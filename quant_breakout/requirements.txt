@@ -1,0 +1,15 @@
+# 必需
+pandas>=2.0
+numpy>=1.24
+
+# 行情（第1~3阶段）
+yfinance>=0.2.40
+
+# 可选：缓存用 parquet（没装会自动退回 CSV，功能不受影响）
+pyarrow>=14.0
+
+# 可选：单元测试
+pytest>=7.4
+
+# 仅第4阶段实盘（Windows + Excel + MarketSpeed II）
+# xlwings>=0.30
