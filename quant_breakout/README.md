@@ -155,6 +155,22 @@ python run.py status                  # 看持仓/权益/风控状态
 - 状态在 `var/state/`，日志在 `var/logs/`，每日流水在 `var/out/journal.csv`
 - 跑满 3 个月后，把 `journal.csv` 的胜率/平均单笔和回测对比；**对不上先查数据和成交假设，不要先改策略**
 
+### 三个月模拟盘（云端每日自动运行 + 可点击日报）
+
+```bash
+python run.py sim-init --start 2026-09-24      # 清空状态，每个市场 ¥1,000,000（美股按当日汇率折美元）
+python run.py sim-day                          # 每个交易日跑一次：两个市场 + 日报
+python run.py report                           # 只重新生成 var/out/report.html
+```
+
+- 日报：<https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ>（每个交易日 07:00 JST 由例行任务更新，同一个 URL）
+- 柱 = 当日损益，线 = 累计损益（同一坐标轴）；**点柱子**看当天几点几分买卖了什么
+- 模拟盘所有成交都在**次日寄付**（JP 09:00 JST / US 09:30 ET），这是回测同款的成交假设
+- 状态（`var/sim.json`、`var/state/`、`var/out/`）随代码入库，例行任务靠它跨天续命
+- 日本株用 `affordable` 股票池、单笔 34%/最多 3 只：¥100 万下多数东证大盘股 1 単元就超预算，默认池几乎买不了
+- 例行任务 id `trig_01SjmCQ9DKyVx7T57iLpZmJh`（每周一至五 07:00 JST）；想停：让 Claude 删除它，或在 claude.ai 的 Routines 里禁用
+- 前提：运行环境的网络策略必须放行 Yahoo Finance（`*.finance.yahoo.com`、`fc.yahoo.com`、`guce.yahoo.com`），否则日报只会显示"取数失败"
+
 ### 半自动（留在楽天、今天就能用）
 
 ```bash
