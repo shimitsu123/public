@@ -4,6 +4,8 @@
     python run.py backtest JP                 第1阶段 回测
     python run.py optimize JP --save          第2阶段 walk-forward，并写入 best_params.json
     python run.py paper    JP                 第3阶段 模拟盘（每交易日收盘后跑一次）
+    python run.py signal   JP --push          半自动：只出操作清单，你在券商 App 照抄（楽天可用）
+    python run.py pos add 7203.T 100 3000     半自动：登记真实成交
     python run.py daemon   JP --broker paper  盘中守护进程（演练；macOS launchd 常驻）
     python run.py daemon   JP --broker tachibana          盘中守护进程（实盘）
     python run.py tachibana-probe --demo      立花 API 连通性与仕様検証（只读，不发单）
@@ -14,6 +16,7 @@
 
 券商（--broker）
     paper      本地模拟，不需要任何账户
+    manual     半自动：持仓手工登记，程序只算不发单（楽天口座のまま使える）
     tachibana  立花証券 e支店 API —— macOS / Linux 原生，推荐
     rss        楽天証券 MARKETSPEED II RSS —— 仅 Windows + Excel
 
@@ -133,6 +136,8 @@ def _make_broker(a, market: str, sizing: SizingConfig):
     """按 --broker 造券商。凭证只从环境变量 / macOS 钥匙串读，不进配置文件。"""
     from qbreak.brokers import make_broker
     kind = getattr(a, "broker", "paper")
+    if kind == "manual":
+        return make_broker("manual", initial_cash=sizing.initial_cash, market=market)
     if kind == "paper":
         b = make_broker("paper", initial_cash=sizing.initial_cash, market=market,
                         exec_cfg=ExecConfig.for_market(market))
@@ -181,6 +186,51 @@ def cmd_live(a) -> int:
         print(f"★ 实盘模式（{a.broker}）。请确认：① ARM 已解锁 ②单笔上限 "
               f"{a.max_order_value:,.0f} ③var/HALT 不存在")
     return _live_common(a, live=True)
+
+
+def cmd_signal(a) -> int:
+    """半自动：工具算信号与止损位，输出一张人能照抄的操作清单（绝不发单）。
+    留在楽天等没有 API 的券商时用这个；成交后用 `run.py pos add/rm` 登记真实持仓。"""
+    from qbreak.trader import operation_sheet, run_once
+    from qbreak import notify
+    market = a.market.upper()
+    p = _params(a)
+    risk = RiskConfig(max_order_value=a.max_order_value, require_arm=False)
+    sizing = SizingConfig(initial_cash=a.cash or 1_000_000,
+                          position_pct=a.position_pct, max_positions=risk.max_positions)
+    a.broker, a.dry_run = "manual", True
+    broker = _make_broker(a, market, sizing)
+    res = run_once(universe(market), broker, p, risk, sizing,
+                   DataConfig(provider=a.provider, years=max(a.years, 2),
+                              allow_synthetic=a.synthetic).validate(),
+                   market=market, dry_run=True, allow_stale=a.allow_stale,
+                   exec_cfg=ExecConfig.for_market(market))
+    from qbreak.trader import PositionBook
+    positions = PositionBook().merge(broker.positions())
+    sheet = operation_sheet(res, p, positions, a.limit_buffer)
+    print("\n" + sheet)
+    (paths.out_dir() / f"sheet_{res.date}.txt").write_text(sheet, encoding="utf-8")
+    if a.push:
+        notify.send(f"{res.date} 操作清单", sheet)
+    return 0
+
+
+def cmd_pos(a) -> int:
+    """登记/查看半自动模式的真实持仓（你在券商 App 成交后手工同步）。"""
+    from qbreak.brokers.manual import ManualBroker
+    b = ManualBroker(market=a.market.upper())
+    if a.action == "add":
+        b.add(a.ticker, a.qty, a.price, a.date or "")
+    elif a.action == "rm":
+        b.remove(a.ticker, a.qty)
+    elif a.action == "cash":
+        amount = float(a.ticker or 0) if a.price is None else a.price
+        b.set_cash(amount)
+        print(f"现金已设为 {amount:,.0f}")
+    pos = b.positions()
+    print(f"现金 {b.cash():,.0f}   持仓：" + (
+        "无" if not pos else ", ".join(f"{t} {p.qty}股@{p.avg_px:,.0f}" for t, p in pos.items())))
+    return 0
 
 
 def cmd_daemon(a) -> int:
@@ -333,7 +383,8 @@ def main(argv=None) -> int:
 
     def _trade_args(sp):
         _common(sp)
-        sp.add_argument("--broker", default="paper", choices=["paper", "tachibana", "rss"])
+        sp.add_argument("--broker", default="paper",
+                        choices=["paper", "manual", "tachibana", "rss"])
         sp.add_argument("--demo", action="store_true", help="立花デモ環境")
         sp.add_argument("--dry-run", action="store_true", help="只算不发单")
         sp.add_argument("--allow-stale", action="store_true", help="允许用过期 K 线（仅测试）")
@@ -349,6 +400,20 @@ def main(argv=None) -> int:
                             ("live", cmd_live, "实盘单次流程")]:
         sp = sub.add_parser(name, help=help_); _trade_args(sp)
         sp.set_defaults(func=fn)
+
+    sg = sub.add_parser("signal", help="半自动：只出操作清单不发单（留在楽天时用）")
+    _trade_args(sg)
+    sg.add_argument("--push", action="store_true", help="通过 QBREAK_WEBHOOK / SMTP 推送清单")
+    sg.set_defaults(func=cmd_signal)
+
+    ps = sub.add_parser("pos", help="登记半自动模式的真实持仓：pos add 7203.T 100 3000 / pos rm 7203.T / pos cash 800000")
+    ps.add_argument("action", choices=["add", "rm", "list", "cash"])
+    ps.add_argument("ticker", nargs="?", default="")
+    ps.add_argument("qty", nargs="?", type=int, default=None)
+    ps.add_argument("price", nargs="?", type=float, default=None)
+    ps.add_argument("--date", default=None, help="买入日 YYYY-MM-DD")
+    ps.add_argument("--market", default="JP")
+    ps.set_defaults(func=cmd_pos)
 
     dm = sub.add_parser("daemon", help="盘中常驻守护进程（实时止损 + 逆指値 + 收盘后日线流程）")
     _trade_args(dm)

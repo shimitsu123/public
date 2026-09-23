@@ -12,6 +12,7 @@
 | **立花証券 e支店** | ✅ | HTTP(GET+JSON) + 实时推送 | **Mac / Linux 推荐**。API 免费。→ [`MACOS.md`](MACOS.md) |
 | 楽天証券 | ❌ | MARKETSPEED II RSS（Excel 插件） | 仅 Windows + 桌面版 Excel。→ [`excel/README_excel.md`](excel/README_excel.md) |
 | 模拟盘 | ✅ | 本地撮合 | 不需要任何账户，先用它跑通全流程 |
+| **半自动（任何券商）** | ✅ | 无 —— 程序只出清单，你在 App 里照抄 | **留在楽天也能用**。`run.py signal` |
 
 楽天証券对个人不提供官方 REST API，唯一官方自动化通道是 Excel 插件，所以 **macOS 上无法用楽天自动下单**。
 两种券商共用同一套信号、风控与回测代码，换券商只改 `--broker`。
@@ -23,7 +24,7 @@
 ```bash
 pip install -r requirements.txt
 python run.py doctor          # 环境自检：Python 版本、依赖、yfinance 连通性
-python run.py selftest        # 150 个单元测试，全绿才继续
+python run.py selftest        # 155 个单元测试，全绿才继续
 python run.py backtest JP     # 第1阶段
 ```
 
@@ -46,11 +47,11 @@ quant_breakout/
 │   ├── trader.py         每日执行流程（收盘后一次）
 │   ├── daemon.py         盘中常驻：实时止损 + 逆指値维护 + 收盘后日线流程
 │   ├── notify.py         webhook / 邮件通知
-│   └── brokers/          paper · tachibana（立花 API）· rakuten_rss（楽天 Excel）
+│   └── brokers/          paper · manual（半自动）· tachibana（立花 API）· rakuten_rss（楽天 Excel）
 ├── MACOS.md              macOS 全自动运行指南（立花 + launchd）
 ├── excel/                RssBridge.bas（VBA 桥）+ 搭建说明（仅 Windows/楽天）
 ├── scripts/              launchd（macOS）/ 任务计划程序（Windows）/ cron
-├── tests/                150 个测试
+├── tests/                155 个测试
 └── original/             上传的原始版本（仅作对照，不参与运行）
 ```
 
@@ -154,7 +155,27 @@ python run.py status                  # 看持仓/权益/风控状态
 - 状态在 `var/state/`，日志在 `var/logs/`，每日流水在 `var/out/journal.csv`
 - 跑满 3 个月后，把 `journal.csv` 的胜率/平均单笔和回测对比；**对不上先查数据和成交假设，不要先改策略**
 
-### 第4阶段　实盘
+### 半自动（留在楽天、今天就能用）
+
+```bash
+python run.py signal JP --push          # 收盘后跑：输出操作清单并推送到手机
+python run.py pos add 7203.T 100 3000   # 你在 App 成交后登记真实持仓
+python run.py pos rm 7203.T             # 卖出后移除
+```
+
+清单长这样，照抄即可（价格已对齐呼値）：
+
+```
+买入  7203.T     100 股  寄付指値 ≤ 3,000（收盘 2,987 +0.5%）  逆指値(止损) 2,778
+卖出  6758.T     200 股  寄付成行  ← dead_cross(死叉)
+持仓维护（逆指値应放在这里；比现有挂单高就上移，不要下移）：
+  8035.T     100 股  逆指値 24,640（跟踪止损，峰值 28,000，成本 20,000）
+```
+
+程序在这个模式下**永远不会发单**（`ManualBroker` 只返回 PROPOSED）。逆指値由你在 App 里挂，
+这就是你的盘中保险。
+
+### 第4阶段　全自动实盘
 
 **macOS / Linux（立花証券 e支店 API）** —— 完整步骤见 [`MACOS.md`](MACOS.md)
 

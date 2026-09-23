@@ -235,7 +235,8 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
         res.positions = {t: pos.qty for t, pos in positions.items()}
         return res
 
-    def place(side: str, ticker: str, qty: int, reason: str) -> Order | None:
+    def place(side: str, ticker: str, qty: int, reason: str,
+              stop_px: float = 0.0) -> Order | None:
         cid = f"{bar_key}-{ticker}-{side}"
         if guard.seen(cid):
             res.blocked.append(f"{side} {ticker}: 本交易日已发过同样的单（幂等拦截）")
@@ -243,7 +244,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
         if dry_run:
             res.orders.append({"side": side, "ticker": ticker, "qty": qty,
                                "price": last_close.get(ticker, 0), "status": "DRY_RUN",
-                               "note": reason})
+                               "note": reason, "stop_px": round(stop_px, 2)})
             return None
         fn = broker.buy if side == "BUY" else broker.sell
         o = fn(ticker, qty, client_id=cid, ref_px=last_close.get(ticker), bar=bar_key)
@@ -310,7 +311,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
                 res.blocked.append(f"BUY {t}: {why}")
                 continue
             o = place("BUY", t, qty, f"entry(range={row['range_pct']:.1f}% "
-                                      f"vol×{row['vol_ratio']:.1f})")
+                                      f"vol×{row['vol_ratio']:.1f})", stop_px=stop_px)
             if o and o.ok:
                 rm.on_open()
                 if o.filled_qty > 0:      # 立即成交（非排队）
@@ -380,3 +381,40 @@ def load_params(path=None) -> StrategyParams:
         return StrategyParams()
     log.info("已加载参数 %s", fp)
     return p
+
+
+def operation_sheet(res: DayResult, p: StrategyParams, positions: dict[str, Position],
+                    limit_buffer_pct: float = 0.5) -> str:
+    """把当日结果整理成一张**人能照着下单**的清单（半自动模式）。
+    每一行都给出：动作、数量、寄付指値、逆指値（止损）—— 你在券商 App 里照抄即可。"""
+    from .tick import round_to_tick
+    L = [f"═══ {res.date} 操作清单（信号已算好，由你手工下单）═══"]
+    buys = [o for o in res.orders if o["side"] == "BUY"]
+    sells = [o for o in res.orders if o["side"] == "SELL"]
+    if not buys and not sells:
+        L.append("今日无买卖动作。")
+    for o in buys:
+        px = float(o.get("price") or 0)
+        lim = round_to_tick(px * (1 + limit_buffer_pct / 100), o["ticker"], "BUY") if px else 0
+        stop = float(o.get("stop_px") or 0) or px * (1 - p.stop_loss_pct / 100)
+        L.append(f"买入  {o['ticker']:<8} {o['qty']:>6} 股  寄付指値 ≤ {lim:,.0f}"
+                 f"（收盘 {px:,.0f} +{limit_buffer_pct}%）  逆指値(止损) {stop:,.0f}"
+                 f"  ← {o.get('note', '')}")
+    for o in sells:
+        L.append(f"卖出  {o['ticker']:<8} {o['qty']:>6} 股  寄付成行  ← {o.get('note', '')}")
+    held = {t: pos for t, pos in positions.items()
+            if t not in {o["ticker"] for o in sells}}
+    if held:
+        L.append("持仓维护（逆指値应放在这里；比现有挂单高就上移，不要下移）：")
+        for t, pos in sorted(held.items()):
+            stop = pos.stop_px or pos.avg_px * (1 - p.stop_loss_pct / 100)
+            trail = pos.peak * (1 - p.trailing_stop_pct / 100) if p.trailing_stop_pct else 0
+            want = max(stop, trail)
+            tag = "跟踪止损" if trail > stop else "固定止损"
+            L.append(f"  {t:<8} {pos.qty:>6} 股  逆指値 {want:,.0f}（{tag}，峰值 {pos.peak:,.0f}，"
+                     f"成本 {pos.avg_px:,.0f}）")
+    if res.blocked:
+        L.append("被拦截：")
+        L += [f"  {b}" for b in res.blocked]
+    L.append(res.risk)
+    return "\n".join(L)

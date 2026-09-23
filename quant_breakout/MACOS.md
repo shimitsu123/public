@@ -26,7 +26,7 @@
 cd quant_breakout
 pip3 install -r requirements.txt
 python3 run.py doctor          # 环境自检
-python3 run.py selftest        # 150 个单元测试
+python3 run.py selftest        # 155 个单元测试
 python3 run.py backtest JP     # 真实数据回测
 python3 run.py optimize JP --save
 ```
@@ -42,6 +42,16 @@ python3 run.py daemon JP --broker paper --dry-run
 **这一步跑顺之前，不要碰实盘。**
 
 ---
+
+## 1.5 等开户期间：半自动模式（留在楽天，今天就能用）
+
+```bash
+python3 run.py signal JP --push      # 每个交易日 16:10 后跑一次（cron/launchd 均可）
+python3 run.py pos add 7203.T 100 3000   # 在楽天 App 成交后登记
+```
+
+程序算信号、算数量、算寄付指値和逆指値，推送一张清单到你手机；你在 iSPEED 里照抄，
+**并把逆指値挂上**。这个模式下程序永远不会发单。
 
 ## 2. 开户与 API 申请
 
