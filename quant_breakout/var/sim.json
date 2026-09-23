@@ -8,7 +8,7 @@
  ],
  "jp": {
   "initial_cash": 1000000,
-  "universe": "affordable",
+  "universe": "broad",
   "position_pct": 0.34,
   "max_positions": 3
  },
@@ -16,9 +16,10 @@
   "initial_cash": null,
   "fx_start": null,
   "fx_date": null,
-  "universe": "default",
+  "universe": "broad",
   "position_pct": 0.2,
   "max_positions": 5
  },
- "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。"
+ "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。股票池 broad = 日経225 / NASDAQ-100+Dow30（按偏好剔除）。use_market_regime=true：指数 200 日线/波动/回撤 + 市场风险报告的行动四选一 共同决定新仓规模。",
+ "use_market_regime": true
 }

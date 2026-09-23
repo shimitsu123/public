@@ -74,6 +74,7 @@ def _fx_on(table: list[tuple[str, float]], date: str, default: float | None) -> 
 
 def build_data(markets: list[str] | None = None) -> dict:
     sim = read_json(paths.home() / "sim.json", {}) or {}
+    extras = read_json(paths.out_dir() / "market_extras.json", {}) or {}
     fx_table = _fx_table()
     fx_start = (sim.get("us") or {}).get("fx_start")
     last_run = read_json(paths.out_dir() / "last_run.json", {}) or {}
@@ -114,6 +115,8 @@ def build_data(markets: list[str] | None = None) -> dict:
         out["markets"][m] = {
             "currency": cur, "symbol": SYMBOL[cur], "initial": initial,
             "days": days, "closed_trades": closed,
+            "regime": (extras.get(m) or {}).get("regime") or {},
+            "watchlist": (extras.get(m) or {}).get("watchlist") or [],
             "summary": {
                 "days": len(days),
                 "equity": eqs[-1] if eqs else initial,
@@ -242,6 +245,12 @@ td.n,th.n{text-align:right}
     </div>
     <div class="chart" id="chart"></div>
   </section>
+  <section class="card" id="regime"></section>
+  <section class="card">
+    <h2>候补队列（按入场条件就绪度排序，不是收益预测）</h2>
+    <div class="legend"><span class="muted">triggered=今日已触发 · imminent=横盘+0轴+MACD 即将金叉 · watch=横盘+0轴 · 可负担=1 単元 ≤ 单笔预算 · 偏好=符合你的美股筛选规则</span></div>
+    <div class="scroll" id="watch"></div>
+  </section>
   <section class="card detail" id="detail"></section>
   <section class="card">
     <h2>全部成交</h2>
@@ -275,7 +284,25 @@ function init(){
       ((lr.blocked_hosts||[]).length ? `　｜ 被拦截的域名：${lr.blocked_hosts.join(", ")}` : ""); }
   render();
 }
-function render(){ renderTabs(); renderTiles(); renderChart(); renderDetail(); renderLog(); }
+function render(){ renderTabs(); renderTiles(); renderRegime(); renderWatch(); renderChart(); renderDetail(); renderLog(); }
+const STATUS_CN = {triggered:"已触发", imminent:"即将", watch:"观察", far:"远"};
+function renderRegime(){
+  const R = cur().regime || {}, box = $("#regime");
+  if (!R.quant_label){ box.innerHTML = `<h2>市场状态</h2><div class="muted">尚未计算</div>`; return; }
+  const mult = R.mult == null ? 1 : R.mult;
+  const tag = mult <= 0 ? "不开新仓" : mult < 1 ? `新仓 ×${mult}` : "正常开仓";
+  box.innerHTML = `<h2>市场状态 · ${tag}</h2><dl class="kv">
+    <dt>量化层</dt><dd>${R.quant_label}（${R.above_ma200 ? "指数在 200 日线上方" : "指数在 200 日线下方"}，20 日波动 ${R.vol20_pct ?? "—"}%，距 252 日高点 ${R.dd252_pct ?? "—"}%）</dd>
+    <dt>判断层</dt><dd>${R.overlay_action ? `市场风险报告「${R.overlay_action}」（${R.overlay_as_of}）` + (R.crash_prob != null ? `，24h 崩盘概率 ${R.crash_prob}%` : "") : "未接入或已过期（>2 天）"}</dd></dl>`;
+}
+function renderWatch(){
+  const W = cur().watchlist || [], c = cur().currency, box = $("#watch");
+  if (!W.length){ box.innerHTML = `<div class="empty">尚无候补数据（首个运行日后出现）</div>`; return; }
+  box.innerHTML = `<table><thead><tr><th>#</th><th>代码</th><th>状态</th><th class="n">就绪度</th><th class="n">收盘</th><th class="n">箱体%</th><th class="n">MACD差%</th><th class="n">量比</th><th class="n">距箱顶%</th><th>可负担</th><th>偏好</th></tr></thead><tbody>` +
+    W.map((w, i) => `<tr><td>${i+1}</td><td>${w.ticker}</td><td><span class="pill ${w.status==="triggered"?"buy":""}">${STATUS_CN[w.status]||w.status}</span></td>
+      <td class="n">${w.score}</td><td class="n">${fmt(w.close, c, c==="USD"?2:0)}</td><td class="n">${w.range_pct ?? "—"}</td><td class="n">${w.macd_gap_pct}${w.hist_up?"↑":"↓"}</td>
+      <td class="n">${w.vol_ratio}</td><td class="n">${w.to_box_top_pct ?? "—"}</td><td>${w.affordable ? "是" : "否（" + fmt(w.lot_cost, c, 0) + "）"}</td><td class="${w.pref_ok?"":"muted"}">${w.pref_ok ? "符合" : (w.pref_note||"不符合")}</td></tr>`).join("") + `</tbody></table>`;
+}
 
 function renderTabs(){
   const t = $("#tabs"); t.innerHTML = "";

@@ -182,7 +182,7 @@ def _yf_download(tickers: list[str], years: int, attempts: int = 3) -> dict[str,
 def _csv_load(ticker: str, cfg: DataConfig) -> pd.DataFrame:
     """本地 CSV：var/csv/<ticker>.csv，列 Date,Open,High,Low,Close,Volume。
     用于把券商/RSS 导出的数据接进来（推荐：实盘与回测同源，避免 yfinance 复权差异）。"""
-    fp = paths.sub("csv") / f"{ticker.replace('/', '_')}.csv"
+    fp = paths.sub("csv") / f"{csv_name(ticker)}.csv"
     if not fp.exists():
         raise DataError(f"{ticker}: 找不到 {fp}")
     df = pd.read_csv(fp)
@@ -194,6 +194,21 @@ def _csv_load(ticker: str, cfg: DataConfig) -> pd.DataFrame:
     df.columns = [c.capitalize() if c.lower() in
                   ("open", "high", "low", "close", "volume") else c for c in df.columns]
     return df
+
+
+def csv_name(ticker: str) -> str:
+    return ticker.replace("/", "_").replace("^", "idx_").replace("=", "_")
+
+
+def dump_csv(data: dict[str, pd.DataFrame]) -> int:
+    """把 {ticker: OHLCV} 写到 var/csv/，供没有外网的机器用 --provider csv 读取。"""
+    n = 0
+    for t, df in data.items():
+        out = df[[c for c in OHLCV if c in df.columns]].copy()
+        out.index.name = "Date"
+        (paths.sub("csv") / f"{csv_name(t)}.csv").write_text(out.to_csv(), encoding="utf-8")
+        n += 1
+    return n
 
 
 # ────────────────────────── 对外入口 ──────────────────────────

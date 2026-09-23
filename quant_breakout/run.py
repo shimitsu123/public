@@ -6,6 +6,7 @@
     python run.py paper    JP                 第3阶段 模拟盘（每交易日收盘后跑一次）
     python run.py sim-init && python run.py sim-day    三个月模拟：初始化 + 每日一跑（含日报）
     python run.py report                      只重新生成日报 var/out/report.html
+    python run.py fetch-data                  有外网的机器：把行情写到 var/csv 再 git push（云端兜底数据源）
     python run.py signal   JP --push          半自动：只出操作清单，你在券商 App 照抄（楽天可用）
     python run.py pos add 7203.T 100 3000     半自动：登记真实成交
     python run.py daemon   JP --broker paper  盘中守护进程（演练；macOS launchd 常驻）
@@ -290,7 +291,17 @@ def _fx_usdjpy() -> tuple[float, str]:
                 return px, "fast_info"
         except Exception as e:                                # noqa: BLE001
             errors.append(f"fast_info {sym}: {e}")
-    raise RuntimeError("取不到 USD/JPY 汇率（yfinance JPY=X / USDJPY=X 均失败："
+    # 最后兜底：fetch-data 从有外网的机器同步过来的 CSV
+    try:
+        from qbreak.data import csv_name
+        fp = paths.sub("csv") / f"{csv_name('JPY=X')}.csv"
+        if fp.exists():
+            df = pd.read_csv(fp, index_col=0, parse_dates=True).dropna(subset=["Close"])
+            if len(df):
+                return float(df["Close"].iloc[-1]), str(df.index[-1].date())
+    except Exception as e:                                    # noqa: BLE001
+        errors.append(f"csv: {e}")
+    raise RuntimeError("取不到 USD/JPY 汇率（yfinance JPY=X / USDJPY=X 与本地 CSV 均失败："
                        + "; ".join(errors)[:300] + "）。可设环境变量 QBREAK_USDJPY=157.6 手动指定")
 
 
@@ -354,10 +365,14 @@ def cmd_sim_day(a) -> int:
         print(f"模拟期已于 {cfg['end']} 结束；只重新生成报表。")
         hp, _ = write_report(cfg["markets"]); print(f"报表 {hp}"); return 0
     p = _params(a)
-    results, errors, notes = {}, {}, {}
+    results, errors, notes, extras = {}, {}, {}, {}
     blocked = _netcheck()
     if blocked:
         log.warning("以下域名不通：%s", blocked)
+    yahoo_blocked = any("yahoo" in h for h in blocked)
+    provider = "csv" if yahoo_blocked else "yfinance"
+    if yahoo_blocked:
+        log.warning("Yahoo 被拦截 → 改用本地 CSV（由 fetch-data 从有外网的机器同步）")
     for m in cfg["markets"]:
         try:
             mc = cfg[m.lower()]
@@ -377,11 +392,16 @@ def cmd_sim_day(a) -> int:
                               max_new_positions_per_day=mc["max_positions"])
             broker = make_broker("paper", initial_cash=sizing.initial_cash, market=m,
                                  exec_cfg=ExecConfig.for_market(m))
-            res = run_once(universe(m, mc.get("universe", "default")), broker, p, risk, sizing,
-                           DataConfig(provider="yfinance", years=2, allow_synthetic=False).validate(),
+            dcfg = DataConfig(provider=provider, years=2, allow_synthetic=False).validate()
+            uni = universe(m, mc.get("universe", "default"))
+            reg = _market_regime(m, dcfg)
+            scale = reg.mult if cfg.get("use_market_regime", True) else 1.0
+            res = run_once(uni, broker, p, risk, sizing, dcfg,
                            market=m, dry_run=False, allow_stale=a.allow_stale,
-                           exec_cfg=ExecConfig.for_market(m))
+                           exec_cfg=ExecConfig.for_market(m), entry_scale=scale)
             results[m] = res
+            extras[m] = {"regime": reg.to_dict(), "watchlist": _scan_market(
+                uni, p, m, dcfg, sizing.initial_cash * mc["position_pct"])}
             soft = [n for n in res.notes if any(k in n for k in ("失败", "过期", "HALT", "不交易"))]
             if soft:
                 notes[m] = "; ".join(soft)[:300]
@@ -405,10 +425,94 @@ def cmd_sim_day(a) -> int:
                 "error": "; ".join([f"{m}: {e}" for m, e in errors.items()]
                                    + [f"{m}: {n}" for m, n in notes.items()]),
                 "markets_ok": [m for m in results if m not in notes],
-                "blocked_hosts": blocked})
+                "blocked_hosts": blocked, "provider": provider})
+    write_json(paths.out_dir() / "market_extras.json", extras)
     hp, jp = write_report(cfg["markets"])
     print(f"\n报表 {hp}\n数据 {jp}")
     return 1 if errors and not results else 0
+
+
+def _market_regime(market: str, dcfg):
+    """指数数据 → 量化层；再叠加 worker 从「市场风险报告」提取的判断层。"""
+    from qbreak.config import BENCHMARK
+    from qbreak.data import load_universe
+    from qbreak.regime import apply_overlay, quant_regime
+    idx = None
+    try:
+        idx = load_universe([BENCHMARK[market]], dcfg).get(BENCHMARK[market])
+    except Exception as e:                                    # noqa: BLE001
+        log.warning("[%s] 指数数据不可用，量化层按 unknown 处理: %s", market, e)
+    reg = apply_overlay(quant_regime(idx, market))
+    log.info("[%s] 市场状态 %s → 新仓规模 ×%.2f", market, reg.label, reg.mult)
+    return reg
+
+
+def _scan_market(uni, p, market, dcfg, budget) -> list[dict]:
+    """候补队列：整个股票池按条件就绪度排序。"""
+    from qbreak.data import load_universe
+    from qbreak.scan import scan
+    from qbreak.strategy import compute_indicators
+    from qbreak.trader import drop_partial_bar
+    try:
+        data = load_universe(uni, dcfg)                      # 已缓存，几乎不花时间
+        ind = {t: compute_indicators(drop_partial_bar(df, market), p) for t, df in data.items()}
+        df = scan(ind, p, market, budget)
+        return df.to_dict("records") if not df.empty else []
+    except Exception as e:                                    # noqa: BLE001
+        log.warning("[%s] 候补队列生成失败: %s", market, e)
+        return []
+
+
+def cmd_fetch_data(a) -> int:
+    """在**有外网**的机器上运行：下载股票池 + 指数 + 汇率的日线到 var/csv/，
+    之后 git push；没有外网的云端 worker 会自动改用这些 CSV。"""
+    from qbreak.config import BENCHMARK
+    from qbreak.data import DataError, dump_csv, load_universe
+    cfg = _sim_cfg()
+    total = 0
+    for m in (cfg.get("markets") or ["JP", "US"]):
+        uni = universe(m, (cfg.get(m.lower()) or {}).get("universe", a.universe))
+        tickers = sorted(set(uni) | {BENCHMARK[m]})
+        try:
+            data = load_universe(tickers, DataConfig(provider="yfinance", years=a.years,
+                                                     allow_synthetic=False).validate(),
+                                 use_cache=False)
+        except DataError as e:
+            print(f"[{m}] 取数失败: {e}"); return 1
+        n = dump_csv(data)
+        total += n
+        print(f"[{m}] 写入 {n} 只到 {paths.sub('csv')}")
+    try:
+        fx, fxd = _fx_usdjpy()
+        import pandas as pd
+        pd.DataFrame({"Close": [fx]}, index=pd.DatetimeIndex([pd.Timestamp(fxd)], name="Date")) \
+            .to_csv(paths.sub("csv") / "JPY_X.csv", mode="a",
+                    header=not (paths.sub("csv") / "JPY_X.csv").exists())
+        print(f"USD/JPY {fx} ({fxd})")
+    except Exception as e:                                    # noqa: BLE001
+        print(f"汇率获取失败（不致命）: {e}")
+    print(f"完成：{total} 只。接着 git add var/csv && git commit && git push 即可让云端使用。")
+    return 0
+
+
+def cmd_universe_update(a) -> int:
+    """从公开来源刷新广域股票池到 var/universe_JP.json / universe_US.json（需外网）。"""
+    import re
+    import urllib.request
+    out = {}
+    try:
+        html = urllib.request.urlopen("https://en.wikipedia.org/wiki/Nikkei_225", timeout=20).read().decode("utf-8", "ignore")
+        codes = sorted(set(re.findall(r"TYO:\s*(\d{4})", html)) | set(re.findall(r"/wiki/[^\"]*?\((\d{4})\)", html)))
+        if len(codes) > 150:
+            out["JP"] = [f"{c}.T" for c in codes]
+    except Exception as e:                                    # noqa: BLE001
+        print(f"日経225 刷新失败: {e}")
+    for m, lst in out.items():
+        (paths.home() / f"universe_{m}.json").write_text(__import__("json").dumps(lst), encoding="utf-8")
+        print(f"[{m}] {len(lst)} 只 → var/universe_{m}.json")
+    if not out:
+        print("未刷新任何名单（保持内置名单）。")
+    return 0
 
 
 def cmd_report(a) -> int:
@@ -648,6 +752,14 @@ def main(argv=None) -> int:
 
     rp = sub.add_parser("report", help="只重新生成日报 HTML"); _common(rp)
     rp.set_defaults(func=cmd_report)
+
+    fd = sub.add_parser("fetch-data", help="有外网的机器：下载股票池日线到 var/csv/（云端被拦截时的数据源）")
+    fd.add_argument("--years", type=int, default=2)
+    fd.add_argument("--universe", default="broad", choices=["default", "affordable", "broad"])
+    fd.set_defaults(func=cmd_fetch_data)
+
+    uu = sub.add_parser("universe-update", help="刷新广域股票池名单（需外网）")
+    uu.set_defaults(func=cmd_universe_update)
 
     pb = sub.add_parser("tachibana-probe", help="立花 API 只读连通性 / 仕様检查")
     pb.add_argument("--demo", action="store_true", help="用デモ環境（强烈建议先在这里跑通）")

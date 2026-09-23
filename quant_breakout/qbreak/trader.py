@@ -195,7 +195,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
              risk_cfg: RiskConfig, sizing: SizingConfig, data_cfg: DataConfig,
              market: str = "JP", dry_run: bool = False, allow_stale: bool = False,
              today: dt.date | None = None, exec_cfg: ExecConfig | None = None,
-             protective_stop: bool = False) -> DayResult:
+             protective_stop: bool = False, entry_scale: float = 1.0) -> DayResult:
     today = today or dt.date.today()
     res = DayResult(date=today.isoformat())
     p.validate()
@@ -330,8 +330,12 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
     res.signals = entry_today
     if entry_today and not decision.allow_open:
         res.blocked.append(f"熔断中，今日不开仓（信号: {', '.join(entry_today)}）")
+    elif entry_today and entry_scale <= 0:
+        res.blocked.append(f"市场状态 risk_off / 避险，今日不开新仓（信号: {', '.join(entry_today)}）")
     elif entry_today:
         equity = broker.equity()
+        if entry_scale < 1.0:
+            res.notes.append(f"市场状态：新仓规模 ×{entry_scale:.2f}")
         for t in sorted(entry_today):
             cur = broker.positions()
             if t in cur:
@@ -345,6 +349,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
                 budget = equity * (sizing.risk_pct / 100) / (px - stop_px) * px
             else:
                 budget = equity * sizing.position_pct
+            budget *= max(0.0, min(1.0, entry_scale))
             budget = min(budget, equity * sizing.max_position_pct,
                          broker.cash() * (1 - sizing.cash_buffer_pct / 100),
                          risk_cfg.max_order_value)

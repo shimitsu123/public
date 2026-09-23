@@ -303,9 +303,14 @@ BENCHMARK = {"JP": "^N225", "US": "^GSPC"}
 
 
 def universe(market: str, name: str = "default") -> list[str]:
+    """default / affordable / broad（日経225 或 NASDAQ-100+Dow30，见 universes.py）"""
     m = market.upper()
+    if name == "broad":
+        from .universes import nikkei225, us_broad
+        out = nikkei225() if m == "JP" else us_broad()
+        return sorted(set(out))
     if name not in UNIVERSES[m]:
-        raise ConfigError(f"未知股票池 {name}，可选 {sorted(UNIVERSES[m])}")
+        raise ConfigError(f"未知股票池 {name}，可选 {sorted(UNIVERSES[m]) + ['broad']}")
     return list(UNIVERSES[m][name])
 
 
