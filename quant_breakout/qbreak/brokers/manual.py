@@ -90,5 +90,5 @@ class ManualBroker(BaseBroker):
         return Order(ticker, "SELL", qty, ref_px or self.get_price(ticker), _now(),
                      "PROPOSED", client_id=client_id, note="半自动：请人工下单")
 
-    def fill_pending(self, opens, bar, max_gap_pct=None):
+    def fill_pending(self, opens, bar, max_gap_pct=None, prev_bars=None):
         return []
