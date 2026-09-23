@@ -5,9 +5,16 @@
 > 这是对上传版本的 review + 重写。原版逐条问题见 **[REVIEW.md](REVIEW.md)**；
 > 原始文件完整保留在 `original/` 里，方便对照。
 
-**楽天証券对个人不提供官方 REST API**，唯一官方自动化通道是
-「マーケットスピード II RSS」（Excel 插件），Python 经 `xlwings` 操作 Excel 下单；
-RSS 仅支持国内株，不支持美股。第4阶段的搭建步骤见 [`excel/README_excel.md`](excel/README_excel.md)。
+## 选哪个券商
+
+| 券商 | macOS 原生 | 接口 | 说明 |
+|---|---|---|---|
+| **立花証券 e支店** | ✅ | HTTP(GET+JSON) + 实时推送 | **Mac / Linux 推荐**。API 免费。→ [`MACOS.md`](MACOS.md) |
+| 楽天証券 | ❌ | MARKETSPEED II RSS（Excel 插件） | 仅 Windows + 桌面版 Excel。→ [`excel/README_excel.md`](excel/README_excel.md) |
+| 模拟盘 | ✅ | 本地撮合 | 不需要任何账户，先用它跑通全流程 |
+
+楽天証券对个人不提供官方 REST API，唯一官方自动化通道是 Excel 插件，所以 **macOS 上无法用楽天自动下单**。
+两种券商共用同一套信号、风控与回测代码，换券商只改 `--broker`。
 
 ---
 
@@ -16,7 +23,7 @@ RSS 仅支持国内株，不支持美股。第4阶段的搭建步骤见 [`excel/
 ```bash
 pip install -r requirements.txt
 python run.py doctor          # 环境自检：Python 版本、依赖、yfinance 连通性
-python run.py selftest        # 83 个单元测试，全绿才继续
+python run.py selftest        # 150 个单元测试，全绿才继续
 python run.py backtest JP     # 第1阶段
 ```
 
@@ -29,18 +36,21 @@ quant_breakout/
 ├── qbreak/
 │   ├── config.py         全部参数 + 校验
 │   ├── paths.py          所有状态/日志/缓存的位置（QBREAK_HOME）
+│   ├── calendar_jp.py    東証営業日・立会時間（祝日は自前計算）
 │   ├── data.py           行情：yfinance 批量 / 本地 CSV / 质量检查 / TTL 缓存
 │   ├── strategy.py       信号（回测与实盘共用）
 │   ├── engine.py         numpy 回测引擎
 │   ├── metrics.py        绩效指标 + 报告
 │   ├── optimize.py       网格搜索 + Walk-Forward
 │   ├── risk.py           熔断 / HALT / 单笔上限
-│   ├── trader.py         每日执行流程
+│   ├── trader.py         每日执行流程（收盘后一次）
+│   ├── daemon.py         盘中常驻：实时止损 + 逆指値维护 + 收盘后日线流程
 │   ├── notify.py         webhook / 邮件通知
-│   └── brokers/          paper（模拟）· rakuten_rss（实盘）
-├── excel/                RssBridge.bas（VBA 桥）+ 搭建说明
-├── scripts/              Windows 任务计划程序 / cron
-├── tests/                83 个测试
+│   └── brokers/          paper · tachibana（立花 API）· rakuten_rss（楽天 Excel）
+├── MACOS.md              macOS 全自动运行指南（立花 + launchd）
+├── excel/                RssBridge.bas（VBA 桥）+ 搭建说明（仅 Windows/楽天）
+├── scripts/              launchd（macOS）/ 任务计划程序（Windows）/ cron
+├── tests/                150 个测试
 └── original/             上传的原始版本（仅作对照，不参与运行）
 ```
 
@@ -144,29 +154,51 @@ python run.py status                  # 看持仓/权益/风控状态
 - 状态在 `var/state/`，日志在 `var/logs/`，每日流水在 `var/out/journal.csv`
 - 跑满 3 个月后，把 `journal.csv` 的胜率/平均单笔和回测对比；**对不上先查数据和成交假设，不要先改策略**
 
-### 第4阶段　实盘（楽天 RSS，仅 Windows + 国内株）
+### 第4阶段　实盘
 
-先读 [`excel/README_excel.md`](excel/README_excel.md) 搭好 Excel 桥，然后：
+**macOS / Linux（立花証券 e支店 API）** —— 完整步骤见 [`MACOS.md`](MACOS.md)
 
 ```bash
-python run.py live JP --dry-run       # 演练：只算不发单，先跑一周
-python run.py live JP                 # 实盘（Excel 里 Ctrl!ARM 填 ARMED 才会发单）
-python run.py live JP --stop-mode intraday --protective-stop   # 自动挂/改逆指値
+python run.py tachibana-probe --demo --dump-spec   # 只读校验 API 仕様，绝不发单
+python run.py daemon JP --broker paper --dry-run   # 先用模拟盘演练一整个交易日
+python run.py daemon JP --broker tachibana --protective-stop   # 实盘常驻
+bash scripts/install_launchd.sh                    # 开机自启
 ```
+
+**Windows（楽天 MARKETSPEED II RSS）** —— 见 [`excel/README_excel.md`](excel/README_excel.md)
+
+```bash
+python run.py live JP --broker rss --dry-run
+python run.py live JP --broker rss --stop-mode intraday --protective-stop
+```
+
+### 盘中守护进程在做什么
+
+```
+休市 → 睡到下一个开市时刻          08:50 → 开市前对账
+09:00–11:30 / 12:30–15:30 → 每 60 秒：取现在值 → 更新峰值 → 检查止损/止盈 → 维护逆指値
+15:25 → 收盘竞价前最后一次风控      15:40 → 日线信号 → 次日寄付单 → 日终对账
+```
+
+**盘中不重算信号**：当前策略的信号定义在收盘价上，回测也是这么验证的。盘中重算会产生
+大量盘中出现、收盘消失的假信号，而且无法用现有回测验证。真正的日内策略是另一个项目。
 
 **上线前清单**
 
-- [ ] `run.py doctor` 全绿；Excel 里 `QB_SelfTest` 通过
-- [ ] `RssBridge.bas` 三处 `★TODO★` 已按当期「RSS 関数一覧」PDF 填写（默认是占位实现，会直接拒绝下单）
-- [ ] MarketSpeed II 已登录、RSS「接続」、功能区切到「**発注可**」
+- [ ] `run.py doctor` 全绿
+- [ ] 立花：`tachibana-probe --demo` 全 `[OK]`，且已对着**官方 API 仕様書**改过 `var/tachibana_spec.json`
+      （`TachibanaSpec` 的默认值是公开信息推断的，**不是验证过的**）
+- [ ] 楽天：`RssBridge.bas` 三处 `★TODO★` 已按当期「RSS 関数一覧」PDF 填写（默认占位实现会拒绝下单）
+- [ ] `--broker paper` 演练过至少一个完整交易日
+- [ ] `--protective-stop` 打开 —— **逆指値是盘中止损的真正保险**，进程崩了它还在
 - [ ] 口座选**特定口座**，不要用 NISA（自动交易会浪费非課税枠，且亏损不能损益通算）
 - [ ] `--max-order-value` 设成你能承受的单笔上限；前两周 `--position-pct 0.05`，只买 1 単元
 - [ ] 熔断线先设 1%：`RiskConfig.daily_max_loss_pct`
-- [ ] 通知打开：`set QBREAK_WEBHOOK=https://...`（Discord/Slack/LINE 兼容）
-- [ ] 同一天 paper 与 live 各跑一次，**两边的信号列表必须完全一致**
-- [ ] 每天收盘后清空 Excel 的 `ARM` 单元格
+- [ ] 通知打开：`export QBREAK_WEBHOOK=https://...`（Discord/Slack/LINE 兼容）
+- [ ] 每天收盘后锁上 ARM
 
-**紧急停止**：在 `var/` 下建一个名为 `HALT` 的文件，任何下单都会被拒绝（Python 侧和 VBA 侧双重拦截）。
+**ARM（人工解锁）**：`echo ARMED > var/ARM` 才会发单，`rm var/ARM` 锁上。
+**紧急停止**：`echo x > var/HALT` —— 任何下单立即被拒绝。
 
 ---
 
@@ -213,6 +245,11 @@ crontab -e
 5. **呼値表 2027-03-01 会变**（JPX 改为按个股流动性 STR 决定），届时需更新 `qbreak/tick.py`。
 6. **值幅制限（ストップ高/安）未建模**：跳空过滤只是近似。
 7. 本框架只做**現物・買い（做多）**，不含信用取引、空売り、分批建仓/加仓。
+8. **差金決済**：現物では同一銘柄・同一営業日・同一資金で「買→売」1 往復まで。
+   2 往復目は券商侧で拒否される（`DaemonConfig.max_round_trips_per_day` 会先拦一道）。
+   不同股票不受此限。
+9. `TachibanaSpec` 的项目名/エンドポイント是**公开信息推断的默认值**，
+   本番発注前に必ず公式 API 仕様書で検証すること（`tachibana-probe` が検証用）。
 
 ---
 

@@ -83,9 +83,11 @@ class PositionBook:
         return positions
 
     def update(self, p: Position) -> None:
-        self.book[p.ticker] = {"peak": p.peak, "stop_px": p.stop_px,
-                               "entry_date": p.entry_date, "hold_bars": p.hold_bars,
-                               "last_bar": p.last_bar}
+        # 合并而不是覆盖：守护进程还往这里存逆指値的注文番号等字段，
+        # 整个字典替换掉会把它们悄悄抹掉，导致逆指値被反复撤改。
+        self.book.setdefault(p.ticker, {}).update(
+            {"peak": p.peak, "stop_px": p.stop_px, "entry_date": p.entry_date,
+             "hold_bars": p.hold_bars, "last_bar": p.last_bar})
 
     def drop(self, ticker: str) -> None:
         self.book.pop(ticker, None)

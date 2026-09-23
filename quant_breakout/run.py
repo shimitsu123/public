@@ -4,11 +4,18 @@
     python run.py backtest JP                 第1阶段 回测
     python run.py optimize JP --save          第2阶段 walk-forward，并写入 best_params.json
     python run.py paper    JP                 第3阶段 模拟盘（每交易日收盘后跑一次）
-    python run.py live     JP --dry-run       第4阶段 实盘演练（不真正发单）
-    python run.py live     JP                 第4阶段 实盘（需 Excel 里人工 ARM）
+    python run.py daemon   JP --broker paper  盘中守护进程（演练；macOS launchd 常驻）
+    python run.py daemon   JP --broker tachibana          盘中守护进程（实盘）
+    python run.py tachibana-probe --demo      立花 API 连通性与仕様検証（只读，不发单）
+    python run.py live     JP --dry-run       单次实盘流程演练（不真正发单）
     python run.py doctor                      环境自检
     python run.py selftest                    跑单元测试
     python run.py status                      看当前持仓/权益/风控状态
+
+券商（--broker）
+    paper      本地模拟，不需要任何账户
+    tachibana  立花証券 e支店 API —— macOS / Linux 原生，推荐
+    rss        楽天証券 MARKETSPEED II RSS —— 仅 Windows + Excel
 
 通用参数：--synthetic（合成数据，仅调试）、--years、--provider、--cash、--allow-stale
 """
@@ -26,6 +33,14 @@ from qbreak.config import (BacktestConfig, DataConfig, ExecConfig, RiskConfig,
 from qbreak.utils import setup_logging                      # noqa: E402
 
 log = setup_logging("cli")
+
+
+def _armed() -> bool:
+    import os
+    if os.environ.get("QBREAK_ARM", "").strip().upper() == "ARMED":
+        return True
+    f = paths.home() / "ARM"
+    return f.exists() and f.read_text(encoding="utf-8").strip().upper() == "ARMED"
 
 
 def _common(ap: argparse.ArgumentParser) -> None:
@@ -114,24 +129,37 @@ def cmd_optimize(a) -> int:
     return 0
 
 
-def _live_common(a, live: bool) -> int:
+def _make_broker(a, market: str, sizing: SizingConfig):
+    """按 --broker 造券商。凭证只从环境变量 / macOS 钥匙串读，不进配置文件。"""
     from qbreak.brokers import make_broker
+    kind = getattr(a, "broker", "paper")
+    if kind == "paper":
+        b = make_broker("paper", initial_cash=sizing.initial_cash, market=market,
+                        exec_cfg=ExecConfig.for_market(market))
+        if a.dry_run:
+            log.info("dry-run：只计算不发单")
+        return b
+    if market != "JP":
+        raise SystemExit(f"{kind} 只支持日本株，美股请用 --broker paper")
+    if kind == "tachibana":
+        return make_broker("tachibana", demo=getattr(a, "demo", False),
+                           require_arm=not a.no_arm, dry_run=a.dry_run,
+                           limit_buffer_pct=a.limit_buffer,
+                           max_order_value=a.max_order_value)
+    return make_broker("rss", workbook=a.workbook, require_arm=not a.no_arm,
+                       dry_run=a.dry_run, limit_buffer_pct=a.limit_buffer)
+
+
+def _live_common(a, live: bool) -> int:
     from qbreak.trader import run_once
     market = a.market.upper()
     p = _params(a)
     risk = RiskConfig(max_order_value=a.max_order_value, require_arm=not a.no_arm)
     sizing = SizingConfig(initial_cash=a.cash or 1_000_000,
                           position_pct=a.position_pct, max_positions=risk.max_positions)
-    if live:
-        if market != "JP":
-            print("楽天 RSS 不支持美股，live 仅限 JP"); return 2
-        broker = make_broker("rss", workbook=a.workbook, require_arm=not a.no_arm,
-                             dry_run=a.dry_run, limit_buffer_pct=a.limit_buffer)
-    else:
-        broker = make_broker("paper", initial_cash=sizing.initial_cash, market=market,
-                             exec_cfg=ExecConfig.for_market(market))
-        if a.dry_run:
-            log.info("dry-run：只计算不发单")
+    if live and a.broker == "paper":
+        a.broker = "tachibana"
+    broker = _make_broker(a, market, sizing)
     ex = ExecConfig.for_market(market)
     ex.stop_fill_mode = a.stop_mode
     ex.validate()
@@ -150,9 +178,70 @@ def cmd_paper(a) -> int:
 
 def cmd_live(a) -> int:
     if not a.dry_run:
-        print("★ 实盘模式。请确认：①Excel 里 Ctrl!ARM 已填 ARMED ②单笔上限 "
+        print(f"★ 实盘模式（{a.broker}）。请确认：① ARM 已解锁 ②单笔上限 "
               f"{a.max_order_value:,.0f} ③var/HALT 不存在")
     return _live_common(a, live=True)
+
+
+def cmd_daemon(a) -> int:
+    """盘中常驻：实时止损 + 逆指値维护 + 收盘后日线流程。"""
+    from qbreak.daemon import Daemon, DaemonConfig
+    market = a.market.upper()
+    risk = RiskConfig(max_order_value=a.max_order_value, require_arm=not a.no_arm)
+    sizing = SizingConfig(initial_cash=a.cash or 1_000_000,
+                          position_pct=a.position_pct, max_positions=risk.max_positions)
+    broker = _make_broker(a, market, sizing)
+    ex = ExecConfig.for_market(market)
+    ex.stop_fill_mode = "intraday" if a.protective_stop else a.stop_mode
+    ex.validate()
+    cfg = DaemonConfig(poll_interval_s=a.interval, protective_stop=a.protective_stop,
+                       eod_at=_parse_time(a.eod_at))
+    d = Daemon(universe(market), broker, _params(a), risk, sizing,
+               DataConfig(provider=a.provider, years=max(a.years, 2),
+                          allow_synthetic=a.synthetic).validate(),
+               ex, cfg=cfg, dry_run=a.dry_run, market=market,
+               fallback_quotes=(a.broker == "paper"))
+    d.install_signal_handlers()
+    d.run_forever(max_loops=1 if a.once else None)
+    return 0
+
+
+def _parse_time(s: str):
+    import datetime as _dt
+    h, m = s.split(":")
+    return _dt.time(int(h), int(m))
+
+
+def cmd_tachibana_probe(a) -> int:
+    """只读连通性检查：登录 → 取价 → 持仓 → 余力。**绝不发单。**
+    用它对着官方 API 仕様書逐项核对 TachibanaSpec，全部通过再考虑实盘。"""
+    from qbreak.brokers.tachibana import TachibanaBroker, TachibanaSpec
+    spec = TachibanaSpec.load()
+    b = TachibanaBroker(spec=spec, demo=a.demo, dry_run=True, require_arm=True)
+    env = "デモ環境" if a.demo else "本番環境"
+    print(f"── 立花 e支店 API 连通性检查（{env}，只读）──")
+    print(f"base = {spec.base_demo if a.demo else spec.base_live}")
+    steps = [
+        ("登录", lambda: (b.login(), f"取得 URL: {sorted(b._urls)}")[1]),
+        ("取价 7203", lambda: f"{b.get_price('7203.T')}"),
+        ("持仓", lambda: f"{ {t: p.qty for t, p in b.positions().items()} }"),
+        ("买付余力", lambda: f"{b.cash():,.0f}"),
+        ("注文一覧", lambda: f"{len(b._call(spec.clm_order_list).get('aOrderList') or [])} 件"),
+    ]
+    ok = True
+    for name, fn in steps:
+        try:
+            print(f"[OK] {name:<12}: {fn()}")
+        except Exception as e:                       # noqa: BLE001
+            print(f"[NG] {name:<12}: {type(e).__name__}: {e}")
+            ok = False
+    if a.dump_spec:
+        print(f"\n已导出仕様模板 → {spec.dump_template()}")
+        print("按官方仕様書改这个文件，程序会自动加载，其余代码不用动。")
+    if not ok:
+        print("\n★ 有项目失败。常见原因：①API 利用申込未生效 ②API 版本 URL 变了 "
+              "③项目名与仕様書不符 → 用 --dump-spec 导出后逐项修正。")
+    return 0 if ok else 1
 
 
 def cmd_status(a) -> int:
@@ -199,6 +288,15 @@ def cmd_doctor(a) -> int:
         print(f"yfinance 连通: {'OK, 最新 ' + str(df.index[-1].date()) if len(df) else '★ 返回空（限流/网络/代理）'}")
     except Exception as e:                                   # noqa: BLE001
         print(f"yfinance 连通: ★ 失败 {type(e).__name__}: {e}")
+    import os as _os
+    print(f"心跳文件    : {'存在' if (paths.home() / 'heartbeat.json').exists() else '无（守护进程未跑过）'}")
+    print(f"ARM 状态    : {'ARMED ★ 当前允许发单' if _armed() else '未解锁（禁止发单）'}")
+    cred = "已设置" if _os.environ.get("TACHIBANA_USER_ID") else "未设置"
+    print(f"立花凭证    : TACHIBANA_USER_ID {cred}")
+    if platform.system() == "Darwin":
+        print("平台        : macOS —— 可用 --broker tachibana（原生）；--broker rss 不可用")
+        pl = Path.home() / "Library/LaunchAgents/com.qbreak.daemon.plist"
+        print(f"launchd     : {'已安装 ' + str(pl) if pl.exists() else '未安装（scripts/install_launchd.sh）'}")
     if platform.system() == "Windows":
         try:
             import xlwings  # noqa: F401
@@ -233,19 +331,36 @@ def main(argv=None) -> int:
     o.add_argument("--save", action="store_true", help="把稳健参数写入 best_params.json")
     o.set_defaults(func=cmd_optimize)
 
-    for name, fn, help_ in [("paper", cmd_paper, "第3阶段 模拟盘"),
-                            ("live", cmd_live, "第4阶段 实盘（楽天 RSS，仅 Windows/JP）")]:
-        s = sub.add_parser(name, help=help_); _common(s)
-        s.add_argument("--dry-run", action="store_true", help="只算不发单")
-        s.add_argument("--allow-stale", action="store_true", help="允许用过期 K 线（仅测试）")
-        s.add_argument("--position-pct", type=float, default=0.20)
-        s.add_argument("--max-order-value", type=float, default=300_000)
-        s.add_argument("--no-arm", action="store_true", help="关闭人工 ARM 闸门（强烈不建议）")
-        s.add_argument("--workbook", default="rss_bridge.xlsm")
-        s.add_argument("--limit-buffer", type=float, default=0.5, help="指値相对现价的偏移 %%")
-        s.add_argument("--protective-stop", action="store_true",
-                       help="为每笔持仓自动挂/改逆指値（配合 --stop-mode intraday）")
-        s.set_defaults(func=fn)
+    def _trade_args(sp):
+        _common(sp)
+        sp.add_argument("--broker", default="paper", choices=["paper", "tachibana", "rss"])
+        sp.add_argument("--demo", action="store_true", help="立花デモ環境")
+        sp.add_argument("--dry-run", action="store_true", help="只算不发单")
+        sp.add_argument("--allow-stale", action="store_true", help="允许用过期 K 线（仅测试）")
+        sp.add_argument("--position-pct", type=float, default=0.20)
+        sp.add_argument("--max-order-value", type=float, default=300_000)
+        sp.add_argument("--no-arm", action="store_true", help="关闭人工 ARM 闸门（强烈不建议）")
+        sp.add_argument("--workbook", default="rss_bridge.xlsm", help="仅 --broker rss")
+        sp.add_argument("--limit-buffer", type=float, default=0.5, help="指値相对现价的偏移 %%")
+        sp.add_argument("--protective-stop", action="store_true",
+                        help="为每笔持仓自动挂/改逆指値（盘中止损的真正保险）")
+
+    for name, fn, help_ in [("paper", cmd_paper, "第3阶段 模拟盘（单次）"),
+                            ("live", cmd_live, "实盘单次流程")]:
+        sp = sub.add_parser(name, help=help_); _trade_args(sp)
+        sp.set_defaults(func=fn)
+
+    dm = sub.add_parser("daemon", help="盘中常驻守护进程（实时止损 + 逆指値 + 收盘后日线流程）")
+    _trade_args(dm)
+    dm.add_argument("--interval", type=int, default=60, help="盘中轮询间隔秒")
+    dm.add_argument("--eod-at", default="15:40", help="收盘后日线流程时刻 JST")
+    dm.add_argument("--once", action="store_true", help="只跑一轮就退出（测试用）")
+    dm.set_defaults(func=cmd_daemon)
+
+    pb = sub.add_parser("tachibana-probe", help="立花 API 只读连通性 / 仕様检查")
+    pb.add_argument("--demo", action="store_true", help="用デモ環境（强烈建议先在这里跑通）")
+    pb.add_argument("--dump-spec", action="store_true", help="导出仕様模板到 var/tachibana_spec.json")
+    pb.set_defaults(func=cmd_tachibana_probe)
 
     st = sub.add_parser("status", help="查看状态"); _common(st)
     st.set_defaults(func=cmd_status)

@@ -1,14 +1,17 @@
 from .base import BaseBroker, BrokerError, Order, Position
 from .paper import PaperBroker
 
-__all__ = ["BaseBroker", "BrokerError", "Order", "Position", "PaperBroker"]
+__all__ = ["BaseBroker", "BrokerError", "Order", "Position", "PaperBroker", "make_broker"]
 
 
 def make_broker(kind: str, **kw) -> BaseBroker:
-    """kind: paper | rss"""
+    """kind: paper（模拟）| tachibana（立花 e支店 API，Mac/Linux）| rss（楽天，Windows+Excel）"""
     if kind == "paper":
         return PaperBroker(**kw)
+    if kind == "tachibana":
+        from .tachibana import TachibanaBroker          # 延迟导入：只在需要时读凭证
+        return TachibanaBroker(**kw)
     if kind == "rss":
-        from .rakuten_rss import RakutenRSSBroker   # 仅 Windows 需要 xlwings，延迟导入
+        from .rakuten_rss import RakutenRSSBroker       # 仅 Windows 需要 xlwings
         return RakutenRSSBroker(**kw)
-    raise ValueError(f"未知券商类型: {kind}")
+    raise ValueError(f"未知券商类型: {kind}（可选 paper / tachibana / rss）")

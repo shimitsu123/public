@@ -260,3 +260,31 @@ def freshness(df: pd.DataFrame) -> tuple[pd.Timestamp, int]:
     """返回 (最新 K 线日期, 距今自然日)。实盘前用来确认拿到的是今天的收盘数据。"""
     last = df.index[-1]
     return last, (pd.Timestamp.today().normalize() - last.normalize()).days
+
+
+def realtime_quotes(tickers: list[str]) -> dict[str, float]:
+    """yfinance 的分钟线最新价。**東証は 15~20 分遅延**なので、
+    実弾では使わないこと（券商 API の現在値を使う）。
+    用途は一つ：立花の口座が開くまでの間、`daemon --broker paper` で
+    守护进程の挙動をリハーサルすること。"""
+    import yfinance as yf
+    for nm in ("yfinance", "yfinance.data", "yfinance.utils"):
+        logging.getLogger(nm).setLevel(logging.CRITICAL)
+    out: dict[str, float] = {}
+    try:
+        raw = yf.download(tickers, period="1d", interval="1m", progress=False,
+                          group_by="ticker", threads=False, auto_adjust=False)
+    except Exception as e:  # noqa: BLE001
+        log.warning("实时报价获取失败: %s", e)
+        return out
+    if raw is None or raw.empty:
+        return out
+    for t in tickers:
+        try:
+            col = raw[t]["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw["Close"]
+            v = col.dropna()
+            if len(v):
+                out[t] = float(v.iloc[-1])
+        except (KeyError, IndexError):
+            continue
+    return out
