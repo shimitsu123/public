@@ -96,7 +96,7 @@ td.n,th.n{text-align:right}
 </div>
 
 <script>
-const DATA = {"generated": "2026-09-23 02:43", "sim": {"start": "2026-09-24", "end": "2026-12-24", "capital_jpy": 1000000, "markets": ["JP", "US"], "jp": {"initial_cash": 1000000, "universe": "affordable", "position_pct": 0.34, "max_positions": 3}, "us": {"initial_cash": null, "fx_start": null, "fx_date": null, "universe": "default", "position_pct": 0.2, "max_positions": 5}, "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。"}, "last_run": {}, "markets": {"JP": {"currency": "JPY", "symbol": "¥", "initial": 1000000.0, "days": [], "closed_trades": [], "summary": {"days": 0, "equity": 1000000.0, "ret_pct": 0.0, "max_dd_pct": 0.0, "trades": 0, "win_rate": 0.0, "realized_pnl": 0}}, "US": {"currency": "USD", "symbol": "$", "initial": 0.0, "days": [], "closed_trades": [], "summary": {"days": 0, "equity": 0.0, "ret_pct": 0.0, "max_dd_pct": 0.0, "trades": 0, "win_rate": 0.0, "realized_pnl": 0}, "fx": {"start": null, "now": null, "equity_jpy": null, "ret_pct_jpy": null, "fx_effect_jpy": null}}}};
+const DATA = {"generated": "2026-09-23 03:41", "sim": {"start": "2026-09-24", "end": "2026-12-24", "capital_jpy": 1000000, "markets": ["JP", "US"], "jp": {"initial_cash": 1000000, "universe": "affordable", "position_pct": 0.34, "max_positions": 3}, "us": {"initial_cash": null, "fx_start": null, "fx_date": null, "universe": "default", "position_pct": 0.2, "max_positions": 5}, "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。"}, "last_run": {"at": "2026-09-23 03:41", "ok": false, "error": "US: RuntimeError: 取不到 USD/JPY 汇率（yfinance JPY=X / USDJPY=X 均失败：fast_info JPY=X: 'currentTradingPeriod'; fast_info USDJPY=X: 'currentTradingPeriod'）。可设环境变量 QBREAK_USDJPY=157.6 手动指定; JP: 取数失败：没有取到任何行情数据。请检查：①网络/代理 ②yfinance 是否被限流（稍后重试或改用 --provider csv）③股票代码是否正确。若只是想跑通流程，加 --synthetic（结果不可用于决策）。", "markets_ok": [], "blocked_hosts": ["query1.finance.yahoo.com", "query2.finance.yahoo.com", "finance.yahoo.com", "fc.yahoo.com", "guce.yahoo.com"]}, "markets": {"JP": {"currency": "JPY", "symbol": "¥", "initial": 1000000.0, "days": [], "closed_trades": [], "summary": {"days": 0, "equity": 1000000.0, "ret_pct": 0.0, "max_dd_pct": 0.0, "trades": 0, "win_rate": 0.0, "realized_pnl": 0}}, "US": {"currency": "USD", "symbol": "$", "initial": 0.0, "days": [], "closed_trades": [], "summary": {"days": 0, "equity": 0.0, "ret_pct": 0.0, "max_dd_pct": 0.0, "trades": 0, "win_rate": 0.0, "realized_pnl": 0}, "fx": {"start": null, "now": null, "equity_jpy": null, "ret_pct_jpy": null, "fx_effect_jpy": null}}}};
 const $ = s => document.querySelector(s);
 const state = {market: null, sel: null};
 const fmt = (v, cur, d) => {
@@ -116,7 +116,9 @@ function init(){
   const sim = DATA.sim || {};
   $("#status").textContent = `更新 ${DATA.generated}` + (sim.start ? ` · 期间 ${sim.start} → ${sim.end}` : "");
   const lr = DATA.last_run || {};
-  if (lr.ok === false){ const b=$("#banner"); b.hidden=false; b.textContent = `最近一次运行失败（${lr.at||""}）：${lr.error||""}`; }
+  if (lr.ok === false){ const b=$("#banner"); b.hidden=false;
+    b.textContent = `最近一次运行未完成（${lr.at||""}）：${lr.error||""}` +
+      ((lr.blocked_hosts||[]).length ? `　｜ 被拦截的域名：${lr.blocked_hosts.join(", ")}` : ""); }
   render();
 }
 function render(){ renderTabs(); renderTiles(); renderChart(); renderDetail(); renderLog(); }

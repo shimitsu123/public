@@ -1,0 +1,13 @@
+{
+ "at": "2026-09-23 03:41",
+ "ok": false,
+ "error": "US: RuntimeError: 取不到 USD/JPY 汇率（yfinance JPY=X / USDJPY=X 均失败：fast_info JPY=X: 'currentTradingPeriod'; fast_info USDJPY=X: 'currentTradingPeriod'）。可设环境变量 QBREAK_USDJPY=157.6 手动指定; JP: 取数失败：没有取到任何行情数据。请检查：①网络/代理 ②yfinance 是否被限流（稍后重试或改用 --provider csv）③股票代码是否正确。若只是想跑通流程，加 --synthetic（结果不可用于决策）。",
+ "markets_ok": [],
+ "blocked_hosts": [
+  "query1.finance.yahoo.com",
+  "query2.finance.yahoo.com",
+  "finance.yahoo.com",
+  "fc.yahoo.com",
+  "guce.yahoo.com"
+ ]
+}
