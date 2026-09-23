@@ -168,8 +168,11 @@ python run.py report                           # 只重新生成 var/out/report.
 - 模拟盘所有成交都在**次日寄付**（JP 09:00 JST / US 09:30 ET），这是回测同款的成交假设
 - 状态（`var/sim.json`、`var/state/`、`var/out/`）随代码入库，例行任务靠它跨天续命
 - 日本株用 `affordable` 股票池、单笔 34%/最多 3 只：¥100 万下多数东证大盘股 1 単元就超预算，默认池几乎买不了
-- 例行任务 id `trig_01SjmCQ9DKyVx7T57iLpZmJh`（每周一至五 07:00 JST）；想停：让 Claude 删除它，或在 claude.ai 的 Routines 里禁用
-- 前提：运行环境的网络策略必须放行 Yahoo Finance（`*.finance.yahoo.com`、`fc.yahoo.com`、`guce.yahoo.com`），否则日报只会显示"取数失败"
+- 例行任务 id `trig_01Ety6bKRzNjWSpsVMRncojR`（每周一至五 07:00 JST，每次新开会话，完成后推送到手机）；
+  想停：让 Claude 删除它，或在 claude.ai 的 Routines 里禁用
+- 前提：运行环境的网络策略必须放行 [`network_allowlist.txt`](network_allowlist.txt) 里的域名；
+  **改动只对新启动的会话生效**（这也是例行任务每次新开会话的原因）。`run.py doctor` 会逐个检查
+- 美股在日报里同时显示美元与折合日元（每日 USD/JPY 记录在 `var/out/fx.csv`），汇率贡献单列
 
 ### 半自动（留在楽天、今天就能用）
 
