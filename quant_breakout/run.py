@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -253,15 +254,60 @@ def _sim_cfg():
 
 
 def _fx_usdjpy() -> tuple[float, str]:
-    """USD/JPY 现价（yfinance JPY=X）。只在初始化美股账户时用一次。"""
+    """USD/JPY 现价。依次尝试：环境变量 QBREAK_USDJPY → yfinance download(JPY=X)
+    → Ticker.history(JPY=X / USDJPY=X) → fast_info。全部失败才抛异常。"""
+    import os
+    import pandas as pd
+    ov = os.environ.get("QBREAK_USDJPY")
+    if ov:
+        return float(ov), "manual"
     import yfinance as yf
-    df = yf.download("JPY=X", period="5d", interval="1d", progress=False, auto_adjust=True)
-    if isinstance(df.columns, __import__("pandas").MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    df = df.dropna()
-    if df.empty:
-        raise RuntimeError("取不到 USD/JPY 汇率（yfinance JPY=X）")
-    return float(df["Close"].iloc[-1]), str(df.index[-1].date())
+    for nm in ("yfinance", "yfinance.data", "yfinance.utils"):
+        logging.getLogger(nm).setLevel(logging.CRITICAL)
+    errors = []
+    for sym in ("JPY=X", "USDJPY=X"):
+        try:
+            df = yf.download(sym, period="1mo", interval="1d", progress=False,
+                             auto_adjust=False, threads=False)
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            s_ = df["Close"].dropna() if "Close" in df else pd.Series(dtype=float)
+            if len(s_):
+                return float(s_.iloc[-1]), str(s_.index[-1].date())
+        except Exception as e:                                # noqa: BLE001
+            errors.append(f"download {sym}: {e}")
+        try:
+            h = yf.Ticker(sym).history(period="1mo", interval="1d", auto_adjust=False)
+            if h is not None and len(h.dropna(subset=["Close"])):
+                h = h.dropna(subset=["Close"])
+                return float(h["Close"].iloc[-1]), str(h.index[-1].date())
+        except Exception as e:                                # noqa: BLE001
+            errors.append(f"history {sym}: {e}")
+        try:
+            fi = yf.Ticker(sym).fast_info
+            px = float(fi["last_price"] or 0)
+            if px > 0:
+                return px, "fast_info"
+        except Exception as e:                                # noqa: BLE001
+            errors.append(f"fast_info {sym}: {e}")
+    raise RuntimeError("取不到 USD/JPY 汇率（yfinance JPY=X / USDJPY=X 均失败："
+                       + "; ".join(errors)[:300] + "）。可设环境变量 QBREAK_USDJPY=157.6 手动指定")
+
+
+def _netcheck() -> list[str]:
+    """逐个检查允许列表里的域名，返回不通的。"""
+    import urllib.request
+    from qbreak.config import NETWORK_ALLOWLIST
+    bad = []
+    for host in NETWORK_ALLOWLIST:
+        try:
+            urllib.request.urlopen(urllib.request.Request(
+                f"https://{host}/", method="HEAD", headers={"User-Agent": "qbreak"}), timeout=8)
+        except urllib.error.HTTPError:
+            pass                                             # 有 HTTP 响应 = 网络通
+        except Exception:                                    # noqa: BLE001
+            bad.append(host)
+    return bad
 
 
 def cmd_sim_init(a) -> int:
@@ -308,7 +354,10 @@ def cmd_sim_day(a) -> int:
         print(f"模拟期已于 {cfg['end']} 结束；只重新生成报表。")
         hp, _ = write_report(cfg["markets"]); print(f"报表 {hp}"); return 0
     p = _params(a)
-    results, errors = {}, {}
+    results, errors, notes = {}, {}, {}
+    blocked = _netcheck()
+    if blocked:
+        log.warning("以下域名不通：%s", blocked)
     for m in cfg["markets"]:
         try:
             mc = cfg[m.lower()]
@@ -333,6 +382,9 @@ def cmd_sim_day(a) -> int:
                            market=m, dry_run=False, allow_stale=a.allow_stale,
                            exec_cfg=ExecConfig.for_market(m))
             results[m] = res
+            soft = [n for n in res.notes if any(k in n for k in ("失败", "过期", "HALT", "不交易"))]
+            if soft:
+                notes[m] = "; ".join(soft)[:300]
             print(f"\n[{m}] " + res.summary())
         except Exception as e:                                   # noqa: BLE001
             errors[m] = f"{type(e).__name__}: {e}"
@@ -347,10 +399,13 @@ def cmd_sim_day(a) -> int:
             fp.open("a", encoding="utf-8").write(line)
     except Exception as e:                                   # noqa: BLE001
         log.warning("汇率获取失败（不影响交易）: %s", e)
+    ok = not errors and not notes
     write_json(paths.out_dir() / "last_run.json",
-               {"at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "ok": not errors,
-                "error": "; ".join(f"{m}: {e}" for m, e in errors.items()),
-                "markets_ok": list(results)})
+               {"at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "ok": ok,
+                "error": "; ".join([f"{m}: {e}" for m, e in errors.items()]
+                                   + [f"{m}: {n}" for m, n in notes.items()]),
+                "markets_ok": [m for m in results if m not in notes],
+                "blocked_hosts": blocked})
     hp, jp = write_report(cfg["markets"])
     print(f"\n报表 {hp}\n数据 {jp}")
     return 1 if errors and not results else 0

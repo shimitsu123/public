@@ -270,7 +270,9 @@ function init(){
   const sim = DATA.sim || {};
   $("#status").textContent = `更新 ${DATA.generated}` + (sim.start ? ` · 期间 ${sim.start} → ${sim.end}` : "");
   const lr = DATA.last_run || {};
-  if (lr.ok === false){ const b=$("#banner"); b.hidden=false; b.textContent = `最近一次运行失败（${lr.at||""}）：${lr.error||""}`; }
+  if (lr.ok === false){ const b=$("#banner"); b.hidden=false;
+    b.textContent = `最近一次运行未完成（${lr.at||""}）：${lr.error||""}` +
+      ((lr.blocked_hosts||[]).length ? `　｜ 被拦截的域名：${lr.blocked_hosts.join(", ")}` : ""); }
   render();
 }
 function render(){ renderTabs(); renderTiles(); renderChart(); renderDetail(); renderLog(); }
