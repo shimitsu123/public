@@ -36,6 +36,30 @@ def bar_key_of(bar_date) -> str:
     return str(pd.Timestamp(bar_date).date())
 
 
+def market_session_closed(market: str, now: dt.datetime | None = None) -> tuple[dt.date, bool]:
+    """返回 (该市场的"今天", 今天的交易时段是否已经收盘)。"""
+    from zoneinfo import ZoneInfo
+    if market.upper() == "JP":
+        from .calendar_jp import now_jst, session_of
+        n = now or now_jst()
+        return n.date(), session_of(n) in ("post", "closed")
+    et = (now or dt.datetime.now(ZoneInfo("America/New_York"))).astimezone(ZoneInfo("America/New_York"))
+    return et.date(), et.weekday() >= 5 or et.time() >= dt.time(16, 0)
+
+
+def drop_partial_bar(df, market: str, now: dt.datetime | None = None):
+    """yfinance 在盘中会把**还没收盘的当日 K 线**也返回。用它算信号等于偷看未来的一半。
+    若最后一根 K 线的日期 = 该市场的今天，且今天尚未收盘 → 丢掉这根。"""
+    if df is None or len(df) == 0:
+        return df
+    today, closed = market_session_closed(market, now)
+    last = df.index[-1]
+    if hasattr(last, "date") and last.date() == today and not closed:
+        log.info("[%s] 丢弃未收盘的当日 K 线 %s", market, today)
+        return df.iloc[:-1]
+    return df
+
+
 def expected_last_bar(today: dt.date, market: str) -> dt.date:
     """按交易日历，今天运行时"应该已经拿到"的最新 K 线日期。
     收盘前/开盘前运行 → 上一交易日；日本用祝日カレンダー，美股用工作日并容忍 1 个假日。
@@ -198,6 +222,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
         notify.send("取数失败，今日未交易", str(e), "error")
         return res
 
+    data = {t: drop_partial_bar(df, market) for t, df in data.items()}
     ind = {t: compute_indicators(df, p) for t, df in data.items()}
     bars = {t: df.index[-1] for t, df in ind.items()}
     bar_date = max(bars.values())

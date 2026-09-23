@@ -145,3 +145,21 @@ def test_journal_is_written():
     _run(_broker(), d1)
     fp = paths.out_dir() / "journal.csv"
     assert fp.exists() and "equity" in fp.read_text(encoding="utf-8-sig")
+
+
+def test_partial_bar_is_dropped_during_session():
+    """盘中跑（比如 10:30 JST）时 yfinance 会返回半根当日 K 线，必须丢掉。"""
+    from zoneinfo import ZoneInfo
+    from qbreak.trader import drop_partial_bar
+    idx = pd.bdate_range(end=pd.Timestamp("2026-09-24"), periods=5)
+    df = pd.DataFrame({"Open": 1, "High": 1, "Low": 1, "Close": 1, "Volume": 1}, index=idx)
+    jst = ZoneInfo("Asia/Tokyo")
+    mid = dt.datetime(2026, 9, 24, 10, 30, tzinfo=jst)            # 前場中
+    assert len(drop_partial_bar(df, "JP", mid)) == 4
+    post = dt.datetime(2026, 9, 24, 16, 0, tzinfo=jst)            # 收盘后
+    assert len(drop_partial_bar(df, "JP", post)) == 5
+    nxt = dt.datetime(2026, 9, 25, 7, 0, tzinfo=jst)              # 次日早上
+    assert len(drop_partial_bar(df, "JP", nxt)) == 5
+    # 美股：9/24 22:30 JST = 9/24 09:30 ET 开盘中 → 丢；9/25 07:00 JST = 9/24 18:00 ET 已收盘 → 留
+    assert len(drop_partial_bar(df, "US", dt.datetime(2026, 9, 24, 22, 30, tzinfo=jst))) == 4
+    assert len(drop_partial_bar(df, "US", dt.datetime(2026, 9, 25, 7, 0, tzinfo=jst))) == 5

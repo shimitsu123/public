@@ -310,3 +310,12 @@ def universe(market: str, name: str = "default") -> list[str]:
 
 
 DEFAULT_PARAMS = StrategyParams()
+
+
+# ── 云端运行需要放行的外网域名（写进环境的网络策略；doctor 会逐个连通性检查）──
+NETWORK_ALLOWLIST = [
+    "query1.finance.yahoo.com", "query2.finance.yahoo.com", "finance.yahoo.com",
+    "fc.yahoo.com", "guce.yahoo.com",          # yfinance 行情与 cookie/crumb
+    "github.com", "api.github.com",            # 状态与日报入库
+    "pypi.org", "files.pythonhosted.org",      # 依赖安装
+]

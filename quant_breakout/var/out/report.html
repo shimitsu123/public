@@ -96,7 +96,7 @@ td.n,th.n{text-align:right}
 </div>
 
 <script>
-const DATA = {"generated": "2026-09-23 01:53", "sim": {"start": "2026-09-24", "end": "2026-12-24", "capital_jpy": 1000000, "markets": ["JP", "US"], "jp": {"initial_cash": 1000000, "universe": "affordable", "position_pct": 0.34, "max_positions": 3}, "us": {"initial_cash": null, "fx_start": null, "fx_date": null, "universe": "default", "position_pct": 0.2, "max_positions": 5}, "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。"}, "last_run": {}, "markets": {"JP": {"currency": "JPY", "symbol": "¥", "initial": 1000000.0, "days": [], "closed_trades": [], "summary": {"days": 0, "equity": 1000000.0, "ret_pct": 0.0, "max_dd_pct": 0.0, "trades": 0, "win_rate": 0.0, "realized_pnl": 0}}, "US": {"currency": "USD", "symbol": "$", "initial": 0.0, "days": [], "closed_trades": [], "summary": {"days": 0, "equity": 0.0, "ret_pct": 0.0, "max_dd_pct": 0.0, "trades": 0, "win_rate": 0.0, "realized_pnl": 0}}}};
+const DATA = {"generated": "2026-09-23 02:43", "sim": {"start": "2026-09-24", "end": "2026-12-24", "capital_jpy": 1000000, "markets": ["JP", "US"], "jp": {"initial_cash": 1000000, "universe": "affordable", "position_pct": 0.34, "max_positions": 3}, "us": {"initial_cash": null, "fx_start": null, "fx_date": null, "universe": "default", "position_pct": 0.2, "max_positions": 5}, "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。"}, "last_run": {}, "markets": {"JP": {"currency": "JPY", "symbol": "¥", "initial": 1000000.0, "days": [], "closed_trades": [], "summary": {"days": 0, "equity": 1000000.0, "ret_pct": 0.0, "max_dd_pct": 0.0, "trades": 0, "win_rate": 0.0, "realized_pnl": 0}}, "US": {"currency": "USD", "symbol": "$", "initial": 0.0, "days": [], "closed_trades": [], "summary": {"days": 0, "equity": 0.0, "ret_pct": 0.0, "max_dd_pct": 0.0, "trades": 0, "win_rate": 0.0, "realized_pnl": 0}, "fx": {"start": null, "now": null, "equity_jpy": null, "ret_pct_jpy": null, "fx_effect_jpy": null}}}};
 const $ = s => document.querySelector(s);
 const state = {market: null, sel: null};
 const fmt = (v, cur, d) => {
@@ -135,12 +135,15 @@ function tile(k, v, s, c){ return `<div class="tile"><div class="k">${k}</div><d
 function renderTiles(){
   const M = cur(), S = M.summary, c = M.currency;
   const pnl = S.equity - M.initial;
+  const fx = M.fx || {};
   $("#tiles").innerHTML =
-    tile("当前权益", fmt(S.equity, c), `起始 ${fmt(M.initial, c)}`) +
+    tile("当前权益", fmt(S.equity, c), `起始 ${fmt(M.initial, c)}` + (fx.equity_jpy ? `　≈ ¥${Number(fx.equity_jpy).toLocaleString("ja-JP")}（USD/JPY ${fx.now}）` : "")) +
     tile("累计损益", signed(pnl, c), `${S.ret_pct>0?"+":""}${S.ret_pct}%`, cls(pnl)) +
     tile("最大回撤", `${S.max_dd_pct}%`, "从权益最高点") +
     tile("已平仓", `${S.trades} 笔`, `胜率 ${S.win_rate}%`) +
-    tile("交易日", `${S.days} / 65`, "3 个月 ≈ 65 个交易日");
+    tile("交易日", `${S.days} / 65`, "3 个月 ≈ 65 个交易日") +
+    (fx.ret_pct_jpy != null ? tile("折合日元收益", `${fx.ret_pct_jpy>0?"+":""}${fx.ret_pct_jpy}%`,
+        `其中汇率贡献 ${fx.fx_effect_jpy>0?"+":""}¥${Number(fx.fx_effect_jpy||0).toLocaleString("ja-JP")}`, cls(fx.ret_pct_jpy)) : "");
 }
 
 function renderChart(){

@@ -56,6 +56,8 @@ def _common(ap: argparse.ArgumentParser) -> None:
                     help="行情取不到时用合成数据跑通流程；结果没有任何投资参考价值")
     ap.add_argument("--cash", type=float, default=None)
     ap.add_argument("--params", default=None, help="指定参数文件（默认 var/best_params.json）")
+    ap.add_argument("--universe", default="default", choices=["default", "affordable"],
+                    help="股票池：affordable = 100 万円でも単元が買える流動性上位（仅 JP 有区别）")
     ap.add_argument("--stop-mode", default="next_open", choices=["next_open", "intraday"],
                     help="止损成交假设：next_open=收盘触发次日开盘成交（默认，最贴近"
                          "每天跑一次的程序）；intraday=盘中触及即成交（必须真的挂逆指値）")
@@ -68,7 +70,7 @@ def _data_cfg(a) -> DataConfig:
 
 def _load_data(a, market: str):
     from qbreak.data import load_universe
-    tickers = universe(market)
+    tickers = universe(market, getattr(a, "universe", "default"))
     log.info("加载 %s 股票池 %d 只，%d 年 …", market, len(tickers), a.years)
     return load_universe(tickers, _data_cfg(a))
 
@@ -84,6 +86,12 @@ def _bt_cfg(a, market: str) -> BacktestConfig:
     bt.exec_cfg.validate()
     if a.cash:
         bt.sizing.initial_cash = a.cash
+    if getattr(a, "position_pct", None):
+        bt.sizing.position_pct = a.position_pct
+        bt.sizing.max_position_pct = max(bt.sizing.max_position_pct, a.position_pct)
+    if getattr(a, "max_positions", None):
+        bt.sizing.max_positions = a.max_positions
+    bt.sizing.validate()
     return bt
 
 
@@ -329,6 +337,16 @@ def cmd_sim_day(a) -> int:
         except Exception as e:                                   # noqa: BLE001
             errors[m] = f"{type(e).__name__}: {e}"
             log.error("[%s] 失败: %s\n%s", m, e, traceback.format_exc())
+    try:                                                     # 每日汇率（美股折日元用）
+        fx, fxd = _fx_usdjpy()
+        fp = paths.out_dir() / "fx.csv"
+        line = f"{today.isoformat()},{fxd},{fx:.4f}\n"
+        if not fp.exists():
+            fp.write_text("date,fx_date,usdjpy\n" + line, encoding="utf-8")
+        elif fxd not in fp.read_text(encoding="utf-8"):
+            fp.open("a", encoding="utf-8").write(line)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("汇率获取失败（不影响交易）: %s", e)
     write_json(paths.out_dir() / "last_run.json",
                {"at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "ok": not errors,
                 "error": "; ".join(f"{m}: {e}" for m, e in errors.items()),
@@ -444,6 +462,25 @@ def cmd_doctor(a) -> int:
             ok = ok and not need
     print(f"数据目录    : {paths.home()}  (可用 QBREAK_HOME 改)")
     print(f"HALT 文件   : {'存在 ★ 当前禁止下单' if paths.halt_file().exists() else '不存在'}")
+    print("── 外网连通（网络策略允许列表见 network_allowlist.txt）──")
+    import urllib.request
+    from qbreak.config import NETWORK_ALLOWLIST
+    blocked = []
+    for host in NETWORK_ALLOWLIST:
+        try:
+            req = urllib.request.Request(f"https://{host}/", method="HEAD",
+                                         headers={"User-Agent": "qbreak-doctor"})
+            urllib.request.urlopen(req, timeout=8)
+            state = "OK"
+        except urllib.error.HTTPError as e:                  # 有 HTTP 响应就说明网络通
+            state = f"OK(HTTP {e.code})"
+        except Exception as e:                               # noqa: BLE001
+            state = f"★ 不通 {type(e).__name__}"
+            blocked.append(host)
+        print(f"  {host:<32} {state}")
+    if blocked:
+        print(f"★ 以下域名被拦截，请加入环境网络策略后【新开会话】再试：{blocked}")
+        ok = False
     try:
         import yfinance as yf
         df = yf.download("7203.T", period="5d", interval="1d", progress=False,
@@ -484,9 +521,13 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     b = sub.add_parser("backtest", help="第1阶段 回测"); _common(b)
+    b.add_argument("--position-pct", type=float, default=None)
+    b.add_argument("--max-positions", type=int, default=None)
     b.set_defaults(func=cmd_backtest)
 
     o = sub.add_parser("optimize", help="第2阶段 walk-forward 参数优化"); _common(o)
+    o.add_argument("--position-pct", type=float, default=None)
+    o.add_argument("--max-positions", type=int, default=None)
     o.add_argument("--train-years", type=float, default=2.0)
     o.add_argument("--test-months", type=int, default=6)
     o.add_argument("--objective", default="calmar",

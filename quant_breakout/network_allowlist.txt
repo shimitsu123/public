@@ -1,0 +1,11 @@
+# 云端环境（claude.ai → Environment → 网络访问）需要放行的域名，一行一个。
+# 改动后对新启动的会话生效；正在运行的会话保持旧策略。
+query1.finance.yahoo.com
+query2.finance.yahoo.com
+finance.yahoo.com
+fc.yahoo.com
+guce.yahoo.com
+github.com
+api.github.com
+pypi.org
+files.pythonhosted.org

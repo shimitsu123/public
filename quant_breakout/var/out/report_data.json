@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-23 01:53",
+ "generated": "2026-09-23 02:43",
  "sim": {
   "start": "2026-09-24",
   "end": "2026-12-24",
@@ -56,6 +56,13 @@
     "trades": 0,
     "win_rate": 0.0,
     "realized_pnl": 0
+   },
+   "fx": {
+    "start": null,
+    "now": null,
+    "equity_jpy": null,
+    "ret_pct_jpy": null,
+    "fx_effect_jpy": null
    }
   }
  }

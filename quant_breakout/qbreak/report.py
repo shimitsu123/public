@@ -55,8 +55,27 @@ def _max_dd(eq: list[float]) -> float:
     return dd * 100
 
 
+def _fx_table() -> list[tuple[str, float]]:
+    fp = paths.out_dir() / "fx.csv"
+    if not fp.exists():
+        return []
+    df = pd.read_csv(fp, dtype=str).fillna("")
+    return sorted((r["fx_date"], float(r["usdjpy"])) for _, r in df.iterrows() if r["usdjpy"])
+
+
+def _fx_on(table: list[tuple[str, float]], date: str, default: float | None) -> float | None:
+    """给定日期的 USD/JPY（取 ≤ 该日的最近一条）。"""
+    best = None
+    for d, v in table:
+        if d <= date:
+            best = v
+    return best if best is not None else default
+
+
 def build_data(markets: list[str] | None = None) -> dict:
     sim = read_json(paths.home() / "sim.json", {}) or {}
+    fx_table = _fx_table()
+    fx_start = (sim.get("us") or {}).get("fx_start")
     last_run = read_json(paths.out_dir() / "last_run.json", {}) or {}
     markets = markets or sim.get("markets") or ["JP", "US"]
     out = {"generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "sim": sim,
@@ -83,8 +102,10 @@ def build_data(markets: list[str] | None = None) -> dict:
                                    "pnl": ex.get("pnl", o.get("extra", {}).get("pnl")),
                                    "note": (o.get("note") or "").replace("pnl=", "损益 ")})
             pos = [p for p in (r.get("positions") or "").split(";") if p]
+            fx = _fx_on(fx_table, bd, fx_start) if m == "US" else None
             days.append({"date": bd, "equity": round(eq, 2), "cash": float(r["cash"] or 0),
                          "pnl": round(eq - prev_eq, 2), "positions": pos, "trades": trades,
+                         "fx": fx, "equity_jpy": round(eq * fx, 0) if fx else None,
                          "signals": [s for s in (r.get("signals") or "").split(";") if s],
                          "risk": r.get("risk", ""), "orders": int(float(r.get("orders") or 0))})
             prev_eq = eq
@@ -103,6 +124,16 @@ def build_data(markets: list[str] | None = None) -> dict:
                 "realized_pnl": round(sum(float(c.get("pnl", 0)) for c in closed), 2),
             },
         }
+        if m == "US":
+            fx_now = days[-1]["fx"] if days else (fx_table[-1][1] if fx_table else fx_start)
+            eq_usd = eqs[-1] if eqs else initial
+            cap = float(sim.get("capital_jpy") or 0)
+            out["markets"][m]["fx"] = {
+                "start": fx_start, "now": fx_now,
+                "equity_jpy": round(eq_usd * fx_now, 0) if fx_now else None,
+                "ret_pct_jpy": round((eq_usd * fx_now / cap - 1) * 100, 2) if fx_now and cap else None,
+                "fx_effect_jpy": round(eq_usd * (fx_now - fx_start), 0) if fx_now and fx_start else None,
+            }
     return out
 
 
@@ -258,12 +289,15 @@ function tile(k, v, s, c){ return `<div class="tile"><div class="k">${k}</div><d
 function renderTiles(){
   const M = cur(), S = M.summary, c = M.currency;
   const pnl = S.equity - M.initial;
+  const fx = M.fx || {};
   $("#tiles").innerHTML =
-    tile("当前权益", fmt(S.equity, c), `起始 ${fmt(M.initial, c)}`) +
+    tile("当前权益", fmt(S.equity, c), `起始 ${fmt(M.initial, c)}` + (fx.equity_jpy ? `　≈ ¥${Number(fx.equity_jpy).toLocaleString("ja-JP")}（USD/JPY ${fx.now}）` : "")) +
     tile("累计损益", signed(pnl, c), `${S.ret_pct>0?"+":""}${S.ret_pct}%`, cls(pnl)) +
     tile("最大回撤", `${S.max_dd_pct}%`, "从权益最高点") +
     tile("已平仓", `${S.trades} 笔`, `胜率 ${S.win_rate}%`) +
-    tile("交易日", `${S.days} / 65`, "3 个月 ≈ 65 个交易日");
+    tile("交易日", `${S.days} / 65`, "3 个月 ≈ 65 个交易日") +
+    (fx.ret_pct_jpy != null ? tile("折合日元收益", `${fx.ret_pct_jpy>0?"+":""}${fx.ret_pct_jpy}%`,
+        `其中汇率贡献 ${fx.fx_effect_jpy>0?"+":""}¥${Number(fx.fx_effect_jpy||0).toLocaleString("ja-JP")}`, cls(fx.ret_pct_jpy)) : "");
 }
 
 function renderChart(){
