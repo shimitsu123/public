@@ -1,10 +1,8 @@
 """候补队列、市场状态、数据源降级、entry_scale。"""
 import datetime as dt
-import json
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from conftest import make_frame
 from qbreak import paths
