@@ -1,4 +1,9 @@
-var/
+var/cache/
+var/logs/
+var/heartbeat.json
+var/*.tmp*
+var/**/*.tmp*
+var/**/*.corrupt.*
 __pycache__/
 *.pyc
 .pytest_cache/

@@ -4,6 +4,8 @@
     python run.py backtest JP                 第1阶段 回测
     python run.py optimize JP --save          第2阶段 walk-forward，并写入 best_params.json
     python run.py paper    JP                 第3阶段 模拟盘（每交易日收盘后跑一次）
+    python run.py sim-init && python run.py sim-day    三个月模拟：初始化 + 每日一跑（含日报）
+    python run.py report                      只重新生成日报 var/out/report.html
     python run.py signal   JP --push          半自动：只出操作清单，你在券商 App 照抄（楽天可用）
     python run.py pos add 7203.T 100 3000     半自动：登记真实成交
     python run.py daemon   JP --broker paper  盘中守护进程（演练；macOS launchd 常驻）
@@ -233,6 +235,117 @@ def cmd_pos(a) -> int:
     return 0
 
 
+# ══════════════════ 三个月模拟（云端每日例行任务用） ══════════════════
+SIM_FILE = "sim.json"
+
+
+def _sim_cfg():
+    from qbreak.utils import read_json
+    return read_json(paths.home() / SIM_FILE, {}) or {}
+
+
+def _fx_usdjpy() -> tuple[float, str]:
+    """USD/JPY 现价（yfinance JPY=X）。只在初始化美股账户时用一次。"""
+    import yfinance as yf
+    df = yf.download("JPY=X", period="5d", interval="1d", progress=False, auto_adjust=True)
+    if isinstance(df.columns, __import__("pandas").MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    df = df.dropna()
+    if df.empty:
+        raise RuntimeError("取不到 USD/JPY 汇率（yfinance JPY=X）")
+    return float(df["Close"].iloc[-1]), str(df.index[-1].date())
+
+
+def cmd_sim_init(a) -> int:
+    """初始化三个月模拟：清空模拟盘状态，写 sim.json。"""
+    import datetime as _dt
+    import shutil
+    from qbreak.utils import write_json
+    if (paths.home() / SIM_FILE).exists() and not a.force:
+        print(f"已存在 {paths.home() / SIM_FILE}，加 --force 才会重置（会清空持仓与流水）")
+        return 2
+    for fp in [paths.state_dir(), paths.out_dir()]:
+        shutil.rmtree(fp, ignore_errors=True)
+    paths.state_dir(); paths.out_dir()
+    start = a.start or _dt.date.today().isoformat()
+    s = _dt.date.fromisoformat(start)
+    end = (s.replace(month=s.month + 3) if s.month <= 9
+           else s.replace(year=s.year + 1, month=s.month - 9)).isoformat()
+    cfg = {"start": start, "end": end, "capital_jpy": a.capital,
+           "markets": [m.upper() for m in a.markets.split(",")],
+           "jp": {"initial_cash": a.capital, "universe": a.jp_universe,
+                  "position_pct": a.jp_position_pct, "max_positions": a.jp_max_positions},
+           "us": {"initial_cash": None, "fx_start": None, "fx_date": None,
+                  "universe": "default", "position_pct": 0.20, "max_positions": 5},
+           "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。"}
+    write_json(paths.home() / SIM_FILE, cfg)
+    print(f"已初始化：{start} → {end}，资金 ¥{a.capital:,.0f}/市场，市场 {cfg['markets']}")
+    print(f"配置在 {paths.home() / SIM_FILE}")
+    return 0
+
+
+def cmd_sim_day(a) -> int:
+    """每个交易日跑一次：两个市场的模拟盘 → 日报 HTML。任何一个市场失败不影响另一个。"""
+    import datetime as _dt
+    import traceback
+    from qbreak.brokers import make_broker
+    from qbreak.report import write_report
+    from qbreak.trader import run_once
+    from qbreak.utils import write_json
+    cfg = _sim_cfg()
+    if not cfg:
+        print("先运行 python run.py sim-init"); return 2
+    today = _dt.date.today()
+    if today > _dt.date.fromisoformat(cfg["end"]):
+        print(f"模拟期已于 {cfg['end']} 结束；只重新生成报表。")
+        hp, _ = write_report(cfg["markets"]); print(f"报表 {hp}"); return 0
+    p = _params(a)
+    results, errors = {}, {}
+    for m in cfg["markets"]:
+        try:
+            mc = cfg[m.lower()]
+            if m == "US" and not mc.get("initial_cash"):
+                fx, fxd = _fx_usdjpy()
+                mc.update({"initial_cash": round(cfg["capital_jpy"] / fx, 2),
+                           "fx_start": fx, "fx_date": fxd})
+                write_json(paths.home() / SIM_FILE, cfg)
+                log.info("美股账户初始化：¥%s ÷ %.2f = $%s（%s）",
+                         f"{cfg['capital_jpy']:,.0f}", fx, f"{mc['initial_cash']:,.2f}", fxd)
+            sizing = SizingConfig(initial_cash=mc["initial_cash"],
+                                  position_pct=mc["position_pct"],
+                                  max_positions=mc["max_positions"],
+                                  max_position_pct=max(0.34, mc["position_pct"]))
+            risk = RiskConfig(max_order_value=10 ** 9, require_arm=False,
+                              max_positions=mc["max_positions"],
+                              max_new_positions_per_day=mc["max_positions"])
+            broker = make_broker("paper", initial_cash=sizing.initial_cash, market=m,
+                                 exec_cfg=ExecConfig.for_market(m))
+            res = run_once(universe(m, mc.get("universe", "default")), broker, p, risk, sizing,
+                           DataConfig(provider="yfinance", years=2, allow_synthetic=False).validate(),
+                           market=m, dry_run=False, allow_stale=a.allow_stale,
+                           exec_cfg=ExecConfig.for_market(m))
+            results[m] = res
+            print(f"\n[{m}] " + res.summary())
+        except Exception as e:                                   # noqa: BLE001
+            errors[m] = f"{type(e).__name__}: {e}"
+            log.error("[%s] 失败: %s\n%s", m, e, traceback.format_exc())
+    write_json(paths.out_dir() / "last_run.json",
+               {"at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "ok": not errors,
+                "error": "; ".join(f"{m}: {e}" for m, e in errors.items()),
+                "markets_ok": list(results)})
+    hp, jp = write_report(cfg["markets"])
+    print(f"\n报表 {hp}\n数据 {jp}")
+    return 1 if errors and not results else 0
+
+
+def cmd_report(a) -> int:
+    from qbreak.report import write_report
+    cfg = _sim_cfg()
+    hp, jp = write_report(cfg.get("markets") if cfg else [a.market.upper()])
+    print(f"报表 {hp}\n数据 {jp}")
+    return 0
+
+
 def cmd_daemon(a) -> int:
     """盘中常驻：实时止损 + 逆指値维护 + 收盘后日线流程。"""
     from qbreak.daemon import Daemon, DaemonConfig
@@ -421,6 +534,24 @@ def main(argv=None) -> int:
     dm.add_argument("--eod-at", default="15:40", help="收盘后日线流程时刻 JST")
     dm.add_argument("--once", action="store_true", help="只跑一轮就退出（测试用）")
     dm.set_defaults(func=cmd_daemon)
+
+    si = sub.add_parser("sim-init", help="初始化 3 个月模拟（清空状态、写 sim.json）")
+    si.add_argument("--capital", type=float, default=1_000_000, help="每个市场的起始资金（日元）")
+    si.add_argument("--markets", default="JP,US")
+    si.add_argument("--start", default=None, help="YYYY-MM-DD，默认今天")
+    si.add_argument("--jp-universe", default="affordable", choices=["default", "affordable"])
+    si.add_argument("--jp-position-pct", type=float, default=0.34)
+    si.add_argument("--jp-max-positions", type=int, default=3)
+    si.add_argument("--force", action="store_true")
+    si.set_defaults(func=cmd_sim_init)
+
+    sd = sub.add_parser("sim-day", help="模拟：跑当日（两个市场）并生成日报")
+    sd.add_argument("--params", default=None)
+    sd.add_argument("--allow-stale", action="store_true")
+    sd.set_defaults(func=cmd_sim_day)
+
+    rp = sub.add_parser("report", help="只重新生成日报 HTML"); _common(rp)
+    rp.set_defaults(func=cmd_report)
 
     pb = sub.add_parser("tachibana-probe", help="立花 API 只读连通性 / 仕様检查")
     pb.add_argument("--demo", action="store_true", help="用デモ環境（强烈建议先在这里跑通）")

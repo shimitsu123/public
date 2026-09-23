@@ -10,6 +10,9 @@ from .base import BaseBroker, Order, Position
 
 log = setup_logging("broker.paper")
 
+# 模拟盘的成交假设是「次日寄付（开盘）」，所以约定时刻就是各市场的开盘时间
+OPEN_TIME = {"JP": "09:00 JST", "US": "09:30 ET"}
+
 
 def _now() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
@@ -111,7 +114,13 @@ class PaperBroker(BaseBroker):
                                  note=f"开盘跳空 {px / o['ref_px'] - 1:+.1%} 超过 {gap}%，放弃"))
                 continue
             self._prices[o["ticker"]] = px
-            out.append(self._fill_now(o["ticker"], o["side"], o["qty"], o["client_id"] + "-f"))
+            f = self._fill_now(o["ticker"], o["side"], o["qty"], o["client_id"] + "-f")
+            f.extra.update({"fill_date": bar, "fill_time": OPEN_TIME.get(self.market, "09:00"),
+                            "queued_bar": o["bar"], "ref_px": o["ref_px"]})
+            if self.state["orders"] and self.state["orders"][-1].get("client_id") == f.client_id:
+                self.state["orders"][-1]["extra"] = f.extra       # 落盘也带上
+                self._save()
+            out.append(f)
         self.state["pending"] = keep
         self._save()
         return out

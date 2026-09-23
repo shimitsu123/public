@@ -1,0 +1,62 @@
+{
+ "generated": "2026-09-23 01:53",
+ "sim": {
+  "start": "2026-09-24",
+  "end": "2026-12-24",
+  "capital_jpy": 1000000,
+  "markets": [
+   "JP",
+   "US"
+  ],
+  "jp": {
+   "initial_cash": 1000000,
+   "universe": "affordable",
+   "position_pct": 0.34,
+   "max_positions": 3
+  },
+  "us": {
+   "initial_cash": null,
+   "fx_start": null,
+   "fx_date": null,
+   "universe": "default",
+   "position_pct": 0.2,
+   "max_positions": 5
+  },
+  "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。"
+ },
+ "last_run": {},
+ "markets": {
+  "JP": {
+   "currency": "JPY",
+   "symbol": "¥",
+   "initial": 1000000.0,
+   "days": [],
+   "closed_trades": [],
+   "summary": {
+    "days": 0,
+    "equity": 1000000.0,
+    "ret_pct": 0.0,
+    "max_dd_pct": 0.0,
+    "trades": 0,
+    "win_rate": 0.0,
+    "realized_pnl": 0
+   }
+  },
+  "US": {
+   "currency": "USD",
+   "symbol": "$",
+   "initial": 0.0,
+   "days": [],
+   "closed_trades": [],
+   "summary": {
+    "days": 0,
+    "equity": 0.0,
+    "ret_pct": 0.0,
+    "max_dd_pct": 0.0,
+    "trades": 0,
+    "win_rate": 0.0,
+    "realized_pnl": 0
+   }
+  }
+ }
+}

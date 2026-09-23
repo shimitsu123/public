@@ -285,11 +285,28 @@ UNIVERSE_US = [
     "ORCL", "CRM", "ADBE", "NFLX", "COST", "LLY", "UNH", "JPM", "XOM",
     "CAT", "DE",
 ]
+# 100 万円クラスの資金で単元（100 株）が買える、流動性上位の銘柄群。
+# 东证大盘股很多单价 > ¥10,000（1 単元 = ¥100 万以上），默认股票池在 ¥100 万资金下几乎买不了。
+# 这里挑的是通常单价 ¥5,000 以下、日均売買代金大的名字；真正买不买得起由运行时按最新价判断。
+UNIVERSE_JP_AFFORDABLE = [
+    "7203.T", "8306.T", "8316.T", "8411.T", "9432.T", "9434.T", "9433.T", "5401.T",
+    "7267.T", "6752.T", "8591.T", "1605.T", "5020.T", "8604.T", "6178.T", "7182.T",
+    "4503.T", "4502.T", "3382.T", "2502.T", "2503.T", "6702.T", "6501.T", "6503.T",
+    "7011.T", "7013.T", "6902.T", "6971.T", "8031.T", "8053.T", "8001.T", "2914.T",
+    "4568.T", "9020.T", "9022.T", "7751.T", "6301.T", "8766.T", "8725.T", "4661.T",
+]
+UNIVERSES = {
+    "JP": {"default": UNIVERSE_JP, "affordable": UNIVERSE_JP_AFFORDABLE},
+    "US": {"default": UNIVERSE_US, "affordable": UNIVERSE_US},
+}
 BENCHMARK = {"JP": "^N225", "US": "^GSPC"}
 
 
-def universe(market: str) -> list[str]:
-    return list(UNIVERSE_JP if market.upper() == "JP" else UNIVERSE_US)
+def universe(market: str, name: str = "default") -> list[str]:
+    m = market.upper()
+    if name not in UNIVERSES[m]:
+        raise ConfigError(f"未知股票池 {name}，可选 {sorted(UNIVERSES[m])}")
+    return list(UNIVERSES[m][name])
 
 
 DEFAULT_PARAMS = StrategyParams()

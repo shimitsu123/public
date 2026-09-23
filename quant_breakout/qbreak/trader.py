@@ -36,6 +36,26 @@ def bar_key_of(bar_date) -> str:
     return str(pd.Timestamp(bar_date).date())
 
 
+def expected_last_bar(today: dt.date, market: str) -> dt.date:
+    """按交易日历，今天运行时"应该已经拿到"的最新 K 线日期。
+    收盘前/开盘前运行 → 上一交易日；日本用祝日カレンダー，美股用工作日并容忍 1 个假日。
+    原版用「距今自然日 ≤ 1」，周一早上（最新 K 线是周五）就会误判为过期。"""
+    from .calendar_jp import is_trading_day, now_jst, prev_trading_day, session_of
+    if market.upper() == "JP":
+        # 收盘后（post）且今天是交易日 → 今天的 K 线应已生成；否则是上一交易日
+        if is_trading_day(today) and session_of(now_jst()) == "post" and now_jst().date() == today:
+            return today
+        return prev_trading_day(today)
+    # US：上一工作日；美国假日没有单独日历，多容忍一个工作日
+    d = today - dt.timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= dt.timedelta(days=1)
+    d2 = d - dt.timedelta(days=1)
+    while d2.weekday() >= 5:
+        d2 -= dt.timedelta(days=1)
+    return d2
+
+
 def exit_reason(p: StrategyParams, pos: Position, px: float, dead: bool,
                 stop_px: float, trail_px: float, tp_px: float,
                 stop_handled_by_broker: bool = False) -> str | None:
@@ -118,6 +138,7 @@ class OrderGuard:
 @dataclass
 class DayResult:
     date: str = ""
+    bar_date: str = ""         # 数据所代表的交易日（报表按这个归档，而不是运行日）
     equity: float = 0.0
     cash: float = 0.0
     positions: dict = field(default_factory=dict)
@@ -180,12 +201,13 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
     ind = {t: compute_indicators(df, p) for t, df in data.items()}
     bars = {t: df.index[-1] for t, df in ind.items()}
     bar_date = max(bars.values())
-    stale_days = (pd.Timestamp(today) - bar_date.normalize()).days
-    if stale_days > risk_cfg.stale_data_max_days and not allow_stale:
-        msg = (f"最新 K 线 {bar_date.date()} 距今 {stale_days} 天 > "
-               f"{risk_cfg.stale_data_max_days}，判定为数据过期，今日不交易。"
-               "（收盘后 yfinance 通常延迟 15~30 分钟，建议 16:00 JST 以后运行；"
-               "若今天本就是休市日则属正常）")
+    res.bar_date = bar_key_of(bar_date)
+    expected = expected_last_bar(today, market)
+    behind = (expected - bar_date.normalize().date()).days       # 比"应有的最新 K 线"晚几天
+    if behind > 0 and not allow_stale:
+        msg = (f"最新 K 线 {bar_date.date()}，但按交易日历应已有 {expected} 的数据"
+               f"（落后 {behind} 天），判定为数据过期，今日不交易。"
+               "（收盘后 yfinance 通常延迟 15~30 分钟；若今天本就是休市日则属正常）")
         log.warning(msg)
         res.notes.append(msg)
         return res
@@ -351,16 +373,17 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
     res.positions = {t: pos.qty for t, pos in broker.positions().items()}
     if not dry_run:
         rm.end(res.equity, today)
-    _journal(res)
+    _journal(res, market)
     if res.orders or decision.daily_loss_pct <= -abs(risk_cfg.daily_max_loss_pct):
         notify.send(f"{res.date} 交易汇总", res.summary(),
                     "warn" if not decision.allow_open else "info")
     return res
 
 
-def _journal(res: DayResult) -> None:
+def _journal(res: DayResult, market: str = "JP") -> None:
     fp = paths.out_dir() / "journal.csv"
-    row = pd.DataFrame([{ "date": res.date, "equity": round(res.equity, 2),
+    row = pd.DataFrame([{ "date": res.date, "market": market, "bar_date": res.bar_date,
+                          "equity": round(res.equity, 2),
                           "cash": round(res.cash, 2),
                           "positions": ";".join(f"{k}:{v}" for k, v in res.positions.items()),
                           "orders": len(res.orders), "signals": ";".join(res.signals),

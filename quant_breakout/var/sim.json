@@ -1,0 +1,24 @@
+{
+ "start": "2026-09-24",
+ "end": "2026-12-24",
+ "capital_jpy": 1000000,
+ "markets": [
+  "JP",
+  "US"
+ ],
+ "jp": {
+  "initial_cash": 1000000,
+  "universe": "affordable",
+  "position_pct": 0.34,
+  "max_positions": 3
+ },
+ "us": {
+  "initial_cash": null,
+  "fx_start": null,
+  "fx_date": null,
+  "universe": "default",
+  "position_pct": 0.2,
+  "max_positions": 5
+ },
+ "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。"
+}
