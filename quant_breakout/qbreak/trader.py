@@ -244,7 +244,8 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
 
     # ── 0.5 撮合昨日排队的「次日开盘」订单（与回测引擎的 T+1 开盘成交对齐）──
     if hasattr(broker, "fill_pending"):
-        for o in broker.fill_pending(opens, bar_key_of(bar_date), ex.max_entry_gap_pct):
+        prev_bars = {t: bar_key_of(df.index[-2]) for t, df in ind.items() if len(df) > 1}
+        for o in broker.fill_pending(opens, bar_key_of(bar_date), ex.max_entry_gap_pct, prev_bars):
             res.orders.append(o.to_dict())
             if o.status == "FILLED" and o.side == "SELL":
                 book.drop(o.ticker)

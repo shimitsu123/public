@@ -155,3 +155,15 @@ def test_dry_run_never_sends():
     br, bridge = _rss(dry_run=True, require_arm=False)
     assert br.buy("7203.T", 100, client_id="c1").status == "BLOCKED"
     assert not bridge.sent
+
+
+def test_deferred_order_expires_when_a_session_was_skipped():
+    """数据延迟一天再补成交 = 事后下单（前视），必须作废。"""
+    b = _paper()
+    b.set_prices({"A.T": 1000.0})
+    b.buy("A.T", 100, client_id="c1", ref_px=1000.0, bar="2026-01-05")
+    fills = b.fill_pending({"A.T": 1010.0}, "2026-01-07", prev_bars={"A.T": "2026-01-06"})
+    assert fills[0].status == "REJECTED" and "数据延迟" in fills[0].note and not b.positions()
+    b.buy("A.T", 100, client_id="c2", ref_px=1000.0, bar="2026-01-07")
+    fills = b.fill_pending({"A.T": 1010.0}, "2026-01-08", prev_bars={"A.T": "2026-01-07"})
+    assert fills[0].status == "FILLED"

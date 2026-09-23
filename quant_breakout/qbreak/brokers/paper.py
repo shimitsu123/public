@@ -93,14 +93,22 @@ class PaperBroker(BaseBroker):
                      note="已排队，次日开盘成交")
 
     def fill_pending(self, opens: dict[str, float], bar: str,
-                     max_gap_pct: float | None = None) -> list[Order]:
+                     max_gap_pct: float | None = None,
+                     prev_bars: dict[str, str] | None = None) -> list[Order]:
         """用当日开盘价撮合昨日排队的订单；当日没排上的（停牌/跳空过大）作废，
-        与回测引擎"信号只在 T+1 有效"的规则一致。"""
+        与回测引擎"信号只在 T+1 有效"的规则一致。
+        prev_bars: {ticker: 最新 K 线的前一根日期}。若排队日 ≠ 前一根，说明数据延迟导致
+        错过了紧接着的开盘（等于事后补单，是前视），作废。"""
         out, keep = [], []
         gap = self.ex.max_entry_gap_pct if max_gap_pct is None else max_gap_pct
         for o in self.state["pending"]:
             if o["bar"] == bar:                      # 今天刚排的，留到明天
                 keep.append(o)
+                continue
+            if prev_bars and o["ticker"] in prev_bars and prev_bars[o["ticker"]] != o["bar"]:
+                out.append(Order(o["ticker"], o["side"], o["qty"], 0, _now(), "REJECTED",
+                                 client_id=o["client_id"],
+                                 note=f"数据延迟：排队日 {o['bar']} 之后已过不止一根 K 线，错过次日寄付，作废"))
                 continue
             px = opens.get(o["ticker"])
             if px is None or px <= 0:

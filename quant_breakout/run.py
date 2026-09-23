@@ -58,8 +58,8 @@ def _common(ap: argparse.ArgumentParser) -> None:
                     help="行情取不到时用合成数据跑通流程；结果没有任何投资参考价值")
     ap.add_argument("--cash", type=float, default=None)
     ap.add_argument("--params", default=None, help="指定参数文件（默认 var/best_params.json）")
-    ap.add_argument("--universe", default="default", choices=["default", "affordable"],
-                    help="股票池：affordable = 100 万円でも単元が買える流動性上位（仅 JP 有区别）")
+    ap.add_argument("--universe", default="default", choices=["default", "affordable", "broad"],
+                    help="股票池：affordable = 100 万円でも単元が買える流動性上位；broad = 日経225 / NASDAQ-100+Dow30")
     ap.add_argument("--stop-mode", default="next_open", choices=["next_open", "intraday"],
                     help="止损成交假设：next_open=收盘触发次日开盘成交（默认，最贴近"
                          "每天跑一次的程序）；intraday=盘中触及即成交（必须真的挂逆指値）")
