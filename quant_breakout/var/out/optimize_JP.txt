@@ -1,44 +1,39 @@
-2026-09-23 03:42:56,247 INFO    qbreak.cli     加载 JP 股票池 40 只，5 年 …
-2026-09-23 03:43:12,397 ERROR   qbreak.data    批量下载失败(DataError): yfinance 返回空数据（可能被限流或代码错误）
-2026-09-23 03:43:12,397 ERROR   qbreak.data    跳过 7203.T：7203.T: yfinance 未返回该代码
-2026-09-23 03:43:12,397 ERROR   qbreak.data    跳过 8306.T：8306.T: yfinance 未返回该代码
-2026-09-23 03:43:12,397 ERROR   qbreak.data    跳过 8316.T：8316.T: yfinance 未返回该代码
-2026-09-23 03:43:12,398 ERROR   qbreak.data    跳过 8411.T：8411.T: yfinance 未返回该代码
-2026-09-23 03:43:12,398 ERROR   qbreak.data    跳过 9432.T：9432.T: yfinance 未返回该代码
-2026-09-23 03:43:12,398 ERROR   qbreak.data    跳过 9434.T：9434.T: yfinance 未返回该代码
-2026-09-23 03:43:12,398 ERROR   qbreak.data    跳过 9433.T：9433.T: yfinance 未返回该代码
-2026-09-23 03:43:12,398 ERROR   qbreak.data    跳过 5401.T：5401.T: yfinance 未返回该代码
-2026-09-23 03:43:12,398 ERROR   qbreak.data    跳过 7267.T：7267.T: yfinance 未返回该代码
-2026-09-23 03:43:12,398 ERROR   qbreak.data    跳过 6752.T：6752.T: yfinance 未返回该代码
-2026-09-23 03:43:12,398 ERROR   qbreak.data    跳过 8591.T：8591.T: yfinance 未返回该代码
-2026-09-23 03:43:12,398 ERROR   qbreak.data    跳过 1605.T：1605.T: yfinance 未返回该代码
-2026-09-23 03:43:12,398 ERROR   qbreak.data    跳过 5020.T：5020.T: yfinance 未返回该代码
-2026-09-23 03:43:12,398 ERROR   qbreak.data    跳过 8604.T：8604.T: yfinance 未返回该代码
-2026-09-23 03:43:12,398 ERROR   qbreak.data    跳过 6178.T：6178.T: yfinance 未返回该代码
-2026-09-23 03:43:12,398 ERROR   qbreak.data    跳过 7182.T：7182.T: yfinance 未返回该代码
-2026-09-23 03:43:12,399 ERROR   qbreak.data    跳过 4503.T：4503.T: yfinance 未返回该代码
-2026-09-23 03:43:12,399 ERROR   qbreak.data    跳过 4502.T：4502.T: yfinance 未返回该代码
-2026-09-23 03:43:12,399 ERROR   qbreak.data    跳过 3382.T：3382.T: yfinance 未返回该代码
-2026-09-23 03:43:12,399 ERROR   qbreak.data    跳过 2502.T：2502.T: yfinance 未返回该代码
-2026-09-23 03:43:27,933 ERROR   qbreak.data    批量下载失败(DataError): yfinance 返回空数据（可能被限流或代码错误）
-2026-09-23 03:43:27,933 ERROR   qbreak.data    跳过 2503.T：2503.T: yfinance 未返回该代码
-2026-09-23 03:43:27,933 ERROR   qbreak.data    跳过 6702.T：6702.T: yfinance 未返回该代码
-2026-09-23 03:43:27,934 ERROR   qbreak.data    跳过 6501.T：6501.T: yfinance 未返回该代码
-2026-09-23 03:43:27,934 ERROR   qbreak.data    跳过 6503.T：6503.T: yfinance 未返回该代码
-2026-09-23 03:43:27,934 ERROR   qbreak.data    跳过 7011.T：7011.T: yfinance 未返回该代码
-2026-09-23 03:43:27,934 ERROR   qbreak.data    跳过 7013.T：7013.T: yfinance 未返回该代码
-2026-09-23 03:43:27,934 ERROR   qbreak.data    跳过 6902.T：6902.T: yfinance 未返回该代码
-2026-09-23 03:43:27,934 ERROR   qbreak.data    跳过 6971.T：6971.T: yfinance 未返回该代码
-2026-09-23 03:43:27,934 ERROR   qbreak.data    跳过 8031.T：8031.T: yfinance 未返回该代码
-2026-09-23 03:43:27,934 ERROR   qbreak.data    跳过 8053.T：8053.T: yfinance 未返回该代码
-2026-09-23 03:43:27,934 ERROR   qbreak.data    跳过 8001.T：8001.T: yfinance 未返回该代码
-2026-09-23 03:43:27,934 ERROR   qbreak.data    跳过 2914.T：2914.T: yfinance 未返回该代码
-2026-09-23 03:43:27,935 ERROR   qbreak.data    跳过 4568.T：4568.T: yfinance 未返回该代码
-2026-09-23 03:43:27,935 ERROR   qbreak.data    跳过 9020.T：9020.T: yfinance 未返回该代码
-2026-09-23 03:43:27,935 ERROR   qbreak.data    跳过 9022.T：9022.T: yfinance 未返回该代码
-2026-09-23 03:43:27,935 ERROR   qbreak.data    跳过 7751.T：7751.T: yfinance 未返回该代码
-2026-09-23 03:43:27,935 ERROR   qbreak.data    跳过 6301.T：6301.T: yfinance 未返回该代码
-2026-09-23 03:43:27,935 ERROR   qbreak.data    跳过 8766.T：8766.T: yfinance 未返回该代码
-2026-09-23 03:43:27,935 ERROR   qbreak.data    跳过 8725.T：8725.T: yfinance 未返回该代码
-2026-09-23 03:43:27,935 ERROR   qbreak.data    跳过 4661.T：4661.T: yfinance 未返回该代码
-2026-09-23 03:43:28,438 ERROR   qbreak.cli     没有取到任何行情数据。请检查：①网络/代理 ②yfinance 是否被限流（稍后重试或改用 --provider csv）③股票代码是否正确。若只是想跑通流程，加 --synthetic（结果不可用于决策）。
+参数组合 36 组；训练 2.0 年 / 测试 6 个月，滚动前进 …
+
+═══ Walk-Forward 各窗口（IS 最优 → OOS 实测）═══
+  is_start     is_end    oos_end  range_n  range_x_pct  macd_fast  macd_slow  macd_signal  is_score  is_trades  oos_cagr  oos_dd  oos_sharpe  oos_trades  oos_win
+2021-09-21 2023-09-21 2024-03-21       60         20.0         12         26            9      3.78         63     27.32   -6.54        2.34          20     60.0
+2022-03-21 2024-03-21 2024-09-21       90         20.0         12         26            9      5.80         66     -0.11   -5.08        0.04          10     50.0
+2022-09-21 2024-09-21 2025-03-21       90         15.0          8         21            9      5.19         41     -5.45   -4.39       -1.12           5     20.0
+2023-03-21 2025-03-21 2025-09-21       40         10.0         12         21            9      2.16         50      8.01   -4.23        1.15          10     40.0
+2023-09-21 2025-09-21 2026-03-21       60         15.0         12         26            9      1.73         52      0.84   -5.20        0.16          12     41.7
+2024-03-21 2026-03-21 2026-09-18       40         10.0          8         26            9      2.00         35      0.37   -1.63        0.15           2    100.0
+
+═══ 稳健参数区间（stability% = 众数出现比例）═══
+      param  min  median  max  mode  stability%
+    range_n 40.0    60.0 90.0  40.0        33.0
+range_x_pct 10.0    15.0 20.0  10.0        33.0
+  macd_fast  8.0    12.0 12.0  12.0        67.0
+  macd_slow 21.0    26.0 26.0  26.0        67.0
+macd_signal  9.0     9.0  9.0   9.0       100.0
+
+═══ 参数敏感度（中位分数随取值变化；断崖=过敏）═══
+      param  value   n  median_score   p25
+    range_n   40.0  72         1.040 0.280
+    range_n   60.0  72         1.090 0.425
+    range_n   90.0  48         1.055 0.558
+range_x_pct   10.0  48         1.055 0.400
+range_x_pct   15.0  72         1.065 0.385
+range_x_pct   20.0  72         1.085 0.425
+  macd_fast    8.0  96         0.980 0.388
+  macd_fast   12.0  96         1.170 0.435
+  macd_slow   21.0  96         1.045 0.417
+  macd_slow   26.0  96         1.080 0.378
+macd_signal    9.0 192         1.060 0.405
+
+═══ 在所有 IS 窗口都进前 20% 的参数组合（优先用这些）═══
+（无 —— 说明策略对参数敏感，应该改规则而不是继续调参）
+
+═══ 拼接 OOS 曲线（最接近实盘期望的数字）═══
+年化 4.68%  最大回撤 -6.54%  夏普 0.66  Calmar 0.71  交易 59 笔  胜率 49.2%
+注意：IS 分数再漂亮也不算数，只看这一行和上面那张表。

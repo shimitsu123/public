@@ -78,3 +78,24 @@ def test_halt_file_alone_blocks():
     paths.halt_file().write_text("manual", encoding="utf-8")
     dec = RiskManager(RiskConfig()).begin(1_000_000, dt.date(2026, 1, 5))
     assert dec.halted and not dec.allow_open
+
+
+def test_risk_state_is_per_market():
+    """¥100 万的日本株账户和 $6,000 的美股账户共用峰值会把美股误判成 -99% 回撤。"""
+    jp = RiskManager(RiskConfig(), market="JP")
+    jp.begin(1_000_000, dt.date(2026, 1, 5)); jp.end(1_000_000, dt.date(2026, 1, 5))
+    us = RiskManager(RiskConfig(), market="US")
+    dec = us.begin(6_336, dt.date(2026, 1, 5))
+    assert not dec.halted and dec.allow_open
+    assert jp.path != us.path and jp.halt_file() != us.halt_file()
+
+
+def test_auto_halt_is_per_market_but_global_halt_blocks_all():
+    cfg = RiskConfig(max_drawdown_pct=20.0, daily_max_loss_pct=99.0)
+    us = RiskManager(cfg, market="US")
+    us.begin(10_000, dt.date(2026, 1, 5)); us.end(10_000, dt.date(2026, 1, 5))
+    assert RiskManager(cfg, market="US").begin(7_000, dt.date(2026, 2, 1)).halted
+    assert (paths.home() / "HALT_US").exists() and not paths.halt_file().exists()
+    assert not RiskManager(cfg, market="JP").begin(1_000_000, dt.date(2026, 2, 1)).halted
+    paths.halt_file().write_text("manual", encoding="utf-8")
+    assert RiskManager(cfg, market="JP").begin(1_000_000, dt.date(2026, 2, 2)).halted

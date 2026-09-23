@@ -1,23 +1,40 @@
-2026-09-23 03:43:28,929 INFO    qbreak.cli     加载 US 股票池 20 只，5 年 …
-2026-09-23 03:43:45,412 ERROR   qbreak.data    批量下载失败(DataError): yfinance 返回空数据（可能被限流或代码错误）
-2026-09-23 03:43:45,412 ERROR   qbreak.data    跳过 AAPL：AAPL: yfinance 未返回该代码
-2026-09-23 03:43:45,413 ERROR   qbreak.data    跳过 MSFT：MSFT: yfinance 未返回该代码
-2026-09-23 03:43:45,413 ERROR   qbreak.data    跳过 NVDA：NVDA: yfinance 未返回该代码
-2026-09-23 03:43:45,413 ERROR   qbreak.data    跳过 AMZN：AMZN: yfinance 未返回该代码
-2026-09-23 03:43:45,413 ERROR   qbreak.data    跳过 META：META: yfinance 未返回该代码
-2026-09-23 03:43:45,413 ERROR   qbreak.data    跳过 GOOGL：GOOGL: yfinance 未返回该代码
-2026-09-23 03:43:45,413 ERROR   qbreak.data    跳过 AVGO：AVGO: yfinance 未返回该代码
-2026-09-23 03:43:45,413 ERROR   qbreak.data    跳过 AMD：AMD: yfinance 未返回该代码
-2026-09-23 03:43:45,413 ERROR   qbreak.data    跳过 MU：MU: yfinance 未返回该代码
-2026-09-23 03:43:45,413 ERROR   qbreak.data    跳过 ORCL：ORCL: yfinance 未返回该代码
-2026-09-23 03:43:45,413 ERROR   qbreak.data    跳过 CRM：CRM: yfinance 未返回该代码
-2026-09-23 03:43:45,413 ERROR   qbreak.data    跳过 ADBE：ADBE: yfinance 未返回该代码
-2026-09-23 03:43:45,413 ERROR   qbreak.data    跳过 NFLX：NFLX: yfinance 未返回该代码
-2026-09-23 03:43:45,414 ERROR   qbreak.data    跳过 COST：COST: yfinance 未返回该代码
-2026-09-23 03:43:45,414 ERROR   qbreak.data    跳过 LLY：LLY: yfinance 未返回该代码
-2026-09-23 03:43:45,414 ERROR   qbreak.data    跳过 UNH：UNH: yfinance 未返回该代码
-2026-09-23 03:43:45,414 ERROR   qbreak.data    跳过 JPM：JPM: yfinance 未返回该代码
-2026-09-23 03:43:45,414 ERROR   qbreak.data    跳过 XOM：XOM: yfinance 未返回该代码
-2026-09-23 03:43:45,414 ERROR   qbreak.data    跳过 CAT：CAT: yfinance 未返回该代码
-2026-09-23 03:43:45,414 ERROR   qbreak.data    跳过 DE：DE: yfinance 未返回该代码
-2026-09-23 03:43:45,917 ERROR   qbreak.cli     没有取到任何行情数据。请检查：①网络/代理 ②yfinance 是否被限流（稍后重试或改用 --provider csv）③股票代码是否正确。若只是想跑通流程，加 --synthetic（结果不可用于决策）。
+参数组合 36 组；训练 2.0 年 / 测试 6 个月，滚动前进 …
+
+═══ Walk-Forward 各窗口（IS 最优 → OOS 实测）═══
+  is_start     is_end    oos_end  range_n  range_x_pct  macd_fast  macd_slow  macd_signal  is_score  is_trades  oos_cagr  oos_dd  oos_sharpe  oos_trades  oos_win
+2021-09-23 2023-09-23 2024-03-23       60         15.0          8         21            9      0.66         17     30.70   -1.88        4.48          17     70.6
+2022-03-23 2024-03-23 2024-09-23       60         15.0          8         21            9      2.58         33     13.31   -5.14        1.86          14     57.1
+2022-09-23 2024-09-23 2025-03-23       60         15.0          8         21            9      2.22         44     -4.24   -3.34       -1.16           7     42.9
+2023-03-23 2025-03-23 2025-09-23       60         20.0          8         21            9      2.58         71     -8.75   -5.83       -1.39          18     27.8
+2023-09-23 2025-09-23 2026-03-23       60         15.0          8         21            9      1.80         48     10.83   -2.93        1.38          14     42.9
+2024-03-23 2026-03-23 2026-09-21       90         20.0          8         21            9      1.45         47    -11.62   -6.16       -3.46           7     14.3
+
+═══ 稳健参数区间（stability% = 众数出现比例）═══
+      param  min  median  max  mode  stability%
+    range_n 60.0    60.0 90.0  60.0        83.0
+range_x_pct 15.0    15.0 20.0  15.0        67.0
+  macd_fast  8.0     8.0  8.0   8.0       100.0
+  macd_slow 21.0    21.0 21.0  21.0       100.0
+macd_signal  9.0     9.0  9.0   9.0       100.0
+
+═══ 参数敏感度（中位分数随取值变化；断崖=过敏）═══
+      param  value   n  median_score    p25
+    range_n   40.0  72         0.250 -0.053
+    range_n   60.0  65         0.340  0.080
+    range_n   90.0  44         0.615  0.245
+range_x_pct   10.0  41         0.080 -0.030
+range_x_pct   15.0  68         0.580  0.237
+range_x_pct   20.0  72         0.450  0.177
+  macd_fast    8.0  90         0.390  0.085
+  macd_fast   12.0  91         0.360 -0.020
+  macd_slow   21.0  90         0.600  0.085
+  macd_slow   26.0  91         0.270  0.015
+macd_signal    9.0 181         0.380  0.040
+
+═══ 在所有 IS 窗口都进前 20% 的参数组合（优先用这些）═══
+ range_n  range_x_pct  macd_fast  macd_slow  macd_signal
+      60         15.0          8         21            9
+
+═══ 拼接 OOS 曲线（最接近实盘期望的数字）═══
+年化 3.95%  最大回撤 -9.57%  夏普 0.68  Calmar 0.41  交易 77 笔  胜率 45.5%
+注意：IS 分数再漂亮也不算数，只看这一行和上面那张表。

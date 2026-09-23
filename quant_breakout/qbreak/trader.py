@@ -202,7 +202,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
     ex = (exec_cfg or ExecConfig.for_market(market)).validate()
     intraday = ex.stop_fill_mode == "intraday"
     book, guard = PositionBook(), OrderGuard()
-    rm = RiskManager(risk_cfg)
+    rm = RiskManager(risk_cfg, market=market)
 
     # ── 0. 同步 + 取数 ──
     try:

@@ -1,44 +1,29 @@
-2026-09-23 03:42:03,196 INFO    qbreak.cli     加载 JP 股票池 40 只，5 年 …
-2026-09-23 03:42:20,830 ERROR   qbreak.data    批量下载失败(DataError): yfinance 返回空数据（可能被限流或代码错误）
-2026-09-23 03:42:20,831 ERROR   qbreak.data    跳过 7203.T：7203.T: yfinance 未返回该代码
-2026-09-23 03:42:20,831 ERROR   qbreak.data    跳过 8306.T：8306.T: yfinance 未返回该代码
-2026-09-23 03:42:20,831 ERROR   qbreak.data    跳过 8316.T：8316.T: yfinance 未返回该代码
-2026-09-23 03:42:20,831 ERROR   qbreak.data    跳过 8411.T：8411.T: yfinance 未返回该代码
-2026-09-23 03:42:20,831 ERROR   qbreak.data    跳过 9432.T：9432.T: yfinance 未返回该代码
-2026-09-23 03:42:20,831 ERROR   qbreak.data    跳过 9434.T：9434.T: yfinance 未返回该代码
-2026-09-23 03:42:20,831 ERROR   qbreak.data    跳过 9433.T：9433.T: yfinance 未返回该代码
-2026-09-23 03:42:20,831 ERROR   qbreak.data    跳过 5401.T：5401.T: yfinance 未返回该代码
-2026-09-23 03:42:20,831 ERROR   qbreak.data    跳过 7267.T：7267.T: yfinance 未返回该代码
-2026-09-23 03:42:20,831 ERROR   qbreak.data    跳过 6752.T：6752.T: yfinance 未返回该代码
-2026-09-23 03:42:20,831 ERROR   qbreak.data    跳过 8591.T：8591.T: yfinance 未返回该代码
-2026-09-23 03:42:20,832 ERROR   qbreak.data    跳过 1605.T：1605.T: yfinance 未返回该代码
-2026-09-23 03:42:20,832 ERROR   qbreak.data    跳过 5020.T：5020.T: yfinance 未返回该代码
-2026-09-23 03:42:20,832 ERROR   qbreak.data    跳过 8604.T：8604.T: yfinance 未返回该代码
-2026-09-23 03:42:20,832 ERROR   qbreak.data    跳过 6178.T：6178.T: yfinance 未返回该代码
-2026-09-23 03:42:20,832 ERROR   qbreak.data    跳过 7182.T：7182.T: yfinance 未返回该代码
-2026-09-23 03:42:20,832 ERROR   qbreak.data    跳过 4503.T：4503.T: yfinance 未返回该代码
-2026-09-23 03:42:20,832 ERROR   qbreak.data    跳过 4502.T：4502.T: yfinance 未返回该代码
-2026-09-23 03:42:20,832 ERROR   qbreak.data    跳过 3382.T：3382.T: yfinance 未返回该代码
-2026-09-23 03:42:20,832 ERROR   qbreak.data    跳过 2502.T：2502.T: yfinance 未返回该代码
-2026-09-23 03:42:37,325 ERROR   qbreak.data    批量下载失败(DataError): yfinance 返回空数据（可能被限流或代码错误）
-2026-09-23 03:42:37,325 ERROR   qbreak.data    跳过 2503.T：2503.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 6702.T：6702.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 6501.T：6501.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 6503.T：6503.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 7011.T：7011.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 7013.T：7013.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 6902.T：6902.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 6971.T：6971.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 8031.T：8031.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 8053.T：8053.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 8001.T：8001.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 2914.T：2914.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 4568.T：4568.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 9020.T：9020.T: yfinance 未返回该代码
-2026-09-23 03:42:37,326 ERROR   qbreak.data    跳过 9022.T：9022.T: yfinance 未返回该代码
-2026-09-23 03:42:37,327 ERROR   qbreak.data    跳过 7751.T：7751.T: yfinance 未返回该代码
-2026-09-23 03:42:37,327 ERROR   qbreak.data    跳过 6301.T：6301.T: yfinance 未返回该代码
-2026-09-23 03:42:37,327 ERROR   qbreak.data    跳过 8766.T：8766.T: yfinance 未返回该代码
-2026-09-23 03:42:37,327 ERROR   qbreak.data    跳过 8725.T：8725.T: yfinance 未返回该代码
-2026-09-23 03:42:37,327 ERROR   qbreak.data    跳过 4661.T：4661.T: yfinance 未返回该代码
-2026-09-23 03:42:37,830 ERROR   qbreak.cli     没有取到任何行情数据。请检查：①网络/代理 ②yfinance 是否被限流（稍后重试或改用 --provider csv）③股票代码是否正确。若只是想跑通流程，加 --synthetic（结果不可用于决策）。
+
+═══ JP 回测 结果 ═══
+期间          : 2021-09-21 ~ 2026-09-18
+交易次数      : 133  （年均 26.6）
+胜率          : 50.4%   盈亏比 PF 1.68   赔率 1.73
+每笔期望      : 1.15%  （平均盈 5.31% / 平均亏 -3.08%）
+年化 CAGR     : 8.29%   累计 48.82%
+最大回撤      : -9.51%   水下 328 个交易日
+夏普 / 索提诺 : 0.96 / 1.17   Calmar 0.87
+最大连亏      : 8 笔   平均持有 12.4 日   资金暴露 38.1%
+期末权益      : 1,488,195
+基准(等权买入持有): CAGR 23.51%  最大回撤 -25.12%  夏普 1.13
+被过滤的信号  : {'gap': 3, 'lot': 15, 'full': 30}  (gap=跳空过大 full=持仓已满 cash/lot=资金不足 no_bar=停牌 rebuy=当日已卖)
+
+出场原因分布:
+reason
+dead_cross    131
+stop            2
+
+分年度:
+ year  ret_pct  max_dd_pct  trades
+ 2021     0.00        0.00       0
+ 2022     3.71       -6.73      32
+ 2023    19.18       -5.66      33
+ 2024     7.55       -9.51      27
+ 2025    13.16       -5.23      28
+ 2026    -1.07       -5.65      13
+
+已保存 /home/user/public/quant_breakout/var/out/trades_JP.csv  equity_JP.csv

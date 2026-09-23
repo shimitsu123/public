@@ -112,7 +112,7 @@ def test_idempotent_across_repeated_runs():
 def test_circuit_breaker_blocks_new_entries():
     d1 = dt.date(2026, 1, 5)
     _write_csv(_flat(300) + [_signal_bar()], d1)
-    rm = RiskManager(RISK)
+    rm = RiskManager(RISK, market="JP")
     rm.begin(1_030_000, dt.date(2026, 1, 2))
     rm.end(1_030_000, dt.date(2026, 1, 2))        # 昨日 103 万 → 今天 100 万 = -2.9%，越过 2% 熔断线
     b = _broker()

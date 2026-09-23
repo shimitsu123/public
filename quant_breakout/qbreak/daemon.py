@@ -108,7 +108,7 @@ class Daemon:
         self.st = DaemonState.load()
         self.book = PositionBook()
         self.guard = OrderGuard()
-        self.rm = RiskManager(self.risk_cfg)
+        self.rm = RiskManager(self.risk_cfg, market=market)
         self._stop = threading.Event()
         self._quote_fails = 0
         self._last_session = ""

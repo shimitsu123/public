@@ -56,10 +56,18 @@ class RiskDecision:
 
 
 class RiskManager:
-    def __init__(self, cfg: RiskConfig, state_path=None):
+    """每个市场一份状态（peak_equity 等不能跨市场混用：¥100 万和 $6,000 放一起会误判 -99% 回撤）。
+    自动触发的 HALT 写 var/HALT_<market>；人工的全局 var/HALT 仍然拦所有市场。"""
+
+    def __init__(self, cfg: RiskConfig, state_path=None, market: str = ""):
         self.cfg = cfg.validate()
-        self.path = state_path or (paths.state_dir() / "risk_state.json")
+        self.market = market.upper()
+        name = f"risk_state_{self.market}.json" if self.market else "risk_state.json"
+        self.path = state_path or (paths.state_dir() / name)
         self.st = RiskState.load(self.path)
+
+    def halt_file(self):
+        return paths.home() / (f"HALT_{self.market}" if self.market else "HALT")
 
     # ── 会话开始：确定当日基准 ──
     def begin(self, equity: float, today: dt.date | None = None) -> RiskDecision:
@@ -79,9 +87,10 @@ class RiskManager:
 
         reasons: list[str] = []
         halted = False
-        if paths.halt_file().exists():
-            halted = True
-            reasons.append(f"存在 HALT 文件（{paths.halt_file()}），删除后才会恢复")
+        for hf in {paths.halt_file(), self.halt_file()}:
+            if hf.exists():
+                halted = True
+                reasons.append(f"存在 HALT 文件（{hf}），删除后才会恢复")
         if self.st.halted_reason:
             halted = True
             reasons.append(f"历史 HALT: {self.st.halted_reason}")
@@ -105,7 +114,7 @@ class RiskManager:
 
     def _trip(self, reason: str) -> None:
         self.st.halted_reason = reason
-        paths.halt_file().write_text(
+        self.halt_file().write_text(
             f"{dt.datetime.now().isoformat()}\n{reason}\n"
             "删除本文件即可解除停机。解除前请先弄清楚发生了什么。\n", encoding="utf-8")
         log.error("★★★ 触发 HALT：%s", reason)
@@ -141,6 +150,7 @@ class RiskManager:
         self.st.halted_reason = ""
         self.st.consecutive_losses = 0
         self.st.save(self.path)
-        if paths.halt_file().exists():
-            paths.halt_file().unlink()
+        for hf in {paths.halt_file(), self.halt_file()}:
+            if hf.exists():
+                hf.unlink()
         log.warning("HALT 已人工解除")
