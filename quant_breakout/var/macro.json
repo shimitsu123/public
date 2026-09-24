@@ -1,17 +1,1 @@
-{
- "as_of": "2026-09-24",
- "source": "市场风险报告 2026-09-24 08:02 早报",
- "brent": 103.33,
- "wti": 92.61,
- "us10y": 5.106,
- "us2y": 4.895,
- "fed_hike_prob": 70,
- "fed_next": "2026-10-28",
- "vix": 15.18,
- "hy_oas_bp": 266,
- "usdjpy": 158.29,
- "jgb10y": 2.99,
- "boj_hike_prob": 25.6,
- "boj_next": "2026-10-30",
- "breadth_pct": 28.8
-}
+{"as_of": "2026-09-24", "source": "市场风险报告 2026-09-24 22:28 晚报", "brent": 105.05, "wti": 93.6, "us10y": 5.15, "us2y": 4.91, "fed_hike_prob": 71, "fed_next": "2026-10-28", "vix": 16.26, "hy_oas_bp": 268, "usdjpy": 158.72, "jgb10y": 3.075, "boj_hike_prob": 30, "boj_next": "2026-10-30", "breadth_pct": 28.8}

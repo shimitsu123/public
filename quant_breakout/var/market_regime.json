@@ -1,6 +1,1 @@
-{
- "as_of": "2026-09-24",
- "source": "市场风险报告 2026-09-24 08:02 早报",
- "JP": {"action": "减仓观察", "crash_prob": 12},
- "US": {"action": "减仓观察", "crash_prob": 11}
-}
+{"as_of": "2026-09-24", "source": "市场风险报告 2026-09-24 22:28 晚报", "JP": {"action": "减仓观察", "crash_prob": 15}, "US": {"action": "减仓观察", "crash_prob": 15}}
