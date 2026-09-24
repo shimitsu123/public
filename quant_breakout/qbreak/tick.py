@@ -69,3 +69,41 @@ def lot_size(ticker: str, market: str) -> int:
     if ticker in LOT_OVERRIDE:
         return LOT_OVERRIDE[ticker]
     return DEFAULT_LOT_JP if market.upper() == "JP" else DEFAULT_LOT_US
+
+
+# ══════════════════════════ 値幅制限（ストップ高 / ストップ安）══════════════════════════
+# JPX「制限値幅」表：基準値段（前日終値）→ 上下の制限値幅（円）。上段から「未満」で判定。
+_JP_LIMITS = [
+    (100, 30), (200, 50), (500, 80), (700, 100), (1_000, 150), (1_500, 300), (2_000, 400),
+    (3_000, 500), (5_000, 700), (7_000, 1_000), (10_000, 1_500), (15_000, 3_000), (20_000, 4_000),
+    (30_000, 5_000), (50_000, 7_000), (70_000, 10_000), (100_000, 15_000), (150_000, 30_000),
+    (200_000, 40_000), (300_000, 50_000), (500_000, 70_000), (700_000, 100_000), (1_000_000, 150_000),
+    (1_500_000, 300_000), (2_000_000, 400_000), (3_000_000, 500_000), (5_000_000, 700_000),
+    (7_000_000, 1_000_000), (10_000_000, 1_500_000), (15_000_000, 3_000_000), (20_000_000, 4_000_000),
+    (30_000_000, 5_000_000), (50_000_000, 7_000_000),
+]
+
+
+def price_limit_jp(base: float) -> float:
+    """前日終値 base に対する制限値幅（円）。"""
+    for upper, width in _JP_LIMITS:
+        if base < upper:
+            return float(width)
+    return 10_000_000.0
+
+
+def limit_lock(prev_close: float, high: float, low: float, close: float, market: str) -> str | None:
+    """その日一日中ストップ高 / ストップ安に張り付いていたか（寄付で約定できない日）。
+    日足だけでは板は見えないので「値幅がほぼゼロ」かつ「前日比が制限値幅の 8 割以上」で判定。
+    日本株以外は None（米国株に値幅制限はない。サーキットブレーカーは別物）。"""
+    if market.upper() != "JP" or not prev_close or prev_close <= 0 or not all(
+            x == x and x > 0 for x in (high, low, close)):
+        return None
+    if (high - low) > prev_close * 0.005:
+        return None
+    w = price_limit_jp(prev_close)
+    if close <= prev_close - 0.8 * w:
+        return "down"
+    if close >= prev_close + 0.8 * w:
+        return "up"
+    return None

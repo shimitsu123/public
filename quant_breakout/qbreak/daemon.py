@@ -94,10 +94,11 @@ class Daemon:
                  exec_cfg: ExecConfig, cfg: DaemonConfig | None = None,
                  dry_run: bool = False, market: str = "JP",
                  fallback_quotes: bool = False,
-                 entry_hook=None):
+                 entry_hook=None, corp_actions=None):
         self.universe = universe
         self.broker = broker
         self.p = params.validate()
+        self.corp_actions = corp_actions       # 除息 / 拆股数据源
         self.entry_hook = entry_hook           # (date) -> (市场倍数, {票: 倍数}, 事件拦截原因)
         self.risk_cfg = risk_cfg.validate()
         self.sizing = sizing.validate()
@@ -340,7 +341,7 @@ class Daemon:
                        today=now.date(), exec_cfg=self.ex,
                        protective_stop=self.cfg.protective_stop,
                        index_close=self._index_close(), entry_scale=scale,
-                       ticker_mult=tmult, entry_block=block)
+                       ticker_mult=tmult, entry_block=block, corp_actions=self.corp_actions)
         log.info("\n%s", res.summary())
         self.st.eod_done = True
         self.st.save()

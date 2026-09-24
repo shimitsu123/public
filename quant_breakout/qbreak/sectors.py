@@ -42,6 +42,14 @@ _jp("pharma", "4151 4502 4503 4506 4507 4519 4523 4568 4578")
 _jp("food", "1332 2002 2269 2282 2501 2502 2503 2801 2802 2871 2914")
 _jp("retail", "3086 3092 3099 3382 7453 8233 8252 8267 9843 9983")
 _jp("consumer", "4452 4911")
+# 2025–2026 新成分与 2026-10-01 定期入替
+_jp("semis", "285A 6525")
+_jp("software_internet", "3697 4307 9697")
+_jp("auto", "543A")
+_jp("hardware", "6701")
+_jp("machinery", "7004")
+_jp("retail", "7532")
+_jp("steel_metal", "5016")
 
 SECTOR_US: dict[str, str] = {}
 
@@ -62,6 +70,12 @@ _us("machinery", "HON CTAS PCAR FAST CPRT PAYX ADP BA CAT MMM")
 _us("chemical", "LIN SHW")
 _us("utility", "CEG AEP EXC XEL")
 _us("finance", "AXP GS JPM V TRV")
+# 2025–2026 新进 NASDAQ-100
+_us("pharma", "ALNY")
+_us("semis", "ALAB MPWR SNDK TER")
+_us("software_internet", "CRWV NBIS SHOP TRI")
+_us("hardware", "LITE STX WDC")
+_us("machinery", "HONA RKLB SPCX")
 
 HIGH_GROWTH = {"semis", "software_internet"}
 OIL_WINNERS = {"energy", "trading", "shipping"}

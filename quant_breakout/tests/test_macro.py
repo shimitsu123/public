@@ -184,3 +184,30 @@ def test_run_once_callable_entry_block_uses_real_fill_date():
                     DataConfig(provider="csv", years=2, min_bars=100), entry_block=lambda d: None,
                     ticker_mult={T: 0.5}, **kw)
     assert res2.orders and res2.orders[0]["side"] == "BUY" and res2.orders[0]["qty"] == 200   # 50%×0.5 预算 → 2 単元
+
+
+# ────────── 利率 beta（US 的长久期判定）──────────
+def test_rate_beta_rank_identifies_rate_sensitive_stock():
+    from qbreak.macro import long_duration_set, rate_beta_rank
+    rng = np.random.default_rng(3)
+    idx = pd.bdate_range("2024-01-01", periods=400)
+    dy = pd.Series(rng.normal(0, 0.05, 400), index=idx)                  # 10Y 日变动（百分点）
+    y = 4.0 + dy.cumsum()
+    noise = lambda: rng.normal(0, 0.01, 400)                               # noqa: E731
+    closes = pd.DataFrame({
+        "DUR": 100 * np.exp(np.cumsum(-0.3 * dy.values + noise())),       # 收益率上行 → 跌
+        "VAL": 100 * np.exp(np.cumsum(+0.2 * dy.values + noise())),
+        "MID": 100 * np.exp(np.cumsum(noise())),
+    }, index=idx)
+    rk = rate_beta_rank(closes, y, "US")
+    assert rk.iloc[-1]["DUR"] < rk.iloc[-1]["MID"] < rk.iloc[-1]["VAL"]
+    assert long_duration_set(closes, y, "US") == {"DUR"}
+
+
+def test_sector_mult_uses_rate_beta_flag_when_given():
+    f = MacroFeatures(brent=80, us10y=5.1)
+    assert sector_mult("hardware", f, long_duration=True)[0] == 0.5          # 非半导体但利率敏感
+    assert sector_mult("semis", f, long_duration=False)[0] == 1.0            # 半导体但不敏感
+    assert sector_mult("semis", f)[0] == 0.5                                 # 不给 → 板块近似
+    t = ticker_mults(["NVDA", "AAPL"], "US", f, long_duration={"AAPL"})
+    assert t["NVDA"][0] == 1.0 and t["AAPL"][0] == 0.5

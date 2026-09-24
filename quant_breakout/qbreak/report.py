@@ -41,6 +41,11 @@ def _orders(market: str) -> list[dict]:
     return [o for o in st.get("orders", []) if o.get("status") == "FILLED"]
 
 
+def _dividends(market: str) -> list[dict]:
+    st = read_json(paths.state_dir() / f"paper_state_{market}.json", {}) or {}
+    return list(st.get("dividends", []))
+
+
 def _closed(market: str) -> list[dict]:
     st = read_json(paths.state_dir() / f"paper_state_{market}.json", {}) or {}
     return list(st.get("closed_trades", []))
@@ -126,6 +131,7 @@ def build_data(markets: list[str] | None = None) -> dict:
                 "trades": len(closed),
                 "win_rate": round(len(wins) / len(closed) * 100, 1) if closed else 0.0,
                 "realized_pnl": round(sum(float(c.get("pnl", 0)) for c in closed), 2),
+                "dividends_net": round(sum(float(d.get("net", 0)) for d in _dividends(m)), 2),
             },
         }
         tax = float(sim.get("tax_pct", 20.315))
@@ -332,7 +338,7 @@ function renderMacro(){
     <dt>量化因子</dt><dd>Brent ${v(f.brent,1)}（20 日 ${f.brent_chg20_pct==null?"—":(f.brent_chg20_pct>0?"+":"")+v(f.brent_chg20_pct,1)+"%"}）· 美 10Y ${v(f.us10y,2)}% · VIX ${v(f.vix,1)} · USD/JPY ${v(f.usdjpy,2)}<div class="muted">yfinance 收盘 ${f.date||"—"}，油价状态 ${X.oil_state||"—"}</div></dd>
     <dt>判断层</dt><dd>${ovHtml}</dd>
     <dt>触发规则</dt><dd>${fired}</dd>
-    <dt>板块倾斜</dt><dd>${tiltHtml}</dd>
+    <dt>板块倾斜</dt><dd>${tiltHtml}<div class="muted">长久期判定：${X.duration_method === "rate_beta" ? `利率 beta（250 日，截面最低 1/3${X.long_duration ? "，当前 " + X.long_duration.length + " 只" : ""}）` : "板块近似（半导体 + 软件互联网）"}</div></dd>
     <dt>事件窗口</dt><dd>${blk}<div class="muted">接下来：${ev}</div></dd></dl>`;
 }
 const STATUS_CN = {triggered:"已触发", imminent:"即将", watch:"观察", far:"远"};
@@ -384,7 +390,7 @@ function renderTiles(){
     tile("当前权益", fmt(S.equity, c), `起始 ${fmt(M.initial, c)}` + (fx.equity_jpy ? `　≈ ¥${Number(fx.equity_jpy).toLocaleString("ja-JP")}（USD/JPY ${fx.now}）` : "")) +
     tile("累计损益", signed(pnl, c), `${S.ret_pct>0?"+":""}${S.ret_pct}%`, cls(pnl)) +
     tile("最大回撤", `${S.max_dd_pct}%`, "从权益最高点") +
-    tile("已平仓", `${S.trades} 笔`, `胜率 ${S.win_rate}% · 已实现 ${signed(S.realized_pnl||0, c)}（税后 ${signed(S.realized_after_tax||0, c)}）`) +
+    tile("已平仓", `${S.trades} 笔`, `胜率 ${S.win_rate}% · 已实现 ${signed(S.realized_pnl||0, c)}（税后 ${signed(S.realized_after_tax||0, c)}）` + (S.dividends_net ? ` · 配当税后 ${signed(S.dividends_net, c)}` : "")) +
     tile("交易日", `${S.days} / 65`, "3 个月 ≈ 65 个交易日") +
     (fx.ret_pct_jpy != null ? tile("折合日元收益", `${fx.ret_pct_jpy>0?"+":""}${fx.ret_pct_jpy}%`,
         `其中汇率贡献 ${fx.fx_effect_jpy>0?"+":""}¥${Number(fx.fx_effect_jpy||0).toLocaleString("ja-JP")}`, cls(fx.ret_pct_jpy)) : "");

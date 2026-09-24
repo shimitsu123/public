@@ -499,7 +499,7 @@ class TachibanaBroker(BaseBroker):
             log.warning("读取注文一覧失败: %s", e)
             return []
 
-    def fill_pending(self, opens, bar, max_gap_pct=None, prev_bars=None):
+    def fill_pending(self, opens, bar, max_gap_pct=None, prev_bars=None, locked=None):
         """寄付注文は取引所側で約定するので、ここですることは無い（インタフェース整合用）。"""
         return []
 

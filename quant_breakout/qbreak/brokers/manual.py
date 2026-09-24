@@ -90,5 +90,20 @@ class ManualBroker(BaseBroker):
         return Order(ticker, "SELL", qty, ref_px or self.get_price(ticker), _now(),
                      "PROPOSED", client_id=client_id, note="半自动：请人工下单")
 
-    def fill_pending(self, opens, bar, max_gap_pct=None, prev_bars=None):
+    def apply_corporate_action(self, ticker, date, dividend=0.0, split=0.0, div_net=1.0):
+        d = self.state["positions"].get(ticker)
+        if not d or not split or abs(split - 1) < 1e-9:
+            return None
+        done = self.state.setdefault("corp_actions", [])
+        key = f"{ticker}|{date}"
+        if key in done:
+            return None
+        old = int(d["qty"])
+        d["qty"] = int(old * split + 1e-6)
+        d["avg_px"] = float(d["avg_px"]) / split
+        done.append(key)
+        self._save()
+        return f"株式分割 1:{split:g}（登记持仓 {old}→{d['qty']} 株，请与券商账户核对）"
+
+    def fill_pending(self, opens, bar, max_gap_pct=None, prev_bars=None, locked=None):
         return []

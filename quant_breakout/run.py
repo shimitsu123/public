@@ -61,9 +61,9 @@ def _common(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--params", default=None, help="指定参数文件（默认 var/best_params.json）")
     ap.add_argument("--universe", default="default", choices=["default", "affordable", "broad"],
                     help="股票池：affordable = 100 万円でも単元が買える流動性上位；broad = 日経225 / NASDAQ-100+Dow30")
-    ap.add_argument("--macro", default="off", choices=["off", "macro", "sector", "events", "all"],
-                    help="回测/优化里叠加宏观层：macro=油价/10Y/VIX/USDJPY 市场倍数；sector=板块倾斜；"
-                         "events=FOMC/BOJ/NFP 事件窗口；all=三者（模拟盘 / 实盘默认相当于 all）")
+    ap.add_argument("--macro", default="off",
+                    help="回测/优化里叠加宏观层，可逗号组合：macro=油价/10Y/VIX/USDJPY 市场倍数；sector=板块倾斜；"
+                         "events=FOMC/BOJ/CPI/NFP 事件窗口；all=三者；sim=与模拟盘 sim.json 同口径；off=不用。")
     ap.add_argument("--event-kinds", default="FOMC,BOJ,CPI,NFP",
                     help="事件窗口包含的事件类型（逗号分隔），例如 FOMC,BOJ 只回避盘中发布的两类")
     ap.add_argument("--stop-mode", default="next_open", choices=["next_open", "intraday"],
@@ -127,20 +127,39 @@ def _macro_frame(dcfg):
 
 def _entry_mult_for(a, market: str, ind: dict):
     """按 --macro 选项构造 [日期 × 票] 新仓倍数矩阵；off 时返回 (None, {})。"""
-    mode = getattr(a, "macro", "off")
-    if mode == "off":
+    mode = str(getattr(a, "macro", "off") or "off").lower()
+    parts = {x.strip() for x in mode.split(",") if x.strip()}
+    sim_kinds = None
+    if "sim" in parts:                                   # 与模拟盘同口径：读 sim.json 的市场段 / 全局开关
+        cfg = _sim_cfg() or {}
+        mc = cfg.get(market.lower(), {}) or {}
+        flag = lambda k, d=True: mc.get(k, cfg.get(k, d))          # noqa: E731
+        parts = ({"macro"} if flag("use_macro") else set()) | ({"sector"} if flag("use_sector_tilt") else set()) \
+            | ({"events"} if flag("use_event_window") else set())
+        sim_kinds = flag("event_kinds", None)
+    if "all" in parts:
+        parts = {"macro", "sector", "events"}
+    bad = parts - {"macro", "sector", "events", "off"}
+    if bad:
+        raise SystemExit(f"--macro 不认识：{sorted(bad)}（可用 macro / sector / events / all / off）")
+    parts.discard("off")
+    if not parts:
         return None, {}
     import pandas as pd
     from qbreak.macro import build_entry_mult, load_events
     gidx = pd.DatetimeIndex(sorted(set().union(*[df.index for df in ind.values()])))
     tickers = list(ind.keys())
-    frame = _macro_frame(_data_cfg(a)) if mode in ("macro", "sector", "all") else None
+    frame = _macro_frame(_data_cfg(a)) if parts & {"macro", "sector"} else None
     kinds = {k.strip().upper() for k in str(getattr(a, "event_kinds", "FOMC,BOJ,CPI,NFP")).split(",") if k.strip()}
+    if sim_kinds:
+        kinds = {str(k).upper() for k in sim_kinds}
     events = load_events(include_history=True, nfp_heuristic_years=(gidx[0].year, gidx[-1].year), kinds=kinds) \
-        if mode in ("events", "all") else None
+        if "events" in parts else None
+    closes = pd.DataFrame({t: df["Close"] for t, df in ind.items()})
     M, stats = build_entry_mult(gidx, tickers, market, frame,
-                                use_macro=mode in ("macro", "all"), use_sector=mode in ("sector", "all"),
-                                use_events=mode in ("events", "all"), events=events)
+                                use_macro="macro" in parts, use_sector="sector" in parts,
+                                use_events="events" in parts, events=events, closes=closes)
+    mode = ",".join(sorted(parts))
     print(f"宏观层（{mode}）：市场倍数<1 的成交日 {stats['macro_days']}，板块倾斜生效日 {stats['sector_days']}，"
           f"事件窗口日 {stats['event_days']}，完全不开仓日 {stats['zero_days']}（共 {len(gidx)} 个交易日）")
     return M, stats
@@ -152,8 +171,8 @@ def _macro_layer(market: str, dcfg, tickers: list[str], today, use_sector: bool 
     bar_date：已知的最新完整 K 线日（用于面板展示的成交日估算）；run_once 内部会按真实 K 线重新算。"""
     from qbreak.calendar_jp import next_trading_day as jp_next
     from qbreak.calendar_us import next_trading_day as us_next
-    from qbreak.macro import (event_block, features_at, load_events, load_overlay, macro_mult,
-                              snapshot, ticker_mults)
+    from qbreak.macro import (DURATION_METHOD, event_block, features_at, load_events, load_overlay,
+                              long_duration_set, macro_mult, snapshot, ticker_mults)
     from qbreak.trader import expected_last_bar
     import pandas as pd
     frame = _macro_frame(dcfg)
@@ -161,13 +180,23 @@ def _macro_layer(market: str, dcfg, tickers: list[str], today, use_sector: bool 
     f = features_at(frame, pd.Timestamp(bar))
     ov = load_overlay(today=today)
     mult, fired = macro_mult(f, ov, market)
-    tilts = ticker_mults(tickers, market, f) if use_sector else {t: (1.0, "", "") for t in tickers}
+    ld = None
+    if use_sector and DURATION_METHOD.get(market.upper()) == "rate_beta" and "us10y" in frame:
+        try:
+            from qbreak.data import load_universe
+            closes = pd.DataFrame({t: df["Close"] for t, df in load_universe(tickers, dcfg).items()})
+            ld = long_duration_set(closes, frame["us10y"].dropna(), market)
+        except Exception as e:                                # noqa: BLE001
+            log.warning("[%s] 利率 beta 计算失败，退回板块近似: %s", market, e)
+    tilts = ticker_mults(tickers, market, f, ld) if use_sector else {t: (1.0, "", "") for t in tickers}
     fill = (jp_next if market == "JP" else us_next)(bar)
     events = load_events(kinds=event_kinds)
     block_fn = (lambda fill_d: event_block(market, fill_d, events)) if use_events else None
     block = block_fn(fill) if block_fn else None
     log.info("[%s] 宏观层 ×%.2f %s；预计成交日 %s %s", market, mult, fired or "无触发", fill, block or "")
     info = snapshot(market, f, ov, mult, fired, tilts, today, fill, events, block)
+    info["duration_method"] = DURATION_METHOD.get(market.upper(), "sector")
+    info["long_duration"] = sorted(ld) if ld is not None else None
     return mult, {t: v[0] for t, v in tilts.items()}, block_fn, info
 
 
@@ -270,11 +299,12 @@ def _live_common(a, live: bool) -> int:
     scale, tmult, block = 1.0, None, None
     if not getattr(a, "no_macro", False):
         scale, tmult, block, _ = _macro_layer(market, dcfg, universe(market), dt.date.today())
+    tmult = _index_mult(market, universe(market), dt.date.today(), tmult)
     res = run_once(universe(market), broker, p, risk, sizing, dcfg,
                    market=market, dry_run=a.dry_run, allow_stale=a.allow_stale,
                    exec_cfg=ex, protective_stop=a.protective_stop,
                    index_close=_index_close(market, dcfg, p), entry_scale=scale,
-                   ticker_mult=tmult, entry_block=block)
+                   ticker_mult=tmult, entry_block=block, corp_actions=_corp_actions_provider())
     print("\n" + res.summary())
     return 0
 
@@ -307,11 +337,12 @@ def cmd_signal(a) -> int:
     scale, tmult, block = 1.0, None, None
     if not getattr(a, "no_macro", False):
         scale, tmult, block, _ = _macro_layer(market, dcfg, universe(market), dt.date.today())
+    tmult = _index_mult(market, universe(market), dt.date.today(), tmult)
     res = run_once(universe(market), broker, p, risk, sizing, dcfg,
                    market=market, dry_run=True, allow_stale=a.allow_stale,
                    exec_cfg=ExecConfig.for_market(market),
                    index_close=_index_close(market, dcfg, p), entry_scale=scale,
-                   ticker_mult=tmult, entry_block=block)
+                   ticker_mult=tmult, entry_block=block, corp_actions=_corp_actions_provider())
     from qbreak.trader import PositionBook
     positions = PositionBook().merge(broker.positions())
     sheet = operation_sheet(res, p, positions, a.limit_buffer)
@@ -500,16 +531,23 @@ def cmd_sim_day(a) -> int:
                 scale = min(scale, fx_scale)
             earnings = _earnings_provider() if p.earnings_blackout_days or p.exit_before_earnings else None
             macro_info, tmult, block = {}, None, None
-            if cfg.get("use_macro", True):
+            flag = lambda k, d=True: mc.get(k, cfg.get(k, d))          # noqa: E731  市场段优先
+            if flag("use_macro") or flag("use_sector_tilt") or flag("use_event_window"):
                 mm, tmult, block, macro_info = _macro_layer(
-                    m, dcfg, uni, today, use_sector=cfg.get("use_sector_tilt", True),
-                    use_events=cfg.get("use_event_window", True), event_kinds=cfg.get("event_kinds"),
+                    m, dcfg, uni, today, use_sector=flag("use_sector_tilt"),
+                    use_events=flag("use_event_window"), event_kinds=flag("event_kinds", None),
                     bar_date=idx_close.index[-1].date() if idx_close is not None else None)
-                scale = min(scale, mm)
+                if flag("use_macro"):
+                    scale = min(scale, mm)
+                else:
+                    macro_info["mult"], macro_info["fired"] = 1.0, []
+                    macro_info["note"] = "市场倍数层已关闭（只用板块倾斜 / 事件窗口）"
+            tmult = _index_mult(m, uni, today, tmult)
             res = run_once(uni, broker, p, risk, sizing, dcfg,
                            market=m, dry_run=False, allow_stale=a.allow_stale,
                            exec_cfg=exc, entry_scale=scale, index_close=idx_close,
-                           earnings=earnings, ticker_mult=tmult, entry_block=block)
+                           earnings=earnings, ticker_mult=tmult, entry_block=block,
+                           corp_actions=_corp_actions_provider())
             results[m] = res
             rd = reg.to_dict(); rd.update({"fx": fx_info, "final_mult": scale})
             rd["params_overlay"] = str(paths.params_file(m).name) if paths.params_file(m).exists() else ""
@@ -582,6 +620,24 @@ def _earnings_provider():
     return YFinanceEarnings()
 
 
+def _index_mult(market: str, tickers: list[str], today, base: dict | None = None) -> dict:
+    """指数定期入替：已公布、未生效的**待剔除**股不开新仓（倍数 0），与板块倾斜倍数取 min。"""
+    from qbreak.universes import index_pending
+    out = dict(base or {})
+    pend = index_pending(market, today)
+    for t in tickers:
+        code = t.split(".")[0] if market.upper() == "JP" else t
+        if (pend.get(code) or {}).get("action") == "delete":
+            out[t] = 0.0
+    return out
+
+
+def _corp_actions_provider():
+    """除息 / 拆股数据（yfinance Ticker.actions，12 小时缓存）。"""
+    from qbreak.corpactions import YFinanceActions
+    return YFinanceActions()
+
+
 def _scan_market(uni, p, market, dcfg, budget, index_close=None, macro_info=None) -> list[dict]:
     """候补队列：整个股票池按条件就绪度排序；附板块与宏观倾斜倍数。"""
     from qbreak.data import load_universe
@@ -597,9 +653,16 @@ def _scan_market(uni, p, market, dcfg, budget, index_close=None, macro_info=None
         df = scan(ind, p, market, budget)
         rows = df.to_dict("records") if not df.empty else []
         f = MacroFeatures(**((macro_info or {}).get("features") or {})) if macro_info else MacroFeatures()
+        from qbreak.universes import index_pending
+        pend = index_pending(market)
         for r in rows:
             s = sector_of(r["ticker"], market)
-            m_, why = sector_mult(s, f)
+            ldset = (macro_info or {}).get("long_duration")
+            m_, why = sector_mult(s, f, None if ldset is None else (r["ticker"] in set(ldset)))
+            code = r["ticker"].split(".")[0] if market == "JP" else r["ticker"]
+            pg = pend.get(code)
+            if pg and pg["action"] == "delete":
+                m_, why = 0.0, f"指数剔除（{pg['effective']} 生效），不开新仓"
             r.update({"sector": sector_cn(r["ticker"], market), "tilt": m_, "tilt_why": why})
         return rows
     except Exception as e:                                    # noqa: BLE001
@@ -646,7 +709,8 @@ def cmd_universe_update(a) -> int:
     out = {}
     try:
         html = urllib.request.urlopen("https://en.wikipedia.org/wiki/Nikkei_225", timeout=20).read().decode("utf-8", "ignore")
-        codes = sorted(set(re.findall(r"TYO:\s*(\d{4})", html)) | set(re.findall(r"/wiki/[^\"]*?\((\d{4})\)", html)))
+        codes = sorted(set(re.findall(r"topSearchStr=([0-9]{3}[0-9A-Z])\"", html))
+                       | set(re.findall(r"TYO:\s*([0-9]{3}[0-9A-Z])\b", html)))
         if len(codes) > 150:
             out["JP"] = [f"{c}.T" for c in codes]
     except Exception as e:                                    # noqa: BLE001
@@ -686,10 +750,11 @@ def cmd_daemon(a) -> int:
     if not getattr(a, "no_macro", False):
         def hook(day):                                       # 日终流程前算一次宏观层
             s, tm, b, _ = _macro_layer(market, dcfg, universe(market), day)
-            return s, tm, b
+            return s, _index_mult(market, universe(market), day, tm), b
     d = Daemon(universe(market), broker, _params(a, market), risk, sizing, dcfg,
                ex, cfg=cfg, dry_run=a.dry_run, market=market,
-               fallback_quotes=(a.broker == "paper"), entry_hook=hook)
+               fallback_quotes=(a.broker == "paper"), entry_hook=hook,
+               corp_actions=_corp_actions_provider())
     d.install_signal_handlers()
     d.run_forever(max_loops=1 if a.once else None)
     return 0

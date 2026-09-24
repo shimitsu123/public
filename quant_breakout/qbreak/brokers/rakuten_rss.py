@@ -307,7 +307,7 @@ class RakutenRSSBroker(BaseBroker):
             log.warning("撤单失败 %s: %s", client_id, e)
             return False
 
-    def fill_pending(self, opens, bar, max_gap_pct=None, prev_bars=None):
+    def fill_pending(self, opens, bar, max_gap_pct=None, prev_bars=None, locked=None):
         """RSS 侧的寄付注文由交易所撮合，这里无事可做（接口对齐用）。"""
         return []
 

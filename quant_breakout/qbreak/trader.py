@@ -26,7 +26,7 @@ from .config import (DataConfig, ExecConfig, RiskConfig, SizingConfig,
 from .data import DataError, load_universe
 from .risk import RiskManager
 from .strategy import compute_indicators
-from .tick import lot_size
+from .tick import limit_lock, lot_size
 from .utils import read_json, setup_logging, write_json
 
 log = setup_logging("trader")
@@ -92,6 +92,60 @@ def expected_last_bar(today: dt.date, market: str) -> dt.date:
     while d2.weekday() >= 5:
         d2 -= dt.timedelta(days=1)
     return d2
+
+
+def _apply_corp_actions(provider, broker, book, ind: dict, bar_key: str, market: str, res) -> None:
+    """把 (上一根已处理 K 线, 本根 K 线] 之间的除息 / 拆股补到持仓与排队订单上。
+    provider 取不到数据时：只用「昨天记下的真实收盘 vs 今天的复权收盘」兜底识别拆股（分红金额无法可靠推断，跳过）。"""
+    from .corpactions import DIV_NET, due, infer_split
+    held = broker.positions()
+    pend = broker.pending() if hasattr(broker, "pending") else []
+    after_of: dict[str, str] = {}
+    for t in held:
+        lb = (book.book.get(t) or {}).get("last_bar") or held[t].last_bar
+        if lb:
+            after_of[t] = lb
+    for o in pend:
+        after_of.setdefault(o["ticker"], o.get("bar", ""))
+    for t, after in after_of.items():
+        if not after or after >= bar_key:
+            continue
+        try:
+            acts = due(provider, t, after, bar_key)
+        except Exception as e:                              # noqa: BLE001
+            acts = []
+            b = book.book.get(t) or {}
+            df = ind.get(t)
+            if df is not None and b.get("last_close"):
+                ts = pd.Timestamp(after)
+                if ts in df.index:
+                    k = infer_split(float(b["last_close"]), float(df.loc[ts, "Close"]))
+                    if k:
+                        acts = [{"date": bar_key, "dividend": 0.0, "split": k}]
+            log.warning("[%s] %s 公司行为数据取不到（%s）%s", market, t, e,
+                        f"，按价格比推断拆股 1:{acts[0]['split']:g}" if acts else "，本次跳过")
+        for a in acts:
+            k, dv = float(a.get("split") or 0), float(a.get("dividend") or 0)
+            b = book.book.get(t)
+            if b:
+                if k > 0 and abs(k - 1) > 1e-9:
+                    for f in ("peak", "stop_px", "last_close"):
+                        if b.get(f):
+                            b[f] = float(b[f]) / k
+                if dv > 0 and t in held:
+                    for f in ("peak", "stop_px"):
+                        if b.get(f):
+                            b[f] = max(0.0, float(b[f]) - dv)
+            note = None
+            if hasattr(broker, "apply_corporate_action"):
+                note = broker.apply_corporate_action(t, a["date"], dividend=dv, split=k,
+                                                     div_net=DIV_NET.get(market.upper(), 1.0))
+            elif k or dv:
+                note = (f"株式分割 1:{k:g}" if k else "") + (f" 配当落ち {dv:g}" if dv else "") + "（止损/峰值已同步调整）"
+            if note:
+                res.notes.append(f"{t} {a['date']}：{note}")
+                log.info("[%s] %s %s：%s", market, t, a["date"], note)
+    book.save()
 
 
 def exit_reason(p: StrategyParams, pos: Position, px: float, dead: bool,
@@ -217,7 +271,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
              today: dt.date | None = None, exec_cfg: ExecConfig | None = None,
              protective_stop: bool = False, entry_scale: float = 1.0,
              index_close=None, earnings=None, ticker_mult: dict | None = None,
-             entry_block: str | None = None) -> DayResult:
+             entry_block=None, corp_actions=None) -> DayResult:
     """entry_scale：市场级新仓倍数（regime / 汇率 / 宏观取 min）；ticker_mult：{票: 板块倾斜倍数}；
     entry_block：字符串 = 今日所有新仓被拦的原因；可调用对象 = f(成交日) -> 原因或 None，
     成交日由本函数按真实最新 K 线 + 交易日历算出（T+1 开盘），避免估算偏差。"""
@@ -276,10 +330,22 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
     if hasattr(broker, "set_prices"):
         broker.set_prices(last_close)
 
+    # ── 0.4 公司行为：上一根已处理 K 线之后的除息 / 拆股（行情是复权价，持仓是真实价）──
+    if corp_actions is not None and not dry_run:
+        _apply_corp_actions(corp_actions, broker, book, ind, bar_key_of(bar_date), market, res)
+
     # ── 0.5 撮合昨日排队的「次日开盘」订单（与回测引擎的 T+1 开盘成交对齐）──
     if hasattr(broker, "fill_pending"):
         prev_bars = {t: bar_key_of(df.index[-2]) for t, df in ind.items() if len(df) > 1}
-        for o in broker.fill_pending(opens, bar_key_of(bar_date), ex.max_entry_gap_pct, prev_bars):
+        locked = {}
+        for t, df in ind.items():
+            if len(df) > 1:
+                lk = limit_lock(float(df["Close"].iloc[-2]), float(df["High"].iloc[-1]),
+                                float(df["Low"].iloc[-1]), float(df["Close"].iloc[-1]), market)
+                if lk:
+                    locked[t] = lk
+        for o in broker.fill_pending(opens, bar_key_of(bar_date), ex.max_entry_gap_pct, prev_bars,
+                                     locked=locked):
             res.orders.append(o.to_dict())
             if o.status == "FILLED" and o.side == "SELL":
                 book.drop(o.ticker)
@@ -303,6 +369,8 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
                                if p.atr_stop_mult > 0 and np.isfinite(prev_atr)
                                else pos.avg_px * (1 - p.stop_loss_pct / 100))
         book.update(pos)
+        if t in last_close:
+            book.book.setdefault(t, {})["last_close"] = last_close[t]    # 拆股兜底判断用（真实价）
         broker.update_position(pos)
     book.save()
 
@@ -353,6 +421,10 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
                              stop_px, trail_px, tp_px,
                              stop_handled_by_broker=intraday and protective_stop,
                              climax=bool(row.get("climax", False)), earnings_in_days=e_days)
+        if reason and hasattr(broker, "pending") and any(
+                q.get("ticker") == t and q.get("side") == "SELL" for q in broker.pending()):
+            res.notes.append(f"SELL {t}: 已有顺延中的卖单（ストップ安），不重复下单")
+            continue
         if reason:
             o = place("SELL", t, pos.qty, reason)
             if o and o.status == "FILLED":

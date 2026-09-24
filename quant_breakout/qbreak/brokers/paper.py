@@ -94,11 +94,14 @@ class PaperBroker(BaseBroker):
 
     def fill_pending(self, opens: dict[str, float], bar: str,
                      max_gap_pct: float | None = None,
-                     prev_bars: dict[str, str] | None = None) -> list[Order]:
+                     prev_bars: dict[str, str] | None = None,
+                     locked: dict[str, str] | None = None) -> list[Order]:
         """用当日开盘价撮合昨日排队的订单；当日没排上的（停牌/跳空过大）作废，
         与回测引擎"信号只在 T+1 有效"的规则一致。
         prev_bars: {ticker: 最新 K 线的前一根日期}。若排队日 ≠ 前一根，说明数据延迟导致
-        错过了紧接着的开盘（等于事后补单，是前视），作废。"""
+        错过了紧接着的开盘（等于事后补单，是前视），作废。
+        locked: {ticker: "up"/"down"}（日本株一整天张贴在ストップ高/安）。
+        卖单遇到ストップ安 → 顺延到下一个寄付；买单遇到ストップ高 → 作废。"""
         out, keep = [], []
         gap = self.ex.max_entry_gap_pct if max_gap_pct is None else max_gap_pct
         for o in self.state["pending"]:
@@ -114,6 +117,18 @@ class PaperBroker(BaseBroker):
             if px is None or px <= 0:
                 out.append(Order(o["ticker"], o["side"], o["qty"], 0, _now(), "REJECTED",
                                  client_id=o["client_id"], note="次日无开盘价（停牌），作废"))
+                continue
+            lk = (locked or {}).get(o["ticker"])
+            if o["side"] == "SELL" and lk == "down":
+                o = {**o, "bar": bar, "carried": int(o.get("carried", 0)) + 1}
+                keep.append(o)
+                out.append(Order(o["ticker"], "SELL", o["qty"], px or 0, _now(), "SENT",
+                                 client_id=o["client_id"],
+                                 note=f"ストップ安張り付きで約定せず，顺延到下一个寄付（第 {o['carried']} 次）"))
+                continue
+            if o["side"] == "BUY" and lk == "up":
+                out.append(Order(o["ticker"], "BUY", o["qty"], px or 0, _now(), "REJECTED",
+                                 client_id=o["client_id"], note="ストップ高張り付きで買えず，作废"))
                 continue
             if (o["side"] == "BUY" and gap and o["ref_px"]
                     and px > o["ref_px"] * (1 + gap / 100)):
@@ -135,6 +150,45 @@ class PaperBroker(BaseBroker):
 
     def pending(self) -> list[dict]:
         return list(self.state["pending"])
+
+    # ── 公司行为（配当落ち / 株式分割）──
+    def apply_corporate_action(self, ticker: str, date: str, dividend: float = 0.0,
+                               split: float = 0.0, div_net: float = 1.0) -> str | None:
+        """幂等（同一票同一日期只处理一次）。返回写进日志的一句话；无事可做返回 None。"""
+        key = f"{ticker}|{date}"
+        done = self.state.setdefault("corp_actions", [])
+        if any(a.get("key") == key for a in done):
+            return None
+        d = self.state["positions"].get(ticker)
+        notes = []
+        if split and split > 0 and abs(split - 1) > 1e-9:
+            if d:
+                old = int(d["qty"])
+                d["qty"] = int(old * split + 1e-6)
+                d["avg_px"] = float(d["avg_px"]) / split
+                for f in ("peak", "stop_px"):
+                    if d.get(f):
+                        d[f] = float(d[f]) / split
+                notes.append(f"株式分割 1:{split:g}（{old}→{d['qty']} 株）")
+            for o in self.state["pending"]:
+                if o["ticker"] == ticker:
+                    o["qty"] = int(int(o["qty"]) * split + 1e-6)
+                    o["ref_px"] = float(o["ref_px"]) / split
+        if dividend and dividend > 0 and d:
+            gross = float(dividend) * int(d["qty"])
+            net = round(gross * div_net, 2)
+            self.state["cash"] = float(self.state["cash"]) + net
+            d["div_cash"] = float(d.get("div_cash", 0.0)) + net
+            for f in ("peak", "stop_px"):
+                if d.get(f):
+                    d[f] = max(0.0, float(d[f]) - float(dividend))
+            self.state.setdefault("dividends", []).append(
+                {"ticker": ticker, "ex_date": date, "per_share": float(dividend), "qty": int(d["qty"]),
+                 "gross": round(gross, 2), "net": net})
+            notes.append(f"配当落ち {dividend:g}×{d['qty']} 株，税后入账 {net:,.2f}")
+        done.append({"key": key, "dividend": float(dividend or 0), "split": float(split or 0)})
+        self._save()
+        return "；".join(notes) or None
 
     def _fill_now(self, ticker: str, side: str, qty: int, client_id: str) -> Order:
         return (self._buy_now(ticker, qty, client_id) if side == "BUY"
@@ -198,6 +252,10 @@ class PaperBroker(BaseBroker):
         self.state["cash"] += proceeds
         avg, entry_date = d["avg_px"], d.get("entry_date", "")
         pnl = (px - avg) * qty - self.ex.fee(px * qty) - self.ex.fee(avg * qty)
+        div_part = float(d.get("div_cash", 0.0)) * qty / max(int(d["qty"]), 1)   # 持有期间已收的税后分红
+        if div_part:
+            pnl += div_part
+            d["div_cash"] = float(d.get("div_cash", 0.0)) - div_part
         d["qty"] -= qty
         if d["qty"] == 0:
             self.state["positions"].pop(ticker)
@@ -205,7 +263,8 @@ class PaperBroker(BaseBroker):
         self.state["closed_trades"].append(
             {"ticker": ticker, "entry_date": entry_date, "exit_date": _now()[:10],
              "entry_px": round(avg, 4), "exit_px": round(px, 4), "shares": qty,
-             "pnl": round(pnl, 2), "ret_pct": round((px / avg - 1) * 100, 3) if avg else 0.0})
+             "pnl": round(pnl, 2), "ret_pct": round((px / avg - 1) * 100, 3) if avg else 0.0,
+             "div": round(div_part, 2)})
         return self._log(Order(ticker, "SELL", qty, px, _now(), "FILLED", filled_qty=qty,
                                filled_px=px, client_id=client_id, note=f"pnl={pnl:,.0f}",
                                extra={"pnl": round(pnl, 2)}))

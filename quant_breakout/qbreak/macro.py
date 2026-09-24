@@ -203,26 +203,59 @@ def oil_state(f: MacroFeatures) -> str:
     return "normal"
 
 
-def sector_mult(sector: str, f: MacroFeatures) -> tuple[float, str]:
-    """板块倾斜倍数（≤1，不放大预算）。"""
+# "高估值成长 / 长久期"的判定方式（2026-09-24 信号层检验后按市场选定，见 README）：
+#   US：利率 beta —— 250 日滚动，个股日收益对美 10Y 日变动的回归系数，截面最低 1/3
+#       （收益率上行期这组信号比其余差 4.96pp，t=−2.54；板块近似在美股是反向的 +3.07pp）
+#   JP：板块近似（半导体 + 软件互联网）—— 两种方法在日本都没有证据，保留用户要求的规则
+DURATION_METHOD = {"JP": "sector", "US": "rate_beta"}
+RATE_BETA_WINDOW = 250
+RATE_BETA_FRAC = 1 / 3
+
+
+def rate_beta_rank(closes: pd.DataFrame, us10y: pd.Series, market: str,
+                   window: int = RATE_BETA_WINDOW) -> pd.DataFrame:
+    """[日期 × 票] 利率 beta 的截面百分位（越小 = 收益率上行时跌得越多）。
+    日本股用前一日的 10Y 变动（美债在东京收盘后才定价）。"""
+    rets = closes.pct_change()
+    dy = us10y.reindex(rets.index).ffill().diff()
+    if market.upper() == "JP":
+        dy = dy.shift(1)
+    beta = rets.rolling(window, min_periods=int(window * 0.8)).cov(dy).div(
+        dy.rolling(window, min_periods=int(window * 0.8)).var(), axis=0)
+    return beta.rank(axis=1, pct=True)
+
+
+def long_duration_set(closes: pd.DataFrame, us10y: pd.Series, market: str) -> set[str]:
+    """当前（最后一行）利率 beta 截面最低 1/3 的票。数据不足返回空集。"""
+    if closes is None or closes.empty or us10y is None or us10y.empty:
+        return set()
+    r = rate_beta_rank(closes, us10y, market).iloc[-1].dropna()
+    return set(r[r <= RATE_BETA_FRAC].index)
+
+
+def sector_mult(sector: str, f: MacroFeatures, long_duration: bool | None = None) -> tuple[float, str]:
+    """板块倾斜倍数（≤1，不放大预算）。long_duration：按利率 beta 判定的结果；None = 用板块近似。"""
     mult, why = 1.0, ""
     if oil_state(f) != "normal":
         if sector in OIL_LOSERS:
             mult, why = OIL_LOSERS[sector], f"油价高位：{sector} ×{OIL_LOSERS[sector]:g}"
         elif sector in OIL_WINNERS:
             why = f"油价高位：{sector} 受益"
-    if f.us10y is not None and f.us10y >= TH["us10y_high"] and sector in HIGH_GROWTH:
+    is_ld = (sector in HIGH_GROWTH) if long_duration is None else bool(long_duration)
+    if f.us10y is not None and f.us10y >= TH["us10y_high"] and is_ld:
         mult = min(mult, 0.5)
-        why = (why + "；" if why else "") + f"10Y {f.us10y:.2f}% ≥ 5：高估值成长 ×0.5"
+        tag = "高估值成长" if long_duration is None else "利率敏感（beta 最低 1/3）"
+        why = (why + "；" if why else "") + f"10Y {f.us10y:.2f}% ≥ 5：{tag} ×0.5"
     return mult, why
 
 
-def ticker_mults(tickers: list[str], market: str, f: MacroFeatures) -> dict[str, tuple[float, str, str]]:
-    """{ticker: (倍数, 板块, 说明)}"""
+def ticker_mults(tickers: list[str], market: str, f: MacroFeatures,
+                 long_duration: set[str] | None = None) -> dict[str, tuple[float, str, str]]:
+    """{ticker: (倍数, 板块, 说明)}。long_duration 给定（US 用利率 beta）时替代板块近似。"""
     out = {}
     for t in tickers:
         s = sector_of(t, market)
-        m, why = sector_mult(s, f)
+        m, why = sector_mult(s, f, None if long_duration is None else (t in long_duration))
         out[t] = (m, s, why)
     return out
 
@@ -344,13 +377,19 @@ def next_events(events: list[MacroEvent], today: dt.date, n: int = 4) -> list[di
 # ────────────────────────── 回测：每日 × 每票 的新仓倍数矩阵 ──────────────────────────
 def build_entry_mult(gidx: pd.DatetimeIndex, tickers: list[str], market: str, frame: pd.DataFrame | None,
                      use_macro: bool = True, use_sector: bool = True, use_events: bool = True,
-                     events: list[MacroEvent] | None = None) -> tuple[np.ndarray, dict]:
+                     events: list[MacroEvent] | None = None,
+                     closes: pd.DataFrame | None = None) -> tuple[np.ndarray, dict]:
     """返回 (矩阵 [len(gidx) × n]，统计)。第 i 行 = 在 gidx[i] 开盘成交的新仓倍数，
-    用的是 gidx[i-1]（信号日）收盘时已知的宏观值 → 无前视。"""
+    用的是 gidx[i-1]（信号日）收盘时已知的宏观值 → 无前视。
+    closes：[日期 × 票] 收盘（US 的利率 beta 判定要用；不给则退回板块近似）。"""
     n = len(tickers)
     M = np.ones((len(gidx), n))
     stats = {"macro_days": 0, "sector_days": 0, "event_days": 0, "zero_days": 0}
     secs = [sector_of(t, market) for t in tickers]
+    ld_rank = None
+    if (use_sector and DURATION_METHOD.get(market.upper()) == "rate_beta" and closes is not None
+            and frame is not None and "us10y" in frame and frame["us10y"].notna().any()):
+        ld_rank = rate_beta_rank(closes.reindex(columns=tickers), frame["us10y"], market).reindex(gidx)
     blocked = blocked_fill_dates(events, market) if (use_events and events) else {}
     for i in range(len(gidx)):
         f = features_at(frame, gidx[i - 1]) if (frame is not None and i > 0) else MacroFeatures()
@@ -361,7 +400,12 @@ def build_entry_mult(gidx: pd.DatetimeIndex, tickers: list[str], market: str, fr
                 stats["macro_days"] += 1
                 row *= mm
         if use_sector:
-            sm = np.array([sector_mult(s, f)[0] for s in secs])
+            if ld_rank is not None and i > 0:
+                rk = ld_rank.iloc[i - 1].values
+                sm = np.array([sector_mult(s, f, bool(rk[j] <= RATE_BETA_FRAC) if rk[j] == rk[j] else False)[0]
+                               for j, s in enumerate(secs)])
+            else:
+                sm = np.array([sector_mult(s, f)[0] for s in secs])
             if (sm < 1.0).any():
                 stats["sector_days"] += 1
                 row *= sm

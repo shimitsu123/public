@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 from .config import BacktestConfig, StrategyParams
-from .tick import lot_size
+from .tick import limit_lock, lot_size
 
 EXIT_REASONS = ("stop", "gap_stop", "trail", "take_profit", "dead_cross", "climax",
                 "max_hold", "time_stop", "end")
@@ -116,7 +116,15 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
     pending_exit: dict[int, str] = {}
     trades: list[dict] = []
     eq_hist, exp_hist = np.empty(i1 - i0), np.empty(i1 - i0)
-    skipped = dict(gap=0, cash=0, lot=0, full=0, no_bar=0, daily_cap=0, rebuy=0, macro=0)
+    skipped = dict(gap=0, cash=0, lot=0, full=0, no_bar=0, daily_cap=0, rebuy=0, macro=0,
+                   limit_up=0, limit_down_hold=0)
+    jp_limits = ex.market.upper() == "JP"
+
+    def locked(i: int, j: int) -> str | None:
+        """当日是否一整天张贴在ストップ高/安（寄付无法成交）。仅日本株。"""
+        if not jp_limits or i == 0 or not A.has[i - 1, j]:
+            return None
+        return limit_lock(A.close[i - 1, j], A.high[i, j], A.low[i, j], A.close[i, j], "JP")
     sold_today: set[int] = set()
     if entry_mult is not None:
         entry_mult = np.asarray(entry_mult, dtype=float)
@@ -156,6 +164,9 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
                 continue
             if not A.has[i, j]:
                 continue                      # 停牌：保留到下一个有交易的日子
+            if locked(i, j) == "down":
+                skipped["limit_down_hold"] += 1
+                continue                      # ストップ安張り付き：卖不掉，留到下一个交易日
             close_pos(j, A.open[i, j] * (1 - slip), i, pending_exit.pop(j))
 
         # ── 2. 执行昨日排队的买入（T+1 开盘）──
@@ -176,6 +187,9 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
             o = A.open[i, j]
             if ex.max_entry_gap_pct and o > sig_close * (1 + ex.max_entry_gap_pct / 100):
                 skipped["gap"] += 1
+                continue
+            if locked(i, j) == "up":
+                skipped["limit_up"] += 1          # ストップ高張り付き：买不到
                 continue
             em = float(entry_mult[i, j]) if entry_mult is not None else 1.0
             if em <= 0:
@@ -231,6 +245,11 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
                 elif h >= tp_px:
                     exit_px, reason = max(tp_px, o), "take_profit"
                 if exit_px is not None:
+                    if locked(i, j) == "down":        # 逆指値も約定しない → 次の寄付で成行
+                        skipped["limit_down_hold"] += 1
+                        pending_exit[j] = reason
+                        ps.last_close = c
+                        continue
                     close_pos(j, exit_px * (1 - slip), i, reason)
                     continue
                 ps.peak = max(ps.peak, h)
