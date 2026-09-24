@@ -582,8 +582,8 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
                     "bear": bool(cc.get("bear")), "timing": bool(cc.get("timing", True)),
                     "sell": core_sell, "buy": core_buy,
                     "weight_pct": round(core_units * core_px / equity * 100, 1) if equity > 0 else 0.0}
-    c_extra = {"core": True, "cost": {k: cc[k] for k in ("slip_pct", "buy_fee_pct", "buy_fee_max",
-                                                           "sell_fee_pct", "sell_fee_max") if k in cc},
+    c_extra = {"core": True, "cost": {k: (list(map(list, v)) if k.endswith("_tiers") else v) for k, v in cc.items()
+                                      if k == "slip_pct" or k.startswith(("buy_fee_", "sell_fee_"))},
                "lot": c_lot}
 
     # 排队顺序 = 开盘成交顺序：核心卖出 → 个股买入 → 核心买入（个股卖单已在 3a 排好）

@@ -258,7 +258,7 @@ def cmd_optimize(a) -> int:
     return 0
 
 
-def _make_broker(a, market: str, sizing: SizingConfig):
+def _make_broker(a, market: str, sizing: SizingConfig, mc: dict | None = None):
     """按 --broker 造券商。凭证只从环境变量 / macOS 钥匙串读，不进配置文件。"""
     from qbreak.brokers import make_broker
     kind = getattr(a, "broker", "paper")
@@ -266,7 +266,7 @@ def _make_broker(a, market: str, sizing: SizingConfig):
         return make_broker("manual", initial_cash=sizing.initial_cash, market=market)
     if kind == "paper":
         b = make_broker("paper", initial_cash=sizing.initial_cash, market=market,
-                        exec_cfg=ExecConfig.for_market(market))
+                        exec_cfg=_exec_cfg(market, mc))
         if a.dry_run:
             log.info("dry-run：只计算不发单")
         return b
@@ -282,8 +282,9 @@ def _make_broker(a, market: str, sizing: SizingConfig):
 
 
 def _exec_cfg(market: str, mc: dict | None = None) -> ExecConfig:
-    """该市场的成交成本（手续费 / 滑点 / 换汇）。"""
-    return ExecConfig.for_market(market)
+    """该市场的成交成本（手续费 / 滑点 / 换汇），按 sim.json 市场段的 broker（fees.BROKERS）。"""
+    from qbreak.fees import broker_of
+    return ExecConfig.for_market(market, broker_of(market, mc))
 
 
 def _live_setup(a, market: str, require_arm: bool):
@@ -345,7 +346,7 @@ def _live_common(a, live: bool) -> int:
     if live and not a.dry_run:
         print(f"★ 实盘模式（{a.broker}）。请确认：① ARM 已解锁 ②单笔上限 "
               f"{a.max_order_value:,.0f} ③var/HALT 不存在")
-    broker = _make_broker(a, market, sizing)
+    broker = _make_broker(a, market, sizing, mc)
     ex = _exec_cfg(market, mc)
     ex.stop_fill_mode = a.stop_mode
     ex.validate()
@@ -379,7 +380,7 @@ def cmd_signal(a) -> int:
     p = _params(a, market)
     cfg, mc, sizing, risk = _live_setup(a, market, require_arm=False)
     a.broker, a.dry_run = "manual", True
-    broker = _make_broker(a, market, sizing)
+    broker = _make_broker(a, market, sizing, mc)
     dcfg = DataConfig(provider=a.provider, years=max(a.years, 2),
                       allow_synthetic=a.synthetic).validate()
     P = _inputs(a, market, cfg, mc, dcfg, p, dt.date.today())
@@ -561,7 +562,7 @@ def _plan_inputs(m: str, mc: dict, cfg: dict, dcfg, today, p):
             macro_info["mult"], macro_info["fired"] = 1.0, []
             macro_info["note"] = "市场倍数层已关闭（只用板块倾斜 / 事件窗口）"
     tmult = _index_mult(m, uni, today, tmult)
-    core = _core_cfg(m, mc.get("core"), bb)                  # 核心指数仓位（默认关闭）
+    core = _core_cfg(m, mc.get("core"), bb, mc.get("broker"))  # 核心指数仓位（默认关闭）
     trade_uni = uni if mc.get("breakout", True) else []      # breakout=false：只持指数（不做个股新仓）
     return SimpleNamespace(uni=uni, trade_uni=trade_uni, scale=scale, tmult=tmult, block=block,
                            force_exit=force_exit, core=core, earnings=earnings, reg=reg,
@@ -595,7 +596,7 @@ def cmd_sim_day(a) -> int:
         try:
             mc = cfg[m.lower()]
             p = _params(a, m)                                # 基础参数 + 该市场覆盖文件
-            exc = ExecConfig.for_market(m)
+            exc = _exec_cfg(m, mc)
             if m == "US" and not mc.get("initial_cash"):
                 fx, fxd = _fx_usdjpy()
                 buy_rate = fx * (1 + exc.fx_spread_pct / 100)          # 换汇成本：买美元要更贵
@@ -618,7 +619,7 @@ def cmd_sim_day(a) -> int:
                               max_consecutive_losses=0, daily_max_loss_pct=100.0,
                               max_drawdown_pct=float(mc.get("halt_dd_pct", 30.0)))
             broker = make_broker("paper", initial_cash=sizing.initial_cash, market=m,
-                                 exec_cfg=ExecConfig.for_market(m))
+                                 exec_cfg=exc)
             dcfg = DataConfig(provider=provider, years=2, allow_synthetic=False).validate()
             P = _plan_inputs(m, mc, cfg, dcfg, today, p)
             uni, trade_uni, scale, idx_close, core = P.uni, P.trade_uni, P.scale, P.idx_close, P.core
@@ -722,7 +723,7 @@ def _bullbear(market: str, dcfg=None) -> dict:
     return out
 
 
-def _core_cfg(market: str, c: dict | None, bb: dict | None) -> dict | None:
+def _core_cfg(market: str, c: dict | None, bb: dict | None, broker: str | None = None) -> dict | None:
     """核心指数仓位配置 → run_once 的 core 参数；未启用返回 None（默认关闭）。
     c = sim.json 市场段的 "core"：{"enabled": true, "ticker": "1329.T", "timing": true, "band_pct": 10, "buffer_pct": 0}
     timing=true：牛熊分界（var/bullbear.json 的检测器）判熊市时目标 = 0（清空核心仓位）。"""
@@ -731,7 +732,7 @@ def _core_cfg(market: str, c: dict | None, bb: dict | None) -> dict | None:
         return None
     from qbreak.core import CORE_ETF, core_cost
     ticker = c.get("ticker") or CORE_ETF[market.upper()]
-    cost = {**core_cost(ticker, market), **(c.get("cost") or {})}
+    cost = {**core_cost(ticker, market, broker), **(c.get("cost") or {})}
     return {"ticker": ticker,
             "bear": bool(c.get("timing", True)) and (bb or {}).get("state") == "bear",
             "timing": bool(c.get("timing", True)),
@@ -961,7 +962,7 @@ def cmd_daemon(a) -> int:
     market = a.market.upper()
     p = _params(a, market)
     cfg_, mc, sizing, risk = _live_setup(a, market, require_arm=not a.no_arm)
-    broker = _make_broker(a, market, sizing)
+    broker = _make_broker(a, market, sizing, mc)
     ex = _exec_cfg(market, mc)
     ex.stop_fill_mode = "intraday" if a.protective_stop else a.stop_mode
     ex.validate()

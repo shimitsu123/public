@@ -94,13 +94,21 @@ def _synthetic(market: str, seed: int, n: int = 200):
     return ind, core, bear
 
 
-@pytest.mark.parametrize("market,cash,pct,npos", [("JP", 1_000_000, 0.34, 3), ("US", 6_336.37, 0.125, 8)])
-def test_live_pipeline_equals_engine_with_core(monkeypatch, market, cash, pct, npos):
+# 分档定额手续费（示例表，只用来检验三处计算口径一致，不代表任何券商的现行费率）
+TIERS = ((50_000, 55.0), (100_000, 99.0), (200_000, 115.0), (500_000, 275.0), (1_000_000, 535.0), (float("inf"), 1070.0))
+
+
+@pytest.mark.parametrize("market,cash,pct,npos,tiered", [("JP", 1_000_000, 0.34, 3, False), ("US", 6_336.37, 0.125, 8, False),
+                                                         ("JP", 1_000_000, 0.25, 4, True)])
+def test_live_pipeline_equals_engine_with_core(monkeypatch, market, cash, pct, npos, tiered):
     ind, core_df, bear = _synthetic(market, seed=7 if market == "JP" else 11)
     core_t = "CORE.T" if market == "JP" else "CORE"
     ind_all = {**ind, core_t: core_df}
     bt = _bt(market, cash, pct, npos)
     ccfg = {"ticker": core_t, "buffer_pct": 0.0, "band_pct": 10.0, **CORE_COST[market]}
+    if tiered:                                        # 个股与核心 ETF 都按分档定额收费
+        bt.exec_cfg.commission_tiers = TIERS
+        ccfg.update({"buy_fee_tiers": TIERS, "sell_fee_tiers": TIERS})
     start = ind_all[core_t].index[60]
     eng = run_backtest(ind_all, P, bt, start=start, core=ccfg, core_bear=bear)
 
@@ -136,6 +144,9 @@ def test_live_pipeline_equals_engine_with_core(monkeypatch, market, cash, pct, n
              .sort_values(["entry_date", "ticker"])["shares"])
     assert st.get("core_trades"), "核心仓位应有减仓记录（入场腾资金 / 熊市清空）"
     assert eng.extra["core"]["trades"] > 5
+    if tiered:                                        # 核心 ETF 的比例费率是 0：手续费非 0 且是整数 = 分档定额确实生效
+        f = eng.extra["core"]["fees"]
+        assert f > 0 and float(f).is_integer()
     # 熊市区间结束时核心仓位为 0（清空），牛市恢复后重新买回
     assert core_t in broker.positions()
 

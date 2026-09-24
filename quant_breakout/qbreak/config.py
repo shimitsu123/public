@@ -167,8 +167,7 @@ class ExecConfig:
     """成交假设（約定前提 / execution assumptions）。回测偏悲观才有参考价值。"""
     market: str = "JP"
     commission_pct: float = 0.0
-    # 日本株：楽天「ゼロコース」现货/信用手续费 0 円（需同意 SOR・R クロス）→ 默认 0。
-    # 若你仍在「超割コース」等旧コース，改成 0.055 等实际值。
+    # 各券商的实际费率在 fees.BROKERS（官方页面核对日期写在那里），for_market 按券商取。
     commission_min: float = 0.0
     commission_max: float = 0.0        # 0=无上限；美股 22（美元）
     commission_tiers: tuple = ()       # 分档定额：((约定金额上限, 手续费), ...)；超过最后一档再按比例（见 fees.py）
@@ -177,7 +176,7 @@ class ExecConfig:
     # T+1 开盘价比信号日收盘高出超过该 % 就放弃这笔（ストップ高／大幅ギャップアップ 追不进去）。
     # 原版无此限制，会把"隔夜跳空 15% 开盘"也当成能成交，严重高估收益。
     fx_spread_pct: float = 0.0
-    # 日元 ⇄ 美元 换汇成本（单边 %）。楽天 25 銭/USD 在 157 円时 ≈ 0.16%，来回 ≈ 0.32%。
+    # 日元 ⇄ 美元 换汇成本（单边 %）。例：楽天 25 銭/USD 在 157 円时 ≈ 0.16%，来回 ≈ 0.32%。
     # 只对美股账户有意义：初始换汇时扣一次，日报折日元时按"卖回日元"再扣一次。
     tax_pct: float = 20.315
     # 譲渡益課税（特定口座・源泉徴収あり）。只用于日报显示"税后"，不影响交易决策。
@@ -209,13 +208,11 @@ class ExecConfig:
         return self
 
     @classmethod
-    def for_market(cls, market: str) -> "ExecConfig":
+    def for_market(cls, market: str, broker: str | None = None) -> "ExecConfig":
+        """该市场在该券商的成交成本（费用表与核对日期见 fees.BROKERS；broker 省略 = fees.DEFAULT_BROKER）。"""
+        from .fees import DEFAULT_BROKER, market_fees
         m = market.upper()
-        if m == "JP":
-            return cls(market="JP", commission_pct=0.0, slippage_pct=0.10).validate()
-        # 美股：0.495%（税込）、最低 0 美元、上限 22 美元；换汇 25 銭/USD ≈ 0.16%（2026-09 时点）
-        return cls(market="US", commission_pct=0.495, commission_min=0.0,
-                   commission_max=22.0, slippage_pct=0.05, fx_spread_pct=0.16).validate()
+        return cls(market=m, **market_fees(broker or DEFAULT_BROKER[m], m)).validate()
 
 
 # ══════════════════════════ 资金管理 ══════════════════════════

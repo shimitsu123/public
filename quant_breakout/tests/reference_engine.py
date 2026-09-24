@@ -57,7 +57,11 @@ def reference_backtest(ind: dict[str, pd.DataFrame], p, bt, start=None, entry_mu
     lot_of = lot_of or (lambda t: 100 if jp else 1)
 
     def fee(x):
-        f = abs(x) * ex.commission_pct / 100
+        x = abs(x)
+        for cap, flat in sorted(getattr(ex, "commission_tiers", ()) or ()):   # 分档定额（独立实现，不调用 fees.py）
+            if 0 < x <= cap:
+                return float(flat)
+        f = x * ex.commission_pct / 100
         if ex.commission_min:
             f = max(f, ex.commission_min)
         if ex.commission_max:

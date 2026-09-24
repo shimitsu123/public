@@ -9,18 +9,18 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from .fees import BROKERS, DEFAULT_BROKER, etf_cost
+
 CORE_ETF = {"JP": "1329.T", "US": "VOO"}
-CORE_COST = {  # 回测 / 模拟盘的成交成本（乐天，2026-09-24 官方页面核对）
-    "JP": {"buy_fee_pct": 0.0, "sell_fee_pct": 0.0, "slip_pct": 0.03, "lot": 1},
-    "US": {"buy_fee_pct": 0.0, "sell_fee_pct": 0.495, "sell_fee_max": 22.0, "slip_pct": 0.01, "lot": 1},
-}
-SPYM_COST = {"buy_fee_pct": 0.495, "buy_fee_max": 22.0, "sell_fee_pct": 0.495, "sell_fee_max": 22.0, "slip_pct": 0.02, "lot": 1}
-COST_BY_TICKER = {"1329.T": CORE_COST["JP"], "VOO": CORE_COST["US"], "SPYM": SPYM_COST}
+# 楽天的核心 ETF 成本（2026-09-24 官方页面核对；各券商的表在 fees.BROKERS）。保留这几个名字给旧脚本 / 测试用。
+CORE_COST = {"JP": BROKERS["rakuten"]["etf"]["1329.T"], "US": BROKERS["rakuten"]["etf"]["VOO"]}
+SPYM_COST = BROKERS["rakuten"]["etf"]["SPYM"]
+COST_BY_TICKER = dict(BROKERS["rakuten"]["etf"])
 
 
-def core_cost(ticker: str, market: str) -> dict:
-    """核心 ETF 的成交成本：登记过的按代码取（VOO 买入免费 / SPYM 买卖都收费），否则按市场默认。"""
-    return dict(COST_BY_TICKER.get(ticker) or CORE_COST[market.upper()])
+def core_cost(ticker: str, market: str, broker: str | None = None) -> dict:
+    """核心 ETF 在该券商的成交成本（broker 省略 = fees.DEFAULT_BROKER）。"""
+    return etf_cost(broker or DEFAULT_BROKER[market.upper()], ticker, market)
 
 
 # 资金配置三档（scripts/allocation_study.py，2026-09-24，引擎「收盘规划」版；同一选择规则在不同回撤上限下的结果）
