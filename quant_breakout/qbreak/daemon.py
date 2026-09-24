@@ -100,7 +100,7 @@ class Daemon:
         self.broker = broker
         self.p = params.validate()
         self.corp_actions = corp_actions       # 除息 / 拆股数据源
-        self.entry_hook = entry_hook           # (date) -> (市场倍数, {票: 倍数}, 事件拦截原因)
+        self.entry_hook = entry_hook           # (date) -> (市场倍数, {票: 倍数}, 事件拦截, 强制离场, 核心仓位, 财报日)
         self.risk_cfg = risk_cfg.validate()
         self.sizing = sizing.validate()
         self.data_cfg = data_cfg.validate()
@@ -111,7 +111,7 @@ class Daemon:
         self.fallback_quotes = fallback_quotes
         self.st = DaemonState.load()
         self.book = PositionBook()
-        self.guard = OrderGuard()
+        self.guard = OrderGuard.for_broker(broker)
         self.rm = RiskManager(self.risk_cfg, market=market)
         self._stop = threading.Event()
         self._quote_fails = 0
@@ -333,13 +333,14 @@ class Daemon:
 
     def _end_of_day(self, now: dt.datetime) -> None:
         log.info("── 收盘后日线流程 ──")
-        scale, tmult, block, force, core = 1.0, None, None, None, None
+        scale, tmult, block, force, core, earnings = 1.0, None, None, None, None, None
         if self.entry_hook is not None:
             try:
                 got = self.entry_hook(now.date())
                 scale, tmult, block = got[:3]
                 force = got[3] if len(got) > 3 else None
                 core = got[4] if len(got) > 4 else None
+                earnings = got[5] if len(got) > 5 else None
             except Exception as e:                            # noqa: BLE001
                 log.warning("宏观层 / 状态层计算失败，按 ×1 处理: %s", e)
         res = run_once(self.universe, self.broker, self.p, self.risk_cfg, self.sizing,
@@ -348,7 +349,7 @@ class Daemon:
                        protective_stop=self.cfg.protective_stop,
                        index_close=self._index_close(), entry_scale=scale,
                        ticker_mult=tmult, entry_block=block, corp_actions=self.corp_actions,
-                       force_exit_all=force, core=core)
+                       force_exit_all=force, core=core, earnings=earnings)
         log.info("\n%s", res.summary())
         self.st.eod_done = True
         self.st.save()

@@ -29,6 +29,7 @@ import pandas as pd
 
 from .config import BacktestConfig, StrategyParams
 from .core import core_orders
+from .fees import side_fee
 from .tick import limit_lock, lot_size
 
 EXIT_REASONS = ("stop", "gap_stop", "trail", "take_profit", "dead_cross", "climax",
@@ -149,11 +150,10 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
             if core_bear.shape != (len(gidx),):
                 raise ValueError(f"core_bear 长度 {core_bear.shape} ≠ {len(gidx)}")
 
+    c_fees = {s: side_fee(core, s) for s in ("BUY", "SELL")}
+
     def c_fee(side: str, notional: float) -> float:
-        pct = float(core.get("buy_fee_pct" if side == "BUY" else "sell_fee_pct", 0.0))
-        f = abs(notional) * pct / 100
-        cap = float(core.get("buy_fee_max" if side == "BUY" else "sell_fee_max", 0.0) or 0.0)
-        return min(f, cap) if cap else f
+        return c_fees[side](notional)
 
     def core_trade(side: str, units: int, i: int) -> None:
         nonlocal cash, core_units

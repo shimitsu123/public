@@ -25,6 +25,7 @@ from .brokers.base import BaseBroker, Order, Position
 from .config import (DataConfig, ExecConfig, RiskConfig, SizingConfig,
                      StrategyParams)
 from .core import core_orders
+from .fees import side_fee
 from .data import DataError, load_universe
 from .risk import RiskManager
 from .strategy import compute_indicators
@@ -222,6 +223,12 @@ class OrderGuard:
         self.path = path or (paths.state_dir() / "sent_orders.json")
         self.ids: dict[str, str] = read_json(self.path, {}) or {}
 
+    @classmethod
+    def for_broker(cls, broker) -> "OrderGuard":
+        """每种券商各记各的：同一台机器上模拟盘与实盘同时跑，也不会互相把对方的单当成「已发过」。"""
+        kind = type(broker).__name__.lower().replace("broker", "")
+        return cls(paths.state_dir() / ("sent_orders.json" if kind == "paper" else f"sent_orders_{kind}.json"))
+
     def seen(self, cid: str) -> bool:
         return cid in self.ids
 
@@ -287,7 +294,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
     p.validate()
     ex = (exec_cfg or ExecConfig.for_market(market)).validate()
     intraday = ex.stop_fill_mode == "intraday"
-    book, guard = PositionBook(), OrderGuard()
+    book, guard = PositionBook(), OrderGuard.for_broker(broker)
     rm = RiskManager(risk_cfg, market=market)
 
     # ── 0. 同步 + 取数 ──
@@ -398,7 +405,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
     def place(side: str, ticker: str, qty: int, reason: str,
               stop_px: float = 0.0, extra: dict | None = None) -> Order | None:
         cid = f"{bar_key}-{ticker}-{side}"
-        if guard.seen(cid):
+        if not dry_run and guard.seen(cid):                  # 只算不发单时不拦（dry-run 从不发单，也从不记账）
             res.blocked.append(f"{side} {ticker}: 本交易日已发过同样的单（幂等拦截）")
             return None
         is_core = bool((extra or {}).get("core"))
@@ -479,11 +486,10 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
     cc = core or {}
     c_slip, c_lot = float(cc.get("slip_pct", 0.0)) / 100, int(cc.get("lot", 1) or 1)
 
+    c_fees = {s: side_fee(cc, s) for s in ("BUY", "SELL")}
+
     def c_fee(side: str, notional: float) -> float:
-        pct = float(cc.get("buy_fee_pct" if side == "BUY" else "sell_fee_pct", 0.0))
-        cap = float(cc.get("buy_fee_max" if side == "BUY" else "sell_fee_max", 0.0) or 0.0)
-        f = abs(notional) * pct / 100
-        return min(f, cap) if cap else f
+        return c_fees[side](notional)
 
     core_units = cur[core_t].qty if core_t in cur else 0
     core_px = float(last_close.get(core_t) or 0.0) if core_t else 0.0
@@ -630,17 +636,18 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
     # ── 4/5. 收尾 ──
     res.equity, res.cash = broker.equity(), broker.cash()
     res.positions = {t: pos.qty for t, pos in broker.positions().items()}
-    if not dry_run:
+    if not dry_run:                                   # 只算不发单的清单不进流水（流水是模拟盘 / 实盘日报的数据源）
         rm.end(res.equity, today)
-    _journal(res, market)
+        _journal(res, market, broker)
     if res.orders or decision.daily_loss_pct <= -abs(risk_cfg.daily_max_loss_pct):
         notify.send(f"{res.date} 交易汇总", res.summary(),
                     "warn" if not decision.allow_open else "info")
     return res
 
 
-def _journal(res: DayResult, market: str = "JP") -> None:
-    fp = paths.out_dir() / "journal.csv"
+def _journal(res: DayResult, market: str = "JP", broker=None) -> None:
+    kind = type(broker).__name__.lower().replace("broker", "") if broker is not None else "paper"
+    fp = paths.out_dir() / ("journal.csv" if kind == "paper" else f"journal_{kind}.csv")   # 模拟盘与实盘各记各的
     row = pd.DataFrame([{ "date": res.date, "market": market, "bar_date": res.bar_date,
                           "equity": round(res.equity, 2),
                           "cash": round(res.cash, 2),

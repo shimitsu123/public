@@ -5,6 +5,7 @@ import time
 
 from .. import paths
 from ..config import ExecConfig
+from ..fees import side_fee
 from ..utils import read_json, setup_logging, write_json
 from .base import BaseBroker, Order, Position
 
@@ -216,13 +217,7 @@ class PaperBroker(BaseBroker):
         """(滑点比例, 手续费函数)。cost=None → 本账户的默认成交成本（ExecConfig）。"""
         if not cost:
             return self.ex.slippage_pct / 100, self.ex.fee
-        pct = float(cost.get("buy_fee_pct" if side == "BUY" else "sell_fee_pct", 0.0))
-        cap = float(cost.get("buy_fee_max" if side == "BUY" else "sell_fee_max", 0.0) or 0.0)
-
-        def fee(notional: float) -> float:
-            f = abs(notional) * pct / 100
-            return min(f, cap) if cap else f
-        return float(cost.get("slip_pct", 0.0)) / 100, fee
+        return float(cost.get("slip_pct", 0.0)) / 100, side_fee(cost, side)
 
     def buy(self, ticker: str, qty: int, limit: float | None = None,
             client_id: str = "", ref_px: float | None = None, bar: str = "",

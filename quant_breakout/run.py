@@ -281,34 +281,83 @@ def _make_broker(a, market: str, sizing: SizingConfig):
                        dry_run=a.dry_run, limit_buffer_pct=a.limit_buffer)
 
 
+def _exec_cfg(market: str, mc: dict | None = None) -> ExecConfig:
+    """该市场的成交成本（手续费 / 滑点 / 换汇）。"""
+    return ExecConfig.for_market(market)
+
+
+def _live_setup(a, market: str, require_arm: bool):
+    """实盘 / 半自动 / 守护进程的资金与风控：默认跟模拟盘同一档（var/sim.json 的市场段：股票池、仓位、
+    个股开关、核心 ETF、宏观层、回撤 HALT），保证真钱照着模拟盘的规则走；--no-sim-config 或没有 sim.json
+    时用命令行参数（旧行为）。返回 (sim.json, 市场段 | None, SizingConfig, RiskConfig)。"""
+    cfg = {} if getattr(a, "no_sim_config", False) else (_sim_cfg() or {})
+    mc = cfg.get(market.lower()) or None
+    if not mc:
+        a.max_order_value = a.max_order_value or 300_000
+        risk = RiskConfig(max_order_value=a.max_order_value, require_arm=require_arm)
+        sizing = SizingConfig(initial_cash=a.cash or 1_000_000,
+                              position_pct=a.position_pct or 0.20, max_positions=risk.max_positions)
+        return {}, None, sizing, risk
+    cap = a.cash or float(mc.get("initial_cash") or 1_000_000)
+    a.max_order_value = a.max_order_value or round(cap * 1.1)    # 核心指数仓位一笔可到权益的 100%
+    risk = RiskConfig(max_order_value=a.max_order_value, require_arm=require_arm,
+                      max_positions=mc["max_positions"], max_new_positions_per_day=mc["max_positions"],
+                      max_drawdown_pct=float(mc.get("halt_dd_pct", 30.0)))
+    pct = a.position_pct or mc["position_pct"]                     # 命令行显式给出时覆盖（例如实盘头两周调小）
+    sizing = SizingConfig(initial_cash=cap, position_pct=pct, max_positions=mc["max_positions"],
+                          max_position_pct=max(0.34, pct))
+    core = mc.get("core") or {}
+    print(f"按 var/sim.json 的 {market} 配置：{mc.get('tier', '?')} 档，{mc['max_positions']}×{pct:.0%}"
+          f"{'（--position-pct 覆盖）' if a.position_pct else ''}，"
+          f"股票池 {mc.get('universe', 'default')}，个股新仓{'开' if mc.get('breakout', True) else '关'}，"
+          f"核心 {core.get('ticker') if core.get('enabled') else '无'}；单笔上限 {a.max_order_value:,.0f}"
+          f"（--no-sim-config 改用命令行参数）")
+    return cfg, mc, sizing, risk
+
+
+def _cli_inputs(a, market: str, dcfg, p, today):
+    """--no-sim-config（或没有 sim.json）时的交易输入：命令行口径（默认股票池、--core、--no-macro）。"""
+    from types import SimpleNamespace
+    uni = universe(market)
+    scale, tmult, block = 1.0, None, None
+    if not getattr(a, "no_macro", False):
+        scale, tmult, block, _ = _macro_layer(market, dcfg, uni, today)
+    tmult = _index_mult(market, uni, today, tmult)
+    rscale, force, bb = _regime_gate(market, dcfg)
+    core = _core_cfg(market, {"enabled": True, "ticker": a.core_ticker} if a.core else None,
+                     bb if bb.get("state") in ("bull", "bear") else (_bullbear(market, dcfg) if a.core else None))
+    return SimpleNamespace(uni=uni, trade_uni=uni, scale=min(scale, rscale), tmult=tmult, block=block,
+                           force_exit=force, core=core, earnings=None, bb=bb,
+                           idx_close=_index_close(market, dcfg, p))
+
+
+def _inputs(a, market: str, cfg: dict, mc: dict | None, dcfg, p, today):
+    return _plan_inputs(market, mc, cfg, dcfg, today, p) if mc else _cli_inputs(a, market, dcfg, p, today)
+
+
 def _live_common(a, live: bool) -> int:
     from qbreak.trader import run_once
     market = a.market.upper()
     p = _params(a, market)
-    risk = RiskConfig(max_order_value=a.max_order_value, require_arm=not a.no_arm)
-    sizing = SizingConfig(initial_cash=a.cash or 1_000_000,
-                          position_pct=a.position_pct, max_positions=risk.max_positions)
+    cfg, mc, sizing, risk = _live_setup(a, market, require_arm=not a.no_arm)
     if live and a.broker == "paper":
         a.broker = "tachibana"
+    if live and not a.dry_run:
+        print(f"★ 实盘模式（{a.broker}）。请确认：① ARM 已解锁 ②单笔上限 "
+              f"{a.max_order_value:,.0f} ③var/HALT 不存在")
     broker = _make_broker(a, market, sizing)
-    ex = ExecConfig.for_market(market)
+    ex = _exec_cfg(market, mc)
     ex.stop_fill_mode = a.stop_mode
     ex.validate()
     dcfg = DataConfig(provider=a.provider, years=max(a.years, 2),
                       allow_synthetic=a.synthetic).validate()
-    scale, tmult, block = 1.0, None, None
-    if not getattr(a, "no_macro", False):
-        scale, tmult, block, _ = _macro_layer(market, dcfg, universe(market), dt.date.today())
-    tmult = _index_mult(market, universe(market), dt.date.today(), tmult)
-    rscale, force, _bb = _regime_gate(market, dcfg)
-    core = _core_cfg(market, {"enabled": True, "ticker": a.core_ticker} if a.core else None,
-                     _bullbear(market, dcfg) if a.core else None)
-    res = run_once(universe(market), broker, p, risk, sizing, dcfg,
+    P = _inputs(a, market, cfg, mc, dcfg, p, dt.date.today())
+    res = run_once(P.trade_uni, broker, p, risk, sizing, dcfg,
                    market=market, dry_run=a.dry_run, allow_stale=a.allow_stale,
                    exec_cfg=ex, protective_stop=a.protective_stop,
-                   index_close=_index_close(market, dcfg, p), entry_scale=min(scale, rscale),
-                   ticker_mult=tmult, entry_block=block, corp_actions=_corp_actions_provider(),
-                   force_exit_all=force, core=core)
+                   index_close=P.idx_close, entry_scale=P.scale, earnings=P.earnings,
+                   ticker_mult=P.tmult, entry_block=P.block, corp_actions=_corp_actions_provider(),
+                   force_exit_all=P.force_exit, core=P.core)
     print("\n" + res.summary())
     return 0
 
@@ -318,42 +367,31 @@ def cmd_paper(a) -> int:
 
 
 def cmd_live(a) -> int:
-    if not a.dry_run:
-        print(f"★ 实盘模式（{a.broker}）。请确认：① ARM 已解锁 ②单笔上限 "
-              f"{a.max_order_value:,.0f} ③var/HALT 不存在")
     return _live_common(a, live=True)
 
 
 def cmd_signal(a) -> int:
     """半自动：工具算信号与止损位，输出一张人能照抄的操作清单（绝不发单）。
-    留在楽天等没有 API 的券商时用这个；成交后用 `run.py pos add/rm` 登记真实持仓。"""
+    默认按 var/sim.json 同一档（与模拟盘同规则）；成交后用 `run.py pos add/rm` 登记真实持仓。"""
     from qbreak.trader import operation_sheet, run_once
     from qbreak import notify
     market = a.market.upper()
     p = _params(a, market)
-    risk = RiskConfig(max_order_value=a.max_order_value, require_arm=False)
-    sizing = SizingConfig(initial_cash=a.cash or 1_000_000,
-                          position_pct=a.position_pct, max_positions=risk.max_positions)
+    cfg, mc, sizing, risk = _live_setup(a, market, require_arm=False)
     a.broker, a.dry_run = "manual", True
     broker = _make_broker(a, market, sizing)
     dcfg = DataConfig(provider=a.provider, years=max(a.years, 2),
                       allow_synthetic=a.synthetic).validate()
-    scale, tmult, block = 1.0, None, None
-    if not getattr(a, "no_macro", False):
-        scale, tmult, block, _ = _macro_layer(market, dcfg, universe(market), dt.date.today())
-    tmult = _index_mult(market, universe(market), dt.date.today(), tmult)
-    rscale, force, bb = _regime_gate(market, dcfg)
+    P = _inputs(a, market, cfg, mc, dcfg, p, dt.date.today())
+    bb = P.bb or {}
     if bb.get("state") in ("bull", "bear"):
         print(f"牛熊分界：{'熊市' if bb['state'] == 'bear' else '牛市'}（自 {bb.get('since')}）；"
               f"翻转价位 {bb.get('level')}（距 {bb.get('distance_pct')}%）")
-    core = _core_cfg(market, {"enabled": True, "ticker": a.core_ticker} if a.core else None,
-                     bb if bb.get("state") in ("bull", "bear") else (_bullbear(market, dcfg) if a.core else None))
-    res = run_once(universe(market), broker, p, risk, sizing, dcfg,
+    res = run_once(P.trade_uni, broker, p, risk, sizing, dcfg,
                    market=market, dry_run=True, allow_stale=a.allow_stale,
-                   exec_cfg=ExecConfig.for_market(market),
-                   index_close=_index_close(market, dcfg, p), entry_scale=min(scale, rscale),
-                   ticker_mult=tmult, entry_block=block, corp_actions=_corp_actions_provider(),
-                   force_exit_all=force, core=core)
+                   exec_cfg=_exec_cfg(market, mc), index_close=P.idx_close, entry_scale=P.scale,
+                   earnings=P.earnings, ticker_mult=P.tmult, entry_block=P.block,
+                   corp_actions=_corp_actions_provider(), force_exit_all=P.force_exit, core=P.core)
     from qbreak.trader import PositionBook
     positions = PositionBook().merge(broker.positions())
     sheet = operation_sheet(res, p, positions, a.limit_buffer)
@@ -486,6 +524,50 @@ def cmd_sim_init(a) -> int:
     return 0
 
 
+def _plan_inputs(m: str, mc: dict, cfg: dict, dcfg, today, p):
+    """sim.json 的市场段 → 当日交易输入：股票池、新仓倍数（状态层 / 牛熊分界 / 汇率 / 宏观）、板块倾斜、
+    事件窗口、强制离场、核心指数仓位。模拟盘、半自动清单、守护进程、实盘都走这里，真钱与模拟盘同一套规则。"""
+    from types import SimpleNamespace
+    uni = universe(m, mc.get("universe", "default"))
+    reg, idx_close = _market_regime(m, dcfg)
+    mode = mc.get("regime_mode", cfg.get("regime_mode", "quant"))
+    use_q, use_bb, bb_exit = REGIME_MODES.get(mode, REGIME_MODES["quant"])
+    if cfg.get("use_market_regime", True):
+        scale = reg.mult if use_q else reg.overlay_mult      # 判断层（风险报告）始终生效
+    else:
+        scale = 1.0
+    bb = _bullbear(m, dcfg)                           # 始终计算，日报显示；是否参与交易看模式
+    bb["gating"] = use_bb
+    force_exit = None
+    if use_bb and bb.get("state") == "bear":
+        scale = 0.0
+        if bb_exit:
+            force_exit = f"regime_bear(牛熊分界：{bb.get('since')} 起熊市)"
+    fx_info = {}
+    if m == "US" and cfg.get("use_fx_scale", True):
+        fx_scale, fx_info = _fx_scale(cfg)
+        scale = min(scale, fx_scale)
+    earnings = _earnings_provider() if p.earnings_blackout_days or p.exit_before_earnings else None
+    macro_info, tmult, block = {}, None, None
+    flag = lambda k, d=True: mc.get(k, cfg.get(k, d))          # noqa: E731  市场段优先
+    if flag("use_macro") or flag("use_sector_tilt") or flag("use_event_window"):
+        mm, tmult, block, macro_info = _macro_layer(
+            m, dcfg, uni, today, use_sector=flag("use_sector_tilt"),
+            use_events=flag("use_event_window"), event_kinds=flag("event_kinds", None),
+            bar_date=idx_close.index[-1].date() if idx_close is not None else None)
+        if flag("use_macro"):
+            scale = min(scale, mm)
+        else:
+            macro_info["mult"], macro_info["fired"] = 1.0, []
+            macro_info["note"] = "市场倍数层已关闭（只用板块倾斜 / 事件窗口）"
+    tmult = _index_mult(m, uni, today, tmult)
+    core = _core_cfg(m, mc.get("core"), bb)                  # 核心指数仓位（默认关闭）
+    trade_uni = uni if mc.get("breakout", True) else []      # breakout=false：只持指数（不做个股新仓）
+    return SimpleNamespace(uni=uni, trade_uni=trade_uni, scale=scale, tmult=tmult, block=block,
+                           force_exit=force_exit, core=core, earnings=earnings, reg=reg,
+                           idx_close=idx_close, mode=mode, bb=bb, fx_info=fx_info, macro_info=macro_info)
+
+
 def cmd_sim_day(a) -> int:
     """每个交易日跑一次：两个市场的模拟盘 → 日报 HTML。任何一个市场失败不影响另一个。"""
     import datetime as _dt
@@ -538,41 +620,10 @@ def cmd_sim_day(a) -> int:
             broker = make_broker("paper", initial_cash=sizing.initial_cash, market=m,
                                  exec_cfg=ExecConfig.for_market(m))
             dcfg = DataConfig(provider=provider, years=2, allow_synthetic=False).validate()
-            uni = universe(m, mc.get("universe", "default"))
-            reg, idx_close = _market_regime(m, dcfg)
-            mode = mc.get("regime_mode", cfg.get("regime_mode", "quant"))
-            use_q, use_bb, bb_exit = REGIME_MODES.get(mode, REGIME_MODES["quant"])
-            if cfg.get("use_market_regime", True):
-                scale = reg.mult if use_q else reg.overlay_mult      # 判断层（风险报告）始终生效
-            else:
-                scale = 1.0
-            bb = _bullbear(m, dcfg)                           # 始终计算，日报显示；是否参与交易看模式
-            bb["gating"] = use_bb
-            force_exit = None
-            if use_bb and bb.get("state") == "bear":
-                scale = 0.0
-                if bb_exit:
-                    force_exit = f"regime_bear(牛熊分界：{bb.get('since')} 起熊市)"
-            fx_info = {}
-            if m == "US" and cfg.get("use_fx_scale", True):
-                fx_scale, fx_info = _fx_scale(cfg)
-                scale = min(scale, fx_scale)
-            earnings = _earnings_provider() if p.earnings_blackout_days or p.exit_before_earnings else None
-            macro_info, tmult, block = {}, None, None
-            flag = lambda k, d=True: mc.get(k, cfg.get(k, d))          # noqa: E731  市场段优先
-            if flag("use_macro") or flag("use_sector_tilt") or flag("use_event_window"):
-                mm, tmult, block, macro_info = _macro_layer(
-                    m, dcfg, uni, today, use_sector=flag("use_sector_tilt"),
-                    use_events=flag("use_event_window"), event_kinds=flag("event_kinds", None),
-                    bar_date=idx_close.index[-1].date() if idx_close is not None else None)
-                if flag("use_macro"):
-                    scale = min(scale, mm)
-                else:
-                    macro_info["mult"], macro_info["fired"] = 1.0, []
-                    macro_info["note"] = "市场倍数层已关闭（只用板块倾斜 / 事件窗口）"
-            tmult = _index_mult(m, uni, today, tmult)
-            core = _core_cfg(m, mc.get("core"), bb)                  # 核心指数仓位（默认关闭）
-            trade_uni = uni if mc.get("breakout", True) else []      # breakout=false：只持指数（不做个股新仓）
+            P = _plan_inputs(m, mc, cfg, dcfg, today, p)
+            uni, trade_uni, scale, idx_close, core = P.uni, P.trade_uni, P.scale, P.idx_close, P.core
+            reg, mode, bb, fx_info, macro_info = P.reg, P.mode, P.bb, P.fx_info, P.macro_info
+            earnings, tmult, block, force_exit = P.earnings, P.tmult, P.block, P.force_exit
             res = run_once(trade_uni, broker, p, risk, sizing, dcfg,
                            market=m, dry_run=False, allow_stale=a.allow_stale,
                            exec_cfg=exc, entry_scale=scale, index_close=idx_close,
@@ -905,36 +956,35 @@ def cmd_report(a) -> int:
 
 
 def cmd_daemon(a) -> int:
-    """盘中常驻：实时止损 + 逆指値维护 + 收盘后日线流程。"""
+    """盘中常驻：实时止损 + 逆指値维护 + 收盘后日线流程（默认按 var/sim.json 同一档）。"""
     from qbreak.daemon import Daemon, DaemonConfig
     market = a.market.upper()
-    risk = RiskConfig(max_order_value=a.max_order_value, require_arm=not a.no_arm)
-    sizing = SizingConfig(initial_cash=a.cash or 1_000_000,
-                          position_pct=a.position_pct, max_positions=risk.max_positions)
+    p = _params(a, market)
+    cfg_, mc, sizing, risk = _live_setup(a, market, require_arm=not a.no_arm)
     broker = _make_broker(a, market, sizing)
-    ex = ExecConfig.for_market(market)
+    ex = _exec_cfg(market, mc)
     ex.stop_fill_mode = "intraday" if a.protective_stop else a.stop_mode
     ex.validate()
     cfg = DaemonConfig(poll_interval_s=a.interval, protective_stop=a.protective_stop,
                        eod_at=_parse_time(a.eod_at))
     dcfg = DataConfig(provider=a.provider, years=max(a.years, 2),
                       allow_synthetic=a.synthetic).validate()
-    hook = None
-    core_on = {"enabled": True, "ticker": a.core_ticker} if a.core else None
-    if not getattr(a, "no_macro", False) or core_on:
-        def hook(day):                                       # 日终流程前算一次宏观层 + 状态层 + 核心仓位
-            s, tm, b = 1.0, None, None
-            if not getattr(a, "no_macro", False):
-                s, tm, b, _ = _macro_layer(market, dcfg, universe(market), day)
-            rs, force, _bb = _regime_gate(market, dcfg)
-            core = _core_cfg(market, core_on, _bullbear(market, dcfg) if core_on else None)
-            return min(s, rs), _index_mult(market, universe(market), day, tm), b, force, core
+
+    def hook(day):                                           # 日终流程前算一次：与模拟盘同一套交易输入
+        P = _inputs(a, market, cfg_, mc, dcfg, p, day)
+        return P.scale, P.tmult, P.block, P.force_exit, P.core, P.earnings
     from qbreak.core import CORE_ETF
-    d = Daemon(universe(market), broker, _params(a, market), risk, sizing, dcfg,
+    if mc:
+        uni = universe(market, mc.get("universe", "default")) if mc.get("breakout", True) else []
+        c = mc.get("core") or {}
+        core_ticker = (c.get("ticker") or CORE_ETF[market]) if c.get("enabled") else None
+    else:
+        uni = universe(market)
+        core_ticker = (a.core_ticker or CORE_ETF[market]) if a.core else None
+    d = Daemon(uni, broker, p, risk, sizing, dcfg,
                ex, cfg=cfg, dry_run=a.dry_run, market=market,
                fallback_quotes=(a.broker == "paper"), entry_hook=hook,
-               corp_actions=_corp_actions_provider(),
-               core_ticker=(a.core_ticker or CORE_ETF[market]) if a.core else None)
+               corp_actions=_corp_actions_provider(), core_ticker=core_ticker)
     d.install_signal_handlers()
     d.run_forever(max_loops=1 if a.once else None)
     return 0
@@ -1099,8 +1149,12 @@ def main(argv=None) -> int:
         sp.add_argument("--demo", action="store_true", help="立花デモ環境")
         sp.add_argument("--dry-run", action="store_true", help="只算不发单")
         sp.add_argument("--allow-stale", action="store_true", help="允许用过期 K 线（仅测试）")
-        sp.add_argument("--position-pct", type=float, default=0.20)
-        sp.add_argument("--max-order-value", type=float, default=300_000)
+        sp.add_argument("--position-pct", type=float, default=None,
+                        help="单笔占权益比例（默认：跟模拟盘同档；--no-sim-config 时 0.20）。实盘头两周可临时调小")
+        sp.add_argument("--max-order-value", type=float, default=None,
+                        help="单笔金额上限（默认：跟模拟盘同档时 = 资金×1.1；否则 300,000）")
+        sp.add_argument("--no-sim-config", action="store_true",
+                        help="不读 var/sim.json 的同档配置，改用命令行参数（--position-pct / --core 等）")
         sp.add_argument("--no-arm", action="store_true", help="关闭人工 ARM 闸门（强烈不建议）")
         sp.add_argument("--workbook", default="rss_bridge.xlsm", help="仅 --broker rss")
         sp.add_argument("--limit-buffer", type=float, default=0.5, help="指値相对现价的偏移 %%")

@@ -171,6 +171,7 @@ class ExecConfig:
     # 若你仍在「超割コース」等旧コース，改成 0.055 等实际值。
     commission_min: float = 0.0
     commission_max: float = 0.0        # 0=无上限；美股 22（美元）
+    commission_tiers: tuple = ()       # 分档定额：((约定金额上限, 手续费), ...)；超过最后一档再按比例（见 fees.py）
     slippage_pct: float = 0.10         # 単边滑点 %
     max_entry_gap_pct: float = 3.0
     # T+1 开盘价比信号日收盘高出超过该 % 就放弃这笔（ストップ高／大幅ギャップアップ 追不进去）。
@@ -194,12 +195,9 @@ class ExecConfig:
     # 日线策略几乎不会触发，但保留这道闸。
 
     def fee(self, notional: float) -> float:
-        f = abs(notional) * self.commission_pct / 100
-        if self.commission_min:
-            f = max(f, self.commission_min)
-        if self.commission_max:
-            f = min(f, self.commission_max)
-        return f
+        from .fees import FeeSchedule
+        return FeeSchedule(self.commission_pct, self.commission_min, self.commission_max,
+                           tuple(self.commission_tiers))(notional)
 
     def validate(self) -> "ExecConfig":
         if self.market.upper() not in ("JP", "US"):
