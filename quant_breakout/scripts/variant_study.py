@@ -72,6 +72,7 @@ def main() -> int:
     ap.add_argument("market")
     ap.add_argument("--only", default="")
     ap.add_argument("--no-wf", action="store_true")
+    ap.add_argument("--tag", default="", help="输出文件名后缀，例如 confirm → variant_study_JP_confirm.csv")
     a = ap.parse_args()
     market = a.market.upper()
     plan = [x for x in PLAN if not a.only or x in a.only.split(",")]
@@ -117,7 +118,7 @@ def main() -> int:
         rows.append(row)
         print(json.dumps(row, ensure_ascii=False), flush=True)
     df = pd.DataFrame(rows)
-    out = paths.out_dir() / f"variant_study_{market}"
+    out = paths.out_dir() / (f"variant_study_{market}" + (f"_{a.tag}" if a.tag else ""))
     df.to_csv(f"{out}.csv", index=False, encoding="utf-8-sig")
     cols = list(df.columns)
     md = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
