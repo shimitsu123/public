@@ -85,7 +85,7 @@ def scan(ind: dict[str, pd.DataFrame], p: StrategyParams, market: str,
             top_flags.append(f"离20日线+{ext:.0f}%")
         if np.isfinite(rsi_v) and rsi_v > 70:
             top_flags.append(f"RSI{rsi_v:.0f}")
-        if np.isfinite(dd_n) and dd_n >= 6:                 # 日本株过滤线是 ≥7，提前一档提示
+        if np.isfinite(dd_n) and dd_n >= 6:                 # 与日本株过滤线（≥6 不进场）一致
             top_flags.append(f"出货日{int(dd_n)}")
         if np.isfinite(ush) and ush > 3:
             top_flags.append("长上影")
