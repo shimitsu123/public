@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-24 08:37",
+ "generated": "2026-09-24 12:18",
  "sim": {
   "start": "2026-09-24",
   "end": "2026-12-24",
@@ -1178,5 +1178,281 @@
     "near_intervention": true
    }
   }
+ },
+ "factors": {
+  "rows": [
+   {
+    "group": "美国利率",
+    "name": "联邦基金（实际成交）",
+    "value": 3.88,
+    "unit": "%",
+    "date": "2026-09-22",
+    "chg20": 0.25,
+    "pct_rank": 41.0,
+    "stale": false
+   },
+   {
+    "group": "美国利率",
+    "name": "美债 3 个月",
+    "value": 4.16,
+    "unit": "%",
+    "date": "2026-09-22",
+    "chg20": 0.29,
+    "pct_rank": 43.0,
+    "stale": false
+   },
+   {
+    "group": "美国利率",
+    "name": "美债 2 年",
+    "value": 4.71,
+    "unit": "%",
+    "date": "2026-09-22",
+    "chg20": 0.47,
+    "pct_rank": 85.0,
+    "stale": false
+   },
+   {
+    "group": "美国利率",
+    "name": "美债 10 年",
+    "value": 4.96,
+    "unit": "%",
+    "date": "2026-09-22",
+    "chg20": 0.26,
+    "pct_rank": 99.0,
+    "stale": false
+   },
+   {
+    "group": "美国利率",
+    "name": "美债 30 年",
+    "value": 5.29,
+    "unit": "%",
+    "date": "2026-09-22",
+    "chg20": 0.06,
+    "pct_rank": 99.0,
+    "stale": false
+   },
+   {
+    "group": "美国利率",
+    "name": "10 年 − 3 个月（倒挂 < 0）",
+    "value": 0.8,
+    "unit": "pt",
+    "date": "2026-09-22",
+    "chg20": -0.03,
+    "pct_rank": 81.0,
+    "stale": false
+   },
+   {
+    "group": "美国利率",
+    "name": "实际利率 10 年",
+    "value": 2.63,
+    "unit": "%",
+    "date": "2026-09-22",
+    "chg20": 0.25,
+    "pct_rank": 100.0,
+    "stale": false
+   },
+   {
+    "group": "美国利率",
+    "name": "通胀预期 10 年",
+    "value": 2.35,
+    "unit": "%",
+    "date": "2026-09-23",
+    "chg20": 0.03,
+    "pct_rank": 57.0,
+    "stale": false
+   },
+   {
+    "group": "日本利率",
+    "name": "日银 无担保 O/N",
+    "value": 0.977,
+    "unit": "%",
+    "date": "2026-09-17",
+    "chg20": 0.0,
+    "pct_rank": 95.0,
+    "stale": false
+   },
+   {
+    "group": "日本利率",
+    "name": "日本国债 2 年",
+    "value": 1.849,
+    "unit": "%",
+    "date": "2026-09-18",
+    "chg20": 0.167,
+    "pct_rank": 99.0,
+    "stale": false
+   },
+   {
+    "group": "日本利率",
+    "name": "日本国债 10 年",
+    "value": 2.981,
+    "unit": "%",
+    "date": "2026-09-18",
+    "chg20": 0.099,
+    "pct_rank": 99.0,
+    "stale": false
+   },
+   {
+    "group": "日本利率",
+    "name": "日本国债 30 年",
+    "value": 4.044,
+    "unit": "%",
+    "date": "2026-09-18",
+    "chg20": 0.002,
+    "pct_rank": 99.0,
+    "stale": false
+   },
+   {
+    "group": "日本利率",
+    "name": "10 年 − 2 年",
+    "value": 1.132,
+    "unit": "pt",
+    "date": "2026-09-18",
+    "chg20": -0.068,
+    "pct_rank": 93.0,
+    "stale": false
+   },
+   {
+    "group": "美日利差",
+    "name": "2 年（美 − 日）",
+    "value": 2.911,
+    "unit": "pt",
+    "date": "2026-09-18",
+    "chg20": 0.403,
+    "pct_rank": 36.0,
+    "stale": false
+   },
+   {
+    "group": "美日利差",
+    "name": "10 年（美 − 日）",
+    "value": 2.029,
+    "unit": "pt",
+    "date": "2026-09-18",
+    "chg20": 0.193,
+    "pct_rank": 23.0,
+    "stale": false
+   },
+   {
+    "group": "原油",
+    "name": "Brent 现货",
+    "value": 114.89,
+    "unit": "$",
+    "date": "2026-09-22",
+    "chg20": 22.18,
+    "pct_rank": 94.0,
+    "stale": false
+   },
+   {
+    "group": "原油",
+    "name": "Brent 期货（近月）",
+    "value": 103.08,
+    "unit": "$",
+    "date": "2026-09-23",
+    "chg20": 14.5,
+    "pct_rank": 90.0,
+    "stale": false
+   },
+   {
+    "group": "原油",
+    "name": "现货 − 期货（>0 = 现货紧张）",
+    "value": 15.64,
+    "unit": "$",
+    "date": "2026-09-22",
+    "chg20": 13.11,
+    "pct_rank": 99.0,
+    "stale": false
+   },
+   {
+    "group": "原油",
+    "name": "WTI 现货",
+    "value": 96.41,
+    "unit": "$",
+    "date": "2026-09-22",
+    "chg20": 10.07,
+    "pct_rank": 88.0,
+    "stale": false
+   },
+   {
+    "group": "汇率·信用·波动",
+    "name": "美元日元",
+    "value": 156.87,
+    "unit": "",
+    "date": "2026-09-18",
+    "chg20": -1.98,
+    "pct_rank": 85.0,
+    "stale": false
+   },
+   {
+    "group": "汇率·信用·波动",
+    "name": "Baa − 美债 10 年 信用利差",
+    "value": 1.42,
+    "unit": "pt",
+    "date": "2026-09-22",
+    "chg20": -0.21,
+    "pct_rank": 2.0,
+    "stale": false
+   },
+   {
+    "group": "汇率·信用·波动",
+    "name": "VIX",
+    "value": 14.21,
+    "unit": "",
+    "date": "2026-09-22",
+    "chg20": -1.24,
+    "pct_rank": 15.0,
+    "stale": false
+   }
+  ],
+  "etf": [
+   {
+    "name": "美长债 TLT",
+    "ret20_pct": -3.24,
+    "date": "2026-09-23",
+    "pct_rank": 26.0
+   },
+   {
+    "name": "黄金 GLD",
+    "ret20_pct": -8.22,
+    "date": "2026-09-23",
+    "pct_rank": 2.0
+   },
+   {
+    "name": "美元指数 UUP",
+    "ret20_pct": 2.47,
+    "date": "2026-09-23",
+    "pct_rank": 85.0
+   },
+   {
+    "name": "商品 DBC",
+    "ret20_pct": 6.27,
+    "date": "2026-09-23",
+    "pct_rank": 85.0
+   },
+   {
+    "name": "新兴市场 EEM",
+    "ret20_pct": 2.42,
+    "date": "2026-09-23",
+    "pct_rank": 65.0
+   },
+   {
+    "name": "高收益债 − 中期国债",
+    "ret20_pct": 1.21,
+    "date": "2026-09-23",
+    "pct_rank": 72.0
+   },
+   {
+    "name": "小盘 − 大盘",
+    "ret20_pct": -6.04,
+    "date": "2026-09-23",
+    "pct_rank": 3.0
+   },
+   {
+    "name": "公用事业 − 大盘（防御轮动）",
+    "ret20_pct": -7.85,
+    "date": "2026-09-23",
+    "pct_rank": 6.0
+   }
+  ],
+  "years": 5,
+  "note": "只展示，不参与交易：2026-09-24 多因子研究（scripts/factor_study.py）样本外没有提高预测力"
  }
 }

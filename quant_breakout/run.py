@@ -603,6 +603,15 @@ def cmd_sim_day(a) -> int:
             fp.open("a", encoding="utf-8").write(line)
     except Exception as e:                                   # noqa: BLE001
         log.warning("汇率获取失败（不影响交易）: %s", e)
+    try:                                                     # 多因子面板（只展示，不参与交易；数据源不通也不影响交易）
+        from qbreak import factors as F
+        from qbreak.data import load_universe as _lu
+        d6 = DataConfig(provider=provider, years=6, allow_synthetic=False, min_bars=250).validate()
+        etf = {k: v["Close"] for k, v in _lu(F.ETF_TICKERS, d6).items()}
+        bz = _lu(["BZ=F"], d6).get("BZ=F")
+        extras["_factors"] = F.snapshot(brent_fut=bz["Close"] if bz is not None else None, etf=etf)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("多因子面板计算失败（不影响交易）: %s", e)
     ok = not errors and not notes
     write_json(paths.out_dir() / "last_run.json",
                {"at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "ok": ok,

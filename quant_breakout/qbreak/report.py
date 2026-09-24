@@ -85,7 +85,7 @@ def build_data(markets: list[str] | None = None) -> dict:
     last_run = read_json(paths.out_dir() / "last_run.json", {}) or {}
     markets = markets or sim.get("markets") or ["JP", "US"]
     out = {"generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "sim": sim,
-           "last_run": last_run, "markets": {}}
+           "last_run": last_run, "markets": {}, "factors": extras.get("_factors") or {}}
     for m in markets:
         cur = CURRENCY[m]
         initial = float((sim.get(m.lower()) or {}).get("initial_cash") or 0)
@@ -284,6 +284,7 @@ td.n,th.n{text-align:right}
   </section>
   <section class="card" id="regime"></section>
   <section class="card" id="macro"></section>
+  <section class="card" id="factors"></section>
   <section class="card">
     <h2>候补队列（按入场条件就绪度排序，不是收益预测）</h2>
     <div class="legend"><span class="muted">triggered=今日已触发 · imminent=横盘+0轴+MACD 即将金叉 · watch=横盘+0轴 · 可负担=1 単元 ≤ 单笔预算 · 偏好=符合你的美股筛选规则 · 顶部风险=离20日线过远/RSI>70/20日内出货日≥6/长上影（上影>3倍实体）/落后指数（仅提示，不过滤）</span></div>
@@ -322,7 +323,27 @@ function init(){
       ((lr.blocked_hosts||[]).length ? `　｜ 被拦截的域名：${lr.blocked_hosts.join(", ")}` : ""); }
   render();
 }
-function render(){ renderTabs(); renderTiles(); renderRegime(); renderMacro(); renderWatch(); renderChart(); renderDetail(); renderLog(); }
+function render(){ renderTabs(); renderTiles(); renderRegime(); renderMacro(); renderFactors(); renderWatch(); renderChart(); renderDetail(); renderLog(); }
+function renderFactors(){
+  const Fx = DATA.factors || {}, box = $("#factors");
+  if (!(Fx.rows || []).length){ box.innerHTML = `<h2>多因子面板</h2><div class="muted">尚未计算（数据源不可用时跳过）</div>`; return; }
+  const n = (v, d) => v == null ? "—" : Number(v).toLocaleString("ja-JP", {minimumFractionDigits: d, maximumFractionDigits: d});
+  const rk = r => (r >= 90 || r <= 10) ? `<b>${n(r, 0)}%</b>` : `${n(r, 0)}%`;
+  let g = "", body = "";
+  for (const r of Fx.rows){
+    if (r.group !== g){ g = r.group; body += `<tr><td colspan="5" class="muted" style="padding-top:10px">${g}</td></tr>`; }
+    const d = r.unit === "$" ? 2 : r.unit ? 2 : 2;
+    body += `<tr><td>${r.name}</td><td class="n">${n(r.value, d)}${r.unit === "%" ? "%" : r.unit === "pt" ? "pt" : ""}</td>
+      <td class="n ${cls(r.chg20)}">${r.chg20 == null ? "—" : (r.chg20 > 0 ? "+" : "") + n(r.chg20, 2)}</td><td class="n">${rk(r.pct_rank)}</td>
+      <td class="muted">${r.date.slice(5)}${r.stale ? "（旧）" : ""}</td></tr>`;
+  }
+  const etf = (Fx.etf || []).map(e => `<tr><td>${e.name}</td><td class="n ${cls(e.ret20_pct)}">${e.ret20_pct > 0 ? "+" : ""}${n(e.ret20_pct, 1)}%</td><td class="n">${rk(e.pct_rank)}</td><td class="muted">${e.date.slice(5)}</td></tr>`).join("");
+  box.innerHTML = `<h2>多因子面板（只展示，不参与交易）</h2>
+    <div class="legend"><span class="muted">分位 = 最新值在近 ${Fx.years || 5} 年中的位置（≥90% 或 ≤10% 加粗）。${Fx.note || ""}</span></div>
+    <div class="scroll"><table><thead><tr><th>因子</th><th class="n">最新</th><th class="n">20 日变动</th><th class="n">分位</th><th>日期</th></tr></thead><tbody>${body}</tbody></table></div>
+    ${etf ? `<h3>跨资产 ETF（20 日涨跌）</h3><div class="scroll"><table><thead><tr><th>ETF</th><th class="n">20 日</th><th class="n">分位</th><th>日期</th></tr></thead><tbody>${etf}</tbody></table></div>` : ""}
+    <div class="muted" style="margin-top:6px">来源：FRED（美债、联邦基金、油价现货、美元日元、信用利差、VIX）、財務省 国債金利情報、日本銀行 時系列統計、yfinance（Brent 期货、ETF）</div>`;
+}
 function renderMacro(){
   const X = cur().macro || {}, box = $("#macro"), f = X.features || {}, ov = X.overlay || null;
   if (!X.features){ box.innerHTML = `<h2>宏观层</h2><div class="muted">未启用或尚未计算</div>`; return; }
