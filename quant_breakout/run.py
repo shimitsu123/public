@@ -860,6 +860,22 @@ def cmd_sim_tier(a) -> int:
     return 0
 
 
+def cmd_jquants_check(a) -> int:
+    """J-Quants 接入检查：API キー、档位可用端点、时点股票池、退市股历史是否可取。不打印 API キー。"""
+    from qbreak.jquants import JQuants, JQuantsError, check, summarize
+    try:
+        client = JQuants(plan=a.plan)
+    except JQuantsError as e:
+        print(f"✗ {e}")
+        return 2
+    print(f"检查中（{client.plan} 档限速 {60 / client.min_interval:.0f} 次/分，约需 {client.min_interval * 9 / 60:.1f} 分钟）…")
+    r = check(client)
+    print(summarize(r))
+    from qbreak.utils import write_json
+    write_json(paths.out_dir() / "jquants_check.json", r)
+    return 0 if r.get("key_ok") else 1
+
+
 def cmd_bullbear(a) -> int:
     """牛熊分界：当前状态 + 明天收盘的翻转价位 + 事后精确标注的熊市清单。"""
     from qbreak.bullbear import load_config, phase_table
@@ -1030,6 +1046,8 @@ def cmd_doctor(a) -> int:
     print(f"ARM 状态    : {'ARMED ★ 当前允许发单' if _armed() else '未解锁（禁止发单）'}")
     cred = "已设置" if _os.environ.get("TACHIBANA_USER_ID") else "未设置"
     print(f"立花凭证    : TACHIBANA_USER_ID {cred}")
+    jq = "已设置" if _os.environ.get("JQUANTS_API_KEY") else "未设置（可选；研究用，见 README「J-Quants 接入」）"
+    print(f"J-Quants    : JQUANTS_API_KEY {jq}；JQUANTS_PLAN={_os.environ.get('JQUANTS_PLAN') or 'free（默认）'}")
     if platform.system() == "Darwin":
         print("平台        : macOS —— 可用 --broker tachibana（原生）；--broker rss 不可用")
         pl = Path.home() / "Library/LaunchAgents/com.qbreak.daemon.plist"
@@ -1117,6 +1135,11 @@ def main(argv=None) -> int:
     dm.add_argument("--eod-at", default="15:40", help="收盘后日线流程时刻 JST")
     dm.add_argument("--once", action="store_true", help="只跑一轮就退出（测试用）")
     dm.set_defaults(func=cmd_daemon)
+
+    jq = sub.add_parser("jquants-check", help="J-Quants 接入检查（需环境变量 JQUANTS_API_KEY；不打印キー）")
+    jq.add_argument("--plan", default=None, choices=["free", "light", "standard", "premium"],
+                    help="订阅档位（决定限速；默认读环境变量 JQUANTS_PLAN，再默认 free）")
+    jq.set_defaults(func=cmd_jquants_check)
 
     st_ = sub.add_parser("sim-tier", help="切换模拟盘资金配置档位：safe / aggressive / max（show = 查看）")
     st_.add_argument("tier", choices=["show", "safe", "aggressive", "max"])

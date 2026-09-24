@@ -9,3 +9,9 @@ github.com
 api.github.com
 pypi.org
 files.pythonhosted.org
+# 多因子面板（只展示，取不到不影响交易）
+fred.stlouisfed.org
+www.mof.go.jp
+www.stat-search.boj.or.jp
+# J-Quants（可选，研究用）
+api.jquants.com
