@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-23 22:11",
+ "generated": "2026-09-24 04:47",
  "sim": {
   "start": "2026-09-24",
   "end": "2026-12-24",
@@ -305,7 +305,9 @@
     "max_dd_pct": 0.0,
     "trades": 0,
     "win_rate": 0.0,
-    "realized_pnl": 0
+    "realized_pnl": 0,
+    "realized_after_tax": 0,
+    "tax_pct": 20.315
    }
   },
   "US": {
@@ -589,11 +591,14 @@
     "max_dd_pct": 0.0,
     "trades": 0,
     "win_rate": 0.0,
-    "realized_pnl": 0
+    "realized_pnl": 0,
+    "realized_after_tax": 0,
+    "tax_pct": 20.315
    },
    "fx": {
     "start": 157.81900024414062,
     "now": 157.819,
+    "spread_pct": 0.0,
     "equity_jpy": 1000000.0,
     "ret_pct_jpy": -0.0,
     "fx_effect_jpy": -0.0
