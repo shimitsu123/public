@@ -4,15 +4,16 @@
 原版 README 让你「限价 = 现价 × 1.005」，7203 现价 2,987 → 3,001.9 这种价格
 在 3,000 円超的价格带（呼値 5 円）上是非法的，实盘会报错。
 
-注意：
-  • 下表为 2024 年以来生效的内容，请对照 JPX「呼値の単位」页面核对。
-  • JPX 已公告 2027-03-01 起改为按个股流动性（STR 指标）决定呼値单位，
-    届时需要按券商/JPX 提供的对照表更新 TICK_TOPIX100 / TICK_OTHERS。
-  • TOPIX100 成分股名单每年换，`TOPIX100_CODES` 只放了少量示例；
-    不确定时用 `others` 档（更粗的呼値）总是合法的（价格一定落在合法格点上）。
+注意（2026-09-24 对照 JPX「呼値の単位」页面，2026-08-06 更新版）：
+  • 2027-02-26 以前：细档适用于 **TOPIX500**（2023-06-05 起由 TOPIX100 扩大）以及交易单位 ≥10 的 ETF/ETN；
+    其余用粗档。`TOPIX500_CODES` 默认空 → 一律用粗档，粗档价格在细档里也合法，只是不够细。
+  • 2027-03-01 起：按个股流动性（STR）分 A / B / C 表，交易单位为 1 的 ETF/ETN/REIT 等用 O 表。
+    JPX 约 2027 年 1 月公布各股的初始分表；未登记时股票用 **C 表**兜底（C 的呼値是 A、B 的整数倍，一定合法），
+    交易单位 1 的品种用 O 表。旧的粗档在 C 表股票上会被拒单（例如 1,000～3,000 円带 C 表是 2 / 5 円）。
 """
 from __future__ import annotations
 
+import datetime as dt
 import math
 
 # (上限价格, 呼値单位)；价格 <= 上限 时适用
@@ -21,37 +22,65 @@ TICK_OTHERS: list[tuple[float, float]] = [
     (500_000, 500), (3_000_000, 1_000), (5_000_000, 5_000),
     (30_000_000, 10_000), (50_000_000, 50_000), (float("inf"), 100_000),
 ]
-TICK_TOPIX100: list[tuple[float, float]] = [
+TICK_TOPIX500: list[tuple[float, float]] = [
     (1_000, 0.1), (3_000, 0.5), (10_000, 1), (30_000, 5), (100_000, 10),
     (300_000, 50), (1_000_000, 100), (3_000_000, 500), (10_000_000, 1_000),
     (30_000_000, 5_000), (float("inf"), 10_000),
 ]
 
-# 仅示例，实盘前请按 JPX 最新 TOPIX100 构成名单补全；留空也不会出错（退回粗档）
-TOPIX100_CODES: set[str] = set()
+TICK_TOPIX100 = TICK_TOPIX500            # 旧名，保持兼容
+# TOPIX500 成分（细档）。留空也不会出错（退回粗档，价格一定合法）
+TOPIX500_CODES: set[str] = set()
+TOPIX100_CODES = TOPIX500_CODES          # 旧名，保持兼容
+
+# ── 2027-03-01 起：STR 分表（JPX 規則改正 2026-08-06 公表，付録 p.7）──
+STR_TICK_START = dt.date(2027, 3, 1)
+_STR_BANDS = [100, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000,
+              1_000_000, 2_000_000, 5_000_000, 10_000_000, 20_000_000, 50_000_000, float("inf")]
+_STR_TICKS = {
+    "A": [0.1, 0.1, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000, 5_000, 10_000],
+    "B": [0.1, 0.1, 0.1, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000],
+    "C": [0.1, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000],
+    "O": [1, 1, 1, 1, 1, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000, 5_000, 10_000],
+}
+STR_CLASS: dict[str, str] = {}           # JPX 公布后填：{"7203": "A", ...}；未登记 → 股票 C / 交易单位 1 → O
 
 
-def tick_size(price: float, code: str | None = None) -> float:
-    table = TICK_TOPIX100 if code and code.split(".")[0] in TOPIX100_CODES else TICK_OTHERS
+def _str_tick(price: float, cls: str) -> float:
+    for cap, unit in zip(_STR_BANDS, _STR_TICKS[cls]):
+        if price <= cap:
+            return float(unit)
+    return float(_STR_TICKS[cls][-1])
+
+
+def tick_size(price: float, code: str | None = None, on: dt.date | None = None, lot: int | None = None) -> float:
+    """on：下单日期（默认今天）；lot：交易单位（1 → 2027-03 起用 O 表）。"""
+    on = on or dt.date.today()
+    c = code.split(".")[0] if code else None
+    if on >= STR_TICK_START:
+        cls = STR_CLASS.get(c or "") or ("O" if lot == 1 else "C")
+        return _str_tick(price, cls)
+    table = TICK_TOPIX500 if c and c in TOPIX500_CODES else TICK_OTHERS
     for cap, unit in table:
         if price <= cap:
             return float(unit)
     return float(table[-1][1])
 
 
-def round_to_tick(price: float, code: str | None = None, side: str = "BUY") -> float:
+def round_to_tick(price: float, code: str | None = None, side: str = "BUY",
+                  on: dt.date | None = None, lot: int | None = None) -> float:
     """把价格对齐到合法呼値。买单向下取整、卖单向上取整（对自己不利的方向），
     保证「不会因为四舍五入而多付/少收」，同时价格一定合法。"""
     if price <= 0:
         raise ValueError(f"价格必须为正: {price}")
-    unit = tick_size(price, code)
+    unit = tick_size(price, code, on, lot)
     n = price / unit
-    n = math.floor(n) if side.upper() == "BUY" else math.ceil(n)
+    n = math.floor(n + 1e-9) if side.upper() == "BUY" else math.ceil(n - 1e-9)
     out = n * unit
     # 跨价格带时（如 2,999.6 向上取整到 3,000）单位会变，再校验一次
-    if tick_size(out, code) != unit:
-        unit2 = tick_size(out, code)
-        n2 = math.floor(out / unit2) if side.upper() == "BUY" else math.ceil(out / unit2)
+    if tick_size(out, code, on, lot) != unit:
+        unit2 = tick_size(out, code, on, lot)
+        n2 = math.floor(out / unit2 + 1e-9) if side.upper() == "BUY" else math.ceil(out / unit2 - 1e-9)
         out = n2 * unit2
     return round(out, 4)
 
@@ -60,8 +89,9 @@ def round_to_tick(price: float, code: str | None = None, side: str = "BUY") -> f
 DEFAULT_LOT_JP = 100
 DEFAULT_LOT_US = 1
 LOT_OVERRIDE: dict[str, int] = {
-    # "1306.T": 10,   # 例：TOPIX 連動型上場投信
-    # "1570.T": 1,
+    "1329.T": 1,      # iShares Core 日経225 ETF（核心仓位）
+    "1321.T": 1,      # NEXT FUNDS 日経225
+    "1571.T": 1,      # NEXT FUNDS 日経平均インバース
 }
 
 

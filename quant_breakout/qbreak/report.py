@@ -354,14 +354,25 @@ function renderRegime(){
     ${R.fx && R.fx.usdjpy ? `<dt>汇率层</dt><dd>USD/JPY ${R.fx.usdjpy}（${R.fx.date}），警戒 ${R.fx.watch_level}±${R.fx.band_pct}% → 美股新仓 ×${R.fx.scale}</dd>` : ""}
     ${R.final_mult != null ? `<dt>最终倍数</dt><dd>×${R.final_mult}</dd>` : ""}
     ${R.params_overlay ? `<dt>参数覆盖</dt><dd>${R.params_overlay}（该市场单独参数）</dd>` : ""}
-    ${bbRow(R.bullbear, R.regime_mode)}</dl>` + renderFxScenarios();
+    ${bbRow(R.bullbear, R.regime_mode, R.core)}
+    ${allocRow(R)}</dl>` + renderFxScenarios();
 }
-function bbRow(B, mode){
+function allocRow(R){
+  const mc = (DATA.sim || {})[state.market.toLowerCase()] || {}, C = R.core || {}, c = cur().currency;
+  const tier = {safe: "安全档", aggressive: "进取档", max: "最大收益档"}[mc.tier] || "";
+  const stock = (tier ? tier + "：" : "") + (R.breakout === false ? "不做个股（只持指数）" : `个股 ${mc.max_positions || "—"} 只 × ${Math.round((mc.position_pct || 0) * 1000) / 10}%`);
+  if (!C.ticker) return `<dt>资金配置</dt><dd>${stock}；核心指数仓位 关闭（闲置资金持现金）<div class="muted">三档配置见 README「资金配置」；sim.json 的 core.enabled 可切换</div></dd>`;
+  const ord = C.sell ? `今晚排队：卖出 ${C.sell} 口` : C.buy ? `今晚排队：买入 ${C.buy} 口` : "今日不调整（偏离 < band）";
+  return `<dt>资金配置</dt><dd>${stock}；核心 ${C.ticker} ${C.units} 口 ≈ ${fmt(C.value, c, c === "USD" ? 2 : 0)}（权益的 ${C.weight_pct}%）
+    ${C.bear ? `<span class="neg">熊市 → 目标 0</span>` : `目标 ≈ ${fmt(C.target_value, c, c === "USD" ? 2 : 0)}`}<div class="muted">${ord}；次日开盘顺序：个股卖 → 指数卖 → 个股买 → 指数买（剩余现金）</div></dd>`;
+}
+function bbRow(B, mode, C){
   if (!B || !B.state || B.state === "off") return mode ? `<dt>状态层</dt><dd>${mode}</dd>` : "";
   if (B.state === "unknown") return `<dt>牛熊分界</dt><dd class="muted">暂不可用 ${B.note||""}</dd>`;
   const st = B.state === "bear" ? `<span class="neg">熊市</span>` : `<span class="pos">牛市</span>`;
   const flip = B.level ? `翻转为${B.flip_to === "bear" ? "熊" : "牛"}的收盘价位 <b>${Number(B.level).toLocaleString("ja-JP")}</b>（距现价 ${B.distance_pct}%${B.need_days ? `，连续 ${B.need_days} 天` : ""}）` : "";
-  const use = B.gating ? "参与交易（熊市停开新仓）" : "仅显示，不参与交易（20 年回测未显示改善，见 README）";
+  const coreUse = C && C.ticker && C.timing ? `；核心指数仓位 ${C.ticker} 按它择时（熊市清空）` : "";
+  const use = (B.gating ? "个股：参与交易（熊市停开新仓）" : "个股：不参与（20 年回测未显示改善，见 README）") + coreUse;
   return `<dt>牛熊分界</dt><dd>${st}（${B.index} 自 ${B.since} 起 ${B.days} 个交易日；${B.asof} 收盘 ${Number(B.close).toLocaleString("ja-JP")}）<div class="muted">${flip}；算法 ${B.detector}；${use}；状态层模式 ${mode||"—"}</div></dd>`;
 }
 function renderFxScenarios(){

@@ -9,11 +9,20 @@
  "jp": {
   "initial_cash": 1000000,
   "universe": "broad",
-  "position_pct": 0.34,
-  "max_positions": 3,
+  "position_pct": 0.25,
+  "max_positions": 4,
   "use_macro": true,
   "use_sector_tilt": true,
-  "use_event_window": false
+  "use_event_window": false,
+  "breakout": true,
+  "core": {
+   "enabled": true,
+   "ticker": "1329.T",
+   "timing": true,
+   "band_pct": 10.0
+  },
+  "halt_dd_pct": 45.0,
+  "tier": "aggressive"
  },
  "us": {
   "initial_cash": 6336.37,
@@ -25,9 +34,18 @@
   "fx_spread_pct": 0.16,
   "use_macro": true,
   "use_sector_tilt": true,
-  "use_event_window": false
+  "use_event_window": false,
+  "breakout": false,
+  "core": {
+   "enabled": true,
+   "ticker": "SPYM",
+   "timing": true,
+   "band_pct": 10.0
+  },
+  "halt_dd_pct": 45.0,
+  "tier": "aggressive"
  },
- "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。股票池 broad = 日経225 / NASDAQ-100+Dow30（按偏好剔除）。use_market_regime=true：指数 200 日线/波动/回撤 + 市场风险报告的行动四选一 共同决定新仓规模。 us.fx_spread_pct：换回日元时的换汇点差（单边 %）；初始换汇（9/23）按当时代码未计点差。 宏观层按市场设定（2026-09-24 变体研究定案）：两市场都开量化因子 + 板块倾斜，事件窗口关闭（样本外拖累）；美股出场改为不用死叉、跟踪止损 10%（浮盈 3% 启动），见 var/best_params_US.json。 regime_mode=quant：状态层维持指数 200 日线/波动/回撤（20 年回测后保留）；牛熊分界（250 日线±3%、连续 5 天）只显示。",
+ "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。股票池 broad = 日経225 / NASDAQ-100+Dow30（按偏好剔除）。use_market_regime=true：指数 200 日线/波动/回撤 + 市场风险报告的行动四选一 共同决定新仓规模。 us.fx_spread_pct：换回日元时的换汇点差（单边 %）；初始换汇（9/23）按当时代码未计点差。 宏观层按市场设定（2026-09-24 变体研究定案）：两市场都开量化因子 + 板块倾斜，事件窗口关闭（样本外拖累）；美股出场改为不用死叉、跟踪止损 10%（浮盈 3% 启动），见 var/best_params_US.json。 regime_mode=quant：状态层维持指数 200 日线/波动/回撤（20 年回测后保留）；牛熊分界（250 日线±3%、连续 5 天）只显示。 资金配置档位 tier（2026-09-24 夜定案）：aggressive = 进取档 —— 日本个股 4×25% + 闲置资金持 1329.T，美股只持 SPYM；两市场牛熊分界判熊市时清空指数仓位；回撤 HALT 45%。见 README「资金配置」与 var/sim_changes.md；切回：python run.py sim-tier safe。",
  "use_market_regime": true,
  "use_macro": true,
  "use_sector_tilt": true,

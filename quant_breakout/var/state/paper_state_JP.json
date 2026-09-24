@@ -4,5 +4,23 @@
  "orders": [],
  "closed_trades": [],
  "realized_pnl": 0.0,
- "pending": []
+ "pending": [
+  {
+   "ticker": "1329.T",
+   "side": "BUY",
+   "qty": 147,
+   "ref_px": 6801.0,
+   "bar": "2026-09-24",
+   "client_id": "2026-09-24-1329.T-BUY",
+   "extra": {
+    "core": true,
+    "cost": {
+     "slip_pct": 0.03,
+     "buy_fee_pct": 0.0,
+     "sell_fee_pct": 0.0
+    },
+    "lot": 1
+   }
+  }
+ ]
 }

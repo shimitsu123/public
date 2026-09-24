@@ -19,6 +19,11 @@ def _now() -> str:
 
 
 class PaperBroker(BaseBroker):
+    # run_once 可以给排队订单附带成交规则（与回测引擎逐条相同）：
+    #   lot  开盘现金不够时按单元减到买得起（BUY）；cap/excl  开盘时持仓数（不计 excl）已达 cap 则放弃（BUY）
+    #   core 核心指数 ETF 的调仓单：不做跳空 / 涨跌停过滤，排在个股之后成交；cost  该单自己的滑点与手续费
+    supports_order_extra = True
+
     def __init__(self, state_file=None, initial_cash: float = 1_000_000,
                  exec_cfg: ExecConfig | None = None, market: str = "JP",
                  defer_to_next_open: bool = True):
@@ -83,10 +88,12 @@ class PaperBroker(BaseBroker):
 
     # ── 次日开盘成交队列 ──
     def queue(self, ticker: str, side: str, qty: int, ref_px: float, bar: str,
-              client_id: str) -> Order:
-        self.state["pending"].append({"ticker": ticker, "side": side, "qty": int(qty),
-                                      "ref_px": float(ref_px), "bar": bar,
-                                      "client_id": client_id})
+              client_id: str, extra: dict | None = None) -> Order:
+        q = {"ticker": ticker, "side": side, "qty": int(qty), "ref_px": float(ref_px), "bar": bar,
+             "client_id": client_id}
+        if extra:
+            q["extra"] = dict(extra)
+        self.state["pending"].append(q)
         self._ids.add(client_id)
         self._save()
         return Order(ticker, side, qty, ref_px, _now(), "SENT", client_id=client_id,
@@ -104,7 +111,10 @@ class PaperBroker(BaseBroker):
         卖单遇到ストップ安 → 顺延到下一个寄付；买单遇到ストップ高 → 作废。"""
         out, keep = [], []
         gap = self.ex.max_entry_gap_pct if max_gap_pct is None else max_gap_pct
-        for o in self.state["pending"]:
+        # 成交顺序与回测引擎相同：个股卖出 → 核心卖出 → 个股买入 → 核心买入（同类按排队先后）
+        prio = lambda k_o: (k_o[1]["side"] == "BUY", bool((k_o[1].get("extra") or {}).get("core")), k_o[0])  # noqa: E731
+        for _, o in sorted(enumerate(self.state["pending"]), key=prio):
+            x = o.get("extra") or {}
             if o["bar"] == bar:                      # 今天刚排的，留到明天
                 keep.append(o)
                 continue
@@ -118,7 +128,7 @@ class PaperBroker(BaseBroker):
                 out.append(Order(o["ticker"], o["side"], o["qty"], 0, _now(), "REJECTED",
                                  client_id=o["client_id"], note="次日无开盘价（停牌），作废"))
                 continue
-            lk = (locked or {}).get(o["ticker"])
+            lk = None if x.get("core") else (locked or {}).get(o["ticker"])
             if o["side"] == "SELL" and lk == "down":
                 o = {**o, "bar": bar, "carried": int(o.get("carried", 0)) + 1}
                 keep.append(o)
@@ -130,14 +140,20 @@ class PaperBroker(BaseBroker):
                 out.append(Order(o["ticker"], "BUY", o["qty"], px or 0, _now(), "REJECTED",
                                  client_id=o["client_id"], note="ストップ高張り付きで買えず，作废"))
                 continue
-            if (o["side"] == "BUY" and gap and o["ref_px"]
+            if o["side"] == "BUY" and x.get("cap") and sum(
+                    1 for t in self.state["positions"] if t not in (x.get("excl") or [])) >= int(x["cap"]):
+                out.append(Order(o["ticker"], "BUY", o["qty"], px, _now(), "REJECTED",
+                                 client_id=o["client_id"], note=f"持仓已满 {x['cap']} 只（排队卖单未成交），放弃"))
+                continue
+            if (o["side"] == "BUY" and gap and o["ref_px"] and not x.get("core")
                     and px > o["ref_px"] * (1 + gap / 100)):
                 out.append(Order(o["ticker"], o["side"], o["qty"], px, _now(), "REJECTED",
                                  client_id=o["client_id"],
                                  note=f"开盘跳空 {px / o['ref_px'] - 1:+.1%} 超过 {gap}%，放弃"))
                 continue
             self._prices[o["ticker"]] = px
-            f = self._fill_now(o["ticker"], o["side"], o["qty"], o["client_id"] + "-f")
+            f = self._fill_now(o["ticker"], o["side"], o["qty"], o["client_id"] + "-f", when=bar,
+                               lot=int(x.get("lot") or 0), cost=x.get("cost"), core=bool(x.get("core")))
             f.extra.update({"fill_date": bar, "fill_time": OPEN_TIME.get(self.market, "09:00"),
                             "queued_bar": o["bar"], "ref_px": o["ref_px"]})
             if self.state["orders"] and self.state["orders"][-1].get("client_id") == f.client_id:
@@ -190,56 +206,84 @@ class PaperBroker(BaseBroker):
         self._save()
         return "；".join(notes) or None
 
-    def _fill_now(self, ticker: str, side: str, qty: int, client_id: str) -> Order:
-        return (self._buy_now(ticker, qty, client_id) if side == "BUY"
-                else self._sell_now(ticker, qty, client_id))
+    def _fill_now(self, ticker: str, side: str, qty: int, client_id: str, when: str = "",
+                  lot: int = 0, cost: dict | None = None, core: bool = False) -> Order:
+        # when：成交所在的交易日（K 线日期）。美股是日本时间次日早上才处理，用运行时的日期会差一天
+        return (self._buy_now(ticker, qty, client_id, when=when, lot=lot, cost=cost) if side == "BUY"
+                else self._sell_now(ticker, qty, client_id, when=when, cost=cost, core=core))
+
+    def _cost(self, side: str, cost: dict | None):
+        """(滑点比例, 手续费函数)。cost=None → 本账户的默认成交成本（ExecConfig）。"""
+        if not cost:
+            return self.ex.slippage_pct / 100, self.ex.fee
+        pct = float(cost.get("buy_fee_pct" if side == "BUY" else "sell_fee_pct", 0.0))
+        cap = float(cost.get("buy_fee_max" if side == "BUY" else "sell_fee_max", 0.0) or 0.0)
+
+        def fee(notional: float) -> float:
+            f = abs(notional) * pct / 100
+            return min(f, cap) if cap else f
+        return float(cost.get("slip_pct", 0.0)) / 100, fee
 
     def buy(self, ticker: str, qty: int, limit: float | None = None,
-            client_id: str = "", ref_px: float | None = None, bar: str = "") -> Order:
+            client_id: str = "", ref_px: float | None = None, bar: str = "",
+            extra: dict | None = None) -> Order:
         if self.defer and bar:
             if self.has_client_id(client_id):
                 return Order(ticker, "BUY", qty, limit or 0, _now(), "REJECTED",
                              client_id=client_id, note="重复的 client_id（幂等拦截）")
             return self.queue(ticker, "BUY", qty, ref_px or self.get_price(ticker),
-                              bar, client_id)
-        return self._buy_now(ticker, qty, client_id, limit)
+                              bar, client_id, extra)
+        x = extra or {}
+        return self._buy_now(ticker, qty, client_id, limit, lot=int(x.get("lot") or 0), cost=x.get("cost"))
 
     def sell(self, ticker: str, qty: int, limit: float | None = None,
-             client_id: str = "", ref_px: float | None = None, bar: str = "") -> Order:
+             client_id: str = "", ref_px: float | None = None, bar: str = "",
+             extra: dict | None = None) -> Order:
         if self.defer and bar:
             if self.has_client_id(client_id):
                 return Order(ticker, "SELL", qty, limit or 0, _now(), "REJECTED",
                              client_id=client_id, note="重复的 client_id（幂等拦截）")
             return self.queue(ticker, "SELL", qty, ref_px or self.get_price(ticker),
-                              bar, client_id)
-        return self._sell_now(ticker, qty, client_id, limit)
+                              bar, client_id, extra)
+        x = extra or {}
+        return self._sell_now(ticker, qty, client_id, limit, cost=x.get("cost"), core=bool(x.get("core")))
 
     def _buy_now(self, ticker: str, qty: int, client_id: str = "",
-                 limit: float | None = None) -> Order:
+                 limit: float | None = None, when: str = "", lot: int = 0,
+                 cost: dict | None = None) -> Order:
         if self.has_client_id(client_id):
             return Order(ticker, "BUY", qty, limit or 0, _now(), "REJECTED",
                          client_id=client_id, note="重复的 client_id（幂等拦截）")
         if qty <= 0:
             return self._log(Order(ticker, "BUY", qty, 0, _now(), "REJECTED",
                                    client_id=client_id, note="数量为 0"))
-        px = self.get_price(ticker) * (1 + self.ex.slippage_pct / 100)
-        cost = px * qty + self.ex.fee(px * qty)
-        if cost > self.cash():
-            return self._log(Order(ticker, "BUY", qty, px, _now(), "REJECTED",
+        slip, fee_f = self._cost("BUY", cost)
+        px = self.get_price(ticker) * (1 + slip)
+        want, note = qty, ""
+        if lot > 0:                                  # 与回测引擎相同：开盘现金不够 → 按单元减到买得起
+            while qty > 0 and px * qty + fee_f(px * qty) > self.cash():
+                qty -= lot
+            if 0 < qty < want:
+                note = f"现金不足，{want}→{qty} 股"
+        total = px * qty + fee_f(px * qty)
+        if qty <= 0 or total > self.cash():
+            need = px * want + fee_f(px * want)
+            return self._log(Order(ticker, "BUY", want, px, _now(), "REJECTED",
                                    client_id=client_id,
-                                   note=f"资金不足 需要{cost:,.0f} 现有{self.cash():,.0f}"))
-        self.state["cash"] -= cost
+                                   note=f"资金不足 需要{need:,.0f} 现有{self.cash():,.0f}"))
+        self.state["cash"] -= total
         d = self.state["positions"].setdefault(
             ticker, {"qty": 0, "avg_px": 0.0, "peak": px, "stop_px": 0.0,
-                     "entry_date": _now()[:10], "hold_bars": 0, "last_bar": ""})
+                     "entry_date": when or _now()[:10], "hold_bars": 0, "last_bar": ""})
         d["avg_px"] = (d["avg_px"] * d["qty"] + px * qty) / (d["qty"] + qty)
         d["qty"] += qty
         d["peak"] = max(d.get("peak", 0.0), px)
         return self._log(Order(ticker, "BUY", qty, px, _now(), "FILLED",
-                               filled_qty=qty, filled_px=px, client_id=client_id))
+                               filled_qty=qty, filled_px=px, client_id=client_id, note=note))
 
     def _sell_now(self, ticker: str, qty: int, client_id: str = "",
-                  limit: float | None = None) -> Order:
+                  limit: float | None = None, when: str = "", cost: dict | None = None,
+                  core: bool = False) -> Order:
         if self.has_client_id(client_id):
             return Order(ticker, "SELL", qty, limit or 0, _now(), "REJECTED",
                          client_id=client_id, note="重复的 client_id（幂等拦截）")
@@ -247,11 +291,13 @@ class PaperBroker(BaseBroker):
         if not d or d["qty"] < qty or qty <= 0:
             return self._log(Order(ticker, "SELL", qty, 0, _now(), "REJECTED",
                                    client_id=client_id, note="持仓不足"))
-        px = self.get_price(ticker) * (1 - self.ex.slippage_pct / 100)
-        proceeds = px * qty - self.ex.fee(px * qty)
+        slip, fee_f = self._cost("SELL", cost)
+        _, buy_fee = self._cost("BUY", cost)
+        px = self.get_price(ticker) * (1 - slip)
+        proceeds = px * qty - fee_f(px * qty)
         self.state["cash"] += proceeds
         avg, entry_date = d["avg_px"], d.get("entry_date", "")
-        pnl = (px - avg) * qty - self.ex.fee(px * qty) - self.ex.fee(avg * qty)
+        pnl = (px - avg) * qty - fee_f(px * qty) - buy_fee(avg * qty)
         div_part = float(d.get("div_cash", 0.0)) * qty / max(int(d["qty"]), 1)   # 持有期间已收的税后分红
         if div_part:
             pnl += div_part
@@ -260,8 +306,10 @@ class PaperBroker(BaseBroker):
         if d["qty"] == 0:
             self.state["positions"].pop(ticker)
         self.state["realized_pnl"] = float(self.state.get("realized_pnl", 0.0)) + pnl
-        self.state["closed_trades"].append(
-            {"ticker": ticker, "entry_date": entry_date, "exit_date": _now()[:10],
+        # 核心指数仓位的减仓不是策略交易：单独记账，不进胜率 / 连亏统计
+        ledger = self.state.setdefault("core_trades", []) if core else self.state["closed_trades"]
+        ledger.append(
+            {"ticker": ticker, "entry_date": entry_date, "exit_date": when or _now()[:10],
              "entry_px": round(avg, 4), "exit_px": round(px, 4), "shares": qty,
              "pnl": round(pnl, 2), "ret_pct": round((px / avg - 1) * 100, 3) if avg else 0.0,
              "div": round(div_part, 2)})

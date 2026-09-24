@@ -83,3 +83,22 @@ def test_synthetic_is_opt_in_only():
         load_universe(["NOPE.T"], DataConfig(provider="csv", allow_synthetic=False))
     got = load_universe(["NOPE.T"], DataConfig(provider="csv", allow_synthetic=True, years=2))
     assert "NOPE.T" in got
+
+
+def test_repair_jp_artifacts_split_transient_and_merger():
+    import numpy as np
+    import pandas as pd
+    from qbreak.data import repair_jp_artifacts
+    idx = pd.bdate_range("2014-01-01", periods=12)
+    c = np.array([1000, 1010, 1005, 100.5, 101, 102, 103, 104, 105, 106, 107, 108.0])     # 第 4 天 1 拆 10 未复权
+    df = pd.DataFrame({"Open": c, "High": c * 1.01, "Low": c * 0.99, "Close": c, "Volume": 1e5}, index=idx)
+    fixed = repair_jp_artifacts("X.T", df)
+    assert len(fixed) == 12 and abs(fixed["Close"].iloc[0] - 100.0) < 1e-9 and fixed["Volume"].iloc[0] == 1e6
+    c2 = np.array([500, 502, 50.1, 50.2, 503, 505, 506, 507.0])                               # 两天被缩小 10 倍后恢复
+    df2 = pd.DataFrame({"Open": c2, "High": c2, "Low": c2, "Close": c2, "Volume": 1e5}, index=idx[:8])
+    f2 = repair_jp_artifacts("Y.T", df2)
+    assert len(f2) == 6 and (f2["Close"] > 400).all()
+    c3 = np.array([100, 101, 102, 43.0, 43.5, 44, 44.5, 45.0])                                # ×0.42 不像拆股 → 截断
+    df3 = pd.DataFrame({"Open": c3, "High": c3, "Low": c3, "Close": c3, "Volume": 1e5}, index=idx[:8])
+    f3 = repair_jp_artifacts("Z.T", df3)
+    assert len(f3) == 5 and f3.index[0] == idx[3]

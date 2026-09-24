@@ -94,8 +94,9 @@ class Daemon:
                  exec_cfg: ExecConfig, cfg: DaemonConfig | None = None,
                  dry_run: bool = False, market: str = "JP",
                  fallback_quotes: bool = False,
-                 entry_hook=None, corp_actions=None):
+                 entry_hook=None, corp_actions=None, core_ticker: str | None = None):
         self.universe = universe
+        self.core_ticker = core_ticker         # 核心指数 ETF：不做个股止损 / 逆指値，由日终流程按目标份额调整
         self.broker = broker
         self.p = params.validate()
         self.corp_actions = corp_actions       # 除息 / 拆股数据源
@@ -205,7 +206,7 @@ class Daemon:
         for t, p in pos.items():
             if not p.peak:
                 p.peak = p.avg_px
-            if not p.stop_px:
+            if not p.stop_px and t != self.core_ticker:
                 p.stop_px = p.avg_px * (1 - self.p.stop_loss_pct / 100)
             self.book.update(p)
         self.book.save()
@@ -235,7 +236,7 @@ class Daemon:
 
         for t, p in list(pos.items()):
             px = prices.get(t)
-            if not px:
+            if not px or t == self.core_ticker:
                 continue
             if px > p.peak:                       # 用实时价更新峰值，跟踪止损才跟得上
                 p.peak = px
@@ -296,6 +297,8 @@ class Daemon:
         if self.dry_run or not hasattr(self.broker, "place_protective_stop"):
             return
         for t, p in self.broker.positions().items():
+            if t == self.core_ticker:
+                continue
             ann = self.book.book.setdefault(t, {})
             base = ann.get("stop_px") or p.stop_px or p.avg_px * (1 - self.p.stop_loss_pct / 100)
             peak = float(ann.get("peak") or p.avg_px)
@@ -330,12 +333,13 @@ class Daemon:
 
     def _end_of_day(self, now: dt.datetime) -> None:
         log.info("── 收盘后日线流程 ──")
-        scale, tmult, block, force = 1.0, None, None, None
+        scale, tmult, block, force, core = 1.0, None, None, None, None
         if self.entry_hook is not None:
             try:
                 got = self.entry_hook(now.date())
                 scale, tmult, block = got[:3]
                 force = got[3] if len(got) > 3 else None
+                core = got[4] if len(got) > 4 else None
             except Exception as e:                            # noqa: BLE001
                 log.warning("宏观层 / 状态层计算失败，按 ×1 处理: %s", e)
         res = run_once(self.universe, self.broker, self.p, self.risk_cfg, self.sizing,
@@ -344,7 +348,7 @@ class Daemon:
                        protective_stop=self.cfg.protective_stop,
                        index_close=self._index_close(), entry_scale=scale,
                        ticker_mult=tmult, entry_block=block, corp_actions=self.corp_actions,
-                       force_exit_all=force)
+                       force_exit_all=force, core=core)
         log.info("\n%s", res.summary())
         self.st.eod_done = True
         self.st.save()

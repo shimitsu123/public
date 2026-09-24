@@ -4,7 +4,8 @@
   0. 券商侧同步 → 读数据 → **数据新鲜度检查**（拿旧 K 线下单是实盘最常见的事故）
   1. 更新持仓跟踪字段（peak / hold_bars），并落盘
   2. 风控 begin：当日熔断、总回撤 HALT、连亏 HALT
-  3. 先卖后买（先释放资金，也避免"满仓时错过止损"）
+  3. 先卖后买（先释放资金，也避免"满仓时错过止损"）；买入在收盘时就定好股数 / 名额 / 资金，
+     规则与回测引擎第 4、5 步逐条相同（预计可用资金含排队卖出的净额；核心指数仓位用 core.core_orders）
   4. 风控 end：把今日收盘权益存成明日的熔断基准
   5. 写 journal.csv + 通知
 
@@ -23,6 +24,7 @@ from . import notify, paths
 from .brokers.base import BaseBroker, Order, Position
 from .config import (DataConfig, ExecConfig, RiskConfig, SizingConfig,
                      StrategyParams)
+from .core import core_orders
 from .data import DataError, load_universe
 from .risk import RiskManager
 from .strategy import compute_indicators
@@ -245,6 +247,7 @@ class DayResult:
     blocked: list = field(default_factory=list)
     risk: str = ""
     notes: list = field(default_factory=list)
+    core: dict = field(default_factory=dict)       # 核心指数仓位：份额 / 市值 / 目标 / 今晚排的单
 
     def summary(self) -> str:
         L = [f"══ {self.date} 运行结果 ══",
@@ -271,10 +274,14 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
              today: dt.date | None = None, exec_cfg: ExecConfig | None = None,
              protective_stop: bool = False, entry_scale: float = 1.0,
              index_close=None, earnings=None, ticker_mult: dict | None = None,
-             entry_block=None, corp_actions=None, force_exit_all: str | None = None) -> DayResult:
+             entry_block=None, corp_actions=None, force_exit_all: str | None = None,
+             core: dict | None = None) -> DayResult:
     """entry_scale：市场级新仓倍数（regime / 汇率 / 宏观取 min）；ticker_mult：{票: 板块倾斜倍数}；
     entry_block：字符串 = 今日所有新仓被拦的原因；可调用对象 = f(成交日) -> 原因或 None，
-    成交日由本函数按真实最新 K 线 + 交易日历算出（T+1 开盘），避免估算偏差。"""
+    成交日由本函数按真实最新 K 线 + 交易日历算出（T+1 开盘），避免估算偏差。
+    core：核心指数仓位（None = 关闭）。{"ticker": "1329.T", "bear": bool, "buffer_pct", "band_pct",
+      "slip_pct", "buy_fee_pct", "sell_fee_pct", "sell_fee_max", "lot"}；不受个股止损 / 熊市清仓规则影响，
+      由 core.core_orders 按「权益 − 个股 − 明天要买的个股」决定份额（与回测引擎同一函数）。"""
     today = today or dt.date.today()
     res = DayResult(date=today.isoformat())
     p.validate()
@@ -292,7 +299,8 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
         return res
 
     held = list(broker.positions())
-    tickers = sorted(set(universe) | set(held))
+    core_t = core["ticker"] if core else None
+    tickers = sorted(set(universe) | set(held) | ({core_t} if core_t else set()))
     try:
         data = load_universe(tickers, data_cfg, use_cache=False)
     except DataError as e:
@@ -347,6 +355,8 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
         for o in broker.fill_pending(opens, bar_key_of(bar_date), ex.max_entry_gap_pct, prev_bars,
                                      locked=locked):
             res.orders.append(o.to_dict())
+            if o.ticker == core_t:
+                continue                                   # 核心仓位调仓不是策略交易（不计连亏）
             if o.status == "FILLED" and o.side == "SELL":
                 book.drop(o.ticker)
                 rm.on_trade_closed(float(o.extra.get("pnl", 0.0)))
@@ -362,7 +372,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
             pos.peak = max(pos.peak or pos.avg_px, float(row["High"]))
             pos.hold_bars += 1
             pos.last_bar = bar_key
-            if not pos.stop_px:
+            if not pos.stop_px and t != core_t:
                 # 与引擎一致：ATR 取**信号日（前一根）**的值，而不是成交当天的
                 prev_atr = float(ind[t]["atr"].iloc[-2]) if len(ind[t]) > 1 else np.nan
                 pos.stop_px = (pos.avg_px - prev_atr * p.atr_stop_mult
@@ -386,26 +396,38 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
         return res
 
     def place(side: str, ticker: str, qty: int, reason: str,
-              stop_px: float = 0.0) -> Order | None:
+              stop_px: float = 0.0, extra: dict | None = None) -> Order | None:
         cid = f"{bar_key}-{ticker}-{side}"
         if guard.seen(cid):
             res.blocked.append(f"{side} {ticker}: 本交易日已发过同样的单（幂等拦截）")
             return None
+        is_core = bool((extra or {}).get("core"))
+        # 买单用 寄付指値 = 收盘 ×(1+跳空上限)：开盘更高就不成交 —— 与回测 / 模拟盘的跳空过滤是同一条规则
+        limit = None
+        if side == "BUY" and ex.max_entry_gap_pct and last_close.get(ticker):
+            from .tick import round_to_tick
+            limit = round_to_tick(last_close[ticker] * (1 + ex.max_entry_gap_pct / 100), ticker, "BUY")
         if dry_run:
             res.orders.append({"side": side, "ticker": ticker, "qty": qty,
                                "price": last_close.get(ticker, 0), "status": "DRY_RUN",
-                               "note": reason, "stop_px": round(stop_px, 2)})
+                               "note": reason, "stop_px": round(stop_px, 2),
+                               "limit": limit, "core": is_core})
             return None
         fn = broker.buy if side == "BUY" else broker.sell
-        o = fn(ticker, qty, client_id=cid, ref_px=last_close.get(ticker), bar=bar_key)
+        kw = {"extra": extra} if extra and getattr(broker, "supports_order_extra", False) else {}
+        o = fn(ticker, qty, limit=limit, client_id=cid, ref_px=last_close.get(ticker), bar=bar_key, **kw)
         o.note = f"{reason} {o.note}".strip()
+        o.extra.update({"limit": limit, "stop_px": round(stop_px, 2), "core": is_core})
         if o.ok:
             guard.mark(cid, f"{o.status} {o.note}")
         res.orders.append(o.to_dict())
         return o
 
-    # ── 3a. 卖出 ──
+    # ── 3a. 卖出（核心指数仓位不走个股离场规则，见 3d）──
+    exiting: set[str] = set()
     for t, pos in list(positions.items()):
+        if t == core_t:
+            continue
         if t not in ind:
             res.blocked.append(f"SELL {t}: 无行情数据，跳过（请人工确认）")
             continue
@@ -426,31 +448,68 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
         if reason and hasattr(broker, "pending") and any(
                 q.get("ticker") == t and q.get("side") == "SELL" for q in broker.pending()):
             res.notes.append(f"SELL {t}: 已有顺延中的卖单（ストップ安），不重复下单")
+            exiting.add(t)
             continue
         if reason:
             o = place("SELL", t, pos.qty, reason)
+            if dry_run or (o is not None and o.ok and o.status != "FILLED"):
+                exiting.add(t)                            # 明天开盘卖出 → 名额与资金可用于明天的买入
             if o and o.status == "FILLED":
                 pnl = (o.filled_px - pos.avg_px) * o.filled_qty
                 rm.on_trade_closed(pnl)
                 book.drop(t)
     book.save()
 
-    # ── 3b. 买入 ──
+    # ── 3b. 买入：收盘时规划（股数 / 名额 / 资金一次定好，与回测引擎第 4 步逐条相同）──
+    slip = ex.slippage_pct / 100
+    cur = broker.positions()
+    stock_held = {t: q for t, q in cur.items() if t != core_t}
+    leaving = {t for t in exiting if t in stock_held}
+    if hasattr(broker, "pending"):
+        leaving |= {q["ticker"] for q in broker.pending() if q["side"] == "SELL" and q["ticker"] in stock_held}
+
+    def px_of(t: str) -> float:
+        return float(last_close.get(t) or stock_held[t].avg_px)
+
+    cash_est = broker.cash()                          # 现金 + 明天开盘卖出的预计净额（按收盘价估）
+    for t in leaving:
+        sp = px_of(t) * (1 - slip)
+        cash_est += stock_held[t].qty * sp - ex.fee(stock_held[t].qty * sp)
+    equity = broker.equity()
+    cc = core or {}
+    c_slip, c_lot = float(cc.get("slip_pct", 0.0)) / 100, int(cc.get("lot", 1) or 1)
+
+    def c_fee(side: str, notional: float) -> float:
+        pct = float(cc.get("buy_fee_pct" if side == "BUY" else "sell_fee_pct", 0.0))
+        cap = float(cc.get("buy_fee_max" if side == "BUY" else "sell_fee_max", 0.0) or 0.0)
+        f = abs(notional) * pct / 100
+        return min(f, cap) if cap else f
+
+    core_units = cur[core_t].qty if core_t in cur else 0
+    core_px = float(last_close.get(core_t) or 0.0) if core_t else 0.0
+    core_liq = 0.0
+    if core_units and core_px:
+        cs = core_px * (1 - c_slip)
+        core_liq = core_units * cs - c_fee("SELL", core_units * cs)
+
     entry_today = [t for t, df in ind.items()
-                   if t in universe and bool(df["entry"].iloc[-1]) and df.index[-1] == bar_date]
+                   if t in universe and t != core_t and bool(df["entry"].iloc[-1]) and df.index[-1] == bar_date]
     res.signals = entry_today
+    planned: list[tuple] = []                         # (票, 股数, 参考止损, 说明, 单元)
+    plan_cost = 0.0
     if entry_today and not decision.allow_open:
         res.blocked.append(f"熔断中，今日不开仓（信号: {', '.join(entry_today)}）")
     elif entry_today and entry_scale <= 0:
         res.blocked.append(f"市场状态 risk_off / 避险，今日不开新仓（信号: {', '.join(entry_today)}）")
     elif entry_today and entry_block:
         res.blocked.append(f"宏观事件窗口：{entry_block}（信号: {', '.join(entry_today)}）")
+    elif entry_today and len(stock_held) >= sizing.max_positions:
+        res.blocked.append(f"持仓数已达上限 {sizing.max_positions}（信号: {', '.join(entry_today)}）")
     elif entry_today:
-        equity = broker.equity()
         if entry_scale < 1.0:
             res.notes.append(f"市场状态：新仓规模 ×{entry_scale:.2f}")
+        n_after = len(stock_held) - len(leaving)
         for t in sorted(entry_today):
-            cur = broker.positions()
             if t in cur:
                 continue
             e_days = _earnings_days(earnings, t, today)
@@ -461,48 +520,95 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
             if tm <= 0:
                 res.blocked.append(f"BUY {t}: 板块倾斜 ×0（宏观层）")
                 continue
+            if n_after + len(planned) >= sizing.max_positions:
+                res.blocked.append(f"BUY {t}: 名额已满（上限 {sizing.max_positions}，"
+                                   f"明天持有 {n_after} + 已计划 {len(planned)}）")
+                continue
             row = ind[t].iloc[-1]
-            px = last_close[t]
-            stop_px = (px - float(row["atr"]) * p.atr_stop_mult
-                       if p.atr_stop_mult > 0 and np.isfinite(row["atr"])
+            px = last_close[t] * (1 + slip)               # 按 收盘×(1+滑点) 定股数（与回测相同）
+            atr_v = float(row["atr"])
+            stop_px = (px - atr_v * p.atr_stop_mult if p.atr_stop_mult > 0 and np.isfinite(atr_v)
                        else px * (1 - p.stop_loss_pct / 100))
-            if sizing.mode == "risk_pct" and px > stop_px:
-                budget = equity * (sizing.risk_pct / 100) / (px - stop_px) * px
+            if not (0 < stop_px < px):
+                stop_px = px * (1 - p.stop_loss_pct / 100)
+            if sizing.mode == "risk_pct":
+                budget = equity * (sizing.risk_pct / 100) / max(px - stop_px, 1e-9) * px
             else:
                 budget = equity * sizing.position_pct
-            budget *= max(0.0, min(1.0, entry_scale)) * min(1.0, tm)
+            em = max(0.0, min(1.0, entry_scale)) * min(1.0, tm)
             if tm < 1.0:
                 res.notes.append(f"{t} 板块倾斜 ×{tm:g}")
-            budget = min(budget, equity * sizing.max_position_pct,
-                         broker.cash() * (1 - sizing.cash_buffer_pct / 100),
-                         risk_cfg.max_order_value)
+            avail = cash_est - plan_cost + core_liq
+            budget = min(budget * em, equity * sizing.max_position_pct,
+                         avail * (1 - sizing.cash_buffer_pct / 100), risk_cfg.max_order_value)
             lot = lot_size(t, market)
-            qty = int(budget // (px * lot)) * lot
+            qty = int(budget // (px * lot)) * lot if budget > 0 else 0
             if qty <= 0:
-                res.blocked.append(f"BUY {t}: 预算 {budget:,.0f} 不够 1 单元({lot}股 ≈{px*lot:,.0f})")
+                res.blocked.append(f"BUY {t}: 预算 {max(budget, 0):,.0f} 不够 1 单元({lot}股 ≈{px*lot:,.0f})")
                 continue
-            ok, why = rm.check_order(qty * px, len(cur))
+            ok, why = rm.check_order(qty * px, len(stock_held))
             if not ok:
                 res.blocked.append(f"BUY {t}: {why}")
                 continue
-            o = place("BUY", t, qty, f"entry(range={row['range_pct']:.1f}% "
-                                      f"vol×{row['vol_ratio']:.1f})", stop_px=stop_px)
-            if o and o.ok:
-                rm.on_open()
-                if o.filled_qty > 0:      # 立即成交（非排队）
-                    pos = Position(ticker=t, qty=o.filled_qty, avg_px=o.filled_px or px,
-                                   peak=max(o.filled_px or px, float(row["High"])),
-                                   stop_px=stop_px, entry_date=bar_key, hold_bars=0,
-                                   last_bar=bar_key)
-                    book.update(pos)
-                    broker.update_position(pos)
-                else:
-                    res.notes.append(f"{t} 已排队，次日开盘成交（参考止损 {stop_px:.1f}）")
-        book.save()
+            planned.append((t, qty, stop_px, f"entry(range={row['range_pct']:.1f}% vol×{row['vol_ratio']:.1f})", lot))
+            plan_cost += qty * px + ex.fee(qty * px)
+
+    # ── 3d. 核心指数仓位：收盘决定明天开盘的买卖份额（core.core_orders，与回测引擎第 5 步同一函数）──
+    core_sell = core_buy = 0
+    if core_t:
+        stock_after = sum(q.qty * px_of(t) for t, q in stock_held.items() if t not in leaving)
+        if not core_px:
+            res.notes.append(f"核心 {core_t}: 无行情，今日不调整")
+        else:
+            cs = core_px * (1 - c_slip)
+            core_sell, core_buy = core_orders(
+                equity, stock_after, plan_cost, cash_est, core_units, core_px, bool(cc.get("bear")),
+                buffer_pct=float(cc.get("buffer_pct", 0.0)), band_pct=float(cc.get("band_pct", 10.0)),
+                lot=c_lot, margin_pct=ex.max_entry_gap_pct,
+                sell_net=lambda u: u * cs - c_fee("SELL", u * cs))
+            if core_buy and not decision.allow_open:
+                res.blocked.append(f"BUY {core_t}: 熔断中，核心仓位今日不加仓")
+                core_buy = 0
+        tgt_val = 0.0 if cc.get("bear") else max(
+            0.0, equity * (1 - float(cc.get("buffer_pct", 0.0)) / 100) - stock_after - plan_cost)
+        res.core = {"ticker": core_t, "units": core_units, "price": core_px,
+                    "value": round(core_units * core_px, 2), "target_value": round(tgt_val, 2),
+                    "bear": bool(cc.get("bear")), "timing": bool(cc.get("timing", True)),
+                    "sell": core_sell, "buy": core_buy,
+                    "weight_pct": round(core_units * core_px / equity * 100, 1) if equity > 0 else 0.0}
+    c_extra = {"core": True, "cost": {k: cc[k] for k in ("slip_pct", "buy_fee_pct", "buy_fee_max",
+                                                           "sell_fee_pct", "sell_fee_max") if k in cc},
+               "lot": c_lot}
+
+    # 排队顺序 = 开盘成交顺序：核心卖出 → 个股买入 → 核心买入（个股卖单已在 3a 排好）
+    if core_sell:
+        why = ("bear(牛熊分界：熊市，核心仓位清空)" if cc.get("bear")
+               else "core(为明天的个股买入腾资金 / 再平衡)")
+        place("SELL", core_t, core_sell, why, extra=c_extra)
+    for t, qty, stop_px, note, lot in planned:
+        o = place("BUY", t, qty, note, stop_px=stop_px,
+                  extra={"lot": lot, "cap": sizing.max_positions, "excl": [core_t] if core_t else []})
+        if o and o.ok:
+            rm.on_open()
+            if o.filled_qty > 0:      # 立即成交（非排队）
+                row = ind[t].iloc[-1]
+                pos = Position(ticker=t, qty=o.filled_qty, avg_px=o.filled_px or last_close[t],
+                               peak=max(o.filled_px or last_close[t], float(row["High"])),
+                               stop_px=stop_px, entry_date=bar_key, hold_bars=0,
+                               last_bar=bar_key)
+                book.update(pos)
+                broker.update_position(pos)
+            else:
+                res.notes.append(f"{t} 已排队，次日开盘成交（参考止损 {stop_px:.1f}）")
+    if core_buy:
+        place("BUY", core_t, core_buy, "core(闲置资金买入指数 ETF)", extra=c_extra)
+    book.save()
 
     # ── 3c. 逆指値（protective stop）维护：让盘中止损在实盘真正生效 ──
     if protective_stop and hasattr(broker, "place_protective_stop") and not dry_run:
         for t, pos in broker.positions().items():
+            if t == core_t:
+                continue
             ann = book.book.get(t, {})
             want = max(pos.stop_px or ann.get("stop_px", 0.0),
                        (pos.peak * (1 - p.trailing_stop_pct / 100)) if p.trailing_stop_pct else 0.0)
@@ -576,24 +682,40 @@ def load_params(path=None, market: str | None = None) -> StrategyParams:
 def operation_sheet(res: DayResult, p: StrategyParams, positions: dict[str, Position],
                     limit_buffer_pct: float = 0.5) -> str:
     """把当日结果整理成一张**人能照着下单**的清单（半自动模式）。
-    每一行都给出：动作、数量、寄付指値、逆指値（止损）—— 你在券商 App 里照抄即可。"""
+    每一行都给出：动作、数量、寄付指値、逆指値（止损）—— 你在券商 App 里照抄即可。
+    买入指値 = 收盘 ×(1+跳空上限)（run_once 已算好并按呼値取整）：开盘更高就不成交，与回测的跳空过滤一致；
+    订单里没有指値时才退回用 limit_buffer_pct。"""
     from .tick import round_to_tick
     L = [f"═══ {res.date} 操作清单（信号已算好，由你手工下单）═══"]
     buys = [o for o in res.orders if o["side"] == "BUY"]
     sells = [o for o in res.orders if o["side"] == "SELL"]
+    x_of = lambda o: o.get("extra") or {}                                   # noqa: E731
+    is_core = lambda o: bool(o.get("core") or x_of(o).get("core"))          # noqa: E731
+    fm = lambda t, v: f"{v:,.0f}" if t.endswith(".T") else f"{v:,.2f}"      # noqa: E731  日本株整数、美股到分
+    core_t = (res.core or {}).get("ticker")
     if not buys and not sells:
         L.append("今日无买卖动作。")
-    for o in buys:
-        px = float(o.get("price") or 0)
-        lim = round_to_tick(px * (1 + limit_buffer_pct / 100), o["ticker"], "BUY") if px else 0
-        stop = float(o.get("stop_px") or 0) or px * (1 - p.stop_loss_pct / 100)
-        L.append(f"买入  {o['ticker']:<8} {o['qty']:>6} 股  寄付指値 ≤ {lim:,.0f}"
-                 f"（收盘 {px:,.0f} +{limit_buffer_pct}%）  逆指値(止损) {stop:,.0f}"
-                 f"  ← {o.get('note', '')}")
     for o in sells:
-        L.append(f"卖出  {o['ticker']:<8} {o['qty']:>6} 股  寄付成行  ← {o.get('note', '')}")
+        tag = "核心指数仓位" if is_core(o) else "个股"
+        L.append(f"卖出  {o['ticker']:<8} {o['qty']:>6} 股  寄付成行（{tag}）  ← {o.get('note', '')}")
+    if any(is_core(o) for o in sells) and any(not is_core(o) for o in buys):
+        L.append("  ↳ 个股买入的资金来自上面卖出的指数 ETF：先等 9:00 寄付卖出成交（买付余力到账），再下个股买单。")
+    for o in sorted(buys, key=is_core):
+        px = float(o.get("price") or 0)
+        lim = o.get("limit") or x_of(o).get("limit") or (
+            round_to_tick(px * (1 + limit_buffer_pct / 100), o["ticker"], "BUY") if px else 0)
+        pct = (lim / px - 1) * 100 if px and lim else 0.0
+        if is_core(o):
+            L.append(f"买入  {o['ticker']:<8} {o['qty']:>6} 口  寄付指値 ≤ {fm(o['ticker'], lim)}"
+                     f"（收盘 {fm(o['ticker'], px)} {pct:+.1f}%）"
+                     f"  核心指数仓位：个股买完后用剩余现金，买不起就少买  ← {o.get('note', '')}")
+            continue
+        stop = float(o.get("stop_px") or x_of(o).get("stop_px") or 0) or px * (1 - p.stop_loss_pct / 100)
+        L.append(f"买入  {o['ticker']:<8} {o['qty']:>6} 股  寄付指値 ≤ {fm(o['ticker'], lim)}"
+                 f"（收盘 {fm(o['ticker'], px)} {pct:+.1f}%，开盘更高就不成交）  逆指値(止损) {fm(o['ticker'], stop)}"
+                 f"  ← {o.get('note', '')}")
     held = {t: pos for t, pos in positions.items()
-            if t not in {o["ticker"] for o in sells}}
+            if t not in {o["ticker"] for o in sells} and t != core_t}       # 核心 ETF 不挂逆指値
     if held:
         L.append("持仓维护（逆指値应放在这里；比现有挂单高就上移，不要下移）：")
         for t, pos in sorted(held.items()):

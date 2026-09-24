@@ -88,6 +88,48 @@ def _write_cache(ticker: str, years: int, df: pd.DataFrame, source: str) -> None
 
 
 # ────────────────────────── 质量检查 ──────────────────────────
+_SPLIT_K = (2, 3, 4, 5, 8, 10, 20, 25, 50, 100)
+
+
+def repair_jp_artifacts(ticker: str, df: pd.DataFrame, max_iter: int = 10) -> pd.DataFrame:
+    """日本株 / ETF 的行情修补。东证有涨跌停，单日 ×0.6 以下或 ×1.7 以上的收盘变动不可能真实发生，
+    一定是数据问题（2026-09-24 在 yfinance 数据里实测到：1329.T 2014-01 的 1 拆 10 未复权、
+    1306.T 2026-03-30 连续两天被缩小 10 倍后恢复、2269.T / 8766.T 等合并新设时的衔接错误）。
+      ① 5 根 K 线内回到原价位附近 → 瞬时错误，删掉这几根
+      ② 持续跳变且接近 1/k 或 k（k=2,3,4,5,8,10,…，误差 6% 内）→ 未复权拆股 / 合并，按 k 复权更早的历史
+      ③ 其余持续跳变 → 截掉跳变之前的历史（衔接不上的旧数据）"""
+    out = df
+    for _ in range(max_iter):
+        c = out["Close"].astype(float)
+        r = (c / c.shift(1)).values
+        bad = np.flatnonzero((r < 0.6) | (r > 1.7))
+        if not len(bad):
+            return out
+        i = int(bad[0])
+        base = float(c.iloc[i - 1])
+        back = next((j for j in range(i + 1, min(i + 6, len(c))) if 0.6 <= float(c.iloc[j]) / base <= 1.7), None)
+        if back is not None:
+            log.warning("%s: %s～%s 共 %d 根 K 线价格异常后恢复，判定为瞬时错误并删除", ticker,
+                        out.index[i].date(), out.index[back - 1].date(), back - i)
+            out = out.drop(out.index[i:back])
+            continue
+        ratio = float(r[i])
+        k = next((k for k in _SPLIT_K for f in (1 / k, k) if abs(ratio / f - 1) < 0.06), None)
+        if k is not None:
+            f = 1 / k if ratio < 1 else k
+            log.warning("%s: %s 收盘 ×%.4f，判定为未复权的 %s（×%g），已复权更早的历史", ticker,
+                        out.index[i].date(), ratio, "拆股" if ratio < 1 else "合并", f)
+            out = out.copy()
+            prior = out.index[:i]
+            for col in ("Open", "High", "Low", "Close"):
+                out.loc[prior, col] = out.loc[prior, col] * f
+            out.loc[prior, "Volume"] = out.loc[prior, "Volume"] / f
+            continue
+        log.warning("%s: %s 收盘 ×%.4f 且不像拆股，截掉此前 %d 根衔接不上的历史", ticker, out.index[i].date(), ratio, i)
+        out = out.iloc[i:]
+    return out
+
+
 def validate_ohlcv(ticker: str, df: pd.DataFrame, cfg: DataConfig) -> pd.DataFrame:
     if df is None or df.empty:
         raise DataError(f"{ticker}: 无数据")
@@ -114,6 +156,8 @@ def validate_ohlcv(ticker: str, df: pd.DataFrame, cfg: DataConfig) -> pd.DataFra
         df = df[~fix]
     df["High"] = df[["High", "Open", "Close"]].max(axis=1)
     df["Low"] = df[["Low", "Open", "Close"]].min(axis=1)
+    if ticker.upper().endswith(".T"):
+        df = repair_jp_artifacts(ticker, df)
 
     if len(df) < cfg.min_bars:
         raise DataError(f"{ticker}: 只有 {len(df)} 根 K 线，少于 min_bars={cfg.min_bars}")

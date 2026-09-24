@@ -301,12 +301,14 @@ def _live_common(a, live: bool) -> int:
         scale, tmult, block, _ = _macro_layer(market, dcfg, universe(market), dt.date.today())
     tmult = _index_mult(market, universe(market), dt.date.today(), tmult)
     rscale, force, _bb = _regime_gate(market, dcfg)
+    core = _core_cfg(market, {"enabled": True, "ticker": a.core_ticker} if a.core else None,
+                     _bullbear(market, dcfg) if a.core else None)
     res = run_once(universe(market), broker, p, risk, sizing, dcfg,
                    market=market, dry_run=a.dry_run, allow_stale=a.allow_stale,
                    exec_cfg=ex, protective_stop=a.protective_stop,
                    index_close=_index_close(market, dcfg, p), entry_scale=min(scale, rscale),
                    ticker_mult=tmult, entry_block=block, corp_actions=_corp_actions_provider(),
-                   force_exit_all=force)
+                   force_exit_all=force, core=core)
     print("\n" + res.summary())
     return 0
 
@@ -344,12 +346,14 @@ def cmd_signal(a) -> int:
     if bb.get("state") in ("bull", "bear"):
         print(f"牛熊分界：{'熊市' if bb['state'] == 'bear' else '牛市'}（自 {bb.get('since')}）；"
               f"翻转价位 {bb.get('level')}（距 {bb.get('distance_pct')}%）")
+    core = _core_cfg(market, {"enabled": True, "ticker": a.core_ticker} if a.core else None,
+                     bb if bb.get("state") in ("bull", "bear") else (_bullbear(market, dcfg) if a.core else None))
     res = run_once(universe(market), broker, p, risk, sizing, dcfg,
                    market=market, dry_run=True, allow_stale=a.allow_stale,
                    exec_cfg=ExecConfig.for_market(market),
                    index_close=_index_close(market, dcfg, p), entry_scale=min(scale, rscale),
                    ticker_mult=tmult, entry_block=block, corp_actions=_corp_actions_provider(),
-                   force_exit_all=force)
+                   force_exit_all=force, core=core)
     from qbreak.trader import PositionBook
     positions = PositionBook().merge(broker.positions())
     sheet = operation_sheet(res, p, positions, a.limit_buffer)
@@ -523,9 +527,14 @@ def cmd_sim_day(a) -> int:
                                   position_pct=mc["position_pct"],
                                   max_positions=mc["max_positions"],
                                   max_position_pct=max(0.34, mc["position_pct"]))
+            # 模拟盘与回测同口径：回测没有「连亏 N 笔熔断」「单日亏 2% 停开仓」，这里也关掉；
+            # 只保留回撤 HALT 作为故障保护，阈值随资金配置档位（halt_dd_pct，高于该档 20 年回测最大回撤）。
+            # HALT 后连核心仓位的熊市清空也不会执行，所以阈值不能低于历史回撤。实盘命令仍用保守默认值。
             risk = RiskConfig(max_order_value=10 ** 9, require_arm=False,
                               max_positions=mc["max_positions"],
-                              max_new_positions_per_day=mc["max_positions"])
+                              max_new_positions_per_day=mc["max_positions"],
+                              max_consecutive_losses=0, daily_max_loss_pct=100.0,
+                              max_drawdown_pct=float(mc.get("halt_dd_pct", 30.0)))
             broker = make_broker("paper", initial_cash=sizing.initial_cash, market=m,
                                  exec_cfg=ExecConfig.for_market(m))
             dcfg = DataConfig(provider=provider, years=2, allow_synthetic=False).validate()
@@ -562,14 +571,18 @@ def cmd_sim_day(a) -> int:
                     macro_info["mult"], macro_info["fired"] = 1.0, []
                     macro_info["note"] = "市场倍数层已关闭（只用板块倾斜 / 事件窗口）"
             tmult = _index_mult(m, uni, today, tmult)
-            res = run_once(uni, broker, p, risk, sizing, dcfg,
+            core = _core_cfg(m, mc.get("core"), bb)                  # 核心指数仓位（默认关闭）
+            trade_uni = uni if mc.get("breakout", True) else []      # breakout=false：只持指数（不做个股新仓）
+            res = run_once(trade_uni, broker, p, risk, sizing, dcfg,
                            market=m, dry_run=False, allow_stale=a.allow_stale,
                            exec_cfg=exc, entry_scale=scale, index_close=idx_close,
                            earnings=earnings, ticker_mult=tmult, entry_block=block,
-                           corp_actions=_corp_actions_provider(), force_exit_all=force_exit)
+                           corp_actions=_corp_actions_provider(), force_exit_all=force_exit,
+                           core=core)
             results[m] = res
             rd = reg.to_dict(); rd.update({"fx": fx_info, "final_mult": scale, "regime_mode": mode,
-                                           "bullbear": bb})
+                                           "bullbear": bb, "core": res.core,
+                                           "breakout": bool(mc.get("breakout", True))})
             rd["params_overlay"] = str(paths.params_file(m).name) if paths.params_file(m).exists() else ""
             extras[m] = {"regime": rd, "macro": macro_info, "watchlist": _scan_market(
                 uni, p, m, dcfg, sizing.initial_cash * mc["position_pct"], idx_close, macro_info)}
@@ -647,6 +660,22 @@ def _bullbear(market: str, dcfg=None) -> dict:
     log.info("[%s] 牛熊分界：%s（自 %s，%s 日）；翻转价位 %s（距 %s%%）", market, out.get("state"), out.get("since"),
              out.get("days"), out.get("level"), out.get("distance_pct"))
     return out
+
+
+def _core_cfg(market: str, c: dict | None, bb: dict | None) -> dict | None:
+    """核心指数仓位配置 → run_once 的 core 参数；未启用返回 None（默认关闭）。
+    c = sim.json 市场段的 "core"：{"enabled": true, "ticker": "1329.T", "timing": true, "band_pct": 10, "buffer_pct": 0}
+    timing=true：牛熊分界（var/bullbear.json 的检测器）判熊市时目标 = 0（清空核心仓位）。"""
+    c = c or {}
+    if not c.get("enabled"):
+        return None
+    from qbreak.core import CORE_ETF, core_cost
+    ticker = c.get("ticker") or CORE_ETF[market.upper()]
+    cost = {**core_cost(ticker, market), **(c.get("cost") or {})}
+    return {"ticker": ticker,
+            "bear": bool(c.get("timing", True)) and (bb or {}).get("state") == "bear",
+            "timing": bool(c.get("timing", True)),
+            "buffer_pct": float(c.get("buffer_pct", 0.0)), "band_pct": float(c.get("band_pct", 10.0)), **cost}
 
 
 def _regime_mode(market: str) -> str:
@@ -795,6 +824,33 @@ def cmd_universe_update(a) -> int:
     return 0
 
 
+def cmd_sim_tier(a) -> int:
+    """切换模拟盘的资金配置档位（safe / aggressive / max），只改 var/sim.json 的市场段。"""
+    from qbreak.core import TIERS
+    from qbreak.utils import write_json
+    cfg = _sim_cfg()
+    if not cfg:
+        print("先运行 python run.py sim-init"); return 2
+    if a.tier == "show":
+        for k, t in TIERS.items():
+            print(f"[{k}] {t['label']}")
+            for m in ("JP", "US"):
+                print(f"   {m}: {t[m]['bt']}")
+        for m in cfg.get("markets", []):
+            print(f"当前 {m}: {(cfg.get(m.lower()) or {}).get('tier', 'safe')}")
+        return 0
+    t = TIERS[a.tier]
+    for m in [x.strip().upper() for x in a.markets.split(",") if x.strip()]:
+        mc = cfg.setdefault(m.lower(), {})
+        preset = {k: v for k, v in t[m].items() if k != "bt"}
+        mc.update(preset)
+        mc["tier"] = a.tier
+        print(f"{m} → {a.tier}：{t[m]['bt']}")
+    write_json(paths.home() / SIM_FILE, cfg)
+    print("已写入 var/sim.json；下一次 sim-day 生效（已持有的个股按原规则离场，新仓按新档位）。")
+    return 0
+
+
 def cmd_bullbear(a) -> int:
     """牛熊分界：当前状态 + 明天收盘的翻转价位 + 事后精确标注的熊市清单。"""
     from qbreak.bullbear import load_config, phase_table
@@ -839,15 +895,21 @@ def cmd_daemon(a) -> int:
     dcfg = DataConfig(provider=a.provider, years=max(a.years, 2),
                       allow_synthetic=a.synthetic).validate()
     hook = None
-    if not getattr(a, "no_macro", False):
-        def hook(day):                                       # 日终流程前算一次宏观层 + 状态层
-            s, tm, b, _ = _macro_layer(market, dcfg, universe(market), day)
+    core_on = {"enabled": True, "ticker": a.core_ticker} if a.core else None
+    if not getattr(a, "no_macro", False) or core_on:
+        def hook(day):                                       # 日终流程前算一次宏观层 + 状态层 + 核心仓位
+            s, tm, b = 1.0, None, None
+            if not getattr(a, "no_macro", False):
+                s, tm, b, _ = _macro_layer(market, dcfg, universe(market), day)
             rs, force, _bb = _regime_gate(market, dcfg)
-            return min(s, rs), _index_mult(market, universe(market), day, tm), b, force
+            core = _core_cfg(market, core_on, _bullbear(market, dcfg) if core_on else None)
+            return min(s, rs), _index_mult(market, universe(market), day, tm), b, force, core
+    from qbreak.core import CORE_ETF
     d = Daemon(universe(market), broker, _params(a, market), risk, sizing, dcfg,
                ex, cfg=cfg, dry_run=a.dry_run, market=market,
                fallback_quotes=(a.broker == "paper"), entry_hook=hook,
-               corp_actions=_corp_actions_provider())
+               corp_actions=_corp_actions_provider(),
+               core_ticker=(a.core_ticker or CORE_ETF[market]) if a.core else None)
     d.install_signal_handlers()
     d.run_forever(max_loops=1 if a.once else None)
     return 0
@@ -1017,6 +1079,9 @@ def main(argv=None) -> int:
         sp.add_argument("--limit-buffer", type=float, default=0.5, help="指値相对现价的偏移 %%")
         sp.add_argument("--protective-stop", action="store_true",
                         help="为每笔持仓自动挂/改逆指値（盘中止损的真正保险）")
+        sp.add_argument("--core", action="store_true",
+                        help="核心指数仓位：闲置资金买指数 ETF（JP 1329.T / US VOO），熊市（牛熊分界）清空")
+        sp.add_argument("--core-ticker", default=None, help="核心 ETF 代码（默认 JP 1329.T / US VOO）")
 
     for name, fn, help_ in [("paper", cmd_paper, "第3阶段 模拟盘（单次）"),
                             ("live", cmd_live, "实盘单次流程")]:
@@ -1043,6 +1108,11 @@ def main(argv=None) -> int:
     dm.add_argument("--eod-at", default="15:40", help="收盘后日线流程时刻 JST")
     dm.add_argument("--once", action="store_true", help="只跑一轮就退出（测试用）")
     dm.set_defaults(func=cmd_daemon)
+
+    st_ = sub.add_parser("sim-tier", help="切换模拟盘资金配置档位：safe / aggressive / max（show = 查看）")
+    st_.add_argument("tier", choices=["show", "safe", "aggressive", "max"])
+    st_.add_argument("--markets", default="JP,US")
+    st_.set_defaults(func=cmd_sim_tier)
 
     si = sub.add_parser("sim-init", help="初始化 3 个月模拟（清空状态、写 sim.json）")
     si.add_argument("--capital", type=float, default=1_000_000, help="每个市场的起始资金（日元）")

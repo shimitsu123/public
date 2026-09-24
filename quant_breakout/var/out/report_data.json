@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-24 07:33",
+ "generated": "2026-09-24 08:37",
  "sim": {
   "start": "2026-09-24",
   "end": "2026-12-24",
@@ -11,11 +11,20 @@
   "jp": {
    "initial_cash": 1000000,
    "universe": "broad",
-   "position_pct": 0.34,
-   "max_positions": 3,
+   "position_pct": 0.25,
+   "max_positions": 4,
    "use_macro": true,
    "use_sector_tilt": true,
-   "use_event_window": false
+   "use_event_window": false,
+   "breakout": true,
+   "core": {
+    "enabled": true,
+    "ticker": "1329.T",
+    "timing": true,
+    "band_pct": 10.0
+   },
+   "halt_dd_pct": 45.0,
+   "tier": "aggressive"
   },
   "us": {
    "initial_cash": 6336.37,
@@ -27,9 +36,18 @@
    "fx_spread_pct": 0.16,
    "use_macro": true,
    "use_sector_tilt": true,
-   "use_event_window": false
+   "use_event_window": false,
+   "breakout": false,
+   "core": {
+    "enabled": true,
+    "ticker": "SPYM",
+    "timing": true,
+    "band_pct": 10.0
+   },
+   "halt_dd_pct": 45.0,
+   "tier": "aggressive"
   },
-  "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。股票池 broad = 日経225 / NASDAQ-100+Dow30（按偏好剔除）。use_market_regime=true：指数 200 日线/波动/回撤 + 市场风险报告的行动四选一 共同决定新仓规模。 us.fx_spread_pct：换回日元时的换汇点差（单边 %）；初始换汇（9/23）按当时代码未计点差。 宏观层按市场设定（2026-09-24 变体研究定案）：两市场都开量化因子 + 板块倾斜，事件窗口关闭（样本外拖累）；美股出场改为不用死叉、跟踪止损 10%（浮盈 3% 启动），见 var/best_params_US.json。 regime_mode=quant：状态层维持指数 200 日线/波动/回撤（20 年回测后保留）；牛熊分界（250 日线±3%、连续 5 天）只显示。",
+  "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。股票池 broad = 日経225 / NASDAQ-100+Dow30（按偏好剔除）。use_market_regime=true：指数 200 日线/波动/回撤 + 市场风险报告的行动四选一 共同决定新仓规模。 us.fx_spread_pct：换回日元时的换汇点差（单边 %）；初始换汇（9/23）按当时代码未计点差。 宏观层按市场设定（2026-09-24 变体研究定案）：两市场都开量化因子 + 板块倾斜，事件窗口关闭（样本外拖累）；美股出场改为不用死叉、跟踪止损 10%（浮盈 3% 启动），见 var/best_params_US.json。 regime_mode=quant：状态层维持指数 200 日线/波动/回撤（20 年回测后保留）；牛熊分界（250 日线±3%、连续 5 天）只显示。 资金配置档位 tier（2026-09-24 夜定案）：aggressive = 进取档 —— 日本个股 4×25% + 闲置资金持 1329.T，美股只持 SPYM；两市场牛熊分界判熊市时清空指数仓位；回撤 HALT 45%。见 README「资金配置」与 var/sim_changes.md；切回：python run.py sim-tier safe。",
   "use_market_regime": true,
   "use_macro": true,
   "use_sector_tilt": true,
@@ -37,7 +55,7 @@
   "regime_mode": "quant"
  },
  "last_run": {
-  "at": "2026-09-24 07:33",
+  "at": "2026-09-24 08:36",
   "ok": true,
   "error": "",
   "markets_ok": [
@@ -77,7 +95,7 @@
      "equity_jpy": null,
      "signals": [],
      "risk": "[风控:正常] 当日 +0.00%  回撤 +0.00%",
-     "orders": 0
+     "orders": 1
     }
    ],
    "closed_trades": [],
@@ -113,6 +131,19 @@
      "index": "^N225",
      "gating": false
     },
+    "core": {
+     "ticker": "1329.T",
+     "units": 0,
+     "price": 6801.0,
+     "value": 0.0,
+     "target_value": 1000000.0,
+     "bear": false,
+     "sell": 0,
+     "buy": 147,
+     "weight_pct": 0.0,
+     "timing": true
+    },
+    "breakout": true,
     "params_overlay": "best_params_JP.json"
    },
    "macro": {
@@ -249,48 +280,6 @@
      "tilt_why": ""
     },
     {
-     "ticker": "8252.T",
-     "status": "watch",
-     "score": 82.9,
-     "close": 2864.0,
-     "range_pct": 13.0,
-     "macd_gap_pct": -0.04,
-     "hist_up": false,
-     "vol_ratio": 0.86,
-     "to_box_top_pct": 9.3,
-     "lot_cost": 286400.0,
-     "affordable": true,
-     "pref_ok": true,
-     "pref_note": "",
-     "top_risk": "",
-     "rsi": 43.0,
-     "rs_pct": 11.8,
-     "sector": "零售",
-     "tilt": 1.0,
-     "tilt_why": ""
-    },
-    {
-     "ticker": "8804.T",
-     "status": "watch",
-     "score": 82.1,
-     "close": 3293.0,
-     "range_pct": 10.7,
-     "macd_gap_pct": -0.298,
-     "hist_up": true,
-     "vol_ratio": 1.8,
-     "to_box_top_pct": 7.6,
-     "lot_cost": 329300.0,
-     "affordable": true,
-     "pref_ok": true,
-     "pref_note": "",
-     "top_risk": "出货日6",
-     "rsi": 45.0,
-     "rs_pct": 10.9,
-     "sector": "不动产",
-     "tilt": 1.0,
-     "tilt_why": ""
-    },
-    {
      "ticker": "2002.T",
      "status": "watch",
      "score": 80.8,
@@ -354,27 +343,6 @@
      "tilt_why": ""
     },
     {
-     "ticker": "4507.T",
-     "status": "watch",
-     "score": 76.0,
-     "close": 2917.5,
-     "range_pct": 14.7,
-     "macd_gap_pct": 0.107,
-     "hist_up": false,
-     "vol_ratio": 1.2,
-     "to_box_top_pct": 5.6,
-     "lot_cost": 291750.0,
-     "affordable": true,
-     "pref_ok": true,
-     "pref_note": "",
-     "top_risk": "",
-     "rsi": 52.0,
-     "rs_pct": 16.3,
-     "sector": "医药",
-     "tilt": 1.0,
-     "tilt_why": ""
-    },
-    {
      "ticker": "8267.T",
      "status": "watch",
      "score": 66.4,
@@ -396,23 +364,44 @@
      "tilt_why": ""
     },
     {
-     "ticker": "1808.T",
+     "ticker": "8252.T",
      "status": "watch",
-     "score": 63.6,
-     "close": 2723.5,
-     "range_pct": 12.6,
-     "macd_gap_pct": -0.492,
-     "hist_up": true,
-     "vol_ratio": 0.82,
-     "to_box_top_pct": 8.8,
-     "lot_cost": 272350.0,
-     "affordable": true,
+     "score": 41.4,
+     "close": 2864.0,
+     "range_pct": 13.0,
+     "macd_gap_pct": -0.04,
+     "hist_up": false,
+     "vol_ratio": 0.86,
+     "to_box_top_pct": 9.3,
+     "lot_cost": 286400.0,
+     "affordable": false,
      "pref_ok": true,
      "pref_note": "",
      "top_risk": "",
-     "rsi": 42.0,
-     "rs_pct": 7.7,
-     "sector": "建设",
+     "rsi": 43.0,
+     "rs_pct": 11.8,
+     "sector": "零售",
+     "tilt": 1.0,
+     "tilt_why": ""
+    },
+    {
+     "ticker": "8804.T",
+     "status": "watch",
+     "score": 41.0,
+     "close": 3293.0,
+     "range_pct": 10.7,
+     "macd_gap_pct": -0.298,
+     "hist_up": true,
+     "vol_ratio": 1.8,
+     "to_box_top_pct": 7.6,
+     "lot_cost": 329300.0,
+     "affordable": false,
+     "pref_ok": true,
+     "pref_note": "",
+     "top_risk": "出货日6",
+     "rsi": 45.0,
+     "rs_pct": 10.9,
+     "sector": "不动产",
      "tilt": 1.0,
      "tilt_why": ""
     },
@@ -434,6 +423,27 @@
      "rsi": 47.0,
      "rs_pct": 10.6,
      "sector": "电力燃气",
+     "tilt": 1.0,
+     "tilt_why": ""
+    },
+    {
+     "ticker": "4507.T",
+     "status": "watch",
+     "score": 38.0,
+     "close": 2917.5,
+     "range_pct": 14.7,
+     "macd_gap_pct": 0.107,
+     "hist_up": false,
+     "vol_ratio": 1.2,
+     "to_box_top_pct": 5.6,
+     "lot_cost": 291750.0,
+     "affordable": false,
+     "pref_ok": true,
+     "pref_note": "",
+     "top_risk": "",
+     "rsi": 52.0,
+     "rs_pct": 16.3,
+     "sector": "医药",
      "tilt": 1.0,
      "tilt_why": ""
     },
@@ -501,23 +511,44 @@
      "tilt_why": ""
     },
     {
-     "ticker": "1928.T",
-     "status": "far",
-     "score": 96.2,
-     "close": 3349.0,
-     "range_pct": 14.5,
-     "macd_gap_pct": -0.038,
+     "ticker": "1808.T",
+     "status": "watch",
+     "score": 31.8,
+     "close": 2723.5,
+     "range_pct": 12.6,
+     "macd_gap_pct": -0.492,
      "hist_up": true,
-     "vol_ratio": 1.35,
-     "to_box_top_pct": 10.3,
-     "lot_cost": 334900.0,
+     "vol_ratio": 0.82,
+     "to_box_top_pct": 8.8,
+     "lot_cost": 272350.0,
+     "affordable": false,
+     "pref_ok": true,
+     "pref_note": "",
+     "top_risk": "",
+     "rsi": 42.0,
+     "rs_pct": 7.7,
+     "sector": "建设",
+     "tilt": 1.0,
+     "tilt_why": ""
+    },
+    {
+     "ticker": "3401.T",
+     "status": "far",
+     "score": 93.2,
+     "close": 1705.0,
+     "range_pct": 16.5,
+     "macd_gap_pct": -0.013,
+     "hist_up": true,
+     "vol_ratio": 1.19,
+     "to_box_top_pct": 7.0,
+     "lot_cost": 170500.0,
      "affordable": true,
      "pref_ok": true,
      "pref_note": "",
-     "top_risk": "出货日6；长上影",
-     "rsi": 45.0,
-     "rs_pct": 13.1,
-     "sector": "建设",
+     "top_risk": "",
+     "rsi": 50.0,
+     "rs_pct": 13.6,
+     "sector": "化学",
      "tilt": 1.0,
      "tilt_why": ""
     }
@@ -564,7 +595,7 @@
      "equity_jpy": 1000000.0,
      "signals": [],
      "risk": "[风控:正常] 当日 +0.00%  回撤 +0.00%",
-     "orders": 0
+     "orders": 1
     }
    ],
    "closed_trades": [],
@@ -582,7 +613,7 @@
     "mult": 0.5,
     "label": "risk_on｜报告:减仓观察",
     "fx": {
-     "usdjpy": 158.20799255371094,
+     "usdjpy": 158.36900329589844,
      "date": "2026-09-24",
      "watch_level": 158.0,
      "band_pct": 1.0,
@@ -606,6 +637,19 @@
      "index": "^GSPC",
      "gating": false
     },
+    "core": {
+     "ticker": "SPYM",
+     "units": 0,
+     "price": 90.37000274658203,
+     "value": 0.0,
+     "target_value": 6336.37,
+     "bear": false,
+     "sell": 0,
+     "buy": 70,
+     "weight_pct": 0.0,
+     "timing": true
+    },
+    "breakout": false,
     "params_overlay": "best_params_US.json"
    },
    "macro": {
