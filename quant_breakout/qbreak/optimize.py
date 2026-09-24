@@ -56,7 +56,7 @@ def _coerce(grid: dict[str, list], k: str, v) -> object:
 
 def grid_search(cache: IndicatorCache, bt: BacktestConfig, base: StrategyParams,
                 grid: dict[str, list] | None = None, start=None, end=None,
-                objective: str = OBJECTIVE) -> pd.DataFrame:
+                objective: str = OBJECTIVE, entry_mult=None) -> pd.DataFrame:
     grid = grid or DEFAULT_GRID
     keys, values = list(grid), list(grid.values())
     rows = []
@@ -67,7 +67,7 @@ def grid_search(cache: IndicatorCache, bt: BacktestConfig, base: StrategyParams,
         except Exception:                 # 非法组合（如 fast>=slow）直接跳过
             continue
         try:
-            res = run_backtest(cache.all(p), p, bt, start=start, end=end)
+            res = run_backtest(cache.all(p), p, bt, start=start, end=end, entry_mult=entry_mult)
         except Exception as e:            # noqa: BLE001
             log.warning("参数 %s 回测失败: %s", kw, e)
             continue
@@ -86,9 +86,10 @@ def grid_search(cache: IndicatorCache, bt: BacktestConfig, base: StrategyParams,
 def walk_forward(data: dict[str, pd.DataFrame], bt: BacktestConfig, base: StrategyParams,
                  grid: dict[str, list] | None = None, train_years: float = 2.0,
                  test_months: int = 6, objective: str = OBJECTIVE,
-                 index_close: pd.Series | None = None):
+                 index_close: pd.Series | None = None, entry_mult=None):
     """滚动窗口：训练 train_years → 测试 test_months → 向前滚动 test_months。
-    index_close：基准指数收盘（相对强度过滤）；不传则该过滤在优化里不生效。"""
+    index_close：基准指数收盘（相对强度过滤）；不传则该过滤在优化里不生效。
+    entry_mult：宏观层 / 板块倾斜 / 事件窗口的新仓倍数矩阵（macro.build_entry_mult），IS 与 OOS 都用。"""
     grid = grid or DEFAULT_GRID
     cache = IndicatorCache(data, index_close)
     gidx = pd.DatetimeIndex(sorted(set().union(*[df.index for df in data.values()])))
@@ -102,7 +103,8 @@ def walk_forward(data: dict[str, pd.DataFrame], bt: BacktestConfig, base: Strate
         oos_end = min(is_end + pd.DateOffset(months=test_months), end)
         if is_end >= end or (oos_end - is_end).days < 20:
             break
-        gs = grid_search(cache, bt, base, grid, start=t0, end=is_end, objective=objective)
+        gs = grid_search(cache, bt, base, grid, start=t0, end=is_end, objective=objective,
+                         entry_mult=entry_mult)
         if gs.empty or not np.isfinite(gs.iloc[0]["score"]):
             log.warning("窗口 %s~%s 没有任何合格参数组合（交易数不足），跳过",
                         t0.date(), is_end.date())
@@ -111,7 +113,7 @@ def walk_forward(data: dict[str, pd.DataFrame], bt: BacktestConfig, base: Strate
         best = gs.iloc[0]
         best_kw = {k: _coerce(grid, k, best[k]) for k in grid}
         p_oos = replace(base, **best_kw).validate()
-        oos = run_backtest(cache.all(p_oos), p_oos, bt, start=is_end, end=oos_end)
+        oos = run_backtest(cache.all(p_oos), p_oos, bt, start=is_end, end=oos_end, entry_mult=entry_mult)
         m = oos.metrics
         windows.append({"is_start": t0.date(), "is_end": is_end.date(), "oos_end": oos_end.date(),
                         **best_kw, "is_score": round(float(best["score"]), 2),

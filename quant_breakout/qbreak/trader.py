@@ -182,6 +182,7 @@ class OrderGuard:
 class DayResult:
     date: str = ""
     bar_date: str = ""         # 数据所代表的交易日（报表按这个归档，而不是运行日）
+    fill_date: str = ""            # 新仓的 T+1 成交日（宏观事件窗口用）
     equity: float = 0.0
     cash: float = 0.0
     positions: dict = field(default_factory=dict)
@@ -215,7 +216,11 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
              market: str = "JP", dry_run: bool = False, allow_stale: bool = False,
              today: dt.date | None = None, exec_cfg: ExecConfig | None = None,
              protective_stop: bool = False, entry_scale: float = 1.0,
-             index_close=None, earnings=None) -> DayResult:
+             index_close=None, earnings=None, ticker_mult: dict | None = None,
+             entry_block: str | None = None) -> DayResult:
+    """entry_scale：市场级新仓倍数（regime / 汇率 / 宏观取 min）；ticker_mult：{票: 板块倾斜倍数}；
+    entry_block：字符串 = 今日所有新仓被拦的原因；可调用对象 = f(成交日) -> 原因或 None，
+    成交日由本函数按真实最新 K 线 + 交易日历算出（T+1 开盘），避免估算偏差。"""
     today = today or dt.date.today()
     res = DayResult(date=today.isoformat())
     p.validate()
@@ -256,6 +261,15 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
         log.warning(msg)
         res.notes.append(msg)
         return res
+
+    if callable(entry_block):
+        from .calendar_jp import next_trading_day as _jp_next
+        from .calendar_us import next_trading_day as _us_next
+        fill_d = (_jp_next if market.upper() == "JP" else _us_next)(bar_date.date())
+        entry_block = entry_block(fill_d)
+        res.fill_date = fill_d.isoformat()
+        if entry_block:
+            log.info("[%s] 成交日 %s 在宏观事件窗口：%s", market, fill_d, entry_block)
 
     last_close = {t: float(df["Close"].iloc[-1]) for t, df in ind.items()}
     opens = {t: float(df["Open"].iloc[-1]) for t, df in ind.items()}
@@ -355,6 +369,8 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
         res.blocked.append(f"熔断中，今日不开仓（信号: {', '.join(entry_today)}）")
     elif entry_today and entry_scale <= 0:
         res.blocked.append(f"市场状态 risk_off / 避险，今日不开新仓（信号: {', '.join(entry_today)}）")
+    elif entry_today and entry_block:
+        res.blocked.append(f"宏观事件窗口：{entry_block}（信号: {', '.join(entry_today)}）")
     elif entry_today:
         equity = broker.equity()
         if entry_scale < 1.0:
@@ -367,6 +383,10 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
             if p.earnings_blackout_days and e_days is not None and e_days <= p.earnings_blackout_days:
                 res.blocked.append(f"BUY {t}: 决算前 {e_days} 个交易日内（回避期 {p.earnings_blackout_days} 日）")
                 continue
+            tm = float((ticker_mult or {}).get(t, 1.0))
+            if tm <= 0:
+                res.blocked.append(f"BUY {t}: 板块倾斜 ×0（宏观层）")
+                continue
             row = ind[t].iloc[-1]
             px = last_close[t]
             stop_px = (px - float(row["atr"]) * p.atr_stop_mult
@@ -376,7 +396,9 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
                 budget = equity * (sizing.risk_pct / 100) / (px - stop_px) * px
             else:
                 budget = equity * sizing.position_pct
-            budget *= max(0.0, min(1.0, entry_scale))
+            budget *= max(0.0, min(1.0, entry_scale)) * min(1.0, tm)
+            if tm < 1.0:
+                res.notes.append(f"{t} 板块倾斜 ×{tm:g}")
             budget = min(budget, equity * sizing.max_position_pct,
                          broker.cash() * (1 - sizing.cash_buffer_pct / 100),
                          risk_cfg.max_order_value)

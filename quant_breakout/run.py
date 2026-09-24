@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import logging
 import sys
 from pathlib import Path
@@ -60,6 +61,11 @@ def _common(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--params", default=None, help="指定参数文件（默认 var/best_params.json）")
     ap.add_argument("--universe", default="default", choices=["default", "affordable", "broad"],
                     help="股票池：affordable = 100 万円でも単元が買える流動性上位；broad = 日経225 / NASDAQ-100+Dow30")
+    ap.add_argument("--macro", default="off", choices=["off", "macro", "sector", "events", "all"],
+                    help="回测/优化里叠加宏观层：macro=油价/10Y/VIX/USDJPY 市场倍数；sector=板块倾斜；"
+                         "events=FOMC/BOJ/NFP 事件窗口；all=三者（模拟盘 / 实盘默认相当于 all）")
+    ap.add_argument("--event-kinds", default="FOMC,BOJ,CPI,NFP",
+                    help="事件窗口包含的事件类型（逗号分隔），例如 FOMC,BOJ 只回避盘中发布的两类")
     ap.add_argument("--stop-mode", default="next_open", choices=["next_open", "intraday"],
                     help="止损成交假设：next_open=收盘触发次日开盘成交（默认，最贴近"
                          "每天跑一次的程序）；intraday=盘中触及即成交（必须真的挂逆指値）")
@@ -113,6 +119,58 @@ def _bt_cfg(a, market: str) -> BacktestConfig:
     return bt
 
 
+def _macro_frame(dcfg):
+    """Brent / 美10Y / VIX / USDJPY 的日线特征表（回测与模拟盘共用同一份代码）。"""
+    from qbreak.macro import features_frame, load_macro_series
+    return features_frame(load_macro_series(dcfg))
+
+
+def _entry_mult_for(a, market: str, ind: dict):
+    """按 --macro 选项构造 [日期 × 票] 新仓倍数矩阵；off 时返回 (None, {})。"""
+    mode = getattr(a, "macro", "off")
+    if mode == "off":
+        return None, {}
+    import pandas as pd
+    from qbreak.macro import build_entry_mult, load_events
+    gidx = pd.DatetimeIndex(sorted(set().union(*[df.index for df in ind.values()])))
+    tickers = list(ind.keys())
+    frame = _macro_frame(_data_cfg(a)) if mode in ("macro", "sector", "all") else None
+    kinds = {k.strip().upper() for k in str(getattr(a, "event_kinds", "FOMC,BOJ,CPI,NFP")).split(",") if k.strip()}
+    events = load_events(include_history=True, nfp_heuristic_years=(gidx[0].year, gidx[-1].year), kinds=kinds) \
+        if mode in ("events", "all") else None
+    M, stats = build_entry_mult(gidx, tickers, market, frame,
+                                use_macro=mode in ("macro", "all"), use_sector=mode in ("sector", "all"),
+                                use_events=mode in ("events", "all"), events=events)
+    print(f"宏观层（{mode}）：市场倍数<1 的成交日 {stats['macro_days']}，板块倾斜生效日 {stats['sector_days']}，"
+          f"事件窗口日 {stats['event_days']}，完全不开仓日 {stats['zero_days']}（共 {len(gidx)} 个交易日）")
+    return M, stats
+
+
+def _macro_layer(market: str, dcfg, tickers: list[str], today, use_sector: bool = True,
+                 use_events: bool = True, event_kinds=None, bar_date=None):
+    """模拟盘 / 实盘：返回 (市场倍数, {票: 板块倍数}, 事件拦截函数 f(成交日)->原因, 日报面板 dict)。
+    bar_date：已知的最新完整 K 线日（用于面板展示的成交日估算）；run_once 内部会按真实 K 线重新算。"""
+    from qbreak.calendar_jp import next_trading_day as jp_next
+    from qbreak.calendar_us import next_trading_day as us_next
+    from qbreak.macro import (event_block, features_at, load_events, load_overlay, macro_mult,
+                              snapshot, ticker_mults)
+    from qbreak.trader import expected_last_bar
+    import pandas as pd
+    frame = _macro_frame(dcfg)
+    bar = bar_date or expected_last_bar(today, market)
+    f = features_at(frame, pd.Timestamp(bar))
+    ov = load_overlay(today=today)
+    mult, fired = macro_mult(f, ov, market)
+    tilts = ticker_mults(tickers, market, f) if use_sector else {t: (1.0, "", "") for t in tickers}
+    fill = (jp_next if market == "JP" else us_next)(bar)
+    events = load_events(kinds=event_kinds)
+    block_fn = (lambda fill_d: event_block(market, fill_d, events)) if use_events else None
+    block = block_fn(fill) if block_fn else None
+    log.info("[%s] 宏观层 ×%.2f %s；预计成交日 %s %s", market, mult, fired or "无触发", fill, block or "")
+    info = snapshot(market, f, ov, mult, fired, tilts, today, fill, events, block)
+    return mult, {t: v[0] for t, v in tilts.items()}, block_fn, info
+
+
 # ────────────────────────── 子命令 ──────────────────────────
 def cmd_backtest(a) -> int:
     from qbreak.engine import buy_and_hold, run_backtest
@@ -126,7 +184,8 @@ def cmd_backtest(a) -> int:
         print(f"相对强度过滤：{p.rs_n} 日涨幅 ≥ 指数 + {p.min_rs_pct}%"
               + ("" if idx_close is not None else "（指数取不到 → 本次未生效）"))
     ind = {t: compute_indicators(df, p, idx_close) for t, df in data.items()}
-    res = run_backtest(ind, p, bt)
+    M, _ = _entry_mult_for(a, market, ind)
+    res = run_backtest(ind, p, bt, entry_mult=M)
     tag = "【合成数据·结果无效】" if a.synthetic else ""
     print(format_report(res, f"{market} 回测{tag}", buy_and_hold(ind, bt)))
     res.trades.to_csv(paths.out_dir() / f"trades_{market}.csv", index=False, encoding="utf-8-sig")
@@ -143,13 +202,17 @@ def cmd_optimize(a) -> int:
     data = _load_data(a, market)
     base, bt = _params(a, market), _bt_cfg(a, market)
     idx_close = _index_close(market, _data_cfg(a), base)
+    M = None
+    if getattr(a, "macro", "off") != "off":
+        from qbreak.strategy import compute_indicators
+        M, _ = _entry_mult_for(a, market, {t: compute_indicators(df, base, idx_close) for t, df in data.items()})
     n = 1
     for v in DEFAULT_GRID.values():
         n *= len(v)
     print(f"参数组合 {n} 组；训练 {a.train_years} 年 / 测试 {a.test_months} 个月，滚动前进 …")
     wf, oos_eq, oos_tr = walk_forward(data, bt, base, DEFAULT_GRID,
                                       a.train_years, a.test_months, a.objective,
-                                      index_close=idx_close)
+                                      index_close=idx_close, entry_mult=M)
     print(report(wf, oos_eq, oos_tr, DEFAULT_GRID))
     if not wf.empty:
         wf.drop(columns="_gs").to_csv(paths.out_dir() / f"walk_forward_{market}.csv",
@@ -204,10 +267,14 @@ def _live_common(a, live: bool) -> int:
     ex.validate()
     dcfg = DataConfig(provider=a.provider, years=max(a.years, 2),
                       allow_synthetic=a.synthetic).validate()
+    scale, tmult, block = 1.0, None, None
+    if not getattr(a, "no_macro", False):
+        scale, tmult, block, _ = _macro_layer(market, dcfg, universe(market), dt.date.today())
     res = run_once(universe(market), broker, p, risk, sizing, dcfg,
                    market=market, dry_run=a.dry_run, allow_stale=a.allow_stale,
                    exec_cfg=ex, protective_stop=a.protective_stop,
-                   index_close=_index_close(market, dcfg, p))
+                   index_close=_index_close(market, dcfg, p), entry_scale=scale,
+                   ticker_mult=tmult, entry_block=block)
     print("\n" + res.summary())
     return 0
 
@@ -237,10 +304,14 @@ def cmd_signal(a) -> int:
     broker = _make_broker(a, market, sizing)
     dcfg = DataConfig(provider=a.provider, years=max(a.years, 2),
                       allow_synthetic=a.synthetic).validate()
+    scale, tmult, block = 1.0, None, None
+    if not getattr(a, "no_macro", False):
+        scale, tmult, block, _ = _macro_layer(market, dcfg, universe(market), dt.date.today())
     res = run_once(universe(market), broker, p, risk, sizing, dcfg,
                    market=market, dry_run=True, allow_stale=a.allow_stale,
                    exec_cfg=ExecConfig.for_market(market),
-                   index_close=_index_close(market, dcfg, p))
+                   index_close=_index_close(market, dcfg, p), entry_scale=scale,
+                   ticker_mult=tmult, entry_block=block)
     from qbreak.trader import PositionBook
     positions = PositionBook().merge(broker.positions())
     sheet = operation_sheet(res, p, positions, a.limit_buffer)
@@ -428,15 +499,22 @@ def cmd_sim_day(a) -> int:
                 fx_scale, fx_info = _fx_scale(cfg)
                 scale = min(scale, fx_scale)
             earnings = _earnings_provider() if p.earnings_blackout_days or p.exit_before_earnings else None
+            macro_info, tmult, block = {}, None, None
+            if cfg.get("use_macro", True):
+                mm, tmult, block, macro_info = _macro_layer(
+                    m, dcfg, uni, today, use_sector=cfg.get("use_sector_tilt", True),
+                    use_events=cfg.get("use_event_window", True), event_kinds=cfg.get("event_kinds"),
+                    bar_date=idx_close.index[-1].date() if idx_close is not None else None)
+                scale = min(scale, mm)
             res = run_once(uni, broker, p, risk, sizing, dcfg,
                            market=m, dry_run=False, allow_stale=a.allow_stale,
                            exec_cfg=exc, entry_scale=scale, index_close=idx_close,
-                           earnings=earnings)
+                           earnings=earnings, ticker_mult=tmult, entry_block=block)
             results[m] = res
             rd = reg.to_dict(); rd.update({"fx": fx_info, "final_mult": scale})
             rd["params_overlay"] = str(paths.params_file(m).name) if paths.params_file(m).exists() else ""
-            extras[m] = {"regime": rd, "watchlist": _scan_market(
-                uni, p, m, dcfg, sizing.initial_cash * mc["position_pct"], idx_close)}
+            extras[m] = {"regime": rd, "macro": macro_info, "watchlist": _scan_market(
+                uni, p, m, dcfg, sizing.initial_cash * mc["position_pct"], idx_close, macro_info)}
             soft = [n for n in res.notes if any(k in n for k in ("失败", "过期", "HALT", "不交易"))]
             if soft:
                 notes[m] = "; ".join(soft)[:300]
@@ -472,9 +550,12 @@ def _market_regime(market: str, dcfg):
     from qbreak.config import BENCHMARK
     from qbreak.data import load_universe
     from qbreak.regime import apply_overlay, quant_regime
+    from qbreak.trader import drop_partial_bar
     idx = None
     try:
         idx = load_universe([BENCHMARK[market]], dcfg).get(BENCHMARK[market])
+        if idx is not None:
+            idx = drop_partial_bar(idx, market)                # 盘中运行时丢掉未收盘的当日 K 线
     except Exception as e:                                    # noqa: BLE001
         log.warning("[%s] 指数数据不可用，量化层按 unknown 处理: %s", market, e)
     reg = apply_overlay(quant_regime(idx, market))
@@ -501,10 +582,12 @@ def _earnings_provider():
     return YFinanceEarnings()
 
 
-def _scan_market(uni, p, market, dcfg, budget, index_close=None) -> list[dict]:
-    """候补队列：整个股票池按条件就绪度排序。"""
+def _scan_market(uni, p, market, dcfg, budget, index_close=None, macro_info=None) -> list[dict]:
+    """候补队列：整个股票池按条件就绪度排序；附板块与宏观倾斜倍数。"""
     from qbreak.data import load_universe
+    from qbreak.macro import MacroFeatures, sector_mult
     from qbreak.scan import scan
+    from qbreak.sectors import sector_cn, sector_of
     from qbreak.strategy import compute_indicators
     from qbreak.trader import drop_partial_bar
     try:
@@ -512,7 +595,13 @@ def _scan_market(uni, p, market, dcfg, budget, index_close=None) -> list[dict]:
         ind = {t: compute_indicators(drop_partial_bar(df, market), p, index_close)
                for t, df in data.items()}
         df = scan(ind, p, market, budget)
-        return df.to_dict("records") if not df.empty else []
+        rows = df.to_dict("records") if not df.empty else []
+        f = MacroFeatures(**((macro_info or {}).get("features") or {})) if macro_info else MacroFeatures()
+        for r in rows:
+            s = sector_of(r["ticker"], market)
+            m_, why = sector_mult(s, f)
+            r.update({"sector": sector_cn(r["ticker"], market), "tilt": m_, "tilt_why": why})
+        return rows
     except Exception as e:                                    # noqa: BLE001
         log.warning("[%s] 候补队列生成失败: %s", market, e)
         return []
@@ -591,11 +680,16 @@ def cmd_daemon(a) -> int:
     ex.validate()
     cfg = DaemonConfig(poll_interval_s=a.interval, protective_stop=a.protective_stop,
                        eod_at=_parse_time(a.eod_at))
-    d = Daemon(universe(market), broker, _params(a, market), risk, sizing,
-               DataConfig(provider=a.provider, years=max(a.years, 2),
-                          allow_synthetic=a.synthetic).validate(),
+    dcfg = DataConfig(provider=a.provider, years=max(a.years, 2),
+                      allow_synthetic=a.synthetic).validate()
+    hook = None
+    if not getattr(a, "no_macro", False):
+        def hook(day):                                       # 日终流程前算一次宏观层
+            s, tm, b, _ = _macro_layer(market, dcfg, universe(market), day)
+            return s, tm, b
+    d = Daemon(universe(market), broker, _params(a, market), risk, sizing, dcfg,
                ex, cfg=cfg, dry_run=a.dry_run, market=market,
-               fallback_quotes=(a.broker == "paper"))
+               fallback_quotes=(a.broker == "paper"), entry_hook=hook)
     d.install_signal_handlers()
     d.run_forever(max_loops=1 if a.once else None)
     return 0
@@ -751,6 +845,8 @@ def main(argv=None) -> int:
 
     def _trade_args(sp):
         _common(sp)
+        sp.add_argument("--no-macro", action="store_true",
+                        help="不使用宏观层（油价/利率/VIX/汇率倍数、板块倾斜、FOMC/BOJ/CPI/NFP 事件窗口）")
         sp.add_argument("--broker", default="paper",
                         choices=["paper", "manual", "tachibana", "rss"])
         sp.add_argument("--demo", action="store_true", help="立花デモ環境")

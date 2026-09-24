@@ -116,6 +116,7 @@ def build_data(markets: list[str] | None = None) -> dict:
             "currency": cur, "symbol": SYMBOL[cur], "initial": initial,
             "days": days, "closed_trades": closed,
             "regime": (extras.get(m) or {}).get("regime") or {},
+            "macro": (extras.get(m) or {}).get("macro") or {},
             "watchlist": (extras.get(m) or {}).get("watchlist") or [],
             "summary": {
                 "days": len(days),
@@ -249,6 +250,7 @@ td.n,th.n{text-align:right}
 .empty{color:var(--ink-2);padding:24px 8px;text-align:center}
 .muted{color:var(--muted)}
 .card h3{font-size:14px;margin:12px 0 6px}
+.fired{margin:0;padding-left:18px}.fired li{margin:1px 0}
 .warn{margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(220,38,38,.10);color:#b91c1c;font-size:13px}
 @media (prefers-reduced-motion:reduce){.tip{transition:none}}
 </style>
@@ -275,6 +277,7 @@ td.n,th.n{text-align:right}
     <div class="chart" id="chart"></div>
   </section>
   <section class="card" id="regime"></section>
+  <section class="card" id="macro"></section>
   <section class="card">
     <h2>候补队列（按入场条件就绪度排序，不是收益预测）</h2>
     <div class="legend"><span class="muted">triggered=今日已触发 · imminent=横盘+0轴+MACD 即将金叉 · watch=横盘+0轴 · 可负担=1 単元 ≤ 单笔预算 · 偏好=符合你的美股筛选规则 · 顶部风险=离20日线过远/RSI>70/20日内出货日≥6/长上影（上影>3倍实体）/落后指数（仅提示，不过滤）</span></div>
@@ -313,7 +316,25 @@ function init(){
       ((lr.blocked_hosts||[]).length ? `　｜ 被拦截的域名：${lr.blocked_hosts.join(", ")}` : ""); }
   render();
 }
-function render(){ renderTabs(); renderTiles(); renderRegime(); renderWatch(); renderChart(); renderDetail(); renderLog(); }
+function render(){ renderTabs(); renderTiles(); renderRegime(); renderMacro(); renderWatch(); renderChart(); renderDetail(); renderLog(); }
+function renderMacro(){
+  const X = cur().macro || {}, box = $("#macro"), f = X.features || {}, ov = X.overlay || null;
+  if (!X.features){ box.innerHTML = `<h2>宏观层</h2><div class="muted">未启用或尚未计算</div>`; return; }
+  const v = (x, d) => (x == null ? "—" : Number(x).toFixed(d));
+  const tag = X.mult <= 0 ? "不开新仓" : X.mult < 1 ? `新仓 ×${X.mult}` : "无触发";
+  const fired = (X.fired || []).length ? `<ul class="fired">${X.fired.map(s => `<li>${s}</li>`).join("")}</ul>` : `<span class="muted">所有阈值未触发</span>`;
+  const tilts = Object.entries(X.sector_tilts || {});
+  const tiltHtml = tilts.length ? tilts.map(([s, t]) => `${s} ×${t.mult}（${t.n} 只，${t.why}）`).join("；") : "无";
+  const ev = (X.next_events || []).map(e => `${e.date} ${e.kind}${e.name ? "（" + e.name + "）" : ""}`).join("　") || "—";
+  const blk = X.event_block ? `<span class="neg">${X.event_block}</span>` : `成交日 ${X.fill_date} 不在事件窗口`;
+  const ovHtml = ov ? `加息隐含 ${v(ov.fed_hike_prob,0)}%（${ov.fed_next||"下次 FOMC"}）· HY 利差 ${v(ov.hy_oas_bp,0)}bp · S&P>50 日线 ${v(ov.breadth_pct,0)}% · JGB10Y ${v(ov.jgb10y,2)}% · BOJ 加息隐含 ${v(ov.boj_hike_prob,0)}%（${ov.boj_next||"下次 BOJ"}）· 美 2Y ${v(ov.us2y,2)}% · WTI ${v(ov.wti,1)}<div class="muted">来源 ${ov.source||"市场风险报告"}，${ov.as_of}${ov.stale ? "（已过期 >2 天，未参与倍数）" : ""}</div>` : `<span class="muted">var/macro.json 未写入（worker 每早从市场风险报告提取）</span>`;
+  box.innerHTML = `<h2>宏观层 · ${tag}</h2><dl class="kv">
+    <dt>量化因子</dt><dd>Brent ${v(f.brent,1)}（20 日 ${f.brent_chg20_pct==null?"—":(f.brent_chg20_pct>0?"+":"")+v(f.brent_chg20_pct,1)+"%"}）· 美 10Y ${v(f.us10y,2)}% · VIX ${v(f.vix,1)} · USD/JPY ${v(f.usdjpy,2)}<div class="muted">yfinance 收盘 ${f.date||"—"}，油价状态 ${X.oil_state||"—"}</div></dd>
+    <dt>判断层</dt><dd>${ovHtml}</dd>
+    <dt>触发规则</dt><dd>${fired}</dd>
+    <dt>板块倾斜</dt><dd>${tiltHtml}</dd>
+    <dt>事件窗口</dt><dd>${blk}<div class="muted">接下来：${ev}</div></dd></dl>`;
+}
 const STATUS_CN = {triggered:"已触发", imminent:"即将", watch:"观察", far:"远"};
 function renderRegime(){
   const R = cur().regime || {}, box = $("#regime");
@@ -338,10 +359,10 @@ function renderFxScenarios(){
 function renderWatch(){
   const W = cur().watchlist || [], c = cur().currency, box = $("#watch");
   if (!W.length){ box.innerHTML = `<div class="empty">尚无候补数据（首个运行日后出现）</div>`; return; }
-  box.innerHTML = `<table><thead><tr><th>#</th><th>代码</th><th>状态</th><th class="n">就绪度</th><th class="n">收盘</th><th class="n">箱体%</th><th class="n">MACD差%</th><th class="n">量比</th><th class="n">距箱顶%</th><th>可负担</th><th>偏好</th><th>顶部风险</th></tr></thead><tbody>` +
-    W.map((w, i) => `<tr><td>${i+1}</td><td>${w.ticker}</td><td><span class="pill ${w.status==="triggered"?"buy":""}">${STATUS_CN[w.status]||w.status}</span></td>
+  box.innerHTML = `<table><thead><tr><th>#</th><th>代码</th><th>板块</th><th>状态</th><th class="n">就绪度</th><th class="n">收盘</th><th class="n">箱体%</th><th class="n">MACD差%</th><th class="n">量比</th><th class="n">距箱顶%</th><th>可负担</th><th>偏好</th><th>顶部风险</th><th>宏观倾斜</th></tr></thead><tbody>` +
+    W.map((w, i) => `<tr><td>${i+1}</td><td>${w.ticker}</td><td class="muted">${w.sector||"—"}</td><td><span class="pill ${w.status==="triggered"?"buy":""}">${STATUS_CN[w.status]||w.status}</span></td>
       <td class="n">${w.score}</td><td class="n">${fmt(w.close, c, c==="USD"?2:0)}</td><td class="n">${w.range_pct ?? "—"}</td><td class="n">${w.macd_gap_pct}${w.hist_up?"↑":"↓"}</td>
-      <td class="n">${w.vol_ratio}</td><td class="n">${w.to_box_top_pct ?? "—"}</td><td>${w.affordable ? "是" : "否（" + fmt(w.lot_cost, c, 0) + "）"}</td><td class="${w.pref_ok?"":"muted"}">${w.pref_ok ? "符合" : (w.pref_note||"不符合")}</td><td class="${w.top_risk?"neg":"muted"}">${w.top_risk || "—"}</td></tr>`).join("") + `</tbody></table>`;
+      <td class="n">${w.vol_ratio}</td><td class="n">${w.to_box_top_pct ?? "—"}</td><td>${w.affordable ? "是" : "否（" + fmt(w.lot_cost, c, 0) + "）"}</td><td class="${w.pref_ok?"":"muted"}">${w.pref_ok ? "符合" : (w.pref_note||"不符合")}</td><td class="${w.top_risk?"neg":"muted"}">${w.top_risk || "—"}</td><td class="${w.tilt!=null&&w.tilt<1?"neg":"muted"}" title="${w.tilt_why||""}">${w.tilt==null?"—":(w.tilt<1?"×"+w.tilt:(w.tilt_why?"受益":"—"))}</td></tr>`).join("") + `</tbody></table>`;
 }
 
 function renderTabs(){

@@ -90,10 +90,12 @@ def _window(gidx: pd.DatetimeIndex, start, end) -> tuple[int, int]:
 
 
 def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestConfig,
-                 start=None, end=None) -> BacktestResult:
+                 start=None, end=None, entry_mult=None) -> BacktestResult:
     """ind: {ticker: compute_indicators(...) 的结果}。start/end 只限制**交易窗口**，
     指标仍在完整历史上计算 —— 这样 walk-forward 的样本外窗口不会被指标预热期吃掉，
-    同时因为指标在 t 时刻只用 ≤t 的数据，也不会引入前视偏差。"""
+    同时因为指标在 t 时刻只用 ≤t 的数据，也不会引入前视偏差。
+    entry_mult：可选 [len(全局日期) × n 票] 矩阵（0~1），成交日 i 的新仓预算 × entry_mult[i, j]；
+    0 = 该日不开该票新仓（宏观层 / 板块倾斜 / 事件窗口，见 macro.build_entry_mult）。"""
     p.validate()
     ex, sz = bt.exec_cfg.validate(), bt.sizing.validate()
     if not ind:
@@ -114,8 +116,12 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
     pending_exit: dict[int, str] = {}
     trades: list[dict] = []
     eq_hist, exp_hist = np.empty(i1 - i0), np.empty(i1 - i0)
-    skipped = dict(gap=0, cash=0, lot=0, full=0, no_bar=0, daily_cap=0, rebuy=0)
+    skipped = dict(gap=0, cash=0, lot=0, full=0, no_bar=0, daily_cap=0, rebuy=0, macro=0)
     sold_today: set[int] = set()
+    if entry_mult is not None:
+        entry_mult = np.asarray(entry_mult, dtype=float)
+        if entry_mult.shape != (len(gidx), len(A.tickers)):
+            raise ValueError(f"entry_mult 形状 {entry_mult.shape} ≠ {(len(gidx), len(A.tickers))}")
 
     def equity_at(i: int) -> float:
         v = cash
@@ -171,6 +177,10 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
             if ex.max_entry_gap_pct and o > sig_close * (1 + ex.max_entry_gap_pct / 100):
                 skipped["gap"] += 1
                 continue
+            em = float(entry_mult[i, j]) if entry_mult is not None else 1.0
+            if em <= 0:
+                skipped["macro"] += 1
+                continue
             px = o * (1 + slip)
             stop_px = (px - A.atr[i - 1, j] * p.atr_stop_mult
                        if p.atr_stop_mult > 0 and i > 0 and np.isfinite(A.atr[i - 1, j])
@@ -183,7 +193,7 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
             else:
                 budget = equity_prev * sz.position_pct
             budget = min(budget, equity_prev * sz.max_position_pct,
-                         cash * (1 - sz.cash_buffer_pct / 100))
+                         cash * (1 - sz.cash_buffer_pct / 100)) * min(1.0, em)
             lot = int(lots[j])
             shares = int(math.floor(budget / px / lot) * lot)
             while shares > 0 and shares * px + fee_f(shares * px) > cash:

@@ -93,10 +93,12 @@ class Daemon:
                  risk_cfg: RiskConfig, sizing: SizingConfig, data_cfg: DataConfig,
                  exec_cfg: ExecConfig, cfg: DaemonConfig | None = None,
                  dry_run: bool = False, market: str = "JP",
-                 fallback_quotes: bool = False):
+                 fallback_quotes: bool = False,
+                 entry_hook=None):
         self.universe = universe
         self.broker = broker
         self.p = params.validate()
+        self.entry_hook = entry_hook           # (date) -> (市场倍数, {票: 倍数}, 事件拦截原因)
         self.risk_cfg = risk_cfg.validate()
         self.sizing = sizing.validate()
         self.data_cfg = data_cfg.validate()
@@ -327,11 +329,18 @@ class Daemon:
 
     def _end_of_day(self, now: dt.datetime) -> None:
         log.info("── 收盘后日线流程 ──")
+        scale, tmult, block = 1.0, None, None
+        if self.entry_hook is not None:
+            try:
+                scale, tmult, block = self.entry_hook(now.date())
+            except Exception as e:                            # noqa: BLE001
+                log.warning("宏观层计算失败，按 ×1 处理: %s", e)
         res = run_once(self.universe, self.broker, self.p, self.risk_cfg, self.sizing,
                        self.data_cfg, market=self.market, dry_run=self.dry_run,
                        today=now.date(), exec_cfg=self.ex,
                        protective_stop=self.cfg.protective_stop,
-                       index_close=self._index_close())
+                       index_close=self._index_close(), entry_scale=scale,
+                       ticker_mult=tmult, entry_block=block)
         log.info("\n%s", res.summary())
         self.st.eod_done = True
         self.st.save()

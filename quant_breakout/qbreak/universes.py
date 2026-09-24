@@ -78,9 +78,18 @@ US_EXCLUDED = {
 }
 
 
-def nikkei225() -> list[str]:
+JP_EXCLUDED = {
+    "航空": ["9201", "9202"],
+    "陆运/物流": ["9001", "9005", "9007", "9008", "9009", "9020", "9021", "9022", "9064", "9147", "9301"],
+    # 海運（9101 / 9104 / 9107）保留：它是油价与运价的受益组，用户在板块倾斜里单列
+}
+_JP_EXCLUDED_SET = {c for v in JP_EXCLUDED.values() for c in v}
+
+
+def nikkei225(exclude: bool = True) -> list[str]:
     ov = _override("JP")
     codes = ov or NIKKEI225
+    codes = [c for c in codes if not (exclude and c.split(".")[0] in _JP_EXCLUDED_SET)]
     return [c if c.endswith(".T") else f"{c}.T" for c in codes]
 
 
