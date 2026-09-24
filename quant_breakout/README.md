@@ -9,8 +9,8 @@
 
 | 券商 | macOS 原生 | 接口 | 说明 |
 |---|---|---|---|
-| **立花証券 e支店** | ✅ | HTTP(GET+JSON) + 实时推送 | **Mac / Linux 推荐**。API 免费。→ [`MACOS.md`](MACOS.md) |
-| 楽天証券 | ❌ | MARKETSPEED II RSS（Excel 插件） | 仅 Windows + 桌面版 Excel。→ [`excel/README_excel.md`](excel/README_excel.md) |
+| **立花証券 e支店** | ✅ | HTTP(GET+JSON) + 实时推送 | **Mac / Linux 推荐**。API 免费。→ [`MACOS.md`](MACOS.md)。⚠️ 适配器需先升级到 v4r10（见已知局限 13） |
+| 楽天証券 | ❌ | MARKETSPEED II RSS（Excel 插件） | 仅 Windows 11 + Windows 版 Excel，只能下日本股 / 国内先物・期权。Mac 上的 MARKETSPEED for Mac 只能手动下单。→ [`excel/README_excel.md`](excel/README_excel.md) |
 | 模拟盘 | ✅ | 本地撮合 | 不需要任何账户，先用它跑通全流程 |
 | **半自动（任何券商）** | ✅ | 无 —— 程序只出清单，你在 App 里照抄 | **留在楽天也能用**。`run.py signal` |
 
@@ -590,6 +590,8 @@ crontab -e
 10. **核心指数仓位 + 实盘**：模拟盘假设「卖指数」与「买个股」都在同一个寄付成交；真实现物账户的买付余力要等卖单成交后才增加，
     买单只能在 9:00 之后下，成交价会偏离开盘价（立花 / RSS 自动下单尚未实现这段先后顺序，目前请用半自动清单手工处理）。
 11. 未建模：美股卖出时的 SEC fee（成交额 ×0.0000206，每笔约 0.002%）、NYSE 半日市（每日收盘后运行的流程不受影响）。
+12. **半自动 `signal` 还没跟模拟盘同步**：`signal` 用命令行默认值（日本 5×20%、default 股票池；美股照样出个股信号，核心 ETF 默认 VOO），不读 `var/sim.json` 的进取档（日本 4×25%、broad 股票池；美股只持 SPYM）。真钱照抄清单前要先对齐。
+13. **立花适配器的 API 版本过时**：`TachibanaSpec` 写的是 `e_api_v4r6` + 密码登录。官方 v4r8 已于 2026-06-27 废止，v4r9 定于 2026-09-27 废止，现行 v4r10（2026-08-29 发布）的登录改为公開鍵暗号方式；另外 2025-07 起每次 API 登录都要电话号码认证（当天复用登录得到的虚拟 URL，可用到夜间闭局）。开户拿到仕様書后升级，并先通过 `tachibana-probe --demo`。来源 https://www.e-shiten.jp/api/20260728.html 、/api/20260513.html 、/api/20250708.html（2026-09-24 查）。
 
 ---
 
