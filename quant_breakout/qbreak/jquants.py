@@ -189,3 +189,63 @@ def summarize(r: dict) -> str:
 
 def cache_dir():
     return paths.sub("cache/jquants")
+
+
+# ────────────────────────── 缓存取数（研究脚本用；缓存不入库）──────────────────────────
+def pick(df: pd.DataFrame, *cands: str) -> str | None:
+    """V1 / V2 列名不同（V2 缩短了列名），按候选顺序取第一个存在的列。"""
+    for c in cands:
+        if c in df.columns:
+            return c
+    return None
+
+
+def to_yf(code5: str) -> str | None:
+    """J-Quants 5 位代码 → yfinance 代码：'72030' → '7203.T'，'285A0' → '285A.T'；优先股等（第 5 位≠0）→ None。"""
+    s = str(code5)
+    if len(s) == 5 and s.endswith("0"):
+        return s[:4] + ".T"
+    if len(s) == 4:
+        return s + ".T"
+    return None
+
+
+def master_cached(client: JQuants, date: str) -> pd.DataFrame:
+    fp = cache_dir() / "master" / f"{date}.csv"
+    fp.parent.mkdir(parents=True, exist_ok=True)
+    if fp.exists():
+        return pd.read_csv(fp, dtype=str)
+    df = client.master(date=date)
+    df.to_csv(fp, index=False)
+    return df.astype(str)
+
+
+def daily_cached(client: JQuants, code: str, frm: str, to: str) -> pd.DataFrame:
+    """单只股票 [frm, to] 的日线（缓存覆盖该区间就不再请求）。返回原始列。"""
+    fp = cache_dir() / "daily" / f"{code}.csv"
+    fp.parent.mkdir(parents=True, exist_ok=True)
+    meta = fp.with_suffix(".range")
+    if fp.exists() and meta.exists():
+        a, b = meta.read_text().split(",")
+        if a <= frm and b >= to:
+            return pd.read_csv(fp)
+    df = client.daily(code=code, frm=frm, to=to)
+    df.to_csv(fp, index=False)
+    meta.write_text(f"{frm},{to}")
+    return df
+
+
+def to_ohlcv(raw: pd.DataFrame) -> pd.DataFrame:
+    """J-Quants 日线 → 引擎用的 OHLCV（用拆股 / 合并调整后的价格；不含分红调整）。"""
+    if raw is None or raw.empty:
+        return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
+    cols = {"Open": ("AdjO", "AdjustmentOpen", "O", "Open"), "High": ("AdjH", "AdjustmentHigh", "H", "High"),
+            "Low": ("AdjL", "AdjustmentLow", "L", "Low"), "Close": ("AdjC", "AdjustmentClose", "C", "Close"),
+            "Volume": ("AdjVo", "AdjustmentVolume", "Vo", "Volume")}
+    out = pd.DataFrame(index=pd.to_datetime(raw[pick(raw, "Date", "date")]))
+    for k, cands in cols.items():
+        c = pick(raw, *cands)
+        out[k] = pd.to_numeric(raw[c], errors="coerce").to_numpy() if c else float("nan")
+    out = out[~out.index.duplicated(keep="last")].sort_index()
+    out = out.dropna(subset=["Open", "High", "Low", "Close"])
+    return out[(out[["Open", "High", "Low", "Close"]] > 0).all(axis=1)]
