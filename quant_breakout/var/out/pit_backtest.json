@@ -1,0 +1,45 @@
+{
+ "plan": "free",
+ "universe": "topix100",
+ "window": [
+  "2024-07-09",
+  "2026-06-29"
+ ],
+ "trade_start": "2024-10-17",
+ "members_final": 95,
+ "members_union": 104,
+ "dropped": 9,
+ "delisted_with_data": 1,
+ "missing": 0,
+ "requests": 137,
+ "results": {
+  "4x25_A": {
+   "cagr_pct": 2.76,
+   "max_dd_pct": -2.83,
+   "calmar": 0.97,
+   "trades": 14,
+   "win_rate": 42.9
+  },
+  "4x25_B": {
+   "cagr_pct": 2.76,
+   "max_dd_pct": -2.83,
+   "calmar": 0.97,
+   "trades": 14,
+   "win_rate": 42.9
+  },
+  "10x10_A": {
+   "cagr_pct": 3.15,
+   "max_dd_pct": -2.52,
+   "calmar": 1.25,
+   "trades": 32,
+   "win_rate": 53.1
+  },
+  "10x10_B": {
+   "cagr_pct": 3.15,
+   "max_dd_pct": -2.52,
+   "calmar": 1.25,
+   "trades": 32,
+   "win_rate": 53.1
+  }
+ }
+}
