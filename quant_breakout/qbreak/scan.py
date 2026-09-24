@@ -74,6 +74,23 @@ def scan(ind: dict[str, pd.DataFrame], p: StrategyParams, market: str,
         lot = lot_size(t, market)
         affordable = close * lot <= budget
         pref_ok, pref_why = _pref_flags(df, market)
+        # 顶部/出货风险标记（进场过滤是否打开都显示，方便人工判断）
+        top_flags = []
+        ext = float(r.get("ext_ma20_pct", np.nan))
+        rsi_v = float(r.get("rsi", np.nan))
+        dd_n = float(r.get("dist_days", np.nan))
+        ush = float(r.get("upper_shadow_ratio", np.nan))
+        rs = float(r.get("rs_pct", np.nan))
+        if np.isfinite(ext) and ext > 8:
+            top_flags.append(f"离20日线+{ext:.0f}%")
+        if np.isfinite(rsi_v) and rsi_v > 70:
+            top_flags.append(f"RSI{rsi_v:.0f}")
+        if np.isfinite(dd_n) and dd_n >= 4:
+            top_flags.append(f"出货日{int(dd_n)}")
+        if np.isfinite(ush) and ush > 2:
+            top_flags.append("长上影")
+        if np.isfinite(rs) and rs < 0:
+            top_flags.append(f"跑输指数{rs:.0f}%")
 
         # 各条件接近度（0~1）
         s_range = 1.0 if is_range else float(np.clip(1 - (range_pct - p.range_x_pct) / p.range_x_pct, 0, 1)) if np.isfinite(range_pct) else 0.0
@@ -101,7 +118,9 @@ def scan(ind: dict[str, pd.DataFrame], p: StrategyParams, market: str,
                          vol_ratio=round(vol_ratio, 2),
                          to_box_top_pct=round(to_top, 1) if np.isfinite(to_top) else None,
                          lot_cost=round(close * lot, 0), affordable=affordable,
-                         pref_ok=pref_ok, pref_note=pref_why))
+                         pref_ok=pref_ok, pref_note=pref_why,
+                         top_risk="；".join(top_flags), rsi=round(rsi_v, 0) if np.isfinite(rsi_v) else None,
+                         rs_pct=round(rs, 1) if np.isfinite(rs) else None))
     if not rows:
         return pd.DataFrame()
     order = {"triggered": 0, "imminent": 1, "watch": 2, "far": 3}

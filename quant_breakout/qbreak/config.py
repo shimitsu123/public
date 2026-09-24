@@ -64,6 +64,27 @@ class StrategyParams:
     min_turnover: float = 0.0          # 最低 20 日平均売買代金（Close×Volume）。0=关闭
     #   日本株建议 1e8（1 亿日元/日）以上，否则 100 股的滑点假设不成立
 
+    # ── 顶部 / 出货过滤（天井・分配 / topping & distribution）——默认关闭，回测验证后再开 ──
+    max_ext_ma20_pct: float = 0.0
+    # 收盘价高于 20 日均线超过该 % 视为过度伸展（追高），不进场。0=关闭。常用 8~12。
+    rsi_n: int = 14
+    max_rsi: float = 0.0
+    # RSI 超过该值不进场（超买区的"金叉"多为末端）。0=关闭。常用 70~75。
+    distribution_lookback: int = 20
+    max_distribution_days: int = 0
+    # 出货日（distribution day）：收跌 >0.2% 且成交量 > 前一日。回看 N 日内出货日 ≥ 该数则不进场。
+    # 0=关闭。O'Neil 口径常用 4~5（20 日内）。
+    max_upper_shadow_ratio: float = 0.0
+    # 信号 K 线上影线 / 实体 > 该倍数视为冲高回落（放量长上影＝出货形态），不进场。0=关闭。常用 2。
+    rs_n: int = 60
+    min_rs_pct: float = 0.0
+    # 相对强度：个股 N 日涨幅 − 指数 N 日涨幅 ≥ 该 %。0=关闭（但 0 也意味着不能跑输指数，
+    # 若想完全关闭请设为 -999）。需要指数数据；没有指数时自动跳过此过滤。
+    earnings_blackout_days: int = 0
+    # 决算（決算発表）前 N 个交易日内不进场；0=关闭。决算跳空是突破策略最大的单日风险来源。
+    exit_before_earnings: bool = False
+    # 持仓遇到决算前 1 个交易日 → 次日开盘离场（放弃赌决算）。
+
     # ── 出场（決済 / exit）──
     stop_loss_pct: float = 7.0
     atr_n: int = 14
@@ -76,6 +97,11 @@ class StrategyParams:
     trailing_arm_pct: float = 0.0      # 浮盈超过该 % 后才启动跟踪止损。0=立即启动
     max_hold_days: int = 60            # 交易日；0=不限
     exit_on_macd_dead_cross: bool = True
+    exit_on_climax: bool = False
+    # 高位放量陰線（出货日）离场：成交量 > 均量×climax_vol_mult 且 收盘<开盘 且 浮盈 > climax_min_gain_pct
+    # → 次日开盘卖出。抓的是"顶部出货"这一天。默认关闭。
+    climax_vol_mult: float = 2.5
+    climax_min_gain_pct: float = 5.0
     time_stop_days: int = 0
     time_stop_min_ret_pct: float = 0.0
     # 时间止损：持有满 time_stop_days 个交易日仍未达到 time_stop_min_ret_pct 浮盈则离场。
@@ -112,7 +138,9 @@ class StrategyParams:
     def warmup_bars(self) -> int:
         """指标预热所需最少 K 线数——数据不足这个数就不该产生任何信号。"""
         return int(max(self.range_n, self.vol_ma_n, self.trend_ma_n,
-                       self.macd_slow + self.macd_signal, self.atr_n) + 2)
+                       self.macd_slow + self.macd_signal, self.atr_n,
+                       self.rsi_n + 1, self.distribution_lookback + 1,
+                       self.rs_n + 1 if self.min_rs_pct > -900 else 0) + 2)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -147,6 +175,12 @@ class ExecConfig:
     max_entry_gap_pct: float = 3.0
     # T+1 开盘价比信号日收盘高出超过该 % 就放弃这笔（ストップ高／大幅ギャップアップ 追不进去）。
     # 原版无此限制，会把"隔夜跳空 15% 开盘"也当成能成交，严重高估收益。
+    fx_spread_pct: float = 0.0
+    # 日元 ⇄ 美元 换汇成本（单边 %）。楽天 25 銭/USD 在 157 円时 ≈ 0.16%，来回 ≈ 0.32%。
+    # 只对美股账户有意义：初始换汇时扣一次，日报折日元时按"卖回日元"再扣一次。
+    tax_pct: float = 20.315
+    # 譲渡益課税（特定口座・源泉徴収あり）。只用于日报显示"税后"，不影响交易决策。
+
     stop_fill_mode: str = "next_open"
     # 止损/跟踪止损/止盈的成交假设，**这是回测与实盘差距最大的一项**：
     #   "next_open" : 收盘价触发 → 次日开盘成交。一个每天只跑一次的程序只能做到这个。
@@ -181,9 +215,9 @@ class ExecConfig:
         m = market.upper()
         if m == "JP":
             return cls(market="JP", commission_pct=0.0, slippage_pct=0.10).validate()
-        # 美股：0.495%（税込）、最低 0 美元、上限 22 美元（2026-09 时点，实际以账户コース为准）
+        # 美股：0.495%（税込）、最低 0 美元、上限 22 美元；换汇 25 銭/USD ≈ 0.16%（2026-09 时点）
         return cls(market="US", commission_pct=0.495, commission_min=0.0,
-                   commission_max=22.0, slippage_pct=0.05).validate()
+                   commission_max=22.0, slippage_pct=0.05, fx_spread_pct=0.16).validate()
 
 
 # ══════════════════════════ 资金管理 ══════════════════════════

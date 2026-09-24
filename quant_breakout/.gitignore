@@ -8,3 +8,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.xlsm
+var/out/trades_*.csv
+var/out/equity_*.csv
+var/out/walk_forward_*.csv

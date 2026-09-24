@@ -127,14 +127,20 @@ def build_data(markets: list[str] | None = None) -> dict:
                 "realized_pnl": round(sum(float(c.get("pnl", 0)) for c in closed), 2),
             },
         }
+        tax = float(sim.get("tax_pct", 20.315))
+        rp_ = out["markets"][m]["summary"]["realized_pnl"]
+        out["markets"][m]["summary"]["realized_after_tax"] = round(rp_ * (1 - tax / 100), 2) if rp_ > 0 else rp_
+        out["markets"][m]["summary"]["tax_pct"] = tax
         if m == "US":
             fx_now = days[-1]["fx"] if days else (fx_table[-1][1] if fx_table else fx_start)
             eq_usd = eqs[-1] if eqs else initial
             cap = float(sim.get("capital_jpy") or 0)
+            spread = float((sim.get("us") or {}).get("fx_spread_pct") or 0)
+            sell_rate = fx_now * (1 - spread / 100) if fx_now else None      # 卖回日元要更便宜
             out["markets"][m]["fx"] = {
-                "start": fx_start, "now": fx_now,
-                "equity_jpy": round(eq_usd * fx_now, 0) if fx_now else None,
-                "ret_pct_jpy": round((eq_usd * fx_now / cap - 1) * 100, 2) if fx_now and cap else None,
+                "start": fx_start, "now": fx_now, "spread_pct": spread,
+                "equity_jpy": round(eq_usd * sell_rate, 0) if sell_rate else None,
+                "ret_pct_jpy": round((eq_usd * sell_rate / cap - 1) * 100, 2) if sell_rate and cap else None,
                 "fx_effect_jpy": round(eq_usd * (fx_now - fx_start), 0) if fx_now and fx_start else None,
             }
     return out
@@ -248,7 +254,7 @@ td.n,th.n{text-align:right}
   <section class="card" id="regime"></section>
   <section class="card">
     <h2>候补队列（按入场条件就绪度排序，不是收益预测）</h2>
-    <div class="legend"><span class="muted">triggered=今日已触发 · imminent=横盘+0轴+MACD 即将金叉 · watch=横盘+0轴 · 可负担=1 単元 ≤ 单笔预算 · 偏好=符合你的美股筛选规则</span></div>
+    <div class="legend"><span class="muted">triggered=今日已触发 · imminent=横盘+0轴+MACD 即将金叉 · watch=横盘+0轴 · 可负担=1 単元 ≤ 单笔预算 · 偏好=符合你的美股筛选规则 · 顶部风险=离20日线过远/RSI>70/20日内出货日≥4/长上影/跑输指数</span></div>
     <div class="scroll" id="watch"></div>
   </section>
   <section class="card detail" id="detail"></section>
@@ -290,18 +296,21 @@ function renderRegime(){
   const R = cur().regime || {}, box = $("#regime");
   if (!R.quant_label){ box.innerHTML = `<h2>市场状态</h2><div class="muted">尚未计算</div>`; return; }
   const mult = R.mult == null ? 1 : R.mult;
-  const tag = mult <= 0 ? "不开新仓" : mult < 1 ? `新仓 ×${mult}` : "正常开仓";
+  const eff = R.final_mult != null ? R.final_mult : mult;
+  const tag = eff <= 0 ? "不开新仓" : eff < 1 ? `新仓 ×${eff}` : "正常开仓";
   box.innerHTML = `<h2>市场状态 · ${tag}</h2><dl class="kv">
     <dt>量化层</dt><dd>${R.quant_label}（${R.above_ma200 ? "指数在 200 日线上方" : "指数在 200 日线下方"}，20 日波动 ${R.vol20_pct ?? "—"}%，距 252 日高点 ${R.dd252_pct ?? "—"}%）</dd>
-    <dt>判断层</dt><dd>${R.overlay_action ? `市场风险报告「${R.overlay_action}」（${R.overlay_as_of}）` + (R.crash_prob != null ? `，24h 崩盘概率 ${R.crash_prob}%` : "") : "未接入或已过期（>2 天）"}</dd></dl>`;
+    <dt>判断层</dt><dd>${R.overlay_action ? `市场风险报告「${R.overlay_action}」（${R.overlay_as_of}）` + (R.crash_prob != null ? `，24h 崩盘概率 ${R.crash_prob}%` : "") : "未接入或已过期（>2 天）"}</dd>
+    ${R.fx && R.fx.usdjpy ? `<dt>汇率层</dt><dd>USD/JPY ${R.fx.usdjpy}（${R.fx.date}），警戒 ${R.fx.watch_level}±${R.fx.band_pct}% → 美股新仓 ×${R.fx.scale}</dd>` : ""}
+    ${R.final_mult != null ? `<dt>最终倍数</dt><dd>×${R.final_mult}</dd>` : ""}</dl>`;
 }
 function renderWatch(){
   const W = cur().watchlist || [], c = cur().currency, box = $("#watch");
   if (!W.length){ box.innerHTML = `<div class="empty">尚无候补数据（首个运行日后出现）</div>`; return; }
-  box.innerHTML = `<table><thead><tr><th>#</th><th>代码</th><th>状态</th><th class="n">就绪度</th><th class="n">收盘</th><th class="n">箱体%</th><th class="n">MACD差%</th><th class="n">量比</th><th class="n">距箱顶%</th><th>可负担</th><th>偏好</th></tr></thead><tbody>` +
+  box.innerHTML = `<table><thead><tr><th>#</th><th>代码</th><th>状态</th><th class="n">就绪度</th><th class="n">收盘</th><th class="n">箱体%</th><th class="n">MACD差%</th><th class="n">量比</th><th class="n">距箱顶%</th><th>可负担</th><th>偏好</th><th>顶部风险</th></tr></thead><tbody>` +
     W.map((w, i) => `<tr><td>${i+1}</td><td>${w.ticker}</td><td><span class="pill ${w.status==="triggered"?"buy":""}">${STATUS_CN[w.status]||w.status}</span></td>
       <td class="n">${w.score}</td><td class="n">${fmt(w.close, c, c==="USD"?2:0)}</td><td class="n">${w.range_pct ?? "—"}</td><td class="n">${w.macd_gap_pct}${w.hist_up?"↑":"↓"}</td>
-      <td class="n">${w.vol_ratio}</td><td class="n">${w.to_box_top_pct ?? "—"}</td><td>${w.affordable ? "是" : "否（" + fmt(w.lot_cost, c, 0) + "）"}</td><td class="${w.pref_ok?"":"muted"}">${w.pref_ok ? "符合" : (w.pref_note||"不符合")}</td></tr>`).join("") + `</tbody></table>`;
+      <td class="n">${w.vol_ratio}</td><td class="n">${w.to_box_top_pct ?? "—"}</td><td>${w.affordable ? "是" : "否（" + fmt(w.lot_cost, c, 0) + "）"}</td><td class="${w.pref_ok?"":"muted"}">${w.pref_ok ? "符合" : (w.pref_note||"不符合")}</td><td class="${w.top_risk?"neg":"muted"}">${w.top_risk || "—"}</td></tr>`).join("") + `</tbody></table>`;
 }
 
 function renderTabs(){
@@ -323,7 +332,7 @@ function renderTiles(){
     tile("当前权益", fmt(S.equity, c), `起始 ${fmt(M.initial, c)}` + (fx.equity_jpy ? `　≈ ¥${Number(fx.equity_jpy).toLocaleString("ja-JP")}（USD/JPY ${fx.now}）` : "")) +
     tile("累计损益", signed(pnl, c), `${S.ret_pct>0?"+":""}${S.ret_pct}%`, cls(pnl)) +
     tile("最大回撤", `${S.max_dd_pct}%`, "从权益最高点") +
-    tile("已平仓", `${S.trades} 笔`, `胜率 ${S.win_rate}%`) +
+    tile("已平仓", `${S.trades} 笔`, `胜率 ${S.win_rate}% · 已实现 ${signed(S.realized_pnl||0, c)}（税后 ${signed(S.realized_after_tax||0, c)}）`) +
     tile("交易日", `${S.days} / 65`, "3 个月 ≈ 65 个交易日") +
     (fx.ret_pct_jpy != null ? tile("折合日元收益", `${fx.ret_pct_jpy>0?"+":""}${fx.ret_pct_jpy}%`,
         `其中汇率贡献 ${fx.fx_effect_jpy>0?"+":""}¥${Number(fx.fx_effect_jpy||0).toLocaleString("ja-JP")}`, cls(fx.ret_pct_jpy)) : "");

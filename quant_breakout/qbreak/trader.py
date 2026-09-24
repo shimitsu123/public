@@ -36,6 +36,20 @@ def bar_key_of(bar_date) -> str:
     return str(pd.Timestamp(bar_date).date())
 
 
+def _earnings_days(provider, ticker: str, today: dt.date) -> int | None:
+    """距下次决算的交易日数；无数据源或取不到 → None（不拦截，但也不假装知道）。"""
+    if provider is None:
+        return None
+    try:
+        d = provider.next_earnings(ticker)
+    except Exception:                                   # noqa: BLE001
+        return None
+    if d is None:
+        return None
+    from .events import trading_days_until
+    return trading_days_until(d, today)
+
+
 def market_session_closed(market: str, now: dt.datetime | None = None) -> tuple[dt.date, bool]:
     """返回 (该市场的"今天", 今天的交易时段是否已经收盘)。"""
     from zoneinfo import ZoneInfo
@@ -82,8 +96,9 @@ def expected_last_bar(today: dt.date, market: str) -> dt.date:
 
 def exit_reason(p: StrategyParams, pos: Position, px: float, dead: bool,
                 stop_px: float, trail_px: float, tp_px: float,
-                stop_handled_by_broker: bool = False) -> str | None:
-    """按收盘价判断是否该离场。优先级：止损 > 跟踪止损 > 止盈 > 死叉 > 超时 > 时间止损。
+                stop_handled_by_broker: bool = False, climax: bool = False,
+                earnings_in_days: int | None = None) -> str | None:
+    """按收盘价判断是否该离场。优先级：止损 > 跟踪止损 > 止盈 > 出货日 > 死叉 > 决算前 > 超时 > 时间止损。
     stop_handled_by_broker=True 时（已挂逆指値）程序不再重复发止损单。"""
     ret_pct = (px / pos.avg_px - 1) * 100 if pos.avg_px else 0.0
     if not stop_handled_by_broker:
@@ -93,8 +108,12 @@ def exit_reason(p: StrategyParams, pos: Position, px: float, dead: bool,
             return f"trail(跟踪止损 {trail_px:.1f} 峰值 {pos.peak:.1f})"
     if px >= tp_px:
         return f"take_profit(止盈 {tp_px:.1f})"
+    if p.exit_on_climax and climax and ret_pct >= p.climax_min_gain_pct:
+        return f"climax(高位放量陰線，浮盈 {ret_pct:+.1f}%)"
     if p.exit_on_macd_dead_cross and dead:
         return "dead_cross(死叉)"
+    if p.exit_before_earnings and earnings_in_days is not None and earnings_in_days <= 1:
+        return f"pre_earnings(决算前 {earnings_in_days} 日)"
     if p.max_hold_days and pos.hold_bars >= p.max_hold_days:
         return f"max_hold(持有 {pos.hold_bars} 根 K 线)"
     if (p.time_stop_days and pos.hold_bars >= p.time_stop_days
@@ -195,7 +214,8 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
              risk_cfg: RiskConfig, sizing: SizingConfig, data_cfg: DataConfig,
              market: str = "JP", dry_run: bool = False, allow_stale: bool = False,
              today: dt.date | None = None, exec_cfg: ExecConfig | None = None,
-             protective_stop: bool = False, entry_scale: float = 1.0) -> DayResult:
+             protective_stop: bool = False, entry_scale: float = 1.0,
+             index_close=None, earnings=None) -> DayResult:
     today = today or dt.date.today()
     res = DayResult(date=today.isoformat())
     p.validate()
@@ -223,7 +243,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
         return res
 
     data = {t: drop_partial_bar(df, market) for t, df in data.items()}
-    ind = {t: compute_indicators(df, p) for t, df in data.items()}
+    ind = {t: compute_indicators(df, p, index_close) for t, df in data.items()}
     bars = {t: df.index[-1] for t, df in ind.items()}
     bar_date = max(bars.values())
     res.bar_date = bar_key_of(bar_date)
@@ -314,9 +334,11 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
         if p.trailing_arm_pct and pos.peak < pos.avg_px * (1 + p.trailing_arm_pct / 100):
             trail_px = -np.inf
         tp_px = pos.avg_px * (1 + p.take_profit_pct / 100) if p.take_profit_pct else np.inf
+        e_days = _earnings_days(earnings, t, today)
         reason = exit_reason(p, pos, px, bool(row["dead_cross"]),
                              stop_px, trail_px, tp_px,
-                             stop_handled_by_broker=intraday and protective_stop)
+                             stop_handled_by_broker=intraday and protective_stop,
+                             climax=bool(row.get("climax", False)), earnings_in_days=e_days)
         if reason:
             o = place("SELL", t, pos.qty, reason)
             if o and o.status == "FILLED":
@@ -340,6 +362,10 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
         for t in sorted(entry_today):
             cur = broker.positions()
             if t in cur:
+                continue
+            e_days = _earnings_days(earnings, t, today)
+            if p.earnings_blackout_days and e_days is not None and e_days <= p.earnings_blackout_days:
+                res.blocked.append(f"BUY {t}: 决算前 {e_days} 个交易日内（回避期 {p.earnings_blackout_days} 日）")
                 continue
             row = ind[t].iloc[-1]
             px = last_close[t]

@@ -376,13 +376,16 @@ def cmd_sim_day(a) -> int:
     for m in cfg["markets"]:
         try:
             mc = cfg[m.lower()]
+            exc = ExecConfig.for_market(m)
             if m == "US" and not mc.get("initial_cash"):
                 fx, fxd = _fx_usdjpy()
-                mc.update({"initial_cash": round(cfg["capital_jpy"] / fx, 2),
-                           "fx_start": fx, "fx_date": fxd})
+                buy_rate = fx * (1 + exc.fx_spread_pct / 100)          # 换汇成本：买美元要更贵
+                mc.update({"initial_cash": round(cfg["capital_jpy"] / buy_rate, 2),
+                           "fx_start": fx, "fx_date": fxd, "fx_spread_pct": exc.fx_spread_pct})
                 write_json(paths.home() / SIM_FILE, cfg)
-                log.info("美股账户初始化：¥%s ÷ %.2f = $%s（%s）",
-                         f"{cfg['capital_jpy']:,.0f}", fx, f"{mc['initial_cash']:,.2f}", fxd)
+                log.info("美股账户初始化：¥%s ÷ %.2f（含换汇 %.2f%%）= $%s（%s）",
+                         f"{cfg['capital_jpy']:,.0f}", buy_rate, exc.fx_spread_pct,
+                         f"{mc['initial_cash']:,.2f}", fxd)
             sizing = SizingConfig(initial_cash=mc["initial_cash"],
                                   position_pct=mc["position_pct"],
                                   max_positions=mc["max_positions"],
@@ -394,14 +397,21 @@ def cmd_sim_day(a) -> int:
                                  exec_cfg=ExecConfig.for_market(m))
             dcfg = DataConfig(provider=provider, years=2, allow_synthetic=False).validate()
             uni = universe(m, mc.get("universe", "default"))
-            reg = _market_regime(m, dcfg)
+            reg, idx_close = _market_regime(m, dcfg)
             scale = reg.mult if cfg.get("use_market_regime", True) else 1.0
+            fx_info = {}
+            if m == "US" and cfg.get("use_fx_scale", True):
+                fx_scale, fx_info = _fx_scale(cfg)
+                scale = min(scale, fx_scale)
+            earnings = _earnings_provider() if p.earnings_blackout_days or p.exit_before_earnings else None
             res = run_once(uni, broker, p, risk, sizing, dcfg,
                            market=m, dry_run=False, allow_stale=a.allow_stale,
-                           exec_cfg=ExecConfig.for_market(m), entry_scale=scale)
+                           exec_cfg=exc, entry_scale=scale, index_close=idx_close,
+                           earnings=earnings)
             results[m] = res
-            extras[m] = {"regime": reg.to_dict(), "watchlist": _scan_market(
-                uni, p, m, dcfg, sizing.initial_cash * mc["position_pct"])}
+            rd = reg.to_dict(); rd.update({"fx": fx_info, "final_mult": scale})
+            extras[m] = {"regime": rd, "watchlist": _scan_market(
+                uni, p, m, dcfg, sizing.initial_cash * mc["position_pct"], idx_close)}
             soft = [n for n in res.notes if any(k in n for k in ("失败", "过期", "HALT", "不交易"))]
             if soft:
                 notes[m] = "; ".join(soft)[:300]
@@ -433,7 +443,7 @@ def cmd_sim_day(a) -> int:
 
 
 def _market_regime(market: str, dcfg):
-    """指数数据 → 量化层；再叠加 worker 从「市场风险报告」提取的判断层。"""
+    """指数数据 → 量化层；再叠加 worker 从「市场风险报告」提取的判断层。返回 (regime, 指数收盘序列)。"""
     from qbreak.config import BENCHMARK
     from qbreak.data import load_universe
     from qbreak.regime import apply_overlay, quant_regime
@@ -444,10 +454,29 @@ def _market_regime(market: str, dcfg):
         log.warning("[%s] 指数数据不可用，量化层按 unknown 处理: %s", market, e)
     reg = apply_overlay(quant_regime(idx, market))
     log.info("[%s] 市场状态 %s → 新仓规模 ×%.2f", market, reg.label, reg.mult)
-    return reg
+    return reg, (idx["Close"] if idx is not None else None)
 
 
-def _scan_market(uni, p, market, dcfg, budget) -> list[dict]:
+def _fx_scale(cfg) -> tuple[float, dict]:
+    """USD/JPY 靠近介入警戒区时，美股新仓减半：换回日元时的汇率下行风险已经不对称。"""
+    watch = float(cfg.get("fx_watch_level", 158.0))
+    band = float(cfg.get("fx_watch_band_pct", 1.0))
+    try:
+        fx, fxd = _fx_usdjpy()
+    except Exception as e:                                    # noqa: BLE001
+        return 1.0, {"error": str(e)[:120]}
+    near = fx >= watch * (1 - band / 100)
+    scale = 0.5 if near else 1.0
+    log.info("[US] USD/JPY %.2f（%s）警戒 %.1f → 汇率倍数 ×%.2f", fx, fxd, watch, scale)
+    return scale, {"usdjpy": fx, "date": fxd, "watch_level": watch, "band_pct": band, "scale": scale}
+
+
+def _earnings_provider():
+    from qbreak.events import YFinanceEarnings
+    return YFinanceEarnings()
+
+
+def _scan_market(uni, p, market, dcfg, budget, index_close=None) -> list[dict]:
     """候补队列：整个股票池按条件就绪度排序。"""
     from qbreak.data import load_universe
     from qbreak.scan import scan
@@ -455,7 +484,8 @@ def _scan_market(uni, p, market, dcfg, budget) -> list[dict]:
     from qbreak.trader import drop_partial_bar
     try:
         data = load_universe(uni, dcfg)                      # 已缓存，几乎不花时间
-        ind = {t: compute_indicators(drop_partial_bar(df, market), p) for t, df in data.items()}
+        ind = {t: compute_indicators(drop_partial_bar(df, market), p, index_close)
+               for t, df in data.items()}
         df = scan(ind, p, market, budget)
         return df.to_dict("records") if not df.empty else []
     except Exception as e:                                    # noqa: BLE001

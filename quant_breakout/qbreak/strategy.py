@@ -43,8 +43,20 @@ def atr(df: pd.DataFrame, n: int) -> pd.Series:
     return tr.ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
 
 
-def compute_indicators(df: pd.DataFrame, p: StrategyParams) -> pd.DataFrame:
-    """在 OHLCV 上追加指标与信号列。输入必须按日期升序且无重复。"""
+def rsi(close: pd.Series, n: int) -> pd.Series:
+    """Wilder RSI。"""
+    d = close.diff()
+    up = d.clip(lower=0).ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
+    dn = (-d.clip(upper=0)).ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
+    rs = up / dn.replace(0, np.nan)
+    out = 100 - 100 / (1 + rs)
+    return out.mask((dn == 0) & up.notna(), 100.0)      # 只涨不跌 → 100，而不是 NaN
+
+
+def compute_indicators(df: pd.DataFrame, p: StrategyParams,
+                       index_close: pd.Series | None = None) -> pd.DataFrame:
+    """在 OHLCV 上追加指标与信号列。输入必须按日期升序且无重复。
+    index_close：基准指数收盘价（用于相对强度）；None 时相对强度过滤自动跳过。"""
     missing = [c for c in OHLCV if c not in df.columns]
     if missing:
         raise ValueError(f"缺少列 {missing}")
@@ -87,7 +99,37 @@ def compute_indicators(df: pd.DataFrame, p: StrategyParams) -> pd.DataFrame:
 
     out["atr"] = atr(out, p.atr_n)
 
+    # ── 顶部 / 出货识别（天井・分配）──
+    ma20 = c.rolling(20).mean()
+    out["ext_ma20_pct"] = (c / ma20 - 1) * 100                  # 相对 20 日线伸展度
+    out["rsi"] = rsi(c, p.rsi_n)
+    down_on_vol = (c.pct_change() < -0.002) & (v > v.shift(1))   # 出货日：收跌且放量
+    out["dist_days"] = down_on_vol.astype(int).rolling(p.distribution_lookback).sum()
+    body = (c - out["Open"]).abs().replace(0, np.nan)
+    out["upper_shadow_ratio"] = (h - np.maximum(c, out["Open"])) / body
+    climax = (v > out["vol_ma"] * p.climax_vol_mult) & (c < out["Open"])
+    out["climax"] = climax.fillna(False).astype(bool)           # 高位放量陰線（是否"高位"由持仓浮盈判断）
+
+    # ── 相对强度（対指数）──
+    if index_close is not None and p.min_rs_pct > -900:
+        ic = index_close.reindex(out.index).ffill()
+        out["rs_pct"] = (c / c.shift(p.rs_n) - 1) * 100 - (ic / ic.shift(p.rs_n) - 1) * 100
+        out["rs_ok"] = out["rs_pct"] >= p.min_rs_pct
+    else:
+        out["rs_pct"] = np.nan
+        out["rs_ok"] = True
+
     cond = out["is_range"] & out["golden_cross"] & out["near_zero"] & out["vol_surge"]
+    if p.max_ext_ma20_pct:
+        cond &= out["ext_ma20_pct"] <= p.max_ext_ma20_pct
+    if p.max_rsi:
+        cond &= out["rsi"] <= p.max_rsi
+    if p.max_distribution_days:
+        cond &= out["dist_days"] < p.max_distribution_days
+    if p.max_upper_shadow_ratio:
+        cond &= ~(out["upper_shadow_ratio"] > p.max_upper_shadow_ratio)
+    if index_close is not None and p.min_rs_pct > -900:
+        cond &= out["rs_ok"]
     if p.require_breakout:
         cond &= out["breakout"]
     if p.trend_ma_n:

@@ -25,7 +25,7 @@ import pandas as pd
 from .config import BacktestConfig, StrategyParams
 from .tick import lot_size
 
-EXIT_REASONS = ("stop", "gap_stop", "trail", "take_profit", "dead_cross",
+EXIT_REASONS = ("stop", "gap_stop", "trail", "take_profit", "dead_cross", "climax",
                 "max_hold", "time_stop", "end")
 
 
@@ -65,6 +65,7 @@ class _Aligned:
         self.atr = np.full((n, m), np.nan)
         self.entry = np.zeros((n, m), dtype=bool)
         self.dead = np.zeros((n, m), dtype=bool)
+        self.climax = np.zeros((n, m), dtype=bool)
         for j, t in enumerate(self.tickers):
             df = ind[t]
             loc = gidx.get_indexer(df.index)
@@ -78,6 +79,8 @@ class _Aligned:
             self.atr[loc, j] = df["atr"].to_numpy(dtype=float)[ok]
             self.entry[loc, j] = df["entry"].to_numpy(dtype=bool)[ok]
             self.dead[loc, j] = df["dead_cross"].to_numpy(dtype=bool)[ok]
+            if "climax" in df.columns:
+                self.climax[loc, j] = df["climax"].fillna(False).to_numpy(dtype=bool)[ok]
 
 
 def _window(gidx: pd.DatetimeIndex, start, end) -> tuple[int, int]:
@@ -233,7 +236,10 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
 
             ps.last_close = c
             if queued is None:
-                if p.exit_on_macd_dead_cross and A.dead[i, j]:
+                if (p.exit_on_climax and A.climax[i, j]
+                        and (c / ps.entry_px - 1) * 100 >= p.climax_min_gain_pct):
+                    queued = "climax"                  # 高位放量陰線 = 出货日
+                elif p.exit_on_macd_dead_cross and A.dead[i, j]:
                     queued = "dead_cross"
                 elif p.max_hold_days and ps.hold >= p.max_hold_days:
                     queued = "max_hold"

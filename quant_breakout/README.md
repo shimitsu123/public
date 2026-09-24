@@ -195,6 +195,20 @@ bash scripts/fetch_and_push.sh            # 或手工跑一次
 - **市场状态**两层取更保守：量化层（指数 200 日线 / 20 日波动 / 距 252 日高点回撤）＋ 判断层（worker 每早读「市场风险报告」的行动四选一：避险=不开新仓、减仓观察=半仓）。
   这一层不在回测里，日报会标明当日倍数与依据
 
+### 筛选逻辑覆盖清单（即将上涨 / 顶部出货 / 汇率 / 费用 / 事件）
+
+| 维度 | 已实现 | 开关（`StrategyParams` / `ExecConfig`） | 默认 |
+|---|---|---|---|
+| 即将上涨 | 横盘紧缩 + MACD 金叉 + 0 轴附近 + 放量；真突破确认；趋势过滤；**相对强度（跑赢指数）**；候补队列就绪度 | `require_breakout` `trend_ma_n` `min_rs_pct` | 前三关，RS 关 |
+| 顶部 / 出货（进场侧） | 离 20 日线过远、RSI 超买、20 日内出货日计数、信号日长上影（冲高回落） | `max_ext_ma20_pct` `max_rsi` `max_distribution_days` `max_upper_shadow_ratio` | 关（回测验证后再开） |
+| 顶部 / 出货（离场侧） | 高位放量陰線（出货日）次日离场；跟踪止损；死叉 | `exit_on_climax` `trailing_stop_pct` `exit_on_macd_dead_cross` | climax 关 |
+| 事件 | 决算前 N 日不进场；持仓决算前 1 日离场（yfinance 决算日历，取不到即标 unknown 不拦） | `earnings_blackout_days` `exit_before_earnings` | 关 |
+| 汇率 | 美股按每日 USD/JPY 折日元、汇率贡献单列；**换汇成本** 25 銭/USD（≈0.16% 单边）计入初始换汇与折回；USD/JPY 靠近介入警戒（158±1%）时美股新仓减半 | `fx_spread_pct`；`sim.json: fx_watch_level / fx_watch_band_pct / use_fx_scale` | 开 |
+| 费用 | 日本株 0%（ゼロコース）、美股 0.495% 上限 $22；滑点 0.10% / 0.05%；跳空 >3% 放弃 | `commission_pct` `slippage_pct` `max_entry_gap_pct` | 开 |
+| 税 | 譲渡益 20.315% 只用于日报「税后」显示 | `tax_pct` | 显示 |
+| 市场状态 | 指数 200 日线 / 波动 / 回撤 + 市场风险报告的行动四选一 | `sim.json: use_market_regime` | 开 |
+| 尚未覆盖 | 値幅制限（ストップ高/安）精确建模、配当落ち日、指数调仓、信用残/空売り比率、板块轮动、新闻/政策事件（政策周报可作人工参考） | — | — |
+
 ### 半自动（留在楽天、今天就能用）
 
 ```bash
