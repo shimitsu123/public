@@ -454,7 +454,7 @@ US `SPYM` 单价 <$100 买卖各 0.495% 上限 $22，或 `VOO` 买入免费、�
 
 **选择方法（事先写定）**：20 年（2006-10～2026-09）年化最高，约束 20 年回撤、近 5 年回撤、近 5 年年化 ≥ 现行；年化差 < 0.5pp 取 Calmar 高者。
 候选 = 个股网格（JP 3×34 / 2×50 / 4×25 / 5×20%，US 5×20 / 3×34 / 8×12.5 / 10×10%）× {只做个股、+指数择时、+指数不择时}，外加只持指数（择时 / 不择时）。
-`python run.py sim-tier show` 查看，`python run.py sim-tier aggressive` 切换（只改 `var/sim.json`）。**模拟盘自 2026-09-24 起用「进取」档**（理由与记录见 `var/sim_changes.md`）；实盘 / 半自动命令加 `--core` 打开核心仓位。
+`python run.py sim-tier show` 查看，`python run.py sim-tier aggressive` 切换（只改 `var/sim.json`）。**模拟盘自 2026-09-24 起用「进取」档**（理由与记录见 `var/sim_changes.md`）。实盘 / 半自动 / 守护进程（`live` `signal` `daemon`）**默认读 `var/sim.json` 的同一档**（仓位、股票池、个股开关、核心 ETF、回撤 HALT、券商费率），真钱与模拟盘同一套规则；`--no-sim-config` 才改用命令行参数（这时 `--core` 打开核心仓位）。
 
 | 档位（回撤约束） | 日本 | 美股 |
 |---|---|---|
@@ -473,7 +473,7 @@ US `SPYM` 单价 <$100 买卖各 0.495% 上限 $22，或 `VOO` 买入免费、�
 ### 半自动（留在楽天、今天就能用）
 
 ```bash
-python run.py signal JP --push          # 收盘后跑：输出操作清单并推送到手机
+python run.py signal JP --push          # 收盘后跑：输出操作清单并推送到手机（默认与模拟盘同一档）
 python run.py pos add 7203.T 100 3000   # 你在 App 成交后登记真实持仓
 python run.py pos rm 7203.T             # 卖出后移除
 ```
@@ -528,7 +528,7 @@ python run.py live JP --broker rss --stop-mode intraday --protective-stop
 - [ ] `--broker paper` 演练过至少一个完整交易日
 - [ ] `--protective-stop` 打开 —— **逆指値是盘中止损的真正保险**，进程崩了它还在
 - [ ] 口座选**特定口座**，不要用 NISA（自动交易会浪费非課税枠，且亏损不能损益通算）
-- [ ] `--max-order-value` 设成你能承受的单笔上限；前两周 `--position-pct 0.05`，只买 1 単元
+- [ ] `--max-order-value` 设成你能承受的单笔上限（跟模拟盘同档时默认 = 资金 ×1.1，因为核心 ETF 一笔可到 100%）；前两周 `--position-pct 0.05`（显式给出时覆盖同档的仓位），只买 1 単元
 - [ ] 熔断线先设 1%：`RiskConfig.daily_max_loss_pct`
 - [ ] 通知打开：`export QBREAK_WEBHOOK=https://...`（Discord/Slack/LINE 兼容）
 - [ ] 每天收盘后锁上 ARM
@@ -590,7 +590,7 @@ crontab -e
 10. **核心指数仓位 + 实盘**：模拟盘假设「卖指数」与「买个股」都在同一个寄付成交；真实现物账户的买付余力要等卖单成交后才增加，
     买单只能在 9:00 之后下，成交价会偏离开盘价（立花 / RSS 自动下单尚未实现这段先后顺序，目前请用半自动清单手工处理）。
 11. 未建模：美股卖出时的 SEC fee（成交额 ×0.0000206，每笔约 0.002%）、NYSE 半日市（每日收盘后运行的流程不受影响）。
-12. **半自动 `signal` 还没跟模拟盘同步**：`signal` 用命令行默认值（日本 5×20%、default 股票池；美股照样出个股信号，核心 ETF 默认 VOO），不读 `var/sim.json` 的进取档（日本 4×25%、broad 股票池；美股只持 SPYM）。真钱照抄清单前要先对齐。
+12. ~~半自动 `signal` 没跟模拟盘同步~~ → 已解决（2026-09-25）：`signal` / `live` / `daemon` 默认读 `var/sim.json` 的同一档，与 `sim-day` 共用 `_plan_inputs`；幂等记录与流水按券商分文件，只算不发单（dry-run）不拦截、不写流水。
 13. **立花适配器的 API 版本过时**：`TachibanaSpec` 写的是 `e_api_v4r6` + 密码登录。官方 v4r8 已于 2026-06-27 废止，v4r9 定于 2026-09-27 废止，现行 v4r10（2026-08-29 发布）的登录改为公開鍵暗号方式；另外 2025-07 起每次 API 登录都要电话号码认证（当天复用登录得到的虚拟 URL，可用到夜间闭局）。开户拿到仕様書后升级，并先通过 `tachibana-probe --demo`。来源 https://www.e-shiten.jp/api/20260728.html 、/api/20260513.html 、/api/20250708.html（2026-09-24 查）。
 
 ---

@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from . import notify, paths
-from .brokers.base import BaseBroker, Order, Position
+from .brokers.base import BaseBroker, Order, Position, state_tag
 from .config import (DataConfig, ExecConfig, RiskConfig, SizingConfig,
                      StrategyParams)
 from .core import core_orders
@@ -189,6 +189,10 @@ class PositionBook:
         self.path = path or (paths.state_dir() / "position_book.json")
         self.book: dict[str, dict] = read_json(self.path, {}) or {}
 
+    @classmethod
+    def for_broker(cls, broker) -> "PositionBook":
+        return cls(paths.state_dir() / f"position_book{state_tag(broker)}.json")
+
     def merge(self, positions: dict[str, Position]) -> dict[str, Position]:
         for t, p in positions.items():
             b = self.book.get(t, {})
@@ -226,8 +230,7 @@ class OrderGuard:
     @classmethod
     def for_broker(cls, broker) -> "OrderGuard":
         """每种券商各记各的：同一台机器上模拟盘与实盘同时跑，也不会互相把对方的单当成「已发过」。"""
-        kind = type(broker).__name__.lower().replace("broker", "")
-        return cls(paths.state_dir() / ("sent_orders.json" if kind == "paper" else f"sent_orders_{kind}.json"))
+        return cls(paths.state_dir() / f"sent_orders{state_tag(broker)}.json")
 
     def seen(self, cid: str) -> bool:
         return cid in self.ids
@@ -294,8 +297,8 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
     p.validate()
     ex = (exec_cfg or ExecConfig.for_market(market)).validate()
     intraday = ex.stop_fill_mode == "intraday"
-    book, guard = PositionBook(), OrderGuard.for_broker(broker)
-    rm = RiskManager(risk_cfg, market=market)
+    book, guard = PositionBook.for_broker(broker), OrderGuard.for_broker(broker)
+    rm = RiskManager(risk_cfg, market=market, tag=state_tag(broker))
 
     # ── 0. 同步 + 取数 ──
     try:
@@ -646,8 +649,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
 
 
 def _journal(res: DayResult, market: str = "JP", broker=None) -> None:
-    kind = type(broker).__name__.lower().replace("broker", "") if broker is not None else "paper"
-    fp = paths.out_dir() / ("journal.csv" if kind == "paper" else f"journal_{kind}.csv")   # 模拟盘与实盘各记各的
+    fp = paths.out_dir() / f"journal{state_tag(broker)}.csv"          # 模拟盘与实盘各记各的
     row = pd.DataFrame([{ "date": res.date, "market": market, "bar_date": res.bar_date,
                           "equity": round(res.equity, 2),
                           "cash": round(res.cash, 2),

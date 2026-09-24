@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import notify, paths
-from .brokers.base import BaseBroker, Position
+from .brokers.base import BaseBroker, Position, state_tag
 from .calendar_jp import now_jst, seconds_until_next_event, session_of
 from .config import DataConfig, ExecConfig, RiskConfig, SizingConfig, StrategyParams
 from .risk import RiskManager
@@ -110,9 +110,9 @@ class Daemon:
         self.market = market
         self.fallback_quotes = fallback_quotes
         self.st = DaemonState.load()
-        self.book = PositionBook()
+        self.book = PositionBook.for_broker(broker)
         self.guard = OrderGuard.for_broker(broker)
-        self.rm = RiskManager(self.risk_cfg, market=market)
+        self.rm = RiskManager(self.risk_cfg, market=market, tag=state_tag(broker))
         self._stop = threading.Event()
         self._quote_fails = 0
         self._last_session = ""

@@ -67,3 +67,24 @@ def test_plan_inputs_respect_breakout_switch_and_core(isolated_home, monkeypatch
     assert P.core["ticker"] == "SPYM" and P.core["bear"] is True        # 熊市 → 指数仓位目标 0
     P2 = run._plan_inputs("JP", cfg["jp"], cfg, None, pd.Timestamp("2026-09-24").date(), p)
     assert P2.trade_uni == P2.uni and P2.core["ticker"] == "1329.T"
+
+
+def test_live_and_sim_state_files_are_separate(isolated_home):
+    """同一数据目录里：模拟盘沿用原文件名，半自动 / 立花各用自己的持仓簿、幂等记录、流水、风控基准和自动 HALT。"""
+    from qbreak.brokers.base import state_tag
+    from qbreak.brokers.manual import ManualBroker
+    from qbreak.brokers.paper import PaperBroker
+    from qbreak.brokers.tachibana import FakeTransport, TachibanaBroker
+    from qbreak.config import RiskConfig
+    from qbreak.risk import RiskManager
+    from qbreak.trader import OrderGuard, PositionBook
+    paper, man = PaperBroker(market="JP"), ManualBroker(market="JP")
+    tb = TachibanaBroker(transport=FakeTransport(), demo=True)
+    assert [state_tag(b) for b in (paper, man, tb)] == ["", "_manual", "_tachibana"]
+    names = lambda b: (OrderGuard.for_broker(b).path.name, PositionBook.for_broker(b).path.name,  # noqa: E731
+                       RiskManager(RiskConfig(), market="JP", tag=state_tag(b)).path.name,
+                       RiskManager(RiskConfig(), market="JP", tag=state_tag(b)).halt_file().name)
+    assert names(paper) == ("sent_orders.json", "position_book.json", "risk_state_JP.json", "HALT_JP")
+    assert names(tb) == ("sent_orders_tachibana.json", "position_book_tachibana.json",
+                         "risk_state_JP_tachibana.json", "HALT_JP_tachibana")
+    assert len({names(paper), names(man), names(tb)}) == 3

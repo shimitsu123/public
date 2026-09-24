@@ -60,6 +60,13 @@ class Order:
         return asdict(self)
 
 
+def state_tag(broker) -> str:
+    """本地状态文件的后缀：模拟盘（PaperBroker）沿用原文件名，其他券商各记各的（_manual / _tachibana / _rakutenrss），
+    同一个数据目录里模拟盘与实盘的持仓簿、幂等记录、流水、风控基准、自动 HALT 互不干扰。"""
+    kind = type(broker).__name__.lower().replace("broker", "") if broker is not None else "paper"
+    return "" if kind in ("paper", "") else f"_{kind}"
+
+
 class BaseBroker(ABC):
     market: str = "JP"
 

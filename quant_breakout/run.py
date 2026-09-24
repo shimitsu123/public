@@ -394,7 +394,7 @@ def cmd_signal(a) -> int:
                    earnings=P.earnings, ticker_mult=P.tmult, entry_block=P.block,
                    corp_actions=_corp_actions_provider(), force_exit_all=P.force_exit, core=P.core)
     from qbreak.trader import PositionBook
-    positions = PositionBook().merge(broker.positions())
+    positions = PositionBook.for_broker(broker).merge(broker.positions())
     sheet = operation_sheet(res, p, positions, a.limit_buffer)
     print("\n" + sheet)
     (paths.out_dir() / f"sheet_{res.date}.txt").write_text(sheet, encoding="utf-8")

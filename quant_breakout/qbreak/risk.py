@@ -59,15 +59,16 @@ class RiskManager:
     """每个市场一份状态（peak_equity 等不能跨市场混用：¥100 万和 $6,000 放一起会误判 -99% 回撤）。
     自动触发的 HALT 写 var/HALT_<market>；人工的全局 var/HALT 仍然拦所有市场。"""
 
-    def __init__(self, cfg: RiskConfig, state_path=None, market: str = ""):
+    def __init__(self, cfg: RiskConfig, state_path=None, market: str = "", tag: str = ""):
         self.cfg = cfg.validate()
         self.market = market.upper()
-        name = f"risk_state_{self.market}.json" if self.market else "risk_state.json"
+        self.tag = tag                     # 券商后缀（brokers.base.state_tag）：实盘与模拟盘的基准 / 自动 HALT 分开
+        name = f"risk_state_{self.market}{tag}.json" if self.market else f"risk_state{tag}.json"
         self.path = state_path or (paths.state_dir() / name)
         self.st = RiskState.load(self.path)
 
     def halt_file(self):
-        return paths.home() / (f"HALT_{self.market}" if self.market else "HALT")
+        return paths.home() / (f"HALT_{self.market}{self.tag}" if self.market else "HALT")
 
     # ── 会话开始：确定当日基准 ──
     def begin(self, equity: float, today: dt.date | None = None) -> RiskDecision:
