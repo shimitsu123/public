@@ -92,6 +92,16 @@ quant_breakout/
 | `max_hold_days` | 60 | 最长持有交易日（0=不限） | |
 | `time_stop_days` | 0 | 时间止损：持有 N 日仍无浮盈则离场 | 释放"死钱" |
 | `exit_on_macd_dead_cross` | True | 死叉平仓 | 关掉后靠跟踪止损锁利，更适合抓大波段 |
+| `max_distribution_days` | 0 | 信号日前 20 日内「收跌且放量」的出货日数 ≥ 该值则不进场（0=关） | 只剔除最明显的派发；日本株覆盖文件设 7 |
+| `max_upper_shadow_ratio` | 0 | 信号日上影线 / 实体 > 该值（冲高回落）则不进场（0=关） | 日本株覆盖文件设 3 |
+| `max_rsi` / `max_ext_ma20_pct` | 0 / 0 | RSI 超买 / 离 20 日线过远则不进场（0=关） | 横盘票几乎不会触发，回测无增量，保持关 |
+| `min_rs_pct` | −999 | 60 日涨幅须 ≥ 指数 + 该值（≤−900=关；RS 值仍在候补队列展示） | 信号层检验：被 RS 剔除的信号反而更好 → 关 |
+| `earnings_blackout_days` | 0 | 决算前 N 个交易日不进场 | 模拟盘设 2 |
+| `exit_on_climax` | False | 浮盈 >5% 时出现放量陰線（量 >2.5×均量）次日离场 | 模拟盘打开；回测中性 |
+
+**按市场覆盖**：`var/best_params.json` 是两市场共用的基础参数；`var/best_params_JP.json` / `var/best_params_US.json`
+存在时，其中字段**覆盖**到该市场（可以只写差异）。`backtest / optimize / paper / signal / daemon / sim-day` 都按市场自动叠加，
+日报「市场状态」栏会标出用了哪个覆盖文件。
 
 ---
 
@@ -199,15 +209,31 @@ bash scripts/fetch_and_push.sh            # 或手工跑一次
 
 | 维度 | 已实现 | 开关（`StrategyParams` / `ExecConfig`） | 默认 |
 |---|---|---|---|
-| 即将上涨 | 横盘紧缩 + MACD 金叉 + 0 轴附近 + 放量；真突破确认；趋势过滤；**相对强度（跑赢指数）**；候补队列就绪度 | `require_breakout` `trend_ma_n` `min_rs_pct` | 前三关，RS 关 |
-| 顶部 / 出货（进场侧） | 离 20 日线过远、RSI 超买、20 日内出货日计数、信号日长上影（冲高回落） | `max_ext_ma20_pct` `max_rsi` `max_distribution_days` `max_upper_shadow_ratio` | 关（回测验证后再开） |
-| 顶部 / 出货（离场侧） | 高位放量陰線（出货日）次日离场；跟踪止损；死叉 | `exit_on_climax` `trailing_stop_pct` `exit_on_macd_dead_cross` | climax 关 |
-| 事件 | 决算前 N 日不进场；持仓决算前 1 日离场（yfinance 决算日历，取不到即标 unknown 不拦） | `earnings_blackout_days` `exit_before_earnings` | 关 |
-| 汇率 | 美股按每日 USD/JPY 折日元、汇率贡献单列；**换汇成本** 25 銭/USD（≈0.16% 单边）计入初始换汇与折回；USD/JPY 靠近介入警戒（158±1%）时美股新仓减半 | `fx_spread_pct`；`sim.json: fx_watch_level / fx_watch_band_pct / use_fx_scale` | 开 |
+| 即将上涨 | 横盘紧缩 + MACD 金叉 + 0 轴附近 + 放量；真突破确认；趋势过滤；相对强度（跑赢指数）；候补队列就绪度 | `require_breakout` `trend_ma_n` `min_rs_pct` | 前三关；RS **关**（见下：信号层检验反向） |
+| 顶部 / 出货（进场侧） | 离 20 日线过远、RSI 超买、20 日内出货日计数、信号日长上影（冲高回落） | `max_ext_ma20_pct` `max_rsi` `max_distribution_days` `max_upper_shadow_ratio` | **日本株**：出货日 ≥7 / 上影 >3 不进场（`best_params_JP.json`）；美股全关（样本 88 个信号，剔除组反而更好） |
+| 顶部 / 出货（离场侧） | 高位放量陰線（出货日）次日离场；跟踪止损；死叉 | `exit_on_climax` `trailing_stop_pct` `exit_on_macd_dead_cross` | climax **开**（回测中性，风控项） |
+| 事件 | 决算前 N 日不进场；持仓决算前 1 日离场（yfinance 决算日历，取不到即标 unknown 不拦） | `earnings_blackout_days` `exit_before_earnings` | 决算前 2 日不进场 |
+| 参数口径 | 回测 / walk-forward / 模拟盘 / 实盘用**同一套指标代码**，指数（相对强度）三处都接入；参数可按市场覆盖 | `best_params_<市场>.json` | JP 有覆盖 |
+| 汇率 | 美股按每日 USD/JPY 折日元、汇率贡献单列；**换汇成本** 25 銭/USD（≈0.16% 单边）计入初始换汇与折回；USD/JPY 靠近介入警戒（158±1%）时美股新仓减半；日报给出**现汇 / 日元升值 5% / 贬值 5%** 三情景的折日元权益 | `fx_spread_pct`；`sim.json: fx_watch_level / fx_watch_band_pct / use_fx_scale` | 开 |
 | 费用 | 日本株 0%（ゼロコース）、美股 0.495% 上限 $22；滑点 0.10% / 0.05%；跳空 >3% 放弃 | `commission_pct` `slippage_pct` `max_entry_gap_pct` | 开 |
 | 税 | 譲渡益 20.315% 只用于日报「税后」显示 | `tax_pct` | 显示 |
 | 市场状态 | 指数 200 日线 / 波动 / 回撤 + 市场风险报告的行动四选一 | `sim.json: use_market_regime` | 开 |
 | 尚未覆盖 | 値幅制限（ストップ高/安）精确建模、配当落ち日、指数调仓、信用残/空売り比率、板块轮动、新闻/政策事件（政策周报可作人工参考） | — | — |
+
+**这些过滤是怎么定的（2026-09-24，日経225 / NASDAQ-100+Dow30，5 年）**
+单路径回测里换掉 1 笔交易就能让 CAGR 差 3～4 个百分点（3 个仓位互相抢名额），所以过滤器的取舍用**信号层面**的检验：
+把基线信号全部列出（JP 276 个 / US 88 个），按过滤器分成「被剔除 / 保留」两组，比较用本策略离场规则的近似收益。
+
+| 过滤（被剔除的信号） | JP 剔除组 vs 保留组 | US 剔除组 vs 保留组 | 结论 |
+|---|---|---|---|
+| 出货日 ≥7 | −1.10% vs +1.67%（n=18，t=−2.2） | +6.2% vs +1.3%（n=7） | JP 开、US 关 |
+| 出货日 ≥4 | +1.25% vs +2.01%（剔掉 68%） | +2.3% vs −0.3%（剔掉 75%） | 太严，两市场都不用 |
+| 上影 >3 | +0.19% vs +1.59%（n=20） | +3.3% vs +1.6%（n=6） | JP 开、US 关 |
+| RSI >70 | +0.07% vs +1.57%（n=14） | −0.3% vs +1.8%（n=5） | 样本太少，关 |
+| 离 20 日线 >8% | +2.89% vs +1.43%（剔除组更好） | +2.5% vs +1.6% | 关 |
+| 相对强度 <0 | +1.93% vs +0.98%（剔除组更好） | +1.5% vs +1.9% | 关：横盘突破本来就常发生在落后股上 |
+
+脚本：`tests/` 之外的一次性分析，逻辑 = `compute_indicators` 的 `entry` + 止损 7% / 死叉 / 60 日近似离场。
 
 ### 半自动（留在楽天、今天就能用）
 

@@ -85,10 +85,12 @@ def grid_search(cache: IndicatorCache, bt: BacktestConfig, base: StrategyParams,
 
 def walk_forward(data: dict[str, pd.DataFrame], bt: BacktestConfig, base: StrategyParams,
                  grid: dict[str, list] | None = None, train_years: float = 2.0,
-                 test_months: int = 6, objective: str = OBJECTIVE):
-    """滚动窗口：训练 train_years → 测试 test_months → 向前滚动 test_months。"""
+                 test_months: int = 6, objective: str = OBJECTIVE,
+                 index_close: pd.Series | None = None):
+    """滚动窗口：训练 train_years → 测试 test_months → 向前滚动 test_months。
+    index_close：基准指数收盘（相对强度过滤）；不传则该过滤在优化里不生效。"""
     grid = grid or DEFAULT_GRID
-    cache = IndicatorCache(data)
+    cache = IndicatorCache(data, index_close)
     gidx = pd.DatetimeIndex(sorted(set().union(*[df.index for df in data.values()])))
     start, end = gidx[0], gidx[-1]
     t0 = start

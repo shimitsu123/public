@@ -77,9 +77,25 @@ def _load_data(a, market: str):
     return load_universe(tickers, _data_cfg(a))
 
 
-def _params(a) -> StrategyParams:
+def _params(a, market: str | None = None) -> StrategyParams:
+    """基础参数（--params / var/best_params.json）＋ 按市场覆盖（var/best_params_<市场>.json）。"""
     from qbreak.trader import load_params
-    return load_params(a.params)
+    return load_params(a.params, market)
+
+
+def _index_close(market: str, dcfg, p: StrategyParams | None = None):
+    """基准指数收盘序列（相对强度过滤用）。过滤关闭（min_rs_pct<=-900）或取不到时返回 None，
+    此时 compute_indicators 自动跳过该过滤 —— 回测 / 优化 / 实盘三处口径一致。"""
+    if p is not None and p.min_rs_pct <= -900:
+        return None
+    from qbreak.config import BENCHMARK
+    from qbreak.data import load_universe
+    try:
+        idx = load_universe([BENCHMARK[market]], dcfg).get(BENCHMARK[market])
+    except Exception as e:                                    # noqa: BLE001
+        log.warning("[%s] 指数数据不可用，相对强度过滤跳过: %s", market, e)
+        return None
+    return idx["Close"] if idx is not None else None
 
 
 def _bt_cfg(a, market: str) -> BacktestConfig:
@@ -104,8 +120,12 @@ def cmd_backtest(a) -> int:
     from qbreak.strategy import compute_indicators
     market = a.market.upper()
     data = _load_data(a, market)
-    p, bt = _params(a), _bt_cfg(a, market)
-    ind = {t: compute_indicators(df, p) for t, df in data.items()}
+    p, bt = _params(a, market), _bt_cfg(a, market)
+    idx_close = _index_close(market, _data_cfg(a), p)
+    if p.min_rs_pct > -900:
+        print(f"相对强度过滤：{p.rs_n} 日涨幅 ≥ 指数 + {p.min_rs_pct}%"
+              + ("" if idx_close is not None else "（指数取不到 → 本次未生效）"))
+    ind = {t: compute_indicators(df, p, idx_close) for t, df in data.items()}
     res = run_backtest(ind, p, bt)
     tag = "【合成数据·结果无效】" if a.synthetic else ""
     print(format_report(res, f"{market} 回测{tag}", buy_and_hold(ind, bt)))
@@ -121,13 +141,15 @@ def cmd_optimize(a) -> int:
     from dataclasses import replace
     market = a.market.upper()
     data = _load_data(a, market)
-    base, bt = _params(a), _bt_cfg(a, market)
+    base, bt = _params(a, market), _bt_cfg(a, market)
+    idx_close = _index_close(market, _data_cfg(a), base)
     n = 1
     for v in DEFAULT_GRID.values():
         n *= len(v)
     print(f"参数组合 {n} 组；训练 {a.train_years} 年 / 测试 {a.test_months} 个月，滚动前进 …")
     wf, oos_eq, oos_tr = walk_forward(data, bt, base, DEFAULT_GRID,
-                                      a.train_years, a.test_months, a.objective)
+                                      a.train_years, a.test_months, a.objective,
+                                      index_close=idx_close)
     print(report(wf, oos_eq, oos_tr, DEFAULT_GRID))
     if not wf.empty:
         wf.drop(columns="_gs").to_csv(paths.out_dir() / f"walk_forward_{market}.csv",
@@ -170,7 +192,7 @@ def _make_broker(a, market: str, sizing: SizingConfig):
 def _live_common(a, live: bool) -> int:
     from qbreak.trader import run_once
     market = a.market.upper()
-    p = _params(a)
+    p = _params(a, market)
     risk = RiskConfig(max_order_value=a.max_order_value, require_arm=not a.no_arm)
     sizing = SizingConfig(initial_cash=a.cash or 1_000_000,
                           position_pct=a.position_pct, max_positions=risk.max_positions)
@@ -180,11 +202,12 @@ def _live_common(a, live: bool) -> int:
     ex = ExecConfig.for_market(market)
     ex.stop_fill_mode = a.stop_mode
     ex.validate()
-    res = run_once(universe(market), broker, p, risk, sizing,
-                   DataConfig(provider=a.provider, years=max(a.years, 2),
-                              allow_synthetic=a.synthetic).validate(),
+    dcfg = DataConfig(provider=a.provider, years=max(a.years, 2),
+                      allow_synthetic=a.synthetic).validate()
+    res = run_once(universe(market), broker, p, risk, sizing, dcfg,
                    market=market, dry_run=a.dry_run, allow_stale=a.allow_stale,
-                   exec_cfg=ex, protective_stop=a.protective_stop)
+                   exec_cfg=ex, protective_stop=a.protective_stop,
+                   index_close=_index_close(market, dcfg, p))
     print("\n" + res.summary())
     return 0
 
@@ -206,17 +229,18 @@ def cmd_signal(a) -> int:
     from qbreak.trader import operation_sheet, run_once
     from qbreak import notify
     market = a.market.upper()
-    p = _params(a)
+    p = _params(a, market)
     risk = RiskConfig(max_order_value=a.max_order_value, require_arm=False)
     sizing = SizingConfig(initial_cash=a.cash or 1_000_000,
                           position_pct=a.position_pct, max_positions=risk.max_positions)
     a.broker, a.dry_run = "manual", True
     broker = _make_broker(a, market, sizing)
-    res = run_once(universe(market), broker, p, risk, sizing,
-                   DataConfig(provider=a.provider, years=max(a.years, 2),
-                              allow_synthetic=a.synthetic).validate(),
+    dcfg = DataConfig(provider=a.provider, years=max(a.years, 2),
+                      allow_synthetic=a.synthetic).validate()
+    res = run_once(universe(market), broker, p, risk, sizing, dcfg,
                    market=market, dry_run=True, allow_stale=a.allow_stale,
-                   exec_cfg=ExecConfig.for_market(market))
+                   exec_cfg=ExecConfig.for_market(market),
+                   index_close=_index_close(market, dcfg, p))
     from qbreak.trader import PositionBook
     positions = PositionBook().merge(broker.positions())
     sheet = operation_sheet(res, p, positions, a.limit_buffer)
@@ -364,7 +388,6 @@ def cmd_sim_day(a) -> int:
     if today > _dt.date.fromisoformat(cfg["end"]):
         print(f"模拟期已于 {cfg['end']} 结束；只重新生成报表。")
         hp, _ = write_report(cfg["markets"]); print(f"报表 {hp}"); return 0
-    p = _params(a)
     results, errors, notes, extras = {}, {}, {}, {}
     blocked = _netcheck()
     if blocked:
@@ -376,6 +399,7 @@ def cmd_sim_day(a) -> int:
     for m in cfg["markets"]:
         try:
             mc = cfg[m.lower()]
+            p = _params(a, m)                                # 基础参数 + 该市场覆盖文件
             exc = ExecConfig.for_market(m)
             if m == "US" and not mc.get("initial_cash"):
                 fx, fxd = _fx_usdjpy()
@@ -410,6 +434,7 @@ def cmd_sim_day(a) -> int:
                            earnings=earnings)
             results[m] = res
             rd = reg.to_dict(); rd.update({"fx": fx_info, "final_mult": scale})
+            rd["params_overlay"] = str(paths.params_file(m).name) if paths.params_file(m).exists() else ""
             extras[m] = {"regime": rd, "watchlist": _scan_market(
                 uni, p, m, dcfg, sizing.initial_cash * mc["position_pct"], idx_close)}
             soft = [n for n in res.notes if any(k in n for k in ("失败", "过期", "HALT", "不交易"))]
@@ -566,7 +591,7 @@ def cmd_daemon(a) -> int:
     ex.validate()
     cfg = DaemonConfig(poll_interval_s=a.interval, protective_stop=a.protective_stop,
                        eod_at=_parse_time(a.eod_at))
-    d = Daemon(universe(market), broker, _params(a), risk, sizing,
+    d = Daemon(universe(market), broker, _params(a, market), risk, sizing,
                DataConfig(provider=a.provider, years=max(a.years, 2),
                           allow_synthetic=a.synthetic).validate(),
                ex, cfg=cfg, dry_run=a.dry_run, market=market,

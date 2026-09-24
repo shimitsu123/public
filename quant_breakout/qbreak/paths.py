@@ -46,8 +46,11 @@ def out_dir() -> Path:
     return sub("out")
 
 
-def params_file() -> Path:
-    """optimize 产出的稳健参数；trader 自动读取。"""
+def params_file(market: str | None = None) -> Path:
+    """optimize 产出的稳健参数；trader 自动读取。
+    market 给定时返回该市场的**覆盖文件**（best_params_JP.json 等，可只写差异字段）。"""
+    if market:
+        return home() / f"best_params_{market.upper()}.json"
     return home() / "best_params.json"
 
 

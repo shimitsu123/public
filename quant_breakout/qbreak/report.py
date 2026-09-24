@@ -142,8 +142,29 @@ def build_data(markets: list[str] | None = None) -> dict:
                 "equity_jpy": round(eq_usd * sell_rate, 0) if sell_rate else None,
                 "ret_pct_jpy": round((eq_usd * sell_rate / cap - 1) * 100, 2) if sell_rate and cap else None,
                 "fx_effect_jpy": round(eq_usd * (fx_now - fx_start), 0) if fx_now and fx_start else None,
+                **fx_scenarios(eq_usd, fx_now, spread, cap,
+                               float(sim.get("fx_watch_level", 158.0)),
+                               float(sim.get("fx_watch_band_pct", 1.0))),
             }
     return out
+
+
+def fx_scenarios(eq_usd: float, fx_now: float | None, spread_pct: float, cap_jpy: float,
+                 watch_level: float = 158.0, band_pct: float = 1.0, shocks=(0.0, -5.0, 5.0)) -> dict:
+    """美元权益换回日元的三种汇率情景（现汇 / 日元升值 5% / 日元贬值 5%），含换汇点差。
+    near_intervention：USD/JPY 进入介入警戒区（watch_level×(1-band%) 以上）→ 汇率下行风险不对称。"""
+    rows = []
+    for sh in shocks:
+        rate = fx_now * (1 + sh / 100) if fx_now else None
+        sell = rate * (1 - spread_pct / 100) if rate else None
+        label = "现汇" if sh == 0 else (f"日元升值 {abs(sh):g}%（USD/JPY {sh:+g}%）" if sh < 0
+                                        else f"日元贬值 {sh:g}%（USD/JPY {sh:+g}%）")
+        rows.append({"shock_pct": sh, "label": label,
+                     "usdjpy": round(rate, 2) if rate else None,
+                     "equity_jpy": round(eq_usd * sell, 0) if sell else None,
+                     "ret_pct_jpy": round((eq_usd * sell / cap_jpy - 1) * 100, 2) if sell and cap_jpy else None})
+    return {"scenarios": rows, "watch_level": watch_level, "band_pct": band_pct,
+            "near_intervention": bool(fx_now and fx_now >= watch_level * (1 - band_pct / 100))}
 
 
 # ────────────────────────── 页面 ──────────────────────────
@@ -227,6 +248,8 @@ td.n,th.n{text-align:right}
 .pill.buy{background:var(--gain-soft);color:var(--gain)}.pill.sell{background:var(--loss-soft);color:var(--loss)}
 .empty{color:var(--ink-2);padding:24px 8px;text-align:center}
 .muted{color:var(--muted)}
+.card h3{font-size:14px;margin:12px 0 6px}
+.warn{margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(220,38,38,.10);color:#b91c1c;font-size:13px}
 @media (prefers-reduced-motion:reduce){.tip{transition:none}}
 </style>
 
@@ -254,7 +277,7 @@ td.n,th.n{text-align:right}
   <section class="card" id="regime"></section>
   <section class="card">
     <h2>候补队列（按入场条件就绪度排序，不是收益预测）</h2>
-    <div class="legend"><span class="muted">triggered=今日已触发 · imminent=横盘+0轴+MACD 即将金叉 · watch=横盘+0轴 · 可负担=1 単元 ≤ 单笔预算 · 偏好=符合你的美股筛选规则 · 顶部风险=离20日线过远/RSI>70/20日内出货日≥4/长上影/跑输指数</span></div>
+    <div class="legend"><span class="muted">triggered=今日已触发 · imminent=横盘+0轴+MACD 即将金叉 · watch=横盘+0轴 · 可负担=1 単元 ≤ 单笔预算 · 偏好=符合你的美股筛选规则 · 顶部风险=离20日线过远/RSI>70/20日内出货日≥6/长上影（上影>3倍实体）/落后指数（仅提示，不过滤）</span></div>
     <div class="scroll" id="watch"></div>
   </section>
   <section class="card detail" id="detail"></section>
@@ -302,7 +325,15 @@ function renderRegime(){
     <dt>量化层</dt><dd>${R.quant_label}（${R.above_ma200 ? "指数在 200 日线上方" : "指数在 200 日线下方"}，20 日波动 ${R.vol20_pct ?? "—"}%，距 252 日高点 ${R.dd252_pct ?? "—"}%）</dd>
     <dt>判断层</dt><dd>${R.overlay_action ? `市场风险报告「${R.overlay_action}」（${R.overlay_as_of}）` + (R.crash_prob != null ? `，24h 崩盘概率 ${R.crash_prob}%` : "") : "未接入或已过期（>2 天）"}</dd>
     ${R.fx && R.fx.usdjpy ? `<dt>汇率层</dt><dd>USD/JPY ${R.fx.usdjpy}（${R.fx.date}），警戒 ${R.fx.watch_level}±${R.fx.band_pct}% → 美股新仓 ×${R.fx.scale}</dd>` : ""}
-    ${R.final_mult != null ? `<dt>最终倍数</dt><dd>×${R.final_mult}</dd>` : ""}</dl>`;
+    ${R.final_mult != null ? `<dt>最终倍数</dt><dd>×${R.final_mult}</dd>` : ""}
+    ${R.params_overlay ? `<dt>参数覆盖</dt><dd>${R.params_overlay}（该市场单独参数）</dd>` : ""}</dl>` + renderFxScenarios();
+}
+function renderFxScenarios(){
+  const fx = cur().fx || {};
+  if (!fx.scenarios || !fx.scenarios.length || fx.scenarios[0].equity_jpy == null) return "";
+  const rows = fx.scenarios.map(s => `<tr><td>${s.label}</td><td class="n">${s.usdjpy}</td><td class="n">¥${Number(s.equity_jpy).toLocaleString("ja-JP")}</td><td class="n ${cls(s.ret_pct_jpy)}">${s.ret_pct_jpy>0?"+":""}${s.ret_pct_jpy}%</td></tr>`).join("");
+  const warn = fx.near_intervention ? `<div class="warn">USD/JPY ${fx.now} 已进入 ${fx.watch_level} 介入警戒区（−${fx.band_pct}%）：日元急升会直接侵蚀美股的日元收益，美股新仓已减半。</div>` : "";
+  return `<h3>换回日元的汇率情景（含换汇点差 ${fx.spread_pct}%）</h3><table class="tbl"><thead><tr><th>情景</th><th class="n">USD/JPY</th><th class="n">折合日元</th><th class="n">日元收益</th></tr></thead><tbody>${rows}</tbody></table>${warn}`;
 }
 function renderWatch(){
   const W = cur().watchlist || [], c = cur().currency, box = $("#watch");

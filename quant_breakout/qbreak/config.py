@@ -77,7 +77,7 @@ class StrategyParams:
     max_upper_shadow_ratio: float = 0.0
     # 信号 K 线上影线 / 实体 > 该倍数视为冲高回落（放量长上影＝出货形态），不进场。0=关闭。常用 2。
     rs_n: int = 60
-    min_rs_pct: float = 0.0
+    min_rs_pct: float = -999.0     # ≤ -900 = 关闭过滤（rs_pct 仍会算出来供展示）；0 = 必须跑赢指数
     # 相对强度：个股 N 日涨幅 − 指数 N 日涨幅 ≥ 该 %。0=关闭（但 0 也意味着不能跑输指数，
     # 若想完全关闭请设为 -999）。需要指数数据；没有指数时自动跳过此过滤。
     earnings_blackout_days: int = 0

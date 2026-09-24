@@ -448,18 +448,32 @@ def _journal(res: DayResult, market: str = "JP") -> None:
     row.to_csv(fp, mode="a", header=not fp.exists(), index=False, encoding="utf-8-sig")
 
 
-def load_params(path=None) -> StrategyParams:
-    """optimize 产出的稳健参数写进 var/best_params.json 就自动生效。"""
+def load_params(path=None, market: str | None = None) -> StrategyParams:
+    """optimize 产出的稳健参数写进 var/best_params.json 就自动生效。
+    market 给定且存在 var/best_params_<MARKET>.json 时，把其中字段**覆盖**到基础参数上：
+    文件可以只写差异（例如日本株单独打开顶部过滤，美股保持关闭）。"""
     fp = path or paths.params_file()
     try:
         p = StrategyParams.load(fp)
     except Exception as e:                                  # noqa: BLE001
         log.error("best_params.json 读取失败（%s），改用默认参数", e)
-        return StrategyParams()
+        p = None
+        fp = None
     if p is None:
-        log.info("未找到 %s，使用默认参数", fp)
-        return StrategyParams()
-    log.info("已加载参数 %s", fp)
+        if fp is not None:
+            log.info("未找到 %s，使用默认参数", fp)
+        p = StrategyParams()
+    else:
+        log.info("已加载参数 %s", fp)
+    if market:
+        ov = paths.params_file(market)
+        if ov.exists():
+            try:
+                d = read_json(ov) or {}
+                p = StrategyParams.from_dict({**p.to_dict(), **d})
+                log.info("已叠加 %s 市场覆盖参数 %s：%s", market, ov, d)
+            except Exception as e:                          # noqa: BLE001
+                log.error("%s 读取失败（%s），忽略覆盖", ov, e)
     return p
 
 

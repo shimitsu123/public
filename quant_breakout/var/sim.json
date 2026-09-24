@@ -18,8 +18,9 @@
   "fx_date": "2026-09-23",
   "universe": "broad",
   "position_pct": 0.2,
-  "max_positions": 5
+  "max_positions": 5,
+  "fx_spread_pct": 0.16
  },
- "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。股票池 broad = 日経225 / NASDAQ-100+Dow30（按偏好剔除）。use_market_regime=true：指数 200 日线/波动/回撤 + 市场风险报告的行动四选一 共同决定新仓规模。",
+ "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。股票池 broad = 日経225 / NASDAQ-100+Dow30（按偏好剔除）。use_market_regime=true：指数 200 日线/波动/回撤 + 市场风险报告的行动四选一 共同决定新仓规模。 us.fx_spread_pct：换回日元时的换汇点差（单边 %）；初始换汇（9/23）按当时代码未计点差。",
  "use_market_regime": true
 }

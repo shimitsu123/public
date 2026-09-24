@@ -110,14 +110,14 @@ def compute_indicators(df: pd.DataFrame, p: StrategyParams,
     climax = (v > out["vol_ma"] * p.climax_vol_mult) & (c < out["Open"])
     out["climax"] = climax.fillna(False).astype(bool)           # 高位放量陰線（是否"高位"由持仓浮盈判断）
 
-    # ── 相对强度（対指数）──
-    if index_close is not None and p.min_rs_pct > -900:
+    # ── 相对强度（対指数）：有指数就算出来供候补队列展示；只有 min_rs_pct > -900 才作为过滤 ──
+    if index_close is not None:
         ic = index_close.reindex(out.index).ffill()
         out["rs_pct"] = (c / c.shift(p.rs_n) - 1) * 100 - (ic / ic.shift(p.rs_n) - 1) * 100
-        out["rs_ok"] = out["rs_pct"] >= p.min_rs_pct
     else:
         out["rs_pct"] = np.nan
-        out["rs_ok"] = True
+    rs_filter = index_close is not None and p.min_rs_pct > -900
+    out["rs_ok"] = (out["rs_pct"] >= p.min_rs_pct) if rs_filter else True
 
     cond = out["is_range"] & out["golden_cross"] & out["near_zero"] & out["vol_surge"]
     if p.max_ext_ma20_pct:
@@ -128,7 +128,7 @@ def compute_indicators(df: pd.DataFrame, p: StrategyParams,
         cond &= out["dist_days"] < p.max_distribution_days
     if p.max_upper_shadow_ratio:
         cond &= ~(out["upper_shadow_ratio"] > p.max_upper_shadow_ratio)
-    if index_close is not None and p.min_rs_pct > -900:
+    if rs_filter:
         cond &= out["rs_ok"]
     if p.require_breakout:
         cond &= out["breakout"]
@@ -147,22 +147,32 @@ def compute_indicators(df: pd.DataFrame, p: StrategyParams,
 
 
 # ────────────────────── 指标缓存（给网格搜索加速）──────────────────────
+# 会改变 compute_indicators 输出的全部字段（离场参数不在其中：它们只在引擎里用）
+INDICATOR_FIELDS = (
+    "range_n", "range_x_pct", "macd_fast", "macd_slow", "macd_signal", "macd_zero_band_pct",
+    "vol_ma_n", "vol_mult", "require_breakout", "breakout_buffer_pct", "trend_ma_n",
+    "min_price", "min_turnover", "atr_n",
+    "max_ext_ma20_pct", "rsi_n", "max_rsi", "distribution_lookback", "max_distribution_days",
+    "max_upper_shadow_ratio", "rs_n", "min_rs_pct", "climax_vol_mult",
+)
+
+
 class IndicatorCache:
     """网格搜索里 range_n 只影响横盘列、MACD 三参数只影响 MACD 列。
     原版每个参数组合都对全部股票整套重算，36 组 × 5 窗口 = 180 次全量重算。
-    这里按「子参数」缓存中间结果，默认网格下重算量降到约 1/6。"""
+    这里按「子参数」缓存中间结果，默认网格下重算量降到约 1/6。
+    index_close：基准指数收盘序列（相对强度过滤用）；None 时该过滤自动跳过。"""
 
-    def __init__(self, data: dict[str, pd.DataFrame]):
+    def __init__(self, data: dict[str, pd.DataFrame], index_close: pd.Series | None = None):
         self.data = data
+        self.index_close = index_close
         self._cache: dict[tuple, pd.DataFrame] = {}
 
     def get(self, ticker: str, p: StrategyParams) -> pd.DataFrame:
-        key = (ticker, p.range_n, p.range_x_pct, p.macd_fast, p.macd_slow, p.macd_signal,
-               p.macd_zero_band_pct, p.vol_ma_n, p.vol_mult, p.require_breakout,
-               p.breakout_buffer_pct, p.trend_ma_n, p.min_price, p.min_turnover, p.atr_n)
+        key = (ticker,) + tuple(getattr(p, f) for f in INDICATOR_FIELDS)
         hit = self._cache.get(key)
         if hit is None:
-            hit = compute_indicators(self.data[ticker], p)
+            hit = compute_indicators(self.data[ticker], p, self.index_close)
             self._cache[key] = hit
         return hit
 

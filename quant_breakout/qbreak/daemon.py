@@ -312,12 +312,26 @@ class Daemon:
                 log.info("逆指値 %s → %.1f", t, want)
         self.book.save()
 
+    def _index_close(self):
+        """基准指数收盘序列（相对强度过滤）；取不到时返回 None → 过滤自动跳过。"""
+        if self.p.min_rs_pct <= -900:
+            return None
+        from .config import BENCHMARK
+        from .data import load_universe
+        try:
+            idx = load_universe([BENCHMARK[self.market]], self.data_cfg).get(BENCHMARK[self.market])
+            return idx["Close"] if idx is not None else None
+        except Exception as e:                                # noqa: BLE001
+            log.warning("指数数据不可用，相对强度过滤跳过: %s", e)
+            return None
+
     def _end_of_day(self, now: dt.datetime) -> None:
         log.info("── 收盘后日线流程 ──")
         res = run_once(self.universe, self.broker, self.p, self.risk_cfg, self.sizing,
                        self.data_cfg, market=self.market, dry_run=self.dry_run,
                        today=now.date(), exec_cfg=self.ex,
-                       protective_stop=self.cfg.protective_stop)
+                       protective_stop=self.cfg.protective_stop,
+                       index_close=self._index_close())
         log.info("\n%s", res.summary())
         self.st.eod_done = True
         self.st.save()

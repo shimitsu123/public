@@ -19,7 +19,7 @@
  "max_distribution_days": 0,
  "max_upper_shadow_ratio": 0.0,
  "rs_n": 60,
- "min_rs_pct": 0.0,
+ "min_rs_pct": -999.0,
  "earnings_blackout_days": 2,
  "exit_before_earnings": false,
  "stop_loss_pct": 7.0,
