@@ -300,11 +300,13 @@ def _live_common(a, live: bool) -> int:
     if not getattr(a, "no_macro", False):
         scale, tmult, block, _ = _macro_layer(market, dcfg, universe(market), dt.date.today())
     tmult = _index_mult(market, universe(market), dt.date.today(), tmult)
+    rscale, force, _bb = _regime_gate(market, dcfg)
     res = run_once(universe(market), broker, p, risk, sizing, dcfg,
                    market=market, dry_run=a.dry_run, allow_stale=a.allow_stale,
                    exec_cfg=ex, protective_stop=a.protective_stop,
-                   index_close=_index_close(market, dcfg, p), entry_scale=scale,
-                   ticker_mult=tmult, entry_block=block, corp_actions=_corp_actions_provider())
+                   index_close=_index_close(market, dcfg, p), entry_scale=min(scale, rscale),
+                   ticker_mult=tmult, entry_block=block, corp_actions=_corp_actions_provider(),
+                   force_exit_all=force)
     print("\n" + res.summary())
     return 0
 
@@ -338,11 +340,16 @@ def cmd_signal(a) -> int:
     if not getattr(a, "no_macro", False):
         scale, tmult, block, _ = _macro_layer(market, dcfg, universe(market), dt.date.today())
     tmult = _index_mult(market, universe(market), dt.date.today(), tmult)
+    rscale, force, bb = _regime_gate(market, dcfg)
+    if bb.get("state") in ("bull", "bear"):
+        print(f"牛熊分界：{'熊市' if bb['state'] == 'bear' else '牛市'}（自 {bb.get('since')}）；"
+              f"翻转价位 {bb.get('level')}（距 {bb.get('distance_pct')}%）")
     res = run_once(universe(market), broker, p, risk, sizing, dcfg,
                    market=market, dry_run=True, allow_stale=a.allow_stale,
                    exec_cfg=ExecConfig.for_market(market),
-                   index_close=_index_close(market, dcfg, p), entry_scale=scale,
-                   ticker_mult=tmult, entry_block=block, corp_actions=_corp_actions_provider())
+                   index_close=_index_close(market, dcfg, p), entry_scale=min(scale, rscale),
+                   ticker_mult=tmult, entry_block=block, corp_actions=_corp_actions_provider(),
+                   force_exit_all=force)
     from qbreak.trader import PositionBook
     positions = PositionBook().merge(broker.positions())
     sheet = operation_sheet(res, p, positions, a.limit_buffer)
@@ -524,7 +531,19 @@ def cmd_sim_day(a) -> int:
             dcfg = DataConfig(provider=provider, years=2, allow_synthetic=False).validate()
             uni = universe(m, mc.get("universe", "default"))
             reg, idx_close = _market_regime(m, dcfg)
-            scale = reg.mult if cfg.get("use_market_regime", True) else 1.0
+            mode = mc.get("regime_mode", cfg.get("regime_mode", "quant"))
+            use_q, use_bb, bb_exit = REGIME_MODES.get(mode, REGIME_MODES["quant"])
+            if cfg.get("use_market_regime", True):
+                scale = reg.mult if use_q else reg.overlay_mult      # 判断层（风险报告）始终生效
+            else:
+                scale = 1.0
+            bb = _bullbear(m, dcfg)                           # 始终计算，日报显示；是否参与交易看模式
+            bb["gating"] = use_bb
+            force_exit = None
+            if use_bb and bb.get("state") == "bear":
+                scale = 0.0
+                if bb_exit:
+                    force_exit = f"regime_bear(牛熊分界：{bb.get('since')} 起熊市)"
             fx_info = {}
             if m == "US" and cfg.get("use_fx_scale", True):
                 fx_scale, fx_info = _fx_scale(cfg)
@@ -547,9 +566,10 @@ def cmd_sim_day(a) -> int:
                            market=m, dry_run=False, allow_stale=a.allow_stale,
                            exec_cfg=exc, entry_scale=scale, index_close=idx_close,
                            earnings=earnings, ticker_mult=tmult, entry_block=block,
-                           corp_actions=_corp_actions_provider())
+                           corp_actions=_corp_actions_provider(), force_exit_all=force_exit)
             results[m] = res
-            rd = reg.to_dict(); rd.update({"fx": fx_info, "final_mult": scale})
+            rd = reg.to_dict(); rd.update({"fx": fx_info, "final_mult": scale, "regime_mode": mode,
+                                           "bullbear": bb})
             rd["params_overlay"] = str(paths.params_file(m).name) if paths.params_file(m).exists() else ""
             extras[m] = {"regime": rd, "macro": macro_info, "watchlist": _scan_market(
                 uni, p, m, dcfg, sizing.initial_cash * mc["position_pct"], idx_close, macro_info)}
@@ -599,6 +619,58 @@ def _market_regime(market: str, dcfg):
     reg = apply_overlay(quant_regime(idx, market))
     log.info("[%s] 市场状态 %s → 新仓规模 ×%.2f", market, reg.label, reg.mult)
     return reg, (idx["Close"] if idx is not None else None)
+
+
+REGIME_MODES = {                   # sim.json regime_mode → (用量化层倍数, 用牛熊分界停开仓, 熊市清仓)
+    "quant": (True, False, False), "bullbear": (False, True, False), "bullbear_exit": (False, True, True),
+    "both": (True, True, False), "both_exit": (True, True, True)}
+
+
+def _bullbear(market: str, dcfg=None) -> dict:
+    """牛熊分界的实时状态（var/bullbear.json 里选定的检测器；指数取近 10 年，只用已收盘 K 线）。"""
+    from qbreak.bullbear import current_regime, load_config
+    from qbreak.config import BENCHMARK
+    from qbreak.data import load_universe
+    from qbreak.trader import drop_partial_bar
+    cfg = load_config()
+    if not cfg.get("detector"):
+        return {"state": "unknown", "note": "var/bullbear.json 未配置"}
+    try:
+        d10 = DataConfig(provider=getattr(dcfg, "provider", "yfinance"), years=10, allow_synthetic=False).validate()
+        idx = load_universe([BENCHMARK[market]], d10).get(BENCHMARK[market])
+        idx = drop_partial_bar(idx, market)
+    except Exception as e:                                    # noqa: BLE001
+        log.warning("[%s] 牛熊分界：指数取不到（%s），按 unknown 处理（不拦截）", market, e)
+        return {"state": "unknown", "note": str(e)[:120]}
+    out = current_regime(idx["Close"], market, cfg)
+    out["index"] = BENCHMARK[market]
+    log.info("[%s] 牛熊分界：%s（自 %s，%s 日）；翻转价位 %s（距 %s%%）", market, out.get("state"), out.get("since"),
+             out.get("days"), out.get("level"), out.get("distance_pct"))
+    return out
+
+
+def _regime_mode(market: str) -> str:
+    """状态层模式：sim.json（市场段 > 全局）> var/bullbear.json 的 mode > quant。"""
+    from qbreak.bullbear import load_config
+    sim = _sim_cfg() or {}
+    return ((sim.get(market.lower()) or {}).get("regime_mode") or sim.get("regime_mode")
+            or load_config().get("mode") or "quant")
+
+
+def _regime_gate(market: str, dcfg) -> tuple[float, str | None, dict]:
+    """实盘 / 半自动 / 守护进程用：按状态层模式给出 (新仓倍数, 强制离场原因, 牛熊信息)。"""
+    use_q, use_bb, bb_exit = REGIME_MODES.get(_regime_mode(market), REGIME_MODES["quant"])
+    scale = 1.0
+    if use_q:
+        reg, _ = _market_regime(market, dcfg)
+        scale = reg.mult
+    bb = _bullbear(market, dcfg) if use_bb else {"state": "off"}
+    force = None
+    if bb.get("state") == "bear":
+        scale = 0.0
+        if bb_exit:
+            force = f"regime_bear(牛熊分界：{bb.get('since')} 起熊市)"
+    return scale, force, bb
 
 
 def _fx_scale(cfg) -> tuple[float, dict]:
@@ -723,6 +795,26 @@ def cmd_universe_update(a) -> int:
     return 0
 
 
+def cmd_bullbear(a) -> int:
+    """牛熊分界：当前状态 + 明天收盘的翻转价位 + 事后精确标注的熊市清单。"""
+    from qbreak.bullbear import load_config, phase_table
+    from qbreak.config import BENCHMARK
+    cfg = load_config()
+    print(f"检测器：{cfg.get('detector')}（状态层模式 JP={_regime_mode('JP')} / US={_regime_mode('US')}）")
+    for m in ("JP", "US"):
+        bb = _bullbear(m, _data_cfg(a))
+        print(f"\n[{m}] {BENCHMARK[m]} {bb.get('asof')} 收盘 {bb.get('close')}：{bb.get('state')}（自 {bb.get('since')}，{bb.get('days')} 日）")
+        if bb.get("level"):
+            print(f"      → 翻转为{'熊' if bb['flip_to'] == 'bear' else '牛'}的价位 {bb['level']}（距现价 {bb['distance_pct']}%）"
+                  + (f"，还需连续 {bb['need_days']} 天" if bb.get("need_days") else "") + f"；参照均线 {bb.get('ma')}")
+        if a.history:
+            import yfinance as yf
+            h = yf.Ticker(BENCHMARK[m]).history(period="max", auto_adjust=True)["Close"]
+            h.index = h.index.tz_localize(None)
+            print(phase_table(h[h.index >= ("1965-01-01" if m == "JP" else "1950-01-01")]).to_string(index=False))
+    return 0
+
+
 def cmd_report(a) -> int:
     from qbreak.report import write_report
     cfg = _sim_cfg()
@@ -748,9 +840,10 @@ def cmd_daemon(a) -> int:
                       allow_synthetic=a.synthetic).validate()
     hook = None
     if not getattr(a, "no_macro", False):
-        def hook(day):                                       # 日终流程前算一次宏观层
+        def hook(day):                                       # 日终流程前算一次宏观层 + 状态层
             s, tm, b, _ = _macro_layer(market, dcfg, universe(market), day)
-            return s, _index_mult(market, universe(market), day, tm), b
+            rs, force, _bb = _regime_gate(market, dcfg)
+            return min(s, rs), _index_mult(market, universe(market), day, tm), b, force
     d = Daemon(universe(market), broker, _params(a, market), risk, sizing, dcfg,
                ex, cfg=cfg, dry_run=a.dry_run, market=market,
                fallback_quotes=(a.broker == "paper"), entry_hook=hook,
@@ -966,6 +1059,9 @@ def main(argv=None) -> int:
     sd.add_argument("--allow-stale", action="store_true")
     sd.set_defaults(func=cmd_sim_day)
 
+    bbp = sub.add_parser("bullbear", help="牛熊分界：当前状态、翻转价位、历史熊市清单"); _common(bbp)
+    bbp.add_argument("--history", action="store_true", help="同时列出 1950/1965 年以来的全部熊市")
+    bbp.set_defaults(func=cmd_bullbear)
     rp = sub.add_parser("report", help="只重新生成日报 HTML"); _common(rp)
     rp.set_defaults(func=cmd_report)
 

@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-24 06:47",
+ "generated": "2026-09-24 07:33",
  "sim": {
   "start": "2026-09-24",
   "end": "2026-12-24",
@@ -29,14 +29,15 @@
    "use_sector_tilt": true,
    "use_event_window": false
   },
-  "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。股票池 broad = 日経225 / NASDAQ-100+Dow30（按偏好剔除）。use_market_regime=true：指数 200 日线/波动/回撤 + 市场风险报告的行动四选一 共同决定新仓规模。 us.fx_spread_pct：换回日元时的换汇点差（单边 %）；初始换汇（9/23）按当时代码未计点差。 宏观层按市场设定（2026-09-24 变体研究定案）：两市场都开量化因子 + 板块倾斜，事件窗口关闭（样本外拖累）；美股出场改为不用死叉、跟踪止损 10%（浮盈 3% 启动），见 var/best_params_US.json。",
+  "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。股票池 broad = 日経225 / NASDAQ-100+Dow30（按偏好剔除）。use_market_regime=true：指数 200 日线/波动/回撤 + 市场风险报告的行动四选一 共同决定新仓规模。 us.fx_spread_pct：换回日元时的换汇点差（单边 %）；初始换汇（9/23）按当时代码未计点差。 宏观层按市场设定（2026-09-24 变体研究定案）：两市场都开量化因子 + 板块倾斜，事件窗口关闭（样本外拖累）；美股出场改为不用死叉、跟踪止损 10%（浮盈 3% 启动），见 var/best_params_US.json。 regime_mode=quant：状态层维持指数 200 日线/波动/回撤（20 年回测后保留）；牛熊分界（250 日线±3%、连续 5 天）只显示。",
   "use_market_regime": true,
   "use_macro": true,
   "use_sector_tilt": true,
-  "use_event_window": false
+  "use_event_window": false,
+  "regime_mode": "quant"
  },
  "last_run": {
-  "at": "2026-09-24 06:47",
+  "at": "2026-09-24 07:33",
   "ok": true,
   "error": "",
   "markets_ok": [
@@ -95,6 +96,23 @@
     "label": "neutral｜报告:减仓观察",
     "fx": {},
     "final_mult": 0.5,
+    "regime_mode": "quant",
+    "bullbear": {
+     "state": "bull",
+     "since": "2025-07-02",
+     "days": 299,
+     "changed_today": false,
+     "detector": "ma_band(L=250,b=0.03,k=5)",
+     "close": 65513.99,
+     "asof": "2026-09-24",
+     "flip_to": "bear",
+     "level": 55757.6,
+     "need_days": 5,
+     "ma": 57482.06,
+     "distance_pct": 17.5,
+     "index": "^N225",
+     "gating": false
+    },
     "params_overlay": "best_params_JP.json"
    },
    "macro": {
@@ -564,13 +582,30 @@
     "mult": 0.5,
     "label": "risk_on｜报告:减仓观察",
     "fx": {
-     "usdjpy": 158.4409942626953,
+     "usdjpy": 158.20799255371094,
      "date": "2026-09-24",
      "watch_level": 158.0,
      "band_pct": 1.0,
      "scale": 0.5
     },
     "final_mult": 0.5,
+    "regime_mode": "quant",
+    "bullbear": {
+     "state": "bull",
+     "since": "2025-05-19",
+     "days": 338,
+     "changed_today": false,
+     "detector": "ma_band(L=250,b=0.03,k=5)",
+     "close": 7706.03,
+     "asof": "2026-09-23",
+     "flip_to": "bear",
+     "level": 6887.5,
+     "need_days": 5,
+     "ma": 7100.51,
+     "distance_pct": 11.88,
+     "index": "^GSPC",
+     "gating": false
+    },
     "params_overlay": "best_params_US.json"
    },
    "macro": {

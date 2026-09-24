@@ -90,12 +90,15 @@ def _window(gidx: pd.DatetimeIndex, start, end) -> tuple[int, int]:
 
 
 def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestConfig,
-                 start=None, end=None, entry_mult=None) -> BacktestResult:
+                 start=None, end=None, entry_mult=None, regime=None,
+                 regime_exit: bool = False) -> BacktestResult:
     """ind: {ticker: compute_indicators(...) 的结果}。start/end 只限制**交易窗口**，
     指标仍在完整历史上计算 —— 这样 walk-forward 的样本外窗口不会被指标预热期吃掉，
     同时因为指标在 t 时刻只用 ≤t 的数据，也不会引入前视偏差。
     entry_mult：可选 [len(全局日期) × n 票] 矩阵（0~1），成交日 i 的新仓预算 × entry_mult[i, j]；
-    0 = 该日不开该票新仓（宏观层 / 板块倾斜 / 事件窗口，见 macro.build_entry_mult）。"""
+    0 = 该日不开该票新仓（宏观层 / 板块倾斜 / 事件窗口，见 macro.build_entry_mult）。
+    regime：可选 bool 数组 [len(全局日期)]，True = 该日收盘时处于熊市（bullbear 分界算法）。
+      熊市收盘产生的信号不在次日开新仓；regime_exit=True 时，宣布熊市当天收盘把全部持仓排队到次日开盘卖出。"""
     p.validate()
     ex, sz = bt.exec_cfg.validate(), bt.sizing.validate()
     if not ind:
@@ -117,7 +120,11 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
     trades: list[dict] = []
     eq_hist, exp_hist = np.empty(i1 - i0), np.empty(i1 - i0)
     skipped = dict(gap=0, cash=0, lot=0, full=0, no_bar=0, daily_cap=0, rebuy=0, macro=0,
-                   limit_up=0, limit_down_hold=0)
+                   limit_up=0, limit_down_hold=0, regime=0)
+    if regime is not None:
+        regime = np.asarray(regime, dtype=bool)
+        if regime.shape != (len(gidx),):
+            raise ValueError(f"regime 长度 {regime.shape} ≠ {len(gidx)}")
     jp_limits = ex.market.upper() == "JP"
 
     def locked(i: int, j: int) -> str | None:
@@ -190,6 +197,9 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
                 continue
             if locked(i, j) == "up":
                 skipped["limit_up"] += 1          # ストップ高張り付き：买不到
+                continue
+            if regime is not None and i > 0 and regime[i - 1]:
+                skipped["regime"] += 1                # 信号日收盘已是熊市 → 牛市算法不开新仓
                 continue
             em = float(entry_mult[i, j]) if entry_mult is not None else 1.0
             if em <= 0:
@@ -277,6 +287,11 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
                     queued = "time_stop"
             if queued:
                 pending_exit[j] = queued
+
+        # ── 3b. 牛熊分界：宣布熊市当天收盘 → 全部持仓次日开盘卖出（可选）──
+        if regime_exit and regime is not None and i > 0 and regime[i] and not regime[i - 1]:
+            for j in list(pos):
+                pending_exit.setdefault(j, "regime_bear")
 
         # ── 4. 收盘后扫描新信号（仅对次日有效）──
         if len(pos) < sz.max_positions:

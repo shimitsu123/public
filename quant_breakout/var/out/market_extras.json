@@ -15,6 +15,23 @@
    "label": "neutral｜报告:减仓观察",
    "fx": {},
    "final_mult": 0.5,
+   "regime_mode": "quant",
+   "bullbear": {
+    "state": "bull",
+    "since": "2025-07-02",
+    "days": 299,
+    "changed_today": false,
+    "detector": "ma_band(L=250,b=0.03,k=5)",
+    "close": 65513.99,
+    "asof": "2026-09-24",
+    "flip_to": "bear",
+    "level": 55757.6,
+    "need_days": 5,
+    "ma": 57482.06,
+    "distance_pct": 17.5,
+    "index": "^N225",
+    "gating": false
+   },
    "params_overlay": "best_params_JP.json"
   },
   "macro": {
@@ -440,13 +457,30 @@
    "mult": 0.5,
    "label": "risk_on｜报告:减仓观察",
    "fx": {
-    "usdjpy": 158.4409942626953,
+    "usdjpy": 158.20799255371094,
     "date": "2026-09-24",
     "watch_level": 158.0,
     "band_pct": 1.0,
     "scale": 0.5
    },
    "final_mult": 0.5,
+   "regime_mode": "quant",
+   "bullbear": {
+    "state": "bull",
+    "since": "2025-05-19",
+    "days": 338,
+    "changed_today": false,
+    "detector": "ma_band(L=250,b=0.03,k=5)",
+    "close": 7706.03,
+    "asof": "2026-09-23",
+    "flip_to": "bear",
+    "level": 6887.5,
+    "need_days": 5,
+    "ma": 7100.51,
+    "distance_pct": 11.88,
+    "index": "^GSPC",
+    "gating": false
+   },
    "params_overlay": "best_params_US.json"
   },
   "macro": {

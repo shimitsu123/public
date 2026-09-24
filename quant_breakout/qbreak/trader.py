@@ -271,7 +271,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
              today: dt.date | None = None, exec_cfg: ExecConfig | None = None,
              protective_stop: bool = False, entry_scale: float = 1.0,
              index_close=None, earnings=None, ticker_mult: dict | None = None,
-             entry_block=None, corp_actions=None) -> DayResult:
+             entry_block=None, corp_actions=None, force_exit_all: str | None = None) -> DayResult:
     """entry_scale：市场级新仓倍数（regime / 汇率 / 宏观取 min）；ticker_mult：{票: 板块倾斜倍数}；
     entry_block：字符串 = 今日所有新仓被拦的原因；可调用对象 = f(成交日) -> 原因或 None，
     成交日由本函数按真实最新 K 线 + 交易日历算出（T+1 开盘），避免估算偏差。"""
@@ -421,6 +421,8 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
                              stop_px, trail_px, tp_px,
                              stop_handled_by_broker=intraday and protective_stop,
                              climax=bool(row.get("climax", False)), earnings_in_days=e_days)
+        if not reason and force_exit_all:
+            reason = force_exit_all                     # 熊市（牛熊分界）→ 全部持仓次日开盘卖出
         if reason and hasattr(broker, "pending") and any(
                 q.get("ticker") == t and q.get("side") == "SELL" for q in broker.pending()):
             res.notes.append(f"SELL {t}: 已有顺延中的卖单（ストップ安），不重复下单")

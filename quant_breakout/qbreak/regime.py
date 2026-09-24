@@ -71,6 +71,20 @@ def quant_regime(index_df: pd.DataFrame | None, market: str) -> Regime:
     return r
 
 
+def quant_regime_series(index_df: pd.DataFrame) -> pd.Series:
+    """quant_regime 的逐日版本（回测用，规则完全相同）：每天收盘的新仓倍数 0 / 0.75 / 1。"""
+    c = index_df["Close"].astype(float)
+    ma200 = c.rolling(200).mean()
+    vol20 = c.pct_change().rolling(20).std() * np.sqrt(252) * 100
+    dd = (c / c.rolling(252, min_periods=1).max() - 1) * 100
+    above = c > ma200
+    off = (~above) | (dd < -12) | (vol20 > 35)
+    on = above & (vol20 < 25) & (dd > -8)
+    out = pd.Series(np.where(off, 0.0, np.where(on, 1.0, 0.75)), index=c.index)
+    out[ma200.isna()] = 1.0
+    return out
+
+
 def apply_overlay(r: Regime, max_age_days: int = 2) -> Regime:
     """读取 var/market_regime.json（worker 从「市场风险报告」提取）。过期则忽略。"""
     d = read_json(paths.home() / "market_regime.json", {}) or {}

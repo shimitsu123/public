@@ -330,18 +330,21 @@ class Daemon:
 
     def _end_of_day(self, now: dt.datetime) -> None:
         log.info("── 收盘后日线流程 ──")
-        scale, tmult, block = 1.0, None, None
+        scale, tmult, block, force = 1.0, None, None, None
         if self.entry_hook is not None:
             try:
-                scale, tmult, block = self.entry_hook(now.date())
+                got = self.entry_hook(now.date())
+                scale, tmult, block = got[:3]
+                force = got[3] if len(got) > 3 else None
             except Exception as e:                            # noqa: BLE001
-                log.warning("宏观层计算失败，按 ×1 处理: %s", e)
+                log.warning("宏观层 / 状态层计算失败，按 ×1 处理: %s", e)
         res = run_once(self.universe, self.broker, self.p, self.risk_cfg, self.sizing,
                        self.data_cfg, market=self.market, dry_run=self.dry_run,
                        today=now.date(), exec_cfg=self.ex,
                        protective_stop=self.cfg.protective_stop,
                        index_close=self._index_close(), entry_scale=scale,
-                       ticker_mult=tmult, entry_block=block, corp_actions=self.corp_actions)
+                       ticker_mult=tmult, entry_block=block, corp_actions=self.corp_actions,
+                       force_exit_all=force)
         log.info("\n%s", res.summary())
         self.st.eod_done = True
         self.st.save()

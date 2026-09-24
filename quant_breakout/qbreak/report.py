@@ -353,7 +353,16 @@ function renderRegime(){
     <dt>判断层</dt><dd>${R.overlay_action ? `市场风险报告「${R.overlay_action}」（${R.overlay_as_of}）` + (R.crash_prob != null ? `，24h 崩盘概率 ${R.crash_prob}%` : "") : "未接入或已过期（>2 天）"}</dd>
     ${R.fx && R.fx.usdjpy ? `<dt>汇率层</dt><dd>USD/JPY ${R.fx.usdjpy}（${R.fx.date}），警戒 ${R.fx.watch_level}±${R.fx.band_pct}% → 美股新仓 ×${R.fx.scale}</dd>` : ""}
     ${R.final_mult != null ? `<dt>最终倍数</dt><dd>×${R.final_mult}</dd>` : ""}
-    ${R.params_overlay ? `<dt>参数覆盖</dt><dd>${R.params_overlay}（该市场单独参数）</dd>` : ""}</dl>` + renderFxScenarios();
+    ${R.params_overlay ? `<dt>参数覆盖</dt><dd>${R.params_overlay}（该市场单独参数）</dd>` : ""}
+    ${bbRow(R.bullbear, R.regime_mode)}</dl>` + renderFxScenarios();
+}
+function bbRow(B, mode){
+  if (!B || !B.state || B.state === "off") return mode ? `<dt>状态层</dt><dd>${mode}</dd>` : "";
+  if (B.state === "unknown") return `<dt>牛熊分界</dt><dd class="muted">暂不可用 ${B.note||""}</dd>`;
+  const st = B.state === "bear" ? `<span class="neg">熊市</span>` : `<span class="pos">牛市</span>`;
+  const flip = B.level ? `翻转为${B.flip_to === "bear" ? "熊" : "牛"}的收盘价位 <b>${Number(B.level).toLocaleString("ja-JP")}</b>（距现价 ${B.distance_pct}%${B.need_days ? `，连续 ${B.need_days} 天` : ""}）` : "";
+  const use = B.gating ? "参与交易（熊市停开新仓）" : "仅显示，不参与交易（20 年回测未显示改善，见 README）";
+  return `<dt>牛熊分界</dt><dd>${st}（${B.index} 自 ${B.since} 起 ${B.days} 个交易日；${B.asof} 收盘 ${Number(B.close).toLocaleString("ja-JP")}）<div class="muted">${flip}；算法 ${B.detector}；${use}；状态层模式 ${mode||"—"}</div></dd>`;
 }
 function renderFxScenarios(){
   const fx = cur().fx || {};
