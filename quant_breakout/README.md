@@ -559,7 +559,7 @@ v3（事先登记 `scripts/threat_index_v3_study.py`）再加黄金、金银比�
 日报威胁卡片列出各领域现在的危险度，组合读数每天前瞻记录。另把「去掉利率曲线倒挂与油价冲击」的版本（调查里拿掉后两段都更好，但属于看过结果的发现）
 加进前瞻记录；所有版本按 `scripts/threat_forward_review.py` 的统一规则在季度复核时检验（前瞻期 ≥3 次 ≥10% 下跌之后才下结论）。
 日経另有**前瞻观察 Wj**（因子调查里日経两段都有效的 8 个因素；美股那一对对日経无效，只作对照；2026-09-15 起记到 `var/out/jp_watch_forward.csv`，
-规则见 `scripts/jp_watch_review.py`）；「现行 + Wj 各因素」8 个版本（美股另有「现行 + 金银比 / 商品波动」2 个）也记进前瞻对照记录（`threat_forward.csv`）。
+规则见 `scripts/jp_watch_review.py`）；「现行 + Wj 各因素」8 个版本（美股另有「现行 + 金银比」「现行 + 商品波动」「现行 + 两者」3 个）也记进前瞻对照记录（`threat_forward.csv`）。
 美股另有**前瞻观察「金银比 + 商品波动」**（v3 里两个半段都有效的两个因素；2026-09-18 起每天记到 `var/out/us_watch_forward.csv`，
 规则见 `scripts/us_watch_review.py`，季度复核时检验；前瞻期内 ≥3 次 ≥10% 下跌之后才下结论，只展示、不参与交易）。
 
