@@ -18,6 +18,9 @@
   （现行 v1 再加美股前瞻观察的一个因素），同一条判定规则。美股一共比 8 个版本；这两个因素也是看过 2011 年后结果才挑的。
 补登（2026-09-25，用户要求；此时这一列还没有任何记录）：美股再加「A0+W」= 现行 v1 再加金银比与商品波动两个因素（等权），
   同一条判定规则；美股一共比 9 个版本。样本内参考在下面单独列出（偏乐观）。
+补登（2026-09-25，用户要求；此时这一列还没有任何记录）：日経再加「A0+Wj」= 现行 v1 再加 Wj 的全部 8 个因素
+  （18 个因素等权，Wj 部分合计占 8/18），同一条判定规则；日経一共比 15 个版本。样本内参考在下面单独列出
+  （偏乐观：8 个因素是看过 2011 年后结果才挑的）。
 """
 from __future__ import annotations
 
@@ -63,20 +66,35 @@ def in_sample(d: dict) -> dict:
     return out
 
 
-def in_sample_w(d: dict) -> dict:
-    """「现行 + 金银比 + 商品波动」（美股）的样本内参考（偏乐观：两个因素是看过 2011 年后结果才挑的）。"""
-    raw, close = TH.build_all(d, TH.load_extra_all())["US"]
-    pct = pd.DataFrame({c: TH.expanding_pct(raw[c]) for c in TH.US_COLS + TH.US_WATCH})
-    a0, aw = TH._eq(pct[TH.US_COLS]), TH._eq(pct[TH.US_COLS + TH.US_WATCH])
+def _vs_a0(a0: pd.Series, s: pd.Series, name: str, close: pd.Series) -> dict:
+    """A0 与某个版本在同一批日子上的两段 AUC（跌≥10% / ≥15%）。"""
     fdd = TH.forward_drawdown(close, 60)
     r = {}
     for lvl in (0.10, 0.15):
         ev = (fdd <= -lvl).astype(float).where(fdd.notna())
-        for name, s in (("A0", a0), ("A0+W", aw)):
-            m_ = (s.index >= EVAL0) & s.notna() & ev.notna() & a0.notna() & aw.notna()
-            a, e = s[m_], ev[m_]
-            r[f"{name}_{int(lvl * 100)}"] = [TH.auc(a[a.index < SPLIT], e[a.index < SPLIT]), TH.auc(a[a.index >= SPLIT], e[a.index >= SPLIT])]
+        for v, x in (("A0", a0), (name, s)):
+            m_ = (x.index >= EVAL0) & x.notna() & ev.notna() & a0.notna() & s.notna()
+            a, e = x[m_], ev[m_]
+            r[f"{v}_{int(lvl * 100)}"] = [TH.auc(a[a.index < SPLIT], e[a.index < SPLIT]), TH.auc(a[a.index >= SPLIT], e[a.index >= SPLIT])]
     return r
+
+
+def in_sample_w(F: dict) -> dict:
+    """「现行 + 金银比 + 商品波动」（美股）的样本内参考（偏乐观：两个因素是看过 2011 年后结果才挑的）。F = build_all(...)。"""
+    raw, close = F["US"]
+    pct = pd.DataFrame({c: TH.expanding_pct(raw[c]) for c in TH.US_COLS + TH.US_WATCH})
+    return _vs_a0(TH._eq(pct[TH.US_COLS]), TH._eq(pct[TH.US_COLS + TH.US_WATCH]), "A0+W", close)
+
+
+def in_sample_wj(F: dict) -> dict:
+    """「现行 + Wj 8 个因素」（日経）的样本内参考（偏乐观：8 个因素是看过 2011 年后结果才挑的）。F = build_all(...)。"""
+    from qbreak import survey as SV
+    raw_ex, close = F["JP"]
+    feats = pd.concat([raw_ex, SV.features(raw_ex.index, SV.load_raw(), jp_market=True)], axis=1)
+    feats = feats.loc[:, ~feats.columns.duplicated()]
+    cols = [c for c in SV.JP_WATCH if c in feats]
+    pct = pd.DataFrame({c: TH.expanding_pct(feats[c]) for c in dict.fromkeys(TH.JP_COLS + cols)})
+    return _vs_a0(TH._eq(pct[TH.JP_COLS]), TH._eq(pct[TH.JP_COLS + cols]), "A0+Wj", close)
 
 
 def main() -> int:
@@ -112,13 +130,16 @@ def main() -> int:
                 a10, a15 = ins[m][f"{v}_10"], ins[m][f"{v}_15"]
                 lines.append(f"| {name} | {TH.FORWARD_LABELS[v]} | {fmt(a10[0])} / {fmt(a10[1])} | {fmt(a15[0])} / {fmt(a15[1])} |")
         sv = json.loads((paths.out_dir() / "threat_factor_survey.json").read_text(encoding="utf-8"))
-        iw = in_sample_w(d)
-        out["in_sample_w"] = iw
-        lines += ["\n## 样本内参考：美股「现行 + 金银比 + 商品波动」（偏乐观，不作判定依据）",
-                  "| 版本 | 跌≥10% AUC 1995–2010 / 2011– | 跌≥15% AUC 1995–2010 / 2011– |", "|---|---|---|"]
-        for v in ("A0", "A0+W"):
-            lines.append(f"| {TH.forward_label(v)} | {fmt(iw[v + '_10'][0])} / {fmt(iw[v + '_10'][1])} | "
-                         f"{fmt(iw[v + '_15'][0])} / {fmt(iw[v + '_15'][1])} |")
+        F = TH.build_all(d, TH.load_extra_all())
+        for key, fn, v2, title in (("in_sample_w", in_sample_w, "A0+W", "美股「现行 + 金银比 + 商品波动」"),
+                                   ("in_sample_wj", in_sample_wj, "A0+Wj", "日経「现行 + Wj 8 个因素」")):
+            iw = fn(F)
+            out[key] = iw
+            lines += [f"\n## 样本内参考：{title}（偏乐观，不作判定依据）",
+                      "| 版本 | 跌≥10% AUC 1995–2010 / 2011– | 跌≥15% AUC 1995–2010 / 2011– |", "|---|---|---|"]
+            for v in ("A0", v2):
+                lines.append(f"| {TH.forward_label(v)} | {fmt(iw[v + '_10'][0])} / {fmt(iw[v + '_10'][1])} | "
+                             f"{fmt(iw[v + '_15'][0])} / {fmt(iw[v + '_15'][1])} |")
         from qbreak.survey import JP_WATCH
         lines += ["\n## 样本内参考：「现行 + 单个观察因素」（因子调查里加进现行模型的 ΔAUC，偏乐观）",
                   "| 市场 | 版本 | ΔAUC 1995–2010 / 2011– | 单独 AUC 1995–2010 / 2011– |", "|---|---|---|---|"]

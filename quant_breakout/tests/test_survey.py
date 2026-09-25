@@ -80,7 +80,10 @@ def test_jp_watch_rows_and_generic_review(tmp_path):
     raw_ex = pd.DataFrame({c: rng.normal(size=1200) for c in dict.fromkeys(cols)}, index=days)
     rows = SV.jp_watch_rows({"JP": (raw_ex, None)}, {})
     assert len(rows) == 5 and {"Wj", "Wj_pct", "W2", "W2_pct", "A0", "A0_pct", "p_breadth"} <= set(rows[-1])
-    assert {f"A0+{c}" for c in SV.JP_WATCH} <= set(rows[-1])                  # 现行 + 各因素（前瞻对照）
+    assert {f"A0+{c}" for c in SV.JP_WATCH} | {"A0+Wj"} <= set(rows[-1])      # 现行 + 各因素 / 全部因素（前瞻对照）
+    a0x = TH._eq(pd.DataFrame({c: TH.expanding_pct(raw_ex[c]) for c in TH.JP_COLS + SV.JP_WATCH}))   # 18 个因素等权
+    assert rows[-1]["A0+Wj"] == round(float(a0x.iloc[-1]), 2)
+    assert TH.forward_label("A0+Wj") == "现行 + 日経 Wj 8 个因素"
     assert TH.forward_label("A0+breadth") == "现行 + 等权相对市值加权下跌（RSP / SPY）" and TH.forward_label("A0+claims") == "现行 + 初请失业金上升"
     fp = tmp_path / "jw.csv"
     TH.log_watch_rows(rows, fp)
