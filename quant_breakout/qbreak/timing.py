@@ -139,9 +139,10 @@ HALF = 0.5                                 # T10：临界（连续 5 天在 250 
 RALLY, TRAIL = 0.20, 0.10                  # T11：熊市里从最低收盘反弹 ≥20% 提前回补；回补后自最高收盘回落 ≥10% 再离场
 
 
-def _state_machine(close: pd.Series, band: np.ndarray, fast_bear=None, early=False) -> np.ndarray:
+def _state_machine(close: pd.Series, band: np.ndarray, fast_bear=None, early=False, early_ok=None) -> np.ndarray:
     """T0 的状态机（连续 K 天收在 250 日线 ×(1−b) 之下 → 熊，×(1+b) 之上 → 牛），b 可以逐日不同；
-    fast_bear[i]：这一天另有「快速离场」条件成立（T7 / T8）；early：T11 的提前回补（见 s11_v_reentry）。"""
+    fast_bear[i]：这一天另有「快速离场」条件成立（T7 / T8 / T12 / T13）；early：T11 的提前回补（见 s11_v_reentry）；
+    early_ok[i]：提前回补另要满足的条件（T14 / T15；None = 不另加条件）。"""
     v = close.to_numpy(float)
     ma = _sma(v, L)
     st = np.zeros(len(v), dtype=int)
@@ -170,7 +171,7 @@ def _state_machine(close: pd.Series, band: np.ndarray, fast_bear=None, early=Fal
             lo = min(lo, v[i])
             if run_up >= K:
                 state, in_early = BULL, False
-            elif early and v[i] >= lo * (1 + RALLY):
+            elif early and (early_ok is None or early_ok[i]) and v[i] >= lo * (1 + RALLY):
                 state, in_early, hi = BULL, True, v[i]
         st[i] = state
     return st
@@ -280,3 +281,63 @@ def expo2(key: str, close: pd.Series, f: pd.DataFrame | None = None, **kw) -> pd
     if key == "T10":
         return t10_half_expo(close, f)
     return (~bear2(key, close, f, **kw)).astype(float)
+
+
+# ══════════ 第三轮候选（2026-09-26 登记，scripts/timing3_study.py；看过第二轮结果之后设计，参数沿用或取常用值）══════════
+# 第二轮的教训：离场快了误报就多（T7 日本样本外误报 3→9 次），回补早了就在多段下跌的熊市里反复被套（T11）。
+# 这一轮给「快」加一个独立的确认：快速离场要信用或另一个大市场同时确认；提前回补要短期趋势已经转好。
+MA_SHORT, SLOPE_WIN = 50, 20               # T14 / T15：提前回补另要「收在 50 日线上 且 50 日线比 20 个交易日前高」
+
+
+def fast7(close: pd.Series) -> np.ndarray:
+    """T7 的快速离场条件：收在 250 日线下 且 距 250 日最高收盘回落 ≥10%，连续 2 天。"""
+    v = close.to_numpy(float)
+    ma = _sma(v, L)
+    hi = close.rolling(L, min_periods=1).max().to_numpy(float)
+    return _runs_of((v < ma) & (v <= hi * (1 - FAST_DD))) >= FAST_K
+
+
+def credit_stress(close: pd.Series, f: pd.DataFrame) -> np.ndarray:
+    """T3 / T8 的信用条件：Baa−10Y 利差 > 其 250 日均值（没有数据 → 不算压力）。"""
+    return (f["baa"] > f["baa_ma250"]).reindex(close.index).fillna(False).to_numpy(bool)
+
+
+def trend_up(close: pd.Series) -> np.ndarray:
+    """短期趋势转好：收在 50 日线上 且 50 日线比 20 个交易日前高（只用当天为止的收盘）。"""
+    v = close.to_numpy(float)
+    m = _sma(v, MA_SHORT)
+    prev = np.r_[np.full(SLOPE_WIN, np.nan), m[:-SLOPE_WIN]] if len(m) > SLOPE_WIN else np.full(len(m), np.nan)
+    with np.errstate(invalid="ignore"):
+        return (v > m) & (m > prev)
+
+
+def s12_fast_credit(close: pd.Series, f: pd.DataFrame) -> np.ndarray:
+    """T12 快速离场要信用确认：T0 之外，「T7 的快速条件 且 信用利差高于均值」→ 立即转熊；回补同 T0。"""
+    return _state_machine(close, np.full(len(close), B), fast_bear=fast7(close) & credit_stress(close, f))
+
+
+def s13_fast_global(close: pd.Series, f: pd.DataFrame) -> np.ndarray:
+    """T13 快速离场要另一个大市场确认：T0 之外，「T7 的快速条件 且 另一个大市场收在它自己的 250 日线下」→ 立即转熊；
+    回补同 T0。另一个市场：美股用日経（同一天已收盘），其他市场用 S&P500（前一天收盘）；f["other_below"] 由研究脚本对齐。"""
+    other = f["other_below"].reindex(close.index).fillna(False).to_numpy(bool)
+    return _state_machine(close, np.full(len(close), B), fast_bear=fast7(close) & other)
+
+
+def s14_v_trend(close: pd.Series, f: pd.DataFrame | None = None) -> np.ndarray:
+    """T14 V 形回补要趋势确认：T11 的提前回补（自熊市低点 +20%，回补后 −10% 离场，回到 250 日线上方后恢复 T0），
+    另要当天「收在 50 日线上 且 50 日线比 20 个交易日前高」。离场同 T0。"""
+    return _state_machine(close, np.full(len(close), B), early=True, early_ok=trend_up(close))
+
+
+def s15_both(close: pd.Series, f: pd.DataFrame) -> np.ndarray:
+    """T15 两头都改：离场同 T12（快速离场要信用确认），回补同 T14（V 形回补要趋势确认）。"""
+    return _state_machine(close, np.full(len(close), B), fast_bear=fast7(close) & credit_stress(close, f),
+                          early=True, early_ok=trend_up(close))
+
+
+STATES3 = {"T0": s0_states, "T12": s12_fast_credit, "T13": s13_fast_global, "T14": s14_v_trend, "T15": s15_both}
+REF3 = {"T7": s7_dual_speed, "T8": s8_credit_fast_exit, "T11": s11_v_reentry}   # 第二轮的对照（不参与判定）
+LABELS3 = {"T0": "现行 250 日线 ±3%、连续 5 天", "T12": "快速离场要信用确认（T7 条件 且 利差高于均值）",
+           "T13": "快速离场要另一个大市场确认（T7 条件 且 另一市场在 250 日线下）",
+           "T14": "V 形回补要趋势确认（+20% 且 在 50 日线上、50 日线上升）", "T15": "T12 的离场 + T14 的回补",
+           "T7": "（对照）第二轮 T7 双速离场", "T8": "（对照）第二轮 T8 信用只加快离场", "T11": "（对照）第二轮 T11 V 形提前回补"}
