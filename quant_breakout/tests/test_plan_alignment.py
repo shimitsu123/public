@@ -184,16 +184,20 @@ def test_sim_tier_switch_and_core_cfg(isolated_home):
     import run
     from qbreak.core import SPYM_COST
     (isolated_home / "sim.json").write_text(json.dumps({
-        "start": "2026-09-24", "end": "2026-12-24", "markets": ["JP", "US"],
+        "start": "2026-09-24", "end": "2026-12-24", "markets": ["JP", "US"], "capital_jpy": 1_000_000,
         "jp": {"initial_cash": 1_000_000, "position_pct": 0.34, "max_positions": 3},
         "us": {"initial_cash": 6336.37, "position_pct": 0.2, "max_positions": 5}}), encoding="utf-8")
     assert run.cmd_sim_tier(argparse.Namespace(tier="aggressive", markets="JP,US")) == 0
     cfg = json.loads((isolated_home / "sim.json").read_text(encoding="utf-8"))
     assert (cfg["jp"]["position_pct"], cfg["jp"]["max_positions"], cfg["jp"]["tier"]) == (0.25, 4, "aggressive")
-    assert cfg["us"]["breakout"] is False and cfg["us"]["core"]["ticker"] == "SPYM"
-    assert cfg["us"]["initial_cash"] == 6336.37                                # 其他字段不动
-    c = run._core_cfg("US", cfg["us"]["core"], {"state": "bear"})
-    assert c["bear"] is True and c["buy_fee_pct"] == SPYM_COST["buy_fee_pct"] == 0.495
+    # 进取档：美股指数仓位 = 东证 1655 @立花（日元账户）；成交市场变了 → 起始资金按 capital_jpy 重开
+    assert cfg["us"]["breakout"] is False and cfg["us"]["core"]["ticker"] == "1655.T"
+    assert (cfg["us"]["venue"], cfg["us"]["broker"], cfg["jp"]["broker"]) == ("JP", "tachibana", "tachibana")
+    assert cfg["us"]["initial_cash"] == 1_000_000
+    c = run._core_cfg("US", cfg["us"]["core"], {"state": "bear"}, cfg["us"]["broker"], run._venue("US", cfg["us"]))
+    assert c["bear"] is True and c["lot"] == 10 and dict(c["buy_fee_tiers"])[500_000] == 187.0
+    c2 = run._core_cfg("US", {"enabled": True, "ticker": "SPYM"}, {"state": "bull"}, "rakuten", "US")
+    assert c2["buy_fee_pct"] == SPYM_COST["buy_fee_pct"] == 0.495
     assert run._core_cfg("JP", cfg["jp"]["core"], {"state": "bull"})["bear"] is False
     assert run._core_cfg("JP", {"enabled": False}, None) is None
     assert run.cmd_sim_tier(argparse.Namespace(tier="safe", markets="JP")) == 0

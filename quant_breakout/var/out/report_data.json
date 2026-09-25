@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-24 22:13",
+ "generated": "2026-09-25 00:07",
  "sim": {
   "start": "2026-09-24",
   "end": "2026-12-24",
@@ -24,30 +24,30 @@
     "band_pct": 10.0
    },
    "halt_dd_pct": 45.0,
-   "tier": "aggressive"
+   "tier": "aggressive",
+   "broker": "tachibana"
   },
   "us": {
-   "initial_cash": 6336.37,
-   "fx_start": 157.81900024414062,
-   "fx_date": "2026-09-23",
    "universe": "broad",
    "position_pct": 0.2,
    "max_positions": 5,
-   "fx_spread_pct": 0.16,
    "use_macro": true,
    "use_sector_tilt": true,
    "use_event_window": false,
    "breakout": false,
    "core": {
     "enabled": true,
-    "ticker": "SPYM",
+    "ticker": "1655.T",
     "timing": true,
     "band_pct": 10.0
    },
    "halt_dd_pct": 45.0,
-   "tier": "aggressive"
+   "tier": "aggressive",
+   "broker": "tachibana",
+   "venue": "JP",
+   "initial_cash": 1000000.0
   },
-  "note": "美股账户在首个成功运行日按当日 USD/JPY 把 capital_jpy 折成美元。股票池 broad = 日経225 / NASDAQ-100+Dow30（按偏好剔除）。use_market_regime=true：指数 200 日线/波动/回撤 + 市场风险报告的行动四选一 共同决定新仓规模。 us.fx_spread_pct：换回日元时的换汇点差（单边 %）；初始换汇（9/23）按当时代码未计点差。 宏观层按市场设定（2026-09-24 变体研究定案）：两市场都开量化因子 + 板块倾斜，事件窗口关闭（样本外拖累）；美股出场改为不用死叉、跟踪止损 10%（浮盈 3% 启动），见 var/best_params_US.json。 regime_mode=quant：状态层维持指数 200 日线/波动/回撤（20 年回测后保留）；牛熊分界（250 日线±3%、连续 5 天）只显示。 资金配置档位 tier（2026-09-24 夜定案）：aggressive = 进取档 —— 日本个股 4×25% + 闲置资金持 1329.T，美股只持 SPYM；两市场牛熊分界判熊市时清空指数仓位；回撤 HALT 45%。见 README「资金配置」与 var/sim_changes.md；切回：python run.py sim-tier safe。",
+  "note": "券商（2026-09-25 起）：立花証券ｅ支店 個別コース（jp / us 段的 broker）；美股指数仓位放东证（us.venue=JP，日元账户，无换汇）。股票池 broad = 日経225 / NASDAQ-100+Dow30（按偏好剔除）。use_market_regime=true：指数 200 日线/波动/回撤 + 市场风险报告的行动四选一 共同决定新仓规模。 宏观层按市场设定（2026-09-24 变体研究定案）：两市场都开量化因子 + 板块倾斜，事件窗口关闭（样本外拖累）；美股出场改为不用死叉、跟踪止损 10%（浮盈 3% 启动），见 var/best_params_US.json。 regime_mode=quant：状态层维持指数 200 日线/波动/回撤（20 年回测后保留）；牛熊分界（250 日线±3%、连续 5 天）只显示。 资金配置档位 tier（2026-09-24 夜定案）：aggressive = 进取档 —— 日本个股 4×25% + 闲置资金持 1329.T，美股只持 1655.T（东证 S&P500 ETF，9/25 起替代 SPYM）；两市场牛熊分界判熊市时清空指数仓位；回撤 HALT 45%。见 README「资金配置」与 var/sim_changes.md；切回：python run.py sim-tier safe。",
   "use_market_regime": true,
   "use_macro": true,
   "use_sector_tilt": true,
@@ -602,62 +602,10 @@
    }
   },
   "US": {
-   "currency": "USD",
-   "symbol": "$",
-   "initial": 6336.37,
-   "days": [
-    {
-     "date": "2026-09-21",
-     "equity": 6336.37,
-     "cash": 6336.37,
-     "pnl": 0.0,
-     "positions": [],
-     "trades": [],
-     "fx": 157.81900024414062,
-     "equity_jpy": 1000000.0,
-     "signals": [],
-     "risk": "[风控:正常] 当日 +0.00%  回撤 +0.00%",
-     "orders": 0
-    },
-    {
-     "date": "2026-09-23",
-     "equity": 6336.37,
-     "cash": 6336.37,
-     "pnl": 0.0,
-     "positions": [],
-     "trades": [],
-     "fx": 157.819,
-     "equity_jpy": 1000000.0,
-     "signals": [],
-     "risk": "[风控:正常] 当日 +0.00%  回撤 +0.00%",
-     "orders": 1
-    },
-    {
-     "date": "2026-09-24",
-     "equity": 6339.71,
-     "cash": 19.41,
-     "pnl": 3.34,
-     "positions": [
-      "SPYM:70"
-     ],
-     "trades": [
-      {
-       "time": "09:30 ET",
-       "ticker": "SPYM",
-       "side": "BUY",
-       "qty": 70,
-       "px": 89.92798566284179,
-       "pnl": null,
-       "note": ""
-      }
-     ],
-     "fx": 157.882,
-     "equity_jpy": 1000926.0,
-     "signals": [],
-     "risk": "[风控:正常] 当日 +0.05%  回撤 +0.00%",
-     "orders": 1
-    }
-   ],
+   "currency": "JPY",
+   "symbol": "¥",
+   "initial": 1000000.0,
+   "days": [],
    "closed_trades": [],
    "regime": {
     "market": "US",
@@ -1192,9 +1140,9 @@
     }
    ],
    "summary": {
-    "days": 3,
-    "equity": 6339.71,
-    "ret_pct": 0.05,
+    "days": 0,
+    "equity": 1000000.0,
+    "ret_pct": 0.0,
     "max_dd_pct": 0.0,
     "trades": 0,
     "win_rate": 0.0,
@@ -1204,37 +1152,35 @@
     "tax_pct": 20.315
    },
    "fx": {
-    "start": 157.81900024414062,
+    "jpy_account": true,
     "now": 157.882,
-    "spread_pct": 0.16,
-    "equity_jpy": 999325.0,
-    "ret_pct_jpy": -0.07,
-    "fx_effect_jpy": 399.0,
+    "spread_pct": 0.0,
     "scenarios": [
      {
       "shock_pct": 0.0,
       "label": "现汇",
       "usdjpy": 157.88,
-      "equity_jpy": 999325.0,
-      "ret_pct_jpy": -0.07
+      "equity_jpy": 1000000.0,
+      "ret_pct_jpy": 0.0
      },
      {
       "shock_pct": -5.0,
       "label": "日元升值 5%（USD/JPY -5%）",
       "usdjpy": 149.99,
-      "equity_jpy": 949358.0,
-      "ret_pct_jpy": -5.06
+      "equity_jpy": 1000000.0,
+      "ret_pct_jpy": 0.0
      },
      {
       "shock_pct": 5.0,
       "label": "日元贬值 5%（USD/JPY +5%）",
       "usdjpy": 165.78,
-      "equity_jpy": 1049291.0,
-      "ret_pct_jpy": 4.93
+      "equity_jpy": 1000000.0,
+      "ret_pct_jpy": 0.0
      }
     ],
     "watch_level": 158.0,
     "band_pct": 1.0,
+    "exposure_jpy": 0.0,
     "near_intervention": true
    }
   }

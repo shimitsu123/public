@@ -285,20 +285,23 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
              protective_stop: bool = False, entry_scale: float = 1.0,
              index_close=None, earnings=None, ticker_mult: dict | None = None,
              entry_block=None, corp_actions=None, force_exit_all: str | None = None,
-             core: dict | None = None) -> DayResult:
+             core: dict | None = None, account: str | None = None) -> DayResult:
     """entry_scale：市场级新仓倍数（regime / 汇率 / 宏观取 min）；ticker_mult：{票: 板块倾斜倍数}；
     entry_block：字符串 = 今日所有新仓被拦的原因；可调用对象 = f(成交日) -> 原因或 None，
     成交日由本函数按真实最新 K 线 + 交易日历算出（T+1 开盘），避免估算偏差。
     core：核心指数仓位（None = 关闭）。{"ticker": "1329.T", "bear": bool, "buffer_pct", "band_pct",
       "slip_pct", "buy_fee_pct", "sell_fee_pct", "sell_fee_max", "lot"}；不受个股止损 / 熊市清仓规则影响，
-      由 core.core_orders 按「权益 − 个股 − 明天要买的个股」决定份额（与回测引擎同一函数）。"""
+      由 core.core_orders 按「权益 − 个股 − 明天要买的个股」决定份额（与回测引擎同一函数）。
+    market：成交所在市场（日历 / 呼値 / 单元 / 费用）；account：账户标签（风控基准、流水按它记，默认 = market）。
+      例：美股指数仓位用东证上市的 S&P500 ETF 时 market="JP"、account="US"。"""
     today = today or dt.date.today()
     res = DayResult(date=today.isoformat())
     p.validate()
     ex = (exec_cfg or ExecConfig.for_market(market)).validate()
     intraday = ex.stop_fill_mode == "intraday"
     book, guard = PositionBook.for_broker(broker), OrderGuard.for_broker(broker)
-    rm = RiskManager(risk_cfg, market=market, tag=state_tag(broker))
+    acct = (account or market).upper()
+    rm = RiskManager(risk_cfg, market=acct, tag=state_tag(broker))
 
     # ── 0. 同步 + 取数 ──
     try:
@@ -641,7 +644,7 @@ def run_once(universe: list[str], broker: BaseBroker, p: StrategyParams,
     res.positions = {t: pos.qty for t, pos in broker.positions().items()}
     if not dry_run:                                   # 只算不发单的清单不进流水（流水是模拟盘 / 实盘日报的数据源）
         rm.end(res.equity, today)
-        _journal(res, market, broker)
+        _journal(res, acct, broker)
     if res.orders or decision.daily_loss_pct <= -abs(risk_cfg.daily_max_loss_pct):
         notify.send(f"{res.date} 交易汇总", res.summary(),
                     "warn" if not decision.allow_open else "info")

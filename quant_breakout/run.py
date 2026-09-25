@@ -258,15 +258,16 @@ def cmd_optimize(a) -> int:
     return 0
 
 
-def _make_broker(a, market: str, sizing: SizingConfig, mc: dict | None = None):
-    """按 --broker 造券商。凭证只从环境变量 / macOS 钥匙串读，不进配置文件。"""
+def _make_broker(a, market: str, sizing: SizingConfig, mc: dict | None = None, account: str | None = None):
+    """按 --broker 造券商（market = 成交市场，account = 账户标签）。凭证只从环境变量 / macOS 钥匙串读，不进配置文件。"""
     from qbreak.brokers import make_broker
     kind = getattr(a, "broker", "paper")
     if kind == "manual":
         return make_broker("manual", initial_cash=sizing.initial_cash, market=market)
     if kind == "paper":
         b = make_broker("paper", initial_cash=sizing.initial_cash, market=market,
-                        exec_cfg=_exec_cfg(market, mc))
+                        exec_cfg=_exec_cfg(market, mc),
+                        state_file=paths.state_dir() / f"paper_state_{(account or market).upper()}.json")
         if a.dry_run:
             log.info("dry-run：只计算不发单")
         return b
@@ -279,6 +280,11 @@ def _make_broker(a, market: str, sizing: SizingConfig, mc: dict | None = None):
                            max_order_value=a.max_order_value)
     return make_broker("rss", workbook=a.workbook, require_arm=not a.no_arm,
                        dry_run=a.dry_run, limit_buffer_pct=a.limit_buffer)
+
+
+def _venue(market: str, mc: dict | None) -> str:
+    """该账户的成交市场：sim.json 市场段的 venue（例：美股指数仓位用东证上市的 S&P500 ETF → "JP"），默认 = 市场本身。"""
+    return str((mc or {}).get("venue") or market).upper()
 
 
 def _exec_cfg(market: str, mc: dict | None = None) -> ExecConfig:
@@ -346,15 +352,16 @@ def _live_common(a, live: bool) -> int:
     if live and not a.dry_run:
         print(f"★ 实盘模式（{a.broker}）。请确认：① ARM 已解锁 ②单笔上限 "
               f"{a.max_order_value:,.0f} ③var/HALT 不存在")
-    broker = _make_broker(a, market, sizing, mc)
-    ex = _exec_cfg(market, mc)
+    venue = _venue(market, mc)
+    broker = _make_broker(a, venue, sizing, mc, market)
+    ex = _exec_cfg(venue, mc)
     ex.stop_fill_mode = a.stop_mode
     ex.validate()
     dcfg = DataConfig(provider=a.provider, years=max(a.years, 2),
                       allow_synthetic=a.synthetic).validate()
     P = _inputs(a, market, cfg, mc, dcfg, p, dt.date.today())
     res = run_once(P.trade_uni, broker, p, risk, sizing, dcfg,
-                   market=market, dry_run=a.dry_run, allow_stale=a.allow_stale,
+                   market=venue, account=market, dry_run=a.dry_run, allow_stale=a.allow_stale,
                    exec_cfg=ex, protective_stop=a.protective_stop,
                    index_close=P.idx_close, entry_scale=P.scale, earnings=P.earnings,
                    ticker_mult=P.tmult, entry_block=P.block, corp_actions=_corp_actions_provider(),
@@ -380,7 +387,8 @@ def cmd_signal(a) -> int:
     p = _params(a, market)
     cfg, mc, sizing, risk = _live_setup(a, market, require_arm=False)
     a.broker, a.dry_run = "manual", True
-    broker = _make_broker(a, market, sizing, mc)
+    venue = _venue(market, mc)
+    broker = _make_broker(a, venue, sizing, mc, market)
     dcfg = DataConfig(provider=a.provider, years=max(a.years, 2),
                       allow_synthetic=a.synthetic).validate()
     P = _inputs(a, market, cfg, mc, dcfg, p, dt.date.today())
@@ -389,8 +397,8 @@ def cmd_signal(a) -> int:
         print(f"牛熊分界：{'熊市' if bb['state'] == 'bear' else '牛市'}（自 {bb.get('since')}）；"
               f"翻转价位 {bb.get('level')}（距 {bb.get('distance_pct')}%）")
     res = run_once(P.trade_uni, broker, p, risk, sizing, dcfg,
-                   market=market, dry_run=True, allow_stale=a.allow_stale,
-                   exec_cfg=_exec_cfg(market, mc), index_close=P.idx_close, entry_scale=P.scale,
+                   market=venue, account=market, dry_run=True, allow_stale=a.allow_stale,
+                   exec_cfg=_exec_cfg(venue, mc), index_close=P.idx_close, entry_scale=P.scale,
                    earnings=P.earnings, ticker_mult=P.tmult, entry_block=P.block,
                    corp_actions=_corp_actions_provider(), force_exit_all=P.force_exit, core=P.core)
     from qbreak.trader import PositionBook
@@ -562,7 +570,7 @@ def _plan_inputs(m: str, mc: dict, cfg: dict, dcfg, today, p):
             macro_info["mult"], macro_info["fired"] = 1.0, []
             macro_info["note"] = "市场倍数层已关闭（只用板块倾斜 / 事件窗口）"
     tmult = _index_mult(m, uni, today, tmult)
-    core = _core_cfg(m, mc.get("core"), bb, mc.get("broker"))  # 核心指数仓位（默认关闭）
+    core = _core_cfg(m, mc.get("core"), bb, mc.get("broker"), _venue(m, mc))  # 核心指数仓位（默认关闭）
     trade_uni = uni if mc.get("breakout", True) else []      # breakout=false：只持指数（不做个股新仓）
     return SimpleNamespace(uni=uni, trade_uni=trade_uni, scale=scale, tmult=tmult, block=block,
                            force_exit=force_exit, core=core, earnings=earnings, reg=reg,
@@ -596,8 +604,9 @@ def cmd_sim_day(a) -> int:
         try:
             mc = cfg[m.lower()]
             p = _params(a, m)                                # 基础参数 + 该市场覆盖文件
-            exc = _exec_cfg(m, mc)
-            if m == "US" and not mc.get("initial_cash"):
+            venue = _venue(m, mc)                            # 成交市场：美股指数仓位可以放在东证（日元账户）
+            exc = _exec_cfg(venue, mc)
+            if venue == "US" and not mc.get("initial_cash"):
                 fx, fxd = _fx_usdjpy()
                 buy_rate = fx * (1 + exc.fx_spread_pct / 100)          # 换汇成本：买美元要更贵
                 mc.update({"initial_cash": round(cfg["capital_jpy"] / buy_rate, 2),
@@ -618,15 +627,15 @@ def cmd_sim_day(a) -> int:
                               max_new_positions_per_day=mc["max_positions"],
                               max_consecutive_losses=0, daily_max_loss_pct=100.0,
                               max_drawdown_pct=float(mc.get("halt_dd_pct", 30.0)))
-            broker = make_broker("paper", initial_cash=sizing.initial_cash, market=m,
-                                 exec_cfg=exc)
+            broker = make_broker("paper", initial_cash=sizing.initial_cash, market=venue, exec_cfg=exc,
+                                 state_file=paths.state_dir() / f"paper_state_{m}.json")
             dcfg = DataConfig(provider=provider, years=2, allow_synthetic=False).validate()
             P = _plan_inputs(m, mc, cfg, dcfg, today, p)
             uni, trade_uni, scale, idx_close, core = P.uni, P.trade_uni, P.scale, P.idx_close, P.core
             reg, mode, bb, fx_info, macro_info = P.reg, P.mode, P.bb, P.fx_info, P.macro_info
             earnings, tmult, block, force_exit = P.earnings, P.tmult, P.block, P.force_exit
             res = run_once(trade_uni, broker, p, risk, sizing, dcfg,
-                           market=m, dry_run=False, allow_stale=a.allow_stale,
+                           market=venue, account=m, dry_run=False, allow_stale=a.allow_stale,
                            exec_cfg=exc, entry_scale=scale, index_close=idx_close,
                            earnings=earnings, ticker_mult=tmult, entry_block=block,
                            corp_actions=_corp_actions_provider(), force_exit_all=force_exit,
@@ -636,8 +645,14 @@ def cmd_sim_day(a) -> int:
                                            "bullbear": bb, "core": res.core,
                                            "breakout": bool(mc.get("breakout", True))})
             rd["params_overlay"] = str(paths.params_file(m).name) if paths.params_file(m).exists() else ""
+            budget = sizing.initial_cash * mc["position_pct"]
+            if venue != m:                                   # 日元账户看美股候补：预算折成美元再判断「买得起」
+                try:
+                    budget /= _fx_usdjpy()[0]
+                except Exception:                            # noqa: BLE001
+                    budget = 0.0
             extras[m] = {"regime": rd, "macro": macro_info, "watchlist": _scan_market(
-                uni, p, m, dcfg, sizing.initial_cash * mc["position_pct"], idx_close, macro_info)}
+                uni, p, m, dcfg, budget, idx_close, macro_info)}
             soft = [n for n in res.notes if any(k in n for k in ("失败", "过期", "HALT", "不交易"))]
             if soft:
                 notes[m] = "; ".join(soft)[:300]
@@ -723,7 +738,8 @@ def _bullbear(market: str, dcfg=None) -> dict:
     return out
 
 
-def _core_cfg(market: str, c: dict | None, bb: dict | None, broker: str | None = None) -> dict | None:
+def _core_cfg(market: str, c: dict | None, bb: dict | None, broker: str | None = None,
+              venue: str | None = None) -> dict | None:
     """核心指数仓位配置 → run_once 的 core 参数；未启用返回 None（默认关闭）。
     c = sim.json 市场段的 "core"：{"enabled": true, "ticker": "1329.T", "timing": true, "band_pct": 10, "buffer_pct": 0}
     timing=true：牛熊分界（var/bullbear.json 的检测器）判熊市时目标 = 0（清空核心仓位）。"""
@@ -732,7 +748,7 @@ def _core_cfg(market: str, c: dict | None, bb: dict | None, broker: str | None =
         return None
     from qbreak.core import CORE_ETF, core_cost
     ticker = c.get("ticker") or CORE_ETF[market.upper()]
-    cost = {**core_cost(ticker, market, broker), **(c.get("cost") or {})}
+    cost = {**core_cost(ticker, venue or market, broker), **(c.get("cost") or {})}
     return {"ticker": ticker,
             "bear": bool(c.get("timing", True)) and (bb or {}).get("state") == "bear",
             "timing": bool(c.get("timing", True)),
@@ -904,12 +920,55 @@ def cmd_sim_tier(a) -> int:
     for m in [x.strip().upper() for x in a.markets.split(",") if x.strip()]:
         mc = cfg.setdefault(m.lower(), {})
         preset = {k: v for k, v in t[m].items() if k != "bt"}
+        old_v, new_v = _venue(m, mc), _venue(m, preset)
+        if old_v != new_v:                                  # 成交市场 / 币种变了：旧持仓与起始资金都不能沿用
+            if (paths.state_dir() / f"paper_state_{m}.json").exists():
+                if not getattr(a, "reset", False):
+                    print(f"✗ {m} 的成交市场会从 {old_v} 变成 {new_v}（币种不同），需要重开该分仓：加 --reset"
+                          f"（旧状态与流水移到 var/archive/，按 capital_jpy 重新开始）")
+                    return 2
+                _archive_market(m, f"sim-tier {a.tier}：成交市场 {old_v} → {new_v}")
+            for k in ("initial_cash", "fx_start", "fx_date", "fx_spread_pct"):
+                mc.pop(k, None)                             # 美元账户在下次运行时按当日汇率重新折算
         mc.update(preset)
         mc["tier"] = a.tier
+        if new_v == "JP" and not mc.get("initial_cash"):
+            mc["initial_cash"] = float(cfg.get("capital_jpy") or 1_000_000)
         print(f"{m} → {a.tier}：{t[m]['bt']}")
     write_json(paths.home() / SIM_FILE, cfg)
     print("已写入 var/sim.json；下一次 sim-day 生效（已持有的个股按原规则离场，新仓按新档位）。")
     return 0
+
+
+def _archive_market(m: str, reason: str):
+    """把一个分仓的模拟盘状态（持仓 / 现金 / 挂单 / 风控基准 / 自动 HALT）和它的流水行移到
+    var/archive/<日期>_<市场>/，之后该分仓从 initial_cash 重新开始。持仓簿里只移走该分仓持有的票。"""
+    import datetime as _dt
+    import shutil
+    import pandas as pd
+    from qbreak.utils import read_json, write_json
+    m = m.upper()
+    dst = paths.home() / "archive" / f"{_dt.date.today().isoformat()}_{m}"
+    dst.mkdir(parents=True, exist_ok=True)
+    st = read_json(paths.state_dir() / f"paper_state_{m}.json", {}) or {}
+    held = set((st.get("positions") or {}).keys())
+    for fp in (paths.state_dir() / f"paper_state_{m}.json", paths.state_dir() / f"risk_state_{m}.json",
+               paths.home() / f"HALT_{m}"):
+        if fp.exists():
+            shutil.move(str(fp), str(dst / fp.name))
+    j = paths.out_dir() / "journal.csv"
+    if j.exists():
+        df = pd.read_csv(j, dtype=str, encoding="utf-8-sig").fillna("")
+        df[df["market"] == m].to_csv(dst / "journal.csv", index=False, encoding="utf-8-sig")
+        df[df["market"] != m].to_csv(j, index=False, encoding="utf-8-sig")
+    bp = paths.state_dir() / "position_book.json"
+    book = read_json(bp, {}) or {}
+    if held & set(book):
+        write_json(dst / "position_book.json", {t: book[t] for t in held & set(book)})
+        write_json(bp, {t: v for t, v in book.items() if t not in held})
+    (dst / "README.txt").write_text(f"{_dt.datetime.now():%Y-%m-%d %H:%M} 归档：{reason}\n", encoding="utf-8")
+    print(f"已归档 {m} 分仓的旧状态与流水 → {dst}")
+    return dst
 
 
 def cmd_jquants_check(a) -> int:
@@ -962,12 +1021,15 @@ def cmd_daemon(a) -> int:
     market = a.market.upper()
     p = _params(a, market)
     cfg_, mc, sizing, risk = _live_setup(a, market, require_arm=not a.no_arm)
-    broker = _make_broker(a, market, sizing, mc)
-    ex = _exec_cfg(market, mc)
+    venue = _venue(market, mc)
+    broker = _make_broker(a, venue, sizing, mc, market)
+    ex = _exec_cfg(venue, mc)
     ex.stop_fill_mode = "intraday" if a.protective_stop else a.stop_mode
     ex.validate()
+    eod_at = a.eod_at or ("16:45" if a.broker == "tachibana" else "15:40")
+    # 立花：15:30～16:30 值洗い期间不受理注文，翌営業日分从 16:30 起受理（https://www.e-shiten.jp/Service/Time.html）
     cfg = DaemonConfig(poll_interval_s=a.interval, protective_stop=a.protective_stop,
-                       eod_at=_parse_time(a.eod_at))
+                       eod_at=_parse_time(eod_at))
     dcfg = DataConfig(provider=a.provider, years=max(a.years, 2),
                       allow_synthetic=a.synthetic).validate()
 
@@ -983,7 +1045,7 @@ def cmd_daemon(a) -> int:
         uni = universe(market)
         core_ticker = (a.core_ticker or CORE_ETF[market]) if a.core else None
     d = Daemon(uni, broker, p, risk, sizing, dcfg,
-               ex, cfg=cfg, dry_run=a.dry_run, market=market,
+               ex, cfg=cfg, dry_run=a.dry_run, market=venue, account=market,
                fallback_quotes=(a.broker == "paper"), entry_hook=hook,
                corp_actions=_corp_actions_provider(), core_ticker=core_ticker)
     d.install_signal_handlers()
@@ -1187,7 +1249,8 @@ def main(argv=None) -> int:
     dm = sub.add_parser("daemon", help="盘中常驻守护进程（实时止损 + 逆指値 + 收盘后日线流程）")
     _trade_args(dm)
     dm.add_argument("--interval", type=int, default=60, help="盘中轮询间隔秒")
-    dm.add_argument("--eod-at", default="15:40", help="收盘后日线流程时刻 JST")
+    dm.add_argument("--eod-at", default=None,
+                    help="收盘后日线流程时刻 JST（默认 15:40；立花 16:45 —— 15:30～16:30 不受理注文）")
     dm.add_argument("--once", action="store_true", help="只跑一轮就退出（测试用）")
     dm.set_defaults(func=cmd_daemon)
 
@@ -1199,6 +1262,8 @@ def main(argv=None) -> int:
     st_ = sub.add_parser("sim-tier", help="切换模拟盘资金配置档位：safe / aggressive / max（show = 查看）")
     st_.add_argument("tier", choices=["show", "safe", "aggressive", "max"])
     st_.add_argument("--markets", default="JP,US")
+    st_.add_argument("--reset", action="store_true",
+                     help="成交市场 / 币种改变时（例：美股仓位 SPYM@楽天 → 1655@立花）归档旧状态并重开该分仓")
     st_.set_defaults(func=cmd_sim_tier)
 
     si = sub.add_parser("sim-init", help="初始化 3 个月模拟（清空状态、写 sim.json）")

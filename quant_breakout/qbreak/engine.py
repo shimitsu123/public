@@ -140,7 +140,7 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
         if regime.shape != (len(gidx),):
             raise ValueError(f"regime 长度 {regime.shape} ≠ {len(gidx)}")
     jc, core_units, core_order, core_last = None, 0, None, np.nan
-    core_log = {"trades": 0, "fees": 0.0, "bought": 0.0, "sold": 0.0}
+    core_log = {"trades": 0, "fees": 0.0, "bought": 0.0, "sold": 0.0, "fills": []}
     if core:
         jc = A.tickers.index(core["ticker"])
         c_lot = int(core.get("lot", 1))
@@ -167,6 +167,7 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
         else:
             cash += notional - f; core_units -= units; core_log["sold"] += notional
         core_log["trades"] += 1; core_log["fees"] += f
+        core_log["fills"].append((str(gidx[i].date()), side, round(notional, 2)))
     jp_limits = ex.market.upper() == "JP"
 
     def locked(i: int, j: int) -> str | None:

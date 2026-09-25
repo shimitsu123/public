@@ -7,6 +7,7 @@ FeeSchedule：按一笔约定金额收费
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Callable
 
@@ -59,7 +60,35 @@ BROKERS: dict[str, dict] = {
                          "slip_pct": 0.02, "lot": 1}},
     },
 }
-DEFAULT_BROKER = {"JP": "rakuten", "US": "rakuten"}
+# 立花証券ｅ支店 国内株式 現物（税込、報告書等電子交付）：https://www.e-shiten.jp/TorihikiRule/cost/（2026-09-25 核对）
+# ETF / REIT「株式と同様にお取扱い」。ｅ支店不做美股（米国株は対面口座のみ），所以没有 US 市场、没有换汇。
+TACHIBANA_KOBETSU = ((100_000, 77.0), (200_000, 99.0), (500_000, 187.0), (1_000_000, 341.0), (1_500_000, 407.0),
+                     (3_000_000, 473.0), (6_000_000, 814.0), (10_000_000, 869.0), (float("inf"), 1100.0))
+TACHIBANA_TEIGAKU = ((120_000, 0.0), (200_000, 176.0), (500_000, 253.0), (1_000_000, 506.0), (2_000_000, 759.0),
+                     (3_000_000, 1012.0))                      # 1 日约定合计；300 万以上每 100 万 +253 円
+
+
+def tachibana_teigaku(day_total: float) -> float:
+    """立花 定額コース：按 1 日约定代金合计收费（300 万円以上每增 100 万円 +253 円，1,000 万円 = 2,783 円）。"""
+    x = abs(float(day_total))
+    if x <= 0:
+        return 0.0
+    for cap, fee in TACHIBANA_TEIGAKU:
+        if x <= cap:
+            return fee
+    return 1012.0 + 253.0 * math.ceil((x - 3_000_000) / 1_000_000)
+
+
+BROKERS["tachibana"] = {
+    "label": "立花証券ｅ支店",
+    "checked": "2026-09-25",
+    "note": "個別コース（1 注文ごと）；ETF 与股票同表；新开户前 60 营业日现物手续费 0 円（未计入）；"
+            "定額コース见 tachibana_teigaku()；不做美股、无换汇",
+    "markets": {"JP": {"commission_tiers": TACHIBANA_KOBETSU}},
+    "etf": {t: {"buy_fee_tiers": TACHIBANA_KOBETSU, "sell_fee_tiers": TACHIBANA_KOBETSU, "slip_pct": sl, "lot": lot}
+            for t, sl, lot in (("1329.T", 0.03, 1), ("1655.T", 0.02, 10), ("2558.T", 0.03, 1))},
+}
+DEFAULT_BROKER = {"JP": "tachibana", "US": "rakuten"}   # 日本 = 立花（2026-09-25 起，Mac 上可 API 全自动）；美股个股只有楽天能做
 _SLIP = {"JP": 0.10, "US": 0.05}                     # 个股单边滑点 %（与券商无关）
 _ETF_SLIP = {"JP": 0.03, "US": 0.02}                 # 没登记的 ETF：滑点按市场默认
 

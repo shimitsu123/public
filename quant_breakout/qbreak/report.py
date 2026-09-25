@@ -87,7 +87,9 @@ def build_data(markets: list[str] | None = None) -> dict:
     out = {"generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "sim": sim,
            "last_run": last_run, "markets": {}, "factors": extras.get("_factors") or {}}
     for m in markets:
-        cur = CURRENCY[m]
+        mcfg = sim.get(m.lower()) or {}
+        venue = str(mcfg.get("venue") or m).upper()
+        cur = CURRENCY[venue]                        # 账户币种跟成交市场走（美股仓位放东证 → 日元账户）
         initial = float((sim.get(m.lower()) or {}).get("initial_cash") or 0)
         jr = _journal(m)
         orders = _orders(m)
@@ -108,7 +110,7 @@ def build_data(markets: list[str] | None = None) -> dict:
                                    "pnl": ex.get("pnl", o.get("extra", {}).get("pnl")),
                                    "note": (o.get("note") or "").replace("pnl=", "损益 ")})
             pos = [p for p in (r.get("positions") or "").split(";") if p]
-            fx = _fx_on(fx_table, bd, fx_start) if m == "US" else None
+            fx = _fx_on(fx_table, bd, fx_start) if cur == "USD" else None
             days.append({"date": bd, "equity": round(eq, 2), "cash": float(r["cash"] or 0),
                          "pnl": round(eq - prev_eq, 2), "positions": pos, "trades": trades,
                          "fx": fx, "equity_jpy": round(eq * fx, 0) if fx else None,
@@ -138,7 +140,17 @@ def build_data(markets: list[str] | None = None) -> dict:
         rp_ = out["markets"][m]["summary"]["realized_pnl"]
         out["markets"][m]["summary"]["realized_after_tax"] = round(rp_ * (1 - tax / 100), 2) if rp_ > 0 else rp_
         out["markets"][m]["summary"]["tax_pct"] = tax
-        if m == "US":
+        if m == "US" and cur == "JPY":
+            # 日元账户持东证上市的 S&P500 ETF：没有换汇成本；ETF 部分的日元价值随 USD/JPY 同步变动，现金不变
+            fx_now = fx_table[-1][1] if fx_table else fx_start
+            eq = eqs[-1] if eqs else initial
+            cash = days[-1]["cash"] if days else initial
+            cap = float(sim.get("capital_jpy") or initial or 0)
+            out["markets"][m]["fx"] = {"jpy_account": True, "now": fx_now, "spread_pct": 0.0,
+                                       **fx_exposure_scenarios(eq, cash, fx_now, cap,
+                                                               float(sim.get("fx_watch_level", 158.0)),
+                                                               float(sim.get("fx_watch_band_pct", 1.0)))}
+        elif m == "US":
             fx_now = days[-1]["fx"] if days else (fx_table[-1][1] if fx_table else fx_start)
             eq_usd = eqs[-1] if eqs else initial
             cap = float(sim.get("capital_jpy") or 0)
@@ -154,6 +166,23 @@ def build_data(markets: list[str] | None = None) -> dict:
                                float(sim.get("fx_watch_band_pct", 1.0))),
             }
     return out
+
+
+def fx_exposure_scenarios(equity_jpy: float, cash_jpy: float, fx_now: float | None, cap_jpy: float,
+                          watch_level: float = 158.0, band_pct: float = 1.0, shocks=(0.0, -5.0, 5.0)) -> dict:
+    """日元账户持无对冲的美股指数 ETF：ETF 部分（权益 − 现金）随 USD/JPY 同比例变动，现金不受影响。"""
+    exp = max(0.0, equity_jpy - cash_jpy)
+    rows = []
+    for sh in shocks:
+        eq = cash_jpy + exp * (1 + sh / 100)
+        label = "现汇" if sh == 0 else (f"日元升值 {abs(sh):g}%（USD/JPY {sh:+g}%）" if sh < 0
+                                        else f"日元贬值 {sh:g}%（USD/JPY {sh:+g}%）")
+        rows.append({"shock_pct": sh, "label": label,
+                     "usdjpy": round(fx_now * (1 + sh / 100), 2) if fx_now else None,
+                     "equity_jpy": round(eq, 0),
+                     "ret_pct_jpy": round((eq / cap_jpy - 1) * 100, 2) if cap_jpy else None})
+    return {"scenarios": rows, "watch_level": watch_level, "band_pct": band_pct, "exposure_jpy": round(exp, 0),
+            "near_intervention": bool(fx_now and fx_now >= watch_level * (1 - band_pct / 100))}
 
 
 def fx_scenarios(eq_usd: float, fx_now: float | None, spread_pct: float, cap_jpy: float,
@@ -310,6 +339,7 @@ const signed = (v, cur) => (v > 0 ? "+" : v < 0 ? "−" : "") + fmt(Math.abs(v),
 const cls = v => v > 0 ? "pos" : v < 0 ? "neg" : "";
 function markets(){ return Object.keys(DATA.markets); }
 function cur(){ return DATA.markets[state.market]; }
+function mlabel(m){ return m==="JP" ? "日本株" : (DATA.markets[m].currency==="JPY" ? "美股指数（东证 ETF）" : "美股"); }
 
 function init(){
   const ms = markets();
@@ -401,7 +431,9 @@ function renderFxScenarios(){
   if (!fx.scenarios || !fx.scenarios.length || fx.scenarios[0].equity_jpy == null) return "";
   const rows = fx.scenarios.map(s => `<tr><td>${s.label}</td><td class="n">${s.usdjpy}</td><td class="n">¥${Number(s.equity_jpy).toLocaleString("ja-JP")}</td><td class="n ${cls(s.ret_pct_jpy)}">${s.ret_pct_jpy>0?"+":""}${s.ret_pct_jpy}%</td></tr>`).join("");
   const warn = fx.near_intervention ? `<div class="warn">USD/JPY ${fx.now} 已进入 ${fx.watch_level} 介入警戒区（−${fx.band_pct}%）：日元急升会直接侵蚀美股的日元收益，美股新仓已减半。</div>` : "";
-  return `<h3>换回日元的汇率情景（含换汇点差 ${fx.spread_pct}%）</h3><table class="tbl"><thead><tr><th>情景</th><th class="n">USD/JPY</th><th class="n">折合日元</th><th class="n">日元收益</th></tr></thead><tbody>${rows}</tbody></table>${warn}`;
+  const head = fx.jpy_account ? `汇率情景（日元账户持东证上市的 S&P500 ETF：无换汇成本；ETF 部分 ¥${Number(fx.exposure_jpy||0).toLocaleString("ja-JP")} 随 USD/JPY 同步变动）`
+                              : `换回日元的汇率情景（含换汇点差 ${fx.spread_pct}%）`;
+  return `<h3>${head}</h3><table class="tbl"><thead><tr><th>情景</th><th class="n">USD/JPY</th><th class="n">折合日元</th><th class="n">日元收益</th></tr></thead><tbody>${rows}</tbody></table>${warn}`;
 }
 function renderWatch(){
   const W = cur().watchlist || [], c = cur().currency, box = $("#watch");
@@ -417,7 +449,7 @@ function renderTabs(){
   for (const m of markets()){
     const b = document.createElement("button"); b.className="tab"; b.role="tab"; b.id="tab-"+m;
     b.setAttribute("aria-selected", m===state.market);
-    b.textContent = (m==="JP"?"日本株":"美股") + ` · ${DATA.markets[m].days.length} 日`;
+    b.textContent = mlabel(m) + ` · ${DATA.markets[m].days.length} 日`;
     b.onclick = () => { state.market=m; const d=cur().days; state.sel=d.length?d.length-1:null; render(); };
     t.appendChild(b);
   }
@@ -510,7 +542,7 @@ function renderDetail(){
   const d = M.days[state.sel];
   const rows = d.trades.map(t => `<tr><td>${t.time}</td><td>${t.ticker}</td><td><span class="pill ${t.side==="BUY"?"buy":"sell"}">${t.side==="BUY"?"买入":"卖出"}</span></td>
      <td class="n">${t.qty}</td><td class="n">${fmt(t.px,c,c==="USD"?2:1)}</td><td class="n ${cls(t.pnl)}">${t.pnl!=null?signed(t.pnl,c):"—"}</td><td class="muted">${t.note||""}</td></tr>`).join("");
-  box.innerHTML = `<h3>${d.date}（${state.market==="JP"?"日本株":"美股"}）</h3>
+  box.innerHTML = `<h3>${d.date}（${mlabel(state.market)}）</h3>
     <dl class="kv"><dt>当日损益</dt><dd class="${cls(d.pnl)}">${signed(d.pnl,c)}</dd>
     <dt>收盘权益</dt><dd>${fmt(d.equity,c)}</dd><dt>现金</dt><dd>${fmt(d.cash,c)}</dd>
     <dt>持仓</dt><dd>${d.positions.length ? d.positions.join("　") : "空仓"}</dd>

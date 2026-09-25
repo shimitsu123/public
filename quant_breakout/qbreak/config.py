@@ -247,9 +247,9 @@ class BacktestConfig:
     end: str | None = None
 
     @classmethod
-    def for_market(cls, market: str, years: int = 5) -> "BacktestConfig":
+    def for_market(cls, market: str, years: int = 5, broker: str | None = None) -> "BacktestConfig":
         m = market.upper()
-        ex = ExecConfig.for_market(m)
+        ex = ExecConfig.for_market(m, broker)
         sz = SizingConfig(initial_cash=1_000_000 if m == "JP" else 10_000)
         return cls(years=years, exec_cfg=ex, sizing=sz.validate())
 

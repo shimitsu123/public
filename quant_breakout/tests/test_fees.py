@@ -44,3 +44,20 @@ def test_unregistered_etf_uses_broker_stock_fees():
     c = etf_cost("rakuten", "XYZ", "US")
     assert c["buy_fee_pct"] == c["sell_fee_pct"] == 0.495 and c["sell_fee_max"] == 22.0
     assert etf_cost("rakuten", "SPYM", "US")["buy_fee_pct"] == 0.495
+
+
+def test_tachibana_tables_match_official_brackets():
+    """立花ｅ支店（税込、電子交付，2026-09-25 官网核对）：個別 = 每笔，定額 = 每日合计。"""
+    from qbreak.fees import TACHIBANA_KOBETSU, tachibana_teigaku
+    kob = FeeSchedule(tiers=TACHIBANA_KOBETSU)
+    assert [kob(x) for x in (100_000, 100_001, 250_000, 500_000, 1_000_000, 12_000_000)] == \
+        [77.0, 99.0, 187.0, 187.0, 341.0, 1100.0]
+    assert [tachibana_teigaku(x) for x in (120_000, 120_001, 500_000, 1_000_000, 3_000_000, 4_000_000,
+                                           10_000_000, 10_000_001)] == \
+        [0.0, 176.0, 253.0, 506.0, 1012.0, 1265.0, 2783.0, 3036.0]
+    ex = ExecConfig.for_market("JP", "tachibana")
+    assert ex.fee(250_000) == 187.0 and ex.fx_spread_pct == 0.0
+    with pytest.raises(KeyError):                                  # ｅ支店不做美股：不能静默套用
+        ExecConfig.for_market("US", "tachibana")
+    assert etf_cost("tachibana", "1655.T", "JP")["lot"] == 10       # 1655 以 10 口为单位
+    assert side_fee(etf_cost("tachibana", "1329.T", "JP"), "SELL")(1_000_000) == 341.0

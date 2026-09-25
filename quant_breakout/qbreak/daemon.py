@@ -92,7 +92,7 @@ class Daemon:
     def __init__(self, universe: list[str], broker: BaseBroker, params: StrategyParams,
                  risk_cfg: RiskConfig, sizing: SizingConfig, data_cfg: DataConfig,
                  exec_cfg: ExecConfig, cfg: DaemonConfig | None = None,
-                 dry_run: bool = False, market: str = "JP",
+                 dry_run: bool = False, market: str = "JP", account: str | None = None,
                  fallback_quotes: bool = False,
                  entry_hook=None, corp_actions=None, core_ticker: str | None = None):
         self.universe = universe
@@ -107,12 +107,13 @@ class Daemon:
         self.ex = exec_cfg.validate()
         self.cfg = cfg or DaemonConfig()
         self.dry_run = dry_run
-        self.market = market
+        self.market = market                   # 成交市场（日历 / 呼値 / 费用）
+        self.account = (account or market).upper()   # 账户标签（风控基准 / 流水）
         self.fallback_quotes = fallback_quotes
         self.st = DaemonState.load()
         self.book = PositionBook.for_broker(broker)
         self.guard = OrderGuard.for_broker(broker)
-        self.rm = RiskManager(self.risk_cfg, market=market, tag=state_tag(broker))
+        self.rm = RiskManager(self.risk_cfg, market=self.account, tag=state_tag(broker))
         self._stop = threading.Event()
         self._quote_fails = 0
         self._last_session = ""
@@ -325,7 +326,8 @@ class Daemon:
         from .config import BENCHMARK
         from .data import load_universe
         try:
-            idx = load_universe([BENCHMARK[self.market]], self.data_cfg).get(BENCHMARK[self.market])
+            bm = BENCHMARK.get(self.account, BENCHMARK[self.market])      # 基准跟账户走（美股仓位在东证也用 S&P500）
+            idx = load_universe([bm], self.data_cfg).get(bm)
             return idx["Close"] if idx is not None else None
         except Exception as e:                                # noqa: BLE001
             log.warning("指数数据不可用，相对强度过滤跳过: %s", e)
@@ -344,7 +346,7 @@ class Daemon:
             except Exception as e:                            # noqa: BLE001
                 log.warning("宏观层 / 状态层计算失败，按 ×1 处理: %s", e)
         res = run_once(self.universe, self.broker, self.p, self.risk_cfg, self.sizing,
-                       self.data_cfg, market=self.market, dry_run=self.dry_run,
+                       self.data_cfg, market=self.market, account=self.account, dry_run=self.dry_run,
                        today=now.date(), exec_cfg=self.ex,
                        protective_stop=self.cfg.protective_stop,
                        index_close=self._index_close(), entry_scale=scale,
