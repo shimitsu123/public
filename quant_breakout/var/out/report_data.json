@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-25 14:31 JST",
+ "generated": "2026-09-25 14:40 JST",
  "mode": "unified",
  "sim": {
   "start": "2026-09-28",
@@ -100,8 +100,8 @@
   "event_def": "之后 60 个交易日内最低收盘比当天跌 ≥10%",
   "US": {
    "date": "2026-09-24",
-   "value": 50.5,
-   "prev20": 45.6,
+   "value": 51.0,
+   "prev20": 41.8,
    "band": "50–60",
    "band_freq": 17.5,
    "base_rate": 14.4,
@@ -117,7 +117,7 @@
     {
      "k": "oil",
      "label": "油价冲击",
-     "pct": 96
+     "pct": 95
     },
     {
      "k": "rates",
@@ -132,14 +132,14 @@
    ],
    "obs": [
     {
-     "k": "grains",
-     "label": "粮食价格急涨",
-     "pct": 96
-    },
-    {
      "k": "commod",
      "label": "商品综合急涨",
      "pct": 96
+    },
+    {
+     "k": "grains",
+     "label": "粮食价格急涨",
+     "pct": 94
     },
     {
      "k": "epu",
@@ -157,8 +157,8 @@
      "pct": 70
     },
     {
-     "k": "natgas",
-     "label": "天然气急涨",
+     "k": "commod_vol",
+     "label": "商品波动",
      "pct": 57
     },
     {
@@ -167,9 +167,9 @@
      "pct": 57
     },
     {
-     "k": "commod_vol",
-     "label": "商品波动",
-     "pct": 56
+     "k": "natgas",
+     "label": "天然气急涨",
+     "pct": 52
     },
     {
      "k": "sloos",
@@ -182,21 +182,32 @@
      "pct": 47
     },
     {
+     "k": "gold_silver",
+     "label": "金银比上升",
+     "pct": 43
+    },
+    {
      "k": "gpr_jump",
      "label": "地缘风险急升",
      "pct": 36
     },
     {
-     "k": "gold_silver",
-     "label": "金银比上升",
-     "pct": 33
-    },
-    {
      "k": "copper",
      "label": "铜价下跌",
-     "pct": 24
+     "pct": 28
     }
-   ]
+   ],
+   "watch": {
+    "date": "2026-09-24",
+    "gs_pct": 43.49,
+    "cv_pct": 56.63,
+    "W": 50.06,
+    "W_pct": 45.48,
+    "A0": 51.01,
+    "A0_pct": 49.87,
+    "gs_raw": -0.25,
+    "cv_raw": 19.02
+   }
   },
   "JP": {
    "date": "2026-09-24",

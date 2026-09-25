@@ -238,3 +238,10 @@ def test_watch_review_and_decision():
     assert TH.watch_decision({**base, "auc_W": 0.70, "auc_A0": 0.60}).startswith("达到门槛")
     assert TH.watch_decision({**base, "auc_W": 0.52, "auc_A0": 0.60}).startswith("未达门槛且")
     assert TH.watch_decision({**base, "auc_W": 0.66, "auc_A0": 0.63}).startswith("未达门槛（")
+
+
+def test_fill_gaps_only_adds_missing_days():
+    y = pd.Series([1.0, 2.0, 4.0], index=pd.DatetimeIndex(["2026-09-18", "2026-09-21", "2026-09-23"]))
+    f = pd.Series([9.0, 1.5, 2.5, 3.0, 5.0], index=pd.DatetimeIndex(["2026-09-17", "2026-09-18", "2026-09-22", "2026-09-23", "2026-09-24"]))
+    g = TH.fill_gaps(y, f, pd.Timestamp("2026-09-24"))
+    assert list(g.index.strftime("%m-%d")) == ["09-18", "09-21", "09-22", "09-23"] and list(g) == [1.0, 2.0, 2.5, 4.0]

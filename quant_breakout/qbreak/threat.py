@@ -123,12 +123,24 @@ def _yf_close(sym: str) -> pd.Series:
     return h[~h.index.duplicated(keep="last")]["Close"]
 
 
+def fill_gaps(primary: pd.Series, backup: pd.Series, before: pd.Timestamp) -> pd.Series:
+    """primary 缺的交易日（在它首日之后、before 之前）用 backup 补上；已有的值不动。"""
+    b = backup.dropna()
+    miss = b.index.difference(primary.index)
+    miss = miss[(miss > primary.index[0]) & (miss < before)]
+    return pd.concat([primary, b.loc[miss]]).sort_index() if len(miss) else primary
+
+
 def load_inputs() -> dict:
     """指数（yfinance 全历史）+ FRED + 財務省日本 10Y。与 scripts/threat_index_study.py 同一口径。"""
     from . import factors
     from .calendar_jp import now_jst
     spx = _yf_close("^GSPC")
     spx = spx[spx.index < pd.Timestamp(now_jst().date())]                  # 日本早上：美国前一日收盘已确定
+    try:                                                                  # Yahoo 偶尔漏一天（例 2026-09-22）→ 用 FRED SP500 补
+        spx = fill_gaps(spx, factors.fred("SP500"), pd.Timestamp(now_jst().date()))
+    except Exception:                                                     # noqa: BLE001
+        pass
     n225 = _yf_close("^N225")
     n = now_jst()
     if n.hour < 16 and len(n225) and n225.index[-1].date() == n.date():   # 当天未收盘的日経 K 线不用

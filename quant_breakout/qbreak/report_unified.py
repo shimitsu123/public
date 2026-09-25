@@ -225,7 +225,7 @@ def _threat_html(t: dict) -> str:
         obs_txt = ("；其他观察因子（不计入指数）：" + ("、".join(f"{escape(o['label'])} {o['pct']}" for o in hot[:6])
                                                   if hot else "都在 70 分位以下")) if obs else ""
         w = x.get("watch")
-        watch_txt = (f"<br>前瞻观察（金银比 + 商品波动，2026-09-25 起记录，还没验证）：{w['W']:.0f} / 100，自身历史 {w['W_pct']:.0f} 分位"
+        watch_txt = (f"<br>前瞻观察（金银比 + 商品波动，2026-09-25 登记、每天记录，还没验证）：{w['W']:.0f} / 100，自身历史 {w['W_pct']:.0f} 分位"
                      f"（≥90 = 警戒{'，<b>现在警戒</b>' if w['W_pct'] >= 90 else ''}）；金银比 60 日 {w['gs_raw']:+.1f}%、"
                      f"商品波动 {w['cv_raw']:.1f}%") if w else ""
         rows.append(f"<dt>{name}：{x['value']:.0f} / 100{prev}</dt><dd>同档位（{escape(str(x.get('band')))}）历史上"

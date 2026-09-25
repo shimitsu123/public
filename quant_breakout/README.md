@@ -554,6 +554,8 @@ v2（事先登记 `scripts/threat_index_v2_study.py`）再加 14 个直接因素
 v3（事先登记 `scripts/threat_index_v3_study.py`）再加黄金、金银比、铜、天然气、粮食、商品综合（S&P GSCI）、银行信贷（破产件数没有可回测的免费长期数据，
 用贷款标准收紧 SLOOS、企业贷款拖欠 / 核销率、短观贷款态度代替）、地缘风险 GPR、政策不确定性 EPU，并试「按类别平衡」：两个市场都没有稳定胜出 → 仍用 v1。
 新因素的当前百分位在日报里作为「其他观察因子」显示（只列 ≥70 分位）；各版本读数每天记到 `var/out/threat_forward.csv`，以后做真正的样本外比较。
+美股另有**前瞻观察「金银比 + 商品波动」**（v3 里两个半段都有效的两个因素；2026-09-18 起每天记到 `var/out/us_watch_forward.csv`，
+规则见 `scripts/us_watch_review.py`，季度复核时检验；前瞻期内 ≥3 次 ≥10% 下跌之后才下结论，只展示、不参与交易）。
 
 **宏观顺风度**（`qbreak/sensitivity.py`；事先登记 `scripts/regime_fit_study.py` → `var/out/regime_fit_study.md`）：
 每只日経225 成分股近 2 年对 日本 10Y / 美国 10Y / 油价 / 美元日元 / 信用利差 的敏感度 × 这些因素近 60 日的趋势 = 「趋势延续时每周多赚 / 少赚多少」。
