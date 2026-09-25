@@ -235,6 +235,19 @@ def _threat_html(t: dict) -> str:
             watch_txt += (f"<br>前瞻观察（日経两段都有效的 8 个因素，2026-09-25 登记、每天记录，还没验证）：{wj['Wj']:.0f} / 100，"
                           f"自身历史 {wj['Wj_pct']:.0f} 分位（≥80 = 预警、≥90 = 警戒{flag}）；对照：金银比 + 商品波动 {wj['W2']:.0f}"
                           f"（{wj['W2_pct']:.0f} 分位）")
+        wf = x.get("wfc")
+        if wf and wf.get("p10") is not None:
+            pct1 = lambda v: "—" if v is None else f"{v * 100:.0f}%"                  # noqa: E731
+            oos = wf.get("oos") or {}
+            src = ("现行指数按 2005 年以来逐年校准折算" if wf.get("show") == "A0"
+                   else f"配比优化「{escape(_WNAMES.get(wf['show'], wf['show']))}」，样本外 AUC {(oos.get('auc10') or 0):.2f}")
+            watch_txt += (f"<br><b>之后 60 个交易日内跌 ≥10% 的概率：{pct1(wf['p10'])}</b>（{src}；2005 年以来平均 {pct1(wf.get('base10'))}；"
+                          f"跌 ≥15%：{pct1(wf.get('p15'))}，平均 {pct1(wf.get('base15'))}）"
+                          + ("。配比最优化（11 种配比方式，事先登记）在样本外都没有稳定胜过现行等权，暂不采用"
+                             if not wf.get("adopted") else "")
+                          + ("；这个概率在样本外也不比直接用历史平均准，只作参考" if (oos.get("bss10") or 0) <= 0 else "")
+                          + ("；主要来源：" + "、".join(f"{escape(_LAB.get(f['k'], f['k']))} {f['pct']}" for f in wf["top"])
+                             if wf.get("top") else ""))
         fw = x.get("fwd") or {}
         fwd_txt = ("<br>前瞻对照（只记录、未验证）：" + "、".join(
             f"{ {'A0x': '去掉曲线倒挂与油价冲击', 'S': '因子调查组合'}[k] } {v:.0f}" for k, v in fw.items())
@@ -251,11 +264,20 @@ def _threat_html(t: dict) -> str:
             f"{((jp.get('auc') or [0, 0])[0] or 0):.2f} / {((jp.get('auc') or [0, 0])[1] or 0):.2f}；"
             f"过去 {hits[1]} 次美股 ≥10% 下跌里只有 {hits[0]} 次在高点前 60 个交易日内到过 80。"
             "加入更多因素（v2：金融条件、MOVE 等；v3：黄金、金银比、铜、天然气、粮食、银行信贷、地缘风险 GPR）的事先登记研究"
-            "都没有在两个市场稳定胜出，指数仍用原算法；观察因子只列出处在自身历史 70 分位以上的。")
+            "都没有在两个市场稳定胜出，指数仍用原算法；配比最优化（11 种配比方式、逐年滚动的样本外检验）也没有方式通过事先定的五条标准，"
+            "按历史拟合的权重在样本外反而常常更差。观察因子只列出处在自身历史 70 分位以上的。")
     return (f"<dl>{''.join(rows)}</dl><p class='muted'>{escape(note)}</p>{_domains_html(us, jp)}"
             f"<h3>接下来的已知大事件</h3><ul>{ev or '<li class=muted>无</li>'}</ul>")
 
 
+def _wnames() -> tuple[dict, dict]:
+    from .survey import LABELS as SL
+    from .threat import LABELS as TL
+    from .weights import NAMES
+    return NAMES, {**TL, **SL}
+
+
+_WNAMES, _LAB = _wnames()
 _CLS = {"两段都提升": "有帮助", "只前半": "只在 2010 年前", "只后半": "只在 2011 年后", "都没有": "没帮助"}
 
 

@@ -80,11 +80,15 @@ def test_report_shows_threat_card_and_error():
                            "obs": [{"k": "gold_silver", "label": "金银比上升", "pct": 88}, {"k": "gpr", "label": "地缘政治风险（GPR）", "pct": 40}],
                            "watch": {"W": 93.0, "W_pct": 97.0, "gs_pct": 90.0, "cv_pct": 96.0, "gs_raw": 8.2, "cv_raw": 31.5},
                            "domains": {"科技周期": {"pct": 93, "class": "两段都提升"}, "货币政策 / 流动性": {"pct": 53, "class": "都没有"}},
-                           "fwd": {"A0x": 49.3, "S": 48.5}},
+                           "fwd": {"A0x": 49.3, "S": 48.5},
+                           "wfc": {"show": "A0", "p10": 0.128, "p15": 0.056, "base10": 0.136, "base15": 0.06, "adopted": None,
+                                   "best": "DOM", "oos": {"auc10": 0.615, "bss10": -0.016}}},
                     "JP": {"value": 58.5, "band": "50–60", "band_freq": 28.9, "base_rate": 26.3, "auc": [0.6, 0.52],
                            "top": [], "obs": [{"k": "gpr", "label": "地缘政治风险（GPR）", "pct": 30}],
                            "watch_jp": {"Wj": 61.0, "Wj_pct": 82.0, "W2": 44.0, "W2_pct": 35.0},
-                           "fwd": {"A0x": 52.8, "S": 54.2}, "fwd_plus": 8},
+                           "fwd": {"A0x": 52.8, "S": 54.2}, "fwd_plus": 8,
+                           "wfc": {"show": "LASSO", "p10": 0.286, "p15": 0.183, "base10": 0.221, "base15": 0.123, "adopted": "LASSO",
+                                   "oos": {"auc10": 0.623, "bss10": 0.02}, "top": [{"k": "breadth", "pct": 96}]}},
                     "events": [{"date": "2026-10-28", "kind": "FOMC"}]}
     write_json(paths.out_dir() / "unified_today.json", td)
     html = write_unified_report().read_text(encoding="utf-8")
@@ -97,6 +101,10 @@ def test_report_shows_threat_card_and_error():
     assert "前瞻对照（只记录、未验证）：去掉曲线倒挂与油价冲击 49、因子调查组合 48" in html
     assert "各经济领域现在的危险度" in html and "<td>科技周期</td><td class='n'>93</td><td>有帮助</td>" in html and "没帮助" in html
     assert "前瞻观察（金银比 + 商品波动" in html and "自身历史 97 分位" in html and "现在警戒" in html and "金银比 60 日 +8.2%" in html
+    assert "之后 60 个交易日内跌 ≥10% 的概率：13%</b>（现行指数按 2005 年以来逐年校准折算；2005 年以来平均 14%；跌 ≥15%：6%，平均 6%）" in html
+    assert "在样本外都没有稳定胜过现行等权，暂不采用；这个概率在样本外也不比直接用历史平均准" in html
+    assert "概率：29%</b>（配比优化「L1 逻辑回归（稀疏）」，样本外 AUC 0.62" in html                    # 通过的方式：显示它与主要来源
+    assert "主要来源：等权相对市值加权下跌（RSP / SPY） 96" in html and html.count("暂不采用") == 1
     td["threat"] = {"error": "FRED 不通"}
     write_json(paths.out_dir() / "unified_today.json", td)
     assert "暂不可用：FRED 不通" in write_unified_report().read_text(encoding="utf-8")

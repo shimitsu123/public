@@ -201,6 +201,8 @@ def snapshot(built: dict | None = None, table: dict | None = None, events: list 
             out[m]["watch_jp"] = readings[m]["watch_jp"]      # 日経前瞻观察（Wj + 对照 W2）
         if readings and m in out and (readings.get(m) or {}).get("domains"):
             out[m]["domains"] = readings[m]["domains"]        # 因子调查：各领域当前危险度百分位（只观察）
+        if readings and m in out and (readings.get(m) or {}).get("wfc"):
+            out[m]["wfc"] = readings[m]["wfc"]                # 配比最优化：之后 60 个交易日的下跌概率（冻结的权重）
         if readings and m in out and (readings.get(m) or {}).get("idx"):
             out[m]["fwd"] = {k: v for k, v in readings[m]["idx"].items() if k in ("A0x", "S") and v is not None}   # 前瞻对照版本
             out[m]["fwd_plus"] = sum(1 for k, v in readings[m]["idx"].items() if k.startswith("A0+") and v is not None)

@@ -69,7 +69,7 @@ EVAL0 = pd.Timestamp("1995-01-01")          # 训练样本起点
 CAL0 = pd.Timestamp("2005-01-01")           # 样本外 u（= 校准数据）起点
 OOS0 = pd.Timestamp("2011-01-01")           # 主评估期起点
 SUB = pd.Timestamp("2019-01-01")            # 子期间分界
-YEARS = list(range(2005, 2027))
+YEARS = list(range(2005, max(2026, pd.Timestamp.today().year) + 1))   # 逐年：本次 2005–2026；以后每年 1 月 --refit 时自然多一年
 LINES: list[str] = []
 
 

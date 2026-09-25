@@ -68,6 +68,10 @@ def test_snapshot_band_top_factors_and_events():
     assert u["value"] == 55.0 and u["band"] == "50–60" and u["band_freq"] == 17.5 and u["hit80"] == [3, 27]
     assert [f["k"] for f in u["top"]] == ["oil", "rates", "curve"] and "JP" not in s
     assert [e["date"] for e in s["events"]] == ["2026-02-20"]                    # 60 天以内、今天以后
+    wfc = {"show": "A0", "p10": 0.13, "base10": 0.14}
+    s = TH.snapshot({"US": (idx, pct), "JP": (pd.Series(dtype=float), pct)}, table, ev, today="2026-02-11",
+                    readings={"US": {"wfc": wfc}})
+    assert s["US"]["wfc"] == wfc                                                # 配比最优化的概率带进日报
 
 
 def test_weekly_available_lag():

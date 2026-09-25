@@ -299,6 +299,7 @@ def _threat_readings(ti: dict) -> dict | None:
         from qbreak.threat import build_all, load_extra_all, log_forward, log_us_watch, v3_readings, v3_selection
         F = build_all(ti, load_extra_all())
         rd = v3_readings(F, v3_selection())
+        raw_sv = None
         try:                                                 # 因子调查：各领域当前读数 + 组合 S 的前瞻记录
             from qbreak import survey as SV
             from qbreak.threat import JP_COLS, US_COLS
@@ -317,6 +318,18 @@ def _threat_readings(ti: dict) -> dict | None:
                 log_watch_rows(jw, paths.out_dir() / "jp_watch_forward.csv")
         except Exception as e:                               # noqa: BLE001
             log.warning("因子调查读数计算失败（不影响交易）：%s", e)
+        try:                                                 # 配比最优化（冻结的权重）：今天的下跌概率 + 各方式的前瞻记录
+            from qbreak import survey as SV
+            from qbreak import weights as WT
+            fc = WT.forecast(F, raw_sv if raw_sv is not None else SV.load_raw())
+            for m, r in fc.items():
+                sh = r["show"]
+                rd[m]["wfc"] = {"date": r["date"], "show": sh, "p10": r["p10"].get(sh), "p15": r["p15"].get(sh),
+                                "base10": r.get("base10"), "base15": r.get("base15"), "adopted": r.get("adopted"),
+                                "best": r.get("best"), "oos": r.get("oos"), "top": r.get("top")}
+            WT.log_forward(fc, paths.out_dir() / "threat_weight_forward.csv")
+        except Exception as e:                               # noqa: BLE001
+            log.warning("配比最优化预测计算失败（不影响交易）：%s", e)
         log_forward(rd, paths.out_dir() / "threat_forward.csv")
         log_us_watch(rd, paths.out_dir() / "us_watch_forward.csv")      # 美股前瞻观察：金银比 + 商品波动
         return rd
@@ -349,6 +362,13 @@ def cmd_threat(a) -> int:
         if w:
             print(f"  前瞻观察（金银比 + 商品波动，未验证）：W {w['W']:.0f}（自身历史 {w['W_pct']:.0f} 分位，≥80 = 预警、≥90 = 警戒）；"
                   f"金银比 60 日 {w['gs_raw']:+.1f}%（{w['gs_pct']:.0f} 分位）、商品波动 {w['cv_raw']:.1f}%（{w['cv_pct']:.0f} 分位）")
+        wf = x.get("wfc")
+        if wf and wf.get("p10") is not None:
+            b10, b15, p15 = wf.get("base10"), wf.get("base15"), wf.get("p15")
+            print(f"  之后 60 个交易日内跌 ≥10% 的概率 {wf['p10'] * 100:.1f}%（{'现行指数折算' if wf['show'] == 'A0' else wf['show']}；"
+                  f"2005 年以来平均 {b10 * 100 if b10 is not None else float('nan'):.1f}%）；跌 ≥15% "
+                  f"{p15 * 100 if p15 is not None else float('nan'):.1f}%（平均 {b15 * 100 if b15 is not None else float('nan'):.1f}%）"
+                  + ("；配比最优化没有方式通过事先规则" if not wf.get("adopted") else ""))
     from qbreak.report_unified import _EV
     print("接下来的已知大事件：" + ("；".join(f"{e['date']} {_EV.get(e['kind'], e['kind'])}"
                                          + (f"（{e['name']}）" if e.get("name") else "") for e in s["events"]) or "无"))
