@@ -444,7 +444,8 @@ def v3_selection() -> dict:
 
 A0X_DROP = ["curve", "oil"]          # 因子调查（2026-09-25）里拿掉后两段都更好的两个（看过结果才提出 → 只做前瞻对照）
 FORWARD_LABELS = {"A0": "现行 v1", "A0x": "去掉曲线倒挂与油价冲击", "B1": "v3 全部等权", "B2": "v3 训练期选因素",
-                  "B3": "v3 类别平衡", "B4": "v3 类别平衡（选入因素）", "S": "因子调查组合 S"}
+                  "B3": "v3 类别平衡", "B4": "v3 类别平衡（选入因素）", "S": "因子调查组合 S",
+                  "A0+W": "现行 + 金银比 + 商品波动"}
 
 
 def forward_label(v: str) -> str:
@@ -475,6 +476,7 @@ def v3_readings(F: dict, sel: dict | None = None) -> dict:
                "A0x": _eq(pct[[c for c in v1 if c not in A0X_DROP]])}          # 去掉曲线倒挂与油价冲击（前瞻对照）
         if m == "US":                                                     # 现行 + 美股前瞻观察的单个因素（前瞻对照，2026-09-25 补登）
             idx.update({f"A0+{c}": _eq(pct[v1 + [c]]) for c in US_WATCH})
+            idx["A0+W"] = _eq(pct[v1 + US_WATCH])                            # 现行 + 金银比 + 商品波动（两个一起，2026-09-25 补登）
         last = pct.index[-1]
         new = V3_EXTRA + (JP_V3_ONLY if m == "JP" else [])
         obs = [{"k": c, "label": LABELS[c], "pct": round(float(pct.at[last, c]) * 100)} for c in new if pct.at[last, c] == pct.at[last, c]]
