@@ -36,7 +36,9 @@ def test_jp_only_hides_fx_and_us_and_shows_core_index_and_watchlist():
     assert "只用于核心 ETF 1655.T 的择时" in html and "6891.63" in html
     assert "8801.T" in html and "即将" in html
     assert "只做日本个股" in html and "JST" in html
-    assert read_json(paths.out_dir() / "report_data.json")["mode"] == "unified"
+    rd = read_json(paths.out_dir() / "report_data.json")
+    assert rd["mode"] == "unified" and rd["markets"]["US"]["regime"]["bullbear"]["level"] == 6891.63   # 例行任务的旧路径
+    assert rd["markets"]["JP"]["watchlist"][0]["ticker"] == "8801.T" and "markets.JP.watchlist" in rd["hint"]
 
 
 def test_fx_section_uses_configured_spread_when_us_stocks_on_or_usd_left():

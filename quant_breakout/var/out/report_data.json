@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-25 11:01 JST",
+ "generated": "2026-09-25 11:07 JST",
  "mode": "unified",
  "sim": {
   "start": "2026-09-28",
@@ -100,5 +100,7 @@
  "win_rate": null,
  "config": {},
  "broker": "rakuten",
- "skipped": {}
+ "skipped": {},
+ "markets": {},
+ "hint": "一个账户模式（楽天）：账户数值在顶层（equity_jpy / ret_pct / max_dd_pct / cash_jpy / cash_usd / positions / core_units×core_last / todo / trades / core_trades / fx_trades / corp_log）；当日损益 = history 最后两行的权益差；牛熊分界在 markets.JP.regime.bullbear（日経）与 markets.US.regime.bullbear（S&P500，只用于 1655 择时）；候补队列在 markets.JP.watchlist。"
 }

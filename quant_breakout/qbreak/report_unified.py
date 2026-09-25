@@ -46,7 +46,15 @@ def build_unified_data() -> dict:
             "core_trades": (st.get("core_trades") or [])[-15:], "n_trades": len(trades),
             "corp_log": (st.get("corp_log") or [])[-10:],
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
-            "config": td.get("config") or {}, "broker": td.get("broker", "rakuten"), "skipped": td.get("skipped") or {}}
+            "config": td.get("config") or {}, "broker": td.get("broker", "rakuten"), "skipped": td.get("skipped") or {},
+            # 例行任务（旧提示按分市场日报写）也能找到：markets.<市场>.regime.bullbear / watchlist
+            "markets": {m: {"regime": e.get("regime") or {}, "macro": e.get("macro") or {},
+                            "watchlist": e.get("watchlist") or [], "core_only": e.get("core_only")}
+                        for m, e in (td.get("extras") or {}).items()},
+            "hint": ("一个账户模式（楽天）：账户数值在顶层（equity_jpy / ret_pct / max_dd_pct / cash_jpy / cash_usd / positions / "
+                     "core_units×core_last / todo / trades / core_trades / fx_trades / corp_log）；当日损益 = history 最后两行的权益差；"
+                     "牛熊分界在 markets.JP.regime.bullbear（日経）与 markets.US.regime.bullbear（S&P500，只用于 1655 择时）；"
+                     "候补队列在 markets.JP.watchlist。")}
 
 
 _STATUS = {"triggered": "已触发", "imminent": "即将", "watch": "观察", "far": "远"}
