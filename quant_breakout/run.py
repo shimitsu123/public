@@ -1068,12 +1068,13 @@ def cmd_tachibana_probe(a) -> int:
     env = "デモ環境" if a.demo else "本番環境"
     print(f"── 立花 e支店 API 连通性检查（{env}，只读）──")
     print(f"base = {spec.base_demo if a.demo else spec.base_live}")
-    steps = [
-        ("登录", lambda: (b.login(), f"取得 URL: {sorted(b._urls)}")[1]),
-        ("取价 7203", lambda: f"{b.get_price('7203.T')}"),
+    steps = [   # 只显示取得了哪几个虚拟 URL（名字），绝不打印 URL 本身、认证 ID 或密钥
+        ("登录（认证 ID + 私钥解密）", lambda: (b.login(), f"虚拟 URL: {sorted(b._urls)}；课税区分 {b._tax or '?'}；"
+                                                   f"下次版本发布 {b.next_release or '未公布'}")[1]),
+        ("取价 7203 / 1329 / 1655", lambda: f"{b.quotes(['7203.T', '1329.T', '1655.T'])}"),
         ("持仓", lambda: f"{ {t: p.qty for t, p in b.positions().items()} }"),
         ("买付余力", lambda: f"{b.cash():,.0f}"),
-        ("注文一覧", lambda: f"{len(b._call(spec.clm_order_list).get('aOrderList') or [])} 件"),
+        ("注文一覧", lambda: f"{len(b.open_orders())} 件"),
     ]
     ok = True
     for name, fn in steps:
@@ -1086,8 +1087,8 @@ def cmd_tachibana_probe(a) -> int:
         print(f"\n已导出仕様模板 → {spec.dump_template()}")
         print("按官方仕様書改这个文件，程序会自动加载，其余代码不用动。")
     if not ok:
-        print("\n★ 有项目失败。常见原因：①API 利用申込未生效 ②API 版本 URL 变了 "
-              "③项目名与仕様書不符 → 用 --dump-spec 导出后逐项修正。")
+        print("\n★ 有项目失败。常见原因：①「ｅ支店・API 利用設定」未设为利用する / 公钥未登记 ②本番与デモ的认证 ID、密钥用反 "
+              "③交付書面未读（在 PC 标准 Web 上读完）④03:30～05:30 不能登录 ⑤仕様改版 → --dump-spec 导出后按新仕様書修正。")
     return 0 if ok else 1
 
 
@@ -1157,8 +1158,9 @@ def cmd_doctor(a) -> int:
     import os as _os
     print(f"心跳文件    : {'存在' if (paths.home() / 'heartbeat.json').exists() else '无（守护进程未跑过）'}")
     print(f"ARM 状态    : {'ARMED ★ 当前允许发单' if _armed() else '未解锁（禁止发单）'}")
-    cred = "已设置" if _os.environ.get("TACHIBANA_USER_ID") else "未设置"
-    print(f"立花凭证    : TACHIBANA_USER_ID {cred}")
+    kp = Path(_os.environ.get("TACHIBANA_PRIVATE_KEY") or Path.home() / ".qbreak" / "e_api_private_key.pem").expanduser()
+    aid = "已设置" if (_os.environ.get("TACHIBANA_AUTH_ID") or _os.environ.get("TACHIBANA_AUTH_ID_FILE")) else "环境变量未设置（也可放钥匙串）"
+    print(f"立花凭证    : 认证 ID {aid}；私钥 {'存在' if kp.exists() else '不存在'}（{kp}）；不打印任何值")
     jq = "已设置" if _os.environ.get("JQUANTS_API_KEY") else "未设置（可选；研究用，见 README「J-Quants 接入」）"
     print(f"J-Quants    : JQUANTS_API_KEY {jq}；JQUANTS_PLAN={_os.environ.get('JQUANTS_PLAN') or 'free（默认）'}")
     if platform.system() == "Darwin":

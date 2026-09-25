@@ -1,70 +1,153 @@
-"""立花証券 e支店 API 适配器测试。
+"""立花証券 e支店 API 适配器测试（v4r10 契约：认证 ID + RSA-OAEP 解密虚拟 URL、官方字段名）。
 
-注意：这里验证的是**我们这一侧的逻辑**（安全闸、呼値、幂等、約定核对、逆指値），
-不是立花 API 的真实契约 —— 后者必须用 `run.py tachibana-probe --demo` 对着官方仕様書验证。
+注意：这里验证的是**我们这一侧的逻辑**（登录解密、会话切断重登、安全闸、呼値、幂等、約定核对、逆指値），
+字段名按 2026-09-25 的公开仕様書；真实服务器的行为仍须 `run.py tachibana-probe --demo` 验证。
 """
+import base64
+import os
+
 import pytest
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from qbreak import paths
 from qbreak.brokers.base import BrokerError
 from qbreak.brokers.tachibana import (Credentials, FakeTransport, TachibanaBroker,
-                                      TachibanaSpec)
+                                      TachibanaSpec, decrypt_url)
 
 SPEC = TachibanaSpec()
-LOGIN_OK = {"sResultCode": "0", "sUrlRequest": "https://x/req", "sUrlPrice": "https://x/price",
-            "sUrlMaster": "https://x/master", "sUrlEvent": "https://x/event"}
+_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+PEM = _KEY.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                         serialization.NoEncryption())
+
+
+def _enc(url: str) -> str:
+    """服务器一侧：用登记的公钥加密虚拟 URL（RSA-OAEP / SHA-256，Base64）。"""
+    ct = _KEY.public_key().encrypt(url.encode("ascii"), padding.OAEP(
+        mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
+    return base64.b64encode(ct).decode("ascii")
+
+
+LOGIN_OK = {"p_errno": "0", "sResultCode": "0", "sZyoutoekiKazeiC": "1", "sKinsyouhouMidokuFlg": "0",
+            "sUrlRequest": _enc("https://x/request/AAA/"), "sUrlPrice": _enc("https://x/price/BBB/"),
+            "sUrlMaster": _enc("https://x/master/CCC/"), "sUrlEvent": _enc("https://x/event/DDD/"),
+            "sUrlEventWebSocket": _enc("wss://x/ws/EEE/")}
+
+
+def _price(p):
+    codes = p[SPEC.f_target_codes].split(",")
+    return {"p_errno": "0", SPEC.r_price_list: [{"sIssueCode": c, "pDPP": "2987"} for c in codes]}
 
 
 def _broker(**kw):
     resp = {
         SPEC.clm_login: LOGIN_OK,
-        SPEC.clm_price: {"sResultCode": "0", "pDPP": "2987"},
-        SPEC.clm_new_order: {"sResultCode": "0", "sOrderNumber": "A0001"},
-        SPEC.clm_order_detail: {"sResultCode": "0", "sOrderYakuzyouSuryou": "100",
-                                "sOrderYakuzyouPrice": "3000", "sOrderStatus": "3"},
-        SPEC.clm_positions: {"sResultCode": "0", "aGenbutuKabuList": [
-            {"sIssueCode": "7203", "sZanKabuSuryou": "300", "sHyoukaTanka": "2400"}]},
-        SPEC.clm_buying_power: {"sResultCode": "0", "sSuiziKaiTukeKanouGaku": "500000"},
+        SPEC.clm_price: _price,
+        SPEC.clm_new_order: {"p_errno": "0", "sResultCode": "0", "sOrderNumber": "A0001", "sEigyouDay": "20260928"},
+        SPEC.clm_order_detail: {"p_errno": "0", "sResultCode": "0", "sYakuzyouSuryou": "100",
+                                "sYakuzyouPrice": "3000", "sOrderStatusCode": "10"},
+        SPEC.clm_positions: {"p_errno": "0", "sResultCode": "0", "aGenbutuKabuList": [
+            {"sUriOrderIssueCode": "7203", "sUriOrderZanKabuSuryou": "200", "sUriOrderGaisanBokaTanka": "2400"},
+            {"sUriOrderIssueCode": "7203", "sUriOrderZanKabuSuryou": "100", "sUriOrderGaisanBokaTanka": "2700"}]},
+        SPEC.clm_buying_power: {"p_errno": "0", "sResultCode": "0", "sSummaryGenkabuKaituke": "500000"},
     }
     resp.update(kw.pop("responses", {}))
     tr = FakeTransport(resp)
-    kw.setdefault("creds", Credentials("u", "p"))
+    kw.setdefault("creds", Credentials("AUTH-XYZ", PEM, "2nd-pw"))
     kw.setdefault("confirm_timeout_s", 2.0)
-    return TachibanaBroker(transport=tr, spec=SPEC, **kw), tr
+    b = TachibanaBroker(transport=tr, spec=SPEC, **kw)
+    b.spec.min_interval_s = 0.0
+    return b, tr
 
 
 def _arm():
     (paths.home() / "ARM").write_text("ARMED", encoding="utf-8")
 
 
-# ────────── 会话 ──────────
+def _orders(tr):
+    return [p for _, p in tr.sent if p.get("sCLMID") == SPEC.clm_new_order]
+
+
+# ────────── 会话（v4r10：认证 ID + 私钥解密）──────────
+def test_login_sends_only_auth_id_and_decrypts_virtual_urls():
+    b, tr = _broker()
+    b.login()
+    url, p = tr.sent[0]
+    assert url == SPEC.base_live + "auth/" and p["sCLMID"] == SPEC.clm_login
+    assert p["sAuthId"] == "AUTH-XYZ" and "sPassword" not in p and "sUserId" not in p
+    assert b._urls[SPEC.key_url_request] == "https://x/request/AAA/"
+    assert b._urls[SPEC.key_url_price] == "https://x/price/BBB/"
+    assert decrypt_url(PEM, LOGIN_OK["sUrlMaster"]) == "https://x/master/CCC/"
+
+
+def test_requests_go_to_decrypted_urls():
+    b, tr = _broker()
+    b.get_price("7203.T")
+    b.cash()
+    assert tr.sent[1][0] == "https://x/price/BBB/"           # 时价 → 仮想URL（PRICE）
+    assert tr.sent[2][0] == "https://x/request/AAA/"         # 余力 → 仮想URL（REQUEST）
+
+
 def test_login_failure_gives_actionable_message():
-    b, _ = _broker(responses={SPEC.clm_login: {"sResultCode": "9"}})
-    with pytest.raises(BrokerError, match="登录失败"):
+    b, _ = _broker(responses={SPEC.clm_login: {"p_errno": "-50", "p_err": "ログインエラー。"}})
+    with pytest.raises(BrokerError, match="利用設定"):
+        b.login()
+
+
+def test_unread_documents_block_login_with_instruction():
+    b, _ = _broker(responses={SPEC.clm_login: {**LOGIN_OK, "sKinsyouhouMidokuFlg": "1", "sUrlRequest": ""}})
+    with pytest.raises(BrokerError, match="交付書面未読"):
+        b.login()
+
+
+def test_wrong_private_key_is_reported():
+    other = rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    b, _ = _broker(creds=Credentials("AUTH-XYZ", other, "2nd-pw"))
+    with pytest.raises(BrokerError, match="不配对"):
         b.login()
 
 
 def test_login_without_request_url_is_rejected():
-    b, _ = _broker(responses={SPEC.clm_login: {"sResultCode": "0"}})
+    b, _ = _broker(responses={SPEC.clm_login: {"p_errno": "0", "sResultCode": "0"}})
     with pytest.raises(BrokerError, match="tachibana-probe"):
         b.login()
 
 
-def test_sequence_number_increments_per_request():
+def test_session_cut_relogins_once_and_retries():
+    state = {"n": 0}
+
+    def cash(p):
+        state["n"] += 1
+        if state["n"] == 1:
+            return {"p_errno": "2", "p_err": "セッションが切断しました。"}
+        return {"p_errno": "0", "sResultCode": "0", "sSummaryGenkabuKaituke": "123"}
+    b, tr = _broker(responses={SPEC.clm_buying_power: cash})
+    assert b.cash() == 123
+    logins = [p for _, p in tr.sent if p["sCLMID"] == SPEC.clm_login]
+    assert len(logins) == 2                                   # 03:30 闭局后第二天自动重新登录
+
+
+def test_sequence_number_strictly_increases_across_relogin():
     b, tr = _broker()
     b.get_price("7203.T")
+    b._logged_in = False
     b.get_price("7203.T")
     seqs = [int(p["p_no"]) for _, p in tr.sent]
     assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)
+    assert all(len(p["p_sd_date"]) == 23 for _, p in tr.sent)   # YYYY.MM.DD-HH:MM:SS.TTT
 
 
-def test_credentials_never_appear_outside_login():
+def test_secrets_never_leave_their_request():
     b, tr = _broker()
     _arm()
     b.buy("7203.T", 100, client_id="c1")
-    for url, p in tr.sent:
-        if p.get("sCLMID") != SPEC.clm_login:
-            assert "sPassword" not in p and "sUserId" not in p
+    for _, p in tr.sent:
+        if p["sCLMID"] != SPEC.clm_login:
+            assert "sAuthId" not in p
+        if p["sCLMID"] not in (SPEC.clm_new_order, SPEC.clm_cancel_order):
+            assert "sSecondPassword" not in p
+    assert "AUTH" not in repr(b.creds) and "2nd" not in repr(b.creds)
 
 
 # ────────── 安全闸 ──────────
@@ -72,7 +155,7 @@ def test_arm_gate_blocks_orders():
     b, tr = _broker()
     o = b.buy("7203.T", 100, client_id="c1")
     assert o.status == "BLOCKED" and "ARM" in o.note
-    assert not any(p.get("sCLMID") == SPEC.clm_new_order for _, p in tr.sent)
+    assert not _orders(tr)
 
 
 def test_halt_file_blocks_orders():
@@ -80,7 +163,14 @@ def test_halt_file_blocks_orders():
     _arm()
     paths.halt_file().write_text("stop", encoding="utf-8")
     assert b.buy("7203.T", 100, client_id="c1").status == "BLOCKED"
-    assert not any(p.get("sCLMID") == SPEC.clm_new_order for _, p in tr.sent)
+    assert not _orders(tr)
+
+
+def test_missing_second_password_blocks_orders():
+    b, tr = _broker(creds=Credentials("AUTH-XYZ", PEM, ""))
+    _arm()
+    o = b.buy("7203.T", 100, client_id="c1")
+    assert o.status == "BLOCKED" and "第二暗証" in o.note and not _orders(tr)
 
 
 def test_max_order_value_blocks():
@@ -95,7 +185,7 @@ def test_dry_run_never_sends_order():
     _arm()
     o = b.buy("7203.T", 100, client_id="c1")
     assert o.status == "BLOCKED" and "dry-run" in o.note
-    assert not any(p.get("sCLMID") == SPEC.clm_new_order for _, p in tr.sent)
+    assert not _orders(tr)
 
 
 def test_idempotent_client_id():
@@ -103,55 +193,83 @@ def test_idempotent_client_id():
     _arm()
     assert b.buy("7203.T", 100, client_id="c1").status == "FILLED"
     assert b.buy("7203.T", 100, client_id="c1").status == "REJECTED"
-    n = sum(1 for _, p in tr.sent if p.get("sCLMID") == SPEC.clm_new_order)
-    assert n == 1
+    assert len(_orders(tr)) == 1
 
 
-# ────────── 发单内容 ──────────
-def test_limit_price_snaps_to_legal_tick():
+def test_order_is_never_resent_after_network_error():
+    b, tr = _broker()
+    _arm()
+    b.login()
+    tr.fail_next = SPEC.clm_new_order
+    o = b.buy("7203.T", 100, client_id="c1")
+    assert o.status == "ERROR" and len(_orders(tr)) == 1      # 发单类不自动重发（可能已被受理）
+
+
+# ────────── 发单内容（v4r10 字段）──────────
+def test_new_order_carries_all_required_fields():
     b, tr = _broker(limit_buffer_pct=0.5)
     _arm()
     o = b.buy("7203.T", 100, client_id="c1")
     # 2987×1.005 = 3001.9 → 3000 円超の価格帯（呼値 5 円）に丸める
     assert o.price == 3000.0
-    sent = [p for _, p in tr.sent if p.get("sCLMID") == SPEC.clm_new_order][0]
-    assert sent[SPEC.f_price] == "3000.0"
+    p = _orders(tr)[0]
+    assert (p["sOrderPrice"], p["sOrderSuryou"], p["sIssueCode"], p["sSizyouC"]) == ("3000", "100", "7203", "00")
+    assert (p["sBaibaiKubun"], p["sGenkinShinyouKubun"], p["sZyoutoekiKazeiC"]) == ("3", "0", "1")
+    assert (p["sGyakusasiOrderType"], p["sGyakusasiZyouken"], p["sGyakusasiPrice"]) == ("0", "0", "*")
+    assert (p["sTatebiType"], p["sTategyokuZyoutoekiKazeiC"], p["sOrderExpireDay"]) == ("*", "*", "0")
+    assert p["sSecondPassword"] == "2nd-pw"
 
 
-def test_buy_sell_side_codes_and_account_type():
+def test_buy_sell_side_codes():
     b, tr = _broker()
     _arm()
     b.buy("7203.T", 100, client_id="c1")
     b.sell("7203.T", 100, client_id="c2")
-    orders = [p for _, p in tr.sent if p.get("sCLMID") == SPEC.clm_new_order]
-    assert orders[0][SPEC.f_side] == SPEC.side_buy
-    assert orders[1][SPEC.f_side] == SPEC.side_sell
-    assert all(o[SPEC.f_tax] == SPEC.tax_specific for o in orders)   # 特定口座
+    orders = _orders(tr)
+    assert [o["sBaibaiKubun"] for o in orders] == ["3", "1"]
 
 
-def test_after_close_order_uses_opening_condition():
+def test_after_close_order_uses_opening_condition_and_skips_fill_polling():
     b, tr = _broker()
     _arm()
-    b.buy("7203.T", 100, client_id="c1", bar="2026-09-23")
-    sent = [p for _, p in tr.sent if p.get("sCLMID") == SPEC.clm_new_order][0]
-    assert sent[SPEC.f_condition] == SPEC.cond_opening       # 寄付
+    o = b.buy("7203.T", 100, limit=2990.0, client_id="c1", bar="2026-09-25")
+    p = _orders(tr)[0]
+    assert p["sCondition"] == SPEC.cond_opening and p["sOrderPrice"] == "2990"       # 寄付指値
+    assert o.status == "SENT" and "寄付" in o.note
+    assert not any(q["sCLMID"] == SPEC.clm_order_detail for _, q in tr.sent)      # 次の寄付で約定：不轮询
 
 
-def test_protective_stop_sets_gyakusashi_fields():
+def test_protective_stop_is_stop_only_market_on_trigger():
     b, tr = _broker()
     _arm()
     o = b.place_protective_stop("7203.T", 100, 2777.7, client_id="s1")
-    sent = [p for _, p in tr.sent if p.get("sCLMID") == SPEC.clm_new_order][0]
-    assert sent[SPEC.f_stop_type] == SPEC.stop_only
-    assert sent[SPEC.f_stop_trigger] == "2778.0"             # 呼値 1 円・売りは切上げ
-    assert sent[SPEC.f_stop_price] == SPEC.price_market      # 触发后成行，确保成交
-    assert o.side == "SELL"
+    p = _orders(tr)[0]
+    assert (p["sGyakusasiOrderType"], p["sGyakusasiZyouken"], p["sGyakusasiPrice"]) == ("1", "2778", "0")
+    assert p["sOrderPrice"] == "*"                               # 通常部分「指定なし」
+    assert o.side == "SELL" and o.status == "SENT"
+
+
+def test_cancel_sends_order_number_business_day_and_second_password():
+    b, tr = _broker()
+    _arm()
+    b.buy("7203.T", 100, limit=2990.0, client_id="c1", bar="2026-09-25")
+    assert b.cancel("c1")
+    p = [q for _, q in tr.sent if q["sCLMID"] == SPEC.clm_cancel_order][0]
+    assert (p["sOrderNumber"], p["sEigyouDay"], p["sSecondPassword"]) == ("A0001", "20260928", "2nd-pw")
 
 
 # ────────── 約定確認 ──────────
+def test_detail_request_uses_order_number_and_business_day():
+    b, tr = _broker()
+    _arm()
+    assert b.buy("7203.T", 100, client_id="c1").status == "FILLED"
+    p = [q for _, q in tr.sent if q["sCLMID"] == SPEC.clm_order_detail][0]
+    assert (p["sOrderNumber"], p["sEigyouDay"]) == ("A0001", "20260928")
+
+
 def test_partial_fill_reported():
     b, _ = _broker(responses={SPEC.clm_order_detail: {
-        "sResultCode": "0", "sOrderYakuzyouSuryou": "50", "sOrderYakuzyouPrice": "3000"}},
+        "p_errno": "0", "sResultCode": "0", "sYakuzyouSuryou": "50", "sYakuzyouPrice": "3000"}},
         confirm_timeout_s=1.0)
     _arm()
     o = b.buy("7203.T", 100, client_id="c1")
@@ -160,52 +278,70 @@ def test_partial_fill_reported():
 
 def test_unfilled_order_is_flagged_not_silently_ok():
     b, _ = _broker(responses={SPEC.clm_order_detail: {
-        "sResultCode": "0", "sOrderYakuzyouSuryou": "0"}}, confirm_timeout_s=1.0)
+        "p_errno": "0", "sResultCode": "0", "sYakuzyouSuryou": "0"}}, confirm_timeout_s=1.0)
     _arm()
     o = b.buy("7203.T", 100, client_id="c1")
     assert o.status == "SENT" and "未约定" in o.note
 
 
-def test_order_error_does_not_raise():
-    b, tr = _broker()
-    _arm()
-    tr.fail_next = SPEC.clm_new_order
-    o = b.buy("7203.T", 100, client_id="c1")
-    assert o.status == "ERROR"                       # 交易主流程不应因为一次发单失败而崩
-
-
 # ────────── 读取 ──────────
-def test_positions_and_cash():
+def test_positions_merge_tax_rows_and_cash():
     b, _ = _broker()
-    assert b.positions()["7203.T"].qty == 300
+    pos = b.positions()["7203.T"]
+    assert pos.qty == 300 and pos.avg_px == pytest.approx((200 * 2400 + 100 * 2700) / 300)
     assert b.cash() == 500_000
 
 
+def test_empty_list_is_empty_string_per_spec():
+    b, _ = _broker(responses={SPEC.clm_positions: {"p_errno": "0", "sResultCode": "0", "aGenbutuKabuList": ""},
+                              SPEC.clm_order_list: {"p_errno": "0", "sResultCode": "0", "aOrderList": ""}})
+    assert b.positions() == {} and b.open_orders() == []
+
+
 def test_empty_price_is_an_error_not_zero():
-    b, _ = _broker(responses={SPEC.clm_price: {"sResultCode": "0", "pDPP": ""}})
+    b, _ = _broker(responses={SPEC.clm_price: {"p_errno": "0", SPEC.r_price_list: [{"sIssueCode": "7203", "pDPP": ""}]}})
     with pytest.raises(BrokerError, match="现在值为空"):
         b.get_price("7203.T")
 
 
-def test_quotes_skips_failing_tickers():
+def test_quotes_batch_up_to_120_and_skip_blank():
     def price(p):
-        return ({"sResultCode": "0", "pDPP": "100"} if p["sIssueCode"] == "7203"
-                else {"sResultCode": "0", "pDPP": ""})
-    b, _ = _broker(responses={SPEC.clm_price: price})
-    assert b.quotes(["7203.T", "6758.T"]) == {"7203.T": 100.0}
+        codes = p[SPEC.f_target_codes].split(",")
+        assert len(codes) <= 120
+        return {"p_errno": "0", SPEC.r_price_list: [{"sIssueCode": c, "pDPP": "" if c == "6758" else "100"}
+                                                    for c in codes]}
+    b, tr = _broker(responses={SPEC.clm_price: price})
+    many = ["7203.T", "6758.T"] + [f"{1000 + i}.T" for i in range(150)]
+    q = b.quotes(many)
+    assert q["7203.T"] == 100.0 and "6758.T" not in q and len(q) == 151
+    assert sum(1 for _, p in tr.sent if p["sCLMID"] == SPEC.clm_price) == 2
 
 
-# ────────── 仕様の差し替え ──────────
+# ────────── 仕様の差し替え / 凭证 ──────────
 def test_spec_can_be_overridden_by_json_file():
     fp = paths.home() / "tachibana_spec.json"
     fp.write_text('{"clm_new_order": "CLMSomethingElse", "side_buy": "9"}', encoding="utf-8")
     s = TachibanaSpec.load()
     assert s.clm_new_order == "CLMSomethingElse" and s.side_buy == "9"
     assert s.clm_price == TachibanaSpec().clm_price      # 未指定项保持默认
+    assert s.base_live.endswith("/e_api_v4r10/")
 
 
-def test_credentials_require_env():
-    import os
-    os.environ.pop("TACHIBANA_USER_ID", None)
-    with pytest.raises(BrokerError, match="TACHIBANA_USER_ID"):
+def test_credentials_from_env_require_auth_id_and_private_key_600(tmp_path, monkeypatch):
+    for k in ("TACHIBANA_AUTH_ID", "TACHIBANA_AUTH_ID_FILE", "TACHIBANA_PRIVATE_KEY"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr("qbreak.brokers.tachibana._keychain", lambda s, a: None)
+    with pytest.raises(BrokerError, match="认证 ID"):
         Credentials.from_env()
+    (tmp_path / "e_api_authid.txt").write_text("AUTH-FROM-FILE\n", encoding="utf-8")
+    monkeypatch.setenv("TACHIBANA_AUTH_ID_FILE", str(tmp_path / "e_api_authid.txt"))
+    kp = tmp_path / "k.pem"
+    kp.write_bytes(PEM)
+    monkeypatch.setenv("TACHIBANA_PRIVATE_KEY", str(kp))
+    if os.name == "posix":
+        kp.chmod(0o644)
+        with pytest.raises(BrokerError, match="chmod 600"):
+            Credentials.from_env()
+        kp.chmod(0o600)
+    c = Credentials.from_env()
+    assert c.auth_id == "AUTH-FROM-FILE" and c.private_key_pem == PEM

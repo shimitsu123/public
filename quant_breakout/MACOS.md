@@ -75,39 +75,41 @@ API 登录从 2026-06-27 起**不再需要电话认证**（只用公開鍵方式
 
 ---
 
-## 3. 凭证放钥匙串，不要写进文件
+## 3. 凭证（v4r10）：认证 ID + RSA 私钥 + 第二暗証，都不进仓库
 
-> ⚠️ 下面是旧版（v4r6，ID + 密码）的做法。v4r10 改为「认证 ID + RSA 私钥」，适配器升级后本节会改成：
-> 认证 ID 与第二暗証（下单用）放钥匙串，私钥文件放 `~/.qbreak/` 且权限 600，绝不进仓库。
-
-```bash
-security add-generic-password -s qbreak-tachibana -a <你的ログインID> -w
-# 回车后会提示输入密码，不会留在 shell 历史里
-
-# 取引暗証番号（如果需要）
-security add-generic-password -s qbreak-tachibana-2nd -a <你的ログインID> -w
-```
-
-然后只需要在环境里设 ID：
+v4r10 登录只送**认证 ID**；应答里的虚拟 URL 用你登记的公钥加密，程序用**私钥**解密（RSA-OAEP / SHA-256）。
+下单还必须带**第二暗証番号**。程序只从下面这些地方读，代码、配置、日志里都不出现：
 
 ```bash
-echo 'export TACHIBANA_USER_ID=<你的ログインID>' >> ~/.zshrc
+mkdir -p ~/.qbreak && chmod 700 ~/.qbreak
+# 私钥：「公開キー登録（自動）」时当场下载的 e_api_private_key.pem（只能下载这一次）放到这里
+mv ~/Downloads/e_api_private_key.pem ~/.qbreak/e_api_private_key.pem
+chmod 600 ~/.qbreak/e_api_private_key.pem          # 别的用户可读时程序会拒绝启动
+
+# 认证 ID（e_api_authid.txt 的内容）与第二暗証番号放钥匙串（-w 后不写值 → 交互输入，不留在 shell 历史）
+security add-generic-password -s qbreak-tachibana-authid -a qbreak -w
+security add-generic-password -s qbreak-tachibana-2nd -a qbreak -w
 ```
 
-程序**只**从环境变量或钥匙串读凭证，代码和配置文件里不出现密码。
+- 想自己生成密钥（私钥从不离开 Mac）：用「公開キー登録（手動）」上传公钥，格式按官方 `authidmanual.pdf`；
+  私钥 PEM（PKCS#8 或 PKCS#1 都能读）放在同一路径。
+- **デモ環境是另一套**认证 ID 与密钥：`~/.qbreak/e_api_private_key_demo.pem`，钥匙串 `qbreak-tachibana-authid-demo` /
+  `qbreak-tachibana-2nd-demo`（或环境变量 `TACHIBANA_AUTH_ID_DEMO` 等）。
+- 也可以用环境变量：`TACHIBANA_AUTH_ID` / `TACHIBANA_AUTH_ID_FILE`（指向 e_api_authid.txt）/ `TACHIBANA_PRIVATE_KEY` / `TACHIBANA_SECOND_PASSWORD`。
+- `python3 run.py doctor` 只显示「是否已设置 / 私钥是否存在」，不打印任何值。
 
 ---
 
 ## 4. 校验 API 仕様（最关键的一步）
 
-`qbreak/brokers/tachibana.py` 里的 `TachibanaSpec` 是**公开信息推断出的默认值**，
-不是官方仕様書验证过的。API 版本（URL 里的 `e_api_vXrY`）和项目名会改版。
+`qbreak/brokers/tachibana.py` 里的 `TachibanaSpec` 已按 2026-09-25 的公开仕様書（v4r10）逐项核对，
+但**还没在真实账户上跑过**。API 版本（URL 里的 `e_api_vXrY`）和项目名会改版（登录应答会告知下一次发布日，日志里有提示）。
 
 ```bash
 python3 run.py tachibana-probe --demo --dump-spec
 ```
 
-这条命令**只读**：登录 → 取价 → 持仓 → 余力 → 注文一覧，**绝不发单**。
+这条命令**只读**：登录（认证 ID + 私钥解密虚拟 URL）→ 取价（7203 / 1329 / 1655）→ 持仓 → 余力 → 注文一覧，**绝不发单**。
 有失败项就打开 `var/tachibana_spec.json`，对着官方仕様書逐项改；
 程序会自动加载这个文件，**其余代码一行都不用动**。
 
@@ -149,7 +151,8 @@ sudo pmset repeat wakeorpoweron MTWRF 08:40:00
 11:30–12:30    → 午休，低频心跳
 12:30–15:30    → 同前場
 15:25–15:30    → 收盘集合竞价，最后一次风控检查
-15:40          → 日线信号 → 次日**寄付**单 → 日终对账 → 存明日的熔断基准
+15:40（立花 16:45）→ 日线信号 → 次日**寄付**单 → 日终对账 → 存明日的熔断基准
+                 （立花 15:30～16:30 不受理注文；会话 03:30 失效，第二天第一次请求时自动重新登录）
 ```
 
 **为什么盘中不重算信号**：当前策略的信号定义在收盘价上，回测也是这么验证的。
@@ -214,7 +217,8 @@ echo "手工停止" > var/HALT
 | 现象 | 处理 |
 |---|---|
 | `launchctl list` 里没有 qbreak | 看 `var/logs/daemon.err`，多半是 Python 路径或 `pip install` 没做 |
-| 一直 `[NG] 登录` | API 利用申込未生效，或 URL 里的 API 版本变了（改 `tachibana_spec.json`） |
+| 一直 `[NG] 登录` | 「ｅ支店・API 利用設定」没设为利用する / 公钥未登记 / 本番与デモ的认证 ID·密钥用反 / 交付書面未读 / 03:30～05:30 维护；仕様改版时改 `tachibana_spec.json` |
+| 「虚拟 URL 解密失败」 | 私钥与登记的公钥不是一对（重新登记公钥，或换回当时下载的私钥） |
 | 日志里全是「休市」 | 正常，今天是周末或祝日。`python3 -c "from qbreak.calendar_jp import session_of; print(session_of())"` 可确认 |
 | 一直「未 ARM」 | `echo ARMED > var/ARM` |
 | 想临时停掉但不卸载 | `echo x > var/HALT`（守护进程继续跑，但不发单） |

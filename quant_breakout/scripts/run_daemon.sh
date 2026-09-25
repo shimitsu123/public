@@ -12,9 +12,11 @@ BROKER="${QBREAK_BROKER:-paper}"        # paper（演练）→ 跑顺了再改 t
 MARKET="${QBREAK_MARKET:-JP}"
 EXTRA="${QBREAK_EXTRA:---protective-stop}"
 PY="${QBREAK_PYTHON:-python3}"
-# 凭证：不要写在这里。用 macOS 钥匙串：
-#   security add-generic-password -s qbreak-tachibana -a <你的ID> -w
-export TACHIBANA_USER_ID="${TACHIBANA_USER_ID:-}"
+# 凭证（立花 API v4r10）：不要写在这里。
+#   认证 ID ：security add-generic-password -s qbreak-tachibana-authid -a qbreak -w
+#   第二暗証：security add-generic-password -s qbreak-tachibana-2nd -a qbreak -w
+#   私钥    ：~/.qbreak/e_api_private_key.pem（chmod 600；与「ｅ支店・API 利用設定」登记的公钥成对）
+# 立花：15:30～16:30 不受理注文 → 守护进程默认 16:45 下次日单；会话 03:30 失效，05:30 后自动重新登录。
 # ────────────────────────────────────────────────────────────────
 
 cd "$PROJ"
