@@ -10,6 +10,10 @@
 判定（每个市场分别，只在该市场前瞻期内 ≥3 次 ≥10% 下跌、且 ≥500 天结果已知之后）：
   AUC 比 A0 高 ≥0.03、且 ≥15% 下跌的 AUC 不低于 A0 的版本 → 取 AUC 最高的一个，建议日报改用（需要用户确认）；否则继续记录。
   不论结论如何都不自动改日报或交易规则。每季度复核时运行（例行任务），输出 var/out/threat_forward_review.md / .json。
+补登（2026-09-25，用户要求；此时这些列还没有任何记录）：日経再加 8 个版本「A0+因素」= 现行 v1 再加日経前瞻观察 Wj 的一个因素
+  （新兴市场相对美股、美国实际利率急升、短观大企业、短观中小非制造业、初请失业金、等权 / 市值加权、日银加息、日本企业物价加速），
+  用同一条判定规则。披露：日経一共比 14 个版本，某个版本碰巧过线的机会比只比一个时大；这 8 个因素也是看过 2011 年后结果才挑的
+  （因子调查里加进现行模型两段都有增益，调查里的 ΔAUC 列为样本内参考）。
 """
 from __future__ import annotations
 
@@ -73,7 +77,7 @@ def main() -> int:
                       f"前瞻期内 ≥10% 下跌 {len(r['episodes'])} 次",
                       "| 版本 | 对照天数 | AUC（跌≥10%）版本 / A0 | AUC（跌≥15%）版本 / A0 |", "|---|---|---|---|"]
             for v, x in r["variants"].items():
-                lines.append(f"| {TH.FORWARD_LABELS.get(v, v)} | {x.get('n', 0)} | {fmt(x.get('auc10'))} / {fmt(x.get('auc10_A0'))} | "
+                lines.append(f"| {TH.forward_label(v)} | {x.get('n', 0)} | {fmt(x.get('auc10'))} / {fmt(x.get('auc10_A0'))} | "
                              f"{fmt(x.get('auc15'))} / {fmt(x.get('auc15_A0'))} |")
             lines.append(f"\n判定（事先规则）：{r['decision']}")
     else:
@@ -87,6 +91,15 @@ def main() -> int:
             for v in ("A0", "A0x"):
                 a10, a15 = ins[m][f"{v}_10"], ins[m][f"{v}_15"]
                 lines.append(f"| {name} | {TH.FORWARD_LABELS[v]} | {fmt(a10[0])} / {fmt(a10[1])} | {fmt(a15[0])} / {fmt(a15[1])} |")
+        sv = json.loads((paths.out_dir() / "threat_factor_survey.json").read_text(encoding="utf-8"))
+        rows = (sv.get("JP") or {}).get("factors") or {}
+        from qbreak.survey import JP_WATCH
+        lines += ["\n## 样本内参考：日経「现行 + Wj 各因素」（因子调查里加进现行模型的 ΔAUC，偏乐观）",
+                  "| 版本 | ΔAUC 1995–2010 / 2011– | 单独 AUC 1995–2010 / 2011– |", "|---|---|---|"]
+        for f in JP_WATCH:
+            x = rows.get(f) or {}
+            dl, sg = x.get("delta") or [None, None], x.get("single") or [None, None]
+            lines.append(f"| {TH.forward_label('A0+' + f)} | {fmt(dl[0])} / {fmt(dl[1])} | {fmt(sg[0])} / {fmt(sg[1])} |")
     except Exception as e:                                               # noqa: BLE001
         lines.append(f"\n（样本内参考计算失败：{e}）")
     lines.append(f"\n（耗时 {time.time() - t0:.0f}s）")

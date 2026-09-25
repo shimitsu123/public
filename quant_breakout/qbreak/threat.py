@@ -203,6 +203,7 @@ def snapshot(built: dict | None = None, table: dict | None = None, events: list 
             out[m]["domains"] = readings[m]["domains"]        # 因子调查：各领域当前危险度百分位（只观察）
         if readings and m in out and (readings.get(m) or {}).get("idx"):
             out[m]["fwd"] = {k: v for k, v in readings[m]["idx"].items() if k in ("A0x", "S") and v is not None}   # 前瞻对照版本
+            out[m]["fwd_plus"] = sum(1 for k, v in readings[m]["idx"].items() if k.startswith("A0+") and v is not None)
     ev = events if events is not None else (read_json(paths.home() / "macro_events.json", {}) or {})
     ev = ev.get("events", ev) if isinstance(ev, dict) else ev
     d0 = pd.Timestamp(today or pd.Timestamp.today().normalize())
@@ -446,6 +447,20 @@ FORWARD_LABELS = {"A0": "现行 v1", "A0x": "去掉曲线倒挂与油价冲击",
                   "B3": "v3 类别平衡", "B4": "v3 类别平衡（选入因素）", "S": "因子调查组合 S"}
 
 
+def forward_label(v: str) -> str:
+    """前瞻对照版本的中文名；「A0+因素」= 现行 v1 再加该因素（日経 Wj 各因素，2026-09-25 补登）。"""
+    if v in FORWARD_LABELS:
+        return FORWARD_LABELS[v]
+    if v.startswith("A0+"):
+        k = v[3:]
+        try:
+            from .survey import LABELS as SL
+        except ImportError:                                                # pragma: no cover
+            SL = {}
+        return f"现行 + {LABELS.get(k) or SL.get(k) or k}"
+    return v
+
+
 def v3_readings(F: dict, sel: dict | None = None) -> dict:
     """最新一天：A0 与 B1～B4 的读数（前瞻记录用）+ 新因素的当前百分位（日报「其他观察因子」）。F = build_all(...)。"""
     sel = sel or {}
@@ -620,7 +635,7 @@ def forward_decision(r: dict, min_episodes: int = 3, min_known: int = 500) -> st
     if not ok:
         return "没有版本达到门槛：继续记录"
     best = max(ok, key=lambda v: ok[v]["auc10"])
-    return (f"{FORWARD_LABELS.get(best, best)} 达到门槛（AUC {ok[best]['auc10']:.3f} vs A0 {ok[best]['auc10_A0']:.3f}）："
+    return (f"{forward_label(best)} 达到门槛（AUC {ok[best]['auc10']:.3f} vs A0 {ok[best]['auc10_A0']:.3f}）："
             "建议日报改用，需要用户确认")
 
 

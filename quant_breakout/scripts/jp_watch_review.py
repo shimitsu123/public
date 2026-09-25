@@ -91,6 +91,17 @@ def main() -> int:
                       f"预警（≥80）{x['days80']} 天、比例 {fmt(x['hit80'])}；前瞻期内 ≥10% 下跌 {len(eps)} 次"
                       + (f"（事前警戒 {sum(e['alert90'] for e in eps)}、预警 {sum(e['warn80'] for e in eps)}）" if eps else ""),
                       f"  判定（事先规则）：90 分位 —— {x['decision90']}；80 分位 —— {x['decision80']}"]
+        lg = pd.read_csv(fp_log)                                          # 补充（2026-09-25）：Wj 各因素单独的前瞻 AUC，只描述、不参与判定
+        lg["date"] = pd.to_datetime(lg["date"])
+        lg = lg.set_index("date").sort_index()
+        fdd = TH.forward_drawdown(d["n225"].dropna(), 60)
+        e = (fdd <= -0.10).astype(float).where(fdd.notna()).reindex(lg.index)
+        k = e.notna()
+        single = {c[2:]: (TH.auc(lg[c][k & lg[c].notna()], e[k & lg[c].notna()]) if (k & lg[c].notna()).any() else None)
+                  for c in lg.columns if c.startswith("p_")}
+        out["single_forward"] = single
+        lines.append("- Wj 各因素单独的前瞻 AUC（只描述）：" + "、".join(f"{SV.LABELS.get(f) or TH.LABELS.get(f, f)} {fmt(v)}"
+                                                          for f, v in single.items()))
     else:
         lines.append("\n还没有前瞻记录（第一次日报运行后开始）。")
     try:

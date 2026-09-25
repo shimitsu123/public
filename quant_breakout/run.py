@@ -311,6 +311,8 @@ def _threat_readings(ti: dict) -> dict | None:
             jw = SV.jp_watch_rows(F, raw_sv)                    # 日経前瞻观察：Wj（日経自己的 8 个因素）+ W2（金银比 + 商品波动）
             if jw:
                 from qbreak.threat import log_watch_rows
+                rd["JP"]["idx"].update({k: v for k, v in jw[-1].items() if k.startswith("A0+")})   # 现行 + Wj 各因素 → 前瞻对照
+                jw = [{k: v for k, v in row.items() if not k.startswith("A0+")} for row in jw]
                 rd["JP"]["watch_jp"] = jw[-1]
                 log_watch_rows(jw, paths.out_dir() / "jp_watch_forward.csv")
         except Exception as e:                               # noqa: BLE001

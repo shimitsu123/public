@@ -298,5 +298,7 @@ def jp_watch_rows(F: dict, raw: dict[str, pd.Series], n: int = 5) -> list[dict]:
                        "A0": a0, "A0_pct": expanding_pct(a0) * 100})
     for c in wj_cols:
         df[f"p_{c}"] = pct[c] * 100
+    for c in wj_cols:                                                     # 现行 A0 再加这一个因素（等权；前瞻对照用，2026-09-25 补登）
+        df[f"A0+{c}"] = _eq(pct[JP_COLS + [c]])
     r = lambda v: round(float(v), 2) if v == v else None                              # noqa: E731
     return [{"date": str(d.date()), **{k: r(v) for k, v in row.items()}} for d, row in df.dropna(subset=["Wj"]).tail(n).iterrows()]
