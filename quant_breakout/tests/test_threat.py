@@ -203,3 +203,38 @@ def test_v3_readings_and_forward_log(tmp_path):
     TH.log_forward(rd, fp)                                                # 同一数据日重复运行：不重复记
     df = pd.read_csv(fp)
     assert len(df) == 2 and set(df["market"]) == {"US", "JP"}
+
+
+def test_us_watch_series_and_keep_first_log(tmp_path):
+    days = pd.bdate_range("2010-01-01", periods=900)
+    rng = np.random.default_rng(8)
+    pct = pd.DataFrame({"gold_silver": rng.uniform(size=900), "commod_vol": rng.uniform(size=900)}, index=days)
+    ws = TH.us_watch_series(pct)
+    assert np.allclose(ws["W"], (pct["gold_silver"] + pct["commod_vol"]) * 50)
+    assert ws["W_pct"].dropna().between(0, 100).all() and ws["W_pct"].iloc[:700].isna().all()      # 自身历史不足 750 天不给值
+    raw = pd.DataFrame({"gold_silver": rng.normal(0, 0.05, 900), "commod_vol": rng.uniform(0.1, 0.4, 900)}, index=days)
+    rows = TH.us_watch_rows(raw, pct, pd.Series(rng.uniform(20, 80, 900), index=days))
+    assert len(rows) == 5 and rows[-1]["date"] == str(days[-1].date()) and set(rows[0]) >= {"W", "W_pct", "A0", "A0_pct", "gs_raw"}
+    fp = tmp_path / "w.csv"
+    TH.log_us_watch({"US": {"watch_rows": rows}}, fp)
+    changed = [dict(r, W=-1.0) for r in rows[1:]] + [dict(rows[-1], date="2099-01-01")]
+    TH.log_us_watch({"US": {"watch_rows": changed}}, fp)
+    df = pd.read_csv(fp)
+    assert len(df) == 6 and (df["W"].iloc[:5] >= 0).all()                  # 已记过的日期保留最早那次，只补新日期
+
+
+def test_watch_review_and_decision():
+    days = pd.bdate_range("2020-01-01", periods=400)
+    close = pd.Series(np.linspace(90, 100, 400), index=days)
+    close.iloc[200:230] = np.linspace(99.5, 80, 30)                         # 第 199 天见顶，之后跌 20%
+    close.iloc[230:] = 80.0
+    log = pd.DataFrame({"date": [str(d.date()) for d in days[100:300]], "W": 30.0, "W_pct": 50.0, "A0": 40.0, "A0_pct": 50.0})
+    log.loc[(log["date"] >= str(days[150].date())) & (log["date"] < str(days[200].date())), ["W", "W_pct"]] = [90.0, 95.0]
+    r = TH.watch_review(log, close)
+    assert r["auc_W"] > 0.8 and r["auc_A0"] == 0.5 and r["alert_days"] == 50
+    assert [e["W_alert"] for e in r["episodes"]] == [True] and [e["A0_alert"] for e in r["episodes"]] == [False]
+    assert r["decision"].startswith("继续观察")                               # 只有 1 次下跌、已知结果不足 500 天
+    base = {"episodes": [{"W_alert": True}, {"W_alert": True}, {"W_alert": False}], "known": 600}
+    assert TH.watch_decision({**base, "auc_W": 0.70, "auc_A0": 0.60}).startswith("达到门槛")
+    assert TH.watch_decision({**base, "auc_W": 0.52, "auc_A0": 0.60}).startswith("未达门槛且")
+    assert TH.watch_decision({**base, "auc_W": 0.66, "auc_A0": 0.63}).startswith("未达门槛（")

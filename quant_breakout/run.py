@@ -296,9 +296,10 @@ def _exec_cfg(market: str, mc: dict | None = None) -> ExecConfig:
 def _threat_readings(ti: dict) -> dict | None:
     """v3 新因素的当前百分位（日报「其他观察因子」）+ 把 A0 与 B1～B4 的读数记到 var/out/threat_forward.csv（前瞻检验）。"""
     try:
-        from qbreak.threat import build_all, load_extra_all, log_forward, v3_readings, v3_selection
+        from qbreak.threat import build_all, load_extra_all, log_forward, log_us_watch, v3_readings, v3_selection
         rd = v3_readings(build_all(ti, load_extra_all()), v3_selection())
         log_forward(rd, paths.out_dir() / "threat_forward.csv")
+        log_us_watch(rd, paths.out_dir() / "us_watch_forward.csv")      # 美股前瞻观察：金银比 + 商品波动
         return rd
     except Exception as e:                                   # noqa: BLE001
         log.warning("威胁指数 v3 观察因子计算失败（不影响交易）：%s", e)
@@ -321,6 +322,10 @@ def cmd_threat(a) -> int:
               f"{s['event_def']}的频率 {x['band_freq']}%（平均 {x['base_rate']}%）；主要来源：{top}")
         if x.get("obs"):
             print("  其他观察因子（百分位，不计入指数）：" + "、".join(f"{o['label']} {o['pct']}" for o in x["obs"]))
+        w = x.get("watch")
+        if w:
+            print(f"  前瞻观察（金银比 + 商品波动，未验证）：W {w['W']:.0f}（自身历史 {w['W_pct']:.0f} 分位，≥90 = 警戒）；"
+                  f"金银比 60 日 {w['gs_raw']:+.1f}%（{w['gs_pct']:.0f} 分位）、商品波动 {w['cv_raw']:.1f}%（{w['cv_pct']:.0f} 分位）")
     from qbreak.report_unified import _EV
     print("接下来的已知大事件：" + ("；".join(f"{e['date']} {_EV.get(e['kind'], e['kind'])}"
                                          + (f"（{e['name']}）" if e.get("name") else "") for e in s["events"]) or "无"))

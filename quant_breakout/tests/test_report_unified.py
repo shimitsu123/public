@@ -77,7 +77,8 @@ def test_report_shows_threat_card_and_error():
     td["threat"] = {"event_def": "之后 60 个交易日内最低收盘比当天跌 ≥10%",
                     "US": {"value": 50.5, "prev20": 45.6, "band": "50–60", "band_freq": 17.5, "base_rate": 14.4,
                            "auc": [0.67, 0.61], "hit80": [3, 27], "top": [{"k": "oil", "label": "油价冲击", "pct": 96}],
-                           "obs": [{"k": "gold_silver", "label": "金银比上升", "pct": 88}, {"k": "gpr", "label": "地缘政治风险（GPR）", "pct": 40}]},
+                           "obs": [{"k": "gold_silver", "label": "金银比上升", "pct": 88}, {"k": "gpr", "label": "地缘政治风险（GPR）", "pct": 40}],
+                           "watch": {"W": 93.0, "W_pct": 97.0, "gs_pct": 90.0, "cv_pct": 96.0, "gs_raw": 8.2, "cv_raw": 31.5}},
                     "JP": {"value": 58.5, "band": "50–60", "band_freq": 28.9, "base_rate": 26.3, "auc": [0.6, 0.52],
                            "top": [], "obs": [{"k": "gpr", "label": "地缘政治风险（GPR）", "pct": 30}]},
                     "events": [{"date": "2026-10-28", "kind": "FOMC"}]}
@@ -87,6 +88,7 @@ def test_report_shows_threat_card_and_error():
     assert "17.5%" in html and "油价冲击 96" in html and "美联储议息" in html and "只有 3 次" in html
     assert "其他观察因子（不计入指数）：金银比上升 88" in html and "地缘政治风险（GPR） 40" not in html   # 只列 ≥70 分位
     assert "都在 70 分位以下" in html
+    assert "前瞻观察（金银比 + 商品波动" in html and "自身历史 97 分位" in html and "现在警戒" in html and "金银比 60 日 +8.2%" in html
     td["threat"] = {"error": "FRED 不通"}
     write_json(paths.out_dir() / "unified_today.json", td)
     assert "暂不可用：FRED 不通" in write_unified_report().read_text(encoding="utf-8")

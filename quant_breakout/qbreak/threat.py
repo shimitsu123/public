@@ -183,6 +183,8 @@ def snapshot(built: dict | None = None, table: dict | None = None, events: list 
     for m in ("US", "JP"):                                     # v3 新因素的当前百分位（只观察，不计入指数）
         if readings and m in out and (readings.get(m) or {}).get("obs"):
             out[m]["obs"] = readings[m]["obs"]
+        if readings and m in out and (readings.get(m) or {}).get("watch"):
+            out[m]["watch"] = readings[m]["watch"]            # 美股前瞻观察（金银比 + 商品波动）
     ev = events if events is not None else (read_json(paths.home() / "macro_events.json", {}) or {})
     ev = ev.get("events", ev) if isinstance(ev, dict) else ev
     d0 = pd.Timestamp(today or pd.Timestamp.today().normalize())
@@ -438,6 +440,9 @@ def v3_readings(F: dict, sel: dict | None = None) -> dict:
         out[m] = {"date": str(last.date()),
                   "idx": {k: (round(float(v.iloc[-1]), 1) if v is not None and v.iloc[-1] == v.iloc[-1] else None) for k, v in idx.items()},
                   "obs": sorted(obs, key=lambda o: -o["pct"])}
+        if m == "US":
+            out[m]["watch_rows"] = us_watch_rows(raw, pct, idx["A0"])
+            out[m]["watch"] = out[m]["watch_rows"][-1] if out[m]["watch_rows"] else None
     return out
 
 
@@ -447,3 +452,82 @@ def log_forward(readings: dict, path) -> None:
     if path.exists():
         rows = pd.concat([pd.read_csv(path), rows]).drop_duplicates(["date", "market"], keep="last")
     rows.sort_values(["date", "market"]).to_csv(path, index=False)
+
+
+# ═══════════ 美股前瞻观察：金银比 + 商品波动（用户 2026-09-25 要求；规则见 scripts/us_watch_review.py，只从该日起记录）═══════════
+# 这两个因素是在看过 2011 年后的结果之后挑出来的（v3 研究里美股两个半段 AUC 都 > 0.6 的只有它们），历史回测会偏乐观 →
+# 只做前瞻记录：每天记下当时算出的读数，以后用真实发生的下跌检验。
+US_WATCH = ["gold_silver", "commod_vol"]
+
+
+def us_watch_series(pct: pd.DataFrame) -> pd.DataFrame:
+    """pct：美股各因素的扩张百分位（0–1，含 gold_silver / commod_vol）。
+    W = 两者平均 ×100；W_pct = W 在它自己历史里的百分位（0–100，≥90 = 警戒）。"""
+    w = pct[US_WATCH].mean(axis=1, skipna=False) * 100
+    return pd.DataFrame({"gs_pct": pct["gold_silver"] * 100, "cv_pct": pct["commod_vol"] * 100, "W": w,
+                         "W_pct": expanding_pct(w) * 100})
+
+
+def us_watch_rows(raw: pd.DataFrame, pct: pd.DataFrame, a0: pd.Series, n: int = 5) -> list[dict]:
+    """最近 n 个美国交易日的观察读数（日报与前瞻记录用；补上例行任务没跑的日子）。"""
+    ws = us_watch_series(pct)
+    ws["A0"] = a0
+    ws["A0_pct"] = expanding_pct(a0) * 100
+    ws["gs_raw"] = raw["gold_silver"] * 100                                          # 金银比 60 日变化（%）
+    ws["cv_raw"] = raw["commod_vol"] * 100                                           # GSCI 20 日年化波动（%）
+    r = lambda v: round(float(v), 2) if v == v else None                              # noqa: E731
+    return [{"date": str(d.date()), **{k: r(v) for k, v in row.items()}} for d, row in ws.dropna(subset=["W"]).tail(n).iterrows()]
+
+
+def log_us_watch(readings: dict, path) -> None:
+    """追加到 var/out/us_watch_forward.csv：已记过的日期保留最早那次（= 当时实际算出的值），只补新日期。"""
+    rows = pd.DataFrame((readings.get("US") or {}).get("watch_rows") or [])
+    if rows.empty:
+        return
+    if path.exists():
+        rows = pd.concat([pd.read_csv(path), rows]).drop_duplicates(["date"], keep="first")
+    rows.sort_values("date").to_csv(path, index=False)
+
+
+def watch_review(log: pd.DataFrame, close: pd.Series, horizon: int = 60) -> dict:
+    """前瞻检验：log = us_watch_forward.csv，close = S&P500 收盘。只用「之后 horizon 个交易日已经走完」的记录。"""
+    from .bullbear import date_phases
+    lg = log.copy()
+    lg["date"] = pd.to_datetime(lg["date"])
+    lg = lg.set_index("date").sort_index()
+    c = close.dropna()
+    fdd = forward_drawdown(c, horizon)
+    e = (fdd <= -0.10).astype(float).where(fdd.notna()).reindex(lg.index)
+    k = e.notna()
+    res = {"first": str(lg.index[0].date()) if len(lg) else None, "days": int(len(lg)), "known": int(k.sum()),
+           "event_days": int(e[k].sum()) if k.any() else 0,
+           "auc_W": auc(lg["W"][k], e[k]) if k.any() else None, "auc_A0": auc(lg["A0"][k], e[k]) if k.any() else None}
+    alert = lg["W_pct"] >= 90
+    res["alert_days"] = int(alert.sum())
+    res["alert_hit"] = float(e[alert & k].mean()) if (alert & k).any() else None       # 警戒日之后 60 日内真的跌 ≥10% 的比例
+    eps = []
+    if len(lg):
+        tp, _ = date_phases(c[c.index >= lg.index[0] - pd.Timedelta(days=500)], 0.10, 0.10)
+        for p in tp[tp["kind"] == "peak"]["date"]:
+            if p < lg.index[0]:
+                continue
+            win = lg.loc[:p].tail(horizon + 1)
+            eps.append({"peak": str(p.date()), "W_alert": bool((win["W_pct"] >= 90).any()),
+                        "A0_alert": bool((win["A0_pct"] >= 90).any())})
+    res["episodes"] = eps
+    res["decision"] = watch_decision(res)
+    return res
+
+
+def watch_decision(r: dict, min_episodes: int = 3, min_known: int = 500) -> str:
+    """事先规则（2026-09-25）：前瞻期内 ≥3 次 ≥10% 下跌、且 ≥500 天结果已知之后才下结论。"""
+    n = len(r.get("episodes") or [])
+    if n < min_episodes or r.get("known", 0) < min_known:
+        return f"继续观察（前瞻期 ≥10% 下跌 {n} / {min_episodes} 次，已知结果 {r.get('known', 0)} / {min_known} 天）"
+    hit = sum(e["W_alert"] for e in r["episodes"]) / n
+    aw, a0 = r.get("auc_W") or 0, r.get("auc_A0") or 0
+    if aw >= 0.65 and aw >= a0 + 0.05 and hit >= 0.5:
+        return f"达到门槛（AUC {aw:.3f} vs A0 {a0:.3f}，事前警戒 {hit:.0%}）：建议把 W 加进美股威胁指数的显示，需要用户确认"
+    if aw < 0.55:
+        return f"未达门槛且 AUC {aw:.3f} < 0.55：建议停止观察"
+    return f"未达门槛（AUC {aw:.3f} vs A0 {a0:.3f}，事前警戒 {hit:.0%}）：继续观察"
