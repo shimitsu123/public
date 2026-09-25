@@ -159,7 +159,7 @@ def test_sim_day_before_start_only_previews(monkeypatch):
     assert not (paths.state_dir() / "unified_state.json").exists()                  # 开始日之前不推进账户
 
 
-def test_preview_fills_market_state_watchlist_cash_fx_with_units(monkeypatch):
+def test_preview_fills_market_state_watchlist_cash_fx_with_units(monkeypatch, capsys):
     from types import SimpleNamespace
 
     import run
@@ -187,6 +187,7 @@ def test_preview_fills_market_state_watchlist_cash_fx_with_units(monkeypatch):
     monkeypatch.setattr(qbreak.data, "LAGGING", {"^N225": {"last": "2026-09-18", "expected": "2026-09-25"},
                                                  "7203.T": {"last": "2026-09-24", "expected": "2026-09-25"}})
     assert run._unified_preview(argparse.Namespace(), cfg) == 0
+    assert "★ 日报缺数据" in capsys.readouterr().out                                  # 缺数据醒目打印，例行任务会看到
     td = read_json(paths.out_dir() / "unified_today.json")
     assert td["preview"] and td["cash_jpy"] == 1_000_000 and td["cash_usd"] == 0 and td["usdjpy"] == 149.25
     assert td["data_dates"] == {"JP": "2026-09-25", "US": "2026-09-24"} and td["todo"] == {}

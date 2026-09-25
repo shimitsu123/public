@@ -912,6 +912,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
         from qbreak.report_unified import write_unified_report
         hp = write_unified_report()
         print(f"报表 {hp}")
+        _print_missing()
     except Exception as e:                                   # noqa: BLE001
         log.warning("统一日报生成失败：%s", e)
     print(_json.dumps({k: out[k] for k in ("bar_date", "equity_jpy", "cash_jpy", "cash_usd", "todo")},
@@ -970,6 +971,16 @@ def _unified_watch_and_threat(extras: dict, plans: dict, data: dict, params: dic
     return threat
 
 
+def _print_missing() -> None:
+    """日报「数据完整性」：有缺失时醒目打印（例行任务汇报时逐项列出，不能静默）。"""
+    from qbreak.utils import read_json
+    miss = (read_json(paths.out_dir() / "report_data.json", {}) or {}).get("missing") or []
+    if miss:
+        print(f"★ 日报缺数据 {len(miss)} 项（汇报时逐项列出）：\n  - " + "\n  - ".join(miss))
+    else:
+        print("数据完整性：日报需要的数据都取到了")
+
+
 def _usdjpy_any() -> tuple[float | None, str | None]:
     """USD/JPY 的备用来源（依次）：Yahoo（JPY=X）→ FRED DEXJPUS → var/macro.json（市场风险报告）。都没有 → (None, None)。"""
     try:
@@ -1022,6 +1033,7 @@ def _unified_preview(a, cfg: dict) -> int:
                                                   "provider": provider, "mode": "unified-preview"})
     from qbreak.report_unified import write_unified_report
     print(f"开始日 {cfg['start']} 之前：只预览（不推进账户、不下单）。报表 {write_unified_report()}")
+    _print_missing()
     for m, e in extras.items():
         bb = (e.get("regime") or {}).get("bullbear", {})
         print(f"[{m}] 牛熊分界 {bb.get('state')}（数据日 {bb.get('asof')}）"
