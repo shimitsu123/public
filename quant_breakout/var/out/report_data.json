@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-25 15:33 JST",
+ "generated": "2026-09-25 15:45 JST",
  "mode": "unified",
  "sim": {
   "start": "2026-09-28",
@@ -302,7 +302,7 @@
     "A0x": 41.5,
     "S": 48.5
    },
-   "fwd_plus": 0
+   "fwd_plus": 2
   },
   "JP": {
    "date": "2026-09-24",
