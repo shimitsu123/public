@@ -117,13 +117,16 @@ def test_real_calendar_file_is_valid():
     """var/macro_events.json（手动维护）：每条都能解析、类型已知、市场是 US / JP、同一天同类不重复；日报能显示每种类型的中文名。"""
     from pathlib import Path
     from qbreak.report_unified import _EV
-    raw = json.loads((Path(__file__).resolve().parents[1] / "var" / "macro_events.json").read_text(encoding="utf-8"))["events"]
+    d = json.loads((Path(__file__).resolve().parents[1] / "var" / "macro_events.json").read_text(encoding="utf-8"))
     keys = set()
-    for it in raw:
-        d = dt.date.fromisoformat(it["date"])
-        assert it["kind"] in EVENT_KINDS and it.get("home", "US") in ("US", "JP"), it
-        assert (d, it["kind"], it.get("home"), it.get("name")) not in keys, it
-        keys.add((d, it["kind"], it.get("home"), it.get("name")))
+    for it in d["events"]:
+        day = dt.date.fromisoformat(it["date"])
+        assert it["kind"] in EVENT_KINDS and it.get("home", "US") in ("US", "JP", "GL"), it     # GL = 全球事件
+        assert it["kind"] in WINDOW_KINDS or (it.get("source") and it.get("checked")), it       # 只展示的事件要写来源与核对日
+        assert (day, it["kind"], it.get("home"), it.get("name")) not in keys, it
+        keys.add((day, it["kind"], it.get("home"), it.get("name")))
+    assert all(t["kind"] in EVENT_KINDS and t.get("checked") for t in d.get("tbd", []))
+    assert any(e["date"] == "2026-11-03" and e["kind"] == "ELECTION" for e in d["events"])       # 美国中期选举
     assert set(EVENT_KINDS) <= set(_EV)
 
 

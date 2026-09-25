@@ -284,7 +284,7 @@ EVENT_KINDS = WINDOW_KINDS + ("ELECTION", "POLITICS", "FISCAL", "TRADE", "OPEC",
 class MacroEvent:
     date: dt.date
     kind: str            # FOMC / BOJ / CPI / NFP（窗口用）；ELECTION / POLITICS / FISCAL / TRADE / … 只展示
-    home: str            # US / JP
+    home: str            # US / JP（GL = 全球事件，只展示）
     name: str = ""
 
     def reaction_date(self, market: str) -> dt.date:

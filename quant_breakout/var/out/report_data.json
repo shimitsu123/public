@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-25 13:22 JST",
+ "generated": "2026-09-25 13:57 JST",
  "mode": "unified",
  "sim": {
   "start": "2026-09-28",
@@ -166,16 +166,80 @@
   },
   "events": [
    {
+    "date": "2026-09-30",
+    "kind": "INDEX",
+    "home": "JP",
+    "name": "日経225 定期入替（9/30 收盘调仓、10/1 生效）：加 JX金属・KOKUSAI ELECTRIC・カプコン，除 ARCHION・コニカミノルタ・カナデビア",
+    "source": "https://www.nikkei.com/article/DGXZQOUB0467C0U6A900C2000000/ ; 规则 https://indexes.nikkei.co.jp/nkave/archives/news/20260709J_3.pdf",
+    "checked": "2026-09-25"
+   },
+   {
+    "date": "2026-10-01",
+    "kind": "TANKAN",
+    "home": "JP",
+    "name": "9 月调查（08:50 发布）",
+    "source": "https://www.boj.or.jp/statistics/outline/tkohyos.xlsx",
+    "checked": "2026-09-25"
+   },
+   {
     "date": "2026-10-02",
     "kind": "NFP",
     "home": "US",
     "name": "9月雇用统计"
    },
    {
+    "date": "2026-10-04",
+    "kind": "ELECTION",
+    "home": "GL",
+    "name": "巴西大选第一轮（周日；决选 10/25）",
+    "source": "https://www.tse.jus.br/comunicacao/noticias/2026/Marco/eleicoes-2026-confira-as-principais-datas-do-calendario-eleitoral",
+    "checked": "2026-09-25"
+   },
+   {
+    "date": "2026-10-04",
+    "kind": "OPEC",
+    "home": "GL",
+    "name": "第 68 次 JMMC + 7 国月度产量会议（周日）",
+    "source": "https://www.opec.org/pr-detail/612-2-august-2026.html ; https://www.opec.org/pr-detail/613-6-september-2026.html",
+    "checked": "2026-09-25"
+   },
+   {
+    "date": "2026-10-05",
+    "kind": "POLITICS",
+    "home": "JP",
+    "name": "临时国会召集（食品消费税减税、众院定数削减法案；10/7–9 代表质询）",
+    "source": "https://www.nippon.com/ja/news/yjj2026091800485/",
+    "checked": "2026-09-25"
+   },
+   {
+    "date": "2026-10-07",
+    "kind": "INDEX",
+    "home": "JP",
+    "name": "新 TOPIX 首次定期入替：公布构成股（10/30 实施）",
+    "source": "https://www.nikkei.com/article/DGXZQOUB1086K0Q6A910C2000000/",
+    "checked": "2026-09-25"
+   },
+   {
     "date": "2026-10-14",
     "kind": "CPI",
     "home": "US",
     "name": "9月CPI"
+   },
+   {
+    "date": "2026-10-25",
+    "kind": "ELECTION",
+    "home": "GL",
+    "name": "巴西大选决选（周日，如需要）",
+    "source": "https://www.tse.jus.br/comunicacao/noticias/2026/Marco/eleicoes-2026-confira-as-principais-datas-do-calendario-eleitoral",
+    "checked": "2026-09-25"
+   },
+   {
+    "date": "2026-10-27",
+    "kind": "ELECTION",
+    "home": "GL",
+    "name": "以色列议会选举（中东局势 / 油价）",
+    "source": "https://www.electionguide.org/elections/id/5092/",
+    "checked": "2026-09-25"
    },
    {
     "date": "2026-10-28",
@@ -189,10 +253,40 @@
     "name": "含展望报告"
    },
    {
+    "date": "2026-10-30",
+    "kind": "INDEX",
+    "home": "JP",
+    "name": "新 TOPIX 首次定期入替实施（10 月最后营业日）：未续选的移行措置銘柄开始按季降权，本次系数 87.5%",
+    "source": "https://www.jpx.co.jp/markets/indices/revisions-indices/nlsgeu000005mj3q-att/RevisionsofTOPIX.pdf",
+    "checked": "2026-09-25"
+   },
+   {
+    "date": "2026-11-03",
+    "kind": "ELECTION",
+    "home": "US",
+    "name": "美国中期选举（东京 11/3 文化の日休市，日本 11/4 反应）",
+    "source": "https://www.fec.gov/help-candidates-and-committees/dates-and-deadlines/2026-reporting-dates/preg-report-notice-pacs-party-committees-2026/",
+    "checked": "2026-09-25"
+   },
+   {
     "date": "2026-11-06",
     "kind": "NFP",
     "home": "US",
     "name": "10月雇用统计"
+   },
+   {
+    "date": "2026-11-10",
+    "kind": "CPI",
+    "home": "US",
+    "name": "10月CPI"
+   },
+   {
+    "date": "2026-11-18",
+    "kind": "SUMMIT",
+    "home": "GL",
+    "name": "APEC 领导人会议（深圳，11/18–19）",
+    "source": "https://news.cgtn.com/news/2025-12-13/2026-APEC-meeting-to-be-held-Nov-18-19-in-Shenzhen-China-1J43L2Fb2w0/index.html",
+    "checked": "2026-09-25"
    }
   ]
  },
