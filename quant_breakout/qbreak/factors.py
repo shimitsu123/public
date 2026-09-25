@@ -153,6 +153,44 @@ def boj_series(code: str = "STRDCLUCON", db: str = "FM01", start_year: int = 199
     return _cached(f"boj_{db}_{code}", fetch)
 
 
+def boj_monthly(db: str, code: str, start: str = "196001") -> pd.Series:
+    """日銀 API 的月度系列（例 PR01 企業物価指数、MD02 マネーストック）。索引 = 月初。"""
+    def fetch():
+        url = f"{BOJ_API}?format=json&lang=jp&db={db}&code={code}&startDate={start}&endDate={dt.date.today().year}12"
+        out = {}
+        for r in json.loads(_get(url)).get("RESULTSET") or []:
+            v = r.get("VALUES") or {}
+            for ym, val in zip(v.get("SURVEY_DATES") or [], v.get("VALUES") or []):
+                if val is not None:
+                    y, m = divmod(int(ym), 100)
+                    out[pd.Timestamp(y, m, 1)] = float(val)
+        return pd.Series(out, name=code).sort_index()
+    return _cached(f"boj_{db}_{code}", fetch)
+
+
+def tpu_monthly() -> pd.Series:
+    """Caldara 等 贸易政策不确定性指数（月度，1960-；matteoiacoviello.com/tpu.htm）。索引 = 月初。"""
+    def fetch():
+        df = pd.read_excel(io.BytesIO(_get("https://www.matteoiacoviello.com/tpu_files/tpu_web_latest.xlsx", timeout=120)),
+                           sheet_name="TPU_MONTHLY")
+        return pd.Series(pd.to_numeric(df["TPU"], errors="coerce").to_numpy(), index=pd.to_datetime(df["DATE"]), name="TPU").dropna()
+    return _cached("tpu_monthly", fetch, 24.0)
+
+
+def shiller_cape() -> pd.Series:
+    """Shiller CAPE（月度，econ.yale.edu；2026-09 核对时只更新到 2023-09 → 只用于历史研究）。索引 = 月初。"""
+    def fetch():
+        df = pd.read_excel(io.BytesIO(_get("http://www.econ.yale.edu/~shiller/data/ie_data.xls", timeout=120)),
+                           sheet_name="Data", header=7)
+        d = pd.to_numeric(df["Date"], errors="coerce")
+        cape = pd.to_numeric(df["CAPE"], errors="coerce")
+        ok = d.notna() & cape.notna()
+        y = d[ok].astype(float)
+        idx = [pd.Timestamp(int(v), int(round((v - int(v)) * 100)) or 1, 1) for v in y]
+        return pd.Series(cape[ok].to_numpy(), index=pd.DatetimeIndex(idx), name="CAPE")
+    return _cached("shiller_cape", fetch, 24.0)
+
+
 def tankan(code: str) -> pd.Series:
     """日銀短観（季度 DI，db=CO）。索引 = 调查季度的最后一天（例 2026-06-30 = 6 月调查，7 月初公布）。"""
     def fetch():
