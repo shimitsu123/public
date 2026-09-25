@@ -229,9 +229,12 @@ def _threat_html(t: dict) -> str:
                      f"（≥80 = 预警、≥90 = 警戒{'，<b>现在警戒</b>' if w['W_pct'] >= 90 else ('，<b>现在预警</b>' if w['W_pct'] >= 80 else '')}）；"
                      f"金银比 60 日 {w['gs_raw']:+.1f}%、"
                      f"商品波动 {w['cv_raw']:.1f}%") if w else ""
+        fw = x.get("fwd") or {}
+        fwd_txt = ("<br>前瞻对照（只记录、未验证）：" + "、".join(
+            f"{ {'A0x': '去掉曲线倒挂与油价冲击', 'S': '因子调查组合'}[k] } {v:.0f}" for k, v in fw.items())) if fw else ""
         rows.append(f"<dt>{name}：{x['value']:.0f} / 100{prev}</dt><dd>同档位（{escape(str(x.get('band')))}）历史上"
                     f"{escape(t.get('event_def', ''))}的频率 {x.get('band_freq')}%（全期平均 {x.get('base_rate')}%）；"
-                    f"主要来源（百分位）：{top}{obs_txt}{watch_txt}</dd>")
+                    f"主要来源（百分位）：{top}{obs_txt}{watch_txt}{fwd_txt}</dd>")
     ev = "".join(f"<li>{escape(e['date'])} {escape(_EV.get(e.get('kind'), e.get('kind', '')))}"
                  f"{('（' + escape(e['name']) + '）') if e.get('name') else ''}</li>" for e in t.get("events", []))
     us, jp = t.get("US", {}), t.get("JP", {})

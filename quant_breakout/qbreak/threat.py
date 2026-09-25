@@ -199,6 +199,8 @@ def snapshot(built: dict | None = None, table: dict | None = None, events: list 
             out[m]["watch"] = readings[m]["watch"]            # 美股前瞻观察（金银比 + 商品波动）
         if readings and m in out and (readings.get(m) or {}).get("domains"):
             out[m]["domains"] = readings[m]["domains"]        # 因子调查：各领域当前危险度百分位（只观察）
+        if readings and m in out and (readings.get(m) or {}).get("idx"):
+            out[m]["fwd"] = {k: v for k, v in readings[m]["idx"].items() if k in ("A0x", "S") and v is not None}   # 前瞻对照版本
     ev = events if events is not None else (read_json(paths.home() / "macro_events.json", {}) or {})
     ev = ev.get("events", ev) if isinstance(ev, dict) else ev
     d0 = pd.Timestamp(today or pd.Timestamp.today().normalize())
@@ -437,6 +439,11 @@ def v3_selection() -> dict:
     return {m: (r.get(m) or {}).get("selected_v3") or [] for m in ("US", "JP")}
 
 
+A0X_DROP = ["curve", "oil"]          # 因子调查（2026-09-25）里拿掉后两段都更好的两个（看过结果才提出 → 只做前瞻对照）
+FORWARD_LABELS = {"A0": "现行 v1", "A0x": "去掉曲线倒挂与油价冲击", "B1": "v3 全部等权", "B2": "v3 训练期选因素",
+                  "B3": "v3 类别平衡", "B4": "v3 类别平衡（选入因素）", "S": "因子调查组合 S"}
+
+
 def v3_readings(F: dict, sel: dict | None = None) -> dict:
     """最新一天：A0 与 B1～B4 的读数（前瞻记录用）+ 新因素的当前百分位（日报「其他观察因子」）。F = build_all(...)。"""
     sel = sel or {}
@@ -447,7 +454,8 @@ def v3_readings(F: dict, sel: dict | None = None) -> dict:
         pct = pd.DataFrame({c: expanding_pct(raw[c]) for c in v3})
         s = [c for c in sel.get(m, []) if c in pct]
         idx = {"A0": _eq(pct[v1]), "B1": _eq(pct[v3]), "B2": _eq(pct[s]) if s else None,
-               "B3": category_mean(pct[v3]), "B4": category_mean(pct[s]) if s else None}
+               "B3": category_mean(pct[v3]), "B4": category_mean(pct[s]) if s else None,
+               "A0x": _eq(pct[[c for c in v1 if c not in A0X_DROP]])}          # 去掉曲线倒挂与油价冲击（前瞻对照）
         last = pct.index[-1]
         new = V3_EXTRA + (JP_V3_ONLY if m == "JP" else [])
         obs = [{"k": c, "label": LABELS[c], "pct": round(float(pct.at[last, c]) * 100)} for c in new if pct.at[last, c] == pct.at[last, c]]
@@ -567,3 +575,48 @@ def watch_decision(r: dict, min_episodes: int = 3, min_known: int = 500) -> str:
     if aw < 0.55:
         return f"未达门槛且 AUC {aw:.3f} < 0.55：建议停止观察"
     return f"未达门槛（AUC {aw:.3f} vs A0 {a0:.3f}，事前警戒 {hit:.0%}）：继续观察"
+
+
+def forward_review(log: pd.DataFrame, closes: dict[str, pd.Series], horizon: int = 60) -> dict:
+    """threat_forward.csv 的前瞻检验：每个市场、每个版本与 A0 在同一批「之后 horizon 个交易日已走完」的日子上比 AUC。"""
+    from .bullbear import date_phases
+    out = {}
+    for m, g in log.groupby("market"):
+        g = g.drop(columns=["market"]).copy()
+        g["date"] = pd.to_datetime(g["date"])
+        g = g.set_index("date").sort_index()
+        c = closes[m].dropna()
+        fdd = forward_drawdown(c, horizon)
+        e10 = (fdd <= -0.10).astype(float).where(fdd.notna()).reindex(g.index)
+        e15 = (fdd <= -0.15).astype(float).where(fdd.notna()).reindex(g.index)
+        k = e10.notna()
+        tp, _ = date_phases(c[c.index >= g.index[0] - pd.Timedelta(days=500)], 0.10, 0.10)
+        res = {"first": str(g.index[0].date()), "days": int(len(g)), "known": int(k.sum()),
+               "event_days": int(e10[k].sum()) if k.any() else 0,
+               "episodes": [str(p.date()) for p in tp[tp["kind"] == "peak"]["date"] if p >= g.index[0]], "variants": {}}
+        for v in [col for col in g.columns if col != "A0"]:
+            both = k & g[v].notna() & g["A0"].notna()
+            if not both.any():
+                res["variants"][v] = {"n": 0}
+                continue
+            res["variants"][v] = {"n": int(both.sum()),
+                                  "auc10": auc(g[v][both], e10[both]), "auc10_A0": auc(g["A0"][both], e10[both]),
+                                  "auc15": auc(g[v][both], e15[both]), "auc15_A0": auc(g["A0"][both], e15[both])}
+        res["decision"] = forward_decision(res)
+        out[m] = res
+    return out
+
+
+def forward_decision(r: dict, min_episodes: int = 3, min_known: int = 500) -> str:
+    """事先规则（2026-09-25）：该市场前瞻期内 ≥3 次 ≥10% 下跌、且 ≥500 天结果已知之后，
+    AUC 比 A0 高 ≥0.03、且 ≥15% 下跌的 AUC 不低于 A0 的版本 → 取 AUC 最高的一个，建议日报改用（需要用户确认）。"""
+    n = len(r.get("episodes") or [])
+    if n < min_episodes or r.get("known", 0) < min_known:
+        return f"继续记录（前瞻期 ≥10% 下跌 {n} / {min_episodes} 次，已知结果 {r.get('known', 0)} / {min_known} 天）"
+    ok = {v: x for v, x in r["variants"].items() if x.get("n") and x["auc10"] is not None and x["auc10_A0"] is not None
+          and x["auc10"] >= x["auc10_A0"] + 0.03 and (x["auc15"] or 0) >= (x["auc15_A0"] or 0)}
+    if not ok:
+        return "没有版本达到门槛：继续记录"
+    best = max(ok, key=lambda v: ok[v]["auc10"])
+    return (f"{FORWARD_LABELS.get(best, best)} 达到门槛（AUC {ok[best]['auc10']:.3f} vs A0 {ok[best]['auc10_A0']:.3f}）："
+            "建议日报改用，需要用户确认")

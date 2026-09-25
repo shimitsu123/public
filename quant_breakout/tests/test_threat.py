@@ -195,7 +195,7 @@ def test_v3_readings_and_forward_log(tmp_path):
     raw = pd.DataFrame({c: rng.normal(size=len(days)) for c in TH.JP_V3}, index=days)
     F = {"US": (raw[TH.US_V3], None), "JP": (raw, None)}
     rd = TH.v3_readings(F, {"US": ["vix", "gold"], "JP": []})
-    assert set(rd["US"]["idx"]) == {"A0", "B1", "B2", "B3", "B4"} and rd["JP"]["idx"]["B2"] is None
+    assert set(rd["US"]["idx"]) == {"A0", "B1", "B2", "B3", "B4", "A0x"} and rd["JP"]["idx"]["B2"] is None
     assert len(rd["JP"]["obs"]) == len(TH.V3_EXTRA + TH.JP_V3_ONLY) and len(rd["US"]["obs"]) == len(TH.V3_EXTRA)
     assert rd["US"]["obs"] == sorted(rd["US"]["obs"], key=lambda o: -o["pct"])
     fp = tmp_path / "fw.csv"
@@ -250,3 +250,24 @@ def test_fill_gaps_only_adds_missing_days():
     f = pd.Series([9.0, 1.5, 2.5, 3.0, 5.0], index=pd.DatetimeIndex(["2026-09-17", "2026-09-18", "2026-09-22", "2026-09-23", "2026-09-24"]))
     g = TH.fill_gaps(y, f, pd.Timestamp("2026-09-24"))
     assert list(g.index.strftime("%m-%d")) == ["09-18", "09-21", "09-22", "09-23"] and list(g) == [1.0, 2.0, 2.5, 4.0]
+
+
+def test_forward_review_compares_on_same_days():
+    days = pd.bdate_range("2020-01-01", periods=400)
+    close = pd.Series(np.linspace(90, 100, 400), index=days)
+    close.iloc[200:230] = np.linspace(99.5, 80, 30)                             # 第 200 天见顶后跌 20%
+    close.iloc[230:] = 80.0
+    rows = []
+    for i, d in enumerate(days[100:300], start=100):
+        hot = 150 <= i < 200
+        rows.append({"date": str(d.date()), "market": "US", "A0": 50.0, "A0x": 90.0 if hot else 40.0, "S": None})
+    r = TH.forward_review(pd.DataFrame(rows), {"US": close})["US"]
+    x = r["variants"]["A0x"]
+    assert x["auc10"] > 0.8 and x["auc10_A0"] == 0.5 and r["variants"]["S"]["n"] == 0
+    assert r["decision"].startswith("继续记录") and len(r["episodes"]) == 1
+    full = {"episodes": ["a", "b", "c"], "known": 600,
+            "variants": {"A0x": {"n": 600, "auc10": 0.70, "auc10_A0": 0.62, "auc15": 0.66, "auc15_A0": 0.60},
+                         "S": {"n": 600, "auc10": 0.64, "auc10_A0": 0.62, "auc15": 0.70, "auc15_A0": 0.60}}}
+    assert TH.forward_decision(full).startswith("去掉曲线倒挂与油价冲击 达到门槛")
+    full["variants"]["A0x"]["auc15"] = 0.55                                     # ≥15% 不如 A0 → 不采用
+    assert TH.forward_decision(full) == "没有版本达到门槛：继续记录"
