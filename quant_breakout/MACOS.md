@@ -1,5 +1,7 @@
 # macOS 全自动运行指南（立花証券 e支店 API）
 
+> **2026-09-25 晚更新**：用户决定继续用楽天（MARKETSPEED II RSS，需要一台 Windows 11），模拟盘改为楽天「一个账户」模式（见 README「一个账户（楽天）」一节）。本指南保留为可选方案：想在 Mac 上原生全自动交易日本株时再用。
+
 > 面向：Mac + 不装 Excel + 想开机自启、全天常驻、自动买卖。
 > 结论先行：**楽天走不通**（RSS 是 Windows 专用 Excel 插件），换 **立花証券 e支店 API** 是
 > macOS 上唯一干净的方案（Apple Silicon 的 Mac mini 也可以：API 是纯 HTTP，不依赖操作系统）。
