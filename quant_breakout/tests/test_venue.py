@@ -102,6 +102,10 @@ def test_sim_unify_archives_sleeves_and_writes_one_account_config():
     assert run.cmd_sim_unify(ns) == 2                                    # 已是一个账户模式：不加 --force 不重开
     c = run._unified_cfg(cfg)
     assert c.fx_before_jp_open and c.fx_spread_yen == 0.03 and c.max_positions == 4
+    assert c.usd_keep_imminent                                           # 日本 + 美股：美股即将有信号时美元先拿着
+    ns.stock_markets, ns.force = "JP", True
+    assert run.cmd_sim_unify(ns) == 0
+    assert not run._unified_cfg(read_json(paths.home() / "sim.json")).usd_keep_imminent
 
 
 def test_per_market_live_signal_daemon_refuse_in_unified_mode(capsys):

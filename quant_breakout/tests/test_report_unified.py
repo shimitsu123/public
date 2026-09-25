@@ -69,3 +69,21 @@ def test_report_before_first_run_says_when_it_starts():
     html = write_unified_report().read_text(encoding="utf-8")
     assert "还没有运行过" in html and "2026-09-28" in html and "¥1,000,000" in html
     assert "个股 4×25%（只做日本个股" in html and "1655.T 1" in html and "None" not in html   # 规则取自 sim.json
+
+
+def test_report_shows_threat_card_and_error():
+    _write(["JP"])
+    td = read_json(paths.out_dir() / "unified_today.json")
+    td["threat"] = {"event_def": "之后 60 个交易日内最低收盘比当天跌 ≥10%",
+                    "US": {"value": 50.5, "prev20": 45.6, "band": "50–60", "band_freq": 17.5, "base_rate": 14.4,
+                           "auc": [0.67, 0.61], "hit80": [3, 27], "top": [{"k": "oil", "label": "油价冲击", "pct": 96}]},
+                    "JP": {"value": 58.5, "band": "50–60", "band_freq": 28.9, "base_rate": 26.3, "auc": [0.6, 0.52],
+                           "top": []},
+                    "events": [{"date": "2026-10-28", "kind": "FOMC"}]}
+    write_json(paths.out_dir() / "unified_today.json", td)
+    html = write_unified_report().read_text(encoding="utf-8")
+    assert "美股（S&amp;P500）：50 / 100" in html or "美股（S&P500）：50 / 100" in html
+    assert "17.5%" in html and "油价冲击 96" in html and "美联储议息" in html and "只有 3 次" in html
+    td["threat"] = {"error": "FRED 不通"}
+    write_json(paths.out_dir() / "unified_today.json", td)
+    assert "暂不可用：FRED 不通" in write_unified_report().read_text(encoding="utf-8")

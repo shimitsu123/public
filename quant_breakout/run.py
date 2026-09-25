@@ -293,6 +293,24 @@ def _exec_cfg(market: str, mc: dict | None = None) -> ExecConfig:
     return ExecConfig.for_market(market, broker_of(market, mc))
 
 
+def cmd_threat(a) -> int:
+    """大事件威胁指数（只展示，不参与交易）：美股 / 日経当前读数、同档位历史大跌频率、主要来源、接下来的已知大事件。"""
+    from qbreak.threat import snapshot
+    from qbreak.utils import write_json
+    s = snapshot()
+    write_json(paths.out_dir() / "threat_today.json", s)
+    for m, name in (("US", "美股 S&P500"), ("JP", "日経225")):
+        x = s.get(m)
+        if not x:
+            continue
+        top = "、".join(f"{f['label']} {f['pct']}" for f in x["top"])
+        print(f"{name}（{x['date']}）：{x['value']:.0f}/100（20 日前 {x['prev20']}）；同档位 {x['band']} 历史上"
+              f"{s['event_def']}的频率 {x['band_freq']}%（平均 {x['base_rate']}%）；主要来源：{top}")
+    print("接下来的已知大事件：" + ("；".join(f"{e['date']} {e['kind']}" for e in s["events"]) or "无"))
+    print(s["note"])
+    return 0
+
+
 def _refuse_unified(a) -> bool:
     """sim.json 是一个账户模式时，分市场的实盘 / 清单 / 守护进程会和模拟盘的规则不一致（例如闲置资金只买 1329）→ 拒绝运行；
     --no-sim-config 时照旧按命令行参数。"""
@@ -822,6 +840,13 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
            "positions": {t: {"market": p.market, "shares": p.shares, "entry_px": p.entry_px, "entry_date": p.entry_date,
                              "stop_px": round(p.stop_px, 2)} for t, p in state.pos.items()},
            "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker}
+    try:                                                     # 大事件威胁指数：只展示，不参与交易
+        from qbreak.threat import snapshot
+        out["threat"] = snapshot()
+        write_json(paths.out_dir() / "threat_today.json", out["threat"])
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("威胁指数计算失败（不影响交易）：%s", e)
+        out["threat"] = {"error": str(e)[:200]}
     write_json(paths.out_dir() / "unified_today.json", out)
     write_json(paths.out_dir() / "last_run.json", {"at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "ok": True,
                                                   "error": "", "markets_ok": ["ALL"], "blocked_hosts": blocked,
@@ -1115,6 +1140,8 @@ def cmd_sim_unify(a) -> int:
                       "stock_markets": [m.strip().upper() for m in a.stock_markets.split(",") if m.strip()],
                       "core": core, "core_index": {t: ("JP" if t == "1329.T" or t == "1306.T" else "US") for t in core},
                       "core_mode": a.core_mode, "universe": {"JP": "broad", "US": "broad"}}
+    if "US" in cfg["unified"]["stock_markets"]:              # op_mode_study：美股即将有信号时美元先不换回
+        cfg["unified"]["usd_keep_imminent"] = True
     write_json(paths.home() / SIM_FILE, cfg)
     print(f"已改为一个账户模式：¥{cfg['capital_jpy']:,.0f}，个股 {a.max_positions}×{a.position_pct:.0%}"
           f"（{'+'.join(cfg['unified']['stock_markets'])}），闲置资金 {core}（{a.core_mode}）。下一次 sim-day 生效。")
@@ -1449,6 +1476,9 @@ def main(argv=None) -> int:
     su.add_argument("--start", default=None)
     su.add_argument("--force", action="store_true")
     su.set_defaults(func=cmd_sim_unify)
+
+    th = sub.add_parser("threat", help="大事件威胁指数（只展示，不参与交易）")
+    th.set_defaults(func=cmd_threat)
 
     jq = sub.add_parser("jquants-check", help="J-Quants 接入检查（需环境变量 JQUANTS_API_KEY；不打印キー）")
     jq.add_argument("--plan", default=None, choices=["free", "light", "standard", "premium"],

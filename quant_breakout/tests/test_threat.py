@@ -52,3 +52,18 @@ def test_us_asof_for_jp_uses_previous_us_close():
     jp = pd.DatetimeIndex(["2026-09-24", "2026-09-25", "2026-09-28"])
     v = TH.us_asof_for_jp(us, jp)
     assert list(v) == [1.0, 2.0, 3.0]                                  # 9/28（周一）早上已知的是 9/25（周五）的美国收盘
+
+
+def test_snapshot_band_top_factors_and_events():
+    days = pd.bdate_range("2026-01-01", periods=30)
+    idx = pd.Series(np.linspace(40, 55, 30), index=days)
+    pct = pd.DataFrame({"oil": 0.96, "rates": 0.95, "vix": 0.2, "curve": 0.64}, index=days)
+    table = {"event": "之后 60 个交易日内最低收盘比当天跌 ≥10%",
+             "US": {"auc_h1": 0.67, "auc_h2": 0.61, "base_rate": 14.4, "episodes_hit80": [3, 27],
+                    "deciles": [{"lo": 40, "hi": 50, "freq": 9.0, "n": 1}, {"lo": 50, "hi": 60, "freq": 17.5, "n": 1}]}}
+    ev = [{"date": "2026-02-20", "kind": "FOMC"}, {"date": "2026-06-01", "kind": "BOJ"}, {"date": "2025-12-01", "kind": "CPI"}]
+    s = TH.snapshot({"US": (idx, pct), "JP": (pd.Series(dtype=float), pct)}, table, ev, today="2026-02-11")
+    u = s["US"]
+    assert u["value"] == 55.0 and u["band"] == "50–60" and u["band_freq"] == 17.5 and u["hit80"] == [3, 27]
+    assert [f["k"] for f in u["top"]] == ["oil", "rates", "curve"] and "JP" not in s
+    assert [e["date"] for e in s["events"]] == ["2026-02-20"]                    # 45 天以内、今天以后

@@ -248,7 +248,9 @@ def main() -> int:
         {"generated": str(pd.Timestamp.today().date()), "pick": pick, "on": ON, "off": OFF,
          "event": "之后 60 个交易日内最低收盘比当天跌 ≥10%", "eval_from": str(EVAL0.date()),
          **{m: {"auc_h1": out[m]["eval"]["auc_h1"], "auc_h2": out[m]["eval"]["auc_h2"], "base_rate": out[m]["eval"]["base_rate"],
-                "deciles": out[m]["eval"]["deciles"]} for m in ("US", "JP")}}, ensure_ascii=False, indent=1), encoding="utf-8")
+                "deciles": out[m]["eval"]["deciles"],
+                "episodes_hit80": [sum(e["hit80_before"] for e in out[m]["episodes"]), len(out[m]["episodes"])]}
+            for m in ("US", "JP")}}, ensure_ascii=False, indent=1), encoding="utf-8")
     return 0
 
 

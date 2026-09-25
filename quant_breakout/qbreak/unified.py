@@ -811,7 +811,11 @@ class UnifiedEngine:
                            "limit": lim, "signal_close": c, "signal_date": d})
         for t, (side, u) in st.core_plan.items():
             if side == "BUY":
-                out["JP"].append({"side": "BUY", "ticker": t, "qty": int(u), "type": "寄付成行（个股买完后，用剩余日元）",
+                j = self.col.get(t)
+                c = float(self.A.close[i, j]) if j is not None and self.A.has[i, j] else float(st.core_last.get(t) or 0)
+                lim = round_to_tick(c * 1.02, t, "BUY") if c > 0 else None   # 实盘：成行会按涨停价占用余力 → 用指値
+                out["JP"].append({"side": "BUY", "ticker": t, "qty": int(u),
+                                  "type": "寄付指値（个股买完后，用剩余日元；卖单成交后再下）", "limit": lim,
                                   "reason": "核心 ETF 调整"})
         for o in st.fx_plan:
             out["FX"].append({"dir": o["dir"], "usd": o["usd"],

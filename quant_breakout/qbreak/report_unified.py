@@ -46,6 +46,7 @@ def build_unified_data() -> dict:
             "history": hist, "trades": trades[-30:], "fx_trades": (st.get("fx_trades") or [])[-15:],
             "core_trades": (st.get("core_trades") or [])[-15:], "n_trades": len(trades),
             "corp_log": (st.get("corp_log") or [])[-10:],
+            "threat": td.get("threat") or read_json(paths.out_dir() / "threat_today.json", {}) or {},
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
             "config": td.get("config") or config_from_sim(sim).to_dict(),     # 首次运行前从 sim.json 取
             "broker": td.get("broker", "rakuten"), "skipped": td.get("skipped") or {},
@@ -56,7 +57,7 @@ def build_unified_data() -> dict:
             "hint": ("一个账户模式（楽天）：账户数值在顶层（equity_jpy / ret_pct / max_dd_pct / cash_jpy / cash_usd / positions / "
                      "core_units×core_last / todo / trades / core_trades / fx_trades / corp_log）；当日损益 = history 最后两行的权益差；"
                      "牛熊分界在 markets.JP.regime.bullbear（日経）与 markets.US.regime.bullbear（S&P500，只用于 1655 择时）；"
-                     "候补队列在 markets.JP.watchlist。")}
+                     "候补队列在 markets.JP.watchlist；大事件威胁指数在 threat（只展示，不参与交易）。")}
 
 
 _STATUS = {"triggered": "已触发", "imminent": "即将", "watch": "观察", "far": "远"}
@@ -160,6 +161,7 @@ def render_unified_html(d: dict) -> str:
         spark=_spark(d.get("history") or []), trades=tr_rows or "<tr><td colspan=6 class='muted'>还没有平仓的交易</td></tr>",
         fx=fx_rows or "<tr><td colspan=4 class='muted'>还没有换汇</td></tr>", markets="".join(mk),
         watch="".join(watch) or "<tr><td colspan=8 class='muted'>尚无候补数据</td></tr>",
+        threat=_threat_html(d.get("threat") or {}),
         corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
         n_trades=d.get("n_trades", 0), win=d.get("win_rate") if d.get("win_rate") is not None else "—",
@@ -168,6 +170,34 @@ def render_unified_html(d: dict) -> str:
                      "牛熊分界 = 指数收盘连续 5 天低于 250 日线 ×0.97 转熊、高于 ×1.03 转牛，2026-09-25 多因子研究后维持）；"
                      f"楽天：日本株 / 东证 ETF 0 円，美股 0.495%（上限 $22），换汇 片道 {round(float(cfg.get('fx_spread_yen', 0.25)) * 100):g} 銭/USD；"
                      "美股卖出后的美元在下一个换汇窗口换回日元。"))
+
+
+_EV = {"FOMC": "美联储议息", "BOJ": "日银议息", "CPI": "美国 CPI", "NFP": "美国非农就业"}
+
+
+def _threat_html(t: dict) -> str:
+    if not t or t.get("error"):
+        return f'<p class="muted">暂不可用{("：" + escape(t["error"])) if t.get("error") else "（首次运行后出现）"}</p>'
+    rows = []
+    for m, name in (("US", "美股（S&P500）"), ("JP", "日本（日経225）")):
+        x = t.get(m)
+        if not x:
+            continue
+        prev = f"，20 日前 {x['prev20']:.0f}" if x.get("prev20") is not None else ""
+        top = "、".join(f"{escape(f['label'])} {f['pct']}" for f in x.get("top", []))
+        rows.append(f"<dt>{name}：{x['value']:.0f} / 100{prev}</dt><dd>同档位（{escape(str(x.get('band')))}）历史上"
+                    f"{escape(t.get('event_def', ''))}的频率 {x.get('band_freq')}%（全期平均 {x.get('base_rate')}%）；"
+                    f"主要来源（百分位）：{top}</dd>")
+    ev = "".join(f"<li>{escape(e['date'])} {escape(_EV.get(e.get('kind'), e.get('kind', '')))}"
+                 f"{('（' + escape(e['name']) + '）') if e.get('name') else ''}</li>" for e in t.get("events", []))
+    us, jp = t.get("US", {}), t.get("JP", {})
+    auc, hits = us.get("auc") or [None, None], us.get("hit80") or [None, None]
+    note = ("只能说明风险比平时高还是低，不能预测具体哪天发生：历史检验 AUC 美股 "
+            f"{(auc[0] or 0):.2f} / {(auc[1] or 0):.2f}（1995–2010 / 2011–），日経 "
+            f"{((jp.get('auc') or [0, 0])[0] or 0):.2f} / {((jp.get('auc') or [0, 0])[1] or 0):.2f}；"
+            f"过去 {hits[1]} 次美股 ≥10% 下跌里只有 {hits[0]} 次在高点前 60 个交易日内到过 80。")
+    return (f"<dl>{''.join(rows)}</dl><p class='muted'>{escape(note)}</p>"
+            f"<h3>接下来的已知大事件</h3><ul>{ev or '<li class=muted>无</li>'}</ul>")
 
 
 def write_unified_report() -> Path:
@@ -209,6 +239,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <section class="card"><h2>除息 / 拆股（已补到持仓与现金）</h2><ul>{corp}</ul></section>
 <section class="card"><h2>核心 ETF（闲置资金）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
 <section class="card"><h2>市场状态</h2><dl>{markets}</dl></section>
+<section class="card"><h2>大事件威胁指数（只展示，不参与交易）</h2>{threat}</section>
 <section class="card"><h2>候补队列（按入场条件就绪度排序，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>状态</th><th class="n">就绪度</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th></tr>{watch}</table></div></section>
 <section class="card"><h2>最近平仓</h2><div class="scroll"><table><tr><th>日期</th><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">损益（日元）</th><th>原因</th></tr>{trades}</table></div></section>
 <section class="card"><h2>换汇记录</h2><div class="scroll"><table><tr><th>日期</th><th>方向</th><th class="n">美元</th><th class="n">汇率</th></tr>{fx}</table></div></section>

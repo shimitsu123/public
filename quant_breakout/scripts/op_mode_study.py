@@ -10,7 +10,8 @@
   U3    只做日本个股，闲置资金拿日元观望
   换汇时点：楽天リアルタイム為替 平日 8:00 起、换得的美元立即可用 → 引擎在买美股当天白天换（不需要提前几天换）。
 窗口：20 年 2006-10～ / 5 年 2021-09～。另报：换汇次数与点差成本、美股成交笔数。
-判定（事先规则）：U2 的 20 年年化比 U0、U1 都高 ≥ 0.3pp 且回撤不更深 → 日本 + 美股模式默认打开 usd_keep_imminent；
+判定（事先规则）：U2 的 20 年年化比 U0、U1 都高 ≥ 0.3pp 且回撤不更深（运行后补记：用未四舍五入的值比较；第一次运行用的是
+  四舍五入到 0.01 的值，结论相同） → 日本 + 美股模式默认打开 usd_keep_imminent；
   是否把模拟盘从 S0C2 换成 U 系列由用户决定（本研究只报告差别）。
 输出 var/out/op_mode_study.md / .json。
 """
@@ -103,7 +104,9 @@ def main() -> int:
             dd = float((r.equity / r.equity.cummax() - 1).min() * 100)
             fx_cost = sum(abs(float(x[2])) * cfg.fx_spread_yen for x in r.state.fx_trades)
             yrs = (r.equity.index[-1] - r.equity.index[0]).days / 365.25
-            row.update({f"{wn}_cagr": r.metrics.get("cagr_pct"), f"{wn}_dd": round(dd, 2), f"{wn}_calmar": r.metrics.get("calmar"),
+            cagr_x = ((r.equity.iloc[-1] / r.equity.iloc[0]) ** (1 / yrs) - 1) * 100 if yrs > 0 else float("nan")
+            row.update({f"{wn}_cagr": r.metrics.get("cagr_pct"), f"{wn}_cagr_exact": cagr_x, f"{wn}_dd_exact": dd,
+                        f"{wn}_dd": round(dd, 2), f"{wn}_calmar": r.metrics.get("calmar"),
                         f"{wn}_jp_trades": int((tr["market"] == "JP").sum()) if len(tr) else 0,
                         f"{wn}_us_trades": int((tr["market"] == "US").sum()) if len(tr) else 0,
                         f"{wn}_fx_n": len(r.state.fx_trades), f"{wn}_fx_cost_yr": round(fx_cost / yrs),
@@ -117,8 +120,10 @@ def main() -> int:
         say(f"| {k} {LABEL[k]} | {r['w20_cagr']}% / {r['w20_dd']}% / {r['w20_calmar']} | {r['w5_cagr']}% / {r['w5_dd']}% | "
             f"{r['w20_jp_trades']} / {r['w20_us_trades']} | {r['w20_fx_n']} / ¥{r['w20_fx_cost_yr']:,} | {r['w20_usd_days_pct']}% |")
     u0, u1, u2 = rows["U0"], rows["U1"], rows["U2"]
-    ok = (u2["w20_cagr"] >= u0["w20_cagr"] + 0.3 and u2["w20_cagr"] >= u1["w20_cagr"] + 0.3
-          and u2["w20_dd"] >= min(u0["w20_dd"], u1["w20_dd"]))
+    ok = (u2["w20_cagr_exact"] >= u0["w20_cagr_exact"] + 0.3 and u2["w20_cagr_exact"] >= u1["w20_cagr_exact"] + 0.3
+          and u2["w20_dd_exact"] >= min(u0["w20_dd_exact"], u1["w20_dd_exact"]))      # 精确值比较（不用四舍五入值）
+    say(f"\n精确值：U2 − U0 = {u2['w20_cagr_exact'] - u0['w20_cagr_exact']:+.3f}pp，U2 − U1 = "
+        f"{u2['w20_cagr_exact'] - u1['w20_cagr_exact']:+.3f}pp（门槛 +0.3pp）")
     say(f"\n判定（事先规则）：{'日本 + 美股模式默认打开 usd_keep_imminent' if ok else 'usd_keep_imminent 不设为默认（差别不够）'}；"
         "模拟盘是否从 S0C2 换成 U 系列由用户决定。")
     say(f"（耗时 {time.time() - t0:.0f}s）")

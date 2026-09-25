@@ -111,3 +111,78 @@ def auc(score: pd.Series, event: pd.Series) -> float | None:
         return None
     r = d["s"].rank()
     return float((r[d["e"] > 0.5].sum() - len(pos) * (len(pos) + 1) / 2) / (len(pos) * len(neg)))
+
+
+# ══════════════════════════ 日报用：最新读数 ══════════════════════════
+def _yf_close(sym: str) -> pd.Series:
+    import logging
+    import yfinance as yf
+    logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+    h = yf.Ticker(sym).history(period="max", auto_adjust=True)
+    h.index = h.index.tz_localize(None).normalize()
+    return h[~h.index.duplicated(keep="last")]["Close"]
+
+
+def load_inputs() -> dict:
+    """指数（yfinance 全历史）+ FRED + 財務省日本 10Y。与 scripts/threat_index_study.py 同一口径。"""
+    from . import factors
+    from .calendar_jp import now_jst
+    spx = _yf_close("^GSPC")
+    spx = spx[spx.index < pd.Timestamp(now_jst().date())]                  # 日本早上：美国前一日收盘已确定
+    n225 = _yf_close("^N225")
+    n = now_jst()
+    if n.hour < 16 and len(n225) and n225.index[-1].date() == n.date():   # 当天未收盘的日経 K 线不用
+        n225 = n225.iloc[:-1]
+    fx = factors.fred("DEXJPUS").dropna()
+    try:
+        jpyx = _yf_close("JPY=X")
+        jpyx = jpyx[(jpyx > 60) & (jpyx < 250) & (jpyx.index > fx.index[-1])]
+        fx = pd.concat([fx, jpyx]).sort_index()
+        fx = fx[~fx.index.duplicated(keep="first")]
+    except Exception:                                                     # noqa: BLE001
+        pass
+    raw = {k: factors.fred(k) for k in ("VIXCLS", "BAA10Y", "DGS10", "DGS3MO", "DCOILWTICO", "UNRATE")}
+    return {"spx": spx, "n225": n225, "fx": fx, "raw": raw, "jgb": factors.jgb_curve()["10Y"].dropna()}
+
+
+def build(d: dict) -> dict:
+    """{"US": (指数, 百分位表), "JP": (…)}；日経用美国因素时取「前一个美国收盘」。"""
+    r = d["raw"]
+    us_days = d["spx"].index[d["spx"].index >= "1990-01-01"]
+    raw_us = raw_features(us_days, d["spx"], r["VIXCLS"], r["BAA10Y"], r["DGS10"], r["DGS3MO"], r["DCOILWTICO"], r["UNRATE"])
+    jp_days = d["n225"].index[d["n225"].index >= "1990-01-01"]
+    m = {k: us_asof_for_jp(r[k], jp_days) for k in ("VIXCLS", "BAA10Y", "DGS10", "DGS3MO", "DCOILWTICO")}
+    raw_jp = raw_features(jp_days, d["n225"], m["VIXCLS"], m["BAA10Y"], m["DGS10"], m["DGS3MO"], m["DCOILWTICO"],
+                          r["UNRATE"], usdjpy=us_asof_for_jp(d["fx"], jp_days), jgb10=d["jgb"].shift(1))
+    return {"US": threat_index(raw_us, US_COLS), "JP": threat_index(raw_jp, JP_COLS)}
+
+
+def snapshot(built: dict | None = None, table: dict | None = None, events: list | None = None,
+             today=None, horizon_days: int = 45) -> dict:
+    """最新读数 + 同档位的历史频率（var/threat_index.json）+ 接下来的已知大事件日程（var/macro_events.json）。只展示。"""
+    from . import paths
+    from .utils import read_json
+    built = built if built is not None else build(load_inputs())
+    table = table if table is not None else (read_json(paths.home() / "threat_index.json", {}) or {})
+    out = {"note": "只展示，不参与交易（2026-09-25 事先登记研究：美股 AUC 0.66、日経 0.58，不足以预测时间段）",
+           "event_def": table.get("event", "之后 60 个交易日内最低收盘比当天跌 ≥10%")}
+    for m in ("US", "JP"):
+        idx, pct = built[m]
+        s = idx.dropna()
+        if s.empty:
+            continue
+        v = float(s.iloc[-1])
+        t = table.get(m) or {}
+        dec = next((b for b in t.get("deciles", []) if b["lo"] <= v < b["hi"]), None)
+        top = pct.loc[s.index[-1]].dropna().sort_values(ascending=False)
+        out[m] = {"date": str(s.index[-1].date()), "value": round(v, 1), "prev20": round(float(s.iloc[-21]), 1) if len(s) > 20 else None,
+                  "band": f"{dec['lo']}–{dec['hi']}" if dec else None, "band_freq": dec["freq"] if dec else None,
+                  "base_rate": t.get("base_rate"), "auc": [t.get("auc_h1"), t.get("auc_h2")],
+                  "hit80": t.get("episodes_hit80"),
+                  "top": [{"k": k, "label": LABELS[k], "pct": round(float(p) * 100)} for k, p in top.head(3).items()]}
+    ev = events if events is not None else (read_json(paths.home() / "macro_events.json", {}) or {})
+    ev = ev.get("events", ev) if isinstance(ev, dict) else ev
+    d0 = pd.Timestamp(today or pd.Timestamp.today().normalize())
+    out["events"] = [e for e in (ev or []) if d0 <= pd.Timestamp(e.get("date", "1900-01-01")) <= d0 + pd.Timedelta(days=horizon_days)]
+    out["events"].sort(key=lambda e: e["date"])
+    return out
