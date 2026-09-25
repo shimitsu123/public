@@ -229,3 +229,25 @@ def test_sim_split_inferred_from_prices_when_actions_unavailable():
     ue.prime(4)
     notes = ue.apply_corp_actions(4, Down())
     assert any("推断拆股 1:2" in n for n in notes) and ue.st.pos["7777.T"].shares == 200
+
+
+
+def test_usd_kept_while_other_us_candidates_are_imminent():
+    """美股 AAA D4 卖出得美元；另一只 BBB 在 D4 收盘「即将触发」→ usd_keep_imminent 时 D5 不换回日元。"""
+    us = _bars(D, [100.0] * 8, entry_on=[D[1]], dead_on=[D[3]])
+    bbb = _bars(D, [50.0] * 8)
+    for c, v in (("macd", -0.01), ("macd_sig", 0.0), ("is_range", True), ("near_zero", True), ("vol_ratio", 1.2)):
+        bbb[c] = v
+    bbb.loc[bbb.index != D[4], "vol_ratio"] = 0.5                     # 只有 D4 满足「即将」
+    from qbreak.unified import imminent_flags
+    assert list(imminent_flags(bbb)) == [d == D[4] for d in D]
+    runs = {}
+    for keep in (False, True):
+        cfg = UnifiedConfig(capital_jpy=400_000, position_pct=0.9, max_positions=1, max_position_pct=0.95,
+                            stock_markets=("US",), core={}, core_index={}, fx_on_jp_holidays=True,
+                            fx_spread_yen=0.25, fx_before_jp_open=False, usd_keep_imminent=keep)
+        ue = UnifiedEngine({"AAA": us, "BBB": bbb}, cfg, {"JP": P, "US": P}, EX, {}, fx=FX)
+        ue.run()
+        runs[keep] = [(d, k) for d, k, *_ in ue.st.fx_trades]
+    assert (str(D[5].date()), "USD>JPY") in runs[False]
+    assert not any(k == "USD>JPY" and d == str(D[5].date()) for d, k in runs[True])

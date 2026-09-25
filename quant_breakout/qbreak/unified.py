@@ -64,6 +64,7 @@ class UnifiedConfig:
     fx_before_jp_open: bool = True        # リアルタイム為替 8:00 起：美股卖出的美元次日 8 点换回日元，赶上 9:00 日本开盘
     usd_keep: bool = False                # False：美股卖出后的美元在下一个换汇窗口换回日元
     usd_min_back: float = 100.0           # 闲置美元少于这个数（例如换汇时多换的零头）就留着下次买美股用，不来回付点差
+    usd_keep_imminent: bool = False       # True：美股候补里有「即将触发 / 已触发」的票时，闲置美元先不换回日元
     us_same_open_reuse: bool = True       # 美股卖出所得当晚可再买美股
 
     def to_dict(self) -> dict:
@@ -117,13 +118,23 @@ class UState:
         return s
 
 
+def imminent_flags(df: pd.DataFrame) -> pd.Series:
+    """候补队列的「已触发 / 即将触发」（qbreak/scan.py 同一定义）：横盘 且 MACD 在 0 轴附近 且 MACD 在信号线下方不到
+    收盘价的 0.15% 且 量比 ≥ 1；或当天已发出 entry。只用当天收盘为止的数据。"""
+    if not {"macd", "macd_sig", "is_range", "near_zero", "vol_ratio"} <= set(df.columns):
+        return df["entry"].astype(bool)
+    gap = (df["macd"] - df["macd_sig"]) / df["Close"] * 100
+    imm = df["is_range"].astype(bool) & df["near_zero"].astype(bool) & (gap < 0) & (gap > -0.15) & (df["vol_ratio"] >= 1.0)
+    return (imm.fillna(False) | df["entry"].astype(bool)).astype(bool)
+
+
 def config_from_sim(sim: dict) -> UnifiedConfig:
     """sim.json 的 unified 段 → UnifiedConfig（楽天：日本株 / 东证 ETF 0 円、美股 0.495% 上限 $22、换汇按片道 3 銭估）。"""
     u = sim.get("unified") or {}
     d = UnifiedConfig()
     kw = {k: u[k] for k in ("position_pct", "max_positions", "max_position_pct", "cash_buffer_pct", "core_mode",
                            "core_buffer_pct", "band_pct", "margin_pct", "fx_spread_yen", "fx_on_jp_holidays",
-                           "usd_keep", "us_same_open_reuse") if k in u}
+                           "usd_keep", "usd_keep_imminent", "us_same_open_reuse") if k in u}
     return UnifiedConfig(capital_jpy=float(sim.get("capital_jpy") or d.capital_jpy),
                          stock_markets=tuple(u.get("stock_markets", d.stock_markets)),
                          core=dict(u.get("core", d.core)), core_index=dict(u.get("core_index", d.core_index)), **kw)
@@ -217,6 +228,12 @@ class UnifiedEngine:
         for m in MKT:
             M = (entry_mult or {}).get(m)
             self.em[m] = M.reindex(self.gidx).fillna(1.0) if M is not None else None
+        self.us_imminent = np.zeros(n, bool)                   # 当天收盘时美股候补里有「即将触发 / 已触发」
+        if cfg.usd_keep_imminent:
+            for t, df in ind.items():
+                if market_of(t) != "US" or t in self.core_set or "US" not in cfg.stock_markets:
+                    continue
+                self.us_imminent |= imminent_flags(df).reindex(self.gidx).fillna(False).to_numpy(bool)
         self.bear = {m: (bear[m].reindex(self.gidx.union(bear[m].index)).ffill().reindex(self.gidx)
                          .fillna(False).to_numpy(bool) if bear and bear.get(m) is not None else np.zeros(n, bool))
                      for m in MKT}
@@ -600,7 +617,8 @@ class UnifiedEngine:
         st.fx_plan = []
         back = x_usd
         if (not cfg.usd_keep and y_usd <= 0 and not any(market_of(t) == "US" for t in st.plan)
-                and st.cash_usd - back >= cfg.usd_min_back):
+                and st.cash_usd - back >= cfg.usd_min_back
+                and not (cfg.usd_keep_imminent and self.us_imminent[i])):
             back = max(back, st.cash_usd)                        # 闲置美元全部换回日元（零头留着）
         back = min(back, st.cash_usd)
         if back > 1.0:

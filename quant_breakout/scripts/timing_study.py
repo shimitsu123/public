@@ -28,6 +28,10 @@
 另报（不参与决定）：各候选在 9 次美股下跌中的表现（顶→底、底后 12 个月，日元计）；同一组候选用在日経225
   （T1 与 T0 相同不列；因子仍用美国的全球风险因子；日経信号晚一天执行）。
 输出 var/out/timing_study.md / .json / .csv。
+
+季度复核（2026-09-25 用户要求；规则不变，只加数据）：`python scripts/timing_study.py --only T0,T2,T3 --review`
+  只比较所列候选（T0 必须在内），同一套采用规则；输出 var/out/timing_review_<日期>.md / .json，
+  并在 var/out/timing_review_history.csv 追加一行（各候选的两半段 Calmar、组合 20 年年化 / 回撤、判定）。
 """
 from __future__ import annotations
 
@@ -133,7 +137,15 @@ def index_test(name: str, price: pd.Series, bears: dict, cash: np.ndarray, lag_s
     return out
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--only", default="", help="只比较这些候选（逗号分隔，须含 T0），例如 T0,T2,T3")
+    ap.add_argument("--review", action="store_true", help="季度复核：输出带日期的文件并追加历史")
+    args = ap.parse_args(argv)
+    cands = {k: T.CANDIDATES[k] for k in (args.only.split(",") if args.only else T.CANDIDATES)}
+    if "T0" not in cands:
+        raise SystemExit("--only 必须包含 T0（现行）")
     t0 = time.time()
     end_us = pd.Timestamp.today().normalize() - pd.Timedelta(days=1)
     spx = load("^GSPC", "1950-01-01")["Close"]
@@ -154,7 +166,7 @@ def main() -> int:
     us_days = spx.index[spx.index >= "1985-01-01"]
     f_us = T.factor_frame(us_days, fx, raw["VIXCLS"], raw["BAA10Y"], raw["DGS10"], raw["DGS3MO"], raw["UNRATE"])
     close_us = spx.loc[us_days]
-    bears_us = {k: fn(close_us, f_us).astype(bool) for k, fn in T.CANDIDATES.items()}
+    bears_us = {k: fn(close_us, f_us).astype(bool) for k, fn in cands.items()}
 
     # ── 检验 A：日元计价 S&P500 总收益 ──
     jp_days = n225.index[(n225.index >= H1[0])]
@@ -221,7 +233,7 @@ def main() -> int:
     # ── 判定（事先规则）──
     base_a, base_b = A["T0"], Bres["T0"]
     why, ok = {}, []
-    for k in T.CANDIDATES:
+    for k in cands:
         if k == "T0":
             continue
         a, b = A[k], Bres[k]
@@ -263,7 +275,7 @@ def main() -> int:
     jd = n225.index[n225.index >= "1985-01-01"]
     f_jp = pd.DataFrame({c: asof(f_us[c], jd - pd.Timedelta(days=1)) for c in f_us.columns}, index=jd)
     nk = n225.loc[jd]
-    bears_nk = {k: fn(nk, f_jp).astype(bool) for k, fn in T.CANDIDATES.items() if k != "T1"}
+    bears_nk = {k: fn(nk, f_jp).astype(bool) for k, fn in cands.items() if k != "T1"}
     days_nk = jd[jd >= H1[0]]
     div = (1 + 0.016) ** (np.arange(len(days_nk)) / 245.0)
     price_nk = pd.Series(nk.loc[days_nk].to_numpy(float) * div, index=days_nk)
@@ -278,7 +290,17 @@ def main() -> int:
         say(f"| {lab} | {r['H1']['cagr']}% / {r['H1']['dd']}% / {r['H1']['calmar']} | "
             f"{r['H2']['cagr']}% / {r['H2']['dd']}% / {r['H2']['calmar']} | {r['ALL']['sw_yr']} | {r['ALL']['invested']}% |")
 
-    fp = paths.out_dir() / "timing_study"
+    fp = paths.out_dir() / ("timing_study" if not args.review else f"timing_review_{pd.Timestamp.today().date()}")
+    if args.review:
+        hist = paths.out_dir() / "timing_review_history.csv"
+        row = {"run": str(pd.Timestamp.today().date()), "data_end": str(spx.index[-1].date()), "pick": pick}
+        for k in cands:
+            row.update({f"{k}_A_H1_calmar": A[k]["H1"]["calmar"], f"{k}_A_H2_calmar": A[k]["H2"]["calmar"],
+                        f"{k}_B20_cagr": Bres[k]["w20_cagr"], f"{k}_B20_dd": round(Bres[k]["w20_dd_exact"], 2)})
+        old_h = pd.read_csv(hist) if hist.exists() else pd.DataFrame()
+        prev = old_h["pick"].iloc[-1] if len(old_h) else "T0"
+        say(f"\n季度复核：上次判定 {prev} → 本次 {pick}" + ("（★ 判定改变：需用户确认后才改模拟盘）" if pick != prev else "（未改变）"))
+        pd.concat([old_h, pd.DataFrame([row])], ignore_index=True).to_csv(hist, index=False)
     strip = lambda r: {k: v for k, v in r.items() if not k.endswith("_eq")}   # noqa: E731
     Path(f"{fp}.md").write_text("\n".join(LINES) + "\n", encoding="utf-8")
     Path(f"{fp}.json").write_text(json.dumps({"pick": pick, "why": why, "A": {k: strip(v) for k, v in A.items()},
