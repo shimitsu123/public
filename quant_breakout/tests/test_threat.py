@@ -1,5 +1,6 @@
 """大事件威胁指数（qbreak/threat.py）：只用当时已公布的数据；百分位 / 未来回撤 / AUC 计算正确。"""
 import numpy as np
+import pytest
 import pandas as pd
 
 from qbreak import threat as TH
@@ -67,3 +68,68 @@ def test_snapshot_band_top_factors_and_events():
     assert u["value"] == 55.0 and u["band"] == "50–60" and u["band_freq"] == 17.5 and u["hit80"] == [3, 27]
     assert [f["k"] for f in u["top"]] == ["oil", "rates", "curve"] and "JP" not in s
     assert [e["date"] for e in s["events"]] == ["2026-02-20"]                    # 45 天以内、今天以后
+
+
+def test_weekly_available_lag():
+    s = pd.Series([1.0, 2.0], index=pd.DatetimeIndex(["2026-09-11", "2026-09-18"]))     # 周五参考日
+    days = pd.bdate_range("2026-09-21", "2026-09-25")
+    a = TH.weekly_available(s, days, 6)
+    assert list(a) == [1.0, 1.0, 1.0, 2.0, 2.0]                                        # 9/24（周四）起可用
+
+
+def _v2_inputs(days, rng):
+    mk = lambda base, sc, pos=False: (lambda v: pd.Series(np.abs(v) + 1 if pos else v, index=days))(  # noqa: E731
+        base + np.cumsum(rng.normal(0, sc, len(days))))
+    weeks = pd.date_range(days[0] - pd.Timedelta(days=400), days[-1], freq="W-FRI")
+    wk = lambda base, sc: pd.Series(base + np.cumsum(rng.normal(0, sc, len(weeks))), index=weeks)   # noqa: E731
+    sat = pd.date_range(days[0] - pd.Timedelta(days=400), days[-1], freq="W-SAT")
+    months = pd.date_range(days[0] - pd.Timedelta(days=800), days[-1], freq="MS")
+    return {"NFCI": wk(0, 0.05), "STLFSI4": wk(0, 0.05), "ICSA": pd.Series(250000 + np.cumsum(rng.normal(0, 3000, len(sat))),
+                                                                        index=sat),
+            "T10Y2Y": mk(1, 0.02), "DGS2": mk(3, 0.02), "DFF": mk(3, 0.01), "DXY": mk(100, 0.3, True),
+            "SKEW": mk(130, 0.5, True), "VIX": mk(20, 0.3, True), "VIX3M": mk(22, 0.3, True), "MOVE": mk(100, 1, True),
+            "HG": mk(3, 0.02, True), "GC": mk(1500, 5, True),
+            "JPCALL": pd.Series(np.cumsum(rng.normal(0, 0.02, len(months))), index=months)}
+
+
+def test_v2_features_no_lookahead():
+    """每个序列只改「截止日时还没公布」的部分（按各自的公布时滞），截止日及以前的因素值不变。"""
+    rng = np.random.default_rng(4)
+    days, close, vix, baa, d10, d3, wti, un, fx, jgb = _inputs(1500, 2)
+    x = _v2_inputs(days, rng)
+    base = TH.raw_features(days, close, vix, baa, d10, d3, wti, un, fx, jgb)
+    f = TH.raw_features_v2(base, days, close, x, usdjpy=fx, jp=True)
+    t = 1300
+    cut = days[t]
+    unpublished = {"NFCI": lambda i: i + pd.Timedelta(days=6) > cut, "STLFSI4": lambda i: i + pd.Timedelta(days=7) > cut,
+                   "ICSA": lambda i: i + pd.Timedelta(days=6) > cut, "JPCALL": lambda i: i + pd.offsets.MonthBegin(2) > cut}
+    for k in ("T10Y2Y", "DGS2", "DFF"):                                   # 滞后 1 个营业日：当天的值当天不用
+        unpublished[k] = lambda i: i >= cut
+    x2 = {}
+    for k, v in x.items():
+        m = unpublished.get(k, lambda i: i > cut)(v.index)
+        x2[k] = v.where(~np.asarray(m), v * 1.3 + 1)
+    later = lambda sr: sr.where(sr.index <= cut, sr * 1.3 + 1)                            # noqa: E731
+    f2 = TH.raw_features_v2(base, days, later(close), x2, usdjpy=later(fx), jp=True)
+    cols = TH.V2_EXTRA + ["yen_vol", "boj"]
+    assert f[cols].iloc[:t + 1].equals(f2[cols].iloc[:t + 1])
+    assert not f[cols].iloc[t + 20:].equals(f2[cols].iloc[t + 20:])                      # 之后确实变了（测试本身有效）
+
+
+def test_walkforward_logit_uses_only_known_targets():
+    rng = np.random.default_rng(7)
+    days = pd.bdate_range("1995-01-02", "2003-12-31")
+    pct = pd.DataFrame({"a": rng.uniform(size=len(days)), "b": rng.uniform(size=len(days))}, index=days)
+    ev = pd.Series((pct["a"] + rng.normal(0, 0.2, len(days)) > 0.8).astype(float), index=days)
+    p = TH.walkforward_logit(pct, ev, first="2000-01-01")
+    assert p[days < "2000-01-01"].isna().all() and p[days >= "2000-01-03"].notna().all()
+    k0 = int(np.flatnonzero(days >= "2002-01-01")[0])
+    ev2 = ev.copy()
+    ev2.iloc[k0 - 60:] = 1 - ev2.iloc[k0 - 60:]                                            # 重估时还不知道答案的样本
+    p2 = TH.walkforward_logit(pct, ev2, first="2000-01-01")
+    yr = (days >= "2002-01-01") & (days < "2003-01-01")
+    assert np.allclose(p[yr], p2[yr])
+    w = TH.logit_fit(pct[["a", "b"]].to_numpy() - 0.5, ev.to_numpy())
+    assert w[1] > 1 and abs(w[2]) < abs(w[1])                                               # 找回 a 的正向作用
+    ts = TH.tail_share(pd.DataFrame({"a": [0.9, 0.1], "b": [0.85, np.nan], "c": [0.2, 0.95]}))
+    assert ts.iloc[0] == pytest.approx(200 / 3) and ts.iloc[1] == pytest.approx(50.0)

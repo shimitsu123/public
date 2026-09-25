@@ -186,3 +186,101 @@ def snapshot(built: dict | None = None, table: dict | None = None, events: list 
     out["events"] = [e for e in (ev or []) if d0 <= pd.Timestamp(e.get("date", "1900-01-01")) <= d0 + pd.Timedelta(days=horizon_days)]
     out["events"].sort(key=lambda e: e["date"])
     return out
+
+
+# ══════════════════════════ v2：更多直接因素 + 四种合成方式（研究见 scripts/threat_index_v2_study.py）══════════════════════════
+V2_EXTRA = ["nfci", "stlfsi", "claims", "curve2", "rates2", "dollar", "skew", "dd52", "trend", "mom20", "vix_term",
+            "move", "cu_au", "fed"]
+US_V2 = US_COLS + V2_EXTRA
+JP_V2 = JP_COLS + V2_EXTRA + ["yen_vol", "boj"]
+LABELS.update({"nfci": "金融条件收紧（NFCI）", "stlfsi": "金融压力（STLFSI）", "claims": "初请失业金上升",
+               "curve2": "10Y−2Y 倒挂", "rates2": "2 年美债急升", "dollar": "美元急升", "skew": "尾部风险定价（SKEW）",
+               "dd52": "离一年高点的跌幅", "trend": "跌破 200 日线", "mom20": "近 20 日下跌", "vix_term": "VIX 期限倒挂",
+               "move": "债券波动（MOVE）", "cu_au": "铜金比下降", "fed": "美联储一年加息幅度", "yen_vol": "日元波动",
+               "boj": "日银一年加息幅度"})
+
+
+def weekly_available(s: pd.Series, days: pd.DatetimeIndex, lag_days: int) -> pd.Series:
+    """周度序列（索引 = 参考周的日期）在 lag_days 天后才公布 → 每个交易日已公布的最新值。"""
+    s = s.dropna()
+    a = pd.Series(s.to_numpy(float), index=s.index + pd.Timedelta(days=lag_days))
+    return a.reindex(days.union(a.index)).ffill().reindex(days)
+
+
+def raw_features_v2(base: pd.DataFrame, days: pd.DatetimeIndex, close: pd.Series, x: dict,
+                    usdjpy: pd.Series | None = None, jp: bool = False) -> pd.DataFrame:
+    """base：raw_features 的结果；x：{"NFCI","STLFSI4","ICSA","T10Y2Y","DGS2","DFF","DXY","SKEW","VIX3M","VIX","MOVE",
+    "HG","GC","JPCALL"} 原始序列（美国的日序列对日本交易日要先用 us_asof_for_jp 对齐）。"""
+    f = base.copy()
+    f["nfci"] = weekly_available(x["NFCI"], days, 6)
+    f["stlfsi"] = weekly_available(x["STLFSI4"], days, 7)
+    cl = x["ICSA"].dropna().rolling(4).mean()
+    f["claims"] = weekly_available(cl / cl.shift(13) - 1, days, 6)
+    f["curve2"] = -_daily(x["T10Y2Y"], days, 1)
+    r2 = _daily(x["DGS2"], days, 1)
+    f["rates2"] = r2 - r2.shift(60)
+    ff = _daily(x["DFF"], days, 1)
+    f["fed"] = ff - ff.shift(250)
+    dx = _daily(x["DXY"], days)
+    f["dollar"] = dx / dx.shift(60) - 1
+    f["skew"] = _daily(x["SKEW"], days)
+    f["vix_term"] = _daily(x["VIX"], days) / _daily(x["VIX3M"], days)
+    f["move"] = _daily(x["MOVE"], days)
+    cg = _daily(x["HG"], days) / _daily(x["GC"], days)
+    f["cu_au"] = -(cg / cg.shift(60) - 1)
+    c = close.reindex(days)
+    f["dd52"] = 1 - c / c.rolling(252, min_periods=200).max()
+    f["trend"] = -(c / c.rolling(200).mean() - 1)
+    f["mom20"] = -(c / c.shift(20) - 1)
+    if jp:
+        fx = _daily(usdjpy, days)
+        f["yen_vol"] = np.log(fx).diff().rolling(20).std() * np.sqrt(252)
+        call = x["JPCALL"].dropna()
+        call = pd.Series(call.to_numpy(float), index=call.index + pd.offsets.MonthBegin(1))   # 月度，再晚一个月才用
+        f["boj"] = monthly_available(call - call.shift(12), days, 1)
+    return f
+
+
+def tail_share(pct: pd.DataFrame, q: float = 0.8) -> pd.Series:
+    """处在各自历史 80 分位以上的因素占比（0–100）；至少一半因素可用才给值。"""
+    ok = pct.notna().sum(axis=1) >= max(1, pct.shape[1] // 2)
+    return ((pct >= q).sum(axis=1) / pct.notna().sum(axis=1).replace(0, np.nan) * 100).where(ok)
+
+
+def logit_fit(X: np.ndarray, y: np.ndarray, l2: float = 1.0, iters: int = 50) -> np.ndarray:
+    """L2 正则逻辑回归（牛顿法）；X 不含常数列，返回 [截距, 系数...]。"""
+    Xb = np.c_[np.ones(len(X)), X]
+    w = np.zeros(Xb.shape[1])
+    reg = np.full(Xb.shape[1], l2)
+    reg[0] = 0.0
+    for _ in range(iters):
+        p = 1 / (1 + np.exp(-np.clip(Xb @ w, -30, 30)))
+        g = Xb.T @ (p - y) + reg * w
+        H = (Xb * (p * (1 - p))[:, None]).T @ Xb + np.diag(reg)
+        step = np.linalg.solve(H, g)
+        w -= step
+        if np.abs(step).max() < 1e-8:
+            break
+    return w
+
+
+def walkforward_logit(pct: pd.DataFrame, event: pd.Series, start: str = "1995-01-01", first: str = "2000-01-01",
+                      horizon: int = 60, l2: float = 1.0) -> pd.Series:
+    """每年第一个交易日重估一次：只用「答案已经知道」的样本（该日之前 horizon 个交易日以前、start 以后），
+    缺失因素按 0.5（中性）；输出 0–100 的预测概率。"""
+    X = pct.fillna(0.5).to_numpy(float) - 0.5
+    y = event.to_numpy(float)
+    idx = pct.index
+    out = np.full(len(idx), np.nan)
+    years = sorted({d.year for d in idx if d >= pd.Timestamp(first)})
+    for yr in years:
+        pos = np.flatnonzero((idx >= pd.Timestamp(f"{yr}-01-01")) & (idx < pd.Timestamp(f"{yr + 1}-01-01")))
+        if not len(pos):
+            continue
+        k0 = pos[0]
+        train = np.flatnonzero((idx >= pd.Timestamp(start)) & (np.arange(len(idx)) <= k0 - horizon - 1) & np.isfinite(y))
+        if len(train) < 250 or len(np.unique(y[train])) < 2:
+            continue
+        w = logit_fit(X[train], y[train], l2)
+        out[pos] = 100 / (1 + np.exp(-np.clip(np.c_[np.ones(len(pos)), X[pos]] @ w, -30, 30)))
+    return pd.Series(out, index=idx)
