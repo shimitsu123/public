@@ -218,12 +218,13 @@ class UnifiedEngine:
     """ind：{ticker: compute_indicators 的结果}（日本票以 .T 结尾）；core ETF 也放在 ind 里（entry 全 False）。
     params：{"JP": StrategyParams, "US": StrategyParams}（离场规则按市场）；ex：{"JP": ExecConfig, "US": ExecConfig}；
     core_cost：{ETF: 成本字典}；fx：DataFrame(Open, Close)（USD/JPY）；entry_mult：{"JP"/"US": DataFrame(日期 × 票)}，
-    按成交日取（缺省 1）；bear：{"JP"/"US": 布尔 Series}，True = 该市场收盘时熊市（核心 ETF 目标 0）。"""
+    按成交日取（缺省 1）；bear：{"JP"/"US": 布尔 Series}，True = 该市场收盘时熊市（核心 ETF 目标 0）；
+    core_expo：{"JP"/"US": 0〜1 的 Series}，非熊市时核心 ETF 目标再乘这个比例（缺省 1；择时研究的分级持仓用）。"""
 
     def __init__(self, ind: dict[str, pd.DataFrame], cfg: UnifiedConfig, params: dict[str, StrategyParams],
                  ex: dict[str, ExecConfig], core_cost: dict[str, dict], fx: pd.DataFrame | None = None,
                  entry_mult: dict[str, pd.DataFrame] | None = None, bear: dict[str, pd.Series] | None = None,
-                 state: UState | None = None):
+                 state: UState | None = None, core_expo: dict[str, pd.Series] | None = None):
         self.cfg, self.params, self.ex, self.core_cost = cfg, params, ex, core_cost
         self.gidx = pd.DatetimeIndex(sorted(set().union(*[df.index for df in ind.values()])))
         self.A = A = _Aligned(ind, self.gidx)
@@ -253,6 +254,9 @@ class UnifiedEngine:
         self.bear = {m: (bear[m].reindex(self.gidx.union(bear[m].index)).ffill().reindex(self.gidx)
                          .fillna(False).to_numpy(bool) if bear and bear.get(m) is not None else np.zeros(n, bool))
                      for m in MKT}
+        self.core_expo = {m: (core_expo[m].reindex(self.gidx.union(core_expo[m].index)).ffill().reindex(self.gidx)
+                              .fillna(1.0).clip(0.0, 1.0).to_numpy(float)
+                              if core_expo and core_expo.get(m) is not None else np.ones(n)) for m in MKT}
         self.fees = {m: ex[m].fee for m in MKT}
         self.slip = {m: ex[m].slippage_pct / 100 for m in MKT}
         self.c_fee = {t: {s: side_fee(core_cost[t], s) for s in ("BUY", "SELL")} for t in cfg.core}
@@ -705,7 +709,8 @@ class UnifiedEngine:
             if price <= 0 or not np.isfinite(price):
                 continue
             units, lot = int(st.core_units.get(t, 0)), int(self.lots[j])
-            tgt = 0 if bear[t] or share[t] <= 0 else int(np.floor(max(0.0, tgt_total * share[t]) / price / lot)) * lot
+            xp = float(self.core_expo[cfg.core_index.get(t, "JP")][i])
+            tgt = 0 if bear[t] or share[t] <= 0 else int(np.floor(max(0.0, tgt_total * share[t] * xp) / price / lot)) * lot
             sell = buy = 0
             if tgt < units and (tgt == 0 or (units - tgt) * price > band):
                 sell = units - tgt
