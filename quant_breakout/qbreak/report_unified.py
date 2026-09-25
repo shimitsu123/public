@@ -242,8 +242,28 @@ def _threat_html(t: dict) -> str:
             f"过去 {hits[1]} 次美股 ≥10% 下跌里只有 {hits[0]} 次在高点前 60 个交易日内到过 80。"
             "加入更多因素（v2：金融条件、MOVE 等；v3：黄金、金银比、铜、天然气、粮食、银行信贷、地缘风险 GPR）的事先登记研究"
             "都没有在两个市场稳定胜出，指数仍用原算法；观察因子只列出处在自身历史 70 分位以上的。")
-    return (f"<dl>{''.join(rows)}</dl><p class='muted'>{escape(note)}</p>"
+    return (f"<dl>{''.join(rows)}</dl><p class='muted'>{escape(note)}</p>{_domains_html(us, jp)}"
             f"<h3>接下来的已知大事件</h3><ul>{ev or '<li class=muted>无</li>'}</ul>")
+
+
+_CLS = {"两段都提升": "有帮助", "只前半": "只在 2010 年前", "只后半": "只在 2011 年后", "都没有": "没帮助"}
+
+
+def _domains_html(us: dict, jp: dict) -> str:
+    """因子调查：各经济领域当前的危险度百分位（领域内不在现行模型里的因素平均）+ 历史上加进现行模型有没有帮助。"""
+    du, dj = us.get("domains") or {}, jp.get("domains") or {}
+    if not du and not dj:
+        return ""
+    order = {"两段都提升": 0, "只后半": 1, "只前半": 2, "都没有": 3}
+    names = sorted(set(du) | set(dj), key=lambda n: (order.get((du.get(n) or {}).get("class"), 4), -((du.get(n) or {}).get("pct") or 0)))
+    cell = lambda v: (f"<td class='n'>{v['pct']}</td><td>{escape(_CLS.get(v.get('class'), '—'))}</td>" if v   # noqa: E731
+                      else "<td class='n'>—</td><td>—</td>")
+    tr = "".join(f"<tr><td>{escape(n)}</td>{cell(du.get(n))}{cell(dj.get(n))}</tr>" for n in names)
+    return ("<details><summary>各经济领域现在的危险度（百分位，越高越危险；只作观察）</summary><div class='scroll'><table>"
+            "<tr><th>领域</th><th class='n'>美股</th><th>历史上加进现行模型</th><th class='n'>日経</th><th>历史上加进现行模型</th></tr>"
+            f"{tr}</table></div><p class='muted'>2026-09-25 事先登记的因子调查（22 个领域约 100 个因素）：逐个放进现行模型，两段历史都有帮助的领域不多；"
+            "只用 2010 年以前挑出的因素组合在 2011 年后反而比现行模型差，所以指数不换，这张表只用来看现在哪些领域偏高。"
+            "研究见 var/out/threat_factor_survey.md。</p></details>")
 
 
 def write_unified_report() -> Path:

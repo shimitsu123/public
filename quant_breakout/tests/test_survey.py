@@ -60,3 +60,13 @@ def test_survey_directions_and_stale():
     assert (f["oil_vol"].dropna() > 0).all() and "breadth" not in f   # 没有数据的因素不出现
     st = SV.stale({"fred:WALCL": pd.Series([1.0], index=[pd.Timestamp("2023-01-04")])}, pd.Timestamp("2026-09-25"))
     assert st.get("fed_bs") == "2023-01-04" and st.get("m2_us") == "取不到"
+
+
+def test_readings_domains_and_S():
+    rng = np.random.default_rng(3)
+    days = pd.bdate_range("2008-01-01", periods=1000)
+    ex = pd.DataFrame({c: rng.normal(size=1000) for c in ("vix", "credit", "gold", "claims")}, index=days)
+    F = {"US": (ex, None), "JP": (ex, None)}
+    r = SV.readings(F, {}, {"US": ["gold"], "JP": []}, {"US": ["vix", "credit"], "JP": ["vix", "credit"]})
+    assert set(r["US"]["domains"]) == {"商品", "就业"} and 0 <= r["US"]["domains"]["商品"] <= 100
+    assert r["US"]["S"] is not None and r["JP"]["S"] is not None

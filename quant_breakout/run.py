@@ -297,7 +297,18 @@ def _threat_readings(ti: dict) -> dict | None:
     """v3 新因素的当前百分位（日报「其他观察因子」）+ 把 A0 与 B1～B4 的读数记到 var/out/threat_forward.csv（前瞻检验）。"""
     try:
         from qbreak.threat import build_all, load_extra_all, log_forward, log_us_watch, v3_readings, v3_selection
-        rd = v3_readings(build_all(ti, load_extra_all()), v3_selection())
+        F = build_all(ti, load_extra_all())
+        rd = v3_readings(F, v3_selection())
+        try:                                                 # 因子调查：各领域当前读数 + 组合 S 的前瞻记录
+            from qbreak import survey as SV
+            from qbreak.threat import JP_COLS, US_COLS
+            sel, cls = SV.survey_selection()
+            sr = SV.readings(F, SV.load_raw(), sel, {"US": US_COLS, "JP": JP_COLS})
+            for m in ("US", "JP"):
+                rd[m]["idx"]["S"] = sr[m]["S"]
+                rd[m]["domains"] = {d: {"pct": p, "class": cls[m].get(d)} for d, p in sr[m]["domains"].items()}
+        except Exception as e:                               # noqa: BLE001
+            log.warning("因子调查读数计算失败（不影响交易）：%s", e)
         log_forward(rd, paths.out_dir() / "threat_forward.csv")
         log_us_watch(rd, paths.out_dir() / "us_watch_forward.csv")      # 美股前瞻观察：金银比 + 商品波动
         return rd

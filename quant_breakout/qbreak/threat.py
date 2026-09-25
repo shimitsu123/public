@@ -197,6 +197,8 @@ def snapshot(built: dict | None = None, table: dict | None = None, events: list 
             out[m]["obs"] = readings[m]["obs"]
         if readings and m in out and (readings.get(m) or {}).get("watch"):
             out[m]["watch"] = readings[m]["watch"]            # 美股前瞻观察（金银比 + 商品波动）
+        if readings and m in out and (readings.get(m) or {}).get("domains"):
+            out[m]["domains"] = readings[m]["domains"]        # 因子调查：各领域当前危险度百分位（只观察）
     ev = events if events is not None else (read_json(paths.home() / "macro_events.json", {}) or {})
     ev = ev.get("events", ev) if isinstance(ev, dict) else ev
     d0 = pd.Timestamp(today or pd.Timestamp.today().normalize())

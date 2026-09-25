@@ -240,3 +240,38 @@ def stale(raw: dict[str, pd.Series], today: pd.Timestamp, max_age_days: int = 20
             if last < today - pd.Timedelta(days=lim):
                 out[key] = str(last.date())
     return out
+
+
+def readings(F: dict, raw: dict[str, pd.Series], sel: dict[str, list[str]], a0_cols: dict[str, list[str]]) -> dict:
+    """日报用：各领域当前的危险度百分位（领域内不在 A0 的因素平均）与组合 S（A0 + 调查选入因素）的最新读数（前瞻记录）。
+    F = threat.build_all(...)；sel / a0_cols：{"US": [...], "JP": [...]}。"""
+    from .threat import expanding_pct
+    dom = {**EXISTING_DOMAIN, **DOMAIN}
+    out = {}
+    for m in ("US", "JP"):
+        raw_ex, _ = F[m]
+        feats = pd.concat([raw_ex, features(raw_ex.index, raw, jp_market=(m == "JP"))], axis=1)
+        a0 = [c for c in a0_cols[m] if c in feats]
+        others = [c for c in feats.columns if c not in a0 and c in dom]
+        pct = pd.DataFrame({c: expanding_pct(feats[c]) for c in a0 + others})
+        s_cols = a0 + [c for c in sel.get(m, []) if c in pct]
+        s = pct[s_cols].mean(axis=1) * 100
+        s = s.where(pct[s_cols].notna().sum(axis=1) >= max(1, len(s_cols) // 2))
+        last = pct.iloc[-1]
+        doms = {}
+        for c in others:
+            if last[c] == last[c]:
+                doms.setdefault(dom[c], []).append(float(last[c]))
+        out[m] = {"date": str(pct.index[-1].date()), "S": round(float(s.iloc[-1]), 1) if s.iloc[-1] == s.iloc[-1] else None,
+                  "domains": {d: round(float(np.mean(v)) * 100) for d, v in doms.items()}}
+    return out
+
+
+def survey_selection() -> tuple[dict, dict]:
+    """调查研究的结果：({"US"/"JP": 选入 S 的因素}, {"US"/"JP": {领域: 分类}})；没有研究结果时为空。"""
+    from . import paths
+    from .utils import read_json
+    r = read_json(paths.out_dir() / "threat_factor_survey.json", {}) or {}
+    sel = {m: (r.get(m) or {}).get("selected") or [] for m in ("US", "JP")}
+    cls = {m: {d: v.get("class") for d, v in ((r.get(m) or {}).get("domains") or {}).items()} for m in ("US", "JP")}
+    return sel, cls
