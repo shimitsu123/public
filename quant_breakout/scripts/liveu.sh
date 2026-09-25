@@ -24,14 +24,17 @@ sync_inputs() {   # 云端维护的配置与每天的输入（拷贝到本机的
 
 if [ "${1:-}" = "trial" ]; then                    # 装好之后马上验证整条路（行情、判断层、执行器），行情缓存与正式目录共用
   shift
-  mkdir -p "$QBREAK_HOME/cache"
+  real="$QBREAK_HOME"
+  mkdir -p "$real/cache" "$real/out"
   tmp="$(mktemp -d)"
-  ln -s "$QBREAK_HOME/cache" "$tmp/cache"
+  ln -s "$real/cache" "$tmp/cache"
   export QBREAK_HOME="$tmp"
   sync_inputs
   echo "试跑（临时目录 $tmp，不动正式的模拟账户）：下载行情、按最新收盘做一次决策，第一次约 3〜5 分钟……"
   "$PY" run.py live-u --broker paper --force "$@"
   rc=$?
+  cp -f "$tmp/out/live_unified_paper_journal.md" "$real/out/trial_journal.md" 2>/dev/null \
+    && echo "（试跑的日志留在 $real/out/trial_journal.md；上面那个临时路径马上删除）"
   rm -rf "$tmp"
   if [ "$rc" = "0" ]; then
     echo "试跑成功：正式的模拟账户每个交易日 07:40 自动运行（模拟期开始日 $("$PY" -c 'import json;print(json.load(open("var/sim.json",encoding="utf-8")).get("start","—"))' 2>/dev/null) 起）"

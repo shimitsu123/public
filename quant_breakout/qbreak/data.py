@@ -163,7 +163,7 @@ def validate_ohlcv(ticker: str, df: pd.DataFrame, cfg: DataConfig) -> pd.DataFra
         raise DataError(f"{ticker}: 只有 {len(df)} 根 K 线，少于 min_bars={cfg.min_bars}")
     jump = df["Close"].pct_change().abs() * 100
     nj = int((jump > cfg.max_daily_move_pct).sum())
-    if nj:
+    if nj and not ticker.startswith("^"):        # 指数（^VIX 等）不会拆股；VIX 单日 +60% 以上是真实行情（例如 2024-08-05）
         log.warning("%s: %d 天单日变动 >%.0f%%，可能是未复权的拆股/合并，请核对",
                     ticker, nj, cfg.max_daily_move_pct)
     return df
