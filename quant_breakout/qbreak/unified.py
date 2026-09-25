@@ -55,6 +55,7 @@ class UnifiedConfig:
     margin_pct: float = 3.0               # 资金缺口按开盘跳空上限多预留
     fx_spread_yen: float = 0.25           # 楽天：片道 25 銭/USD（TTS = 中值 + 0.25，TTB = 中值 − 0.25）
     fx_on_jp_holidays: bool = False       # 日本休市日能否换汇
+    fx_before_jp_open: bool = False       # 换汇窗口在 09:00 之前就开：闲置美元先换回日元，赶上同一个日本开盘的买入
     usd_keep: bool = False                # False：美股卖出后的美元在下一个换汇窗口换回日元
     us_same_open_reuse: bool = True       # 美股卖出所得当晚可再买美股
 
@@ -303,10 +304,15 @@ class UnifiedEngine:
             st.pos[t] = UPos(t, m, shares, px, str(self.gidx[i].date()), stop_px, px, px, hold=0,
                              entry_fx=float(self.fx_close[i]) if m == "US" else 1.0)
 
-    def _exec_fx(self, i: int) -> None:
+    def _exec_fx(self, i: int, only: str | None = None) -> None:
+        """执行计划的换汇。only="USD>JPY"：日本开盘前只换回日元（fx_before_jp_open）；其余留到开盘后。"""
         st, sp = self.st, self.cfg.fx_spread_yen
         mid = float(self.fx_open[i])
+        keep = []
         for o in st.fx_plan:
+            if only and o["dir"] != only:
+                keep.append(o)
+                continue
             if o["dir"] == "JPY>USD":
                 rate = mid + sp
                 usd = min(float(o["usd"]), math.floor(st.cash_jpy / rate * 100) / 100)
@@ -322,8 +328,9 @@ class UnifiedEngine:
                 st.cash_usd -= usd
                 st.cash_jpy += usd * rate
             st.fx_trades.append((str(self.gidx[i].date()), o["dir"], round(usd, 2), round(rate, 4)))
-        st.fx_plan = []
-        st.fx_reserve_jpy = 0.0
+        st.fx_plan = keep
+        if not keep:
+            st.fx_reserve_jpy = 0.0
 
     def _check_exits(self, m: str, i: int) -> None:
         """收盘：止损 / 跟踪止损 / 止盈 / 死叉 / 出货日 / 最长持有 / 时间止损（与 engine.run_backtest 的第 3 步相同）。"""
@@ -409,6 +416,11 @@ class UnifiedEngine:
             return self.live_fx_ok
         return self.cfg.fx_on_jp_holidays or bool(self.sess["JP"][k])
 
+    def _fx_ok_jp(self, i: int) -> bool:
+        """明早日本开盘那天是否有换汇窗口（开盘前换回日元用）。"""
+        k = int(self.nxt["JP"][i])
+        return self.live_fx_ok if k < 0 else bool(self.sess["JP"][k])
+
     def _decide(self, i: int) -> None:
         st, A, cfg = self.st, self.A, self.cfg
         fx = float(self.fx_close[i])
@@ -422,11 +434,22 @@ class UnifiedEngine:
                 cpx = float(A.close[i, self.col[t]]) * (1 - self.c_slip[t])
                 core_liq += u * cpx - self.c_fee[t]["SELL"](u * cpx)
         cash_est = st.cash_jpy + jp_exit_net                     # 明早日本开盘时的日元（不含核心卖出）
-        usd_now = st.cash_usd + (us_exit_net if cfg.us_same_open_reuse else 0.0)
-        plan_jpy = 0.0           # 计划的日本买入成本
-        plan_usd = 0.0           # 计划的美股买入成本（美元）
-        fx_usd = 0.0             # 需要换成美元的金额
-        buf = 1 - cfg.cash_buffer_pct / 100
+        sp, mg, buf = cfg.fx_spread_yen, 1 + cfg.margin_pct / 100, 1 - cfg.cash_buffer_pct / 100
+        rb, rs = fx + sp, fx - sp                                # 买美元 / 卖美元的汇率（中值 ± 点差）
+        jpy0 = cash_est + core_liq                               # 日元池：明早开盘可用（含核心卖出）
+        reuse = us_exit_net if cfg.us_same_open_reuse else 0.0
+        usd0 = st.cash_usd + reuse                               # 美元池：现有 + 今晚美股卖出所得
+        pre = cfg.fx_before_jp_open and not cfg.usd_keep and self._fx_ok_jp(i)
+        post = self._fx_ok(i)
+        used_jpy = used_usd = 0.0                                # 已计划的日本 / 美股买入成本
+        x_usd = 0.0                                              # 开盘前 美元→日元（给日本买入）
+        y_usd = 0.0                                              # 开盘后 日元→美元（给美股买入）
+
+        def jpy_avail() -> float:
+            return jpy0 - used_jpy - y_usd * rb + x_usd * rs
+
+        def usd_cash_free() -> float:                           # 现有美元里还没被占用、明早能先换回日元的部分
+            return st.cash_usd - max(0.0, used_usd - reuse) - x_usd
         # ── 候选：两个市场今天收盘成立的信号，一起按执行成本排名 ──
         cands = []
         for m in cfg.stock_markets:
@@ -440,7 +463,7 @@ class UnifiedEngine:
             if market_of(t) == "JP":
                 return 0
             c = float(A.close[i, self.col[t]]) * (1 + self.slip["US"])
-            return 1 if usd_now - plan_usd >= c else 2
+            return 1 if usd0 >= c else 2
         if len(st.pos) >= cfg.max_positions:          # 与 engine 相同：持仓已满（含明天要卖的）时不规划新仓
             cands = []
         for t in sorted(cands, key=lambda x: (tier(x), x)):
@@ -454,7 +477,7 @@ class UnifiedEngine:
             if n_after + len(st.plan) >= cfg.max_positions:
                 self.skipped["full"] += 1
                 continue
-            if m == "US" and not self._fx_ok(i) and usd_now - plan_usd <= 0:
+            if m == "US" and not post and usd0 + y_usd - used_usd - x_usd <= 0:
                 self.skipped["fx_window"] += 1
                 continue
             c = float(A.close[i, self.col[t]])
@@ -463,44 +486,49 @@ class UnifiedEngine:
             fee = self.fees[m]
             lot = int(self.lots[self.col[t]])
             if m == "JP":
-                avail = cash_est - plan_jpy - fx_usd * (fx + cfg.fx_spread_yen) + core_liq
-                budget = min(budget_jpy, avail * buf)
+                avail = jpy_avail()
+                conv = max(0.0, usd_cash_free()) * rs / mg if pre else 0.0
+                budget = min(budget_jpy, (avail + conv) * buf)
                 shares = int(math.floor(budget / px / lot) * lot) if budget > 0 else 0
                 if shares <= 0:
                     self.skipped["lot" if budget > 0 else "cash"] += 1
                     continue
-                plan_jpy += shares * px + fee(shares * px)
+                cost = shares * px + fee(shares * px)
+                if cost > avail and pre:
+                    x_usd += (cost - max(0.0, avail)) * mg / rs
+                used_jpy += cost
             else:
-                usd_free = max(0.0, usd_now - plan_usd)
-                jpy_left = cash_est - plan_jpy - fx_usd * (fx + cfg.fx_spread_yen) + core_liq
-                conv = (max(0.0, jpy_left) / (fx + cfg.fx_spread_yen) / (1 + cfg.margin_pct / 100)
-                        if self._fx_ok(i) else 0.0)
-                budget = min(budget_jpy / fx, (usd_free + conv) * buf)
+                avail = usd0 + y_usd - used_usd - x_usd
+                conv = max(0.0, jpy_avail()) / rb / mg if post else 0.0
+                budget = min(budget_jpy / fx, (max(0.0, avail) + conv) * buf)
                 shares = int(math.floor(budget / px / lot) * lot) if budget > 0 else 0
                 if shares <= 0:
                     self.skipped["lot" if budget > 0 else "usd"] += 1
                     continue
                 cost = shares * px + fee(shares * px)
-                need = cost - usd_free
-                if need > 0:
-                    fx_usd += need * (1 + cfg.margin_pct / 100)
-                plan_usd += cost
+                if cost > avail:
+                    y_usd += (cost - max(0.0, avail)) * mg
+                used_usd += cost
             st.plan[t] = [c, shares, str(self.gidx[i].date())]
-        # ── 换汇计划 ──
+        # ── 换汇计划：开盘前 美元→日元（日本买入所需 + 不再需要的闲置美元），开盘后 日元→美元（美股买入所需）──
         st.fx_plan = []
-        if fx_usd > 0:
-            usd = math.ceil(fx_usd * 100) / 100
-            st.fx_plan.append({"dir": "JPY>USD", "usd": usd})
-        idle_usd = st.cash_usd - max(0.0, plan_usd - (us_exit_net if cfg.us_same_open_reuse else 0.0))
-        if not cfg.usd_keep and fx_usd <= 0 and idle_usd > 1.0 and not any(market_of(t) == "US" for t in st.plan):
-            st.fx_plan.append({"dir": "USD>JPY", "usd": math.floor(idle_usd * 100) / 100})
-        fx_jpy = fx_usd * (fx + cfg.fx_spread_yen)
+        back = x_usd
+        if not cfg.usd_keep and y_usd <= 0 and not any(market_of(t) == "US" for t in st.plan):
+            back = max(back, st.cash_usd)                        # 闲置美元全部换回日元
+        back = min(back, st.cash_usd)
+        if back > 1.0:
+            st.fx_plan.append({"dir": "USD>JPY", "usd": math.floor(back * 100) / 100})
+        if y_usd > 0:
+            st.fx_plan.append({"dir": "JPY>USD", "usd": math.ceil(y_usd * 100) / 100})
+        fx_jpy = y_usd * rb
         st.fx_reserve_jpy = fx_jpy
+        pre_jpy = back * rs if pre and back > 1.0 else 0.0      # 开盘前换回、开盘时已到账的日元
         # ── 核心 ETF：目标 = 权益 − 个股 − 计划买入 − 换汇预留 − 留作美元的部分，按权重分给各 ETF ──
-        self._decide_core(i, eq, exit_ts, plan_jpy + fx_jpy, cash_est, plan_usd, fx)
+        self._decide_core(i, eq, exit_ts, used_jpy + fx_jpy, cash_est + pre_jpy, used_usd, fx,
+                          usd_stay=st.cash_usd - (back if pre and back > 1.0 else 0.0))
 
     def _decide_core(self, i: int, eq: float, exit_ts: list, reserve: float, cash_est: float,
-                     plan_usd: float, fx: float) -> None:
+                     plan_usd: float, fx: float, usd_stay: float | None = None) -> None:
         """核心 ETF（东证上市、日元）目标额 = 权益 − 继续持有的个股 − 明早的日本买入与换汇预留 − 美元现金
         − 今晚美股卖出的部分（卖出所得是美元，换回日元之前不能买东证 ETF）。按权重分给各 ETF；熊市那份为 0。
         只有一只 ETF、没有美股时，与 core.core_orders 完全相同（引擎差分测试保证）。"""
@@ -515,8 +543,9 @@ class UnifiedEngine:
                 us_exiting += v if ps.market == "US" else 0.0
             else:
                 stock_after += v
+        usd_stay = st.cash_usd if usd_stay is None else max(0.0, usd_stay)
         tgt_total = (eq * (1 - cfg.core_buffer_pct / 100) - stock_after - reserve
-                     - st.cash_usd * fx - us_exiting)
+                     - usd_stay * fx - us_exiting)
         w = {t: float(v) for t, v in cfg.core.items()}
         bear = {t: bool(self.bear[cfg.core_index.get(t, "JP")][i]) for t in w}
         if cfg.core_mode == "follow":
@@ -575,6 +604,9 @@ class UnifiedEngine:
             j = self.col[t]
             if A.has[i, j]:
                 st.core_last[t] = float(A.close[i, j])
+        fx_day = bool(st.fx_plan) and (self.cfg.fx_on_jp_holidays or self.sess["JP"][i])
+        if fx_day and self.cfg.fx_before_jp_open:
+            self._exec_fx(i, only="USD>JPY")                          # 开盘前把闲置美元换回日元
         if self.sess["JP"][i]:
             self._exec_exits("JP", i)
             for t, (side, u) in list(st.core_plan.items()):          # 核心卖出先于个股买入，腾出现金
@@ -592,7 +624,7 @@ class UnifiedEngine:
                     self._core_trade(t, "BUY", u, i)
                     st.core_plan.pop(t)
         if st.fx_plan and (self.cfg.fx_on_jp_holidays or self.sess["JP"][i]):
-            self._exec_fx(i)
+            self._exec_fx(i)                                          # 开盘后：日元→美元（可用早上卖出所得）
         if self.sess["JP"][i]:
             self._check_exits("JP", i)
         if self.sess["US"][i]:

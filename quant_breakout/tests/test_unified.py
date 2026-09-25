@@ -137,3 +137,18 @@ def test_core_buy_leaves_yen_for_same_day_conversion():
     assert any(t["ticker"] == "AAA" for t in ue.st.trades)   # 核心 ETF 先买满、再卖出腾钱 → 换汇 → 美股买入都成立
     assert ue.st.cash_jpy >= 0 and ue.st.cash_usd >= 0
     assert any(k == "JPY>USD" for _, k, *_ in ue.st.fx_trades)
+
+
+def test_pre_open_conversion_lets_jp_buy_use_last_nights_dollars():
+    """fx_before_jp_open：换汇窗口在 09:00 前 → D4 夜美股卖出的美元 D5 开盘前换回日元，D4 收盘的日本信号 D5 就能买入。"""
+    us = _bars(D, [100.0] * 8, entry_on=[D[1]], dead_on=[D[3]])
+    jp = _bars(D, [1000.0] * 8, entry_on=[D[4]])
+    cfg = UnifiedConfig(capital_jpy=400_000, position_pct=0.9, max_positions=1, max_position_pct=0.95,
+                        stock_markets=("JP", "US"), core={}, core_index={}, fx_on_jp_holidays=True,
+                        fx_before_jp_open=True)
+    ue = UnifiedEngine({"AAA": us, "7777.T": jp}, cfg, {"JP": P, "US": P}, EX, {}, fx=FX)
+    ue.run()
+    jp_tr = [t for t in ue.st.trades if t["ticker"] == "7777.T"]
+    assert jp_tr and jp_tr[0]["entry_date"] == str(D[5].date())
+    back = [x for x in ue.st.fx_trades if x[1] == "USD>JPY" and x[0] == str(D[5].date())]
+    assert back and back[0][3] == 149.75 and back[0][2] > 2000                     # 卖出所得全部换回；TTB = 中值 − 25 銭
