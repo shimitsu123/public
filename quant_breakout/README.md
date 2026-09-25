@@ -205,7 +205,9 @@ python run.py report                           # 只重新生成 var/out/report.
   一个账户的**实盘执行器** `run.py live-u`（07:30 对账 → 决策 → 寄付单；09:05 开盘后补单）已完成并用模拟账户演练过：
   历史回放与回测引擎逐笔一致（5 年 23.02% / 20 年 12.87%，差 ¥0），走真实立花适配器 + 模拟交易所时 5 年 22.99%（`var/out/live_rehearsal.md`）；
   9/28 起 `sim-day` 每天用模拟券商把执行器走一遍、与模拟盘比较（日报顶部）。上线步骤见 MACOS.md §1.6
-- **Mac 上的模拟操盘（立花开户前，现在就做）**：`bash scripts/install_launchd_live_u.sh`（默认 paper）→ 周一至五 07:40 在 Mac 上用
+- **Mac 上的模拟操盘（立花开户前，现在就做）**：终端里粘贴一行
+  `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/shimitsu123/public/claude/rakuten-auto-trading-review-ka7lf0/quant_breakout/scripts/mac_bootstrap.sh)"`
+  （= 取代码 + `bash scripts/install_launchd_live_u.sh`（默认 paper）+ 试跑）→ 周一至五 07:40 在 Mac 上用
   同一个执行器跑模拟账户、与云端模拟盘逐日比较、发通知、写日志；状态在 `~/.qbreak/home`（不在仓库里）。见 MACOS.md §1.7
 - 一个账户模式（`sim.json` mode = unified）：`sim-day` 在开始日之前**只预览**（用最新收盘算市场状态、候补队列、USD/JPY、威胁指数，
   不读写账户状态、不下单）；`report` 重出统一日报。日报每个数字带单位，顶部「数据完整性」逐项列出没取到的数据与原因

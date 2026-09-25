@@ -126,26 +126,18 @@ python3 run.py live-u --broker tachibana --resolve U2026-10-01-BUY-7203.T --fill
 用和实盘**完全相同的执行器**，只把券商换成模拟账户（PaperBroker，成交规则与回测相同）：每个交易日早上在你的 Mac 上跑一次，
 下「明天开盘」的单，第二天早上按真实的开盘价撮合、对账。以后立花开户，只要把 `paper` 换成 `tachibana`。
 
-**一次性安装**（Mac 全天开着即可；Homebrew 已装）：
+**一次性安装**（Mac 全天开着即可）：在「终端」里粘贴这一行（可以重复运行，已装好的会更新）：
 
 ```bash
-brew install python@3.12
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/shimitsu123/public/claude/rakuten-auto-trading-review-ka7lf0/quant_breakout/scripts/mac_bootstrap.sh)"
 ```
 
-```bash
-git clone https://github.com/shimitsu123/public.git ~/qbreak-src
-```
-
-```bash
-cd ~/qbreak-src && git checkout claude/rakuten-auto-trading-review-ka7lf0
-```
-
-```bash
-bash ~/qbreak-src/quant_breakout/scripts/install_launchd_live_u.sh
-```
-
-安装脚本会：建虚拟环境 `~/.qbreak/venv`（Python ≥ 3.10；macOS 自带的 3.9 不够）并装依赖 → 注册 LaunchAgent
-`com.qbreak.liveu.paper`（**周一至五 07:40**，按 Mac 的系统时区，应为日本时间）→ 跑一次环境自检（`doctor`）。
+`scripts/mac_bootstrap.sh` 依次：检查 Xcode Command Line Tools（没有就弹出安装窗口，装完再运行这一行）→ 找 Python ≥ 3.10
+（macOS 自带的 3.9 不够；没有就用 Homebrew 装 3.12，连 Homebrew 也没有就提示去 https://brew.sh 或 python.org）
+→ 取代码到 `~/qbreak-src` 并切到分支 → `install_launchd_live_u.sh paper`：建虚拟环境 `~/.qbreak/venv` 并装依赖、
+注册 LaunchAgent `com.qbreak.liveu.paper`（**周一至五 07:40**，按 Mac 的系统时区，应为日本时间）、环境自检（`doctor`）
+→ `liveu.sh trial` 试跑一次（临时目录下载行情、按最新收盘做一次决策，不动正式的模拟账户）。
+在云端按同样的方式（curl 下载 → 全新克隆 → 空的行情缓存）整条走过一遍：约 1 分钟，试跑成功（2026-09-25）。
 
 **每天 07:40 自动做的事**（`scripts/liveu.sh run --broker paper`）：
 1. `git pull` 等云端例行任务把当天的数据推上来（06:57 开始，通常 07:10～07:30；最多等 50 分钟，等不到就用手上最新的并提示）
