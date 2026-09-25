@@ -234,6 +234,11 @@ def test_watch_review_and_decision():
     assert r["auc_W"] > 0.8 and r["auc_A0"] == 0.5 and r["alert_days"] == 50
     assert [e["W_alert"] for e in r["episodes"]] == [True] and [e["A0_alert"] for e in r["episodes"]] == [False]
     assert r["decision"].startswith("继续观察")                               # 只有 1 次下跌、已知结果不足 500 天
+    assert r["warn80_days"] == 50 and [e["W_warn80"] for e in r["episodes"]] == [True] and r["decision80"].startswith("继续观察")
+    ok80 = {"episodes": [{"W_warn80": True, "A0_warn80": False}] * 2 + [{"W_warn80": False, "A0_warn80": True}], "known": 600,
+            "warn80_hit": 0.30, "base_rate": 0.15}
+    assert TH.warn80_decision(ok80).startswith("预警线有效")                # 2/3 事前预警、发生率 2 倍、不低于 A0
+    assert TH.warn80_decision({**ok80, "warn80_hit": 0.20}).startswith("预警线未达门槛")      # 只有 1.3 倍
     base = {"episodes": [{"W_alert": True}, {"W_alert": True}, {"W_alert": False}], "known": 600}
     assert TH.watch_decision({**base, "auc_W": 0.70, "auc_A0": 0.60}).startswith("达到门槛")
     assert TH.watch_decision({**base, "auc_W": 0.52, "auc_A0": 0.60}).startswith("未达门槛且")

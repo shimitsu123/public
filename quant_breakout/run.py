@@ -324,7 +324,7 @@ def cmd_threat(a) -> int:
             print("  其他观察因子（百分位，不计入指数）：" + "、".join(f"{o['label']} {o['pct']}" for o in x["obs"]))
         w = x.get("watch")
         if w:
-            print(f"  前瞻观察（金银比 + 商品波动，未验证）：W {w['W']:.0f}（自身历史 {w['W_pct']:.0f} 分位，≥90 = 警戒）；"
+            print(f"  前瞻观察（金银比 + 商品波动，未验证）：W {w['W']:.0f}（自身历史 {w['W_pct']:.0f} 分位，≥80 = 预警、≥90 = 警戒）；"
                   f"金银比 60 日 {w['gs_raw']:+.1f}%（{w['gs_pct']:.0f} 分位）、商品波动 {w['cv_raw']:.1f}%（{w['cv_pct']:.0f} 分位）")
     from qbreak.report_unified import _EV
     print("接下来的已知大事件：" + ("；".join(f"{e['date']} {_EV.get(e['kind'], e['kind'])}"

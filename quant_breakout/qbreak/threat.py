@@ -517,6 +517,10 @@ def watch_review(log: pd.DataFrame, close: pd.Series, horizon: int = 60) -> dict
     alert = lg["W_pct"] >= 90
     res["alert_days"] = int(alert.sum())
     res["alert_hit"] = float(e[alert & k].mean()) if (alert & k).any() else None       # 警戒日之后 60 日内真的跌 ≥10% 的比例
+    warn = lg["W_pct"] >= 80                                                           # 预警线（2026-09-25 补登）
+    res["warn80_days"] = int(warn.sum())
+    res["warn80_hit"] = float(e[warn & k].mean()) if (warn & k).any() else None
+    res["base_rate"] = float(e[k].mean()) if k.any() else None
     eps = []
     if len(lg):
         tp, _ = date_phases(c[c.index >= lg.index[0] - pd.Timedelta(days=500)], 0.10, 0.10)
@@ -525,10 +529,28 @@ def watch_review(log: pd.DataFrame, close: pd.Series, horizon: int = 60) -> dict
                 continue
             win = lg.loc[:p].tail(horizon + 1)
             eps.append({"peak": str(p.date()), "W_alert": bool((win["W_pct"] >= 90).any()),
-                        "A0_alert": bool((win["A0_pct"] >= 90).any())})
+                        "A0_alert": bool((win["A0_pct"] >= 90).any()),
+                        "W_warn80": bool((win["W_pct"] >= 80).any()), "A0_warn80": bool((win["A0_pct"] >= 80).any())})
     res["episodes"] = eps
     res["decision"] = watch_decision(res)
+    res["decision80"] = warn80_decision(res)
     return res
+
+
+def warn80_decision(r: dict, min_episodes: int = 3, min_known: int = 500) -> str:
+    """80 分位预警线（2026-09-25 补登，前瞻结果出来之前；90 分位的规则不变）：
+    前瞻期内 ≥3 次 ≥10% 下跌、且 ≥500 天结果已知之后：≥2/3 的下跌事前 60 个交易日内到过 80、
+    预警日之后的下跌发生率 ≥ 全期基准的 1.5 倍、且事前预警比例不低于 A0 的 80 分位线 → 建议把 W≥80 标成美股预警（需用户确认）。"""
+    eps = r.get("episodes") or []
+    n = len(eps)
+    if n < min_episodes or r.get("known", 0) < min_known:
+        return f"继续观察（前瞻期 ≥10% 下跌 {n} / {min_episodes} 次，已知结果 {r.get('known', 0)} / {min_known} 天）"
+    hw = sum(e["W_warn80"] for e in eps) / n
+    ha = sum(e["A0_warn80"] for e in eps) / n
+    lift = (r["warn80_hit"] / r["base_rate"]) if r.get("warn80_hit") is not None and r.get("base_rate") else 0.0
+    if hw >= 2 / 3 and lift >= 1.5 and hw >= ha:
+        return f"预警线有效（事前预警 {hw:.0%}，A0 {ha:.0%}；预警后发生率是基准的 {lift:.1f} 倍）：建议把 W≥80 标成美股预警，需要用户确认"
+    return f"预警线未达门槛（事前预警 {hw:.0%}，A0 {ha:.0%}；预警后发生率是基准的 {lift:.1f} 倍）"
 
 
 def watch_decision(r: dict, min_episodes: int = 3, min_known: int = 500) -> str:
