@@ -197,6 +197,8 @@ def snapshot(built: dict | None = None, table: dict | None = None, events: list 
             out[m]["obs"] = readings[m]["obs"]
         if readings and m in out and (readings.get(m) or {}).get("watch"):
             out[m]["watch"] = readings[m]["watch"]            # 美股前瞻观察（金银比 + 商品波动）
+        if readings and m in out and (readings.get(m) or {}).get("watch_jp"):
+            out[m]["watch_jp"] = readings[m]["watch_jp"]      # 日経前瞻观察（Wj + 对照 W2）
         if readings and m in out and (readings.get(m) or {}).get("domains"):
             out[m]["domains"] = readings[m]["domains"]        # 因子调查：各领域当前危险度百分位（只观察）
         if readings and m in out and (readings.get(m) or {}).get("idx"):
@@ -547,7 +549,7 @@ def watch_review(log: pd.DataFrame, close: pd.Series, horizon: int = 60) -> dict
     return res
 
 
-def warn80_decision(r: dict, min_episodes: int = 3, min_known: int = 500) -> str:
+def warn80_decision(r: dict, min_episodes: int = 3, min_known: int = 500, name: str = "W", market: str = "美股") -> str:
     """80 分位预警线（2026-09-25 补登，前瞻结果出来之前；90 分位的规则不变）：
     前瞻期内 ≥3 次 ≥10% 下跌、且 ≥500 天结果已知之后：≥2/3 的下跌事前 60 个交易日内到过 80、
     预警日之后的下跌发生率 ≥ 全期基准的 1.5 倍、且事前预警比例不低于 A0 的 80 分位线 → 建议把 W≥80 标成美股预警（需用户确认）。"""
@@ -559,11 +561,11 @@ def warn80_decision(r: dict, min_episodes: int = 3, min_known: int = 500) -> str
     ha = sum(e["A0_warn80"] for e in eps) / n
     lift = (r["warn80_hit"] / r["base_rate"]) if r.get("warn80_hit") is not None and r.get("base_rate") else 0.0
     if hw >= 2 / 3 and lift >= 1.5 and hw >= ha:
-        return f"预警线有效（事前预警 {hw:.0%}，A0 {ha:.0%}；预警后发生率是基准的 {lift:.1f} 倍）：建议把 W≥80 标成美股预警，需要用户确认"
+        return f"预警线有效（事前预警 {hw:.0%}，A0 {ha:.0%}；预警后发生率是基准的 {lift:.1f} 倍）：建议把 {name}≥80 标成{market}预警，需要用户确认"
     return f"预警线未达门槛（事前预警 {hw:.0%}，A0 {ha:.0%}；预警后发生率是基准的 {lift:.1f} 倍）"
 
 
-def watch_decision(r: dict, min_episodes: int = 3, min_known: int = 500) -> str:
+def watch_decision(r: dict, min_episodes: int = 3, min_known: int = 500, name: str = "W", market: str = "美股") -> str:
     """事先规则（2026-09-25）：前瞻期内 ≥3 次 ≥10% 下跌、且 ≥500 天结果已知之后才下结论。"""
     n = len(r.get("episodes") or [])
     if n < min_episodes or r.get("known", 0) < min_known:
@@ -571,7 +573,7 @@ def watch_decision(r: dict, min_episodes: int = 3, min_known: int = 500) -> str:
     hit = sum(e["W_alert"] for e in r["episodes"]) / n
     aw, a0 = r.get("auc_W") or 0, r.get("auc_A0") or 0
     if aw >= 0.65 and aw >= a0 + 0.05 and hit >= 0.5:
-        return f"达到门槛（AUC {aw:.3f} vs A0 {a0:.3f}，事前警戒 {hit:.0%}）：建议把 W 加进美股威胁指数的显示，需要用户确认"
+        return f"达到门槛（AUC {aw:.3f} vs A0 {a0:.3f}，事前警戒 {hit:.0%}）：建议把 {name} 加进{market}威胁指数的显示，需要用户确认"
     if aw < 0.55:
         return f"未达门槛且 AUC {aw:.3f} < 0.55：建议停止观察"
     return f"未达门槛（AUC {aw:.3f} vs A0 {a0:.3f}，事前警戒 {hit:.0%}）：继续观察"
@@ -620,3 +622,53 @@ def forward_decision(r: dict, min_episodes: int = 3, min_known: int = 500) -> st
     best = max(ok, key=lambda v: ok[v]["auc10"])
     return (f"{FORWARD_LABELS.get(best, best)} 达到门槛（AUC {ok[best]['auc10']:.3f} vs A0 {ok[best]['auc10_A0']:.3f}）："
             "建议日报改用，需要用户确认")
+
+
+def log_watch_rows(rows: list[dict], path) -> None:
+    """前瞻观察的通用记录：已记过的日期保留最早那次（= 当时实际算出的值），只补新日期。"""
+    df = pd.DataFrame(rows or [])
+    if df.empty:
+        return
+    if path.exists():
+        df = pd.concat([pd.read_csv(path), df]).drop_duplicates(["date"], keep="first")
+    df.sort_values("date").to_csv(path, index=False)
+
+
+def watch_review_generic(log: pd.DataFrame, close: pd.Series, scores: dict[str, str], market: str,
+                         horizon: int = 60) -> dict:
+    """前瞻观察的通用检验（与美股 watch_review 同一规则）：scores = {分数列: 自身百分位列}，与 A0 / A0_pct 对照。
+    判定用 watch_decision（90 分位警戒）与 warn80_decision（80 分位预警），门槛不变。"""
+    from .bullbear import date_phases
+    lg = log.copy()
+    lg["date"] = pd.to_datetime(lg["date"])
+    lg = lg.set_index("date").sort_index()
+    c = close.dropna()
+    fdd = forward_drawdown(c, horizon)
+    e = (fdd <= -0.10).astype(float).where(fdd.notna()).reindex(lg.index)
+    k = e.notna()
+    res = {"first": str(lg.index[0].date()) if len(lg) else None, "days": int(len(lg)), "known": int(k.sum()),
+           "event_days": int(e[k].sum()) if k.any() else 0, "base_rate": float(e[k].mean()) if k.any() else None,
+           "auc_A0": auc(lg["A0"][k], e[k]) if k.any() else None, "scores": {}}
+    peaks = []
+    if len(lg):
+        tp, _ = date_phases(c[c.index >= lg.index[0] - pd.Timedelta(days=500)], 0.10, 0.10)
+        peaks = [p for p in tp[tp["kind"] == "peak"]["date"] if p >= lg.index[0]]
+    for sc, pc in scores.items():
+        r = {"auc": auc(lg[sc][k], e[k]) if k.any() else None}
+        for thr in (90, 80):
+            on = lg[pc] >= thr
+            r[f"days{thr}"] = int(on.sum())
+            r[f"hit{thr}"] = float(e[on & k].mean()) if (on & k).any() else None
+        eps = []
+        for p in peaks:
+            win = lg.loc[:p].tail(horizon + 1)
+            eps.append({"peak": str(p.date()), "alert90": bool((win[pc] >= 90).any()), "warn80": bool((win[pc] >= 80).any()),
+                        "A0_alert90": bool((win["A0_pct"] >= 90).any()), "A0_warn80": bool((win["A0_pct"] >= 80).any())})
+        r["episodes"] = eps
+        r["decision90"] = watch_decision({"episodes": [{"W_alert": x["alert90"]} for x in eps], "known": res["known"],
+                                          "auc_W": r["auc"], "auc_A0": res["auc_A0"]}, name=sc, market=market)
+        r["decision80"] = warn80_decision({"episodes": [{"W_warn80": x["warn80"], "A0_warn80": x["A0_warn80"]} for x in eps],
+                                           "known": res["known"], "warn80_hit": r["hit80"], "base_rate": res["base_rate"]},
+                                          name=sc, market=market)
+        res["scores"][sc] = r
+    return res

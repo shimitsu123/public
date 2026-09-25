@@ -70,3 +70,31 @@ def test_readings_domains_and_S():
     r = SV.readings(F, {}, {"US": ["gold"], "JP": []}, {"US": ["vix", "credit"], "JP": ["vix", "credit"]})
     assert set(r["US"]["domains"]) == {"商品", "就业"} and 0 <= r["US"]["domains"]["商品"] <= 100
     assert r["US"]["S"] is not None and r["JP"]["S"] is not None
+
+
+def test_jp_watch_rows_and_generic_review(tmp_path):
+    from qbreak import threat as TH
+    rng = np.random.default_rng(9)
+    days = pd.bdate_range("2008-01-01", periods=1200)
+    cols = SV.JP_WATCH + ["gold_silver", "commod_vol"] + TH.JP_COLS
+    raw_ex = pd.DataFrame({c: rng.normal(size=1200) for c in dict.fromkeys(cols)}, index=days)
+    rows = SV.jp_watch_rows({"JP": (raw_ex, None)}, {})
+    assert len(rows) == 5 and {"Wj", "Wj_pct", "W2", "W2_pct", "A0", "A0_pct", "p_breadth"} <= set(rows[-1])
+    fp = tmp_path / "jw.csv"
+    TH.log_watch_rows(rows, fp)
+    TH.log_watch_rows([dict(r, Wj=-1.0) for r in rows], fp)                  # 已记日期保留最早值
+    assert (pd.read_csv(fp)["Wj"] >= 0).all()
+    d2 = pd.bdate_range("2020-01-01", periods=400)
+    close = pd.Series(np.linspace(90, 100, 400), index=d2)
+    close.iloc[200:230] = np.linspace(99.5, 80, 30)
+    close.iloc[230:] = 80.0
+    lg = pd.DataFrame({"date": [str(x.date()) for x in d2[100:300]], "Wj": 30.0, "Wj_pct": 50.0, "W2": 40.0, "W2_pct": 85.0,
+                       "A0": 40.0, "A0_pct": 50.0})
+    hot = (lg["date"] >= str(d2[150].date())) & (lg["date"] < str(d2[200].date()))
+    lg.loc[hot, ["Wj", "Wj_pct"]] = [90.0, 95.0]
+    r = TH.watch_review_generic(lg, close, {"Wj": "Wj_pct", "W2": "W2_pct"}, market="日経")
+    wj, w2 = r["scores"]["Wj"], r["scores"]["W2"]
+    assert wj["auc"] > 0.8 and wj["days90"] == 50 and [e["alert90"] for e in wj["episodes"]] == [True]
+    assert w2["days80"] == 200 and w2["days90"] == 0 and wj["decision90"].startswith("继续观察")
+    assert TH.watch_decision({"episodes": [{"W_alert": True}] * 3, "known": 600, "auc_W": 0.7, "auc_A0": 0.6},
+                             name="Wj", market="日経").endswith("建议把 Wj 加进日経威胁指数的显示，需要用户确认")

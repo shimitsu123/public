@@ -229,6 +229,12 @@ def _threat_html(t: dict) -> str:
                      f"（≥80 = 预警、≥90 = 警戒{'，<b>现在警戒</b>' if w['W_pct'] >= 90 else ('，<b>现在预警</b>' if w['W_pct'] >= 80 else '')}）；"
                      f"金银比 60 日 {w['gs_raw']:+.1f}%、"
                      f"商品波动 {w['cv_raw']:.1f}%") if w else ""
+        wj = x.get("watch_jp")
+        if wj:
+            flag = "，<b>现在警戒</b>" if wj["Wj_pct"] >= 90 else ("，<b>现在预警</b>" if wj["Wj_pct"] >= 80 else "")
+            watch_txt += (f"<br>前瞻观察（日経两段都有效的 8 个因素，2026-09-25 登记、每天记录，还没验证）：{wj['Wj']:.0f} / 100，"
+                          f"自身历史 {wj['Wj_pct']:.0f} 分位（≥80 = 预警、≥90 = 警戒{flag}）；对照：金银比 + 商品波动 {wj['W2']:.0f}"
+                          f"（{wj['W2_pct']:.0f} 分位）")
         fw = x.get("fwd") or {}
         fwd_txt = ("<br>前瞻对照（只记录、未验证）：" + "、".join(
             f"{ {'A0x': '去掉曲线倒挂与油价冲击', 'S': '因子调查组合'}[k] } {v:.0f}" for k, v in fw.items())) if fw else ""

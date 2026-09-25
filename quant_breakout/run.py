@@ -303,10 +303,16 @@ def _threat_readings(ti: dict) -> dict | None:
             from qbreak import survey as SV
             from qbreak.threat import JP_COLS, US_COLS
             sel, cls = SV.survey_selection()
-            sr = SV.readings(F, SV.load_raw(), sel, {"US": US_COLS, "JP": JP_COLS})
+            raw_sv = SV.load_raw()
+            sr = SV.readings(F, raw_sv, sel, {"US": US_COLS, "JP": JP_COLS})
             for m in ("US", "JP"):
                 rd[m]["idx"]["S"] = sr[m]["S"]
                 rd[m]["domains"] = {d: {"pct": p, "class": cls[m].get(d)} for d, p in sr[m]["domains"].items()}
+            jw = SV.jp_watch_rows(F, raw_sv)                    # 日経前瞻观察：Wj（日経自己的 8 个因素）+ W2（金银比 + 商品波动）
+            if jw:
+                from qbreak.threat import log_watch_rows
+                rd["JP"]["watch_jp"] = jw[-1]
+                log_watch_rows(jw, paths.out_dir() / "jp_watch_forward.csv")
         except Exception as e:                               # noqa: BLE001
             log.warning("因子调查读数计算失败（不影响交易）：%s", e)
         log_forward(rd, paths.out_dir() / "threat_forward.csv")
@@ -333,6 +339,10 @@ def cmd_threat(a) -> int:
               f"{s['event_def']}的频率 {x['band_freq']}%（平均 {x['base_rate']}%）；主要来源：{top}")
         if x.get("obs"):
             print("  其他观察因子（百分位，不计入指数）：" + "、".join(f"{o['label']} {o['pct']}" for o in x["obs"]))
+        wj = x.get("watch_jp")
+        if wj:
+            print(f"  前瞻观察（日経自己的 8 个因素，未验证）：Wj {wj['Wj']:.0f}（自身历史 {wj['Wj_pct']:.0f} 分位，≥80 = 预警、≥90 = 警戒）；"
+                  f"对照 金银比 + 商品波动 {wj['W2']:.0f}（{wj['W2_pct']:.0f} 分位）")
         w = x.get("watch")
         if w:
             print(f"  前瞻观察（金银比 + 商品波动，未验证）：W {w['W']:.0f}（自身历史 {w['W_pct']:.0f} 分位，≥80 = 预警、≥90 = 警戒）；"

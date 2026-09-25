@@ -275,3 +275,28 @@ def survey_selection() -> tuple[dict, dict]:
     sel = {m: (r.get(m) or {}).get("selected") or [] for m in ("US", "JP")}
     cls = {m: {d: v.get("class") for d, v in ((r.get(m) or {}).get("domains") or {}).items()} for m in ("US", "JP")}
     return sel, cls
+
+
+# ═══════════ 日経前瞻观察（用户 2026-09-25 要求；规则见 scripts/jp_watch_review.py，只从该日起记录）═══════════
+# 美股的「金银比 + 商品波动」在日経历史上无效（两段 AUC 约 0.59 / 0.50、0.53 / 0.47）→ 按同一挑法，用因子调查里
+# 对日経两段都有增益的因素（停更的 OECD 中国先行指数除外）组成 Wj；美股那一对放在日経上作对照（W2）。
+JP_WATCH = ["em_rel", "real10", "tankan_big", "tankan_small", "claims", "breadth", "boj", "jp_cgpi"]
+
+
+def jp_watch_rows(F: dict, raw: dict[str, pd.Series], n: int = 5) -> list[dict]:
+    """最近 n 个日本交易日的日経观察读数：Wj（8 个因素）与 W2（金银比 + 商品波动）及各自在自身历史里的百分位，A0 作对照。"""
+    from .threat import JP_COLS, _eq, expanding_pct
+    raw_ex, _ = F["JP"]
+    feats = pd.concat([raw_ex, features(raw_ex.index, raw, jp_market=True)], axis=1)
+    feats = feats.loc[:, ~feats.columns.duplicated()]
+    wj_cols = [c for c in JP_WATCH if c in feats]
+    pct = pd.DataFrame({c: expanding_pct(feats[c]) for c in dict.fromkeys(wj_cols + ["gold_silver", "commod_vol"] + JP_COLS)})
+    wj = _eq(pct[wj_cols])
+    w2 = pct[["gold_silver", "commod_vol"]].mean(axis=1, skipna=False) * 100
+    a0 = _eq(pct[JP_COLS])
+    df = pd.DataFrame({"Wj": wj, "Wj_pct": expanding_pct(wj) * 100, "W2": w2, "W2_pct": expanding_pct(w2) * 100,
+                       "A0": a0, "A0_pct": expanding_pct(a0) * 100})
+    for c in wj_cols:
+        df[f"p_{c}"] = pct[c] * 100
+    r = lambda v: round(float(v), 2) if v == v else None                              # noqa: E731
+    return [{"date": str(d.date()), **{k: r(v) for k, v in row.items()}} for d, row in df.dropna(subset=["Wj"]).tail(n).iterrows()]
