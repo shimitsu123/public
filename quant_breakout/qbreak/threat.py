@@ -204,7 +204,7 @@ def snapshot(built: dict | None = None, table: dict | None = None, events: list 
         if readings and m in out and (readings.get(m) or {}).get("wfc"):
             out[m]["wfc"] = readings[m]["wfc"]                # 配比最优化：之后 60 个交易日的下跌概率（冻结的权重）
         if readings and m in out and (readings.get(m) or {}).get("idx"):
-            out[m]["fwd"] = {k: v for k, v in readings[m]["idx"].items() if k in ("A0x", "S") and v is not None}   # 前瞻对照版本
+            out[m]["fwd"] = {k: v for k, v in readings[m]["idx"].items() if k in ("A0x", "S", "DOM") and v is not None}   # 前瞻对照版本
             out[m]["fwd_plus"] = sum(1 for k, v in readings[m]["idx"].items() if k.startswith("A0+") and v is not None)
     ev = events if events is not None else (read_json(paths.home() / "macro_events.json", {}) or {})
     ev = ev.get("events", ev) if isinstance(ev, dict) else ev
@@ -447,7 +447,8 @@ def v3_selection() -> dict:
 A0X_DROP = ["curve", "oil"]          # 因子调查（2026-09-25）里拿掉后两段都更好的两个（看过结果才提出 → 只做前瞻对照）
 FORWARD_LABELS = {"A0": "现行 v1", "A0x": "去掉曲线倒挂与油价冲击", "B1": "v3 全部等权", "B2": "v3 训练期选因素",
                   "B3": "v3 类别平衡", "B4": "v3 类别平衡（选入因素）", "S": "因子调查组合 S",
-                  "A0+W": "现行 + 金银比 + 商品波动", "A0+Wj": "现行 + 日経 Wj 8 个因素"}
+                  "A0+W": "现行 + 金银比 + 商品波动", "A0+Wj": "现行 + 日経 Wj 8 个因素",
+                  "DOM": "领域均衡（22 个领域等权）"}
 
 
 def forward_label(v: str) -> str:

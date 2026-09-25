@@ -161,7 +161,9 @@ def test_forecast_applies_frozen_weights_and_log_keeps_first(tmp_path):
     W = {"US": {"cols": cols, "a0_cols": TH.US_COLS, "adopted": "RIDGE", "best": "RIDGE", "base10": 0.12, "base15": 0.05,
                 "schemes": {"A0": {"q": np.linspace(0, 100, 101).tolist(), "cal10": [-2.0, 1.0], "cal15": [-3.0, 1.0]},
                             "RIDGE": {"b0": 0.1, "beta": {"gold": 2.0, "vix": -0.5}, "q": q, "cal10": [-2.5, 2.0],
-                                      "cal15": [-3.5, 2.0], "oos": {"auc10": 0.7}}}}}
+                                      "cal15": [-3.5, 2.0], "oos": {"auc10": 0.7}},
+                            "DOM": {"b0": 0.0, "beta": {"gold": 0.5, "vix": 0.25, "credit": 0.25}, "q": q,
+                                    "cal10": [-2.0, 1.0], "cal15": [-3.0, 1.0]}}}}
     fp = tmp_path / "w.json"
     fp.write_text(json.dumps(W), encoding="utf-8")
     fc = WT.forecast(F, {}, path=fp)
@@ -175,6 +177,8 @@ def test_forecast_applies_frozen_weights_and_log_keeps_first(tmp_path):
     a0 = TH._eq(pd.DataFrame({c: TH.expanding_pct(raw_ex[c]) for c in TH.US_COLS})).iloc[-1]
     assert r["u"]["A0"] == pytest.approx(round(a0 / 100, 4), abs=1e-4)
     assert r["show"] == "RIDGE" and r["date"] == str(days[-1].date()) and r["oos"]["auc10"] == 0.7
+    pc = TH.expanding_pct(raw_ex["credit"]).iloc[-1]
+    assert r["dom"] == pytest.approx(round(100 * (0.5 * pg + 0.25 * pv + 0.25 * pc), 2))   # 领域均衡的 0–100 读数
     lp = tmp_path / "f.csv"
     WT.log_forward(fc, lp)
     fc["US"]["p10"]["RIDGE"] = 0.99

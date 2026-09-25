@@ -21,6 +21,11 @@
 补登（2026-09-25，用户要求；此时这一列还没有任何记录）：日経再加「A0+Wj」= 现行 v1 再加 Wj 的全部 8 个因素
   （18 个因素等权，Wj 部分合计占 8/18），同一条判定规则；日経一共比 15 个版本。样本内参考在下面单独列出
   （偏乐观：8 个因素是看过 2011 年后结果才挑的）。
+补登（2026-09-25，用户要求；此时这一列还没有任何记录）：美股再加「DOM」= 领域均衡（配比最优化研究 scripts/threat_weight_study.py 的同名方式：
+  var/threat_weights.json 冻结的美股全部因素（本次 95 个）在 22 个领域内先各自平均、再各领域等权，缺值按中性 50 → 0–100；
+  因素清单随每年 1 月 --refit 冻结的清单变），同一条判定规则；美股一共比 10 个版本。
+  披露：它是看过配比研究 11 种方式的样本外结果之后挑出来的（美股 2011 年后 AUC 0.694、A0 0.615，但区块自助法 ΔAUC 的 5% 分位
+  −0.030，不显著），所以同样只能靠前瞻检验；样本内参考在下面单独列出（偏乐观）。它的概率版本另记在 var/out/threat_weight_forward.csv。
 """
 from __future__ import annotations
 
@@ -97,6 +102,28 @@ def in_sample_wj(F: dict) -> dict:
     return _vs_a0(TH._eq(pct[TH.JP_COLS]), TH._eq(pct[TH.JP_COLS + cols]), "A0+Wj", close)
 
 
+def dom_index(F: dict, path=None) -> tuple[pd.Series, pd.Series]:
+    """美股「领域均衡」的全历史读数（0–100）：冻结的因素清单与权重（var/threat_weights.json 的 DOM），缺值按中性 50。返回 (指数, 收盘)。"""
+    from qbreak import survey as SV
+    from qbreak.utils import read_json
+    W = (read_json(path or (paths.home() / "threat_weights.json"), {}) or {}).get("US") or {}
+    beta = ((W.get("schemes") or {}).get("DOM") or {}).get("beta") or {}
+    raw_ex, close = F["US"]
+    feats = pd.concat([raw_ex, SV.features(raw_ex.index, SV.load_raw(), jp_market=False)], axis=1)
+    feats = feats.loc[:, ~feats.columns.duplicated()]
+    cols = [c for c in beta if c in feats]
+    pct = pd.DataFrame({c: TH.expanding_pct(feats[c]) for c in cols}).fillna(0.5)
+    return pct[cols] @ pd.Series(beta)[cols] * 100, close
+
+
+def in_sample_dom(F: dict) -> dict:
+    """美股「领域均衡」的样本内参考（偏乐观：看过配比研究的样本外结果之后才挑的）。"""
+    dom, close = dom_index(F)
+    raw, _ = F["US"]
+    pct = pd.DataFrame({c: TH.expanding_pct(raw[c]) for c in TH.US_COLS})
+    return _vs_a0(TH._eq(pct[TH.US_COLS]), dom, "DOM", close)
+
+
 def main() -> int:
     t0 = time.time()
     d = TH.load_inputs()
@@ -135,7 +162,8 @@ def main() -> int:
         sv = json.loads((paths.out_dir() / "threat_factor_survey.json").read_text(encoding="utf-8"))
         F = TH.build_all(d, TH.load_extra_all())
         for key, fn, v2, title in (("in_sample_w", in_sample_w, "A0+W", "美股「现行 + 金银比 + 商品波动」"),
-                                   ("in_sample_wj", in_sample_wj, "A0+Wj", "日経「现行 + Wj 8 个因素」")):
+                                   ("in_sample_wj", in_sample_wj, "A0+Wj", "日経「现行 + Wj 8 个因素」"),
+                                   ("in_sample_dom", in_sample_dom, "DOM", "美股「领域均衡」")):
             iw = fn(F)
             out[key] = iw
             lines += [f"\n## 样本内参考：{title}（偏乐观，不作判定依据）",
@@ -143,6 +171,11 @@ def main() -> int:
             for v in ("A0", v2):
                 lines.append(f"| {TH.forward_label(v)} | {fmt(iw[v + '_10'][0])} / {fmt(iw[v + '_10'][1])} | "
                              f"{fmt(iw[v + '_15'][0])} / {fmt(iw[v + '_15'][1])} |")
+        ws = (json.loads((paths.out_dir() / "threat_weight_study.json").read_text(encoding="utf-8")).get("US") or {}).get("eval") or {}
+        if ws.get("DOM"):
+            x, a = ws["DOM"], ws.get("A0") or {}
+            lines.append(f"\n配比最优化研究的逐年滚动样本外（2011– ）：领域均衡 AUC {fmt(x.get('auc10'))}、A0 {fmt(a.get('auc10'))}；"
+                         f"区块自助法 ΔAUC 5% 分位 {fmt(x.get('boot_p05'))}；≥15% {fmt(x.get('auc15'))} / {fmt(a.get('auc15'))}")
         from qbreak.survey import JP_WATCH
         lines += ["\n## 样本内参考：「现行 + 单个观察因素」（因子调查里加进现行模型的 ΔAUC，偏乐观）",
                   "| 市场 | 版本 | ΔAUC 1995–2010 / 2011– | 单独 AUC 1995–2010 / 2011– |", "|---|---|---|---|"]

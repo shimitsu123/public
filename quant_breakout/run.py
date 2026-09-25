@@ -327,6 +327,8 @@ def _threat_readings(ti: dict) -> dict | None:
                 rd[m]["wfc"] = {"date": r["date"], "show": sh, "p10": r["p10"].get(sh), "p15": r["p15"].get(sh),
                                 "base10": r.get("base10"), "base15": r.get("base15"), "adopted": r.get("adopted"),
                                 "best": r.get("best"), "oos": r.get("oos"), "top": r.get("top")}
+            if (fc.get("US") or {}).get("dom") is not None:    # 美股「领域均衡」→ 前瞻对照（2026-09-25 补登）
+                rd["US"]["idx"]["DOM"] = fc["US"]["dom"]
             WT.log_forward(fc, paths.out_dir() / "threat_weight_forward.csv")
         except Exception as e:                               # noqa: BLE001
             log.warning("配比最优化预测计算失败（不影响交易）：%s", e)

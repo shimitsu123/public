@@ -80,7 +80,7 @@ def test_report_shows_threat_card_and_error():
                            "obs": [{"k": "gold_silver", "label": "金银比上升", "pct": 88}, {"k": "gpr", "label": "地缘政治风险（GPR）", "pct": 40}],
                            "watch": {"W": 93.0, "W_pct": 97.0, "gs_pct": 90.0, "cv_pct": 96.0, "gs_raw": 8.2, "cv_raw": 31.5},
                            "domains": {"科技周期": {"pct": 93, "class": "两段都提升"}, "货币政策 / 流动性": {"pct": 53, "class": "都没有"}},
-                           "fwd": {"A0x": 49.3, "S": 48.5},
+                           "fwd": {"A0x": 49.3, "S": 48.5, "DOM": 57.3},
                            "wfc": {"show": "A0", "p10": 0.128, "p15": 0.056, "base10": 0.136, "base15": 0.06, "adopted": None,
                                    "best": "DOM", "oos": {"auc10": 0.615, "bss10": -0.016}}},
                     "JP": {"value": 58.5, "band": "50–60", "band_freq": 28.9, "base_rate": 26.3, "auc": [0.6, 0.52],
@@ -98,7 +98,7 @@ def test_report_shows_threat_card_and_error():
     assert "都在 70 分位以下" in html
     assert "另记录「现行 + 观察因素」8 个版本" in html
     assert "前瞻观察（日経两段都有效的 8 个因素" in html and "自身历史 82 分位" in html and "现在预警" in html and "金银比 + 商品波动 44" in html
-    assert "前瞻对照（只记录、未验证）：去掉曲线倒挂与油价冲击 49、因子调查组合 48" in html
+    assert "前瞻对照（只记录、未验证）：去掉曲线倒挂与油价冲击 49、因子调查组合 48、领域均衡 57" in html
     assert "各经济领域现在的危险度" in html and "<td>科技周期</td><td class='n'>93</td><td>有帮助</td>" in html and "没帮助" in html
     assert "前瞻观察（金银比 + 商品波动" in html and "自身历史 97 分位" in html and "现在警戒" in html and "金银比 60 日 +8.2%" in html
     assert "之后 60 个交易日内跌 ≥10% 的概率：13%</b>（现行指数按 2005 年以来逐年校准折算；2005 年以来平均 14%；跌 ≥15%：6%，平均 6%）" in html

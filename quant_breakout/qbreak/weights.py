@@ -391,6 +391,9 @@ def forecast(F: dict, raw: dict, path=None) -> dict:
             res["u"][k] = round(u, 4) if u == u else None
             res["p10"][k] = prob(sch.get("cal10"), u)
             res["p15"][k] = prob(sch.get("cal15"), u)
+        dom = (wm.get("schemes") or {}).get("DOM")
+        if dom:                                               # 领域均衡的 0–100 读数（美股记进 threat_forward.csv 作前瞻对照）
+            res["dom"] = round(100 * (0.5 + apply(dom, row)), 2)
         show = wm.get("adopted") or "A0"
         res.update(adopted=wm.get("adopted"), show=show, base10=wm.get("base10"), base15=wm.get("base15"),
                    oos=(wm.get("schemes") or {}).get(show, {}).get("oos"), best=wm.get("best"))

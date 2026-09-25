@@ -250,7 +250,7 @@ def _threat_html(t: dict) -> str:
                              if wf.get("top") else ""))
         fw = x.get("fwd") or {}
         fwd_txt = ("<br>前瞻对照（只记录、未验证）：" + "、".join(
-            f"{ {'A0x': '去掉曲线倒挂与油价冲击', 'S': '因子调查组合'}[k] } {v:.0f}" for k, v in fw.items())
+            f"{ {'A0x': '去掉曲线倒挂与油价冲击', 'S': '因子调查组合', 'DOM': '领域均衡'}[k] } {v:.0f}" for k, v in fw.items())
             + (f"；另记录「现行 + 观察因素」{x['fwd_plus']} 个版本" if x.get("fwd_plus") else "")) if fw else ""
         rows.append(f"<dt>{name}：{x['value']:.0f} / 100{prev}</dt><dd>同档位（{escape(str(x.get('band')))}）历史上"
                     f"{escape(t.get('event_def', ''))}的频率 {x.get('band_freq')}%（全期平均 {x.get('base_rate')}%）；"

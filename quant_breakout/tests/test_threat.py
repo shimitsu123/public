@@ -72,6 +72,10 @@ def test_snapshot_band_top_factors_and_events():
     s = TH.snapshot({"US": (idx, pct), "JP": (pd.Series(dtype=float), pct)}, table, ev, today="2026-02-11",
                     readings={"US": {"wfc": wfc}})
     assert s["US"]["wfc"] == wfc                                                # 配比最优化的概率带进日报
+    s = TH.snapshot({"US": (idx, pct), "JP": (pd.Series(dtype=float), pct)}, table, ev, today="2026-02-11",
+                    readings={"US": {"idx": {"A0": 55.0, "A0x": 41.5, "S": None, "DOM": 57.3, "A0+W": 50.8}}})
+    assert s["US"]["fwd"] == {"A0x": 41.5, "DOM": 57.3} and s["US"]["fwd_plus"] == 1
+    assert TH.forward_label("DOM") == "领域均衡（22 个领域等权）"
 
 
 def test_weekly_available_lag():
