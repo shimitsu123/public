@@ -32,7 +32,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from qbreak import paths                                                   # noqa: E402
 from qbreak.bullbear import BEAR, Detector, load_config                   # noqa: E402
 from qbreak.config import BacktestConfig, DataConfig, universe             # noqa: E402
-from qbreak.core import CORE_COST, SPYM_COST, core_frame                   # noqa: E402
+from qbreak.core import core_cost, core_frame                               # noqa: E402
+from qbreak.fees import broker_of                                           # noqa: E402
 from qbreak.data import load_universe                                      # noqa: E402
 from qbreak.engine import run_backtest                                     # noqa: E402
 from qbreak.macro import build_entry_mult, features_frame, load_macro_series  # noqa: E402
@@ -54,6 +55,9 @@ def main() -> int:
     sim = json.loads((paths.home() / "sim.json").read_text(encoding="utf-8"))
     mc = sim.get(market.lower(), {})
     flag = lambda k, d=True: mc.get(k, sim.get(k, d))                          # noqa: E731
+    # 费用按券商：日本 = sim.json 的 jp.broker（立花）；美股研究的是美国市场的个股 + 美股 ETF → 只有楽天能做
+    broker = broker_of("JP", mc) if market == "JP" else "rakuten"
+    print(f"[{market}] 费用按 {broker}", flush=True)
     d21 = DataConfig(provider="yfinance", years=21, allow_synthetic=False).validate()
     t0 = time.time()
     data = load_universe(universe(market, "broad"), d21)
@@ -63,11 +67,12 @@ def main() -> int:
     # 核心 ETF
     if market == "JP":
         etf = load_universe(["1329.T"], d21)["1329.T"]
-        cores = {"core": (core_frame(etf, idx_full, div_yield_pct=1.6), CORE_COST["JP"])}
+        cores = {"core": (core_frame(etf, idx_full, div_yield_pct=1.6), core_cost("1329.T", "JP", broker))}
     else:
         spy = load_universe(["SPY"], d21)["SPY"]
         spym = load_universe(["SPYM"], d21)["SPYM"]
-        cores = {"core": (core_frame(spy), CORE_COST["US"]), "spym": (core_frame(spym), SPYM_COST)}
+        cores = {"core": (core_frame(spy), core_cost("VOO", "US", broker)),
+                 "spym": (core_frame(spym), core_cost("SPYM", "US", broker))}
     print(f"[{market}] 数据 {len(data)} 只，{time.time() - t0:.0f}s", flush=True)
     tickers = list(ind)
     rows = []
@@ -97,7 +102,7 @@ def main() -> int:
         for name, s in schemes:
             row = {"scheme": name}
             for wname, start in (("w20", W20), ("w5", W5)):
-                bt = BacktestConfig.for_market(market, 21)
+                bt = BacktestConfig.for_market(market, 21, broker)
                 bt.sizing.initial_cash, bt.sizing.position_pct, bt.sizing.max_positions = CASH[market], s["pct"], s["n"]
                 bt.sizing.max_position_pct = max(bt.sizing.max_position_pct, s["pct"])
                 bt.sizing.validate()

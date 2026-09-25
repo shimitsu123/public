@@ -19,7 +19,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from qbreak import paths                                                   # noqa: E402
 from qbreak.bullbear import BEAR, Detector, load_config                   # noqa: E402
 from qbreak.config import BacktestConfig, DataConfig, universe             # noqa: E402
-from qbreak.core import CORE_COST, SPYM_COST, core_frame                   # noqa: E402
+from qbreak.core import core_cost, core_frame                               # noqa: E402
+from qbreak.fees import broker_of                                           # noqa: E402
 from qbreak.data import load_universe                                      # noqa: E402
 from qbreak.engine import run_backtest                                     # noqa: E402
 from qbreak.macro import build_entry_mult, features_frame, load_macro_series  # noqa: E402
@@ -86,12 +87,13 @@ def main() -> int:
         ind = IndicatorCache(data).all(p)
         ts = trade_stats(ind)
         idx_full = load(*SYM[market])
+        broker = broker_of("JP", mc) if market == "JP" else "rakuten"       # 美股指数用 SPYM 的 20 年美元口径（1655 只有 2017 年起）
         if market == "JP":
             etf = load_universe(["1329.T"], d21)["1329.T"]
-            cf, cost, n, pct, brk = core_frame(etf, idx_full, div_yield_pct=1.6), CORE_COST["JP"], 4, 0.25, True
+            cf, cost, n, pct, brk = core_frame(etf, idx_full, div_yield_pct=1.6), core_cost("1329.T", "JP", broker), 4, 0.25, True
         else:
             spym = load_universe(["SPYM"], d21)["SPYM"]
-            cf, cost, n, pct, brk = core_frame(spym), SPYM_COST, 1, 0.01, False
+            cf, cost, n, pct, brk = core_frame(spym), core_cost("SPYM", "US", broker), 1, 0.01, False
         ind2 = dict(ind); ind2["CORE"] = cf
         names = list(ind2)
         gidx = pd.DatetimeIndex(sorted(set().union(*[df.index for df in ind2.values()])))
@@ -104,7 +106,7 @@ def main() -> int:
         if not brk:
             M[:] = 0.0
         bear = (pd.Series(det.states(idx_full["Close"]), index=idx_full.index).reindex(gidx).ffill() == BEAR).values
-        bt = BacktestConfig.for_market(market, 21)
+        bt = BacktestConfig.for_market(market, 21, broker)
         bt.sizing.initial_cash, bt.sizing.position_pct, bt.sizing.max_positions = (1_000_000 if market == "JP" else 6_336.37), pct, n
         bt.sizing.max_position_pct = max(bt.sizing.max_position_pct, pct)
         r = run_backtest(ind2, p, bt, start=START, entry_mult=M,
