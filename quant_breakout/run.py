@@ -1061,6 +1061,39 @@ def cmd_sim_tier(a) -> int:
     return 0
 
 
+def cmd_sim_unify(a) -> int:
+    """模拟盘改为「一个账户」（楽天，日元 + 美元；日本株 + 美股 + 东证 ETF 一起配）：
+    旧的分市场分仓（jp / us）归档到 var/archive/，写 sim.json 的 mode=unified 与 unified 段，下一次 sim-day 从 capital_jpy 开始。"""
+    import datetime as _dt
+    from qbreak.utils import write_json
+    cfg = _sim_cfg()
+    if not cfg:
+        print("先运行 python run.py sim-init"); return 2
+    if cfg.get("mode") == "unified" and not a.force:
+        print("已经是一个账户模式；加 --force 重开（旧状态归档）"); return 2
+    for m in ("JP", "US"):
+        if (paths.state_dir() / f"paper_state_{m}.json").exists() or (paths.home() / f"HALT_{m}").exists():
+            _archive_market(m, "改为一个账户模式（sim-unify）")
+    up = paths.state_dir() / "unified_state.json"
+    if up.exists():
+        dst = paths.home() / "archive" / f"{_dt.date.today().isoformat()}_UNIFIED"
+        dst.mkdir(parents=True, exist_ok=True)
+        up.replace(dst / up.name)
+    core = {k: float(v) for k, v in (x.split(":") for x in a.core.split(",") if x)}
+    cfg["mode"] = "unified"
+    cfg["capital_jpy"] = float(a.capital or cfg.get("capital_jpy") or 1_000_000)
+    cfg["start"] = a.start or _dt.date.today().isoformat()
+    cfg["unified"] = {"broker": "rakuten", "position_pct": a.position_pct, "max_positions": a.max_positions,
+                      "max_position_pct": max(0.34, a.position_pct),
+                      "stock_markets": [m.strip().upper() for m in a.stock_markets.split(",") if m.strip()],
+                      "core": core, "core_index": {t: ("JP" if t == "1329.T" or t == "1306.T" else "US") for t in core},
+                      "core_mode": a.core_mode, "universe": {"JP": "broad", "US": "broad"}}
+    write_json(paths.home() / SIM_FILE, cfg)
+    print(f"已改为一个账户模式：¥{cfg['capital_jpy']:,.0f}，个股 {a.max_positions}×{a.position_pct:.0%}"
+          f"（{'+'.join(cfg['unified']['stock_markets'])}），闲置资金 {core}（{a.core_mode}）。下一次 sim-day 生效。")
+    return 0
+
+
 def _archive_market(m: str, reason: str):
     """把一个分仓的模拟盘状态（持仓 / 现金 / 挂单 / 风控基准 / 自动 HALT）和它的流水行移到
     var/archive/<日期>_<市场>/，之后该分仓从 initial_cash 重新开始。持仓簿里只移走该分仓持有的票。"""
@@ -1376,6 +1409,17 @@ def main(argv=None) -> int:
                     help="收盘后日线流程时刻 JST（默认 15:40；立花 16:45 —— 15:30～16:30 不受理注文）")
     dm.add_argument("--once", action="store_true", help="只跑一轮就退出（测试用）")
     dm.set_defaults(func=cmd_daemon)
+
+    su = sub.add_parser("sim-unify", help="模拟盘改为一个账户（楽天，日元 + 美元；日本株 + 美股 + 东证 ETF 一起配）")
+    su.add_argument("--capital", type=float, default=None, help="总资金（日元），默认沿用 capital_jpy")
+    su.add_argument("--stock-markets", default="JP,US", help="个股参与统一排名的市场")
+    su.add_argument("--core", default="1329.T:0.5,1655.T:0.5", help="闲置资金的东证 ETF 与权重")
+    su.add_argument("--core-mode", default="split", choices=["split", "follow"])
+    su.add_argument("--position-pct", type=float, default=0.25)
+    su.add_argument("--max-positions", type=int, default=4)
+    su.add_argument("--start", default=None)
+    su.add_argument("--force", action="store_true")
+    su.set_defaults(func=cmd_sim_unify)
 
     jq = sub.add_parser("jquants-check", help="J-Quants 接入检查（需环境变量 JQUANTS_API_KEY；不打印キー）")
     jq.add_argument("--plan", default=None, choices=["free", "light", "standard", "premium"],

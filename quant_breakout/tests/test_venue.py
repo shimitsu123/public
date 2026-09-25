@@ -79,3 +79,24 @@ def test_sim_tier_venue_change_requires_reset_and_archives_old_sleeve():
     assert list(pd.read_csv(paths.out_dir() / "journal.csv", encoding="utf-8-sig")["market"]) == ["JP"]
     assert list(pd.read_csv(arch / "journal.csv", encoding="utf-8-sig")["market"]) == ["US"]
     assert set(read_json(paths.state_dir() / "position_book.json")) == {"7203.T"}
+
+
+def test_sim_unify_archives_sleeves_and_writes_one_account_config():
+    import run
+    write_json(paths.home() / "sim.json", {"start": "2026-09-24", "end": "2026-12-24", "capital_jpy": 1_000_000,
+               "markets": ["JP", "US"], "jp": {"initial_cash": 1_000_000}, "us": {"initial_cash": 1_000_000}})
+    write_json(paths.state_dir() / "paper_state_JP.json", {"cash": 1_000_000, "positions": {}, "pending": [{"ticker": "1329.T"}]})
+    pd.DataFrame([{"date": "2026-09-24", "market": "JP", "bar_date": "2026-09-24", "equity": 1, "cash": 1}]
+                 ).to_csv(paths.out_dir() / "journal.csv", index=False, encoding="utf-8-sig")
+    ns = argparse.Namespace(capital=None, stock_markets="JP,US", core="1329.T:0.5,1655.T:0.5", core_mode="split",
+                            position_pct=0.25, max_positions=4, start="2026-09-28", force=False)
+    assert run.cmd_sim_unify(ns) == 0
+    cfg = read_json(paths.home() / "sim.json")
+    u = cfg["unified"]
+    assert cfg["mode"] == "unified" and cfg["capital_jpy"] == 1_000_000 and cfg["start"] == "2026-09-28"
+    assert u["core"] == {"1329.T": 0.5, "1655.T": 0.5} and u["core_index"] == {"1329.T": "JP", "1655.T": "US"}
+    assert u["stock_markets"] == ["JP", "US"] and u["broker"] == "rakuten"
+    assert not (paths.state_dir() / "paper_state_JP.json").exists()
+    assert run.cmd_sim_unify(ns) == 2                                    # 已是一个账户模式：不加 --force 不重开
+    c = run._unified_cfg(cfg)
+    assert c.fx_before_jp_open and c.fx_spread_yen == 0.03 and c.max_positions == 4

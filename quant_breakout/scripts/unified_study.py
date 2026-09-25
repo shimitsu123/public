@@ -16,6 +16,10 @@
   年化差 < 0.5pp 取 Calmar 高者。另报告「加美股个股」（S1 − S0）在每种闲置资金方案下的差。
 个股部分有幸存者偏差（偏乐观，两种个股范围都有）；指数部分没有。
 输出 var/out/unified_study.md / .json / .csv。
+
+运行后修订（2026-09-25，只改比较精度，规则不变）：第一次运行拿四舍五入到 0.01 的回撤去比较，
+S0C2 的 20 年回撤精确值 −35.0011% 显示成 −35.0% 而「通过」。规则原文是「≥ −35%」，改用未四舍五入的值比较；
+按四舍五入值的判定（第一次运行的结果）也一并输出（pick_rounded），不隐藏。
 """
 from __future__ import annotations
 
@@ -60,6 +64,16 @@ def spx_jpy_on_jp_days(spx: pd.DataFrame, fx: pd.Series, jp_days: pd.DatetimeInd
     fxp = fx.reindex(jp_days.union(fx.index)).ffill().shift(1).reindex(jp_days)
     c = (us_prev * fxp).dropna()
     return pd.DataFrame({"Open": c, "High": c, "Low": c, "Close": c, "Volume": 1e9}, index=c.index)
+
+
+def choose(df: pd.DataFrame, dd: str) -> str | None:
+    """事先规则：20 年回撤 ≥ −35% 且 5 年回撤 ≥ −30% 里取 20 年年化最高；年化差 < 0.5pp 取 Calmar 高者。"""
+    ok = df[(df[f"w20{dd}"] >= -35.0) & (df[f"w5{dd}"] >= -30.0)]
+    if ok.empty:
+        return None
+    cand = ok[ok["w20_cagr"] >= ok["w20_cagr"].max() - 0.5].copy()
+    cand["calmar_exact"] = cand["w20_cagr"] / cand[f"w20{dd}"].abs()
+    return str(cand.sort_values("calmar_exact", ascending=False).iloc[0]["scheme"])
 
 
 def main() -> int:
@@ -111,7 +125,9 @@ def main() -> int:
                 ue = UnifiedEngine(use, cfg, params, ex, {t: ccost[t] for t in core}, fx=fx, entry_mult=em, bear=bear)
                 r = ue.run(start=start)
                 mt, tr = r.metrics, r.trades[r.trades["reason"] != "end"]
+                dd_exact = float((r.equity / r.equity.cummax() - 1).min() * 100)   # 不四舍五入，判定用
                 row.update({f"{wname}_cagr": mt.get("cagr_pct"), f"{wname}_dd": mt.get("max_dd_pct"),
+                            f"{wname}_dd_exact": dd_exact,
                             f"{wname}_calmar": mt.get("calmar"),
                             f"{wname}_jp_trades": int((tr["market"] == "JP").sum()),
                             f"{wname}_us_trades": int((tr["market"] == "US").sum()),
@@ -135,16 +151,15 @@ def main() -> int:
         cdesc = " + ".join(f"{t.split('.')[0]}×{w:g}" for t, w in r["core"].items()) + ("（跟随牛市）" if r["mode"] == "follow" else "")
         say(f"| {r['scheme']} | {r['stocks']} | {cdesc} | {r['w20_cagr']}% | {r['w20_dd']}% | {r['w20_calmar']} | "
             f"{r['w5_cagr']}% | {r['w5_dd']}% | {r['w20_jp_trades']} / {r['w20_us_trades']} / {r['w20_fx']} |")
-    ok = df[(df["w20_dd"] >= -35.0) & (df["w5_dd"] >= -30.0)]
-    if ok.empty:
-        pick = None
-        say("\n判定：没有方案满足回撤约束")
-    else:
-        top = ok["w20_cagr"].max()
-        cand = ok[ok["w20_cagr"] >= top - 0.5].copy()
-        cand["calmar_exact"] = cand["w20_cagr"] / cand["w20_dd"].abs()
-        pick = cand.sort_values("calmar_exact", ascending=False).iloc[0]["scheme"]
-        say(f"\n判定（事先规则）：{pick}")
+    pick, pick_rounded = choose(df, "_dd_exact"), choose(df, "_dd")
+    say(f"\n判定（事先规则，回撤按精确值比较）：{pick or '没有方案满足回撤约束'}")
+    edge = df[(df["w20_dd"] >= -35.0) & (df["w5_dd"] >= -30.0)
+              & ~((df["w20_dd_exact"] >= -35.0) & (df["w5_dd_exact"] >= -30.0))]
+    for _, r in edge.iterrows():
+        say(f"压线：{r['scheme']} 20 年回撤精确值 {r['w20_dd_exact']:.4f}%、5 年 {r['w5_dd_exact']:.4f}%"
+            f"（表中四舍五入为 {r['w20_dd']}% / {r['w5_dd']}%），不满足约束")
+    if pick_rounded != pick:
+        say(f"按四舍五入后的回撤判定会是 {pick_rounded}（第一次运行的结果；精度修订见文件头）")
     say("\n加美股个股（S1 − S0）的 20 年年化差：" + "；".join(
         f"{ck} {float(df.loc[df.scheme == 'S1' + ck, 'w20_cagr'].iloc[0]) - float(df.loc[df.scheme == 'S0' + ck, 'w20_cagr'].iloc[0]):+.2f}pp"
         for ck in CORES))
@@ -152,7 +167,7 @@ def main() -> int:
     fp = paths.out_dir() / "unified_study"
     df.drop(columns=["core"]).to_csv(f"{fp}.csv", index=False, encoding="utf-8-sig")
     Path(f"{fp}.md").write_text("\n".join(LINES) + "\n", encoding="utf-8")
-    Path(f"{fp}.json").write_text(json.dumps({"pick": pick, "rows": df.drop(columns=["core"]).to_dict("records")},
+    Path(f"{fp}.json").write_text(json.dumps({"pick": pick, "pick_rounded": pick_rounded, "rows": df.drop(columns=["core"]).to_dict("records")},
                                              ensure_ascii=False, indent=1, default=float), encoding="utf-8")
     return 0
 
