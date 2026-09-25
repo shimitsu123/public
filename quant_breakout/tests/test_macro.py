@@ -10,7 +10,7 @@ from qbreak import paths
 from qbreak.calendar_us import is_trading_day as us_td, next_trading_day as us_next
 from qbreak.config import BacktestConfig, StrategyParams
 from qbreak.engine import run_backtest
-from qbreak.macro import (WINDOW_KINDS, MacroEvent, MacroFeatures, MacroOverlay, blocked_fill_dates,
+from qbreak.macro import (EVENT_KINDS, WINDOW_KINDS, MacroEvent, MacroFeatures, MacroOverlay, blocked_fill_dates,
                           build_entry_mult, event_block, features_at, features_frame, load_events, load_overlay,
                           macro_mult, sector_mult, ticker_mults)
 from qbreak.sectors import SECTOR_JP, SECTOR_US, sector_of
@@ -111,6 +111,20 @@ def test_display_only_kinds_never_block():
     assert event_block("JP", dt.date(2026, 11, 4)) is None
     assert event_block("US", dt.date(2026, 10, 27)) is not None                # FOMC 照常
     assert set(WINDOW_KINDS) == {"FOMC", "BOJ", "CPI", "NFP"}
+
+
+def test_real_calendar_file_is_valid():
+    """var/macro_events.json（手动维护）：每条都能解析、类型已知、市场是 US / JP、同一天同类不重复；日报能显示每种类型的中文名。"""
+    from pathlib import Path
+    from qbreak.report_unified import _EV
+    raw = json.loads((Path(__file__).resolve().parents[1] / "var" / "macro_events.json").read_text(encoding="utf-8"))["events"]
+    keys = set()
+    for it in raw:
+        d = dt.date.fromisoformat(it["date"])
+        assert it["kind"] in EVENT_KINDS and it.get("home", "US") in ("US", "JP"), it
+        assert (d, it["kind"], it.get("home"), it.get("name")) not in keys, it
+        keys.add((d, it["kind"], it.get("home"), it.get("name")))
+    assert set(EVENT_KINDS) <= set(_EV)
 
 
 def test_load_overlay_age_and_types():

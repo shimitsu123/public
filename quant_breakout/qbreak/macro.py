@@ -277,6 +277,7 @@ HIST_BOJ = """2021-01-21 2021-03-19 2021-04-27 2021-06-18 2021-07-16 2021-09-22 
 
 
 WINDOW_KINDS = ("FOMC", "BOJ", "CPI", "NFP")      # 事件窗口（不开新仓）只认这 4 类；选举 / 财政期限等只在日报日程里展示
+EVENT_KINDS = WINDOW_KINDS + ("ELECTION", "POLITICS", "FISCAL", "TRADE", "OPEC", "SUMMIT", "TANKAN", "SQ", "OPEX", "INDEX")
 
 
 @dataclass
