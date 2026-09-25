@@ -1,7 +1,7 @@
 {
- "start": "2026-09-24",
+ "start": "2026-09-28",
  "end": "2026-12-24",
- "capital_jpy": 1000000,
+ "capital_jpy": 1000000.0,
  "markets": [
   "JP",
   "US"
@@ -23,7 +23,7 @@
   },
   "halt_dd_pct": 45.0,
   "tier": "aggressive",
-  "broker": "tachibana"
+  "broker": "rakuten"
  },
  "us": {
   "universe": "broad",
@@ -41,7 +41,7 @@
   },
   "halt_dd_pct": 45.0,
   "tier": "aggressive",
-  "broker": "tachibana",
+  "broker": "rakuten",
   "venue": "JP",
   "initial_cash": 1000000.0
  },
@@ -50,5 +50,28 @@
  "use_macro": true,
  "use_sector_tilt": true,
  "use_event_window": false,
- "regime_mode": "quant"
+ "regime_mode": "quant",
+ "mode": "unified",
+ "unified": {
+  "broker": "rakuten",
+  "position_pct": 0.25,
+  "max_positions": 4,
+  "max_position_pct": 0.34,
+  "stock_markets": [
+   "JP"
+  ],
+  "core": {
+   "1329.T": 0.5,
+   "1655.T": 0.5
+  },
+  "core_index": {
+   "1329.T": "JP",
+   "1655.T": "US"
+  },
+  "core_mode": "split",
+  "universe": {
+   "JP": "broad",
+   "US": "broad"
+  }
+ }
 }

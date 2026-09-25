@@ -293,6 +293,18 @@ def _exec_cfg(market: str, mc: dict | None = None) -> ExecConfig:
     return ExecConfig.for_market(market, broker_of(market, mc))
 
 
+def _refuse_unified(a) -> bool:
+    """sim.json 是一个账户模式时，分市场的实盘 / 清单 / 守护进程会和模拟盘的规则不一致（例如闲置资金只买 1329）→ 拒绝运行；
+    --no-sim-config 时照旧按命令行参数。"""
+    if getattr(a, "no_sim_config", False) or (_sim_cfg() or {}).get("mode") != "unified":
+        return False
+    print("var/sim.json 是「一个账户」模式（楽天；个股与闲置资金的 ETF 在同一个账户里一起配）。分市场的实盘 / 清单 / 守护进程"
+          "会和模拟盘的规则不一致，所以不运行。\n"
+          "现在：按日报「今天要做的事」（var/out/report.html）操作；一个账户的实盘执行器（RSS 自动下日本单，换汇与美股单提示手动）是下一步。\n"
+          "确实要按旧的分市场规则：加 --no-sim-config，并在命令行给出 --cash / --position-pct / --core。")
+    return True
+
+
 def _live_setup(a, market: str, require_arm: bool):
     """实盘 / 半自动 / 守护进程的资金与风控：默认跟模拟盘同一档（var/sim.json 的市场段：股票池、仓位、
     个股开关、核心 ETF、宏观层、回撤 HALT），保证真钱照着模拟盘的规则走；--no-sim-config 或没有 sim.json
@@ -344,6 +356,8 @@ def _inputs(a, market: str, cfg: dict, mc: dict | None, dcfg, p, today):
 
 def _live_common(a, live: bool) -> int:
     from qbreak.trader import run_once
+    if _refuse_unified(a):
+        return 2
     market = a.market.upper()
     p = _params(a, market)
     cfg, mc, sizing, risk = _live_setup(a, market, require_arm=not a.no_arm)
@@ -383,6 +397,8 @@ def cmd_signal(a) -> int:
     默认按 var/sim.json 同一档（与模拟盘同规则）；成交后用 `run.py pos add/rm` 登记真实持仓。"""
     from qbreak.trader import operation_sheet, run_once
     from qbreak import notify
+    if _refuse_unified(a):
+        return 2
     market = a.market.upper()
     p = _params(a, market)
     cfg, mc, sizing, risk = _live_setup(a, market, require_arm=False)
@@ -1095,6 +1111,9 @@ def cmd_sim_unify(a) -> int:
         dst.mkdir(parents=True, exist_ok=True)
         up.replace(dst / up.name)
     core = {k: float(v) for k, v in (x.split(":") for x in a.core.split(",") if x)}
+    for sec in ("jp", "us"):                                 # 旧分仓段只剩宏观 / 状态层开关在用；券商统一为楽天
+        if isinstance(cfg.get(sec), dict):
+            cfg[sec]["broker"] = "rakuten"
     cfg["mode"] = "unified"
     cfg["capital_jpy"] = float(a.capital or cfg.get("capital_jpy") or 1_000_000)
     cfg["start"] = a.start or _dt.date.today().isoformat()
@@ -1187,6 +1206,8 @@ def cmd_report(a) -> int:
 def cmd_daemon(a) -> int:
     """盘中常驻：实时止损 + 逆指値维护 + 收盘后日线流程（默认按 var/sim.json 同一档）。"""
     from qbreak.daemon import Daemon, DaemonConfig
+    if _refuse_unified(a):
+        return 2
     market = a.market.upper()
     p = _params(a, market)
     cfg_, mc, sizing, risk = _live_setup(a, market, require_arm=not a.no_arm)

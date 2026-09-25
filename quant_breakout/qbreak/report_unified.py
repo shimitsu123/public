@@ -139,6 +139,9 @@ def render_unified_html(d: dict) -> str:
               else "只做日本个股，美股敞口经由东证 ETF；事先登记的研究显示 ¥100 万规模下加美股个股会拉低收益")
     return _PAGE.format(
         generated=escape(d["generated"]), bar=escape(str(d.get("bar_date") or "—")),
+        first="" if d.get("history") else (f'<div class="muted">一个账户模式已开启，还没有运行过；首次运行在 '
+                                           f'{escape(str((d.get("sim") or {}).get("start") or "下一个日本营业日"))} '
+                                           f'07:00 JST 前后（之后每个日本营业日早上一次）</div>'),
         equity=_money(d["equity_jpy"]), ret=d["ret_pct"], mdd=d["max_dd_pct"], cap=_money(d["capital_jpy"]),
         cash_jpy=_money(d.get("cash_jpy")), cash_usd=_money(d.get("cash_usd"), "USD"),
         usdjpy=f"{fx:.2f}" if fx else "—", todo=todo_html,
@@ -181,7 +184,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 .scroll{{overflow-x:auto}} dt{{font-weight:600;margin-top:6px}} dd{{margin:0 0 4px}}
 </style></head><body><main>
 <h1>模拟盘日报 · 一个账户（楽天，日元 + 美元）</h1>
-<div class="muted">生成 {generated}；数据截至 {bar}（日本收盘 + 美股收盘都已知的最后一天）</div>
+<div class="muted">生成 {generated}；数据截至 {bar}（日本收盘 + 美股收盘都已知的最后一天）</div>{first}
 <section class="card"><div class="kpi">
 <div><span class="muted">总权益（日元）</span><b>{equity}</b><span class="muted">起始 {cap}</span></div>
 <div><span class="muted">累计</span><b>{ret}%</b><span class="muted">最大回撤 {mdd}%</span></div>

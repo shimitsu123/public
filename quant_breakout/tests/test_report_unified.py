@@ -57,3 +57,10 @@ def test_sim_day_after_end_only_rebuilds_report():
     assert run.cmd_sim_day(argparse.Namespace()) == 0          # 不取行情、不推进状态
     assert (paths.out_dir() / "report.html").exists()
     assert read_json(paths.state_dir() / "unified_state.json")["last_date"] == "2026-09-25"
+
+
+def test_report_before_first_run_says_when_it_starts():
+    write_json(paths.home() / "sim.json", {"mode": "unified", "start": "2026-09-28", "end": "2026-12-24",
+                                           "capital_jpy": 1_000_000})
+    html = write_unified_report().read_text(encoding="utf-8")
+    assert "还没有运行过" in html and "2026-09-28" in html and "¥1,000,000" in html

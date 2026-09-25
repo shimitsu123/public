@@ -84,7 +84,8 @@ def test_sim_tier_venue_change_requires_reset_and_archives_old_sleeve():
 def test_sim_unify_archives_sleeves_and_writes_one_account_config():
     import run
     write_json(paths.home() / "sim.json", {"start": "2026-09-24", "end": "2026-12-24", "capital_jpy": 1_000_000,
-               "markets": ["JP", "US"], "jp": {"initial_cash": 1_000_000}, "us": {"initial_cash": 1_000_000}})
+               "markets": ["JP", "US"], "jp": {"initial_cash": 1_000_000, "broker": "tachibana"},
+               "us": {"initial_cash": 1_000_000, "broker": "tachibana", "venue": "JP"}})
     write_json(paths.state_dir() / "paper_state_JP.json", {"cash": 1_000_000, "positions": {}, "pending": [{"ticker": "1329.T"}]})
     pd.DataFrame([{"date": "2026-09-24", "market": "JP", "bar_date": "2026-09-24", "equity": 1, "cash": 1}]
                  ).to_csv(paths.out_dir() / "journal.csv", index=False, encoding="utf-8-sig")
@@ -96,7 +97,19 @@ def test_sim_unify_archives_sleeves_and_writes_one_account_config():
     assert cfg["mode"] == "unified" and cfg["capital_jpy"] == 1_000_000 and cfg["start"] == "2026-09-28"
     assert u["core"] == {"1329.T": 0.5, "1655.T": 0.5} and u["core_index"] == {"1329.T": "JP", "1655.T": "US"}
     assert u["stock_markets"] == ["JP", "US"] and u["broker"] == "rakuten"
+    assert cfg["jp"]["broker"] == cfg["us"]["broker"] == "rakuten"
     assert not (paths.state_dir() / "paper_state_JP.json").exists()
     assert run.cmd_sim_unify(ns) == 2                                    # 已是一个账户模式：不加 --force 不重开
     c = run._unified_cfg(cfg)
     assert c.fx_before_jp_open and c.fx_spread_yen == 0.03 and c.max_positions == 4
+
+
+def test_per_market_live_signal_daemon_refuse_in_unified_mode(capsys):
+    import run
+    write_json(paths.home() / "sim.json", {"mode": "unified", "start": "2026-09-28", "end": "2026-12-24",
+               "capital_jpy": 1_000_000, "jp": {"initial_cash": 1_000_000, "position_pct": 0.25, "max_positions": 4}})
+    ns = argparse.Namespace(market="JP", no_sim_config=False)
+    assert run.cmd_signal(ns) == 2 and run.cmd_daemon(ns) == 2 and run._live_common(ns, live=True) == 2
+    assert "一个账户" in capsys.readouterr().out
+    ns.no_sim_config = True                                             # 显式按命令行参数：不拦
+    assert run._refuse_unified(ns) is False
