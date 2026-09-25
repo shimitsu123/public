@@ -825,6 +825,8 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
         from qbreak.report_unified import write_unified_report
         print(f"模拟期已于 {cfg['end']} 结束；只重新生成报表。报表 {write_unified_report()}")
         return 0
+    if cfg.get("start") and now_jst().date() < _dt.date.fromisoformat(cfg["start"]):
+        return _unified_preview(a, cfg)                     # 开始日之前：只预览市场状态与候补队列，不推进账户、不下单
     blocked = _netcheck()
     provider = "csv" if any("yahoo" in h for h in blocked) else "yfinance"
     st_path = paths.state_dir() / "unified_state.json"
@@ -858,17 +860,9 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     ccost = {t: etf_cost(broker, t, market_of(t)) for t in ucfg.core}
     eng = UnifiedEngine(ind, ucfg, params, ex, ccost, fx=fx, bear=bear, state=state)
     today = _dt.date.today()
-    extras, plans = {}, {}
-    for m in ucfg.stock_markets:                          # 明天成交的新仓倍数：与原模拟盘同一套宏观 / 板块 / 状态层
-        mc = dict(cfg.get(m.lower()) or {})
-        mc["universe"] = (u.get("universe") or {}).get(m, "broad")
-        P = plans[m] = _plan_inputs(m, mc, cfg, dcfg, today, params[m])
+    extras, plans = _unified_extras(cfg, ucfg, u, dcfg, params, today)
+    for m, P in plans.items():                            # 明天成交的新仓倍数：与原模拟盘同一套宏观 / 板块 / 状态层
         eng.live_mult[m] = (P.scale, P.tmult or {}, P.block if isinstance(P.block, str) else None)
-        extras[m] = {"regime": {**P.reg.to_dict(), "bullbear": P.bb, "final_mult": P.scale, "regime_mode": P.mode,
-                                "fx": P.fx_info}, "macro": P.macro_info}
-    for m in sorted(set(ucfg.core_index.values()) - set(ucfg.stock_markets)):   # 只给核心 ETF 择时的指数：日报显示牛熊分界
-        extras[m] = {"regime": {"bullbear": _bullbear(m, dcfg)},
-                     "core_only": sorted(t for t, x in ucfg.core_index.items() if x == m)}
     eng.live_fx_ok = is_trading_day(now_jst().date())      # 今天白天（日本营业日）才有换汇窗口
     if any(params[m].earnings_blackout_days for m in params):  # 决算前 N 个交易日不进场（风控项，与原模拟盘相同）
         from qbreak.trader import _earnings_days
@@ -899,6 +893,53 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     todo = eng.todo(min(i_last, len(eng.gidx) - 1))
     eq = state.history[-1][1] if state.history else ucfg.capital_jpy
     usdjpy = float(state.history[-1][4]) if state.history and state.history[-1][4] else None
+    threat = _unified_watch_and_threat(extras, plans, data, params, dcfg, ucfg, eq, usdjpy)
+    out = {"date": today.isoformat(), "bar_date": state.last_date, "equity_jpy": eq, "cash_jpy": round(state.cash_jpy),
+           "cash_usd": round(state.cash_usd, 2), "todo": todo, "skipped": eng.skipped,
+           "positions": {t: {"market": p.market, "shares": p.shares, "entry_px": p.entry_px, "entry_date": p.entry_date,
+                             "stop_px": round(p.stop_px, 2)} for t, p in state.pos.items()},
+           "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker,
+           "threat": threat}
+    if usdjpy is None:                                       # 状态里没有汇率时（例如首日）：备用来源
+        out["usdjpy"], out["usdjpy_src"] = _usdjpy_any()
+    from qbreak.data import LAGGING
+    out["lagging"] = dict(LAGGING)                           # 重下载后仍落后于交易日历的行情（日报「数据完整性」列出）
+    write_json(paths.out_dir() / "unified_today.json", out)
+    write_json(paths.out_dir() / "last_run.json", {"at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "ok": True,
+                                                  "error": "", "markets_ok": ["ALL"], "blocked_hosts": blocked,
+                                                  "provider": provider, "mode": "unified"})
+    try:
+        from qbreak.report_unified import write_unified_report
+        hp = write_unified_report()
+        print(f"报表 {hp}")
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("统一日报生成失败：%s", e)
+    print(_json.dumps({k: out[k] for k in ("bar_date", "equity_jpy", "cash_jpy", "cash_usd", "todo")},
+                      ensure_ascii=False, indent=1, default=float))
+    return 0
+
+
+def _unified_extras(cfg: dict, ucfg, u: dict, dcfg, params: dict, today) -> tuple[dict, dict]:
+    """一个账户：各市场的交易输入（新仓倍数：状态层 / 宏观 / 板块 / 牛熊分界）与日报「市场状态」；
+    只给核心 ETF 择时的指数只算牛熊分界。返回 (extras, plans)。"""
+    extras, plans = {}, {}
+    for m in ucfg.stock_markets:
+        mc = dict(cfg.get(m.lower()) or {})
+        mc["universe"] = (u.get("universe") or {}).get(m, "broad")
+        P = plans[m] = _plan_inputs(m, mc, cfg, dcfg, today, params[m])
+        extras[m] = {"regime": {**P.reg.to_dict(), "bullbear": P.bb, "final_mult": P.scale, "regime_mode": P.mode,
+                                "fx": P.fx_info}, "macro": P.macro_info}
+    for m in sorted(set(ucfg.core_index.values()) - set(ucfg.stock_markets)):   # 只给核心 ETF 择时的指数：日报显示牛熊分界
+        extras[m] = {"regime": {"bullbear": _bullbear(m, dcfg)},
+                     "core_only": sorted(t for t, x in ucfg.core_index.items() if x == m)}
+    return extras, plans
+
+
+def _unified_watch_and_threat(extras: dict, plans: dict, data: dict, params: dict, dcfg, ucfg, eq: float,
+                              usdjpy: float | None) -> dict:
+    """候补队列（条件就绪度，不是收益预测；「买得起」按一个名额的预算）+ 宏观顺风度 + 大事件威胁指数（只展示）。
+    extras 就地加 watchlist；返回威胁指数快照。"""
+    from qbreak.utils import write_json
     ti, fit = None, None
     try:                                                     # 宏观数据下载一次：威胁指数 + 候补队列的顺风度（都只作参考）
         from qbreak.sensitivity import current_fit, load_ext_prices
@@ -912,35 +953,81 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
             fit = current_fit({t: data[t]["Close"] for t in plans["JP"].uni if t in data}, ti)
     except Exception as e:                                   # noqa: BLE001
         log.warning("宏观顺风度计算失败（不影响交易）：%s", e)
-    for m, P in plans.items():                           # 候补队列（条件就绪度，不是收益预测）；「买得起」按一个名额的预算
+    for m, P in plans.items():
         budget = eq * ucfg.position_pct / ((usdjpy or 150.0) if m == "US" else 1.0)
         extras[m]["watchlist"] = _scan_market(P.uni, params[m], m, dcfg, budget, P.idx_close, P.macro_info,
                                               fit=fit if m == "JP" else None)[:15]
-    out = {"date": today.isoformat(), "bar_date": state.last_date, "equity_jpy": eq, "cash_jpy": round(state.cash_jpy),
-           "cash_usd": round(state.cash_usd, 2), "todo": todo, "skipped": eng.skipped,
-           "positions": {t: {"market": p.market, "shares": p.shares, "entry_px": p.entry_px, "entry_date": p.entry_date,
-                             "stop_px": round(p.stop_px, 2)} for t, p in state.pos.items()},
-           "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker}
+        if not extras[m]["watchlist"]:
+            log.warning("[%s] 候补队列为空（股票池 %d 只）：行情取不到或生成失败", m, len(P.uni))
     try:                                                     # 大事件威胁指数：只展示，不参与交易
         from qbreak.threat import build, load_inputs, snapshot
         ti = ti if ti is not None else load_inputs()
-        out["threat"] = snapshot(build(ti), readings=_threat_readings(ti))
-        write_json(paths.out_dir() / "threat_today.json", out["threat"])
+        threat = snapshot(build(ti), readings=_threat_readings(ti))
+        write_json(paths.out_dir() / "threat_today.json", threat)
     except Exception as e:                                   # noqa: BLE001
         log.warning("威胁指数计算失败（不影响交易）：%s", e)
-        out["threat"] = {"error": str(e)[:200]}
+        threat = {"error": str(e)[:200]}
+    return threat
+
+
+def _usdjpy_any() -> tuple[float | None, str | None]:
+    """USD/JPY 的备用来源（依次）：Yahoo（JPY=X）→ FRED DEXJPUS → var/macro.json（市场风险报告）。都没有 → (None, None)。"""
+    try:
+        v, d = _fx_usdjpy()
+        return round(float(v), 3), f"Yahoo {d}"
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("USD/JPY：Yahoo 取不到（%s），改用 FRED", e)
+    try:
+        from qbreak import factors
+        s = factors.fred("DEXJPUS").dropna()
+        return round(float(s.iloc[-1]), 3), f"FRED {s.index[-1].date()}"
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("USD/JPY：FRED 取不到（%s），改用市场风险报告", e)
+    from qbreak.utils import read_json
+    mj = read_json(paths.home() / "macro.json", {}) or {}
+    if mj.get("usdjpy"):
+        return float(mj["usdjpy"]), f"市场风险报告 {mj.get('as_of')}"
+    return None, None
+
+
+def _unified_preview(a, cfg: dict) -> int:
+    """模拟期开始（sim.json start）之前的日报：不读写账户状态、不下单；用最新收盘数据算市场状态、候补队列、USD/JPY 与
+    威胁指数，写 var/out/unified_today.json（preview = true）与日报，免得开始前日报一片空白，也免得提前开始模拟。"""
+    import datetime as _dt
+    from qbreak.data import load_universe
+    from qbreak.fees import broker_of
+    from qbreak.utils import write_json
+    ucfg = _unified_cfg(cfg)
+    u = cfg.get("unified") or {}
+    blocked = _netcheck()
+    provider = "csv" if any("yahoo" in h for h in blocked) else "yfinance"
+    dcfg = DataConfig(provider=provider, years=2, allow_synthetic=False).validate()
+    params = {m: _params(a, m) for m in ("JP", "US")}
+    today = _dt.date.today()
+    extras, plans = _unified_extras(cfg, ucfg, u, dcfg, params, today)
+    data = load_universe(sorted(plans["JP"].uni), dcfg) if "JP" in plans else {}
+    fx, fx_src = _usdjpy_any()
+    cap = float(ucfg.capital_jpy)
+    threat = _unified_watch_and_threat(extras, plans, data, params, dcfg, ucfg, cap, fx)
+    dates = {m: (e.get("regime") or {}).get("bullbear", {}).get("asof") for m, e in extras.items()}
+    out = {"preview": True, "date": today.isoformat(), "start": cfg["start"], "bar_date": None,
+           "data_dates": {m: v for m, v in sorted(dates.items()) if v}, "equity_jpy": cap, "cash_jpy": round(cap),
+           "cash_usd": 0.0, "usdjpy": fx, "usdjpy_src": fx_src, "todo": {}, "skipped": {}, "positions": {},
+           "core_units": {}, "extras": extras, "config": ucfg.to_dict(), "broker": broker_of("JP", u), "threat": threat}
+    from qbreak.data import LAGGING
+    out["lagging"] = dict(LAGGING)
     write_json(paths.out_dir() / "unified_today.json", out)
     write_json(paths.out_dir() / "last_run.json", {"at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "ok": True,
                                                   "error": "", "markets_ok": ["ALL"], "blocked_hosts": blocked,
-                                                  "provider": provider, "mode": "unified"})
-    try:
-        from qbreak.report_unified import write_unified_report
-        hp = write_unified_report()
-        print(f"报表 {hp}")
-    except Exception as e:                                   # noqa: BLE001
-        log.warning("统一日报生成失败：%s", e)
-    print(_json.dumps({k: out[k] for k in ("bar_date", "equity_jpy", "cash_jpy", "cash_usd", "todo")},
-                      ensure_ascii=False, indent=1, default=float))
+                                                  "provider": provider, "mode": "unified-preview"})
+    from qbreak.report_unified import write_unified_report
+    print(f"开始日 {cfg['start']} 之前：只预览（不推进账户、不下单）。报表 {write_unified_report()}")
+    for m, e in extras.items():
+        bb = (e.get("regime") or {}).get("bullbear", {})
+        print(f"[{m}] 牛熊分界 {bb.get('state')}（数据日 {bb.get('asof')}）"
+              + ("" if e.get("core_only") else f"；候补队列 {len(e.get('watchlist') or [])} 只"))
+    if LAGGING:
+        print("行情落后（已重下载仍缺最近交易日）：" + "、".join(f"{t} {v['last']}（应有 {v['expected']}）" for t, v in LAGGING.items()))
     return 0
 
 
@@ -1307,6 +1394,11 @@ def cmd_bullbear(a) -> int:
 def cmd_report(a) -> int:
     from qbreak.report import write_report
     cfg = _sim_cfg()
+    if cfg and cfg.get("mode") == "unified":                  # 一个账户模式：重出统一日报（不要被旧的分市场日报覆盖）
+        from qbreak.report_unified import write_unified_report
+        hp = write_unified_report()
+        print(f"报表 {hp}\n数据 {paths.out_dir() / 'report_data.json'}")
+        return 0
     hp, jp = write_report(cfg.get("markets") if cfg else [a.market.upper()])
     print(f"报表 {hp}\n数据 {jp}")
     return 0

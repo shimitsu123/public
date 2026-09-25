@@ -33,7 +33,9 @@ def test_jp_only_hides_fx_and_us_and_shows_core_index_and_watchlist():
     _write(["JP"])
     html = write_unified_report().read_text(encoding="utf-8")
     assert "日间 换汇" not in html and "美股开盘" not in html
-    assert "只用于核心 ETF 1655.T 的择时" in html and "6891.63" in html
+    assert "只用于核心 ETF 1655.T 的择时" in html and "转熊价位 6,891.6 pt" in html and "距翻转价位 +11.80%" in html
+    assert "转熊价位 55,673 円" in html and "明天新仓倍数 0.5 倍" in html and "98.0 分" in html          # 单位
+    assert "× 570 口" in html and "1655.T 50%" in html and "150.00 円/USD" in html
     assert "8801.T" in html and "即将" in html
     assert "只做日本个股" in html and "JST" in html
     rd = read_json(paths.out_dir() / "report_data.json")
@@ -68,7 +70,8 @@ def test_report_before_first_run_says_when_it_starts():
                                                        "core_index": {"1655.T": "US"}, "core_mode": "split"}})
     html = write_unified_report().read_text(encoding="utf-8")
     assert "还没有运行过" in html and "2026-09-28" in html and "¥1,000,000" in html
-    assert "个股 4×25%（只做日本个股" in html and "1655.T 1" in html and "None" not in html   # 规则取自 sim.json
+    assert "个股 4×25%（只做日本个股" in html and "1655.T 100%" in html and "None" not in html   # 规则取自 sim.json
+    assert "数据完整性：缺" in html and "模拟盘还没有运行过" in html and "胜率 —（还没有平仓）" in html
 
 
 def test_report_shows_threat_card_and_error():
@@ -93,18 +96,18 @@ def test_report_shows_threat_card_and_error():
     write_json(paths.out_dir() / "unified_today.json", td)
     html = write_unified_report().read_text(encoding="utf-8")
     assert "美股（S&amp;P500）：50 / 100" in html or "美股（S&P500）：50 / 100" in html
-    assert "17.5%" in html and "油价冲击 96" in html and "美联储议息" in html and "只有 3 次" in html
-    assert "其他观察因子（不计入指数）：金银比上升 88" in html and "地缘政治风险（GPR） 40" not in html   # 只列 ≥70 分位
+    assert "17.5%" in html and "油价冲击 96 分位" in html and "美联储议息" in html and "只有 3 次" in html
+    assert "其他观察因子（不计入指数）：金银比上升 88 分位" in html and "：50 / 100 分，20 日前 46 分" in html and "地缘政治风险（GPR） 40" not in html   # 只列 ≥70 分位
     assert "都在 70 分位以下" in html
     assert "另记录「现行 + 观察因素」8 个版本" in html
     assert "前瞻观察（日経两段都有效的 8 个因素" in html and "自身历史 82 分位" in html and "现在预警" in html and "金银比 + 商品波动 44" in html
-    assert "前瞻对照（只记录、未验证）：去掉曲线倒挂与油价冲击 49、因子调查组合 48、领域均衡 57" in html
-    assert "各经济领域现在的危险度" in html and "<td>科技周期</td><td class='n'>93</td><td>有帮助</td>" in html and "没帮助" in html
+    assert "前瞻对照（只记录、未验证）：去掉曲线倒挂与油价冲击 49 分、因子调查组合 48 分、领域均衡 57 分" in html
+    assert "各经济领域现在的危险度" in html and "<td>科技周期</td><td class='n'>93 分位</td><td>有帮助</td>" in html and "没帮助" in html
     assert "前瞻观察（金银比 + 商品波动" in html and "自身历史 97 分位" in html and "现在警戒" in html and "金银比 60 日 +8.2%" in html
     assert "之后 60 个交易日内跌 ≥10% 的概率：13%</b>（现行指数按 2005 年以来逐年校准折算；2005 年以来平均 14%；跌 ≥15%：6%，平均 6%）" in html
     assert "在样本外都没有稳定胜过现行等权，暂不采用；这个概率在样本外也不比直接用历史平均准" in html
     assert "概率：29%</b>（配比优化「L1 逻辑回归（稀疏）」，样本外 AUC 0.62" in html                    # 通过的方式：显示它与主要来源
-    assert "主要来源：等权相对市值加权下跌（RSP / SPY） 96" in html and html.count("暂不采用") == 1
+    assert "主要来源：等权相对市值加权下跌（RSP / SPY） 96 分位" in html and "商品波动 31.5%（年化）" in html and html.count("暂不采用") == 1
     td["threat"] = {"error": "FRED 不通"}
     write_json(paths.out_dir() / "unified_today.json", td)
     assert "暂不可用：FRED 不通" in write_unified_report().read_text(encoding="utf-8")
@@ -127,5 +130,86 @@ def test_report_commodity_sector_card():
         "A": {"jp_etf": {"1623.T": {"gold": [0.21, 2.5]}, "1632.T": {"gold": [-0.18, -2.1]}},
               "us_etf": {"GDX": {"gold": [1.78, 9.0]}, "KRE": {"gold": [-0.22, -2.2]}}}})
     html = write_unified_report().read_text(encoding="utf-8")
-    assert "商品 × 行业" in html and "钢铁·有色 +0.21*" in html and "金融（除银行） -0.18*" in html
-    assert "金矿股 +1.78*" in html and "地区银行 -0.22*" in html
+    assert "商品 × 行业" in html and "钢铁·有色 +0.21%*" in html and "金融（除银行） -0.18%*" in html
+    assert "金矿股 +1.78%*" in html and "地区银行 -0.22%*" in html
+
+
+def _sim_unified_jp():
+    write_json(paths.home() / "sim.json", {"mode": "unified", "start": "2026-09-28", "end": "2026-12-24",
+                                           "capital_jpy": 1_000_000,
+                                           "unified": {"stock_markets": ["JP"], "core": {"1655.T": 1.0},
+                                                       "core_index": {"1655.T": "US"}, "core_mode": "split"}})
+    return read_json(paths.home() / "sim.json")
+
+
+def test_sim_day_before_start_only_previews(monkeypatch):
+    import datetime as dt
+
+    import run
+    import qbreak.calendar_jp as cj
+    _sim_unified_jp()
+    monkeypatch.setattr(cj, "now_jst", lambda: dt.datetime(2026, 9, 25, 17, 0, tzinfo=cj.JST))
+    called = {}
+
+    def fake_preview(a, cfg):
+        called["start"] = cfg["start"]
+        return 0
+    monkeypatch.setattr(run, "_unified_preview", fake_preview)
+    assert run.cmd_sim_day(argparse.Namespace()) == 0 and called == {"start": "2026-09-28"}
+    assert not (paths.state_dir() / "unified_state.json").exists()                  # 开始日之前不推进账户
+
+
+def test_preview_fills_market_state_watchlist_cash_fx_with_units(monkeypatch):
+    from types import SimpleNamespace
+
+    import run
+    import qbreak.data
+    cfg = _sim_unified_jp()
+    bbj = {"state": "bull", "since": "2025-05-19", "days": 340, "flip_to": "bear", "level": 44000.0, "close": 45500.0,
+           "distance_pct": 3.41, "asof": "2026-09-25"}
+    bbu = {"state": "bull", "since": "2025-06-02", "days": 330, "flip_to": "bear", "level": 6190.2, "close": 6601.5,
+           "distance_pct": 6.64, "asof": "2026-09-24"}
+    extras = {"JP": {"regime": {"quant_label": "neutral", "above_ma200": True, "vol20_pct": 18.2, "dd252_pct": -4.1,
+                                "overlay_action": "减仓观察", "overlay_mult": 0.5, "overlay_as_of": "2026-09-24",
+                                "crash_prob": 15, "final_mult": 0.5, "bullbear": bbj}, "macro": {"fired": ["美债利率急升"]}},
+              "US": {"regime": {"bullbear": bbu}, "core_only": ["1655.T"]}}
+
+    def fake_watch(ex, pl, data, params, dcfg, ucfg, eq, fx):
+        ex["JP"]["watchlist"] = [{"ticker": "8801.T", "sector": "不动产", "status": "imminent", "score": 91.5, "close": 1501,
+                                  "affordable": True, "lot_cost": 150100, "tilt": 1.0}]
+        return {"error": "测试里不算"}
+    monkeypatch.setattr(run, "_netcheck", lambda: [])
+    monkeypatch.setattr(run, "_params", lambda a, m: None)
+    monkeypatch.setattr(run, "_unified_extras", lambda *a, **k: (extras, {"JP": SimpleNamespace(uni=["8801.T"])}))
+    monkeypatch.setattr(run, "_usdjpy_any", lambda: (149.25, "Yahoo 2026-09-25"))
+    monkeypatch.setattr(run, "_unified_watch_and_threat", fake_watch)
+    monkeypatch.setattr(qbreak.data, "load_universe", lambda t, c: {})
+    monkeypatch.setattr(qbreak.data, "LAGGING", {"^N225": {"last": "2026-09-18", "expected": "2026-09-25"},
+                                                 "7203.T": {"last": "2026-09-24", "expected": "2026-09-25"}})
+    assert run._unified_preview(argparse.Namespace(), cfg) == 0
+    td = read_json(paths.out_dir() / "unified_today.json")
+    assert td["preview"] and td["cash_jpy"] == 1_000_000 and td["cash_usd"] == 0 and td["usdjpy"] == 149.25
+    assert td["data_dates"] == {"JP": "2026-09-25", "US": "2026-09-24"} and td["todo"] == {}
+    assert not (paths.state_dir() / "unified_state.json").exists()
+    html = (paths.out_dir() / "report.html").read_text(encoding="utf-8")
+    assert "开始前的预览" in html and "日本 2026-09-25 收盘、美股 2026-09-24 收盘（开始前的预览）" in html
+    assert "8801.T" in html and "91.5 分" in html and "是（一手 ¥150,100）" in html
+    assert "149.25 円/USD（Yahoo 2026-09-25）" in html and "¥1,000,000" in html and "$0.00" in html
+    assert "明天新仓倍数 0.5 倍" in html and "判断层（市场风险报告 2026-09-24）：减仓观察（24 小时崩盘概率 15%，倍数 0.5 倍）" in html
+    assert "转熊价位 44,000 円，现价 45,500 円，距翻转价位 +3.41%" in html and "转熊价位 6,190.2 pt" in html
+    assert "20 日波动 18.2%（年化）" in html and "离一年高点 -4.1%" in html
+    assert "首次运行（2026-09-28 07:00 JST 前后）后给出当天要下的单" in html
+    assert "数据完整性：缺" in html and "大事件威胁指数：测试里不算" in html and "候补队列：空" not in html
+    rd = read_json(paths.out_dir() / "report_data.json")
+    assert rd["preview"] and rd["markets"]["JP"]["watchlist"][0]["ticker"] == "8801.T"
+    assert any("威胁指数" in x for x in rd["missing"]) and not any("USD/JPY" in x for x in rd["missing"])
+    assert "行情落后：^N225 最新 2026-09-18，应有 2026-09-25" in html and "行情落后：个股 1 只（例 7203.T" in html
+
+
+def test_report_command_rebuilds_unified_report_in_unified_mode():
+    import run
+    _write(["JP"])
+    write_json(paths.home() / "sim.json", dict(read_json(paths.home() / "sim.json"), mode="unified"))
+    (paths.out_dir() / "report.html").unlink(missing_ok=True)
+    assert run.cmd_report(argparse.Namespace(market="JP")) == 0
+    assert "一个账户" in (paths.out_dir() / "report.html").read_text(encoding="utf-8")     # 不是旧的分市场日报

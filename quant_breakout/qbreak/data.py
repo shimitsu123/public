@@ -256,20 +256,52 @@ def dump_csv(data: dict[str, pd.DataFrame]) -> int:
 
 
 # ────────────────────────── 对外入口 ──────────────────────────
+LAGGING: dict[str, dict] = {}      # 本进程里重下载后仍落后于「按日历应有的最新交易日」的标的：{代码: {"last", "expected"}}
+
+
+def _market_of(t: str) -> str | None:
+    """行情新鲜度检查用的市场：日本（.T、日経 / TOPIX 指数）、美国（无后缀代码、美股指数）；汇率 / 期货 / 其他交易所不查。"""
+    if t.endswith(".T") or t in ("^N225", "^TOPX", "^TPX"):
+        return "JP"
+    if "=" in t or "." in t:
+        return None
+    return "US"
+
+
+def behind(t: str, df: pd.DataFrame | None) -> tuple[str, str] | None:
+    """最新 K 线早于该市场按交易日历「现在应该已经拿到」的交易日 → (最新, 应有)；否则 None。"""
+    m = _market_of(t)
+    if m is None or df is None or not len(df):
+        return None
+    from .calendar_jp import now_jst
+    from .trader import expected_last_bar
+    exp = expected_last_bar(now_jst().date(), m)
+    last = pd.Timestamp(df.index[-1]).date()
+    return (str(last), str(exp)) if last < exp else None
+
+
 def load_universe(tickers: list[str], cfg: DataConfig | None = None,
                   use_cache: bool = True) -> dict[str, pd.DataFrame]:
     """返回 {ticker: OHLCV DataFrame}。失败的标的会被跳过并记录，
-    全部失败时抛异常（而不是像原版那样悄悄换成假数据继续跑）。"""
+    全部失败时抛异常（而不是像原版那样悄悄换成假数据继续跑）。
+    缓存除了有效期（TTL），还按交易日历查新鲜度：缺了应有的最近交易日（Yahoo 偶尔晚更新）→ 重新下载；
+    重下载失败时退回旧缓存，重下载后仍落后的记进 LAGGING（日报「数据完整性」会列出）。"""
     cfg = (cfg or DataConfig()).validate()
     out: dict[str, pd.DataFrame] = {}
     todo: list[str] = []
+    old: dict[str, pd.DataFrame] = {}
 
     for t in tickers:
         c = _read_cache(t, cfg.years, cfg.cache_ttl_hours) if use_cache else None
         if c is not None:
             try:
-                out[t] = validate_ohlcv(t, c, cfg)
-                continue
+                c = validate_ohlcv(t, c, cfg)
+                b = behind(t, c) if cfg.provider == "yfinance" else None
+                if b is None:
+                    out[t] = c
+                    continue
+                log.info("缓存落后 %s：最新 %s，应有 %s → 重新下载", t, *b)
+                old[t] = c
             except DataError as e:
                 log.warning("缓存数据不合格，重新下载: %s", e)
         todo.append(t)
@@ -300,6 +332,16 @@ def load_universe(tickers: list[str], cfg: DataConfig | None = None,
             except DataError as e:
                 log.error("跳过 %s：%s", t, e)
 
+    for t, c in old.items():                    # 重下载失败：用旧缓存（总比没有强），并记为落后
+        if t not in out:
+            log.warning("%s 重新下载失败，暂用旧缓存（最新 %s）", t, c.index[-1].date())
+            out[t] = c
+    for t in tickers:
+        b = behind(t, out.get(t))
+        if b:
+            LAGGING[t] = {"last": b[0], "expected": b[1]}
+        else:
+            LAGGING.pop(t, None)
     missing = [t for t in tickers if t not in out]
     if missing and cfg.allow_synthetic:
         log.warning("★★★ 以下标的改用【合成数据】，结果没有任何投资参考价值：%s", missing)

@@ -30,17 +30,22 @@ def build_unified_data() -> dict:
     sim = read_json(paths.home() / "sim.json", {}) or {}
     hist = st.get("history") or []
     cap = float(sim.get("capital_jpy") or 1_000_000)
-    eq = float(hist[-1][1]) if hist else cap
-    fx = float(hist[-1][4]) if hist else None
+    eq = float(hist[-1][1]) if hist else float(td.get("equity_jpy") or cap)
+    fx = float(hist[-1][4]) if hist and hist[-1][4] else (float(td["usdjpy"]) if td.get("usdjpy") else None)
     peak, mdd = cap, 0.0
     for h in hist:
         peak = max(peak, float(h[1]))
         mdd = min(mdd, float(h[1]) / peak - 1)
     trades = st.get("trades") or []
     wins = [t for t in trades if float(t.get("pnl_jpy") or 0) > 0]
-    return {"generated": now_jst().strftime("%Y-%m-%d %H:%M JST"), "mode": "unified", "sim": sim,
+    d = {"generated": now_jst().strftime("%Y-%m-%d %H:%M JST"), "mode": "unified", "sim": sim,
             "capital_jpy": cap, "equity_jpy": eq, "ret_pct": round((eq / cap - 1) * 100, 2), "max_dd_pct": round(mdd * 100, 2),
-            "cash_jpy": st.get("cash_jpy"), "cash_usd": st.get("cash_usd"), "usdjpy": fx, "bar_date": st.get("last_date"),
+            "cash_jpy": st.get("cash_jpy") if st else td.get("cash_jpy"),       # 开始前：预览给的初始现金
+            "cash_usd": st.get("cash_usd") if st else td.get("cash_usd"), "usdjpy": fx,
+            "usdjpy_src": "模拟盘状态" if hist and hist[-1][4] else td.get("usdjpy_src"),
+            "preview": bool(td.get("preview")) and not hist, "data_dates": td.get("data_dates") or {},
+            "lagging": td.get("lagging") or {},
+            "bar_date": st.get("last_date"),
             "positions": td.get("positions") or {}, "core_units": st.get("core_units") or {},
             "core_last": st.get("core_last") or {}, "todo": td.get("todo") or {}, "extras": td.get("extras") or {},
             "history": hist, "trades": trades[-30:], "fx_trades": (st.get("fx_trades") or [])[-15:],
@@ -58,7 +63,72 @@ def build_unified_data() -> dict:
             "hint": ("一个账户模式（楽天）：账户数值在顶层（equity_jpy / ret_pct / max_dd_pct / cash_jpy / cash_usd / positions / "
                      "core_units×core_last / todo / trades / core_trades / fx_trades / corp_log）；当日损益 = history 最后两行的权益差；"
                      "牛熊分界在 markets.JP.regime.bullbear（日経）与 markets.US.regime.bullbear（S&P500，只用于 1655 择时）；"
-                     "候补队列在 markets.JP.watchlist；大事件威胁指数在 threat（只展示，不参与交易）。")}
+                     "候补队列在 markets.JP.watchlist；大事件威胁指数在 threat（只展示，不参与交易）；"
+                     "missing = 日报应有而没取到的数据（项目 + 原因），汇报时逐项列出。")}
+    d["missing"] = missing_items(d)
+    return d
+
+
+_MNAME = {"JP": "日本（日経225）", "US": "美股（S&P500）"}
+
+
+def missing_items(d: dict) -> list[str]:
+    """日报应有而没取到的数据（项目：原因）。写在日报顶部；例行任务汇报时逐项列出，避免静默缺数据。"""
+    out = []
+    sim, cfg = d.get("sim") or {}, d.get("config") or {}
+    started, preview = bool(d.get("history")), bool(d.get("preview"))
+    if not started and not preview:
+        out.append(f"账户数值、市场状态、候补队列：模拟盘还没有运行过（开始日 {sim.get('start') or '—'}），开始前的预览也没有运行")
+    if started and not d.get("bar_date"):
+        out.append("数据截至日期：账户状态里没有")
+    if d.get("usdjpy") is None:
+        out.append("USD/JPY：账户状态、Yahoo、FRED、市场风险报告都没取到")
+    for key, label in (("cash_jpy", "日元现金"), ("cash_usd", "美元现金")):
+        if d.get(key) is None and (started or preview):
+            out.append(f"{label}：账户状态里没有")
+    ex = d.get("extras") or {}
+    if started or preview:
+        for m in list(cfg.get("stock_markets") or []) + sorted(set((cfg.get("core_index") or {}).values())):
+            e = ex.get(m) or {}
+            if not e:
+                out.append(f"{_MNAME.get(m, m)} 市场状态：没有算出")
+                continue
+            bb = (e.get("regime") or {}).get("bullbear") or {}
+            if bb.get("state") in (None, "unknown"):
+                out.append(f"{_MNAME.get(m, m)} 牛熊分界：{bb.get('note') or '指数行情取不到'}")
+            if m in (cfg.get("stock_markets") or []) and not e.get("watchlist"):
+                out.append(f"{_MNAME.get(m, m)} 候补队列：空（股票池行情取不到或生成失败，见运行日志）")
+    lag = d.get("lagging") or {}
+    idx = {k: v for k, v in lag.items() if k.startswith("^") or k in ((cfg.get("core") or {}))}
+    for k, v in idx.items():
+        out.append(f"行情落后：{k} 最新 {v['last']}，应有 {v['expected']}（已重新下载仍缺，指数 / 核心 ETF 相关判断按旧数据）")
+    stocks = sorted(k for k in lag if k not in idx)
+    if stocks:
+        out.append(f"行情落后：个股 {len(stocks)} 只（例 {'、'.join(stocks[:3])} 最新 {lag[stocks[0]]['last']}，"
+                   f"应有 {lag[stocks[0]]['expected']}），候补队列里这些股票用的是旧收盘")
+    t = d.get("threat") or {}
+    if not t or t.get("error"):
+        out.append(f"大事件威胁指数：{t.get('error') or '没有算出'}")
+    mr = read_json(paths.home() / "market_regime.json", {}) or {}
+    for m in ("JP", "US"):
+        if not (mr.get(m) or {}).get("action"):
+            out.append(f"{_MNAME[m]} 市场风险报告的判断层（行动四选一）：没取到（按量化层单独判断）")
+    ref = pd_date(d.get("data_dates", {}).get("JP")) or pd_date(d.get("bar_date")) or now_jst().date()
+    asof = pd_date(mr.get("as_of"))
+    if asof and (ref - asof).days > 4:
+        out.append(f"市场风险报告的判断层：已过期（{asof}，数据日 {ref}）")
+    mj = read_json(paths.home() / "macro.json", {}) or {}
+    nulls = [k for k in ("brent", "wti", "us10y", "us2y", "vix", "hy_oas_bp", "usdjpy", "jgb10y") if mj.get(k) is None]
+    if nulls:
+        out.append("宏观数值（市场风险报告）缺：" + "、".join(nulls))
+    return out
+
+
+def pd_date(v) -> dt.date | None:
+    try:
+        return dt.date.fromisoformat(str(v)[:10]) if v else None
+    except ValueError:
+        return None
 
 
 _STATUS = {"triggered": "已触发", "imminent": "即将", "watch": "观察", "far": "远"}
@@ -68,6 +138,29 @@ def _money(v, ccy="JPY") -> str:
     if v is None:
         return "—"
     return f"${float(v):,.2f}" if ccy == "USD" else f"¥{float(v):,.0f}"
+
+
+def _fxr(v) -> str:
+    """汇率带单位。"""
+    return "—" if not v else f"{float(v):.2f} 円/USD"
+
+
+def _lvl(v, market: str) -> str:
+    """指数点位带单位：日経平均按「円」，S&P500 按「pt」。"""
+    if v is None:
+        return "—"
+    return f"{float(v):,.0f} 円" if market == "JP" else f"{float(v):,.1f} pt"
+
+
+def _pct(v, nd: int = 1, sign: bool = False) -> str:
+    if v is None or v != v:
+        return "—"
+    return f"{float(v):+.{nd}f}%" if sign else f"{float(v):.{nd}f}%"
+
+
+_QLAB = {"risk_on": "偏多（站上 200 日线、波动低、回撤小）", "neutral": "中性", "risk_off": "偏空（跌破 200 日线 / 回撤大 / 波动大）",
+         "unknown": "未知"}
+_BB = {"bull": "牛市", "bear": "熊市", "unknown": "未知"}
 
 
 def _spark(hist: list, w: int = 640, h: int = 120) -> str:
@@ -80,6 +173,22 @@ def _spark(hist: list, w: int = 640, h: int = 120) -> str:
     return (f'<svg viewBox="0 0 {w} {h}" class="spark" role="img" aria-label="权益曲线">'
             f'<polyline fill="none" stroke="var(--accent)" stroke-width="2" points="{pts}"/></svg>'
             f'<div class="muted">{escape(hist[0][0])} ～ {escape(hist[-1][0])}：{_money(ys[0])} → {_money(ys[-1])}</div>')
+
+
+def _bar_txt(d: dict) -> str:
+    if d.get("bar_date"):
+        return f"{d['bar_date']}（日本收盘 + 美股收盘都已知的最后一天）"
+    dd = d.get("data_dates") or {}
+    if dd:
+        return "、".join(f"{'日本' if m == 'JP' else '美股'} {v} 收盘" for m, v in dd.items() if v) + "（开始前的预览）"
+    return "—（还没有运行过）"
+
+
+def _missing_html(items: list[str]) -> str:
+    if not items:
+        return '<div class="muted">数据完整性：日报需要的数据都取到了</div>'
+    return ("<div class=\"card warn\"><b>数据完整性：缺 " + str(len(items)) + " 项</b><ul>"
+            + "".join(f"<li>{escape(x)}</li>" for x in items) + "</ul></div>")
 
 
 def render_unified_html(d: dict) -> str:
@@ -96,11 +205,14 @@ def render_unified_html(d: dict) -> str:
                 arrow = "日元 → 美元" if o["dir"] == "JPY>USD" else "美元 → 日元"
                 out.append(f"<li>{arrow}：{_money(o['usd'], 'USD')}（约 {_money(o.get('jpy_est'))}）</li>")
                 continue
-            lim = f"，指値 {o['limit']:,}" if o.get("limit") else ""
+            ccy = "USD" if market == "US" else "JPY"
+            lim = f"，指値 {_money(o['limit'], ccy)}" if o.get("limit") else ""
             why = f"（{escape(str(o.get('reason')))}）" if o.get("reason") else ""
-            out.append(f"<li><b>{'买入' if o['side'] == 'BUY' else '卖出'}</b> {escape(o['ticker'])} × {o['qty']:,}"
+            unit = "口" if str(o.get("ticker", "")).startswith(("1655", "1329", "2558")) else "股"
+            out.append(f"<li><b>{'买入' if o['side'] == 'BUY' else '卖出'}</b> {escape(o['ticker'])} × {o['qty']:,} {unit}"
                        f" {escape(o.get('type', ''))}{lim}{why}</li>")
-        return "".join(out) or '<li class="muted">无</li>'
+        return "".join(out) or (f'<li class="muted">首次运行（{escape(str(d.get("sim", {}).get("start")))} 07:00 JST 前后）后给出当天要下的单'
+                                '（现在是开始前的预览，不下单）</li>' if d.get("preview") else '<li class="muted">无</li>')
 
     sen = round(float(cfg.get("fx_spread_yen", 0.25)) * 100)
     todo_html = f'<h3>09:00 日本开盘（寄付）</h3><ul>{rows(td.get("JP", []), "JP")}</ul>'
@@ -111,54 +223,72 @@ def render_unified_html(d: dict) -> str:
     pos_rows = []
     for t, p in (d.get("positions") or {}).items():
         ccy = "USD" if p["market"] == "US" else "JPY"
-        pos_rows.append(f"<tr><td>{escape(t)}</td><td>{'美股' if ccy == 'USD' else '日本'}</td><td class='n'>{p['shares']:,}</td>"
+        pos_rows.append(f"<tr><td>{escape(t)}</td><td>{'美股' if ccy == 'USD' else '日本'}</td><td class='n'>{p['shares']:,} 股</td>"
                         f"<td class='n'>{_money(p['entry_px'], ccy)}</td><td class='n'>{_money(p['stop_px'], ccy)}</td>"
                         f"<td>{escape(p['entry_date'])}</td></tr>")
     core_rows = []
     for t, u in (d.get("core_units") or {}).items():
         px = float((d.get("core_last") or {}).get(t) or 0)
-        core_rows.append(f"<tr><td>{escape(t)}</td><td class='n'>{int(u):,}</td><td class='n'>{_money(px)}</td>"
+        core_rows.append(f"<tr><td>{escape(t)}</td><td class='n'>{int(u):,} 口</td><td class='n'>{_money(px)}</td>"
                          f"<td class='n'>{_money(int(u) * px)}</td></tr>")
     tr_rows = "".join(
         f"<tr><td>{escape(t['exit_date'])}</td><td>{escape(t['ticker'])}</td><td>{'美股' if t['market'] == 'US' else '日本'}</td>"
-        f"<td class='n'>{t['shares']:,}</td><td class='n {'pos' if float(t['pnl_jpy']) > 0 else 'neg'}'>{_money(t['pnl_jpy'])}</td>"
+        f"<td class='n'>{t['shares']:,} 股</td><td class='n {'pos' if float(t['pnl_jpy']) > 0 else 'neg'}'>{_money(t['pnl_jpy'])}</td>"
         f"<td>{escape(t['reason'])}</td></tr>" for t in reversed(d.get("trades") or []))
     fx_rows = "".join(f"<tr><td>{escape(x[0])}</td><td>{'日元→美元' if x[1] == 'JPY>USD' else '美元→日元'}</td>"
-                      f"<td class='n'>{_money(x[2], 'USD')}</td><td class='n'>{x[3]}</td></tr>"
+                      f"<td class='n'>{_money(x[2], 'USD')}</td><td class='n'>{_fxr(x[3])}</td></tr>"
                       for x in reversed(d.get("fx_trades") or []))
     mk, watch = [], []
     for m, e in (d.get("extras") or {}).items():
         r = e.get("regime") or {}
         bb = r.get("bullbear") or {}
-        name = "日本（日経225）" if m == "JP" else "美股（S&P500）"
-        line = (f"牛熊分界 {escape(str(bb.get('state', '?')))}（自 {escape(str(bb.get('since', '?')))}，"
-                f"翻转价位 {bb.get('level')}，距现价 {bb.get('distance_pct')}%）")
+        name = _MNAME.get(m, m)
+        if bb.get("state") in ("bull", "bear"):
+            flip = bb.get("flip_to") or ("bear" if bb["state"] == "bull" else "bull")
+            days = f"，已 {bb['days']} 个交易日" if bb.get("days") is not None else ""
+            line = (f"牛熊分界 {_BB[bb['state']]}（自 {escape(str(bb.get('since')))}{days}；"
+                    f"{'转熊' if flip == 'bear' else '转牛'}价位 {_lvl(bb.get('level'), m)}，"
+                    + (f"现价 {_lvl(bb['close'], m)}，" if bb.get("close") is not None else "")
+                    + f"距翻转价位 {_pct(bb.get('distance_pct'), 2, True)}"
+                    + (f"；数据日 {escape(str(bb['asof']))}" if bb.get("asof") else "") + "）")
+        else:
+            line = f"牛熊分界 未知（{escape(str(bb.get('note') or '指数行情取不到'))}）"
         if e.get("core_only"):
             mk.append(f"<dt>{name}</dt><dd>{line}；只用于核心 ETF {escape('、'.join(e['core_only']))} 的择时（牛市持有、熊市那份留现金）</dd>")
             continue
         fired = "；".join((e.get("macro") or {}).get("fired") or []) or "无"
-        mk.append(f"<dt>{name}</dt><dd>状态 {escape(str(r.get('label', '')))}；新仓倍数 ×{r.get('final_mult')}；{line}；"
+        q = r.get("quant_label") or "unknown"
+        qd = (f"（{'站上' if r.get('above_ma200') else '跌破'} 200 日线，20 日波动 {_pct(r.get('vol20_pct'))}（年化），"
+              f"离一年高点 {_pct(r.get('dd252_pct'), 1, True)}）") if r.get("vol20_pct") is not None else ""
+        ov = (f"；判断层（市场风险报告 {escape(str(r.get('overlay_as_of') or '—'))}）：{escape(str(r.get('overlay_action')))}"
+              f"（24 小时崩盘概率 {_pct(r.get('crash_prob'), 0)}，倍数 {r.get('overlay_mult')} 倍）") if r.get("overlay_action") else "；判断层：没取到"
+        mk.append(f"<dt>{name}</dt><dd>量化层 {_QLAB.get(q, escape(q))}{qd}{ov}；<b>明天新仓倍数 {r.get('final_mult')} 倍</b>；{line}；"
                   f"宏观触发：{escape(fired)}</dd>")
         ccy = "USD" if m == "US" else "JPY"
         for i, w in enumerate((e.get("watchlist") or [])[:10], 1):
             tilt = w.get("tilt")
+            lot = f"（一手 {_money(w.get('lot_cost'), ccy)}）" if w.get("lot_cost") else ""
             watch.append(f"<tr><td>{i}</td><td>{escape(str(w.get('ticker')))}</td><td class='muted'>{escape(str(w.get('sector') or '—'))}</td>"
-                         f"<td>{_STATUS.get(w.get('status'), escape(str(w.get('status'))))}</td><td class='n'>{w.get('score')}</td>"
-                         f"<td class='n'>{_money(w.get('close'), ccy)}</td><td>{'是' if w.get('affordable') else '否'}</td>"
-                         f"<td class='muted'>{'—' if tilt is None or tilt >= 1 else '×' + str(tilt)}</td>"
+                         f"<td>{_STATUS.get(w.get('status'), escape(str(w.get('status'))))}</td><td class='n'>{float(w.get('score') or 0):.1f} 分</td>"
+                         f"<td class='n'>{_money(w.get('close'), ccy)}</td><td>{'是' if w.get('affordable') else '否'}{lot}</td>"
+                         f"<td class='muted'>{'—' if tilt is None or tilt >= 1 else f'{tilt:g} 倍'}</td>"
                          f"<td class='muted'>{escape(str(w.get('fit_tier') or '—'))}"
                          f"{('：' + escape(w['fit_why'])) if w.get('fit_why') else ''}</td></tr>")
-    core_desc = " / ".join(f"{t} {w:g}" for t, w in (cfg.get("core") or {}).items())
+    core_desc = " / ".join(f"{t} {float(w) * 100:g}%" for t, w in (cfg.get("core") or {}).items())
     stocks = ("日本 + 美股合计、一起排名：日本 → 美元已够的美股 → 要换汇的美股" if with_us
               else "只做日本个股，美股敞口经由东证 ETF；事先登记的研究显示 ¥100 万规模下加美股个股会拉低收益")
     return _PAGE.format(
-        generated=escape(d["generated"]), bar=escape(str(d.get("bar_date") or "—")),
-        first="" if d.get("history") else (f'<div class="muted">一个账户模式已开启，还没有运行过；首次运行在 '
-                                           f'{escape(str((d.get("sim") or {}).get("start") or "下一个日本营业日"))} '
-                                           f'07:00 JST 前后（之后每个日本营业日早上一次）</div>'),
+        generated=escape(d["generated"]), bar=escape(_bar_txt(d)), missing=_missing_html(d.get("missing") or []),
+        first="" if d.get("history") else (
+            f'<div class="muted"><b>开始前的预览</b>：模拟期 {escape(str((d.get("sim") or {}).get("start")))} 开始，现在还没有交易；'
+            '下面的市场状态、候补队列、汇率都用最新收盘数据计算（不下单、不动账户）。首次运行在开始日 07:00 JST 前后'
+            '（之后每个日本营业日早上一次）</div>' if d.get("preview") else
+            f'<div class="muted">一个账户模式已开启，还没有运行过；首次运行在 '
+            f'{escape(str((d.get("sim") or {}).get("start") or "下一个日本营业日"))} '
+            f'07:00 JST 前后（之后每个日本营业日早上一次）</div>'),
         equity=_money(d["equity_jpy"]), ret=d["ret_pct"], mdd=d["max_dd_pct"], cap=_money(d["capital_jpy"]),
         cash_jpy=_money(d.get("cash_jpy")), cash_usd=_money(d.get("cash_usd"), "USD"),
-        usdjpy=f"{fx:.2f}" if fx else "—", todo=todo_html,
+        usdjpy=_fxr(fx) + (f"（{escape(str(d.get('usdjpy_src')))}）" if fx and d.get("usdjpy_src") else ""), todo=todo_html,
         positions="".join(pos_rows) or "<tr><td colspan=6 class='muted'>无</td></tr>",
         core="".join(core_rows) or "<tr><td colspan=4 class='muted'>无</td></tr>",
         spark=_spark(d.get("history") or []), trades=tr_rows or "<tr><td colspan=6 class='muted'>还没有平仓的交易</td></tr>",
@@ -167,7 +297,7 @@ def render_unified_html(d: dict) -> str:
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or []),
         corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
-        n_trades=d.get("n_trades", 0), win=d.get("win_rate") if d.get("win_rate") is not None else "—",
+        n_trades=d.get("n_trades", 0), win=_pct(d.get("win_rate")) if d.get("win_rate") is not None else "—（还没有平仓）",
         rules=escape(f"个股 {cfg.get('max_positions')}×{int(float(cfg.get('position_pct', 0)) * 100)}%（{stocks}）；"
                      f"闲置资金 {core_desc}（{'熊市那份留现金' if cfg.get('core_mode') == 'split' else '熊市那份转给牛市的一只'}；"
                      "牛熊分界 = 指数收盘连续 5 天低于 250 日线 ×0.97 转熊、高于 ×1.03 转牛，2026-09-25 多因子研究后维持）；"
@@ -191,7 +321,7 @@ def _commod_rows() -> list[dict]:
         for side, key, names in (("jp", "jp_etf", SECTOR_ETF_JP), ("us", "us_etf", SECTOR_ETF_US)):
             v = sorted(((names.get(e, e), bt[c][0], bt[c][1]) for e, bt in (a.get(key) or {}).items() if c in bt),
                        key=lambda z: z[1])
-            fm = lambda z: f"{z[0]} {z[1]:+.2f}{'*' if abs(z[2]) >= 2 else ''}"                    # noqa: E731
+            fm = lambda z: f"{z[0]} {z[1]:+.2f}%{'*' if abs(z[2]) >= 2 else ''}"                   # noqa: E731
             row[side + "_up"] = "、".join(fm(z) for z in v[::-1][:2] if z[1] > 0) or "—"
             row[side + "_dn"] = "、".join(fm(z) for z in v[:2] if z[1] < 0) or "—"
         rows.append(row)
@@ -218,22 +348,22 @@ def _threat_html(t: dict) -> str:
         x = t.get(m)
         if not x:
             continue
-        prev = f"，20 日前 {x['prev20']:.0f}" if x.get("prev20") is not None else ""
-        top = "、".join(f"{escape(f['label'])} {f['pct']}" for f in x.get("top", []))
+        prev = f"，20 日前 {x['prev20']:.0f} 分" if x.get("prev20") is not None else ""
+        top = "、".join(f"{escape(f['label'])} {f['pct']} 分位" for f in x.get("top", []))
         obs = x.get("obs") or []
         hot = [o for o in obs if o["pct"] >= 70]
-        obs_txt = ("；其他观察因子（不计入指数）：" + ("、".join(f"{escape(o['label'])} {o['pct']}" for o in hot[:6])
+        obs_txt = ("；其他观察因子（不计入指数）：" + ("、".join(f"{escape(o['label'])} {o['pct']} 分位" for o in hot[:6])
                                                   if hot else "都在 70 分位以下")) if obs else ""
         w = x.get("watch")
-        watch_txt = (f"<br>前瞻观察（金银比 + 商品波动，2026-09-25 登记、每天记录，还没验证）：{w['W']:.0f} / 100，自身历史 {w['W_pct']:.0f} 分位"
+        watch_txt = (f"<br>前瞻观察（金银比 + 商品波动，2026-09-25 登记、每天记录，还没验证）：{w['W']:.0f} / 100 分，自身历史 {w['W_pct']:.0f} 分位"
                      f"（≥80 = 预警、≥90 = 警戒{'，<b>现在警戒</b>' if w['W_pct'] >= 90 else ('，<b>现在预警</b>' if w['W_pct'] >= 80 else '')}）；"
                      f"金银比 60 日 {w['gs_raw']:+.1f}%、"
-                     f"商品波动 {w['cv_raw']:.1f}%") if w else ""
+                     f"商品波动 {w['cv_raw']:.1f}%（年化）") if w else ""
         wj = x.get("watch_jp")
         if wj:
             flag = "，<b>现在警戒</b>" if wj["Wj_pct"] >= 90 else ("，<b>现在预警</b>" if wj["Wj_pct"] >= 80 else "")
-            watch_txt += (f"<br>前瞻观察（日経两段都有效的 8 个因素，2026-09-25 登记、每天记录，还没验证）：{wj['Wj']:.0f} / 100，"
-                          f"自身历史 {wj['Wj_pct']:.0f} 分位（≥80 = 预警、≥90 = 警戒{flag}）；对照：金银比 + 商品波动 {wj['W2']:.0f}"
+            watch_txt += (f"<br>前瞻观察（日経两段都有效的 8 个因素，2026-09-25 登记、每天记录，还没验证）：{wj['Wj']:.0f} / 100 分，"
+                          f"自身历史 {wj['Wj_pct']:.0f} 分位（≥80 = 预警、≥90 = 警戒{flag}）；对照：金银比 + 商品波动 {wj['W2']:.0f} 分"
                           f"（{wj['W2_pct']:.0f} 分位）")
         wf = x.get("wfc")
         if wf and wf.get("p10") is not None:
@@ -246,23 +376,24 @@ def _threat_html(t: dict) -> str:
                           + ("。配比最优化（11 种配比方式，事先登记）在样本外都没有稳定胜过现行等权，暂不采用"
                              if not wf.get("adopted") else "")
                           + ("；这个概率在样本外也不比直接用历史平均准，只作参考" if (oos.get("bss10") or 0) <= 0 else "")
-                          + ("；主要来源：" + "、".join(f"{escape(_LAB.get(f['k'], f['k']))} {f['pct']}" for f in wf["top"])
+                          + ("；主要来源：" + "、".join(f"{escape(_LAB.get(f['k'], f['k']))} {f['pct']} 分位" for f in wf["top"])
                              if wf.get("top") else ""))
         fw = x.get("fwd") or {}
         fwd_txt = ("<br>前瞻对照（只记录、未验证）：" + "、".join(
-            f"{ {'A0x': '去掉曲线倒挂与油价冲击', 'S': '因子调查组合', 'DOM': '领域均衡'}[k] } {v:.0f}" for k, v in fw.items())
+            f"{ {'A0x': '去掉曲线倒挂与油价冲击', 'S': '因子调查组合', 'DOM': '领域均衡'}[k] } {v:.0f} 分" for k, v in fw.items())
             + (f"；另记录「现行 + 观察因素」{x['fwd_plus']} 个版本" if x.get("fwd_plus") else "")) if fw else ""
-        rows.append(f"<dt>{name}：{x['value']:.0f} / 100{prev}</dt><dd>同档位（{escape(str(x.get('band')))}）历史上"
+        rows.append(f"<dt>{name}：{x['value']:.0f} / 100 分{prev}（数据日 {escape(str(x.get('date') or '—'))}）</dt>"
+                    f"<dd>同档位（{escape(str(x.get('band')))} 分）历史上"
                     f"{escape(t.get('event_def', ''))}的频率 {x.get('band_freq')}%（全期平均 {x.get('base_rate')}%）；"
                     f"主要来源（百分位）：{top}{obs_txt}{watch_txt}{fwd_txt}</dd>")
     ev = "".join(f"<li>{escape(e['date'])} {escape(_EV.get(e.get('kind'), e.get('kind', '')))}"
                  f"{('（' + escape(e['name']) + '）') if e.get('name') else ''}</li>" for e in t.get("events", []))
     us, jp = t.get("US", {}), t.get("JP", {})
     auc, hits = us.get("auc") or [None, None], us.get("hit80") or [None, None]
-    note = ("只能说明风险比平时高还是低，不能预测具体哪天发生：历史检验 AUC 美股 "
+    note = ("只能说明风险比平时高还是低，不能预测具体哪天发生：历史检验 AUC（0.5 = 瞎猜，1 = 完美）美股 "
             f"{(auc[0] or 0):.2f} / {(auc[1] or 0):.2f}（1995–2010 / 2011–），日経 "
             f"{((jp.get('auc') or [0, 0])[0] or 0):.2f} / {((jp.get('auc') or [0, 0])[1] or 0):.2f}；"
-            f"过去 {hits[1]} 次美股 ≥10% 下跌里只有 {hits[0]} 次在高点前 60 个交易日内到过 80。"
+            f"过去 {hits[1]} 次美股 ≥10% 下跌里只有 {hits[0]} 次在高点前 60 个交易日内到过 80 分。"
             "加入更多因素（v2：金融条件、MOVE 等；v3：黄金、金银比、铜、天然气、粮食、银行信贷、地缘风险 GPR）的事先登记研究"
             "都没有在两个市场稳定胜出，指数仍用原算法；配比最优化（11 种配比方式、逐年滚动的样本外检验）也没有方式通过事先定的五条标准，"
             "按历史拟合的权重在样本外反而常常更差。观察因子只列出处在自身历史 70 分位以上的。")
@@ -288,7 +419,7 @@ def _domains_html(us: dict, jp: dict) -> str:
         return ""
     order = {"两段都提升": 0, "只后半": 1, "只前半": 2, "都没有": 3}
     names = sorted(set(du) | set(dj), key=lambda n: (order.get((du.get(n) or {}).get("class"), 4), -((du.get(n) or {}).get("pct") or 0)))
-    cell = lambda v: (f"<td class='n'>{v['pct']}</td><td>{escape(_CLS.get(v.get('class'), '—'))}</td>" if v   # noqa: E731
+    cell = lambda v: (f"<td class='n'>{v['pct']} 分位</td><td>{escape(_CLS.get(v.get('class'), '—'))}</td>" if v   # noqa: E731
                       else "<td class='n'>—</td><td>—</td>")
     tr = "".join(f"<tr><td>{escape(n)}</td>{cell(du.get(n))}{cell(dj.get(n))}</tr>" for n in names)
     return ("<details><summary>各经济领域现在的危险度（百分位，越高越危险；只作观察）</summary><div class='scroll'><table>"
@@ -319,17 +450,17 @@ main{{max-width:880px;margin:0 auto;padding:16px}} h1{{font-size:20px;margin:4px
 .kpi{{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}} .kpi div{{border:1px solid var(--line);border-radius:8px;padding:8px}}
 .kpi b{{display:block;font-size:17px}} .muted{{color:var(--muted);font-size:13px}} ul{{margin:4px 0 8px;padding-left:20px}}
 table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom:1px solid var(--line);padding:5px 4px;text-align:left}}
-.n{{text-align:right;font-variant-numeric:tabular-nums}} .pos{{color:var(--pos)}} .neg{{color:var(--neg)}} .spark{{width:100%;height:120px}}
+.n{{text-align:right;font-variant-numeric:tabular-nums}} .warn{{border-color:var(--neg)}} .pos{{color:var(--pos)}} .neg{{color:var(--neg)}} .spark{{width:100%;height:120px}}
 .scroll{{overflow-x:auto}} dt{{font-weight:600;margin-top:6px}} dd{{margin:0 0 4px}}
 </style></head><body><main>
 <h1>模拟盘日报 · 一个账户（楽天，日元 + 美元）</h1>
-<div class="muted">生成 {generated}；数据截至 {bar}（日本收盘 + 美股收盘都已知的最后一天）</div>{first}
+<div class="muted">生成 {generated}；数据截至 {bar}</div>{first}{missing}
 <section class="card"><div class="kpi">
 <div><span class="muted">总权益（日元）</span><b>{equity}</b><span class="muted">起始 {cap}</span></div>
 <div><span class="muted">累计</span><b>{ret}%</b><span class="muted">最大回撤 {mdd}%</span></div>
 <div><span class="muted">日元现金</span><b>{cash_jpy}</b></div>
 <div><span class="muted">美元现金</span><b>{cash_usd}</b><span class="muted">USD/JPY {usdjpy}</span></div>
-<div><span class="muted">已平仓</span><b>{n_trades} 笔</b><span class="muted">胜率 {win}%</span></div>
+<div><span class="muted">已平仓</span><b>{n_trades} 笔</b><span class="muted">胜率 {win}</span></div>
 </div></section>
 <section class="card"><h2>今天要做的事（日本时间）</h2>{todo}</section>
 <section class="card"><h2>权益曲线（日元）</h2>{spark}</section>
@@ -338,7 +469,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <section class="card"><h2>核心 ETF（闲置资金）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
 <section class="card"><h2>市场状态</h2><dl>{markets}</dl></section>
 <section class="card"><h2>大事件威胁指数（只展示，不参与交易）</h2>{threat}</section>
-<section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>状态</th><th class="n">就绪度</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
+<section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>状态</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
 <p class="muted">宏观顺风度 = 个股对日本 / 美国利率、油价、日元、信用利差，以及农产品、工业金属、黄金、天然气 ETF 的历史敏感度 × 近 60 个交易日的变化（当日横截面三分位：顺风 / 中性 / 逆风），只作参考：2026-09-25 事先登记研究显示它对之后 20 日的收益没有可靠的预测力（加商品后月末前 1/5 − 后 1/5 为 +0.35%，t 1.40；秩相关 0.006），交易排序不用它。</p></section>
 {commod}
 <section class="card"><h2>最近平仓</h2><div class="scroll"><table><tr><th>日期</th><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">损益（日元）</th><th>原因</th></tr>{trades}</table></div></section>
