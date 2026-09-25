@@ -208,7 +208,7 @@ python run.py report                           # 只重新生成 var/out/report.
 - 模拟盘所有成交都在**次日寄付**（JP 09:00 JST / US 09:30 ET），这是回测同款的成交假设
 - 状态（`var/sim.json`、`var/state/`、`var/out/`）随代码入库，例行任务靠它跨天续命
 - 日本株用 `affordable` 股票池、单笔 34%/最多 3 只：¥100 万下多数东证大盘股 1 単元就超预算，默认池几乎买不了
-- 例行任务 id `trig_01Ety6bKRzNjWSpsVMRncojR`（每周一至五 07:00 JST，每次新开会话，完成后推送到手机）；
+- 例行任务 id `trig_01MMZVeTtxexr6y4sDhy4rxX`（2026-09-25 重建：每周一至五 06:57 JST，汇报逐项带单位、先报「数据完整性」；发到固定的模拟盘对话里）；
   想停：让 Claude 删除它，或在 claude.ai 的 Routines 里禁用
 - 前提：运行环境的网络策略必须放行 [`network_allowlist.txt`](network_allowlist.txt) 里的域名；
   **改动只对新启动的会话生效**（这也是例行任务每次新开会话的原因）。`run.py doctor` 会逐个检查
