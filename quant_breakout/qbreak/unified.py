@@ -1,6 +1,6 @@
 """unified.py — 一个账户（日元 + 美元）同时交易日本株 / 美股 / 指数 ETF 的统一引擎。回测与模拟盘共用同一个逐日推进器。
 
-为什么要统一：真实账户只有一笔钱（例如 100 万円）。买美股要先把日元换成美元（楽天：为替手数料 片道 25 銭/USD），
+为什么要统一：真实账户只有一笔钱（例如 100 万円）。买美股要先把日元换成美元（楽天 リアルタイム為替：手数料 0 銭、有买卖价差，按片道 3 銭估；円貨決済 / 定時為替是 ±25 銭），
 美股卖出后的美元要换回日元才能买日本股；日本与美股的买入机会要放在一起排名、共用名额，而不是两个互不相干的账户。
 
 楽天的规则（官方页面，2026-09-25 核对，仅对该时点有效）：リアルタイム為替 平日 8:00～翌 6:00（夏 5:00），手数料 0 銭（有买卖价差），
@@ -102,6 +102,8 @@ class UState:
     core_trades: list = field(default_factory=list)
     fx_trades: list = field(default_factory=list)
     history: list = field(default_factory=list)       # [日期, 日元权益, 日元现金, 美元现金, USD/JPY]
+    corp_done: list = field(default_factory=list)     # 已处理的公司行为 "代码|日期"（模拟盘；幂等用）
+    corp_log: list = field(default_factory=list)      # [{"date", "ticker", "note"}]
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -113,6 +115,55 @@ class UState:
         s = cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
         s.pos = {t: (p if isinstance(p, UPos) else UPos(**p)) for t, p in (d.get("pos") or {}).items()}
         return s
+
+
+def apply_corp_action(st: UState, ticker: str, date: str, dividend: float = 0.0, split: float = 0.0,
+                      div_net: float = 1.0) -> str | None:
+    """把一次除息 / 拆股补到状态上（模拟盘：行情是复权价，持仓按真实价格记账；规则与 PaperBroker 相同）。
+    拆股 1→k：股数 ×k，成本 / 止损 / 峰值 / 收盘 ÷k，计划单股数 ×k、信号价 ÷k。除息：到手分红（税后）进该市场的现金，
+    止损与峰值各减一个分红额。同一票同一日期只处理一次；没有持仓 / 计划时返回 None。"""
+    key = f"{ticker}|{date}"
+    if key in st.corp_done:
+        return None
+    m, notes = market_of(ticker), []
+    p = st.pos.get(ticker)
+    k = float(split or 0)
+    if k > 0 and abs(k - 1) > 1e-9:
+        if p:
+            old = p.shares
+            p.shares = int(old * k + 1e-6)
+            for f in ("entry_px", "stop_px", "peak", "last_close"):
+                setattr(p, f, float(getattr(p, f)) / k)
+            notes.append(f"株式分割 1:{k:g}（{old}→{p.shares} 株）")
+        if int(st.core_units.get(ticker) or 0):
+            old = int(st.core_units[ticker])
+            st.core_units[ticker] = int(old * k + 1e-6)
+            if st.core_last.get(ticker):
+                st.core_last[ticker] = float(st.core_last[ticker]) / k
+            notes.append(f"分割 1:{k:g}（{old}→{st.core_units[ticker]} 口）")
+        if ticker in st.plan:
+            pl = st.plan[ticker]
+            pl[0], pl[1] = float(pl[0]) / k, int(int(pl[1]) * k + 1e-6)
+            notes.append("计划单同步调整")
+        if ticker in st.core_plan:
+            st.core_plan[ticker][1] = int(int(st.core_plan[ticker][1]) * k + 1e-6)
+    dv = float(dividend or 0)
+    qty = (p.shares if p else 0) + int(st.core_units.get(ticker) or 0)
+    if dv > 0 and qty > 0:
+        net = dv * qty * div_net
+        if m == "US":
+            st.cash_usd += net
+        else:
+            st.cash_jpy += net
+        if p:
+            p.stop_px, p.peak = max(0.0, p.stop_px - dv), max(0.0, p.peak - dv)
+        notes.append(f"配当落ち {dv:g} × {qty:,} → 税后 {'$' if m == 'US' else '¥'}{net:,.2f} 入账")
+    if not notes:
+        return None
+    st.corp_done.append(key)
+    note = "；".join(notes)
+    st.corp_log.append({"date": date, "ticker": ticker, "note": note})
+    return note
 
 
 @dataclass
@@ -662,6 +713,38 @@ class UnifiedEngine:
         st.last_date = str(self.gidx[i].date())
         st.history.append([st.last_date, round(eq, 2), round(st.cash_jpy, 2), round(st.cash_usd, 2),
                            round(float(self.fx_close[i]), 4)])
+
+    def apply_corp_actions(self, i: int, provider) -> list[str]:
+        """模拟盘专用（回测的复权价天然正确，不用）：推进第 i 天之前，把 (上一根已处理 K 线, 第 i 天] 之间的除息 / 拆股
+        补到持仓、核心 ETF 与计划单上。provider 取不到时只按「记下的真实收盘 vs 今天的复权收盘」兜底识别拆股（分红跳过）。"""
+        from .corpactions import DIV_NET, due, infer_split
+        st = self.st
+        after, upto = st.last_date, str(self.gidx[i].date())
+        if not after or after >= upto:
+            return []
+        out = []
+        names = set(st.pos) | {t for t, u in st.core_units.items() if u} | set(st.plan) | set(st.core_plan)
+        for t in sorted(names):
+            try:
+                acts = due(provider, t, after, upto)
+            except Exception as e:                            # noqa: BLE001
+                acts = []
+                j, ps = self.col.get(t), st.pos.get(t)
+                stored = ps.last_close if ps else st.core_last.get(t)
+                ia = int(self.gidx.searchsorted(pd.Timestamp(after)))
+                if j is not None and stored and ia < len(self.gidx) and str(self.gidx[ia].date()) == after \
+                        and self.A.has[ia, j]:
+                    k = infer_split(float(stored), float(self.A.close[ia, j]))
+                    if k:
+                        acts = [{"date": upto, "dividend": 0.0, "split": k}]
+                out.append(f"{t} 公司行为数据取不到（{type(e).__name__}）" + (f"，按价格比推断拆股 1:{acts[0]['split']:g}"
+                                                                         if acts else "，本次跳过"))
+            for a in acts:
+                n = apply_corp_action(st, t, a["date"], dividend=float(a.get("dividend") or 0),
+                                      split=float(a.get("split") or 0), div_net=DIV_NET.get(market_of(t), 1.0))
+                if n:
+                    out.append(f"{t} {a['date']}：{n}")
+        return out
 
     def prime(self, lo: int) -> None:
         """从第 lo 天开始推进之前：每只票在 lo 之前的最后一根 K 线（ATR / 涨跌停判断用）。"""

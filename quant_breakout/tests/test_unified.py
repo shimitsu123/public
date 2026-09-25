@@ -168,3 +168,64 @@ def test_pending_plan_across_other_markets_holiday_keeps_its_money():
     assert min(h[2] for h in ue.st.history) >= -1e-6 and min(h[3] for h in ue.st.history) >= -1e-6   # 现金从不为负
     jp_tr = [t for t in ue.st.trades if t["ticker"] == "7777.T"]
     assert jp_tr and jp_tr[0]["entry_date"] == str(D[3].date())                                   # 跨过假日照样成交
+
+
+# ─────────────────────────── 模拟盘：除息 / 拆股（行情是复权价，持仓按真实价格记账）───────────────────────────
+def _held_state(**kw):
+    from qbreak.unified import UPos, UState
+    pos = {"7777.T": UPos("7777.T", "JP", 100, 1000.0, "2026-01-06", 930.0, 1050.0, 1000.0, hold=2, armed=True)}
+    return UState(cash_jpy=100_000.0, pos=pos, last_date=str(D[3].date()), **kw)
+
+
+def test_apply_corp_action_split_dividend_idempotent():
+    from qbreak.corpactions import DIV_NET
+    from qbreak.unified import UPos, apply_corp_action
+    st = _held_state(core_units={"1329.T": 73}, plan={"6666.T": [2000.0, 50, "2026-01-08"]})
+    assert "100→200" in apply_corp_action(st, "7777.T", "2026-01-09", split=2.0, div_net=DIV_NET["JP"])
+    p = st.pos["7777.T"]
+    assert (p.shares, p.entry_px, p.stop_px, p.peak, p.last_close) == (200, 500.0, 465.0, 525.0, 500.0)
+    assert apply_corp_action(st, "7777.T", "2026-01-09", split=2.0) is None           # 同一天只处理一次
+    apply_corp_action(st, "7777.T", "2026-01-12", dividend=20.0, div_net=DIV_NET["JP"])
+    assert st.cash_jpy == pytest.approx(100_000 + 20 * 200 * DIV_NET["JP"]) and (p.stop_px, p.peak) == (445.0, 505.0)
+    apply_corp_action(st, "1329.T", "2026-01-12", dividend=100.0, div_net=DIV_NET["JP"])   # 核心 ETF 的分配金
+    assert st.cash_jpy == pytest.approx(100_000 + (20 * 200 + 100 * 73) * DIV_NET["JP"])
+    apply_corp_action(st, "6666.T", "2026-01-13", split=5.0)                             # 计划单：股数 ×5、信号价 ÷5
+    assert st.plan["6666.T"][:2] == [400.0, 250]
+    st.pos["AAA"] = UPos("AAA", "US", 10, 100.0, "2026-01-06", 93.0, 100.0, 100.0)
+    apply_corp_action(st, "AAA", "2026-01-13", dividend=1.0, div_net=DIV_NET["US"])      # 美股分红进美元
+    assert st.cash_usd == pytest.approx(10 * DIV_NET["US"])
+    assert apply_corp_action(st, "9999.T", "2026-01-13", dividend=5.0) is None           # 没持有：什么都不做
+    assert len(st.corp_log) == 5
+
+
+def _split_engine(state):
+    jp = _bars(D, [500.0] * 8)                               # 复权后的行情：拆股（D4）前的价格已被 yfinance 除以 2
+    cfg = UnifiedConfig(capital_jpy=0, position_pct=0.25, max_positions=4, stock_markets=("JP",), core={}, core_index={})
+    return UnifiedEngine({"7777.T": jp}, cfg, {"JP": P, "US": P}, EX, {}, state=state)
+
+
+def test_sim_step_after_split_does_not_fake_a_stop():
+    from qbreak.corpactions import FakeActions
+    prov = FakeActions({"7777.T": [{"date": str(D[4].date()), "dividend": 0.0, "split": 2.0},
+                                   {"date": str(D[2].date()), "dividend": 30.0, "split": 0.0}]})  # D2 在上次处理之前：不重复
+    ue = _split_engine(_held_state())
+    ue.prime(4)
+    notes = ue.apply_corp_actions(4, prov)
+    ue.step(4)
+    assert len(notes) == 1 and "100→200" in notes[0]
+    assert not ue.st.pending_exit and ue.st.pos["7777.T"].shares == 200
+    assert ue.st.history[-1][1] == pytest.approx(100_000 + 200 * 500.0)                   # 权益没有凭空腰斩
+    bad = _split_engine(_held_state())                                                     # 对照：不补拆股 → 假止损
+    bad.prime(4)
+    bad.step(4)
+    assert bad.st.pending_exit.get("7777.T") == "stop" and bad.st.history[-1][1] == pytest.approx(150_000)
+
+
+def test_sim_split_inferred_from_prices_when_actions_unavailable():
+    class Down:
+        def actions(self, ticker):
+            raise ConnectionError("blocked")
+    ue = _split_engine(_held_state())
+    ue.prime(4)
+    notes = ue.apply_corp_actions(4, Down())
+    assert any("推断拆股 1:2" in n for n in notes) and ue.st.pos["7777.T"].shares == 200

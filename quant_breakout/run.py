@@ -727,6 +727,10 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     ucfg = _unified_cfg(cfg)
     u = cfg.get("unified") or {}
     broker = broker_of("JP", u)
+    if cfg.get("end") and _dt.date.today() > _dt.date.fromisoformat(cfg["end"]):
+        from qbreak.report_unified import write_unified_report
+        print(f"模拟期已于 {cfg['end']} 结束；只重新生成报表。报表 {write_unified_report()}")
+        return 0
     blocked = _netcheck()
     provider = "csv" if any("yahoo" in h for h in blocked) else "yfinance"
     st_path = paths.state_dir() / "unified_state.json"
@@ -760,14 +764,17 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     ccost = {t: etf_cost(broker, t, market_of(t)) for t in ucfg.core}
     eng = UnifiedEngine(ind, ucfg, params, ex, ccost, fx=fx, bear=bear, state=state)
     today = _dt.date.today()
-    extras = {}
+    extras, plans = {}, {}
     for m in ucfg.stock_markets:                          # 明天成交的新仓倍数：与原模拟盘同一套宏观 / 板块 / 状态层
         mc = dict(cfg.get(m.lower()) or {})
         mc["universe"] = (u.get("universe") or {}).get(m, "broad")
-        P = _plan_inputs(m, mc, cfg, dcfg, today, params[m])
+        P = plans[m] = _plan_inputs(m, mc, cfg, dcfg, today, params[m])
         eng.live_mult[m] = (P.scale, P.tmult or {}, P.block if isinstance(P.block, str) else None)
         extras[m] = {"regime": {**P.reg.to_dict(), "bullbear": P.bb, "final_mult": P.scale, "regime_mode": P.mode,
                                 "fx": P.fx_info}, "macro": P.macro_info}
+    for m in sorted(set(ucfg.core_index.values()) - set(ucfg.stock_markets)):   # 只给核心 ETF 择时的指数：日报显示牛熊分界
+        extras[m] = {"regime": {"bullbear": _bullbear(m, dcfg)},
+                     "core_only": sorted(t for t, x in ucfg.core_index.items() if x == m)}
     eng.live_fx_ok = is_trading_day(now_jst().date())      # 今天白天（日本营业日）才有换汇窗口
     if any(params[m].earnings_blackout_days for m in params):  # 决算前 N 个交易日不进场（风控项，与原模拟盘相同）
         from qbreak.trader import _earnings_days
@@ -787,12 +794,20 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
         print(f"没有新的完整交易日（截止 {cutoff}，上次 {state.last_date}）")
     else:
         eng.prime(idxs[0])
+        prov = _corp_actions_provider()
         for i in idxs:
+            for n in eng.apply_corp_actions(i, prov):     # 除息 / 拆股（行情是复权价，持仓按真实价格记账）
+                log.info("公司行为 %s", n)
+                print(n)
             eng.step(i)
     st_path.write_text(_json.dumps(state.to_dict(), ensure_ascii=False, indent=1, default=float), encoding="utf-8")
     i_last = int(eng.gidx.searchsorted(pd.Timestamp(state.last_date))) if state.last_date else len(eng.gidx) - 1
     todo = eng.todo(min(i_last, len(eng.gidx) - 1))
     eq = state.history[-1][1] if state.history else ucfg.capital_jpy
+    usdjpy = float(state.history[-1][4]) if state.history and state.history[-1][4] else None
+    for m, P in plans.items():                           # 候补队列（条件就绪度，不是收益预测）；「买得起」按一个名额的预算
+        budget = eq * ucfg.position_pct / ((usdjpy or 150.0) if m == "US" else 1.0)
+        extras[m]["watchlist"] = _scan_market(P.uni, params[m], m, dcfg, budget, P.idx_close, P.macro_info)[:15]
     out = {"date": today.isoformat(), "bar_date": state.last_date, "equity_jpy": eq, "cash_jpy": round(state.cash_jpy),
            "cash_usd": round(state.cash_usd, 2), "todo": todo, "skipped": eng.skipped,
            "positions": {t: {"market": p.market, "shares": p.shares, "entry_px": p.entry_px, "entry_date": p.entry_date,
