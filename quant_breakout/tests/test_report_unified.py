@@ -98,4 +98,16 @@ def test_watchlist_shows_macro_tailwind_column():
     td["extras"]["JP"]["watchlist"][0].update({"fit": 0.21, "fit_why": "日本利率↑ 受益；油价↑ 受益", "fit_tier": "顺风"})
     write_json(paths.out_dir() / "unified_today.json", td)
     html = write_unified_report().read_text(encoding="utf-8")
-    assert "顺风：日本利率↑ 受益；油价↑ 受益" in html and "宏观顺风度" in html and "没有预测力" in html
+    assert "顺风：日本利率↑ 受益；油价↑ 受益" in html and "宏观顺风度" in html and "没有可靠的预测力" in html
+    assert "黄金、天然气" in html
+
+
+def test_report_commodity_sector_card():
+    _write(["JP"])
+    write_json(paths.out_dir() / "commodity_fit_study.json", {
+        "labels": {"gold": "黄金"},
+        "A": {"jp_etf": {"1623.T": {"gold": [0.21, 2.5]}, "1632.T": {"gold": [-0.18, -2.1]}},
+              "us_etf": {"GDX": {"gold": [1.78, 9.0]}, "KRE": {"gold": [-0.22, -2.2]}}}})
+    html = write_unified_report().read_text(encoding="utf-8")
+    assert "商品 × 行业" in html and "钢铁·有色 +0.21*" in html and "金融（除银行） -0.18*" in html
+    assert "金矿股 +1.78*" in html and "地区银行 -0.22*" in html
