@@ -29,6 +29,16 @@
    }
   }
  },
+ "single_forward": {
+  "em_rel": null,
+  "real10": null,
+  "tankan_big": null,
+  "tankan_small": null,
+  "claims": null,
+  "breadth": null,
+  "boj": null,
+  "jp_cgpi": null
+ },
  "in_sample": {
   "Wj": {
    "auc10": [
