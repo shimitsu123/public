@@ -24,34 +24,34 @@ def core_cost(ticker: str, market: str, broker: str | None = None) -> dict:
 
 
 # 资金配置三档（scripts/allocation_study.py，2026-09-24，引擎「收盘规划」版；同一选择规则在不同回撤上限下的结果）
-# 券商（2026-09-25 起）：日本 → 立花ｅ支店 個別コース（broker_cost_study）；美股指数仓位 → 东证 1655 @立花（日元账户，
-# us_sleeve_venue_study）；安全档的美股个股只能在楽天（ｅ支店不做美股）。
+# 券商：楽天（2026-09-25 晚用户决定；日本株 / 东证 ETF 0 円）。美股指数仓位用东证上市的 1655（日元、0 円、无换汇，
+# us_sleeve_venue_study）。模拟盘已改为「一个账户」模式（sim.json mode=unified，见 qbreak/unified.py），档位只作用于旧的分市场命令。
 # 20 年 = 2006-10～2026-09，5 年 = 2021-09～；个股部分有幸存者偏差（偏乐观），指数部分没有
 TIERS = {
     "safe": {"label": "安全（事先登记的约束：20 年回撤 ≥−30%、5 年 ≥−20%）",
              "JP": {"position_pct": 0.34, "max_positions": 3, "breakout": True, "core": {"enabled": False},
-                    "broker": "tachibana", "halt_dd_pct": 30.0, "bt": "突破 3×34%：20 年 2.83%/年 回撤 −18.3%；5 年 4.02% / −9.0%"},
+                    "broker": "rakuten", "halt_dd_pct": 30.0, "bt": "突破 3×34%：20 年 2.83%/年 回撤 −18.3%；5 年 4.02% / −9.0%"},
              "US": {"position_pct": 0.20, "max_positions": 5, "breakout": True, "core": {"enabled": False},
                     "broker": "rakuten", "venue": "US", "halt_dd_pct": 30.0, "bt": "突破 5×20%：20 年 1.62%/年 回撤 −18.0%；5 年 2.67% / −11.5%"}},
     "aggressive": {"label": "进取（20 年回撤 ≥−35%、5 年 ≥−30%；Calmar 两市场最高，日本与 3×34% 并列）",
                    "JP": {"position_pct": 0.25, "max_positions": 4, "breakout": True,
                           "core": {"enabled": True, "ticker": "1329.T", "timing": True, "band_pct": 10.0},
-                          "broker": "tachibana", "halt_dd_pct": 45.0,
+                          "broker": "rakuten", "halt_dd_pct": 45.0,
                           "bt": "突破 4×25% + 闲置资金 1329（熊市清空）：20 年 8.77%/年 回撤 −32.5%；5 年 17.4% / −25.7%"},
                    "US": {"position_pct": 0.20, "max_positions": 5, "breakout": False,
                           "core": {"enabled": True, "ticker": "1655.T", "timing": True, "band_pct": 10.0},
-                          "broker": "tachibana", "venue": "JP", "halt_dd_pct": 45.0,
+                          "broker": "rakuten", "venue": "JP", "halt_dd_pct": 45.0,
                           "bt": "只持 S&P500 + 牛熊择时（不做个股）：20 年 8.30%/年 回撤 −33.4%（SPYM 美元口径）；"
-                                "东证 1655@立花 日元口径 2017-11～ 14.25%/年 回撤 −33.4%（us_sleeve_venue_study）"}},
+                                "东证 1655 日元口径（楽天 0 円；对比 SPYM@楽天 见 us_sleeve_venue_study）"}},
     "max": {"label": "最大收益（不设回撤上限；历史回撤约 −55%～−61%）",
             "JP": {"position_pct": 0.34, "max_positions": 3, "breakout": True,
                    "core": {"enabled": True, "ticker": "1329.T", "timing": False, "band_pct": 10.0},
-                   "broker": "tachibana", "halt_dd_pct": 70.0,
+                   "broker": "rakuten", "halt_dd_pct": 70.0,
                    "bt": "突破 3×34% + 闲置资金一直持 1329：20 年 11.58%/年 回撤 −61.2%；5 年 21.9% / −25.0%"},
             "US": {"position_pct": 0.20, "max_positions": 5, "breakout": False,
                    "core": {"enabled": True, "ticker": "1655.T", "timing": False, "band_pct": 10.0},
-                   "broker": "tachibana", "venue": "JP", "halt_dd_pct": 70.0,
-                   "bt": "只持 S&P500（买入持有）：20 年 11.27%/年 回撤 −54.5%（SPYM 美元口径）；东证 1655@立花 日元口径"}},
+                   "broker": "rakuten", "venue": "JP", "halt_dd_pct": 70.0,
+                   "bt": "只持 S&P500（买入持有）：20 年 11.27%/年 回撤 −54.5%（SPYM 美元口径）；现用东证 1655（日元）"}},
 }
 
 

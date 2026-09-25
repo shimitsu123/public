@@ -588,6 +588,8 @@ def cmd_sim_day(a) -> int:
     cfg = _sim_cfg()
     if not cfg:
         print("先运行 python run.py sim-init"); return 2
+    if cfg.get("mode") == "unified":                          # 一个账户（日元 + 美元）同时做日本 / 美股 / ETF
+        return cmd_sim_day_unified(a, cfg)
     today = _dt.date.today()
     if today > _dt.date.fromisoformat(cfg["end"]):
         print(f"模拟期已于 {cfg['end']} 结束；只重新生成报表。")
@@ -690,6 +692,116 @@ def cmd_sim_day(a) -> int:
     hp, jp = write_report(cfg["markets"])
     print(f"\n报表 {hp}\n数据 {jp}")
     return 1 if errors and not results else 0
+
+
+def _unified_cfg(sim: dict):
+    """sim.json 的 unified 段 → UnifiedConfig（楽天：日本株 / 东证 ETF 0 円、美股 0.495% 上限 $22、换汇 片道 25 銭）。"""
+    from qbreak.unified import UnifiedConfig
+    u = sim.get("unified") or {}
+    d = UnifiedConfig()
+    kw = {k: u[k] for k in ("position_pct", "max_positions", "max_position_pct", "cash_buffer_pct", "core_mode",
+                           "core_buffer_pct", "band_pct", "margin_pct", "fx_spread_yen", "fx_on_jp_holidays",
+                           "usd_keep", "us_same_open_reuse") if k in u}
+    return UnifiedConfig(capital_jpy=float(sim.get("capital_jpy") or d.capital_jpy),
+                         stock_markets=tuple(u.get("stock_markets", d.stock_markets)),
+                         core=dict(u.get("core", d.core)), core_index=dict(u.get("core_index", d.core_index)), **kw)
+
+
+def cmd_sim_day_unified(a, cfg: dict) -> int:
+    """一个账户的模拟盘：读 var/state/unified_state.json → 把新到的交易日（日本收盘 + 美股收盘都已知的日子）推进一步
+    → 保存状态 → 写今天的操作（09:00 日本开盘、日间换汇、夜间美股开盘）与日报。与回测同一个推进器（qbreak/unified.py）。"""
+    import datetime as _dt
+    import json as _json
+    import numpy as np
+    import pandas as pd
+    from qbreak.bullbear import BEAR, Detector, load_config
+    from qbreak.calendar_jp import is_trading_day, now_jst
+    from qbreak.config import BENCHMARK
+    from qbreak.core import core_frame
+    from qbreak.data import load_universe
+    from qbreak.fees import broker_of, etf_cost
+    from qbreak.strategy import compute_indicators
+    from qbreak.trader import drop_partial_bar
+    from qbreak.unified import UnifiedEngine, UState, market_of
+    from qbreak.utils import read_json, write_json
+    ucfg = _unified_cfg(cfg)
+    u = cfg.get("unified") or {}
+    broker = broker_of("JP", u)
+    blocked = _netcheck()
+    provider = "csv" if any("yahoo" in h for h in blocked) else "yfinance"
+    st_path = paths.state_dir() / "unified_state.json"
+    raw = read_json(st_path)
+    state = UState.from_dict(raw) if raw else UState(cash_jpy=float(ucfg.capital_jpy))
+    dcfg = DataConfig(provider=provider, years=2, allow_synthetic=False).validate()
+    params = {m: _params(a, m) for m in ("JP", "US")}
+    unis = {m: (universe(m, (u.get("universe") or {}).get(m, "broad")) if m in ucfg.stock_markets else [])
+            for m in ("JP", "US")}
+    want = sorted(set(unis["JP"]) | set(unis["US"]) | set(state.pos) | set(state.plan) | set(ucfg.core))
+    data = load_universe(want, dcfg)
+    ind = {}
+    for t, df in data.items():
+        df = drop_partial_bar(df, market_of(t))
+        if df is None or len(df) < 60:
+            continue
+        ind[t] = core_frame(df) if t in ucfg.core else compute_indicators(df, params[market_of(t)])
+    missing = [t for t in set(state.pos) | set(ucfg.core) if t not in ind]
+    if missing:
+        raise RuntimeError(f"持仓 / 核心 ETF 取不到行情：{missing}")
+    d10 = DataConfig(provider=provider, years=10, allow_synthetic=False).validate()
+    det_cfg = load_config()
+    det = Detector(det_cfg["detector"]["kind"], det_cfg["detector"]["params"])
+    bear = {}
+    for m in ("JP", "US"):
+        ix = drop_partial_bar(load_universe([BENCHMARK[m]], d10)[BENCHMARK[m]], m)
+        bear[m] = pd.Series(np.asarray(det.states(ix["Close"])) == BEAR, index=ix.index)
+    fxd = load_universe(["JPY=X"], DataConfig(provider=provider, years=2, allow_synthetic=False, min_bars=100).validate())
+    fx = fxd["JPY=X"][["Open", "Close"]] if "JPY=X" in fxd else None
+    ex = {m: ExecConfig.for_market(m, broker_of(m, u)) for m in ("JP", "US")}
+    ccost = {t: etf_cost(broker, t, market_of(t)) for t in ucfg.core}
+    eng = UnifiedEngine(ind, ucfg, params, ex, ccost, fx=fx, bear=bear, state=state)
+    today = _dt.date.today()
+    extras = {}
+    for m in ucfg.stock_markets:                          # 明天成交的新仓倍数：与原模拟盘同一套宏观 / 板块 / 状态层
+        mc = dict(cfg.get(m.lower()) or {})
+        mc["universe"] = (u.get("universe") or {}).get(m, "broad")
+        P = _plan_inputs(m, mc, cfg, dcfg, today, params[m])
+        eng.live_mult[m] = (P.scale, P.tmult or {}, P.block if isinstance(P.block, str) else None)
+        extras[m] = {"regime": {**P.reg.to_dict(), "bullbear": P.bb, "final_mult": P.scale, "regime_mode": P.mode,
+                                "fx": P.fx_info}, "macro": P.macro_info}
+    eng.live_fx_ok = is_trading_day(now_jst().date())      # 今天白天（日本营业日）才有换汇窗口
+    cutoff = (now_jst() - _dt.timedelta(hours=6, minutes=30)).date() - _dt.timedelta(days=1)
+    last = _dt.date.fromisoformat(state.last_date) if state.last_date else None
+    idxs = [i for i, d in enumerate(eng.gidx) if d.date() <= cutoff and (last is None or d.date() > last)]
+    if last is None:
+        idxs = idxs[-1:]                                    # 第一次运行：只用最新一天做决策，不回放历史
+    if not idxs:
+        print(f"没有新的完整交易日（截止 {cutoff}，上次 {state.last_date}）")
+    else:
+        eng.prime(idxs[0])
+        for i in idxs:
+            eng.step(i)
+    st_path.write_text(_json.dumps(state.to_dict(), ensure_ascii=False, indent=1, default=float), encoding="utf-8")
+    i_last = int(eng.gidx.searchsorted(pd.Timestamp(state.last_date))) if state.last_date else len(eng.gidx) - 1
+    todo = eng.todo(min(i_last, len(eng.gidx) - 1))
+    eq = state.history[-1][1] if state.history else ucfg.capital_jpy
+    out = {"date": today.isoformat(), "bar_date": state.last_date, "equity_jpy": eq, "cash_jpy": round(state.cash_jpy),
+           "cash_usd": round(state.cash_usd, 2), "todo": todo, "skipped": eng.skipped,
+           "positions": {t: {"market": p.market, "shares": p.shares, "entry_px": p.entry_px, "entry_date": p.entry_date,
+                             "stop_px": round(p.stop_px, 2)} for t, p in state.pos.items()},
+           "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker}
+    write_json(paths.out_dir() / "unified_today.json", out)
+    write_json(paths.out_dir() / "last_run.json", {"at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "ok": True,
+                                                  "error": "", "markets_ok": ["ALL"], "blocked_hosts": blocked,
+                                                  "provider": provider, "mode": "unified"})
+    try:
+        from qbreak.report_unified import write_unified_report
+        hp = write_unified_report()
+        print(f"报表 {hp}")
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("统一日报生成失败：%s", e)
+    print(_json.dumps({k: out[k] for k in ("bar_date", "equity_jpy", "cash_jpy", "cash_usd", "todo")},
+                      ensure_ascii=False, indent=1, default=float))
+    return 0
 
 
 def _market_regime(market: str, dcfg):

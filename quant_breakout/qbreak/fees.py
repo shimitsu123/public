@@ -90,7 +90,7 @@ BROKERS["tachibana"] = {
     "etf": {t: {"buy_fee_tiers": TACHIBANA_KOBETSU, "sell_fee_tiers": TACHIBANA_KOBETSU, "slip_pct": sl, "lot": lot}
             for t, sl, lot in (("1329.T", 0.03, 1), ("1655.T", 0.02, 10), ("2558.T", 0.03, 1))},
 }
-DEFAULT_BROKER = {"JP": "tachibana", "US": "rakuten"}   # 日本 = 立花（2026-09-25 起，Mac 上可 API 全自动）；美股个股只有楽天能做
+DEFAULT_BROKER = {"JP": "rakuten", "US": "rakuten"}   # 2026-09-25（晚）用户决定继续用楽天（MARKETSPEED II RSS）；立花保留为可选
 _SLIP = {"JP": 0.10, "US": 0.05}                     # 个股单边滑点 %（与券商无关）
 _ETF_SLIP = {"JP": 0.03, "US": 0.02}                 # 没登记的 ETF：滑点按市场默认
 

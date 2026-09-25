@@ -160,6 +160,10 @@ class UnifiedEngine:
         self.skipped: dict[str, int] = {k: 0 for k in ("gap", "cash", "lot", "full", "no_bar", "rebuy", "macro",
                                                         "limit_up", "limit_down_hold", "usd", "fx_window")}
         self._sold_today: set[str] = set()
+        # 模拟盘最后一天的决策：明天还不在数据里 → 用当天算好的倍数（{市场: (市场倍数, {票: 板块倍数}, 拦截原因)}）
+        # 与「明天白天能否换汇」（日本营业日才有换汇窗口）
+        self.live_mult: dict[str, tuple] = {}
+        self.live_fx_ok: bool = True
 
     # ── 工具 ──
     @staticmethod
@@ -390,6 +394,9 @@ class UnifiedEngine:
     def _entry_mult(self, t: str, i: int) -> float:
         m = market_of(t)
         k = int(self.nxt[m][i])
+        if k < 0 and m in self.live_mult:                  # 模拟盘：成交日在明天
+            scale, tmult, block = self.live_mult[m]
+            return 0.0 if block else float(scale) * float((tmult or {}).get(t, 1.0))
         M = self.em[m]
         if M is None or k < 0 or t not in M.columns:
             return 1.0
@@ -398,7 +405,9 @@ class UnifiedEngine:
     def _fx_ok(self, i: int) -> bool:
         """明天（下一个日历日）换汇窗口是否开在今晚美股开盘之前：简化为「下一个美股开盘日也是换汇日」。"""
         k = int(self.nxt["US"][i])
-        return k >= 0 and (self.cfg.fx_on_jp_holidays or bool(self.sess["JP"][k]))
+        if k < 0:
+            return self.live_fx_ok
+        return self.cfg.fx_on_jp_holidays or bool(self.sess["JP"][k])
 
     def _decide(self, i: int) -> None:
         st, A, cfg = self.st, self.A, self.cfg
@@ -598,15 +607,48 @@ class UnifiedEngine:
         st.history.append([st.last_date, round(eq, 2), round(st.cash_jpy, 2), round(st.cash_usd, 2),
                            round(float(self.fx_close[i]), 4)])
 
+    def prime(self, lo: int) -> None:
+        """从第 lo 天开始推进之前：每只票在 lo 之前的最后一根 K 线（ATR / 涨跌停判断用）。"""
+        for j in range(len(self.A.tickers)):
+            prev = np.flatnonzero(self.A.has[:lo, j])
+            self.last_bar[j] = int(prev[-1]) if len(prev) else -1
+
     def run(self, start=None, end=None) -> UnifiedResult:
         lo = 0 if start is None else int(self.gidx.searchsorted(pd.Timestamp(start), side="left"))
         hi = len(self.gidx) if end is None else int(self.gidx.searchsorted(pd.Timestamp(end), side="right"))
-        for j in range(len(self.A.tickers)):                  # 窗口开始前的最后一根 K 线（ATR / 涨跌停判断）
-            prev = np.flatnonzero(self.A.has[:lo, j])
-            self.last_bar[j] = int(prev[-1]) if len(prev) else -1
+        self.prime(lo)
         for i in range(lo, hi):
             self.step(i)
         return self.result(lo, hi)
+
+    def todo(self, i: int) -> dict:
+        """当前状态下「下一步要做的事」（模拟盘日报 / 操作清单 / RSS 用）：日本开盘单、换汇、美股开盘单、核心 ETF。
+        寄付指値 = 信号日收盘 ×(1+跳空上限)，与回测的跳空过滤是同一条规则。"""
+        from .tick import round_to_tick
+        st, out = self.st, {"JP": [], "FX": [], "US": []}
+        for t, why in st.pending_exit.items():
+            if t in st.pos:
+                ps = st.pos[t]
+                out[ps.market].append({"side": "SELL", "ticker": t, "qty": ps.shares, "type": "寄付成行" if ps.market == "JP"
+                                       else "开盘成行", "reason": why})
+        for t, (side, u) in st.core_plan.items():
+            if side == "SELL":
+                out["JP"].insert(0, {"side": "SELL", "ticker": t, "qty": int(u), "type": "寄付成行", "reason": "核心 ETF 调整"})
+        for t, (c, sh, d) in st.plan.items():
+            m = market_of(t)
+            lim = c * (1 + self.ex[m].max_entry_gap_pct / 100)
+            lim = round_to_tick(lim, t, "BUY") if m == "JP" else round(lim, 2)
+            out[m].append({"side": "BUY", "ticker": t, "qty": int(sh), "type": "寄付指値" if m == "JP" else "开盘指値",
+                           "limit": lim, "signal_close": c, "signal_date": d})
+        for t, (side, u) in st.core_plan.items():
+            if side == "BUY":
+                out["JP"].append({"side": "BUY", "ticker": t, "qty": int(u), "type": "寄付成行（个股买完后，用剩余日元）",
+                                  "reason": "核心 ETF 调整"})
+        for o in st.fx_plan:
+            out["FX"].append({"dir": o["dir"], "usd": o["usd"],
+                              "jpy_est": round(o["usd"] * (float(self.fx_close[i]) + (self.cfg.fx_spread_yen if o["dir"] == "JPY>USD"
+                                                                                       else -self.cfg.fx_spread_yen)))})
+        return out
 
     def result(self, lo: int, hi: int) -> UnifiedResult:
         from .metrics import compute_metrics

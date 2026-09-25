@@ -190,12 +190,12 @@ def test_sim_tier_switch_and_core_cfg(isolated_home):
     assert run.cmd_sim_tier(argparse.Namespace(tier="aggressive", markets="JP,US")) == 0
     cfg = json.loads((isolated_home / "sim.json").read_text(encoding="utf-8"))
     assert (cfg["jp"]["position_pct"], cfg["jp"]["max_positions"], cfg["jp"]["tier"]) == (0.25, 4, "aggressive")
-    # 进取档：美股指数仓位 = 东证 1655 @立花（日元账户）；成交市场变了 → 起始资金按 capital_jpy 重开
+    # 进取档：美股指数仓位 = 东证 1655（楽天，日元账户，0 円）；成交市场变了 → 起始资金按 capital_jpy 重开
     assert cfg["us"]["breakout"] is False and cfg["us"]["core"]["ticker"] == "1655.T"
-    assert (cfg["us"]["venue"], cfg["us"]["broker"], cfg["jp"]["broker"]) == ("JP", "tachibana", "tachibana")
+    assert (cfg["us"]["venue"], cfg["us"]["broker"], cfg["jp"]["broker"]) == ("JP", "rakuten", "rakuten")
     assert cfg["us"]["initial_cash"] == 1_000_000
     c = run._core_cfg("US", cfg["us"]["core"], {"state": "bear"}, cfg["us"]["broker"], run._venue("US", cfg["us"]))
-    assert c["bear"] is True and c["lot"] == 10 and dict(c["buy_fee_tiers"])[500_000] == 187.0
+    assert c["bear"] is True and c["lot"] == 10 and c["buy_fee_pct"] == 0.0
     c2 = run._core_cfg("US", {"enabled": True, "ticker": "SPYM"}, {"state": "bull"}, "rakuten", "US")
     assert c2["buy_fee_pct"] == SPYM_COST["buy_fee_pct"] == 0.495
     assert run._core_cfg("JP", cfg["jp"]["core"], {"state": "bull"})["bear"] is False
