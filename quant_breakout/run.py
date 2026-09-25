@@ -1185,8 +1185,8 @@ def _bullbear(market: str, dcfg=None) -> dict:
         return {"state": "unknown", "note": str(e)[:120]}
     out = current_regime(idx["Close"], market, cfg)
     out["index"] = BENCHMARK[market]
-    log.info("[%s] 牛熊分界：%s（自 %s，%s 日）；翻转价位 %s（距 %s%%）", market, out.get("state"), out.get("since"),
-             out.get("days"), out.get("level"), out.get("distance_pct"))
+    log.info("[%s] 牛熊分界：%s（自 %s，%s 日）；翻转价位 %s（距 %s%%）；%s：%s", market, out.get("state"), out.get("since"),
+             out.get("days"), out.get("level"), out.get("distance_pct"), out.get("phase_label", "—"), out.get("phase_text", ""))
     return out
 
 
@@ -1585,9 +1585,27 @@ def cmd_live_unified(a) -> int:
     paper = a.broker == "paper"
     tag = "paper" if paper else "tachibana" + ("_demo" if a.demo else "") + ("_dryrun" if a.dry_run else "")
     book = paths.state_dir() / f"live_unified_{tag}.json"
+
+    def page(alert: str | None = None) -> None:     # 账本 + 日志的页面（每条路径都重写；scripts/liveu.sh 每天早上打开它）
+        from qbreak import desktop_page
+        try:
+            p_ = desktop_page.write(desktop_page.default_path(tag), tag, float(ucfg.capital_jpy), cfg.get("start"),
+                                    alert=alert or getattr(a, "alert", None), note=getattr(a, "note", None))
+        except Exception as e:                            # noqa: BLE001
+            log.warning("账本页面没写成（不影响交易）：%s", e)
+            return
+        print(f"页面 {p_}")
+        if getattr(a, "desktop", False):
+            try:
+                print(f"桌面链接 {desktop_page.link(tag)} → {p_}")
+            except Exception as e:                        # noqa: BLE001
+                print(f"★ 桌面链接没建成：{e}")
+        if getattr(a, "open", False):
+            desktop_page.show(p_)
     if a.resolve:
         o = resolve_order(book, a.resolve, a.filled, a.px)
         print(f"已登记：{o['cid']} 成交 {o['filled_qty']} 股 @ {o['filled_px']:g}；下次早上的对账按这个记账")
+        page()
         return 0
     if a.status:
         b_ = read_json(book, {}) or {}
@@ -1604,9 +1622,11 @@ def cmd_live_unified(a) -> int:
             print(f"  单 {o['cid']}  {o['side']} {o['ticker']} ×{o['qty']}{lim}  {o['status']}  {o.get('note', '')}")
         for e in (b_.get("events") or [])[-10:]:
             print(f"  [{e['level']}] {e['at']} {e['msg']}")
+        page()
         return 0
     if paper and cfg.get("start") and now_jst().date() < _dt.date.fromisoformat(cfg["start"]) and not a.force:
         print(f"模拟期开始日 {cfg['start']} 之前不推进模拟账户（与模拟盘同一天开始；--force 可提前演练）")
+        page()
         return 0
     blocked = _netcheck()
     provider = "csv" if any("yahoo" in h for h in blocked) else "yfinance"
@@ -1657,10 +1677,17 @@ def cmd_live_unified(a) -> int:
             ux.morning(idxs, corp=corp)
     except ExecutorError as e:
         print(f"★ 执行器停下（状态没有改动）：{e}")
+        page(f"执行器停下（状态没有改动，需要人工处理）：{e}")
+        if a.notify:
+            from qbreak import notify
+            t_ = f"qbreak {'模拟操盘' if paper else '立花实盘'} ★ 执行器停下"
+            mac_notify(t_, str(e)[:200])
+            notify.send(t_, str(e), "warn")
         return 3
     sm = ux.summary()
     cmp = compare_with_sim(eng.st, sim_state) if a.compare_sim else None
     sm["compare"] = cmp
+    sm["market"] = {m: (e.get("regime") or {}).get("bullbear") for m, e in ctx.extras.items()}   # 牛熊：现在处于哪个阶段（页面 / 日志）
     write_json(paths.out_dir() / f"live_unified_{tag}.json", sm)
     title, short, body = daily_text(sm, eng.st, cmp, paper, float(ucfg.capital_jpy))
     append_journal(paths.out_dir() / f"live_unified_{tag}_journal.md", now_jst().strftime("%Y-%m-%d %H:%M JST"), title, body)
@@ -1684,6 +1711,7 @@ def cmd_live_unified(a) -> int:
     if cmp:
         print(cmp["text"])
     print(f"日志 {paths.out_dir() / f'live_unified_{tag}_journal.md'}")
+    page()
     return 1 if sm["blocked"] and not paper else 0
 
 
@@ -2002,7 +2030,7 @@ def main(argv=None) -> int:
     lu = sub.add_parser("live-u", help="一个账户方案的实盘执行器：早上对账→决策→寄付单；--phase open 开盘后补单（立花 / 模拟账户）")
     lu.add_argument("--broker", default="paper", choices=["paper", "tachibana"])
     lu.add_argument("--phase", default="morning", choices=["morning", "open"],
-                    help="morning：成交日 08:55 前（例行 07:30）；open：成交日 09:05 前后（开盘前余力不够的买单）")
+                    help="morning：成交日 08:55 前（Mac 定时任务 07:40）；open：成交日 09:05 前后（开盘前余力不够的买单）")
     lu.add_argument("--demo", action="store_true", help="立花デモ環境（账本与本番分开）")
     lu.add_argument("--dry-run", action="store_true", help="立花：登录与读取照常，发单只打印（账本单独一份）")
     lu.add_argument("--max-order-value", type=float, default=None, help="单笔上限（默认 权益 ×1.05）")
@@ -2017,6 +2045,10 @@ def main(argv=None) -> int:
                     help="与这个模拟盘状态文件逐日比较（Mac：仓库里 git pull 下来的 var/state/unified_state.json）；"
                          "模拟账户还没有账本时从它开始")
     lu.add_argument("--notify", action="store_true", help="结果发通知：macOS 通知中心 + QBREAK_WEBHOOK / QBREAK_SMTP（有设置时）")
+    lu.add_argument("--alert", default=None, metavar="TEXT", help="页面顶上的红色提示（scripts/liveu.sh 在运行失败时用）")
+    lu.add_argument("--note", default=None, metavar="TEXT", help="页面顶上的说明（例如试跑）")
+    lu.add_argument("--open", action="store_true", help="macOS：写完页面用浏览器打开（数据目录里有 NO_OPEN 文件就不打开）")
+    lu.add_argument("--desktop", action="store_true", help="在桌面放一个指向页面的链接（在终端里做一次；定时任务不碰桌面文件夹）")
     lu.add_argument("--params", default=None)
     lu.set_defaults(func=cmd_live_unified)
 

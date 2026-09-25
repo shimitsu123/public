@@ -369,3 +369,71 @@ def test_demo_order_test_runs_the_whole_order_cycle(capsys):
     out = capsys.readouterr().out
     assert "約定照会的字段" in out and "sYakuzyouSuryou" in out and "已撤" in out
     assert exch.pos.get("1655.T") == 10 and [o["status"] for o in exch.orders.values()] == ["10", "7"]
+
+
+# ────────── ④ Mac 上的页面（账本 + 日志）──────────
+def test_desktop_page_before_start_links_the_trial_page():
+    from qbreak import desktop_page
+    html = desktop_page.render("paper", 1_000_000, "2026-09-28")
+    assert "还没有开始" in html and "2026-09-28" in html and "trial_page.html" not in html
+    (paths.out_dir() / "trial_page.html").write_text("x", encoding="utf-8")
+    html = desktop_page.render("paper", 1_000_000, "2026-09-28", alert="运行没有完成（退出码 1）", note="这是试跑")
+    assert "href='trial_page.html'" in html and "★ 运行没有完成（退出码 1）" in html and "这是试跑" in html
+    assert "id='stale'" in html and "getUTCDay" in html and "非投资建议" in html
+    assert desktop_page.default_path("paper") == paths.out_dir() / "page_paper.html"
+
+
+def test_desktop_page_shows_book_orders_fills_market_and_journal(tmp_path):
+    from qbreak import desktop_page
+    from qbreak.live_unified import append_journal
+    make, start = _synth(7)
+    r = rehearse(make, start, kind="paper", workdir=tmp_path)
+    book = json.loads(open(r["book"], encoding="utf-8").read())
+    (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(book, ensure_ascii=False), encoding="utf-8")
+    st = book["state"]
+    mk = {"JP": {"state": "bull", "since": "2025-05-01", "days": 330, "asof": "2026-09-24", "phase_label": "牛市·稳固",
+                 "phase_text": "比 250 日均线高 15.3%", "flip_line": 40123.45},
+          "US": {"state": "bear", "since": "2026-08-01", "days": 40, "asof": "2026-09-24", "phase_label": "熊市·回升（在往牛的方向走）",
+                 "phase_text": "比 250 日均线低 2.0%", "flip_line": 6000.0}}
+    (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps(
+        {"fill_day": "2026-09-29", "blocked": None, "market": mk,
+         "compare": {"comparable": True, "same": False, "text": "★ 与云端模拟盘不一致"}}, ensure_ascii=False), encoding="utf-8")
+    jp = paths.out_dir() / "live_unified_paper_journal.md"
+    for d in ("09-28", "09-29"):
+        append_journal(jp, f"2026-{d} 07:45 JST", f"qbreak 模拟操盘 2026-{d}", f"- 决策日 2026-{d}\n- 下一开盘：没有单")
+    p = desktop_page.write(desktop_page.default_path("paper"), "paper", 1_000_000, "2026-09-28")
+    html = p.read_text(encoding="utf-8")
+    eq = float(st["history"][-1][1])
+    assert f"¥{eq:,.0f}" in html and "起始 ¥1,000,000" in html and "★ 与云端模拟盘不一致" in html
+    assert "牛市·稳固" in html and "熊市·回升" in html and "40,123.45 円" in html and "6,000.00 pt" in html
+    assert "<h2>持仓</h2>" in html and "<h2>下一开盘的单</h2>" in html and "<h2>最近成交</h2>" in html
+    fills = [o for h in book["history"] for o in h["orders"] if o["filled_qty"] > 0]
+    assert fills and ("口</td>" in html or "股</td>" in html)
+    assert html.index("2026-09-29 07:45 JST") < html.index("2026-09-28 07:45 JST")      # 日志：新的在上
+    for t, u in (st.get("core_units") or {}).items():
+        if int(u):
+            assert f"{int(u):,} 口" in html
+
+
+def test_desktop_link_is_a_symlink_and_never_replaces_a_real_file(tmp_path):
+    from qbreak import desktop_page
+    desk = tmp_path / "Desktop"
+    lk = desktop_page.link("paper", desk)
+    assert lk.name == "qbreak模拟操盘.html" and lk.is_symlink() and lk.resolve() == desktop_page.default_path("paper").resolve()
+    assert desktop_page.link("paper", desk) == lk                          # 重建：替换旧链接
+    real = desk / desktop_page.desktop_name("tachibana")
+    real.write_text("mine", encoding="utf-8")
+    with pytest.raises(FileExistsError):
+        desktop_page.link("tachibana", desk)
+    assert real.read_text(encoding="utf-8") == "mine"
+
+
+def test_daily_text_shows_bull_bear_phase():
+    from qbreak.live_unified import daily_text
+    from qbreak.unified import UState
+    st = UState(cash_jpy=1_000_000.0, last_date="2026-09-29", history=[["2026-09-29", 1_000_000.0, 0, 0, 150]])
+    sm = {"decided_on": "2026-09-29", "orders": [], "events": [], "blocked": None,
+          "market": {"JP": {"state": "bull", "phase_label": "牛市·稳固", "phase_text": "比 250 日均线高 15.3%"},
+                     "US": {"state": "unknown"}}}
+    _, _, body = daily_text(sm, st, None, True, 1_000_000)
+    assert "- 牛熊（日経平均）：牛市·稳固：比 250 日均线高 15.3%" in body and "S&P500" not in body

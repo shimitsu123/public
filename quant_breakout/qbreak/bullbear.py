@@ -382,7 +382,77 @@ def current_regime(close: pd.Series, market: str, cfg: dict | None = None) -> di
            "days": int(len(st) - since_i), "changed_today": bool(len(st) > 1 and st[-2] != cur and st[-2] != 0),
            "detector": det.name, "close": round(float(close.iloc[-1]), 2), "asof": str(close.index[-1].date())}
     out.update(boundary(close, det, cur, since_i))
+    out.update(phase(close, det, st, since_i))
     return out
+
+
+# ── 现在处于哪个阶段（只用于展示，不参与交易；阈值是展示用的，不是交易规则）──
+PHASE_NEAR = 3.0          # 离翻转线不到 3% → 临界
+PHASE_WEAK = 8.0          # 离翻转线不到 8% → 走弱（牛）/ 回升（熊）
+PHASE_TREND_PP = 5.0      # 20 个交易日里离均线的距离缩小 ≥ 5 个百分点 → 也算走弱 / 回升
+PHASE_DIR_PP = 1.0        # 方向文字：20 日变化超过 ±1 个百分点才说「靠近 / 远离」
+PHASE_LOOKBACK = 20       # 比较的回看交易日数
+PHASE_NEW_DAYS = 20       # 翻转后 20 个交易日内标「刚转」
+
+
+def phase(close: pd.Series, det: "Detector", st: np.ndarray, since_i: int) -> dict:
+    """现行检测器（ma_band：连续 k 天收在 250 日线 ×(1−b) 之下转熊、×(1+b) 之上转牛）下，现在处于哪个阶段：
+    牛市·稳固 / 牛市·走弱 / 牛市·临界 / 牛→熊确认中 / 熊市·深 / 熊市·回升 / 熊市·临界 / 熊→牛确认中（翻转后 20 天内加「刚转」），
+    并给出直观的百分比：离 250 日线的距离、它 20 个交易日的变化、还要跌 / 涨多少才碰到翻转线。其他检测器返回 {}。"""
+    if det.kind != "ma_band":
+        return {}
+    p = det.params
+    L, b, k = int(p["L"]), float(p["b"]), int(p["k"])
+    v = close.values.astype(float)
+    ma = _sma(v, L)
+    if len(v) <= L + PHASE_LOOKBACK or not np.isfinite(ma[-1]) or not np.isfinite(ma[-1 - PHASE_LOOKBACK]):
+        return {}
+    cur = int(st[-1])
+    dev = (v / ma - 1) * 100
+    now, prev = float(dev[-1]), float(dev[-1 - PHASE_LOOKBACK])
+    chg = round(now - prev, 1)                            # 判断用显示出来的那个数（避免「−1.0 个百分点，变化不大」）
+    days = int(len(st) - since_i)
+    run = 0
+    for x, m_ in zip(v[::-1], ma[::-1]):
+        if (cur == BULL and x < m_ * (1 - b)) or (cur == BEAR and x > m_ * (1 + b)):
+            run += 1
+        else:
+            break
+    if cur == BULL:
+        line = float(ma[-1] * (1 - b))
+        need = (1 - line / v[-1]) * 100                    # 还要跌多少 %（已在线下时 ≤ 0）
+        if run >= 1:
+            code, label = "bull_to_bear", f"牛→熊 确认中（已连续 {run}/{k} 天收在转熊线下）"
+        elif need < PHASE_NEAR:
+            code, label = "bull_near", f"牛市·临界（离转熊线不到 {PHASE_NEAR:g}%）"
+        elif need < PHASE_WEAK or chg <= -PHASE_TREND_PP:
+            code, label = "bull_weak", "牛市·走弱（在往熊的方向走）"
+        else:
+            code, label = "bull_firm", "牛市·稳固"
+        way = "向熊靠近" if chg <= -PHASE_DIR_PP else ("远离转熊线（走强）" if chg >= PHASE_DIR_PP else "变化不大")
+        move = (f"已在转熊线下 {-need:.1f}%，再连续 {k - run} 天就转熊" if run >= 1 else
+                f"要再跌 {need:.1f}% 并连续 {k} 天收在线下才会转熊")
+    else:
+        line = float(ma[-1] * (1 + b))
+        need = (line / v[-1] - 1) * 100                    # 还要涨多少 %（已在线上时 ≤ 0）
+        if run >= 1:
+            code, label = "bear_to_bull", f"熊→牛 确认中（已连续 {run}/{k} 天收在转牛线上）"
+        elif need < PHASE_NEAR:
+            code, label = "bear_near", f"熊市·临界（离转牛线不到 {PHASE_NEAR:g}%）"
+        elif need < PHASE_WEAK or chg >= PHASE_TREND_PP:
+            code, label = "bear_recover", "熊市·回升（在往牛的方向走）"
+        else:
+            code, label = "bear_deep", "熊市·深"
+        way = "向牛靠近" if chg >= PHASE_DIR_PP else ("远离转牛线（走弱）" if chg <= -PHASE_DIR_PP else "变化不大")
+        move = (f"已在转牛线上 {-need:.1f}%，再连续 {k - run} 天就转牛" if run >= 1 else
+                f"要再涨 {need:.1f}% 并连续 {k} 天收在线上才会转牛")
+    if days <= PHASE_NEW_DAYS and run == 0:
+        label = f"刚转{'牛' if cur == BULL else '熊'}（第 {days} 个交易日）· " + label
+    text = (f"比 {L} 日均线{'高' if now >= 0 else '低'} {abs(now):.1f}%（{PHASE_LOOKBACK} 个交易日前 {prev:+.1f}%，"
+            f"{chg:+.1f} 个百分点，{way}）；{move}")
+    return {"phase": code, "phase_label": label, "phase_text": text, "ma_dev_pct": round(now, 2),
+            "ma_dev_pct_prev": round(prev, 2), "ma_dev_change_pp": round(chg, 2), "to_flip_pct": round(-need if cur == BULL else need, 2),
+            "confirm_days": run, "confirm_need": k, "flip_line": round(line, 2)}
 
 
 def boundary(close: pd.Series, det: Detector, cur: int, since_i: int) -> dict:

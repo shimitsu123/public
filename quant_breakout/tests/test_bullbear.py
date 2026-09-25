@@ -105,3 +105,47 @@ def test_engine_regime_blocks_entries_and_forces_exit():
     forced = run_backtest(ind, p, bt, regime=flip, regime_exit=True)
     tr = forced.trades.iloc[0]
     assert tr["reason"] == "regime_bear" and str(tr["exit_date"].date()) == str(ind["A.T"].index[41].date())
+
+
+# ────────── 现在处于哪个阶段（只用于展示）──────────
+def _phase_of(v, L=250, b=0.03, k=5):
+    import numpy as np
+    import pandas as pd
+    from qbreak.bullbear import current_regime
+    close = pd.Series(np.asarray(v, float), index=pd.bdate_range("2015-01-01", periods=len(v)))
+    return current_regime(close, "JP", {"detector": {"kind": "ma_band", "params": {"L": L, "b": b, "k": k}}})
+
+
+def test_phase_bull_firm_weak_near_and_confirming():
+    import numpy as np
+    up = list(np.linspace(100, 200, 400))
+    r = _phase_of(up)                                        # 一路上涨：离均线很远 → 稳固
+    assert r["state"] == "bull" and r["phase"] == "bull_firm" and r["to_flip_pct"] < -8
+    assert "要再跌" in r["phase_text"] and "转熊" in r["phase_text"]
+    flat = list(np.linspace(100, 200, 300)) + [200.0] * 200   # 横盘：均线追上来 → 离转熊线越来越近
+    r = _phase_of(flat)
+    assert r["state"] == "bull" and r["phase"] in ("bull_weak", "bull_near") and r["ma_dev_change_pp"] < 0
+    ma = float(np.mean(flat[-250:]))
+    below = flat + [ma * 0.95] * 2                            # 连续 2 天收在转熊线（均线 −3%）下
+    r = _phase_of(below)
+    assert r["state"] == "bull" and r["phase"] == "bull_to_bear" and r["confirm_days"] == 2 and "2/5" in r["phase_label"]
+
+
+def test_phase_bear_deep_recover_and_new():
+    import numpy as np
+    down = list(np.linspace(200, 100, 400))
+    r = _phase_of(down)
+    assert r["state"] == "bear" and r["phase"] == "bear_deep" and r["to_flip_pct"] > 8 and "要再涨" in r["phase_text"]
+    rec = down + list(np.linspace(100, 125, 40))              # 反弹：离转牛线变近
+    r = _phase_of(rec)
+    assert r["state"] == "bear" and r["phase"] in ("bear_recover", "bear_near", "bear_to_bull")
+    assert r["ma_dev_change_pp"] > 0
+
+
+def test_phase_only_for_ma_band_detector():
+    import numpy as np
+    import pandas as pd
+    from qbreak.bullbear import current_regime
+    close = pd.Series(np.linspace(100, 200, 400), index=pd.bdate_range("2015-01-01", periods=400))
+    r = current_regime(close, "JP", {"detector": {"kind": "dd_rally", "params": {"x": 0.2, "y": 0.2}}})
+    assert r["state"] == "bull" and "phase" not in r

@@ -64,7 +64,9 @@ def build_unified_data() -> dict:
                         for m, e in (td.get("extras") or {}).items()},
             "hint": ("一个账户模式：账户数值在顶层（equity_jpy / ret_pct / max_dd_pct / cash_jpy / cash_usd / positions / "
                      "core_units×core_last / todo / trades / core_trades / fx_trades / corp_log）；当日损益 = history 最后两行的权益差；"
-                     "牛熊分界在 markets.JP.regime.bullbear（日経）与 markets.US.regime.bullbear（S&P500，只用于 1655 择时）；"
+                     "牛熊分界在 markets.JP.regime.bullbear（日経）与 markets.US.regime.bullbear（S&P500，只用于 1655 择时），"
+                     "其中 phase_label / phase_text = 现在处于哪个阶段（牛·稳固 / 牛·走弱 / 牛→熊确认中 / 熊·回升 …）"
+                     "与直观百分比（离 250 日线的距离、20 个交易日的变化、还要跌 / 涨多少才翻转），汇报时先写这个；"
                      "候补队列在 markets.JP.watchlist；大事件威胁指数在 threat（只展示，不参与交易）；"
                      "missing = 日报应有而没取到的数据（项目 + 原因），汇报时逐项列出。")}
     d["missing"] = missing_items(d)
@@ -295,7 +297,9 @@ def render_unified_html(d: dict) -> str:
         if bb.get("state") in ("bull", "bear"):
             flip = bb.get("flip_to") or ("bear" if bb["state"] == "bull" else "bull")
             days = f"，已 {bb['days']} 个交易日" if bb.get("days") is not None else ""
-            line = (f"牛熊分界 {_BB[bb['state']]}（自 {escape(str(bb.get('since')))}{days}；"
+            head = (f"<b>{escape(str(bb['phase_label']))}</b>：{escape(str(bb.get('phase_text') or ''))}。明细："
+                    if bb.get("phase_label") else "")              # 现在处于哪个阶段（只用于展示）
+            line = (f"牛熊分界 {head}{_BB[bb['state']]}（自 {escape(str(bb.get('since')))}{days}；"
                     f"{'转熊' if flip == 'bear' else '转牛'}价位 {_lvl(bb.get('level'), m)}，"
                     + (f"现价 {_lvl(bb['close'], m)}，" if bb.get("close") is not None else "")
                     + f"距翻转价位 {_pct(bb.get('distance_pct'), 2, True)}"

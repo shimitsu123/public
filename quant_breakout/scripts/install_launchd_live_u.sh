@@ -95,13 +95,20 @@ if [ "$MODE" = "paper" ]; then
   plist com.qbreak.liveu.paper 7 40 run --broker paper
 else
   plist com.qbreak.liveu.morning 7 40 run --broker tachibana
-  plist com.qbreak.liveu.open 9 5 --broker tachibana --phase open --notify
+  plist com.qbreak.liveu.open 9 5 run --broker tachibana --phase open
 fi
 
 # ③ 环境自检（Python 版本、依赖、行情连通性）
 QBREAK_HOME="$LHOME" "$PYX" "$PROJ/run.py" doctor || echo "★ doctor 有失败项（见上），修好再等明天早上的运行"
+# ④ 桌面链接 → 每天重写的页面（账本 + 日志）。只在 macOS、只在这里（终端里）建一次：定时任务不碰受隐私保护的桌面文件夹
+if [ "$(uname)" = "Darwin" ]; then
+  (QBREAK_LIVEU_HOME="$LHOME" QBREAK_PYTHON="$PYX" bash "$PROJ/scripts/liveu.sh" --broker "$MODE" --status --desktop 2>&1 \
+     | grep -E "桌面链接|★") \
+    || echo "（桌面链接没建成：之后在终端里运行 bash \"$PROJ/scripts/liveu.sh\" desktop --broker $MODE）"
+fi
 echo
-echo "数据目录 $LHOME（账本 state/、日志 logs/、每天的日志 out/live_unified_${MODE}_journal.md）"
+echo "数据目录 $LHOME（账本 state/、日志 logs/、每天的日志 out/live_unified_${MODE}_journal.md、页面 out/page_${MODE}.html）"
+echo "页面：每次运行后重写，定时任务跑完自动打开（不想弹出：touch \"$LHOME/NO_OPEN\"）；桌面上的 qbreak*.html 指向它"
 echo "看账本：  bash \"$PROJ/scripts/liveu.sh\" --broker $MODE --status"
 echo "手动跑一次（和定时任务相同）：bash \"$PROJ/scripts/liveu.sh\" run --broker $MODE"
 if [ "$MODE" = "tachibana" ]; then

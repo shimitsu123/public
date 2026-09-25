@@ -202,13 +202,17 @@ python run.py report                           # 只重新生成 var/out/report.
 
 - 日报：<https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ>（每个交易日 07:00 JST 由例行任务更新，同一个 URL）
 - 券商：2026-09-25 深夜起模拟盘按**立花 e支店 個別コース**计费（`sim-unify --broker tachibana`；只有日元、只做东证，1655.T 在东京开盘时买卖）。
-  一个账户的**实盘执行器** `run.py live-u`（07:30 对账 → 决策 → 寄付单；09:05 开盘后补单）已完成并用模拟账户演练过：
+  一个账户的**实盘执行器** `run.py live-u`（07:40 对账 → 决策 → 寄付单；09:05 开盘后补单）已完成并用模拟账户演练过：
   历史回放与回测引擎逐笔一致（5 年 23.02% / 20 年 12.87%，差 ¥0），走真实立花适配器 + 模拟交易所时 5 年 22.99%（`var/out/live_rehearsal.md`）；
   9/28 起 `sim-day` 每天用模拟券商把执行器走一遍、与模拟盘比较（日报顶部）。上线步骤见 MACOS.md §1.6
 - **Mac 上的模拟操盘（立花开户前，现在就做）**：终端里粘贴一行
   `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/shimitsu123/public/claude/rakuten-auto-trading-review-ka7lf0/quant_breakout/scripts/mac_bootstrap.sh)"`
   （= 取代码 + `bash scripts/install_launchd_live_u.sh`（默认 paper）+ 试跑）→ 周一至五 07:40 在 Mac 上用
-  同一个执行器跑模拟账户、与云端模拟盘逐日比较、发通知、写日志；状态在 `~/.qbreak/home`（不在仓库里）。见 MACOS.md §1.7
+  同一个执行器跑模拟账户、与云端模拟盘逐日比较、发通知、写日志；状态在 `~/.qbreak/home`（不在仓库里）。
+  每次运行后重写「账本 + 日志」页面并自动打开（桌面上的 `qbreak模拟操盘.html` 指向它；含牛熊现在处于哪个阶段）。见 MACOS.md §1.7
+- 牛熊分界除了「牛 / 熊」的结果，再给**现在处于哪个阶段**（只展示，不改交易规则）：牛市·稳固 / 走弱 / 临界 / 牛→熊确认中、
+  熊市·深 / 回升 / 临界 / 熊→牛确认中（翻转后 20 个交易日内标「刚转」），附离 250 日均线的百分比、它 20 个交易日的变化（百分点）、
+  还要跌 / 涨多少 % 才碰到翻转线（`qbreak/bullbear.py` 的 `phase()`；日报「市场状态」、Mac 页面、执行器日志都显示）
 - 一个账户模式（`sim.json` mode = unified）：`sim-day` 在开始日之前**只预览**（用最新收盘算市场状态、候补队列、USD/JPY、威胁指数，
   不读写账户状态、不下单）；`report` 重出统一日报。日报每个数字带单位，顶部「数据完整性」逐项列出没取到的数据与原因
   （行情缓存除了 12 小时有效期，还按交易日历检查是否缺了应有的最近交易日，缺了就重下载，仍缺的在这里列出）

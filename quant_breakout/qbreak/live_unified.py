@@ -4,7 +4,7 @@
 收盘后的离场判断、统一决策（明天的单）都是同一段代码 —— 成交相同，实盘就与模拟盘 / 回测逐笔相同。
 
 每个交易日（F = 成交日，D = 它的上一交易日）
-  早上（F 的 06:30〜08:55，美股 D 收盘之后；例行任务 07:30）  run.py live-u --phase morning
+  早上（F 的 06:30〜08:55，美股 D 收盘之后；Mac 定时任务 07:40）  run.py live-u --phase morning
     ① 对账：D 那天下的单 → 向券商查实际成交（数量 / 均价）→ 记进状态。顺序与引擎相同：个股卖 → 核心卖 → 个股买 → 核心买。
        卖单没成交（ストップ安張り付き等）→ 仍是「待卖」，今天再下；买单没成交 → 作废（信号只在次日开盘有效，与回测相同）
     ② 核对：券商持仓 = 状态持仓？不一致 → 今天不下单、报警。现金以券商的买付可能額为准（税、实际手续费、分红入账都在这里对齐）
@@ -717,6 +717,9 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
                      + (f"：{o['note']}" if o.get("note") else ""))
     if not sm.get("orders"):
         lines.append("- 下一开盘：没有单")
+    for m, bb in (sm.get("market") or {}).items():        # 牛熊：现在处于哪个阶段（只展示）
+        if bb and bb.get("phase_label"):
+            lines.append(f"- 牛熊（{ {'JP': '日経平均', 'US': 'S&P500'}.get(m, m)}）：{bb['phase_label']}：{bb.get('phase_text', '')}")
     if cmp:
         lines.append(f"- {cmp['text']}")
     if sm.get("blocked"):

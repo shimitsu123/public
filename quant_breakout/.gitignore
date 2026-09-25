@@ -11,3 +11,5 @@ __pycache__/
 var/out/trades_*.csv
 var/out/equity_*.csv
 var/out/walk_forward_*.csv
+var/out/page_*.html
+var/out/trial_page.html

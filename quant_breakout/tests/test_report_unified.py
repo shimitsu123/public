@@ -257,3 +257,17 @@ def test_report_shows_executor_rehearsal_and_flags_mismatch():
     write_json(paths.out_dir() / "unified_today.json", td)
     write_unified_report()
     assert any("运行失败" in m for m in read_json(paths.out_dir() / "report_data.json")["missing"])
+
+
+def test_report_leads_with_bull_bear_phase_and_percentages():
+    _write(["JP"])
+    td = read_json(paths.out_dir() / "unified_today.json")
+    td["extras"]["JP"]["regime"]["bullbear"].update(
+        phase="bull_firm", phase_label="牛市·稳固",
+        phase_text="比 250 日均线高 15.3%（20 个交易日前 +18.0%，-2.8 个百分点，向熊靠近）；要再跌 15.9% 并连续 5 天收在线下才会转熊")
+    write_json(paths.out_dir() / "unified_today.json", td)
+    html = write_unified_report().read_text(encoding="utf-8")
+    assert "<b>牛市·稳固</b>：比 250 日均线高 15.3%" in html and "要再跌 15.9%" in html
+    assert "转熊价位 55,673 円" in html                     # 原来的明细还在
+    rd = read_json(paths.out_dir() / "report_data.json")
+    assert rd["markets"]["JP"]["regime"]["bullbear"]["phase_label"] == "牛市·稳固" and "phase_text" in rd["hint"]
