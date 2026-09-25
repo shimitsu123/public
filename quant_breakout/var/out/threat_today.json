@@ -325,6 +325,23 @@
     "pct": 21
    }
   ],
+  "watch_jp": {
+   "date": "2026-09-24",
+   "Wj": 67.03,
+   "Wj_pct": 91.35,
+   "W2": 46.99,
+   "W2_pct": 39.1,
+   "A0": 58.54,
+   "A0_pct": 77.79,
+   "p_em_rel": 69.61,
+   "p_real10": 84.5,
+   "p_tankan_big": 21.11,
+   "p_tankan_small": 64.02,
+   "p_claims": 10.75,
+   "p_breadth": 93.97,
+   "p_boj": 94.66,
+   "p_jp_cgpi": 97.65
+  },
   "domains": {
    "信用 / 破产代理": {
     "pct": 42,
