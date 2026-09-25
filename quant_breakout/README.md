@@ -9,8 +9,8 @@
 
 | 券商 | macOS 原生 | 接口 | 说明 |
 |---|---|---|---|
-| 立花証券 e支店（可选） | ✅ | HTTP(GET+JSON) + 实时推送；v4r10 用 AuthID + RSA 私钥登录（不用电话） | Mac / Linux 上可原生全自动（2026-09-25 下午曾切换，当晚改回楽天）。API 免费；只做东证上市的现物 / 信用（**不做美股**，美股指数用东证 1655）；手续费 個別コース 50 万 187 円 / 100 万 341 円…→ [`MACOS.md`](MACOS.md)。适配器已按 v4r10 公开仕様書升级，开户后先过 `tachibana-probe --demo`（见已知局限 13） |
-| **楽天証券（模拟盘默认，一个账户）** | ❌ | MARKETSPEED II RSS（Excel 插件） | 仅 Windows 11 + Windows 版 Excel，只能下日本股 / 国内先物・期权（换汇、美股只能手动）。现行方案的单全是东证日本株 / ETF，RSS 能全部覆盖（见「一个账户（楽天）」一节）。Mac 上的 MARKETSPEED for Mac 只能手动下单。日本株手续费 0 円（ゼロコース）。→ [`excel/README_excel.md`](excel/README_excel.md) |
+| **立花証券 e支店（模拟盘默认，2026-09-25 深夜起）** | ✅ | HTTP(GET+JSON) + 实时推送；v4r10 用 AuthID + RSA 私钥登录（不用电话） | Mac / Linux 上可原生全自动（不做美股个股后，楽天的美元 / 换汇逻辑用不到，改用立花；按立花手续费现行方案年化约少 0.46 pp，见 `var/out/broker_s0c2_study.md`）。API 免费；只做东证上市的现物 / 信用（**不做美股**，美股指数用东证 1655）；手续费 個別コース 50 万 187 円 / 100 万 341 円…→ [`MACOS.md`](MACOS.md)。适配器已按 v4r10 公开仕様書升级，开户后先过 `tachibana-probe --demo`（见已知局限 13） |
+| 楽天証券（可选：要做美股个股时） | ❌ | MARKETSPEED II RSS（Excel 插件） | 仅 Windows 11 + Windows 版 Excel，只能下日本股 / 国内先物・期权（换汇、美股只能手动）。现行方案的单全是东证日本株 / ETF，RSS 能全部覆盖（见「一个账户（楽天）」一节）。Mac 上的 MARKETSPEED for Mac 只能手动下单。日本株手续费 0 円（ゼロコース）。→ [`excel/README_excel.md`](excel/README_excel.md) |
 | 模拟盘 | ✅ | 本地撮合 | 不需要任何账户，先用它跑通全流程 |
 | **半自动（任何券商）** | ✅ | 无 —— 程序只出清单，你在 App 里照抄 | **留在楽天也能用**。`run.py signal` |
 
@@ -201,6 +201,7 @@ python run.py report                           # 只重新生成 var/out/report.
 ```
 
 - 日报：<https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ>（每个交易日 07:00 JST 由例行任务更新，同一个 URL）
+- 券商：2026-09-25 深夜起模拟盘按**立花 e支店 個別コース**计费（`sim-unify --broker tachibana`；只有日元、只做东证，1655.T 在东京开盘时买卖）。一个账户的实盘执行器（每天开盘前按与模拟盘同一计划经立花 API 下单）是下一步，见 MACOS.md
 - 一个账户模式（`sim.json` mode = unified）：`sim-day` 在开始日之前**只预览**（用最新收盘算市场状态、候补队列、USD/JPY、威胁指数，
   不读写账户状态、不下单）；`report` 重出统一日报。日报每个数字带单位，顶部「数据完整性」逐项列出没取到的数据与原因
   （行情缓存除了 12 小时有效期，还按交易日历检查是否缺了应有的最近交易日，缺了就重下载，仍缺的在这里列出）

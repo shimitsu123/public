@@ -383,9 +383,9 @@ def _refuse_unified(a) -> bool:
     --no-sim-config 时照旧按命令行参数。"""
     if getattr(a, "no_sim_config", False) or (_sim_cfg() or {}).get("mode") != "unified":
         return False
-    print("var/sim.json 是「一个账户」模式（楽天；个股与闲置资金的 ETF 在同一个账户里一起配）。分市场的实盘 / 清单 / 守护进程"
+    print("var/sim.json 是「一个账户」模式（个股与闲置资金的 ETF 在同一个账户里一起配）。分市场的实盘 / 清单 / 守护进程"
           "会和模拟盘的规则不一致，所以不运行。\n"
-          "现在：按日报「今天要做的事」（var/out/report.html）操作；一个账户的实盘执行器（RSS 自动下日本单，换汇与美股单提示手动）是下一步。\n"
+          "现在：按日报「今天要做的事」（var/out/report.html）操作；一个账户的实盘执行器（立花 API 每天开盘前按同一计划自动下单）是下一步。\n"
           "确实要按旧的分市场规则：加 --no-sim-config，并在命令行给出 --cash / --position-pct / --core。")
     return True
 
@@ -816,7 +816,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     from qbreak.fees import broker_of, etf_cost
     from qbreak.strategy import compute_indicators
     from qbreak.trader import drop_partial_bar
-    from qbreak.unified import UnifiedEngine, UState, market_of
+    from qbreak.unified import UnifiedEngine, UState, exec_configs, market_of
     from qbreak.utils import read_json, write_json
     ucfg = _unified_cfg(cfg)
     u = cfg.get("unified") or {}
@@ -856,7 +856,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
         bear[m] = pd.Series(np.asarray(det.states(ix["Close"])) == BEAR, index=ix.index)
     fxd = load_universe(["JPY=X"], DataConfig(provider=provider, years=2, allow_synthetic=False, min_bars=100).validate())
     fx = fxd["JPY=X"][["Open", "Close"]] if "JPY=X" in fxd else None
-    ex = {m: ExecConfig.for_market(m, broker_of(m, u)) for m in ("JP", "US")}
+    ex = exec_configs(ucfg.stock_markets, u)
     ccost = {t: etf_cost(broker, t, market_of(t)) for t in ucfg.core}
     eng = UnifiedEngine(ind, ucfg, params, ex, ccost, fx=fx, bear=bear, state=state)
     today = _dt.date.today()
@@ -1316,22 +1316,28 @@ def cmd_sim_unify(a) -> int:
         dst = paths.home() / "archive" / f"{_dt.date.today().isoformat()}_UNIFIED"
         dst.mkdir(parents=True, exist_ok=True)
         up.replace(dst / up.name)
+    from qbreak.fees import BROKERS, DEFAULT_BROKER
     core = {k: float(v) for k, v in (x.split(":") for x in a.core.split(",") if x)}
-    for sec in ("jp", "us"):                                 # 旧分仓段只剩宏观 / 状态层开关在用；券商统一为楽天
+    sm = [m.strip().upper() for m in a.stock_markets.split(",") if m.strip()]
+    broker = getattr(a, "broker", None) or ("rakuten" if "US" in sm else DEFAULT_BROKER["JP"])
+    if [m for m in sm if m not in BROKERS[broker]["markets"]]:
+        print(f"{BROKERS[broker]['label']} 不做 {'、'.join(m for m in sm if m not in BROKERS[broker]['markets'])} 的个股"
+              "（立花只做东证；美股个股要用楽天）"); return 2
+    for sec in ("jp", "us"):                                 # 旧分仓段只剩宏观 / 状态层开关在用；券商与一个账户相同
         if isinstance(cfg.get(sec), dict):
-            cfg[sec]["broker"] = "rakuten"
+            cfg[sec]["broker"] = broker
     cfg["mode"] = "unified"
     cfg["capital_jpy"] = float(a.capital or cfg.get("capital_jpy") or 1_000_000)
     cfg["start"] = a.start or _dt.date.today().isoformat()
-    cfg["unified"] = {"broker": "rakuten", "position_pct": a.position_pct, "max_positions": a.max_positions,
+    cfg["unified"] = {"broker": broker, "position_pct": a.position_pct, "max_positions": a.max_positions,
                       "max_position_pct": max(0.34, a.position_pct),
-                      "stock_markets": [m.strip().upper() for m in a.stock_markets.split(",") if m.strip()],
+                      "stock_markets": sm,
                       "core": core, "core_index": {t: ("JP" if t == "1329.T" or t == "1306.T" else "US") for t in core},
                       "core_mode": a.core_mode, "universe": {"JP": "broad", "US": "broad"}}
     if "US" in cfg["unified"]["stock_markets"]:              # op_mode_study：美股即将有信号时美元先不换回
         cfg["unified"]["usd_keep_imminent"] = True
     write_json(paths.home() / SIM_FILE, cfg)
-    print(f"已改为一个账户模式：¥{cfg['capital_jpy']:,.0f}，个股 {a.max_positions}×{a.position_pct:.0%}"
+    print(f"已改为一个账户模式（{BROKERS[broker]['label']}）：¥{cfg['capital_jpy']:,.0f}，个股 {a.max_positions}×{a.position_pct:.0%}"
           f"（{'+'.join(cfg['unified']['stock_markets'])}），闲置资金 {core}（{a.core_mode}）。下一次 sim-day 生效。")
     return 0
 
@@ -1659,7 +1665,9 @@ def main(argv=None) -> int:
     dm.add_argument("--once", action="store_true", help="只跑一轮就退出（测试用）")
     dm.set_defaults(func=cmd_daemon)
 
-    su = sub.add_parser("sim-unify", help="模拟盘改为一个账户（楽天，日元 + 美元；日本株 + 美股 + 东证 ETF 一起配）")
+    su = sub.add_parser("sim-unify", help="模拟盘改为一个账户（个股与闲置资金的东证 ETF 一起配；楽天可加美股，立花只做东证）")
+    su.add_argument("--broker", default=None, choices=["rakuten", "tachibana"],
+                    help="券商（默认：有美股个股 → 楽天，否则 fees.DEFAULT_BROKER）")
     su.add_argument("--capital", type=float, default=None, help="总资金（日元），默认沿用 capital_jpy")
     su.add_argument("--stock-markets", default="JP,US", help="个股参与统一排名的市场")
     su.add_argument("--core", default="1329.T:0.5,1655.T:0.5", help="闲置资金的东证 ETF 与权重")

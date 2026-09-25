@@ -131,7 +131,10 @@ def test_report_commodity_sector_card():
               "us_etf": {"GDX": {"gold": [1.78, 9.0]}, "KRE": {"gold": [-0.22, -2.2]}}}})
     html = write_unified_report().read_text(encoding="utf-8")
     assert "商品 × 行业" in html and "钢铁·有色 +0.21%*" in html and "金融（除银行） -0.18%*" in html
-    assert "金矿股 +1.78%*" in html and "地区银行 -0.22%*" in html
+    assert "美国行业受益" not in html and "金矿股" not in html                     # 只做日本个股：不列美国行业
+    _write(["JP", "US"])
+    html = write_unified_report().read_text(encoding="utf-8")
+    assert "金矿股 +1.78%*" in html and "地区银行 -0.22%*" in html and "美国行业受益" in html
 
 
 def _sim_unified_jp():
@@ -195,7 +198,9 @@ def test_preview_fills_market_state_watchlist_cash_fx_with_units(monkeypatch, ca
     html = (paths.out_dir() / "report.html").read_text(encoding="utf-8")
     assert "开始前的预览" in html and "日本 2026-09-25 收盘、美股 2026-09-24 收盘（开始前的预览）" in html
     assert "8801.T" in html and "91.5 分" in html and "是（一手 ¥150,100）" in html
-    assert "149.25 円/USD（Yahoo 2026-09-25）" in html and "¥1,000,000" in html and "$0.00" in html
+    assert "一个账户（立花証券ｅ支店，日元，只做东证）" in html and "¥1,000,000" in html          # 默认券商：立花（只有日元）
+    assert "USD/JPY（只影响 1655.T 的日元价值）</span><b>149.25 円/USD</b>" in html and "Yahoo 2026-09-25" in html
+    assert "美元现金" not in html and "$0.00" not in html and "個別コース" in html and "≤10 万 ¥77" in html
     assert "明天新仓倍数 0.5 倍" in html and "判断层（市场风险报告 2026-09-24）：减仓观察（24 小时崩盘概率 15%，倍数 0.5 倍）" in html
     assert "转熊价位 44,000 円，现价 45,500 円，距翻转价位 +3.41%" in html and "转熊价位 6,190.2 pt" in html
     assert "20 日波动 18.2%（年化）" in html and "离一年高点 -4.1%" in html
@@ -214,3 +219,21 @@ def test_report_command_rebuilds_unified_report_in_unified_mode():
     (paths.out_dir() / "report.html").unlink(missing_ok=True)
     assert run.cmd_report(argparse.Namespace(market="JP")) == 0
     assert "一个账户" in (paths.out_dir() / "report.html").read_text(encoding="utf-8")     # 不是旧的分市场日报
+
+
+def test_sim_unify_tachibana_jp_only_and_refuses_us_stocks():
+    import run
+    from qbreak.unified import exec_configs
+    write_json(paths.home() / "sim.json", {"start": "2026-09-28", "end": "2026-12-24", "capital_jpy": 1_000_000,
+               "markets": ["JP", "US"], "jp": {"initial_cash": 1_000_000}, "us": {"initial_cash": 1_000_000, "venue": "JP"}})
+    ns = argparse.Namespace(capital=None, stock_markets="JP,US", core="1655.T:1", core_mode="split", position_pct=0.25,
+                            max_positions=4, start="2026-09-28", force=False, broker="tachibana")
+    assert run.cmd_sim_unify(ns) == 2                                       # 立花不做美股个股
+    ns.stock_markets = "JP"
+    assert run.cmd_sim_unify(ns) == 0
+    cfg = read_json(paths.home() / "sim.json")
+    assert cfg["unified"]["broker"] == cfg["jp"]["broker"] == cfg["us"]["broker"] == "tachibana"
+    ex = exec_configs(cfg["unified"]["stock_markets"], cfg["unified"])       # 美股只是推进器的结构：不报错、不收费
+    assert ex["JP"].fee(250_000) == 187 and ex["US"].fee(10_000) == 0
+    html = write_unified_report().read_text(encoding="utf-8")
+    assert "立花証券ｅ支店，日元，只做东证" in html and "無人" not in html and "1655.T 100%" in html

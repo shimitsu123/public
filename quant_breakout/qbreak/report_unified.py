@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import paths
 from .calendar_jp import now_jst
+from .fees import BROKERS, broker_of
 from .unified import config_from_sim
 from .utils import read_json
 
@@ -55,12 +56,12 @@ def build_unified_data() -> dict:
             "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
             "config": td.get("config") or config_from_sim(sim).to_dict(),     # 首次运行前从 sim.json 取
-            "broker": td.get("broker", "rakuten"), "skipped": td.get("skipped") or {},
+            "broker": td.get("broker") or broker_of("JP", sim.get("unified")), "skipped": td.get("skipped") or {},
             # 例行任务（旧提示按分市场日报写）也能找到：markets.<市场>.regime.bullbear / watchlist
             "markets": {m: {"regime": e.get("regime") or {}, "macro": e.get("macro") or {},
                             "watchlist": e.get("watchlist") or [], "core_only": e.get("core_only")}
                         for m, e in (td.get("extras") or {}).items()},
-            "hint": ("一个账户模式（楽天）：账户数值在顶层（equity_jpy / ret_pct / max_dd_pct / cash_jpy / cash_usd / positions / "
+            "hint": ("一个账户模式：账户数值在顶层（equity_jpy / ret_pct / max_dd_pct / cash_jpy / cash_usd / positions / "
                      "core_units×core_last / todo / trades / core_trades / fx_trades / corp_log）；当日损益 = history 最后两行的权益差；"
                      "牛熊分界在 markets.JP.regime.bullbear（日経）与 markets.US.regime.bullbear（S&P500，只用于 1655 择时）；"
                      "候补队列在 markets.JP.watchlist；大事件威胁指数在 threat（只展示，不参与交易）；"
@@ -83,7 +84,8 @@ def missing_items(d: dict) -> list[str]:
         out.append("数据截至日期：账户状态里没有")
     if d.get("usdjpy") is None:
         out.append("USD/JPY：账户状态、Yahoo、FRED、市场风险报告都没取到")
-    for key, label in (("cash_jpy", "日元现金"), ("cash_usd", "美元现金")):
+    usd = "US" in (BROKERS.get(d.get("broker") or "", {}).get("markets") or {"US": 1})
+    for key, label in (("cash_jpy", "日元现金"), ("cash_usd", "美元现金"))[:2 if usd else 1]:
         if d.get(key) is None and (started or preview):
             out.append(f"{label}：账户状态里没有")
     ex = d.get("extras") or {}
@@ -110,7 +112,7 @@ def missing_items(d: dict) -> list[str]:
     if not t or t.get("error"):
         out.append(f"大事件威胁指数：{t.get('error') or '没有算出'}")
     mr = read_json(paths.home() / "market_regime.json", {}) or {}
-    for m in ("JP", "US"):
+    for m in cfg.get("stock_markets") or ["JP"]:                   # 判断层只影响做个股的市场的新仓倍数
         if not (mr.get(m) or {}).get("action"):
             out.append(f"{_MNAME[m]} 市场风险报告的判断层（行动四选一）：没取到（按量化层单独判断）")
     ref = pd_date(d.get("data_dates", {}).get("JP")) or pd_date(d.get("bar_date")) or now_jst().date()
@@ -173,6 +175,28 @@ def _spark(hist: list, w: int = 640, h: int = 120) -> str:
     return (f'<svg viewBox="0 0 {w} {h}" class="spark" role="img" aria-label="权益曲线">'
             f'<polyline fill="none" stroke="var(--accent)" stroke-width="2" points="{pts}"/></svg>'
             f'<div class="muted">{escape(hist[0][0])} ～ {escape(hist[-1][0])}：{_money(ys[0])} → {_money(ys[-1])}</div>')
+
+
+def _has_usd(broker: str | None) -> bool:
+    """该券商的账户有没有美元（楽天：日元 + 美元；立花：只有日元，只做东证）。"""
+    return "US" in ((BROKERS.get(broker or "") or {}).get("markets") or {"US": 1})
+
+
+def _acct(broker: str | None, with_us: bool) -> str:
+    lab = (BROKERS.get(broker or "") or {}).get("label") or "楽天証券"
+    return f"{lab}，日元 + 美元" if _has_usd(broker) else f"{lab}，日元，只做东证"
+
+
+def _fee_rule(broker: str | None, cfg: dict) -> str:
+    """规则栏的手续费说明（与 qbreak/fees.py 同一份费用表）。"""
+    b = BROKERS.get(broker or "") or {}
+    if broker == "tachibana":
+        tiers = "、".join(f"≤{int(cap) // 10000} 万 ¥{int(fee)}" for cap, fee in (b["markets"]["JP"]["commission_tiers"])[:4])
+        return (f"{b['label']} 個別コース：每笔按约定金额 {tiers}…（ETF 同表；新开户前 60 个营业日 0 円未计入；{b.get('checked')} 核对）；"
+                "只做东证（不做美股、不换汇），1655.T 用日元在东京开盘时买卖；API 可无人值守自动下单"
+                "（15:30～16:30 值洗い期间不受理，之后受理翌营业日的单）。")
+    return (f"楽天：日本株 / 东证 ETF 0 円，美股 0.495%（上限 $22），换汇 片道 {round(float(cfg.get('fx_spread_yen', 0.25)) * 100):g} 銭/USD；"
+            "美股卖出后的美元在下一个换汇窗口换回日元。")
 
 
 def _bar_txt(d: dict) -> str:
@@ -287,22 +311,25 @@ def render_unified_html(d: dict) -> str:
             f'{escape(str((d.get("sim") or {}).get("start") or "下一个日本营业日"))} '
             f'07:00 JST 前后（之后每个日本营业日早上一次）</div>'),
         equity=_money(d["equity_jpy"]), ret=d["ret_pct"], mdd=d["max_dd_pct"], cap=_money(d["capital_jpy"]),
-        cash_jpy=_money(d.get("cash_jpy")), cash_usd=_money(d.get("cash_usd"), "USD"),
-        usdjpy=_fxr(fx) + (f"（{escape(str(d.get('usdjpy_src')))}）" if fx and d.get("usdjpy_src") else ""), todo=todo_html,
+        cash_jpy=_money(d.get("cash_jpy")), acct=escape(_acct(d.get("broker"), with_us)),
+        usd_tile=(f'<div><span class="muted">美元现金</span><b>{_money(d.get("cash_usd"), "USD")}</b>'
+                  f'<span class="muted">USD/JPY {_fxr(fx)}</span></div>' if _has_usd(d.get("broker")) else
+                  f'<div><span class="muted">USD/JPY（只影响 1655.T 的日元价值）</span><b>{_fxr(fx)}</b>'
+                  f'<span class="muted">{escape(str(d.get("usdjpy_src") or ""))}</span></div>'),
+        todo=todo_html,
         positions="".join(pos_rows) or "<tr><td colspan=6 class='muted'>无</td></tr>",
         core="".join(core_rows) or "<tr><td colspan=4 class='muted'>无</td></tr>",
         spark=_spark(d.get("history") or []), trades=tr_rows or "<tr><td colspan=6 class='muted'>还没有平仓的交易</td></tr>",
         fx=fx_rows or "<tr><td colspan=4 class='muted'>还没有换汇</td></tr>", markets="".join(mk),
         watch="".join(watch) or "<tr><td colspan=9 class='muted'>尚无候补数据</td></tr>",
-        threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or []),
+        threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us),
         corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
         n_trades=d.get("n_trades", 0), win=_pct(d.get("win_rate")) if d.get("win_rate") is not None else "—（还没有平仓）",
         rules=escape(f"个股 {cfg.get('max_positions')}×{int(float(cfg.get('position_pct', 0)) * 100)}%（{stocks}）；"
                      f"闲置资金 {core_desc}（{'熊市那份留现金' if cfg.get('core_mode') == 'split' else '熊市那份转给牛市的一只'}；"
                      "牛熊分界 = 指数收盘连续 5 天低于 250 日线 ×0.97 转熊、高于 ×1.03 转牛，2026-09-25 多因子研究后维持）；"
-                     f"楽天：日本株 / 东证 ETF 0 円，美股 0.495%（上限 $22），换汇 片道 {round(float(cfg.get('fx_spread_yen', 0.25)) * 100):g} 銭/USD；"
-                     "美股卖出后的美元在下一个换汇窗口换回日元。"))
+                     + _fee_rule(d.get("broker"), cfg)))
 
 
 _EV = {"FOMC": "美联储议息", "BOJ": "日银议息", "CPI": "美国 CPI", "NFP": "美国非农就业", "ELECTION": "选举",
@@ -328,16 +355,19 @@ def _commod_rows() -> list[dict]:
     return rows
 
 
-def _commod_html(rows: list[dict]) -> str:
+def _commod_html(rows: list[dict], with_us: bool = True) -> str:
+    """商品 × 行业；不做美股个股时只列日本行业（美国行业的敏感度只对挑美股有用）。"""
     if not rows:
         return ""
-    tr = "".join(f"<tr><td>{escape(r['label'])}</td><td>{escape(r['jp_up'])}</td><td>{escape(r['jp_dn'])}</td>"
-                 f"<td>{escape(r['us_up'])}</td><td>{escape(r['us_dn'])}</td></tr>" for r in rows)
+    us = lambda r: f"<td>{escape(r['us_up'])}</td><td>{escape(r['us_dn'])}</td>" if with_us else ""       # noqa: E731
+    tr = "".join(f"<tr><td>{escape(r['label'])}</td><td>{escape(r['jp_up'])}</td><td>{escape(r['jp_dn'])}</td>{us(r)}</tr>"
+                 for r in rows)
     return ("<section class=\"card\"><details><summary><h2 style=\"display:inline\">商品 × 行业：商品涨 1% 时各行业相对大盘同周多涨 / 少涨几 %"
             "（只作参考）</h2></summary><div class=\"scroll\"><table><tr><th>商品</th><th>日本行业受益</th><th>日本行业受损</th>"
-            f"<th>美国行业受益</th><th>美国行业受损</th></tr>{tr}</table></div>"
-            "<p class=\"muted\">最近 104 周、控制大盘（日本 日経225 / 美国 S&amp;P500）后的回归系数，* = t ≥ 2；日本行业用 TOPIX-17 行业 ETF，"
-            "美国用行业 ETF。敏感度会随时间变化，研究见 var/out/commodity_fit_study.md。</p></details></section>")
+            + ("<th>美国行业受益</th><th>美国行业受损</th>" if with_us else "") + f"</tr>{tr}</table></div>"
+            "<p class=\"muted\">最近 104 周、控制大盘（" + ("日本 日経225 / 美国 S&amp;P500" if with_us else "日経225")
+            + "）后的回归系数，* = t ≥ 2；日本行业用 TOPIX-17 行业 ETF" + ("，美国用行业 ETF" if with_us else "")
+            + "。敏感度会随时间变化，研究见 var/out/commodity_fit_study.md。</p></details></section>")
 
 
 def _threat_html(t: dict) -> str:
@@ -453,13 +483,13 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 .n{{text-align:right;font-variant-numeric:tabular-nums}} .warn{{border-color:var(--neg)}} .pos{{color:var(--pos)}} .neg{{color:var(--neg)}} .spark{{width:100%;height:120px}}
 .scroll{{overflow-x:auto}} dt{{font-weight:600;margin-top:6px}} dd{{margin:0 0 4px}}
 </style></head><body><main>
-<h1>模拟盘日报 · 一个账户（楽天，日元 + 美元）</h1>
+<h1>模拟盘日报 · 一个账户（{acct}）</h1>
 <div class="muted">生成 {generated}；数据截至 {bar}</div>{first}{missing}
 <section class="card"><div class="kpi">
 <div><span class="muted">总权益（日元）</span><b>{equity}</b><span class="muted">起始 {cap}</span></div>
 <div><span class="muted">累计</span><b>{ret}%</b><span class="muted">最大回撤 {mdd}%</span></div>
 <div><span class="muted">日元现金</span><b>{cash_jpy}</b></div>
-<div><span class="muted">美元现金</span><b>{cash_usd}</b><span class="muted">USD/JPY {usdjpy}</span></div>
+{usd_tile}
 <div><span class="muted">已平仓</span><b>{n_trades} 笔</b><span class="muted">胜率 {win}</span></div>
 </div></section>
 <section class="card"><h2>今天要做的事（日本时间）</h2>{todo}</section>

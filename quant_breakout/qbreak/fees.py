@@ -91,7 +91,9 @@ BROKERS["tachibana"] = {
     "etf": {t: {"buy_fee_tiers": TACHIBANA_KOBETSU, "sell_fee_tiers": TACHIBANA_KOBETSU, "slip_pct": sl, "lot": lot}
             for t, sl, lot in (("1329.T", 0.03, 1), ("1655.T", 0.02, 10), ("2558.T", 0.03, 1))},
 }
-DEFAULT_BROKER = {"JP": "rakuten", "US": "rakuten"}   # 2026-09-25（晚）用户决定继续用楽天（MARKETSPEED II RSS）；立花保留为可选
+DEFAULT_BROKER = {"JP": "tachibana", "US": "rakuten"}
+# 2026-09-25（深夜）用户改用立花：不做美股个股后，楽天的美元 / 换汇逻辑用不到；立花 API 能在 Mac / 云端无人值守自动下单
+# （楽天的 MARKETSPEED II RSS 只能在 Windows + Excel 上跑、每天要人登录）。美股研究（立花不做美股）仍按楽天费率。
 _SLIP = {"JP": 0.10, "US": 0.05}                     # 个股单边滑点 %（与券商无关）
 _ETF_SLIP = {"JP": 0.03, "US": 0.02}                 # 没登记的 ETF：滑点按市场默认
 

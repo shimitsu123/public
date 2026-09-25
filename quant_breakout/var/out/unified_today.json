@@ -10,7 +10,7 @@
  "equity_jpy": 1000000.0,
  "cash_jpy": 1000000,
  "cash_usd": 0.0,
- "usdjpy": 158.136,
+ "usdjpy": 158.203,
  "usdjpy_src": "Yahoo 2026-09-25",
  "todo": {},
  "skipped": {},
@@ -555,7 +555,7 @@
   "usd_keep_imminent": false,
   "us_same_open_reuse": true
  },
- "broker": "rakuten",
+ "broker": "tachibana",
  "threat": {
   "note": "只展示，不参与交易（2026-09-25 事先登记研究：美股 AUC 0.66、日経 0.58，不足以预测时间段）",
   "event_def": "之后 60 个交易日内最低收盘比当天跌 ≥10%",

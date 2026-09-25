@@ -23,7 +23,7 @@
   },
   "halt_dd_pct": 45.0,
   "tier": "aggressive",
-  "broker": "rakuten"
+  "broker": "tachibana"
  },
  "us": {
   "universe": "broad",
@@ -41,11 +41,11 @@
   },
   "halt_dd_pct": 45.0,
   "tier": "aggressive",
-  "broker": "rakuten",
+  "broker": "tachibana",
   "venue": "JP",
   "initial_cash": 1000000.0
  },
- "note": "券商（2026-09-25 起）：立花証券ｅ支店 個別コース（jp / us 段的 broker）；美股指数仓位放东证（us.venue=JP，日元账户，无换汇）。股票池 broad = 日経225 / NASDAQ-100+Dow30（按偏好剔除）。use_market_regime=true：指数 200 日线/波动/回撤 + 市场风险报告的行动四选一 共同决定新仓规模。 宏观层按市场设定（2026-09-24 变体研究定案）：两市场都开量化因子 + 板块倾斜，事件窗口关闭（样本外拖累）；美股出场改为不用死叉、跟踪止损 10%（浮盈 3% 启动），见 var/best_params_US.json。 regime_mode=quant：状态层维持指数 200 日线/波动/回撤（20 年回测后保留）；牛熊分界（250 日线±3%、连续 5 天）只显示。 资金配置档位 tier（2026-09-24 夜定案）：aggressive = 进取档 —— 日本个股 4×25% + 闲置资金持 1329.T，美股只持 1655.T（东证 S&P500 ETF，9/25 起替代 SPYM）；两市场牛熊分界判熊市时清空指数仓位；回撤 HALT 45%。见 README「资金配置」与 var/sim_changes.md；切回：python run.py sim-tier safe。",
+ "note": "券商（2026-09-25 深夜起）：立花証券ｅ支店 個別コース（一个账户，只有日元，只做东证）。用户改用立花：不做美股个股后，楽天的美元 / 换汇逻辑用不到；立花 API 能在 Mac / 云端无人值守自动下单（楽天的 MARKETSPEED II RSS 只能在 Windows + Excel、每天要人登录）。方案 S0C2：日本个股 4×25%（日経225，按偏好剔除）+ 闲置资金全部 1655.T（东证 S&P500，按 S&P500 牛熊分界择时，熊市那份留现金）；宏观 / 板块倾斜开、事件窗口关，状态层 quant；回撤 HALT 45%。按立花手续费重算（scripts/broker_s0c2_study.py）：20 年与 5 年年化都比楽天 0 円少约 0.46 pp（手续费约 ¥1.3～1.9 万 / 年）。",
  "use_market_regime": true,
  "use_macro": true,
  "use_sector_tilt": true,
@@ -53,7 +53,7 @@
  "regime_mode": "quant",
  "mode": "unified",
  "unified": {
-  "broker": "rakuten",
+  "broker": "tachibana",
   "position_pct": 0.25,
   "max_positions": 4,
   "max_position_pct": 0.34,

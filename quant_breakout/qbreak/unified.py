@@ -86,6 +86,21 @@ class UPos:
     entry_fx: float = 1.0                 # 美股：买入当天的 USD/JPY（算日元损益用）
 
 
+def exec_configs(stock_markets, u: dict | None = None) -> dict:
+    """推进器要的两个市场的执行参数：做个股的市场按所选券商（sim.json unified.broker）；
+    不做个股的市场（例如立花不做美股，美股只经由东证 1655）只是结构需要，不会产生手续费 → 用默认值，不套用别家的费率。"""
+    from .config import ExecConfig
+    from .fees import BROKERS, broker_of
+    out = {}
+    for m in ("JP", "US"):
+        b = broker_of(m, u)
+        if m not in tuple(stock_markets) and m not in BROKERS[b]["markets"]:
+            out[m] = ExecConfig(market=m).validate()
+        else:
+            out[m] = ExecConfig.for_market(m, b)
+    return out
+
+
 @dataclass
 class UState:
     cash_jpy: float
