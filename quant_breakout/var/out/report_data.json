@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-25 11:07 JST",
+ "generated": "2026-09-25 12:21 JST",
  "mode": "unified",
  "sim": {
   "start": "2026-09-28",
@@ -64,11 +64,9 @@
     "JP"
    ],
    "core": {
-    "1329.T": 0.5,
-    "1655.T": 0.5
+    "1655.T": 1.0
    },
    "core_index": {
-    "1329.T": "JP",
     "1655.T": "US"
    },
    "core_mode": "split",
