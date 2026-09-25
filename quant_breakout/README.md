@@ -565,7 +565,7 @@ v2（事先登记 `scripts/threat_index_v2_study.py`）再加 14 个直接因素
 一条命令可切换（`python run.py sim-unify --stock-markets JP,US --core "" --force`）。但 20 年回测只有 2.7～3.0%/年（S0C2 13.2%）：没信号时拿现金观望，大部分时间没有收益；
 楽天换汇当天就能用，不需要提前几天换。
 
-**季度复核**：每年 1 / 4 / 7 / 10 月 12 日用新数据按同一规则复核 T0 / T2 / T3（`--only T0,T2,T3 --review`），判定改变时需用户确认。
+**季度复核**：每年 1 / 4 / 7 / 10 月 12 日用新数据按同一规则复核 T0 / T2 / T3（`--only T0,T2,T3 --review`），判定改变时需用户确认；同一例行任务顺便维护大事件日程（tbd 里定下日期的逐条核对原文后移入、补新公布的非固定大事件）。
 
 **模拟盘**（2026-09-28 起，¥1,000,000）：**用户选定 S0C2**（2026-09-25 晚；规则判定是 S0C3，S0C2 收益更高、20 年回撤压在 −35% 线上）：`python run.py sim-unify --stock-markets JP --core 1655.T:1 --core-mode split --start 2026-09-28 --force`。改回 S0C3：`--core 1329.T:0.5,1655.T:0.5`。
 想看日本 + 美股个股一起排名：`python run.py sim-unify --stock-markets JP,US --force`（旧状态归档、重新开始）。
