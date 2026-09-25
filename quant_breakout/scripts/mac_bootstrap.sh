@@ -49,6 +49,13 @@ if [ -d "$DEST/.git" ]; then
   git -C "$DEST" fetch -q origin "$BRANCH"
   git -C "$DEST" checkout -q "$BRANCH"
   git -C "$DEST" pull -q --ff-only origin "$BRANCH"
+elif [ -d "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null)" ]; then
+  # 文件夹已经在了（例如先在这里开了 claude remote-control，里面有 .claude/）：就地取代码，不动里面原有的文件
+  echo "在已有的文件夹 $DEST 里取代码（约 15 MB）……"
+  git -C "$DEST" init -q
+  git -C "$DEST" remote add origin "$REPO" 2>/dev/null || git -C "$DEST" remote set-url origin "$REPO"
+  git -C "$DEST" fetch -q origin "$BRANCH"
+  git -C "$DEST" checkout -q -t "origin/$BRANCH"
 else
   echo "下载代码到 $DEST（约 15 MB）……"
   git clone -q "$REPO" "$DEST"
