@@ -105,16 +105,19 @@ def main() -> int:
     out: dict = {}
     fp_log = paths.out_dir() / "threat_forward.csv"
     if fp_log.exists() and len(pd.read_csv(fp_log)):
-        fr = TH.forward_review(pd.read_csv(fp_log), {"US": d["spx"], "JP": d["n225"]})
+        lg = pd.read_csv(fp_log)
+        fr = TH.forward_review(lg, {"US": d["spx"], "JP": d["n225"]})
         out["forward"] = fr
         for m, name in (("US", "S&P500"), ("JP", "日経225")):
             r = fr.get(m)
             if not r:
                 continue
+            has = lg[lg["market"] == m].notna().any()                  # 只列该市场记过的版本（另一个市场专用的列在这里全空）
+            vs = {v: x for v, x in r["variants"].items() if has.get(v, False)}
             lines += [f"\n## {name}：{r['first']} 起 {r['days']} 天，结果已知 {r['known']} 天、事件日 {r['event_days']} 天；"
-                      f"前瞻期内 ≥10% 下跌 {len(r['episodes'])} 次",
+                      f"前瞻期内 ≥10% 下跌 {len(r['episodes'])} 次；与 A0 对照的版本 {len(vs)} 个",
                       "| 版本 | 对照天数 | AUC（跌≥10%）版本 / A0 | AUC（跌≥15%）版本 / A0 |", "|---|---|---|---|"]
-            for v, x in r["variants"].items():
+            for v, x in vs.items():
                 lines.append(f"| {TH.forward_label(v)} | {x.get('n', 0)} | {fmt(x.get('auc10'))} / {fmt(x.get('auc10_A0'))} | "
                              f"{fmt(x.get('auc15'))} / {fmt(x.get('auc15_A0'))} |")
             lines.append(f"\n判定（事先规则）：{r['decision']}")
