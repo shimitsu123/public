@@ -32,6 +32,73 @@
     "label": "利率曲线倒挂",
     "pct": 64
    }
+  ],
+  "obs": [
+   {
+    "k": "grains",
+    "label": "粮食价格急涨",
+    "pct": 96
+   },
+   {
+    "k": "commod",
+    "label": "商品综合急涨",
+    "pct": 96
+   },
+   {
+    "k": "epu",
+    "label": "政策不确定性（EPU）",
+    "pct": 94
+   },
+   {
+    "k": "gpr",
+    "label": "地缘政治风险（GPR）",
+    "pct": 92
+   },
+   {
+    "k": "gold",
+    "label": "黄金急涨（避险）",
+    "pct": 70
+   },
+   {
+    "k": "natgas",
+    "label": "天然气急涨",
+    "pct": 57
+   },
+   {
+    "k": "delinq",
+    "label": "企业贷款拖欠率上升",
+    "pct": 57
+   },
+   {
+    "k": "commod_vol",
+    "label": "商品波动",
+    "pct": 56
+   },
+   {
+    "k": "sloos",
+    "label": "银行收紧企业贷款（SLOOS）",
+    "pct": 49
+   },
+   {
+    "k": "chargeoff",
+    "label": "企业贷款核销率上升",
+    "pct": 47
+   },
+   {
+    "k": "gpr_jump",
+    "label": "地缘风险急升",
+    "pct": 36
+   },
+   {
+    "k": "gold_silver",
+    "label": "金银比上升",
+    "pct": 33
+   },
+   {
+    "k": "copper",
+    "label": "铜价下跌",
+    "pct": 24
+   }
   ]
  },
  "JP": {
@@ -64,6 +131,93 @@
     "k": "rates",
     "label": "美债利率急升",
     "pct": 86
+   }
+  ],
+  "obs": [
+   {
+    "k": "grains",
+    "label": "粮食价格急涨",
+    "pct": 95
+   },
+   {
+    "k": "commod",
+    "label": "商品综合急涨",
+    "pct": 95
+   },
+   {
+    "k": "epu",
+    "label": "政策不确定性（EPU）",
+    "pct": 95
+   },
+   {
+    "k": "gpr",
+    "label": "地缘政治风险（GPR）",
+    "pct": 92
+   },
+   {
+    "k": "gpr_jp",
+    "label": "涉日地缘风险",
+    "pct": 82
+   },
+   {
+    "k": "jp_lng",
+    "label": "日本 LNG 价格急涨",
+    "pct": 78
+   },
+   {
+    "k": "gold",
+    "label": "黄金急涨（避险）",
+    "pct": 75
+   },
+   {
+    "k": "commod_vol",
+    "label": "商品波动",
+    "pct": 63
+   },
+   {
+    "k": "tankan_lend",
+    "label": "短观：银行贷款态度收紧",
+    "pct": 63
+   },
+   {
+    "k": "delinq",
+    "label": "企业贷款拖欠率上升",
+    "pct": 58
+   },
+   {
+    "k": "tankan_cash",
+    "label": "短观：企业资金周转恶化",
+    "pct": 58
+   },
+   {
+    "k": "sloos",
+    "label": "银行收紧企业贷款（SLOOS）",
+    "pct": 49
+   },
+   {
+    "k": "chargeoff",
+    "label": "企业贷款核销率上升",
+    "pct": 47
+   },
+   {
+    "k": "natgas",
+    "label": "天然气急涨",
+    "pct": 40
+   },
+   {
+    "k": "gpr_jump",
+    "label": "地缘风险急升",
+    "pct": 36
+   },
+   {
+    "k": "gold_silver",
+    "label": "金银比上升",
+    "pct": 31
+   },
+   {
+    "k": "copper",
+    "label": "铜价下跌",
+    "pct": 21
    }
   ]
  },

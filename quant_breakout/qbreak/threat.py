@@ -158,7 +158,7 @@ def build(d: dict) -> dict:
 
 
 def snapshot(built: dict | None = None, table: dict | None = None, events: list | None = None,
-             today=None, horizon_days: int = 60) -> dict:
+             today=None, horizon_days: int = 60, readings: dict | None = None) -> dict:
     """最新读数 + 同档位的历史频率（var/threat_index.json）+ 接下来的已知大事件日程（var/macro_events.json）。只展示。"""
     from . import paths
     from .utils import read_json
@@ -180,6 +180,9 @@ def snapshot(built: dict | None = None, table: dict | None = None, events: list 
                   "base_rate": t.get("base_rate"), "auc": [t.get("auc_h1"), t.get("auc_h2")],
                   "hit80": t.get("episodes_hit80"),
                   "top": [{"k": k, "label": LABELS[k], "pct": round(float(p) * 100)} for k, p in top.head(3).items()]}
+    for m in ("US", "JP"):                                     # v3 新因素的当前百分位（只观察，不计入指数）
+        if readings and m in out and (readings.get(m) or {}).get("obs"):
+            out[m]["obs"] = readings[m]["obs"]
     ev = events if events is not None else (read_json(paths.home() / "macro_events.json", {}) or {})
     ev = ev.get("events", ev) if isinstance(ev, dict) else ev
     d0 = pd.Timestamp(today or pd.Timestamp.today().normalize())
@@ -402,3 +405,45 @@ def build_all(d: dict, x: dict) -> dict:
         xj[k] = us_asof_for_jp(x[k], jp_days)
     f_jp = raw_features_v3(raw_features_v2(base_jp, jp_days, d["n225"], xj, usdjpy=fxj, jp=True), jp_days, xj, jp=True)
     return {"US": (f_us, d["spx"].reindex(us_days)), "JP": (f_jp, d["n225"].reindex(jp_days))}
+
+
+def _eq(p: pd.DataFrame) -> pd.Series:
+    if p.shape[1] == 0:
+        return pd.Series(np.nan, index=p.index)
+    return (p.mean(axis=1) * 100).where(p.notna().sum(axis=1) >= max(1, p.shape[1] // 2))
+
+
+def v3_selection() -> dict:
+    """v3 研究在训练期（1995–2010）选入的因素（B2 / B4 用）：{"US": [...], "JP": [...]}；没有研究结果时为空。"""
+    from . import paths
+    from .utils import read_json
+    r = read_json(paths.out_dir() / "threat_index_v3_study.json", {}) or {}
+    return {m: (r.get(m) or {}).get("selected_v3") or [] for m in ("US", "JP")}
+
+
+def v3_readings(F: dict, sel: dict | None = None) -> dict:
+    """最新一天：A0 与 B1～B4 的读数（前瞻记录用）+ 新因素的当前百分位（日报「其他观察因子」）。F = build_all(...)。"""
+    sel = sel or {}
+    out = {}
+    for m in ("US", "JP"):
+        raw, _ = F[m]
+        v1, v3 = (US_COLS, US_V3) if m == "US" else (JP_COLS, JP_V3)
+        pct = pd.DataFrame({c: expanding_pct(raw[c]) for c in v3})
+        s = [c for c in sel.get(m, []) if c in pct]
+        idx = {"A0": _eq(pct[v1]), "B1": _eq(pct[v3]), "B2": _eq(pct[s]) if s else None,
+               "B3": category_mean(pct[v3]), "B4": category_mean(pct[s]) if s else None}
+        last = pct.index[-1]
+        new = V3_EXTRA + (JP_V3_ONLY if m == "JP" else [])
+        obs = [{"k": c, "label": LABELS[c], "pct": round(float(pct.at[last, c]) * 100)} for c in new if pct.at[last, c] == pct.at[last, c]]
+        out[m] = {"date": str(last.date()),
+                  "idx": {k: (round(float(v.iloc[-1]), 1) if v is not None and v.iloc[-1] == v.iloc[-1] else None) for k, v in idx.items()},
+                  "obs": sorted(obs, key=lambda o: -o["pct"])}
+    return out
+
+
+def log_forward(readings: dict, path) -> None:
+    """每天追加 A0 与 B1～B4 的读数（同一数据日重复运行只保留最后一次），用于以后做真正的样本外比较。"""
+    rows = pd.DataFrame([{"date": r["date"], "market": m, **r["idx"]} for m, r in readings.items()])
+    if path.exists():
+        rows = pd.concat([pd.read_csv(path), rows]).drop_duplicates(["date", "market"], keep="last")
+    rows.sort_values(["date", "market"]).to_csv(path, index=False)

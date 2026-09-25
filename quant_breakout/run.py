@@ -293,11 +293,24 @@ def _exec_cfg(market: str, mc: dict | None = None) -> ExecConfig:
     return ExecConfig.for_market(market, broker_of(market, mc))
 
 
+def _threat_readings(ti: dict) -> dict | None:
+    """v3 新因素的当前百分位（日报「其他观察因子」）+ 把 A0 与 B1～B4 的读数记到 var/out/threat_forward.csv（前瞻检验）。"""
+    try:
+        from qbreak.threat import build_all, load_extra_all, log_forward, v3_readings, v3_selection
+        rd = v3_readings(build_all(ti, load_extra_all()), v3_selection())
+        log_forward(rd, paths.out_dir() / "threat_forward.csv")
+        return rd
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("威胁指数 v3 观察因子计算失败（不影响交易）：%s", e)
+        return None
+
+
 def cmd_threat(a) -> int:
     """大事件威胁指数（只展示，不参与交易）：美股 / 日経当前读数、同档位历史大跌频率、主要来源、接下来的已知大事件。"""
-    from qbreak.threat import snapshot
+    from qbreak.threat import build, load_inputs, snapshot
     from qbreak.utils import write_json
-    s = snapshot()
+    ti = load_inputs()
+    s = snapshot(build(ti), readings=_threat_readings(ti))
     write_json(paths.out_dir() / "threat_today.json", s)
     for m, name in (("US", "美股 S&P500"), ("JP", "日経225")):
         x = s.get(m)
@@ -306,6 +319,8 @@ def cmd_threat(a) -> int:
         top = "、".join(f"{f['label']} {f['pct']}" for f in x["top"])
         print(f"{name}（{x['date']}）：{x['value']:.0f}/100（20 日前 {x['prev20']}）；同档位 {x['band']} 历史上"
               f"{s['event_def']}的频率 {x['band_freq']}%（平均 {x['base_rate']}%）；主要来源：{top}")
+        if x.get("obs"):
+            print("  其他观察因子（百分位，不计入指数）：" + "、".join(f"{o['label']} {o['pct']}" for o in x["obs"]))
     from qbreak.report_unified import _EV
     print("接下来的已知大事件：" + ("；".join(f"{e['date']} {_EV.get(e['kind'], e['kind'])}"
                                          + (f"（{e['name']}）" if e.get("name") else "") for e in s["events"]) or "无"))
@@ -836,9 +851,13 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     usdjpy = float(state.history[-1][4]) if state.history and state.history[-1][4] else None
     ti, fit = None, None
     try:                                                     # 宏观数据下载一次：威胁指数 + 候补队列的顺风度（都只作参考）
-        from qbreak.sensitivity import current_fit
+        from qbreak.sensitivity import current_fit, load_ext_prices
         from qbreak.threat import load_inputs
         ti = load_inputs()
+        try:                                                 # 扩展顺风度：再加 农产品 / 工业金属 / 黄金 / 天然气（研究 commodity_fit_study）
+            ti["commod"] = load_ext_prices()
+        except Exception as e:                               # noqa: BLE001
+            log.warning("商品 ETF 取不到，顺风度只用 5 个宏观因素：%s", e)
         if "JP" in plans:
             fit = current_fit({t: data[t]["Close"] for t in plans["JP"].uni if t in data}, ti)
     except Exception as e:                                   # noqa: BLE001
@@ -854,7 +873,8 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
            "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker}
     try:                                                     # 大事件威胁指数：只展示，不参与交易
         from qbreak.threat import build, load_inputs, snapshot
-        out["threat"] = snapshot(build(ti if ti is not None else load_inputs()))
+        ti = ti if ti is not None else load_inputs()
+        out["threat"] = snapshot(build(ti), readings=_threat_readings(ti))
         write_json(paths.out_dir() / "threat_today.json", out["threat"])
     except Exception as e:                                   # noqa: BLE001
         log.warning("威胁指数计算失败（不影响交易）：%s", e)

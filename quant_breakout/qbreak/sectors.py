@@ -99,3 +99,14 @@ def sector_of(ticker: str, market: str) -> str:
 
 def sector_cn(ticker: str, market: str) -> str:
     return SECTOR_CN.get(sector_of(ticker, market), "其他")
+
+
+# 行业 ETF（商品敏感度研究 scripts/commodity_fit_study.py 与日报「商品 × 行业」表用；TOPIX-17 ETF 成交稀少，只作分析）
+SECTOR_ETF_JP = {"1617.T": "食品", "1618.T": "能源资源", "1619.T": "建设·资材", "1620.T": "素材·化学", "1621.T": "医药品",
+                 "1622.T": "汽车·运输机", "1623.T": "钢铁·有色", "1624.T": "机械", "1625.T": "电机·精密", "1626.T": "信息通信·服务",
+                 "1627.T": "电力·燃气", "1628.T": "运输·物流", "1629.T": "商社·批发", "1630.T": "零售", "1631.T": "银行",
+                 "1632.T": "金融（除银行）", "1633.T": "不动产"}
+SECTOR_ETF_US = {"XLE": "能源", "XLB": "原材料", "XLI": "工业", "XLP": "必需消费", "XLU": "公用事业", "XLF": "金融", "XLK": "科技",
+                 "XLV": "医疗", "XLY": "可选消费", "XLRE": "房地产", "XLC": "通信", "XME": "金属矿业", "GDX": "金矿股", "KRE": "地区银行",
+                 "ITB": "住宅建筑", "XRT": "零售", "JETS": "航空", "IYT": "运输", "XOP": "油气开采", "OIH": "油服", "MOO": "农业综合",
+                 "PBJ": "食品饮料", "SLX": "钢铁", "SMH": "半导体", "IBB": "生物科技", "VNQ": "REIT"}

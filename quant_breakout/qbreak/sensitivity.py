@@ -134,6 +134,12 @@ def fit_score(b: pd.Series | None, tr: pd.Series, factors: list[str] | None = No
     return score, "；".join(parts)
 
 
+def load_ext_prices() -> dict[str, pd.Series]:
+    """扩展顺风度用的 4 个商品 ETF 收盘（去错价）：{"agri","metals","gold","natgas"}。"""
+    from . import factors as F
+    return {k: F.despike(F.yf_close(COMMODS[k][0])) for k in EXT}
+
+
 def current_fit(closes: dict[str, pd.Series], inputs: dict, factors: list[str] | None = None) -> dict[str, dict]:
     """候补队列用：每只日本票当前的顺风度（%/周）、说明、当日横截面三分位档（顺风 / 中性 / 逆风）。
     inputs = qbreak.threat.load_inputs() 的结果（与威胁指数共用一次下载）；inputs["commod"] 有商品价格时

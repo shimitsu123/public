@@ -47,6 +47,7 @@ def build_unified_data() -> dict:
             "core_trades": (st.get("core_trades") or [])[-15:], "n_trades": len(trades),
             "corp_log": (st.get("corp_log") or [])[-10:],
             "threat": td.get("threat") or read_json(paths.out_dir() / "threat_today.json", {}) or {},
+            "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
             "config": td.get("config") or config_from_sim(sim).to_dict(),     # 首次运行前从 sim.json 取
             "broker": td.get("broker", "rakuten"), "skipped": td.get("skipped") or {},
@@ -163,7 +164,7 @@ def render_unified_html(d: dict) -> str:
         spark=_spark(d.get("history") or []), trades=tr_rows or "<tr><td colspan=6 class='muted'>还没有平仓的交易</td></tr>",
         fx=fx_rows or "<tr><td colspan=4 class='muted'>还没有换汇</td></tr>", markets="".join(mk),
         watch="".join(watch) or "<tr><td colspan=9 class='muted'>尚无候补数据</td></tr>",
-        threat=_threat_html(d.get("threat") or {}),
+        threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or []),
         corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
         n_trades=d.get("n_trades", 0), win=d.get("win_rate") if d.get("win_rate") is not None else "—",
@@ -179,6 +180,36 @@ _EV = {"FOMC": "美联储议息", "BOJ": "日银议息", "CPI": "美国 CPI", "N
        "TANKAN": "日银短观", "SQ": "日本 SQ（定期）", "OPEX": "美股季度期权到期（定期）", "INDEX": "指数调整"}
 
 
+def _commod_rows() -> list[dict]:
+    """商品 × 行业（同周联动；研究 var/out/commodity_fit_study.json 的 A 段）：每个商品受益 / 受损最多的行业各 2 个。"""
+    from .sectors import SECTOR_ETF_JP, SECTOR_ETF_US
+    r = read_json(paths.out_dir() / "commodity_fit_study.json", {}) or {}
+    a, lab = r.get("A") or {}, r.get("labels") or {}
+    rows = []
+    for c, name in lab.items():
+        row = {"k": c, "label": name}
+        for side, key, names in (("jp", "jp_etf", SECTOR_ETF_JP), ("us", "us_etf", SECTOR_ETF_US)):
+            v = sorted(((names.get(e, e), bt[c][0], bt[c][1]) for e, bt in (a.get(key) or {}).items() if c in bt),
+                       key=lambda z: z[1])
+            fm = lambda z: f"{z[0]} {z[1]:+.2f}{'*' if abs(z[2]) >= 2 else ''}"                    # noqa: E731
+            row[side + "_up"] = "、".join(fm(z) for z in v[::-1][:2] if z[1] > 0) or "—"
+            row[side + "_dn"] = "、".join(fm(z) for z in v[:2] if z[1] < 0) or "—"
+        rows.append(row)
+    return rows
+
+
+def _commod_html(rows: list[dict]) -> str:
+    if not rows:
+        return ""
+    tr = "".join(f"<tr><td>{escape(r['label'])}</td><td>{escape(r['jp_up'])}</td><td>{escape(r['jp_dn'])}</td>"
+                 f"<td>{escape(r['us_up'])}</td><td>{escape(r['us_dn'])}</td></tr>" for r in rows)
+    return ("<section class=\"card\"><details><summary><h2 style=\"display:inline\">商品 × 行业：商品涨 1% 时各行业相对大盘同周多涨 / 少涨几 %"
+            "（只作参考）</h2></summary><div class=\"scroll\"><table><tr><th>商品</th><th>日本行业受益</th><th>日本行业受损</th>"
+            f"<th>美国行业受益</th><th>美国行业受损</th></tr>{tr}</table></div>"
+            "<p class=\"muted\">最近 104 周、控制大盘（日本 日経225 / 美国 S&amp;P500）后的回归系数，* = t ≥ 2；日本行业用 TOPIX-17 行业 ETF，"
+            "美国用行业 ETF。敏感度会随时间变化，研究见 var/out/commodity_fit_study.md。</p></details></section>")
+
+
 def _threat_html(t: dict) -> str:
     if not t or t.get("error"):
         return f'<p class="muted">暂不可用{("：" + escape(t["error"])) if t.get("error") else "（首次运行后出现）"}</p>'
@@ -189,9 +220,13 @@ def _threat_html(t: dict) -> str:
             continue
         prev = f"，20 日前 {x['prev20']:.0f}" if x.get("prev20") is not None else ""
         top = "、".join(f"{escape(f['label'])} {f['pct']}" for f in x.get("top", []))
+        obs = x.get("obs") or []
+        hot = [o for o in obs if o["pct"] >= 70]
+        obs_txt = ("；其他观察因子（不计入指数）：" + ("、".join(f"{escape(o['label'])} {o['pct']}" for o in hot[:6])
+                                                  if hot else "都在 70 分位以下")) if obs else ""
         rows.append(f"<dt>{name}：{x['value']:.0f} / 100{prev}</dt><dd>同档位（{escape(str(x.get('band')))}）历史上"
                     f"{escape(t.get('event_def', ''))}的频率 {x.get('band_freq')}%（全期平均 {x.get('base_rate')}%）；"
-                    f"主要来源（百分位）：{top}</dd>")
+                    f"主要来源（百分位）：{top}{obs_txt}</dd>")
     ev = "".join(f"<li>{escape(e['date'])} {escape(_EV.get(e.get('kind'), e.get('kind', '')))}"
                  f"{('（' + escape(e['name']) + '）') if e.get('name') else ''}</li>" for e in t.get("events", []))
     us, jp = t.get("US", {}), t.get("JP", {})
@@ -199,7 +234,9 @@ def _threat_html(t: dict) -> str:
     note = ("只能说明风险比平时高还是低，不能预测具体哪天发生：历史检验 AUC 美股 "
             f"{(auc[0] or 0):.2f} / {(auc[1] or 0):.2f}（1995–2010 / 2011–），日経 "
             f"{((jp.get('auc') or [0, 0])[0] or 0):.2f} / {((jp.get('auc') or [0, 0])[1] or 0):.2f}；"
-            f"过去 {hits[1]} 次美股 ≥10% 下跌里只有 {hits[0]} 次在高点前 60 个交易日内到过 80。")
+            f"过去 {hits[1]} 次美股 ≥10% 下跌里只有 {hits[0]} 次在高点前 60 个交易日内到过 80。"
+            "加入更多因素（v2：金融条件、MOVE 等；v3：黄金、金银比、铜、天然气、粮食、银行信贷、地缘风险 GPR）的事先登记研究"
+            "都没有在两个市场稳定胜出，指数仍用原算法；观察因子只列出处在自身历史 70 分位以上的。")
     return (f"<dl>{''.join(rows)}</dl><p class='muted'>{escape(note)}</p>"
             f"<h3>接下来的已知大事件</h3><ul>{ev or '<li class=muted>无</li>'}</ul>")
 
@@ -246,6 +283,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <section class="card"><h2>大事件威胁指数（只展示，不参与交易）</h2>{threat}</section>
 <section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>状态</th><th class="n">就绪度</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
 <p class="muted">宏观顺风度 = 个股对日本 / 美国利率、油价、日元、信用利差的历史敏感度 × 近 60 个交易日的变化（当日横截面三分位：顺风 / 中性 / 逆风），只作参考：2026-09-25 事先登记研究显示它对之后 20 日的收益没有预测力（秩相关 0.00），交易排序不用它。</p></section>
+{commod}
 <section class="card"><h2>最近平仓</h2><div class="scroll"><table><tr><th>日期</th><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">损益（日元）</th><th>原因</th></tr>{trades}</table></div></section>
 <section class="card"><h2>换汇记录</h2><div class="scroll"><table><tr><th>日期</th><th>方向</th><th class="n">美元</th><th class="n">汇率</th></tr>{fx}</table></div></section>
 <section class="card"><h2>规则</h2><p class="muted">{rules}</p></section>

@@ -187,3 +187,19 @@ def test_v3_features_no_lookahead():
 def test_category_mean_balances_groups():
     pct = pd.DataFrame({"vix": [1.0], "rvol": [1.0], "move": [1.0], "gold": [0.0]})             # 波动 3 个都 1，商品 1 个 0
     assert TH.category_mean(pct).iloc[0] == pytest.approx(50.0)
+
+
+def test_v3_readings_and_forward_log(tmp_path):
+    rng = np.random.default_rng(5)
+    days = pd.bdate_range("2010-01-01", periods=900)
+    raw = pd.DataFrame({c: rng.normal(size=len(days)) for c in TH.JP_V3}, index=days)
+    F = {"US": (raw[TH.US_V3], None), "JP": (raw, None)}
+    rd = TH.v3_readings(F, {"US": ["vix", "gold"], "JP": []})
+    assert set(rd["US"]["idx"]) == {"A0", "B1", "B2", "B3", "B4"} and rd["JP"]["idx"]["B2"] is None
+    assert len(rd["JP"]["obs"]) == len(TH.V3_EXTRA + TH.JP_V3_ONLY) and len(rd["US"]["obs"]) == len(TH.V3_EXTRA)
+    assert rd["US"]["obs"] == sorted(rd["US"]["obs"], key=lambda o: -o["pct"])
+    fp = tmp_path / "fw.csv"
+    TH.log_forward(rd, fp)
+    TH.log_forward(rd, fp)                                                # 同一数据日重复运行：不重复记
+    df = pd.read_csv(fp)
+    assert len(df) == 2 and set(df["market"]) == {"US", "JP"}
