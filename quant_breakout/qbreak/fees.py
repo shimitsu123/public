@@ -55,6 +55,8 @@ BROKERS: dict[str, dict] = {
         "markets": {"JP": {"commission_pct": 0.0},
                     "US": {"commission_pct": 0.495, "commission_max": 22.0, "fx_spread_pct": 0.16}},
         "etf": {"1329.T": {"buy_fee_pct": 0.0, "sell_fee_pct": 0.0, "slip_pct": 0.03, "lot": 1},
+                "1655.T": {"buy_fee_pct": 0.0, "sell_fee_pct": 0.0, "slip_pct": 0.02, "lot": 10},   # 东证 S&P500（日元）
+                "2558.T": {"buy_fee_pct": 0.0, "sell_fee_pct": 0.0, "slip_pct": 0.03, "lot": 1},
                 "VOO": {"buy_fee_pct": 0.0, "sell_fee_pct": 0.495, "sell_fee_max": 22.0, "slip_pct": 0.01, "lot": 1},
                 "SPYM": {"buy_fee_pct": 0.495, "buy_fee_max": 22.0, "sell_fee_pct": 0.495, "sell_fee_max": 22.0,
                          "slip_pct": 0.02, "lot": 1}},
