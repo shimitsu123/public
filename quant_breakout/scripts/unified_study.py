@@ -1,7 +1,9 @@
 """unified_study.py — 一个账户 ¥1,000,000（楽天）里日本株 + 美股 + 东证 ETF 怎么配（事先写定，先提交后运行，结果出来不改规则）。
 
-账户：总资金 ¥1,000,000（不是日本、美股各 100 万）。楽天费用：日本株 / 东证 ETF 0 円（ゼロコース），美股 0.495%（上限 $22），
-换汇 片道 25 銭/USD；美股买入当天白天先换汇、当晚开盘成交；美股卖出后的美元下一个换汇窗口换回日元（qbreak/unified.py）。
+账户：总资金 ¥1,000,000（不是日本、美股各 100 万）。楽天费用：日本株 / 东证 ETF 0 円（ゼロコース），美股 0.495%（上限 $22）。
+换汇（运行前按 2026-09-25 的官方核对修订，结果出来之前）：リアルタイム為替 手数料 0 銭、买卖价差按片道 3 銭估；
+平日 8:00 起可换 → 美股买入当天先换汇、当晚开盘成交；美股卖出的美元次日 8:00 换回日元、9:00 日本开盘可用；
+日本祝日（海外市场开）也能换汇（qbreak/unified.py 的默认值）。敏感性：另报告换汇按 ±25 銭（円貨決済 / 定時為替的水平）时 S1 的结果，不参与选择。
 个股：现行参数（best_params_JP / best_params_US），日本与美股的新信号一起排名、共用名额（执行成本低的优先）。
 候选（2 × 4 = 8 个，个股仓位固定 4×25%，避免多重比较）：
   个股范围  S0 只做日本个股（日経225，按偏好剔除）   S1 日本 + 美股个股（NASDAQ-100 + Dow30，按偏好剔除）一起排名
@@ -117,6 +119,15 @@ def main() -> int:
             rows.append(row)
             print(json.dumps({k: v for k, v in row.items() if k != "core"}, ensure_ascii=False, default=float),
                   f"{time.time() - t0:.0f}s", flush=True)
+    sens = {}                                               # 敏感性：换汇 ±25 銭（不参与选择）
+    for ck, (core, mode) in CORES.items():
+        use = {t: df for t, df in ind.items() if (t in core) or (t not in ("1329.T", "1655.T"))}
+        cfg = UnifiedConfig(capital_jpy=1_000_000, position_pct=0.25, max_positions=4, max_position_pct=0.34,
+                            stock_markets=("JP", "US"), core=core,
+                            core_index={t: ("JP" if t == "1329.T" else "US") for t in core}, core_mode=mode,
+                            fx_spread_yen=0.25)
+        r = UnifiedEngine(use, cfg, params, ex, {t: ccost[t] for t in core}, fx=fx, entry_mult=em, bear=bear).run(start=W20)
+        sens[f"S1{ck}"] = r.metrics.get("cagr_pct")
     df = pd.DataFrame(rows)
     say("\n| 方案 | 个股 | 闲置资金 | 20 年年化 | 20 年回撤 | Calmar | 5 年年化 | 5 年回撤 | 20 年成交 日本 / 美股 / 换汇 |")
     say("|---|---|---|---|---|---|---|---|---|")
@@ -137,6 +148,7 @@ def main() -> int:
     say("\n加美股个股（S1 − S0）的 20 年年化差：" + "；".join(
         f"{ck} {float(df.loc[df.scheme == 'S1' + ck, 'w20_cagr'].iloc[0]) - float(df.loc[df.scheme == 'S0' + ck, 'w20_cagr'].iloc[0]):+.2f}pp"
         for ck in CORES))
+    say("换汇按 ±25 銭时 S1 的 20 年年化（敏感性，不参与选择）：" + "；".join(f"{k} {v}%" for k, v in sens.items()))
     fp = paths.out_dir() / "unified_study"
     df.drop(columns=["core"]).to_csv(f"{fp}.csv", index=False, encoding="utf-8-sig")
     Path(f"{fp}.md").write_text("\n".join(LINES) + "\n", encoding="utf-8")

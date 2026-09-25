@@ -87,7 +87,7 @@ FX = pd.DataFrame({"Open": 150.0, "Close": 150.0}, index=D)
 def test_us_buy_converts_yen_the_same_day_before_us_open():
     ind = {"AAA": _bars(D, [100.0] * 8, entry_on=[D[1]])}                  # 美股信号：D1 收盘
     cfg = UnifiedConfig(capital_jpy=1_000_000, position_pct=0.25, max_positions=4, stock_markets=("US",),
-                        core={}, core_index={}, fx_on_jp_holidays=True)
+                        core={}, core_index={}, fx_on_jp_holidays=True, fx_spread_yen=0.25, fx_before_jp_open=False)
     ue = UnifiedEngine(ind, cfg, {"JP": P, "US": P}, EX, {}, fx=FX)
     ue.run()
     fx0 = ue.st.fx_trades[0]
@@ -105,7 +105,8 @@ def test_us_sale_dollars_go_back_to_yen_before_a_jp_buy():
     us = _bars(D, [100.0] * 8, entry_on=[D[1]], dead_on=[D[3]])
     jp = _bars(D, [1000.0] * 8, entry_on=[D[4], D[5]])
     cfg = UnifiedConfig(capital_jpy=400_000, position_pct=0.9, max_positions=1, max_position_pct=0.95,
-                        stock_markets=("JP", "US"), core={}, core_index={}, fx_on_jp_holidays=True)
+                        stock_markets=("JP", "US"), core={}, core_index={}, fx_on_jp_holidays=True,
+                        fx_spread_yen=0.25, fx_before_jp_open=False)
     ue = UnifiedEngine({"AAA": us, "7777.T": jp}, cfg, {"JP": P, "US": P}, EX, {}, fx=FX)
     ue.run()
     dirs = [(d, k) for d, k, *_ in ue.st.fx_trades]
@@ -145,7 +146,7 @@ def test_pre_open_conversion_lets_jp_buy_use_last_nights_dollars():
     jp = _bars(D, [1000.0] * 8, entry_on=[D[4]])
     cfg = UnifiedConfig(capital_jpy=400_000, position_pct=0.9, max_positions=1, max_position_pct=0.95,
                         stock_markets=("JP", "US"), core={}, core_index={}, fx_on_jp_holidays=True,
-                        fx_before_jp_open=True)
+                        fx_before_jp_open=True, fx_spread_yen=0.25)
     ue = UnifiedEngine({"AAA": us, "7777.T": jp}, cfg, {"JP": P, "US": P}, EX, {}, fx=FX)
     ue.run()
     jp_tr = [t for t in ue.st.trades if t["ticker"] == "7777.T"]

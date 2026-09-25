@@ -49,11 +49,12 @@ def side_fee(cost: dict | None, side: str) -> Callable[[float], float]:
 BROKERS: dict[str, dict] = {
     "rakuten": {
         "label": "楽天証券",
-        "checked": "2026-09-24",
-        "note": "国内株ゼロコース（需同意 SOR・R クロス）；米国株 0.495%（上限 22 美元）；换汇 25 銭/USD（157 円时 ≈0.16%）；"
-                "VOO 为买付手数料無料 ETF（卖出照收）",
+        "checked": "2026-09-25",
+        "note": "国内株ゼロコース（需同意 SOR・R クロス；ETF/REIT 同为 0 円）；米国株 0.495%（2.22 美元以下 0、上限 22 美元）；"
+                "换汇：リアルタイム為替 手数料 0 銭（2023-12-04 起，有业者间买卖价差，按片道 3 銭估 ≈0.02%），"
+                "定時為替 / 米国株円貨決済 ±25 銭；买付手数料無料 ETF 15 只（VOO / VT / VTI / SPY / QQQ 等，仅买入）",
         "markets": {"JP": {"commission_pct": 0.0},
-                    "US": {"commission_pct": 0.495, "commission_max": 22.0, "fx_spread_pct": 0.16}},
+                    "US": {"commission_pct": 0.495, "commission_max": 22.0, "fx_spread_pct": 0.02}},
         "etf": {"1329.T": {"buy_fee_pct": 0.0, "sell_fee_pct": 0.0, "slip_pct": 0.03, "lot": 1},
                 "1655.T": {"buy_fee_pct": 0.0, "sell_fee_pct": 0.0, "slip_pct": 0.02, "lot": 10},   # 东证 S&P500（日元）
                 "2558.T": {"buy_fee_pct": 0.0, "sell_fee_pct": 0.0, "slip_pct": 0.03, "lot": 1},
