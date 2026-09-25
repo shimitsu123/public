@@ -158,7 +158,7 @@ def build(d: dict) -> dict:
 
 
 def snapshot(built: dict | None = None, table: dict | None = None, events: list | None = None,
-             today=None, horizon_days: int = 45) -> dict:
+             today=None, horizon_days: int = 60) -> dict:
     """最新读数 + 同档位的历史频率（var/threat_index.json）+ 接下来的已知大事件日程（var/macro_events.json）。只展示。"""
     from . import paths
     from .utils import read_json

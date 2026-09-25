@@ -10,9 +10,9 @@ from qbreak import paths
 from qbreak.calendar_us import is_trading_day as us_td, next_trading_day as us_next
 from qbreak.config import BacktestConfig, StrategyParams
 from qbreak.engine import run_backtest
-from qbreak.macro import (MacroEvent, MacroFeatures, MacroOverlay, blocked_fill_dates, build_entry_mult,
-                          features_at, features_frame, load_events, load_overlay, macro_mult, sector_mult,
-                          ticker_mults)
+from qbreak.macro import (WINDOW_KINDS, MacroEvent, MacroFeatures, MacroOverlay, blocked_fill_dates,
+                          build_entry_mult, event_block, features_at, features_frame, load_events, load_overlay,
+                          macro_mult, sector_mult, ticker_mults)
 from qbreak.sectors import SECTOR_JP, SECTOR_US, sector_of
 from qbreak.universes import NIKKEI225, US_BROAD, nikkei225
 
@@ -99,6 +99,18 @@ def test_load_events_reads_file_and_history():
     kinds = {e.kind for e in hist}
     assert {"FOMC", "BOJ", "NFP"} <= kinds and any(e.date == dt.date(2024, 9, 18) for e in hist)
     assert sum(1 for e in hist if e.kind == "NFP") == 12
+
+
+def test_display_only_kinds_never_block():
+    """选举 / 财政期限等非固定大事件只进日报日程，事件窗口仍只认 FOMC / BOJ / CPI / NFP。"""
+    (paths.home() / "macro_events.json").write_text(json.dumps({"events": [
+        {"date": "2026-11-03", "kind": "ELECTION", "home": "US", "name": "美国中期选举"},
+        {"date": "2026-10-28", "kind": "FOMC", "home": "US"}]}))
+    assert {e.kind for e in load_events()} == {"ELECTION", "FOMC"}             # 日程里都有
+    assert event_block("US", dt.date(2026, 11, 2)) is None                     # 选举前一日：不拦截
+    assert event_block("JP", dt.date(2026, 11, 4)) is None
+    assert event_block("US", dt.date(2026, 10, 27)) is not None                # FOMC 照常
+    assert set(WINDOW_KINDS) == {"FOMC", "BOJ", "CPI", "NFP"}
 
 
 def test_load_overlay_age_and_types():

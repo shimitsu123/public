@@ -46,3 +46,25 @@ def test_trend_and_fit_text():
     s, why = SN.fit_score(b, tr)
     assert abs(s - (5 * 0.02 - 0.5 * tr["oil"])) < 1e-9
     assert why.startswith("油价↑ 受损") and "日本利率↑ 受益" in why
+
+
+def test_current_fit_tiers():
+    lv, rng = _levels(900, 5)
+    for c in ("rate_jp", "rate_us", "fx", "credit"):                         # 只让油价起作用（其余因素恒定 → 系数 0）
+        lv[c] = lv[c].iloc[0]
+    days = lv.index
+    n225 = pd.Series(np.exp(lv["mkt"].to_numpy()), index=days)
+    inputs = {"n225": n225, "jgb": lv["rate_jp"], "fx": pd.Series(np.exp(lv["fx"].to_numpy()), index=days),
+              "raw": {"DGS10": lv["rate_us"], "DCOILWTICO": pd.Series(np.exp(lv["oil"].to_numpy()), index=days),
+                      "BAA10Y": lv["credit"]}}
+    closes = {}
+    for k, b_oil in enumerate(np.linspace(-0.5, 0.5, 9)):                  # 油价敏感度从负到正
+        oil_seen = lv["oil"].diff().shift(1).fillna(0)                          # 日本 D 日反映的是前一个美国收盘的油价
+        r = lv["mkt"].diff().fillna(0) + b_oil * oil_seen + rng.normal(0, 0.002, len(days))
+        closes[f"{1000 + k}.T"] = pd.Series(1000 * np.exp(np.cumsum(r.to_numpy())), index=days)
+    out = SN.current_fit(closes, inputs)
+    assert set(out) == set(closes) and {o["fit_tier"] for o in out.values()} == {"顺风", "中性", "逆风"}
+    oil_up = SN.trend(SN.factor_levels(days, n225, inputs["jgb"], inputs["raw"]["DGS10"], inputs["raw"]["DCOILWTICO"],
+                                       inputs["fx"], inputs["raw"]["BAA10Y"]), days[-1])["oil"] > 0
+    best = max(out, key=lambda t: out[t]["fit"])
+    assert best == ("1008.T" if oil_up else "1000.T")                      # 油价上涨时油价敏感度最高的最顺风

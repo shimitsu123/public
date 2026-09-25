@@ -171,7 +171,7 @@ def _macro_layer(market: str, dcfg, tickers: list[str], today, use_sector: bool 
     bar_date：已知的最新完整 K 线日（用于面板展示的成交日估算）；run_once 内部会按真实 K 线重新算。"""
     from qbreak.calendar_jp import next_trading_day as jp_next
     from qbreak.calendar_us import next_trading_day as us_next
-    from qbreak.macro import (DURATION_METHOD, event_block, features_at, load_events, load_overlay,
+    from qbreak.macro import (DURATION_METHOD, WINDOW_KINDS, event_block, features_at, load_events, load_overlay,
                               long_duration_set, macro_mult, snapshot, ticker_mults)
     from qbreak.trader import expected_last_bar
     import pandas as pd
@@ -190,7 +190,7 @@ def _macro_layer(market: str, dcfg, tickers: list[str], today, use_sector: bool 
             log.warning("[%s] 利率 beta 计算失败，退回板块近似: %s", market, e)
     tilts = ticker_mults(tickers, market, f, ld) if use_sector else {t: (1.0, "", "") for t in tickers}
     fill = (jp_next if market == "JP" else us_next)(bar)
-    events = load_events(kinds=event_kinds)
+    events = load_events(kinds=event_kinds or WINDOW_KINDS)      # 选举等只展示的事件不进窗口
     block_fn = (lambda fill_d: event_block(market, fill_d, events)) if use_events else None
     block = block_fn(fill) if block_fn else None
     log.info("[%s] 宏观层 ×%.2f %s；预计成交日 %s %s", market, mult, fired or "无触发", fill, block or "")
@@ -306,7 +306,9 @@ def cmd_threat(a) -> int:
         top = "、".join(f"{f['label']} {f['pct']}" for f in x["top"])
         print(f"{name}（{x['date']}）：{x['value']:.0f}/100（20 日前 {x['prev20']}）；同档位 {x['band']} 历史上"
               f"{s['event_def']}的频率 {x['band_freq']}%（平均 {x['base_rate']}%）；主要来源：{top}")
-    print("接下来的已知大事件：" + ("；".join(f"{e['date']} {e['kind']}" for e in s["events"]) or "无"))
+    from qbreak.report_unified import _EV
+    print("接下来的已知大事件：" + ("；".join(f"{e['date']} {_EV.get(e['kind'], e['kind'])}"
+                                         + (f"（{e['name']}）" if e.get("name") else "") for e in s["events"]) or "无"))
     print(s["note"])
     return 0
 
@@ -832,17 +834,27 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     todo = eng.todo(min(i_last, len(eng.gidx) - 1))
     eq = state.history[-1][1] if state.history else ucfg.capital_jpy
     usdjpy = float(state.history[-1][4]) if state.history and state.history[-1][4] else None
+    ti, fit = None, None
+    try:                                                     # 宏观数据下载一次：威胁指数 + 候补队列的顺风度（都只作参考）
+        from qbreak.sensitivity import current_fit
+        from qbreak.threat import load_inputs
+        ti = load_inputs()
+        if "JP" in plans:
+            fit = current_fit({t: data[t]["Close"] for t in plans["JP"].uni if t in data}, ti)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("宏观顺风度计算失败（不影响交易）：%s", e)
     for m, P in plans.items():                           # 候补队列（条件就绪度，不是收益预测）；「买得起」按一个名额的预算
         budget = eq * ucfg.position_pct / ((usdjpy or 150.0) if m == "US" else 1.0)
-        extras[m]["watchlist"] = _scan_market(P.uni, params[m], m, dcfg, budget, P.idx_close, P.macro_info)[:15]
+        extras[m]["watchlist"] = _scan_market(P.uni, params[m], m, dcfg, budget, P.idx_close, P.macro_info,
+                                              fit=fit if m == "JP" else None)[:15]
     out = {"date": today.isoformat(), "bar_date": state.last_date, "equity_jpy": eq, "cash_jpy": round(state.cash_jpy),
            "cash_usd": round(state.cash_usd, 2), "todo": todo, "skipped": eng.skipped,
            "positions": {t: {"market": p.market, "shares": p.shares, "entry_px": p.entry_px, "entry_date": p.entry_date,
                              "stop_px": round(p.stop_px, 2)} for t, p in state.pos.items()},
            "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker}
     try:                                                     # 大事件威胁指数：只展示，不参与交易
-        from qbreak.threat import snapshot
-        out["threat"] = snapshot()
+        from qbreak.threat import build, load_inputs, snapshot
+        out["threat"] = snapshot(build(ti if ti is not None else load_inputs()))
         write_json(paths.out_dir() / "threat_today.json", out["threat"])
     except Exception as e:                                   # noqa: BLE001
         log.warning("威胁指数计算失败（不影响交易）：%s", e)
@@ -986,8 +998,9 @@ def _corp_actions_provider():
     return YFinanceActions()
 
 
-def _scan_market(uni, p, market, dcfg, budget, index_close=None, macro_info=None) -> list[dict]:
-    """候补队列：整个股票池按条件就绪度排序；附板块与宏观倾斜倍数。"""
+def _scan_market(uni, p, market, dcfg, budget, index_close=None, macro_info=None, fit: dict | None = None) -> list[dict]:
+    """候补队列：整个股票池按条件就绪度排序；附板块与宏观倾斜倍数。fit（qbreak.sensitivity.current_fit）给出时，
+    加上宏观顺风度并按「状态 → 顺风 / 中性 / 逆风 → 就绪度」排序（只作参考，不影响交易）。"""
     from qbreak.data import load_universe
     from qbreak.macro import MacroFeatures, sector_mult
     from qbreak.scan import scan
@@ -998,7 +1011,7 @@ def _scan_market(uni, p, market, dcfg, budget, index_close=None, macro_info=None
         data = load_universe(uni, dcfg)                      # 已缓存，几乎不花时间
         ind = {t: compute_indicators(drop_partial_bar(df, market), p, index_close)
                for t, df in data.items()}
-        df = scan(ind, p, market, budget)
+        df = scan(ind, p, market, budget, top=len(ind) if fit else 15)
         rows = df.to_dict("records") if not df.empty else []
         f = MacroFeatures(**((macro_info or {}).get("features") or {})) if macro_info else MacroFeatures()
         from qbreak.universes import index_pending
@@ -1012,6 +1025,12 @@ def _scan_market(uni, p, market, dcfg, budget, index_close=None, macro_info=None
             if pg and pg["action"] == "delete":
                 m_, why = 0.0, f"指数剔除（{pg['effective']} 生效），不开新仓"
             r.update({"sector": sector_cn(r["ticker"], market), "tilt": m_, "tilt_why": why})
+            if fit:
+                r.update(fit.get(r["ticker"], {"fit": None, "fit_why": "", "fit_tier": "—"}))
+        if fit:
+            so = {"triggered": 0, "imminent": 1, "watch": 2, "far": 3}
+            to = {"顺风": 0, "中性": 1, "—": 1, "逆风": 2}
+            rows.sort(key=lambda r: (so.get(r["status"], 9), to.get(r.get("fit_tier"), 1), -float(r.get("score") or 0)))
         return rows
     except Exception as e:                                    # noqa: BLE001
         log.warning("[%s] 候补队列生成失败: %s", market, e)

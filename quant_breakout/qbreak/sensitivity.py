@@ -90,3 +90,24 @@ def fit_score(b: pd.Series | None, tr: pd.Series) -> tuple[float | None, str]:
     top = contrib.abs().sort_values(ascending=False).head(2).index
     parts = [f"{LABEL[f]}{'↑' if tr[f] > 0 else '↓'} {'受益' if contrib[f] > 0 else '受损'}" for f in top if abs(contrib[f]) > 1e-9]
     return score, "；".join(parts)
+
+
+def current_fit(closes: dict[str, pd.Series], inputs: dict) -> dict[str, dict]:
+    """候补队列用：每只日本票当前的顺风度（%/周）、说明、当日横截面三分位档（顺风 / 中性 / 逆风）。
+    inputs = qbreak.threat.load_inputs() 的结果（与威胁指数共用一次下载）。只作参考，不参与交易。"""
+    r, n225 = inputs["raw"], inputs["n225"]
+    jp_days = n225.index[n225.index >= n225.index[-1] - pd.Timedelta(days=365 * 3)]
+    lv = factor_levels(jp_days, n225, inputs["jgb"], r["DGS10"], r["DCOILWTICO"], inputs["fx"], r["BAA10Y"])
+    W = weekly_changes(lv)
+    X = W[FACTORS + ["mkt"]]
+    tr = trend(lv, jp_days[-1])
+    out = {}
+    for t, c in closes.items():
+        s, why = fit_score(betas(stock_weekly(c, W.index), X, W.index[-1]), tr)
+        if s is not None:
+            out[t] = {"fit": round(s, 3), "fit_why": why}
+    if out:
+        q = pd.Series({t: o["fit"] for t, o in out.items()}).rank(pct=True)
+        for t in out:
+            out[t]["fit_tier"] = "顺风" if q[t] > 2 / 3 else ("逆风" if q[t] <= 1 / 3 else "中性")
+    return out

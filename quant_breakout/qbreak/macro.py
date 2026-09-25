@@ -276,10 +276,13 @@ HIST_BOJ = """2021-01-21 2021-03-19 2021-04-27 2021-06-18 2021-07-16 2021-09-22 
 2026-01-23 2026-03-19 2026-04-28 2026-06-16 2026-07-31 2026-09-18""".split()
 
 
+WINDOW_KINDS = ("FOMC", "BOJ", "CPI", "NFP")      # 事件窗口（不开新仓）只认这 4 类；选举 / 财政期限等只在日报日程里展示
+
+
 @dataclass
 class MacroEvent:
     date: dt.date
-    kind: str            # FOMC / BOJ / CPI / NFP
+    kind: str            # FOMC / BOJ / CPI / NFP（窗口用）；ELECTION / POLITICS / FISCAL / TRADE / … 只展示
     home: str            # US / JP
     name: str = ""
 
@@ -365,7 +368,7 @@ def blocked_fill_dates(events: list[MacroEvent], market: str) -> dict[dt.date, s
 
 
 def event_block(market: str, fill_date: dt.date, events: list[MacroEvent] | None = None) -> str | None:
-    ev = events if events is not None else load_events()
+    ev = events if events is not None else load_events(kinds=WINDOW_KINDS)
     return blocked_fill_dates(ev, market).get(fill_date)
 
 

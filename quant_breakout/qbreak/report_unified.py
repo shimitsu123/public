@@ -144,7 +144,9 @@ def render_unified_html(d: dict) -> str:
             watch.append(f"<tr><td>{i}</td><td>{escape(str(w.get('ticker')))}</td><td class='muted'>{escape(str(w.get('sector') or '—'))}</td>"
                          f"<td>{_STATUS.get(w.get('status'), escape(str(w.get('status'))))}</td><td class='n'>{w.get('score')}</td>"
                          f"<td class='n'>{_money(w.get('close'), ccy)}</td><td>{'是' if w.get('affordable') else '否'}</td>"
-                         f"<td class='muted'>{'—' if tilt is None or tilt >= 1 else '×' + str(tilt)}</td></tr>")
+                         f"<td class='muted'>{'—' if tilt is None or tilt >= 1 else '×' + str(tilt)}</td>"
+                         f"<td class='muted'>{escape(str(w.get('fit_tier') or '—'))}"
+                         f"{('：' + escape(w['fit_why'])) if w.get('fit_why') else ''}</td></tr>")
     core_desc = " / ".join(f"{t} {w:g}" for t, w in (cfg.get("core") or {}).items())
     stocks = ("日本 + 美股合计、一起排名：日本 → 美元已够的美股 → 要换汇的美股" if with_us
               else "只做日本个股，美股敞口经由东证 ETF；事先登记的研究显示 ¥100 万规模下加美股个股会拉低收益")
@@ -160,7 +162,7 @@ def render_unified_html(d: dict) -> str:
         core="".join(core_rows) or "<tr><td colspan=4 class='muted'>无</td></tr>",
         spark=_spark(d.get("history") or []), trades=tr_rows or "<tr><td colspan=6 class='muted'>还没有平仓的交易</td></tr>",
         fx=fx_rows or "<tr><td colspan=4 class='muted'>还没有换汇</td></tr>", markets="".join(mk),
-        watch="".join(watch) or "<tr><td colspan=8 class='muted'>尚无候补数据</td></tr>",
+        watch="".join(watch) or "<tr><td colspan=9 class='muted'>尚无候补数据</td></tr>",
         threat=_threat_html(d.get("threat") or {}),
         corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
@@ -172,7 +174,9 @@ def render_unified_html(d: dict) -> str:
                      "美股卖出后的美元在下一个换汇窗口换回日元。"))
 
 
-_EV = {"FOMC": "美联储议息", "BOJ": "日银议息", "CPI": "美国 CPI", "NFP": "美国非农就业"}
+_EV = {"FOMC": "美联储议息", "BOJ": "日银议息", "CPI": "美国 CPI", "NFP": "美国非农就业", "ELECTION": "选举",
+       "POLITICS": "政治日程", "FISCAL": "财政期限", "TRADE": "贸易 / 关税期限", "OPEC": "OPEC+ 会议", "SUMMIT": "峰会",
+       "TANKAN": "日银短观", "SQ": "日本 SQ（定期）", "OPEX": "美股季度期权到期（定期）", "INDEX": "指数调整"}
 
 
 def _threat_html(t: dict) -> str:
@@ -240,7 +244,8 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <section class="card"><h2>核心 ETF（闲置资金）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
 <section class="card"><h2>市场状态</h2><dl>{markets}</dl></section>
 <section class="card"><h2>大事件威胁指数（只展示，不参与交易）</h2>{threat}</section>
-<section class="card"><h2>候补队列（按入场条件就绪度排序，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>状态</th><th class="n">就绪度</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th></tr>{watch}</table></div></section>
+<section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>状态</th><th class="n">就绪度</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
+<p class="muted">宏观顺风度 = 个股对日本 / 美国利率、油价、日元、信用利差的历史敏感度 × 近 60 个交易日的变化（当日横截面三分位：顺风 / 中性 / 逆风），只作参考：2026-09-25 事先登记研究显示它对之后 20 日的收益没有预测力（秩相关 0.00），交易排序不用它。</p></section>
 <section class="card"><h2>最近平仓</h2><div class="scroll"><table><tr><th>日期</th><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">损益（日元）</th><th>原因</th></tr>{trades}</table></div></section>
 <section class="card"><h2>换汇记录</h2><div class="scroll"><table><tr><th>日期</th><th>方向</th><th class="n">美元</th><th class="n">汇率</th></tr>{fx}</table></div></section>
 <section class="card"><h2>规则</h2><p class="muted">{rules}</p></section>

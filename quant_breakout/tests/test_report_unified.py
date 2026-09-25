@@ -87,3 +87,12 @@ def test_report_shows_threat_card_and_error():
     td["threat"] = {"error": "FRED 不通"}
     write_json(paths.out_dir() / "unified_today.json", td)
     assert "暂不可用：FRED 不通" in write_unified_report().read_text(encoding="utf-8")
+
+
+def test_watchlist_shows_macro_tailwind_column():
+    _write(["JP"])
+    td = read_json(paths.out_dir() / "unified_today.json")
+    td["extras"]["JP"]["watchlist"][0].update({"fit": 0.21, "fit_why": "日本利率↑ 受益；油价↑ 受益", "fit_tier": "顺风"})
+    write_json(paths.out_dir() / "unified_today.json", td)
+    html = write_unified_report().read_text(encoding="utf-8")
+    assert "顺风：日本利率↑ 受益；油价↑ 受益" in html and "宏观顺风度" in html and "没有预测力" in html
