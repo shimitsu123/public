@@ -195,7 +195,9 @@ def test_v3_readings_and_forward_log(tmp_path):
     raw = pd.DataFrame({c: rng.normal(size=len(days)) for c in TH.JP_V3}, index=days)
     F = {"US": (raw[TH.US_V3], None), "JP": (raw, None)}
     rd = TH.v3_readings(F, {"US": ["vix", "gold"], "JP": []})
-    assert set(rd["US"]["idx"]) == {"A0", "B1", "B2", "B3", "B4", "A0x"} and rd["JP"]["idx"]["B2"] is None
+    assert set(rd["US"]["idx"]) == {"A0", "B1", "B2", "B3", "B4", "A0x", "A0+gold_silver", "A0+commod_vol"}
+    assert rd["JP"]["idx"]["B2"] is None and "A0+gold_silver" not in rd["JP"]["idx"]
+    assert TH.forward_label("A0+gold_silver") == "现行 + 金银比上升"
     assert len(rd["JP"]["obs"]) == len(TH.V3_EXTRA + TH.JP_V3_ONLY) and len(rd["US"]["obs"]) == len(TH.V3_EXTRA)
     assert rd["US"]["obs"] == sorted(rd["US"]["obs"], key=lambda o: -o["pct"])
     fp = tmp_path / "fw.csv"

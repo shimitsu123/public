@@ -473,6 +473,8 @@ def v3_readings(F: dict, sel: dict | None = None) -> dict:
         idx = {"A0": _eq(pct[v1]), "B1": _eq(pct[v3]), "B2": _eq(pct[s]) if s else None,
                "B3": category_mean(pct[v3]), "B4": category_mean(pct[s]) if s else None,
                "A0x": _eq(pct[[c for c in v1 if c not in A0X_DROP]])}          # 去掉曲线倒挂与油价冲击（前瞻对照）
+        if m == "US":                                                     # 现行 + 美股前瞻观察的单个因素（前瞻对照，2026-09-25 补登）
+            idx.update({f"A0+{c}": _eq(pct[v1 + [c]]) for c in US_WATCH})
         last = pct.index[-1]
         new = V3_EXTRA + (JP_V3_ONLY if m == "JP" else [])
         obs = [{"k": c, "label": LABELS[c], "pct": round(float(pct.at[last, c]) * 100)} for c in new if pct.at[last, c] == pct.at[last, c]]

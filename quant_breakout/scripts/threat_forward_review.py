@@ -14,6 +14,8 @@
   （新兴市场相对美股、美国实际利率急升、短观大企业、短观中小非制造业、初请失业金、等权 / 市值加权、日银加息、日本企业物价加速），
   用同一条判定规则。披露：日経一共比 14 个版本，某个版本碰巧过线的机会比只比一个时大；这 8 个因素也是看过 2011 年后结果才挑的
   （因子调查里加进现行模型两段都有增益，调查里的 ΔAUC 列为样本内参考）。
+补登（2026-09-25，用户要求；此时这些列还没有任何记录）：美股再加 2 个版本「A0+金银比上升」「A0+商品波动」
+  （现行 v1 再加美股前瞻观察的一个因素），同一条判定规则。美股一共比 8 个版本；这两个因素也是看过 2011 年后结果才挑的。
 """
 from __future__ import annotations
 
@@ -92,14 +94,15 @@ def main() -> int:
                 a10, a15 = ins[m][f"{v}_10"], ins[m][f"{v}_15"]
                 lines.append(f"| {name} | {TH.FORWARD_LABELS[v]} | {fmt(a10[0])} / {fmt(a10[1])} | {fmt(a15[0])} / {fmt(a15[1])} |")
         sv = json.loads((paths.out_dir() / "threat_factor_survey.json").read_text(encoding="utf-8"))
-        rows = (sv.get("JP") or {}).get("factors") or {}
         from qbreak.survey import JP_WATCH
-        lines += ["\n## 样本内参考：日経「现行 + Wj 各因素」（因子调查里加进现行模型的 ΔAUC，偏乐观）",
-                  "| 版本 | ΔAUC 1995–2010 / 2011– | 单独 AUC 1995–2010 / 2011– |", "|---|---|---|"]
-        for f in JP_WATCH:
-            x = rows.get(f) or {}
-            dl, sg = x.get("delta") or [None, None], x.get("single") or [None, None]
-            lines.append(f"| {TH.forward_label('A0+' + f)} | {fmt(dl[0])} / {fmt(dl[1])} | {fmt(sg[0])} / {fmt(sg[1])} |")
+        lines += ["\n## 样本内参考：「现行 + 单个观察因素」（因子调查里加进现行模型的 ΔAUC，偏乐观）",
+                  "| 市场 | 版本 | ΔAUC 1995–2010 / 2011– | 单独 AUC 1995–2010 / 2011– |", "|---|---|---|---|"]
+        for m, name, fs in (("US", "S&P500", TH.US_WATCH), ("JP", "日経225", JP_WATCH)):
+            rows = (sv.get(m) or {}).get("factors") or {}
+            for f in fs:
+                x = rows.get(f) or {}
+                dl, sg = x.get("delta") or [None, None], x.get("single") or [None, None]
+                lines.append(f"| {name} | {TH.forward_label('A0+' + f)} | {fmt(dl[0])} / {fmt(dl[1])} | {fmt(sg[0])} / {fmt(sg[1])} |")
     except Exception as e:                                               # noqa: BLE001
         lines.append(f"\n（样本内参考计算失败：{e}）")
     lines.append(f"\n（耗时 {time.time() - t0:.0f}s）")

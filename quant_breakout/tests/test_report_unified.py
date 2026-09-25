@@ -92,7 +92,7 @@ def test_report_shows_threat_card_and_error():
     assert "17.5%" in html and "油价冲击 96" in html and "美联储议息" in html and "只有 3 次" in html
     assert "其他观察因子（不计入指数）：金银比上升 88" in html and "地缘政治风险（GPR） 40" not in html   # 只列 ≥70 分位
     assert "都在 70 分位以下" in html
-    assert "另记录「现行 + Wj 各因素」8 个版本" in html
+    assert "另记录「现行 + 单个观察因素」8 个版本" in html
     assert "前瞻观察（日経两段都有效的 8 个因素" in html and "自身历史 82 分位" in html and "现在预警" in html and "金银比 + 商品波动 44" in html
     assert "前瞻对照（只记录、未验证）：去掉曲线倒挂与油价冲击 49、因子调查组合 48" in html
     assert "各经济领域现在的危险度" in html and "<td>科技周期</td><td class='n'>93</td><td>有帮助</td>" in html and "没帮助" in html

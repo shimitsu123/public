@@ -88,6 +88,17 @@ def main() -> int:
                                                      f"{'有' if e['W_warn80'] else '无'}，A0 警戒 {'有' if e['A0_alert'] else '无'} / 预警 "
                                                      f"{'有' if e['A0_warn80'] else '无'}）" for e in r["episodes"]) or "还没有"),
                   f"\n判定（事先规则）：90 分位警戒 —— {r['decision']}；80 分位预警 —— {r['decision80']}"]
+        lg = pd.read_csv(fp_log)                                          # 补充（2026-09-25）：两个因素单独的前瞻 AUC，只描述、不参与判定
+        lg["date"] = pd.to_datetime(lg["date"])
+        lg = lg.set_index("date").sort_index()
+        fdd = TH.forward_drawdown(d["spx"].dropna(), 60)
+        e = (fdd <= -0.10).astype(float).where(fdd.notna()).reindex(lg.index)
+        single = {}
+        for col, lab in (("gs_pct", "金银比上升"), ("cv_pct", "商品波动")):
+            k = e.notna() & lg[col].notna()
+            single[lab] = TH.auc(lg[col][k], e[k]) if k.any() else None
+        out["single_forward"] = single
+        lines.append("- 两个因素单独的前瞻 AUC（只描述）：" + "、".join(f"{k} {fmt(v)}" for k, v in single.items()))
     else:
         lines.append("\n还没有前瞻记录（第一次日报运行后开始）。")
     try:
