@@ -237,3 +237,23 @@ def test_sim_unify_tachibana_jp_only_and_refuses_us_stocks():
     assert ex["JP"].fee(250_000) == 187 and ex["US"].fee(10_000) == 0
     html = write_unified_report().read_text(encoding="utf-8")
     assert "立花証券ｅ支店，日元，只做东证" in html and "無人" not in html and "1655.T 100%" in html
+
+
+def test_report_shows_executor_rehearsal_and_flags_mismatch():
+    """实盘执行器的演练账户（模拟券商）：一致 → 一行说明；不一致 / 失败 → 进「数据完整性」（例行任务汇报第一行会写出来）。"""
+    _write(["JP"])
+    td = read_json(paths.out_dir() / "unified_today.json")
+    td["executor"] = {"same_as_sim": True, "equity_diff_jpy": 0.0, "orders": 2, "decided_on": "2026-09-25", "blocked": None}
+    write_json(paths.out_dir() / "unified_today.json", td)
+    html = write_unified_report().read_text(encoding="utf-8")
+    assert "实盘执行器演练账户" in html and "与模拟盘一致" in html and "今天的单 2 笔" in html
+    assert not any("执行器" in m for m in read_json(paths.out_dir() / "report_data.json")["missing"])
+    td["executor"] = {"same_as_sim": False, "equity_diff_jpy": -1234.0, "orders": 0, "decided_on": "2026-09-25"}
+    write_json(paths.out_dir() / "unified_today.json", td)
+    html = write_unified_report().read_text(encoding="utf-8")
+    miss = read_json(paths.out_dir() / "report_data.json")["missing"]
+    assert "与模拟盘不一致" in html and any("与模拟盘不一致" in m and "−¥1,234" in m for m in miss)
+    td["executor"] = {"error": "ConnectionError: x"}
+    write_json(paths.out_dir() / "unified_today.json", td)
+    write_unified_report()
+    assert any("运行失败" in m for m in read_json(paths.out_dir() / "report_data.json")["missing"])

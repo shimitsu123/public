@@ -201,7 +201,10 @@ python run.py report                           # 只重新生成 var/out/report.
 ```
 
 - 日报：<https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ>（每个交易日 07:00 JST 由例行任务更新，同一个 URL）
-- 券商：2026-09-25 深夜起模拟盘按**立花 e支店 個別コース**计费（`sim-unify --broker tachibana`；只有日元、只做东证，1655.T 在东京开盘时买卖）。一个账户的实盘执行器（每天开盘前按与模拟盘同一计划经立花 API 下单）是下一步，见 MACOS.md
+- 券商：2026-09-25 深夜起模拟盘按**立花 e支店 個別コース**计费（`sim-unify --broker tachibana`；只有日元、只做东证，1655.T 在东京开盘时买卖）。
+  一个账户的**实盘执行器** `run.py live-u`（07:30 对账 → 决策 → 寄付单；09:05 开盘后补单）已完成并用模拟账户演练过：
+  历史回放与回测引擎逐笔一致（5 年 23.02% / 20 年 12.87%，差 ¥0），走真实立花适配器 + 模拟交易所时 5 年 22.99%（`var/out/live_rehearsal.md`）；
+  9/28 起 `sim-day` 每天用模拟券商把执行器走一遍、与模拟盘比较（日报顶部）。上线步骤见 MACOS.md §1.6
 - 一个账户模式（`sim.json` mode = unified）：`sim-day` 在开始日之前**只预览**（用最新收盘算市场状态、候补队列、USD/JPY、威胁指数，
   不读写账户状态、不下单）；`report` 重出统一日报。日报每个数字带单位，顶部「数据完整性」逐项列出没取到的数据与原因
   （行情缓存除了 12 小时有效期，还按交易日历检查是否缺了应有的最近交易日，缺了就重下载，仍缺的在这里列出）
@@ -637,7 +640,16 @@ python run.py pos rm 7203.T             # 卖出后移除
 
 ### 第4阶段　全自动实盘
 
-**macOS / Linux（立花証券 e支店 API）** —— 完整步骤见 [`MACOS.md`](MACOS.md)
+**一个账户方案（现行 S0C2，立花証券 e支店 API）** —— 完整步骤见 [`MACOS.md`](MACOS.md) §1.6
+
+```bash
+python run.py live-u-rehearse                                # 用模拟账户演练（历史回放，与回测引擎逐日比较）
+python run.py live-u --broker tachibana --demo --dry-run --no-clock   # デモ：登录、读持仓与余力、打印会下的单（不发）
+bash scripts/install_launchd_live_u.sh                       # 周一至五 07:30 早上的单 + 09:05 开盘后补单
+python run.py live-u --broker tachibana --status             # 账本：持仓、今天的单、最近事件
+```
+
+**分市场方案（旧；一个账户模式下会拒绝运行）**
 
 ```bash
 python run.py tachibana-probe --demo --dump-spec   # 只读校验 API 仕様，绝不发单

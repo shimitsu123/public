@@ -1,0 +1,323 @@
+"""一个账户的实盘执行器（qbreak/live_unified.py）：
+① 执行器 + 模拟券商逐日走「对账 → 决策 → 下单 → 开盘撮合」，与回测引擎逐笔一致（真实的立花适配器 + 模拟交易所也一致）；
+② 真实下单的情形：卖单没成交（ストップ安）→ 顺延重下；买单没成交 → 作废；部分成交；
+③ 安全闸：HALT、持仓不一致、状态不明的单、时间窗口；同一个早上重跑不重复下单；现金以券商为准。"""
+import datetime as dt
+import json
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from qbreak import paths
+from qbreak.brokers.tachibana_sim import SimExchange
+from qbreak.calendar_jp import JST
+from qbreak.config import StrategyParams
+from qbreak.fees import etf_cost
+from qbreak.live_unified import ExecOrder, ExecutorError, UnifiedExecutor, _np, rehearse, resolve_order
+from qbreak.unified import UnifiedConfig, UnifiedEngine, exec_configs
+
+from test_plan_alignment import _synthetic
+
+P = StrategyParams(take_profit_pct=0, trailing_stop_pct=0, exit_on_macd_dead_cross=True, max_hold_days=0,
+                   stop_loss_pct=7.0)
+EX = exec_configs(("JP",), {"broker": "tachibana"})
+CC = {"1655.T": etf_cost("tachibana", "1655.T", "JP")}
+CFG = UnifiedConfig(capital_jpy=1_000_000, position_pct=0.25, max_positions=4, max_position_pct=0.34,
+                    stock_markets=("JP",), core={"1655.T": 1.0}, core_index={"1655.T": "US"})
+NEW = "CLMKabuNewOrder"
+
+
+def _maker(ind, bear):
+    return lambda: UnifiedEngine(ind, CFG, {"JP": P, "US": P}, EX, CC, bear={"US": bear})
+
+
+def _synth(seed):
+    ind, core_df, bear = _synthetic("JP", seed=seed, n=260)
+    return _maker({**ind, "1655.T": core_df}, pd.Series(bear, index=core_df.index)), core_df.index[60]
+
+
+def _frame(close, opens=None, entry=(), dead=(), lock=(), start="2026-01-05"):
+    """手工 K 线：lock 里的日子一整天张贴在当天的价（高 = 低 = 收 = 开）。"""
+    idx = pd.bdate_range(start, periods=len(close))
+    c = np.asarray(close, float)
+    o = np.asarray(opens if opens is not None else close, float)
+    h, lo = np.maximum(o, c) * 1.004, np.minimum(o, c) * 0.996
+    for i in lock:
+        h[i] = lo[i] = o[i] = c[i]
+    df = pd.DataFrame({"Open": o, "High": h, "Low": lo, "Close": c, "Volume": 1e6}, index=idx)
+    df["entry"], df["dead_cross"] = df.index.isin(idx[list(entry)]), df.index.isin(idx[list(dead)])
+    df["atr"], df["climax"] = c * 0.02, False
+    return df
+
+
+def _scenario(a_close, a_open=None, entry=(10,), dead=(), lock=(), bear_all=False, n=30):
+    a = _frame(a_close, a_open, entry=entry, dead=dead, lock=lock)
+    b = _frame([1500.0] * n)
+    core = _frame([700.0] * n)
+    core["entry"] = False
+    bear = pd.Series(bool(bear_all), index=core.index)
+    return _maker({"A.T": a, "B.T": b, "1655.T": core}, bear), core.index[5]
+
+
+def _split_fees(r) -> float:
+    """核心买单拆成「寄付 + 开盘后余数」时多付的手续费（每拆一次多一笔；这里的金额档都是 77 円）+ 浮点余量。"""
+    n = sum(1 for h in r["ux"].book["history"] for o in h["orders"] if o["cid"].endswith("-2") and o["filled_qty"] > 0)
+    return 77.0 * n + 1e-6
+
+
+# ────────── ① 与回测引擎逐笔一致 ──────────
+@pytest.mark.parametrize("seed", [7, 11, 23])
+def test_paper_account_equals_engine_exactly(seed):
+    make, start = _synth(seed)
+    r = rehearse(make, start, kind="paper")
+    assert r["max_abs_diff"] == 0.0 and r["same_trades"] and r["same_core"] and not r["errors"]
+    assert r["stats"]["deferred"] > 0                      # 两段式买入（开盘前余力不够 → 开盘后）确实走到了
+
+
+@pytest.mark.parametrize("seed", [7, 23])
+def test_real_tachibana_adapter_on_sim_exchange_equals_engine(seed):
+    """真实的立花适配器（发单字段、約定照会、持仓、余力）+ 模拟交易所：约束不起作用的数据上与引擎逐笔一致。"""
+    make, start = _synth(seed)
+    r = rehearse(make, start, kind="tachibana-sim")
+    assert r["max_abs_diff"] < 1.0 and r["same_trades"] and r["same_core"] and not r["errors"]
+    assert r["calls"][NEW] > 10 and r["calls"]["CLMOrderListDetail"] > 10
+
+
+def test_split_core_buy_costs_only_the_extra_commission():
+    """核心 ETF 买单开盘前余力只放得下一部分：先下寄付，余数开盘后再下 —— 与模型的差只是多一笔手续费（77 円）。"""
+    make, start = _synth(11)
+    r = rehearse(make, start, kind="tachibana-sim")
+    assert r["same_trades"] and -200 < r["final_diff"] <= 0
+    hist = [o for h in r["ux"].book["history"] for o in h["orders"]]
+    assert any(o["cid"].endswith("-2") and o["kind"] == "core" for o in hist)
+
+
+# ────────── ② 真实下单的情形 ──────────
+def test_unfilled_sell_on_limit_down_is_carried_and_replaced():
+    n = 30
+    a = [1000.0] * 20 + [700.0] * (n - 20)                    # 第 20 天一整天ストップ安（1000 → 700）
+    make, start = _scenario(a, entry=(10,), dead=(19,), lock=(20,))
+    r = rehearse(make, start, kind="tachibana-sim")
+    assert r["same_trades"] and r["max_abs_diff"] <= _split_fees(r)   # 引擎同样：张贴那天卖不掉，第二天开盘卖出
+    assert r["stats"]["unfilled_sell"] == 1
+    sells = [o for h in r["ux"].book["history"] for o in h["orders"] if o["ticker"] == "A.T" and o["side"] == "SELL"]
+    assert [o["status"] for o in sells] == ["UNFILLED", "FILLED"]
+    t = r["executor"].trades
+    assert list(t[t["reason"] != "end"]["ticker"]) == ["A.T"]
+
+
+def test_unfilled_opening_buy_is_dropped_not_retried():
+    """寄付指値（信号日收盘 ×1.03）够不着：作废，不追（模型的跳空过滤同样放弃）。"""
+    n = 30
+    a = [1000.0] * n
+    op = list(a)
+    op[11] = 1050.0                                           # 第 11 天开盘 +5%
+    make, start = _scenario(a, op, entry=(10,), bear_all=True)   # 熊市：核心为 0，现金够 → 开盘前就下寄付指値
+    r = rehearse(make, start, kind="tachibana-sim")
+    assert r["same_trades"] and r["max_abs_diff"] <= _split_fees(r)
+    buys = [o for h in r["ux"].book["history"] for o in h["orders"] if o["ticker"] == "A.T"]
+    assert len(buys) == 1 and buys[0]["status"] == "UNFILLED" and buys[0]["phase"] == "morning"
+    assert r["stats"]["model_diff"] == 0 and len(r["executor"].trades) == 0
+
+
+class _HalfSell(SimExchange):
+    """第一次卖 A.T 只成交一半（比例配分）。"""
+    done = False
+
+    def _fill(self, o, op):
+        if o["side"] == "SELL" and o["ticker"] == "A.T" and not self.done:
+            self.done = True
+            o["qty"] = int(o["qty"]) // 2
+        super()._fill(o, op)
+
+
+def test_partial_sell_keeps_the_rest_pending_and_resells():
+    n = 30
+    make, start = _scenario([1000.0] * n, entry=(10,), dead=(15,))
+    r = rehearse(make, start, kind="tachibana-sim", exchange_cls=_HalfSell)
+    sells = [o for h in r["ux"].book["history"] for o in h["orders"] if o["ticker"] == "A.T" and o["side"] == "SELL"]
+    assert [o["status"] for o in sells] == ["PARTIAL", "FILLED"]
+    assert sells[1]["qty"] == sells[0]["qty"] - sells[0]["filled_qty"]
+    assert "A.T" not in r["ux"].eng.st.pos and not r["errors"] and not r["ux"].blocked
+    assert list(r["executor"].trades["reason"]) == ["dead_cross（部分成交）", "dead_cross"]
+
+
+# ────────── ③ 安全闸与幂等 ──────────
+def test_rerun_same_morning_sends_nothing_new(tmp_path):
+    make, start = _synth(7)
+    r = rehearse(make, start, kind="tachibana-sim", workdir=tmp_path)
+    ux, exch = r["ux"], r["exchange"]
+    n0 = exch.calls[NEW]
+    ux.morning([])                                            # 同一个早上再跑一次（没有新交易日）
+    ux2 = UnifiedExecutor(ux.eng, ux.b, r["book"], paper=False, respect_halt=False, check_clock=False)
+    ux2.morning([])                                           # 进程重启后从账本读回
+    assert exch.calls[NEW] == n0
+
+
+def test_halt_blocks_orders_and_rerun_after_removal_sends_them():
+    make, start = _scenario([1000.0] * 30, entry=(10,), bear_all=True)
+    eng = make()
+    exch = SimExchange(eng, cash=eng.st.cash_jpy)
+    from qbreak.brokers.tachibana import TachibanaBroker
+    b = TachibanaBroker(transport=exch, spec=exch.spec, creds=exch.creds(), require_arm=False, confirm_timeout_s=0.0)
+    ux = UnifiedExecutor(eng, b, paths.state_dir() / "book.json", paper=False, check_clock=False)
+    lo = int(eng.gidx.searchsorted(start))
+    eng.prime(lo)
+    for k in range(lo, 11):
+        exch.open(k)
+        ux.open_phase()
+        exch.close_day()
+        exch.set_day(k + 1)
+        if k == 10:
+            paths.halt_file().write_text("stop", encoding="utf-8")
+        ux.run_bar(k)
+    o = [x for x in ux.orders if x.ticker == "A.T"][0]
+    assert o.status == "BLOCKED" and "HALT" in o.note and exch.calls.get(NEW, 0) == 0
+    paths.halt_file().unlink()
+    ux.blocked = None
+    ux.morning([])
+    assert o.status == "SENT" and exch.calls[NEW] == 1
+
+
+def test_holdings_mismatch_blocks_orders():
+    make, start = _synth(7)
+    seen = {}
+
+    def tamper(k, ux, exch):
+        if not seen and ux.eng.st.core_units.get("1655.T"):
+            exch.pos["C.T"] = 100                             # 券商那边多出一只执行器管的票（人工买的？）
+            seen["k"] = k
+    r = rehearse(make, start, kind="tachibana-sim", before_bar=tamper)
+    ux = r["ux"]
+    assert "持仓与券商不一致" in (ux.blocked or "") and "C.T" in ux.blocked
+    assert all(o.status == "BLOCKED" for o in ux.orders if o.decided_on == ux.eng.st.last_date and o.status != "DEFERRED")
+
+
+class _NetDown(SimExchange):
+    """指定时刻起，下一笔新规注文遇到网络错误（服务器那边没收到）。"""
+    fail = False
+
+    def get_json(self, url, payload):
+        if self.fail and payload.get(self.spec.f_clmid) == NEW:
+            self.fail = False
+            raise ConnectionError("回线断了")
+        return super().get_json(url, payload)
+
+
+def test_unknown_order_stops_next_morning_until_resolved():
+    make, start = _scenario([1000.0] * 30, entry=(10,), bear_all=True)
+    eng = make()
+    exch = _NetDown(eng, cash=eng.st.cash_jpy)
+    from qbreak.brokers.tachibana import TachibanaBroker
+    b = TachibanaBroker(transport=exch, spec=exch.spec, creds=exch.creds(), require_arm=False, confirm_timeout_s=0.0)
+    book = paths.state_dir() / "book.json"
+    ux = UnifiedExecutor(eng, b, book, paper=False, check_clock=False)
+    lo = int(eng.gidx.searchsorted(start))
+    eng.prime(lo)
+
+    def day(k, x):
+        exch.open(k)
+        x.open_phase()
+        exch.close_day()
+        exch.set_day(k + 1)
+        x.run_bar(k)
+    for k in range(lo, 10):
+        day(k, ux)
+    exch.fail = True
+    day(10, ux)                                               # 第 10 天收盘后下 A.T 的买单 → 网络错误
+    o = [x for x in ux.orders if x.ticker == "A.T"][0]
+    assert o.status == "ERROR" and "状态不明" in o.note
+    with pytest.raises(ExecutorError, match="状态不明"):
+        day(11, ux)                                           # 第二天早上：不猜，停下
+    resolve_order(book, o.cid, 0, 0.0)                        # 人工在注文一覧确认：没受理
+    ux2 = UnifiedExecutor(eng, b, book, paper=False, check_clock=False)
+    ux2.run_bar(11)
+    assert eng.st.last_date == str(eng.gidx[11].date()) and "A.T" not in eng.st.pos
+
+
+def test_cash_drift_is_synced_to_broker_and_logged():
+    make, start = _synth(7)
+    hit = {}
+
+    def tax(k, ux, exch):
+        if not hit and k > 100:
+            exch.cash -= 1234.0                                  # 例如源泉徴収された譲渡益税
+            hit["k"] = k
+    r = rehearse(make, start, kind="tachibana-sim", before_bar=tax)
+    ux, exch = r["ux"], r["exchange"]
+    assert ux.stats["cash_sync"] == 1
+    assert any("现金差 -1,234 円" in e["msg"] for e in ux.book["events"])
+    assert abs(ux.eng.st.cash_jpy - exch.cash) < 1e-6
+
+
+def test_time_windows():
+    make, _ = _synth(7)
+    eng = make()
+    eng.st.last_date = "2026-09-25"                           # 周五收盘后的决策 → 成交日 9/28（周一）
+    now = {"t": None}
+    ux = UnifiedExecutor(eng, None, paths.state_dir() / "b.json", paper=False, clock=lambda: now["t"])
+
+    def at(d, hh, mm=0):
+        now["t"] = dt.datetime(2026, 9, d, hh, mm, tzinfo=JST)
+    at(26, 10)
+    assert ux._gate("morning") is None                        # 周六：给周一的寄付单
+    at(28, 8, 50)
+    assert ux._gate("morning") is None and "09:00" in ux._gate("open")
+    at(28, 9, 0)
+    assert "寄付注文来不及" in ux._gate("morning") and ux._gate("open") is None
+    at(28, 15, 30)
+    assert ux._gate("open")
+    at(29, 9, 5)
+    assert "不是成交日" in ux._gate("open")
+    paths.halt_file().write_text("x", encoding="utf-8")
+    at(28, 8, 0)
+    assert "HALT" in ux._gate("morning")
+
+
+def test_fit_limit_stays_on_tick_grid_and_within_buying_power():
+    make, _ = _synth(7)
+    eng = make()
+    ux = UnifiedExecutor(eng, None, paths.state_dir() / "b.json", paper=False, check_clock=False)
+    o = ExecOrder("c", "A.T", "BUY", "stock", 100, "2026-01-01", limit=1030.0, ref_px=1000.0)
+    fee = eng.fees["JP"]
+    bp = 100 * 1012 + fee(100 * 1012)
+    lim = ux._fit_limit(o, 100, bp)
+    assert lim == 1012.0 and ux._reserve(o, 100, lim) <= bp
+    assert ux._fit_limit(o, 100, 10_000_000) == 1030.0
+    assert ux._fit_qty(o, 100 * 1030 + fee(100 * 1030) - 1) == 0
+
+
+def test_book_json_keeps_numpy_ints_as_ints(tmp_path):
+    fp = tmp_path / "x.json"
+    fp.write_text(json.dumps({"q": np.int64(300), "p": np.float64(1.5)}, default=_np), encoding="utf-8")
+    d = json.loads(fp.read_text(encoding="utf-8"))
+    assert d == {"q": 300, "p": 1.5} and isinstance(d["q"], int)
+
+
+def test_executor_refuses_us_stocks():
+    make, _ = _synth(7)
+    eng = make()
+    eng.cfg = UnifiedConfig(stock_markets=("JP", "US"), core={"1655.T": 1.0})
+    with pytest.raises(ValueError, match="美股"):
+        UnifiedExecutor(eng, None, paths.state_dir() / "b.json")
+
+
+def test_missed_open_phase_is_flagged_as_divergence():
+    """09:05 的开盘后补单没有跑：第二天对账时这些买单记为 MISSED 并报警（与模拟盘出现差异），不会静默消失。"""
+    make, start = _scenario([1000.0] * 30, entry=())          # 1655 = 700 円：100 万全买 1420 口，限价 ×1.02 预留放不下 → 余数留到开盘后
+    eng = make()
+    exch = SimExchange(eng, cash=eng.st.cash_jpy)
+    from qbreak.brokers.tachibana import TachibanaBroker
+    b = TachibanaBroker(transport=exch, spec=exch.spec, creds=exch.creds(), require_arm=False, confirm_timeout_s=0.0)
+    ux = UnifiedExecutor(eng, b, paths.state_dir() / "book.json", paper=False, respect_halt=False, check_clock=False)
+    lo = int(eng.gidx.searchsorted(start))
+    eng.prime(lo)
+    for k in range(lo, lo + 3):                               # 这里不跑开盘后那段（ux.open_phase）
+        exch.open(k)
+        exch.close_day()
+        exch.set_day(k + 1)
+        ux.run_bar(k)
+    missed = [o for h in ux.book["history"] for o in h["orders"] if o["status"] == "MISSED"]
+    assert missed and ux.stats["model_diff"] >= 1
+    assert any("开盘后补单没有运行" in e["msg"] for e in ux.book["events"] + ux.events)

@@ -195,7 +195,8 @@ def apply_corp_action(st: UState, ticker: str, date: str, dividend: float = 0.0,
             st.cash_jpy += net
         if p:
             p.stop_px, p.peak = max(0.0, p.stop_px - dv), max(0.0, p.peak - dv)
-        notes.append(f"配当落ち {dv:g} × {qty:,} → 税后 {'$' if m == 'US' else '¥'}{net:,.2f} 入账")
+        notes.append(f"配当落ち {dv:g} × {qty:,} → 税后 {'$' if m == 'US' else '¥'}{net:,.2f} 入账" if div_net > 0
+                     else f"配当落ち {dv:g} × {qty:,}（止损 / 峰值同步下调；现金以券商实际入账为准）")
     if not notes:
         return None
     st.corp_done.append(key)
@@ -330,11 +331,13 @@ class UnifiedEngine:
                               ret_pct=round((px / ps.entry_px - 1) * 100, 3), hold_days=ps.hold, reason=reason))
         self._sold_today.add(t)
 
-    def _core_trade(self, t: str, side: str, units: int, i: int) -> None:
+    def _core_trade(self, t: str, side: str, units: int, i: int, px: float | None = None) -> None:
+        """核心 ETF 成交记账。px=None：回测撮合（开盘价 ± 滑点）；给了 px：实盘执行器的实际成交价。"""
         st, j = self.st, self.col[t]
-        if units <= 0 or not self.A.has[i, j]:
+        if units <= 0 or (px is None and not self.A.has[i, j]):
             return
-        px = self.A.open[i, j] * (1 + self.c_slip[t] if side == "BUY" else 1 - self.c_slip[t])
+        if px is None:
+            px = self.A.open[i, j] * (1 + self.c_slip[t] if side == "BUY" else 1 - self.c_slip[t])
         notional = units * px
         f = self.c_fee[t][side](notional)
         if side == "BUY":
@@ -393,20 +396,38 @@ class UnifiedEngine:
             if shares <= 0:
                 self.skipped["cash" if m == "JP" else "usd"] += 1
                 continue
-            p = self._p(t)
-            k = int(self.last_bar[j])
-            atr_prev = A.atr[k, j] if k >= 0 else np.nan
-            stop_px = (px - atr_prev * p.atr_stop_mult if p.atr_stop_mult > 0 and np.isfinite(atr_prev)
-                       else px * (1 - p.stop_loss_pct / 100))
-            if not (0 < stop_px < px):
-                stop_px = px * (1 - p.stop_loss_pct / 100)
-            notional = shares * px
-            if m == "JP":
-                st.cash_jpy -= notional + fee(notional)
-            else:
-                st.cash_usd -= notional + fee(notional)
-            st.pos[t] = UPos(t, m, shares, px, str(self.gidx[i].date()), stop_px, px, px, hold=0,
-                             entry_fx=float(self.fx_close[i]) if m == "US" else 1.0)
+            self._open(t, m, shares, px, i)
+
+    def _open(self, t: str, m: str, shares: int, px: float, i: int) -> None:
+        """按成交价开仓：止损按开仓前一根 K 线的 ATR（没有就按固定比例），扣现金与手续费。
+        回测撮合（_exec_buys）与实盘执行器（券商回报的实际成交价）共用。"""
+        st, A, fee = self.st, self.A, self.fees[m]
+        j = self.col[t]
+        p = self._p(t)
+        k = int(self.last_bar[j])
+        atr_prev = A.atr[k, j] if k >= 0 else np.nan
+        stop_px = (px - atr_prev * p.atr_stop_mult if p.atr_stop_mult > 0 and np.isfinite(atr_prev)
+                   else px * (1 - p.stop_loss_pct / 100))
+        if not (0 < stop_px < px):
+            stop_px = px * (1 - p.stop_loss_pct / 100)
+        notional = shares * px
+        if m == "JP":
+            st.cash_jpy -= notional + fee(notional)
+        else:
+            st.cash_usd -= notional + fee(notional)
+        st.pos[t] = UPos(t, m, shares, px, str(self.gidx[i].date()), stop_px, px, px, hold=0,
+                         entry_fx=float(self.fx_close[i]) if m == "US" else 1.0)
+
+    def sell_fill(self, t: str, qty: int, px: float, i: int, reason: str) -> None:
+        """实盘执行器：个股卖出的实际成交（可能部分成交：只卖出 qty 股，剩下的继续持有、留在待卖）。"""
+        ps = self.st.pos[t]
+        if qty >= ps.shares:
+            self._close(t, px, i, reason)
+            return
+        rest = UPos(**{**asdict(ps), "shares": ps.shares - int(qty)})
+        ps.shares = int(qty)
+        self._close(t, px, i, reason + "（部分成交）")
+        self.st.pos[t] = rest
 
     def _exec_fx(self, i: int, only: str | None = None) -> None:
         """执行计划的换汇。only="USD>JPY"：日本开盘前只换回日元（fx_before_jp_open）；其余留到开盘后。"""
@@ -716,14 +737,20 @@ class UnifiedEngine:
             elif buy:
                 st.core_plan[t] = ["BUY", int(buy)]
 
-    # ── 推进一天 ──
-    def step(self, i: int) -> None:
+    # ── 分阶段（实盘执行器：开盘的成交来自券商，收盘后的离场判断与决策用同一套代码）──
+    def begin_day(self, i: int) -> None:
+        """第 i 天开始：清空「今天卖过」、记下核心 ETF 的收盘价。"""
         st, A = self.st, self.A
         self._sold_today = set()
         for t in self.cfg.core:
             j = self.col[t]
             if A.has[i, j]:
                 st.core_last[t] = float(A.close[i, j])
+
+    def open_phase(self, i: int) -> None:
+        """第 i 天日本开盘（回测撮合）：换汇 → 个股卖 → 核心卖 → 个股买 → 核心买 → 开盘后的换汇。
+        实盘执行器不调用它，而是把券商的实际成交记进状态。"""
+        st, A = self.st, self.A
         fx_day = bool(st.fx_plan) and (self.cfg.fx_on_jp_holidays or self.sess["JP"][i])
         if fx_day and self.cfg.fx_before_jp_open:
             self._exec_fx(i, only="USD>JPY")                          # 开盘前把闲置美元换回日元
@@ -745,6 +772,10 @@ class UnifiedEngine:
                     st.core_plan.pop(t)
         if st.fx_plan and (self.cfg.fx_on_jp_holidays or self.sess["JP"][i]):
             self._exec_fx(i)                                          # 开盘后：日元→美元（可用早上卖出所得）
+
+    def close_phase(self, i: int) -> None:
+        """第 i 天日本收盘之后：日本持仓的离场判断 → 夜间美股（回测撮合）→ 统一决策（明天的单）→ 记账。"""
+        st, A = self.st, self.A
         if self.sess["JP"][i]:
             self._check_exits("JP", i)
         if self.sess["US"][i]:
@@ -759,9 +790,17 @@ class UnifiedEngine:
         st.history.append([st.last_date, round(eq, 2), round(st.cash_jpy, 2), round(st.cash_usd, 2),
                            round(float(self.fx_close[i]), 4)])
 
-    def apply_corp_actions(self, i: int, provider) -> list[str]:
-        """模拟盘专用（回测的复权价天然正确，不用）：推进第 i 天之前，把 (上一根已处理 K 线, 第 i 天] 之间的除息 / 拆股
-        补到持仓、核心 ETF 与计划单上。provider 取不到时只按「记下的真实收盘 vs 今天的复权收盘」兜底识别拆股（分红跳过）。"""
+    # ── 推进一天 ──
+    def step(self, i: int) -> None:
+        self.begin_day(i)
+        self.open_phase(i)
+        self.close_phase(i)
+
+    def apply_corp_actions(self, i: int, provider, credit_dividends: bool = True, on_action=None) -> list[str]:
+        """模拟盘 / 实盘执行器专用（回测的复权价天然正确，不用）：推进第 i 天之前，把 (上一根已处理 K 线, 第 i 天] 之间的除息 / 拆股
+        补到持仓、核心 ETF 与计划单上。provider 取不到时只按「记下的真实收盘 vs 今天的复权收盘」兜底识别拆股（分红跳过）。
+        credit_dividends=False（实盘）：分红只调整止损 / 峰值，现金以券商实际入账为准（执行器每天与券商核对现金）。
+        on_action(票, 日期, 分红, 拆股, 税后比例)：每处理一次就回调一次（执行器用它把同一事件同步给模拟券商）。"""
         from .corpactions import DIV_NET, due, infer_split
         st = self.st
         after, upto = st.last_date, str(self.gidx[i].date())
@@ -785,10 +824,13 @@ class UnifiedEngine:
                 out.append(f"{t} 公司行为数据取不到（{type(e).__name__}）" + (f"，按价格比推断拆股 1:{acts[0]['split']:g}"
                                                                          if acts else "，本次跳过"))
             for a in acts:
-                n = apply_corp_action(st, t, a["date"], dividend=float(a.get("dividend") or 0),
-                                      split=float(a.get("split") or 0), div_net=DIV_NET.get(market_of(t), 1.0))
+                dv, sp = float(a.get("dividend") or 0), float(a.get("split") or 0)
+                net = DIV_NET.get(market_of(t), 1.0)
+                n = apply_corp_action(st, t, a["date"], dividend=dv, split=sp, div_net=net if credit_dividends else 0.0)
                 if n:
                     out.append(f"{t} {a['date']}：{n}")
+                    if on_action is not None:
+                        on_action(t, a["date"], dv, sp, net)
         return out
 
     def prime(self, lo: int) -> None:

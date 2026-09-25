@@ -53,6 +53,7 @@ def build_unified_data() -> dict:
             "core_trades": (st.get("core_trades") or [])[-15:], "n_trades": len(trades),
             "corp_log": (st.get("corp_log") or [])[-10:],
             "threat": td.get("threat") or read_json(paths.out_dir() / "threat_today.json", {}) or {},
+            "executor": td.get("executor") or {},                # 实盘执行器的演练账户（模拟券商）与模拟盘的逐日比较
             "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
             "config": td.get("config") or config_from_sim(sim).to_dict(),     # 首次运行前从 sim.json 取
@@ -111,6 +112,14 @@ def missing_items(d: dict) -> list[str]:
     t = d.get("threat") or {}
     if not t or t.get("error"):
         out.append(f"大事件威胁指数：{t.get('error') or '没有算出'}")
+    x = d.get("executor") or {}
+    if started and x.get("error"):
+        out.append(f"实盘执行器演练账户：运行失败（{x['error']}）—— 不影响模拟盘，但实盘要走的那条路今天没验证")
+    elif started and x and x.get("same_as_sim") is False:
+        diff = x.get("equity_diff_jpy")
+        out.append("实盘执行器演练账户与模拟盘不一致（执行器告警，不是缺数据）："
+                   + (f"权益差 {'+' if diff >= 0 else '−'}¥{abs(diff):,.0f}" if diff is not None else "持仓 / 现金不同")
+                   + " —— 实盘要走的那条路（下单 → 券商回报 → 对账）有问题，见 var/out/live_unified_paper.json")
     mr = read_json(paths.home() / "market_regime.json", {}) or {}
     for m in cfg.get("stock_markets") or ["JP"]:                   # 判断层只影响做个股的市场的新仓倍数
         if not (mr.get(m) or {}).get("action"):
@@ -215,6 +224,22 @@ def _missing_html(items: list[str]) -> str:
             + "".join(f"<li>{escape(x)}</li>" for x in items) + "</ul></div>")
 
 
+def _executor_html(d: dict) -> str:
+    """实盘执行器的演练账户（模拟券商，qbreak/live_unified.py）：每天与模拟盘同一套行情走一遍，比较结果。"""
+    x = d.get("executor") or {}
+    if not x or not d.get("history"):
+        return ""
+    if x.get("error"):
+        return f'<div class="muted">实盘执行器演练账户：<b class="neg">运行失败</b>（{escape(str(x["error"]))}）</div>'
+    ok = x.get("same_as_sim")
+    diff = x.get("equity_diff_jpy")
+    txt = ("与模拟盘一致（持仓、1655、现金、权益）" if ok else
+           f"<b class='neg'>与模拟盘不一致</b>（权益差 {_money(diff) if diff is not None else '—'}）")
+    return (f'<div class="muted">实盘执行器演练账户（模拟券商，走「下单 → 券商回报 → 对账」这条实盘的路）：{txt}；'
+            f'决策日 {escape(str(x.get("decided_on") or "—"))}，今天的单 {int(x.get("orders") or 0)} 笔'
+            + (f"；没下单：{escape(str(x['blocked']))}" if x.get("blocked") else "") + "</div>")
+
+
 def render_unified_html(d: dict) -> str:
     today = now_jst().date()
     usopen = _us_open_jst(today)
@@ -302,7 +327,8 @@ def render_unified_html(d: dict) -> str:
     stocks = ("日本 + 美股合计、一起排名：日本 → 美元已够的美股 → 要换汇的美股" if with_us
               else "只做日本个股，美股敞口经由东证 ETF；事先登记的研究显示 ¥100 万规模下加美股个股会拉低收益")
     return _PAGE.format(
-        generated=escape(d["generated"]), bar=escape(_bar_txt(d)), missing=_missing_html(d.get("missing") or []),
+        generated=escape(d["generated"]), bar=escape(_bar_txt(d)),
+        missing=_missing_html(d.get("missing") or []) + _executor_html(d),
         first="" if d.get("history") else (
             f'<div class="muted"><b>开始前的预览</b>：模拟期 {escape(str((d.get("sim") or {}).get("start")))} 开始，现在还没有交易；'
             '下面的市场状态、候补队列、汇率都用最新收盘数据计算（不下单、不动账户）。首次运行在开始日 07:00 JST 前后'

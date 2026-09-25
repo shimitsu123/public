@@ -801,11 +801,12 @@ def _unified_cfg(sim: dict):
     return config_from_sim(sim)
 
 
-def cmd_sim_day_unified(a, cfg: dict) -> int:
-    """一个账户的模拟盘：读 var/state/unified_state.json → 把新到的交易日（日本收盘 + 美股收盘都已知的日子）推进一步
-    → 保存状态 → 写今天的操作（09:00 日本开盘、日间换汇、夜间美股开盘）与日报。与回测同一个推进器（qbreak/unified.py）。"""
+def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=()):
+    """模拟盘（sim-day）与实盘执行器（live-u）共用：按 var/sim.json 建统一引擎 —— 行情到最新收盘（去掉未收盘的当日 K 线）、
+    牛熊分界、汇率、明天成交的新仓倍数（宏观 / 板块 / 状态层）、决算前不进场。返回 (eng, ctx)；ctx.make(state) 用同一套
+    输入再建一个引擎（例如执行器演练账户的状态）。"""
     import datetime as _dt
-    import json as _json
+    from types import SimpleNamespace
     import numpy as np
     import pandas as pd
     from qbreak.bullbear import BEAR, Detector, load_config
@@ -816,27 +817,16 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     from qbreak.fees import broker_of, etf_cost
     from qbreak.strategy import compute_indicators
     from qbreak.trader import drop_partial_bar
-    from qbreak.unified import UnifiedEngine, UState, exec_configs, market_of
-    from qbreak.utils import read_json, write_json
+    from qbreak.unified import UnifiedEngine, exec_configs, market_of
     ucfg = _unified_cfg(cfg)
     u = cfg.get("unified") or {}
     broker = broker_of("JP", u)
-    if cfg.get("end") and _dt.date.today() > _dt.date.fromisoformat(cfg["end"]):
-        from qbreak.report_unified import write_unified_report
-        print(f"模拟期已于 {cfg['end']} 结束；只重新生成报表。报表 {write_unified_report()}")
-        return 0
-    if cfg.get("start") and now_jst().date() < _dt.date.fromisoformat(cfg["start"]):
-        return _unified_preview(a, cfg)                     # 开始日之前：只预览市场状态与候补队列，不推进账户、不下单
-    blocked = _netcheck()
-    provider = "csv" if any("yahoo" in h for h in blocked) else "yfinance"
-    st_path = paths.state_dir() / "unified_state.json"
-    raw = read_json(st_path)
-    state = UState.from_dict(raw) if raw else UState(cash_jpy=float(ucfg.capital_jpy))
     dcfg = DataConfig(provider=provider, years=2, allow_synthetic=False).validate()
     params = {m: _params(a, m) for m in ("JP", "US")}
     unis = {m: (universe(m, (u.get("universe") or {}).get(m, "broad")) if m in ucfg.stock_markets else [])
             for m in ("JP", "US")}
-    want = sorted(set(unis["JP"]) | set(unis["US"]) | set(state.pos) | set(state.plan) | set(ucfg.core))
+    want = sorted(set(unis["JP"]) | set(unis["US"]) | set(state.pos) | set(state.plan) | set(ucfg.core)
+                  | set(extra_tickers))
     data = load_universe(want, dcfg)
     ind = {}
     for t, df in data.items():
@@ -858,12 +848,9 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     fx = fxd["JPY=X"][["Open", "Close"]] if "JPY=X" in fxd else None
     ex = exec_configs(ucfg.stock_markets, u)
     ccost = {t: etf_cost(broker, t, market_of(t)) for t in ucfg.core}
-    eng = UnifiedEngine(ind, ucfg, params, ex, ccost, fx=fx, bear=bear, state=state)
     today = _dt.date.today()
     extras, plans = _unified_extras(cfg, ucfg, u, dcfg, params, today)
-    for m, P in plans.items():                            # 明天成交的新仓倍数：与原模拟盘同一套宏观 / 板块 / 状态层
-        eng.live_mult[m] = (P.scale, P.tmult or {}, P.block if isinstance(P.block, str) else None)
-    eng.live_fx_ok = is_trading_day(now_jst().date())      # 今天白天（日本营业日）才有换汇窗口
+    eblock = None
     if any(params[m].earnings_blackout_days for m in params):  # 决算前 N 个交易日不进场（风控项，与原模拟盘相同）
         from qbreak.trader import _earnings_days
         prov = _earnings_provider()
@@ -872,12 +859,60 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
             n = params[market_of(t)].earnings_blackout_days
             e = _earnings_days(prov, t, today) if n else None
             return f"决算前 {e} 个交易日" if e is not None and e <= n else None
-        eng.entry_block_fn = _eblock
+        eblock = _eblock
+
+    def make(st):
+        e = UnifiedEngine(ind, ucfg, params, ex, ccost, fx=fx, bear=bear, state=st)
+        for m, P in plans.items():                        # 明天成交的新仓倍数：与原模拟盘同一套宏观 / 板块 / 状态层
+            e.live_mult[m] = (P.scale, P.tmult or {}, P.block if isinstance(P.block, str) else None)
+        e.live_fx_ok = is_trading_day(now_jst().date())    # 今天白天（日本营业日）才有换汇窗口
+        e.entry_block_fn = eblock
+        return e
+    ctx = SimpleNamespace(data=data, ind=ind, plans=plans, extras=extras, params=params, dcfg=dcfg, ucfg=ucfg, u=u,
+                          broker=broker, today=today, ex=ex, ccost=ccost, make=make)
+    return make(state), ctx
+
+
+def _new_bar_idxs(eng, state):
+    """还没处理过的完整交易日（日本收盘 + 美股收盘都已知：日本时间 06:30 之后才算前一天完整）。第一次运行只取最新一天。"""
+    import datetime as _dt
+    from qbreak.calendar_jp import now_jst
     cutoff = (now_jst() - _dt.timedelta(hours=6, minutes=30)).date() - _dt.timedelta(days=1)
     last = _dt.date.fromisoformat(state.last_date) if state.last_date else None
     idxs = [i for i, d in enumerate(eng.gidx) if d.date() <= cutoff and (last is None or d.date() > last)]
-    if last is None:
-        idxs = idxs[-1:]                                    # 第一次运行：只用最新一天做决策，不回放历史
+    return (idxs[-1:] if last is None else idxs), cutoff
+
+
+def cmd_sim_day_unified(a, cfg: dict) -> int:
+    """一个账户的模拟盘：读 var/state/unified_state.json → 把新到的交易日（日本收盘 + 美股收盘都已知的日子）推进一步
+    → 保存状态 → 写今天的操作（09:00 日本开盘、日间换汇、夜间美股开盘）与日报。与回测同一个推进器（qbreak/unified.py）。"""
+    import datetime as _dt
+    import json as _json
+    import pandas as pd
+    from qbreak.calendar_jp import now_jst
+    from qbreak.fees import broker_of
+    from qbreak.unified import UState
+    from qbreak.utils import read_json, write_json
+    ucfg = _unified_cfg(cfg)
+    u = cfg.get("unified") or {}
+    broker = broker_of("JP", u)
+    if cfg.get("end") and _dt.date.today() > _dt.date.fromisoformat(cfg["end"]):
+        from qbreak.report_unified import write_unified_report
+        print(f"模拟期已于 {cfg['end']} 结束；只重新生成报表。报表 {write_unified_report()}")
+        return 0
+    if cfg.get("start") and now_jst().date() < _dt.date.fromisoformat(cfg["start"]):
+        return _unified_preview(a, cfg)                     # 开始日之前：只预览市场状态与候补队列，不推进账户、不下单
+    blocked = _netcheck()
+    provider = "csv" if any("yahoo" in h for h in blocked) else "yfinance"
+    st_path = paths.state_dir() / "unified_state.json"
+    raw = read_json(st_path)
+    state = UState.from_dict(raw) if raw else UState(cash_jpy=float(ucfg.capital_jpy))
+    ex_path = paths.state_dir() / "live_unified_paper.json"               # 执行器演练账户（模拟）：它的持仓也要有行情
+    ex_state = (read_json(ex_path, {}) or {}).get("state") or {}
+    extra = set(ex_state.get("pos") or {}) | set(ex_state.get("plan") or {})
+    eng, ctx = _unified_engine(a, cfg, state, provider, extra_tickers=extra)
+    data, plans, extras, params, dcfg, today = ctx.data, ctx.plans, ctx.extras, ctx.params, ctx.dcfg, ctx.today
+    idxs, cutoff = _new_bar_idxs(eng, state)
     if not idxs:
         print(f"没有新的完整交易日（截止 {cutoff}，上次 {state.last_date}）")
     else:
@@ -889,6 +924,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
                 print(n)
             eng.step(i)
     st_path.write_text(_json.dumps(state.to_dict(), ensure_ascii=False, indent=1, default=float), encoding="utf-8")
+    executor = _executor_paper_step(ctx, state)            # 实盘执行器的演练账户：同一天、同一套行情，应与模拟盘逐日一致
     i_last = int(eng.gidx.searchsorted(pd.Timestamp(state.last_date))) if state.last_date else len(eng.gidx) - 1
     todo = eng.todo(min(i_last, len(eng.gidx) - 1))
     eq = state.history[-1][1] if state.history else ucfg.capital_jpy
@@ -899,7 +935,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
            "positions": {t: {"market": p.market, "shares": p.shares, "entry_px": p.entry_px, "entry_date": p.entry_date,
                              "stop_px": round(p.stop_px, 2)} for t, p in state.pos.items()},
            "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker,
-           "threat": threat}
+           "threat": threat, "executor": executor}
     if usdjpy is None:                                       # 状态里没有汇率时（例如首日）：备用来源
         out["usdjpy"], out["usdjpy_src"] = _usdjpy_any()
     from qbreak.data import LAGGING
@@ -918,6 +954,76 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     print(_json.dumps({k: out[k] for k in ("bar_date", "equity_jpy", "cash_jpy", "cash_usd", "todo")},
                       ensure_ascii=False, indent=1, default=float))
     return 0
+
+
+def _paper_broker_for_executor(ucfg, ex_jp):
+    from qbreak.brokers.paper import PaperBroker
+    return PaperBroker(state_file=paths.state_dir() / "live_unified_paper_broker.json", initial_cash=float(ucfg.capital_jpy),
+                       exec_cfg=ex_jp, market="JP")
+
+
+def _seed_paper_executor(book: "Path", pb, sim_state) -> None:
+    """执行器演练账户还不存在、模拟盘已经在跑：从模拟盘当前状态开始（持仓、核心 ETF、现金一起抄到模拟券商），之后逐日比较。"""
+    import copy
+    import json as _json
+    from qbreak.live_unified import _np
+    from qbreak.utils import atomic_write_text
+    st = copy.deepcopy(sim_state)
+    pb.state.update({"cash": float(st.cash_jpy), "positions": {}, "pending": []})
+    for t, p in st.pos.items():
+        pb.state["positions"][t] = {"qty": int(p.shares), "avg_px": float(p.entry_px), "peak": float(p.peak),
+                                    "stop_px": float(p.stop_px), "entry_date": p.entry_date, "hold_bars": int(p.hold),
+                                    "last_bar": st.last_date}
+    for t, u in st.core_units.items():
+        if int(u):
+            pb.state["positions"][t] = {"qty": int(u), "avg_px": float(st.core_last.get(t) or 0), "peak": 0.0,
+                                        "stop_px": 0.0, "entry_date": st.last_date, "hold_bars": 0, "last_bar": st.last_date}
+    pb._save()
+    atomic_write_text(book, _json.dumps({"version": 1, "seeded_from_sim": st.last_date, "state": st.to_dict(), "orders": []},
+                                        ensure_ascii=False, indent=1, default=_np))
+
+
+def _executor_paper_step(ctx, sim_state) -> dict:
+    """实盘执行器（qbreak/live_unified.py）每天用模拟账户跟模拟盘一起走：同一套行情与决策代码，只是成交经由
+    「下单 → 券商（PaperBroker）撮合 → 第二天对账」这条实盘要走的路。两者应逐日一致；不一致 = 执行器有问题 → 醒目打印、写进日报。
+    失败不影响模拟盘本身。"""
+    from qbreak.live_unified import ExecutorError, UnifiedExecutor, load_state
+    from qbreak.utils import write_json
+    book = paths.state_dir() / "live_unified_paper.json"
+    try:
+        pb = _paper_broker_for_executor(ctx.ucfg, ctx.ex["JP"])
+        if not book.exists() and sim_state.last_date and len(sim_state.history) > 1:
+            _seed_paper_executor(book, pb, sim_state)
+        st = load_state(book, ctx.ucfg.capital_jpy)
+        eng = ctx.make(st)
+        ux = UnifiedExecutor(eng, pb, book, paper=True, check_clock=False)
+        idxs, _ = _new_bar_idxs(eng, st)
+        prov = _corp_actions_provider()
+
+        def corp(k: int) -> None:
+            for n in eng.apply_corp_actions(k, prov, on_action=ux.on_corp_action):
+                log.info("执行器演练 公司行为 %s", n)
+        ux.morning(idxs, corp=corp)
+        sm = ux.summary()
+        pos = lambda s_: {t: int(p.shares) for t, p in s_.pos.items()}                         # noqa: E731
+        core = lambda s_: {t: int(u) for t, u in s_.core_units.items() if int(u)}             # noqa: E731
+        eq_x = st.history[-1][1] if st.history else None
+        eq_s = sim_state.history[-1][1] if sim_state.history else None
+        same = (st.last_date == sim_state.last_date and pos(st) == pos(sim_state) and core(st) == core(sim_state)
+                and abs(st.cash_jpy - sim_state.cash_jpy) < 1.0)
+        sm["same_as_sim"], sm["sim_equity_jpy"] = same, eq_s
+        write_json(paths.out_dir() / "live_unified_paper.json", sm)
+        diff = (eq_x - eq_s) if eq_x is not None and eq_s is not None else None
+        print("执行器演练账户（模拟券商）：" + ("与模拟盘一致（持仓、1655、现金、权益）" if same else
+                                          f"★ 与模拟盘不一致：权益差 {diff:+,.0f} 円；持仓 {pos(st)} vs {pos(sim_state)}；"
+                                          f"1655 {core(st)} vs {core(sim_state)} —— 请检查执行器（实盘要走的路）")
+              + (f"；今天的单 {len(sm['orders'])} 笔" if sm["orders"] else ""))
+        return {"same_as_sim": same, "equity_jpy": eq_x, "equity_diff_jpy": diff, "orders": len(sm["orders"]),
+                "blocked": sm["blocked"], "decided_on": sm["decided_on"]}
+    except (ExecutorError, Exception) as e:                    # noqa: BLE001
+        log.warning("执行器演练账户失败（不影响模拟盘）：%s", e)
+        print(f"★ 执行器演练账户失败（不影响模拟盘）：{e}")
+        return {"error": str(e)[:200]}
 
 
 def _unified_extras(cfg: dict, ucfg, u: dict, dcfg, params: dict, today) -> tuple[dict, dict]:
@@ -1462,6 +1568,120 @@ def cmd_daemon(a) -> int:
     return 0
 
 
+def cmd_live_unified(a) -> int:
+    """一个账户方案（var/sim.json unified）的实盘执行器：早上对账 → 核对 → 决策 → 下寄付单；--phase open 开盘后补单。
+    --broker paper：模拟账户（PaperBroker，第二天早上按 K 线撮合）；tachibana：立花 e支店 API（--demo デモ環境、--dry-run 只算不发）。"""
+    import datetime as _dt
+    from qbreak.calendar_jp import now_jst
+    from qbreak.data import LAGGING
+    from qbreak.live_unified import ExecutorError, UnifiedExecutor, load_state, resolve_order
+    from qbreak.trader import expected_last_bar
+    from qbreak.utils import read_json, write_json
+    cfg = _sim_cfg() or {}
+    if cfg.get("mode") != "unified":
+        print("var/sim.json 不是「一个账户」模式：这个执行器只执行一个账户方案（先 run.py sim-unify）。")
+        return 2
+    ucfg = _unified_cfg(cfg)
+    if "US" in ucfg.stock_markets:
+        print("一个账户方案里有美股个股：立花 e支店不做美股，执行器不支持（sim.json unified.stock_markets 只留 JP）。")
+        return 2
+    paper = a.broker == "paper"
+    tag = "paper" if paper else "tachibana" + ("_demo" if a.demo else "") + ("_dryrun" if a.dry_run else "")
+    book = paths.state_dir() / f"live_unified_{tag}.json"
+    if a.resolve:
+        o = resolve_order(book, a.resolve, a.filled, a.px)
+        print(f"已登记：{o['cid']} 成交 {o['filled_qty']} 股 @ {o['filled_px']:g}；下次早上的对账按这个记账")
+        return 0
+    if a.status:
+        b_ = read_json(book, {}) or {}
+        st = b_.get("state") or {}
+        print(f"账本 {book}（更新 {b_.get('updated', '—')}）\n决策日 {st.get('last_date') or '—'}；现金 ¥{float(st.get('cash_jpy') or 0):,.0f}")
+        for t, p_ in (st.get("pos") or {}).items():
+            print(f"  持仓 {t} {int(p_['shares']):,} 股  成本 ¥{float(p_['entry_px']):,.2f}  止损 ¥{float(p_['stop_px']):,.2f}  "
+                  f"买入 {p_['entry_date']}" + ("  （待卖）" if t in (st.get("pending_exit") or {}) else ""))
+        for t, u_ in (st.get("core_units") or {}).items():
+            if int(u_):
+                print(f"  核心 {t} {int(u_):,} 口")
+        for o in b_.get("orders", []):
+            lim = f" 限价 ¥{o['limit']:g}" if o.get("limit") else ""
+            print(f"  单 {o['cid']}  {o['side']} {o['ticker']} ×{o['qty']}{lim}  {o['status']}  {o.get('note', '')}")
+        for e in (b_.get("events") or [])[-10:]:
+            print(f"  [{e['level']}] {e['at']} {e['msg']}")
+        return 0
+    if paper and cfg.get("start") and now_jst().date() < _dt.date.fromisoformat(cfg["start"]) and not a.force:
+        print(f"模拟期开始日 {cfg['start']} 之前不推进模拟账户（与模拟盘同一天开始；--force 可提前演练）")
+        return 0
+    blocked = _netcheck()
+    provider = "csv" if any("yahoo" in h for h in blocked) else "yfinance"
+    state = load_state(book, ucfg.capital_jpy)
+    eng, ctx = _unified_engine(a, cfg, state, provider)
+    if paper:
+        broker = _paper_broker_for_executor(ucfg, ctx.ex["JP"])
+    else:
+        from qbreak.brokers.tachibana import TachibanaBroker
+        broker = TachibanaBroker(demo=a.demo, dry_run=a.dry_run, require_arm=not a.no_arm,
+                                 max_order_value=a.max_order_value or 300_000)
+        print(f"★ 立花 e支店 {'デモ環境' if a.demo else '本番環境'}{'（dry-run：只算不发单）' if a.dry_run else ''}；"
+              f"单笔上限 {'权益 ×1.05（自动）' if a.max_order_value is None else f'{a.max_order_value:,.0f} 円'}；"
+              f"ARM {'关闭（--no-arm）' if a.no_arm else '需要'}；HALT 文件 {paths.halt_file()}")
+    ux = UnifiedExecutor(eng, broker, book, paper=paper, check_clock=not (paper or a.no_clock),
+                         auto_cap=(not paper and a.max_order_value is None))
+    try:
+        if a.phase == "open":
+            if paper:
+                print("模拟账户的开盘撮合在第二天早上一起做，不用 --phase open")
+                return 0
+            ux.open_phase()
+        else:
+            if not paper:                                    # 实盘：行情没更新到应有的交易日就不下单
+                exp = expected_last_bar(now_jst().date(), "JP")
+                last = eng.gidx[-1].date()
+                if last < exp:
+                    ux.block(f"日本行情只到 {last}（应有 {exp}）")
+                late = sorted(t for t in LAGGING if t in ("^GSPC", "^N225", "1655.T") or t in state.pos)
+                if late:
+                    ux.block("行情落后：" + "、".join(f"{t} {LAGGING[t]['last']}（应有 {LAGGING[t]['expected']}）" for t in late))
+            idxs, cutoff = _new_bar_idxs(eng, state)
+            prov = _corp_actions_provider()
+
+            def corp(k: int) -> None:
+                for n in eng.apply_corp_actions(k, prov, credit_dividends=paper, on_action=ux.on_corp_action):
+                    log.info("公司行为 %s", n)
+                    print(n)
+            if not idxs:
+                print(f"没有新的完整交易日（截止 {cutoff}，上次决策 {state.last_date}）：只补下当前决策里还没下的单")
+            ux.morning(idxs, corp=corp)
+    except ExecutorError as e:
+        print(f"★ 执行器停下（状态没有改动）：{e}")
+        return 3
+    sm = ux.summary()
+    write_json(paths.out_dir() / f"live_unified_{tag}.json", sm)
+    print(f"\n决策日 {sm['decided_on']} → 成交日 {sm['fill_day']}；权益 ¥{sm['equity_jpy']:,.0f}，现金 ¥{sm['cash_jpy']:,.0f}")
+    for r in sm["reconciled"]:
+        print(f"  已对账 {r['bar']} {r['side']} {r['ticker']} {r['qty']:,} 股 @ ¥{r['px']:,.2f}")
+    for o in sm["orders"]:
+        lim = f" 限价 ¥{o['limit']:g}" if o.get("limit") else ""
+        print(f"  {o['side']} {o['ticker']} ×{o['qty']:,}{lim}（{'寄付' if o['phase'] == 'morning' else '开盘后'}）"
+              f" → {o['status']} {o.get('note') or ''}".rstrip())
+    if sm["blocked"]:
+        print(f"★ 没有下单：{sm['blocked']}")
+    bad = [e for e in sm["events"] if e["level"] == "error"]
+    for e in bad[-5:]:
+        print(f"★ {e['msg']}")
+    return 1 if sm["blocked"] and not paper else 0
+
+
+def cmd_live_rehearse(a) -> int:
+    """执行器用模拟账户演练：历史行情逐日回放（模拟券商 / 立花适配器 + 模拟交易所），与回测引擎逐日比较。"""
+    import runpy
+    sys.argv = ["live_rehearsal.py", "--windows", a.windows]
+    try:
+        runpy.run_path(str(Path(__file__).resolve().parent / "scripts" / "live_rehearsal.py"), run_name="__main__")
+    except SystemExit as e:
+        return int(e.code or 0)
+    return 0
+
+
 def _parse_time(s: str):
     import datetime as _dt
     h, m = s.split(":")
@@ -1721,6 +1941,27 @@ def main(argv=None) -> int:
 
     uu = sub.add_parser("universe-update", help="刷新广域股票池名单（需外网）")
     uu.set_defaults(func=cmd_universe_update)
+
+    lu = sub.add_parser("live-u", help="一个账户方案的实盘执行器：早上对账→决策→寄付单；--phase open 开盘后补单（立花 / 模拟账户）")
+    lu.add_argument("--broker", default="paper", choices=["paper", "tachibana"])
+    lu.add_argument("--phase", default="morning", choices=["morning", "open"],
+                    help="morning：成交日 08:55 前（例行 07:30）；open：成交日 09:05 前后（开盘前余力不够的买单）")
+    lu.add_argument("--demo", action="store_true", help="立花デモ環境（账本与本番分开）")
+    lu.add_argument("--dry-run", action="store_true", help="立花：登录与读取照常，发单只打印（账本单独一份）")
+    lu.add_argument("--max-order-value", type=float, default=None, help="单笔上限（默认 权益 ×1.05）")
+    lu.add_argument("--no-arm", action="store_true", help="关闭人工 ARM 闸门（强烈不建议）")
+    lu.add_argument("--no-clock", action="store_true", help="不检查时间窗口（只在デモ / dry-run 演练时用）")
+    lu.add_argument("--force", action="store_true", help="模拟账户：模拟期开始日之前也运行")
+    lu.add_argument("--status", action="store_true", help="只看账本（持仓、今天的单、最近事件），不连券商")
+    lu.add_argument("--resolve", default=None, metavar="CID", help="登记状态不明的单的实际成交（配 --filled / --px）")
+    lu.add_argument("--filled", type=int, default=0)
+    lu.add_argument("--px", type=float, default=0.0)
+    lu.add_argument("--params", default=None)
+    lu.set_defaults(func=cmd_live_unified)
+
+    lr = sub.add_parser("live-u-rehearse", help="执行器用模拟账户演练：历史回放，与回测引擎逐日比较（var/out/live_rehearsal.md）")
+    lr.add_argument("--windows", default="5y,20y")
+    lr.set_defaults(func=cmd_live_rehearse)
 
     pb = sub.add_parser("tachibana-probe", help="立花 API 只读连通性 / 仕様检查")
     pb.add_argument("--demo", action="store_true", help="用デモ環境（强烈建议先在这里跑通）")

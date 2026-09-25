@@ -345,3 +345,64 @@ def test_credentials_from_env_require_auth_id_and_private_key_600(tmp_path, monk
         kp.chmod(0o600)
     c = Credentials.from_env()
     assert c.auth_id == "AUTH-FROM-FILE" and c.private_key_pem == PEM
+
+
+# ────────── 一个账户的执行器要用到的：寄付成行、約定照会、按注文番号撤单、始値 ──────────
+def test_opening_sell_without_limit_is_market_order():
+    """寄付 + 不给价格 = 成行（在开盘集合竞价按开盘价成交 = 回测的「次日开盘」），不能变成现在值 −0.5% 的指値。"""
+    b, tr = _broker()
+    _arm()
+    o = b.sell("7203.T", 100, client_id="c1", bar="2026-09-25")
+    p = _orders(tr)[0]
+    assert (p["sCondition"], p["sOrderPrice"]) == (SPEC.cond_opening, SPEC.price_market) and o.status == "SENT"
+
+
+def test_market_buy_without_any_price_is_blocked():
+    """取不到现在值时的成行买单：单笔上限没法检查 → 拒绝（原来会以金额 0 通过闸门）。"""
+    b, tr = _broker(responses={SPEC.clm_price: {"p_errno": "0", SPEC.r_price_list: [{"sIssueCode": "7203", "pDPP": ""}]}})
+    _arm()
+    o = b.buy("7203.T", 100, client_id="c1")
+    assert o.status == "BLOCKED" and "成行买单" in o.note and not _orders(tr)
+
+
+def test_server_rejection_is_rejected_not_unknown():
+    """服务器应答了业务错误（例如余力不足）→ REJECTED（确定没受理，执行器可以放心）；网络错误才是 ERROR（状态不明）。"""
+    b, _ = _broker(responses={SPEC.clm_new_order: {"p_errno": "0", "sResultCode": "991020", "sResultText": "買付余力不足"}})
+    _arm()
+    o = b.buy("7203.T", 100, limit=2990.0, client_id="c1", bar="2026-09-25")
+    assert o.status == "REJECTED" and "991020" in o.note
+
+
+def test_order_status_uses_execution_list_vwap():
+    b, tr = _broker(responses={SPEC.clm_order_detail: {
+        "p_errno": "0", "sResultCode": "0", "sOrderStatusCode": "10", "sYakuzyouSuryou": "300", "sYakuzyouPrice": "9",
+        SPEC.r_exec_list: [{SPEC.r_exec_qty: "100", SPEC.r_exec_px: "3000"}, {SPEC.r_exec_qty: "200", SPEC.r_exec_px: "3003"}]}})
+    r = b.order_status("A0001", "20260928")
+    assert r["filled_qty"] == 300 and r["avg_px"] == pytest.approx(3002.0) and r["status_code"] == "10"
+    p = [q for _, q in tr.sent if q["sCLMID"] == SPEC.clm_order_detail][0]
+    assert (p["sOrderNumber"], p["sEigyouDay"]) == ("A0001", "20260928")
+
+
+def test_order_status_falls_back_to_top_level_fields():
+    b, _ = _broker()
+    assert b.order_status("A0001", "20260928") == {"filled_qty": 100, "avg_px": 3000.0, "status_code": "10", "status": ""}
+
+
+def test_cancel_by_persisted_order_number_works_after_restart():
+    """执行器把注文番号 + 営業日存在账本里：进程重启（内存里的 client_id 映射没了）也能撤单。"""
+    b, tr = _broker()
+    assert b.cancel("unknown-cid") is False
+    assert b.cancel_order("A0009", "20260928")
+    p = [q for _, q in tr.sent if q["sCLMID"] == SPEC.clm_cancel_order][0]
+    assert (p["sOrderNumber"], p["sEigyouDay"], p["sSecondPassword"]) == ("A0009", "20260928", "2nd-pw")
+
+
+def test_quote_detail_returns_open_and_skips_blank():
+    def price(p):
+        return {"p_errno": "0", SPEC.r_price_list: [
+            {"sIssueCode": "7203", "pDPP": "3010", "pDOP": "2995", "pDHP": "", "pDLP": "", "pPRP": "2980"},
+            {"sIssueCode": "6758", "pDPP": "", "pDOP": "", "pPRP": ""}]}
+    b, _ = _broker(responses={SPEC.clm_price: price})
+    q = b.quote_detail(["7203.T", "6758.T"])
+    assert q == {"7203.T": {"price": 3010.0, "open": 2995.0, "prev_close": 2980.0}}
+    assert b.quotes(["7203.T", "6758.T"]) == {"7203.T": 3010.0}

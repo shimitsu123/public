@@ -168,6 +168,13 @@ class PaperBroker(BaseBroker):
     def pending(self) -> list[dict]:
         return list(self.state["pending"])
 
+    def expire_pending(self) -> list[dict]:
+        """当日有效：今天开盘没成交的单全部作废（与真实券商的寄付 / 当日限り注文相同）。
+        一个账户的执行器（live_unified）每天早上按模型状态重新下单，所以这里不顺延（顺延会与重新下的单重复）。"""
+        gone, self.state["pending"] = self.state["pending"], []
+        self._save()
+        return gone
+
     # ── 公司行为（配当落ち / 株式分割）──
     def apply_corporate_action(self, ticker: str, date: str, dividend: float = 0.0,
                                split: float = 0.0, div_net: float = 1.0) -> str | None:
