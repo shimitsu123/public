@@ -284,3 +284,121 @@ def walkforward_logit(pct: pd.DataFrame, event: pd.Series, start: str = "1995-01
         w = logit_fit(X[train], y[train], l2)
         out[pos] = 100 / (1 + np.exp(-np.clip(np.c_[np.ones(len(pos)), X[pos]] @ w, -30, 30)))
     return pd.Series(out, index=idx)
+
+
+# ═══════════ v3：贵金属 / 铜 / 天然气 / 粮食 / 商品综合 / 银行信贷（破产的代理）/ 地缘风险（研究见 scripts/threat_index_v3_study.py）═══════════
+# 破产件数：美国 FRED 没有、日本 TSR / 帝国数据库只公开年表或近月报告 → 没有可回测的长期序列，
+# 用在破产增加之前或同时恶化的银行信贷指标代替（美国 SLOOS 贷款标准、企业贷款拖欠率 / 核销率；日本短观贷款态度 / 资金周转）。
+V3_EXTRA = ["gold", "gold_silver", "copper", "natgas", "grains", "commod", "commod_vol", "sloos", "delinq", "chargeoff",
+            "gpr", "gpr_jump", "epu"]
+JP_V3_ONLY = ["tankan_lend", "tankan_cash", "jp_lng", "gpr_jp"]
+US_V3 = US_V2 + V3_EXTRA
+JP_V3 = JP_V2 + V3_EXTRA + JP_V3_ONLY
+LABELS.update({"gold": "黄金急涨（避险）", "gold_silver": "金银比上升", "copper": "铜价下跌", "natgas": "天然气急涨",
+               "grains": "粮食价格急涨", "commod": "商品综合急涨", "commod_vol": "商品波动",
+               "sloos": "银行收紧企业贷款（SLOOS）", "delinq": "企业贷款拖欠率上升", "chargeoff": "企业贷款核销率上升",
+               "gpr": "地缘政治风险（GPR）", "gpr_jump": "地缘风险急升", "epu": "政策不确定性（EPU）",
+               "tankan_lend": "短观：银行贷款态度收紧", "tankan_cash": "短观：企业资金周转恶化", "jp_lng": "日本 LNG 价格急涨",
+               "gpr_jp": "涉日地缘风险"})
+CATEGORY = {"波动": ["vix", "vix_d20", "rvol", "vix_term", "move", "skew", "yen_vol"],
+            "信用 / 破产代理": ["credit", "nfci", "stlfsi", "sloos", "delinq", "chargeoff", "tankan_lend", "tankan_cash"],
+            "利率": ["curve", "curve2", "rates", "rates2", "fed", "jgb", "boj"],
+            "商品": ["oil", "cu_au", "gold", "gold_silver", "copper", "natgas", "grains", "commod", "commod_vol", "jp_lng"],
+            "就业": ["jobs", "claims"],
+            "趋势": ["dd52", "trend", "mom20"],
+            "汇率": ["dollar", "yen"],
+            "地缘 / 不确定性": ["gpr", "gpr_jump", "epu", "gpr_jp"]}
+V3_YF = {"GC": "GC=F", "SI": "SI=F", "HG": "HG=F", "NG": "NG=F", "ZW": "ZW=F", "ZC": "ZC=F", "ZS": "ZS=F", "GSCI": "^SPGSCI"}
+V3_FRED = {"SLOOS": "DRTSCILM", "DELINQ": "DRBLACBS", "CHARGEOFF": "CORBLACBS", "EPU": "USEPUINDXD", "JPLNG": "PNGASJPUSDM"}
+V3_TANKAN = {"TK_LEND": "TK99F0000612GCQ00000", "TK_CASH": "TK99F0000609GCQ00000"}   # 全规模・全产业 实绩 DI
+
+
+def gpr_available(s: pd.Series, days: pd.DatetimeIndex, extra_days: int = 1) -> pd.Series:
+    """GPR 日度每周一更新（含当天为止）→ 日期 d 的值在 d 之后（含）第一个周一再过 extra_days 天可用。"""
+    s = s.dropna()
+    monday = s.index + pd.to_timedelta((7 - s.index.weekday) % 7, unit="D")
+    a = pd.Series(s.to_numpy(float), index=monday + pd.Timedelta(days=extra_days)).groupby(level=0).last()
+    return a.reindex(days.union(a.index)).ffill().reindex(days)
+
+
+def raw_features_v3(base: pd.DataFrame, days: pd.DatetimeIndex, x: dict, jp: bool = False) -> pd.DataFrame:
+    """base：raw_features_v2 的结果。x：V3_YF 的日序列（日本交易日要先用 us_asof_for_jp 对齐）+ V3_FRED / V3_TANKAN /
+    "GPRD"（日度）/ "GPRC_JPN"（月度）原始序列。按日历日计的发布时滞，日本再多等 1 天。"""
+    f = base.copy()
+    lagd = 1 if jp else 0
+    px = {k: _daily(x[k], days) for k in V3_YF}
+    ch60 = {k: v / v.shift(60) - 1 for k, v in px.items()}
+    f["gold"] = ch60["GC"]
+    gs = px["GC"] / px["SI"]
+    f["gold_silver"] = gs / gs.shift(60) - 1
+    f["copper"] = -ch60["HG"]
+    f["natgas"] = ch60["NG"]
+    f["grains"] = pd.concat([ch60["ZW"], ch60["ZC"], ch60["ZS"]], axis=1).mean(axis=1, skipna=False)
+    f["commod"] = ch60["GSCI"]
+    f["commod_vol"] = np.log(px["GSCI"]).diff().rolling(20).std() * np.sqrt(252)
+    f["sloos"] = weekly_available(x["SLOOS"], days, 45 + lagd)                         # 季度调查，约 5 周后公布
+    for k, col in (("DELINQ", "delinq"), ("CHARGEOFF", "chargeoff")):                 # 季度，季末约 2 个月后公布
+        q = x[k].dropna()
+        f[col] = weekly_available(q - q.shift(4), days, 160 + lagd)
+    gd = x["GPRD"].dropna()
+    g30 = gd.rolling(30).mean()
+    f["gpr"] = gpr_available(g30, days, 1 + lagd)
+    f["gpr_jump"] = gpr_available(g30 / gd.rolling(365, min_periods=300).mean() - 1, days, 1 + lagd)
+    f["epu"] = weekly_available(x["EPU"].dropna().rolling(30, min_periods=20).mean(), days, 2 + lagd)
+    if jp:
+        for k, col in (("TK_LEND", "tankan_lend"), ("TK_CASH", "tankan_cash")):       # 索引 = 调查季末；约 1～5 天后公布
+            q = x[k].dropna()
+            f[col] = weekly_available(-(q - q.shift(4)), days, 5)
+        lng = x["JPLNG"].dropna()
+        yoy = lng / lng.shift(12) - 1                                                 # IMF 月度，约 2 个月后才有
+        f["jp_lng"] = weekly_available(pd.Series(yoy.to_numpy(float), index=yoy.index + pd.DateOffset(months=3)), days, 0)
+        f["gpr_jp"] = monthly_available(x["GPRC_JPN"].dropna().rolling(3).mean(), days, 5)
+    return f
+
+
+def category_mean(pct: pd.DataFrame) -> pd.Series:
+    """先在 CATEGORY 各类内部平均，再对有值的类别等权平均（0–100）；至少一半类别有值才给值。"""
+    cats = {c: [k for k in ks if k in pct] for c, ks in CATEGORY.items()}
+    cm = pd.DataFrame({c: pct[ks].mean(axis=1) for c, ks in cats.items() if ks})
+    ok = cm.notna().sum(axis=1) >= max(1, cm.shape[1] // 2)
+    return (cm.mean(axis=1) * 100).where(ok)
+
+
+def load_extra_all() -> dict:
+    """v2 + v3 需要的全部原始序列（FRED / yfinance / 日銀 API / GPR）。"""
+    from . import factors
+    x = {k: factors.fred(k) for k in ("NFCI", "STLFSI4", "ICSA", "T10Y2Y", "DGS2", "DFF")}
+    x["JPCALL"] = factors.fred("IRSTCI01JPM156N")
+    x["VIX"] = factors.fred("VIXCLS")
+    for k, sym in (("DXY", "DX-Y.NYB"), ("SKEW", "^SKEW"), ("VIX3M", "^VIX3M"), ("MOVE", "^MOVE")):
+        x[k] = factors.yf_close(sym)
+    for k, sym in V3_YF.items():
+        x[k] = factors.despike(factors.yf_close(sym))
+    for k, sid in V3_FRED.items():
+        x[k] = factors.fred(sid)
+    for k, code in V3_TANKAN.items():
+        x[k] = factors.tankan(code)
+    x["GPRD"] = factors.gpr_daily()["GPRD"]
+    x["GPRC_JPN"] = factors.gpr_monthly()["GPRC_JPN"]
+    return x
+
+
+US_DAILY_V2 = ("T10Y2Y", "DGS2", "DFF", "DXY", "SKEW", "VIX", "VIX3M", "MOVE", "HG", "GC")
+
+
+def build_all(d: dict, x: dict) -> dict:
+    """v1 + v2 + v3 全部因素的原始值：{"US": (特征表, 指数收盘), "JP": (…)}。日本交易日用前一个美国收盘。"""
+    r = d["raw"]
+    us_days = d["spx"].index[d["spx"].index >= "1990-01-01"]
+    base_us = raw_features(us_days, d["spx"], r["VIXCLS"], r["BAA10Y"], r["DGS10"], r["DGS3MO"], r["DCOILWTICO"], r["UNRATE"])
+    f_us = raw_features_v3(raw_features_v2(base_us, us_days, d["spx"], x), us_days, x)
+    jp_days = d["n225"].index[d["n225"].index >= "1990-01-01"]
+    m = {k: us_asof_for_jp(r[k], jp_days) for k in ("VIXCLS", "BAA10Y", "DGS10", "DGS3MO", "DCOILWTICO")}
+    fxj = us_asof_for_jp(d["fx"], jp_days)
+    base_jp = raw_features(jp_days, d["n225"], m["VIXCLS"], m["BAA10Y"], m["DGS10"], m["DGS3MO"], m["DCOILWTICO"],
+                           r["UNRATE"], usdjpy=fxj, jgb10=d["jgb"].shift(1))
+    xj = dict(x)
+    for k in set(US_DAILY_V2) | set(V3_YF):
+        xj[k] = us_asof_for_jp(x[k], jp_days)
+    f_jp = raw_features_v3(raw_features_v2(base_jp, jp_days, d["n225"], xj, usdjpy=fxj, jp=True), jp_days, xj, jp=True)
+    return {"US": (f_us, d["spx"].reindex(us_days)), "JP": (f_jp, d["n225"].reindex(jp_days))}

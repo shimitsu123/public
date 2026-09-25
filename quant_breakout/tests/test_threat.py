@@ -133,3 +133,57 @@ def test_walkforward_logit_uses_only_known_targets():
     assert w[1] > 1 and abs(w[2]) < abs(w[1])                                               # 找回 a 的正向作用
     ts = TH.tail_share(pd.DataFrame({"a": [0.9, 0.1], "b": [0.85, np.nan], "c": [0.2, 0.95]}))
     assert ts.iloc[0] == pytest.approx(200 / 3) and ts.iloc[1] == pytest.approx(50.0)
+
+
+def _v3_inputs(days, rng):
+    mk = lambda base, sc: pd.Series(np.abs(base + np.cumsum(rng.normal(0, sc, len(days)))) + 1, index=days)   # noqa: E731
+    cal = pd.date_range(days[0] - pd.Timedelta(days=800), days[-1], freq="D")
+    qs = pd.date_range(days[0] - pd.Timedelta(days=1500), days[-1], freq="QS")
+    qe = pd.date_range(days[0] - pd.Timedelta(days=1500), days[-1], freq="QE")
+    ms = pd.date_range(days[0] - pd.Timedelta(days=1500), days[-1], freq="MS")
+    x = {k: mk(100, 1) for k in ("GC", "SI", "HG", "NG", "ZW", "ZC", "ZS", "GSCI")}
+    x.update({"SLOOS": pd.Series(rng.normal(0, 10, len(qs)), index=qs), "DELINQ": pd.Series(2 + rng.normal(0, 0.3, len(qs)), index=qs),
+              "CHARGEOFF": pd.Series(1 + rng.normal(0, 0.2, len(qs)), index=qs),
+              "EPU": pd.Series(np.abs(rng.normal(100, 30, len(cal))), index=cal),
+              "GPRD": pd.Series(np.abs(rng.normal(100, 30, len(cal))), index=cal),
+              "TK_LEND": pd.Series(rng.normal(10, 5, len(qe)), index=qe), "TK_CASH": pd.Series(rng.normal(5, 5, len(qe)), index=qe),
+              "JPLNG": pd.Series(np.abs(rng.normal(10, 2, len(ms))), index=ms), "GPRC_JPN": pd.Series(np.abs(rng.normal(0.4, 0.1, len(ms))), index=ms)})
+    return x
+
+
+def test_gpr_available_monday_updates():
+    s = pd.Series([1.0, 2.0, 3.0], index=pd.DatetimeIndex(["2026-09-16", "2026-09-21", "2026-09-22"]))   # 周三 / 周一 / 周二
+    days = pd.bdate_range("2026-09-21", "2026-09-30")
+    a = TH.gpr_available(s, days, 1)
+    assert list(a.fillna(-1)) == [-1, 2, 2, 2, 2, 2, 3, 3]            # 9/16 与 9/21 的值 9/22 起可用；9/22 的值 9/29 起
+
+
+def test_v3_features_no_lookahead():
+    """v3 每个序列只改「截止日时还没公布」的部分（按各自的公布时滞），截止日及以前的因素值不变。"""
+    rng = np.random.default_rng(11)
+    days = pd.bdate_range("2015-01-01", periods=900)
+    base = pd.DataFrame(index=days)
+    x = _v3_inputs(days, rng)
+    t = 800
+    cut = days[t]
+    for jp, extra in ((False, 0), (True, 1)):
+        f = TH.raw_features_v3(base, days, x, jp=jp)
+        monday_after = lambda i: i + pd.to_timedelta((7 - i.weekday) % 7, unit="D")                  # noqa: E731
+        unpublished = {"SLOOS": lambda i: i + pd.Timedelta(days=45 + extra) > cut,
+                       "DELINQ": lambda i: i + pd.Timedelta(days=160 + extra) > cut,
+                       "CHARGEOFF": lambda i: i + pd.Timedelta(days=160 + extra) > cut,
+                       "EPU": lambda i: i + pd.Timedelta(days=2 + extra) > cut,
+                       "GPRD": lambda i: monday_after(i) + pd.Timedelta(days=1 + extra) > cut,
+                       "TK_LEND": lambda i: i + pd.Timedelta(days=5) > cut, "TK_CASH": lambda i: i + pd.Timedelta(days=5) > cut,
+                       "JPLNG": lambda i: i + pd.DateOffset(months=3) > cut,
+                       "GPRC_JPN": lambda i: i + pd.offsets.MonthBegin(1) + pd.Timedelta(days=4) > cut}
+        x2 = {k: v.where(~np.asarray(unpublished.get(k, lambda i: i > cut)(v.index)), v * 1.5 + 3) for k, v in x.items()}
+        f2 = TH.raw_features_v3(base, days, x2, jp=jp)
+        cols = TH.V3_EXTRA + (TH.JP_V3_ONLY if jp else [])
+        assert f[cols].iloc[:t + 1].equals(f2[cols].iloc[:t + 1]), jp
+        assert not f[cols].iloc[t + 60:].equals(f2[cols].iloc[t + 60:])                           # 之后确实变了
+
+
+def test_category_mean_balances_groups():
+    pct = pd.DataFrame({"vix": [1.0], "rvol": [1.0], "move": [1.0], "gold": [0.0]})             # 波动 3 个都 1，商品 1 个 0
+    assert TH.category_mean(pct).iloc[0] == pytest.approx(50.0)

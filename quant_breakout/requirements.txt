@@ -5,6 +5,9 @@ numpy>=1.24
 # 行情（第1~3阶段）
 yfinance>=0.2.40
 
+# 地缘政治风险指数（GPR，.xls）
+xlrd>=2.0
+
 # 可选：缓存用 parquet（没装会自动退回 CSV，功能不受影响）
 pyarrow>=14.0
 

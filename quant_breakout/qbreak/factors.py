@@ -153,6 +153,71 @@ def boj_series(code: str = "STRDCLUCON", db: str = "FM01", start_year: int = 199
     return _cached(f"boj_{db}_{code}", fetch)
 
 
+def tankan(code: str) -> pd.Series:
+    """日銀短観（季度 DI，db=CO）。索引 = 调查季度的最后一天（例 2026-06-30 = 6 月调查，7 月初公布）。"""
+    def fetch():
+        url = f"{BOJ_API}?format=json&lang=jp&db=CO&code={code}&startDate=197401&endDate={dt.date.today().year}04"
+        out = {}
+        for r in json.loads(_get(url)).get("RESULTSET") or []:
+            v = r.get("VALUES") or {}
+            for q, val in zip(v.get("SURVEY_DATES") or [], v.get("VALUES") or []):
+                if val is not None:
+                    y, k = divmod(int(q), 100)
+                    out[pd.Timestamp(y, 3 * k, 1) + pd.offsets.MonthEnd(0)] = float(val)
+        return pd.Series(out, name=code).sort_index()
+    return _cached(f"boj_CO_{code}", fetch)
+
+
+# ────────────────────────── 商品价格 / 地缘风险 ──────────────────────────
+def yf_close(sym: str, max_age_h: float = 12.0) -> pd.Series:
+    """yfinance 全历史收盘（复权）；商品 ETF / 期货连续合约 / 指数。"""
+    def fetch():
+        import logging
+        import yfinance as yf
+        logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+        h = yf.Ticker(sym).history(period="max", auto_adjust=True)
+        if h.empty:
+            raise RuntimeError(f"yfinance 没有 {sym}")
+        h.index = h.index.tz_localize(None).normalize()
+        c = h[~h.index.duplicated(keep="last")]["Close"]
+        return c[c > 0].rename(sym)
+    safe = "".join(ch if ch.isalnum() else "_" for ch in sym)
+    return _cached(f"yf_{safe}", fetch, max_age_h)
+
+
+def despike(s: pd.Series, jump: float = 0.25, back: float = 0.05) -> pd.Series:
+    """单日涨跌超过 ±25%、第二天又几乎全部回去（两天合计 < ±5%）的报价视为错价（例 CPER 2014-12-04），用前一天的值代替。"""
+    s = s.dropna()
+    r = np.log(s).diff()
+    bad = (r.abs() > jump) & ((r + r.shift(-1)).abs() < back)
+    return s.mask(bad).ffill()
+
+
+GPR_DAILY = "https://www.matteoiacoviello.com/gpr_files/data_gpr_daily_recent.xls"
+GPR_MONTHLY = "https://www.matteoiacoviello.com/gpr_files/data_gpr_export.xls"
+
+
+def gpr_daily() -> pd.DataFrame:
+    """Caldara & Iacoviello 日度地缘政治风险指数（1985-，每周一更新；CC BY，出处 matteoiacoviello.com/gpr.htm）。
+    列：GPRD（总）、GPRD_THREAT（威胁）、GPRD_ACT（行动）。最新几周是初值，会小幅修订。"""
+    def fetch():
+        df = pd.read_excel(io.BytesIO(_get(GPR_DAILY, timeout=120)))
+        df = df[pd.to_numeric(df["DAY"], errors="coerce").notna()]
+        df.index = pd.to_datetime(df["DAY"].astype(int).astype(str), format="%Y%m%d")
+        return df[["GPRD", "GPRD_THREAT", "GPRD_ACT"]].apply(pd.to_numeric, errors="coerce").dropna(how="all")
+    return _cached("gpr_daily", fetch, 24.0)
+
+
+def gpr_monthly(cols=("GPR", "GPRC_JPN", "GPRC_USA")) -> pd.DataFrame:
+    """月度 GPR（含国别：GPRC_JPN = 提到日本的地缘风险文章占比）；每月初更新上月。索引 = 月初。"""
+    def fetch():
+        df = pd.read_excel(io.BytesIO(_get(GPR_MONTHLY, timeout=120)))
+        df = df[pd.to_datetime(df["month"], errors="coerce").notna()]
+        df.index = pd.to_datetime(df["month"])
+        return df[list(cols)].apply(pd.to_numeric, errors="coerce").dropna(how="all")
+    return _cached("gpr_monthly", fetch, 24.0)
+
+
 # ────────────────────────── 汇总 ──────────────────────────
 def macro_levels() -> pd.DataFrame:
     """所有免费宏观序列按日历日对齐（不前向填充；各市场按自己的可得时点再对齐）。"""
