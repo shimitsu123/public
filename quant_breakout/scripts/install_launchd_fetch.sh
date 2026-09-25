@@ -21,4 +21,4 @@ cat > "$PLIST" <<EOF
 EOF
 launchctl unload "$PLIST" 2>/dev/null || true
 launchctl load -w "$PLIST"
-echo "已注册 $LABEL（每天 06:30 JST）。手工测试：bash scripts/fetch_and_push.sh"
+echo "已注册 ${LABEL}（每天 06:30 JST）。手工测试：bash scripts/fetch_and_push.sh"

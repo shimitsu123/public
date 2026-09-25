@@ -36,7 +36,7 @@ if [ "${QBREAK_SKIP_VENV:-}" = "1" ]; then            # 测试用：不建虚拟
 else
   if [ ! -x "$VENV/bin/python" ]; then
     PYB="$(find_python)" || { echo "★ 需要 Python ≥ 3.10：先 brew install python@3.12（或从 python.org 安装），再重跑本脚本"; exit 1; }
-    echo "建立虚拟环境 $VENV（$("$PYB" -V)）"
+    echo "建立虚拟环境 ${VENV}（$("$PYB" -V)）"
     "$PYB" -m venv "$VENV"
   fi
   PYX="$VENV/bin/python"
@@ -51,7 +51,7 @@ if ! git -C "$PROJ" rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
   exit 1
 fi
 tz="$(date +%z)"
-[ "$tz" = "+0900" ] || echo "★ 注意：这台 Mac 的时区是 UTC$tz，launchd 按本地时间触发 —— 下面的 07:40 / 09:05 会不是日本时间"
+[ "$tz" = "+0900" ] || echo "★ 注意：这台 Mac 的时区是 UTC${tz}，launchd 按本地时间触发 —— 下面的 07:40 / 09:05 会不是日本时间"
 
 plist() {   # label hour minute liveu.sh 的参数...
   local label="$1" hh="$2" mm="$3"; shift 3
@@ -87,7 +87,7 @@ $cal  </array>
 </plist>
 PLISTEOF
   load "$f"
-  echo "已注册 $label：周一至五 $(printf %02d:%02d "$hh" "$mm") → scripts/liveu.sh $*"
+  echo "已注册 ${label}：周一至五 $(printf %02d:%02d "$hh" "$mm") → scripts/liveu.sh $*"
 }
 
 for l in "${LABELS[@]}"; do unload "$AGENTS/$l.plist"; rm -f "$AGENTS/$l.plist"; done   # 切换模式时不留旧任务
@@ -104,10 +104,10 @@ QBREAK_HOME="$LHOME" "$PYX" "$PROJ/run.py" doctor || echo "★ doctor 有失败�
 if [ "$(uname)" = "Darwin" ]; then
   (QBREAK_LIVEU_HOME="$LHOME" QBREAK_PYTHON="$PYX" bash "$PROJ/scripts/liveu.sh" --broker "$MODE" --status --desktop 2>&1 \
      | grep -E "桌面链接|★") \
-    || echo "（桌面链接没建成：之后在终端里运行 bash \"$PROJ/scripts/liveu.sh\" desktop --broker $MODE）"
+    || echo "（桌面链接没建成：之后在终端里运行 bash \"$PROJ/scripts/liveu.sh\" desktop --broker ${MODE}）"
 fi
 echo
-echo "数据目录 $LHOME（账本 state/、日志 logs/、每天的日志 out/live_unified_${MODE}_journal.md、页面 out/page_${MODE}.html）"
+echo "数据目录 ${LHOME}（账本 state/、日志 logs/、每天的日志 out/live_unified_${MODE}_journal.md、页面 out/page_${MODE}.html）"
 echo "页面：每次运行后重写，定时任务跑完自动打开（不想弹出：touch \"$LHOME/NO_OPEN\"）；桌面上的 qbreak*.html 指向它"
 echo "看账本：  bash \"$PROJ/scripts/liveu.sh\" --broker $MODE --status"
 echo "手动跑一次（和定时任务相同）：bash \"$PROJ/scripts/liveu.sh\" run --broker $MODE"

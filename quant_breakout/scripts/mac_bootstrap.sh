@@ -57,7 +57,7 @@ elif [ -d "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null)" ]; then
   git -C "$DEST" fetch -q origin "$BRANCH"
   git -C "$DEST" checkout -q -t "origin/$BRANCH"
 else
-  echo "下载代码到 $DEST（约 15 MB）……"
+  echo "下载代码到 ${DEST}（约 15 MB）……"
   git clone -q "$REPO" "$DEST"
   git -C "$DEST" checkout -q "$BRANCH"
 fi

@@ -40,7 +40,7 @@ if [ "${1:-}" = "trial" ]; then                    # 装好之后马上验证整
   ln -s "$real/cache" "$tmp/cache"
   export QBREAK_HOME="$tmp"
   sync_inputs
-  echo "试跑（临时目录 $tmp，不动正式的模拟账户）：下载行情、按最新收盘做一次决策，第一次约 3〜5 分钟……"
+  echo "试跑（临时目录 ${tmp}，不动正式的模拟账户）：下载行情、按最新收盘做一次决策，第一次约 3〜5 分钟……"
   "$PY" run.py live-u --broker paper --force --note "这是试跑（临时目录，不是正式的模拟账户）：样子和以后每天早上的页面一样" "$@"
   rc=$?
   cp -f "$tmp/out/live_unified_paper_journal.md" "$real/out/trial_journal.md" 2>/dev/null \
@@ -77,13 +77,13 @@ if [ "${1:-}" = "run" ]; then
           pullmsg=""
         else                                       # 多半是仓库里有本地改动 / 本地提交：拉不下来就一直用旧代码旧数据 → 页面上标红
           pullmsg="git pull 失败（仓库里有本地改动或网络问题）：今天用的是本机现有的代码和数据；终端里运行 git -C $PROJ status 查看"
-          echo "（$pullmsg）"
+          echo "（${pullmsg}）"
         fi
       fi
       d="$("$PY" -c 'import json;print(json.load(open("var/out/unified_today.json",encoding="utf-8")).get("date",""))' 2>/dev/null)"
       [ "$d" = "$today" ] && break
       if [ "$waited" -ge "${QBREAK_LIVEU_WAIT_MIN:-50}" ]; then
-        echo "★ 等了 ${waited} 分钟，云端今天（$today）的数据还没入库（最新 ${d:-无}）：用手上最新的判断层 / 宏观数值继续"
+        echo "★ 等了 ${waited} 分钟，云端今天（${today}）的数据还没入库（最新 ${d:-无}）：用手上最新的判断层 / 宏观数值继续"
         break
       fi
       sleep 300
@@ -104,7 +104,7 @@ if [ "${1:-}" = "run" ]; then
   rc=$?
   if ! find "$QBREAK_HOME/out" -name 'page_*.html' -newer "$stamp" 2>/dev/null | grep -q .; then
     # 没走到写页面那一步（Python 出错、行情取不到……）：页面顶上标红 + 通知，别让人看着上一次的页面以为没事
-    msg="$(TZ=Asia/Tokyo date '+%m/%d %H:%M') 的运行没有完成（退出码 $rc）：看 $QBREAK_HOME/logs/ 里的 .err / .out，或把它发给 Claude"
+    msg="$(TZ=Asia/Tokyo date '+%m/%d %H:%M') 的运行没有完成（退出码 ${rc}）：看 $QBREAK_HOME/logs/ 里的 .err / .out，或把它发给 Claude"
     echo "★ $msg"
     "$PY" run.py live-u "$@" --status --alert "$msg" $([ "$openphase" = "0" ] && echo --open) >/dev/null 2>&1
     mac_alert "qbreak ★ 运行没有完成" "$msg"

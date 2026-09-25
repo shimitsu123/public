@@ -485,3 +485,14 @@
 - Mac：执行器每次运行后重写「账本 + 日志」页面（`qbreak/desktop_page.py`，`~/.qbreak/home/out/page_paper.html`），定时任务跑完自动打开；
   桌面的 `qbreak模拟操盘.html` 是指向它的链接（安装时建立；定时任务不写受隐私保护的桌面文件夹）。运行没走完 / `git pull` 失败 → 页面顶上标红。
 - 仓库根目录 `CLAUDE.md` + `quant_breakout/HANDOFF.md`：Mac 上的 Claude Code 在 `~/qbreak-src` 启动时自动读取（规则、安全、现状、流程、路线图）。
+
+## 2026-09-26 上线门槛定下（用户原样采用提案，事先登记）+ macOS bash 3.2 修复
+- 立花本番的上线门槛（之后不因模拟结果改数字）：Mac 模拟操盘与云端连续 ≥ 10 个交易日一致（或差异都能解释）、没有状态不明的单、
+  HALT 演练过一次、デモ发单检查的三点（约定字段、余力变化、按注文番号撤单）确认；全部满足才上本番，先用较小金额跑 1〜2 周再加到计划金额。
+  其他决定：Mac 页面每天自动弹出（保留）；日报例行任务的汇报文字不改。
+- 修复（用户在 Mac 上发现）：macOS 自带的 /bin/bash 3.2 在 UTF-8 locale 下把紧跟在 `$变量` 后面的全角字符的第一个字节算进变量名
+  （例 `$DEST（` → `DEST\xEF: unbound variable`），脚本都开了 `set -u` → 直接退出；一行安装要用 `LC_ALL=C` 才装上，
+  定时任务（plist 里 LANG=en_US.UTF-8）在出错路径上会触发。11 处改成 `${VAR}`（mac_bootstrap / install_launchd_live_u /
+  liveu / install_launchd_fetch）。`tests/test_shell_scripts.py`：静态扫描所有脚本；再在 ISO-8859-1 locale 下真的跑一遍
+  （Linux 的 glibc 在这个 locale 里和 macOS 一样把 0xEF 当字母，能复现：修复前 `pullmsg\xEF: unbound variable`，修复后通过），
+  en_US.UTF-8 下也跑一遍。只改脚本的文字输出，交易逻辑不变。
