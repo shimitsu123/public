@@ -23,7 +23,9 @@ def _csv(bars, last):
     (paths.sub("csv") / f"{T}.csv").write_text(df.to_csv(), encoding="utf-8")
 
 
-def test_run_once_books_under_account_label_not_venue():
+def test_run_once_books_under_account_label_not_venue(monkeypatch):
+    import qbreak.calendar_jp as cj
+    monkeypatch.setattr(cj, "now_jst", lambda: dt.datetime(2026, 9, 25, 7, 0))    # 固定在开盘前：否则在 9/25 收盘后跑会把 9/24 的数据判成过期
     ex = ExecConfig.for_market("JP", "tachibana")
     b = PaperBroker(initial_cash=1_000_000, exec_cfg=ex, market="JP",
                     state_file=paths.state_dir() / "paper_state_US.json")
