@@ -14,7 +14,7 @@ table{width:100%;border-collapse:collapse;font-size:13px} td,th{border-bottom:1p
 .scroll{overflow-x:auto} dt{font-weight:600;margin-top:6px} dd{margin:0 0 4px}
 </style></head><body><main>
 <h1>模拟盘日报 · 一个账户（楽天，日元 + 美元）</h1>
-<div class="muted">生成 2026-09-25 12:21 JST；数据截至 —（日本收盘 + 美股收盘都已知的最后一天）</div><div class="muted">一个账户模式已开启，还没有运行过；首次运行在 2026-09-28 07:00 JST 前后（之后每个日本营业日早上一次）</div>
+<div class="muted">生成 2026-09-25 12:50 JST；数据截至 —（日本收盘 + 美股收盘都已知的最后一天）</div><div class="muted">一个账户模式已开启，还没有运行过；首次运行在 2026-09-28 07:00 JST 前后（之后每个日本营业日早上一次）</div>
 <section class="card"><div class="kpi">
 <div><span class="muted">总权益（日元）</span><b>¥1,000,000</b><span class="muted">起始 ¥1,000,000</span></div>
 <div><span class="muted">累计</span><b>0.0%</b><span class="muted">最大回撤 0.0%</span></div>
@@ -22,7 +22,7 @@ table{width:100%;border-collapse:collapse;font-size:13px} td,th{border-bottom:1p
 <div><span class="muted">美元现金</span><b>—</b><span class="muted">USD/JPY —</span></div>
 <div><span class="muted">已平仓</span><b>0 笔</b><span class="muted">胜率 —%</span></div>
 </div></section>
-<section class="card"><h2>今天要做的事（日本时间）</h2><h3>09:00 日本开盘（寄付）</h3><ul><li class="muted">无</li></ul><h3>日间 换汇（リアルタイム為替：手数料 0 銭，价差按片道 25 銭估）</h3><ul><li class="muted">无</li></ul><h3>22:30 美股开盘（日本时间）</h3><ul><li class="muted">无</li></ul></section>
+<section class="card"><h2>今天要做的事（日本时间）</h2><h3>09:00 日本开盘（寄付）</h3><ul><li class="muted">无</li></ul></section>
 <section class="card"><h2>权益曲线（日元）</h2><p class="muted">权益曲线：数据还不够两天</p></section>
 <section class="card"><h2>个股持仓</h2><div class="scroll"><table><tr><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">成本</th><th class="n">止损</th><th>买入日</th></tr><tr><td colspan=6 class='muted'>无</td></tr></table></div></section>
 <section class="card"><h2>除息 / 拆股（已补到持仓与现金）</h2><ul><li class="muted">无</li></ul></section>
@@ -31,5 +31,5 @@ table{width:100%;border-collapse:collapse;font-size:13px} td,th{border-bottom:1p
 <section class="card"><h2>候补队列（按入场条件就绪度排序，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>状态</th><th class="n">就绪度</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th></tr><tr><td colspan=8 class='muted'>尚无候补数据</td></tr></table></div></section>
 <section class="card"><h2>最近平仓</h2><div class="scroll"><table><tr><th>日期</th><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">损益（日元）</th><th>原因</th></tr><tr><td colspan=6 class='muted'>还没有平仓的交易</td></tr></table></div></section>
 <section class="card"><h2>换汇记录</h2><div class="scroll"><table><tr><th>日期</th><th>方向</th><th class="n">美元</th><th class="n">汇率</th></tr><tr><td colspan=4 class='muted'>还没有换汇</td></tr></table></div></section>
-<section class="card"><h2>规则</h2><p class="muted">个股 None×0%（日本 + 美股合计、一起排名：日本 → 美元已够的美股 → 要换汇的美股）；闲置资金 （熊市那份转给牛市的一只）；楽天：日本株 / 东证 ETF 0 円，美股 0.495%（上限 $22），换汇 片道 25 銭/USD；美股卖出后的美元在下一个换汇窗口换回日元。</p></section>
+<section class="card"><h2>规则</h2><p class="muted">个股 4×25%（只做日本个股，美股敞口经由东证 ETF；事先登记的研究显示 ¥100 万规模下加美股个股会拉低收益）；闲置资金 1655.T 1（熊市那份留现金；牛熊分界 = 指数收盘连续 5 天低于 250 日线 ×0.97 转熊、高于 ×1.03 转牛，2026-09-25 多因子研究后维持）；楽天：日本株 / 东证 ETF 0 円，美股 0.495%（上限 $22），换汇 片道 3 銭/USD；美股卖出后的美元在下一个换汇窗口换回日元。</p></section>
 </main></body></html>

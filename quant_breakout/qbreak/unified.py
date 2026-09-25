@@ -117,6 +117,18 @@ class UState:
         return s
 
 
+def config_from_sim(sim: dict) -> UnifiedConfig:
+    """sim.json 的 unified 段 → UnifiedConfig（楽天：日本株 / 东证 ETF 0 円、美股 0.495% 上限 $22、换汇按片道 3 銭估）。"""
+    u = sim.get("unified") or {}
+    d = UnifiedConfig()
+    kw = {k: u[k] for k in ("position_pct", "max_positions", "max_position_pct", "cash_buffer_pct", "core_mode",
+                           "core_buffer_pct", "band_pct", "margin_pct", "fx_spread_yen", "fx_on_jp_holidays",
+                           "usd_keep", "us_same_open_reuse") if k in u}
+    return UnifiedConfig(capital_jpy=float(sim.get("capital_jpy") or d.capital_jpy),
+                         stock_markets=tuple(u.get("stock_markets", d.stock_markets)),
+                         core=dict(u.get("core", d.core)), core_index=dict(u.get("core_index", d.core_index)), **kw)
+
+
 def apply_corp_action(st: UState, ticker: str, date: str, dividend: float = 0.0, split: float = 0.0,
                       div_net: float = 1.0) -> str | None:
     """把一次除息 / 拆股补到状态上（模拟盘：行情是复权价，持仓按真实价格记账；规则与 PaperBroker 相同）。

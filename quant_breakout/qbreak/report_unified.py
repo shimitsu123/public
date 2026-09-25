@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import paths
 from .calendar_jp import now_jst
+from .unified import config_from_sim
 from .utils import read_json
 
 
@@ -46,7 +47,8 @@ def build_unified_data() -> dict:
             "core_trades": (st.get("core_trades") or [])[-15:], "n_trades": len(trades),
             "corp_log": (st.get("corp_log") or [])[-10:],
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
-            "config": td.get("config") or {}, "broker": td.get("broker", "rakuten"), "skipped": td.get("skipped") or {},
+            "config": td.get("config") or config_from_sim(sim).to_dict(),     # 首次运行前从 sim.json 取
+            "broker": td.get("broker", "rakuten"), "skipped": td.get("skipped") or {},
             # 例行任务（旧提示按分市场日报写）也能找到：markets.<市场>.regime.bullbear / watchlist
             "markets": {m: {"regime": e.get("regime") or {}, "macro": e.get("macro") or {},
                             "watchlist": e.get("watchlist") or [], "core_only": e.get("core_only")}
@@ -162,7 +164,8 @@ def render_unified_html(d: dict) -> str:
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
         n_trades=d.get("n_trades", 0), win=d.get("win_rate") if d.get("win_rate") is not None else "—",
         rules=escape(f"个股 {cfg.get('max_positions')}×{int(float(cfg.get('position_pct', 0)) * 100)}%（{stocks}）；"
-                     f"闲置资金 {core_desc}（{'熊市那份留现金' if cfg.get('core_mode') == 'split' else '熊市那份转给牛市的一只'}）；"
+                     f"闲置资金 {core_desc}（{'熊市那份留现金' if cfg.get('core_mode') == 'split' else '熊市那份转给牛市的一只'}；"
+                     "牛熊分界 = 指数收盘连续 5 天低于 250 日线 ×0.97 转熊、高于 ×1.03 转牛，2026-09-25 多因子研究后维持）；"
                      f"楽天：日本株 / 东证 ETF 0 円，美股 0.495%（上限 $22），换汇 片道 {round(float(cfg.get('fx_spread_yen', 0.25)) * 100):g} 銭/USD；"
                      "美股卖出后的美元在下一个换汇窗口换回日元。"))
 

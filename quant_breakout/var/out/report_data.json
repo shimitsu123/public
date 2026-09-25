@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-25 12:21 JST",
+ "generated": "2026-09-25 12:50 JST",
  "mode": "unified",
  "sim": {
   "start": "2026-09-28",
@@ -96,7 +96,32 @@
  "n_trades": 0,
  "corp_log": [],
  "win_rate": null,
- "config": {},
+ "config": {
+  "capital_jpy": 1000000.0,
+  "position_pct": 0.25,
+  "max_positions": 4,
+  "max_position_pct": 0.34,
+  "cash_buffer_pct": 1.0,
+  "stock_markets": [
+   "JP"
+  ],
+  "core": {
+   "1655.T": 1.0
+  },
+  "core_index": {
+   "1655.T": "US"
+  },
+  "core_mode": "split",
+  "core_buffer_pct": 0.0,
+  "band_pct": 10.0,
+  "margin_pct": 3.0,
+  "fx_spread_yen": 0.03,
+  "fx_on_jp_holidays": true,
+  "fx_before_jp_open": true,
+  "usd_keep": false,
+  "usd_min_back": 100.0,
+  "us_same_open_reuse": true
+ },
  "broker": "rakuten",
  "skipped": {},
  "markets": {},
