@@ -152,3 +152,18 @@ def test_pre_open_conversion_lets_jp_buy_use_last_nights_dollars():
     assert jp_tr and jp_tr[0]["entry_date"] == str(D[5].date())
     back = [x for x in ue.st.fx_trades if x[1] == "USD>JPY" and x[0] == str(D[5].date())]
     assert back and back[0][3] == 149.75 and back[0][2] > 2000                     # 卖出所得全部换回；TTB = 中值 − 25 銭
+
+
+def test_pending_plan_across_other_markets_holiday_keeps_its_money():
+    """日本假日（只有美股开市）那天的决策：前一天定下、还没成交的日本买入计划先占住日元，不会把同一笔钱再分给新信号。"""
+    jd = D.delete(2)                                          # D2 日本休市
+    jp = _bars(jd, [1000.0] * 7, entry_on=[D[1]])
+    jp2 = _bars(jd, [1000.0] * 7)
+    us = _bars(D, [100.0] * 8, entry_on=[D[2]])                # 美股 D2 收盘信号
+    cfg = UnifiedConfig(capital_jpy=300_000, position_pct=0.9, max_positions=2, max_position_pct=0.95,
+                        stock_markets=("JP", "US"), core={}, core_index={}, fx_on_jp_holidays=True)
+    ue = UnifiedEngine({"7777.T": jp, "8888.T": jp2, "AAA": us}, cfg, {"JP": P, "US": P}, EX, {}, fx=FX)
+    ue.run()
+    assert min(h[2] for h in ue.st.history) >= -1e-6 and min(h[3] for h in ue.st.history) >= -1e-6   # 现金从不为负
+    jp_tr = [t for t in ue.st.trades if t["ticker"] == "7777.T"]
+    assert jp_tr and jp_tr[0]["entry_date"] == str(D[3].date())                                   # 跨过假日照样成交

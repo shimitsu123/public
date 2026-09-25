@@ -769,6 +769,15 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
         extras[m] = {"regime": {**P.reg.to_dict(), "bullbear": P.bb, "final_mult": P.scale, "regime_mode": P.mode,
                                 "fx": P.fx_info}, "macro": P.macro_info}
     eng.live_fx_ok = is_trading_day(now_jst().date())      # 今天白天（日本营业日）才有换汇窗口
+    if any(params[m].earnings_blackout_days for m in params):  # 决算前 N 个交易日不进场（风控项，与原模拟盘相同）
+        from qbreak.trader import _earnings_days
+        prov = _earnings_provider()
+
+        def _eblock(t: str, i: int) -> str | None:
+            n = params[market_of(t)].earnings_blackout_days
+            e = _earnings_days(prov, t, today) if n else None
+            return f"决算前 {e} 个交易日" if e is not None and e <= n else None
+        eng.entry_block_fn = _eblock
     cutoff = (now_jst() - _dt.timedelta(hours=6, minutes=30)).date() - _dt.timedelta(days=1)
     last = _dt.date.fromisoformat(state.last_date) if state.last_date else None
     idxs = [i for i, d in enumerate(eng.gidx) if d.date() <= cutoff and (last is None or d.date() > last)]

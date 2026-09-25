@@ -57,6 +57,7 @@ class UnifiedConfig:
     fx_on_jp_holidays: bool = False       # 日本休市日能否换汇
     fx_before_jp_open: bool = False       # 换汇窗口在 09:00 之前就开：闲置美元先换回日元，赶上同一个日本开盘的买入
     usd_keep: bool = False                # False：美股卖出后的美元在下一个换汇窗口换回日元
+    usd_min_back: float = 100.0           # 闲置美元少于这个数（例如换汇时多换的零头）就留着下次买美股用，不来回付点差
     us_same_open_reuse: bool = True       # 美股卖出所得当晚可再买美股
 
     def to_dict(self) -> dict:
@@ -159,12 +160,14 @@ class UnifiedEngine:
             self.st.core_units.setdefault(t, 0)
         self.last_bar = np.full(len(A.tickers), -1)        # 每只票最近一根 K 线的位置（上一根 ATR / 涨跌停判断用）
         self.skipped: dict[str, int] = {k: 0 for k in ("gap", "cash", "lot", "full", "no_bar", "rebuy", "macro",
-                                                        "limit_up", "limit_down_hold", "usd", "fx_window")}
+                                                        "limit_up", "limit_down_hold", "usd", "fx_window",
+                                                        "earnings")}
         self._sold_today: set[str] = set()
         # 模拟盘最后一天的决策：明天还不在数据里 → 用当天算好的倍数（{市场: (市场倍数, {票: 板块倍数}, 拦截原因)}）
         # 与「明天白天能否换汇」（日本营业日才有换汇窗口）
         self.live_mult: dict[str, tuple] = {}
         self.live_fx_ok: bool = True
+        self.entry_block_fn = None                          # (票, 日) -> 拦截原因 | None（模拟盘：决算前 N 日不进场）
 
     # ── 工具 ──
     @staticmethod
@@ -410,11 +413,15 @@ class UnifiedEngine:
         return float(M.iat[k, M.columns.get_loc(t)])
 
     def _fx_ok(self, i: int) -> bool:
-        """明天（下一个日历日）换汇窗口是否开在今晚美股开盘之前：简化为「下一个美股开盘日也是换汇日」。"""
+        """决策后的第一个换汇日（日本营业日；fx_on_jp_holidays 时每天）是否不晚于下一个美股开盘日 ——
+        例：周四收盘后决策，周五白天换汇、周五夜美股买入；周一若是日本假日，周五就已换好。"""
         k = int(self.nxt["US"][i])
         if k < 0:
             return self.live_fx_ok
-        return self.cfg.fx_on_jp_holidays or bool(self.sess["JP"][k])
+        if self.cfg.fx_on_jp_holidays:
+            return True
+        j = int(self.nxt["JP"][i])
+        return 0 <= j <= k
 
     def _fx_ok_jp(self, i: int) -> bool:
         """明早日本开盘那天是否有换汇窗口（开盘前换回日元用）。"""
@@ -442,6 +449,13 @@ class UnifiedEngine:
         pre = cfg.fx_before_jp_open and not cfg.usd_keep and self._fx_ok_jp(i)
         post = self._fx_ok(i)
         used_jpy = used_usd = 0.0                                # 已计划的日本 / 美股买入成本
+        for t0, (c0, sh0, _) in st.plan.items():                 # 还没成交的旧计划（另一个市场休市时会跨过一次决策）先占住资金
+            m0 = market_of(t0)
+            px0 = c0 * (1 + self.slip[m0])
+            if m0 == "JP":
+                used_jpy += sh0 * px0 + self.fees[m0](sh0 * px0)
+            else:
+                used_usd += sh0 * px0 + self.fees[m0](sh0 * px0)
         x_usd = 0.0                                              # 开盘前 美元→日元（给日本买入）
         y_usd = 0.0                                              # 开盘后 日元→美元（给美股买入）
 
@@ -473,6 +487,9 @@ class UnifiedEngine:
             em = self._entry_mult(t, i)
             if em <= 0:
                 self.skipped["macro"] += 1
+                continue
+            if self.entry_block_fn is not None and self.entry_block_fn(t, i):
+                self.skipped["earnings"] += 1
                 continue
             if n_after + len(st.plan) >= cfg.max_positions:
                 self.skipped["full"] += 1
@@ -513,8 +530,9 @@ class UnifiedEngine:
         # ── 换汇计划：开盘前 美元→日元（日本买入所需 + 不再需要的闲置美元），开盘后 日元→美元（美股买入所需）──
         st.fx_plan = []
         back = x_usd
-        if not cfg.usd_keep and y_usd <= 0 and not any(market_of(t) == "US" for t in st.plan):
-            back = max(back, st.cash_usd)                        # 闲置美元全部换回日元
+        if (not cfg.usd_keep and y_usd <= 0 and not any(market_of(t) == "US" for t in st.plan)
+                and st.cash_usd - back >= cfg.usd_min_back):
+            back = max(back, st.cash_usd)                        # 闲置美元全部换回日元（零头留着）
         back = min(back, st.cash_usd)
         if back > 1.0:
             st.fx_plan.append({"dir": "USD>JPY", "usd": math.floor(back * 100) / 100})
