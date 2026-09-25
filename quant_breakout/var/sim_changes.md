@@ -458,3 +458,16 @@
 - 每天：9/28 起 `sim-day` 结束时用模拟券商把执行器走一遍（账本 `var/state/live_unified_paper.json`、`live_unified_paper_broker.json`，随状态入库），
   与模拟盘逐日比较；日报顶部显示「一致 / 不一致」，不一致或失败进「数据完整性」。
 - 没验证、要在デモ确认：立花约定明细的字段名、开盘前买付可能額的口径、寄付指値没成交的失效时点（见 MACOS.md §1.6）。
+
+## 2026-09-25（深夜⑬）Mac 上的模拟操盘（用户：立花还没开户、Mac 全天开着 →「先进行模拟操盘」）
+- 模拟盘的规则、参数、股票池、开始日（9/28）都没有改。
+- `scripts/install_launchd_live_u.sh` 默认改为模拟操盘：建虚拟环境（Python ≥ 3.10）→ 注册 `com.qbreak.liveu.paper`
+  （周一至五 07:40）→ `doctor`。每天：`git pull` 等云端例行任务当天的数据入库（最多 50 分钟）→ 同步判断层 / 宏观数值等输入
+  → 同一个执行器跑模拟账户 → 与云端模拟盘逐日比较 → macOS 通知 + 日志 `~/.qbreak/home/out/live_unified_paper_journal.md`。
+  执行器的状态放在仓库外（`~/.qbreak/home`），`git pull` 不会冲突；晚于 9/28 安装时从云端模拟盘当时的状态开始。
+  `install_launchd_live_u.sh tachibana` = 开户后的本番（07:40 + 09:05）。
+- `live-u` 新增 `--compare-sim`（与模拟盘状态比较：同一决策日才比）、`--notify`（通知中心 + webhook / 邮件）、每天的日志。
+- 立花デモ環境（官方 https://www.e-shiten.jp/Service/demo.html ，2026-09-25 核对，仅对该时点有效）：要先开户；
+  登录 8:30～27:00；价格不是真的（指値按指値成交、成行一律 100 円）；数据第二天重置 → 只能做一天的 API 检查，不能多日演练。
+  改正 MACOS.md §1.6（原写「デモ常驻至少 1 周」不可行），新增 `tachibana-probe --demo --order-test`（只限デモ：
+  指値买 1655 一单元 → 約定照会字段 → 余力 / 持仓变化 → 寄付卖单 → 按注文番号撤单）。

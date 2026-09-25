@@ -31,6 +31,7 @@ import argparse
 import datetime as dt
 import logging
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # 允许从任意 CWD 运行
@@ -987,7 +988,7 @@ def _executor_paper_step(ctx, sim_state) -> dict:
     """实盘执行器（qbreak/live_unified.py）每天用模拟账户跟模拟盘一起走：同一套行情与决策代码，只是成交经由
     「下单 → 券商（PaperBroker）撮合 → 第二天对账」这条实盘要走的路。两者应逐日一致；不一致 = 执行器有问题 → 醒目打印、写进日报。
     失败不影响模拟盘本身。"""
-    from qbreak.live_unified import ExecutorError, UnifiedExecutor, load_state
+    from qbreak.live_unified import ExecutorError, UnifiedExecutor, compare_with_sim, load_state
     from qbreak.utils import write_json
     book = paths.state_dir() / "live_unified_paper.json"
     try:
@@ -1005,20 +1006,14 @@ def _executor_paper_step(ctx, sim_state) -> dict:
                 log.info("执行器演练 公司行为 %s", n)
         ux.morning(idxs, corp=corp)
         sm = ux.summary()
-        pos = lambda s_: {t: int(p.shares) for t, p in s_.pos.items()}                         # noqa: E731
-        core = lambda s_: {t: int(u) for t, u in s_.core_units.items() if int(u)}             # noqa: E731
-        eq_x = st.history[-1][1] if st.history else None
-        eq_s = sim_state.history[-1][1] if sim_state.history else None
-        same = (st.last_date == sim_state.last_date and pos(st) == pos(sim_state) and core(st) == core(sim_state)
-                and abs(st.cash_jpy - sim_state.cash_jpy) < 1.0)
-        sm["same_as_sim"], sm["sim_equity_jpy"] = same, eq_s
+        cmp = compare_with_sim(st, sim_state)
+        same = bool(cmp["same"]) if cmp["comparable"] else False     # 同一天跑，日期不同本身就是问题
+        sm["same_as_sim"], sm["compare"] = same, cmp
         write_json(paths.out_dir() / "live_unified_paper.json", sm)
-        diff = (eq_x - eq_s) if eq_x is not None and eq_s is not None else None
-        print("执行器演练账户（模拟券商）：" + ("与模拟盘一致（持仓、1655、现金、权益）" if same else
-                                          f"★ 与模拟盘不一致：权益差 {diff:+,.0f} 円；持仓 {pos(st)} vs {pos(sim_state)}；"
-                                          f"1655 {core(st)} vs {core(sim_state)} —— 请检查执行器（实盘要走的路）")
-              + (f"；今天的单 {len(sm['orders'])} 笔" if sm["orders"] else ""))
-        return {"same_as_sim": same, "equity_jpy": eq_x, "equity_diff_jpy": diff, "orders": len(sm["orders"]),
+        print("执行器演练账户（模拟券商）：" + (cmp["text"] if cmp["comparable"] else "★ " + cmp["text"])
+              + (f"；下一开盘的单 {len(sm['orders'])} 笔" if sm["orders"] else ""))
+        return {"same_as_sim": same, "equity_jpy": st.history[-1][1] if st.history else None,
+                "equity_diff_jpy": cmp.get("equity_diff_jpy"), "orders": len(sm["orders"]),
                 "blocked": sm["blocked"], "decided_on": sm["decided_on"]}
     except (ExecutorError, Exception) as e:                    # noqa: BLE001
         log.warning("执行器演练账户失败（不影响模拟盘）：%s", e)
@@ -1574,8 +1569,10 @@ def cmd_live_unified(a) -> int:
     import datetime as _dt
     from qbreak.calendar_jp import now_jst
     from qbreak.data import LAGGING
-    from qbreak.live_unified import ExecutorError, UnifiedExecutor, load_state, resolve_order
+    from qbreak.live_unified import (ExecutorError, UnifiedExecutor, append_journal, compare_with_sim, daily_text,
+                                     load_state, mac_notify, resolve_order)
     from qbreak.trader import expected_last_bar
+    from qbreak.unified import UState
     from qbreak.utils import read_json, write_json
     cfg = _sim_cfg() or {}
     if cfg.get("mode") != "unified":
@@ -1613,6 +1610,13 @@ def cmd_live_unified(a) -> int:
         return 0
     blocked = _netcheck()
     provider = "csv" if any("yahoo" in h for h in blocked) else "yfinance"
+    sim_raw = read_json(a.compare_sim, None) if a.compare_sim else None   # 云端模拟盘的状态（Mac 上 git pull 之后的仓库文件）
+    sim_state = UState.from_dict(sim_raw) if sim_raw else None
+    if paper and not book.exists() and sim_state is not None and len(sim_state.history) > 1:
+        from qbreak.unified import exec_configs
+        ex_jp = exec_configs(ucfg.stock_markets, cfg.get("unified") or {})["JP"]
+        _seed_paper_executor(book, _paper_broker_for_executor(ucfg, ex_jp), sim_state)
+        print(f"模拟账户从云端模拟盘 {sim_state.last_date} 的状态开始（之后逐日比较）")
     state = load_state(book, ucfg.capital_jpy)
     eng, ctx = _unified_engine(a, cfg, state, provider)
     if paper:
@@ -1655,7 +1659,16 @@ def cmd_live_unified(a) -> int:
         print(f"★ 执行器停下（状态没有改动）：{e}")
         return 3
     sm = ux.summary()
+    cmp = compare_with_sim(eng.st, sim_state) if a.compare_sim else None
+    sm["compare"] = cmp
     write_json(paths.out_dir() / f"live_unified_{tag}.json", sm)
+    title, short, body = daily_text(sm, eng.st, cmp, paper, float(ucfg.capital_jpy))
+    append_journal(paths.out_dir() / f"live_unified_{tag}_journal.md", now_jst().strftime("%Y-%m-%d %H:%M JST"), title, body)
+    if a.notify:
+        from qbreak import notify
+        bad = bool(sm["blocked"]) or bool(cmp and cmp.get("comparable") and not cmp.get("same"))
+        mac_notify(title, short)
+        notify.send(title, body, "warn" if bad else "info")
     print(f"\n决策日 {sm['decided_on']} → 成交日 {sm['fill_day']}；权益 ¥{sm['equity_jpy']:,.0f}，现金 ¥{sm['cash_jpy']:,.0f}")
     for r in sm["reconciled"]:
         print(f"  已对账 {r['bar']} {r['side']} {r['ticker']} {r['qty']:,} 股 @ ¥{r['px']:,.2f}")
@@ -1668,6 +1681,9 @@ def cmd_live_unified(a) -> int:
     bad = [e for e in sm["events"] if e["level"] == "error"]
     for e in bad[-5:]:
         print(f"★ {e['msg']}")
+    if cmp:
+        print(cmp["text"])
+    print(f"日志 {paths.out_dir() / f'live_unified_{tag}_journal.md'}")
     return 1 if sm["blocked"] and not paper else 0
 
 
@@ -1688,10 +1704,49 @@ def _parse_time(s: str):
     return _dt.time(int(h), int(m))
 
 
+def _tachibana_order_test(b, spec) -> bool:
+    """デモ環境专用的一天发单检查（官方：デモ的价格不是真的，指値按指値成交、成行一律 100 円成交，第二天数据重置 →
+    只能检查 API 的字段与流程，不能做多日演练）：当日指値买 1655.T 1 单元 → 約定照会（打印明细应答的字段名）→
+    余力与持仓的变化 → 寄付卖单 → 按注文番号撤单。"""
+    from qbreak.tick import round_to_tick
+    b.dry_run, b.require_arm, b.max_order_value = False, False, 10_000_000
+    t, qty = "1655.T", 10
+    q = b.quote_detail([t]).get(t) or {}
+    ref = q.get("price") or q.get("prev_close")
+    if not ref:
+        print("[NG] 发单检查    : 取不到 1655 的价格（デモ的约定时间 9:00～11:30 / 12:30～15:00 / 15:10～27:00）")
+        return False
+    lim = round_to_tick(float(ref), t, "BUY")
+    cash0, pos0 = b.cash(), b.positions().get(t)
+    o = b.buy(t, qty, limit=lim, client_id=f"probe-{int(time.time())}")
+    print(f"[{'OK' if o.status in ('FILLED', 'PARTIAL', 'SENT') else 'NG'}] 当日指値买    : {t} ×{qty} @ {lim:g} → {o.status}"
+          f"（注文番号 {o.broker_id or '—'}，约定 {o.filled_qty} @ {o.filled_px:g}）{o.note}")
+    if not o.broker_id:
+        return False
+    raw = b._call(spec.clm_order_detail, **{spec.f_order_no: o.broker_id, spec.f_order_date: o.extra.get("order_date", "")})
+    keys = sorted(k for k in raw if not k.startswith("p_"))
+    print(f"     約定照会的字段（对照 tachibana_spec.json 的 r_filled_qty / r_filled_px / r_status_code / r_exec_list）：{keys}")
+    for k in (spec.r_filled_qty, spec.r_filled_px, spec.r_status_code, spec.r_exec_list):
+        print(f"       {k} = {raw.get(k, '（没有这个字段）')!r}"[:200])
+    st = b.order_status(o.broker_id, o.extra.get("order_date", ""))
+    cash1, pos1 = b.cash(), b.positions().get(t)
+    print(f"[OK] 约定与余力    : order_status {st}；买付可能額 {cash0:,.0f} → {cash1:,.0f} 円；"
+          f"{t} 持仓 {pos0.qty if pos0 else 0} → {pos1.qty if pos1 else 0} 口")
+    s_ = b.sell(t, qty, client_id=f"probe-s-{int(time.time())}", bar="next")      # 寄付成行：等下一个寄付，先撤掉
+    print(f"[{'OK' if s_.status == 'SENT' else 'NG'}] 寄付卖单      : → {s_.status}（注文番号 {s_.broker_id or '—'}）{s_.note}")
+    if s_.broker_id:
+        c = b.cancel_order(s_.broker_id, s_.extra.get("order_date", ""))
+        print(f"[{'OK' if c else 'NG'}] 按注文番号撤单 : {'已撤' if c else '失败（见日志）'}")
+    return o.status in ("FILLED", "PARTIAL", "SENT")
+
+
 def cmd_tachibana_probe(a) -> int:
-    """只读连通性检查：登录 → 取价 → 持仓 → 余力。**绝不发单。**
+    """只读连通性检查：登录 → 取价 → 持仓 → 余力。**默认绝不发单**；--order-test 只在デモ環境发单（检查字段与流程）。
     用它对着官方 API 仕様書逐项核对 TachibanaSpec，全部通过再考虑实盘。"""
     from qbreak.brokers.tachibana import TachibanaBroker, TachibanaSpec
+    if a.order_test and not a.demo:
+        print("--order-test 只能配 --demo（デモ環境：假价格、第二天重置）；本番绝不做发单检查")
+        return 2
     spec = TachibanaSpec.load()
     b = TachibanaBroker(spec=spec, demo=a.demo, dry_run=True, require_arm=True)
     env = "デモ環境" if a.demo else "本番環境"
@@ -1712,6 +1767,8 @@ def cmd_tachibana_probe(a) -> int:
         except Exception as e:                       # noqa: BLE001
             print(f"[NG] {name:<12}: {type(e).__name__}: {e}")
             ok = False
+    if ok and a.order_test:
+        ok = _tachibana_order_test(b, spec)
     if a.dump_spec:
         print(f"\n已导出仕様模板 → {spec.dump_template()}")
         print("按官方仕様書改这个文件，程序会自动加载，其余代码不用动。")
@@ -1956,6 +2013,10 @@ def main(argv=None) -> int:
     lu.add_argument("--resolve", default=None, metavar="CID", help="登记状态不明的单的实际成交（配 --filled / --px）")
     lu.add_argument("--filled", type=int, default=0)
     lu.add_argument("--px", type=float, default=0.0)
+    lu.add_argument("--compare-sim", default=None, metavar="PATH",
+                    help="与这个模拟盘状态文件逐日比较（Mac：仓库里 git pull 下来的 var/state/unified_state.json）；"
+                         "模拟账户还没有账本时从它开始")
+    lu.add_argument("--notify", action="store_true", help="结果发通知：macOS 通知中心 + QBREAK_WEBHOOK / QBREAK_SMTP（有设置时）")
     lu.add_argument("--params", default=None)
     lu.set_defaults(func=cmd_live_unified)
 
@@ -1966,6 +2027,8 @@ def main(argv=None) -> int:
     pb = sub.add_parser("tachibana-probe", help="立花 API 只读连通性 / 仕様检查")
     pb.add_argument("--demo", action="store_true", help="用デモ環境（强烈建议先在这里跑通）")
     pb.add_argument("--dump-spec", action="store_true", help="导出仕様模板到 var/tachibana_spec.json")
+    pb.add_argument("--order-test", action="store_true",
+                    help="只限 --demo：当日指値买 1655 一单元 → 約定照会字段 → 余力变化 → 寄付卖单 → 撤单（デモ是假价格、每天重置）")
     pb.set_defaults(func=cmd_tachibana_probe)
 
     st = sub.add_parser("status", help="查看状态"); _common(st)

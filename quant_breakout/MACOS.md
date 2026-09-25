@@ -2,6 +2,7 @@
 
 > **2026-09-25 深夜更新**：用户改用**立花 e支店**（不做美股个股 → 楽天的美元 / 换汇逻辑用不到；立花 API 能在 Mac 上无人值守下单）。
 > 模拟盘已按立花個別コース计费（9/28 起）。**一个账户方案（S0C2）的实盘执行器 `run.py live-u` 已完成，并用模拟账户演练过（见 §1.6）**。
+> **现在（立花还没开户）：先在 Mac 上做模拟操盘 —— 见 §1.7，一条命令装好，每个交易日早上自动跑、发通知、与云端模拟盘逐日比较。**
 > §5〜§6 的分市场守护进程是旧的「每个市场一个账户」方案，一个账户模式下会拒绝运行，只作参考。
 
 > 面向：Mac + 不装 Excel + 想开机自启、全天常驻、自动买卖。
@@ -102,16 +103,81 @@ python3 run.py live-u --broker tachibana --status                               
 python3 run.py live-u --broker tachibana --resolve U2026-10-01-BUY-7203.T --filled 100 --px 3001   # 没成交填 --filled 0
 ```
 
-**上线步骤**
+**上线步骤（立花开户之后）**
 
-1. `python3 run.py tachibana-probe --demo`（只读）全 `[OK]`
-2. デモ：`python3 run.py live-u --broker tachibana --demo --dry-run --no-clock`（登录、读持仓与余力、打印会下的单，不发）
-3. デモ常驻至少 1 周：`QBREAK_LIVEU_DEMO=1 bash scripts/install_launchd_live_u.sh` + `echo ARMED > var/ARM`；每天看 `--demo --status`。
-   **要在デモ确认的几点**（按公开仕様書写的，没在真实服务器上跑过）：
-   约定明细的字段（`aYakuzyouSikkouList` / `sYakuzyouSuryou` / `sYakuzyouPrice`，不对就改 `var/tachibana_spec.json`）；
-   开盘前的买付可能額 = 现金（含未交割的卖出所得）、开盘卖出成交后即时反映；寄付指値没成交时是否在开盘后失效
-4. 本番：入金 → `bash scripts/install_launchd_live_u.sh` → `echo ARMED > var/ARM`
-5. 第一天：执行器从最新收盘的决策开始，现金按券商余力；同一账户里请不要人工买卖执行器管的票（股票池 + 1655），否则持仓核对会停下
+立花的デモ環境（官方 https://www.e-shiten.jp/Service/demo.html ，2026-09-25 核对，仅对该时点有效）：**要先开 e支店账户**才能用；
+登录 8:30～27:00（含周末）；约定时间 9:00～11:30 / 12:30～15:00 / 15:10～27:00；**价格不是真的**（指値按指値成交、成行一律 100 円成交）；
+当天的注文与约定**第二天重置**。所以デモ只能检查 API 的字段与流程，**不能做多日演练**（多日演练就是 §1.7 的 Mac 模拟操盘）。
+
+1. `python3 run.py tachibana-probe --demo`（只读：登录、取价、持仓、余力、注文一覧）全 `[OK]`
+2. デモ一天的发单检查（8:30 以后）：`python3 run.py tachibana-probe --demo --order-test`
+   —— 当日指値买 1655 一单元 → 打印約定照会应答的字段名 → 余力与持仓的变化 → 寄付卖单 → 按注文番号撤单。要确认的三点
+   （按公开仕様書写的，没在真实服务器上跑过）：约定明细的字段（`sYakuzyouSuryou` / `sYakuzyouPrice` / `aYakuzyouSikkouList`，
+   不对就改 `var/tachibana_spec.json`）；买付可能額在成交后怎么变；寄付单能否按注文番号撤掉
+3. `python3 run.py live-u --broker tachibana --dry-run --no-clock`（本番：登录、读持仓与余力、打印会下的单，不发）
+4. 本番：入金 → `bash scripts/install_launchd_live_u.sh tachibana`（07:40 早上的单 + 09:05 开盘后补单）→ `echo ARMED > ~/.qbreak/home/ARM`
+   （Mac 上执行器的数据目录是 `~/.qbreak/home`，ARM / HALT 都放这里）
+5. 本番的「开盘前买付可能額」（是否含未交割的卖出所得、开盘卖出成交后是否即时反映）デモ验证不了（假价格、每天重置）：
+   头几天每天看 `bash scripts/liveu.sh --broker tachibana --status` 与日志；执行器每天早上都会核对持仓与现金，不一致就停下
+6. 第一天：执行器从最新收盘的决策开始，现金按券商余力；同一账户里请不要人工买卖执行器管的票（股票池 + 1655），否则持仓核对会停下
+
+## 1.7 现在：Mac 上的模拟操盘（立花开户前；2026-09-25 起）
+
+用和实盘**完全相同的执行器**，只把券商换成模拟账户（PaperBroker，成交规则与回测相同）：每个交易日早上在你的 Mac 上跑一次，
+下「明天开盘」的单，第二天早上按真实的开盘价撮合、对账。以后立花开户，只要把 `paper` 换成 `tachibana`。
+
+**一次性安装**（Mac 全天开着即可；Homebrew 已装）：
+
+```bash
+brew install python@3.12
+```
+
+```bash
+git clone https://github.com/shimitsu123/public.git ~/qbreak-src
+```
+
+```bash
+cd ~/qbreak-src && git checkout claude/rakuten-auto-trading-review-ka7lf0
+```
+
+```bash
+bash ~/qbreak-src/quant_breakout/scripts/install_launchd_live_u.sh
+```
+
+安装脚本会：建虚拟环境 `~/.qbreak/venv`（Python ≥ 3.10；macOS 自带的 3.9 不够）并装依赖 → 注册 LaunchAgent
+`com.qbreak.liveu.paper`（**周一至五 07:40**，按 Mac 的系统时区，应为日本时间）→ 跑一次环境自检（`doctor`）。
+
+**每天 07:40 自动做的事**（`scripts/liveu.sh run --broker paper`）：
+1. `git pull` 等云端例行任务把当天的数据推上来（06:57 开始，通常 07:10～07:30；最多等 50 分钟，等不到就用手上最新的并提示）
+2. 把云端维护的配置与当天的判断层（`market_regime.json`）、宏观数值（`macro.json`）等拷到 Mac 的数据目录 `~/.qbreak/home`
+   （执行器自己的账本、日志也在这里，**不在仓库里** → 以后 `git pull` 永远不会冲突）
+3. 执行器：昨天的单按真实开盘价撮合 → 对账 → 核对 → 决策 → 下「下一开盘」的单
+4. 与云端模拟盘逐日比较（同一套代码与数据，应当一致）→ 通知中心弹一条（权益、当日 / 累计损益、下一开盘的单数、是否一致）
+   → 追加一节到日志 `~/.qbreak/home/out/live_unified_paper_journal.md`
+
+**开始日**：9/28（与云端模拟盘同一天、同一个决策）；9/28 之前运行只提示「开始日之前不推进」。
+晚于 9/28 才安装：模拟账户从云端模拟盘当时的状态开始，之后逐日比较。
+
+**常用**：
+
+```bash
+bash ~/qbreak-src/quant_breakout/scripts/liveu.sh --broker paper --status
+```
+
+```bash
+open ~/.qbreak/home/out/live_unified_paper_journal.md
+```
+
+```bash
+bash ~/qbreak-src/quant_breakout/scripts/liveu.sh run --broker paper
+```
+
+（第三条 = 手动跑一次，与定时任务相同；同一天重复跑不会重复下单。卸载：`bash scripts/install_launchd_live_u.sh uninstall`。）
+
+**与云端「不一致」时**：多半是两边取到的数据不同（云端例行任务当天晚了 / 失败 → Mac 用了前一天的判断层；
+Yahoo 行情在两次取数之间修正；决算日期缓存不同）。日志里有两边的持仓与现金；想重新对齐就删掉
+`~/.qbreak/home/state/live_unified_paper*.json`，下次从云端模拟盘当时的状态重新开始。
+通知第一次会以「スクリプトエディタ / Script Editor」的名义弹出：在 系统设置 → 通知 里允许它。
 
 ## 2. 开户与 API 设定（v4r10，2026-09-25 核对）
 
@@ -218,7 +284,8 @@ sudo pmset repeat wakeorpoweron MTWRF 08:40:00
 
 ## 7. 上线清单
 
-- [ ] 一个账户方案（现行）：按 §1.6 的上线步骤（`live-u`）；下面几项里「守护进程 / --protective-stop / 16:45」是旧的分市场方案
+- [ ] 一个账户方案（现行）：先 §1.7 的 Mac 模拟操盘，开户后按 §1.6 的上线步骤（`live-u`）；ARM / HALT 在 `~/.qbreak/home/`；
+      下面几项里「守护进程 / --protective-stop / 16:45 / var/ARM」是旧的分市场方案
 - [ ] `run.py doctor` 全绿
 - [ ] `tachibana-probe --demo` 全 `[OK]`，且已对着官方仕様書改过 `tachibana_spec.json`
 - [ ] `tachibana-probe`（本番，不加 `--demo`）全 `[OK]`

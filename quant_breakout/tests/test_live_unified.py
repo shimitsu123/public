@@ -321,3 +321,51 @@ def test_missed_open_phase_is_flagged_as_divergence():
     missed = [o for h in ux.book["history"] for o in h["orders"] if o["status"] == "MISSED"]
     assert missed and ux.stats["model_diff"] >= 1
     assert any("开盘后补单没有运行" in e["msg"] for e in ux.book["events"] + ux.events)
+
+
+# ────────── Mac 模拟操盘：与云端模拟盘比较、汇报文字 ──────────
+def test_compare_with_sim_only_on_same_day_and_names_differences():
+    from qbreak.live_unified import compare_with_sim
+    from qbreak.unified import UPos, UState
+    a = UState(cash_jpy=100.0, last_date="2026-09-29", history=[["2026-09-29", 1000.0, 100.0, 0.0, 150.0]])
+    b = UState(cash_jpy=100.0, last_date="2026-09-28", history=[["2026-09-28", 1000.0, 100.0, 0.0, 150.0]])
+    r = compare_with_sim(a, b)
+    assert r["comparable"] is False and "不是同一天" in r["text"]
+    assert compare_with_sim(a, None)["comparable"] is False
+    b.last_date = "2026-09-29"
+    assert compare_with_sim(a, b)["same"] is True
+    a.pos["7203.T"] = UPos("7203.T", "JP", 100, 3000.0, "2026-09-29", 2800.0, 3000.0, 3000.0)
+    a.history[-1][1] = 1300.0
+    r = compare_with_sim(a, b)
+    assert r["same"] is False and "7203.T" in r["text"] and "权益差 +300 円" in r["text"]
+
+
+def test_daily_text_has_units_and_flags():
+    from qbreak.live_unified import daily_text
+    from qbreak.unified import UState
+    st = UState(cash_jpy=5000.0, last_date="2026-09-29", core_units={"1655.T": 1100},
+                history=[["2026-09-28", 1_000_000.0, 0, 0, 150], ["2026-09-29", 1_003_000.0, 0, 0, 150]])
+    sm = {"decided_on": "2026-09-29", "fill_day": "2026-09-30", "equity_jpy": 1_003_000, "blocked": None, "events": [],
+          "reconciled": [{"bar": "2026-09-29", "side": "BUY", "ticker": "1655.T", "qty": 1100, "px": 880.5, "kind": "core"}],
+          "orders": [{"side": "BUY", "ticker": "7203.T", "kind": "stock", "qty": 100, "sent_qty": 0, "limit": 3090.0,
+                      "phase": "open", "status": "DEFERRED", "note": ""}]}
+    title, short, body = daily_text(sm, st, {"comparable": True, "same": True, "text": "与云端模拟盘一致"}, True, 1_000_000)
+    assert "模拟操盘" in title and "权益 ¥1,003,000（当日 +3,000 円，累计 +0.30%）" in short and "与云端一致" in short
+    assert "1655.T 1,100 口" in body and "@ ¥880.50" in body and "7203.T 100 股（开盘后指値 ≤ ¥3,090）" in body
+
+
+def test_demo_order_test_runs_the_whole_order_cycle(capsys):
+    """tachibana-probe --demo --order-test 的流程（这里对着模拟交易所）：指値买 → 約定照会字段 → 余力 / 持仓变化 → 寄付卖 → 撤单。"""
+    import run
+    from qbreak.brokers.tachibana import TachibanaBroker
+    make, _ = _scenario([1000.0] * 30)
+    eng = make()
+    exch = SimExchange(eng, cash=1_000_000)
+    b = TachibanaBroker(transport=exch, spec=exch.spec, creds=exch.creds(), dry_run=True, require_arm=True,
+                        confirm_timeout_s=0.0)
+    exch.set_day(10)
+    exch.open(10)                                             # デモ的约定时间内
+    assert run._tachibana_order_test(b, exch.spec) is True
+    out = capsys.readouterr().out
+    assert "約定照会的字段" in out and "sYakuzyouSuryou" in out and "已撤" in out
+    assert exch.pos.get("1655.T") == 10 and [o["status"] for o in exch.orders.values()] == ["10", "7"]

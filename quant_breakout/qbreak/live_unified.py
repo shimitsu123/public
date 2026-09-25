@@ -654,3 +654,97 @@ def rehearse(make_engine, start, end=None, kind: str = "paper", workdir=None, ex
             "same_core": res.state.core_trades == ref.state.core_trades, "errors": errors[-20:], "diffs": ux.diffs,
             "calls": dict(getattr(exch, "calls", {}) or {}), "book": str(wd / f"book_{kind}.json"),
             "ux": ux, "exchange": exch}
+
+
+# ══════════════════════════ 汇报：与模拟盘比较、通知、日志 ══════════════════════════
+def compare_with_sim(st: UState, sim: UState | None) -> dict:
+    """执行器账户 vs 模拟盘账户：同一决策日时逐项比较（个股股数、1655 口数、现金、权益）；不是同一天就不比（例如云端当天还没入库）。"""
+    pos = lambda s: {t: int(p.shares) for t, p in s.pos.items()}                     # noqa: E731
+    core = lambda s: {t: int(u) for t, u in s.core_units.items() if int(u)}          # noqa: E731
+    eq = lambda s: float(s.history[-1][1]) if s.history else None                    # noqa: E731
+    out = {"exec_date": st.last_date, "sim_date": sim.last_date if sim else None, "comparable": False, "same": None}
+    if sim is None or not sim.last_date or st.last_date != sim.last_date:
+        out["text"] = (f"模拟盘停在 {(sim.last_date if sim else None) or '—'}、执行器在 {st.last_date or '—'}："
+                       "不是同一天，这次不比（云端当天的例行任务可能还没入库）")
+        return out
+    diff = eq(st) - eq(sim) if eq(st) is not None and eq(sim) is not None else None
+    same = pos(st) == pos(sim) and core(st) == core(sim) and abs(st.cash_jpy - sim.cash_jpy) < 1.0
+    out.update(comparable=True, same=same, equity_diff_jpy=diff)
+    if same:
+        out["text"] = "与云端模拟盘一致（个股、1655、现金、权益）"
+    else:
+        parts = []
+        if pos(st) != pos(sim):
+            parts.append(f"个股 {pos(st) or '无'} vs {pos(sim) or '无'}")
+        if core(st) != core(sim):
+            parts.append(f"1655 {core(st) or '无'} vs {core(sim) or '无'}")
+        parts.append(f"现金差 {st.cash_jpy - sim.cash_jpy:+,.0f} 円")
+        if diff is not None:
+            parts.append(f"权益差 {diff:+,.0f} 円")
+        out["text"] = "★ 与云端模拟盘不一致：" + "；".join(parts)
+    return out
+
+
+def _qty_txt(o: dict) -> str:
+    return f"{int(o.get('sent_qty') or o['qty']):,} {'口' if o.get('kind') == 'core' else '股'}"
+
+
+def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: float) -> tuple[str, str, str]:
+    """(标题, 通知用的一行, 日志正文)。每个数字带单位。"""
+    hist = st.history or []
+    eq = float(hist[-1][1]) if hist else float(sm.get("equity_jpy") or capital)
+    chg = eq - float(hist[-2][1]) if len(hist) > 1 else 0.0
+    ret = (eq / capital - 1) * 100 if capital else 0.0
+    title = f"qbreak {'模拟操盘' if paper else '立花实盘'} {sm.get('decided_on') or ''}"
+    orders = [o for o in sm.get("orders") or [] if o.get("status") not in ("SKIPPED",)]
+    short = f"权益 ¥{eq:,.0f}（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）｜下一开盘的单 {len(orders)} 笔"
+    if cmp and cmp.get("comparable"):
+        short += "｜与云端一致" if cmp.get("same") else "｜★ 与云端不一致"
+    if sm.get("blocked"):
+        short += "｜★ 没下单"
+    lines = [f"- 决策日 {sm.get('decided_on') or '—'} → 成交日 {sm.get('fill_day') or '—'}；权益 ¥{eq:,.0f}"
+             f"（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）；现金 ¥{float(st.cash_jpy):,.0f}"]
+    held = [f"{t} {int(p.shares):,} 股（成本 ¥{float(p.entry_px):,.2f}，止损 ¥{float(p.stop_px):,.2f}）" for t, p in st.pos.items()]
+    held += [f"{t} {int(u):,} 口" for t, u in st.core_units.items() if int(u)]
+    lines.append("- 持仓：" + ("；".join(held) if held else "无（全部现金）"))
+    for r in sm.get("reconciled") or []:
+        unit = "口" if r.get("kind") == "core" else "股"
+        lines.append(f"- 已成交（{r['bar']} 开盘）：{'买' if r['side'] == 'BUY' else '卖'} {r['ticker']} {int(r['qty']):,} {unit} @ ¥{float(r['px']):,.2f}")
+    for o in sm.get("orders") or []:
+        how = ("寄付成行" if o["side"] == "SELL" else
+               f"{'寄付' if o.get('phase') == 'morning' and o.get('status') != 'DEFERRED' else '开盘后'}指値 ≤ ¥{float(o['limit']):,.0f}")
+        lines.append(f"- 下一开盘：{'卖' if o['side'] == 'SELL' else '买'} {o['ticker']} {_qty_txt(o)}（{how}）→ {o['status']}"
+                     + (f"：{o['note']}" if o.get("note") else ""))
+    if not sm.get("orders"):
+        lines.append("- 下一开盘：没有单")
+    if cmp:
+        lines.append(f"- {cmp['text']}")
+    if sm.get("blocked"):
+        lines.append(f"- ★ 没有下单：{sm['blocked']}")
+    for e in [e for e in sm.get("events") or [] if e.get("level") == "error"][-5:]:
+        lines.append(f"- ★ {e['msg']}")
+    return title, short, "\n".join(lines)
+
+
+def append_journal(path, when: str, title: str, body: str) -> None:
+    """模拟操盘 / 实盘日志（markdown，按时间追加，一天一节）。"""
+    from pathlib import Path
+    p = Path(path)
+    head = "" if p.exists() else "# 执行器日志（每个交易日早上一节；数字都带单位）\n"
+    with p.open("a", encoding="utf-8") as f:
+        f.write(f"{head}\n## {when}　{title}\n{body}\n")
+
+
+def mac_notify(title: str, text: str) -> bool:
+    """macOS 通知中心（osascript；参数经 argv 传入，不拼接脚本 → 引号、换行都安全）。其他系统返回 False。"""
+    import subprocess
+    import sys
+    if sys.platform != "darwin":
+        return False
+    try:
+        subprocess.run(["osascript", "-e", "on run argv", "-e",
+                        "display notification (item 1 of argv) with title (item 2 of argv)", "-e", "end run",
+                        text, title], timeout=15, capture_output=True, check=False)
+        return True
+    except Exception:                                    # noqa: BLE001
+        return False
