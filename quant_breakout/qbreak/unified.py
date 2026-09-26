@@ -66,6 +66,7 @@ class UnifiedConfig:
     usd_min_back: float = 100.0           # 闲置美元少于这个数（例如换汇时多换的零头）就留着下次买美股用，不来回付点差
     usd_keep_imminent: bool = False       # True：美股候补里有「即将触发 / 已触发」的票时，闲置美元先不换回日元
     us_same_open_reuse: bool = True       # 美股卖出所得当晚可再买美股
+    one_lot_cap_pct: float = 0.0          # 一手放宽：按名额算买不到一手、但一手 ≤ 权益 × 这个比例（× 宏观倍数）且现金够时买一手；0 = 关（现行）
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -149,7 +150,7 @@ def config_from_sim(sim: dict) -> UnifiedConfig:
     d = UnifiedConfig()
     kw = {k: u[k] for k in ("position_pct", "max_positions", "max_position_pct", "cash_buffer_pct", "core_mode",
                            "core_buffer_pct", "band_pct", "margin_pct", "fx_spread_yen", "fx_on_jp_holidays",
-                           "usd_keep", "usd_keep_imminent", "us_same_open_reuse") if k in u}
+                           "usd_keep", "usd_keep_imminent", "us_same_open_reuse", "one_lot_cap_pct") if k in u}
     return UnifiedConfig(capital_jpy=float(sim.get("capital_jpy") or d.capital_jpy),
                          stock_markets=tuple(u.get("stock_markets", d.stock_markets)),
                          core=dict(u.get("core", d.core)), core_index=dict(u.get("core_index", d.core_index)), **kw)
@@ -642,6 +643,9 @@ class UnifiedEngine:
                 conv = max(0.0, usd_cash_free()) * rs / mg if pre else 0.0
                 budget = min(budget_jpy, (avail + conv) * buf)
                 shares = int(math.floor(budget / px / lot) * lot) if budget > 0 else 0
+                if (shares <= 0 < budget and cfg.one_lot_cap_pct > 0
+                        and px * lot <= min(eq * cfg.one_lot_cap_pct * min(1.0, em), (avail + conv) * buf)):
+                    shares = lot                                  # 一手放宽（默认关；scripts/capital_study.py）
                 if shares <= 0:
                     self.skipped["lot" if budget > 0 else "cash"] += 1
                     continue
