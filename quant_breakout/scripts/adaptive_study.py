@@ -292,14 +292,23 @@ def make_runner(data_n: dict):
     cfg = CS.cfg_for(1_000_000, 4)
     us = load_params(market="US")
     cache: dict = {}
+    run_ctx = {"idx": idx, "bear": bear, "names": names}
 
-    def run(ind: dict, p, prio: dict | None = None, start: str = W20) -> dict:
-        if "em" not in cache:                                                 # 入场倍数只取决于日期与股票，算一次
+    def run(ind: dict, p, prio: dict | None = None, start: str = W20, scale: pd.Series | None = None,
+            layers: tuple[bool, bool, bool] = (True, True, True)) -> dict:
+        """scale：按成交日的新仓倍数再乘一个系数（研究用，缺省 = 不变）；layers =（宏观, 板块倾斜, 量化状态层）开关（消融用）。"""
+        key = ("em",) + tuple(layers)
+        if key not in cache:                                                  # 入场倍数只取决于日期与股票，算一次
             g = pd.DatetimeIndex(sorted(set().union(*[ind[t].index for t in names])))
-            M, _ = build_entry_mult(g, names, "JP", macro, use_macro=bool(flag("use_macro")),
-                                    use_sector=bool(flag("use_sector_tilt")), use_events=False, closes=closes)
-            M = M * quant_regime_series(idx["JP"]).reindex(g).ffill().shift(1).fillna(1.0).values[:, None]
-            cache["em"] = {"JP": pd.DataFrame(M, index=g, columns=names)}
+            M, _ = build_entry_mult(g, names, "JP", macro, use_macro=bool(flag("use_macro")) and layers[0],
+                                    use_sector=bool(flag("use_sector_tilt")) and layers[1], use_events=False, closes=closes)
+            if layers[2]:
+                M = M * quant_regime_series(idx["JP"]).reindex(g).ffill().shift(1).fillna(1.0).values[:, None]
+            cache[key] = pd.DataFrame(M, index=g, columns=names)
+        em = cache[key]
+        if scale is not None:
+            em = em.mul(scale.reindex(em.index).fillna(1.0).to_numpy(float), axis=0)
+        cache["em"] = {"JP": em}
         Z._PrioEngine.PRIO = prio
         try:
             r = Z._PrioEngine({**ind, "1655.T": core}, cfg, {"JP": p, "US": us}, ex, cc, fx=fxdf[["Open", "Close"]],
@@ -309,6 +318,7 @@ def make_runner(data_n: dict):
         tr = r.trades[(r.trades["reason"] != "end") & (r.trades["ticker"] != "1655.T")]
         return {"equity": r.equity, "trades": int(len(tr)),
                 "win": round(float((tr["pnl"] > 0).mean()) * 100, 1) if len(tr) else None}
+    run.ctx = run_ctx                                                         # 指数行情、牛熊（搭配研究要用）
     return run
 
 

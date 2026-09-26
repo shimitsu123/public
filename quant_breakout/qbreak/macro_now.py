@@ -146,6 +146,59 @@ def health(frame: pd.DataFrame | None = None, n225: pd.Series | None = None, jgb
     return {"tiles": tiles, "score": score, "counts": cnt}
 
 
+def _pts(v: pd.Series, warn, bad, higher_is_worse: bool = True) -> pd.Series:
+    """逐日的状态分：正常 1、注意 0.5、警戒 0、缺值 NaN（与 status() 同一套规则）。"""
+    v = v.astype(float)
+    out = pd.Series(1.0, index=v.index)
+    if higher_is_worse:
+        if warn is not None:
+            out[v >= warn] = 0.5
+        if bad is not None:
+            out[v >= bad] = 0.0
+    else:
+        if warn is not None:
+            out[v < warn] = 0.5
+        if bad is not None:
+            out[v <= bad] = 0.0
+    out[v.isna()] = np.nan
+    return out
+
+
+def health_series(frame: pd.DataFrame | None = None, n225: pd.Series | None = None, jgb: pd.Series | None = None,
+                  hy_bp: pd.Series | None = None, threat: dict | None = None) -> pd.DataFrame:
+    """逐日的健康度（研究用，与 health() 同一套阈值；美股宽度没有历史 → 不含）：各项状态分 + score（有数据的项平均 × 100）。
+    各序列按日期并起来、向前填（每一天只用到那天为止已知的值）。"""
+    cols: dict[str, pd.Series] = {}
+    if n225 is not None and len(n225.dropna()) > 250:
+        c = n225.dropna().astype(float)
+        d = (c / c.rolling(250).mean() - 1) * 100
+        cols["n225_ma"] = pd.Series(np.where(d > 3, 1.0, np.where(d < -3, 0.0, 0.5)), index=d.index).where(d.notna())
+    fr = frame if frame is not None else pd.DataFrame()
+    for k in ("vix", "us10y", "usdjpy"):
+        if k in fr.columns:
+            _, _, warn, bad, hiw, _ = TILES[k]
+            cols[k] = _pts(fr[k].dropna(), warn, bad, bool(hiw))
+    if "brent" in fr.columns:
+        b = _pts(fr["brent"].dropna(), TILES["brent"][2], TILES["brent"][3])
+        if "brent_chg20_pct" in fr.columns:
+            shock = fr["brent_chg20_pct"].reindex(b.index) >= TH["oil_shock20_pct"]
+            b = b.where(~(shock & (b == 1.0)), 0.5)
+        cols["brent"] = b
+    if jgb is not None:
+        cols["jgb10y"] = _pts(jgb.dropna(), TILES["jgb10y"][2], TILES["jgb10y"][3])
+    if hy_bp is not None:
+        cols["hy"] = _pts(hy_bp.dropna(), TILES["hy"][2], TILES["hy"][3])
+    for m in ("US", "JP"):
+        s = (threat or {}).get(m)
+        if s is not None:
+            cols[f"threat_{m.lower()}"] = _pts(s.dropna(), THREAT_WARN, THREAT_BAD)
+    if not cols:
+        return pd.DataFrame(columns=["score"])
+    df = pd.concat(cols, axis=1).sort_index().ffill()
+    df["score"] = df.mean(axis=1, skipna=True) * 100
+    return df
+
+
 def transform(s: pd.Series, how: str) -> pd.Series:
     s = s.dropna().astype(float)
     if how == "mom":

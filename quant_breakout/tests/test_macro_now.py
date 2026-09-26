@@ -84,3 +84,25 @@ def test_upcoming_events_window():
           {"date": "bad"}]
     out = MN.upcoming(ev, dt.date(2026, 9, 26))
     assert [e["kind"] for e in out] == ["NFP"] and out[0]["name"] == "9月"
+
+
+def test_health_series_matches_latest_tiles():
+    idx = pd.bdate_range("2024-01-01", periods=400)
+    rng = np.random.default_rng(3)
+    n225 = pd.Series(100 * np.exp(np.cumsum(rng.normal(0, 0.01, len(idx)))), index=idx)
+    fr = pd.DataFrame({"vix": np.linspace(12, 33, len(idx)), "us10y": np.linspace(4.0, 5.1, len(idx)), "usdjpy": 150.0,
+                       "brent": 90.0, "brent_chg20_pct": np.r_[np.zeros(len(idx) - 1), 16.0]}, index=idx)
+    jgb = pd.Series(3.1, index=idx)
+    hy = pd.Series(np.linspace(300, 420, len(idx)), index=idx)
+    thr = {"US": pd.Series(70.0, index=idx), "JP": pd.Series(40.0, index=idx)}
+    H = MN.health_series(fr, n225, jgb, hy, thr)
+    h = MN.health(fr, n225, jgb, hy, {}, thr)
+    pts = {"good": 1.0, "warn": 0.5, "bad": 0.0}
+    last = H.iloc[-1]
+    for t in h["tiles"]:
+        if t["key"] in H.columns:
+            assert last[t["key"]] == pts[t["status"]], t["key"]
+    assert last["score"] == pytest.approx(np.mean([pts[t["status"]] for t in h["tiles"] if t["key"] in H.columns]) * 100)
+    assert H["vix"].iloc[0] == 1.0 and H["vix"].iloc[-1] == 0.0                # 随时间变化：前面正常、最后警戒
+    assert H["n225_ma"].iloc[:249].isna().all()                                 # 250 日线出来之前没有值
+    assert "breadth" not in H.columns
