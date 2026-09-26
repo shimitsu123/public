@@ -981,11 +981,30 @@ def _score_forward_log(ctx, eng, state, planned: dict) -> dict:
         days = list(jp_ix[jp_ix <= pd.Timestamp(state.last_date)])
         d10 = DataConfig(provider=ctx.dcfg.provider, years=10, allow_synthetic=False).validate()
         ix = drop_partial_bar(load_universe([BENCHMARK["JP"]], d10)[BENCHMARK["JP"]], "JP")
-        return SF.run_daily(ctx.ind, ix["Close"], jp, days[-SF.LOOKBACK:], planned, mp, paths.out_dir() / SF.LOG_FILE,
-                            str(ctx.today))
+        res = SF.run_daily(ctx.ind, ix["Close"], jp, days[-SF.LOOKBACK:], planned, mp, paths.out_dir() / SF.LOG_FILE,
+                           str(ctx.today))
     except Exception as e:                                   # noqa: BLE001
         log.warning("买点质量分前向记录失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"}
+    try:                                                     # 扩大池（TOPIX 1000 里日経225 以外的票；2026-09-26 追加登记）
+        from qbreak import wide_universe as W
+        from qbreak.strategy import compute_indicators
+        wp = paths.home() / W.FILE
+        if wp.exists():
+            doc = W.load(wp)
+            dw = load_universe(W.tickers(doc), DataConfig(provider=ctx.dcfg.provider, years=2, allow_synthetic=False).validate())
+            ind_x = {}
+            for t, df in dw.items():
+                df = drop_partial_bar(df, "JP")
+                if df is not None and len(df) >= 60:
+                    ind_x[t] = compute_indicators(df, ctx.params["JP"])
+            base = {t: ctx.ind[t] for t in jp if t in ctx.ind}
+            res["wide"] = SF.run_daily_wide(base, ind_x, ix["Close"], doc, days[-SF.LOOKBACK:], mp,
+                                            paths.out_dir() / SF.LOG_WIDE, str(ctx.today))
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("买点质量分前向记录（扩大池）失败（不影响交易）：%s", e)
+        res["wide_error"] = f"{type(e).__name__}: {e}"
+    return res
 
 
 def _paper_broker_for_executor(ucfg, ex_jp):

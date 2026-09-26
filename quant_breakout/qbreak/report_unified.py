@@ -119,6 +119,8 @@ def missing_items(d: dict) -> list[str]:
     sf = d.get("score_forward") or {}
     if started and sf.get("error"):
         out.append(f"买点质量分前向记录：今天没记上（{sf['error']}）—— 不影响交易，下次运行会补最近 5 个交易日")
+    if started and sf.get("wide_error"):
+        out.append(f"买点质量分前向记录（扩大池）：今天没记上（{sf['wide_error']}）—— 不影响交易，下次运行会补最近 5 个交易日")
     x = d.get("executor") or {}
     if started and x.get("error"):
         out.append(f"实盘执行器演练账户：运行失败（{x['error']}）—— 不影响模拟盘，但实盘要走的那条路今天没验证")

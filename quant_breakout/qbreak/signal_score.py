@@ -122,7 +122,10 @@ def signal_rows(panel: dict[str, pd.DataFrame], ind: dict[str, pd.DataFrame], st
         P = panel[k]
         ci = P.columns.get_indexer(R["ticker"])
         ri = P.index.get_indexer(R["date"])
-        R[k] = P.to_numpy(float)[ri, ci]
+        ok = (ri >= 0) & (ci >= 0)                                  # 面板里没有的日期 / 票 → 缺值（不能取到别的行）
+        v = np.full(len(R), np.nan)
+        v[ok] = P.to_numpy(float)[ri[ok], ci[ok]]
+        R[k] = v
     return R
 
 

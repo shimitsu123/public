@@ -27,8 +27,17 @@
   检出力的现实（按过去 13 年每年约 36 个信号）：100 笔约 3 年、只能分辨 AUC ≈ 0.70 以上的效果；200 笔约 0.64；400 笔（约 11 年）约 0.60
   （80% 检出力）。score_study 里量比的样本外 AUC 是 0.594 —— 以这个股票池的信号频率，前向记录是防止数据挖掘的长期保险，不是快速答案。
   主假设成立 → 另写一份事先登记的组合研究（用这个分数跳过 / 排序），通过门槛且用户确认后才可能改模拟盘；只凭前向记录不改规则。
-五、复核：python scripts/score_forward.py --review（只读 var/out/score_forward.csv，不改、不补写）
+五、复核：python scripts/score_forward.py --review（只读 var/out/score_forward.csv 与 score_forward_wide.csv，不改、不补写）
   → var/out/score_forward_review.md / .json，并追加 var/out/score_forward_review_history.csv。
+六、追加登记（2026-09-26，用户要求「加快前向记录」；此时前向记录还没有任何数据）
+  - 扩大池：TOPIX 1000（プライム，規模区分 Core30 / Large70 / Mid400 / Small 1）里日経225 股票池以外的票，同样剔除航空 / 陆运 /
+    仓储物流（var/universe_wide.json，東証上場銘柄一覧 2026-08-31 版，冻结）：T500x 249 只（过去 5 年每年约 66 个信号）、
+    S1x 467 只（约 149 个）。行业因子对照日経225 同组成员（qbreak/wide_universe.py，東証 33 业种 → 现有分组的对照表事先写定），
+    用同一个冻结的配比打分，记到 var/out/score_forward_wide.csv（规则同上：只追加、同一日期 × 票保留最早）。
+  - 主判定改为「合并样本」（日経225 + T500x + S1x）：已平仓第一次达到 200、400、800 笔时判定（主假设 99% 区间、次假设 95%），
+    主假设另外要求：大中型股（日経225 + T500x）的点估计也在事先方向。只看日経225 的 100 / 200 / 400 笔判定照旧，作为附带。
+  - 预计每年约 250 个信号 → 200 笔约 1 年、400 笔约 1.6〜2 年、800 笔约 3〜3.5 年；400 笔时约能分辨 AUC 0.60，800 笔时约 0.57（80% 检出力）。
+  - 同一天另登记「没参与过设计的股票」检验（scripts/heldout_study.py）：扩大池 2013〜 的历史信号，现在就能给出股票不同、时期相同的样本外证据。
 """
 from __future__ import annotations
 
@@ -51,7 +60,8 @@ from qbreak import signal_score as S                                         # n
 from qbreak.weights import auc_np                                            # noqa: E402
 
 TRAIN_END = "2026-09-26"                         # 训练样本：信号日与平仓日都在这之前
-CHECKPOINTS = (100, 200, 400)
+CHECKPOINTS = (100, 200, 400)                    # 只看日経225（附带）
+CHECKPOINTS_WIDE = (200, 400, 800)               # 合并样本（主判定，2026-09-26 追加登记）
 BOOT_N, SEED = 2000, 20260926
 NOTIONAL = 250_000
 # 变量 → (说明, 事先方向：+1 = 越大越赚钱, 主 / 次)
@@ -174,12 +184,20 @@ def evaluate(C: pd.DataFrame, cnt: dict) -> dict:
     return ev
 
 
-def decide(ev: dict, history: pd.DataFrame | None = None) -> dict:
+def decide(ev: dict, history: pd.DataFrame | None = None, checkpoints=CHECKPOINTS, scope: str = "N225",
+           large_mid: dict | None = None) -> dict:
+    """判定时点：已平仓第一次达到 checkpoints 里的笔数（history 里同一 scope 已判定过的不再判定）。
+    large_mid：{变量: 大中型股的 AUC 点估计}（合并样本的主假设另外要求它在事先方向）。"""
     n = ev["count"]["closed"]
-    done = set() if history is None or history.empty else {int(x) for x in history.get("checkpoint", pd.Series(dtype=float)).dropna()}
-    cp = max([c for c in CHECKPOINTS if n >= c], default=None)
+    h = history if history is not None and not history.empty else pd.DataFrame()
+    if len(h) and "scope" in h.columns:
+        h = h[h["scope"].fillna("N225") == scope]
+    elif len(h) and scope != "N225":
+        h = h.iloc[0:0]
+    done = {int(x) for x in h.get("checkpoint", pd.Series(dtype=float)).dropna()} if len(h) else set()
+    cp = max([c for c in checkpoints if n >= c], default=None)
     if cp is None or cp in done:
-        nxt = min([c for c in CHECKPOINTS if c > n and c not in done], default=None)
+        nxt = min([c for c in checkpoints if c > n and c not in done], default=None)
         return {"checkpoint": None, "text": f"只报告进度：已平仓 {n} 笔（下一个判定时点 {nxt} 笔）" if nxt else f"已平仓 {n} 笔；三个判定时点都已做完"}
     res = {}
     for c, (lab, sgn, kind) in HYP.items():
@@ -188,11 +206,60 @@ def decide(ev: dict, history: pd.DataFrame | None = None) -> dict:
             continue
         lo, hi = (a["lo99"], a["hi99"]) if kind.startswith("P") else (a["lo95"], a["hi95"])
         ok = (lo is not None and lo > 0.5) if sgn > 0 else (hi is not None and hi < 0.5)
-        res[c] = {"hyp": kind, "label": lab, "ok": bool(ok), "range": [lo, hi], "level": "99%" if kind.startswith("P") else "95%"}
+        note = ""
+        if ok and kind.startswith("P") and large_mid is not None:
+            v = large_mid.get(c)
+            if v is None or (v - 0.5) * sgn <= 0:
+                ok, note = False, f"大中型股的点估计 {v} 不在事先方向"
+        res[c] = {"hyp": kind, "label": lab, "ok": bool(ok), "range": [lo, hi], "level": "99%" if kind.startswith("P") else "95%",
+                  "note": note}
     k = ev.get("f3_keep") or {}
     res["F3_keep"] = {"hyp": "S1", "label": "F3 保留的信号", "ok": bool(k.get("dwin_lo", -1) > 0 and (k.get("exp") or -9) >= (ev["exp"] or 9)),
-                      "range": [k.get("dwin_lo"), k.get("dwin_hi")], "level": "95%"}
+                      "range": [k.get("dwin_lo"), k.get("dwin_hi")], "level": "95%", "note": ""}
     return {"checkpoint": cp, "results": res}
+
+
+def read_logs() -> pd.DataFrame:
+    """两份记录合在一起（只读）：segment = N225 / T500x / S1x。"""
+    parts = []
+    for fn, seg in ((SF.LOG_FILE, "N225"), (SF.LOG_WIDE, None)):
+        fp = paths.out_dir() / fn
+        if fp.exists():
+            d = pd.read_csv(fp, dtype={"date": str, "ticker": str})
+            if seg is not None:
+                d["segment"] = seg
+            parts.append(d)
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=["date", "ticker", "segment"])
+
+
+def seg_auc(C: pd.DataFrame, cols: list[str]) -> dict:
+    out = {}
+    for seg in ("N225", "T500x", "S1x", "大中型"):
+        d = C[C["segment"].isin(["N225", "T500x"])] if seg == "大中型" else C[C["segment"] == seg]
+        out[seg] = {"n": int(len(d)), **{c: (round(a, 4) if (a := auc_np(d[c], d["win"])) is not None else None)
+                                          for c in cols if c in d.columns}}
+    return out
+
+
+def _say_eval(title: str, ev: dict, V: dict) -> None:
+    say(f"\n## {title}")
+    cnt = ev["count"]
+    say(f"对上行情的 {cnt.get('matched', 0)} 个（持有中 {cnt.get('open', 0)}、对不上 {cnt.get('unmatched', 0)}）；已平仓 {cnt['closed']} 笔"
+        + (f"，胜率 {ev['win']}%，每笔期望 {ev['exp']:+.2f}%" if cnt["closed"] else ""))
+    if ev.get("auc"):
+        say("| 变量 | 事先方向 | 假设 | AUC | 95% 区间 | 99% 区间 |")
+        say("|---|---|---|---|---|---|")
+        for c, a in ev["auc"].items():
+            lab, sgn, kind = HYP[c]
+            say(f"| {c} {lab} | {'+' if sgn > 0 else '−'} | {kind} | {a['auc'] if a['auc'] is not None else '—'} | "
+                f"{a['lo95']}〜{a['hi95']} | {a['lo99']}〜{a['hi99']} |")
+    if V.get("checkpoint"):
+        say(f"判定（已平仓第一次达到 {V['checkpoint']} 笔）：")
+        for c, r in V["results"].items():
+            say(f"- {r['hyp']} {r['label']}：{'成立' if r['ok'] else '不成立'}（{r['level']} 区间 {r['range'][0]}〜{r['range'][1]}）"
+                + (f"；{r['note']}" if r.get("note") else ""))
+    else:
+        say(V.get("text", ""))
 
 
 def review() -> int:
@@ -201,48 +268,44 @@ def review() -> int:
     from qbreak.strategy import IndicatorCache
     from qbreak.trader import load_params
     t0 = time.time()
-    fp = paths.out_dir() / SF.LOG_FILE
-    log = pd.read_csv(fp, dtype={"date": str, "ticker": str}) if fp.exists() else pd.DataFrame(columns=["date", "ticker"])
+    log = read_logs()
     say(f"# 买点「质量分」前向记录复核（{pd.Timestamp.today().date()}）")
-    say(f"记录 {len(log)} 个信号（{SF.FORWARD_START}〜{log['date'].max() if len(log) else '—'}）；规则见 scripts/score_forward.py 开头。")
-    ev: dict = {"count": {"logged": int(len(log)), "closed": 0}}
+    say(f"记录 {len(log)} 个信号（" + "、".join(f"{k} {v}" for k, v in log["segment"].value_counts().items()) + f"；{SF.FORWARD_START}〜"
+        f"{log['date'].max() if len(log) else '—'}）；规则见 scripts/score_forward.py 开头（第六节 = 追加登记的扩大池与合并判定）。")
+    hist_fp = paths.out_dir() / "score_forward_review_history.csv"
+    hist = pd.read_csv(hist_fp) if hist_fp.exists() else pd.DataFrame()
+    evs, Vs, segs = {}, {}, {}
     if len(log):
         p = load_params(market="JP")
         data = load_universe(sorted(set(log["ticker"])), DataConfig(provider="yfinance", years=3, allow_synthetic=False).validate())
         ind = dict(IndicatorCache(data).all(p))
         bt = BacktestConfig.for_market("JP", 3, "tachibana")
         bt.sizing.initial_cash, bt.sizing.position_pct, bt.sizing.max_positions, bt.sizing.max_position_pct = 1e10, 1.0, 1, 1.0
-        C, cnt = match(log, trades_from(ind, p, bt, SF.FORWARD_START))
-        ev = evaluate(C, cnt)
-        say(f"对上行情的 {cnt['matched']} 个（持有中 {cnt['open']}、对不上 {cnt['unmatched']}）；已平仓 {cnt['closed']} 笔"
-            + (f"，胜率 {ev['win']}%，每笔期望 {ev['exp']:+.2f}%" if cnt["closed"] else ""))
-        say("\n| 变量 | 事先方向 | 假设 | AUC | 95% 区间 | 99% 区间 |")
-        say("|---|---|---|---|---|---|")
-        for c, a in ev["auc"].items():
-            lab, sgn, kind = HYP[c]
-            say(f"| {c} {lab} | {'+' if sgn > 0 else '−'} | {kind} | {a['auc'] if a['auc'] is not None else '—'} | "
-                f"{a['lo95']}〜{a['hi95']} | {a['lo99']}〜{a['hi99']} |")
-        k = ev.get("f3_keep") or {}
-        if k:
-            say(f"\nF3 保留的信号 {k['n']} 笔：胜率 {k['win']}%、每笔 {k['exp']}%（全部 {ev['win']}% / {ev['exp']}%）；"
-                f"胜率差 95% 区间 {k.get('dwin_lo')}〜{k.get('dwin_hi')} pp")
-    hist_fp = paths.out_dir() / "score_forward_review_history.csv"
-    hist = pd.read_csv(hist_fp) if hist_fp.exists() else pd.DataFrame()
-    V = decide(ev, hist) if ev["count"].get("closed") else {"checkpoint": None, "text": "还没有已平仓的信号"}
-    if V.get("checkpoint"):
-        say(f"\n## 判定（已平仓第一次达到 {V['checkpoint']} 笔；主假设 99% 区间、次假设 95%）")
-        for c, r in V["results"].items():
-            say(f"- {r['hyp']} {r['label']}：{'成立' if r['ok'] else '不成立'}（{r['level']} 区间 {r['range'][0]}〜{r['range'][1]}）")
-        if any(r["ok"] for r in V["results"].values() if r["hyp"].startswith("P")):
-            say("主假设成立 → 需要另写一份事先登记的组合研究；模拟盘规则不变（改需用户确认）。")
-    else:
-        say(f"\n{V['text']}")
+        T = trades_from(ind, p, bt, SF.FORWARD_START)
+        for scope, sub, cps in (("combined", log, CHECKPOINTS_WIDE), ("N225", log[log["segment"] == "N225"], CHECKPOINTS)):
+            C, cnt = match(sub, T)
+            evs[scope] = evaluate(C, cnt) if cnt["closed"] else {"count": cnt, "auc": {}}
+            segs[scope] = seg_auc(C, list(HYP)) if cnt["closed"] else {}
+            lm = {c: segs[scope].get("大中型", {}).get(c) for c in HYP} if scope == "combined" else None
+            Vs[scope] = (decide(evs[scope], hist, cps, scope, lm) if cnt["closed"]
+                         else {"checkpoint": None, "text": "还没有已平仓的信号"})
+    for scope, title in (("combined", "合并样本（主判定：日経225 + T500x + S1x）"), ("N225", "只看日経225（附带）")):
+        if scope in evs:
+            _say_eval(title, evs[scope], Vs[scope])
+            if segs.get(scope):
+                say("分段 AUC（点估计）：" + "；".join(f"{g} {v['n']} 笔 F2 {v.get('F2')} / 量比 {v.get('vol')}" for g, v in segs[scope].items()))
+    if not evs:
+        say("\n还没有记录。")
+    if any(any(r["ok"] for r in V.get("results", {}).values() if r["hyp"].startswith("P")) for V in Vs.values()):
+        say("\n主假设成立 → 需要另写一份事先登记的组合研究；模拟盘规则不变（改需用户确认）。")
     out = paths.out_dir() / "score_forward_review"
     Path(f"{out}.md").write_text("\n".join(LINES) + "\n", encoding="utf-8")
-    Path(f"{out}.json").write_text(json.dumps({"eval": ev, "decision": V}, ensure_ascii=False, indent=1, default=float), encoding="utf-8")
-    row = {"run": str(pd.Timestamp.today().date()), "logged": ev["count"].get("logged"), "closed": ev["count"].get("closed"),
-           "checkpoint": V.get("checkpoint"), **{f"auc_{c}": (a or {}).get("auc") for c, a in (ev.get("auc") or {}).items()}}
-    pd.concat([hist, pd.DataFrame([row])], ignore_index=True).to_csv(hist_fp, index=False)
+    Path(f"{out}.json").write_text(json.dumps({"eval": evs, "decision": Vs, "segments": segs}, ensure_ascii=False, indent=1,
+                                              default=float), encoding="utf-8")
+    rows = [{"run": str(pd.Timestamp.today().date()), "scope": sc, "logged": int(len(log)), "closed": ev["count"].get("closed"),
+             "checkpoint": Vs[sc].get("checkpoint"), **{f"auc_{c}": (a or {}).get("auc") for c, a in (ev.get("auc") or {}).items()}}
+            for sc, ev in evs.items()] or [{"run": str(pd.Timestamp.today().date()), "scope": "combined", "logged": 0, "closed": 0}]
+    pd.concat([hist, pd.DataFrame(rows)], ignore_index=True).to_csv(hist_fp, index=False)
     print(f"{time.time() - t0:.0f}s")
     return 0
 

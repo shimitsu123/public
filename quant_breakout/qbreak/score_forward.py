@@ -21,7 +21,7 @@ from .sectors import SECTOR_JP
 FORWARD_START = "2026-09-28"
 LOOKBACK = 5
 KEYS = ["F1", "F2", "F3", "F4", "F5"]
-MODEL_FILE, LOG_FILE = "score_forward_model.json", "score_forward.csv"
+MODEL_FILE, LOG_FILE, LOG_WIDE = "score_forward_model.json", "score_forward.csv", "score_forward_wide.csv"
 
 
 # ── 冻结的配比 ──
@@ -84,27 +84,56 @@ def append_log(rows: pd.DataFrame, path: Path) -> int:
     return int(len(new))
 
 
+def _assemble(rows: pd.DataFrame, ind: dict[str, pd.DataFrame], sector: list, planned: dict | None, meta: dict,
+              today: str, extra: dict | None = None) -> pd.DataFrame:
+    """打好分的信号 → 记录行：日期、代码、行业、模拟盘是否计划买入（不知道 = 空）、收盘、量比、真突破、距箱顶 %、因子、分数、记录日、模型。"""
+    ds = rows["date"].dt.strftime("%Y-%m-%d")
+    pl = planned or {}
+    info = []
+    for d, t in zip(rows["date"], rows["ticker"]):
+        r = ind[t].loc[d]
+        bo = breakout_fields(r)
+        info.append({"close": round(float(r["Close"]), 2), "vol_ratio": round(float(r["vol_ratio"]), 3),
+                     "breakout": int(bo["breakout"]), "to_box_top_pct": bo["to_box_top_pct"]})
+    head = pd.DataFrame({"date": rows["date"], "ticker": rows["ticker"], **(extra or {}), "sector": sector,
+                         "planned": [(1 if t in set(pl[d]) else 0) if d in pl else np.nan for d, t in zip(ds, rows["ticker"])]})
+    out = pd.concat([head, pd.DataFrame(info, index=rows.index), rows.drop(columns=["date", "ticker"]).round(6)], axis=1)
+    out["logged_on"], out["model"] = today, meta.get("id", "")
+    return out
+
+
+def _days(bar_dates: list) -> list:
+    return sorted({pd.Timestamp(d) for d in bar_dates if pd.Timestamp(d) >= pd.Timestamp(FORWARD_START)})
+
+
 def run_daily(ind: dict[str, pd.DataFrame], index_close: pd.Series | None, tickers: list[str], bar_dates: list,
               planned: dict[str, list] | None, model_path: Path, log_path: Path, today: str) -> dict:
     """最近 LOOKBACK 个交易日（≥ FORWARD_START）的信号打分并追加。planned：{日期: 当天收盘后模拟盘计划买入的票}（本次处理的日子才有）。"""
     models, meta = load_model(model_path)
-    days = sorted({pd.Timestamp(d) for d in bar_dates if pd.Timestamp(d) >= pd.Timestamp(FORWARD_START)})
+    days = _days(bar_dates)
     if not days:
         return {"logged": 0, "days": [], "note": f"{FORWARD_START} 之前不记"}
     rows = score_rows(signal_rows_on(ind, index_close, days, tickers), models)
     if len(rows):
-        ds = rows["date"].dt.strftime("%Y-%m-%d")
-        pl = planned or {}
-        info = []
-        for d, t in zip(rows["date"], rows["ticker"]):
-            r = ind[t].loc[d]
-            bo = breakout_fields(r)
-            info.append({"close": round(float(r["Close"]), 2), "vol_ratio": round(float(r["vol_ratio"]), 3),
-                         "breakout": int(bo["breakout"]), "to_box_top_pct": bo["to_box_top_pct"]})
-        head = pd.DataFrame({"date": rows["date"], "ticker": rows["ticker"],
-                             "sector": [SECTOR_JP.get(t.split(".")[0], "other") for t in rows["ticker"]],
-                             "planned": [(1 if t in set(pl[d]) else 0) if d in pl else np.nan for d, t in zip(ds, rows["ticker"])]})
-        rows = pd.concat([head, pd.DataFrame(info), rows.drop(columns=["date", "ticker"]).round(6)], axis=1)
-        rows["logged_on"], rows["model"] = today, meta.get("id", "")
+        rows = _assemble(rows, ind, [SECTOR_JP.get(t.split(".")[0], "other") for t in rows["ticker"]], planned, meta, today)
     n = append_log(rows, log_path)
     return {"logged": n, "signals": int(len(rows)), "days": [str(d.date()) for d in days], "model": meta.get("id", "")}
+
+
+def run_daily_wide(ind_base: dict[str, pd.DataFrame], ind_extra: dict[str, pd.DataFrame], index_close: pd.Series | None,
+                   doc: dict, bar_dates: list, model_path: Path, log_path: Path, today: str) -> dict:
+    """扩大池（var/universe_wide.json）：同样的因子（行业因子对照日経225 同组成员）与冻结的配比，追加到 score_forward_wide.csv。"""
+    from . import wide_universe as W
+    models, meta = load_model(model_path)
+    days = _days(bar_dates)
+    if not days or not ind_extra:
+        return {"logged": 0, "days": [str(d.date()) for d in days], "note": "没有要记的日子" if not days else "扩大池没有行情"}
+    grp, seg = W.group_of(doc), W.segment_of(doc)
+    panel = W.feature_panel_wide(ind_extra, ind_base, index_close, grp)
+    rows = S.signal_rows(panel, ind_extra)
+    rows = score_rows(rows[rows["date"].isin(pd.DatetimeIndex(days))].reset_index(drop=True), models)
+    if len(rows):
+        rows = _assemble(rows, ind_extra, [grp.get(t, "other") for t in rows["ticker"]], None, meta, today,
+                         extra={"segment": [seg.get(t, "") for t in rows["ticker"]]})
+    n = append_log(rows, log_path)
+    return {"logged": n, "signals": int(len(rows)), "tickers": len(ind_extra), "days": [str(d.date()) for d in days]}
