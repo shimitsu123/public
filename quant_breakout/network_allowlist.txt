@@ -22,3 +22,7 @@ www.boj.or.jp
 www.federalreserve.gov
 news.google.com
 www.jma.go.jp
+# 能源消费（每月；只展示，取不到不影响交易；qbreak/energy_now.py）
+www.eia.gov
+www.jodidata.org
+www.customs.go.jp

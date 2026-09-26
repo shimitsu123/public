@@ -58,6 +58,7 @@ def build_unified_data() -> dict:
             "themes": td.get("themes") or {},                    # 主题 / 业种强弱、影响度、新出现的联动（只作展示）
             "macro_now": td.get("macro_now") or {},              # 仪表盘：市场健康度 + 消费 / 零售等新数据（只作展示）
             "news": td.get("news") or {},                        # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
+            "energy": td.get("energy") or {},                    # 仪表盘：能源消费（每月）+ K4 前向记录的状态（只作展示 / 记录）
             "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
             "config": td.get("config") or config_from_sim(sim).to_dict(),     # 首次运行前从 sim.json 取
@@ -77,7 +78,8 @@ def build_unified_data() -> dict:
                      "r2_now / r2_hist = 与日経225 的同步度 R²）与 themes.emerging（新出现的联动群 clusters、个股 links；只作展示，不改交易）；"
                      "missing = 日报应有而没取到的数据（项目 + 原因），汇报时逐项列出；"
                      "仪表盘数据在 macro_now（health.tiles = 市场健康度、releases = 消费 / 零售等新公布的数据）与 news.summary"
-                     "（经济威胁消息的汇总），都只作展示、不参与交易。")}
+                     "（经济威胁消息的汇总），都只作展示、不参与交易；能源消费在 energy（rows = 18 个来源的 3 个月同比 value %、"
+                     "历史分位 pct、偏弱 / 偏强 state、同期一起动的行业 links；k4 = K4 前向观察的状态，forward = 前向记录的天数），只作展示 / 记录。")}
     d["missing"] = missing_items(d)
     return d
 
@@ -126,10 +128,18 @@ def missing_items(d: dict) -> list[str]:
     th = d.get("themes") or {}
     if (started or preview) and (th.get("error") or not th.get("groups")):
         out.append(f"主题 / 业种强弱：{th.get('error') or '没有算出'}（只作展示，不影响交易）")
-    for k, lab in (("macro_now", "一眼看懂的市场健康度 / 新公布的数据"), ("news", "一眼看懂的经济威胁消息")):
+    for k, lab in (("macro_now", "一眼看懂的市场健康度 / 新公布的数据"), ("news", "一眼看懂的经济威胁消息"), ("energy", "能源消费（每月）")):
         v = d.get(k) or {}
         if v.get("error"):
             out.append(f"{lab}：{v['error']}（只作展示，不影响交易）")
+    en = d.get("energy") or {}
+    if started and not en.get("error"):
+        miss = [r["name"] for r in en.get("rows") or [] if r.get("value") is None]
+        if miss:
+            out.append(f"能源消费（每月）：{len(miss)} 个来源没取到（{'、'.join(miss[:4])}{'…' if len(miss) > 4 else ''}）（只作展示，不影响交易）")
+        fe = (en.get("forward") or {}).get("error")
+        if fe:
+            out.append(f"K4 前向记录：今天没记上（{fe}）—— 不影响交易，不补写")
     sf = d.get("score_forward") or {}
     if started and sf.get("error"):
         out.append(f"买点质量分前向记录：今天没记上（{sf['error']}）—— 不影响交易，下次运行会补最近 5 个交易日")

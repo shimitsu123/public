@@ -945,6 +945,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
            "themes": _theme_panel(provider)}                  # 主题 / 业种强弱、影响度、新出现的联动（只作展示）
     out["macro_now"] = _macro_now_panel(extras)              # 仪表盘：市场健康度 + 消费 / 零售等新数据（只作展示）
     out["news"] = _news_panel(out)                           # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
+    out["energy"] = _energy_panel(today)                     # 仪表盘：能源消费（每月）+ K4 前向记录（只作展示 / 记录）
     if usdjpy is None:                                       # 状态里没有汇率时（例如首日）：备用来源
         out["usdjpy"], out["usdjpy_src"] = _usdjpy_any()
     from qbreak.data import LAGGING
@@ -975,6 +976,25 @@ def _macro_now_panel(extras: dict) -> dict:
     except Exception as e:                                   # noqa: BLE001
         log.warning("市场健康度 / 新数据面板失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"}
+
+
+def _energy_panel(today) -> dict:
+    """仪表盘「能源消费（每月）」（qbreak/energy_now.py）+ K4 前向记录（scripts/energy_forward.py 登记；2026-09-28 起每天追加一行到
+    var/out/energy_forward.csv，只追加、不补写）。只作展示 / 记录，失败只记下原因（日报「数据完整性」会列出），不影响交易。"""
+    try:
+        from qbreak import energy_now as EN
+        snap = EN.snapshot(today=today)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("能源消费面板失败（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"}
+    fp = paths.out_dir() / EN.FORWARD_FILE
+    try:
+        logged = str(today) >= EN.FORWARD_START and EN.append_forward(fp, EN.forward_row(snap, str(today)))
+        snap["forward"] = {"logged": bool(logged), **EN.forward_status(fp)}
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("K4 前向记录失败（不影响交易）：%s", e)
+        snap["forward"] = {"error": f"{type(e).__name__}: {e}"}
+    return snap
 
 
 def _news_holdings(d: dict) -> dict[str, str]:

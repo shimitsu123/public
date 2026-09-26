@@ -190,6 +190,59 @@ def releases_html(rel: list[dict], events: list[dict] | None = None) -> str:
             + (f"<h3>接下来 3 周的已知大事件</h3><ul>{ev}</ul>" if ev else ""))
 
 
+# ── ③b 能源消费（每月；qbreak/energy_now.py，只作展示）──
+def _implied(r: dict) -> str:
+    """现在的读数偏弱 / 偏强时，同期关系意味着哪些行业一起弱 / 强（描述，不是预测）。"""
+    st, lk = r.get("state"), r.get("links") or []
+    if st not in ("偏弱", "偏强") or not lk:
+        return "—"
+    up = [x["target"] for x in lk if (x["t"] > 0) == (st == "偏强")]
+    dn = [x["target"] for x in lk if (x["t"] > 0) != (st == "偏强")]
+    return "；".join(p for p in ((f"一起偏强：{'、'.join(up)}" if up else ""), (f"一起偏弱：{'、'.join(dn)}" if dn else "")) if p)
+
+
+def energy_html(e: dict | None) -> str:
+    if not e:
+        return '<p class="muted">暂不可用（今天的日报还没有能源数据）</p>'
+    if e.get("error"):
+        return f'<p class="muted">暂不可用：{escape(str(e["error"]))}</p>'
+    s, k4, fw = e.get("summary") or {}, e.get("k4") or {}, e.get("forward") or {}
+    head = (f"<p>{s.get('ok', 0)} / {s.get('n', 0)} 个来源取到：<b>偏弱 {s.get('weak', 0)} 个</b>（在 2006 年以来的历史 20% 分位以下）、"
+            f"<b>偏强 {s.get('strong', 0)} 个</b>（80% 分位以上）。同比 = 最近 3 个月（周度 13 周）合计相对一年前同期。</p>")
+    if k4.get("value") is not None:
+        on = bool(k4.get("on"))
+        rec = (f"；前向记录 {fw['rows']} 天、其中满足 {fw['k4_on']} 天" if fw.get("rows") else "")
+        head += (f"<p><span class='badge {'b-warn' if on else 'b-good'}'>K4 {'满足' if on else '不满足'}</span> "
+                 f"日本成品油需求 3 个月同比 {_fmt(k4['value'], 2, True)}%（{escape(str(k4.get('period') or ''))}）"
+                 f"{'<' if on else '≥'} {_fmt(k4.get('theta'), 2, True)}% → 若采用 K4，日本个股新仓会{'减半' if on else '照常'}"
+                 f"<span class='muted'>（前向观察，只记录、不影响交易；scripts/energy_forward.py{rec}）</span></p>")
+    rows, grp = [], None
+    for r in e.get("rows") or []:
+        if r.get("group") != grp:
+            grp = r.get("group")
+            rows.append(f"<tr><td colspan=6><b>{escape(str(grp))}</b></td></tr>")
+        if r.get("value") is None:
+            rows.append(f"<tr><td>{escape(r['name'])}</td><td colspan=5 class='muted'>{escape(str(r.get('error') or '没取到'))}</td></tr>")
+            continue
+        st = r.get("state")
+        cls = "b-bad" if st == "偏弱" else "b-good" if st == "偏强" else ""
+        badge = f"<span class='badge {cls}'>{escape(str(st))}</span>" if st else ""
+        pct = "—" if r.get("pct") is None else f"{r['pct']:.0f} 分位"
+        lk = "、".join(f"{escape(x['target'])} {'+' if x['t'] > 0 else '−'}" for x in r.get("links") or []) or "—"
+        stk = "、".join(f"{escape(x['stock'])} {'+' if x['t'] > 0 else '−'}" for x in (r.get("stocks") or [])[:4])
+        stk = f"<div class='muted' style='font-size:11px'>个股：{stk}</div>" if stk else ""
+        rows.append(f"<tr><td>{escape(r['name'])}<div class='muted' style='font-size:11px'>{escape(str(r.get('period') or ''))}</div></td>"
+                    f"<td class='n'>{_fmt(r['value'], 1, True)}%<div class='muted' style='font-size:11px'>上一期 {_fmt(r.get('prev'), 1, True)}%</div></td>"
+                    f"<td class='n'>{pct}</td><td>{badge}</td>"
+                    f"<td>{lk}{stk}</td>"
+                    f"<td class='muted'>{escape(_implied(r))}</td></tr>")
+    return (head + "<div class='scroll'><table class='rel'><tr><th>来源（数据期）</th><th class='n'>同比</th><th class='n'>历史分位</th><th>判断</th>"
+            "<th>同期一起强（+）/ 弱（−）的行业与个股（两半一致）</th><th>现在的读数意味着（同期，不是预测）</th></tr>"
+            f"{''.join(rows)}</table></div>"
+            "<p class='muted'>研究（scripts/energy_study.py）：这些关系是「同一段时间一起动」，数据公布时股价多半已经反映；公布之后没有预测力，"
+            "放进模型的阈值候选全部不通过 → 只作展示。</p>")
+
+
 # ── ④ 经济威胁消息 ──
 def news_summary_html(s: dict, generated: str | None = None) -> str:
     """日报（公开）用：只放汇总。"""
@@ -302,10 +355,12 @@ def render(d: dict, macro: dict | None = None, news: dict | None = None, full_ne
     return (f'<style>{CSS}</style><section class="card dash"><h2>一眼看懂</h2><p class="big">{escape(headline(d, macro, news))}</p>{stance_html(d)}'
             f'<h2 style="margin-top:14px">市场健康度</h2>{health_html(hh)}'
             f'<h2 style="margin-top:14px">消费 / 零售与新公布的数据</h2>{releases_html(macro.get("releases") or [], macro.get("events"))}'
+            f'<h2 style="margin-top:14px">能源消费（每月）</h2>{energy_html(d.get("energy"))}'
             f'<h2 style="margin-top:14px">经济威胁消息与影响链路</h2>{nh}'
             f'<h2 style="margin-top:14px">业种强弱</h2>{sectors_html(d.get("themes") or {})}'
             f'<p class="muted">数据：FRED（St. Louis Fed；零售销售 = 美国商务部、消费者信心 = University of Michigan、日本消费者态度指数 = OECD）、'
-            f'財務省、Yahoo Finance、各消息来源；宏观取数 {escape(str(macro.get("generated") or "—"))}。'
+            f'EIA（成品油周报 / 短期能源展望 STEO / 天然气）、JODI-Oil、財務省（国債金利・貿易統計）、Yahoo Finance、各消息来源；'
+            f'宏观取数 {escape(str(macro.get("generated") or "—"))}。'
             f'只作参考，不参与交易，非投资建议。</p></section>')
 
 
