@@ -1,5 +1,5 @@
 """ndx_posthoc.py — 事后核对（不参与任何判定，2026-09-27）：ndx_study（登记 ed1f43c）按规则只差回撤一条的 N1「核心换成纳指（牛熊按 S&P500）」，
-1987〜2026 全期只有核心时的收益与最深的几次回撤（日元计 / 美元计），给用户做取舍用。
+1987〜2026 全期只有核心时的收益与最深的几次回撤（日元计 / 美元计）、任意 10 年窗口的分布，给用户做取舍用。
 输出：var/out/ndx_posthoc.md / .json（只有统计）
 """
 from __future__ import annotations
@@ -86,6 +86,31 @@ def main() -> int:
             cell = lambda s: f"{s['cagr']:.2f}% / {s['dd']:.2f}% / {s['calmar']:.3f}"   # noqa: E731
             say(f"| {k} | {cell(w['all'])} | {cell(w['old'])} | {cell(w['new'])} | "
                 + "；".join(f"{x['peak']} → {x['trough']}：{x['depth']:+.1f}%" for x in dds) + " |")
+    say("\n## 任意 10 年（每月起点，1987-01〜2016-09 开始，日元计）的年化与最大回撤分布")
+    say("| 方案 | 年化 最差 / 中位 / 最好 | 最大回撤 最差 / 中位 | 年化比现行高的窗口比例 |")
+    say("|---|---|---|---|")
+    S, Nq = (su * fxs).dropna(), (ndx * fxs).dropna()
+    c = S.index.intersection(Nq.index)
+    S, Nq = S.reindex(c), Nq.reindex(c)
+    eqs = {"现行 S&P500": N.core_mix({"S": S}, {"S": 1.0}, {"S": bear_s}), "N1 纳指": N.core_mix({"N": Nq}, {"N": 1.0}, {"N": bear_s}),
+           "N3 各半": N.core_mix({"S": S, "N": Nq}, {"S": 0.5, "N": 0.5}, {"S": bear_s, "N": bear_s})}
+    starts = pd.date_range("1987-01-01", "2016-09-01", freq="MS")
+    roll = {}
+    for k, e in eqs.items():
+        cg, dd = [], []
+        for a in starts:
+            s_ = HW.seg(e, str(a.date()), str((a + pd.DateOffset(years=10)).date()))
+            cg.append(s_["cagr"])
+            dd.append(s_["dd"])
+        roll[k] = (np.array(cg, float), np.array(dd, float))
+    base = roll["现行 S&P500"][0]
+    out["rolling10"] = {}
+    for k, (cg, dd) in roll.items():
+        out["rolling10"][k] = {"cagr_min": float(np.nanmin(cg)), "cagr_med": float(np.nanmedian(cg)), "cagr_max": float(np.nanmax(cg)),
+                               "dd_min": float(np.nanmin(dd)), "dd_med": float(np.nanmedian(dd)), "beat": float(np.nanmean(cg > base))}
+        r = out["rolling10"][k]
+        beat = "—" if k.startswith("现行") else "{:.0f}%".format(r["beat"] * 100)
+        say(f"| {k} | {r['cagr_min']:+.1f}% / {r['cagr_med']:+.1f}% / {r['cagr_max']:+.1f}% | {r['dd_min']:.1f}% / {r['dd_med']:.1f}% | {beat} |")
     say(f"\n用时 {time.time() - t0:.0f}s")
     fp = paths.out_dir() / "ndx_posthoc"
     Path(f"{fp}.md").write_text("\n".join(LINES) + "\n", encoding="utf-8")
