@@ -394,7 +394,7 @@ class UnifiedEngine:
                 self.skipped["limit_up"] += 1
                 continue
             px = o * (1 + slip)
-            lot = int(self.lots[j])
+            lot = self._lot_for(t, i)
             cash = st.cash_jpy - st.fx_reserve_jpy if m == "JP" else st.cash_usd
             while shares > 0 and shares * px + fee(shares * px) > cash:
                 shares -= lot
@@ -402,6 +402,11 @@ class UnifiedEngine:
                 self.skipped["cash" if m == "JP" else "usd"] += 1
                 continue
             self._open(t, m, shares, px, i)
+
+    def _lot_for(self, t: str, i: int) -> int:
+        """个股买入的交易单位（股数，按行情的口径）。默认 = 固定单元（JP 100 股）；研究可覆盖成「当时真实的一手」
+        （行情是复权价，拆股前的真实一手 = 100 × 真实价 ÷ 复权价 个复权股；scripts/jq_study.py）。"""
+        return int(self.lots[self.col[t]])
 
     def _open(self, t: str, m: str, shares: int, px: float, i: int) -> None:
         """按成交价开仓：止损按开仓前一根 K 线的 ATR（没有就按固定比例），扣现金与手续费。
@@ -631,7 +636,7 @@ class UnifiedEngine:
             px = c * (1 + self.slip[m])
             budget_jpy = min(eq * cfg.position_pct * min(1.0, em), eq * cfg.max_position_pct)
             fee = self.fees[m]
-            lot = int(self.lots[self.col[t]])
+            lot = self._lot_for(t, i)
             if m == "JP":
                 avail = jpy_avail()
                 conv = max(0.0, usd_cash_free()) * rs / mg if pre else 0.0
