@@ -160,7 +160,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
 
     def run(ind: dict, p, pb: dict | None = None, hold_pb: int = 10, mult: bool = True, pb_free: bool = False,
             limit_k: float = 0.0, pb_use_dead: bool = False, cfg_over: dict | None = None, jp_bull_only: bool = False,
-            extra_core: dict | None = None, pref_us: pd.Series | None = None) -> dict:
+            extra_core: dict | None = None, pref_us: pd.Series | None = None, core_expo: dict | None = None) -> dict:
         names = list(ind)
         key = tuple(names) + (("nomult",) if not mult else ())
         if key not in em_cache and not mult:
@@ -195,7 +195,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             xc = extra_core or {}
             cc2 = {**cc, **{t: etf_cost(broker, t, "JP") for t in xc}}
             eng = MixEngine({**ind, "1655.T": core, **xc}, c, {"JP": p, "US": us}, ex, cc2, fx=fxdf[["Open", "Close"]],
-                            entry_mult={"JP": em}, bear=bear)
+                            entry_mult={"JP": em}, bear=bear, core_expo=core_expo)
             r = eng.run(start=start, end=end)
         finally:
             MixEngine.PB, MixEngine.LIMIT_K, MixEngine.PB_USE_DEAD, MixEngine.PREF_US = {}, 0.0, False, None
