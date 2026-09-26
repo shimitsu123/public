@@ -1,0 +1,19 @@
+var/cache/
+var/logs/
+var/heartbeat.json
+var/*.tmp*
+var/**/*.tmp*
+var/**/*.corrupt.*
+__pycache__/
+*.pyc
+.pytest_cache/
+*.xlsm
+var/out/trades_*.csv
+var/out/equity_*.csv
+var/out/walk_forward_*.csv
+var/out/page_*.html
+var/out/trial_page.html
+
+# Mac 实时仪表盘（含第三方消息标题，不入库）
+var/out/dashboard.html
+var/out/jq_today.json

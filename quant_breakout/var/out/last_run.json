@@ -1,0 +1,11 @@
+{
+ "at": "2026-09-25 08:45",
+ "ok": true,
+ "error": "",
+ "markets_ok": [
+  "ALL"
+ ],
+ "blocked_hosts": [],
+ "provider": "yfinance",
+ "mode": "unified-preview"
+}

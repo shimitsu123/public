@@ -1,0 +1,76 @@
+{
+ "start": "2026-09-28",
+ "end": "2026-12-24",
+ "capital_jpy": 1000000.0,
+ "markets": [
+  "JP",
+  "US"
+ ],
+ "jp": {
+  "initial_cash": 1000000,
+  "universe": "broad",
+  "position_pct": 0.25,
+  "max_positions": 4,
+  "use_macro": true,
+  "use_sector_tilt": true,
+  "use_event_window": false,
+  "breakout": true,
+  "core": {
+   "enabled": true,
+   "ticker": "1329.T",
+   "timing": true,
+   "band_pct": 10.0
+  },
+  "halt_dd_pct": 45.0,
+  "tier": "aggressive",
+  "broker": "tachibana"
+ },
+ "us": {
+  "universe": "broad",
+  "position_pct": 0.2,
+  "max_positions": 5,
+  "use_macro": true,
+  "use_sector_tilt": true,
+  "use_event_window": false,
+  "breakout": false,
+  "core": {
+   "enabled": true,
+   "ticker": "1655.T",
+   "timing": true,
+   "band_pct": 10.0
+  },
+  "halt_dd_pct": 45.0,
+  "tier": "aggressive",
+  "broker": "tachibana",
+  "venue": "JP",
+  "initial_cash": 1000000.0
+ },
+ "note": "券商（2026-09-25 深夜起）：立花証券ｅ支店 個別コース（一个账户，只有日元，只做东证）。用户改用立花：不做美股个股后，楽天的美元 / 换汇逻辑用不到；立花 API 能在 Mac / 云端无人值守自动下单（楽天的 MARKETSPEED II RSS 只能在 Windows + Excel、每天要人登录）。方案 S0C2：日本个股 4×25%（日経225，按偏好剔除）+ 闲置资金全部 1655.T（东证 S&P500，按 S&P500 牛熊分界择时，熊市那份留现金）；宏观 / 板块倾斜开、事件窗口关，状态层 quant；回撤 HALT 45%。按立花手续费重算（scripts/broker_s0c2_study.py）：20 年与 5 年年化都比楽天 0 円少约 0.46 pp（手续费约 ¥1.3～1.9 万 / 年）。一手放宽（按名额买不到一手时、一手 ≤ 权益 50% 且现金够 → 买一手；scripts/capital_study.py 事先登记 115c662 通过的 U2）：2026-09-26 用户确认启用，2026-09-27 生效前用户确认撤回（J-Quants 口径事后诊断更差、效果不稳健，var/out/ml_posthoc.md）→ unified.one_lot_cap_pct = 0（关）：按名额买不到一手就跳过，单只 ≤ 34%。",
+ "use_market_regime": true,
+ "use_macro": true,
+ "use_sector_tilt": true,
+ "use_event_window": false,
+ "regime_mode": "quant",
+ "mode": "unified",
+ "unified": {
+  "broker": "tachibana",
+  "position_pct": 0.25,
+  "max_positions": 4,
+  "max_position_pct": 0.34,
+  "one_lot_cap_pct": 0.0,
+  "stock_markets": [
+   "JP"
+  ],
+  "core": {
+   "1655.T": 1.0
+  },
+  "core_index": {
+   "1655.T": "US"
+  },
+  "core_mode": "split",
+  "universe": {
+   "JP": "broad",
+   "US": "broad"
+  }
+ }
+}

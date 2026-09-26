@@ -1,0 +1,5 @@
+| variant | exit | macro | full_cagr_pct | full_max_dd_pct | full_sharpe | full_calmar | full_trades | full_win_rate | div_cagr_pct | div_max_dd_pct | div_sharpe | div_calmar | div_trades | div_win_rate | oos_cagr_pct | oos_max_dd_pct | oos_sharpe | oos_calmar | oos_trades | oos_win_rate | oos_pos_windows | oos_windows | secs |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| X0_M0 | X0 | M0 | 11.95 | -7.27 | 1.45 | 1.64 | 104 | 56.7 | 4.17 | -4.21 | 1.01 | 0.99 | 170 | 52.9 | 7.85 | -5.09 | 1.33 | 1.54 | 45 | 53.3 | 6 | 6 | 164 |
+| X0_M2 | X0 | M2 | 11.94 | -7.26 | 1.53 | 1.64 | 101 | 57.4 | 3.97 | -3.55 | 1.03 | 1.12 | 170 | 52.9 | 8.36 | -4.39 | 1.38 | 1.9 | 46 | 56.5 | 6 | 6 | 150 |
+| X0_M1 | X0 | M1 | 11.08 | -7.45 | 1.36 | 1.49 | 103 | 55.3 | 4.2 | -4.21 | 1.02 | 1.0 | 170 | 52.9 | 7.85 | -5.09 | 1.33 | 1.54 | 45 | 53.3 | 6 | 6 | 152 |
