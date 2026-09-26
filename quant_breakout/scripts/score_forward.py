@@ -38,6 +38,21 @@
     主假设另外要求：大中型股（日経225 + T500x）的点估计也在事先方向。只看日経225 的 100 / 200 / 400 笔判定照旧，作为附带。
   - 预计每年约 250 个信号 → 200 笔约 1 年、400 笔约 1.6〜2 年、800 笔约 3〜3.5 年；400 笔时约能分辨 AUC 0.60，800 笔时约 0.57（80% 检出力）。
   - 同一天另登记「没参与过设计的股票」检验（scripts/heldout_study.py）：扩大池 2013〜 的历史信号，现在就能给出股票不同、时期相同的样本外证据。
+七、追加登记 X2（2026-09-26，用户要求「X2 登记进前向记录」；此时前向记录还没有任何数据）
+  来由：fund_study（登记 efa7235，结果 04190e0）里 X2「自己业种的顾客业种的短観业况变化」样本外 AUC 0.569（95% 区间 0.503〜0.630，
+  两半 0.569 / 0.565），过了第一条门槛；但前半保留的胜率只 +0.09 pp、S0C2 Calmar 0.360 < 0.363、比对照 V0 的 AUC 差区间含 0 → 没通过。
+  另外同一个信号（S5）对业种收益本身几乎没有作用（F1：公布后 63 日 IC +0.004，t 0.18）→ 事先的看法：X2 的 AUC 多半有偶然成分，
+  前向记录是为了不错过，不是预期它会成立。
+  - 记录：两份记录（score_forward.csv / score_forward_wide.csv）每个信号另记 x2 = 这只票的東証业种（var/industry_s33.json）的 S5
+    （信号日当天或之前已可用的最近一次短観；可用日按 qbreak/tankan.py available() 的保守日期）与 x2_survey（用到的调查季度末）。
+    算法与 fund_study 相同（qbreak/score_forward.py x2_table / x2_lookup；tests/test_score_forward.py 核对两者一致）。
+    短観取不到 → 空（不补写；日报「数据完整性」会列出）；复核只用有值的。
+  - 假设 X2（事先方向 +，与主假设同级）：X2 → 赚钱：AUC 的 99% 区间下限 > 0.5；合并样本另外要求大中型股（日経225 + T500x）的点估计 > 0.5。
+  - 区间：X2 在同一次调查、同一业种里的值都一样 → 自助法按「用到的调查季度」聚类（2,000 次，种子 20260926），不按月。
+    有值的已平仓信号覆盖的调查季度 < 8 个时，这个时点不判定 X2（只报告），到下一个时点再判定（最多 3 次，所以仍用 99%）。
+  - 判定时点与主判定相同：合并样本 200 / 400 / 800 笔；只看日経225 的 100 / 200 / 400 笔另报。合并样本 200 笔时预计只有约 4 个
+    调查季度 → 第一次实际判定多半在 400 笔（约 2 年）。
+  - 成立 → 与主假设一样：另写一份事先登记的组合研究，通过门槛且用户确认后才可能改模拟盘；只凭前向记录不改规则。
 """
 from __future__ import annotations
 
@@ -64,11 +79,13 @@ CHECKPOINTS = (100, 200, 400)                    # 只看日経225（附带）
 CHECKPOINTS_WIDE = (200, 400, 800)               # 合并样本（主判定，2026-09-26 追加登记）
 BOOT_N, SEED = 2000, 20260926
 NOTIONAL = 250_000
+X2_MIN_CLUSTERS = 8                              # X2：有值的已平仓信号覆盖的调查季度少于这个数 → 这个时点不判定（第七节）
 # 变量 → (说明, 事先方向：+1 = 越大越赚钱, 主 / 次)
 HYP = {"F2": ("F2 逻辑回归分数", 1, "P1"), "vol": ("量比（对数）", 1, "P2"),
        "ind_mom20": ("行业 20 日动量", -1, "S2"), "ind_mom60": ("行业 60 日动量", -1, "S2"), "rel_ind60": ("个股相对行业", 1, "S3"),
        "F1": ("F1 等权分数", 1, "另报"), "F3": ("F3 IC 加权分数", 1, "另报"), "F4": ("F4 只用行业", 1, "另报"),
-       "F5": ("F5 只用个股", 1, "另报"), "breakout": ("真突破", 1, "另报")}
+       "F5": ("F5 只用个股", 1, "另报"), "breakout": ("真突破", 1, "另报"),
+       "x2": ("X2 顾客业种的短観业况变化", 1, "X2")}
 LINES: list[str] = []
 
 
@@ -151,8 +168,9 @@ def match(log: pd.DataFrame, T: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     return C, cnt
 
 
-def boot_ci(C: pd.DataFrame, cols: list[str], seed: int = SEED) -> np.ndarray:
-    mon = C["date"].dt.to_period("M").to_numpy()
+def boot_ci(C: pd.DataFrame, cols: list[str], seed: int = SEED, cluster: np.ndarray | None = None) -> np.ndarray:
+    """按信号月（cluster 给定时按它，例 X2 用到的调查季度）聚类的自助法 AUC。"""
+    mon = C["date"].dt.to_period("M").to_numpy() if cluster is None else np.asarray(cluster)
     groups = [np.flatnonzero(mon == m) for m in np.unique(mon)]
     rng = np.random.default_rng(seed)
     V = C[cols].to_numpy(float)
@@ -166,15 +184,27 @@ def boot_ci(C: pd.DataFrame, cols: list[str], seed: int = SEED) -> np.ndarray:
     return out
 
 
+def _auc_row(C: pd.DataFrame, c: str, B: np.ndarray, j: int) -> dict:
+    a = auc_np(C[c], C["win"]) if len(C) else None
+    q = lambda p: round(float(np.nanpercentile(B[:, j], p)), 4) if np.isfinite(B[:, j]).any() else None   # noqa: E731
+    return {"auc": None if a is None else round(a, 4), "lo95": q(2.5), "hi95": q(97.5), "lo99": q(0.5), "hi99": q(99.5)}
+
+
 def evaluate(C: pd.DataFrame, cnt: dict) -> dict:
     ev = {"count": cnt, "win": round(float(C["win"].mean()) * 100, 2) if len(C) else None,
           "exp": round(float(C["net"].mean()), 3) if len(C) else None, "auc": {}}
-    cols = [c for c in HYP if c in C.columns]
+    cols = [c for c in HYP if c in C.columns and c != "x2"]
     B = boot_ci(C, cols) if len(C) >= 10 else np.full((1, len(cols)), np.nan)
     for j, c in enumerate(cols):
-        a = auc_np(C[c], C["win"]) if len(C) else None
-        q = lambda p: round(float(np.nanpercentile(B[:, j], p)), 4) if np.isfinite(B[:, j]).any() else None   # noqa: E731
-        ev["auc"][c] = {"auc": None if a is None else round(a, 4), "lo95": q(2.5), "hi95": q(97.5), "lo99": q(0.5), "hi99": q(99.5)}
+        ev["auc"][c] = _auc_row(C, c, B, j)
+    if "x2" in C.columns:                                      # X2：只用有值的；按用到的调查季度聚类（第七节）
+        X = C.assign(x2=pd.to_numeric(C["x2"], errors="coerce"))
+        X = X[np.isfinite(X["x2"].to_numpy(float))].reset_index(drop=True)
+        svy = X["x2_survey"].fillna("").astype(str).to_numpy() if "x2_survey" in X.columns else np.array([""] * len(X))
+        k = int(len(np.unique(svy[svy != ""]))) if len(X) else 0
+        Bx = boot_ci(X, ["x2"], cluster=svy) if len(X) >= 10 and k >= 2 else np.full((1, 1), np.nan)
+        ev["auc"]["x2"] = _auc_row(X, "x2", Bx, 0)
+        ev["x2"] = {"n": int(len(X)), "clusters": k}
     if "F3_keep" in C.columns and len(C):                      # S1：F3 保留的 vs 全部
         from signal_study import boot
         K = C[C["F3_keep"] == 1]
@@ -216,6 +246,21 @@ def decide(ev: dict, history: pd.DataFrame | None = None, checkpoints=CHECKPOINT
     k = ev.get("f3_keep") or {}
     res["F3_keep"] = {"hyp": "S1", "label": "F3 保留的信号", "ok": bool(k.get("dwin_lo", -1) > 0 and (k.get("exp") or -9) >= (ev["exp"] or 9)),
                       "range": [k.get("dwin_lo"), k.get("dwin_hi")], "level": "95%", "note": ""}
+    a = ev["auc"].get("x2") or {}
+    if a.get("auc") is not None:                               # X2（第七节）：调查季度够 8 个才判定
+        nx = ev.get("x2") or {}
+        lo, hi = a.get("lo99"), a.get("hi99")
+        if nx.get("clusters", 0) < X2_MIN_CLUSTERS:
+            res["x2"] = {"hyp": "X2", "label": HYP["x2"][0], "ok": False, "judged": False, "range": [lo, hi], "level": "99%",
+                         "note": f"有值的 {nx.get('n', 0)} 笔只覆盖 {nx.get('clusters', 0)} 个调查季度（< {X2_MIN_CLUSTERS}）→ 这个时点不判定，下一个时点再判定"}
+        else:
+            ok, note = bool(lo is not None and lo > 0.5), ""
+            if ok and large_mid is not None:
+                v = large_mid.get("x2")
+                if v is None or v <= 0.5:
+                    ok, note = False, f"大中型股的点估计 {v} 不在事先方向"
+            res["x2"] = {"hyp": "X2", "label": HYP["x2"][0], "ok": ok, "judged": True, "range": [lo, hi], "level": "99%",
+                         "note": note or f"有值的 {nx.get('n', 0)} 笔、{nx.get('clusters', 0)} 个调查季度"}
     return {"checkpoint": cp, "results": res}
 
 
@@ -253,10 +298,13 @@ def _say_eval(title: str, ev: dict, V: dict) -> None:
             lab, sgn, kind = HYP[c]
             say(f"| {lab if lab.startswith(c) else f'{c} {lab}'} | {'+' if sgn > 0 else '−'} | {kind} | {a['auc'] if a['auc'] is not None else '—'} | "
                 f"{a['lo95']}〜{a['hi95']} | {a['lo99']}〜{a['hi99']} |")
+    if ev.get("x2"):
+        say(f"X2 有值的已平仓 {ev['x2']['n']} 笔、覆盖 {ev['x2']['clusters']} 个调查季度（X2 的区间按调查季度聚类；第七节）")
     if V.get("checkpoint"):
         say(f"判定（已平仓第一次达到 {V['checkpoint']} 笔）：")
         for c, r in V["results"].items():
-            say(f"- {r['hyp']} {r['label']}：{'成立' if r['ok'] else '不成立'}（{r['level']} 区间 {r['range'][0]}〜{r['range'][1]}）"
+            verdict = "不判定" if r.get("judged") is False else ("成立" if r["ok"] else "不成立")
+            say(f"- {r['hyp']} {r['label']}：{verdict}（{r['level']} 区间 {r['range'][0]}〜{r['range'][1]}）"
                 + (f"；{r['note']}" if r.get("note") else ""))
     else:
         say(V.get("text", ""))
@@ -293,11 +341,12 @@ def review() -> int:
         if scope in evs:
             _say_eval(title, evs[scope], Vs[scope])
             if segs.get(scope):
-                say("分段 AUC（点估计）：" + "；".join(f"{g} {v['n']} 笔 F2 {v.get('F2')} / 量比 {v.get('vol')}" for g, v in segs[scope].items()))
+                say("分段 AUC（点估计）：" + "；".join(f"{g} {v['n']} 笔 F2 {v.get('F2')} / 量比 {v.get('vol')} / X2 {v.get('x2')}"
+                                                      for g, v in segs[scope].items()))
     if not evs:
         say("\n还没有记录。")
-    if any(any(r["ok"] for r in V.get("results", {}).values() if r["hyp"].startswith("P")) for V in Vs.values()):
-        say("\n主假设成立 → 需要另写一份事先登记的组合研究；模拟盘规则不变（改需用户确认）。")
+    if any(any(r["ok"] for r in V.get("results", {}).values() if r["hyp"].startswith("P") or r["hyp"] == "X2") for V in Vs.values()):
+        say("\n主假设（或 X2）成立 → 需要另写一份事先登记的组合研究；模拟盘规则不变（改需用户确认）。")
     out = paths.out_dir() / "score_forward_review"
     Path(f"{out}.md").write_text("\n".join(LINES) + "\n", encoding="utf-8")
     Path(f"{out}.json").write_text(json.dumps({"eval": evs, "decision": Vs, "segments": segs}, ensure_ascii=False, indent=1,

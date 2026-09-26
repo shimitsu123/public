@@ -570,6 +570,9 @@ S0C2 20 年回撤不深于 T0、样本外识别延迟不增加 → **全部不�
 2026-09-26 追加登记（32c16cb）：记录范围扩大到 TOPIX 1000 里日経225 以外的 716 只（`var/universe_wide.json`，`var/out/score_forward_wide.csv`），
 合并样本已平仓 200 / 400 / 800 笔时判定。「没参与过设计的股票」检验（`scripts/heldout_study.py` → `var/out/heldout_study.md`）：
 F2 分数在这些股票上不成立（T500x AUC 0.465），量比方向一致但较弱（T500x 0.522、S1x 0.568）→ 不提议组合研究。
+2026-09-26 再追加登记 X2（用户要求；`scripts/score_forward.py` 第七节）：两份记录每个信号另记「这只票的東証业种的顾客业种的短観业况变化」
+（与 `scripts/fund_study.py` 的 X2 同一算法，`qbreak/score_forward.py` x2_table / x2_lookup）和用到的调查季度；判定时点同上，
+99% 区间按调查季度聚类，覆盖的调查季度 < 8 个时不判定（第一次实际判定多半在合并 400 笔，约 2 年）。
 
 **行业联动：一个行业先动，另一个行业跟上？**（2026-09-26，事先登记 e9c0926，`scripts/leadlag_study.py` → `var/out/leadlag_study.md`；方法 `qbreak/sector_leadlag.py`）：
 東証 33 业种 30 个 × 过去 1 / 5 / 20 天 → 次日开盘起的当天 / 1〜5 天 / 6〜20 天。日本 → 日本 7,830 个检验，后半 0 个复现；

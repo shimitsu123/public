@@ -1007,8 +1007,12 @@ def _score_forward_log(ctx, eng, state, planned: dict) -> dict:
         days = list(jp_ix[jp_ix <= pd.Timestamp(state.last_date)])
         d10 = DataConfig(provider=ctx.dcfg.provider, years=10, allow_synthetic=False).validate()
         ix = drop_partial_bar(load_universe([BENCHMARK["JP"]], d10)[BENCHMARK["JP"]], "JP")
+        x2, x2_err = _x2_for_forward(SF, days[-SF.LOOKBACK:])
         res = SF.run_daily(ctx.ind, ix["Close"], jp, days[-SF.LOOKBACK:], planned, mp, paths.out_dir() / SF.LOG_FILE,
-                           str(ctx.today))
+                           str(ctx.today), x2=x2)
+        res["x2_survey"] = (x2 or {}).get("latest", "")
+        if x2_err:
+            res["x2_error"] = x2_err
     except Exception as e:                                   # noqa: BLE001
         log.warning("买点质量分前向记录失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"}
@@ -1026,11 +1030,25 @@ def _score_forward_log(ctx, eng, state, planned: dict) -> dict:
                     ind_x[t] = compute_indicators(df, ctx.params["JP"])
             base = {t: ctx.ind[t] for t in jp if t in ctx.ind}
             res["wide"] = SF.run_daily_wide(base, ind_x, ix["Close"], doc, days[-SF.LOOKBACK:], mp,
-                                            paths.out_dir() / SF.LOG_WIDE, str(ctx.today))
+                                            paths.out_dir() / SF.LOG_WIDE, str(ctx.today), x2=x2)
     except Exception as e:                                   # noqa: BLE001
         log.warning("买点质量分前向记录（扩大池）失败（不影响交易）：%s", e)
         res["wide_error"] = f"{type(e).__name__}: {e}"
     return res
+
+
+def _x2_for_forward(SF, days: list) -> tuple[dict | None, str | None]:
+    """前向记录的 X2（顾客业种的短観业况变化；scripts/score_forward.py 第七节）：要记的日子都在登记日之前 → 不取数据。
+    取不到 → (None, 原因)：X2 记为空（不补写），日报「数据完整性」会列出。"""
+    import json as _json
+    if not SF._days(days):
+        return None, None
+    try:
+        s33 = {f"{c}.T": v for c, v in _json.loads((paths.home() / "industry_s33.json").read_text(encoding="utf-8"))["s33"].items()}
+        return SF.x2_load(s33), None
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("前向记录的 X2（短観）取不到（不影响交易）：%s", e)
+        return None, f"{type(e).__name__}: {e}"
 
 
 def _paper_broker_for_executor(ucfg, ex_jp):
