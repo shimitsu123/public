@@ -148,6 +148,20 @@ def test_true_breakout_tag_on_buy_orders_and_watchlist():
     assert "真突破" in read_json(paths.out_dir() / "report_data.json")["hint"]
 
 
+def test_score_forward_failure_is_listed_as_missing():
+    _write(["JP"])
+    td = read_json(paths.out_dir() / "unified_today.json")
+    td["score_forward"] = {"error": "RuntimeError: 取不到日経"}
+    write_json(paths.out_dir() / "unified_today.json", td)
+    write_unified_report()
+    rd = read_json(paths.out_dir() / "report_data.json")
+    assert any("买点质量分前向记录" in m and "取不到日経" in m for m in rd["missing"])
+    td["score_forward"] = {"logged": 2, "signals": 2}
+    write_json(paths.out_dir() / "unified_today.json", td)
+    write_unified_report()
+    assert not any("买点质量分" in m for m in read_json(paths.out_dir() / "report_data.json")["missing"])
+
+
 def test_report_commodity_sector_card():
     _write(["JP"])
     write_json(paths.out_dir() / "commodity_fit_study.json", {

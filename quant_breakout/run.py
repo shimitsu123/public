@@ -914,6 +914,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     eng, ctx = _unified_engine(a, cfg, state, provider, extra_tickers=extra)
     data, plans, extras, params, dcfg, today = ctx.data, ctx.plans, ctx.extras, ctx.params, ctx.dcfg, ctx.today
     idxs, cutoff = _new_bar_idxs(eng, state)
+    planned: dict[str, list] = {}                          # 每个处理过的交易日收盘后计划买入的票（前向记录用）
     if not idxs:
         print(f"没有新的完整交易日（截止 {cutoff}，上次 {state.last_date}）")
     else:
@@ -924,12 +925,14 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
                 log.info("公司行为 %s", n)
                 print(n)
             eng.step(i)
+            planned[str(eng.gidx[i].date())] = sorted(state.plan)
     st_path.write_text(_json.dumps(state.to_dict(), ensure_ascii=False, indent=1, default=float), encoding="utf-8")
     executor = _executor_paper_step(ctx, state)            # 实盘执行器的演练账户：同一天、同一套行情，应与模拟盘逐日一致
     i_last = int(eng.gidx.searchsorted(pd.Timestamp(state.last_date))) if state.last_date else len(eng.gidx) - 1
     todo = eng.todo(min(i_last, len(eng.gidx) - 1))
     from qbreak.scan import tag_breakouts
     tag_breakouts(todo, ctx.ind)                             # 个股买单加「真突破」标签（只作展示，不改交易）
+    score_fwd = _score_forward_log(ctx, eng, state, planned)  # 买点质量分的前向记录（只记录，不影响交易）
     eq = state.history[-1][1] if state.history else ucfg.capital_jpy
     usdjpy = float(state.history[-1][4]) if state.history and state.history[-1][4] else None
     threat = _unified_watch_and_threat(extras, plans, data, params, dcfg, ucfg, eq, usdjpy)
@@ -938,7 +941,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
            "positions": {t: {"market": p.market, "shares": p.shares, "entry_px": p.entry_px, "entry_date": p.entry_date,
                              "stop_px": round(p.stop_px, 2)} for t, p in state.pos.items()},
            "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker,
-           "threat": threat, "executor": executor}
+           "threat": threat, "executor": executor, "score_forward": score_fwd}
     if usdjpy is None:                                       # 状态里没有汇率时（例如首日）：备用来源
         out["usdjpy"], out["usdjpy_src"] = _usdjpy_any()
     from qbreak.data import LAGGING
@@ -957,6 +960,32 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     print(_json.dumps({k: out[k] for k in ("bar_date", "equity_jpy", "cash_jpy", "cash_usd", "todo")},
                       ensure_ascii=False, indent=1, default=float))
     return 0
+
+
+def _score_forward_log(ctx, eng, state, planned: dict) -> dict:
+    """买点「质量分」前向记录（scripts/score_forward.py 登记）：最近 5 个已处理的日本交易日（≥ 2026-09-28）的信号
+    用冻结的配比打分，追加到 var/out/score_forward.csv。失败只记下原因（日报「数据完整性」会列出），不影响模拟盘。"""
+    import pandas as pd
+    from qbreak import score_forward as SF
+    try:
+        mp = paths.home() / SF.MODEL_FILE
+        if not mp.exists():
+            return {"error": f"没有冻结的配比 {mp.name}"}
+        if not state.last_date:
+            return {"logged": 0, "note": "还没有处理过交易日"}
+        from qbreak.config import BENCHMARK
+        from qbreak.data import load_universe
+        from qbreak.trader import drop_partial_bar
+        jp = universe("JP", (ctx.u.get("universe") or {}).get("JP", "broad"))
+        jp_ix = pd.DatetimeIndex(sorted(set().union(*[ctx.ind[t].index for t in jp if t in ctx.ind])))
+        days = list(jp_ix[jp_ix <= pd.Timestamp(state.last_date)])
+        d10 = DataConfig(provider=ctx.dcfg.provider, years=10, allow_synthetic=False).validate()
+        ix = drop_partial_bar(load_universe([BENCHMARK["JP"]], d10)[BENCHMARK["JP"]], "JP")
+        return SF.run_daily(ctx.ind, ix["Close"], jp, days[-SF.LOOKBACK:], planned, mp, paths.out_dir() / SF.LOG_FILE,
+                            str(ctx.today))
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("买点质量分前向记录失败（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"}
 
 
 def _paper_broker_for_executor(ucfg, ex_jp):

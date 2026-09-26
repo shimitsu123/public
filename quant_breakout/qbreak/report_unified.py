@@ -54,6 +54,7 @@ def build_unified_data() -> dict:
             "corp_log": (st.get("corp_log") or [])[-10:],
             "threat": td.get("threat") or read_json(paths.out_dir() / "threat_today.json", {}) or {},
             "executor": td.get("executor") or {},                # 实盘执行器的演练账户（模拟券商）与模拟盘的逐日比较
+            "score_forward": td.get("score_forward") or {},      # 买点质量分的前向记录（只记录，不影响交易）
             "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
             "config": td.get("config") or config_from_sim(sim).to_dict(),     # 首次运行前从 sim.json 取
@@ -115,6 +116,9 @@ def missing_items(d: dict) -> list[str]:
     t = d.get("threat") or {}
     if not t or t.get("error"):
         out.append(f"大事件威胁指数：{t.get('error') or '没有算出'}")
+    sf = d.get("score_forward") or {}
+    if started and sf.get("error"):
+        out.append(f"买点质量分前向记录：今天没记上（{sf['error']}）—— 不影响交易，下次运行会补最近 5 个交易日")
     x = d.get("executor") or {}
     if started and x.get("error"):
         out.append(f"实盘执行器演练账户：运行失败（{x['error']}）—— 不影响模拟盘，但实盘要走的那条路今天没验证")
