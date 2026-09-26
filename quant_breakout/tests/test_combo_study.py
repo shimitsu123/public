@@ -53,3 +53,10 @@ def test_bucket_table_and_decide():
     V = CB.decide(R, base)
     assert V["best"] == "C1" and not V["per"]["C1"]
     assert V["per"]["C2"] and V["per"]["C3"] and V["per"]["C4"] and V["per"]["C5"]   # 前半低 / 只 +0.04 / 近 5 年低 / 回撤深 3 pp
+
+
+def test_asof_values_handles_repeated_dates():
+    s = pd.Series([1.0, 2.0, 3.0], index=pd.to_datetime(["2024-01-01", "2024-01-03", "2024-01-05"]))
+    d = pd.to_datetime(["2024-01-02", "2024-01-02", "2024-01-05", "2023-12-31"])
+    v = CB.asof_values(s, d)
+    assert v[:3].tolist() == [1.0, 1.0, 3.0] and np.isnan(v[3])                # 同一天多笔、之前没有值 → 缺值

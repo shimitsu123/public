@@ -72,6 +72,15 @@ def fill_scale(factor: pd.Series, g: pd.DatetimeIndex) -> pd.Series:
     return f.shift(1).fillna(1.0)
 
 
+def asof_values(s: pd.Series, dates) -> np.ndarray:
+    """每个日期（可以重复）当时最新的值（≤ 该日，向前填）。"""
+    s = s.sort_index()
+    s = s[~s.index.duplicated(keep="last")]
+    u = pd.DatetimeIndex(pd.unique(pd.DatetimeIndex(dates)))
+    v = s.reindex(s.index.union(u)).ffill()
+    return v.reindex(pd.DatetimeIndex(dates)).to_numpy()
+
+
 def vol_prio(ind: dict) -> dict:
     """C1：(代码, 信号日) → 当天的量比。"""
     out = {}
@@ -182,7 +191,7 @@ def main() -> int:
     bt.sizing.initial_cash, bt.sizing.position_pct, bt.sizing.max_positions, bt.sizing.max_position_pct = 1e10, 1.0, 1, 1.0
     T = ES.outcomes(ind, p, bt)
     T = T[T["sig_date"] >= pd.Timestamp(W20)].reset_index(drop=True)
-    at = lambda s: s.sort_index().reindex(s.sort_index().index.union(T["sig_date"])).ffill().reindex(T["sig_date"]).to_numpy()  # noqa: E731
+    at = lambda s: asof_values(s, T["sig_date"])                              # noqa: E731
     T["jp_state"] = np.where(at(bear["JP"].astype(float)) > 0.5, "熊", "牛")
     T["us_state"] = np.where(at(bear["US"].astype(float)) > 0.5, "熊", "牛")
     T["dist"] = at(dist)
