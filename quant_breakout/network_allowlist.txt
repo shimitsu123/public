@@ -15,3 +15,10 @@ www.mof.go.jp
 www.stat-search.boj.or.jp
 # J-Quants（可选，研究用）
 api.jquants.com
+# 市场仪表盘 + 经济威胁消息（只展示与提醒，取不到不影响交易；qbreak/news.py）
+www3.nhk.or.jp
+news.yahoo.co.jp
+www.boj.or.jp
+www.federalreserve.gov
+news.google.com
+www.jma.go.jp

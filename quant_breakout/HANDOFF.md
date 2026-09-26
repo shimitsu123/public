@@ -1,4 +1,4 @@
-# HANDOFF：现状与来龙去脉（给新的 Claude 会话；2026-09-25 写，有变化就更新这里）
+# HANDOFF：现状与来龙去脉（给新的 Claude 会话；2026-09-25 写，2026-09-26 更新，有变化就更新这里）
 
 细节以代码与这些文件为准：`README.md`（总览）、`MACOS.md`（Mac 与立花）、`var/sim_changes.md`（每次变更与研究结论，按时间）、
 `REVIEW.md`（原版代码审查）、`var/out/`（研究报告与日报数据）。
@@ -56,6 +56,18 @@
 - J-Quants Standard 数据分析（2026-09-26，用户已购买 Standard；事先登记 dc81672）：会社予想修正、增益率、信用余额、大额空头与它们的组合
   全部没过门槛 → 「最准确的方法」按登记的选法仍是现行（不按分数过滤）；最准的单项仍是量比与 X2（都在前向记录里）。
   另外发现：回测用复权价，拆股前的真实一手被低估 —— 按当时真实股价，S0C2 20 年年化 12.72% → 12.17%（`var/out/jq_study.md`）
+- 资金规模 / 名额分配（2026-09-26，事先登记 115c662）：¥100 万时「4 个名额 + 一手放宽 50%」（U2：按名额买不到一手、但一手 ≤ 权益 50% 且现金够 → 买一手）
+  按登记规则通过（主窗口 Calmar 0.453 → 0.529，两半与 20 年都不差）；**只是提议，模拟盘未改**（要用：`var/sim.json` 的 `unified.one_lot_cap_pct: 0.5`，
+  需用户确认）。资金到 ¥300 万左右以后「一手太贵」基本消失（`var/out/capital_study.md`）
+- 因子曲线左右平移对齐股价（2026-09-26，115c662）：26 个因子 × 927 只 × ±26 周；「最像」的平移量绝大多数是 0（同一周），
+  领先对复现 130 对 > 对照最多 69 对（对齐成立但很弱，相关约 ±0.2）；拿来挑买点（L1）AUC 0.514 不通过（`var/out/lagscan_study.md`）
+- 跟着时代调整（2026-09-26，5be8793）：每年 / 每月按最近成绩重选买点阈值（A1〜A3 真实切换回测）、按行业近况跳过 / 排序（A4 / A5）全部不通过；
+  A1 / A3 样本外 Calmar +0.045 / +0.048（门槛 +0.05），行业近况几乎没有持续性（相关 +0.03）→ 维持固定阈值（`var/out/adaptive_study.md`）
+- 市场仪表盘 + 经济威胁消息（2026-09-26，用户要求，**只作展示与提醒，不参与交易**）：日报顶部「一眼看懂」（偏向刻度、新仓倍数、仓位构成、
+  市场健康度 10 项 = 宏观层自己的阈值、消费 / 零售等新公布的数据、消息汇总、业种强弱；`qbreak/dashboard.py`、`macro_now.py`、`viz.py`）；
+  消息监控 `qbreak/news.py`（NHK / Yahoo!ニュース / 日銀 / 財務省 / FRB / Google ニュース / 気象庁 → 可信度 → 事件 → 因子 → 行业 → 持仓 / 候补）。
+  Mac 上 `scripts/install_launchd_news.sh` 注册后每 15 分钟重写 `~/.qbreak/home/out/dashboard.html` 并对新的提醒发通知（**还没在 Mac 上安装**，待办 ⑲）。
+  公开仓库：消息标题与链接只在 `var/cache/news/`（不入库）与 Mac 本机页面，日报只放汇总
 - 季度复核：例行任务每年 1 / 4 / 7 / 10 月 12 日 09:56 JST（下一次 2026-10-12）：顶底择时复核、敏感度表、前向记录评估（含 X2）、大事件日程、
   新出现的联动群 / 新上市公司与现有行业的关联对比（步骤 2g；1 月另更新影响度历年值 `var/theme_influence.json`；2026-09-26 用户确认加入）
 
@@ -75,6 +87,9 @@
 - ⑪ 2026-10-12（周一）09:56 季度复核：看汇报第一行有没有「需要用户确认」
 - ⑫ 立花开户之后：按「路线图」3 逐步做，满足「路线图」4 的上线门槛才上本番（`ARM` 只在用户明确要求时创建）
 - ⑬ 2026-12-24 模拟期结束：总结 → 用户决定继续 / 上实盘 / 调整；（可选）J-Quants 付费档做无幸存者偏差回测（路线图 6）
+- ⑲ ✋ 决定要不要启用资金研究通过的「一手放宽 50%」（U2；启用 = 云端会话改 `var/sim.json` 并记进 sim_changes，Mac 不改）；
+  🤖 装市场仪表盘 + 经济威胁提醒：`bash ~/qbreak-src/quant_breakout/scripts/install_launchd_news.sh`（每 15 分钟；先 `git pull --ff-only`），
+  马上看一次 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh news --open`
 - ⑱ ✋ 只用 Mac 对话之前（一次性，用户本人在 Mac 的终端做；Claude 不经手密钥）：① GitHub 登录（`gh auth login` 或 SSH 钥匙），
   让 `~/qbreak-dev` 能推送；② 想在 Mac 上跑 J-Quants 研究时，把 API キー存进钥匙串：`security add-generic-password -s qbreak-jquants -a qbreak -w`
   （回车后输入，不留在 shell 历史）。J-Quants Standard 已购买（2026-09-26）
@@ -91,6 +106,8 @@
 - 日报的「真突破 / 未破箱顶（差 x%）/ 距箱顶 x%」标签（个股买单与候补队列）同样只用于展示（`qbreak/scan.py` 的 `breakout_fields()`）
 - 日报的「主题与业种」一节与个股的主题 / 业种标签（近 1 / 3 个月相对 TOPIX 1000、排名、与日経的同步度 R²、新出现的联动群）
   只用于展示（2026-09-26 用户要求；`qbreak/theme_monitor.py`，sim-day 写进 `unified_today.json` 的 themes）
+- 日报顶部的「一眼看懂」仪表盘、Mac 的市场仪表盘与经济威胁提醒只用于展示与提醒（`macro_now` / `news` 写进 `unified_today.json`，
+  健康度的颜色用宏观层自己的阈值；消息归类是标题关键词，影响链路的冲击幅度是「这类消息常见的幅度」× 行业敏感度，都不是预测）
 
 ## 每天的流程（周一至五，JST）
 1. 前一晚 22:00：用户的另一个例行任务更新「市场风险报告」artifact（判断层与宏观数值的来源）
@@ -105,7 +122,9 @@
 - `qbreak/brokers/tachibana.py` 立花 API v4r10 适配器；`qbreak/brokers/tachibana_sim.py` 模拟交易所（演练用）；`qbreak/brokers/paper.py` 模拟券商
 - `qbreak/bullbear.py` 牛熊分界 + 阶段；`qbreak/report_unified.py` 日报；`qbreak/desktop_page.py` Mac 的账本页面
 - `run.py`：`sim-day`（云端）、`live-u`（执行器）、`live-u-rehearse`（演练）、`tachibana-probe`（连通性检查）、`doctor`
-- `scripts/liveu.sh`（Mac 上跑执行器）、`scripts/install_launchd_live_u.sh`（注册定时任务）、`scripts/mac_bootstrap.sh`（一行安装）
+- `scripts/liveu.sh`（Mac 上跑执行器；`news` = 市场仪表盘 + 经济威胁提醒）、`scripts/install_launchd_live_u.sh`（注册定时任务）、
+  `scripts/install_launchd_news.sh`（仪表盘每 15 分钟）、`scripts/mac_bootstrap.sh`（一行安装）
+- `qbreak/dashboard.py` 仪表盘（日报顶部与 Mac 页面共用）、`qbreak/macro_now.py` 健康度与新数据、`qbreak/news.py` 消息监控、`qbreak/viz.py` 小图
 - 云端状态：`var/state/unified_state.json`（模拟盘）；Mac 状态：`~/.qbreak/home/state/live_unified_paper.json`（账本，不在仓库）
 
 ## 用户常问的，去哪里查
@@ -115,6 +134,8 @@
   Yahoo 行情修正）。重新对齐：删掉 `~/.qbreak/home/state/live_unified_paper*.json`，下次从云端模拟盘当时的状态开始
 - 「页面没更新 / 没弹出」：`launchctl list | grep qbreak`、`~/.qbreak/home/logs/`；`~/.qbreak/home/NO_OPEN` 存在就不弹出
 - 「牛熊现在怎样」：页面「牛熊：现在处于哪个阶段」或日报「市场状态」（离 250 日线的 %、20 个交易日的变化 pp、离翻转还差多少 %）
+- 「现在偏向哪边 / 市场健康吗 / 有什么威胁消息」：Mac 的 `~/.qbreak/home/out/dashboard.html`（每 15 分钟，账本页面顶上有链接）或日报「一眼看懂」；
+  消息的全文列表 `~/.qbreak/home/cache/news/news.json`；定时任务日志 `~/.qbreak/home/logs/com.qbreak.news.out|err`
 
 ## 在 Mac 对话里怎么问（2026-09-26 起用户只用 Mac 的 Claude 对话；规则见 CLAUDE.md「在用户的 Mac 上」）
 执行器管理买卖的方式：每个交易日 07:40 按规则自动决策、下「下一开盘」的单（立花上线后另有 09:05 开盘后补单）；

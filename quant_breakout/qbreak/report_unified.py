@@ -56,6 +56,8 @@ def build_unified_data() -> dict:
             "executor": td.get("executor") or {},                # 实盘执行器的演练账户（模拟券商）与模拟盘的逐日比较
             "score_forward": td.get("score_forward") or {},      # 买点质量分的前向记录（只记录，不影响交易）
             "themes": td.get("themes") or {},                    # 主题 / 业种强弱、影响度、新出现的联动（只作展示）
+            "macro_now": td.get("macro_now") or {},              # 仪表盘：市场健康度 + 消费 / 零售等新数据（只作展示）
+            "news": td.get("news") or {},                        # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
             "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
             "config": td.get("config") or config_from_sim(sim).to_dict(),     # 首次运行前从 sim.json 取
@@ -73,7 +75,9 @@ def build_unified_data() -> dict:
                      "（收盘是否高于过去 60 日最高、距箱顶 %；只作参考，不改交易）；大事件威胁指数在 threat（只展示，不参与交易）；"
                      "主题 / 业种强弱在 themes.groups（r1m / r3m = 近 1 / 3 个月相对 TOPIX 1000 平均的 %，rank3m / of = 排名，"
                      "r2_now / r2_hist = 与日経225 的同步度 R²）与 themes.emerging（新出现的联动群 clusters、个股 links；只作展示，不改交易）；"
-                     "missing = 日报应有而没取到的数据（项目 + 原因），汇报时逐项列出。")}
+                     "missing = 日报应有而没取到的数据（项目 + 原因），汇报时逐项列出；"
+                     "仪表盘数据在 macro_now（health.tiles = 市场健康度、releases = 消费 / 零售等新公布的数据）与 news.summary"
+                     "（经济威胁消息的汇总），都只作展示、不参与交易。")}
     d["missing"] = missing_items(d)
     return d
 
@@ -122,6 +126,10 @@ def missing_items(d: dict) -> list[str]:
     th = d.get("themes") or {}
     if (started or preview) and (th.get("error") or not th.get("groups")):
         out.append(f"主题 / 业种强弱：{th.get('error') or '没有算出'}（只作展示，不影响交易）")
+    for k, lab in (("macro_now", "一眼看懂的市场健康度 / 新公布的数据"), ("news", "一眼看懂的经济威胁消息")):
+        v = d.get(k) or {}
+        if v.get("error"):
+            out.append(f"{lab}：{v['error']}（只作展示，不影响交易）")
     sf = d.get("score_forward") or {}
     if started and sf.get("error"):
         out.append(f"买点质量分前向记录：今天没记上（{sf['error']}）—— 不影响交易，下次运行会补最近 5 个交易日")
@@ -368,8 +376,11 @@ def render_unified_html(d: dict) -> str:
     core_desc = " / ".join(f"{t} {float(w) * 100:g}%" for t, w in (cfg.get("core") or {}).items())
     stocks = ("日本 + 美股合计、一起排名：日本 → 美元已够的美股 → 要换汇的美股" if with_us
               else "只做日本个股，美股敞口经由东证 ETF；事先登记的研究显示 ¥100 万规模下加美股个股会拉低收益")
+    from .dashboard import render as _dash
+    nw = d.get("news") or {}
+    dash = _dash(d, d.get("macro_now") or {}, {"summary": nw.get("summary") or {}, "generated": nw.get("generated"), "error": nw.get("error")})
     return _PAGE.format(
-        generated=escape(d["generated"]), bar=escape(_bar_txt(d)),
+        generated=escape(d["generated"]), bar=escape(_bar_txt(d)), dash=dash,
         missing=_missing_html(d.get("missing") or []) + _executor_html(d),
         first="" if d.get("history") else (
             f'<div class="muted"><b>开始前的预览</b>：模拟期 {escape(str((d.get("sim") or {}).get("start")))} 开始，现在还没有交易；'
@@ -645,13 +656,14 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 {usd_tile}
 <div><span class="muted">已平仓</span><b>{n_trades} 笔</b><span class="muted">胜率 {win}</span></div>
 </div></section>
+{dash}
 <section class="card"><h2>今天要做的事（日本时间）</h2>{todo}</section>
 <section class="card"><h2>权益曲线（日元）</h2>{spark}</section>
 <section class="card"><h2>个股持仓</h2><div class="scroll"><table><tr><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">成本</th><th class="n">止损</th><th>买入日</th></tr>{positions}</table></div></section>
 <section class="card"><h2>除息 / 拆股（已补到持仓与现金）</h2><ul>{corp}</ul></section>
 <section class="card"><h2>核心 ETF（闲置资金）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
 <section class="card"><h2>市场状态</h2><dl>{markets}</dl></section>
-<section class="card"><h2>大事件威胁指数（只展示，不参与交易）</h2>{threat}</section>
+<section class="card"><details><summary><h2 style="display:inline">大事件威胁指数的明细（只展示，不参与交易）</h2></summary>{threat}</details></section>
 <section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>主题 / 业种（近 3 月相对）</th><th>状态</th><th>突破</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
 <p class="muted">宏观顺风度 = 个股对日本 / 美国利率、油价、日元、信用利差，以及农产品、工业金属、黄金、天然气 ETF 的历史敏感度 × 近 60 个交易日的变化（当日横截面三分位：顺风 / 中性 / 逆风），只作参考：2026-09-25 事先登记研究显示它对之后 20 日的收益没有可靠的预测力（加商品后月末前 1/5 − 后 1/5 为 +0.35%，t 1.40；秩相关 0.006），交易排序不用它。</p>
 <p class="muted">突破：<b>真突破</b> = 信号当天收盘高于过去 60 个交易日的最高价（不含当天）；<b>未破箱顶</b> = 信号成立但收盘还在箱顶之下（括号里是还差的 %）；还没触发的票显示距箱顶 %（今天要做的事里的买单也标了）。只作参考，不改交易：2026-09-26 事先登记的研究（2006-10〜，日経225 股票池，现行出场规则，每笔扣来回手续费）全部信号 638 笔：胜率 42.5%、每笔平均 +0.70%、盈亏比 1.89；其中真突破 163 笔：胜率 49.7%、每笔 +0.83%、盈亏比 1.44；未破箱顶 475 笔：胜率 40.0%、每笔 +0.66%、盈亏比 2.08。只做真突破：胜率 +7.2 pp（95% 区间 +0.7〜+13.6 pp），每笔期望 +0.13 pp 但不显著（95% 区间 −0.78〜+0.96 pp），组合 20 年年化 11.2%（现行 12.8%）、最大回撤 −36.4%（现行 −35.1%）——现行策略靠盈亏比赚钱，不是靠命中率（var/out/signal_study.md）。</p></section>

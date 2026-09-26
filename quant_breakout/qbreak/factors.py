@@ -84,14 +84,15 @@ def _read(fp):
 
 
 # ────────────────────────── FRED ──────────────────────────
-def fred(series_id: str) -> pd.Series:
+def fred(series_id: str, max_age_h: float = 12.0) -> pd.Series:
+    """FRED 系列（CSV 缓存 max_age_h 小时；仪表盘的新数据监控用更短的缓存）。"""
     def fetch():
         raw = _get(f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}")
         df = pd.read_csv(io.BytesIO(raw))
         s = pd.to_numeric(df.iloc[:, 1], errors="coerce")   # 缺值是 "."
         s.index = pd.to_datetime(df.iloc[:, 0])
         return s.dropna().rename(series_id)
-    return _cached(f"fred_{series_id}", fetch)
+    return _cached(f"fred_{series_id}", fetch, max_age_h)
 
 
 # ────────────────────────── Ken French 行业组合 ──────────────────────────

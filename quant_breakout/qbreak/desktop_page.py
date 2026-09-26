@@ -67,6 +67,9 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
     body = [f"<h1>{escape(title)}</h1><div class='muted'>页面生成 {upd}；账本更新 {escape(str(book.get('updated') or '—'))}；"
             "每个交易日 07:40 自动运行后更新，这个页面每 10 分钟自动刷新</div>",
             "<section id='stale' class='card warn' hidden></section>"]
+    if (paths.out_dir() / "dashboard.html").exists():         # run.py news --page（每 15 分钟）写的市场仪表盘
+        body.append("<div class='muted'><a href='dashboard.html'>市场仪表盘</a>：现在偏向哪边、市场健康度、新公布的数据、"
+                    "经济威胁消息与影响链路（每 15 分钟更新）</div>")
     if alert:
         body.append(f"<section class='card warn'><b>★ {escape(str(alert))}</b></section>")
     if note:

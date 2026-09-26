@@ -16,6 +16,7 @@
 - 绝不让用户把密钥、令牌、密码贴进聊天：放 Mac 的钥匙串（Keychain）/ `~/.zshrc` / launchd 的 plist，或云端环境设置
 - 立花私钥 `~/.qbreak/e_api_private_key.pem` 保持 `chmod 600`，不读出内容
 - J-Quants 原始数据不能入库（公开仓库 + 个人自用条款）：缓存只在 `quant_breakout/var/cache/jquants/`（已 gitignore）
+- 消息监控（`qbreak/news.py`）取来的第三方标题 / 链接不能入库：只放 `var/cache/news/`（已 gitignore）与 Mac 本机页面；日报（会入库）只放汇总
 - 不抓取、不自动操作楽天証券网站或 iSPEED（総合証券取引約款 第35条第12項）
 - 这是**公开仓库**：CLAUDE.md、HANDOFF.md、代码、提交信息里不写个人信息（姓名、邮箱、账户号、住址、Mac 用户名、私人链接）
 - 云端例行任务（Routines）：没有用户在这次对话里确认，不新建、不修改、不删除
@@ -46,7 +47,8 @@
   用户说「停 / 今天不要下单」→ 立刻建 `~/.qbreak/home/HALT`（停下单不用再确认）；不在执行器之外向立花发任何单（不写临时脚本调 API 下单）；
   用户想人工买卖执行器管的股票（股票池 + 1655）→ 先说明这会让第二天的持仓核对停下，建议先 HALT 再商量
 - 排查先看：`~/.qbreak/home/logs/com.qbreak.liveu.*.out|err`、`~/.qbreak/home/out/live_unified_paper_journal.md`、
-  页面 `~/.qbreak/home/out/page_paper.html`、`bash scripts/liveu.sh --broker paper --status`、`launchctl list | grep qbreak`
+  页面 `~/.qbreak/home/out/page_paper.html`、`bash scripts/liveu.sh --broker paper --status`、`launchctl list | grep qbreak`；
+  市场仪表盘 / 经济威胁提醒（每 15 分钟）：`~/.qbreak/home/out/dashboard.html`、`~/.qbreak/home/logs/com.qbreak.news.out|err`（只展示与提醒，不下单）
 
 ## 在云端（claude.ai/code 会话 / 例行任务）
 - 开发分支 `claude/rakuten-auto-trading-review-ka7lf0`：只推这个分支，不开 PR（除非用户要求）

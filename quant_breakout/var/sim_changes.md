@@ -1009,3 +1009,21 @@
   业种几乎没有持续性（之前 36 个月与下一年的业种每笔期望相关 +0.03，14 年里 8 年为正）：被 A4 跳过的「冷门业种」买点之后反而更好
   （前半每笔 +1.31% vs 全部 +1.15%，后半 +0.08% vs +0.04%）→ 追行业近况没有用。
 - 结论：**维持现行固定阈值、不按行业近况调整，模拟盘不变**。A1 / A3 接近门槛，要继续观察的话可另行登记前向记录（需要用户同意）。
+
+## 2026-09-26 日报加「一眼看懂」仪表盘 + 经济威胁消息监控（用户要求；只作展示与提醒，交易规则不变）
+用户：「操盘报告可视化不太好……能清晰看到现在偏向哪一个方向、整个市场健康度怎么样，零售等数据也要考虑，横展开但不要失去重点；
+页面要实时表现新数据对宏观的影响；对经济威胁的消息要实时提醒，做一个实时获取消息的 API，判断消息真实度，再判断对哪些行业的影响（影响链路）」。
+- 日报顶部「一眼看懂」（`qbreak/dashboard.py`、小图 `qbreak/viz.py`）：一句话总结（方向、新仓倍数、健康度、提醒件数）→ 日美牛熊刻度（离翻转价位 %）、
+  进攻 / 防守（新仓倍数与宏观触发）、仓位构成 → 市场健康度 10 项（`qbreak/macro_now.py`；颜色 = 宏观层自己的阈值 `macro.TH`，
+  日経离 250 日线用牛熊分界的 ±3%，威胁指数 60 / 80 分；综合分 = 正常 1、注意 0.5、警戒 0 的平均）→ 消费 / 零售等新公布的数据
+  （FRED：RSAFS、UMCSENT、ICSA、UNRATE、PAYEMS、CPIAUCSL，日本消费者态度指数 CSCICP02JPM460S；日本零售的 FRED 系列 2023〜2024 已停更，
+  日银 API 没有消费活动指数）→ 消息汇总 → 业种强弱。大事件威胁指数的长说明折叠起来。sim-day 把 `macro_now` / `news`（汇总）写进 `unified_today.json`。
+- 消息监控 `qbreak/news.py` + `python run.py news [--page] [--notify]`：NHK / Yahoo!ニュース / 日銀 / 財務省 / FRB 的 RSS、Google ニュース检索（日英）、
+  気象庁地震（震度 5 弱以上）→ 可信度（来源档位 + 交叉确认 − 推测用语，经验打分）→ 事件（标题关键词；只有决定 / 发动 / 升级用语才升严重度，
+  2026-09-26 实测 49 件相关、1 件达到提醒线）→ 因子冲击（这类消息常见的幅度）× TOPIX-17 行业 ETF 的周敏感度（`out/sector_betas.json`，每周重算）
+  → 持仓 / 候补。BLS 的 RSS 拒绝访问（403），没用。
+- Mac：`scripts/install_launchd_news.sh`（LaunchAgent `com.qbreak.news`，每 15 分钟 `liveu.sh news`）→ `~/.qbreak/home/out/dashboard.html`
+  + 新提醒的 macOS 通知；账本页面顶上加了链接。要用户在 Mac 上安装一次（HANDOFF 待办 ⑲）。
+- 公开仓库：第三方消息标题与链接只写 `var/cache/news/`（gitignore）与 Mac 本机页面；`var/out/dashboard.html` 加进 .gitignore；日报只放汇总。
+- 云端环境的网络白名单要加：www3.nhk.or.jp、news.yahoo.co.jp、www.boj.or.jp、www.federalreserve.gov、news.google.com、www.jma.go.jp
+  （`network_allowlist.txt`；取不到时仪表盘只显示「失败」，不影响交易）。

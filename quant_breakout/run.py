@@ -943,6 +943,8 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
            "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker,
            "threat": threat, "executor": executor, "score_forward": score_fwd,
            "themes": _theme_panel(provider)}                  # 主题 / 业种强弱、影响度、新出现的联动（只作展示）
+    out["macro_now"] = _macro_now_panel(extras)              # 仪表盘：市场健康度 + 消费 / 零售等新数据（只作展示）
+    out["news"] = _news_panel(out)                           # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
     if usdjpy is None:                                       # 状态里没有汇率时（例如首日）：备用来源
         out["usdjpy"], out["usdjpy_src"] = _usdjpy_any()
     from qbreak.data import LAGGING
@@ -960,6 +962,96 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
         log.warning("统一日报生成失败：%s", e)
     print(_json.dumps({k: out[k] for k in ("bar_date", "equity_jpy", "cash_jpy", "cash_usd", "todo")},
                       ensure_ascii=False, indent=1, default=float))
+    return 0
+
+
+def _macro_now_panel(extras: dict) -> dict:
+    """日报「一眼看懂」的市场健康度与新公布的数据（qbreak/macro_now.py；只作展示，失败只记下原因）。"""
+    try:
+        from qbreak import macro_now as MN
+        m = MN.collect(overlay=(((extras.get("JP") or {}).get("macro") or {}).get("overlay")))
+        MN.write(m)
+        return m
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("市场健康度 / 新数据面板失败（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"}
+
+
+def _news_holdings(d: dict) -> dict[str, str]:
+    """持仓 + 候补队列 + 今天的买单 → TOPIX-17 行业（影响链路的最后一环）。"""
+    from qbreak import news as NW
+    ticks = list(d.get("positions") or {})
+    ticks += [w.get("ticker") for w in (((d.get("extras") or {}).get("JP") or {}).get("watchlist") or []) if w.get("ticker")]
+    ticks += [o.get("ticker") for o in ((d.get("todo") or {}).get("JP") or []) if o.get("side") == "BUY" and o.get("ticker")]
+    return NW.holdings_map(sorted(set(ticks)))
+
+
+def _news_panel(d: dict) -> dict:
+    """经济威胁消息（qbreak/news.py；只作展示）：日报（入库）只放汇总；标题与链接只写到 var/cache/news/（不入库）。"""
+    try:
+        from qbreak import news as NW
+        from qbreak.calendar_jp import now_jst
+        now = now_jst()
+        items, stat = NW.fetch_all()
+        events = NW.analyze(items, NW.sector_betas(), _news_holdings(d), now=now)
+        gen = now.strftime("%Y-%m-%d %H:%M JST")
+        NW.save(events, stat, gen)
+        return {"generated": gen, "summary": NW.summary(events), "sources": stat}
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("经济威胁消息面板失败（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"}
+
+
+def cmd_news(a) -> int:
+    """经济威胁消息 + 新公布的宏观数据（只展示与提醒，不参与交易）：取消息 → 可信度 → 事件 → 影响链路（因子 → 行业 → 持仓 / 候补）。
+    --page：重写 <数据目录>/out/dashboard.html（Mac 每 15 分钟一次）；--notify：新的提醒 → macOS 通知（+ QBREAK_WEBHOOK / QBREAK_SMTP 若已设置）。"""
+    import datetime as _dt
+    from qbreak import dashboard as DB
+    from qbreak import macro_now as MN
+    from qbreak import news as NW
+    from qbreak.calendar_jp import now_jst
+    from qbreak.utils import atomic_write_text, read_json
+    now = now_jst()
+    d = read_json(paths.PROJECT_ROOT / "var" / "out" / "unified_today.json", {}) or {}   # 云端模拟盘的当天数据（每天 git pull）
+    items, stat = NW.fetch_all()
+    events = NW.analyze(items, NW.sector_betas(), _news_holdings(d), now=now)
+    gen = now.strftime("%Y-%m-%d %H:%M JST")
+    NW.save(events, stat, gen)
+    fresh = NW.new_alerts(events)
+    bad = [k for k, v in stat.items() if not isinstance(v, int)]
+    print(f"{gen}：与经济有关的消息 {len(events)} 件，达到提醒线 {sum(e['alert'] for e in events)} 件（新的 {len(fresh)} 件）"
+          + (f"；取不到：{'、'.join(bad)}" if bad else ""))
+    for e in events[:8]:
+        print(f"  {'★' if e['alert'] else ' '} 威胁 {e['threat']:.2f}｜可信度 {e['cred']}｜{'、'.join(e['event_labels'])}｜"
+              f"{e['publisher']}｜{e['title'][:60]}")
+    if a.notify:
+        for e in fresh[:3]:
+            NW.notify_mac(f"qbreak 经济威胁提醒：{'、'.join(e['event_labels'])}", NW.alert_text(e))
+        if fresh:
+            from qbreak import notify as NT
+            NT.send("经济威胁提醒", "\n".join(f"{e['title']}｜{NW.alert_text(e)}" for e in fresh[:5]), level="warn")
+    if a.page:
+        old = MN.load()
+        try:
+            age_h = (now - _dt.datetime.fromisoformat(old["health_at"])).total_seconds() / 3600
+        except (KeyError, TypeError, ValueError):
+            age_h = None
+        stale = age_h is None or age_h >= a.health_hours
+        ov = (((d.get("extras") or {}).get("JP") or {}).get("macro") or {}).get("overlay")
+        m = MN.collect(max_age_h=a.fred_hours, overlay=ov, with_health=stale)
+        if stale:
+            m["health_at"] = now.isoformat(timespec="minutes")
+        else:
+            m["health"], m["health_at"] = old.get("health") or {}, old.get("health_at")
+        MN.write(m)
+        hp = paths.out_dir() / "dashboard.html"
+        atomic_write_text(hp, DB.page(d, m, {"events": events, "generated": gen, "sources": stat}, gen))
+        print(f"页面 {hp}")
+        if a.open:
+            import subprocess
+            import sys as _sys
+            if _sys.platform == "darwin":
+                subprocess.run(["open", str(hp)], check=False)
     return 0
 
 
@@ -2080,6 +2172,14 @@ def main(argv=None) -> int:
 
     th = sub.add_parser("threat", help="大事件威胁指数（只展示，不参与交易）")
     th.set_defaults(func=cmd_threat)
+
+    nw = sub.add_parser("news", help="经济威胁消息 + 新公布的宏观数据 → 可信度与影响链路（只展示与提醒，不参与交易）")
+    nw.add_argument("--page", action="store_true", help="重写 <数据目录>/out/dashboard.html（市场仪表盘）")
+    nw.add_argument("--notify", action="store_true", help="新的提醒 → macOS 通知（+ 已设置的 webhook / 邮件）")
+    nw.add_argument("--open", action="store_true", help="写完页面用浏览器打开（Mac）")
+    nw.add_argument("--fred-hours", type=float, default=1.0, help="FRED 缓存小时数（默认 1：新公布的数据约 1 小时内出现）")
+    nw.add_argument("--health-hours", type=float, default=3.0, help="市场健康度多久重算一次（小时，默认 3）")
+    nw.set_defaults(func=cmd_news)
 
     jq = sub.add_parser("jquants-check", help="J-Quants 接入检查（需环境变量 JQUANTS_API_KEY；不打印キー）")
     jq.add_argument("--plan", default=None, choices=["free", "light", "standard", "premium"],

@@ -33,7 +33,8 @@ def _shell_scripts() -> list[Path]:
 
 def test_no_bare_variable_followed_by_non_ascii():
     scripts = _shell_scripts()
-    assert {"liveu.sh", "install_launchd_live_u.sh", "mac_bootstrap.sh", "install_launchd_fetch.sh"} <= {p.name for p in scripts}
+    assert {"liveu.sh", "install_launchd_live_u.sh", "mac_bootstrap.sh", "install_launchd_fetch.sh",
+            "install_launchd_news.sh"} <= {p.name for p in scripts}
     hits = [f"{p.relative_to(ROOT)}:{n}: {m.group().decode()}{line[m.end():].decode('utf-8', 'replace')[:1]}"
             for p in scripts for n, line in enumerate(p.read_bytes().splitlines(), 1)
             for m in BARE_VAR_THEN_NON_ASCII.finditer(line)]
@@ -104,3 +105,12 @@ def test_scripts_print_chinese_after_variables_without_dying(tmp_path, locales, 
     out, err = _bash(env, "scripts/install_launchd_live_u.sh", "paper")
     assert "unbound variable" not in err, err
     assert "时区是 UTC+0000" in out and "已注册 com.qbreak.liveu.paper：" in out and "数据目录 " in out
+    out, err = _bash(env, "scripts/install_launchd_news.sh")                  # 市场仪表盘 + 经济威胁提醒（每 15 分钟）
+    assert "unbound variable" not in err, err
+    plist = tmp_path / "agents" / "com.qbreak.news.plist"
+    assert "已注册 com.qbreak.news：每 15 分钟一次" in out and plist.exists()
+    assert "<string>news</string>" in plist.read_text(encoding="utf-8") and "<integer>900</integer>" in plist.read_text(encoding="utf-8")
+    out, err = _bash(env, "scripts/liveu.sh", "news")
+    assert "unbound variable" not in err, err
+    out, err = _bash(env, "scripts/install_launchd_news.sh", "uninstall")
+    assert "已卸载 com.qbreak.news" in out and not plist.exists()
