@@ -686,7 +686,7 @@ Mac 上 LaunchAgent `com.qbreak.jquants`（`scripts/install_launchd_jquants.sh`�
 **拉代码后一条命令装好 / 更新 Mac 上的全部**：`git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（MACOS.md §1.10）。
 Mac 登录 / 开机后自动启动（`com.qbreak.login`，RunAtLoad）：仪表盘没加载就加载、交易日已过 07:40 而今天的模拟操盘没跑 → 补跑、打开页面（MACOS.md §1.11；立花本番不补跑）。
 
-**影子账户（判断型选股，只前向记录）**（2026-09-26，用户要求；事先登记 `scripts/shadow_account.py`，`qbreak/shadow.py`）：云端日报例行任务每天按日报 / 市场风险报告做「规则以外」的判断（09:00 JST 之前，日経225 + 1655 / 1329，个股 ≤ 4 只、单只 ≤ 35%、不加杠杆），单独记一个 ¥100 万的模拟账户，和规则账户逐日对比（`var/out/shadow_equity.csv`）；2026-12-24 收盘后按事先写定的四条评估（累计收益差 > 0、日超额收益 95% 区间下限 > 0、回撤不深 2 pp、判断覆盖率 ≥ 90%）。不影响模拟盘与交易。
+**影子账户（判断型选股，只前向记录）**（2026-09-26，用户要求；事先登记 `scripts/shadow_account.py`，`qbreak/shadow.py`）：例行任务「影子账户判断」（每个交易日 07:45 JST）按当天的日报 / 市场风险报告做「规则以外」的判断（09:00 JST 之前，日経225 + 1655 / 1329，个股 ≤ 4 只、单只 ≤ 35%、不加杠杆），单独记一个 ¥100 万的模拟账户，和规则账户逐日对比（`var/out/shadow_equity.csv`）；2026-12-24 收盘后按事先写定的四条评估（累计收益差 > 0、日超额收益 95% 区间下限 > 0、回撤不深 2 pp、判断覆盖率 ≥ 90%）。不影响模拟盘与交易。
 
 **宏观顺风度**（`qbreak/sensitivity.py`；事先登记 `scripts/regime_fit_study.py` → `var/out/regime_fit_study.md`）：
 每只日経225 成分股近 2 年对 日本 10Y / 美国 10Y / 油价 / 美元日元 / 信用利差 的敏感度 × 这些因素近 60 日的趋势 = 「趋势延续时每周多赚 / 少赚多少」。
