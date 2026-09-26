@@ -96,6 +96,7 @@ HO, H1, H2 = ("2023-10-01", None), ("2023-10-01", "2025-04-01"), ("2025-04-01", 
 CAND_UP, COMBO_UP, MAX_CHANGES, DD_TOL, PASS_UP = 0.03, 0.02, 5, 2.0, 0.05
 HALF, MIN_BUCKET, N_BOOT, SEED, NOTIONAL = 0.5, 100, 2000, 20260926, 250_000
 DELIST_GAP_DAYS = 10
+CKPT_NAME = "pit_retrain_ckpt.pkl"
 UNIVERSES = {"U0y": "今天的日経225（yfinance 总回报行情，以前回测的口径；参照）", "U0": "今天的日経225（J-Quants 行情，不按时点；参照）",
              "U1": "时点 TOPIX 500", "U2": "时点 TOPIX 1000"}
 S33_GROUP = {"水産・農林業": "food", "食料品": "food", "鉱業": "energy", "石油･石炭製品": "energy", "建設業": "construction",
@@ -242,7 +243,7 @@ def bucket_table(T: pd.DataFrame, dim: str) -> pd.DataFrame:
         d, lo, hi = month_boot(t["net"].to_numpy(float), inb, t["month"].to_numpy())
         rows.append({"bucket": lab, "n": int(len(g)), "mean": float(g["net"].mean()), "win": float(g["win"].mean() * 100),
                      "diff": d, "lo": lo, "hi": hi})
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=["bucket", "n", "mean", "win", "diff", "lo", "hi"])
 
 
 def macro_candidates(T_train: pd.DataFrame, dims=MULT_DIMS) -> list[dict]:
@@ -265,6 +266,13 @@ def state_scale(states: pd.DataFrame, dim: str, bucket: str, g: pd.DatetimeIndex
     fac = pd.Series(np.where(states[dim].to_numpy(object) == bucket, HALF, 1.0), index=states.index)
     f = fac.reindex(fac.index.union(g)).ffill().reindex(g)
     return f.shift(1).fillna(1.0)
+
+
+def states_at(ST: pd.DataFrame, dates) -> pd.DataFrame:
+    """每个信号日（可以重复）那天或之前最近的状态（信号日是 J-Quants 的交易日，状态表是日経的交易日）。"""
+    sd = pd.DatetimeIndex(dates)
+    u = pd.DatetimeIndex(pd.unique(sd))
+    return ST.reindex(ST.index.union(u)).ffill().reindex(sd)
 
 
 def split_trades(T: pd.DataFrame) -> dict[str, pd.DataFrame]:
@@ -502,6 +510,7 @@ def main(argv=None) -> int:
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--coverage", action="store_true", help="只看股票池只数、行情覆盖、退市只数、近似与标签的重合、调整值核对、信号个数（登记前用）")
+    ap.add_argument("--resume", action="store_true", help="基准 / 43 个单项 / 组合从上次的检查点（var/cache，不入库）接着算（中途出错后用）")
     a = ap.parse_args(argv)
     t0 = time.time()
     here = Path(__file__).resolve().parent
@@ -522,7 +531,7 @@ def main(argv=None) -> int:
     delist = delist_dates({t: D["data"][t] for t in set(names["U1"]) | set(names["U2"]) | set(names["U0"])})
     if a.coverage:
         return coverage(D, names, masks, delist, days, t0)
-    return run_all(D, names, masks, delist, days, head, t0, load, SYM, load_params)
+    return run_all(D, names, masks, delist, days, head, t0, load, SYM, load_params, resume=a.resume)
 
 
 def coverage(D, names, masks, delist, days, t0) -> int:
@@ -582,7 +591,9 @@ def coverage(D, names, masks, delist, days, t0) -> int:
     return 0
 
 
-def run_all(D, names, masks, delist, days, head, t0, load, SYM, load_params) -> int:
+def run_all(D, names, masks, delist, days, head, t0, load, SYM, load_params, resume: bool = False) -> int:
+    import pickle
+    ckpt = paths.sub("cache") / CKPT_NAME                                     # 只有统计；var/cache 已 gitignore
     from qbreak.bullbear import BEAR, Detector, load_config
     from qbreak import factors
     from qbreak import threat as TH
@@ -603,21 +614,29 @@ def run_all(D, names, masks, delist, days, head, t0, load, SYM, load_params) -> 
     say(f"\n股票池：U1 时点 TOPIX 500 出现过 {len(names['U1'])} 只、U2 时点 TOPIX 1000 出现过 {len(names['U2'])} 只、U0 今天的日経225 {len(names['U0'])} 只；"
         f"退市（行情提前结束）{len(delist)} 只；板块倾斜按 33 业种补了 {n_sec} 只。")
     # ── 基准 + 43 个单项（U1 / U2）──
+    got = pickle.loads(ckpt.read_bytes()) if resume and ckpt.exists() else {}
+    if got:
+        say(f"（基准 / 43 个单项 / 组合从检查点恢复：{got.get('when')}，同一份登记规则的上一次运行）")
     jobs = [("P0", None, ("U0", "U1", "U2"), None)] + [(lab, ch, ("U1", "U2"), None) for lab, ch in PS.VARIANTS]
-    R = {}
-    with _pool() as ex:
-        for lab, out in ex.map(_job, jobs):
-            R[lab] = out
-            print(lab, {u: (v["tr"]["calmar"]) for u, v in out.items()}, f"{time.time() - t0:.0f}s", flush=True)
+    R = got.get("R") or {}
+    if not R:
+        with _pool() as ex:
+            for lab, out in ex.map(_job, jobs):
+                R[lab] = out
+                print(lab, f"{time.time() - t0:.0f}s", flush=True)
+        ckpt.write_bytes(pickle.dumps({"R": R, "when": str(pd.Timestamp.now())}))
     base = R["P0"]
     # U0y：同一批票的 yfinance 行情（以前回测的口径）
     import adaptive_study as AD
     from qbreak.config import DataConfig, universe
     from qbreak.data import load_universe
     from qbreak.strategy import IndicatorCache
-    data_y = load_universe(universe("JP", "broad"), DataConfig(provider="yfinance", years=21, allow_synthetic=False).validate())
-    ry = AD.make_runner(data_y)(dict(IndicatorCache(data_y, ic).all(p0)), p0, start=TRADE_START)
-    base_y = {**stats(ry["equity"]), "trades": ry["trades"], "win": ry["win"], "lot_skips": None, "delist_exits": 0}
+    base_y = got.get("base_y")
+    if base_y is None:
+        data_y = load_universe(universe("JP", "broad"), DataConfig(provider="yfinance", years=21, allow_synthetic=False).validate())
+        ry = AD.make_runner(data_y)(dict(IndicatorCache(data_y, ic).all(p0)), p0, start=TRADE_START)
+        base_y = {**stats(ry["equity"]), "trades": ry["trades"], "win": ry["win"], "lot_skips": None, "delist_exits": 0}
+        ckpt.write_bytes(pickle.dumps({"R": R, "base_y": base_y, "when": str(pd.Timestamp.now())}))
     # ── 重训：候选与组合 ──
     changes = dict(PS.VARIANTS)
     sel = {}
@@ -627,9 +646,15 @@ def run_all(D, names, masks, delist, days, head, t0, load, SYM, load_params) -> 
         sel[u] = {"cands": cands, "order": PS.best_per_param(cands, changes)}
     G["order"] = {u: sel[u]["order"] for u in sel}
     G["base"] = {u: base[u] for u in ("U1", "U2")}
-    with _pool() as ex:
-        for u, (cur, kept, steps, best) in ex.map(_greedy_job, ("U1", "U2")):
-            sel[u].update({"changes": cur, "kept": kept, "steps": steps, "stats": best})
+    if got.get("greedy"):
+        for u in ("U1", "U2"):
+            sel[u].update(got["greedy"][u])
+    else:
+        with _pool() as ex:
+            for u, (cur, kept, steps, best) in ex.map(_greedy_job, ("U1", "U2")):
+                sel[u].update({"changes": cur, "kept": kept, "steps": steps, "stats": best})
+        ckpt.write_bytes(pickle.dumps({"R": R, "base_y": base_y, "greedy": {u: {k: sel[u][k] for k in ("changes", "kept", "steps", "stats")}
+                                                                            for u in ("U1", "U2")}, "when": str(pd.Timestamp.now())}))
     # ── 宏观：独立交易与分状态 ──
     ind_u2 = _ind_for(_indicators(p0), "U2")
     T = indep_trades(ind_u2, p0, delist)
@@ -646,8 +671,7 @@ def run_all(D, names, masks, delist, days, head, t0, load, SYM, load_params) -> 
     bull = pd.Series(np.asarray(det.states(ic)) != BEAR, index=ic.index)
     jdays = ic.index[(ic.index >= pd.Timestamp(WINDOW[0]) - pd.Timedelta(days=200)) & (ic.index <= pd.Timestamp(WINDOW[1]))]
     ST = jp_states(jdays, factors.jgb_curve()["10Y"], factors.fred("DGS10"), fx, bull)
-    sd = pd.DatetimeIndex(T["sig_date"])
-    STa = ST.reindex(ST.index.union(sd)).ffill().reindex(sd)                    # 信号日（J-Quants 交易日）那天或之前最近的状态
+    STa = states_at(ST, T["sig_date"])
     for dcol in MULT_DIMS:
         T[dcol] = STa[dcol].to_numpy(object)
     T["D7"] = [PD.label_asof(D["s17"], t.split(".")[0] + "0", d) for t, d in zip(T["ticker"], T["sig_date"])]

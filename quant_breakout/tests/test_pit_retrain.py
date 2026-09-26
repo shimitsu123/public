@@ -215,3 +215,13 @@ def test_pit_engine_sells_on_last_bar_and_does_not_buy_it():
     assert tr["1111.T"]["exit_date"] == str(D[4].date()) and tr["1111.T"]["reason"] == "delist"
     assert "2222.T" not in tr and "2222.T" not in ue.st.pos and ue.skipped.get("delist") == 1
     assert "3333.T" in tr or "3333.T" in ue.st.pos
+
+
+def test_states_at_handles_repeated_signal_dates_and_empty_buckets():
+    days = pd.bdate_range("2022-01-03", periods=4)
+    ST = pd.DataFrame({"D6": ["牛", "熊", "熊", "牛"]}, index=days)
+    sd = pd.DatetimeIndex([days[1], days[1], days[3], pd.Timestamp("2022-01-08")])   # 同一天多个信号；状态表里没有的日子 → 之前最近的
+    assert PR.states_at(ST, sd)["D6"].tolist() == ["熊", "熊", "牛", "牛"]
+    T = pd.DataFrame({"net": [1.0], "win": [True], "month": ["2022-01"], "D6": [None]})
+    tb = PR.bucket_table(T, "D6")
+    assert len(tb) == 0 and list(tb.columns) == ["bucket", "n", "mean", "win", "diff", "lo", "hi"]
