@@ -1045,13 +1045,59 @@ def cmd_news(a) -> int:
             m["health"], m["health_at"] = old.get("health") or {}, old.get("health_at")
         MN.write(m)
         hp = paths.out_dir() / "dashboard.html"
-        atomic_write_text(hp, DB.page(d, m, {"events": events, "generated": gen, "sources": stat}, gen))
+        from qbreak import jq_live as JL
+        atomic_write_text(hp, DB.page(d, m, {"events": events, "generated": gen, "sources": stat}, gen, JL.load_today()))
         print(f"页面 {hp}")
         if a.open:
             import subprocess
             import sys as _sys
             if _sys.platform == "darwin":
                 subprocess.run(["open", str(hp)], check=False)
+    return 0
+
+
+def _jq_scope() -> tuple[set[str], dict[str, str], list[str]]:
+    """J-Quants 整理用的范围：股票池（日経225 + 扩大池，四位代码）、持仓 / 候补的标签、候补队列 + 今天的买单（算真实一手）。
+    都读仓库里的文件（Mac 的数据目录里没有这些）。"""
+    import json as _json
+    from qbreak.config import universe
+    from qbreak.utils import read_json
+    uni = {t.split(".")[0] for t in universe("JP", "broad")}
+    fp = paths.PROJECT_ROOT / "var" / "universe_wide.json"
+    if fp.exists():
+        doc = _json.loads(fp.read_text(encoding="utf-8"))
+        uni |= {str(x["code"]) for xs in doc.get("segments", {}).values() for x in xs}
+    d = read_json(paths.PROJECT_ROOT / "var" / "out" / "unified_today.json", {}) or {}
+    tags: dict[str, str] = {}
+    watch = [w.get("ticker") for w in (((d.get("extras") or {}).get("JP") or {}).get("watchlist") or []) if w.get("ticker")]
+    watch += [o.get("ticker") for o in ((d.get("todo") or {}).get("JP") or []) if o.get("side") == "BUY" and o.get("ticker")]
+    for t in watch:
+        tags[str(t).split(".")[0]] = "候补"
+    for t in (d.get("positions") or {}):
+        tags[str(t).split(".")[0]] = "持仓"
+    return uni, tags, watch
+
+
+def cmd_jq_live(a) -> int:
+    """J-Quants（Standard）每天的新数据 → 对项目有用的信息（只展示 / 研究，不改交易）：决算日程、会社予想修正、日々公表信用残、
+    空売り残高報告、真实一手、拆股、上市一览变化、海外投資家。营业日 19:30 取当天、次日 07:05 取確報与补取（scripts/install_launchd_jquants.sh）。"""
+    import datetime as _dt
+    from qbreak import jq_live as JL
+    from qbreak.calendar_jp import JST, now_jst
+    from qbreak.jquants import JQuants
+    now = now_jst()
+    if a.date:
+        d = _dt.date.fromisoformat(a.date)
+        now = _dt.datetime.combine(d, _dt.time(20, 0) if a.phase != "morning" else _dt.time(7, 5), JST)
+        if a.phase == "morning":
+            from qbreak.calendar_jp import next_trading_day
+            now = _dt.datetime.combine(next_trading_day(d), _dt.time(7, 5), JST)
+    uni, tags, watch = _jq_scope()
+    d = JL.run_now(JQuants(), now, uni, tags, watch)
+    print(JL.as_text(d))
+    bad = {k: v for k, v in (d.get("fetch") or {}).items() if isinstance(v, str) and not v.startswith("已有")}
+    if bad:
+        print("  没取到（下次自动补）：" + "；".join(f"{k} {v}" for k, v in bad.items()))
     return 0
 
 
@@ -2172,6 +2218,11 @@ def main(argv=None) -> int:
 
     th = sub.add_parser("threat", help="大事件威胁指数（只展示，不参与交易）")
     th.set_defaults(func=cmd_threat)
+
+    jl = sub.add_parser("jq-live", help="J-Quants 每天的新数据 → 决算日程、予想修正、信用 / 空売り、真实一手等（只展示 / 研究）")
+    jl.add_argument("--date", default=None, help="YYYY-MM-DD：手动补取某个营业日（缺省按现在的时刻自动选）")
+    jl.add_argument("--phase", default="evening", choices=["evening", "morning"], help="配合 --date：evening = 当天、morning = 次日早上那一轮")
+    jl.set_defaults(func=cmd_jq_live)
 
     nw = sub.add_parser("news", help="经济威胁消息 + 新公布的宏观数据 → 可信度与影响链路（只展示与提醒，不参与交易）")
     nw.add_argument("--page", action="store_true", help="重写 <数据目录>/out/dashboard.html（市场仪表盘）")

@@ -220,6 +220,57 @@ bash ~/qbreak-src/quant_breakout/scripts/liveu.sh news --open
 卸载：`bash ~/qbreak-src/quant_breakout/scripts/install_launchd_news.sh uninstall`；日志 `~/.qbreak/home/logs/com.qbreak.news.out|err`。
 消息的标题与链接只存在 `~/.qbreak/home/cache/news/`（公开仓库不转载第三方标题）；云端日报的「一眼看懂」只放汇总。
 
+## 1.9 J-Quants 每天的新数据（周一至五 19:30 + 07:05；2026-09-26 起，只作展示 / 研究，不改交易）
+
+キー（Standard 方案）只放钥匙串，**不贴进聊天、不写进文件**。在「终端」里运行这一行，回车后输入キー（屏幕上不显示、不留在历史里）：
+
+```bash
+security add-generic-password -s qbreak-jquants -a qbreak -w
+```
+
+之后运行下面 1.10 的一条命令就会注册 LaunchAgent `com.qbreak.jquants`（单独装：`bash scripts/install_launchd_jquants.sh`）。
+
+**为什么是这两个时刻**（J-Quants 官方的更新时刻，https://jpx-jquants.com/ja/spec/data-update ，2026-09-26 查，仅对本次检索时点有效）：
+株価四本値・日々公表信用残 16:30、空売り残高報告・上場銘柄一覧 17:30、決算短信（速報）18:00 → **19:30** 取当天（留出延迟余量）；
+決算短信（確報）24:30、決算発表予定日 10:05（前一营业日的）→ **次日 07:05** 补取与确认（在 07:40 模拟操盘之前）。
+已取到的不重取；没取到 / 空的下次自动补；周末、节假日按前一营业日处理。
+
+每次整理出对项目有用的信息（写 `~/.qbreak/home/out/jq_today.json`，市场仪表盘的「J-Quants 每天的新信息」一节显示）：
+1. 股票池（日経225 + 扩大池）10 个营业日内要发表决算的票，持仓 / 候补在前；和执行器现在用的 Yahoo 日程**不一致的标 ★**
+   （执行器「决算前不买」用的是 Yahoo 日程，对照它有没有漏）
+2. 当天开示的会社予想修正：营业利润（银行等用经常利润）相对上一次予想的变化 %
+3. 日々公表信用残（注意喚起・規制）、空売り残高報告（≥ 0.5%）、拆股 / 合并（调整系数 ≠ 1）
+4. 候补与今天买单的真实一手（收盘价 × 100 股）
+5. 上市一览的变化（新上市 / 退市 / 市场区分变更；新上市的票用 `scripts/theme_link_check.py` 做关联对比）
+6. 海外投資家（Prime）的周度买卖差额
+
+马上取一次（キー自动从钥匙串读，不回显）：
+
+```bash
+bash ~/qbreak-src/quant_breakout/scripts/liveu.sh jq
+```
+
+J-Quants 的原始数据只存在 `~/.qbreak/home/cache/jquants/live/`，整理结果也只在这台 Mac 上（個人利用条款：不再分发、公开仓库不入库）。
+研究脚本要キー时：`bash scripts/with_jquants.sh ~/.qbreak/venv/bin/python scripts/<研究>.py`（从钥匙串读进那个进程，不回显）。
+卸载：`bash ~/qbreak-src/quant_breakout/scripts/install_launchd_jquants.sh uninstall`；日志 `~/.qbreak/home/logs/com.qbreak.jquants.out|err`。
+
+## 1.10 拉代码后一条命令装好 / 更新全部；以后在 Mac 的 Claude 对话里直接做
+
+```bash
+git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh
+```
+
+`scripts/mac_setup.sh`（可以重复运行；不动账本、不下单、不碰 `ARM` / `HALT`）：① Python 依赖 → ② 模拟操盘 `com.qbreak.liveu.paper`
+（没装就装；立花本番已装时不动）→ ③ 市场仪表盘 + 经济威胁提醒 `com.qbreak.news` → ④ J-Quants 定时取数 `com.qbreak.jquants`
+（钥匙串里有 `qbreak-jquants` 才装；只检查有没有，不读出值）→ ⑤ 研究用的第二个克隆 `~/qbreak-dev`（没有就建；没有本地改动就更新）
+→ ⑥ 列出已注册的定时任务与页面位置。
+
+以后在 Mac 的 Claude 对话里**直接说要做什么**（「更新一下」「今天怎么样」「持仓最近有决算吗」「研究一下 ××」）：
+Claude 自己运行需要的命令并汇报结果（规则见仓库根目录的 `CLAUDE.md`「在用户的 Mac 上」，问法对照见 `HANDOFF.md`「在 Mac 对话里怎么问」）；
+研究在 `~/qbreak-dev` 里一口气走完「登记 → 运行 → 记录 → 推送」。遇到权限确认点「允许」即可；想少问几次，
+可以在 Mac 的 Claude Code 里用 `/permissions` 自己把常用的只读命令加进允许列表（这由你决定，Claude 不替你改权限设置）。
+实盘相关（`ARM`、删 `HALT`、`--no-arm`、`--resolve`）、改模拟盘规则、密钥，仍然要你在那次对话里明确说。
+
 ## 2. 开户与 API 设定（v4r10，2026-09-25 核对）
 
 1. 网上填表 → 邮寄 / 自行打印开户文件 → 寄回 2 种身份证明与マイナンバー → 审查 → ID / 密码以簡易書留寄到。

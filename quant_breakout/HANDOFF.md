@@ -138,12 +138,16 @@
   消息的全文列表 `~/.qbreak/home/cache/news/news.json`；定时任务日志 `~/.qbreak/home/logs/com.qbreak.news.out|err`
 
 ## 在 Mac 对话里怎么问（2026-09-26 起用户只用 Mac 的 Claude 对话；规则见 CLAUDE.md「在用户的 Mac 上」）
+**用户问什么，Claude 就直接运行需要的命令并汇报结果**（不是把命令列给用户去跑；研究在 `~/qbreak-dev` 里一口气做完）。
 执行器管理买卖的方式：每个交易日 07:40 按规则自动决策、下「下一开盘」的单（立花上线后另有 09:05 开盘后补单）；
 你控制的是「开 / 停 / 只演练 / 确认状态不明的单」，**不是逐笔下指令**（系统不给买卖指令，也不在执行器之外发单）。
 
 | 想做什么 | 这样问（例） | Claude 做什么 | 注意 |
 |---|---|---|---|
+| 装 / 更新全部 | 「拉一下最新代码并更新」「把定时任务都装好」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh` | 不动账本、不下单 |
 | 看今天的情况 | 「今天模拟操盘怎么样？」「现在持仓和下一开盘的单是什么？」 | `bash scripts/liveu.sh --broker paper --status`（立花上线后 `--broker tachibana`），读页面与日志 | 只读 |
+| 市场偏向 / 威胁消息 | 「现在偏向哪边？」「有什么经济威胁消息？」 | `bash scripts/liveu.sh news --open`（仪表盘重写并打开），读 `~/.qbreak/home/cache/news/news.json` | 只读 |
+| J-Quants 今天的新数据 | 「持仓 / 候补最近有决算吗？」「今天有哪些予想修正？」 | 读 `~/.qbreak/home/out/jq_today.json`；要马上取：`bash scripts/liveu.sh jq` | 只读；キー不回显 |
 | 和云端对账 | 「今天和云端一致吗？不一致为什么？」 | 读日志的比较行（两边持仓、现金、权益差） | 只读 |
 | 为什么没买 / 为什么卖 | 「为什么今天没买 7203？」 | 查日志的 blocked / skipped（一手太贵、名额满、跳空 > 3%、决算前等） | 只读 |
 | 立花连得上吗 | 「检查立花连通（只读）」「用デモ环境检查」 | `run.py tachibana-probe [--demo]`（登录、取价、持仓、余力、注文一覧） | 不发单 |

@@ -34,7 +34,7 @@ def _shell_scripts() -> list[Path]:
 def test_no_bare_variable_followed_by_non_ascii():
     scripts = _shell_scripts()
     assert {"liveu.sh", "install_launchd_live_u.sh", "mac_bootstrap.sh", "install_launchd_fetch.sh",
-            "install_launchd_news.sh"} <= {p.name for p in scripts}
+            "install_launchd_news.sh", "install_launchd_jquants.sh", "mac_setup.sh"} <= {p.name for p in scripts}
     hits = [f"{p.relative_to(ROOT)}:{n}: {m.group().decode()}{line[m.end():].decode('utf-8', 'replace')[:1]}"
             for p in scripts for n, line in enumerate(p.read_bytes().splitlines(), 1)
             for m in BARE_VAR_THEN_NON_ASCII.finditer(line)]
@@ -114,3 +114,15 @@ def test_scripts_print_chinese_after_variables_without_dying(tmp_path, locales, 
     assert "unbound variable" not in err, err
     out, err = _bash(env, "scripts/install_launchd_news.sh", "uninstall")
     assert "已卸载 com.qbreak.news" in out and not plist.exists()
+    out, err = _bash(env, "scripts/install_launchd_jquants.sh")               # J-Quants：周一至五 19:30 + 07:05
+    assert "unbound variable" not in err, err
+    jp = tmp_path / "agents" / "com.qbreak.jquants.plist"
+    assert "已注册 com.qbreak.jquants：" in out and jp.read_text(encoding="utf-8").count("<key>Weekday</key>") == 10
+    out, err = _bash({**env, "JQUANTS_API_KEY": ""}, "scripts/liveu.sh", "jq")   # 没有キー → 说明怎么放进钥匙串（不回显任何值）
+    assert "unbound variable" not in err, err
+    assert "钥匙串里没有 qbreak-jquants" in out
+    (tmp_path / "agents" / "com.qbreak.liveu.paper.plist").write_text("x", encoding="utf-8")
+    out, err = _bash(env, "scripts/mac_setup.sh")                             # 一条命令：已装的跳过、没键就说明、克隆失败也不中断
+    assert "unbound variable" not in err, err
+    assert "② 模拟操盘已安装" in out and "已注册 com.qbreak.news" in out and "④ J-Quants：钥匙串里还没有" in out
+    assert "⑤ ★ 没能建" in out and "已注册的定时任务：" in out

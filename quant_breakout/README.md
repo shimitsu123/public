@@ -669,6 +669,14 @@ v3（事先登记 `scripts/threat_index_v3_study.py`）再加黄金、金银比�
 Mac 上 `scripts/install_launchd_news.sh` 每 15 分钟重写 `~/.qbreak/home/out/dashboard.html` 并对新的提醒发通知（MACOS.md §1.8）。
 公开仓库：消息标题与链接不入库（`var/cache/news/` 与 Mac 本机页面），日报只放汇总。
 
+**J-Quants 每天的新数据**（2026-09-26，用户要求；只作展示 / 研究，不改交易；`qbreak/jq_live.py`，`python run.py jq-live`）：
+Mac 上 LaunchAgent `com.qbreak.jquants`（`scripts/install_launchd_jquants.sh`）周一至五 **19:30** 取当天（株価・信用 16:30、空売り・上場一覧 17:30、
+決算短信速報 18:00 之后）、**次日 07:05** 取決算短信確報（24:30）与决算日程（10:05 更新的）并补取没取到的（07:40 模拟操盘之前）。
+整理出：股票池 10 个营业日内的决算日程（与执行器用的 Yahoo 日程对照，不一致标 ★）、会社予想修正 %、日々公表信用残、空売り残高報告、拆股、
+真实一手、上市一览变化、海外投資家周度差额 → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示（MACOS.md §1.9）。
+キー只在钥匙串（`qbreak-jquants`），J-Quants 原始数据与整理结果都不入库（個人利用条款）。
+**拉代码后一条命令装好 / 更新 Mac 上的全部**：`git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（MACOS.md §1.10）。
+
 **宏观顺风度**（`qbreak/sensitivity.py`；事先登记 `scripts/regime_fit_study.py` → `var/out/regime_fit_study.md`）：
 每只日経225 成分股近 2 年对 日本 10Y / 美国 10Y / 油价 / 美元日元 / 信用利差 的敏感度 × 这些因素近 60 日的趋势 = 「趋势延续时每周多赚 / 少赚多少」。
 研究里列出了利率 / 油价 / 汇率 / 信用上升或下降时哪些板块、哪些票表现较好（例：日本利率上升 → 银行受益、不动产 / 零售受损；油价上升 → 1605 / 5019 / 5020 / 商社受益、

@@ -1048,3 +1048,24 @@
 - **事后发现（不能直接采用）**：量化状态层（跌破 200 日线等 → 新仓 0 倍）挡掉的交易两半都比 1 倍时好（46.0% / +1.62% vs 32.8% / −0.31%；
   50.9% / +0.97% vs 42.7% / +0.67%）；消融：去掉这一层 S0C2 20 年 Calmar 0.363 → 0.376（近 5 年 1.273 → 1.356），去掉宏观层 → 0.343、
   去掉板块倾斜 → 0.359。→ 另行登记用没参与设计的扩大池 714 只确认（`scripts/regime_confirm.py`）。
+
+## 2026-09-26 J-Quants 每天的新数据定时取数 + Mac 一条命令安装 / 更新（用户要求；只作展示 / 研究，交易规则不变）
+用户：「现在要实时获取 J-Quants 上面有用的信息，结合当前 project 的方式定一个最适合的时间段自动进行获取」「上述命令整理为 Mac 上 pull 代码后
+可以直接运行的……以后在 Mac 那边对话问什么都可以不中断直接进行和研究」。
+- 时刻（J-Quants 官方更新时刻 https://jpx-jquants.com/ja/spec/data-update ，2026-09-26 查）：株価・日々公表信用残 16:30、空売り残高報告・
+  上場銘柄一覧 17:30、決算短信速報 18:00 → **营业日 19:30** 取当天；決算短信確報 24:30、決算発表予定日 10:05 → **次日 07:05** 补取
+  （07:40 模拟操盘之前）。已取到的不重取，没取到 / 空的下次补；決算短信早上再取一次（確報）。
+- `qbreak/jq_live.py` + `python run.py jq-live [--date --phase]`：股票池（日経225 + 扩大池）10 个营业日内的决算日程（与执行器用的 Yahoo 日程对照，
+  不一致标 ★）、会社予想修正（营业利润；银行等用经常利润；按 `/fins/summary?code=` 的上一次予想算 %）、日々公表信用残、空売り残高報告、
+  拆股 / 合并（AdjFactor ≠ 1）、候补与买单的真实一手、上市一览变化（新上市 → theme_link_check）、海外投資家（Prime）周度差额。
+  信用取引週末残高（日次）从 2026-09-28 起按申込日取（`published_date` 还不支持，HTTP 400）。
+- 2026-09-25 的真实数据试取（云端，Standard）：10 个营业日内要决算的股票池 47 只；予想修正 9509 营业利润 +27.1%、8154 +6.7%；
+  日々公表 36 只；空売り報告 240 只。
+- 只作展示 / 研究：结果 `<数据目录>/out/jq_today.json`（gitignore）→ Mac 市场仪表盘的「J-Quants 每天的新信息」；原始数据 `cache/jquants/live/`
+  （gitignore）。执行器的「决算前不买」仍用 Yahoo 日程（改成 J-Quants 要另行登记、用户同意）。
+- `jq_data.bulk_download`：记录每个文件的 LastModified，变了就重下（订正会覆盖同一个 Key）。
+- Mac：`scripts/install_launchd_jquants.sh`（LaunchAgent `com.qbreak.jquants`，キー从钥匙串 `qbreak-jquants` 读、不回显）、
+  `scripts/with_jquants.sh`（研究脚本带キー运行）、`scripts/mac_setup.sh`（拉代码后一条命令装好 / 更新：依赖、模拟操盘、仪表盘、J-Quants、研究用克隆）。
+  CLAUDE.md / HANDOFF：Mac 上的 Claude 直接运行命令并汇报、研究一口气做完（登记 → 运行 → 记录 → 推送）。
+- 本来还想提交一个项目级的 Claude Code 权限允许列表（`.claude/settings.json`，让 Mac 对话少问几次），被会话的安全检查以「自我修改权限」拦下 →
+  没有提交；要不要加、加哪些，由用户在 Mac 上用 `/permissions` 自己决定。

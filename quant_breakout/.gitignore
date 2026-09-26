@@ -16,3 +16,4 @@ var/out/trial_page.html
 
 # Mac 实时仪表盘（含第三方消息标题，不入库）
 var/out/dashboard.html
+var/out/jq_today.json

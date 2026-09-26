@@ -238,6 +238,43 @@ def news_full_html(events: list[dict], limit: int = 10) -> str:
     return "".join(out)
 
 
+# ── J-Quants 每天的新信息（只在 Mac 本机页面；J-Quants 数据不能公开）──
+def jq_html(j: dict | None) -> str:
+    if not j:
+        return '<p class="muted">还没有 J-Quants 数据（钥匙串里放好キー后运行 scripts/install_launchd_jquants.sh）</p>'
+    es = j.get("earnings_soon") or []
+    mine = [e for e in es if e.get("tag") != "股票池"]
+    rows = "".join(f"<tr><td>{escape(e['code'])} {escape(str(e.get('name') or ''))}</td><td>{escape(e['date'])}</td><td>{escape(str(e.get('fq') or ''))}</td>"
+                   f"<td>{escape(e.get('tag') or '')}</td><td class='{'neg' if e.get('mismatch') else 'muted'}'>"
+                   f"{escape(str(e.get('yahoo') or '—'))}{' ★不一致' if e.get('mismatch') else ''}</td></tr>" for e in (mine + [e for e in es if e.get('mismatch') and e not in mine])[:15])
+    parts = [f"<p>{escape(str(j.get('day')))} 的数据（{escape(str(j.get('phase') or ''))}，{escape(str(j.get('generated') or ''))} 取）："
+             f"股票池 10 个营业日内要发表决算的 <b>{len(es)} 只</b>，其中持仓 / 候补 {len(mine)} 只。</p>"]
+    if rows:
+        parts.append("<div class='scroll'><table><tr><th>代码</th><th>决算日</th><th>区分</th><th>标签</th><th>Yahoo 日程（执行器现在用的）</th></tr>"
+                     f"{rows}</table></div>")
+    rv = j.get("revisions") or []
+    if rv:
+        txt = "、".join(f"{escape(r['code'])} {escape(str(r.get('main')))} {r['main_chg_pct']:+.1f}%（{escape(r['doc'])}）"
+                       if r.get("main_chg_pct") is not None else f"{escape(r['code'])}（{escape(r['doc'])}）" for r in rv[:12])
+        parts.append(f"<p>当天开示的会社予想（股票池）：{txt}</p>")
+    for k, lab in (("margin_alerts", "日々公表信用残（注意喚起・规制）"), ("short_reports", "空売り残高報告（≥ 0.5%）"), ("splits", "拆股 / 合并")):
+        v = j.get(k) or []
+        if v:
+            u = list(dict.fromkeys(x["code"] for x in v))
+            parts.append(f"<p>{lab}：{len(u)} 只（{escape('、'.join(u[:15]))}{'…' if len(u) > 15 else ''}）</p>")
+    lots = j.get("lots") or []
+    if lots:
+        parts.append("<p>候补的真实一手：" + escape("、".join(f"{x['code']} ¥{x['lot_jpy']:,.0f}" for x in lots[:12])) + "</p>")
+    ls = j.get("listings") or {}
+    if ls.get("new") or ls.get("gone") or ls.get("moved"):
+        parts.append(f"<p>上市一览：新上市 {len(ls.get('new') or [])} 只、退市 {len(ls.get('gone') or [])} 只、市场区分变更 {len(ls.get('moved') or [])} 只"
+                     "（新上市的票用 scripts/theme_link_check.py 做关联对比）</p>")
+    fg = j.get("foreign")
+    if fg:
+        parts.append(f"<p>海外投資家（Prime）{escape(fg['week'])}：差引 {fg['balance']:+,.0f} 千円</p>")
+    return "".join(parts) + "<p class='muted'>来源 J-Quants（個人利用、不再分发；只在这台 Mac 上显示）。只作参考，不改交易。</p>"
+
+
 # ── ⑤ 业种强弱 ──
 def sectors_html(themes: dict, n: int = 5) -> str:
     from . import themes as TH
@@ -287,11 +324,12 @@ td,th{{border-bottom:1px solid var(--line);padding:5px 4px;text-align:left;verti
 <div class="muted">生成 {generated}；消息 {news_at}（来源：{sources}）；页面每 5 分钟自动刷新</div>{alert}{body}</main></body></html>"""
 
 
-def page(d: dict, macro: dict, news: dict, generated: str) -> str:
-    """Mac 本机的独立页面（完整消息）。"""
+def page(d: dict, macro: dict, news: dict, generated: str, jq: dict | None = None) -> str:
+    """Mac 本机的独立页面（完整消息 + J-Quants 每天的新信息）。"""
     src = "、".join(f"{escape(k)} {v if isinstance(v, int) else '✗'}" for k, v in (news.get("sources") or {}).items())
     al = [e for e in news.get("events") or [] if e.get("alert")]
     alert = (f'<div class="card" style="border-color:var(--neg)"><b>提醒 {len(al)} 件</b>：'
              + "；".join(escape("、".join(e["event_labels"])) + f"（{escape(e['title'][:40])}…）" for e in al[:3]) + "</div>") if al else ""
     return _PAGE.format(generated=escape(generated), news_at=escape(str(news.get("generated") or "—")), sources=src or "—",
-                        alert=alert, body=render(d, macro, news, full_news=True))
+                        alert=alert, body=render(d, macro, news, full_news=True)
+                        + f'<section class="card dash"><h2>J-Quants 每天的新信息</h2>{jq_html(jq)}</section>')

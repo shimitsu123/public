@@ -7,6 +7,7 @@
 #   bash scripts/liveu.sh desktop                    手动（在终端里做一次）：桌面上放一个指向页面的链接，并打开页面
 #   bash scripts/liveu.sh trial                      试跑：在临时目录下载行情、按最新收盘做一次决策（不动正式的模拟账户）
 #   bash scripts/liveu.sh news [--open]              定时任务用（每 15 分钟，scripts/install_launchd_news.sh）：市场仪表盘 + 经济威胁提醒
+#   bash scripts/liveu.sh jq                         定时任务用（营业日 19:30 + 次日 07:05，scripts/install_launchd_jquants.sh）：J-Quants 新数据
 # 页面（账本 + 日志）：~/.qbreak/home/out/page_paper.html（立花：page_tachibana.html），每次运行都重写；
 #   定时任务跑完自动用浏览器打开（不想弹出：touch ~/.qbreak/home/NO_OPEN）；运行没走完 → 页面顶上标红 + 通知。
 # 环境变量：QBREAK_LIVEU_HOME（默认 ~/.qbreak/home）、QBREAK_PYTHON（默认 ~/.qbreak/venv/bin/python）、
@@ -57,6 +58,20 @@ if [ "${1:-}" = "trial" ]; then                    # 装好之后马上验证整
     echo "★ 试跑失败（见上），把这段输出发给 Claude"
   fi
   exit "$rc"
+fi
+
+if [ "${1:-}" = "jq" ]; then                       # 定时任务用（营业日 19:30 + 次日 07:05）：J-Quants 每天的新数据（キー不回显）
+  shift
+  sync_inputs
+  if [ -z "${JQUANTS_API_KEY:-}" ] && command -v security >/dev/null 2>&1; then
+    JQUANTS_API_KEY="$(security find-generic-password -s qbreak-jquants -a qbreak -w 2>/dev/null || true)"
+  fi
+  if [ -z "${JQUANTS_API_KEY:-}" ]; then
+    echo "★ 钥匙串里没有 qbreak-jquants：在终端运行 security add-generic-password -s qbreak-jquants -a qbreak -w（回车后输入キー）"
+    exit 3
+  fi
+  export JQUANTS_API_KEY JQUANTS_PLAN="${JQUANTS_PLAN:-standard}"
+  exec "$PY" run.py jq-live "$@"
 fi
 
 if [ "${1:-}" = "news" ]; then                     # 定时任务用（每 15 分钟）：经济威胁消息 + 新公布的数据 → 市场仪表盘；新的提醒 → 通知

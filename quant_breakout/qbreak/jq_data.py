@@ -43,12 +43,22 @@ def bulk_download(client: JQuants, endpoint: str, http_get=None, log=print) -> l
         from curl_cffi import requests as cr
         http_get = lambda url: cr.get(url, timeout=180).content                    # noqa: E731
     keys = client.get("/bulk/list", endpoint=endpoint)
+    meta_fp = bulk_dir() / "_last_modified.json"
+    try:
+        import json as _json
+        meta = _json.loads(meta_fp.read_text(encoding="utf-8")) if meta_fp.exists() else {}
+    except ValueError:
+        meta = {}
     out = []
     for k in sorted(keys, key=lambda r: r["Key"]):
         fp = bulk_dir() / k["Key"]
         size = int(float(k.get("Size") or 0))
-        if fp.exists() and (not size or fp.stat().st_size == size):
+        lm = str(k.get("LastModified") or "")
+        same = not lm or meta.get(k["Key"]) in (None, lm)                    # 订正会覆盖同一个 Key：LastModified 变了就重下
+        if fp.exists() and same and (not size or fp.stat().st_size == size):
             out.append(fp)
+            if lm and k["Key"] not in meta:
+                meta[k["Key"]] = lm
             continue
         for tries in range(6):                                           # 429（限速）→ 等一分钟再试
             st, body = client._once("/bulk/get", {"key": k["Key"]})
@@ -63,7 +73,12 @@ def bulk_download(client: JQuants, endpoint: str, http_get=None, log=print) -> l
         tmp.write_bytes(blob)
         tmp.replace(fp)
         out.append(fp)
+        if lm:
+            meta[k["Key"]] = lm
         log(f"  {k['Key']} {len(blob) / 1e6:.1f} MB")
+    if meta:
+        import json as _json
+        meta_fp.write_text(_json.dumps(meta, ensure_ascii=False, indent=0), encoding="utf-8")
     return out
 
 

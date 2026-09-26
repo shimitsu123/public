@@ -101,6 +101,19 @@ def test_real_ratio_and_bulk_cache(monkeypatch, tmp_path):
     files = JD.bulk_download(C(), "/equities/bars/daily", http_get=lambda url: blob, log=lambda s: None)
     files2 = JD.bulk_download(C(), "/equities/bars/daily", http_get=lambda url: blob, log=lambda s: None)
     assert files == files2 and C.calls == 1                                        # 已下载的文件不再下（月度文件不会变）
+
+    class C2(C):
+        lm = "2026-09-01T00:00:00Z"
+
+        def get(self, path, **kw):
+            return [{"Key": "x/historical/2020/a.csv.gz", "Size": "0", "LastModified": C2.lm}]
+    JD.bulk_download(C2(), "/equities/bars/daily", http_get=lambda url: blob, log=lambda s: None)
+    n = C.calls
+    JD.bulk_download(C2(), "/equities/bars/daily", http_get=lambda url: blob, log=lambda s: None)
+    assert C.calls == n                                                           # LastModified 没变 → 不重下
+    C2.lm = "2026-09-26T00:00:00Z"                                               # 订正覆盖了同一个 Key → 重下
+    JD.bulk_download(C2(), "/equities/bars/daily", http_get=lambda url: blob, log=lambda s: None)
+    assert C.calls == n + 1
     df = JD.read_bulk(files, JD.DATASETS["daily"][1], {"72030"})
     assert list(df["Code"]) == ["72030"] and JD.code5("7203.T") == "72030" and JD.code5("285A.T") == "285A0"
 
