@@ -941,7 +941,8 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
            "positions": {t: {"market": p.market, "shares": p.shares, "entry_px": p.entry_px, "entry_date": p.entry_date,
                              "stop_px": round(p.stop_px, 2)} for t, p in state.pos.items()},
            "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker,
-           "threat": threat, "executor": executor, "score_forward": score_fwd}
+           "threat": threat, "executor": executor, "score_forward": score_fwd,
+           "themes": _theme_panel(provider)}                  # 主题 / 业种强弱、影响度、新出现的联动（只作展示）
     if usdjpy is None:                                       # 状态里没有汇率时（例如首日）：备用来源
         out["usdjpy"], out["usdjpy_src"] = _usdjpy_any()
     from qbreak.data import LAGGING
@@ -960,6 +961,31 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     print(_json.dumps({k: out[k] for k in ("bar_date", "equity_jpy", "cash_jpy", "cash_usd", "todo")},
                       ensure_ascii=False, indent=1, default=float))
     return 0
+
+
+def _theme_panel(provider: str) -> dict:
+    """日报的「主题 / 业种强弱、影响度、新出现的联动」（qbreak/theme_monitor.py；只作展示，不改交易）。
+    行情：TOPIX 1000（var/industry_s33.json）+ 主题成员，近 2 年；失败只记下原因，日报「数据完整性」会列出。"""
+    import json as _json
+    try:
+        from qbreak import theme_monitor as TM
+        from qbreak import themes as TH
+        from qbreak.config import BENCHMARK
+        from qbreak.data import load_universe
+        from qbreak.trader import drop_partial_bar
+        from qbreak.utils import read_json
+        s33 = {f"{c}.T": v for c, v in _json.loads((paths.home() / "industry_s33.json").read_text(encoding="utf-8"))["s33"].items()}
+        want = sorted(set(s33) | {f"{c}.T" for c in TH.members()})
+        data = load_universe(want, DataConfig(provider=provider, years=2, allow_synthetic=False).validate())
+        data = {t: df for t, df in ((t, drop_partial_bar(df, "JP")) for t, df in data.items()) if df is not None and len(df)}
+        d10 = DataConfig(provider=provider, years=10, allow_synthetic=False).validate()
+        ix = drop_partial_bar(load_universe([BENCHMARK["JP"]], d10)[BENCHMARK["JP"]], "JP")
+        out = TM.panel(data, s33, ix["Close"], read_json(paths.home() / "theme_influence.json", {}) or {})
+        out["n_loaded"], out["n_wanted"] = len(data), len(want)
+        return out
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("主题强弱面板失败（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"}
 
 
 def _score_forward_log(ctx, eng, state, planned: dict) -> dict:
@@ -1175,7 +1201,8 @@ def _unified_preview(a, cfg: dict) -> int:
     out = {"preview": True, "date": today.isoformat(), "start": cfg["start"], "bar_date": None,
            "data_dates": {m: v for m, v in sorted(dates.items()) if v}, "equity_jpy": cap, "cash_jpy": round(cap),
            "cash_usd": 0.0, "usdjpy": fx, "usdjpy_src": fx_src, "todo": {}, "skipped": {}, "positions": {},
-           "core_units": {}, "extras": extras, "config": ucfg.to_dict(), "broker": broker_of("JP", u), "threat": threat}
+           "core_units": {}, "extras": extras, "config": ucfg.to_dict(), "broker": broker_of("JP", u), "threat": threat,
+           "themes": _theme_panel(provider)}
     from qbreak.data import LAGGING
     out["lagging"] = dict(LAGGING)
     write_json(paths.out_dir() / "unified_today.json", out)

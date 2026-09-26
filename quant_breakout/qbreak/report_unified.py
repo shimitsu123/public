@@ -55,6 +55,7 @@ def build_unified_data() -> dict:
             "threat": td.get("threat") or read_json(paths.out_dir() / "threat_today.json", {}) or {},
             "executor": td.get("executor") or {},                # 实盘执行器的演练账户（模拟券商）与模拟盘的逐日比较
             "score_forward": td.get("score_forward") or {},      # 买点质量分的前向记录（只记录，不影响交易）
+            "themes": td.get("themes") or {},                    # 主题 / 业种强弱、影响度、新出现的联动（只作展示）
             "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
             "config": td.get("config") or config_from_sim(sim).to_dict(),     # 首次运行前从 sim.json 取
@@ -70,6 +71,8 @@ def build_unified_data() -> dict:
                      "与直观百分比（离 250 日线的距离、20 个交易日的变化、还要跌 / 涨多少才翻转），汇报时先写这个；"
                      "候补队列在 markets.JP.watchlist；todo 的个股买单与候补队列的 breakout / to_box_top_pct = 「真突破」标签"
                      "（收盘是否高于过去 60 日最高、距箱顶 %；只作参考，不改交易）；大事件威胁指数在 threat（只展示，不参与交易）；"
+                     "主题 / 业种强弱在 themes.groups（r1m / r3m = 近 1 / 3 个月相对 TOPIX 1000 平均的 %，rank3m / of = 排名，"
+                     "r2_now / r2_hist = 与日経225 的同步度 R²）与 themes.emerging（新出现的联动群 clusters、个股 links；只作展示，不改交易）；"
                      "missing = 日报应有而没取到的数据（项目 + 原因），汇报时逐项列出。")}
     d["missing"] = missing_items(d)
     return d
@@ -116,6 +119,9 @@ def missing_items(d: dict) -> list[str]:
     t = d.get("threat") or {}
     if not t or t.get("error"):
         out.append(f"大事件威胁指数：{t.get('error') or '没有算出'}")
+    th = d.get("themes") or {}
+    if (started or preview) and (th.get("error") or not th.get("groups")):
+        out.append(f"主题 / 业种强弱：{th.get('error') or '没有算出'}（只作展示，不影响交易）")
     sf = d.get("score_forward") or {}
     if started and sf.get("error"):
         out.append(f"买点质量分前向记录：今天没记上（{sf['error']}）—— 不影响交易，下次运行会补最近 5 个交易日")
@@ -272,6 +278,8 @@ def render_unified_html(d: dict) -> str:
     cfg = d.get("config") or {}
     with_us = "US" in (cfg.get("stock_markets") or ["JP", "US"])
 
+    meta = _groups_meta()
+
     def rows(items, market):
         out = []
         for o in items:
@@ -284,6 +292,8 @@ def render_unified_html(d: dict) -> str:
             why = f"（{escape(str(o.get('reason')))}）" if o.get("reason") else ""
             unit = "口" if str(o.get("ticker", "")).startswith(("1655", "1329", "2558")) else "股"
             tag = f" {_bo_tag(o)}" if o.get("side") == "BUY" and "breakout" in o else ""
+            if o.get("side") == "BUY":
+                tag += f" {_grp_tag(o.get('ticker', ''), d.get('themes') or {}, meta)}"
             out.append(f"<li><b>{'买入' if o['side'] == 'BUY' else '卖出'}</b> {escape(o['ticker'])} × {o['qty']:,} {unit}"
                        f" {escape(o.get('type', ''))}{lim}{why}{tag}</li>")
         return "".join(out) or (f'<li class="muted">首次运行（{escape(str(d.get("sim", {}).get("start")))} 07:00 JST 前后）后给出当天要下的单'
@@ -346,6 +356,7 @@ def render_unified_html(d: dict) -> str:
             tilt = w.get("tilt")
             lot = f"（一手 {_money(w.get('lot_cost'), ccy)}）" if w.get("lot_cost") else ""
             watch.append(f"<tr><td>{i}</td><td>{escape(str(w.get('ticker')))}</td><td class='muted'>{escape(str(w.get('sector') or '—'))}</td>"
+                         f"<td>{_grp_tag(str(w.get('ticker')), d.get('themes') or {}, meta) if m == 'JP' else '—'}</td>"
                          f"<td>{_STATUS.get(w.get('status'), escape(str(w.get('status'))))}</td><td>{_bo_tag(w) or '—'}</td>"
                          f"<td class='n'>{float(w.get('score') or 0):.1f} 分</td>"
                          f"<td class='n'>{_money(w.get('close'), ccy)}</td><td>{'是' if w.get('affordable') else '否'}{lot}</td>"
@@ -376,7 +387,8 @@ def render_unified_html(d: dict) -> str:
         core="".join(core_rows) or "<tr><td colspan=4 class='muted'>无</td></tr>",
         spark=_spark(d.get("history") or []), trades=tr_rows or "<tr><td colspan=6 class='muted'>还没有平仓的交易</td></tr>",
         fx=fx_rows or "<tr><td colspan=4 class='muted'>还没有换汇</td></tr>", markets="".join(mk),
-        watch="".join(watch) or "<tr><td colspan=9 class='muted'>尚无候补数据</td></tr>",
+        watch="".join(watch) or "<tr><td colspan=11 class='muted'>尚无候补数据</td></tr>",
+        themes=_themes_html(d.get("themes") or {}, meta),
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us),
         corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
@@ -390,6 +402,89 @@ def render_unified_html(d: dict) -> str:
 _EV = {"FOMC": "美联储议息", "BOJ": "日银议息", "CPI": "美国 CPI", "NFP": "美国非农就业", "ELECTION": "选举",
        "POLITICS": "政治日程", "FISCAL": "财政期限", "TRADE": "贸易 / 关税期限", "OPEC": "OPEC+ 会议", "SUMMIT": "峰会",
        "TANKAN": "日银短观", "SQ": "日本 SQ（定期）", "OPEX": "美股季度期权到期（定期）", "INDEX": "指数调整"}
+
+
+def _groups_meta() -> tuple[dict, dict, dict]:
+    """(代码 → 東証业种, 代码 → 主题, 代码 → 公司名)。"""
+    from . import jpx_list as JL
+    from . import themes as TH
+    s33 = (read_json(paths.home() / "industry_s33.json", {}) or {}).get("s33") or {}
+    return s33, TH.members(), JL.names()
+
+
+def _sg(v, nd: int = 1) -> str:
+    return "—" if v is None else f"{'+' if v > 0 else '−' if v < 0 else '±'}{abs(float(v)):.{nd}f}%"
+
+
+def _grp_tag(ticker: str, th: dict, meta: tuple) -> str:
+    """个股的主题 / 业种标签 + 近 3 个月相对强弱（排名）。主题优先；不在主题里的写東証业种。只作参考。"""
+    s33, mem, _ = meta
+    g = (th or {}).get("groups") or {}
+    code = str(ticker).split(".")[0]
+    out = []
+    for key, label, kind in ((mem.get(code), None, "主题"), (s33.get(code), None, "业种")):
+        if not key or key not in g:
+            continue
+        x = g[key]
+        name = ((th.get("themes") or {}).get(key) or {}).get("name", key)
+        rk = f"（{x['rank3m']}/{x['of']}）" if x.get("rank3m") else ""
+        out.append(f'<span class="tag dim" title="{kind}：近 3 个月相对 TOPIX 1000 平均，括号 = {kind}里的排名">'
+                   f"{escape(name)} {_sg(x.get('r3m'))}{rk}</span>")
+    return " ".join(out) or '<span class="muted">—</span>'
+
+
+def _themes_html(th: dict, meta: tuple) -> str:
+    """主题 / 业种：近 1 / 3 个月强弱、影响度（与日経的同步度）、新出现的联动（只作参考，不改交易）。"""
+    g = (th or {}).get("groups") or {}
+    if not g:
+        return ""
+    s33, mem, nm = meta
+    names = {k: v.get("name", k) for k, v in ((th.get("themes") or {}).items())}
+    yr = int(str(th.get("asof") or now_jst().date())[:4])
+    y3, y10 = str(yr - 3), str(yr - 10)
+
+    def r2(x, y=None):
+        v = x.get("r2_now") if y is None else (x.get("r2_hist") or {}).get(y)
+        return "—" if v is None else f"{float(v):.2f}"
+
+    def row(k, lab):
+        x = g[k]
+        cls = "pos" if (x.get("r3m") or 0) > 0 else "neg"
+        return (f"<tr><td>{escape(lab)}</td><td class='n'>{x.get('n', 0)} 只</td><td class='n'>{_sg(x.get('r1m'))}</td>"
+                f"<td class='n {cls}'>{_sg(x.get('r3m'))}（{x.get('rank3m', '—')}/{x.get('of', '—')}）</td>"
+                f"<td class='n'>{r2(x)} / {r2(x, y3)} / {r2(x, y10)}</td></tr>")
+    tk = sorted([k for k in g if k in names and g[k].get("r3m") is not None], key=lambda k: -g[k]["r3m"])
+    ik = sorted([k for k in g if k not in names and g[k].get("r3m") is not None], key=lambda k: -g[k]["r3m"])
+    head = (f"<tr><th>组</th><th class='n'>成员</th><th class='n'>近 1 月</th><th class='n'>近 3 月（排名）</th>"
+            f"<th class='n'>与日経同步度 R²：近 1 年 / {y3} / {y10}</th></tr>")
+    t_rows = "".join(row(k, f"{k} {names[k]}") for k in tk)
+    i_rows = "".join(row(k, k) for k in ik[:5]) + ("<tr><td colspan=5 class='muted'>…</td></tr>" if len(ik) > 10 else "") \
+        + "".join(row(k, k) for k in ik[-5:] if k not in ik[:5])
+    e = th.get("emerging") or {}
+    lab = lambda t: escape(f"{t.split('.')[0]} {nm.get(t.split('.')[0], '')}".strip())            # noqa: E731
+    gname = lambda k: escape(f"{k} {names[k]}" if k in names else str(k))                           # noqa: E731
+    cl = "".join(
+        f"<li><b>{escape(c['kind'])}</b> {c['n']} 只，群内平均相关 {c['corr_before']:.2f} → {c['corr_now']:.2f}；"
+        f"最像：{'、'.join(f'{gname(k)} {v:.2f}' for k, v in c['similar'])}；"
+        f"业种分布：{escape('、'.join(f'{k} {v}' for k, v in list(c['industries'].items())[:5]))}；"
+        f"成员：{'、'.join(lab(t) for t in c['members'])}{' …' if c['n'] > len(c['members']) else ''}</li>"
+        for c in e.get("clusters") or [])
+    lk = "；".join(
+        f"{lab(x['ticker'])}（{escape(str(x['own_ind'] or '—'))}）→ {gname(x['group'])} {x['corr_before']:+.2f} → {x['corr_now']:+.2f}"
+        for x in (e.get("links") or [])[:10])
+    emer = (f"<h3>新出现的联动（近 6 个月 {escape(' 〜 '.join(e['window']))}，对比之前 1 年）</h3>"
+            f"<ul>{cl or '<li class=muted>没有新形成的股票群</li>'}</ul>"
+            f"<p class='muted'>个股（现在最像的「非所属」组，相关 之前 → 现在）：{lk or '无'}</p>") if e.get("window") else (
+            f"<p class='muted'>新出现的联动：{escape(str(e.get('note') or '没有算出'))}</p>")
+    return ("<section class=\"card\"><h2>主题与业种：强弱、影响度、新出现的联动（只作参考，不改交易）</h2>"
+            f"<p class='muted'>数据截至 {escape(str(th.get('asof') or '—'))}；近 1 / 3 月 = 近 21 / 63 个交易日相对 TOPIX 1000 平均（对数收益之和，%）；"
+            "影响度 = 这一组每天的涨跌与日経225 同步的程度（R²，0〜1；历年值每年 1 月更新 var/theme_influence.json）。</p>"
+            f"<h3>12 个主题</h3><div class='scroll'><table>{head}{t_rows}</table></div>"
+            f"<h3>東証业种（最强 5 / 最弱 5）</h3><div class='scroll'><table>{head}{i_rows}</table></div>{emer}"
+            "<p class='muted'>读法：主题成员按主营业务事先写定（qbreak/themes.py）；「新联动群」= 最近半年开始一起动、以前不一起动的股票（平均连接聚类），"
+            "附上它和现有业种 / 主题最像哪几个 —— 新出现的行业先这样和现有行业做关联对比，要正式加进主题表先跑 "
+            "scripts/theme_link_check.py。2026-09-26 的研究：主题动量用来挑买点没有通过、行业之间的领先关系多半是时代现象"
+            "（var/out/theme_study.md、us_replication_study.md）—— 这里只帮助看清结构，不是买卖信号。</p></section>")
 
 
 def _commod_rows() -> list[dict]:
@@ -555,9 +650,10 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <section class="card"><h2>核心 ETF（闲置资金）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
 <section class="card"><h2>市场状态</h2><dl>{markets}</dl></section>
 <section class="card"><h2>大事件威胁指数（只展示，不参与交易）</h2>{threat}</section>
-<section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>状态</th><th>突破</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
+<section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>主题 / 业种（近 3 月相对）</th><th>状态</th><th>突破</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
 <p class="muted">宏观顺风度 = 个股对日本 / 美国利率、油价、日元、信用利差，以及农产品、工业金属、黄金、天然气 ETF 的历史敏感度 × 近 60 个交易日的变化（当日横截面三分位：顺风 / 中性 / 逆风），只作参考：2026-09-25 事先登记研究显示它对之后 20 日的收益没有可靠的预测力（加商品后月末前 1/5 − 后 1/5 为 +0.35%，t 1.40；秩相关 0.006），交易排序不用它。</p>
 <p class="muted">突破：<b>真突破</b> = 信号当天收盘高于过去 60 个交易日的最高价（不含当天）；<b>未破箱顶</b> = 信号成立但收盘还在箱顶之下（括号里是还差的 %）；还没触发的票显示距箱顶 %（今天要做的事里的买单也标了）。只作参考，不改交易：2026-09-26 事先登记的研究（2006-10〜，日経225 股票池，现行出场规则，每笔扣来回手续费）全部信号 638 笔：胜率 42.5%、每笔平均 +0.70%、盈亏比 1.89；其中真突破 163 笔：胜率 49.7%、每笔 +0.83%、盈亏比 1.44；未破箱顶 475 笔：胜率 40.0%、每笔 +0.66%、盈亏比 2.08。只做真突破：胜率 +7.2 pp（95% 区间 +0.7〜+13.6 pp），每笔期望 +0.13 pp 但不显著（95% 区间 −0.78〜+0.96 pp），组合 20 年年化 11.2%（现行 12.8%）、最大回撤 −36.4%（现行 −35.1%）——现行策略靠盈亏比赚钱，不是靠命中率（var/out/signal_study.md）。</p></section>
+{themes}
 {commod}
 <section class="card"><h2>最近平仓</h2><div class="scroll"><table><tr><th>日期</th><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">损益（日元）</th><th>原因</th></tr>{trades}</table></div></section>
 <section class="card"><h2>换汇记录</h2><div class="scroll"><table><tr><th>日期</th><th>方向</th><th class="n">美元</th><th class="n">汇率</th></tr>{fx}</table></div></section>

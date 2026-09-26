@@ -24,6 +24,9 @@
 - 研究先登记规则（commit）再运行；看到结果之后不改规则；前向记录 `quant_breakout/var/out/*_forward.csv` 只追加，不改、不补写
 - 配置变更与研究结论记在 `quant_breakout/var/sim_changes.md`（事后的改动写明是事后）
 - 不改策略参数、仓位、股票池、宏观阈值、牛熊分界参数，除非用户明确要求并记进 sim_changes.md
+- 新出现的行业 / 主题 / 公司（日报「新出现的联动」、新上市、用户提的新主题）：先用 `quant_breakout/scripts/theme_link_check.py`
+  和现有东证业种 + 主题做关联对比，结果写进 sim_changes.md；改主题表 `quant_breakout/qbreak/themes.py` 要用户同意；
+  影响度历年值 `var/theme_influence.json` 每年 1 月用 `scripts/theme_influence.py` 加上刚结束的一年
 
 ## 在用户的 Mac 上（`~/qbreak-src` = 每个交易日 07:40 定时任务用的仓库）
 - **不改、不提交 `~/qbreak-src` 里被 git 跟踪的文件**：定时任务每天 `git pull --ff-only`，本地改动或本地提交会让它拉不下来，
