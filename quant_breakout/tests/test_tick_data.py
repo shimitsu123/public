@@ -102,3 +102,15 @@ def test_repair_jp_artifacts_split_transient_and_merger():
     df3 = pd.DataFrame({"Open": c3, "High": c3, "Low": c3, "Close": c3, "Volume": 1e5}, index=idx[:8])
     f3 = repair_jp_artifacts("Z.T", df3)
     assert len(f3) == 5 and f3.index[0] == idx[3]
+
+
+def test_repair_split_with_integer_prices_and_volume():
+    """yfinance 有时给整数型的价格 / 成交量；未复权拆股复权时要能写入小数（旧版 pandas 只警告，新版直接报错）。"""
+    import pandas as pd
+    from qbreak.data import repair_jp_artifacts
+    idx = pd.bdate_range("2024-01-01", periods=20)
+    px = [1001] * 10 + [3003] * 10                                         # 3 并 1（合并）未复权
+    df = pd.DataFrame({"Open": px, "High": px, "Low": px, "Close": px, "Volume": [200_000] * 10 + [66_000] * 10},
+                      index=idx).astype("int64")
+    out = repair_jp_artifacts("X.T", df)
+    assert out["Close"].iloc[0] == 3003 and abs(out["Volume"].iloc[0] - 200_000 / 3) < 1e-6 and len(out) == 20

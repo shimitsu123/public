@@ -119,7 +119,7 @@ def repair_jp_artifacts(ticker: str, df: pd.DataFrame, max_iter: int = 10) -> pd
             f = 1 / k if ratio < 1 else k
             log.warning("%s: %s 收盘 ×%.4f，判定为未复权的 %s（×%g），已复权更早的历史", ticker,
                         out.index[i].date(), ratio, "拆股" if ratio < 1 else "合并", f)
-            out = out.copy()
+            out = out.astype({c: float for c in ("Open", "High", "Low", "Close", "Volume")})   # 整数型也要能写入小数
             prior = out.index[:i]
             for col in ("Open", "High", "Low", "Close"):
                 out.loc[prior, col] = out.loc[prior, col] * f
