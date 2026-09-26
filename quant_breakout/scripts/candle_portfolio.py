@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import sys
 import warnings
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -78,6 +79,13 @@ class MixEngine(MS.MLEngine):
                 self.A.dead[i, j] = v
 
 
+def bull_only(em: pd.DataFrame, bear_jp: pd.Series) -> pd.DataFrame:
+    """日本牛熊判定（收盘时）= 熊 → 第二天（成交日）的个股新仓倍数 = 0。em：成交日 × 票。"""
+    bj = bear_jp.reindex(em.index.union(bear_jp.index)).ffill().reindex(em.index).fillna(False).astype(bool)
+    prev = bj.shift(1, fill_value=False)
+    return em.mul((~prev).astype(float).to_numpy()[:, None])
+
+
 def seg_total(eq: pd.Series, a: str | None, b: str | None) -> float | None:
     """一段时间的总收益 %（这一段最后一天的权益 ÷ 这一段第一天 − 1）。"""
     e = eq.dropna()
@@ -100,7 +108,7 @@ def yearly(eq: pd.Series, start: str = TRADE_START) -> dict[str, float]:
     return {str(y): round(float(ye[y] / prev.iloc[k] - 1) * 100, 2) for k, y in enumerate(ye.index)}
 
 
-def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple], end: str | None = None):
+def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple], end: str | None = None, start: str = TRADE_START):
     """run(ind, p, pb=None) → {窗口: 年化 / 回撤 / Calmar, trades, win, win_<窗口>, hold, reasons, years}。"""
     import capital_study as CS
     from bullbear_study import SYM, load
@@ -137,7 +145,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
     em_cache: dict = {}
 
     def run(ind: dict, p, pb: dict | None = None, hold_pb: int = 10, mult: bool = True, pb_free: bool = False,
-            limit_k: float = 0.0, pb_use_dead: bool = False) -> dict:
+            limit_k: float = 0.0, pb_use_dead: bool = False, cfg_over: dict | None = None, jp_bull_only: bool = False) -> dict:
         names = list(ind)
         key = tuple(names) + (("nomult",) if not mult else ())
         if key not in em_cache and not mult:
@@ -160,20 +168,23 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
                     k = int(em.index.searchsorted(d)) + 1
                     if k < len(em.index):
                         em.iat[k, c] = 1.0
+        if jp_bull_only:
+            em = bull_only(em, bear["JP"])
         JS.RealLotEngine.RATIO, JS.RealLotEngine.LAST = ratio, []
         MS.MLEngine.EXIT = {}
         Z._PrioEngine.PRIO = None
         MixEngine.PB, MixEngine.HOLD_PB, MixEngine.LIMIT_K, MixEngine.PB_USE_DEAD = (pb or {}), hold_pb, limit_k, pb_use_dead
         try:
-            eng = MixEngine({**ind, "1655.T": core}, cfg, {"JP": p, "US": us}, ex, cc, fx=fxdf[["Open", "Close"]],
+            c = replace(cfg, **cfg_over) if cfg_over else cfg
+            eng = MixEngine({**ind, "1655.T": core}, c, {"JP": p, "US": us}, ex, cc, fx=fxdf[["Open", "Close"]],
                             entry_mult={"JP": em}, bear=bear)
-            r = eng.run(start=TRADE_START, end=end)
+            r = eng.run(start=start, end=end)
         finally:
             MixEngine.PB, MixEngine.LIMIT_K, MixEngine.PB_USE_DEAD = {}, 0.0, False
         tr = r.trades[r.trades["reason"] != "end"]
         st = tr[tr["ticker"] != "1655.T"] if len(tr) else tr
         out = {w: {**CS.seg_stats(r.equity, a, b), "tot": seg_total(r.equity, a, b)} for w, (a, b) in windows.items()}
-        out.update({"trades": int(len(st)), "years": yearly(r.equity)})
+        out.update({"trades": int(len(st)), "years": yearly(r.equity, start)})
         if len(st):
             ed = pd.to_datetime(st["entry_date"])
             w = (st["pnl"] > 0).to_numpy()
