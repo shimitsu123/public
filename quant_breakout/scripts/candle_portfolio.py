@@ -32,6 +32,11 @@ class MixEngine(MS.MLEngine):
     LIMIT_K = 0.0                                                            # > 0：押し目用指値买（信号日收盘 − K × ATR），碰不到就不买
     PB_USE_DEAD = False                                                      # True：押し目仓位另外按指标表的 dead_cross 列卖（例：反弹到 5 日线）
 
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.bear["XR"] = ~self.bear["US"]                                   # 「避险」核心：美股牛市时算熊（目标 0），美股熊市时算牛
+        self.core_expo["XR"] = np.ones(len(self.gidx))
+
     def _is_pb(self, t: str) -> bool:
         s = MixEngine.PB.get(t)
         if not s:
@@ -145,7 +150,8 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
     em_cache: dict = {}
 
     def run(ind: dict, p, pb: dict | None = None, hold_pb: int = 10, mult: bool = True, pb_free: bool = False,
-            limit_k: float = 0.0, pb_use_dead: bool = False, cfg_over: dict | None = None, jp_bull_only: bool = False) -> dict:
+            limit_k: float = 0.0, pb_use_dead: bool = False, cfg_over: dict | None = None, jp_bull_only: bool = False,
+            extra_core: dict | None = None) -> dict:
         names = list(ind)
         key = tuple(names) + (("nomult",) if not mult else ())
         if key not in em_cache and not mult:
@@ -176,13 +182,15 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
         MixEngine.PB, MixEngine.HOLD_PB, MixEngine.LIMIT_K, MixEngine.PB_USE_DEAD = (pb or {}), hold_pb, limit_k, pb_use_dead
         try:
             c = replace(cfg, **cfg_over) if cfg_over else cfg
-            eng = MixEngine({**ind, "1655.T": core}, c, {"JP": p, "US": us}, ex, cc, fx=fxdf[["Open", "Close"]],
+            xc = extra_core or {}
+            cc2 = {**cc, **{t: etf_cost(broker, t, "JP") for t in xc}}
+            eng = MixEngine({**ind, "1655.T": core, **xc}, c, {"JP": p, "US": us}, ex, cc2, fx=fxdf[["Open", "Close"]],
                             entry_mult={"JP": em}, bear=bear)
             r = eng.run(start=start, end=end)
         finally:
             MixEngine.PB, MixEngine.LIMIT_K, MixEngine.PB_USE_DEAD = {}, 0.0, False
         tr = r.trades[r.trades["reason"] != "end"]
-        st = tr[tr["ticker"] != "1655.T"] if len(tr) else tr
+        st = tr[~tr["ticker"].isin(["1655.T", *(extra_core or {})])] if len(tr) else tr
         out = {w: {**CS.seg_stats(r.equity, a, b), "tot": seg_total(r.equity, a, b)} for w, (a, b) in windows.items()}
         out.update({"trades": int(len(st)), "years": yearly(r.equity, start)})
         if len(st):
