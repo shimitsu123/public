@@ -274,6 +274,7 @@ class UnifiedEngine:
         self.live_mult: dict[str, tuple] = {}
         self.live_fx_ok: bool = True
         self.entry_block_fn = None                          # (票, 日) -> 拦截原因 | None（模拟盘：决算前 N 日不进场）
+        self.entry_priority_fn = None                       # (票, 日) -> 分数 | None：同一天的新仓候选按分数高的先（研究用；缺省 = 按代码）
 
     # ── 工具 ──
     @staticmethod
@@ -606,7 +607,10 @@ class UnifiedEngine:
             return 1 if usd0 >= c else 2
         if len(st.pos) >= cfg.max_positions:          # 与 engine 相同：持仓已满（含明天要卖的）时不规划新仓
             cands = []
-        for t in sorted(cands, key=lambda x: (tier(x), x)):
+        def prio(t: str) -> float:                    # 分数高的排前面；没有分数的排在有分数的后面
+            v = self.entry_priority_fn(t, i) if self.entry_priority_fn is not None else None
+            return -float(v) if v is not None and np.isfinite(v) else np.inf
+        for t in sorted(cands, key=lambda x: (tier(x), prio(x), x)):
             if t in st.pos or t in st.pending_exit or t in st.plan:
                 continue
             m = market_of(t)

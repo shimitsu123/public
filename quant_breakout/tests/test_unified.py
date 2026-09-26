@@ -127,6 +127,23 @@ def test_ranking_prefers_jp_over_us_needing_fx_when_one_slot():
     assert bought == {"7777.T"} and not ue.st.fx_trades
 
 
+def test_entry_priority_default_keeps_code_order_and_score_reorders():
+    """同一天两个日本信号、只有一个名额：缺省按代码（小的先）；给了分数 → 分数高的先（研究用的钩子，缺省不改行为）。"""
+    a, b = _bars(D, [1000.0] * 8, entry_on=[D[1]]), _bars(D, [1000.0] * 8, entry_on=[D[1]])
+    cfg = UnifiedConfig(capital_jpy=1_000_000, position_pct=0.25, max_positions=1, stock_markets=("JP",),
+                        core={}, core_index={})
+
+    def run(fn=None):
+        ue = UnifiedEngine({"1111.T": a, "2222.T": b}, cfg, {"JP": P, "US": P}, EX, {})
+        ue.entry_priority_fn = fn
+        ue.run()
+        return {t["ticker"] for t in ue.st.trades}, ue.skipped["full"]
+    assert run() == ({"1111.T"}, 1)
+    assert run(lambda t, i: {"1111.T": 0.1, "2222.T": 0.9}[t]) == ({"2222.T"}, 1)
+    assert run(lambda t, i: {"1111.T": None, "2222.T": -5.0}[t]) == ({"2222.T"}, 1)      # 没有分数的排在后面
+    assert run(lambda t, i: None) == ({"1111.T"}, 1)
+
+
 def test_core_buy_leaves_yen_for_same_day_conversion():
     us = _bars(D, [100.0] * 8, entry_on=[D[2]])
     etf = _bars(D, [3000.0] * 8)
