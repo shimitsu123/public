@@ -28,13 +28,23 @@
   和现有东证业种 + 主题做关联对比，结果写进 sim_changes.md；改主题表 `quant_breakout/qbreak/themes.py` 要用户同意；
   影响度历年值 `var/theme_influence.json` 每年 1 月用 `scripts/theme_influence.py` 加上刚结束的一年
 
-## 在用户的 Mac 上（`~/qbreak-src` = 每个交易日 07:40 定时任务用的仓库）
-- **不改、不提交 `~/qbreak-src` 里被 git 跟踪的文件**：定时任务每天 `git pull --ff-only`，本地改动或本地提交会让它拉不下来，
-  模拟操盘就会用旧代码、旧数据。要改代码 → 告诉用户在云端会话（claude.ai/code）里改（那里跑全部测试、推到分支），Mac 只 `git pull`
+## 在用户的 Mac 上（2026-09-26 起：用户只在 Mac 的 Claude 对话里提问与执行）
+用户的问法与对应的命令见 HANDOFF.md「在 Mac 对话里怎么问」。
+- 两个克隆：`~/qbreak-src` = 每个交易日 07:40 定时任务用的仓库，**只 `git pull`，不改、不提交被跟踪的文件**（本地改动或本地提交会让
+  定时任务拉不下来，模拟 / 实盘就用旧代码、旧数据）；`~/qbreak-dev` = 改代码、做研究用的第二个克隆（同一分支；第一次需要时建：
+  `git clone -b claude/rakuten-auto-trading-review-ka7lf0 https://github.com/shimitsu123/public.git ~/qbreak-dev`）
+- 在 `~/qbreak-dev` 里改代码 / 做研究：规则同「在云端」一节（先登记后运行、全部测试通过才提交、`git pull --rebase` 后再推、不写模型名）；
+  推送要用户自己在 Mac 上配好 GitHub 登录（`gh auth login` 或 SSH 钥匙；不在对话里贴令牌），推不上去就停下告诉用户；
+  推上去之后 `git -C ~/qbreak-src pull --ff-only`（不拉也行，第二天 07:40 会自动拉）
+- 云端例行任务照旧（每个交易日 06:57 模拟盘日报、每季复核）：它们每天推 `var/`，所以 dev 克隆推之前一定先 `git pull --rebase`
 - 不在 Mac 上对仓库的 `var/` 运行 `run.py sim-day` / `sim-*` / `report` / `optimize` 等（会改被跟踪的文件；模拟盘只在云端跑）
 - 执行器只经 `scripts/liveu.sh`（它把数据目录设成 `~/.qbreak/home`）；直接跑 `run.py` 时先 `export QBREAK_HOME=~/.qbreak/home`
   （只读命令也一样）；Python 用 `~/.qbreak/venv/bin/python`（macOS 自带的 3.9 不够）
-- 实盘相关：不创建 `~/.qbreak/home/ARM`、不删除 `HALT`、不加 `--no-arm`，除非用户在这次对话里明确要求
+- J-Quants（Standard，研究用）：密钥放钥匙串（服务名 `qbreak-jquants`，用户自己用 `security add-generic-password -s qbreak-jquants -a qbreak -w` 存），
+  命令里临时读进环境变量、绝不回显：`JQUANTS_API_KEY="$(security find-generic-password -s qbreak-jquants -a qbreak -w)" JQUANTS_PLAN=standard …`
+- 实盘相关（立花）：不创建 `~/.qbreak/home/ARM`、不删除 `HALT`、不加 `--no-arm`、不用 `--resolve` 登记成交，除非用户在这次对话里明确要求；
+  用户说「停 / 今天不要下单」→ 立刻建 `~/.qbreak/home/HALT`（停下单不用再确认）；不在执行器之外向立花发任何单（不写临时脚本调 API 下单）；
+  用户想人工买卖执行器管的股票（股票池 + 1655）→ 先说明这会让第二天的持仓核对停下，建议先 HALT 再商量
 - 排查先看：`~/.qbreak/home/logs/com.qbreak.liveu.*.out|err`、`~/.qbreak/home/out/live_unified_paper_journal.md`、
   页面 `~/.qbreak/home/out/page_paper.html`、`bash scripts/liveu.sh --broker paper --status`、`launchctl list | grep qbreak`
 
