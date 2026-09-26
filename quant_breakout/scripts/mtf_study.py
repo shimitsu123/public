@@ -190,6 +190,12 @@ def r_fails(r: dict, base: dict) -> list[str]:
     return f
 
 
+def exit_label(lab: str) -> str:
+    """C 部分每一行的名字（2026-09-27 登记后修正：原来用 dict.get 的默认值，默认值先被求值 → 「现行」那一行 KeyError）。"""
+    special = {"现行": "现行（日线死叉等）", "C1": "C1 " + CANDS["C1"], "C2": "C2 " + CANDS["C2"], "C5": "C5 " + CANDS["C5"]}
+    return special[lab] if lab in special else f"现行 + {lab} {({**mtf.W_EVENT, **mtf.M_EVENT})[lab]} 就卖"
+
+
 def yearly(eq: pd.Series, start: str = TRADE_START) -> dict[str, float]:
     e = eq.dropna()
     e = e[e.index >= pd.Timestamp(start)]
@@ -476,9 +482,7 @@ def main(argv=None) -> int:
         out["C"][lab] = {"va": sv, "ho": sh}
         if lab in TOPS:
             xrows[lab] = sv
-        name = {"现行": "现行（日线死叉等）", "C1": "C1 " + CANDS["C1"], "C2": "C2 " + CANDS["C2"], "C5": "C5 " + CANDS["C5"]}.get(
-            lab, f"现行 + {lab} {({**mtf.W_EVENT, **mtf.M_EVENT})[lab]} 就卖")
-        say(f"| {name} | {cell(sv)} | {cell(sh)} |")
+        say(f"| {exit_label(lab)} | {cell(sv)} | {cell(sh)} |")
     top = pick_top(xrows, base_va)
     out["C3_top"] = top
     say(f"\n→ C3 用：{top + ' ' + ({**mtf.W_EVENT, **mtf.M_EVENT})[top] if top else '没有见顶特征满足挑选条件 → C3 不跑'}")

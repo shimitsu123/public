@@ -94,3 +94,9 @@ def test_yearly_and_trade_stats():
     s = S.tstats(T)
     assert s["n"] == 3 and s["pf"] == 5.0 and s["win"] == 66.67
     assert len(S.period(T, *S.HOLD)) == 1
+
+
+def test_exit_labels_for_every_row_of_part_c():
+    labs = ["现行"] + list(S.TOPS) + ["C1", "C2", "C5"]
+    out = [S.exit_label(x) for x in labs]
+    assert out[0].startswith("现行（") and out[1].startswith("现行 + X1") and out[-1].startswith("C5 ")
