@@ -32,6 +32,7 @@ class MixEngine(MS.MLEngine):
     LIMIT_K = 0.0                                                            # > 0：押し目用指値买（信号日收盘 − K × ATR），碰不到就不买
     PB_USE_DEAD = False                                                      # True：押し目仓位另外按指标表的 dead_cross 列卖（例：反弹到 5 日线）
     PREF_US: pd.Series | None = None                                         # 双动量：True = 美股（日元计）比日本强（按日期，向后填）
+    YEN_STRONG: pd.Series | None = None                                      # 汇率对冲切换：True = 日元走强趋势（按日期，向后填）
 
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
@@ -45,6 +46,12 @@ class MixEngine(MS.MLEngine):
             self.bear["MU"] = us_b | (~jp_b & ~pu)
             self.bear["MJ"] = jp_b | (~us_b & pu)
             self.core_expo["MU"] = self.core_expo["MJ"] = np.ones(n)
+        if MixEngine.YEN_STRONG is not None:                                # 美股牛市：日元走强 → 对冲版（HG），否则不对冲（UH）
+            s = MixEngine.YEN_STRONG
+            ys = s.reindex(self.gidx.union(s.index)).ffill().reindex(self.gidx).fillna(False).to_numpy(bool)
+            self.bear["UH"] = self.bear["US"] | ys
+            self.bear["HG"] = self.bear["US"] | ~ys
+            self.core_expo["UH"] = self.core_expo["HG"] = np.ones(n)
 
     def _is_pb(self, t: str) -> bool:
         s = MixEngine.PB.get(t)
@@ -160,7 +167,8 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
 
     def run(ind: dict, p, pb: dict | None = None, hold_pb: int = 10, mult: bool = True, pb_free: bool = False,
             limit_k: float = 0.0, pb_use_dead: bool = False, cfg_over: dict | None = None, jp_bull_only: bool = False,
-            extra_core: dict | None = None, pref_us: pd.Series | None = None, core_expo: dict | None = None) -> dict:
+            extra_core: dict | None = None, pref_us: pd.Series | None = None, core_expo: dict | None = None,
+            yen_strong: pd.Series | None = None) -> dict:
         names = list(ind)
         key = tuple(names) + (("nomult",) if not mult else ())
         if key not in em_cache and not mult:
@@ -189,7 +197,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
         MS.MLEngine.EXIT = {}
         Z._PrioEngine.PRIO = None
         MixEngine.PB, MixEngine.HOLD_PB, MixEngine.LIMIT_K, MixEngine.PB_USE_DEAD = (pb or {}), hold_pb, limit_k, pb_use_dead
-        MixEngine.PREF_US = pref_us
+        MixEngine.PREF_US, MixEngine.YEN_STRONG = pref_us, yen_strong
         try:
             c = replace(cfg, **cfg_over) if cfg_over else cfg
             xc = extra_core or {}
@@ -198,7 +206,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
                             entry_mult={"JP": em}, bear=bear, core_expo=core_expo)
             r = eng.run(start=start, end=end)
         finally:
-            MixEngine.PB, MixEngine.LIMIT_K, MixEngine.PB_USE_DEAD, MixEngine.PREF_US = {}, 0.0, False, None
+            MixEngine.PB, MixEngine.LIMIT_K, MixEngine.PB_USE_DEAD, MixEngine.PREF_US, MixEngine.YEN_STRONG = {}, 0.0, False, None, None
         tr = r.trades[r.trades["reason"] != "end"]
         st = tr[~tr["ticker"].isin(["1655.T", *(extra_core or {})])] if len(tr) else tr
         out = {w: {**CS.seg_stats(r.equity, a, b), "tot": seg_total(r.equity, a, b)} for w, (a, b) in windows.items()}
