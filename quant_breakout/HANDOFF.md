@@ -68,6 +68,14 @@
   消息监控 `qbreak/news.py`（NHK / Yahoo!ニュース / 日銀 / 財務省 / FRB / Google ニュース / 気象庁 → 可信度 → 事件 → 因子 → 行业 → 持仓 / 候补）。
   Mac 上 `scripts/install_launchd_news.sh` 注册后每 15 分钟重写 `~/.qbreak/home/out/dashboard.html` 并对新的提醒发通知（**还没在 Mac 上安装**，待办 ⑲）。
   公开仓库：消息标题与链接只在 `var/cache/news/`（不入库）与 Mac 本机页面，日报只放汇总
+- 买卖点参数横展开（不止 MACD，2026-09-26，事先登记 55ae877）：43 个单项 → 发现期挑出的「出货日上限 4」验证期 Calmar 0.452 < 现行 0.475 + 0.05
+  → 维持现行参数；很多出场参数和现行完全一样（MACD 死叉先卖掉）（`var/out/param_study.md`）
+- 各层怎么搭配（2026-09-26，事先登记 55ae877 / 修正 bec2d8a）：量比优先、美股熊市减半、离翻转价位 ±5% 减半、健康度 < 50 减半、全部一起 → 全部不通过；
+  量比最高 1/5 两半都最好（已在前向记录里）（`var/out/combo_study.md`）。事后看到的「量化状态层挡掉的突破更好」用没参与设计的 714 只检验
+  （F，事先登记 ab9bd3e）→ 没有确认，维持现行（`var/out/regime_confirm.md`）
+- J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
+  → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
+  （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）
 - 季度复核：例行任务每年 1 / 4 / 7 / 10 月 12 日 09:56 JST（下一次 2026-10-12）：顶底择时复核、敏感度表、前向记录评估（含 X2）、大事件日程、
   新出现的联动群 / 新上市公司与现有行业的关联对比（步骤 2g；1 月另更新影响度历年值 `var/theme_influence.json`；2026-09-26 用户确认加入）
 
@@ -88,8 +96,9 @@
 - ⑫ 立花开户之后：按「路线图」3 逐步做，满足「路线图」4 的上线门槛才上本番（`ARM` 只在用户明确要求时创建）
 - ⑬ 2026-12-24 模拟期结束：总结 → 用户决定继续 / 上实盘 / 调整；（可选）J-Quants 付费档做无幸存者偏差回测（路线图 6）
 - ⑲ ✋ 决定要不要启用资金研究通过的「一手放宽 50%」（U2；启用 = 云端会话改 `var/sim.json` 并记进 sim_changes，Mac 不改）；
-  🤖 装市场仪表盘 + 经济威胁提醒：`bash ~/qbreak-src/quant_breakout/scripts/install_launchd_news.sh`（每 15 分钟；先 `git pull --ff-only`），
-  马上看一次 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh news --open`
+  🤖 装 / 更新全部（依赖、模拟操盘、市场仪表盘 + 经济威胁提醒、J-Quants 定时取数、研究用克隆 `~/qbreak-dev`）：
+  `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（J-Quants 那一项要钥匙串里已有キー，见 ⑱②），
+  马上看一次 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh news --open`、`bash ~/qbreak-src/quant_breakout/scripts/liveu.sh jq`
 - ⑱ ✋ 只用 Mac 对话之前（一次性，用户本人在 Mac 的终端做；Claude 不经手密钥）：① GitHub 登录（`gh auth login` 或 SSH 钥匙），
   让 `~/qbreak-dev` 能推送；② 想在 Mac 上跑 J-Quants 研究时，把 API キー存进钥匙串：`security add-generic-password -s qbreak-jquants -a qbreak -w`
   （回车后输入，不留在 shell 历史）。J-Quants Standard 已购买（2026-09-26）
