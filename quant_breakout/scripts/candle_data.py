@@ -48,13 +48,15 @@ def _build() -> dict:
     ecal = pd.DatetimeIndex(sorted(set().union(*[df.index for df in yf.values()])))
     edays = ecal[(ecal >= pd.Timestamp("2005-09-01")) & (ecal < pd.Timestamp(PERIODS["E0"][1]) + pd.Timedelta(days=60))]
     E = K.panel(yf, edays, en)
-    return {"days": days.values, "names": np.array(nm), **{f"J_{k}": v for k, v in P.items()},
+    rt = pd.DataFrame({t: D["ratio"][t] for t in nm if t in D["ratio"]}).reindex(index=days, columns=nm).to_numpy(float)
+    return {"days": days.values, "names": np.array(nm), **{f"J_{k}": v for k, v in P.items()}, "J_R": rt,
             **{f"M_{u}": v for u, v in mem.items()}, "edays": edays.values, "enames": np.array(en), **{f"E_{k}": v for k, v in E.items()},
             "delist_names": np.array(sorted(PRS.delist_dates({t: D["data"][t] for t in nm})))}
 
 
 def load(rebuild: bool = False) -> dict:
-    """{"days", "names", "P" (JQ 宽表), "mem" {U0, U1, U2}, "edays", "enames", "E" (E0 宽表)}。第一次约 2〜3 分钟，之后读缓存。"""
+    """{"days", "names", "P" (JQ 宽表), "mem" {U0, U1, U2}, "edays", "enames", "E" (E0 宽表), "ratio"（真实一手比例的宽表）}。
+    第一次约 2〜3 分钟，之后读缓存。"""
     fp = paths.sub("cache") / CACHE
     t0 = time.time()
     if rebuild or not fp.exists():
@@ -63,7 +65,7 @@ def load(rebuild: bool = False) -> dict:
     z = dict(np.load(fp, allow_pickle=False))
     out = {"days": pd.DatetimeIndex(z["days"]), "names": list(z["names"]), "P": {k: z[f"J_{k}"] for k in "OHLCV"},
            "mem": {u: z[f"M_{u}"] for u in ("U0", "U1", "U2")}, "edays": pd.DatetimeIndex(z["edays"]), "enames": list(z["enames"]),
-           "E": {k: z[f"E_{k}"] for k in "OHLCV"}, "load_s": round(time.time() - t0, 1)}
+           "E": {k: z[f"E_{k}"] for k in "OHLCV"}, "ratio": z.get("J_R"), "load_s": round(time.time() - t0, 1)}
     return out
 
 

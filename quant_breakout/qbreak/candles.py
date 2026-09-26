@@ -194,3 +194,18 @@ def excess(R: np.ndarray, member: np.ndarray) -> np.ndarray:
         warnings.simplefilter("ignore", RuntimeWarning)                   # 整行都没有成员 → NaN
         m = np.nanmean(x, axis=1, keepdims=True)
     return x - m
+
+
+def pullback(P: dict[str, np.ndarray], drop: float = 0.10, v5max: float = 0.85, sma_n: int = 150) -> np.ndarray:
+    """缩量押し目（2026-09-27 探索期 2017〜2021 找到、scripts/candle_study.py 登记）：那天收盘时——
+    ① 最近 5 个交易日跌 ≥ drop（收盘 / 5 天前收盘 − 1 ≤ −drop）；② 最近 5 天均量 ≤ 之前 20 天均量 × v5max（缩量）；
+    ③ 收盘在 sma_n 日线上、且 sma_n 日线比 20 天前高（长期上升）；④ 今天最低没跌破前 20 天最低（回调，不是破位）。"""
+    C, L, V = P["C"], P["L"], P["V"]
+    sma = rolling_mean(C, sma_n)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        ret5 = C / sh(C, 5) - 1
+        vr5 = rolling_mean(V, 5) / sh(rolling_mean(V, 20), 5)
+        lo20 = sh(rolling_min(L, 20), 1)
+        m = (ret5 <= -drop) & (vr5 <= v5max) & (C > sma) & (sma > sh(sma, 20)) & ~(L < lo20)
+    ok = np.isfinite(C) & np.isfinite(L) & np.isfinite(ret5) & np.isfinite(vr5) & np.isfinite(sma) & np.isfinite(lo20)
+    return np.asarray(m, bool) & ok

@@ -77,3 +77,16 @@ def test_targets_and_excess():
     mem = np.array([[True, True], [True, False], [True, True], [False, False]])
     ex = K.excess(np.array([[1.0, 3.0], [2.0, 5.0], [np.nan, 4.0], [1.0, 1.0]]), mem)
     assert np.allclose(ex[0], [-1.0, 1.0]) and ex[1, 0] == 0.0 and np.isnan(ex[1, 1]) and ex[2, 1] == 0.0 and np.isnan(ex[3]).all()
+
+
+def test_pullback_definition_and_no_lookahead():
+    n = 200
+    C = np.r_[np.linspace(100, 160, 190), [150.0, 146.0, 143.0, 141.0, 142.0], np.full(5, 142.0)]
+    P = {"O": C.copy()[:, None], "H": (C * 1.01)[:, None], "L": (C * 0.99)[:, None], "C": C[:, None],
+         "V": np.r_[np.full(190, 1e6), np.full(10, 5e5)][:, None]}
+    pb = K.pullback(P)
+    assert pb[194, 0] and not pb[:190, 0].any()                                  # 5 日跌 ≥ 10%、缩量、150 日线上升、没破 20 日低
+    P2 = {**P, "V": np.full((n, 1), 1e6)}
+    assert not K.pullback(P2)[194, 0]                                            # 不缩量 → 不算
+    cut = {k: v[:195] for k, v in P.items()}
+    assert np.array_equal(K.pullback(cut)[:195], pb[:195])
