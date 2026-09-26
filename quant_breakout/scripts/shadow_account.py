@@ -137,9 +137,9 @@ def cmd_evaluate(a) -> int:
     rows = list(csv.DictReader(fp.open(encoding="utf-8"))) if fp.exists() else []
     rows.sort(key=lambda r: r["date"])
     last = rows[-1]["date"] if rows else None
-    final = last is not None and last >= SH.END
+    final = _now().date() > dt.date.fromisoformat(SH.END)        # 期间结束之后（模拟盘在 end 之后不再推进，最后一天可能早于 end）
     if not final and not a.interim:
-        print(f"还没到评估时点（{SH.END} 收盘处理完之后；现在最新 {last or '—'}）。看中间统计：--interim（不判定）")
+        print(f"还没到评估时点（{SH.END} 收盘之后；现在最新 {last or '—'}）。看中间统计：--interim（不判定）")
         return 0
     days = [str(d.date()) for d in pd.date_range(SH.START, min(SH.END, last or SH.START)) if is_trading_day(d.date())]
     ev = SH.evaluate(rows, SH.decided_dates(), days)

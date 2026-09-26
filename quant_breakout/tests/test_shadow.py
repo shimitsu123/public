@@ -177,3 +177,15 @@ def test_cmd_step_and_interim_evaluate(isolated_home, monkeypatch, capsys):
     assert SA.main(["evaluate"]) == 0 and "还没到评估时点" in capsys.readouterr().out
     assert SA.main(["evaluate", "--interim"]) == 0
     assert "中间统计（还没到评估时点，不判定）" in capsys.readouterr().out
+
+
+def test_final_evaluation_runs_after_end_even_if_rule_stopped_earlier(isolated_home, monkeypatch, capsys):
+    rows = [f"2026-12-{d:02d},{1_000_000 + d * 1000},{1_000_000 + d * 500},0,0,0" for d in (21, 22, 23)]
+    (isolated_home / "out").mkdir(exist_ok=True)
+    (isolated_home / "out" / SH.EQUITY).write_text(",".join(SH.EQUITY_COLS) + "\n" + "\n".join(rows) + "\n", encoding="utf-8")
+    monkeypatch.setenv("QBREAK_NOW", "2026-12-24T20:00:00")
+    assert SA.main(["evaluate"]) == 0 and "还没到评估时点" in capsys.readouterr().out
+    monkeypatch.setenv("QBREAK_NOW", "2026-12-25T07:30:00")                  # 模拟盘最后一天是 12-23 也要能正式评估
+    assert SA.main(["evaluate"]) == 0
+    out = capsys.readouterr().out
+    assert "中间统计" not in out and "期间 2026-09-28〜2026-12-23" in out and (isolated_home / "out" / "shadow_eval.md").exists()
