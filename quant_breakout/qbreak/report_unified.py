@@ -59,6 +59,7 @@ def build_unified_data() -> dict:
             "macro_now": td.get("macro_now") or {},              # 仪表盘：市场健康度 + 消费 / 零售等新数据（只作展示）
             "news": td.get("news") or {},                        # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
             "energy": td.get("energy") or {},                    # 仪表盘：能源消费（每月）+ K4 前向记录的状态（只作展示 / 记录）
+            "shadow": read_json(paths.out_dir() / "shadow_today.json", {}) or {},   # 影子账户（判断型，只前向记录，不影响交易）
             "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
             "config": td.get("config") or config_from_sim(sim).to_dict(),     # 首次运行前从 sim.json 取
@@ -291,6 +292,29 @@ def _executor_html(d: dict) -> str:
             + (f"；没下单：{escape(str(x['blocked']))}" if x.get("blocked") else "") + "</div>")
 
 
+def _shadow_html(d: dict) -> str:
+    """影子账户（判断型选股，scripts/shadow_account.py；只前向记录，不影响模拟盘与交易）。"""
+    s = d.get("shadow") or {}
+    if not s:
+        return ""
+    diff = s.get("diff_pp")
+    cls = "pos" if (diff or 0) > 0 else "neg" if (diff or 0) < 0 else ""
+    dec = s.get("last_decision") or {}
+    orders = "；".join(f"{escape(o['side'])} {escape(o['ticker'])} {int(o['shares']):,} 股（{escape(o.get('reason') or '')}）"
+                      for o in dec.get("orders") or []) or "不动"
+    rows = "".join(f"<tr><td>{escape(t)}</td><td class='n'>{int(p['shares']):,} 股</td><td class='n'>{_money(p.get('cost'))}</td>"
+                   f"<td class='n'>{_money(p.get('close'))}</td><td class='n'>{_money(p.get('value'))}</td>"
+                   f"<td class='n'>{float(p.get('pnl_pct') or 0):+.2f}%</td></tr>" for t, p in (s.get("positions") or {}).items())
+    return (f'<section class="card"><h2>影子账户（判断型选股，只记录，不影响模拟盘与交易）</h2>'
+            f'<p>截至 {escape(str(s.get("as_of") or "—"))}：权益 <b>{_money(s.get("equity_jpy"))}</b>（{float(s.get("ret_pct") or 0):+.2f}%），'
+            f'规则账户 {_money(s.get("rule_equity_jpy"))}，差 <b class="{cls}">{"—" if diff is None else f"{diff:+.2f} pp"}</b>；现金 {_money(s.get("cash_jpy"))}</p>'
+            f'<p class="muted">{escape(str(dec.get("for_date") or "—"))} 的判断：{escape(str(dec.get("view") or "—"))} → {orders}</p>'
+            + (f'<div class="scroll"><table><tr><th>代码</th><th class="n">股数</th><th class="n">成本</th><th class="n">收盘</th>'
+               f'<th class="n">市值</th><th class="n">损益</th></tr>{rows}</table></div>' if rows else "")
+            + f'<p class="muted">记录期间 {escape(" 〜 ".join(s.get("period") or []))}；评估标准事先登记在 scripts/shadow_account.py（3 个月后评估）。'
+            f'{escape(str(s.get("note") or ""))}</p></section>')
+
+
 def render_unified_html(d: dict) -> str:
     today = now_jst().date()
     usopen = _us_open_jst(today)
@@ -412,7 +436,7 @@ def render_unified_html(d: dict) -> str:
         fx=fx_rows or "<tr><td colspan=4 class='muted'>还没有换汇</td></tr>", markets="".join(mk),
         watch="".join(watch) or "<tr><td colspan=11 class='muted'>尚无候补数据</td></tr>",
         themes=_themes_html(d.get("themes") or {}, meta),
-        threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us),
+        threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us), shadow=_shadow_html(d),
         corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
         n_trades=d.get("n_trades", 0), win=_pct(d.get("win_rate")) if d.get("win_rate") is not None else "—（还没有平仓）",
@@ -679,6 +703,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <p class="muted">突破：<b>真突破</b> = 信号当天收盘高于过去 60 个交易日的最高价（不含当天）；<b>未破箱顶</b> = 信号成立但收盘还在箱顶之下（括号里是还差的 %）；还没触发的票显示距箱顶 %（今天要做的事里的买单也标了）。只作参考，不改交易：2026-09-26 事先登记的研究（2006-10〜，日経225 股票池，现行出场规则，每笔扣来回手续费）全部信号 638 笔：胜率 42.5%、每笔平均 +0.70%、盈亏比 1.89；其中真突破 163 笔：胜率 49.7%、每笔 +0.83%、盈亏比 1.44；未破箱顶 475 笔：胜率 40.0%、每笔 +0.66%、盈亏比 2.08。只做真突破：胜率 +7.2 pp（95% 区间 +0.7〜+13.6 pp），每笔期望 +0.13 pp 但不显著（95% 区间 −0.78〜+0.96 pp），组合 20 年年化 11.2%（现行 12.8%）、最大回撤 −36.4%（现行 −35.1%）——现行策略靠盈亏比赚钱，不是靠命中率（var/out/signal_study.md）。</p></section>
 {themes}
 {commod}
+{shadow}
 <section class="card"><h2>最近平仓</h2><div class="scroll"><table><tr><th>日期</th><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">损益（日元）</th><th>原因</th></tr>{trades}</table></div></section>
 <section class="card"><h2>换汇记录</h2><div class="scroll"><table><tr><th>日期</th><th>方向</th><th class="n">美元</th><th class="n">汇率</th></tr>{fx}</table></div></section>
 <section class="card"><h2>规则</h2><p class="muted">{rules}</p></section>
