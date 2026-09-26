@@ -73,17 +73,20 @@ def test_decide_rules():
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_repo_sim_enables_u2_one_lot_up_to_half_of_equity():
-    """2026-09-26 用户确认启用 U2：仓库的 var/sim.json → config_from_sim 一手放宽 50%，其余名额设定不变；一手 ≤ 权益 50% 买一手，超过跳过。"""
+def test_repo_sim_one_lot_relaxation_reverted_to_off():
+    """2026-09-26 用户确认启用 U2（一手放宽 50%），2026-09-27 生效前用户确认撤回：仓库的 var/sim.json → config_from_sim 一手放宽 0（关），
+    其余名额设定不变；一手超过名额就跳过。功能本身还在（研究用）：打开 50% 时一手 ≤ 权益 50% 买一手、超过跳过。"""
     import json
     from qbreak.unified import config_from_sim
     sim = json.loads((ROOT / "var" / "sim.json").read_text(encoding="utf-8"))
     cfg = config_from_sim(sim)
-    assert cfg.one_lot_cap_pct == 0.5 and (cfg.position_pct, cfg.max_positions, cfg.max_position_pct) == (0.25, 4, 0.34)
-    on = _run(cfg.one_lot_cap_pct, px=4800.0)                                  # 一手 ¥480,000 ≈ 权益 48%
+    assert cfg.one_lot_cap_pct == 0.0 and (cfg.position_pct, cfg.max_positions, cfg.max_position_pct) == (0.25, 4, 0.34)
+    cur = _run(cfg.one_lot_cap_pct, px=4800.0)                                 # 一手 ¥480,000 > 名额 ¥250,000 → 跳过
+    assert not cur.st.trades and not cur.st.pos and cur.skipped["lot"] == 1
+    on = _run(0.5, px=4800.0)                                                  # 一手 ¥480,000 ≈ 权益 48%
     t = on.st.trades or [{"ticker": k, "shares": v.shares} for k, v in on.st.pos.items()]
     assert [x["ticker"] for x in t] == ["7777.T"] and t[0]["shares"] == 100
-    over = _run(cfg.one_lot_cap_pct, px=5200.0)                                # 一手 ¥520,000 > 权益 50% → 跳过
+    over = _run(0.5, px=5200.0)                                                # 一手 ¥520,000 > 权益 50% → 跳过
     assert not over.st.trades and not over.st.pos and over.skipped["lot"] == 1
 
 
@@ -103,4 +106,4 @@ def test_liveu_copies_sim_json_to_mac_home_for_the_executor(tmp_path):
         synced = json.loads((tmp_path / "home" / "sim.json").read_text(encoding="utf-8"))
         assert synced == json.loads((ROOT / "var" / "sim.json").read_text(encoding="utf-8"))
         from qbreak.unified import config_from_sim
-        assert config_from_sim(synced).one_lot_cap_pct == 0.5
+        assert config_from_sim(synced).one_lot_cap_pct == 0.0
