@@ -251,7 +251,7 @@ def _say_eval(title: str, ev: dict, V: dict) -> None:
         say("|---|---|---|---|---|---|")
         for c, a in ev["auc"].items():
             lab, sgn, kind = HYP[c]
-            say(f"| {c} {lab} | {'+' if sgn > 0 else '−'} | {kind} | {a['auc'] if a['auc'] is not None else '—'} | "
+            say(f"| {lab if lab.startswith(c) else f'{c} {lab}'} | {'+' if sgn > 0 else '−'} | {kind} | {a['auc'] if a['auc'] is not None else '—'} | "
                 f"{a['lo95']}〜{a['hi95']} | {a['lo99']}〜{a['hi99']} |")
     if V.get("checkpoint"):
         say(f"判定（已平仓第一次达到 {V['checkpoint']} 笔）：")
