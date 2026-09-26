@@ -15,8 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import capital_study as CS                                                    # noqa: E402
 
 
-def _run(one_lot: float):
-    ind = {"7777.T": _bars(D, [3000.0] * 8, entry_on=[D[1]])}                  # 一手 = ¥300,000 > 名额 ¥250,000
+def _run(one_lot: float, px: float = 3000.0):
+    ind = {"7777.T": _bars(D, [px] * 8, entry_on=[D[1]])}                      # 默认一手 = ¥300,000 > 名额 ¥250,000
     cfg = UnifiedConfig(capital_jpy=1_000_000, position_pct=0.25, max_positions=4, stock_markets=("JP",), core={}, core_index={},
                         one_lot_cap_pct=one_lot)
     ue = UnifiedEngine(ind, cfg, {"JP": P, "US": P}, EX, {})
@@ -68,3 +68,39 @@ def test_decide_rules():
     V = CS.decide(R, "1000000|4")
     assert V["best"] == "1000000|3" and set(V["per"]) == {"1000000|3", "1000000|2", "1000000|5", "1000000|6"}
     assert V["per"]["1000000|2"] and V["per"]["1000000|5"] and V["per"]["1000000|6"]
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_repo_sim_enables_u2_one_lot_up_to_half_of_equity():
+    """2026-09-26 用户确认启用 U2：仓库的 var/sim.json → config_from_sim 一手放宽 50%，其余名额设定不变；一手 ≤ 权益 50% 买一手，超过跳过。"""
+    import json
+    from qbreak.unified import config_from_sim
+    sim = json.loads((ROOT / "var" / "sim.json").read_text(encoding="utf-8"))
+    cfg = config_from_sim(sim)
+    assert cfg.one_lot_cap_pct == 0.5 and (cfg.position_pct, cfg.max_positions, cfg.max_position_pct) == (0.25, 4, 0.34)
+    on = _run(cfg.one_lot_cap_pct, px=4800.0)                                  # 一手 ¥480,000 ≈ 权益 48%
+    t = on.st.trades or [{"ticker": k, "shares": v.shares} for k, v in on.st.pos.items()]
+    assert [x["ticker"] for x in t] == ["7777.T"] and t[0]["shares"] == 100
+    over = _run(cfg.one_lot_cap_pct, px=5200.0)                                # 一手 ¥520,000 > 权益 50% → 跳过
+    assert not over.st.trades and not over.st.pos and over.skipped["lot"] == 1
+
+
+def test_liveu_copies_sim_json_to_mac_home_for_the_executor(tmp_path):
+    """Mac：scripts/liveu.sh 每次运行先把仓库的 var/sim.json 拷到 ~/.qbreak/home（这里用临时目录），执行器（paper / tachibana 相同）
+    经 config_from_sim 读它 → 与云端模拟盘同一设定。python 用假的（只打印参数），不跑执行器。"""
+    import json
+    import os
+    import subprocess
+    stub = tmp_path / "py"
+    stub.write_text('#!/bin/sh\necho "stub $*"\n', encoding="utf-8")
+    stub.chmod(0o755)
+    env = {**os.environ, "QBREAK_LIVEU_HOME": str(tmp_path / "home"), "QBREAK_PYTHON": str(stub)}
+    for broker in ("paper", "tachibana"):
+        r = subprocess.run(["bash", "scripts/liveu.sh", "--broker", broker, "--status"], cwd=ROOT, env=env, capture_output=True, timeout=60)
+        assert r.returncode == 0 and f"stub run.py live-u --broker {broker} --status" in r.stdout.decode("utf-8", "replace")
+        synced = json.loads((tmp_path / "home" / "sim.json").read_text(encoding="utf-8"))
+        assert synced == json.loads((ROOT / "var" / "sim.json").read_text(encoding="utf-8"))
+        from qbreak.unified import config_from_sim
+        assert config_from_sim(synced).one_lot_cap_pct == 0.5
