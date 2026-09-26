@@ -67,7 +67,8 @@ def build_unified_data() -> dict:
                      "牛熊分界在 markets.JP.regime.bullbear（日経）与 markets.US.regime.bullbear（S&P500，只用于 1655 择时），"
                      "其中 phase_label / phase_text = 现在处于哪个阶段（牛·稳固 / 牛·走弱 / 牛→熊确认中 / 熊·回升 …）"
                      "与直观百分比（离 250 日线的距离、20 个交易日的变化、还要跌 / 涨多少才翻转），汇报时先写这个；"
-                     "候补队列在 markets.JP.watchlist；大事件威胁指数在 threat（只展示，不参与交易）；"
+                     "候补队列在 markets.JP.watchlist；todo 的个股买单与候补队列的 breakout / to_box_top_pct = 「真突破」标签"
+                     "（收盘是否高于过去 60 日最高、距箱顶 %；只作参考，不改交易）；大事件威胁指数在 threat（只展示，不参与交易）；"
                      "missing = 日报应有而没取到的数据（项目 + 原因），汇报时逐项列出。")}
     d["missing"] = missing_items(d)
     return d
@@ -145,6 +146,22 @@ def pd_date(v) -> dt.date | None:
 
 
 _STATUS = {"triggered": "已触发", "imminent": "即将", "watch": "观察", "far": "远"}
+
+
+def _bo_tag(o: dict) -> str:
+    """「真突破」标签（只作展示，不改交易）。买单 / 已触发：真突破 或 未破箱顶（差 x%）；还没触发：距箱顶 x%。
+    没有这个字段（旧数据、核心 ETF、卖单）→ 空。"""
+    if "breakout" not in o:
+        return ""
+    x = o.get("to_box_top_pct")
+    if o.get("status", "triggered") == "triggered":
+        if o.get("breakout"):
+            return '<span class="tag">真突破</span>'
+        return '<span class="tag dim">未破箱顶' + (f"（差 {float(x):.1f}%）" if x is not None else "") + "</span>"
+    if x is None:
+        return '<span class="muted">—</span>'
+    x = float(x)
+    return f'<span class="muted">{"已在箱顶上方 " + format(-x, ".1f") if x < 0 else "距箱顶 " + format(x, ".1f")}%</span>'
 
 
 def _money(v, ccy="JPY") -> str:
@@ -260,8 +277,9 @@ def render_unified_html(d: dict) -> str:
             lim = f"，指値 {_money(o['limit'], ccy)}" if o.get("limit") else ""
             why = f"（{escape(str(o.get('reason')))}）" if o.get("reason") else ""
             unit = "口" if str(o.get("ticker", "")).startswith(("1655", "1329", "2558")) else "股"
+            tag = f" {_bo_tag(o)}" if o.get("side") == "BUY" and "breakout" in o else ""
             out.append(f"<li><b>{'买入' if o['side'] == 'BUY' else '卖出'}</b> {escape(o['ticker'])} × {o['qty']:,} {unit}"
-                       f" {escape(o.get('type', ''))}{lim}{why}</li>")
+                       f" {escape(o.get('type', ''))}{lim}{why}{tag}</li>")
         return "".join(out) or (f'<li class="muted">首次运行（{escape(str(d.get("sim", {}).get("start")))} 07:00 JST 前后）后给出当天要下的单'
                                 '（现在是开始前的预览，不下单）</li>' if d.get("preview") else '<li class="muted">无</li>')
 
@@ -322,7 +340,8 @@ def render_unified_html(d: dict) -> str:
             tilt = w.get("tilt")
             lot = f"（一手 {_money(w.get('lot_cost'), ccy)}）" if w.get("lot_cost") else ""
             watch.append(f"<tr><td>{i}</td><td>{escape(str(w.get('ticker')))}</td><td class='muted'>{escape(str(w.get('sector') or '—'))}</td>"
-                         f"<td>{_STATUS.get(w.get('status'), escape(str(w.get('status'))))}</td><td class='n'>{float(w.get('score') or 0):.1f} 分</td>"
+                         f"<td>{_STATUS.get(w.get('status'), escape(str(w.get('status'))))}</td><td>{_bo_tag(w) or '—'}</td>"
+                         f"<td class='n'>{float(w.get('score') or 0):.1f} 分</td>"
                          f"<td class='n'>{_money(w.get('close'), ccy)}</td><td>{'是' if w.get('affordable') else '否'}{lot}</td>"
                          f"<td class='muted'>{'—' if tilt is None or tilt >= 1 else f'{tilt:g} 倍'}</td>"
                          f"<td class='muted'>{escape(str(w.get('fit_tier') or '—'))}"
@@ -512,6 +531,7 @@ main{{max-width:880px;margin:0 auto;padding:16px}} h1{{font-size:20px;margin:4px
 table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom:1px solid var(--line);padding:5px 4px;text-align:left}}
 .n{{text-align:right;font-variant-numeric:tabular-nums}} .warn{{border-color:var(--neg)}} .pos{{color:var(--pos)}} .neg{{color:var(--neg)}} .spark{{width:100%;height:120px}}
 .scroll{{overflow-x:auto}} dt{{font-weight:600;margin-top:6px}} dd{{margin:0 0 4px}}
+.tag{{display:inline-block;border:1px solid var(--accent);color:var(--accent);border-radius:4px;padding:0 4px;font-size:12px;white-space:nowrap}} .tag.dim{{border-color:var(--line);color:var(--muted)}}
 </style></head><body><main>
 <h1>模拟盘日报 · 一个账户（{acct}）</h1>
 <div class="muted">生成 {generated}；数据截至 {bar}</div>{first}{missing}
@@ -529,8 +549,9 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <section class="card"><h2>核心 ETF（闲置资金）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
 <section class="card"><h2>市场状态</h2><dl>{markets}</dl></section>
 <section class="card"><h2>大事件威胁指数（只展示，不参与交易）</h2>{threat}</section>
-<section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>状态</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
-<p class="muted">宏观顺风度 = 个股对日本 / 美国利率、油价、日元、信用利差，以及农产品、工业金属、黄金、天然气 ETF 的历史敏感度 × 近 60 个交易日的变化（当日横截面三分位：顺风 / 中性 / 逆风），只作参考：2026-09-25 事先登记研究显示它对之后 20 日的收益没有可靠的预测力（加商品后月末前 1/5 − 后 1/5 为 +0.35%，t 1.40；秩相关 0.006），交易排序不用它。</p></section>
+<section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>状态</th><th>突破</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
+<p class="muted">宏观顺风度 = 个股对日本 / 美国利率、油价、日元、信用利差，以及农产品、工业金属、黄金、天然气 ETF 的历史敏感度 × 近 60 个交易日的变化（当日横截面三分位：顺风 / 中性 / 逆风），只作参考：2026-09-25 事先登记研究显示它对之后 20 日的收益没有可靠的预测力（加商品后月末前 1/5 − 后 1/5 为 +0.35%，t 1.40；秩相关 0.006），交易排序不用它。</p>
+<p class="muted">突破：<b>真突破</b> = 信号当天收盘高于过去 60 个交易日的最高价（不含当天）；<b>未破箱顶</b> = 信号成立但收盘还在箱顶之下（括号里是还差的 %）；还没触发的票显示距箱顶 %（今天要做的事里的买单也标了）。只作参考，不改交易：2026-09-26 事先登记的研究（2006-10〜，日経225 股票池，现行出场规则，每笔扣来回手续费）全部信号 638 笔：胜率 42.5%、每笔平均 +0.70%、盈亏比 1.89；其中真突破 163 笔：胜率 49.7%、每笔 +0.83%、盈亏比 1.44；未破箱顶 475 笔：胜率 40.0%、每笔 +0.66%、盈亏比 2.08。只做真突破：胜率 +7.2 pp（95% 区间 +0.7〜+13.6 pp），每笔期望 +0.13 pp 但不显著（95% 区间 −0.78〜+0.96 pp），组合 20 年年化 11.2%（现行 12.8%）、最大回撤 −36.4%（现行 −35.1%）——现行策略靠盈亏比赚钱，不是靠命中率（var/out/signal_study.md）。</p></section>
 {commod}
 <section class="card"><h2>最近平仓</h2><div class="scroll"><table><tr><th>日期</th><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">损益（日元）</th><th>原因</th></tr>{trades}</table></div></section>
 <section class="card"><h2>换汇记录</h2><div class="scroll"><table><tr><th>日期</th><th>方向</th><th class="n">美元</th><th class="n">汇率</th></tr>{fx}</table></div></section>

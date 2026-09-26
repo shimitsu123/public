@@ -1,5 +1,6 @@
 """一个账户（楽天）日报：只做日本个股时不显示换汇 / 美股栏；核心 ETF 用到的指数显示牛熊分界；候补队列；模拟期结束只重出报表。"""
 import argparse
+import re
 
 from qbreak import paths
 from qbreak.report_unified import write_unified_report
@@ -121,6 +122,30 @@ def test_watchlist_shows_macro_tailwind_column():
     html = write_unified_report().read_text(encoding="utf-8")
     assert "顺风：日本利率↑ 受益；油价↑ 受益" in html and "宏观顺风度" in html and "没有可靠的预测力" in html
     assert "黄金、天然气" in html
+
+
+def test_true_breakout_tag_on_buy_orders_and_watchlist():
+    todo = {"JP": [{"side": "BUY", "ticker": "7203.T", "qty": 100, "type": "寄付指値", "limit": 3060, "signal_close": 3000,
+                    "signal_date": "2026-09-25", "breakout": True, "to_box_top_pct": -1.2},
+                   {"side": "BUY", "ticker": "6758.T", "qty": 100, "type": "寄付指値", "limit": 3570, "signal_close": 3500,
+                    "signal_date": "2026-09-25", "breakout": False, "to_box_top_pct": 2.3},
+                   {"side": "BUY", "ticker": "1655.T", "qty": 570, "type": "寄付指値", "reason": "核心 ETF 调整"}],
+            "FX": [], "US": []}
+    _write(["JP"], todo=todo)
+    td = read_json(paths.out_dir() / "unified_today.json")
+    wl = td["extras"]["JP"]["watchlist"]
+    wl[0].update({"breakout": False, "to_box_top_pct": 4.5})
+    wl += [{"ticker": "7203.T", "status": "triggered", "score": 99.0, "close": 3000, "affordable": True, "breakout": True,
+            "to_box_top_pct": -1.2},
+           {"ticker": "9984.T", "status": "watch", "score": 60.0, "close": 9000, "affordable": True, "breakout": True,
+            "to_box_top_pct": -0.8}]
+    write_json(paths.out_dir() / "unified_today.json", td)
+    html = write_unified_report().read_text(encoding="utf-8")
+    li = [x for x in re.findall(r"<li>(.*?)</li>", html) if x.startswith("<b>买入</b>")]
+    assert '<span class="tag">真突破</span>' in li[0] and "未破箱顶（差 2.3%）" in li[1] and "tag" not in li[2]
+    assert "距箱顶 4.5%" in html and "已在箱顶上方 0.8%" in html and "<th>突破</th>" in html
+    assert "只作参考，不改交易" in html and "163 笔" in html and "var/out/signal_study.md" in html
+    assert "真突破" in read_json(paths.out_dir() / "report_data.json")["hint"]
 
 
 def test_report_commodity_sector_card():

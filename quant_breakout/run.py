@@ -928,6 +928,8 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     executor = _executor_paper_step(ctx, state)            # 实盘执行器的演练账户：同一天、同一套行情，应与模拟盘逐日一致
     i_last = int(eng.gidx.searchsorted(pd.Timestamp(state.last_date))) if state.last_date else len(eng.gidx) - 1
     todo = eng.todo(min(i_last, len(eng.gidx) - 1))
+    from qbreak.scan import tag_breakouts
+    tag_breakouts(todo, ctx.ind)                             # 个股买单加「真突破」标签（只作展示，不改交易）
     eq = state.history[-1][1] if state.history else ucfg.capital_jpy
     usdjpy = float(state.history[-1][4]) if state.history and state.history[-1][4] else None
     threat = _unified_watch_and_threat(extras, plans, data, params, dcfg, ucfg, eq, usdjpy)

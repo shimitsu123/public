@@ -9,6 +9,9 @@
   imminent   横盘 + 0 轴附近成立，MACD 距离金叉 < 0.15%，量比 ≥ 1.0
   watch      横盘 + 0 轴附近成立
   far        其余
+
+「真突破」标签（只作展示，不改交易）：信号当天收盘 > 过去 range_n 日最高价（不含当天；compute_indicators 的 breakout 列）。
+2026-09-26 事先登记的研究（var/out/signal_study.md）：真突破的信号胜率更高，但每笔期望的差异不显著、只买真突破组合更差。
 """
 from __future__ import annotations
 
@@ -52,6 +55,30 @@ def _pref_flags(df: pd.DataFrame, market: str) -> tuple[bool, str]:
     return (not bad), "；".join(bad)
 
 
+def breakout_fields(r: pd.Series) -> dict:
+    """一行指标 → 「真突破」标签用的两个字段（只作展示）：
+    breakout = 收盘 > 过去 range_n 日最高价（不含当天）；to_box_top_pct = 距箱顶 %（正 = 还差多少，负 = 已在箱顶之上）。"""
+    close = float(r["Close"])
+    box_top = float(r["box_top"]) if pd.notna(r["box_top"]) else np.nan
+    to_top = (box_top / close - 1) * 100 if np.isfinite(box_top) and np.isfinite(close) and close > 0 else np.nan
+    return {"breakout": bool(r["breakout"]) if pd.notna(r["breakout"]) else False,
+            "to_box_top_pct": round(to_top, 1) if np.isfinite(to_top) else None}
+
+
+def tag_breakouts(todo: dict, ind: dict[str, pd.DataFrame]) -> dict:
+    """「今天要做的事」的个股买单加上「真突破」字段（按信号日那一行）；卖单、核心 ETF、换汇不动。就地修改并返回。"""
+    for m in ("JP", "US"):
+        for o in todo.get(m) or []:
+            df = ind.get(o.get("ticker"))
+            d = o.get("signal_date")
+            if o.get("side") != "BUY" or not d or df is None or "breakout" not in df.columns:
+                continue
+            ts = pd.Timestamp(d)
+            if ts in df.index:
+                o.update(breakout_fields(df.loc[ts]))
+    return todo
+
+
 def scan(ind: dict[str, pd.DataFrame], p: StrategyParams, market: str,
          budget: float, top: int = 15) -> pd.DataFrame:
     """ind: {ticker: compute_indicators 结果}。budget: 单笔预算（用于可负担性）。"""
@@ -69,8 +96,7 @@ def scan(ind: dict[str, pd.DataFrame], p: StrategyParams, market: str,
         gap = float((r["macd"] - r["macd_sig"]) / close * 100)        # <0 = 还在信号线下方
         hist_up = bool(r["macd_hist"] > r1["macd_hist"])
         vol_ratio = float(r["vol_ratio"]) if np.isfinite(r["vol_ratio"]) else 0.0
-        box_top = float(r["box_top"]) if np.isfinite(r["box_top"]) else np.nan
-        to_top = (box_top / close - 1) * 100 if np.isfinite(box_top) else np.nan   # 距箱顶 %
+        bo = breakout_fields(r)                                   # 真突破标签 + 距箱顶 %（只作展示）
         lot = lot_size(t, market)
         affordable = close * lot <= budget
         pref_ok, pref_why = _pref_flags(df, market)
@@ -116,7 +142,7 @@ def scan(ind: dict[str, pd.DataFrame], p: StrategyParams, market: str,
                          range_pct=round(range_pct, 1) if np.isfinite(range_pct) else None,
                          macd_gap_pct=round(gap, 3), hist_up=hist_up,
                          vol_ratio=round(vol_ratio, 2),
-                         to_box_top_pct=round(to_top, 1) if np.isfinite(to_top) else None,
+                         to_box_top_pct=bo["to_box_top_pct"], breakout=bo["breakout"],
                          lot_cost=round(close * lot, 0), affordable=affordable,
                          pref_ok=pref_ok, pref_note=pref_why,
                          top_risk="；".join(top_flags), rsi=round(rsi_v, 0) if np.isfinite(rsi_v) else None,

@@ -10,14 +10,14 @@ from qbreak.brokers import PaperBroker
 from qbreak.config import DataConfig, ExecConfig, RiskConfig, SizingConfig, StrategyParams
 from qbreak.data import csv_name, dump_csv, load_universe
 from qbreak.regime import Regime, apply_overlay, quant_regime
-from qbreak.scan import scan
+from qbreak.scan import scan, tag_breakouts
 from qbreak.strategy import compute_indicators
 from qbreak.trader import run_once
 from qbreak.utils import write_json
 
 
-def _flat_then_signal(n=300, px=1000.0, jump=1.03, volx=6.0):
-    rows = [(px, px * 1.002, px * 0.998, px, 1e6)] * n + [(px, px * jump * 1.001, px * 0.999, px * jump, 1e6 * volx)]
+def _flat_then_signal(n=300, px=1000.0, jump=1.03, volx=6.0, hi=1.002):
+    rows = [(px, px * hi, px * 0.998, px, 1e6)] * n + [(px, px * jump * 1.001, px * 0.999, px * jump, 1e6 * volx)]
     return make_frame(rows)
 
 
@@ -45,6 +45,26 @@ def test_scan_us_pref_flags_price_over_100():
     ind = {"BIG": compute_indicators(_flat_then_signal(px=250.0), P)}
     df = scan(ind, P, "US", budget=1300)
     assert not df.iloc[0]["pref_ok"] and "单价" in df.iloc[0]["pref_note"]
+
+
+def test_scan_and_todo_mark_true_breakout_display_only():
+    """「真突破」= 收盘 > 过去 60 日最高价（不含当天）；只加展示字段，状态与排序不变。"""
+    ind = {"SIG.T": compute_indicators(_flat_then_signal(), P),                       # 收 1030 > 箱顶 1002
+           "INB.T": compute_indicators(_flat_then_signal(jump=1.005, hi=1.01), P)}    # 收 1005 < 箱顶 1010
+    df = scan(ind, P, "JP", budget=340_000).set_index("ticker")
+    assert (df["status"] == "triggered").all()
+    assert bool(df.loc["SIG.T", "breakout"]) and df.loc["SIG.T", "to_box_top_pct"] == -2.7
+    assert not bool(df.loc["INB.T", "breakout"]) and df.loc["INB.T", "to_box_top_pct"] == 0.5
+    d = str(ind["SIG.T"].index[-1].date())
+    todo = {"JP": [{"side": "BUY", "ticker": "SIG.T", "qty": 100, "signal_date": d},
+                   {"side": "BUY", "ticker": "INB.T", "qty": 100, "signal_date": d},
+                   {"side": "SELL", "ticker": "SIG.T", "qty": 100},
+                   {"side": "BUY", "ticker": "1655.T", "qty": 5, "reason": "核心 ETF 调整"},
+                   {"side": "BUY", "ticker": "NOPE.T", "qty": 100, "signal_date": d}], "FX": [], "US": []}
+    out = tag_breakouts(todo, ind)["JP"]
+    assert out[0]["breakout"] is True and out[0]["to_box_top_pct"] == -2.7
+    assert out[1]["breakout"] is False and out[1]["to_box_top_pct"] == 0.5
+    assert all("breakout" not in o for o in out[2:])                                  # 卖单、核心 ETF、没有行情的票不动
 
 
 # ────────── 市场状态 ──────────
