@@ -94,6 +94,38 @@ def fred(series_id: str) -> pd.Series:
     return _cached(f"fred_{series_id}", fetch)
 
 
+# ────────────────────────── Ken French 行业组合 ──────────────────────────
+FF_URL = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/{n}_Industry_Portfolios_CSV.zip"
+
+
+def parse_ff_monthly(text: str, table: str = "Average Value Weighted Returns -- Monthly") -> pd.DataFrame:
+    """Ken French 行业组合 CSV 里的一张月度表 → 月初日期 × 行业的月收益（%）；-99.99 / -999 = 缺值。"""
+    lines = text.splitlines()
+    i0 = next(k for k, ln in enumerate(lines) if table in ln)
+    hdr = [c.strip() for c in lines[i0 + 1].split(",")]
+    idx, rows = [], []
+    for ln in lines[i0 + 2:]:
+        p = ln.split(",")
+        if len(p) != len(hdr) or not p[0].strip().isdigit() or len(p[0].strip()) != 6:
+            break
+        idx.append(pd.Timestamp(int(p[0][:4]), int(p[0].strip()[4:]), 1))
+        rows.append([float(v) for v in p[1:]])
+    df = pd.DataFrame(rows, index=pd.DatetimeIndex(idx), columns=hdr[1:])
+    return df.where(df > -99)
+
+
+def ff_industries(n: int = 49, weighting: str = "vw") -> pd.DataFrame:
+    """Ken French Data Library 的 n 行业组合月收益（%，CRSP，含已退市公司 → 没有幸存者偏差）。索引 = 月初。"""
+    table = {"vw": "Average Value Weighted Returns -- Monthly", "ew": "Average Equal Weighted Returns -- Monthly"}[weighting]
+
+    def fetch():
+        import zipfile
+        z = zipfile.ZipFile(io.BytesIO(_get(FF_URL.format(n=n), timeout=120)))
+        name = next(f for f in z.namelist() if f.lower().endswith(".csv"))
+        return parse_ff_monthly(z.read(name).decode("latin-1"), table)
+    return _cached(f"ff{n}_{weighting}", fetch, 24.0)
+
+
 # ────────────────────────── 財務省 JGB ──────────────────────────
 def parse_era_date(s: str) -> pd.Timestamp | None:
     """'S49.9.24' → 1974-09-24；'H31.4.30' → 2019-04-30；'R8.9.18' → 2026-09-18。"""
