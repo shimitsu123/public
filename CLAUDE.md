@@ -56,7 +56,8 @@
 - 排查先看：`~/.qbreak/home/logs/com.qbreak.liveu.*.out|err`、`~/.qbreak/home/out/live_unified_paper_journal.md`、
   页面 `~/.qbreak/home/out/page_paper.html`、`bash scripts/liveu.sh --broker paper --status`、`launchctl list | grep qbreak`；
   市场仪表盘 / 经济威胁提醒（每 15 分钟）：`~/.qbreak/home/out/dashboard.html`、`~/.qbreak/home/logs/com.qbreak.news.out|err`（只展示与提醒，不下单）；
-  J-Quants：`~/.qbreak/home/logs/com.qbreak.jquants.out|err`
+  J-Quants：`~/.qbreak/home/logs/com.qbreak.jquants.out|err`；登录 / 开机后的自动启动（补跑、打开页面）：
+  `~/.qbreak/home/logs/com.qbreak.login.out|err`
 
 ## 在云端（claude.ai/code 会话 / 例行任务）
 - 开发分支 `claude/rakuten-auto-trading-review-ka7lf0`：只推这个分支，不开 PR（除非用户要求）

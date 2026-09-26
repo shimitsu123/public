@@ -4,6 +4,7 @@
 # ① Python 依赖（~/.qbreak/venv）+ ② 模拟操盘 com.qbreak.liveu.paper（周一至五 07:40；没装就装，已装立花本番时不动）
 # ③ 市场仪表盘 + 经济威胁提醒 com.qbreak.news（每 15 分钟）
 # ④ J-Quants 定时取数 com.qbreak.jquants（钥匙串里有 qbreak-jquants 才装；只检查有没有，绝不读出值）
+# ④b 登录 / 开机后自动启动 com.qbreak.login（RunAtLoad：仪表盘没加载就加载、交易日已过 07:40 而今天没跑 → 补跑模拟操盘、打开页面）
 # ⑤ 研究用的第二个克隆 ~/qbreak-dev（没有就建；没有本地改动就快进到最新）
 # ⑥ 自检：已注册的定时任务、页面在哪里
 set -euo pipefail
@@ -40,6 +41,9 @@ else
   echo "④ J-Quants：钥匙串里还没有 qbreak-jquants → 跳过。要用的话在终端运行下面这行（回车后输入キー，屏幕上不显示、不留在历史里），再重跑本脚本："
   echo "   security add-generic-password -s qbreak-jquants -a qbreak -w"
 fi
+
+# ④b 登录 / 开机后自动启动（仪表盘没加载就加载、今天没跑就补跑模拟操盘、打开页面）
+bash "$PROJ/scripts/install_launchd_login.sh"
 
 # ⑤ 研究用的第二个克隆（改代码 / 做研究都在这里；~/qbreak-src 只 pull）
 if [ -d "$DEV/.git" ]; then

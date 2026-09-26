@@ -39,3 +39,10 @@ def test_decide_forward_stages_and_rules():
     assert EF.decide_forward(b, good, 30, "2029-10-01")["verdict"] == "暴露不够，继续记录"
     bad = EF.decide_forward(b, {"cagr": 9.0, "dd": -23.0, "calmar": 0.39}, 100, "2031-10-01")
     assert bad["stage"] == "5 年" and "建议停止记录" in bad["verdict"] and len(bad["fails"]) == 2
+
+
+def test_completeness_counts_missing_trading_days():
+    T = _T([("2026-09-28", True), ("2026-09-30", True), ("2026-10-03", False)])  # 10-03 是周六（多出来的不算错）
+    c = EF.completeness(T, "2026-10-02")
+    assert c["expected"] == 5 and c["recorded"] == 2 and c["missing"] == ["2026-09-29", "2026-10-01", "2026-10-02"]
+    assert EF.completeness(_T([]), "2026-09-28")["missing"] == ["2026-09-28"]

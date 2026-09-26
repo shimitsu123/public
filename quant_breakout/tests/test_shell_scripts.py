@@ -34,7 +34,7 @@ def _shell_scripts() -> list[Path]:
 def test_no_bare_variable_followed_by_non_ascii():
     scripts = _shell_scripts()
     assert {"liveu.sh", "install_launchd_live_u.sh", "mac_bootstrap.sh", "install_launchd_fetch.sh",
-            "install_launchd_news.sh", "install_launchd_jquants.sh", "mac_setup.sh"} <= {p.name for p in scripts}
+            "install_launchd_news.sh", "install_launchd_jquants.sh", "mac_setup.sh", "install_launchd_login.sh"} <= {p.name for p in scripts}
     hits = [f"{p.relative_to(ROOT)}:{n}: {m.group().decode()}{line[m.end():].decode('utf-8', 'replace')[:1]}"
             for p in scripts for n, line in enumerate(p.read_bytes().splitlines(), 1)
             for m in BARE_VAR_THEN_NON_ASCII.finditer(line)]
@@ -125,4 +125,8 @@ def test_scripts_print_chinese_after_variables_without_dying(tmp_path, locales, 
     out, err = _bash(env, "scripts/mac_setup.sh")                             # 一条命令：已装的跳过、没键就说明、克隆失败也不中断
     assert "unbound variable" not in err, err
     assert "② 模拟操盘已安装" in out and "已注册 com.qbreak.news" in out and "④ J-Quants：钥匙串里还没有" in out
+    assert "已注册 com.qbreak.login" in out and (tmp_path / "agents" / "com.qbreak.login.plist").exists()
     assert "⑤ ★ 没能建" in out and "已注册的定时任务：" in out
+    out, err = _bash({**env, "QBREAK_LOGIN_DELAY": "0"}, "scripts/liveu.sh", "login")   # 登录时的检查（假 Python 出错 → 如实说，不中断）
+    assert "unbound variable" not in err, err
+    assert "登录时的检查失败" in out

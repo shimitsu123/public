@@ -8,6 +8,8 @@
 #   bash scripts/liveu.sh trial                      试跑：在临时目录下载行情、按最新收盘做一次决策（不动正式的模拟账户）
 #   bash scripts/liveu.sh news [--open]              定时任务用（每 15 分钟，scripts/install_launchd_news.sh）：市场仪表盘 + 经济威胁提醒
 #   bash scripts/liveu.sh jq                         定时任务用（营业日 19:30 + 次日 07:05，scripts/install_launchd_jquants.sh）：J-Quants 新数据
+#   bash scripts/liveu.sh login                      登录 / 开机时（scripts/install_launchd_login.sh，RunAtLoad）：仪表盘没加载就加载、
+#                                                    交易日已过 07:40 而今天没跑 → 补跑模拟操盘、打开账本页面与仪表盘（遵守 NO_OPEN）
 # 页面（账本 + 日志）：~/.qbreak/home/out/page_paper.html（立花：page_tachibana.html），每次运行都重写；
 #   定时任务跑完自动用浏览器打开（不想弹出：touch ~/.qbreak/home/NO_OPEN）；运行没走完 → 页面顶上标红 + 通知。
 # 环境变量：QBREAK_LIVEU_HOME（默认 ~/.qbreak/home）、QBREAK_PYTHON（默认 ~/.qbreak/venv/bin/python）、
@@ -72,6 +74,44 @@ if [ "${1:-}" = "jq" ]; then                       # 定时任务用（营业日
   fi
   export JQUANTS_API_KEY JQUANTS_PLAN="${JQUANTS_PLAN:-standard}"
   exec "$PY" run.py jq-live "$@"
+fi
+
+if [ "${1:-}" = "login" ]; then                    # 登录 / 开机时（LaunchAgent com.qbreak.login，RunAtLoad）：qbreak/mac_login.py 决定要做什么
+  shift
+  sleep "${QBREAK_LOGIN_DELAY:-60}"                # 等网络起来
+  AGENTS="${QBREAK_LAUNCH_AGENTS:-$HOME/Library/LaunchAgents}"
+  loaded=""
+  if command -v launchctl >/dev/null 2>&1; then
+    loaded="$(launchctl list 2>/dev/null | awk '{print $3}' | grep '^com\.qbreak\.' | tr '\n' ',')"
+  fi
+  running=0
+  if command -v pgrep >/dev/null 2>&1 && pgrep -f "run.py live-u" >/dev/null 2>&1; then running=1; fi
+  echo "── $(TZ=Asia/Tokyo date '+%F %H:%M') 登录时的检查 ──"
+  if ! plan="$("$PY" -m qbreak.mac_login --agents "$AGENTS" --loaded "$loaded" --running "$running" 2>&1)"; then
+    echo "★ 登录时的检查失败：${plan}"
+    exit 1
+  fi
+  opener="${QBREAK_OPEN_CMD:-}"
+  [ -z "$opener" ] && [ "$(uname)" = "Darwin" ] && opener=open
+  tab="$(printf '\t')"
+  while IFS="$tab" read -r act arg; do
+    case "$act" in
+      NOTE) echo "$arg" ;;
+      LOAD_NEWS) launchctl load -w "$arg" && echo "已加载 com.qbreak.news（市场仪表盘）" ;;
+      INSTALL_NEWS) bash "$PROJ/scripts/install_launchd_news.sh" ;;
+      RUN_PAPER)
+        if [ "${QBREAK_LOGIN_DRY:-0}" = "1" ]; then
+          echo "（演练：这里会补跑 liveu.sh run --broker paper）"
+        else
+          bash "$PROJ/scripts/liveu.sh" run --broker paper
+        fi ;;
+      OPEN)
+        if [ -n "$opener" ]; then "$opener" "$arg" >/dev/null 2>&1 && echo "已打开 ${arg}"; else echo "（不是 macOS：不打开 ${arg}）"; fi ;;
+    esac
+  done <<PLANEOF
+$plan
+PLANEOF
+  exit 0
 fi
 
 if [ "${1:-}" = "news" ]; then                     # 定时任务用（每 15 分钟）：经济威胁消息 + 新公布的数据 → 市场仪表盘；新的提醒 → 通知

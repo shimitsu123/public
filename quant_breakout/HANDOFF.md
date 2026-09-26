@@ -81,6 +81,9 @@
 - J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
   → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
   （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）
+- 影子账户（2026-09-26 用户要求并确认，事先登记 `scripts/shadow_account.py`）：规则以外的「判断型」选股单独记一个模拟账户（¥100 万、9/28〜12/24、同一费用 / 成交口径；日経225 + 1655 / 1329，个股 ≤ 4 只、单只 ≤ 35%、不加杠杆）：云端日报例行任务每天
+  sim-day 之后 `shadow_account.py step` → Claude 按日报 / 市场风险报告判断（09:00 之前）→ `decide`；和规则账户逐日对比（`var/out/shadow_equity.csv`，只追加）；12-24 收盘后按事先写定的四条评估。只记录，不影响模拟盘与交易
+- Mac 登录 / 开机后自动启动（2026-09-26，用户要求）：`com.qbreak.login`（RunAtLoad）→ 仪表盘没加载就加载、交易日已过 07:40 而今天没跑 → 补跑模拟操盘、打开页面（MACOS.md §1.11；立花本番不补跑）。**还没在 Mac 上安装**（跑一次 mac_setup.sh 即可）
 - 季度复核：例行任务每年 1 / 4 / 7 / 10 月 12 日 09:56 JST（下一次 2026-10-12）：顶底择时复核、敏感度表、前向记录评估（含 X2）、大事件日程、
   新出现的联动群 / 新上市公司与现有行业的关联对比（步骤 2g；1 月另更新影响度历年值 `var/theme_influence.json`；2026-09-26 用户确认加入）
 
@@ -99,8 +102,10 @@
 - ⑩ 9/28〜10/2 第一周：每天看一致性，把解释不了的差异记下来（上线门槛之一：连续 ≥ 10 个交易日一致或差异都能解释）
 - ⑪ 2026-10-12（周一）09:56 季度复核：看汇报第一行有没有「需要用户确认」
 - ⑫ 立花开户之后：按「路线图」3 逐步做，满足「路线图」4 的上线门槛才上本番（`ARM` 只在用户明确要求时创建）
+- ㉑ 2026-12-25 早上：影子账户（判断型）3 个月评估 —— 云端日报例行任务在 12-24 收盘处理完之后自动运行
+  `python scripts/shadow_account.py evaluate`（标准见该文件开头第四节），汇报第一行写结论；只是记录，模拟盘不改
 - ⑳ 2029-09-28 之后第一次：K4 前向记录 3 年判定 `python scripts/energy_forward.py --review`（2031-09-28 之后再做 5 年判定；平时只看
-  `var/out/energy_forward.csv` 是否每天在追加；要不要把进度放进季度例行任务，要用户确认）
+  `var/out/energy_forward.csv` 是否每天在追加；2026-09-26 用户确认后，季度例行任务每次汇报进度（2h），只汇报不判定）
 - ⑬ 2026-12-24 模拟期结束：总结 → 用户决定继续 / 上实盘 / 调整；（可选）J-Quants 付费档做无幸存者偏差回测（路线图 6）
 - ⑲ ✋ 决定要不要启用资金研究通过的「一手放宽 50%」（U2；启用 = 云端会话改 `var/sim.json` 并记进 sim_changes，Mac 不改）；
   🤖 装 / 更新全部（依赖、模拟操盘、市场仪表盘 + 经济威胁提醒、J-Quants 定时取数、研究用克隆 `~/qbreak-dev`）：
@@ -161,6 +166,8 @@
 | 想做什么 | 这样问（例） | Claude 做什么 | 注意 |
 |---|---|---|---|
 | 装 / 更新全部 | 「拉一下最新代码并更新」「把定时任务都装好」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh` | 不动账本、不下单 |
+| 开机后补跑了吗 | 「今天开机后模拟操盘补跑了吗？」 | 读 `~/.qbreak/home/logs/com.qbreak.login.out`；`launchctl list \| grep qbreak` | 只读；立花本番不在登录时补跑 |
+| 影子账户（判断型） | 「影子账户今天怎么样？比规则账户好吗？」 | 读 `var/out/shadow_today.json`、`var/out/shadow_equity.csv`（云端每天记）；中间统计 `python scripts/shadow_account.py evaluate --interim` | 只读；判断只在云端例行任务里做 |
 | 看今天的情况 | 「今天模拟操盘怎么样？」「现在持仓和下一开盘的单是什么？」 | `bash scripts/liveu.sh --broker paper --status`（立花上线后 `--broker tachibana`），读页面与日志 | 只读 |
 | 市场偏向 / 威胁消息 | 「现在偏向哪边？」「有什么经济威胁消息？」 | `bash scripts/liveu.sh news --open`（仪表盘重写并打开），读 `~/.qbreak/home/cache/news/news.json` | 只读 |
 | J-Quants 今天的新数据 | 「持仓 / 候补最近有决算吗？」「今天有哪些予想修正？」 | 读 `~/.qbreak/home/out/jq_today.json`；要马上取：`bash scripts/liveu.sh jq` | 只读；キー不回显 |

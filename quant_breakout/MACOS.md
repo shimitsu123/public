@@ -263,13 +263,24 @@ git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/m
 `scripts/mac_setup.sh`（可以重复运行；不动账本、不下单、不碰 `ARM` / `HALT`）：① Python 依赖 → ② 模拟操盘 `com.qbreak.liveu.paper`
 （没装就装；立花本番已装时不动）→ ③ 市场仪表盘 + 经济威胁提醒 `com.qbreak.news` → ④ J-Quants 定时取数 `com.qbreak.jquants`
 （钥匙串里有 `qbreak-jquants` 才装；只检查有没有，不读出值）→ ⑤ 研究用的第二个克隆 `~/qbreak-dev`（没有就建；没有本地改动就更新）
-→ ⑥ 列出已注册的定时任务与页面位置。
+→ ④b 登录 / 开机后自动启动 `com.qbreak.login`（见 1.11）→ ⑥ 列出已注册的定时任务与页面位置。
 
 以后在 Mac 的 Claude 对话里**直接说要做什么**（「更新一下」「今天怎么样」「持仓最近有决算吗」「研究一下 ××」）：
 Claude 自己运行需要的命令并汇报结果（规则见仓库根目录的 `CLAUDE.md`「在用户的 Mac 上」，问法对照见 `HANDOFF.md`「在 Mac 对话里怎么问」）；
 研究在 `~/qbreak-dev` 里一口气走完「登记 → 运行 → 记录 → 推送」。遇到权限确认点「允许」即可；想少问几次，
 可以在 Mac 的 Claude Code 里用 `/permissions` 自己把常用的只读命令加进允许列表（这由你决定，Claude 不替你改权限设置）。
 实盘相关（`ARM`、删 `HALT`、`--no-arm`、`--resolve`）、改模拟盘规则、密钥，仍然要你在那次对话里明确说。
+
+## 1.11 登录 / 开机后自动启动（LaunchAgent `com.qbreak.login`，2026-09-26 起）
+
+Mac 睡着 / 关着的时候 07:40 的模拟操盘会错过。`scripts/mac_setup.sh` 会注册 `com.qbreak.login`（RunAtLoad：每次登录 / 开机后约 1 分钟跑一次
+`scripts/liveu.sh login`，规则在 `qbreak/mac_login.py`）：
+1. 市场仪表盘 `com.qbreak.news` 没加载 → 加载（没装 → 安装）
+2. 今天是日本交易日、已过 07:40 JST、今天的模拟操盘还没跑成（`~/.qbreak/home/out/live_unified_paper.json` 的日期不是今天）、
+   没有别的执行器在跑 → 补跑 `liveu.sh run --broker paper`（同一决策日重复跑不会重复下单）。**装的是立花本番时永远不在登录时补跑**（真钱只按定时任务）
+3. 打开账本页面 `page_paper.html` 和市场仪表盘 `dashboard.html`（不想弹出：`touch ~/.qbreak/home/NO_OPEN`）
+
+单独装 / 卸载：`bash ~/qbreak-src/quant_breakout/scripts/install_launchd_login.sh [uninstall]`；日志 `~/.qbreak/home/logs/com.qbreak.login.out|err`。
 
 ## 2. 开户与 API 设定（v4r10，2026-09-25 核对）
 

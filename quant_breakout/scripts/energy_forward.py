@@ -111,6 +111,16 @@ def decide_forward(base: dict, k4: dict, on_days: int, review_date: str) -> dict
     return {"stage": st, "verdict": "前向不成立" + ("（建议停止记录）" if st == "5 年" else ""), "fails": f}
 
 
+def completeness(T: pd.DataFrame, today, start: str = START) -> dict:
+    """是否每天在追加：start〜today 的日本交易日里哪些没有记录（记录日可以多出节假日，不算错）。"""
+    from qbreak.calendar_jp import is_trading_day
+    days = [d.date() for d in pd.date_range(start, pd.Timestamp(today)) if is_trading_day(d.date())]
+    have = set(pd.to_datetime(T["date"]).dt.date) if len(T) else set()
+    miss = [d for d in days if d not in have]
+    return {"expected": len(days), "recorded": len(have & set(days)), "missing": [str(d) for d in miss],
+            "last": str(max(have)) if have else None}
+
+
 def main(argv=None) -> int:
     import argparse
     ap = argparse.ArgumentParser()
@@ -123,6 +133,16 @@ def main(argv=None) -> int:
     say(f"规则见 scripts/energy_forward.py 开头（2026-09-26 登记）。记录 {len(T)} 天（{T['date'].min().date() if len(T) else '—'}〜"
         f"{T['date'].max().date() if len(T) else '—'}），其中 K4 满足 {on_rec} 天；月末状态 {int(S.sum())} / {len(S)} 个月满足。")
     out = {"records": int(len(T)), "on_days_recorded": on_rec, "months": int(len(S)), "months_on": int(S.sum())}
+    today = pd.Timestamp.today().date()
+    cp = completeness(T, today)
+    out["completeness"] = cp
+    ms = cp["missing"]
+    say(f"是否每天在追加：{START}〜{today} 的交易日 {cp['expected']} 天，有记录 {cp['recorded']} 天"
+        + (f"，缺 {len(ms)} 天（{'、'.join(ms[:8])}{'…' if len(ms) > 8 else ''}）" if ms else "，没有缺") + f"；最近一次记录 {cp['last'] or '—'}")
+    if len(T):
+        last = T.iloc[-1]
+        say(f"最近的 K4：{last.get('k4_value')}%（{last.get('k4_period')}），θ {last.get('k4_theta')}% → {'满足' if last['on'] else '不满足'}；"
+            "月末状态：" + "、".join(f"{d:%Y-%m} {'满足' if v else '不满足'}" for d, v in S.tail(6).items()))
     if args.review and len(T):
         import adaptive_study as AD
         import capital_study as CS
@@ -146,7 +166,8 @@ def main(argv=None) -> int:
         V = decide_forward(base, k4, on_days, today)
         say(f"\n前向期（{START}〜{g[-1].date()}）：现行 年化 {base['cagr']}% / 回撤 {base['dd']}% / Calmar {base['calmar']}；"
             f"现行 + K4 年化 {k4['cagr']}% / 回撤 {k4['dd']}% / Calmar {k4['calmar']}；K4 生效 {on_days} 个交易日（{time.time() - t0:.0f}s）")
-        say(f"\n**{V['verdict']}**" + (f"（{'；'.join(V['fails'])}）" if V["fails"] else ""))
+        say(f"\n**{V['verdict']}**" + (f"（{'；'.join(V['fails'])}）" if V["fails"] else "")
+            + ("（上面是到目前为止的中间统计，只汇报、不判定）" if V["stage"] is None else ""))
         out.update({"base": base, "k4": k4, "on_days": on_days, "decision": V})
     fp = paths.out_dir() / "energy_forward_review"
     Path(f"{fp}.md").write_text("\n".join(LINES) + "\n", encoding="utf-8")
