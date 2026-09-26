@@ -138,6 +138,10 @@ def compute_indicators(df: pd.DataFrame, p: StrategyParams,
         cond &= out["liq_ok"]
     if p.min_price:
         cond &= out["price_ok"]
+    if p.min_weekly_vol_ratio:                                     # W2：周线量比（最近完成的一周 ÷ 前 10 周平均）
+        from .mtf import live_calendar, weekly_volume_ratio        # mtf 从本模块导入 macd / rsi → 这里延迟导入
+        out["w5v"] = weekly_volume_ratio(out, live_calendar(out.index)).to_numpy(float)
+        cond &= ~(out["w5v"] < p.min_weekly_vol_ratio)             # 缺值（历史不够）→ 不过滤
 
     # 预热期内一律不发信号（数据不足时 rolling 得到 NaN → 比较结果为 False，这里再兜一层）
     warm = np.arange(len(out)) >= p.warmup_bars

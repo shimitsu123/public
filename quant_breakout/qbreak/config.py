@@ -76,6 +76,9 @@ class StrategyParams:
     # 0=关闭。O'Neil 口径常用 4~5（20 日内）。
     max_upper_shadow_ratio: float = 0.0
     # 信号 K 线上影线 / 实体 > 该倍数视为冲高回落（放量长上影＝出货形态），不进场。0=关闭。常用 2。
+    min_weekly_vol_ratio: float = 0.0
+    # 周线量比（最近完成的一周成交量 ÷ 之前 10 周平均）< 该值不进场；历史不够 10 周 → 不过滤。0=关闭。
+    # W2（scripts/wvol_study.py 登记 9990cba 通过，2026-09-27 用户确认启用）：日本株 1.0（var/best_params_JP.json）。周的完成按东证日历。
     rs_n: int = 60
     min_rs_pct: float = -999.0     # ≤ -900 = 关闭过滤（rs_pct 仍会算出来供展示）；0 = 必须跑赢指数
     # 相对强度：个股 N 日涨幅 − 指数 N 日涨幅 ≥ 该 %。0=关闭（但 0 也意味着不能跑输指数，

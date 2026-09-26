@@ -140,6 +140,27 @@ def event_on(flag: pd.Series, idx: pd.DatetimeIndex) -> pd.Series:
     return pd.Series(out, index=idx)
 
 
+def weekly_volume_ratio(df: pd.DataFrame, days: pd.DatetimeIndex) -> pd.Series:
+    """周线量比 W5v（最近完成的一周成交量 ÷ 之前 10 周平均），放回 df 的日期；与 weekly_features 的 W5v 同一个定义。
+    10 周历史不够 / 平均为 0 → NaN。"""
+    wb = bars(df, days, "W")
+    v = wb["Volume"].astype(float)
+    vma10 = v.shift(1).rolling(10).mean()
+    f = pd.DataFrame({"W5v": v / vma10.where(vma10 > 0)}, index=wb.index)
+    return state_on(f, df.index)["W5v"]
+
+
+def live_calendar(idx: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """实盘 / 模拟盘用的日历：这只票的交易日 + 东证的下一个交易日。
+    研究（历史回测）里日历包含之后的日子，所以「这一周的最后一个交易日」收盘时这一周就算完成；实盘的数据到今天为止，
+    补上下一个交易日，完成的判断才和回测一致（周五 / 连休前的最后一天收盘时，这一周已完成）。"""
+    from .calendar_jp import next_trading_day
+    idx = pd.DatetimeIndex(idx)
+    if not len(idx):
+        return idx
+    return idx.append(pd.DatetimeIndex([pd.Timestamp(next_trading_day(idx[-1].date()))]))
+
+
 def daily_frame(df: pd.DataFrame, days: pd.DatetimeIndex) -> pd.DataFrame:
     """一只票：日线 → 周 / 月线特征 → 放回这只票的日线日期（状态列 + 事件列 E_*）。"""
     wf = weekly_features(bars(df, days, "W"))
