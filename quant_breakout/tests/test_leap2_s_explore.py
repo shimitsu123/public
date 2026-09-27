@@ -98,3 +98,20 @@ def test_us_pct_frames_maps_sector_and_month():
     fr = {"A.T": pd.DataFrame({"entry": True}, index=idx), "B.T": pd.DataFrame({"entry": True}, index=idx)}
     u = S4B.us_pct_frames(fr, {"A.T": "電気機器", "B.T": "謎の業種"}, P)
     assert np.allclose(u["A.T"], [0.1, 0.1, 0.9]) and np.isnan(u["B.T"]).all()
+
+
+def test_rolling_betas_recover_known_slope_and_use_only_past_weeks():
+    import leap2_s5_explore as S5
+    rng = np.random.default_rng(0)
+    idx = pd.date_range("2010-01-01", periods=140, freq="W-FRI")
+    m = pd.Series(rng.normal(0, 0.02, 140), index=idx)
+    f = pd.Series(rng.normal(0, 0.01, 140), index=idx)
+    y = pd.DataFrame({"A": 1.5 * m + 2.0 * f + rng.normal(0, 0.001, 140)}, index=idx)
+    X = pd.DataFrame({"f": f, "n225": m})
+    B = S5.rolling_betas(y, X[["f", "n225"]], "n225", weeks=104)["f"]
+    assert B["A"].iloc[:104].isna().all() and abs(B["A"].iloc[-1] - 2.0) < 0.05     # 前 104 周没有；控制日経后的系数 ≈ 2
+    y2 = y.copy()
+    y2.iloc[120:] = 9.9                                                               # 改第 121 周以后 → 第 119 周的 β 不变
+    B2 = S5.rolling_betas(y2, X[["f", "n225"]], "n225", weeks=104)["f"]
+    assert np.isclose(B2["A"].iloc[119], B["A"].iloc[119])
+    assert S5.weekly(pd.Series([1.0, 2.0], index=pd.to_datetime(["2020-01-06", "2020-01-10"]))).iloc[-1] == 2.0
