@@ -53,7 +53,7 @@ def _load(tickers: list[str], years: int = 1) -> dict:
     from qbreak.config import DataConfig
     from qbreak.data import load_universe
     from qbreak.trader import drop_partial_bar
-    data = load_universe(sorted(set(tickers)), DataConfig(provider="yfinance", years=years, allow_synthetic=False).validate())
+    data = load_universe(sorted(set(tickers)), DataConfig(provider="yfinance", years=years, min_bars=20, allow_synthetic=False).validate())
     return {t: drop_partial_bar(df, "JP") for t, df in data.items() if df is not None and len(df)}
 
 

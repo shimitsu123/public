@@ -19,3 +19,4 @@ cryptography>=41
 
 # 仅第4阶段实盘（Windows + Excel + MarketSpeed II）
 # xlwings>=0.30
+openpyxl
