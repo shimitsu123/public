@@ -183,7 +183,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             limit_k: float = 0.0, pb_use_dead: bool = False, cfg_over: dict | None = None, jp_bull_only: bool = False,
             extra_core: dict | None = None, pref_us: pd.Series | None = None, core_expo: dict | None = None,
             yen_strong: pd.Series | None = None, extra_bear: dict | None = None, priority: dict | None = None,
-            em_scale: pd.Series | None = None, params_t: dict | None = None) -> dict:
+            em_scale: pd.Series | None = None, params_t: dict | None = None, em_tick: dict | None = None) -> dict:
         names = list(ind)
         key = tuple(names) + (("nomult",) if not mult else ())
         if key not in em_cache and not mult:
@@ -211,6 +211,13 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
         if em_scale is not None:                                            # 按成交日再乘一个倍数（例：每月决定个股层开 / 关 / 减半）
             sc = em_scale.reindex(em.index.union(em_scale.index)).ffill().reindex(em.index).fillna(1.0).to_numpy(float)
             em = em.mul(sc[:, None])
+        if em_tick:                                                         # {(票, 信号日): 倍数}：那个信号的新仓倍数再乘一个数（成交日 = 信号日的下一个交易日）
+            em = em.copy()
+            for (t, d), f in em_tick.items():
+                if t in em.columns:
+                    k = int(em.index.searchsorted(pd.Timestamp(d))) + 1
+                    if k < len(em.index):
+                        em.iat[k, em.columns.get_loc(t)] *= float(f)
         JS.RealLotEngine.RATIO, JS.RealLotEngine.LAST = ratio, []
         MS.MLEngine.EXIT = {}
         Z._PrioEngine.PRIO = None
