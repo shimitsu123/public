@@ -176,7 +176,8 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
     def run(ind: dict, p, pb: dict | None = None, hold_pb: int = 10, mult: bool = True, pb_free: bool = False,
             limit_k: float = 0.0, pb_use_dead: bool = False, cfg_over: dict | None = None, jp_bull_only: bool = False,
             extra_core: dict | None = None, pref_us: pd.Series | None = None, core_expo: dict | None = None,
-            yen_strong: pd.Series | None = None, extra_bear: dict | None = None, priority: dict | None = None) -> dict:
+            yen_strong: pd.Series | None = None, extra_bear: dict | None = None, priority: dict | None = None,
+            em_scale: pd.Series | None = None) -> dict:
         names = list(ind)
         key = tuple(names) + (("nomult",) if not mult else ())
         if key not in em_cache and not mult:
@@ -201,6 +202,9 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
                         em.iat[k, c] = 1.0
         if jp_bull_only:
             em = bull_only(em, bear["JP"])
+        if em_scale is not None:                                            # 按成交日再乘一个倍数（例：每月决定个股层开 / 关 / 减半）
+            sc = em_scale.reindex(em.index.union(em_scale.index)).ffill().reindex(em.index).fillna(1.0).to_numpy(float)
+            em = em.mul(sc[:, None])
         JS.RealLotEngine.RATIO, JS.RealLotEngine.LAST = ratio, []
         MS.MLEngine.EXIT = {}
         Z._PrioEngine.PRIO = None

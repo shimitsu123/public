@@ -134,8 +134,8 @@ def tercile_table(y: pd.Series, x: pd.Series) -> list[dict]:
 
 
 # ── 数据 ──
-def era_inputs(D: dict, era: str, p0, pb) -> dict:
-    """某个年代：指标表（现行 = W2、不加 W2）、收盘宽表、真实一手比例、组合回测。"""
+def era_inputs(D: dict, era: str, p0, pb, windows: dict | None = None) -> dict:
+    """某个年代：指标表（现行 = W2、不加 W2）、收盘宽表、真实一手比例、组合回测（windows 缺省 = 整个年代）。"""
     if era == "E":
         P, days, names = D["E"], D["edays"], D["enames"]
         cols, ratio = list(range(len(names))), {}
@@ -150,8 +150,8 @@ def era_inputs(D: dict, era: str, p0, pb) -> dict:
     fb = CS_.frames_from(P, days, names, cols, pb, {})
     closes = pd.DataFrame({t: fw[t]["Close"] for t in fw}).reindex(days)
     a, b = ERAS[era]
-    run = CP.make_runner(closes, ratio, {era: (a, None)}, end=b, start=a)
-    return {"fw": fw, "fb": fb, "closes": closes, "run": run, "days": days, "start": a, "end": b}
+    run = CP.make_runner(closes, ratio, windows or {era: (a, None)}, end=b, start=a)
+    return {"fw": fw, "fb": fb, "closes": closes, "run": run, "days": days, "start": a, "end": b, "ratio": ratio}
 
 
 def run_equity(run, fr: dict, p) -> tuple[pd.Series, pd.DataFrame, dict]:
@@ -225,6 +225,18 @@ def signal_frame(ends: pd.DatetimeIndex, fb: dict, fw: dict, T: pd.DataFrame) ->
     return out
 
 
+def daily_inputs(closes: pd.DataFrame, idx: pd.DatetimeIndex, n225: pd.Series, spx: pd.Series, fxs: pd.Series, L: pd.DataFrame,
+                 bear: dict) -> dict:
+    """factor_frame 要的日频输入（都对齐到 idx；期初指标用 closes 的全部历史）。"""
+    ff = lambda s: s.reindex(idx.union(s.index)).ffill().reindex(idx)                          # noqa: E731
+    full = closes.index                                                    # 这个年代全部的交易日（含开始之前的预热）
+    ffa = lambda s: s.reindex(full.union(s.index)).ffill().reindex(full)                       # noqa: E731
+    return {"n225": ff(n225), "spx_jpy": ff(spx) * ff(fxs), "fx": ff(fxs), "us10y": ff(L["us10y"].dropna()),
+            "jgb10y": ff(L["jgb10y"].dropna()), "wti": ff(L["wti_spot"].where(L["wti_spot"] > 0).dropna()),
+            "vix": ff(L["vix"].dropna()), "bear_jp": ff(bear["JP"]).fillna(False), "bear_us": ff(bear["US"]).fillna(False),
+            "C": closes, "n225_full": ffa(n225)}
+
+
 def analyse(freq: str, ex: pd.Series, F: pd.DataFrame, era: str) -> dict:
     out = {"n": int(ex.notna().sum()), "mean": float(ex.mean()), "pos": float((ex > 0).mean() * 100), "corr": {}, "terc": {}}
     for k in FACTORS:
@@ -276,13 +288,7 @@ def main() -> int:
         expo = stock_exposure(tr[tr["ticker"] != "1655.T"] if len(tr) else tr, I["closes"], eq)
         T = CPH.trades(I["fw"], p0, I["start"])
         T = T[(T["sig_date"] >= a) & (T["sig_date"] <= b)] if len(T) else T
-        ff = lambda s: s.reindex(idx.union(s.index)).ffill().reindex(idx)                      # noqa: E731
-        full = I["closes"].index                                            # 这个年代全部的交易日（含开始之前的预热）
-        ffa = lambda s: s.reindex(full.union(s.index)).ffill().reindex(full)                     # noqa: E731
-        X = {"n225": ff(n225), "spx_jpy": ff(spx) * ff(fxs), "fx": ff(fxs), "us10y": ff(L["us10y"].dropna()),
-             "jgb10y": ff(L["jgb10y"].dropna()), "wti": ff(L["wti_spot"].where(L["wti_spot"] > 0).dropna()),
-             "vix": ff(L["vix"].dropna()), "bear_jp": ff(bear["JP"]).fillna(False), "bear_us": ff(bear["US"]).fillna(False),
-             "C": I["closes"], "n225_full": ffa(n225)}
+        X = daily_inputs(I["closes"], idx, n225, spx, fxs, L, bear)
         res[era] = {}
         for freq in ("M", "W"):
             ends = period_ends(idx, freq)
