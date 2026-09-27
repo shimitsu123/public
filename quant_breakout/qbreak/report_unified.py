@@ -59,6 +59,7 @@ def build_unified_data() -> dict:
             "macro_now": td.get("macro_now") or {},              # 仪表盘：市场健康度 + 消费 / 零售等新数据（只作展示）
             "news": td.get("news") or {},                        # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
             "energy": td.get("energy") or {},                    # 仪表盘：能源消费（每月）+ K4 前向记录的状态（只作展示 / 记录）
+            "era": td.get("era") or {},                          # 时代主线前向记录的状态（qbreak/era_forward.py；只记录）
             "shadow": read_json(paths.out_dir() / "shadow_today.json", {}) or {},   # 影子账户（判断型，只前向记录，不影响交易）
             "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
@@ -76,6 +77,7 @@ def build_unified_data() -> dict:
                      "候补队列在 markets.JP.watchlist；todo 的个股买单与候补队列的 breakout / to_box_top_pct = 「真突破」标签"
                      "（收盘是否高于过去 60 日最高、距箱顶 %；只作参考，不改交易）；大事件威胁指数在 threat（只展示，不参与交易）；"
                      "主题 / 业种强弱在 themes.groups（r1m / r3m = 近 1 / 3 个月相对 TOPIX 1000 平均的 %，rank3m / of = 排名，"
+                     "r12 / rank12 / of12 = 时代主线（12 个月、跳过最近 1 个月）与排名，"
                      "r2_now / r2_hist = 与日経225 的同步度 R²）与 themes.emerging（新出现的联动群 clusters、个股 links；只作展示，不改交易）；"
                      "missing = 日报应有而没取到的数据（项目 + 原因），汇报时逐项列出；"
                      "仪表盘数据在 macro_now（health.tiles = 市场健康度、releases = 消费 / 零售等新公布的数据）与 news.summary"
@@ -148,6 +150,11 @@ def missing_items(d: dict) -> list[str]:
         out.append(f"买点质量分前向记录（扩大池）：今天没记上（{sf['wide_error']}）—— 不影响交易，下次运行会补最近 5 个交易日")
     if started and sf.get("x2_error"):
         out.append(f"买点质量分前向记录的 X2（短観）：取不到（{sf['x2_error']}）—— 今天记下的信号 X2 为空（不补写），不影响交易")
+    ef = d.get("era") or {}
+    if started and ef.get("error"):
+        out.append(f"时代主线前向记录：这次没记上（{ef['error']}）—— 不影响交易；这个月不补写，下个月第一次运行照常记")
+    if started and ef.get("us_error"):
+        out.append(f"时代主线前向记录的美国 49 行业：取不到（{ef['us_error']}）—— 只记了日本；下次取到时记最新的月份（不补写），不影响交易")
     x = d.get("executor") or {}
     if started and x.get("error"):
         out.append(f"实盘执行器演练账户：运行失败（{x['error']}）—— 不影响模拟盘，但实盘要走的那条路今天没验证")
@@ -499,13 +506,20 @@ def _themes_html(th: dict, meta: tuple) -> str:
         cls = "pos" if (x.get("r3m") or 0) > 0 else "neg"
         return (f"<tr><td>{escape(lab)}</td><td class='n'>{x.get('n', 0)} 只</td><td class='n'>{_sg(x.get('r1m'))}</td>"
                 f"<td class='n {cls}'>{_sg(x.get('r3m'))}（{x.get('rank3m', '—')}/{x.get('of', '—')}）</td>"
+                f"<td class='n'>{_sg(x.get('r12'))}（{x.get('rank12', '—')}/{x.get('of12', '—')}）</td>"
                 f"<td class='n'>{r2(x)} / {r2(x, y3)} / {r2(x, y10)}</td></tr>")
     tk = sorted([k for k in g if k in names and g[k].get("r3m") is not None], key=lambda k: -g[k]["r3m"])
     ik = sorted([k for k in g if k not in names and g[k].get("r3m") is not None], key=lambda k: -g[k]["r3m"])
     head = (f"<tr><th>组</th><th class='n'>成员</th><th class='n'>近 1 月</th><th class='n'>近 3 月（排名）</th>"
-            f"<th class='n'>与日経同步度 R²：近 1 年 / {y3} / {y10}</th></tr>")
+            f"<th class='n'>时代主线 12-1 月（排名）</th><th class='n'>与日経同步度 R²：近 1 年 / {y3} / {y10}</th></tr>")
+    era_i = sorted([k for k in g if k not in names and g[k].get("r12") is not None], key=lambda k: -g[k]["r12"])[:7]
+    era_t = sorted([k for k in g if k in names and g[k].get("r12") is not None], key=lambda k: -g[k]["r12"])[:3]
+    era = ("<p><b>时代主线（最近 12 个月、跳过最近 1 个月领先）</b>：业种 " + escape("、".join(era_i) or "—")
+           + "；主题 " + escape("、".join(f"{k} {names[k]}" for k in era_t) or "—")
+           + "<br><span class='muted'>依据 var/out/era_study.md：这样排在前面的行业之后平均还会跑赢（美国 1931〜2026 按 12 个月算 70% 的时候、"
+           "日本 2006〜2026 68〜83%），但领先 3 年以上的反而容易反转；每月记进 var/out/era_forward.csv 自动核对。只作参考，不改交易。</span></p>")
     t_rows = "".join(row(k, f"{k} {names[k]}") for k in tk)
-    i_rows = "".join(row(k, k) for k in ik[:5]) + ("<tr><td colspan=5 class='muted'>…</td></tr>" if len(ik) > 10 else "") \
+    i_rows = "".join(row(k, k) for k in ik[:5]) + ("<tr><td colspan=6 class='muted'>…</td></tr>" if len(ik) > 10 else "") \
         + "".join(row(k, k) for k in ik[-5:] if k not in ik[:5])
     e = th.get("emerging") or {}
     lab = lambda t: escape(f"{t.split('.')[0]} {nm.get(t.split('.')[0], '')}".strip())            # noqa: E731
@@ -526,7 +540,7 @@ def _themes_html(th: dict, meta: tuple) -> str:
     return ("<section class=\"card\"><h2>主题与业种：强弱、影响度、新出现的联动（只作参考，不改交易）</h2>"
             f"<p class='muted'>数据截至 {escape(str(th.get('asof') or '—'))}；近 1 / 3 月 = 近 21 / 63 个交易日相对 TOPIX 1000 平均（对数收益之和，%）；"
             "影响度 = 这一组每天的涨跌与日経225 同步的程度（R²，0〜1；历年值每年 1 月更新 var/theme_influence.json）。</p>"
-            f"<h3>12 个主题</h3><div class='scroll'><table>{head}{t_rows}</table></div>"
+            f"{era}<h3>12 个主题</h3><div class='scroll'><table>{head}{t_rows}</table></div>"
             f"<h3>東証业种（最强 5 / 最弱 5）</h3><div class='scroll'><table>{head}{i_rows}</table></div>{emer}"
             "<p class='muted'>读法：主题成员按主营业务事先写定（qbreak/themes.py）；「新联动群」= 最近半年开始一起动、以前不一起动的股票（平均连接聚类），"
             "附上它和现有业种 / 主题最像哪几个 —— 新出现的行业先这样和现有行业做关联对比，要正式加进主题表先跑 "

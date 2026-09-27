@@ -40,6 +40,17 @@ def test_strength_sums_and_separate_ranks():
     assert TM.strength(rel2)["T9"]["r3m"] is None                                              # 近 63 天有效 < 70% → 不算
 
 
+def test_strength_era_12_1_month_and_ranks():
+    idx = pd.bdate_range("2024-01-01", periods=300)
+    rel = pd.DataFrame({"T1": 0.1, "T9": 0.0, "甲": -0.1, "乙": 0.2}, index=idx)
+    rel.loc[idx[-21:], "T9"] = 5.0                                                             # 最近 1 个月的大涨不算进时代主线
+    st = TM.strength(rel)
+    assert st["T1"]["r12"] == pytest.approx(0.1 * 231) and st["T9"]["r12"] == pytest.approx(0.0)
+    assert st["T1"]["rank12"] == 1 and st["T9"]["rank12"] == 2 and st["T1"]["of12"] == 2          # 主题之间排名
+    assert st["乙"]["rank12"] == 1 and st["甲"]["rank12"] == 2
+    assert TM.strength(rel.iloc[-200:])["T1"]["r12"] is None                                    # 不到 252 天 → 不算
+
+
 def test_influence_now_and_by_year():
     rng = np.random.default_rng(0)
     idx = pd.bdate_range("2022-01-03", "2023-12-29")

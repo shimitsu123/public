@@ -5,6 +5,8 @@
 口径（与 theme_study / supply_chain_study 相同）：日对数收益（%）；组 = 東証 30 业种（var/industry_s33.json）+ 12 个主题（qbreak/themes.py），
 组的日收益 = 成员等权平均（有行情的成员 < 3 只的日子缺值）；相对收益 = 组 − TOPIX 1000 929 只的平均。
   - 强弱：近 21 / 63 个交易日相对收益之和（约 1 / 3 个月，%）；主题之间、业种之间分别排名。
+  - 时代主线（2026-09-27 加）：12 个月、跳过最近 1 个月的相对收益之和（scripts/era_study.py：美国 100 年、日本 20 年里这样排在前面的行业
+    之后平均还会跑赢，3 年以上的领先反而反转）；只作展示，并每月记进 var/out/era_forward.csv（qbreak/era_forward.py）。
   - 影响度：组的日收益与日経225 日收益的相关系数平方（R²，近 250 个交易日；「日経每天的涨跌有多少和这一组同步」）。
     历年的值由 scripts/theme_influence.py 算好存在 var/theme_influence.json（每年更新一次）。
   - 新出现的联动（近 126 个交易日 vs 之前 250 个交易日，股票用相对收益）：
@@ -24,6 +26,7 @@ import pandas as pd
 from . import themes as TH
 
 WIN = {"r1m": 21, "r3m": 63}
+ERA_WIN, ERA_SKIP = 252, 21                        # 时代主线：12 个月、跳过最近 1 个月（era_study 的 M12）
 MIN_FRAC = 0.7
 INF_WIN = 250
 RECENT, PRIOR = 126, 250
@@ -62,7 +65,9 @@ def group_panel(lr: pd.DataFrame, s33: dict[str, str], min_members: int = TH.MIN
 
 
 def strength(rel: pd.DataFrame) -> dict[str, dict]:
-    """{组: {r1m, r3m, rank3m, of}}：近 21 / 63 个交易日的相对收益之和（%）；主题、业种分别按 r3m 排名。"""
+    """{组: {r1m, r3m, rank3m, of, r12, rank12, of12}}：近 21 / 63 个交易日的相对收益之和（%）；主题、业种分别按 r3m 排名。
+    r12 =「时代主线」：第 −252 … −22 个交易日（12 个月、跳过最近 1 个月）的相对收益之和（%；scripts/era_study.py 的 M12 同一个意思），
+    主题、业种分别按 r12 排名。"""
     out: dict[str, dict] = {}
     for g in rel.columns:
         s = rel[g]
@@ -70,10 +75,15 @@ def strength(rel: pd.DataFrame) -> dict[str, dict]:
         for k, n in WIN.items():
             tail = s.iloc[-n:]
             out[g][k] = round(float(tail.sum()), 2) if tail.notna().sum() >= MIN_FRAC * n else None
+        mid = s.iloc[-ERA_WIN:-ERA_SKIP] if len(s) >= ERA_WIN else s.iloc[0:0]
+        out[g]["r12"] = round(float(mid.sum()), 2) if len(mid) and mid.notna().sum() >= MIN_FRAC * len(mid) else None
     for keys in ([g for g in out if g in TH.THEMES], [g for g in out if g not in TH.THEMES]):
         ranked = sorted([g for g in keys if out[g]["r3m"] is not None], key=lambda g: -out[g]["r3m"])
         for i, g in enumerate(ranked, 1):
             out[g]["rank3m"], out[g]["of"] = i, len(ranked)
+        ranked = sorted([g for g in keys if out[g]["r12"] is not None], key=lambda g: -out[g]["r12"])
+        for i, g in enumerate(ranked, 1):
+            out[g]["rank12"], out[g]["of12"] = i, len(ranked)
     return out
 
 

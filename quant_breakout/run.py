@@ -943,6 +943,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
            "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker,
            "threat": threat, "executor": executor, "score_forward": score_fwd,
            "themes": _theme_panel(provider)}                  # 主题 / 业种强弱、影响度、新出现的联动（只作展示）
+    out["era"] = _era_forward_log(out["themes"], today)      # 时代主线的前向记录（每月一次；只记录，不影响交易）
     out["macro_now"] = _macro_now_panel(extras)              # 仪表盘：市场健康度 + 消费 / 零售等新数据（只作展示）
     out["news"] = _news_panel(out)                           # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
     out["energy"] = _energy_panel(today)                     # 仪表盘：能源消费（每月）+ K4 前向记录（只作展示 / 记录）
@@ -975,6 +976,25 @@ def _macro_now_panel(extras: dict) -> dict:
         return m
     except Exception as e:                                   # noqa: BLE001
         log.warning("市场健康度 / 新数据面板失败（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"}
+
+
+def _era_forward_log(themes: dict, today) -> dict:
+    """时代主线的前向记录（qbreak/era_forward.py，2026-09-27 登记）：日本业种 / 主题每月第一次运行记一次 12-1 个月排名，
+    美国 49 行业新月份出来时记一次。只追加；失败只记下原因（日报「数据完整性」会列出），不影响交易。"""
+    from qbreak import era_forward as EF
+    us, us_err = None, None
+    try:
+        from qbreak import factors as F
+        us = F.ff_industries(49, "vw")
+    except Exception as e:                                   # noqa: BLE001
+        us_err = f"{type(e).__name__}: {e}"
+        log.warning("美国 49 行业取不到（时代主线只记日本）：%s", e)
+    try:
+        res = EF.log_month(paths.out_dir() / EF.LOG_FILE, themes if isinstance(themes, dict) else {}, str(today), us)
+        return {**res, "us_error": us_err} if us_err else res
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("时代主线前向记录失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"}
 
 
