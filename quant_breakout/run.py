@@ -1148,7 +1148,8 @@ def _theme_panel(provider: str) -> dict:
 
 def _score_forward_log(ctx, eng, state, planned: dict) -> dict:
     """买点「质量分」前向记录（scripts/score_forward.py 登记）：最近 5 个已处理的日本交易日（≥ 2026-09-28）的信号
-    用冻结的配比打分，追加到 var/out/score_forward.csv。失败只记下原因（日报「数据完整性」会列出），不影响模拟盘。"""
+    用冻结的配比打分，追加到 var/out/score_forward.csv。失败只记下原因（日报「数据完整性」会列出），不影响模拟盘。
+    记的是「不加 W2 的突破」+ 周线量比与 W2 标记（第八节，2026-09-27）：模拟盘的指标表里 W2 挡掉的信号不出现，所以另外重算。"""
     import pandas as pd
     from qbreak import score_forward as SF
     try:
@@ -1166,7 +1167,8 @@ def _score_forward_log(ctx, eng, state, planned: dict) -> dict:
         d10 = DataConfig(provider=ctx.dcfg.provider, years=10, allow_synthetic=False).validate()
         ix = drop_partial_bar(load_universe([BENCHMARK["JP"]], d10)[BENCHMARK["JP"]], "JP")
         x2, x2_err = _x2_for_forward(SF, days[-SF.LOOKBACK:])
-        res = SF.run_daily(ctx.ind, ix["Close"], jp, days[-SF.LOOKBACK:], planned, mp, paths.out_dir() / SF.LOG_FILE,
+        ind_f = SF.no_w2_frames(ctx.ind, ctx.params["JP"], jp)                  # 不加 W2 的突破（第八节）
+        res = SF.run_daily(ind_f, ix["Close"], jp, days[-SF.LOOKBACK:], planned, mp, paths.out_dir() / SF.LOG_FILE,
                            str(ctx.today), x2=x2)
         res["x2_survey"] = (x2 or {}).get("latest", "")
         if x2_err:
@@ -1182,11 +1184,12 @@ def _score_forward_log(ctx, eng, state, planned: dict) -> dict:
             doc = W.load(wp)
             dw = load_universe(W.tickers(doc), DataConfig(provider=ctx.dcfg.provider, years=2, allow_synthetic=False).validate())
             ind_x = {}
+            p_fwd = SF.no_w2_params(ctx.params["JP"])                           # 不加 W2 的突破（第八节）
             for t, df in dw.items():
                 df = drop_partial_bar(df, "JP")
                 if df is not None and len(df) >= 60:
-                    ind_x[t] = compute_indicators(df, ctx.params["JP"])
-            base = {t: ctx.ind[t] for t in jp if t in ctx.ind}
+                    ind_x[t] = compute_indicators(df, p_fwd)
+            base = ind_f
             res["wide"] = SF.run_daily_wide(base, ind_x, ix["Close"], doc, days[-SF.LOOKBACK:], mp,
                                             paths.out_dir() / SF.LOG_WIDE, str(ctx.today), x2=x2)
     except Exception as e:                                   # noqa: BLE001

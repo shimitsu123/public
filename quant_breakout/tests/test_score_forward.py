@@ -205,3 +205,96 @@ def test_x2_evaluate_clusters_by_survey_and_decide():
     ev["x2"]["clusters"] = 5                                                # 调查季度不够 8 个 → 这个时点不判定
     r = SFR.decide(ev, None, SFR.CHECKPOINTS_WIDE, "combined", {"x2": 0.6})["results"]["x2"]
     assert r["judged"] is False and not r["ok"] and "不判定" in r["note"]
+
+
+# ── W2（2026-09-27 追加登记，scripts/score_forward.py 第八节）──
+from qbreak import w2_forward as W2F                                         # noqa: E402
+
+PW2 = StrategyParams(range_x_pct=40.0, vol_mult=1.0, min_weekly_vol_ratio=1.0)
+
+
+def _ind_w2(n=700, seed=2):
+    """与 _ind 同样的 K 线，但指标按「W2 打开」的参数算（= 模拟盘的指标表）。"""
+    base, idx = _ind(n, seed)
+    cols = ["Open", "High", "Low", "Close", "Volume"]
+    return {t: compute_indicators(df[cols], PW2) for t, df in base.items()}, base, idx
+
+
+def test_no_w2_frames_restore_all_breakouts():
+    live, base, _ = _ind_w2()
+    f = SF.no_w2_frames(live, PW2, TICKERS)
+    n_live = n_all = 0
+    for t in TICKERS:
+        e_all, e_live = f[t]["entry"].to_numpy(bool), live[t]["entry"].to_numpy(bool)
+        assert (e_all == base[t]["entry"].to_numpy(bool)).all()               # = 不加 W2 的参数算的信号
+        assert not (e_live & ~e_all).any()                                    # 模拟盘的信号都在里面
+        n_live, n_all = n_live + e_live.sum(), n_all + e_all.sum()
+    assert 0 < n_live < n_all                                                 # W2 挡掉了一部分，记录里要有
+    same = SF.no_w2_frames(base, P, TICKERS)                                  # W2 没打开 → 原样
+    assert all(same[t] is base[t] for t in TICKERS)
+    assert SF.no_w2_params(PW2).min_weekly_vol_ratio == 0.0 and SF.no_w2_params(PW2).range_x_pct == 40.0
+
+
+def test_run_daily_logs_all_breakouts_with_w2_flags(tmp_path, monkeypatch):
+    live, base, idx = _ind_w2()
+    models, _ = _models(base, idx)
+    mp, lp = tmp_path / "m.json", tmp_path / "log.csv"
+    SF.save_model(models, {"id": "t1"}, mp)
+    days = list(base[TICKERS[0]].index[-250:])
+    monkeypatch.setattr(SF, "FORWARD_START", str(days[0].date()))
+    f = SF.no_w2_frames(live, PW2, TICKERS)
+    SF.run_daily(f, idx, TICKERS, days, None, mp, lp, "2026-10-01")
+    got = pd.read_csv(lp)
+    assert {"w5v", "w2_keep"} <= set(got.columns) and set(got["w2_keep"]) == {0, 1}
+    for r in got.itertuples():
+        d = pd.Timestamp(r.date)
+        assert bool(base[r.ticker].loc[d, "entry"])                           # 记的是不加 W2 的突破
+        assert r.w2_keep == int(bool(live[r.ticker].loc[d, "entry"]))         # 标记 = 实盘 W2 的结论
+        w = live[r.ticker].loc[d, "w5v"]
+        assert (np.isnan(r.w5v) and np.isnan(w)) or abs(r.w5v - w) < 1e-4     # 周线量比 = 实盘同一个定义
+    assert (got.loc[got["w2_keep"] == 0, "w5v"] < 1.0).all()
+
+
+def _w2_sample(n=600, effect=1.0, seed=3):
+    rng = np.random.default_rng(seed)
+    keep = (rng.random(n) < 0.45).astype(int)
+    return pd.DataFrame({"date": pd.to_datetime(rng.choice(pd.bdate_range("2026-10-01", "2028-09-29"), n)),
+                         "w2_keep": keep, "net": rng.normal(0, 5.9, n) + effect * keep,
+                         "segment": rng.choice(["N225", "T500x", "S1x"], n)})
+
+
+def test_w2_evaluate_alarm_and_confirm():
+    assert W2F.keep_flag([0.99, 1.0, np.nan, 3.0]).tolist() == [0, 1, 1, 1]  # 缺值 = 保留（与实盘相同）
+    good = W2F.evaluate(_w2_sample(3000, 1.5))
+    assert good["diff"] > 0 and W2F.confirmed(good) and not W2F.alarm(good) and good["months"] >= 20
+    bad = W2F.evaluate(_w2_sample(3000, -1.5))
+    assert W2F.alarm(bad) and not W2F.confirmed(bad)
+    flat = W2F.evaluate(_w2_sample(300, 0.0))
+    assert not W2F.alarm(flat) and not W2F.confirmed(flat)
+    assert W2F.evaluate(_w2_sample(50).assign(w2_keep=1))["diff"] is None      # 只有一组 → 没有差、不判定
+    a, b = W2F.evaluate(_w2_sample(400)), W2F.evaluate(_w2_sample(400))
+    assert a == b                                                               # 种子固定 → 同样的区间
+
+
+def test_w2_judgement_schedule():
+    assert W2F.due_date("2027-09-27") is None and W2F.due_date("2027-10-05") == "2027-09-28"
+    assert W2F.due_date("2027-12-01", done={"2027-09-28"}) is None
+    assert W2F.due_date("2029-01-10") == "2028-09-28"                           # 错过的早年份不补判
+    assert W2F.due_date("2040-01-01") == "2031-09-28" and W2F.due_date("2040-01-01", done={"2031-09-28"}) is None
+    assert W2F.due_checkpoint(399, (400, 800)) is None and W2F.due_checkpoint(450, (400, 800)) == 400
+    assert W2F.due_checkpoint(450, (400, 800), {400}) is None and W2F.due_checkpoint(900, (400, 800), {400}) == 800
+
+
+def test_w2_review_decides_once_per_year(tmp_path):
+    C = _w2_sample(900, -2.0)
+    w = SFR.w2_review(C, None, pd.Timestamp("2027-10-02"))
+    assert w["year"] == "2027-09-28" and w["alarm"] is True and w["checkpoint"] == 800 and w["confirmed"] is False
+    assert set(w["segments"]) == {"N225", "T500x", "S1x"}
+    hist = pd.DataFrame([{"run": "2027-10-02", "scope": "W2", "closed": 900, "w2_year": "2027-09-28", "checkpoint": 800.0},
+                         {"run": "2027-10-02", "scope": "combined", "closed": 900, "checkpoint": 800.0}])
+    fp = tmp_path / "h.csv"
+    hist.to_csv(fp, index=False)
+    h = pd.read_csv(fp)                                                         # 读回来的类型也要认得
+    w2 = SFR.w2_review(C, h, pd.Timestamp("2027-12-20"))
+    assert w2["year"] is None and w2["checkpoint"] is None and w2["alarm"] is None
+    assert SFR.decide({"count": {"closed": 900}, "exp": 0.1, "auc": {}}, h, SFR.CHECKPOINTS_WIDE, "combined")["checkpoint"] is None

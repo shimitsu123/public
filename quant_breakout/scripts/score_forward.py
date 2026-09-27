@@ -90,6 +90,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from qbreak import paths                                                     # noqa: E402
 from qbreak import score_forward as SF                                       # noqa: E402
 from qbreak import signal_score as S                                         # noqa: E402
+from qbreak import w2_forward as W2F                                         # noqa: E402
 from qbreak.weights import auc_np                                            # noqa: E402
 
 TRAIN_END = "2026-09-26"                         # 训练样本：信号日与平仓日都在这之前
@@ -98,6 +99,7 @@ CHECKPOINTS_WIDE = (200, 400, 800)               # 合并样本（主判定，20
 BOOT_N, SEED = 2000, 20260926
 NOTIONAL = 250_000
 X2_MIN_CLUSTERS = 8                              # X2：有值的已平仓信号覆盖的调查季度少于这个数 → 这个时点不判定（第七节）
+W2_CHECKPOINTS = (400, 800)                      # W2：合并样本已平仓第一次达到 → 证实判定（第八节）；失效警报按年（qbreak/w2_forward.py）
 # 变量 → (说明, 事先方向：+1 = 越大越赚钱, 主 / 次)
 HYP = {"F2": ("F2 逻辑回归分数", 1, "P1"), "vol": ("量比（对数）", 1, "P2"),
        "ind_mom20": ("行业 20 日动量", -1, "S2"), "ind_mom60": ("行业 60 日动量", -1, "S2"), "rel_ind60": ("个股相对行业", 1, "S3"),
@@ -328,6 +330,39 @@ def _say_eval(title: str, ev: dict, V: dict) -> None:
         say(V.get("text", ""))
 
 
+def w2_review(C: pd.DataFrame, hist: pd.DataFrame | None, today) -> dict:
+    """第八节：合并样本里已平仓、有 W2 标记的信号 → 保留 vs 挡掉；失效警报按年、证实按已平仓笔数，做过的不再做。"""
+    ev = W2F.evaluate(C)
+    year = W2F.due_date(today, W2F.JUDGE_DATES, W2F.history_done(hist, "W2", "w2_year"))
+    cp = W2F.due_checkpoint(ev["n"], W2_CHECKPOINTS, W2F.history_done(hist, "W2", "checkpoint"))
+    seg = {}
+    if len(C) and "w2_keep" in C.columns:
+        k = pd.to_numeric(C["w2_keep"], errors="coerce").to_numpy(float)
+        for g in ("N225", "T500x", "S1x"):
+            m = (C["segment"] == g).to_numpy() if "segment" in C.columns else np.zeros(len(C), bool)
+            seg[g] = {"keep": W2F.stat(C.loc[m & (k == 1), "net"]), "drop": W2F.stat(C.loc[m & (k == 0), "net"])}
+    return {"eval": ev, "year": year, "checkpoint": cp, "alarm": W2F.alarm(ev) if year else None,
+            "confirmed": W2F.confirmed(ev) if cp else None, "segments": seg}
+
+
+def _say_w2(w: dict) -> None:
+    say("\n## W2（第八节）：保留 vs 挡掉（合并样本、已平仓）")
+    ev = w["eval"]
+    say(W2F.summary_line(ev) if ev["n"] else "还没有已平仓、带 W2 标记的信号")
+    lines = W2F.verdict_lines(ev, f"{w['year']} 这一年" if w["year"] else None,
+                              f"已平仓第一次达到 {w['checkpoint']} 笔" if w["checkpoint"] else None)
+    if lines:
+        for x in lines:
+            say(f"- {x}")
+    else:
+        nxt_y = next((d for d in W2F.JUDGE_DATES if pd.Timestamp(d) > pd.Timestamp.today()), None)
+        nxt_c = next((c for c in W2_CHECKPOINTS if c > ev["n"]), None)
+        say(f"只报告进度（下一次失效警报判定：{nxt_y or '—'} 之后的复核；下一次证实判定：已平仓 {nxt_c or '—'} 笔）")
+    if w["segments"]:
+        f = lambda s: f"{s['n']} 笔 {s['mean']:+.2f}%" if s.get("n") else "0 笔"                                  # noqa: E731
+        say("分段（只描述）：" + "；".join(f"{g} 保留 {f(v['keep'])} / 挡掉 {f(v['drop'])}" for g, v in w["segments"].items()))
+
+
 def review() -> int:
     from qbreak.config import BacktestConfig, DataConfig
     from qbreak.data import load_universe
@@ -341,8 +376,9 @@ def review() -> int:
     hist_fp = paths.out_dir() / "score_forward_review_history.csv"
     hist = pd.read_csv(hist_fp) if hist_fp.exists() else pd.DataFrame()
     evs, Vs, segs = {}, {}, {}
+    w2 = None
     if len(log):
-        p = load_params(market="JP")
+        p = SF.no_w2_params(load_params(market="JP"))           # 第八节：与记录同一个范围（不加 W2 的突破）
         data = load_universe(sorted(set(log["ticker"])), DataConfig(provider="yfinance", years=3, allow_synthetic=False).validate())
         ind = dict(IndicatorCache(data).all(p))
         bt = BacktestConfig.for_market("JP", 3, "tachibana")
@@ -355,23 +391,33 @@ def review() -> int:
             lm = {c: segs[scope].get("大中型", {}).get(c) for c in HYP} if scope == "combined" else None
             Vs[scope] = (decide(evs[scope], hist, cps, scope, lm) if cnt["closed"]
                          else {"checkpoint": None, "text": "还没有已平仓的信号"})
+            if scope == "combined":
+                w2 = w2_review(C, hist, pd.Timestamp.today())
     for scope, title in (("combined", "合并样本（主判定：日経225 + T500x + S1x）"), ("N225", "只看日経225（附带）")):
         if scope in evs:
             _say_eval(title, evs[scope], Vs[scope])
             if segs.get(scope):
                 say("分段 AUC（点估计）：" + "；".join(f"{g} {v['n']} 笔 F2 {v.get('F2')} / 量比 {v.get('vol')} / X2 {v.get('x2')}"
                                                       for g, v in segs[scope].items()))
+    if w2 is not None:
+        _say_w2(w2)
     if not evs:
         say("\n还没有记录。")
     if any(any(r["ok"] for r in V.get("results", {}).values() if r["hyp"].startswith("P") or r["hyp"] == "X2") for V in Vs.values()):
         say("\n主假设（或 X2）成立 → 需要另写一份事先登记的组合研究；模拟盘规则不变（改需用户确认）。")
     out = paths.out_dir() / "score_forward_review"
     Path(f"{out}.md").write_text("\n".join(LINES) + "\n", encoding="utf-8")
-    Path(f"{out}.json").write_text(json.dumps({"eval": evs, "decision": Vs, "segments": segs}, ensure_ascii=False, indent=1,
+    Path(f"{out}.json").write_text(json.dumps({"eval": evs, "decision": Vs, "segments": segs, "w2": w2}, ensure_ascii=False, indent=1,
                                               default=float), encoding="utf-8")
     rows = [{"run": str(pd.Timestamp.today().date()), "scope": sc, "logged": int(len(log)), "closed": ev["count"].get("closed"),
              "checkpoint": Vs[sc].get("checkpoint"), **{f"auc_{c}": (a or {}).get("auc") for c, a in (ev.get("auc") or {}).items()}}
             for sc, ev in evs.items()] or [{"run": str(pd.Timestamp.today().date()), "scope": "combined", "logged": 0, "closed": 0}]
+    if w2 is not None:                                          # 第八节：W2 一行（判定过的年份 / 笔数，下次不再判定）
+        e = w2["eval"]
+        rows.append({"run": str(pd.Timestamp.today().date()), "scope": "W2", "logged": int(len(log)), "closed": e["n"],
+                     "w2_year": w2["year"], "checkpoint": w2["checkpoint"], "w2_diff": e.get("diff"), "w2_lo95": e.get("lo95"),
+                     "w2_hi95": e.get("hi95"), "w2_lo99": e.get("lo99"), "w2_hi99": e.get("hi99"), "w2_alarm": w2["alarm"],
+                     "w2_confirmed": w2["confirmed"]})
     pd.concat([hist, pd.DataFrame(rows)], ignore_index=True).to_csv(hist_fp, index=False)
     print(f"{time.time() - t0:.0f}s")
     return 0

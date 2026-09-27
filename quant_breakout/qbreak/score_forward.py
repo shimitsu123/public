@@ -7,6 +7,8 @@
 复核时按那时的行情、用同一套出场规则算。只作记录，不影响交易。
 X2（2026-09-26 追加登记，scripts/score_forward.py 第七节）：每个信号另记这只票的東証业种的「顾客业种的短観业况变化」
 （与 scripts/fund_study.py 的 S5 / X2 同一算法）和用到的调查季度；短観取不到 → 空，不补写。
+W2（2026-09-27 追加登记，第八节）：记录的是「不加 W2 的突破」（no_w2_frames：参数里 W2 打开时按关掉 W2 的参数重算同一份 K 线），
+每个信号另记周线量比 w5v 与 W2 是否保留 w2_keep（qbreak/w2_forward.py：< 1.0 → 0，≥ 1.0 或缺值 → 1）。
 """
 from __future__ import annotations
 
@@ -17,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from . import signal_score as S
+from . import w2_forward as W2F
 from .scan import breakout_fields
 from .sectors import SECTOR_JP
 
@@ -25,6 +28,39 @@ LOOKBACK = 5
 KEYS = ["F1", "F2", "F3", "F4", "F5"]
 MODEL_FILE, LOG_FILE, LOG_WIDE = "score_forward_model.json", "score_forward.csv", "score_forward_wide.csv"
 X2_COLS = ("x2", "x2_survey")                      # X2 的值、用到的短観调查季度（YYYY-MM-DD）
+W2_COLS = ("w5v", "w2_keep")                       # 周线量比、W2 是否保留（第八节）
+OHLCV = ["Open", "High", "Low", "Close", "Volume"]
+
+
+# ── W2（第八节）：记录「不加 W2 的突破」+ 周线量比与保留标记 ──
+def no_w2_params(p):
+    """现行参数去掉 W2（其他不变）。"""
+    from dataclasses import replace
+    return replace(p, min_weekly_vol_ratio=0.0) if getattr(p, "min_weekly_vol_ratio", 0) else p
+
+
+def no_w2_frames(ind: dict[str, pd.DataFrame], p, tickers) -> dict[str, pd.DataFrame]:
+    """tickers 的指标表换成「不加 W2」的：参数里 W2 没打开 → 原样；打开 → 用指标表里的同一份 K 线按去掉 W2 的参数重算。"""
+    uni = {t: ind[t] for t in tickers if t in ind}
+    if not getattr(p, "min_weekly_vol_ratio", 0):
+        return uni
+    from .strategy import compute_indicators
+    p0 = no_w2_params(p)
+    return {t: compute_indicators(df[OHLCV], p0) for t, df in uni.items()}
+
+
+def w2_fields(ind: dict[str, pd.DataFrame], dates, tickers) -> tuple[list, list]:
+    """每个信号的周线量比（qbreak/mtf.py：东证日历补下一个交易日 = 实盘 W2 同一个定义）与 W2 是否保留。"""
+    from . import mtf
+    cache: dict[str, pd.Series] = {}
+    w5 = []
+    for d, t in zip(dates, tickers):
+        if t not in cache:
+            df = ind[t]
+            cache[t] = mtf.weekly_volume_ratio(df, mtf.live_calendar(df.index))
+        v = cache[t].get(pd.Timestamp(d), np.nan)
+        w5.append(float(v) if v is not None and np.isfinite(v) else np.nan)
+    return [round(v, 4) if np.isfinite(v) else np.nan for v in w5], W2F.keep_flag(w5).tolist()
 
 
 # ── 冻结的配比 ──
@@ -132,7 +168,7 @@ def append_log(rows: pd.DataFrame, path: Path) -> int:
 def _assemble(rows: pd.DataFrame, ind: dict[str, pd.DataFrame], sector: list, planned: dict | None, meta: dict,
               today: str, extra: dict | None = None, x2: dict | None = None) -> pd.DataFrame:
     """打好分的信号 → 记录行：日期、代码、行业、模拟盘是否计划买入（不知道 = 空）、收盘、量比、真突破、距箱顶 %、因子、分数、
-    X2 与调查季度（取不到 = 空）、记录日、模型。"""
+    X2 与调查季度（取不到 = 空）、周线量比与 W2 是否保留、记录日、模型。"""
     ds = rows["date"].dt.strftime("%Y-%m-%d")
     pl = planned or {}
     info = []
@@ -145,6 +181,7 @@ def _assemble(rows: pd.DataFrame, ind: dict[str, pd.DataFrame], sector: list, pl
                          "planned": [(1 if t in set(pl[d]) else 0) if d in pl else np.nan for d, t in zip(ds, rows["ticker"])]})
     out = pd.concat([head, pd.DataFrame(info, index=rows.index), rows.drop(columns=["date", "ticker"]).round(6)], axis=1)
     out[X2_COLS[0]], out[X2_COLS[1]] = x2_lookup(x2, rows["date"], list(rows["ticker"]))
+    out[W2_COLS[0]], out[W2_COLS[1]] = w2_fields(ind, rows["date"], list(rows["ticker"]))
     out["logged_on"], out["model"] = today, meta.get("id", "")
     return out
 
