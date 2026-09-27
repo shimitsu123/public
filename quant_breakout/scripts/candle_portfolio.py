@@ -137,8 +137,10 @@ def yearly(eq: pd.Series, start: str = TRADE_START) -> dict[str, float]:
     return {str(y): round(float(ye[y] / prev.iloc[k] - 1) * 100, 2) for k, y in enumerate(ye.index)}
 
 
-def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple], end: str | None = None, start: str = TRADE_START):
-    """run(ind, p, pb=None) → {窗口: 年化 / 回撤 / Calmar, trades, win, win_<窗口>, hold, reasons, years}。"""
+def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple], end: str | None = None, start: str = TRADE_START,
+                years: int = 21):
+    """run(ind, p, pb=None) → {窗口: 年化 / 回撤 / Calmar, trades, win, win_<窗口>, hold, reasons, years}。
+    years：宏观序列与 1655 的 yfinance 年数（缺省 21 = 2005 起；2001〜2006 的窗口用 27）。"""
     import capital_study as CS
     from bullbear_study import SYM, load
     from unified_study import spx_jpy_on_jp_days
@@ -155,7 +157,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
     sim = json.loads((paths.home() / "sim.json").read_text(encoding="utf-8"))
     cfg = config_from_sim(sim)
     broker = (sim.get("unified") or {}).get("broker", "tachibana")
-    d21 = DataConfig(provider="yfinance", years=21, allow_synthetic=False).validate()
+    d21 = DataConfig(provider="yfinance", years=years, allow_synthetic=False).validate()
     us = load_params(market="US")
     idx = {m: load(*SYM[m]) for m in ("JP", "US")}
     fxdf = load("JPY=X", "2000-01-01")
