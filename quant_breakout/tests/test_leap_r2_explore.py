@@ -63,3 +63,45 @@ def test_month_picks_rank_members_at_month_end():
     mem = {"A.T": np.ones(len(idx), bool), "B.T": np.ones(len(idx), bool), "C.T": np.zeros(len(idx), bool)}   # C 不是成员
     pk = S6.month_picks(fr, sc, mem, top=1)
     assert pk["A.T"][idx.get_loc(pd.Timestamp("2021-01-29"))] and not pk["C.T"].any() and pk["A.T"].sum() == 2
+
+
+def test_synth_jpy_uses_previous_us_close_and_morning_fx():
+    import leap_r9_explore as R9
+    us = pd.DataFrame({"Close": [100.0, 110.0, 121.0]}, index=pd.to_datetime(["2021-01-04", "2021-01-05", "2021-01-06"]))
+    fx = pd.Series([100.0, 100.0, 200.0], index=us.index)
+    jp = pd.to_datetime(["2021-01-05", "2021-01-06", "2021-01-07"])
+    df = R9.synth_jpy(us, fx, pd.DatetimeIndex(jp), base=1000.0)
+    # 1/5：前一个美国收盘 100 × 前一日汇率 100；1/6：110 × 100；1/7：121 × 200（当天早上知道的是前一天收盘的汇率）
+    assert np.allclose(df["Close"].to_numpy(), [1000.0, 1100.0, 2420.0]) and (df["Volume"] == 1e6).all()
+
+
+def test_trend_frame_monthly_decision_without_lookahead():
+    import leap_r10_explore as R10
+    idx = pd.bdate_range("2019-01-01", "2020-12-31")
+    c = pd.Series(np.linspace(100, 200, len(idx)), index=idx)
+    c[idx >= pd.Timestamp("2020-06-01")] = 50.0                                     # 6 月暴跌
+    df = pd.DataFrame({"Open": c, "High": c, "Low": c, "Close": c, "Volume": 1e6})
+    fr = R10.trend_frame(df, months=3)
+    assert not fr.loc["2019-02-28", "entry"] and fr.loc["2019-03-29", "entry"] and fr.loc["2019-04-01", "entry"]   # 第 3 个月末起才有 3 个月均线
+    assert fr.loc["2020-06-10", "entry"]                                            # 月中暴跌：月末之前不改判定（只在月末看）
+    assert fr.loc["2020-06-30", "dead_cross"] and not fr.loc["2020-07-01", "entry"]
+    df2 = df.copy()
+    df2.loc["2020-09-01":, "Close"] = 1e6                                           # 之后的数据不改变之前的判定
+    fr2 = R10.trend_frame(df2, months=3)
+    assert (fr2.loc[:"2020-08-31", "entry"] == fr.loc[:"2020-08-31", "entry"]).all()
+
+
+def test_r10_placebo_keeps_monthly_structure_and_fraction():
+    import leap_r10_study as ST
+    idx = pd.bdate_range("2010-01-01", "2019-12-31")
+    tf = pd.DataFrame({"Close": 1.0, "entry": False, "dead_cross": False}, index=idx)
+    out = ST.placebo_frame(tf, 0.3, np.random.default_rng(0))
+    me = idx[ST.month_end_flags(idx)]
+    held = out["entry"].reindex(me).to_numpy(bool)
+    assert 0.15 < held.mean() < 0.45                                               # 大约 30% 的月份拿着
+    # 同一个月里（两个月末之间）拿不拿不变；不拿的那个月末有卖出标记
+    per_month = out["entry"].groupby(idx.to_period("M")).nunique()
+    assert (per_month <= 2).all()
+    assert (out["dead_cross"].to_numpy(bool) <= ~out["entry"].to_numpy(bool)).all()
+    me2, frac = ST.hold_months(out, "2012-01-01", "2013-12-31")
+    assert len(me2) == 24 and 0.0 <= frac <= 1.0
