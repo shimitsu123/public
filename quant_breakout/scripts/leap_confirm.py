@@ -42,8 +42,9 @@ def yf_panel(names: list[str], lo: str, hi: str) -> tuple[dict, pd.DatetimeIndex
     return {k: v[:, keep] for k, v in P.items()}, days, [nm[j] for j in keep]
 
 
-def context(era: str, names: list[str] | None = None) -> dict:
-    """{P, days, names, cols, ratio, start, end, windows, years, delist}。names 缺省 = 今天的日経225（Z / E）。"""
+def context(era: str, names: list[str] | None = None, jmem: str = "U0") -> dict:
+    """{P, days, names, cols, ratio, start, end, windows, years, delist}。names 缺省 = 今天的日経225（Z / E）；
+    J 的 jmem：U0 = 今天的日経225（缺省）、U1 = 时点 TOPIX 500、U2 = 时点 TOPIX 1000（无幸存者偏差；只在成员的日子才有信号，见 member_mask）。"""
     import pit_retrain_study as PRS
     from qbreak.config import universe
     if era in ("Z", "E"):
@@ -57,11 +58,21 @@ def context(era: str, names: list[str] | None = None) -> dict:
     P, days, nm = D["P"], D["days"], D["names"]
     last = {nm[j]: days[np.where(np.isfinite(P["C"][:, j]))[0][-1]] for j in range(len(nm)) if np.isfinite(P["C"][:, j]).any()}
     delist = {t: d for t, d in last.items() if d < pd.Timestamp(PRS.WINDOW[1]) - pd.Timedelta(days=PRS.DELIST_GAP_DAYS)}
-    cols = [j for j in range(len(nm)) if D["mem"]["U0"][:, j].any()]
+    cols = [j for j in range(len(nm)) if D["mem"][jmem][:, j].any()]
     ratio = {nm[j]: pd.Series(D["ratio"][:, j], index=days) for j in cols}
     a, b = LC.WINDOWS["J"]
     return {"era": "J", "P": P, "days": days, "names": nm, "cols": cols, "ratio": ratio, "start": a, "end": b,
-            "windows": _windows("J"), "years": 21, "delist": delist, "D": D}
+            "windows": _windows("J"), "years": 21, "delist": delist, "D": D, "jmem": jmem}
+
+
+def member_mask(ctx: dict, fr: dict) -> dict[str, np.ndarray]:
+    """J 的时点股票池：那一天是不是成员（U0 / Z / E → 全部 True）。"""
+    if ctx.get("era") != "J" or ctx.get("jmem", "U0") == "U0":
+        return {t: np.ones(len(df), bool) for t, df in fr.items()}
+    M = ctx["D"]["mem"][ctx["jmem"]]
+    col = {t: j for j, t in enumerate(ctx["names"])}
+    di = pd.Index(ctx["days"])
+    return {t: M[di.get_indexer(df.index), col[t]] for t, df in fr.items()}
 
 
 def frames(ctx: dict, p) -> dict[str, pd.DataFrame]:
@@ -138,3 +149,19 @@ def placebo_q(ctx: dict, run_fn, fr: dict, p, frac: float, seeds: int = LC.PLACE
         vals.append(r[era]["calmar"])
     v = np.array([x for x in vals if x is not None], float)
     return (float(np.percentile(v, q)) if len(v) else float("nan")), vals
+
+
+def w2_keep(ctx: dict, fr: dict, cut: float = 1.0) -> dict[str, np.ndarray]:
+    """每只票每天：周线量比 ≥ cut（W2 同一定义：qbreak/mtf.py；缺值 → 保留）。wvol_study.with_w5v 同一算法。"""
+    from qbreak import mtf
+    P, days = ctx["P"], ctx["days"]
+    col = {t: j for j, t in enumerate(ctx["names"])}
+    out = {}
+    for t, df in fr.items():
+        j = col[t]
+        ok = np.isfinite(P["C"][:, j]) & np.isfinite(P["O"][:, j])
+        raw = pd.DataFrame({"Open": P["O"][ok, j], "High": P["H"][ok, j], "Low": P["L"][ok, j], "Close": P["C"][ok, j],
+                            "Volume": P["V"][ok, j]}, index=days[ok])
+        w = mtf.daily_frame(raw, days)["W5v"].reindex(df.index).to_numpy(float)
+        out[t] = ~np.isfinite(w) | (w >= cut)
+    return out
