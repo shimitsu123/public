@@ -71,3 +71,39 @@ def test_segment_and_scale_masks():
     assert p[i, 1] and p[j, 0]
     sc = X.scale_matrix(DAYS, names, snaps)
     assert sc[i, 0] == 0 and sc[i, 1] == 5 and sc[i, 2] == 1 and sc[j, 0] == 3 and sc[j, 2] == 0
+
+
+def test_margin_pub_rule_holiday_weeks_and_extra_columns():
+    days = pd.bdate_range("2024-05-01", "2024-07-31")
+    assert list(X.margin_pub_days(["2024-06-07", "2024-06-14"], days).strftime("%Y-%m-%d")) == ["2024-06-11", "2024-06-18"]      # 周五申込 → 下周第 2 个交易日（周二）
+    d2 = days.drop(pd.Timestamp("2024-06-17"))                                                                                    # 下周一休市 → 周三
+    assert list(X.margin_pub_days(["2024-06-14"], d2).strftime("%Y-%m-%d")) == ["2024-06-19"]
+    assert list(X.margin_pub_days(["2024-06-13"], days).strftime("%Y-%m-%d")) == ["2024-06-18"]                                   # 周五休市、申込日为周四 → 同一规则
+    M = pd.DataFrame({"Date": ["2024-06-14"], "Code": ["12340"], "LongVol": ["1000"], "ShrtVol": ["100"], "LongStdVol": ["700"], "LongNegVol": ["300"],
+                      "ShrtStdVol": ["100"], "ShrtNegVol": ["0"], "IssType": ["2"]})
+    out = X.margin_weekly(d2, M)
+    r = out.iloc[0]
+    assert r["pub"] == pd.Timestamp("2024-06-19") and r["avail"] == pd.Timestamp("2024-06-20") and r["long_std"] == 700 and r["long_neg"] == 300 and r["iss_type"] == "2"
+
+
+def test_fins_fs_rows_consolidated_first_and_buyback():
+    F = pd.DataFrame([
+        dict(DiscDate="2024-05-10", DiscTime="15:00", Code="10000", DiscNo="1", DocType="FYFinancialStatements_Consolidated_JP", CurPerType="FY", CurFYEn="2024-03-31", TrShFY="100", ShOutFY="10000", NP="5", CFO="8", CFI="-1", TA="100", Eq="50", EqAR="0.5", CashEq="20", ShEq="50", ROE="0.1"),
+        dict(DiscDate="2024-05-10", DiscTime="15:00", Code="10000", DiscNo="2", DocType="FYFinancialStatements_NonConsolidated_JP", CurPerType="FY", CurFYEn="2024-03-31", TrShFY="100", ShOutFY="10000", NP="5", CFO="8", CFI="-1", TA="100", Eq="50", EqAR="0.5", CashEq="20", ShEq="50", ROE="0.1"),
+        dict(DiscDate="2024-05-20", DiscTime="15:00", Code="10000", DiscNo="3", DocType="FYFinancialStatements_Consolidated_JP", CurPerType="FY", CurFYEn="2024-03-31", TrShFY="999", ShOutFY="10000", NP="5", CFO="8", CFI="-1", TA="100", Eq="50", EqAR="0.5", CashEq="20", ShEq="50", ROE="0.1"),   # 订正 → 不算
+        dict(DiscDate="2024-08-09", DiscTime="15:00", Code="10000", DiscNo="4", DocType="1QFinancialStatements_Consolidated_JP", CurPerType="1Q", CurFYEn="2025-03-31", TrShFY="130", ShOutFY="10000", NP="1", CFO="", CFI="", TA="100", Eq="50", EqAR="0.5", CashEq="20", ShEq="50", ROE=""),
+        dict(DiscDate="2024-11-08", DiscTime="15:00", Code="10000", DiscNo="5", DocType="2QFinancialStatements_Consolidated_JP", CurPerType="2Q", CurFYEn="2025-03-31", TrShFY="120", ShOutFY="9990", NP="2", CFO="3", CFI="", TA="100", Eq="50", EqAR="0.5", CashEq="20", ShEq="50", ROE=""),
+        dict(DiscDate="2025-02-10", DiscTime="15:00", Code="10000", DiscNo="6", DocType="3QFinancialStatements_Consolidated_JP", CurPerType="3Q", CurFYEn="2025-03-31", TrShFY="120", ShOutFY="19980", NP="3", CFO="", CFI="", TA="100", Eq="50", EqAR="0.5", CashEq="20", ShEq="50", ROE=""),   # 拆股 → 缺值
+        dict(DiscDate="2024-05-10", DiscTime="15:00", Code="20000", DiscNo="7", DocType="FYFinancialStatements_NonConsolidated_JP", CurPerType="FY", CurFYEn="2024-03-31", TrShFY="0", ShOutFY="1000", NP="1", CFO="1", CFI="", TA="10", Eq="5", EqAR="0.5", CashEq="1", ShEq="5", ROE="0.1"),
+        dict(DiscDate="2024-05-10", DiscTime="15:00", Code="30000", DiscNo="8", DocType="FYFinancialStatements_Consolidated_REIT", CurPerType="FY", CurFYEn="2024-03-31", TrShFY="0", ShOutFY="1000", NP="1", CFO="1", CFI="", TA="10", Eq="5", EqAR="0.5", CashEq="1", ShEq="5", ROE="0.1"),
+        dict(DiscDate="2024-06-10", DiscTime="15:00", Code="10000", DiscNo="9", DocType="EarnForecastRevision", CurPerType="FY", CurFYEn="2025-03-31", TrShFY="", ShOutFY="", NP="", CFO="", CFI="", TA="", Eq="", EqAR="", CashEq="", ShEq="", ROE=""),
+    ])
+    fs = X.fins_fs_rows(F)
+    a = fs[fs["ticker"] == "1000.T"]
+    assert list(a["doc"].str.contains("NonConsolidated")) == [False] * len(a) and len(a) == 4 and a.iloc[0]["TrShFY"] == 100      # 连结优先、订正不算
+    assert len(fs[fs["ticker"] == "2000.T"]) == 1 and "3000.T" not in set(fs["ticker"])                                          # 只有单体的公司保留；REIT / 修正不算
+    bb = X.buyback_b(fs)
+    b = bb[bb["ticker"] == "1000.T"].sort_values("date")
+    assert np.isnan(b.iloc[0]["b"]) and np.isclose(b.iloc[1]["b"], 30 / 10000) and np.isclose(b.iloc[2]["b"], 0.0) and np.isnan(b.iloc[3]["b"])   # 首份缺值；+0.3%；消却 → 0；拆股 → 缺值
+    assert np.isclose(b.iloc[1]["tr_chg"], 0.3)
+    assert list(b["prev_date"].isna()) == [True, False, False, False]

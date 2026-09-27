@@ -125,6 +125,9 @@
   结论上限写死 = 展示 + 前向记录，不改交易；探索 2001〜2021 → **全部候选不过探索门**（P1 规则名单 W5 +0.15 pp、命中 52%，与无变更会合无区别；
   事前 β 名单 −0.79 pp）→ 按登记不跑 2022〜2026 的判定，只建展示库（`var/out/policy_event_lib.json`，日报标「历史描述，不是预测」）；前向记录照常
   （`var/out/policy_forward.csv`，唯一样本外检验）；**维持现行**（`var/out/policy_event_study.md`）。
+- 没用过的 J-Quants 数据 × W2 突破 N1〜N5（2026-09-27，用户「现在下载后的所有数据中还有哪些没有用到的有用的要训练的…让选股更加精准」；设计面板 + 审计后登记，
+  `scripts/demand_study.py` 头部是登记全文、`scripts/demand_features.py` 特征层）：信用買い残 4 周减少 / 自社株買い进行中 / 決算日程位置 / 低应计 / N1 × 突破日量比 作「W2 池的保留规则」，
+  资格池内与 B、剔除组、分层抽签对照比较；探索 2017〜2021 → 通过才跑 2022〜2026 一次；结论上限 = 提议 + 前向记录（结果见 sim_changes.md 与 `var/out/demand_study.md`）。
 - J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
   → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
   （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）
