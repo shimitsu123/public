@@ -122,7 +122,9 @@
   中 / 弱类别，日银无变更 260 + FOMC 其余 209 作对照池；来源由 `scripts/policy_event_verify.py` 机械核对，meti 等打不开的留空只描述）；
   规则层 `qbreak/policy_events.py`（分类 → 受益 / 受损业种机械推导、时区换算、校验）；数据层 `scripts/policy_event_data.py`；前向记录 `qbreak/policy_forward.py`
   （云端 sim-day 唯一写者，`var/out/policy_forward.csv` 只追加；已过去的日银 / FOMC 日程没录入 → PENDING 行）；日报 / 仪表盘「政策事件反应库」块只展示。
-  结论上限写死 = 展示 + 前向记录，不改交易；探索 2001〜2021 → 通过才跑 2022〜2026 一次；结果见 sim_changes.md 与 `var/out/policy_event_study.md`。
+  结论上限写死 = 展示 + 前向记录，不改交易；探索 2001〜2021 → **全部候选不过探索门**（P1 规则名单 W5 +0.15 pp、命中 52%，与无变更会合无区别；
+  事前 β 名单 −0.79 pp）→ 按登记不跑 2022〜2026 的判定，只建展示库（`var/out/policy_event_lib.json`，日报标「历史描述，不是预测」）；前向记录照常
+  （`var/out/policy_forward.csv`，唯一样本外检验）；**维持现行**（`var/out/policy_event_study.md`）。
 - J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
   → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
   （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）

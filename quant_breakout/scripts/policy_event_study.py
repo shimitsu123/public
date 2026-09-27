@@ -66,7 +66,7 @@ TOPIX 改用 J-Quants 指数、置换对照 ≥ 1,000 次 + Holm、J5 按子类�
   J5 子类：有相反子类的类别里，两个子类各自（各按各自名单）平均 S > 0（各 n ≥ 5；不够 → 该类只描述、不判）；
   J6 年代：X 阶段 A / B1 同号、C 阶段 A / B1 / B2 同号（段内 n < 15 的段不计）；J7 事前漂移：S − PRE > 0 且 PRE < S/2（同长度）；
   J8 无信息会合（C4）：BOJ_CHANGE / FED_TURN 事件的平均 S > 对照池（同一名单、按「上一次变更方向」套用）的平均 S。
-  读法：X 过 J1〜J8 才把候选写进 CONFIRM_IDS、提交、再跑 C 一次；X 不过 → 不跑 C 的判定，但 C 的类别 × 业种描述表仍进展示库（--stage library），并写明
+  读法：X 过 J1〜J8 才把候选写进 CONFIRM_IDS、提交、再跑 C 一次；X 不过 → 不跑 C 的判定（--stage library 的判定表只重报 X），但 C 的类别 × 业种描述表仍进展示库，并写明
   「第二阶段个股层没有干净的确认窗口，只能前向」；X、C 都过 = 「历史一致」：P1 标「历史一致（分类事后写定，非样本外）」、P2 标「历史一致（机械 β 名单）」；
   「登记确认」只由前向记录（n ≥ 30 复现）授予。J1〜J5 过而 J6 不过 = 时代依赖。方向与年代重合（円買 ≥ 2022 vs 円売 ≤ 2011、紧缩 2006〜07 与 2022 以后、
   关税 2018〜20 与 2025〜26）→ J5 / J6 实际检验的是「β 通道在两种符号、两个年代下都成立」，按 sign × 年代分表报告。
@@ -534,6 +534,8 @@ def run_study(stage: str, n_perm: int = N_PERM, say=print) -> dict:
     ctrl = E[(E["tier"] == "control") & (E["excluded"] == 0) & (E["verified"] != "") & E["r"].notna() & (E["r"] <= end_cut)]
     say(f"强类别计入 {len(strong)} 条、对照池 {len(ctrl)} 条；{time.time() - t_start:.0f}s")
     wins = {"X": WIN_X} if stage == "explore" else {"X": WIN_X, "C": (WIN_C[0], str(end_cut.date()))}
+    if stage == "library":
+        wins = {"X": WIN_X}                                 # 展示库阶段：判定表只重报 X（X 不过就不看 C 的判定），类别 × 业种描述表用全部事件
     res = {"stage": stage, "git": git_rev(), "rules_version": PEV.rules_version(), "events_sha256": hashlib.sha256(Path(PD.EVENTS_PATH).read_bytes()).hexdigest()[:16],
            "windows": wins, "n_perm": n_perm, "confirm_ids": list(CONFIRM_IDS), "n_events": int(len(E)), "n_judgment": int(E["in_judgment"].sum()),
            "x_end": WIN_X[1], "c_end": str(end_cut.date()), "era_b_start": ERA_B_START,
