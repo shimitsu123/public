@@ -1585,3 +1585,10 @@ K 线形态 `qbreak/candles.py`；结果 `var/out/candle_user_test.md / .json`�
 - 修正：`run.py` 命令行入口先 `_pin_jst()`（进程时区设为 Asia/Tokyo）。策略参数、仓位、股票池、阈值都没改；
   前向记录都还没开始写（K4 从 2026-09-28、买点质量分从 2026-09-28 的信号、时代主线从 2026-10-01），没有已有记录被改动。
   测试 `tests/test_calendar.py::test_run_py_pins_process_clock_to_jst`；在临时数据目录（不动仓库账本）跑了一遍 sim-day 确认正常。
+
+## 2026-09-27 季度复核例行任务加 2i / 2j（用户在对话里确认：「要把 W2 全市场复核和时代主线复核加进季度复核任务」）
+- 2i `python scripts/w2_forward_all.py --review`（W2 全市场前向检验：每年一次判定，2027-09-28 起；要 J-Quants 的键，云端环境变量已设置）；
+  2j `python scripts/era_outlook.py && python scripts/era_outlook.py --review`（时代主线展望每季刷新 + 前向记录复核，满 36 个月判定）；
+  2f 的说明补上第八节（W2 每日记录的失效警报 / 证实）；汇报加 ⑪ ⑫、上限 24 → 28 行；禁止改 era_forward.csv / w2_forward_all_history.csv（只由脚本追加）与判定规则。
+- 只是复核与汇报，不改交易；第一次运行 2026-10-12 09:56 JST。
+
