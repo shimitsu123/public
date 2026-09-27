@@ -37,3 +37,29 @@ def test_sleeve_frames_rank_at_month_end_and_drop_losers():
     assert out["A.T"].loc[feb, "dead_cross"] and out["C.T"].loc[feb, "entry"] and not out["B.T"].loc[feb, "dead_cross"]
     assert out["A.T"]["entry"].sum() == 1 and not out["A.T"].loc["2021-02-01":"2021-02-25", "dead_cross"].any()
     assert prio[("B.T", jan)] == 2.0
+
+
+def test_weekly_ratio_uses_only_finished_weeks():
+    import leap_r6_explore as R6
+    days = pd.bdate_range("2021-01-04", periods=80)                                  # 周一开始
+    V = np.ones((80, 1))
+    C = np.ones((80, 1)) * 100.0
+    V[60:65] = 5.0                                                                  # 第 13 周放量（周一〜周五）
+    C[64] = 110.0
+    R, W = R6.weekly_ratio(V, C, days)
+    wed = 62                                                                        # 那一周的周三：那一周还没结束 → 仍是上一周的量比
+    assert np.isclose(R[wed, 0], 1.0) and np.isclose(R[64, 0], 5.0) and W[64, 0] > 0
+    V2 = V.copy()
+    V2[70:] = 50.0                                                                  # 之后的放量不改变之前的值
+    R2_, _ = R6.weekly_ratio(V2, C, days)
+    assert np.allclose(R2_[:70], R[:70], equal_nan=True)
+
+
+def test_month_picks_rank_members_at_month_end():
+    import leap_r6b_sleeve as S6
+    idx = pd.bdate_range("2021-01-25", "2021-02-26")
+    fr = {t: pd.DataFrame({"entry": False}, index=idx) for t in ("A.T", "B.T", "C.T")}
+    sc = {"A.T": np.full(len(idx), 3.0), "B.T": np.full(len(idx), 2.0), "C.T": np.full(len(idx), 5.0)}
+    mem = {"A.T": np.ones(len(idx), bool), "B.T": np.ones(len(idx), bool), "C.T": np.zeros(len(idx), bool)}   # C 不是成员
+    pk = S6.month_picks(fr, sc, mem, top=1)
+    assert pk["A.T"][idx.get_loc(pd.Timestamp("2021-01-29"))] and not pk["C.T"].any() and pk["A.T"].sum() == 2
