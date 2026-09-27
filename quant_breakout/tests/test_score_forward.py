@@ -298,3 +298,28 @@ def test_w2_review_decides_once_per_year(tmp_path):
     w2 = SFR.w2_review(C, h, pd.Timestamp("2027-12-20"))
     assert w2["year"] is None and w2["checkpoint"] is None and w2["alarm"] is None
     assert SFR.decide({"count": {"closed": 900}, "exp": 0.1, "auc": {}}, h, SFR.CHECKPOINTS_WIDE, "combined")["checkpoint"] is None
+
+
+def test_run_daily_logs_k2_usw_columns(tmp_path, monkeypatch):
+    """第九节：每个信号另记 vr1 / b_n225 / k2_keep / us12 / usw_keep；idio 给不了 → 全部为空。"""
+    from qbreak import idio_forward as IF
+    live, base, idx = _ind_w2()
+    models, _ = _models(base, idx)
+    mp, lp, lp2 = tmp_path / "m.json", tmp_path / "log.csv", tmp_path / "log2.csv"
+    SF.save_model(models, {"id": "t1"}, mp)
+    days = list(base[TICKERS[0]].index[-250:])
+    monkeypatch.setattr(SF, "FORWARD_START", str(days[0].date()))
+    f = SF.no_w2_frames(live, PW2, TICKERS)
+    m0 = pd.Timestamp(days[0]).to_period("M").to_timestamp()
+    P = pd.DataFrame({"Chips": 0.2}, index=pd.date_range(m0, periods=14, freq="MS"))
+    SF.run_daily(f, idx, TICKERS, days, None, mp, lp, "2026-10-01", idio={"mkt_close": idx, "us_pct": P, "s33": {TICKERS[0]: "電気機器"}})
+    got = pd.read_csv(lp)
+    assert set(IF.COLS) <= set(got.columns) and set(got["k2_keep"].dropna().astype(int)) <= {0, 1}
+    a = got[got["ticker"] == TICKERS[0]]
+    assert (a["us12"] == 0.2).all() and (a["usw_keep"] == 1).all()
+    assert got[got["ticker"] != TICKERS[0]]["us12"].isna().all()
+    for r in got.itertuples():
+        v = IF.vr1_series(f[r.ticker]).get(pd.Timestamp(r.date))
+        assert (np.isnan(r.vr1) and not np.isfinite(v)) or abs(r.vr1 - v) < 1e-3
+    SF.run_daily(f, idx, TICKERS, days, None, mp, lp2, "2026-10-01")
+    assert pd.read_csv(lp2)[list(IF.COLS)].isna().all().all()

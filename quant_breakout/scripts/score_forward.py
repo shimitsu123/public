@@ -71,6 +71,21 @@
   - 检出力（每年约 250 笔、每笔标准差约 5.9%、保留约 45%；80%）：每笔差 1 pp 的反转约 3.5〜4.5 年、证实 +0.5〜0.7 pp 约 9〜18 年
     → 长期保险；更快的全市场版见 scripts/w2_forward_all.py（同日登记）。
   - 警报 / 证实都只是提议：改模拟盘与执行器要用户在对话里确认，并记 sim_changes.md。
+九、追加登记 K2 / USW（2026-09-27，用户「F 前向记录」；此时两份记录都还没有任何数据；定义 qbreak/idio_forward.py）
+  来由：「选股本身的质的飞跃」循环（scripts/leap2_common.py）S6 登记检验（a88cbd3）：K2「突破日量比 ≥ 2.0 ∧ 对日経225 的 β ≤ 0.70」
+  在 2001〜2006 / 2006〜2016 / 2017〜2026 每笔都比现行多赚 1.2〜1.5 pp、组合 Calmar 都不差，但胜率只 +3.2 pp、随机对照没过 → 按规则不通过；
+  S4（scripts/leap2_s4b_explore.py）：USW「所在東証业种的美国对应行业（Ken French 49）12 个月强弱最弱 1/3」只在 2017〜2026 成立
+  （W2 ∧ USW 25 笔 68% / +3.54%），2006〜2016 没有 → 时代依赖。两个都只能靠登记之后的数据检验，不交易。
+  - 记录：两份记录每个信号另记 vr1（突破日量比）、b_n225（104 周 β，信号周之前一周为止）、k2_keep、us12（美国对应行业百分位，
+    月数据只用到两个月前）、usw_keep。量比 / β 缺值 → k2_keep = 0（= 登记检验里「不买」）；us12 取不到 → 空、不补写
+    （复核时 us12 为空的可以按同一规则从 Ken French 数据补算，只用于复核、不写回记录）；记录时行情只有 2 年 → β 用约 100 周（≥ 69 周才算）。
+  - 假设（事先方向）：K2：全部（不加 W2）突破里 K2 = 1 的每笔净收益 > 其余；USW：W2 保留的突破里 USW = 1 的每笔净收益 > 其余（us12 缺值的不算）。
+  - 判定（每年一次：与 W2 同一组日期 2027-09-28 … 2031-09-28 之后的那次复核；合并样本 = 日経225 + T500x + S1x；做过的年份不再做）：
+    证实：「标记 − 其余」的 99% 区间下限 > 0（按信号月聚类的自助法 2,000 次，种子 20260927）→ 记为「新数据证实」；
+    反向：「其余 − 标记」的 95% 区间下限 > 0 → 记为「新数据否定」；其他时候只报告进度。另报日経225 / T500x / S1x 分段。
+  - 检出力（每年约 250 笔、每笔标准差约 5.9%；K2 约 19%、USW ≈ W2 保留 45% 的 1/3；80%）：K2 每笔差 1.5 pp 约 4 年、USW 差 2 pp 约 3.5〜4 年
+    → 长期保险；全市场版（scripts/w2_forward_all.py 同日加 K2 / USW，主对象每年约 1,000 笔）差同样大小约 1 年。
+  - 证实 / 否定都只是记录：要改模拟盘 / 执行器另写一份事先登记的组合研究，并经用户确认。
 """
 from __future__ import annotations
 
@@ -87,6 +102,7 @@ import pandas as pd
 warnings.filterwarnings("ignore")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from qbreak import idio_forward as IF                                        # noqa: E402
 from qbreak import paths                                                     # noqa: E402
 from qbreak import score_forward as SF                                       # noqa: E402
 from qbreak import signal_score as S                                         # noqa: E402
@@ -330,6 +346,27 @@ def _say_eval(title: str, ev: dict, V: dict) -> None:
         say(V.get("text", ""))
 
 
+def idio_fill(C: pd.DataFrame) -> pd.DataFrame:
+    """第九节：us12 为空的信号按同一规则从 Ken French 数据补算（只用于这次复核，不写回记录）；取不到就原样。"""
+    if not len(C) or "us12" not in C.columns:
+        return C
+    u = pd.to_numeric(C["us12"], errors="coerce")
+    if u.notna().all():
+        return C
+    try:
+        from qbreak import factors as F
+        s33 = {f"{c}.T": v for c, v in json.loads((paths.home() / "industry_s33.json").read_text(encoding="utf-8"))["s33"].items()}
+        P = IF.us_rank_asof(F.ff_industries(49, "vw"))
+    except Exception as e:                                                   # noqa: BLE001
+        say(f"（K2 / USW：us12 为空的 {int(u.isna().sum())} 笔补算不了：{type(e).__name__}: {e}）")
+        return C
+    C = C.copy()
+    fill = [IF.us12_at(P, s33.get(t), d) if not np.isfinite(x) else x for x, t, d in zip(u, C["ticker"], C["date"])]
+    C["us12"] = fill
+    C["usw_keep"] = IF.usw_flag(fill)
+    return C
+
+
 def w2_review(C: pd.DataFrame, hist: pd.DataFrame | None, today) -> dict:
     """第八节：合并样本里已平仓、有 W2 标记的信号 → 保留 vs 挡掉；失效警报按年、证实按已平仓笔数，做过的不再做。"""
     ev = W2F.evaluate(C)
@@ -376,7 +413,7 @@ def review() -> int:
     hist_fp = paths.out_dir() / "score_forward_review_history.csv"
     hist = pd.read_csv(hist_fp) if hist_fp.exists() else pd.DataFrame()
     evs, Vs, segs = {}, {}, {}
-    w2 = None
+    w2 = idio = None
     if len(log):
         p = SF.no_w2_params(load_params(market="JP"))           # 第八节：与记录同一个范围（不加 W2 的突破）
         data = load_universe(sorted(set(log["ticker"])), DataConfig(provider="yfinance", years=3, allow_synthetic=False).validate())
@@ -393,6 +430,7 @@ def review() -> int:
                          else {"checkpoint": None, "text": "还没有已平仓的信号"})
             if scope == "combined":
                 w2 = w2_review(C, hist, pd.Timestamp.today())
+                idio = IF.review_pair(idio_fill(C), hist, pd.Timestamp.today())   # 第九节：K2 / USW（us12 为空的按同一规则补算，不写回）
     for scope, title in (("combined", "合并样本（主判定：日経225 + T500x + S1x）"), ("N225", "只看日経225（附带）")):
         if scope in evs:
             _say_eval(title, evs[scope], Vs[scope])
@@ -401,14 +439,18 @@ def review() -> int:
                                                       for g, v in segs[scope].items()))
     if w2 is not None:
         _say_w2(w2)
+    if idio is not None:
+        say("\n## K2 / USW（第九节）：标记 vs 其余（合并样本、已平仓）")
+        for x in IF.say_lines(idio):
+            say(x)
     if not evs:
         say("\n还没有记录。")
     if any(any(r["ok"] for r in V.get("results", {}).values() if r["hyp"].startswith("P") or r["hyp"] == "X2") for V in Vs.values()):
         say("\n主假设（或 X2）成立 → 需要另写一份事先登记的组合研究；模拟盘规则不变（改需用户确认）。")
     out = paths.out_dir() / "score_forward_review"
     Path(f"{out}.md").write_text("\n".join(LINES) + "\n", encoding="utf-8")
-    Path(f"{out}.json").write_text(json.dumps({"eval": evs, "decision": Vs, "segments": segs, "w2": w2}, ensure_ascii=False, indent=1,
-                                              default=float), encoding="utf-8")
+    Path(f"{out}.json").write_text(json.dumps({"eval": evs, "decision": Vs, "segments": segs, "w2": w2, "idio": idio}, ensure_ascii=False,
+                                              indent=1, default=float), encoding="utf-8")
     rows = [{"run": str(pd.Timestamp.today().date()), "scope": sc, "logged": int(len(log)), "closed": ev["count"].get("closed"),
              "checkpoint": Vs[sc].get("checkpoint"), **{f"auc_{c}": (a or {}).get("auc") for c, a in (ev.get("auc") or {}).items()}}
             for sc, ev in evs.items()] or [{"run": str(pd.Timestamp.today().date()), "scope": "combined", "logged": 0, "closed": 0}]
@@ -418,6 +460,8 @@ def review() -> int:
                      "w2_year": w2["year"], "checkpoint": w2["checkpoint"], "w2_diff": e.get("diff"), "w2_lo95": e.get("lo95"),
                      "w2_hi95": e.get("hi95"), "w2_lo99": e.get("lo99"), "w2_hi99": e.get("hi99"), "w2_alarm": w2["alarm"],
                      "w2_confirmed": w2["confirmed"]})
+    if idio is not None:                                        # 第九节：K2 / USW 各一行（判定过的年份下次不再判定）
+        rows += IF.history_rows(idio, str(pd.Timestamp.today().date()), "", {"logged": int(len(log))})
     pd.concat([hist, pd.DataFrame(rows)], ignore_index=True).to_csv(hist_fp, index=False)
     print(f"{time.time() - t0:.0f}s")
     return 0

@@ -1187,12 +1187,15 @@ def _score_forward_log(ctx, eng, state, planned: dict) -> dict:
         d10 = DataConfig(provider=ctx.dcfg.provider, years=10, allow_synthetic=False).validate()
         ix = drop_partial_bar(load_universe([BENCHMARK["JP"]], d10)[BENCHMARK["JP"]], "JP")
         x2, x2_err = _x2_for_forward(SF, days[-SF.LOOKBACK:])
+        idio, idio_err = _idio_for_forward(SF, days[-SF.LOOKBACK:], ix["Close"])   # K2 / USW 的输入（第九节）
         ind_f = SF.no_w2_frames(ctx.ind, ctx.params["JP"], jp)                  # 不加 W2 的突破（第八节）
         res = SF.run_daily(ind_f, ix["Close"], jp, days[-SF.LOOKBACK:], planned, mp, paths.out_dir() / SF.LOG_FILE,
-                           str(ctx.today), x2=x2)
+                           str(ctx.today), x2=x2, idio=idio)
         res["x2_survey"] = (x2 or {}).get("latest", "")
         if x2_err:
             res["x2_error"] = x2_err
+        if idio_err:
+            res["idio_error"] = idio_err
     except Exception as e:                                   # noqa: BLE001
         log.warning("买点质量分前向记录失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"}
@@ -1211,7 +1214,7 @@ def _score_forward_log(ctx, eng, state, planned: dict) -> dict:
                     ind_x[t] = compute_indicators(df, p_fwd)
             base = ind_f
             res["wide"] = SF.run_daily_wide(base, ind_x, ix["Close"], doc, days[-SF.LOOKBACK:], mp,
-                                            paths.out_dir() / SF.LOG_WIDE, str(ctx.today), x2=x2)
+                                            paths.out_dir() / SF.LOG_WIDE, str(ctx.today), x2=x2, idio=idio)
     except Exception as e:                                   # noqa: BLE001
         log.warning("买点质量分前向记录（扩大池）失败（不影响交易）：%s", e)
         res["wide_error"] = f"{type(e).__name__}: {e}"
@@ -1230,6 +1233,29 @@ def _x2_for_forward(SF, days: list) -> tuple[dict | None, str | None]:
     except Exception as e:                                   # noqa: BLE001
         log.warning("前向记录的 X2（短観）取不到（不影响交易）：%s", e)
         return None, f"{type(e).__name__}: {e}"
+
+
+def _idio_for_forward(SF, days: list, mkt_close) -> tuple[dict | None, str | None]:
+    """前向记录的 K2 / USW 输入（scripts/score_forward.py 第九节）：日経225 日收盘（算 β）、東証 33 业种（var/industry_s33.json）、
+    美国 49 行业的 12 个月强弱百分位（Ken French，qbreak/factors.ff_industries）。要记的日子都在登记日之前 → 不取数据。
+    美国行业取不到 → us12 记为空（不补写）、其余照记，返回原因；业种表也取不到 → 只记量比与 β。"""
+    import json as _json
+    from qbreak import idio_forward as IF
+    if not SF._days(days):
+        return None, None
+    idio: dict = {"mkt_close": mkt_close, "us_pct": None, "s33": None}
+    err = None
+    try:
+        idio["s33"] = {f"{c}.T": v for c, v in _json.loads((paths.home() / "industry_s33.json").read_text(encoding="utf-8"))["s33"].items()}
+    except Exception as e:                                   # noqa: BLE001
+        err = f"业种表：{type(e).__name__}: {e}"
+    try:
+        from qbreak import factors as F
+        idio["us_pct"] = IF.us_rank_asof(F.ff_industries(49, "vw"))
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("前向记录的美国行业强弱取不到（不影响交易）：%s", e)
+        err = (err + "；" if err else "") + f"美国 49 行业：{type(e).__name__}: {e}"
+    return idio, err
 
 
 def _paper_broker_for_executor(ucfg, ex_jp):

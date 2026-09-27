@@ -150,6 +150,8 @@ def missing_items(d: dict) -> list[str]:
         out.append(f"买点质量分前向记录（扩大池）：今天没记上（{sf['wide_error']}）—— 不影响交易，下次运行会补最近 5 个交易日")
     if started and sf.get("x2_error"):
         out.append(f"买点质量分前向记录的 X2（短観）：取不到（{sf['x2_error']}）—— 今天记下的信号 X2 为空（不补写），不影响交易")
+    if started and sf.get("idio_error"):
+        out.append(f"买点质量分前向记录的 K2 / USW：部分输入取不到（{sf['idio_error']}）—— 今天记下的信号里对应的列为空（不补写），不影响交易")
     ef = d.get("era") or {}
     if started and ef.get("error"):
         out.append(f"时代主线前向记录：这次没记上（{ef['error']}）—— 不影响交易；这个月不补写，下个月第一次运行照常记")

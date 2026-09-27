@@ -65,3 +65,27 @@ def test_refresh_only_fetches_daily_bulk_and_new_month_ends(monkeypatch):
     info = WFA.refresh(log=lambda s: None, today="2026-11-05")
     assert calls["bulk"] == ["/equities/bars/daily"] and calls["master"] == ["2026-09-30", "2026-10-30"]
     assert info == {"bar_files": 1, "new_snapshots": ["2026-09-30", "2026-10-30"]}
+
+
+def test_idio_all_flags_from_panel_and_master_map():
+    """第七节：K2 / USW 的输入从 J-Quants 面板算，业种从上市一览对，缺值按登记规则。"""
+    from qbreak import idio_forward as IF
+    rng = np.random.default_rng(7)
+    days = pd.bdate_range("2023-01-02", periods=760)
+    mkt = pd.Series(100 * np.cumprod(1 + rng.normal(0, 0.01, 760)), index=days)
+    r_a = 0.3 * mkt.pct_change().fillna(0).to_numpy() + rng.normal(0, 0.004, 760)
+    r_b = 1.6 * mkt.pct_change().fillna(0).to_numpy() + rng.normal(0, 0.004, 760)
+    C = np.column_stack([100 * np.cumprod(1 + r_a), 100 * np.cumprod(1 + r_b)])
+    V = np.full((760, 2), 1000.0)
+    V[-1, 0] = 2400.0
+    A = {"days": days, "names": ["1234.T", "5678.T"], "C": C, "V": V}
+    F = pd.DataFrame({"ticker": ["1234.T", "5678.T", "1234.T"], "sig_date": [days[-1], days[-1], days[-2]], "net": [1.0, 2.0, 3.0],
+                      "w2_keep": [1, 1, 0]})
+    m0 = days[-1].to_period("M").to_timestamp()
+    P = pd.DataFrame({"Chips": [0.1]}, index=[m0])
+    out = WFA.idio_all(F, A, mkt, P, {"12340": "電気機器", "1234.T": "電気機器"})
+    assert out["vr1"].tolist()[0] == 2.4 and np.isclose(out["vr1"].iloc[1], 1.0) and np.isclose(out["vr1"].iloc[2], 1.0)
+    assert out["b_n225"].iloc[0] < 0.7 < out["b_n225"].iloc[1] and out["k2_keep"].tolist() == [1, 0, 0]
+    assert out["us12"].iloc[0] == 0.1 and out["usw_keep"].iloc[0] == 1.0 and np.isnan(out["us12"].iloc[1])
+    assert WFA.s33_of({"56780": "銀行業"}, "5678.T") == "銀行業" and WFA.s33_of({}, "5678.T") is None
+    assert set(IF.COLS) <= set(WFA.idio_all(F.iloc[0:0], A, mkt, P, {}).columns)

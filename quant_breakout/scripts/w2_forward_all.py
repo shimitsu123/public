@@ -23,6 +23,12 @@
   输出（只有统计）：var/out/w2_forward_all_review.md / .json；var/out/w2_forward_all_history.csv（只追加：每次复核一行、判定过的年份）。
 六、复核：python scripts/w2_forward_all.py --review（要 J-Quants 的键；Mac：bash scripts/with_jquants.sh ~/.qbreak/venv/bin/python
   scripts/w2_forward_all.py --review）。
+七、追加登记 K2 / USW（2026-09-27 同日；用户「F 前向记录」；定义 qbreak/idio_forward.py，与 scripts/score_forward.py 第九节同一规则）
+  每笔登记之后的交易另算：突破日量比（J-Quants 成交量，之前 20 日均量）、对日経225 的 β（信号周之前一周为止 104 周的周收益回归，
+  日経225 用 yfinance）、K2 标记；所在東証 33 业种（复核时最新的月末上市一览 S33Nm）→ 美国对应行业 12 个月强弱百分位、USW 标记。
+  假设与判定（主对象）：K2：全部突破里 K2 = 1 的每笔净收益 > 其余；USW：W2 保留里 USW = 1 的 > 其余（us12 缺值不算）；
+  每年一次（与 W2 同一组日期）：证实 = 99% 区间下限 > 0；否定 = 反向 95% 区间下限 > 0；其他时候只报告进度。另报日経225 / 其他。
+  检出力（主对象每年约 1,000 笔）：K2 差 1.5 pp、USW 差 2 pp 各约 1 年。证实 / 否定都只是记录，改规则要另写登记的研究并经用户确认。
 """
 from __future__ import annotations
 
@@ -34,11 +40,13 @@ import time
 import warnings
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 warnings.filterwarnings("ignore")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from qbreak import idio_forward as IF                                        # noqa: E402
 from qbreak import paths                                                     # noqa: E402
 from qbreak import w2_forward as W2F                                         # noqa: E402
 
@@ -52,6 +60,7 @@ LIQ_LOG = math.log10(LIQ_MIN_YEN)                                             # 
 HIST = "w2_forward_all_history.csv"
 LINES: list[str] = []
 assert W2_CUT == W2F.W2_CUT and JUDGE_DATES == W2F.JUDGE_DATES and (BOOT_N, SEED) == (W2F.BOOT_N, W2F.SEED)   # 登记值与共用模块一致
+assert IF.JUDGE_DATES == JUDGE_DATES
 
 
 def say(s: str = "") -> None:
@@ -99,6 +108,51 @@ def forward_trades(T: pd.DataFrame) -> pd.DataFrame:
     return F.reset_index(drop=True)
 
 
+def s33_of(s33: dict[str, str], t: str) -> str | None:
+    """交易表的代码（4 位 + .T 或 5 位）→ 上市一览的 33 业种名。"""
+    c = str(t).split(".")[0]
+    return s33.get(t) or s33.get(c) or s33.get(c + "0") or s33.get(c[:4]) if s33 else None
+
+
+def s33_map_from_master() -> dict[str, str]:
+    """复核时最新的月末上市一览 → {代码: 33 业种名}（5 位代码与 4 位 + .T 都放进去）。"""
+    from qbreak import pit_data as PD
+    snaps = PD.snapshots()
+    if not snaps:
+        return {}
+    m = snaps[max(snaps)]
+    out = {}
+    for code, name in zip(m["Code"].astype(str), m["S33Nm"].astype(str)):
+        out[code] = name
+        if len(code) == 5 and code.endswith("0"):
+            out[code[:4] + ".T"] = name
+    return out
+
+
+def idio_all(F: pd.DataFrame, A: dict, mkt_close: pd.Series | None, us_pct: pd.DataFrame | None, s33: dict[str, str] | None) -> pd.DataFrame:
+    """第七节：登记之后的每笔交易 → vr1、b_n225、k2_keep、us12、usw_keep（qbreak/idio_forward.py 同一定义；面板 = A 的 C / V）。"""
+    if not len(F):
+        return F.assign(**{c: pd.Series(dtype=float) for c in IF.COLS})
+    days, names = pd.DatetimeIndex(A["days"]), list(A["names"])
+    V = pd.DataFrame(A["V"], index=days, columns=names)
+    VR = V / V.shift(1).rolling(20, min_periods=15).mean()
+    C = pd.DataFrame(A["C"], index=days, columns=names)
+    Yw = C.resample("W-FRI").last().pct_change(fill_method=None).clip(-0.5, 0.5)
+    m_w = IF.weekly_returns(mkt_close) if mkt_close is not None else None
+    vr, bt, us = [], [], []
+    for t, d in zip(F["ticker"], pd.to_datetime(F["sig_date"])):
+        v = VR.at[d, t] if (t in VR.columns and d in VR.index) else np.nan
+        vr.append(round(float(v), 4) if np.isfinite(v) else np.nan)
+        b = IF.beta_asof(Yw[t], m_w, d) if (m_w is not None and t in Yw.columns) else float("nan")
+        bt.append(round(b, 4) if np.isfinite(b) else np.nan)
+        u = IF.us12_at(us_pct, s33_of(s33 or {}, t), d)
+        us.append(round(u, 4) if np.isfinite(u) else np.nan)
+    out = F.copy()
+    out["vr1"], out["b_n225"], out["k2_keep"] = vr, bt, IF.k2_flag(vr, bt)
+    out["us12"], out["usw_keep"] = us, IF.usw_flag(us)
+    return out
+
+
 def decide(ev: dict, hist: pd.DataFrame | None, today) -> dict:
     """每年一次（JUDGE_DATES）：失效警报 95% / 证实 99%；判定过的年份记进历史，不再判定。"""
     year = W2F.due_date(today, JUDGE_DATES, W2F.history_done(hist, "all", "w2_year"))
@@ -126,9 +180,22 @@ def review(fetch: bool = True) -> int:
     A = AD.load(rebuild=fetch)
     last_bar = A["days"][-1]
     p = SF.no_w2_params(load_params(market="JP"))
-    T, n_st = S.train_all(A, p, S.market_frame(load(*SYM["JP"])["Close"]), start=FORWARD_START)
-    del A
+    jp_close = load(*SYM["JP"])["Close"]
+    T, n_st = S.train_all(A, p, S.market_frame(jp_close), start=FORWARD_START)
     F = forward_trades(T)
+    idio_note = []
+    us_pct = s33 = None
+    try:                                                                      # 第七节：K2 / USW 的输入（取不到 → 对应列为空，另报原因）
+        from qbreak import factors as FX
+        us_pct = IF.us_rank_asof(FX.ff_industries(49, "vw"))
+    except Exception as e:                                                    # noqa: BLE001
+        idio_note.append(f"美国 49 行业取不到：{type(e).__name__}: {e}")
+    try:
+        s33 = s33_map_from_master()
+    except Exception as e:                                                    # noqa: BLE001
+        idio_note.append(f"上市一览的业种取不到：{type(e).__name__}: {e}")
+    F = idio_all(F, A, jp_close, us_pct, s33)
+    del A
     n225 = set(universe("JP", "broad"))
     F["n225"] = F["ticker"].isin(n225)
     M = F[F["main"]]
@@ -153,6 +220,19 @@ def review(fetch: bool = True) -> int:
     say("\n## 另报（不判定）")
     for k, e in side.items():
         say(f"- {k}：" + (W2F.summary_line(e) if e.get("n") else "0 笔"))
+    idio = IF.review_pair(M, hist, today, scope_prefix="all_", date_col="sig_date", seg_col=None)
+    say("\n## K2 / USW（第七节，主对象）：标记 vs 其余")
+    for x in IF.say_lines(idio, today=today):
+        say(x)
+    if len(M):
+        f2 = lambda s: f"{s['n']} 笔 {s['mean']:+.2f}%" if s.get("n") else "0 笔"                                 # noqa: E731
+        for key, col, base_ in (("K2", "k2_keep", M), ("USW", "usw_keep", M[pd.to_numeric(M["w2_keep"], errors="coerce") == 1])):
+            kv = pd.to_numeric(base_[col], errors="coerce").to_numpy(float)
+            say(f"  - {key} 分段（只描述）：" + "；".join(
+                f"{g} 标记 {f2(W2F.stat(base_.loc[m & (kv == 1), 'net']))} / 其余 {f2(W2F.stat(base_.loc[m & (kv == 0), 'net']))}"
+                for g, m in (("日経225", base_["n225"].to_numpy(bool)), ("其他", ~base_["n225"].to_numpy(bool)))))
+    for x in idio_note:
+        say(f"  - {x}")
     yr = by_year(M) if len(M) else {}
     if yr:
         say("\n| 信号年 | W2 保留 | 挡掉 |")
@@ -167,11 +247,13 @@ def review(fetch: bool = True) -> int:
     Path(f"{out}.md").write_text("\n".join(LINES) + "\n", encoding="utf-8")
     Path(f"{out}.json").write_text(json.dumps({"run": str(today.date()), "data_through": str(last_bar.date()), "refresh": info,
                                                "n_all": int(len(F)), "main": ev, "decision": V, "side": side, "by_year": yr,
-                                               "code": code}, ensure_ascii=False, indent=1, default=float), encoding="utf-8")
+                                               "idio": idio, "idio_note": idio_note, "code": code}, ensure_ascii=False, indent=1,
+                                              default=float), encoding="utf-8")
     row = {"run": str(today.date()), "scope": "all", "data_through": str(last_bar.date()), "closed": ev["n"], "w2_year": V["year"],
            "w2_diff": ev.get("diff"), "w2_lo95": ev.get("lo95"), "w2_hi95": ev.get("hi95"), "w2_lo99": ev.get("lo99"),
            "w2_hi99": ev.get("hi99"), "w2_alarm": V["alarm"], "w2_confirmed": V["confirmed"], "code": code}
-    pd.concat([hist, pd.DataFrame([row])], ignore_index=True).to_csv(hist_fp, index=False)   # 只追加
+    rows = [row] + IF.history_rows(idio, str(today.date()), "all_", {"data_through": str(last_bar.date()), "code": code})   # 第七节
+    pd.concat([hist, pd.DataFrame(rows)], ignore_index=True).to_csv(hist_fp, index=False)   # 只追加
     return 0
 
 

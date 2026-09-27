@@ -142,7 +142,7 @@
   `python scripts/shadow_account.py evaluate`（标准见该文件开头第四节），汇报第一行写结论；只是记录，模拟盘不改；之后提示删除这个例行任务
 - ⑳ 2029-09-28 之后第一次：K4 前向记录 3 年判定 `python scripts/energy_forward.py --review`（2031-09-28 之后再做 5 年判定；平时只看
   `var/out/energy_forward.csv` 是否每天在追加；2026-09-26 用户确认后，季度例行任务每次汇报进度（2h），只汇报不判定）
-- ㉕ 2027-09-28 之后第一次：W2 前向记录的第一次年度判定 —— 每日记录在季度复核 2f 里自动算（看 `var/out/score_forward_review.md` 的 W2 一节）；全市场版在季度复核 2i 里自动算（2026-09-27 用户确认加入；手动：☁️ `python scripts/w2_forward_all.py --review`，云端有 J-Quants キー）/ 🤖 Mac：`bash scripts/with_jquants.sh ~/.qbreak/venv/bin/python scripts/w2_forward_all.py --review`（在 `~/qbreak-dev`）；「失效警报成立」→ 提议关掉 W2，用户确认才改
+- ㉕ 2027-09-28 之后第一次：W2 前向记录的第一次年度判定 —— 每日记录在季度复核 2f 里自动算（看 `var/out/score_forward_review.md` 的 W2 一节）；全市场版在季度复核 2i 里自动算（2026-09-27 用户确认加入；手动：☁️ `python scripts/w2_forward_all.py --review`，云端有 J-Quants キー）/ 🤖 Mac：`bash scripts/with_jquants.sh ~/.qbreak/venv/bin/python scripts/w2_forward_all.py --review`（在 `~/qbreak-dev`）；「失效警报成立」→ 提议关掉 W2，用户确认才改；同一份复核里另有 K2（放量 ∧ 低 β）/ USW（美国对应行业弱）两个只记录不交易的标记（2026-09-27 用户确认登记；`qbreak/idio_forward.py`），每年判定一次，证实也只是记录
 - ㉖ 随时：时代主线前向记录的进度 ☁️🤖 `python scripts/era_outlook.py --review`（2026-10 起每月一次；记满 36 个月 ≈ 2029-10 起判定失效与否）；已加进季度复核 2j（2026-09-27 用户确认；同时每季刷新展望 `var/out/era_outlook.md`）
 - ⑬ 2026-12-24 模拟期结束：总结 → 用户决定继续 / 上实盘 / 调整；（可选）J-Quants 付费档做无幸存者偏差回测（路线图 6）
 - ⑲ 🤖 装 / 更新全部（依赖、模拟操盘、市场仪表盘 + 经济威胁提醒、J-Quants 定时取数、研究用克隆 `~/qbreak-dev`）：
