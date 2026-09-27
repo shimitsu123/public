@@ -117,10 +117,10 @@ def s33_of(s33: dict[str, str], t: str) -> str | None:
 def s33_map_from_master() -> dict[str, str]:
     """复核时最新的月末上市一览 → {代码: 33 业种名}（5 位代码与 4 位 + .T 都放进去）。"""
     from qbreak import pit_data as PD
-    snaps = PD.snapshots()
-    if not snaps:
+    files = PD.master_files()
+    if not files:
         return {}
-    m = snaps[max(snaps)]
+    m = pd.read_csv(files[max(files)], dtype=str)
     out = {}
     for code, name in zip(m["Code"].astype(str), m["S33Nm"].astype(str)):
         out[code] = name

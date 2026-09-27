@@ -89,3 +89,15 @@ def test_idio_all_flags_from_panel_and_master_map():
     assert out["us12"].iloc[0] == 0.1 and out["usw_keep"].iloc[0] == 1.0 and np.isnan(out["us12"].iloc[1])
     assert WFA.s33_of({"56780": "銀行業"}, "5678.T") == "銀行業" and WFA.s33_of({}, "5678.T") is None
     assert set(IF.COLS) <= set(WFA.idio_all(F.iloc[0:0], A, mkt, P, {}).columns)
+
+
+def test_s33_map_reads_latest_master_snapshot(tmp_path, monkeypatch):
+    from qbreak import pit_data as PD
+    old, new = tmp_path / "2026-08-29.csv", tmp_path / "2026-09-30.csv"
+    pd.DataFrame({"Code": ["12340"], "S33Nm": ["化学"]}).to_csv(old, index=False)
+    pd.DataFrame({"Code": ["12340", "56780"], "S33Nm": ["電気機器", "銀行業"]}).to_csv(new, index=False)
+    monkeypatch.setattr(PD, "master_files", lambda: {pd.Timestamp("2026-08-29"): old, pd.Timestamp("2026-09-30"): new})
+    m = WFA.s33_map_from_master()
+    assert m["12340"] == "電気機器" and m["1234.T"] == "電気機器" and m["56780"] == "銀行業"      # 用最新的那份
+    monkeypatch.setattr(PD, "master_files", lambda: {})
+    assert WFA.s33_map_from_master() == {}

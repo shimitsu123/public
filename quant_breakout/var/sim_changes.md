@@ -1750,3 +1750,11 @@ K 线形态 `qbreak/candles.py`；结果 `var/out/candle_user_test.md / .json`�
 - 全市场版（`scripts/w2_forward_all.py` 同日加 K2 / USW；J-Quants 全市场、复核时重算）：主对象每年约 1,000 笔 → 差同样大小约 1 年。
 - 季度复核例行任务不用改（它已经跑 `score_forward.py --review` 与 `w2_forward_all.py --review`，K2 / USW 在同一份报告里）。
 - 证实 / 否定都只是记录：要改模拟盘 / 执行器，另写事先登记的组合研究并经用户确认。「选股本身的质的飞跃」循环到此暂停（用户选 F）。
+
+## 2026-09-27 全部个股的「最新决算 + 会社予想修正」一览（用户：「取得现在所有个股的决算、业绩修正」；只展示 / 研究，不影响交易）
+- `scripts/fins_now.py`：J-Quants Standard 決算短信サマリー批量文件（全市场 2016-09 起，191,193 行、4,654 家；缓存 `var/cache/jquants/bulk/`，不入库）
+  → 每家一行（最近开示、期间、累计利润增益率、最近一次真的改了予想的修正 % 与日期、当期予想）→ `var/cache/jquants/out/fins_now.csv`（J-Quants 派生，不入库）+ 摘要。
+  2026-09-27 运行：数据到 2026-09-25；30 天内开示 391 家、改予想 81 家（上修 54 / 下修 27）。修正 % 在予想接近 0 时会极端（研究里要截断或用符号）。
+- 修正：`scripts/w2_forward_all.py` 的 `s33_map_from_master` 误用了不存在的 `pit_data.snapshots()`（8002ef6 引入）→ 改用 `master_files()` 读最新一份，补测试。
+- 决算 / 修正数据以前的用法（当突破过滤、每月选股）都没通过（sim_changes 2026-09-26 jq_study、earnings_study；leap_r8）；
+  没做过的是「开示本身当买点」（事件驱动进场）→ 设计中，登记后再运行。
