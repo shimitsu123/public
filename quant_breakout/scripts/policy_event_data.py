@@ -27,7 +27,7 @@ from qbreak import paths                                                      # 
 EVENT_COLS = ["date", "time_jst", "category", "name_ja", "name_en", "description", "source_url", "verified", "notes"]
 HORIZONS = (1, 5, 20, 60)
 CLOSE_CHANGE, CLOSE_OLD, CLOSE_NEW = pd.Timestamp("2024-11-05"), "15:00", "15:30"
-EVENTS_PATH = Path(paths.home()) / "policy_events.csv" if hasattr(paths, "home") else Path("var/policy_events.csv")
+EVENTS_PATH = Path(paths.PROJECT_ROOT) / "var" / "policy_events.csv"          # 仓库里的事件表（Mac 上 paths.home() 是 ~/.qbreak/home，不在那里）
 
 
 # ───────────────────────── 事件表 ─────────────────────────
@@ -237,3 +237,243 @@ def summarize(R: pd.DataFrame, col: str = "ex_post") -> pd.DataFrame:
     g = R.dropna(subset=[col]).groupby(["series", "h"])[col]
     out = g.agg(n="count", mean="mean", median="median", hit=lambda x: float((x > 0).mean() * 100)).reset_index()
     return out
+
+
+# ───────────────────────── 第 3 步扩展：可交易窗口、掩码、对照、事前 β ─────────────────────────
+def _cache_ohlcv(name: str) -> pd.DataFrame | None:
+    fp = Path(paths.cache_dir()) / name
+    if not fp.exists():
+        return None
+    df = pd.read_csv(fp)
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.set_index("Date").sort_index()
+    return df[~df.index.duplicated()][["Open", "Close", "Volume"]].astype(float)
+
+
+def sector17_frames() -> dict[str, pd.DataFrame]:
+    """17 业种 ETF 的 Open / Close / Volume（var/cache/<code>_21y.csv）。"""
+    from qbreak.sectors import SECTOR_ETF_JP
+    out = {}
+    for code, name in SECTOR_ETF_JP.items():
+        df = _cache_ohlcv(f"{code}_21y.csv")
+        if df is not None:
+            out[name] = df
+    return out
+
+
+def etf_daily(frames: dict[str, pd.DataFrame]) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """→ (cc 收对收 %, oc 开对收 %, ok 成交量 > 0 掩码)；成交量 = 0 的日子 cc / oc = NaN。"""
+    cc, oc, ok = {}, {}, {}
+    for n, df in frames.items():
+        good = df["Volume"] > 0
+        c = df["Close"].where(good)
+        cc[n] = c.pct_change() * 100
+        oc[n] = (df["Close"] / df["Open"] - 1).where(good & (df["Open"] > 0)) * 100
+        ok[n] = good
+    return pd.DataFrame(cc), pd.DataFrame(oc), pd.DataFrame(ok)
+
+
+def panel_daily(closes: pd.DataFrame, opens: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """个股 收盘 / 开盘（天 × 票）→ (cc, oc) 日收益 %。"""
+    cc = closes.pct_change() * 100
+    oc = (closes / opens - 1) * 100
+    return cc, oc
+
+
+def sector_daily_pit(A: dict, snaps: dict[pd.Timestamp, pd.DataFrame], min_n: int = 5) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """全市场面板 → 33 业种等权的 (cc, oc) 日收益（时点分类、只算时点上市的票）。"""
+    days, names = pd.DatetimeIndex(A["days"]), list(A["names"])
+    C = pd.DataFrame(A["C"], index=days, columns=names)
+    O = pd.DataFrame(A["O"], index=days, columns=names)
+    cc, oc = panel_daily(C, O)
+    mask = pd.DataFrame(A["listed"], index=days, columns=names)
+    maps = s33_map_pit(snaps)
+    sd = sorted(maps)
+    if not sd:
+        mp = s33_map()
+        return equal_weight_returns(cc, mp, mask, min_n), equal_weight_returns(oc, mp, mask, min_n)
+    pcc, poc = [], []
+    bounds = [days[0] - pd.Timedelta(days=1)] + sd
+    for k, lo in enumerate(bounds):
+        hi = bounds[k + 1] if k + 1 < len(bounds) else days[-1]
+        rows = (days > lo) & (days <= hi)
+        if not rows.any():
+            continue
+        mp = maps[sd[0]] if k == 0 else maps[lo]
+        pcc.append(equal_weight_returns(cc[rows], mp, mask[rows], min_n))
+        poc.append(equal_weight_returns(oc[rows], mp, mask[rows], min_n))
+    return pd.concat(pcc).sort_index(), pd.concat(poc).sort_index()
+
+
+def sector_daily_long(tickers: list[str] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """长历史池（yfinance 27 年）→ 33 业种等权 (cc, oc)（今天的分类）。"""
+    import leap_data as LD
+    names = tickers or list(LD.names())
+    data = LD.ohlcv(names)
+    closes = pd.DataFrame({t: df["Close"].astype(float) for t, df in data.items() if len(df)}).sort_index()
+    opens = pd.DataFrame({t: df["Open"].astype(float) for t, df in data.items() if len(df)}).reindex(closes.index)
+    cc, oc = panel_daily(closes, opens)
+    mp = s33_map()
+    return equal_weight_returns(cc, mp), equal_weight_returns(oc, mp)
+
+
+def window_open(cc: pd.DataFrame, oc: pd.DataFrame, t0: pd.Timestamp, h: int) -> pd.Series:
+    """可交易窗口：t0 开盘 → t0+h−1 收盘的累计收益 %（每列一个序列；数据不够 → NaN）。"""
+    idx = cc.index
+    k = idx.get_indexer([t0])[0] if t0 in idx else -1
+    if k < 0 or k + h - 1 >= len(idx):
+        return pd.Series(np.nan, index=cc.columns)
+    first = oc.iloc[k] / 100
+    rest = (1 + cc.iloc[k + 1:k + h] / 100).prod(axis=0, skipna=False) if h > 1 else pd.Series(1.0, index=cc.columns)
+    return ((1 + first) * rest - 1) * 100
+
+
+def window_close(cc: pd.DataFrame, r: pd.Timestamp, lo: int, hi: int) -> pd.Series:
+    """收盘口径：从 r+lo−1 收盘到 r+hi 收盘的累计收益 %（lo ≤ hi；lo = 0、hi = 0 → D0 = [r−1 收 → r 收]）。"""
+    idx = cc.index
+    k = idx.get_indexer([r])[0] if r in idx else -1
+    a, b = k + lo, k + hi
+    if k < 0 or a < 0 or b >= len(idx):
+        return pd.Series(np.nan, index=cc.columns)
+    return ((1 + cc.iloc[a:b + 1] / 100).prod(axis=0, skipna=False) - 1) * 100
+
+
+def spread(x: pd.Series, benef: list[str], victim: list[str]) -> float:
+    """事件级价差：受益篮子等权 − 受损篮子等权（只有一侧 → 该侧 − 其余业种等权）；缺值的业种跳过；两侧都没有可得业种 → NaN。"""
+    x = x.dropna()
+    b = [s for s in benef if s in x.index]
+    v = [s for s in victim if s in x.index]
+    if b and v:
+        return float(x[b].mean() - x[v].mean())
+    if b:
+        rest = x.drop(b)
+        return float(x[b].mean() - rest.mean()) if len(rest) else np.nan
+    if v:
+        rest = x.drop(v)
+        return float(rest.mean() - x[v].mean()) if len(rest) else np.nan
+    return np.nan
+
+
+def shuffle_sectors(benef: list[str], victim: list[str], available: list[str], seed: int) -> tuple[list[str], list[str]]:
+    """随机业种对照：受益 / 受损换成同样个数的随机可得业种（两侧不重叠）。"""
+    rng = np.random.default_rng(seed)
+    pool = list(available)
+    k = len(benef) + len(victim)
+    if k == 0 or len(pool) < k:
+        return [], []
+    pick = list(rng.choice(pool, size=k, replace=False))
+    return [str(x) for x in pick[:len(benef)]], [str(x) for x in pick[len(benef):]]
+
+
+def cluster_boot_month(values: np.ndarray, months: np.ndarray, n: int = 2000, seed: int = 20260927) -> tuple[float, float]:
+    """按事件所在日历月聚类的自助法：均值的 2.5 / 97.5 分位；样本 < 5 → (nan, nan)。"""
+    v = np.asarray(values, float)
+    ok = np.isfinite(v)
+    v, m = v[ok], np.asarray(months)[ok]
+    if len(v) < 5:
+        return np.nan, np.nan
+    codes, uniq = pd.factorize(pd.Index(m))
+    sums = np.bincount(codes, weights=v, minlength=len(uniq))
+    cnt = np.bincount(codes, minlength=len(uniq)).astype(float)
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(uniq), size=(n, len(uniq)))
+    means = sums[idx].sum(1) / cnt[idx].sum(1)
+    return float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
+
+
+def overlap_flags(r_days: pd.DatetimeIndex, days: pd.DatetimeIndex, gap: int = 20) -> np.ndarray:
+    """|r_i − r_j| ≤ gap 个交易日 → overlap = 1（与任一其他事件）。"""
+    pos = np.array([days.searchsorted(r) if pd.notna(r) else -10 ** 9 for r in r_days])
+    out = np.zeros(len(pos), int)
+    for i in range(len(pos)):
+        for j in range(len(pos)):
+            if i != j and abs(pos[i] - pos[j]) <= gap:
+                out[i] = 1
+                break
+    return out
+
+
+CRISIS = (("2008-09-01", "2009-03-31"), ("2020-02-01", "2020-05-31"))
+
+
+def crisis_flag(r: pd.Timestamp) -> int:
+    return int(any(pd.Timestamp(a) <= r <= pd.Timestamp(b) for a, b in CRISIS)) if pd.notna(r) else 0
+
+
+def adjacent_flag(r: pd.Timestamp, dates, days: pd.DatetimeIndex, gap: int = 3) -> int:
+    """r 前后 gap 个交易日内有 dates 里的日子（FOMC / 日银 / NFP / CPI 等）→ 1。"""
+    if pd.isna(r) or dates is None or not len(dates):
+        return 0
+    k = days.searchsorted(r)
+    ks = days.searchsorted(pd.DatetimeIndex(pd.to_datetime(dates)))
+    return int(bool(np.any(np.abs(ks - k) <= gap)))
+
+
+# ── 事前 β 通道（P2）──
+FACTOR_FILES = {"rate_jp": ("mof_jgb_curve.csv", "10Y", "diff"), "rate_us": ("fred_DGS10.csv", None, "diff"),
+                "oil": ("fred_DCOILWTICO.csv", None, "logpct"), "fx": ("fred_DEXJPUS.csv", None, "logpct"), "credit": ("fred_BAA10Y.csv", None, "diff")}
+
+
+def _factor_series(fname: str, col: str | None) -> pd.Series | None:
+    fp = Path(paths.cache_dir()) / "factors" / fname
+    if not fp.exists():
+        return None
+    df = pd.read_csv(fp)
+    dcol = df.columns[0]
+    df[dcol] = pd.to_datetime(df[dcol], errors="coerce")
+    df = df.dropna(subset=[dcol]).set_index(dcol).sort_index()
+    s = pd.to_numeric(df[col] if col else df.iloc[:, 0], errors="coerce").dropna()
+    return s[~s.index.duplicated()]
+
+
+def factor_weekly() -> pd.DataFrame:
+    """因子周变化（W-FRI）：利率 pp 差、汇率 / 油价 对数变化 %；缺文件的因子不出现。"""
+    out = {}
+    for f, (fname, col, kind) in FACTOR_FILES.items():
+        s = _factor_series(fname, col)
+        if s is None:
+            continue
+        w = s.resample("W-FRI").last().ffill()
+        out[f] = w.diff() if kind == "diff" else np.log(w).diff() * 100
+    return pd.DataFrame(out)
+
+
+def weekly_from_daily(cc: pd.DataFrame) -> pd.DataFrame:
+    """日收益 %（天 × 序列）→ 周收益 %（W-FRI）。"""
+    return ((1 + cc / 100).resample("W-FRI").prod(min_count=1) - 1) * 100
+
+
+def betas_asof(sec_w: pd.DataFrame, fac_w: pd.DataFrame, mkt_w: pd.Series, end: pd.Timestamp, weeks: int = 104, min_weeks: int = 60) -> pd.DataFrame | None:
+    """截至 end 之前（不含 end 所在周）的 weeks 周：业种超额周收益（− 日経）对因子周变化的多元 OLS β（业种 × 因子）；不足 min_weeks → None。"""
+    cutoff = pd.Timestamp(end) - pd.Timedelta(days=pd.Timestamp(end).weekday() + 3)      # 上一周的周五
+    X = fac_w[fac_w.index <= cutoff].tail(weeks)
+    Y = (sec_w.sub(mkt_w, axis=0)).reindex(X.index)
+    ok = X.notna().all(axis=1) & Y.notna().any(axis=1)
+    X, Y = X[ok], Y[ok]
+    if len(X) < min_weeks:
+        return None
+    Xm = np.column_stack([np.ones(len(X)), X.to_numpy(float)])
+    out = {}
+    for col in Y.columns:
+        y = Y[col].to_numpy(float)
+        m = np.isfinite(y)
+        if m.sum() < min_weeks:
+            continue
+        b, *_ = np.linalg.lstsq(Xm[m], y[m], rcond=None)
+        out[col] = b[1:]
+    if not out:
+        return None
+    return pd.DataFrame(out, index=X.columns).T
+
+
+def beta_lists(B: pd.DataFrame, shocks: dict[str, float], k: int = 4) -> tuple[list[str], list[str]]:
+    """Σ β × 冲击 → 前 k（受益）/ 后 k（受损）。"""
+    if B is None or not shocks:
+        return [], []
+    fs = [f for f in shocks if f in B.columns]
+    if not fs:
+        return [], []
+    score = sum(B[f] * shocks[f] for f in fs).dropna().sort_values()
+    if len(score) < 2 * k:
+        return [], []
+    return list(score.index[-k:][::-1]), list(score.index[:k])

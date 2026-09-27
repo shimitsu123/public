@@ -64,3 +64,47 @@ def test_sector33_all_pit_uses_strictly_earlier_snapshot():
     assert np.isclose(ew.loc[idx[2], "A"], 2.0) and np.isnan(ew.loc[idx[2]].get("B", np.nan))    # 第二份快照之前：两只都在 A（等权 (1+3)/2）
     assert np.isclose(ew.loc[idx[4], "A"], 1.0) and np.isclose(ew.loc[idx[4], "B"], 3.0)          # 严格早于那天的快照 → 2.T 归 B
     assert np.isnan(ew.loc[idx[3]].get("B", np.nan))                                             # 快照当天还用旧分类
+
+
+def test_open_and_close_windows_and_spread():
+    idx = DAYS[:6]
+    cc = pd.DataFrame({"a": [np.nan, 1.0, 1.0, 1.0, 1.0, 1.0], "b": [np.nan, 0.0, 0.0, 0.0, 0.0, 0.0]}, index=idx)
+    oc = pd.DataFrame({"a": [0.5] * 6, "b": [0.0] * 6}, index=idx)
+    w = PE.window_open(cc, oc, idx[2], 3)                                   # t0 开 → t0+2 收：(1.005)(1.01)(1.01) − 1
+    assert np.isclose(w["a"], (1.005 * 1.01 * 1.01 - 1) * 100) and np.isclose(w["b"], 0.0)
+    assert PE.window_open(cc, oc, idx[4], 3).isna().all()                    # 数据不够
+    d0 = PE.window_close(cc, idx[2], 0, 0); assert np.isclose(d0["a"], 1.0)
+    w5 = PE.window_close(cc, idx[1], 1, 4); assert np.isclose(w5["a"], (1.01 ** 4 - 1) * 100)
+    x = pd.Series({"a": 2.0, "b": -1.0, "c": 0.0, "d": np.nan})
+    assert np.isclose(PE.spread(x, ["a"], ["b"]), 3.0) and np.isclose(PE.spread(x, ["a"], []), 2.0 - (-0.5)) and np.isclose(PE.spread(x, [], ["b"]), 1.0 + 1.0)
+    assert np.isnan(PE.spread(x, ["d"], []))
+
+
+def test_controls_flags_and_boot():
+    b, v = PE.shuffle_sectors(["a", "b"], ["c"], list("abcdefgh"), 0)
+    assert len(b) == 2 and len(v) == 1 and not set(b) & set(v) and (b, v) == PE.shuffle_sectors(["a", "b"], ["c"], list("abcdefgh"), 0)
+    assert PE.shuffle_sectors([], [], list("abc"), 0) == ([], [])
+    lo, hi = PE.cluster_boot_month(np.r_[np.ones(20) * 2, -np.ones(20)], np.r_[["2020-01"] * 20, ["2020-02"] * 20], n=300)
+    assert lo <= 0.5 <= hi
+    r = pd.DatetimeIndex([DAYS[10], DAYS[15], DAYS[60], pd.NaT])
+    assert list(PE.overlap_flags(r, DAYS, 20)) == [1, 1, 0, 0]
+    assert PE.crisis_flag(pd.Timestamp("2020-03-16")) == 1 and PE.crisis_flag(pd.Timestamp("2024-10-01")) == 0
+    assert PE.adjacent_flag(DAYS[10], [DAYS[12]], DAYS) == 1 and PE.adjacent_flag(DAYS[10], [DAYS[14]], DAYS) == 0 and PE.adjacent_flag(DAYS[10], [], DAYS) == 0
+
+
+def test_betas_asof_use_only_past_weeks():
+    weeks = pd.date_range("2020-01-03", periods=160, freq="W-FRI")
+    rng = np.random.default_rng(0)
+    fac = pd.DataFrame({"rate_jp": rng.normal(0, 0.05, 160), "fx": rng.normal(0, 1, 160)}, index=weeks)
+    mkt = pd.Series(rng.normal(0, 1, 160), index=weeks)
+    sec = pd.DataFrame({"銀行業": mkt + 10 * fac["rate_jp"] + rng.normal(0, 0.1, 160), "小売業": mkt - 0.5 * fac["fx"] + rng.normal(0, 0.1, 160)}, index=weeks)
+    end = weeks[120] + pd.Timedelta(days=3)
+    B = PE.betas_asof(sec, fac, mkt, end)
+    assert B is not None and B.loc["銀行業", "rate_jp"] > 5 and B.loc["小売業", "fx"] < -0.3
+    sec2 = sec.copy(); sec2.loc[weeks[121]:, :] = 999.0                        # 改掉 end 之后的周 → β 不变
+    B2 = PE.betas_asof(sec2, fac, mkt, end)
+    assert np.allclose(B.to_numpy(), B2.to_numpy())
+    assert PE.betas_asof(sec, fac, mkt, weeks[30]) is None                      # 不足 60 周
+    bl, vl = PE.beta_lists(B, {"rate_jp": 0.1, "fx": -1.0}, k=1)
+    assert bl == ["銀行業"] and vl == ["小売業"]                                   # 加息 → 银行 β 高、零售 fx 负 → 受损
+    assert PE.beta_lists(None, {"fx": 1.0}) == ([], [])
