@@ -1,0 +1,64 @@
+{
+ "events": [],
+ "history": [],
+ "version": 1,
+ "broker": "PaperBroker",
+ "updated": "2026-09-28T07:00:13+09:00",
+ "state": {
+  "cash_jpy": 1000000.0,
+  "cash_usd": 0.0,
+  "pos": {},
+  "core_units": {
+   "1655.T": 0
+  },
+  "core_last": {
+   "1655.T": 878.0
+  },
+  "pending_exit": {},
+  "plan": {},
+  "core_plan": {
+   "1655.T": [
+    "BUY",
+    1130
+   ]
+  },
+  "fx_plan": [],
+  "fx_reserve_jpy": 0.0,
+  "last_date": "2026-09-25",
+  "trades": [],
+  "core_trades": [],
+  "fx_trades": [],
+  "history": [
+   [
+    "2026-09-25",
+    1000000.0,
+    1000000.0,
+    0.0,
+    158.811
+   ]
+  ],
+  "corp_done": [],
+  "corp_log": []
+ },
+ "orders": [
+  {
+   "cid": "U2026-09-25-BUY-1655.T",
+   "ticker": "1655.T",
+   "side": "BUY",
+   "kind": "core",
+   "qty": 1130,
+   "decided_on": "2026-09-25",
+   "limit": 895.0,
+   "ref_px": 878.0,
+   "reason": "核心 ETF 调整",
+   "phase": "open",
+   "status": "DEFERRED",
+   "sent_qty": 0,
+   "broker_id": "",
+   "order_date": "",
+   "filled_qty": 0,
+   "filled_px": 0.0,
+   "note": "开盘前余力 1,000,000 円 < 按限价预留 1,011,757 円 → 开盘后按始値检查、减股再下"
+  }
+ ]
+}

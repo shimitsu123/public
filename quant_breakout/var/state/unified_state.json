@@ -1,0 +1,36 @@
+{
+ "cash_jpy": 1000000.0,
+ "cash_usd": 0.0,
+ "pos": {},
+ "core_units": {
+  "1655.T": 0
+ },
+ "core_last": {
+  "1655.T": 878.0
+ },
+ "pending_exit": {},
+ "plan": {},
+ "core_plan": {
+  "1655.T": [
+   "BUY",
+   1130
+  ]
+ },
+ "fx_plan": [],
+ "fx_reserve_jpy": 0.0,
+ "last_date": "2026-09-25",
+ "trades": [],
+ "core_trades": [],
+ "fx_trades": [],
+ "history": [
+  [
+   "2026-09-25",
+   1000000.0,
+   1000000.0,
+   0.0,
+   158.811
+  ]
+ ],
+ "corp_done": [],
+ "corp_log": []
+}

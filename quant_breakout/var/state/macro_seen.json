@@ -1,0 +1,30 @@
+{
+ "us_retail": {
+  "obs": "2026-08",
+  "seen": null
+ },
+ "us_sent": {
+  "obs": "2026-08",
+  "seen": null
+ },
+ "jp_conf": {
+  "obs": "2026-08",
+  "seen": null
+ },
+ "us_claims": {
+  "obs": "2026-09-19",
+  "seen": null
+ },
+ "us_unrate": {
+  "obs": "2026-08",
+  "seen": null
+ },
+ "us_payroll": {
+  "obs": "2026-08",
+  "seen": null
+ },
+ "us_cpi": {
+  "obs": "2026-08",
+  "seen": null
+ }
+}

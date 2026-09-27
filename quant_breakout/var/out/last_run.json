@@ -1,5 +1,5 @@
 {
- "at": "2026-09-25 08:45",
+ "at": "2026-09-28 07:09",
  "ok": true,
  "error": "",
  "markets_ok": [
@@ -7,5 +7,5 @@
  ],
  "blocked_hosts": [],
  "provider": "yfinance",
- "mode": "unified-preview"
+ "mode": "unified"
 }
