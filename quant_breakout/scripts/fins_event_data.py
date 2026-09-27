@@ -9,6 +9,7 @@
   （只作描述 / 分段，不作过滤：用户 2026-09-27「取消小盘股受一手金额和流动性限制」）。
 events_full（研究用的完整事件表，events_table 的超集）另加：
   只留 {1Q,2Q,3Q,FY}FinancialStatements_{Consolidated,NonConsolidated}_{JP,IFRS,US} 与 EarnForecastRevision（不要 REIT、股息修正、外国、其他期间）；
+  同一公司连结与单体都有 → 只用连结（单体的予想不进修正链，避免跨口径的虚假修正）；
   fy12 当期决算期 = 12 个月；first 同一键的第一次开示（決算短信：(文件类型, 决算期末, 期间)；予想修正：(决算期末, 开示日)），
   之后同键的行 = 订正（数字没变 → rev = 0）；retro / chg_acc / chg_sub / chg_scope 遡及修正 / 会计估计变更 / 连结子公司异动 / 连结范围变更标记；
   level 这一行用的利润档（按这一行有值的列：OP → OdP → NP，不看公司全历史）；pos 新旧予想都 > 0（亏损缩小不算上修）；
@@ -138,6 +139,9 @@ def events_full(F: pd.DataFrame, days: pd.DatetimeIndex) -> pd.DataFrame:
         t = JQ.to_yf(code)
         if t is None:
             continue
+        dt_all = g["DocType"].astype(str)
+        if dt_all.str.contains("_Consolidated_").any():                          # 连结与单体都有的公司只用连结（单体是补充、不进修正链）
+            g = g[~dt_all.str.contains("_NonConsolidated_")]
         g = g.sort_values(["disc_d", "DiscTime", "DiscNo"], kind="mergesort")
         last_fc, last_div, actual, seen = {}, {}, {}, set()
         for r in g.itertuples(index=False):

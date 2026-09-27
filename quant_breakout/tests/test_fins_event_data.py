@@ -92,7 +92,8 @@ def _fins_full():
         # 乙（56780，银行）：没有营业利润 → 经常利润档；2024-11-06 15:10 开示 = 延长后的盘中；2024-11-01 15:10 = 旧制度的盘后
         _row("56780", "2024-11-01", "15:10", FS.format("2Q"), "2Q", "2024-04-01", "2025-03-31", OdP="50", FOdP="80"),
         _row("56780", "2024-11-06", "15:10", "EarnForecastRevision", "2Q", "2024-04-01", "2025-03-31", FOdP="96"),
-        # 不算：REIT、股息修正、优先股代码、遡及修正
+        # 不算：REIT、股息修正、优先股代码、遡及修正；甲的单体决算（有连结 → 单体不用）
+        _row("12340", "2020-08-05", "15:30", "1QFinancialStatements_NonConsolidated_JP", "1Q", "2020-04-01", "2021-03-31", OP="10", FOP="40"),
         _row("12340", "2020-11-10", "15:00", "DividendForecastRevision", "2Q", "2020-04-01", "2021-03-31", FDivAnn="20"),
         _row("34560", "2020-11-10", "15:00", "FYFinancialStatements_Consolidated_REIT", "FY", "2019-11-01", "2020-10-31", OP="5"),
         _row("99991", "2020-11-10", "15:00", FS.format("2Q"), "2Q", "2020-04-01", "2021-03-31", OP="5", FOP="10"),
@@ -105,7 +106,7 @@ def test_events_full_levels_revisions_corrections_and_timing():
     days = pd.bdate_range("2019-01-01", "2025-01-31")
     E = FE.events_full(_fins_full(), days)
     assert set(E["ticker"]) == {"1234.T", "5678.T"} and "FYFinancialStatements_Consolidated_REIT" not in set(E["doc"])
-    assert "DividendForecastRevision" not in set(E["doc"])
+    assert "DividendForecastRevision" not in set(E["doc"]) and not E["doc"].str.contains("NonConsolidated").any()
     a = E[E["ticker"] == "1234.T"].sort_values(["date", "disc_no"]).reset_index(drop=True)
     assert a["level"].tolist()[:5] == ["OP"] * 5
     fy = a[a["per"] == "FY"].iloc[0]
