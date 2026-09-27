@@ -59,3 +59,42 @@ def test_multi_year_high_excludes_today_and_needs_history():
     fr = {"A.T": pd.DataFrame({"entry": True}, index=idx[2:]), "B.T": pd.DataFrame({"entry": True}, index=idx)}
     m = S2B.hi_masks(fr, {"A.T": pd.Series(c.to_numpy(), index=idx)}, 3)
     assert m["A.T"].tolist() == [False, False, True, True] and not m["B.T"].any()
+
+
+def test_asof_helpers_respect_us_timing():
+    import leap2_s3_explore as S3
+    s = pd.Series([1.0, 2.0, 3.0], index=pd.to_datetime(["2020-01-06", "2020-01-07", "2020-01-08"]))
+    d = pd.DatetimeIndex(["2020-01-06", "2020-01-08", "2020-01-10"])
+    assert np.allclose(S3.asof_before(s, d)[1:], [2.0, 3.0]) and np.isnan(S3.asof_before(s, d)[0])   # 美国同一天的收盘不能用
+    assert np.allclose(S3.asof_upto(s, d), [1.0, 3.0, 3.0])
+
+
+def test_tercile_table_high_minus_low():
+    import leap2_s3_explore as S3
+    V = pd.DataFrame({"sig_date": pd.to_datetime(["2010-01-05"] * 45), "x": np.arange(45, dtype=float),
+                      "net": [-1.0] * 15 + [0.5] * 15 + [2.0] * 15})
+    r = S3.tercile_table(V, "x")
+    assert r["low"]["win"] == 0.0 and r["high"]["win"] == 100.0 and np.isclose(r["d_mean"], 3.0) and r["years"] == [1, 1]
+    assert S3.tercile_table(V.iloc[:10], "x") == {}
+
+
+def test_us_rank_uses_data_two_months_back():
+    import leap2_s4_explore as S4
+    idx = pd.date_range("2000-01-01", periods=16, freq="MS")
+    R = pd.DataFrame({"A": 1.0, "B": 0.0, "C": -1.0}, index=idx)
+    R.loc[idx[14], "C"] = 500.0                                                   # 第 15 个月 C 暴涨 → 只有两个月后才看得到
+    P = S4.us_rank_asof(R)
+    assert np.isnan(P.iloc[12]["A"]) and P.iloc[13]["A"] == 1.0 and P.iloc[13]["C"] == 1 / 3
+    assert P.iloc[15]["C"] == 1 / 3 and not np.isnan(P.iloc[15]["A"])           # 第 16 个月用的是到第 14 个月为止
+    from qbreak.us_industry import FF49_CN
+    assert S4.S33_FF49["電気機器"] == "Chips" and set(S4.S33_FF49.values()) <= set(FF49_CN)    # 只用 Ken French 49 行业里真有的代码
+    assert len(S4.S33_FF49) == 33
+
+
+def test_us_pct_frames_maps_sector_and_month():
+    import leap2_s4b_explore as S4B
+    idx = pd.to_datetime(["2020-03-02", "2020-03-31", "2020-04-01"])
+    P = pd.DataFrame({"Chips": [0.1, 0.9]}, index=pd.to_datetime(["2020-03-01", "2020-04-01"]))
+    fr = {"A.T": pd.DataFrame({"entry": True}, index=idx), "B.T": pd.DataFrame({"entry": True}, index=idx)}
+    u = S4B.us_pct_frames(fr, {"A.T": "電気機器", "B.T": "謎の業種"}, P)
+    assert np.allclose(u["A.T"], [0.1, 0.1, 0.9]) and np.isnan(u["B.T"]).all()
