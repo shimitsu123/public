@@ -4624,5 +4624,126 @@
 "N1 / N5 方向与事先假设相反（反向组 ΔL% ≥ +10% 545 笔 38.2% / +0.65%）"
 ],
 "notes": "不写前向记录、不试反向（若作候选需另登记且只剩 C 窗口）；模拟盘 / W2 / 股票池不变；五类未用数据都已检验、不成立"
+},
+{
+"line": 1885,
+"date": "2026-09-27",
+"title": "登记：网罗结合 × 横展开 H 轮（H1 选股信号 → 美国个股；H2 威胁指数 → 21 个市场）",
+"kind": "study",
+"domain": "选股/买点",
+"registration": "cdda851",
+"script": "scripts/hx_select_study.py; scripts/threat_intl_study.py",
+"output": "var/out/hx_select_study.md; var/out/threat_intl_study.md",
+"candidates": [],
+"baseline": "",
+"windows": "H1 美国 1995-01〜2026-06（两半 〜2010 / 2011〜）；H2 逐年样本外 2005〜2026、主评估 2011〜",
+"verdict": "变更/工程",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "两份对抗审计后登记；登记前只看笔数 / 数据完整性 + 输出丢弃的流程冒烟；结论上限 = 提议 + 前向记录（用户确认）"
+},
+{
+"line": 1916,
+"date": "2026-09-27",
+"title": "结果：H1 选股信号横展开到美国个股 U1〜U5",
+"kind": "study",
+"domain": "选股/买点",
+"registration": "cdda851",
+"script": "scripts/hx_select_study.py",
+"output": "var/out/hx_select_study.md",
+"candidates": [
+{
+"id": "U1",
+"rule": "W2 周线量比 ≥ 1.0（方向检验）",
+"result": "保留 866 笔 +0.39% vs 剔除 +0.35%；两半同向 ✓，按月聚类下限 −0.21 pp ✗"
+},
+{
+"id": "U2",
+"rule": "K2 量比 ≥ 2 ∧ β ≤ 0.70（不加 W2）",
+"result": "242 笔 +0.41% vs P +0.37%；A +1.31% / B −0.15% ✗"
+},
+{
+"id": "U3",
+"rule": "W2 ∧ 与 S&P 500 低相关后 1/3",
+"result": "331 笔 +0.26% vs W2 +0.39%（两半都更差）✗"
+},
+{
+"id": "U4",
+"rule": "V3 突破日量比 ≥ 3（不加 W2）",
+"result": "204 笔 45.6% / +0.57% vs 43.7% / +0.37%（+0.20 pp）；A +1.31% / B +0.07% ✗"
+},
+{
+"id": "U5",
+"rule": "W2 ∧ 量比 / 低 β / 股息率 / 低相关 至少两条",
+"result": "454 笔 +0.26% vs W2 +0.39%（被剔除的 +0.53%）✗"
+}
+],
+"baseline": "SP500U 398 只、P 1,708 笔 43.7% / +0.37%（A +0.85% / B +0.12%）",
+"windows": "1995-01-02〜2026-06-30；A 〜2010 / B 2011〜",
+"verdict": "不通过",
+"stable_findings": [
+"W2 保留 > 剔除在两半同向（+0.13 / +0.02 pp），但逐笔幅度极小（同日本）"
+],
+"era_dependent_or_reversed": [
+"K2 / V3 在 1995〜2010 成立（+0.46 pp）、2011〜2026 消失或反过来",
+"低相关与网罗组合在 W2 里反而更差",
+"特征与赢的 AUC 全在 0.48〜0.52"
+],
+"notes": "不做日本检查；模拟盘 / W2 / 股票池不变；S&P 400（2016〜）里量的方向与日本一致但只描述"
+},
+{
+"line": 1933,
+"date": "2026-09-27",
+"title": "结果：H2 威胁指数横展开到 21 个市场（6 个候选）",
+"kind": "study",
+"domain": "威胁指数",
+"registration": "cdda851",
+"script": "scripts/threat_intl_study.py",
+"output": "var/out/threat_intl_study.md",
+"candidates": [
+{
+"id": "A0X",
+"rule": "A0 去掉曲线倒挂与油价冲击",
+"result": "+0.039、15/15、p 0.115；只差 C3 ✗（接近）"
+},
+{
+"id": "DOM",
+"rule": "领域均衡",
+"result": "+0.056、14/15、p 0.172；2019– −0.015、BSS 差 ✗"
+},
+{
+"id": "ENS",
+"rule": "A0 / DOM / POOL 平均",
+"result": "+0.029、13/15、p 0.194 ✗"
+},
+{
+"id": "EW",
+"rule": "全部因素等权",
+"result": "地区均衡 ΔAUC +0.021、12/15、p 0.326 ✗"
+},
+{
+"id": "PRIOR_US",
+"rule": "美股 PRIOR 权重搬过去",
+"result": "+0.021、12/15、p 0.335 ✗"
+},
+{
+"id": "POOL",
+"rule": "23 个市场分 5 组合并训练（留出组）",
+"result": "−0.002、6/15、p 0.531 ✗"
+}
+],
+"baseline": "A0（v1）：发达 15 个 AUC 0.442〜0.570；本国 S&P500 0.615、日経 0.513",
+"windows": "逐年样本外 2005〜2026；主评估 2011〜答案已知的最后一天；子期间 2011–18 / 2019–",
+"verdict": "接近(差一条)",
+"stable_findings": [
+"A0X 在 15 个发达市场、本国两个、新兴平均都比 A0 好（+0.039 / +0.053 / +0.035 / +0.029）"
+],
+"era_dependent_or_reversed": [
+"A0X 的提高集中在 2011〜2018（+0.071），2019– 只 +0.004",
+"DOM 2011〜2018 +0.105、2019– −0.015",
+"跨市场合并训练（POOL）没有帮助：下跌同步，合并不增加独立事件",
+"所有方式 BSS < 0"
+],
+"notes": "按登记不成立 → 日报维持 A0；A0X 已在前向记录（threat_forward.csv，季度复核按 threat_forward_review.py）照常"
 }
 ]

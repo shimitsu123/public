@@ -133,7 +133,10 @@
   H0 研究总图 `var/out/research_map.md`（`scripts/research_map.py` ← `var/research_registry.json`，sim_changes.md 全部 118 条的索引：领域 × 结论、两期都成立 / 时代依赖）；
   H1 日本两期成立的选股信号（W2 / K2 / V3 / 低相关）与事先写定的组合 U5 放到没用过的美国个股（S&P 500 去掉以前用过的 = 398 只、1995〜2026）检验（`scripts/hx_select_study.py`）；
   H2 威胁指数 6 种配比（EW / DOM / PRIOR_US / 跨市场合并训练 POOL / ENS / A0X）放到没用过的 21 个市场（发达 15 + 新兴 6）检验（`scripts/threat_intl_study.py`）。
-  结论上限 = 提议 + 前向记录（模拟盘 / 执行器 / 日报显示都要用户确认才改）；结果见 sim_changes.md。
+  结论上限 = 提议 + 前向记录（模拟盘 / 执行器 / 日报显示都要用户确认才改）；登记 cdda851。
+  **结果**：H1 五个候选全部不成立（美国 398 只 1,708 笔：W2 两半同向但每笔只多 +0.02 pp；K2 / V3 只在 1995〜2010 成立；低相关与网罗组合 U5 在 W2 里反而更差 +0.26% vs +0.39%）；
+  H2 六个候选都不成立 —— A0X（去掉曲线倒挂与油价）15 个发达市场全为正、地区均衡 ΔAUC +0.039，只差联合自助法显著性（p 0.115）；跨市场合并训练 POOL −0.002 没用。
+  → **维持现行**（W2、股票池、日报 A0 都不变）；A0X 的前向记录（2026-09-25 起）照常，季度复核按它自己的规则判定（`var/out/hx_select_study.md`、`var/out/threat_intl_study.md`）。
 - J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
   → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
   （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）
