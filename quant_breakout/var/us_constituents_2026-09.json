@@ -1,0 +1,5426 @@
+{
+"retrieved": "2026-09-27",
+"source": "Wikipedia: List of S&P 500 companies（Date added 列）/ List of S&P 400 companies（变更表里最近一次 Added 的日期；表里没有 → null = 更早或不明）",
+"sp500": [
+{
+"ticker": "MMM",
+"sector": "Industrials",
+"sub": "Industrial Conglomerates",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "AOS",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2017-07-26"
+},
+{
+"ticker": "ABT",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "ABBV",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2012-12-31"
+},
+{
+"ticker": "ACN",
+"sector": "Information Technology",
+"sub": "IT Consulting & Other Services",
+"date_added": "2011-07-06"
+},
+{
+"ticker": "ADBE",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "1997-05-05"
+},
+{
+"ticker": "AMD",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2017-03-20"
+},
+{
+"ticker": "AES",
+"sector": "Utilities",
+"sub": "Independent Power Producers & Energy Traders",
+"date_added": "1998-10-02"
+},
+{
+"ticker": "AFL",
+"sector": "Financials",
+"sub": "Life & Health Insurance",
+"date_added": "1999-05-28"
+},
+{
+"ticker": "A",
+"sector": "Health Care",
+"sub": "Life Sciences Tools & Services",
+"date_added": "2000-06-05"
+},
+{
+"ticker": "APD",
+"sector": "Materials",
+"sub": "Industrial Gases",
+"date_added": "1985-04-30"
+},
+{
+"ticker": "ABNB",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": "2023-09-18"
+},
+{
+"ticker": "AKAM",
+"sector": "Information Technology",
+"sub": "Internet Services & Infrastructure",
+"date_added": "2007-07-12"
+},
+{
+"ticker": "ALB",
+"sector": "Materials",
+"sub": "Specialty Chemicals",
+"date_added": "2016-07-01"
+},
+{
+"ticker": "ARE",
+"sector": "Real Estate",
+"sub": "Office REITs",
+"date_added": "2017-03-20"
+},
+{
+"ticker": "ALGN",
+"sector": "Health Care",
+"sub": "Health Care Supplies",
+"date_added": "2017-06-19"
+},
+{
+"ticker": "ALLE",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2013-12-02"
+},
+{
+"ticker": "LNT",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "2016-07-01"
+},
+{
+"ticker": "ALL",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": "1995-07-13"
+},
+{
+"ticker": "GOOGL",
+"sector": "Communication Services",
+"sub": "Interactive Media & Services",
+"date_added": "2006-04-03"
+},
+{
+"ticker": "GOOG",
+"sector": "Communication Services",
+"sub": "Interactive Media & Services",
+"date_added": "2014-04-03"
+},
+{
+"ticker": "MO",
+"sector": "Consumer Staples",
+"sub": "Tobacco",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "AMZN",
+"sector": "Consumer Discretionary",
+"sub": "Broadline Retail",
+"date_added": "2005-11-18"
+},
+{
+"ticker": "AMCR",
+"sector": "Materials",
+"sub": "Paper & Plastic Packaging Products & Materials",
+"date_added": "2019-06-07"
+},
+{
+"ticker": "AEE",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": "1991-09-19"
+},
+{
+"ticker": "AEP",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "AXP",
+"sector": "Financials",
+"sub": "Consumer Finance",
+"date_added": "1976-06-30"
+},
+{
+"ticker": "AIG",
+"sector": "Financials",
+"sub": "Multi-line Insurance",
+"date_added": "1980-03-31"
+},
+{
+"ticker": "AMT",
+"sector": "Real Estate",
+"sub": "Telecom Tower REITs",
+"date_added": "2007-11-19"
+},
+{
+"ticker": "AWK",
+"sector": "Utilities",
+"sub": "Water Utilities",
+"date_added": "2016-03-04"
+},
+{
+"ticker": "AMP",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "2005-10-03"
+},
+{
+"ticker": "AME",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": "2013-09-23"
+},
+{
+"ticker": "AMGN",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "1992-01-02"
+},
+{
+"ticker": "APH",
+"sector": "Information Technology",
+"sub": "Electronic Components",
+"date_added": "2008-09-30"
+},
+{
+"ticker": "ADI",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "1999-10-12"
+},
+{
+"ticker": "AON",
+"sector": "Financials",
+"sub": "Insurance Brokers",
+"date_added": "1996-04-23"
+},
+{
+"ticker": "APA",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "1997-07-28"
+},
+{
+"ticker": "APO",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "2024-12-23"
+},
+{
+"ticker": "AAPL",
+"sector": "Information Technology",
+"sub": "Technology Hardware, Storage & Peripherals",
+"date_added": "1982-11-30"
+},
+{
+"ticker": "AMAT",
+"sector": "Information Technology",
+"sub": "Semiconductor Materials & Equipment",
+"date_added": "1995-03-16"
+},
+{
+"ticker": "APP",
+"sector": "Communication Services",
+"sub": "Advertising",
+"date_added": "2025-09-22"
+},
+{
+"ticker": "APTV",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Parts & Equipment",
+"date_added": "2012-12-24"
+},
+{
+"ticker": "ACGL",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": "2022-11-01"
+},
+{
+"ticker": "ADM",
+"sector": "Consumer Staples",
+"sub": "Agricultural Products & Services",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "ARES",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "2025-12-11"
+},
+{
+"ticker": "ANET",
+"sector": "Information Technology",
+"sub": "Communications Equipment",
+"date_added": "2018-08-28"
+},
+{
+"ticker": "AJG",
+"sector": "Financials",
+"sub": "Insurance Brokers",
+"date_added": "2016-05-31"
+},
+{
+"ticker": "AIZ",
+"sector": "Financials",
+"sub": "Multi-line Insurance",
+"date_added": "2007-04-10"
+},
+{
+"ticker": "T",
+"sector": "Communication Services",
+"sub": "Integrated Telecommunication Services",
+"date_added": "1983-11-30"
+},
+{
+"ticker": "ATO",
+"sector": "Utilities",
+"sub": "Gas Utilities",
+"date_added": "2019-02-15"
+},
+{
+"ticker": "ADSK",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "1989-12-01"
+},
+{
+"ticker": "ADP",
+"sector": "Industrials",
+"sub": "Human Resource & Employment Services",
+"date_added": "1981-03-31"
+},
+{
+"ticker": "AZO",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Retail",
+"date_added": "1997-01-02"
+},
+{
+"ticker": "AVY",
+"sector": "Materials",
+"sub": "Paper & Plastic Packaging Products & Materials",
+"date_added": "1987-12-31"
+},
+{
+"ticker": "AXON",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2023-05-04"
+},
+{
+"ticker": "BKR",
+"sector": "Energy",
+"sub": "Oil & Gas Equipment & Services",
+"date_added": "2017-07-07"
+},
+{
+"ticker": "BALL",
+"sector": "Materials",
+"sub": "Metal, Glass & Plastic Containers",
+"date_added": "1984-10-31"
+},
+{
+"ticker": "BAC",
+"sector": "Financials",
+"sub": "Diversified Banks",
+"date_added": "1976-06-30"
+},
+{
+"ticker": "BAX",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "1972-09-30"
+},
+{
+"ticker": "BDX",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "1972-09-30"
+},
+{
+"ticker": "BRK-B",
+"sector": "Financials",
+"sub": "Multi-Sector Holdings",
+"date_added": "2010-02-16"
+},
+{
+"ticker": "BBY",
+"sector": "Consumer Discretionary",
+"sub": "Computer & Electronics Retail",
+"date_added": "1999-06-29"
+},
+{
+"ticker": "TECH",
+"sector": "Health Care",
+"sub": "Life Sciences Tools & Services",
+"date_added": "2021-08-30"
+},
+{
+"ticker": "BIIB",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2003-11-13"
+},
+{
+"ticker": "BLK",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "2011-04-04"
+},
+{
+"ticker": "BX",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "2023-09-18"
+},
+{
+"ticker": "XYZ",
+"sector": "Financials",
+"sub": "Transaction & Payment Processing Services",
+"date_added": "2025-07-23"
+},
+{
+"ticker": "BE",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": "2026-09-21"
+},
+{
+"ticker": "BNY",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "1995-03-31"
+},
+{
+"ticker": "BA",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "BKNG",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": "2009-11-06"
+},
+{
+"ticker": "BSX",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "1995-02-24"
+},
+{
+"ticker": "BMY",
+"sector": "Health Care",
+"sub": "Pharmaceuticals",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "AVGO",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2014-05-08"
+},
+{
+"ticker": "BR",
+"sector": "Industrials",
+"sub": "Data Processing & Outsourced Services",
+"date_added": "2018-06-18"
+},
+{
+"ticker": "BRO",
+"sector": "Financials",
+"sub": "Insurance Brokers",
+"date_added": "2021-09-20"
+},
+{
+"ticker": "BF-B",
+"sector": "Consumer Staples",
+"sub": "Distillers & Vintners",
+"date_added": "1982-10-31"
+},
+{
+"ticker": "BG",
+"sector": "Consumer Staples",
+"sub": "Agricultural Products & Services",
+"date_added": "2023-03-15"
+},
+{
+"ticker": "BXP",
+"sector": "Real Estate",
+"sub": "Office REITs",
+"date_added": "2006-04-03"
+},
+{
+"ticker": "CHRW",
+"sector": "Industrials",
+"sub": "Air Freight & Logistics",
+"date_added": "2007-03-02"
+},
+{
+"ticker": "CDNS",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2017-09-18"
+},
+{
+"ticker": "CPT",
+"sector": "Real Estate",
+"sub": "Multi-Family Residential REITs",
+"date_added": "2022-04-04"
+},
+{
+"ticker": "COF",
+"sector": "Financials",
+"sub": "Consumer Finance",
+"date_added": "1998-07-01"
+},
+{
+"ticker": "CAH",
+"sector": "Health Care",
+"sub": "Health Care Distributors",
+"date_added": "1997-05-27"
+},
+{
+"ticker": "CCL",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": "1998-12-22"
+},
+{
+"ticker": "CARR",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2020-04-03"
+},
+{
+"ticker": "CVNA",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Retail",
+"date_added": "2025-12-22"
+},
+{
+"ticker": "CASY",
+"sector": "Consumer Staples",
+"sub": "Food Retail",
+"date_added": "2026-04-09"
+},
+{
+"ticker": "CAT",
+"sector": "Industrials",
+"sub": "Construction Machinery & Heavy Transportation Equipment",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "CBOE",
+"sector": "Financials",
+"sub": "Financial Exchanges & Data",
+"date_added": "2017-03-01"
+},
+{
+"ticker": "CBRE",
+"sector": "Real Estate",
+"sub": "Real Estate Services",
+"date_added": "2006-11-10"
+},
+{
+"ticker": "CDW",
+"sector": "Information Technology",
+"sub": "Technology Distributors",
+"date_added": "2019-09-23"
+},
+{
+"ticker": "COR",
+"sector": "Health Care",
+"sub": "Health Care Distributors",
+"date_added": "2001-08-30"
+},
+{
+"ticker": "CNC",
+"sector": "Health Care",
+"sub": "Managed Health Care",
+"date_added": "2016-03-30"
+},
+{
+"ticker": "CNP",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": "1985-07-31"
+},
+{
+"ticker": "CF",
+"sector": "Materials",
+"sub": "Fertilizers & Agricultural Chemicals",
+"date_added": "2008-08-27"
+},
+{
+"ticker": "CRL",
+"sector": "Health Care",
+"sub": "Life Sciences Tools & Services",
+"date_added": "2021-05-14"
+},
+{
+"ticker": "SCHW",
+"sector": "Financials",
+"sub": "Investment Banking & Brokerage",
+"date_added": "1997-06-02"
+},
+{
+"ticker": "CHTR",
+"sector": "Communication Services",
+"sub": "Cable & Satellite",
+"date_added": "2016-09-08"
+},
+{
+"ticker": "CVX",
+"sector": "Energy",
+"sub": "Integrated Oil & Gas",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "CMG",
+"sector": "Consumer Discretionary",
+"sub": "Restaurants",
+"date_added": "2011-04-28"
+},
+{
+"ticker": "CB",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": "2010-07-15"
+},
+{
+"ticker": "CHD",
+"sector": "Consumer Staples",
+"sub": "Household Products",
+"date_added": "2015-12-29"
+},
+{
+"ticker": "CIEN",
+"sector": "Information Technology",
+"sub": "Communications Equipment",
+"date_added": "2026-02-09"
+},
+{
+"ticker": "CI",
+"sector": "Health Care",
+"sub": "Health Care Services",
+"date_added": "1976-06-30"
+},
+{
+"ticker": "CINF",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": "1997-12-18"
+},
+{
+"ticker": "CTAS",
+"sector": "Industrials",
+"sub": "Diversified Support Services",
+"date_added": "2001-03-01"
+},
+{
+"ticker": "CSCO",
+"sector": "Information Technology",
+"sub": "Communications Equipment",
+"date_added": "1993-12-01"
+},
+{
+"ticker": "C",
+"sector": "Financials",
+"sub": "Diversified Banks",
+"date_added": "1988-05-31"
+},
+{
+"ticker": "CFG",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2016-01-29"
+},
+{
+"ticker": "CLX",
+"sector": "Consumer Staples",
+"sub": "Household Products",
+"date_added": "1969-03-31"
+},
+{
+"ticker": "CME",
+"sector": "Financials",
+"sub": "Financial Exchanges & Data",
+"date_added": "2006-08-11"
+},
+{
+"ticker": "CMS",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "KO",
+"sector": "Consumer Staples",
+"sub": "Soft Drinks & Non-alcoholic Beverages",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "CTSH",
+"sector": "Information Technology",
+"sub": "IT Consulting & Other Services",
+"date_added": "2006-11-17"
+},
+{
+"ticker": "COHR",
+"sector": "Information Technology",
+"sub": "Electronic Components",
+"date_added": "2026-03-23"
+},
+{
+"ticker": "COIN",
+"sector": "Financials",
+"sub": "Financial Exchanges & Data",
+"date_added": "2025-05-19"
+},
+{
+"ticker": "CL",
+"sector": "Consumer Staples",
+"sub": "Household Products",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "CMCSA",
+"sector": "Communication Services",
+"sub": "Cable & Satellite",
+"date_added": "2002-11-19"
+},
+{
+"ticker": "FIX",
+"sector": "Industrials",
+"sub": "Construction & Engineering",
+"date_added": "2025-12-22"
+},
+{
+"ticker": "COP",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "ED",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "STZ",
+"sector": "Consumer Staples",
+"sub": "Distillers & Vintners",
+"date_added": "2005-07-01"
+},
+{
+"ticker": "CEG",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "2022-02-02"
+},
+{
+"ticker": "COO",
+"sector": "Health Care",
+"sub": "Health Care Supplies",
+"date_added": "2016-09-23"
+},
+{
+"ticker": "CPRT",
+"sector": "Industrials",
+"sub": "Diversified Support Services",
+"date_added": "2018-07-02"
+},
+{
+"ticker": "GLW",
+"sector": "Information Technology",
+"sub": "Electronic Components",
+"date_added": "1995-02-27"
+},
+{
+"ticker": "CPAY",
+"sector": "Financials",
+"sub": "Transaction & Payment Processing Services",
+"date_added": "2018-06-20"
+},
+{
+"ticker": "CTVA",
+"sector": "Materials",
+"sub": "Fertilizers & Agricultural Chemicals",
+"date_added": "2019-06-03"
+},
+{
+"ticker": "CSGP",
+"sector": "Real Estate",
+"sub": "Real Estate Services",
+"date_added": "2022-09-19"
+},
+{
+"ticker": "COST",
+"sector": "Consumer Staples",
+"sub": "Consumer Staples Merchandise Retail",
+"date_added": "1993-10-01"
+},
+{
+"ticker": "CRH",
+"sector": "Materials",
+"sub": "Construction Materials",
+"date_added": "2025-12-22"
+},
+{
+"ticker": "CRWD",
+"sector": "Information Technology",
+"sub": "Systems Software",
+"date_added": "2024-06-24"
+},
+{
+"ticker": "CCI",
+"sector": "Real Estate",
+"sub": "Telecom Tower REITs",
+"date_added": "2012-03-14"
+},
+{
+"ticker": "CSX",
+"sector": "Industrials",
+"sub": "Rail Transportation",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "CMI",
+"sector": "Industrials",
+"sub": "Construction Machinery & Heavy Transportation Equipment",
+"date_added": "1965-03-31"
+},
+{
+"ticker": "CVS",
+"sector": "Health Care",
+"sub": "Health Care Services",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "DHR",
+"sector": "Health Care",
+"sub": "Life Sciences Tools & Services",
+"date_added": "1998-11-18"
+},
+{
+"ticker": "DRI",
+"sector": "Consumer Discretionary",
+"sub": "Restaurants",
+"date_added": "1995-05-31"
+},
+{
+"ticker": "DDOG",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2025-07-09"
+},
+{
+"ticker": "DVA",
+"sector": "Health Care",
+"sub": "Health Care Services",
+"date_added": "2008-07-31"
+},
+{
+"ticker": "DECK",
+"sector": "Consumer Discretionary",
+"sub": "Footwear",
+"date_added": "2024-03-18"
+},
+{
+"ticker": "DE",
+"sector": "Industrials",
+"sub": "Agricultural & Farm Machinery",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "DELL",
+"sector": "Information Technology",
+"sub": "Technology Hardware, Storage & Peripherals",
+"date_added": "2024-09-23"
+},
+{
+"ticker": "DAL",
+"sector": "Industrials",
+"sub": "Passenger Airlines",
+"date_added": "2013-09-11"
+},
+{
+"ticker": "DVN",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2000-08-30"
+},
+{
+"ticker": "DXCM",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "2020-05-12"
+},
+{
+"ticker": "FANG",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2018-12-03"
+},
+{
+"ticker": "DLR",
+"sector": "Real Estate",
+"sub": "Data Center REITs",
+"date_added": "2016-05-18"
+},
+{
+"ticker": "DG",
+"sector": "Consumer Staples",
+"sub": "Consumer Staples Merchandise Retail",
+"date_added": "2012-12-03"
+},
+{
+"ticker": "DLTR",
+"sector": "Consumer Staples",
+"sub": "Consumer Staples Merchandise Retail",
+"date_added": "2011-12-19"
+},
+{
+"ticker": "D",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": "2016-11-30"
+},
+{
+"ticker": "DPZ",
+"sector": "Consumer Discretionary",
+"sub": "Restaurants",
+"date_added": "2020-05-12"
+},
+{
+"ticker": "DASH",
+"sector": "Consumer Discretionary",
+"sub": "Specialized Consumer Services",
+"date_added": "2025-03-24"
+},
+{
+"ticker": "DOV",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "1985-10-31"
+},
+{
+"ticker": "DOW",
+"sector": "Materials",
+"sub": "Commodity Chemicals",
+"date_added": "2019-04-01"
+},
+{
+"ticker": "DHI",
+"sector": "Consumer Discretionary",
+"sub": "Homebuilding",
+"date_added": "2005-06-22"
+},
+{
+"ticker": "DTE",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "DUK",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "1976-06-30"
+},
+{
+"ticker": "DD",
+"sector": "Industrials",
+"sub": "Industrial Conglomerates",
+"date_added": "2019-06-03"
+},
+{
+"ticker": "ETN",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "EBAY",
+"sector": "Consumer Discretionary",
+"sub": "Broadline Retail",
+"date_added": "2002-07-22"
+},
+{
+"ticker": "ECHO",
+"sector": "Communication Services",
+"sub": "Wireless Telecommunication Services",
+"date_added": "2026-03-23"
+},
+{
+"ticker": "ECL",
+"sector": "Materials",
+"sub": "Specialty Chemicals",
+"date_added": "1989-01-31"
+},
+{
+"ticker": "EIX",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "EW",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "2011-04-01"
+},
+{
+"ticker": "ELV",
+"sector": "Health Care",
+"sub": "Managed Health Care",
+"date_added": "2002-07-25"
+},
+{
+"ticker": "EME",
+"sector": "Industrials",
+"sub": "Construction & Engineering",
+"date_added": "2025-09-22"
+},
+{
+"ticker": "EMR",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": "1965-03-31"
+},
+{
+"ticker": "ETR",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "EOG",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2000-11-02"
+},
+{
+"ticker": "EQT",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2022-10-03"
+},
+{
+"ticker": "EFX",
+"sector": "Industrials",
+"sub": "Research & Consulting Services",
+"date_added": "1997-06-19"
+},
+{
+"ticker": "EQIX",
+"sector": "Real Estate",
+"sub": "Data Center REITs",
+"date_added": "2015-03-20"
+},
+{
+"ticker": "ERIE",
+"sector": "Financials",
+"sub": "Insurance Brokers",
+"date_added": "2024-09-23"
+},
+{
+"ticker": "ESS",
+"sector": "Real Estate",
+"sub": "Multi-Family Residential REITs",
+"date_added": "2014-04-02"
+},
+{
+"ticker": "EL",
+"sector": "Consumer Staples",
+"sub": "Personal Care Products",
+"date_added": "2006-01-05"
+},
+{
+"ticker": "EG",
+"sector": "Financials",
+"sub": "Reinsurance",
+"date_added": "2017-06-19"
+},
+{
+"ticker": "EVRG",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "2018-06-05"
+},
+{
+"ticker": "P",
+"sector": "Information Technology",
+"sub": "Technology Hardware, Storage & Peripherals",
+"date_added": "2026-09-21"
+},
+{
+"ticker": "ES",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "2009-07-24"
+},
+{
+"ticker": "EXC",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "EXE",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2025-03-24"
+},
+{
+"ticker": "EXPE",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": "2007-10-02"
+},
+{
+"ticker": "EXPD",
+"sector": "Industrials",
+"sub": "Air Freight & Logistics",
+"date_added": "2007-10-10"
+},
+{
+"ticker": "EXR",
+"sector": "Real Estate",
+"sub": "Self-Storage REITs",
+"date_added": "2016-01-19"
+},
+{
+"ticker": "XOM",
+"sector": "Energy",
+"sub": "Integrated Oil & Gas",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "FFIV",
+"sector": "Information Technology",
+"sub": "Communications Equipment",
+"date_added": "2010-12-20"
+},
+{
+"ticker": "FDS",
+"sector": "Financials",
+"sub": "Financial Exchanges & Data",
+"date_added": "2021-12-20"
+},
+{
+"ticker": "FICO",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2023-03-20"
+},
+{
+"ticker": "FAST",
+"sector": "Industrials",
+"sub": "Trading Companies & Distributors",
+"date_added": "2008-09-15"
+},
+{
+"ticker": "FRT",
+"sector": "Real Estate",
+"sub": "Retail REITs",
+"date_added": "2016-02-01"
+},
+{
+"ticker": "FDX",
+"sector": "Industrials",
+"sub": "Air Freight & Logistics",
+"date_added": "1980-12-31"
+},
+{
+"ticker": "FDXF",
+"sector": "Industrials",
+"sub": "Cargo Ground Transportation",
+"date_added": "2026-06-01"
+},
+{
+"ticker": "FERG",
+"sector": "Industrials",
+"sub": "Trading Companies & Distributors",
+"date_added": "2026-08-05"
+},
+{
+"ticker": "FIS",
+"sector": "Financials",
+"sub": "Transaction & Payment Processing Services",
+"date_added": "2006-11-10"
+},
+{
+"ticker": "FITB",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "1996-03-29"
+},
+{
+"ticker": "FSLR",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2022-12-19"
+},
+{
+"ticker": "FE",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "1997-11-28"
+},
+{
+"ticker": "FISV",
+"sector": "Financials",
+"sub": "Transaction & Payment Processing Services",
+"date_added": "2001-04-02"
+},
+{
+"ticker": "FLEX",
+"sector": "Information Technology",
+"sub": "Electronic Manufacturing Services",
+"date_added": "2026-06-22"
+},
+{
+"ticker": "F",
+"sector": "Consumer Discretionary",
+"sub": "Automobile Manufacturers",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "FTNT",
+"sector": "Information Technology",
+"sub": "Systems Software",
+"date_added": "2018-10-11"
+},
+{
+"ticker": "FTV",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2016-07-01"
+},
+{
+"ticker": "FOXA",
+"sector": "Communication Services",
+"sub": "Broadcasting",
+"date_added": "2019-03-19"
+},
+{
+"ticker": "FOX",
+"sector": "Communication Services",
+"sub": "Broadcasting",
+"date_added": "2019-03-19"
+},
+{
+"ticker": "BEN",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "1998-04-30"
+},
+{
+"ticker": "FCX",
+"sector": "Materials",
+"sub": "Copper",
+"date_added": "2011-07-01"
+},
+{
+"ticker": "GRMN",
+"sector": "Consumer Discretionary",
+"sub": "Consumer Electronics",
+"date_added": "2012-12-12"
+},
+{
+"ticker": "IT",
+"sector": "Information Technology",
+"sub": "IT Consulting & Other Services",
+"date_added": "2017-04-05"
+},
+{
+"ticker": "GE",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "GEHC",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "2023-01-04"
+},
+{
+"ticker": "GEV",
+"sector": "Industrials",
+"sub": "Heavy Electrical Equipment",
+"date_added": "2024-04-02"
+},
+{
+"ticker": "GEN",
+"sector": "Information Technology",
+"sub": "Systems Software",
+"date_added": "2003-03-25"
+},
+{
+"ticker": "GNRC",
+"sector": "Industrials",
+"sub": "Heavy Electrical Equipment",
+"date_added": "2021-03-22"
+},
+{
+"ticker": "GD",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "GIS",
+"sector": "Consumer Staples",
+"sub": "Packaged Foods & Meats",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "GM",
+"sector": "Consumer Discretionary",
+"sub": "Automobile Manufacturers",
+"date_added": "2013-06-06"
+},
+{
+"ticker": "GPC",
+"sector": "Consumer Discretionary",
+"sub": "Distributors",
+"date_added": "1973-12-31"
+},
+{
+"ticker": "GILD",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2004-07-01"
+},
+{
+"ticker": "GPN",
+"sector": "Financials",
+"sub": "Transaction & Payment Processing Services",
+"date_added": "2016-04-25"
+},
+{
+"ticker": "GL",
+"sector": "Financials",
+"sub": "Life & Health Insurance",
+"date_added": "1989-04-30"
+},
+{
+"ticker": "GDDY",
+"sector": "Information Technology",
+"sub": "Internet Services & Infrastructure",
+"date_added": "2024-06-24"
+},
+{
+"ticker": "GS",
+"sector": "Financials",
+"sub": "Investment Banking & Brokerage",
+"date_added": "2002-07-22"
+},
+{
+"ticker": "HAL",
+"sector": "Energy",
+"sub": "Oil & Gas Equipment & Services",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "HIG",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "HAS",
+"sector": "Consumer Discretionary",
+"sub": "Leisure Products",
+"date_added": "1984-09-30"
+},
+{
+"ticker": "HCA",
+"sector": "Health Care",
+"sub": "Health Care Facilities",
+"date_added": "2015-01-27"
+},
+{
+"ticker": "DOC",
+"sector": "Real Estate",
+"sub": "Health Care REITs",
+"date_added": "2008-03-31"
+},
+{
+"ticker": "HSIC",
+"sector": "Health Care",
+"sub": "Health Care Distributors",
+"date_added": "2015-03-17"
+},
+{
+"ticker": "HSY",
+"sector": "Consumer Staples",
+"sub": "Packaged Foods & Meats",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "HPE",
+"sector": "Information Technology",
+"sub": "Technology Hardware, Storage & Peripherals",
+"date_added": "2015-11-02"
+},
+{
+"ticker": "HLT",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": "2017-06-19"
+},
+{
+"ticker": "HD",
+"sector": "Consumer Discretionary",
+"sub": "Home Improvement Retail",
+"date_added": "1988-03-31"
+},
+{
+"ticker": "HONA",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2026-06-29"
+},
+{
+"ticker": "HON",
+"sector": "Industrials",
+"sub": "Industrial Conglomerates",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "HRL",
+"sector": "Consumer Staples",
+"sub": "Packaged Foods & Meats",
+"date_added": "2009-03-04"
+},
+{
+"ticker": "HST",
+"sector": "Real Estate",
+"sub": "Hotel & Resort REITs",
+"date_added": "2007-03-20"
+},
+{
+"ticker": "HWM",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2016-10-21"
+},
+{
+"ticker": "HPQ",
+"sector": "Information Technology",
+"sub": "Technology Hardware, Storage & Peripherals",
+"date_added": "1974-12-31"
+},
+{
+"ticker": "HUBB",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2023-10-18"
+},
+{
+"ticker": "HUM",
+"sector": "Health Care",
+"sub": "Managed Health Care",
+"date_added": "2012-12-10"
+},
+{
+"ticker": "HBAN",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "1997-08-28"
+},
+{
+"ticker": "HII",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2018-01-03"
+},
+{
+"ticker": "IBM",
+"sector": "Information Technology",
+"sub": "IT Consulting & Other Services",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "IEX",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2019-08-09"
+},
+{
+"ticker": "IDXX",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "2017-01-05"
+},
+{
+"ticker": "ITW",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "1986-02-28"
+},
+{
+"ticker": "ILMN",
+"sector": "Health Care",
+"sub": "Life Sciences Tools & Services",
+"date_added": "2026-09-21"
+},
+{
+"ticker": "INCY",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2017-02-28"
+},
+{
+"ticker": "IR",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2020-03-03"
+},
+{
+"ticker": "PODD",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "2023-03-15"
+},
+{
+"ticker": "INTC",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "1976-12-31"
+},
+{
+"ticker": "IBKR",
+"sector": "Financials",
+"sub": "Investment Banking & Brokerage",
+"date_added": "2025-08-28"
+},
+{
+"ticker": "ICE",
+"sector": "Financials",
+"sub": "Financial Exchanges & Data",
+"date_added": "2007-09-26"
+},
+{
+"ticker": "IFF",
+"sector": "Materials",
+"sub": "Specialty Chemicals",
+"date_added": "1976-03-31"
+},
+{
+"ticker": "IP",
+"sector": "Materials",
+"sub": "Paper & Plastic Packaging Products & Materials",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "INTU",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2000-12-05"
+},
+{
+"ticker": "ISRG",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "2008-06-02"
+},
+{
+"ticker": "IVZ",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "2008-08-21"
+},
+{
+"ticker": "INVH",
+"sector": "Real Estate",
+"sub": "Single-Family Residential REITs",
+"date_added": "2022-09-19"
+},
+{
+"ticker": "IQV",
+"sector": "Health Care",
+"sub": "Life Sciences Tools & Services",
+"date_added": "2017-08-29"
+},
+{
+"ticker": "IRM",
+"sector": "Real Estate",
+"sub": "Other Specialized REITs",
+"date_added": "2009-01-06"
+},
+{
+"ticker": "JBHT",
+"sector": "Industrials",
+"sub": "Cargo Ground Transportation",
+"date_added": "2015-07-01"
+},
+{
+"ticker": "JBL",
+"sector": "Information Technology",
+"sub": "Electronic Manufacturing Services",
+"date_added": "2023-12-18"
+},
+{
+"ticker": "JKHY",
+"sector": "Financials",
+"sub": "Transaction & Payment Processing Services",
+"date_added": "2018-11-13"
+},
+{
+"ticker": "J",
+"sector": "Industrials",
+"sub": "Construction & Engineering",
+"date_added": "2007-10-26"
+},
+{
+"ticker": "JNJ",
+"sector": "Health Care",
+"sub": "Pharmaceuticals",
+"date_added": "1973-06-30"
+},
+{
+"ticker": "JCI",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2010-08-27"
+},
+{
+"ticker": "JPM",
+"sector": "Financials",
+"sub": "Diversified Banks",
+"date_added": "1975-06-30"
+},
+{
+"ticker": "KVUE",
+"sector": "Consumer Staples",
+"sub": "Personal Care Products",
+"date_added": "2023-08-25"
+},
+{
+"ticker": "KDP",
+"sector": "Consumer Staples",
+"sub": "Soft Drinks & Non-alcoholic Beverages",
+"date_added": "2022-06-21"
+},
+{
+"ticker": "KEY",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "1994-03-01"
+},
+{
+"ticker": "KEYS",
+"sector": "Information Technology",
+"sub": "Electronic Equipment & Instruments",
+"date_added": "2018-11-06"
+},
+{
+"ticker": "KMB",
+"sector": "Consumer Staples",
+"sub": "Household Products",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "KIM",
+"sector": "Real Estate",
+"sub": "Retail REITs",
+"date_added": "2006-04-04"
+},
+{
+"ticker": "KMI",
+"sector": "Energy",
+"sub": "Oil & Gas Storage & Transportation",
+"date_added": "2012-05-25"
+},
+{
+"ticker": "KKR",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "2024-06-24"
+},
+{
+"ticker": "KLAC",
+"sector": "Information Technology",
+"sub": "Semiconductor Materials & Equipment",
+"date_added": "1997-09-30"
+},
+{
+"ticker": "KHC",
+"sector": "Consumer Staples",
+"sub": "Packaged Foods & Meats",
+"date_added": "2015-07-06"
+},
+{
+"ticker": "KR",
+"sector": "Consumer Staples",
+"sub": "Food Retail",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "LHX",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2008-09-22"
+},
+{
+"ticker": "LH",
+"sector": "Health Care",
+"sub": "Health Care Services",
+"date_added": "2004-11-01"
+},
+{
+"ticker": "LRCX",
+"sector": "Information Technology",
+"sub": "Semiconductor Materials & Equipment",
+"date_added": "2012-06-29"
+},
+{
+"ticker": "LVS",
+"sector": "Consumer Discretionary",
+"sub": "Casinos & Gaming",
+"date_added": "2019-10-03"
+},
+{
+"ticker": "LDOS",
+"sector": "Industrials",
+"sub": "Diversified Support Services",
+"date_added": "2019-08-09"
+},
+{
+"ticker": "LEN",
+"sector": "Consumer Discretionary",
+"sub": "Homebuilding",
+"date_added": "2005-10-04"
+},
+{
+"ticker": "LII",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2024-12-23"
+},
+{
+"ticker": "LLY",
+"sector": "Health Care",
+"sub": "Pharmaceuticals",
+"date_added": "1970-12-31"
+},
+{
+"ticker": "LIN",
+"sector": "Materials",
+"sub": "Industrial Gases",
+"date_added": "1992-07-01"
+},
+{
+"ticker": "LYV",
+"sector": "Communication Services",
+"sub": "Movies & Entertainment",
+"date_added": "2019-12-23"
+},
+{
+"ticker": "LMT",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "L",
+"sector": "Financials",
+"sub": "Multi-line Insurance",
+"date_added": "1995-05-31"
+},
+{
+"ticker": "LOW",
+"sector": "Consumer Discretionary",
+"sub": "Home Improvement Retail",
+"date_added": "1984-02-29"
+},
+{
+"ticker": "LULU",
+"sector": "Consumer Discretionary",
+"sub": "Apparel, Accessories & Luxury Goods",
+"date_added": "2023-10-18"
+},
+{
+"ticker": "LITE",
+"sector": "Information Technology",
+"sub": "Communications Equipment",
+"date_added": "2026-03-23"
+},
+{
+"ticker": "LYB",
+"sector": "Materials",
+"sub": "Specialty Chemicals",
+"date_added": "2012-09-05"
+},
+{
+"ticker": "MTB",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2004-02-23"
+},
+{
+"ticker": "MPC",
+"sector": "Energy",
+"sub": "Oil & Gas Refining & Marketing",
+"date_added": "2011-07-01"
+},
+{
+"ticker": "MAR",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": "1998-05-29"
+},
+{
+"ticker": "MRSH",
+"sector": "Financials",
+"sub": "Insurance Brokers",
+"date_added": "1987-08-31"
+},
+{
+"ticker": "MLM",
+"sector": "Materials",
+"sub": "Construction Materials",
+"date_added": "2014-07-02"
+},
+{
+"ticker": "MRVL",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2026-06-22"
+},
+{
+"ticker": "MAS",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "1981-06-30"
+},
+{
+"ticker": "MA",
+"sector": "Financials",
+"sub": "Transaction & Payment Processing Services",
+"date_added": "2008-07-18"
+},
+{
+"ticker": "MKC",
+"sector": "Consumer Staples",
+"sub": "Packaged Foods & Meats",
+"date_added": "2003-03-20"
+},
+{
+"ticker": "MCD",
+"sector": "Consumer Discretionary",
+"sub": "Restaurants",
+"date_added": "1970-06-30"
+},
+{
+"ticker": "MCK",
+"sector": "Health Care",
+"sub": "Health Care Distributors",
+"date_added": "1999-01-13"
+},
+{
+"ticker": "MDT",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "1986-10-31"
+},
+{
+"ticker": "MRK",
+"sector": "Health Care",
+"sub": "Pharmaceuticals",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "META",
+"sector": "Communication Services",
+"sub": "Interactive Media & Services",
+"date_added": "2013-12-23"
+},
+{
+"ticker": "MET",
+"sector": "Financials",
+"sub": "Life & Health Insurance",
+"date_added": "2000-12-11"
+},
+{
+"ticker": "MTD",
+"sector": "Health Care",
+"sub": "Life Sciences Tools & Services",
+"date_added": "2016-09-06"
+},
+{
+"ticker": "MGM",
+"sector": "Consumer Discretionary",
+"sub": "Casinos & Gaming",
+"date_added": "2017-07-26"
+},
+{
+"ticker": "MCHP",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2007-09-07"
+},
+{
+"ticker": "MU",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "1994-09-27"
+},
+{
+"ticker": "MSFT",
+"sector": "Information Technology",
+"sub": "Systems Software",
+"date_added": "1994-06-01"
+},
+{
+"ticker": "MAA",
+"sector": "Real Estate",
+"sub": "Multi-Family Residential REITs",
+"date_added": "2016-12-02"
+},
+{
+"ticker": "MRNA",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2021-07-21"
+},
+{
+"ticker": "MDLZ",
+"sector": "Consumer Staples",
+"sub": "Packaged Foods & Meats",
+"date_added": "2012-10-02"
+},
+{
+"ticker": "MPWR",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2021-02-12"
+},
+{
+"ticker": "MNST",
+"sector": "Consumer Staples",
+"sub": "Soft Drinks & Non-alcoholic Beverages",
+"date_added": "2012-06-28"
+},
+{
+"ticker": "MCO",
+"sector": "Financials",
+"sub": "Financial Exchanges & Data",
+"date_added": "1998-07-01"
+},
+{
+"ticker": "MS",
+"sector": "Financials",
+"sub": "Investment Banking & Brokerage",
+"date_added": "1993-07-29"
+},
+{
+"ticker": "MOS",
+"sector": "Materials",
+"sub": "Fertilizers & Agricultural Chemicals",
+"date_added": "2011-09-26"
+},
+{
+"ticker": "MSI",
+"sector": "Information Technology",
+"sub": "Communications Equipment",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "MSCI",
+"sector": "Financials",
+"sub": "Financial Exchanges & Data",
+"date_added": "2018-04-04"
+},
+{
+"ticker": "NDAQ",
+"sector": "Financials",
+"sub": "Financial Exchanges & Data",
+"date_added": "2008-10-22"
+},
+{
+"ticker": "NTAP",
+"sector": "Information Technology",
+"sub": "Technology Hardware, Storage & Peripherals",
+"date_added": "1999-06-25"
+},
+{
+"ticker": "NFLX",
+"sector": "Communication Services",
+"sub": "Movies & Entertainment",
+"date_added": "2010-12-20"
+},
+{
+"ticker": "NEM",
+"sector": "Materials",
+"sub": "Gold",
+"date_added": "1969-06-30"
+},
+{
+"ticker": "NWSA",
+"sector": "Communication Services",
+"sub": "Publishing",
+"date_added": "2013-08-01"
+},
+{
+"ticker": "NWS",
+"sector": "Communication Services",
+"sub": "Publishing",
+"date_added": "2015-09-18"
+},
+{
+"ticker": "NEE",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": "1976-06-30"
+},
+{
+"ticker": "NKE",
+"sector": "Consumer Discretionary",
+"sub": "Apparel, Accessories & Luxury Goods",
+"date_added": "1988-11-30"
+},
+{
+"ticker": "NI",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": "2000-11-02"
+},
+{
+"ticker": "NDSN",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2022-02-15"
+},
+{
+"ticker": "NSC",
+"sector": "Industrials",
+"sub": "Rail Transportation",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "NTRS",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "1998-01-30"
+},
+{
+"ticker": "NOC",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "NCLH",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": "2017-10-13"
+},
+{
+"ticker": "NRG",
+"sector": "Utilities",
+"sub": "Independent Power Producers & Energy Traders",
+"date_added": "2010-01-29"
+},
+{
+"ticker": "NUE",
+"sector": "Materials",
+"sub": "Steel",
+"date_added": "1985-04-30"
+},
+{
+"ticker": "NVDA",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2001-11-30"
+},
+{
+"ticker": "NVR",
+"sector": "Consumer Discretionary",
+"sub": "Homebuilding",
+"date_added": "2019-09-26"
+},
+{
+"ticker": "NXPI",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2021-03-22"
+},
+{
+"ticker": "ORLY",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Retail",
+"date_added": "2009-03-27"
+},
+{
+"ticker": "OXY",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "ODFL",
+"sector": "Industrials",
+"sub": "Cargo Ground Transportation",
+"date_added": "2019-12-09"
+},
+{
+"ticker": "OMC",
+"sector": "Communication Services",
+"sub": "Advertising",
+"date_added": "1997-12-31"
+},
+{
+"ticker": "ON",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2022-06-21"
+},
+{
+"ticker": "OKE",
+"sector": "Energy",
+"sub": "Oil & Gas Storage & Transportation",
+"date_added": "2010-03-15"
+},
+{
+"ticker": "ORCL",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "1989-08-31"
+},
+{
+"ticker": "OTIS",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2020-04-03"
+},
+{
+"ticker": "PCAR",
+"sector": "Industrials",
+"sub": "Construction Machinery & Heavy Transportation Equipment",
+"date_added": "1980-12-31"
+},
+{
+"ticker": "PKG",
+"sector": "Materials",
+"sub": "Paper & Plastic Packaging Products & Materials",
+"date_added": "2017-07-26"
+},
+{
+"ticker": "PLTR",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2024-09-23"
+},
+{
+"ticker": "PANW",
+"sector": "Information Technology",
+"sub": "Systems Software",
+"date_added": "2023-06-20"
+},
+{
+"ticker": "PSKY",
+"sector": "Communication Services",
+"sub": "Movies & Entertainment",
+"date_added": "1994-09-30"
+},
+{
+"ticker": "PH",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "1985-11-30"
+},
+{
+"ticker": "PAYX",
+"sector": "Industrials",
+"sub": "Human Resource & Employment Services",
+"date_added": "1998-10-01"
+},
+{
+"ticker": "PYPL",
+"sector": "Financials",
+"sub": "Transaction & Payment Processing Services",
+"date_added": "2015-07-20"
+},
+{
+"ticker": "PNR",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2012-10-01"
+},
+{
+"ticker": "PEP",
+"sector": "Consumer Staples",
+"sub": "Soft Drinks & Non-alcoholic Beverages",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "PFE",
+"sector": "Health Care",
+"sub": "Pharmaceuticals",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "PCG",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": "2022-10-03"
+},
+{
+"ticker": "PM",
+"sector": "Consumer Staples",
+"sub": "Tobacco",
+"date_added": "2008-03-31"
+},
+{
+"ticker": "PSX",
+"sector": "Energy",
+"sub": "Oil & Gas Refining & Marketing",
+"date_added": "2012-05-01"
+},
+{
+"ticker": "PNW",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": "1999-10-04"
+},
+{
+"ticker": "PNC",
+"sector": "Financials",
+"sub": "Diversified Banks",
+"date_added": "1988-04-30"
+},
+{
+"ticker": "PPG",
+"sector": "Materials",
+"sub": "Specialty Chemicals",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "PPL",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "2001-10-01"
+},
+{
+"ticker": "PFG",
+"sector": "Financials",
+"sub": "Life & Health Insurance",
+"date_added": "2002-07-22"
+},
+{
+"ticker": "PG",
+"sector": "Consumer Staples",
+"sub": "Personal Care Products",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "PGR",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": "1997-08-04"
+},
+{
+"ticker": "PLD",
+"sector": "Real Estate",
+"sub": "Industrial REITs",
+"date_added": "2003-07-17"
+},
+{
+"ticker": "PRU",
+"sector": "Financials",
+"sub": "Life & Health Insurance",
+"date_added": "2002-07-22"
+},
+{
+"ticker": "PEG",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "PTC",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2021-04-20"
+},
+{
+"ticker": "PSA",
+"sector": "Real Estate",
+"sub": "Self-Storage REITs",
+"date_added": "2005-08-19"
+},
+{
+"ticker": "PHM",
+"sector": "Consumer Discretionary",
+"sub": "Homebuilding",
+"date_added": "1984-04-30"
+},
+{
+"ticker": "PWR",
+"sector": "Industrials",
+"sub": "Construction & Engineering",
+"date_added": "2009-07-01"
+},
+{
+"ticker": "QCOM",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "1999-07-22"
+},
+{
+"ticker": "DGX",
+"sector": "Health Care",
+"sub": "Health Care Services",
+"date_added": "2002-12-12"
+},
+{
+"ticker": "Q",
+"sector": "Information Technology",
+"sub": "Semiconductor Materials & Equipment",
+"date_added": "2025-11-03"
+},
+{
+"ticker": "RL",
+"sector": "Consumer Discretionary",
+"sub": "Apparel, Accessories & Luxury Goods",
+"date_added": "2007-02-02"
+},
+{
+"ticker": "RJF",
+"sector": "Financials",
+"sub": "Investment Banking & Brokerage",
+"date_added": "2017-03-20"
+},
+{
+"ticker": "RDDT",
+"sector": "Communication Services",
+"sub": "Interactive Media & Services",
+"date_added": "2026-08-18"
+},
+{
+"ticker": "RTX",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "O",
+"sector": "Real Estate",
+"sub": "Retail REITs",
+"date_added": "2015-04-07"
+},
+{
+"ticker": "REG",
+"sector": "Real Estate",
+"sub": "Retail REITs",
+"date_added": "2017-03-02"
+},
+{
+"ticker": "REGN",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2013-05-01"
+},
+{
+"ticker": "RF",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "1998-08-28"
+},
+{
+"ticker": "RSG",
+"sector": "Industrials",
+"sub": "Environmental & Facilities Services",
+"date_added": "2008-12-05"
+},
+{
+"ticker": "RMD",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "2017-07-26"
+},
+{
+"ticker": "RVTY",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "1985-05-31"
+},
+{
+"ticker": "HOOD",
+"sector": "Financials",
+"sub": "Investment Banking & Brokerage",
+"date_added": "2025-09-22"
+},
+{
+"ticker": "ROK",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": "2000-03-12"
+},
+{
+"ticker": "ROL",
+"sector": "Industrials",
+"sub": "Environmental & Facilities Services",
+"date_added": "2018-10-01"
+},
+{
+"ticker": "ROP",
+"sector": "Information Technology",
+"sub": "Electronic Equipment & Instruments",
+"date_added": "2009-12-23"
+},
+{
+"ticker": "ROST",
+"sector": "Consumer Discretionary",
+"sub": "Apparel Retail",
+"date_added": "2009-12-21"
+},
+{
+"ticker": "RCL",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": "2014-12-05"
+},
+{
+"ticker": "SPGI",
+"sector": "Financials",
+"sub": "Financial Exchanges & Data",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "CRM",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2008-09-15"
+},
+{
+"ticker": "SNDK",
+"sector": "Information Technology",
+"sub": "Technology Hardware, Storage & Peripherals",
+"date_added": "2025-11-28"
+},
+{
+"ticker": "SBAC",
+"sector": "Real Estate",
+"sub": "Telecom Tower REITs",
+"date_added": "2017-09-01"
+},
+{
+"ticker": "SLB",
+"sector": "Energy",
+"sub": "Oil & Gas Equipment & Services",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "STX",
+"sector": "Information Technology",
+"sub": "Technology Hardware, Storage & Peripherals",
+"date_added": "2012-07-02"
+},
+{
+"ticker": "SRE",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": "2017-03-17"
+},
+{
+"ticker": "NOW",
+"sector": "Information Technology",
+"sub": "Systems Software",
+"date_added": "2019-11-21"
+},
+{
+"ticker": "SHW",
+"sector": "Materials",
+"sub": "Specialty Chemicals",
+"date_added": "1964-06-30"
+},
+{
+"ticker": "SPG",
+"sector": "Real Estate",
+"sub": "Retail REITs",
+"date_added": "2002-06-26"
+},
+{
+"ticker": "SWKS",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2015-03-12"
+},
+{
+"ticker": "SJM",
+"sector": "Consumer Staples",
+"sub": "Packaged Foods & Meats",
+"date_added": "2008-11-06"
+},
+{
+"ticker": "SW",
+"sector": "Materials",
+"sub": "Paper & Plastic Packaging Products & Materials",
+"date_added": "2024-07-08"
+},
+{
+"ticker": "SNA",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "1982-09-30"
+},
+{
+"ticker": "SOLV",
+"sector": "Health Care",
+"sub": "Health Care Technology",
+"date_added": "2024-04-01"
+},
+{
+"ticker": "SO",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "LUV",
+"sector": "Industrials",
+"sub": "Passenger Airlines",
+"date_added": "1994-07-01"
+},
+{
+"ticker": "SWK",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "1982-09-30"
+},
+{
+"ticker": "SBUX",
+"sector": "Consumer Discretionary",
+"sub": "Restaurants",
+"date_added": "2000-06-07"
+},
+{
+"ticker": "STT",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "2003-03-14"
+},
+{
+"ticker": "STLD",
+"sector": "Materials",
+"sub": "Steel",
+"date_added": "2022-12-22"
+},
+{
+"ticker": "STE",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "2019-12-23"
+},
+{
+"ticker": "SYK",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "2000-12-12"
+},
+{
+"ticker": "SMCI",
+"sector": "Information Technology",
+"sub": "Technology Hardware, Storage & Peripherals",
+"date_added": "2024-03-18"
+},
+{
+"ticker": "SYF",
+"sector": "Financials",
+"sub": "Consumer Finance",
+"date_added": "2015-11-18"
+},
+{
+"ticker": "SNPS",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2017-03-16"
+},
+{
+"ticker": "SYY",
+"sector": "Consumer Staples",
+"sub": "Food Distributors",
+"date_added": "1986-12-31"
+},
+{
+"ticker": "TMUS",
+"sector": "Communication Services",
+"sub": "Wireless Telecommunication Services",
+"date_added": "2019-07-15"
+},
+{
+"ticker": "TROW",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "2019-07-29"
+},
+{
+"ticker": "TTWO",
+"sector": "Communication Services",
+"sub": "Interactive Home Entertainment",
+"date_added": "2018-03-19"
+},
+{
+"ticker": "TPR",
+"sector": "Consumer Discretionary",
+"sub": "Apparel, Accessories & Luxury Goods",
+"date_added": "2004-09-01"
+},
+{
+"ticker": "TRGP",
+"sector": "Energy",
+"sub": "Oil & Gas Storage & Transportation",
+"date_added": "2022-10-12"
+},
+{
+"ticker": "TGT",
+"sector": "Consumer Staples",
+"sub": "Consumer Staples Merchandise Retail",
+"date_added": "1976-12-31"
+},
+{
+"ticker": "TEL",
+"sector": "Information Technology",
+"sub": "Electronic Manufacturing Services",
+"date_added": "2011-10-17"
+},
+{
+"ticker": "TDY",
+"sector": "Information Technology",
+"sub": "Electronic Equipment & Instruments",
+"date_added": "2020-06-22"
+},
+{
+"ticker": "TER",
+"sector": "Information Technology",
+"sub": "Semiconductor Materials & Equipment",
+"date_added": "2020-09-21"
+},
+{
+"ticker": "TSLA",
+"sector": "Consumer Discretionary",
+"sub": "Automobile Manufacturers",
+"date_added": "2020-12-21"
+},
+{
+"ticker": "TXN",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2001-03-12"
+},
+{
+"ticker": "TPL",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2024-11-26"
+},
+{
+"ticker": "TXT",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "1978-12-31"
+},
+{
+"ticker": "TMO",
+"sector": "Health Care",
+"sub": "Life Sciences Tools & Services",
+"date_added": "2004-08-03"
+},
+{
+"ticker": "TJX",
+"sector": "Consumer Discretionary",
+"sub": "Apparel Retail",
+"date_added": "1985-09-30"
+},
+{
+"ticker": "TKO",
+"sector": "Communication Services",
+"sub": "Movies & Entertainment",
+"date_added": "2025-03-24"
+},
+{
+"ticker": "TSCO",
+"sector": "Consumer Discretionary",
+"sub": "Other Specialty Retail",
+"date_added": "2014-01-24"
+},
+{
+"ticker": "TT",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2010-11-17"
+},
+{
+"ticker": "TDG",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2016-06-03"
+},
+{
+"ticker": "TRV",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": "2002-08-21"
+},
+{
+"ticker": "TRMB",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2021-01-21"
+},
+{
+"ticker": "TFC",
+"sector": "Financials",
+"sub": "Diversified Banks",
+"date_added": "1997-12-04"
+},
+{
+"ticker": "TYL",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2020-06-22"
+},
+{
+"ticker": "TSN",
+"sector": "Consumer Staples",
+"sub": "Packaged Foods & Meats",
+"date_added": "2005-08-10"
+},
+{
+"ticker": "USB",
+"sector": "Financials",
+"sub": "Diversified Banks",
+"date_added": "1999-11-01"
+},
+{
+"ticker": "UBER",
+"sector": "Industrials",
+"sub": "Passenger Ground Transportation",
+"date_added": "2023-12-18"
+},
+{
+"ticker": "UDR",
+"sector": "Real Estate",
+"sub": "Multi-Family Residential REITs",
+"date_added": "2016-03-07"
+},
+{
+"ticker": "ULTA",
+"sector": "Consumer Discretionary",
+"sub": "Other Specialty Retail",
+"date_added": "2016-04-18"
+},
+{
+"ticker": "UNP",
+"sector": "Industrials",
+"sub": "Rail Transportation",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "UAL",
+"sector": "Industrials",
+"sub": "Passenger Airlines",
+"date_added": "2015-09-03"
+},
+{
+"ticker": "UPS",
+"sector": "Industrials",
+"sub": "Air Freight & Logistics",
+"date_added": "2002-07-22"
+},
+{
+"ticker": "URI",
+"sector": "Industrials",
+"sub": "Trading Companies & Distributors",
+"date_added": "2014-09-20"
+},
+{
+"ticker": "UNH",
+"sector": "Health Care",
+"sub": "Managed Health Care",
+"date_added": "1994-07-01"
+},
+{
+"ticker": "UHS",
+"sector": "Health Care",
+"sub": "Health Care Facilities",
+"date_added": "2014-09-20"
+},
+{
+"ticker": "VLO",
+"sector": "Energy",
+"sub": "Oil & Gas Refining & Marketing",
+"date_added": "2002-12-20"
+},
+{
+"ticker": "VEEV",
+"sector": "Health Care",
+"sub": "Health Care Technology",
+"date_added": "2026-05-07"
+},
+{
+"ticker": "VTR",
+"sector": "Real Estate",
+"sub": "Health Care REITs",
+"date_added": "2009-03-04"
+},
+{
+"ticker": "VLTO",
+"sector": "Industrials",
+"sub": "Environmental & Facilities Services",
+"date_added": "2023-10-02"
+},
+{
+"ticker": "VRSN",
+"sector": "Information Technology",
+"sub": "Internet Services & Infrastructure",
+"date_added": "2006-02-01"
+},
+{
+"ticker": "VRSK",
+"sector": "Industrials",
+"sub": "Research & Consulting Services",
+"date_added": "2015-10-08"
+},
+{
+"ticker": "VZ",
+"sector": "Communication Services",
+"sub": "Integrated Telecommunication Services",
+"date_added": "1983-11-30"
+},
+{
+"ticker": "VRTX",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2013-09-23"
+},
+{
+"ticker": "VRT",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": "2026-03-23"
+},
+{
+"ticker": "VTRS",
+"sector": "Health Care",
+"sub": "Pharmaceuticals",
+"date_added": "2004-04-23"
+},
+{
+"ticker": "VICI",
+"sector": "Real Estate",
+"sub": "Hotel & Resort REITs",
+"date_added": "2022-06-08"
+},
+{
+"ticker": "V",
+"sector": "Financials",
+"sub": "Transaction & Payment Processing Services",
+"date_added": "2009-12-21"
+},
+{
+"ticker": "VST",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "2024-05-08"
+},
+{
+"ticker": "VMRK",
+"sector": "Real Estate",
+"sub": "Multi-Family Residential REITs",
+"date_added": "2001-12-03"
+},
+{
+"ticker": "VMC",
+"sector": "Materials",
+"sub": "Construction Materials",
+"date_added": "1999-06-30"
+},
+{
+"ticker": "WRB",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": "2019-12-05"
+},
+{
+"ticker": "GWW",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "1981-06-30"
+},
+{
+"ticker": "WAB",
+"sector": "Industrials",
+"sub": "Construction Machinery & Heavy Transportation Equipment",
+"date_added": "2019-02-27"
+},
+{
+"ticker": "WMT",
+"sector": "Consumer Staples",
+"sub": "Consumer Staples Merchandise Retail",
+"date_added": "1982-08-31"
+},
+{
+"ticker": "DIS",
+"sector": "Communication Services",
+"sub": "Movies & Entertainment",
+"date_added": "1976-06-30"
+},
+{
+"ticker": "WBD",
+"sector": "Communication Services",
+"sub": "Broadcasting",
+"date_added": "2022-04-11"
+},
+{
+"ticker": "WM",
+"sector": "Industrials",
+"sub": "Environmental & Facilities Services",
+"date_added": "1998-08-31"
+},
+{
+"ticker": "WAT",
+"sector": "Health Care",
+"sub": "Life Sciences Tools & Services",
+"date_added": "2002-01-02"
+},
+{
+"ticker": "WEC",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "2008-10-31"
+},
+{
+"ticker": "WFC",
+"sector": "Financials",
+"sub": "Diversified Banks",
+"date_added": "1976-06-30"
+},
+{
+"ticker": "WELL",
+"sector": "Real Estate",
+"sub": "Health Care REITs",
+"date_added": "2009-01-30"
+},
+{
+"ticker": "WST",
+"sector": "Health Care",
+"sub": "Health Care Supplies",
+"date_added": "2020-05-22"
+},
+{
+"ticker": "WDC",
+"sector": "Information Technology",
+"sub": "Technology Hardware, Storage & Peripherals",
+"date_added": "2009-07-01"
+},
+{
+"ticker": "WY",
+"sector": "Real Estate",
+"sub": "Timber REITs",
+"date_added": "1979-10-01"
+},
+{
+"ticker": "WSM",
+"sector": "Consumer Discretionary",
+"sub": "Homefurnishing Retail",
+"date_added": "2025-03-24"
+},
+{
+"ticker": "WMB",
+"sector": "Energy",
+"sub": "Oil & Gas Storage & Transportation",
+"date_added": "1975-03-31"
+},
+{
+"ticker": "WTW",
+"sector": "Financials",
+"sub": "Insurance Brokers",
+"date_added": "2016-01-05"
+},
+{
+"ticker": "WDAY",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2024-12-23"
+},
+{
+"ticker": "WYNN",
+"sector": "Consumer Discretionary",
+"sub": "Casinos & Gaming",
+"date_added": "2008-11-14"
+},
+{
+"ticker": "XEL",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": "1957-03-04"
+},
+{
+"ticker": "XYL",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2011-11-01"
+},
+{
+"ticker": "YUM",
+"sector": "Consumer Discretionary",
+"sub": "Restaurants",
+"date_added": "1997-10-06"
+},
+{
+"ticker": "ZBRA",
+"sector": "Information Technology",
+"sub": "Electronic Equipment & Instruments",
+"date_added": "2019-12-23"
+},
+{
+"ticker": "ZBH",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "2001-08-07"
+},
+{
+"ticker": "ZTS",
+"sector": "Health Care",
+"sub": "Pharmaceuticals",
+"date_added": "2013-06-21"
+}
+],
+"sp400": [
+{
+"ticker": "AA",
+"sector": "Materials",
+"sub": "Aluminum",
+"date_added": "2021-12-20"
+},
+{
+"ticker": "AAL",
+"sector": "Industrials",
+"sub": "Passenger Airlines",
+"date_added": "2024-09-23"
+},
+{
+"ticker": "AAON",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2024-05-03"
+},
+{
+"ticker": "ACI",
+"sector": "Consumer Staples",
+"sub": "Food Retail",
+"date_added": "2025-03-11"
+},
+{
+"ticker": "ACM",
+"sector": "Industrials",
+"sub": "Construction & Engineering",
+"date_added": null
+},
+{
+"ticker": "ADC",
+"sector": "Real Estate",
+"sub": "Retail REITs",
+"date_added": "2023-02-06"
+},
+{
+"ticker": "AEIS",
+"sector": "Information Technology",
+"sub": "Semiconductor Materials & Equipment",
+"date_added": "2026-02-02"
+},
+{
+"ticker": "AFG",
+"sector": "Financials",
+"sub": "Multi-line Insurance",
+"date_added": null
+},
+{
+"ticker": "AGCO",
+"sector": "Industrials",
+"sub": "Agricultural & Farm Machinery",
+"date_added": null
+},
+{
+"ticker": "AGNC",
+"sector": "Financials",
+"sub": "Mortgage REITs",
+"date_added": "2026-09-21"
+},
+{
+"ticker": "AHR",
+"sector": "Real Estate",
+"sub": "Health Care REITs",
+"date_added": "2026-02-02"
+},
+{
+"ticker": "AIT",
+"sector": "Industrials",
+"sub": "Trading Companies & Distributors",
+"date_added": "2024-03-18"
+},
+{
+"ticker": "ALGM",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2022-12-19"
+},
+{
+"ticker": "ALK",
+"sector": "Industrials",
+"sub": "Passenger Airlines",
+"date_added": "2025-03-24"
+},
+{
+"ticker": "ALLY",
+"sector": "Financials",
+"sub": "Consumer Finance",
+"date_added": "2023-09-18"
+},
+{
+"ticker": "ALSN",
+"sector": "Industrials",
+"sub": "Construction Machinery & Heavy Transportation Equipment",
+"date_added": "2026-07-06"
+},
+{
+"ticker": "ALV",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Parts & Equipment",
+"date_added": "2023-03-20"
+},
+{
+"ticker": "AM",
+"sector": "Energy",
+"sub": "Oil & Gas Storage & Transportation",
+"date_added": "2019-09-23"
+},
+{
+"ticker": "AMG",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "2019-12-13"
+},
+{
+"ticker": "AMH",
+"sector": "Real Estate",
+"sub": "Single-Family Residential REITs",
+"date_added": "2024-03-01"
+},
+{
+"ticker": "AMKR",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2021-02-16"
+},
+{
+"ticker": "AN",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Retail",
+"date_added": "2017-08-08"
+},
+{
+"ticker": "ANF",
+"sector": "Consumer Discretionary",
+"sub": "Apparel Retail",
+"date_added": "2024-07-22"
+},
+{
+"ticker": "APG",
+"sector": "Industrials",
+"sub": "Construction & Engineering",
+"date_added": "2025-06-24"
+},
+{
+"ticker": "APPF",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2024-04-01"
+},
+{
+"ticker": "AR",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2022-10-20"
+},
+{
+"ticker": "ARMK",
+"sector": "Consumer Discretionary",
+"sub": "Distributors",
+"date_added": "2023-03-20"
+},
+{
+"ticker": "ARW",
+"sector": "Information Technology",
+"sub": "Technology Distributors",
+"date_added": null
+},
+{
+"ticker": "ARWR",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2026-02-09"
+},
+{
+"ticker": "ASB",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": null
+},
+{
+"ticker": "ASH",
+"sector": "Materials",
+"sub": "Diversified Chemicals",
+"date_added": null
+},
+{
+"ticker": "ATI",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2025-03-24"
+},
+{
+"ticker": "ATR",
+"sector": "Materials",
+"sub": "Metal, Glass & Plastic Containers",
+"date_added": null
+},
+{
+"ticker": "AVAV",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2025-07-18"
+},
+{
+"ticker": "AVNT",
+"sector": "Materials",
+"sub": "Specialty Chemicals",
+"date_added": null
+},
+{
+"ticker": "AVT",
+"sector": "Information Technology",
+"sub": "Technology Distributors",
+"date_added": null
+},
+{
+"ticker": "AVTR",
+"sector": "Health Care",
+"sub": "Life Sciences Tools & Services",
+"date_added": "2024-07-26"
+},
+{
+"ticker": "AXTA",
+"sector": "Materials",
+"sub": "Specialty Chemicals",
+"date_added": "2023-03-20"
+},
+{
+"ticker": "AYI",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": "2018-06-18"
+},
+{
+"ticker": "BAH",
+"sector": "Industrials",
+"sub": "Research & Consulting Services",
+"date_added": "2025-12-22"
+},
+{
+"ticker": "BBWI",
+"sector": "Consumer Discretionary",
+"sub": "Other Specialty Retail",
+"date_added": "2025-03-24"
+},
+{
+"ticker": "BC",
+"sector": "Consumer Discretionary",
+"sub": "Leisure Products",
+"date_added": "2013-12-20"
+},
+{
+"ticker": "BCO",
+"sector": "Industrials",
+"sub": "Security & Alarm Services",
+"date_added": "2017-09-18"
+},
+{
+"ticker": "BDC",
+"sector": "Information Technology",
+"sub": "Electronic Components",
+"date_added": "2014-06-30"
+},
+{
+"ticker": "BHF",
+"sector": "Financials",
+"sub": "Life & Health Insurance",
+"date_added": "2019-04-03"
+},
+{
+"ticker": "BILL",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2024-12-23"
+},
+{
+"ticker": "BIO",
+"sector": "Health Care",
+"sub": "Life Sciences Tools & Services",
+"date_added": "2024-09-23"
+},
+{
+"ticker": "BJ",
+"sector": "Consumer Staples",
+"sub": "Consumer Staples Merchandise Retail",
+"date_added": "2019-10-30"
+},
+{
+"ticker": "BKH",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": null
+},
+{
+"ticker": "BMRN",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2024-06-24"
+},
+{
+"ticker": "BRKR",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "2021-12-02"
+},
+{
+"ticker": "BROS",
+"sector": "Consumer Discretionary",
+"sub": "Restaurants",
+"date_added": "2026-02-02"
+},
+{
+"ticker": "BRX",
+"sector": "Real Estate",
+"sub": "Retail REITs",
+"date_added": "2019-02-06"
+},
+{
+"ticker": "BSY",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2025-10-06"
+},
+{
+"ticker": "BTSG",
+"sector": "Health Care",
+"sub": "Health Care Services",
+"date_added": "2026-07-17"
+},
+{
+"ticker": "BURL",
+"sector": "Consumer Discretionary",
+"sub": "Apparel Retail",
+"date_added": "2023-11-07"
+},
+{
+"ticker": "BWA",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Parts & Equipment",
+"date_added": "2025-12-22"
+},
+{
+"ticker": "BWXT",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2023-06-19"
+},
+{
+"ticker": "BYD",
+"sector": "Consumer Discretionary",
+"sub": "Casinos & Gaming",
+"date_added": "2018-02-13"
+},
+{
+"ticker": "CACI",
+"sector": "Industrials",
+"sub": "Diversified Support Services",
+"date_added": null
+},
+{
+"ticker": "CAR",
+"sector": "Industrials",
+"sub": "Passenger Ground Transportation",
+"date_added": "2016-09-16"
+},
+{
+"ticker": "CART",
+"sector": "Consumer Staples",
+"sub": "Food Retail",
+"date_added": "2025-01-14"
+},
+{
+"ticker": "CAVA",
+"sector": "Consumer Discretionary",
+"sub": "Restaurants",
+"date_added": "2025-03-31"
+},
+{
+"ticker": "CBSH",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": null
+},
+{
+"ticker": "CBT",
+"sector": "Materials",
+"sub": "Diversified Chemicals",
+"date_added": null
+},
+{
+"ticker": "CCK",
+"sector": "Materials",
+"sub": "Paper & Plastic Packaging Products & Materials",
+"date_added": "2023-06-19"
+},
+{
+"ticker": "CDE",
+"sector": "Materials",
+"sub": "Gold",
+"date_added": "2026-06-22"
+},
+{
+"ticker": "CDP",
+"sector": "Real Estate",
+"sub": "Office REITs",
+"date_added": null
+},
+{
+"ticker": "CELH",
+"sector": "Consumer Staples",
+"sub": "Soft Drinks & Non-alcoholic Beverages",
+"date_added": "2022-08-10"
+},
+{
+"ticker": "CFR",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": null
+},
+{
+"ticker": "CG",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "2023-11-30"
+},
+{
+"ticker": "CGNX",
+"sector": "Information Technology",
+"sub": "Electronic Equipment & Instruments",
+"date_added": "2014-09-19"
+},
+{
+"ticker": "CHDN",
+"sector": "Consumer Discretionary",
+"sub": "Casinos & Gaming",
+"date_added": "2016-06-24"
+},
+{
+"ticker": "CHE",
+"sector": "Health Care",
+"sub": "Health Care Services",
+"date_added": "2018-06-18"
+},
+{
+"ticker": "CHH",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": "2019-12-10"
+},
+{
+"ticker": "CHRD",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2023-03-20"
+},
+{
+"ticker": "CHWY",
+"sector": "Consumer Discretionary",
+"sub": "Other Specialty Retail",
+"date_added": "2024-11-06"
+},
+{
+"ticker": "CLF",
+"sector": "Materials",
+"sub": "Steel",
+"date_added": "2021-03-01"
+},
+{
+"ticker": "CLH",
+"sector": "Industrials",
+"sub": "Environmental & Facilities Services",
+"date_added": null
+},
+{
+"ticker": "CMC",
+"sector": "Materials",
+"sub": "Steel",
+"date_added": null
+},
+{
+"ticker": "CNH",
+"sector": "Industrials",
+"sub": "Agricultural & Farm Machinery",
+"date_added": "2024-09-23"
+},
+{
+"ticker": "CNM",
+"sector": "Industrials",
+"sub": "Trading Companies & Distributors",
+"date_added": "2023-11-13"
+},
+{
+"ticker": "CNO",
+"sector": "Financials",
+"sub": "Life & Health Insurance",
+"date_added": "2015-04-07"
+},
+{
+"ticker": "CNX",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2016-03-04"
+},
+{
+"ticker": "COKE",
+"sector": "Consumer Staples",
+"sub": "Soft Drinks & Non-alcoholic Beverages",
+"date_added": "2022-07-20"
+},
+{
+"ticker": "COLB",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2023-03-01"
+},
+{
+"ticker": "COLM",
+"sector": "Consumer Discretionary",
+"sub": "Apparel, Accessories & Luxury Goods",
+"date_added": "2019-12-17"
+},
+{
+"ticker": "CORT",
+"sector": "Health Care",
+"sub": "Pharmaceuticals",
+"date_added": "2026-09-21"
+},
+{
+"ticker": "CR",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2023-04-04"
+},
+{
+"ticker": "CRBG",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "2025-12-17"
+},
+{
+"ticker": "CROX",
+"sector": "Consumer Discretionary",
+"sub": "Footwear",
+"date_added": "2021-06-02"
+},
+{
+"ticker": "CRS",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2024-12-23"
+},
+{
+"ticker": "CRUS",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2016-09-21"
+},
+{
+"ticker": "CSL",
+"sector": "Industrials",
+"sub": "Industrial Conglomerates",
+"date_added": null
+},
+{
+"ticker": "CTRE",
+"sector": "Real Estate",
+"sub": "Health Care REITs",
+"date_added": "2026-03-23"
+},
+{
+"ticker": "CUBE",
+"sector": "Real Estate",
+"sub": "Industrial REITs",
+"date_added": "2022-12-19"
+},
+{
+"ticker": "CUZ",
+"sector": "Real Estate",
+"sub": "Office REITs",
+"date_added": "2016-10-05"
+},
+{
+"ticker": "CVLT",
+"sector": "Information Technology",
+"sub": "Systems Software",
+"date_added": null
+},
+{
+"ticker": "CW",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2016-02-01"
+},
+{
+"ticker": "CXT",
+"sector": "Information Technology",
+"sub": "Electronic Equipment & Instruments",
+"date_added": null
+},
+{
+"ticker": "CYTK",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2024-03-18"
+},
+{
+"ticker": "DAR",
+"sector": "Consumer Staples",
+"sub": "Agricultural Products & Services",
+"date_added": "2020-01-29"
+},
+{
+"ticker": "DBX",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2023-06-19"
+},
+{
+"ticker": "DCI",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": null
+},
+{
+"ticker": "DINO",
+"sector": "Energy",
+"sub": "Oil & Gas Refining & Marketing",
+"date_added": null
+},
+{
+"ticker": "DKS",
+"sector": "Consumer Discretionary",
+"sub": "Specialty Stores",
+"date_added": null
+},
+{
+"ticker": "DLB",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2023-08-22"
+},
+{
+"ticker": "DOCN",
+"sector": "Information Technology",
+"sub": "Internet Services & Infrastructure",
+"date_added": "2026-04-09"
+},
+{
+"ticker": "DOCS",
+"sector": "Health Care",
+"sub": "Health Care Technology",
+"date_added": "2023-06-19"
+},
+{
+"ticker": "DOCU",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2024-10-11"
+},
+{
+"ticker": "DT",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2022-09-19"
+},
+{
+"ticker": "DTM",
+"sector": "Energy",
+"sub": "Oil & Gas Storage & Transportation",
+"date_added": "2021-07-02"
+},
+{
+"ticker": "DUOL",
+"sector": "Consumer Discretionary",
+"sub": "Education Services",
+"date_added": "2024-04-22"
+},
+{
+"ticker": "DY",
+"sector": "Industrials",
+"sub": "Construction & Engineering",
+"date_added": "2025-12-22"
+},
+{
+"ticker": "EAT",
+"sector": "Consumer Discretionary",
+"sub": "Restaurants",
+"date_added": "2026-09-21"
+},
+{
+"ticker": "EEFT",
+"sector": "Financials",
+"sub": "Transaction & Payment Processing Services",
+"date_added": "2022-02-01"
+},
+{
+"ticker": "EGP",
+"sector": "Real Estate",
+"sub": "Industrial REITs",
+"date_added": "2019-05-07"
+},
+{
+"ticker": "EHC",
+"sector": "Health Care",
+"sub": "Health Care Facilities",
+"date_added": "2018-01-02"
+},
+{
+"ticker": "ELAN",
+"sector": "Health Care",
+"sub": "Pharmaceuticals",
+"date_added": "2025-09-02"
+},
+{
+"ticker": "ELF",
+"sector": "Consumer Staples",
+"sub": "Personal Care Products",
+"date_added": "2024-01-23"
+},
+{
+"ticker": "ELS",
+"sector": "Real Estate",
+"sub": "Single-Family Residential REITs",
+"date_added": "2023-07-24"
+},
+{
+"ticker": "ENS",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": "2016-08-26"
+},
+{
+"ticker": "ENSG",
+"sector": "Health Care",
+"sub": "Health Care Facilities",
+"date_added": "2024-10-01"
+},
+{
+"ticker": "ENTG",
+"sector": "Information Technology",
+"sub": "Semiconductor Materials & Equipment",
+"date_added": "2025-03-06"
+},
+{
+"ticker": "EPR",
+"sector": "Real Estate",
+"sub": "Other Specialized REITs",
+"date_added": "2016-01-19"
+},
+{
+"ticker": "EQH",
+"sector": "Financials",
+"sub": "Diversified Financial Services",
+"date_added": "2023-12-18"
+},
+{
+"ticker": "ESAB",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2022-04-05"
+},
+{
+"ticker": "ESNT",
+"sector": "Financials",
+"sub": "Commercial & Residential Mortgage Finance",
+"date_added": "2020-05-26"
+},
+{
+"ticker": "EVR",
+"sector": "Financials",
+"sub": "Investment Banking & Brokerage",
+"date_added": "2018-03-26"
+},
+{
+"ticker": "EWBC",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": null
+},
+{
+"ticker": "EXEL",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2018-07-02"
+},
+{
+"ticker": "EXLS",
+"sector": "Industrials",
+"sub": "Data Processing & Outsourced Services",
+"date_added": "2022-10-03"
+},
+{
+"ticker": "EXP",
+"sector": "Materials",
+"sub": "Construction Materials",
+"date_added": "2013-04-30"
+},
+{
+"ticker": "EXPO",
+"sector": "Industrials",
+"sub": "Research & Consulting Services",
+"date_added": "2023-03-22"
+},
+{
+"ticker": "FAF",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": null
+},
+{
+"ticker": "FBIN",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2022-12-19"
+},
+{
+"ticker": "FCFS",
+"sector": "Financials",
+"sub": "Consumer Finance",
+"date_added": "2019-09-23"
+},
+{
+"ticker": "FCN",
+"sector": "Industrials",
+"sub": "Research & Consulting Services",
+"date_added": "2019-10-24"
+},
+{
+"ticker": "FFIN",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2019-03-22"
+},
+{
+"ticker": "FHI",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": null
+},
+{
+"ticker": "FHN",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2013-06-21"
+},
+{
+"ticker": "FIVE",
+"sector": "Consumer Discretionary",
+"sub": "Specialty Stores",
+"date_added": "2018-04-19"
+},
+{
+"ticker": "FLG",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": null
+},
+{
+"ticker": "FLR",
+"sector": "Industrials",
+"sub": "Construction & Engineering",
+"date_added": "2019-06-04"
+},
+{
+"ticker": "FLS",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2021-03-22"
+},
+{
+"ticker": "FN",
+"sector": "Information Technology",
+"sub": "Electronic Manufacturing Services",
+"date_added": "2024-09-23"
+},
+{
+"ticker": "FNB",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2016-02-09"
+},
+{
+"ticker": "FND",
+"sector": "Consumer Discretionary",
+"sub": "Home Improvement Retail",
+"date_added": "2023-10-20"
+},
+{
+"ticker": "FNF",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": "2023-09-18"
+},
+{
+"ticker": "FOUR",
+"sector": "Financials",
+"sub": "Transaction & Payment Processing Services",
+"date_added": "2024-11-20"
+},
+{
+"ticker": "FR",
+"sector": "Real Estate",
+"sub": "Industrial REITs",
+"date_added": null
+},
+{
+"ticker": "FTI",
+"sector": "Energy",
+"sub": "Oil & Gas Equipment & Services",
+"date_added": "2025-09-12"
+},
+{
+"ticker": "G",
+"sector": "Industrials",
+"sub": "Data Processing & Outsourced Services",
+"date_added": "2021-05-03"
+},
+{
+"ticker": "GAP",
+"sector": "Consumer Discretionary",
+"sub": "Apparel Retail",
+"date_added": null
+},
+{
+"ticker": "GATX",
+"sector": "Industrials",
+"sub": "Construction Machinery & Heavy Transportation Equipment",
+"date_added": null
+},
+{
+"ticker": "GBCI",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2020-06-22"
+},
+{
+"ticker": "GEF",
+"sector": "Materials",
+"sub": "Metal, Glass & Plastic Containers",
+"date_added": null
+},
+{
+"ticker": "GGG",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": null
+},
+{
+"ticker": "GHC",
+"sector": "Consumer Discretionary",
+"sub": "Education Services",
+"date_added": "2014-09-19"
+},
+{
+"ticker": "GLPI",
+"sector": "Real Estate",
+"sub": "Other Specialized REITs",
+"date_added": "2023-09-18"
+},
+{
+"ticker": "GME",
+"sector": "Consumer Discretionary",
+"sub": "Computer & Electronics Retail",
+"date_added": "2021-08-04"
+},
+{
+"ticker": "GMED",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": null
+},
+{
+"ticker": "GNTX",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Parts & Equipment",
+"date_added": null
+},
+{
+"ticker": "GPK",
+"sector": "Materials",
+"sub": "Paper & Plastic Packaging Products & Materials",
+"date_added": "2023-06-19"
+},
+{
+"ticker": "GWRE",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2025-01-27"
+},
+{
+"ticker": "GXO",
+"sector": "Industrials",
+"sub": "Air Freight & Logistics",
+"date_added": "2021-08-02"
+},
+{
+"ticker": "H",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": "2023-10-12"
+},
+{
+"ticker": "HAE",
+"sector": "Health Care",
+"sub": "Health Care Supplies",
+"date_added": "2018-06-18"
+},
+{
+"ticker": "HALO",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2020-11-13"
+},
+{
+"ticker": "HGV",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": "2023-03-20"
+},
+{
+"ticker": "HIMS",
+"sector": "Health Care",
+"sub": "Health Care Services",
+"date_added": "2025-03-24"
+},
+{
+"ticker": "HL",
+"sector": "Materials",
+"sub": "Silver",
+"date_added": "2025-12-22"
+},
+{
+"ticker": "HLI",
+"sector": "Financials",
+"sub": "Investment Banking & Brokerage",
+"date_added": "2023-12-18"
+},
+{
+"ticker": "HLNE",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": "2024-09-23"
+},
+{
+"ticker": "HOG",
+"sector": "Consumer Discretionary",
+"sub": "Motorcycle Manufacturers",
+"date_added": "2020-06-22"
+},
+{
+"ticker": "HOMB",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2017-06-02"
+},
+{
+"ticker": "HQY",
+"sector": "Health Care",
+"sub": "Managed Health Care",
+"date_added": "2018-09-17"
+},
+{
+"ticker": "HR",
+"sector": "Real Estate",
+"sub": "Health Care REITs",
+"date_added": "2016-03-07"
+},
+{
+"ticker": "HRB",
+"sector": "Consumer Discretionary",
+"sub": "Specialized Consumer Services",
+"date_added": "2020-09-21"
+},
+{
+"ticker": "HUBS",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2026-09-21"
+},
+{
+"ticker": "HWC",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": null
+},
+{
+"ticker": "HXL",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2020-06-22"
+},
+{
+"ticker": "IBOC",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": null
+},
+{
+"ticker": "IDA",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": null
+},
+{
+"ticker": "IDCC",
+"sector": "Information Technology",
+"sub": "Communications Equipment",
+"date_added": "2026-03-23"
+},
+{
+"ticker": "IESC",
+"sector": "Industrials",
+"sub": "Construction & Engineering",
+"date_added": "2026-07-01"
+},
+{
+"ticker": "INGR",
+"sector": "Consumer Staples",
+"sub": "Agricultural Products & Services",
+"date_added": null
+},
+{
+"ticker": "IPGP",
+"sector": "Information Technology",
+"sub": "Electronic Manufacturing Services",
+"date_added": "2022-06-21"
+},
+{
+"ticker": "IRT",
+"sector": "Real Estate",
+"sub": "Multi-Family Residential REITs",
+"date_added": "2022-05-19"
+},
+{
+"ticker": "ITT",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": null
+},
+{
+"ticker": "JAZZ",
+"sector": "Health Care",
+"sub": "Pharmaceuticals",
+"date_added": "2020-09-21"
+},
+{
+"ticker": "JEF",
+"sector": "Financials",
+"sub": "Multi-Sector Holdings",
+"date_added": "2019-09-26"
+},
+{
+"ticker": "JLL",
+"sector": "Real Estate",
+"sub": "Real Estate Services",
+"date_added": null
+},
+{
+"ticker": "KBH",
+"sector": "Consumer Discretionary",
+"sub": "Homebuilding",
+"date_added": null
+},
+{
+"ticker": "KBR",
+"sector": "Industrials",
+"sub": "Diversified Support Services",
+"date_added": null
+},
+{
+"ticker": "KD",
+"sector": "Information Technology",
+"sub": "IT Consulting & Other Services",
+"date_added": "2021-11-05"
+},
+{
+"ticker": "KEX",
+"sector": "Industrials",
+"sub": "Marine Transportation",
+"date_added": null
+},
+{
+"ticker": "KNF",
+"sector": "Materials",
+"sub": "Construction Materials",
+"date_added": "2023-06-01"
+},
+{
+"ticker": "KNSL",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": "2020-12-29"
+},
+{
+"ticker": "KNX",
+"sector": "Industrials",
+"sub": "Cargo Ground Transportation",
+"date_added": "2017-07-12"
+},
+{
+"ticker": "KRC",
+"sector": "Real Estate",
+"sub": "Office REITs",
+"date_added": "2013-02-28"
+},
+{
+"ticker": "KRG",
+"sector": "Real Estate",
+"sub": "Retail REITs",
+"date_added": "2021-10-22"
+},
+{
+"ticker": "KRYS",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2026-07-24"
+},
+{
+"ticker": "KTOS",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2025-09-22"
+},
+{
+"ticker": "LAD",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Retail",
+"date_added": "2020-09-01"
+},
+{
+"ticker": "LAMR",
+"sector": "Real Estate",
+"sub": "Other Specialized REITs",
+"date_added": null
+},
+{
+"ticker": "LEA",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Parts & Equipment",
+"date_added": "2019-12-13"
+},
+{
+"ticker": "LECO",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": null
+},
+{
+"ticker": "LFUS",
+"sector": "Information Technology",
+"sub": "Electronic Components",
+"date_added": "2016-11-28"
+},
+{
+"ticker": "LIVN",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": null
+},
+{
+"ticker": "LNTH",
+"sector": "Health Care",
+"sub": "Health Care Supplies",
+"date_added": "2022-10-12"
+},
+{
+"ticker": "LOPE",
+"sector": "Consumer Discretionary",
+"sub": "Education Services",
+"date_added": "2019-12-13"
+},
+{
+"ticker": "LPX",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": null
+},
+{
+"ticker": "LSCC",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2021-04-20"
+},
+{
+"ticker": "LSTR",
+"sector": "Industrials",
+"sub": "Cargo Ground Transportation",
+"date_added": null
+},
+{
+"ticker": "M",
+"sector": "Consumer Discretionary",
+"sub": "Broadline Retail",
+"date_added": "2021-12-20"
+},
+{
+"ticker": "MANH",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2015-06-10"
+},
+{
+"ticker": "MAT",
+"sector": "Consumer Discretionary",
+"sub": "Leisure Products",
+"date_added": "2019-06-07"
+},
+{
+"ticker": "MEDP",
+"sector": "Health Care",
+"sub": "Life Sciences Tools & Services",
+"date_added": "2020-09-21"
+},
+{
+"ticker": "MIDD",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2020-06-22"
+},
+{
+"ticker": "MKSI",
+"sector": "Information Technology",
+"sub": "Semiconductor Materials & Equipment",
+"date_added": "2017-11-22"
+},
+{
+"ticker": "MLI",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2024-11-26"
+},
+{
+"ticker": "MMS",
+"sector": "Industrials",
+"sub": "Data Processing & Outsourced Services",
+"date_added": null
+},
+{
+"ticker": "MOG-A",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2026-03-23"
+},
+{
+"ticker": "MOH",
+"sector": "Health Care",
+"sub": "Managed Health Care",
+"date_added": "2026-07-22"
+},
+{
+"ticker": "MORN",
+"sector": "Financials",
+"sub": "Financial Exchanges & Data",
+"date_added": "2023-09-18"
+},
+{
+"ticker": "MP",
+"sector": "Materials",
+"sub": "Diversified Metals & Mining",
+"date_added": "2025-09-22"
+},
+{
+"ticker": "MSA",
+"sector": "Industrials",
+"sub": "Office Services & Supplies",
+"date_added": null
+},
+{
+"ticker": "MSM",
+"sector": "Industrials",
+"sub": "Trading Companies & Distributors",
+"date_added": null
+},
+{
+"ticker": "MTDR",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2022-04-04"
+},
+{
+"ticker": "MTG",
+"sector": "Financials",
+"sub": "Reinsurance",
+"date_added": "2020-11-13"
+},
+{
+"ticker": "MTN",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": "2023-09-18"
+},
+{
+"ticker": "MTSI",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2022-08-17"
+},
+{
+"ticker": "MTZ",
+"sector": "Industrials",
+"sub": "Construction & Engineering",
+"date_added": "2018-11-12"
+},
+{
+"ticker": "MUR",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2017-07-26"
+},
+{
+"ticker": "MUSA",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Retail",
+"date_added": "2013-08-30"
+},
+{
+"ticker": "MZTI",
+"sector": "Consumer Staples",
+"sub": "Packaged Foods & Meats",
+"date_added": null
+},
+{
+"ticker": "NBIX",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2021-03-30"
+},
+{
+"ticker": "NEU",
+"sector": "Materials",
+"sub": "Specialty Chemicals",
+"date_added": null
+},
+{
+"ticker": "NFG",
+"sector": "Utilities",
+"sub": "Gas Utilities",
+"date_added": null
+},
+{
+"ticker": "NJR",
+"sector": "Utilities",
+"sub": "Gas Utilities",
+"date_added": "2016-03-08"
+},
+{
+"ticker": "NLY",
+"sector": "Financials",
+"sub": "Mortgage REITs",
+"date_added": "2022-09-19"
+},
+{
+"ticker": "NNN",
+"sector": "Real Estate",
+"sub": "Retail REITs",
+"date_added": null
+},
+{
+"ticker": "NOV",
+"sector": "Energy",
+"sub": "Oil & Gas Equipment & Services",
+"date_added": "2021-09-20"
+},
+{
+"ticker": "NOVT",
+"sector": "Information Technology",
+"sub": "Electronic Equipment & Instruments",
+"date_added": "2022-07-26"
+},
+{
+"ticker": "NTNX",
+"sector": "Information Technology",
+"sub": "Systems Software",
+"date_added": "2025-09-22"
+},
+{
+"ticker": "NVST",
+"sector": "Health Care",
+"sub": "Health Care Supplies",
+"date_added": "2021-04-12"
+},
+{
+"ticker": "NVT",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": "2018-05-02"
+},
+{
+"ticker": "NWE",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": null
+},
+{
+"ticker": "NXST",
+"sector": "Communication Services",
+"sub": "Broadcasting",
+"date_added": "2022-12-01"
+},
+{
+"ticker": "NXT",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": "2024-06-24"
+},
+{
+"ticker": "NYT",
+"sector": "Communication Services",
+"sub": "Publishing",
+"date_added": null
+},
+{
+"ticker": "OC",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2019-09-23"
+},
+{
+"ticker": "OGE",
+"sector": "Utilities",
+"sub": "Multi-Utilities",
+"date_added": null
+},
+{
+"ticker": "OGS",
+"sector": "Utilities",
+"sub": "Gas Utilities",
+"date_added": "2014-01-31"
+},
+{
+"ticker": "OHI",
+"sector": "Real Estate",
+"sub": "Health Care REITs",
+"date_added": null
+},
+{
+"ticker": "OKTA",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2025-05-01"
+},
+{
+"ticker": "OLED",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2018-12-10"
+},
+{
+"ticker": "OLLI",
+"sector": "Consumer Discretionary",
+"sub": "Broadline Retail",
+"date_added": "2018-06-11"
+},
+{
+"ticker": "OLN",
+"sector": "Materials",
+"sub": "Diversified Chemicals",
+"date_added": null
+},
+{
+"ticker": "ONB",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2022-02-18"
+},
+{
+"ticker": "ONTO",
+"sector": "Information Technology",
+"sub": "Semiconductor Materials & Equipment",
+"date_added": "2023-10-18"
+},
+{
+"ticker": "OPCH",
+"sector": "Health Care",
+"sub": "Health Care Facilities",
+"date_added": "2021-08-30"
+},
+{
+"ticker": "ORA",
+"sector": "Utilities",
+"sub": "Renewable Electricity",
+"date_added": "2022-07-07"
+},
+{
+"ticker": "ORI",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": null
+},
+{
+"ticker": "OSK",
+"sector": "Industrials",
+"sub": "Construction Machinery & Heavy Transportation Equipment",
+"date_added": null
+},
+{
+"ticker": "OVV",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2023-06-19"
+},
+{
+"ticker": "OZK",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": null
+},
+{
+"ticker": "PAG",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Retail",
+"date_added": "2023-08-04"
+},
+{
+"ticker": "PATH",
+"sector": "Information Technology",
+"sub": "Systems Software",
+"date_added": "2026-01-02"
+},
+{
+"ticker": "PB",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": null
+},
+{
+"ticker": "PBF",
+"sector": "Energy",
+"sub": "Oil & Gas Refining & Marketing",
+"date_added": "2022-12-01"
+},
+{
+"ticker": "PCTY",
+"sector": "Industrials",
+"sub": "Human Resource & Employment Services",
+"date_added": "2020-04-27"
+},
+{
+"ticker": "PEGA",
+"sector": "Information Technology",
+"sub": "Application Software",
+"date_added": "2025-05-22"
+},
+{
+"ticker": "PEN",
+"sector": "Health Care",
+"sub": "Health Care Equipment",
+"date_added": "2019-09-23"
+},
+{
+"ticker": "PFGC",
+"sector": "Consumer Staples",
+"sub": "Food Distributors",
+"date_added": "2021-09-03"
+},
+{
+"ticker": "PII",
+"sector": "Consumer Discretionary",
+"sub": "Leisure Products",
+"date_added": null
+},
+{
+"ticker": "PINS",
+"sector": "Communication Services",
+"sub": "Interactive Home Entertainment",
+"date_added": "2025-12-22"
+},
+{
+"ticker": "PK",
+"sector": "Real Estate",
+"sub": "Hotel & Resort REITs",
+"date_added": "2019-09-18"
+},
+{
+"ticker": "PLNT",
+"sector": "Consumer Discretionary",
+"sub": "Leisure Facilities",
+"date_added": "2023-06-19"
+},
+{
+"ticker": "PNFP",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2017-06-19"
+},
+{
+"ticker": "POR",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": "2022-06-29"
+},
+{
+"ticker": "POST",
+"sector": "Consumer Staples",
+"sub": "Packaged Foods & Meats",
+"date_added": "2012-02-03"
+},
+{
+"ticker": "PPC",
+"sector": "Consumer Staples",
+"sub": "Packaged Foods & Meats",
+"date_added": "2019-09-23"
+},
+{
+"ticker": "PR",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2023-09-18"
+},
+{
+"ticker": "PRI",
+"sector": "Financials",
+"sub": "Life & Health Insurance",
+"date_added": "2013-02-12"
+},
+{
+"ticker": "PSN",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2024-09-23"
+},
+{
+"ticker": "PVH",
+"sector": "Consumer Discretionary",
+"sub": "Apparel, Accessories & Luxury Goods",
+"date_added": "2022-09-19"
+},
+{
+"ticker": "QLYS",
+"sector": "Information Technology",
+"sub": "Systems Software",
+"date_added": "2020-06-22"
+},
+{
+"ticker": "R",
+"sector": "Industrials",
+"sub": "Cargo Ground Transportation",
+"date_added": "2017-06-19"
+},
+{
+"ticker": "RBA",
+"sector": "Industrials",
+"sub": "Diversified Support Services",
+"date_added": "2024-06-24"
+},
+{
+"ticker": "RBC",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2023-09-18"
+},
+{
+"ticker": "REXR",
+"sector": "Real Estate",
+"sub": "Industrial REITs",
+"date_added": "2020-08-03"
+},
+{
+"ticker": "RGA",
+"sector": "Financials",
+"sub": "Reinsurance",
+"date_added": null
+},
+{
+"ticker": "RGEN",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2019-09-23"
+},
+{
+"ticker": "RGLD",
+"sector": "Materials",
+"sub": "Gold",
+"date_added": null
+},
+{
+"ticker": "RH",
+"sector": "Consumer Discretionary",
+"sub": "Homefurnishing Retail",
+"date_added": "2019-12-26"
+},
+{
+"ticker": "RLI",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": "2019-11-27"
+},
+{
+"ticker": "RMBS",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2023-12-18"
+},
+{
+"ticker": "RNR",
+"sector": "Financials",
+"sub": "Reinsurance",
+"date_added": "2014-01-02"
+},
+{
+"ticker": "ROIV",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": "2024-04-01"
+},
+{
+"ticker": "ROKU",
+"sector": "Communication Services",
+"sub": "Movies & Entertainment",
+"date_added": "2026-06-22"
+},
+{
+"ticker": "RPM",
+"sector": "Materials",
+"sub": "Specialty Chemicals",
+"date_added": null
+},
+{
+"ticker": "RRC",
+"sector": "Energy",
+"sub": "Oil & Gas Exploration & Production",
+"date_added": "2022-03-02"
+},
+{
+"ticker": "RRX",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": null
+},
+{
+"ticker": "RS",
+"sector": "Materials",
+"sub": "Steel",
+"date_added": null
+},
+{
+"ticker": "RYAN",
+"sector": "Financials",
+"sub": "Insurance Brokers",
+"date_added": "2024-06-28"
+},
+{
+"ticker": "RYN",
+"sector": "Real Estate",
+"sub": "Timber REITs",
+"date_added": null
+},
+{
+"ticker": "SAIA",
+"sector": "Industrials",
+"sub": "Cargo Ground Transportation",
+"date_added": "2021-08-30"
+},
+{
+"ticker": "SAIC",
+"sector": "Industrials",
+"sub": "Diversified Support Services",
+"date_added": "2013-09-27"
+},
+{
+"ticker": "SANM",
+"sector": "Information Technology",
+"sub": "Electronic Manufacturing Services",
+"date_added": "2026-06-22"
+},
+{
+"ticker": "SARO",
+"sector": "Industrials",
+"sub": "Aerospace & Defense",
+"date_added": "2026-01-22"
+},
+{
+"ticker": "SBRA",
+"sector": "Real Estate",
+"sub": "Health Care REITs",
+"date_added": "2017-08-17"
+},
+{
+"ticker": "SCI",
+"sector": "Consumer Discretionary",
+"sub": "Specialized Consumer Services",
+"date_added": null
+},
+{
+"ticker": "SEIC",
+"sector": "Financials",
+"sub": "Asset Management & Custody Banks",
+"date_added": null
+},
+{
+"ticker": "SF",
+"sector": "Financials",
+"sub": "Investment Banking & Brokerage",
+"date_added": null
+},
+{
+"ticker": "SFM",
+"sector": "Consumer Staples",
+"sub": "Food Retail",
+"date_added": "2016-02-09"
+},
+{
+"ticker": "SGI",
+"sector": "Consumer Discretionary",
+"sub": "Home Furnishings",
+"date_added": null
+},
+{
+"ticker": "SHC",
+"sector": "Health Care",
+"sub": "Health Care Services",
+"date_added": "2022-06-21"
+},
+{
+"ticker": "SIGI",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": "2019-09-23"
+},
+{
+"ticker": "SIRI",
+"sector": "Communication Services",
+"sub": "Broadcasting",
+"date_added": "2026-06-11"
+},
+{
+"ticker": "SITM",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2026-03-23"
+},
+{
+"ticker": "SLAB",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": null
+},
+{
+"ticker": "SLGN",
+"sector": "Materials",
+"sub": "Metal, Glass & Plastic Containers",
+"date_added": null
+},
+{
+"ticker": "SLM",
+"sector": "Financials",
+"sub": "Consumer Finance",
+"date_added": "2014-04-30"
+},
+{
+"ticker": "SMG",
+"sector": "Materials",
+"sub": "Fertilizers & Agricultural Chemicals",
+"date_added": null
+},
+{
+"ticker": "SMTC",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": "2026-06-22"
+},
+{
+"ticker": "SN",
+"sector": "Consumer Discretionary",
+"sub": "Household Appliances",
+"date_added": "2026-05-18"
+},
+{
+"ticker": "SNX",
+"sector": "Information Technology",
+"sub": "Technology Distributors",
+"date_added": "2015-12-29"
+},
+{
+"ticker": "SOLS",
+"sector": "Materials",
+"sub": "Specialty Chemicals",
+"date_added": "2026-03-23"
+},
+{
+"ticker": "SON",
+"sector": "Materials",
+"sub": "Paper & Plastic Packaging Products & Materials",
+"date_added": null
+},
+{
+"ticker": "SPXC",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": "2025-12-22"
+},
+{
+"ticker": "SR",
+"sector": "Utilities",
+"sub": "Gas Utilities",
+"date_added": null
+},
+{
+"ticker": "SSB",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2023-03-20"
+},
+{
+"ticker": "SSD",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2020-10-07"
+},
+{
+"ticker": "ST",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": "2023-09-18"
+},
+{
+"ticker": "STAG",
+"sector": "Real Estate",
+"sub": "Industrial REITs",
+"date_added": "2023-05-04"
+},
+{
+"ticker": "STRL",
+"sector": "Industrials",
+"sub": "Construction & Engineering",
+"date_added": "2025-11-13"
+},
+{
+"ticker": "STWD",
+"sector": "Financials",
+"sub": "Mortgage REITs",
+"date_added": "2023-03-20"
+},
+{
+"ticker": "SUI",
+"sector": "Real Estate",
+"sub": "Single-Family Residential REITs",
+"date_added": "2026-08-20"
+},
+{
+"ticker": "SWX",
+"sector": "Utilities",
+"sub": "Gas Utilities",
+"date_added": "2016-06-30"
+},
+{
+"ticker": "SYNA",
+"sector": "Information Technology",
+"sub": "Semiconductors",
+"date_added": null
+},
+{
+"ticker": "TCBI",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2017-03-29"
+},
+{
+"ticker": "TEX",
+"sector": "Industrials",
+"sub": "Construction Machinery & Heavy Transportation Equipment",
+"date_added": null
+},
+{
+"ticker": "THC",
+"sector": "Health Care",
+"sub": "Health Care Facilities",
+"date_added": "2016-04-18"
+},
+{
+"ticker": "THG",
+"sector": "Financials",
+"sub": "Property & Casualty Insurance",
+"date_added": null
+},
+{
+"ticker": "THO",
+"sector": "Consumer Discretionary",
+"sub": "Leisure Products",
+"date_added": null
+},
+{
+"ticker": "TKR",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": null
+},
+{
+"ticker": "TLN",
+"sector": "Utilities",
+"sub": "Independent Power Producers & Energy Traders",
+"date_added": "2025-08-28"
+},
+{
+"ticker": "TNL",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": null
+},
+{
+"ticker": "TOL",
+"sector": "Consumer Discretionary",
+"sub": "Homebuilding",
+"date_added": null
+},
+{
+"ticker": "TOST",
+"sector": "Financials",
+"sub": "Transaction & Payment Processing Services",
+"date_added": "2026-07-01"
+},
+{
+"ticker": "TREX",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2019-04-01"
+},
+{
+"ticker": "TRU",
+"sector": "Industrials",
+"sub": "Research & Consulting Services",
+"date_added": "2025-09-22"
+},
+{
+"ticker": "TTC",
+"sector": "Industrials",
+"sub": "Agricultural & Farm Machinery",
+"date_added": null
+},
+{
+"ticker": "TTEK",
+"sector": "Industrials",
+"sub": "Construction & Engineering",
+"date_added": "2019-08-01"
+},
+{
+"ticker": "TTMI",
+"sector": "Information Technology",
+"sub": "Electronic Manufacturing Services",
+"date_added": "2026-01-30"
+},
+{
+"ticker": "TWLO",
+"sector": "Information Technology",
+"sub": "Systems Software",
+"date_added": "2025-08-19"
+},
+{
+"ticker": "TXNM",
+"sector": "Utilities",
+"sub": "Electric Utilities",
+"date_added": null
+},
+{
+"ticker": "TXRH",
+"sector": "Consumer Discretionary",
+"sub": "Restaurants",
+"date_added": "2016-05-12"
+},
+{
+"ticker": "UBSI",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2017-04-12"
+},
+{
+"ticker": "UFPI",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2023-02-23"
+},
+{
+"ticker": "UGI",
+"sector": "Utilities",
+"sub": "Gas Utilities",
+"date_added": null
+},
+{
+"ticker": "ULS",
+"sector": "Industrials",
+"sub": "Research & Consulting Services",
+"date_added": "2025-12-22"
+},
+{
+"ticker": "UMBF",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": null
+},
+{
+"ticker": "UNM",
+"sector": "Financials",
+"sub": "Life & Health Insurance",
+"date_added": "2021-09-20"
+},
+{
+"ticker": "USFD",
+"sector": "Consumer Staples",
+"sub": "Food Distributors",
+"date_added": "2023-03-20"
+},
+{
+"ticker": "UTHR",
+"sector": "Health Care",
+"sub": "Biotechnology",
+"date_added": null
+},
+{
+"ticker": "VAL",
+"sector": "Energy",
+"sub": "Oil & Gas Drilling",
+"date_added": "2023-03-20"
+},
+{
+"ticker": "VC",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Parts & Equipment",
+"date_added": "2018-07-11"
+},
+{
+"ticker": "VFC",
+"sector": "Consumer Discretionary",
+"sub": "Apparel, Accessories & Luxury Goods",
+"date_added": "2025-03-24"
+},
+{
+"ticker": "VIAV",
+"sector": "Information Technology",
+"sub": "Communications Equipment",
+"date_added": "2026-06-22"
+},
+{
+"ticker": "VICR",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": "2026-03-23"
+},
+{
+"ticker": "VLY",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": null
+},
+{
+"ticker": "VMI",
+"sector": "Industrials",
+"sub": "Industrial Machinery & Supplies & Components",
+"date_added": null
+},
+{
+"ticker": "VNO",
+"sector": "Real Estate",
+"sub": "Office REITs",
+"date_added": "2023-01-05"
+},
+{
+"ticker": "VNOM",
+"sector": "Energy",
+"sub": "Oil & Gas Storage & Transportation",
+"date_added": "2024-09-23"
+},
+{
+"ticker": "VNT",
+"sector": "Information Technology",
+"sub": "Electronic Equipment & Instruments",
+"date_added": "2021-03-22"
+},
+{
+"ticker": "VOYA",
+"sector": "Financials",
+"sub": "Multi-Sector Holdings",
+"date_added": "2021-12-28"
+},
+{
+"ticker": "VVV",
+"sector": "Consumer Discretionary",
+"sub": "Automotive Retail",
+"date_added": "2017-05-16"
+},
+{
+"ticker": "WAL",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2024-09-23"
+},
+{
+"ticker": "WCC",
+"sector": "Industrials",
+"sub": "Trading Companies & Distributors",
+"date_added": "2023-06-19"
+},
+{
+"ticker": "WEX",
+"sector": "Financials",
+"sub": "Transaction & Payment Processing Services",
+"date_added": null
+},
+{
+"ticker": "WFRD",
+"sector": "Energy",
+"sub": "Oil & Gas Equipment & Services",
+"date_added": "2023-09-18"
+},
+{
+"ticker": "WH",
+"sector": "Consumer Discretionary",
+"sub": "Hotels, Resorts & Cruise Lines",
+"date_added": null
+},
+{
+"ticker": "WHR",
+"sector": "Consumer Discretionary",
+"sub": "Household Appliances",
+"date_added": "2024-03-18"
+},
+{
+"ticker": "WING",
+"sector": "Consumer Discretionary",
+"sub": "Restaurants",
+"date_added": "2020-09-21"
+},
+{
+"ticker": "WLK",
+"sector": "Materials",
+"sub": "Specialty Chemicals",
+"date_added": "2022-10-18"
+},
+{
+"ticker": "WMG",
+"sector": "Communication Services",
+"sub": "Movies & Entertainment",
+"date_added": "2024-06-24"
+},
+{
+"ticker": "WMS",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2023-03-20"
+},
+{
+"ticker": "WPC",
+"sector": "Real Estate",
+"sub": "Diversified REITs",
+"date_added": "2023-11-30"
+},
+{
+"ticker": "WSO",
+"sector": "Industrials",
+"sub": "Trading Companies & Distributors",
+"date_added": null
+},
+{
+"ticker": "WTFC",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2017-04-03"
+},
+{
+"ticker": "WTRG",
+"sector": "Utilities",
+"sub": "Water Utilities",
+"date_added": null
+},
+{
+"ticker": "WTS",
+"sector": "Industrials",
+"sub": "Building Products",
+"date_added": "2022-02-01"
+},
+{
+"ticker": "WWD",
+"sector": "Industrials",
+"sub": "Electrical Components & Equipment",
+"date_added": null
+},
+{
+"ticker": "XPO",
+"sector": "Industrials",
+"sub": "Cargo Ground Transportation",
+"date_added": null
+},
+{
+"ticker": "XRAY",
+"sector": "Health Care",
+"sub": "Health Care Supplies",
+"date_added": "2024-04-03"
+},
+{
+"ticker": "YETI",
+"sector": "Consumer Discretionary",
+"sub": "Leisure Products",
+"date_added": "2021-01-21"
+},
+{
+"ticker": "ZION",
+"sector": "Financials",
+"sub": "Regional Banks",
+"date_added": "2024-03-18"
+}
+]
+}
