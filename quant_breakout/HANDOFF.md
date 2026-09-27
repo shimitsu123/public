@@ -113,6 +113,10 @@
 - 核心仓位的汇率对冲切换（2026-09-27，事先登记 a1e0ecf）：日元走强时拿对冲版 S&P500 → 没通过、**维持现行**（`var/out/fxhedge_study.md`）
 - 核心仓位的季节性（2026-09-27，事先登记 3d7066e）：5〜10 月核心减到 50% / 0% → 1950〜2016 大多更好、2017〜2026 大幅更差 → 没通过、**维持现行**（`var/out/halloween_study.md`）
 - 核心仓位的双动量（2026-09-27，事先登记 58ded9f）：美股 / 日本哪个强拿哪个（12 / 6 个月）→ 两个年代都明显更差、**维持现行**（`var/out/dualmom_study.md`）
+- 決算 / 会社予想修正的「开示本身当买点」（2026-09-27，用户要求；事先登记 8834f8e，`scripts/fins_event_study.py`，全市场、不限一手 / 流动性）：
+  上修 / 印证 / 反应确认 / 20 日卖法 / 期初指引五个候选 2017〜2021 每笔全为负（上修 −0.65%，W2 突破基准 +0.11%）、与予想重申无差别、开示前反而为正
+  → 探索门全不过、按登记不跑 2022〜2026、**维持现行**（`var/out/fins_event_study.md`）；全部个股最新决算 / 修正一览：☁️ `python scripts/fins_now.py`
+  （Mac：`bash scripts/with_jquants.sh ~/.qbreak/venv/bin/python scripts/fins_now.py`；只展示）
 - J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
   → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
   （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）
