@@ -173,6 +173,7 @@
 ## 每天的流程（周一至五，JST）
 1. 前一晚 22:00：用户的另一个例行任务更新「市场风险报告」artifact（判断层与宏观数值的来源）
 2. 06:57 云端：拉代码 → 从风险报告写 `var/market_regime.json`、`var/macro.json` → `sim-day` → 入库 → 发布日报
+   （云端容器是 UTC：`run.py` 启动时把进程时区固定为 JST（2026-09-27 起），「今天」、预计成交日、前向记录的日期与 Mac 一致）
 3. 07:40 Mac（`scripts/liveu.sh run --broker paper`）：`git pull`，等云端当天的 `var/out/unified_today.json`（最多 50 分钟）
    → 把配置与输入拷到 `~/.qbreak/home` → 执行器：昨天的单按真实开盘价撮合 → 对账 → 决策 → 下「下一开盘」的单
    → 与云端模拟盘逐日比较 → 通知中心 → 日志 → 重写页面并用浏览器打开（桌面的 `qbreak模拟操盘.html` 指向它）

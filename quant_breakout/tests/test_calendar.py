@@ -81,3 +81,19 @@ def test_sleep_until_next_event_is_bounded():
 
 def test_naive_datetime_treated_as_jst():
     assert session_of(dt.datetime(2026, 9, 24, 10, 0)) == "morning"
+
+
+def test_run_py_pins_process_clock_to_jst():
+    """云端容器是 UTC：run.py 启动时把时区固定为 JST —— 06:57 JST 的例行运行里「今天」不会变成前一天（和 Mac 一致）。
+    在子进程里检查，免得改掉测试进程自己的时区。"""
+    import subprocess
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    code = ("import os, time, datetime as d; os.environ['TZ'] = 'UTC'; time.tzset(); import run; run._pin_jst(); "
+            "from zoneinfo import ZoneInfo; a = d.datetime.now(); b = d.datetime.now(ZoneInfo('Asia/Tokyo')).replace(tzinfo=None); "
+            "print(abs((a - b).total_seconds()) < 60, time.strftime('%Z'))")
+    out = subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True, timeout=120)
+    assert out.stdout.split() == ["True", "JST"], out.stderr[-500:]
+    tail = (root / "run.py").read_text(encoding="utf-8").split('if __name__ == "__main__":')[-1]
+    assert "_pin_jst()" in tail                                                   # 命令行入口一定先固定时区

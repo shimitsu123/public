@@ -2374,5 +2374,16 @@ def main(argv=None) -> int:
         return 1
 
 
+def _pin_jst() -> None:
+    """日期与时刻一律按日本时间（JST）。云端容器是 UTC：06:57 JST 的例行运行里 date.today() 会是前一天
+    （日报的 date、预计成交日、宏观面板的 K 线日、前向记录的日期都会差一天，也和 Mac 上的执行器不一致）。"""
+    import os
+    import time
+    os.environ["TZ"] = "Asia/Tokyo"
+    if hasattr(time, "tzset"):
+        time.tzset()
+
+
 if __name__ == "__main__":
+    _pin_jst()
     raise SystemExit(main())
