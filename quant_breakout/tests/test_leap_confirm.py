@@ -31,3 +31,22 @@ def test_masks_and_keep_fraction():
 def test_windows_follow_charter():
     w = LF._windows("Z")
     assert w["Z"] == ("2001-01-04", "2006-09-30") and w["Z1"][1] == "2003-12-31" and w["Z2"][0] == "2004-01-01"
+
+
+def test_placebo_trades_takes_percentiles_of_win_mean_calmar(monkeypatch):
+    idx = pd.bdate_range("2020-01-06", periods=20)
+    fr = {"A.T": pd.DataFrame({"entry": [True] * 20}, index=idx)}
+    calls = []
+
+    def fake_run(ctx, run_fn, f, p, **kw):
+        k = int(f["A.T"]["entry"].sum())
+        calls.append((k, kw))
+        return {"Z": {"win": float(k), "mean": k / 10, "calmar": None if k == 0 else 1.0}}
+
+    monkeypatch.setattr(LF, "run", fake_run)
+    out = LF.placebo_trades({"era": "Z"}, None, fr, None, 0.5, seeds=10, q=95, priority={"x": 1})
+    ks = [k for k, _ in calls]
+    assert len(calls) == 10 and all(kw == {"priority": {"x": 1}} for _, kw in calls)
+    assert set(ks) <= {0, 5, 10, 15, 20} and len(set(ks)) > 1                          # 整周一起留或一起去
+    assert np.isclose(out["win"], np.percentile(ks, 95)) and np.isclose(out["mean"], np.percentile(ks, 95) / 10)
+    assert len(out["vals"]["calmar"]) == 10

@@ -151,6 +151,23 @@ def placebo_q(ctx: dict, run_fn, fr: dict, p, frac: float, seeds: int = LC.PLACE
     return (float(np.percentile(v, q)) if len(v) else float("nan")), vals
 
 
+def placebo_trades(ctx: dict, run_fn, fr: dict, p, frac: float, seeds: int = 30, q: float = 95, **kw) -> dict:
+    """「选股本身的飞跃」的随机对照（scripts/leap2_common.py S5）：fr 的信号按「股票 × 周」随机保留 frac，seeds 次
+    → 该窗口组合里个股交易的胜率、每笔、Calmar 各自的 q 分位与全部值。kw 照传给 run（例：priority）。"""
+    import wvol_placebo as WP
+    era = ctx["era"]
+    vals = {"win": [], "mean": [], "calmar": []}
+    for s in range(seeds):
+        r = run(ctx, run_fn, WP.week_lottery(fr, frac, s), p, **kw)[era]
+        for k in vals:
+            vals[k].append(r.get(k))
+    out = {}
+    for k, v in vals.items():
+        a = np.array([x for x in v if x is not None], float)
+        out[k] = float(np.percentile(a, q)) if len(a) else float("nan")
+    return {**out, "vals": vals}
+
+
 def w2_keep(ctx: dict, fr: dict, cut: float = 1.0) -> dict[str, np.ndarray]:
     """每只票每天：周线量比 ≥ cut（W2 同一定义：qbreak/mtf.py；缺值 → 保留）。wvol_study.with_w5v 同一算法。"""
     from qbreak import mtf
