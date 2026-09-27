@@ -117,6 +117,12 @@
   上修 / 印证 / 反应确认 / 20 日卖法 / 期初指引五个候选 2017〜2021 每笔全为负（上修 −0.65%，W2 突破基准 +0.11%）、与予想重申无差别、开示前反而为正
   → 探索门全不过、按登记不跑 2022〜2026、**维持现行**（`var/out/fins_event_study.md`）；全部个股最新决算 / 修正一览：☁️ `python scripts/fins_now.py`
   （Mac：`bash scripts/with_jquants.sh ~/.qbreak/venv/bin/python scripts/fins_now.py`；只展示）
+- 政策事件反应库 G1（2026-09-27，用户「G1 政策事件库要做」；设计面板 + 两份对抗审计后按审计清单修正再登记，`scripts/policy_event_study.py` 头部是登记全文）：
+  事件表 `var/policy_events.csv`（官方日期 + 官方 URL，708 行：强类别 日银变更 55 / 財務省介入 19 / FOMC 转折 9 / 关税 60 / 半导体规制 5 / 消费税 9，
+  中 / 弱类别，日银无变更 260 + FOMC 其余 209 作对照池；来源由 `scripts/policy_event_verify.py` 机械核对，meti 等打不开的留空只描述）；
+  规则层 `qbreak/policy_events.py`（分类 → 受益 / 受损业种机械推导、时区换算、校验）；数据层 `scripts/policy_event_data.py`；前向记录 `qbreak/policy_forward.py`
+  （云端 sim-day 唯一写者，`var/out/policy_forward.csv` 只追加；已过去的日银 / FOMC 日程没录入 → PENDING 行）；日报 / 仪表盘「政策事件反应库」块只展示。
+  结论上限写死 = 展示 + 前向记录，不改交易；探索 2001〜2021 → 通过才跑 2022〜2026 一次；结果见 sim_changes.md 与 `var/out/policy_event_study.md`。
 - J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
   → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
   （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）
@@ -191,6 +197,8 @@
 - `scripts/liveu.sh`（Mac 上跑执行器；`news` = 市场仪表盘 + 经济威胁提醒）、`scripts/install_launchd_live_u.sh`（注册定时任务）、
   `scripts/install_launchd_news.sh`（仪表盘每 15 分钟）、`scripts/mac_bootstrap.sh`（一行安装）
 - `qbreak/dashboard.py` 仪表盘（日报顶部与 Mac 页面共用）、`qbreak/macro_now.py` 健康度与新数据、`qbreak/news.py` 消息监控、`qbreak/viz.py` 小图
+- 政策事件反应库：`qbreak/policy_events.py`（规则）、`scripts/policy_event_data.py`（数据）、`scripts/policy_event_study.py`（登记 + 研究）、
+  `scripts/policy_event_verify.py`（来源核对）、`qbreak/policy_forward.py`（前向记录）、`var/policy_events.csv`（事件表）、`var/policy_extra_pool.json`（长历史池补充票）
 - 云端状态：`var/state/unified_state.json`（模拟盘）；Mac 状态：`~/.qbreak/home/state/live_unified_paper.json`（账本，不在仓库）
 
 ## 用户常问的，去哪里查
@@ -219,6 +227,7 @@
 | 和云端对账 | 「今天和云端一致吗？不一致为什么？」 | 读日志的比较行（两边持仓、现金、权益差） | 只读 |
 | 为什么没买 / 为什么卖 | 「为什么今天没买 7203？」 | 查日志的 blocked / skipped（一手太贵、名额满、跳空 > 3%、决算前等） | 只读 |
 | 立花连得上吗 | 「检查立花连通（只读）」「用デモ环境检查」 | `run.py tachibana-probe [--demo]`（登录、取价、持仓、余力、注文一覧） | 不发单 |
+| 政策事件库（G1） | 「日银今天决定加息了，录进政策事件库」「最近的政策事件反应怎么样？」「哪些会合还没分类？」 | 在 `~/qbreak-dev` 里 `bash scripts/liveu.sh policy add --category BOJ_CHANGE --subtype tighten --date 2026-10-30 --source <日银官方 URL> --name-ja … --checked 2026-10-30`（美国主场用美国当地日期；MOF_FX 要 `--confirmed-same-day` 或 `--covert --known-on 月次公表日`）→ `git add var/policy_events.csv && git commit -m … && git pull --rebase && git push`；看：`bash scripts/liveu.sh policy list`、`policy tocheck`、日报「政策事件反应库」块、`var/out/policy_forward_review.md` | 只改事件表、只展示 + 前向记录，不下单；云端 sim-day 是前向记录唯一写者 |
 | 演练 | 「用 dry-run 看今天实盘会下什么单」 | `run.py live-u --broker tachibana --dry-run --no-clock` | 登录与读取照常，单只打印 |
 | 开始实盘 | 「我确认开始实盘，创建 ARM」 | `echo ARMED > ~/.qbreak/home/ARM` | 只在你这次明确说时；先满足路线图 4 的上线门槛 |
 | 停止下单 | 「停」「今天不要下单」 | 立刻建 `~/.qbreak/home/HALT`（买卖都不下，持仓不动） | 恢复要你明确说「恢复下单，删除 HALT」 |

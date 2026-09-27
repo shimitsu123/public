@@ -944,6 +944,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
            "threat": threat, "executor": executor, "score_forward": score_fwd,
            "themes": _theme_panel(provider)}                  # 主题 / 业种强弱、影响度、新出现的联动（只作展示）
     out["era"] = _era_forward_log(out["themes"], today)      # 时代主线的前向记录（每月一次；只记录，不影响交易）
+    out["policy"] = _policy_panel(today)                     # 政策事件反应库：前向记录 + 日报块（只记录 / 展示，不影响交易）
     out["macro_now"] = _macro_now_panel(extras)              # 仪表盘：市场健康度 + 消费 / 零售等新数据（只作展示）
     out["news"] = _news_panel(out)                           # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
     out["energy"] = _energy_panel(today)                     # 仪表盘：能源消费（每月）+ K4 前向记录（只作展示 / 记录）
@@ -966,6 +967,230 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
                       ensure_ascii=False, indent=1, default=float))
     return 0
 
+
+
+def _policy_days(lo: str = "1999-01-04", extra_days: int = 400):
+    """交易日历（qbreak/calendar_jp）→ DatetimeIndex（到今天 + extra_days）。"""
+    import datetime as _d
+    import pandas as _pd
+    from qbreak.calendar_jp import is_trading_day
+    start, end = _pd.Timestamp(lo).date(), _d.date.today() + _d.timedelta(days=extra_days)
+    return _pd.DatetimeIndex([_pd.Timestamp(d) for d in _pd.date_range(start, end).date if is_trading_day(d)])
+
+
+def _policy_events_frame(days=None):
+    """事件表 + 按规则算出的 r / t0 / overlap（scripts/policy_event_data.reaction_days 同一口径）。"""
+    import sys as _sys
+    import pandas as _pd
+    _sys.path.insert(0, str(paths.PROJECT_ROOT / "scripts"))
+    import policy_event_data as PD
+    from qbreak import policy_events as PEV
+    E = _pd.read_csv(PD.EVENTS_PATH, dtype=str).fillna("") if PD.EVENTS_PATH.exists() else _pd.DataFrame(columns=PEV.EVENT_COLS)
+    for c in PEV.EVENT_COLS:
+        if c not in E.columns:
+            E[c] = ""
+    days = days if days is not None else _policy_days()
+    if len(E):
+        E["date"] = _pd.to_datetime(E["date"])
+        E["r"], E["t0"] = PD.reaction_and_entry(E, days)
+        live = E[E["excluded"].astype(str) != "1"]
+        E["overlap"] = "0"
+        if len(live):
+            E.loc[live.index, "overlap"] = [str(x) for x in PD.overlap_flags(_pd.DatetimeIndex(live["r"]), days)]
+        E["crisis"] = [str(PD.crisis_flag(r)) for r in E["r"]]
+    return E, days
+
+
+def _policy_panel(today) -> dict:
+    """政策事件反应库（qbreak/policy_forward.py，2026-09-27 登记）：① 把新事件追加进前向记录（只追加；唯一写者 = 云端 sim-day）；
+    ② 日报块：最近 60 个交易日内的事件（事前受益 / 受损业种、到今天的实际价差 D0 / W5 / W20）、类别历史统计（展示库）、前向记录进度、
+    60 天内的 BOJ / FOMC / TANKAN / ELECTION / TRADE 日程提示。失败只记下原因（日报「数据完整性」会列出），不影响交易。"""
+    import json as _json
+    import pandas as _pd
+    from qbreak import policy_forward as PF
+    from qbreak import policy_events as PEV
+    from qbreak.utils import read_json
+    out: dict = {}
+    try:
+        E, days = _policy_events_frame()
+        me = read_json(paths.PROJECT_ROOT / "var" / "macro_events.json", {}) or {}
+        if len(E):
+            out["forward"] = PF.log_day(paths.out_dir() / PF.LOG_FILE, E, str(today), days, me.get("events") or [])
+        out["status"] = PF.status(paths.out_dir() / PF.LOG_FILE, str(today), E if len(E) else None)
+        lib_fp = paths.PROJECT_ROOT / "var" / "out" / "policy_event_lib.json"
+        lib = _json.loads(lib_fp.read_text(encoding="utf-8")) if lib_fp.exists() else {}
+        out["lib_git"] = lib.get("git")
+        out["enabled"] = bool(lib)                                      # 研究跑完（展示库存在）之前不算任何事件窗口的收益
+        recent = []
+        if len(E) and lib:
+            t = _pd.Timestamp(str(today))
+            k = days.searchsorted(t)
+            lo = max(days[max(0, k - 60)], _pd.Timestamp(lib.get("c_end") or "2026-06-26") + _pd.Timedelta(days=1))   # 只显示确认窗口之后的事件
+            R = E[(E["excluded"].astype(str) != "1") & (E["r"] >= lo) & (E["r"] <= t) & ~E["category"].isin(["CTRL_BOJ_NOCHG", "CTRL_FOMC_OTHER", "UNREGISTERED"])].sort_values("r", ascending=False).head(5)
+            real = {}
+            if len(R):
+                try:
+                    import sys as _sys
+                    _sys.path.insert(0, str(paths.PROJECT_ROOT / "scripts"))
+                    import allstock_data as AD
+                    import jq_extra_data as X
+                    import policy_event_data as PD
+                    import policy_event_study as ST
+                    A = AD.load()
+                    cc, oc = PD.sector_daily_pit(A, X.master_snapshots())
+                    from bullbear_study import SYM, load
+                    n = load(*SYM["JP"])
+                    bcc, boc = ST.bench_daily(n)
+                    W = PD.WindowCache(cc.reindex(days), oc.reindex(days))
+                    WB = PD.WindowCache(bcc.reindex(days), boc.reindex(days))
+                    for i, e in R.iterrows():
+                        cat, sub = e["category"], e["subtype"]
+                        b, v = PEV.derive_lists(cat, sub)[:2] if cat in PEV.CATS and PEV.CATS[cat]["tier"] in ("strong", "mid") else ([], [])
+                        rec = {}
+                        for w in ("D0", "W5", "W20"):
+                            spec = ST.WINDOWS[w]
+                            if spec[0] == "close":
+                                x = W.close_windows([e["r"]], spec[1], spec[2])[0]; bench = WB.close_windows([e["r"]], spec[1], spec[2])[0, 0]
+                            else:
+                                x = W.open_windows([e["t0"]], spec[1])[0]; bench = WB.open_windows([e["t0"]], spec[1])[0, 0]
+                            xs = _pd.Series(x - bench, index=list(cc.columns))
+                            md = PEV.market_dir_of(cat, sub) if cat != "ELECTION" else int(e["market_dir"] or 0)
+                            sp = PD.spread(xs, b, v) if (b or v) else (md * bench if md else float("nan"))
+                            rec[w] = None if sp != sp else round(float(sp), 2)
+                        real[e["id"]] = rec
+                except Exception as e2:                                        # noqa: BLE001
+                    out["real_error"] = f"{type(e2).__name__}: {e2}"
+            for _, e in R.iterrows():
+                cat, sub = e["category"], e["subtype"]
+                b, v = PEV.derive_lists(cat, sub)[:2] if cat in PEV.CATS and PEV.CATS[cat]["tier"] in ("strong", "mid") else ([], [])
+                recent.append({"id": e["id"], "date": e["date"].strftime("%Y-%m-%d"), "category": cat, "subtype": sub, "sign": int(e["sign"] or 0),
+                               "name_ja": e["name_ja"], "benef": b, "victim": v, "r": e["r"].strftime("%Y-%m-%d") if _pd.notna(e["r"]) else "",
+                               "t0": e["t0"].strftime("%Y-%m-%d") if _pd.notna(e["t0"]) else "", "verified": e["verified"], "covert": e.get("covert", ""),
+                               "real": real.get(e["id"], {})})
+        out["recent"] = recent
+        cats = {}
+        for key, ent in (lib.get("library") or {}).items():
+            w5 = (ent.get("windows") or {}).get("W5", {}).get("spread_P1") or {}
+            w20 = (ent.get("windows") or {}).get("W20", {}).get("spread_P1") or {}
+            cats[key] = {"n": ent.get("n"), "benef": ent.get("benef"), "victim": ent.get("victim"), "W5": w5, "W20": w20}
+        out["categories"] = cats
+        tests = (lib.get("tests") or {}).get("C") or (lib.get("tests") or {}).get("X") or {}
+        labs = [b.get("verdict") for k, b in tests.items() if b.get("verdict") and not b.get("fails")]
+        out["label"] = ("；".join(labs) if labs else ("探索窗口未过：只展示（历史描述，不是预测）" if tests else "")) if lib else "研究未跑：不展示反应"
+        out["c_end"] = lib.get("c_end")
+        try:
+            me = read_json(paths.PROJECT_ROOT / "var" / "macro_events.json", {}) or {}
+            t = _pd.Timestamp(str(today))
+            out["upcoming"] = [{"date": x.get("date"), "kind": x.get("kind"), "name": x.get("name", "")} for x in (me.get("events") or [])
+                               if x.get("kind") in ("BOJ", "FOMC", "TANKAN", "ELECTION", "TRADE") and t <= _pd.Timestamp(x.get("date")) <= t + _pd.Timedelta(days=60)][:8]
+        except Exception:                                                        # noqa: BLE001
+            out["upcoming"] = []
+        return out
+    except Exception as e:                                                       # noqa: BLE001
+        log.warning("政策事件反应库面板失败（不影响交易）：%s", e)
+        out["error"] = f"{type(e).__name__}: {e}"
+        return out
+
+
+def cmd_policy_event(a) -> int:
+    """政策事件库的录入 / 查看（Mac 对话里由 Claude 执行；只改仓库里的事件表 var/policy_events.csv，不算反应、不下单）。
+    add：校验（类别 / 子类在词表、日期 ≤ 今天、来源域名白名单、id 不重复）→ 按规则算 r / t0 → 追加一行 → 打印事前受益 / 受损与类别历史统计；
+    list：最近 N 天的事件；check：只填核对日 verified；tocheck：列出待核对的条目到 var/out/policy_events_tocheck.md。"""
+    import datetime as _d
+    import json as _json
+    import sys as _sys
+    import pandas as _pd
+    from qbreak.utils import read_json
+    _sys.path.insert(0, str(paths.PROJECT_ROOT / "scripts"))
+    import policy_event_data as PD
+    from qbreak import policy_events as PEV
+    fp = PD.EVENTS_PATH
+    if "qbreak-src" in str(paths.PROJECT_ROOT) and a.action in ("add", "check"):
+        print("这是 ~/qbreak-src（只 git pull 的克隆）：录入要在 ~/qbreak-dev 里做（CLAUDE.md）"); return 2
+    E = _pd.read_csv(fp, dtype=str).fillna("") if fp.exists() else _pd.DataFrame(columns=PEV.EVENT_COLS)
+    for c in PEV.EVENT_COLS:
+        if c not in E.columns:
+            E[c] = ""
+    today = PEV.today_jst()
+    if a.action == "list":
+        F, _ = _policy_events_frame()
+        lo = _pd.Timestamp(today) - _pd.Timedelta(days=a.days)
+        R = F[(F["date"] >= lo)].sort_values("date") if len(F) else F
+        print(f"政策事件（最近 {a.days} 天）{len(R)} 条：")
+        for _, e in R.iterrows():
+            b, v = PEV.derive_lists(e["category"], e["subtype"])[:2] if e["category"] in PEV.CATS and PEV.CATS[e["category"]]["tier"] in ("strong", "mid") else ([], [])
+            print(f"  {e['id']}｜{e['date'].date()} {e['time_local'] or '--:--'}（JST {e['date_jst']} {e['time_jst'] or '--:--'}）｜{e['category']}/{e['subtype']} sign {e['sign']}｜"
+                  f"r {e['r'].date() if _pd.notna(e['r']) else '—'} t0 {e['t0'].date() if _pd.notna(e['t0']) else '—'}｜受益 {'、'.join(b) or '—'}｜受损 {'、'.join(v) or '—'}｜"
+                  f"核对 {e['verified'] or '未'}{'｜覆面' if e.get('covert') == '1' else ''}{'｜排除：' + e['reason'] if e['excluded'] == '1' else ''}")
+        return 0
+    if a.action == "tocheck":
+        R = E[(E["verified"] == "") & (E["excluded"] != "1")] if len(E) else E
+        lines = [f"# 待核对的政策事件（{today}）：{len(R)} 条", ""] + [f"- {r['id']}｜{r['date']}｜{r['category']}/{r['subtype']}｜{r['name_ja']}｜{r['source_url']}" for _, r in R.iterrows()]
+        out = paths.PROJECT_ROOT / "var" / "out" / "policy_events_tocheck.md"
+        out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print("\n".join(lines)); print(f"→ {out}")
+        return 0
+    if a.action == "check":
+        if not a.id or a.id not in set(E["id"]):
+            print("要 --id（存在的事件 id）"); return 2
+        E.loc[E["id"] == a.id, "verified"] = a.checked or today.isoformat()
+        E.loc[E["id"] == a.id, "checked_hash"] = "manual"
+        E[PEV.EVENT_COLS].to_csv(fp, index=False); print(f"{a.id} 核对日 → {a.checked or today.isoformat()}（checked_hash = manual）")
+        return 0
+    # add
+    date = a.date
+    if a.from_macro:
+        me = read_json(paths.PROJECT_ROOT / "var" / "macro_events.json", {}) or {}
+        past = sorted(x["date"] for x in (me.get("events") or []) if x.get("kind") == a.from_macro and x.get("date") <= today.isoformat())
+        if not past:
+            print(f"macro_events.json 里没有已过去的 {a.from_macro} 日程"); return 2
+        date = past[-1]
+    if not (a.category and a.subtype and date and a.source):
+        print("add 需要 --category --subtype --date（或 --from-macro）--source"); return 2
+    sign = PEV.CATS.get(a.category, {}).get("subtypes", {}).get(a.subtype)
+    md = PEV.market_dir_from_seats(a.subtype, a.seats) if a.category == "ELECTION" else PEV.market_dir_of(a.category, a.subtype)
+    home = PEV.CATS.get(a.category, {}).get("home", "JP")
+    time_src = a.time_src or ("official_page" if a.time else ("class_default" if PEV.CATS.get(a.category, {}).get("default_time") else ""))
+    tm = a.time or (PEV.CATS.get(a.category, {}).get("default_time", "") if time_src == "class_default" else "")
+    dj, tj = PEV.jst_of(date, tm, home) if a.category in PEV.CATS else (date, tm)
+    covert = "" if a.category != "MOF_FX" else ("1" if a.covert else "0")
+    if a.category == "MOF_FX" and not a.covert and not a.confirmed_same_day:
+        print("MOF_FX 要写明：--confirmed-same-day（当日財務省 / 財務官が公表）或 --covert --known-on 月次公表日（覆面介入，只描述）"); return 2
+    known_on = a.known_on or date
+    base = f"{a.category}-{date}"
+    ids = set(E["id"]) if len(E) else set()
+    eid = base if base not in ids else next(f"{base}-{k}" for k in range(2, 99) if f"{base}-{k}" not in ids)
+    row = {c: "" for c in PEV.EVENT_COLS}
+    row.update(dict(id=eid, category=a.category, subtype=a.subtype, sign=str(sign if sign is not None else 0), date=date, time_local=tm, date_jst=dj, time_jst=tj, time_src=time_src,
+                    home=home, known_on=known_on, covert=covert, pre_announced=str(int(a.pre_announced)), market_dir=str(md),
+                    name_ja=a.name_ja or "", name_en=a.name_en or "", description=a.description or "", amount=a.amount or "", source_url=a.source,
+                    verified=a.checked or "", checked_hash="manual" if a.checked else "", http_status="",
+                    added_on=today.isoformat(), added_by="forward", excluded="0", reason="", supersedes=a.supersedes or "", revised_on="", notes=a.notes or ""))
+    errs = PEV.validate_row(row, today)
+    if a.supersedes and a.supersedes not in ids:
+        errs.append(f"supersedes 指向不存在的 id {a.supersedes}")
+    if errs:
+        print("不能录入：" + "；".join(errs)); return 2
+    F, days = _policy_events_frame()
+    tmp = _pd.DataFrame([row]); tmp["date"] = _pd.to_datetime(tmp["date"])
+    rr, tt = PD.reaction_and_entry(tmp, days); r, t0 = rr[0], tt[0]
+    b, v, note = PEV.derive_lists(a.category, a.subtype) if a.category in PEV.CATS and PEV.CATS[a.category]["tier"] in ("strong", "mid") else ([], [], "")
+    print(f"{'[dry-run] ' if a.dry_run else ''}{eid}：{a.category}/{a.subtype} sign {row['sign']} market_dir {md}；公布 {date} {tm or '--:--'}（{home} 当地；JST {dj} {tj or '--:--'}；{time_src or '无时刻'}）"
+          f"→ 反应日 r {r.date() if _pd.notna(r) else '—'}、买点 t0 {t0.date() if _pd.notna(t0) else '—'}{'；覆面介入（只描述）' if covert == '1' else ''}")
+    print(f"  事前受益：{'、'.join(b) or '—'}；受损：{'、'.join(v) or '—'}{'（' + note + '）' if note else ''}")
+    lib_fp = paths.PROJECT_ROOT / "var" / "out" / "policy_event_lib.json"
+    if lib_fp.exists():
+        lib = _json.loads(lib_fp.read_text(encoding="utf-8")).get("library") or {}
+        ent = lib.get(f"{a.category}/{a.subtype}")
+        if ent:
+            w5 = (ent.get("windows") or {}).get("W5", {}).get("spread_P1") or {}
+            w20 = (ent.get("windows") or {}).get("W20", {}).get("spread_P1") or {}
+            print(f"  历史统计（不是预测）：n={ent.get('n')}；W5 平均 {w5.get('mean')} pp 命中 {w5.get('hit')}%；W20 平均 {w20.get('mean')} pp 命中 {w20.get('hit')}%")
+    if a.dry_run:
+        return 0
+    _pd.concat([E, _pd.DataFrame([row])], ignore_index=True)[PEV.EVENT_COLS].to_csv(fp, index=False)
+    print(f"已追加到 {fp}（`git add var/policy_events.csv && git commit -m ... && git pull --rebase && git push` 后，下一个交易日云端 sim-day 追加前向记录；录入日 ≤ t0 才算及时）")
+    return 0
 
 def _macro_now_panel(extras: dict) -> dict:
     """日报「一眼看懂」的市场健康度与新公布的数据（qbreak/macro_now.py；只作展示，失败只记下原因）。"""
@@ -2301,6 +2526,19 @@ def main(argv=None) -> int:
     nw.add_argument("--health-hours", type=float, default=3.0, help="市场健康度多久重算一次（小时，默认 3）")
     nw.set_defaults(func=cmd_news)
 
+    pe = sub.add_parser("policy-event", help="政策事件库：add 录入（官方来源）/ list / check 填核对日 / tocheck 待核对清单（只改事件表，不下单）")
+    pe.add_argument("action", choices=["add", "list", "check", "tocheck"])
+    pe.add_argument("--category"); pe.add_argument("--subtype"); pe.add_argument("--date", help="官方公布日 YYYY-MM-DD（主场当地：美国主场用美国日期）")
+    pe.add_argument("--time", help="公布时刻 HH:MM（主场当地时刻；自动换算成 JST）"); pe.add_argument("--time-src", dest="time_src", default="")
+    pe.add_argument("--covert", action="store_true", help="MOF_FX：覆面介入（当日无官方确认；要同时给 --known-on 月次公表日；只描述）")
+    pe.add_argument("--confirmed-same-day", dest="confirmed_same_day", action="store_true", help="MOF_FX：当日財務省 / 財務官が介入を公表")
+    pe.add_argument("--source", help="官方来源 URL（域名白名单）"); pe.add_argument("--name-ja", dest="name_ja"); pe.add_argument("--name-en", dest="name_en")
+    pe.add_argument("--description"); pe.add_argument("--amount"); pe.add_argument("--notes"); pe.add_argument("--known-on", dest="known_on")
+    pe.add_argument("--pre-announced", dest="pre_announced", action="store_true"); pe.add_argument("--seats", type=int, help="选举：与党议席数 → market_dir")
+    pe.add_argument("--supersedes"); pe.add_argument("--from-macro", dest="from_macro", choices=["BOJ", "FOMC"], help="取 var/macro_events.json 最近一次会合日")
+    pe.add_argument("--checked", help="核对日 YYYY-MM-DD"); pe.add_argument("--id"); pe.add_argument("--days", type=int, default=90)
+    pe.add_argument("--dry-run", dest="dry_run", action="store_true")
+    pe.set_defaults(func=cmd_policy_event)
     jq = sub.add_parser("jquants-check", help="J-Quants 接入检查（需环境变量 JQUANTS_API_KEY；不打印キー）")
     jq.add_argument("--plan", default=None, choices=["free", "light", "standard", "premium"],
                     help="订阅档位（决定限速；默认读环境变量 JQUANTS_PLAN，再默认 free）")

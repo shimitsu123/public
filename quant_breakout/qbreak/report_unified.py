@@ -60,6 +60,7 @@ def build_unified_data() -> dict:
             "news": td.get("news") or {},                        # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
             "energy": td.get("energy") or {},                    # 仪表盘：能源消费（每月）+ K4 前向记录的状态（只作展示 / 记录）
             "era": td.get("era") or {},                          # 时代主线前向记录的状态（qbreak/era_forward.py；只记录）
+            "policy": td.get("policy") or {},                    # 政策事件反应库（qbreak/policy_forward.py；只展示 + 前向记录）
             "shadow": read_json(paths.out_dir() / "shadow_today.json", {}) or {},   # 影子账户（判断型，只前向记录，不影响交易）
             "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
@@ -157,6 +158,11 @@ def missing_items(d: dict) -> list[str]:
         out.append(f"时代主线前向记录：这次没记上（{ef['error']}）—— 不影响交易；这个月不补写，下个月第一次运行照常记")
     if started and ef.get("us_error"):
         out.append(f"时代主线前向记录的美国 49 行业：取不到（{ef['us_error']}）—— 只记了日本；下次取到时记最新的月份（不补写），不影响交易")
+    pf = d.get("policy") or {}
+    if started and pf.get("error"):
+        out.append(f"政策事件反应库：这次没算 / 没记上（{pf['error']}）—— 不影响交易；前向记录不补写")
+    if started and (pf.get("status") or {}).get("pending"):
+        out.append(f"政策事件反应库：{pf['status']['pending']} 个已过去的日银 / FOMC 日程还没有分类录入（待分类，Mac 上 `bash scripts/liveu.sh policy add …`）")
     x = d.get("executor") or {}
     if started and x.get("error"):
         out.append(f"实盘执行器演练账户：运行失败（{x['error']}）—— 不影响模拟盘，但实盘要走的那条路今天没验证")
@@ -444,7 +450,7 @@ def render_unified_html(d: dict) -> str:
         spark=_spark(d.get("history") or []), trades=tr_rows or "<tr><td colspan=6 class='muted'>还没有平仓的交易</td></tr>",
         fx=fx_rows or "<tr><td colspan=4 class='muted'>还没有换汇</td></tr>", markets="".join(mk),
         watch="".join(watch) or "<tr><td colspan=11 class='muted'>尚无候补数据</td></tr>",
-        themes=_themes_html(d.get("themes") or {}, meta),
+        themes=_themes_html(d.get("themes") or {}, meta), policy=_policy_html(d.get("policy") or {}),
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us), shadow=_shadow_html(d),
         corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
@@ -548,6 +554,37 @@ def _themes_html(th: dict, meta: tuple) -> str:
             "附上它和现有业种 / 主题最像哪几个 —— 新出现的行业先这样和现有行业做关联对比，要正式加进主题表先跑 "
             "scripts/theme_link_check.py。2026-09-26 的研究：主题动量用来挑买点没有通过、行业之间的领先关系多半是时代现象"
             "（var/out/theme_study.md、us_replication_study.md）—— 这里只帮助看清结构，不是买卖信号。</p></section>")
+
+
+def _policy_html(p: dict) -> str:
+    """政策事件反应库：最近事件（事前受益 / 受损业种、到今天的实际价差）、类别历史统计、前向记录进度、60 天内的日程。只展示，不改交易。"""
+    if not p:
+        return ""
+    st = p.get("status") or {}
+    head = (f"<section class='card'><h2>政策事件反应库（只展示 + 前向记录，不改交易）</h2>"
+            f"<p class='muted'>{escape(str(p.get('label') or ''))}；前向记录 {st.get('total', 0)} 条（及时 {st.get('on_time', 0)}、W20 到期 {st.get('due_w20', 0)}、"
+            f"待分类 {st.get('pending', 0)}）；{escape(str(st.get('next_judge') or ''))}。事前名单由规则机械推出（2026-09 写定，含事后知识）；"
+            f"「登记确认」只由前向记录授予。{('错误：' + escape(str(p['error']))) if p.get('error') else ''}</p>")
+    rows = []
+    for e in p.get("recent") or []:
+        real = e.get("real") or {}
+        rows.append(f"<tr><td>{escape(e.get('date', ''))}</td><td>{escape(e.get('category', ''))}/{escape(e.get('subtype', ''))}</td><td>{escape(e.get('name_ja', ''))}</td>"
+                    f"<td>{escape('、'.join(e.get('benef') or []) or '—')}</td><td>{escape('、'.join(e.get('victim') or []) or '—')}</td>"
+                    f"<td>{escape(e.get('r', ''))} / {escape(e.get('t0', ''))}</td><td class='n'>{real.get('D0', '—')}</td><td class='n'>{real.get('W5', '—')}</td><td class='n'>{real.get('W20', '—')}</td>"
+                    f"<td>{'核对' if e.get('verified') else '未核对'}{'・覆面' if str(e.get('covert')) == '1' else ''}</td></tr>")
+    recent = ("<h3>最近 60 个交易日的事件（确认窗口之后）</h3><div class='scroll'><table><tr><th>公布日</th><th>类别</th><th>事件</th><th>事前受益</th><th>事前受损</th>"
+              "<th>反应日 / 买点</th><th class='n'>D0 价差 pp</th><th class='n'>W5 pp</th><th class='n'>W20 pp</th><th>状态</th></tr>" + "".join(rows) + "</table></div>") if rows else         "<p class='muted'>确认窗口之后还没有新事件（或研究还没跑、库不存在）。</p>"
+    cats = p.get("categories") or {}
+    crow = []
+    for k, c in sorted(cats.items()):
+        w5, w20 = c.get("W5") or {}, c.get("W20") or {}
+        crow.append(f"<tr><td>{escape(k)}</td><td class='n'>{c.get('n')}</td><td>{escape('、'.join(c.get('benef') or []) or '—')}</td><td>{escape('、'.join(c.get('victim') or []) or '—')}</td>"
+                    f"<td class='n'>{w5.get('mean', '—')}</td><td class='n'>{w5.get('hit', '—')}</td><td class='n'>{w20.get('mean', '—')}</td><td class='n'>{w20.get('hit', '—')}</td></tr>")
+    lib = ("<h3>类别历史统计（P1 名单价差，全历史描述，不是预测）</h3><div class='scroll'><table><tr><th>类别/子类</th><th class='n'>n</th><th>受益</th><th>受损</th>"
+           "<th class='n'>W5 均值 pp</th><th class='n'>W5 命中 %</th><th class='n'>W20 均值 pp</th><th class='n'>W20 命中 %</th></tr>" + "".join(crow) + "</table></div>") if crow else ""
+    up = "".join(f"<li>{escape(str(x.get('date')))} {escape(str(x.get('kind')))} {escape(str(x.get('name') or ''))}</li>" for x in p.get("upcoming") or [])
+    upcoming = f"<h3>60 天内的相关日程（公布后再分类录入）</h3><ul>{up}</ul>" if up else ""
+    return head + recent + lib + upcoming + "</section>"
 
 
 def _commod_rows() -> list[dict]:
@@ -718,6 +755,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <p class="muted">宏观顺风度 = 个股对日本 / 美国利率、油价、日元、信用利差，以及农产品、工业金属、黄金、天然气 ETF 的历史敏感度 × 近 60 个交易日的变化（当日横截面三分位：顺风 / 中性 / 逆风），只作参考：2026-09-25 事先登记研究显示它对之后 20 日的收益没有可靠的预测力（加商品后月末前 1/5 − 后 1/5 为 +0.35%，t 1.40；秩相关 0.006），交易排序不用它。</p>
 <p class="muted">突破：<b>真突破</b> = 信号当天收盘高于过去 60 个交易日的最高价（不含当天）；<b>未破箱顶</b> = 信号成立但收盘还在箱顶之下（括号里是还差的 %）；还没触发的票显示距箱顶 %（今天要做的事里的买单也标了）。只作参考，不改交易：2026-09-26 事先登记的研究（2006-10〜，日経225 股票池，现行出场规则，每笔扣来回手续费）全部信号 638 笔：胜率 42.5%、每笔平均 +0.70%、盈亏比 1.89；其中真突破 163 笔：胜率 49.7%、每笔 +0.83%、盈亏比 1.44；未破箱顶 475 笔：胜率 40.0%、每笔 +0.66%、盈亏比 2.08。只做真突破：胜率 +7.2 pp（95% 区间 +0.7〜+13.6 pp），每笔期望 +0.13 pp 但不显著（95% 区间 −0.78〜+0.96 pp），组合 20 年年化 11.2%（现行 12.8%）、最大回撤 −36.4%（现行 −35.1%）——现行策略靠盈亏比赚钱，不是靠命中率（var/out/signal_study.md）。</p></section>
 {themes}
+{policy}
 {commod}
 {shadow}
 <section class="card"><h2>最近平仓</h2><div class="scroll"><table><tr><th>日期</th><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">损益（日元）</th><th>原因</th></tr>{trades}</table></div></section>

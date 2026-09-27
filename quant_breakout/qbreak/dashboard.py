@@ -340,6 +340,19 @@ def sectors_html(themes: dict, n: int = 5) -> str:
     return viz.diverging(pick) + f'<p class="muted">近 1 个月相对 TOPIX 1000 平均（%）；数据日 {escape(str(themes.get("asof") or "—"))}</p>'
 
 
+def policy_html(p: dict | None) -> str:
+    """政策事件反应库（qbreak/policy_forward.py）：最近事件的事前受益 / 受损业种与到今天的价差；库没建 / 没跑 → 一句话。"""
+    if not p:
+        return "<p class='muted'>政策事件反应库：还没有数据（研究登记后每个交易日云端记录）。</p>"
+    st = p.get("status") or {}
+    out = [f"<p class='muted'>{escape(str(p.get('label') or ''))}；前向记录 {st.get('total', 0)} 条、待分类 {st.get('pending', 0)}。</p>"]
+    for e in (p.get("recent") or [])[:5]:
+        real = e.get("real") or {}
+        out.append(f"<p>{escape(e.get('date', ''))} {escape(e.get('category', ''))}/{escape(e.get('subtype', ''))} {escape(e.get('name_ja', ''))}：受益 {escape('、'.join(e.get('benef') or []) or '—')}；"
+                   f"受损 {escape('、'.join(e.get('victim') or []) or '—')}；D0 {real.get('D0', '—')} / W5 {real.get('W5', '—')} / W20 {real.get('W20', '—')} pp</p>")
+    return "".join(out)
+
+
 def render(d: dict, macro: dict | None = None, news: dict | None = None, full_news: bool = False) -> str:
     """仪表盘 HTML 片段。d = 日报数据（build_unified_data 或 unified_today.json 的内容）；macro = macro_now；
     news：full_news=True 时是 {"events": [...], "generated": ...}（Mac），否则是 {"summary": {...}, "generated": ...}（日报）。"""
@@ -358,6 +371,7 @@ def render(d: dict, macro: dict | None = None, news: dict | None = None, full_ne
             f'<h2 style="margin-top:14px">能源消费（每月）</h2>{energy_html(d.get("energy"))}'
             f'<h2 style="margin-top:14px">经济威胁消息与影响链路</h2>{nh}'
             f'<h2 style="margin-top:14px">业种强弱</h2>{sectors_html(d.get("themes") or {})}'
+            f'<h2 style="margin-top:14px">政策事件（事前名单 vs 实际，只展示）</h2>{policy_html(d.get("policy"))}'
             f'<p class="muted">数据：FRED（St. Louis Fed；零售销售 = 美国商务部、消费者信心 = University of Michigan、日本消费者态度指数 = OECD）、'
             f'EIA（成品油周报 / 短期能源展望 STEO / 天然气）、JODI-Oil、財務省（国債金利・貿易統計）、Yahoo Finance、各消息来源；'
             f'宏观取数 {escape(str(macro.get("generated") or "—"))}。'

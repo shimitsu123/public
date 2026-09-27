@@ -282,6 +282,21 @@ Mac 睡着 / 关着的时候 07:40 的模拟操盘会错过。`scripts/mac_setup
 
 单独装 / 卸载：`bash ~/qbreak-src/quant_breakout/scripts/install_launchd_login.sh [uninstall]`；日志 `~/.qbreak/home/logs/com.qbreak.login.out|err`。
 
+## 1.12 政策事件反应库的录入（2026-09-27 起；只改仓库里的事件表，不下单）
+
+日银决定、財務省介入、FOMC 转折、关税、半导体规制、消费税等政策事件公布后，在 Mac 对话里让 Claude 录入（在 `~/qbreak-dev` 里，不在 `~/qbreak-src`）：
+
+```
+bash scripts/liveu.sh policy add --category BOJ_CHANGE --subtype tighten --date 2026-10-30 --source https://www.boj.or.jp/... --name-ja "利上げ 1.5%" --checked 2026-10-30
+```
+
+- `--date` 用主场当地的官方日期（美国主场用美国日期，脚本自动换算 JST）；有官方时刻加 `--time HH:MM`（当地时刻）；日银会合不给时刻 → 类别默认 12:00
+- `MOF_FX` 必须写明 `--confirmed-same-day`（当日財務省 / 財務官が公表）或 `--covert --known-on 月次公表日`（覆面介入，只描述）
+- `--checked` = 自己在浏览器里核对过来源（写今天；checked_hash = manual）；不写 → 只描述、不进统计，可以之后 `policy check --id <id>`
+- 录入后：`git add var/policy_events.csv && git commit -m "政策事件：..." && git pull --rebase && git push`；下一个交易日云端 sim-day 追加前向记录
+- 看：`bash scripts/liveu.sh policy list`（最近 90 天）、`policy tocheck`（待核对清单）、日报「政策事件反应库」块、`var/out/policy_forward_review.md`
+- 日报里「待分类」= 已过去的日银 / FOMC 日程还没有事件行（无变更也要录：`--category CTRL_BOJ_NOCHG --subtype no_change` / `CTRL_FOMC_OTHER --subtype other`）
+
 ## 2. 开户与 API 设定（v4r10，2026-09-25 核对）
 
 1. 网上填表 → 邮寄 / 自行打印开户文件 → 寄回 2 种身份证明与マイナンバー → 审查 → ID / 密码以簡易書留寄到。

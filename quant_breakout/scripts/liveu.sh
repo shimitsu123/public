@@ -4,6 +4,7 @@
 #   bash scripts/liveu.sh run --broker paper        定时任务用：git pull 等云端当天的数据入库 → 同步输入 → 执行器 → 通知 → 打开页面
 #   bash scripts/liveu.sh run --broker tachibana --phase open   定时任务用（立花 09:05）：开盘后补单（不等云端、不打开页面）
 #   bash scripts/liveu.sh --broker paper --status   手动：看账本（持仓、下一开盘的单、最近事件），顺便重写页面
+#   bash scripts/liveu.sh policy add …               政策事件库录入（官方来源；在 ~/qbreak-dev 里，之后 git add var/policy_events.csv 提交推送）
 #   bash scripts/liveu.sh desktop                    手动（在终端里做一次）：桌面上放一个指向页面的链接，并打开页面
 #   bash scripts/liveu.sh trial                      试跑：在临时目录下载行情、按最新收盘做一次决策（不动正式的模拟账户）
 #   bash scripts/liveu.sh news [--open]              定时任务用（每 15 分钟，scripts/install_launchd_news.sh）：市场仪表盘 + 经济威胁提醒
@@ -118,6 +119,11 @@ if [ "${1:-}" = "news" ]; then                     # 定时任务用（每 15 �
   shift
   sync_inputs
   exec "$PY" run.py news --page --notify "$@"
+fi
+
+if [ "${1:-}" = "policy" ]; then                   # 政策事件库：bash scripts/liveu.sh policy add|list|check|tocheck …（只改仓库里的事件表，不下单；在 ~/qbreak-dev 里用）
+  shift
+  exec "$PY" run.py policy-event "$@"
 fi
 
 if [ "${1:-}" = "desktop" ]; then                  # 在终端里做一次（第一次可能会问「终端」能否访问桌面文件夹：允许）

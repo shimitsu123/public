@@ -42,23 +42,53 @@ def load_events(path: Path | str | None = None) -> pd.DataFrame:
     return E.sort_values(["date", "category"]).reset_index(drop=True)
 
 
+def next_days(dates, days: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """日期 → 之后第一个交易日；数据末尾之后 → NaT。"""
+    d = pd.DatetimeIndex(pd.to_datetime(dates)).normalize()
+    k = days.searchsorted(d.to_numpy(), side="right")
+    out = days.to_numpy()[np.clip(k, 0, len(days) - 1)]
+    return pd.DatetimeIndex(np.where(k < len(days), out, np.datetime64("NaT")))
+
+
 def close_time(d: pd.Timestamp) -> str:
     return CLOSE_NEW if pd.Timestamp(d) >= CLOSE_CHANGE else CLOSE_OLD
 
 
-def reaction_days(E: pd.DataFrame, days: pd.DatetimeIndex) -> pd.DatetimeIndex:
-    """每个事件的反应日 r（见模块开头）；数据末尾之后 → NaT。"""
-    out = []
-    for d, tm in zip(E["date"], E["time_jst"]):
-        d = pd.Timestamp(d).normalize()
-        tm = str(tm or "")
-        intraday = bool(tm) and tm < close_time(d)
-        if intraday and d in days:
-            out.append(d)
+def _s(x) -> str:
+    return "" if x is None or (isinstance(x, float) and np.isnan(x)) else str(x)
+
+
+def _next_after(days: pd.DatetimeIndex, d: pd.Timestamp):
+    k = days.searchsorted(d, side="right")
+    return days[k] if k < len(days) else pd.NaT
+
+
+def reaction_and_entry(E: pd.DataFrame, days: pd.DatetimeIndex) -> tuple[pd.DatetimeIndex, pd.DatetimeIndex]:
+    """(r, t0)。date_jst / time_jst（qbreak.policy_events.jst_of 由 date + time_local + home 换算）：
+    有时刻：JST 日期 d 是交易日且 时刻 < 收盘时刻（2024-11-05 前 15:00、之后 15:30）→ r = d；时刻 < 07:40（执行器决策时刻）→ t0 = d，否则 t0 = d 之后第一个交易日；
+    时刻 ≥ 收盘 或 d 非交易日 → r = d 之后第一个交易日、t0 = r。
+    无时刻：r = date_jst（= date）之后第一个交易日、t0 = r（日本主场 = 当收盘后；美国主场 = JST 夜间，与 qbreak/macro.py MacroEvent.reaction_date 同一规则）。
+    没有 date_jst 列时用 date。数据末尾之后 → NaT。"""
+    from qbreak import policy_events as PEV
+    dj_col = E["date_jst"] if "date_jst" in E.columns else E["date"]
+    rs, t0s = [], []
+    for d, dj, tm in zip(E["date"], dj_col, E["time_jst"]):
+        d = pd.Timestamp(dj if _s(dj) not in ("", "NaT") else d).normalize()
+        tm = _s(tm)
+        if tm and d in days and tm < close_time(d):
+            r = d
+            t0 = d if tm < PEV.ENTRY_CUTOFF else _next_after(days, d)
         else:
-            k = days.searchsorted(d, side="right")
-            out.append(days[k] if k < len(days) else pd.NaT)
-    return pd.DatetimeIndex(out)
+            r = _next_after(days, d)
+            t0 = r
+        rs.append(r)
+        t0s.append(t0)
+    return pd.DatetimeIndex(rs), pd.DatetimeIndex(t0s)
+
+
+def reaction_days(E: pd.DataFrame, days: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """每个事件的反应日 r（reaction_and_entry 的第一项）。"""
+    return reaction_and_entry(E, days)[0]
 
 
 # ───────────────────────── 收益序列 ─────────────────────────
@@ -72,17 +102,43 @@ def _cache_csv(name: str) -> pd.Series | None:
     return s[~s.index.duplicated()].sort_index()
 
 
+MAX_ABS_BENCH = 15.0
+
+
+def check_series(s: pd.Series, name: str, max_abs: float = MAX_ABS_BENCH) -> pd.Series:
+    """基准 / ETF 序列体检：单日 |收益| > max_abs%（无拆股的指数不可能）→ 拒绝使用（ValueError）。"""
+    r = s.pct_change().abs() * 100
+    bad = r[r > max_abs]
+    if len(bad):
+        raise ValueError(f"{name} 序列有 {len(bad)} 个 |日收益| > {max_abs}% 的跳变（{bad.index[0].date()} …）：不用")
+    return s
+
+
+def topix_daily() -> pd.DataFrame | None:
+    """TOPIX 指数四本值（J-Quants /indices/bars/daily/topix，缓存 var/cache/jquants/out/topix_daily.csv，Standard 档 2016-09-27 起）→ Open / Close；缺 → None。"""
+    fp = Path(paths.cache_dir()) / "jquants" / "out" / "topix_daily.csv"
+    if not fp.exists():
+        return None
+    df = pd.read_csv(fp)
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.set_index("Date").sort_index()
+    out = pd.DataFrame({"Open": pd.to_numeric(df["O"], errors="coerce"), "Close": pd.to_numeric(df["C"], errors="coerce")})
+    check_series(out["Close"].dropna(), "TOPIX")
+    return out[~out.index.duplicated()]
+
+
 def benchmarks() -> dict[str, pd.Series]:
-    """{'N225': 收盘, 'TOPIX': 收盘（1306.T，可能缺）}。"""
+    """{'N225': 收盘（^N225，体检过）, 'TOPIX': 收盘（J-Quants 指数，2016-09-27 起；缺则没有）}。不用 yfinance 1306.T（2015-01-05 / 2026-03-30 有 −90% 的错价）。"""
     out = {}
     try:
         from bullbear_study import SYM, load
-        out["N225"] = load(*SYM["JP"])["Close"].astype(float)
+        n = load(*SYM["JP"])
+        out["N225"] = check_series(n["Close"].astype(float), "N225")
     except Exception:                                                        # noqa: BLE001
         pass
-    t = _cache_csv("1306.T_21y.csv")
-    if t is not None:
-        out["TOPIX"] = t
+    tp = topix_daily()
+    if tp is not None:
+        out["TOPIX"] = tp["Close"]
     return out
 
 
@@ -100,12 +156,29 @@ def s33_map() -> dict[str, str]:
     """票（1234.T）→ 33 业种名（今天的分类）。"""
     import json
     fp = Path(paths.home()) / "industry_s33.json"
+    from qbreak.policy_events import norm_s33
     d = json.loads(Path(fp).read_text(encoding="utf-8"))
-    return {f"{k}.T": v for k, v in (d.get("s33") or {}).items()}
+    return {f"{k}.T": norm_s33(v) for k, v in (d.get("s33") or {}).items()}
 
 
-def equal_weight_returns(rets: pd.DataFrame, groups: dict[str, str], mask: pd.DataFrame | None = None, min_n: int = 3) -> pd.DataFrame:
-    """个股日收益（天 × 票）→ 每个业种等权的日收益（天 × 业种）；mask（同形，bool）= 那天算不算这只票；少于 min_n 只 → NaN。"""
+def extra_pool() -> dict[str, str]:
+    """长历史池的补充票（var/policy_extra_pool.json：今天的 TOPIX 成分里长历史池缺的业种 陸運 / 空運 / 倉庫 / 保険 等；quality = low）→ {票: 33 业种}。"""
+    import json
+    from qbreak.policy_events import norm_s33
+    fp = Path(paths.PROJECT_ROOT) / "var" / "policy_extra_pool.json"
+    if not fp.exists():
+        return {}
+    d = json.loads(fp.read_text(encoding="utf-8"))
+    return {t: norm_s33(v["s33"]) for t, v in (d.get("tickers") or {}).items()}
+
+
+MIN_N = 5                                                 # 业种等权：成员 < 5 只 → NaN（A / B 年代统一）
+MAX_ABS_RET = 35.0                                        # 个股单日 |收益| > 35% → 当数据错误剔除（東証値幅制限之外；yfinance 长历史有拆股 / 重上市错价）
+
+
+def equal_weight_returns(rets: pd.DataFrame, groups: dict[str, str], mask: pd.DataFrame | None = None, min_n: int = MIN_N,
+                         max_abs: float | None = MAX_ABS_RET) -> pd.DataFrame:
+    """个股日收益（天 × 票）→ 每个业种等权的日收益（天 × 业种）；mask（同形，bool）= 那天算不算这只票；少于 min_n 只 → NaN；|收益| > max_abs → 当缺值。"""
     out = {}
     by: dict[str, list[str]] = {}
     for t, g in groups.items():
@@ -114,6 +187,8 @@ def equal_weight_returns(rets: pd.DataFrame, groups: dict[str, str], mask: pd.Da
     for g, ts in sorted(by.items()):
         r = rets[ts]
         ok = np.isfinite(r.to_numpy())
+        if max_abs is not None:
+            ok &= np.abs(np.nan_to_num(r.to_numpy(), nan=0.0)) <= max_abs
         if mask is not None:
             ok &= mask.reindex(index=r.index, columns=ts).fillna(False).to_numpy(bool)
         v = np.where(ok, r.to_numpy(), np.nan)
@@ -142,10 +217,11 @@ def s33_map_pit(snaps: dict[pd.Timestamp, pd.DataFrame]) -> dict[pd.Timestamp, d
         if col is None:
             continue
         mp = {}
+        from qbreak.policy_events import norm_s33
         for c, g in zip(m["Code"].astype(str), m[col].astype(str)):
             t = JQ.to_yf(c)
             if t and g and g != "-":
-                mp[t] = g
+                mp[t] = norm_s33(g)
         out[pd.Timestamp(d)] = mp
     return out
 
@@ -172,14 +248,27 @@ def sector33_all_pit(A: dict, snaps: dict[pd.Timestamp, pd.DataFrame], min_n: in
     return pd.concat(parts).sort_index()
 
 
-def sector33_long(tickers: list[str] | None = None) -> pd.DataFrame:
-    """日経225 + 扩大池（yfinance 长历史）→ 33 业种等权日收益（今天的分类）。"""
+def long_pool(tickers: list[str] | None = None, extra: bool = True) -> tuple[list[str], dict[str, str]]:
+    """长历史池的票与业种：日経225 + 扩大池（今天的分类）+ 补充票（extra_pool）。"""
     import leap_data as LD
-    names = tickers or list(LD.names())
+    names = list(tickers) if tickers else list(LD.names())
+    mp = dict(s33_map())
+    if extra:
+        for t, g in extra_pool().items():
+            if t not in names:
+                names.append(t)
+            mp[t] = g
+    return names, mp
+
+
+def sector33_long(tickers: list[str] | None = None, extra: bool = True) -> pd.DataFrame:
+    """日経225 + 扩大池 + 补充票（yfinance 长历史）→ 33 业种等权日收益（今天的分类）。"""
+    import leap_data as LD
+    names, mp = long_pool(tickers, extra)
     data = LD.ohlcv(names)
     closes = pd.DataFrame({t: df["Close"].astype(float) for t, df in data.items() if len(df)}).sort_index()
     rets = closes.pct_change() * 100
-    return equal_weight_returns(rets, s33_map())
+    return equal_weight_returns(rets, mp)
 
 
 # ───────────────────────── 反应 ─────────────────────────
@@ -305,15 +394,14 @@ def sector_daily_pit(A: dict, snaps: dict[pd.Timestamp, pd.DataFrame], min_n: in
     return pd.concat(pcc).sort_index(), pd.concat(poc).sort_index()
 
 
-def sector_daily_long(tickers: list[str] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """长历史池（yfinance 27 年）→ 33 业种等权 (cc, oc)（今天的分类）。"""
+def sector_daily_long(tickers: list[str] | None = None, extra: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """长历史池（yfinance 27 年）+ 补充票 → 33 业种等权 (cc, oc)（今天的分类；成员 < MIN_N → NaN）。"""
     import leap_data as LD
-    names = tickers or list(LD.names())
+    names, mp = long_pool(tickers, extra)
     data = LD.ohlcv(names)
     closes = pd.DataFrame({t: df["Close"].astype(float) for t, df in data.items() if len(df)}).sort_index()
     opens = pd.DataFrame({t: df["Open"].astype(float) for t, df in data.items() if len(df)}).reindex(closes.index)
     cc, oc = panel_daily(closes, opens)
-    mp = s33_map()
     return equal_weight_returns(cc, mp), equal_weight_returns(oc, mp)
 
 
@@ -338,11 +426,73 @@ def window_close(cc: pd.DataFrame, r: pd.Timestamp, lo: int, hi: int) -> pd.Seri
     return ((1 + cc.iloc[a:b + 1] / 100).prod(axis=0, skipna=False) - 1) * 100
 
 
-def spread(x: pd.Series, benef: list[str], victim: list[str]) -> float:
-    """事件级价差：受益篮子等权 − 受损篮子等权（只有一侧 → 该侧 − 其余业种等权）；缺值的业种跳过；两侧都没有可得业种 → NaN。"""
+class WindowCache:
+    """向量化窗口收益（置换对照要算上千次）：cc / oc（天 × 序列，%）→ 累计 log(1 + cc)（NaN 当 0）与缺值计数，任意 t0 / h 的窗口收益一次算完。"""
+
+    def __init__(self, cc: pd.DataFrame, oc: pd.DataFrame, max_missing: float = 0.5):
+        self.index = cc.index
+        self.columns = list(cc.columns)
+        C = cc.to_numpy(float) / 100
+        self.O = oc.reindex(index=cc.index, columns=cc.columns).to_numpy(float) / 100
+        self.nanC = np.isnan(C)
+        self.L = np.vstack([np.zeros((1, C.shape[1])), np.cumsum(np.log1p(np.nan_to_num(C, nan=0.0)), axis=0)])   # L[k] = Σ_{j<k} log(1+C[j])
+        self.N = np.vstack([np.zeros((1, C.shape[1]), int), np.cumsum(self.nanC, axis=0)])
+        self.max_missing = max_missing
+
+    def pos(self, dates) -> np.ndarray:
+        return self.index.get_indexer(pd.DatetimeIndex(dates))
+
+    def open_windows(self, t0s, h: int) -> np.ndarray:
+        """t0 开 → t0+h−1 收（%）：(事件 × 序列)；t0 缺 / 不够 / 开盘缺 / 窗口内缺值超过一半 → NaN。"""
+        k = self.pos(t0s)
+        n, m = len(k), len(self.columns)
+        out = np.full((n, m), np.nan)
+        ok = (k >= 0) & (k + h - 1 < len(self.index))
+        if not ok.any():
+            return out
+        kk = k[ok]
+        first = self.O[kk]                                                                    # (n_ok × m)
+        rest = np.exp(self.L[kk + h] - self.L[kk + 1]) if h > 1 else np.ones_like(first)       # Π_{j=k+1}^{k+h−1}
+        miss = (self.N[kk + h] - self.N[kk + 1]) if h > 1 else np.zeros_like(first)
+        val = ((1 + first) * rest - 1) * 100
+        val[np.isnan(first)] = np.nan
+        if h > 1:
+            val[miss > self.max_missing * (h - 1)] = np.nan
+        out[ok] = val
+        return out
+
+    def close_windows(self, rs, lo: int, hi: int) -> np.ndarray:
+        """r+lo−1 收 → r+hi 收（%）：(事件 × 序列)。"""
+        k = self.pos(rs)
+        n, m = len(k), len(self.columns)
+        out = np.full((n, m), np.nan)
+        a, b = k + lo, k + hi
+        ok = (k >= 0) & (a >= 0) & (b < len(self.index))
+        if not ok.any():
+            return out
+        aa, bb = a[ok], b[ok]
+        val = (np.exp(self.L[bb + 1] - self.L[aa]) - 1) * 100
+        miss = self.N[bb + 1] - self.N[aa]
+        val[miss > self.max_missing * (hi - lo + 1)] = np.nan
+        out[ok] = val
+        return out
+
+
+MIN_SIDE = 2                                              # 篮子一侧可得业种 < 2 → 该事件缺值（不静默缩篮）
+
+
+def basket_sizes(x: pd.Series, benef: list[str], victim: list[str]) -> tuple[int, int]:
     x = x.dropna()
-    b = [s for s in benef if s in x.index]
-    v = [s for s in victim if s in x.index]
+    return sum(1 for s_ in benef if s_ in x.index), sum(1 for s_ in victim if s_ in x.index)
+
+
+def spread(x: pd.Series, benef: list[str], victim: list[str], min_side: int = MIN_SIDE) -> float:
+    """事件级价差：受益篮子等权 − 受损篮子等权（只有一侧 → 该侧 − 其余业种等权）；名单里给了的一侧可得业种 < min_side → NaN；两侧都没给 → NaN。"""
+    x = x.dropna()
+    b = [s_ for s_ in benef if s_ in x.index]
+    v = [s_ for s_ in victim if s_ in x.index]
+    if (benef and len(b) < min_side) or (victim and len(v) < min_side):
+        return np.nan
     if b and v:
         return float(x[b].mean() - x[v].mean())
     if b:
@@ -365,11 +515,27 @@ def shuffle_sectors(benef: list[str], victim: list[str], available: list[str], s
     return [str(x) for x in pick[:len(benef)]], [str(x) for x in pick[len(benef):]]
 
 
-def cluster_boot_month(values: np.ndarray, months: np.ndarray, n: int = 2000, seed: int = 20260927) -> tuple[float, float]:
-    """按事件所在日历月聚类的自助法：均值的 2.5 / 97.5 分位；样本 < 5 → (nan, nan)。"""
+def chain_ids(r_days: pd.DatetimeIndex, days: pd.DatetimeIndex, gap: int = 20) -> np.ndarray:
+    """事件链：按 r 排序，相邻 r 间隔 ≤ gap 个交易日的事件连成一链（自助法的聚类单位；NaT → −1）。"""
+    pos = np.array([days.searchsorted(r) if pd.notna(r) else -1 for r in r_days])
+    order = np.argsort(pos, kind="stable")
+    out = np.full(len(pos), -1, int)
+    chain, last = -1, None
+    for i in order:
+        if pos[i] < 0:
+            continue
+        if last is None or pos[i] - last > gap:
+            chain += 1
+        out[i] = chain
+        last = pos[i]
+    return out
+
+
+def cluster_boot(values: np.ndarray, labels: np.ndarray, n: int = 2000, seed: int = 20260927) -> tuple[float, float]:
+    """按聚类标签（事件链 / 月）整簇重抽样的自助法：均值的 2.5 / 97.5 分位；样本 < 5 → (nan, nan)。"""
     v = np.asarray(values, float)
     ok = np.isfinite(v)
-    v, m = v[ok], np.asarray(months)[ok]
+    v, m = v[ok], np.asarray(labels)[ok]
     if len(v) < 5:
         return np.nan, np.nan
     codes, uniq = pd.factorize(pd.Index(m))
@@ -379,6 +545,11 @@ def cluster_boot_month(values: np.ndarray, months: np.ndarray, n: int = 2000, se
     idx = rng.integers(0, len(uniq), size=(n, len(uniq)))
     means = sums[idx].sum(1) / cnt[idx].sum(1)
     return float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
+
+
+def cluster_boot_month(values: np.ndarray, months: np.ndarray, n: int = 2000, seed: int = 20260927) -> tuple[float, float]:
+    """按事件所在日历月聚类（cluster_boot 的别名）。"""
+    return cluster_boot(values, months, n, seed)
 
 
 def overlap_flags(r_days: pd.DatetimeIndex, days: pd.DatetimeIndex, gap: int = 20) -> np.ndarray:
