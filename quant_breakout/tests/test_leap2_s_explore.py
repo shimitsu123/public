@@ -169,3 +169,56 @@ def test_s6_study_candidate_keep_and_registry():
     assert k["A.T"].tolist() == [True, False, False, False]                                    # 缺值 → 不买
     assert set(ST.CANDS) == {"K1", "K2", "K3"} and len(ST.CANDS) <= 5
     assert [ST.CANDS[c][1:] for c in ("K1", "K2", "K3")] == [(2.184, 0.78), (2.0, 0.70), (2.0, 0.78)]
+
+
+def test_s7_day_features_only_use_signal_day_and_before():
+    import leap2_s7_features as S7
+    idx = pd.bdate_range("2015-01-01", periods=120)
+    c = np.linspace(100, 120, 120)
+    df = pd.DataFrame({"Open": c, "High": c + 2, "Low": c - 2, "Close": c, "Volume": 1000.0}, index=idx)
+    df.iloc[-1, df.columns.get_loc("Close")] = 130.0
+    df.iloc[-1, df.columns.get_loc("High")] = 132.0
+    df.iloc[-5:, df.columns.get_loc("Volume")] = 2000.0
+    mkt = pd.Series(0.01, index=idx)
+    f = S7.day_features(df, idx[-1], mkt)
+    assert np.isclose(f["clv"], (130 - 118) / (132 - 118)) and f["brk_pos"] > 0 and f["up5"] == 5      # 当天最低 = 120 − 2
+    assert np.isclose(f["ex_mkt"], f["day_ret"] - 0.01) and np.isclose(f["vtrend"], np.mean([1000] + [2000] * 4) / 1000)   # 信号日前 5 天（不含当天）
+    fut = pd.DataFrame({"Open": 1e6, "High": 1e6, "Low": 1e6, "Close": 1e6, "Volume": 1e9},
+                       index=pd.bdate_range(idx[-1] + pd.Timedelta(days=1), periods=3))
+    g = S7.day_features(pd.concat([df, fut]), idx[-1], pd.concat([mkt, pd.Series(0.5, index=fut.index)]))
+    assert all(np.isclose(g[k], f[k], equal_nan=True) for k in f)                                   # 信号日之后的数据不影响
+    assert S7.day_features(df, idx[10], mkt) == {}                                                   # 历史不够
+
+
+def test_s7_sector_relative_uses_same_day_peers():
+    import leap2_s7_features as S7
+    idx = pd.to_datetime(["2020-01-06", "2020-01-07"])
+    cols = [f"{k}.T" for k in range(6)]
+    R = pd.DataFrame([[0.01, 0.02, 0.03, 0.04, 0.05, 0.10], [0.0] * 6], index=idx, columns=cols)
+    VR = pd.DataFrame([[1.0, 2.0, 3.0, 4.0, 5.0, 9.0], [1.0] * 6], index=idx, columns=cols)
+    s33 = {c: "化学" for c in cols[:5]}
+    s33[cols[5]] = "銀行業"                                                                            # 只有 1 只 → 不算
+    T = pd.DataFrame({"ticker": [cols[4], cols[5]], "sig_date": [idx[0], idx[0]]})
+    ex, vr = S7.sector_relative(T, R, VR, s33)
+    assert np.isclose(ex[0], 0.05 - 0.03) and np.isclose(vr[0], 5.0 / 3.0) and np.isnan(ex[1]) and np.isnan(vr[1])
+
+
+def test_s7_rules_screen_keep_fraction_and_c4():
+    import leap2_s7_combo as S7C
+    x = np.arange(300, dtype=float)
+    R, meta = S7C.make_rules6(pd.DataFrame({"a": x}), ["a"], [])
+    assert len(meta) == 6 and R[0].sum() == 100 and R[2].sum() == 200 and R[5].sum() == 100
+    rng = np.random.default_rng(2)
+    n = 400
+    xx = rng.random(n)
+    y = np.where(xx > 0.3, 3.0, -1.0)                                                                # 70% 的信号好
+    R2, meta2 = S7C.make_rules6(pd.DataFrame({"x": xx}), ["x"], [])
+    era = np.r_[np.ones(200, bool), np.zeros(200, bool)]
+    masks = {"E": era, "J": ~era, "E1": np.r_[np.ones(100, bool), np.zeros(300, bool)], "E2": np.r_[np.zeros(100, bool), np.ones(100, bool), np.zeros(200, bool)],
+             "J1": np.r_[np.zeros(200, bool), np.ones(100, bool), np.zeros(100, bool)], "J2": np.r_[np.zeros(300, bool), np.ones(100, bool)]}
+    base = {k: (45.0, 0.5) for k in masks}
+    ok, _ = S7C.screen7(R2, meta2, y, masks, base)
+    assert ok[3, 3] and ok[4, 4] and not ok[5, 5]                                                    # 「≥ 2/3」只保留 33% < 35% → 不过
+    P = pd.DataFrame({"vr1": [1.0, 2.0, 3.0], "b_n225": [1.0, 0.5, 0.2], "dy": [1.0, 2.0, 3.0], "w5v": [1.0, 2.0, 3.0]})
+    c4 = S7C.composite_c4(P)
+    assert c4.iloc[2] > c4.iloc[1] > c4.iloc[0]
