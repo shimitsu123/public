@@ -31,6 +31,7 @@
 - 前向记录扩大到 TOPIX 1000（2026-09-26 追加登记 32c16cb）：日経225 以外 716 只的信号记到 `var/out/score_forward_wide.csv`；
   合并样本已平仓 200 / 400 / 800 笔时判定（约 1 / 2 / 3.5 年）；复核已加进季度例行任务（2026-09-26 用户确认，步骤 2f）。同一天的「没参与过设计的股票」检验：F2 分数在别的股票上不成立
   （AUC 0.465），量比方向一致但较弱（0.52〜0.57）→ 不提议组合研究（`var/out/heldout_study.md`）
+- W2 前向记录（2026-09-27 登记 472b4ad，用户要求「登记 W2 前向记录，加全市场版」）：上面两份前向记录改回记「不加 W2 的突破」（W2 启用后原来只会记下一半），每个信号另记周线量比与 W2 标记；季度复核 2f 的 `score_forward.py --review` 里有「W2 保留 vs 挡掉」一节，失效警报每年一次（2027-09-28 起）、证实在合并已平仓 400 / 800 笔。全市场版 `python scripts/w2_forward_all.py --review`（J-Quants；成交额 ≥ ¥500 万的东证股票，每年约 1,000 笔，2027〜2031 每年判定一次）还没加进例行任务（要用户确认）
 - 行业联动（2026-09-26，事先登记 e9c0926）：日本行业之间的「领先 → 跟随」后半期不复现；美国行业 → 日本行业只在第二天日内有效
   （例 美国钢铁 ETF → 日本鉄鋼，方向命中率约 56%）；用来挑买点的 4 个候选全部没过 → 维持现行（`var/out/leadlag_study.md`）
 - 跨行业上下游（2026-09-26，事先登记 4534945）：上游 / 下游行业的股价没有带动作用；原材料（化学製品、石油製品、鉄鋼）涨价 → 之后几个月
@@ -140,6 +141,7 @@
   `python scripts/shadow_account.py evaluate`（标准见该文件开头第四节），汇报第一行写结论；只是记录，模拟盘不改；之后提示删除这个例行任务
 - ⑳ 2029-09-28 之后第一次：K4 前向记录 3 年判定 `python scripts/energy_forward.py --review`（2031-09-28 之后再做 5 年判定；平时只看
   `var/out/energy_forward.csv` 是否每天在追加；2026-09-26 用户确认后，季度例行任务每次汇报进度（2h），只汇报不判定）
+- ㉕ 2027-09-28 之后第一次：W2 前向记录的第一次年度判定 —— 每日记录在季度复核 2f 里自动算（看 `var/out/score_forward_review.md` 的 W2 一节）；全市场版 ☁️ `python scripts/w2_forward_all.py --review`（云端有 J-Quants キー）/ 🤖 Mac：`bash scripts/with_jquants.sh ~/.qbreak/venv/bin/python scripts/w2_forward_all.py --review`（在 `~/qbreak-dev`）；「失效警报成立」→ 提议关掉 W2，用户确认才改
 - ⑬ 2026-12-24 模拟期结束：总结 → 用户决定继续 / 上实盘 / 调整；（可选）J-Quants 付费档做无幸存者偏差回测（路线图 6）
 - ⑲ 🤖 装 / 更新全部（依赖、模拟操盘、市场仪表盘 + 经济威胁提醒、J-Quants 定时取数、研究用克隆 `~/qbreak-dev`）：
   `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（J-Quants 那一项要钥匙串里已有キー，见 ⑱②），

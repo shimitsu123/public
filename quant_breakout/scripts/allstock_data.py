@@ -18,15 +18,15 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from qbreak import pit_data as PD                                            # noqa: E402
-from qbreak.jquants import to_yf                                             # noqa: E402
+from qbreak.jquants import cache_dir, to_yf                                  # noqa: E402
 
-CACHE = Path(__file__).resolve().parents[1] / "var" / "cache" / "jquants" / "allstock_panels.npz"
+CACHE = cache_dir() / "allstock_panels.npz"                                  # 与批量日线同一个缓存目录（QBREAK_HOME 设了就跟着它）
 GENERAL_MKT = {"0101", "0102", "0104", "0106", "0107", "0111", "0112", "0113"}   # 一部 / 二部 / マザーズ / JASDAQ S・G / プライム / スタンダード / グロース
 COLS = ["Date", "Code", "O", "H", "L", "C", "Vo", "Va", "AdjFactor", "MktCap"]
 
 
 def snapshots() -> dict[pd.Timestamp, pd.DataFrame]:
-    d = Path(__file__).resolve().parents[1] / "var" / "cache" / "jquants" / "master"
+    d = cache_dir() / "master"
     out = {}
     for fp in sorted(d.glob("*.csv")):
         m = pd.read_csv(fp, dtype=str)
