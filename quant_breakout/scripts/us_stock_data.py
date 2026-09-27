@@ -1,7 +1,7 @@
 """us_stock_data.py — 美国个股行情（横展开检验用，2026-09-27）。
 
 股票池 = 今天的 S&P 500 / S&P 400 成分（Wikipedia 2026-09-27 时点，冻结在 var/us_constituents_2026-09.json；幸存者偏差同日本 E 窗口
-「今天的日経225」口径）。行情 = yfinance 27 年日线（调整后 OHLCV，qbreak.data.load_universe 同一口径，缓存在 var/cache/，不入库），
+「今天的日経225」口径）。行情 = yfinance 35 年日线（调整后 OHLCV，qbreak.data.load_universe 同一口径，缓存在 var/cache/，不入库），
 另取未复权收盘与每股分红（算股息率；缓存 var/cache/us_yf/）。
 用法：python scripts/us_stock_data.py --prefetch
 """
@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from qbreak import paths                                                     # noqa: E402
 
-YEARS = 27
+YEARS = 35
 ACT_DIR = "us_yf"
 CONST_FILE = "us_constituents_2026-09.json"
 INDEXES = {"sp500": "^GSPC", "sp400": "^MID"}

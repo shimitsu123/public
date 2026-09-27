@@ -13,9 +13,11 @@ import threat_intl_study as TI  # noqa: E402
 def test_markets_and_folds():
     allk = ["US", "JP"] + list(TI.MARKETS)
     flat = [k for f in TI.FOLDS for k in f]
-    assert sorted(flat) == sorted(allk) and len(flat) == len(set(flat)) == 24
-    assert sum(TI.group(k) == "dev" for k in TI.MARKETS) == 16
+    assert sorted(flat) == sorted(allk) and len(flat) == len(set(flat)) == 23
+    assert sum(TI.group(k) == "dev" for k in TI.MARKETS) == 15
     assert sum(TI.group(k) == "em" for k in TI.MARKETS) == 6
+    assert sorted(k for ks in TI.REGIONS.values() for k in ks) == sorted(k for k in TI.MARKETS if TI.group(k) == "dev")
+    assert "TA125" not in TI.MARKETS
     assert all(TI.MARKETS[k][3] in ("early", "americas") for k in TI.MARKETS)
 
 
@@ -96,34 +98,43 @@ def test_pooled_training_uses_answer_known_rows_only():
     assert pos.max() <= cutoff
 
 
+def test_region_mean_and_holm():
+    vals = {k: 0.1 for k in TI.REGIONS["欧洲"]} | {k: -0.1 for k in TI.REGIONS["其他"]}
+    assert abs(TI.region_mean(vals)) < 1e-12                                  # 两个地区等权
+    vals2 = dict(vals)
+    for k in TI.REGIONS["其他"]:
+        vals2[k] = None
+    assert TI.region_mean(vals2) is None                                      # 一个地区没有值 → 不给
+    h = TI.holm({"a": 0.001, "b": 0.02, "c": 0.04})
+    assert h == {"a": True, "b": True, "c": True}
+    h2 = TI.holm({"a": 0.001, "b": 0.03, "c": 0.04})
+    assert h2 == {"a": True, "b": False, "c": False}                        # 0.03 > 0.05/2 → 之后都不显著
+
+
 def test_joint_bootstrap_and_judge():
     rng = np.random.default_rng(0)
+    dev = [k for ks in TI.REGIONS.values() for k in ks]
     E = {}
-    for k in ("M1", "M2", "M3"):
-        dates = pd.bdate_range("2011-01-03", periods=1500)
-        y = (rng.random(1500) < 0.2).astype(float)
-        u0 = rng.random(1500)
+    for k in dev:
+        dates = pd.bdate_range("2011-01-03", periods=800)
+        y = (rng.random(800) < 0.2).astype(float)
+        u0 = rng.random(800)
         E[k] = {"ok": True, "mask_dates": dates, "_y": y, "_u": {m: u0.copy() for m in TI.METHODS}}
-    b = TI.joint_bootstrap(E, ["M1", "M2", "M3"], reps=30)
+    b = TI.joint_bootstrap(E, dev, reps=20)
     assert all(np.allclose(v[np.isfinite(v)], 0.0) for v in b.values())    # 候选 = A0 → 差 0
-    # 判定：构造 3 个发达 + 1 个新兴市场的汇总
     ev = {}
-    for k, d in (("D1", 0.05), ("D2", 0.04), ("D3", 0.06), ("E1", 0.02)):
-        ev[k] = {"ok": True, "A0": {"bss10": -0.01}}
+    for k in dev + ["E1"]:
+        ev[k] = {"ok": True, "A0": {"bss10": -0.01, "auc15": 0.6}}
         for m in TI.CANDS:
-            ev[k][m] = {"d_auc10": d, "d_sub": [d, d], "bss10": 0.0}
+            ev[k][m] = {"d_auc10": 0.05, "d_sub": [0.05, 0.05], "bss10": 0.0, "auc15": 0.62}
     boot = {m: np.full(50, 0.02) for m in TI.CANDS}
-    old = TI.C2_MIN_N
-    TI.C2_MIN_N = 3
-    try:
-        J = TI.judge(ev, ["D1", "D2", "D3"], ["E1"], boot)
-    finally:
-        TI.C2_MIN_N = old
+    J = TI.judge(ev, dev, ["E1"], boot)
     assert J["passed"] == list(TI.CANDS) and J["adopted"] in TI.CANDS
     ev["E1"]["DOM"]["d_auc10"] = -0.01
-    TI.C2_MIN_N = 3
-    try:
-        J2 = TI.judge(ev, ["D1", "D2", "D3"], ["E1"], boot)
-    finally:
-        TI.C2_MIN_N = old
-    assert "DOM" not in J2["passed"]                                         # C6 新兴同号不满足
+    for k in TI.REGIONS["其他"]:
+        ev[k]["EW"]["d_auc10"] = -0.2                                           # 「其他」地区为负 → C2 不过
+    J2 = TI.judge(ev, dev, ["E1"], boot)
+    assert "DOM" not in J2["passed"] and "EW" not in J2["passed"]
+    boot["POOL"] = np.full(50, -0.01)                                         # 自助法全 ≤ 0 → C3 不过
+    J3 = TI.judge(ev, dev, ["E1"], boot)
+    assert "POOL" not in J3["passed"]

@@ -34,11 +34,11 @@ def test_keep_masks_missing_values():
                       "corr_rank": [0.5, 0.2, np.nan, 0.9, 0.3, 0.2]})
     M = HX.keep_masks(T)
     assert M["W2"].tolist() == [True, False, True, True, True, True]           # W2 缺值 → 保留（同现行）
-    assert M["U2"].tolist() == [True, False, False, False, True, False]        # 量比 / β 缺值 → 不满足
-    assert M["U3"].tolist() == [False, False, False, False, True, True]        # 低相关 ≤ 1/3；缺值 → 不满足
-    assert M["U4"].tolist() == [False, False, False, False, True, False]
-    # U5：W2 ∧ 四条里至少两条（第 5 行只有低相关一条 → 不保留）
-    assert M["U5"].tolist() == [True, False, True, True, True, False]
+    assert M["U2"].tolist() == [True, True, False, False, True, False]         # K2 不加 W2（同日本）；量比 / β 缺值 → 不满足
+    assert M["U3"].tolist() == [False, False, False, False, True, True]        # W2 ∧ 低相关 ≤ 1/3；缺值 → 不满足
+    assert M["U4"].tolist() == [False, False, False, False, True, False]       # V3 不加 W2
+    assert M["U5"].tolist() == [True, False, True, True, True, False]          # W2 ∧ 四条里至少两条
+    assert M["U2w"].tolist() == [True, False, False, False, True, False]       # 另报：W2 ∧ K2
 
 
 def test_lottery_keeps_stratum_counts_and_is_seeded():
@@ -67,19 +67,36 @@ def test_boot_and_gate():
 
 
 def test_gate_min_n():
-    T = _T(n=600, lift=5.0, seed=4)
+    T = _T(n=300, lift=5.0, seed=4)
     g = HX.gate(T, HX.keep_masks(T), "U2")
     assert any(f.startswith("G5") for f in g["fails"])                       # 笔数不够 → 不成立
 
 
+def test_gate_u1_sign_test():
+    T = _T(n=4000, seed=6)
+    M = HX.keep_masks(T)
+    T.loc[M["W2"], "net"] += 3.0                                             # W2 保留组明显更好
+    T["month"] = T["sig_date"].dt.to_period("M").astype(str)
+    g = HX.gate(T, HX.keep_masks(T), "U1")
+    assert g["pass"], g["fails"]
+    T2 = _T(n=4000, seed=6)
+    T2["month"] = T2["sig_date"].dt.to_period("M").astype(str)
+    g2 = HX.gate(T2, HX.keep_masks(T2), "U1")                                # 没有效果 → R2 过不了（或 R1 某半不过）
+    assert not g2["pass"]
+
+
 def test_pools_split():
+    from qbreak.config import UNIVERSE_US
     from qbreak.universes import US_BROAD
-    x, _ = HX.pool_members("sp500x")
-    s, _ = HX.pool_members("sp500seen")
-    assert x and s and not (set(x) & set(s)) and set(s) <= set(US_BROAD)
-    assert all(v >= HX.WIN0 for v in x.values())
-    a, _ = HX.pool_members("sp500")
-    assert set(x) | set(s) == set(a)
+    seen = set(US_BROAD) | set(UNIVERSE_US)
+    u, ua, sec = HX.pool_members("sp500u")
+    sn, _, _ = HX.pool_members("sp500seen")
+    al, aa, _ = HX.pool_members("sp500")
+    s4, _, _ = HX.pool_members("sp400")
+    assert u and sn and not (set(u) & seen) and set(sn) <= seen and set(u) | set(sn) == set(al)
+    assert all(v >= HX.WIN0 and v >= ua[t] + HX.BURN_IN for t, v in u.items())   # 加入满 90 天之后才算
+    assert all(v >= HX.S400_START + HX.BURN_IN for v in s4.values())
+    assert set(sec) == set(u)
 
 
 def test_bad_move_flags():
@@ -104,3 +121,22 @@ def test_corr60_frame_matches_definition():
     mr = m.pct_change().iloc[i - 59:i + 1].to_numpy()
     assert np.isclose(cr.iloc[i], np.corrcoef(r, mr)[0, 1])
     assert cr.iloc[:40].isna().all()                                          # 不到 40 对 → 缺值
+
+
+def test_run_main_report_smoke(monkeypatch):
+    """报告与判定的整条流程（合成数据）：每个候选都有判定行、套在 W2 里的版本与单项都有输出，不出错。"""
+    T = _T(n=2500, seed=5)
+    T["corr60"] = np.random.default_rng(6).uniform(-0.2, 0.9, len(T))
+    T["month"] = T["sig_date"].dt.to_period("M").astype(str)
+    M = HX.keep_masks(T)
+    info = {"pool": "sp500u", "n_names": 50, "n_trades_raw": len(T) + 1, "n_bad": 1, "secs": 0}
+    monkeypatch.setattr(HX, "build", lambda pool, p0: ({}, T, M, info))
+    monkeypatch.setattr(HX, "LINES", [])
+    out = HX.run_main(None)
+    text = "\n".join(HX.LINES)
+    assert set(out["gates"]) == set(HX.CANDS) and all("pass" in g for g in out["gates"].values())
+    for cid in HX.CANDS:
+        assert f"### {cid} " in text
+    assert "套在 W2 里面的版本" in text and "特征与「赢」的 AUC" in text and "按年" in text
+    d = HX.run_desc("sp400", None, "S&P 400（2016 年起）")
+    assert set(d["desc"]) == set(HX.CANDS) | set(HX.NESTED)

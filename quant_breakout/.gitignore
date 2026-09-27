@@ -17,3 +17,7 @@ var/out/trial_page.html
 # Mac 实时仪表盘（含第三方消息标题，不入库）
 var/out/dashboard.html
 var/out/jq_today.json
+
+# 调试运行（--only / --reps）的输出，不入库
+var/out/*_partial.md
+var/out/*_partial.json
