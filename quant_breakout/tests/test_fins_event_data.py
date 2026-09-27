@@ -145,7 +145,7 @@ def test_describe_events_full_reaction_gap_and_split():
     c[i + 1:, 0] = 1050.0                                                # 周一收 1050（反应 +5%）
     O = c.copy(); O[i + 1, 0] = 1020.0                                   # 周一开 1020（跳空 +2%）、收阳
     V = np.full((n, 2), 1e5); V[i + 1, 0] = 4e5
-    R = np.full((n, 2), 0.5); R[i + 2:, 1] = 0.25                         # 第二只票在 t0+1 拆股
+    R = np.full((n, 2), 0.5); R[i + 1:, 1] = 0.25                         # 第二只票在 t0 拆股（t0+1 才拆的不算：不用进场后的信息）
     A = {"days": days, "names": ["1234.T", "5678.T"], "O": O, "H": c * 1.01, "L": c * 0.99, "C": c, "V": V, "R": R, "VA": np.full((n, 2), 5e8),
          "MC": np.full((n, 2), 1e10), "listed": np.ones((n, 2), bool)}
     E = pd.DataFrame({"ticker": ["1234.T", "5678.T"], "sig_day": [days[i], days[i]], "t0": [days[i + 1], days[i + 1]], "r": [days[i + 1], days[i + 1]]})

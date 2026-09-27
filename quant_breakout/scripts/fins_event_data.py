@@ -202,7 +202,7 @@ def describe_events(A: dict, E: pd.DataFrame) -> pd.DataFrame:
     """事件表 + 面板 → 加描述字段（对不上的缺值）：lot_yen 信号日一手真实金额（调整后收盘 × R × 100）、va20 信号日前 20 日平均成交额（円）、
     mc 信号日市值；有 t0 / r 列时再加：listed_t0 t0 那天在时点股票池、gap_t0 t0 开盘对信号日收盘 %（引擎 > 3% 放弃）、
     react 反应日 r 收盘对前一交易日 %、react_d r 收盘对开示日前一交易日 %、vr_r r 日量 ÷ 前 20 日均量、up_r r 日收阳（收 ≥ 开）、
-    split_near [信号日−1, t0+1] 内 R 跳变 > 1%（拆股 / 并股）。"""
+    split_near [信号日−1, t0] 内 R 跳变 > 1%（拆股 / 并股；不用进场后的信息）。"""
     days, names = pd.DatetimeIndex(A["days"]), list(A["names"])
     col = {t: j for j, t in enumerate(names)}
     di = pd.Index(days)
@@ -234,7 +234,7 @@ def describe_events(A: dict, E: pd.DataFrame) -> pd.DataFrame:
             listed[k] = float(A["listed"][i0, j])
             if np.isfinite(c) and c > 0 and np.isfinite(O[i0, j]):
                 gap[k] = (O[i0, j] / c - 1) * 100
-            lo, hi = max(0, i - 1), min(len(days) - 1, i0 + 1)
+            lo, hi = max(0, i - 1), i0
             rr_ = R[lo:hi + 1, j]
             if np.isfinite(rr_).all() and len(rr_) > 1:
                 split[k] = float(np.any(np.abs(np.diff(rr_) / rr_[:-1]) > 0.01))
