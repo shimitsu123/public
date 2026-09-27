@@ -115,3 +115,57 @@ def test_rolling_betas_recover_known_slope_and_use_only_past_weeks():
     B2 = S5.rolling_betas(y2, X[["f", "n225"]], "n225", weeks=104)["f"]
     assert np.isclose(B2["A"].iloc[119], B["A"].iloc[119])
     assert S5.weekly(pd.Series([1.0, 2.0], index=pd.to_datetime(["2020-01-06", "2020-01-10"]))).iloc[-1] == 2.0
+
+
+def test_combo_rules_pairs_and_screen():
+    import leap2_s6_combo as S6
+    n = 60
+    P = pd.DataFrame({"a": np.arange(n, dtype=float), "b": np.r_[np.zeros(30), np.ones(30)], "w2": np.r_[np.ones(30), np.zeros(30)]})
+    R, meta = S6.make_rules(P, [], ["w2"])
+    assert R.shape == (2, n) and meta[0]["lab"] == "w2 是" and R[0].sum() == 30
+    x = np.arange(300, dtype=float)
+    R2, meta2 = S6.make_rules(pd.DataFrame({"a": x}), ["a"], [])
+    assert [m["op"] for m in meta2] == ["<=", "<=", ">=", ">="] and R2[0].sum() == 100 and R2[3].sum() == 100    # 分位点固定
+    y = np.r_[np.ones(150), -np.ones(150)]
+    nn, w, mu = S6.pair_stats(R2, y, np.ones(300, bool))
+    assert nn[0, 0] == 100 and w[0, 0] == 100.0 and np.isclose(mu[3, 3], -1.0) and nn[0, 3] == 0              # 对角 = 单条；互斥 → 0 笔
+    sel = np.r_[np.ones(150, bool), np.zeros(150, bool)]
+    assert S6.pair_stats(R2, y, sel)[0][1, 1] == 150
+
+
+def test_screen_needs_both_eras_and_halves():
+    import leap2_s6_combo as S6
+    rng = np.random.default_rng(1)
+    n = 400
+    x = rng.random(n)
+    y = np.where(x > 0.5, 3.0, -1.0)                                                                   # 指标高 → 全赚
+    R, meta = S6.make_rules(pd.DataFrame({"x": x}), ["x"], [])
+    era = np.r_[np.ones(200, bool), np.zeros(200, bool)]
+    masks = {"E": era, "J": ~era, "E1": np.r_[np.ones(100, bool), np.zeros(300, bool)], "E2": np.r_[np.zeros(100, bool), np.ones(100, bool), np.zeros(200, bool)],
+             "J1": np.r_[np.zeros(200, bool), np.ones(100, bool), np.zeros(100, bool)], "J2": np.r_[np.zeros(300, bool), np.ones(100, bool)]}
+    base = {k: (45.0, 0.5) for k in masks}
+    ok, _ = S6.screen(R, meta, y, masks, base)
+    assert ok[3, 3] and ok[2, 2] and not ok[0, 0]                                                        # 「≥ 2/3」「≥ 中位数」过，「≤ 1/3」不过
+    y2 = y.copy()
+    y2[~era] = -1.0                                                                                     # J 全亏 → 什么都不过
+    assert not S6.screen(R, meta, y2, masks, base)[0].any()
+
+
+def test_daily_from_weekly_uses_previous_week():
+    import leap2_s6b_portfolio as S6B
+    M = pd.DataFrame({"A.T": [1.0, 2.0, 3.0]}, index=pd.to_datetime(["2020-01-03", "2020-01-10", "2020-01-17"]))
+    days = pd.DatetimeIndex(["2020-01-13", "2020-01-17", "2020-01-20"])                             # 周一、周五、下周一
+    assert S6B.daily_from_weekly(M, "A.T", days).tolist() == [2.0, 2.0, 3.0]                             # 本周五的值要到下周才用
+    assert np.isnan(S6B.daily_from_weekly(M, "B.T", days)).all()
+
+
+def test_s6_study_candidate_keep_and_registry():
+    import leap2_s6_study as ST
+    idx = pd.bdate_range("2020-01-06", periods=4)
+    fa = {"A.T": pd.DataFrame({"entry": True}, index=idx)}
+    vr = {"A.T": np.array([3.0, 1.0, np.nan, 2.5])}
+    beta = {"A.T": np.array([0.5, 0.5, 0.5, np.nan])}
+    k = ST.candidate_keep(fa, vr, beta, 2.0, 0.7)
+    assert k["A.T"].tolist() == [True, False, False, False]                                    # 缺值 → 不买
+    assert set(ST.CANDS) == {"K1", "K2", "K3"} and len(ST.CANDS) <= 5
+    assert [ST.CANDS[c][1:] for c in ("K1", "K2", "K3")] == [(2.184, 0.78), (2.0, 0.70), (2.0, 0.78)]
