@@ -51,3 +51,16 @@ def test_shuffle_dates_same_year_and_gap():
     assert list(PE.shuffle_dates(r, DAYS, 0)) == list(s)                       # 种子可复现
     cum = PE.cum_from_returns(pd.DataFrame({"a": [1.0, np.nan, -1.0]}, index=DAYS[:3]))
     assert np.isclose(cum["a"].iloc[-1], 100 * 1.01 * 0.99)
+
+
+def test_sector33_all_pit_uses_strictly_earlier_snapshot():
+    idx = DAYS[:6]
+    n = len(idx)
+    C = np.ones((n, 2)); C[:, 0] = np.cumprod([1, 1.01, 1.01, 1.01, 1.01, 1.01]); C[:, 1] = np.cumprod([1, 1.03, 1.03, 1.03, 1.03, 1.03])
+    A = {"days": idx, "names": ["1000.T", "2000.T"], "C": C, "listed": np.ones((n, 2), bool)}
+    snaps = {pd.Timestamp(idx[0]): pd.DataFrame({"Code": ["10000", "20000"], "S33Nm": ["A", "A"]}),
+             pd.Timestamp(idx[3]): pd.DataFrame({"Code": ["10000", "20000"], "S33Nm": ["A", "B"]})}
+    ew = PE.sector33_all_pit(A, snaps, min_n=1)
+    assert np.isclose(ew.loc[idx[2], "A"], 2.0) and np.isnan(ew.loc[idx[2]].get("B", np.nan))    # 第二份快照之前：两只都在 A（等权 (1+3)/2）
+    assert np.isclose(ew.loc[idx[4], "A"], 1.0) and np.isclose(ew.loc[idx[4], "B"], 3.0)          # 严格早于那天的快照 → 2.T 归 B
+    assert np.isnan(ew.loc[idx[3]].get("B", np.nan))                                             # 快照当天还用旧分类

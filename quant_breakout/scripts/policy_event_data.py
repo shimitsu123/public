@@ -121,7 +121,7 @@ def equal_weight_returns(rets: pd.DataFrame, groups: dict[str, str], mask: pd.Da
         with np.errstate(invalid="ignore"):
             m = np.nansum(v, axis=1) / np.where(n > 0, n, np.nan)
         out[g] = pd.Series(np.where(n >= min_n, m, np.nan), index=r.index)
-    return pd.DataFrame(out)
+    return pd.DataFrame(out, index=rets.index)
 
 
 def sector33_all(A: dict) -> pd.DataFrame:
@@ -131,6 +131,45 @@ def sector33_all(A: dict) -> pd.DataFrame:
     rets = C.pct_change() * 100
     mask = pd.DataFrame(A["listed"], index=days, columns=names)
     return equal_weight_returns(rets, s33_map(), mask)
+
+
+def s33_map_pit(snaps: dict[pd.Timestamp, pd.DataFrame]) -> dict[pd.Timestamp, dict[str, str]]:
+    """每份月末上市一览 → {票: 33 业种名}（时点分类）。"""
+    from qbreak import jquants as JQ
+    out = {}
+    for d, m in snaps.items():
+        col = "S33Nm" if "S33Nm" in m.columns else None
+        if col is None:
+            continue
+        mp = {}
+        for c, g in zip(m["Code"].astype(str), m[col].astype(str)):
+            t = JQ.to_yf(c)
+            if t and g and g != "-":
+                mp[t] = g
+        out[pd.Timestamp(d)] = mp
+    return out
+
+
+def sector33_all_pit(A: dict, snaps: dict[pd.Timestamp, pd.DataFrame], min_n: int = 5) -> pd.DataFrame:
+    """全市场面板 → 33 业种等权日收益，业种按「严格早于那天的最近一份上市一览」（时点分类；第一份快照之前 → 用第一份）。"""
+    days, names = pd.DatetimeIndex(A["days"]), list(A["names"])
+    C = pd.DataFrame(A["C"], index=days, columns=names)
+    rets = C.pct_change() * 100
+    mask = pd.DataFrame(A["listed"], index=days, columns=names)
+    maps = s33_map_pit(snaps)
+    sd = sorted(maps)
+    if not sd:
+        return equal_weight_returns(rets, s33_map(), mask, min_n)
+    parts = []
+    bounds = [days[0] - pd.Timedelta(days=1)] + sd
+    for k, lo in enumerate(bounds):
+        hi = bounds[k + 1] if k + 1 < len(bounds) else days[-1]
+        rows = (days > lo) & (days <= hi)
+        if not rows.any():
+            continue
+        mp = maps[sd[0]] if k == 0 else maps[lo]
+        parts.append(equal_weight_returns(rets[rows], mp, mask[rows], min_n))
+    return pd.concat(parts).sort_index()
 
 
 def sector33_long(tickers: list[str] | None = None) -> pd.DataFrame:
