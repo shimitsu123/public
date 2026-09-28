@@ -1,7 +1,32 @@
 {
- "cash": 1000000.0,
- "positions": {},
- "orders": [],
+ "cash": 9354.965003295918,
+ "positions": {
+  "1655.T": {
+   "qty": 1130,
+   "avg_px": 876.3752522094726,
+   "peak": 876.3752522094726,
+   "stop_px": 0.0,
+   "entry_date": "2026-09-29",
+   "hold_bars": 0,
+   "last_bar": ""
+  }
+ },
+ "orders": [
+  {
+   "ticker": "1655.T",
+   "side": "BUY",
+   "qty": 1130,
+   "price": 876.3752522094726,
+   "ts": "2026-09-29 07:01:33",
+   "status": "FILLED",
+   "filled_qty": 1130,
+   "filled_px": 876.3752522094726,
+   "client_id": "U2026-09-25-BUY-1655.T",
+   "broker_id": "",
+   "note": "",
+   "extra": {}
+  }
+ ],
  "closed_trades": [],
  "realized_pnl": 0.0,
  "pending": []

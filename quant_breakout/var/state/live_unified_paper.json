@@ -1,32 +1,67 @@
 {
- "events": [],
- "history": [],
+ "events": [
+  {
+   "at": "2026-09-29T07:01:33+09:00",
+   "level": "info",
+   "msg": "BUY 1655.T ×1130 限价 895（盘中）→ FILLED"
+  }
+ ],
+ "history": [
+  {
+   "fill_bar": "2026-09-28",
+   "orders": [
+    {
+     "cid": "U2026-09-25-BUY-1655.T",
+     "ticker": "1655.T",
+     "side": "BUY",
+     "kind": "core",
+     "qty": 1130,
+     "decided_on": "2026-09-25",
+     "limit": 895.0,
+     "ref_px": 878.0,
+     "reason": "核心 ETF 调整",
+     "phase": "open",
+     "status": "FILLED",
+     "sent_qty": 1130,
+     "broker_id": "",
+     "order_date": "",
+     "filled_qty": 1130,
+     "filled_px": 876.3752522094726,
+     "note": ""
+    }
+   ]
+  }
+ ],
  "version": 1,
  "broker": "PaperBroker",
- "updated": "2026-09-28T07:00:13+09:00",
+ "updated": "2026-09-29T07:01:33+09:00",
  "state": {
-  "cash_jpy": 1000000.0,
+  "cash_jpy": 9354.965003295918,
   "cash_usd": 0.0,
   "pos": {},
   "core_units": {
-   "1655.T": 0
+   "1655.T": 1130
   },
   "core_last": {
-   "1655.T": 878.0
+   "1655.T": 875.7000122070312
   },
   "pending_exit": {},
   "plan": {},
-  "core_plan": {
-   "1655.T": [
-    "BUY",
-    1130
-   ]
-  },
+  "core_plan": {},
   "fx_plan": [],
   "fx_reserve_jpy": 0.0,
-  "last_date": "2026-09-25",
+  "last_date": "2026-09-28",
   "trades": [],
-  "core_trades": [],
+  "core_trades": [
+   [
+    "2026-09-28",
+    "1655.T",
+    "BUY",
+    1130,
+    876.3753,
+    341.0
+   ]
+  ],
   "fx_trades": [],
   "history": [
    [
@@ -35,30 +70,17 @@
     1000000.0,
     0.0,
     158.811
+   ],
+   [
+    "2026-09-28",
+    998895.98,
+    9354.97,
+    0.0,
+    157.381
    ]
   ],
   "corp_done": [],
   "corp_log": []
  },
- "orders": [
-  {
-   "cid": "U2026-09-25-BUY-1655.T",
-   "ticker": "1655.T",
-   "side": "BUY",
-   "kind": "core",
-   "qty": 1130,
-   "decided_on": "2026-09-25",
-   "limit": 895.0,
-   "ref_px": 878.0,
-   "reason": "核心 ETF 调整",
-   "phase": "open",
-   "status": "DEFERRED",
-   "sent_qty": 0,
-   "broker_id": "",
-   "order_date": "",
-   "filled_qty": 0,
-   "filled_px": 0.0,
-   "note": "开盘前余力 1,000,000 円 < 按限价预留 1,011,757 円 → 开盘后按始値检查、减股再下"
-  }
- ]
+ "orders": []
 }
