@@ -4745,5 +4745,103 @@
 "所有方式 BSS < 0"
 ],
 "notes": "按登记不成立 → 日报维持 A0；A0X 已在前向记录（threat_forward.csv，季度复核按 threat_forward_review.py）照常"
+},
+{
+"line": 1953,
+"date": "2026-09-28",
+"title": "登记：中型股的突破日量比 M1〜M3 + 核心 S&P500 / 纳指 / 按比例 W25〜W100",
+"kind": "study",
+"domain": "选股/买点",
+"registration": "e9dee1e",
+"script": "scripts/mid_vthrust_study.py; scripts/core_mix_study.py",
+"output": "var/out/mid_vthrust_study.md; var/out/core_mix_study.md",
+"candidates": [],
+"baseline": "",
+"windows": "M：美国 S&P 400 1995〜2015 + 日本 T500x Z 2001〜2006；C：1929〜1986 Ken French 代理（1986〜2026 只描述）",
+"verdict": "变更/工程",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "审计后登记：去掉 Yahoo 成交量 0 假行、同一只票抽签、按季度聚类；C 的 1929〜1986 已知部分写进来由、年化 ≤ 0 的比较保护；顺带发现 Z 窗口日经225 行情的假行（待核对）"
+},
+{
+"line": 1981,
+"date": "2026-09-28",
+"title": "结果：中型股的突破日量比 M1〜M3",
+"kind": "study",
+"domain": "选股/买点",
+"registration": "e9dee1e",
+"script": "scripts/mid_vthrust_study.py",
+"output": "var/out/mid_vthrust_study.md",
+"candidates": [
+{
+"id": "M1",
+"rule": "突破日量比 ≥ 3（不加 W2）",
+"result": "A 250 笔 52.0% / +1.76% vs 42.4% / +0.64%；只差同周抽签（95 分位 +1.93%）；B 47 笔 +1.25% vs +1.28% ✗"
+},
+{
+"id": "M2",
+"rule": "W2 ∧ 突破日量比 ≥ 3",
+"result": "A 133 笔 +1.61% vs W2 +0.77%；年×业种 / 同周抽签 ✗；B 22 笔 +1.03% vs +1.27% ✗"
+},
+{
+"id": "M3",
+"rule": "突破日量比 ≥ 2（不加 W2）",
+"result": "A 610 笔 +0.78% vs +0.64%（+0.14 pp）✗；B 同号 ✓"
+}
+],
+"baseline": "A S&P 400 1995〜2015 P 1,131 笔 42.4% / +0.64%；B T500x Z P 275 笔 45.1% / +1.28%",
+"windows": "A 1995-01-02〜2015-12-31（两半 〜2005 / 2006〜）；B 2001-01-04〜2006-09-30",
+"verdict": "接近(差一条)",
+"stable_findings": [
+"美国中型股 3 倍量突破：同一只票内、同年同业种比都更好（胜率 +9.6 pp、每笔 +1.12 pp），两半同向"
+],
+"era_dependent_or_reversed": [
+"与同一周的其他突破比不显著（优势多半是时点）",
+"日本 T500x 2001〜2006 没有（−0.03 pp）",
+"A 是后来进指数的公司的历史（幸存者偏差）"
+],
+"notes": "按登记不成立；不新增前向记录；去掉假行后 B 从 390 笔变成 275 笔"
+},
+{
+"line": 1997,
+"date": "2026-09-28",
+"title": "结果：核心 S&P500 / 纳指 / 按比例 哪个更可靠",
+"kind": "study",
+"domain": "核心/配置",
+"registration": "e9dee1e",
+"script": "scripts/core_mix_study.py",
+"output": "var/out/core_mix_study.md",
+"candidates": [
+{
+"id": "W25",
+"rule": "纳指类 25%",
+"result": "1929〜1986 7.90% / −52.29% / 0.151 vs W0 7.82% / −47.25% / 0.166 ✗"
+},
+{
+"id": "W50",
+"rule": "纳指类 50%",
+"result": "7.94% / −56.97% / 0.139 ✗"
+},
+{
+"id": "W75",
+"rule": "纳指类 75%",
+"result": "7.94% / −61.32% / 0.129 ✗"
+},
+{
+"id": "W100",
+"rule": "纳指类 100%",
+"result": "7.90% / −65.31% / 0.121 ✗；1986〜2026 日元 15.79% / −44.72% / 0.353 vs W0 11.63% / −36.88% / 0.315（只描述）"
+}
+],
+"baseline": "W0（S&P500 / 全市场）1929〜1986 7.82% / −47.25% / 0.166",
+"windows": "登记判定 1929-01〜1986-12（三段）；1986〜2026 只描述",
+"verdict": "不通过",
+"stable_findings": [
+"科技比例越高最大回撤越深（两个时代都是）"
+],
+"era_dependent_or_reversed": [
+"纳指 / 科技的收益优势只在 1986 年以后成立；1929〜1986 收益几乎一样（+0.1 pp/年）"
+],
+"notes": "维持 1655；㉔ 仍是用户在知情下的选择，这一轮证据不支持换；代理 = Ken French BusEq"
 }
 ]
