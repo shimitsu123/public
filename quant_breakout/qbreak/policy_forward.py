@@ -188,7 +188,9 @@ def review(today: str | None = None) -> dict:
     st = status(path, today, E)
     out = {"today": today, "status": st, "rows": []}
     if not path.exists() or st["total"] == 0:
+        out["verdict"] = "还没有记录"
         out["text"] = f"政策事件前向记录：还没有记录（{today}；待分类 {st.get('pending', 0)}）"
+        _write_review(out, 0)                                                # 没有记录也写复核文件与历史一行（季度复核入库时文件一定存在）
         return out
     L = pd.read_csv(path, dtype=str)
     L = L[L["category"] != "PENDING"]
@@ -237,9 +239,16 @@ def review(today: str | None = None) -> dict:
     for rec in out["rows"]:
         lines.append(f"- {rec['event_id']} {rec['category']}/{rec['subtype']} late={rec['late']} 判定={int(rec['in_judgment'])}：D0 {rec.get('S_D0')} W5 {rec.get('S_W5')} W20 {rec.get('S_W20')} W60 {rec.get('S_W60')}")
     out["text"] = "\n".join(lines)
-    (paths.out_dir() / "policy_forward_review.md").write_text(out["text"] + "\n非投资建议。\n", encoding="utf-8")
+    _write_review(out, n)
+    return out
+
+
+def _write_review(out: dict, n: int) -> None:
+    """复核结果 → policy_forward_review.md / .json（覆盖）与 policy_forward_review_history.csv（只追加一行）。"""
     import json
+    st = out["status"]
+    (paths.out_dir() / "policy_forward_review.md").write_text(out["text"] + "\n非投资建议。\n", encoding="utf-8")
     (paths.out_dir() / "policy_forward_review.json").write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     hist = paths.out_dir() / REVIEW_HISTORY
-    pd.DataFrame([{"reviewed_on": today, "total": st["total"], "strong_due": n, "pending": st.get("pending", 0), "verdict": verdict}]).to_csv(hist, mode="a", header=not hist.exists(), index=False)
-    return out
+    pd.DataFrame([{"reviewed_on": out["today"], "total": st["total"], "strong_due": n, "pending": st.get("pending", 0),
+                   "verdict": out["verdict"]}]).to_csv(hist, mode="a", header=not hist.exists(), index=False)

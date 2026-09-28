@@ -40,3 +40,13 @@ def test_append_only_late_anchor_and_pending(tmp_path):
     E2 = pd.concat([_events(), pd.DataFrame([dict(id="FED_TURN-2026-10-29", category="FED_TURN", date="2026-10-29", date_jst="2026-10-30", excluded="0")])], ignore_index=True)
     assert PF.status(path, "2026-12-15", E2)["pending"] == 0                                           # 用户录入同一天的事件 → 不再待分类
     assert PF.status(tmp_path / "none.csv", "2026-12-15")["total"] == 0
+
+
+def test_review_without_records_still_writes_files(tmp_path, monkeypatch):
+    monkeypatch.setenv("QBREAK_HOME", str(tmp_path))
+    out = PF.review(today="2026-10-12")
+    assert out["verdict"] == "还没有记录" and "还没有记录" in out["text"]
+    assert (tmp_path / "out" / "policy_forward_review.md").exists() and (tmp_path / "out" / "policy_forward_review.json").exists()
+    PF.review(today="2027-01-12")
+    h = pd.read_csv(tmp_path / "out" / PF.REVIEW_HISTORY)
+    assert list(h["reviewed_on"]) == ["2026-10-12", "2027-01-12"] and (h["total"] == 0).all()        # 历史只追加

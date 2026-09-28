@@ -4931,5 +4931,22 @@
 "T1 方向与事先相反（间接成本上升多的业种之后略好；不显著）"
 ],
 "notes": "间接影响也没有可利用的时间差；只描述（没检验两半）：直接暴露大的业种在原材料上涨的当月（h = −1）相对差 0.14%/标准差，之后没有延续；与 supply_chain_study（一阶成本 C 无效）、lag_study（外部因子当天就反映）一致；日报不加、模拟盘不变、不新增前向记录"
+},
+{
+"line": 2079,
+"date": "2026-09-28",
+"title": "季度复核例行任务加 2k（政策事件前向记录复核）",
+"kind": "engineering",
+"domain": "数据/工程",
+"registration": "—",
+"script": "scripts/policy_event_study.py --review; qbreak/policy_forward.py",
+"output": "var/out/policy_forward_review.md",
+"candidates": [],
+"baseline": "",
+"windows": "每季复核；强类别到期 ≥ 30 条第一次判定；首次运行 2026-10-12 09:56 JST",
+"verdict": "变更/工程",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "用户确认；没有记录时也写复核文件；判定规则不变"
 }
 ]
