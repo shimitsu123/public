@@ -117,8 +117,8 @@ def items(today: dt.date, horizon: int = HORIZON_DAYS, events=None, changes=None
             if within(d):
                 extra = "；1 月另重估威胁指数配比、主题影响度加一年" if m == 1 else ""
                 out.append({"date": d.isoformat(), "what": "季度复核（例行任务 09:56 JST）", "who": "例行任务 → 你看汇报",
-                            "src": "季度复核例行任务（2〜2k）", "check": "汇报第一行有没有「★ …需要用户确认」（顶底、前瞻观察、威胁指数、配比、质量分 / W2 / 卖法 X6 与 R4、新联动群 / 新上市、"
-                                                                      f"K4、时代主线、政策事件）{extra}"})
+                            "src": "季度复核例行任务（2〜2l、3、3b）", "check": "汇报第一行有没有「★ …需要用户确认」（顶底、前瞻观察、威胁指数、配比、质量分 / W2 / 卖法 X6 与 R4、新联动群 / 新上市、"
+                                                                      f"K4、时代主线、政策事件、成本 × 销售 S2、数据体检的新问题）{extra}"})
         for m, lab in ((3, "春季（4 月生效）"), (9, "秋季（10 月生效）")):
             d = dt.date(yy, m, 1)
             if within(d):

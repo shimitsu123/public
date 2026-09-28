@@ -15,13 +15,20 @@
   I 事件表：政策事件表的校验、大事件日程往后 12 个月的日银 / FOMC / 短観、指数入替记录的代码是否上市
   J 前向记录：文件、行数、主键重复、应有的交易日有没有缺
   K 已知缺的数据（没有来源 / 要付费 / 以后才有）
-输出：var/out/data_audit.md / .json（只有统计与代码，不存第三方原始数据）。
+输出：var/out/data_audit.md / .json（只有统计与代码，不存第三方原始数据）；末尾一节「和上一次相比」：跑之前读上一次的 data_audit.json，
+  按「区 + 项目」逐项比（项目名末尾的全角括号注释不算，例如「^N225（21 年缓存）」= 「^N225」）→ 变重 / 变轻 / 新增 / 消失。
+  python scripts/data_audit.py           只读核对（约 2 分钟）
+  python scripts/data_audit.py --warm    先用标准取数（qbreak.data.load_universe：缓存新鲜就不下载）补齐 A 区要读的 yfinance 行情缓存，再核对；
+                                         只写 var/cache/（已 gitignore）。季度复核在新容器里用（2026-09-28 用户确认 ㉚-2）：不补的话 A 区会把
+                                         「没有缓存」（容器的状态，不是数据本身）报成缺 / 问题。Z 窗口（var/cache/leap_yf，只有研究用、重建很慢）不补；
+                                         J-Quants 面板由季度复核前面的 w2_forward_all.py --review 补。
 """
 from __future__ import annotations
 
 import datetime as dt
 import json
 import os
+import re
 import sys
 import time
 import warnings
@@ -104,19 +111,46 @@ def px_stats(df: pd.DataFrame, cal: pd.DatetimeIndex, today: dt.date, big: float
 
 
 # ── A 行情缓存 ──
-@guarded("A 行情")
-def check_prices(today: dt.date) -> dict:
+IDX = (("^N225", "牛熊（日経）、威胁指数"), ("^GSPC", "1655 的牛熊分界"), ("1655.T", "核心 ETF"), ("1329.T", "研究（核心对照）"),
+       ("JPY=X", "汇率"))
+
+
+def price_lists(today: dt.date) -> list[tuple[str, list[str], int, str]]:
+    """A 区要看的三组行情缓存（名字、代码、年数、用在哪里）；--warm 补的也是这三组。"""
     from qbreak import wide_universe as W
     from qbreak.universes import nikkei225
     n_now = nikkei225(exclude=True, today=today)                      # 交易股票池（航空 / 铁路不取行情）
     n_after = nikkei225(exclude=True, today=dt.date(2026, 10, 1))
+    n225 = sorted(set(n_now) | set(n_after))
     wide = W.tickers(W.load())
+    return [("日経225（今天）21 年", n225, 21, "研究（Z/E/J 以外的 20 年回测、行业收益）"),
+            ("日経225（今天）2 年", n225, 2, "模拟盘 / 执行器（sim-day、live-u）"),
+            ("扩大池（TOPIX 1000 其余）21 年", sorted(set(wide) - set(n_now)), 21, "行业收益、扩大池前向记录、研究")]
+
+
+def warm(today: dt.date) -> None:
+    """--warm：用标准取数补齐 A 区要读的行情缓存（缓存新鲜就不下载；只写 var/cache/）；取不到的照样往下核对、照实报告。"""
+    from qbreak.config import DataConfig
+    from qbreak.data import load_universe
+    jobs = [(name, lst, years) for name, lst, years, _ in price_lists(today)]
+    jobs += [("^N225 21 年（交易日历核对用）", ["^N225"], 21), ("指数 / ETF / 汇率 2 年", [t for t, _ in IDX[1:]], 2)]
+    for name, lst, years in jobs:
+        t0 = time.time()
+        try:
+            got = load_universe(lst, DataConfig(provider="yfinance", years=years, allow_synthetic=False).validate())
+            print(f"[补缓存] {name}：{len(got)} / {len(lst)} 只（{time.time() - t0:.0f}s）", flush=True)
+        except Exception as e:                                          # noqa: BLE001
+            print(f"[补缓存] {name}：取数失败 {type(e).__name__}: {e}（照样核对、照实报告）"[:300], flush=True)
+
+
+@guarded("A 行情")
+def check_prices(today: dt.date) -> dict:
+    from qbreak.universes import nikkei225
+    n_now = nikkei225(exclude=True, today=today)                      # 交易股票池（航空 / 铁路不取行情）
     cal = trading_days(dt.date(1999, 1, 1), today)
     want = last_complete_jp(today)
     out = {}
-    for name, lst, years, used in (("日経225（今天）21 年", sorted(set(n_now) | set(n_after)), 21, "研究（Z/E/J 以外的 20 年回测、行业收益）"),
-                                   ("日経225（今天）2 年", sorted(set(n_now) | set(n_after)), 2, "模拟盘 / 执行器（sim-day、live-u）"),
-                                   ("扩大池（TOPIX 1000 其余）21 年", sorted(set(wide) - set(n_now)), 21, "行业收益、扩大池前向记录、研究")):
+    for name, lst, years, used in price_lists(today):
         stats, missing = {}, []
         for t in lst:
             df = read_px(t, years)
@@ -172,8 +206,7 @@ def check_prices(today: dt.date) -> dict:
         add("A 行情", name, st, "；".join(notes), used)
         out[name] = {"n": len(lst), "cached": len(stats), "missing": missing, "old": old, "recent_missing_days": recent, "extra": extra,
                      "big": big, "dup": dup, "nan": nan, "zero_vol": zv}
-    for t, used in (("^N225", "牛熊（日経）、威胁指数"), ("^GSPC", "1655 的牛熊分界"), ("1655.T", "核心 ETF"), ("1329.T", "研究（核心对照）"),
-                    ("JPY=X", "汇率")):
+    for t, used in IDX:
         for years in (2, 10, 21):
             df = read_px(t, years)
             if df is not None:
@@ -609,7 +642,44 @@ def known_gaps() -> None:
         add("K 已知缺", item, "缺", det, used)
 
 
-def write(extra: dict) -> None:
+def _key(r: dict) -> tuple[str, str]:
+    """逐项对齐用：区 + 项目名（末尾的全角括号注释不算：「^N225（21 年缓存）」=「^N225」、「全市场面板（日线）」=「全市场面板」）。"""
+    return r["area"], re.sub(r"（[^（）]*）$", "", r["item"]).strip()
+
+
+CACHE_HINT = ("没有缓存", "没有文件", "不在（", "没有 ^N225")                     # 细节里有这些 → 多半是这台机器 / 容器没有缓存，不是数据本身
+
+
+def compare(prev: dict | None, rows: list[dict]) -> dict:
+    """和上一次的体检比：变重 / 变轻（状态按 问题 > 缺 > 注意 > OK）、新增、消失；同一个键出现多次取最重的。"""
+    if not prev or not prev.get("rows"):
+        return {"prev_date": None}
+
+    def worst(rs):
+        out = {}
+        for r in rs:
+            k = _key(r)
+            if k not in out or ORDER.get(r["status"], 9) < ORDER.get(out[k]["status"], 9):
+                out[k] = r
+        return out
+    old, cur = worst(prev["rows"]), worst(rows)
+
+    def item(k, a, b):
+        r = b or a
+        return {"area": k[0], "item": r["item"], "old": a["status"] if a else None, "new": b["status"] if b else None,
+                "detail": (b or a)["detail"][:240],
+                "cache": bool(b) and any(h in b["detail"] for h in CACHE_HINT) and "重复日期" not in b["detail"]}
+    worse = [item(k, old[k], cur[k]) for k in cur if k in old and ORDER.get(cur[k]["status"], 9) < ORDER.get(old[k]["status"], 9)]
+    better = [item(k, old[k], cur[k]) for k in cur if k in old and ORDER.get(cur[k]["status"], 9) > ORDER.get(old[k]["status"], 9)]
+    new = [item(k, None, cur[k]) for k in cur if k not in old]
+    gone = [item(k, old[k], None) for k in old if k not in cur]
+    still = [item(k, old[k], cur[k]) for k in cur if k in old and cur[k]["status"] == old[k]["status"] == "问题"]
+    return {"prev_date": prev.get("date"), "prev_counts": prev.get("counts"), "worse": worse, "better": better, "new": new, "gone": gone,
+            "still_problem": still,
+            "new_problems": [x for x in worse + new if x["new"] == "问题" and not x["cache"]]}
+
+
+def write(extra: dict, cmp: dict | None = None) -> None:
     rows = sorted(ROWS, key=lambda r: (r["area"], ORDER.get(r["status"], 9)))
     cnt = {k: sum(r["status"] == k for r in ROWS) for k in ("问题", "缺", "注意", "OK")}
     L = [f"# 数据核对（{_today()}；scripts/data_audit.py）", "",
@@ -617,15 +687,38 @@ def write(extra: dict) -> None:
          "| 区 | 项目 | 状态 | 细节 | 用在哪里 |", "|---|---|---|---|---|"]
     for r in rows:
         L.append(f"| {r['area']} | {r['item']} | **{r['status']}** | {r['detail'].replace('|', '/')} | {r['used_by']} |")
+    cmp = cmp or {"prev_date": None}
+    L += ["", "## 和上一次相比", ""]
+    if not cmp.get("prev_date"):
+        L.append("没有上一次的结果（第一次运行，或 var/out/data_audit.json 不在）。")
+    else:
+        pc = cmp.get("prev_counts") or {}
+        L.append(f"上一次 {cmp['prev_date']}：问题 {pc.get('问题', '—')}、缺 {pc.get('缺', '—')}、注意 {pc.get('注意', '—')}、OK {pc.get('OK', '—')} 项 → "
+                 f"这次 问题 {cnt['问题']}、缺 {cnt['缺']}、注意 {cnt['注意']}、OK {cnt['OK']} 项。"
+                 f"新出现 / 变重的「问题」（不算缓存不在的）{len(cmp['new_problems'])} 项；变重 {len(cmp['worse'])} 项、变轻 {len(cmp['better'])} 项、"
+                 f"新增 {len(cmp['new'])} 项、消失 {len(cmp['gone'])} 项；一直是「问题」的 {len(cmp['still_problem'])} 项。")
+        ch = [("变重", x) for x in cmp["worse"]] + [("新增", x) for x in cmp["new"]] + [("变轻", x) for x in cmp["better"]] + [("消失", x) for x in cmp["gone"]]
+        if ch:
+            L += ["", "| 变化 | 区 | 项目 | 上一次 → 这次 | 细节 | 缓存不在？ |", "|---|---|---|---|---|---|"]
+            for tag, x in ch:
+                L.append(f"| {tag} | {x['area']} | {x['item']} | {x['old'] or '—'} → {x['new'] or '—'} | {x['detail'].replace('|', '/')} | "
+                         f"{'是（多半是这台机器没有缓存，不是数据本身）' if x['cache'] else ''} |")
     L += ["", "非投资建议。"]
     (paths.out_dir() / "data_audit.md").write_text("\n".join(L) + "\n", encoding="utf-8")
-    (paths.out_dir() / "data_audit.json").write_text(json.dumps({"date": str(_today()), "counts": cnt, "rows": rows, "detail": extra},
+    (paths.out_dir() / "data_audit.json").write_text(json.dumps({"date": str(_today()), "counts": cnt, "rows": rows, "detail": extra, "vs_prev": cmp},
                                                                 ensure_ascii=False, indent=1, default=str), encoding="utf-8")
 
 
 def main() -> int:
     t0 = time.time()
     today = _today()
+    fp = paths.out_dir() / "data_audit.json"
+    try:
+        prev = json.loads(fp.read_text(encoding="utf-8")) if fp.exists() else None          # 覆盖之前先读上一次的结果
+    except (OSError, ValueError):
+        prev = None
+    if "--warm" in sys.argv:
+        warm(today)
     extra = {}
     extra["prices"] = check_prices(today)
     check_leap_yf(today)
@@ -640,7 +733,7 @@ def main() -> int:
     check_events(today)
     check_forward(today)
     known_gaps()
-    write(extra)
+    write(extra, compare(prev, ROWS))
     print(f"\n用时 {time.time() - t0:.0f}s → var/out/data_audit.md")
     return 0
 

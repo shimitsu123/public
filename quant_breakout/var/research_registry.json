@@ -5695,5 +5695,47 @@
 "每年重调：E 略好（+0.14 pp），近 10 年 J2 / J 更差（−0.49 / −1.22 pp）"
 ],
 "notes": "现行一组逐个信号与 compute_indicators + W2 相同（核对通过）；74,232 笔单独交易；维持现行参数；Z / W 仍可用于参数类检验"
+},
+{
+"line": 2500,
+"date": "2026-09-28",
+"title": "季度复核加 2l 成本 × 销售 S2 前向记录复核与 3b 数据体检（--warm 补缓存、和上一次比）；日报不加资格检查汇报行",
+"kind": "config_change",
+"domain": "数据/工程",
+"registration": "用户在对话里确认（㉙① / ㉚-2）",
+"script": "例行任务（顶底择时季度复核）的提示词; scripts/data_audit.py",
+"output": "var/out/cost_sales_forward_review.md; var/out/data_audit.md",
+"candidates": [],
+"baseline": "—",
+"windows": "每年 1 / 4 / 7 / 10 月 12 日（下一次 2026-10-12）",
+"verdict": "变更/工程",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "只报告与判定提示；体检新出现 / 变重的「问题」写进汇报第一行，不在例行任务里修；试跑 454 秒、结果与上一次相同；不影响交易"
+},
+{
+"line": 2528,
+"date": "2026-09-28",
+"title": "核心换纳斯达克 100（㉔）：现在不换，2026-12-24 和模拟期总结一起定",
+"kind": "config_change",
+"domain": "核心/配置",
+"registration": "用户在对话里确认",
+"script": "scripts/ndx_study.py; scripts/core_mix_study.py",
+"output": "var/out/decision_table.md",
+"candidates": [
+{
+"id": "N1",
+"rule": "核心换成纳指（牛熊按 S&P500）",
+"result": "E Calmar 0.386 vs 0.217、J 0.511 vs 0.372；1987〜2005 回撤 −44.79% vs −37.65%（按规则差这一条）；2022 年 −8.0% vs +4.1%"
+}
+],
+"baseline": "现行 1655 + 牛熊分界 T0（S0C2）",
+"windows": "—",
+"verdict": "提议(未采用)",
+"stable_findings": [],
+"era_dependent_or_reversed": [
+"纳指核心 2006〜2026 两个年代都更好，但 1987〜2005 与 1929〜1986 代理的回撤更深"
+],
+"notes": "用户选「现在不换，12-24 再定」；换的话执行器要会买纳指 ETF，另行确认并记 sim_changes"
 }
 ]
