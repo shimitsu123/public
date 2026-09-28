@@ -208,3 +208,26 @@ def test_w2_forward_all_x6_pairs_and_yearly_decision(monkeypatch):
     hist = pd.DataFrame([EF.history_row(x["eval"], "2027-10-01", "all_X6", "x6_year", "2027-09-28")])
     assert WFA.x6_eval(P, hist, pd.Timestamp("2028-01-10"), set())["year"] is None   # 同一年不再判定
     assert WFA.x6_eval(pd.DataFrame(), None, pd.Timestamp("2027-10-01"), set())["eval"]["n"] == 0
+
+
+def test_status_lines_read_only(tmp_path):
+    days = pd.bdate_range("2026-09-28", periods=120)
+    log = pd.DataFrame({"date": [str(days[0].date()), str(days[5].date()), str(days[100].date()), str(days[3].date())],
+                        "ticker": ["A.T", "B.T", "C.T", "D.T"], "segment": ["N225", "T500x", "N225", "S1x"], "w2_keep": [1, 1, 1, 0],
+                        "k2_keep": [1, 0, 0, 1], "usw_keep": [np.nan, 1, 0, 0]})
+    L = SFR.status_lines(log, days[-1], tmp_path)
+    txt = "\n".join(L)
+    assert "记录 4 个信号" in txt and "W2 保留 3 个、挡掉 1 个" in txt
+    assert "已满 65 个交易日的 2 个" in txt and "成熟配对 100 笔" in txt   # 第 0 / 5 天的信号已满 65 个交易日；第 100 天的还没有
+    assert "还没有复核过" in txt and "2027-09-28" in txt
+    pd.DataFrame([{"run": "2027-01-12", "scope": "X6", "closed": 12, "x6_diff": 0.8, "x6_lo95": -0.4, "x6_hi95": 2.1}]).to_csv(
+        tmp_path / "score_forward_review_history.csv", index=False)
+    txt2 = "\n".join(SFR.status_lines(log, days[-1], tmp_path))
+    assert "最近一次复核 2027-01-12，成熟配对 12 笔，X6 − 现行 +0.80 pp（95% 区间 -0.40〜+2.10）" in txt2
+    assert list(tmp_path.iterdir()) == [tmp_path / "score_forward_review_history.csv"]   # 只读：没有写别的文件
+    assert "还没有记录" in SFR.status_lines(pd.DataFrame(columns=["date", "ticker", "segment"]), days[-1], tmp_path)[1]
+
+
+def test_trading_days_after_uses_tse_calendar():
+    n = SFR.trading_days_after(["2026-09-18", "2026-09-24"], "2026-09-25")
+    assert n.tolist() == [2, 1]                                                     # 9/19〜23 周末 + 休市（敬老の日・国民の休日・秋分の日）

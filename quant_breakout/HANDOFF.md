@@ -321,6 +321,7 @@
 | 装 / 更新全部 | 「拉一下最新代码并更新」「把定时任务都装好」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh` | 不动账本、不下单 |
 | 开机后补跑了吗 | 「今天开机后模拟操盘补跑了吗？」 | 读 `~/.qbreak/home/logs/com.qbreak.login.out`；`launchctl list \| grep qbreak` | 只读；立花本番不在登录时补跑 |
 | 影子账户（判断型） | 「影子账户今天怎么样？比规则账户好吗？」 | 读 `var/out/shadow_today.json`、`var/out/shadow_equity.csv`（云端每天记）；中间统计 `python scripts/shadow_account.py evaluate --interim` | 只读；判断只在云端例行任务里做 |
+| 前向记录进度 | 「前向记录记了多少？X6 吊灯止损现在怎样？」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/score_forward.py --status`（在 `~/qbreak-src/quant_breakout`，读仓库里云端每天追加的记录；不联网、不写文件）；详细结果读季度复核的 `var/out/score_forward_review.md`、`w2_forward_all_review.md` | 只读；判定只在季度复核里做 |
 | 接下来要检查什么 | 「这个月 / 接下来要注意什么？」「什么时候判定 W2？」 | 读 `CHECK_TIMELINE.md` 与日报「检查日历」（`var/out/unified_today.json` 的 calendar） | 只读 |
 | 股票被踢出了吗 | 「要下单 / 手上的股票有没有被踢出日経225、被指定特別注意？」 | `QBREAK_HOME=~/.qbreak/home ~/.qbreak/venv/bin/python run.py eligibility`（在 `~/qbreak-src/quant_breakout`） | 只读；名单差异要改名单 → 你确认后云端改 |
 | 数据对不对 | 「研究 / 模拟盘用的数据对不对？缺什么？」 | 读 `var/out/data_audit.md`（每项 OK / 注意 / 问题 / 缺 与用在哪里）；重跑在云端 `python scripts/data_audit.py`（缓存都在云端） | 只读；修正要另记 sim_changes |

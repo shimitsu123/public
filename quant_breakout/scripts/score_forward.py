@@ -29,6 +29,7 @@
   主假设成立 → 另写一份事先登记的组合研究（用这个分数跳过 / 排序），通过门槛且用户确认后才可能改模拟盘；只凭前向记录不改规则。
 五、复核：python scripts/score_forward.py --review（只读 var/out/score_forward.csv 与 score_forward_wide.csv，不改、不补写）
   → var/out/score_forward_review.md / .json，并追加 var/out/score_forward_review_history.csv。
+  只看进度（不联网、不写任何文件，2026-09-28 加）：python scripts/score_forward.py --status。
 六、追加登记（2026-09-26，用户要求「加快前向记录」；此时前向记录还没有任何数据）
   - 扩大池：TOPIX 1000（プライム，規模区分 Core30 / Large70 / Mid400 / Small 1）里日経225 股票池以外的票，同样剔除航空 / 陆运 /
     仓储物流（var/universe_wide.json，東証上場銘柄一覧 2026-08-31 版，冻结）：T500x 249 只（过去 5 年每年约 66 个信号）、
@@ -535,17 +536,80 @@ def review() -> int:
     return 0
 
 
+# ── 只读的进度（不联网、不写任何文件；Mac 上也可以直接跑）──
+def trading_days_after(dates, today) -> np.ndarray:
+    """每个日期之后（不含当天）到 today（含）为止的东证交易日数。"""
+    from qbreak.calendar_jp import is_trading_day
+    d = pd.to_datetime(pd.Series(dates)).dt.normalize()
+    t = pd.Timestamp(today).normalize()
+    if not len(d):
+        return np.zeros(0, int)
+    days = [x for x in pd.date_range(d.min(), t, freq="D") if is_trading_day(x.date())]
+    idx = pd.DatetimeIndex(days)
+    return (len(idx) - idx.searchsorted(d.to_numpy(), side="right")).astype(int)
+
+
+def _last_hist(fp: Path, scope: str) -> dict | None:
+    if not fp.exists():
+        return None
+    h = pd.read_csv(fp)
+    h = h[h["scope"] == scope] if "scope" in h.columns else h.iloc[0:0]
+    return None if h.empty else h.iloc[-1].to_dict()
+
+
+def status_lines(log: pd.DataFrame, today, out_dir: Path) -> list[str]:
+    t = pd.Timestamp(today).normalize()
+    L = [f"# 前向记录进度（只读；{t.date()}）"]
+    if not len(log):
+        L.append(f"还没有记录：{SF.FORWARD_START} 的 K 线起，云端 sim-day 每个交易日早上追加（日経225 → score_forward.csv、扩大池 → score_forward_wide.csv）。")
+    else:
+        d = pd.to_datetime(log["date"])
+        seg = "、".join(f"{k} {v}" for k, v in log["segment"].value_counts().items())
+        L.append(f"记录 {len(log)} 个信号（{seg}；{d.min().date()}〜{d.max().date()}）。")
+        k = pd.to_numeric(log["w2_keep"], errors="coerce").to_numpy(float) if "w2_keep" in log.columns else np.full(len(log), np.nan)
+        age = trading_days_after(d, t)
+        mat = (k == 1) & (age >= EF.MATURE_BARS)
+        nxt = next((c for c in EF.CHECKPOINTS if c > int(mat.sum())), None)
+        L.append(f"W2 保留 {int((k == 1).sum())} 个、挡掉 {int((k == 0).sum())} 个；卖法 X6（第十节）：W2 保留里信号日之后已满 {EF.MATURE_BARS} 个交易日的"
+                 f" {int(mat.sum())} 个（按日历估；复核时按行情确认两边都已卖出）→ 下一个判定时点：成熟配对 {nxt or '—'} 笔。")
+        for c, lab in (("k2_keep", "K2 标记"), ("usw_keep", "USW 标记")):
+            if c in log.columns:
+                v = pd.to_numeric(log[c], errors="coerce")
+                L.append(f"{lab}：1 = {int((v == 1).sum())} 个、0 = {int((v == 0).sum())} 个、空 = {int(v.isna().sum())} 个。")
+    nxt_y = next((x for x in EF.JUDGE_DATES if pd.Timestamp(x) > t), None)
+    L.append(f"下一次年度判定（W2 / K2 / USW、X6 全市场）：{nxt_y or '五次都已过'} 之后的第一次季度复核。")
+    for fn, scope, lab in (("score_forward_review_history.csv", "X6", "每日记录"), ("w2_forward_all_history.csv", "all_X6", "全市场")):
+        r = _last_hist(out_dir / fn, scope)
+        if r is None:
+            L.append(f"X6 {lab}：还没有复核过（季度复核 {'2f' if scope == 'X6' else '2i'} 会算）。")
+        else:
+            ci = "" if pd.isna(r.get("x6_lo95")) else f"（95% 区间 {r['x6_lo95']:+.2f}〜{r['x6_hi95']:+.2f}）"
+            diff = "—" if pd.isna(r.get("x6_diff")) else f"{r['x6_diff']:+.2f} pp"
+            L.append(f"X6 {lab}：最近一次复核 {r.get('run')}，成熟配对 {int(r.get('closed') or 0)} 笔，X6 − 现行 {diff}{ci}。")
+    L.append("已平仓的收益、AUC、W2 保留 vs 挡掉要按行情重算 → 看季度复核的 var/out/score_forward_review.md 与 w2_forward_all_review.md。")
+    return L
+
+
+def status(today=None) -> int:
+    for x in status_lines(read_logs(), today or pd.Timestamp.today(), paths.out_dir()):
+        print(x)
+    return 0
+
+
 def main(argv=None) -> int:
     import argparse
     ap = argparse.ArgumentParser()
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--freeze", action="store_true", help="登记时生成冻结的配比（只做一次）")
     g.add_argument("--review", action="store_true", help="复核前向记录")
+    g.add_argument("--status", action="store_true", help="只读的进度（不联网、不写文件）")
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args(argv)
     if a.freeze:
         freeze(a.force)
         return 0
+    if a.status:
+        return status()
     return review()
 
 
