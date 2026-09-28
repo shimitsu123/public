@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import os
 import sys
 import warnings
 from pathlib import Path
@@ -30,10 +31,18 @@ def _windows(era: str) -> dict:
     return {era: (a, b), f"{era}1": (a1, b1), f"{era}2": (a2, b2)}
 
 
+def drop_zero_volume() -> bool:
+    """环境变量 QB_DROP_ZERO_VOL=1 → 去掉成交量 ≤ 0 的行（Yahoo 日本个股 2000〜2006 的休市假行：成交量 0、价格 = 前一天收盘）。
+    缺省关（以前各研究的结果照原样可重现）；2026-09-28 事后核对（scripts/k2_z_clean_check.py）才打开。"""
+    return os.environ.get("QB_DROP_ZERO_VOL", "") == "1"
+
+
 def yf_panel(names: list[str], lo: str, hi: str) -> tuple[dict, pd.DatetimeIndex, list[str]]:
     import leap_data as LD
     from qbreak import candles as K
     data = LD.ohlcv(names)
+    if drop_zero_volume():
+        data = {t: df[df["Volume"] > 0] for t, df in data.items()}
     nm = [t for t in names if t in data and len(data[t])]
     days = pd.DatetimeIndex(sorted(set().union(*[data[t].index for t in nm])))
     days = days[(days >= pd.Timestamp(lo)) & (days <= pd.Timestamp(hi))]
