@@ -174,7 +174,7 @@ def release_targets(D: pd.DataFrame, dates, n_days: int) -> pd.DataFrame:
 # ── 売上高计划（前年比・年度）：scripts/cost_sales_study.py（2026-09-28 登记）──
 SALES_SURVEY = {5: (4, 5), 4: (7, 5), 3: (10, 5), 2: (12, 20)}             # k → 同一年度内的保守可用日（月, 日）；k = 5 是 3 月调查（年度开始时的计划）
 SALES_OLD = {"1149": "1140", "1143": "1200"}                               # 2010 年分类变更前的旧代码（一般機械、精密機械），2009 年度以前拼接
-SALES_TSE_EXTRA = {"陸運業": ["2040"], "空運業": ["2040"], "倉庫・運輸関連業": ["2040"]}   # 运输都用 運輸・郵便
+REV_SURVEYS = (4, 3, 2)                                                    # 売上高 修正率：6 / 9 / 12 月调查对上一次计划的修正（3 月调查没有）
 
 
 def sales_code(ind: str, k: int) -> str:
@@ -182,14 +182,16 @@ def sales_code(ind: str, k: int) -> str:
     return f"TK99G{ind}102CFY{k}1000"
 
 
-def load_sales(fetch_annual=None) -> dict[int, pd.DataFrame]:
-    """{k: 年度（整数）× 短観业种} 的 売上高 前年比（%），k ∈ {0, 2, 3, 4, 5}；旧分类拼到新代码下（新代码有值优先）。"""
-    if fetch_annual is None:
-        fetch_annual = boj_annual
+def sales_rev_code(ind: str, k: int) -> str:
+    """売上高 修正率・年度（大企業）：k = 4 6 月调查（对 3 月计划）、3 9 月、2 12 月。"""
+    return f"TK99G{ind}1022FY{k}1000"
+
+
+def _load_vintages(fetch_annual, code_fn, ks) -> dict[int, pd.DataFrame]:
     inds = sorted(set(IND) | set(SALES_OLD.values()))
     out = {}
-    for k in (0, 2, 3, 4, 5):
-        df = pd.DataFrame({i: _get_series(fetch_annual, sales_code(i, k)) for i in inds}).sort_index()
+    for k in ks:
+        df = pd.DataFrame({i: _get_series(fetch_annual, code_fn(i, k)) for i in inds}).sort_index()
         for new, old in SALES_OLD.items():
             if old in df.columns:
                 df[new] = df[new].combine_first(df[old]) if new in df.columns else df[old]
@@ -197,24 +199,58 @@ def load_sales(fetch_annual=None) -> dict[int, pd.DataFrame]:
     return out
 
 
-def sales_strength(S: dict[int, pd.DataFrame], months, hist_years: int = 10, min_hist: int = 5) -> pd.DataFrame:
-    """月末 × 短観业种：当时已公布的最新一次调查对「本年度」的売上高计划 − 该业种过去 hist_years 个年度实绩的中位
-    （年度 = 4 月〜翌年 3 月；计划的可用日见 SALES_SURVEY；年度 x 的实绩在 x + 1 年 7 月 5 日之后才用；实绩少于 min_hist 个 → 缺值）。"""
-    act = S[0]
-    cols = sorted(set().union(*[set(df.columns) for df in S.values()]))
+def load_sales(fetch_annual=None) -> dict[int, pd.DataFrame]:
+    """{k: 年度（整数）× 短観业种} 的 売上高 前年比（%），k ∈ {0, 2, 3, 4, 5}；旧分类拼到新代码下（新代码有值优先）。"""
+    return _load_vintages(fetch_annual or boj_annual, sales_code, (0, 2, 3, 4, 5))
+
+
+def load_sales_rev(fetch_annual=None) -> dict[int, pd.DataFrame]:
+    """{k: 年度 × 短観业种} 的 売上高 修正率（%），k ∈ REV_SURVEYS（只作另报）。"""
+    return _load_vintages(fetch_annual or boj_annual, sales_rev_code, REV_SURVEYS)
+
+
+def _mad(a: np.ndarray) -> float:
+    a = a[np.isfinite(a)]
+    return float(np.median(np.abs(a - np.median(a)))) if len(a) else float("nan")
+
+
+def vintage_z(S: dict[int, pd.DataFrame], hist_years: int = 10, min_hist: int = 5, mad_floor: float = 0.5) -> dict[int, pd.DataFrame]:
+    """同一次调查（同一 k）比自己：年度 fy 的计划 −（之前 hist_years 个年度同一次调查计划的中位）÷（1.4826 × MAD，MAD 至少 mad_floor 个百分点）；
+    之前的计划不到 min_hist 个 → 缺值。消掉各业种惯常的计划偏差与「越早的调查越保守」的差别（2026-09-28 审计）。"""
+    out = {}
+    for k, df in S.items():
+        if k == 0:
+            continue
+        prev = df.shift(1)
+        med = prev.rolling(hist_years, min_periods=min_hist).median()
+        mad = prev.rolling(hist_years, min_periods=min_hist).apply(_mad, raw=True)
+        out[k] = (df - med) / (1.4826 * mad.clip(lower=mad_floor))
+    return out
+
+
+def latest_vintage(V: dict[int, pd.DataFrame], months, survey: dict[int, tuple[int, int]] = SALES_SURVEY) -> pd.DataFrame:
+    """月末 × 短観业种：当时已公布的最新一次调查（有值的那一次）对「本年度」的值（年度 = 4 月〜翌年 3 月；可用日见 survey）。"""
+    cols = sorted(set().union(*[set(df.columns) for df in V.values()]))
     rows = {}
     for t in pd.DatetimeIndex(months):
         fy = t.year if t >= pd.Timestamp(t.year, 4, 5) else t.year - 1
-        plan = pd.Series(np.nan, index=cols)
-        for k in (2, 3, 4, 5):                                             # 可用日由晚到早：取当时最新、且有值的那一次
-            m, d = SALES_SURVEY[k]
-            if pd.Timestamp(fy, m, d) <= t and fy in S[k].index:
-                plan = plan.fillna(S[k].loc[fy].reindex(cols))
-        done = [x for x in act.index if pd.Timestamp(int(x) + 1, 7, 5) <= t]
-        hist = act.loc[sorted(done)[-hist_years:]].reindex(columns=cols) if done else pd.DataFrame(columns=cols)
-        med = hist.median().where(hist.notna().sum() >= min_hist)
-        rows[t] = plan - med
+        val = pd.Series(np.nan, index=cols)
+        for k in sorted(V, key=lambda k: survey[k], reverse=True):          # 可用日由晚到早：取当时最新、且有值的那一次
+            m, d = survey[k]
+            if pd.Timestamp(fy, m, d) <= t and fy in V[k].index:
+                val = val.fillna(V[k].loc[fy].reindex(cols))
+        rows[t] = val
     return pd.DataFrame.from_dict(rows, orient="index")
+
+
+def sales_strength(S: dict[int, pd.DataFrame], months, **kw) -> pd.DataFrame:
+    """月末 × 短観业种：「销售特别好」= 当时最新一次调查的本年度売上高计划，按同一次调查的历年计划标准化（vintage_z）。"""
+    return latest_vintage(vintage_z(S, **kw), months)
+
+
+def sales_revision(R: dict[int, pd.DataFrame], months) -> pd.DataFrame:
+    """月末 × 短観业种：当时最新一次调查的本年度売上高修正率（%；4〜6 月末还没有修正 → 缺值）。"""
+    return latest_vintage(R, months, {k: SALES_SURVEY[k] for k in R})
 
 
 def pass_through(T: dict[str, pd.DataFrame], months) -> pd.DataFrame:
@@ -229,11 +265,10 @@ def pass_through(T: dict[str, pd.DataFrame], months) -> pd.DataFrame:
 
 
 def to_tse(X: pd.DataFrame, industries: list[str]) -> pd.DataFrame:
-    """短観业种的月度值 → 東証业种（TSE 与 SALES_TSE_EXTRA；几个短観业种取平均；没有对应的业种不出现）。"""
-    m = {**TSE, **SALES_TSE_EXTRA}
+    """短観业种的月度值 → 東証业种（TSE；几个短観业种取平均；没有对应的业种不出现）。"""
     out = {}
     for g in industries:
-        cols = [c for c in m.get(g, []) if c in X.columns]
+        cols = [c for c in TSE.get(g, []) if c in X.columns]
         if cols:
             out[g] = X[cols].mean(axis=1, skipna=False)
     return pd.DataFrame(out, index=X.index)
