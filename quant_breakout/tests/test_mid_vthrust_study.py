@@ -85,3 +85,24 @@ def test_report_blocks_smoke(monkeypatch):
     MV.show_describe(MV.describe(T, M))
     text = "\n".join(MV.LINES)
     assert "抽签对照 95 分位" in text and "突破日量比分档" in text and "按年" in text
+
+
+def test_clean_drops_zero_volume_rows():
+    idx = pd.bdate_range("2001-01-01", periods=400)
+    df = pd.DataFrame({"Open": 1.0, "High": 1.0, "Low": 1.0, "Close": 1.0, "Volume": 100.0}, index=idx)
+    df.iloc[[0, 5, 6], df.columns.get_loc("Volume")] = 0.0                       # 休市假行（成交量 0）
+    df.iloc[7, df.columns.get_loc("Volume")] = np.nan
+    data, cl = MV.clean({"X.T": df, "Y.T": df}, {"X.T": "s"}, "B")
+    assert list(data) == ["X.T"] and len(data["X.T"]) == 396 and (data["X.T"]["Volume"] > 0).all()
+    w0, w1, _ = MV.WIN["B"]
+    assert cl["rows_window"] == int(((idx >= w0) & (idx <= w1)).sum()) and cl["dropped_window"] == 3   # 1-01 在窗口之前
+
+
+def test_always_drawn_and_quarter_boot():
+    base = np.ones(6, bool)
+    keep = np.array([True, True, False, True, False, False])
+    strata = np.array(["a", "a", "b", "b", "c", "c"])
+    assert MV.always_drawn(base, keep, strata) == round(2 / 3, 3)                # 层 a 全是候选 → 那 2 笔每次必中
+    T = _T(n=1200, seed=7)
+    M = MV.keep_masks(T)
+    assert abs(MV.boot_q(T, M["P"], M["P"]) or 0.0) < 1e-12                      # 候选 = 基准 → 差 0

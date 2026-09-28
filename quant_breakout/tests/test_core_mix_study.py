@@ -68,10 +68,11 @@ def test_seg_and_rolling10():
 
 
 def test_p1_fails():
-    b = {"full": {"calmar": 0.30, "dd": -40.0}, **{k: {"calmar": 0.2} for k in CM.P1_BLOCKS}}
-    ok = {"full": {"calmar": 0.36, "dd": -41.5}, **{k: {"calmar": 0.25} for k in CM.P1_BLOCKS}}
-    bad = {"full": {"calmar": 0.34, "dd": -43.0}, **{k: {"calmar": 0.25} for k in CM.P1_BLOCKS}}
-    bad["1948〜1966"] = {"calmar": 0.1}
+    blk = lambda cal: {"calmar": cal, "cagr": 5.0, "dd": -25.0}                   # noqa: E731
+    b = {"full": {"calmar": 0.30, "dd": -40.0, "cagr": 12.0}, **{k: blk(0.2) for k in CM.P1_BLOCKS}}
+    ok = {"full": {"calmar": 0.36, "dd": -41.5, "cagr": 14.9}, **{k: blk(0.25) for k in CM.P1_BLOCKS}}
+    bad = {"full": {"calmar": 0.34, "dd": -43.0, "cagr": 14.6}, **{k: blk(0.25) for k in CM.P1_BLOCKS}}
+    bad["1948〜1966"] = blk(0.1)
     res = {0: b, 25: ok, 50: bad}
     assert CM.p1_fails(res, 25) == []
     f = CM.p1_fails(res, 50)
@@ -95,3 +96,24 @@ def test_report_pipeline_smoke(monkeypatch):
     assert set(E["timed"]) == set(CM.WEIGHTS) and E["roll10"]["timed"][0]["n"] > 400
     assert acc is None or 0.0 <= acc <= 1.0
     assert any(line.startswith("| W100 |") for line in CM.LINES)
+
+
+def test_not_worse_guards_negative_cagr():
+    b = {"cagr": -1.0, "dd": -30.0, "calmar": -0.033}
+    deeper = {"cagr": -1.0, "dd": -60.0, "calmar": -0.017}                        # Calmar 看起来更好，其实跌得深得多
+    assert not CM.not_worse(deeper, b, 0.0)
+    assert CM.not_worse({"cagr": 0.5, "dd": -31.0, "calmar": 0.016}, b, 0.0)
+    assert not CM.not_worse({"cagr": 3.0, "dd": -20.0, "calmar": 0.15}, {"cagr": 3.0, "dd": -25.0, "calmar": 0.12}, 0.05)
+
+
+def test_daily_rf_compounds_to_monthly():
+    days = pd.bdate_range("1950-01-02", "1950-02-28")
+    rf = CM.daily_rf(days, pd.Series([1.0, 2.0], index=pd.DatetimeIndex(["1950-01-01", "1950-02-01"])))
+    jan, feb = rf[days.month == 1], rf[days.month == 2]
+    assert np.isclose(np.prod(1 + jan) - 1, 0.01) and np.isclose(np.prod(1 + feb) - 1, 0.02)
+
+
+def test_parse_ff_monthly():
+    text = "\n".join(["desc", "", ",Mkt-RF,RF", "192607, 2.89, 0.22", "192608, 2.64, 0.25", "", " Annual Factors", ",Mkt-RF,RF", "1927, 29.0, 3.1"])
+    df = CM.parse_ff_monthly(text, None)
+    assert len(df) == 2 and df.index[1] == pd.Timestamp("1926-08-01") and np.isclose(df.loc["1926-07-01", "RF"], 0.22)

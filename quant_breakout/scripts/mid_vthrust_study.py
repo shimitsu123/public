@@ -7,22 +7,34 @@
   已知的相关结果（照实写）：日経225 V3（突破日 3 倍量、不加 W2）两个年代每笔 +1.63% / +1.30%（vthrust，登记 09d859a）；
   日経225 以外 666 只 2006〜2016 V3 +0.87% vs 过滤掉 +0.66%（vthrust_wide，事后）；美国 S&P 500 没用过的 398 只 V3 +0.57% vs +0.37%、
   后半 2011〜 +0.07% vs +0.12%（H1，不成立）；日本時点 TOPIX 500 的 2017〜2026 在 S1 / S7 探索里看过量比类特征 → 不再用。
+  M2 的已知反面：日経225 的 V1（W2 ∧ 3 倍量）2006〜2016 只有 17 笔 −0.13%；S&P 500（H1）W2 ∧ 3 倍量 103 笔 +0.04%。
 
 一 样本（两个都没用来看过突破日量比）
   A 主判定：美国 S&P 400 今天的成分（var/us_constituents_2026-09.json；去掉以前研究用过的美股 SEEN = US_BROAD ∪ UNIVERSE_US），
     信号日 1995-01-02〜2015-12-31（H1 只算了 2016 年以后）；半段 A1 = 1995〜2005、A2 = 2006〜2015。
-    成分与业种是今天的 → 幸存者偏差（候选与基准都有；「放量急涨后失败、退市」的票不在样本里 → 对 V3 偏乐观，记为局限）；
-    S&P 400 的加入日 2012 年以前不全 → 不按加入日截断（整段都算），这一点与 H1 不同。
+    成分与业种是今天的 → **幸存者偏差比 H1 大得多**：400 只里有加入日的 300 只中 283 只是 2016 年以后才加入（240 只 2019 年以后），
+    1995 年就有行情的只有 160 只（2006 年 251 只、2015 年 328 只）→ A 大部分是「后来成功、被选进指数的公司」在加入之前的历史
+    （H1 用「加入 + 90 天」排除的正是这一段）；变更表 2012 年以前不全、没法按加入日截断。候选与基准同样有这个偏差，
+    但「放量急涨后失败、退市」的票不在样本里 → 对 V3 偏乐观；B 也是今天的成分 →「A 过 ∧ B 同号」分不开偏差与真效果 →
+    G3 另加「同一只票里抽签」（控制「哪些票」的选择效应）。SEEN 在 S&P 400 里去掉 0 只。
   B 同号检查：日本 T500x（TOPIX 500 里日経225 以外、已剔除航空 / 陆运 / 仓储物流；var/universe_wide.json，今天的成分，yfinance 27 年），
     Z 窗口 信号日 2001-01-04〜2006-09-30（Z 只用过日経225 的组合确认，扩大池从没在 Z 用过；日経225 的 K2 在 Z 看过 →「放量」在 Z
     有效是已知的，照实写）；半段 2001〜2003 / 2004〜2006-09。
   另报（只描述）：日本 S1x（TOPIX Small 1 里日経225 以外）同一 Z 窗口。
-  登记前核对（只有笔数，没看任何收益）：A 399 只、P 1,153 笔（A1 639 / A2 514；数据检查剔除 0）；W2 537、M1 270（169 / 101）、
-    M2 141（82 / 59）、M3 634（376 / 258）；B 247 只、P 390 笔（127 / 263）；W2 181、M1 80（32 / 48）、M2 35（18 / 17）、M3 213（71 / 142）；
-    vr1、w5v 缺值 0%。→ G5 的门槛（全窗口 ≥ 100、每半 ≥ 30；B ≥ 20）按这些笔数写定。
+  数据清洗（审计发现，登记前）：Yahoo 的日本个股 2001〜2006 有「休市日 / 缺数据日」的假行（成交量 0、开高低收 = 前一天收盘；
+    Z 各年占 T500x 行数的 4.8〜7.5%，2007〜2016 ≤ 0.8%）→ 会让 20 日均量偏小（vr1 虚高）、在假行上按旧收盘成交（绕过 3% 跳空过滤）。
+    → 两个样本都把「成交量 ≤ 0」的行整行去掉（美国也有少量）；不用 qbreak/calendar_jp（它按今天的祝日规则，2001〜2006 的天皇诞生日、
+    海の日、敬老の日、山の日都不对）。去掉的行数照报。
+  登记前核对（只有笔数，没看任何收益；去掉成交量 ≤ 0 的行之后）：A 399 只、窗口内去掉 6,377 / 1,297,516 行（0.5%）、P 1,131 笔
+    （A1 617 / A2 514；数据检查剔除 0）；W2 527、M1 250（149 / 101）、M2 133（74 / 59）、M3 610（352 / 258）；
+    B 247 只、窗口内去掉 17,057 / 277,683 行（6.1%）、P 275 笔（90 / 185；去掉假行之前是 390 笔 → 假行造出了约 115 笔交易）；
+    W2 133、M1 47（17 / 30）、M2 22（9 / 13）、M3 142（50 / 92）；vr1、w5v 缺值 0%。
+    → G5 的门槛（全窗口 ≥ 100、每半 ≥ 30；B ≥ 20）按第一次核对写定，去掉假行后仍都满足（B 的 M2 只剩 22 笔）。
 二 交易：同 H1 —— 现行日本突破规则原样去掉 W2（score_forward.no_w2_params(load_params(market="JP"))），每只票单独、一次一仓
-  （qbreak.engine.run_backtest；A 用美股执行设定、B 用日股执行设定；手续费清零后按来回 0.15% 扣，只为可比）；
-  持仓到数据末尾没平仓的不算；信号日前 5 天到平仓日有单日 |涨跌| > 60% 的剔除（hx_select_study.bad_move_flags）。P = 剩下的全部。
+  （qbreak.engine.run_backtest；A 用美股执行设定、B 用日股执行设定；手续费清零后按来回 0.15% 扣，只为可比；
+  引擎的毛收益已含滑点（美股每边 0.05%、日股每边 0.10%）→ 来回合计约 0.25% / 0.35%；A、B 都没有决算日 → 不做决算前不进场）；
+  持仓到数据末尾没平仓的不算；信号日前 5 天到平仓日有单日 |涨跌| > 60% 的剔除（hx_select_study.bad_move_flags；用到了之后的价格路径 →
+  候选与基准各剔除几笔分开报）。P = 剩下的全部。
   行情一直算到今天，但只统计信号日落在上面窗口里的交易（窗口之后的交易不输出、不看）。
 三 特征（信号日收盘为止已知）：vr1 突破日量比 = 当天成交量 ÷ 之前 20 天平均（idio_forward.vr1_series，同 H1 / K2）；
   w5v 周线量比（mtf.weekly_volume_ratio，W2 同一定义；缺值 → W2 保留，同现行）；vr1 缺值 → 条件不满足。
@@ -32,19 +44,24 @@
   M3 突破日 2 倍量：vr1 ≥ 2.0（不加 W2）。基准 = P。
 五 判定（每个候选分别）
   A（主）：G1 每笔净收益 全窗口 候选 − 基准 ≥ +0.5 pp，且 A1、A2 各自 > 0；G2 胜率 全窗口与两半都 ≥ 基准；
-    G3 全窗口的每笔与胜率都 > 两种抽签对照的 95 分位（基准里按「年 × GICS 业种」分层、按「同一周」分层随机保留与候选同样的笔数，各 1,000 次）；
-    G4 (候选 − 基准) 每笔的按月聚类自助法（2,000 次）95% 区间下限 > 0；G5 笔数：全窗口 ≥ 100、每半 ≥ 30。
+    G3 全窗口的每笔与胜率都 > 三种抽签对照的 95 分位（基准里按「年 × GICS 业种」「同一周」「同一只票」分层随机保留与候选同样的笔数，
+    各 1,000 次；每种另报「整层都是候选、每次必被抽中」的候选占比）；
+    G4 (候选 − 基准) 每笔按季度聚类的自助法（2,000 次；持有最长约 60 个交易日，按月聚类会低估误差）95% 区间下限 > 0；
+    G5 笔数：全窗口 ≥ 100、每半 ≥ 30。
   B（同号）：全窗口 候选 − 基准 每笔 > 0 且 胜率 ≥ 基准，且候选 ≥ 20 笔。
   成立 = A 全过 ∧ B 同号。成立 → 提议（用户确认才改任何东西）：① 中型股的突破日量比前向记录（只记录不交易，用户同意再登记）；
   ② 要真的交易中型股，执行器要扩大股票池（行情、一手金额、下单）——是另一个决定，先要做组合层的检验（S0C2 + 中型股）。
   不成立 → 只记录；模拟盘 / 执行器 / W2 / 股票池都不变。
 六 另报（只描述）：两半与按年的每笔；vr1 与「赢」的 AUC；vr1 分档（< 1.5、1.5〜2、2〜3、≥ 3）的每笔；B 的 S1x。
-七 事前预期（写死）：A 上 M1 全过约 15%（H1 大型股同一规则 +0.20 pp、后半消失；S&P 400 的 +0.95 pp 是事后看到的，一般会缩水）；
+七 事前预期（写死）：A 上 M1 全过约 12%（H1 大型股同一规则 +0.20 pp、后半消失；S&P 400 的 +0.95 pp 是事后看到的，一般会缩水；
+  同一只票抽签更难过）；
   M2 约 10%（笔数最少）；M3 约 10%（日本与 H1 的 2 倍量都只有 +0.1 pp 左右）；B 同号约 60%（日経225 的放量在 Z 有效）；
-  三个都不成立约 75%。检出力：M1 约 270 笔、每笔标准差约 7% 时 (候选 − 基准) 的标准误约 0.45 pp（按月聚类更大）→ 约 +1 pp 以上的效果才有机会过 G4；
-  M2 约 140 笔 → 约 +1.3 pp；B 的同号检查（M1 80 笔、M2 35 笔）只看方向，偶然同号的概率接近一半。
+  三个都不成立约 78%。检出力：M1 约 250 笔、每笔标准差约 7% 时 (候选 − 基准) 的标准误约 0.4〜0.45 pp（按季度聚类更大）→ 约 +1 pp 以上的效果才有机会过 G4；
+  M2 约 130 笔 → 约 +1.3 pp；B 的同号检查（M1 47 笔、M2 22 笔）只看方向，偶然同号的概率接近一半。
 八 局限：今天的成分（幸存者偏差，见一）；GICS / 東証 33 业种是今天的分类；突破规则是为日本调的；美股没有决算日数据 → 不做决算前不进场；
-  B 的 yfinance 2001〜2006 日本中小型股数据可能有缺漏（数据检查剔除的笔数照报）；单只单独交易 ≠ 组合里的交易（名额、资金不受限）。
+  B 的 yfinance 2001〜2006 日本中型股数据有假行（已去掉，见一）与其他缺漏；单只单独交易 ≠ 组合里的交易（名额、资金不受限）。
+  顺带发现（不属于这一轮）：以前 Z 窗口的研究（例 S6 的 K2 在日経225 的 Z 确认）用的同一份 yfinance 行情也有这些假行 → 量比类的 Z 结果
+  可能偏乐观，记在 sim_changes.md，另行核对。
 输出：var/out/mid_vthrust_study.md / .json（只有统计）
 """
 from __future__ import annotations
@@ -91,26 +108,43 @@ def _f(s: dict) -> str:
 
 
 # ───────────────────────── 数据 ─────────────────────────
+def clean(raw: dict[str, pd.DataFrame], sector: dict[str, str], key: str) -> tuple[dict[str, pd.DataFrame], dict]:
+    """去掉成交量 ≤ 0（或缺值）的行（Yahoo 的休市假行 / 停牌，头部一）；返回 (行情, {窗口内的行数, 去掉的行数})。"""
+    w0, w1, _ = WIN[key]
+    data, rows, dropped = {}, 0, 0
+    for t, df in raw.items():
+        if t not in sector:
+            continue
+        df = df[["Open", "High", "Low", "Close", "Volume"]]
+        ok = (df["Volume"] > 0).to_numpy()
+        inw = ((df.index >= w0) & (df.index <= w1))
+        rows += int(inw.sum())
+        dropped += int((inw & ~ok).sum())
+        df = df[ok]
+        if len(df) >= 300:
+            data[t] = df
+    return data, {"rows_window": rows, "dropped_window": dropped}
+
+
 def us_pool() -> dict:
-    """A：今天的 S&P 400 去掉 SEEN → {data, sector, market}。"""
+    """A：今天的 S&P 400 去掉 SEEN → {data, sector, market, clean}。"""
     seen = HX.seen_names()
     c = UD.constituents()
     names = [t for t in UD.names("sp400") if t not in seen]
     sector = {r["ticker"]: r["sector"] for r in c["sp400"]}
-    data = UD.ohlcv(names)
-    data = {t: df[["Open", "High", "Low", "Close", "Volume"]] for t, df in data.items() if t in sector and len(df) >= 300}
-    return {"data": data, "sector": {t: sector[t] for t in data}, "market": "US", "years": UD.YEARS}
+    data, cl = clean(UD.ohlcv(names), sector, "A")
+    return {"data": data, "sector": {t: sector[t] for t in data}, "market": "US", "years": UD.YEARS, "clean": cl,
+            "n_seen_removed": sum(1 for t in UD.names("sp400") if t in seen)}
 
 
 def jp_pool(seg: str = "T500x") -> dict:
-    """B：日本 T500x（或 S1x）今天的成分 → {data, sector, market}。"""
+    """B：日本 T500x（或 S1x）今天的成分 → {data, sector, market, clean}。"""
     import leap_data as LD
     from qbreak import wide_universe as WU
     doc = WU.load()
     s33 = {f"{x['code']}.T": x["s33"] for x in doc["segments"][seg]}
-    data = LD.ohlcv(list(s33))
-    data = {t: df[["Open", "High", "Low", "Close", "Volume"]] for t, df in data.items() if t in s33 and len(df) >= 300}
-    return {"data": data, "sector": {t: s33[t] for t in data}, "market": "JP", "years": LD.YEARS}
+    data, cl = clean(LD.ohlcv(list(s33)), s33, "B" if seg == "T500x" else "S1x")
+    return {"data": data, "sector": {t: s33[t] for t in data}, "market": "JP", "years": LD.YEARS, "clean": cl}
 
 
 def base_params():
@@ -182,15 +216,35 @@ def keep_masks(T: pd.DataFrame) -> dict[str, np.ndarray]:
 def build(D: dict, p0, key: str) -> tuple[pd.DataFrame, dict, dict]:
     t0 = time.time()
     w0, w1, _ = WIN[key]
-    T = trades(D, p0, w0, w1)
+    T = attach(trades(D, p0, w0, w1), D)
     bad = HX.bad_move_flags(T, D)
-    info = {"sample": key, "n_names": len(D["data"]), "n_trades_raw": int(len(T)), "n_bad": int(bad.sum())}
-    T = attach(T[~bad].reset_index(drop=True), D)
+    M0 = keep_masks(T)
+    info = {"sample": key, "n_names": len(D["data"]), "n_trades_raw": int(len(T)), "n_bad": int(bad.sum()),
+            "n_bad_by": {k: int((bad & M0[k]).sum()) for k in ("P", "W2") + tuple(CANDS)}, **D.get("clean", {})}
+    T = T[~bad].reset_index(drop=True)
     info["secs"] = round(time.time() - t0)
     return T, keep_masks(T), info
 
 
 # ───────────────────────── 判定 ─────────────────────────
+def always_drawn(base: np.ndarray, keep: np.ndarray, strata: np.ndarray) -> float | None:
+    """候选里有多少落在「整层都是候选」的层（抽签时每次必被抽中）。"""
+    bi = np.flatnonzero(base)
+    kp = keep[bi]
+    if not kp.any():
+        return None
+    _, inv = np.unique(strata[bi], return_inverse=True)
+    nb, nk = np.bincount(inv), np.bincount(inv, weights=kp.astype(float))
+    full = (nk == nb) & (nk > 0)
+    return round(float(kp[full[inv]].sum() / kp.sum()), 3)
+
+
+def boot_q(T: pd.DataFrame, base: np.ndarray, keep: np.ndarray) -> float | None:
+    """(候选 − 基准) 每笔、按信号日所在季度聚类的自助法 2.5% 分位（hx_select_study.boot_diff_lo，聚类键换成季度）。"""
+    Tq = pd.DataFrame({"net": T["net"].to_numpy(float), "month": T["sig_date"].dt.to_period("Q").astype(str).to_numpy()})
+    return HX.boot_diff_lo(Tq, base, keep)
+
+
 def gate_a(T: pd.DataFrame, M: dict, cid: str) -> dict:
     """主判定 G1〜G5（头部五）。"""
     base, keep = M[BASE_OF[cid]], M[cid]
@@ -198,10 +252,11 @@ def gate_a(T: pd.DataFrame, M: dict, cid: str) -> dict:
     res = {"base": BASE_OF[cid], "all": {"cand": HX.stats(T, keep), "base": HX.stats(T, base), "excl": HX.stats(T, base & ~keep)}}
     for h, hm in (("h1", h1), ("h2", ~h1)):
         res[h] = {"cand": HX.stats(T, keep & hm), "base": HX.stats(T, base & hm)}
-    ys = (T["year"].astype(str) + "|" + T["sector"]).to_numpy()
-    lot = {"年×业种": HX.lottery(T, base, keep, ys, seed=HX.SEED), "同周": HX.lottery(T, base, keep, T["week"].to_numpy(), seed=HX.SEED + 1)}
+    strata = {"年×业种": (T["year"].astype(str) + "|" + T["sector"]).to_numpy(), "同周": T["week"].to_numpy(), "同一只票": T["ticker"].to_numpy()}
+    lot = {k: HX.lottery(T, base, keep, st, seed=HX.SEED + i) for i, (k, st) in enumerate(strata.items())}
     res["lottery_q"] = {k: {"mean": float(np.nanpercentile(v["mean"], Q)), "win": float(np.nanpercentile(v["win"], Q))} for k, v in lot.items()}
-    res["diff_lo"] = HX.boot_diff_lo(T, base, keep)
+    res["always_drawn"] = {k: always_drawn(base, keep, st) for k, st in strata.items()}
+    res["diff_lo"] = boot_q(T, base, keep)
     c, b = res["all"]["cand"], res["all"]["base"]
     nan = float("nan")
     fails = []
@@ -225,7 +280,7 @@ def gate_a(T: pd.DataFrame, M: dict, cid: str) -> dict:
         if not (c["n"] and c["win"] > q["win"]):
             fails.append(f"G3 胜率 ≤ {k}抽签 {Q} 分位 {q['win']:.1f}%")
     if not (res["diff_lo"] is not None and res["diff_lo"] > 0):
-        fails.append(f"G4 (候选 − 基准) 按月聚类 95% 下限 {res['diff_lo'] if res['diff_lo'] is not None else nan:+.2f} pp ≤ 0")
+        fails.append(f"G4 (候选 − 基准) 按季度聚类 95% 下限 {res['diff_lo'] if res['diff_lo'] is not None else nan:+.2f} pp ≤ 0")
     res["fails"] = fails
     res["pass"] = not fails
     return res
@@ -279,7 +334,8 @@ def git_info() -> dict:
 def counts(T: pd.DataFrame, M: dict, key: str, info: dict) -> None:
     """登记前核对：只报笔数与缺值（不看收益）。"""
     h1 = (T["sig_date"] < WIN[key][2]).to_numpy()
-    print(f"{key}：{info['n_names']} 只；交易 {info['n_trades_raw']}，剔除 {info['n_bad']}；P {len(T)}（{HALF_NAME[key][0]} {int(h1.sum())} / "
+    print(f"{key}：{info['n_names']} 只；窗口内 {info.get('rows_window')} 行、去掉成交量 ≤ 0 的 {info.get('dropped_window')} 行；交易 {info['n_trades_raw']}，"
+          f"剔除 {info['n_bad']}（{info['n_bad_by']}）；P {len(T)}（{HALF_NAME[key][0]} {int(h1.sum())} / "
           f"{HALF_NAME[key][1]} {int((~h1).sum())}）；缺值 vr1 {T['vr1'].isna().mean() * 100:.1f}%、w5v {T['w5v'].isna().mean() * 100:.1f}%")
     for k in ("W2",) + tuple(CANDS):
         m = M[k]
@@ -291,8 +347,9 @@ def show_block(title: str, g: dict, halves: tuple[str, str]) -> None:
     say(f"- {halves[0]}：候选 {_f(g['h1']['cand'])}；基准 {_f(g['h1']['base'])}")
     say(f"- {halves[1]}：候选 {_f(g['h2']['cand'])}；基准 {_f(g['h2']['base'])}")
     if "lottery_q" in g:
-        say("- 抽签对照 95 分位：" + "；".join(f"{k} 每笔 {v['mean']:+.2f}% 胜率 {v['win']:.1f}%" for k, v in g["lottery_q"].items()))
-        say(f"- (候选 − 基准) 按月聚类 95% 下限 {g['diff_lo'] if g['diff_lo'] is not None else float('nan'):+.2f} pp")
+        say("- 抽签对照 95 分位：" + "；".join(f"{k} 每笔 {v['mean']:+.2f}% 胜率 {v['win']:.1f}%" for k, v in g["lottery_q"].items())
+            + "（候选里每次必被抽中的比例：" + "、".join(f"{k} {v * 100:.0f}%" if v is not None else f"{k} —" for k, v in g["always_drawn"].items()) + "）")
+        say(f"- (候选 − 基准) 按季度聚类 95% 下限 {g['diff_lo'] if g['diff_lo'] is not None else float('nan'):+.2f} pp")
     say(f"- {title}：{'过' if g['pass'] else '不过：' + '；'.join(g['fails'])}")
 
 
@@ -326,9 +383,11 @@ def main() -> int:
         return 0
     say(f"# 中型股的突破日量比（{pd.Timestamp.today().date()}；git {gi['rev']}{'（脏）' if gi['dirty'] else ''}）")
     say("规则见 scripts/mid_vthrust_study.py 开头（先提交后运行）。各格：笔数 / 胜率 / 每笔净收益（来回 0.15% 已扣）。")
-    say(f"\n## A 主判定：美国 S&P 400（去掉 SEEN）{IA['n_names']} 只，信号日 1995〜2015：交易 {IA['n_trades_raw']} 笔，数据检查剔除 {IA['n_bad']} → P {len(TA)} 笔；{IA['secs']}s")
+    say(f"\n## A 主判定：美国 S&P 400（去掉 SEEN {DA['n_seen_removed']} 只）{IA['n_names']} 只，信号日 1995〜2015：窗口内去掉成交量 ≤ 0 的 "
+        f"{IA['dropped_window']} / {IA['rows_window']} 行；交易 {IA['n_trades_raw']} 笔，数据检查剔除 {IA['n_bad']}（{IA['n_bad_by']}）→ P {len(TA)} 笔；{IA['secs']}s")
     say(f"- P：{_f(HX.stats(TA, MA['P']))}；W2：{_f(HX.stats(TA, MA['W2']))}")
-    say(f"\n## B 同号检查：日本 T500x {IB['n_names']} 只，Z 窗口 2001-01〜2006-09：交易 {IB['n_trades_raw']} 笔，数据检查剔除 {IB['n_bad']} → P {len(TB)} 笔；{IB['secs']}s")
+    say(f"\n## B 同号检查：日本 T500x {IB['n_names']} 只，Z 窗口 2001-01〜2006-09：窗口内去掉成交量 ≤ 0 的 {IB['dropped_window']} / {IB['rows_window']} 行；"
+        f"交易 {IB['n_trades_raw']} 笔，数据检查剔除 {IB['n_bad']}（{IB['n_bad_by']}）→ P {len(TB)} 笔；{IB['secs']}s")
     say(f"- P：{_f(HX.stats(TB, MB['P']))}；W2：{_f(HX.stats(TB, MB['W2']))}")
     res = {"git": gi, "A": {**IA, "gates": {}}, "B": {**IB, "signs": {}}}
     for cid in CANDS:
