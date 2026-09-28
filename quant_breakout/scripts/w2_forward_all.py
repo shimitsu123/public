@@ -41,6 +41,12 @@
   - 检出力（按 E / J 校准外推，scripts/x6_forward_calib.py；99% 下限 > 0、80%）：主对象 W2 保留每年约 450 笔 → 差 1 pp 约 1.6〜2 年、
     0.5 pp 约 6〜8 年；不管 W2 的全部每年约 1,000 笔 → 差 1 pp 约 0.6〜0.9 年。小盘股波动更大，实际多半更慢。
   - 证实也只是记录：改模拟盘另写一份事先登记的组合研究，并经用户确认。算不了（例外）→ 报告里写原因，不影响第一〜七节。
+九、追加登记 卖出判定 R4「抛物线 SAR 翻转代替死叉」（2026-09-28；与 scripts/score_forward.py 第十一节同一做法与判定，qbreak/exit_forward.py）
+  - 对象与配对同第八节（同一批配对多跑一边：只把死叉换成 SAR 从价格下方翻到上方的那天收盘）；主对象里 W2 保留、成熟、两边都已平仓的配对。
+  - 判定（每年一次，与第八节同一组日期；做过的年份不再做）：证实 = 胜率差 99% 区间下限 > 0 且每笔差 95% 区间下限 > −0.30 pp；
+    否定 = 胜率差 95% 区间上限 < 0 或每笔差 95% 区间上限 < −0.30 pp；其他 = 未定。另报：主对象里不管 W2 的全部、不限成交额、日経225 部分。
+  - 来由与局限：卖出判定确认里事后看到（胜率 +4.2 pp、每笔 −0.03 pp，没看过的数据）；2006〜2016 日経225 不一致 → 只能靠这里的新数据。
+    检出力（胜率差 +4 pp，99% 下限、80%）：主对象 W2 保留每年约 450 笔 → 约 2 年。证实也只是记录，改模拟盘要另做登记的组合研究并经用户确认。
 """
 from __future__ import annotations
 
@@ -213,8 +219,13 @@ def x6_eval(P: pd.DataFrame, hist: pd.DataFrame | None, today, n225: set[str]) -
     sec = EF.evaluate(P[main], date_col="sig_date")
     side = {"不限成交额（W2 保留）": EF.evaluate(P[keep], date_col="sig_date"),
             "主对象里的日経225 股票池（W2 保留）": EF.evaluate(P[main & keep & nn], date_col="sig_date")}
+    e4 = EF.evaluate_r4(P[main & keep], date_col="sig_date")                  # 第九节：R4（同一批配对多跑的一边）
+    r4 = {"eval": e4, "year": W2F.due_date(today, EF.JUDGE_DATES, W2F.history_done(hist, "all_R4", "r4_year")),
+          "secondary": EF.evaluate_r4(P[main], date_col="sig_date"),
+          "side": {"不限成交额（W2 保留）": EF.evaluate_r4(P[keep], date_col="sig_date"),
+                   "主对象里的日経225 股票池（W2 保留）": EF.evaluate_r4(P[main & keep & nn], date_col="sig_date")}}
     return {"eval": ev, "year": year, "secondary": sec, "sec_ok": bool(sec.get("lo95") is not None and sec["lo95"] > 0) if year else None,
-            "side": side}
+            "side": side, "r4": r4}
 
 
 def decide(ev: dict, hist: pd.DataFrame | None, today) -> dict:
@@ -319,6 +330,18 @@ def review(fetch: bool = True) -> int:
             + (f" → 这一年{'倾向成立' if x6['sec_ok'] else '倾向不成立'}" if x6["year"] else ""))
         for k, e in x6["side"].items():
             say(f"- 另报 {k}：{EF.summary_line(e)}")
+        r4 = x6["r4"]                                                         # 第九节
+        say("\n## 卖出判定 R4（第九节，主对象、W2 保留、成熟配对）：同一个信号 现行 vs 抛物线 SAR 翻转")
+        say(EF.r4_summary_line(r4["eval"]))
+        lines = EF.r4_verdict_lines(r4["eval"], f"{r4['year']} 这一年" if r4["year"] else None)
+        for x in lines:
+            say(f"- {x}")
+        if not lines:
+            nxt = next((d for d in JUDGE_DATES if pd.Timestamp(d) > today), None)
+            say(f"只报告进度（下一次判定：{nxt} 之后的复核）" if nxt else "五次年度判定都已做完（只报告）")
+        say(f"- 另报 主对象里不管 W2 的全部：{EF.r4_summary_line(r4['secondary'])}")
+        for k, e in r4["side"].items():
+            say(f"- 另报 {k}：{EF.r4_summary_line(e)}")
     for x in x6_note:
         say(f"- {x}")
     yr = by_year(M) if len(M) else {}
@@ -345,6 +368,8 @@ def review(fetch: bool = True) -> int:
     if x6 is not None:                                                        # 第八节：判定过的年份下次不再判定
         rows.append(EF.history_row(x6["eval"], str(today.date()), "all_X6", "x6_year", x6["year"],
                                    {"data_through": str(last_bar.date()), "code": code, "x6_sec_ok": x6["sec_ok"]}))
+        rows.append(EF.r4_history_row(x6["r4"]["eval"], str(today.date()), "all_R4", "r4_year", x6["r4"]["year"],
+                                      {"data_through": str(last_bar.date()), "code": code}))          # 第九节
     pd.concat([hist, pd.DataFrame(rows)], ignore_index=True).to_csv(hist_fp, index=False)   # 只追加
     return 0
 

@@ -107,6 +107,20 @@
   - 证实也只是记录：X6 在组合里账户几乎不动（个股仓位小、拿得久资金离开 1655）→ 要改模拟盘另写一份事先登记的组合研究，并经用户确认。
   - 同日顺带修正（不是规则改动）：复核读行情的年数改为「覆盖登记日之前 2 年、最少 3 年」（data_years；原来固定 3 年，
     2029 年以后最早的记录会落到行情外、对不上）。
+十一、追加登记 卖出判定 R4「抛物线 SAR 翻转代替死叉」（2026-09-28，用户「继续 把前向记录和卖出判定研究做完」；此时两份记录都还没有任何数据；
+  定义与统计 qbreak/exit_forward.py）
+  来由：卖出判定的确认（scripts/sell_confirm.py，登记 c9149d1、结果 391acd6）里**事后**看到：没看过的数据（2001〜2006 日経225 + 另一批股票 714 只，
+  650 对）上 R4 胜率 +4.2 pp（95% 区间 +1.5〜+6.9）、每笔 −0.03 pp（−0.34〜+0.26）—— 15 个判定里唯一「胜率升、每笔不降」的；
+  但探索用的 2006〜2016 日経225 里胜率 ±0、每笔 −0.32 pp，并不一致。它不是事先的假设 → 只能用登记之后的数据检验。只记录，不交易。
+  - 做法：与第十节同一批配对多跑一边：只把死叉换成「抛物线 SAR（0.02 / 0.02 / 0.2）从价格下方翻到上方的那天收盘」，其余卖法不变；
+    成熟（信号日之后 ≥ 65 根 K 线）、现行与 R4 两边都已平仓的才算。
+  - 主假设（事先方向：胜率升、每笔不降）：合并样本 W2 保留的成熟配对；区间 = 按信号月聚类的自助法 2,000 次（种子 20260928）。
+    判定时点：成熟配对第一次达到 100 / 200 / 400 笔（做过的不再做）：
+      证实 = 胜率差（R4 − 现行）的 99% 区间下限 > 0，且每笔差的 95% 区间下限 > −0.30 pp（非劣效的界限，写定）；
+      否定 = 胜率差的 95% 区间上限 < 0，或每笔差的 95% 区间上限 < −0.30 pp（→ 结束跟踪，记录照留）；其他 = 未定。
+    另报（不判定）：只看日経225（W2 保留）、不管 W2 的全部突破。
+  - 检出力（按确认的数据外推：胜率差的聚类标准误约 1.4 pp / 650 对）：胜率差 +4 pp 要约 900 对 → 这份记录约 8 年；快的是全市场版（第九节）约 2 年。
+  - 证实也只是记录：改模拟盘另写一份事先登记的组合研究，并经用户确认。
 """
 from __future__ import annotations
 
@@ -445,7 +459,10 @@ def x6_review(log: pd.DataFrame, ind: dict, p, bt, hist: pd.DataFrame | None) ->
     cp = W2F.due_checkpoint(ev["n"], EF.CHECKPOINTS, W2F.history_done(hist, "X6", "checkpoint"))
     seg = M["segment"].to_numpy() if len(M) and "segment" in M.columns else np.array([""] * len(M))
     side = {"只看日経225（W2 保留）": EF.evaluate(M[seg == "N225"]), "不管 W2 的全部突破（合并样本）": EF.evaluate(P)}
-    return {"eval": ev, "checkpoint": cp, "side": side}
+    e4 = EF.evaluate_r4(M)                                                    # 第十一节：R4（同一批配对多跑的一边）
+    r4 = {"eval": e4, "checkpoint": W2F.due_checkpoint(e4["n"], EF.CHECKPOINTS, W2F.history_done(hist, "R4", "checkpoint")),
+          "side": {"只看日経225（W2 保留）": EF.evaluate_r4(M[seg == "N225"]), "不管 W2 的全部突破（合并样本）": EF.evaluate_r4(P)}}
+    return {"eval": ev, "checkpoint": cp, "side": side, "r4": r4}
 
 
 def _say_x6(x: dict) -> None:
@@ -460,6 +477,18 @@ def _say_x6(x: dict) -> None:
         say(f"只报告进度（下一个判定时点：成熟配对 {nxt} 笔）" if nxt else "三个判定时点都已做完（只报告）")
     for k, e in x["side"].items():
         say(f"- 另报 {k}：{EF.summary_line(e)}")
+    r4 = x.get("r4")
+    if r4 is not None:                                                        # 第十一节
+        say("\n## 卖出判定 R4（第十一节）：同一个信号 现行 vs 抛物线 SAR 翻转（合并样本、W2 保留、成熟配对）")
+        say(EF.r4_summary_line(r4["eval"]))
+        lines = EF.r4_verdict_lines(r4["eval"], f"成熟配对第一次达到 {r4['checkpoint']} 笔" if r4["checkpoint"] else None)
+        for s_ in lines:
+            say(f"- {s_}")
+        if not lines:
+            nxt = next((c for c in EF.CHECKPOINTS if c > r4["eval"]["n"]), None)
+            say(f"只报告进度（下一个判定时点：成熟配对 {nxt} 笔）" if nxt else "三个判定时点都已做完（只报告）")
+        for k, e in r4["side"].items():
+            say(f"- 另报 {k}：{EF.r4_summary_line(e)}")
 
 
 def review() -> int:
@@ -531,6 +560,8 @@ def review() -> int:
     if x6 is not None:                                          # 第十节：X6 一行（判定过的笔数下次不再判定）
         rows.append(EF.history_row(x6["eval"], str(pd.Timestamp.today().date()), "X6", "checkpoint", x6["checkpoint"],
                                    {"logged": int(len(log))}))
+        rows.append(EF.r4_history_row(x6["r4"]["eval"], str(pd.Timestamp.today().date()), "R4", "checkpoint", x6["r4"]["checkpoint"],
+                                      {"logged": int(len(log))}))                # 第十一节
     pd.concat([hist, pd.DataFrame(rows)], ignore_index=True).to_csv(hist_fp, index=False)
     print(f"{time.time() - t0:.0f}s")
     return 0
@@ -586,6 +617,14 @@ def status_lines(log: pd.DataFrame, today, out_dir: Path) -> list[str]:
             ci = "" if pd.isna(r.get("x6_lo95")) else f"（95% 区间 {r['x6_lo95']:+.2f}〜{r['x6_hi95']:+.2f}）"
             diff = "—" if pd.isna(r.get("x6_diff")) else f"{r['x6_diff']:+.2f} pp"
             L.append(f"X6 {lab}：最近一次复核 {r.get('run')}，成熟配对 {int(r.get('closed') or 0)} 笔，X6 − 现行 {diff}{ci}。")
+    for fn, scope, lab in (("score_forward_review_history.csv", "R4", "每日记录"), ("w2_forward_all_history.csv", "all_R4", "全市场")):
+        r = _last_hist(out_dir / fn, scope)
+        if r is None:
+            L.append(f"R4（抛物线 SAR）{lab}：还没有复核过。")
+        else:
+            dw = "—" if pd.isna(r.get("r4_dwin")) else f"{r['r4_dwin']:+.1f} pp"
+            dm = "—" if pd.isna(r.get("r4_dmean")) else f"{r['r4_dmean']:+.2f} pp"
+            L.append(f"R4（抛物线 SAR）{lab}：最近一次复核 {r.get('run')}，成熟配对 {int(r.get('closed') or 0)} 笔，胜率差 {dw}、每笔差 {dm}。")
     L.append("已平仓的收益、AUC、W2 保留 vs 挡掉要按行情重算 → 看季度复核的 var/out/score_forward_review.md 与 w2_forward_all_review.md。")
     return L
 

@@ -5457,5 +5457,30 @@
 "另报（事后）：SAR 翻转代替死叉 胜率 +4.2 pp、每笔 −0.03 pp（E 不一致）→ 另登记前向记录"
 ],
 "notes": "登记的确认研究：「取舍」确认 = 过热回落类不能兼顾胜率与每笔 → 不采用、维持现行；用户「把卖出判定研究做完」；Z 与另一批股票已用于卖出判定这一族；模拟盘不变"
+},
+{
+"line": 2384,
+"date": "2026-09-28",
+"title": "卖出判定 R4「抛物线 SAR 翻转代替死叉」前向记录（只记录不交易）",
+"kind": "forward_record",
+"domain": "出场/卖点",
+"registration": "本提交",
+"script": "qbreak/exit_forward.py（scripts/score_forward.py 第十一节、scripts/w2_forward_all.py 第九节）",
+"output": "var/out/score_forward_review.md、var/out/w2_forward_all_review.md",
+"candidates": [
+{
+"id": "R4",
+"rule": "只把 MACD 死叉换成 SAR（0.02 / 0.02 / 0.2）翻到价格上方；同一信号 现行 vs R4 配对",
+"result": "登记时没有数据；确认（事后）胜率 +4.2 pp（+1.5〜+6.9）、每笔 −0.03 pp；2006〜2016 日経225 不一致"
+}
+],
+"baseline": "现行卖法（死叉为主）",
+"windows": "信号日 ≥ 2026-09-28；每日记录 100 / 200 / 400 笔、全市场 2027-09-28 起每年",
+"verdict": "前向记录",
+"stable_findings": [],
+"era_dependent_or_reversed": [
+"2006〜2016 日経225：胜率 ±0、每笔 −0.32 pp"
+],
+"notes": "证实 = 胜率差 99% 下限 > 0 且每笔差 95% 下限 > −0.30 pp；只记录，改模拟盘要另做登记的组合研究并经用户确认"
 }
 ]

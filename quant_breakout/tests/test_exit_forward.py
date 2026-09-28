@@ -168,8 +168,13 @@ def test_score_forward_x6_review_checkpoint_once(monkeypatch):
     assert x["eval"]["diff"] == pytest.approx(2.0)                                  # 两个信号都是 X6 多赚 2 pp（9% → 11%）
     assert x["side"]["不管 W2 的全部突破（合并样本）"]["n"] == 3
     assert x["side"]["只看日経225（W2 保留）"]["n"] == 2
-    hist = pd.DataFrame([EF.history_row(x["eval"], "2027-01-05", "X6", "checkpoint", 2)])
-    assert SFR.x6_review(log, ind, _p(), _bt(), hist)["checkpoint"] is None          # 做过的时点不再判定
+    r4 = x["r4"]
+    assert set(r4) == {"eval", "checkpoint", "side"} and r4["eval"]["n"] <= 2
+    assert r4["side"]["不管 W2 的全部突破（合并样本）"]["n"] >= r4["eval"]["n"]
+    hist = pd.DataFrame([EF.history_row(x["eval"], "2027-01-05", "X6", "checkpoint", 2),
+                         EF.r4_history_row(r4["eval"], "2027-01-05", "R4", "checkpoint", 2)])
+    x2 = SFR.x6_review(log, ind, _p(), _bt(), hist)
+    assert x2["checkpoint"] is None and x2["r4"]["checkpoint"] is None               # 做过的时点不再判定（X6 与 R4 各自）
     assert SFR.x6_review(log.drop(columns=["w2_keep"]), ind, _p(), _bt(), None)["eval"]["n"] == 0   # 没有 W2 标记 → 主假设不算
 
 
@@ -205,8 +210,11 @@ def test_w2_forward_all_x6_pairs_and_yearly_decision(monkeypatch):
     assert x["year"] is None and x["sec_ok"] is None
     x = WFA.x6_eval(P.assign(main=True), None, pd.Timestamp("2027-10-01"), {"1111.T"})
     assert x["year"] == "2027-09-28" and isinstance(x["sec_ok"], bool)
-    hist = pd.DataFrame([EF.history_row(x["eval"], "2027-10-01", "all_X6", "x6_year", "2027-09-28")])
-    assert WFA.x6_eval(P, hist, pd.Timestamp("2028-01-10"), set())["year"] is None   # 同一年不再判定
+    assert x["r4"]["year"] == "2027-09-28" and {"eval", "secondary", "side"} <= set(x["r4"])
+    hist = pd.DataFrame([EF.history_row(x["eval"], "2027-10-01", "all_X6", "x6_year", "2027-09-28"),
+                         EF.r4_history_row(x["r4"]["eval"], "2027-10-01", "all_R4", "r4_year", "2027-09-28")])
+    x3 = WFA.x6_eval(P, hist, pd.Timestamp("2028-01-10"), set())
+    assert x3["year"] is None and x3["r4"]["year"] is None                           # 同一年不再判定
     assert WFA.x6_eval(pd.DataFrame(), None, pd.Timestamp("2027-10-01"), set())["eval"]["n"] == 0
 
 
@@ -231,3 +239,49 @@ def test_status_lines_read_only(tmp_path):
 def test_trading_days_after_uses_tse_calendar():
     n = SFR.trading_days_after(["2026-09-18", "2026-09-24"], "2026-09-25")
     assert n.tolist() == [2, 1]                                                     # 9/19〜23 周末 + 休市（敬老の日・国民の休日・秋分の日）
+
+
+# ── R4：抛物线 SAR 翻转（第十一节 / 第九节）──
+def test_sar_flip_same_as_sell_common():
+    import sell_common as SC
+    rng = np.random.default_rng(9)
+    n = 300
+    c = 1000 * np.exp(np.cumsum(rng.normal(0, 0.02, n)))
+    df = pd.DataFrame({"Open": c, "High": c * 1.01, "Low": c * 0.99, "Close": c, "macd": 0.0, "macd_sig": 0.0, "dead_cross": False},
+                      index=pd.bdate_range("2020-01-01", periods=n))
+    assert np.array_equal(EF.sar_flip(df), SC.signals(df)["sar_flip"]) and EF.sar_flip(df).any()
+    assert SC.psar is EF.psar                                                        # 只有一份实现
+    assert (EF.R4_MARGIN, EF.SAR_STEP, EF.SAR_MAX) == (0.30, 0.02, 0.2)
+
+
+def test_pair_has_r4_arm_with_same_entry():
+    df = make_indicator_frame(RISE, entries={5}, deads={8})
+    pr = EF.pair("A.T", df, df.index[5], _p(), _bt())
+    c = pr["r4"]
+    assert c["entry_date"] == pr["cur"]["entry_date"] and c["entry_px"] == pr["cur"]["entry_px"]
+    assert c["reason"] in ("sar_flip", "stop", "max_hold", "end", "trail", "take_profit")
+    P = EF.pairs_frame({"A.T": df}, pd.DataFrame({"ticker": ["A.T"], "date": [df.index[5]]}), _p(), _bt(), rt=0.1)
+    assert {"status_r4", "net_r4", "hold_r4", "reason_r4", "d_r4"} <= set(P.columns)
+
+
+def _fake_r4(dwin_shift, dmean_shift, n=400, seed=3):
+    rng = np.random.default_rng(seed)
+    cur = rng.normal(0.5, 5, n)
+    var = cur + dmean_shift + rng.normal(0, 1.0, n)
+    flip = rng.random(n) < dwin_shift                                                 # 把一部分小亏变成小赚（胜率升、每笔几乎不变）
+    var = np.where(flip & (cur < 0) & (cur > -1.5), np.abs(cur) * 0.3, var)
+    dates = pd.to_datetime("2027-01-01") + pd.to_timedelta(rng.integers(0, 900, n), unit="D")
+    return pd.DataFrame({"date": dates, "status_r4": "ok", "mature": True, "net_cur": cur, "net_r4": var, "hold_cur": 11, "hold_r4": 12,
+                         "status": "ok", "net_x6": cur, "d": 0.0, "hold_x6": 11, "reason_x6": "chandelier"})
+
+
+def test_r4_evaluate_and_verdicts():
+    up = EF.evaluate_r4(_fake_r4(0.9, 0.0))
+    assert up["dwin"] > 0 and EF.r4_confirmed(up) and not EF.r4_refuted(up)
+    worse = EF.evaluate_r4(_fake_r4(0.0, -1.0))
+    assert EF.r4_refuted(worse) and not EF.r4_confirmed(worse)                        # 每笔差 95% 上限 < −0.30 → 否定
+    assert "证实成立" in EF.r4_verdict_lines(up, "测试")[0] and EF.r4_verdict_lines(up, None) == []
+    assert "成熟配对" in EF.r4_summary_line(up) and EF.r4_summary_line({"n": 0}) == "还没有成熟的配对"
+    row = EF.r4_history_row(up, "2027-10-01", "all_R4", "r4_year", "2027-09-28")
+    assert row["r4_confirmed"] is True and row["r4_year"] == "2027-09-28"
+    assert EF.evaluate_r4(pd.DataFrame())["n"] == 0

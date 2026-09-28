@@ -14,6 +14,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from qbreak.exit_forward import psar                                          # noqa: F401  抛物线 SAR 只写一份，R4 前向记录用同一个
+
 # 变体：fam（R 换判定 / A 另外加 / C 死叉要确认）、zh、sig（判定名，见 signals）、mode（replace / or / and）
 VARIANTS: dict[str, dict] = {
     "R1": {"fam": "R", "zh": "KD 死叉（慢速随机指标 14 / 3 / 3：%K 下穿 %D）代替 MACD 死叉", "sig": "kd_dead", "mode": "replace"},
@@ -82,35 +84,6 @@ def dmi(h, lo, c, n: int = 14) -> tuple[np.ndarray, np.ndarray]:
     atr = wilder(tr, n)
     with np.errstate(invalid="ignore", divide="ignore"):
         return 100 * wilder(pdm, n) / atr, 100 * wilder(mdm, n) / atr
-
-
-def psar(h, lo, step: float = 0.02, mx: float = 0.2) -> tuple[np.ndarray, np.ndarray]:
-    """抛物线 SAR（Wilder）。返回 (SAR, up)：up = True 表示上升趋势（SAR 在价格下方）。第一天按「第二天收在第一天之上 → 上升」起算。"""
-    h, lo = np.asarray(h, float), np.asarray(lo, float)
-    n = len(h)
-    sar, up = np.full(n, np.nan), np.zeros(n, bool)
-    if n < 2:
-        return sar, up
-    trend = h[1] >= h[0]
-    ep = h[0] if trend else lo[0]
-    s = lo[0] if trend else h[0]
-    af = step
-    for i in range(1, n):
-        s = s + af * (ep - s)
-        if trend:
-            s = min(s, lo[i - 1], lo[i - 2] if i >= 2 else lo[i - 1])
-            if lo[i] < s:                                                    # 跌破 → 翻成下降
-                trend, s, ep, af = False, ep, lo[i], step
-            elif h[i] > ep:
-                ep, af = h[i], min(af + step, mx)
-        else:
-            s = max(s, h[i - 1], h[i - 2] if i >= 2 else h[i - 1])
-            if h[i] > s:                                                     # 突破 → 翻成上升
-                trend, s, ep, af = True, ep, h[i], step
-            elif lo[i] < ep:
-                ep, af = lo[i], min(af + step, mx)
-        sar[i], up[i] = s, trend
-    return sar, up
 
 
 def heikin_bear(o, h, lo, c) -> np.ndarray:

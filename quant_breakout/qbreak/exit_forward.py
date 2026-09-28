@@ -15,6 +15,11 @@
   成熟：信号日之后至少有 MATURE_BARS 根 K 线（最长持有 60 天 + 次日开盘 + 余量）→ 两边都应已平仓。只用成熟的配对：
   否则「X6 拿得久、还没卖的多半是赚的」会让早期结果偏向现行。
 只作记录，不影响交易。
+
+R4「抛物线 SAR 翻转代替死叉」（2026-09-28 追加登记；scripts/score_forward.py 第十一节、scripts/w2_forward_all.py 第九节）：
+  同一个配对再多跑一边：只把「死叉」那一条换成「抛物线 SAR（0.02 / 0.02 / 0.2，Wilder）从价格下方翻到上方的那天收盘」（其余卖法不变；
+  与 scripts/sell_common.py 的 sar_flip 同一定义，psar 只在这里写一份）。来由：卖出判定的确认（scripts/sell_confirm.py，c9149d1）里
+  事后看到它胜率 +4.2 pp、每笔 −0.03 pp（没看过的数据），但探索用的 2006〜2016 日経225 不一致 → 只能用登记之后的数据检验。
 """
 from __future__ import annotations
 
@@ -29,6 +34,8 @@ BOOT_N, SEED = 2000, 20260928
 CHECKPOINTS = (100, 200, 400)          # 每日记录：合并样本、W2 保留、成熟配对第一次达到 → 判定
 JUDGE_DATES = W2F.JUDGE_DATES          # 全市场：每年一次（与 W2 / K2 / USW 同一组日期）
 MIN_CI = 10                            # 配对少于这个数不算区间
+R4_MARGIN = 0.30                       # R4：每笔不能差过 0.30 pp（非劣效的界限，登记时写定）
+SAR_STEP, SAR_MAX = 0.02, 0.2
 
 
 def chandelier_flags(df: pd.DataFrame, k_fill: int, px: float, k: float = CHANDELIER_K) -> np.ndarray:
@@ -45,6 +52,43 @@ def chandelier_flags(df: pd.DataFrame, k_fill: int, px: float, k: float = CHANDE
     lvl = peak - k * a
     out[k_fill:] = np.isfinite(lvl) & (c < lvl)
     return out
+
+
+def psar(h, lo, step: float = SAR_STEP, mx: float = SAR_MAX) -> tuple[np.ndarray, np.ndarray]:
+    """抛物线 SAR（Wilder）。返回 (SAR, up)：up = True 表示上升趋势（SAR 在价格下方）。第一天按「第二天高点 ≥ 第一天 → 上升」起算。"""
+    h, lo = np.asarray(h, float), np.asarray(lo, float)
+    n = len(h)
+    sar, up = np.full(n, np.nan), np.zeros(n, bool)
+    if n < 2:
+        return sar, up
+    trend = h[1] >= h[0]
+    ep = h[0] if trend else lo[0]
+    s = lo[0] if trend else h[0]
+    af = step
+    for i in range(1, n):
+        s = s + af * (ep - s)
+        if trend:
+            s = min(s, lo[i - 1], lo[i - 2] if i >= 2 else lo[i - 1])
+            if lo[i] < s:                                                    # 跌破 → 翻成下降
+                trend, s, ep, af = False, ep, lo[i], step
+            elif h[i] > ep:
+                ep, af = h[i], min(af + step, mx)
+        else:
+            s = max(s, h[i - 1], h[i - 2] if i >= 2 else h[i - 1])
+            if h[i] > s:                                                     # 突破 → 翻成上升
+                trend, s, ep, af = True, ep, h[i], step
+            elif lo[i] < ep:
+                ep, af = lo[i], min(af + step, mx)
+        sar[i], up[i] = s, trend
+    return sar, up
+
+
+def sar_flip(df: pd.DataFrame) -> np.ndarray:
+    """SAR 从价格下方翻到上方的那天（收盘时成立 → 次日开盘卖）。"""
+    if not len(df):
+        return np.zeros(0, bool)
+    _, up = psar(df["High"].to_numpy(float), df["Low"].to_numpy(float))
+    return np.r_[False, up[:-1] & ~up[1:]]
 
 
 def _one(t: str, f: pd.DataFrame, p, bt, start, end) -> dict | None:
@@ -76,7 +120,12 @@ def pair(t: str, df: pd.DataFrame, sig_date, p, bt, end=None) -> dict | None:
         raise AssertionError(f"{t} {d.date()}：两边的买入应完全相同")
     if b["reason"] == "dead_cross":
         b["reason"] = "chandelier"
-    return {"cur": a, "x6": b}
+    c = _one(t, f.assign(dead_cross=sar_flip(f)), p, bt, d, end)                    # R4（第十一节）
+    if c is None or c["entry_date"] != a["entry_date"] or c["entry_px"] != a["entry_px"]:
+        raise AssertionError(f"{t} {d.date()}：R4 的买入应与现行完全相同")
+    if c["reason"] == "dead_cross":
+        c["reason"] = "sar_flip"
+    return {"cur": a, "x6": b, "r4": c}
 
 
 def pairs_frame(ind: dict[str, pd.DataFrame], sigs: pd.DataFrame, p, bt, rt: float, date_col: str = "date",
@@ -98,14 +147,17 @@ def pairs_frame(ind: dict[str, pd.DataFrame], sigs: pd.DataFrame, p, bt, rt: flo
         if pr is None:
             rows.append({**r, "status": "no_fill", "mature": mature})
             continue
-        a, b = pr["cur"], pr["x6"]
+        a, b, c = pr["cur"], pr["x6"], pr["r4"]
         rows.append({**r, "status": "ok" if a["reason"] != "end" and b["reason"] != "end" else "open", "mature": mature,
                      "entry_date": a["entry_date"], "exit_cur": a["exit_date"], "exit_x6": b["exit_date"],
                      "reason_cur": a["reason"], "reason_x6": b["reason"], "hold_cur": int(a["hold_days"]), "hold_x6": int(b["hold_days"]),
-                     "net_cur": round(float(a["ret_pct"]) - rt, 4), "net_x6": round(float(b["ret_pct"]) - rt, 4)})
+                     "net_cur": round(float(a["ret_pct"]) - rt, 4), "net_x6": round(float(b["ret_pct"]) - rt, 4),
+                     "status_r4": "ok" if a["reason"] != "end" and c["reason"] != "end" else "open", "exit_r4": c["exit_date"],
+                     "reason_r4": c["reason"], "hold_r4": int(c["hold_days"]), "net_r4": round(float(c["ret_pct"]) - rt, 4)})
     P = pd.DataFrame(rows)
     if len(P) and "net_cur" in P.columns:
         P["d"] = (P["net_x6"] - P["net_cur"]).round(4)
+        P["d_r4"] = (P["net_r4"] - P["net_cur"]).round(4)
     return P
 
 
@@ -199,3 +251,85 @@ def history_row(ev: dict, run: str, scope: str, key: str, when, extra: dict | No
     return {"run": run, "scope": scope, "closed": ev.get("n", 0), key: when, "x6_diff": ev.get("diff"), "x6_lo95": ev.get("lo95"),
             "x6_hi95": ev.get("hi95"), "x6_lo99": ev.get("lo99"), "x6_hi99": ev.get("hi99"),
             "x6_confirmed": confirmed(ev) if judged else None, "x6_refuted": refuted(ev) if judged else None, **(extra or {})}
+
+
+# ───────────────────────── R4：胜率升、每笔不降（第十一节 / 第九节）─────────────────────────
+def usable_r4(P: pd.DataFrame) -> pd.DataFrame:
+    """成熟、现行与 R4 两边都已平仓的配对。"""
+    if not len(P) or "status_r4" not in P.columns:
+        return pd.DataFrame(columns=list(P.columns))
+    return P[(P["status_r4"] == "ok") & P["mature"].astype(bool)].reset_index(drop=True)
+
+
+def boot_win_mean(cur, var, dates, n: int = BOOT_N, seed: int = SEED) -> tuple[np.ndarray, np.ndarray]:
+    """按信号月聚类的自助法：胜率差（pp）与每笔差（pp）。"""
+    cur, var = np.asarray(cur, float), np.asarray(var, float)
+    mon = pd.to_datetime(pd.Series(dates)).dt.to_period("M").to_numpy()
+    groups = [np.flatnonzero(mon == m) for m in pd.unique(mon)]
+    rng = np.random.default_rng(seed)
+    dw, dm = np.empty(n), np.empty(n)
+    for b in range(n):
+        idx = np.concatenate([groups[j] for j in rng.integers(0, len(groups), len(groups))])
+        dw[b] = ((var[idx] > 0).mean() - (cur[idx] > 0).mean()) * 100
+        dm[b] = var[idx].mean() - cur[idx].mean()
+    return dw, dm
+
+
+def evaluate_r4(P: pd.DataFrame, date_col: str = "date", n: int = BOOT_N, seed: int = SEED) -> dict:
+    U = usable_r4(P)
+    out = {"n": int(len(U)), "cur": W2F.stat(U["net_cur"]) if len(U) else {"n": 0}, "r4": W2F.stat(U["net_r4"]) if len(U) else {"n": 0}}
+    if not len(U):
+        return out
+    c, v = U["net_cur"].to_numpy(float), U["net_r4"].to_numpy(float)
+    out.update({"dwin": round(((v > 0).mean() - (c > 0).mean()) * 100, 2), "dmean": round(float(v.mean() - c.mean()), 3),
+                "hold_cur": float(np.median(U["hold_cur"])), "hold_r4": float(np.median(U["hold_r4"])),
+                "months": int(pd.to_datetime(U[date_col]).dt.to_period("M").nunique())})
+    if len(U) >= MIN_CI:
+        dw, dm = boot_win_mean(c, v, U[date_col], n, seed)
+        q = lambda a, p_: round(float(np.percentile(a, p_)), 3)                                      # noqa: E731
+        out.update({"dwin_lo95": q(dw, 2.5), "dwin_hi95": q(dw, 97.5), "dwin_lo99": q(dw, 0.5), "dwin_hi99": q(dw, 99.5),
+                    "dmean_lo95": q(dm, 2.5), "dmean_hi95": q(dm, 97.5)})
+    return out
+
+
+def r4_confirmed(ev: dict) -> bool:
+    """证实：胜率差 99% 下限 > 0，且每笔差 95% 下限 > −R4_MARGIN（胜率升、每笔不差过 0.30 pp）。"""
+    return ev.get("dwin_lo99") is not None and ev["dwin_lo99"] > 0 and ev["dmean_lo95"] > -R4_MARGIN
+
+
+def r4_refuted(ev: dict) -> bool:
+    """否定：胜率差 95% 上限 < 0，或每笔差 95% 上限 < −R4_MARGIN。"""
+    return ev.get("dwin_hi95") is not None and (ev["dwin_hi95"] < 0 or ev["dmean_hi95"] < -R4_MARGIN)
+
+
+def r4_verdict_lines(ev: dict, when: str | None) -> list[str]:
+    if not when:
+        return []
+    if "dwin_lo95" not in ev:
+        return [f"判定（{when}）：成熟配对只有 {ev.get('n', 0)} 笔、算不出区间 → 证实 / 否定都不成立"]
+    if r4_confirmed(ev):
+        v = "**证实成立 = 新数据证实「R4 胜率更高、每笔不差」**（要改模拟盘还要另写一份登记的组合研究，并经用户确认）"
+    elif r4_refuted(ev):
+        v = "**否定成立** → 结束跟踪（记录照留）"
+    else:
+        v = "证实 / 否定都不成立（未定）"
+    return [f"判定（{when}）：{v}；胜率差 {ev['dwin']:+.1f} pp（99% 区间 {ev['dwin_lo99']:+.1f}〜{ev['dwin_hi99']:+.1f}），"
+            f"每笔差 {ev['dmean']:+.2f} pp（95% 区间 {ev['dmean_lo95']:+.2f}〜{ev['dmean_hi95']:+.2f}，界限 −{R4_MARGIN:.2f}）"]
+
+
+def r4_summary_line(ev: dict) -> str:
+    if not ev.get("n"):
+        return "还没有成熟的配对"
+    f = lambda s, h: f"胜率 {s['win']:.1f}% / 每笔 {s['mean']:+.2f}% / 持有中位 {h:g} 天"                     # noqa: E731
+    ci = (f"（胜率差 95% 区间 {ev['dwin_lo95']:+.1f}〜{ev['dwin_hi95']:+.1f}、每笔差 95% 区间 {ev['dmean_lo95']:+.2f}〜{ev['dmean_hi95']:+.2f}）"
+          if "dwin_lo95" in ev else "")
+    return (f"成熟配对 {ev['n']} 笔（{ev.get('months', 0)} 个月）：现行 {f(ev['cur'], ev['hold_cur'])}；R4 {f(ev['r4'], ev['hold_r4'])}；"
+            f"胜率差 {ev['dwin']:+.1f} pp、每笔差 {ev['dmean']:+.2f} pp{ci}")
+
+
+def r4_history_row(ev: dict, run: str, scope: str, key: str, when, extra: dict | None = None) -> dict:
+    judged = when is not None
+    return {"run": run, "scope": scope, "closed": ev.get("n", 0), key: when, "r4_dwin": ev.get("dwin"), "r4_dwin_lo99": ev.get("dwin_lo99"),
+            "r4_dwin_hi95": ev.get("dwin_hi95"), "r4_dmean": ev.get("dmean"), "r4_dmean_lo95": ev.get("dmean_lo95"),
+            "r4_dmean_hi95": ev.get("dmean_hi95"), "r4_confirmed": r4_confirmed(ev) if judged else None,
+            "r4_refuted": r4_refuted(ev) if judged else None, **(extra or {})}
