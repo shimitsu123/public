@@ -1,4 +1,4 @@
-"""scripts/leap_confirm.py：QB_DROP_ZERO_VOL=1 时去掉成交量 ≤ 0 的行（缺省不去，以前的研究可重现）。"""
+"""scripts/leap_confirm.py：缺省去掉成交量 ≤ 0 的行（2026-09-28 起）；QB_DROP_ZERO_VOL=0 时照原样（重现以前的结果）。"""
 import sys
 from pathlib import Path
 
@@ -18,15 +18,15 @@ def _fake(monkeypatch):
     return idx
 
 
-def test_default_keeps_zero_volume_rows(monkeypatch):
-    monkeypatch.delenv("QB_DROP_ZERO_VOL", raising=False)
+def test_env_zero_keeps_zero_volume_rows(monkeypatch):
+    monkeypatch.setenv("QB_DROP_ZERO_VOL", "0")
     idx = _fake(monkeypatch)
     P, days, nm = LF.yf_panel(["A.T", "B.T"], "2001-01-01", "2001-12-31")
     assert len(days) == len(idx) and nm == ["A.T", "B.T"]
 
 
-def test_env_drops_zero_volume_rows(monkeypatch):
-    monkeypatch.setenv("QB_DROP_ZERO_VOL", "1")
+def test_default_drops_zero_volume_rows(monkeypatch):
+    monkeypatch.delenv("QB_DROP_ZERO_VOL", raising=False)
     idx = _fake(monkeypatch)
     P, days, nm = LF.yf_panel(["A.T", "B.T"], "2001-01-01", "2001-12-31")
     assert len(days) == len(idx) - 2 and idx[3] not in days and np.isfinite(P["C"]).all()

@@ -32,9 +32,10 @@ def _windows(era: str) -> dict:
 
 
 def drop_zero_volume() -> bool:
-    """环境变量 QB_DROP_ZERO_VOL=1 → 去掉成交量 ≤ 0 的行（Yahoo 日本个股 2000〜2006 的休市假行：成交量 0、价格 = 前一天收盘）。
-    缺省关（以前各研究的结果照原样可重现）；2026-09-28 事后核对（scripts/k2_z_clean_check.py）才打开。"""
-    return os.environ.get("QB_DROP_ZERO_VOL", "") == "1"
+    """去掉成交量 ≤ 0 的行（Yahoo 日本个股 2000〜2006 的休市假行：成交量 0、价格 = 前一天收盘；日経225 每年 4.5〜6.9%）。
+    2026-09-28 起缺省打开（事后核对 scripts/k2_z_clean_check.py 发现假行把 Z 的现行压低、把 K2 的 Z 优势抬高）；
+    要原样重现 2026-09-28 以前的 Z / E 结果：QB_DROP_ZERO_VOL=0。"""
+    return os.environ.get("QB_DROP_ZERO_VOL", "1") != "0"
 
 
 def yf_panel(names: list[str], lo: str, hi: str) -> tuple[dict, pd.DatetimeIndex, list[str]]:
