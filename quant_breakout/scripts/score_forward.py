@@ -86,6 +86,26 @@
   - 检出力（每年约 250 笔、每笔标准差约 5.9%；K2 约 19%、USW ≈ W2 保留 45% 的 1/3；80%）：K2 每笔差 1.5 pp 约 4 年、USW 差 2 pp 约 3.5〜4 年
     → 长期保险；全市场版（scripts/w2_forward_all.py 同日加 K2 / USW，主对象每年约 1,000 笔）差同样大小约 1 年。
   - 证实 / 否定都只是记录：要改模拟盘 / 执行器另写一份事先登记的组合研究，并经用户确认。
+十、追加登记 卖法 X6「吊灯止损」（2026-09-28，用户「㉛ 选 ① 走前向记录」；此时两份记录都还没有任何数据；定义与统计 qbreak/exit_forward.py）
+  来由：买点 / 卖点 / 持有时间 横展开（scripts/bsh_explore.py，结果 da9c1dc）里 X6「持有以来最高价 − 3 × ATR14，收盘跌破就卖（代替 MACD 死叉）」
+  组合里每笔明显变好，但账户 Calmar 只 +0.02、没过入选规则；它是看过 E / J 之后挑出来的 → 只能用登记之后才发生的信号检验。只记录，不交易。
+  - 做法：记录里的每个信号（按记录的日期与票，不重算买点）只留这一个买入信号，用回测引擎（qbreak/engine.run_backtest，现行成交假设）跑两次：
+    现行 / 只把死叉换成吊灯止损（最高价从买入价起算、ATR 用当天的 Wilder ATR14、k = 3；止损 −7%、跟踪 12%、止盈 +25%、放量阴线、
+    最长 60 天两边相同）。两边买入完全相同 → 配对差 = X6 − 现行 的净收益 pp（来回手续费两边相同）。
+  - 成熟：信号日之后至少 65 根 K 线（两边都应已平仓）才算；有一边还没卖的不算、另报笔数
+    （不这样做，X6 拿得久、还没卖的多半是赚的，会让早期结果偏向现行）。
+  - 主假设（事先方向：X6 每笔 > 现行）：合并样本（日経225 + T500x + S1x）里 W2 保留（w2_keep = 1）的成熟配对，配对差的平均；
+    区间 = 按信号月聚类的自助法 2,000 次（种子 20260928）。判定时点：成熟配对第一次达到 100 / 200 / 400 笔（做过的不再做）：
+      证实 = 99% 区间下限 > 0；否定 = 95% 区间上限 < 0（X6 每笔反而更差 → 结束跟踪，记录照留）；其他 = 未定、只报告进度。
+    另报（不判定）：只看日経225（W2 保留）、不管 W2 的全部突破；两边的胜率 / 每笔 / 持有中位、X6 更好的占比、X6 的出场原因。
+  - 登记前的校准（scripts/x6_forward_calib.py → var/out/x6_forward_calib.md；用的是已看过的 E / J，只核对模拟器、估检出力，不是检验）：
+    配对的现行一边与引擎一只票一次一仓的交易逐笔一致（E 127 / 127、J 172 / 172 笔）；今天的日経225 W2 保留的配对差
+    E +1.35 pp（95% 区间 −0.08〜+2.98）、J +0.38 pp（−0.72〜+1.58），标准差 6.2〜7.5 pp，X6 更好的只占 23〜32%（少数大赚拉高平均），
+    胜率 X6 反而低 2〜3 pp。检出力（按聚类标准误外推；99% 下限 > 0、80%）：差 1 pp 约 710〜930 笔（这份记录 W2 保留每年约 110 笔
+    → 6.5〜8.5 年）、差 1.5 pp 约 320〜420 笔（约 3〜4 年）→ 这份记录是长期保险；快的是全市场版（scripts/w2_forward_all.py 第八节，同日登记）。
+  - 证实也只是记录：X6 在组合里账户几乎不动（个股仓位小、拿得久资金离开 1655）→ 要改模拟盘另写一份事先登记的组合研究，并经用户确认。
+  - 同日顺带修正（不是规则改动）：复核读行情的年数改为「覆盖登记日之前 2 年、最少 3 年」（data_years；原来固定 3 年，
+    2029 年以后最早的记录会落到行情外、对不上）。
 """
 from __future__ import annotations
 
@@ -102,6 +122,7 @@ import pandas as pd
 warnings.filterwarnings("ignore")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from qbreak import exit_forward as EF                                        # noqa: E402
 from qbreak import idio_forward as IF                                        # noqa: E402
 from qbreak import paths                                                     # noqa: E402
 from qbreak import score_forward as SF                                       # noqa: E402
@@ -400,6 +421,46 @@ def _say_w2(w: dict) -> None:
         say("分段（只描述）：" + "；".join(f"{g} 保留 {f(v['keep'])} / 挡掉 {f(v['drop'])}" for g, v in w["segments"].items()))
 
 
+def data_years(today) -> int:
+    """复核要的行情年数：覆盖登记日（FORWARD_START）之前至少 2 年（指标预热），最少 3 年。
+    2026-09-28 追加（第十节同日）：原来固定 3 年，2029 年以后最早的记录会落到行情外、对不上 → 按经过的年数加长。"""
+    gone = (pd.Timestamp(today) - pd.Timestamp(SF.FORWARD_START)).days / 365.25
+    return max(3, int(np.ceil(max(gone, 0.0))) + 2)
+
+
+# ── 第十节：卖法 X6（吊灯止损）的配对 ──
+def x6_review(log: pd.DataFrame, ind: dict, p, bt, hist: pd.DataFrame | None) -> dict:
+    """记录里的信号（按记录的日期与票，不重算买点）逐个配对模拟 现行 / X6（qbreak/exit_forward.py）。
+    主：合并样本里 W2 保留的（w2_keep = 1）；成熟配对第一次达到 100 / 200 / 400 笔时判定（做过的不再做）。
+    另报（不判定）：只看日経225（W2 保留）、不管 W2 的全部突破。"""
+    rt = bt.exec_cfg.fee(NOTIONAL) * 2 / NOTIONAL * 100
+    cols = [c for c in ("date", "ticker", "segment", "w2_keep") if c in log.columns]
+    S = log[cols].copy()
+    S["date"] = pd.to_datetime(S["date"])
+    P = EF.pairs_frame(ind, S, p, bt, rt)
+    k = pd.to_numeric(P["w2_keep"], errors="coerce").to_numpy(float) if len(P) and "w2_keep" in P.columns else np.zeros(len(P))
+    M = P[k == 1] if len(P) else P
+    ev = EF.evaluate(M)
+    cp = W2F.due_checkpoint(ev["n"], EF.CHECKPOINTS, W2F.history_done(hist, "X6", "checkpoint"))
+    seg = M["segment"].to_numpy() if len(M) and "segment" in M.columns else np.array([""] * len(M))
+    side = {"只看日経225（W2 保留）": EF.evaluate(M[seg == "N225"]), "不管 W2 的全部突破（合并样本）": EF.evaluate(P)}
+    return {"eval": ev, "checkpoint": cp, "side": side}
+
+
+def _say_x6(x: dict) -> None:
+    say("\n## 卖法 X6（第十节）：同一个信号 现行 vs 吊灯止损（合并样本、W2 保留、成熟配对）")
+    ev = x["eval"]
+    say(EF.summary_line(ev))
+    lines = EF.verdict_lines(ev, f"成熟配对第一次达到 {x['checkpoint']} 笔" if x["checkpoint"] else None)
+    for s_ in lines:
+        say(f"- {s_}")
+    if not lines:
+        nxt = next((c for c in EF.CHECKPOINTS if c > ev["n"]), None)
+        say(f"只报告进度（下一个判定时点：成熟配对 {nxt} 笔）" if nxt else "三个判定时点都已做完（只报告）")
+    for k, e in x["side"].items():
+        say(f"- 另报 {k}：{EF.summary_line(e)}")
+
+
 def review() -> int:
     from qbreak.config import BacktestConfig, DataConfig
     from qbreak.data import load_universe
@@ -413,10 +474,11 @@ def review() -> int:
     hist_fp = paths.out_dir() / "score_forward_review_history.csv"
     hist = pd.read_csv(hist_fp) if hist_fp.exists() else pd.DataFrame()
     evs, Vs, segs = {}, {}, {}
-    w2 = idio = None
+    w2 = idio = x6 = None
     if len(log):
         p = SF.no_w2_params(load_params(market="JP"))           # 第八节：与记录同一个范围（不加 W2 的突破）
-        data = load_universe(sorted(set(log["ticker"])), DataConfig(provider="yfinance", years=3, allow_synthetic=False).validate())
+        data = load_universe(sorted(set(log["ticker"])), DataConfig(provider="yfinance", years=data_years(pd.Timestamp.today()),
+                                                                     allow_synthetic=False).validate())
         ind = dict(IndicatorCache(data).all(p))
         bt = BacktestConfig.for_market("JP", 3, "tachibana")
         bt.sizing.initial_cash, bt.sizing.position_pct, bt.sizing.max_positions, bt.sizing.max_position_pct = 1e10, 1.0, 1, 1.0
@@ -431,6 +493,7 @@ def review() -> int:
             if scope == "combined":
                 w2 = w2_review(C, hist, pd.Timestamp.today())
                 idio = IF.review_pair(idio_fill(C), hist, pd.Timestamp.today())   # 第九节：K2 / USW（us12 为空的按同一规则补算，不写回）
+        x6 = x6_review(log, ind, p, bt, hist)                                 # 第十节：卖法 X6 的配对
     for scope, title in (("combined", "合并样本（主判定：日経225 + T500x + S1x）"), ("N225", "只看日経225（附带）")):
         if scope in evs:
             _say_eval(title, evs[scope], Vs[scope])
@@ -443,13 +506,15 @@ def review() -> int:
         say("\n## K2 / USW（第九节）：标记 vs 其余（合并样本、已平仓）")
         for x in IF.say_lines(idio):
             say(x)
+    if x6 is not None:
+        _say_x6(x6)
     if not evs:
         say("\n还没有记录。")
     if any(any(r["ok"] for r in V.get("results", {}).values() if r["hyp"].startswith("P") or r["hyp"] == "X2") for V in Vs.values()):
         say("\n主假设（或 X2）成立 → 需要另写一份事先登记的组合研究；模拟盘规则不变（改需用户确认）。")
     out = paths.out_dir() / "score_forward_review"
     Path(f"{out}.md").write_text("\n".join(LINES) + "\n", encoding="utf-8")
-    Path(f"{out}.json").write_text(json.dumps({"eval": evs, "decision": Vs, "segments": segs, "w2": w2, "idio": idio}, ensure_ascii=False,
+    Path(f"{out}.json").write_text(json.dumps({"eval": evs, "decision": Vs, "segments": segs, "w2": w2, "idio": idio, "x6": x6}, ensure_ascii=False,
                                               indent=1, default=float), encoding="utf-8")
     rows = [{"run": str(pd.Timestamp.today().date()), "scope": sc, "logged": int(len(log)), "closed": ev["count"].get("closed"),
              "checkpoint": Vs[sc].get("checkpoint"), **{f"auc_{c}": (a or {}).get("auc") for c, a in (ev.get("auc") or {}).items()}}
@@ -462,6 +527,9 @@ def review() -> int:
                      "w2_confirmed": w2["confirmed"]})
     if idio is not None:                                        # 第九节：K2 / USW 各一行（判定过的年份下次不再判定）
         rows += IF.history_rows(idio, str(pd.Timestamp.today().date()), "", {"logged": int(len(log))})
+    if x6 is not None:                                          # 第十节：X6 一行（判定过的笔数下次不再判定）
+        rows.append(EF.history_row(x6["eval"], str(pd.Timestamp.today().date()), "X6", "checkpoint", x6["checkpoint"],
+                                   {"logged": int(len(log))}))
     pd.concat([hist, pd.DataFrame(rows)], ignore_index=True).to_csv(hist_fp, index=False)
     print(f"{time.time() - t0:.0f}s")
     return 0

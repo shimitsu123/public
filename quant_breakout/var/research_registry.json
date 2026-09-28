@@ -5342,5 +5342,32 @@
 "全部加大个股仓位：E 持平、J 更差"
 ],
 "notes": "没有入选 → 不登记；P1（K2 加码）不是运气但幅度很小，K2 已在前向记录；模拟盘不变"
+},
+{
+"line": 2325,
+"date": "2026-09-28",
+"title": "卖法 X6「吊灯止损」前向记录（㉛ ①，只记录不交易）",
+"kind": "forward_record",
+"domain": "出场/卖点",
+"registration": "本提交",
+"script": "qbreak/exit_forward.py（scripts/score_forward.py 第十节、scripts/w2_forward_all.py 第八节）",
+"output": "var/out/score_forward_review.md、var/out/w2_forward_all_review.md（校准 var/out/x6_forward_calib.md）",
+"candidates": [
+{
+"id": "X6",
+"rule": "只把 MACD 死叉换成「收盘 < 持有以来最高价 − 3 × ATR14」；同一信号 现行 vs X6 配对、只用成熟配对",
+"result": "登记时没有数据；校准（已看过的 E / J）配对差 E +1.35 pp（−0.08〜+2.98）、J +0.38 pp（−0.72〜+1.58）"
+}
+],
+"baseline": "现行卖法（死叉为主）",
+"windows": "信号日 ≥ 2026-09-28；每日记录 100 / 200 / 400 笔、全市场 2027-09-28 起每年",
+"verdict": "前向记录",
+"stable_findings": [
+"校准：配对的现行一边与引擎逐笔一致（127 / 127、172 / 172）"
+],
+"era_dependent_or_reversed": [
+"同一信号比，X6 的优势 E 大、J 小（+1.35 vs +0.38 pp）；组合里的 +0.74 pp 有一部分来自交易集合变化"
+],
+"notes": "用户选 ①；证实也只是记录，改模拟盘要另写登记的组合研究并经用户确认；Z 没用"
 }
 ]
