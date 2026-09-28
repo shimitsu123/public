@@ -4843,5 +4843,47 @@
 "纳指 / 科技的收益优势只在 1986 年以后成立；1929〜1986 收益几乎一样（+0.1 pp/年）"
 ],
 "notes": "维持 1655；㉔ 仍是用户在知情下的选择，这一轮证据不支持换；代理 = Ken French BusEq"
+},
+{
+"line": 2016,
+"date": "2026-09-28",
+"title": "事后核对：去掉 Yahoo 休市假行后重算 S6 的 K1〜K3（Z / E）",
+"kind": "study",
+"domain": "选股/买点",
+"registration": "a3b8daf（事后，脚本先提交）",
+"script": "scripts/k2_z_clean_check.py",
+"output": "var/out/k2_z_clean_check.md",
+"candidates": [
+{
+"id": "K2",
+"rule": "放量 ∧ 低 β（S6 登记 a88cbd3）",
+"result": "Z 每笔优势 +1.33 pp → −0.59 pp（现行 +0.78% → +2.71%）；E +1.47 → +1.80 pp"
+}
+],
+"baseline": "现行 = S0C2 + W2（日経225）",
+"windows": "Z 2001〜2006、E 2006〜2016（J 沿用原结果）",
+"verdict": "不通过",
+"stable_findings": [],
+"era_dependent_or_reversed": [
+"K2 的优势只在 E / J 两个年代（Z 的优势是假行造成的）"
+],
+"notes": "Z 窗口 5.9% 的行是成交量 0 的假行；leap_confirm 从此缺省去掉（QB_DROP_ZERO_VOL=0 可重现旧结果）；登记的结论（K1〜K3 不通过）不变，K2 前向记录照常"
+},
+{
+"line": 2029,
+"date": "2026-09-28",
+"title": "登记：间接影响的传导时间 T1〜T5（产业连关表 108 部门 × 原材料企业物价）",
+"kind": "study",
+"domain": "行业/主题/联动",
+"registration": "5e3c11a",
+"script": "scripts/transmit_study.py",
+"output": "var/out/transmit_study.md",
+"candidates": [],
+"baseline": "",
+"windows": "行业 2006-10〜2026-08（两半 2016-08 / 09）；个股 Z / E / J",
+"verdict": "变更/工程",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "两次对抗审计后登记：原材料行外生（不重复算自己的循环）、108 部门（能源只取 061）、食料用输入物价 + 去季节 z、T2 全部错开对照、只靠能源 → 不算新证据"
 }
 ]
