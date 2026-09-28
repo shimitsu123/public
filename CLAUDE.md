@@ -2,6 +2,7 @@
 
 主体是 `quant_breakout/`：个人用的日本股票量化交易系统（研究 → 云端模拟盘 → Mac 上的执行器）。命令都在 `quant_breakout/` 下运行。
 现状、每天的流程、决定与理由、已知限制、路线图（先读它）：@quant_breakout/HANDOFF.md
+全部研究按层与时间串起来的检查时间线（每天 / 每周 / 每月 / 每季 / 每年、事件驱动、判定日历）：`quant_breakout/CHECK_TIMELINE.md`
 
 ## 和用户沟通
 - 用中文；结论先行 → 要点（≤ 7 条）→ 详解 / 来源 / 下一步

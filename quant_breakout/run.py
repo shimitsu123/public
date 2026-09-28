@@ -953,6 +953,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     out["news"] = _news_panel(out)                           # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
     out["energy"] = _energy_panel(today)                     # 仪表盘：能源消费（每月）+ K4 前向记录（只作展示 / 记录）
     out["cost_sales"] = _cost_sales_panel(today)             # 成本 × 销售（S2）：上个月末的分组 + 前向记录（只展示 / 记录，不影响交易）
+    out["calendar"] = _calendar_panel(today)                 # 检查日历：接下来 45 天有日期的检查 + 远期判定（只展示；全貌 CHECK_TIMELINE.md）
     if usdjpy is None:                                       # 状态里没有汇率时（例如首日）：备用来源
         out["usdjpy"], out["usdjpy_src"] = _usdjpy_any()
     from qbreak.data import LAGGING
@@ -1207,6 +1208,16 @@ def _macro_now_panel(extras: dict) -> dict:
     except Exception as e:                                   # noqa: BLE001
         log.warning("市场健康度 / 新数据面板失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"}
+
+
+def _calendar_panel(today) -> dict:
+    """检查日历（qbreak/check_calendar.py，2026-09-28 用户要求的检查时间线）：只展示；失败只记原因。"""
+    from qbreak import check_calendar as CK
+    try:
+        return CK.panel(today)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("检查日历失败（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 
 def _cost_sales_panel(today) -> dict:

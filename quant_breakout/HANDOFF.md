@@ -1,7 +1,8 @@
 # HANDOFF：现状与来龙去脉（给新的 Claude 会话；2026-09-25 写，2026-09-26 更新，有变化就更新这里）
 
 细节以代码与这些文件为准：`README.md`（总览）、`MACOS.md`（Mac 与立花）、`var/sim_changes.md`（每次变更与研究结论，按时间）、
-`REVIEW.md`（原版代码审查）、`var/out/`（研究报告与日报数据）、`RESEARCH_PLAN.md`（研究路线图：方向 R1〜R6、顺序与「稳定」的判定口径）。
+`REVIEW.md`（原版代码审查）、`var/out/`（研究报告与日报数据）、`RESEARCH_PLAN.md`（研究路线图：方向 R1〜R6、顺序与「稳定」的判定口径）、
+**`CHECK_TIMELINE.md`（检查时间线：全部研究按层与时间串起来 —— 每天 / 每周 / 每月 / 每季 / 每年看什么、事件驱动、前向记录的判定日历；日报「检查日历」一栏自动列出接下来 45 天）**。
 
 ## 一句话
 个人资金 ¥1,000,000，一个账户方案 **S0C2**（立花証券 e支店 個別コース）：日本个股 4 个名额 × 25%（日経225 股票池）
@@ -153,6 +154,8 @@
   执行器发买单前再查一次；核心 ETF 被 JPX 指定 → 不下它的买单；持仓被标记只报警（不自动卖）。日报「下单前资格检查」一栏，告警进「数据完整性」；
   只读检查 `run.py eligibility`（旧命令 `universe-update` 不再覆盖名单）。当场核对：ja.wikipedia 与修正后的名单一致，en.wikipedia 仍列 6594（所以只作参考），
   JPX 特別注意銘柄里有 6594（即使名单没改也会被挡）。
+- 检查时间线（2026-09-28，用户「依据现在的所有研究整理出一整个check时间线…横展开一下」）：`CHECK_TIMELINE.md` + 日报「检查日历」（`qbreak/check_calendar.py`，
+  接下来 45 天有日期的检查 + 远期判定）。只展示。
 - 为什么越近越弱（2026-09-28，用户「分析为什么越靠近现在胜率什么的就会变弱…」）：诊断 `scripts/decay_diag.py`（只描述）→ **不是结构性衰退**：
   逐笔 E（2006〜2016）+0.74% 与 J（2017〜）+0.76% 一样；Z（2001〜2006）+2.73% 的优势集中在 2005 年（日経 +40%，41 笔 +4.57%），去掉后只多 +0.15 pp；
   每个年代都靠少数强势年（E 去 2012 → −0.07%、J 去 2025 → +0.30%）；不是幸存者偏差、不是机制变化。事后核对 `scripts/pit_recheck.py`：研究框架加
@@ -282,6 +285,7 @@
 | 装 / 更新全部 | 「拉一下最新代码并更新」「把定时任务都装好」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh` | 不动账本、不下单 |
 | 开机后补跑了吗 | 「今天开机后模拟操盘补跑了吗？」 | 读 `~/.qbreak/home/logs/com.qbreak.login.out`；`launchctl list \| grep qbreak` | 只读；立花本番不在登录时补跑 |
 | 影子账户（判断型） | 「影子账户今天怎么样？比规则账户好吗？」 | 读 `var/out/shadow_today.json`、`var/out/shadow_equity.csv`（云端每天记）；中间统计 `python scripts/shadow_account.py evaluate --interim` | 只读；判断只在云端例行任务里做 |
+| 接下来要检查什么 | 「这个月 / 接下来要注意什么？」「什么时候判定 W2？」 | 读 `CHECK_TIMELINE.md` 与日报「检查日历」（`var/out/unified_today.json` 的 calendar） | 只读 |
 | 股票被踢出了吗 | 「要下单 / 手上的股票有没有被踢出日経225、被指定特別注意？」 | `QBREAK_HOME=~/.qbreak/home ~/.qbreak/venv/bin/python run.py eligibility`（在 `~/qbreak-src/quant_breakout`） | 只读；名单差异要改名单 → 你确认后云端改 |
 | 成本 × 销售 | 「现在原材料在涨吗？哪些业种偏间接？」 | `~/.qbreak/venv/bin/python scripts/cost_sales_forward.py --show`；进度 `--review` | 只展示；行业层，不是个股建议 |
 | 看今天的情况 | 「今天模拟操盘怎么样？」「现在持仓和下一开盘的单是什么？」 | `bash scripts/liveu.sh --broker paper --status`（立花上线后 `--broker tachibana`），读页面与日志 | 只读 |

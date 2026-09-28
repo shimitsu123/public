@@ -5106,5 +5106,22 @@
 "stable_findings": [],
 "era_dependent_or_reversed": [],
 "notes": "只展示 / 只记录：原材料在涨的月份销售好且成本上涨的业种按间接占比分偏间接 / 偏直接；判定只改日报标签"
+},
+{
+"line": 2182,
+"date": "2026-09-28",
+"title": "检查时间线（CHECK_TIMELINE.md）+ 日报「检查日历」",
+"kind": "display",
+"domain": "数据/工程",
+"registration": "",
+"script": "qbreak/check_calendar.py",
+"output": "CHECK_TIMELINE.md",
+"candidates": [],
+"baseline": "",
+"windows": "",
+"verdict": "只展示",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "把全部研究按层（在用 / 只展示 / 前向记录 / 否定）与时间（日 / 周 / 月 / 季 / 年 / 事件 / 判定日）串起来；日报列出接下来 45 天有日期的检查"
 }
 ]

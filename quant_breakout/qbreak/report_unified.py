@@ -63,6 +63,7 @@ def build_unified_data() -> dict:
             "policy": td.get("policy") or {},                    # 政策事件反应库（qbreak/policy_forward.py；只展示 + 前向记录）
             "eligibility": td.get("eligibility") or {},          # 下单前资格检查（qbreak/eligibility.py：被踢出 / 被指定的票不开新仓）
             "cost_sales": td.get("cost_sales") or {},            # 成本 × 销售（S2）分组与前向记录（qbreak/cost_sales_forward.py；只展示）
+            "calendar": td.get("calendar") or {},                # 检查日历（qbreak/check_calendar.py；只展示，全貌 CHECK_TIMELINE.md）
             "shadow": read_json(paths.out_dir() / "shadow_today.json", {}) or {},   # 影子账户（判断型，只前向记录，不影响交易）
             "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
@@ -165,6 +166,9 @@ def missing_items(d: dict) -> list[str]:
         out.append(f"政策事件反应库：这次没算 / 没记上（{pf['error']}）—— 不影响交易；前向记录不补写")
     if started and (pf.get("status") or {}).get("pending"):
         out.append(f"政策事件反应库：{pf['status']['pending']} 个已过去的日银 / FOMC 日程还没有分类录入（待分类，Mac 上 `bash scripts/liveu.sh policy add …`）")
+    ck = d.get("calendar") or {}
+    if started and ck.get("error"):
+        out.append(f"检查日历：这次没排出来（{ck['error']}）—— 只作展示，不影响交易")
     cs = d.get("cost_sales") or {}
     if started and cs.get("error"):
         out.append(f"成本 × 销售（S2）：这次没算出（{cs['error']}）—— 只作展示，不影响交易；前向记录下次运行再记（不补写）")
@@ -353,6 +357,23 @@ def _eligibility_html(d: dict, meta: tuple) -> str:
             "持仓被标记只报警，要不要提前卖由你决定（人工买卖执行器管的票之前先 HALT）。代码在 qbreak/eligibility.py。</p></section>")
 
 
+def _calendar_html(c: dict) -> str:
+    """检查日历：接下来 45 天有日期的检查 + 远期判定（只展示；每一项的来由见 CHECK_TIMELINE.md）。"""
+    if not c or c.get("error") or not (c.get("items") or c.get("milestones")):
+        return ""
+    wd = "一二三四五六日"
+    row = lambda x: (f"<tr><td>{escape(x['date'])}（{wd[dt.date.fromisoformat(x['date']).weekday()]}）</td><td>{escape(x['what'])}</td>"   # noqa: E731
+                     f"<td class='muted'>{escape(x['check'])}</td><td>{escape(x['who'])}</td></tr>")
+    body = "".join(row(x) for x in c.get("items") or [])
+    far = "".join(f"<li>{escape(x['date'])}：{escape(x['what'])} —— {escape(x['check'])}</li>" for x in c.get("milestones") or [])
+    return ("<section class='card'><details open><summary><h2 style='display:inline'>检查日历（接下来 "
+            f"{int(c.get('horizon_days') or 45)} 天有日期的检查；只展示）</h2></summary>"
+            + (f"<div class='scroll'><table><tr><th>日期</th><th>事项</th><th>看什么 / 怎么做</th><th>谁</th></tr>{body}</table></div>" if body else "")
+            + (f"<h3>远期的判定 / 评估（事先写定）</h3><ul>{far}</ul>" if far else "")
+            + "<p class='muted'>每天固定的流程（06:57 云端日报 → 07:40 Mac 执行器 → 09:00 寄付）、每周 / 每月 / 每季 / 每年要看的事与每一项的研究来由："
+              "仓库里的 CHECK_TIMELINE.md。</p></details></section>")
+
+
 def _cost_sales_html(c: dict) -> str:
     """成本 × 销售（S2，qbreak/cost_sales_forward.py）：原材料在涨的月份，销售好且成本上涨的业种按间接占比分组（只展示，不改交易）。"""
     if not c or c.get("error") or not c.get("rows"):
@@ -533,6 +554,7 @@ def render_unified_html(d: dict) -> str:
         themes=_themes_html(d.get("themes") or {}, meta), policy=_policy_html(d.get("policy") or {}),
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us), shadow=_shadow_html(d),
         elig=_eligibility_html(d, meta), cost_sales=_cost_sales_html(d.get("cost_sales") or {}),
+        calendar=_calendar_html(d.get("calendar") or {}),
         corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
         n_trades=d.get("n_trades", 0), win=_pct(d.get("win_rate")) if d.get("win_rate") is not None else "—（还没有平仓）",
@@ -827,6 +849,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 {dash}
 <section class="card"><h2>今天要做的事（日本时间）</h2>{todo}</section>
 {elig}
+{calendar}
 <section class="card"><h2>权益曲线（日元）</h2>{spark}</section>
 <section class="card"><h2>个股持仓</h2><div class="scroll"><table><tr><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">成本</th><th class="n">止损</th><th>买入日</th></tr>{positions}</table></div></section>
 <section class="card"><h2>除息 / 拆股（已补到持仓与现金）</h2><ul>{corp}</ul></section>
