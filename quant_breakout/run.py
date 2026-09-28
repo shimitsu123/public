@@ -851,6 +851,8 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=()):
     ccost = {t: etf_cost(broker, t, market_of(t)) for t in ucfg.core}
     today = _dt.date.today()
     extras, plans = _unified_extras(cfg, ucfg, u, dcfg, params, today)
+    from qbreak import eligibility as EL
+    gate = EL.gate_for(today, unis["JP"], ucfg.core)       # 下单前资格检查：被踢出 / 被指定 / 确认不了的票不开新个股仓
     eblock = None
     if any(params[m].earnings_blackout_days for m in params):  # 决算前 N 个交易日不进场（风控项，与原模拟盘相同）
         from qbreak.trader import _earnings_days
@@ -868,9 +870,10 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=()):
             e.live_mult[m] = (P.scale, P.tmult or {}, P.block if isinstance(P.block, str) else None)
         e.live_fx_ok = is_trading_day(now_jst().date())    # 今天白天（日本营业日）才有换汇窗口
         e.entry_block_fn = eblock
+        e.entry_gate_fn = gate.entry_block
         return e
     ctx = SimpleNamespace(data=data, ind=ind, plans=plans, extras=extras, params=params, dcfg=dcfg, ucfg=ucfg, u=u,
-                          broker=broker, today=today, ex=ex, ccost=ccost, make=make)
+                          broker=broker, today=today, ex=ex, ccost=ccost, make=make, gate=gate)
     return make(state), ctx
 
 
@@ -936,18 +939,20 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     eq = state.history[-1][1] if state.history else ucfg.capital_jpy
     usdjpy = float(state.history[-1][4]) if state.history and state.history[-1][4] else None
     threat = _unified_watch_and_threat(extras, plans, data, params, dcfg, ucfg, eq, usdjpy)
+    elig = _eligibility_panel(ctx, eng, state, extras)      # 下单前资格检查：被挡的票、持仓标记、名单对照（候补队列标出理由）
     out = {"date": today.isoformat(), "bar_date": state.last_date, "equity_jpy": eq, "cash_jpy": round(state.cash_jpy),
            "cash_usd": round(state.cash_usd, 2), "todo": todo, "skipped": eng.skipped,
            "positions": {t: {"market": p.market, "shares": p.shares, "entry_px": p.entry_px, "entry_date": p.entry_date,
                              "stop_px": round(p.stop_px, 2)} for t, p in state.pos.items()},
            "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker,
-           "threat": threat, "executor": executor, "score_forward": score_fwd,
+           "threat": threat, "executor": executor, "score_forward": score_fwd, "eligibility": elig,
            "themes": _theme_panel(provider)}                  # 主题 / 业种强弱、影响度、新出现的联动（只作展示）
     out["era"] = _era_forward_log(out["themes"], today)      # 时代主线的前向记录（每月一次；只记录，不影响交易）
     out["policy"] = _policy_panel(today)                     # 政策事件反应库：前向记录 + 日报块（只记录 / 展示，不影响交易）
     out["macro_now"] = _macro_now_panel(extras)              # 仪表盘：市场健康度 + 消费 / 零售等新数据（只作展示）
     out["news"] = _news_panel(out)                           # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
     out["energy"] = _energy_panel(today)                     # 仪表盘：能源消费（每月）+ K4 前向记录（只作展示 / 记录）
+    out["cost_sales"] = _cost_sales_panel(today)             # 成本 × 销售（S2）：上个月末的分组 + 前向记录（只展示 / 记录，不影响交易）
     if usdjpy is None:                                       # 状态里没有汇率时（例如首日）：备用来源
         out["usdjpy"], out["usdjpy_src"] = _usdjpy_any()
     from qbreak.data import LAGGING
@@ -1202,6 +1207,17 @@ def _macro_now_panel(extras: dict) -> dict:
     except Exception as e:                                   # noqa: BLE001
         log.warning("市场健康度 / 新数据面板失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"}
+
+
+def _cost_sales_panel(today) -> dict:
+    """成本 × 销售（qbreak/cost_sales_forward.py，2026-09-28 用户确认）：上个月末 S2 的分组（原材料在涨的月份、销售好且成本上涨的业种按间接占比
+    分偏间接 / 偏直接），每月算一次；2026-10 起每月第一次运行追加前向记录。只展示 / 只记录；失败只记原因（日报「数据完整性」会列出）。"""
+    from qbreak import cost_sales_forward as CF
+    try:
+        return CF.panel(today)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("成本 × 销售面板失败（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 
 def _era_forward_log(themes: dict, today) -> dict:
@@ -1523,7 +1539,8 @@ def _executor_paper_step(ctx, sim_state) -> dict:
             _seed_paper_executor(book, pb, sim_state)
         st = load_state(book, ctx.ucfg.capital_jpy)
         eng = ctx.make(st)
-        ux = UnifiedExecutor(eng, pb, book, paper=True, check_clock=False)
+        ux = UnifiedExecutor(eng, pb, book, paper=True, check_clock=False,
+                             pre_send=ctx.gate.pre_send if getattr(ctx, "gate", None) else None)
         idxs, _ = _new_bar_idxs(eng, st)
         prov = _corp_actions_provider()
 
@@ -1545,6 +1562,28 @@ def _executor_paper_step(ctx, sim_state) -> dict:
         log.warning("执行器演练账户失败（不影响模拟盘）：%s", e)
         print(f"★ 执行器演练账户失败（不影响模拟盘）：{e}")
         return {"error": str(e)[:200]}
+
+
+def _eligibility_panel(ctx, eng, state, extras: dict) -> dict:
+    """下单前资格检查（qbreak/eligibility.py）的日报块：股票池里不开新仓的票、今天被挡掉的信号、持仓标记（模拟盘 + 执行器演练账户）、
+    日経225 名单对照；候补队列里被挡的票标出理由（倾斜记 0 倍）。失败只记原因，不影响交易（闸门本身在引擎里已生效）。"""
+    from qbreak.utils import read_json
+    g = getattr(ctx, "gate", None)
+    if g is None:
+        return {}
+    try:
+        held = g.held_alerts(list(state.pos) + [t for t, u in state.core_units.items() if int(u)], "模拟盘")
+        ex = (read_json(paths.state_dir() / "live_unified_paper.json", {}) or {}).get("state") or {}
+        held += g.held_alerts(list(ex.get("pos") or {}) + [t for t, u in (ex.get("core_units") or {}).items() if int(u)],
+                              "执行器演练账户")
+        for w in ((extras.get("JP") or {}).get("watchlist") or []):
+            why = g.entry_block(str(w.get("ticker") or ""))
+            if why:
+                w.update(gate=why, tilt=0.0, tilt_why=f"资格检查：{why}")
+        return g.panel(held=held, blocked_today=[{"date": d, "ticker": t, "why": why} for d, t, why in eng.gate_log])
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("资格检查日报块失败（闸门照常生效）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 
 def _unified_extras(cfg: dict, ucfg, u: dict, dcfg, params: dict, today) -> tuple[dict, dict]:
@@ -1867,24 +1906,50 @@ def cmd_fetch_data(a) -> int:
 
 
 def cmd_universe_update(a) -> int:
-    """从公开来源刷新广域股票池到 var/universe_JP.json / universe_US.json（需外网）。"""
-    import re
-    import urllib.request
-    out = {}
-    try:
-        html = urllib.request.urlopen("https://en.wikipedia.org/wiki/Nikkei_225", timeout=20).read().decode("utf-8", "ignore")
-        codes = sorted(set(re.findall(r"topSearchStr=([0-9]{3}[0-9A-Z])\"", html))
-                       | set(re.findall(r"TYO:\s*([0-9]{3}[0-9A-Z])\b", html)))
-        if len(codes) > 150:
-            out["JP"] = [f"{c}.T" for c in codes]
-    except Exception as e:                                    # noqa: BLE001
-        print(f"日経225 刷新失败: {e}")
-    for m, lst in out.items():
-        (paths.home() / f"universe_{m}.json").write_text(__import__("json").dumps(lst), encoding="utf-8")
-        print(f"[{m}] {len(lst)} 只 → var/universe_{m}.json")
-    if not out:
-        print("未刷新任何名单（保持内置名单）。")
-    return 0
+    """（旧命令）以前把 en.wikipedia 的名单直接写进 var/universe_JP.json 覆盖内置名单；en 版会滞后（2026-09-28 还列着
+    已被剔除的 6594），而且改股票池要用户确认 → 现在只做对照、不写文件：等同 run.py eligibility。"""
+    print("universe-update 不再改股票池（改名单要用户确认，记进 var/sim_changes.md）；下面是名单对照与资格检查：")
+    return cmd_eligibility(a)
+
+
+def cmd_eligibility(a) -> int:
+    """下单前资格检查（qbreak/eligibility.py）：重取 ja / en.wikipedia 的日経225 名单与 JPX 特別注意・監理・整理・上場廃止，
+    列出股票池里不开新仓的票、名单差异、持仓标记（模拟盘 / 执行器账本）。只读：不改股票池、不下单。有要人工确认的事 → 返回 1。"""
+    import datetime as _dt
+    from qbreak import eligibility as EL
+    from qbreak.config import universe
+    from qbreak.utils import read_json
+    cfg = _sim_cfg() or {}
+    u = cfg.get("unified") or {}
+    core = list(_unified_cfg(cfg).core) if cfg.get("mode") == "unified" else ["1655.T"]
+    today = _dt.date.today()
+    EL.refresh(force=True)
+    g = EL.gate_for(today, universe("JP", (u.get("universe") or {}).get("JP", "broad")), core, refresh_first=False)
+    held = []
+    for name, fp in (("模拟盘", paths.state_dir() / "unified_state.json"),
+                     ("执行器（模拟账户）", paths.state_dir() / "live_unified_paper.json"),
+                     ("执行器（立花）", paths.state_dir() / "live_unified_tachibana.json")):
+        raw = read_json(fp, {}) or {}
+        st = raw.get("state") if "state" in raw else raw
+        if st:
+            held += g.held_alerts(list((st or {}).get("pos") or {})
+                                  + [t for t, x in ((st or {}).get("core_units") or {}).items() if int(x)], name)
+    pn = g.panel(held=held)
+    print(f"资格检查 {pn['as_of']}：")
+    for k, x in pn["sources"].items():
+        print(f"  {x['label']}：{'有效' if x['fresh'] else '★ 过期 / 取不到'}（最后成功 {x['ok_at'] or '—'}；"
+              f"{x['n']} 条{('；' + x['note']) if x.get('note') else ''}{('；错误 ' + x['error']) if x.get('error') else ''}）")
+    for k, dd in pn["diff"].items():
+        print(f"  名单对照 {EL.LABEL[k]}：我们有它没有 {dd['ours_only'] or '无'}；它有我们没有 {dd['src_only'] or '无'}；"
+              f"已记录的纳入它还没更新 {dd['lag'] or '无'}")
+    for b in pn["blocked"]:
+        print(f"  不开新仓 {b['code']}：{b['why']}")
+    for h in pn["held"]:
+        print(f"  持仓 {h['ticker']}（{h['account']}）{'★ ' if h['level'] == 'warn' else ''}{h['why']}")
+    for c in pn["core"]:
+        print(f"  ★ 核心 ETF {c['code']}：{c['why']}")
+    print(pn["text"])
+    return 1 if pn["needs_user"] else 0
 
 
 def cmd_sim_tier(a) -> int:
@@ -2176,7 +2241,7 @@ def cmd_live_unified(a) -> int:
               f"单笔上限 {'权益 ×1.05（自动）' if a.max_order_value is None else f'{a.max_order_value:,.0f} 円'}；"
               f"ARM {'关闭（--no-arm）' if a.no_arm else '需要'}；HALT 文件 {paths.halt_file()}")
     ux = UnifiedExecutor(eng, broker, book, paper=paper, check_clock=not (paper or a.no_clock),
-                         auto_cap=(not paper and a.max_order_value is None))
+                         auto_cap=(not paper and a.max_order_value is None), pre_send=ctx.gate.pre_send)
     try:
         if a.phase == "open":
             if paper:
@@ -2214,6 +2279,9 @@ def cmd_live_unified(a) -> int:
     sm = ux.summary()
     cmp = compare_with_sim(eng.st, sim_state) if a.compare_sim else None
     sm["compare"] = cmp
+    held = list(eng.st.pos) + [t for t, u_ in eng.st.core_units.items() if int(u_)]
+    sm["eligibility"] = ctx.gate.panel(held=ctx.gate.held_alerts(held, "执行器"),
+                                       blocked_today=[{"date": d_, "ticker": t_, "why": w_} for d_, t_, w_ in eng.gate_log])
     sm["market"] = {m: (e.get("regime") or {}).get("bullbear") for m, e in ctx.extras.items()}   # 牛熊：现在处于哪个阶段（页面 / 日志）
     write_json(paths.out_dir() / f"live_unified_{tag}.json", sm)
     title, short, body = daily_text(sm, eng.st, cmp, paper, float(ucfg.capital_jpy))
@@ -2232,6 +2300,8 @@ def cmd_live_unified(a) -> int:
               f" → {o['status']} {o.get('note') or ''}".rstrip())
     if sm["blocked"]:
         print(f"★ 没有下单：{sm['blocked']}")
+    for n_ in sm["eligibility"].get("needs_user") or []:
+        print(f"★ {n_}")
     bad = [e for e in sm["events"] if e["level"] == "error"]
     for e in bad[-5:]:
         print(f"★ {e['msg']}")
@@ -2577,8 +2647,11 @@ def main(argv=None) -> int:
     fd.add_argument("--universe", default="broad", choices=["default", "affordable", "broad"])
     fd.set_defaults(func=cmd_fetch_data)
 
-    uu = sub.add_parser("universe-update", help="刷新广域股票池名单（需外网）")
+    uu = sub.add_parser("universe-update", help="（旧命令）只做名单对照与资格检查，不改股票池（= eligibility）")
     uu.set_defaults(func=cmd_universe_update)
+
+    el = sub.add_parser("eligibility", help="下单前资格检查：日経225 名单对照 + JPX 特別注意・監理・整理・上場廃止（只读，需外网）")
+    el.set_defaults(func=cmd_eligibility)
 
     lu = sub.add_parser("live-u", help="一个账户方案的实盘执行器：早上对账→决策→寄付单；--phase open 开盘后补单（立花 / 模拟账户）")
     lu.add_argument("--broker", default="paper", choices=["paper", "tachibana"])

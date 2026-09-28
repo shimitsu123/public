@@ -5072,5 +5072,39 @@
 ],
 "era_dependent_or_reversed": [],
 "notes": "行业层与 transmit_study 同一段数据（销售是新数据）；提议日报显示 + S2 前向记录，都要用户确认；个股层不改"
+},
+{
+"line": 2152,
+"date": "2026-09-28",
+"title": "用户确认：日経225 名单 6594 → 4062 + 下单前资格检查（被踢出 / 被指定的票不开新仓）",
+"kind": "config_change",
+"domain": "资金/执行/成本",
+"registration": "",
+"script": "qbreak/eligibility.py; qbreak/universes.py; qbreak/n225_history.py",
+"output": "var/out/eligibility.json",
+"candidates": [],
+"baseline": "",
+"windows": "今后的模拟盘与执行器决策（回测不设）",
+"verdict": "采用",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "G1〜G6：股票池外 / 指数待剔除 / ja.wikipedia 没有 / JPX 特別注意・監理・整理 / 上場廃止（含预定）/ 数据过期 → 不开新个股仓；执行器发单前再查；持仓只报警"
+},
+{
+"line": 2170,
+"date": "2026-09-28",
+"title": "登记：成本 × 销售 日报显示 + S2 前向记录（用户确认 ㉘）",
+"kind": "forward_record",
+"domain": "行业/主题/联动",
+"registration": "",
+"script": "qbreak/cost_sales_forward.py; scripts/cost_sales_forward.py",
+"output": "var/out/cost_sales_forward.csv",
+"candidates": [],
+"baseline": "",
+"windows": "2026-10 起每月；≥ 36 个月起判定、60 个月最后一次",
+"verdict": "前向记录",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "只展示 / 只记录：原材料在涨的月份销售好且成本上涨的业种按间接占比分偏间接 / 偏直接；判定只改日报标签"
 }
 ]

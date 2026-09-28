@@ -143,7 +143,16 @@
   三种随机对照，含「只错开销售」）。结论上限 = 日报显示 / 前向记录的提议（用户确认才改）。
   **结果（登记 12a49c7）**：行业层 **S2 成立且算新证据** —— 原材料在涨时，销售好（前一半）且成本上涨的业种里，成本主要经过供应链间接上升的一半
   比直接吃到原材料的一半之后 3 个月多 +1.23%（t 2.65，两半 +1.36 / +1.11，对照 p 0.005），比不看销售时多 +0.82 pp（t 2.10）；销售前 1/3 时 +2.29%（t 3.66）。
-  S1（销售盖过成本）无效（−0.15%）；个股层 S4 / S5 不成立（没过随机对照）→ 模拟盘不变。待用户决定：日报加「成本 × 销售」显示、S2 前向记录（见待办 ㉘）。
+  S1（销售盖过成本）无效（−0.15%）；个股层 S4 / S5 不成立（没过随机对照）→ 模拟盘不变。
+  **2026-09-28 用户确认 ㉘**：日报加「成本 × 销售」一栏（每月第一次 sim-day 算上个月末：原材料在涨的月份，销售好且成本上涨的业种分偏间接 / 偏直接；只列行业）+
+  S2 前向记录（`qbreak/cost_sales_forward.py` 头部是登记全文；2026-10-01 起每月记一次 `var/out/cost_sales_forward.csv`，只追加；记满 36 个月起判定，
+  复核 `python scripts/cost_sales_forward.py --review`，看当前分组 `--show`）。季度复核要不要加这一步 → 待办 ㉙。
+- 下单前资格检查（2026-09-28，用户「改 横展开一下 以后要确认要下单的股票被没被踢出」）：日経225 名单 6594 → 4062（用户确认 ㉗；研究用的近似时点名单同步）；
+  `qbreak/eligibility.py` 每次决策前对照 ja.wikipedia 的日経225 名单（主）/ en.wikipedia（参考）/ JPX 特別注意・監理・整理・上場廃止（只存代码、类别、日期 →
+  `var/out/eligibility.json`）：股票池外、指数待剔除、ja.wikipedia 没有、被 JPX 指定、上場廃止（含预定）、数据 4 天以上取不到 → **不开新个股仓**；
+  执行器发买单前再查一次；核心 ETF 被 JPX 指定 → 不下它的买单；持仓被标记只报警（不自动卖）。日报「下单前资格检查」一栏，告警进「数据完整性」；
+  只读检查 `run.py eligibility`（旧命令 `universe-update` 不再覆盖名单）。当场核对：ja.wikipedia 与修正后的名单一致，en.wikipedia 仍列 6594（所以只作参考），
+  JPX 特別注意銘柄里有 6594（即使名单没改也会被挡）。
 - 为什么越近越弱（2026-09-28，用户「分析为什么越靠近现在胜率什么的就会变弱…」）：诊断 `scripts/decay_diag.py`（只描述）→ **不是结构性衰退**：
   逐笔 E（2006〜2016）+0.74% 与 J（2017〜）+0.76% 一样；Z（2001〜2006）+2.73% 的优势集中在 2005 年（日経 +40%，41 笔 +4.57%），去掉后只多 +0.15 pp；
   每个年代都靠少数强势年（E 去 2012 → −0.07%、J 去 2025 → +0.30%）；不是幸存者偏差、不是机制变化。事后核对 `scripts/pit_recheck.py`：研究框架加
@@ -200,8 +209,8 @@
   `var/out/energy_forward.csv` 是否每天在追加；2026-09-26 用户确认后，季度例行任务每次汇报进度（2h），只汇报不判定）
 - ㉕ 2027-09-28 之后第一次：W2 前向记录的第一次年度判定 —— 每日记录在季度复核 2f 里自动算（看 `var/out/score_forward_review.md` 的 W2 一节）；全市场版在季度复核 2i 里自动算（2026-09-27 用户确认加入；手动：☁️ `python scripts/w2_forward_all.py --review`，云端有 J-Quants キー）/ 🤖 Mac：`bash scripts/with_jquants.sh ~/.qbreak/venv/bin/python scripts/w2_forward_all.py --review`（在 `~/qbreak-dev`）；「失效警报成立」→ 提议关掉 W2，用户确认才改；同一份复核里另有 K2（放量 ∧ 低 β）/ USW（美国对应行业弱）两个只记录不交易的标记（2026-09-27 用户确认登记；`qbreak/idio_forward.py`），每年判定一次，证实也只是记录
 - ㉖ 随时：时代主线前向记录的进度 ☁️🤖 `python scripts/era_outlook.py --review`（2026-10 起每月一次；记满 36 个月 ≈ 2029-10 起判定失效与否）；已加进季度复核 2j（2026-09-27 用户确认；同时每季刷新展望 `var/out/era_outlook.md`）
-- ㉗ ✋ 决定要不要修正日経225 名单：`qbreak/universes.py` 里还有 ニデック（6594，2025-11-05 已因特別注意銘柄被剔除），缺イビデン（4062，补入）；只有这一只不同（日本経済新聞 2025-10-27；Wikipedia 构成銘柄一览）。用户确认后 ☁️ 把 6594 换成 4062、记 sim_changes.md；在那之前执行器可能对 6594 开新仓
-- ㉘ ✋ 决定要不要做「成本 × 销售」的日报显示与前向记录（2026-09-28 研究结果：行业层 S2 成立）：① 日报加一栏 —— 原材料在涨的月份，列出销售好且成本上涨的业种，按「间接占比」分成偏间接 / 偏直接两组（只展示，不改交易）；② 把 S2 的月度价差登记成前向记录（2026-10 起每月记一次，36 个月后判定）。都要用户确认才做 ☁️
+- ㉙ ✋ 决定例行任务要不要加两步（要用户在对话里确认才改例行任务 ☁️）：① 季度复核加 2l「成本 × 销售 S2 前向记录复核」`python scripts/cost_sales_forward.py --review`
+  （36 个月前只报进度）；② 日报例行任务的汇报加一行「资格检查」（现在告警已写进「数据完整性」、汇报第一行会列出，不加也不会漏）
 - ⑬ 2026-12-24 模拟期结束：总结 → 用户决定继续 / 上实盘 / 调整；（可选）J-Quants 付费档做无幸存者偏差回测（路线图 6）
 - ⑲ 🤖 装 / 更新全部（依赖、模拟操盘、市场仪表盘 + 经济威胁提醒、J-Quants 定时取数、研究用克隆 `~/qbreak-dev`）：
   `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（J-Quants 那一项要钥匙串里已有キー，见 ⑱②），
@@ -218,6 +227,8 @@
   决算前 2 个交易日不进场（`var/best_params.json` 的 earnings_blackout_days；取不到决算日时不拦截）；
   **W2（2026-09-27 用户确认启用）**：最近完成的一周成交量 ÷ 之前 10 周平均 < 1.0 的突破不买（`var/best_params_JP.json` 的
   min_weekly_vol_ratio；周的完成按东证日历；历史不够不拦截）
+- **下单前资格检查（2026-09-28 用户要求）**：被踢出日経225（名单对照 ja.wikipedia）、被 JPX 指定（特別注意 / 監理 / 整理）、上場廃止（含预定）、
+  指数待剔除、股票池外的票不开新仓；资格数据 4 天以上取不到 → 当天不开新个股仓；执行器发买单前再查一次（`qbreak/eligibility.py`）
 - 1655：闲置资金全部；S&P500 连续 5 天收在 250 日均线 ×0.97 之下 → 熊（卖出，留现金）；连续 5 天在 ×1.03 之上 → 牛（`var/bullbear.json`）
 - 回撤达 45% → HALT（停新仓）
 - 牛熊的「现在处于哪个阶段」（牛市·稳固 / 走弱 / 临界 / 牛→熊确认中，熊市同理）只用于展示，阈值 3% / 8% / 5 pp 是展示用的，
@@ -230,10 +241,10 @@
 
 ## 每天的流程（周一至五，JST）
 1. 前一晚 22:00：用户的另一个例行任务更新「市场风险报告」artifact（判断层与宏观数值的来源）
-2. 06:57 云端：拉代码 → 从风险报告写 `var/market_regime.json`、`var/macro.json` → `sim-day` → 入库 → 发布日报
+2. 06:57 云端：拉代码 → 从风险报告写 `var/market_regime.json`、`var/macro.json` → `sim-day`（其中先取资格数据：日経225 名单 + JPX 指定 → 决策）→ 入库 → 发布日报
    （云端容器是 UTC：`run.py` 启动时把进程时区固定为 JST（2026-09-27 起），「今天」、预计成交日、前向记录的日期与 Mac 一致）
 3. 07:40 Mac（`scripts/liveu.sh run --broker paper`）：`git pull`，等云端当天的 `var/out/unified_today.json`（最多 50 分钟）
-   → 把配置与输入拷到 `~/.qbreak/home` → 执行器：昨天的单按真实开盘价撮合 → 对账 → 决策 → 下「下一开盘」的单
+   → 把配置与输入拷到 `~/.qbreak/home` → 执行器：昨天的单按真实开盘价撮合 → 对账 → 决策 → 资格检查（Mac 自己再取一次）→ 下「下一开盘」的单
    → 与云端模拟盘逐日比较 → 通知中心 → 日志 → 重写页面并用浏览器打开（桌面的 `qbreak模拟操盘.html` 指向它）
 4. 立花上线后另有 09:05 的开盘后补单（开盘前余力不够的买单）
 
@@ -248,6 +259,8 @@
 - 政策事件反应库：`qbreak/policy_events.py`（规则）、`scripts/policy_event_data.py`（数据）、`scripts/policy_event_study.py`（登记 + 研究）、
   `scripts/policy_event_verify.py`（来源核对）、`qbreak/policy_forward.py`（前向记录）、`var/policy_events.csv`（事件表）、`var/policy_extra_pool.json`（长历史池补充票）
 - 云端状态：`var/state/unified_state.json`（模拟盘）；Mac 状态：`~/.qbreak/home/state/live_unified_paper.json`（账本，不在仓库）
+- 下单前资格检查：`qbreak/eligibility.py`（快照 `var/out/eligibility.json`；只读检查 `run.py eligibility`）；成本 × 销售显示与 S2 前向记录：`qbreak/cost_sales_forward.py`
+  （复核 / 当前分组 `scripts/cost_sales_forward.py --review | --show`）
 
 ## 用户常问的，去哪里查
 - 「今天买卖了什么 / 为什么没买」：页面、日志 `~/.qbreak/home/out/live_unified_paper_journal.md`、当天汇总
@@ -269,6 +282,8 @@
 | 装 / 更新全部 | 「拉一下最新代码并更新」「把定时任务都装好」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh` | 不动账本、不下单 |
 | 开机后补跑了吗 | 「今天开机后模拟操盘补跑了吗？」 | 读 `~/.qbreak/home/logs/com.qbreak.login.out`；`launchctl list \| grep qbreak` | 只读；立花本番不在登录时补跑 |
 | 影子账户（判断型） | 「影子账户今天怎么样？比规则账户好吗？」 | 读 `var/out/shadow_today.json`、`var/out/shadow_equity.csv`（云端每天记）；中间统计 `python scripts/shadow_account.py evaluate --interim` | 只读；判断只在云端例行任务里做 |
+| 股票被踢出了吗 | 「要下单 / 手上的股票有没有被踢出日経225、被指定特別注意？」 | `QBREAK_HOME=~/.qbreak/home ~/.qbreak/venv/bin/python run.py eligibility`（在 `~/qbreak-src/quant_breakout`） | 只读；名单差异要改名单 → 你确认后云端改 |
+| 成本 × 销售 | 「现在原材料在涨吗？哪些业种偏间接？」 | `~/.qbreak/venv/bin/python scripts/cost_sales_forward.py --show`；进度 `--review` | 只展示；行业层，不是个股建议 |
 | 看今天的情况 | 「今天模拟操盘怎么样？」「现在持仓和下一开盘的单是什么？」 | `bash scripts/liveu.sh --broker paper --status`（立花上线后 `--broker tachibana`），读页面与日志 | 只读 |
 | 市场偏向 / 威胁消息 | 「现在偏向哪边？」「有什么经济威胁消息？」 | `bash scripts/liveu.sh news --open`（仪表盘重写并打开），读 `~/.qbreak/home/cache/news/news.json` | 只读 |
 | J-Quants 今天的新数据 | 「持仓 / 候补最近有决算吗？」「今天有哪些予想修正？」 | 读 `~/.qbreak/home/out/jq_today.json`；要马上取：`bash scripts/liveu.sh jq` | 只读；キー不回显 |

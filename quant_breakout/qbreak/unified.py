@@ -268,13 +268,15 @@ class UnifiedEngine:
         self.last_bar = np.full(len(A.tickers), -1)        # 每只票最近一根 K 线的位置（上一根 ATR / 涨跌停判断用）
         self.skipped: dict[str, int] = {k: 0 for k in ("gap", "cash", "lot", "full", "no_bar", "rebuy", "macro",
                                                         "limit_up", "limit_down_hold", "usd", "fx_window",
-                                                        "earnings")}
+                                                        "earnings", "gate")}
         self._sold_today: set[str] = set()
         # 模拟盘最后一天的决策：明天还不在数据里 → 用当天算好的倍数（{市场: (市场倍数, {票: 板块倍数}, 拦截原因)}）
         # 与「明天白天能否换汇」（日本营业日才有换汇窗口）
         self.live_mult: dict[str, tuple] = {}
         self.live_fx_ok: bool = True
         self.entry_block_fn = None                          # (票, 日) -> 拦截原因 | None（模拟盘：决算前 N 日不进场）
+        self.entry_gate_fn = None                           # (票, 日) -> 理由 | None：下单前资格检查（qbreak/eligibility.py；模拟盘 / 执行器）
+        self.gate_log: list[tuple[str, str, str]] = []      # 被资格检查挡掉的信号：(信号日, 票, 理由)
         self.entry_priority_fn = None                       # (票, 日) -> 分数 | None：同一天的新仓候选按分数高的先（研究用；缺省 = 按代码）
 
     # ── 工具 ──
@@ -619,6 +621,12 @@ class UnifiedEngine:
         for t in sorted(cands, key=lambda x: (tier(x), prio(x), x)):
             if t in st.pos or t in st.pending_exit or t in st.plan:
                 continue
+            if self.entry_gate_fn is not None:              # 被踢出 / 被指定 / 确认不了的票不开新仓（与回测无关：回测不设）
+                why = self.entry_gate_fn(t, i)
+                if why:
+                    self.skipped["gate"] += 1
+                    self.gate_log.append((str(self.gidx[i].date()), t, why))
+                    continue
             m = market_of(t)
             em = self._entry_mult(t, i)
             if em <= 0:

@@ -61,6 +61,8 @@ def build_unified_data() -> dict:
             "energy": td.get("energy") or {},                    # 仪表盘：能源消费（每月）+ K4 前向记录的状态（只作展示 / 记录）
             "era": td.get("era") or {},                          # 时代主线前向记录的状态（qbreak/era_forward.py；只记录）
             "policy": td.get("policy") or {},                    # 政策事件反应库（qbreak/policy_forward.py；只展示 + 前向记录）
+            "eligibility": td.get("eligibility") or {},          # 下单前资格检查（qbreak/eligibility.py：被踢出 / 被指定的票不开新仓）
+            "cost_sales": td.get("cost_sales") or {},            # 成本 × 销售（S2）分组与前向记录（qbreak/cost_sales_forward.py；只展示）
             "shadow": read_json(paths.out_dir() / "shadow_today.json", {}) or {},   # 影子账户（判断型，只前向记录，不影响交易）
             "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
@@ -163,6 +165,14 @@ def missing_items(d: dict) -> list[str]:
         out.append(f"政策事件反应库：这次没算 / 没记上（{pf['error']}）—— 不影响交易；前向记录不补写")
     if started and (pf.get("status") or {}).get("pending"):
         out.append(f"政策事件反应库：{pf['status']['pending']} 个已过去的日银 / FOMC 日程还没有分类录入（待分类，Mac 上 `bash scripts/liveu.sh policy add …`）")
+    cs = d.get("cost_sales") or {}
+    if started and cs.get("error"):
+        out.append(f"成本 × 销售（S2）：这次没算出（{cs['error']}）—— 只作展示，不影响交易；前向记录下次运行再记（不补写）")
+    el = d.get("eligibility") or {}
+    if el.get("error") and not el.get("sources"):
+        out.append(f"下单前资格检查的日报块：没算出（{el['error']}）—— 闸门本身在引擎里照常生效")
+    for n in el.get("needs_user") or []:
+        out.append(f"下单前资格检查（告警，不是缺数据）：{n}")
     x = d.get("executor") or {}
     if started and x.get("error"):
         out.append(f"实盘执行器演练账户：运行失败（{x['error']}）—— 不影响模拟盘，但实盘要走的那条路今天没验证")
@@ -305,6 +315,76 @@ def _executor_html(d: dict) -> str:
     return (f'<div class="muted">实盘执行器演练账户（模拟券商，走「下单 → 券商回报 → 对账」这条实盘的路）：{txt}；'
             f'决策日 {escape(str(x.get("decided_on") or "—"))}，今天的单 {int(x.get("orders") or 0)} 笔'
             + (f"；没下单：{escape(str(x['blocked']))}" if x.get("blocked") else "") + "</div>")
+
+
+def _eligibility_html(d: dict, meta: tuple) -> str:
+    """下单前资格检查（qbreak/eligibility.py）：被踢出 / 被指定 / 确认不了的票不开新个股仓；持仓只报警（规则不自动卖）。"""
+    e = d.get("eligibility") or {}
+    if not e or not e.get("sources"):
+        return ""
+    nm = meta[2] if len(meta) > 2 else {}
+    lab = lambda c: f"{c} {nm[c]}" if c in nm else c                                  # noqa: E731
+    srcs = "".join(f"<li>{escape(x['label'])}：{'有效' if x.get('fresh') else '<b class=neg>过期 / 取不到</b>'}"
+                   f"（最后成功 {escape(str(x.get('ok_at') or '—'))}；{int(x.get('n') or 0)} 条"
+                   + (f"；{escape(x['note'])}" if x.get("note") else "") + (f"；错误 {escape(x['error'])}" if x.get("error") else "")
+                   + "）</li>" for x in (e.get("sources") or {}).values())
+    needs = "".join(f"<li class='neg'>{escape(n)}</li>" for n in e.get("needs_user") or [])
+    blocked = "".join(f"<tr><td>{escape(lab(b['code']))}</td><td>{escape(b['why'])}</td></tr>" for b in e.get("blocked") or [])
+    today = "".join(f"<li>{escape(x['date'])} {escape(lab(str(x['ticker']).split('.')[0]))}：{escape(x['why'])}</li>"
+                    for x in e.get("blocked_today") or [])
+    held = "".join(f"<li class='{'neg' if h.get('level') == 'warn' else 'muted'}'>{escape(lab(str(h['ticker']).split('.')[0]))}"
+                   f"（{escape(str(h.get('account') or '—'))}）：{escape(h['why'])}</li>" for h in e.get("held") or [])
+    diff = "".join(f"<li>{'ja.wikipedia（主）' if k == 'ja_wiki' else 'en.wikipedia（参考，不挡）'}：我们有它没有 "
+                   f"{escape('、'.join(v.get('ours_only') or []) or '无')}；它有我们没有 {escape('、'.join(v.get('src_only') or []) or '无')}"
+                   + (f"；已记录的纳入它还没更新 {escape('、'.join(v['lag']))}" if v.get("lag") else "") + "</li>"
+                   for k, v in (e.get("diff") or {}).items())
+    return ("<section class='card'><h2>下单前资格检查（被踢出 / 被指定的票不开新仓）</h2>"
+            f"<p><b>{escape(str(e.get('text') or ''))}</b></p>"
+            + (f"<h3>要你确认的事</h3><ul>{needs}</ul>" if needs else "")
+            + (f"<h3>今天被挡掉的信号</h3><ul>{today}</ul>" if today else "")
+            + (f"<h3>股票池里今天不开新仓的票</h3><div class='scroll'><table><tr><th>代码</th><th>理由</th></tr>{blocked}</table></div>"
+               if blocked else "")
+            + (f"<h3>持仓的标记（规则不自动卖）</h3><ul>{held}</ul>" if held else "")
+            + f"<h3>日経225 名单对照</h3><ul>{diff or '<li class=muted>—</li>'}</ul>"
+            + f"<details><summary class='muted'>数据来源（只存代码、类别、日期）</summary><ul>{srcs}</ul></details>"
+            "<p class='muted'>规则（2026-09-28 用户要求「以后要确认要下单的股票被没被踢出」）：今天的交易股票池以外、日経225 待剔除、"
+            "ja.wikipedia 名单里没有（var/index_changes.json 解释不了）、JPX 特別注意 / 監理 / 整理銘柄、上場廃止（含预定）→ 不开新个股仓；"
+            "必需来源超过 4 天没取到 → 当天不开新个股仓；执行器发买单前再查一次；核心 ETF 只看 JPX 标记。"
+            "持仓被标记只报警，要不要提前卖由你决定（人工买卖执行器管的票之前先 HALT）。代码在 qbreak/eligibility.py。</p></section>")
+
+
+def _cost_sales_html(c: dict) -> str:
+    """成本 × 销售（S2，qbreak/cost_sales_forward.py）：原材料在涨的月份，销售好且成本上涨的业种按间接占比分组（只展示，不改交易）。"""
+    if not c or c.get("error") or not c.get("rows"):
+        return ""
+    st = c.get("study") or {}
+    rows = {r["industry"]: r for r in c.get("rows") or []}
+    g = c.get("groups") or {}
+
+    def li(names):
+        return "".join(f"<li>{escape(j)}：间接占比 {float(rows[j]['share'] or 0) * 100:.0f}%，原材料成本 +{float(rows[j]['cost3p'] or 0):.2f}%"
+                       f"（占产出额），销售 {float(rows[j]['sales'] or 0):+.2f}（按自己历年同一次调查标准化）</li>" for j in names if j in rows)
+    fw = c.get("forward") or {}
+    if not c.get("cost_up"):
+        body = (f"<p>{escape(str(c.get('month_end')))} 末：原材料<b>没在涨</b>（18 个业种的成本净变化平均 {float(c.get('cost_net') or 0):+.2f}%）"
+                "→ 这个月不分组（研究里也只看原材料在涨的月份）。</p>")
+    elif not g.get("ok"):
+        body = (f"<p>{escape(str(c.get('month_end')))} 末：原材料在涨，但销售好且成本上涨的业种只有 {int(g.get('n') or 0)} 个（不到 4 个）"
+                "→ 这个月不分组（研究里也不算）。</p>")
+    else:
+        body = (f"<p>{escape(str(c.get('month_end')))} 末：原材料在涨（成本净变化平均 {float(c.get('cost_net') or 0):+.2f}%）；"
+                f"销售好（前一半）且成本上涨的业种 {int(g.get('n') or 0)} 个：</p>"
+                f"<h3>偏间接（成本主要经供应链间接上升）</h3><ul>{li(g.get('indirect') or [])}</ul>"
+                f"<h3>偏直接（直接吃到原材料涨价）</h3><ul>{li(g.get('direct') or [])}</ul>"
+                + (f"<p class='muted'>中间（不算）：{escape('、'.join(g.get('middle') or []))}</p>" if g.get("middle") else ""))
+    return ("<section class='card'><h2>成本 × 销售：原材料在涨时，销售好的业种里「偏间接」的更好（只展示，不改交易）</h2>" + body
+            + f"<p class='muted'>历史（{escape(str(st.get('period')))}，事先登记 {escape(str(st.get('reg')))}）：之后 3 个月 偏间接 − 偏直接 平均 "
+            f"+{st.get('S2')}%（t {float(st.get('S2_t') or 0):.2f}，{st.get('S2_n')} 个月）；不看销售只有 +{st.get('S2b')}%（销售这一条件的增量 +{st.get('pair')} pp，"
+            f"t {float(st.get('pair_t') or 0):.2f}）；只看销售前 1/3 为 +{st.get('top3')}%（t {float(st.get('top3_t') or 0):.2f}）。「销售盖过成本」（S1）不成立；"
+            "用它挑突破的个股（S4 / S5）没有改进 —— 只看行业，不是个股买卖建议。"
+            f"前向记录（2026-10 起每月一次，36 个月后判定）：已记 {int(fw.get('months') or 0)} 个月"
+            + (f"（{escape(str(fw.get('first')))}〜{escape(str(fw.get('last')))}，其中原材料在涨 {int(fw.get('cost_up_months') or 0)} 个月）"
+               if fw.get("months") else "") + "。非投资建议。</p></section>")
 
 
 def _shadow_html(d: dict) -> str:
@@ -452,6 +532,7 @@ def render_unified_html(d: dict) -> str:
         watch="".join(watch) or "<tr><td colspan=11 class='muted'>尚无候补数据</td></tr>",
         themes=_themes_html(d.get("themes") or {}, meta), policy=_policy_html(d.get("policy") or {}),
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us), shadow=_shadow_html(d),
+        elig=_eligibility_html(d, meta), cost_sales=_cost_sales_html(d.get("cost_sales") or {}),
         corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
         n_trades=d.get("n_trades", 0), win=_pct(d.get("win_rate")) if d.get("win_rate") is not None else "—（还没有平仓）",
@@ -745,6 +826,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 </div></section>
 {dash}
 <section class="card"><h2>今天要做的事（日本时间）</h2>{todo}</section>
+{elig}
 <section class="card"><h2>权益曲线（日元）</h2>{spark}</section>
 <section class="card"><h2>个股持仓</h2><div class="scroll"><table><tr><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">成本</th><th class="n">止损</th><th>买入日</th></tr>{positions}</table></div></section>
 <section class="card"><h2>除息 / 拆股（已补到持仓与现金）</h2><ul>{corp}</ul></section>
@@ -755,6 +837,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <p class="muted">宏观顺风度 = 个股对日本 / 美国利率、油价、日元、信用利差，以及农产品、工业金属、黄金、天然气 ETF 的历史敏感度 × 近 60 个交易日的变化（当日横截面三分位：顺风 / 中性 / 逆风），只作参考：2026-09-25 事先登记研究显示它对之后 20 日的收益没有可靠的预测力（加商品后月末前 1/5 − 后 1/5 为 +0.35%，t 1.40；秩相关 0.006），交易排序不用它。</p>
 <p class="muted">突破：<b>真突破</b> = 信号当天收盘高于过去 60 个交易日的最高价（不含当天）；<b>未破箱顶</b> = 信号成立但收盘还在箱顶之下（括号里是还差的 %）；还没触发的票显示距箱顶 %（今天要做的事里的买单也标了）。只作参考，不改交易：2026-09-26 事先登记的研究（2006-10〜，日経225 股票池，现行出场规则，每笔扣来回手续费）全部信号 638 笔：胜率 42.5%、每笔平均 +0.70%、盈亏比 1.89；其中真突破 163 笔：胜率 49.7%、每笔 +0.83%、盈亏比 1.44；未破箱顶 475 笔：胜率 40.0%、每笔 +0.66%、盈亏比 2.08。只做真突破：胜率 +7.2 pp（95% 区间 +0.7〜+13.6 pp），每笔期望 +0.13 pp 但不显著（95% 区间 −0.78〜+0.96 pp），组合 20 年年化 11.2%（现行 12.8%）、最大回撤 −36.4%（现行 −35.1%）——现行策略靠盈亏比赚钱，不是靠命中率（var/out/signal_study.md）。</p></section>
 {themes}
+{cost_sales}
 {policy}
 {commod}
 {shadow}

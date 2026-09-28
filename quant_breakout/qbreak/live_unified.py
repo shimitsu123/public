@@ -99,7 +99,7 @@ class UnifiedExecutor:
 
     def __init__(self, eng: UnifiedEngine, broker, path=None, *, paper: bool | None = None,
                  respect_halt: bool = True, check_clock: bool = True, clock=None, sync_cash: bool | None = None,
-                 auto_cap: bool = False, cap_mult: float = 1.05, persist: bool = True):
+                 auto_cap: bool = False, cap_mult: float = 1.05, persist: bool = True, pre_send=None):
         if "US" in eng.cfg.stock_markets or any(market_of(t) != "JP" for t in eng.cfg.core):
             raise ValueError("执行器只做东证（立花 e支店没有美股）：stock_markets 只能是 JP，核心 ETF 只能是东证上市的")
         self.eng, self.b = eng, broker
@@ -110,12 +110,13 @@ class UnifiedExecutor:
         self.sync_cash = (not self.paper) if sync_cash is None else sync_cash
         self.auto_cap, self.cap_mult = auto_cap, cap_mult
         self.persist = persist                              # False：演练回放只在内存里记账（最后一次性保存）
+        self.pre_send = pre_send                            # (票, BUY/SELL, stock/core) -> 理由 | None：发买单前的资格检查（qbreak/eligibility.py）
         self.book = read_json(self.path, {}) or {}
         self.orders = [ExecOrder.from_dict(o) for o in self.book.get("orders", [])]
         self.events: list[dict] = []
         self.blocked: str | None = None
         self.stats = {k: 0 for k in ("fills", "unfilled_sell", "unfilled_buy", "model_diff", "deferred", "reduced",
-                                     "limit_lowered", "skipped", "blocked", "cash_sync")}
+                                     "limit_lowered", "skipped", "blocked", "cash_sync", "gate")}
         self._fills: dict[str, tuple[int, float]] = {}
         self._reconciled: list[dict] = []
         self.diffs: list[dict] = []                         # 模型会成交、实际没成交的买单（与模拟盘出现差异的起点）
@@ -201,6 +202,17 @@ class UnifiedExecutor:
             return {"lot": lot, "cap": int(eng.cfg.max_positions), "excl": sorted(eng.core_set)}
         return {}
 
+    def _gate_buy(self, o: ExecOrder) -> str | None:
+        """发买单前再确认一次这只票没被踢出 / 没被指定（执行器里的最新数据；卖单不查）。"""
+        if o.side != "BUY" or self.pre_send is None:
+            return None
+        why = self.pre_send(o.ticker, o.side, o.kind)
+        if why:
+            self.stats["gate"] += 1
+            self._event("warn", f"BUY {o.ticker} 不下：资格检查 —— {why}")
+            return f"资格检查：{why}"
+        return None
+
     def _send(self, o: ExecOrder, qty: int, bar: str) -> None:
         """bar 非空 = 寄付（开盘集合竞价）；空 = 盘中当日限り。先把「发送中」写进账本再发（崩溃后不会重发）。"""
         b = self.b
@@ -259,6 +271,10 @@ class UnifiedExecutor:
             if side == "BUY" and not o.limit:
                 o.status, o.note = "SKIPPED", "没有收盘价，定不了限价"
                 continue
+            g = self._gate_buy(o)
+            if g:
+                o.status, o.note = "SKIPPED", g
+                continue
             if side == "SELL":
                 self._send(o, o.qty, bar=d)
                 continue
@@ -311,6 +327,10 @@ class UnifiedExecutor:
             self.stats["skipped"] += 1
             self._event("info", f"BUY {o.ticker}（开盘后）放弃：{why}")
         for o in act:
+            g = self._gate_buy(o)
+            if g:
+                o.status, o.note = "SKIPPED", g
+                continue
             op = get_open(o.ticker)
             if not op or op <= 0:
                 skip(o, "没有开盘价（停牌 / 特別気配で未寄付）—— 模型也不买")
@@ -702,6 +722,9 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
         short += "｜与云端一致" if cmp.get("same") else "｜★ 与云端不一致"
     if sm.get("blocked"):
         short += "｜★ 没下单"
+    el = sm.get("eligibility") or {}
+    if el.get("needs_user"):
+        short += "｜★ 资格检查要确认"
     lines = [f"- 决策日 {sm.get('decided_on') or '—'} → 成交日 {sm.get('fill_day') or '—'}；权益 ¥{eq:,.0f}"
              f"（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）；现金 ¥{float(st.cash_jpy):,.0f}"]
     held = [f"{t} {int(p.shares):,} 股（成本 ¥{float(p.entry_px):,.2f}，止损 ¥{float(p.stop_px):,.2f}）" for t, p in st.pos.items()]
@@ -724,6 +747,10 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
         lines.append(f"- {cmp['text']}")
     if sm.get("blocked"):
         lines.append(f"- ★ 没有下单：{sm['blocked']}")
+    for n in el.get("needs_user") or []:                    # 下单前资格检查：被踢出 / 被指定 / 名单不一致 / 数据过期
+        lines.append(f"- ★ {n}")
+    if el and not el.get("needs_user"):
+        lines.append(f"- {el.get('text') or '资格检查：—'}")
     for e in [e for e in sm.get("events") or [] if e.get("level") == "error"][-5:]:
         lines.append(f"- ★ {e['msg']}")
     return title, short, "\n".join(lines)
