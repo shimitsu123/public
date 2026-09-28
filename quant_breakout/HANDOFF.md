@@ -214,6 +214,9 @@
 - ㉖ 随时：时代主线前向记录的进度 ☁️🤖 `python scripts/era_outlook.py --review`（2026-10 起每月一次；记满 36 个月 ≈ 2029-10 起判定失效与否）；已加进季度复核 2j（2026-09-27 用户确认；同时每季刷新展望 `var/out/era_outlook.md`）
 - ㉙ ✋ 决定例行任务要不要加两步（要用户在对话里确认才改例行任务 ☁️）：① 季度复核加 2l「成本 × 销售 S2 前向记录复核」`python scripts/cost_sales_forward.py --review`
   （36 个月前只报进度）；② 日报例行任务的汇报加一行「资格检查」（现在告警已写进「数据完整性」、汇报第一行会列出，不加也不会漏）
+- ㉚ ✋ 数据体检（2026-09-28，`scripts/data_audit.py` → `var/out/data_audit.md`；历年祝日、Yahoo 休市假行、近似时点名单已修正，交易规则不变）的两件事要你决定：
+  ① 模拟盘 / 执行器用的 yfinance 行情防复权错位（例：5401 在 2025-09-29 拆股日假涨 +8.5%，已滚出 52 周窗口）→ 每天拿 J-Quants 交叉核对只报警，还是行情改用 J-Quants；
+  ② 数据体检要不要加进季度复核（约 100 秒、只读；例行任务要你在对话里确认才改）
 - ⑬ 2026-12-24 模拟期结束：总结 → 用户决定继续 / 上实盘 / 调整；（可选）J-Quants 付费档做无幸存者偏差回测（路线图 6）
 - ⑲ 🤖 装 / 更新全部（依赖、模拟操盘、市场仪表盘 + 经济威胁提醒、J-Quants 定时取数、研究用克隆 `~/qbreak-dev`）：
   `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（J-Quants 那一项要钥匙串里已有キー，见 ⑱②），
@@ -287,6 +290,7 @@
 | 影子账户（判断型） | 「影子账户今天怎么样？比规则账户好吗？」 | 读 `var/out/shadow_today.json`、`var/out/shadow_equity.csv`（云端每天记）；中间统计 `python scripts/shadow_account.py evaluate --interim` | 只读；判断只在云端例行任务里做 |
 | 接下来要检查什么 | 「这个月 / 接下来要注意什么？」「什么时候判定 W2？」 | 读 `CHECK_TIMELINE.md` 与日报「检查日历」（`var/out/unified_today.json` 的 calendar） | 只读 |
 | 股票被踢出了吗 | 「要下单 / 手上的股票有没有被踢出日経225、被指定特別注意？」 | `QBREAK_HOME=~/.qbreak/home ~/.qbreak/venv/bin/python run.py eligibility`（在 `~/qbreak-src/quant_breakout`） | 只读；名单差异要改名单 → 你确认后云端改 |
+| 数据对不对 | 「研究 / 模拟盘用的数据对不对？缺什么？」 | 读 `var/out/data_audit.md`（每项 OK / 注意 / 问题 / 缺 与用在哪里）；重跑在云端 `python scripts/data_audit.py`（缓存都在云端） | 只读；修正要另记 sim_changes |
 | 成本 × 销售 | 「现在原材料在涨吗？哪些业种偏间接？」 | `~/.qbreak/venv/bin/python scripts/cost_sales_forward.py --show`；进度 `--review` | 只展示；行业层，不是个股建议 |
 | 看今天的情况 | 「今天模拟操盘怎么样？」「现在持仓和下一开盘的单是什么？」 | `bash scripts/liveu.sh --broker paper --status`（立花上线后 `--broker tachibana`），读页面与日志 | 只读 |
 | 市场偏向 / 威胁消息 | 「现在偏向哪边？」「有什么经济威胁消息？」 | `bash scripts/liveu.sh news --open`（仪表盘重写并打开），读 `~/.qbreak/home/cache/news/news.json` | 只读 |
