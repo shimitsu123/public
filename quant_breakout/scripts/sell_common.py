@@ -164,11 +164,17 @@ def signals(df: pd.DataFrame) -> dict[str, np.ndarray]:
     return out
 
 
+def dead_for(S: dict[str, np.ndarray], key: str) -> np.ndarray:
+    """变体 key 的卖出判定列（S = signals 的结果；"_neutral" → 死叉 ∨ 全 False）。"""
+    V = NEUTRAL if key == "_neutral" else VARIANTS[key]
+    d, s = S["dead_cross"], S[V["sig"]]
+    return s if V["mode"] == "replace" else (d | s if V["mode"] == "or" else d & s)
+
+
 def exit_transform(fr: dict[str, pd.DataFrame], key: str | None, cache: dict | None = None) -> dict[str, pd.DataFrame]:
     """把每只票的 dead_cross 列换成变体的卖出判定（key = None → 原样；"_neutral" → 死叉 ∨ 全 False）。cache：{票: signals} 复用。"""
     if not key:
         return fr
-    V = NEUTRAL if key == "_neutral" else VARIANTS[key]
     out = {}
     for t, df in fr.items():
         S = cache.get(t) if cache is not None else None
@@ -176,7 +182,5 @@ def exit_transform(fr: dict[str, pd.DataFrame], key: str | None, cache: dict | N
             S = signals(df)
             if cache is not None:
                 cache[t] = S
-        d, s = S["dead_cross"], S[V["sig"]]
-        new = s if V["mode"] == "replace" else (d | s if V["mode"] == "or" else d & s)
-        out[t] = df.assign(dead_cross=new)
+        out[t] = df.assign(dead_cross=dead_for(S, key))
     return out
