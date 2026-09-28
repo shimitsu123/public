@@ -108,3 +108,11 @@ def test_valid_start_and_roll_block():
     assert vs == idx[4]
     R = CS.roll_block(S, 2, vs)
     assert R.iloc[:4].equals(S.iloc[:4]) and list(R["a"].iloc[4:]) == [4.0, 5.0, 0.0, 1.0, 2.0, 3.0]   # 只在有效区间里循环
+
+
+def test_skip_panel_missing_sales_means_keep():
+    idx = pd.DatetimeIndex(["2020-01-31"])
+    D3p = _m([[0, 0, 1, 0, 0, 0]], idx)
+    I3p = _m([[0, 0, 4, 0, 0, 0]], idx)                                             # 只有 c 成本压力大（偏间接）
+    SALES = _m([[9, 5, np.nan, 5, 1, 8]], idx)                                      # c 的销售缺值 → 照做（登记文字「缺值照做」）
+    assert not CS.skip_panel(D3p, I3p, SALES, "S4").iloc[0].any() and not CS.skip_panel(D3p, I3p, SALES, "S5").iloc[0].any()

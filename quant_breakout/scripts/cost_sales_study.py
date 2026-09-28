@@ -38,7 +38,7 @@
     经 Holm（S1、S2 两个一起，5%）后仍过。事先方向：S1 > 0、S2 > 0。
   读法：S1 有效且配对差 S1 − S1c 的 NW t ≥ 1.645 →「销售能盖过成本压力」；S1 有效但配对差不够 →「销售好本身有预测力（不只是盖过成本）」；
     S2 有效且配对差 S2 − S2b 的 NW t ≥ 1.645 →「销售好时偏间接的更好（销售这一条件起作用）」；S2 有效但配对差不够 →
-    「偏间接的本来就略好（与 T1 已见的一致，不算新证据）」。只有行业层有效才提议日报显示（用户确认）。
+    「偏间接的本来就略好（与 T1 已见的一致，不算新证据）」。S1 有效、或 S2 有效且算新证据，才提议日报显示（用户确认）。
   另报（不进判定）：Fama–MacBeth 连续版（z(DIR3⁺)、z(IND3⁺)、z(SALES) 与两个交叉项）；SALES 换成价格转嫁（短観 販売価格 DI − 仕入価格 DI）
     或売上高修正率（qbreak/tankan.sales_revision）；S2 用 SALES 前 1/3。
 三 检验（个股层：日経225 的突破，现行 = S0C2 + W2；Z / E / J，Z / E 去掉 Yahoo 休市假行；与 transmit_study T4 / T5 同一框架）
@@ -254,7 +254,7 @@ def fm_interaction(Y, D3p, I3p, SALES, min_n: int = 12) -> dict:
 def skip_panel(D3p, I3p, SALES, rule: str) -> pd.DataFrame:
     """月末 × 业种：下个月不做的布尔表。S4：成本压力大且（偏直接 或 SALES 不在前 1/3）；S5：成本压力大且 SALES 不在前 1/3。"""
     C = costly(D3p, I3p)
-    top = (rank_pct(SALES) > 2 / 3).reindex(index=C.index, columns=C.columns).fillna(False)
+    top = ((rank_pct(SALES) > 2 / 3) | SALES.isna()).reindex(index=C.index, columns=C.columns).fillna(True)   # SALES 缺值 → 当作照做
     direct = D3p > I3p
     return C & (direct | ~top) if rule == "S4" else C & ~top
 
@@ -371,7 +371,7 @@ def panels(months: pd.DatetimeIndex, inds: list[str]) -> dict:
     P = pd.DataFrame({k: TS.cgpi(c) for k, c in TS.SHOCK_CGPI.items()})
     sig = pos_signals(P, ex, months, inds, 3)
     S = TK.load_sales()
-    need = {c for g in CS for c in TK.TSE.get(g, [])}
+    need = {c for g in CS for c in TK.TSE.get(g, [])} | set(TK.SALES_OLD.values())
     bad = [c for c in TK.MISSING if "102CFY" in c and c[5:9] in need]
     if bad:
         raise SystemExit(f"短観売上高 取不到：{bad}（不跑，防止横截面悄悄变小）")
@@ -508,7 +508,7 @@ def main() -> int:
             say(f"- {cid}：{'选股改进成立' if not (fi or fp) else '不成立：' + '；'.join(fi + fp)}")
     say("\n## 结论（事先规则）")
     say(f"- 行业层：S1 {res['S1']['verdict']}；S2 {res['S2']['verdict']}"
-        + ("→ 提议日报加「成本 × 销售」显示（用户确认）" if (not f1 or not f2) else "") + "。")
+        + ("→ 提议日报加「成本 × 销售」显示（用户确认）" if (not f1 or (not f2 and new2)) else "") + "。")
     if not a.skip_stock:
         ok = [k for k in ("S4", "S5") if not (res[k]["improve_fails"] or res[k]["placebo_fails"])]
         say(f"- 个股层：{('、'.join(ok) + ' 过 → 提议前向记录（用户确认）') if ok else 'S4 / S5 都不过 → 模拟盘不变'}。")

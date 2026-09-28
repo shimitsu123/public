@@ -5015,5 +5015,22 @@
 "stable_findings": [],
 "era_dependent_or_reversed": [],
 "notes": "ニデック 2025-11-05 剔除（特別注意銘柄）、イビデン补入；股票池要用户确认才改"
+},
+{
+"line": 2121,
+"date": "2026-09-28",
+"title": "登记：成本 × 销售 S1〜S5（短観 売上高计划 × 直接 / 间接成本）",
+"kind": "study",
+"domain": "行业/主题/联动",
+"registration": "（本提交）",
+"script": "scripts/cost_sales_study.py; qbreak/tankan.py",
+"output": "var/out/cost_sales_study.md",
+"candidates": [],
+"baseline": "",
+"windows": "行业 2006-10〜2026-08（两半 2016-08 / 09）；个股 Z / E / J",
+"verdict": "变更/工程",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "两次对抗审计后登记：销售按同一次调查比自己、成本只算上涨、错开对照只在有效区间、只错开销售的对照、销售增量要求、Holm、去一个业种稳健性"
 }
 ]
