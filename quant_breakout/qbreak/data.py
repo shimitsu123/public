@@ -130,6 +130,21 @@ def repair_jp_artifacts(ticker: str, df: pd.DataFrame, max_iter: int = 10) -> pd
     return out
 
 
+def drop_jp_holiday_rows(ticker: str, df: pd.DataFrame) -> pd.DataFrame:
+    """东证休市日（祝日 / 年末年始 / 全日休场）上的行 = Yahoo 的假行（价格不动、成交量 0 或抄前一天）→ 去掉。
+    2026-09-28 数据核对（scripts/data_audit.py）：2005〜2021 每只约 20〜60 行（多在 2005〜2006、2017〜2018），2022 年以后没有；
+    要原样重现以前的研究结果：QB_KEEP_HOLIDAY_ROWS=1。"""
+    import os
+    if os.environ.get("QB_KEEP_HOLIDAY_ROWS") == "1" or df.empty:
+        return df
+    from .calendar_jp import is_trading_day
+    keep = np.array([is_trading_day(d.date()) for d in df.index], bool)
+    if not keep.all():
+        log.info("%s: 去掉 %d 行东证休市日的行情（Yahoo 假行）", ticker, int((~keep).sum()))
+        df = df[keep]
+    return df
+
+
 def validate_ohlcv(ticker: str, df: pd.DataFrame, cfg: DataConfig) -> pd.DataFrame:
     if df is None or df.empty:
         raise DataError(f"{ticker}: 无数据")
@@ -157,6 +172,7 @@ def validate_ohlcv(ticker: str, df: pd.DataFrame, cfg: DataConfig) -> pd.DataFra
     df["High"] = df[["High", "Open", "Close"]].max(axis=1)
     df["Low"] = df[["Low", "Open", "Close"]].min(axis=1)
     if ticker.upper().endswith(".T"):
+        df = drop_jp_holiday_rows(ticker, df)
         df = repair_jp_artifacts(ticker, df)
 
     if len(df) < cfg.min_bars:

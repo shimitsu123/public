@@ -5123,5 +5123,38 @@
 "stable_findings": [],
 "era_dependent_or_reversed": [],
 "notes": "把全部研究按层（在用 / 只展示 / 前向记录 / 否定）与时间（日 / 周 / 月 / 季 / 年 / 事件 / 判定日）串起来；日报列出接下来 45 天有日期的检查"
+},
+{
+"line": 2190,
+"date": "2026-09-28",
+"title": "数据体检（全部研究 / 运行数据：对不对、缺什么）",
+"kind": "engineering",
+"domain": "数据/工程",
+"registration": null,
+"script": "scripts/data_audit.py",
+"output": "var/out/data_audit.md",
+"candidates": [
+{
+"id": "日历",
+"rule": "calendar_jp 按年份的祝日规则",
+"result": "修正：与 J-Quants 2016-09〜 2,456 个交易日逐日一致"
+},
+{
+"id": "假行",
+"rule": "去掉东证休市日的 Yahoo 假行（QB_KEEP_HOLIDAY_ROWS=1 可还原）",
+"result": "21 年个股层回测 胜率 45.6→46.6%、每笔 +1.10→+1.14%，结论不变"
+},
+{
+"id": "交叉核对",
+"rule": "yfinance vs J-Quants 同日差 > 5%",
+"result": "17 天；近 2 年 5401 2025-09-29 复权错位（已滚出 52 周窗口）"
+}
+],
+"baseline": null,
+"windows": "缓存全期（2005〜2026）；J-Quants 2016-09〜",
+"verdict": "变更/工程",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "历年祝日 / 假行 / 近似时点名单已修正（数据修正，交易规则不变）；待决定：模拟盘行情对 J-Quants 交叉核对或改数据源；体检是否加进季度复核"
 }
 ]

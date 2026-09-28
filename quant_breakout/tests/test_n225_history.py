@@ -25,3 +25,14 @@ def test_member_mask_and_pit_names():
     assert names[:2] == ["7203.T", "6703.T"] and len(names) == 1 + len(H.REMOVED)
     assert not set(H.ADD_YEAR) & set(H.REMOVED) and all(isinstance(v, tuple) and v[1] >= 2001 for v in H.REMOVED.values())
     assert np.all([2001 <= y <= 2026 for y in H.ADD_YEAR.values()])
+
+
+def test_audit_additions_2026_10_and_idemitsu():
+    """2026-09-28 数据核对补登记：10/1 定期入替（+5016 / 6525 / 9697，−543A / 4902 / 7004）；出光 5019 是 2019 年选进的。"""
+    for t in ("5016.T", "6525.T", "9697.T"):
+        assert H.member_then(t, 2025) is False and H.member_then(t, 2026) is None
+    for t in ("4902.T", "7004.T"):
+        assert H.member_then(t, 2010) is True and H.member_then(t, 2026) is None
+    assert H.member_then("543A.T", 2026) is None
+    assert H.member_then("5019.T", 2012) is False and H.member_then("5019.T", 2019) is None and H.member_then("5019.T", 2020) is True
+    assert not set(H.CONTINUITY) & (set(H.ADD_YEAR) | set(H.REMOVED))                  # 连续成员不另登记进出
