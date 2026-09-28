@@ -64,6 +64,7 @@ def build_unified_data() -> dict:
             "eligibility": td.get("eligibility") or {},          # 下单前资格检查（qbreak/eligibility.py：被踢出 / 被指定的票不开新仓）
             "cost_sales": td.get("cost_sales") or {},            # 成本 × 销售（S2）分组与前向记录（qbreak/cost_sales_forward.py；只展示）
             "calendar": td.get("calendar") or {},                # 检查日历（qbreak/check_calendar.py；只展示，全貌 CHECK_TIMELINE.md）
+            "price_check": td.get("price_check") or {},          # 行情交叉核对（qbreak/price_check.py；yfinance × J-Quants，只报警）
             "shadow": read_json(paths.out_dir() / "shadow_today.json", {}) or {},   # 影子账户（判断型，只前向记录，不影响交易）
             "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
@@ -177,6 +178,9 @@ def missing_items(d: dict) -> list[str]:
         out.append(f"下单前资格检查的日报块：没算出（{el['error']}）—— 闸门本身在引擎里照常生效")
     for n in el.get("needs_user") or []:
         out.append(f"下单前资格检查（告警，不是缺数据）：{n}")
+    if started:
+        from .price_check import summary_lines
+        out += summary_lines(d.get("price_check") or {})             # 行情交叉核对（J-Quants，只报警）：没做 / 取不到 / 告警
     x = d.get("executor") or {}
     if started and x.get("error"):
         out.append(f"实盘执行器演练账户：运行失败（{x['error']}）—— 不影响模拟盘，但实盘要走的那条路今天没验证")
@@ -374,6 +378,34 @@ def _calendar_html(c: dict) -> str:
               "仓库里的 CHECK_TIMELINE.md。</p></details></section>")
 
 
+def _price_check_html(pc: dict) -> str:
+    """行情交叉核对（qbreak/price_check.py，㉚-1）：yfinance × J-Quants 调整后收盘；只报警（有告警时默认展开）。"""
+    if not pc:
+        return ""
+    from .price_check import KIND_ZH, describe
+    why = pc.get("error") or pc.get("skipped")
+    al = pc.get("alerts") or []
+    if why:
+        body = f"<p class='muted'>今天没做：{escape(str(why))}（只报警的检查，不影响交易）</p>"
+    else:
+        body = (f"<p>{escape(str(pc.get('from')))}〜{escape(str(pc.get('to')))}：核对 {int(pc.get('checked') or 0)} / {int(pc.get('wanted') or 0)} 只"
+                + (f"（J-Quants 没有 {len(pc['not_in_jq'])} 只：{escape('、'.join(pc['not_in_jq'][:5]))}）" if pc.get("not_in_jq") else "")
+                + (f"；取不到 {int(pc['n_errors'])} 只" if pc.get("n_errors") else "")
+                + (f"；时间到没核对 {int(pc['timeout'])} 只" if pc.get("timeout") else "") + "。</p>")
+        body += ("<ul>" + "".join(f"<li>⚠ {escape(describe(a))}</li>" for a in al) + "</ul>") if al else \
+            "<p>✓ 近 200 天没有复权错位，最新收盘一致，近 20 个交易日不缺。</p>"
+        cnt = pc.get("info_counts") or {}
+        if cnt:
+            body += "<p class='muted'>只提示（不影响指标或已过去）：" + "；".join(f"{escape(KIND_ZH.get(k, k))} {int(v)}" for k, v in cnt.items()) + "</p>"
+    return ("<section class='card'><details" + (" open" if al else "") + "><summary><h2 style='display:inline'>行情交叉核对（yfinance × J-Quants；只报警）"
+            + (f" ⚠ {len(al)} 条" if al else "") + "</h2></summary>" + body
+            + "<p class='muted'>模拟盘 / 执行器用 yfinance 的行情（拆股 + 分红调整）；每天拿 J-Quants（JPX 官方，只做拆股 / 合并调整）核对近 200 天："
+              "同一天涨跌差 &gt; 5 pp 且之后比值变了 &gt; 4% = 复权错位；最新一天两边的比值比前 5 天跳了 &gt; 1%；yfinance 落后或缺交易日。"
+              "除息日那天比值往上跳 1〜5% 是 yfinance 的分红调整，只提示。"
+              "只报警：不改行情、不改交易、不挡下单。告警的票若在今天的买单 / 持仓里，先核对哪边对；要停下单就在 Mac 对话里说「今天不要下单」。"
+              "（数据体检 ㉚-1，2026-09-28 用户决定；代码 qbreak/price_check.py）</p></details></section>")
+
+
 def _cost_sales_html(c: dict) -> str:
     """成本 × 销售（S2，qbreak/cost_sales_forward.py）：原材料在涨的月份，销售好且成本上涨的业种按间接占比分组（只展示，不改交易）。"""
     if not c or c.get("error") or not c.get("rows"):
@@ -554,7 +586,7 @@ def render_unified_html(d: dict) -> str:
         themes=_themes_html(d.get("themes") or {}, meta), policy=_policy_html(d.get("policy") or {}),
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us), shadow=_shadow_html(d),
         elig=_eligibility_html(d, meta), cost_sales=_cost_sales_html(d.get("cost_sales") or {}),
-        calendar=_calendar_html(d.get("calendar") or {}),
+        calendar=_calendar_html(d.get("calendar") or {}), pcheck=_price_check_html(d.get("price_check") or {}),
         corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
         n_trades=d.get("n_trades", 0), win=_pct(d.get("win_rate")) if d.get("win_rate") is not None else "—（还没有平仓）",
@@ -849,6 +881,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 {dash}
 <section class="card"><h2>今天要做的事（日本时间）</h2>{todo}</section>
 {elig}
+{pcheck}
 {calendar}
 <section class="card"><h2>权益曲线（日元）</h2>{spark}</section>
 <section class="card"><h2>个股持仓</h2><div class="scroll"><table><tr><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">成本</th><th class="n">止损</th><th>买入日</th></tr>{positions}</table></div></section>

@@ -916,6 +916,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     extra = set(ex_state.get("pos") or {}) | set(ex_state.get("plan") or {})
     eng, ctx = _unified_engine(a, cfg, state, provider, extra_tickers=extra)
     data, plans, extras, params, dcfg, today = ctx.data, ctx.plans, ctx.extras, ctx.params, ctx.dcfg, ctx.today
+    pcheck = _price_check_panel(data, today)                 # 行情交叉核对（J-Quants，㉚-1）：只报警，不改行情 / 交易
     idxs, cutoff = _new_bar_idxs(eng, state)
     planned: dict[str, list] = {}                          # 每个处理过的交易日收盘后计划买入的票（前向记录用）
     if not idxs:
@@ -954,6 +955,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     out["energy"] = _energy_panel(today)                     # 仪表盘：能源消费（每月）+ K4 前向记录（只作展示 / 记录）
     out["cost_sales"] = _cost_sales_panel(today)             # 成本 × 销售（S2）：上个月末的分组 + 前向记录（只展示 / 记录，不影响交易）
     out["calendar"] = _calendar_panel(today)                 # 检查日历：接下来 45 天有日期的检查 + 远期判定（只展示；全貌 CHECK_TIMELINE.md）
+    out["price_check"] = pcheck                              # 行情交叉核对（yfinance × J-Quants）：告警进日报「数据完整性」
     if usdjpy is None:                                       # 状态里没有汇率时（例如首日）：备用来源
         out["usdjpy"], out["usdjpy_src"] = _usdjpy_any()
     from qbreak.data import LAGGING
@@ -1218,6 +1220,54 @@ def _calendar_panel(today) -> dict:
     except Exception as e:                                   # noqa: BLE001
         log.warning("检查日历失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"[:200]}
+
+
+def _price_check_panel(data: dict, today) -> dict:
+    """行情交叉核对（qbreak/price_check.py；数据体检 ㉚-1，2026-09-28 用户决定「先只报警」）：模拟盘载入的日本股票 / ETF 近 200 天的收盘
+    × J-Quants 调整后收盘 → 复权错位、最新收盘不一致、缺交易日。只报警（日报「数据完整性」列出），不改行情、不改交易；失败只记原因。"""
+    from qbreak import price_check as PC
+    try:
+        r = PC.run(data, today)
+        if r.get("checked") is not None:
+            print(f"行情交叉核对（J-Quants）：核对 {r['checked']} / {r['wanted']} 只，告警 {len(r.get('alerts') or [])} 条（{r.get('elapsed_s')} s）")
+        return r
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("行情交叉核对失败（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
+
+
+def cmd_price_check(a) -> int:
+    """行情交叉核对（只读、只报警）：本机 yfinance 缓存里的日経225 股票池 + 核心 ETF（+ 模拟盘 / 执行器账本里的票）× J-Quants。
+    需要 JQUANTS_API_KEY（Mac：bash scripts/with_jquants.sh 从钥匙串读进这个进程；不回显）。有告警 → 返回 1。"""
+    import datetime as _dt
+    from qbreak import price_check as PC
+    from qbreak.config import universe
+    from qbreak.data import load_universe
+    from qbreak.utils import read_json
+    cfg = _sim_cfg() or {}
+    u = cfg.get("unified") or {}
+    core = list(_unified_cfg(cfg).core) if cfg.get("mode") == "unified" else ["1655.T"]
+    held = set()
+    for fp in (paths.state_dir() / "unified_state.json", paths.state_dir() / "live_unified_paper.json",
+               paths.state_dir() / "live_unified_tachibana.json"):
+        raw = read_json(fp, {}) or {}
+        st = (raw.get("state") if "state" in raw else raw) or {}
+        held |= set(st.get("pos") or {}) | set(st.get("plan") or {})
+    want = sorted(set(universe("JP", (u.get("universe") or {}).get("JP", "broad"))) | set(core) | {t for t in held if t.endswith(".T")})
+    data = load_universe(want, DataConfig(provider="yfinance", years=2, allow_synthetic=False).validate())
+    r = PC.run(data, _dt.date.today())
+    if r.get("skipped") or r.get("error"):
+        print(f"没做：{r.get('skipped') or r.get('error')}")
+        return 2
+    print(f"行情交叉核对 {r['from']}〜{r['to']}：核对 {r['checked']} / {r['wanted']} 只（{r['elapsed_s']} s）；"
+          f"J-Quants 没有 {len(r['not_in_jq'])} 只；取不到 {r['n_errors']} 只；时间到没核对 {r['timeout']} 只")
+    for a_ in r.get("alerts") or []:
+        print(f"  ⚠ {PC.describe(a_)}")
+    if not r.get("alerts"):
+        print("  ✓ 没有复权错位、最新收盘一致、近 20 个交易日不缺")
+    if r.get("info_counts"):
+        print("  只提示：" + "；".join(f"{PC.KIND_ZH.get(k, k)} {v}" for k, v in r["info_counts"].items()))
+    return 1 if r.get("alerts") else 0
 
 
 def _cost_sales_panel(today) -> dict:
@@ -2663,6 +2713,9 @@ def main(argv=None) -> int:
 
     el = sub.add_parser("eligibility", help="下单前资格检查：日経225 名单对照 + JPX 特別注意・監理・整理・上場廃止（只读，需外网）")
     el.set_defaults(func=cmd_eligibility)
+
+    pcx = sub.add_parser("price-check", help="行情交叉核对：yfinance × J-Quants（近 200 天；复权错位 / 最新收盘 / 缺交易日；只读、只报警）")
+    pcx.set_defaults(func=cmd_price_check)
 
     lu = sub.add_parser("live-u", help="一个账户方案的实盘执行器：早上对账→决策→寄付单；--phase open 开盘后补单（立花 / 模拟账户）")
     lu.add_argument("--broker", default="paper", choices=["paper", "tachibana"])

@@ -381,13 +381,14 @@ def main() -> int:
 
     # D5〜D7 个股层
     rk = P.rank(axis=1, pct=True)
-    d5 = {}
+    d5, bases = {}, {}
     for e in ("E", "J"):
         t1 = time.time()
         S = era_stock(e, P, s33, week=not a.quick)
         chk = {k: (S["res"][k]["n"], S["res"][k]["win"], S["res"][k]["mean"]) for k in ("现行", "M2", "M3")}
         regk = {k: (v["n"], v["win"], v["mean"]) for k, v in ((k, reg["stock"]["windows"][e]["res"][k][e]) for k in ("现行", "M2", "M3"))}
         base = annotate(S["tr"]["现行"], S["fw"], S["keep"], rk, s33, CC, U)
+        bases[e] = base
         say(f"\n## D5 {ZH[e]} 个股逐笔拆解（与登记时核对：{'相同' if chk == regk else f'不同 {chk} vs {regk}'}；{round(time.time() - t1)} s）")
         nosig = int(base["sig"].isna().sum())
         if nosig:
@@ -466,6 +467,35 @@ def main() -> int:
                       "by_ind": ind_all, "week": S["week"], "res": S["res"], "frac": S["frac"]})
         d5[e] = out_e
     res["D5"] = d5
+    pool = pd.concat([bases["E"], bases["J"]], ignore_index=True)
+    say(f"\n## D6 两段合起来（2011-01〜，现行 {fmt_s(stats(pool))}）")
+    d6 = {}
+    for cid, cut in (("M2", 1 / 3), ("M3", 1 / 2)):
+        f = pool[f"f_{cid}"].fillna(False).to_numpy(bool)
+        pi = perm_industry(pool["net"], rk, pool["me"], pool["ind"], cut, f, seed=41 if cid == "M2" else 42)
+        d6[cid] = {"过滤": stats(pool[f]), "剩下": stats(pool[~f]), "perm_ind": pi}
+        say(f"- {cid}：过滤 {fmt_s(stats(pool[f]))}、剩下 {fmt_s(stats(pool[~f]))}；业种标签置换（{pi['n']} 次）里剩下的胜率分位 {pi['win_pct']:.1f}%、"
+            f"每笔分位 {pi['mean_pct']:.1f}%")
+    spp = spearman_perm(pool["score"], pool["net"], seed=43)
+    d6["spearman"] = spp
+    say(f"- 分数分位 × 每笔净收益 秩相关 {spp['rho']:+.3f}（{spp['n']} 笔，置换 p {spp['p']:.3f}）")
+    res["D6_pooled"] = d6
+    e5, j5 = d5["E"], d5["J"]
+    say("\n## 读法（事后，只描述；不改判定、不提议）")
+    say(f"- 行业层：模型对之后 1 个月业种相对收益的 IC 在 E′ 对应的月份 {era1['E']['ic1']:+.3f}（t {era1['E']['t1']:.2f}）、"
+        f"J {era1['J']['ic1']:+.3f}（t {era1['J']['t1']:.2f}）—— 个股层变好的那段，模型对行业其实没有预测力；变差的那段反而略有。")
+    say(f"- 被 M2 挡掉的交易，持有期里自己业种的相对收益：E′ {e5['M2']['decomp']['过滤']['indrel']:+.2f}%（其余 {e5['M2']['decomp']['其余']['indrel']:+.2f}%，"
+        f"模型看错了行业）、J {j5['M2']['decomp']['过滤']['indrel']:+.2f}%（其余 {j5['M2']['decomp']['其余']['indrel']:+.2f}%，模型看对了行业）；"
+        f"输赢都来自个股自己：E′ {e5['M2']['decomp']['过滤']['idio']:+.2f}% vs {e5['M2']['decomp']['其余']['idio']:+.2f}%、"
+        f"J {j5['M2']['decomp']['过滤']['idio']:+.2f}% vs {j5['M2']['decomp']['其余']['idio']:+.2f}%。")
+    say(f"- 分数与持有期业种相对收益的秩相关 E′ {e5['spearman_ind']['rho']:+.3f}、J {j5['spearman_ind']['rho']:+.3f}（都≈ 0）；"
+        f"J 的持有期收益里个股自己占方差 {j5['var_share']['idio']:.0f}%、业种相对与总收益的相关 {j5['corr_ind_tot']:+.2f}"
+        f"（E′ {e5['var_share']['idio']:.0f}%、{e5['corr_ind_tot']:+.2f}）→ J 里即使完全预知业种收益（上限）也只有 "
+        f"{fmt_s(j5['oracle']['M2']['剩下'])}（现行 {fmt_s(stats(bases['J']))}）。")
+    say(f"- 分数的组成变了：E′ 主要是顾客销售 CUS（{d3['E']['share']['CUS'] * 100:.0f}%），J 主要是原油 + 鉄鋼（{(d3['J']['share']['OIL'] + d3['J']['share']['STEEL']) * 100:.0f}%）"
+        f"—— 两段实际上是两个不同的过滤器。")
+    say(f"- 两段合起来：M2 剩下的胜率 / 每笔在业种标签置换里的分位 {d6['M2']['perm_ind']['win_pct']:.0f}% / {d6['M2']['perm_ind']['mean_pct']:.0f}%，"
+        f"分数 × 每笔秩相关 {spp['rho']:+.3f}（p {spp['p']:.2f}）；J 被挡的净收益合计 {j5['M2']['split']['过滤']['sum']:+.1f} pp 里最大 3 笔占大头。")
     res["elapsed_s"] = round(time.time() - t0)
     say(f"\n（耗时 {res['elapsed_s']} s）。事后诊断，只描述；非投资建议。")
     if a.quick:

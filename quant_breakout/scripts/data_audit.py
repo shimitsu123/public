@@ -251,21 +251,11 @@ def check_jquants(today: dt.date) -> None:
             f"{snaps[0].stem}〜{last}，{len(snaps)} 期", "近似时点股票池、新上市")
 
 
-def classify_mismatch(J: pd.Series, Y: pd.Series, i: int) -> tuple[str, float]:
-    """第 i 天两边涨跌幅差 > 5% 的原因：
-    timing = 前后一天合起来一致（涨跌停 / 特别气配那天一边没有成交价、日期错一天）—— 持有几天以上的收益不受影响；
-    level = 从这天起两边的比值变了、之后不回来（拆股 / 分红复权错位：yfinance 的 auto_adjust 会把分红也复权，J-Quants 只复权拆股）；
-    other = 都不是。返回 (种类, 比值变化)。"""
-    lo, hi = max(i - 2, 0), min(i + 1, len(J) - 1)
-    cj, cy = float(J.iloc[hi] / J.iloc[lo]), float(Y.iloc[hi] / Y.iloc[lo])
-    R = Y / J
-    before, after = float(R.iloc[max(i - 6, 0):i].median()), float(R.iloc[i:i + 6].median())
-    shift = after / before - 1 if before else 0.0
-    if abs(cy / cj - 1) < 0.01:
-        return "timing", shift
-    if abs(shift) > 0.04:
-        return "level", shift
-    return "other", shift
+# 两边日收益差很大的那天分 timing / level / other：与每天的交叉核对（qbreak/price_check.py，㉚-1）共用同一个函数
+#   timing = 前后一天合起来一致（涨跌停 / 特别气配那天一边没有成交价、日期错一天）—— 持有几天以上的收益不受影响；
+#   level = 从这天起两边的比值变了、之后不回来（拆股 / 分红复权错位：yfinance 的 auto_adjust 会把分红也复权，J-Quants 只复权拆股）；
+#   other = 都不是。
+from qbreak.price_check import classify_mismatch                             # noqa: E402,F401
 
 
 @guarded("B 交叉核对")
