@@ -186,6 +186,10 @@
   **结果：全部不成立** —— 行业层样本外 IC +0.021（t 0.75，两段 −0.012 / +0.042，错开对照 p 0.13，去掉行业动量 / 原油后 t 0.67 / 0.66）；
   个股层按顺序不判定，只报数字：E′（2011〜2016-09）避开看淡业种胜率 45.5% → 58.1%，但 J（2017〜）42.0% → 31.0%、每笔 +0.61% → −0.66%（方向相反）。
   → 原材料 / 原油 / 汇率与销售经产业链的影响当月就进了价格；**维持现行**（日报不加、模拟盘不变、不新增前向记录；`var/out/state_model_study.md`）。
+  事后诊断（用户「为什么前一段变好、近 10 年明显变差」；`scripts/state_model_diag.py` → `var/out/state_model_diag.md`，只描述、判定不变）：
+  不是模型两个时代对错反了 —— 行业层 IC 在 E′ 对应的月份 +0.004、J +0.036（与个股层方向相反）；被挡的交易输赢来自个股自己
+  （E′ 被挡的业种其实跑赢、个股自己 −2.74%；J 被挡的业种确实跑输、个股自己 +2.63%，最大 3 笔占 +55 / +71 pp）；J 的突破收益 87% 的方差来自个股自己，
+  完全预知业种收益也只有 44.8% / +0.59%（现行 42.0% / +0.61%）；两段合起来被挡的与留下的没差别（分位 50%，秩相关 −0.04，p 0.65）→ 不能用，也不能反着用。
 - J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
   → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
   （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）
@@ -221,9 +225,11 @@
 - ㉖ 随时：时代主线前向记录的进度 ☁️🤖 `python scripts/era_outlook.py --review`（2026-10 起每月一次；记满 36 个月 ≈ 2029-10 起判定失效与否）；已加进季度复核 2j（2026-09-27 用户确认；同时每季刷新展望 `var/out/era_outlook.md`）
 - ㉙ ✋ 决定例行任务要不要加两步（要用户在对话里确认才改例行任务 ☁️）：① 季度复核加 2l「成本 × 销售 S2 前向记录复核」`python scripts/cost_sales_forward.py --review`
   （36 个月前只报进度）；② 日报例行任务的汇报加一行「资格检查」（现在告警已写进「数据完整性」、汇报第一行会列出，不加也不会漏）
-- ㉚ ✋ 数据体检（2026-09-28，`scripts/data_audit.py` → `var/out/data_audit.md`；历年祝日、Yahoo 休市假行、近似时点名单已修正，交易规则不变）的两件事要你决定：
-  ① 模拟盘 / 执行器用的 yfinance 行情防复权错位（例：5401 在 2025-09-29 拆股日假涨 +8.5%，已滚出 52 周窗口）→ 每天拿 J-Quants 交叉核对只报警，还是行情改用 J-Quants；
-  ② 数据体检要不要加进季度复核（约 100 秒、只读；例行任务要你在对话里确认才改）
+- ㉚ ✋ 数据体检（2026-09-28，`scripts/data_audit.py` → `var/out/data_audit.md`；历年祝日、Yahoo 休市假行、近似时点名单已修正，交易规则不变）：
+  ① ✅ 2026-09-28 用户决定「先只报警，每天拿 J-Quants 交叉核对」→ 已做（`qbreak/price_check.py`）：云端 sim-day 每天核对模拟盘的 214 只近 200 天
+  （复权错位 / 最新一天比值跳 > 1% / 行情落后 / 近 20 个交易日缺日），告警写进日报「行情交叉核对」卡片与「数据完整性」；不改行情、不改交易；
+  行情要不要改用 J-Quants 以后再说（改数据源要你确认）；
+  ② 还要你决定：数据体检要不要加进季度复核（约 100 秒、只读；例行任务要你在对话里确认才改）
 - ⑬ 2026-12-24 模拟期结束：总结 → 用户决定继续 / 上实盘 / 调整；（可选）J-Quants 付费档做无幸存者偏差回测（路线图 6）
 - ⑲ 🤖 装 / 更新全部（依赖、模拟操盘、市场仪表盘 + 经济威胁提醒、J-Quants 定时取数、研究用克隆 `~/qbreak-dev`）：
   `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（J-Quants 那一项要钥匙串里已有キー，见 ⑱②），
@@ -254,7 +260,7 @@
 
 ## 每天的流程（周一至五，JST）
 1. 前一晚 22:00：用户的另一个例行任务更新「市场风险报告」artifact（判断层与宏观数值的来源）
-2. 06:57 云端：拉代码 → 从风险报告写 `var/market_regime.json`、`var/macro.json` → `sim-day`（其中先取资格数据：日経225 名单 + JPX 指定 → 决策）→ 入库 → 发布日报
+2. 06:57 云端：拉代码 → 从风险报告写 `var/market_regime.json`、`var/macro.json` → `sim-day`（其中先取资格数据：日経225 名单 + JPX 指定 → 行情对 J-Quants 交叉核对（只报警）→ 决策）→ 入库 → 发布日报
    （云端容器是 UTC：`run.py` 启动时把进程时区固定为 JST（2026-09-27 起），「今天」、预计成交日、前向记录的日期与 Mac 一致）
 3. 07:40 Mac（`scripts/liveu.sh run --broker paper`）：`git pull`，等云端当天的 `var/out/unified_today.json`（最多 50 分钟）
    → 把配置与输入拷到 `~/.qbreak/home` → 执行器：昨天的单按真实开盘价撮合 → 对账 → 决策 → 资格检查（Mac 自己再取一次）→ 下「下一开盘」的单
@@ -298,6 +304,7 @@
 | 接下来要检查什么 | 「这个月 / 接下来要注意什么？」「什么时候判定 W2？」 | 读 `CHECK_TIMELINE.md` 与日报「检查日历」（`var/out/unified_today.json` 的 calendar） | 只读 |
 | 股票被踢出了吗 | 「要下单 / 手上的股票有没有被踢出日経225、被指定特別注意？」 | `QBREAK_HOME=~/.qbreak/home ~/.qbreak/venv/bin/python run.py eligibility`（在 `~/qbreak-src/quant_breakout`） | 只读；名单差异要改名单 → 你确认后云端改 |
 | 数据对不对 | 「研究 / 模拟盘用的数据对不对？缺什么？」 | 读 `var/out/data_audit.md`（每项 OK / 注意 / 问题 / 缺 与用在哪里）；重跑在云端 `python scripts/data_audit.py`（缓存都在云端） | 只读；修正要另记 sim_changes |
+| 行情有没有错位 | 「今天的行情和 J-Quants 对得上吗？」「有没有复权错位？」 | 读 `var/out/unified_today.json` 的 price_check（云端每天）；Mac 上现查：`QBREAK_HOME=~/.qbreak/home bash scripts/with_jquants.sh ~/.qbreak/venv/bin/python run.py price-check`（在 `~/qbreak-src/quant_breakout`，约 2 分钟） | 只读、只报警；告警的票在买单 / 持仓里 → 先核对哪边对，要停就建 HALT |
 | 成本 × 销售 | 「现在原材料在涨吗？哪些业种偏间接？」 | `~/.qbreak/venv/bin/python scripts/cost_sales_forward.py --show`；进度 `--review` | 只展示；行业层，不是个股建议 |
 | 看今天的情况 | 「今天模拟操盘怎么样？」「现在持仓和下一开盘的单是什么？」 | `bash scripts/liveu.sh --broker paper --status`（立花上线后 `--broker tachibana`），读页面与日志 | 只读 |
 | 市场偏向 / 威胁消息 | 「现在偏向哪边？」「有什么经济威胁消息？」 | `bash scripts/liveu.sh news --open`（仪表盘重写并打开），读 `~/.qbreak/home/cache/news/news.json` | 只读 |
