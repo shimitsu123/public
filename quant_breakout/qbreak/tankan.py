@@ -169,3 +169,71 @@ def release_targets(D: pd.DataFrame, dates, n_days: int) -> pd.DataFrame:
         tot, n = csum[b] - csum[a], cnt[b] - cnt[a]
         rows.append(np.where(n >= 0.9 * n_days, tot, np.nan))
     return pd.DataFrame(rows, index=pd.DatetimeIndex(dates), columns=D.columns)
+
+
+# ── 売上高计划（前年比・年度）：scripts/cost_sales_study.py（2026-09-28 登记）──
+SALES_SURVEY = {5: (4, 5), 4: (7, 5), 3: (10, 5), 2: (12, 20)}             # k → 同一年度内的保守可用日（月, 日）；k = 5 是 3 月调查（年度开始时的计划）
+SALES_OLD = {"1149": "1140", "1143": "1200"}                               # 2010 年分类变更前的旧代码（一般機械、精密機械），2009 年度以前拼接
+SALES_TSE_EXTRA = {"陸運業": ["2040"], "空運業": ["2040"], "倉庫・運輸関連業": ["2040"]}   # 运输都用 運輸・郵便
+
+
+def sales_code(ind: str, k: int) -> str:
+    """売上高 前年比・年度（大企業）：k = 0 実績、1 実績見込、2 12 月调查、3 9 月、4 6 月、5 3 月调查的计划。"""
+    return f"TK99G{ind}102CFY{k}1000"
+
+
+def load_sales(fetch_annual=None) -> dict[int, pd.DataFrame]:
+    """{k: 年度（整数）× 短観业种} 的 売上高 前年比（%），k ∈ {0, 2, 3, 4, 5}；旧分类拼到新代码下（新代码有值优先）。"""
+    if fetch_annual is None:
+        fetch_annual = boj_annual
+    inds = sorted(set(IND) | set(SALES_OLD.values()))
+    out = {}
+    for k in (0, 2, 3, 4, 5):
+        df = pd.DataFrame({i: _get_series(fetch_annual, sales_code(i, k)) for i in inds}).sort_index()
+        for new, old in SALES_OLD.items():
+            if old in df.columns:
+                df[new] = df[new].combine_first(df[old]) if new in df.columns else df[old]
+        out[k] = df.drop(columns=[c for c in SALES_OLD.values() if c in df.columns])
+    return out
+
+
+def sales_strength(S: dict[int, pd.DataFrame], months, hist_years: int = 10, min_hist: int = 5) -> pd.DataFrame:
+    """月末 × 短観业种：当时已公布的最新一次调查对「本年度」的売上高计划 − 该业种过去 hist_years 个年度实绩的中位
+    （年度 = 4 月〜翌年 3 月；计划的可用日见 SALES_SURVEY；年度 x 的实绩在 x + 1 年 7 月 5 日之后才用；实绩少于 min_hist 个 → 缺值）。"""
+    act = S[0]
+    cols = sorted(set().union(*[set(df.columns) for df in S.values()]))
+    rows = {}
+    for t in pd.DatetimeIndex(months):
+        fy = t.year if t >= pd.Timestamp(t.year, 4, 5) else t.year - 1
+        plan = pd.Series(np.nan, index=cols)
+        for k in (2, 3, 4, 5):                                             # 可用日由晚到早：取当时最新、且有值的那一次
+            m, d = SALES_SURVEY[k]
+            if pd.Timestamp(fy, m, d) <= t and fy in S[k].index:
+                plan = plan.fillna(S[k].loc[fy].reindex(cols))
+        done = [x for x in act.index if pd.Timestamp(int(x) + 1, 7, 5) <= t]
+        hist = act.loc[sorted(done)[-hist_years:]].reindex(columns=cols) if done else pd.DataFrame(columns=cols)
+        med = hist.median().where(hist.notna().sum() >= min_hist)
+        rows[t] = plan - med
+    return pd.DataFrame.from_dict(rows, orient="index")
+
+
+def pass_through(T: dict[str, pd.DataFrame], months) -> pd.DataFrame:
+    """月末 × 短観业种：当时已公布的最新一次调查的 販売価格 DI − 仕入価格 DI（実績；可用日见 available）。"""
+    spread = (T["sell"] - T["buy"]).sort_index()
+    avail = pd.DatetimeIndex([available(q) for q in spread.index])
+    rows = {}
+    for t in pd.DatetimeIndex(months):
+        ok = np.flatnonzero(avail <= t)
+        rows[t] = spread.iloc[ok[-1]] if len(ok) else pd.Series(np.nan, index=spread.columns)
+    return pd.DataFrame.from_dict(rows, orient="index")
+
+
+def to_tse(X: pd.DataFrame, industries: list[str]) -> pd.DataFrame:
+    """短観业种的月度值 → 東証业种（TSE 与 SALES_TSE_EXTRA；几个短観业种取平均；没有对应的业种不出现）。"""
+    m = {**TSE, **SALES_TSE_EXTRA}
+    out = {}
+    for g in industries:
+        cols = [c for c in m.get(g, []) if c in X.columns]
+        if cols:
+            out[g] = X[cols].mean(axis=1, skipna=False)
+    return pd.DataFrame(out, index=X.index)
