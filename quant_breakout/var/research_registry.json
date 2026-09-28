@@ -4948,5 +4948,72 @@
 "stable_findings": [],
 "era_dependent_or_reversed": [],
 "notes": "用户确认；没有记录时也写复核文件；判定规则不变"
+},
+{
+"line": 2088,
+"date": "2026-09-28",
+"title": "诊断：为什么越靠近现在突破越弱（只描述）",
+"kind": "explore",
+"domain": "选股/买点",
+"registration": "—",
+"script": "scripts/decay_diag.py",
+"output": "var/out/decay_diag.md",
+"candidates": [],
+"baseline": "现行 = 突破 + W2（逐笔，今天的日経225）",
+"windows": "Z 2001〜2006 / E 2006〜2016 / J 2017〜",
+"verdict": "探索不登记",
+"stable_findings": [
+"E 与 J 每笔一样（+0.74% vs +0.76%，t −0.03）"
+],
+"era_dependent_or_reversed": [
+"Z 的优势集中在 2005 年（去掉后只多 +0.15 pp）",
+"每个年代都靠少数强势年（E 去 2012 → −0.07%，J 去 2025 → +0.30%）"
+],
+"notes": "不是幸存者偏差（当时已是成员的更好）、不是机制变化（跳空 / 出场结构不变）；W2 增益越近越小（Z +0.46 / E +0.13 / J +0.08 pp）"
+},
+{
+"line": 2104,
+"date": "2026-09-28",
+"title": "事后核对：近似时点日経225 重算现行与 W2",
+"kind": "study",
+"domain": "数据/工程",
+"registration": "57c644b（事后，脚本先提交）",
+"script": "scripts/pit_recheck.py; qbreak/n225_history.py",
+"output": "var/out/pit_recheck.md",
+"candidates": [
+{
+"id": "R1",
+"rule": "Z 的优势是否来自股票池后见之明",
+"result": "Z 每笔 +2.71% → 近似时点 +3.31%：不是"
+},
+{
+"id": "R2",
+"rule": "W2 在近似时点下是否还有增益",
+"result": "Z +2.34 / E +0.36 / J +0.09 pp：不受口径影响（J 很小）"
+}
+],
+"baseline": "现行 = S0C2 + W2",
+"windows": "Z / E / J",
+"verdict": "变更/工程",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "研究框架加近似时点日経225（Wikipedia 入替历史，按年）；以后 Z / E 另报近似时点与去掉最好一年；模拟盘不改"
+},
+{
+"line": 2115,
+"date": "2026-09-28",
+"title": "发现：日経225 名单过期一只（6594 → 4062，待用户确认）",
+"kind": "config_change",
+"domain": "数据/工程",
+"registration": "—",
+"script": "qbreak/universes.py",
+"output": "—",
+"candidates": [],
+"baseline": "",
+"windows": "—",
+"verdict": "提议(未采用)",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "ニデック 2025-11-05 剔除（特別注意銘柄）、イビデン补入；股票池要用户确认才改"
 }
 ]
