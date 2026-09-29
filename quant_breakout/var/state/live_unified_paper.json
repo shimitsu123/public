@@ -4,6 +4,11 @@
    "at": "2026-09-29T07:01:33+09:00",
    "level": "info",
    "msg": "BUY 1655.T ×1130 限价 895（盘中）→ FILLED"
+  },
+  {
+   "at": "2026-09-30T07:07:22+09:00",
+   "level": "info",
+   "msg": "SELL 1655.T ×1130（寄付）→ SENT 已排队，次日开盘成交"
   }
  ],
  "history": [
@@ -34,23 +39,34 @@
  ],
  "version": 1,
  "broker": "PaperBroker",
- "updated": "2026-09-29T07:01:33+09:00",
+ "updated": "2026-09-30T07:07:22+09:00",
  "state": {
   "cash_jpy": 9354.965003295918,
   "cash_usd": 0.0,
   "pos": {},
   "core_units": {
-   "1655.T": 1130
+   "1655.T": 1130,
+   "1545.T": 0
   },
   "core_last": {
-   "1655.T": 875.7000122070312
+   "1655.T": 871.0,
+   "1545.T": 239.89999389648438
   },
   "pending_exit": {},
   "plan": {},
-  "core_plan": {},
+  "core_plan": {
+   "1545.T": [
+    "BUY",
+    4140
+   ],
+   "1655.T": [
+    "SELL",
+    1130
+   ]
+  },
   "fx_plan": [],
   "fx_reserve_jpy": 0.0,
-  "last_date": "2026-09-28",
+  "last_date": "2026-09-29",
   "trades": [],
   "core_trades": [
    [
@@ -77,10 +93,56 @@
     9354.97,
     0.0,
     157.381
+   ],
+   [
+    "2026-09-29",
+    993584.97,
+    9354.97,
+    0.0,
+    157.226
    ]
   ],
   "corp_done": [],
   "corp_log": []
  },
- "orders": []
+ "orders": [
+  {
+   "cid": "U2026-09-29-SELL-1655.T",
+   "ticker": "1655.T",
+   "side": "SELL",
+   "kind": "core",
+   "qty": 1130,
+   "decided_on": "2026-09-29",
+   "limit": null,
+   "ref_px": 871.0,
+   "reason": "核心 ETF 调整",
+   "phase": "morning",
+   "status": "SENT",
+   "sent_qty": 1130,
+   "broker_id": "",
+   "order_date": "",
+   "filled_qty": 0,
+   "filled_px": 0.0,
+   "note": "已排队，次日开盘成交"
+  },
+  {
+   "cid": "U2026-09-29-BUY-1545.T",
+   "ticker": "1545.T",
+   "side": "BUY",
+   "kind": "core",
+   "qty": 4140,
+   "decided_on": "2026-09-29",
+   "limit": 244.0,
+   "ref_px": 239.89999389648438,
+   "reason": "核心 ETF 调整",
+   "phase": "open",
+   "status": "DEFERRED",
+   "sent_qty": 0,
+   "broker_id": "",
+   "order_date": "",
+   "filled_qty": 0,
+   "filled_px": 0.0,
+   "note": "开盘前余力 9,355 円 < 按限价预留 1,010,567 円 → 开盘后按始値检查、减股再下"
+  }
+ ]
 }

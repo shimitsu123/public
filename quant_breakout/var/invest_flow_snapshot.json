@@ -1,81 +1,81 @@
 {
- "quarter": "2026Q1",
- "period": "2026 年 1〜3 月期",
- "avail": "2026-06-30",
- "asof": "2026-09-29",
- "total_growth": 4.8,
+ "quarter": "2026Q2",
+ "period": "2026 年 4〜6 月期",
+ "avail": "2026-09-30",
+ "asof": "2026-09-30",
+ "total_growth": 3.7,
  "share_up": [
   {
-   "industry": "鉄鋼",
-   "v": 19.2,
-   "share": 3.0,
-   "growth": 24.0
+   "industry": "その他金融業",
+   "v": 29.0,
+   "share": 5.6,
+   "growth": 32.7
   },
   {
-   "industry": "その他金融業",
-   "v": 17.4,
-   "share": 5.4,
-   "growth": 22.2
+   "industry": "鉄鋼",
+   "v": 17.0,
+   "share": 3.1,
+   "growth": 20.7
   },
   {
    "industry": "建設業",
-   "v": 13.9,
-   "share": 2.4,
-   "growth": 18.7
+   "v": 14.2,
+   "share": 2.5,
+   "growth": 17.9
   },
   {
-   "industry": "機械",
-   "v": 13.8,
-   "share": 3.2,
-   "growth": 18.5
+   "industry": "サービス業",
+   "v": 8.6,
+   "share": 6.4,
+   "growth": 12.3
   },
   {
-   "industry": "食料品",
-   "v": 11.0,
-   "share": 2.3,
-   "growth": 15.8
+   "industry": "電気・ガス業",
+   "v": 6.6,
+   "share": 11.8,
+   "growth": 10.3
   }
  ],
  "share_down": [
   {
    "industry": "電気機器",
-   "v": -20.8,
-   "share": 6.7,
-   "growth": -16.0
-  },
-  {
-   "industry": "不動産業",
-   "v": -19.1,
-   "share": 6.0,
-   "growth": -14.3
+   "v": -21.9,
+   "share": 6.5,
+   "growth": -18.2
   },
   {
    "industry": "倉庫・運輸関連業",
-   "v": -18.5,
+   "v": -17.5,
    "share": 2.2,
    "growth": -13.8
   },
   {
-   "industry": "精密機器",
-   "v": -7.0,
-   "share": 1.8,
-   "growth": -2.3
+   "industry": "不動産業",
+   "v": -14.2,
+   "share": 6.1,
+   "growth": -10.5
   },
   {
    "industry": "輸送用機器",
-   "v": -4.8,
-   "share": 8.2,
-   "growth": -0.0
+   "v": -11.0,
+   "share": 7.9,
+   "growth": -7.3
+  },
+  {
+   "industry": "卸売業",
+   "v": -5.3,
+   "share": 2.6,
+   "growth": -1.6
   }
  ],
  "flow_up": [
   {
-   "industry": "機械",
-   "v": 2.2
+   "industry": "輸送用機器",
+   "v": 1.7
   },
   {
-   "industry": "輸送用機器",
-   "v": 1.6
+   "industry": "機械",
+   "v": 1.4
   },
   {
    "industry": "精密機器",
@@ -83,29 +83,21 @@
   },
   {
    "industry": "情報・通信業",
-   "v": 1.3
+   "v": 0.9
   },
   {
    "industry": "電気機器",
-   "v": 1.1
+   "v": 0.9
   }
  ],
  "flow_down": [
   {
    "industry": "不動産業",
-   "v": -0.9
+   "v": -0.6
   },
   {
    "industry": "水産・農林業",
-   "v": -0.7
-  },
-  {
-   "industry": "建設業",
-   "v": -0.1
-  },
-  {
-   "industry": "食料品",
-   "v": -0.1
+   "v": -0.3
   }
  ],
  "n_ind": 27,
