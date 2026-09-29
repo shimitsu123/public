@@ -68,6 +68,9 @@
   （industry_s33.json「証券、商品先物取引業」、J-Quants 上市一览「証券・商品先物取引業」）→ 时点 TOPIX 1000 里不在今天名单的证券公司被分成另一个组 →
   業種名统一成「・」（ind_name）；「现在的位置」加上个股比例的日期与「不属于主线業種、但关联最高的 5 只」（只描述）。
   第一次运行在出结果之前停掉，没有看输出。
+出结果之后只改了两处（2026-09-29，判定与各表的数字不变）：「现在的位置」的公司名改用 JPX 公开名单（J-Quants 的数据不入库）；
+  日経225 去掉盘中还没收盘的当日 K 线（第一次运行在 9/29 盘中，最后一根是盘中价；yfinance 的 ^N225 缺 9/28 → 最后一根完整的是 9/25）
+  → 只影响最后几天的之后涨跌：各格子的平均与区间 ±0.01 pp、「现在的位置」的乖离（−0.67% 盘中 → +0.14% 9/25 收盘）；判定不变。
 六 局限：日経225 与扩大池用今天的成分（Z / E / W 有幸存者偏差，J2 没有）；业种用今天的分类；大跌 / 见顶的段数少（日本约 20 / 37 段），
   同一时期的段互相不独立；调整后价、不含分红（指数）；这些样本以前做过很多别的检验；税前、不计费用。模拟盘 / 执行器不因这次研究改。非投资建议。
 输出：var/out/crash_mainline_study.md / .json（只有统计）。
@@ -438,7 +441,8 @@ def jp_panels() -> dict[str, dict]:
 
 def n225() -> pd.Series:
     from bullbear_study import load
-    return load("^N225", OLD[0])["Close"].astype(float)
+    from qbreak.trader import drop_partial_bar
+    return drop_partial_bar(load("^N225", OLD[0]), "JP")["Close"].astype(float)          # 盘中运行时去掉还没收盘的当日 K 线
 
 
 def us_market() -> pd.Series:
@@ -972,14 +976,8 @@ def current_state(nk: pd.Series, dv: pd.Series, P: dict, s33: dict, best) -> dic
     qtd_a = (last.to_period("Q")).start_time
     qtd = group_scores(REL, groups, np.flatnonzero(days >= qtd_a))
     corr = assoc(REL, groups, ml, len(days))
-    names = {}
-    try:
-        import allstock_data as AD
-        snaps = AD.snapshots()
-        m = snaps[max(snaps)]
-        names = {c[:4] + ".T": nfkc(n) for c, n in zip(m["Code"].astype(str), m["CoName"].astype(str))}
-    except Exception:                                                          # noqa: BLE001
-        pass
+    from qbreak import jpx_list as JL
+    names = {f"{c}.T": n for c, n in JL.names().items()}                     # 公司名用 JPX 公开名单（var/jpx_names.json），不用 J-Quants 的
     mem = S["M"][-1]
     rank = [j for j in np.argsort(-np.nan_to_num(corr, nan=-9)) if mem[j] and np.isfinite(corr[j])]
     order, other = rank[:10], [j for j in rank if groups[j] not in ml][:5]
