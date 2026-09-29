@@ -32,6 +32,9 @@
   换出去（只有 W2 保留）/ 换进来（只有 W2d 保留）：Z 14 / 5、E 21 / 17、J 27 / 27；
   保留率按用到的那一周有几天（W2 → W2d）：E 2 天 0% → 60%（5 个）、4 天 24% → 45%（55）、5 天 63% → 54%（225）；
   J 2 天 0% → 75%（8）、3 天 0% → 50%（8）、4 天 33% → 52%（91）、5 天 55% → 45%（293）。
+运行前修正（登记 e24f9b3 之后、看到任何结果之前）：第一次运行在逐笔那一步报错停止（candle_posthoc.trades 用的旧引擎 qbreak/engine.run_backtest
+  不支持 X6 吊灯止损，没有输出任何数字）→ 逐笔改用 qbreak/exit_forward.pairs_frame 的 X6 那一边（X6 前向记录的同一个定义：同一个信号、同一个买入，
+  卖出用吊灯止损代替死叉；成本同 candle_posthoc.trades 的 ¥25 万一笔来回手续费；只用已平仓的）。规则、门槛、窗口都不变。
 输出：var/out/w2d_study.md / .json（只有统计）。
 """
 from __future__ import annotations
@@ -167,6 +170,25 @@ def signal_table(ctx: dict, fa: dict, R: dict) -> pd.DataFrame:
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=["ticker", "date", "w2", "w2d", "k2", "k2d", "wdays"])
 
 
+def solo_trades(fa: dict, S: pd.DataFrame, p0) -> pd.DataFrame:
+    """逐笔（每只票单独、扣成本），离场 = 现行 X6：qbreak/exit_forward.pairs_frame 的 x6 那一边（X6 前向记录同一个定义：同一个信号、
+    同一个买入，卖出用吊灯止损代替死叉）。p0 = 不加 W2、离场死叉的参数（pairs_frame 在它上面把死叉换成吊灯止损）；
+    成本 = candle_posthoc.trades 同一个（¥25 万一笔的来回手续费）；只用已平仓的（status ok）。"""
+    import pit_retrain_study as PRS
+    from qbreak import exit_forward as EF
+    from qbreak.config import BacktestConfig
+    if not len(S):
+        return pd.DataFrame(columns=["ticker", "sig_date", "net", "hold_days", "k2", "k2d"])
+    bt = BacktestConfig.for_market("JP", 21, "tachibana")
+    bt.sizing.initial_cash, bt.sizing.position_pct, bt.sizing.max_positions, bt.sizing.max_position_pct = 1e10, 1.0, 1, 1.0
+    rt = bt.exec_cfg.fee(PRS.NOTIONAL) * 2 / PRS.NOTIONAL * 100
+    P = EF.pairs_frame(fa, S[["ticker", "date", "k2", "k2d"]], p0, bt, rt)
+    P = P[P["status"] == "ok"] if len(P) and "status" in P.columns else P.iloc[0:0]
+    return pd.DataFrame({"ticker": P["ticker"].to_numpy(), "sig_date": pd.to_datetime(P["date"]).to_numpy(),
+                         "net": P["net_x6"].astype(float).to_numpy(), "hold_days": P["hold_x6"].astype(float).to_numpy(),
+                         "k2": P["k2"].astype(bool).to_numpy(), "k2d": P["k2d"].astype(bool).to_numpy()})
+
+
 def count_mode() -> int:
     """登记前的检查：只数信号（不跑回测、不算收益）。"""
     for era in ERAS:
@@ -184,7 +206,6 @@ def count_mode() -> int:
 def main(argv: list[str]) -> int:
     if "--count" in argv:
         return count_mode()
-    import candle_posthoc as CPH
     import candle_study as CS_
     import leap_confirm as LF
     from qbreak import paths
@@ -206,13 +227,8 @@ def main(argv: list[str]) -> int:
                       "W2d": LF.run(ctx, run_fn, LF.with_mask(fa, k2d), px, cfg_over=no_core)}
         S = signal_table(ctx, fa, R)
         sig[era] = S
-        a, b = ctx["windows"][era]
-        T = CPH.trades(fa, px, a)
+        T = solo_trades(fa, S, p0)
         if len(T):
-            T = T[(T["sig_date"] >= pd.Timestamp(a)) & ((T["sig_date"] <= pd.Timestamp(b)) if b else True)].copy()
-            pos = {t: {d: i for i, d in enumerate(fa[t].index)} for t in fa}
-            T["k2"] = [bool(k2[t][pos[t][d]]) for t, d in zip(T["ticker"], T["sig_date"])]
-            T["k2d"] = [bool(k2d[t][pos[t][d]]) for t, d in zip(T["ticker"], T["sig_date"])]
             T["group"] = [group_of(x, y) for x, y in zip(T["k2"], T["k2d"])]
             T["era"] = era
             solo_rows.append(T)

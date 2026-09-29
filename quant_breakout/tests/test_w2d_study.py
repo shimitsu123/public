@@ -79,3 +79,23 @@ def test_verdict_rules():
     assert not ok and any(x.startswith("④") for x in f)
     assert W.verdict(_acct(0.33, 0.42, 0.20), {"换进来": {"n": 12, "mean": -5.0}, "换出去": {"n": 45, "mean": 0.2}})[0]   # < 20 笔不判
     assert W.verdict(_acct(0.33, 0.42, 0.20), {"换进来": {"n": 40, "mean": -5.0}, "换出去": {"n": 19, "mean": 0.2}})[0]
+
+
+def test_solo_trades_use_x6_pairs():
+    """逐笔 = exit_forward.pairs_frame 的 X6 那一边（旧引擎不支持 X6；登记后第一次运行在这里报错，运行前修正）。"""
+    from qbreak.config import StrategyParams
+    from qbreak.strategy import compute_indicators
+    rng = np.random.default_rng(7)
+    n = 400
+    c = 1000 * np.exp(np.cumsum(rng.normal(0.0005, 0.015, n)))
+    idx = pd.bdate_range("2020-01-06", periods=n)
+    df = pd.DataFrame({"Open": c * (1 + rng.normal(0, 0.003, n)), "High": c * 1.01, "Low": c * 0.99, "Close": c,
+                       "Volume": rng.lognormal(np.log(1e6), 0.3, n)}, index=idx)
+    df["Open"] = df[["Open", "High"]].min(axis=1).clip(lower=df["Low"])
+    p = StrategyParams()
+    ind = compute_indicators(df, p)
+    S = pd.DataFrame({"ticker": ["A.T", "A.T"], "date": [idx[150], idx[250]], "k2": [True, False], "k2d": [False, True]})
+    T = W.solo_trades({"A.T": ind}, S, p)
+    assert list(T.columns) == ["ticker", "sig_date", "net", "hold_days", "k2", "k2d"] and 1 <= len(T) <= 2
+    assert set(T["sig_date"]) <= {idx[150], idx[250]} and np.isfinite(T["net"]).all() and (T["hold_days"] >= 1).all()
+    assert W.solo_trades({"A.T": ind}, S.iloc[0:0], p).empty
