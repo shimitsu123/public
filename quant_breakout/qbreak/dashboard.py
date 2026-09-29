@@ -89,7 +89,14 @@ def stance_html(d: dict) -> str:
     ex = d.get("extras") or {}
     boxes = []
     icm = (d.get("idle_cash") or {}).get("mode")
-    us_name = "美国（S&P500）· 只用于 1655 择时" if icm in (None, "K0") else "美国（S&P500）· 基准账户（原规则）的 1655 择时"
+    from .idle_cash import MODES, uses_market
+    if icm in (None, "K0"):
+        us_name = "美国（S&P500）· 只用于 1655 择时"
+    elif "US" in uses_market(icm):                                      # 闲置资金也跟美股分界（例：Q1 纳指 1545）
+        held = "、".join(t.replace(".T", "") for t in (MODES.get(icm) or {}).get("core", {}))
+        us_name = f"美国（S&P500）· 闲置资金 {held} 与基准账户的 1655 择时"
+    else:
+        us_name = "美国（S&P500）· 基准账户（原规则）的 1655 择时"
     for m, name in (("JP", "日本（日経225）· 个股的牛熊"), ("US", us_name)):
         bb = ((ex.get(m) or {}).get("regime") or {}).get("bullbear") or {}
         if not bb and m == "US":

@@ -81,7 +81,8 @@ def build_unified_data() -> dict:
                         for m, e in (td.get("extras") or {}).items()},
             "hint": ("一个账户模式：账户数值在顶层（equity_jpy / ret_pct / max_dd_pct / cash_jpy / cash_usd / positions / "
                      "core_units×core_last / todo / trades / core_trades / fx_trades / corp_log）；当日损益 = history 最后两行的权益差；"
-                     "牛熊分界在 markets.JP.regime.bullbear（日経）与 markets.US.regime.bullbear（S&P500，只用于 1655 择时），"
+                     "牛熊分界在 markets.JP.regime.bullbear（日経）与 markets.US.regime.bullbear（S&P500，只用于核心 ETF 的择时：基准账户的 1655、"
+                     "闲置资金方式跟美股分界时的那只 ETF，见 idle_cash），"
                      "其中 phase_label / phase_text = 现在处于哪个阶段（牛·稳固 / 牛·走弱 / 牛→熊确认中 / 熊·回升 …）"
                      "与直观百分比（离 250 日线的距离、20 个交易日的变化、还要跌 / 涨多少才翻转），汇报时先写这个；"
                      "候补队列在 markets.JP.watchlist；todo 的个股买单与候补队列的 breakout / to_box_top_pct = 「真突破」标签"
@@ -566,7 +567,8 @@ def render_unified_html(d: dict) -> str:
             ccy = "USD" if market == "US" else "JPY"
             lim = f"，指値 {_money(o['limit'], ccy)}" if o.get("limit") else ""
             why = f"（{escape(str(o.get('reason')))}）" if o.get("reason") else ""
-            unit = "口" if str(o.get("ticker", "")).startswith(("1655", "1329", "2558", "1540", "133A", "1671", "2238")) else "股"
+            unit = "口" if (str(o.get("ticker", "")) in _IC_NAMES()
+                           or str(o.get("ticker", "")).startswith(("1655", "1329", "2558"))) else "股"
             tag = f" {_bo_tag(o)}" if o.get("side") == "BUY" and "breakout" in o else ""
             if o.get("side") == "BUY":
                 tag += f" {_grp_tag(o.get('ticker', ''), d.get('themes') or {}, meta)}"
@@ -618,8 +620,13 @@ def render_unified_html(d: dict) -> str:
             line = f"牛熊分界 未知（{escape(str(bb.get('note') or '指数行情取不到'))}）"
         if e.get("core_only"):
             icm = (d.get("idle_cash") or {}).get("mode")
-            use = ("只给基准账户（原规则）的 1655 择时；模拟盘的闲置资金现在按「" + escape(str((d.get("idle_cash") or {}).get("label") or icm)) + "」"
-                   if icm and icm != "K0" else f"只用于核心 ETF {escape('、'.join(e['core_only']))} 的择时（牛市持有、熊市那份留现金）")
+            lab = escape(str((d.get("idle_cash") or {}).get("label") or icm))
+            if icm and icm != "K0" and m in _ic_markets(icm):              # 闲置资金的方式也跟这条分界（例：Q1 纳指 1545）
+                use = f"用于核心 ETF 的择时：模拟盘的闲置资金「{lab}」与基准账户（原规则）的 1655（牛市持有、熊市那份留现金）"
+            elif icm and icm != "K0":
+                use = "只给基准账户（原规则）的 1655 择时；模拟盘的闲置资金现在按「" + lab + "」"
+            else:
+                use = f"只用于核心 ETF {escape('、'.join(e['core_only']))} 的择时（牛市持有、熊市那份留现金）"
             mk.append(f"<dt>{name}</dt><dd>{line}；{use}</dd>")
             continue
         fired = "；".join((e.get("macro") or {}).get("fired") or []) or "无"
@@ -694,6 +701,16 @@ def render_unified_html(d: dict) -> str:
 _EV = {"FOMC": "美联储议息", "BOJ": "日银议息", "CPI": "美国 CPI", "NFP": "美国非农就业", "ELECTION": "选举",
        "POLITICS": "政治日程", "FISCAL": "财政期限", "TRADE": "贸易 / 关税期限", "OPEC": "OPEC+ 会议", "SUMMIT": "峰会",
        "TANKAN": "日银短观", "SQ": "日本 SQ（定期）", "OPEX": "美股季度期权到期（定期）", "INDEX": "指数调整"}
+
+
+def _IC_NAMES() -> dict:
+    from .idle_cash import NAMES
+    return NAMES
+
+
+def _ic_markets(mode: str | None) -> set[str]:
+    from .idle_cash import uses_market
+    return uses_market(mode)
 
 
 def _ic_now(ic: dict) -> str:

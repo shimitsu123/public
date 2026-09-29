@@ -88,7 +88,7 @@ def _write_cache(ticker: str, years: int, df: pd.DataFrame, source: str) -> None
 
 
 # ────────────────────────── 质量检查 ──────────────────────────
-_SPLIT_K = (2, 3, 4, 5, 8, 10, 20, 25, 50, 100)
+_SPLIT_K = (2, 3, 4, 5, 8, 10, 20, 25, 50, 100, 200)       # 200：1545.T 2026-05-22 的 1 拆 200（yfinance 没复权；2026-09-29 模拟盘演练时发现）
 
 
 def repair_jp_artifacts(ticker: str, df: pd.DataFrame, max_iter: int = 10) -> pd.DataFrame:

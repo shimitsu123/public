@@ -69,6 +69,12 @@ OVERLAYS = {"P1": "牛熊分界 = 熊 → 反向", "P2": "威胁指数 A0 ≥ 80
             "P4": "熊 且（A0 或 C_rel ≥ 80 分位）→ 反向"}
 
 
+def uses_market(mode: str | None) -> set[str]:
+    """这个闲置资金方式跟哪条现有的牛熊分界择时（{"US"} / {"JP"} / 空 = 自己的开关）。日报 / 仪表盘写说明用。"""
+    m = MODES.get(mode or "K0", MODES["K0"])
+    return {k for k in m["core_index"].values() if k in ("US", "JP")}
+
+
 def _on_idx(s: pd.Series | None, idx: pd.DatetimeIndex, fill) -> pd.Series:
     if s is None or not len(s):
         return pd.Series(fill, index=idx)

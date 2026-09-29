@@ -104,6 +104,19 @@ def test_repair_jp_artifacts_split_transient_and_merger():
     assert len(f3) == 5 and f3.index[0] == idx[3]
 
 
+def test_repair_split_1_to_200_with_garbage_row():
+    """1545.T 2026-05-22：1 拆 200 没复权 + 第二天一行 1.23 円的垃圾 → 复权更早的历史、删掉垃圾行，不截断。"""
+    import numpy as np
+    import pandas as pd
+    from qbreak.data import repair_jp_artifacts
+    idx = pd.bdate_range("2026-05-15", periods=10)
+    c = np.array([46670.69, 46281.68, 46301.63, 46371.45, 47009.82, 238.79, 1.23, 239.29, 241.38, 240.39])
+    df = pd.DataFrame({"Open": c, "High": c, "Low": c, "Close": c, "Volume": 1e5}, index=idx)
+    out = repair_jp_artifacts("1545.T", df)
+    assert len(out) == 9 and idx[6] not in out.index and out.index[0] == idx[0]
+    assert abs(out["Close"].iloc[4] - 47009.82 / 200) < 1e-9 and (out["Close"] > 200).all()
+
+
 def test_repair_split_with_integer_prices_and_volume():
     """yfinance 有时给整数型的价格 / 成交量；未复权拆股复权时要能写入小数（旧版 pandas 只警告，新版直接报错）。"""
     import pandas as pd

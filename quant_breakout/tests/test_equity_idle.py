@@ -182,3 +182,17 @@ def test_core_only_stats_share_and_switches():
     assert sh == {"1545.T": 66.7, "2842.T": 33.3}
     assert S.held_share({}, {"US": bear}, idx, "2020-01-01", None) == {"1655.T": 66.7}
     assert S.switches_per_year(sp, idx, "2020-01-01", None) == round(2 / ((idx[-1] - idx[0]).days / 365.25), 1)
+
+
+def test_displays_for_market_timed_idle_cash():
+    """Q1（纳指 1545）也跟美股牛熊分界 → 仪表盘 / 日报写「闲置资金 1545 与基准账户的 1655 择时」；K3 照旧「只给基准账户」；1545 的单位是口。"""
+    from qbreak import dashboard as DB
+    from qbreak import report_unified as RU
+    assert IC.uses_market("Q1") == {"US"} and IC.uses_market("Q4") == {"JP"} and IC.uses_market("K3") == set()
+    assert IC.uses_market("K0") == {"US"} and IC.uses_market(None) == {"US"}
+    bb = {"state": "bull", "since": "2025-06-01"}
+    d = {"extras": {"US": {"regime": {"bullbear": bb}}, "JP": {"regime": {"bullbear": bb}}}}
+    q1 = DB.stance_html({**d, "idle_cash": {"mode": "Q1"}})
+    k3 = DB.stance_html({**d, "idle_cash": {"mode": "K3"}})
+    assert "闲置资金 1545 与基准账户的 1655 择时" in q1 and "基准账户（原规则）的 1655 择时" in k3
+    assert "1545.T" in RU._IC_NAMES() and "US" in RU._ic_markets("Q1")
