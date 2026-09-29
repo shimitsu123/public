@@ -366,6 +366,11 @@
   第一次判定：每日记录成熟配对 100 笔（约 1 年）、全市场 2027-09-28 之后那次复核；Z（2001〜2006）没用，留着
 - ㉜ ✅ 2026-09-28 用户选 ①：出口股 EX1「隔夜海外同行没跌才买」另外登记（f1b08f4）用没看过的 2001〜2006 日経225 + 另一批股票确认
   → **不通过**（`var/out/exportlink_confirm.md`：180 个信号 胜率 −2.3 pp、每笔 +0.19 pp，区间都含 0；秩相关 ≈ 0）→ 不进前向记录，这条线结束
+- ㉟ 待你确认：「投资流向」季度快照放进日报（只展示，不改交易）—— 每季（MOF 季報公布：12-01、03 月初、06-01、09-01 之后的月末）列出
+  设备投资占比上升 / 下降最多的业种、投资的钱流向哪些业种（固定資本マトリックス）；研究（登记 5db014b）显示这些数字预测不了之后的行业收益
+  （日本 T1 / T2、美国 T3 都不成立，`var/out/invest_flow_study.md`），所以只作背景
+- ✋ ｅ支店 2026-09-30 起改定交付书面：要用立花 API（本番 / 实盘）之前，先在 ｅ支店 PC 站确认改定书面（未读时 API 不发放虚拟 URL、登录被挡；
+  执行器会报「交付書面未読」）。模拟操盘（paper）不受影响。来源 https://www.e-shiten.jp/important_info/20260911.html（2026-09-29 查看）
 - ⑬ 2026-12-24 模拟期结束：总结 → 用户决定继续 / 上实盘 / 调整；同时定 ㉔（核心要不要换纳指 100）；（可选）J-Quants 付费档做无幸存者偏差回测（路线图 6）
 - ⑲ 🤖 装 / 更新全部（依赖、模拟操盘、市场仪表盘 + 经济威胁提醒、J-Quants 定时取数、研究用克隆 `~/qbreak-dev`）：
   `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（J-Quants 那一项要钥匙串里已有キー，见 ⑱②），
@@ -418,6 +423,8 @@
   `var/state/unified_state_base.json`（基准账户：原规则 = 不加判断层、离场用死叉、闲置资金 1655 + 牛熊分界）、`scripts/fwd_judgment_check.py`（历史检验）
 - 个股离场方式：`qbreak/exit_rules.py`（DC / X6 / R4 / X6R4 / ALL；`var/sim.json` 的 exits 选用）、引擎实现在 `qbreak/unified.py` 的 `_check_exits`
 - 闲置资金方式：`qbreak/idle_cash.py`（K0〜K6；`var/sim.json` 的 idle_cash 选用；月末开关 TR: / RT: / XR 键进引擎的 bear）、研究 `scripts/idle_cash_study.py`
+- 投资流向（按行业的季度设备投资）：`qbreak/invest_flow.py`（財務省 法人企業統計 季報的取数 → `var/cache/mof/`、固定資本マトリックス → `var/cache/io/`；
+  导出的暴露 `var/invest_fcm_2020.json`）、研究 `scripts/invest_flow_study.py`（不成立，只作背景）
 - 下单前资格检查：`qbreak/eligibility.py`（快照 `var/out/eligibility.json`；只读检查 `run.py eligibility`）；成本 × 销售显示与 S2 前向记录：`qbreak/cost_sales_forward.py`
   （复核 / 当前分组 `scripts/cost_sales_forward.py --review | --show`）
 
