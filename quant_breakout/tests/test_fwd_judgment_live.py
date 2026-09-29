@@ -103,18 +103,18 @@ def test_baseline_step_copies_state_once_then_runs_without_layer(monkeypatch):
     raw_before = main.st.to_dict()
     calls = []
 
-    def make(st, fj=True):
-        calls.append(fj)
+    def make(st, fj=True, base=False):
+        calls.append(base)
         return _engine(ind, bear, st)
     ctx = SimpleNamespace(make=make, today="2026-09-30", ucfg=SimpleNamespace(capital_jpy=1_000_000))
     b = run._baseline_step(ctx, raw_before)
-    assert calls == [False] and b["since"] == "2026-09-30" and b["last_date"] == str(ind["1655.T"].index[-1].date())
+    assert calls == [True] and b["since"] == "2026-09-30" and b["last_date"] == str(ind["1655.T"].index[-1].date())   # 原规则的引擎
     assert b["plan"] == ["A.T", "B.T"] and b["equity_jpy"] is not None
     doc = json.loads((paths.state_dir() / "unified_state_base.json").read_text(encoding="utf-8"))
     assert doc["_since"] == "2026-09-30" and doc["last_date"] == b["last_date"]
     b2 = run._baseline_step(SimpleNamespace(make=make, today="2026-10-01", ucfg=ctx.ucfg), {"cash_jpy": 1.0})
     assert b2["since"] == "2026-09-30" and b2["last_date"] == b["last_date"]      # 之后读自己的状态，不再复制
-    bad = run._baseline_step(SimpleNamespace(make=lambda st, fj=True: 1 / 0, today="x", ucfg=ctx.ucfg), raw_before)
+    bad = run._baseline_step(SimpleNamespace(make=lambda st, fj=True, base=False: 1 / 0, today="x", ucfg=ctx.ucfg), raw_before)
     assert "ZeroDivisionError" in bad["error"]                                   # 失败只记下，不影响模拟盘
 
 

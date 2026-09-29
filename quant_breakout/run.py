@@ -834,6 +834,9 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
     broker = broker_of("JP", u)
     dcfg = DataConfig(provider=provider, years=2, allow_synthetic=False).validate()
     params = {m: _params(a, m) for m in ("JP", "US")}
+    from qbreak import exit_rules as EXR
+    xmode = EXR.mode_of(cfg, "JP")                          # 离场方式（var/sim.json 的 exits；2026-09-29 用户要求加进 X6 / R4）
+    params_x = {**params, "JP": EXR.apply(params["JP"], xmode)}   # 只给引擎用；params（死叉）照旧给前向记录、判断层、候补队列
     unis = {m: (universe(m, (u.get("universe") or {}).get(m, "broad")) if m in ucfg.stock_markets else [])
             for m in ("JP", "US")}
     want = sorted(set(unis["JP"]) | set(unis["US"]) | set(state.pos) | set(state.plan) | set(ucfg.core)
@@ -844,7 +847,7 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
         df = drop_partial_bar(df, market_of(t))
         if df is None or len(df) < 60:
             continue
-        ind[t] = core_frame(df) if t in ucfg.core else compute_indicators(df, params[market_of(t)])
+        ind[t] = core_frame(df) if t in ucfg.core else compute_indicators(df, params_x[market_of(t)])   # R4 打开时多一列 sar_flip
     missing = [t for t in set(state.pos) | set(ucfg.core) if t not in ind]
     if missing:
         raise RuntimeError(f"持仓 / 核心 ETF 取不到行情：{missing}")
@@ -892,15 +895,16 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
             if used0 is not None:
                 rg["final_mult"] = sc1
 
-    def make(st, fj: bool = True):
-        e = UnifiedEngine(ind, ucfg, params, ex, ccost, fx=fx, bear=bear, state=st)
-        _apply_live_mults(e, plans, fj_pl if fj else None, bar_date)
+    def make(st, fj: bool = True, base: bool = False):
+        """base = True：原规则（不加前向记录判断层、离场用死叉）= 基准账户。"""
+        e = UnifiedEngine(ind, ucfg, params if base else params_x, ex, ccost, fx=fx, bear=bear, state=st)
+        _apply_live_mults(e, plans, None if (base or not fj) else fj_pl, bar_date)
         e.live_fx_ok = is_trading_day(now_jst().date())    # 今天白天（日本营业日）才有换汇窗口
         e.entry_block_fn = eblock
         e.entry_gate_fn = gate.entry_block
         return e
     ctx = SimpleNamespace(data=data, ind=ind, plans=plans, extras=extras, params=params, dcfg=dcfg, ucfg=ucfg, u=u,
-                          broker=broker, today=today, ex=ex, ccost=ccost, make=make, gate=gate, fj=fj_pl, fj_on=fj_on,
+                          broker=broker, today=today, ex=ex, ccost=ccost, make=make, gate=gate, fj=fj_pl, fj_on=fj_on, xmode=xmode,
                           bar_date=bar_date)
     return make(state), ctx
 
@@ -1102,8 +1106,8 @@ def _fj_compute(ind: dict, params: dict, u: dict, bar_date: str, pre: dict) -> d
 
 
 def _baseline_step(ctx, raw_before: dict | None) -> dict:
-    """基准账户（不加前向记录判断层）：同一套行情、同一个引擎，只是不用判断层 → var/state/unified_state_base.json。
-    第一次 = 复制模拟盘当时（这次推进之前）的状态，之后每天各走各的；只作对照，失败不影响模拟盘。"""
+    """基准账户（原规则：不加前向记录判断层、离场用 MACD 死叉；2026-09-29 用户要求的改动都不加）：同一套行情、同一个引擎
+    → var/state/unified_state_base.json。第一次 = 复制模拟盘当时（这次推进之前）的状态，之后每天各走各的；只作对照，失败不影响模拟盘。"""
     import json as _json
     from qbreak.unified import UState
     from qbreak.utils import read_json
@@ -1115,7 +1119,7 @@ def _baseline_step(ctx, raw_before: dict | None) -> dict:
             rawb = dict(raw_before or {})
             since = str(ctx.today)
         st = UState.from_dict({k: v for k, v in rawb.items() if k != "_since"}) if rawb else UState(cash_jpy=float(ctx.ucfg.capital_jpy))
-        eng = ctx.make(st, fj=False)
+        eng = ctx.make(st, base=True)
         idxs, _ = _new_bar_idxs(eng, st)
         if idxs:
             eng.prime(idxs[0])
@@ -1218,7 +1222,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
             eng.step(i)
             planned[str(eng.gidx[i].date())] = sorted(state.plan)
     st_path.write_text(_json.dumps(state.to_dict(), ensure_ascii=False, indent=1, default=float), encoding="utf-8")
-    baseline = _baseline_step(ctx, raw) if fj_on else None   # 基准账户：同一天、同一套行情、不加前向记录判断层（对照判断层的效果）
+    baseline = _baseline_step(ctx, raw) if (fj_on or ctx.xmode != "DC") else None   # 基准账户：同一天、同一套行情、原规则（对照改动的效果）
     executor = _executor_paper_step(ctx, state)            # 实盘执行器的演练账户：同一天、同一套行情，应与模拟盘逐日一致
     i_last = int(eng.gidx.searchsorted(pd.Timestamp(state.last_date))) if state.last_date else len(eng.gidx) - 1
     todo = eng.todo(min(i_last, len(eng.gidx) - 1))
@@ -1243,7 +1247,9 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     out["news"] = _news_panel(out)                           # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
     out["energy"] = pre.get("energy") or _energy_panel(today)   # 仪表盘：能源消费（每月）+ K4 前向记录（K4 也进判断层）
     out["cost_sales"] = pre.get("cost_sales") or _cost_sales_panel(today)   # 成本 × 销售（S2）：上个月末的分组 + 前向记录（S2 也进判断层）
-    out["fwdj"] = _fj_summary(ctx, baseline, eq) if fj_on else {"enabled": False}   # 前向记录判断层：今天的判定 + 基准账户对照
+    out["fwdj"] = _fj_summary(ctx, baseline, eq) if fj_on else {"enabled": False, "baseline": baseline or {}}   # 判断层 + 基准账户对照
+    from qbreak import exit_rules as _EXR
+    out["exit_mode"] = {"JP": ctx.xmode, "label": _EXR.LABELS[ctx.xmode]}   # 个股的离场方式（var/sim.json exits）
     try:
         from qbreak import survey as _SV
         out["survey_failed"] = dict(_SV.LAST_FAILED)          # 因子调查取不到的数据源（日报「数据完整性」列出）
@@ -2690,6 +2696,7 @@ def cmd_live_unified(a) -> int:
                                        blocked_today=[{"date": d_, "ticker": t_, "why": w_} for d_, t_, w_ in eng.gate_log])
     sm["market"] = {m: (e.get("regime") or {}).get("bullbear") for m, e in ctx.extras.items()}   # 牛熊：现在处于哪个阶段（页面 / 日志）
     sm["fwd_judgment"] = _fj_brief(ctx)                     # 前向记录判断层：云端算好的文件今天有没有生效（页面 / 日志）
+    sm["exit_mode"] = ctx.xmode                              # 个股的离场方式（var/sim.json exits；与云端模拟盘同一个）
     write_json(paths.out_dir() / f"live_unified_{tag}.json", sm)
     title, short, body = daily_text(sm, eng.st, cmp, paper, float(ucfg.capital_jpy))
     append_journal(paths.out_dir() / f"live_unified_{tag}_journal.md", now_jst().strftime("%Y-%m-%d %H:%M JST"), title, body)

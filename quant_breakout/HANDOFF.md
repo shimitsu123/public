@@ -298,6 +298,11 @@
   （C_rel 警示的日子原有宏观 / 状态层已经关门）。证据弱：多数项目是没通过才进前向记录的 —— 效果看日报「前向记录判断层」卡片里的
   **基准账户**（不加这一层，`var/state/unified_state_base.json`）。云端 sim-day 算好 `var/fwd_judgment.json` → Mac 执行器（liveu.sh 同步）读同一个文件；
   日期对不上 = 这一层不生效（执行器日志 / 页面标「★ 判断层没生效」）。关掉：`var/sim.json` 的 `fwd_judgment.enabled` 改 false（要记 sim_changes）。
+- **个股离场换成 X6 吊灯止损**（2026-09-29 用户要求「把卖法 X6 / R4 也加进离场」；登记 17f2dc4、`qbreak/exit_rules.py`；**2026-09-30 的决策起**）：
+  五种加法（DC / X6 / R4 / X6R4 / ALL）按事先规则选中 X6 = 收盘 < 持有以来最高价 − 3 × ATR14 代替 MACD 死叉（止损 / 跟踪 / 止盈 / 最长 60 天不变）；
+  账户历史「差不多」（Calmar 2006〜2016 0.285 → 0.306、2017〜 0.388 → 0.405；每笔更好、胜率略低、持有更久），R4 与组合在 2006〜2016 更差
+  （`var/out/exit_mode_check.md`）。开关 `var/sim.json` 的 `exits.JP`（"DC" = 原规则）；`var/best_params*.json` 没改 → 研究脚本与 X6 / R4
+  前向记录的「现行」仍是死叉。基准账户 = 原规则（不加判断层、离场用死叉），日报「前向记录判断层」卡片里看两边的差。
 - J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
   → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
   （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）
@@ -404,7 +409,8 @@
   `scripts/policy_event_verify.py`（来源核对）、`qbreak/policy_forward.py`（前向记录）、`var/policy_events.csv`（事件表）、`var/policy_extra_pool.json`（长历史池补充票）
 - 云端状态：`var/state/unified_state.json`（模拟盘）；Mac 状态：`~/.qbreak/home/state/live_unified_paper.json`（账本，不在仓库）
 - 前向记录判断层：`qbreak/fwd_judgment.py`（规则与计分）、`var/fwd_judgment.json`（每天的判定，云端写、Mac 读）、
-  `var/state/unified_state_base.json`（基准账户：不加判断层的对照）、`scripts/fwd_judgment_check.py`（历史检验）
+  `var/state/unified_state_base.json`（基准账户：原规则 = 不加判断层、离场用死叉）、`scripts/fwd_judgment_check.py`（历史检验）
+- 个股离场方式：`qbreak/exit_rules.py`（DC / X6 / R4 / X6R4 / ALL；`var/sim.json` 的 exits 选用）、引擎实现在 `qbreak/unified.py` 的 `_check_exits`
 - 下单前资格检查：`qbreak/eligibility.py`（快照 `var/out/eligibility.json`；只读检查 `run.py eligibility`）；成本 × 销售显示与 S2 前向记录：`qbreak/cost_sales_forward.py`
   （复核 / 当前分组 `scripts/cost_sales_forward.py --review | --show`）
 

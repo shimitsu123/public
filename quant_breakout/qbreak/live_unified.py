@@ -757,6 +757,9 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
             lines.append(f"- 牛熊（{ {'JP': '日経平均', 'US': 'S&P500'}.get(m, m)}）：{bb['phase_label']}：{bb.get('phase_text', '')}")
     if fj.get("enabled"):                                   # 前向记录判断层（云端算好的 fwd_judgment.json）
         lines.append(fj_text(fj))
+    if sm.get("exit_mode") and sm["exit_mode"] != "DC":        # 个股的离场方式（var/sim.json exits）
+        from .exit_rules import LABELS
+        lines.append(f"- 个股离场：{LABELS.get(sm['exit_mode'], sm['exit_mode'])}（止损 / 跟踪 / 止盈 / 最长持有照旧）")
     if cmp:
         lines.append(f"- {cmp['text']}")
     if sm.get("blocked"):

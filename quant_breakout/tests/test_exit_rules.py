@@ -87,3 +87,12 @@ def test_indicators_and_single_ticker_engine_guard():
     assert np.array_equal(on["sar_flip"].to_numpy(bool), EF.sar_flip(on))
     with pytest.raises(NotImplementedError):
         run_backtest({"X.T": base}, EXR.apply(StrategyParams(), "X6"), BacktestConfig())
+
+
+def test_exit_mode_shown_in_executor_journal():
+    from qbreak.live_unified import daily_text
+    from qbreak.unified import UState
+    _, _, body = daily_text({"decided_on": "2026-09-30", "orders": [], "exit_mode": "X6"}, UState(cash_jpy=1e6), None, True, 1e6)
+    assert "个股离场：吊灯止损" in body
+    _, _, body0 = daily_text({"decided_on": "2026-09-30", "orders": [], "exit_mode": "DC"}, UState(cash_jpy=1e6), None, True, 1e6)
+    assert "个股离场" not in body0

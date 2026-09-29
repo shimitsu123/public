@@ -6312,5 +6312,47 @@
 "多数项目是事先规则没通过才进前向记录的（F2 在没见过的股票上反向、G1 没过）；只有 C_rel 在 21 个外国市场确认过（指数层）"
 ],
 "notes": "用户明确要求加进模拟盘（不是研究结论）；var/sim.json fwd_judgment.enabled 开关；执行器读同一个 var/fwd_judgment.json（日期对不上 = 原规则）；市场层读数最多落后 1 个交易日（再旧按中性）；顺带修正 survey.load_raw 单个数据源失败让整批读数没有的问题"
+},
+{
+"line": 2935,
+"date": "2026-09-29",
+"title": "个股离场加进卖法 X6 / R4（用户要求）：五种加法按登记规则选中 X6 吊灯止损代替死叉",
+"kind": "config_change",
+"domain": "出场/卖点",
+"registration": "17f2dc4",
+"script": "qbreak/exit_rules.py；scripts/exit_mode_check.py",
+"output": "var/out/exit_mode_check.md；var/sim.json exits",
+"candidates": [
+{
+"id": "X6",
+"rule": "吊灯止损（收盘 < 持有以来最高价 − 3 × ATR14）代替死叉",
+"result": "Calmar E 0.285 → 0.306、J 0.388 → 0.405、Z 1.313 → 1.625；每笔 E +0.60 → +2.10%、J +0.61 → +1.35% → 选中（差不多）"
+},
+{
+"id": "R4",
+"rule": "抛物线 SAR 翻转代替死叉",
+"result": "E 0.244、J 0.391、Z 1.426（E 更差）"
+},
+{
+"id": "X6R4",
+"rule": "吊灯或 SAR 哪个先到",
+"result": "E 0.246、J 0.392"
+},
+{
+"id": "ALL",
+"rule": "死叉、吊灯、SAR 哪个先到",
+"result": "E 0.255、J 0.377"
+}
+],
+"baseline": "DC 死叉（原规则）；实时用基准账户（原规则）对照",
+"windows": "E 2006-10〜2016-09、J 2017-01〜、Z 2001〜2006-09（只描述）",
+"verdict": "变更/工程",
+"stable_findings": [
+"吊灯止损让赚钱的仓位拿得更久（持有中位 12 → 22 天），每笔三个年代都更好、胜率略低"
+],
+"era_dependent_or_reversed": [
+"X6 / R4 都是在 E / J 上探索出来的，没有没看过的数据；账户层只是差不多（+0.021 / +0.017）"
+],
+"notes": "用户决定加；var/best_params*.json 不改（研究与 X6 / R4 前向记录的现行仍是死叉）；基准账户改为原规则（不加判断层、死叉）"
 }
 ]
