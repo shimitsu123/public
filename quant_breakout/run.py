@@ -333,6 +333,16 @@ def _threat_readings(ti: dict) -> dict | None:
             WT.log_forward(fc, paths.out_dir() / "threat_weight_forward.csv")
         except Exception as e:                               # noqa: BLE001
             log.warning("配比最优化预测计算失败（不影响交易）：%s", e)
+        try:                                                 # ㉞「威胁高 + 压力已释放」C_rel = 平均(A0, 100 − 压力)：前向对照（2026-09-29 用户同意）
+            from qbreak import pressure as PR
+            for m, close in (("US", ti["spx"]), ("JP", ti["n225"])):
+                pn = PR.now_reading(close)
+                cr = PR.c_rel(rd[m]["idx"].get("A0"), pn["P_g"])
+                rd[m]["idx"]["C_rel"] = None if cr is None else round(cr, 1)
+                rd[m]["crel"] = {"date": pn["date"], "C_rel": rd[m]["idx"]["C_rel"], "A0": rd[m]["idx"].get("A0"),
+                                 "P_g": pn["P_g"], "pct": pn["pct"]}
+        except Exception as e:                               # noqa: BLE001
+            log.warning("C_rel（威胁高 + 压力已释放）计算失败（不影响交易）：%s", e)
         log_forward(rd, paths.out_dir() / "threat_forward.csv")
         log_us_watch(rd, paths.out_dir() / "us_watch_forward.csv")      # 美股前瞻观察：金银比 + 商品波动
         return rd

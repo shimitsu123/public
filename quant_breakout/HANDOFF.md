@@ -331,8 +331,8 @@
   2026-09-29 起另报 3 个月判定的 JP-S33Q / JP-THQ「下一季」与最新一季的影响占比，记满 12 个季度起判定）；已加进季度复核 2j（2026-09-27 用户确认；同时每季刷新展望 `var/out/era_outlook.md`）
 - ㉝ 随时 / 事件发生时：「≤ −15% 深跌」前向记录（日経225；对照 S&P 500 / DAX / FTSE 100） ☁️ `python scripts/deepdip_forward.py --review` / 🤖 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/deepdip_forward.py --status`
   （Mac 在 `~/qbreak-src/quant_breakout`，先 `git pull`；只读、不写文件）；平时看日报那一栏即可；有事件时日报标 ★，JP 满 5 个且都过了 60 个交易日起每次运行自动判定；只记录，用到交易要另外登记、用户确认）
-- ㉞ ✋ 待你决定：「威胁高 + 压力已释放」C_rel 全球确认成立（2026-09-29，`var/out/threat_pressure_global.md`）→ 要不要把 C_rel 作为对照列加进威胁指数前向记录
-  （`var/out/threat_forward.csv`，美股 / 日経每天记一个值；只记录，不改日报的 0〜100、不影响交易）；要的话云端会话实现（每天算压力的当日分位）并记 sim_changes
+- ㉞ ✅ 2026-09-29 用户选「加进前向记录」：C_rel 从 2026-09-30 起每天记进 `var/out/threat_forward.csv`（列 C_rel；`qbreak/pressure.py`），
+  复核沿用威胁指数前向记录的事先规则（季度复核 2c）
 - ㉙ ✅ 2026-09-28 用户选「只加 ①」：季度复核已加 2l「成本 × 销售 S2 前向记录复核」`python scripts/cost_sales_forward.py --review`
   （36 个月前只报进度；汇报第 ⑭ 项）；② 日报例行任务的汇报加一行「资格检查」→ 不加（告警已写进「数据完整性」、汇报第一行会列出，不会漏）
 - ㉚ ✅ 数据体检（2026-09-28，`scripts/data_audit.py` → `var/out/data_audit.md`；历年祝日、Yahoo 休市假行、近似时点名单已修正，交易规则不变）：

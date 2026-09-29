@@ -6251,5 +6251,28 @@
 "房贷利率 26 周上升只在 2011– 有用（0.709，前半 0.428；因子调查已看过，数字完全一致）"
 ],
 "notes": "盘点：A0、压力指数都没有房贷利率与家庭信贷；v3 只有企业信贷；因子调查有房贷利率。「延迟日」= 逾期 30 天以上。日本没有长期家庭拖欠序列，用美国的。维持 A0，不改规则"
+},
+{
+"line": 2876,
+"date": "2026-09-29",
+"title": "「威胁高 + 压力已释放」C_rel 加进威胁指数前向记录（用户确认 ㉞）",
+"kind": "forward_record",
+"domain": "威胁指数",
+"registration": "f01ea80（全球确认）",
+"script": "qbreak/pressure.py",
+"output": "var/out/threat_forward.csv（列 C_rel）",
+"candidates": [
+{
+"id": "C_rel",
+"rule": "(A0 + 100 − P_g) ÷ 2，每天美股 / 日経各一个值",
+"result": "2026-09-30 起记录；2026-09-28 美国 46.3、日本 49.0"
+}
+],
+"baseline": "威胁指数 A0",
+"windows": "2026-09-30〜（只追加）",
+"verdict": "前向记录",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "复核沿用 threat.forward_decision（≥ 3 次下跌、≥ 500 天已知后 AUC ≥ A0 + 0.03 且 ≥15% 不低于 A0）"
 }
 ]
