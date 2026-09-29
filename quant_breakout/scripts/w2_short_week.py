@@ -1,4 +1,4 @@
-"""w2_short_week.py — 连休让一周只有 2〜4 个交易日时，下一周 W2（周线量比 ≥ 1.0）让多少票通过（只描述，不改规则；HANDOFF ㊲ 的背景）。
+"""w2_short_week.py — 连休让一周只有 2〜4 个交易日时，下一周 W2（周线量比 ≥ 1.0）让多少票通过（只描述，不改规则；HANDOFF ㊲ 的背景，日均版对照见 scripts/w2d_study.py）。
 
 W2 = 最近完成的一周成交量合计 ÷ 前 10 周平均（qbreak/mtf.weekly_volume_ratio，与模拟盘同一个函数、同一个日历口径）。
 对每一周：完成之后的下一个交易日，股票池里 w5v ≥ 1.0 的比例与中位数；按那一周的交易日数分组。
@@ -61,7 +61,7 @@ def main() -> int:
     lines += ["", "只有 2〜3 个交易日的周：", ""] + [f"- {r.start}〜{r.end}（{r.days} 天）：过 W2 {r.share * 100:.1f}%、中位 {r.median:.2f}"
                                                    for r in short.itertuples(index=False)]
     lines += ["", "读法：W2 用一周的**合计**成交量，连休那一周天数少、合计自然偏低 → 下一周几乎所有突破都被挡；研究里的 W2 回测也是同一个定义，"
-              "这个效果已经算在历史结果里。要不要登记「按日均量算」的对照研究由用户决定（HANDOFF ㊲）。非投资建议。", ""]
+              "这个效果已经算在历史结果里。按日均量算的对照研究（㊲，登记 e24f9b3）没通过 → 维持 W2（var/out/w2d_study.md）。非投资建议。", ""]
     fp = Path(__file__).resolve().parents[1] / "var" / "out" / "w2_short_week.md"
     fp.write_text("\n".join(lines), encoding="utf-8")
     print("\n".join(lines))
