@@ -313,6 +313,10 @@
   同一天先定的 K3（133A 美元趋势）一次也没执行，被这次代替。开关 `var/sim.json` 的 `idle_cash.mode`（"K0" = 原规则 1655、"K3" = 美元趋势）；
   基准账户 = 原规则（判断层关、死叉、1655 + 牛熊分界）。1545 在 2026-05-22 做了 1 拆 200，yfinance 没复权 → `qbreak/data.py` 的拆股识别已加进 200。
   ｅ支店没有 FX / 外币存款 / MMF；做空要另开信用账户 → 这里只用现物 ETF。
+- 现在的选股方法放在楽天的美股还是立花的日経225（2026-09-29 用户问；登记 1ba090e、`scripts/market_compare_study.py` → `var/out/market_compare_study.md`）：
+  同一套个股规则（W2 + X6、4 × 25%）、同一个推进器 → 按事先读法 **日経（立花）更好**（两个窗口的每笔净收益与个股层 Calmar 都是日経高）：
+  每笔 2006〜2016 +2.74% vs +0.30%、2017〜 +0.55% vs −0.86%；楽天来回约 1% 的手续费每年约 4〜6 万円（立花 0.1〜0.3 万円），
+  去掉费用美股每笔也只有 +1.29% / +0.13%；每笔差的区间含 0。立花不做美股、楽天美股不能自动下单 → 只回答问题，模拟盘不变。
 - J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
   → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
   （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）
@@ -441,6 +445,7 @@
 - 「前向记录判断层今天生效了吗 / 为什么减半」：Mac 页面「前向记录判断层」卡片与日志那一行（`~/.qbreak/home/out/live_unified_paper.json` 的 fwd_judgment）；
   云端的详细读数与候选判定在日报「前向记录判断层」卡片（`var/out/unified_today.json` 的 fwdj、`var/fwd_judgment.json`）；
   「★ 没生效」多半是云端当天晚了 / 失败（文件日期是前一天）→ 那天按原规则，和云端的对照会不一致
+- 「选股放在美股（楽天）好还是日経（立花）好」：`var/out/market_compare_study.md`（2026-09-29：日経更好，美股被楽天约 1% 的来回费用吃掉）
 - 「牛熊现在怎样」：页面「牛熊：现在处于哪个阶段」或日报「市场状态」（离 250 日线的 %、20 个交易日的变化 pp、离翻转还差多少 %）
 - 「现在偏向哪边 / 市场健康吗 / 有什么威胁消息」：Mac 的 `~/.qbreak/home/out/dashboard.html`（每 15 分钟，账本页面顶上有链接）或日报「一眼看懂」；
   消息的全文列表 `~/.qbreak/home/cache/news/news.json`；定时任务日志 `~/.qbreak/home/logs/com.qbreak.news.out|err`
