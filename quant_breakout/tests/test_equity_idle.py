@@ -120,9 +120,9 @@ def test_selection_rules():
                       "Q3": (11.2, -20.0, 0.56),                               # 年化只高 0.7 ✗
                       "Q4": (12.3, -31.0, 0.397),                              # ✓，Calmar 与 Q5 相差 < 0.02
                       "Q5": (12.1, -30.0, 0.403),
-                      "Q6": (None, None, None)} for t in ("E", "J")})
+                      "Q6": (11.6, -30.0, 0.39)} for t in ("E", "J")})       # 年化 +1.1 < 该候选的门槛 1.13 ✗
     win, q = S.pick_a(acct)
-    assert q["Q2"] == (False, ["E 回撤", "J 回撤"]) and q["Q3"][1] == ["E 年化", "J 年化"] and not q["Q6"][0]
+    assert q["Q2"] == (False, ["E 回撤", "J 回撤"]) and q["Q3"][1] == ["E 年化", "J 年化"] and q["Q6"][1] == ["E 年化", "J 年化"]
     assert win == "Q4"                                                          # Q5 0.403 最高，Q4 相差 < 0.02 且年化更高
     acct["J"]["Q4"]["cagr"] = 11.4                                              # J 只高 0.9 pp → 不入围
     assert S.pick_a(acct)[0] == "Q5"
@@ -133,8 +133,35 @@ def test_selection_rules():
     assert ad == "P1" and res["P2"]["why"] == ["E 年化", "J 年化"] and res["P3"]["why"] == ["E Calmar", "J Calmar"]
     assert res["P4"]["ok"] and res["P1"]["d_calmar"] == 0.037
     assert S.decision("Q1", "P1", None) == {"mode": "Q1", "overlay": "P1", "change": True}
-    assert S.decision(None, None, "P3") == {"mode": "K0", "overlay": "P3", "change": True}
+    assert S.decision(None, None, "P3", True) == {"mode": "K0", "overlay": "P3", "change": True}
+    assert S.decision(None, None, "P3", False)["change"] is False                # 只是不低于、没有高 1 pp → 不换
     assert S.decision(None, None, None)["change"] is False
+    for t in ("E", "J"):
+        acct[t]["S0+P1"] = {"cagr": 11.5, "dd": -30.0, "calmar": 0.38}
+    assert S.fallback_ok(acct, "S0+P1")
+    acct["E"]["S0+P1"]["cagr"] = 11.4
+    assert not S.fallback_ok(acct, "S0+P1")
+    for t in ("E", "J"):                                                        # 同分比较不四舍五入：0.0204 vs 0.0400 相差 0.0196 < 0.02
+        acct[t].update({"Q1+P1": {"cagr": 12.5, "dd": -30.0, "calmar": 0.4004}, "Q1+P4": {"cagr": 12.5, "dd": -30.0, "calmar": 0.42}})
+    assert S.pick_b(acct, "Q1")[0] == "P1"
+
+
+def test_fx_cleaning_and_inverse_levels():
+    import equity_idle_study as S
+    d = pd.bdate_range("2008-04-01", periods=8)
+    fx = pd.Series([102.0, 102.5, 102.3, 108.2, 102.6, 102.9, 106.4, 106.5], index=d)
+    ref = pd.Series([102.1, 102.4, 102.2, 102.5, 102.7, 103.0, 106.3, 106.6], index=d)
+    out, fixed = S.clean_fx(fx, ref)
+    assert fixed == [str(d[3].date())] and out.iloc[3] == 102.5 and out.iloc[6] == 106.4   # 尖刺换成 FRED；真的跳动（不回来）不动
+    idx = pd.bdate_range("2006-09-27", periods=6)
+    f = pd.DataFrame({"Open": 100000.0, "High": 100000.0, "Low": 100000.0, "Close": [100000.0, 90000.0, 80000.0, 60000.0, 50000.0, 40000.0],
+                      "Volume": 1e9, "entry": False}, index=idx)
+    sp = {"cfg_over": IC.overlay_cfg("Q1"), "extra_core": {"1545.T": f.copy(), "2842.T": f.copy()}}
+    sp2 = S.level_at(sp, "2006-10-01")                                           # 窗口第一天之前最后一天 = 09-29 的 80000
+    assert sp2["extra_core"]["2842.T"]["Close"].loc["2006-09-29"] == S.REF_PX["2842.T"]
+    assert sp2["extra_core"]["1545.T"] is sp["extra_core"]["1545.T"] and sp["extra_core"]["2842.T"]["Close"].iloc[0] == 100000.0
+    b = S.spec_b("S0", "P1", {"1655.T": f, "2238.T": f}, {"US": pd.Series(False, index=idx)}, {})
+    assert set(b["extra_core"]) == {"1655.T", "2238.T"} and b["cfg_over"]["core_index"] == {"1655.T": "EQ", "2238.T": "IV"}
 
 
 def test_core_only_stats_share_and_switches():
