@@ -36,6 +36,8 @@ class MixEngine(MS.MLEngine):
     EXTRA_BEAR: dict = {}                                                    # 另外的牛熊判定 {键: 布尔 Series（True = 熊）}，核心 ETF 用 core_index 指向它
     PRIORITY: dict = {}                                                      # {(票, 信号日): 分数}：同一天的新仓候选按分数高的先（没有的 = 0）
     PARAMS_T: dict = {}                                                      # {票: StrategyParams}：这些票用另一套出场参数（例：ETF 趋势仓位；缺省空 = 不变）
+    PARAMS_TD: dict = {}                                                     # {(票, 成交日 "YYYY-MM-DD"): StrategyParams}：那一笔持仓用另一套出场参数
+                                                                             # （例：按月变的持有天数 / 止损，bnf_adapt_study；缺省空 = 不变；只研究用）
 
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
@@ -62,7 +64,23 @@ class MixEngine(MS.MLEngine):
             self.bear["HG"] = self.bear["US"] | ~ys
             self.core_expo["UH"] = self.core_expo["HG"] = np.ones(n)
 
+    def _open(self, t: str, m: str, shares: int, px: float, i: int) -> None:
+        self._opening = (t, str(self.gidx[i].date()))                           # 开仓时止损按这一笔的参数（PARAMS_TD 以成交日为键）
+        try:
+            super()._open(t, m, shares, px, i)
+        finally:
+            self._opening = None
+
     def _p(self, t: str):
+        td = MixEngine.PARAMS_TD
+        if td:
+            op = getattr(self, "_opening", None)
+            key = op if (op and op[0] == t) else None
+            if key is None:
+                ps = getattr(self, "st", None) and self.st.pos.get(t)
+                key = (t, ps.entry_date) if ps is not None else None
+            if key is not None and key in td:
+                return td[key]
         return MixEngine.PARAMS_T.get(t) or super()._p(t)
 
     def _is_pb(self, t: str) -> bool:
@@ -183,7 +201,8 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             limit_k: float = 0.0, pb_use_dead: bool = False, cfg_over: dict | None = None, jp_bull_only: bool = False,
             extra_core: dict | None = None, pref_us: pd.Series | None = None, core_expo: dict | None = None,
             yen_strong: pd.Series | None = None, extra_bear: dict | None = None, priority: dict | None = None,
-            em_scale: pd.Series | None = None, params_t: dict | None = None, em_tick: dict | None = None) -> dict:
+            em_scale: pd.Series | None = None, params_t: dict | None = None, em_tick: dict | None = None,
+            params_td: dict | None = None) -> dict:
         names = list(ind)
         key = tuple(names) + (("nomult",) if not mult else ())
         if key not in em_cache and not mult:
@@ -225,6 +244,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
         MixEngine.PREF_US, MixEngine.YEN_STRONG, MixEngine.EXTRA_BEAR = pref_us, yen_strong, (extra_bear or {})
         MixEngine.PRIORITY = priority or {}
         MixEngine.PARAMS_T = params_t or {}
+        MixEngine.PARAMS_TD = params_td or {}
         try:
             c = replace(cfg, **cfg_over) if cfg_over else cfg
             xc = extra_core or {}
@@ -234,7 +254,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             r = eng.run(start=start, end=end)
         finally:
             MixEngine.PB, MixEngine.LIMIT_K, MixEngine.PB_USE_DEAD, MixEngine.PREF_US, MixEngine.YEN_STRONG = {}, 0.0, False, None, None
-            MixEngine.EXTRA_BEAR, MixEngine.PRIORITY, MixEngine.PARAMS_T = {}, {}, {}
+            MixEngine.EXTRA_BEAR, MixEngine.PRIORITY, MixEngine.PARAMS_T, MixEngine.PARAMS_TD = {}, {}, {}, {}
         tr = r.trades[r.trades["reason"] != "end"]
         st = tr[~tr["ticker"].isin(["1655.T", *(extra_core or {})])] if len(tr) else tr
         out = {w: {**CS.seg_stats(r.equity, a, b), "tot": seg_total(r.equity, a, b)} for w, (a, b) in windows.items()}
