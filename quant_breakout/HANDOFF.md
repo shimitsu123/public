@@ -320,6 +320,7 @@
   ① 今天开盘已决定的单；② 持仓：明天（s1）收盘到哪个价位触发哪条卖出规则（→ 后天 s2 开盘卖）、最迟满 60 个交易日的日期、情景（持平 / 每天 ±1%）下最早哪天卖、历史统计的「再持有中位几天」（`var/timeline_stats.json`）；③ 候补队列前 15 只：s1 收盘落在什么价格区间 + 成交量多少股以上会出买点（→ s2 开盘买）与挡住的理由（资格检查 / 指数剔除 / 新仓倍数 0 / 一手买不起 / 决算前 / 名额满 / 横盘不成立 / MACD 已在信号线之上 …）；④ 横展开：整个股票池 225 只里，情景推算未来 10 个交易日最早哪天会出买点（价格条件成立的那天按刚好放量、含 W2 用完整的买入条件核对）；⑤ 闲置资金的牛熊翻转线；⑥ 日历（满 60 天、决算日、指数入替、周线完成）。
   价位不是另写的规则：在最后一根 K 线后接假设 K 线（开盘 = 前收、没有影线），买点用 `qbreak/strategy.py` 重算、卖出按引擎 `_check_exits` 的顺序；`tests/test_timeline.py` 用真实引擎逐条核对（卖出日期 / 理由 / 卖出线两侧、买点区间上下沿与成交量门槛）。决算形态 `qbreak/earn_state.py`（定义 = 登记研究的 `scripts/earn_traj_data.py`）：持仓、候补队列、时间线每行旁标出（扭亏为盈 / 盈利加速 = 绿、盈转亏 / 亏损扩大 = 红，开示 > 100 天标「旧」；J-Quants 每只每天最多取一次，原始数据只在 `var/cache/`）。
 - W2 的日均版 W2d（2026-09-29 用户：「要先登记一个『按日均量（周合计 ÷ 交易日数）算周线量比』的对照研究」；登记 e24f9b3 + 运行前修正 dded207、`scripts/w2d_study.py` → `var/out/w2d_study.md`）：连休短周之后合计版几乎全挡（2〜3 天周保留 0%），日均版保留 33〜75%，但完整 5 天周之后反而少保留（E 63% → 54%、J 55% → 45%）→ 整个账户（S0C2 + X6）Calmar W2 → W2d：Z 1.760 → 1.843、E 0.319 → 0.306（−0.013，门槛 −0.01）、J 0.401 → 0.399；E + J 合计 −0.015（门槛 +0.02）→ **没通过，维持 W2**，模拟盘 / 执行器 / 前向记录都不变。逐笔换进来 vs 换出去只有 J（2017〜）日均版更好（+3.23% vs −0.38%），Z、E 反过来（+0.38% vs +8.98%、+0.67% vs +2.25%）。
+- 周末 / 祝日 / 年末年始（2026-09-29 用户：「周末和年休还有红日子现在考没考虑进去 … 横展开」「休息的时候 … 参照日经225指数主连 拉低个股的周线和月线有什么问题」）：**已经考虑进去** —— 东证日历按历年祝日规则（今天对东证官方营业日历 2016-09-29〜2027-12-31 逐日一致，只有 2020-10-01 系统故障日是有意的差别）、行情的休市假行读入即去掉、周 / 月线只用真实交易日聚合。横展开修正：① 决算前 2 个交易日不进场以前只跳过周末（黄金周前后会漏挡）→ 按交易所日历（09-30 起）；② 美国日历改成规则计算（以前只到 2027）；③ 日报「09:00 日本开盘」写上实际成交日、休市日加提示；④ 数据体检加官方日历核对（含将来）。周 / 月线：价格线不会被拉低，只有「合计」成交量被拉低（W2 已检验两种修法都没更好 → 维持）。日経225先物不拿来补个股的休市日（那是假行情），只作开盘跳空参考：日报一行 CME 先物 ÷ 东证最后收盘（历史上休市期间 CME 涨 > 2% 时平均 29% 的票高开 3% 以上）。研究不重跑（09-28 / 09-29 已在干净数据上复核）；`var/out/holiday_gaps.md`、sim_changes 2026-09-29「周末 / 祝日 / 年末年始 横展开」。
 - 现在的选股方法放在楽天的美股还是立花的日経225（2026-09-29 用户问；登记 1ba090e、`scripts/market_compare_study.py` → `var/out/market_compare_study.md`）：
   同一套个股规则（W2 + X6、4 × 25%）、同一个推进器 → 按事先读法 **日経（立花）更好**（两个窗口的每笔净收益与个股层 Calmar 都是日経高）：
   每笔 2006〜2016 +2.74% vs +0.30%、2017〜 +0.55% vs −0.86%；楽天来回约 1% 的手续费每年约 4〜6 万円（立花 0.1〜0.3 万円），
@@ -399,7 +400,7 @@
 - 个股：日経225 股票池的突破信号（`qbreak/strategy.py`，参数 `qbreak/config.py` + `var/best_params_JP.json`）；
   4 个名额 × 权益 25%，单只 ≤ 34%；按名额买不到一手（100 股）就跳过（一手放宽 2026-09-27 生效前撤回，`var/sim.json` 的
   unified.one_lot_cap_pct = 0）；新仓倍数 = 量化状态层 × 宏观层 × 板块倾斜；事件窗口关闭；
-  决算前 2 个交易日不进场（`var/best_params.json` 的 earnings_blackout_days；取不到决算日时不拦截）；
+  决算前 2 个交易日不进场（`var/best_params.json` 的 earnings_blackout_days；交易日按东证日历数，2026-09-30 起含祝日；取不到决算日时不拦截）；
   **W2（2026-09-27 用户确认启用）**：最近完成的一周成交量 ÷ 之前 10 周平均 < 1.0 的突破不买（`var/best_params_JP.json` 的
   min_weekly_vol_ratio；周的完成按东证日历；历史不够不拦截）
 - **下单前资格检查（2026-09-28 用户要求）**：被踢出日経225（名单对照 ja.wikipedia）、被 JPX 指定（特別注意 / 監理 / 整理）、上場廃止（含预定）、
@@ -447,7 +448,7 @@
 - 季度决算的轨迹：`scripts/earn_traj_data.py`（J-Quants 決算短信 → 单季营业利润、Yahoo → 美股每季 EPS、六种形态）、
   `scripts/earn_traj_study.py`（登记 fabde0b：事件层 + 选股层）→ `var/out/earn_traj_study.md`
 - 日报的决算形态（㊱）：`qbreak/earn_state.py`（panel / state_of / tag_html；缓存 `var/cache/jquants/fins_code/`，不入库）
-- 买卖时间线：`qbreak/timeline.py`（build / buy_trigger / sell_levels / scenario_entry / scenario_exit / html；run.py 的 `_timeline_panel` 接进 sim-day）、测试 `tests/test_timeline.py`（真实引擎核对）；「预计卖出」的统计 `scripts/timeline_stats.py` → `var/timeline_stats.json`（规则或股票池改了就重跑）；W2 × 连休短周的描述 `scripts/w2_short_week.py` → `var/out/w2_short_week.md`（㊲ 的背景）；W2 的日均版 W2d 对照 `scripts/w2d_study.py` → `var/out/w2d_study.md`（㊲，没通过；定义 `qbreak/mtf.weekly_volume_ratio_per_day` 只研究用）
+- 买卖时间线：`qbreak/timeline.py`（build / buy_trigger / sell_levels / scenario_entry / scenario_exit / html；run.py 的 `_timeline_panel` 接进 sim-day）、测试 `tests/test_timeline.py`（真实引擎核对）；「预计卖出」的统计 `scripts/timeline_stats.py` → `var/timeline_stats.json`（规则或股票池改了就重跑）；W2 × 连休短周的描述 `scripts/w2_short_week.py` → `var/out/w2_short_week.md`（㊲ 的背景）；W2 的日均版 W2d 对照 `scripts/w2d_study.py` → `var/out/w2d_study.md`（㊲，没通过；定义 `qbreak/mtf.weekly_volume_ratio_per_day` 只研究用）；周末 / 祝日：东证日历 `qbreak/calendar_jp.py`、美国日历 `qbreak/calendar_us.py`（规则计算）、休市期间日経225先物参考 `qbreak/holiday_gap.py`（日报一行）与描述 `scripts/holiday_gap_study.py` → `var/out/holiday_gaps.md` / `var/holiday_gaps.json`
 - 行情缓存：`qbreak/data.py`（有效期 12 小时 + 按交易日历查新鲜度；盘中取的缓存在收盘后视为过期、重新下载 —— 2026-09-29 修正，以前收盘后 12 小时内会把盘中快照当成收盘价；重下载失败去掉那一根并记为「行情落后」）
 - 下单前资格检查：`qbreak/eligibility.py`（快照 `var/out/eligibility.json`；只读检查 `run.py eligibility`）；成本 × 销售显示与 S2 前向记录：`qbreak/cost_sales_forward.py`
   （复核 / 当前分组 `scripts/cost_sales_forward.py --review | --show`）
@@ -518,6 +519,7 @@
   演练（立花适配器 + 模拟交易所）：5 年年化 22.99% vs 回测 23.02%（−¥3,864）；20 年 12.87% vs 12.87%（−¥4,865）
 - 立花デモ環境价格是假的、每天重置 → 只能检查 API 字段与流程；开盘前买付可能額的实际行为要本番头几天确认
 - Mac 要开着且已登录（合盖 / 关机就不跑）；云端例行任务失败时 Mac 用手上最新的输入继续，并提示
+- 日历：东证的将来休日来自规则 + 官方日历核对（J-Quants 的官方日历目前到 2027-12-31；新的特别休日 / 临时休市要改 `qbreak/calendar_jp.py`，季度数据体检 A2b 会报出来）。日経225先物的休市期间行情只有 CME（Yahoo NIY=F）；大阪的祝日取引数据要 J-Quants Premium（现在是 Standard）
 
 ## 路线图 / 未来的展望
 1. 2026-09-28 起：模拟期（到 12-24）。每天看页面与「与云端一致」；第一周重点确认通知、页面按时出现，比较没有无法解释的差异

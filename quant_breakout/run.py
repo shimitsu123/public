@@ -1280,6 +1280,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     except Exception:                                        # noqa: BLE001
         pass
     out["calendar"] = _calendar_panel(today)                 # 检查日历：接下来 45 天有日期的检查 + 远期判定（只展示；全貌 CHECK_TIMELINE.md）
+    out["jp_futures"] = _jp_futures_panel(state.last_date, today)   # 东证休市期间 / 隔夜的日経225先物 → 今天开盘的跳空参考（只展示）
     out["price_check"] = pcheck                              # 行情交叉核对（yfinance × J-Quants）：告警进日报「数据完整性」
     if usdjpy is None:                                       # 状态里没有汇率时（例如首日）：备用来源
         out["usdjpy"], out["usdjpy_src"] = _usdjpy_any()
@@ -1535,6 +1536,17 @@ def _macro_now_panel(extras: dict) -> dict:
     except Exception as e:                                   # noqa: BLE001
         log.warning("市场健康度 / 新数据面板失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"}
+
+
+def _jp_futures_panel(bar_date, today) -> dict | None:
+    """日経225先物（CME，Yahoo NIY=F）÷ 东证最后收盘 → 下一个开盘的跳空参考；中间有东证休市的平日会标出（qbreak/holiday_gap.py）。
+    2026-09-29 用户「休息的时候没有交易的话要参照日经225指数主连指数」：只展示，不补个股的休市日、不改交易。取不到 → None。"""
+    try:
+        from qbreak import holiday_gap as HG
+        return HG.panel(bar_date, today)
+    except Exception as e:                                  # noqa: BLE001
+        log.warning("日経225先物参考取不到：%s", e)
+        return None
 
 
 def _calendar_panel(today) -> dict:

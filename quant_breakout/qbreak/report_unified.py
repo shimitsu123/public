@@ -632,7 +632,14 @@ def render_unified_html(d: dict) -> str:
                                 '（现在是开始前的预览，不下单）</li>' if d.get("preview") else '<li class="muted">无</li>')
 
     sen = round(float(cfg.get("fx_spread_yen", 0.25)) * 100)
-    todo_html = f'<h3>09:00 日本开盘（寄付）</h3><ul>{rows(td.get("JP", []), "JP")}</ul>'
+    from .calendar_jp import is_trading_day, next_trading_day
+    from .holiday_gap import html as _fut_html
+    wdn = "月火水木金土日"
+    fill = next_trading_day(dt.date.fromisoformat(str(d["bar_date"])[:10])) if d.get("bar_date") else None
+    head = f"{fill:%m/%d}（{wdn[fill.weekday()]}）09:00 日本开盘（寄付）" if fill else "09:00 日本开盘（寄付）"
+    hol = (f"<p class='muted'>今天 {today:%m/%d}（{wdn[today.weekday()]}）东证休市：上面的单在 {fill:%m/%d}（{wdn[fill.weekday()]}）开盘成交"
+           f"（执行器在休市日发出的寄付单，券商按下一个营业日受理）。</p>") if fill and today < fill and not is_trading_day(today) else ""
+    todo_html = f'<h3>{head}</h3><ul>{rows(td.get("JP", []), "JP")}</ul>{hol}{_fut_html(d.get("jp_futures"))}'
     if with_us or td.get("FX") or td.get("US") or float(d.get("cash_usd") or 0) > 0:   # 只做日本个股且没有美元时不显示
         todo_html += (f'<h3>日间 换汇（リアルタイム為替：手数料 0 銭，价差按片道 {sen:g} 銭估）</h3><ul>{rows(td.get("FX", []), "FX")}</ul>'
                       f'<h3>{usopen} 美股开盘（日本时间）</h3><ul>{rows(td.get("US", []), "US")}</ul>')

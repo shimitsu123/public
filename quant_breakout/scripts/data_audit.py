@@ -4,6 +4,7 @@
   A 行情缓存（yfinance）：日経225 今天的成员与 10/1 之后的成员、扩大池（TOPIX 1000 其余）、指数 / 1655 / 汇率 ——
     有没有、最后日期、交易日历上缺的天、休市日的假行、成交量 0、没有解释的单日 ±35% 以上、重复日期
   A2 交易日历（calendar_jp）对 J-Quants（2016-09〜）与 ^N225（2005〜2016-08）的真实交易日
+  A2b 交易日历对东证官方营业日历（J-Quants /markets/calendar，含将来到明年年底）；美国日历（规则计算）对 ^GSPC
   B 交叉核对：yfinance vs J-Quants（2016-10〜）—— 同一天涨跌幅差 > 5% 的天数，分成「前后一天合起来一致」（涨跌停 / 日期错一天）与
     「比值从此变了」（拆股 / 分红复权错位；近 2 年的会影响模拟盘）；最后一天的收盘是否一致、两边互缺的交易日
   C J-Quants 缓存：全市场面板的日期与只数、日経225 是否都在、月末上市一览最新一期、キー是否已设置（只看有没有）
@@ -386,6 +387,45 @@ def check_calendar(today: dt.date) -> None:
         + (f"；其它 {y2x[:5]}" if y2x else "") + f"；成交量 0 的行 {len(fake)} 行（休市日的假行 / 早年没有成交量）", "Z / E 窗口的研究")
 
 
+
+CAL_KNOWN = {dt.date(2020, 10, 1)}        # 官方是营业日（东证系统故障全天停止交易），calendar_jp 按休市 —— 有意的差别
+
+
+@guarded("A 行情")
+def check_calendar_official(today: dt.date) -> None:
+    """东证官方营业日历（J-Quants /markets/calendar：过去约 10 年 + 到明年年底；HolDiv 1 = 营业日、2 = 半日立会、0 = 休业日、
+    3 = 休业日但大阪有祝日取引）逐日对 calendar_jp —— 包括将来的日子（新的特别休日、临时休市要提前改日历）。
+    美国：calendar_us（规则计算）对 ^GSPC 21 年缓存的交易日。2026-09-29 加（用户：「周末和年休还有红日子现在考没考虑进去」）。"""
+    from qbreak.calendar_jp import is_trading_day
+    if not os.environ.get("JQUANTS_API_KEY"):
+        add("A 行情", "交易日历 vs 东证官方日历（含将来）", "缺", "没有 JQUANTS_API_KEY：取不了官方日历（只检查有没有，不打印）", "所有回测、日报、执行器")
+    else:
+        from qbreak.jquants import JQuants
+        rows = JQuants().get("/markets/calendar")
+        items = sorted((dt.date.fromisoformat(str(r["Date"])[:10]), str(r.get("HolDiv"))) for r in rows if r.get("Date"))
+        bad = [d for d, div in items if (div in ("1", "2")) != is_trading_day(d) and d not in CAL_KNOWN]
+        nxt = [d for d, div in items if today < d <= today + dt.timedelta(days=366) and d.weekday() < 5 and div not in ("1", "2")]
+        h3 = [d for d, div in items if d > today and div == "3"]
+        add("A 行情", "交易日历 vs 东证官方日历（J-Quants，含将来）", "OK" if not bad else "问题",
+            f"{items[0][0]}〜{items[-1][0]}（{len(items)} 天）：不一致 {len(bad)} 天" + (f"（{bad[:5]}）" if bad else "")
+            + "（2020-10-01 官方是营业日、全天停止交易，日历按休市：有意的差别）；接下来 12 个月平日休市 "
+            + f"{len(nxt)} 天（{'、'.join(d.strftime('%m/%d') for d in nxt[:12])}{' …' if len(nxt) > 12 else ''}）"
+            + f"；其中大阪有祝日取引（日経225先物等）{len(h3)} 天；官方日历到 {items[-1][0]}（每年年底前会公布再下一年）",
+            "所有回测、日报、执行器、买卖时间线（什么时候开市、周线哪天完成）")
+    from qbreak import calendar_us as CU
+    g = read_px("^GSPC", 21)
+    if g is None:
+        add("A 行情", "美国交易日历 vs ^GSPC", "缺", "没有 ^GSPC 21 年缓存", "宏观事件窗口、美股决算前回避")
+        return
+    have = {d.date() for d in g.index}
+    days = [d.date() for d in pd.bdate_range(g.index[0], g.index[-1])]
+    x1 = [d for d in days if CU.is_trading_day(d) and d not in have]
+    x2 = [d for d in days if not CU.is_trading_day(d) and d in have]
+    add("A 行情", "美国交易日历（规则计算）vs ^GSPC", "OK" if not x1 and not x2 else "问题",
+        f"{days[0]}〜{days[-1]}：日历说开市、^GSPC 没有 {len(x1)} 天" + (f"（{x1[:5]}）" if x1 else "")
+        + f"；日历说休市、^GSPC 有 {len(x2)} 天" + (f"（{x2[:5]}）" if x2 else ""), "宏观事件窗口、美股决算前回避、T+1")
+
+
 # ── D 日银 ──
 @guarded("D 日银")
 def check_boj(today: dt.date) -> None:
@@ -725,6 +765,7 @@ def main() -> int:
     check_leap_yf(today)
     check_jquants(today)
     check_calendar(today)
+    check_calendar_official(today)
     extra["yf_vs_jq"] = check_yf_vs_jq(today)
     check_boj(today)
     check_macro(today)

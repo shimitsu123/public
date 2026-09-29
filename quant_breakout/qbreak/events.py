@@ -80,11 +80,17 @@ class FakeEarnings:
         return self.table.get(ticker)
 
 
-def trading_days_until(target: dt.date, today: dt.date) -> int:
-    """粗略交易日数（只跳过周末，足够做"N 日内回避"）。"""
+def trading_days_until(target: dt.date, today: dt.date, market: str = "JP") -> int:
+    """today 之后到 target（含）的交易日数：日本按东证日历（周末 + 祝日 + 年末年始），美国按 NYSE 日历。
+    2026-09-29 修正：以前只跳过周末 → 连休前后多数了祝日，「决算前 N 个交易日不进场」会漏挡
+    （例：4/30 看 5/7 的决算，中间是黄金周，实际 2 个交易日，旧算法数成 5 个）。"""
+    if str(market).upper() == "US":
+        from .calendar_us import is_trading_day
+    else:
+        from .calendar_jp import is_trading_day
     n, d = 0, today
     while d < target:
         d += dt.timedelta(days=1)
-        if d.weekday() < 5:
+        if is_trading_day(d):
             n += 1
     return n

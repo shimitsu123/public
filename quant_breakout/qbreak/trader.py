@@ -50,7 +50,7 @@ def _earnings_days(provider, ticker: str, today: dt.date) -> int | None:
     if d is None:
         return None
     from .events import trading_days_until
-    return trading_days_until(d, today)
+    return trading_days_until(d, today, "JP" if ticker.upper().endswith(".T") else "US")
 
 
 def market_session_closed(market: str, now: dt.datetime | None = None) -> tuple[dt.date, bool]:

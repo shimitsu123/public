@@ -102,6 +102,23 @@ def test_trading_days_until_skips_weekends():
     assert trading_days_until(dt.date(2026, 9, 28), dt.date(2026, 9, 24)) == 2   # 木→月：金、月
 
 
+def test_trading_days_until_skips_exchange_holidays():
+    """2026-09-29 修正：以前只跳过周末，黄金周前后会多数祝日 →「决算前 2 个交易日不进场」漏挡。"""
+    assert trading_days_until(dt.date(2026, 5, 7), dt.date(2026, 4, 30)) == 2    # 5/1 与 5/7（5/4〜5/6 是祝日）；旧算法 5
+    assert trading_days_until(dt.date(2026, 9, 24), dt.date(2026, 9, 18)) == 1   # 9/21〜23 连休
+    assert trading_days_until(dt.date(2027, 1, 4), dt.date(2026, 12, 30)) == 1   # 12/31〜1/3 年末年始
+    assert trading_days_until(dt.date(2026, 11, 27), dt.date(2026, 11, 25), "US") == 1   # 美股：感恩节 11/26 休市，只数 11/27
+    assert trading_days_until(dt.date(2026, 11, 27), dt.date(2026, 11, 25), "JP") == 2   # 日本 11/26・27 都开市
+    assert trading_days_until(dt.date(2026, 11, 26), dt.date(2026, 11, 25), "US") == 0
+
+
+def test_earnings_days_uses_the_ticker_market_calendar():
+    from qbreak.trader import _earnings_days
+    prov = FakeEarnings({"7203.T": dt.date(2026, 5, 7), "AAPL": dt.date(2026, 7, 6)})
+    assert _earnings_days(prov, "7203.T", dt.date(2026, 4, 30)) == 2              # 黄金周：挡（≤ 2）
+    assert _earnings_days(prov, "AAPL", dt.date(2026, 7, 1)) == 2                 # 7/2、7/6（7/3 独立日补休）
+
+
 def test_earnings_blackout_blocks_entry(tmp_path):
     from qbreak.trader import run_once
     T = "9999.T"

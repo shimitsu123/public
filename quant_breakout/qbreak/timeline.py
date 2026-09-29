@@ -425,7 +425,7 @@ def build(frames: dict, p_entry, p_exit, *, bar_date: dt.date, positions: dict, 
             blocks.append(f"一手 ¥{lot_px * 100:,.0f} > 每个名额 ¥{budget:,.0f}（权益 × {position_pct:g} × 新仓倍数 {mult:g}）→ 买不起就跳过")
         ed = earn.get(t)
         if ed:
-            e_days = trading_days_until(dt.date.fromisoformat(ed), s2)
+            e_days = trading_days_until(dt.date.fromisoformat(ed), s2, "JP")
             if e_days <= int(p_entry.earnings_blackout_days or 0):
                 blocks.append(f"{ed} 决算：{s2} 在决算前 {e_days} 个交易日内，不进场")
         if free <= 0:
