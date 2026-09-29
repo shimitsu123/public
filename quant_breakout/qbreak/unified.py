@@ -220,6 +220,8 @@ class UnifiedEngine:
     params：{"JP": StrategyParams, "US": StrategyParams}（离场规则按市场）；ex：{"JP": ExecConfig, "US": ExecConfig}；
     core_cost：{ETF: 成本字典}；fx：DataFrame(Open, Close)（USD/JPY）；entry_mult：{"JP"/"US": DataFrame(日期 × 票)}，
     按成交日取（缺省 1）；bear：{"JP"/"US": 布尔 Series}，True = 该市场收盘时熊市（核心 ETF 目标 0）；
+    另外的键（qbreak/idle_cash.py 的 "TR:<票>" / "RT:<票>" / "XR"）= 闲置资金那只 ETF 自己的开关，核心 ETF 用 core_index 指向它；
+    core_index 指向的键没有给 → 那只按熊（目标 0，留现金）；
     core_expo：{"JP"/"US": 0〜1 的 Series}，非熊市时核心 ETF 目标再乘这个比例（缺省 1；择时研究的分级持仓用）。"""
 
     def __init__(self, ind: dict[str, pd.DataFrame], cfg: UnifiedConfig, params: dict[str, StrategyParams],
@@ -252,12 +254,13 @@ class UnifiedEngine:
                 if market_of(t) != "US" or t in self.core_set or "US" not in cfg.stock_markets:
                     continue
                 self.us_imminent |= imminent_flags(df).reindex(self.gidx).fillna(False).to_numpy(bool)
+        keys = list(MKT) + [k for k in (bear or {}) if k not in MKT]
         self.bear = {m: (bear[m].reindex(self.gidx.union(bear[m].index)).ffill().reindex(self.gidx)
                          .fillna(False).to_numpy(bool) if bear and bear.get(m) is not None else np.zeros(n, bool))
-                     for m in MKT}
+                     for m in keys}
         self.core_expo = {m: (core_expo[m].reindex(self.gidx.union(core_expo[m].index)).ffill().reindex(self.gidx)
                               .fillna(1.0).clip(0.0, 1.0).to_numpy(float)
-                              if core_expo and core_expo.get(m) is not None else np.ones(n)) for m in MKT}
+                              if core_expo and core_expo.get(m) is not None else np.ones(n)) for m in keys}
         self.fees = {m: ex[m].fee for m in MKT}
         self.slip = {m: ex[m].slippage_pct / 100 for m in MKT}
         self.c_fee = {t: {s: side_fee(core_cost[t], s) for s in ("BUY", "SELL")} for t in cfg.core}
@@ -700,6 +703,11 @@ class UnifiedEngine:
         self._decide_core(i, eq, exit_ts, used_jpy + fx_jpy, cash_est + pre_jpy, used_usd, fx,
                           usd_stay=st.cash_usd - (back if pre and back > 1.0 else 0.0))
 
+    def _core_bear(self, t: str, i: int) -> bool:
+        """核心 ETF t 在第 i 天收盘时算不算熊（目标 0）：core_index 指向的键；键不在 → 熊（留现金，不猜）。"""
+        b = self.bear.get(self.cfg.core_index.get(t, "JP"))
+        return True if b is None else bool(b[i])
+
     def _decide_core(self, i: int, eq: float, exit_ts: list, reserve: float, cash_est: float,
                      plan_usd: float, fx: float, usd_stay: float | None = None) -> None:
         """核心 ETF（东证上市、日元）目标额 = 权益 − 继续持有的个股 − 明早的日本买入与换汇预留 − 美元现金
@@ -720,7 +728,7 @@ class UnifiedEngine:
         tgt_total = (eq * (1 - cfg.core_buffer_pct / 100) - stock_after - reserve
                      - usd_stay * fx - us_exiting)
         w = {t: float(v) for t, v in cfg.core.items()}
-        bear = {t: bool(self.bear[cfg.core_index.get(t, "JP")][i]) for t in w}
+        bear = {t: self._core_bear(t, i) for t in w}
         if cfg.core_mode == "follow":
             bull_w = sum(v for t, v in w.items() if not bear[t])
             share = {t: (v / bull_w if bull_w > 0 and not bear[t] else 0.0) for t, v in w.items()}
@@ -737,7 +745,8 @@ class UnifiedEngine:
             if price <= 0 or not np.isfinite(price):
                 continue
             units, lot = int(st.core_units.get(t, 0)), int(self.lots[j])
-            xp = float(self.core_expo[cfg.core_index.get(t, "JP")][i])
+            xe = self.core_expo.get(cfg.core_index.get(t, "JP"))
+            xp = float(xe[i]) if xe is not None else 1.0
             tgt = 0 if bear[t] or share[t] <= 0 else int(np.floor(max(0.0, tgt_total * share[t] * xp) / price / lot)) * lot
             sell = buy = 0
             if tgt < units and (tgt == 0 or (units - tgt) * price > band):

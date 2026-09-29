@@ -89,7 +89,9 @@ BROKERS["tachibana"] = {
             "定額コース见 tachibana_teigaku()；不做美股、无换汇",
     "markets": {"JP": {"commission_tiers": TACHIBANA_KOBETSU}},
     "etf": {t: {"buy_fee_tiers": TACHIBANA_KOBETSU, "sell_fee_tiers": TACHIBANA_KOBETSU, "slip_pct": sl, "lot": lot}
-            for t, sl, lot in (("1329.T", 0.03, 1), ("1655.T", 0.02, 10), ("2558.T", 0.03, 1))},
+            for t, sl, lot in (("1329.T", 0.03, 1), ("1655.T", 0.02, 10), ("2558.T", 0.03, 1),
+                               # 闲置资金的候选（qbreak/idle_cash.py；2026-09-29 登记）：滑点按 2026-08 的日均成交额事先写定、一手 1 口（JPX）
+                               ("1540.T", 0.03, 1), ("133A.T", 0.05, 1), ("1671.T", 0.05, 1), ("2238.T", 0.20, 1))},
 }
 DEFAULT_BROKER = {"JP": "tachibana", "US": "rakuten"}
 # 2026-09-25（深夜）用户改用立花：不做美股个股后，楽天的美元 / 换汇逻辑用不到；立花 API 能在 Mac / 云端无人值守自动下单
