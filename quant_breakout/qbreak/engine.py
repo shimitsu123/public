@@ -33,7 +33,7 @@ from .fees import side_fee
 from .tick import limit_lock, lot_size
 
 EXIT_REASONS = ("stop", "gap_stop", "trail", "take_profit", "dead_cross", "climax",
-                "max_hold", "time_stop", "end")
+                "max_hold", "time_stop", "end", "chandelier", "sar_flip")   # 后两个只在 qbreak/unified.py（模拟盘 / 执行器的 exits）
 
 
 @dataclass
@@ -74,6 +74,7 @@ class _Aligned:
         self.entry = np.zeros((n, m), dtype=bool)
         self.dead = np.zeros((n, m), dtype=bool)
         self.climax = np.zeros((n, m), dtype=bool)
+        self.sarflip = np.zeros((n, m), dtype=bool)                # 卖出判定 R4（只有 compute_indicators 打开 exit_sar_flip 时才有这一列）
         for j, t in enumerate(self.tickers):
             df = ind[t]
             loc = gidx.get_indexer(df.index)
@@ -89,6 +90,8 @@ class _Aligned:
             self.dead[loc, j] = df["dead_cross"].to_numpy(dtype=bool)[ok]
             if "climax" in df.columns:
                 self.climax[loc, j] = df["climax"].fillna(False).to_numpy(dtype=bool)[ok]
+            if "sar_flip" in df.columns:
+                self.sarflip[loc, j] = df["sar_flip"].fillna(False).to_numpy(dtype=bool)[ok]
 
 
 def _window(gidx: pd.DatetimeIndex, start, end) -> tuple[int, int]:
@@ -114,6 +117,8 @@ def run_backtest(ind: dict[str, pd.DataFrame], p: StrategyParams, bt: BacktestCo
       个股卖出 → 核心卖出 → 个股买入 → 核心买入（用剩余现金，买不起的部分放弃）。
       core_bear（bool 数组）为 True 的日子目标 = 0（熊市清空核心仓位）。"""
     p.validate()
+    if p.exit_chandelier_k or p.exit_sar_flip:              # 这两种卖法只在 qbreak/unified.py 实现 → 这里不静默忽略
+        raise NotImplementedError("吊灯止损 / SAR 翻转离场只在 qbreak/unified.UnifiedEngine 里实现（模拟盘 / 执行器的 exits）")
     ex, sz = bt.exec_cfg.validate(), bt.sizing.validate()
     if not ind:
         raise ValueError("没有可回测的标的")

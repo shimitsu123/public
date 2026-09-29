@@ -109,6 +109,12 @@ class StrategyParams:
     time_stop_min_ret_pct: float = 0.0
     # 时间止损：持有满 time_stop_days 个交易日仍未达到 time_stop_min_ret_pct 浮盈则离场。
     # 0=关闭。作用是把"不涨不跌"的死钱释放出来。
+    exit_chandelier_k: float = 0.0
+    # 吊灯止损（卖法 X6）：收盘 < 持有以来最高价（从买入价起、每天取当天最高价）− k × ATR(atr_n) → 次日开盘卖。0=关闭。
+    exit_sar_flip: bool = False
+    # 抛物线 SAR（0.02 / 0.02 / 0.2）从价格下方翻到上方的那天收盘 → 次日开盘卖（卖出判定 R4）。
+    # 这两项只由模拟盘 / 执行器的 var/sim.json「exits」段打开（qbreak/exit_rules.py）；var/best_params*.json 不写 ——
+    # 研究脚本与 X6 / R4 前向记录的「现行」仍是 MACD 死叉（登记时的定义）。只在 qbreak/unified.py 的引擎里实现。
 
     def __post_init__(self):
         """按字段声明强制类型。来自 JSON / numpy / 命令行的值可能是 float 或 np.float64，

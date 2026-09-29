@@ -147,6 +147,9 @@ def compute_indicators(df: pd.DataFrame, p: StrategyParams,
     warm = np.arange(len(out)) >= p.warmup_bars
     out["entry"] = (cond.fillna(False).to_numpy(dtype=bool)) & warm
     out["dead_cross"] = out["dead_cross"].fillna(False).astype(bool)
+    if p.exit_sar_flip:                                            # 卖出判定 R4：SAR 翻到价格上方（qbreak/exit_forward.sar_flip 同一个定义）
+        from .exit_forward import sar_flip
+        out["sar_flip"] = sar_flip(out)
     return out
 
 
@@ -157,7 +160,7 @@ INDICATOR_FIELDS = (
     "vol_ma_n", "vol_mult", "require_breakout", "breakout_buffer_pct", "trend_ma_n",
     "min_price", "min_turnover", "atr_n",
     "max_ext_ma20_pct", "rsi_n", "max_rsi", "distribution_lookback", "max_distribution_days",
-    "max_upper_shadow_ratio", "rs_n", "min_rs_pct", "climax_vol_mult",
+    "max_upper_shadow_ratio", "rs_n", "min_rs_pct", "climax_vol_mult", "exit_sar_flip",
 )
 
 

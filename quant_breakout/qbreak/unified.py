@@ -471,7 +471,8 @@ class UnifiedEngine:
             st.fx_reserve_jpy = 0.0
 
     def _check_exits(self, m: str, i: int) -> None:
-        """收盘：止损 / 跟踪止损 / 止盈 / 死叉 / 出货日 / 最长持有 / 时间止损（与 engine.run_backtest 的第 3 步相同）。"""
+        """收盘：止损 / 跟踪止损 / 止盈 / 死叉 / 出货日 / 最长持有 / 时间止损（与 engine.run_backtest 的第 3 步相同）；
+        var/sim.json 的 exits 打开时另有 吊灯止损（X6）/ SAR 翻转（R4），顺序：出货日 → 死叉 → 吊灯 → SAR → 最长持有 → 时间止损。"""
         st, A = self.st, self.A
         for t in list(st.pos):
             ps = st.pos[t]
@@ -517,10 +518,16 @@ class UnifiedEngine:
                     queued = "take_profit"
             ps.last_close = c
             if queued is None:
+                chand = (p.exit_chandelier_k > 0 and np.isfinite(A.atr[i, j])            # 吊灯止损 X6：峰值已含今天的最高价
+                         and c < ps.peak - p.exit_chandelier_k * A.atr[i, j])
                 if p.exit_on_climax and A.climax[i, j] and (c / ps.entry_px - 1) * 100 >= p.climax_min_gain_pct:
                     queued = "climax"
                 elif p.exit_on_macd_dead_cross and A.dead[i, j]:
                     queued = "dead_cross"
+                elif chand:
+                    queued = "chandelier"
+                elif p.exit_sar_flip and A.sarflip[i, j]:                         # SAR 翻转 R4（exits 打开时指标表才有这一列）
+                    queued = "sar_flip"
                 elif p.max_hold_days and ps.hold >= p.max_hold_days:
                     queued = "max_hold"
                 elif (p.time_stop_days and ps.hold >= p.time_stop_days
