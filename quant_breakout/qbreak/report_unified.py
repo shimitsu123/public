@@ -68,6 +68,7 @@ def build_unified_data() -> dict:
             "price_check": td.get("price_check") or {},          # 行情交叉核对（qbreak/price_check.py；yfinance × J-Quants，只报警）
             "fwdj": td.get("fwdj") or {},                        # 前向记录判断层（qbreak/fwd_judgment.py；2026-09-30 起影响日本个股新仓）
             "exit_mode": td.get("exit_mode") or {},              # 个股的离场方式（qbreak/exit_rules.py；var/sim.json exits）
+            "idle_cash": td.get("idle_cash") or {},              # 闲置资金的方式与现在拿什么（qbreak/idle_cash.py；var/sim.json idle_cash）
             "survey_failed": td.get("survey_failed") or {},      # 因子调查取不到的数据源（qbreak/survey.LAST_FAILED）
             "shadow": read_json(paths.out_dir() / "shadow_today.json", {}) or {},   # 影子账户（判断型，只前向记录，不影响交易）
             "commod": _commod_rows(),
@@ -507,7 +508,7 @@ def _fwdj_html(d: dict) -> str:
              "<th>新仓</th></tr>" + "".join(st_rows) + "</table></div>") if st_rows else "<p class='muted'>最新收盘没有日本个股的买入候选</p>"
     b = f.get("baseline") or {}
     diff = f.get("diff_jpy")
-    base = (f"<p>基准账户（原规则：同一套行情、不加这一层、离场用死叉，{escape(str(b.get('since') or '—'))} 起）：权益 {_money(b.get('equity_jpy'))}；"
+    base = (f"<p>基准账户（原规则：同一套行情、不加这一层、离场用死叉、闲置资金 1655 + 美股牛熊分界，{escape(str(b.get('since') or '—'))} 起）：权益 {_money(b.get('equity_jpy'))}；"
             f"模拟盘 {_money(f.get('equity_jpy'))}；差 <b class='{'pos' if (diff or 0) > 0 else 'neg' if (diff or 0) < 0 else ''}'>"
             f"{'—' if diff is None else ('+' if diff >= 0 else '−') + f'¥{abs(diff):,.0f}'}</b>"
             f"（持仓 基准 {len(b.get('positions') or [])} 只）</p>") if b and not b.get("error") else \
@@ -565,7 +566,7 @@ def render_unified_html(d: dict) -> str:
             ccy = "USD" if market == "US" else "JPY"
             lim = f"，指値 {_money(o['limit'], ccy)}" if o.get("limit") else ""
             why = f"（{escape(str(o.get('reason')))}）" if o.get("reason") else ""
-            unit = "口" if str(o.get("ticker", "")).startswith(("1655", "1329", "2558")) else "股"
+            unit = "口" if str(o.get("ticker", "")).startswith(("1655", "1329", "2558", "1540", "133A", "1671", "2238")) else "股"
             tag = f" {_bo_tag(o)}" if o.get("side") == "BUY" and "breakout" in o else ""
             if o.get("side") == "BUY":
                 tag += f" {_grp_tag(o.get('ticker', ''), d.get('themes') or {}, meta)}"
@@ -616,7 +617,10 @@ def render_unified_html(d: dict) -> str:
         else:
             line = f"牛熊分界 未知（{escape(str(bb.get('note') or '指数行情取不到'))}）"
         if e.get("core_only"):
-            mk.append(f"<dt>{name}</dt><dd>{line}；只用于核心 ETF {escape('、'.join(e['core_only']))} 的择时（牛市持有、熊市那份留现金）</dd>")
+            icm = (d.get("idle_cash") or {}).get("mode")
+            use = ("只给基准账户（原规则）的 1655 择时；模拟盘的闲置资金现在按「" + escape(str((d.get("idle_cash") or {}).get("label") or icm)) + "」"
+                   if icm and icm != "K0" else f"只用于核心 ETF {escape('、'.join(e['core_only']))} 的择时（牛市持有、熊市那份留现金）")
+            mk.append(f"<dt>{name}</dt><dd>{line}；{use}</dd>")
             continue
         fired = "；".join((e.get("macro") or {}).get("fired") or []) or "无"
         q = r.get("quant_label") or "unknown"
@@ -661,7 +665,7 @@ def render_unified_html(d: dict) -> str:
         cash_jpy=_money(d.get("cash_jpy")), acct=escape(_acct(d.get("broker"), with_us)),
         usd_tile=(f'<div><span class="muted">美元现金</span><b>{_money(d.get("cash_usd"), "USD")}</b>'
                   f'<span class="muted">USD/JPY {_fxr(fx)}</span></div>' if _has_usd(d.get("broker")) else
-                  f'<div><span class="muted">USD/JPY（只影响 1655.T 的日元价值）</span><b>{_fxr(fx)}</b>'
+                  f'<div><span class="muted">USD/JPY（只影响核心 ETF 的日元价值）</span><b>{_fxr(fx)}</b>'
                   f'<span class="muted">{escape(str(d.get("usdjpy_src") or ""))}</span></div>'),
         todo=todo_html,
         positions="".join(pos_rows) or "<tr><td colspan=6 class='muted'>无</td></tr>",
@@ -679,14 +683,23 @@ def render_unified_html(d: dict) -> str:
         n_trades=d.get("n_trades", 0), win=_pct(d.get("win_rate")) if d.get("win_rate") is not None else "—（还没有平仓）",
         rules=escape(f"个股 {cfg.get('max_positions')}×{int(float(cfg.get('position_pct', 0)) * 100)}%（{stocks}）；"
                      + (f"个股离场：{(d.get('exit_mode') or {}).get('label')}；" if (d.get('exit_mode') or {}).get('JP') not in (None, 'DC') else "")
-                     + f"闲置资金 {core_desc}（{'熊市那份留现金' if cfg.get('core_mode') == 'split' else '熊市那份转给牛市的一只'}；"
-                     "牛熊分界 = 指数收盘连续 5 天低于 250 日线 ×0.97 转熊、高于 ×1.03 转牛，2026-09-25 多因子研究后维持）；"
+                     + (f"闲置资金：{(d.get('idle_cash') or {}).get('label')}（现在：{_ic_now(d.get('idle_cash') or {})}；"
+                        f"{escape(str((d.get('idle_cash') or {}).get('since') or ''))} 起；原规则 1655 + 牛熊分界只给基准账户）；"
+                        if (d.get('idle_cash') or {}).get('mode') not in (None, 'K0') else
+                        f"闲置资金 {core_desc}（{'熊市那份留现金' if cfg.get('core_mode') == 'split' else '熊市那份转给牛市的一只'}；"
+                        "牛熊分界 = 指数收盘连续 5 天低于 250 日线 ×0.97 转熊、高于 ×1.03 转牛，2026-09-25 多因子研究后维持）；")
                      + _fee_rule(d.get("broker"), cfg)))
 
 
 _EV = {"FOMC": "美联储议息", "BOJ": "日银议息", "CPI": "美国 CPI", "NFP": "美国非农就业", "ELECTION": "选举",
        "POLITICS": "政治日程", "FISCAL": "财政期限", "TRADE": "贸易 / 关税期限", "OPEC": "OPEC+ 会议", "SUMMIT": "峰会",
        "TANKAN": "日银短观", "SQ": "日本 SQ（定期）", "OPEX": "美股季度期权到期（定期）", "INDEX": "指数调整"}
+
+
+def _ic_now(ic: dict) -> str:
+    """闲置资金现在拿什么（与执行器日志同一句）。"""
+    from .live_unified import ic_text
+    return ic_text(ic)
 
 
 def _groups_meta() -> tuple[dict, dict, dict]:

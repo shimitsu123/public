@@ -125,3 +125,21 @@ def test_study_synthetic_prices_use_only_known_values():
     acct["E"]["K0"] = {"calmar": 0.28}
     acct["J"]["K0"] = {"calmar": 0.35}
     assert S.reading(acct, "K2") == "差不多"
+
+
+def test_live_helpers_and_displays():
+    from qbreak.live_unified import daily_text, ic_text
+    assert IC.last_month_complete("2026-09-30") is True and IC.last_month_complete("2026-09-29") is False
+    s = _daily([100 + k for k in range(13)] + [80])
+    det = IC.detail("K3", {"133A.T": s}, s.index[-1])
+    assert det["month_end"] == str(IC.month_ends(s.index)[-1].date()) and det["close"] == 112.0 and det["sma"] == 107.5
+    ic = {"mode": "K3", "label": IC.LABELS["K3"], "text": "美元短期国债（133A）", **det}
+    assert "112.00 > 10 个月均线 ¥107.50" in ic_text(ic)
+    assert "12 个月" in ic_text({"text": "现金", "ret12": {"1540.T": 40.2}})
+    _, _, body = daily_text({"decided_on": "2026-09-30", "orders": [], "idle_cash": ic}, UState(cash_jpy=1e6), None, True, 1e6)
+    assert "- 闲置资金：美元趋势" in body and "现在：美元短期国债（133A）" in body
+    _, _, body0 = daily_text({"decided_on": "2026-09-30", "orders": [], "idle_cash": {"mode": "K0"}}, UState(cash_jpy=1e6), None, True, 1e6)
+    assert "闲置资金" not in body0
+    from qbreak import dashboard as DB
+    parts = {k for k, _, _ in DB.exposure({"equity_jpy": 1e6, "cash_jpy": 1e5, "core_units": {"133A.T": 100}, "core_last": {"133A.T": 1000.0}})}
+    assert "核心 ETF（133A）" in parts

@@ -238,7 +238,7 @@ def test_preview_fills_market_state_watchlist_cash_fx_with_units(monkeypatch, ca
     assert "开始前的预览" in html and "日本 2026-09-25 收盘、美股 2026-09-24 收盘（开始前的预览）" in html
     assert "8801.T" in html and "91.5 分" in html and "是（一手 ¥150,100）" in html
     assert "一个账户（立花証券ｅ支店，日元，只做东证）" in html and "¥1,000,000" in html          # 默认券商：立花（只有日元）
-    assert "USD/JPY（只影响 1655.T 的日元价值）</span><b>149.25 円/USD</b>" in html and "Yahoo 2026-09-25" in html
+    assert "USD/JPY（只影响核心 ETF 的日元价值）</span><b>149.25 円/USD</b>" in html and "Yahoo 2026-09-25" in html
     assert "美元现金" not in html and "$0.00" not in html and "個別コース" in html and "≤10 万 ¥77" in html
     assert "明天新仓倍数 0.5 倍" in html and "判断层（市场风险报告 2026-09-24）：减仓观察（24 小时崩盘概率 15%，倍数 0.5 倍）" in html
     assert "转熊价位 44,000 円，现价 45,500 円，距翻转价位 +3.41%" in html and "转熊价位 6,190.2 pt" in html

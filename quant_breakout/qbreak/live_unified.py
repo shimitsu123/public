@@ -691,13 +691,13 @@ def compare_with_sim(st: UState, sim: UState | None) -> dict:
     same = pos(st) == pos(sim) and core(st) == core(sim) and abs(st.cash_jpy - sim.cash_jpy) < 1.0
     out.update(comparable=True, same=same, equity_diff_jpy=diff)
     if same:
-        out["text"] = "与云端模拟盘一致（个股、1655、现金、权益）"
+        out["text"] = "与云端模拟盘一致（个股、核心 ETF、现金、权益）"
     else:
         parts = []
         if pos(st) != pos(sim):
             parts.append(f"个股 {pos(st) or '无'} vs {pos(sim) or '无'}")
         if core(st) != core(sim):
-            parts.append(f"1655 {core(st) or '无'} vs {core(sim) or '无'}")
+            parts.append(f"核心 ETF {core(st) or '无'} vs {core(sim) or '无'}")
         parts.append(f"现金差 {st.cash_jpy - sim.cash_jpy:+,.0f} 円")
         if diff is not None:
             parts.append(f"权益差 {diff:+,.0f} 円")
@@ -707,6 +707,18 @@ def compare_with_sim(st: UState, sim: UState | None) -> dict:
 
 def _qty_txt(o: dict) -> str:
     return f"{int(o.get('sent_qty') or o['qty']):,} {'口' if o.get('kind') == 'core' else '股'}"
+
+
+def ic_text(ic: dict | None) -> str:
+    """闲置资金一句话：现在拿什么 + 读数（K2〜K4：月末收盘 vs 10 个月均线；K6：12 个月涨跌）。"""
+    ic = ic or {}
+    t = str(ic.get("text") or "—")
+    if ic.get("sma") is not None and ic.get("close") is not None:
+        t += (f"（{ic.get('month_end')} 月末收盘 ¥{float(ic['close']):,.2f} {'>' if float(ic['close']) > float(ic['sma']) else '≤'} "
+              f"{ic.get('months', 10)} 个月均线 ¥{float(ic['sma']):,.2f}）")
+    elif ic.get("ret12"):
+        t += "（12 个月：" + "、".join(f"{k} {float(v):+.1f}%" for k, v in ic["ret12"].items()) + "）"
+    return t
 
 
 def fj_text(fj: dict) -> str:
@@ -760,6 +772,9 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     if sm.get("exit_mode") and sm["exit_mode"] != "DC":        # 个股的离场方式（var/sim.json exits）
         from .exit_rules import LABELS
         lines.append(f"- 个股离场：{LABELS.get(sm['exit_mode'], sm['exit_mode'])}（止损 / 跟踪 / 止盈 / 最长持有照旧）")
+    ic = sm.get("idle_cash") or {}
+    if ic.get("mode") and ic["mode"] != "K0":                 # 闲置资金的方式（var/sim.json idle_cash）
+        lines.append(f"- 闲置资金：{ic.get('label') or ic['mode']}；现在：{ic_text(ic)}")
     if cmp:
         lines.append(f"- {cmp['text']}")
     if sm.get("blocked"):

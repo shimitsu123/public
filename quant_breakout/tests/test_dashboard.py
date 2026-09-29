@@ -27,7 +27,7 @@ def test_lean_positions_and_text():
 
 def test_exposure_parts():
     parts = {k: v for k, v, _ in DB.exposure(_d())}
-    assert parts == {"个股": 500_000, "核心 ETF（1655）": 200_000, "现金": 300_000}
+    assert parts == {"个股": 500_000, "核心 ETF（1655）": 200_000, "现金": 300_000}                # 标签 = 现在拿着的核心 ETF
     assert DB.exposure({"equity_jpy": 0}) == []
 
 

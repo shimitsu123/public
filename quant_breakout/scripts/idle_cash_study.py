@@ -184,12 +184,9 @@ def held_share(k: str, px: dict, fxp: dict, us_bear: pd.Series, a: str, b: str |
     w = days[(days >= pd.Timestamp(a)) & ((days <= pd.Timestamp(b)) if b else True)]
     if not len(w):
         return {}
-    if k == "K0":
-        ub = us_bear.reindex(w.union(us_bear.index)).ffill().reindex(w).fillna(False)
-        return {"1655.T": round(float((~ub).mean() * 100), 1)}
-    if k == "K5":
-        ub = us_bear.reindex(w.union(us_bear.index)).ffill().reindex(w).fillna(False)
-        return {"2238.T": round(float(ub.mean() * 100), 1)}
+    if k in ("K0", "K5"):                                                   # 2026-09-29 运行后修正：object 型的 ~ 是按位取反 → 先转布尔（只影响这张描述表）
+        ub = us_bear.reindex(w.union(us_bear.index)).ffill().reindex(w).fillna(False).astype(bool)
+        return {"1655.T": round(float((~ub).mean() * 100), 1)} if k == "K0" else {"2238.T": round(float(ub.mean() * 100), 1)}
     if k in ("GA", "EW", "K1"):
         return {} if k == "K1" else {t: 100.0 for t in (["1540.T"] if k == "GA" else IC.ROT)}
     sp = spec(k, px, fxp)

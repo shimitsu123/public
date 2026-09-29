@@ -812,7 +812,13 @@ def _unified_cfg(sim: dict):
     return config_from_sim(sim)
 
 
-def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hook=None):
+def _core_all(cfg: dict) -> list[str]:
+    """核心 ETF 的全部：原规则（sim.json unified.core，基准账户用）+ 闲置资金方式的 ETF（var/sim.json idle_cash）。"""
+    from qbreak import idle_cash as IC
+    return sorted(set(_unified_cfg(cfg).core) | set(IC.MODES[IC.mode_of(cfg)]["core"]))
+
+
+def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hook=None, extra_core=()):
     """模拟盘（sim-day）与实盘执行器（live-u）共用：按 var/sim.json 建统一引擎 —— 行情到最新收盘（去掉未收盘的当日 K 线）、
     牛熊分界、汇率、明天成交的新仓倍数（宏观 / 板块 / 状态层）、决算前不进场。返回 (eng, ctx)；ctx.make(state) 用同一套
     输入再建一个引擎（例如执行器演练账户的状态）。"""
@@ -837,18 +843,22 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
     from qbreak import exit_rules as EXR
     xmode = EXR.mode_of(cfg, "JP")                          # 离场方式（var/sim.json 的 exits；2026-09-29 用户要求加进 X6 / R4）
     params_x = {**params, "JP": EXR.apply(params["JP"], xmode)}   # 只给引擎用；params（死叉）照旧给前向记录、判断层、候补队列
+    from qbreak import idle_cash as IC
+    icmode = IC.mode_of(cfg)                                # 闲置资金（var/sim.json idle_cash；2026-09-29 用户要求「默认不要 S&P500」）
     unis = {m: (universe(m, (u.get("universe") or {}).get(m, "broad")) if m in ucfg.stock_markets else [])
             for m in ("JP", "US")}
-    want = sorted(set(unis["JP"]) | set(unis["US"]) | set(state.pos) | set(state.plan) | set(ucfg.core)
-                  | set(extra_tickers))
+    core_all = (set(ucfg.core) | set(IC.MODES[icmode]["core"]) | set(extra_core)          # 原规则的 1655（基准账户）+ 这个方式的 ETF
+                | {t for t, v in state.core_units.items() if int(v or 0)})              # + 以前的方式留下的（下一次决策卖掉）
+    want = sorted(set(unis["JP"]) | set(unis["US"]) | set(state.pos) | set(state.plan) | core_all | set(extra_tickers))
     data = load_universe(want, dcfg)
     ind = {}
     for t, df in data.items():
         df = drop_partial_bar(df, market_of(t))
         if df is None or len(df) < 60:
             continue
-        ind[t] = core_frame(df) if t in ucfg.core else compute_indicators(df, params_x[market_of(t)])   # R4 打开时多一列 sar_flip
-    missing = [t for t in set(state.pos) | set(ucfg.core) if t not in ind]
+        ind[t] = core_frame(df) if t in core_all else compute_indicators(df, params_x[market_of(t)])   # R4 打开时多一列 sar_flip
+    missing = [t for t in set(state.pos) | set(ucfg.core) | set(IC.MODES[icmode]["core"])
+               | {t for t, v in state.core_units.items() if int(v or 0)} if t not in ind]
     if missing:
         raise RuntimeError(f"持仓 / 核心 ETF 取不到行情：{missing}")
     d10 = DataConfig(provider=provider, years=10, allow_synthetic=False).validate()
@@ -860,12 +870,18 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
         bear[m] = pd.Series(np.asarray(det.states(ix["Close"])) == BEAR, index=ix.index)
     fxd = load_universe(["JPY=X"], DataConfig(provider=provider, years=2, allow_synthetic=False, min_bars=100).validate())
     fx = fxd["JPY=X"][["Open", "Close"]] if "JPY=X" in fxd else None
+    gi = pd.DatetimeIndex(sorted(set().union(*[df.index for df in ind.values()])))
+    ic_last = IC.last_month_complete(gi[-1]) if len(gi) else False           # 最新 K 线是本月最后一个交易日 → 这个月末今天就判定
+    ic_px = {t: ind[t]["Close"] for t in IC.MODES[icmode]["core"] if t in ind}
+    bear.update(IC.extra_bear(icmode, ic_px, bear.get("US"), gi, ic_last))    # 闲置资金 ETF 自己的开关（TR: / RT: / XR）
+    ic_status = {**IC.status(icmode, bear, gi[-1]), **IC.detail(icmode, ic_px, gi[-1], ic_last),
+                 "since": (cfg.get("idle_cash") or {}).get("since")} if len(gi) else {"mode": icmode}
     ex = exec_configs(ucfg.stock_markets, u)
-    ccost = {t: etf_cost(broker, t, market_of(t)) for t in ucfg.core}
+    ccost = {t: etf_cost(broker, t, market_of(t)) for t in core_all}
     today = _dt.date.today()
     extras, plans = _unified_extras(cfg, ucfg, u, dcfg, params, today)
     from qbreak import eligibility as EL
-    gate = EL.gate_for(today, unis["JP"], ucfg.core)       # 下单前资格检查：被踢出 / 被指定 / 确认不了的票不开新个股仓
+    gate = EL.gate_for(today, unis["JP"], sorted(core_all))   # 下单前资格检查：被踢出 / 被指定 / 确认不了的票不开新个股仓
     eblock = None
     if any(params[m].earnings_blackout_days for m in params):  # 决算前 N 个交易日不进场（风控项，与原模拟盘相同）
         from qbreak.trader import _earnings_days
@@ -896,8 +912,10 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
                 rg["final_mult"] = sc1
 
     def make(st, fj: bool = True, base: bool = False):
-        """base = True：原规则（不加前向记录判断层、离场用死叉）= 基准账户。"""
-        e = UnifiedEngine(ind, ucfg, params if base else params_x, ex, ccost, fx=fx, bear=bear, state=st)
+        """base = True：原规则（不加前向记录判断层、离场用死叉、闲置资金 1655）= 基准账户。
+        闲置资金按这个账户自己的持仓配：以前的方式留下的 ETF 权重 0（下一次决策卖掉）。"""
+        cfg_e = IC.apply(ucfg, "K0" if base else icmode, held=dict(st.core_units) if st is not None else None)
+        e = UnifiedEngine(ind, cfg_e, params if base else params_x, ex, ccost, fx=fx, bear=bear, state=st)
         _apply_live_mults(e, plans, None if (base or not fj) else fj_pl, bar_date)
         e.live_fx_ok = is_trading_day(now_jst().date())    # 今天白天（日本营业日）才有换汇窗口
         e.entry_block_fn = eblock
@@ -905,7 +923,7 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
         return e
     ctx = SimpleNamespace(data=data, ind=ind, plans=plans, extras=extras, params=params, dcfg=dcfg, ucfg=ucfg, u=u,
                           broker=broker, today=today, ex=ex, ccost=ccost, make=make, gate=gate, fj=fj_pl, fj_on=fj_on, xmode=xmode,
-                          bar_date=bar_date)
+                          bar_date=bar_date, icmode=icmode, ic_status=ic_status)
     return make(state), ctx
 
 
@@ -1202,10 +1220,11 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     ex_state = (read_json(ex_path, {}) or {}).get("state") or {}
     base_state = (read_json(paths.state_dir() / "unified_state_base.json", {}) or {})   # 基准账户（不加判断层）：它的持仓也要有行情
     extra = set(ex_state.get("pos") or {}) | set(ex_state.get("plan") or {}) | set(base_state.get("pos") or {}) | set(base_state.get("plan") or {})
+    xcore = {t for s_ in (ex_state, base_state) for t, v in (s_.get("core_units") or {}).items() if int(v or 0)}   # 它们拿着的核心 ETF
     fj_on = bool((cfg.get("fwd_judgment") or {}).get("enabled"))
     pre = _fj_precompute(provider, now_jst().date()) if fj_on else {}      # 判断层要用的面板（主题 / 能源 K4 / 成本 × 销售）先算，后面日报直接用
     hook = (lambda ind, params, u, bar_date: _fj_compute(ind, params, u, bar_date, {**pre, "provider": provider})) if fj_on else None
-    eng, ctx = _unified_engine(a, cfg, state, provider, extra_tickers=extra, fj_hook=hook)
+    eng, ctx = _unified_engine(a, cfg, state, provider, extra_tickers=extra, fj_hook=hook, extra_core=xcore)
     data, plans, extras, params, dcfg, today = ctx.data, ctx.plans, ctx.extras, ctx.params, ctx.dcfg, ctx.today
     pcheck = _price_check_panel(data, today)                 # 行情交叉核对（J-Quants，㉚-1）：只报警，不改行情 / 交易
     idxs, cutoff = _new_bar_idxs(eng, state)
@@ -1222,7 +1241,8 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
             eng.step(i)
             planned[str(eng.gidx[i].date())] = sorted(state.plan)
     st_path.write_text(_json.dumps(state.to_dict(), ensure_ascii=False, indent=1, default=float), encoding="utf-8")
-    baseline = _baseline_step(ctx, raw) if (fj_on or ctx.xmode != "DC") else None   # 基准账户：同一天、同一套行情、原规则（对照改动的效果）
+    baseline = (_baseline_step(ctx, raw) if (fj_on or ctx.xmode != "DC" or ctx.icmode != "K0")   # 基准账户：同一天、同一套行情、原规则
+                else None)                                                                        #（对照改动的效果）
     executor = _executor_paper_step(ctx, state)            # 实盘执行器的演练账户：同一天、同一套行情，应与模拟盘逐日一致
     i_last = int(eng.gidx.searchsorted(pd.Timestamp(state.last_date))) if state.last_date else len(eng.gidx) - 1
     todo = eng.todo(min(i_last, len(eng.gidx) - 1))
@@ -1250,6 +1270,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     out["fwdj"] = _fj_summary(ctx, baseline, eq) if fj_on else {"enabled": False, "baseline": baseline or {}}   # 判断层 + 基准账户对照
     from qbreak import exit_rules as _EXR
     out["exit_mode"] = {"JP": ctx.xmode, "label": _EXR.LABELS[ctx.xmode]}   # 个股的离场方式（var/sim.json exits）
+    out["idle_cash"] = ctx.ic_status                         # 闲置资金的方式与现在拿什么（var/sim.json idle_cash）
     try:
         from qbreak import survey as _SV
         out["survey_failed"] = dict(_SV.LAST_FAILED)          # 因子调查取不到的数据源（日报「数据完整性」列出）
@@ -1547,7 +1568,7 @@ def cmd_price_check(a) -> int:
     from qbreak.utils import read_json
     cfg = _sim_cfg() or {}
     u = cfg.get("unified") or {}
-    core = list(_unified_cfg(cfg).core) if cfg.get("mode") == "unified" else ["1655.T"]
+    core = _core_all(cfg) if cfg.get("mode") == "unified" else ["1655.T"]
     held = set()
     for fp in (paths.state_dir() / "unified_state.json", paths.state_dir() / "live_unified_paper.json",
                paths.state_dir() / "live_unified_tachibana.json"):
@@ -2333,7 +2354,7 @@ def cmd_eligibility(a) -> int:
     from qbreak.utils import read_json
     cfg = _sim_cfg() or {}
     u = cfg.get("unified") or {}
-    core = list(_unified_cfg(cfg).core) if cfg.get("mode") == "unified" else ["1655.T"]
+    core = _core_all(cfg) if cfg.get("mode") == "unified" else ["1655.T"]
     today = _dt.date.today()
     EL.refresh(force=True)
     g = EL.gate_for(today, universe("JP", (u.get("universe") or {}).get("JP", "broad")), core, refresh_first=False)
@@ -2666,7 +2687,7 @@ def cmd_live_unified(a) -> int:
                 last = eng.gidx[-1].date()
                 if last < exp:
                     ux.block(f"日本行情只到 {last}（应有 {exp}）")
-                late = sorted(t for t in LAGGING if t in ("^GSPC", "^N225", "1655.T") or t in state.pos)
+                late = sorted(t for t in LAGGING if t in ("^GSPC", "^N225", "1655.T") or t in state.pos or t in eng.cfg.core)
                 if late:
                     ux.block("行情落后：" + "、".join(f"{t} {LAGGING[t]['last']}（应有 {LAGGING[t]['expected']}）" for t in late))
             idxs, cutoff = _new_bar_idxs(eng, state)
@@ -2697,6 +2718,7 @@ def cmd_live_unified(a) -> int:
     sm["market"] = {m: (e.get("regime") or {}).get("bullbear") for m, e in ctx.extras.items()}   # 牛熊：现在处于哪个阶段（页面 / 日志）
     sm["fwd_judgment"] = _fj_brief(ctx)                     # 前向记录判断层：云端算好的文件今天有没有生效（页面 / 日志）
     sm["exit_mode"] = ctx.xmode                              # 个股的离场方式（var/sim.json exits；与云端模拟盘同一个）
+    sm["idle_cash"] = ctx.ic_status                          # 闲置资金的方式与现在拿什么（var/sim.json idle_cash；与云端模拟盘同一个）
     write_json(paths.out_dir() / f"live_unified_{tag}.json", sm)
     title, short, body = daily_text(sm, eng.st, cmp, paper, float(ucfg.capital_jpy))
     append_journal(paths.out_dir() / f"live_unified_{tag}_journal.md", now_jst().strftime("%Y-%m-%d %H:%M JST"), title, body)

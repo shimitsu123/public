@@ -81,13 +81,16 @@ def exposure(d: dict) -> list[tuple[str, float, str]]:
     stocks = max(eq - cash - core, 0.0)
     if eq <= 0:
         return []
-    return [("个股", stocks, "var(--accent)"), ("核心 ETF（1655）", core, "var(--pos)"), ("现金", cash, "var(--muted)")]
+    held = [t.replace(".T", "") for t, u in (d.get("core_units") or {}).items() if float(u or 0)]
+    return [("个股", stocks, "var(--accent)"), (f"核心 ETF（{'、'.join(held) or '无'}）", core, "var(--pos)"), ("现金", cash, "var(--muted)")]
 
 
 def stance_html(d: dict) -> str:
     ex = d.get("extras") or {}
     boxes = []
-    for m, name in (("JP", "日本（日経225）· 个股与 1655 的牛熊"), ("US", "美国（S&P500）· 只用于 1655 择时")):
+    icm = (d.get("idle_cash") or {}).get("mode")
+    us_name = "美国（S&P500）· 只用于 1655 择时" if icm in (None, "K0") else "美国（S&P500）· 基准账户（原规则）的 1655 择时"
+    for m, name in (("JP", "日本（日経225）· 个股的牛熊"), ("US", us_name)):
         bb = ((ex.get(m) or {}).get("regime") or {}).get("bullbear") or {}
         if not bb and m == "US":
             continue

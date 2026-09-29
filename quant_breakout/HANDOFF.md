@@ -303,6 +303,12 @@
   账户历史「差不多」（Calmar 2006〜2016 0.285 → 0.306、2017〜 0.388 → 0.405；每笔更好、胜率略低、持有更久），R4 与组合在 2006〜2016 更差
   （`var/out/exit_mode_check.md`）。开关 `var/sim.json` 的 `exits.JP`（"DC" = 原规则）；`var/best_params*.json` 没改 → 研究脚本与 X6 / R4
   前向记录的「现行」仍是死叉。基准账户 = 原规则（不加判断层、离场用死叉），日报「前向记录判断层」卡片里看两边的差。
+- **闲置资金不再默认买 S&P500：换成 K3 美元趋势 133A**（2026-09-29 用户要求「没有候选股票的时候默认不要选择 sp500 … 立花能交易的」；
+  登记 229b99c、`qbreak/idle_cash.py`；**2026-09-30 的决策起**；9/30 的决策卖掉 1655、买 133A）：立花现物能买的六种（现金 / 黄金 1540 /
+  美元 133A / 原油 1671 / 美股熊市买 S&P500 反向 2238 / 四只轮动）按事先规则选中 K3 = 133A 超短期美国国债 ETF（円換算、不对冲），
+  月末收盘 > 最近 10 个月末的平均 → 下个月拿，否则现金。**更稳、但少赚很多**：年化 2006〜2016 8.77% → 4.23%、2017〜 14.16% → 3.06%，
+  最大回撤 −28.64% → −12.60%、−34.98% → −18.36%（`var/out/idle_cash_study.md`）。开关 `var/sim.json` 的 `idle_cash.mode`（"K0" = 原规则 1655）；
+  基准账户 = 原规则（判断层关、死叉、1655 + 牛熊分界）。ｅ支店没有 FX / 外币存款 / MMF；做空要另开信用账户 → 这里只用现物 ETF。
 - J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
   → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
   （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）
@@ -409,8 +415,9 @@
   `scripts/policy_event_verify.py`（来源核对）、`qbreak/policy_forward.py`（前向记录）、`var/policy_events.csv`（事件表）、`var/policy_extra_pool.json`（长历史池补充票）
 - 云端状态：`var/state/unified_state.json`（模拟盘）；Mac 状态：`~/.qbreak/home/state/live_unified_paper.json`（账本，不在仓库）
 - 前向记录判断层：`qbreak/fwd_judgment.py`（规则与计分）、`var/fwd_judgment.json`（每天的判定，云端写、Mac 读）、
-  `var/state/unified_state_base.json`（基准账户：原规则 = 不加判断层、离场用死叉）、`scripts/fwd_judgment_check.py`（历史检验）
+  `var/state/unified_state_base.json`（基准账户：原规则 = 不加判断层、离场用死叉、闲置资金 1655 + 牛熊分界）、`scripts/fwd_judgment_check.py`（历史检验）
 - 个股离场方式：`qbreak/exit_rules.py`（DC / X6 / R4 / X6R4 / ALL；`var/sim.json` 的 exits 选用）、引擎实现在 `qbreak/unified.py` 的 `_check_exits`
+- 闲置资金方式：`qbreak/idle_cash.py`（K0〜K6；`var/sim.json` 的 idle_cash 选用；月末开关 TR: / RT: / XR 键进引擎的 bear）、研究 `scripts/idle_cash_study.py`
 - 下单前资格检查：`qbreak/eligibility.py`（快照 `var/out/eligibility.json`；只读检查 `run.py eligibility`）；成本 × 销售显示与 S2 前向记录：`qbreak/cost_sales_forward.py`
   （复核 / 当前分组 `scripts/cost_sales_forward.py --review | --show`）
 

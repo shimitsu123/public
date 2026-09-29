@@ -119,15 +119,57 @@ def extra_bear(mode: str, closes: dict[str, pd.Series], us_bear: pd.Series | Non
 
 
 def apply(ucfg, mode: str, held: dict | None = None):
-    """UnifiedConfig → 这个方式的闲置资金设定；held = 状态里还拿着的核心 ETF（不在这个方式里的 → 权重 0，引擎下一次决策全部卖掉）。"""
+    """UnifiedConfig → 这个方式的闲置资金设定；held = 状态里还拿着的核心 ETF（不在这个方式里的 → 权重 0，引擎下一次决策全部卖掉）。
+    K0 = var/sim.json 自己的 unified.core（原规则；以后那里改了也跟着）。"""
     if mode not in MODES:
         raise KeyError(f"未知闲置资金方式 {mode}，可选 {sorted(MODES)}")
     m = MODES[mode]
-    core, ci = dict(m["core"]), dict(m["core_index"])
+    if mode == "K0":
+        core, ci, cm = dict(ucfg.core), dict(ucfg.core_index), ucfg.core_mode
+    else:
+        core, ci, cm = dict(m["core"]), dict(m["core_index"]), m["core_mode"]
     for t, u in (held or {}).items():
         if int(u or 0) and t not in core:
             core[t], ci[t] = 0.0, "US"
-    return replace(ucfg, core=core, core_index=ci, core_mode=m["core_mode"])
+    return replace(ucfg, core=core, core_index=ci, core_mode=cm)
+
+
+def last_month_complete(bar_date) -> bool:
+    """实时：最新 K 线那天是不是那个月最后一个东证交易日（是 → 这个月末的判定今天收盘就定）。"""
+    from .calendar_jp import next_trading_day
+    d = pd.Timestamp(bar_date).date()
+    return next_trading_day(d).month != d.month
+
+
+def detail(mode: str, closes: dict[str, pd.Series], asof, last_complete: bool = False) -> dict:
+    """日报 / 页面的读数：K2〜K4 = 用的那个月末的收盘与 10 个月均线；K6 = 各只 12 个月涨跌。"""
+    d = pd.Timestamp(asof)
+    out: dict = {}
+    if mode in ("K2", "K3", "K4"):
+        t = next(iter(MODES[mode]["core"]))
+        c = closes.get(t)
+        if c is not None and len(c.dropna()):
+            c = c.dropna()
+            c = c[c.index <= d]
+            me = month_ends(c.index, last_complete)
+            if len(me) >= TREND_MONTHS:
+                m = c.reindex(me)
+                out = {"month_end": str(me[-1].date()), "close": round(float(m.iloc[-1]), 2),
+                       "sma": round(float(m.iloc[-TREND_MONTHS:].mean()), 2), "months": TREND_MONTHS}
+    elif mode == "K6":
+        r = {}
+        for t in ROT:
+            c = closes.get(t)
+            if c is None or not len(c.dropna()):
+                continue
+            c = c.dropna()
+            c = c[c.index <= d]
+            me = month_ends(c.index, last_complete)
+            if len(me) > MOM_MONTHS:
+                v = c.reindex(me)
+                r[t] = round(float(v.iloc[-1] / v.iloc[-1 - MOM_MONTHS] - 1) * 100, 1)
+        out = {"ret12": r}
+    return out
 
 
 def status(mode: str, bear: dict[str, pd.Series], asof) -> dict:
