@@ -24,7 +24,7 @@ def _daily(values_per_month, start="2024-01-01"):
 
 
 def test_modes_mode_of_and_apply():
-    assert set(IC.MODES) == {"K0", "K1", "K2", "K3", "K4", "K5", "K6"} and IC.mode_of({}) == "K0"
+    assert {"K0", "K1", "K2", "K3", "K4", "K5", "K6"} <= set(IC.MODES) and IC.mode_of({}) == "K0"   # 第二轮另加 Q1〜Q6
     assert IC.mode_of({"idle_cash": {"mode": "K2"}}) == "K2" and IC.mode_of({"idle_cash": {"mode": "zz"}}) == "K0"
     c = IC.apply(CFG, "K2", held={"1655.T": 30, "1540.T": 0})
     assert c.core == {"1540.T": 1.0, "1655.T": 0.0} and c.core_index["1540.T"] == "TR:1540.T" and c.core_mode == "split"

@@ -16,6 +16,15 @@ FX、外币存款、MMF、投信、美股 ｅ支店都没有；做空个股 / ET
   K6 趋势轮动：每个月末在 1540 / 133A / 1671 / 2238 里拿过去 12 个月涨得最多的那一只（最多的也 ≤ 0 → 现金）
 月末 = 那个月最后一个交易日：收盘时决定、第二天开盘换（与引擎的牛熊分界同一个时点）；实时最后一个月只有「今天就是本月最后一个
 交易日」才算（run.py 按东证日历判断）。选哪一个：scripts/idle_cash_study.py（登记后只跑一次）按事先写定的规则选，结果写进 var/sim.json。
+第二轮（2026-09-29 用户：「闲置资金改为比1655收益更高的股票类别进行研究 / 预计会下跌的时候要选择反向型的股票进行研究」；
+scripts/equity_idle_study.py 登记）：股票类 Q1〜Q6（熊 → 现金，牛熊用现有的分界，不加新参数）+「预计下跌 → 反向 ETF」的开关 P1〜P4：
+  Q1 纳斯达克 100 1545（不对冲）      Q2 美国半导体 SOX 2243（不对冲）  Q3 纳指 2 倍 2869（先物型）   —— 美股牛熊分界（S&P500）
+  Q4 日经 225 1321                    Q5 日经 2 倍 1570（先物型）                                   —— 日本牛熊分界（日经 225）
+  Q6 印度 Nifty 50 1678（不对冲）     —— 同一个检测器、同一组参数用在印度指数上（键 "T0:IN"；实时要另接印度指数，入选后才实现）
+  反向：1655 → 2238 S&P500、纳指 / SOX / 纳指 2 倍 → 2842 纳指（东证没有 SOX 反向）、日经 → 1571；印度没有反向。
+  P1 牛熊分界 = 熊；P2 威胁指数 A0 在自身历史的百分位 ≥ 80；P3 C_rel ≥ 80；P4 熊 且（A0 或 C_rel ≥ 80）→ 那天收盘时「预计下跌」，
+  第二天开盘把闲置资金换成反向 ETF（牛市也换）；不预计下跌 → 照原来（牛 → 股票 ETF、熊 → 现金）。引擎用 follow 模式：
+  键 "EQ" = 熊 ∨ 预计下跌（股票 ETF 目标 0），键 "IV" = 不预计下跌（反向 ETF 目标 0）。
 """
 from __future__ import annotations
 
@@ -35,12 +44,80 @@ MODES: dict[str, dict] = {
     "K4": {"core": {"1671.T": 1.0}, "core_index": {"1671.T": "TR:1671.T"}, "core_mode": "split"},
     "K5": {"core": {"2238.T": 1.0}, "core_index": {"2238.T": "XR"}, "core_mode": "split"},
     "K6": {"core": {t: 1.0 for t in ROT}, "core_index": {t: f"RT:{t}" for t in ROT}, "core_mode": "follow"},
+    "Q1": {"core": {"1545.T": 1.0}, "core_index": {"1545.T": "US"}, "core_mode": "split"},
+    "Q2": {"core": {"2243.T": 1.0}, "core_index": {"2243.T": "US"}, "core_mode": "split"},
+    "Q3": {"core": {"2869.T": 1.0}, "core_index": {"2869.T": "US"}, "core_mode": "split"},
+    "Q4": {"core": {"1321.T": 1.0}, "core_index": {"1321.T": "JP"}, "core_mode": "split"},
+    "Q5": {"core": {"1570.T": 1.0}, "core_index": {"1570.T": "JP"}, "core_mode": "split"},
+    "Q6": {"core": {"1678.T": 1.0}, "core_index": {"1678.T": "T0:IN"}, "core_mode": "split"},
 }
 LABELS = {"K0": "1655 S&P500 + 美股牛熊分界（原规则）", "K1": "现金", "K2": "黄金趋势 1540（10 个月均线）",
           "K3": "美元趋势 133A 超短期美债（10 个月均线）", "K4": "原油趋势 1671（10 个月均线）",
-          "K5": "美股熊市买 S&P500 反向 2238、牛市现金", "K6": "趋势轮动（1540 / 133A / 1671 / 2238 取 12 个月最强）"}
+          "K5": "美股熊市买 S&P500 反向 2238、牛市现金", "K6": "趋势轮动（1540 / 133A / 1671 / 2238 取 12 个月最强）",
+          "Q1": "纳斯达克 100 1545 + 美股牛熊分界", "Q2": "美国半导体 SOX 2243 + 美股牛熊分界",
+          "Q3": "纳指 2 倍 2869 + 美股牛熊分界", "Q4": "日经 225 1321 + 日本牛熊分界", "Q5": "日经 2 倍 1570 + 日本牛熊分界",
+          "Q6": "印度 Nifty 50 1678 + 印度牛熊分界"}
 NAMES = {"1655.T": "S&P500（1655）", "1540.T": "黄金（1540）", "133A.T": "美元短期国债（133A）", "1671.T": "WTI 原油（1671）",
-         "2238.T": "S&P500 反向（2238）"}
+         "2238.T": "S&P500 反向（2238）", "1545.T": "纳斯达克 100（1545）", "2243.T": "美国半导体（2243）",
+         "2869.T": "纳指 2 倍（2869）", "1321.T": "日经 225（1321）", "1570.T": "日经 2 倍（1570）", "1678.T": "印度 Nifty 50（1678）",
+         "2842.T": "纳指反向（2842）", "1571.T": "日经反向（1571）"}
+# 第二轮：股票类的市场（牛熊分界 / 威胁指数用哪边）与反向 ETF（None = 东证没有）
+EQ_MARKET = {"K0": "US", "Q1": "US", "Q2": "US", "Q3": "US", "Q4": "JP", "Q5": "JP", "Q6": "IN"}
+INVERSE = {"K0": "2238.T", "Q1": "2842.T", "Q2": "2842.T", "Q3": "2842.T", "Q4": "1571.T", "Q5": "1571.T", "Q6": None}
+WARN = 80.0                                   # 「自身历史里最高 1/5」= 警示（qbreak/fwd_judgment.WARN_PCT 同一个 80）
+OVERLAYS = {"P1": "牛熊分界 = 熊 → 反向", "P2": "威胁指数 A0 ≥ 80 分位 → 反向", "P3": "C_rel（威胁高 + 压力已释放）≥ 80 分位 → 反向",
+            "P4": "熊 且（A0 或 C_rel ≥ 80 分位）→ 反向"}
+
+
+def _on_idx(s: pd.Series | None, idx: pd.DatetimeIndex, fill) -> pd.Series:
+    if s is None or not len(s):
+        return pd.Series(fill, index=idx)
+    return s.reindex(idx.union(s.index)).ffill().reindex(idx).fillna(fill)
+
+
+def _overlay_parts(bear: pd.Series, a0_pct: pd.Series | None, crel_pct: pd.Series | None) -> tuple:
+    """日期 = 三者的并集（各自向后填）→ (日期, 熊（没有值 = 熊）, 熊已知, A0 ≥ 80, C_rel ≥ 80)；百分位没有值 = 不算警示。"""
+    idx = pd.DatetimeIndex(sorted(set(bear.index) | set(a0_pct.index if a0_pct is not None else [])
+                                  | set(crel_pct.index if crel_pct is not None else [])))
+    bv = _on_idx(bear.astype(float), idx, np.nan).to_numpy(float)
+    known = np.isfinite(bv)
+    b = ~known | (np.nan_to_num(bv, nan=1.0) > 0.5)
+    a = np.nan_to_num(_on_idx(a0_pct, idx, np.nan).to_numpy(float), nan=-1.0) >= WARN
+    c = np.nan_to_num(_on_idx(crel_pct, idx, np.nan).to_numpy(float), nan=-1.0) >= WARN
+    return idx, b, known, a, c
+
+
+def overlay_on(variant: str, bear: pd.Series, a0_pct: pd.Series | None = None, crel_pct: pd.Series | None = None) -> pd.Series:
+    """「预计下跌」（True = 那天收盘时换成反向）。bear：牛熊分界（True = 熊）；a0_pct / crel_pct：自身历史里的百分位（0〜100）。
+    牛熊还没有值的日子不算预计下跌（不猜，留现金）。"""
+    idx, b, known, a, c = _overlay_parts(bear, a0_pct, crel_pct)
+    if variant == "P1":
+        on = b & known
+    elif variant == "P2":
+        on = a
+    elif variant == "P3":
+        on = c
+    elif variant == "P4":
+        on = b & known & (a | c)
+    else:
+        raise KeyError(f"未知反向规则 {variant}，可选 {sorted(OVERLAYS)}")
+    return pd.Series(on, index=idx)
+
+
+def overlay_keys(variant: str, bear: pd.Series, a0_pct: pd.Series | None = None, crel_pct: pd.Series | None = None) -> dict[str, pd.Series]:
+    """引擎的两个开关键：EQ（True = 股票 ETF 目标 0：熊、牛熊没有值或预计下跌）、IV（True = 反向 ETF 目标 0：不预计下跌）。"""
+    idx, b, _known, _a, _c = _overlay_parts(bear, a0_pct, crel_pct)
+    on = overlay_on(variant, bear, a0_pct, crel_pct).to_numpy(bool)
+    return {"EQ": pd.Series(b | on, index=idx), "IV": pd.Series(~on, index=idx)}
+
+
+def overlay_cfg(mode: str) -> dict:
+    """股票类 + 反向的引擎设定（follow：开着的那只拿全部闲置资金；两只都关 → 现金）。"""
+    eq = next(iter(MODES[mode]["core"]))
+    inv = INVERSE.get(mode)
+    if inv is None:
+        raise KeyError(f"{mode} 在东证没有反向 ETF")
+    return {"core": {eq: 1.0, inv: 1.0}, "core_index": {eq: "EQ", inv: "IV"}, "core_mode": "follow"}
 
 
 def mode_of(cfg: dict | None) -> str:
