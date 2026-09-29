@@ -120,7 +120,13 @@ def _yf_close(sym: str) -> pd.Series:
     logging.getLogger("yfinance").setLevel(logging.CRITICAL)
     h = yf.Ticker(sym).history(period="max", auto_adjust=True)
     h.index = h.index.tz_localize(None).normalize()
-    return h[~h.index.duplicated(keep="last")]["Close"]
+    h = h[~h.index.duplicated(keep="last")].dropna(subset=["Close"])      # Yahoo 偶尔只给开盘、收盘 NaN（例 ^N225 2026-09-29）
+    try:
+        from .data import fill_index_from_intraday
+        h = fill_index_from_intraday(sym, h)                             # 落后于交易日历 → 用 5 分钟线合成（记进 data.FILLED）
+    except Exception as e:                                                # noqa: BLE001
+        logging.getLogger("qbreak.threat").warning("%s 分钟线合成失败（按旧数据）：%s", sym, e)
+    return h["Close"]
 
 
 def fill_gaps(primary: pd.Series, backup: pd.Series, before: pd.Timestamp) -> pd.Series:

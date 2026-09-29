@@ -1284,8 +1284,10 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     out["price_check"] = pcheck                              # 行情交叉核对（yfinance × J-Quants）：告警进日报「数据完整性」
     if usdjpy is None:                                       # 状态里没有汇率时（例如首日）：备用来源
         out["usdjpy"], out["usdjpy_src"] = _usdjpy_any()
-    from qbreak.data import LAGGING
+    from qbreak.data import FILLED, LAGGING, fixes_of
     out["lagging"] = dict(LAGGING)                           # 重下载后仍落后于交易日历的行情（日报「数据完整性」列出）
+    out["filled"] = dict(FILLED)                             # 指数日线 Yahoo 缺收盘 → 用 5 分钟线合成的（日报「数据完整性 · 自动修复」列出）
+    out["data_fixes"] = fixes_of(list(data))                 # 拆股当天分红口径的修正（同上）
     write_json(paths.out_dir() / "unified_today.json", out)
     write_json(paths.out_dir() / "last_run.json", {"at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "ok": True,
                                                   "error": "", "markets_ok": ["ALL"], "blocked_hosts": blocked,

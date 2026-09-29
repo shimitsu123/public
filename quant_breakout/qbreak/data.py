@@ -58,6 +58,10 @@ def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+ADJ_VERSION = 2                    # 价格调整口径的版本：2 = 自己按 Yahoo 的分红 / 拆股记录调整（拆股当天的分红按拆股后口径）；缓存口径不同 → 重新下载
+ACTIONS: dict[str, dict] = {}      # 本进程里每只票的公司行为（随缓存保存）：{"div": {日期: 分红率 %}, "split": {日期: 比例}, "fixes": [修正过的分红]}
+
+
 def _read_cache(ticker: str, years: int, ttl_hours: float) -> pd.DataFrame | None:
     fp, mp = _cache_path(ticker, years), _meta_path(ticker, years)
     if not fp.exists() or not mp.exists():
@@ -68,29 +72,53 @@ def _read_cache(ticker: str, years: int, ttl_hours: float) -> pd.DataFrame | Non
                - datetime.fromisoformat(meta["fetched_at"])).total_seconds() / 3600
         if age > ttl_hours:
             return None
+        if meta.get("source") == "yfinance" and meta.get("adj") != ADJ_VERSION:
+            log.info("缓存 %s 是旧的价格调整口径（%s ≠ %s）→ 重新下载", fp.name, meta.get("adj"), ADJ_VERSION)
+            return None
         df = (pd.read_parquet(fp) if fp.suffix == ".parquet"
               else pd.read_csv(fp, index_col=0, parse_dates=True))
         df.index = pd.DatetimeIndex(df.index)
+        if meta.get("actions") is not None:
+            ACTIONS[ticker] = meta["actions"]
         return df
     except Exception as e:  # noqa: BLE001
         log.warning("缓存读取失败 %s: %s", fp.name, e)
         return None
 
 
-def _write_cache(ticker: str, years: int, df: pd.DataFrame, source: str) -> None:
+def _write_cache(ticker: str, years: int, df: pd.DataFrame, source: str, extra: dict | None = None) -> None:
     fp = _cache_path(ticker, years)
     try:
         if fp.suffix == ".parquet":
             df.to_parquet(fp)
         else:
             df.to_csv(fp)
-        _meta_path(ticker, years).write_text(json.dumps({
-            "ticker": ticker, "rows": len(df), "source": source,
-            "first": str(df.index[0].date()), "last": str(df.index[-1].date()),
-            "fetched_at": datetime.now(timezone.utc).isoformat(),
-        }, ensure_ascii=False), encoding="utf-8")
+        meta = {"ticker": ticker, "rows": len(df), "source": source,
+                "first": str(df.index[0].date()), "last": str(df.index[-1].date()),
+                "fetched_at": datetime.now(timezone.utc).isoformat()}
+        if source == "yfinance":
+            meta["adj"] = ADJ_VERSION
+            meta["actions"] = ACTIONS.get(ticker) or {"div": {}, "split": {}, "fixes": []}
+        if extra:
+            meta.update(extra)
+        _meta_path(ticker, years).write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
     except Exception as e:  # noqa: BLE001
         log.warning("缓存写入失败 %s: %s", fp.name, e)
+
+
+def actions_of(ticker: str) -> dict:
+    """这只票的公司行为（本进程里下载或从缓存读到的）：{"div": {日期: 分红率 %}, "split": {日期: 比例}, "fixes": [...]}；没有 → 空。"""
+    a = ACTIONS.get(ticker) or {}
+    return {"div": dict(a.get("div") or {}), "split": dict(a.get("split") or {}), "fixes": list(a.get("fixes") or [])}
+
+
+def fixes_of(tickers) -> list[dict]:
+    """这些票里修正过的分红（日报「数据完整性 · 自动修复」用）。"""
+    out = []
+    for t in tickers:
+        for f in actions_of(t)["fixes"]:
+            out.append({"ticker": t, **f})
+    return out
 
 
 # ────────────────────────── 质量检查 ──────────────────────────
@@ -221,6 +249,60 @@ def synthetic(ticker: str, years: int, seed: int | None = None) -> pd.DataFrame:
 
 
 # ────────────────────────── Provider ──────────────────────────
+DIV_FIX_TOL = 1.0                  # 拆股当天的分红：默认按拆股后口径；只有拆股前口径明显更符合当天实际跌幅（差 ≥ 1 pp）才保留 Yahoo 的
+DIV_FIX_MIN_GAP = 0.5              # 两种口径的分红率差 ≥ 0.5 pp 才记成「修正」（日报列出）；更小的差静默按拆股后口径
+
+
+def adjust_prices(raw: pd.DataFrame, ticker: str = "") -> tuple[pd.DataFrame, dict]:
+    """Yahoo 的未调整行情（auto_adjust=False + actions=True：价格已按拆股调整、分红另列）→ 与 yfinance auto_adjust 同一口径的
+    调整后 OHLCV（除息日之前的价格整体 × (1 − 分红 ÷ 前一日收盘)），但**拆股当天的分红**按市场实际的除权除息幅度判断口径：
+    Yahoo 把日本株「拆股生效日同一天除息」的分红记成拆股前每股的金额（日本的惯例：分割与配当同一基準日时，配当按分割前的股数宣布；
+    例 8766.T 2026-09-29：1 拆 15 当天的分红 122.5 円，Yahoo 当成当天 523 円股价的 22.8% 分红，把之前的价格整体调低 22.8% → 当天「涨」25.8%；
+    5706.T 同日 1 拆 10 也是；2026-09-29 横向扫描 1,076 只近 2 年：20 例，没有反例），这里默认按「分红 ÷ 拆股比 ÷ 前收」，
+    只有「分红 ÷ 前收」明显更符合当天实际的价格跌幅（当天收益 + 分红率 ≈ 0，差 ≥ 1 pp）才保留 Yahoo 的口径。
+    返回 (OHLCV, {"div": {日期: 分红率 %}, "split": {日期: 比例}, "fixes": [{"date", "div", "split", "yield_yahoo", "yield_fixed"}]})。"""
+    df = raw.dropna(subset=["Close"]).copy()
+    if not len(df):
+        return df, {"div": {}, "split": {}, "fixes": []}
+    c = pd.to_numeric(df["Close"], errors="coerce").astype(float)
+    div = pd.to_numeric(df["Dividends"], errors="coerce").fillna(0.0) if "Dividends" in df.columns else pd.Series(0.0, index=df.index)
+    spl = pd.to_numeric(df["Stock Splits"], errors="coerce").fillna(0.0) if "Stock Splits" in df.columns else pd.Series(0.0, index=df.index)
+    prev = c.shift(1)
+    f = pd.Series(1.0, index=df.index)
+    acts: dict = {"div": {}, "split": {}, "fixes": []}
+    for d in df.index[spl.to_numpy(float) > 0]:
+        if float(spl[d]) != 1.0:
+            acts["split"][str(d.date())] = float(spl[d])
+    for d in df.index[div.to_numpy(float) > 0]:
+        p0 = float(prev[d]) if np.isfinite(prev[d]) else np.nan
+        if not np.isfinite(p0) or p0 <= 0:
+            continue
+        y = float(div[d]) / p0
+        s = float(spl[d])
+        if s > 0 and s != 1.0:
+            y2 = y / s
+            r = float(c[d]) / p0 - 1
+            z1, z2 = abs(r + y) * 100, abs(r + y2) * 100                  # 两种口径各自与当天实际跌幅的差（pp）
+            if not (z1 + DIV_FIX_TOL < z2):                                # 拆股前口径没有明显更符合 → 按拆股后口径
+                if abs(y - y2) * 100 >= DIV_FIX_MIN_GAP:
+                    acts["fixes"].append({"date": str(d.date()), "div": float(div[d]), "split": s,
+                                          "yield_yahoo": round(y * 100, 2), "yield_fixed": round(y2 * 100, 2)})
+                    log.warning("%s %s：拆股 %g 当天的分红 %g 按拆股前口径（%.1f%%）→ 改按拆股后口径（%.2f%%）", ticker, d.date(), s,
+                                float(div[d]), y * 100, y2 * 100)
+                y = y2
+        if y >= 1.0:
+            log.warning("%s %s：分红率 %.0f%% 不合理，忽略这笔分红的调整", ticker, d.date(), y * 100)
+            continue
+        f[d] = 1.0 - y
+        acts["div"][str(d.date())] = round(y * 100, 4)
+    cum = f[::-1].cumprod()[::-1].shift(-1).fillna(1.0)            # 第 i 天的系数 = 之后所有除息日系数的乘积
+    out = pd.DataFrame(index=df.index)
+    for k in ("Open", "High", "Low", "Close"):
+        out[k] = pd.to_numeric(df[k], errors="coerce").astype(float) * cum
+    out["Volume"] = pd.to_numeric(df["Volume"], errors="coerce") if "Volume" in df.columns else np.nan
+    return out, acts
+
+
 def _yf_download(tickers: list[str], years: int, attempts: int = 3) -> dict[str, pd.DataFrame]:
     import yfinance as yf
     # yfinance 自带的 logger 在网络不通时会刷屏，这里降噪（错误仍由我们自己的日志报告）
@@ -230,18 +312,21 @@ def _yf_download(tickers: list[str], years: int, attempts: int = 3) -> dict[str,
     out: dict[str, pd.DataFrame] = {}
 
     def _dl():
-        return yf.download(tickers, period=f"{years}y", interval="1d", auto_adjust=True,
+        return yf.download(tickers, period=f"{years}y", interval="1d", auto_adjust=False, actions=True,
                            progress=False, group_by="ticker", threads=False)
 
     raw = retry(_dl, attempts=cfg_attempts[0], base_delay=1.5, log=log)
     if raw is None or raw.empty:
         raise DataError("yfinance 返回空数据（可能被限流或代码错误）")
     if isinstance(raw.columns, pd.MultiIndex):
-        for t in tickers:
-            if t in raw.columns.get_level_values(0):
-                out[t] = raw[t].dropna(how="all")
+        got = {t: raw[t] for t in tickers if t in raw.columns.get_level_values(0)}
     else:                                   # 单只股票时 yfinance 返回单层列
-        out[tickers[0]] = raw.dropna(how="all")
+        got = {tickers[0]: raw}
+    for t, df in got.items():
+        df = df.dropna(how="all")
+        if "Close" not in df.columns:
+            continue
+        out[t], ACTIONS[t] = adjust_prices(df, t)
     return out
 
 
@@ -300,6 +385,71 @@ def behind(t: str, df: pd.DataFrame | None) -> tuple[str, str] | None:
     exp = expected_last_bar(now_jst().date(), m)
     last = pd.Timestamp(df.index[-1]).date()
     return (str(last), str(exp)) if last < exp else None
+
+
+FILLED: dict[str, dict] = {}       # 本进程里用分钟线合成的指数日线：{代码: {"dates": [...], "close": 最新合成收盘, "source": "yfinance 5m"}}
+FILL_MIN_BARS = 30                 # 一天至少要有这么多根 5 分钟线才合成（日本 60〜68 根、美国 78 根）
+
+
+def _yf_intraday(ticker: str, days: int = 5, interval: str = "5m") -> pd.DataFrame:
+    import yfinance as yf
+    for nm in ("yfinance", "yfinance.data", "yfinance.utils", "peewee"):
+        logging.getLogger(nm).setLevel(logging.CRITICAL)
+    return yf.Ticker(ticker).history(period=f"{days}d", interval=interval, auto_adjust=False)
+
+
+def fill_index_from_intraday(ticker: str, df: pd.DataFrame | None, now: datetime | None = None) -> pd.DataFrame | None:
+    """指数（^ 开头）的日线落后于交易日历（Yahoo 偶尔只给开盘、收盘是 NaN，例 ^N225 2026-09-29）→ 用那几天的 5 分钟线合成日线
+    （开 = 第一根开盘、高 / 低 = 极值、收 = 最后一根收盘、量 = 合计）补上，只补已收盘的日子；合成的收盘与正式收盘可能差 0.1% 以内，
+    下次整段重新下载时会被正式日线换掉。补上的记进 FILLED（日报「数据完整性 · 自动修复」列出）。取不到 / 不够 → 原样返回。"""
+    if df is None or not len(df) or not ticker.startswith("^"):
+        return df
+    b = behind(ticker, df)
+    if b is None:
+        return df
+    m = _market_of(ticker)
+    try:
+        bars = _yf_intraday(ticker)
+    except Exception as e:                                             # noqa: BLE001
+        log.warning("%s 分钟线取不到（不合成日线）：%s", ticker, e)
+        return df
+    if bars is None or not len(bars) or "Close" not in bars.columns:
+        return df
+    from zoneinfo import ZoneInfo
+
+    from .calendar_jp import JST
+    from .trader import market_session_closed
+    tz = JST if m == "JP" else ZoneInfo("America/New_York")
+    idx = pd.DatetimeIndex(bars.index)
+    idx = idx.tz_localize("UTC").tz_convert(tz) if idx.tz is None else idx.tz_convert(tz)
+    bars = bars.copy()
+    bars.index = idx
+    bars = bars.dropna(subset=["Close"])
+    last = pd.Timestamp(df.index[-1]).normalize()
+    exp = pd.Timestamp(b[1])
+    n_day, n_closed = market_session_closed(m, (now or _now_utc()).astimezone(tz))
+    added = []
+    rows = {}
+    for day, g in bars.groupby(bars.index.tz_localize(None).normalize()):
+        day = pd.Timestamp(day)
+        if day <= last or day > exp or len(g) < FILL_MIN_BARS:
+            continue
+        if day.date() == n_day and not n_closed:
+            continue                                                   # 今天还没收盘
+        vol = pd.to_numeric(g["Volume"], errors="coerce").fillna(0).sum() if "Volume" in g.columns else 0.0
+        rows[day] = {"Open": float(g["Open"].iloc[0]), "High": float(g["High"].max()), "Low": float(g["Low"].min()),
+                     "Close": float(g["Close"].iloc[-1]), "Volume": float(vol)}
+        added.append(day)
+    if not rows:
+        return df
+    add = pd.DataFrame.from_dict(rows, orient="index")[OHLCV]
+    out = pd.concat([df[[c for c in OHLCV if c in df.columns]], add]).sort_index()
+    out = out[~out.index.duplicated(keep="last")]
+    FILLED[ticker] = {"dates": [str(d.date()) for d in added], "close": rows[added[-1]]["Close"], "source": "yfinance 5m",
+                      "expected": b[1]}
+    log.warning("%s 日线只到 %s（应有 %s）→ 用 5 分钟线合成 %s（收盘 %.2f）", ticker, last.date(), b[1],
+                "、".join(str(d.date()) for d in added), rows[added[-1]]["Close"])
+    return out
 
 
 def _fetched_at(ticker: str, years: int) -> datetime | None:
@@ -388,6 +538,13 @@ def load_universe(tickers: list[str], cfg: DataConfig | None = None,
         if t not in out:
             log.warning("%s 重新下载失败，暂用旧缓存（最新 %s）", t, c.index[-1].date())
             out[t] = c
+    if cfg.provider == "yfinance":              # 指数的日线落后（Yahoo 只给开盘、收盘 NaN）→ 用 5 分钟线合成，补上的写进缓存
+        for t in tickers:
+            if t.startswith("^") and t in out and behind(t, out[t]) is not None:
+                filled = fill_index_from_intraday(t, out[t])
+                if filled is not None and len(filled) > len(out[t]):
+                    out[t] = filled
+                    _write_cache(t, cfg.years, filled, "yfinance", extra={"filled": FILLED[t]["dates"]})
     for t in tickers:
         b = behind(t, out.get(t))
         if b:

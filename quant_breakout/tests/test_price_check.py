@@ -156,3 +156,24 @@ def test_report_block_and_missing_items():
     hp = write_unified_report()
     assert "5401.T 复权错位" in hp.read_text(encoding="utf-8")
     assert read_json(paths.out_dir() / "report_data.json")["price_check"]["alerts"][0]["ticker"] == "5401.T"
+
+
+def test_level_shift_explained_by_dividend_is_info_not_alert():
+    """特别分红（3659.T 2026-09-29 分红率 13.5%）：yfinance 按分红把之前整体调低 → 比值上跳 15.6%，能被分红解释 → 只提示。"""
+    Y, J = _pair()
+    d = J.index[30]
+    Y.iloc[:30] = Y.iloc[:30] * (1 - 0.1353)
+    r = PC.compare(Y, J, div_yield={str(d.date()): 13.53})
+    assert not [a for a in r["alerts"] if a["kind"] == "level"]
+    dv = [x for x in r["info"] if x["kind"] == "dividend"]
+    assert len(dv) == 1 and dv[0]["date"] == str(d.date()) and abs(dv[0]["yield_pct"] - 13.53) < 1e-6
+    assert "除息调整" in PC.describe({"ticker": "3659.T", **dv[0]})
+    # 分红解释不了（8766.T 那种 22.8% 的错口径，实际分红 1.5%）→ 仍是复权错位告警
+    r2 = PC.compare(Y, J, div_yield={str(d.date()): 1.52})
+    assert [a for a in r2["alerts"] if a["kind"] == "level"]
+    # 最新一天的比值跳 > 5%（特别分红在最新一天）→ 有分红解释就只提示
+    Y3, J3 = _pair()
+    Y3.iloc[:-1] = Y3.iloc[:-1] * (1 - 0.10)
+    r3 = PC.compare(Y3, J3, div_yield={str(J3.index[-1].date()): 10.0})
+    assert not r3["alerts"] and [x for x in r3["info"] if x["kind"] == "dividend"]
+    assert PC.explained_by_dividend(15.6, 13.53) and not PC.explained_by_dividend(15.6, 1.52) and not PC.explained_by_dividend(15.6, None)

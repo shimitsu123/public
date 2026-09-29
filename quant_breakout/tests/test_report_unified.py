@@ -310,3 +310,18 @@ def test_report_leads_with_bull_bear_phase_and_percentages():
     assert "转熊价位 55,673 円" in html                     # 原来的明细还在
     rd = read_json(paths.out_dir() / "report_data.json")
     assert rd["markets"]["JP"]["regime"]["bullbear"]["phase_label"] == "牛市·稳固" and "phase_text" in rd["hint"]
+
+
+def test_fixed_items_listed_separately_from_missing():
+    from qbreak import report_unified as RU
+    d = {"filled": {"^N225": {"dates": ["2026-09-29"], "close": 65209.37, "source": "yfinance 5m", "expected": "2026-09-29"}},
+         "data_fixes": [{"ticker": "8766.T", "date": "2026-09-29", "div": 122.5, "split": 15.0, "yield_yahoo": 22.76, "yield_fixed": 1.52}],
+         "price_check": {"info": [{"ticker": "3659.T", "kind": "dividend", "date": "2026-09-29", "shift_pct": 15.6, "yield_pct": 13.53}],
+                         "info_counts": {"dividend": 1}}}
+    fx = RU.fixed_items(d)
+    assert len(fx) == 3 and "5 分钟线合成" in fx[0] and "65,209.37" in fx[0] and "8766.T" in fx[1] and "1.52%" in fx[1] and "3659.T" in fx[2]
+    html = RU._missing_html([], fx)
+    assert "都取到了" in html and "自动修复 3 项" in html and "8766.T" in html
+    html2 = RU._missing_html(["行情落后：^GSPC …"], fx)
+    assert "缺 1 项" in html2 and "自动修复 3 项" in html2
+    assert RU._missing_html([], []) == '<div class="muted">数据完整性：日报需要的数据都取到了</div>'

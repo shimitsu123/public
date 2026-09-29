@@ -98,10 +98,32 @@ def build_unified_data() -> dict:
                      "（经济威胁消息的汇总），都只作展示、不参与交易；能源消费在 energy（rows = 18 个来源的 3 个月同比 value %、"
                      "历史分位 pct、偏弱 / 偏强 state、同期一起动的行业 links；k4 = K4 前向观察的状态，forward = 前向记录的天数），只作展示 / 记录。")}
     d["missing"] = missing_items(d)
+    d["fixed"] = fixed_items(d)
     return d
 
 
 _MNAME = {"JP": "日本（日経225）", "US": "美股（S&P500）"}
+
+
+def fixed_items(d: dict) -> list[str]:
+    """数据层自动修好的（不算缺，写在「数据完整性」下面让你看得见）：指数日线用分钟线合成、拆股当天的分红口径修正、能被分红解释的比值变化。"""
+    out = []
+    for k, v in sorted((d.get("filled") or {}).items()):
+        ds = "、".join(v.get("dates") or [])
+        c = v.get("close")
+        out.append(f"{k} {ds} 的日线 Yahoo 没给收盘（只有开盘）→ 用当天的 5 分钟线合成（收盘 {c:,.2f}；与正式收盘可能差 0.1% 以内，"
+                   "正式日线到了会自动换掉）—— 指数 / 核心 ETF 判断与判断层市场读数按合成的收盘" if isinstance(c, (int, float))
+                   else f"{k} {ds} 的日线用 5 分钟线合成")
+    for f in d.get("data_fixes") or []:
+        out.append(f"{f.get('ticker')} {f.get('date')}：拆股 1 拆 {f.get('split'):g} 当天的分红 {f.get('div'):g} 円是拆股前每股的金额，Yahoo 当成 "
+                   f"{f.get('yield_yahoo'):.1f}% 的分红把之前的价格整体调低 → 已改按拆股后口径 {f.get('yield_fixed'):.2f}% 调整（60 日箱体 / MACD / 止损参考按修正后的价格）")
+    pc = d.get("price_check") or {}
+    dv = [x for x in (pc.get("info") or []) if x.get("kind") == "dividend"]
+    n_dv = (pc.get("info_counts") or {}).get("dividend", len(dv))
+    if n_dv:
+        big = [f"{x['ticker']} {x['date']} {x['yield_pct']:.1f}%" for x in dv[:3]]
+        out.append(f"行情交叉核对：{n_dv} 只的比值变化能被当天的分红解释（例 {'、'.join(big)}）—— yfinance 按分红调整、J-Quants 不调，不是错位")
+    return out
 
 
 def missing_items(d: dict) -> list[str]:
@@ -349,11 +371,13 @@ def _bar_txt(d: dict) -> str:
     return "—（还没有运行过）"
 
 
-def _missing_html(items: list[str]) -> str:
+def _missing_html(items: list[str], fixed: list[str] | None = None) -> str:
+    fx = ("<details><summary>自动修复 " + str(len(fixed)) + " 项（不算缺）</summary><ul>"
+          + "".join(f"<li>{escape(x)}</li>" for x in fixed) + "</ul></details>") if fixed else ""
     if not items:
-        return '<div class="muted">数据完整性：日报需要的数据都取到了</div>'
+        return '<div class="muted">数据完整性：日报需要的数据都取到了' + ("；" + fx if fx else "") + "</div>"
     return ("<div class=\"card warn\"><b>数据完整性：缺 " + str(len(items)) + " 项</b><ul>"
-            + "".join(f"<li>{escape(x)}</li>" for x in items) + "</ul></div>")
+            + "".join(f"<li>{escape(x)}</li>" for x in items) + "</ul>" + fx + "</div>")
 
 
 def _executor_html(d: dict) -> str:
@@ -724,7 +748,7 @@ def render_unified_html(d: dict) -> str:
     dash = _dash(d, d.get("macro_now") or {}, {"summary": nw.get("summary") or {}, "generated": nw.get("generated"), "error": nw.get("error")})
     return _PAGE.format(
         generated=escape(d["generated"]), bar=escape(_bar_txt(d)), dash=dash,
-        missing=_missing_html(d.get("missing") or []) + _executor_html(d),
+        missing=_missing_html(d.get("missing") or [], d.get("fixed") or []) + _executor_html(d),
         first="" if d.get("history") else (
             f'<div class="muted"><b>开始前的预览</b>：模拟期 {escape(str((d.get("sim") or {}).get("start")))} 开始，现在还没有交易；'
             '下面的市场状态、候补队列、汇率都用最新收盘数据计算（不下单、不动账户）。首次运行在开始日 07:00 JST 前后'
