@@ -125,10 +125,12 @@ def _f(s: dict) -> str:
 
 # ───────────────────────── 数据 ─────────────────────────
 def seen_names() -> set[str]:
-    """以前的研究用过的美股（US_BROAD ∪ UNIVERSE_US）：一律不进判定。"""
+    """以前的研究用过的美股（US_BROAD ∪ UNIVERSE_US）：一律不进判定。
+    US_BROAD 2026-09-30 起加回的 15 只（航空运输 / 百货 / 服装 / 食品饮料餐饮）以前的研究没用过 → 不算，名单与登记时相同
+    （2026-09-29 事后补的一行：只是不让股票池的改动改变这里的名单）。"""
     from qbreak.config import UNIVERSE_US
-    from qbreak.universes import US_BROAD
-    return set(US_BROAD) | set(UNIVERSE_US)
+    from qbreak.universes import US_BROAD, excluded_until_20260929
+    return (set(US_BROAD) - excluded_until_20260929("US")) | set(UNIVERSE_US)
 
 
 def pool_members(pool: str = "sp500u") -> tuple[dict[str, pd.Timestamp], dict[str, pd.Timestamp], dict[str, str]]:

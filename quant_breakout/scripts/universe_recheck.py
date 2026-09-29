@@ -10,20 +10,23 @@ JP_EXCLUDED_UNTIL_20260929；百货、服装、食品饮料 日本一直在池�
   J 窗口的宽表 candle_panels.npz 也各自按自己的股票池重建）。比较每个脚本自己事先写定的结论字段
   （passed / proposal / decision / chosen / reading / verdict …）与关键数字；以前登记时的结论照旧有效，这里只回答「换股票池会不会变」。
   注意：以前的脚本在今天重跑，「现行」参数是今天的（W2 已开）→ old 这一遍不一定等于当时登记的数字；判断出入只看 old 与 new 的差。
-选哪些脚本：在用的规则（W2、X6、判断层市场层、闲置资金 Q1）+ 差一点 / 待定的候选（V1〜V4、K1〜K3、D1 / D2、R2a、名额 U1 / U2、
-  A1〜A5、核心纳指 N1〜N3、黄金 / 长债 R10）+ 楽天美股 vs 立花日経（日本那边）。其余研究按依赖关系分类（见 var/out/universe_recheck.md）。
+选哪些脚本：在用的规则（W2、X6、判断层市场层、闲置资金 Q1）+ 差一点 / 待定的候选（V1〜V4、K1〜K3（确认 leap2_s6_study 与来源的搜索
+  leap2_s6_combo）、D1 / D2、R2a、名额 U1 / U2、A1〜A5、核心纳指 N1〜N3、黄金 / 长债 R10）+ 楽天美股 vs 立花日経（日本那边）
+  + 抽查 8 项「不通过」的研究（WAVE2）。其余研究按依赖关系分类（见 var/out/universe_recheck.md）。
+结论的比较只看标签（选中哪个、过没过、读法），不比小数：同 / 决定不变但过门槛的候选有变 / 结论字段变了。
 
 用法：
   python scripts/universe_recheck.py setup  <base> [模式…]          # 建 <base>/<模式>/home（缺省 old 与 new）
   python scripts/universe_recheck.py run    <base> <old|new|newus> <脚本名>  # 在对应数据目录里跑一个研究脚本（日志 <base>/<mode>/<脚本>.log）
   newus = new + 楽天美股 vs 立花日経 的美股池也加回航空运输 / 服装 / 食品饮料餐饮 / 日用品综合零售（market_compare_study 的 US_EXCL_SUBS 清空）
-  python scripts/universe_recheck.py report <base>                 # 读两边的输出 → var/out/universe_recheck.md / .json
+  python scripts/universe_recheck.py report <base> [读法.md]        # 读两边的输出 → var/out/universe_recheck.md / .json（读法 = 看了结果之后写的说明，附在最后）
 非投资建议。
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import runpy
 import shutil
 import sys
@@ -32,6 +35,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 SCRIPTS = ["exit_mode_check", "equity_idle_study", "fwd_judgment_check", "wvol_study", "vthrust_study", "stack_study",
            "layer_study", "ndx_study", "refuge_study", "capital_study", "adaptive_study", "leap2_s6_combo", "market_compare_study"]
+# K1〜K3 的登记确认（S6 搜索 leap2_s6_combo 只是它的来源，要先用同一个股票池重建 leap_r1 的逐笔）
+EXTRA = ["leap2_s6_study"]
 # 抽查：结论是「不通过」的研究里挑 8 项（有可比的结论字段、单次几分钟）
 WAVE2 = ["signal_study", "score_study", "mtf_study", "breadth_study", "ecurve_study", "timing2_study", "sell_confirm", "madev_study"]
 KEYS = ("passed", "proposal", "decision", "chosen", "reading", "verdict", "better_than_w2", "fails")
@@ -58,6 +63,13 @@ def setup(base: Path, modes: tuple[str, ...] = ("old", "new")) -> None:
             (c / f.name).symlink_to(f)
 
 
+W2_OFF_MODES = ("oldw", "neww")                        # 只有这两个用登记时的基准（不开 W2）；注意 "new" 也以 w 结尾，不能用 endswith
+
+
+def w2_off(mode: str) -> bool:
+    return mode in W2_OFF_MODES
+
+
 def run(base: Path, mode: str, script: str) -> None:
     os.environ["QBREAK_HOME"] = str(base / mode / "home")
     sys.path.insert(0, str(REPO))
@@ -68,7 +80,7 @@ def run(base: Path, mode: str, script: str) -> None:
         U.US_EXCLUDED = U.US_EXCLUDED_UNTIL_20260929
     elif mode not in ("new", "newus", "neww"):
         raise SystemExit(f"mode 只能是 old / new / newus / oldw / neww：{mode}")
-    if mode.endswith("w"):                                                   # 登记时的基准：不开 W2（W2 是 2026-09-27 才启用的）
+    if w2_off(mode):                                                         # 登记时的基准：不开 W2（W2 是 2026-09-27 才启用的）
         from qbreak import score_forward as SF
         from qbreak import trader as TR
         _orig = TR.load_params
@@ -94,6 +106,54 @@ def _pick(d: dict) -> dict:
         if k in d:
             v = d[k]
             out[k] = (len(v) if isinstance(v, (list, dict)) and k == "fails" else v)
+    if isinstance(d.get("pools"), dict):               # leap2_s6_combo：每个池子过筛选的组合个数与组合（去掉分位点的数字）
+        out["pools"] = {p: {"real": v.get("real"), "top": sorted(re.sub(r"（[^）]*）", "", t["rule"]) for t in (v.get("top") or []))}
+                        for p, v in d["pools"].items()}
+    for k in ("K1", "K2", "K3"):                       # leap2_s6_study：飞跃门槛 S1〜S5 / 选股改进 各自过没过
+        v = d.get(k)
+        if isinstance(v, dict) and "leap_fails" in v:
+            out.setdefault("verdict", {})[k] = {"label": ("飞跃 ✓" if not v["leap_fails"] else "飞跃 ✗") + " / "
+                                                + ("改进 ✓" if not v["improve_fails"] else "改进 ✗")}
+    return out
+
+
+def _concl(v):
+    """比较结论只看标签：去掉小数（关键数字）与每个候选的明细（per、fails 的条数）。"""
+    if isinstance(v, dict):
+        return {k: _concl(x) for k, x in v.items() if k not in ("per", "fails") and not isinstance(x, float)}
+    if isinstance(v, list):
+        return [_concl(x) for x in v if not isinstance(x, float)]
+    return v
+
+
+def same_kind(pa: dict | None, pb: dict | None) -> str | None:
+    """old 与 new 的结论：same = 完全相同 / passed = 决定相同、只有过门槛的候选不同 / changed = 结论字段不同；缺一边 → None。"""
+    if pa is None or pb is None:
+        return None
+    ca, cb = _concl(pa), _concl(pb)
+    if ca == cb:
+        return "same"
+    drop = lambda c: {k: x for k, x in c.items() if k != "passed"}          # noqa: E731
+    return "passed" if drop(ca) == drop(cb) else "changed"
+
+
+def _details(a: dict | None, b: dict | None) -> list[str]:
+    """结论不同的研究：每个候选 old / new 各没过哪几条门槛（只列两边不一样的候选）。"""
+    def per(d):
+        if not d:
+            return {}
+        if isinstance(d.get("fails"), dict):
+            return d["fails"]
+        if isinstance(d.get("decision"), dict) and isinstance(d["decision"].get("per"), dict):
+            return {k: (v.get("fails") if isinstance(v, dict) else v) for k, v in d["decision"]["per"].items()}
+        return {k: d[k]["improve_fails"] for k in ("K1", "K2", "K3") if isinstance(d.get(k), dict) and "improve_fails" in d[k]}
+    pa, pb = per(a), per(b)
+    out = []
+    for k in sorted(set(pa) | set(pb)):
+        fa, fb = pa.get(k) or [], pb.get(k) or []
+        if bool(fa) != bool(fb):
+            out.append(f"  - {k}：old " + ("全部过" if not fa else "没过 " + "；".join(map(str, fa)))
+                       + " → new " + ("全部过" if not fb else "没过 " + "；".join(map(str, fb))))
     return out
 
 
@@ -111,7 +171,7 @@ def load_out(base: Path, mode: str, script: str) -> dict | None:
 
 def compare(base: Path) -> list[dict]:
     rows = []
-    for s in SCRIPTS + ["market_compare_study@new@newus", "wvol_study@oldw@neww", "vthrust_study@oldw@neww"] + WAVE2:
+    for s in SCRIPTS + EXTRA + ["market_compare_study@new@newus", "wvol_study@oldw@neww", "vthrust_study@oldw@neww"] + WAVE2:
         s, mode_a, mode_b = (s.split("@") + ["old", "new"])[:3] if "@" in s else (s, "old", "new")
         a, b = load_out(base, mode_a, s), load_out(base, mode_b, s)
         reg = None
@@ -122,8 +182,10 @@ def compare(base: Path) -> list[dict]:
             except Exception:                                                # noqa: BLE001
                 reg = None
         pa, pb = (_pick(a) if a else None), (_pick(b) if b else None)
+        kind = same_kind(pa, pb)
         rows.append({"script": s if (mode_a, mode_b) == ("old", "new") else f"{s}（{mode_a} vs {mode_b}）", "registered": reg, "old": pa, "new": pb,
-                     "same": (pa == pb) if (pa is not None and pb is not None) else None})
+                     "kind": kind, "same": None if kind is None else kind == "same", "numbers_same": (pa == pb) if kind else None,
+                     "details": _details(a, b) if kind in ("passed", "changed") else []})
     return rows
 
 
@@ -204,7 +266,8 @@ LABEL = {"exit_mode_check": "离场 X6（在用）", "equity_idle_study": "闲�
          "wvol_study": "W2 周线量比（在用）", "vthrust_study": "放量突破加强版 V1〜V4（差一条）", "stack_study": "深跌加仓 D1 / D2（差一点）",
          "layer_study": "个股层值不值得 R2a（差一条）", "ndx_study": "核心纳指 N1〜N3（差一条）", "refuge_study": "熊市换黄金 / 长债 R10（差一条）",
          "capital_study": "名额数 / 一手放宽（提议未采用）", "adaptive_study": "跟时代调阈值 A1〜A5（差一条）",
-         "leap2_s6_combo": "量 × 低 β 组合 K1〜K3（K2 前向记录）", "market_compare_study": "楽天美股 vs 立花日経",
+         "leap2_s6_combo": "S6 指标两两搭配搜索（K1〜K3 的来源，探索）", "leap2_s6_study": "量 × 低 β K1〜K3 确认（K2 前向记录）",
+         "market_compare_study": "楽天美股 vs 立花日経",
          "signal_study": "抽查：买点 / 卖点成功率 E1〜E4", "score_study": "抽查：买点质量分 F1〜F5", "mtf_study": "抽查：多周期 C1〜C5",
          "breadth_study": "抽查：市场宽度 A50", "ecurve_study": "抽查：突破最近管不管用", "timing2_study": "抽查：牛熊分界第二轮 T7〜T11",
          "sell_confirm": "抽查：卖出判定确认", "madev_study": "抽查：周 / 月线脱离均线就卖 D1〜D8"}
@@ -214,38 +277,52 @@ def _short(v) -> str:
     if v is None:
         return "—（没跑出来）"
     parts = []
-    for k in ("chosen", "reading", "proposal", "passed", "better_than_w2", "verdict", "decision"):
+    for k in ("chosen", "reading", "proposal", "passed", "better_than_w2", "verdict", "decision", "pools"):
         if k in v:
             x = v[k]
             if k == "decision" and isinstance(x, dict):
-                x = {kk: vv for kk, vv in x.items() if kk != "per"} or "见 json"
+                x = _concl(x) or "见 json"
             if k == "verdict" and isinstance(x, dict):
                 x = {kk: (vv.get("label") if isinstance(vv, dict) else vv) for kk, vv in x.items()}
+            if k == "pools" and isinstance(x, dict):
+                x = {p: f"过筛选 {vv.get('real')} 个" for p, vv in x.items()}
             parts.append(f"{k} {json.dumps(x, ensure_ascii=False)}")
     return "；".join(parts) or json.dumps(v, ensure_ascii=False)[:120]
 
 
-def write_report(base: Path) -> dict:
+KIND_TEXT = {"same": "不变", "passed": "决定不变；过门槛的候选有变", "changed": "**结论字段变了**", None: "—"}
+
+
+def write_report(base: Path, notes: Path | None = None) -> dict:
     rows = compare(base)
     cls = classify_registry()
     added = {}
     fa = base / "added_trades.json"
     if fa.exists():
         added = json.loads(fa.read_text(encoding="utf-8"))
-    rerun = {r["script"].split("（")[0] for r in rows}
+    done = [r for r in rows if r["kind"] is not None]
+    by = {k: [r for r in done if r["kind"] == k] for k in ("same", "passed", "changed")}
+    missing = [r for r in rows if r["kind"] is None]
+    nm = lambda r: LABEL.get(r["script"].split("（")[0], r["script"].split("（")[0]) + r["script"][len(r["script"].split("（")[0]):]   # noqa: E731
     L = ["# 股票池加回航空 / 陆运之后，以前的研究结论有没有出入（2026-09-29 事后复核；做法见 scripts/universe_recheck.py 开头）", ""]
-    changed = [r for r in rows if r["same"] is False]
-    L.append("**结论：" + ("重跑的研究里没有一条的结论因为股票池而改变。" if not changed else
-                          f"有 {len(changed)} 项的结论字段不同：" + "、".join(r["script"] for r in changed)) + "**")
+    L.append(f"**结论：两边都跑出来的 {len(done)} 项里，{len(by['same'])} 项结论完全相同；"
+             + (f"{len(by['passed'])} 项决定不变、只有过门槛的候选有变（" + "、".join(nm(r) for r in by["passed"]) + "）；" if by["passed"] else "")
+             + (f"{len(by['changed'])} 项结论字段变了（" + "、".join(nm(r) for r in by["changed"]) + "）" if by["changed"] else "没有一项的结论字段因为股票池而改变")
+             + "。**" + (f"（没跑出来 {len(missing)} 项：" + "、".join(nm(r) for r in missing) + "）" if missing else ""))
     L += ["", "## 一 重跑的研究（同一份代码、数据、参数，只换股票池：old = 213 只，new = 225 只）", "",
           "| 研究 | 登记时的结论 | old 重跑 | new 重跑 | 股票池改变结论吗 |", "|---|---|---|---|---|"]
     for r in rows:
-        nm = r["script"].split("（")[0]
-        tail = r["script"][len(nm):]
-        L.append(f"| {LABEL.get(nm, nm)}{tail} | {_short(r['registered'])} | {_short(r['old'])} | {_short(r['new'])} | "
-                 + ("不变" if r["same"] else ("**变了**" if r["same"] is False else "—")) + " |")
+        extra = "（数字有小差）" if r["kind"] == "same" and r["numbers_same"] is False else ""
+        L.append(f"| {nm(r)} | {_short(r['registered'])} | {_short(r['old'])} | {_short(r['new'])} | {KIND_TEXT[r['kind']]}{extra} |")
     L += ["", "读法：old 重跑不一定等于登记时的数字 —— 以前的脚本今天重跑时「现行」参数是今天的（W2 已开、行情多了几天）；"
-          "判断股票池的影响只看 old 与 new 的差。W2 / V1〜V4 另用登记时的基准（不开 W2）各跑一遍（oldw vs neww）。"]
+          "判断股票池的影响只看 old 与 new 的差。W2 / V1〜V4 另用登记时的基准（不开 W2）各跑一遍（oldw vs neww）。"
+          "「结论」只比标签（选中哪个、过没过、读法），不比小数。"]
+    det = [r for r in rows if r["details"]]
+    if det:
+        L += ["", "### 结论不同的几项：每个候选 old / new 各没过哪几条门槛（只列两边不一样的候选）", ""]
+        for r in det:
+            L.append(f"- {nm(r)}（{KIND_TEXT[r['kind']].strip('*')}）")
+            L += r["details"]
     if added:
         L += ["", "## 二 加回的 12 只自己的交易（现行规则：W2 + X6；个股层，窗口内买入）", ""]
         for tag in ("Z", "E", "J"):
@@ -256,17 +333,20 @@ def write_report(base: Path) -> dict:
             L.append(f"- {tag}：加回的 {ad['n']} 笔（胜率 {ad['win']}%、每笔 {ad['mean']}%、合计 ¥{ad['pnl_jpy']:,}）；其余 {ot['n']} 笔（胜率 {ot['win']}%、每笔 {ot['mean']}%）；"
                      + "按票：" + ("、".join(f"{t} {n}" for t, n in a.get("by_ticker", {}).items()) or "无"))
     from collections import Counter
-    L += ["", "## 三 全部 174 条研究按依赖的股票池分类（按脚本内容自动判）", ""]
+    L += ["", f"## 三 全部 {len(cls)} 条研究按依赖的股票池分类（按脚本内容自动判）", ""]
     cnt = Counter(c["dep"] for c in cls)
     L += [f"- {k}：{v} 条" for k, v in cnt.most_common()]
     dep = [c for c in cls if c["dep"] == "日経225 股票池"]
     vc = Counter(c["verdict"] for c in dep)
     L += ["", f"依赖日経225 股票池的 {len(dep)} 条：" + "、".join(f"{k} {v}" for k, v in vc.most_common())
-          + f"；其中在用 / 差一点 / 待定的都在第一节重跑了（{len(rerun)} 项脚本）。"
-          "其余（多数是「不通过」「探索不登记」）没有逐条重跑：加回的 12 只在各年代只占现行规则交易的一小部分（第二节），"
-          "而重跑的 13 项里结论全部不受影响 → 判断不会翻转；要逐条重跑的，命令见脚本开头。",
+          + f"；在用 / 差一点 / 待定的与 8 项抽查在第一节重跑了（{len({r['script'].split('（')[0] for r in done})} 个脚本）。"
+          "其余（多数是「不通过」「探索不登记」）没有逐条重跑：加回的 12 只在各年代只占现行规则交易的一小部分（第二节）；"
+          "要逐条重跑的，命令见脚本开头。",
           "不依赖日経225 股票池的：指数 / 行业 / 宏观类（牛熊、威胁指数、行业联动、核心 ETF）不看个股池；扩大池（冻结）与全市场研究"
-          "的股票池本来就不受这次改动影响（全市场本来就含航空 / 陆运）；美股研究另见第一节「楽天美股 vs 立花日経（newus）」。非投资建议。"]
+          "的股票池本来就不受这次改动影响（全市场本来就含航空 / 陆运）；美股研究另见第一节「楽天美股 vs 立花日経（newus）」。"]
+    if notes is not None and notes.exists():
+        L += ["", "## 四 读法（看了上面的结果之后写的，事后）", "", notes.read_text(encoding="utf-8").strip()]
+    L += ["", "非投资建议。"]
     out = {"rows": rows, "added": added, "classes": cls, "counts": dict(cnt)}
     fp = REPO / "var" / "out" / "universe_recheck"
     Path(f"{fp}.md").write_text("\n".join(L) + "\n", encoding="utf-8")
@@ -291,7 +371,7 @@ def main(argv: list[str]) -> int:
         (base / "added_trades.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
         return 0
     if cmd == "report":
-        write_report(base)
+        write_report(base, Path(argv[2]).resolve() if len(argv) > 2 else None)
         return 0
     print(__doc__)
     return 2

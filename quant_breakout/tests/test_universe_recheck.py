@@ -57,3 +57,58 @@ def test_classify_registry_covers_every_entry():
     dep = {r["dep"] for r in rows if "scripts/exit_mode_check.py" in r["script"].split(";")}
     assert dep == {"日経225 股票池"}
     assert {r["dep"] for r in rows if r["script"] == "scripts/threat_intl_study.py"} == {"指数 / 行业 / 宏观（不看个股池）"}
+
+
+def test_conclusion_compare_ignores_numbers():
+    a = {"verdict": {"D1": {"label": "不通过", "E": {"d_calmar": 0.001, "d_dd": 0.47}}}}
+    b = {"verdict": {"D1": {"label": "不通过", "E": {"d_calmar": 0.002, "d_dd": 0.46}}}}
+    assert R.same_kind(a, b) == "same" and R.same_kind(None, a) is None
+    assert R.same_kind({"proposal": "W2", "passed": ["V3"]}, {"proposal": "W2", "passed": []}) == "passed"
+    ca = {"decision": {"per": {"1000000|2": []}, "best": "1000000|2"}}
+    cb = {"decision": {"per": {"1000000|2": ["主窗口"]}, "best": "1000000|4|U2"}}
+    assert R.same_kind(ca, cb) == "changed"
+    assert R.same_kind({"decision": {"H3": True, "H3_diff": 2.8}}, {"decision": {"H3": True, "H3_diff": 1.1}}) == "same"
+
+
+def test_pick_search_pools_and_k_candidates():
+    d = {"pools": {"P1": {"real": 2, "top": [{"rule": "vr1 ≥ 2/3 分位（2.184） ∧ b_n225 ≤ 中位数（0.7803）"}]}},
+         "K2": {"leap_fails": ["S1 Z 胜率 56.5%"], "improve_fails": []}}
+    p = R._pick(d)
+    assert p["pools"]["P1"] == {"real": 2, "top": ["vr1 ≥ 2/3 分位 ∧ b_n225 ≤ 中位数"]}
+    assert p["verdict"]["K2"]["label"] == "飞跃 ✗ / 改进 ✓"
+    assert "过筛选 2 个" in R._short(p)
+
+
+def test_details_only_lists_flipped_candidates():
+    out = R._details({"fails": {"V1": ["x"], "V3": []}}, {"fails": {"V1": ["y"], "V3": ["z"]}})
+    assert len(out) == 1 and "V3" in out[0] and "old 全部过" in out[0] and "z" in out[0]
+    cap = R._details({"decision": {"per": {"2": [], "U2": ["g"]}}}, {"decision": {"per": {"2": ["h"], "U2": []}}})
+    assert len(cap) == 2
+    sig = R._details({"decision": {"per": {"E1": {"pass": False, "fails": ["q"]}}}}, {"decision": {"per": {"E1": {"pass": True, "fails": []}}}})
+    assert len(sig) == 1 and "new 全部过" in sig[0]
+
+
+def test_write_report_counts_follow_results(tmp_path, monkeypatch):
+    repo = _fake_repo(tmp_path)
+    reg = [{"line": 1, "date": "2026-09-01", "domain": "个股", "verdict": "不通过", "title": "x", "script": ""}]
+    (repo / "var" / "research_registry.json").write_text(json.dumps(reg), encoding="utf-8")
+    monkeypatch.setattr(R, "REPO", repo)
+    monkeypatch.setattr(R, "SCRIPTS", ["x"])
+    monkeypatch.setattr(R, "EXTRA", [])
+    monkeypatch.setattr(R, "WAVE2", [])
+    base = tmp_path / "urc"
+    R.setup(base, ("old", "new"))
+    time.sleep(0.01)
+    for m, v in (("old", ["A"]), ("new", [])):
+        (base / m / "home" / "out" / "x.json").write_text(json.dumps({"proposal": "W2", "passed": v}), encoding="utf-8")
+    notes = tmp_path / "notes.md"
+    notes.write_text("读法一句。", encoding="utf-8")
+    out = R.write_report(base, notes)
+    md = (repo / "var" / "out" / "universe_recheck.md").read_text(encoding="utf-8")
+    assert [r["kind"] for r in out["rows"] if r["script"] == "x"] == ["passed"]
+    assert "两边都跑出来的 1 项里，0 项结论完全相同；1 项决定不变" in md and "全部 1 条研究" in md
+    assert "## 四 读法" in md and "读法一句。" in md and md.rstrip().endswith("非投资建议。")
+
+
+def test_only_w_modes_turn_w2_off():
+    assert [m for m in ("old", "new", "newus", "oldw", "neww") if R.w2_off(m)] == ["oldw", "neww"]   # "new" 以 w 结尾，但要开 W2

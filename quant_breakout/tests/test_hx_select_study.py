@@ -87,8 +87,10 @@ def test_gate_u1_sign_test():
 
 def test_pools_split():
     from qbreak.config import UNIVERSE_US
-    from qbreak.universes import US_BROAD
-    seen = set(US_BROAD) | set(UNIVERSE_US)
+    from qbreak.universes import US_BROAD, excluded_until_20260929
+    seen = HX.seen_names()
+    added = excluded_until_20260929("US") & set(US_BROAD)                    # 2026-09-30 起加回的 15 只：以前没用过 → 不算 SEEN
+    assert len(added) == 15 and not (seen & added) and seen == (set(US_BROAD) - added) | set(UNIVERSE_US)
     u, ua, sec = HX.pool_members("sp500u")
     sn, _, _ = HX.pool_members("sp500seen")
     al, aa, _ = HX.pool_members("sp500")
