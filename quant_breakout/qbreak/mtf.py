@@ -150,6 +150,26 @@ def weekly_volume_ratio(df: pd.DataFrame, days: pd.DatetimeIndex) -> pd.Series:
     return state_on(f, df.index)["W5v"]
 
 
+def weekly_volume_ratio_per_day(df: pd.DataFrame, days: pd.DatetimeIndex) -> pd.Series:
+    """W2d 用（2026-09-29 登记的对照研究 scripts/w2d_study.py；只研究，交易仍用 weekly_volume_ratio）：周线量比的「日均」版 ——
+    最近完成的一周日均成交量（周合计 ÷ 这只票那一周有 K 线的天数）÷ 之前 10 周日均量的平均。
+    连休让一周只有 2〜4 个交易日时，合计版会被天数压低（scripts/w2_short_week.py），日均版不会。
+    完成日、放回日线的方式、缺值（10 周历史不够 / 平均为 0 → NaN）都与 weekly_volume_ratio 相同。"""
+    comp = completion_days(days, "W")
+    d = df[["Close", "Volume"]]
+    d = d[d["Close"].notna()]
+    if not len(d) or not len(comp):
+        return pd.Series(np.nan, index=df.index, name="W5v")
+    g = d.groupby(period_key(d.index, "W"))["Volume"]
+    v = (g.sum() / g.size()).astype(float)
+    v = v[v.index.isin(comp.index)]
+    v.index = pd.DatetimeIndex(comp.reindex(v.index).to_numpy())
+    v = v.sort_index()
+    vma10 = v.shift(1).rolling(10).mean()
+    f = pd.DataFrame({"W5v": v / vma10.where(vma10 > 0)}, index=v.index)
+    return state_on(f, df.index)["W5v"]
+
+
 def live_calendar(idx: pd.DatetimeIndex) -> pd.DatetimeIndex:
     """实盘 / 模拟盘用的日历：这只票的交易日 + 东证的下一个交易日。
     研究（历史回测）里日历包含之后的日子，所以「这一周的最后一个交易日」收盘时这一周就算完成；实盘的数据到今天为止，
