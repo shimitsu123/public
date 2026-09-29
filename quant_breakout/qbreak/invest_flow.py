@@ -352,3 +352,79 @@ def demand_signal(e: dict, g: pd.DataFrame) -> pd.DataFrame:
         if cols:
             out[j] = sum(w[c] * g[c] for c in cols)
     return pd.DataFrame(out, index=g.index)
+
+
+# ───────────────────────── 日报的季度快照（㉟，2026-09-29 用户确认；只展示，不改交易）─────────────────────────
+SNAP_FILE = "invest_flow_snapshot.json"
+STUDY_NOTE = ("研究（登记 5db014b，var/out/invest_flow_study.md）：占比趋势（T1）、投资的钱流向（T2）预测不了之后 3 个月的行业收益，"
+              "美国复现（T3）也不成立；投资带动的原材料价格多在同一季度就一起动 → 只作背景")
+
+
+def q_label(p: pd.Period) -> str:
+    return f"{p.year}Q{p.quarter}"
+
+
+def due_quarter(asof) -> pd.Period:
+    """asof 那天「已经可以用」的最新一季（avail_month_end ≤ asof；与研究同一口径：季末那个月 + 3 个月的月末）。"""
+    d = pd.Timestamp(asof).normalize()
+    p = pd.Period(d, freq="Q")
+    while avail_month_end(p) > d:
+        p -= 1
+    return p
+
+
+def snapshot(raw: pd.DataFrame, e: dict, asof, top: int = 5, min_share: float = 1.0) -> dict:
+    """最新一季（asof 时已可用）的：占比上升 / 下降最多的业种（4 季合计占比 vs 一年前；占比 < min_share% 的小业种波动大，不排）、
+    投资额增速、投资的钱流向（DEM：设备投资的变化带来的国内产出变化 %，只列正 / 负）。"""
+    capex = capex_table(raw, "040")
+    capex = capex[[avail_month_end(p) <= pd.Timestamp(asof).normalize() for p in capex.index]]
+    total = capex[TOTAL]
+    G = groups(capex, MOF_TSE)
+    SQ, gG = self_signal(G, total), growth(G)
+    share = trailing4(G).div(trailing4(total.to_frame()).iloc[:, 0], axis=0) * 100
+    GD = groups(capex, {group_name(c): c for c in FCM_MOF.values()})
+    DEM = demand_signal(e or {}, growth(GD))
+    ok = SQ.dropna(how="all")
+    if not len(ok):
+        raise ValueError("没有可用的季度")
+    q = ok.index[-1]
+
+    def rows(s: pd.Series, asc: bool, extra=None) -> list[dict]:
+        s = s.dropna().sort_values(ascending=asc).head(top)
+        return [{"industry": j, "v": round(float(v), 1), **(extra(j) if extra else {})} for j, v in s.items()]
+    big = SQ.loc[q][share.loc[q] >= min_share]
+
+    def self_extra(j):
+        return {"share": round(float(share.loc[q, j]), 1), "growth": None if pd.isna(gG.loc[q, j]) else round(float(gG.loc[q, j]), 1)}
+    dem = DEM.loc[q] if q in DEM.index else pd.Series(dtype=float)
+    tg = growth(total.to_frame("t"))["t"]
+    return {"quarter": q_label(q), "period": f"{q.year} 年 {q.quarter * 3 - 2}〜{q.quarter * 3} 月期",
+            "avail": avail_month_end(q).date().isoformat(), "asof": str(pd.Timestamp(asof).date()),
+            "total_growth": None if pd.isna(tg.get(q)) else round(float(tg[q]), 1),
+            "share_up": rows(big[big > 0], False, self_extra), "share_down": rows(big[big < 0], True, self_extra),
+            "flow_up": rows(dem[dem >= 0.05], False), "flow_down": rows(dem[dem <= -0.05], True),
+            "n_ind": int(SQ.loc[q].notna().sum()), "n_small": int((share.loc[q] < min_share).sum()), "min_share": min_share,
+            "source": "財務省 法人企業統計調査 季報（資本金 10 億円以上、原数值；e-Stat 0003060191）+ 2020 年 固定資本マトリックス（var/invest_fcm_2020.json）",
+            "note": STUDY_NOTE}
+
+
+def refresh_snapshot(asof, fetch=None) -> dict:
+    """日报用：已存的快照不是最新可用的一季才去 e-Stat 取数（每季一次；取不到就留着旧的并写原因）。只存导出的数字。"""
+    fp = paths.home() / SNAP_FILE
+    old = json.loads(fp.read_text(encoding="utf-8")) if fp.exists() else None
+    want = q_label(due_quarter(asof))
+    if old and old.get("quarter") == want and not old.get("error"):
+        return old
+    try:
+        raw = (fetch or (lambda: fetch_mof(refresh=True)))()
+        e = (json.loads((paths.home() / "invest_fcm_2020.json").read_text(encoding="utf-8")) or {}).get("e") or {}
+        snap = snapshot(raw, e, asof)
+    except Exception as ex:                                              # noqa: BLE001
+        msg = f"{type(ex).__name__}: {ex}"[:200]
+        if old:
+            return {**old, "stale": f"{want} 还没取到（{msg}）；显示的是 {old.get('quarter')}"}
+        return {"error": msg, "want": want}
+    if snap["quarter"] != want:
+        snap["stale"] = f"e-Stat 还没有 {want}（按公布日程应该已有）；显示的是 {snap['quarter']}"
+    fp.write_text(json.dumps(snap, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return snap

@@ -24,11 +24,12 @@ def test_every_pool_ticker_has_a_sector():
     assert sector_of("NVDA", "US") == "semis" and sector_of("CVX", "US") == "energy"
 
 
-def test_jp_pool_excludes_airlines_and_land_transport_but_keeps_shipping():
-    u = nikkei225()
-    assert "9201.T" not in u and "9202.T" not in u and "9001.T" not in u and "9064.T" not in u
+def test_jp_pool_includes_airlines_and_land_transport_from_20260930():
+    u = nikkei225()                                                  # 2026-09-29 用户：选股可以包括航空 / 运输
+    assert "9201.T" in u and "9202.T" in u and "9001.T" in u and "9064.T" in u
     assert "9101.T" in u and "8031.T" in u
-    assert len(nikkei225(exclude=False)) == 225
+    assert len(nikkei225(exclude=False)) == 225 and len(u) == 225
+    assert sector_of("9201.T", "JP") == "airline" and sector_of("9020.T", "JP") == "land_transport"
 
 
 def test_macro_mult_thresholds_take_min():

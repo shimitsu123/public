@@ -1267,6 +1267,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     out["news"] = _news_panel(out)                           # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
     out["energy"] = pre.get("energy") or _energy_panel(today)   # 仪表盘：能源消费（每月）+ K4 前向记录（K4 也进判断层）
     out["cost_sales"] = pre.get("cost_sales") or _cost_sales_panel(today)   # 成本 × 销售（S2）：上个月末的分组 + 前向记录（S2 也进判断层）
+    out["invest_flow"] = _invest_flow_panel(today)           # 投资流向：季度快照（㉟；每季取一次 e-Stat，只作背景，不影响交易）
     out["fwdj"] = _fj_summary(ctx, baseline, eq) if fj_on else {"enabled": False, "baseline": baseline or {}}   # 判断层 + 基准账户对照
     from qbreak import exit_rules as _EXR
     out["exit_mode"] = {"JP": ctx.xmode, "label": _EXR.LABELS[ctx.xmode]}   # 个股的离场方式（var/sim.json exits）
@@ -1600,6 +1601,17 @@ def _cost_sales_panel(today) -> dict:
         return CF.panel(today)
     except Exception as e:                                   # noqa: BLE001
         log.warning("成本 × 销售面板失败（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
+
+
+def _invest_flow_panel(today) -> dict:
+    """投资流向的季度快照（qbreak/invest_flow.py，㉟ 2026-09-29 用户确认）：已存的不是最新可用的一季才去 e-Stat 取数；
+    只作背景，失败只记原因、不影响交易。"""
+    from qbreak import invest_flow as IF
+    try:
+        return IF.refresh_snapshot(today)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("投资流向快照失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 

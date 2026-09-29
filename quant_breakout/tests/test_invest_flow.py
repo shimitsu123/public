@@ -88,3 +88,56 @@ def test_study_helpers():
     assert n == 80 and abs(b - 2) < 0.05 and t > 20
     assert set(sum((v[1] for v in S.US_TYPES.values()), [])) <= {"Hardw", "Chips", "LabEq", "Softw", "Mach", "ElcEq", "Autos", "Aero",
                                                                   "Ships", "Cnstr", "BldMt", "Steel", "Oil"}
+
+
+def _raw_long(quarters: int = 12) -> pd.DataFrame:
+    """长表：全産業 104 + 機械 121 + 不動産 130 + 鉱業 106（占比很小），季度码 = 年 × 10 + 季。"""
+    idx = pd.period_range("2023Q1", periods=quarters, freq="Q")
+    rows = []
+    for i, p in enumerate(idx):
+        q = p.year * 10 + p.quarter
+        vals = {"104": 1000.0, "121": 100.0 + 10 * i, "130": 200.0 - 5 * i, "106": 0.5 + 0.1 * i}
+        rows += [{"size": "25", "ind": k, "q": q, "item": "040", "value": v} for k, v in vals.items()]
+    return pd.DataFrame(rows)
+
+
+def test_snapshot_uses_only_published_quarters_and_skips_small_industries():
+    raw = _raw_long(14)                                                         # 2023Q1〜2026Q2
+    s = IF.snapshot(raw, {"機械": {"121+154": 0.1}}, "2026-09-29")
+    assert s["quarter"] == "2026Q1" and s["avail"] == "2026-06-30"               # 2026Q2 要 9/30 才用
+    assert IF.snapshot(raw, {}, "2026-09-30")["quarter"] == "2026Q2"
+    up = [r["industry"] for r in s["share_up"]]
+    down = [r["industry"] for r in s["share_down"]]
+    assert up == ["機械"] and down == ["不動産業"] and "鉱業" not in up and s["n_small"] >= 1   # 鉱業 占比 < 1% 不排
+    assert s["flow_up"] and s["flow_up"][0]["industry"] == "機械" and s["flow_up"][0]["v"] > 0
+    assert IF.q_label(IF.due_quarter("2026-12-30")) == "2026Q2" and IF.q_label(IF.due_quarter("2026-12-31")) == "2026Q3"
+
+
+def test_refresh_snapshot_fetches_once_per_quarter(isolated_home):
+    import json
+    (isolated_home / "invest_fcm_2020.json").write_text(json.dumps({"e": {}}), encoding="utf-8")
+    calls = []
+
+    def fetch():
+        calls.append(1)
+        return _raw_long(14)
+    a = IF.refresh_snapshot("2026-09-30", fetch=fetch)
+    b = IF.refresh_snapshot("2026-10-15", fetch=fetch)                          # 同一季 → 不再取
+    assert a["quarter"] == b["quarter"] == "2026Q2" and len(calls) == 1
+    c = IF.refresh_snapshot("2026-12-31", fetch=fetch)                          # 该有 2026Q3 了，但 e-Stat 还没有 → 标出、留着
+    assert len(calls) == 2 and c["quarter"] == "2026Q2" and "2026Q3" in c["stale"]
+
+    def boom():
+        raise RuntimeError("e-Stat down")
+    d = IF.refresh_snapshot("2027-03-31", fetch=boom)
+    assert d["quarter"] == "2026Q2" and "e-Stat down" in d["stale"]
+    (isolated_home / IF.SNAP_FILE).unlink()
+    assert "error" in IF.refresh_snapshot("2027-03-31", fetch=boom)
+
+
+def test_snapshot_card_renders():
+    from qbreak.report_unified import _invest_flow_html
+    s = IF.snapshot(_raw_long(14), {"機械": {"121+154": 0.1}}, "2026-09-30")
+    h = _invest_flow_html(s)
+    assert "投资流向" in h and "機械" in h and "只作背景" in h and "2026 年 4〜6 月期" in h
+    assert "没取到" in _invest_flow_html({"error": "x", "want": "2026Q3"}) and _invest_flow_html({}) == ""

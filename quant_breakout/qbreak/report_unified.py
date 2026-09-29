@@ -64,6 +64,7 @@ def build_unified_data() -> dict:
             "policy": td.get("policy") or {},                    # 政策事件反应库（qbreak/policy_forward.py；只展示 + 前向记录）
             "eligibility": td.get("eligibility") or {},          # 下单前资格检查（qbreak/eligibility.py：被踢出 / 被指定的票不开新仓）
             "cost_sales": td.get("cost_sales") or {},            # 成本 × 销售（S2）分组与前向记录（qbreak/cost_sales_forward.py；只展示）
+            "invest_flow": td.get("invest_flow") or {},          # 投资流向的季度快照（㉟，qbreak/invest_flow.py；只作背景）
             "calendar": td.get("calendar") or {},                # 检查日历（qbreak/check_calendar.py；只展示，全貌 CHECK_TIMELINE.md）
             "price_check": td.get("price_check") or {},          # 行情交叉核对（qbreak/price_check.py；yfinance × J-Quants，只报警）
             "fwdj": td.get("fwdj") or {},                        # 前向记录判断层（qbreak/fwd_judgment.py；2026-09-30 起影响日本个股新仓）
@@ -432,6 +433,39 @@ def _price_check_html(pc: dict) -> str:
               "（数据体检 ㉚-1，2026-09-28 用户决定；代码 qbreak/price_check.py）</p></details></section>")
 
 
+def _invest_flow_html(v: dict) -> str:
+    """投资流向（㉟，qbreak/invest_flow.py 的季度快照；財務省 法人企業統計 季報）：只作背景，不改交易。"""
+    if not v:
+        return ""
+    if v.get("error"):
+        return ("<section class='card'><h2>投资流向（季度快照，只作背景）</h2>"
+                f"<p class='muted'>这一季（{escape(str(v.get('want') or '—'))}）没取到：{escape(str(v['error']))} —— 只作展示，不影响交易；下次运行再取。</p></section>")
+
+    def li(rows, share: bool) -> str:
+        if not rows:
+            return "<li class='muted'>无</li>"
+        out = []
+        for r in rows:
+            if share:
+                g = "" if r.get("growth") is None else f"，投资额 {float(r['growth']):+.1f}%"
+                out.append(f"<li>{escape(r['industry'])}：占比 {float(r['share']):.1f}%，比一年前 {float(r['v']):+.1f}%{g}</li>")
+            else:
+                out.append(f"<li>{escape(r['industry'])}：{float(r['v']):+.1f}%</li>")
+        return "".join(out)
+    tg = v.get("total_growth")
+    head = (f"<p>{escape(str(v.get('period')))}（{escape(str(v.get('quarter')))}；按研究口径 {escape(str(v.get('avail')))} 起用）："
+            f"全产业设备投资（4 季合计）比一年前 {'—' if tg is None else f'{float(tg):+.1f}%'}。"
+            + (f"<br><b>注意</b>：{escape(str(v['stale']))}" if v.get("stale") else "") + "</p>")
+    return ("<section class='card'><h2>投资流向（季度快照，只作背景，不改交易）</h2>" + head
+            + "<h3>设备投资占比上升最多（4 季合计，比一年前）</h3><ul>" + li(v.get("share_up"), True) + "</ul>"
+            + "<h3>占比下降最多</h3><ul>" + li(v.get("share_down"), True) + "</ul>"
+            + "<h3>投资的钱流向：国内产出因设备投资变化而增加的业种</h3><ul>" + li(v.get("flow_up"), False) + "</ul>"
+            + "<h3>减少的业种</h3><ul>" + li(v.get("flow_down"), False) + "</ul>"
+            + f"<p class='muted'>占比 &lt; {float(v.get('min_share') or 1):g}% 的小业种波动大，不排（{int(v.get('n_small') or 0)} 个）。"
+            f"「投资的钱流向」= 各行业设备投资的增速 × 2020 年固定資本マトリックス与产业连关表算出的国内诱发产出比例。{escape(str(v.get('note') or ''))}。"
+            f"来源：{escape(str(v.get('source') or ''))}；财务省在季末后第 3 个月的第 1 个工作日公布，这里在那个月的月末才换成新的一季。</p></section>")
+
+
 def _cost_sales_html(c: dict) -> str:
     """成本 × 销售（S2，qbreak/cost_sales_forward.py）：原材料在涨的月份，销售好且成本上涨的业种按间接占比分组（只展示，不改交易）。"""
     if not c or c.get("error") or not c.get("rows"):
@@ -684,6 +718,7 @@ def render_unified_html(d: dict) -> str:
         deepdip=_deepdip_html(d.get("deepdip") or {}), fwdj=_fwdj_html(d),
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us), shadow=_shadow_html(d),
         elig=_eligibility_html(d, meta), cost_sales=_cost_sales_html(d.get("cost_sales") or {}),
+        invest_flow=_invest_flow_html(d.get("invest_flow") or {}),
         calendar=_calendar_html(d.get("calendar") or {}), pcheck=_price_check_html(d.get("price_check") or {}),
         corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
@@ -723,7 +758,9 @@ def _groups_meta() -> tuple[dict, dict, dict]:
     """(代码 → 東証业种, 代码 → 主题, 代码 → 公司名)。"""
     from . import jpx_list as JL
     from . import themes as TH
-    s33 = (read_json(paths.home() / "industry_s33.json", {}) or {}).get("s33") or {}
+    from .universes import JP_READDED_S33
+    s33 = dict(JP_READDED_S33)                   # 2026-09-30 起加回的航空 / 陆运（30 业种表不含，只作标签）
+    s33.update((read_json(paths.home() / "industry_s33.json", {}) or {}).get("s33") or {})
     return s33, TH.members(), JL.names()
 
 
@@ -1094,6 +1131,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <p class="muted">突破：<b>真突破</b> = 信号当天收盘高于过去 60 个交易日的最高价（不含当天）；<b>未破箱顶</b> = 信号成立但收盘还在箱顶之下（括号里是还差的 %）；还没触发的票显示距箱顶 %（今天要做的事里的买单也标了）。只作参考，不改交易：2026-09-26 事先登记的研究（2006-10〜，日経225 股票池，现行出场规则，每笔扣来回手续费）全部信号 638 笔：胜率 42.5%、每笔平均 +0.70%、盈亏比 1.89；其中真突破 163 笔：胜率 49.7%、每笔 +0.83%、盈亏比 1.44；未破箱顶 475 笔：胜率 40.0%、每笔 +0.66%、盈亏比 2.08。只做真突破：胜率 +7.2 pp（95% 区间 +0.7〜+13.6 pp），每笔期望 +0.13 pp 但不显著（95% 区间 −0.78〜+0.96 pp），组合 20 年年化 11.2%（现行 12.8%）、最大回撤 −36.4%（现行 −35.1%）——现行策略靠盈亏比赚钱，不是靠命中率（var/out/signal_study.md）。</p></section>
 {themes}
 {cost_sales}
+{invest_flow}
 {policy}
 {commod}
 {shadow}

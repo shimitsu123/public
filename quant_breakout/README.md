@@ -241,7 +241,7 @@ bash scripts/fetch_and_push.sh            # 或手工跑一次
 
 ### 广域股票池 + 候补队列 + 市场状态
 
-- `--universe broad`：日経225（`qbreak/universes.py`，静态名单，`universe-update` 可刷新）/ NASDAQ-100+Dow30（已按偏好剔除航空运输、百货、服装、食品饮料餐饮、中国背景）
+- `--universe broad`：日経225（`qbreak/universes.py`，静态名单，`universe-update` 可刷新；2026-09-30 起 225 只全用）/ NASDAQ-100+Dow30（剔除中国背景；航空运输、百货、服装、食品饮料餐饮 2026-09-30 起加回）
 - 每日 **候补队列**：全池按「距离入场条件的远近」排序（横盘/0轴/MACD 距金叉/量比 四项就绪度 + 可负担性），
   `triggered → imminent → watch → far`。这是"接下来最可能交易的顺序"，不是收益预测
 - 「突破」列与「今天要做的事」的个股买单：**真突破**（信号当天收盘 > 过去 60 日最高价，不含当天）/ **未破箱顶（差 x%）**；
@@ -316,7 +316,7 @@ bash scripts/fetch_and_push.sh            # 或手工跑一次
 | 板块倾斜 | `qbreak/sectors.py` 行业标签（两池 332 只全部有标签） | 油价高位或冲击时：能源·商社·海运 ×1（标"受益"，不放大）、航空 ×0、陆运/化学/纸浆/电力 ×0.5、食品/零售/消费 ×0.75；美 10Y ≥5% 时 半导体·软件互联网 ×0.5（"高估值成长"用板块近似，未用估值数据） | 是（`--macro sector`） |
 | 事件窗口 | `var/macro_events.json`（FOMC / BOJ / CPI / NFP 官方日程，已录入到 2027 年） | 发布时刻之前**最后一个开盘的交易日**不开新仓（=「前一日」）；发布在该市场盘中的事件（FOMC 对美股、BOJ 对日本股）当日也不开。例：FOMC 10/28 → 美股 10/27–28、日本股 10/28；NFP 10/2（21:30 JST）→ 美股 10/1、日本股 10/2；BOJ 10/30 → 日本股 10/29–30、美股 10/29 | 部分（回测用历史 FOMC/BOJ 精确日 + NFP 首周五近似，CPI 只在实盘） |
 
-- 日本池按用户要求剔除航空（9201/9202）与陆运/物流（9001…9147、9301）；**海運保留**，因为它在板块倾斜里是油价受益组（`universes.JP_EXCLUDED` 可改）
+- 日本池 2026-09-29 之前按用户要求剔除航空（9201/9202）与陆运/物流（9001…9147、9301）；2026-09-30 的决策起用户要求加回（225 只全用，以前的名单留在 `universes.JP_EXCLUDED_UNTIL_20260929` 供研究对照）；油价冲击时板块倾斜照旧：航空 ×0、陆运 ×0.5
 - 回测：`python run.py backtest JP --universe broad --macro sim`（与模拟盘同口径）；`macro` / `sector` / `events` 可逗号组合单测；`optimize` 同样支持
 - 模拟盘 / `paper` / `signal` / `daemon` 默认启用；`sim.json` 全局或市场段里的 `use_macro / use_sector_tilt / use_event_window / event_kinds` 可关；命令行 `--no-macro`
 

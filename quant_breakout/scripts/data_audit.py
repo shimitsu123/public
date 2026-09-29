@@ -500,10 +500,11 @@ def check_maps(today: dt.date) -> None:
     from qbreak import sectors as SE
     from qbreak import themes as TH
     from qbreak import wide_universe as W
-    from qbreak.universes import JP_EXCLUDED, nikkei225
+    from qbreak.universes import JP_EXCLUDED, JP_READDED_S33, nikkei225
     n225 = sorted({t.split(".")[0] for t in nikkei225(exclude=True, today=today)} | {t.split(".")[0] for t in nikkei225(exclude=True, today=dt.date(2026, 10, 1))})
     wide = sorted({t.split(".")[0] for t in W.tickers(W.load())})
-    s33 = (json.loads((paths.home() / "industry_s33.json").read_text(encoding="utf-8")) or {}).get("s33") or {}
+    s33 = dict(JP_READDED_S33)                   # 2026-09-30 起加回的航空 / 陆运：30 业种表（industry_s33.json）按登记口径不含
+    s33.update((json.loads((paths.home() / "industry_s33.json").read_text(encoding="utf-8")) or {}).get("s33") or {})
     nm = JL.names()
     excl = {c for v in JP_EXCLUDED.values() for c in v}
     for label, codes in (("日経225 交易股票池（今天 + 10/1 后）", n225), ("扩大池", wide)):

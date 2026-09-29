@@ -6,8 +6,9 @@
 原版 20 只太少（每年信号个位数，统计意义弱）。这里给出：
   • NIKKEI225 : 日経平均構成銘柄（**基于公开信息整理的静态名单，成分会调整**；
                 代码错误/退市的只会在取数时被跳过，不会造成误交易）
-  • US_BROAD  : NASDAQ-100 + Dow 30，并按用户偏好剔除
-                航空/运输、百货、服装、食品饮料餐饮、中国背景公司
+  • US_BROAD  : NASDAQ-100 + Dow 30，剔除中国背景公司
+2026-09-29 用户：「选股可以包括航空/运输、百货、服装、食品饮料餐饮」→ 2026-09-30 的决策起日経225 不再剔除航空 / 陆运 / 物流
+（225 只全用）、US_BROAD 加回这几类（中国背景照旧剔除）；以前的剔除名单留在 *_UNTIL_20260929，研究复核（新旧股票池对照）用。
 名单可用 `python run.py universe-update` 在有外网的机器上刷新（写入 var/universe_*.json，优先级高于本文件）。
 """
 from __future__ import annotations
@@ -59,7 +60,7 @@ NIKKEI225 = [
     "285A", "3697", "4307", "543A", "6701", "7004", "7532",
 ]
 
-# NASDAQ-100 + Dow 30（按用户偏好剔除后）。剔除项见 US_EXCLUDED，方便复查。
+# NASDAQ-100 + Dow 30（剔除中国背景后）。剔除项见 US_EXCLUDED；2026-09-30 起加回的见 US_EXCLUDED_UNTIL_20260929。
 US_BROAD = [
     "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "AVGO", "TSLA", "COST", "NFLX",
     "AMD", "ADBE", "LIN", "CSCO", "TMUS", "QCOM", "INTU", "AMAT", "TXN", "ISRG", "CMCSA",
@@ -74,8 +75,14 @@ US_BROAD = [
     # Dow 30 中不在上面的
     "AXP", "BA", "CAT", "CRM", "CVX", "DIS", "GS", "HD", "IBM", "JNJ", "JPM", "MMM", "MRK",
     "PG", "SHW", "TRV", "UNH", "V", "VZ",
+    # 2026-09-30 起加回（用户：选股可以包括航空/运输、百货、服装、食品饮料餐饮）；UPS 不是 NASDAQ-100 / Dow 30 成员，不加
+    "CSX", "ODFL", "FER", "WMT", "NKE", "LULU", "ROST", "PEP", "MDLZ", "KDP", "KHC", "MNST", "CCEP", "KO", "MCD",
 ]
 US_EXCLUDED = {
+    "中国背景": ["PDD", "BIDU", "NTES", "JD"],
+}
+# 2026-09-29 之前的剔除（研究复核对照用；不再影响股票池）
+US_EXCLUDED_UNTIL_20260929 = {
     "航空/运输": ["CSX", "ODFL", "UPS", "FER"],   # FER = 收费公路 / 机场运营
     "百货/零售": ["WMT"],
     "服装": ["NKE", "LULU", "ROST"],
@@ -84,12 +91,23 @@ US_EXCLUDED = {
 }
 
 
-JP_EXCLUDED = {
+JP_EXCLUDED: dict[str, list[str]] = {}          # 2026-09-30 的决策起不剔除任何业种（日経225 全部 225 只）
+# 2026-09-29 之前的剔除（研究复核对照用；扩大池 var/universe_wide.json 与 30 业种面板 var/industry_s33.json 仍按登记时的口径不含这三个业种）
+JP_EXCLUDED_UNTIL_20260929 = {
     "航空": ["9201", "9202"],
     "陆运/物流": ["9001", "9005", "9007", "9008", "9009", "9020", "9021", "9022", "9064", "9147", "9301"],
-    # 海運（9101 / 9104 / 9107）保留：它是油价与运价的受益组，用户在板块倾斜里单列
+    # 海運（9101 / 9104 / 9107）一直保留：它是油价与运价的受益组，用户在板块倾斜里单列
 }
+# 加回的日経225 成员的東証 33 业种（var/industry_s33.json 不含它们；显示与数据核对用，JPX 上場銘柄一覧 2026-08-31）
+JP_READDED_S33 = {"9001": "陸運業", "9005": "陸運業", "9007": "陸運業", "9008": "陸運業", "9009": "陸運業", "9020": "陸運業",
+                  "9021": "陸運業", "9022": "陸運業", "9064": "陸運業", "9147": "陸運業", "9201": "空運業", "9202": "空運業"}
 _JP_EXCLUDED_SET = {c for v in JP_EXCLUDED.values() for c in v}
+
+
+def excluded_until_20260929(market: str) -> set[str]:
+    """2026-09-29 之前股票池剔除的代码（JP 不带 .T）—— 研究复核里重现旧股票池用。"""
+    d = JP_EXCLUDED_UNTIL_20260929 if market.upper() == "JP" else US_EXCLUDED_UNTIL_20260929
+    return {c for v in d.values() for c in v}
 
 
 def index_changes(market: str) -> list[dict]:

@@ -76,6 +76,11 @@ _us("semis", "ALAB MPWR SNDK TER")
 _us("software_internet", "CRWV NBIS SHOP TRI")
 _us("hardware", "LITE STX WDC")
 _us("machinery", "HONA RKLB SPCX")
+# 2026-09-30 起加回 US_BROAD 的（航空/运输、百货、服装、食品饮料餐饮）
+_us("land_transport", "CSX ODFL FER")
+_us("retail", "WMT ROST")
+_us("consumer", "NKE LULU")
+_us("food", "PEP MDLZ KDP KHC MNST CCEP KO MCD")
 
 HIGH_GROWTH = {"semis", "software_internet"}
 OIL_WINNERS = {"energy", "trading", "shipping"}
