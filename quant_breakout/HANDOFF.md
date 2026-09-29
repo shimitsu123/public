@@ -433,7 +433,12 @@
 - 闲置资金方式：`qbreak/idle_cash.py`（K0〜K6、股票类 Q1〜Q6 与「预计下跌 → 反向」开关 P1〜P4（没采用）；`var/sim.json` 的 idle_cash 选用；
   月末开关 TR: / RT: / XR 与 EQ / IV 键进引擎的 bear）、研究 `scripts/idle_cash_study.py`、`scripts/equity_idle_study.py`
 - 投资流向（按行业的季度设备投资）：`qbreak/invest_flow.py`（財務省 法人企業統計 季報的取数 → `var/cache/mof/`、固定資本マトリックス → `var/cache/io/`；
-  导出的暴露 `var/invest_fcm_2020.json`）、研究 `scripts/invest_flow_study.py`（不成立，只作背景）
+  导出的暴露 `var/invest_fcm_2020.json`）、研究 `scripts/invest_flow_study.py`（不成立，只作背景）；日报的季度快照 `var/invest_flow_snapshot.json`
+  （`qbreak/invest_flow.py` 的 snapshot / refresh_snapshot，㉟，2026-09-30 起）
+- 股票池：`qbreak/universes.py`（2026-09-30 起日経225 全部 225 只；以前剔除的名单 `*_UNTIL_20260929`）；换股票池后的研究复核
+  `scripts/universe_recheck.py`（同一脚本在 213 / 225 只两个股票池各跑一遍，比较结论 → `var/out/universe_recheck.md`）
+- 季度决算的轨迹：`scripts/earn_traj_data.py`（J-Quants 決算短信 → 单季营业利润、Yahoo → 美股每季 EPS、六种形态）、
+  `scripts/earn_traj_study.py`（登记 fabde0b：事件层 + 选股层）→ `var/out/earn_traj_study.md`
 - 下单前资格检查：`qbreak/eligibility.py`（快照 `var/out/eligibility.json`；只读检查 `run.py eligibility`）；成本 × 销售显示与 S2 前向记录：`qbreak/cost_sales_forward.py`
   （复核 / 当前分组 `scripts/cost_sales_forward.py --review | --show`）
 
