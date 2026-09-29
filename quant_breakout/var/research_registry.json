@@ -5945,5 +5945,33 @@
 "stable_findings": [],
 "era_dependent_or_reversed": [],
 "notes": "历史上 3 个月的前 7 名下一季只多 +0.0〜0.2%（crash_mainline_posthoc），两个都列；不改交易"
+},
+{
+"line": 2663,
+"date": "2026-09-29",
+"title": "「≤ −15% 深跌」前向记录：日経225 13 周线乖离第一次 ≤ −15%（美国 S&P 500 −12% 作对照；只记录 / 展示）",
+"kind": "forward_record",
+"domain": "牛熊/择时",
+"registration": "本提交",
+"script": "qbreak/deepdip_forward.py（sim-day 每天记；scripts/deepdip_forward.py --review）",
+"output": "var/out/deepdip_forward.csv；日报「深跌前向记录」一栏；var/out/deepdip_forward_review.md",
+"candidates": [
+{
+"id": "JP",
+"rule": "日経225 13 周线乖离第一次 ≤ −15%（回到线之上才算新的一段）→ 下一个交易日收盘买，看之后 20 / 60 / 120 个交易日",
+"result": "登记时没有前向数据；事后描述 1965〜2000 9 段 +3.11%、2001〜2026 8 段 +4.64%（60 日超额，区间都含 0）"
+},
+{
+"id": "US（对照）",
+"rule": "S&P 500 同一规则、门槛 −12%（按波动折算）",
+"result": "登记时没有前向数据；事后描述 1926〜2026 34 段 +1.28%"
+}
+],
+"baseline": "base60 = 事件日之前 10 年每天买、拿 60 个交易日的平均",
+"windows": "事件日 ≥ 2026-10-01；JP 满 5 个且都过了 60 个交易日起判定（按历史频率约 15〜20 年）",
+"verdict": "前向记录",
+"stable_findings": [],
+"era_dependent_or_reversed": [],
+"notes": "前向成立 = 60 日超额平均 > 0 且涨的比例 ≥ 60%（只升级日报标签；用到交易要另外登记并经用户确认）；平均 ≤ 0 → 前向不成立；JP + US 满 10 个只描述"
 }
 ]

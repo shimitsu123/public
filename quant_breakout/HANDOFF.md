@@ -257,6 +257,11 @@
   −6% × ≥ 50% 只有 10 段 +3.75%（区间含 0），2006〜2016 与独立数据（1965〜2000、美国）都不成立；二 反弹时与主线关联高的票并不更强
   （日本 −0.067、美国 0.000）；三 暂时顶之后主线关联高的票并不跌得更多 → 都不通过 → **判定 A**，模拟盘不变。事后描述
   （`scripts/crash_mainline_posthoc.py`）：只有 ≤ −15% 的深跌在三段都为正（段数少、区间含 0），进场后平均还跌 6〜10%。
+- 「≤ −15% 深跌」前向记录（2026-09-29，用户「把 ≤ −15% 深跌做成前向记录」；规则在 `qbreak/deepdip_forward.py` 开头，只记录 / 展示，不改交易）：
+  日経225 13 周线乖离第一次 ≤ −15%（回到线之上才算新的一段；数据最后一天不判，事件晚一个交易日记下）+ 美国 S&P 500 −12% 作对照；
+  2026-10-01 起 sim-day 每天追加 `var/out/deepdip_forward.csv`（只追加），日报「市场状态」下面一栏显示离触发线多远、事件之后 20 / 60 / 120 天的涨跌；
+  JP 满 5 个事件且都过了 60 个交易日起判定（60 日超额平均 > 0 且涨的比例 ≥ 60% →「前向成立」，只升级日报标签）。按历史频率
+  （日本约 3〜4 年一次）要 15〜20 年；2026-09-28 日経225 −0.25%（还差 14.75 pp）、S&P 500 +0.78%（还差 12.78 pp）。
 - J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
   → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
   （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）
@@ -296,6 +301,8 @@
 - ㉕ 2027-09-28 之后第一次：W2 前向记录的第一次年度判定 —— 每日记录在季度复核 2f 里自动算（看 `var/out/score_forward_review.md` 的 W2 一节）；全市场版在季度复核 2i 里自动算（2026-09-27 用户确认加入；手动：☁️ `python scripts/w2_forward_all.py --review`，云端有 J-Quants キー）/ 🤖 Mac：`bash scripts/with_jquants.sh ~/.qbreak/venv/bin/python scripts/w2_forward_all.py --review`（在 `~/qbreak-dev`）；「失效警报成立」→ 提议关掉 W2，用户确认才改；同一份复核里另有 K2（放量 ∧ 低 β）/ USW（美国对应行业弱）两个只记录不交易的标记（2026-09-27 用户确认登记；`qbreak/idio_forward.py`），每年判定一次，证实也只是记录
 - ㉖ 随时：时代主线前向记录的进度 ☁️🤖 `python scripts/era_outlook.py --review`（2026-10 起每月一次；记满 36 个月 ≈ 2029-10 起判定失效与否；
   2026-09-29 起另报 3 个月判定的 JP-S33Q / JP-THQ「下一季」与最新一季的影响占比，记满 12 个季度起判定）；已加进季度复核 2j（2026-09-27 用户确认；同时每季刷新展望 `var/out/era_outlook.md`）
+- ㉝ 随时 / 事件发生时：「≤ −15% 深跌」前向记录 ☁️ `python scripts/deepdip_forward.py --review` / 🤖 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/deepdip_forward.py --status`
+  （Mac 在 `~/qbreak-src/quant_breakout`，先 `git pull`；只读、不写文件）；平时看日报那一栏即可；有事件时日报标 ★，JP 满 5 个且都过了 60 个交易日起每次运行自动判定；只记录，用到交易要另外登记、用户确认）
 - ㉙ ✅ 2026-09-28 用户选「只加 ①」：季度复核已加 2l「成本 × 销售 S2 前向记录复核」`python scripts/cost_sales_forward.py --review`
   （36 个月前只报进度；汇报第 ⑭ 项）；② 日报例行任务的汇报加一行「资格检查」→ 不加（告警已写进「数据完整性」、汇报第一行会列出，不会漏）
 - ㉚ ✅ 数据体检（2026-09-28，`scripts/data_audit.py` → `var/out/data_audit.md`；历年祝日、Yahoo 休市假行、近似时点名单已修正，交易规则不变）：
@@ -381,6 +388,7 @@
 | 开机后补跑了吗 | 「今天开机后模拟操盘补跑了吗？」 | 读 `~/.qbreak/home/logs/com.qbreak.login.out`；`launchctl list \| grep qbreak` | 只读；立花本番不在登录时补跑 |
 | 影子账户（判断型） | 「影子账户今天怎么样？比规则账户好吗？」 | 读 `var/out/shadow_today.json`、`var/out/shadow_equity.csv`（云端每天记）；中间统计 `python scripts/shadow_account.py evaluate --interim` | 只读；判断只在云端例行任务里做 |
 | 前向记录进度 | 「前向记录记了多少？X6 吊灯止损现在怎样？」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/score_forward.py --status`（在 `~/qbreak-src/quant_breakout`，读仓库里云端每天追加的记录；不联网、不写文件）；详细结果读季度复核的 `var/out/score_forward_review.md`、`w2_forward_all_review.md` | 只读；判定只在季度复核里做 |
+| 深跌前向记录 | 「日経离 −15% 还有多远？深跌前向记录记了几个？」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/deepdip_forward.py --status`（在 `~/qbreak-src/quant_breakout`，读云端每天算好的 `var/out/unified_today.json`；不联网、不写文件）；也可直接看日报「深跌前向记录」一栏 | 只读 / 只展示，不改交易 |
 | 接下来要检查什么 | 「这个月 / 接下来要注意什么？」「什么时候判定 W2？」 | 读 `CHECK_TIMELINE.md` 与日报「检查日历」（`var/out/unified_today.json` 的 calendar） | 只读 |
 | 股票被踢出了吗 | 「要下单 / 手上的股票有没有被踢出日経225、被指定特別注意？」 | `QBREAK_HOME=~/.qbreak/home ~/.qbreak/venv/bin/python run.py eligibility`（在 `~/qbreak-src/quant_breakout`） | 只读；名单差异要改名单 → 你确认后云端改 |
 | 数据对不对 | 「研究 / 模拟盘用的数据对不对？缺什么？」 | 读 `var/out/data_audit.md`（每项 OK / 注意 / 问题 / 缺 与用在哪里）；重跑在云端 `python scripts/data_audit.py`（缓存都在云端） | 只读；修正要另记 sim_changes |

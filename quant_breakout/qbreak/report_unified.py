@@ -60,6 +60,7 @@ def build_unified_data() -> dict:
             "news": td.get("news") or {},                        # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
             "energy": td.get("energy") or {},                    # 仪表盘：能源消费（每月）+ K4 前向记录的状态（只作展示 / 记录）
             "era": td.get("era") or {},                          # 时代主线前向记录的状态（qbreak/era_forward.py；只记录）
+            "deepdip": td.get("deepdip") or {},                  # 「≤ −15% 深跌」前向记录（qbreak/deepdip_forward.py；只记录 / 展示）
             "policy": td.get("policy") or {},                    # 政策事件反应库（qbreak/policy_forward.py；只展示 + 前向记录）
             "eligibility": td.get("eligibility") or {},          # 下单前资格检查（qbreak/eligibility.py：被踢出 / 被指定的票不开新仓）
             "cost_sales": td.get("cost_sales") or {},            # 成本 × 销售（S2）分组与前向记录（qbreak/cost_sales_forward.py；只展示）
@@ -162,6 +163,9 @@ def missing_items(d: dict) -> list[str]:
         out.append(f"时代主线前向记录：这次没记上（{ef['error']}）—— 不影响交易；这个月不补写，下个月第一次运行照常记")
     if started and ef.get("us_error"):
         out.append(f"时代主线前向记录的美国 49 行业：取不到（{ef['us_error']}）—— 只记了日本；下次取到时记最新的月份（不补写），不影响交易")
+    dd = d.get("deepdip") or {}
+    if started and dd.get("error"):
+        out.append(f"深跌前向记录（≤ −15%）：这次没算 / 没记上（{dd['error']}）—— 不影响交易；下次运行会按行情补上漏掉的事件")
     infl = (d.get("themes") or {}).get("influence") or {}
     if started and infl.get("error"):
         out.append(f"各业种影响占比（J-Quants 東証業種別指数）：取不到（{infl['error']}）—— 时代主线旁边不标占比，不影响交易")
@@ -587,6 +591,7 @@ def render_unified_html(d: dict) -> str:
         fx=fx_rows or "<tr><td colspan=4 class='muted'>还没有换汇</td></tr>", markets="".join(mk),
         watch="".join(watch) or "<tr><td colspan=11 class='muted'>尚无候补数据</td></tr>",
         themes=_themes_html(d.get("themes") or {}, meta), policy=_policy_html(d.get("policy") or {}),
+        deepdip=_deepdip_html(d.get("deepdip") or {}),
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us), shadow=_shadow_html(d),
         elig=_eligibility_html(d, meta), cost_sales=_cost_sales_html(d.get("cost_sales") or {}),
         calendar=_calendar_html(d.get("calendar") or {}), pcheck=_price_check_html(d.get("price_check") or {}),
@@ -739,6 +744,36 @@ def _influence_html(th: dict) -> str:
             f"<th class='n'>这段时间相对 TOPIX</th></tr>{body}</table></div>"
             "<p class='muted'>影响占比 = 这段时间 TOPIX 每天的涨跌里来自这个业种的份额（全部 33 业种合计 100%；比重大、又和大盘同涨同跌的业种占比高）；"
             f"J-Quants 東証業種別指数（qbreak/sector_influence.py，拟合 R² {now.get('r2', '—')}）。只作参考，不改交易。</p>")
+
+
+def _deepdip_html(dd: dict) -> str:
+    """「≤ −15% 深跌」前向记录（qbreak/deepdip_forward.py）：现在离触发线多远、最近 120 个交易日内的事件与之后的涨跌、判定进度。只作参考，不改交易。"""
+    if not dd:
+        return ""
+    if dd.get("error"):
+        return f"<section class='card'><h2>深跌前向记录（≤ −15%）</h2><p class='muted'>这次没算出（{escape(str(dd['error']))}）</p></section>"
+    st = dd.get("status") or {}
+    now = "；".join(f"{escape(v.get('name', k))} 13 周线乖离 {v['dev']:+.1f}%（{escape(v['date'])}；触发线 {v['thr']:+.0f}%，还差 {v['gap_pp']:.1f} pp）"
+                    if "dev" in v else f"{escape(k)}：{escape(str(v.get('error')))}" for k, v in st.items())
+    rev = dd.get("review") or {}
+
+    def f(x, fmt="{:+.1f}%"):
+        return "—（还没到）" if x is None else fmt.format(x)
+    act = "".join(
+        f"<li><b>★ {escape(e['market'])} {escape(e['event_date'])}</b> 乖离 {e['dev']:+.1f}%"
+        + (f"、脱线个股 {e['breadth']:.0f}%" if e.get("breadth") is not None else "")
+        + f"：之后 20 天 {f(e['r20'])}、60 天 {f(e['r60'])}（历史平均 {f(e['base60'], '{:+.2f}%')}）、"
+        f"买后最低 {f(e['mae60'])}{'' if e.get('mae_done') else '（到现在）'}</li>" for e in dd.get("active") or [])
+    jp, pool = rev.get("jp") or {}, rev.get("pool") or {}
+    judge = escape(str(jp.get("label") or "—")) + (f"（{jp['n']} 个：60 日超额平均 {jp['mean']:+.2f}%、涨的比例 {jp['win']:.0f}%）" if jp.get("mean") is not None else "")
+    return ("<section class='card'><h2>深跌前向记录（日経225 13 周线乖离 ≤ −15%；只记录，不改交易）</h2>"
+            f"<p>现在：{now}</p>"
+            + (f"<ul>{act}</ul>" if act else "")
+            + f"<p class='muted'>已记事件 {dd.get('n', 0)} 个（{escape(str(dd.get('start', '')))} 起）；判定：{judge}；JP + US 合并：{escape(str(pool.get('label') or '—'))}。"
+            "最后一天的乖离是暂定值（这一周是否已完要等下一个交易日），事件第二天才判、才记，事件日不变。"
+            "历史参考（事后描述，登记的研究没有通过）：13 周线第一次 ≤ −15% 之后 60 个交易日比平时多 日経225 1965〜2000 +3.11%（9 段）、"
+            "2001〜2026 +4.64%（8 段）、美国（−12%）+1.28%（34 段），区间都含 0；买进后 60 天内平均还跌 6〜10%。"
+            "规则见 qbreak/deepdip_forward.py 开头（2026-09-29 登记）。</p></section>")
 
 
 def _policy_html(p: dict) -> str:
@@ -938,6 +973,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <section class="card"><h2>除息 / 拆股（已补到持仓与现金）</h2><ul>{corp}</ul></section>
 <section class="card"><h2>核心 ETF（闲置资金）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
 <section class="card"><h2>市场状态</h2><dl>{markets}</dl></section>
+{deepdip}
 <section class="card"><details><summary><h2 style="display:inline">大事件威胁指数的明细（只展示，不参与交易）</h2></summary>{threat}</details></section>
 <section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>主题 / 业种（近 3 月相对）</th><th>状态</th><th>突破</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
 <p class="muted">宏观顺风度 = 个股对日本 / 美国利率、油价、日元、信用利差，以及农产品、工业金属、黄金、天然气 ETF 的历史敏感度 × 近 60 个交易日的变化（当日横截面三分位：顺风 / 中性 / 逆风），只作参考：2026-09-25 事先登记研究显示它对之后 20 日的收益没有可靠的预测力（加商品后月末前 1/5 − 后 1/5 为 +0.35%，t 1.40；秩相关 0.006），交易排序不用它。</p>

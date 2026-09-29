@@ -949,6 +949,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
            "threat": threat, "executor": executor, "score_forward": score_fwd, "eligibility": elig,
            "themes": _theme_panel(provider)}                  # 主题 / 业种强弱、影响度、新出现的联动（只作展示）
     out["era"] = _era_forward_log(out["themes"], today)      # 时代主线的前向记录（每月一次；只记录，不影响交易）
+    out["deepdip"] = _deepdip_forward_log(data, today)       # 「≤ −15% 深跌」前向记录（只记录 / 展示，不影响交易）
     out["policy"] = _policy_panel(today)                     # 政策事件反应库：前向记录 + 日报块（只记录 / 展示，不影响交易）
     out["macro_now"] = _macro_now_panel(extras)              # 仪表盘：市场健康度 + 消费 / 零售等新数据（只作展示）
     out["news"] = _news_panel(out)                           # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
@@ -1300,6 +1301,28 @@ def _era_forward_log(themes: dict, today) -> dict:
     except Exception as e:                                   # noqa: BLE001
         log.warning("时代主线前向记录失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"}
+
+
+def _deepdip_forward_log(data: dict, today) -> dict:
+    """「≤ −15% 深跌」前向记录（qbreak/deepdip_forward.py，2026-09-29 登记）：日経225 / S&P 500 近 11 年以上的收盘 → 记新事件（只追加）、
+    现在的乖离、已记事件之后的涨跌与判定。只记录 / 展示，不影响交易；失败只记下原因（日报「数据完整性」会列出）。"""
+    from qbreak import deepdip_forward as DF
+    try:
+        from qbreak.config import DataConfig, universe
+        from qbreak.data import load_universe
+        from qbreak.trader import drop_partial_bar
+        cfg = DataConfig(provider="yfinance", years=DF.years_needed(paths.out_dir() / DF.LOG_FILE, str(today)), allow_synthetic=False).validate()
+        closes = {}
+        for mk, spec in DF.MARKETS.items():
+            df = load_universe([spec["symbol"]], cfg).get(spec["symbol"])
+            if df is not None and len(df):
+                closes[mk] = drop_partial_bar(df, spec["session"])["Close"]
+        n225 = set(universe("JP", "broad"))
+        members = {t: df["Close"] for t, df in (data or {}).items() if t in n225 and df is not None and len(df)}
+        return DF.run_day(paths.out_dir() / DF.LOG_FILE, closes, members, str(today))
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("深跌前向记录失败（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 
 def _energy_panel(today) -> dict:
