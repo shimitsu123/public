@@ -24,13 +24,12 @@ from qbreak import paths                                                     # n
 def closes(today: str) -> dict[str, pd.Series]:
     from qbreak.config import DataConfig
     from qbreak.data import load_universe
-    from qbreak.trader import drop_partial_bar
     cfg = DataConfig(provider="yfinance", years=DF.years_needed(paths.out_dir() / DF.LOG_FILE, today), allow_synthetic=False).validate()
     out = {}
     for mk, spec in DF.MARKETS.items():
         df = load_universe([spec["symbol"]], cfg).get(spec["symbol"])
         if df is not None and len(df):
-            out[mk] = drop_partial_bar(df, spec["session"])["Close"]
+            out[mk] = DF.drop_partial(df, spec["session"])["Close"]
     return out
 
 
@@ -49,7 +48,8 @@ def render(asof: str, status: dict, n: int, rev: dict) -> list[str]:
                      f"{fm(e['r20'])} / {fm(e['r60'])} / {fm(e['r120'])}；买后最低 {fm(e['mae60'])}；60 日超额 {fm(e['x60'])}（base60 {fm(e['base60'], '{:+.3f}%')}）")
     jp, pool = rev.get("jp") or {}, rev.get("pool") or {}
     lines.append(f"- 判定（JP）：{jp.get('label', '—')}" + (f"（{jp['n']} 个，60 日超额平均 {jp['mean']:+.2f}%、涨的比例 {jp['win']:.0f}%）" if jp.get("mean") is not None else ""))
-    lines.append(f"- JP + US 合并：{pool.get('label', '—')}" + (f"（{pool['n']} 个，平均 {pool['mean']:+.2f}%、涨的比例 {pool['win']:.0f}%）" if pool.get("mean") is not None else ""))
+    lines.append(f"- JP + 对照合并：{pool.get('label', '—')}" + (f"（{pool['n']} 个，平均 {pool['mean']:+.2f}%、涨的比例 {pool['win']:.0f}%）" if pool.get("mean") is not None else "")
+                 + (f"；独立的大跌段 {pool['episodes']} 个" if pool.get("episodes") else ""))
     lines.append("非投资建议。")
     return lines
 

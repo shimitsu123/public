@@ -1304,19 +1304,18 @@ def _era_forward_log(themes: dict, today) -> dict:
 
 
 def _deepdip_forward_log(data: dict, today) -> dict:
-    """「≤ −15% 深跌」前向记录（qbreak/deepdip_forward.py，2026-09-29 登记）：日経225 / S&P 500 近 11 年以上的收盘 → 记新事件（只追加）、
+    """「≤ −15% 深跌」前向记录（qbreak/deepdip_forward.py，2026-09-29 登记）：日経225 + 对照 S&P 500 / DAX / FTSE 100 近 11 年以上的收盘 → 记新事件（只追加）、
     现在的乖离、已记事件之后的涨跌与判定。只记录 / 展示，不影响交易；失败只记下原因（日报「数据完整性」会列出）。"""
     from qbreak import deepdip_forward as DF
     try:
         from qbreak.config import DataConfig, universe
         from qbreak.data import load_universe
-        from qbreak.trader import drop_partial_bar
         cfg = DataConfig(provider="yfinance", years=DF.years_needed(paths.out_dir() / DF.LOG_FILE, str(today)), allow_synthetic=False).validate()
         closes = {}
         for mk, spec in DF.MARKETS.items():
             df = load_universe([spec["symbol"]], cfg).get(spec["symbol"])
             if df is not None and len(df):
-                closes[mk] = drop_partial_bar(df, spec["session"])["Close"]
+                closes[mk] = DF.drop_partial(df, spec["session"])["Close"]
         n225 = set(universe("JP", "broad"))
         members = {t: df["Close"] for t, df in (data or {}).items() if t in n225 and df is not None and len(df)}
         return DF.run_day(paths.out_dir() / DF.LOG_FILE, closes, members, str(today))

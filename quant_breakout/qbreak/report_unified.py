@@ -766,13 +766,16 @@ def _deepdip_html(dd: dict) -> str:
         f"买后最低 {f(e['mae60'])}{'' if e.get('mae_done') else '（到现在）'}</li>" for e in dd.get("active") or [])
     jp, pool = rev.get("jp") or {}, rev.get("pool") or {}
     judge = escape(str(jp.get("label") or "—")) + (f"（{jp['n']} 个：60 日超额平均 {jp['mean']:+.2f}%、涨的比例 {jp['win']:.0f}%）" if jp.get("mean") is not None else "")
+    from . import deepdip_forward as DF
+    hist = "、".join(escape(v) for v in DF.HIST.values())
+    eps = f"，独立的大跌段 {pool['episodes']} 个" if pool.get("episodes") else ""
     return ("<section class='card'><h2>深跌前向记录（日経225 13 周线乖离 ≤ −15%；只记录，不改交易）</h2>"
             f"<p>现在：{now}</p>"
             + (f"<ul>{act}</ul>" if act else "")
-            + f"<p class='muted'>已记事件 {dd.get('n', 0)} 个（{escape(str(dd.get('start', '')))} 起）；判定：{judge}；JP + US 合并：{escape(str(pool.get('label') or '—'))}。"
+            + f"<p class='muted'>已记事件 {dd.get('n', 0)} 个（{escape(str(dd.get('start', '')))} 起）；判定：{judge}；JP + 对照合并：{escape(str(pool.get('label') or '—'))}{eps}。"
             "最后一天的乖离是暂定值（这一周是否已完要等下一个交易日），事件第二天才判、才记，事件日不变。"
-            "历史参考（事后描述，登记的研究没有通过）：13 周线第一次 ≤ −15% 之后 60 个交易日比平时多 日経225 1965〜2000 +3.11%（9 段）、"
-            "2001〜2026 +4.64%（8 段）、美国（−12%）+1.28%（34 段），区间都含 0；买进后 60 天内平均还跌 6〜10%。"
+            f"历史参考（事后描述，登记的研究没有通过）：13 周线第一次到门槛之后 60 个交易日比平时多 {hist}；日本 / 美国的区间都含 0，"
+            "买进后 60 天内平均还跌 6〜10%。"
             "规则见 qbreak/deepdip_forward.py 开头（2026-09-29 登记）。</p></section>")
 
 

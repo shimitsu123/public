@@ -116,11 +116,12 @@ def test_sim_day_hook_and_report(isolated_home, monkeypatch):
     jp = _series(recover="2026-11-16")
     frames = {"^N225": jp, "^GSPC": _series(drop="2027-01-04")}
 
-    def fake_load(tickers, cfg, **k):
-        return {t: pd.DataFrame({"Open": frames[t], "High": frames[t], "Low": frames[t], "Close": frames[t], "Volume": 1.0}) for t in tickers}
+    def fake_load(tickers, cfg, **k):                                        # DAX / FTSE 100 没给行情 → 那两栏「没有行情」，其余照常
+        return {t: pd.DataFrame({"Open": frames[t], "High": frames[t], "Low": frames[t], "Close": frames[t], "Volume": 1.0}) for t in tickers if t in frames}
     monkeypatch.setattr(D, "load_universe", fake_load)
     r = run._deepdip_forward_log({}, "2027-06-30")
     assert r["n"] == 2 and {e["market"] for e in r["review"]["events"]} == {"JP", "US"}
+    assert r["status"]["DE"] == {"error": "没有行情"} and r["status"]["UK"] == {"error": "没有行情"}
     html = RU._deepdip_html(r)
     assert "深跌前向记录" in html and "触发线 -15%" in html and "记录中" in html
     r["active"] = [e for e in r["review"]["events"] if e["market"] == "US"]
@@ -132,7 +133,9 @@ def test_sim_day_hook_and_report(isolated_home, monkeypatch):
 
 def test_registered_constants():
     assert DF.FORWARD_START == "2026-10-01" and DF.LOG_FILE == "deepdip_forward.csv"
-    assert {k: (v["symbol"], v["thr"]) for k, v in DF.MARKETS.items()} == {"JP": ("^N225", -15.0), "US": ("^GSPC", -12.0)}
+    assert {k: (v["symbol"], v["thr"]) for k, v in DF.MARKETS.items()} == {"JP": ("^N225", -15.0), "US": ("^GSPC", -12.0),
+                                                                           "DE": ("^GDAXI", -14.0), "UK": ("^FTSE", -11.2)}
+    assert DF.EPISODE_GAP == 90 and DF.EU_CLOSE == {"DE": ("Europe/Berlin", 17, 45), "UK": ("Europe/London", 16, 45)}
     assert (DF.LINE_N, DF.STK_DEV, DF.HORIZONS, DF.H_MAIN, DF.BASE_YEARS) == (13, -15.0, (20, 60, 120), 60, 10)
     assert (DF.JUDGE_N, DF.POOL_N, DF.WIN_SHARE) == (5, 10, 60.0)
 
@@ -159,3 +162,30 @@ def test_script_status_reads_report_only(tmp_path, monkeypatch, capsys):
     txt = capsys.readouterr().out
     assert "日报 2026-11-17" in txt and "还差 7.00 pp" in txt and "JP 2026-10-05" in txt and "取不到行情（没有行情）" in txt
     assert sorted(p.name for p in out.iterdir()) == before                            # 不写文件
+
+
+def test_drop_partial_european_close():
+    import datetime as dt
+    idx = pd.bdate_range("2026-09-28", "2026-10-05")                           # 最后一根 = 2026-10-05（周一）
+    df = pd.DataFrame({"Close": range(len(idx))}, index=idx, dtype=float)
+    utc = dt.timezone.utc
+    assert len(DF.drop_partial(df, "DE", dt.datetime(2026, 10, 5, 10, 0, tzinfo=utc))) == len(df) - 1   # 柏林 12:00：还没收盘
+    assert len(DF.drop_partial(df, "DE", dt.datetime(2026, 10, 5, 16, 0, tzinfo=utc))) == len(df)       # 柏林 18:00
+    assert len(DF.drop_partial(df, "UK", dt.datetime(2026, 10, 5, 15, 30, tzinfo=utc))) == len(df) - 1  # 伦敦 16:30（夏令时）< 16:45
+    assert len(DF.drop_partial(df, "UK", dt.datetime(2026, 10, 5, 16, 0, tzinfo=utc))) == len(df)       # 伦敦 17:00
+    assert len(DF.drop_partial(df, "DE", dt.datetime(2026, 10, 6, 8, 0, tzinfo=utc))) == len(df)        # 第二天：最后一根不是今天
+    assert len(DF.drop_partial(df, "JP", dt.datetime(2026, 10, 6, 8, 0, tzinfo=utc))) == len(df)        # JP / US 走交易代码里的函数
+
+
+def test_episode_labels_and_pool_episodes():
+    lab = DF.episode_labels(["2020-03-09", "2008-10-06", "2020-03-12", "2008-10-10", "2011-03-15", "2020-06-01"])
+    assert lab[1] == lab[3] and lab[0] == lab[2] == lab[5] and len(set(lab)) == 3              # 2020-06-01 离 03-12 81 天 → 同一段
+    assert len(set(DF.episode_labels(["2020-03-09", "2020-07-01"]))) == 2                      # 114 天 → 两段
+    days = pd.bdate_range("2024-01-01", "2027-06-30")
+    c = pd.Series(100.0, index=days)
+    c[days >= pd.Timestamp("2026-10-05")] = 80.0
+    c[days >= pd.Timestamp("2027-02-01")] = 101.0
+    log = pd.DataFrame([{"market": "JP", "event_date": "2026-10-05", "dev": -20.0, "base60": 0.0},
+                        {"market": "US", "event_date": "2026-10-05", "dev": -20.0, "base60": 0.0}])
+    pool = DF.review(log, {"JP": c, "US": c})["pool"]
+    assert pool["n"] == 2 and pool["episodes"] == 1                           # 两个市场同一天 → 一个大跌段

@@ -22,6 +22,13 @@
 四 判定（事先写定）：JP 满 5 个事件且都过了 60 个交易日起，每次运行都判：60 日超额平均 > 0 且 60 日涨的比例 ≥ 60% →「前向成立」
   （只升级日报标签；要用到交易，另外登记组合检验、要你确认）；平均 ≤ 0 →「前向不成立」（日报不再标历史参考）；其余「未定」。
   JP + US 合并满 10 个时另报同样的统计（只描述）。预期很慢：历史上日本约 3〜4 年一次、美国约 3 年一次。
+五 追加对照（2026-09-29，登记 1c55865 之后、开始日之前，前向还没有任何记录；用户「加 DAX 和 FTSE 100 作对照」）：
+  DE：德国 DAX（^GDAXI）门槛 −14.0%；UK：英国 FTSE 100（^FTSE）门槛 −11.2%。与美国同一原则按波动折算：两边都有数据的全部年份
+  （DAX 1988〜2026、FTSE 1984〜2026）的日对数收益标准差 ÷ 日経225 同期的 × −15%（k = 0.935 / 0.749）。事件、记录、结果与美国相同
+  （对照，只描述）；还没收盘的当天 K 线按当地时间去掉（Xetra 17:45、LSE 16:45 之前算没收盘；JP / US 照旧用交易代码里的函数）。
+  JP 的判定不变；四里「JP + US 合并」改为「JP + 对照（US / DE / UK）合并」满 10 个另报（只描述），同时报独立的大跌段数
+  （按日期排序，与前一个事件相距 ≤ 90 个日历日的算同一段：同一次全球大跌会在几个市场各记一个事件）。
+  欧洲两个指数的历史只看一次：scripts/deepdip_intl_check.py（同一提交登记）。
 """
 from __future__ import annotations
 
@@ -37,12 +44,19 @@ FORWARD_START = "2026-10-01"
 LOG_FILE = "deepdip_forward.csv"
 COLS = ["logged_on", "market", "event_date", "dev", "close", "line", "base60", "breadth"]
 MARKETS = {"JP": {"symbol": "^N225", "thr": -15.0, "session": "JP", "name": "日経225"},
-           "US": {"symbol": "^GSPC", "thr": -12.0, "session": "US", "name": "S&P 500"}}
+           "US": {"symbol": "^GSPC", "thr": -12.0, "session": "US", "name": "S&P 500"},
+           "DE": {"symbol": "^GDAXI", "thr": -14.0, "session": "DE", "name": "DAX"},          # 五：2026-09-29 追加的对照
+           "UK": {"symbol": "^FTSE", "thr": -11.2, "session": "UK", "name": "FTSE 100"}}
 LINE_N, STK_DEV, MIN_BREADTH_N = 13, -15.0, 50
 HORIZONS, H_MAIN, BASE_YEARS = (20, 60, 120), 60, 10
 JUDGE_N, POOL_N, WIN_SHARE = 5, 10, 60.0
 ACTIVE_DAYS = 120
-HIST = {"JP": "1965〜2000 9 段 +3.11%、2001〜2026 8 段 +4.64%", "US": "1926〜2026 34 段 +1.28%（门槛 −12%）"}
+EPISODE_GAP = 90                                                             # 各市场事件日相距 ≤ 90 个日历日 → 同一次大跌
+EU_CLOSE = {"DE": ("Europe/Berlin", 17, 45), "UK": ("Europe/London", 16, 45)}   # Xetra 17:30 / LSE 16:30 收盘（含收盘竞价）后 15 分钟
+HIST = {"JP": "日経225 1965〜2000 +3.11%（9 段）、2001〜2026 +4.64%（8 段）",       # 历史参考（只作展示；事后描述）
+        "US": "美国（−12%）1926〜2026 +1.28%（34 段）",
+        "DE": "DAX（−14%）见 var/out/deepdip_intl_check.md",
+        "UK": "FTSE 100（−11.2%）见 var/out/deepdip_intl_check.md"}
 
 
 def weekly_line(close: pd.Series, days=None, n: int = LINE_N) -> pd.Series:
@@ -137,6 +151,32 @@ def breadth_at(members: dict[str, pd.Series] | None, date, thr: float = STK_DEV,
     return round(float(np.mean(np.array(vals) <= thr) * 100), 1) if len(vals) >= min_n else None
 
 
+def drop_partial(df: pd.DataFrame, session: str, now=None) -> pd.DataFrame:
+    """去掉还没收盘的当天 K 线：JP / US 用交易代码里同一个函数；DE / UK 按当地时间收盘后 15 分钟之前算没收盘。"""
+    if session in ("JP", "US"):
+        from .trader import drop_partial_bar
+        return drop_partial_bar(df, session, now)
+    if df is None or not len(df):
+        return df
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    tz, hh, mm = EU_CLOSE[session]
+    n = (now or dt.datetime.now(dt.timezone.utc)).astimezone(ZoneInfo(tz))
+    return df.iloc[:-1] if df.index[-1].date() == n.date() and n.time() < dt.time(hh, mm) else df
+
+
+def episode_labels(dates, gap_days: int = EPISODE_GAP) -> list[int]:
+    """同一次大跌（跨市场）编同一个号：按日期排序，与前一个事件相距 ≤ gap_days 个日历日的并进同一段；返回与输入同顺序的段号。"""
+    ts = [pd.Timestamp(d) for d in dates]
+    order = sorted(range(len(ts)), key=lambda i: ts[i])
+    lab, cur = [0] * len(ts), -1
+    for j, i in enumerate(order):
+        if j == 0 or (ts[i] - ts[order[j - 1]]).days > gap_days:
+            cur += 1
+        lab[i] = cur
+    return lab
+
+
 def load_log(path: Path) -> pd.DataFrame:
     if not Path(path).exists():
         return pd.DataFrame(columns=COLS)
@@ -192,7 +232,7 @@ def judge(done: list[dict], need: int = JUDGE_N) -> dict:
 
 
 def review(log: pd.DataFrame, closes: dict[str, pd.Series]) -> dict:
-    """每个记下的事件：之后 20 / 60 / 120 天的涨跌、60 天内最低、60 日超额；JP 的判定与 JP + US 合并（只描述）。"""
+    """每个记下的事件：之后 20 / 60 / 120 天的涨跌、60 天内最低、60 日超额；JP 的判定与 JP + 对照合并（只描述，另报独立的大跌段数）。"""
     rows = []
     for _, r in log.iterrows():
         c = closes.get(r["market"])
@@ -210,6 +250,7 @@ def review(log: pd.DataFrame, closes: dict[str, pd.Series]) -> dict:
         rows.append(out)
     done = [x for x in rows if x["x60"] is not None]
     pool = judge(done, POOL_N)
+    pool["episodes"] = len(set(episode_labels([x["event_date"] for x in done])))
     return {"events": rows, "jp": judge([x for x in done if x["market"] == "JP"]),
             "pool": {**pool, "label": "只描述：" + pool["label"]}}
 
