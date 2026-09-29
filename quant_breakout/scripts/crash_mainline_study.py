@@ -64,6 +64,10 @@
     d −12% 15 旧 15、15 / 14 / 9；d −15% 8 旧 9、都 8；d −20% 2 旧 3。美国（k = 0.803）d −6 / −9 / −12 / −15 / −20% × k：122 / 71 / 45 / 34 / 20 段；
     美国 1991〜2026 加 S&P 500 成分比例（个股 k = 0.946）：5〜20 段。
   二：大跌段 Z 5、E 11、J 5（都有反弹开始）；美国 71。三：暂时顶开始跌 Z 10、E 13、J 14；美国 142。業種覆盖 100%。
+登记后、运行前的修正（2026-09-29，没看任何结果；规则不变）：核对 J-Quants 業種别指数时发现同一个業種有两种写法
+  （industry_s33.json「証券、商品先物取引業」、J-Quants 上市一览「証券・商品先物取引業」）→ 时点 TOPIX 1000 里不在今天名单的证券公司被分成另一个组 →
+  業種名统一成「・」（ind_name）；「现在的位置」加上个股比例的日期与「不属于主线業種、但关联最高的 5 只」（只描述）。
+  第一次运行在出结果之前停掉，没有看输出。
 六 局限：日経225 与扩大池用今天的成分（Z / E / W 有幸存者偏差，J2 没有）；业种用今天的分类；大跌 / 见顶的段数少（日本约 20 / 37 段），
   同一时期的段互相不独立；调整后价、不含分红（指数）；这些样本以前做过很多别的检验；税前、不计费用。模拟盘 / 执行器不因这次研究改。非投资建议。
 输出：var/out/crash_mainline_study.md / .json（只有统计）。
@@ -128,6 +132,11 @@ def say(s: str = "") -> None:
 
 def nfkc(s) -> str:
     return unicodedata.normalize("NFKC", str(s)) if s is not None and str(s) not in ("", "nan", "None") else ""
+
+
+def ind_name(s) -> str:
+    """業種名统一写法：NFKC，且「、」→「・」（industry_s33.json 写「証券、商品先物取引業」、J-Quants 写「証券・商品先物取引業」）。"""
+    return nfkc(s).replace("、", "・")
 
 
 # ───────────────────────── 线、乖离、多数个股的比例（纯函数，有测试）─────────────────────────
@@ -386,14 +395,14 @@ def s33_map() -> dict[str, str]:
         import allstock_data as AD
         for _, m in sorted(AD.snapshots().items()):
             for code, nm in zip(m["Code"].astype(str), m["S33Nm"].astype(str)):
-                v = nfkc(nm)
+                v = ind_name(nm)
                 if len(code) == 5 and code.endswith("0") and v not in ("", "その他", "-"):
                     out[code[:4] + ".T"] = v
     except Exception as e:                                                    # noqa: BLE001
         print(f"J-Quants 上市一览读不到（只用 industry_s33.json）：{e}")
     doc = json.loads((paths.home() / "industry_s33.json").read_text(encoding="utf-8"))
     for c, v in doc["s33"].items():
-        out[f"{c}.T"] = nfkc(v)
+        out[f"{c}.T"] = ind_name(v)
     return out
 
 
@@ -972,19 +981,24 @@ def current_state(nk: pd.Series, dv: pd.Series, P: dict, s33: dict, best) -> dic
     except Exception:                                                          # noqa: BLE001
         pass
     mem = S["M"][-1]
-    order = [j for j in np.argsort(-np.nan_to_num(corr, nan=-9)) if mem[j] and np.isfinite(corr[j])][:10]
+    rank = [j for j in np.argsort(-np.nan_to_num(corr, nan=-9)) if mem[j] and np.isfinite(corr[j])]
+    order, other = rank[:10], [j for j in rank if groups[j] not in ml][:5]
     Bj = breadth(panel_dev(P["J"]["C"], P["J"]["days"]), P["J"]["M"])
     Bj2 = breadth(panel_dev(S["C"], days), S["M"])
-    out = {"date": str(nk.index[-1].date()), "dev": float(dv.iloc[-1]), "breadth_n225": float(Bj[-1]), "breadth_t1000": float(Bj2[-1]),
+    out = {"date": str(nk.index[-1].date()), "bdate": str(days[-1].date()), "dev": float(dv.iloc[-1]), "breadth_n225": float(Bj[-1]),
+           "breadth_t1000": float(Bj2[-1]),
            "mainline_q": f"{qa.year}Q{(qa.month - 1) // 3 + 1}", "mainline": ml, "scores": {g: round(sc[g], 2) for g in ml},
            "qtd": top_k(qtd, ML_TOP["JP"]), "top_assoc": [{"ticker": S["names"][j], "name": names.get(S["names"][j], ""),
-                                                         "ind": groups[j], "corr": round(float(corr[j]), 3)} for j in order]}
+                                                         "ind": groups[j], "corr": round(float(corr[j]), 3)} for j in order],
+           "top_assoc_other": [{"ticker": S["names"][j], "name": names.get(S["names"][j], ""), "ind": groups[j],
+                                "corr": round(float(corr[j]), 3)} for j in other]}
     say(f"\n## 现在的位置（数据截至 {out['date']}；只描述）")
-    say(f"- 日経225 13 周线乖离 {out['dev']:+.2f}%；13 周线 ≤ −15% 的个股比例：日経225 成分 {out['breadth_n225']:.0f}%、时点 TOPIX 1000 {out['breadth_t1000']:.0f}%"
+    say(f"- 日経225 13 周线乖离 {out['dev']:+.2f}%（{out['date']}）；13 周线 ≤ −15% 的个股比例（{out['bdate']}）：日経225 成分 {out['breadth_n225']:.0f}%、时点 TOPIX 1000 {out['breadth_t1000']:.0f}%"
         + (f"；一的「最好的深度」（≤ {best[0]:+.0f}%、比例 {'不要求' if best[1] == 0 else f'≥ {best[1]:.0f}%'}）现在{'成立' if out['dev'] <= best[0] and (best[1] == 0 or out['breadth_n225'] >= best[1]) else '不成立'}" if best else ""))
     say(f"- 时代主线（{out['mainline_q']} 判定，时点 TOPIX 1000 等权）：" + "、".join(f"{g}（{sc[g]:+.1f}%）" for g in ml)
         + f"；本季到现在（{qtd_a.date()}〜{last.date()}）领先：" + "、".join(out["qtd"]))
     say("- 现在与主线篮子关联最高的 10 只（近 126 个交易日的相关）：" + "、".join(f"{x['ticker'][:4]} {x['name']}（{x['ind']} {x['corr']:+.2f}）" for x in out["top_assoc"]))
+    say("- 不属于主线業種、但关联最高的 5 只：" + "、".join(f"{x['ticker'][:4]} {x['name']}（{x['ind']} {x['corr']:+.2f}）" for x in out["top_assoc_other"]))
     return out
 
 

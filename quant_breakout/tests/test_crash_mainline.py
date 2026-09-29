@@ -26,6 +26,11 @@ def test_line_dev_uses_completed_weeks():
     assert np.isclose(dv.iloc[-1], (80 / ((12 * 100 + 80) / 13) - 1) * 100)   # 最后一周（没完成）还用上一根的线
 
 
+def test_ind_name():
+    assert CM.ind_name("証券、商品先物取引業") == CM.ind_name("証券・商品先物取引業") == "証券・商品先物取引業"
+    assert CM.ind_name("ガラス･土石製品") == "ガラス・土石製品" and CM.ind_name(None) == ""
+
+
 def test_breadth():
     DEV = np.array([[-20.0, -10.0, np.nan, -16.0], [0.0, 1.0, 2.0, 3.0]])
     M = np.array([[True, True, True, False], [True, True, True, True]])
