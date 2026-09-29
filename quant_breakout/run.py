@@ -812,7 +812,7 @@ def _unified_cfg(sim: dict):
     return config_from_sim(sim)
 
 
-def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=()):
+def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hook=None):
     """模拟盘（sim-day）与实盘执行器（live-u）共用：按 var/sim.json 建统一引擎 —— 行情到最新收盘（去掉未收盘的当日 K 线）、
     牛熊分界、汇率、明天成交的新仓倍数（宏观 / 板块 / 状态层）、决算前不进场。返回 (eng, ctx)；ctx.make(state) 用同一套
     输入再建一个引擎（例如执行器演练账户的状态）。"""
@@ -874,17 +874,290 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=()):
             return f"决算前 {e} 个交易日" if e is not None and e <= n else None
         eblock = _eblock
 
-    def make(st):
+    from qbreak import fwd_judgment as FJ
+    bar_date = str(pd.DatetimeIndex(sorted(set().union(*[df.index for df in ind.values()])))[-1].date()) if ind else None
+    fj_pl = None                                           # 前向记录判断层（2026-09-29 用户要求；var/sim.json fwd_judgment.enabled 开关）
+    fj_on = bool((cfg.get("fwd_judgment") or {}).get("enabled"))
+    if fj_on:
+        if fj_hook is not None:                             # 云端 sim-day：决策之前现算 → var/fwd_judgment.json
+            fj_pl = fj_hook(ind, params, u, bar_date)
+        else:                                               # Mac 执行器：读云端算好、scripts/liveu.sh 同步过来的同一个文件
+            fj_pl = FJ.load(paths.home() / FJ.FILE)
+        if "JP" in plans and "JP" in extras:              # 日报 / 页面显示判断层取 min 之后实际生效的新仓倍数
+            sc1, _, used0 = FJ.apply(plans["JP"].scale, plans["JP"].tmult or {}, fj_pl, bar_date)
+            mk0 = (fj_pl or {}).get("market") or {}
+            rg = extras["JP"].setdefault("regime", {})
+            rg["fwd_judgment"] = {"applied": used0 is not None, "as_of": (fj_pl or {}).get("as_of"), "points": mk0.get("points"),
+                                  "mult": mk0.get("mult"), "before": plans["JP"].scale}
+            if used0 is not None:
+                rg["final_mult"] = sc1
+
+    def make(st, fj: bool = True):
         e = UnifiedEngine(ind, ucfg, params, ex, ccost, fx=fx, bear=bear, state=st)
-        for m, P in plans.items():                        # 明天成交的新仓倍数：与原模拟盘同一套宏观 / 板块 / 状态层
-            e.live_mult[m] = (P.scale, P.tmult or {}, P.block if isinstance(P.block, str) else None)
+        _apply_live_mults(e, plans, fj_pl if fj else None, bar_date)
         e.live_fx_ok = is_trading_day(now_jst().date())    # 今天白天（日本营业日）才有换汇窗口
         e.entry_block_fn = eblock
         e.entry_gate_fn = gate.entry_block
         return e
     ctx = SimpleNamespace(data=data, ind=ind, plans=plans, extras=extras, params=params, dcfg=dcfg, ucfg=ucfg, u=u,
-                          broker=broker, today=today, ex=ex, ccost=ccost, make=make, gate=gate)
+                          broker=broker, today=today, ex=ex, ccost=ccost, make=make, gate=gate, fj=fj_pl, fj_on=fj_on,
+                          bar_date=bar_date)
     return make(state), ctx
+
+
+def _apply_live_mults(e, plans: dict, fj_pl: dict | None, bar_date: str | None) -> dict | None:
+    """明天成交的新仓倍数（与原模拟盘同一套宏观 / 板块 / 状态层）+ 前向记录判断层（只作用在日本个股：市场倍数与原有各层取 min，
+    s < 0 的票 ×0.5 与板块倾斜取 min；同一天的候选 s 高的先、再按 F2，只用在最新一天的决策）。返回生效的判断层 | None。"""
+    from qbreak import fwd_judgment as FJ
+    used = None
+    for m, P in plans.items():
+        sc, tm = P.scale, P.tmult or {}
+        if m == "JP":
+            sc, tm, used = FJ.apply(sc, tm, fj_pl, bar_date)
+        e.live_mult[m] = (sc, tm, P.block if isinstance(P.block, str) else None)
+    if used is not None:
+        last_i = len(e.gidx) - 1
+        e.entry_priority_fn = lambda t, i, _u=used, _l=last_i: FJ.priority_of(_u, t) if i == _l else None
+    return used
+
+
+def _fj_precompute(provider: str, today) -> dict:
+    """前向记录判断层要用、日报本来也要算的面板：主题 / 业种强弱（时代主线）、能源（K4）、成本 × 销售（S2）。先算一次，后面日报直接用。"""
+    return {"themes": _theme_panel(provider), "energy": _energy_panel(today), "cost_sales": _cost_sales_panel(today)}
+
+
+def _fj_policy_lists(bar_date: str) -> list[tuple[list, list]]:
+    """G1：强 / 中类别、sign ≠ 0、没被排除的政策事件里，成交日（bar_date 的下一个交易日）落在 t0 起 20 个交易日（W20）内的 →
+    [(受益业种, 受损业种)]（qbreak/policy_events.derive_lists；sign = −1 的子类已互换）。"""
+    import pandas as pd
+    from qbreak import policy_events as PEV
+    E, days = _policy_events_frame()
+    if not len(E):
+        return []
+    k = int(days.searchsorted(pd.Timestamp(bar_date), side="right"))
+    if k >= len(days):
+        return []
+    out = []
+    for _, e in E.iterrows():
+        cat, sub = e["category"], e["subtype"]
+        if str(e.get("excluded")) == "1" or cat not in PEV.CATS or PEV.CATS[cat]["tier"] not in ("strong", "mid"):
+            continue
+        try:
+            sign = int(float(e.get("sign") or 0))
+        except (TypeError, ValueError):
+            sign = 0
+        if sign == 0 or pd.isna(e.get("t0")):
+            continue
+        j0 = int(days.searchsorted(pd.Timestamp(e["t0"])))
+        if j0 <= k <= j0 + 19:
+            b, v = PEV.derive_lists(cat, sub)[:2]
+            out.append((list(b), list(v)))
+    return out
+
+
+def _fj_stock_inputs(ind: dict, params: dict, u: dict, bar_date: str, cands: list[str], pre: dict) -> tuple[dict, dict]:
+    """候选的个股层输入（与各前向记录同一套函数）：F2 / X2 / K2 / USW / 时代主线 / S2 / G1。返回 ({票: 输入}, {项: 取不到的原因})。"""
+    import json as _json
+    import pandas as pd
+    from qbreak import score_forward as SF
+    from qbreak.config import BENCHMARK
+    from qbreak.data import load_universe
+    from qbreak.trader import drop_partial_bar
+    errs: dict = {}
+    out: dict = {t: {} for t in cands}
+    if not cands:
+        return out, errs
+    day = pd.Timestamp(bar_date)
+    s33: dict = {}
+    try:
+        s33 = {f"{c}.T": v for c, v in _json.loads((paths.home() / "industry_s33.json").read_text(encoding="utf-8"))["s33"].items()}
+    except Exception as e:                                   # noqa: BLE001
+        errs["业种表"] = f"{type(e).__name__}: {e}"
+    for t in cands:
+        out[t]["industry"] = s33.get(t)
+    jp = universe("JP", (u.get("universe") or {}).get("JP", "broad"))
+    ix = None
+    try:
+        d10 = DataConfig(provider=pre.get("provider") or "yfinance", years=10, allow_synthetic=False).validate()
+        ix = drop_partial_bar(load_universe([BENCHMARK["JP"]], d10)[BENCHMARK["JP"]], "JP")["Close"]
+    except Exception as e:                                   # noqa: BLE001
+        errs["日経225 指数"] = f"{type(e).__name__}: {e}"
+    try:                                                     # B1 F2：与买点质量分前向记录同一个冻结配比、同一份「不加 W2」的信号表
+        models, _ = SF.load_model(paths.home() / SF.MODEL_FILE)
+        rows = SF.signal_rows_on(SF.no_w2_frames(ind, params["JP"], jp), ix, [day], jp)
+        rows = rows[rows["ticker"].isin(cands)].reset_index(drop=True)
+        if len(rows):
+            sc = SF.score_rows(rows, {"F2": models["F2"]})
+            for _, r in sc.iterrows():
+                out[r["ticker"]].update(F2=float(r["F2"]), F2_thr=float(models["F2"].thr))
+    except Exception as e:                                   # noqa: BLE001
+        errs["B1 F2"] = f"{type(e).__name__}: {e}"
+    dates = pd.DatetimeIndex([day] * len(cands))
+    try:                                                     # B2 X2
+        x2, x2_err = _x2_for_forward(SF, [str(day.date())])
+        if x2_err:
+            errs["B2 X2"] = x2_err
+        if x2 is not None:
+            vals, _ = SF.x2_lookup(x2, dates, cands)
+            for t, v in zip(cands, vals):
+                out[t]["x2"] = None if v != v else float(v)
+    except Exception as e:                                   # noqa: BLE001
+        errs["B2 X2"] = f"{type(e).__name__}: {e}"
+    try:                                                     # B3 K2 / B4 USW
+        from qbreak import idio_forward as IF
+        idio, idio_err = _idio_for_forward(SF, [str(day.date())], ix)
+        if idio_err:
+            errs["B3 / B4 K2·USW"] = idio_err
+        if idio is not None:
+            f = IF.fields(ind, dates, cands, idio.get("mkt_close"), idio.get("us_pct"), idio.get("s33"))
+            for i, t in enumerate(cands):
+                out[t]["k2"], out[t]["usw"] = f["k2_keep"][i], f["usw_keep"][i]
+    except Exception as e:                                   # noqa: BLE001
+        errs["B3 / B4 K2·USW"] = f"{type(e).__name__}: {e}"
+    th = pre.get("themes") or {}                             # B5 时代主线：12-1 个月前 7 或上一季前 7（東証 33 业种）
+    groups = th.get("groups") or {}
+    inds = set(s33.values())
+    top12 = [g for g, v in sorted(((g, v) for g, v in groups.items() if g in inds and v.get("r12") is not None),
+                                   key=lambda kv: -float(kv[1]["r12"]))][:7]
+    topq = [x[0] for x in ((th.get("era_q") or {}).get("industries") or [])][:7]
+    era = set(top12) | set(topq)
+    if not groups:
+        errs["B5 时代主线"] = th.get("error") or "主题 / 业种强弱没有算出"
+    cs = pre.get("cost_sales") or {}                         # B6 S2
+    g = cs.get("groups") or {}
+    if cs.get("error"):
+        errs["B6 S2"] = cs["error"]
+    try:                                                     # B7 G1
+        pol = _fj_policy_lists(bar_date)
+    except Exception as e:                                   # noqa: BLE001
+        pol = []
+        errs["B7 G1"] = f"{type(e).__name__}: {e}"
+    for t in cands:
+        name = out[t].get("industry")
+        out[t]["era"] = (name in era) if (era and name) else None
+        s2 = None
+        if cs.get("cost_up") and g.get("ok") and name:
+            s2 = "indirect" if name in (g.get("indirect") or []) else ("direct" if name in (g.get("direct") or []) else None)
+        out[t]["s2"] = s2
+        out[t]["g1"] = sum((1 if name in b else 0) - (1 if name in v else 0) for b, v in pol) if name else 0
+    return out, errs
+
+
+FJ_MAX_LAG = 1                                               # 市场层读数最多落后最新 K 线 1 个日本交易日（与宏观判断层「过期不用」同一个思路）
+
+
+def _jp_trading_days_between(a: str, b: str) -> int:
+    """a 之后到 b（含）有几个日本交易日（a ≥ b → 0）。"""
+    import pandas as pd
+    from qbreak.calendar_jp import is_trading_day
+    if pd.Timestamp(a) >= pd.Timestamp(b):
+        return 0
+    return sum(1 for d in pd.date_range(pd.Timestamp(a) + pd.Timedelta(days=1), b).date if is_trading_day(d))
+
+
+def _fj_compute(ind: dict, params: dict, u: dict, bar_date: str, pre: dict) -> dict:
+    """前向记录判断层（qbreak/fwd_judgment.py）：云端 sim-day 在引擎决策之前算 → var/fwd_judgment.json（Mac 执行器读同一个文件）。
+    任何一项算不了 → 记 0（中性）并写明原因；整个算不了 → 市场倍数 1、没有个股判定（= 原规则）。"""
+    import pandas as pd
+    from qbreak import fwd_judgment as FJ
+    from qbreak.unified import market_of
+    from qbreak.utils import write_json
+    errors: dict = {}
+    row: dict = {}
+    try:                                                     # 不晚于最新 K 线的最后一行；日経225 当天的 K 线缺 → 用前一个交易日的（再旧 → 按中性）
+        H = FJ.market_history()
+        H = H[H.index <= pd.Timestamp(bar_date)]
+        rd = str(H.index[-1].date())
+        lag = _jp_trading_days_between(rd, bar_date)
+        if lag > FJ_MAX_LAG:
+            errors["市场层读数"] = f"读数只到 {rd}（最新 K 线 {bar_date}，落后 {lag} 个交易日）→ 市场层按中性"
+        else:
+            row = H.iloc[-1].to_dict()
+        row["_date"] = rd
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("判断层市场层读数失败（按中性）：%s", e)
+        errors["市场层读数"] = f"{type(e).__name__}: {e}"[:200]
+    k4 = ((pre.get("energy") or {}).get("k4") or {}).get("on")
+    if k4 is None:
+        errors["A5 K4"] = (pre.get("energy") or {}).get("error") or "能源数据没有 K4"
+    core = set(((_sim_cfg() or {}).get("unified") or {}).get("core") or {})
+    cands = sorted(t for t, df in ind.items() if market_of(t) == "JP" and t not in core and len(df)
+                   and str(df.index[-1].date()) == bar_date and bool(df["entry"].iloc[-1]))
+    try:
+        stocks, serr = _fj_stock_inputs(ind, params, u, bar_date, cands, pre)
+        errors.update(serr)
+    except Exception as e:                                   # noqa: BLE001
+        stocks = {t: {} for t in cands}
+        errors["个股层"] = f"{type(e).__name__}: {e}"[:200]
+    pl = FJ.payload(bar_date, row, None if k4 is None else bool(k4), stocks, errors)
+    pl["market"]["date"] = row.get("_date")
+    try:
+        write_json(paths.home() / FJ.FILE, pl)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("判断层文件写不了：%s", e)
+    m = pl["market"]
+    log.info("前向记录判断层 %s：市场 %s 分 → ×%.2f；候选 %d 只（减半 %d）", bar_date, m["points"], m["mult"], len(stocks),
+             sum(1 for v in pl["stocks"].values() if v["mult"] < 1))
+    return pl
+
+
+def _baseline_step(ctx, raw_before: dict | None) -> dict:
+    """基准账户（不加前向记录判断层）：同一套行情、同一个引擎，只是不用判断层 → var/state/unified_state_base.json。
+    第一次 = 复制模拟盘当时（这次推进之前）的状态，之后每天各走各的；只作对照，失败不影响模拟盘。"""
+    import json as _json
+    from qbreak.unified import UState
+    from qbreak.utils import read_json
+    fp = paths.state_dir() / "unified_state_base.json"
+    try:
+        rawb = read_json(fp) or {}
+        since = rawb.get("_since")
+        if not rawb:
+            rawb = dict(raw_before or {})
+            since = str(ctx.today)
+        st = UState.from_dict({k: v for k, v in rawb.items() if k != "_since"}) if rawb else UState(cash_jpy=float(ctx.ucfg.capital_jpy))
+        eng = ctx.make(st, fj=False)
+        idxs, _ = _new_bar_idxs(eng, st)
+        if idxs:
+            eng.prime(idxs[0])
+            prov = _corp_actions_provider()
+            for i in idxs:
+                eng.apply_corp_actions(i, prov)
+                eng.step(i)
+        doc = st.to_dict()
+        doc["_since"] = since
+        fp.write_text(_json.dumps(doc, ensure_ascii=False, indent=1, default=float), encoding="utf-8")
+        return {"since": since, "last_date": st.last_date, "equity_jpy": st.history[-1][1] if st.history else None,
+                "positions": sorted(st.pos), "plan": sorted(st.plan)}
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("基准账户失败（不影响模拟盘）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
+
+
+def _fj_summary(ctx, baseline: dict | None, eq) -> dict:
+    """日报用：今天的判断层（市场分数与倍数、各项、候选的判定）+ 基准账户对照。"""
+    pl = getattr(ctx, "fj", None) or {}
+    out = {**_fj_brief(ctx), "market": pl.get("market"), "stocks": pl.get("stocks") or {}, "errors": dict(pl.get("errors") or {}),
+           "baseline": baseline or {}}
+    b = (baseline or {}).get("equity_jpy")
+    out["equity_jpy"], out["diff_jpy"] = eq, (None if b is None or eq is None else round(float(eq) - float(b)))
+    if out.get("why"):
+        out["errors"]["生效"] = out["why"]
+    return out
+
+
+def _fj_brief(ctx) -> dict:
+    """判断层今天有没有生效（日报 / 执行器日志与页面）：{enabled, applied, as_of, bar_date, points, mult, halved, why}。"""
+    from qbreak import fwd_judgment as FJ
+    if not getattr(ctx, "fj_on", False):
+        return {"enabled": False}
+    pl, bd = getattr(ctx, "fj", None), getattr(ctx, "bar_date", None)
+    if not pl:
+        return {"enabled": True, "applied": False, "bar_date": bd, "why": f"没有 {FJ.FILE}（云端还没算 / 没同步到本机）→ 今天按原规则"}
+    ok = FJ.apply(1.0, {}, pl, bd)[2] is not None
+    m = pl.get("market") or {}
+    why = None if ok else (f"判断层文件是 {pl.get('as_of')} 的，最新 K 线 {bd} → 今天按原规则" if pl.get("enabled") else "判断层文件标着关闭")
+    return {"enabled": True, "applied": ok, "as_of": pl.get("as_of"), "bar_date": bd, "points": m.get("points"), "mult": m.get("mult"),
+            "halved": sorted(t for t, v in (pl.get("stocks") or {}).items() if float(v.get("mult", 1.0)) < 1.0), "why": why}
 
 
 def _new_bar_idxs(eng, state):
@@ -923,8 +1196,12 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     state = UState.from_dict(raw) if raw else UState(cash_jpy=float(ucfg.capital_jpy))
     ex_path = paths.state_dir() / "live_unified_paper.json"               # 执行器演练账户（模拟）：它的持仓也要有行情
     ex_state = (read_json(ex_path, {}) or {}).get("state") or {}
-    extra = set(ex_state.get("pos") or {}) | set(ex_state.get("plan") or {})
-    eng, ctx = _unified_engine(a, cfg, state, provider, extra_tickers=extra)
+    base_state = (read_json(paths.state_dir() / "unified_state_base.json", {}) or {})   # 基准账户（不加判断层）：它的持仓也要有行情
+    extra = set(ex_state.get("pos") or {}) | set(ex_state.get("plan") or {}) | set(base_state.get("pos") or {}) | set(base_state.get("plan") or {})
+    fj_on = bool((cfg.get("fwd_judgment") or {}).get("enabled"))
+    pre = _fj_precompute(provider, now_jst().date()) if fj_on else {}      # 判断层要用的面板（主题 / 能源 K4 / 成本 × 销售）先算，后面日报直接用
+    hook = (lambda ind, params, u, bar_date: _fj_compute(ind, params, u, bar_date, {**pre, "provider": provider})) if fj_on else None
+    eng, ctx = _unified_engine(a, cfg, state, provider, extra_tickers=extra, fj_hook=hook)
     data, plans, extras, params, dcfg, today = ctx.data, ctx.plans, ctx.extras, ctx.params, ctx.dcfg, ctx.today
     pcheck = _price_check_panel(data, today)                 # 行情交叉核对（J-Quants，㉚-1）：只报警，不改行情 / 交易
     idxs, cutoff = _new_bar_idxs(eng, state)
@@ -941,6 +1218,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
             eng.step(i)
             planned[str(eng.gidx[i].date())] = sorted(state.plan)
     st_path.write_text(_json.dumps(state.to_dict(), ensure_ascii=False, indent=1, default=float), encoding="utf-8")
+    baseline = _baseline_step(ctx, raw) if fj_on else None   # 基准账户：同一天、同一套行情、不加前向记录判断层（对照判断层的效果）
     executor = _executor_paper_step(ctx, state)            # 实盘执行器的演练账户：同一天、同一套行情，应与模拟盘逐日一致
     i_last = int(eng.gidx.searchsorted(pd.Timestamp(state.last_date))) if state.last_date else len(eng.gidx) - 1
     todo = eng.todo(min(i_last, len(eng.gidx) - 1))
@@ -957,14 +1235,20 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
                              "stop_px": round(p.stop_px, 2)} for t, p in state.pos.items()},
            "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker,
            "threat": threat, "executor": executor, "score_forward": score_fwd, "eligibility": elig,
-           "themes": _theme_panel(provider)}                  # 主题 / 业种强弱、影响度、新出现的联动（只作展示）
+           "themes": pre.get("themes") or _theme_panel(provider)}   # 主题 / 业种强弱、影响度、新出现的联动（只作展示）
     out["era"] = _era_forward_log(out["themes"], today)      # 时代主线的前向记录（每月一次；只记录，不影响交易）
     out["deepdip"] = _deepdip_forward_log(data, today)       # 「≤ −15% 深跌」前向记录（只记录 / 展示，不影响交易）
     out["policy"] = _policy_panel(today)                     # 政策事件反应库：前向记录 + 日报块（只记录 / 展示，不影响交易）
     out["macro_now"] = _macro_now_panel(extras)              # 仪表盘：市场健康度 + 消费 / 零售等新数据（只作展示）
     out["news"] = _news_panel(out)                           # 仪表盘：经济威胁消息的汇总（只作展示；标题不入库）
-    out["energy"] = _energy_panel(today)                     # 仪表盘：能源消费（每月）+ K4 前向记录（只作展示 / 记录）
-    out["cost_sales"] = _cost_sales_panel(today)             # 成本 × 销售（S2）：上个月末的分组 + 前向记录（只展示 / 记录，不影响交易）
+    out["energy"] = pre.get("energy") or _energy_panel(today)   # 仪表盘：能源消费（每月）+ K4 前向记录（K4 也进判断层）
+    out["cost_sales"] = pre.get("cost_sales") or _cost_sales_panel(today)   # 成本 × 销售（S2）：上个月末的分组 + 前向记录（S2 也进判断层）
+    out["fwdj"] = _fj_summary(ctx, baseline, eq) if fj_on else {"enabled": False}   # 前向记录判断层：今天的判定 + 基准账户对照
+    try:
+        from qbreak import survey as _SV
+        out["survey_failed"] = dict(_SV.LAST_FAILED)          # 因子调查取不到的数据源（日报「数据完整性」列出）
+    except Exception:                                        # noqa: BLE001
+        pass
     out["calendar"] = _calendar_panel(today)                 # 检查日历：接下来 45 天有日期的检查 + 远期判定（只展示；全貌 CHECK_TIMELINE.md）
     out["price_check"] = pcheck                              # 行情交叉核对（yfinance × J-Quants）：告警进日报「数据完整性」
     if usdjpy is None:                                       # 状态里没有汇率时（例如首日）：备用来源
@@ -2405,6 +2689,7 @@ def cmd_live_unified(a) -> int:
     sm["eligibility"] = ctx.gate.panel(held=ctx.gate.held_alerts(held, "执行器"),
                                        blocked_today=[{"date": d_, "ticker": t_, "why": w_} for d_, t_, w_ in eng.gate_log])
     sm["market"] = {m: (e.get("regime") or {}).get("bullbear") for m, e in ctx.extras.items()}   # 牛熊：现在处于哪个阶段（页面 / 日志）
+    sm["fwd_judgment"] = _fj_brief(ctx)                     # 前向记录判断层：云端算好的文件今天有没有生效（页面 / 日志）
     write_json(paths.out_dir() / f"live_unified_{tag}.json", sm)
     title, short, body = daily_text(sm, eng.st, cmp, paper, float(ucfg.capital_jpy))
     append_journal(paths.out_dir() / f"live_unified_{tag}_journal.md", now_jst().strftime("%Y-%m-%d %H:%M JST"), title, body)

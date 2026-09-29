@@ -116,6 +116,12 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
                         f"数据日 {escape(str(bb.get('asof') or '—'))}</span></li>")
         body.append("<section class='card'><h2>牛熊：现在处于哪个阶段</h2><ul>" + "".join(rows) + "</ul>"
                     "<div class='muted'>只用于展示；交易规则不变（连续 5 天收在 250 日线 −3% 之下转熊、+3% 之上转牛）</div></section>")
+    fj = sm.get("fwd_judgment") or {}
+    if fj.get("enabled"):                                    # 前向记录判断层：云端算好的文件今天有没有生效
+        from .live_unified import fj_text
+        body.append(f"<section class='card{'' if fj.get('applied') else ' warn'}'><h2>前向记录判断层</h2>"
+                    f"<div>{escape(fj_text(fj)[2:])}</div><div class='muted'>云端模拟盘每天算好 var/fwd_judgment.json、"
+                    "scripts/liveu.sh 同步到本机；日期对不上就按原规则（与云端模拟盘的对照会显示不一致）</div></section>")
     if st:
         pend = st.get("pending_exit") or {}
         pos = "".join(f"<tr><td>{escape(t)}</td><td class='n'>{int(p['shares']):,} 股</td><td class='n'>{_yen(p['entry_px'])}</td>"

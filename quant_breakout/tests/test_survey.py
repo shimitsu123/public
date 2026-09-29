@@ -103,3 +103,31 @@ def test_jp_watch_rows_and_generic_review(tmp_path):
     assert w2["days80"] == 200 and w2["days90"] == 0 and wj["decision90"].startswith("继续观察")
     assert TH.watch_decision({"episodes": [{"W_alert": True}] * 3, "known": 600, "auc_W": 0.7, "auc_A0": 0.6},
                              name="Wj", market="日経").endswith("建议把 Wj 加进日経威胁指数的显示，需要用户确认")
+
+
+def test_load_raw_skips_failed_source_and_incomplete_s_wj_give_no_value(monkeypatch):
+    """一个数据源取不到 → 只跳过它并记下原因（以前整批读数都没有）；S / Wj 的因素不全 → 不给值（不拿少了因素的版本凑数）。"""
+    from qbreak import factors as F
+    from qbreak import threat as TH
+    days = pd.bdate_range("2012-01-02", periods=50)
+
+    def fred(ident):
+        if ident == "WALCL":
+            raise ConnectionError("fred down")
+        return pd.Series(1.0, index=days)
+    monkeypatch.setattr(F, "fred", fred)
+    monkeypatch.setattr(F, "yf_close", lambda ident: pd.Series(1.0, index=days))
+    monkeypatch.setattr(F, "despike", lambda s: s)
+    raw = SV.load_raw({"fred:WALCL", "fred:DGS10", "yf:^SOX"})
+    assert set(raw) == {"fred:DGS10", "yf:^SOX"} and SV.LAST_FAILED["fred:WALCL"].startswith("ConnectionError")
+    SV.load_raw({"yf:^SOX"})
+    assert SV.LAST_FAILED == {}                                              # 每次重新记
+    rng = np.random.default_rng(3)
+    d2 = pd.bdate_range("2008-01-01", periods=1000)
+    ex = pd.DataFrame({c: rng.normal(size=1000) for c in ("vix", "credit", "gold", "claims")}, index=d2)
+    r = SV.readings({"US": (ex, None), "JP": (ex, None)}, {}, {"US": ["gold", "nfci"], "JP": ["gold"]},
+                    {"US": ["vix", "credit"], "JP": ["vix", "credit"]})
+    assert r["US"]["S"] is None and r["JP"]["S"] is not None                  # US 选入的 nfci 取不到 → S 不给值
+    cols = SV.JP_WATCH[:-1] + ["gold_silver", "commod_vol"] + TH.JP_COLS          # Wj 少一个因素
+    raw_ex = pd.DataFrame({c: rng.normal(size=1000) for c in dict.fromkeys(cols)}, index=d2)
+    assert SV.jp_watch_rows({"JP": (raw_ex, None)}, {}) == []

@@ -290,6 +290,14 @@
   盘点：A0、压力指数都没有房贷利率与家庭信贷；v3 只有企业信贷（企业贷款拖欠 / 核销 / 放贷标准）；因子调查有房贷利率（没选入）。
   加上信用卡 / 消费贷 / 房贷的拖欠（逾期 30 天以上）与核销、信用卡放贷标准、房贷利率 → 美股 / 日経都没有候选成立：1995–2010 略好
   （次贷危机），2011– 变差、15 个发达市场全部变差 → 维持 A0；压力指数与 C_rel 加进去准确度也不变。日本没有长期家庭拖欠序列，用美国的。
+- **前向记录判断层加进模拟盘**（2026-09-29 用户要求「威胁高 + 压力已释放加进模拟盘选股的策略判断」「前向记录的东西都加入选股判断」；
+  规则登记 c5ef50d、`qbreak/fwd_judgment.py`；**2026-09-30 的决策起生效**；只作用在日本个股新仓，1655 / 牛熊分界 / 离场 / 资格检查不变）：
+  市场层 = C_rel 日経 ≥ 自身 80 分位（2 分）+ 威胁前向各版本中位数 / Wj / 美股 W / K4 / T2·T3 熊（各 1 分）− 深跌窗口（1 分）→ ×1 / ×0.75 / ×0.5，
+  与原有各层取小；个股层 = F2 / X2 / K2 / USW / 时代主线 / S2 / G1 各 ±1，合计 < 0 → 那只 ×0.5、同一天 s 高的先。
+  历史检验（`var/out/fwd_judgment_check.md`）：市场层整体「差不多」（J 回撤 −35.6% → −32.2%、E 几乎不变）；只加 C_rel 与现行完全相同
+  （C_rel 警示的日子原有宏观 / 状态层已经关门）。证据弱：多数项目是没通过才进前向记录的 —— 效果看日报「前向记录判断层」卡片里的
+  **基准账户**（不加这一层，`var/state/unified_state_base.json`）。云端 sim-day 算好 `var/fwd_judgment.json` → Mac 执行器（liveu.sh 同步）读同一个文件；
+  日期对不上 = 这一层不生效（执行器日志 / 页面标「★ 判断层没生效」）。关掉：`var/sim.json` 的 `fwd_judgment.enabled` 改 false（要记 sim_changes）。
 - J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
   → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
   （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）
@@ -332,7 +340,8 @@
 - ㉝ 随时 / 事件发生时：「≤ −15% 深跌」前向记录（日経225；对照 S&P 500 / DAX / FTSE 100） ☁️ `python scripts/deepdip_forward.py --review` / 🤖 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/deepdip_forward.py --status`
   （Mac 在 `~/qbreak-src/quant_breakout`，先 `git pull`；只读、不写文件）；平时看日报那一栏即可；有事件时日报标 ★，JP 满 5 个且都过了 60 个交易日起每次运行自动判定；只记录，用到交易要另外登记、用户确认）
 - ㉞ ✅ 2026-09-29 用户选「加进前向记录」：C_rel 从 2026-09-30 起每天记进 `var/out/threat_forward.csv`（列 C_rel；`qbreak/pressure.py`），
-  复核沿用威胁指数前向记录的事先规则（季度复核 2c）
+  复核沿用威胁指数前向记录的事先规则（季度复核 2c）；同一天用户又要求把 C_rel 与全部前向记录加进模拟盘的选股判断 → 前向记录判断层
+  （见上面「前向记录判断层加进模拟盘」；2026-09-30 起生效，基准账户对照）
 - ㉙ ✅ 2026-09-28 用户选「只加 ①」：季度复核已加 2l「成本 × 销售 S2 前向记录复核」`python scripts/cost_sales_forward.py --review`
   （36 个月前只报进度；汇报第 ⑭ 项）；② 日报例行任务的汇报加一行「资格检查」→ 不加（告警已写进「数据完整性」、汇报第一行会列出，不会漏）
 - ㉚ ✅ 数据体检（2026-09-28，`scripts/data_audit.py` → `var/out/data_audit.md`；历年祝日、Yahoo 休市假行、近似时点名单已修正，交易规则不变）：
@@ -394,6 +403,8 @@
 - 政策事件反应库：`qbreak/policy_events.py`（规则）、`scripts/policy_event_data.py`（数据）、`scripts/policy_event_study.py`（登记 + 研究）、
   `scripts/policy_event_verify.py`（来源核对）、`qbreak/policy_forward.py`（前向记录）、`var/policy_events.csv`（事件表）、`var/policy_extra_pool.json`（长历史池补充票）
 - 云端状态：`var/state/unified_state.json`（模拟盘）；Mac 状态：`~/.qbreak/home/state/live_unified_paper.json`（账本，不在仓库）
+- 前向记录判断层：`qbreak/fwd_judgment.py`（规则与计分）、`var/fwd_judgment.json`（每天的判定，云端写、Mac 读）、
+  `var/state/unified_state_base.json`（基准账户：不加判断层的对照）、`scripts/fwd_judgment_check.py`（历史检验）
 - 下单前资格检查：`qbreak/eligibility.py`（快照 `var/out/eligibility.json`；只读检查 `run.py eligibility`）；成本 × 销售显示与 S2 前向记录：`qbreak/cost_sales_forward.py`
   （复核 / 当前分组 `scripts/cost_sales_forward.py --review | --show`）
 
@@ -403,6 +414,9 @@
 - 「和云端不一致」：日志里的比较行（两边的持仓、现金、权益差）。多半是数据不同（云端当天晚了或失败 → Mac 用了前一天的判断层；
   Yahoo 行情修正）。重新对齐：删掉 `~/.qbreak/home/state/live_unified_paper*.json`，下次从云端模拟盘当时的状态开始
 - 「页面没更新 / 没弹出」：`launchctl list | grep qbreak`、`~/.qbreak/home/logs/`；`~/.qbreak/home/NO_OPEN` 存在就不弹出
+- 「前向记录判断层今天生效了吗 / 为什么减半」：Mac 页面「前向记录判断层」卡片与日志那一行（`~/.qbreak/home/out/live_unified_paper.json` 的 fwd_judgment）；
+  云端的详细读数与候选判定在日报「前向记录判断层」卡片（`var/out/unified_today.json` 的 fwdj、`var/fwd_judgment.json`）；
+  「★ 没生效」多半是云端当天晚了 / 失败（文件日期是前一天）→ 那天按原规则，和云端的对照会不一致
 - 「牛熊现在怎样」：页面「牛熊：现在处于哪个阶段」或日报「市场状态」（离 250 日线的 %、20 个交易日的变化 pp、离翻转还差多少 %）
 - 「现在偏向哪边 / 市场健康吗 / 有什么威胁消息」：Mac 的 `~/.qbreak/home/out/dashboard.html`（每 15 分钟，账本页面顶上有链接）或日报「一眼看懂」；
   消息的全文列表 `~/.qbreak/home/cache/news/news.json`；定时任务日志 `~/.qbreak/home/logs/com.qbreak.news.out|err`

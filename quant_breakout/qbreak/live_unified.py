@@ -709,6 +709,15 @@ def _qty_txt(o: dict) -> str:
     return f"{int(o.get('sent_qty') or o['qty']):,} {'口' if o.get('kind') == 'core' else '股'}"
 
 
+def fj_text(fj: dict) -> str:
+    """前向记录判断层的一行（执行器日志 / 页面）。"""
+    if not fj.get("applied"):
+        return f"- ★ 前向记录判断层没生效：{fj.get('why') or '—'}"
+    h = fj.get("halved") or []
+    return (f"- 前向记录判断层（{fj.get('as_of')}）：市场 {fj.get('points')} 分 → 日本个股新仓 ×{fj.get('mult')}（与原有各层取小）；"
+            + (f"个股减半 {len(h)} 只：{'、'.join(h[:8])}" if h else "没有个股减半"))
+
+
 def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: float) -> tuple[str, str, str]:
     """(标题, 通知用的一行, 日志正文)。每个数字带单位。"""
     hist = st.history or []
@@ -725,6 +734,9 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     el = sm.get("eligibility") or {}
     if el.get("needs_user"):
         short += "｜★ 资格检查要确认"
+    fj = sm.get("fwd_judgment") or {}
+    if fj.get("enabled") and not fj.get("applied"):
+        short += "｜★ 判断层没生效"
     lines = [f"- 决策日 {sm.get('decided_on') or '—'} → 成交日 {sm.get('fill_day') or '—'}；权益 ¥{eq:,.0f}"
              f"（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）；现金 ¥{float(st.cash_jpy):,.0f}"]
     held = [f"{t} {int(p.shares):,} 股（成本 ¥{float(p.entry_px):,.2f}，止损 ¥{float(p.stop_px):,.2f}）" for t, p in st.pos.items()]
@@ -743,6 +755,8 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     for m, bb in (sm.get("market") or {}).items():        # 牛熊：现在处于哪个阶段（只展示）
         if bb and bb.get("phase_label"):
             lines.append(f"- 牛熊（{ {'JP': '日経平均', 'US': 'S&P500'}.get(m, m)}）：{bb['phase_label']}：{bb.get('phase_text', '')}")
+    if fj.get("enabled"):                                   # 前向记录判断层（云端算好的 fwd_judgment.json）
+        lines.append(fj_text(fj))
     if cmp:
         lines.append(f"- {cmp['text']}")
     if sm.get("blocked"):

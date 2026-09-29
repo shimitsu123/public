@@ -66,6 +66,8 @@ def build_unified_data() -> dict:
             "cost_sales": td.get("cost_sales") or {},            # 成本 × 销售（S2）分组与前向记录（qbreak/cost_sales_forward.py；只展示）
             "calendar": td.get("calendar") or {},                # 检查日历（qbreak/check_calendar.py；只展示，全貌 CHECK_TIMELINE.md）
             "price_check": td.get("price_check") or {},          # 行情交叉核对（qbreak/price_check.py；yfinance × J-Quants，只报警）
+            "fwdj": td.get("fwdj") or {},                        # 前向记录判断层（qbreak/fwd_judgment.py；2026-09-30 起影响日本个股新仓）
+            "survey_failed": td.get("survey_failed") or {},      # 因子调查取不到的数据源（qbreak/survey.LAST_FAILED）
             "shadow": read_json(paths.out_dir() / "shadow_today.json", {}) or {},   # 影子账户（判断型，只前向记录，不影响交易）
             "commod": _commod_rows(),
             "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else None,
@@ -185,6 +187,20 @@ def missing_items(d: dict) -> list[str]:
         out.append(f"下单前资格检查的日报块：没算出（{el['error']}）—— 闸门本身在引擎里照常生效")
     for n in el.get("needs_user") or []:
         out.append(f"下单前资格检查（告警，不是缺数据）：{n}")
+    fj = d.get("fwdj") or {}
+    if started and fj.get("enabled"):                              # 前向记录判断层：算不了的项按中性（0）；日期对不上 → 这一层今天没生效
+        for k, v in (fj.get("errors") or {}).items():
+            out.append(f"前向记录判断层：{v}" if k == "生效" else
+                       f"前向记录判断层的「{k}」：取不到（{v}）—— 这一项按中性（0 分），其余照常")
+        if (fj.get("baseline") or {}).get("error"):
+            out.append(f"前向记录判断层的基准账户（不加判断层的对照）：这次没走（{fj['baseline']['error']}）—— 不影响模拟盘")
+        md = (fj.get("market") or {}).get("date")
+        if md and fj.get("as_of") and md != fj.get("as_of") and "市场层读数" not in (fj.get("errors") or {}):
+            out.append(f"前向记录判断层的市场层读数用的是 {md} 的（{fj['as_of']} 的日経225 K 线当时还没有，最多落后 1 个交易日）—— 各项照常计分")
+    sv = d.get("survey_failed") or {}
+    if started and sv:
+        out.append(f"因子调查的数据源取不到 {len(sv)} 个（{'、'.join(list(sv)[:4])}{'…' if len(sv) > 4 else ''}）—— 威胁指数前向记录的 S / A0+Wj、"
+                   "日経前瞻观察 Wj 今天不算（不拿少了因素的版本凑数，不补写）；判断层对应的项按中性")
     if started:
         from .price_check import summary_lines
         out += summary_lines(d.get("price_check") or {})             # 行情交叉核对（J-Quants，只报警）：没做 / 取不到 / 告警
@@ -447,6 +463,65 @@ def _cost_sales_html(c: dict) -> str:
                if fw.get("months") else "") + "。非投资建议。</p></section>")
 
 
+def _fwdj_html(d: dict) -> str:
+    """前向记录判断层（qbreak/fwd_judgment.py；2026-09-29 用户要求加进模拟盘，规则登记 c5ef50d）：今天的市场分数与倍数、
+    候选的个股判定、基准账户（不加判断层）对照。"""
+    f = d.get("fwdj") or {}
+    if not f.get("enabled"):
+        return ""
+    from .fwd_judgment import LABELS, POINTS
+    m = f.get("market") or {}
+    it, rd = m.get("items") or {}, m.get("readings") or {}
+
+    def pc(v) -> str:
+        return "—" if v is None else f"{float(v):.0f} 分位"
+
+    def yn(k: str, yes: str = "<b>警示</b>", no: str = "否") -> str:
+        v = it.get(k)
+        return "算不了（按 0）" if v is None else (yes if v else no)
+    read = {"A1": f"C_rel {'—' if rd.get('C_rel') is None else rd['C_rel']}（满分 100）→ 自身历史 {pc(rd.get('crel_pct'))}",
+            "A2": f"各版本分位的中位数 {pc(rd.get('tv_pct'))}", "A3": pc(rd.get("wj_pct")), "A4": pc(rd.get("w_pct")),
+            "A5": yn("A5", "成立", "不成立"), "A6": yn("A6", "熊", "不是熊"), "A+": yn("A+", "在窗口里", "不在")}
+    rows = "".join(f"<tr><td>{k}</td><td>{escape(LABELS[k])}</td><td class='n'>{POINTS[k]} 分</td><td>{read[k]}</td><td>{yn(k)}</td></tr>"
+                   for k in POINTS)
+    rows += (f"<tr><td>A+</td><td>{escape(LABELS['A+'])}</td><td class='n'>−1 分</td><td>{read['A+']}</td>"
+             f"<td>{yn('A+', '<b>抵消 1 分</b>', '否')}</td></tr>")
+    rg = ((d.get("extras") or {}).get("JP") or {}).get("regime") or {}
+    fr = rg.get("fwd_judgment") or {}
+    if f.get("applied"):
+        head = (f"<p>判定日 {escape(str(f.get('as_of')))}（最新收盘）：市场 <b>{m.get('points')} 分 → 日本个股新仓 ×{m.get('mult')}</b>；"
+                f"原有各层 {fr.get('before', '—')} 倍 → 取小后明天实际 <b>{rg.get('final_mult', '—')} 倍</b></p>")
+    else:
+        head = f"<p class='neg'>今天没生效：{escape(str(f.get('why') or '—'))}（明天按原规则）</p>"
+    names = {"B1": "F2", "B2": "X2", "B3": "K2", "B4": "USW", "B5": "时代主线", "B6": "S2", "B7": "G1"}
+    st_rows = []
+    for t, v in sorted((f.get("stocks") or {}).items(), key=lambda kv: (-float(kv[1].get("score", 0)), -float(kv[1].get("F2") or -9))):
+        fl = "、".join(f"{names[k]} {'+1' if x > 0 else '−1'}" for k, x in (v.get("flags") or {}).items() if x) or "全部 0"
+        ind = (v.get("inputs") or {}).get("industry") or "—"
+        f2 = "—" if v.get("F2") is None else f"{float(v['F2']):+.2f}"
+        st_rows.append(f"<tr><td>{escape(t)}</td><td class='muted'>{escape(str(ind))}</td><td>{escape(fl)}</td>"
+                       f"<td class='n'>{int(v.get('score', 0)):+d}</td><td class='n'>{f2}</td>"
+                       f"<td>{'<b>×0.5</b>' if float(v.get('mult', 1)) < 1 else '不变'}</td></tr>")
+    stock = ("<div class='scroll'><table><tr><th>候选</th><th>業種</th><th>不为 0 的项</th><th class='n'>合计 s</th><th class='n'>F2</th>"
+             "<th>新仓</th></tr>" + "".join(st_rows) + "</table></div>") if st_rows else "<p class='muted'>最新收盘没有日本个股的买入候选</p>"
+    b = f.get("baseline") or {}
+    diff = f.get("diff_jpy")
+    base = (f"<p>基准账户（同一套行情、不加这一层，{escape(str(b.get('since') or '—'))} 起）：权益 {_money(b.get('equity_jpy'))}；"
+            f"模拟盘 {_money(f.get('equity_jpy'))}；差 <b class='{'pos' if (diff or 0) > 0 else 'neg' if (diff or 0) < 0 else ''}'>"
+            f"{'—' if diff is None else ('+' if diff >= 0 else '−') + f'¥{abs(diff):,.0f}'}</b>"
+            f"（持仓 基准 {len(b.get('positions') or [])} 只）</p>") if b and not b.get("error") else \
+        f"<p class='muted'>基准账户：{escape(str(b.get('error') or '还没有'))}</p>"
+    return ("<section class='card'><h2>前向记录判断层（2026-09-30 起影响日本个股新仓；用户要求）</h2>" + head
+            + "<div class='scroll'><table><tr><th>项</th><th>内容</th><th class='n'>分数</th><th>今天的读数</th><th>判定</th></tr>" + rows
+            + "</table></div><p class='muted'>分数 n = 警示分 − 深跌抵消（最低 0）：0 → ×1、1 → ×0.75、≥ 2 → ×0.5；与量化层 / 判断层 / 宏观层取小（不放大）。"
+            "个股层：每只候选 7 项各 +1 / −1 / 0，合计 s &lt; 0 → 这只新仓 ×0.5；同一天抢名额时 s 高的先、再按 F2。</p>"
+            + stock + base
+            + "<p class='muted'>证据（照实写）：这些项目大多是事先规则没通过才进前向记录的；只有 C_rel 在 21 个外国市场确认过（指数层）。"
+            "历史检验（scripts/fwd_judgment_check.py，登记 c5ef50d）：市场层整体 E / J 两个窗口「差不多」；只加 C_rel 与现行完全相同 ——"
+            "C_rel 警示的成交日，原有各层多半已经不开新仓（E、Z 100%，J 80%），剩下的日子也没有突破成交（事后描述）。"
+            "关掉：var/sim.json 的 fwd_judgment.enabled = false。非投资建议。</p></section>")
+
+
 def _shadow_html(d: dict) -> str:
     """影子账户（判断型选股，scripts/shadow_account.py；只前向记录，不影响模拟盘与交易）。"""
     s = d.get("shadow") or {}
@@ -548,7 +623,10 @@ def render_unified_html(d: dict) -> str:
               f"离一年高点 {_pct(r.get('dd252_pct'), 1, True)}）") if r.get("vol20_pct") is not None else ""
         ov = (f"；判断层（市场风险报告 {escape(str(r.get('overlay_as_of') or '—'))}）：{escape(str(r.get('overlay_action')))}"
               f"（24 小时崩盘概率 {_pct(r.get('crash_prob'), 0)}，倍数 {r.get('overlay_mult')} 倍）") if r.get("overlay_action") else "；判断层：没取到"
-        mk.append(f"<dt>{name}</dt><dd>量化层 {_QLAB.get(q, escape(q))}{qd}{ov}；<b>明天新仓倍数 {r.get('final_mult')} 倍</b>；{line}；"
+        fjr = r.get("fwd_judgment") or {}
+        fjt = ((f"（含前向记录判断层 {fjr.get('points')} 分 ×{fjr.get('mult')}，原有各层 {fjr.get('before')} 倍，取小）" if fjr.get("applied")
+                else "（前向记录判断层今天没生效）") if fjr else "")
+        mk.append(f"<dt>{name}</dt><dd>量化层 {_QLAB.get(q, escape(q))}{qd}{ov}；<b>明天新仓倍数 {r.get('final_mult')} 倍</b>{fjt}；{line}；"
                   f"宏观触发：{escape(fired)}</dd>")
         ccy = "USD" if m == "US" else "JPY"
         for i, w in enumerate((e.get("watchlist") or [])[:10], 1):
@@ -591,7 +669,7 @@ def render_unified_html(d: dict) -> str:
         fx=fx_rows or "<tr><td colspan=4 class='muted'>还没有换汇</td></tr>", markets="".join(mk),
         watch="".join(watch) or "<tr><td colspan=11 class='muted'>尚无候补数据</td></tr>",
         themes=_themes_html(d.get("themes") or {}, meta), policy=_policy_html(d.get("policy") or {}),
-        deepdip=_deepdip_html(d.get("deepdip") or {}),
+        deepdip=_deepdip_html(d.get("deepdip") or {}), fwdj=_fwdj_html(d),
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us), shadow=_shadow_html(d),
         elig=_eligibility_html(d, meta), cost_sales=_cost_sales_html(d.get("cost_sales") or {}),
         calendar=_calendar_html(d.get("calendar") or {}), pcheck=_price_check_html(d.get("price_check") or {}),
@@ -976,6 +1054,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <section class="card"><h2>除息 / 拆股（已补到持仓与现金）</h2><ul>{corp}</ul></section>
 <section class="card"><h2>核心 ETF（闲置资金）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
 <section class="card"><h2>市场状态</h2><dl>{markets}</dl></section>
+{fwdj}
 {deepdip}
 <section class="card"><details><summary><h2 style="display:inline">大事件威胁指数的明细（只展示，不参与交易）</h2></summary>{threat}</details></section>
 <section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>主题 / 业种（近 3 月相对）</th><th>状态</th><th>突破</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>

@@ -105,29 +105,37 @@ def sources() -> set[str]:
     return {src for s in SPECS for src in s[4]}
 
 
+LAST_FAILED: dict[str, str] = {}                  # 最近一次 load_raw 取不到的数据源 → 原因（日报「数据完整性」列出）
+
+
 def load_raw(srcs: set[str] | None = None) -> dict[str, pd.Series]:
-    """下载（有缓存）调查用的全部原始序列：{数据源: 序列}。"""
+    """下载（有缓存）调查用的全部原始序列：{数据源: 序列}。某个源取不到 → 跳过并记进 LAST_FAILED（2026-09-29 起：
+    以前一个源失败会让整批读数（S、各领域、日経前瞻观察 Wj）都没有；用到它的因素自然缺，Wj / S 因素不全时不给值）。"""
     from . import factors as F
     out = {}
     jgb = None
+    LAST_FAILED.clear()
     for src in sorted(srcs or sources()):
         kind, _, ident = src.partition(":")
-        if kind == "fred":
-            out[src] = F.fred(ident)
-        elif kind == "yf":
-            out[src] = F.despike(F.yf_close(ident))
-        elif kind == "boj":
-            db, code = ident.split(":")
-            out[src] = F.boj_monthly(db, code, "200304" if db == "MD02" else "196001")
-        elif kind == "tankan":
-            out[src] = F.tankan(ident)
-        elif kind == "mof":
-            jgb = jgb if jgb is not None else F.jgb_curve()
-            out[src] = jgb[ident].dropna()
-        elif kind == "tpu":
-            out[src] = F.tpu_monthly()
-        elif kind == "shiller":
-            out[src] = F.shiller_cape()
+        try:
+            if kind == "fred":
+                out[src] = F.fred(ident)
+            elif kind == "yf":
+                out[src] = F.despike(F.yf_close(ident))
+            elif kind == "boj":
+                db, code = ident.split(":")
+                out[src] = F.boj_monthly(db, code, "200304" if db == "MD02" else "196001")
+            elif kind == "tankan":
+                out[src] = F.tankan(ident)
+            elif kind == "mof":
+                jgb = jgb if jgb is not None else F.jgb_curve()
+                out[src] = jgb[ident].dropna()
+            elif kind == "tpu":
+                out[src] = F.tpu_monthly()
+            elif kind == "shiller":
+                out[src] = F.shiller_cape()
+        except Exception as e:                                               # noqa: BLE001
+            LAST_FAILED[src] = f"{type(e).__name__}: {str(e)[:120]}"
     return out
 
 
@@ -257,6 +265,8 @@ def readings(F: dict, raw: dict[str, pd.Series], sel: dict[str, list[str]], a0_c
         s_cols = a0 + [c for c in sel.get(m, []) if c in pct]
         s = pct[s_cols].mean(axis=1) * 100
         s = s.where(pct[s_cols].notna().sum(axis=1) >= max(1, len(s_cols) // 2))
+        if any(c not in pct for c in sel.get(m, [])):                          # 选入的因素取不到 → S 不给值（不拿少了因素的 S 凑数）
+            s = s * np.nan
         last = pct.iloc[-1]
         doms = {}
         for c in others:
@@ -290,6 +300,8 @@ def jp_watch_rows(F: dict, raw: dict[str, pd.Series], n: int = 5) -> list[dict]:
     feats = pd.concat([raw_ex, features(raw_ex.index, raw, jp_market=True)], axis=1)
     feats = feats.loc[:, ~feats.columns.duplicated()]
     wj_cols = [c for c in JP_WATCH if c in feats]
+    if len(wj_cols) < len(JP_WATCH):                                          # Wj 的 8 个因素不全（数据源取不到）→ 这天不给读数
+        return []
     pct = pd.DataFrame({c: expanding_pct(feats[c]) for c in dict.fromkeys(wj_cols + ["gold_silver", "commod_vol"] + JP_COLS)})
     wj = _eq(pct[wj_cols])
     w2 = pct[["gold_silver", "commod_vol"]].mean(axis=1, skipna=False) * 100

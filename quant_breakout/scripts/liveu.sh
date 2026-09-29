@@ -26,9 +26,10 @@ cd "$PROJ" || exit 1
 
 sync_inputs() {   # 云端维护的配置与每天的输入（拷贝到本机的数据目录；本机写的东西不会回到仓库）
   for f in sim.json best_params.json best_params_JP.json best_params_US.json bullbear.json index_changes.json \
-           macro.json macro_events.json market_regime.json threat_index.json threat_weights.json; do
+           macro.json macro_events.json market_regime.json threat_index.json threat_weights.json fwd_judgment.json; do
     [ -f "var/$f" ] && cp -f "var/$f" "$QBREAK_HOME/$f"
   done
+  return 0          # 清单最后一个文件还不存在（例：云端第一次写 fwd_judgment.json 之前）也不算失败
 }
 
 mac_alert() {     # macOS 通知（文字经 argv 传入，不拼进脚本）
