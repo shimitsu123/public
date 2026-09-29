@@ -40,7 +40,7 @@ def render(asof: str, status: dict, n: int, rev: dict) -> list[str]:
         if "dev" not in s:
             lines.append(f"- {spec['name']}：取不到行情（{s.get('error', '—')}）")
             continue
-        lines.append(f"- {spec['name']}：13 周线乖离 {s['dev']:+.2f}%（{s['date']}，最后一天是暂定值）；触发线 {spec['thr']:+.0f}%，还差 {s['gap_pp']:.2f} pp")
+        lines.append(f"- {spec['name']}：13 周线乖离 {s['dev']:+.2f}%（{s['date']}，最后一天是暂定值）；触发线 {spec['thr']:+g}%，还差 {s['gap_pp']:.2f} pp")
     lines.append(f"- 已记事件 {n} 个（{DF.FORWARD_START} 起）")
     fm = lambda v, f="{:+.2f}%": "—" if v is None else f.format(v)                                  # noqa: E731
     for e in rev.get("events") or []:

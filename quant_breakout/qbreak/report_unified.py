@@ -753,7 +753,7 @@ def _deepdip_html(dd: dict) -> str:
     if dd.get("error"):
         return f"<section class='card'><h2>深跌前向记录（≤ −15%）</h2><p class='muted'>这次没算出（{escape(str(dd['error']))}）</p></section>"
     st = dd.get("status") or {}
-    now = "；".join(f"{escape(v.get('name', k))} 13 周线乖离 {v['dev']:+.1f}%（{escape(v['date'])}；触发线 {v['thr']:+.0f}%，还差 {v['gap_pp']:.1f} pp）"
+    now = "；".join(f"{escape(v.get('name', k))} 13 周线乖离 {v['dev']:+.1f}%（{escape(v['date'])}；触发线 {v['thr']:+g}%，还差 {v['gap_pp']:.1f} pp）"
                     if "dev" in v else f"{escape(k)}：{escape(str(v.get('error')))}" for k, v in st.items())
     rev = dd.get("review") or {}
 
@@ -774,8 +774,8 @@ def _deepdip_html(dd: dict) -> str:
             + (f"<ul>{act}</ul>" if act else "")
             + f"<p class='muted'>已记事件 {dd.get('n', 0)} 个（{escape(str(dd.get('start', '')))} 起）；判定：{judge}；JP + 对照合并：{escape(str(pool.get('label') or '—'))}{eps}。"
             "最后一天的乖离是暂定值（这一周是否已完要等下一个交易日），事件第二天才判、才记，事件日不变。"
-            f"历史参考（事后描述，登记的研究没有通过）：13 周线第一次到门槛之后 60 个交易日比平时多 {hist}；日本 / 美国的区间都含 0，"
-            "买进后 60 天内平均还跌 6〜10%。"
+            f"历史参考（日本 / 美国是事后描述；欧洲是 2026-09-29 事先登记的核对，判定「方向一致」）：13 周线第一次到门槛之后 60 个交易日比平时多 {hist}；"
+            "区间都含 0，之后 60 天涨的比例与任意一天差不多，买进后 60 天内平均还跌 6〜13%（任意一天买约 5〜6%）。"
             "规则见 qbreak/deepdip_forward.py 开头（2026-09-29 登记）。</p></section>")
 
 

@@ -55,8 +55,8 @@ EPISODE_GAP = 90                                                             # �
 EU_CLOSE = {"DE": ("Europe/Berlin", 17, 45), "UK": ("Europe/London", 16, 45)}   # Xetra 17:30 / LSE 16:30 收盘（含收盘竞价）后 15 分钟
 HIST = {"JP": "日経225 1965〜2000 +3.11%（9 段）、2001〜2026 +4.64%（8 段）",       # 历史参考（只作展示；事后描述）
         "US": "美国（−12%）1926〜2026 +1.28%（34 段）",
-        "DE": "DAX（−14%）见 var/out/deepdip_intl_check.md",
-        "UK": "FTSE 100（−11.2%）见 var/out/deepdip_intl_check.md"}
+        "DE": "DAX（−14%）1987〜2026 +1.83%（13 段）",                          # scripts/deepdip_intl_check.py（2026-09-29 登记 0f93036）
+        "UK": "FTSE 100（−11.2%）1984〜2026 +0.96%（13 段）"}
 
 
 def weekly_line(close: pd.Series, days=None, n: int = LINE_N) -> pd.Series:

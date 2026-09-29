@@ -262,6 +262,11 @@
   2026-10-01 起 sim-day 每天追加 `var/out/deepdip_forward.csv`（只追加），日报「市场状态」下面一栏显示离触发线多远、事件之后 20 / 60 / 120 天的涨跌；
   JP 满 5 个事件且都过了 60 个交易日起判定（60 日超额平均 > 0 且涨的比例 ≥ 60% →「前向成立」，只升级日报标签）。按历史频率
   （日本约 3〜4 年一次）要 15〜20 年；2026-09-28 日経225 −0.25%（还差 14.75 pp）、S&P 500 +0.78%（还差 12.78 pp）。
+  同日（用户「加 DAX 和 FTSE 100 作对照」）加对照 DAX −14.0% / FTSE 100 −11.2%（按波动折算；`qbreak/deepdip_forward.py` 第五节，登记 0f93036）；
+  欧洲历史核对（`scripts/deepdip_intl_check.py` → `var/out/deepdip_intl_check.md`）按事先规则「方向一致」但很弱：60 日超额 DAX +1.59%、
+  FTSE 100 +1.08%（各 13 个，合并区间 −4.6〜+7.5%），涨的比例与任意一天差不多，买后 60 天内平均还跌 10〜13%（平时 5〜6%）。
+  用户问「直接进模拟盘是不是也可以」→ **没进**（没经账户层检验、模拟期内几乎不会触发、危机时与牛熊分界 / 风险层方向相反）；
+  要做账户层检验须用户确认（先登记）。
 - J-Quants 每天的新数据（2026-09-26，用户要求，只作展示 / 研究）：Mac 上 LaunchAgent `com.qbreak.jquants` 周一至五 19:30（当天）+ 07:05（確報与补取）
   → `~/.qbreak/home/out/jq_today.json`，市场仪表盘显示：持仓 / 候补的决算日程（与 Yahoo 对照）、予想修正 %、信用 / 空売り、拆股、真实一手、上市一览变化
   （`qbreak/jq_live.py`、MACOS.md §1.9；**还没在 Mac 上安装**，待办 ⑲）。拉代码后一条命令装好 / 更新全部：`scripts/mac_setup.sh`（MACOS.md §1.10）
@@ -301,7 +306,7 @@
 - ㉕ 2027-09-28 之后第一次：W2 前向记录的第一次年度判定 —— 每日记录在季度复核 2f 里自动算（看 `var/out/score_forward_review.md` 的 W2 一节）；全市场版在季度复核 2i 里自动算（2026-09-27 用户确认加入；手动：☁️ `python scripts/w2_forward_all.py --review`，云端有 J-Quants キー）/ 🤖 Mac：`bash scripts/with_jquants.sh ~/.qbreak/venv/bin/python scripts/w2_forward_all.py --review`（在 `~/qbreak-dev`）；「失效警报成立」→ 提议关掉 W2，用户确认才改；同一份复核里另有 K2（放量 ∧ 低 β）/ USW（美国对应行业弱）两个只记录不交易的标记（2026-09-27 用户确认登记；`qbreak/idio_forward.py`），每年判定一次，证实也只是记录
 - ㉖ 随时：时代主线前向记录的进度 ☁️🤖 `python scripts/era_outlook.py --review`（2026-10 起每月一次；记满 36 个月 ≈ 2029-10 起判定失效与否；
   2026-09-29 起另报 3 个月判定的 JP-S33Q / JP-THQ「下一季」与最新一季的影响占比，记满 12 个季度起判定）；已加进季度复核 2j（2026-09-27 用户确认；同时每季刷新展望 `var/out/era_outlook.md`）
-- ㉝ 随时 / 事件发生时：「≤ −15% 深跌」前向记录 ☁️ `python scripts/deepdip_forward.py --review` / 🤖 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/deepdip_forward.py --status`
+- ㉝ 随时 / 事件发生时：「≤ −15% 深跌」前向记录（日経225；对照 S&P 500 / DAX / FTSE 100） ☁️ `python scripts/deepdip_forward.py --review` / 🤖 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/deepdip_forward.py --status`
   （Mac 在 `~/qbreak-src/quant_breakout`，先 `git pull`；只读、不写文件）；平时看日报那一栏即可；有事件时日报标 ★，JP 满 5 个且都过了 60 个交易日起每次运行自动判定；只记录，用到交易要另外登记、用户确认）
 - ㉙ ✅ 2026-09-28 用户选「只加 ①」：季度复核已加 2l「成本 × 销售 S2 前向记录复核」`python scripts/cost_sales_forward.py --review`
   （36 个月前只报进度；汇报第 ⑭ 项）；② 日报例行任务的汇报加一行「资格检查」→ 不加（告警已写进「数据完整性」、汇报第一行会列出，不会漏）
