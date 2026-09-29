@@ -65,6 +65,8 @@ def build_unified_data() -> dict:
             "eligibility": td.get("eligibility") or {},          # 下单前资格检查（qbreak/eligibility.py：被踢出 / 被指定的票不开新仓）
             "cost_sales": td.get("cost_sales") or {},            # 成本 × 销售（S2）分组与前向记录（qbreak/cost_sales_forward.py；只展示）
             "invest_flow": td.get("invest_flow") or {},          # 投资流向的季度快照（㉟，qbreak/invest_flow.py；只作背景）
+            "timeline": td.get("timeline") or {},                  # 买卖时间线（qbreak/timeline.py；每天按前一天收盘重算，只展示）
+            "earn_state": td.get("earn_state") or {},              # 最近一次决算的形态（qbreak/earn_state.py，㊱；只展示）
             "calendar": td.get("calendar") or {},                # 检查日历（qbreak/check_calendar.py；只展示，全貌 CHECK_TIMELINE.md）
             "price_check": td.get("price_check") or {},          # 行情交叉核对（qbreak/price_check.py；yfinance × J-Quants，只报警）
             "fwdj": td.get("fwdj") or {},                        # 前向记录判断层（qbreak/fwd_judgment.py；2026-09-30 起影响日本个股新仓）
@@ -186,6 +188,14 @@ def missing_items(d: dict) -> list[str]:
     cs = d.get("cost_sales") or {}
     if started and cs.get("error"):
         out.append(f"成本 × 销售（S2）：这次没算出（{cs['error']}）—— 只作展示，不影响交易；前向记录下次运行再记（不补写）")
+    tl = d.get("timeline") or {}
+    if started and tl.get("error"):
+        out.append(f"买卖时间线：这次没算出（{tl['error']}）—— 只作展示，不影响交易")
+    es = d.get("earn_state") or {}
+    hard = {k: v for k, v in (es.get("errors") or {}).items() if not str(v).startswith("用了缓存")}
+    if started and hard:
+        k0 = next(iter(hard))
+        out.append(f"最近一次决算的形态：{len(hard)} 项取不到（例 {k0}：{hard[k0]}）—— 那几只不标形态；只作展示，不影响交易")
     el = d.get("eligibility") or {}
     if el.get("error") and not el.get("sources"):
         out.append(f"下单前资格检查的日报块：没算出（{el['error']}）—— 闸门本身在引擎里照常生效")
@@ -255,6 +265,16 @@ def _bo_tag(o: dict) -> str:
         return '<span class="muted">—</span>'
     x = float(x)
     return f'<span class="muted">{"已在箱顶上方 " + format(-x, ".1f") if x < 0 else "距箱顶 " + format(x, ".1f")}%</span>'
+
+
+def _timeline_card(d: dict) -> str:
+    """买卖时间线（qbreak/timeline.py；每天按前一天收盘重算，只展示）。旧数据没有这个字段 → 不显示。"""
+    tl = d.get("timeline")
+    if not tl:
+        return ""
+    from .earn_state import tag_html
+    from .timeline import html as tl_html
+    return f"<section class='card' id='timeline'>{tl_html(tl, tag_html)}</section>"
 
 
 def _money(v, ccy="JPY") -> str:
@@ -617,12 +637,14 @@ def render_unified_html(d: dict) -> str:
         todo_html += (f'<h3>日间 换汇（リアルタイム為替：手数料 0 銭，价差按片道 {sen:g} 銭估）</h3><ul>{rows(td.get("FX", []), "FX")}</ul>'
                       f'<h3>{usopen} 美股开盘（日本时间）</h3><ul>{rows(td.get("US", []), "US")}</ul>')
     fx = d.get("usdjpy") or 0
+    from .earn_state import tag_html as _es_tag
+    es_map = (d.get("earn_state") or {}).get("states") or {}
     pos_rows = []
     for t, p in (d.get("positions") or {}).items():
         ccy = "USD" if p["market"] == "US" else "JPY"
         pos_rows.append(f"<tr><td>{escape(t)}</td><td>{'美股' if ccy == 'USD' else '日本'}</td><td class='n'>{p['shares']:,} 股</td>"
                         f"<td class='n'>{_money(p['entry_px'], ccy)}</td><td class='n'>{_money(p['stop_px'], ccy)}</td>"
-                        f"<td>{escape(p['entry_date'])}</td></tr>")
+                        f"<td>{escape(p['entry_date'])}</td><td>{_es_tag(es_map.get(t)) if ccy == 'JPY' else '—'}</td></tr>")
     core_rows = []
     for t, u in (d.get("core_units") or {}).items():
         px = float((d.get("core_last") or {}).get(t) or 0)
@@ -680,7 +702,8 @@ def render_unified_html(d: dict) -> str:
             lot = f"（一手 {_money(w.get('lot_cost'), ccy)}）" if w.get("lot_cost") else ""
             watch.append(f"<tr><td>{i}</td><td>{escape(str(w.get('ticker')))}</td><td class='muted'>{escape(str(w.get('sector') or '—'))}</td>"
                          f"<td>{_grp_tag(str(w.get('ticker')), d.get('themes') or {}, meta) if m == 'JP' else '—'}</td>"
-                         f"<td>{_STATUS.get(w.get('status'), escape(str(w.get('status'))))}</td><td>{_bo_tag(w) or '—'}</td>"
+                         f"<td>{_STATUS.get(w.get('status'), escape(str(w.get('status'))))}</td>"
+                         f"<td>{_es_tag(es_map.get(str(w.get('ticker')))) if m == 'JP' else '—'}</td><td>{_bo_tag(w) or '—'}</td>"
                          f"<td class='n'>{float(w.get('score') or 0):.1f} 分</td>"
                          f"<td class='n'>{_money(w.get('close'), ccy)}</td><td>{'是' if w.get('affordable') else '否'}{lot}</td>"
                          f"<td class='muted'>{'—' if tilt is None or tilt >= 1 else f'{tilt:g} 倍'}</td>"
@@ -709,11 +732,12 @@ def render_unified_html(d: dict) -> str:
                   f'<div><span class="muted">USD/JPY（只影响核心 ETF 的日元价值）</span><b>{_fxr(fx)}</b>'
                   f'<span class="muted">{escape(str(d.get("usdjpy_src") or ""))}</span></div>'),
         todo=todo_html,
-        positions="".join(pos_rows) or "<tr><td colspan=6 class='muted'>无</td></tr>",
+        positions="".join(pos_rows) or "<tr><td colspan=7 class='muted'>无</td></tr>",
         core="".join(core_rows) or "<tr><td colspan=4 class='muted'>无</td></tr>",
         spark=_spark(d.get("history") or []), trades=tr_rows or "<tr><td colspan=6 class='muted'>还没有平仓的交易</td></tr>",
         fx=fx_rows or "<tr><td colspan=4 class='muted'>还没有换汇</td></tr>", markets="".join(mk),
-        watch="".join(watch) or "<tr><td colspan=11 class='muted'>尚无候补数据</td></tr>",
+        watch="".join(watch) or "<tr><td colspan=12 class='muted'>尚无候补数据</td></tr>",
+        timeline=_timeline_card(d),
         themes=_themes_html(d.get("themes") or {}, meta), policy=_policy_html(d.get("policy") or {}),
         deepdip=_deepdip_html(d.get("deepdip") or {}), fwdj=_fwdj_html(d),
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us), shadow=_shadow_html(d),
@@ -1119,16 +1143,17 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 {pcheck}
 {calendar}
 <section class="card"><h2>权益曲线（日元）</h2>{spark}</section>
-<section class="card"><h2>个股持仓</h2><div class="scroll"><table><tr><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">成本</th><th class="n">止损</th><th>买入日</th></tr>{positions}</table></div></section>
+<section class="card"><h2>个股持仓</h2><div class="scroll"><table><tr><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">成本</th><th class="n">止损</th><th>买入日</th><th>最近一次决算的形态</th></tr>{positions}</table></div></section>
 <section class="card"><h2>除息 / 拆股（已补到持仓与现金）</h2><ul>{corp}</ul></section>
 <section class="card"><h2>核心 ETF（闲置资金）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
 <section class="card"><h2>市场状态</h2><dl>{markets}</dl></section>
 {fwdj}
 {deepdip}
 <section class="card"><details><summary><h2 style="display:inline">大事件威胁指数的明细（只展示，不参与交易）</h2></summary>{threat}</details></section>
-<section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>主题 / 业种（近 3 月相对）</th><th>状态</th><th>突破</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
+<section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>主题 / 业种（近 3 月相对）</th><th>状态</th><th>最近一次决算的形态</th><th>突破</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
 <p class="muted">宏观顺风度 = 个股对日本 / 美国利率、油价、日元、信用利差，以及农产品、工业金属、黄金、天然气 ETF 的历史敏感度 × 近 60 个交易日的变化（当日横截面三分位：顺风 / 中性 / 逆风），只作参考：2026-09-25 事先登记研究显示它对之后 20 日的收益没有可靠的预测力（加商品后月末前 1/5 − 后 1/5 为 +0.35%，t 1.40；秩相关 0.006），交易排序不用它。</p>
 <p class="muted">突破：<b>真突破</b> = 信号当天收盘高于过去 60 个交易日的最高价（不含当天）；<b>未破箱顶</b> = 信号成立但收盘还在箱顶之下（括号里是还差的 %）；还没触发的票显示距箱顶 %（今天要做的事里的买单也标了）。只作参考，不改交易：2026-09-26 事先登记的研究（2006-10〜，日経225 股票池，现行出场规则，每笔扣来回手续费）全部信号 638 笔：胜率 42.5%、每笔平均 +0.70%、盈亏比 1.89；其中真突破 163 笔：胜率 49.7%、每笔 +0.83%、盈亏比 1.44；未破箱顶 475 笔：胜率 40.0%、每笔 +0.66%、盈亏比 2.08。只做真突破：胜率 +7.2 pp（95% 区间 +0.7〜+13.6 pp），每笔期望 +0.13 pp 但不显著（95% 区间 −0.78〜+0.96 pp），组合 20 年年化 11.2%（现行 12.8%）、最大回撤 −36.4%（现行 −35.1%）——现行策略靠盈亏比赚钱，不是靠命中率（var/out/signal_study.md）。</p></section>
+{timeline}
 {themes}
 {cost_sales}
 {invest_flow}

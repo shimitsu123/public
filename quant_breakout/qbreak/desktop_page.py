@@ -159,6 +159,15 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
         body.append("<section class='card'><h2>最近成交</h2><div class='scroll'><table><tr><th>成交日</th><th>方向</th><th>代码</th>"
                     "<th class='n'>数量</th><th class='n'>成交价</th></tr>"
                     + ("".join(fills[:12]) or "<tr><td colspan=5 class='muted'>还没有</td></tr>") + "</table></div></section>")
+    tl_doc = read_json(paths.PROJECT_ROOT / "var" / "out" / "unified_today.json", {}) or {}   # 云端日报（07:40 拉代码时同步）
+    if tl_doc.get("timeline"):
+        from .earn_state import tag_html
+        from .timeline import html as tl_html
+        same = (str(tl_doc.get("bar_date")) == str(st.get("last_date"))) if st else None
+        body.append("<section class='card'>" + tl_html(tl_doc["timeline"], tag_html)
+                    + "<div class='muted'>来自云端模拟盘的日报（仓库里的 var/out/unified_today.json，07:40 拉代码时同步）"
+                    + ("；和执行器按同一天的收盘决策" if same else ("；★ 日期和执行器的决策日不同" if same is False else ""))
+                    + "</div></section>")
     secs = _journal_sections(journal)
     if secs:
         body.append("<section class='card'><h2>日志（最近 7 次运行，点开看更早的）</h2>" + "".join(

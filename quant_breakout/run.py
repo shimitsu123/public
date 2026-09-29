@@ -1253,6 +1253,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     usdjpy = float(state.history[-1][4]) if state.history and state.history[-1][4] else None
     threat = _unified_watch_and_threat(extras, plans, data, params, dcfg, ucfg, eq, usdjpy)
     elig = _eligibility_panel(ctx, eng, state, extras)      # 下单前资格检查：被挡的票、持仓标记、名单对照（候补队列标出理由）
+    tlp = _timeline_panel(ctx, eng, state, todo, extras, elig, eq, today, i_last, provider)   # 买卖时间线 + 决算形态（只展示）
     out = {"date": today.isoformat(), "bar_date": state.last_date, "equity_jpy": eq, "cash_jpy": round(state.cash_jpy),
            "cash_usd": round(state.cash_usd, 2), "todo": todo, "skipped": eng.skipped,
            "positions": {t: {"market": p.market, "shares": p.shares, "entry_px": p.entry_px, "entry_date": p.entry_date,
@@ -1268,6 +1269,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     out["energy"] = pre.get("energy") or _energy_panel(today)   # 仪表盘：能源消费（每月）+ K4 前向记录（K4 也进判断层）
     out["cost_sales"] = pre.get("cost_sales") or _cost_sales_panel(today)   # 成本 × 销售（S2）：上个月末的分组 + 前向记录（S2 也进判断层）
     out["invest_flow"] = _invest_flow_panel(today)           # 投资流向：季度快照（㉟；每季取一次 e-Stat，只作背景，不影响交易）
+    out["timeline"], out["earn_state"] = tlp["timeline"], tlp["earn_state"]   # 买卖时间线（每天按前一天收盘重算）、决算形态（㊱）
     out["fwdj"] = _fj_summary(ctx, baseline, eq) if fj_on else {"enabled": False, "baseline": baseline or {}}   # 判断层 + 基准账户对照
     from qbreak import exit_rules as _EXR
     out["exit_mode"] = {"JP": ctx.xmode, "label": _EXR.LABELS[ctx.xmode]}   # 个股的离场方式（var/sim.json exits）
@@ -1613,6 +1615,70 @@ def _invest_flow_panel(today) -> dict:
     except Exception as e:                                   # noqa: BLE001
         log.warning("投资流向快照失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"[:200]}
+
+
+def _timeline_panel(ctx, eng, state, todo: dict, extras: dict, elig: dict, eq: float, today, i_last: int, provider: str) -> dict:
+    """买卖时间线（qbreak/timeline.py；2026-09-29 用户要求）+ 最近一次决算的形态（qbreak/earn_state.py，㊱ 用户确认）。
+    按前一天收盘把现行规则翻译成日期与价位：下一开盘的单、持仓的卖出线、候补的买点区间、整个股票池的情景推算、闲置资金的翻转线、日历。
+    只展示，不影响交易；失败只记原因（日报「数据完整性」会列出）。"""
+    import time as _time
+
+    import pandas as pd
+    from qbreak import earn_state as ES
+    from qbreak import exit_rules as EXR
+    from qbreak import idle_cash as IC
+    from qbreak import timeline as TL
+    from qbreak.strategy import OHLCV
+    from qbreak.universes import index_pending
+    from qbreak.utils import read_json
+    t_start = _time.time()
+    try:
+        bar = pd.Timestamp(state.last_date)
+        jp = [t for t in universe("JP", (ctx.u.get("universe") or {}).get("JP", "broad"))]
+        watch = list((extras.get("JP") or {}).get("watchlist") or [])
+        want = set(jp) | set(state.pos) | {w.get("ticker") for w in watch if w.get("ticker")}
+        frames = {t: ctx.ind[t][OHLCV].loc[:bar] for t in want if t in ctx.ind and len(ctx.ind[t].loc[:bar]) > 100}
+        pos = {t: {"entry_px": p.entry_px, "entry_date": p.entry_date, "stop_px": p.stop_px, "peak": p.peak, "hold": p.hold,
+                   "armed": p.armed, "shares": p.shares} for t, p in state.pos.items()}
+        top = [w.get("ticker") for w in watch[:15] if w.get("ticker")]
+        em = {}
+        for t in top:
+            try:
+                em[t] = float(eng._entry_mult(t, i_last))
+            except Exception:                                # noqa: BLE001
+                em[t] = 1.0
+        earn = {}
+        if provider != "csv":                                # Yahoo 连不上时不取决算日（取不到就不显示，不假装知道）
+            from qbreak.trader import _earnings_days          # noqa: F401  （与决算前回避同一个数据源）
+            prov, t0 = _earnings_provider(), _time.time()
+            for t in list(state.pos) + top:
+                if _time.time() - t0 > 90:
+                    break
+                try:
+                    d_ = prov.next_earnings(t)
+                    if d_:
+                        earn[t] = d_.isoformat()
+                except Exception:                            # noqa: BLE001
+                    pass
+        blocked = {f"{b['code']}.T": b["why"] for b in (elig or {}).get("blocked") or [] if b.get("code")}
+        blocked.update({w["ticker"]: w["gate"] for w in watch if w.get("gate")})
+        icm = ctx.icmode
+        core = set(ctx.ucfg.core) | set((IC.MODES.get(icm) or {}).get("core") or ())
+        tl = TL.build(frames, ctx.params["JP"], EXR.apply(ctx.params["JP"], ctx.xmode), bar_date=bar.date(), positions=pos,
+                      pending=dict(state.pending_exit), plan=dict(state.plan), todo=todo, watch=watch, pool=jp, equity=eq,
+                      position_pct=ctx.ucfg.position_pct, max_positions=ctx.ucfg.max_positions, em=em, earn=earn, blocked=blocked,
+                      index_pend=index_pending("JP", today), bullbear_us=((extras.get("US") or {}).get("regime") or {}).get("bullbear"),
+                      idle=ctx.ic_status, stats=read_json(paths.home() / "timeline_stats.json", None), core=core)
+        need = set(state.pos) | set(top) | {r["ticker"] for r in tl["sweep"][:40]} | set(state.plan)
+        es = ES.panel(sorted(need), today)
+        TL.attach_states(tl, es.get("states") or {})
+        log.info("买卖时间线（%s 收盘）：持仓 %d、候补 %d、横展开 %d / %d 只会出买点；决算形态 %d 只（%.0f 秒）", tl["bar_date"],
+                 len(tl["holdings"]), len(tl["candidates"]), len(tl["sweep"]), tl.get("sweep_n") or 0,
+                 len(es.get("states") or {}), _time.time() - t_start)
+        return {"timeline": tl, "earn_state": es}
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("买卖时间线失败（不影响交易）：%s", e)
+        return {"timeline": {"error": f"{type(e).__name__}: {e}"[:200]}, "earn_state": {}}
 
 
 def _era_forward_log(themes: dict, today) -> dict:

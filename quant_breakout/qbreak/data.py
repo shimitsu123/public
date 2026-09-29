@@ -9,6 +9,8 @@
   4. **数据质量检查**：重复日期、非单调、负价、零成交量、未处理拆股造成的异常跳变。
   5. 不依赖 pyarrow：没装就自动退回 CSV。
   6. 新增 CSV provider —— 可以用券商/RSS 导出的本地数据，彻底摆脱 yfinance 的不确定性。
+  7. 盘中取的缓存（最后一根是还没收盘的当日 K 线）在那个市场收盘后视为过期、重新下载（2026-09-29 空跑时发现：
+     有效期 12 小时内会把盘中快照当成收盘价）；重下载失败就去掉那一根兜底并记为落后。
 """
 from __future__ import annotations
 
@@ -52,13 +54,17 @@ def _meta_path(ticker: str, years: int) -> Path:
     return _cache_path(ticker, years).with_suffix(".meta.json")
 
 
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def _read_cache(ticker: str, years: int, ttl_hours: float) -> pd.DataFrame | None:
     fp, mp = _cache_path(ticker, years), _meta_path(ticker, years)
     if not fp.exists() or not mp.exists():
         return None
     try:
         meta = json.loads(mp.read_text(encoding="utf-8"))
-        age = (datetime.now(timezone.utc)
+        age = (_now_utc()
                - datetime.fromisoformat(meta["fetched_at"])).total_seconds() / 3600
         if age > ttl_hours:
             return None
@@ -296,6 +302,32 @@ def behind(t: str, df: pd.DataFrame | None) -> tuple[str, str] | None:
     return (str(last), str(exp)) if last < exp else None
 
 
+def _fetched_at(ticker: str, years: int) -> datetime | None:
+    try:
+        return datetime.fromisoformat(json.loads(_meta_path(ticker, years).read_text(encoding="utf-8"))["fetched_at"])
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def partial_cached(t: str, df: pd.DataFrame | None, fetched_at: datetime | None, now: datetime | None = None) -> bool:
+    """盘中取的缓存：最后一根是取数时那个市场还没收盘的当日 K 线（yfinance 盘中会返回），而现在那个市场已经收盘（或已是之后的日子）
+    → True（有效期内也要重新下载，否则收盘后 12 小时内会把盘中快照当成收盘价）。现在还在盘中 → False（drop_partial_bar 照旧丢掉那根）。"""
+    m = _market_of(t)
+    if m is None or df is None or not len(df) or fetched_at is None:
+        return False
+    from zoneinfo import ZoneInfo
+
+    from .calendar_jp import JST
+    from .trader import market_session_closed
+    tz = JST if m == "JP" else ZoneInfo("America/New_York")
+    last = pd.Timestamp(df.index[-1]).date()
+    f_day, f_closed = market_session_closed(m, fetched_at.astimezone(tz))
+    if last != f_day or f_closed:
+        return False                                            # 取数时这一根已经收盘（或是更早的日子）
+    n_day, n_closed = market_session_closed(m, (now or _now_utc()).astimezone(tz))
+    return n_day > last or n_closed
+
+
 def load_universe(tickers: list[str], cfg: DataConfig | None = None,
                   use_cache: bool = True) -> dict[str, pd.DataFrame]:
     """返回 {ticker: OHLCV DataFrame}。失败的标的会被跳过并记录，
@@ -313,11 +345,15 @@ def load_universe(tickers: list[str], cfg: DataConfig | None = None,
             try:
                 c = validate_ohlcv(t, c, cfg)
                 b = behind(t, c) if cfg.provider == "yfinance" else None
-                if b is None:
+                if b is None and cfg.provider == "yfinance" and partial_cached(t, c, _fetched_at(t, cfg.years)):
+                    log.info("缓存 %s 的最后一根（%s）是盘中取的、现在已收盘 → 重新下载", t, c.index[-1].date())
+                    old[t] = c.iloc[:-1]                  # 重下载失败时不拿盘中快照兜底（少一天 → 记为落后）
+                elif b is None:
                     out[t] = c
                     continue
-                log.info("缓存落后 %s：最新 %s，应有 %s → 重新下载", t, *b)
-                old[t] = c
+                else:
+                    log.info("缓存落后 %s：最新 %s，应有 %s → 重新下载", t, *b)
+                    old[t] = c
             except DataError as e:
                 log.warning("缓存数据不合格，重新下载: %s", e)
         todo.append(t)
