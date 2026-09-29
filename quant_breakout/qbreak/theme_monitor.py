@@ -7,6 +7,10 @@
   - 强弱：近 21 / 63 个交易日相对收益之和（约 1 / 3 个月，%）；主题之间、业种之间分别排名。
   - 时代主线（2026-09-27 加）：12 个月、跳过最近 1 个月的相对收益之和（scripts/era_study.py：美国 100 年、日本 20 年里这样排在前面的行业
     之后平均还会跑赢，3 年以上的领先反而反转）；只作展示，并每月记进 var/out/era_forward.csv（qbreak/era_forward.py）。
+  - 时代主线的 3 个月判定（2026-09-28 用户要求「时间主线从一年改为3个月一判定」，日报的主线改用它；12-1 个月照旧列出、照旧记）：
+    最近一个完整的日历季度里各组相对收益之和（%）的排名，业种前 7、主题前 3；季度完整 = 数据的最后一天 ≥ 这个季度最后一个交易日；
+    另给本季到现在的排名（进行中，季末才正式判定）。事后描述（scripts/crash_mainline_posthoc.py）：3 个月的前 7 名下一季平均只多 +0.0〜0.2%
+    （区间含 0），12-1 个月的前 7 名 +0.3〜0.9% —— 3 个月的主线是「最近谁强」，不代表下一季还强。
   - 影响度：组的日收益与日経225 日收益的相关系数平方（R²，近 250 个交易日；「日経每天的涨跌有多少和这一组同步」）。
     历年的值由 scripts/theme_influence.py 算好存在 var/theme_influence.json（每年更新一次）。
   - 新出现的联动（近 126 个交易日 vs 之前 250 个交易日，股票用相对收益）：
@@ -27,6 +31,7 @@ from . import themes as TH
 
 WIN = {"r1m": 21, "r3m": 63}
 ERA_WIN, ERA_SKIP = 252, 21                        # 时代主线：12 个月、跳过最近 1 个月（era_study 的 M12）
+Q_TOP_IND, Q_TOP_TH, Q_MIN_DAYS = 7, 3, 40         # 时代主线的 3 个月判定：业种前 7、主题前 3；季度里有值的天 < 40 → 不判定
 MIN_FRAC = 0.7
 INF_WIN = 250
 RECENT, PRIOR = 126, 250
@@ -84,6 +89,44 @@ def strength(rel: pd.DataFrame) -> dict[str, dict]:
         ranked = sorted([g for g in keys if out[g]["r12"] is not None], key=lambda g: -out[g]["r12"])
         for i, g in enumerate(ranked, 1):
             out[g]["rank12"], out[g]["of12"] = i, len(ranked)
+    return out
+
+
+def quarter_end_day(q: pd.Period) -> pd.Timestamp:
+    """这个日历季度最后一个交易日（東証日历）。"""
+    from .calendar_jp import is_trading_day, prev_trading_day
+    d = q.end_time.date()
+    return pd.Timestamp(d if is_trading_day(d) else prev_trading_day(d))
+
+
+def quarter_rank(rel: pd.DataFrame) -> dict:
+    """时代主线的 3 个月判定：最近一个完整季度各组相对收益之和（%）的排名（主题、业种分开），业种前 7、主题前 3；
+    另给本季到现在（进行中）。{quarter, range, n_days, industries, themes, rank: {组: {q, rank, of}}, qtd: {...}}。"""
+    x = rel.dropna(how="all")
+    if not len(x):
+        return {}
+    last = x.index[-1]
+    q = last.to_period("Q")
+    judged, cur = (q - 1, q) if last < quarter_end_day(q) else (q, q + 1)
+
+    def part(p: pd.Period) -> dict:
+        rows = x[(x.index >= p.start_time) & (x.index <= p.end_time)]
+        if len(rows) < (Q_MIN_DAYS if p == judged else 1):
+            return {"quarter": f"{p.year}Q{p.quarter}", "n_days": int(len(rows))}
+        sc = {g: round(float(rows[g].sum()), 2) for g in rows.columns if rows[g].notna().sum() >= MIN_FRAC * len(rows)}
+        rank = {}
+        tops = {}
+        for kind, keys, k in (("themes", [g for g in sc if g in TH.THEMES], Q_TOP_TH), ("industries", [g for g in sc if g not in TH.THEMES], Q_TOP_IND)):
+            ranked = sorted(keys, key=lambda g: (-sc[g], g))
+            for i, g in enumerate(ranked, 1):
+                rank[g] = {"q": sc[g], "rank": i, "of": len(ranked)}
+            tops[kind] = [[g, sc[g]] for g in ranked[:k]]
+        return {"quarter": f"{p.year}Q{p.quarter}", "range": [str(rows.index[0].date()), str(rows.index[-1].date())],
+                "n_days": int(len(rows)), **tops, "rank": rank}
+
+    out = part(judged)
+    qtd = part(cur) if cur <= last.to_period("Q") else {"quarter": f"{cur.year}Q{cur.quarter}", "n_days": 0}
+    out["qtd"] = {k: v for k, v in qtd.items() if k != "rank"}
     return out
 
 
@@ -220,4 +263,4 @@ def panel(data: dict[str, pd.DataFrame], s33: dict[str, str], idx_close: pd.Seri
         groups[g] = {**st.get(g, {}), "r2_now": inf.get(g), "n": len(gm.get(g, [])), "r2_hist": {y: h[y] for y in sorted(h)[-11:]}}
     return {"asof": str(last.date()) if last is not None else None, "index": "^N225", "groups": groups,
             "themes": {k: {"name": v[0], "ja": v[1]} for k, v in TH.THEMES.items()},
-            "emerging": emerging(lr, s33, rel, mkt)}
+            "era_q": quarter_rank(rel), "emerging": emerging(lr, s33, rel, mkt)}

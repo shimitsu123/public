@@ -159,7 +159,8 @@ def review() -> int:
         _write("era_forward_review", {"n": 0})
         return 0
     log = pd.read_csv(fp, dtype={"asof": str, "group": str, "market": str})
-    first = pd.Timestamp(min(log["asof"]) + "-01")
+    starts = [pd.Timestamp(a + "-01") if "Q" not in a else pd.Period(a, freq="Q").start_time for a in log["asof"].unique()]
+    first = min(starts)
     years = max(3, math.ceil((pd.Timestamp.today() - first).days / 365) + 2)
     s33 = {f"{c}.T": v for c, v in json.loads((paths.home() / "industry_s33.json").read_text(encoding="utf-8"))["s33"].items()}
     want = sorted(set(s33) | {f"{c}.T" for c in TH.members()})
@@ -167,6 +168,8 @@ def review() -> int:
     _, rel, _ = TM.group_panel(TM.log_returns(data), s33)
     relm = rel.groupby(rel.index.to_period("M")).sum(min_count=10)
     relm.index = [str(p) for p in relm.index]
+    relq = rel.groupby(rel.index.to_period("Q")).sum(min_count=40)                  # 3 个月判定的复核用（季度相对收益）
+    relq.index = [f"{p.year}Q{p.quarter}" for p in relq.index]
     R = F.ff_industries(49, "vw")
     L = np.log1p(R / 100.0) * 100
     relu = L.sub(L.mean(axis=1), axis=0)
@@ -183,6 +186,21 @@ def review() -> int:
         if mk == "JP-S33":
             say("  判定：" + ("**失效**（记满 36 个月、95% 区间上限 < 0 → 日报不再叫它时代主线、要重新研究；改日报要用户确认）" if j1["failed"]
                             else ("未失效" if j1["judged"] else f"只报告进度（记满 {EF.JUDGE_MONTHS} 个月才判定）")))
+    for mk, name in (("JP-S33Q", "日本東证业种 3 个月判定 前 7"), ("JP-THQ", "日本主题 3 个月判定 前 3")):
+        s1 = EF.score_next(log, relq, mk, 1)
+        j1 = EF.judge(s1, EF.JUDGE_QUARTERS)
+        out[mk] = {"next1": j1, "quarters_logged": int(log[log["market"] == mk]["asof"].nunique())}
+        fa = lambda v, f="{:+.2f}": "—" if v is None else f.format(v)                              # noqa: E731
+        say(f"- {name}：记了 {out[mk]['quarters_logged']} 个季度；下一季的相对收益 {j1['n']} 个季度 平均 {fa(j1['mean'])}%"
+            f"（比平均好的季度 {fa(j1['hit'], '{:.0f}')}%，95% 区间 {fa(j1.get('lo95'))}〜{fa(j1.get('hi95'))}）")
+        if mk == "JP-S33Q":
+            say("  判定：" + ("**失效**（记满 12 个季度、95% 区间上限 < 0 → 3 个月的主线在新数据里不延续；改日报要用户确认）" if j1["failed"]
+                            else ("未失效" if j1["judged"] else f"只报告进度（记满 {EF.JUDGE_QUARTERS} 个季度才判定）")))
+    inf = log[log["market"] == "JP-INFQ"]
+    if len(inf):
+        last_q = sorted(inf["asof"].unique())[-1]
+        top = inf[inf["asof"] == last_q].sort_values("rank").head(5)
+        say(f"- 影响占比（{last_q}）：" + "、".join(f"{g} {v:.1f}%" for g, v in zip(top["group"], top["score"])))
     say(f"\n用时 {time.time() - t0:.0f}s")
     _write("era_forward_review", out)
     hist = paths.out_dir() / "era_forward_review_history.csv"

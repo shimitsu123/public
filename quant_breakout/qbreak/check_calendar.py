@@ -47,6 +47,8 @@ MILESTONES = [
        "季度复核", "w2_forward / w2_forward_all / idio_forward / exit_forward") for y in range(2027, 2032)],
     ("2029-09-01", "时代主线、成本 × 销售 S2 前向记录记满 36 个月", "之后的复核开始判定：时代主线 95% 上限 < 0 → 失效；S2 平均 > 0 且 t ≥ 1.645 → 前向复现、平均 ≤ 0 → 没复现"
      "（都只改日报标签）", "季度复核 / 手动", "qbreak/era_forward.py、qbreak/cost_sales_forward.py"),
+    ("2029-10-01", "时代主线 3 个月判定记满 12 个季度", "之后的复核（era_outlook.py --review）开始判定：业种前 7「下一季」平均超额的 95% 上限 < 0 → "
+     "3 个月的主线在新数据里不延续（只改日报标签，要你确认）", "季度复核 / 手动", "qbreak/era_forward.py"),
     ("2029-09-28", "K4（成品油需求 → 新仓减半）3 年判定", "energy_forward.py --review 前向成立 → 提议（你确认才改模拟盘）", "季度复核", "scripts/energy_forward.py"),
     ("2031-09-01", "成本 × 销售 S2 记满 60 个月（最后一次判定）", "仍未定 → 「证据不足」，维持只展示", "手动", "qbreak/cost_sales_forward.py"),
     ("2031-09-28", "K4 5 年判定", "同上", "季度复核", "scripts/energy_forward.py"),
@@ -109,7 +111,11 @@ def items(today: dt.date, horizon: int = HORIZON_DAYS, events=None, changes=None
     for d in first_trading_days(today, end):
         out.append({"date": d.isoformat(), "what": "月度记录（每月第一个交易日）", "who": "自动（sim-day）",
                     "src": "qbreak/era_forward.py、qbreak/cost_sales_forward.py、qbreak/energy_now.py",
-                    "check": "日报：时代主线记上个月末的排名；「成本 × 销售」换成上个月末的分组（原材料在涨吗、偏间接 / 偏直接）并追加前向记录；能源消费一栏"})
+                    "check": "日报：12-1 个月领先记上个月末的排名；「成本 × 销售」换成上个月末的分组（原材料在涨吗、偏间接 / 偏直接）并追加前向记录；能源消费一栏"})
+        if d.month in (1, 4, 7, 10):
+            out.append({"date": d.isoformat(), "what": "时代主线的季度判定（每季第一个交易日）", "who": "自动（sim-day）",
+                        "src": "qbreak/theme_monitor.py（quarter_rank）、qbreak/sector_influence.py、qbreak/era_forward.py",
+                        "check": "日报「时代主线（每 3 个月判定）」换成上一季的前 7 业种 / 前 3 主题，旁边标各业种影响占比；前向记录追加 JP-S33Q / JP-THQ / JP-INFQ"})
     y = today.year
     for yy in (y, y + 1):
         for m in (1, 4, 7, 10):

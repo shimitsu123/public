@@ -11,6 +11,12 @@
 复核（scripts/era_outlook.py --review，事先写定）：每个 asof 月的前 7（日本业种）/ 前 3（主题）/ 前 10（美国）之后 1 个月、12 个月的相对收益
 （日本 = 相对 TOPIX 1000 等权平均；美国 = 相对 49 行业等权平均）；记满 36 个月（3 年）起，日本业种前 7「之后 1 个月」的平均超额
 95% 区间上限 < 0 → 判为「时代主线在新数据里失效」→ 日报不再把它叫时代主线、要重新研究（改日报要用户确认）；其余时候只报告进度。
+3 个月判定（2026-09-29 登记；用户 2026-09-28 要求「时间主线从一年改为3个月一判定，时间主线要标记当前各行业影响占比」）：
+  JP-S33Q / JP-THQ：最近一个完整日历季度的业种 / 主题相对收益（qbreak/theme_monitor.py quarter_rank，TOPIX 1000 等权）与排名，
+    asof = 「2026Q3」这样的季度；新季度第一次 sim-day 运行（判定的季度 = 今天所在季度的上一个季度）时记一次；数据没到季末 → 那天不记。
+  JP-INFQ：同一个季度里各业种的「影响占比」（qbreak/sector_influence.py，J-Quants 東証業種別指数；score = 占比 %，按占比排名）；取不到就不记。
+  2026-10-01 起记（第一次 = 2026Q3）。复核（scripts/era_outlook.py --review）：每季的业种前 7 / 主题前 3 下一季的相对收益；
+  记满 12 个季度（3 年）起，业种前 7「下一季」平均超额的 95% 区间上限 < 0 → 判为 3 个月的主线在新数据里失效（改日报要用户确认）。
 """
 from __future__ import annotations
 
@@ -22,8 +28,9 @@ import pandas as pd
 FORWARD_START = "2026-10-01"
 LOG_FILE = "era_forward.csv"
 COLS = ["logged_on", "market", "asof", "group", "score", "rank", "of"]
-TOP = {"JP-S33": 7, "JP-TH": 3, "US-FF49": 10}
+TOP = {"JP-S33": 7, "JP-TH": 3, "US-FF49": 10, "JP-S33Q": 7, "JP-THQ": 3}
 JUDGE_MONTHS = 36
+JUDGE_QUARTERS = 12
 
 
 def jp_rows(groups: dict, theme_keys, asof_day: str, today: str) -> list[dict]:
@@ -108,14 +115,48 @@ def score_next(log: pd.DataFrame, rel_month: pd.DataFrame, market: str, horizon:
     return pd.DataFrame(rows, columns=["asof", "excess", "n"])
 
 
-def judge(s: pd.DataFrame) -> dict:
-    """记满 JUDGE_MONTHS 个月起：平均超额的 95% 区间上限 < 0 → 失效；其余只报告进度。"""
+def quarter_rows(era_q: dict, theme_keys, today: str) -> list[dict]:
+    """theme_monitor.quarter_rank → 记录行（业种 JP-S33Q、主题 JP-THQ）。"""
+    q = era_q.get("quarter")
+    return [{"logged_on": today, "market": "JP-THQ" if g in theme_keys else "JP-S33Q", "asof": q, "group": g,
+             "score": float(v["q"]), "rank": int(v["rank"]), "of": int(v["of"])} for g, v in (era_q.get("rank") or {}).items()]
+
+
+def influence_rows(infl: dict, quarter: str, today: str) -> list[dict]:
+    """sector_influence.shares（判定季度的窗口）→ JP-INFQ 行（score = 影响占比 %，按占比排名）。"""
+    rows = list((infl or {}).get("rows", {}).items())
+    return [{"logged_on": today, "market": "JP-INFQ", "asof": quarter, "group": g, "score": float(v["share"]), "rank": k + 1,
+             "of": len(rows)} for k, (g, v) in enumerate(rows)]
+
+
+def due_quarter(era_q: dict | None, today: str) -> bool:
+    """今天 ≥ 开始日，且判定的季度正好是今天所在季度的上一个季度（数据已到季末）。"""
+    q = (era_q or {}).get("quarter")
+    if not q or str(today) < FORWARD_START or not (era_q or {}).get("rank"):
+        return False
+    return pd.Period(q, freq="Q") == pd.Timestamp(today).to_period("Q") - 1
+
+
+def log_quarter(path: Path, themes: dict | None, today: str, infl_q: dict | None = None) -> dict:
+    """sim-day 调用：新季度的第一次运行记上一季的 3 个月判定（与影响占比）；只追加，同一个 (market, asof, group) 只留最早那次。"""
+    from . import themes as TH
+    eq = (themes or {}).get("era_q") or {}
+    if not due_quarter(eq, today):
+        return {"q": 0, "inf": 0}
+    res = {"q": append(path, quarter_rows(eq, set(TH.THEMES), today)), "inf": 0, "quarter": eq["quarter"]}
+    if infl_q and infl_q.get("rows") and infl_q.get("window"):
+        res["inf"] = append(path, influence_rows(infl_q, eq["quarter"], today))
+    return res
+
+
+def judge(s: pd.DataFrame, need: int = JUDGE_MONTHS) -> dict:
+    """记满 need 期（缺省 36 个月；3 个月判定用 12 个季度）起：平均超额的 95% 区间上限 < 0 → 失效；其余只报告进度。"""
     x = s["excess"].to_numpy(float) if len(s) else np.array([])
     n = len(x)
     out = {"n": n, "mean": float(x.mean()) if n else None, "hit": float((x > 0).mean() * 100) if n else None}
     if n >= 2:
         se = x.std(ddof=1) / np.sqrt(n)
         out["lo95"], out["hi95"] = float(x.mean() - 1.96 * se), float(x.mean() + 1.96 * se)
-    out["judged"] = n >= JUDGE_MONTHS
+    out["judged"] = n >= need
     out["failed"] = bool(out["judged"] and out.get("hi95") is not None and out["hi95"] < 0)
     return out

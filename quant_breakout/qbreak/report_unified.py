@@ -162,6 +162,9 @@ def missing_items(d: dict) -> list[str]:
         out.append(f"时代主线前向记录：这次没记上（{ef['error']}）—— 不影响交易；这个月不补写，下个月第一次运行照常记")
     if started and ef.get("us_error"):
         out.append(f"时代主线前向记录的美国 49 行业：取不到（{ef['us_error']}）—— 只记了日本；下次取到时记最新的月份（不补写），不影响交易")
+    infl = (d.get("themes") or {}).get("influence") or {}
+    if started and infl.get("error"):
+        out.append(f"各业种影响占比（J-Quants 東証業種別指数）：取不到（{infl['error']}）—— 时代主线旁边不标占比，不影响交易")
     pf = d.get("policy") or {}
     if started and pf.get("error"):
         out.append(f"政策事件反应库：这次没算 / 没记上（{pf['error']}）—— 不影响交易；前向记录不补写")
@@ -654,13 +657,13 @@ def _themes_html(th: dict, meta: tuple) -> str:
     tk = sorted([k for k in g if k in names and g[k].get("r3m") is not None], key=lambda k: -g[k]["r3m"])
     ik = sorted([k for k in g if k not in names and g[k].get("r3m") is not None], key=lambda k: -g[k]["r3m"])
     head = (f"<tr><th>组</th><th class='n'>成员</th><th class='n'>近 1 月</th><th class='n'>近 3 月（排名）</th>"
-            f"<th class='n'>时代主线 12-1 月（排名）</th><th class='n'>与日経同步度 R²：近 1 年 / {y3} / {y10}</th></tr>")
+            f"<th class='n'>12-1 个月（排名）</th><th class='n'>与日経同步度 R²：近 1 年 / {y3} / {y10}</th></tr>")
     era_i = sorted([k for k in g if k not in names and g[k].get("r12") is not None], key=lambda k: -g[k]["r12"])[:7]
     era_t = sorted([k for k in g if k in names and g[k].get("r12") is not None], key=lambda k: -g[k]["r12"])[:3]
-    era = ("<p><b>时代主线（最近 12 个月、跳过最近 1 个月领先）</b>：业种 " + escape("、".join(era_i) or "—")
+    era = _era_q_html(th, names) + ("<p>12-1 个月领先（2026-09-28 以前的时代主线，照旧列出、照旧每月记）：业种 " + escape("、".join(era_i) or "—")
            + "；主题 " + escape("、".join(f"{k} {names[k]}" for k in era_t) or "—")
            + "<br><span class='muted'>依据 var/out/era_study.md：这样排在前面的行业之后平均还会跑赢（美国 1931〜2026 按 12 个月算 70% 的时候、"
-           "日本 2006〜2026 68〜83%），但领先 3 年以上的反而容易反转；每月记进 var/out/era_forward.csv 自动核对。只作参考，不改交易。</span></p>")
+           "日本 2006〜2026 68〜83%），但领先 3 年以上的反而容易反转。只作参考，不改交易。</span></p>") + _influence_html(th)
     t_rows = "".join(row(k, f"{k} {names[k]}") for k in tk)
     i_rows = "".join(row(k, k) for k in ik[:5]) + ("<tr><td colspan=6 class='muted'>…</td></tr>" if len(ik) > 10 else "") \
         + "".join(row(k, k) for k in ik[-5:] if k not in ik[:5])
@@ -689,6 +692,53 @@ def _themes_html(th: dict, meta: tuple) -> str:
             "附上它和现有业种 / 主题最像哪几个 —— 新出现的行业先这样和现有行业做关联对比，要正式加进主题表先跑 "
             "scripts/theme_link_check.py。2026-09-26 的研究：主题动量用来挑买点没有通过、行业之间的领先关系多半是时代现象"
             "（var/out/theme_study.md、us_replication_study.md）—— 这里只帮助看清结构，不是买卖信号。</p></section>")
+
+
+def _era_q_html(th: dict, names: dict) -> str:
+    """时代主线的 3 个月判定（qbreak/theme_monitor.quarter_rank）+ 各业种影响占比（qbreak/sector_influence.py）。"""
+    eq = th.get("era_q") or {}
+    ir = ((th.get("influence") or {}).get("now") or {}).get("rows") or {}
+    if not eq.get("industries"):
+        return f"<p class='muted'>时代主线（3 个月判定）：这次没算出（{escape(str(eq.get('quarter') or '数据不够'))}）</p>"
+
+    def nm(g):
+        return str(g).replace("、", "・")                                  # 「証券、商品先物取引業」在「、」分隔的列表里读不清
+
+    def ind(gv):
+        g, sc = gv
+        v = ir.get(g)
+        return escape(f"{nm(g)}（{sc:+.1f}%" + (f"｜影响占比 {v['share']:.1f}%" if v else "") + "）")
+    qtd = eq.get("qtd") or {}
+    q_line = ("；本季进行中（" + escape(" 〜 ".join(qtd.get("range") or [])) + "，季末才正式判定）：业种 "
+              + escape("、".join(nm(g) for g, _ in qtd.get("industries") or []) or "—")) if qtd.get("industries") else ""
+    return ("<p><b>时代主线（每 3 个月判定：" + escape(f"{eq['quarter']}，{eq['range'][0]} 〜 {eq['range'][1]}")
+            + "，业种等权相对 TOPIX 1000 平均；影响占比 = 近 3 个月 TOPIX 涨跌里来自这个业种的份额，见下表）</b>：业种 "
+            + "、".join(ind(x) for x in eq["industries"])
+            + "；主题 " + escape("、".join(f"{k} {names.get(k, k)}（{v:+.1f}%）" for k, v in eq.get("themes") or []) or "—") + q_line
+            + "<br><span class='muted'>2026-09-28 用户要求从「12 个月（跳过最近 1 个月）」改为每 3 个月判定；每季第一次运行记进 var/out/era_forward.csv"
+            "（JP-S33Q / JP-THQ / 影响占比 JP-INFQ），记满 12 个季度起判定。事后描述（var/out/crash_mainline_posthoc.md）：3 个月的前 7 名下一季平均只多 "
+            "+0.0〜0.2%（区间含 0），12-1 个月的前 7 名 +0.3〜0.9% —— 3 个月的主线是「最近谁强」，不代表下一季还强。只作参考，不改交易。</span></p>")
+
+
+def _influence_html(th: dict) -> str:
+    """各业种影响占比表：近 63 个交易日 TOPIX 每天的涨跌里来自各业种的份额（全部 33 业种合计 100%）。"""
+    inf = th.get("influence") or {}
+    now = inf.get("now") or {}
+    rows = list((now.get("rows") or {}).items())
+    if not rows:
+        why = inf.get("error") or now.get("error") or "没有数据"
+        return f"<p class='muted'>各业种影响占比：这次取不到（{escape(str(why))}）</p>"
+    ml = {g for g, _ in ((th.get("era_q") or {}).get("industries") or [])}
+    body = "".join(f"<tr><td>{'★ ' if g in ml else ''}{escape(str(g).replace('、', '・'))}</td><td class='n'>{v['share']:.1f}%</td><td class='n'>{v['weight']:.1f}%</td>"
+                   f"<td class='n {'pos' if v['rel'] > 0 else 'neg'}'>{v['rel']:+.1f}%</td></tr>" for g, v in rows[:10])
+    rest = sum(v["share"] for _, v in rows[10:])
+    body += f"<tr><td class='muted'>其余 {len(rows) - 10} 个业种</td><td class='n'>{rest:.1f}%</td><td></td><td></td></tr>"
+    w = now.get("window") or ["", ""]
+    return (f"<h3>各业种影响占比（近 {now.get('n_days', '—')} 个交易日 {escape(w[0])} 〜 {escape(w[-1])}，TOPIX 口径）</h3>"
+            "<div class='scroll'><table><tr><th>业种（★ = 时代主线）</th><th class='n'>影响占比</th><th class='n'>时价总额比重（估计）</th>"
+            f"<th class='n'>这段时间相对 TOPIX</th></tr>{body}</table></div>"
+            "<p class='muted'>影响占比 = 这段时间 TOPIX 每天的涨跌里来自这个业种的份额（全部 33 业种合计 100%；比重大、又和大盘同涨同跌的业种占比高）；"
+            f"J-Quants 東証業種別指数（qbreak/sector_influence.py，拟合 R² {now.get('r2', '—')}）。只作参考，不改交易。</p>")
 
 
 def _policy_html(p: dict) -> str:

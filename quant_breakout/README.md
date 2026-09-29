@@ -691,7 +691,7 @@ EIA 周度成品油（总量 / 汽油 / 柴油 / 航空燃料）、EIA STEO 当�
 
 **为什么各年段表现不同**（2026-09-27，只描述，`scripts/perf_attrib.py` → `var/out/perf_attrib.md`）：个股层相对核心（1655）的每月超额，两个年代都稳定的因素只有当月 S&P500（日元计）/ USD/JPY 的涨跌（负）与月初 VIX（正）；事先知道的因素只能解释 10〜15%。
 
-**时代主线**（2026-09-27，事先登记 825bd56，`scripts/era_study.py` → `var/out/era_study.md`）：美国 49 行业 1926〜2026，1 年的领先会延续、3〜10 年的领先反而反转；「过去 12 个月最强的 10 个行业」（M12）比等权年化 +3.65%（三段都为正），长期领先的规则（E36 / E60 / ER / EN）都不如它。日报「主题与业种」的「时代主线」列与`var/out/era_forward.csv`（`qbreak/era_forward.py`，每月记一次、`scripts/era_outlook.py --review` 核对）用的就是 M12；展望 `var/out/era_outlook.md`（只描述）。
+**时代主线**（2026-09-27，事先登记 825bd56，`scripts/era_study.py` → `var/out/era_study.md`）：美国 49 行业 1926〜2026，1 年的领先会延续、3〜10 年的领先反而反转；「过去 12 个月最强的 10 个行业」（M12）比等权年化 +3.65%（三段都为正），长期领先的规则（E36 / E60 / ER / EN）都不如它。日报「主题与业种」的「时代主线」列与`var/out/era_forward.csv`（`qbreak/era_forward.py`，每月记一次、`scripts/era_outlook.py --review` 核对）用的就是 M12；展望 `var/out/era_outlook.md`（只描述）。2026-09-29 起（用户要求）日报的时代主线改为**每 3 个月判定**（最近一个完整季度业种前 7 / 主题前 3，`qbreak/theme_monitor.py` quarter_rank；12-1 个月照旧列出、照旧记），主线业种旁边标**影响占比**（近 63 个交易日 TOPIX 涨跌里来自各业种的份额，J-Quants 東証業種別指数，`qbreak/sector_influence.py`）；历史上 3 个月的领先下一季不延续（`var/out/crash_mainline_posthoc.md`）。
 
 **让策略跟着时代自己更新**（2026-09-27，事先登记 8480ff1，`scripts/evolve_study.py` → `var/out/evolve_study.md`）：每月只用过去重新学习的个股层开关（V1〜V3）、W2 门槛每季自己选（V4）、只买领先业种的突破（V5）→ 2009〜2016 Calmar 0.349〜0.382（现行 0.388），都没通过 → **维持现行**。
 

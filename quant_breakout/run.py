@@ -1293,7 +1293,9 @@ def _era_forward_log(themes: dict, today) -> dict:
         us_err = f"{type(e).__name__}: {e}"
         log.warning("美国 49 行业取不到（时代主线只记日本）：%s", e)
     try:
-        res = EF.log_month(paths.out_dir() / EF.LOG_FILE, themes if isinstance(themes, dict) else {}, str(today), us)
+        th = themes if isinstance(themes, dict) else {}
+        res = EF.log_month(paths.out_dir() / EF.LOG_FILE, th, str(today), us)
+        res["quarter"] = EF.log_quarter(paths.out_dir() / EF.LOG_FILE, th, str(today), (th.get("influence") or {}).get("quarter"))
         return {**res, "us_error": us_err} if us_err else res
     except Exception as e:                                   # noqa: BLE001
         log.warning("时代主线前向记录失败（不影响交易）：%s", e)
@@ -1462,10 +1464,37 @@ def _theme_panel(provider: str) -> dict:
         ix = drop_partial_bar(load_universe([BENCHMARK["JP"]], d10)[BENCHMARK["JP"]], "JP")
         out = TM.panel(data, s33, ix["Close"], read_json(paths.home() / "theme_influence.json", {}) or {})
         out["n_loaded"], out["n_wanted"] = len(data), len(want)
+        out["influence"] = _sector_influence(out.get("era_q") or {})     # 各业种影响占比（J-Quants 東証業種別指数；只作展示）
         return out
     except Exception as e:                                   # noqa: BLE001
         log.warning("主题强弱面板失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"}
+
+
+def _sector_influence(era_q: dict) -> dict:
+    """各业种影响占比（qbreak/sector_influence.py；2026-09-28 用户「时间主线要标记当前各行业影响占比」）：近 63 个交易日 +
+    时代主线判定的那个季度。需要 JQUANTS_API_KEY（Mac：bash scripts/with_jquants.sh）；取不到只记原因，不影响日报其余部分与交易。"""
+    import datetime as _d
+    import os
+    if not os.environ.get("JQUANTS_API_KEY"):
+        return {"error": "没有 JQUANTS_API_KEY"}
+    try:
+        import pandas as pd
+
+        from qbreak import sector_influence as SI
+        from qbreak.calendar_jp import now_jst
+        from qbreak.jquants import JQuants, cache_dir
+        today = now_jst().date()
+        C = SI.fetch(JQuants(), (today - _d.timedelta(days=240)).isoformat(), cache_dir() / "indices", today.isoformat())
+        out = {"now": SI.shares(C)}
+        q = era_q.get("quarter")
+        if q:
+            per = pd.Period(q, freq="Q")
+            out["quarter"] = {**SI.shares(C, start=per.start_time, end=per.end_time.normalize()), "quarter": q}
+        return out
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("影响占比取不到（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 
 def _score_forward_log(ctx, eng, state, planned: dict) -> dict:
