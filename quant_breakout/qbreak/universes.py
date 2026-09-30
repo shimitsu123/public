@@ -1,5 +1,6 @@
 """universes.py — 广域股票池（ユニバース）。成分为 2026-09-24 时点（日経225 / NASDAQ-100 取自 Wikipedia）；
-之后的指数入替写在 var/index_changes.json，生效日起自动增删（见 index_changes()）。
+之后的指数入替写在 var/index_changes.json，生效日起自动增删（见 index_changes()）；上場廃止的票到了上場廃止日由退市时间表
+（qbreak/delist_schedule.py → var/delist_schedule.json）自动去掉（2026-09-30 用户要求；只减不加，补入仍要用户确认）。
 2026-09-28 修正（用户确认）：6594 ニデック → 4062 イビデン（2025-10-27 臨時入替，旧名单没跟上）。臨時入替 / 特別注意 / 整理 /
 上場廃止由 qbreak/eligibility.py 每天对照 ja.wikipedia 与 JPX 查出、先挡新仓；改这份名单仍要用户确认（记进 var/sim_changes.md）。
 
@@ -156,9 +157,14 @@ def index_pending(market: str, today=None) -> dict[str, dict]:
 
 
 def nikkei225(exclude: bool = True, today=None) -> list[str]:
+    """今天的日経225 股票池：静态名单 → 定期入替（生效日起）→ 去掉已到上場廃止日的（退市时间表 var/delist_schedule.json 的 applied，
+    qbreak/delist_schedule.py 每次决策前更新；只减不加）。"""
+    import datetime as _dt
+    from .delist_schedule import applied_codes
     ov = _override("JP")
     codes = _apply_changes(ov or NIKKEI225, "JP", today)
-    codes = [c for c in codes if not (exclude and c.split(".")[0] in _JP_EXCLUDED_SET)]
+    gone = applied_codes(today or _dt.date.today())
+    codes = [c for c in codes if not (exclude and c.split(".")[0] in _JP_EXCLUDED_SET) and c.split(".")[0] not in gone]
     return [c if c.endswith(".T") else f"{c}.T" for c in codes]
 
 

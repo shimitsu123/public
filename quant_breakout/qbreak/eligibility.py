@@ -17,7 +17,9 @@
   G6 必需来源（ja.wikipedia + JPX 四页）有一个超过 4 天没取到（或从没取到）→ 今天不开新个股仓（确认不了就不买）
   核心 ETF（1655）：G4 / G5（その他商品页）→ 执行器不下核心买单（卖单照常）；来源过期不挡核心
   持仓：被 G3〜G5 标记 → 只报警（规则不自动卖，与回测相同；要不要提前卖由用户决定，人工买卖前先 HALT）
-  反方向：ja.wikipedia 有、我们没有（且不是已记录的剔除）→ 只报警：改名单要用户确认，记进 var/sim_changes.md
+  反方向：ja.wikipedia 有、我们没有（且不是已记录的剔除 / 已到日的上場廃止）→ 只报警：改名单要用户确认，记进 var/sim_changes.md
+  退市时间表（2026-09-30 用户要求）：qbreak/delist_schedule.py 用同一份快照列出上場廃止日 / 最終売買日 / 定期入替；上場廃止日 ≤ 今天 →
+  自动从股票池去掉（universes.nikkei225 读 var/delist_schedule.json）；补入仍要用户确认；持仓只报警
 已知局限：TOB 公布 → 整理銘柄指定之间的几周查不到（要 TDnet）；Wikipedia 是社区编辑、可能滞后（所以 JPX 那一层独立判断）。
 """
 from __future__ import annotations
@@ -231,6 +233,14 @@ def refresh(path=None, now=None, fetch=None, ttl_hours: float = TTL_HOURS, force
     return snap
 
 
+def refresh_today(fetch=None) -> dict:
+    """今天的快照：取数（2 小时内取过就不取）；Mac 上仓库里云端写的 var/out/eligibility.json 某来源比自己新就用它的。
+    资格检查（gate_for）与退市时间表（qbreak/delist_schedule.update）共用。"""
+    repo = paths.PROJECT_ROOT / "var" / "out" / FILE
+    fb = repo if repo.resolve() != snapshot_path().resolve() and repo.exists() else None
+    return refresh(fetch=fetch, fallback=fb)
+
+
 # ── 判定 ──
 def _code(t: str) -> str:
     return str(t).split(".")[0]
@@ -254,6 +264,7 @@ class Gate:
     changes: list = field(default_factory=list)
     pending: dict = field(default_factory=dict)
     error: str = ""                                              # 资格检查本身出错（→ 不开新个股仓）
+    delisted: set = field(default_factory=set)                   # 退市时间表已到日、从股票池去掉的（var/delist_schedule.json applied）
 
     def __post_init__(self):
         src = self.snap.get("sources") or {}
@@ -269,7 +280,7 @@ class Gate:
             if not codes:
                 continue
             self.diff[k] = {"ours_only": sorted(self.ours - codes - added), "lag": sorted((self.ours - codes) & added),
-                            "src_only": sorted(codes - self.ours - deleted)}
+                            "src_only": sorted(codes - self.ours - deleted - set(self.delisted))}
         self.g3 = set((self.diff.get("ja_wiki") or {}).get("ours_only") or [])
         lo = (self.today - dt.timedelta(days=DELIST_LOOKBACK_DAYS)).isoformat()
         self.flags: dict[str, list[str]] = {}
@@ -369,15 +380,15 @@ class Gate:
 
 def gate_for(today: dt.date, trade_tickers, core_tickers=(), refresh_first: bool = True, fetch=None) -> Gate:
     """取数（2 小时内取过就不取）→ 今天的判定。任何意外 → 返回「出错」的判定（不开新个股仓），不让模拟盘 / 执行器崩溃。"""
+    from . import delist_schedule as DS
     from .universes import index_changes, index_pending, nikkei225
     trade = {_code(t) for t in trade_tickers if _tse(t)}
     core = {_code(t) for t in core_tickers}
     try:
-        repo = paths.PROJECT_ROOT / "var" / "out" / FILE
-        fb = repo if repo.resolve() != snapshot_path().resolve() and repo.exists() else None
-        snap = refresh(fetch=fetch, fallback=fb) if refresh_first else load()
+        snap = refresh_today(fetch=fetch) if refresh_first else load()
         ours = {_code(t) for t in nikkei225(exclude=False, today=today)}
-        return Gate(today, trade, ours, snap, core, index_changes("JP"), index_pending("JP", today))
+        return Gate(today, trade, ours, snap, core, index_changes("JP"), index_pending("JP", today),
+                    delisted=DS.applied_codes(today))                 # 已上場廃止、去掉的票：ja.wikipedia 还列着也不算「它有我们没有」
     except Exception as e:                                        # noqa: BLE001
         log.error("资格检查出错：%s", e)
         return Gate(today, trade, set(), {}, core, error=f"{type(e).__name__}: {e}"[:160])

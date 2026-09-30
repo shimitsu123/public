@@ -85,11 +85,26 @@ def _changes() -> list[dict]:
     return index_changes("JP")
 
 
-def items(today: dt.date, horizon: int = HORIZON_DAYS, events=None, changes=None) -> list[dict]:
-    """今天〜今天 + horizon 天里有日期的检查（按日期排）。"""
+def _delist() -> list[dict]:
+    from .delist_schedule import load
+    return load().get("items") or []
+
+
+def items(today: dt.date, horizon: int = HORIZON_DAYS, events=None, changes=None, delist=None) -> list[dict]:
+    """今天〜今天 + horizon 天里有日期的检查（按日期排）。delist = 退市时间表的 items（默认读 var/delist_schedule.json）。"""
     end = today + dt.timedelta(days=horizon)
     out: list[dict] = []
     within = lambda s: today.isoformat() <= str(s)[:10] <= end.isoformat()                      # noqa: E731
+    for r in (delist if delist is not None else _delist()):
+        if r.get("kind") != "上場廃止" or not (r.get("in_pool") or r.get("held") or r.get("core")):
+            continue
+        who = ("持仓 " + "、".join(r["held"]) + "；" if r.get("held") else "") + ("核心 ETF；" if r.get("core") else "") + ("股票池" if r.get("in_pool") else "")
+        for key, lab, chk in (("last_trade", "最終売買日", "持仓里有它 → 决定要不要在这天收盘前卖（要卖先 HALT，人工处理）；规则不自动卖"),
+                              ("date", "上場廃止日（从股票池自动去掉）", "日报「股票池更新时间表」确认已去掉；日経225 的补入銘柄要你确认后加进名单")):
+            d = str(r.get(key) or "")[:10]
+            if d and within(d):
+                out.append({"date": d, "what": f"上場廃止 {r['code']}：{lab}（{r.get('why') or '—'}；{who.rstrip('；') or '—'}）",
+                            "who": "自动 + 你", "src": "qbreak/delist_schedule.py（var/delist_schedule.json）", "check": chk})
     for e in (events if events is not None else _events()):
         kind, d, name = e.get("kind"), str(e.get("date") or "")[:10], str(e.get("name") or "")
         if not d or not within(d):

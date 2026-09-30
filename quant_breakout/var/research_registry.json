@@ -7431,5 +7431,43 @@
    "日本：B0 11 个 hit120 80%，加石油的 B1 9 个只 50%、假底 50% → 在日本加石油更差；各市场 B1 > B0 的 12 个、< 的 8 个"
   ],
   "notes": "不加进深跌前向记录 / 判断层；模拟盘 / 执行器不变；石油需求这条线到此为止（减仓反、底部确认不超过平移），只留仪表盘展示与 K4 前向记录"
+ },
+ {
+  "line": 3721,
+  "date": "2026-09-30",
+  "title": "退市时间表：JPX 上場廃止日 / 最終売買日 + 定期入替进一张表，到了上場廃止日自动从股票池去掉（只减；补入要用户确认、持仓只报警）",
+  "kind": "engineering",
+  "domain": "数据/工程",
+  "registration": "工程变更（用户要求：「做一个实时股票退市时间表check 到日期后就把对应股票池更新」；不是登记研究）",
+  "script": "qbreak/delist_schedule.py；qbreak/universes.py（nikkei225 读 applied）；qbreak/eligibility.py（refresh_today、Gate.delisted）；run.py（_delist_update、delist-schedule）；qbreak/report_unified.py；qbreak/check_calendar.py；qbreak/live_unified.py；scripts/liveu.sh",
+  "output": "var/delist_schedule.json",
+  "candidates": [
+   {
+    "id": "上場廃止",
+    "rule": "JPX 一览的上場廃止日 ≤ 今天 → applied → nikkei225() 去掉；最終売買日 = 前一个交易日",
+    "result": "2026-09-30 快照：30 只都不在股票池 / 持仓 → 没有去掉的"
+   },
+   {
+    "id": "定期入替",
+    "rule": "index_changes.json 生效日起自动增删（原有机制，只显示）",
+    "result": "10-01：+5016 / 6525 / 9697，−543A / 4902 / 7004"
+   },
+   {
+    "id": "整理銘柄",
+    "rule": "已指定、一览还没登日期 → 日期未定",
+    "result": "只显示；登出日期后自动进表"
+   },
+   {
+    "id": "持仓 / 补入",
+    "rule": "不自动卖、不自动加：日报 / 日志 / 日历提醒（最終売買日、剩余交易日、补入要确认）",
+    "result": "—"
+   }
+  ],
+  "baseline": "此前：静态名单 + 定期入替；上場廃止的成员只靠资格检查挡新仓、名单不变（取数时跳过）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "交易规则、参数、仓位不变；applied 保留 400 天；取不到 JPX 时旧表照常生效"
  }
 ]

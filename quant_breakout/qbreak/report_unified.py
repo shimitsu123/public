@@ -63,6 +63,7 @@ def build_unified_data() -> dict:
             "deepdip": td.get("deepdip") or {},                  # 「≤ −15% 深跌」前向记录（qbreak/deepdip_forward.py；只记录 / 展示）
             "policy": td.get("policy") or {},                    # 政策事件反应库（qbreak/policy_forward.py；只展示 + 前向记录）
             "eligibility": td.get("eligibility") or {},          # 下单前资格检查（qbreak/eligibility.py：被踢出 / 被指定的票不开新仓）
+            "delist": td.get("delist") or {},                    # 股票池更新时间表（qbreak/delist_schedule.py：上場廃止到日自动去掉）
             "cost_sales": td.get("cost_sales") or {},            # 成本 × 销售（S2）分组与前向记录（qbreak/cost_sales_forward.py；只展示）
             "invest_flow": td.get("invest_flow") or {},          # 投资流向的季度快照（㉟，qbreak/invest_flow.py；只作背景）
             "timeline": td.get("timeline") or {},                  # 买卖时间线（qbreak/timeline.py；每天按前一天收盘重算，只展示）
@@ -223,6 +224,11 @@ def missing_items(d: dict) -> list[str]:
         out.append(f"下单前资格检查的日报块：没算出（{el['error']}）—— 闸门本身在引擎里照常生效")
     for n in el.get("needs_user") or []:
         out.append(f"下单前资格检查（告警，不是缺数据）：{n}")
+    ds = d.get("delist") or {}
+    if ds.get("error"):
+        out.append(f"股票池更新时间表：这次没更新（{ds['error']}）—— 上一次的表照常生效（已到日去掉的不变）")
+    for n in ds.get("needs_user") or []:
+        out.append(f"股票池更新时间表（告警，不是缺数据）：{n}")
     fj = d.get("fwdj") or {}
     if started and fj.get("enabled"):                              # 前向记录判断层：算不了的项按中性（0）；日期对不上 → 这一层今天没生效
         for k, v in (fj.get("errors") or {}).items():
@@ -438,6 +444,49 @@ def _eligibility_html(d: dict, meta: tuple) -> str:
             "ja.wikipedia 名单里没有（var/index_changes.json 解释不了）、JPX 特別注意 / 監理 / 整理銘柄、上場廃止（含预定）→ 不开新个股仓；"
             "必需来源超过 4 天没取到 → 当天不开新个股仓；执行器发买单前再查一次；核心 ETF 只看 JPX 标记。"
             "持仓被标记只报警，要不要提前卖由你决定（人工买卖执行器管的票之前先 HALT）。代码在 qbreak/eligibility.py。</p></section>")
+
+
+def _delist_html(d: dict, meta: tuple) -> str:
+    """股票池更新时间表（qbreak/delist_schedule.py）：上場廃止日 / 最終売買日 / 定期入替；到了上場廃止日自动从股票池去掉（只减）；
+    补入要用户确认；持仓只报警。"""
+    x = d.get("delist") or {}
+    if not x or (not x.get("items") and not x.get("error") and not x.get("applied")):
+        return ""
+    nm = meta[2] if len(meta) > 2 else {}
+    lab = lambda c: f"{c} {nm[c]}" if c in nm else c                                  # noqa: E731
+    badge = {"待生效": "▲", "今天生效": "■", "已生效": "✓", "日期未定": "…"}
+
+    def rel(r):
+        return "；".join(s for s in (("股票池" if r.get("in_pool") else ""), ("持仓 " + "、".join(r["held"]) if r.get("held") else ""),
+                                     ("核心 ETF" if r.get("core") else ""), ("<b>已从股票池去掉</b>" if r.get("removed") else "")) if s) or "—"
+    rows = []
+    for r in x.get("ours") or []:
+        if r["kind"] == "上場廃止":
+            when, what = r["date"], f"上場廃止（{escape(r.get('why') or '—')}）；最終売買日 {escape(str(r.get('last_trade') or '—'))}，剩 {int(r.get('days_left') or 0)} 个交易日"
+        elif r["kind"] == "整理銘柄":
+            when, what = "未定", f"JPX 整理銘柄（{escape(str(r.get('designated') or '—'))} 指定；上場廃止日还没公布）"
+        else:
+            when, what = r["date"], f"日経225 {r['kind']}（{escape(str(r.get('announced') or '—'))} 公布）"
+        rows.append(f"<tr><td>{escape(str(when))}</td><td>{escape(lab(r['code']))}</td><td>{what}</td>"
+                    f"<td>{badge.get(r['status'], '')} {escape(r['status'])}</td><td>{rel(r)}</td></tr>")
+    applied = "".join(f"<li>{escape(lab(a['code']))}：{escape(a['date'])} 上場廃止（{escape(a.get('why') or '—')}），{escape(str(a.get('applied_on') or '—'))} 起不在股票池</li>"
+                      for a in x.get("applied") or [])
+    other = [r for r in x.get("items") or [] if r["kind"] == "上場廃止" and not (r.get("in_pool") or r.get("held") or r.get("core") or r.get("removed"))]
+    other_html = "、".join(f"{escape(r['code'])} {escape(r['date'])}" for r in other)
+    needs = "".join(f"<li class='neg'>{escape(n)}</li>" for n in x.get("needs_user") or [])
+    err = f"<p class='neg'>这次没更新：{escape(x['error'])} —— 上一次的表（{escape(str(x.get('as_of') or '—'))}）照常生效</p>" if x.get("error") else ""
+    return ("<section class='card'><h2>股票池更新时间表（上場廃止 / 定期入替；到日自动去掉）</h2>"
+            f"<p><b>{escape(str(x.get('text') or ''))}</b></p>{err}"
+            + (f"<h3>要你看的事</h3><ul>{needs}</ul>" if needs else "")
+            + "<div class='scroll'><table><tr><th>日期</th><th>代码</th><th>事</th><th>状态</th><th>与我们的关系</th></tr>"
+            + ("".join(rows) or "<tr><td colspan=5 class='muted'>股票池 / 持仓 / 核心 ETF 里没有有日期的事</td></tr>") + "</table></div>"
+            + (f"<h3>已从股票池去掉（到了上場廃止日）</h3><ul>{applied}</ul>" if applied else "")
+            + (f"<details><summary class='muted'>JPX 一览里其他 {len(other)} 只（不在股票池；代码 上場廃止日）</summary><p class='muted'>{other_html}</p></details>"
+               if other else "")
+            + "<p class='muted'>规则（2026-09-30 用户要求「做一个实时股票退市时间表 check，到日期后就把对应股票池更新」）：每次决策前用资格检查的同一份 JPX 快照更新；"
+            "上場廃止日 ≤ 今天 → 自动从交易股票池去掉（只减，记在 var/delist_schedule.json 的 applied，模拟盘 / 执行器 / 候补队列同一张表）；"
+            "定期入替照旧按 var/index_changes.json 生效日增删；补入的票（臨時入替的替补）要你确认后改名单；持仓不自动卖（要提前卖先 HALT）。"
+            "代码在 qbreak/delist_schedule.py，命令 run.py delist-schedule。</p></section>")
 
 
 def _calendar_html(c: dict) -> str:
@@ -1074,7 +1123,7 @@ def render_unified_html(d: dict) -> str:
         themes=_themes_html(d.get("themes") or {}, meta), policy=_policy_html(d.get("policy") or {}),
         deepdip=_deepdip_html(d.get("deepdip") or {}), fwdj=_fwdj_html(d),
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us), shadow=_shadow_html(d),
-        elig=_eligibility_html(d, meta), cost_sales=_cost_sales_html(d.get("cost_sales") or {}),
+        elig=_eligibility_html(d, meta), delist=_delist_html(d, meta), cost_sales=_cost_sales_html(d.get("cost_sales") or {}),
         invest_flow=_invest_flow_html(d.get("invest_flow") or {}),
         calendar=_calendar_html(d.get("calendar") or {}), pcheck=_price_check_html(d.get("price_check") or {}),
         corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
@@ -1484,6 +1533,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <section class="card top"><h2>⑦ 除息 / 拆股（已补到持仓与现金）</h2><ul>{corp}</ul></section>
 {dash}
 {elig}
+{delist}
 {pcheck}
 {calendar}
 <section class="card"><h2>市场状态（文字明细）</h2><dl>{markets}</dl></section>

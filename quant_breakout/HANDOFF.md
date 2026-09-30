@@ -167,6 +167,11 @@
   执行器发买单前再查一次；核心 ETF 被 JPX 指定 → 不下它的买单；持仓被标记只报警（不自动卖）。日报「下单前资格检查」一栏，告警进「数据完整性」；
   只读检查 `run.py eligibility`（旧命令 `universe-update` 不再覆盖名单）。当场核对：ja.wikipedia 与修正后的名单一致，en.wikipedia 仍列 6594（所以只作参考），
   JPX 特別注意銘柄里有 6594（即使名单没改也会被挡）。
+- 退市时间表（2026-09-30，用户「做一个实时股票退市时间表check 到日期后就把对应股票池更新」）：`qbreak/delist_schedule.py` 用资格检查的同一份 JPX 快照 +
+  `var/index_changes.json` 生成 `var/delist_schedule.json`（上場廃止日、最終売買日、剩余交易日、理由类别、定期入替、整理銘柄的日期未定；只存代码与日期），
+  每次决策前、算股票池之前更新（云端 sim-day、Mac 执行器）；**上場廃止日 ≤ 今天 → 自动从交易股票池去掉**（`universes.nikkei225()` 读表里的 applied，
+  只减不加，保留 400 天；取不到 JPX 时旧表照常生效）；补入的票仍要你确认（去掉后 30 天内每天提醒）；持仓不自动卖（日报「要你看的事」/ 执行器日志写明
+  最終売買日与剩余交易日；到日还拿着 → 人工处理，先 HALT）。日报新卡片「股票池更新时间表」、检查日历列最終売買日 / 上場廃止日；命令 `run.py delist-schedule`。
 - 检查时间线（2026-09-28，用户「依据现在的所有研究整理出一整个check时间线…横展开一下」）：`CHECK_TIMELINE.md` + 日报「检查日历」（`qbreak/check_calendar.py`，
   接下来 45 天有日期的检查 + 远期判定）。只展示。
 - 为什么越近越弱（2026-09-28，用户「分析为什么越靠近现在胜率什么的就会变弱…」）：诊断 `scripts/decay_diag.py`（只描述）→ **不是结构性衰退**：
@@ -419,7 +424,8 @@
   **W2（2026-09-27 用户确认启用）**：最近完成的一周成交量 ÷ 之前 10 周平均 < 1.0 的突破不买（`var/best_params_JP.json` 的
   min_weekly_vol_ratio；周的完成按东证日历；历史不够不拦截）
 - **下单前资格检查（2026-09-28 用户要求）**：被踢出日経225（名单对照 ja.wikipedia）、被 JPX 指定（特別注意 / 監理 / 整理）、上場廃止（含预定）、
-  指数待剔除、股票池外的票不开新仓；资格数据 4 天以上取不到 → 当天不开新个股仓；执行器发买单前再查一次（`qbreak/eligibility.py`）
+  指数待剔除、股票池外的票不开新仓；资格数据 4 天以上取不到 → 当天不开新个股仓；执行器发买单前再查一次（`qbreak/eligibility.py`）；
+  **退市时间表（2026-09-30 用户要求）**：上場廃止日 ≤ 今天 → 自动从股票池去掉（`qbreak/delist_schedule.py`，只减；补入要你确认、持仓不自动卖）
 - 1655：闲置资金全部；S&P500 连续 5 天收在 250 日均线 ×0.97 之下 → 熊（卖出，留现金）；连续 5 天在 ×1.03 之上 → 牛（`var/bullbear.json`）
 - 回撤达 45% → HALT（停新仓）
 - 牛熊的「现在处于哪个阶段」（牛市·稳固 / 走弱 / 临界 / 牛→熊确认中，熊市同理）只用于展示，阈值 3% / 8% / 5 pp 是展示用的，
@@ -478,7 +484,8 @@
 - K4 横向到其他市场（JODI 各国成品油需求 → 指数级 ×0.5 规则 24 个市场 + 账户级 JP-T / US-0 / US-R；启用规则事先写定）：`scripts/k4_horizontal_study.py`（登记 fae314e）→ `var/out/k4_horizontal_study.md` / `.json`；`tests/test_k4_horizontal_study.py`
 - 判断底部的方法 + 石油需求条件（深跌段 B0 / B0m ± 石油、24 个市场、随机一天与石油平移对照）：`scripts/bottom_oil_study.py`（登记 a0c033b）→ `var/out/bottom_oil_study.md` / `.json`；`tests/test_bottom_oil_study.py`
 - 行情缓存：`qbreak/data.py`（有效期 12 小时 + 按交易日历查新鲜度；盘中取的缓存在收盘后视为过期、重新下载 —— 2026-09-29 修正，以前收盘后 12 小时内会把盘中快照当成收盘价；重下载失败去掉那一根并记为「行情落后」）；**价格调整口径 v2（2026-09-30）**：不用 yfinance 的 auto_adjust，改为 `qbreak.data.adjust_prices` 按 Yahoo 的分红 / 拆股记录自己调整（同一口径，实测与 Yahoo 的 Adj Close 差 < 1e-6），**拆股当天的分红按拆股后口径**（Yahoo 把日本株分割与配当同一基準日的分红记成分割前每股金额 → 8766.T 2026-09-29 被当成 22.8% 的分红、之前价格整体调低、当天「涨」25.8%；横向扫描 1,076 只近 2 年 20 例，含 8035.T / 5401.T 2025-09-29），公司行为随缓存的 meta 保存（`actions_of` / `fixes_of`）、缓存 meta 带 `adj` 版本号（口径不同就重新下载）；**指数日线缺收盘 → 用当天 5 分钟线合成**（`fill_index_from_intraday`，只补 `^` 开头、已收盘的日子；Yahoo 的 ^N225 2026-09-29 只给开盘、收盘 NaN），记进 `FILLED`，日报「数据完整性 · 自动修复」列出；威胁指数的指数序列同样处理（`qbreak/threat.py`）
-- 下单前资格检查：`qbreak/eligibility.py`（快照 `var/out/eligibility.json`；只读检查 `run.py eligibility`）；成本 × 销售显示与 S2 前向记录：`qbreak/cost_sales_forward.py`
+- 下单前资格检查：`qbreak/eligibility.py`（快照 `var/out/eligibility.json`；只读检查 `run.py eligibility`）；退市时间表：`qbreak/delist_schedule.py`
+  （`var/delist_schedule.json`；`run.py delist-schedule`；`tests/test_delist_schedule.py`）；成本 × 销售显示与 S2 前向记录：`qbreak/cost_sales_forward.py`
   （复核 / 当前分组 `scripts/cost_sales_forward.py --review | --show`）
 
 ## 用户常问的，去哪里查
@@ -510,6 +517,7 @@
 | 深跌前向记录 | 「日経离 −15% 还有多远？深跌前向记录记了几个？」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/deepdip_forward.py --status`（在 `~/qbreak-src/quant_breakout`，读云端每天算好的 `var/out/unified_today.json`；不联网、不写文件）；也可直接看日报「深跌前向记录」一栏 | 只读 / 只展示，不改交易 |
 | 接下来要检查什么 | 「这个月 / 接下来要注意什么？」「什么时候判定 W2？」 | 读 `CHECK_TIMELINE.md` 与日报「检查日历」（`var/out/unified_today.json` 的 calendar） | 只读 |
 | 股票被踢出了吗 | 「要下单 / 手上的股票有没有被踢出日経225、被指定特別注意？」 | `QBREAK_HOME=~/.qbreak/home ~/.qbreak/venv/bin/python run.py eligibility`（在 `~/qbreak-src/quant_breakout`） | 只读；名单差异要改名单 → 你确认后云端改 |
+| 谁快退市了 | 「哪些股票快退市了？最終売買日是哪天？股票池更新了吗？」 | `QBREAK_HOME=~/.qbreak/home ~/.qbreak/venv/bin/python run.py delist-schedule`（在 `~/qbreak-src/quant_breakout`；`--offline` 不重取）或看日报「股票池更新时间表」 | 到了上場廃止日自动从股票池去掉（只减）；补入要你确认；持仓不自动卖（要卖先 HALT） |
 | 数据对不对 | 「研究 / 模拟盘用的数据对不对？缺什么？」 | 读 `var/out/data_audit.md`（每项 OK / 注意 / 问题 / 缺 与用在哪里）；重跑在云端 `python scripts/data_audit.py`（缓存都在云端） | 只读；修正要另记 sim_changes |
 | 行情有没有错位 | 「今天的行情和 J-Quants 对得上吗？」「有没有复权错位？」 | 读 `var/out/unified_today.json` 的 price_check（云端每天）；Mac 上现查：`QBREAK_HOME=~/.qbreak/home bash scripts/with_jquants.sh ~/.qbreak/venv/bin/python run.py price-check`（在 `~/qbreak-src/quant_breakout`，约 2 分钟） | 只读、只报警；告警的票在买单 / 持仓里 → 先核对哪边对，要停就建 HALT |
 | 成本 × 销售 | 「现在原材料在涨吗？哪些业种偏间接？」 | `~/.qbreak/venv/bin/python scripts/cost_sales_forward.py --show`；进度 `--review` | 只展示；行业层，不是个股建议 |

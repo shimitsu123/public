@@ -746,6 +746,9 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     el = sm.get("eligibility") or {}
     if el.get("needs_user"):
         short += "｜★ 资格检查要确认"
+    ds = sm.get("delist") or {}
+    if ds.get("needs_user"):
+        short += "｜★ 退市时间表要看"
     fj = sm.get("fwd_judgment") or {}
     if fj.get("enabled") and not fj.get("applied"):
         short += "｜★ 判断层没生效"
@@ -783,6 +786,12 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
         lines.append(f"- ★ {n}")
     if el and not el.get("needs_user"):
         lines.append(f"- {el.get('text') or '资格检查：—'}")
+    for n in ds.get("needs_user") or []:                    # 股票池更新时间表：持仓将上場廃止 / 已去掉、补入要确认
+        lines.append(f"- ★ {n}")
+    if ds.get("error"):
+        lines.append(f"- ★ 股票池更新时间表这次没更新：{ds['error']}（上一次的表照常生效）")
+    elif ds.get("text") and not ds.get("needs_user"):
+        lines.append(f"- {ds['text']}")
     for e in [e for e in sm.get("events") or [] if e.get("level") == "error"][-5:]:
         lines.append(f"- ★ {e['msg']}")
     return title, short, "\n".join(lines)

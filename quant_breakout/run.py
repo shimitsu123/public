@@ -845,6 +845,8 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
     params_x = {**params, "JP": EXR.apply(params["JP"], xmode)}   # 只给引擎用；params（死叉）照旧给前向记录、判断层、候补队列
     from qbreak import idle_cash as IC
     icmode = IC.mode_of(cfg)                                # 闲置资金（var/sim.json idle_cash；2026-09-29 用户要求「默认不要 S&P500」）
+    today = _dt.date.today()
+    delist = _delist_update(today, state, ucfg)             # 退市时间表：到了上場廃止日的票从股票池去掉（下面的 universe() 读同一张表）
     unis = {m: (universe(m, (u.get("universe") or {}).get(m, "broad")) if m in ucfg.stock_markets else [])
             for m in ("JP", "US")}
     core_all = (set(ucfg.core) | set(IC.MODES[icmode]["core"]) | set(extra_core)          # 原规则的 1655（基准账户）+ 这个方式的 ETF
@@ -878,7 +880,6 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
                  "since": (cfg.get("idle_cash") or {}).get("since")} if len(gi) else {"mode": icmode}
     ex = exec_configs(ucfg.stock_markets, u)
     ccost = {t: etf_cost(broker, t, market_of(t)) for t in core_all}
-    today = _dt.date.today()
     extras, plans = _unified_extras(cfg, ucfg, u, dcfg, params, today)
     from qbreak import eligibility as EL
     gate = EL.gate_for(today, unis["JP"], sorted(core_all))   # 下单前资格检查：被踢出 / 被指定 / 确认不了的票不开新个股仓
@@ -923,8 +924,46 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
         return e
     ctx = SimpleNamespace(data=data, ind=ind, plans=plans, extras=extras, params=params, dcfg=dcfg, ucfg=ucfg, u=u,
                           broker=broker, today=today, ex=ex, ccost=ccost, make=make, gate=gate, fj=fj_pl, fj_on=fj_on, xmode=xmode,
-                          bar_date=bar_date, icmode=icmode, ic_status=ic_status)
+                          bar_date=bar_date, icmode=icmode, ic_status=ic_status, delist=delist)
     return make(state), ctx
+
+
+def _held_codes(state, ucfg=None) -> dict:
+    """{代码: [账户, …]}：这次的账户状态 + 磁盘上的其他账本（模拟盘 / 执行器模拟账户 / 立花），退市时间表与资格检查标持仓用。"""
+    from qbreak.utils import read_json
+    out: dict[str, list[str]] = {}
+
+    def add(st, name):
+        for t in list((st or {}).get("pos") or {}) + [t for t, x in ((st or {}).get("core_units") or {}).items() if int(x or 0)]:
+            out.setdefault(str(t).split(".")[0], [])
+            if name not in out[str(t).split(".")[0]]:
+                out[str(t).split(".")[0]].append(name)
+    for name, fp in (("模拟盘", paths.state_dir() / "unified_state.json"), ("执行器（模拟账户）", paths.state_dir() / "live_unified_paper.json"),
+                     ("执行器（立花）", paths.state_dir() / "live_unified_tachibana.json")):
+        raw = read_json(fp, {}) or {}
+        add(raw.get("state") if "state" in raw else raw, name)
+    if state is not None:                                     # 这次传进来的状态通常就是上面某个账本；只补账本里没有的票
+        st = {"pos": {t: 1 for t in state.pos if str(t).split(".")[0] not in out},
+              "core_units": {t: x for t, x in state.core_units.items() if str(t).split(".")[0] not in out}}
+        add(st, "这次的账户")
+    return out
+
+
+def _delist_update(today, state, ucfg=None) -> dict:
+    """退市时间表（qbreak/delist_schedule.py，2026-09-30 用户要求「做一个实时股票退市时间表 check，到日期后就把对应股票池更新」）：
+    决策之前更新 var/delist_schedule.json（Mac：~/.qbreak/home/）；到了上場廃止日的票从股票池去掉。失败 → 上一次的表照常生效。"""
+    from qbreak import delist_schedule as DS
+    try:
+        core = list(getattr(ucfg, "core", []) or []) + ["1655.T"]
+        d = DS.update(today, held=_held_codes(state, ucfg), core=core)
+        for n_ in d.get("needs_user") or []:
+            print(f"★ {n_}")
+        if d.get("error"):
+            print(f"★ 退市时间表这次没更新：{d['error']}（上一次的表照常生效）")
+        return d
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("退市时间表失败（上一次的表照常生效）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 
 def _apply_live_mults(e, plans: dict, fj_pl: dict | None, bar_date: str | None) -> dict | None:
@@ -1260,6 +1299,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
                              "stop_px": round(p.stop_px, 2)} for t, p in state.pos.items()},
            "core_units": state.core_units, "extras": extras, "config": ucfg.to_dict(), "broker": broker,
            "threat": threat, "executor": executor, "score_forward": score_fwd, "eligibility": elig,
+           "delist": getattr(ctx, "delist", None) or {},        # 股票池更新时间表：上場廃止 / 定期入替；到日自动去掉（只减）
            "themes": pre.get("themes") or _theme_panel(provider)}   # 主题 / 业种强弱、影响度、新出现的联动（只作展示）
     out["era"] = _era_forward_log(out["themes"], today)      # 时代主线的前向记录（每月一次；只记录，不影响交易）
     out["deepdip"] = _deepdip_forward_log(data, today)       # 「≤ −15% 深跌」前向记录（只记录 / 展示，不影响交易）
@@ -2477,6 +2517,33 @@ def cmd_eligibility(a) -> int:
     return 1 if pn["needs_user"] else 0
 
 
+def cmd_delist_schedule(a) -> int:
+    """退市时间表（qbreak/delist_schedule.py）：重取 JPX 上場廃止 / 監理・整理，列出上場廃止日、最終売買日（剩几个交易日）、定期入替，
+    到了上場廃止日的票从股票池去掉（写 var/delist_schedule.json；Mac 上是 ~/.qbreak/home/ 的那份）。补入不自动做、持仓不自动卖。
+    有要人工看的事 → 返回 1。"""
+    import datetime as _dt
+    from qbreak import delist_schedule as DS
+    from qbreak import eligibility as EL
+    from qbreak.config import universe
+    cfg = _sim_cfg() or {}
+    u = cfg.get("unified") or {}
+    core = _core_all(cfg) if cfg.get("mode") == "unified" else ["1655.T"]
+    today = _dt.date.today()
+    offline = bool(getattr(a, "offline", False))
+    if not offline:
+        EL.refresh(force=True)
+    before = universe("JP", (u.get("universe") or {}).get("JP", "broad"))
+    d = DS.update(today, held=_held_codes(None), core=core, snap=EL.load() if offline else None)   # --offline：只用现有快照重算
+    after = universe("JP", (u.get("universe") or {}).get("JP", "broad"))
+    print(f"退市时间表 {d.get('as_of') or today.isoformat()}（更新 {d.get('updated') or '—'}；JPX 上場廃止一览最后成功 "
+          f"{(d.get('source_ok_at') or {}).get('jpx_delisted') or '—'}）：")
+    for ln in DS.lines(d):
+        print(ln)
+    gone = sorted(set(before) - set(after))
+    print(f"交易股票池 {len(after)} 只" + (f"（这次去掉 {'、'.join(gone)}）" if gone else "（这次没有去掉的）") + f"；文件 {DS.path()}")
+    return 1 if d.get("needs_user") or d.get("error") else 0
+
+
 def cmd_sim_tier(a) -> int:
     """切换模拟盘的资金配置档位（safe / aggressive / max），只改 var/sim.json 的市场段。"""
     from qbreak.core import TIERS
@@ -2807,6 +2874,7 @@ def cmd_live_unified(a) -> int:
     held = list(eng.st.pos) + [t for t, u_ in eng.st.core_units.items() if int(u_)]
     sm["eligibility"] = ctx.gate.panel(held=ctx.gate.held_alerts(held, "执行器"),
                                        blocked_today=[{"date": d_, "ticker": t_, "why": w_} for d_, t_, w_ in eng.gate_log])
+    sm["delist"] = getattr(ctx, "delist", None) or {}          # 股票池更新时间表（上場廃止 / 定期入替；到日自动去掉）
     sm["market"] = {m: (e.get("regime") or {}).get("bullbear") for m, e in ctx.extras.items()}   # 牛熊：现在处于哪个阶段（页面 / 日志）
     sm["fwd_judgment"] = _fj_brief(ctx)                     # 前向记录判断层：云端算好的文件今天有没有生效（页面 / 日志）
     sm["exit_mode"] = ctx.xmode                              # 个股的离场方式（var/sim.json exits；与云端模拟盘同一个）
@@ -2828,7 +2896,7 @@ def cmd_live_unified(a) -> int:
               f" → {o['status']} {o.get('note') or ''}".rstrip())
     if sm["blocked"]:
         print(f"★ 没有下单：{sm['blocked']}")
-    for n_ in sm["eligibility"].get("needs_user") or []:
+    for n_ in (sm["eligibility"].get("needs_user") or []) + (sm["delist"].get("needs_user") or []):
         print(f"★ {n_}")
     bad = [e for e in sm["events"] if e["level"] == "error"]
     for e in bad[-5:]:
@@ -3180,6 +3248,9 @@ def main(argv=None) -> int:
 
     el = sub.add_parser("eligibility", help="下单前资格检查：日経225 名单对照 + JPX 特別注意・監理・整理・上場廃止（只读，需外网）")
     el.set_defaults(func=cmd_eligibility)
+    dl = sub.add_parser("delist-schedule", help="退市时间表：JPX 上場廃止日 / 最終売買日 + 定期入替；到日自动从股票池去掉（写 delist_schedule.json；需外网）")
+    dl.add_argument("--offline", action="store_true", help="不重取 JPX，只用现有快照重算")
+    dl.set_defaults(func=cmd_delist_schedule)
 
     pcx = sub.add_parser("price-check", help="行情交叉核对：yfinance × J-Quants（近 200 天；复权错位 / 最新收盘 / 缺交易日；只读、只报警）")
     pcx.set_defaults(func=cmd_price_check)
