@@ -325,3 +325,46 @@ def test_fixed_items_listed_separately_from_missing():
     html2 = RU._missing_html(["行情落后：^GSPC …"], fx)
     assert "缺 1 项" in html2 and "自动修复 3 项" in html2
     assert RU._missing_html([], []) == '<div class="muted">数据完整性：日报需要的数据都取到了</div>'
+
+
+def test_holdings_dashboard_is_on_top_with_meters_and_status():
+    """持仓相关的块放最上面、按重要度 ①〜⑦；每个参数带横条 + 状态徽章（图标 + 文字）；有持仓时每只票一条「卖出线 ← 现价 → 止盈」。"""
+    from qbreak import report_unified as RU
+    d = {"generated": "2026-09-30 07:00", "bar_date": "2026-09-29", "equity_jpy": 950_000.0, "capital_jpy": 1_000_000.0, "ret_pct": -5.0,
+         "max_dd_pct": -6.0, "cash_jpy": 100_000.0, "cash_usd": 0.0, "broker": "tachibana", "usdjpy": 150.0, "n_trades": 3, "win_rate": 66.7,
+         "history": [["2026-09-25", 1_000_000.0, 1_000_000.0, 0.0, 150.0], ["2026-09-26", 1_010_000.0, 100_000.0, 0.0, 150.0],
+                     ["2026-09-29", 950_000.0, 100_000.0, 0.0, 150.0]],
+         "positions": {"7203.T": {"market": "JP", "shares": 100, "entry_px": 3000.0, "stop_px": 2790.0, "entry_date": "2026-09-18"}},
+         "core_units": {"1655.T": 500}, "core_last": {"1655.T": 900.0}, "config": {"stock_markets": ["JP"], "core": {"1655.T": 1.0}, "max_positions": 4},
+         "todo": {"JP": [], "FX": [], "US": []}, "sim": {"start": "2026-09-28"},
+         "timeline": {"slots": {"max": 4, "held": 1, "selling": 0, "buying": 1, "free": 2},
+                      "holdings": [{"ticker": "7203.T", "close": 2850.0, "hold": 7, "first_down_pct": -2.1, "max_hold": {"sell_day": "2026-12-19"},
+                                    "levels": [{"rule": "止损（买价 −7%）", "side": "down", "op": "≤", "px": 2790.0},
+                                               {"rule": "止盈（+25%）", "side": "up", "op": "≥", "px": 3750.0}]}]},
+         "extras": {"JP": {"regime": {"quant_label": "neutral", "quant_mult": 0.75, "overlay_action": "避险", "overlay_mult": 0.0, "final_mult": 0.0,
+                                      "fwd_judgment": {"applied": True, "points": 2, "mult": 0.5},
+                                      "bullbear": {"state": "bull", "since": "2025-07-02", "level": 55924.8, "close": 65877.6, "distance_pct": 17.8,
+                                                   "flip_to": "bear", "phase_label": "牛市·稳固", "asof": "2026-09-28"}},
+                           "macro": {"fired": []}, "watchlist": []}},
+         "threat": {"JP": {"date": "2026-09-28", "value": 59.9, "prev20": 56.6, "top": [{"label": "油价冲击", "pct": 97}]},
+                    "US": {"date": "2026-09-29", "value": 84.0, "prev20": 41.0}},
+         "fwdj": {"enabled": True, "points": 2, "mult": 0.5, "as_of": "2026-09-29", "market": {"date": "2026-09-28", "items": {"A3": True, "A5": True}}}}
+    html = RU.render_unified_html(d)
+    i = [html.index(k) for k in ("① 账户", "② 个股持仓", "③ 今天要做的事", "④ 资产构成", "⑤ 市场状态", "⑥ 权益曲线", "⑦ 除息 / 拆股", "候补队列（状态")]
+    assert i == sorted(i)                                                                   # 持仓相关 ①〜⑦ 在最上面、按重要度
+    # ① 回撤 −5.94%（峰值 1,010,000）→ 注意档；徽章 = 图标 + 文字
+    assert "st st-warn\">▲ 注意" in html and "−5.94%" in html.replace("-", "−") and "个股名额 1 / 4 在用" in html
+    # ② 持仓：现价 2,850 距止损 −2.1% → 警戒；横条上有卖出线 / 成本 / 止盈三个刻度
+    assert "距止损 -2.1%" in html and "st st-serious\">■ 距止损" in html and "卖出线 ¥2,790" in html and "止盈 ¥3,750" in html and "成本 ¥3,000" in html
+    assert "7 / 60 天" in html and "还有 53 天" in html
+    # ④ 资产构成：个股 285,000 + 1655 450,000 + 现金 100,000 → 环形图 + 图例百分比
+    assert 'class="donut"' in html and "S&amp;P500（1655）" in html and "<b>¥450,000</b>" in html and "现金 <b>¥100,000</b>" in html
+    # ⑤ 市场：牛熊距翻转 +17.8% 安全；日経威胁 59.9 注意；美股 84.0 危险；新仓倍数 ×0 今天不开新仓；判断层 2 分 ×0.5
+    assert "距翻转 +17.8%" in html and "st-good\">✓ 安全" in html
+    assert "59.9 分" in html and "84.0 分" in html and "st st-crit\">✖ 危险" in html
+    assert "今天不开新仓" in html and "前向记录判断层 2 分 ×0.5" in html and "A3 日経前瞻观察 Wj" in html
+    # 没有持仓时：说明名额全空，不画横条
+    d["positions"] = {}
+    d["timeline"]["holdings"] = []
+    html2 = RU.render_unified_html(d)
+    assert "4 个名额全空" in html2 and "卖出线 ¥" not in html2

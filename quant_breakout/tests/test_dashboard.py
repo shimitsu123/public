@@ -65,7 +65,7 @@ def test_report_puts_dashboard_on_top_and_folds_threat_details(isolated_home):
          "macro_now": {"health": {"score": 75, "counts": {"good": 3, "warn": 1}, "tiles": []}, "releases": []},
          "news": {"summary": NW.summary(_events()), "generated": "g"}}
     html = RU.render_unified_html(d)
-    assert html.index("一眼看懂") < html.index("今天要做的事") and "健康度 75 / 100" in html
+    assert html.index("① 账户") < html.index("今天要做的事") < html.index("一眼看懂") and "健康度 75 / 100" in html   # 持仓相关先、市场一眼看懂在 ⑦ 之后（2026-09-30 用户要求）
     assert "<details><summary><h2 style=\"display:inline\">大事件威胁指数的明细" in html and "追加関税" not in html
 
 

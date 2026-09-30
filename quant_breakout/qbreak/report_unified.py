@@ -290,6 +290,14 @@ def _bo_tag(o: dict) -> str:
 
 
 def _timeline_card(d: dict) -> str:
+    """买卖时间线卡片；时间线数据缺键 / 坏了 → 只这一块显示原因，不让整份日报失败。"""
+    try:
+        return _timeline_card_inner(d)
+    except Exception as e:                                                # noqa: BLE001
+        return f"<section class='card' id='timeline'><h2>买卖时间线</h2><p class='muted'>这次没画出（{escape(f'{type(e).__name__}: {e}'[:160])}）</p></section>"
+
+
+def _timeline_card_inner(d: dict) -> str:
     """买卖时间线（qbreak/timeline.py；每天按前一天收盘重算，只展示）。旧数据没有这个字段 → 不显示。"""
     tl = d.get("timeline")
     if not tl:
@@ -626,6 +634,296 @@ def _shadow_html(d: dict) -> str:
             f'{escape(str(s.get("note") or ""))}</p></section>')
 
 
+# ───────────────────────── 持仓仪表盘（日报最上面；重要度从高到低；每个参数带「现在在哪、危不危险」）─────────────────────────
+# 状态色是固定的四档（好 / 注意 / 警戒 / 危险），一律配图标 + 文字，不单靠颜色；分类色（资产构成）用四个经校验的色槽。
+_ST_ICON = {"good": "✓", "warn": "▲", "serious": "■", "crit": "✖", "na": "·", "info": "○"}
+_ST_LAB = {"good": "安全", "warn": "注意", "serious": "警戒", "crit": "危险", "na": "未知", "info": ""}
+
+
+def _chip(st: str, text: str | None = None) -> str:
+    """状态徽章：图标 + 文字（颜色只是辅助）。"""
+    lab = _ST_LAB.get(st, "") if text is None else text
+    return f'<span class="st st-{st}">{_ST_ICON.get(st, "·")} {escape(lab)}</span>'
+
+
+def _grade(x, cuts: tuple, worse_high: bool = True) -> str:
+    """x 对三个门槛 (注意, 警戒, 危险) → good / warn / serious / crit；worse_high = 越大越危险。"""
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return "na"
+    if v != v:
+        return "na"
+    a, b, c = cuts
+    if worse_high:
+        return "crit" if v >= c else "serious" if v >= b else "warn" if v >= a else "good"
+    return "crit" if v <= c else "serious" if v <= b else "warn" if v <= a else "good"
+
+
+def _meter(frac, st: str, zones=(), ticks=(), w: int = 320, label: str = "") -> str:
+    """横条：淡色区带 = 各档的位置（门槛在哪一眼能看到）、实心条 = 现在到哪里（颜色 = 危险度）、▼ = 现在；ticks = [(位置 0〜1, 文字)]。"""
+    def X(f) -> float:
+        return round(max(0.0, min(1.0, float(f))) * w, 1)
+    rows_of: list[int] = []                                             # 刻度文字挨得太近（< 70px）→ 换到第二行
+    last_x = {0: -1e9, 1: -1e9}
+    for f, _ in ticks:
+        x = X(f)
+        r = 0 if x - last_x[0] >= 70 else 1
+        rows_of.append(r)
+        last_x[r] = x
+    h = 42 if 1 in rows_of else 30
+    parts = [f'<svg viewBox="0 0 {w} {h}" class="meter" role="img" aria-label="{escape(label)}">',
+             f'<rect x="0" y="9" width="{w}" height="6" rx="3" fill="var(--line)"/>']
+    for f0, f1, z in zones:
+        wd = max(0.0, X(f1) - X(f0))
+        if wd > 0:
+            parts.append(f'<rect x="{X(f0)}" y="9" width="{wd}" height="6" fill="var(--st-{z})" opacity="0.28"/>')
+    if frac is not None and frac == frac:
+        x = X(frac)
+        parts.append(f'<rect x="0" y="9" width="{x}" height="6" rx="3" fill="var(--st-{st})"/>')
+        parts.append(f'<polygon points="{x - 5},0 {x + 5},0 {x},7" fill="var(--fg)"/>')
+    for (f, txt), r in zip(ticks, rows_of):
+        x = X(f)
+        parts.append(f'<line x1="{x}" y1="8" x2="{x}" y2="{17 if r == 0 else 29}" stroke="var(--muted)" stroke-width="1"/>')
+        anchor = "start" if f < 0.12 else ("end" if f > 0.88 else "middle")
+        parts.append(f'<text x="{x}" y="{27 if r == 0 else 39}" font-size="9" fill="var(--muted)" text-anchor="{anchor}">{escape(txt)}</text>')
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def _mrow(name: str, sub: str, meter: str, value: str, chip: str, note: str = "") -> str:
+    """仪表盘的一行：名称 · 说明 / 数值 + 状态徽章 / 横条 / 备注（name / sub / value / note 已是 HTML）。"""
+    return (f'<div class="mrow"><div class="mlab"><b>{name}</b>{(" <span class=muted>" + sub + "</span>") if sub else ""}</div>'
+            f'<div class="mval">{value} {chip}</div><div class="mbar">{meter}</div>'
+            + (f'<div class="muted small">{note}</div>' if note else "") + "</div>")
+
+
+def _segments(cells: list[tuple[str, str]], w: int = 320, h: int = 14) -> str:
+    """分段条（名额、倍数档）：cells = [(fill 变量名, 文字)]，段与段之间留 2px 空隙。"""
+    n = max(1, len(cells))
+    gap = 2
+    cw = (w - gap * (n - 1)) / n
+    out = [f'<svg viewBox="0 0 {w} {h}" class="seg" role="img" aria-label="分段">']
+    for i, (fill, txt) in enumerate(cells):
+        x = round(i * (cw + gap), 1)
+        out.append(f'<rect x="{x}" y="2" width="{cw:.1f}" height="10" rx="2" fill="{fill}"/>')
+        if txt:
+            tf = "var(--muted)" if fill == "var(--line)" else "var(--card)"
+            out.append(f'<text x="{x + cw / 2:.1f}" y="10.5" font-size="8" fill="{tf}" text-anchor="middle">{escape(txt)}</text>')
+    out.append("</svg>")
+    return "".join(out)
+
+
+def _account_block(d: dict) -> str:
+    """① 账户：总权益 / 累计 / 离峰值的回撤（门槛 −5 / −12 / −20%）/ 现金 / 名额 / 已平仓。"""
+    hist = d.get("history") or []
+    eq = float(d.get("equity_jpy") or 0)
+    cap = float(d.get("capital_jpy") or 0)
+    ys = [float(x[1]) for x in hist] + ([eq] if eq else [])
+    peak = max(ys) if ys else cap
+    dd = (eq / peak - 1) * 100 if peak else None
+    st = _grade(dd, (-5.0, -12.0, -20.0), worse_high=False)
+    frac = None if dd is None else min(1.0, max(0.0, -dd / 30.0))
+    zones = [(0, 5 / 30, "good"), (5 / 30, 12 / 30, "warn"), (12 / 30, 20 / 30, "serious"), (20 / 30, 1, "crit")]
+    meter = _meter(frac, st, zones, ticks=[(0, "峰值"), (5 / 30, "−5%"), (12 / 30, "−12%"), (20 / 30, "−20%"), (1, "−30%")], label="离峰值的回撤")
+    ret = d.get("ret_pct")
+    ret_txt = "—" if ret is None else f"{float(ret):+.2f}%"
+    mdd = d.get("max_dd_pct")
+    dd_txt = "—" if dd is None else f"{dd:+.2f}%"
+    tl = d.get("timeline") or {}
+    sl = tl.get("slots") or {}
+    cfg = d.get("config") or {}
+    nmax = int(sl.get("max") or cfg.get("max_positions") or 4)
+    held = int(sl.get("held") if sl.get("held") is not None else len(d.get("positions") or {}))
+    selling, buying = int(sl.get("selling") or 0), int(sl.get("buying") or 0)
+    free = int(sl.get("free")) if sl.get("free") is not None else max(0, nmax - held - buying)
+    cells = ([("var(--s1)", "持")] * max(0, held - selling) + [("var(--st-warn)", "卖")] * selling
+             + [("var(--s2)", "买")] * buying + [("var(--line)", "空")] * free)[:nmax]
+    n_tr = int(d.get("n_trades") or 0)
+    win = _pct(d.get("win_rate")) if d.get("win_rate") is not None else "—（还没有平仓）"
+    fx = d.get("usdjpy") or 0
+    usd = (f'<div><span class="muted">美元现金</span><b>{_money(d.get("cash_usd"), "USD")}</b><span class="muted">USD/JPY {_fxr(fx)}</span></div>'
+           if _has_usd(d.get("broker")) else
+           f'<div><span class="muted">USD/JPY（只影响核心 ETF 的日元价值）</span><b>{_fxr(fx)}</b><span class="muted">{escape(str(d.get("usdjpy_src") or ""))}</span></div>')
+    return (f'<section class="card top"><h2>① 账户</h2>'
+            f'<div class="hero"><span class="muted">总权益（日元）</span><b class="big">{_money(eq)}</b>'
+            f'<span class="{"pos" if (ret or 0) >= 0 else "neg"} big2">{ret_txt}</span><span class="muted">起始 {_money(cap)}</span></div>'
+            + _mrow("离峰值的回撤", f"峰值 {_money(peak)}；模拟期最大回撤 {escape(str(mdd))}%", meter, dd_txt, _chip(st))
+            + f'<div class="kpi"><div><span class="muted">日元现金</span><b>{_money(d.get("cash_jpy"))}</b></div>{usd}'
+            f'<div><span class="muted">个股名额 {held} / {nmax} 在用</span>{_segments(cells)}<span class="muted">持 {held} · 明天卖 {selling} · 明天买 {buying} · 空 {free}</span></div>'
+            f'<div><span class="muted">已平仓</span><b>{n_tr} 笔</b><span class="muted">胜率 {win}</span></div></div></section>')
+
+
+def _positions_block(d: dict, closes: dict) -> str:
+    """② 个股持仓：每只票一条「卖出线 ← 现价 → 止盈」的横条（门槛 = 距最近的卖出线 6 / 3 / 1.5%）+ 持有天数。"""
+    from .earn_state import tag_html as _es_tag
+    pos = d.get("positions") or {}
+    tl = d.get("timeline") or {}
+    hs = {h.get("ticker"): h for h in (tl.get("holdings") or [])}
+    es_map = (d.get("earn_state") or {}).get("states") or {}
+    cfg = d.get("config") or {}
+    nmax = int((tl.get("slots") or {}).get("max") or cfg.get("max_positions") or 4)
+    if not pos:
+        return (f'<section class="card top"><h2>② 个股持仓</h2><p class="muted">无：{nmax} 个名额全空（明天开盘要不要买，看下面「今天要做的事」与候补队列）。</p></section>')
+    rows = []
+    for t, p in pos.items():
+        h = hs.get(t) or {}
+        ccy = "USD" if p.get("market") == "US" else "JPY"
+        entry, stop0 = float(p["entry_px"]), float(p["stop_px"])
+        close = closes.get(t)
+        lv = h.get("levels") or []
+        downs = [x for x in lv if x.get("side") == "down" and x.get("px") is not None]
+        ups = [x for x in lv if x.get("side") == "up" and x.get("px") is not None]
+        hard = max((float(x["px"]) for x in downs), default=stop0)
+        hard_rule = next((str(x.get("rule") or "").split("（")[0] for x in downs if float(x["px"]) == hard), "止损")
+        tp = max((float(x["px"]) for x in ups), default=entry * 1.25)
+        if close:
+            d_down, d_up, pnl = (hard / close - 1) * 100, (tp / close - 1) * 100, (close / entry - 1) * 100
+        else:
+            d_down = d_up = pnl = None
+        st = _grade(None if d_down is None else -d_down, (6.0, 3.0, 1.5), worse_high=False)
+        span = tp - hard
+
+        def F(x: float) -> float:
+            return (x - hard) / span if span > 0 else 0.0
+        frac = None if close is None else F(close)
+        zones = [(0, F(hard * 1.015), "crit"), (F(hard * 1.015), F(hard * 1.03), "serious"), (F(hard * 1.03), F(hard * 1.06), "warn"),
+                 (F(hard * 1.06), 1, "good")]
+        ticks = [(0, f"卖出线 {_money(hard, ccy)}"), (F(entry), f"成本 {_money(entry, ccy)}"), (1, f"止盈 {_money(tp, ccy)}")]
+        meter = _meter(frac, st, zones, ticks, label=f"{t} 现价在卖出线与止盈之间的位置")
+        val = (f"现价 {_money(close, ccy)}<span class='{'pos' if pnl >= 0 else 'neg'}'>（{pnl:+.1f}%）</span>"
+               f"<span class='muted'> 距止盈 {d_up:+.1f}%</span>" if close else "现价：今天没算出")
+        chip = _chip(st, f"距{hard_rule} {d_down:+.1f}%" if d_down is not None else "位置未知")
+        hold = int(h.get("hold") or p.get("hold") or 0)
+        hmax = int(h.get("max_hold_days") or 60)
+        mh = h.get("max_hold") or {}
+        left = max(0, hmax - hold)
+        hst = "warn" if left <= 10 else "info"
+        hmeter = _meter(hold / hmax if hmax else None, hst, [], [(0, "买入"), (1, f"满 {hmax} 天")], label=f"{t} 持有天数")
+        q = h.get("queued") or {}
+        qtxt = f"；<b>明天开盘卖</b>（{escape(str(q.get('reason') or ''))}）" if q else ""
+        head = (f"<b>{escape(t)}</b> <span class='muted'>{'美股' if ccy == 'USD' else '日本'} · {int(p['shares']):,} 股 · 买入 {escape(str(p.get('entry_date') or ''))}"
+                f" · 止损 {_money(stop0, ccy)}</span> {_es_tag(es_map.get(t)) if (ccy == 'JPY' and es_map.get(t)) else ''}{qtxt}")
+        rows.append(f'<div class="posrow"><div class="mlab">{head}</div><div class="mval">{val} {chip}</div><div class="mbar">{meter}</div>'
+                    + _mrow("持有", f"最迟 {escape(str(mh.get('sell_day') or '—'))} 开盘卖", hmeter, f"{hold} / {hmax} 天",
+                            _chip(hst, f"还有 {left} 天")) + "</div>")
+    return f'<section class="card top"><h2>② 个股持仓（{len(pos)} / {nmax} 个名额）</h2>{"".join(rows)}</section>'
+
+
+_SLOT_FILL = ("var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)")
+
+
+def _donut(slices: list[tuple[str, float, str]], size: int = 120) -> str:
+    """环形图：slices = [(名称, 金额, 色变量)]（金额 ≤ 0 的不画）；段之间留 2px 空隙；名称与数值在旁边的图例里。"""
+    tot = sum(v for _, v, _ in slices if v > 0)
+    if tot <= 0:
+        return ""
+    r, cx = 42.0, size / 2
+    circ = 2 * 3.141592653589793 * r
+    out = [f'<svg viewBox="0 0 {size} {size}" class="donut" role="img" aria-label="资产构成">']
+    off = 0.0
+    for name, v, fill in slices:
+        if v <= 0:
+            continue
+        seg = circ * v / tot
+        vis = max(0.0, seg - 2)
+        out.append(f'<circle cx="{cx}" cy="{cx}" r="{r}" fill="none" stroke="{fill}" stroke-width="16" stroke-dasharray="{vis:.2f} {circ - vis:.2f}" '
+                   f'stroke-dashoffset="{-off:.2f}" transform="rotate(-90 {cx} {cx})"/>')
+        off += seg
+    out.append("</svg>")
+    return "".join(out)
+
+
+def _allocation_block(d: dict, closes: dict, core_rows: str) -> str:
+    """④ 资产构成（环形图 + 图例）+ 核心 ETF 表。"""
+    fx = float(d.get("usdjpy") or 0) or 1.0
+    stock = 0.0
+    for t, p in (d.get("positions") or {}).items():
+        px = closes.get(t) or float(p["entry_px"])
+        stock += float(p["shares"]) * px * (fx if p.get("market") == "US" else 1.0)
+    names = _IC_NAMES()
+    core = []
+    for i, (t, u) in enumerate((d.get("core_units") or {}).items()):
+        v = int(u) * float((d.get("core_last") or {}).get(t) or 0)
+        core.append((names.get(t, t), v, _SLOT_FILL[1 + (i % 2)]))
+    cash = float(d.get("cash_jpy") or 0) + float(d.get("cash_usd") or 0) * fx
+    slices = [("个股", stock, _SLOT_FILL[0])] + core + [("现金", cash, _SLOT_FILL[3])]
+    tot = sum(v for _, v, _ in slices)
+    leg = "".join(f'<li><span class="sw" style="background:{fill}"></span>{escape(n)} <b>{_money(v)}</b> <span class="muted">{(v / tot * 100 if tot else 0):.0f}%</span></li>'
+                  for n, v, fill in slices if v > 0)
+    return (f'<section class="card top"><h2>④ 资产构成与核心 ETF（闲置资金）</h2><div class="alloc">{_donut(slices)}<ul class="legend">{leg}</ul></div>'
+            f'<div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core_rows}</table></div></section>')
+
+
+def _market_block(d: dict) -> str:
+    """⑤ 市场状态仪表：牛熊分界离翻转多远、明天新仓倍数、大事件威胁指数、前向记录判断层。"""
+    from .fwd_judgment import LABELS as _FJ
+    rows = []
+    for m, e in (d.get("extras") or {}).items():
+        r = e.get("regime") or {}
+        bb = r.get("bullbear") or {}
+        name = _MNAME.get(m, m)
+        dist = bb.get("distance_pct")
+        if bb.get("state") in ("bull", "bear") and dist is not None:
+            dist = float(dist)
+            st = _grade(dist, (10.0, 5.0, 2.0), worse_high=False)
+            zones = [(0, 2 / 25, "crit"), (2 / 25, 5 / 25, "serious"), (5 / 25, 10 / 25, "warn"), (10 / 25, 1, "good")]
+            ticks = [(0, "翻转价位"), (5 / 25, "5%"), (10 / 25, "10%"), (1, "25%")]
+            flip = bb.get("flip_to") or ("bear" if bb["state"] == "bull" else "bull")
+            sub = (f"{escape(str(bb.get('phase_label') or _BB.get(bb['state'], '')))}；{'转熊' if flip == 'bear' else '转牛'}价位 {_lvl(bb.get('level'), m)}"
+                   + (f"，现价 {_lvl(bb['close'], m)}" if bb.get("close") is not None else "")
+                   + (f"（{escape(str(bb.get('asof')))}）" if bb.get("asof") else ""))
+            rows.append(_mrow(f"{escape(name)} 牛熊分界", sub, _meter(min(1.0, dist / 25), st, zones, ticks, label=f"{name} 距翻转"),
+                              f"距翻转 {dist:+.1f}%", _chip(st)))
+        if e.get("core_only"):
+            continue
+        fm = r.get("final_mult")
+        if fm is not None:
+            fm = float(fm)
+            steps = [0.0, 0.5, 0.75, 1.0]
+            cells = [("var(--s1)" if fm >= v and v > 0 else "var(--line)", f"×{v:g}") for v in steps[1:]]
+            fj = r.get("fwd_judgment") or {}
+            why = [f"量化层 {escape(_QLAB.get(r.get('quant_label') or '', str(r.get('quant_label') or '')).split('（')[0])} ×{r.get('quant_mult', '—')}"]
+            if r.get("overlay_action"):
+                why.append(f"市场风险报告「{escape(str(r['overlay_action']))}」×{r.get('overlay_mult')}")
+            if fj.get("applied"):
+                why.append(f"前向记录判断层 {fj.get('points')} 分 ×{fj.get('mult')}")
+            fired = (e.get("macro") or {}).get("fired") or []
+            if fired:
+                why.append("宏观触发 " + "、".join(escape(str(x)) for x in fired))
+            st = "serious" if fm <= 0 else ("warn" if fm < 1 else "good")
+            lab = "今天不开新仓" if fm <= 0 else (f"减到 ×{fm:g}" if fm < 1 else "正常 ×1")
+            rows.append(_mrow(f"{escape(name)} 明天新仓倍数", "各层取最小", _segments(cells), f"×{fm:g}", _chip(st, lab), "；".join(why)))
+    th = d.get("threat") or {}
+    for mk, nm in (("JP", "日経"), ("US", "美股")):
+        t = th.get(mk) or {}
+        v = t.get("value")
+        if v is None:
+            continue
+        v = float(v)
+        st = _grade(v, (50.0, 65.0, 80.0))
+        zones = [(0, 0.5, "good"), (0.5, 0.65, "warn"), (0.65, 0.8, "serious"), (0.8, 1, "crit")]
+        ticks = [(0, "0"), (0.5, "50"), (0.65, "65"), (0.8, "80 = 历史事件线"), (1, "100")]
+        p20 = t.get("prev20")
+        sub = f"{escape(str(t.get('date') or ''))}；20 个交易日前 {float(p20):.1f}" if p20 is not None else escape(str(t.get("date") or ""))
+        top = "、".join(escape(str(x.get("label"))) for x in (t.get("top") or [])[:3])
+        rows.append(_mrow(f"{nm} 大事件威胁指数", sub, _meter(v / 100, st, zones, ticks, label=f"{nm} 威胁指数"), f"{v:.1f} 分", _chip(st),
+                          (f"主因 {top}（只展示，不参与交易）" if top else "只展示，不参与交易")))
+    fj = d.get("fwdj") or {}
+    if fj.get("enabled"):
+        mk = fj.get("market") or {}
+        pts, mult = fj.get("points"), fj.get("mult")
+        items = mk.get("items") or {}
+        on = [f"{k} {escape(_FJ.get(k, k))}" for k, v in items.items() if v]
+        st = "good" if (mult or 1) >= 1 else ("warn" if (mult or 1) >= 0.75 else "serious")
+        cells = [("var(--s1)" if (pts or 0) >= i else "var(--line)", str(i)) for i in range(1, 5)]
+        rows.append(_mrow("前向记录判断层（市场层）", f"按 {escape(str(mk.get('date') or fj.get('as_of') or ''))} 收盘；0〜1 分 ×1 / ×0.75，≥ 2 分 ×0.5",
+                          _segments(cells), f"{pts} 分", _chip(st, f"×{mult}"), ("触发：" + "；".join(on)) if on else "没有触发项"))
+    if not rows:
+        return ""
+    return f'<section class="card top"><h2>⑤ 市场状态（离危险多远）</h2>{"".join(rows)}</section>'
+
+
 def render_unified_html(d: dict) -> str:
     today = now_jst().date()
     usopen = _us_open_jst(today)
@@ -746,8 +1044,12 @@ def render_unified_html(d: dict) -> str:
     from .dashboard import render as _dash
     nw = d.get("news") or {}
     dash = _dash(d, d.get("macro_now") or {}, {"summary": nw.get("summary") or {}, "generated": nw.get("generated"), "error": nw.get("error")})
+    closes = {h.get("ticker"): float(h["close"]) for h in ((d.get("timeline") or {}).get("holdings") or []) if h.get("close")}
     return _PAGE.format(
         generated=escape(d["generated"]), bar=escape(_bar_txt(d)), dash=dash,
+        account=_account_block(d), positions_block=_positions_block(d, closes),
+        allocation=_allocation_block(d, closes, "".join(core_rows) or "<tr><td colspan=4 class='muted'>无</td></tr>"),
+        market=_market_block(d),
         missing=_missing_html(d.get("missing") or [], d.get("fixed") or []) + _executor_html(d),
         first="" if d.get("history") else (
             f'<div class="muted"><b>开始前的预览</b>：模拟期 {escape(str((d.get("sim") or {}).get("start")))} 开始，现在还没有交易；'
@@ -1158,26 +1460,35 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 .n{{text-align:right;font-variant-numeric:tabular-nums}} .warn{{border-color:var(--neg)}} .pos{{color:var(--pos)}} .neg{{color:var(--neg)}} .spark{{width:100%;height:120px}}
 .scroll{{overflow-x:auto}} dt{{font-weight:600;margin-top:6px}} dd{{margin:0 0 4px}}
 .tag{{display:inline-block;border:1px solid var(--accent);color:var(--accent);border-radius:4px;padding:0 4px;font-size:12px;white-space:nowrap}} .tag.dim{{border-color:var(--line);color:var(--muted)}}
+:root{{--st-good:#0ca30c;--st-warn:#fab219;--st-serious:#ec835a;--st-crit:#d03b3b;--st-na:#8f8f89;--st-info:#2f6f8f;--s1:#2a78d6;--s2:#1baf7a;--s3:#4a3aa7;--s4:#eda100}}
+@media (prefers-color-scheme: dark){{:root:not([data-theme="light"]){{--st-info:#6fb3d2;--s1:#3987e5;--s2:#199e70;--s3:#9085e9;--s4:#c98500}}}}
+:root[data-theme="dark"]{{--st-info:#6fb3d2;--s1:#3987e5;--s2:#199e70;--s3:#9085e9;--s4:#c98500}}
+.card.top{{border-left:3px solid var(--accent)}} .hero{{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;margin:2px 0 8px}} .hero .big{{font-size:34px;font-weight:600;line-height:1.1}} .hero .big2{{font-size:20px;font-weight:600}}
+.mrow,.posrow{{display:grid;grid-template-columns:1fr;gap:2px;padding:8px 0;border-top:1px solid var(--line)}} .mrow:first-of-type,.posrow:first-of-type{{border-top:0}}
+.posrow .mrow{{border-top:0;padding:4px 0 0}} .mlab{{font-size:14px}} .mval{{font-size:15px}} .mval b{{font-size:17px}}
+.meter{{width:100%;height:auto;display:block;max-width:520px}} .seg{{width:100%;height:auto;display:block;max-width:360px}}
+.st{{display:inline-block;border-radius:999px;padding:1px 8px;font-size:12px;font-weight:600;color:#fff;white-space:nowrap;vertical-align:middle}}
+.st-good{{background:var(--st-good)}} .st-warn{{background:var(--st-warn);color:#1d1d1b}} .st-serious{{background:var(--st-serious);color:#1d1d1b}} .st-crit{{background:var(--st-crit)}} .st-na{{background:var(--st-na)}} .st-info{{background:var(--st-info)}}
+.alloc{{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:4px 0 8px}} .donut{{width:120px;height:120px;flex:none}} .legend{{list-style:none;padding:0;margin:0}} .legend li{{margin:2px 0}}
+.sw{{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}}
+@media (min-width:640px){{.mrow{{grid-template-columns:1fr 1fr;grid-template-areas:"lab val" "bar bar" "note note"}} .mrow .mlab{{grid-area:lab}} .mrow .mval{{grid-area:val;text-align:right}} .mrow .mbar{{grid-area:bar}} .mrow .small{{grid-area:note}}}}
 </style></head><body><main>
 <h1>模拟盘日报 · 一个账户（{acct}）</h1>
-<div class="muted">生成 {generated}；数据截至 {bar}</div>{first}{missing}
-<section class="card"><div class="kpi">
-<div><span class="muted">总权益（日元）</span><b>{equity}</b><span class="muted">起始 {cap}</span></div>
-<div><span class="muted">累计</span><b>{ret}%</b><span class="muted">最大回撤 {mdd}%</span></div>
-<div><span class="muted">日元现金</span><b>{cash_jpy}</b></div>
-{usd_tile}
-<div><span class="muted">已平仓</span><b>{n_trades} 笔</b><span class="muted">胜率 {win}</span></div>
-</div></section>
+<div class="muted">生成 {generated}；数据截至 {bar}；上面 ①〜⑦ 是持仓相关、按重要度排（每条横条：▼ = 现在，淡色区带 = 门槛，徽章 = 危不危险）</div>{first}{missing}
+{account}
+{positions_block}
+<section class="card top"><h2>③ 今天要做的事（日本时间）</h2>{todo}</section>
+{allocation}
+{market}
+<section class="card top"><h2>⑥ 权益曲线（日元）</h2>{spark}</section>
+<section class="card top"><h2>⑦ 除息 / 拆股（已补到持仓与现金）</h2><ul>{corp}</ul></section>
 {dash}
-<section class="card"><h2>今天要做的事（日本时间）</h2>{todo}</section>
 {elig}
 {pcheck}
 {calendar}
-<section class="card"><h2>权益曲线（日元）</h2>{spark}</section>
-<section class="card"><h2>个股持仓</h2><div class="scroll"><table><tr><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">成本</th><th class="n">止损</th><th>买入日</th><th>最近一次决算的形态</th></tr>{positions}</table></div></section>
-<section class="card"><h2>除息 / 拆股（已补到持仓与现金）</h2><ul>{corp}</ul></section>
-<section class="card"><h2>核心 ETF（闲置资金）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
-<section class="card"><h2>市场状态</h2><dl>{markets}</dl></section>
+<section class="card"><h2>市场状态（文字明细）</h2><dl>{markets}</dl></section>
+<section class="card"><h2>个股持仓（表）</h2><div class="scroll"><table><tr><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">成本</th><th class="n">止损</th><th>买入日</th><th>最近一次决算的形态</th></tr>{positions}</table></div></section>
+<section class="card"><h2>核心 ETF（闲置资金，表）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
 {fwdj}
 {deepdip}
 <section class="card"><details><summary><h2 style="display:inline">大事件威胁指数的明细（只展示，不参与交易）</h2></summary>{threat}</details></section>
