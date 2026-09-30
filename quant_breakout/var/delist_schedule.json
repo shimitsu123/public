@@ -492,6 +492,20 @@
    "last_trade": "2027-02-26",
    "days_left": 99,
    "removed": false
+  },
+  {
+   "kind": "上場廃止",
+   "code": "2388",
+   "date": "2027-04-01",
+   "status": "待生效",
+   "in_pool": false,
+   "held": [],
+   "core": false,
+   "src": "JPX 上場廃止銘柄一覧",
+   "why": "上場維持基準不適合",
+   "last_trade": "2027-03-31",
+   "days_left": 121,
+   "removed": false
   }
  ],
  "ours": [
@@ -570,13 +584,13 @@
  ],
  "applied": [],
  "needs_user": [],
- "n_other": 30,
+ "n_other": 31,
  "stale": false,
  "source_ok_at": {
-  "jpx_delisted": "2026-09-30T07:04+09:00",
-  "jpx_supervision": "2026-09-30T07:04+09:00",
-  "jpx_supervision_etf": "2026-09-30T07:04+09:00"
+  "jpx_delisted": "2026-10-01T07:05+09:00",
+  "jpx_supervision": "2026-10-01T07:05+09:00",
+  "jpx_supervision_etf": "2026-10-01T07:05+09:00"
  },
- "text": "股票池更新时间表：股票池里 0 只有上場廃止预定；定期入替 2026-10-01 生效（+5016/6525/9697 −4902/543A/7004）；JPX 一览另有 30 只不在股票池",
- "updated": "2026-10-01T00:28+09:00"
+ "text": "股票池更新时间表：股票池里 0 只有上場廃止预定；定期入替 2026-10-01 生效（+5016/6525/9697 −4902/543A/7004）；JPX 一览另有 31 只不在股票池",
+ "updated": "2026-10-01T07:05+09:00"
 }

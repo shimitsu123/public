@@ -1,62 +1,40 @@
 {
  "broker": "PaperBroker",
- "decided_on": "2026-09-29",
- "fill_day": "2026-09-30",
- "equity_jpy": 993585,
- "cash_jpy": 9355,
+ "decided_on": "2026-09-30",
+ "fill_day": "2026-10-01",
+ "equity_jpy": 987003,
+ "cash_jpy": 192,
  "positions": {},
  "core_units": {
-  "1655.T": 1130
+  "1545.T": 4110
  },
  "pending_exit": {},
- "reconciled": [],
- "orders": [
+ "reconciled": [
   {
-   "cid": "U2026-09-29-SELL-1655.T",
-   "ticker": "1655.T",
+   "bar": "2026-09-30",
    "side": "SELL",
-   "kind": "core",
+   "ticker": "1655.T",
    "qty": 1130,
-   "decided_on": "2026-09-29",
-   "limit": null,
-   "ref_px": 871.0,
-   "reason": "核心 ETF 调整",
-   "phase": "morning",
-   "status": "SENT",
-   "sent_qty": 1130,
-   "broker_id": "",
-   "order_date": "",
-   "filled_qty": 0,
-   "filled_px": 0.0,
-   "note": "已排队，次日开盘成交"
+   "px": 872.2255,
+   "kind": "core"
   },
   {
-   "cid": "U2026-09-29-BUY-1545.T",
-   "ticker": "1545.T",
+   "bar": "2026-09-30",
    "side": "BUY",
-   "kind": "core",
-   "qty": 4140,
-   "decided_on": "2026-09-29",
-   "limit": 244.0,
-   "ref_px": 239.89999389648438,
-   "reason": "核心 ETF 调整",
-   "phase": "open",
-   "status": "DEFERRED",
-   "sent_qty": 0,
-   "broker_id": "",
-   "order_date": "",
-   "filled_qty": 0,
-   "filled_px": 0.0,
-   "note": "开盘前余力 9,355 円 < 按限价预留 1,010,567 円 → 开盘后按始値检查、减股再下"
+   "ticker": "1545.T",
+   "qty": 4110,
+   "px": 241.8725,
+   "kind": "core"
   }
  ],
+ "orders": [],
  "blocked": null,
  "stats": {
-  "fills": 0,
+  "fills": 2,
   "unfilled_sell": 0,
   "unfilled_buy": 0,
   "model_diff": 0,
-  "deferred": 1,
+  "deferred": 0,
   "reduced": 0,
   "limit_lowered": 0,
   "skipped": 0,
@@ -74,14 +52,19 @@
    "at": "2026-09-30T07:07:22+09:00",
    "level": "info",
    "msg": "SELL 1655.T ×1130（寄付）→ SENT 已排队，次日开盘成交"
+  },
+  {
+   "at": "2026-10-01T07:09:03+09:00",
+   "level": "info",
+   "msg": "BUY 1545.T ×4140 限价 244（盘中）→ FILLED 现金不足，4140→4110 股"
   }
  ],
  "same_as_sim": true,
  "compare": {
-  "exec_date": "2026-09-29",
-  "sim_date": "2026-09-29",
+  "exec_date": "2026-09-30",
+  "sim_date": "2026-09-30",
   "comparable": true,
-  "same": true,
+  "same": "True",
   "equity_diff_jpy": 0.0,
   "text": "与云端模拟盘一致（个股、核心 ETF、现金、权益）"
  }
