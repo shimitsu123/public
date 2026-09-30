@@ -21,7 +21,7 @@
   F1 按当天候选数分：f = 1 / k（1 个 → 100%，2 个 → 50%，3 个 → 33%，≥ 4 个 → 25%）。
   F2 波动平价：f = clip(0.25 × 30% ÷ σ, 10%, 75%)（σ 越低买越多；σ 缺 → 25%）。
   F3 滚动半凯利：每月初用该年代过去 36 个月已平仓的笔（现行账户的笔，事后算，登记的简化）算 p = 胜率、b = 平均赚 ÷ 平均亏（净收益 %），
-     f = clip(½ × (p − (1 − p) ÷ b), 5%, 100%)；不满 30 笔 → 25%。
+     f = clip(½ × (p − (1 − p) ÷ b), 5%, 100%)；不满 20 笔 → 25%（现行一年只约 6〜9 笔，36 个月约 20〜27 笔）。
   F4 候选数 × 波动：f = clip((1 / k) × 30% ÷ σ, 10%, 100%)（σ 缺 → 1 / k）。
   F5 全仓一只：名额 1 个、f = 100%（分配的极端，作边界）。
   对照（只描述）：现行 4 × 25%；安慰剂 = 每个信号随机 f ∈ {25, 50, 75, 100}%（20 个种子）；
@@ -69,7 +69,7 @@ F_NOW = 0.25                                                                  # 
 SIGMA_REF, SIG_N = 0.30, 20
 F2_LO, F2_HI = 0.10, 0.75
 F4_LO, F4_HI = 0.10, 1.00
-KELLY_WIN, KELLY_MIN, KELLY_LO, KELLY_HI, KELLY_DEFAULT = 36, 30, 0.05, 1.0, 0.25
+KELLY_WIN, KELLY_MIN, KELLY_LO, KELLY_HI, KELLY_DEFAULT = 36, 20, 0.05, 1.0, 0.25          # 现行一年约 6〜9 笔 → 36 个月约 20〜27 笔，门槛 20 笔（与 OAT 的每档 20 笔一致）
 PLACEBO_CHOICES, PLACEBO_SEEDS = (0.25, 0.5, 0.75, 1.0), 20
 ORACLE_WIN, ORACLE_LOSE, ORACLE_NA = 1.0, 0.10, 0.25
 MIN_TRADES, CAL_UP, DD_TOL, Z_TOL = 30, 0.02, 2.0, 0.02
@@ -150,7 +150,7 @@ def kelly_f(nets) -> tuple[float, float, float]:
 
 
 def kelly_by_month(tr: pd.DataFrame, a: str, b: str) -> dict[int, dict]:
-    """每个月 m（a〜b）：只用 exit_date 落在 [m − 36 个月, m) 的已平仓笔；不满 30 笔 → 25%。返回 {m: {f, p, b, n}}。"""
+    """每个月 m（a〜b）：只用 exit_date 落在 [m − 36 个月, m) 的已平仓笔；不满 KELLY_MIN 笔 → 25%。返回 {m: {f, p, b, n}}。"""
     out = {}
     if len(tr):
         ex = pd.to_datetime(tr["exit_date"]).to_numpy()
