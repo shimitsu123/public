@@ -122,7 +122,7 @@ def test_brief_summary_and_displays():
     import run
     from qbreak.live_unified import daily_text, fj_text
     from qbreak.report_unified import _fwdj_html, missing_items
-    pl = FJ.payload("2026-09-29", {**CALM, "wj_pct": 93.0}, True, {"A.T": {"F2": -0.9, "F2_thr": -0.444, "industry": "電気機器"}},
+    pl = FJ.payload("2026-09-29", {**CALM, "wj_pct": 93.0, "w_pct": 90.0}, True, {"A.T": {"F2": -0.9, "F2_thr": -0.444, "industry": "電気機器"}},   # Wj + W = 2 分（K4 不计分）
                     {"B2 X2": "取不到"})
     assert run._fj_brief(SimpleNamespace(fj_on=False)) == {"enabled": False}
     miss = run._fj_brief(SimpleNamespace(fj_on=True, fj=None, bar_date="2026-09-29"))
