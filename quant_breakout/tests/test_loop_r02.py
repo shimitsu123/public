@@ -28,6 +28,8 @@ def test_gate_factor_and_bear_at_use_same_day_value():
     f = B.gate_factor(bear, days)
     assert f.tolist() == [1.0, 0.0, 0.0, 1.0, 1.0]                                         # 当天（向后填）的熊 → 0
     assert B.bear_at(bear, days).tolist() == [False, True, True, False, False]
+    dup = pd.to_datetime(["2020-01-08", "2020-01-06", "2020-01-08", "2020-01-10"])          # 同一天几个信号（2026-10-01 运行时发现会报错）
+    assert B.bear_at(bear, dup).tolist() == [True, False, True, False]
     assert B.gate_factor(bear.iloc[0:0].astype(bool), days).tolist() == [1.0] * 5          # 没有值 = 不是熊
 
 

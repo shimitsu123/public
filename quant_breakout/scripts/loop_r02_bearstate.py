@@ -69,9 +69,11 @@ def gate_factor(bear: pd.Series, days) -> pd.Series:
 
 
 def bear_at(bear: pd.Series, dates) -> np.ndarray:
+    """每个日期（可以重复：同一天几个信号）那天（向后填）是不是熊。"""
     d = pd.DatetimeIndex(pd.to_datetime(dates))
-    b = bear.astype(float).reindex(d.union(bear.index)).ffill().reindex(d).fillna(0.0) > 0.5
-    return b.to_numpy(bool)
+    u = d.unique()
+    b = bear.astype(float).reindex(u.union(bear.index)).ffill().reindex(u).fillna(0.0) > 0.5
+    return b.reindex(d).to_numpy(bool)
 
 
 def shift_domain(s: pd.Series, a: str = SHIFT_FROM, b: str = LCM.J_END) -> pd.Series:
