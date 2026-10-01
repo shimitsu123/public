@@ -7961,5 +7961,22 @@
    "CB 比 C 稳（逐年前推后一半 +0.26 vs −0.10 pp），但两种检验都不超过随机"
   ],
   "notes": "C 照旧；可选（要用户同意）：CB 的跳不跳过加进前向记录作对照"
+ },
+ {
+  "line": 4174,
+  "date": "2026-10-01",
+  "title": "研究循环：直到找到比现在更好的模型才停（登记规则、基准 B0、上限 20 个做法、两关判定）",
+  "kind": "engineering",
+  "domain": "数据/工程",
+  "registration": "本提交（规则 scripts/research_loop.py、基准 scripts/loop_common.py、状态 var/research_loop.json）",
+  "script": "scripts/research_loop.py",
+  "output": "var/out/research_loop_baseline.md",
+  "candidates": [],
+  "baseline": "B0 = W2 + C（留一年代）+ X6 + 闲置资金 Q1 纳指 1545 + 美股牛熊分界 + 判断层市场层：Calmar Z 0.949 / E 0.566 / J 0.660（最大回撤 −14.80 / −23.09 / −29.00%）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "第一关 S1 合计 ≥ +0.03、S2 每个年代 ≥ −0.02、S3 回撤不深 2 pp、S4 前后两半合计 ≥ 0、S5 W / Jx 不变差（改个股交易时）、S6 两种检验（学参数时）；第二关严格大于 400 次随机改动的最大值；20 个做法用完或找到即停"
  }
 ]

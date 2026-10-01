@@ -365,6 +365,7 @@
   CB 袋装 C（50 种切法的规则投票）、CS 稳定选择 C（入选占比 ≥ 0.6 的特征）**都不通过**（要留一年代与逐年前推两种检验都过）；CB 三个年代、两种检验、前后两半都是正的
   （逐年前推后一半 +0.26 pp，C 是 −0.10 pp），但两种检验都差在「超过随机」（账户 +0.061 vs 随机 +0.076、逐年 +0.46 pp vs 随机 +0.68 pp）→ C 照旧；
   稳定性表：全部数据里最稳的是 r12− / vexp+ / us12− / b_n225− / atrp−，只用 2001〜2016 学时没有一个特征稳。可选（要用户同意）：CB 的跳不跳过加进前向记录作对照。
+- **研究循环「直到找到比现在更好的模型才停」**（2026-10-01 用户：「开始研究循环，直到找到比现在更好的模型才停」；规则 `scripts/research_loop.py` 开头、基准 `scripts/loop_common.py`、状态 `var/research_loop.json`、登记 sim_changes 第 4174 行）：基准 B0 = 今天模拟盘能在历史上重现的部分（W2 + C 留一年代 + X6 + 闲置资金 Q1 纳指 1545 + 美股牛熊分界 + 判断层市场层；Calmar Z 0.949 / E 0.566 / J 0.660）；第一关 = 三个年代 Calmar 合计 +0.03 以上、每个年代不低 0.02 以上、回撤不深 2 pp、前后两半不变差（改个股交易时 W / Jx 不变差、学参数时两种检验都过）；第二关 = 另行登记后严格超过 400 次「同样多、同样形状的随机改动」的最大值；上限 20 个做法；找到 / 用完 / 模拟盘规则变了 / 推不上去 / 要用户决定 → 停。**不改模拟盘与执行器，候选只提议**（用户说「加进前向记录」或「采用」才做）。进度：`python scripts/research_loop.py --status`；每一轮的结果见下面各轮与 sim_changes。
 - 现在的选股方法放在楽天的美股还是立花的日経225（2026-09-29 用户问；登记 1ba090e、`scripts/market_compare_study.py` → `var/out/market_compare_study.md`）：
   同一套个股规则（W2 + X6、4 × 25%）、同一个推进器 → 按事先读法 **日経（立花）更好**（两个窗口的每笔净收益与个股层 Calmar 都是日経高）：
   每笔 2006〜2016 +2.74% vs +0.30%、2017〜 +0.55% vs −0.86%；楽天来回约 1% 的手续费每年约 4〜6 万円（立花 0.1〜0.3 万円），
@@ -523,6 +524,7 @@
 - 选股第二轮（C 逐年前推 N3 / W2 挡掉的 C 分高也买 N1 / 不要 W2 改用 C N2；登记 92e2ef2）：`scripts/combo2_study.py`、`scripts/combo2_common.py` → `var/out/combo2_study.md` / `.json`；
   `tests/test_combo2_study.py`（W2 挡掉的突破的样本缓存 `var/cache/combo2_nonw2.pkl`，不入库）
 - 选股第三轮（让 C 更稳：袋装 CB / 稳定选择 CS，两种检验；登记 91c9490）：`scripts/combo3_study.py`、`scripts/combo3_common.py` → `var/out/combo3_study.md` / `.json`；`tests/test_combo3_study.py`
+- 研究循环（2026-10-01 起，直到找到比现在更好的模型）：规则与状态 `scripts/research_loop.py`（`--status` / `--baseline` / `--fingerprint`）→ `var/research_loop.json`、`var/out/research_loop_baseline.md` / `.json`；基准 B0 与账户接口 `scripts/loop_common.py`；`tests/test_research_loop.py`；每一轮一个 `scripts/loop_rNN_*.py` → `var/out/loop_rNN_*.md` / `.json`
 - 行情缓存：`qbreak/data.py`（有效期 12 小时 + 按交易日历查新鲜度；盘中取的缓存在收盘后视为过期、重新下载 —— 2026-09-29 修正，以前收盘后 12 小时内会把盘中快照当成收盘价；重下载失败去掉那一根并记为「行情落后」）；**价格调整口径 v2（2026-09-30）**：不用 yfinance 的 auto_adjust，改为 `qbreak.data.adjust_prices` 按 Yahoo 的分红 / 拆股记录自己调整（同一口径，实测与 Yahoo 的 Adj Close 差 < 1e-6），**拆股当天的分红按拆股后口径**（Yahoo 把日本株分割与配当同一基準日的分红记成分割前每股金额 → 8766.T 2026-09-29 被当成 22.8% 的分红、之前价格整体调低、当天「涨」25.8%；横向扫描 1,076 只近 2 年 20 例，含 8035.T / 5401.T 2025-09-29），公司行为随缓存的 meta 保存（`actions_of` / `fixes_of`）、缓存 meta 带 `adj` 版本号（口径不同就重新下载）；**指数日线缺收盘 → 用当天 5 分钟线合成**（`fill_index_from_intraday`，只补 `^` 开头、已收盘的日子；Yahoo 的 ^N225 2026-09-29 只给开盘、收盘 NaN），记进 `FILLED`，日报「数据完整性 · 自动修复」列出；威胁指数的指数序列同样处理（`qbreak/threat.py`）
 - 下单前资格检查：`qbreak/eligibility.py`（快照 `var/out/eligibility.json`；只读检查 `run.py eligibility`）；退市时间表：`qbreak/delist_schedule.py`
   （`var/delist_schedule.json`；`run.py delist-schedule`；`tests/test_delist_schedule.py`）；成本 × 销售显示与 S2 前向记录：`qbreak/cost_sales_forward.py`
@@ -577,6 +579,7 @@
 | 状态不明的单 | 「U2026-10-01-BUY-7203.T 在立花网页上是成交 100 股 3,001 円」 | `run.py live-u --broker tachibana --resolve … --filled 100 --px 3001` | 你先在立花的注文一覧看过；没成交就说「没成交」 |
 | 人工买卖 | —— | 目前没有这个功能：执行器管的股票（股票池 + 1655）人工买卖会让第二天的持仓核对停下 | 要人工平仓：先说「停」，再商量是否加「指定卖出 / 登记人工成交」功能 |
 | 研究 / 改规则 | 「用 J-Quants 数据研究 XX，先登记再跑」 | 在 `~/qbreak-dev` 里：登记（提交）→ 运行 → 结果写进 sim_changes → 推送 | 模拟盘 / 实盘规则只在你确认后改 |
+| 研究循环 | 「研究循环进度？」「停止研究循环」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/research_loop.py --status`（在 `~/qbreak-src/quant_breakout`，读 `var/research_loop.json`；只读）；停止 = 不再开新的一轮 | 循环只研究、只提议，不改模拟盘 / 执行器 |
 | 日报 / 季度复核 | 「上次季度复核说了什么？」「今天日报的主题强弱？」 | `git -C ~/qbreak-src pull --ff-only` 后读 `var/out/`（`*_review.md`、`unified_today.json`） | 只读 |
 
 立花的交易次数与能买的股票（2026-09-26 查官方页面，仅对该时点有效；出处见 sim_changes.md 同日一节）：
