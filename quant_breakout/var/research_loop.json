@@ -999,5 +999,12 @@
     }
    ]
   }
- ]
+ ],
+ "adopted": {
+  "date": "2026-10-02",
+  "candidate": "FJE（第 15 轮）",
+  "change": "闲置资金 Q1 → Q1H（日元走强时对冲版纳指 2845、其余 1545；var/sim.json idle_cash.mode、qbreak/fx_hedge.py），2026-10-01 收盘的决策起（10-02 06:57 / 07:40 起）",
+  "fingerprint_after": "e73f7f6c0149fe10",
+  "record": "var/sim_changes.md 2026-10-02「配置变更（用户决定：「采用」…FJE）」"
+ }
 }

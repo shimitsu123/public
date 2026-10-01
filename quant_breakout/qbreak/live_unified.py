@@ -718,6 +718,12 @@ def ic_text(ic: dict | None) -> str:
               f"{ic.get('months', 10)} 个月均线 ¥{float(ic['sma']):,.2f}）")
     elif ic.get("ret12"):
         t += "（12 个月：" + "、".join(f"{k} {float(v):+.1f}%" for k, v in ic["ret12"].items()) + "）"
+    fh = ic.get("fx_hedge")
+    if fh:                                                  # FJE 日元走强判定（Q1H；qbreak/fx_hedge.py）
+        src = str(fh.get("source") or "")
+        t += f"（日元走强判定：{fh.get('text') or '—'}" + ("" if src == "云端" else f"；★ {src}") + "）"
+        if fh.get("errors"):
+            t += "；★ " + "；".join(f"{k}：{v}" for k, v in fh["errors"].items())
     return t
 
 

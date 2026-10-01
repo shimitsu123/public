@@ -818,7 +818,7 @@ def _core_all(cfg: dict) -> list[str]:
     return sorted(set(_unified_cfg(cfg).core) | set(IC.MODES[IC.mode_of(cfg)]["core"]))
 
 
-def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hook=None, extra_core=(), cc_hook=None):
+def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hook=None, extra_core=(), cc_hook=None, fh_hook=None):
     """模拟盘（sim-day）与实盘执行器（live-u）共用：按 var/sim.json 建统一引擎 —— 行情到最新收盘（去掉未收盘的当日 K 线）、
     牛熊分界、汇率、明天成交的新仓倍数（宏观 / 板块 / 状态层）、决算前不进场。返回 (eng, ctx)；ctx.make(state) 用同一套
     输入再建一个引擎（例如执行器演练账户的状态）。"""
@@ -876,8 +876,13 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
     ic_last = IC.last_month_complete(gi[-1]) if len(gi) else False           # 最新 K 线是本月最后一个交易日 → 这个月末今天就判定
     ic_px = {t: ind[t]["Close"] for t in IC.MODES[icmode]["core"] if t in ind}
     bear.update(IC.extra_bear(icmode, ic_px, bear.get("US"), gi, ic_last))    # 闲置资金 ETF 自己的开关（TR: / RT: / XR）
+    fh_pl = fh_info = None
+    if icmode in IC.FX_HEDGE and len(gi):                  # FJE（qbreak/fx_hedge.py；2026-10-02 用户「采用」）：两个键 FH:UH / FH:HG
+        fh_pl, fh_info = _fh_keys(bear, det, str(gi[-1].date()), provider, fh_hook)
     ic_status = {**IC.status(icmode, bear, gi[-1]), **IC.detail(icmode, ic_px, gi[-1], ic_last),
                  "since": (cfg.get("idle_cash") or {}).get("since")} if len(gi) else {"mode": icmode}
+    if fh_info is not None:
+        ic_status["fx_hedge"] = fh_info
     ex = exec_configs(ucfg.stock_markets, u)
     ccost = {t: etf_cost(broker, t, market_of(t)) for t in core_all}
     extras, plans = _unified_extras(cfg, ucfg, u, dcfg, params, today)
@@ -935,7 +940,7 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
         return e
     ctx = SimpleNamespace(data=data, ind=ind, plans=plans, extras=extras, params=params, dcfg=dcfg, ucfg=ucfg, u=u,
                           broker=broker, today=today, ex=ex, ccost=ccost, make=make, gate=gate, fj=fj_pl, fj_on=fj_on, xmode=xmode,
-                          bar_date=bar_date, icmode=icmode, ic_status=ic_status, delist=delist, cc=cc_pl, cc_on=cc_on)
+                          bar_date=bar_date, icmode=icmode, ic_status=ic_status, delist=delist, cc=cc_pl, cc_on=cc_on, fh=fh_pl)
     return make(state), ctx
 
 
@@ -1190,6 +1195,72 @@ def _cc_market(provider: str):
     return (n["Close"] if n is not None and len(n) else None), (v["Close"] if v is not None and len(v) else None)
 
 
+def _fh_compute(bear: dict, det, bar_date: str, provider: str, write: bool = True, fx_close=None) -> dict:
+    """FJE 的「对冲中」（qbreak/fx_hedge.py）：USD/JPY（Yahoo JPY=X，10 年）+ 日経225 的熊 → var/fx_hedge.json（write = True：云端 sim-day）。
+    执行器没有云端的文件时也用这个（write = False，本机现算）。fx_close：测试用。算不了 → on = None（调用的地方按「不对冲」）。"""
+    import pandas as pd
+    from qbreak import fx_hedge as FH
+    from qbreak.utils import write_json
+    errors: dict = {}
+    pl = None
+    try:
+        if fx_close is None:
+            from qbreak.data import load_universe
+            fxd = load_universe(["JPY=X"], DataConfig(provider=provider, years=10, allow_synthetic=False, min_bars=300).validate())
+            fx_close = fxd["JPY=X"]["Close"] if "JPY=X" in fxd else None
+        if fx_close is None or not len(fx_close.dropna()):
+            raise RuntimeError("USD/JPY（JPY=X）取不到")
+        jp = bear.get("JP")
+        if jp is None or not len(jp):
+            raise RuntimeError("日経225 的牛熊取不到")
+        d = pd.Timestamp(bar_date)
+        fxc = fx_close.dropna()
+        fxc = fxc[fxc.index <= d]                         # 只用到最新 K 线那天（美国 d 日）为止
+        comp = FH.components(fxc, jp[jp.index <= d], det)
+        pl = FH.payload(bar_date, comp, fxc, n225_date=str(jp.index[jp.index <= d][-1].date()) if (jp.index <= d).any() else None)
+        lag = (d - pd.Timestamp(pl["usdjpy_date"])).days if pl.get("usdjpy_date") else None
+        if lag is None or lag > 5:
+            errors["汇率"] = f"USD/JPY 只到 {pl.get('usdjpy_date') or '—'}（最新 K 线 {bar_date}）"
+            pl["errors"] = {**pl.get("errors", {}), **errors}
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("FJE 日元走强判定算不了（这一天按不对冲）：%s", e)
+        errors["计算"] = f"{type(e).__name__}: {e}"[:200]
+        pl = {"version": 1, "as_of": bar_date, "on": None, "series": {}, "errors": errors}
+    if write:
+        try:
+            write_json(paths.home() / FH.FILE, pl)
+        except Exception as e:                               # noqa: BLE001
+            log.warning("FJE 的文件写不了：%s", e)
+    return pl
+
+
+def _fh_keys(bear: dict, det, bar_date: str, provider: str, fh_hook=None) -> tuple[dict, dict]:
+    """FJE 的两个键放进 bear（引擎 follow 模式：FH:UH = 美股熊 或 对冲中，FH:HG = 美股熊 或 不在对冲中）。
+    云端（fh_hook）：决策之前现算 → var/fx_hedge.json；Mac 执行器：读 scripts/liveu.sh 同步过来的同一个文件，
+    没覆盖最新 K 线 → 本机现算（日志 / 页面写明）。算不了 → 不对冲（= Q1：1545 + 美股牛熊分界）。返回 (文件内容, 日报 / 页面的摘要)。"""
+    import pandas as pd
+    from qbreak import fx_hedge as FH
+    source = "云端"
+    if fh_hook is not None:
+        pl = fh_hook(bear, det, bar_date)
+    else:
+        pl = FH.load(paths.home() / FH.FILE)
+        if not FH.covers(pl, bar_date):
+            log.warning("%s 没覆盖最新 K 线 %s（文件 %s）→ 本机现算", FH.FILE, bar_date, (pl or {}).get("as_of"))
+            pl, source = _fh_compute(bear, det, bar_date, provider, write=False), "本机现算（云端文件没同步到这一天）"
+    st = FH.state_from_payload(pl)
+    if st is None or (pl or {}).get("on") is None:
+        st = pd.Series([False], index=[pd.Timestamp(bar_date)])
+        source += "；算不了 → 按不对冲"
+    bear.update(FH.keys(st, bear.get("US") if bear.get("US") is not None else pd.Series(dtype=bool)))
+    info = {"on": (pl or {}).get("on"), "since": (pl or {}).get("since"), "votes": (pl or {}).get("votes"),
+            "votes_of": (pl or {}).get("votes_of"), "jp_bear": (pl or {}).get("jp_bear"), "yen_bull": (pl or {}).get("yen_bull"),
+            "usdjpy": (pl or {}).get("usdjpy"), "usdjpy_date": (pl or {}).get("usdjpy_date"), "chg10_pct": (pl or {}).get("chg10_pct"),
+            "as_of": (pl or {}).get("as_of"), "source": source, "errors": dict((pl or {}).get("errors") or {}), "text": FH.text(pl)}
+    log.info("FJE 日元走强判定 %s（%s）：%s", bar_date, source, info["text"])
+    return pl, info
+
+
 def _cc_compute(ind: dict, bar_date: str, provider: str, market=None) -> dict:
     """关联搭配 C（qbreak/combo_c.py）：云端 sim-day 在引擎决策之前算 → var/combo_c.json（Mac 执行器读同一个文件）。
     候选 = 最新 K 线上成立的日本个股（核心除外）；单个特征算不了 = 0 票；日経225 / VIX 取不到或过期 → 这一天 C 不动（= 原规则）。
@@ -1358,7 +1429,11 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     hook = (lambda ind, params, u, bar_date: _fj_compute(ind, params, u, bar_date, {**pre, "provider": provider})) if fj_on else None
     cc_on = bool((cfg.get("combo_c") or {}).get("enabled"))
     cc_hook = (lambda ind, bar_date: _cc_compute(ind, bar_date, provider)) if cc_on else None   # 关联搭配 C：决策之前现算
-    eng, ctx = _unified_engine(a, cfg, state, provider, extra_tickers=extra, fj_hook=hook, extra_core=xcore, cc_hook=cc_hook)
+    from qbreak import idle_cash as _IC
+    fh_hook = ((lambda bear, det, bar_date: _fh_compute(bear, det, bar_date, provider))     # FJE：决策之前现算 → var/fx_hedge.json
+               if _IC.mode_of(cfg) in _IC.FX_HEDGE else None)
+    eng, ctx = _unified_engine(a, cfg, state, provider, extra_tickers=extra, fj_hook=hook, extra_core=xcore, cc_hook=cc_hook,
+                               fh_hook=fh_hook)
     data, plans, extras, params, dcfg, today = ctx.data, ctx.plans, ctx.extras, ctx.params, ctx.dcfg, ctx.today
     pcheck = _price_check_panel(data, today)                 # 行情交叉核对（J-Quants，㉚-1）：只报警，不改行情 / 交易
     idxs, cutoff = _new_bar_idxs(eng, state)

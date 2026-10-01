@@ -91,6 +91,16 @@ def test_state_append_cap_and_status():
     assert "做法 4 / 20" in RL.status_text({**found, "start": "2026-10-01", "baseline": {}})
 
 
+def test_status_after_adoption(monkeypatch):
+    st = {"start": "2026-10-01", "baseline": {}, "fingerprint": "aaa", "rounds": [], "cap": RL.CAP,
+          "adopted": {"date": "2026-10-02", "candidate": "X", "change": "Q1 → Q1H", "fingerprint_after": "bbb"}}
+    monkeypatch.setattr(RL, "rules_fingerprint", lambda home=None: "bbb")
+    t = RL.status_text(st)
+    assert "采用：2026-10-02" in t and "已按「采用」改过" in t and "★" not in t
+    monkeypatch.setattr(RL, "rules_fingerprint", lambda home=None: "ccc")
+    assert "★ 与登记时不同" in RL.status_text(st)                                           # 采用之后又改了别的 → 照旧提示
+
+
 def test_fingerprint_sensitive_to_rules_not_notes(tmp_path):
     for f in ("sim.json", "best_params_JP.json", "bullbear.json"):
         shutil.copy(ROOT / "var" / f, tmp_path / f)

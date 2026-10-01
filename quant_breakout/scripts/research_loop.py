@@ -234,10 +234,16 @@ def status_text(st: dict) -> str:
         L.append(f"- 第 {r['round']} 轮 {r.get('date', '')} {r.get('title', '')}：" + "；".join(
             f"{a['id']} {a['verdict']}" + (f"（合计 {a['sum']:+.3f}）" if _num(a.get("sum")) is not None else "") for a in r["approaches"]))
     fp = st.get("fingerprint")
+    ad = st.get("adopted") or {}                                             # 用户「采用」候选之后记下的（日期、候选、采用后的指纹）
+    if ad:
+        L.append(f"采用：{ad.get('date', '—')} 用户「采用」{ad.get('candidate', '—')} → 模拟盘 {ad.get('change', '—')}")
     if fp:
         try:
             now = rules_fingerprint()
-            L.append("模拟盘规则：" + ("与登记时相同" if now == fp else f"★ 与登记时不同（{fp} → {now}）→ 循环应停下、由用户决定"))
+            if ad.get("fingerprint_after") and now == ad["fingerprint_after"] and now != fp:
+                L.append(f"模拟盘规则：已按「采用」改过（登记时 {fp} → 采用后 {now}）；这个循环已结束，新循环要重新登记基准")
+            else:
+                L.append("模拟盘规则：" + ("与登记时相同" if now == fp else f"★ 与登记时不同（{fp} → {now}）→ 循环应停下、由用户决定"))
         except Exception as e:                                               # noqa: BLE001
             L.append(f"模拟盘规则指纹算不了：{type(e).__name__}")
     return "\n".join(L)
