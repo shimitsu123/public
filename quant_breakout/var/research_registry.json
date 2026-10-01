@@ -8399,5 +8399,22 @@
    "2026（到 9 月）比 Q1 少 7.0 pp：三段对冲之后日元没升"
   ],
   "notes": "用户「采用」；2026-10-02 06:57 JST 云端 sim-day 与 07:40 Mac 执行器起（10-01 收盘的决策）；云端算 var/fx_hedge.json、Mac 经 liveu.sh 同步同一个文件；改回 = var/sim.json idle_cash.mode \"Q1\" / \"K0\"；前向确认核心层约 11 年、账户层约 44 年（几年之内只能看有没有明显变差）；2845 本身能否在立花现物买，上实盘前由用户确认"
+ },
+ {
+  "line": 4604,
+  "date": "2026-10-02",
+  "title": "登记第二个研究循环「直到找到比现在更好的模型才停」：基准 B1 = 模拟盘规则（含 Q1H）、两关 + 事后组合 S7、上限 20、同一家族 ≤ 3、汇率对冲不再加",
+  "kind": "engineering",
+  "domain": "核心/配置",
+  "registration": "本提交（规则 scripts/research_loop2.py、基准 scripts/loop2_common.py）",
+  "script": "scripts/research_loop2.py",
+  "output": "var/out/research_loop2_baseline.md",
+  "candidates": [],
+  "baseline": "B1 Calmar Z 0.979 / E 0.749 / J 0.741（回撤 −14.71 / −19.70 / −26.97%）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "用户「开始第二个研究循环」= 上一条回复给的全文；先决条件满足（B0 与第一个循环登记的值一致、B1 与采用时按模拟盘成本重算的值一致）；不改模拟盘与执行器，候选只提议"
  }
 ]
