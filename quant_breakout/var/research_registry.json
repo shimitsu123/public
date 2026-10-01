@@ -8088,5 +8088,33 @@
    "急升时转现金（FXC）只在 J 好、E 差"
   ],
   "notes": "研究循环用掉 6 / 20 个做法；FXH 只差第二关（随机对照约第 98 百分位，循环要求超过 400 次的最大值）；加进前向记录要用户决定"
+ },
+ {
+  "line": 4293,
+  "date": "2026-10-01",
+  "title": "研究循环第 5 轮：利差收窄时对冲闲置资金（RDH）/ 美股熊时日本个股清仓（SEX）→ 都是第一关不过",
+  "kind": "study",
+  "domain": "核心/配置",
+  "registration": "5984400（登记后代码未改、只运行一次；循环规则 3e643be）",
+  "script": "scripts/loop_r05_ratediff.py",
+  "output": "var/out/loop_r05_ratediff.md",
+  "candidates": [
+   {
+    "id": "RDH",
+    "rule": "美日 2 年利差 63 日变化 ≤ −0.50 pp 起、≥ −0.25 pp 止 → 对冲版纳指 2845",
+    "result": "合计 +0.002（Z −0.019、E +0.004、J +0.017）、S4 不过"
+   },
+   {
+    "id": "SEX",
+    "rule": "美股熊的日子里日本个股清仓、不开新仓",
+    "result": "= UBG（+0.003、S5 不过）；B0 里没有个股在美股翻熊时还拿着"
+   }
+  ],
+  "baseline": "B0 Calmar Z 0.949 / E 0.566 / J 0.660",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "研究循环用掉 8 / 20 个做法"
  }
 ]
