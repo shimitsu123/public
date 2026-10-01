@@ -778,6 +778,56 @@
      }
     }
    ]
+  },
+  {
+   "round": 12,
+   "date": "2026-10-01",
+   "title": "日経在来回震荡时不开新仓",
+   "domain": "牛熊/择时",
+   "script": "scripts/loop_r12_trendgate.py",
+   "registration": "0fa493b",
+   "output": "var/out/loop_r12_trendgate.md",
+   "approaches": [
+    {
+     "id": "ERG",
+     "rule": "日経225 的 ER60 < 过去 1250 天 1/3 分位（来回震荡）→ 日本个股新仓 ×0",
+     "verdict": "第一关不过",
+     "sum": -0.246,
+     "d": {
+      "Z": -0.119,
+      "E": -0.102,
+      "J": -0.025
+     },
+     "checks": {
+      "S1": false,
+      "S2": false,
+      "S3": false,
+      "S4": false,
+      "S5": false,
+      "S6": true
+     },
+     "h1": -0.089,
+     "h2": -0.334,
+     "cand": {
+      "Z": {
+       "calmar": 0.83,
+       "dd": -15.55,
+       "cagr": 12.91
+      },
+      "E": {
+       "calmar": 0.464,
+       "dd": -26.9,
+       "cagr": 12.5
+      },
+      "J": {
+       "calmar": 0.635,
+       "dd": -28.99,
+       "cagr": 18.42
+      }
+     },
+     "why": "三个年代都更差（Z −0.119、E −0.102、J −0.025，合计 −0.246）；W 挡掉的信号每笔 +2.91%（比保留的好）、Jx 挡掉的 −0.46% → 时代依赖"
+    }
+   ]
   }
  ]
 }
