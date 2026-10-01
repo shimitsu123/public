@@ -8033,5 +8033,28 @@
   ],
   "era_dependent_or_reversed": [],
   "notes": "研究循环用掉 3 / 20 个做法"
+ },
+ {
+  "line": 4248,
+  "date": "2026-10-01",
+  "title": "研究循环第 3 轮：平静的牛市里加一点杠杆 LV25（2 倍纳指 2869 占闲置资金 25%）→ 第一关不过（合计 −0.054）",
+  "kind": "study",
+  "domain": "核心/配置",
+  "registration": "4f1f860（登记后代码未改、只运行一次；循环规则 3e643be）",
+  "script": "scripts/loop_r03_calmlever.py",
+  "output": "var/out/loop_r03_calmlever.md",
+  "candidates": [
+   {
+    "id": "LV25",
+    "rule": "日元计纳指 σ20 < 扩展中位数且美股牛市 → 1545 0.75 + 2869 0.25（有效 1.25）；其余 = B0",
+    "result": "Calmar Z 0.949 → 0.887、E 0.566 → 0.565、J 0.660 → 0.669（合计 −0.054）；回撤都略深；核心换仓约翻倍 → 第一关不过"
+   }
+  ],
+  "baseline": "B0 Calmar Z 0.949 / E 0.566 / J 0.660",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "研究循环用掉 4 / 20 个做法；与第 1 轮合起来：「不平静时少拿」「平静时多拿」两边都不成立"
  }
 ]
