@@ -8193,5 +8193,30 @@
    "E 2009-06-11 提前买回后碰上回撤里的再下探 → 回撤深 3 pp（事后描述）"
   ],
   "notes": "研究循环用掉 11 / 20 个做法；看了第 7 轮 NDA 的事后描述之后设计的"
+ },
+ {
+  "line": 4378,
+  "date": "2026-10-01",
+  "title": "研究循环第 9 轮：美股急跌熔断（CPX：S&P 比 10 日最高低 10% → 转现金、站回 20 日线才回来）→ 第一关不过",
+  "kind": "study",
+  "domain": "牛熊/择时",
+  "registration": "d73ee8f（登记后代码未改、只运行一次；循环规则 3e643be）",
+  "script": "scripts/loop_r09_crashbreak.py",
+  "output": "var/out/loop_r09_crashbreak.md",
+  "candidates": [
+   {
+    "id": "CPX",
+    "rule": "S&P 收盘 ≤ 10 日最高 × 0.90 → 现金；站回 20 日线结束",
+    "result": "合计 −0.018（Z 0、E −0.089、J +0.071）；E 回撤深 3.9 pp；S1〜S4 不过"
+   }
+  ],
+  "baseline": "B0 Calmar Z 0.949 / E 0.566 / J 0.660",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [
+   "急跌时卖多卖在最低的几天：E 2015-08-26、J 2018-02 / 2025-04；只有 J 2020-03 少亏（事后、推测）"
+  ],
+  "notes": "研究循环用掉 12 / 20 个做法"
  }
 ]
