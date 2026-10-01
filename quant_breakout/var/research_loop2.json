@@ -59,5 +59,28 @@
  },
  "prereq_ok": true,
  "fingerprint": "e73f7f6c0149fe10",
- "rounds": []
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-02",
+   "title": "核心分批切换",
+   "registration": "94818f7",
+   "script": "scripts/loop2_r01_tranche.py",
+   "approaches": [
+    {
+     "id": "TR3",
+     "verdict": "第一关不过",
+     "sum": -0.133,
+     "family": "执行·核心分批切换",
+     "posthoc": false,
+     "passed": 4,
+     "d": {
+      "Z": 0.001,
+      "E": -0.063,
+      "J": -0.071
+     }
+    }
+   ]
+  }
+ ]
 }
