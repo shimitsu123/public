@@ -122,6 +122,13 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
         body.append(f"<section class='card{'' if fj.get('applied') else ' warn'}'><h2>前向记录判断层</h2>"
                     f"<div>{escape(fj_text(fj)[2:])}</div><div class='muted'>云端模拟盘每天算好 var/fwd_judgment.json、"
                     "scripts/liveu.sh 同步到本机；日期对不上就按原规则（与云端模拟盘的对照会显示不一致）</div></section>")
+    cc = sm.get("combo_c") or {}
+    if cc.get("enabled"):                                    # 关联搭配 C：云端算好的文件今天有没有生效、跳过了哪些
+        from .combo_c import text as cc_text
+        body.append(f"<section class='card{'' if cc.get('applied') else ' warn'}'><h2>关联搭配 C（市场状态 × 个股特征）</h2>"
+                    f"<div>{escape(cc_text(cc)[2:])}</div><div class='muted'>只在「日経在 200 日线上且 VIX &lt; 20」时起作用：5 个个股特征投票，"
+                    "不利的比有利的多 2 票以上的候选这次不开新仓；云端模拟盘每天算好 var/combo_c.json、scripts/liveu.sh 同步到本机；"
+                    "日期对不上就按原规则</div></section>")
     if st:
         pend = st.get("pending_exit") or {}
         pos = "".join(f"<tr><td>{escape(t)}</td><td class='n'>{int(p['shares']):,} 股</td><td class='n'>{_yen(p['entry_px'])}</td>"

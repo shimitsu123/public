@@ -11,6 +11,9 @@ W2（2026-09-27 追加登记，第八节）：记录的是「不加 W2 的突破
 每个信号另记周线量比 w5v 与 W2 是否保留 w2_keep（qbreak/w2_forward.py：< 1.0 → 0，≥ 1.0 或缺值 → 1）。
 K2 / USW（2026-09-27 追加登记，第九节；qbreak/idio_forward.py）：每个信号另记突破日量比 vr1、对日経225 的 β b_n225、K2 标记 k2_keep、
 美国对应行业 12 个月强弱百分位 us12、USW 标记 usw_keep（us12 取不到 → 空，不补写）。
+关联搭配 C（2026-10-01 追加登记，第十二节；qbreak/combo_c.py）：每个信号另记市场格 cc_on（日経在 200 日线上且 VIX < 20 = 1；
+算不了 = 空）、cc_ma200、cc_vix、5 个特征 cc_vexp / cc_upper / cc_atrp / cc_r12 / cc_us12、分数 cc_score、会不会跳过 cc_skip
+（与模拟盘同一个函数 combo_c.fields；取不到的 = 空，不补写）。
 """
 from __future__ import annotations
 
@@ -20,6 +23,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from . import combo_c as CC
 from . import idio_forward as IF
 from . import signal_score as S
 from . import w2_forward as W2F
@@ -33,6 +37,7 @@ MODEL_FILE, LOG_FILE, LOG_WIDE = "score_forward_model.json", "score_forward.csv"
 X2_COLS = ("x2", "x2_survey")                      # X2 的值、用到的短観调查季度（YYYY-MM-DD）
 W2_COLS = ("w5v", "w2_keep")                       # 周线量比、W2 是否保留（第八节）
 IDIO_COLS = IF.COLS                                # 突破日量比、β、K2 标记、美国对应行业百分位、USW 标记（第九节）
+CC_COLS = CC.COLS                                  # 关联搭配 C：市场格、5 个特征、分数、会不会跳过（第十二节）
 OHLCV = ["Open", "High", "Low", "Close", "Volume"]
 
 
@@ -170,10 +175,11 @@ def append_log(rows: pd.DataFrame, path: Path) -> int:
 
 
 def _assemble(rows: pd.DataFrame, ind: dict[str, pd.DataFrame], sector: list, planned: dict | None, meta: dict,
-              today: str, extra: dict | None = None, x2: dict | None = None, idio: dict | None = None) -> pd.DataFrame:
+              today: str, extra: dict | None = None, x2: dict | None = None, idio: dict | None = None,
+              cc: dict | None = None) -> pd.DataFrame:
     """打好分的信号 → 记录行：日期、代码、行业、模拟盘是否计划买入（不知道 = 空）、收盘、量比、真突破、距箱顶 %、因子、分数、
     X2 与调查季度（取不到 = 空）、周线量比与 W2 是否保留、K2 / USW 的输入与标记（第九节；idio = {mkt_close, us_pct, s33}，
-    None = 这次算不了 → 全部为空）、记录日、模型。"""
+    None = 这次算不了 → 全部为空）、关联搭配 C 的列（第十二节；cc = {n225, vix, us_pct, s33}，None → 全部为空）、记录日、模型。"""
     ds = rows["date"].dt.strftime("%Y-%m-%d")
     pl = planned or {}
     info = []
@@ -193,6 +199,13 @@ def _assemble(rows: pd.DataFrame, ind: dict[str, pd.DataFrame], sector: list, pl
     else:
         for c in IDIO_COLS:
             out[c] = np.nan
+    if cc is not None:
+        for c, v in CC.fields(ind, rows["date"], list(rows["ticker"]), cc.get("n225"), cc.get("vix"), cc.get("us_pct"),
+                              cc.get("s33")).items():
+            out[c] = v
+    else:
+        for c in CC_COLS:
+            out[c] = np.nan
     out["logged_on"], out["model"] = today, meta.get("id", "")
     return out
 
@@ -203,9 +216,10 @@ def _days(bar_dates: list) -> list:
 
 def run_daily(ind: dict[str, pd.DataFrame], index_close: pd.Series | None, tickers: list[str], bar_dates: list,
               planned: dict[str, list] | None, model_path: Path, log_path: Path, today: str, x2: dict | None = None,
-              idio: dict | None = None) -> dict:
+              idio: dict | None = None, cc: dict | None = None) -> dict:
     """最近 LOOKBACK 个交易日（≥ FORWARD_START）的信号打分并追加。planned：{日期: 当天收盘后模拟盘计划买入的票}（本次处理的日子才有）。
-    x2：x2_load() 的结果（None = 短観取不到 → X2 记为空）；idio：{mkt_close, us_pct, s33}（第九节；None → K2 / USW 列为空）。"""
+    x2：x2_load() 的结果（None = 短観取不到 → X2 记为空）；idio：{mkt_close, us_pct, s33}（第九节；None → K2 / USW 列为空）；
+    cc：{n225, vix, us_pct, s33}（第十二节；None → C 的列为空）。"""
     models, meta = load_model(model_path)
     days = _days(bar_dates)
     if not days:
@@ -213,14 +227,14 @@ def run_daily(ind: dict[str, pd.DataFrame], index_close: pd.Series | None, ticke
     rows = score_rows(signal_rows_on(ind, index_close, days, tickers), models)
     if len(rows):
         rows = _assemble(rows, ind, [SECTOR_JP.get(t.split(".")[0], "other") for t in rows["ticker"]], planned, meta, today, x2=x2,
-                         idio=idio)
+                         idio=idio, cc=cc)
     n = append_log(rows, log_path)
     return {"logged": n, "signals": int(len(rows)), "days": [str(d.date()) for d in days], "model": meta.get("id", "")}
 
 
 def run_daily_wide(ind_base: dict[str, pd.DataFrame], ind_extra: dict[str, pd.DataFrame], index_close: pd.Series | None,
                    doc: dict, bar_dates: list, model_path: Path, log_path: Path, today: str, x2: dict | None = None,
-                   idio: dict | None = None) -> dict:
+                   idio: dict | None = None, cc: dict | None = None) -> dict:
     """扩大池（var/universe_wide.json）：同样的因子（行业因子对照日経225 同组成员）与冻结的配比，追加到 score_forward_wide.csv。"""
     from . import wide_universe as W
     models, meta = load_model(model_path)
@@ -233,6 +247,6 @@ def run_daily_wide(ind_base: dict[str, pd.DataFrame], ind_extra: dict[str, pd.Da
     rows = score_rows(rows[rows["date"].isin(pd.DatetimeIndex(days))].reset_index(drop=True), models)
     if len(rows):
         rows = _assemble(rows, ind_extra, [grp.get(t, "other") for t in rows["ticker"]], None, meta, today,
-                         extra={"segment": [seg.get(t, "") for t in rows["ticker"]]}, x2=x2, idio=idio)
+                         extra={"segment": [seg.get(t, "") for t in rows["ticker"]]}, x2=x2, idio=idio, cc=cc)
     n = append_log(rows, log_path)
     return {"logged": n, "signals": int(len(rows)), "tickers": len(ind_extra), "days": [str(d.date()) for d in days]}

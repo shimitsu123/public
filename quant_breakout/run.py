@@ -818,7 +818,7 @@ def _core_all(cfg: dict) -> list[str]:
     return sorted(set(_unified_cfg(cfg).core) | set(IC.MODES[IC.mode_of(cfg)]["core"]))
 
 
-def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hook=None, extra_core=()):
+def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hook=None, extra_core=(), cc_hook=None):
     """模拟盘（sim-day）与实盘执行器（live-u）共用：按 var/sim.json 建统一引擎 —— 行情到最新收盘（去掉未收盘的当日 K 线）、
     牛熊分界、汇率、明天成交的新仓倍数（宏观 / 板块 / 状态层）、决算前不进场。返回 (eng, ctx)；ctx.make(state) 用同一套
     输入再建一个引擎（例如执行器演练账户的状态）。"""
@@ -911,20 +911,31 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
                                   "mult": mk0.get("mult"), "before": plans["JP"].scale}
             if used0 is not None:
                 rg["final_mult"] = sc1
+    from qbreak import combo_c as CC
+    cc_pl = None                                           # 关联搭配 C（2026-10-01 用户「加进模拟盘并记录」；var/sim.json combo_c.enabled 开关）
+    cc_on = bool((cfg.get("combo_c") or {}).get("enabled"))
+    if cc_on:
+        if cc_hook is not None:                             # 云端 sim-day：决策之前现算 → var/combo_c.json
+            try:
+                cc_pl = cc_hook(ind, bar_date)
+            except Exception as e:                          # noqa: BLE001
+                log.warning("关联搭配 C 算不了（今天按原规则）：%s", e)
+        else:                                               # Mac 执行器：读云端算好、scripts/liveu.sh 同步过来的同一个文件
+            cc_pl = CC.load(paths.home() / CC.FILE)
 
     def make(st, fj: bool = True, base: bool = False):
-        """base = True：原规则（不加前向记录判断层、离场用死叉、闲置资金 1655）= 基准账户。
+        """base = True：原规则（不加前向记录判断层与关联搭配 C、离场用死叉、闲置资金 1655）= 基准账户。
         闲置资金按这个账户自己的持仓配：以前的方式留下的 ETF 权重 0（下一次决策卖掉）。"""
         cfg_e = IC.apply(ucfg, "K0" if base else icmode, held=dict(st.core_units) if st is not None else None)
         e = UnifiedEngine(ind, cfg_e, params if base else params_x, ex, ccost, fx=fx, bear=bear, state=st)
-        _apply_live_mults(e, plans, None if (base or not fj) else fj_pl, bar_date)
+        _apply_live_mults(e, plans, None if (base or not fj) else fj_pl, bar_date, None if (base or not fj) else cc_pl)
         e.live_fx_ok = is_trading_day(now_jst().date())    # 今天白天（日本营业日）才有换汇窗口
         e.entry_block_fn = eblock
         e.entry_gate_fn = gate.entry_block
         return e
     ctx = SimpleNamespace(data=data, ind=ind, plans=plans, extras=extras, params=params, dcfg=dcfg, ucfg=ucfg, u=u,
                           broker=broker, today=today, ex=ex, ccost=ccost, make=make, gate=gate, fj=fj_pl, fj_on=fj_on, xmode=xmode,
-                          bar_date=bar_date, icmode=icmode, ic_status=ic_status, delist=delist)
+                          bar_date=bar_date, icmode=icmode, ic_status=ic_status, delist=delist, cc=cc_pl, cc_on=cc_on)
     return make(state), ctx
 
 
@@ -966,15 +977,18 @@ def _delist_update(today, state, ucfg=None) -> dict:
         return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 
-def _apply_live_mults(e, plans: dict, fj_pl: dict | None, bar_date: str | None) -> dict | None:
+def _apply_live_mults(e, plans: dict, fj_pl: dict | None, bar_date: str | None, cc_pl: dict | None = None) -> dict | None:
     """明天成交的新仓倍数（与原模拟盘同一套宏观 / 板块 / 状态层）+ 前向记录判断层（只作用在日本个股：市场倍数与原有各层取 min，
-    s < 0 的票 ×0.5 与板块倾斜取 min；同一天的候选 s 高的先、再按 F2，只用在最新一天的决策）。返回生效的判断层 | None。"""
+    s < 0 的票 ×0.5 与板块倾斜取 min；同一天的候选 s 高的先、再按 F2，只用在最新一天的决策）+ 关联搭配 C（qbreak/combo_c.py：
+    「平静的牛市」里不利特征多 2 票以上的票 ×0，只用在最新一天的决策）。返回生效的判断层 | None。"""
+    from qbreak import combo_c as CC
     from qbreak import fwd_judgment as FJ
     used = None
     for m, P in plans.items():
         sc, tm = P.scale, P.tmult or {}
         if m == "JP":
             sc, tm, used = FJ.apply(sc, tm, fj_pl, bar_date)
+            tm, _ = CC.apply(tm, cc_pl, bar_date)
         e.live_mult[m] = (sc, tm, P.block if isinstance(P.block, str) else None)
     if used is not None:
         last_i = len(e.gidx) - 1
@@ -1162,6 +1176,85 @@ def _fj_compute(ind: dict, params: dict, u: dict, bar_date: str, pre: dict) -> d
     return pl
 
 
+CC_VIX_MAX_DAYS = 5                                           # VIX 的最后一个收盘最多早于最新 K 线这么多天（周末 / 美国假日之外 = 取不到）
+
+
+def _cc_market(provider: str):
+    """关联搭配 C 的市场格输入：日経225 日收盘（去掉未收盘的当天）与 VIX 日收盘（取不到 → None）。"""
+    from qbreak.data import load_universe
+    from qbreak.trader import drop_partial_bar
+    d2 = DataConfig(provider=provider, years=2, allow_synthetic=False, min_bars=100).validate()
+    r = load_universe(["^N225", "^VIX"], d2)
+    n = drop_partial_bar(r["^N225"], "JP") if r.get("^N225") is not None else None
+    v = drop_partial_bar(r["^VIX"], "US") if r.get("^VIX") is not None else None
+    return (n["Close"] if n is not None and len(n) else None), (v["Close"] if v is not None and len(v) else None)
+
+
+def _cc_compute(ind: dict, bar_date: str, provider: str, market=None) -> dict:
+    """关联搭配 C（qbreak/combo_c.py）：云端 sim-day 在引擎决策之前算 → var/combo_c.json（Mac 执行器读同一个文件）。
+    候选 = 最新 K 线上成立的日本个股（核心除外）；单个特征算不了 = 0 票；日経225 / VIX 取不到或过期 → 这一天 C 不动（= 原规则）。
+    market：测试用 (日経225 收盘, VIX 收盘)。"""
+    import json as _json
+    import pandas as pd
+    from qbreak import combo_c as CC
+    from qbreak.unified import market_of
+    from qbreak.utils import write_json
+    errors: dict = {}
+    try:
+        n225, vix = market if market is not None else _cc_market(provider)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("关联搭配 C 的市场格取不到（这一天 C 不动）：%s", e)
+        n225 = vix = None
+        errors["市场格"] = f"{type(e).__name__}: {e}"[:200]
+    d = pd.Timestamp(bar_date)
+    if n225 is not None and len(n225.dropna()):
+        nd = str(n225.dropna().index[n225.dropna().index <= d][-1].date()) if (n225.dropna().index <= d).any() else None
+        lag = _jp_trading_days_between(nd, bar_date) if nd else None
+        if lag is None or lag > FJ_MAX_LAG:
+            errors["市场格"] = f"日経225 只到 {nd or '—'}（最新 K 线 {bar_date}）→ 这一天 C 不动"
+            n225 = None
+    if vix is not None and len(vix.dropna()):
+        vb = vix.dropna().index[vix.dropna().index < d]
+        if not len(vb) or (d - vb[-1]).days > CC_VIX_MAX_DAYS:
+            errors["市场格"] = f"VIX 只到 {str(vb[-1].date()) if len(vb) else '—'}（最新 K 线 {bar_date}）→ 这一天 C 不动"
+            vix = None
+    mk = CC.market_state(n225, vix, bar_date)
+    if mk["on"] is None:
+        errors.setdefault("市场格", "日経225 / VIX 取不到 → 这一天 C 不动")
+    core = set(((_sim_cfg() or {}).get("unified") or {}).get("core") or {})
+    cands = sorted(t for t, df in ind.items() if market_of(t) == "JP" and t not in core and len(df)
+                   and str(df.index[-1].date()) == bar_date and bool(df["entry"].iloc[-1]))
+    s33 = us_pct = None
+    if cands:
+        try:
+            s33 = {f"{c}.T": v for c, v in _json.loads((paths.home() / "industry_s33.json").read_text(encoding="utf-8"))["s33"].items()}
+            from qbreak import factors as F
+            from qbreak import idio_forward as IF
+            us_pct = IF.us_rank_asof(F.ff_industries(49, "vw"))
+        except Exception as e:                               # noqa: BLE001
+            log.warning("关联搭配 C 的 us12（美国对应行业）取不到（这一票按 0 票）：%s", e)
+            errors["us12"] = f"{type(e).__name__}: {e}"[:200]
+    cal = CC.calendar(ind)
+    stocks = {}
+    for t in cands:
+        try:
+            f = CC.stock_features(ind[t], bar_date, cal)
+            f["us12"] = CC.us12_of(us_pct, s33, t, bar_date)
+        except Exception as e:                               # noqa: BLE001
+            f = {}
+            errors[t] = f"{type(e).__name__}: {e}"[:200]
+        stocks[t] = f
+    pl = CC.payload(bar_date, mk, stocks, errors)
+    try:
+        write_json(paths.home() / CC.FILE, pl)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("关联搭配 C 的文件写不了：%s", e)
+    sk = [t for t, v in pl["stocks"].items() if v["skip"]]
+    log.info("关联搭配 C %s：%s；候选 %d 只，跳过 %d 只 %s", bar_date, "平静的牛市" if mk["on"] else ("不在那一格" if mk["on"] is False else "算不了"),
+             len(stocks), len(sk), sk)
+    return pl
+
+
 def _baseline_step(ctx, raw_before: dict | None) -> dict:
     """基准账户（原规则：不加前向记录判断层、离场用 MACD 死叉；2026-09-29 用户要求的改动都不加）：同一套行情、同一个引擎
     → var/state/unified_state_base.json。第一次 = 复制模拟盘当时（这次推进之前）的状态，之后每天各走各的；只作对照，失败不影响模拟盘。"""
@@ -1263,7 +1356,9 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     fj_on = bool((cfg.get("fwd_judgment") or {}).get("enabled"))
     pre = _fj_precompute(provider, now_jst().date()) if fj_on else {}      # 判断层要用的面板（主题 / 能源 K4 / 成本 × 销售）先算，后面日报直接用
     hook = (lambda ind, params, u, bar_date: _fj_compute(ind, params, u, bar_date, {**pre, "provider": provider})) if fj_on else None
-    eng, ctx = _unified_engine(a, cfg, state, provider, extra_tickers=extra, fj_hook=hook, extra_core=xcore)
+    cc_on = bool((cfg.get("combo_c") or {}).get("enabled"))
+    cc_hook = (lambda ind, bar_date: _cc_compute(ind, bar_date, provider)) if cc_on else None   # 关联搭配 C：决策之前现算
+    eng, ctx = _unified_engine(a, cfg, state, provider, extra_tickers=extra, fj_hook=hook, extra_core=xcore, cc_hook=cc_hook)
     data, plans, extras, params, dcfg, today = ctx.data, ctx.plans, ctx.extras, ctx.params, ctx.dcfg, ctx.today
     pcheck = _price_check_panel(data, today)                 # 行情交叉核对（J-Quants，㉚-1）：只报警，不改行情 / 交易
     idxs, cutoff = _new_bar_idxs(eng, state)
@@ -1280,7 +1375,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
             eng.step(i)
             planned[str(eng.gidx[i].date())] = sorted(state.plan)
     st_path.write_text(_json.dumps(state.to_dict(), ensure_ascii=False, indent=1, default=float), encoding="utf-8")
-    baseline = (_baseline_step(ctx, raw) if (fj_on or ctx.xmode != "DC" or ctx.icmode != "K0")   # 基准账户：同一天、同一套行情、原规则
+    baseline = (_baseline_step(ctx, raw) if (fj_on or cc_on or ctx.xmode != "DC" or ctx.icmode != "K0")   # 基准账户：同一天、同一套行情、原规则
                 else None)                                                                        #（对照改动的效果）
     executor = _executor_paper_step(ctx, state)            # 实盘执行器的演练账户：同一天、同一套行情，应与模拟盘逐日一致
     i_last = int(eng.gidx.searchsorted(pd.Timestamp(state.last_date))) if state.last_date else len(eng.gidx) - 1
@@ -1311,6 +1406,9 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     out["invest_flow"] = _invest_flow_panel(today)           # 投资流向：季度快照（㉟；每季取一次 e-Stat，只作背景，不影响交易）
     out["timeline"], out["earn_state"] = tlp["timeline"], tlp["earn_state"]   # 买卖时间线（每天按前一天收盘重算）、决算形态（㊱）
     out["fwdj"] = _fj_summary(ctx, baseline, eq) if fj_on else {"enabled": False, "baseline": baseline or {}}   # 判断层 + 基准账户对照
+    from qbreak import combo_c as _CC
+    out["combo_c"] = {**_CC.summary(ctx.cc, ctx.bar_date, ctx.cc_on),                  # 关联搭配 C：今天的市场格、候选的投票与跳过
+                      "since": (cfg.get("combo_c") or {}).get("since")}
     from qbreak import exit_rules as _EXR
     out["exit_mode"] = {"JP": ctx.xmode, "label": _EXR.LABELS[ctx.xmode]}   # 个股的离场方式（var/sim.json exits）
     out["idle_cash"] = ctx.ic_status                         # 闲置资金的方式与现在拿什么（var/sim.json idle_cash）
@@ -1994,14 +2092,17 @@ def _score_forward_log(ctx, eng, state, planned: dict) -> dict:
         ix = drop_partial_bar(load_universe([BENCHMARK["JP"]], d10)[BENCHMARK["JP"]], "JP")
         x2, x2_err = _x2_for_forward(SF, days[-SF.LOOKBACK:])
         idio, idio_err = _idio_for_forward(SF, days[-SF.LOOKBACK:], ix["Close"])   # K2 / USW 的输入（第九节）
+        cc, cc_err = _cc_for_forward(SF, days[-SF.LOOKBACK:], ix["Close"], idio, ctx.dcfg.provider)   # 关联搭配 C 的输入（第十二节）
         ind_f = SF.no_w2_frames(ctx.ind, ctx.params["JP"], jp)                  # 不加 W2 的突破（第八节）
         res = SF.run_daily(ind_f, ix["Close"], jp, days[-SF.LOOKBACK:], planned, mp, paths.out_dir() / SF.LOG_FILE,
-                           str(ctx.today), x2=x2, idio=idio)
+                           str(ctx.today), x2=x2, idio=idio, cc=cc)
         res["x2_survey"] = (x2 or {}).get("latest", "")
         if x2_err:
             res["x2_error"] = x2_err
         if idio_err:
             res["idio_error"] = idio_err
+        if cc_err:
+            res["cc_error"] = cc_err
     except Exception as e:                                   # noqa: BLE001
         log.warning("买点质量分前向记录失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"}
@@ -2020,7 +2121,7 @@ def _score_forward_log(ctx, eng, state, planned: dict) -> dict:
                     ind_x[t] = compute_indicators(df, p_fwd)
             base = ind_f
             res["wide"] = SF.run_daily_wide(base, ind_x, ix["Close"], doc, days[-SF.LOOKBACK:], mp,
-                                            paths.out_dir() / SF.LOG_WIDE, str(ctx.today), x2=x2, idio=idio)
+                                            paths.out_dir() / SF.LOG_WIDE, str(ctx.today), x2=x2, idio=idio, cc=cc)
     except Exception as e:                                   # noqa: BLE001
         log.warning("买点质量分前向记录（扩大池）失败（不影响交易）：%s", e)
         res["wide_error"] = f"{type(e).__name__}: {e}"
@@ -2062,6 +2163,20 @@ def _idio_for_forward(SF, days: list, mkt_close) -> tuple[dict | None, str | Non
         log.warning("前向记录的美国行业强弱取不到（不影响交易）：%s", e)
         err = (err + "；" if err else "") + f"美国 49 行业：{type(e).__name__}: {e}"
     return idio, err
+
+
+def _cc_for_forward(SF, days: list, n225_close, idio: dict | None, provider: str) -> tuple[dict | None, str | None]:
+    """前向记录的关联搭配 C 输入（scripts/score_forward.py 第十二节）：日経225 日收盘、VIX、美国行业百分位与业种表（第九节已取的）。
+    要记的日子都在登记日之前 → 不取。VIX 取不到 → 市场格为空（cc_on 空、cc_skip 0），特征照记、不补写。"""
+    if not SF._days(days):
+        return None, None
+    cc = {"n225": n225_close, "vix": None, "us_pct": (idio or {}).get("us_pct"), "s33": (idio or {}).get("s33")}
+    try:
+        cc["vix"] = _cc_market(provider)[1]
+        return cc, None
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("前向记录的 VIX 取不到（不影响交易）：%s", e)
+        return cc, f"VIX：{type(e).__name__}: {e}"
 
 
 def _paper_broker_for_executor(ucfg, ex_jp):
@@ -2877,6 +2992,8 @@ def cmd_live_unified(a) -> int:
     sm["delist"] = getattr(ctx, "delist", None) or {}          # 股票池更新时间表（上場廃止 / 定期入替；到日自动去掉）
     sm["market"] = {m: (e.get("regime") or {}).get("bullbear") for m, e in ctx.extras.items()}   # 牛熊：现在处于哪个阶段（页面 / 日志）
     sm["fwd_judgment"] = _fj_brief(ctx)                     # 前向记录判断层：云端算好的文件今天有没有生效（页面 / 日志）
+    from qbreak import combo_c as _CC
+    sm["combo_c"] = _CC.brief(ctx.cc, ctx.bar_date, ctx.cc_on)    # 关联搭配 C：云端算好的文件今天有没有生效、跳过了哪些
     sm["exit_mode"] = ctx.xmode                              # 个股的离场方式（var/sim.json exits；与云端模拟盘同一个）
     sm["idle_cash"] = ctx.ic_status                          # 闲置资金的方式与现在拿什么（var/sim.json idle_cash；与云端模拟盘同一个）
     write_json(paths.out_dir() / f"live_unified_{tag}.json", sm)

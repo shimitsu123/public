@@ -752,6 +752,9 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     fj = sm.get("fwd_judgment") or {}
     if fj.get("enabled") and not fj.get("applied"):
         short += "｜★ 判断层没生效"
+    cc = sm.get("combo_c") or {}
+    if cc.get("enabled") and not cc.get("applied"):
+        short += "｜★ 关联搭配 C 没生效"
     lines = [f"- 决策日 {sm.get('decided_on') or '—'} → 成交日 {sm.get('fill_day') or '—'}；权益 ¥{eq:,.0f}"
              f"（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）；现金 ¥{float(st.cash_jpy):,.0f}"]
     held = [f"{t} {int(p.shares):,} 股（成本 ¥{float(p.entry_px):,.2f}，止损 ¥{float(p.stop_px):,.2f}）" for t, p in st.pos.items()]
@@ -772,6 +775,9 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
             lines.append(f"- 牛熊（{ {'JP': '日経平均', 'US': 'S&P500'}.get(m, m)}）：{bb['phase_label']}：{bb.get('phase_text', '')}")
     if fj.get("enabled"):                                   # 前向记录判断层（云端算好的 fwd_judgment.json）
         lines.append(fj_text(fj))
+    if cc.get("enabled"):                                   # 关联搭配 C（云端算好的 combo_c.json）
+        from .combo_c import text as cc_text
+        lines.append(cc_text(cc))
     if sm.get("exit_mode") and sm["exit_mode"] != "DC":        # 个股的离场方式（var/sim.json exits）
         from .exit_rules import LABELS
         lines.append(f"- 个股离场：{LABELS.get(sm['exit_mode'], sm['exit_mode'])}（止损 / 跟踪 / 止盈 / 最长持有照旧）")

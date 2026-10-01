@@ -71,6 +71,7 @@ def build_unified_data() -> dict:
             "calendar": td.get("calendar") or {},                # 检查日历（qbreak/check_calendar.py；只展示，全貌 CHECK_TIMELINE.md）
             "price_check": td.get("price_check") or {},          # 行情交叉核对（qbreak/price_check.py；yfinance × J-Quants，只报警）
             "fwdj": td.get("fwdj") or {},                        # 前向记录判断层（qbreak/fwd_judgment.py；2026-09-30 起影响日本个股新仓）
+            "combo_c": td.get("combo_c") or {},                  # 关联搭配 C（qbreak/combo_c.py；2026-10-01 的决策起影响日本个股新仓）
             "exit_mode": td.get("exit_mode") or {},              # 个股的离场方式（qbreak/exit_rules.py；var/sim.json exits）
             "idle_cash": td.get("idle_cash") or {},              # 闲置资金的方式与现在拿什么（qbreak/idle_cash.py；var/sim.json idle_cash）
             "survey_failed": td.get("survey_failed") or {},      # 因子调查取不到的数据源（qbreak/survey.LAST_FAILED）
@@ -189,6 +190,13 @@ def missing_items(d: dict) -> list[str]:
         out.append(f"买点质量分前向记录的 X2（短観）：取不到（{sf['x2_error']}）—— 今天记下的信号 X2 为空（不补写），不影响交易")
     if started and sf.get("idio_error"):
         out.append(f"买点质量分前向记录的 K2 / USW：部分输入取不到（{sf['idio_error']}）—— 今天记下的信号里对应的列为空（不补写），不影响交易")
+    if started and sf.get("cc_error"):
+        out.append(f"买点质量分前向记录的关联搭配 C：部分输入取不到（{sf['cc_error']}）—— 今天记下的信号市场格为空（不补写），不影响交易")
+    cc = d.get("combo_c") or {}
+    if cc.get("enabled") and not cc.get("applied"):
+        out.append(f"关联搭配 C 今天没生效：{cc.get('why') or '—'} —— 明天的新仓按原规则（不跳过任何票）")
+    elif cc.get("enabled") and cc.get("errors"):
+        out.append("关联搭配 C 有算不了的项（按 0 票 / 这一天 C 不动）：" + "；".join(f"{k}：{v}" for k, v in cc["errors"].items()))
     ef = d.get("era") or {}
     if started and ef.get("error"):
         out.append(f"时代主线前向记录：这次没记上（{ef['error']}）—— 不影响交易；这个月不补写，下个月第一次运行照常记")
@@ -599,6 +607,52 @@ def _cost_sales_html(c: dict) -> str:
             f"前向记录（2026-10 起每月一次，36 个月后判定）：已记 {int(fw.get('months') or 0)} 个月"
             + (f"（{escape(str(fw.get('first')))}〜{escape(str(fw.get('last')))}，其中原材料在涨 {int(fw.get('cost_up_months') or 0)} 个月）"
                if fw.get("months") else "") + "。非投资建议。</p></section>")
+
+
+def _combo_c_html(d: dict) -> str:
+    """关联搭配 C（qbreak/combo_c.py；2026-10-01 用户「加进模拟盘并记录」，研究 scripts/combo_all_study.py 登记 7f2ca59 /
+    结果 729c4ee / 事后核对 63fa4d2）：今天的市场格、候选的 5 个特征 / 投票 / 分数、跳过了哪些。"""
+    c = d.get("combo_c") or {}
+    if not c.get("enabled"):
+        return ""
+    from .combo_c import FEATS, LABELS, RULE, SKIP_BELOW, VIX_MAX
+    if not c.get("applied"):
+        head = f"<p class='neg'>今天没生效：{escape(str(c.get('why') or '—'))}（明天按原规则）</p>"
+    else:
+        ma, vx = c.get("n225_ma200"), c.get("vix")
+        cell = "—" if ma is None or vx is None else f"日経离 200 日线 {float(ma) * 100:+.1f}%、VIX {float(vx):.1f}"
+        on = c.get("on")
+        sk = c.get("skipped") or []
+        head = (f"<p>判定日 {escape(str(c.get('as_of')))}（最新收盘）：{escape(cell)} → "
+                + ("<b>平静的牛市：C 起作用</b>" if on is True else "不在「平静的牛市」：C 不动" if on is False else "市场格算不了：C 不动")
+                + (f"；明天不开新仓（C 跳过）：<b>{escape('、'.join(sk))}</b>" if on is True and sk else
+                   "；没有要跳过的候选" if on is True else "") + "</p>")
+    rows = []
+    for t, v in sorted((c.get("stocks") or {}).items(), key=lambda kv: (kv[1].get("score", 0), kv[0])):
+        fe, vt = v.get("features") or {}, v.get("votes") or {}
+
+        def cell(k: str) -> str:
+            x = fe.get(k)
+            if x is None:
+                return "<td class='n muted'>—（0 票）</td>"
+            txt = f"{float(x) * 100:+.1f}%" if k == "r12" else f"{float(x) * 100:.2f}%" if k == "atrp" else f"{float(x):.3f}"
+            g = int(vt.get(k, 0))
+            return f"<td class='n'>{txt} <span class='{'pos' if g > 0 else 'neg' if g < 0 else 'muted'}'>{'+1' if g > 0 else '−1' if g < 0 else '0'}</span></td>"
+        rows.append(f"<tr><td>{escape(t)}</td>" + "".join(cell(k) for k in FEATS)
+                    + f"<td class='n'>{int(v.get('score', 0)):+d}</td><td>{'<b>跳过</b>' if v.get('skip') else '不变'}</td></tr>")
+    tbl = ("<div class='scroll'><table><tr><th>候选</th>" + "".join(f"<th class='n'>{escape(LABELS[k])}</th>" for k in FEATS)
+           + "<th class='n'>分数</th><th>新仓</th></tr>" + "".join(rows) + "</table></div>") if rows else         "<p class='muted'>最新收盘没有日本个股的买入候选</p>"
+    cuts = "；".join(f"{escape(LABELS[k])} {'越大越好' if RULE[k][0] > 0 else '越小越好'}（切点 {RULE[k][1]:g} / {RULE[k][2]:g}）" for k in FEATS)
+    err = c.get("errors") or {}
+    errs = ("<p class='muted'>算不了的项（按 0 票 / C 不动）：" + "；".join(f"{escape(str(k))}：{escape(str(v))}" for k, v in err.items()) + "</p>") if err else ""
+    return ("<section class='card'><h2>关联搭配 C：市场状态 × 个股特征（2026-10-01 的决策起影响日本个股新仓；用户要求）</h2>" + head + tbl + errs
+            + f"<p class='muted'>只在「日経225 收盘在 200 日线上、且 VIX（前一个美国收盘）&lt; {VIX_MAX:g}」时起作用：5 个特征各投一票"
+            f"（有利的三分之一 +1、不利的三分之一 −1、中间 / 缺值 0）：{cuts}；分数 &lt; {SKIP_BELOW:g}（不利多 2 票以上）→ 这只明天不开新仓，"
+            "其余不变（不放大）；其他市场格不动。基准账户（原规则）不加。</p>"
+            "<p class='muted'>证据（照实写）：研究（scripts/combo_all_study.py，登记 7f2ca59）按事先写定的 D1〜D4b 全部通过 —— 2017〜2026 日経225 "
+            "W2 信号胜率 40.1% → 46.5%、每笔 +0.91% → +1.88%（保留 74%）；但 2001〜2016 只略好，别的股票几乎没有效果（+0.05 / +0.04 pp），"
+            "日経225 每年约只有 2〜3 笔会被跳过（2017〜2026：23 笔）→ 前向记录（scripts/score_forward.py 第十二节）只能抓住明显变坏。"
+            "关掉：var/sim.json 的 combo_c.enabled = false。非投资建议。</p></section>")
 
 
 def _fwdj_html(d: dict) -> str:
@@ -1121,7 +1175,7 @@ def render_unified_html(d: dict) -> str:
         watch="".join(watch) or "<tr><td colspan=12 class='muted'>尚无候补数据</td></tr>",
         timeline=_timeline_card(d),
         themes=_themes_html(d.get("themes") or {}, meta), policy=_policy_html(d.get("policy") or {}),
-        deepdip=_deepdip_html(d.get("deepdip") or {}), fwdj=_fwdj_html(d),
+        deepdip=_deepdip_html(d.get("deepdip") or {}), fwdj=_fwdj_html(d), combo_c=_combo_c_html(d),
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us), shadow=_shadow_html(d),
         elig=_eligibility_html(d, meta), delist=_delist_html(d, meta), cost_sales=_cost_sales_html(d.get("cost_sales") or {}),
         invest_flow=_invest_flow_html(d.get("invest_flow") or {}),
@@ -1540,6 +1594,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <section class="card"><h2>个股持仓（表）</h2><div class="scroll"><table><tr><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">成本</th><th class="n">止损</th><th>买入日</th><th>最近一次决算的形态</th></tr>{positions}</table></div></section>
 <section class="card"><h2>核心 ETF（闲置资金，表）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
 {fwdj}
+{combo_c}
 {deepdip}
 <section class="card"><details><summary><h2 style="display:inline">大事件威胁指数的明细（只展示，不参与交易）</h2></summary>{threat}</details></section>
 <section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>主题 / 业种（近 3 月相对）</th><th>状态</th><th>最近一次决算的形态</th><th>突破</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>

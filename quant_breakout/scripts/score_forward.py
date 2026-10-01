@@ -121,6 +121,27 @@
     另报（不判定）：只看日経225（W2 保留）、不管 W2 的全部突破。
   - 检出力（按确认的数据外推：胜率差的聚类标准误约 1.4 pp / 650 对）：胜率差 +4 pp 要约 900 对 → 这份记录约 8 年；快的是全市场版（第九节）约 2 年。
   - 证实也只是记录：改模拟盘另写一份事先登记的组合研究，并经用户确认。
+十二、追加登记 关联搭配 C「市场状态 × 个股特征」（2026-10-01，用户「加进模拟盘并记录」；C 从 2026-10-01 收盘的决策（10-02 成交）起
+  作用在模拟盘与执行器；此时两份记录都还没有任何 C 的数据；定义 qbreak/combo_c.py）
+  来由：全部研究的关联搭配（scripts/combo_all_study.py，登记 7f2ca59、结果 729c4ee、事后核对 63fa4d2）里 C 按事先写定的 D1〜D4b 全部通过：
+  2017〜2026 日経225 W2 信号胜率 40.1% → 46.5%、每笔 +0.91% → +1.88%（保留 74%）；但 2001〜2016 只略好，别的股票（W / Jx）几乎没有效果
+  （+0.05 / +0.04 pp）→ 效果可能只属于今天的日経225 + 这个年代。用户决定直接加进模拟盘，这一节记它在登记之后的新数据里还成不成立。
+  - 记录：两份记录（score_forward.csv / score_forward_wide.csv）每个信号另记 cc_on（信号日 日経225 收盘在 200 日线上且 VIX < 20 = 1，
+    否则 0；算不了 = 空）、cc_ma200、cc_vix、5 个特征 cc_vexp / cc_upper / cc_atrp / cc_r12 / cc_us12、分数 cc_score、cc_skip
+    （C 会不会跳过 = cc_on = 1 且分数 < −1）。算法 = 模拟盘同一个函数（qbreak/combo_c.fields；与研究面板逐信号核对一致，见 sim_changes.md）。
+    扩大池（T500x / S1x）只记录，C 不作用在它们身上。
+  - 结果：第十节的配对里 X6 那一边（模拟盘的离场 = X6，与研究同一个结果定义），成熟、两边都已平仓的才算（qbreak/exit_forward.usable）。
+  - 样本：信号日 ≥ 2026-10-01、W2 保留（w2_keep = 1）、cc_on = 1。主 = 日経225（C 实际作用的股票）；另报合并样本（日経225 + T500x + S1x）。
+    C 的列为空的（算不了的日子）不算、不补算，另报个数。
+  - 假设（事先方向）：保留（cc_skip = 0）的 X6 每笔净收益 > 跳过的（cc_skip = 1）。差 = 保留 − 跳过，区间 = 按信号月聚类的自助法 2,000 次
+    （种子 20260927，qbreak/w2_forward.evaluate 同一函数）。
+  - 判定（每年一次：与 W2 同一组日期 2027-09-28 … 2031-09-28 之后的那次复核；做过的年份不再做；保留 / 跳过任一组已平仓 < 10 笔 →
+    这一年记「样本不够、不判定」，也算做过）：
+      失效警报：保留 − 跳过 的 95% 区间上限 < 0（= 跳过的反而更好）→ 提议关掉 C（var/sim.json combo_c.enabled = false；用户在对话里确认才改）；
+      证实：保留 − 跳过 的 99% 区间下限 > 0 → 记为「新数据证实 C」；其他 = 只报告进度。另报（不判定）：合并样本、两组胜率、跳过个数。
+  - 检出力（照实写）：研究里日経225 每年被跳过的只有约 2〜3 笔（2017〜2026：23 笔 / 9.75 年）→ 跳过组到 10 笔约要 4 年，
+    每笔差 1 pp 在这个笔数上分不出来 → 这份记录只能抓住「明显变坏」；账户层面的模拟盘 − 基准账户含其它改动，只作背景。
+  - 警报 / 证实都只是提议或记录：改模拟盘 / 执行器要用户在对话里确认，并记 sim_changes.md。
 """
 from __future__ import annotations
 
@@ -137,6 +158,7 @@ import pandas as pd
 warnings.filterwarnings("ignore")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from qbreak import combo_c as CC                                            # noqa: E402
 from qbreak import exit_forward as EF                                        # noqa: E402
 from qbreak import idio_forward as IF                                        # noqa: E402
 from qbreak import paths                                                     # noqa: E402
@@ -449,7 +471,7 @@ def x6_review(log: pd.DataFrame, ind: dict, p, bt, hist: pd.DataFrame | None) ->
     主：合并样本里 W2 保留的（w2_keep = 1）；成熟配对第一次达到 100 / 200 / 400 笔时判定（做过的不再做）。
     另报（不判定）：只看日経225（W2 保留）、不管 W2 的全部突破。"""
     rt = bt.exec_cfg.fee(NOTIONAL) * 2 / NOTIONAL * 100
-    cols = [c for c in ("date", "ticker", "segment", "w2_keep") if c in log.columns]
+    cols = [c for c in ("date", "ticker", "segment", "w2_keep", "cc_on", "cc_skip") if c in log.columns]   # cc_*：第十二节
     S = log[cols].copy()
     S["date"] = pd.to_datetime(S["date"])
     P = EF.pairs_frame(ind, S, p, bt, rt)
@@ -462,7 +484,8 @@ def x6_review(log: pd.DataFrame, ind: dict, p, bt, hist: pd.DataFrame | None) ->
     e4 = EF.evaluate_r4(M)                                                    # 第十一节：R4（同一批配对多跑的一边）
     r4 = {"eval": e4, "checkpoint": W2F.due_checkpoint(e4["n"], EF.CHECKPOINTS, W2F.history_done(hist, "R4", "checkpoint")),
           "side": {"只看日経225（W2 保留）": EF.evaluate_r4(M[seg == "N225"]), "不管 W2 的全部突破（合并样本）": EF.evaluate_r4(P)}}
-    return {"eval": ev, "checkpoint": cp, "side": side, "r4": r4}
+    cc = CC.review(P, log, hist, pd.Timestamp.today())                       # 第十二节：关联搭配 C（同一批配对的 X6 那一边）
+    return {"eval": ev, "checkpoint": cp, "side": side, "r4": r4, "cc": cc}
 
 
 def _say_x6(x: dict) -> None:
@@ -489,6 +512,11 @@ def _say_x6(x: dict) -> None:
             say(f"只报告进度（下一个判定时点：成熟配对 {nxt} 笔）" if nxt else "三个判定时点都已做完（只报告）")
         for k, e in r4["side"].items():
             say(f"- 另报 {k}：{EF.r4_summary_line(e)}")
+    cc = x.get("cc")
+    if cc is not None:                                                        # 第十二节
+        say(f"\n## 关联搭配 C（第十二节）：会跳过 vs 保留（{CC.SINCE} 起、W2 保留、平静的牛市、X6 的成熟配对）")
+        for s_ in CC.say_lines(cc):
+            say(f"- {s_}")
 
 
 def review() -> int:
@@ -562,6 +590,8 @@ def review() -> int:
                                    {"logged": int(len(log))}))
         rows.append(EF.r4_history_row(x6["r4"]["eval"], str(pd.Timestamp.today().date()), "R4", "checkpoint", x6["r4"]["checkpoint"],
                                       {"logged": int(len(log))}))                # 第十一节
+        if x6.get("cc") is not None:                            # 第十二节：C 一行（判定过的年份（含样本不够）下次不再判定）
+            rows.append(CC.history_row(x6["cc"], str(pd.Timestamp.today().date()), {"logged": int(len(log))}))
     pd.concat([hist, pd.DataFrame(rows)], ignore_index=True).to_csv(hist_fp, index=False)
     print(f"{time.time() - t0:.0f}s")
     return 0
@@ -607,8 +637,15 @@ def status_lines(log: pd.DataFrame, today, out_dir: Path) -> list[str]:
             if c in log.columns:
                 v = pd.to_numeric(log[c], errors="coerce")
                 L.append(f"{lab}：1 = {int((v == 1).sum())} 个、0 = {int((v == 0).sum())} 个、空 = {int(v.isna().sum())} 个。")
+        if "cc_on" in log.columns:                                            # 第十二节：关联搭配 C
+            m = (d >= pd.Timestamp(CC.SINCE)).to_numpy() & (k == 1) & (log["segment"] == "N225").to_numpy()
+            on = pd.to_numeric(log["cc_on"], errors="coerce").to_numpy(float)
+            sk = pd.to_numeric(log["cc_skip"], errors="coerce").to_numpy(float)
+            L.append(f"关联搭配 C（第十二节，日経225、{CC.SINCE} 起、W2 保留）：{int(m.sum())} 个，平静的牛市 {int((m & (on == 1)).sum())} 个、"
+                     f"其中会跳过 {int((m & (on == 1) & (sk == 1)).sum())} 个；市场格为空 {int((m & np.isnan(on)).sum())} 个"
+                     f"（成熟、已平仓的「保留 vs 跳过」看季度复核）。")
     nxt_y = next((x for x in EF.JUDGE_DATES if pd.Timestamp(x) > t), None)
-    L.append(f"下一次年度判定（W2 / K2 / USW、X6 全市场）：{nxt_y or '五次都已过'} 之后的第一次季度复核。")
+    L.append(f"下一次年度判定（W2 / K2 / USW、X6 全市场、关联搭配 C）：{nxt_y or '五次都已过'} 之后的第一次季度复核。")
     for fn, scope, lab in (("score_forward_review_history.csv", "X6", "每日记录"), ("w2_forward_all_history.csv", "all_X6", "全市场")):
         r = _last_hist(out_dir / fn, scope)
         if r is None:
