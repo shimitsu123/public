@@ -4,7 +4,7 @@
  "registered": "3e643be",
  "user_request": "开始研究循环，直到找到比现在更好的模型才停（用户 2026-10-01 的原文与 0)〜4) 全文见 var/sim_changes.md 同日「研究循环登记」一节）",
  "rules": "scripts/research_loop.py 开头（判定、上限、停下的情况）；基准 B0 = scripts/loop_common.py 开头",
- "status": "running",
+ "status": "found",
  "cap": 20,
  "criteria": {
   "sum_min": 0.03,
@@ -935,6 +935,66 @@
       "q95": 0.1581,
       "q99": 0.3201,
       "registration": "1c7a4d3"
+     }
+    }
+   ]
+  },
+  {
+   "round": 15,
+   "date": "2026-10-01",
+   "title": "参数多数决版的合并对冲（FXE ∪ JBH）",
+   "domain": "核心/配置",
+   "script": "scripts/loop_r15_fxeunion.py",
+   "registration": "80e7649（第二关 f1c205c）",
+   "output": "var/out/loop_r15_fxeunion.md",
+   "approaches": [
+    {
+     "id": "FJE",
+     "rule": "FXE 的多数决急升中 或 JBH 的日経熊且日元牛，且美股牛 → 闲置资金换对冲版纳指 2845",
+     "verdict": "更好候选",
+     "sum": 0.329,
+     "d": {
+      "Z": 0.048,
+      "E": 0.193,
+      "J": 0.088
+     },
+     "checks": {
+      "S1": true,
+      "S2": true,
+      "S3": true,
+      "S4": true,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.339,
+     "h2": 0.397,
+     "cand": {
+      "Z": {
+       "calmar": 0.997,
+       "dd": -14.6,
+       "cagr": 14.56
+      },
+      "E": {
+       "calmar": 0.759,
+       "dd": -19.49,
+       "cagr": 14.79
+      },
+      "J": {
+       "calmar": 0.748,
+       "dd": -26.9,
+       "cagr": 20.13
+      }
+     },
+     "why": "第一关全过（Z +0.048、E +0.193、J +0.088，合计 +0.329，回撤都更浅）；第二关 +0.329 > 400 次循环平移的最大 +0.263（0 次 ≥ 它）→ 更好候选；事后设计的组合（看过 FXH / FXE / JBH / FJH），同样设计的 FJH 第二关没过",
+     "stage2": {
+      "stat": 0.329,
+      "max": 0.263,
+      "ge_stat": 0,
+      "n": 400,
+      "valid": 400,
+      "q95": 0.1543,
+      "q99": 0.2253,
+      "registration": "f1c205c"
      }
     }
    ]
