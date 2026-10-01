@@ -1,5 +1,5 @@
 {
- "as_of": "2026-10-01",
+ "as_of": "2026-10-02",
  "items": [
   {
    "kind": "上場廃止",
@@ -201,7 +201,7 @@
    "kind": "上場廃止",
    "code": "3670",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -215,7 +215,7 @@
    "kind": "上場廃止",
    "code": "3787",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -229,7 +229,7 @@
    "kind": "上場廃止",
    "code": "4316",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -243,7 +243,7 @@
    "kind": "上場廃止",
    "code": "6147",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -257,7 +257,7 @@
    "kind": "上場廃止",
    "code": "7255",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -271,7 +271,7 @@
    "kind": "上場廃止",
    "code": "7709",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -285,7 +285,7 @@
    "kind": "上場廃止",
    "code": "7851",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -299,7 +299,7 @@
    "kind": "上場廃止",
    "code": "7946",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -313,7 +313,7 @@
    "kind": "上場廃止",
    "code": "7985",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -327,7 +327,7 @@
    "kind": "指数剔除",
    "code": "4902",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -339,7 +339,7 @@
    "kind": "指数剔除",
    "code": "543A",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -351,7 +351,7 @@
    "kind": "指数剔除",
    "code": "7004",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -363,7 +363,7 @@
    "kind": "指数纳入",
    "code": "5016",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": true,
    "held": [],
    "core": false,
@@ -375,7 +375,7 @@
    "kind": "指数纳入",
    "code": "6525",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": true,
    "held": [],
    "core": false,
@@ -387,7 +387,7 @@
    "kind": "指数纳入",
    "code": "9697",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": true,
    "held": [],
    "core": false,
@@ -406,7 +406,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "TOB・MBO・株式併合",
    "last_trade": "2026-10-08",
-   "days_left": 6,
+   "days_left": 5,
    "removed": false
   },
   {
@@ -420,7 +420,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "TOB・MBO・株式併合",
    "last_trade": "2026-10-08",
-   "days_left": 6,
+   "days_left": 5,
    "removed": false
   },
   {
@@ -434,7 +434,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "TOB・MBO・株式併合",
    "last_trade": "2026-10-08",
-   "days_left": 6,
+   "days_left": 5,
    "removed": false
   },
   {
@@ -448,7 +448,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "TOB・MBO・株式併合",
    "last_trade": "2026-10-16",
-   "days_left": 11,
+   "days_left": 10,
    "removed": false
   },
   {
@@ -462,7 +462,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "上場維持基準不適合",
    "last_trade": "2026-12-30",
-   "days_left": 62,
+   "days_left": 61,
    "removed": false
   },
   {
@@ -476,7 +476,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "上場維持基準不適合",
    "last_trade": "2027-02-26",
-   "days_left": 99,
+   "days_left": 98,
    "removed": false
   },
   {
@@ -490,7 +490,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "上場維持基準不適合",
    "last_trade": "2027-02-26",
-   "days_left": 99,
+   "days_left": 98,
    "removed": false
   },
   {
@@ -504,7 +504,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "上場維持基準不適合",
    "last_trade": "2027-03-31",
-   "days_left": 121,
+   "days_left": 120,
    "removed": false
   }
  ],
@@ -513,7 +513,7 @@
    "kind": "指数剔除",
    "code": "4902",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -525,7 +525,7 @@
    "kind": "指数剔除",
    "code": "543A",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -537,7 +537,7 @@
    "kind": "指数剔除",
    "code": "7004",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -549,7 +549,7 @@
    "kind": "指数纳入",
    "code": "5016",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": true,
    "held": [],
    "core": false,
@@ -561,7 +561,7 @@
    "kind": "指数纳入",
    "code": "6525",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": true,
    "held": [],
    "core": false,
@@ -573,7 +573,7 @@
    "kind": "指数纳入",
    "code": "9697",
    "date": "2026-10-01",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": true,
    "held": [],
    "core": false,
@@ -587,10 +587,10 @@
  "n_other": 31,
  "stale": false,
  "source_ok_at": {
-  "jpx_delisted": "2026-10-01T07:05+09:00",
-  "jpx_supervision": "2026-10-01T07:05+09:00",
-  "jpx_supervision_etf": "2026-10-01T07:05+09:00"
+  "jpx_delisted": "2026-10-02T07:03+09:00",
+  "jpx_supervision": "2026-10-02T07:03+09:00",
+  "jpx_supervision_etf": "2026-10-02T07:03+09:00"
  },
- "text": "股票池更新时间表：股票池里 0 只有上場廃止预定；定期入替 2026-10-01 生效（+5016/6525/9697 −4902/543A/7004）；JPX 一览另有 31 只不在股票池",
- "updated": "2026-10-01T07:05+09:00"
+ "text": "股票池更新时间表：股票池里 0 只有上場廃止预定；JPX 一览另有 31 只不在股票池",
+ "updated": "2026-10-02T07:03+09:00"
 }

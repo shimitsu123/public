@@ -1,36 +1,19 @@
 {
  "broker": "PaperBroker",
- "decided_on": "2026-09-30",
- "fill_day": "2026-10-01",
- "equity_jpy": 987003,
+ "decided_on": "2026-10-01",
+ "fill_day": "2026-10-02",
+ "equity_jpy": 1013307,
  "cash_jpy": 192,
  "positions": {},
  "core_units": {
   "1545.T": 4110
  },
  "pending_exit": {},
- "reconciled": [
-  {
-   "bar": "2026-09-30",
-   "side": "SELL",
-   "ticker": "1655.T",
-   "qty": 1130,
-   "px": 872.2255,
-   "kind": "core"
-  },
-  {
-   "bar": "2026-09-30",
-   "side": "BUY",
-   "ticker": "1545.T",
-   "qty": 4110,
-   "px": 241.8725,
-   "kind": "core"
-  }
- ],
+ "reconciled": [],
  "orders": [],
  "blocked": null,
  "stats": {
-  "fills": 2,
+  "fills": 0,
   "unfilled_sell": 0,
   "unfilled_buy": 0,
   "model_diff": 0,
@@ -61,10 +44,10 @@
  ],
  "same_as_sim": true,
  "compare": {
-  "exec_date": "2026-09-30",
-  "sim_date": "2026-09-30",
+  "exec_date": "2026-10-01",
+  "sim_date": "2026-10-01",
   "comparable": true,
-  "same": "True",
+  "same": true,
   "equity_diff_jpy": 0.0,
   "text": "与云端模拟盘一致（个股、核心 ETF、现金、权益）"
  }
