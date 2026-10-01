@@ -1,7 +1,7 @@
 {
  "title": "研究循环：直到找到比现在更好的模型才停",
  "start": "2026-10-01",
- "registered": "见 git log「登记（运行前）：研究循环」（第 1 轮记录时补上提交号）",
+ "registered": "3e643be",
  "user_request": "开始研究循环，直到找到比现在更好的模型才停（用户 2026-10-01 的原文与 0)〜4) 全文见 var/sim_changes.md 同日「研究循环登记」一节）",
  "rules": "scripts/research_loop.py 开头（判定、上限、停下的情况）；基准 B0 = scripts/loop_common.py 开头",
  "status": "running",
@@ -91,5 +91,56 @@
   }
  },
  "fingerprint": "053ecdfdcdc562bc",
- "rounds": []
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-01",
+   "title": "闲置资金（纳指 1545）按波动率调节仓位",
+   "domain": "核心/配置",
+   "script": "scripts/loop_r01_voltarget.py",
+   "registration": "b5955f3",
+   "output": "var/out/loop_r01_voltarget.md",
+   "approaches": [
+    {
+     "id": "VT20",
+     "rule": "σ20（日元计纳指 20 日波动）vs 自己的扩展中位数：比例 = min(1, 目标 / σ20)，差 ≥ 0.10 才换、σ20 ≤ 目标回到 1；只在不是熊市时乘到核心",
+     "verdict": "第一关不过",
+     "sum": 0.203,
+     "d": {
+      "Z": -0.019,
+      "E": -0.053,
+      "J": 0.275
+     },
+     "checks": {
+      "S1": true,
+      "S2": false,
+      "S3": true,
+      "S4": true,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.18,
+     "h2": 0.13,
+     "cand": {
+      "Z": {
+       "calmar": 0.93,
+       "dd": -14.79,
+       "cagr": 13.76
+      },
+      "E": {
+       "calmar": 0.513,
+       "dd": -22.03,
+       "cagr": 11.3
+      },
+      "J": {
+       "calmar": 0.935,
+       "dd": -20.99,
+       "cagr": 19.63
+      }
+     },
+     "why": "S2 不过：E Calmar 0.566 → 0.513（−0.053）、Z −0.019；J 0.660 → 0.935（+0.275，回撤 −29.00% → −20.99%）"
+    }
+   ]
+  }
+ ]
 }
