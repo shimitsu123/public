@@ -8116,5 +8116,30 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "研究循环用掉 8 / 20 个做法"
+ },
+ {
+  "line": 4315,
+  "date": "2026-10-01",
+  "title": "研究循环第 6 轮：美股熊市时闲置资金的币种（BXU：熊市里美元在 200 日线之上 → 133A）→ 第一关不过",
+  "kind": "study",
+  "domain": "核心/配置",
+  "registration": "06d87ae（登记后代码未改、只运行一次；循环规则 3e643be）",
+  "script": "scripts/loop_r06_bearcash.py",
+  "output": "var/out/loop_r06_bearcash.md",
+  "candidates": [
+   {
+    "id": "BXU",
+    "rule": "美股熊 且 美元在 200 日线之上 → 闲置资金拿 133A；否则日元现金；牛 → 1545",
+    "result": "合计 −0.130（Z +0.013、E −0.157、J +0.014）；E 回撤深 5.4 pp；S2 / S3 / S4 不过"
+   }
+  ],
+  "baseline": "B0 Calmar Z 0.949 / E 0.566 / J 0.660",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [
+   "只有 2001 与 2022 赚；熊市里美元在 200 日线附近来回换（2003、2009、2018-12〜2019-01）亏得更多（事后描述）"
+  ],
+  "notes": "研究循环用掉 9 / 20 个做法"
  }
 ]
