@@ -1,7 +1,7 @@
 {
  "title": "第二个研究循环：直到找到比现在更好的模型才停",
  "start": "2026-10-02",
- "registered": "本提交（登记）",
+ "registered": "197d8b6",
  "user_request": "开始第二个研究循环（= 2026-10-02 上一条回复给用户的全文；原文全文见 var/sim_changes.md 第 4604 行「第二个研究循环登记」）",
  "rules": "scripts/research_loop2.py 开头（判定、上限、家族、事后组合、停下的情况）；基准 B1 = scripts/loop2_common.py 开头",
  "status": "running",
