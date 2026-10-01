@@ -8218,5 +8218,30 @@
    "急跌时卖多卖在最低的几天：E 2015-08-26、J 2018-02 / 2025-04；只有 J 2020-03 少亏（事后、推测）"
   ],
   "notes": "研究循环用掉 12 / 20 个做法"
+ },
+ {
+  "line": 4397,
+  "date": "2026-10-01",
+  "title": "研究循环第 10 轮：日元走强且美股走弱时换对冲版纳指（RFH）→ 第一关不过",
+  "kind": "study",
+  "domain": "核心/配置",
+  "registration": "5e4d351（登记后代码未改、只运行一次；循环规则 3e643be）",
+  "script": "scripts/loop_r10_riskoffhedge.py",
+  "output": "var/out/loop_r10_riskoffhedge.md",
+  "candidates": [
+   {
+    "id": "RFH",
+    "rule": "USD/JPY 与 S&P 都在 50 日线下且美股牛 → 2845",
+    "result": "合计 −0.172（Z −0.320、E +0.029、J +0.119）；Z 回撤深 4.1 pp；S1〜S4 不过"
+   }
+  ],
+  "baseline": "B0 Calmar Z 0.949 / E 0.566 / J 0.660",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [
+   "E / J 变好（J 回撤浅 3.4 pp）、Z 大幅变差（利差大、来回换多）"
+  ],
+  "notes": "研究循环用掉 13 / 20 个做法；看了第 4 轮 FXH / FXC 之后设计的"
  }
 ]
