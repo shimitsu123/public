@@ -128,7 +128,7 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
         body.append(f"<section class='card{'' if cc.get('applied') else ' warn'}'><h2>关联搭配 C（市场状态 × 个股特征）</h2>"
                     f"<div>{escape(cc_text(cc)[2:])}</div><div class='muted'>只在「日経在 200 日线上且 VIX &lt; 20」时起作用：5 个个股特征投票，"
                     "不利的比有利的多 2 票以上的候选这次不开新仓；云端模拟盘每天算好 var/combo_c.json、scripts/liveu.sh 同步到本机；"
-                    "日期对不上就按原规则</div></section>")
+                    "日期对不上就按原规则；证据：只用过去学时前推不成立（2026-10-01 第二轮研究），要不要关掉由你决定</div></section>")
     if st:
         pend = st.get("pending_exit") or {}
         pos = "".join(f"<tr><td>{escape(t)}</td><td class='n'>{int(p['shares']):,} 股</td><td class='n'>{_yen(p['entry_px'])}</td>"
