@@ -28,6 +28,17 @@
   之后转熊的（2000-10、2008-01、2011-08、2015-08、2022-01、2025-03）→ S&P 跌得少 → 回撤浅一点；天数只占牛市的 2〜5% → 账户的差小，S1（+0.03）是难点。
   第一关约 15%、第二关约 25%。
 运行：python scripts/loop3_r04_zonespx.py（第一关）；--scale（只数 B1 的状态）；--wiring（登记前的接线核对）。输出 var/out/loop3_r04_zonespx.md / .json。非投资建议。
+
+第二关（2026-10-02 第一关全过之后另行登记；登记 = 加这一段的那次提交，之后不改、只运行一次，`--stage2 --workers 3`；第一关的代码不改）：
+  形状 = 第一关登记时写定的那一个（同 NSX 登记时的形状）—— 把 2000-01-03〜2026-09-30 里 B1 分界是「牛」（S&P 不是熊）的美国交易日按顺序接成一串，
+  警戒区标记在这一串上整体循环平移 k 天（k ∈ [250, N − 250]，N = 那一串的天数；种子 s = 0〜399：research_loop3.shift_ks =
+  numpy.random.default_rng([20261003, s])）→ 警戒区的天数与每段长短不变（首尾接起来的那一段除外）、只落在牛市的日子里；窗口外照真实的；
+  B1 的分界、FJE 与其余部分都不动（loop2_r12_ndxtospx.nsx_over 原样）。每次三个年代都跑，统计量 = Calmar 差合计（对同一次运行的 B1）；
+  ZSP 要严格大于 400 次的最大值（research_loop3.stage2；有算不出的 = 不过）。
+  事前预期（照实写）：第一关的 +0.141 几乎全部来自 Z（2006-06〜07 纳指单独下跌时换成 S&P、Z 回撤 −14.71% → −12.62%）；E / J 几乎不变。
+  随机平移会把 4〜9 段警戒区放到牛市里别的日子：多数放在上涨里 → 纳指涨得多 → 略差；少数正好碰上纳指领跌的几段（2000 年、2006-05、2022-01〜03、
+  2025-02〜04）→ 可能比候选还好 → 第二关约 15〜20%。即使通过也是事后 → 只提议（加进前向记录 / 采用由用户决定），不改模拟盘。
+  输出 var/out/loop3_r04_zonespx_stage2.md / .json。
 """
 from __future__ import annotations
 
@@ -221,13 +232,97 @@ def wiring() -> int:
     return 0 if same and n_spx > 0 else 1
 
 
+# ───────────────────────── 第二关（第一关全过之后另行登记；tests/test_loop3_r04.py） ─────────────────────────
+SHIFT_FROM = "2000-01-03"
+
+
+def placebo_zone(zbear: pd.Series, us_bear: pd.Series, seed: int, a: str = SHIFT_FROM, b: str = L2.J_END) -> pd.Series:
+    """第二关的随机改动：窗口里 B1 分界是牛的美国交易日接成一串，警戒区标记在这一串上整体循环平移（research_loop3.shift_ks 的第 seed 个 k）；窗口外照真实的。"""
+    z, bear, idx = N8.on_union(zbear, us_bear)
+    zone = z & ~bear
+    inw = (idx >= pd.Timestamp(a)) & (idx <= pd.Timestamp(b))
+    pos = np.flatnonzero(~bear & inw)
+    k = R3.shift_ks(len(pos), seeds=[seed])[0]
+    out = zone.copy()
+    out[pos] = np.roll(zone[pos], k)
+    return pd.Series(out, index=idx)
+
+
+_G: dict = {}
+
+
+def _placebo_one(seed: int) -> float | None:
+    W, zb, uni, hspx, base = _G["W"], _G["zb"], _G["uni"], _G["hspx"], _G["base"]
+    try:
+        ov = NS.nsx_over(W, placebo_zone(zb, W["bear"]["US"], seed), uni, hspx)
+        tot = 0.0
+        for e in L2.ERAS:
+            c = L2.run(W, e, **ov)["calmar"]
+            if c is None or base[e] is None:
+                return None
+            tot += c - base[e]
+        return round(float(tot), 6)
+    except Exception:                                                         # noqa: BLE001
+        return None
+
+
+def stage_two(workers: int) -> int:
+    import multiprocessing as mp
+    from qbreak import paths
+    t0 = time.time()
+    s1 = json.loads((paths.out_dir() / f"{OUT}.json").read_text(encoding="utf-8"))["stage1"]["ZSP"]
+    if not s1["ok"]:
+        print("ZSP 第一关没过 → 不做第二关")
+        return 1
+    code, dirty = git_head()
+    W = L2.load()
+    uni, sw = inputs(W)
+    zb = zone_bear(W["inp"]["spx"]["Close"])
+    hspx = NS.hedged_spx_frame(W["inp"])
+    base = {e: L2.run(W, e)["calmar"] for e in L2.ERAS}
+    cand = {e: L2.run(W, e, **NS.nsx_over(W, sw, uni, hspx))["calmar"] for e in L2.ERAS}
+    stat = round(sum(cand[e] - base[e] for e in L2.ERAS), 6)
+    _G.update({"W": W, "zb": zb, "uni": uni, "hspx": hspx, "base": base})
+    seeds = list(range(R3.PLACEBO_N))
+    vals = []
+    if workers > 1:
+        with mp.get_context("fork").Pool(workers) as pool:
+            for i, v in enumerate(pool.imap(_placebo_one, seeds)):
+                vals.append(v)
+                if (i + 1) % 40 == 0:
+                    print(f"随机改动 {i + 1} / {len(seeds)}（{time.time() - t0:.0f}s）", flush=True)
+    else:
+        for i in seeds:
+            vals.append(_placebo_one(i))
+            if (i + 1) % 40 == 0:
+                print(f"随机改动 {i + 1} / {len(seeds)}（{time.time() - t0:.0f}s）", flush=True)
+    s2 = R3.stage2(stat, vals)
+    vd = R3.verdict(s1, s2)
+    v = np.array([x for x in vals if x is not None], float)
+    res = {"round": ROUND, "id": "ZSP", "code": code, "dirty": dirty, "base": base, "cand": cand, "stat": stat, "stage1_stat": s1["sum"],
+           "placebo": vals, "stage2": s2, "verdict": vd,
+           "q": {q: round(float(np.percentile(v, q)), 4) for q in (50, 95, 99)} if len(v) else {},
+           "pos_share": round(float((v > 0).mean() * 100), 1) if len(v) else None, "seconds": round(time.time() - t0)}
+    L = [f"# 第三个研究循环第 4 轮 第二关：ZSP vs 400 次循环平移（{pd.Timestamp.today().date()}；代码 {code}{' + 未提交的改动' if dirty else ''}）", "",
+         f"**{vd}**：候选的 Calmar 差合计 {stat:+.4f}（第一关运行 {s1['sum']:+.4f}）；400 次随机里最大 {_f(s2['max'], '{:+.4f}')}、"
+         f"≥ 候选的 {s2['ge_stat']} 次、算出 {s2['valid']} / {s2['n']} 次；中位数 {_f(res['q'].get(50), '{:+.4f}')}、"
+         f"95 分位 {_f(res['q'].get(95), '{:+.4f}')}、99 分位 {_f(res['q'].get(99), '{:+.4f}')}；随机里比 B1 好的 {_f(res['pos_share'], '{:.1f}')}%",
+         "", f"用时 {res['seconds']} s。非投资建议。"]
+    print("\n".join(L))
+    (paths.out_dir() / f"{OUT}_stage2.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    (paths.out_dir() / f"{OUT}_stage2.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=float) + "\n", encoding="utf-8")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="第三个研究循环第 4 轮：ZSP（警戒区里核心换成 S&P500）")
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--scale", action="store_true", help="只数 B1 的状态（不跑 ZSP）")
     g.add_argument("--wiring", action="store_true", help="登记前的接线核对（不看 ZSP 的收益）")
+    g.add_argument("--stage2", action="store_true", help="第二关（第一关全过之后另行登记；只运行一次）")
+    ap.add_argument("--workers", type=int, default=1)
     a = ap.parse_args(argv)
-    return scale_only() if a.scale else wiring() if a.wiring else stage_one()
+    return stage_two(a.workers) if a.stage2 else scale_only() if a.scale else wiring() if a.wiring else stage_one()
 
 
 if __name__ == "__main__":

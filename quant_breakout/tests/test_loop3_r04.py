@@ -55,5 +55,33 @@ def test_wiring_and_cli():
     wsrc = inspect.getsource(T.wiring)
     assert "pd.Series(False, index=sw.index)" in wsrc and "n_spx > 0" in wsrc
     with pytest.raises(SystemExit):
-        T.main(["--stage2"])
+        T.main(["--nope"])
     assert np.isfinite(T.ZONE["L"])
+
+
+def test_placebo_zone_keeps_days_and_stays_on_bull_days():
+    idx = pd.bdate_range("2000-01-03", periods=900)
+    rng = np.random.default_rng(7)
+    bear = pd.Series(False, index=idx)
+    bear.iloc[100:180] = True                                                 # 一段熊市
+    zb = pd.Series(False, index=idx)
+    for a, n in ((50, 8), (300, 15), (600, 5)):
+        zb.iloc[a:a + n] = True
+    zb.iloc[120:130] = True                                                   # 熊市里的 0% 熊不算警戒区
+    real = T.zone_state(zb, bear)
+    for seed in (0, 1, 399):
+        p = T.placebo_zone(zb, bear, seed, a="2000-01-03", b=str(idx[-1].date()))
+        assert int(p.sum()) == int(real.sum()) == 28                         # 天数不变
+        assert not (p & bear.reindex(p.index).to_numpy(bool)).any()           # 只落在牛市的日子里
+        assert p.equals(T.placebo_zone(zb, bear, seed, a="2000-01-03", b=str(idx[-1].date())))   # 同一个种子 = 同一个结果
+    pos = np.flatnonzero(~bear.to_numpy(bool))
+    k = R3.shift_ks(len(pos))[5]
+    assert list(T.placebo_zone(zb, bear, 5, a="2000-01-03", b=str(idx[-1].date())).to_numpy()[pos]) == list(np.roll(real.to_numpy()[pos], k))
+    assert rng is not None
+
+
+def test_stage_two_reuses_registered_pieces():
+    import inspect
+    src = inspect.getsource(T.stage_two)
+    assert 'R3.stage2(stat, vals)' in src and 'if not s1["ok"]' in src and "NS.nsx_over(W, sw, uni, hspx)" in src
+    assert "R3.shift_ks(len(pos), seeds=[seed])[0]" in inspect.getsource(T.placebo_zone)
