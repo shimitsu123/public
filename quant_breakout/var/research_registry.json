@@ -9730,5 +9730,25 @@
    "日経225 账户 E / J 都更好，但 W / Jx 里同样规则挡掉的信号反而更好（与第 3 轮 STR 同样：账户变好、独立池子不支持）"
   ],
   "notes": "第四个循环用掉 11 / 20；过 6 / 7 条；即使 S5 过了，+0.068 也低于第二关门槛的诊断值 +0.158"
+ },
+ {
+  "line": 6247,
+  "date": "2026-10-03",
+  "title": "第四个研究循环停下（stopped:时间到，2026-10-03 05:40 JST）：11 / 20 用了、没找到；最接近 STR / SSN（只差 S5）/ BAS",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "循环规则 2f891af（第五条：用户给的时间到 → 停下汇报）",
+  "script": "scripts/research_loop4.py",
+  "output": "var/research_loop4.json",
+  "candidates": [],
+  "baseline": "B1 Calmar Z 0.979 / E 0.749 / J 0.741",
+  "windows": "Z / E / J",
+  "verdict": "变更/工程",
+  "stable_findings": [
+   "选股过滤两种输法：挡掉 Z 2003〜2005 的大赢家；或账户变好但独立池子（W / Jx）不支持",
+   "个股层平均只占权益约 16%（0.64 只）→ 只改「买哪只」对账户的影响天然有限"
+  ],
+  "era_dependent_or_reversed": [],
+  "notes": "待办 ㊸ 等用户决定；模拟盘、执行器没改"
  }
 ]
