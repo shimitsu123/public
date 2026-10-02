@@ -63,5 +63,63 @@
  },
  "prereq_ok": true,
  "fingerprint": "e73f7f6c0149fe10",
- "rounds": []
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-02",
+   "title": "美股熊市的闲置资金无条件拿高信用国债（资产置换类）",
+   "registration": "7ff27f2",
+   "script": "scripts/loop3_r01_bondswap.py",
+   "approaches": [
+    {
+     "id": "BAJ",
+     "verdict": "第一关不过",
+     "sum": 0.248,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "kind": "asset",
+     "passed": 6,
+     "d": {
+      "Z": 0.182,
+      "E": 0.09,
+      "J": -0.024
+     },
+     "unseen": 0.092,
+     "note": "只差 S2（J −0.024）；拿 2561；J 2022 −3.8 pp"
+    },
+    {
+     "id": "BAU",
+     "verdict": "第一关不过",
+     "sum": 0.241,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "kind": "asset",
+     "passed": 6,
+     "d": {
+      "Z": 0.194,
+      "E": 0.059,
+      "J": -0.012
+     },
+     "unseen": 0.068,
+     "note": "只差 S4（后一半 −0.060）；拿 1482；E 2009 −11.2、J 2022 −6.4 pp"
+    },
+    {
+     "id": "BAB",
+     "verdict": "第一关不过",
+     "sum": 0.252,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "kind": "asset",
+     "passed": 6,
+     "d": {
+      "Z": 0.191,
+      "E": 0.077,
+      "J": -0.016
+     },
+     "unseen": 0.082,
+     "note": "只差 S4（后一半 −0.023）；1482 / 2561 各一半"
+    }
+   ]
+  }
+ ]
 }
