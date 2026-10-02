@@ -81,6 +81,29 @@
      }
     }
    ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-02",
+   "title": "美股熊市里拿对冲版美国 7〜10 年国债",
+   "registration": "119aa46",
+   "script": "scripts/loop2_r02_bondrefuge.py",
+   "approaches": [
+    {
+     "id": "TBH",
+     "verdict": "第一关不过",
+     "sum": 0.248,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "passed": 6,
+     "d": {
+      "Z": 0.194,
+      "E": 0.049,
+      "J": 0.005
+     },
+     "note": "只差 S4（后一半合计 −0.004：Z 后一半 2004〜2006 没拿过债券，权益路径不同 → −0.023）；S7 +0.010"
+    }
+   ]
   }
  ]
 }
