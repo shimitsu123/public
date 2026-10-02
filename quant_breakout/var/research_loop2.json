@@ -4,7 +4,7 @@
  "registered": "197d8b6",
  "user_request": "开始第二个研究循环（= 2026-10-02 上一条回复给用户的全文；原文全文见 var/sim_changes.md 第 4604 行「第二个研究循环登记」）",
  "rules": "scripts/research_loop2.py 开头（判定、上限、家族、事后组合、停下的情况）；基准 B1 = scripts/loop2_common.py 开头",
- "status": "running",
+ "status": "stopped:要用户决定（2026-10-02）—— 「核心·熊市避险资产」家族 3 / 3 用完：TBJ / TBU 第一关全过、第二关（平移候选自己的择时信号）不过，但随机时点也有 95〜98% 比 B1 好 → 这条线前向记录 / 采用 / 换一种检验只能由用户决定（第 4 轮登记 86acbb3 事先写定）",
  "cap": 20,
  "family_cap": 3,
  "banned_families": [
@@ -138,6 +138,48 @@
      "note": "第一关全过；第二关 400 次里最大 +0.254（≥ 候选 2 次，约第 99.5 百分位）；随机的 97.8% 都比 B1 好（中位 +0.168）"
     }
    ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-02",
+   "title": "美股熊市里拿对冲版美债 或 日本国债（TBH ∪ TBJ）",
+   "registration": "86acbb3",
+   "stage2_registration": "cc97c61",
+   "script": "scripts/loop2_r04_bondunion.py",
+   "approaches": [
+    {
+     "id": "TBU",
+     "verdict": "第二关不过",
+     "sum": 0.277,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "passed": 7,
+     "d": {
+      "Z": 0.167,
+      "E": 0.12,
+      "J": -0.01
+     },
+     "stage2": {
+      "stat": 0.277,
+      "max": 0.327,
+      "ge_stat": 14,
+      "q": {
+       "50": 0.167,
+       "95": 0.266,
+       "99": 0.292
+      }
+     },
+     "note": "第一关全过（事后组合，S7 +0.034）；第二关 400 次里最大 +0.327（≥ 候选 14 次，约第 96.5 百分位）；随机的 94.8% 都比 B1 好（中位 +0.167）"
+    }
+   ]
   }
- ]
+ ],
+ "stopped": {
+  "date": "2026-10-02",
+  "after_round": 4,
+  "used": 4,
+  "left": 16,
+  "reason": "循环规则「要用户决定 → 说明后停」；第 4 轮登记（86acbb3）事先写定：家族用完仍没有更好候选就停下请用户决定",
+  "resume": "用户在对话里说「继续第二个研究循环」→ status 改回 running（记进 sim_changes），剩下的做法照原规则"
+ }
 }
