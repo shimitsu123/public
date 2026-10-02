@@ -4,7 +4,7 @@
  "registered": "本提交（登记）",
  "user_request": "开第三个研究循环（回应第二个循环结束时的下一步 ③：换题目范围或换第二关设计，例如熊市换资产类改用资产置换的随机对照）",
  "rules": "scripts/research_loop3.py 开头（判定、第二关的三种形状、上限、家族、ID 不重用、停下的情况）；基准 B1 = scripts/loop2_common.py 开头",
- "status": "running",
+ "status": "stopped:要用户决定（2026-10-02）—— 第 7〜9 轮（用户的题 Jason Perl → DMX / DMT / DMN；另一个只读检查提的 RTX / NZS / ECL）6 个做法都第一关不过（最接近 NZS：只差 S7）；用户说的「现在提出的观点」已经做完；剩下 5 个做法没有事先列好的题 → 结束（没找到）/ 先做新的选题扫描再继续 由用户决定；用户说「继续第三个研究循环」→ 改回 running（规则 507dd68 不变）",
  "cap": 20,
  "family_cap": 3,
  "banned_families": [
@@ -367,6 +367,31 @@
      },
      "unseen": -0.015,
      "note": "只差 S7：+0.140 几乎全部来自 Z 2006-06〜07 的 9 天（回撤 −14.71% → −12.62%，同 ZSP）；E 0 天、J 11 天；1987〜2000 −0.015（方向相反）"
+    }
+   ]
+  },
+  {
+   "round": 9,
+   "date": "2026-10-02",
+   "title": "日本个股新仓的开仓节奏（成交日至少隔 5 个交易日、同一天最多一笔；另一个只读检查提的剩下的题）",
+   "registration": "cdcf737",
+   "script": "scripts/loop3_r09_entrygap.py",
+   "approaches": [
+    {
+     "id": "ECL",
+     "verdict": "第一关不过",
+     "sum": -0.195,
+     "family": "个股层·开仓节奏",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 2,
+     "d": {
+      "Z": -0.027,
+      "E": -0.168,
+      "J": 0.0
+     },
+     "unseen": null,
+     "note": "S1〜S5 不过；E −0.168（回撤 −19.70% → −23.58%）；J 笔数 63 → 44 但 Calmar 不变；W 里被去掉的扎堆信号反而更好（47.0%、+1.89%）"
     }
    ]
   }
