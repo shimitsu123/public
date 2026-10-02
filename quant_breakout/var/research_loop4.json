@@ -1,0 +1,69 @@
+{
+ "title": "第四个研究循环（选股）：直到找到比现在更好的选股算法才停",
+ "start": "2026-10-03",
+ "registered": "本提交（登记）",
+ "user_request": "继续研究循环 6个小时之内不停 直到找到比现在好的选股算法（2026-10-02 23:40 JST；第三个循环的 20 个用完后另开）",
+ "rules": "scripts/research_loop4.py 开头（判定同第三个循环、题目只限选股、第二关的随机挡、上限、家族、ID 不重用、停下的情况）",
+ "status": "running",
+ "deadline": "2026-10-03 05:40 JST",
+ "cap": 20,
+ "family_cap": 3,
+ "family_prefix": "选股",
+ "banned_families": [
+  "汇率对冲"
+ ],
+ "kinds": [
+  "signal",
+  "asset",
+  "stock"
+ ],
+ "criteria": {
+  "sum_min": 0.03,
+  "era_tol": 0.02,
+  "dd_tol_pp": 2.0,
+  "placebo_n": 400,
+  "stage1": "与第二 / 第三个循环相同（S1〜S6 + S7 事后组合）",
+  "stage2": {
+   "stock": "同样强度的随机挡（每月随机挑同样多的票 / 逐个信号按同样比例随机挡；种子 numpy.random.default_rng([20261003, s])）",
+   "signal": "同第三个循环",
+   "asset": "同第三个循环"
+  },
+  "rule": "候选的 Calmar 差合计严格大于 400 次里的最大值（有算不出的 = 不过）"
+ },
+ "baseline_def": "B1 = 第二 / 第三个循环的同一个 B1；J 到 2026-09-30",
+ "baseline": {
+  "Z": {
+   "cagr": 14.4,
+   "dd": -14.71,
+   "calmar": 0.979,
+   "n": 35,
+   "mean": 6.094,
+   "win": 68.6,
+   "h1": 0.721,
+   "h2": 1.683
+  },
+  "E": {
+   "cagr": 14.74,
+   "dd": -19.7,
+   "calmar": 0.749,
+   "n": 43,
+   "mean": 1.283,
+   "win": 41.9,
+   "h1": 0.278,
+   "h2": 1.551
+  },
+  "J": {
+   "cagr": 19.98,
+   "dd": -26.97,
+   "calmar": 0.741,
+   "n": 63,
+   "mean": 3.077,
+   "win": 49.2,
+   "h1": 0.8,
+   "h2": 0.747
+  }
+ },
+ "prereq_ok": true,
+ "fingerprint": "e73f7f6c0149fe10",
+ "rounds": []
+}
