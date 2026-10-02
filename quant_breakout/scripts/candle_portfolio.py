@@ -93,12 +93,6 @@ class MixEngine(MS.MLEngine):
             self.bear["HG"] = self.bear["US"] | ~ys
             self.core_expo["UH"] = self.core_expo["HG"] = np.ones(n)
 
-    def _check_exits(self, m: str, i: int) -> None:
-        super()._check_exits(m, i)
-        ox = MixEngine.OPP_EXIT
-        if ox and m == "JP":
-            self._opp_exit(i, ox)
-
     def _opp_exit(self, i: int, ox: dict) -> None:
         """第 i 天收盘：日本个股持有 ≥ hold 天、自买入以来比核心参照（ref）少涨 ≥ gap → 第二天开盘卖（reason = opp_cost）；已排队离场的不动。"""
         st, A = self.st, self.A
@@ -203,6 +197,9 @@ class MixEngine(MS.MLEngine):
         finally:
             for j, v in saved:
                 self.A.dead[i, j] = v
+        ox = MixEngine.OPP_EXIT                                              # 跑输核心就离场（第 17 轮 OCX；原来另写的一个同名方法被这个覆盖 → 合到这里）
+        if ox and m == "JP":
+            self._opp_exit(i, ox)
 
 
 def bull_only(em: pd.DataFrame, bear_jp: pd.Series) -> pd.DataFrame:

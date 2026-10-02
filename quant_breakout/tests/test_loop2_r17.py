@@ -42,6 +42,14 @@ def test_engine_hook_off_by_default():
     assert "MixEngine.OPP_EXIT = opp_exit or None" in src and "MixEngine.OPP_EXIT = None" in src
 
 
+def test_engine_calls_opp_exit_and_has_one_check_exits():
+    """登记的运行里钩子没生效：MixEngine 里另有一个同名的 _check_exits 在后面把它覆盖了 → 只能有一个定义，而且它要调用 _opp_exit。"""
+    import re
+    src = inspect.getsource(CP.MixEngine)
+    assert len(re.findall(r"\n    def _check_exits\(", src)) == 1
+    assert "self._opp_exit(i, ox)" in inspect.getsource(CP.MixEngine._check_exits)
+
+
 def test_cli_takes_no_options():
     import pytest
     with pytest.raises(SystemExit):
