@@ -145,6 +145,31 @@
      "note": "S1 / S2 / S4 / S7 不过；只有 J 好（对冲中纳指 −11.3%、美债 +10.8%），Z / E / 1987〜2000 对冲中美股照涨"
     }
    ]
+  },
+  {
+   "round": 3,
+   "date": "2026-10-02",
+   "title": "日元急升一开始就卖出日本个股（个股层·离场）",
+   "registration": "7474aaa",
+   "script": "scripts/loop3_r03_yenexit.py",
+   "approaches": [
+    {
+     "id": "FXX",
+     "verdict": "第一关不过",
+     "sum": -0.245,
+     "family": "个股层·日元急升离场",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 2,
+     "d": {
+      "Z": -0.119,
+      "E": -0.004,
+      "J": -0.122
+     },
+     "unseen": null,
+     "note": "S1〜S5 不过；J 回撤 −26.97% → −29.40%；卖掉的多半是之后还在涨的突破（J 2025 −8.9 pp）；与 YSG 同一结论"
+    }
+   ]
   }
  ]
 }
