@@ -65,5 +65,47 @@
  },
  "prereq_ok": true,
  "fingerprint": "e73f7f6c0149fe10",
- "rounds": []
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-03",
+   "title": "选股：同一只票上一次突破刚失败 FBM / 信号前有放量大跌日 NEV",
+   "registration": "b6c7384",
+   "script": "scripts/loop4_r01_memory.py",
+   "approaches": [
+    {
+     "id": "FBM",
+     "verdict": "第一关不过",
+     "sum": -0.12,
+     "family": "选股·个股记忆",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 3,
+     "d": {
+      "Z": 0.011,
+      "E": -0.184,
+      "J": 0.053
+     },
+     "unseen": null,
+     "note": "S1〜S4 不过、S5 过（Jx 被挡的 50 个胜率 32.0%、每笔 −0.64%）；E −0.184（回撤 −19.70% → −24.91%：挡掉一笔之后名额连锁）、J +0.053"
+    },
+    {
+     "id": "NEV",
+     "verdict": "第一关不过",
+     "sum": -0.019,
+     "family": "选股·消息冲击",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 3,
+     "d": {
+      "Z": -0.035,
+      "E": 0.025,
+      "J": -0.009
+     },
+     "unseen": null,
+     "note": "S1、S2、S4、S5 不过（S3 过）；合计 −0.019（Z −0.035：2005 −3.8 pp；E +0.025；J −0.009）"
+    }
+   ]
+  }
+ ]
 }
