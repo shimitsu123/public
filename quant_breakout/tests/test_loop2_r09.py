@@ -35,7 +35,19 @@ def test_wiring_to_b1_core_keys():
     assert o["extra_expo"][Y.UH_KEY].tolist() == [1.0, 0.6, 1.0]                  # 截到 0〜1
 
 
-def test_cli_takes_no_options():
+def test_stage2_registered_constants_and_shift():
+    assert (T.SHIFT_FROM, T.SHIFT_GAP, T.SEED0) == ("2000-01-03", 250, 20262009)
+    idx = pd.bdate_range("1999-06-01", periods=1500)
+    x = pd.Series(np.where((np.arange(1500) // 90) % 3 == 0, 0.6, 1.0), index=idx)
+    w = x[x.index >= pd.Timestamp("2000-01-03")]
+    for seed in (0, 9, 399):
+        s = T.shifted(x, seed)
+        k = T.shift_k(seed, len(w))
+        assert 250 <= k <= len(w) - 250 and s.index.equals(w.index)
+        assert np.array_equal(s.to_numpy(), np.roll(w.to_numpy(), k))            # 同样多、同样形状（整体循环平移）
+
+
+def test_stage2_cli_choices():
     import pytest
     with pytest.raises(SystemExit):
-        T.main(["--stage2", "VTU"])
+        T.main(["--stage2", "XXX"])
