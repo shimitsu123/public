@@ -1,6 +1,6 @@
-"""第三个研究循环第 11 轮 MXR / IVH / SEC（scripts/loop3_r11_lottery.py，2026-10-03 登记）：登记值、月 MAX 与特质波动（不足 15 天 = NaN）、
-横截面最高一成（NaN 不挡）、S5 的同业种贪心、引擎钩子 MixEngine.SECTOR_CAP（同业种持有 / 今天已排 → 不开；明天要卖的不算；核心 ETF、美股、查不到业种的不挡）、
-run 的传入与复位、接线与命令行。"""
+"""第三个研究循环第 11 轮 SEC（scripts/loop3_r11_sector.py，2026-10-03 登记；MXR / IVH 规模核对后不登记）：登记值、
+（只描述用的）月 MAX 与特质波动（不足 15 天 = NaN）与横截面最高一成（NaN 不挡）、S5 的同业种贪心、
+引擎钩子 MixEngine.SECTOR_CAP（同业种持有 / 今天已排 → 不开；明天要卖的不算；核心 ETF、美股、查不到业种的不挡）、run 的传入与复位、接线与命令行。"""
 import json
 import sys
 from pathlib import Path
@@ -12,14 +12,14 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-import loop3_r11_lottery as T  # noqa: E402
+import loop3_r11_sector as T  # noqa: E402
 import research_loop3 as R3  # noqa: E402
 
 
 def test_registered_constants():
-    assert (T.ROUND, T.IDS, T.POSTHOC, T.KIND, T.TOP_Q, T.MIN_DAYS) == (11, ("MXR", "IVH", "SEC"), False, "stock", 0.90, 15)
-    assert T.FAMILY == {"MXR": "选股·彩票型", "IVH": "选股·彩票型", "SEC": "选股·组合分散"}
-    assert T.KIND in R3.KINDS and not set(T.IDS) & R3.previous_ids(ROOT / "var")
+    assert (T.ROUND, T.IDS, T.DROPPED, T.POSTHOC, T.KIND, T.TOP_Q, T.MIN_DAYS) == (11, ("SEC",), ("MXR", "IVH"), False, "stock", 0.90, 15)
+    assert T.FAMILY == {"SEC": "选股·组合分散"}
+    assert T.KIND in R3.KINDS and not set(T.IDS + T.DROPPED) & R3.previous_ids(ROOT / "var")
     st = json.loads((ROOT / "var" / "research_loop3.json").read_text(encoding="utf-8"))
     mine = [r for r in st.get("rounds") or [] if r.get("round") == T.ROUND]
     if mine:                                                                  # 结果已记进状态文件
@@ -27,7 +27,7 @@ def test_registered_constants():
     else:
         used = {a["id"] for r in st.get("rounds") or [] for a in r.get("approaches") or []}
         fc = R3.family_counts(st)
-        assert not set(T.IDS) & used and fc.get("选股·彩票型", 0) + 2 <= R3.FAMILY_CAP and fc.get("选股·组合分散", 0) + 1 <= R3.FAMILY_CAP
+        assert not set(T.IDS) & used and fc.get("选股·组合分散", 0) + 1 <= R3.FAMILY_CAP
         assert R3.used(st) + len(T.IDS) <= R3.CAP
 
 
@@ -107,9 +107,9 @@ def test_run_passes_and_resets_sector_cap_and_wiring_cli():
     assert r.count("MixEngine.SECTOR_CAP = None") == 1
     s1 = inspect.getsource(T.stage_one)
     assert "rb = L2.run(W, e)" in s1 and "rc = L2.run(W, e, **over)" in s1 and "R3.stage1(cand[k], base, trade=os_[k], posthoc=None)" in s1
-    ru = inspect.getsource(T.runs)
-    assert '"SEC": {"sector_cap": sec}' in ru and 'RM.em_tick_of(G[e]["MXR"], days)' in ru
+    assert T.runs({"7203.T": "輸送用機器"}) == {"SEC": {"sector_cap": {"7203.T": "輸送用機器"}}} and list(T.runs({})) == list(T.IDS)
+    assert "em_tick" not in inspect.getsource(T.runs) and "MXR" not in inspect.getsource(T.other_stocks).split('"""')[2]
     w = inspect.getsource(T.wiring)
-    assert "runs(W, \"J\", empty, {})" in w and "all(v > 0 for v in n.values())" in w
+    assert "runs({})" in w and "all(v > 0 for v in n.values())" in w
     with pytest.raises(SystemExit):
         T.main(["--nope"])
