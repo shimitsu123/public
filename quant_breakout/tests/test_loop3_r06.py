@@ -23,8 +23,13 @@ def test_registered_constants():
     assert T.KIND in R3.KINDS and not set(T.IDS) & R3.previous_ids(ROOT / "var")
     import json
     st = json.loads((ROOT / "var" / "research_loop3.json").read_text(encoding="utf-8"))
-    used = {a["id"] for r in st.get("rounds") or [] for a in r.get("approaches") or []}
-    assert not set(T.IDS) & used and R3.family_counts(st).get(T.FAMILY, 0) + len(T.IDS) <= R3.FAMILY_CAP
+    mine = [r for r in st.get("rounds") or [] if r.get("round") == T.ROUND]
+    if mine:                                                                  # 结果已记进状态文件 → 第 6 轮就是这两个做法、这个家族
+        assert [a["id"] for a in mine[0]["approaches"]] == list(T.IDS)
+        assert {a["family"] for a in mine[0]["approaches"]} == {T.FAMILY} and R3.family_counts(st)[T.FAMILY] <= R3.FAMILY_CAP
+    else:                                                                     # 登记时：ID 没用过、家族加上之后不超过上限
+        used = {a["id"] for r in st.get("rounds") or [] for a in r.get("approaches") or []}
+        assert not set(T.IDS) & used and R3.family_counts(st).get(T.FAMILY, 0) + len(T.IDS) <= R3.FAMILY_CAP
 
 
 def _table(n=12, op=100.0, rec=10.0, paid=11.0, debt=1000.0):
