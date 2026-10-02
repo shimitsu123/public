@@ -4,7 +4,7 @@
  "registered": "197d8b6",
  "user_request": "开始第二个研究循环（= 2026-10-02 上一条回复给用户的全文；原文全文见 var/sim_changes.md 第 4604 行「第二个研究循环登记」）",
  "rules": "scripts/research_loop2.py 开头（判定、上限、家族、事后组合、停下的情况）；基准 B1 = scripts/loop2_common.py 开头",
- "status": "running",
+ "status": "exhausted",
  "cap": 20,
  "family_cap": 3,
  "banned_families": [
@@ -548,6 +548,29 @@
       "J": -0.009
      },
      "note": "S1 / S4 / S5 不过（合计 −0.009；两半 −0.042 / +0.028；Jx 220 笔被改变 +4.50% → +3.35%、每笔 −0.32 pp）；Z / E 不变（开示日数据 2016-09 起）；原想做的 EBG（决算前 2 日不进场）规模检查后不占做法：B1 的买入 0 笔受影响，Jx 被挡的 36 个信号 +2.03%（略好于平均）"
+    }
+   ]
+  },
+  {
+   "round": 20,
+   "date": "2026-10-02",
+   "title": "去掉 +25% 止盈、赢家交给 X6 吊灯止损",
+   "registration": "8dd3982",
+   "script": "scripts/loop2_r20_notp.py",
+   "approaches": [
+    {
+     "id": "TPX",
+     "verdict": "第一关不过",
+     "sum": -0.012,
+     "family": "个股层·止盈",
+     "posthoc": false,
+     "passed": 4,
+     "d": {
+      "Z": 0.0,
+      "E": 0.007,
+      "J": -0.019
+     },
+     "note": "S1 / S4 / S5 不过（合计 −0.012；两半 −0.007 / −0.016；W 被改变 29 笔 +28.13% → +25.15%、Jx 19 笔 +25.89% → +25.83%）→ 现行 +25% 止盈有历史支持"
     }
    ]
   }
