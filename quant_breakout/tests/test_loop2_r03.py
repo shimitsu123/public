@@ -49,3 +49,24 @@ def test_fee_table_has_2561():
     from qbreak.fees import etf_cost
     c = etf_cost("tachibana", "2561.T", "JP")
     assert c["lot"] == 1 and c["slip_pct"] == 0.10
+
+
+def test_stage2_registered_constants_and_shift():
+    assert (T.SHIFT_FROM, T.SHIFT_GAP, T.SEED0) == ("2000-01-04", 250, 20262003)
+    idx = pd.bdate_range("2000-01-04", periods=1200)
+    s = pd.Series((np.arange(1200) // 100) % 2 == 0, index=idx)
+    for seed in (0, 1, 399):
+        k = T.shift_k(seed, len(s))
+        assert 250 <= k <= len(s) - 250
+        sh = T.shifted(s, seed)
+        assert sh.index.equals(idx) and int(sh.sum()) == int(s.sum())                   # 同样多
+        assert np.array_equal(sh.to_numpy(), np.roll(s.to_numpy(), k))                  # 同样形状（整体循环平移）
+    assert T.shift_k(7, 1200) == T.shift_k(7, 1200)                                     # 种子固定 → 可重现
+    early = pd.Series(True, index=pd.bdate_range("1999-12-01", periods=30))
+    assert T.shift_domain(early).index.min() >= pd.Timestamp("2000-01-04")
+
+
+def test_stage2_cli_choices():
+    import pytest
+    with pytest.raises(SystemExit):
+        T.main(["--stage2", "XXX"])

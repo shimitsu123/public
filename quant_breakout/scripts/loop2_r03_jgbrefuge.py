@@ -23,9 +23,18 @@
 事前预期（照实写，按一般的市场历史估计）：2001〜2003、2008 下半年、2010、2015〜16（负利率）日本国债上涨；2022〜2025 日本利率上升 → 债券自己是熊 → 现金；
   幅度比 TBH 小（久期约 10 年但日本利率波动小）—— Z +0.05〜+0.15、E +0.03〜+0.10、J ±0.02；第一关约 30%，「更好候选」约 8%。
 运行：python scripts/loop2_r03_jgbrefuge.py（第一关）。输出 var/out/loop2_r03_jgbrefuge.md / .json。非投资建议。
+
+第二关（2026-10-02 第一关全过之后另行登记；登记 = 加这一段的那次提交，之后不改、只运行一次，`--stage2 TBJ`）：
+  第一个循环第 4 / 11 / 14 / 15 轮同一个口径 —— 把候选自己新加的那条信号「日本国债自己的牛熊」（东证交易日，2000-01-04〜2026-09-30）
+  整体循环平移 k 天（k ∈ [250, N − 250]，种子 s = 0〜399：numpy.random.default_rng([20262003, s])），美股牛熊分界与 B1 的其余部分都不动
+  → 「美股熊且（平移后的）日本国债牛 → 拿 2561」= 同样多、同样形状的随机改动；统计量 = 三个年代 Calmar 差合计（同一次运行里 TBJ 与 B1 重算），
+  要严格大于 400 次的最大值（research_loop2.stage2；有算不出的、次数不够 → 不过）。
+  事前预期（照实写）：美股熊市里日本国债平均是涨的 → 随机的日子也会多半赚一点；候选要赢过 400 次里最好的那一次，约 25%。
+  输出 var/out/loop2_r03_jgbrefuge_stage2_TBJ.md / .json。
 """
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
@@ -51,6 +60,7 @@ TRUST_FEE = 0.066                                                           # �
 REF_DATE, REF_PX = "2026-08-31", 1979.0                                     # 2561 的真实收盘（Yahoo）
 OLD = T2.OLD
 OUT = "loop2_r03_jgbrefuge"
+SHIFT_FROM, SHIFT_GAP, SEED0 = "2000-01-04", 250, 20262003          # 第二关（另行登记）
 
 
 # ───────────────────────── 规则（纯函数，tests/test_loop2_r03.py） ─────────────────────────
@@ -83,6 +93,21 @@ def tbj_over(bear_us: pd.Series, jgb_on: pd.Series, frame: pd.DataFrame) -> dict
                          "core_index": {"1545.T": Y.UH_KEY, Y.HEDGE_T: Y.HG_KEY, JGB_T: JG_KEY}, "core_mode": "follow"},
             "extra_core": {JGB_T: frame},
             "extra_bear": {JG_KEY: Y.or_series(~bear_us.astype(bool), ~jgb_on.astype(bool))}}
+
+
+def shift_domain(s: pd.Series, a: str = SHIFT_FROM, b: str = L2.J_END) -> pd.Series:
+    return s[(s.index >= pd.Timestamp(a)) & (s.index <= pd.Timestamp(b))]
+
+
+def shift_k(seed: int, n: int, gap: int = SHIFT_GAP) -> int:
+    rng = np.random.default_rng([SEED0, int(seed)])
+    return int(rng.integers(gap, n - gap + 1))
+
+
+def shifted(s: pd.Series, seed: int) -> pd.Series:
+    """第二关：日本国债的牛熊序列在 SHIFT_FROM〜J_END 里整体循环平移（同样多、同样形状）。"""
+    w = shift_domain(s)
+    return pd.Series(np.roll(w.to_numpy(bool), shift_k(seed, len(w))), index=w.index)
 
 
 # ───────────────────────── 运行 ─────────────────────────
@@ -209,5 +234,78 @@ def write(res: dict) -> None:
     (paths.out_dir() / f"{OUT}.md").write_text(text + "\n", encoding="utf-8")
 
 
+_G: dict = {}
+
+
+def _placebo_one(seed: int) -> float | None:
+    W, on, frame, base = _G["W"], _G["on"], _G["frame"], _G["base"]
+    try:
+        ov = tbj_over(W["bear"]["US"], shifted(on, seed), frame)
+        tot = 0.0
+        for e in L2.ERAS:
+            c = L2.run(W, e, **ov)["calmar"]
+            if c is None or base[e] is None:
+                return None
+            tot += c - base[e]
+        return round(float(tot), 6)
+    except Exception:                                                         # noqa: BLE001
+        return None
+
+
+def stage_two(k: str, workers: int) -> int:
+    import multiprocessing as mp
+    import equity_idle_study as EI
+    from qbreak import paths
+    t0 = time.time()
+    s1 = json.loads((paths.out_dir() / f"{OUT}.json").read_text(encoding="utf-8"))["stage1"][k]
+    if not s1["ok"]:
+        print(f"{k} 第一关没过 → 不做第二关")
+        return 1
+    code, dirty = git_head()
+    W = L2.load()
+    jc = jgb_close(W["inp"])
+    on = T2.trend_on(jc)
+    frame = EI.frame_close(jc)
+    base = {e: L2.run(W, e)["calmar"] for e in L2.ERAS}
+    cand = {e: L2.run(W, e, **tbj_over(W["bear"]["US"], on, frame))["calmar"] for e in L2.ERAS}
+    stat = round(sum(cand[e] - base[e] for e in L2.ERAS), 6)
+    _G.update({"W": W, "on": on, "frame": frame, "base": base})
+    seeds = list(range(R2.PLACEBO_N))
+    vals = []
+    if workers > 1:
+        with mp.get_context("fork").Pool(workers) as pool:
+            for i, v in enumerate(pool.imap(_placebo_one, seeds)):
+                vals.append(v)
+                if (i + 1) % 40 == 0:
+                    print(f"随机改动 {i + 1} / {len(seeds)}（{time.time() - t0:.0f}s）", flush=True)
+    else:
+        for i in seeds:
+            vals.append(_placebo_one(i))
+            if (i + 1) % 40 == 0:
+                print(f"随机改动 {i + 1} / {len(seeds)}（{time.time() - t0:.0f}s）", flush=True)
+    s2 = R2.stage2(stat, vals)
+    vd = R2.verdict(s1, s2)
+    v = np.array([x for x in vals if x is not None], float)
+    res = {"round": ROUND, "id": k, "code": code, "dirty": dirty, "base": base, "cand": cand, "stat": stat, "stage1_stat": s1["sum"],
+           "placebo": vals, "stage2": s2, "verdict": vd,
+           "q": {q: round(float(np.percentile(v, q)), 4) for q in (50, 95, 99)} if len(v) else {}, "seconds": round(time.time() - t0)}
+    L = [f"# 第二个研究循环第 3 轮 第二关：{k} vs 400 次循环平移（{pd.Timestamp.today().date()}；代码 {code}{' + 未提交的改动' if dirty else ''}）", "",
+         f"**{vd}**：候选的 Calmar 差合计 {stat:+.4f}（第一关运行 {s1['sum']:+.4f}）；400 次随机里最大 {_f(s2['max'], '{:+.4f}')}、"
+         f"≥ 候选的 {s2['ge_stat']} 次、算出 {s2['valid']} / {s2['n']} 次；中位数 {_f(res['q'].get(50), '{:+.4f}')}、"
+         f"95 分位 {_f(res['q'].get(95), '{:+.4f}')}、99 分位 {_f(res['q'].get(99), '{:+.4f}')}", "", f"用时 {res['seconds']} s。非投资建议。"]
+    print("\n".join(L))
+    (paths.out_dir() / f"{OUT}_stage2_{k}.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    (paths.out_dir() / f"{OUT}_stage2_{k}.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=float) + "\n", encoding="utf-8")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="第二个研究循环第 3 轮：TBJ")
+    ap.add_argument("--stage2", choices=IDS)
+    ap.add_argument("--workers", type=int, default=1)
+    a = ap.parse_args(argv)
+    return stage_two(a.stage2, a.workers) if a.stage2 else stage_one()
+
+
 if __name__ == "__main__":
-    raise SystemExit(stage_one())
+    raise SystemExit(main())
