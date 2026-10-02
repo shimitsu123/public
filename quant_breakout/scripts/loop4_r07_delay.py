@@ -83,7 +83,7 @@ def delay_monthly(ri: pd.Series, rm: pd.Series, months: pd.PeriodIndex) -> pd.Se
     Y, M = F["y"].to_numpy(float), F[[f"m{k}" for k in range(LAGS + 1)]].to_numpy(float)
     out = np.full(len(months), np.nan)
     for j, m in enumerate(months):
-        hi = int(idx.searchsorted(m.to_timestamp(how="end"), side="right"))
+        hi = int(idx.searchsorted((m + 1).to_timestamp(), side="left"))       # 周五 < 下个月 1 日 0 点（= ≤ 月末；不用纳秒的月末时刻）
         lo = max(0, hi - WIN_W)
         if hi - lo >= MIN_W:
             out[j] = delay_d1(Y[lo:hi], M[lo:hi])

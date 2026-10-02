@@ -51,6 +51,8 @@ def test_delay_monthly_window_and_bottom_third():
     d = T.delay_monthly(ri, rm, months)
     assert np.isnan(d.loc[pd.Period("2020-06", "M")])                     # 到 2020-06 还不到 40 周 → NaN
     assert d.loc[pd.Period("2021-06", "M")] > 0.5                          # 主要对上周的市场反应 → 延迟大
+    d_s = T.delay_monthly(ri.set_axis(widx.as_unit("s")), rm.set_axis(widx.as_unit("s")), months)   # 真实数据的索引是秒精度
+    assert np.allclose(d_s.to_numpy(), d.to_numpy(), equal_nan=True)
     P = pd.DataFrame({"A": [0.1, 0.5], "B": [0.2, np.nan], "C": [0.9, 0.1]}, index=pd.period_range("2021-01", periods=2, freq="M"))
     B = T.bottom_third(P)
     assert list(B.iloc[0]) == [True, False, False] and list(B.iloc[1]) == [False, False, True]   # 最低的三分之一；NaN 不挡
