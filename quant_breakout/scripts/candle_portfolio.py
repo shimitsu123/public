@@ -67,6 +67,8 @@ class MixEngine(MS.MLEngine):
                                                                              # 第二个研究循环第 17 轮；缺省 None = 不变）
     EXIT_TICK: dict | None = None                                            # {票: {收盘日, …}}：那天收盘还拿着 → 第二天开盘卖（reason = pre_earnings；
                                                                              # 第二个研究循环第 19 轮 EBX；缺省 None = 不变）
+    ENTRY_GAP: int | None = None                                             # 日本个股新仓的成交日之间至少隔几个东证交易日、同一个决策日最多排一笔
+                                                                             # （第三个研究循环第 9 轮 ECL；挡掉的记在 skipped["entry_gap"]；缺省 None = 不变）
 
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
@@ -152,6 +154,24 @@ class MixEngine(MS.MLEngine):
             super()._open(t, m, shares, px, i)
         finally:
             self._opening = None
+        if MixEngine.ENTRY_GAP and m == "JP" and t not in self.core_set and t in self.st.pos:
+            self._jp_fill = i                                                # ECL：最近一笔日本个股新仓的成交日（位置）
+
+    def _entry_mult(self, t: str, i: int) -> float:
+        """ECL（ENTRY_GAP = g）：第 i 天收盘决策 → 成交日 k；今天已经排了日本个股、或 k 与上一笔日本个股新仓的成交日不到 g 个交易日 → 0（不开）。"""
+        v = super()._entry_mult(t, i)
+        g = MixEngine.ENTRY_GAP
+        if not g or v <= 0 or t in self.core_set or self.mkt[self.col[t]] != "JP":
+            return v
+        if any(x not in self.core_set and self.mkt[self.col[x]] == "JP" for x in self.st.plan):
+            blocked = True
+        else:
+            k, last = int(self.nxt["JP"][i]), getattr(self, "_jp_fill", None)
+            blocked = last is not None and k >= 0 and k - last < g
+        if blocked:
+            self.skipped["entry_gap"] = self.skipped.get("entry_gap", 0) + 1
+            return 0.0
+        return v
 
     def _p(self, t: str):
         td = MixEngine.PARAMS_TD
@@ -291,7 +311,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             yen_strong: pd.Series | None = None, extra_bear: dict | None = None, priority: dict | None = None,
             em_scale: pd.Series | None = None, params_t: dict | None = None, em_tick: dict | None = None,
             params_td: dict | None = None, extra_expo: dict | None = None, dd_brake: dict | None = None,
-            opp_exit: dict | None = None, exit_tick: dict | None = None) -> dict:
+            opp_exit: dict | None = None, exit_tick: dict | None = None, entry_gap: int | None = None) -> dict:
         names = list(ind)
         key = tuple(names) + (("nomult",) if not mult else ())
         if key not in em_cache and not mult:
@@ -338,6 +358,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
         MixEngine.DD_BRAKE = dd_brake or None
         MixEngine.OPP_EXIT = opp_exit or None
         MixEngine.EXIT_TICK = exit_tick or None
+        MixEngine.ENTRY_GAP = entry_gap or None
         try:
             c = replace(cfg, **cfg_over) if cfg_over else cfg
             xc = extra_core or {}
@@ -352,6 +373,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             MixEngine.DD_BRAKE = None
             MixEngine.OPP_EXIT = None
             MixEngine.EXIT_TICK = None
+            MixEngine.ENTRY_GAP = None
         tr = r.trades[r.trades["reason"] != "end"]
         st = tr[~tr["ticker"].isin(["1655.T", *(extra_core or {})])] if len(tr) else tr
         out = {w: {**CS.seg_stats(r.equity, a, b), "tot": seg_total(r.equity, a, b)} for w, (a, b) in windows.items()}
