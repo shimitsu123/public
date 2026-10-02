@@ -9586,5 +9586,50 @@
   ],
   "era_dependent_or_reversed": [],
   "notes": "不占第四个循环的名额（仍 7 / 20）"
+ },
+ {
+  "line": 6138,
+  "date": "2026-10-03",
+  "title": "只描述的诊断：选股类第二关的门槛 —— 随机挡 15% 的 W2 信号 400 次，最大 +0.158（= 完美选股上限的 27%）、中位 −0.075、13.2% 能过 S1",
+  "kind": "explore",
+  "domain": "选股/买点",
+  "registration": "294ad67（脚本与读法先提交、只运行一次；不占研究循环的名额）",
+  "script": "scripts/loop4_placebo_bar.py",
+  "output": "var/out/loop4_placebo_bar.md",
+  "candidates": [],
+  "baseline": "B1 Calmar Z 0.979 / E 0.749 / J 0.741",
+  "windows": "Z / E / J",
+  "verdict": "探索不登记",
+  "stable_findings": [
+   "随机挡 15% 的信号：Calmar 差合计中位 −0.075（挡了平均就亏，Z 最多）；最大 +0.158 = 第二关门槛 = 完美选股上限的 27%",
+   "随机里 13.2% 能过 S1（+0.03）→ 第一关单靠 S1 很松，把关的是 S2〜S5 与第二关"
+  ],
+  "era_dependent_or_reversed": [],
+  "notes": "第 3 轮 STR 的 +0.096 只在随机的 99 分位附近"
+ },
+ {
+  "line": 6148,
+  "date": "2026-10-03",
+  "title": "第四个研究循环（选股）第 5 轮：选股模型 C 多用别的股票学 CWX（学习集 + 不同时期的扩大池，代替 B1 的 C）→ 第一关不过（−0.177：Z −0.139）",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "85b30b3（代码 7dddd00；登记后代码未改、只运行一次；循环规则 2f891af；不是事后组合；S6 两种检验）",
+  "script": "scripts/loop4_r05_cwide.py",
+  "output": "var/out/loop4_r05_cwide.md",
+  "candidates": [
+   {
+    "id": "CWX",
+    "rule": "C 的学习集 = 日経225 另外两个年代 + 不同时期的扩大池（Z 折 E+J+W+Jx、E 折 Z+J+Jx、J 折 Z+E+W），其余不变，代替 B1 的 C",
+    "result": "合计 −0.177（Z −0.139、E −0.018、J −0.020）；S1、S2、S4、S5、S6 不过（逐年前推 +0.021）"
+   }
+  ],
+  "baseline": "B1 Calmar Z 0.979 / E 0.749 / J 0.741",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30；S5 = W 2006〜2016 / Jx 2017〜",
+  "verdict": "不通过",
+  "stable_findings": [
+   "学习集变多后「每个学习集都同号」的特征只剩 1〜3 个（Z 折只剩 b_n225−）→ C 变成粗的低 β 过滤，Z 少买 11 笔赢家；日経225 与中小盘的规律不同，混学会冲淡"
+  ],
+  "era_dependent_or_reversed": [],
+  "notes": "第四个循环用掉 8 / 20"
  }
 ]
