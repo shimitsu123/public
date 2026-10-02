@@ -450,6 +450,8 @@ FJE = USD/JPY 急升 或 日経熊且日元牛，2026-10-02 用户「采用」�
   - 第 7 轮 PDL「价格延迟最小（对大盘反应最快）的三分之一不买」（登记 0b7e403；Hou & Moskowitz 2005）：**第一关不过** —— −0.025（Z 2005 −6.1 pp）；W / Jx 里被挡的突破反而更好（与文献方向相反）。10 / 20
   - 第 8 轮 SSN「业种同月季节性最差的三分之一不买」（登记 0b8a465；Keloharju 等 2016；2010 年起才有分数、Z 不碰）：**第一关不过、只差 S5** —— +0.068（E +0.051、J +0.017），但 W / Jx 里被挡的反而更好（与 STR 同样：账户变好、独立池子不支持）；即使 S5 过了也低于第二关门槛诊断值 +0.158。11 / 20
   - 2026-10-03 05:40 JST **第四个循环停下（stopped:时间到）：11 / 20 用了、没找到**（两关都过 0 个；最接近 STR / SSN 只差 S5、BAS）。学到的：选股过滤要么挡掉 Z 2003〜2005 的大赢家，要么账户变好但独立池子不支持；个股层平均只占权益约 16% → 只改「买哪只」影响有限 → 待办 ㊸
+  - 2026-10-03 用户选 ㊸ ③ → 第四个循环到此结束（11 / 20、没找到）；另开第五个循环（仓位结构，见下一条）
+- **第五个研究循环「仓位结构：直到找到比现在更好的仓位结构才停」**（2026-10-03 用户「选③，开新循环研究仓位结构」；规则 `scripts/research_loop5.py` 开头、状态 `var/research_loop5.json`）：基准 B1 不变（先决条件满足、加减仓接法核对通过）；判定同第二〜四个循环，**S5 换成仓位版**（W / Jx 里每笔「净收益 − 同期核心（O0 = B1 不开日本个股的账户）」× (倍数 − 1) 的平均 ≥ 0、加权的跑赢核心比例不降）；**题目只限仓位结构**（家族以「仓位」开头）；单只上限仍 34%、「全部加大」不再试；第二关按形状事先写定（按信号：倍数在信号之间随机打乱；按时间：每日倍数循环平移；结构：相邻参数也过 + 400 次配对重抽全部更好）；上限 20、同一家族 ≤ 3、第一〜四个循环的 ID 不再用；没有时间限制。五个循环合计最多 89 个做法、偶然「找到」约 20%
 - 现在的选股方法放在楽天的美股还是立花的日経225（2026-09-29 用户问；登记 1ba090e、`scripts/market_compare_study.py` → `var/out/market_compare_study.md`）：
   同一套个股规则（W2 + X6、4 × 25%）、同一个推进器 → 按事先读法 **日経（立花）更好**（两个窗口的每笔净收益与个股层 Calmar 都是日経高）：
   每笔 2006〜2016 +2.74% vs +0.30%、2017〜 +0.55% vs −0.86%；楽天来回约 1% 的手续费每年约 4〜6 万円（立花 0.1〜0.3 万円），
@@ -521,7 +523,7 @@ FJE = USD/JPY 急升 或 日経熊且日元牛，2026-10-02 用户「采用」�
 - ㊳ ✅ 2026-10-02 用户「采用」研究循环的「更好候选」FJE（日元急升 或 日経熊且日元牛时，闲置资金从 1545 换成对冲版纳指 2845；美股熊照旧现金）
   → 模拟盘与 Mac 执行器的闲置资金 Q1 → Q1H，2026-10-01 收盘的决策起（10-02 06:57 / 07:40 起）（见上面「现在在哪一步」的 Q1H 一条、sim_changes 2026-10-02「配置变更」）。
   汇率改用 Yahoo JPY=X（及时）；2845 在立花 ｅ支店：现物可买东证上市 ETF（2026-09-29 查的一般规定），**上实盘前由用户本人在立花网站的銘柄情報确认一次 2845 本身能现物买**（Claude 不经手登录信息、不自动操作网站）
-- ㊸ ✋ 2026-10-03 05:40 第四个研究循环（只做选股）停下（时间到；11 / 20 用了、没找到；第三个循环 20 / 20 也没找到）→ 等你决定：
+- ㊸ ✅ 2026-10-03 用户「选③，开新循环研究仓位结构」→ 第四个循环以「11 / 20、没找到」结束（状态保留 stopped:时间到）；另开第五个研究循环（仓位结构，`scripts/research_loop5.py`）；㊶ 的 ③（企业利息负担加进仪表盘）还在等你。原来的说明：第四个研究循环（只做选股）停下（时间到；11 / 20 用了、没找到；第三个循环 20 / 20 也没找到）→ 等你决定：
   ①「结束第四个循环」（以「没找到」结束；模拟盘照旧）—— 推荐：有先验支持的选股新想法基本用完；B1 平均只拿 0.64 只日本个股（约占权益 16%），
      「完美选股」的上限每个年代也只有约 +0.2，而第二关门槛约是上限的 27% → 继续只挑「买哪只」收益很小；
   ②「把 STR 加进前向记录」（只记录、不交易；同业种过去 3 年的突破平均跑输核心就不买：日経225 账户三个年代都更好 +0.096，但独立池子不支持 → 把握小）；
@@ -639,6 +641,7 @@ FJE = USD/JPY 急升 或 日経熊且日元牛，2026-10-02 用户「采用」�
 - 研究循环（2026-10-01 起，直到找到比现在更好的模型）：规则与状态 `scripts/research_loop.py`（`--status` / `--baseline` / `--fingerprint`）→ `var/research_loop.json`、`var/out/research_loop_baseline.md` / `.json`；基准 B0 与账户接口 `scripts/loop_common.py`；`tests/test_research_loop.py`；每一轮一个 `scripts/loop_rNN_*.py` → `var/out/loop_rNN_*.md` / `.json`
 - 第三个研究循环（2026-10-02 起）：规则与状态 `scripts/research_loop3.py`（`--status` / `--baseline` / `--init`）→ `var/research_loop3.json`、`var/out/research_loop3_baseline.md` / `.json`；`tests/test_research_loop3.py`；每一轮一个 `scripts/loop3_rNN_*.py` → `var/out/loop3_rNN_*.md` / `.json`
 - 第四个研究循环（选股，2026-10-03 起）：规则与状态 `scripts/research_loop4.py`（`--status` / `--baseline` / `--init`）→ `var/research_loop4.json`、`var/out/research_loop4_baseline.md` / `.json`；`tests/test_research_loop4.py`；每一轮一个 `scripts/loop4_rNN_*.py` → `var/out/loop4_rNN_*.md` / `.json`；事后诊断「完美选股」的上限 `scripts/loop4_oracle_diag.py` → `var/out/loop4_oracle_diag.md` / `.json`（`tests/test_loop4_oracle_diag.py`）；第二关门槛的诊断 `scripts/loop4_placebo_bar.py` → `var/out/loop4_placebo_bar.md` / `.json`；名额诊断 `scripts/loop4_exposure_diag.py` → `var/out/loop4_exposure_diag.md` / `.json`
+- 第五个研究循环（仓位结构，2026-10-03 起）：规则与状态 `scripts/research_loop5.py`（`--status` / `--baseline` / `--init`）→ `var/research_loop5.json`、`var/out/research_loop5_baseline.md` / `.json`；`tests/test_research_loop5.py`；每一轮一个 `scripts/loop5_rNN_*.py` → `var/out/loop5_rNN_*.md` / `.json`
 - 第二个研究循环（2026-10-02 起；同日 20 个做法用完、没找到 → 结束）：规则与状态 `scripts/research_loop2.py`（`--status` / `--baseline` / `--init` / `--fingerprint`）→ `var/research_loop2.json`、`var/out/research_loop2_baseline.md` / `.json`；基准 B1 与账户接口 `scripts/loop2_common.py`；`tests/test_research_loop2.py`；每一轮一个 `scripts/loop2_rNN_*.py` → `var/out/loop2_rNN_*.md` / `.json`（第二关 `*_stage2_<ID>.md` / `.json`）
 - 行情缓存：`qbreak/data.py`（有效期 12 小时 + 按交易日历查新鲜度；盘中取的缓存在收盘后视为过期、重新下载 —— 2026-09-29 修正，以前收盘后 12 小时内会把盘中快照当成收盘价；重下载失败去掉那一根并记为「行情落后」）；**价格调整口径 v2（2026-09-30）**：不用 yfinance 的 auto_adjust，改为 `qbreak.data.adjust_prices` 按 Yahoo 的分红 / 拆股记录自己调整（同一口径，实测与 Yahoo 的 Adj Close 差 < 1e-6），**拆股当天的分红按拆股后口径**（Yahoo 把日本株分割与配当同一基準日的分红记成分割前每股金额 → 8766.T 2026-09-29 被当成 22.8% 的分红、之前价格整体调低、当天「涨」25.8%；横向扫描 1,076 只近 2 年 20 例，含 8035.T / 5401.T 2025-09-29），公司行为随缓存的 meta 保存（`actions_of` / `fixes_of`）、缓存 meta 带 `adj` 版本号（口径不同就重新下载）；**指数日线缺收盘 → 用当天 5 分钟线合成**（`fill_index_from_intraday`，只补 `^` 开头、已收盘的日子；Yahoo 的 ^N225 2026-09-29 只给开盘、收盘 NaN），记进 `FILLED`，日报「数据完整性 · 自动修复」列出；威胁指数的指数序列同样处理（`qbreak/threat.py`）
 - 下单前资格检查：`qbreak/eligibility.py`（快照 `var/out/eligibility.json`；只读检查 `run.py eligibility`）；退市时间表：`qbreak/delist_schedule.py`
@@ -697,6 +700,7 @@ FJE = USD/JPY 急升 或 日経熊且日元牛，2026-10-02 用户「采用」�
 | 研究 / 改规则 | 「用 J-Quants 数据研究 XX，先登记再跑」 | 在 `~/qbreak-dev` 里：登记（提交）→ 运行 → 结果写进 sim_changes → 推送 | 模拟盘 / 实盘规则只在你确认后改 |
 | 研究循环 | 「研究循环进度？」「停止研究循环」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/research_loop.py --status`（在 `~/qbreak-src/quant_breakout`，读 `var/research_loop.json`；只读）；停止 = 不再开新的一轮 | 循环只研究、只提议，不改模拟盘 / 执行器 |
 | 第二个研究循环 | 「第二个研究循环进度？」「停止研究循环」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/research_loop2.py --status`（在 `~/qbreak-src/quant_breakout`，读 `var/research_loop2.json`；只读）；停止 = 不再开新的一轮 | 循环只研究、只提议，不改模拟盘 / 执行器 |
+| 第五个研究循环（仓位结构） | 「第五个研究循环进度？」「停止研究循环」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/research_loop5.py --status`（在 `~/qbreak-src/quant_breakout`，读 `var/research_loop5.json`；只读）；停止 = 不再开新的一轮 | 循环只研究、只提议，不改模拟盘 / 执行器 |
 | 日报 / 季度复核 | 「上次季度复核说了什么？」「今天日报的主题强弱？」 | `git -C ~/qbreak-src pull --ff-only` 后读 `var/out/`（`*_review.md`、`unified_today.json`） | 只读 |
 
 立花的交易次数与能买的股票（2026-09-26 查官方页面，仅对该时点有效；出处见 sim_changes.md 同日一节）：

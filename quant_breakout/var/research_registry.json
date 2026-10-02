@@ -9750,5 +9750,39 @@
   ],
   "era_dependent_or_reversed": [],
   "notes": "待办 ㊸ 等用户决定；模拟盘、执行器没改"
+ },
+ {
+  "line": 6263,
+  "date": "2026-10-03",
+  "title": "用户决定 ㊸：选 ③ —— 另开第五个研究循环「仓位结构」；第四个循环到此结束（11 / 20、没找到）",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": "—",
+  "script": "scripts/research_loop5.py",
+  "output": "var/research_loop4.json",
+  "candidates": [],
+  "baseline": "B1 Calmar Z 0.979 / E 0.749 / J 0.741",
+  "windows": "Z / E / J",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "用户「选③，开新循环研究仓位结构」；STR 不加前向记录；㊶ ③ 还在等；模拟盘、执行器没改"
+ },
+ {
+  "line": 6268,
+  "date": "2026-10-03",
+  "title": "登记第五个研究循环「仓位结构：直到找到比现在更好的仓位结构才停」：基准 B1 不变、判定同第二〜四个循环（S5 换成仓位版：W / Jx 每笔超额 − O0 核心的一阶效果）、题目只限仓位结构（家族以「仓位」开头）、单只上限 34%、三种第二关事先写定（打乱 / 循环平移 / 相邻参数 + 配对重抽）、上限 20、同一家族 ≤ 3、第一〜四个循环的 ID 不再用、没有时间限制",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": "本提交（规则 scripts/research_loop5.py；基准 scripts/loop2_common.py）",
+  "script": "scripts/research_loop5.py",
+  "output": "var/out/research_loop5_baseline.md",
+  "candidates": [],
+  "baseline": "B1 Calmar Z 0.979 / E 0.749 / J 0.741（回撤 -14.71% / -19.70% / -26.97%）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "用户「选③，开新循环研究仓位结构」（㊸ ③）；先决条件满足；加减仓接法核对通过（倍数全为 1 = B1，m_max 1 / 1.36 两种接法）；五个循环合计最多 89 个做法、偶然「找到」约 20%；不改模拟盘与执行器"
  }
 ]
