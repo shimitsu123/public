@@ -9,8 +9,9 @@
   - 以前（「质的飞跃」第 12 轮，2026-09-27 探索）只看过**个股**的同月季节性（日経225 两个年代都不显著），没看过**业种**的；C 的 53 个特征里没有季节性。
   - 数据：日本个股的日线从 2000 年起 → 要求至少 10 个往年同月（文献用到 20 年）→ 2010 年以后才有分数：**Z 与 E 的前半段一笔都不碰**（数据限制，照实写；
     这样 Z 2003〜2005 的赢家碰不到 —— 第 1〜7 轮最常见的输法 —— 但这不是挑出来的参数：10 年是写定的最少年数）。先验中偏弱（季节性的幅度比突破单笔的波动小得多）。
-做法：每个月末 t：每个东証 33 业种（第 11 轮 SEC 同一张表）的月收益 = 业种成员（那个年代账户的日本个股池；W / Jx 各自的池子）当月收益的等权平均（当月有收益的
-  成员 ≥ 3 只才算）；季节分 = 这个业种在「t+1 的那个日历月份」的往年收益平均（只用 t 以前的年份，≥ 10 年才算）；当月横截面（有分数的业种）最低的三分之一 →
+做法：每个月末 t：每个东証 33 业种（第 11 轮 SEC 同一张表）的月收益 = 业种成员（日経225 的票；三个年代的日线合起来、2000 年起）当月收益的等权平均（当月有收益的
+  成员 ≥ 3 只才算；登记前的工程修正：每个年代的日线只从那个年代之前不久开始，凑不满 10 年 → 改成三个年代合起来，与「2000 年起、2010 年以后才有分数」的原意一致；
+  只看过个数、没看收益）；W / Jx 的票用同一张业种分数表（季节性是业种的性质；S5 检验的是别的股票的突破）；季节分 = 这个业种在「t+1 的那个日历月份」的往年收益平均（只用 t 以前的年份，≥ 10 年才算）；当月横截面（有分数的业种）最低的三分之一 →
   这些业种的票在月 t+1 的信号不开新仓（em_tick 0）；算不出的不挡。其余 —— W2 + C 的买点、X6 等离场、核心 FJE、判断层 —— 全部同 B1。
   参数（10 年、3 只、三分之一）一次写定（S6 不适用）。
 S5：W（扩大池 2006〜2016）与 Jx（时点 TOPIX 1000 里非日経225，2017〜）里 B1 会买的信号（W2 + C 那一折）按各自池子的业种季节分挡，保留的 vs 全部，胜率差、每笔差都要 ≥ 0。
@@ -86,20 +87,27 @@ def ticker_block(Bs: pd.DataFrame, tickers, sec: dict) -> pd.DataFrame:
 
 
 # ───────────────────────── 输入 ─────────────────────────
-def season_table(fa: dict, names, sec: dict, months: pd.PeriodIndex) -> pd.DataFrame:
-    keys = [t for t in names if str(t).endswith(".T") and t not in CORE and t in fa]
-    R = pd.DataFrame({t: RM.monthly_ret(fa[t]["Close"]).reindex(months) for t in keys}, index=months)
-    return ticker_block(bottom_third(season_score(sector_monthly(R, sec))), keys, sec)
+def union_monthly(frames: list[dict], months: pd.PeriodIndex) -> pd.DataFrame:
+    """几个年代的日线（同一只票可能在几个里都有）→ 个股月收益合起来（先出现的年代优先，缺的月份用后面的补）。"""
+    out: dict[str, pd.Series] = {}
+    for fa in frames:
+        for t, df in fa.items():
+            if not str(t).endswith(".T") or t in CORE:
+                continue
+            r = RM.monthly_ret(df["Close"]).reindex(months)
+            out[t] = r if t not in out else out[t].combine_first(r)
+    return pd.DataFrame(out, index=months)
 
 
 def inputs(W: dict) -> dict:
-    """{年代 / W / Jx: SSN 被挡表（行 = 月 t，列 = 票；用在月 t+1 的信号上）}。"""
+    """{年代 / W / Jx: SSN 被挡表（行 = 月 t，列 = 票；用在月 t+1 的信号上）}；业种分数用三个年代的日経225 日线合起来算，一张表给所有池子用。"""
     months = RM.market_m(W).index
     sec = R11.sector_map()
     SM = W["SM"]
-    return {key: season_table(fa, names, sec, months)
-            for key, fa, names in [(e, SM[e]["fa"], RM.era_names(W, e)) for e in L2.ERAS]
-            + [("W", SM["W"]["fa"], list(SM["W"]["fa"])), ("Jx", SM["J2"]["fa"], list(SM["J2"]["fa"]))]}
+    Bs = bottom_third(season_score(sector_monthly(union_monthly([SM[e]["fa"] for e in L2.ERAS], months), sec)))
+    keys = {e: RM.era_names(W, e) for e in L2.ERAS}
+    keys.update({"W": list(SM["W"]["fa"]), "Jx": list(SM["J2"]["fa"])})
+    return {k: ticker_block(Bs, [t for t in names if str(t).endswith(".T") and t not in CORE], sec) for k, names in keys.items()}
 
 
 # ───────────────────────── S5 ─────────────────────────

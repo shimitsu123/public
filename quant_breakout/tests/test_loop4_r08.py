@@ -55,11 +55,26 @@ def test_bottom_third_and_ticker_block():
     assert list(tb.iloc[0]) == [True, False, False]                             # 没有业种 → 不挡
 
 
+def test_union_monthly_combines_eras():
+    i1 = pd.bdate_range("2000-01-03", "2001-12-28")
+    i2 = pd.bdate_range("2001-06-01", "2003-12-30")
+    f1 = {"A.T": pd.DataFrame({"Close": np.linspace(100, 200, len(i1))}, index=i1)}
+    f2 = {"A.T": pd.DataFrame({"Close": np.linspace(300, 400, len(i2))}, index=i2), "B.T": pd.DataFrame({"Close": np.ones(len(i2))}, index=i2)}
+    months = pd.period_range("2000-01", "2003-12", freq="M")
+    R = T.union_monthly([f1, f2], months)
+    assert R["A.T"].loc[pd.Period("2000-06", "M")] == pytest.approx(T.RM.monthly_ret(f1["A.T"]["Close"]).loc[pd.Period("2000-06", "M")])
+    assert R["A.T"].loc[pd.Period("2003-06", "M")] == pytest.approx(T.RM.monthly_ret(f2["A.T"]["Close"]).loc[pd.Period("2003-06", "M")])   # 后面的年代补上
+    assert R["A.T"].loc[pd.Period("2001-08", "M")] == pytest.approx(T.RM.monthly_ret(f1["A.T"]["Close"]).loc[pd.Period("2001-08", "M")])   # 重叠 → 先出现的优先
+    assert R["B.T"].loc[pd.Period("2000-06", "M")] != R["B.T"].loc[pd.Period("2000-06", "M")]                                               # 没有 → NaN
+
+
 def test_wiring_and_cli():
     r = inspect.getsource(T.runs)
     assert '"SSN": {"em_tick": RM.em_tick_of(G[e], W["ctx"][e]["days"])}' in r
     s1 = inspect.getsource(T.stage_one)
     assert "rb = L2.run(W, e)" in s1 and "rc = L2.run(W, e, **over)" in s1 and "R4.stage1(cand[k], base, trade=os_[k], posthoc=None)" in s1
+    i = inspect.getsource(T.inputs)
+    assert 'union_monthly([SM[e]["fa"] for e in L2.ERAS], months)' in i
     w = inspect.getsource(T.wiring)
     assert 'L2.run(W, "J", em_tick={})' in w and "n > 0" in w
     with pytest.raises(SystemExit):
