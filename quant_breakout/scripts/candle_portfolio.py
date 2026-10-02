@@ -26,6 +26,22 @@ from qbreak import paths                                                     # n
 TRADE_START = MS.TRADE_START
 
 
+class DDBrake:
+    """账户回撤刹车（第二个研究循环第 5 轮 scripts/loop2_r05_ddbrake.py 登记；只研究用）：逐日 update(收盘权益, 美股熊) → 核心目标的倍数。
+    高点 P = 这一段美股牛里收盘权益的最高（美股熊的日子 → 清空；熊转牛那天的收盘重新起算）；收盘权益 < (1 − level) × P → mult，否则 1。
+    没有滞后带：回到那条线以上就恢复（第二天开盘生效，与核心的其它目标同一个时点）。"""
+
+    def __init__(self, level: float, mult: float):
+        self.level, self.mult, self.peak = float(level), float(mult), None
+
+    def update(self, eq: float, bear: bool) -> float:
+        if bear:
+            self.peak = None
+            return 1.0
+        self.peak = float(eq) if self.peak is None else max(self.peak, float(eq))
+        return self.mult if float(eq) < (1.0 - self.level) * self.peak else 1.0
+
+
 class MixEngine(MS.MLEngine):
     PB: dict[str, set] = {}
     HOLD_PB = 10
@@ -40,6 +56,8 @@ class MixEngine(MS.MLEngine):
     PARAMS_T: dict = {}                                                      # {票: StrategyParams}：这些票用另一套出场参数（例：ETF 趋势仓位；缺省空 = 不变）
     PARAMS_TD: dict = {}                                                     # {(票, 成交日 "YYYY-MM-DD"): StrategyParams}：那一笔持仓用另一套出场参数
                                                                              # （例：按月变的持有天数 / 止损，bnf_adapt_study；缺省空 = 不变；只研究用）
+    DD_BRAKE: dict | None = None                                             # 账户回撤刹车 {"level": 0.10, "mult": 0.5}（DDBrake；第二个研究循环第 5 轮；
+                                                                             # 缺省 None = 不变）；逐日记录在实例的 ddb_log [(日期, 倍数)]
 
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
@@ -67,6 +85,27 @@ class MixEngine(MS.MLEngine):
             self.bear["UH"] = self.bear["US"] | ys
             self.bear["HG"] = self.bear["US"] | ~ys
             self.core_expo["UH"] = self.core_expo["HG"] = np.ones(n)
+
+    def _decide(self, i: int) -> None:
+        bk = MixEngine.DD_BRAKE
+        if bk:
+            self._dd_brake(i, bk)
+        super()._decide(i)
+
+    def _dd_brake(self, i: int, bk: dict) -> None:
+        """第 i 天收盘：按收盘权益更新刹车 → 核心 ETF 各自的键在第 i 天的比例 = 原来的 × 倍数（_decide_core 读它，第二天开盘成交）。"""
+        if not hasattr(self, "_ddb"):
+            keys = {self.cfg.core_index.get(t, "JP") for t in self.cfg.core}
+            keys = [k for k in keys if k in self.core_expo]
+            self._ddb = DDBrake(bk["level"], bk["mult"])
+            self._ddb_base = {k: np.array(self.core_expo[k], dtype=float) for k in keys}
+            for k in keys:                                                   # 各键各用一份（有的键共用同一个数组）
+                self.core_expo[k] = np.array(self._ddb_base[k], dtype=float)
+            self.ddb_log = []
+        m = self._ddb.update(self.equity(i), bool(self.bear["US"][i]))
+        for k, base in self._ddb_base.items():
+            self.core_expo[k][i] = base[i] * m
+        self.ddb_log.append((self.gidx[i], m))
 
     def _open(self, t: str, m: str, shares: int, px: float, i: int) -> None:
         self._opening = (t, str(self.gidx[i].date()))                           # 开仓时止损按这一笔的参数（PARAMS_TD 以成交日为键）
@@ -206,7 +245,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             extra_core: dict | None = None, pref_us: pd.Series | None = None, core_expo: dict | None = None,
             yen_strong: pd.Series | None = None, extra_bear: dict | None = None, priority: dict | None = None,
             em_scale: pd.Series | None = None, params_t: dict | None = None, em_tick: dict | None = None,
-            params_td: dict | None = None, extra_expo: dict | None = None) -> dict:
+            params_td: dict | None = None, extra_expo: dict | None = None, dd_brake: dict | None = None) -> dict:
         names = list(ind)
         key = tuple(names) + (("nomult",) if not mult else ())
         if key not in em_cache and not mult:
@@ -250,6 +289,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
         MixEngine.PRIORITY = priority or {}
         MixEngine.PARAMS_T = params_t or {}
         MixEngine.PARAMS_TD = params_td or {}
+        MixEngine.DD_BRAKE = dd_brake or None
         try:
             c = replace(cfg, **cfg_over) if cfg_over else cfg
             xc = extra_core or {}
@@ -261,6 +301,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             MixEngine.PB, MixEngine.LIMIT_K, MixEngine.PB_USE_DEAD, MixEngine.PREF_US, MixEngine.YEN_STRONG = {}, 0.0, False, None, None
             MixEngine.EXTRA_BEAR, MixEngine.PRIORITY, MixEngine.PARAMS_T, MixEngine.PARAMS_TD = {}, {}, {}, {}
             MixEngine.EXTRA_EXPO = {}
+            MixEngine.DD_BRAKE = None
         tr = r.trades[r.trades["reason"] != "end"]
         st = tr[~tr["ticker"].isin(["1655.T", *(extra_core or {})])] if len(tr) else tr
         out = {w: {**CS.seg_stats(r.equity, a, b), "tot": seg_total(r.equity, a, b)} for w, (a, b) in windows.items()}
