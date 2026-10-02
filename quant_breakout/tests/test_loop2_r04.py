@@ -35,3 +35,23 @@ def test_union_weights_split_when_both_bull():
     w = T.union_weights(pd.Series([False, True, True, True, True], index=idx), pd.Series([True, False, False, False, False], index=idx),
                         pd.Series([True, True, True, False, False], index=idx), pd.Series([True, True, False, True, False], index=idx))
     assert w.to_numpy().tolist() == [[0, 1, 0, 0], [0, 0, 0.5, 0.5], [0, 0, 1, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
+
+
+def test_stage2_registered_constants_and_joint_shift():
+    import numpy as np
+    assert (T.SHIFT_FROM, T.SHIFT_GAP, T.SEED0) == ("2000-01-04", 250, 20262004)
+    idx = pd.bdate_range("2000-01-04", periods=1200)
+    a = pd.Series((np.arange(1200) // 100) % 2 == 0, index=idx)
+    b = pd.Series((np.arange(1200) // 70) % 3 == 0, index=idx)
+    for seed in (0, 5, 399):
+        sa, sb = T.shifted_pair(a, b, seed)
+        k = T.shift_k(seed, 1200)
+        assert 250 <= k <= 950 and sa.index.equals(idx) and sb.index.equals(idx)
+        assert np.array_equal(sa.to_numpy(), np.roll(a.to_numpy(), k)) and np.array_equal(sb.to_numpy(), np.roll(b.to_numpy(), k))   # 同一个 k
+        assert int(sa.sum()) == int(a.sum()) and int(sb.sum()) == int(b.sum())
+
+
+def test_stage2_cli_choices():
+    import pytest
+    with pytest.raises(SystemExit):
+        T.main(["--stage2", "XXX"])

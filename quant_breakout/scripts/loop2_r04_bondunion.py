@@ -18,9 +18,18 @@
 事前预期（照实写）：合计约 +0.20〜+0.30（两只的平均附近，分散后回撤可能更浅）；第二关仍要赢过「随机时点也有资产效果」的 400 次最大值 →
   第一关约 55%，「更好候选」约 12%。不论结果，这个家族到此用完。
 运行：python scripts/loop2_r04_bondunion.py（第一关）。输出 var/out/loop2_r04_bondunion.md / .json。非投资建议。
+
+第二关（2026-10-02 第一关全过之后另行登记；登记 = 加这一段的那次提交，之后不改、只运行一次，`--stage2 TBU`）：
+  第 3 轮 TBJ 同一个口径 —— 把候选自己新加的两条信号「对冲版美债自己的牛熊」「日本国债自己的牛熊」（都是东证交易日，2000-01-04〜2026-09-30）
+  用同一个 k 一起整体循环平移（k ∈ [250, N − 250]，种子 s = 0〜399：numpy.random.default_rng([20262004, s])；两条之间的关系不变），
+  美股牛熊分界与 B1 的其余部分都不动 → 同样多、同样形状的随机改动；统计量 = 三个年代 Calmar 差合计（同一次运行里 TBU 与 B1 重算），
+  要严格大于 400 次的最大值（research_loop2.stage2；有算不出的、次数不够 → 不过）。
+  事前预期（照实写）：TBJ 的随机平移 97.8% 比 B1 好、最大 +0.254 → 这次随机的也会多半赚；候选 +0.277 要赢过 400 次里最好的那一次，约 30%。
+  输出 var/out/loop2_r04_bondunion_stage2_TBU.md / .json。
 """
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
@@ -43,6 +52,7 @@ FAMILY = T2.FAMILY
 POSTHOC = True
 OLD = T2.OLD
 OUT = "loop2_r04_bondunion"
+SHIFT_FROM, SHIFT_GAP, SEED0 = "2000-01-04", 250, 20262004          # 第二关（另行登记）
 
 
 # ───────────────────────── 规则（纯函数，tests/test_loop2_r04.py） ─────────────────────────
@@ -63,6 +73,24 @@ def union_weights(bear: pd.Series, hedge: pd.Series, ust: pd.Series, jgb: pd.Ser
     share = 1.0 / n.where(n > 0, 1.0)
     return pd.DataFrame({"u": (~b & ~h).astype(float), "h": (~b & h).astype(float),
                          "b": (b & o1).astype(float) * share, "j": (b & o2).astype(float) * share}, index=bear.index)
+
+
+def shift_domain(s: pd.Series, a: str = SHIFT_FROM, b: str = L2.J_END) -> pd.Series:
+    return s[(s.index >= pd.Timestamp(a)) & (s.index <= pd.Timestamp(b))]
+
+
+def shift_k(seed: int, n: int, gap: int = SHIFT_GAP) -> int:
+    rng = np.random.default_rng([SEED0, int(seed)])
+    return int(rng.integers(gap, n - gap + 1))
+
+
+def shifted_pair(a: pd.Series, b: pd.Series, seed: int) -> tuple[pd.Series, pd.Series]:
+    """第二关：两条债券牛熊序列放到同一组日子上（SHIFT_FROM〜J_END），用同一个 k 一起整体循环平移（两条之间的关系不变）。"""
+    wa, wb = shift_domain(a), shift_domain(b)
+    idx = wa.index.intersection(wb.index)
+    k = shift_k(seed, len(idx))
+    va, vb = wa.reindex(idx).fillna(False).to_numpy(bool), wb.reindex(idx).fillna(False).to_numpy(bool)
+    return pd.Series(np.roll(va, k), index=idx), pd.Series(np.roll(vb, k), index=idx)
 
 
 # ───────────────────────── 运行 ─────────────────────────
@@ -200,5 +228,81 @@ def write(res: dict) -> None:
     (paths.out_dir() / f"{OUT}.md").write_text(text + "\n", encoding="utf-8")
 
 
+_G: dict = {}
+
+
+def _placebo_one(seed: int) -> float | None:
+    W, on_b, on_j, fb, fj, base = _G["W"], _G["on_b"], _G["on_j"], _G["fb"], _G["fj"], _G["base"]
+    try:
+        sb, sj = shifted_pair(on_b, on_j, seed)
+        ov = tbu_over(W["bear"]["US"], sb, fb, sj, fj)
+        tot = 0.0
+        for e in L2.ERAS:
+            c = L2.run(W, e, **ov)["calmar"]
+            if c is None or base[e] is None:
+                return None
+            tot += c - base[e]
+        return round(float(tot), 6)
+    except Exception:                                                         # noqa: BLE001
+        return None
+
+
+def stage_two(k: str, workers: int) -> int:
+    import multiprocessing as mp
+    import equity_idle_study as EI
+    from qbreak import paths
+    t0 = time.time()
+    s1 = json.loads((paths.out_dir() / f"{OUT}.json").read_text(encoding="utf-8"))["stage1"][k]
+    if not s1["ok"]:
+        print(f"{k} 第一关没过 → 不做第二关")
+        return 1
+    code, dirty = git_head()
+    W = L2.load()
+    bc, jc = T2.bond_close(W["inp"]), T3.jgb_close(W["inp"])
+    on_b, on_j = T2.trend_on(bc), T2.trend_on(jc)
+    fb, fj = EI.frame_close(bc), EI.frame_close(jc)
+    base = {e: L2.run(W, e)["calmar"] for e in L2.ERAS}
+    cand = {e: L2.run(W, e, **tbu_over(W["bear"]["US"], on_b, fb, on_j, fj))["calmar"] for e in L2.ERAS}
+    stat = round(sum(cand[e] - base[e] for e in L2.ERAS), 6)
+    _G.update({"W": W, "on_b": on_b, "on_j": on_j, "fb": fb, "fj": fj, "base": base})
+    seeds = list(range(R2.PLACEBO_N))
+    vals = []
+    if workers > 1:
+        with mp.get_context("fork").Pool(workers) as pool:
+            for i, v in enumerate(pool.imap(_placebo_one, seeds)):
+                vals.append(v)
+                if (i + 1) % 40 == 0:
+                    print(f"随机改动 {i + 1} / {len(seeds)}（{time.time() - t0:.0f}s）", flush=True)
+    else:
+        for i in seeds:
+            vals.append(_placebo_one(i))
+            if (i + 1) % 40 == 0:
+                print(f"随机改动 {i + 1} / {len(seeds)}（{time.time() - t0:.0f}s）", flush=True)
+    s2 = R2.stage2(stat, vals)
+    vd = R2.verdict(s1, s2)
+    v = np.array([x for x in vals if x is not None], float)
+    res = {"round": ROUND, "id": k, "code": code, "dirty": dirty, "base": base, "cand": cand, "stat": stat, "stage1_stat": s1["sum"],
+           "placebo": vals, "stage2": s2, "verdict": vd,
+           "q": {q: round(float(np.percentile(v, q)), 4) for q in (50, 95, 99)} if len(v) else {},
+           "pos_share": round(float((v > 0).mean() * 100), 1) if len(v) else None, "seconds": round(time.time() - t0)}
+    L = [f"# 第二个研究循环第 4 轮 第二关：{k} vs 400 次循环平移（{pd.Timestamp.today().date()}；代码 {code}{' + 未提交的改动' if dirty else ''}）", "",
+         f"**{vd}**：候选的 Calmar 差合计 {stat:+.4f}（第一关运行 {s1['sum']:+.4f}）；400 次随机里最大 {_f(s2['max'], '{:+.4f}')}、"
+         f"≥ 候选的 {s2['ge_stat']} 次、算出 {s2['valid']} / {s2['n']} 次；中位数 {_f(res['q'].get(50), '{:+.4f}')}、"
+         f"95 分位 {_f(res['q'].get(95), '{:+.4f}')}、99 分位 {_f(res['q'].get(99), '{:+.4f}')}；随机里比 B1 好的 {_f(res['pos_share'], '{:.1f}')}%",
+         "", f"用时 {res['seconds']} s。非投资建议。"]
+    print("\n".join(L))
+    (paths.out_dir() / f"{OUT}_stage2_{k}.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    (paths.out_dir() / f"{OUT}_stage2_{k}.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=float) + "\n", encoding="utf-8")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="第二个研究循环第 4 轮：TBU")
+    ap.add_argument("--stage2", choices=IDS)
+    ap.add_argument("--workers", type=int, default=1)
+    a = ap.parse_args(argv)
+    return stage_two(a.stage2, a.workers) if a.stage2 else stage_one()
+
+
 if __name__ == "__main__":
-    raise SystemExit(stage_one())
+    raise SystemExit(main())
