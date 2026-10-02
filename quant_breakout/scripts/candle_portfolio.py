@@ -65,6 +65,8 @@ class MixEngine(MS.MLEngine):
                                                                              # 缺省 None = 不变）；逐日记录在实例的 ddb_log [(日期, 倍数)]
     OPP_EXIT: dict | None = None                                             # 跑输核心就离场 {"ref": "1545.T", "hold": 10, "gap": 0.05}（opp_cost_hit；
                                                                              # 第二个研究循环第 17 轮；缺省 None = 不变）
+    EXIT_TICK: dict | None = None                                            # {票: {收盘日, …}}：那天收盘还拿着 → 第二天开盘卖（reason = pre_earnings；
+                                                                             # 第二个研究循环第 19 轮 EBX；缺省 None = 不变）
 
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
@@ -111,6 +113,17 @@ class MixEngine(MS.MLEngine):
             cr = float(A.close[i, jr]) / float(A.close[ie, jr]) - 1
             if opp_cost_hit(sr, cr, int(ps.hold), int(ox["hold"]), float(ox["gap"])):
                 st.pending_exit[t] = "opp_cost"
+
+    def _tick_exit(self, i: int, xt: dict) -> None:
+        """第 i 天收盘：日本个股在 xt[票] 的日子里还拿着、没排队离场 → 第二天开盘卖（reason = pre_earnings）。"""
+        d = pd.Timestamp(self.gidx[i]).normalize()
+        st = self.st
+        for t in list(st.pos):
+            ps = st.pos[t]
+            if ps.market != "JP" or t in st.pending_exit:
+                continue
+            if d in xt.get(t, ()):
+                st.pending_exit[t] = "pre_earnings"
 
     def _decide(self, i: int) -> None:
         bk = MixEngine.DD_BRAKE
@@ -200,6 +213,9 @@ class MixEngine(MS.MLEngine):
         ox = MixEngine.OPP_EXIT                                              # 跑输核心就离场（第 17 轮 OCX；原来另写的一个同名方法被这个覆盖 → 合到这里）
         if ox and m == "JP":
             self._opp_exit(i, ox)
+        xt = MixEngine.EXIT_TICK                                             # 指定日收盘还拿着就离场（第 19 轮 EBX：决算前卖出）
+        if xt and m == "JP":
+            self._tick_exit(i, xt)
 
 
 def bull_only(em: pd.DataFrame, bear_jp: pd.Series) -> pd.DataFrame:
@@ -275,7 +291,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             yen_strong: pd.Series | None = None, extra_bear: dict | None = None, priority: dict | None = None,
             em_scale: pd.Series | None = None, params_t: dict | None = None, em_tick: dict | None = None,
             params_td: dict | None = None, extra_expo: dict | None = None, dd_brake: dict | None = None,
-            opp_exit: dict | None = None) -> dict:
+            opp_exit: dict | None = None, exit_tick: dict | None = None) -> dict:
         names = list(ind)
         key = tuple(names) + (("nomult",) if not mult else ())
         if key not in em_cache and not mult:
@@ -321,6 +337,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
         MixEngine.PARAMS_TD = params_td or {}
         MixEngine.DD_BRAKE = dd_brake or None
         MixEngine.OPP_EXIT = opp_exit or None
+        MixEngine.EXIT_TICK = exit_tick or None
         try:
             c = replace(cfg, **cfg_over) if cfg_over else cfg
             xc = extra_core or {}
@@ -334,6 +351,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             MixEngine.EXTRA_EXPO = {}
             MixEngine.DD_BRAKE = None
             MixEngine.OPP_EXIT = None
+            MixEngine.EXIT_TICK = None
         tr = r.trades[r.trades["reason"] != "end"]
         st = tr[~tr["ticker"].isin(["1655.T", *(extra_core or {})])] if len(tr) else tr
         out = {w: {**CS.seg_stats(r.equity, a, b), "tot": seg_total(r.equity, a, b)} for w, (a, b) in windows.items()}
