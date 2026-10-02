@@ -271,6 +271,63 @@
      "note": "S1 / S4 不过；J 个股胜率 49.2% → 54.8%、每笔 +3.08% → +3.99%（S5 明显过），但 2025 −10.8 / 2026 −6.1 pp → 后一半 −0.123"
     }
    ]
+  },
+  {
+   "round": 7,
+   "date": "2026-10-02",
+   "title": "Jason Perl（DeMark 指标 TD Sequential）的观点 → 日本个股的离场与买点（DMX 卖 13 卖出 / DMT 收盘在卖 setup 的 TDST 之下卖出 / DMN 刚出现卖 13 不开新仓；用户的题）",
+   "registration": "26967f6",
+   "script": "scripts/loop3_r07_demark.py",
+   "approaches": [
+    {
+     "id": "DMX",
+     "verdict": "第一关不过",
+     "sum": -0.091,
+     "family": "个股层·DeMark 离场",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 2,
+     "d": {
+      "Z": 0.07,
+      "E": -0.169,
+      "J": 0.008
+     },
+     "unseen": null,
+     "note": "S1〜S5 不过；胜率 W +2.28 / Jx +2.90 pp、J 账户 49.2% → 56.5%，但每笔 −0.33 / −0.00 pp（W 被改变的 70 笔 +7.87% → +5.83%：砍掉大赢家）；E −0.169（回撤 −19.70% → −24.07%）"
+    },
+    {
+     "id": "DMT",
+     "verdict": "第一关不过",
+     "sum": -0.004,
+     "family": "个股层·DeMark 离场",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 4,
+     "d": {
+      "Z": -0.002,
+      "E": 0.001,
+      "J": -0.003
+     },
+     "unseen": null,
+     "note": "S1 / S4 / S5 不过；另一种追踪止损，比 X6 差（W 被改变的 124 笔 +1.16% → −1.32%）"
+    },
+    {
+     "id": "DMN",
+     "verdict": "第一关不过",
+     "sum": -0.011,
+     "family": "个股层·DeMark 买点",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 5,
+     "d": {
+      "Z": 0.0,
+      "E": 0.009,
+      "J": -0.02
+     },
+     "unseen": null,
+     "note": "S1 / S4 不过；只挡 Z 1 / E 3 / J 9 个信号；S5 小幅过（Jx 被挡 32 个 −0.77%）；J 2025 −6.9 pp"
+    }
+   ]
   }
  ],
  "status_was": "stopped:要用户决定（2026-10-02）—— 第 6 轮（用户的题：企业利息负担）IBS / IBA 两个都第一关不过；同一会话另一个只读检查：按现在的规则剩下的题「两关都过」的机会最好的约 1%（NZS）、其余 ≤ 0.5%，剩下 11 个全用上期望约 0.1 个 → 结束（没找到）/ 继续 / 先等前向记录由用户决定；用户说「继续第三个研究循环」→ 改回 running（规则 507dd68 不变）",
