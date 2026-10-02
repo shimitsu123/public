@@ -21,7 +21,22 @@ def test_core_bear_is_spx_bear_minus_early_return():
     assert T.core_bear(spx, pd.Series(False, index=idx)).tolist() == spx.tolist()            # 纳指从不翻熊 → 没有早回来 = B1
 
 
-def test_cli_takes_no_options():
+def test_stage2_registered_constants_and_shift_shape():
+    import numpy as np
+    assert (T.SHIFT_FROM, T.SHIFT_GAP, T.SEED0) == ("2000-01-03", 250, 20262008)
+    idx = pd.bdate_range("2000-01-03", periods=1600)
+    spx = pd.Series((np.arange(1600) // 200) % 2 == 1, index=idx)               # 每 200 天轮流牛 / 熊
+    ndx = pd.Series(((np.arange(1600) % 200) < 40) & spx.to_numpy(), index=idx)  # 每段熊市的前 40 天纳指也熊 → 之后早回来
+    real = T.core_bear(spx, ndx)
+    for seed in (0, 7, 399):
+        p = T.placebo_bear(spx, ndx, seed)
+        assert p.index.equals(real.index)
+        assert not (p & ~spx).any()                                               # 只会在 S&P 熊的日子里是熊（牛的日子不动）
+        assert int((spx & ~p).sum()) == int((spx & ~real).sum())                  # 早回来的天数不变
+        assert 250 <= T.shift_k(seed, int(spx.sum())) <= int(spx.sum()) - 250
+
+
+def test_stage2_cli_choices():
     import pytest
     with pytest.raises(SystemExit):
-        T.main(["--stage2", "NDRH"])
+        T.main(["--stage2", "XXX"])

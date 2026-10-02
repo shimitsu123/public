@@ -18,6 +18,15 @@
 事前预期（照实写）：NDR 在 B0 上 Z / J 都是正的；E 的回撤加深有一半来自日元，B1 会对冲掉一部分 → 第一关约 40%（E 的 S2 / S3 仍是关键）、
   第二关约 30%（NDR 登记时的估计），「更好候选」约 12%。
 运行：python scripts/loop2_r08_ndrhedged.py（第一关）。输出 var/out/loop2_r08_ndrhedged.md / .json。非投资建议。
+
+第二关（2026-10-02 第一关全过之后另行登记；登记 = 加这一段的那次提交，之后不改、只运行一次，`--stage2 NDRH --workers 3`）：
+  NDR 登记时写定的形状（第一个循环第 8 轮，loop_r08_ndxreentry.placebo_key 同一个做法）—— 把 2000-01-03〜2026-09-30 里 S&P 熊的美国交易日
+  按顺序接成一串，「早回来」标记在这一串上整体循环平移 k 天（k ∈ [250, N − 250]，N = 那一串的天数；种子 s = 0〜399：
+  numpy.random.default_rng([20262008, s])）→ 早回来的天数与每段长短不变、只落在 S&P 熊的日子里；窗口外照真实的；FJE 与 B1 的其余部分都不动。
+  每次三个年代都跑，统计量 = Calmar 差合计（对同一次运行的 B1）；NDRH 要严格大于 400 次的最大值（research_loop2.stage2；有算不出的 = 不过）。
+  事前预期（照实写）：早回来只有几段（2003-04〜05、2009-06〜07、2020-04〜06、2023-03〜04 等），平移到熊市里别的日子多半是在下跌里拿核心
+  → 随机的多半比 B1 差；但也会有几次碰到别的反弹。NDR 登记时估第二关约 30%，这里同样约 30〜35%。
+  输出 var/out/loop2_r08_ndrhedged_stage2_NDRH.md / .json。
 """
 from __future__ import annotations
 
@@ -44,6 +53,7 @@ FAMILY = "核心·择时（早回来）"
 POSTHOC = True
 OLD = R5.OLD
 OUT = "loop2_r08_ndrhedged"
+SHIFT_FROM, SHIFT_GAP, SEED0 = N8.SHIFT_FROM, N8.SHIFT_GAP, 20262008  # 第二关（另行登记）：NDR 同一个形状，种子换成本轮的
 
 
 # ───────────────────────── 接法（tests/test_loop2_r08.py） ─────────────────────────
@@ -56,6 +66,24 @@ def ndrh_over(W: dict, ndx_bear: pd.Series, uni: pd.Series) -> dict:
     """B1 的接法（fxh_over：对冲中 → 2845，否则 1545）里把「美股熊」换成 core_bear。"""
     import loop_r04_yensurge as Y
     return Y.fxh_over(W, core_bear(W["bear"]["US"], ndx_bear), uni, Y.hedged_frame(W["inp"]))
+
+
+def shift_k(seed: int, n: int, gap: int = SHIFT_GAP) -> int:
+    rng = np.random.default_rng([SEED0, int(seed)])
+    return int(rng.integers(gap, n - gap + 1))
+
+
+def placebo_bear(spx_bear: pd.Series, ndx_bear: pd.Series, seed: int, a: str = SHIFT_FROM, b: str = L2.J_END) -> pd.Series:
+    """第二关的随机改动（NDR 登记时的形状）：窗口里 S&P 熊的日子接成一串，「早回来」标记在这一串上循环平移 → 核心用的熊；窗口外照真实的。"""
+    s, _, idx = N8.on_union(spx_bear, ndx_bear)
+    re = N8.reentry(spx_bear, ndx_bear).to_numpy(bool)
+    key = s & ~re
+    inw = (idx >= pd.Timestamp(a)) & (idx <= pd.Timestamp(b))
+    pos = np.flatnonzero(s & inw)
+    rolled = np.roll(re[pos], shift_k(seed, len(pos)))
+    key = key.copy()
+    key[pos] = ~rolled
+    return pd.Series(key, index=idx)
 
 
 def old_core(W: dict, uni: pd.Series, bear: pd.Series) -> dict:
@@ -186,10 +214,79 @@ def write(res: dict) -> None:
     (paths.out_dir() / f"{OUT}.md").write_text(text + "\n", encoding="utf-8")
 
 
+_G: dict = {}
+
+
+def _placebo_one(seed: int) -> float | None:
+    import loop_r04_yensurge as Y
+    W, nb_, uni, hf, base = _G["W"], _G["nb"], _G["uni"], _G["hf"], _G["base"]
+    try:
+        ov = Y.fxh_over(W, placebo_bear(W["bear"]["US"], nb_, seed), uni, hf)
+        tot = 0.0
+        for e in L2.ERAS:
+            c = L2.run(W, e, **ov)["calmar"]
+            if c is None or base[e] is None:
+                return None
+            tot += c - base[e]
+        return round(float(tot), 6)
+    except Exception:                                                         # noqa: BLE001
+        return None
+
+
+def stage_two(k: str, workers: int) -> int:
+    import multiprocessing as mp
+    import loop_r04_yensurge as Y
+    from qbreak import paths
+    t0 = time.time()
+    s1 = json.loads((paths.out_dir() / f"{OUT}.json").read_text(encoding="utf-8"))["stage1"][k]
+    if not s1["ok"]:
+        print(f"{k} 第一关没过 → 不做第二关")
+        return 1
+    code, dirty = git_head()
+    W = L2.load()
+    _, _, uni = L2.fje_states(W)
+    nb_ = N8.ndx_bear(W["inp"])
+    base = {e: L2.run(W, e)["calmar"] for e in L2.ERAS}
+    cand = {e: L2.run(W, e, **ndrh_over(W, nb_, uni))["calmar"] for e in L2.ERAS}
+    stat = round(sum(cand[e] - base[e] for e in L2.ERAS), 6)
+    _G.update({"W": W, "nb": nb_, "uni": uni, "hf": Y.hedged_frame(W["inp"]), "base": base})
+    seeds = list(range(R2.PLACEBO_N))
+    vals = []
+    if workers > 1:
+        with mp.get_context("fork").Pool(workers) as pool:
+            for i, v in enumerate(pool.imap(_placebo_one, seeds)):
+                vals.append(v)
+                if (i + 1) % 40 == 0:
+                    print(f"随机改动 {i + 1} / {len(seeds)}（{time.time() - t0:.0f}s）", flush=True)
+    else:
+        for i in seeds:
+            vals.append(_placebo_one(i))
+            if (i + 1) % 40 == 0:
+                print(f"随机改动 {i + 1} / {len(seeds)}（{time.time() - t0:.0f}s）", flush=True)
+    s2 = R2.stage2(stat, vals)
+    vd = R2.verdict(s1, s2)
+    v = np.array([x for x in vals if x is not None], float)
+    res = {"round": ROUND, "id": k, "code": code, "dirty": dirty, "base": base, "cand": cand, "stat": stat, "stage1_stat": s1["sum"],
+           "placebo": vals, "stage2": s2, "verdict": vd,
+           "q": {q: round(float(np.percentile(v, q)), 4) for q in (50, 95, 99)} if len(v) else {},
+           "pos_share": round(float((v > 0).mean() * 100), 1) if len(v) else None, "seconds": round(time.time() - t0)}
+    L = [f"# 第二个研究循环第 8 轮 第二关：{k} vs 400 次循环平移（{pd.Timestamp.today().date()}；代码 {code}{' + 未提交的改动' if dirty else ''}）", "",
+         f"**{vd}**：候选的 Calmar 差合计 {stat:+.4f}（第一关运行 {s1['sum']:+.4f}）；400 次随机里最大 {_f(s2['max'], '{:+.4f}')}、"
+         f"≥ 候选的 {s2['ge_stat']} 次、算出 {s2['valid']} / {s2['n']} 次；中位数 {_f(res['q'].get(50), '{:+.4f}')}、"
+         f"95 分位 {_f(res['q'].get(95), '{:+.4f}')}、99 分位 {_f(res['q'].get(99), '{:+.4f}')}；随机里比 B1 好的 {_f(res['pos_share'], '{:.1f}')}%",
+         "", f"用时 {res['seconds']} s。非投资建议。"]
+    print("\n".join(L))
+    (paths.out_dir() / f"{OUT}_stage2_{k}.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    (paths.out_dir() / f"{OUT}_stage2_{k}.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=float) + "\n", encoding="utf-8")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="第二个研究循环第 8 轮：NDRH（NDR 原样 + FJE）")
-    ap.parse_args(argv)
-    return stage_one()
+    ap.add_argument("--stage2", choices=IDS)
+    ap.add_argument("--workers", type=int, default=1)
+    a = ap.parse_args(argv)
+    return stage_two(a.stage2, a.workers) if a.stage2 else stage_one()
 
 
 if __name__ == "__main__":
