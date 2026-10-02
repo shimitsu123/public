@@ -42,6 +42,11 @@ class DDBrake:
         return self.mult if float(eq) < (1.0 - self.level) * self.peak else 1.0
 
 
+def opp_cost_hit(stock_ret: float, core_ret: float, hold: int, hold_min: int, gap: float) -> bool:
+    """跑输核心就离场（第二个研究循环第 17 轮 OCX）：持有 ≥ hold_min 天，且 个股自买入以来的涨跌 − 核心参照同期的涨跌 ≤ −gap。"""
+    return hold >= hold_min and np.isfinite(stock_ret) and np.isfinite(core_ret) and (stock_ret - core_ret) <= -gap + 1e-12
+
+
 class MixEngine(MS.MLEngine):
     PB: dict[str, set] = {}
     HOLD_PB = 10
@@ -58,6 +63,8 @@ class MixEngine(MS.MLEngine):
                                                                              # （例：按月变的持有天数 / 止损，bnf_adapt_study；缺省空 = 不变；只研究用）
     DD_BRAKE: dict | None = None                                             # 账户回撤刹车 {"level": 0.10, "mult": 0.5}（DDBrake；第二个研究循环第 5 轮；
                                                                              # 缺省 None = 不变）；逐日记录在实例的 ddb_log [(日期, 倍数)]
+    OPP_EXIT: dict | None = None                                             # 跑输核心就离场 {"ref": "1545.T", "hold": 10, "gap": 0.05}（opp_cost_hit；
+                                                                             # 第二个研究循环第 17 轮；缺省 None = 不变）
 
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
@@ -85,6 +92,31 @@ class MixEngine(MS.MLEngine):
             self.bear["UH"] = self.bear["US"] | ys
             self.bear["HG"] = self.bear["US"] | ~ys
             self.core_expo["UH"] = self.core_expo["HG"] = np.ones(n)
+
+    def _check_exits(self, m: str, i: int) -> None:
+        super()._check_exits(m, i)
+        ox = MixEngine.OPP_EXIT
+        if ox and m == "JP":
+            self._opp_exit(i, ox)
+
+    def _opp_exit(self, i: int, ox: dict) -> None:
+        """第 i 天收盘：日本个股持有 ≥ hold 天、自买入以来比核心参照（ref）少涨 ≥ gap → 第二天开盘卖（reason = opp_cost）；已排队离场的不动。"""
+        st, A = self.st, self.A
+        jr = self.col.get(ox["ref"])
+        if jr is None or not A.has[i, jr]:
+            return
+        for t in list(st.pos):
+            ps = st.pos[t]
+            if ps.market != "JP" or t in st.pending_exit:
+                continue
+            j = self.col[t]
+            ie = self.gidx.get_indexer([pd.Timestamp(ps.entry_date)])[0]
+            if not A.has[i, j] or ie < 0 or not A.has[ie, jr]:
+                continue
+            sr = float(A.close[i, j]) / float(ps.entry_px) - 1
+            cr = float(A.close[i, jr]) / float(A.close[ie, jr]) - 1
+            if opp_cost_hit(sr, cr, int(ps.hold), int(ox["hold"]), float(ox["gap"])):
+                st.pending_exit[t] = "opp_cost"
 
     def _decide(self, i: int) -> None:
         bk = MixEngine.DD_BRAKE
@@ -245,7 +277,8 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             extra_core: dict | None = None, pref_us: pd.Series | None = None, core_expo: dict | None = None,
             yen_strong: pd.Series | None = None, extra_bear: dict | None = None, priority: dict | None = None,
             em_scale: pd.Series | None = None, params_t: dict | None = None, em_tick: dict | None = None,
-            params_td: dict | None = None, extra_expo: dict | None = None, dd_brake: dict | None = None) -> dict:
+            params_td: dict | None = None, extra_expo: dict | None = None, dd_brake: dict | None = None,
+            opp_exit: dict | None = None) -> dict:
         names = list(ind)
         key = tuple(names) + (("nomult",) if not mult else ())
         if key not in em_cache and not mult:
@@ -290,6 +323,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
         MixEngine.PARAMS_T = params_t or {}
         MixEngine.PARAMS_TD = params_td or {}
         MixEngine.DD_BRAKE = dd_brake or None
+        MixEngine.OPP_EXIT = opp_exit or None
         try:
             c = replace(cfg, **cfg_over) if cfg_over else cfg
             xc = extra_core or {}
@@ -302,6 +336,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             MixEngine.EXTRA_BEAR, MixEngine.PRIORITY, MixEngine.PARAMS_T, MixEngine.PARAMS_TD = {}, {}, {}, {}
             MixEngine.EXTRA_EXPO = {}
             MixEngine.DD_BRAKE = None
+            MixEngine.OPP_EXIT = None
         tr = r.trades[r.trades["reason"] != "end"]
         st = tr[~tr["ticker"].isin(["1655.T", *(extra_core or {})])] if len(tr) else tr
         out = {w: {**CS.seg_stats(r.equity, a, b), "tot": seg_total(r.equity, a, b)} for w, (a, b) in windows.items()}
