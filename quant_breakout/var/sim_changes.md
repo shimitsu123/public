@@ -5643,3 +5643,9 @@ K 线形态 `qbreak/candles.py`；结果 `var/out/candle_user_test.md / .json`�
   `var/research_loop3.json` 的 status = stopped:…；你说「继续第三个研究循环」→ 改回 running（规则 507dd68 不变）。
 - 顺带修正（记账错误，不影响任何判定）：`var/research_loop3.json` 第 5 轮 TOML 的 passed 记成 4，实际是 3（S5〜S7）→ 改成 3（只影响「最接近的 3 个」的排序）。
 - 文件：`scripts/loop3_r06_interest.py` → `var/out/loop3_r06_interest.md` / `.json`；`var/research_loop3.json` 第 6 轮。非投资建议。
+
+## 2026-10-02 用户「继续现在的研究」→ 第三个研究循环恢复（status → running；规则 507dd68 不变；9 / 20，剩 11）；下一轮 = 用户的新题「Jason Perl 的观点」
+- 用户（原话）：「jason perl的观点也要进行详细分析加到现在的研究中 继续现在的研究 然后再继续现在提出的观点」。
+- 读法（照实写）：「继续现在的研究」= 待办 ㊶ 的 ②（继续第三个研究循环）→ `var/research_loop3.json` 的 status 改回 running（原来的 stopped 说明留在 status_was）；
+  「Jason Perl 的观点」= 下一轮的题（他公开的方法是 DeMark 指标 —— TD Setup / Countdown / Combo，先联网核对他现在的职务与最近的观点，再按循环规则登记、只运行一次）；
+  「然后再继续现在提出的观点」→ 那之后接着用剩下的做法（另一个只读检查提的 NZS / RTX / ECL 等）。㊶ 的 ③（企业利息负担加进仪表盘）你没明说 → 不做，继续等你。
