@@ -9004,5 +9004,22 @@
    "换指数（NSX / RXC / RXH）E 或 J 变差；买点闸门 YSG W / Jx 方向相反"
   ],
   "notes": "模拟盘、执行器未改；下一步（什么都不改 / 加进前向记录 / 第三个循环）由用户决定"
+ },
+ {
+  "line": 5372,
+  "date": "2026-10-02",
+  "title": "登记第三个研究循环「直到找到比现在更好的模型才停」：基准 B1 不变、第一关同前、第二关加「资产置换类」（资产收益循环平移）、上限 20、同一家族 ≤ 3、以前的 ID 不再用",
+  "kind": "engineering",
+  "domain": "核心/配置",
+  "registration": "本提交（规则 scripts/research_loop3.py；基准 scripts/loop2_common.py）",
+  "script": "scripts/research_loop3.py",
+  "output": "var/out/research_loop3_baseline.md",
+  "candidates": [],
+  "baseline": "B1 Calmar Z 0.979 / E 0.749 / J 0.741（回撤 −14.71 / −19.70 / −26.97%）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "用户「开第三个研究循环」（第二个循环结束时的下一步 ③）；先决条件满足（B1 与第二个循环登记的值一致、模拟盘规则指纹相同）；三个循环合计约 58 个做法、偶然「找到」约 13.5%；不改模拟盘与执行器"
  }
 ]

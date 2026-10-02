@@ -1,0 +1,67 @@
+{
+ "title": "第三个研究循环：直到找到比现在更好的模型才停",
+ "start": "2026-10-02",
+ "registered": "本提交（登记）",
+ "user_request": "开第三个研究循环（回应第二个循环结束时的下一步 ③：换题目范围或换第二关设计，例如熊市换资产类改用资产置换的随机对照）",
+ "rules": "scripts/research_loop3.py 开头（判定、第二关的三种形状、上限、家族、ID 不重用、停下的情况）；基准 B1 = scripts/loop2_common.py 开头",
+ "status": "running",
+ "cap": 20,
+ "family_cap": 3,
+ "banned_families": [
+  "汇率对冲"
+ ],
+ "kinds": [
+  "signal",
+  "asset",
+  "stock"
+ ],
+ "criteria": {
+  "sum_min": 0.03,
+  "era_tol": 0.02,
+  "dd_tol_pp": 2.0,
+  "placebo_n": 400,
+  "stage1": "与第二个循环相同（S1〜S6 + S7 事后组合）",
+  "stage2": {
+   "signal": "候选自己新加的信号整体循环平移（k ∈ [250, N − 250]）",
+   "asset": "换进来的资产的日收益序列整体循环平移 k 个交易日（k ∈ [250, N − 250]，种子 numpy.random.default_rng([20261003, s])），B1 的状态不动",
+   "stock": "该轮第二关登记时写定"
+  },
+  "rule": "候选的 Calmar 差合计严格大于 400 次里的最大值（有算不出的 = 不过）"
+ },
+ "baseline_def": "B1 = 第二个循环的同一个 B1（W2 + C 留一年代 + X6 + 闲置资金 Q1H + 判断层市场层，个股 4 × 25%、立花费用）；J 到 2026-09-30",
+ "baseline": {
+  "Z": {
+   "cagr": 14.4,
+   "dd": -14.71,
+   "calmar": 0.979,
+   "n": 35,
+   "mean": 6.094,
+   "win": 68.6,
+   "h1": 0.721,
+   "h2": 1.683
+  },
+  "E": {
+   "cagr": 14.74,
+   "dd": -19.7,
+   "calmar": 0.749,
+   "n": 43,
+   "mean": 1.283,
+   "win": 41.9,
+   "h1": 0.278,
+   "h2": 1.551
+  },
+  "J": {
+   "cagr": 19.98,
+   "dd": -26.97,
+   "calmar": 0.741,
+   "n": 63,
+   "mean": 3.077,
+   "win": 49.2,
+   "h1": 0.8,
+   "h2": 0.747
+  }
+ },
+ "prereq_ok": true,
+ "fingerprint": "e73f7f6c0149fe10",
+ "rounds": []
+}

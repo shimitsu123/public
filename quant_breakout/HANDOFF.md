@@ -420,6 +420,7 @@ FJE = USD/JPY 急升 或 日経熊且日元牛，2026-10-02 用户「采用」�
   - 第 19 轮 EBX「决算前卖出持仓」（实盘代码里关着的 exit_before_earnings；登记 d492fb4；新家族「个股层·决算日程」1 / 3）：**第一关不过（S1、S4、S5）** —— 合计 −0.009（Z / E 不变、J 0.741 → 0.732）；胜率升、每笔降（Jx 220 笔 +4.50% → +3.35%）→ exit_before_earnings 维持关闭有历史支持。原想做的 EBG（模拟盘在用的「决算前 2 个交易日不进场」）规模检查后不占做法：2017〜2026 的 B1 买入一笔也挡不到；Jx 被挡的 36 个信号 +2.03%（不比别的差）→ 保留与否由用户定
   - 第 20 轮 TPX「去掉 +25% 止盈、赢家交给 X6 吊灯止损」（登记 8dd3982；新家族「个股层·止盈」1 / 3；选题在第 19 轮结果之前定）：**第一关不过（S1、S4、S5）** —— 合计 −0.012（Z 0、E +0.007、J −0.019）；W 被改变 29 笔 +28.13% → +25.15% → 现行 +25% 止盈有历史支持
   - **2026-10-02 循环结束：20 个做法用完，没找到比 B1 更好的候选**（状态 exhausted；sim_changes「第二个研究循环结束」一节）—— 最接近的 3 个：NVU（合计 +0.430、第二关约第 98 百分位）、TBU（+0.277、约第 96.5）、TBJ（+0.247、约第 99.5），都是「第一关全过、第二关不过」；模拟盘、执行器没改。下一步由用户决定（待办 ㊵）
+- **第三个研究循环「直到找到比现在更好的模型才停」**（2026-10-02 用户：「开第三个研究循环」= 第二个循环结束时的下一步 ③；登记 sim_changes 第 5372 行；规则 `scripts/research_loop3.py` 开头、状态 `var/research_loop3.json`）：基准 B1 不变（Calmar Z 0.979 / E 0.749 / J 0.741）；第一关同第二个循环；第二关按类别 —— signal（新信号循环平移，同前）/ **asset（资产置换类：只换「拿什么资产」、不加新择时 → 换进来的资产的日收益整体循环平移 400 次）** / stock（该轮写定）；上限 20、同一家族 ≤ 3、汇率对冲不再加、第一 / 第二个循环用过的 ID 不能再用；先做资产置换类（美股熊市的闲置资金拿高信用国债、不加债券自己的牛熊过滤），再新数据与没试过的层。**不改模拟盘与执行器**
 - 现在的选股方法放在楽天的美股还是立花的日経225（2026-09-29 用户问；登记 1ba090e、`scripts/market_compare_study.py` → `var/out/market_compare_study.md`）：
   同一套个股规则（W2 + X6、4 × 25%）、同一个推进器 → 按事先读法 **日経（立花）更好**（两个窗口的每笔净收益与个股层 Calmar 都是日経高）：
   每笔 2006〜2016 +2.74% vs +0.30%、2017〜 +0.55% vs −0.86%；楽天来回约 1% 的手续费每年约 4〜6 万円（立花 0.1〜0.3 万円），
@@ -491,7 +492,7 @@ FJE = USD/JPY 急升 或 日経熊且日元牛，2026-10-02 用户「采用」�
 - ㊳ ✅ 2026-10-02 用户「采用」研究循环的「更好候选」FJE（日元急升 或 日経熊且日元牛时，闲置资金从 1545 换成对冲版纳指 2845；美股熊照旧现金）
   → 模拟盘与 Mac 执行器的闲置资金 Q1 → Q1H，2026-10-01 收盘的决策起（10-02 06:57 / 07:40 起）（见上面「现在在哪一步」的 Q1H 一条、sim_changes 2026-10-02「配置变更」）。
   汇率改用 Yahoo JPY=X（及时）；2845 在立花 ｅ支店：现物可买东证上市 ETF（2026-09-29 查的一般规定），**上实盘前由用户本人在立花网站的銘柄情報确认一次 2845 本身能现物买**（Claude 不经手登录信息、不自动操作网站）
-- ㊵ 第二个研究循环结束（2026-10-02，20 个做法用完、没找到；sim_changes「第二个研究循环结束」一节）→ 等用户决定，用户没说之前不做任何一项：
+- ㊵ ✅ 2026-10-02 用户「开第三个研究循环」（选 ③；①② 没选 → NVU / TBU / TBJ 不前向记录）。原来的说明：第二个研究循环结束（20 个做法用完、没找到）→ 等用户决定：
   ① 什么都不改（模拟盘照旧）；② 把最接近的 NVU / TBU / TBJ 之一「加进前向记录」（只记录、不交易）；③ 开第三个循环（换题目范围或换第二关设计，例如熊市换资产类改用资产置换的随机对照；要重新登记）。
   顺带的事实（不要求动作）：现行「决算前 2 个交易日不进场」在 2017〜2026 的 B1 上一笔也挡不到、Jx 被挡的信号也不比别的差 → 保留与否由用户定；exit_before_earnings 维持关闭、+25% 止盈维持都有历史支持
 - ㊴ ✅ 2026-10-02 用户选 ④「继续第二个研究循环」（①〜③ 没选 → TBU / TBJ 不前向记录、不采用、不换检验）。原来的说明：第二个研究循环停下、等用户决定「熊市避险」这条线（TBU = 美股熊时 1482 对冲版美债 / 2561 日本国债 各自是牛就拿；TBJ 只拿 2561）：
@@ -591,6 +592,7 @@ FJE = USD/JPY 急升 或 日経熊且日元牛，2026-10-02 用户「采用」�
   `tests/test_combo2_study.py`（W2 挡掉的突破的样本缓存 `var/cache/combo2_nonw2.pkl`，不入库）
 - 选股第三轮（让 C 更稳：袋装 CB / 稳定选择 CS，两种检验；登记 91c9490）：`scripts/combo3_study.py`、`scripts/combo3_common.py` → `var/out/combo3_study.md` / `.json`；`tests/test_combo3_study.py`
 - 研究循环（2026-10-01 起，直到找到比现在更好的模型）：规则与状态 `scripts/research_loop.py`（`--status` / `--baseline` / `--fingerprint`）→ `var/research_loop.json`、`var/out/research_loop_baseline.md` / `.json`；基准 B0 与账户接口 `scripts/loop_common.py`；`tests/test_research_loop.py`；每一轮一个 `scripts/loop_rNN_*.py` → `var/out/loop_rNN_*.md` / `.json`
+- 第三个研究循环（2026-10-02 起）：规则与状态 `scripts/research_loop3.py`（`--status` / `--baseline` / `--init`）→ `var/research_loop3.json`、`var/out/research_loop3_baseline.md` / `.json`；`tests/test_research_loop3.py`；每一轮一个 `scripts/loop3_rNN_*.py` → `var/out/loop3_rNN_*.md` / `.json`
 - 第二个研究循环（2026-10-02 起；同日 20 个做法用完、没找到 → 结束）：规则与状态 `scripts/research_loop2.py`（`--status` / `--baseline` / `--init` / `--fingerprint`）→ `var/research_loop2.json`、`var/out/research_loop2_baseline.md` / `.json`；基准 B1 与账户接口 `scripts/loop2_common.py`；`tests/test_research_loop2.py`；每一轮一个 `scripts/loop2_rNN_*.py` → `var/out/loop2_rNN_*.md` / `.json`（第二关 `*_stage2_<ID>.md` / `.json`）
 - 行情缓存：`qbreak/data.py`（有效期 12 小时 + 按交易日历查新鲜度；盘中取的缓存在收盘后视为过期、重新下载 —— 2026-09-29 修正，以前收盘后 12 小时内会把盘中快照当成收盘价；重下载失败去掉那一根并记为「行情落后」）；**价格调整口径 v2（2026-09-30）**：不用 yfinance 的 auto_adjust，改为 `qbreak.data.adjust_prices` 按 Yahoo 的分红 / 拆股记录自己调整（同一口径，实测与 Yahoo 的 Adj Close 差 < 1e-6），**拆股当天的分红按拆股后口径**（Yahoo 把日本株分割与配当同一基準日的分红记成分割前每股金额 → 8766.T 2026-09-29 被当成 22.8% 的分红、之前价格整体调低、当天「涨」25.8%；横向扫描 1,076 只近 2 年 20 例，含 8035.T / 5401.T 2025-09-29），公司行为随缓存的 meta 保存（`actions_of` / `fixes_of`）、缓存 meta 带 `adj` 版本号（口径不同就重新下载）；**指数日线缺收盘 → 用当天 5 分钟线合成**（`fill_index_from_intraday`，只补 `^` 开头、已收盘的日子；Yahoo 的 ^N225 2026-09-29 只给开盘、收盘 NaN），记进 `FILLED`，日报「数据完整性 · 自动修复」列出；威胁指数的指数序列同样处理（`qbreak/threat.py`）
 - 下单前资格检查：`qbreak/eligibility.py`（快照 `var/out/eligibility.json`；只读检查 `run.py eligibility`）；退市时间表：`qbreak/delist_schedule.py`
