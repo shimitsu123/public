@@ -17,6 +17,16 @@
 事前预期（照实写）：第一关大概率过（两条各自都过、管的日子不同；但早回来的日子 σ20 通常偏高 → 那几段会被比例打折，合起来可能比相加少）；
   第二关：两条的随机版也相加，右尾一起变长，粗算约第 97 百分位 → 约 10%；「更好候选」约 8%。
 运行：python scripts/loop2_r10_ndrvol.py（第一关）。输出 var/out/loop2_r10_ndrvol.md / .json。非投资建议。
+
+第二关（2026-10-02 第一关全过之后另行登记；登记 = 加这一段的那次提交，之后不改、只运行一次，`--stage2 NVU --workers 3`）：
+  两条信号各自按自己登记时的形状平移，平移量由同一个种子的两次抽取得出（种子 s = 0〜399：rng = numpy.random.default_rng([20262010, s])，
+  先抽 k1、再抽 k2）：
+    ① 早回来（NDRH / NDR 的形状）：2000-01-03〜2026-09-30 里 S&P 熊的美国交易日接成一串，早回来标记在这一串上整体循环平移 k1（k1 ∈ [250, N1 − 250]）；
+    ② 比例（VTU / VT20 的形状）：2000-01-03〜2026-09-30 的比例序列整体循环平移 k2（k2 ∈ [250, N2 − 250]），窗口外 = 1。
+  两条的天数、每段长短、比例分布都不变，只是时点与真实的信号脱钩；FJE 与 B1 的其余部分都不动。
+  统计量 = 三个年代 Calmar 差合计（对同一次运行的 B1）；NVU 要严格大于 400 次的最大值（research_loop2.stage2；有算不出的 = 不过）。
+  事前预期（照实写）：两条各自的随机版中位数都 < 0（−0.380 / −0.138）、右尾都长（最大 +0.699 / +0.607）；相加之后候选 +0.430 粗算约第 97 百分位 → 约 10%。
+  输出 var/out/loop2_r10_ndrvol_stage2_NVU.md / .json。
 """
 from __future__ import annotations
 
@@ -45,6 +55,7 @@ FAMILY = R8.FAMILY
 POSTHOC = True
 OLD = R5.OLD
 OUT = "loop2_r10_ndrvol"
+SHIFT_FROM, SHIFT_GAP, SEED0 = "2000-01-03", 250, 20262010           # 第二关（另行登记）：两条各自的形状，同一个种子抽两次
 
 
 # ───────────────────────── 接法（tests/test_loop2_r10.py） ─────────────────────────
@@ -53,6 +64,26 @@ def nvu_over(W: dict, ndx_bear: pd.Series, uni: pd.Series, x: pd.Series) -> dict
     a, b = R8.ndrh_over(W, ndx_bear, uni), R9.vtu_over(x)
     assert not set(a) & set(b)
     return {**a, **b}
+
+
+def shift_pair(seed: int, n1: int, n2: int, gap: int = SHIFT_GAP) -> tuple[int, int]:
+    """同一个种子抽两次：k1（早回来那一串）、k2（比例序列）。"""
+    rng = np.random.default_rng([SEED0, int(seed)])
+    return int(rng.integers(gap, n1 - gap + 1)), int(rng.integers(gap, n2 - gap + 1))
+
+
+def placebo_parts(spx_bear: pd.Series, ndx_bear: pd.Series, x: pd.Series, seed: int,
+                  a: str = SHIFT_FROM, b: str = L2.J_END) -> tuple[pd.Series, pd.Series]:
+    """第二关的随机改动 → (核心用的熊, 比例)。早回来：窗口里 S&P 熊的日子接成一串、标记循环平移 k1（窗口外照真实的）；比例：窗口里循环平移 k2。"""
+    s, _, idx = N8.on_union(spx_bear, ndx_bear)
+    re = N8.reentry(spx_bear, ndx_bear).to_numpy(bool)
+    inw = (idx >= pd.Timestamp(a)) & (idx <= pd.Timestamp(b))
+    pos = np.flatnonzero(s & inw)
+    w = x[(x.index >= pd.Timestamp(a)) & (x.index <= pd.Timestamp(b))]
+    k1, k2 = shift_pair(seed, len(pos), len(w))
+    key = s & ~re
+    key[pos] = ~np.roll(re[pos], k1)
+    return pd.Series(key, index=idx), pd.Series(np.roll(w.to_numpy(float), k2), index=w.index)
 
 
 def old_core(W: dict, uni: pd.Series, bear: pd.Series, x: pd.Series | None) -> dict:
@@ -170,10 +201,82 @@ def write(res: dict) -> None:
     (paths.out_dir() / f"{OUT}.md").write_text(text + "\n", encoding="utf-8")
 
 
+_G: dict = {}
+
+
+def _placebo_one(seed: int) -> float | None:
+    import loop_r04_yensurge as Y
+    W, nb_, uni, x, hf, base = _G["W"], _G["nb"], _G["uni"], _G["x"], _G["hf"], _G["base"]
+    try:
+        key, xs = placebo_parts(W["bear"]["US"], nb_, x, seed)
+        ov = {**Y.fxh_over(W, key, uni, hf), **R9.vtu_over(xs)}
+        tot = 0.0
+        for e in L2.ERAS:
+            c = L2.run(W, e, **ov)["calmar"]
+            if c is None or base[e] is None:
+                return None
+            tot += c - base[e]
+        return round(float(tot), 6)
+    except Exception:                                                         # noqa: BLE001
+        return None
+
+
+def stage_two(k: str, workers: int) -> int:
+    import multiprocessing as mp
+    import equity_idle_study as EI
+    import loop_r04_yensurge as Y
+    from qbreak import paths
+    t0 = time.time()
+    s1 = json.loads((paths.out_dir() / f"{OUT}.json").read_text(encoding="utf-8"))["stage1"][k]
+    if not s1["ok"]:
+        print(f"{k} 第一关没过 → 不做第二关")
+        return 1
+    code, dirty = git_head()
+    W = L2.load()
+    _, _, uni = L2.fje_states(W)
+    nb_ = N8.ndx_bear(W["inp"])
+    x = R9.ratio_usd(EI.ndx_tr(W["inp"]))
+    base = {e: L2.run(W, e)["calmar"] for e in L2.ERAS}
+    cand = {e: L2.run(W, e, **nvu_over(W, nb_, uni, x))["calmar"] for e in L2.ERAS}
+    stat = round(sum(cand[e] - base[e] for e in L2.ERAS), 6)
+    _G.update({"W": W, "nb": nb_, "uni": uni, "x": x, "hf": Y.hedged_frame(W["inp"]), "base": base})
+    seeds = list(range(R2.PLACEBO_N))
+    vals = []
+    if workers > 1:
+        with mp.get_context("fork").Pool(workers) as pool:
+            for i, v in enumerate(pool.imap(_placebo_one, seeds)):
+                vals.append(v)
+                if (i + 1) % 40 == 0:
+                    print(f"随机改动 {i + 1} / {len(seeds)}（{time.time() - t0:.0f}s）", flush=True)
+    else:
+        for i in seeds:
+            vals.append(_placebo_one(i))
+            if (i + 1) % 40 == 0:
+                print(f"随机改动 {i + 1} / {len(seeds)}（{time.time() - t0:.0f}s）", flush=True)
+    s2 = R2.stage2(stat, vals)
+    vd = R2.verdict(s1, s2)
+    v = np.array([z for z in vals if z is not None], float)
+    res = {"round": ROUND, "id": k, "code": code, "dirty": dirty, "base": base, "cand": cand, "stat": stat, "stage1_stat": s1["sum"],
+           "placebo": vals, "stage2": s2, "verdict": vd,
+           "q": {q: round(float(np.percentile(v, q)), 4) for q in (50, 95, 99)} if len(v) else {},
+           "pos_share": round(float((v > 0).mean() * 100), 1) if len(v) else None, "seconds": round(time.time() - t0)}
+    L = [f"# 第二个研究循环第 10 轮 第二关：{k} vs 400 次循环平移（{pd.Timestamp.today().date()}；代码 {code}{' + 未提交的改动' if dirty else ''}）", "",
+         f"**{vd}**：候选的 Calmar 差合计 {stat:+.4f}（第一关运行 {s1['sum']:+.4f}）；400 次随机里最大 {_f(s2['max'], '{:+.4f}')}、"
+         f"≥ 候选的 {s2['ge_stat']} 次、算出 {s2['valid']} / {s2['n']} 次；中位数 {_f(res['q'].get(50), '{:+.4f}')}、"
+         f"95 分位 {_f(res['q'].get(95), '{:+.4f}')}、99 分位 {_f(res['q'].get(99), '{:+.4f}')}；随机里比 B1 好的 {_f(res['pos_share'], '{:.1f}')}%",
+         "", f"用时 {res['seconds']} s。非投资建议。"]
+    print("\n".join(L))
+    (paths.out_dir() / f"{OUT}_stage2_{k}.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    (paths.out_dir() / f"{OUT}_stage2_{k}.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=float) + "\n", encoding="utf-8")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="第二个研究循环第 10 轮：NVU = NDRH ∪ VTU")
-    ap.parse_args(argv)
-    return stage_one()
+    ap.add_argument("--stage2", choices=IDS)
+    ap.add_argument("--workers", type=int, default=1)
+    a = ap.parse_args(argv)
+    return stage_two(a.stage2, a.workers) if a.stage2 else stage_one()
 
 
 if __name__ == "__main__":

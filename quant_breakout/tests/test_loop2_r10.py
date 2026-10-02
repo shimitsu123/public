@@ -33,7 +33,24 @@ def test_union_wiring_merges_both_rules():
     assert o["extra_bear"][Y.HG_KEY].tolist() == [True, True, True, False, True, True]
 
 
-def test_cli_takes_no_options():
+def test_stage2_registered_constants_and_joint_shift():
+    import numpy as np
+    assert (T.SHIFT_FROM, T.SHIFT_GAP, T.SEED0) == ("2000-01-03", 250, 20262010)
+    idx = pd.bdate_range("2000-01-03", periods=1600)
+    spx = pd.Series((np.arange(1600) // 200) % 2 == 1, index=idx)
+    ndx = pd.Series(((np.arange(1600) % 200) < 40) & spx.to_numpy(), index=idx)
+    x = pd.Series(np.where((np.arange(1600) // 70) % 4 == 0, 0.5, 1.0), index=idx)
+    real = T.R8.core_bear(spx, ndx)
+    for seed in (0, 10, 399):
+        k1, k2 = T.shift_pair(seed, int(spx.sum()), len(x))
+        assert 250 <= k1 <= int(spx.sum()) - 250 and 250 <= k2 <= len(x) - 250
+        assert (k1, k2) == T.shift_pair(seed, int(spx.sum()), len(x))           # 种子固定 → 可重现
+        key, xs = T.placebo_parts(spx, ndx, x, seed)
+        assert not (key & ~spx).any() and int((spx & ~key).sum()) == int((spx & ~real).sum())   # 早回来只在 S&P 熊里、天数不变
+        assert np.array_equal(xs.to_numpy(), np.roll(x.to_numpy(), k2))        # 比例整体循环平移
+
+
+def test_stage2_cli_choices():
     import pytest
     with pytest.raises(SystemExit):
-        T.main(["--stage2", "NVU"])
+        T.main(["--stage2", "XXX"])
