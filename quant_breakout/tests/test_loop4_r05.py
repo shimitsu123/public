@@ -1,4 +1,4 @@
-"""第四个研究循环第 5 轮 W2T / VTZ（scripts/loop4_r05_weakvol.py，2026-10-03 登记）：登记值与第四个循环的规则、弱市的判定（日経在 200 日线下；
+"""第四个研究循环第 5 轮的候选 W2T / VTZ（scripts/loop4_r05_weakvol.py，2026-10-03 规模核对后不登记）：登记值与第四个循环的规则、弱市的判定（日経在 200 日线下；
 缺值不算）、只在弱市且量不够时挡（缺值不挡、牛市一笔不挡）、接线与命令行。"""
 import inspect
 import sys
@@ -17,13 +17,9 @@ import research_loop4 as R4  # noqa: E402
 def test_registered_constants_and_loop4_rules():
     assert (T.ROUND, T.IDS, T.POSTHOC, T.KIND, T.W2T_MIN, T.VTZ_MIN) == (5, ("W2T", "VTZ"), False, "stock", 1.5, 2.0)
     assert T.FAMILY == {"W2T": "选股·门槛随市况", "VTZ": "选股·门槛随市况"} and all(f.startswith(R4.FAMILY_PREFIX) for f in T.FAMILY.values())
-    assert not set(T.IDS) & R4.previous_ids(ROOT / "var")
-    st = R4.load_state(ROOT / "var")
-    mine = [r for r in st.get("rounds") or [] if r.get("round") == T.ROUND]
-    if mine:
-        assert [a["id"] for a in mine[0]["approaches"]] == list(T.IDS)
-    else:
-        R4.check_new_approaches(st, [{"id": k, "family": T.FAMILY[k], "posthoc": T.POSTHOC, "kind": T.KIND} for k in T.IDS], R4.previous_ids(ROOT / "var"))
+    assert not set(T.IDS) & R4.previous_ids(ROOT / "var") and T.DROPPED is True
+    st = R4.load_state(ROOT / "var")                                         # 规模核对后不登记 → 状态文件里不能有这两个
+    assert not {a["id"] for r in st.get("rounds") or [] for a in r.get("approaches") or []} & set(T.IDS)
 
 
 def test_weak_and_gates():
