@@ -11007,5 +11007,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "第七个循环停下时的待办编号更正为 ㊿（㊾ 已用于 VCT 前向复核那一条）；模拟盘与执行器不变"
+ },
+ {
+  "line": 7751,
+  "date": "2026-10-04",
+  "title": "登记：检验力测算 —— 合成的「半个先知」减仓规则（技能 q × 晚 L 天）在横展开 / 单一序列两种第二关里的通过率（㊿ ④ 换方向的第一步；运行前）",
+  "kind": "engineering",
+  "domain": "牛熊/择时",
+  "registration": "本提交（scripts/power_study.py 开头；登记后不改、只运行一次）",
+  "script": "scripts/power_study.py",
+  "output": "var/out/power_study.md",
+  "candidates": [],
+  "baseline": "每个市场自己的牛熊分界（牛 100%、其余现金）",
+  "windows": "1998-01-01〜2026-09-30（17 个市场 + 美国 S&P 500）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "q ∈ {0, 0.1, 0.25, 0.5, 1} × L ∈ {0, 5} × 10 = 100 个；读 q = 0.5、L = 5：≥ 50% 够、< 20% 不够；登记前只在合成随机游走上试跑并改了噪音的放法、加了熊市补密度与 q = 0.1；不改模拟盘与任何判定"
  }
 ]
