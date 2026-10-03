@@ -424,6 +424,31 @@
      "note": "Z 2005 +12.7 pp；S4、S5 不过"
     }
    ]
+  },
+  {
+   "round": 10,
+   "date": "2026-10-03",
+   "title": "去掉量化状态层 RGX",
+   "registration": "9abf64e（代码 6322c9e）",
+   "script": "scripts/loop5_r10_regime.py",
+   "approaches": [
+    {
+     "id": "RGX",
+     "verdict": "第一关不过",
+     "sum": -0.186,
+     "family": "仓位·状态层",
+     "posthoc": false,
+     "kind": "struct",
+     "passed": 2,
+     "d": {
+      "Z": -0.051,
+      "E": -0.145,
+      "J": 0.01
+     },
+     "unseen": null,
+     "note": "E −0.145、回撤深 5.65 pp；S1〜S5 不过"
+    }
+   ]
   }
  ],
  "ended": "2026-10-03 11:35 JST 第 9 轮之后停下（要用户决定）：17 / 20 用了、没找到（两关都过的 0 个）；剩下 3 个做法没有事先列好的、有文献先验又不与以前重叠的题 → 按规则第五条「要用户决定 → 说明后停」",
