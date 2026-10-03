@@ -40,6 +40,15 @@
 事前预期：写在登记（var/sim_changes.md）里、看结果之前。
 运行：python scripts/loop6_r06_cotcrowd.py（第一关）；--scale（只数日子）；--wiring（登记前的接线核对）；--stage2 CRW [--workers N]（第二关）。
 输出 var/out/loop6_r06_cotcrowd.md / .json（第二关 loop6_r06_cotcrowd_stage2_CRW.md / .json）。非投资建议。
+
+第二关（2026-10-03 第一关全过（合计 +0.229）之后另行登记；登记 = 加这一段的那次提交，之后不改、只运行一次，`--stage2 CRW --workers 3`；第一关与 --stage2 的代码不改）：
+  形状 = 第一关登记时写定的那一个 —— CRW 的「对冲中」（东证日上）在 2000-01-04〜2026-09-30 的 6,549 个东证交易日上整体循环平移 k
+  （research_loop6.shift_ks(n, 0)：numpy.random.default_rng([20261006, 0, s])，s = 0〜399），窗外不动；B2（FJE、美股牛熊、BCU 的相关条件、1482 价格）不动；
+  每次三个年代都跑，统计量 = Calmar 差合计（对同一次运行的 B2）；CRW 要严格大于 400 次的最大值（research_loop6.stage2；有算不出的 = 不过）。
+  另加只描述（不参与判定）：`--stage2ref CRW --workers 3` —— 只平移「拥挤」标记（美国交易日上、d 日已知的最新报告的拥挤与否）在 2000-01-04〜2026-09-30 的
+  美国交易日上整体循环平移 k（k ∈ [250, N − 250]，种子 numpy.random.default_rng([20261006, 3, s])，s = 0〜399；窗外照真实的），USD/JPY 与 20 日线照真实的、
+  状态机照样重算 → 回答「好处来自 CFTC 的持仓信息，还是只要在随便哪段日子里『跌破 20 日线就对冲』就有」；报候选在 400 次里的百分位。
+  输出 var/out/loop6_r06_cotcrowd_stage2ref_CRW.md / .json。
 """
 from __future__ import annotations
 
@@ -463,12 +472,84 @@ def stage_two(k: str, workers: int) -> int:
     return 0
 
 
+# ───── 只描述（不参与判定；第二关登记时加）：只平移「拥挤」标记、USD/JPY 照真实的 ─────
+REF_KIND = 3                                                                 # 种子 [20261006, 3, s]（research_loop6 的 0 / 1 / 2 之外）
+
+
+def ref_ks(n: int, seeds=range(R6.PLACEBO_N), gap: int = R6.SHIFT_GAP) -> list[int]:
+    """只描述用的平移量：numpy.random.default_rng([20261006, 3, s]).integers(gap, n − gap + 1)。"""
+    if n <= 2 * gap:
+        raise ValueError(f"序列太短（{n} ≤ {2 * gap}）")
+    return [int(np.random.default_rng([R6.LOOP_SEED, REF_KIND, int(s)]).integers(gap, n - gap + 1)) for s in seeds]
+
+
+def shifted_crowded(crowded_us: pd.Series, k: int | None) -> pd.Series:
+    """「拥挤」标记（美国交易日上）在 2000-01-04〜J 的最后一天上整体循环平移 k（None = 不平移），窗外不动。"""
+    return Z4.shifted_zone(crowded_us, k)
+
+
+def ref_crw(dex: pd.Series, crowded_us: pd.Series, days: pd.DatetimeIndex, k: int | None) -> pd.Series:
+    """只平移拥挤标记、USD/JPY 照真实的重算 CRW → 东证日上的「对冲中」。"""
+    return on_idx(crw_state(dex, shifted_crowded(crowded_us, k)), days)
+
+
+def _placebo_ref_one(seed: int):
+    W, M, base, ks = _G["W"], _G["M"], _G["base"], _G["ks"]
+    try:
+        return _run_sum(W, M, candidate_uni(M["uni"], ref_crw(M["dex"], M["crowd_us"], M["days"], ks[int(seed)])), base)
+    except Exception:                                                         # noqa: BLE001
+        return None
+
+
+def stage_two_ref(k: str, workers: int) -> int:
+    """只描述（不参与判定）：只平移「拥挤」标记的 400 次随机对照，报候选的百分位。"""
+    from qbreak import paths
+    t0 = time.time()
+    s1 = json.loads((paths.out_dir() / f"{OUT}.json").read_text(encoding="utf-8"))["stage1"][k]
+    if not s1["ok"]:
+        print(f"{k} 第一关没过 → 不做")
+        return 1
+    code, dirty = git_head()
+    W = L6.load()
+    M = inputs(W)
+    dex = W["inp"]["dexjp"].dropna()
+    M["dex"], M["crowd_us"] = dex, on_idx(M["known"], dex.index)
+    base = {e: L6.run(W, e)["calmar"] for e in L6.ERAS}
+    ov = over(W, W["bear"]["US"], M["uni_c"], M["hf"], M["on_b"], M["fb"])
+    cand = {e: L6.run(W, e, **ov)["calmar"] for e in L6.ERAS}
+    stat = round(sum(cand[e] - base[e] for e in L6.ERAS), 6)
+    n = len(R6.shift_window(M["crowd_us"]))
+    ks = ref_ks(n)
+    _G.update({"W": W, "M": M, "base": base, "ks": ks})
+    vals = Z4._pool(_placebo_ref_one, list(range(R6.PLACEBO_N)), workers, t0, "随机改动（只平移拥挤标记）")
+    s2 = R6.stage2(stat, vals)
+    v = np.array([x for x in vals if x is not None], float)
+    pct = round(float((v < stat).mean() * 100), 2) if len(v) else None
+    res = {"loop": 6, "segment": 2, "round": ROUND, "id": k, "shape": "只平移 CFTC「拥挤」标记（美国交易日上），USD/JPY 与 20 日线照真实的重算",
+           "describe_only": True, "code": code, "dirty": dirty, "base": base, "cand": cand, "stat": stat, "n": n, "placebo": vals, "max": s2["max"],
+           "ge_stat": s2["ge_stat"], "valid": s2["valid"], "pct_below": pct,
+           "q": {q: round(float(np.percentile(v, q)), 4) for q in (50, 95, 99)} if len(v) else {},
+           "pos_share": round(float((v > 0).mean() * 100), 1) if len(v) else None, "seconds": round(time.time() - t0)}
+    L = [f"# 第六个研究循环第二段第 6 轮 只描述（不参与判定）：{k} vs 只平移「拥挤」标记的 400 次随机对照（JST {pd.Timestamp.now(tz='Asia/Tokyo').date()}；"
+         f"代码 {code}{' + 未提交的改动' if dirty else ''}）", "",
+         f"候选的 Calmar 差合计 {stat:+.4f}；随机（拥挤标记在 {n} 个美国交易日上循环平移、USD/JPY 照真实的重算）比候选低的 {_f(pct, '{:.2f}')}%、"
+         f"最大 {_f(s2['max'], '{:+.4f}')}、≥ 候选的 {s2['ge_stat']} 次、算出 {s2['valid']} / {s2['n']} 次；中位数 {_f(res['q'].get(50), '{:+.4f}')}、"
+         f"95 分位 {_f(res['q'].get(95), '{:+.4f}')}、99 分位 {_f(res['q'].get(99), '{:+.4f}')}；随机里比 B2 好的 {_f(res['pos_share'], '{:.1f}')}%",
+         "", f"用时 {res['seconds']} s。只描述，判定只看 --stage2。非投资建议。"]
+    text = "\n".join(L)
+    print(text)
+    (paths.out_dir() / f"{OUT}_stage2ref_{k}.md").write_text(text + "\n", encoding="utf-8")
+    (paths.out_dir() / f"{OUT}_stage2ref_{k}.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=float) + "\n", encoding="utf-8")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="第六个研究循环第二段第 6 轮：CRW（日元投机空头拥挤时，一回落就先对冲）")
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--scale", action="store_true", help="只数日子（不算收益）")
     g.add_argument("--wiring", action="store_true", help="登记前的接线核对（不看候选的结果）")
     g.add_argument("--stage2", choices=IDS, help="第二关（第一关全过才做）")
+    g.add_argument("--stage2ref", choices=IDS, help="只描述：只平移「拥挤」标记的随机对照（不参与判定）")
     ap.add_argument("--workers", type=int, default=4)
     a = ap.parse_args(argv)
     if a.scale:
@@ -477,6 +558,8 @@ def main(argv: list[str] | None = None) -> int:
         return wiring()
     if a.stage2:
         return stage_two(a.stage2, a.workers)
+    if a.stage2ref:
+        return stage_two_ref(a.stage2ref, a.workers)
     return stage_one()
 
 

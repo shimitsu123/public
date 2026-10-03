@@ -148,3 +148,23 @@ def test_sources_and_cli():
     assert 'candidate_uni(M["uni"], shifted_crw(M["crw_t"], ks[int(seed)]))' in inspect.getsource(C._placebo_one)
     with pytest.raises(SystemExit):
         C.main(["--nope"])
+
+
+def test_stage2ref_shifts_only_crowded_flag_and_is_describe_only():
+    assert C.REF_KIND == 3 and C.ref_ks(2000)[:3] == [int(np.random.default_rng([20261006, 3, s]).integers(250, 1751)) for s in range(3)]
+    d = pd.bdate_range("1999-06-01", periods=7000)
+    rng = np.random.default_rng(4)
+    fx = pd.Series(100 * np.cumprod(1 + rng.normal(0, 0.006, 7000)), index=d)
+    crowd = pd.Series(np.repeat(rng.random(7000 // 60 + 1) < 0.25, 60)[:7000], index=d)
+    days = d[::1]
+    assert C.ref_crw(fx, crowd, days, None).equals(C.on_idx(C.crw_state(fx, crowd), days))           # k = None → 候选本身
+    sh = C.shifted_crowded(crowd, 77)
+    w = R6.shift_window(crowd)
+    assert sh[~crowd.index.isin(w.index)].equals(crowd[~crowd.index.isin(w.index)])                 # 窗外照真实的
+    assert sh.loc[w.index].tolist() == np.roll(w.to_numpy(), 77).tolist()
+    assert C.ref_crw(fx, crowd, days, 77).equals(C.on_idx(C.crw_state(fx, sh), days))              # USD/JPY 照真实的、状态机重算
+    r = inspect.getsource(C.stage_two_ref)
+    assert '"describe_only": True' in r and "ref_ks(n)" in r and "R6.verdict" not in r and "_stage2ref_" in r
+    assert 'ref_crw(M["dex"], M["crowd_us"], M["days"], ks[int(seed)])' in inspect.getsource(C._placebo_ref_one)
+    with pytest.raises(SystemExit):
+        C.main(["--stage2ref", "XXX"])
