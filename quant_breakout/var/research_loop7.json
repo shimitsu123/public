@@ -239,5 +239,16 @@
    "sum": 0.001493,
    "why": "账户 +0.310 但 S7 −0.030；横展开 +0.001、9 / 17 为正、约第 86.5 百分位"
   }
- ]
+ ],
+ "us_history_check": {
+  "script": "scripts/vsx_us_history.py",
+  "registered": "0a7e98d",
+  "verdict": "不支持",
+  "full": 0.005256,
+  "pctile": 82.0,
+  "decades_pos": 3,
+  "h1": -0.005731,
+  "h2": 0.065862,
+  "note": "事后追加、只给 ㊾ 作参考；不改循环的判定（VSX = 第二关不过）"
+ }
 }
