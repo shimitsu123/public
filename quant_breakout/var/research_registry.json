@@ -10948,5 +10948,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "波动类在美国好、在 17 个市场≈ 0；VSX 要不要当「只在美国成立」的候选由用户决定；剩下 7 个名额估计约 5〜10%"
+ },
+ {
+  "line": 7714,
+  "date": "2026-10-04",
+  "title": "登记：VSX 的美国长历史核对（S&P 500 1929〜1986，VSX 没碰过；事后、只给 ㊾ 作参考；运行前）",
+  "kind": "engineering",
+  "domain": "核心/配置",
+  "registration": "本提交（scripts/vsx_us_history.py 开头；登记后不改、只运行一次）",
+  "script": "scripts/vsx_us_history.py",
+  "output": "var/out/vsx_us_history.md",
+  "candidates": [],
+  "baseline": "S&P 自己的牛熊分界（牛 100%、其余现金）",
+  "windows": "1929-01-02〜1986-12-31",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "不改第七个循环的判定与模拟盘；强 / 弱支持 → ㊾ 推荐前向记录；事前预期强 8% / 弱 25% / 不支持 67%"
  }
 ]
