@@ -513,6 +513,9 @@
   - 第三段第 13 轮 RSC「10 年美债收益率急升的牛市里 1/3 留现金」（登记 ceea493）：**第一关不过、只差 S4**（+0.081；Z +0.093、E +0.006、J −0.018；前一半 −0.021；S7 +0.028；2026-10-02 这条信号正成立，只描述）→ 接着下一轮（第三段 7 / 13、合计 14 / 20）
   - 2026-10-04 约 00:55 JST **第三段停下、等你决定（待办 ㊽；stopped:要用户决定）：7 / 13 用了（合计 14 / 20）、没找到**；最接近 VCT（第一关全过 +0.354、第二关约第 97 百分位）/ RSC / VPS。独立扫描估计现行规则内剩下 6 个合计约 5%（有空位的都是择时类，择时类第二关去掉汇率时点影响后 0 / 8）；另有「家族按同一类信号还是按动作算」要你裁定（BPR / VPS 沿用了 VCT 的急跌信号，照实写在 sim_changes）
   - 2026-10-04 约 01:05 JST 你选 ㊽ ① + ④（「把 VCT 加进前向记录 / 然后换别的方向继续研究」）→ **第六个研究循环结束**（14 / 20；站得住的两关都过只有 BCU，已采用）；模拟盘不变（Q1B = B3）；VCT 只做前向记录（见上面「VCT 前向记录」）；之后换方向另开第七个研究循环
+- **第七个研究循环「独立市场验证（横展开）」**（2026-10-04 起；你 ㊽「然后换别的方向继续研究」；规则 `scripts/research_loop7.py` 开头、状态 `var/research_loop7.json`）：
+  单一序列上的随机平移第二关检验力太低（核心择时类 0 / 8 过）→ 换方向：把只用一个市场自己的指数就能算出的核心规则放到 17 个独立市场（日本、欧洲 8 国、澳大利亚、香港、新加坡、加拿大、巴西、墨西哥、马来西亚、印尼）上一起检验，窗口 1998-01〜2026-09；第二关 = 合并平均严格大于 400 次「同一 k 平移」的最大值 + ≥ 2/3 的市场为正 + 两半都为正；第一关仍在账户 B3 上；上限 10、同一家族 ≤ 3；没有时间限制（`python scripts/research_loop7.py --status`）
+  - 第 1 轮 VCX「VCT 的通用版放到 17 个市场」（登记中；账户第一关引用 VCT 已过的结果）
 - 现在的选股方法放在楽天的美股还是立花的日経225（2026-09-29 用户问；登记 1ba090e、`scripts/market_compare_study.py` → `var/out/market_compare_study.md`）：
   同一套个股规则（W2 + X6、4 × 25%）、同一个推进器 → 按事先读法 **日経（立花）更好**（两个窗口的每笔净收益与个股层 Calmar 都是日経高）：
   每笔 2006〜2016 +2.74% vs +0.30%、2017〜 +0.55% vs −0.86%；楽天来回约 1% 的手续费每年约 4〜6 万円（立花 0.1〜0.3 万円），
@@ -732,6 +735,7 @@
 - 第四个研究循环（选股，2026-10-03 起）：规则与状态 `scripts/research_loop4.py`（`--status` / `--baseline` / `--init`）→ `var/research_loop4.json`、`var/out/research_loop4_baseline.md` / `.json`；`tests/test_research_loop4.py`；每一轮一个 `scripts/loop4_rNN_*.py` → `var/out/loop4_rNN_*.md` / `.json`；事后诊断「完美选股」的上限 `scripts/loop4_oracle_diag.py` → `var/out/loop4_oracle_diag.md` / `.json`（`tests/test_loop4_oracle_diag.py`）；第二关门槛的诊断 `scripts/loop4_placebo_bar.py` → `var/out/loop4_placebo_bar.md` / `.json`；名额诊断 `scripts/loop4_exposure_diag.py` → `var/out/loop4_exposure_diag.md` / `.json`
 - 第五个研究循环（仓位结构，2026-10-03 起）：规则与状态 `scripts/research_loop5.py`（`--status` / `--baseline` / `--init`）→ `var/research_loop5.json`、`var/out/research_loop5_baseline.md` / `.json`；`tests/test_research_loop5.py`；每一轮一个 `scripts/loop5_rNN_*.py` → `var/out/loop5_rNN_*.md` / `.json`
 - 闲置资金 BCU（2026-10-03 采用）：`qbreak/bond_refuge.py`（`tests/test_bond_refuge.py`）→ 云端 `var/bond_refuge.json`；`run._br_compute` / `run._br_keys`
+- 第七个研究循环（独立市场验证，2026-10-04 起）：规则与状态 `scripts/research_loop7.py`（`--status` / `--init`）→ `var/research_loop7.json`；`tests/test_research_loop7.py`；每一轮一个 `scripts/loop7_rNN_*.py` → `var/out/loop7_rNN_*.md` / `.json`
 - VCT 前向记录（2026-10-04 起）：规则 / 记录 / 复核 `qbreak/vct_forward.py`（sim-day 的 `_vct_forward_log`）→ `var/out/vct_forward.csv`；状态 / 复核 `scripts/vct_forward.py --status / --review`；`tests/test_vct_forward.py`
 - 第六个研究循环（核心层，2026-10-03 起）：规则与状态 `scripts/research_loop6.py`（`--status` / `--baseline` / `--init`；第二段 `--baseline2` / `--init2`、基准 B2 `scripts/loop6_common.py` → `var/out/research_loop6_b2.md`；用户解除「汇率对冲」禁令后 `--resume-fx`）→ `var/research_loop6.json`、`var/out/research_loop6_baseline.md` / `.json`；`tests/test_research_loop6.py`；每一轮一个 `scripts/loop6_rNN_*.py` → `var/out/loop6_rNN_*.md` / `.json`
 - 第二个研究循环（2026-10-02 起；同日 20 个做法用完、没找到 → 结束）：规则与状态 `scripts/research_loop2.py`（`--status` / `--baseline` / `--init` / `--fingerprint`）→ `var/research_loop2.json`、`var/out/research_loop2_baseline.md` / `.json`；基准 B1 与账户接口 `scripts/loop2_common.py`；`tests/test_research_loop2.py`；每一轮一个 `scripts/loop2_rNN_*.py` → `var/out/loop2_rNN_*.md` / `.json`（第二关 `*_stage2_<ID>.md` / `.json`）
@@ -795,6 +799,7 @@
 | 研究循环 | 「研究循环进度？」「停止研究循环」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/research_loop.py --status`（在 `~/qbreak-src/quant_breakout`，读 `var/research_loop.json`；只读）；停止 = 不再开新的一轮 | 循环只研究、只提议，不改模拟盘 / 执行器 |
 | 第二个研究循环 | 「第二个研究循环进度？」「停止研究循环」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/research_loop2.py --status`（在 `~/qbreak-src/quant_breakout`，读 `var/research_loop2.json`；只读）；停止 = 不再开新的一轮 | 循环只研究、只提议，不改模拟盘 / 执行器 |
 | 第五个研究循环（仓位结构） | 「第五个研究循环进度？」「停止研究循环」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/research_loop5.py --status`（在 `~/qbreak-src/quant_breakout`，读 `var/research_loop5.json`；只读）；停止 = 不再开新的一轮 | 循环只研究、只提议，不改模拟盘 / 执行器 |
+| 第七个研究循环（独立市场验证） | 「第七个研究循环进度？」「停止研究循环」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/research_loop7.py --status`（在 `~/qbreak-src/quant_breakout`，读 `var/research_loop7.json`；只读）；停止 = 不再开新的一轮 | 循环只研究、只提议，不改模拟盘 / 执行器 |
 | 第六个研究循环（核心层） | 「第六个研究循环进度？」「停止研究循环」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/research_loop6.py --status`（在 `~/qbreak-src/quant_breakout`，读 `var/research_loop6.json`；只读）；停止 = 不再开新的一轮 | 循环只研究、只提议，不改模拟盘 / 执行器 |
 | 日报 / 季度复核 | 「上次季度复核说了什么？」「今天日报的主题强弱？」 | `git -C ~/qbreak-src pull --ff-only` 后读 `var/out/`（`*_review.md`、`unified_today.json`） | 只读 |
 

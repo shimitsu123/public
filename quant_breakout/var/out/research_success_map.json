@@ -1,10 +1,10 @@
 {
- "n": 99,
+ "n": 106,
  "by_layer": {
   "核心层": {
-   "n": 47,
-   "pass1": 14,
-   "near": 9,
+   "n": 54,
+   "pass1": 15,
+   "near": 10,
    "found": 3,
    "pctiles": [
     98.0,
@@ -20,7 +20,8 @@
     100.0,
     99.75,
     89.0,
-    100.0
+    100.0,
+    97.0
    ],
    "ids_pass1": [
     "FXH",
@@ -36,7 +37,8 @@
     "BCU",
     "BCB",
     "NDB",
-    "CRW"
+    "CRW",
+    "VCT"
    ],
    "ids_near": [
     "VT20",
@@ -47,10 +49,11 @@
     "BAJ",
     "BAU",
     "BAB",
-    "NZS"
+    "NZS",
+    "RSC"
    ],
-   "pass1_pct": 29.8,
-   "near_pct": 19.1
+   "pass1_pct": 27.8,
+   "near_pct": 18.5
   },
   "个股层": {
    "n": 50,
@@ -190,7 +193,7 @@
    "near_pct": 50.0
   },
   "核心·择时（早回来）": {
-   "n": 4,
+   "n": 5,
    "pass1": 3,
    "near": 0,
    "found": 0,
@@ -205,26 +208,28 @@
     "NDB"
    ],
    "ids_near": [],
-   "pass1_pct": 75.0,
+   "pass1_pct": 60.0,
    "near_pct": 0.0
   },
   "核心·波动率仓位": {
-   "n": 2,
-   "pass1": 1,
+   "n": 5,
+   "pass1": 2,
    "near": 0,
    "found": 0,
    "pctiles": [
-    88.0
+    88.0,
+    97.0
    ],
    "ids_pass1": [
-    "VTU"
+    "VTU",
+    "VCT"
    ],
    "ids_near": [],
-   "pass1_pct": 50.0,
+   "pass1_pct": 40.0,
    "near_pct": 0.0
   },
   "核心·指数选择": {
-   "n": 6,
+   "n": 7,
    "pass1": 1,
    "near": 1,
    "found": 0,
@@ -237,8 +242,8 @@
    "ids_near": [
     "NZS"
    ],
-   "pass1_pct": 16.7,
-   "near_pct": 16.7
+   "pass1_pct": 14.3,
+   "near_pct": 14.3
   },
   "核心·日元走强状态资产": {
    "n": 1,
@@ -315,6 +320,30 @@
    "ids_near": [],
    "pass1_pct": 100.0,
    "near_pct": 0.0
+  },
+  "核心·信用利差": {
+   "n": 1,
+   "pass1": 0,
+   "near": 0,
+   "found": 0,
+   "pctiles": [],
+   "ids_pass1": [],
+   "ids_near": [],
+   "pass1_pct": 0.0,
+   "near_pct": 0.0
+  },
+  "核心·利率冲击": {
+   "n": 1,
+   "pass1": 0,
+   "near": 1,
+   "found": 0,
+   "pctiles": [],
+   "ids_pass1": [],
+   "ids_near": [
+    "RSC"
+   ],
+   "pass1_pct": 0.0,
+   "near_pct": 100.0
   }
  },
  "rows": [
@@ -1802,6 +1831,111 @@
    "found": true,
    "near": false,
    "pctile": 100.0
+  },
+  {
+   "loop": 6,
+   "round": 7,
+   "id": "VBH",
+   "layer": "核心层",
+   "sub": "核心·波动率仓位",
+   "verdict": "第一关不过",
+   "sum": 0.179,
+   "passed": 4,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": false,
+   "pctile": null
+  },
+  {
+   "loop": 6,
+   "round": 8,
+   "id": "VBT",
+   "layer": "核心层",
+   "sub": "核心·波动率仓位",
+   "verdict": "第一关不过",
+   "sum": 0.22,
+   "passed": 5,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": false,
+   "pctile": null
+  },
+  {
+   "loop": 6,
+   "round": 9,
+   "id": "VCT",
+   "layer": "核心层",
+   "sub": "核心·波动率仓位",
+   "verdict": "第二关不过",
+   "sum": 0.354,
+   "passed": 7,
+   "full": 7,
+   "pass1": true,
+   "found": false,
+   "near": false,
+   "pctile": 97.0
+  },
+  {
+   "loop": 6,
+   "round": 10,
+   "id": "BPR",
+   "layer": "核心层",
+   "sub": "核心·择时（早回来）",
+   "verdict": "第一关不过",
+   "sum": 0.039,
+   "passed": 5,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": false,
+   "pctile": null
+  },
+  {
+   "loop": 6,
+   "round": 11,
+   "id": "CSV",
+   "layer": "核心层",
+   "sub": "核心·信用利差",
+   "verdict": "第一关不过",
+   "sum": 0.051,
+   "passed": 5,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": false,
+   "pctile": null
+  },
+  {
+   "loop": 6,
+   "round": 12,
+   "id": "VPS",
+   "layer": "核心层",
+   "sub": "核心·指数选择",
+   "verdict": "第一关不过",
+   "sum": 0.26,
+   "passed": 5,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": false,
+   "pctile": null
+  },
+  {
+   "loop": 6,
+   "round": 13,
+   "id": "RSC",
+   "layer": "核心层",
+   "sub": "核心·利率冲击",
+   "verdict": "第一关不过",
+   "sum": 0.081,
+   "passed": 6,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": true,
+   "pctile": null
   }
  ]
 }

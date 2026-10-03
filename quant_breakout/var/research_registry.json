@@ -10785,5 +10785,39 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "前向支持 = VCT Calmar ≥ B3 且回撤浅 ≥ 1 pp；前向不支持 = VCT Calmar < B3 − 0.05；要不要用由用户决定"
+ },
+ {
+  "line": 7603,
+  "date": "2026-10-04",
+  "title": "第七个研究循环登记：独立市场验证（横展开）—— 核心择时规则放到 17 个独立市场上一起检验",
+  "kind": "engineering",
+  "domain": "核心/配置",
+  "registration": "本提交（scripts/research_loop7.py 开头；登记后不改）",
+  "script": "scripts/research_loop7.py",
+  "output": "var/research_loop7.json",
+  "candidates": [],
+  "baseline": "账户 B3 Calmar Z 1.194 / E 0.627 / J 0.676；每个市场 = 自己的牛熊分界",
+  "windows": "1998-01-01〜2026-09-30（17 个市场）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "单一序列的第二关检验力太低（择时类 0 / 8）→ 17 个独立市场合并、同一个严格门槛（> 400 次同一 k 平移的最大值）+ ≥ 2/3 为正 + 两半都为正；上限 10"
+ },
+ {
+  "line": 7618,
+  "date": "2026-10-04",
+  "title": "第七个研究循环第 1 轮登记：VCX = VCT 的通用版放到 17 个独立市场（运行前）",
+  "kind": "engineering",
+  "domain": "核心/配置",
+  "registration": "本提交（scripts/loop7_r01_vctx.py 开头；登记后不改、只运行一次）",
+  "script": "scripts/loop7_r01_vctx.py",
+  "output": "var/out/loop7_r01_vctx.md",
+  "candidates": [],
+  "baseline": "每个市场自己的牛熊分界（牛 100%、其余现金）",
+  "windows": "1998-01-01〜2026-09-30",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "规模：牛的日子里信号平均 13.8%、每市场平均 75 段；接线核对过；事前预期三条都过约 15%"
  }
 ]
