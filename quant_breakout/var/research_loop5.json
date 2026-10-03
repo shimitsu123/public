@@ -4,7 +4,7 @@
  "registered": "本提交（登记）",
  "user_request": "选③，开新循环研究仓位结构（2026-10-03 约 08:00 JST；待办 ㊸ 的 ③：有好信号时放多少、个股层和核心怎么分）",
  "rules": "scripts/research_loop5.py 开头（判定同第二〜四个循环、S5 换成仓位版、题目只限仓位结构、三种第二关、上限、家族、ID 不重用、停下的情况）",
- "status": "running",
+ "status": "stopped:要用户决定",
  "deadline": null,
  "cap": 20,
  "family_cap": 3,
@@ -399,6 +399,55 @@
      "note": "Z 2005 −17.6 pp"
     }
    ]
+  },
+  {
+   "round": 9,
+   "date": "2026-10-03",
+   "title": "按止损距离定仓位（固定风险比例）RSK",
+   "registration": "7522a00（代码 1ae286e）",
+   "script": "scripts/loop5_r09_risk.py",
+   "approaches": [
+    {
+     "id": "RSK",
+     "verdict": "第一关不过",
+     "sum": 0.187,
+     "family": "仓位·风险预算",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 5,
+     "d": {
+      "Z": 0.207,
+      "E": -0.016,
+      "J": -0.004
+     },
+     "unseen": null,
+     "note": "Z 2005 +12.7 pp；S4、S5 不过"
+    }
+   ]
+  }
+ ],
+ "ended": "2026-10-03 11:35 JST 第 9 轮之后停下（要用户决定）：17 / 20 用了、没找到（两关都过的 0 个）；剩下 3 个做法没有事先列好的、有文献先验又不与以前重叠的题 → 按规则第五条「要用户决定 → 说明后停」",
+ "closest3": [
+  {
+   "round": 3,
+   "id": "BTS",
+   "verdict": "第一关不过",
+   "sum": 0.186,
+   "passed": 6
+  },
+  {
+   "round": 7,
+   "id": "X2F",
+   "verdict": "第一关不过",
+   "sum": 0.184,
+   "passed": 6
+  },
+  {
+   "round": 9,
+   "id": "RSK",
+   "verdict": "第一关不过",
+   "sum": 0.187,
+   "passed": 5
   }
  ]
 }

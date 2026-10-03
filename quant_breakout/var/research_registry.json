@@ -10034,5 +10034,52 @@
    "WAV：2005 年的大赢家多在突破不扎堆时买进；J 2023 年以后扎堆时更好；W 与 Jx 相反"
   ],
   "notes": "第五个循环用掉 16 / 20"
+ },
+ {
+  "line": 6620,
+  "date": "2026-10-03",
+  "title": "第五个研究循环（仓位结构）第 9 轮：按止损距离定仓位 RSK（固定风险比例）→ 第一关不过（+0.187，几乎全部来自 Z 2005）",
+  "kind": "study",
+  "domain": "资金/执行/成本",
+  "registration": "7522a00（代码 1ae286e；登记后代码未改、只运行一次；循环规则 3577846；不是事后组合）",
+  "script": "scripts/loop5_r09_risk.py",
+  "output": "var/out/loop5_r09_risk.md",
+  "candidates": [
+   {
+    "id": "RSK",
+    "rule": "每只 = 25% × 那一折学习样本 ATR% 中位数 ÷ 这只的 ATR%，截在 12.5%〜34%（X6 止损距离 = 3 × ATR，每笔风险相同）",
+    "result": "合计 +0.187（Z +0.207：2005 +12.7 pp；E −0.016；J −0.004）；S4、S5 不过"
+   }
+  ],
+  "baseline": "B1 Calmar Z 0.979 / E 0.749 / J 0.741",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30；S5 = W 2006〜2016 / Jx 2017〜（每笔超额 − O0 核心）",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [
+   "RSK：Z 2005 好、E / J 差不多；W / Jx 加仓的那一边都更差（低风险倾斜 BTS / IVL / RSK 同一形状）"
+  ],
+  "notes": "第五个循环用掉 17 / 20"
+ },
+ {
+  "line": 6632,
+  "date": "2026-10-03",
+  "title": "第五个研究循环停下（stopped:要用户决定，2026-10-03 11:35 JST）：17 / 20 用了、没找到；最接近 BTS / X2F（只差 S5）/ RSK",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": "循环规则 3577846；各轮登记见 sim_changes",
+  "script": "scripts/research_loop5.py",
+  "output": "var/research_loop5.json",
+  "candidates": [],
+  "baseline": "B1 Calmar Z 0.979 / E 0.749 / J 0.741",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30",
+  "verdict": "变更/工程",
+  "stable_findings": [
+   "仓位规则在两个独立股票池（W / Jx）同方向的几乎没有（17 个里只有 HAL 过 S5）",
+   "按信号调仓位 10 个里 8 个在 W 上加仓那一边每笔更差"
+  ],
+  "era_dependent_or_reversed": [
+   "账户上的差主要来自 Z 2005 一个年份"
+  ],
+  "notes": "待办 ㊹：① 结束（推荐）② 继续（剩 3 个，要新的想法来源）"
  }
 ]
