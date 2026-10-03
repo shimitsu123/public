@@ -1,0 +1,106 @@
+"""个股宏观敏感度与顺风度（qbreak/sensitivity.py）：能找回已知系数、只用截止日为止的数据、说明文字方向正确。"""
+import numpy as np
+import pandas as pd
+
+from qbreak import sensitivity as SN
+
+
+def _levels(n=900, seed=2):
+    rng = np.random.default_rng(seed)
+    days = pd.bdate_range("2020-01-06", periods=n)
+    lv = pd.DataFrame({"rate_jp": np.cumsum(rng.normal(0, 0.01, n)), "rate_us": np.cumsum(rng.normal(0, 0.02, n)),
+                       "oil": np.log(70) + np.cumsum(rng.normal(0, 0.02, n)), "fx": np.log(140) + np.cumsum(rng.normal(0, 0.005, n)),
+                       "credit": 2 + np.cumsum(rng.normal(0, 0.01, n)), "mkt": np.log(30000) + np.cumsum(rng.normal(0, 0.01, n))},
+                      index=days)
+    return lv, rng
+
+
+def test_factor_levels_use_previous_us_close():
+    jp = pd.DatetimeIndex(["2026-09-24", "2026-09-25", "2026-09-28"])
+    us = pd.Series([4.0, 4.1, 4.2], index=pd.DatetimeIndex(["2026-09-23", "2026-09-24", "2026-09-25"]))
+    one = pd.Series(1.0, index=us.index)
+    lv = SN.factor_levels(jp, pd.Series(100.0, index=jp), pd.Series([1.0, 1.1, 1.2], index=jp), us, one * 60, one * 150, us)
+    assert list(lv["rate_us"]) == [4.0, 4.1, 4.2] and list(lv["rate_jp"]) == [1.0, 1.1, 1.2]
+
+
+def test_betas_recover_known_exposures_and_ignore_future():
+    lv, rng = _levels()
+    W = SN.weekly_changes(lv)
+    X = W[SN.FACTORS + ["mkt"]]
+    y = 1.2 * X["mkt"] + 2.0 * X["oil"] - 3.0 * X["rate_jp"] + pd.Series(rng.normal(0, 0.3, len(X)), index=X.index)
+    end = X.index[150]
+    b = SN.betas(y, X, end)
+    assert abs(b["oil"] - 2.0) < 0.2 and abs(b["rate_jp"] + 3.0) < 1.0 and abs(b["mkt"] - 1.2) < 0.2
+    y2 = y.where(y.index <= end, 99.0)
+    assert SN.betas(y2, X, end).equals(b)                                   # 截止日之后的数据不影响
+    assert SN.betas(y, X, X.index[20]) is None                              # 不足 60 周
+
+
+def test_trend_and_fit_text():
+    days = pd.bdate_range("2026-01-05", periods=61)
+    lv = pd.DataFrame({"rate_jp": np.linspace(1.0, 1.24, 61), "rate_us": 4.0, "oil": np.log(np.linspace(60, 66, 61)),
+                       "fx": np.log(150.0), "credit": 2.0, "mkt": 10.0}, index=days)
+    tr = SN.trend(lv, days[-1])
+    assert abs(tr["rate_jp"] - 0.24 / 12) < 1e-12 and abs(tr["oil"] - np.log(1.1) * 100 / 12) < 1e-9
+    b = pd.Series({"rate_jp": 5.0, "rate_us": 0.0, "oil": -0.5, "fx": 0.0, "credit": 0.0, "mkt": 1.0})
+    s, why = SN.fit_score(b, tr)
+    assert abs(s - (5 * 0.02 - 0.5 * tr["oil"])) < 1e-9
+    assert why.startswith("油价↑ 受损") and "日本利率↑ 受益" in why
+
+
+def test_current_fit_tiers():
+    lv, rng = _levels(900, 5)
+    for c in ("rate_jp", "rate_us", "fx", "credit"):                         # 只让油价起作用（其余因素恒定 → 系数 0）
+        lv[c] = lv[c].iloc[0]
+    days = lv.index
+    n225 = pd.Series(np.exp(lv["mkt"].to_numpy()), index=days)
+    inputs = {"n225": n225, "jgb": lv["rate_jp"], "fx": pd.Series(np.exp(lv["fx"].to_numpy()), index=days),
+              "raw": {"DGS10": lv["rate_us"], "DCOILWTICO": pd.Series(np.exp(lv["oil"].to_numpy()), index=days),
+                      "BAA10Y": lv["credit"]}}
+    closes = {}
+    for k, b_oil in enumerate(np.linspace(-0.5, 0.5, 9)):                  # 油价敏感度从负到正
+        oil_seen = lv["oil"].diff().shift(1).fillna(0)                          # 日本 D 日反映的是前一个美国收盘的油价
+        r = lv["mkt"].diff().fillna(0) + b_oil * oil_seen + rng.normal(0, 0.002, len(days))
+        closes[f"{1000 + k}.T"] = pd.Series(1000 * np.exp(np.cumsum(r.to_numpy())), index=days)
+    out = SN.current_fit(closes, inputs)
+    assert set(out) == set(closes) and {o["fit_tier"] for o in out.values()} == {"顺风", "中性", "逆风"}
+    oil_up = SN.trend(SN.factor_levels(days, n225, inputs["jgb"], inputs["raw"]["DGS10"], inputs["raw"]["DCOILWTICO"],
+                                       inputs["fx"], inputs["raw"]["BAA10Y"]), days[-1])["oil"] > 0
+    best = max(out, key=lambda t: out[t]["fit"])
+    assert best == ("1008.T" if oil_up else "1000.T")                      # 油价上涨时油价敏感度最高的最顺风
+
+
+def test_pair_beta_recovers_exposure_and_t():
+    rng = np.random.default_rng(3)
+    idx = pd.date_range("2020-01-03", periods=200, freq="W-FRI")
+    m, x = pd.Series(rng.normal(0, 2, 200), index=idx), pd.Series(rng.normal(0, 3, 200), index=idx)
+    y = 1.1 * m + 0.4 * x + pd.Series(rng.normal(0, 1, 200), index=idx)
+    b, t = SN.pair_beta(y, x, m, idx[-1])
+    assert abs(b - 0.4) < 0.1 and t > 5
+    _, t0 = SN.pair_beta(1.1 * m + pd.Series(rng.normal(0, 1, 200), index=idx), x, m, idx[-1])
+    assert abs(t0) < 3                                                        # 无关的商品：不显著
+    assert SN.pair_beta(y, x, m, idx[30]) is None                             # 不足 60 周
+
+
+def test_factor_levels_extra_uses_previous_us_close_and_log_changes():
+    jp = pd.DatetimeIndex(["2026-09-24", "2026-09-25", "2026-09-28", "2026-10-02"])
+    us = pd.DatetimeIndex(["2026-09-23", "2026-09-24", "2026-09-25", "2026-10-01"])
+    one = pd.Series(1.0, index=us)
+    gold = pd.Series([10.0, 11.0, 12.1, 13.31], index=us)
+    lv = SN.factor_levels(jp, pd.Series(100.0, index=jp), pd.Series(1.0, index=jp), one * 4, one * 60, one * 150, one,
+                          extra={"gold": gold})
+    assert np.allclose(np.exp(lv["gold"]), [10, 11, 12.1, 13.31])            # 日本 D 日 = 前一个美国收盘
+    w = SN.weekly_changes(lv)
+    assert abs(w["gold"].iloc[-1] - np.log(13.31 / 11.0) * 100) < 1e-9       # 周五到周五，%（对数）
+    us_lv = SN.factor_levels(us, pd.Series(100.0, index=us), pd.Series(1.0, index=us), one * 4, one * 60, one * 150, one,
+                             extra={"gold": gold}, same_day=True)
+    assert np.allclose(np.exp(us_lv["gold"]), gold)                           # 美国资产：当天收盘
+
+
+def test_despike_removes_one_day_bad_print_only():
+    from qbreak.factors import despike
+    idx = pd.bdate_range("2014-12-01", periods=6)
+    s = pd.Series([19.5, 19.6, 19.5, 13.05, 19.56, 19.4], index=idx)            # 12/04 错价：−40% 次日 +40%
+    assert list(despike(s)) == [19.5, 19.6, 19.5, 19.5, 19.56, 19.4]
+    real = pd.Series([100.0, 105.0, 70.0, 80.0, 82.0], index=idx[:5])          # 真实暴跌后部分反弹：保留
+    assert despike(real).equals(real)

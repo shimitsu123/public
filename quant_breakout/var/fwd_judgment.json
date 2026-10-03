@@ -1,0 +1,30 @@
+{
+ "as_of": "2026-10-01",
+ "enabled": true,
+ "market": {
+  "items": {
+   "A1": false,
+   "A2": false,
+   "A3": true,
+   "A4": false,
+   "A5": true,
+   "A6": false,
+   "A+": false
+  },
+  "points": 1,
+  "mult": 0.75,
+  "readings": {
+   "C_rel": 49.4,
+   "crel_pct": 54.5,
+   "tv_pct": 72.7,
+   "wj_pct": 91.4,
+   "w_pct": 56.7
+  },
+  "t23_bear": false,
+  "k4_on": true,
+  "deepdip": false,
+  "date": "2026-10-01"
+ },
+ "stocks": {},
+ "errors": {}
+}

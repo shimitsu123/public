@@ -1,0 +1,737 @@
+{
+ "code": "92e2ef2",
+ "n": {
+  "Z": {
+   "w2": 93,
+   "nonw2": 113
+  },
+  "E": {
+   "w2": 153,
+   "nonw2": 131
+  },
+  "J": {
+   "w2": 172,
+   "nonw2": 180
+  },
+  "W": {
+   "w2": 573,
+   "nonw2": 707
+  },
+  "Jx": {
+   "w2": 905,
+   "nonw2": 958
+  }
+ },
+ "base_w2": {
+  "Z": {
+   "cagr": 12.87,
+   "dd": -7.43,
+   "calmar": 1.732,
+   "n": 38,
+   "mean": 5.213,
+   "win": 60.5
+  },
+  "E": {
+   "cagr": 8.81,
+   "dd": -27.51,
+   "calmar": 0.32,
+   "n": 65,
+   "mean": 1.91,
+   "win": 41.5
+  },
+  "J": {
+   "cagr": 14.15,
+   "dd": -34.98,
+   "calmar": 0.404,
+   "n": 81,
+   "mean": 1.349,
+   "win": 38.3
+  }
+ },
+ "base_c": {
+  "Z": {
+   "cagr": 13.45,
+   "dd": -7.28,
+   "calmar": 1.849,
+   "n": 35,
+   "mean": 5.989,
+   "win": 65.7
+  },
+  "E": {
+   "cagr": 8.88,
+   "dd": -28.44,
+   "calmar": 0.312,
+   "n": 44,
+   "mean": 1.53,
+   "win": 43.2
+  },
+  "J": {
+   "cagr": 15.08,
+   "dd": -34.26,
+   "calmar": 0.44,
+   "n": 60,
+   "mean": 2.948,
+   "win": 46.7
+  }
+ },
+ "N3": {
+  "per_year": {
+   "2002": {
+    "rule": "—",
+    "n": 5,
+    "kept": 5,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": 2.641
+   },
+   "2003": {
+    "rule": "—",
+    "n": 8,
+    "kept": 8,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": 5.4349
+   },
+   "2004": {
+    "rule": "—",
+    "n": 15,
+    "kept": 15,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": 0.7079
+   },
+   "2005": {
+    "rule": "—",
+    "n": 45,
+    "kept": 45,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": 7.8641
+   },
+   "2006": {
+    "rule": "—",
+    "n": 16,
+    "kept": 16,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": 4.7042
+   },
+   "2007": {
+    "rule": "—",
+    "n": 13,
+    "kept": 13,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": -2.1979
+   },
+   "2008": {
+    "rule": "—",
+    "n": 4,
+    "kept": 4,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": -0.1236
+   },
+   "2009": {
+    "rule": "—",
+    "n": 3,
+    "kept": 3,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": -0.0753
+   },
+   "2010": {
+    "rule": "—",
+    "n": 22,
+    "kept": 22,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": 2.1349
+   },
+   "2011": {
+    "rule": "—",
+    "n": 20,
+    "kept": 20,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": -3.1749
+   },
+   "2012": {
+    "rule": "—",
+    "n": 34,
+    "kept": 34,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": 8.0442
+   },
+   "2013": {
+    "rule": "—",
+    "n": 16,
+    "kept": 16,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": 1.1765
+   },
+   "2014": {
+    "rule": "—",
+    "n": 18,
+    "kept": 18,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": 0.3882
+   },
+   "2015": {
+    "rule": "—",
+    "n": 12,
+    "kept": 12,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": 0.4552
+   },
+   "2016": {
+    "rule": "格2：vexp+、lturn−、rng−、follow+、atrp−、us12−（门槛 -1）",
+    "n": 3,
+    "kept": 3,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": -3.4956
+   },
+   "2017": {
+    "rule": "格2：vexp+、lturn−、rng−、follow+、atrp−、us12−（门槛 -1）",
+    "n": 25,
+    "kept": 18,
+    "dwin": 6.0,
+    "dmean": -0.4501,
+    "skip_mean": 3.3127,
+    "keep_mean": 1.7052
+   },
+   "2018": {
+    "rule": "格2：vexp+、lturn−、rng−、atrp−（门槛 -1）",
+    "n": 11,
+    "kept": 8,
+    "dwin": -4.5455,
+    "dmean": -0.362,
+    "skip_mean": 2.9801,
+    "keep_mean": 1.6527
+   },
+   "2019": {
+    "rule": "格2：vexp+、rng−、atrp−（门槛 -1）",
+    "n": 20,
+    "kept": 19,
+    "dwin": 1.3158,
+    "dmean": 0.0831,
+    "skip_mean": -1.5406,
+    "keep_mean": 0.1213
+   },
+   "2020": {
+    "rule": "格2：vexp+、lturn−、rng−、atrp−、rsec−、sec_ex+（门槛 -1）",
+    "n": 21,
+    "kept": 13,
+    "dwin": 5.8608,
+    "dmean": 1.2561,
+    "skip_mean": -5.0636,
+    "keep_mean": -1.7664
+   },
+   "2021": {
+    "rule": "格2：vexp+、lturn−、rng−、ext20−、vr10−、atrp−、sec−、rsec−、sec_ex+、x2+（门槛 -1）",
+    "n": 16,
+    "kept": 15,
+    "dwin": 2.0833,
+    "dmean": 0.5199,
+    "skip_mean": -8.5066,
+    "keep_mean": -0.1886
+   },
+   "2022": {
+    "rule": "格2：vexp+、lturn−、day_ret−、rng−、ext20−、vr10−、atrp−、r20−、sec−、rsec−、sec_ex+、x2+（门槛 -2）",
+    "n": 15,
+    "kept": 15,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": -0.3753
+   },
+   "2023": {
+    "rule": "格2：vexp+、lturn−、day_ret−、rng−、ext20−、vr10−、atrp−、sec−、rsec−、sec_ex+、x2+（门槛 -1）",
+    "n": 23,
+    "kept": 17,
+    "dwin": -5.1151,
+    "dmean": -0.0898,
+    "skip_mean": 1.9769,
+    "keep_mean": 1.6326
+   },
+   "2024": {
+    "rule": "格2：vexp+、lturn−、rng−、vr10−、atrp−、b_n225−、dy−、sec−、rsec−、sec_ex+、x2+（门槛 -2）",
+    "n": 11,
+    "kept": 11,
+    "dwin": 0.0,
+    "dmean": 0.0,
+    "skip_mean": null,
+    "keep_mean": -0.2652
+   },
+   "2025": {
+    "rule": "格2：vexp+、rng−、vr10−、vol60−、atrp−、r60−、sec−、rsec−、x2+（门槛 -1）",
+    "n": 24,
+    "kept": 21,
+    "dwin": 0.0,
+    "dmean": -0.57,
+    "skip_mean": 9.3974,
+    "keep_mean": 4.8372
+   },
+   "2026": {
+    "rule": "格2：vexp+、rng−、atrp−、r3y+、sec−、x2+（门槛 -1）",
+    "n": 6,
+    "kept": 4,
+    "dwin": 16.6667,
+    "dmean": 3.1128,
+    "skip_mean": -7.2916,
+    "keep_mean": 2.0469
+   }
+  },
+  "pooled": {
+   "n": 175,
+   "kept": 144,
+   "frac": 0.8229,
+   "win_all": 40.0,
+   "mean_all": 0.8341,
+   "win": 41.6667,
+   "mean": 0.9647,
+   "dwin": 1.6667,
+   "dmean": 0.1306
+  },
+  "placebo": {
+   "dmean_q95": 0.448,
+   "dwin_q95": 2.9681
+  },
+  "halves": [
+   {
+    "n": 88,
+    "kept": 68,
+    "frac": 0.7727,
+    "win_all": 31.8182,
+    "mean_all": 0.02,
+    "win": 35.2941,
+    "mean": 0.2968,
+    "dwin": 3.4759,
+    "dmean": 0.2769
+   },
+   {
+    "n": 87,
+    "kept": 76,
+    "frac": 0.8736,
+    "win_all": 48.2759,
+    "mean_all": 1.6575,
+    "win": 47.3684,
+    "mean": 1.5623,
+    "dwin": -0.9074,
+    "dmean": -0.0952
+   }
+  ],
+  "median": "2021-06-09",
+  "other": {
+   "W": {
+    "n": 18,
+    "kept": 18,
+    "frac": 1.0,
+    "win_all": 33.3333,
+    "mean_all": -1.8314,
+    "win": 33.3333,
+    "mean": -1.8314,
+    "dwin": 0.0,
+    "dmean": 0.0
+   },
+   "Jx": {
+    "n": 905,
+    "kept": 794,
+    "frac": 0.8773,
+    "win_all": 38.895,
+    "mean_all": 0.2467,
+    "win": 40.0504,
+    "mean": 0.3405,
+    "dwin": 1.1554,
+    "dmean": 0.0937
+   }
+  },
+  "acct": {
+   "E": {
+    "cagr": 8.81,
+    "dd": -27.51,
+    "calmar": 0.32,
+    "n": 65,
+    "mean": 1.91,
+    "win": 41.5,
+    "frac": 1.0
+   },
+   "J": {
+    "cagr": 14.25,
+    "dd": -35.12,
+    "calmar": 0.406,
+    "n": 69,
+    "mean": 1.528,
+    "win": 39.1,
+    "frac": 0.8208
+   }
+  },
+  "acct_q95": null,
+  "F": [
+   false,
+   false,
+   true,
+   false,
+   false
+  ],
+  "verdict": "不通过"
+ },
+ "N1": {
+  "rescued": {
+   "Z": {
+    "n": 14,
+    "win": 57.1429,
+    "mean": 2.5788
+   },
+   "E": {
+    "n": 10,
+    "win": 30.0,
+    "mean": -1.0367
+   },
+   "J": {
+    "n": 11,
+    "win": 45.4545,
+    "mean": 2.2844
+   },
+   "W": {
+    "n": 76,
+    "win": 43.4211,
+    "mean": 1.6005
+   },
+   "Jx": {
+    "n": 138,
+    "win": 35.5072,
+    "mean": 0.0015
+   }
+  },
+  "base": {
+   "Z": {
+    "n": 89,
+    "win": 57.3034,
+    "mean": 4.7666
+   },
+   "E": {
+    "n": 116,
+    "win": 42.2414,
+    "mean": 2.1758
+   },
+   "J": {
+    "n": 127,
+    "win": 46.4567,
+    "mean": 1.879
+   },
+   "W": {
+    "n": 438,
+    "win": 44.5205,
+    "mean": 1.8067
+   },
+   "Jx": {
+    "n": 792,
+    "win": 39.0152,
+    "mean": 0.2897
+   }
+  },
+  "pooled": {
+   "n": 35,
+   "win": 45.7143,
+   "mean": 1.4533
+  },
+  "pooled_base": {
+   "n": 332,
+   "win": 47.8916,
+   "mean": 2.7568
+  },
+  "placebo_q95": 5.0503,
+  "acct": {
+   "Z": {
+    "cagr": 11.51,
+    "dd": -7.53,
+    "calmar": 1.529,
+    "n": 43,
+    "mean": 3.527,
+    "win": 62.8,
+    "added": 14
+   },
+   "E": {
+    "cagr": 8.82,
+    "dd": -28.46,
+    "calmar": 0.31,
+    "n": 48,
+    "mean": 1.504,
+    "win": 43.8,
+    "added": 10
+   },
+   "J": {
+    "cagr": 14.78,
+    "dd": -34.26,
+    "calmar": 0.431,
+    "n": 65,
+    "mean": 2.6,
+    "win": 44.6,
+    "added": 11
+   }
+  },
+  "acct_q95": null,
+  "G": [
+   false,
+   false,
+   true,
+   false,
+   false
+  ],
+  "verdict": "不通过"
+ },
+ "N2": {
+  "rules": {
+   "Z": "格2：vexp+、vr10−、corr60−、b_n225−、r12−、rsec−、x2+（门槛 -1）",
+   "E": "格2：vr1+、hi52−、vol60−、atrp−、b_wti+、r120−、x2+（门槛 -1）",
+   "J": "格2：m6−、rng−、x2+（门槛 -1）",
+   "W": "格2：vr1+、hi52−、vol60−、atrp−、b_wti+、r120−、x2+（门槛 -1）",
+   "Jx": "格2：m6−、rng−、x2+（门槛 -1）"
+  },
+  "bought": {
+   "Z": {
+    "n": 183,
+    "win": 50.8197,
+    "mean": 3.7194
+   },
+   "E": {
+    "n": 239,
+    "win": 39.3305,
+    "mean": 1.4745
+   },
+   "J": {
+    "n": 317,
+    "win": 40.694,
+    "mean": 0.8591
+   },
+   "W": {
+    "n": 1106,
+    "win": 44.0325,
+    "mean": 1.4645
+   },
+   "Jx": {
+    "n": 1692,
+    "win": 37.5296,
+    "mean": -0.1211
+   }
+  },
+  "delta": {
+   "Z": {
+    "n": 206,
+    "kept": 183,
+    "frac": 0.8883,
+    "win_all": 51.4563,
+    "mean_all": 3.7201,
+    "win": 50.8197,
+    "mean": 3.7194,
+    "dwin": -0.6366,
+    "dmean": -0.0007
+   },
+   "E": {
+    "n": 284,
+    "kept": 239,
+    "frac": 0.8415,
+    "win_all": 38.7324,
+    "mean_all": 1.3621,
+    "win": 39.3305,
+    "mean": 1.4745,
+    "dwin": 0.5981,
+    "dmean": 0.1124
+   },
+   "J": {
+    "n": 352,
+    "kept": 317,
+    "frac": 0.9006,
+    "win_all": 41.4773,
+    "mean_all": 1.0173,
+    "win": 40.694,
+    "mean": 0.8591,
+    "dwin": -0.7833,
+    "dmean": -0.1582
+   },
+   "W": {
+    "n": 1280,
+    "kept": 1106,
+    "frac": 0.8641,
+    "win_all": 44.0625,
+    "mean_all": 1.4778,
+    "win": 44.0325,
+    "mean": 1.4645,
+    "dwin": -0.03,
+    "dmean": -0.0133
+   },
+   "Jx": {
+    "n": 1863,
+    "kept": 1692,
+    "frac": 0.9082,
+    "win_all": 37.2517,
+    "mean_all": -0.2004,
+    "win": 37.5296,
+    "mean": -0.1211,
+    "dwin": 0.2778,
+    "dmean": 0.0793
+   }
+  },
+  "pooled": {
+   "n": 842,
+   "kept": 739,
+   "frac": 0.8777,
+   "win_all": 42.9929,
+   "mean_all": 1.7949,
+   "win": 42.7605,
+   "mean": 1.7664,
+   "dwin": -0.2324,
+   "dmean": -0.0284
+  },
+  "placebo": {
+   "dmean_q95": 0.1683,
+   "dwin_q95": 1.1207
+  },
+  "acct": {
+   "Z": {
+    "cagr": 12.49,
+    "dd": -10.56,
+    "calmar": 1.183,
+    "n": 52,
+    "mean": 3.496,
+    "win": 50.0,
+    "frac": 0.8905
+   },
+   "E": {
+    "cagr": 8.1,
+    "dd": -30.31,
+    "calmar": 0.267,
+    "n": 76,
+    "mean": 1.316,
+    "win": 39.5,
+    "frac": 0.8408
+   },
+   "J": {
+    "cagr": 14.02,
+    "dd": -34.8,
+    "calmar": 0.403,
+    "n": 124,
+    "mean": 1.134,
+    "win": 37.9,
+    "frac": 0.902
+   }
+  },
+  "acct_q95": null,
+  "G": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "verdict": "不通过"
+ },
+ "desc": {
+  "Z": {
+   "≤ −2": {
+    "n": 31,
+    "win": 61.2903,
+    "mean": 6.2492
+   },
+   "−1〜+1": {
+    "n": 22,
+    "win": 40.9091,
+    "mean": 2.7219
+   },
+   "≥ +2": {
+    "n": 14,
+    "win": 57.1429,
+    "mean": 2.5788
+   }
+  },
+  "E": {
+   "≤ −2": {
+    "n": 43,
+    "win": 32.5581,
+    "mean": -1.0926
+   },
+   "−1〜+1": {
+    "n": 29,
+    "win": 44.8276,
+    "mean": 1.8231
+   },
+   "≥ +2": {
+    "n": 10,
+    "win": 30.0,
+    "mean": -1.0367
+   }
+  },
+  "J": {
+   "≤ −2": {
+    "n": 73,
+    "win": 52.0548,
+    "mean": 2.0342
+   },
+   "−1〜+1": {
+    "n": 42,
+    "win": 40.4762,
+    "mean": 1.0481
+   },
+   "≥ +2": {
+    "n": 11,
+    "win": 45.4545,
+    "mean": 2.2844
+   }
+  },
+  "W": {
+   "≤ −2": {
+    "n": 185,
+    "win": 47.027,
+    "mean": 1.4796
+   },
+   "−1〜+1": {
+    "n": 115,
+    "win": 40.8696,
+    "mean": 0.6845
+   },
+   "≥ +2": {
+    "n": 76,
+    "win": 43.4211,
+    "mean": 1.6005
+   }
+  },
+  "Jx": {
+   "≤ −2": {
+    "n": 176,
+    "win": 34.6591,
+    "mean": -1.1744
+   },
+   "−1〜+1": {
+    "n": 364,
+    "win": 33.5165,
+    "mean": -1.2258
+   },
+   "≥ +2": {
+    "n": 138,
+    "win": 35.5072,
+    "mean": 0.0015
+   }
+  }
+ }
+}

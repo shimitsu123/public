@@ -1,0 +1,233 @@
+{
+ "JP": {
+  "explain": {
+   "全部因子": {
+    "in_r2": 0.166,
+    "out_r2": 0.236,
+    "coef": {
+     "const": -0.0003,
+     "sp500_prev": 0.489,
+     "d_us10y": 0.0118,
+     "d_us2y": -0.0011,
+     "d_jgb10y": -0.0016,
+     "d_jgb2y": 0.0022,
+     "d_baa_spread": 0.0085,
+     "d_vix": -0.0004,
+     "oil": 0.0008,
+     "fx": 0.096
+    }
+   },
+   "不含 VIX": {
+    "in_r2": 0.166,
+    "out_r2": 0.236,
+    "coef": {
+     "const": -0.0003,
+     "sp500_prev": 0.5254,
+     "d_us10y": 0.0114,
+     "d_us2y": -0.0006,
+     "d_jgb10y": -0.0015,
+     "d_jgb2y": 0.002,
+     "d_baa_spread": 0.0083,
+     "oil": 0.0008,
+     "fx": 0.0991
+    }
+   }
+  },
+  "predict": {
+   "F0": {
+    "n_features": 9,
+    "test_months": 212,
+    "test_start": "2009-01-30",
+    "oos_r2_pct": -5.2,
+    "cw_t": -1.32,
+    "auc": 0.52,
+    "brier_skill": -0.077,
+    "dd_base_rate": 0.16,
+    "wf_oos_r2_pct": -4.42,
+    "wf_auc": 0.541,
+    "wf_months": 308
+   },
+   "F1": {
+    "n_features": 42,
+    "test_months": 212,
+    "test_start": "2009-01-30",
+    "oos_r2_pct": -0.83,
+    "cw_t": 0.55,
+    "auc": 0.524,
+    "brier_skill": -0.105,
+    "dd_base_rate": 0.16,
+    "wf_oos_r2_pct": -6.1,
+    "wf_auc": 0.512,
+    "wf_months": 308
+   },
+   "F2": {
+    "n_features": 50,
+    "test_months": 212,
+    "test_start": "2009-01-30",
+    "oos_r2_pct": 0.74,
+    "cw_t": 1.89,
+    "auc": 0.548,
+    "brier_skill": -0.068,
+    "dd_base_rate": 0.16,
+    "wf_oos_r2_pct": -8.83,
+    "wf_auc": 0.5,
+    "wf_months": 308
+   },
+   "F3": {
+    "n_features": 58,
+    "test_months": 116,
+    "test_start": "2017-01-31",
+    "oos_r2_pct": -308.33,
+    "cw_t": -1.07,
+    "auc": 0.58,
+    "brier_skill": -3.33,
+    "dd_base_rate": 0.129,
+    "wf_oos_r2_pct": -29.25,
+    "wf_auc": 0.474,
+    "wf_months": 176
+   }
+  },
+  "useful": {
+   "F1": false,
+   "F2": true,
+   "F3": false
+  },
+  "timing": {
+   "set": "F2",
+   "factor": {
+    "cagr_pct": 10.7,
+    "mdd_pct": -33.4,
+    "calmar": 0.32,
+    "switches_per_year": 6.55,
+    "cash_share": 0.147
+   },
+   "ma_band": {
+    "cagr_pct": 6.74,
+    "mdd_pct": -34.1,
+    "calmar": 0.198,
+    "switches_per_year": 1.19,
+    "cash_share": 0.343
+   },
+   "buy_hold": {
+    "cagr_pct": 11.96,
+    "mdd_pct": -31.8,
+    "calmar": 0.376,
+    "switches_per_year": 0.0,
+    "cash_share": 0.0
+   },
+   "factor_h1": {
+    "cagr_pct": 11.34,
+    "mdd_pct": -28.3,
+    "calmar": 0.4
+   },
+   "ma_band_h1": {
+    "cagr_pct": 5.15,
+    "mdd_pct": -34.1,
+    "calmar": 0.151
+   },
+   "factor_h2": {
+    "cagr_pct": 10.08,
+    "mdd_pct": -33.4,
+    "calmar": 0.302
+   },
+   "ma_band_h2": {
+    "cagr_pct": 8.36,
+    "mdd_pct": -25.5,
+    "calmar": 0.328
+   }
+  },
+  "adopt_timing": false
+ },
+ "US": {
+  "explain": {
+   "全部因子": {
+    "in_r2": 0.633,
+    "out_r2": 0.587,
+    "coef": {
+     "const": 0.0003,
+     "d_us10y": -0.005,
+     "d_us2y": 0.0091,
+     "d_jgb10y": -0.0006,
+     "d_jgb2y": 0.0018,
+     "d_baa_spread": -0.0077,
+     "d_vix": -0.0063,
+     "oil": -0.0037,
+     "fx": 0.0068
+    }
+   },
+   "不含 VIX": {
+    "in_r2": 0.058,
+    "out_r2": -0.014,
+    "coef": {
+     "const": 0.0003,
+     "d_us10y": -0.035,
+     "d_us2y": 0.0457,
+     "d_jgb10y": 0.0055,
+     "d_jgb2y": -0.0058,
+     "d_baa_spread": -0.0444,
+     "oil": -0.0045,
+     "fx": 0.1354
+    }
+   }
+  },
+  "predict": {
+   "F0": {
+    "n_features": 9,
+    "test_months": 212,
+    "test_start": "2009-01-30",
+    "oos_r2_pct": -12.54,
+    "cw_t": -1.08,
+    "auc": 0.631,
+    "brier_skill": -0.071,
+    "dd_base_rate": 0.156,
+    "wf_oos_r2_pct": -6.73,
+    "wf_auc": 0.641,
+    "wf_months": 308
+   },
+   "F1": {
+    "n_features": 42,
+    "test_months": 212,
+    "test_start": "2009-01-30",
+    "oos_r2_pct": -17.18,
+    "cw_t": -1.09,
+    "auc": 0.571,
+    "brier_skill": -0.351,
+    "dd_base_rate": 0.156,
+    "wf_oos_r2_pct": -9.89,
+    "wf_auc": 0.591,
+    "wf_months": 308
+   },
+   "F2": {
+    "n_features": 50,
+    "test_months": 212,
+    "test_start": "2009-01-30",
+    "oos_r2_pct": -15.33,
+    "cw_t": -0.85,
+    "auc": 0.541,
+    "brier_skill": -0.244,
+    "dd_base_rate": 0.156,
+    "wf_oos_r2_pct": -13.27,
+    "wf_auc": 0.571,
+    "wf_months": 308
+   },
+   "F3": {
+    "n_features": 58,
+    "test_months": 116,
+    "test_start": "2017-01-31",
+    "oos_r2_pct": -231.08,
+    "cw_t": -0.73,
+    "auc": 0.491,
+    "brier_skill": -1.765,
+    "dd_base_rate": 0.172,
+    "wf_oos_r2_pct": -30.92,
+    "wf_auc": 0.494,
+    "wf_months": 176
+   }
+  },
+  "useful": {
+   "F1": false,
+   "F2": false,
+   "F3": false
+  }
+ }
+}

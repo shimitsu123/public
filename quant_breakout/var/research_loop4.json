@@ -1,0 +1,343 @@
+{
+ "title": "第四个研究循环（选股）：直到找到比现在更好的选股算法才停",
+ "start": "2026-10-03",
+ "registered": "本提交（登记）",
+ "user_request": "继续研究循环 6个小时之内不停 直到找到比现在好的选股算法（2026-10-02 23:40 JST；第三个循环的 20 个用完后另开）",
+ "rules": "scripts/research_loop4.py 开头（判定同第三个循环、题目只限选股、第二关的随机挡、上限、家族、ID 不重用、停下的情况）",
+ "status": "stopped:时间到",
+ "deadline": "2026-10-03 05:40 JST",
+ "cap": 20,
+ "family_cap": 3,
+ "family_prefix": "选股",
+ "banned_families": [
+  "汇率对冲"
+ ],
+ "kinds": [
+  "signal",
+  "asset",
+  "stock"
+ ],
+ "criteria": {
+  "sum_min": 0.03,
+  "era_tol": 0.02,
+  "dd_tol_pp": 2.0,
+  "placebo_n": 400,
+  "stage1": "与第二 / 第三个循环相同（S1〜S6 + S7 事后组合）",
+  "stage2": {
+   "stock": "同样强度的随机挡（每月随机挑同样多的票 / 逐个信号按同样比例随机挡；种子 numpy.random.default_rng([20261003, s])）",
+   "signal": "同第三个循环",
+   "asset": "同第三个循环"
+  },
+  "rule": "候选的 Calmar 差合计严格大于 400 次里的最大值（有算不出的 = 不过）"
+ },
+ "baseline_def": "B1 = 第二 / 第三个循环的同一个 B1；J 到 2026-09-30",
+ "baseline": {
+  "Z": {
+   "cagr": 14.4,
+   "dd": -14.71,
+   "calmar": 0.979,
+   "n": 35,
+   "mean": 6.094,
+   "win": 68.6,
+   "h1": 0.721,
+   "h2": 1.683
+  },
+  "E": {
+   "cagr": 14.74,
+   "dd": -19.7,
+   "calmar": 0.749,
+   "n": 43,
+   "mean": 1.283,
+   "win": 41.9,
+   "h1": 0.278,
+   "h2": 1.551
+  },
+  "J": {
+   "cagr": 19.98,
+   "dd": -26.97,
+   "calmar": 0.741,
+   "n": 63,
+   "mean": 3.077,
+   "win": 49.2,
+   "h1": 0.8,
+   "h2": 0.747
+  }
+ },
+ "prereq_ok": true,
+ "fingerprint": "e73f7f6c0149fe10",
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-03",
+   "title": "选股：同一只票上一次突破刚失败 FBM / 信号前有放量大跌日 NEV",
+   "registration": "b6c7384",
+   "script": "scripts/loop4_r01_memory.py",
+   "approaches": [
+    {
+     "id": "FBM",
+     "verdict": "第一关不过",
+     "sum": -0.12,
+     "family": "选股·个股记忆",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 3,
+     "d": {
+      "Z": 0.011,
+      "E": -0.184,
+      "J": 0.053
+     },
+     "unseen": null,
+     "note": "S1〜S4 不过、S5 过（Jx 被挡的 50 个胜率 32.0%、每笔 −0.64%）；E −0.184（回撤 −19.70% → −24.91%：挡掉一笔之后名额连锁）、J +0.053"
+    },
+    {
+     "id": "NEV",
+     "verdict": "第一关不过",
+     "sum": -0.019,
+     "family": "选股·消息冲击",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 3,
+     "d": {
+      "Z": -0.035,
+      "E": 0.025,
+      "J": -0.009
+     },
+     "unseen": null,
+     "note": "S1、S2、S4、S5 不过（S3 过）；合计 −0.019（Z −0.035：2005 −3.8 pp；E +0.025；J −0.009）"
+    }
+   ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-03",
+   "title": "选股：成交量生命周期晚期不买 VLC / 没整理就再突破不买 BAS",
+   "registration": "624d2c8",
+   "script": "scripts/loop4_r02_volbase.py",
+   "approaches": [
+    {
+     "id": "VLC",
+     "verdict": "第一关不过",
+     "sum": -0.202,
+     "family": "选股·量的生命周期",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 3,
+     "d": {
+      "Z": -0.221,
+      "E": 0.026,
+      "J": -0.007
+     },
+     "unseen": null,
+     "note": "S1、S2、S4、S5 不过（S3 过）；合计 −0.202（Z −0.221：2005 −15.4 pp）；W 被挡的 81 个每笔 +2.74%（比保留的好）"
+    },
+    {
+     "id": "BAS",
+     "verdict": "第一关不过",
+     "sum": 0.019,
+     "family": "选股·整理形态",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 5,
+     "d": {
+      "Z": -0.004,
+      "E": 0.002,
+      "J": 0.021
+     },
+     "unseen": null,
+     "note": "S1、S5 不过（S2、S3、S4 过）；合计 +0.019（Z −0.004、E +0.002、J +0.021）；W 被挡的 23 个 60.9% / +3.16%（更好）、Jx 被挡的 65 个 35.4% / −0.53%（更差）→ 两个池子相反"
+    }
+   ]
+  },
+  {
+   "round": 3,
+   "date": "2026-10-03",
+   "title": "个股 / 业种过去的突破跑不赢核心 CTR / STR",
+   "registration": "5091ca6（代码 7401332）",
+   "script": "scripts/loop4_r03_coretrack.py",
+   "approaches": [
+    {
+     "id": "CTR",
+     "verdict": "第一关不过",
+     "sum": -0.254,
+     "family": "选股·个股记忆",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 3,
+     "d": {
+      "Z": -0.235,
+      "E": -0.031,
+      "J": 0.012
+     },
+     "unseen": null,
+     "note": "Z 2005 −19.4 pp：同一只票过去跑输核心的突破这次正是主升浪"
+    },
+    {
+     "id": "STR",
+     "verdict": "第一关不过",
+     "sum": 0.096,
+     "family": "选股·行业记忆",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 6,
+     "d": {
+      "Z": 0.027,
+      "E": 0.041,
+      "J": 0.028
+     },
+     "unseen": null,
+     "note": "账户三个年代都更好（+0.096），但 W 被挡的 243 个每笔 +2.54%（比保留的好）→ S5 不过；本循环最接近（过 6 / 7 条）"
+    }
+   ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-03",
+   "title": "选股模型 C 改学「跑不跑得赢核心」XSM",
+   "registration": "eb902a9（代码 44067eb）",
+   "script": "scripts/loop4_r04_xsmodel.py",
+   "approaches": [
+    {
+     "id": "XSM",
+     "verdict": "第一关不过",
+     "sum": -0.002,
+     "family": "选股·学习目标",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 2,
+     "d": {
+      "Z": -0.002,
+      "E": 0.054,
+      "J": -0.054
+     },
+     "unseen": null,
+     "note": "留一年代 −0.002（E +0.054、J −0.054：2017 −8.8、2025 −8.1 pp）；逐年前推 +0.030；S5：Jx 只有 C 保留的 75 个每笔 +1.03% 比只有 C_xs 保留的 +0.51% 好"
+    }
+   ]
+  },
+  {
+   "round": 5,
+   "date": "2026-10-03",
+   "title": "选股模型 C 多用别的股票学 CWX",
+   "registration": "85b30b3（代码 7dddd00；W2T / VTZ 规模核对后不登记）",
+   "script": "scripts/loop4_r05_cwide.py",
+   "approaches": [
+    {
+     "id": "CWX",
+     "verdict": "第一关不过",
+     "sum": -0.177,
+     "family": "选股·学习样本",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 2,
+     "d": {
+      "Z": -0.139,
+      "E": -0.018,
+      "J": -0.02
+     },
+     "unseen": null,
+     "note": "加学习集之后每个学习集都同号的特征只剩 1〜3 个（Z 折只剩 b_n225−）→ C 变成粗的低 β / 低波动过滤；Z 少买 11 笔赢家（2004 −2.8、2005 −4.8 pp）"
+    }
+   ]
+  },
+  {
+   "round": 6,
+   "date": "2026-10-03",
+   "title": "选股模型 C 在波动的牛市也挑 CV3",
+   "registration": "624631f（代码 5e2b2a0）",
+   "script": "scripts/loop4_r06_ccell3.py",
+   "approaches": [
+    {
+     "id": "CV3",
+     "verdict": "第一关不过",
+     "sum": 0.028,
+     "family": "选股·C 的适用范围",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 3,
+     "d": {
+      "Z": 0.0,
+      "E": 0.025,
+      "J": 0.003
+     },
+     "unseen": null,
+     "note": "+0.028（Z 0、E +0.025、J +0.003），差 S1 的 +0.03 只 0.002；但 Jx 多挡的 17 个反而更好（58.8% / +1.75%）、后一半 −0.006、逐年前推 +0.002"
+    }
+   ]
+  },
+  {
+   "round": 7,
+   "date": "2026-10-03",
+   "title": "价格延迟最小的三分之一不买 PDL",
+   "registration": "0b7e403（代码 9287dd5 / 7c95286）",
+   "script": "scripts/loop4_r07_delay.py",
+   "approaches": [
+    {
+     "id": "PDL",
+     "verdict": "第一关不过",
+     "sum": -0.025,
+     "family": "选股·信息扩散",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 3,
+     "d": {
+      "Z": -0.047,
+      "E": -0.015,
+      "J": 0.037
+     },
+     "unseen": null,
+     "note": "−0.025（Z 2005 −6.1 pp）；W / Jx 里被挡的（反应快的）突破反而更好（+2.00% / +1.02% 每笔）→ 方向与文献相反"
+    }
+   ]
+  },
+  {
+   "round": 8,
+   "date": "2026-10-03",
+   "title": "业种同月季节性最差的三分之一不买 SSN",
+   "registration": "0b8a465（代码 e2db8b0 / 7443512）",
+   "script": "scripts/loop4_r08_season.py",
+   "approaches": [
+    {
+     "id": "SSN",
+     "verdict": "第一关不过",
+     "sum": 0.068,
+     "family": "选股·季节性",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 6,
+     "d": {
+      "Z": 0.0,
+      "E": 0.051,
+      "J": 0.017
+     },
+     "unseen": null,
+     "note": "+0.068（Z 0、E +0.051、J +0.017），只差 S5：W 被挡的 81 个 59.3% / +2.58%、Jx 被挡的 200 个 45.0% / +1.33%，都比保留的好；过 6 / 7 条（同 STR）"
+    }
+   ]
+  }
+ ],
+ "ended": "2026-10-03 05:40 JST 时间到（用户给的 6 小时）；第 8 轮之后 11 / 20 用了、没找到（两关都过的 0 个）",
+ "closest3": [
+  {
+   "round": 3,
+   "id": "STR",
+   "verdict": "第一关不过",
+   "sum": 0.096,
+   "passed": 6
+  },
+  {
+   "round": 8,
+   "id": "SSN",
+   "verdict": "第一关不过",
+   "sum": 0.068,
+   "passed": 6
+  },
+  {
+   "round": 2,
+   "id": "BAS",
+   "verdict": "第一关不过",
+   "sum": 0.019,
+   "passed": 5
+  }
+ ],
+ "after": "2026-10-03 约 08:00 JST 用户选 ㊸ ③ → 第四个循环到此结束（11 / 20、没找到）；另开第五个研究循环（仓位结构，scripts/research_loop5.py）"
+}

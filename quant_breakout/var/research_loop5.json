@@ -1,0 +1,521 @@
+{
+ "title": "第五个研究循环（仓位结构）：直到找到比现在更好的仓位结构才停",
+ "start": "2026-10-03",
+ "registered": "本提交（登记）",
+ "user_request": "选③，开新循环研究仓位结构（2026-10-03 约 08:00 JST；待办 ㊸ 的 ③：有好信号时放多少、个股层和核心怎么分）",
+ "rules": "scripts/research_loop5.py 开头（判定同第二〜四个循环、S5 换成仓位版、题目只限仓位结构、三种第二关、上限、家族、ID 不重用、停下的情况）",
+ "status": "exhausted",
+ "deadline": null,
+ "cap": 20,
+ "family_cap": 3,
+ "family_prefix": "仓位",
+ "banned_families": [
+  "汇率对冲"
+ ],
+ "kinds": [
+  "size_trade",
+  "size_time",
+  "struct"
+ ],
+ "sizing": {
+  "base_pct": 0.25,
+  "max_pct": 0.34,
+  "m_cap": 1.36,
+  "how": "position_pct = 25% × m_max、全部新仓倍数 ÷ m_max、每个信号 / 每一天再 × m（m 全为 1 = B1）"
+ },
+ "criteria": {
+  "sum_min": 0.03,
+  "era_tol": 0.02,
+  "dd_tol_pp": 2.0,
+  "placebo_n": 400,
+  "stage1": "与第二〜四个循环相同（S1〜S6 + S7 事后组合）；S5 = W / Jx 每笔超额（− O0 核心）的 dmean = 平均[(m − 1) × x] ≥ 0、dwin = 加权跑赢核心比例差 ≥ 0",
+  "stage2": {
+   "size_trade": "倍数在同一年代的信号之间随机打乱（种子 [20261005, 1, s]），严格大于 400 次的最大值",
+   "size_time": "每日倍数序列整体循环平移 k ∈ [250, N − 250]（种子 [20261005, s]），严格大于 400 次的最大值",
+   "struct": "相邻参数值也过 S1 与 S2，且 400 次配对重抽（每个年代随机去掉 20% 信号，种子 [20261005, 2, s, 年代序号]）的 Calmar 差合计全部 > 0"
+  },
+  "rule": "有算不出的 = 不过"
+ },
+ "baseline_def": "B1 = 第二〜四个循环的同一个 B1；J 到 2026-09-30",
+ "baseline": {
+  "Z": {
+   "cagr": 14.4,
+   "dd": -14.71,
+   "calmar": 0.979,
+   "n": 35,
+   "mean": 6.094,
+   "win": 68.6,
+   "h1": 0.721,
+   "h2": 1.683
+  },
+  "E": {
+   "cagr": 14.74,
+   "dd": -19.7,
+   "calmar": 0.749,
+   "n": 43,
+   "mean": 1.283,
+   "win": 41.9,
+   "h1": 0.278,
+   "h2": 1.551
+  },
+  "J": {
+   "cagr": 19.98,
+   "dd": -26.97,
+   "calmar": 0.741,
+   "n": 63,
+   "mean": 3.077,
+   "win": 49.2,
+   "h1": 0.8,
+   "h2": 0.747
+  }
+ },
+ "prereq_ok": true,
+ "fingerprint": "e73f7f6c0149fe10",
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-03",
+   "title": "个股层与核心按状态切分 CSH / SMO / RSM",
+   "registration": "7d377e7（代码 a2f99a1）",
+   "script": "scripts/loop5_r01_layer.py",
+   "approaches": [
+    {
+     "id": "CSH",
+     "verdict": "第一关不过",
+     "sum": 0.003,
+     "family": "仓位·层间切分",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 5,
+     "d": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.003
+     },
+     "unseen": null,
+     "note": "只碰到 J 的 9 笔"
+    },
+    {
+     "id": "SMO",
+     "verdict": "第一关不过",
+     "sum": -0.038,
+     "family": "仓位·策略动量",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 3,
+     "d": {
+      "Z": -0.037,
+      "E": -0.067,
+      "J": 0.066
+     },
+     "unseen": null,
+     "note": "J +0.066，Z 2005 / E 拐点变差"
+    },
+    {
+     "id": "RSM",
+     "verdict": "第一关不过",
+     "sum": -0.105,
+     "family": "仓位·层间切分",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 3,
+     "d": {
+      "Z": -0.164,
+      "E": -0.018,
+      "J": 0.077
+     },
+     "unseen": null,
+     "note": "J +0.077，Z −0.164（2005 −13.1 pp）"
+    }
+   ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-03",
+   "title": "按市场波动 / 按 C 的分数调仓位 VMS / CSZ",
+   "registration": "1e30638（代码 723a327）",
+   "script": "scripts/loop5_r02_volc.py",
+   "approaches": [
+    {
+     "id": "VMS",
+     "verdict": "第一关不过",
+     "sum": 0.155,
+     "family": "仓位·波动率择时",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 5,
+     "d": {
+      "Z": 0.156,
+      "E": -0.022,
+      "J": 0.021
+     },
+     "unseen": null,
+     "note": "S2 差 0.002（E −0.022）、S5 Jx 负；好处来自 Z 2005"
+    },
+    {
+     "id": "CSZ",
+     "verdict": "第一关不过",
+     "sum": 0.153,
+     "family": "仓位·按信号",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 5,
+     "d": {
+      "Z": 0.132,
+      "E": 0.029,
+      "J": -0.008
+     },
+     "unseen": null,
+     "note": "S4 前一半 −0.004、S5 负；好处来自 Z"
+    }
+   ]
+  },
+  {
+   "round": 3,
+   "date": "2026-10-03",
+   "title": "按 β / 按成分股离散度调仓位 BTS / DSP",
+   "registration": "3a59f28（代码 3467f71）",
+   "script": "scripts/loop5_r03_betadisp.py",
+   "approaches": [
+    {
+     "id": "BTS",
+     "verdict": "第一关不过",
+     "sum": 0.186,
+     "family": "仓位·按信号",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 6,
+     "d": {
+      "Z": 0.071,
+      "E": 0.042,
+      "J": 0.073
+     },
+     "unseen": null,
+     "note": "三个年代都变好，只差 S5（W dmean −0.273）"
+    },
+    {
+     "id": "DSP",
+     "verdict": "第一关不过",
+     "sum": 0.167,
+     "family": "仓位·市场离散度",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 4,
+     "d": {
+      "Z": 0.214,
+      "E": -0.041,
+      "J": -0.006
+     },
+     "unseen": null,
+     "note": "好处集中在 Z 2005；E −0.041"
+    }
+   ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-03",
+   "title": "按离 52 周高点远近 / 业种动量调仓位 H52 / ISM",
+   "registration": "ff79468（代码 04f2ae7）",
+   "script": "scripts/loop5_r04_hiind.py",
+   "approaches": [
+    {
+     "id": "H52",
+     "verdict": "第一关不过",
+     "sum": 0.038,
+     "family": "仓位·按信号",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 4,
+     "d": {
+      "Z": -0.016,
+      "E": 0.099,
+      "J": -0.045
+     },
+     "unseen": null,
+     "note": "E 好、J 差"
+    },
+    {
+     "id": "ISM",
+     "verdict": "第一关不过",
+     "sum": -0.342,
+     "family": "仓位·按业种",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 3,
+     "d": {
+      "Z": -0.276,
+      "E": -0.008,
+      "J": -0.058
+     },
+     "unseen": null,
+     "note": "Z 2005 −11 pp"
+    }
+   ]
+  },
+  {
+   "round": 5,
+   "date": "2026-10-03",
+   "title": "按特质波动 / 季节调仓位 IVL / HAL",
+   "registration": "fc380e3（代码 0282368）",
+   "script": "scripts/loop5_r05_ivolcal.py",
+   "approaches": [
+    {
+     "id": "IVL",
+     "verdict": "第一关不过",
+     "sum": 0.121,
+     "family": "仓位·特质波动",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 4,
+     "d": {
+      "Z": 0.198,
+      "E": -0.063,
+      "J": -0.014
+     },
+     "unseen": null,
+     "note": "Z 2005 +11 pp；E −0.063"
+    },
+    {
+     "id": "HAL",
+     "verdict": "第一关不过",
+     "sum": -0.157,
+     "family": "仓位·日历",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 3,
+     "d": {
+      "Z": -0.153,
+      "E": 0.001,
+      "J": -0.005
+     },
+     "unseen": null,
+     "note": "Z 2005 −16.5 pp；S5 过"
+    }
+   ]
+  },
+  {
+   "round": 6,
+   "date": "2026-10-03",
+   "title": "按股息率 / 3 年反转调仓位 DYV / LTR",
+   "registration": "661b404（代码 fe7ae2c）",
+   "script": "scripts/loop5_r06_valrev.py",
+   "approaches": [
+    {
+     "id": "DYV",
+     "verdict": "第一关不过",
+     "sum": -0.041,
+     "family": "仓位·价值",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 3,
+     "d": {
+      "Z": -0.024,
+      "E": 0.001,
+      "J": -0.018
+     },
+     "unseen": null,
+     "note": "差都小；Jx 上有用"
+    },
+    {
+     "id": "LTR",
+     "verdict": "第一关不过",
+     "sum": -0.15,
+     "family": "仓位·长期反转",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 3,
+     "d": {
+      "Z": -0.157,
+      "E": 0.032,
+      "J": -0.025
+     },
+     "unseen": null,
+     "note": "Z 2005 −7.1 pp；E +0.032"
+    }
+   ]
+  },
+  {
+   "round": 7,
+   "date": "2026-10-03",
+   "title": "按顾客业种短観调仓位 X2F",
+   "registration": "1a3c1f7（代码 7ca8aab）",
+   "script": "scripts/loop5_r07_x2f.py",
+   "approaches": [
+    {
+     "id": "X2F",
+     "verdict": "第一关不过",
+     "sum": 0.184,
+     "family": "仓位·基本面",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 6,
+     "d": {
+      "Z": 0.096,
+      "E": 0.05,
+      "J": 0.038
+     },
+     "unseen": null,
+     "note": "只差 S5；三个年代都变好"
+    }
+   ]
+  },
+  {
+   "round": 8,
+   "date": "2026-10-03",
+   "title": "按日美相关 / 同时突破数调仓位 COR / WAV",
+   "registration": "1ed008a（代码 aafb29e）",
+   "script": "scripts/loop5_r08_corwav.py",
+   "approaches": [
+    {
+     "id": "COR",
+     "verdict": "第一关不过",
+     "sum": 0.013,
+     "family": "仓位·层间相关",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 3,
+     "d": {
+      "Z": 0.049,
+      "E": 0.005,
+      "J": -0.041
+     },
+     "unseen": null,
+     "note": "J −0.041；W / Jx 相反"
+    },
+    {
+     "id": "WAV",
+     "verdict": "第一关不过",
+     "sum": -0.266,
+     "family": "仓位·市场宽度",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 3,
+     "d": {
+      "Z": -0.278,
+      "E": 0.006,
+      "J": 0.006
+     },
+     "unseen": null,
+     "note": "Z 2005 −17.6 pp"
+    }
+   ]
+  },
+  {
+   "round": 9,
+   "date": "2026-10-03",
+   "title": "按止损距离定仓位（固定风险比例）RSK",
+   "registration": "7522a00（代码 1ae286e）",
+   "script": "scripts/loop5_r09_risk.py",
+   "approaches": [
+    {
+     "id": "RSK",
+     "verdict": "第一关不过",
+     "sum": 0.187,
+     "family": "仓位·风险预算",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 5,
+     "d": {
+      "Z": 0.207,
+      "E": -0.016,
+      "J": -0.004
+     },
+     "unseen": null,
+     "note": "Z 2005 +12.7 pp；S4、S5 不过"
+    }
+   ]
+  },
+  {
+   "round": 10,
+   "date": "2026-10-03",
+   "title": "去掉量化状态层 RGX",
+   "registration": "9abf64e（代码 6322c9e）",
+   "script": "scripts/loop5_r10_regime.py",
+   "approaches": [
+    {
+     "id": "RGX",
+     "verdict": "第一关不过",
+     "sum": -0.186,
+     "family": "仓位·状态层",
+     "posthoc": false,
+     "kind": "struct",
+     "passed": 2,
+     "d": {
+      "Z": -0.051,
+      "E": -0.145,
+      "J": 0.01
+     },
+     "unseen": null,
+     "note": "E −0.145、回撤深 5.65 pp；S1〜S5 不过"
+    }
+   ]
+  },
+  {
+   "round": 11,
+   "date": "2026-10-03",
+   "title": "按高成交量溢价调仓位 DVS / WVS",
+   "registration": "e157e47（代码 6ade4a7）",
+   "script": "scripts/loop5_r11_volume.py",
+   "approaches": [
+    {
+     "id": "DVS",
+     "verdict": "第一关不过",
+     "sum": -0.226,
+     "family": "仓位·量能",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 3,
+     "d": {
+      "Z": -0.261,
+      "E": -0.002,
+      "J": 0.037
+     },
+     "unseen": null,
+     "note": "Z 2005 −15.6 pp；S5 W 过、Jx 不过"
+    },
+    {
+     "id": "WVS",
+     "verdict": "第一关不过",
+     "sum": -0.273,
+     "family": "仓位·量能",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 3,
+     "d": {
+      "Z": -0.269,
+      "E": 0.016,
+      "J": -0.02
+     },
+     "unseen": null,
+     "note": "Z 2005 −12.8 pp；S5 W 不过、Jx 过"
+    }
+   ]
+  }
+ ],
+ "ended": "2026-10-03 11:35 JST 第 9 轮之后停下（要用户决定）：17 / 20 用了、没找到（两关都过的 0 个）；剩下 3 个做法没有事先列好的、有文献先验又不与以前重叠的题 → 按规则第五条「要用户决定 → 说明后停」",
+ "closest3": [
+  {
+   "round": 3,
+   "id": "BTS",
+   "verdict": "第一关不过",
+   "sum": 0.186,
+   "passed": 6
+  },
+  {
+   "round": 7,
+   "id": "X2F",
+   "verdict": "第一关不过",
+   "sum": 0.184,
+   "passed": 6
+  },
+  {
+   "round": 9,
+   "id": "RSK",
+   "verdict": "第一关不过",
+   "sum": 0.187,
+   "passed": 5
+  }
+ ],
+ "resumed": "2026-10-03 11:55 JST 用户「继续第五个循环 并找到接下来研究成功率最大的方向 没有时间限制 一直找到比现在算法更好的」（待办 ㊹ 选 ②）→ running；规则 3577846 不变；17 / 20，剩 3",
+ "exhausted": "2026-10-03 12:50 JST 第 11 轮之后 20 / 20 用完、没找到（两关都过的 0 个）；最接近 BTS（+0.186，过 6 / 7 条） / X2F（+0.184，过 6 / 7 条） / RSK（+0.187，过 5 / 7 条）；之后按用户「找到接下来研究成功率最大的方向 … 一直找到比现在算法更好的」另开第六个研究循环（核心层，规则另行登记）"
+}
