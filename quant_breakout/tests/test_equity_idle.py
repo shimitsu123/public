@@ -107,6 +107,22 @@ def test_study_builders_use_only_known_values():
     assert abs(S.jpy_per(fx, pd.Series([83.0], index=pd.DatetimeIndex(["2024-01-02"]))).iloc[0] - 150.0 / 83.0) < 1e-12
 
 
+def test_fx_on_same_day_and_prev_env(monkeypatch):
+    """2026-10-03 用户 ㊼ ① 起：东证 d 日换汇用 d 当天（含）以前最近的 Yahoo 值（≈ d 日东京早上）；QB_FX_ALIGN=prev 重现以前的口径。"""
+    import equity_idle_study as S
+    days = pd.DatetimeIndex(["2024-01-04", "2024-01-05", "2024-01-09"])
+    fx = pd.Series([140.0, 141.0, 142.0], index=pd.DatetimeIndex(["2024-01-04", "2024-01-05", "2024-01-08"]))
+    dexin = pd.Series([83.0, 84.0], index=pd.DatetimeIndex(["2024-01-03", "2024-01-08"]))
+    monkeypatch.delenv(S.FX_ALIGN_ENV, raising=False)
+    assert S.fx_align() == "same" and S.fx_on(days, fx).tolist() == [140.0, 141.0, 142.0]          # 1-09：没有当天的 → 1-08 的
+    inr = S.inr_on(days, fx, dexin)
+    assert abs(inr.iloc[0] - 140.0 / 83.0) < 1e-12 and abs(inr.iloc[2] - 142.0 / 84.0) < 1e-12        # 卢比：DEXINUS（纽约中午）仍用 d 之前的
+    monkeypatch.setenv(S.FX_ALIGN_ENV, "prev")
+    v = S.fx_on(days, fx)
+    assert np.isnan(v.iloc[0]) and v.iloc[1:].tolist() == [140.0, 142.0]                              # 以前：d 之前（不含 d）
+    assert S.inr_on(days, fx, dexin).equals(S.prev_on(days, S.jpy_per(fx, dexin)))
+
+
 def _acct(vals: dict) -> dict:
     return {t: {k: {"cagr": v[0], "dd": v[1], "calmar": v[2]} for k, v in d.items()} for t, d in vals.items()}
 

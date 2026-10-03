@@ -14,6 +14,8 @@
     实盘不受影响（执行器用真实的 1545 / 2845 价格成交）；受影响的是「汇率择时」的回测好处有多大。
 B 部分重算：B0（Q1：1545 + 美股牛熊）、B1（+ FJE）、B2（+ BCU，第六个循环第二段的基准）、CRW（第 6 轮）在原口径 / 修正口径下的 Z / E / J 账户。
 运行：python scripts/fx_timing_audit.py（两种口径各加载一次，约 8 分钟）→ var/out/fx_timing_audit.md / .json。非投资建议。
+2026-10-03 用户 ㊼ ① 之后：研究口径改成修正口径（equity_idle_study.fx_on 成为缺省）→ 这里的「原口径」改由环境变量 QB_FX_ALIGN=prev 得到
+（运行的那一次（cb954cf）是把 EI.on_jp 换成 on_jp_same_day；两种写法算出的是同一组价格，tests/test_fx_timing_audit.py 核对）。
 """
 from __future__ import annotations
 
@@ -62,11 +64,11 @@ def stamp_evidence(yahoo: pd.Series, dex: pd.Series) -> dict:
 
 
 def accounts(mode: str) -> dict:
-    """B：一种口径下 B0 / B1 / B2 / CRW 的 Z / E / J 账户。"""
+    """B：一种口径下 B0 / B1 / B2 / CRW 的 Z / E / J 账户（原口径 = QB_FX_ALIGN=prev；修正口径 = 缺省 = on_jp_same_day 的算法）。"""
+    import os
     import equity_idle_study as EI
-    orig = EI.on_jp
-    if mode == "fixed":
-        EI.on_jp = on_jp_same_day
+    old = os.environ.get(EI.FX_ALIGN_ENV)
+    os.environ[EI.FX_ALIGN_ENV] = "prev" if mode == "orig" else "same"
     try:
         import loop_common as LCM
         import loop6_common as L6
@@ -81,7 +83,10 @@ def accounts(mode: str) -> dict:
             print(mode, e, json.dumps(out[e], ensure_ascii=False), flush=True)
         return out
     finally:
-        EI.on_jp = orig
+        if old is None:
+            os.environ.pop(EI.FX_ALIGN_ENV, None)
+        else:
+            os.environ[EI.FX_ALIGN_ENV] = old
 
 
 def effects(acc: dict) -> dict:

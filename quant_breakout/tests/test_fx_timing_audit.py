@@ -10,10 +10,13 @@ import equity_idle_study as EI  # noqa: E402
 import fx_timing_audit as A  # noqa: E402
 
 
-def test_same_day_fx_vs_original_prev_fx():
+def test_same_day_fx_vs_original_prev_fx(monkeypatch):
     days = pd.to_datetime(["2024-07-10", "2024-07-11", "2024-07-12"])
     us = pd.Series([100.0, 101.0, 102.0], index=pd.to_datetime(["2024-07-09", "2024-07-10", "2024-07-11"]))
     fx = pd.Series([160.0, 161.0, 158.0], index=days)                       # Yahoo：东证当天早上的值
+    monkeypatch.delenv(EI.FX_ALIGN_ENV, raising=False)
+    assert EI.on_jp(us, fx, days).equals(A.on_jp_same_day(us, fx, days))     # 2026-10-03 ㊼ ① 起：研究口径 = 修正口径
+    monkeypatch.setenv(EI.FX_ALIGN_ENV, "prev")                              # 以前的口径（只为重现以前的结果）
     o = EI.on_jp(us, fx, days)
     f = A.on_jp_same_day(us, fx, days)
     assert o.loc["2024-07-12"] == 102.0 * 161.0                              # 原口径：美国 7-11 收盘 × 汇率用 d 之前（7-11 早上）

@@ -30,6 +30,9 @@
    窗口 E 2006-10〜2016-09、J 2017-01〜（判定）；Z 2001〜2006-09 只描述。
 二 资产的日元价（全程合成，东证交易日 d；最后按 2026-08-31 的真实收盘定价格水平 → 一手的粒度与现在一致）：
    美国指数的 = 前一个美国收盘 × d 日早上的 USD/JPY（与 1655 上市前的合成、idle_cash_study 同一做法）：
+     ★ 2026-10-03 起（用户 ㊼ ①；scripts/fx_timing_audit.py）：「d 日早上的 USD/JPY」= d 当天（含）以前最近的 Yahoo「JPY=X」值
+       （它标成 d 日的值 ≈ d 日东京早上、开盘前；fx_on）。以前的代码用的是 d 之前（不含 d）的值 ≈ d − 1 日早上，比这里写的旧约一天
+       → 用纽约中午 DEXJPUS 做信号的汇率择时在回测里会提前看到汇率变动。环境变量 QB_FX_ALIGN=prev 可以重现以前的结果。
      S0 1655 = ^SP500TR − 年 0.066%；Q1 1545 = 纳指总收益 − 0.22%，纳指总收益 = QQQ 复权价加回它的年 0.20% 费用；
      Q2 2243 = ^SOX × 年 0.8% 股息估计（SOXX 2001〜2026 分配的平均）− 0.4125%；
      Q3 2869 = 每日重置 2 × (纳指总收益 − 美国 3 个月国库券) + 日本无担保拆借（担保金的利息）− 0.825%，不乘汇率
@@ -96,6 +99,7 @@ USD/JPY 四个错价换成 FRED、A 段门槛按各候选的合成乐观度、B 
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import warnings
@@ -260,11 +264,37 @@ def jpy_per(fx_usdjpy: pd.Series, per_usd: pd.Series) -> pd.Series:
     return (fx_usdjpy.dropna().reindex(idx).ffill() / per_usd.dropna().reindex(idx).ffill()).dropna()
 
 
+FX_ALIGN_ENV = "QB_FX_ALIGN"                                                 # "prev" = 2026-10-03 以前的口径（只为重现以前的结果）
+
+
+def fx_align() -> str:
+    """换汇的时点：「same」（缺省，2026-10-03 起）/「prev」（以前的口径）。"""
+    return "prev" if os.environ.get(FX_ALIGN_ENV, "").strip().lower() == "prev" else "same"
+
+
+def fx_on(days: pd.DatetimeIndex, fx: pd.Series) -> pd.Series:
+    """东证交易日 d 换汇用的 USD/JPY = d 当天（含）以前最近的 Yahoo「JPY=X」值（它标成 d 日的值 ≈ d 日东京早上、开盘前）。
+    2026-10-03 用户 ㊼ ① 起的研究口径（scripts/fx_timing_audit.py）；QB_FX_ALIGN=prev → 以前的口径（d 之前、不含 d，比实际旧约一天）。"""
+    if fx_align() == "prev":
+        return prev_on(days, fx)
+    f = fx.dropna().sort_index()
+    days = pd.DatetimeIndex(days)
+    return f.reindex(days.union(f.index)).ffill().reindex(days)
+
+
+def inr_on(days: pd.DatetimeIndex, fx: pd.Series, dexin: pd.Series) -> pd.Series:
+    """东证交易日 d 的 1 卢比日元价：USD/JPY 用 fx_on（d 日早上）、USD/INR（FRED DEXINUS = 纽约中午）用 d 之前最近的。
+    QB_FX_ALIGN=prev → 以前的口径（两者合成之后取 d 之前的）。"""
+    if fx_align() == "prev":
+        return prev_on(days, jpy_per(fx, dexin))
+    return fx_on(days, fx) / prev_on(days, dexin)
+
+
 def on_jp(s: pd.Series, fx: pd.Series | None, days: pd.DatetimeIndex) -> pd.Series:
-    """东证交易日 d 的日元价 = 前一个（美国 / 印度）收盘 ×（前一个汇率）。"""
+    """东证交易日 d 的日元价 = 前一个（美国 / 印度）收盘 × 东证 d 日开盘前的 USD/JPY（fx_on；2026-10-03 起）。"""
     v = prev_on(days, s)
     if fx is not None:
-        v = v * prev_on(days, fx)
+        v = v * fx_on(days, fx)
     return v.dropna()
 
 
@@ -282,7 +312,7 @@ def asset_closes(inp: dict) -> dict[str, pd.Series | pd.DataFrame]:
         "2238.T": on_jp(lev(sptr, -1.0, dtb3, cjp, FEE["2238.T"]), None, days),
         "2842.T": on_jp(lev(ntr, -1.0, dtb3, cjp, FEE["2842.T"]), None, days),
         "1678.T": (prev_on(days, grow(grow(india_index(inp), IN_DIV), -FEE["1678.T"]))
-                   * prev_on(days, jpy_per(fx, inp["dexin"]))).dropna(),
+                   * inr_on(days, fx, inp["dexin"])).dropna(),
     }
     for t, m in (("1321.T", 1.0), ("1570.T", 2.0), ("1571.T", -1.0)):
         f = jp_product(n225, m, None if m == 1.0 else cjp, None if m == 1.0 else cjp, FEE[t])
