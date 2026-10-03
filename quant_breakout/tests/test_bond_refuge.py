@@ -235,3 +235,29 @@ def test_fred_download_falls_back_to_system_curl(monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda args, **k: calls.append(args) or SimpleNamespace(stdout=b"DATE,X\n2026-10-01,1\n"))
     assert factors._get("https://fred.stlouisfed.org/graph/fredgraph.csv?id=X", timeout=5, tries=2) == b"DATE,X\n2026-10-01,1\n"
     assert calls and calls[0][0] == "curl"
+
+
+def test_download_order_depends_on_proxy(monkeypatch):
+    """经代理（云端）先用系统 curl、curl_cffi 只作后备；不经代理（Mac）照旧先 curl_cffi（2026-10-03：代理下 curl_cffi 访问 FRED 一直超时）。"""
+    from qbreak import factors
+    calls = []
+    monkeypatch.setattr(factors.time, "sleep", lambda s: None)
+    monkeypatch.setattr(factors, "_curl", lambda url, timeout: calls.append("curl") or b"C")
+    monkeypatch.setattr(factors, "_cffi", lambda url, timeout: calls.append("cffi") or b"F")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+    assert factors._get("https://x", timeout=1, tries=3) == b"C" and calls == ["curl"]
+    for k in ("HTTPS_PROXY", "https_proxy"):
+        monkeypatch.delenv(k, raising=False)
+    calls.clear()
+    assert factors._get("https://x", timeout=1, tries=3) == b"F" and calls == ["cffi"]
+
+    def bad(url, timeout):
+        calls.append("curl")
+        raise RuntimeError("curl: (28) timed out")
+    monkeypatch.setattr(factors, "_curl", bad)
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+    calls.clear()
+    assert factors._get("https://x", timeout=1, tries=3) == b"F" and calls == ["curl", "curl", "curl", "cffi"]
+    monkeypatch.setattr(factors, "_cffi", lambda url, timeout: (_ for _ in ()).throw(RuntimeError("cffi down")))
+    with pytest.raises(RuntimeError, match="下载失败"):
+        factors._get("https://x", timeout=1, tries=2)

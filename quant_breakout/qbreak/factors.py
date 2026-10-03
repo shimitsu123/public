@@ -41,31 +41,44 @@ def _dir():
     return paths.sub("cache/factors")
 
 
+def _proxied() -> bool:
+    """经 HTTPS 代理上网（云端会话 / 例行任务）。"""
+    import os
+    return bool(os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy"))
+
+
+def _curl(url: str, timeout: int) -> bytes:
+    import shutil
+    import subprocess
+    if not shutil.which("curl"):
+        raise RuntimeError("没有系统 curl")
+    return subprocess.run(["curl", "-sSfL", "--max-time", str(timeout), url], check=True, capture_output=True).stdout
+
+
+def _cffi(url: str, timeout: int) -> bytes:
+    from curl_cffi import requests as cr
+    r = cr.get(url, impersonate="chrome", timeout=timeout)
+    r.raise_for_status()
+    return r.content
+
+
 def _get(url: str, timeout: int = 60, tries: int = 3) -> bytes:
-    """用 curl_cffi（yfinance 的依赖）模拟浏览器 TLS 指纹下载：FRED 会让 Python 默认客户端一直卡到超时。
-    没装 curl_cffi 时退回系统 curl。"""
+    """下载。用 curl_cffi（yfinance 的依赖）模拟浏览器 TLS 指纹：FRED 会让 Python 默认客户端一直卡到超时；没装 curl_cffi → 系统 curl。
+    经代理时（云端）先用系统 curl：2026-10-03 云端会话里 curl_cffi 经代理访问 FRED 先是 502、后来一直超时（每次等满 timeout），
+    系统 curl 不到 1 秒就取到同一份 CSV；不经代理（Mac）时顺序照旧。两种都试过还不行 → 报错。"""
+    order = (_curl, _cffi) if _proxied() else (_cffi, _curl)
     last = None
-    for k in range(tries):
-        try:
+    for fn in order:
+        for k in range(tries if fn is order[0] else 1):
             try:
-                from curl_cffi import requests as cr
-            except ImportError:
-                import subprocess
-                return subprocess.run(["curl", "-sSfL", "--max-time", str(timeout), url],
-                                      check=True, capture_output=True).stdout
-            r = cr.get(url, impersonate="chrome", timeout=timeout)
-            r.raise_for_status()
-            return r.content
-        except Exception as e:                          # noqa: BLE001
-            last = e
-            time.sleep(2 * (k + 1))
-    try:                                                # curl_cffi 一直失败（代理 502 等，2026-10-03 云端会话里见过）→ 系统 curl 再试一次
-        import shutil
-        import subprocess
-        if shutil.which("curl"):
-            return subprocess.run(["curl", "-sSfL", "--max-time", str(timeout), url], check=True, capture_output=True).stdout
-    except Exception as e:                              # noqa: BLE001
-        last = e
+                return fn(url, timeout)
+            except ImportError as e:                    # 没装 curl_cffi
+                last = e
+                break
+            except Exception as e:                      # noqa: BLE001
+                last = e
+                if k + 1 < tries and fn is order[0]:
+                    time.sleep(2 * (k + 1))
     raise RuntimeError(f"下载失败 {url}: {last}")
 
 
