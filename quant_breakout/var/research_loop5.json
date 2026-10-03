@@ -251,6 +251,47 @@
      "note": "Z 2005 −11 pp"
     }
    ]
+  },
+  {
+   "round": 5,
+   "date": "2026-10-03",
+   "title": "按特质波动 / 季节调仓位 IVL / HAL",
+   "registration": "fc380e3（代码 0282368）",
+   "script": "scripts/loop5_r05_ivolcal.py",
+   "approaches": [
+    {
+     "id": "IVL",
+     "verdict": "第一关不过",
+     "sum": 0.121,
+     "family": "仓位·特质波动",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 4,
+     "d": {
+      "Z": 0.198,
+      "E": -0.063,
+      "J": -0.014
+     },
+     "unseen": null,
+     "note": "Z 2005 +11 pp；E −0.063"
+    },
+    {
+     "id": "HAL",
+     "verdict": "第一关不过",
+     "sum": -0.157,
+     "family": "仓位·日历",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 3,
+     "d": {
+      "Z": -0.153,
+      "E": 0.001,
+      "J": -0.005
+     },
+     "unseen": null,
+     "note": "Z 2005 −16.5 pp；S5 过"
+    }
+   ]
   }
  ]
 }
