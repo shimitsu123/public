@@ -248,6 +248,11 @@ class MixEngine(MS.MLEngine):
             self._tick_exit(i, xt)
 
 
+def regime_with_floor(qr: pd.Series, floor: float | None) -> pd.Series:
+    """量化状态层的逐日新仓倍数（0 / 0.75 / 1）→ 研究用的下限 max(倍数, floor)；floor = None → 原样（= B1，只研究用）。"""
+    return qr if floor is None else qr.clip(lower=float(floor))
+
+
 def bull_only(em: pd.DataFrame, bear_jp: pd.Series) -> pd.DataFrame:
     """日本牛熊判定（收盘时）= 熊 → 第二天（成交日）的个股新仓倍数 = 0。em：成交日 × 票。"""
     bj = bear_jp.reindex(em.index.union(bear_jp.index)).ffill().reindex(em.index).fillna(False).astype(bool)
@@ -322,9 +327,9 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             em_scale: pd.Series | None = None, params_t: dict | None = None, em_tick: dict | None = None,
             params_td: dict | None = None, extra_expo: dict | None = None, dd_brake: dict | None = None,
             opp_exit: dict | None = None, exit_tick: dict | None = None, entry_gap: int | None = None,
-            sector_cap: dict | None = None) -> dict:
+            sector_cap: dict | None = None, regime_floor: float | None = None) -> dict:
         names = list(ind)
-        key = tuple(names) + (("nomult",) if not mult else ())
+        key = tuple(names) + (("nomult",) if not mult else ()) + ((("regime_floor", float(regime_floor)),) if regime_floor is not None and mult else ())
         if key not in em_cache and not mult:
             g = pd.DatetimeIndex(sorted(set().union(*[ind[t].index for t in names])))
             em_cache[key] = pd.DataFrame(1.0, index=g, columns=names)
@@ -332,7 +337,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             g = pd.DatetimeIndex(sorted(set().union(*[ind[t].index for t in names])))
             M, _ = build_entry_mult(g, names, "JP", macro, use_macro=bool(flag("use_macro")), use_sector=bool(flag("use_sector_tilt")),
                                     use_events=False, closes=closes_all.reindex(index=g, columns=names))
-            M = M * qr.reindex(g).ffill().shift(1).fillna(1.0).values[:, None]
+            M = M * regime_with_floor(qr, regime_floor).reindex(g).ffill().shift(1).fillna(1.0).values[:, None]   # regime_floor：研究用的状态层下限（缺省 None = 不变）
             em_cache[key] = pd.DataFrame(M, index=g, columns=names)
         em = em_cache[key]
         if pb and pb_free:                                                  # 押し目信号的第二天：新仓倍数当 1（不受宏观 / 状态层限制）
