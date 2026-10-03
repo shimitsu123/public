@@ -43,9 +43,20 @@
    判定的数字、第二关（严格大于 400 次的最大值）、题目范围、ID 不重用都不变。照实写：以前「汇率对冲」的禁令只写在说明里，代码按家族名完全一致比较，
    而本循环的家族名都带「核心·」前缀 → 代码其实没有拦；这次一并改成去掉「核心·」前缀再比（banned / family_base），并记下这一段由用户解除的家族
    （segments[-1].unbanned）。汇率类以前在循环内外已试过约 8 个规则 → 多重检验的风险更高，找到也只是历史上的候选，要前向记录确认。
+九 第三段（2026-10-03 用户在停下（待办 ㊼）之后明确选 ①「重新检验，不过就撤」；按 ㊼ 的说明，只回答编号 = 同时同意下面的做法；加在本文件末尾「第三段」一节 = 第三段的登记提交）：
+   第 6 轮 CRW 之后的事后审计发现研究引擎的汇率时点偏差 → 研究口径改成修正口径（scripts/equity_idle_study.fx_on，749398a）→ FJE 按修正口径重新检验不过
+   → 模拟盘与执行器撤掉 FJE（idle_cash Q1HB → Q1B，852a9dc）。所以：
+   - 基准换成 B3 = 撤掉 FJE 之后的模拟盘（Q1B = 第一个循环的 B0 + BCU；scripts/loop6_common.load3）在修正口径下；轮次号接着编（第三段从第 7 轮起）。
+   - 计数接着（不重新开始）：第二段用掉的 7 个算进来 → 这一段上限 20 − 7 = 13；家族用量也接着第二段算（同一家族 ≤ 3，比重新计数保守）。
+   - 「汇率对冲」家族重新不加（第二段由用户解除的 3 个名额里剩下的 2 个不用 —— 修正口径下汇率择时普遍变弱；用户同意）。
+   - CRW 不采用、不加前向记录；第二段的 CRW「更好候选」只是原口径下的登记判定（事后审计：修正后第一关不过）。
+   - 判定的数字、第二关三种（B3 的状态与美股指数不动）、题目范围、种子、ID 不重用（本循环前面几段的 ID 也不能用）都不变。
+   先决条件（登记时）：研究口径 = 修正口径；模拟盘的闲置资金方式 = Q1B；接线检查 —— B3（Q1B 同一结构的键）与「B2 的接法里 FJE 永远不成立」
+   三个年代的年化 / 最大回撤 / Calmar 完全相同；模拟盘规则指纹记下来（之后变了 → 停下）。
 用法：python scripts/research_loop6.py --status（进度，只读）；--baseline（重算 B1 与先决条件）；--init（登记时写 var/research_loop6.json；已存在就不动；
       先决条件不过 → 不登记）；--baseline2 / --init2（第二段：重算 B2 与先决条件 / 登记第二段，已有就不动）；
-      --resume-fx（第二段：用户解除「汇率对冲」家族禁令后回到 running，已解除就不动；八）。非投资建议。
+      --resume-fx（第二段：用户解除「汇率对冲」家族禁令后回到 running，已解除就不动；八）；
+      --baseline3 / --init3（第三段：重算 B3 与先决条件 / 登记第三段，已有就不动；九）。非投资建议。
 """
 from __future__ import annotations
 
@@ -152,6 +163,15 @@ def check_new_approaches(st: dict, approaches: list[dict], prev: set[str] | None
     """第二个循环的检查（家族、不再加的家族、家族上限、事后组合标明）+ 第二关类别 ∈ KINDS + 家族以「核心」开头 + 不用第一〜五个循环的 ID
     （第二段起：家族上限按这一段算、本循环前面几段的 ID 也不能用）。"""
     R2.check_new_approaches(view(st), approaches)
+    carry = dict(((segment(st) or {}).get("carry") or {}).get("family") or {})   # 第三段起：家族用量接着上一段算（九）
+    if carry:
+        cnt = dict(carry)
+        for k, n in family_counts(view(st)).items():
+            cnt[k] = cnt.get(k, 0) + n
+        for a in approaches:
+            cnt[a.get("family")] = cnt.get(a.get("family"), 0) + 1
+            if cnt[a.get("family")] > FAMILY_CAP:
+                raise ValueError(f"家族「{a.get('family')}」加上上一段的用量超过 {FAMILY_CAP} 个做法（{a.get('id')}）")
     prev = (previous_ids() if prev is None else set(prev)) | earlier_ids(st)
     bn = banned(st)
     for a in approaches:
@@ -278,7 +298,19 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--baseline2", action="store_true")
     ap.add_argument("--init2", action="store_true")
     ap.add_argument("--resume-fx", action="store_true", help="第二段：用户解除「汇率对冲」家族禁令后回到 running（八；已解除就不动）")
+    ap.add_argument("--baseline3", action="store_true", help="第三段：重算 B3 与先决条件（九）")
+    ap.add_argument("--init3", action="store_true", help="第三段：登记（先决条件过了才登记；已有就不动；九）")
     a = ap.parse_args(argv)
+    if a.baseline3 or a.init3:
+        res = compute_baseline3()
+        write_baseline3(res)
+        if a.init3:
+            if not res["prereq_ok"]:
+                print("★ 第三段的先决条件不满足 → 不登记")
+                return 2
+            init_segment3(res)
+        print(status_text(load_state()))
+        return 0
     if a.resume_fx:
         resume_segment2_fx()
         print(status_text(load_state()))
@@ -368,33 +400,52 @@ def earlier_ids(st: dict) -> set[str]:
     return {a.get("id") for r in st.get("rounds") or [] if int(r.get("round", 0)) < k0 for a in r.get("approaches") or [] if a.get("id")}
 
 
+def ids_before(st: dict, k: int) -> set[str]:
+    """本循环第 k 轮之前（所有段）用过的做法 ID（各轮的测试核对「这一轮的 ID 以前没用过」用；第三段起 earlier_ids 也含第二段的）。"""
+    return {a.get("id") for r in (st or {}).get("rounds") or [] if int(r.get("round", 0)) < int(k) for a in r.get("approaches") or [] if a.get("id")}
+
+
 def segment_text(st: dict) -> str:
     """有第二段时的进度：这一段（B2）+ 第一段一行。"""
     sg, v = segment(st), view(st)
     b = v.get("baseline") or {}
-    L = [f"第六个研究循环第二段（{sg.get('start', '—')} 起，登记 {sg.get('registered', '—')}；基准 B2 = 采用后的模拟盘 B1 + BCU）：状态 {derive_status(v)}；"
-         f"做法 {used(v)} / {v.get('cap', CAP)}（剩 {left(v)}）",
-         "基准 B2 账户 Calmar（最大回撤）：" + "、".join(
+    k = int(sg.get("seg", 2))
+    name = {2: "第二段", 3: "第三段"}.get(k, f"第 {k} 段")
+    bname = {2: "B2 = 采用后的模拟盘 B1 + BCU", 3: "B3 = 撤掉 FJE 之后的模拟盘（Q1B：B0 + BCU），修正口径"}.get(k, sg.get("baseline_def", "—"))
+    cu = int((sg.get("carry") or {}).get("used") or 0)
+    L = [f"第六个研究循环{name}（{sg.get('start', '—')} 起，登记 {sg.get('registered', '—')}；基准 {bname}）：状态 {derive_status(v)}；"
+         f"做法 {used(v)} / {v.get('cap', CAP)}（剩 {left(v)}）" + (f"（计数接着上一段：{cu} + {used(v)} / {CAP}）" if cu else ""),
+         f"基准 {bname.split(' ')[0]} 账户 Calmar（最大回撤）：" + "、".join(
              f"{e} {b[e]['calmar']:.3f}（{b[e]['dd']:.2f}%）" for e in ERAS if (b.get(e) or {}).get("calmar") is not None)]
     for r in v.get("rounds") or []:
         L.append(f"- 第 {r['round']} 轮 {r.get('date', '')} {r.get('title', '')}：" + "；".join(
             f"{a['id']}〔{a.get('family', '—')}{'·事后组合' if a.get('posthoc') else ''}〕{a['verdict']}"
             + (f"（合计 {a['sum']:+.3f}）" if _num(a.get("sum")) is not None else "") for a in r["approaches"]))
-    fc = family_counts(v)
+    fc = dict(((sg.get("carry") or {}).get("family")) or {})
+    for f, n in family_counts(v).items():
+        fc[f] = fc.get(f, 0) + n
     if fc:
-        L.append("这一段的家族用量（上限 %d）：" % FAMILY_CAP + "、".join(f"{k} {n}" for k, n in sorted(fc.items())))
+        L.append("这一段的家族用量（上限 %d%s）：" % (FAMILY_CAP, "，含上一段" if sg.get("carry") else "")
+                 + "、".join(f"{f} {n}" for f, n in sorted(fc.items())))
     L.append("这一段不再加的家族：" + ("、".join(banned(st)) or "无")
              + (f"（由用户解除：{'、'.join(sg['unbanned'])}；{sg.get('resumed', '')}）" if sg.get("unbanned") else ""))
     k0 = int(sg.get("from_round", SEG2_FROM))
-    first = [a for r in st.get("rounds") or [] if int(r.get("round", 0)) < k0 for a in r.get("approaches") or []]
+    segs = list(st.get("segments") or [])
+    starts = [1] + [int(x.get("from_round", SEG2_FROM)) for x in segs]
     ad = st.get("adopted") or {}
-    L.append(f"第一段（基准 B1，{st.get('start', '—')} 起）：" + "、".join(f"{a['id']} {a['verdict']}" for a in first)
-             + (f"；{ad.get('date', '—')} 用户「采用」{ad.get('candidate', '—')}" if ad else ""))
+    for i in range(len(starts) - 1):                                        # 前面几段（第一段 = 基准 B1）
+        lo, hi = starts[i], starts[i + 1]
+        aps = [a for r in st.get("rounds") or [] if lo <= int(r.get("round", 0)) < hi for a in r.get("approaches") or []]
+        tag = "第一段（基准 B1，%s 起）" % st.get("start", "—") if i == 0 else {1: "第二段（基准 B2）"}.get(i, f"第 {i + 1} 段")
+        tail = (f"；{ad.get('date', '—')} 用户「采用」{ad.get('candidate', '—')}" if (i == 0 and ad) else "")
+        if i >= 1 and segs[i - 1].get("closed"):
+            tail += f"；{segs[i - 1]['closed']}"
+        L.append(f"{tag}：" + "、".join(f"{a['id']} {a['verdict']}" for a in aps) + tail)
     fp = sg.get("fingerprint")
     if fp:
         try:
             now = rules_fingerprint()
-            L.append("模拟盘规则：" + ("与第二段登记时相同" if now == fp else f"★ 与第二段登记时不同（{fp} → {now}）→ 循环应停下、由用户决定"))
+            L.append("模拟盘规则：" + (f"与{name}登记时相同" if now == fp else f"★ 与{name}登记时不同（{fp} → {now}）→ 循环应停下、由用户决定"))
         except Exception as e:                                               # noqa: BLE001
             L.append(f"模拟盘规则指纹算不了：{type(e).__name__}")
     return "\n".join(L)
@@ -444,6 +495,76 @@ def init_segment2(res: dict, home: Path | None = None) -> dict:
           "baseline": res["baseline"], "prereq_ok": res["prereq_ok"], "fingerprint": res["fingerprint"],
           "cap": CAP, "family_cap": FAMILY_CAP, "status": "running"}
     st = {**st, "segments": list(st.get("segments") or []) + [sg], "status": "running"}
+    save_state(st, home)
+    return st
+
+
+
+# ───────────────────────── 第三段（2026-10-03 用户 ㊼ ①「重新检验，不过就撤」；见文件开头九） ─────────────────────────
+SEG3_FROM = 7                                                                # 第三段的第一轮
+WIRE_TOL = 1e-9                                                              # 接线检查：两种接法的账户要完全相同
+SEG3_MODE = "Q1B"                                                            # 撤掉 FJE 之后模拟盘的闲置资金方式
+
+
+def compute_baseline3() -> dict:
+    """B3 重算 + 第三段的先决条件（研究口径 = 修正口径、模拟盘 = Q1B、接线检查：B3 = B2 的接法里 FJE 永远不成立）。"""
+    import json as _json
+    import time
+    import equity_idle_study as EI
+    import loop_common as LCM
+    import loop6_common as L6
+    from qbreak import idle_cash as IC
+    from qbreak import paths
+    t0 = time.time()
+    W = L6.load3()
+    b3 = {e: {k: v for k, v in L6.run(W, e).items() if k != "years"} for e in ERAS}
+    alt_ov = L6.b3_alt_over(W)
+    alt = {e: {k: v for k, v in LCM.run(W, e, **alt_ov).items() if k != "years"} for e in ERAS}
+    wire = {e: {"b3": b3[e]["calmar"], "alt": alt[e]["calmar"],
+                "same": all(b3[e][k] is not None and alt[e][k] is not None and abs(float(b3[e][k]) - float(alt[e][k])) <= WIRE_TOL
+                            for k in ("cagr", "dd", "calmar", "h1", "h2"))} for e in ERAS}
+    sim = _json.loads((paths.home() / "sim.json").read_text(encoding="utf-8"))
+    mode, fx = IC.mode_of(sim), EI.fx_align()
+    ok = all(v["same"] for v in wire.values()) and mode == SEG3_MODE and fx == "same"
+    return {"wire": wire, "mode": mode, "fx_align": fx, "fingerprint": rules_fingerprint(), "prereq_ok": ok, "baseline": b3,
+            "seconds": round(time.time() - t0)}
+
+
+def write_baseline3(res: dict) -> None:
+    from qbreak import paths
+    w = res["wire"]
+    L = ["# 第六个研究循环第三段：基准 B3（= 撤掉 FJE 之后的模拟盘 Q1B：B0 + BCU，修正口径）重算（scripts/research_loop6.py --baseline3；scripts/loop6_common.load3）", "",
+         f"先决条件：**{'满足' if res['prereq_ok'] else '不满足'}** —— 接线检查（B3 与「B2 的接法里 FJE 永远不成立」）：" + "、".join(
+             f"{e} {w[e]['b3']:.4f} / {w[e]['alt']:.4f} {'✓' if w[e]['same'] else '✗'}" for e in ERAS)
+         + f"；模拟盘闲置资金方式 {res['mode']}（要 {SEG3_MODE}）{'✓' if res['mode'] == SEG3_MODE else '✗'}；研究口径 {res['fx_align']}"
+         f"（要 same）{'✓' if res['fx_align'] == 'same' else '✗'}；模拟盘规则指纹 {res['fingerprint']}。", "",
+         "| 年代 | 年化 | 最大回撤 | Calmar | 前一半 | 后一半 | 个股笔数 | 胜率 | 每笔 |", "|---|---|---|---|---|---|---|---|---|"]
+    for e, v in res["baseline"].items():
+        L.append(f"| {e} | {v['cagr']:+.2f}% | {v['dd']:.2f}% | {v['calmar']:.3f} | {v['h1']:.3f} | {v['h2']:.3f} | {v['n']} | "
+                 f"{v['win'] if v['win'] is not None else '—'}% | {v['mean'] if v['mean'] is not None else '—'}% |")
+    L += ["", f"用时 {res['seconds']} s。非投资建议。"]
+    (paths.out_dir() / "research_loop6_b3.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    (paths.out_dir() / "research_loop6_b3.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=float) + "\n", encoding="utf-8")
+    print("\n".join(L))
+
+
+def init_segment3(res: dict, home: Path | None = None, when: str = "2026-10-03") -> dict:
+    """登记第三段（已经有就不动，返回原来的）：第二段记下用户的决定后关上；新的一段计数 / 家族用量接着第二段，「汇率对冲」不再解除。"""
+    st = load_state(home)
+    sg = segment(st)
+    if not sg or int(sg.get("seg", 2)) >= 3:
+        return st
+    v2 = view(st)
+    carry = {"used": used(v2), "family": family_counts(v2)}
+    closed = {**sg, "status": derive_status(v2),
+              "closed": (f"{when} 用户（待办 ㊼）「①重新检验，不过就撤」：研究口径改成修正口径（749398a）→ FJE 重新检验不过 → 模拟盘撤掉 FJE（Q1B，852a9dc）；"
+                         "CRW 不采用；第六个循环在第三段（基准 B3）接着做，计数接着")}
+    s3 = {"seg": 3, "from_round": len(st.get("rounds") or []) + 1, "start": when, "registered": "本提交（第三段登记）",
+          "user_request": "①重新检验，不过就撤（2026-10-03，待办 ㊼；只回答编号 = 同时同意：CRW 不采用、按修正口径重算基准、计数接着 7 / 20、剩下 2 个汇率对冲名额不用）",
+          "baseline_def": "B3 = 撤掉 FJE 之后的模拟盘（Q1B：第一个循环的 B0 + BCU；scripts/loop6_common.load3），研究口径 = 修正口径（fx_on）；J 到 2026-09-30",
+          "baseline": res["baseline"], "prereq_ok": res["prereq_ok"], "fingerprint": res["fingerprint"], "fx_align": res.get("fx_align"),
+          "cap": max(0, CAP - carry["used"]), "carry": carry, "family_cap": FAMILY_CAP, "status": "running"}
+    st = {**st, "segments": list(st["segments"][:-1]) + [closed, s3], "status": "running"}
     save_state(st, home)
     return st
 

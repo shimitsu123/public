@@ -10521,5 +10521,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "当时拿着 1545、2845 为 0 口 → 换方式不产生买卖；临时目录里 sim-day 与执行器演练账户各跑一次核对"
+ },
+ {
+  "line": 7296,
+  "date": "2026-10-03",
+  "title": "第六个研究循环第三段登记：基准 B3 = 撤掉 FJE 之后的模拟盘（Q1B），修正口径；计数接着 7 / 20、汇率对冲重新不加",
+  "kind": "decision",
+  "domain": "核心/配置",
+  "registration": "本提交（第三段登记）",
+  "script": "scripts/research_loop6.py（--init3）",
+  "output": "var/out/research_loop6_b3.md",
+  "candidates": [],
+  "baseline": "B3 Calmar Z 1.194 / E 0.627 / J 0.676",
+  "windows": "Z / E / J",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "接线检查：B3 = B2 的接法里 FJE 永远不成立（三个年代完全相同）"
  }
 ]

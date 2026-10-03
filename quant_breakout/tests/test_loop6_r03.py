@@ -21,7 +21,7 @@ def test_registered_constants_and_loop6_segment2_rules():
     st = R6.load_state(ROOT / "var")
     if not R6.segment(st):
         pytest.skip("第二段还没有登记")
-    assert not set(N.IDS) & (R6.previous_ids(ROOT / "var") | R6.earlier_ids(st))
+    assert not set(N.IDS) & (R6.previous_ids(ROOT / "var") | R6.ids_before(st, N.ROUND))
     mine = [r for r in st.get("rounds") or [] if r.get("round") == N.ROUND]
     if mine:
         assert [a["id"] for a in mine[0]["approaches"]] == list(N.IDS)

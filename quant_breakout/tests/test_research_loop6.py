@@ -179,14 +179,28 @@ def test_b2_reference_and_common_wiring():
 
 def test_registered_segment2_if_present():
     st = R6.load_state(ROOT / "var")
-    sg = R6.segment(st)
+    sg = next((x for x in st.get("segments") or [] if int(x.get("seg", 2)) == 2), {})            # 第三段起：最后一段不再是第二段
     if not sg:
         pytest.skip("第二段还没有登记")
     assert sg["prereq_ok"] is True and sg["from_round"] == 2 and sg["cap"] == 20
     assert sg["fingerprint"] == (st.get("adopted") or {}).get("fingerprint_after")
     assert all(abs(sg["baseline"][e]["calmar"] - R6.B2_REF[e]) <= R6.PREREQ_TOL for e in R6.ERAS)
     if sg.get("unbanned"):                                                                      # 八：用户在第二段解除的只有「汇率对冲」
-        assert sg["unbanned"] == ["汇率对冲"] and sg.get("pauses") and R6.banned(st) == ()
+        assert sg["unbanned"] == ["汇率对冲"] and sg.get("pauses")
+        assert R6.banned(st) == (() if R6.segment(st) is sg or R6.segment(st) == sg else ("汇率对冲",))
+
+
+def test_registered_segment3_if_present():
+    """第三段（九）：上限 13、计数与家族用量接着第二段、汇率对冲重新不加、先决条件都满足、第二段关上并记下用户的决定。"""
+    st = R6.load_state(ROOT / "var")
+    sg = R6.segment(st)
+    if int(sg.get("seg", 2)) < 3:
+        pytest.skip("第三段还没有登记")
+    s2 = next(x for x in st["segments"] if int(x.get("seg", 2)) == 2)
+    assert sg["prereq_ok"] is True and sg["from_round"] == R6.SEG3_FROM and sg["cap"] == R6.CAP - sg["carry"]["used"] == 13
+    assert sg["carry"]["family"].get("核心·熊市避险资产") == 3 and "汇率对冲" in R6.banned(st) and not sg.get("unbanned")
+    assert sg.get("fx_align") == "same" and s2.get("closed") and "㊼" in s2["closed"]
+    assert all(sg["baseline"][e]["calmar"] is not None for e in R6.ERAS)
 
 
 def test_fx_ban_strips_core_prefix_and_segment2_unban(tmp_path, monkeypatch):
@@ -222,3 +236,56 @@ def test_fx_ban_strips_core_prefix_and_segment2_unban(tmp_path, monkeypatch):
 def _save(home, st):
     R6.save_state(st, home)
     return home
+
+
+def _seg3_ready():
+    """第二段用掉 7 个（第 2〜6 轮，与真实的家族用量相同）、第 6 轮 CRW「更好候选」→ found。"""
+    st = _seg_state()
+    mk = lambda i, f, v=R6.FAIL1: {"id": i, "family": f, "posthoc": True, "kind": "signal", "verdict": v, "sum": -0.1}   # noqa: E731
+    st["rounds"] += [{"round": 2, "approaches": [mk("BCS", "核心·熊市避险资产"), mk("BCM", "核心·熊市避险资产"), mk("BCF", "核心·熊市避险资产")]},
+                     {"round": 3, "approaches": [mk("NDB", "核心·择时（早回来）", R6.FAIL2)]},
+                     {"round": 4, "approaches": [mk("ZBX", "核心·择时（早离场）")]}, {"round": 5, "approaches": [mk("TB7", "核心·择时（早离场）")]},
+                     {"round": 6, "approaches": [mk("CRW", "核心·汇率对冲", R6.FOUND)]}]
+    st["segments"][-1].update({"unbanned": ["汇率对冲"], "status": "found"})
+    return st
+
+
+def test_init_segment3_carries_count_families_and_rebans_fx(tmp_path, monkeypatch):
+    """第三段（用户 ㊼ ①）：第二段关上、计数接着（上限 20 − 7 = 13）、家族用量接着、「汇率对冲」重新不加、前面几段的 ID 不能用、只登记一次。"""
+    st = _seg3_ready()
+    assert R6.derive_status(R6.view(st)) == "found" and "汇率对冲" not in R6.banned(st)
+    res = {"baseline": {"Z": {"calmar": 1.0, "dd": -15.0}}, "prereq_ok": True, "fingerprint": "q1b", "fx_align": "same"}
+    out = R6.init_segment3(res, home=_save(tmp_path, st))
+    sg = R6.segment(out)
+    assert (sg["seg"], sg["from_round"], sg["cap"], sg["status"]) == (3, 7, 13, "running") and out["status"] == "running"
+    assert sg["carry"] == {"used": 7, "family": {"核心·熊市避险资产": 3, "核心·择时（早回来）": 1, "核心·择时（早离场）": 2, "核心·汇率对冲": 1}}
+    assert out["segments"][-2]["status"] == "found" and "㊼" in out["segments"][-2]["closed"]
+    v = R6.view(out)
+    assert v["rounds"] == [] and R6.left(v) == 13 and R6.derive_status(v) == "running" and v["baseline"] == res["baseline"]
+    assert "汇率对冲" in R6.banned(out) and {"BCU", "BCS", "NDB", "CRW"} <= R6.earlier_ids(out)
+    ok = {"id": "NEW1", "family": "核心·择时（早离场）", "posthoc": True, "kind": "signal"}
+    R6.check_new_approaches(out, [ok], prev=set())                                                # 早离场 2 + 1 = 3
+    for bad in ([ok, {**ok, "id": "NEW2"}], [{**ok, "family": "核心·熊市避险资产"}], [{**ok, "family": "核心·汇率对冲"}], [{**ok, "id": "CRW"}]):
+        with pytest.raises(ValueError):
+            R6.check_new_approaches(out, bad, prev=set())
+    st7 = R6.add_round(out, {"round": 7, "date": "2026-10-03", "title": "t7", "approaches": [{**ok, "verdict": R6.FAIL1, "sum": -0.1}]}, prev=set())
+    assert R6.used(R6.view(st7)) == 1 and R6.left(R6.view(st7)) == 12
+    assert R6.init_segment3(res, home=tmp_path) == out                                            # 已经有就不动
+    monkeypatch.setattr(R6, "rules_fingerprint", lambda home=None: "q1b")
+    t = R6.status_text(out)
+    assert "第六个研究循环第三段" in t and "计数接着上一段：7 + 0 / 20" in t and "这一段不再加的家族：汇率对冲" in t
+    assert "第二段（基准 B2）：BCS" in t and "与第三段登记时相同" in t and "核心·熊市避险资产 3" in t
+
+
+def test_b3_wiring_matches_q1b():
+    """研究的 B3 与生产的 Q1B 同一结构（键名：研究 US_BD = 生产 BR:BD；1545 都跟美股牛熊 US）。"""
+    import inspect
+    import loop2_r02_bondrefuge as T2
+    import loop6_common as L6
+    from qbreak import bond_refuge as BR
+    from qbreak import idle_cash as IC
+    src = inspect.getsource(L6.b3_over)
+    assert '"core_index": {"1545.T": "US", T2.BOND_T: T2.BD_KEY}' in src and '"core_mode": "follow"' in src
+    m = IC.MODES["Q1B"]
+    assert {t: ({"US": "US", T2.BD_KEY: BR.KEY}[k]) for t, k in {"1545.T": "US", T2.BOND_T: T2.BD_KEY}.items()} == m["core_index"]
+    assert "never = pd.Series(False" in inspect.getsource(L6.b3_alt_over) and R6.SEG3_MODE == "Q1B"
