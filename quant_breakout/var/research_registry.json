@@ -10081,5 +10081,24 @@
    "账户上的差主要来自 Z 2005 一个年份"
   ],
   "notes": "待办 ㊹：① 结束（推荐）② 继续（剩 3 个，要新的想法来源）"
+ },
+ {
+  "line": 6651,
+  "date": "2026-10-03",
+  "title": "用户决定 ㊹：② 继续第五个研究循环（17 / 20，剩 3）+ 研究成功率统计（核心层第一关全过 27%、个股层 0%）",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": "循环规则 3577846 不变",
+  "script": "scripts/research_success_map.py",
+  "output": "var/out/research_success_map.md",
+  "candidates": [],
+  "baseline": "B1 Calmar Z 0.979 / E 0.749 / J 0.741",
+  "windows": "第一〜五个循环的状态文件",
+  "verdict": "变更/工程",
+  "stable_findings": [
+   "核心层 37 个做法第一关全过 10 个（27%）、两关都过 1 个（FJE）；个股层 47 个第一关全过 0 个"
+  ],
+  "era_dependent_or_reversed": [],
+  "notes": "成功率最大的方向 = 核心层；第五个循环用完后另开第六个循环（核心层）"
  }
 ]
