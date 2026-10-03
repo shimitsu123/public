@@ -10728,5 +10728,22 @@
    "J 2024-10〜11 利率急升、纳指照涨（−3.5 pp）"
   ],
   "notes": "第三段用掉 7 / 13（合计 14 / 20）；「核心·利率冲击」新家族 1 / 3"
+ },
+ {
+  "line": 7545,
+  "date": "2026-10-04",
+  "title": "第六个研究循环第三段停下（要用户决定，待办 ㊽）：7 / 13 用了（合计 14 / 20）、没找到；最接近 VCT（第一关全过、第二关约第 97 百分位）",
+  "kind": "decision",
+  "domain": "核心/配置",
+  "registration": "—",
+  "script": "scripts/research_loop6.py",
+  "output": "var/research_loop6.json",
+  "candidates": [],
+  "baseline": "B3 Calmar Z 1.194 / E 0.627 / J 0.676",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "选项：① 结束第六个循环、VCT 加进前向记录（只记录）② 结束第六个循环 ③ 照现行规则继续（剩 6）④ 别的方向；家族按同一类信号算还是按动作算要用户裁定"
  }
 ]
