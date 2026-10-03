@@ -235,6 +235,31 @@
      }
     }
    ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-03",
+   "title": "核心的快速离场 ZBX（第二段）",
+   "registration": "5ae519f（代码 918148d；第二段规则 9c3fdb4）",
+   "script": "scripts/loop6_r04_fastexit.py",
+   "approaches": [
+    {
+     "id": "ZBX",
+     "verdict": "第一关不过",
+     "sum": -0.555,
+     "family": "核心·择时（早离场）",
+     "posthoc": true,
+     "kind": "signal",
+     "passed": 2,
+     "d": {
+      "Z": -0.449,
+      "E": 0.009,
+      "J": -0.115
+     },
+     "unseen": -0.089,
+     "note": "跌破 250 日线就走、收回就回：来回太多（Z 2005 −9.9、2006 −6.8 pp；J 2022 −12.0、2025 −10.1 pp），Z 回撤反而深到 −19.71%"
+    }
+   ]
   }
  ],
  "found": "2026-10-03 JST 第 1 轮 BCU 两关都过 = 更好候选 → 循环按规则停下（status = found），等用户说「加进前向记录」或「采用」；模拟盘 / 执行器不改",
