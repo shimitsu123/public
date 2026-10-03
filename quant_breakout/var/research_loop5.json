@@ -333,6 +333,31 @@
      "note": "Z 2005 −7.1 pp；E +0.032"
     }
    ]
+  },
+  {
+   "round": 7,
+   "date": "2026-10-03",
+   "title": "按顾客业种短観调仓位 X2F",
+   "registration": "1a3c1f7（代码 7ca8aab）",
+   "script": "scripts/loop5_r07_x2f.py",
+   "approaches": [
+    {
+     "id": "X2F",
+     "verdict": "第一关不过",
+     "sum": 0.184,
+     "family": "仓位·基本面",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 6,
+     "d": {
+      "Z": 0.096,
+      "E": 0.05,
+      "J": 0.038
+     },
+     "unseen": null,
+     "note": "只差 S5；三个年代都变好"
+    }
+   ]
   }
  ]
 }
