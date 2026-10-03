@@ -143,6 +143,63 @@
      }
     }
    ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-03",
+   "title": "BCU 的债券只在「真的在避险」时拿 BCS / BCM / BCF（第二段）",
+   "registration": "1b7d174（代码同一个提交；第二段规则 9c3fdb4）",
+   "script": "scripts/loop6_r02_bondgate.py",
+   "approaches": [
+    {
+     "id": "BCS",
+     "verdict": "第一关不过",
+     "sum": -0.209,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "kind": "signal",
+     "passed": 4,
+     "d": {
+      "Z": -0.19,
+      "E": -0.007,
+      "J": -0.012
+     },
+     "unseen": 0.001,
+     "note": "Z 2002 −11.2 pp（2002 年美债全年在涨，股市反弹段也在涨 → 换成现金少赚）；E 2009 +3.5、2008 +3.4 pp"
+    },
+    {
+     "id": "BCM",
+     "verdict": "第一关不过",
+     "sum": -0.218,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "kind": "signal",
+     "passed": 3,
+     "d": {
+      "Z": -0.168,
+      "E": -0.056,
+      "J": 0.006
+     },
+     "unseen": -0.001,
+     "note": "Z 2002 −9.7 pp；E 2009 +3.4、J 2022 +2.3 pp；E 回撤深 1.06 pp"
+    },
+    {
+     "id": "BCF",
+     "verdict": "第一关不过",
+     "sum": -0.301,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "kind": "combo",
+     "passed": 3,
+     "d": {
+      "Z": -0.266,
+      "E": -0.035,
+      "J": 0.0
+     },
+     "unseen": 0.0,
+     "note": "两个条件都要 → 拿债券的日子最少：Z 2002 −13.2 pp"
+    }
+   ]
   }
  ],
  "found": "2026-10-03 JST 第 1 轮 BCU 两关都过 = 更好候选 → 循环按规则停下（status = found），等用户说「加进前向记录」或「采用」；模拟盘 / 执行器不改",

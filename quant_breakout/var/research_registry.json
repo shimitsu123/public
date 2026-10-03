@@ -10280,5 +10280,40 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "判定、第二关三种、题目范围不变；第一段的 BCU / BCJ / BCB 不能再用；替换 B2 已拿着的资产不做；多重检验最多 112 个做法、偶然「找到」约 24%"
+ },
+ {
+  "line": 6961,
+  "date": "2026-10-03",
+  "title": "第六个研究循环第二段第 2 轮：BCU 的债券只在「真的在避险」时拿 BCS / BCM / BCF → 三个都第一关不过（-0.209 / -0.218 / -0.301）",
+  "kind": "study",
+  "domain": "核心/配置",
+  "registration": "1b7d174（登记后代码未改、只运行一次；第二段规则 9c3fdb4；三个都是事后 → S7 适用）",
+  "script": "scripts/loop6_r02_bondgate.py",
+  "output": "var/out/loop6_r02_bondgate.md",
+  "candidates": [
+   {
+    "id": "BCS",
+    "rule": "B2 拿 1482 的日子里再加 S&P500 63 天下跌",
+    "result": "第一关 -0.209（Z -0.190、E -0.007、J -0.012）→ 不过"
+   },
+   {
+    "id": "BCM",
+    "rule": "再加 1482 合成价 63 天上涨",
+    "result": "第一关 -0.218（Z -0.168、E -0.056、J +0.006）→ 不过"
+   },
+   {
+    "id": "BCF",
+    "rule": "两个都要",
+    "result": "第一关 -0.301（Z -0.266、E -0.035、J +0.000）→ 不过"
+   }
+  ],
+  "baseline": "B2 Calmar Z 1.162 / E 0.808 / J 0.749",
+  "windows": "Z / E / J；S7 = 1987〜2000 只有核心",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [
+   "E 2009 +3.4 pp、J 2022 +2.3 pp（BCM）变好，但 Z 2002 −9.7〜−13.2 pp：长段被切碎、错过反弹里的上涨"
+  ],
+  "notes": "第二段用掉 3 / 20；「熊市避险资产」家族第二段 3 / 3 用完"
  }
 ]

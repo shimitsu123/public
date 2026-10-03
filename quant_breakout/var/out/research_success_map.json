@@ -1,8 +1,8 @@
 {
- "n": 92,
+ "n": 95,
  "by_layer": {
   "核心层": {
-   "n": 40,
+   "n": 43,
    "pass1": 12,
    "near": 9,
    "found": 2,
@@ -45,8 +45,8 @@
     "BAB",
     "NZS"
    ],
-   "pass1_pct": 30.0,
-   "near_pct": 22.5
+   "pass1_pct": 27.9,
+   "near_pct": 20.9
   },
   "个股层": {
    "n": 50,
@@ -125,7 +125,7 @@
    "near_pct": 0.0
   },
   "核心·熊市避险资产": {
-   "n": 9,
+   "n": 12,
    "pass1": 4,
    "near": 4,
    "found": 1,
@@ -147,8 +147,8 @@
     "BAU",
     "BAB"
    ],
-   "pass1_pct": 44.4,
-   "near_pct": 44.4
+   "pass1_pct": 33.3,
+   "near_pct": 33.3
   },
   "风险层·账户回撤刹车": {
    "n": 1,
@@ -1665,6 +1665,51 @@
    "found": false,
    "near": false,
    "pctile": 99.75
+  },
+  {
+   "loop": 6,
+   "round": 2,
+   "id": "BCS",
+   "layer": "核心层",
+   "sub": "核心·熊市避险资产",
+   "verdict": "第一关不过",
+   "sum": -0.209,
+   "passed": 4,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": false,
+   "pctile": null
+  },
+  {
+   "loop": 6,
+   "round": 2,
+   "id": "BCM",
+   "layer": "核心层",
+   "sub": "核心·熊市避险资产",
+   "verdict": "第一关不过",
+   "sum": -0.218,
+   "passed": 3,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": false,
+   "pctile": null
+  },
+  {
+   "loop": 6,
+   "round": 2,
+   "id": "BCF",
+   "layer": "核心层",
+   "sub": "核心·熊市避险资产",
+   "verdict": "第一关不过",
+   "sum": -0.301,
+   "passed": 3,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": false,
+   "pctile": null
   }
  ]
 }
