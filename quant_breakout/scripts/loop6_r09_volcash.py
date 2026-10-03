@@ -27,6 +27,12 @@
 事前预期：写在登记（var/sim_changes.md）里、看结果之前。
 运行：python scripts/loop6_r09_volcash.py（第一关）；--scale（只数日子）；--wiring（登记前的接线核对）；--stage2 VCT [--workers N]（第二关）。
 输出 var/out/loop6_r09_volcash.md / .json（第二关 loop6_r09_volcash_stage2_VCT.md / .json）。非投资建议。
+
+第二关（2026-10-03 第一关全过之后另行登记；登记 = 加这一段的那次提交，之后不改、只运行一次，`--stage2 VCT --workers 3`；第一关与 --stage2 的代码不改）：
+  形状 = 第一关登记时写定的那一个 —— 信号「高波动 ∧ 正在跌」（东证日上的布尔序列）在 2000-01-04〜2026-09-30 的 6,549 个东证交易日上整体循环平移 k
+  （research_loop6.shift_ks(n, 0)：numpy.random.default_rng([20261006, 0, s])，s = 0〜399），窗外不动；拿美债（负相关）与留现金（不是负相关）
+  两部分都跟着平移后的信号重算（vct_over）；B3（美股熊、股债相关、价格）不动；每次三个年代都跑，统计量 = Calmar 差合计（对同一次运行的 B3）；
+  VCT 要严格大于 400 次的最大值（research_loop6.stage2；有算不出的 = 不过）。
 """
 from __future__ import annotations
 
