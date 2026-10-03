@@ -33,8 +33,13 @@
 六 每一轮：先登记（提交推送）再只运行一次；记进 var/sim_changes.md / var/research_registry.json / var/out/research_map.md / HANDOFF.md /
    CHECK_TIMELINE.md / var/research_loop6.json；全部测试通过才提交、pull --rebase 后推送；不停下来问，接着下一轮。不改模拟盘和执行器。
 多重检验（照实写）：第一〜五个循环 89 个做法 + 本循环最多 20 个 = 109 个，每个偶然过第二关约 1 / 401 → 合计约 24%；「找到」也只是历史上的候选，要前向记录确认。
+七 第二段（2026-10-03 用户「采用\n\n并且继续第六个研究循环」；加在本文件末尾「第二段」一节 = 第二段的登记提交）：第 1 轮的 BCU 采用之后，
+   按上面「要改只能由用户在对话里明确要求、重新开始计数」：基准换成 B2 = 采用后的模拟盘（B1 + BCU，scripts/loop6_common.py）、做法计数与家族用量从第二段重新算
+   （上限 20、同一家族 ≤ 3）；判定的数字、第二关三种（B2 的状态与美股指数不动）、题目范围、种子、ID 不重用（再加本循环第一段的 BCU / BCJ / BCB）都不变；
+   轮次号接着编（第二段从第 2 轮起）。先决条件：B2 重算 = 第 1 轮 BCU 的第一关账户（每个年代 Calmar 差 ≤ PREREQ_TOL）、模拟盘规则指纹 = 采用后的指纹。
+   第二段里替换 B2 已经拿着的资产（例：把 1482 换成别的债券）不能用 asset 类的第二关（平移换进来的资产会连 B2 已有的好处一起打乱，对照太弱）→ 这种做法不做。
 用法：python scripts/research_loop6.py --status（进度，只读）；--baseline（重算 B1 与先决条件）；--init（登记时写 var/research_loop6.json；已存在就不动；
-      先决条件不过 → 不登记）。非投资建议。
+      先决条件不过 → 不登记）；--baseline2 / --init2（第二段：重算 B2 与先决条件 / 登记第二段，已有就不动）。非投资建议。
 """
 from __future__ import annotations
 
@@ -138,9 +143,10 @@ def previous_ids(home: Path | None = None) -> set[str]:
 
 
 def check_new_approaches(st: dict, approaches: list[dict], prev: set[str] | None = None) -> None:
-    """第二个循环的检查（家族、不再加的家族、家族上限、事后组合标明）+ 第二关类别 ∈ KINDS + 家族以「核心」开头 + 不用第一〜五个循环的 ID。"""
-    R2.check_new_approaches(st, approaches)
-    prev = previous_ids() if prev is None else prev
+    """第二个循环的检查（家族、不再加的家族、家族上限、事后组合标明）+ 第二关类别 ∈ KINDS + 家族以「核心」开头 + 不用第一〜五个循环的 ID
+    （第二段起：家族上限按这一段算、本循环前面几段的 ID 也不能用）。"""
+    R2.check_new_approaches(view(st), approaches)
+    prev = (previous_ids() if prev is None else set(prev)) | earlier_ids(st)
     for a in approaches:
         if a.get("kind") not in KINDS:
             raise ValueError(f"做法 {a.get('id')} 没写第二关的类别（kind ∈ {KINDS}）")
@@ -152,12 +158,33 @@ def check_new_approaches(st: dict, approaches: list[dict], prev: set[str] | None
 
 def add_round(st: dict, rnd: dict, prev: set[str] | None = None) -> dict:
     check_new_approaches(st, list(rnd.get("approaches") or []), prev)
-    return RL.add_round(st, rnd)
+    if not segment(st):
+        return RL.add_round(st, rnd)
+    v = view(st)                                                             # 第二段起：这一段的状态 / 剩下的上限；轮次号接着全部轮次编
+    if derive_status(v) != "running":
+        raise ValueError(f"这一段已停（{derive_status(v)}），不能再加轮次")
+    rounds = list(st.get("rounds") or [])
+    k = int(rnd.get("round", 0))
+    if k != len(rounds) + 1:
+        raise ValueError(f"轮次号应为 {len(rounds) + 1}，给的是 {k}")
+    n = len(rnd.get("approaches") or [])
+    if n < 1 or n > left(v):
+        raise ValueError(f"这一轮 {n} 个做法，这一段剩下的上限 {left(v)}")
+    for a in rnd["approaches"]:
+        if a.get("verdict") not in (FOUND, FAIL1, FAIL2):
+            raise ValueError(f"做法 {a.get('id')} 的结论不是 {FOUND} / {FAIL1} / {FAIL2}")
+    out = {**st, "rounds": rounds + [rnd]}
+    sg = {**segment(out), "status": derive_status(view(out))}
+    out["segments"] = list(out.get("segments") or [])[:-1] + [sg]
+    out["status"] = sg["status"]
+    return out
 
 
 def status_text(st: dict) -> str:
     if not st:
         return "第六个研究循环还没有登记（var/research_loop6.json 不存在）。"
+    if segment(st):
+        return segment_text(st)
     t = R2.status_text(st).replace("第二个研究循环", "第六个研究循环", 1)
     ad = st.get("adopted") or {}                                             # 用户「采用」候选之后记下的（日期、候选、采用后的指纹）
     if not ad:
@@ -239,7 +266,19 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--baseline", action="store_true")
     ap.add_argument("--init", action="store_true")
+    ap.add_argument("--baseline2", action="store_true")
+    ap.add_argument("--init2", action="store_true")
     a = ap.parse_args(argv)
+    if a.baseline2 or a.init2:
+        res = compute_baseline2()
+        write_baseline2(res)
+        if a.init2:
+            if not res["prereq_ok"]:
+                print("★ 第二段的先决条件不满足 → 不登记")
+                return 2
+            init_segment2(res)
+        print(status_text(load_state()))
+        return 0
     if a.baseline or a.init:
         res = compute_baseline()
         write_baseline(res)
@@ -251,6 +290,116 @@ def main(argv: list[str] | None = None) -> int:
     if a.status or not (a.baseline or a.init):
         print(status_text(load_state()))
     return 0
+
+
+
+# ───────────────────────── 第二段（2026-10-03 用户「采用 并且继续第六个研究循环」；见文件开头七） ─────────────────────────
+SEG2_FROM = 2                                                                # 第二段的第一轮
+B2_REF = {"Z": 1.162, "E": 0.808, "J": 0.749}                                # 第 1 轮 BCU 的第一关 Calmar（var/out/loop6_r01_bondcorr.json）
+
+
+def segment(st: dict) -> dict:
+    """现在这一段（没有第二段 → {}）。"""
+    segs = (st or {}).get("segments") or []
+    return segs[-1] if segs else {}
+
+
+def view(st: dict) -> dict:
+    """现在这一段的视图：轮次只算这一段的；基准 / 指纹 / 上限 / 状态用这一段的（没有第二段 → 原状态）。"""
+    sg = segment(st)
+    if not sg:
+        return st
+    k0 = int(sg.get("from_round", SEG2_FROM))
+    rounds = [r for r in st.get("rounds") or [] if int(r.get("round", 0)) >= k0]
+    return {**st, "rounds": rounds, "baseline": sg.get("baseline") or {}, "fingerprint": sg.get("fingerprint"), "cap": sg.get("cap", CAP),
+            "status": sg.get("status", "running"), "start": sg.get("start"), "registered": sg.get("registered"), "adopted": None}
+
+
+def earlier_ids(st: dict) -> set[str]:
+    """本循环前面几段用过的做法 ID（第二段起不能再用）。"""
+    sg = segment(st)
+    if not sg:
+        return set()
+    k0 = int(sg.get("from_round", SEG2_FROM))
+    return {a.get("id") for r in st.get("rounds") or [] if int(r.get("round", 0)) < k0 for a in r.get("approaches") or [] if a.get("id")}
+
+
+def segment_text(st: dict) -> str:
+    """有第二段时的进度：这一段（B2）+ 第一段一行。"""
+    sg, v = segment(st), view(st)
+    b = v.get("baseline") or {}
+    L = [f"第六个研究循环第二段（{sg.get('start', '—')} 起，登记 {sg.get('registered', '—')}；基准 B2 = 采用后的模拟盘 B1 + BCU）：状态 {derive_status(v)}；"
+         f"做法 {used(v)} / {v.get('cap', CAP)}（剩 {left(v)}）",
+         "基准 B2 账户 Calmar（最大回撤）：" + "、".join(
+             f"{e} {b[e]['calmar']:.3f}（{b[e]['dd']:.2f}%）" for e in ERAS if (b.get(e) or {}).get("calmar") is not None)]
+    for r in v.get("rounds") or []:
+        L.append(f"- 第 {r['round']} 轮 {r.get('date', '')} {r.get('title', '')}：" + "；".join(
+            f"{a['id']}〔{a.get('family', '—')}{'·事后组合' if a.get('posthoc') else ''}〕{a['verdict']}"
+            + (f"（合计 {a['sum']:+.3f}）" if _num(a.get("sum")) is not None else "") for a in r["approaches"]))
+    fc = family_counts(v)
+    if fc:
+        L.append("这一段的家族用量（上限 %d）：" % FAMILY_CAP + "、".join(f"{k} {n}" for k, n in sorted(fc.items())))
+    k0 = int(sg.get("from_round", SEG2_FROM))
+    first = [a for r in st.get("rounds") or [] if int(r.get("round", 0)) < k0 for a in r.get("approaches") or []]
+    ad = st.get("adopted") or {}
+    L.append(f"第一段（基准 B1，{st.get('start', '—')} 起）：" + "、".join(f"{a['id']} {a['verdict']}" for a in first)
+             + (f"；{ad.get('date', '—')} 用户「采用」{ad.get('candidate', '—')}" if ad else ""))
+    fp = sg.get("fingerprint")
+    if fp:
+        try:
+            now = rules_fingerprint()
+            L.append("模拟盘规则：" + ("与第二段登记时相同" if now == fp else f"★ 与第二段登记时不同（{fp} → {now}）→ 循环应停下、由用户决定"))
+        except Exception as e:                                               # noqa: BLE001
+            L.append(f"模拟盘规则指纹算不了：{type(e).__name__}")
+    return "\n".join(L)
+
+
+def compute_baseline2() -> dict:
+    """B2 重算 + 第二段的先决条件（与第 1 轮 BCU 的第一关账户一致、模拟盘规则指纹 = 采用后的指纹）。"""
+    import time
+    import loop6_common as L6
+    t0 = time.time()
+    W = L6.load()
+    b2 = {e: {k: v for k, v in L6.run(W, e).items() if k != "years"} for e in ERAS}
+    ad = load_state().get("adopted") or {}
+    pre = {e: {"calmar": b2[e]["calmar"], "ref": B2_REF[e],
+               "same": b2[e]["calmar"] is not None and abs(b2[e]["calmar"] - B2_REF[e]) <= PREREQ_TOL} for e in ERAS}
+    fp_now, fp_ad = rules_fingerprint(), ad.get("fingerprint_after")
+    ok = all(v["same"] for v in pre.values()) and fp_ad is not None and fp_now == fp_ad
+    return {"prereq": pre, "fingerprint": fp_now, "fingerprint_adopted": fp_ad, "prereq_ok": ok, "baseline": b2,
+            "seconds": round(time.time() - t0)}
+
+
+def write_baseline2(res: dict) -> None:
+    from qbreak import paths
+    pre = res["prereq"]
+    L = ["# 第六个研究循环第二段：基准 B2（= 采用后的模拟盘 B1 + BCU）重算（scripts/research_loop6.py --baseline2；scripts/loop6_common.py）", "",
+         f"先决条件：**{'满足' if res['prereq_ok'] else '不满足'}** —— B2 与第 1 轮 BCU 的第一关账户：" + "、".join(
+             f"{e} {pre[e]['calmar']:.4f}（第 1 轮 {pre[e]['ref']:.4f}）{'✓' if pre[e]['same'] else '✗'}" for e in ERAS)
+         + f"；模拟盘规则指纹 {res['fingerprint']}（采用后 {res['fingerprint_adopted']}）{'✓' if res['fingerprint'] == res['fingerprint_adopted'] else '✗'}。", "",
+         "| 年代 | 年化 | 最大回撤 | Calmar | 前一半 | 后一半 | 个股笔数 | 胜率 | 每笔 |", "|---|---|---|---|---|---|---|---|---|"]
+    for e, v in res["baseline"].items():
+        L.append(f"| {e} | {v['cagr']:+.2f}% | {v['dd']:.2f}% | {v['calmar']:.3f} | {v['h1']:.3f} | {v['h2']:.3f} | {v['n']} | "
+                 f"{v['win'] if v['win'] is not None else '—'}% | {v['mean'] if v['mean'] is not None else '—'}% |")
+    L += ["", f"用时 {res['seconds']} s。非投资建议。"]
+    (paths.out_dir() / "research_loop6_b2.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    (paths.out_dir() / "research_loop6_b2.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=float) + "\n", encoding="utf-8")
+    print("\n".join(L))
+
+
+def init_segment2(res: dict, home: Path | None = None) -> dict:
+    """登记第二段（已经有就不动，返回原来的）：segments 加一段、状态回到 running。"""
+    st = load_state(home)
+    if not st or segment(st):
+        return st
+    sg = {"seg": 2, "from_round": len(st.get("rounds") or []) + 1, "start": "2026-10-03", "registered": "本提交（第二段登记）",
+          "user_request": "采用\n\n并且继续第六个研究循环（2026-10-03）",
+          "baseline_def": "B2 = 采用后的模拟盘（B1 + BCU；scripts/loop6_common.py）；J 到 2026-09-30",
+          "baseline": res["baseline"], "prereq_ok": res["prereq_ok"], "fingerprint": res["fingerprint"],
+          "cap": CAP, "family_cap": FAMILY_CAP, "status": "running"}
+    st = {**st, "segments": list(st.get("segments") or []) + [sg], "status": "running"}
+    save_state(st, home)
+    return st
 
 
 if __name__ == "__main__":

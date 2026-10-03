@@ -113,3 +113,75 @@ def test_status_after_adoption(monkeypatch):
 
 def test_cli_status_is_read_only():
     assert R6.main(["--status"]) == 0
+
+
+def _seg_state():
+    r1 = {"round": 1, "date": "2026-10-03", "title": "t", "approaches": [
+        {"id": "BCU", "family": "核心·熊市避险资产", "posthoc": True, "kind": "asset", "verdict": R6.FOUND, "sum": 0.25},
+        {"id": "BCJ", "family": "核心·熊市避险资产", "posthoc": True, "kind": "asset", "verdict": R6.FAIL1, "sum": 0.01}]}
+    return {"status": "found", "cap": 20, "rounds": [r1], "start": "2026-10-03", "fingerprint": "aaa",
+            "adopted": {"date": "2026-10-03", "candidate": "BCU", "fingerprint_after": "bbb"},
+            "segments": [{"seg": 2, "from_round": 2, "start": "2026-10-03", "registered": "x",
+                          "baseline": {"Z": {"calmar": 1.162, "dd": -14.76}}, "fingerprint": "bbb", "cap": 20, "status": "running"}]}
+
+
+def test_segment2_view_counts_and_ids():
+    """第二段（用户「采用 并且继续」）：计数与家族用量从这一段重新算、轮次号接着编、第一段的 ID 不能再用、找到 → 这一段停。"""
+    st = _seg_state()
+    v = R6.view(st)
+    assert v["rounds"] == [] and R6.used(v) == 0 and R6.left(v) == 20 and R6.derive_status(v) == "running"
+    assert R6.earlier_ids(st) == {"BCU", "BCJ"} and R6.view({"rounds": []}) == {"rounds": []}
+    ok = {"id": "NEW1", "family": "核心·熊市避险资产", "posthoc": True, "kind": "signal"}
+    R6.check_new_approaches(st, [ok, {**ok, "id": "NEW2"}, {**ok, "id": "NEW3"}], prev=set())
+    with pytest.raises(ValueError):
+        R6.check_new_approaches(st, [{**ok, "id": "BCU"}], prev=set())
+    rnd = {"round": 2, "date": "2026-10-04", "title": "t2", "approaches": [{**ok, "verdict": R6.FAIL1, "sum": -0.1}]}
+    st2 = R6.add_round(st, rnd, prev=set())
+    assert len(st2["rounds"]) == 2 and R6.used(R6.view(st2)) == 1 and st2["segments"][-1]["status"] == "running"
+    with pytest.raises(ValueError):
+        R6.add_round(st, {**rnd, "round": 3}, prev=set())
+    found = R6.add_round(st, {**rnd, "approaches": [{**ok, "verdict": R6.FOUND, "sum": 0.3}]}, prev=set())
+    assert found["status"] == "found" and found["segments"][-1]["status"] == "found"
+    with pytest.raises(ValueError):
+        R6.add_round(found, {**rnd, "round": 3, "approaches": [{**ok, "id": "NEW9", "verdict": R6.FAIL1}]}, prev=set())
+
+
+def test_segment2_status_text(monkeypatch):
+    st = _seg_state()
+    monkeypatch.setattr(R6, "rules_fingerprint", lambda home=None: "bbb")
+    t = R6.status_text(st)
+    assert "第二段" in t and "做法 0 / 20" in t and "与第二段登记时相同" in t and "BCU 更好候选" in t
+    monkeypatch.setattr(R6, "rules_fingerprint", lambda home=None: "ccc")
+    assert "★ 与第二段登记时不同" in R6.status_text(st)
+
+
+def test_init_segment2_once(tmp_path):
+    st0 = {k: v for k, v in _seg_state().items() if k != "segments"}
+    R6.save_state(st0, tmp_path)
+    res = {"baseline": {"Z": {"calmar": 1.162}}, "prereq_ok": True, "fingerprint": "bbb"}
+    st = R6.init_segment2(res, home=tmp_path)
+    assert st["status"] == "running" and R6.segment(st)["from_round"] == 2 and R6.segment(st)["fingerprint"] == "bbb"
+    st2 = R6.init_segment2({**res, "fingerprint": "zzz"}, home=tmp_path)                       # 已有第二段就不动
+    assert len(st2["segments"]) == 1 and R6.segment(st2)["fingerprint"] == "bbb"
+
+
+def test_b2_reference_and_common_wiring():
+    import inspect
+    import json
+    import loop6_common as L6
+    assert R6.B2_REF == {"Z": 1.162, "E": 0.808, "J": 0.749} and R6.SEG2_FROM == 2
+    src = inspect.getsource(L6.bcu_over)
+    assert "T.inputs(W)" in src and 'T2.tbh_over(W["bear"]["US"], M["on_b"], M["fb"])' in src
+    assert 'W["b1"] = merge_over(W["b1"], ov)' in inspect.getsource(L6.load) and L6.run is L6.L2.run
+    r1 = json.loads((ROOT / "var" / "out" / "loop6_r01_bondcorr.json").read_text(encoding="utf-8"))
+    assert {e: r1["cand"]["BCU"][e]["calmar"] for e in R6.ERAS} == R6.B2_REF                 # 第 1 轮 BCU 的第一关账户
+
+
+def test_registered_segment2_if_present():
+    st = R6.load_state(ROOT / "var")
+    sg = R6.segment(st)
+    if not sg:
+        pytest.skip("第二段还没有登记")
+    assert sg["prereq_ok"] is True and sg["from_round"] == 2 and sg["cap"] == 20
+    assert sg["fingerprint"] == (st.get("adopted") or {}).get("fingerprint_after")
+    assert all(abs(sg["baseline"][e]["calmar"] - R6.B2_REF[e]) <= R6.PREREQ_TOL for e in R6.ERAS)

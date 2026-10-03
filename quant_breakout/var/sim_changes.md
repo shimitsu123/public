@@ -6918,3 +6918,18 @@ K 线形态 `qbreak/candles.py`；结果 `var/out/candle_user_test.md / .json`�
 - 研究循环：`var/research_loop6.json` 记 adopted（采用后的规则指纹 60b6d5e5c8768c16，登记时 e73f7f6c0149fe10）；`python scripts/research_loop6.py --status` 显示「已按采用改过」。
 - 改回：`var/sim.json` 的 `idle_cash.mode` = "Q1H"（只有 FJE，美股熊只拿现金；2026-10-02〜10-03 的规则）/ "Q1"（只拿 1545）/ "K0"（原规则 1655）；改回也要记在这里。
   测试：全部 2045 项通过（新增 `tests/test_bond_refuge.py` 12 项、`tests/test_research_loop6.py` 1 项）。非投资建议。
+
+## 2026-10-03 登记 第六个研究循环**第二段**（基准 B2 = 采用后的模拟盘 B1 + BCU；用户「采用\n\n并且继续第六个研究循环」；规则 = `scripts/research_loop6.py` 开头七与末尾「第二段」一节 = 本提交，之后不改；状态 `var/research_loop6.json` 的 segments）
+- 依据（照实写）：第六个循环的规则开头「要改只能由用户在对话里明确要求、重新开始计数」、五「模拟盘规则变了 → 说明后停」。用户「采用」BCU 的同一句里要求接着找 →
+  模拟盘已经改成 Q1HB，再拿旧的 B1 比就找不出「比现在更好」的 → 基准换成 B2 = 采用后的模拟盘，按规程**做法计数与家族用量从这一段重新开始（0 / 20、同一家族 ≤ 3）**。
+- 不变：判定的数字（S1〜S7，S5 不适用）、第二关三种（signal / asset / combo，种子、k 的范围，B2 的状态与美股指数不动）、题目只限核心层（家族以「核心」开头、不加杠杆、
+  汇率对冲家族不再加）、第一〜五个循环的 ID 不再用 + **本循环第一段的 BCU / BCJ / BCB 也不能再用**；轮次号接着编（第二段从第 2 轮起）；停下的情况同前。
+- 新加的限制（看第二段结果之前写定）：替换 B2 已经拿着的资产（例：把 BCU 的 1482 换成别的债券）不能用 asset 类的第二关
+  （平移换进来的资产会连 B2 已有的好处一起打乱，对照太弱）→ 第二段不做这种做法。
+- B2（`scripts/loop6_common.py`）= `loop2_common.load()` 的 B1 + 第 1 轮 BCU 的改动（同一个输入 `loop6_r01_bondcorr.inputs`、同一个接法 `loop2_r02_bondrefuge.tbh_over`）合并进
+  `W["b1"]` → 之后 `run(W, e, **over)` 都在 B2 上再改（改核心设定的候选要连 1482 / 键 US_BD 一起写）。
+- 先决条件（`python scripts/research_loop6.py --baseline2` → `var/out/research_loop6_b2.md` / `.json`，230 s）：**满足** —— B2 重算 = 第 1 轮 BCU 的第一关账户
+  （Calmar Z 1.162 / E 0.808 / J 0.749，最大回撤 −14.76 / −19.61 / −26.96%，年化 +17.14 / +15.85 / +20.19%）、模拟盘规则指纹 60b6d5e5c8768c16 = 采用后的指纹。
+- 多重检验（照实写）：第一〜六个循环到现在 92 个做法 + 第二段最多 20 个 = 最多 112 个，每个偶然过第二关约 1 / 401 → 合计偶然「找到」约 24%；「找到」也只是历史上的候选，要前向记录确认。
+- 工程：`scripts/research_loop6.py`（段的视图 / 计数 / 加一轮 / 进度 / B2 先决条件 / `--baseline2` `--init2`）、`scripts/loop6_common.py`；`tests/test_research_loop6.py` 加 5 项
+  （段的计数与家族用量、第一段 ID 不能再用、轮次号接着编、找到 → 这一段停、进度文字、只登记一次、B2 的参照值与接法）；全部测试通过。模拟盘、执行器都不改（这一节）。非投资建议。

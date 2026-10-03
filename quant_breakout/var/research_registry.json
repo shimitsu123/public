@@ -10263,5 +10263,22 @@
    "J 只 +0.008"
   ],
   "notes": "用户「采用 并且继续第六个研究循环」（2026-10-03）；2026-10-05 06:57 JST 云端 sim-day 与 07:40 Mac 执行器起（10-02 收盘的决策）；云端算 var/bond_refuge.json、Mac 经 liveu.sh 同步同一个文件；现在美股牛、股债相关 +0.40 → 持仓不变；改回 = var/sim.json idle_cash.mode \"Q1H\" / \"Q1\" / \"K0\"；前向要等下一次美股熊市（2001 年起平均 2〜3 年一段）"
+ },
+ {
+  "line": 6922,
+  "date": "2026-10-03",
+  "title": "第六个研究循环第二段登记：基准 B2 = 采用后的模拟盘（B1 + BCU）、做法计数从 0 / 20 重新开始（用户「采用 并且继续第六个研究循环」）",
+  "kind": "engineering",
+  "domain": "核心/配置",
+  "registration": "本提交（scripts/research_loop6.py 开头七与末尾「第二段」）",
+  "script": "scripts/research_loop6.py、scripts/loop6_common.py",
+  "output": "var/out/research_loop6_b2.md",
+  "candidates": [],
+  "baseline": "B2：Calmar Z 1.162 / E 0.808 / J 0.749（= 第 1 轮 BCU 的第一关账户）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "判定、第二关三种、题目范围不变；第一段的 BCU / BCJ / BCB 不能再用；替换 B2 已拿着的资产不做；多重检验最多 112 个做法、偶然「找到」约 24%"
  }
 ]

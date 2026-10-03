@@ -5,7 +5,7 @@
  "user_request": "继续第五个循环 并找到接下来研究成功率最大的方向 没有时间限制 一直找到比现在算法更好的（2026-10-03 约 11:50 JST；第五个循环 12:50 用完、没找到）",
  "why_core": "研究成功率统计（var/out/research_success_map.md）：核心层 37 个做法第一关全过 10 个（27%）、两关都过 1 个（FJE）；个股层 50 个第一关全过 0 个",
  "rules": "scripts/research_loop6.py 开头（判定同第二〜五个循环、题目只限核心层、三种第二关、上限、家族、ID 不重用、停下的情况）",
- "status": "found",
+ "status": "running",
  "deadline": null,
  "cap": 20,
  "family_cap": 3,
@@ -153,5 +153,52 @@
   "user": "采用（2026-10-03，同一句里还有「并且继续第六个研究循环」）",
   "fingerprint_before": "e73f7f6c0149fe10",
   "fingerprint_after": "60b6d5e5c8768c16"
- }
+ },
+ "segments": [
+  {
+   "seg": 2,
+   "from_round": 2,
+   "start": "2026-10-03",
+   "registered": "本提交（第二段登记）",
+   "user_request": "采用\n\n并且继续第六个研究循环（2026-10-03）",
+   "baseline_def": "B2 = 采用后的模拟盘（B1 + BCU；scripts/loop6_common.py）；J 到 2026-09-30",
+   "baseline": {
+    "Z": {
+     "cagr": 17.14,
+     "dd": -14.76,
+     "calmar": 1.162,
+     "n": 35,
+     "mean": 5.999,
+     "win": 65.7,
+     "h1": 1.374,
+     "h2": 1.657
+    },
+    "E": {
+     "cagr": 15.85,
+     "dd": -19.61,
+     "calmar": 0.808,
+     "n": 43,
+     "mean": 1.287,
+     "win": 41.9,
+     "h1": 0.353,
+     "h2": 1.572
+    },
+    "J": {
+     "cagr": 20.19,
+     "dd": -26.96,
+     "calmar": 0.749,
+     "n": 63,
+     "mean": 3.078,
+     "win": 49.2,
+     "h1": 0.831,
+     "h2": 0.753
+    }
+   },
+   "prereq_ok": true,
+   "fingerprint": "60b6d5e5c8768c16",
+   "cap": 20,
+   "family_cap": 3,
+   "status": "running"
+  }
+ ]
 }
