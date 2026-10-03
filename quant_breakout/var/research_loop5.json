@@ -358,6 +358,47 @@
      "note": "只差 S5；三个年代都变好"
     }
    ]
+  },
+  {
+   "round": 8,
+   "date": "2026-10-03",
+   "title": "按日美相关 / 同时突破数调仓位 COR / WAV",
+   "registration": "1ed008a（代码 aafb29e）",
+   "script": "scripts/loop5_r08_corwav.py",
+   "approaches": [
+    {
+     "id": "COR",
+     "verdict": "第一关不过",
+     "sum": 0.013,
+     "family": "仓位·层间相关",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 3,
+     "d": {
+      "Z": 0.049,
+      "E": 0.005,
+      "J": -0.041
+     },
+     "unseen": null,
+     "note": "J −0.041；W / Jx 相反"
+    },
+    {
+     "id": "WAV",
+     "verdict": "第一关不过",
+     "sum": -0.266,
+     "family": "仓位·市场宽度",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 3,
+     "d": {
+      "Z": -0.278,
+      "E": 0.006,
+      "J": 0.006
+     },
+     "unseen": null,
+     "note": "Z 2005 −17.6 pp"
+    }
+   ]
   }
  ]
 }
