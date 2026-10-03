@@ -71,5 +71,63 @@
  },
  "prereq_ok": true,
  "fingerprint": "e73f7f6c0149fe10",
- "rounds": []
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-03",
+   "title": "个股层与核心按状态切分 CSH / SMO / RSM",
+   "registration": "7d377e7（代码 a2f99a1）",
+   "script": "scripts/loop5_r01_layer.py",
+   "approaches": [
+    {
+     "id": "CSH",
+     "verdict": "第一关不过",
+     "sum": 0.003,
+     "family": "仓位·层间切分",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 5,
+     "d": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.003
+     },
+     "unseen": null,
+     "note": "只碰到 J 的 9 笔"
+    },
+    {
+     "id": "SMO",
+     "verdict": "第一关不过",
+     "sum": -0.038,
+     "family": "仓位·策略动量",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 3,
+     "d": {
+      "Z": -0.037,
+      "E": -0.067,
+      "J": 0.066
+     },
+     "unseen": null,
+     "note": "J +0.066，Z 2005 / E 拐点变差"
+    },
+    {
+     "id": "RSM",
+     "verdict": "第一关不过",
+     "sum": -0.105,
+     "family": "仓位·层间切分",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 3,
+     "d": {
+      "Z": -0.164,
+      "E": -0.018,
+      "J": 0.077
+     },
+     "unseen": null,
+     "note": "J +0.077，Z −0.164（2005 −13.1 pp）"
+    }
+   ]
+  }
+ ]
 }
