@@ -128,6 +128,47 @@
      "note": "J +0.077，Z −0.164（2005 −13.1 pp）"
     }
    ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-03",
+   "title": "按市场波动 / 按 C 的分数调仓位 VMS / CSZ",
+   "registration": "1e30638（代码 723a327）",
+   "script": "scripts/loop5_r02_volc.py",
+   "approaches": [
+    {
+     "id": "VMS",
+     "verdict": "第一关不过",
+     "sum": 0.155,
+     "family": "仓位·波动率择时",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 5,
+     "d": {
+      "Z": 0.156,
+      "E": -0.022,
+      "J": 0.021
+     },
+     "unseen": null,
+     "note": "S2 差 0.002（E −0.022）、S5 Jx 负；好处来自 Z 2005"
+    },
+    {
+     "id": "CSZ",
+     "verdict": "第一关不过",
+     "sum": 0.153,
+     "family": "仓位·按信号",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 5,
+     "d": {
+      "Z": 0.132,
+      "E": 0.029,
+      "J": -0.008
+     },
+     "unseen": null,
+     "note": "S4 前一半 −0.004、S5 负；好处来自 Z"
+    }
+   ]
   }
  ]
 }
