@@ -1,9 +1,9 @@
-"""research_success_map.py — 五个研究循环（var/research_loop*.json）的「研究成功率」：按层（核心层 / 个股层 / 账户风险层）统计
+"""research_success_map.py — 各研究循环（var/research_loop*.json，第一〜六个）的「研究成功率」：按层（核心层 / 个股层 / 账户风险层）统计
 第一关全过、只差一条、两关都过的比例与第二关的百分位（只描述、不跑任何候选；2026-10-03 用户「找到接下来研究成功率最大的方向」）。
 
 口径（照实写）：
   - 第一个循环（research_loop.json）没有家族字段：UBG / SEX / ERG 管的是日本个股的进出 → 个股层，其余 → 核心层；
-    第二〜五个循环按家族名：「核心·」「执行·核心」→ 核心层，「风险层·」→ 账户风险层，「个股层·」「选股·」「仓位·」→ 个股层（再分 闸门·离场 / 选股 / 仓位）。
+    第二〜六个循环按家族名：「核心·」「执行·核心」→ 核心层，「风险层·」→ 账户风险层，「个股层·」「选股·」「仓位·」→ 个股层（再分 闸门·离场 / 选股 / 仓位）。
   - 第一关全过 = 结论是「第二关不过」或「更好候选」；只差一条 = 第一关没过、但过的条数 = 满分 − 1（第一个循环满分 6 条、之后 7 条）。
   - 第二关百分位从结论说明里读（「约第 NN 百分位」「排约 NN%」）；读不到 → 空。
 运行：python scripts/research_success_map.py → var/out/research_success_map.md / .json。非投资建议。
@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-FILES = ("research_loop.json", "research_loop2.json", "research_loop3.json", "research_loop4.json", "research_loop5.json")
+FILES = ("research_loop.json", "research_loop2.json", "research_loop3.json", "research_loop4.json", "research_loop5.json", "research_loop6.json")
 LOOP1_STOCK = {"UBG", "SEX", "ERG"}
 FOUND = "更好候选"
 PASS1 = ("第二关不过", FOUND)
@@ -101,8 +101,9 @@ def main() -> int:
     R = rows(paths.home())
     by_layer, by_sub = summarize(R, "layer"), summarize(R, "sub")
     res = {"n": len(R), "by_layer": by_layer, "by_sub": by_sub, "rows": R}
-    L = ["# 研究成功率：五个研究循环按层统计（只描述，不跑候选；脚本 scripts/research_success_map.py）", "",
-         f"做法合计 {len(R)} 个（第一〜五个循环）。第一关全过 = 结论「第二关不过 / 更好候选」；只差一条 = 过的条数 = 满分 − 1。", "",
+    loops = sorted({x["loop"] for x in R})
+    L = ["# 研究成功率：各研究循环按层统计（只描述，不跑候选；脚本 scripts/research_success_map.py）", "",
+         f"做法合计 {len(R)} 个（第 {loops[0] if loops else 1}〜{loops[-1] if loops else 1} 个循环）。第一关全过 = 结论「第二关不过 / 更好候选」；只差一条 = 过的条数 = 满分 − 1。", "",
          "| 层 | 做法 | 第一关全过 | 只差一条 | 两关都过 | 第一关全过的做法（第二关百分位） |", "|---|---|---|---|---|---|"]
     for ly in ("核心层", "账户风险层", "个股层"):
         g = by_layer.get(ly)
@@ -112,7 +113,7 @@ def main() -> int:
         L.append(f"| {ly} | {g['n']} | {g['pass1']}（{g['pass1_pct']}%） | {g['near']}（{g['near_pct']}%） | {g['found']} | {pc or '—'} |")
     L += ["", "个股层再分：" + "；".join(f"{s} {by_sub[s]['n']} 个（第一关全过 {by_sub[s]['pass1']}、只差一条 {by_sub[s]['near']}：{'、'.join(by_sub[s]['ids_near']) or '—'}）"
                                    for s in ("闸门·离场", "选股", "仓位") if s in by_sub),
-          "", "核心层按家族（第二〜五个循环；第一个循环记为「核心」）："]
+          "", "核心层按家族（第二个循环起按家族名；第一个循环记为「核心」）："]
     for s, g in sorted(by_sub.items(), key=lambda kv: (-kv[1]["pass1"], -kv[1]["near"], kv[0])):
         if any(x["sub"] == s and x["layer"] == "核心层" for x in R):
             L.append(f"- {s}：{g['n']} 个，第一关全过 {g['pass1']}（{'、'.join(g['ids_pass1']) or '—'}），只差一条 {g['near']}（{'、'.join(g['ids_near']) or '—'}）")

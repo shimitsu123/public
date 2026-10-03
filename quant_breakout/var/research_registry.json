@@ -10181,5 +10181,22 @@
    "账户上的差主要来自 Z 2005 一个年份"
   ],
   "notes": "没找到（用完）；下一步：第六个研究循环（核心层；研究成功率统计里核心层第一关全过 27%、个股层 0%）"
+ },
+ {
+  "line": 6774,
+  "date": "2026-10-03",
+  "title": "第六个研究循环登记：核心层（研究成功率最大的方向）—— 直到找到比现在更好的核心规则才停",
+  "kind": "engineering",
+  "domain": "核心/配置",
+  "registration": "本提交（scripts/research_loop6.py 开头；登记后不改）",
+  "script": "scripts/research_loop6.py",
+  "output": "var/research_loop6.json",
+  "candidates": [],
+  "baseline": "B1 Calmar Z / E / J 0.979 / 0.749 / 0.741",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "研究成功率：核心层第一关全过 27%、个股层 0% → 本循环只做核心层；第二关三种（signal / asset / combo）"
  }
 ]
