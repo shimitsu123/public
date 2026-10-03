@@ -29,6 +29,15 @@
 事前预期：写在登记（var/sim_changes.md）里、看结果之前。
 运行：python scripts/loop6_r03_earlyreturn.py（第一关）；--scale（只数日子）；--wiring（登记前的接线核对）；--stage2 NDB [--workers N]（第二关）。
 输出 var/out/loop6_r03_earlyreturn.md / .json（第二关 loop6_r03_earlyreturn_stage2_NDB.md / .json）。非投资建议。
+
+第二关（2026-10-03 第一关全过之后另行登记；登记 = 加这一段的那次提交，之后不改、只运行一次，`--stage2 NDB --workers 3`；第一关与 --stage2 的代码不改）：
+  形状 = 第一关登记时写定的那一个 —— 纳指熊（东证日上的布尔序列）在 2000-01-04〜2026-09-30 的 6,549 个东证交易日上整体循环平移 k
+  （research_loop6.shift_ks(n, 0)：numpy.random.default_rng([20261006, 0, s])，s = 0〜399），窗外不动；早回来与核心用的熊用平移后的纳指熊重算；
+  B2（S&P 熊、FJE、BCU 的相关条件、1482 价格）不动；每次三个年代都跑，统计量 = Calmar 差合计（对同一次运行的 B2）；
+  NDB 要严格大于 400 次的最大值（research_loop6.stage2；有算不出的 = 不过）。
+  另加只描述（不参与判定；第一关登记时预告）：`--stage2ref NDB --workers 3` —— 第二个循环 NDRH 的第二关形状搬到 B2 上：2000-01-04〜2026-09-30 里
+  S&P 熊的东证日接成一串，早回来标记在这一串上整体循环平移 k（k ∈ [250, N − 250]，种子 numpy.random.default_rng([20262008, s]) 与 NDRH 同一组），
+  窗外照真实的；报候选在 400 次里的百分位。输出 var/out/loop6_r03_earlyreturn_stage2ref_NDB.md / .json。
 """
 from __future__ import annotations
 
@@ -381,12 +390,106 @@ def stage_two(k: str, workers: int) -> int:
     return 0
 
 
+# ───── 只描述（不参与判定；第一关登记时预告、第二关登记时加）：第二个循环 NDRH 的第二关形状搬到 B2 上 ─────
+REF_SEED = 20262008                                                          # NDRH 第二关的种子（同一组平移量）
+
+
+def ref_ks(n: int, seeds=range(R6.PLACEBO_N), gap: int = N8.SHIFT_GAP) -> list[int]:
+    """NDRH 同一组平移量：numpy.random.default_rng([20262008, s]).integers(gap, n − gap + 1)（loop2_r08_ndrhedged.shift_k 同一个）。"""
+    if n <= 2 * gap:
+        raise ValueError(f"序列太短（{n} ≤ {2 * gap}）")
+    return [int(np.random.default_rng([REF_SEED, int(s)]).integers(gap, n - gap + 1)) for s in seeds]
+
+
+def ref_mask(spx_t: pd.Series) -> np.ndarray:
+    """2000-01-04〜J 的最后一天里 S&P 熊的东证日。"""
+    idx = spx_t.index
+    return spx_t.astype(bool).to_numpy() & np.asarray((idx >= pd.Timestamp(R6.SHIFT_FROM)) & (idx <= pd.Timestamp(L6.J_END)))
+
+
+def ref_core_bear(spx_t: pd.Series, ndx_t: pd.Series, k: int) -> pd.Series:
+    """NDRH 的形状（东证日上）：窗口里 S&P 熊的东证日接成一串，早回来标记在这一串上整体循环平移 k（天数与每段长短不变、只落在 S&P 熊里）；窗外照真实的。"""
+    s = spx_t.astype(bool).to_numpy()
+    re = early(spx_t, ndx_t).to_numpy(bool)
+    pos = np.flatnonzero(ref_mask(spx_t))
+    key = s & ~re
+    key[pos] = ~np.roll(re[pos], int(k))
+    return pd.Series(key, index=spx_t.index)
+
+
+def _placebo_ref_one(seed: int):
+    W, M, base, ks = _G["W"], _G["M"], _G["base"], _G["ks"]
+    try:
+        kw = over(W, ref_core_bear(M["spx_t"], M["ndx_t"], ks[int(seed)]), M["uni"], M["hf"], M["on_b"], M["fb"])
+        tot = 0.0
+        for e in L6.ERAS:
+            c = L6.run(W, e, **kw)["calmar"]
+            if c is None or base[e] is None:
+                return None
+            tot += c - base[e]
+        return round(float(tot), 6)
+    except Exception:                                                         # noqa: BLE001
+        return None
+
+
+def stage_two_ref(k: str, workers: int) -> int:
+    """只描述（不参与判定）：NDRH 形状的 400 次随机对照，报候选的百分位。"""
+    import multiprocessing as mp
+    from qbreak import paths
+    t0 = time.time()
+    s1 = json.loads((paths.out_dir() / f"{OUT}.json").read_text(encoding="utf-8"))["stage1"][k]
+    if not s1["ok"]:
+        print(f"{k} 第一关没过 → 不做")
+        return 1
+    code, dirty = git_head()
+    W = L6.load()
+    M = inputs(W)
+    base = {e: L6.run(W, e)["calmar"] for e in L6.ERAS}
+    ov = over(W, M["cb"], M["uni"], M["hf"], M["on_b"], M["fb"])
+    cand = {e: L6.run(W, e, **ov)["calmar"] for e in L6.ERAS}
+    stat = round(sum(cand[e] - base[e] for e in L6.ERAS), 6)
+    n = int(ref_mask(M["spx_t"]).sum())
+    ks = ref_ks(n)
+    _G.update({"W": W, "M": M, "base": base, "ks": ks})
+    seeds = list(range(R6.PLACEBO_N))
+    vals = []
+    if workers > 1:
+        with mp.get_context("fork").Pool(workers) as pool:
+            for i, v in enumerate(pool.imap(_placebo_ref_one, seeds)):
+                vals.append(v)
+                if (i + 1) % 40 == 0:
+                    print(f"随机改动（NDRH 形状）{i + 1} / {len(seeds)}（{time.time() - t0:.0f}s）", flush=True)
+    else:
+        for i in seeds:
+            vals.append(_placebo_ref_one(i))
+    s2 = R6.stage2(stat, vals)
+    v = np.array([x for x in vals if x is not None], float)
+    pct = round(float((v < stat).mean() * 100), 2) if len(v) else None
+    res = {"loop": 6, "segment": 2, "round": ROUND, "id": k, "shape": "NDRH（早回来标记在 S&P 熊的东证日串上循环平移）", "describe_only": True,
+           "code": code, "dirty": dirty, "base": base, "cand": cand, "stat": stat, "n": n, "placebo": vals, "max": s2["max"],
+           "ge_stat": s2["ge_stat"], "valid": s2["valid"], "pct_below": pct,
+           "q": {q: round(float(np.percentile(v, q)), 4) for q in (50, 95, 99)} if len(v) else {},
+           "pos_share": round(float((v > 0).mean() * 100), 1) if len(v) else None, "seconds": round(time.time() - t0)}
+    L = [f"# 第六个研究循环第二段第 3 轮 只描述（不参与判定）：{k} vs NDRH 形状的 400 次随机对照（JST {pd.Timestamp.now(tz='Asia/Tokyo').date()}；"
+         f"代码 {code}{' + 未提交的改动' if dirty else ''}）", "",
+         f"候选的 Calmar 差合计 {stat:+.4f}；随机（早回来标记在 S&P 熊的 {n} 个东证日串上循环平移）比候选低的 {_f(pct, '{:.2f}')}%、"
+         f"最大 {_f(s2['max'], '{:+.4f}')}、≥ 候选的 {s2['ge_stat']} 次、算出 {s2['valid']} / {s2['n']} 次；中位数 {_f(res['q'].get(50), '{:+.4f}')}、"
+         f"95 分位 {_f(res['q'].get(95), '{:+.4f}')}、99 分位 {_f(res['q'].get(99), '{:+.4f}')}；随机里比 B2 好的 {_f(res['pos_share'], '{:.1f}')}%",
+         "", f"用时 {res['seconds']} s。只描述，判定只看 --stage2。非投资建议。"]
+    text = "\n".join(L)
+    print(text)
+    (paths.out_dir() / f"{OUT}_stage2ref_{k}.md").write_text(text + "\n", encoding="utf-8")
+    (paths.out_dir() / f"{OUT}_stage2ref_{k}.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=float) + "\n", encoding="utf-8")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="第六个研究循环第二段第 3 轮：NDB（纳指先转牛就早一点拿回核心，接到 B2 上）")
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--scale", action="store_true", help="只数日子（不算收益）")
     g.add_argument("--wiring", action="store_true", help="登记前的接线核对（不看候选的结果）")
     g.add_argument("--stage2", choices=IDS, help="第二关（第一关全过才做）")
+    g.add_argument("--stage2ref", choices=IDS, help="只描述：NDRH 形状的随机对照（不参与判定）")
     ap.add_argument("--workers", type=int, default=4)
     a = ap.parse_args(argv)
     if a.scale:
@@ -395,6 +498,8 @@ def main(argv: list[str] | None = None) -> int:
         return wiring()
     if a.stage2:
         return stage_two(a.stage2, a.workers)
+    if a.stage2ref:
+        return stage_two_ref(a.stage2ref, a.workers)
     return stage_one()
 
 

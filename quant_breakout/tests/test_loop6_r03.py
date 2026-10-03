@@ -102,3 +102,29 @@ def test_wiring_sources_and_cli():
     assert 'core_bear(M["spx_t"], shifted_ndx(M["ndx_t"], ks[int(seed)]))' in p
     with pytest.raises(SystemExit):
         N.main(["--nope"])
+
+
+def test_reference_shape_matches_ndrh_and_only_moves_inside_spx_bear():
+    import loop2_r08_ndrhedged as R8
+    assert N.ref_ks(1500)[:5] == [R8.shift_k(s, 1500) for s in range(5)]                      # NDRH 同一组平移量
+    d = pd.bdate_range("1999-06-01", periods=9000)
+    rng = np.random.default_rng(7)
+    spx = pd.Series(np.repeat(rng.random(9000 // 60 + 1) < 0.35, 60)[:9000], index=d)
+    ndx = pd.Series(np.repeat(rng.random(9000 // 25 + 1) < 0.4, 25)[:9000], index=d)
+    assert N.ref_core_bear(spx, ndx, 0).equals(N.core_bear(spx, ndx))                          # k = 0 → 候选本身
+    m = N.ref_mask(spx)
+    re = N.early(spx, ndx).to_numpy(bool)
+    k = N.ref_core_bear(spx, ndx, 37)
+    moved = spx.to_numpy() & ~k.to_numpy()                                                     # 平移后的早回来
+    assert not (moved & ~spx.to_numpy()).any()                                                 # 只落在 S&P 熊的日子里
+    assert int(moved[m].sum()) == int(re[m].sum())                                             # 窗口里早回来的天数不变
+    assert (moved[~m] == re[~m]).all()                                                         # 窗外照真实的
+
+
+def test_stage2ref_is_describe_only_and_cli():
+    s = inspect.getsource(N.stage_two_ref)
+    assert '"describe_only": True' in s and "ref_ks(n)" in s and "_stage2ref_" in s and "R6.verdict" not in s
+    p = inspect.getsource(N._placebo_ref_one)
+    assert 'ref_core_bear(M["spx_t"], M["ndx_t"], ks[int(seed)])' in p
+    with pytest.raises(SystemExit):
+        N.main(["--stage2ref", "XXX"])
