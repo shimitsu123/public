@@ -1,11 +1,11 @@
 {
- "n": 89,
+ "n": 92,
  "by_layer": {
   "核心层": {
-   "n": 37,
-   "pass1": 10,
+   "n": 40,
+   "pass1": 12,
    "near": 9,
-   "found": 1,
+   "found": 2,
    "pctiles": [
     98.0,
     94.0,
@@ -16,7 +16,9 @@
     91.0,
     88.0,
     98.0,
-    96.8
+    96.8,
+    100.0,
+    99.75
    ],
    "ids_pass1": [
     "FXH",
@@ -28,7 +30,9 @@
     "NDRH",
     "VTU",
     "NVU",
-    "ZSP"
+    "ZSP",
+    "BCU",
+    "BCB"
    ],
    "ids_near": [
     "VT20",
@@ -41,8 +45,8 @@
     "BAB",
     "NZS"
    ],
-   "pass1_pct": 27.0,
-   "near_pct": 24.3
+   "pass1_pct": 30.0,
+   "near_pct": 22.5
   },
   "个股层": {
    "n": 50,
@@ -121,17 +125,21 @@
    "near_pct": 0.0
   },
   "核心·熊市避险资产": {
-   "n": 6,
-   "pass1": 2,
+   "n": 9,
+   "pass1": 4,
    "near": 4,
-   "found": 0,
+   "found": 1,
    "pctiles": [
     99.5,
-    96.5
+    96.5,
+    100.0,
+    99.75
    ],
    "ids_pass1": [
     "TBJ",
-    "TBU"
+    "TBU",
+    "BCU",
+    "BCB"
    ],
    "ids_near": [
     "TBH",
@@ -139,8 +147,8 @@
     "BAU",
     "BAB"
    ],
-   "pass1_pct": 33.3,
-   "near_pct": 66.7
+   "pass1_pct": 44.4,
+   "near_pct": 44.4
   },
   "风险层·账户回撤刹车": {
    "n": 1,
@@ -1612,6 +1620,51 @@
    "found": false,
    "near": false,
    "pctile": null
+  },
+  {
+   "loop": 6,
+   "round": 1,
+   "id": "BCU",
+   "layer": "核心层",
+   "sub": "核心·熊市避险资产",
+   "verdict": "更好候选",
+   "sum": 0.25,
+   "passed": 7,
+   "full": 7,
+   "pass1": true,
+   "found": true,
+   "near": false,
+   "pctile": 100.0
+  },
+  {
+   "loop": 6,
+   "round": 1,
+   "id": "BCJ",
+   "layer": "核心层",
+   "sub": "核心·熊市避险资产",
+   "verdict": "第一关不过",
+   "sum": 0.012,
+   "passed": 5,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": false,
+   "pctile": null
+  },
+  {
+   "loop": 6,
+   "round": 1,
+   "id": "BCB",
+   "layer": "核心层",
+   "sub": "核心·熊市避险资产",
+   "verdict": "第二关不过",
+   "sum": 0.114,
+   "passed": 7,
+   "full": 7,
+   "pass1": true,
+   "found": false,
+   "near": false,
+   "pctile": 99.75
   }
  ]
 }

@@ -5,7 +5,7 @@
  "user_request": "继续第五个循环 并找到接下来研究成功率最大的方向 没有时间限制 一直找到比现在算法更好的（2026-10-03 约 11:50 JST；第五个循环 12:50 用完、没找到）",
  "why_core": "研究成功率统计（var/out/research_success_map.md）：核心层 37 个做法第一关全过 10 个（27%）、两关都过 1 个（FJE）；个股层 50 个第一关全过 0 个",
  "rules": "scripts/research_loop6.py 开头（判定同第二〜五个循环、题目只限核心层、三种第二关、上限、家族、ID 不重用、停下的情况）",
- "status": "running",
+ "status": "found",
  "deadline": null,
  "cap": 20,
  "family_cap": 3,
@@ -66,5 +66,84 @@
  },
  "prereq_ok": true,
  "fingerprint": "e73f7f6c0149fe10",
- "rounds": []
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-03",
+   "title": "美股熊市里、只在股债负相关时拿国债 BCU / BCJ / BCB",
+   "registration": "42376b0（代码 ee9a41e；第二关登记 41b24b6）",
+   "script": "scripts/loop6_r01_bondcorr.py",
+   "approaches": [
+    {
+     "id": "BCU",
+     "verdict": "更好候选",
+     "sum": 0.25,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "kind": "asset",
+     "passed": 7,
+     "d": {
+      "Z": 0.183,
+      "E": 0.059,
+      "J": 0.008
+     },
+     "unseen": 0.01,
+     "note": "两关都过：第二关候选 +0.250 > 400 次最大 +0.219（≥ 候选 0 次）",
+     "stage2": {
+      "stat": 0.25,
+      "max": 0.219,
+      "ge_stat": 0,
+      "n": 400,
+      "median": -0.1625,
+      "q95": 0.079,
+      "q99": 0.168,
+      "pos_share": 16.5
+     }
+    },
+    {
+     "id": "BCJ",
+     "verdict": "第一关不过",
+     "sum": 0.012,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "kind": "asset",
+     "passed": 5,
+     "d": {
+      "Z": 0.035,
+      "E": 0.001,
+      "J": -0.024
+     },
+     "unseen": 0.041,
+     "note": "S1（+0.012）、S2（J −0.024）不过"
+    },
+    {
+     "id": "BCB",
+     "verdict": "第二关不过",
+     "sum": 0.114,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "kind": "asset",
+     "passed": 7,
+     "d": {
+      "Z": 0.077,
+      "E": 0.051,
+      "J": -0.014
+     },
+     "unseen": 0.038,
+     "note": "第二关 400 次里最大 +0.125（≥ 候选 1 次，约第 99.75 百分位）",
+     "stage2": {
+      "stat": 0.114,
+      "max": 0.125,
+      "ge_stat": 1,
+      "n": 400,
+      "median": -0.3065,
+      "q95": -0.049,
+      "q99": -0.0018,
+      "pos_share": 1.0
+     }
+    }
+   ]
+  }
+ ],
+ "found": "2026-10-03 JST 第 1 轮 BCU 两关都过 = 更好候选 → 循环按规则停下（status = found），等用户说「加进前向记录」或「采用」；模拟盘 / 执行器不改"
 }
