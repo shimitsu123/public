@@ -1,9 +1,9 @@
 {
- "n": 95,
+ "n": 96,
  "by_layer": {
   "核心层": {
-   "n": 43,
-   "pass1": 12,
+   "n": 44,
+   "pass1": 13,
    "near": 9,
    "found": 2,
    "pctiles": [
@@ -18,7 +18,8 @@
     98.0,
     96.8,
     100.0,
-    99.75
+    99.75,
+    89.0
    ],
    "ids_pass1": [
     "FXH",
@@ -32,7 +33,8 @@
     "NVU",
     "ZSP",
     "BCU",
-    "BCB"
+    "BCB",
+    "NDB"
    ],
    "ids_near": [
     "VT20",
@@ -45,8 +47,8 @@
     "BAB",
     "NZS"
    ],
-   "pass1_pct": 27.9,
-   "near_pct": 20.9
+   "pass1_pct": 29.5,
+   "near_pct": 20.5
   },
   "个股层": {
    "n": 50,
@@ -186,20 +188,22 @@
    "near_pct": 50.0
   },
   "核心·择时（早回来）": {
-   "n": 3,
-   "pass1": 2,
+   "n": 4,
+   "pass1": 3,
    "near": 0,
    "found": 0,
    "pctiles": [
     91.0,
-    98.0
+    98.0,
+    89.0
    ],
    "ids_pass1": [
     "NDRH",
-    "NVU"
+    "NVU",
+    "NDB"
    ],
    "ids_near": [],
-   "pass1_pct": 66.7,
+   "pass1_pct": 75.0,
    "near_pct": 0.0
   },
   "核心·波动率仓位": {
@@ -1710,6 +1714,21 @@
    "found": false,
    "near": false,
    "pctile": null
+  },
+  {
+   "loop": 6,
+   "round": 3,
+   "id": "NDB",
+   "layer": "核心层",
+   "sub": "核心·择时（早回来）",
+   "verdict": "第二关不过",
+   "sum": 0.16,
+   "passed": 7,
+   "full": 7,
+   "pass1": true,
+   "found": false,
+   "near": false,
+   "pctile": 89.0
   }
  ]
 }
