@@ -169,6 +169,47 @@
      "note": "S4 前一半 −0.004、S5 负；好处来自 Z"
     }
    ]
+  },
+  {
+   "round": 3,
+   "date": "2026-10-03",
+   "title": "按 β / 按成分股离散度调仓位 BTS / DSP",
+   "registration": "3a59f28（代码 3467f71）",
+   "script": "scripts/loop5_r03_betadisp.py",
+   "approaches": [
+    {
+     "id": "BTS",
+     "verdict": "第一关不过",
+     "sum": 0.186,
+     "family": "仓位·按信号",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 6,
+     "d": {
+      "Z": 0.071,
+      "E": 0.042,
+      "J": 0.073
+     },
+     "unseen": null,
+     "note": "三个年代都变好，只差 S5（W dmean −0.273）"
+    },
+    {
+     "id": "DSP",
+     "verdict": "第一关不过",
+     "sum": 0.167,
+     "family": "仓位·市场离散度",
+     "posthoc": false,
+     "kind": "size_time",
+     "passed": 4,
+     "d": {
+      "Z": 0.214,
+      "E": -0.041,
+      "J": -0.006
+     },
+     "unseen": null,
+     "note": "好处集中在 Z 2005；E −0.041"
+    }
+   ]
   }
  ]
 }
