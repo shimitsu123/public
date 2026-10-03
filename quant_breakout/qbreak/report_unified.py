@@ -66,6 +66,7 @@ def build_unified_data() -> dict:
             "delist": td.get("delist") or {},                    # 股票池更新时间表（qbreak/delist_schedule.py：上場廃止到日自动去掉）
             "cost_sales": td.get("cost_sales") or {},            # 成本 × 销售（S2）分组与前向记录（qbreak/cost_sales_forward.py；只展示）
             "invest_flow": td.get("invest_flow") or {},          # 投资流向的季度快照（㉟，qbreak/invest_flow.py；只作背景）
+            "interest_burden": td.get("interest_burden") or {},  # 企业利息负担的季度快照（㊶ ③，qbreak/interest_burden.py；仪表盘里只作背景）
             "timeline": td.get("timeline") or {},                  # 买卖时间线（qbreak/timeline.py；每天按前一天收盘重算，只展示）
             "earn_state": td.get("earn_state") or {},              # 最近一次决算的形态（qbreak/earn_state.py，㊱；只展示）
             "calendar": td.get("calendar") or {},                # 检查日历（qbreak/check_calendar.py；只展示，全貌 CHECK_TIMELINE.md）

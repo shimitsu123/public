@@ -302,6 +302,58 @@ def news_full_html(events: list[dict], limit: int = 10) -> str:
 
 
 # ── J-Quants 每天的新信息（只在 Mac 本机页面；J-Quants 数据不能公开）──
+# ── ③c 企业利息负担（每季；qbreak/interest_burden.py，只作背景，㊶ ③）──
+_HEAVY = "<span class='badge b-warn'>重且在加重</span>"
+
+
+def interest_html(v: dict | None, top: int | None = None) -> str:
+    """日本全产业与各业种的 ICR / 借款利率、美国 ICR 与新旧借款利差、BIS DSR（季度快照；top = 只列利息负担最重的几个业种）。"""
+    if not v:
+        return '<p class="muted">暂不可用（今天的日报还没有利息负担数据）</p>'
+    if v.get("error"):
+        return f'<p class="muted">暂不可用：{escape(str(v["error"]))}</p>'
+    out = []
+    j, u, b = v.get("jp") or {}, v.get("us") or {}, v.get("bis") or {}
+
+    def sq(on, since) -> str:
+        return (f"<span class='badge b-warn'>ICR 变差且借款利率上升（{escape(str(since))} 起）</span>" if on
+                else "<span class='badge b-good'>没有「ICR 变差且借款利率上升」</span>")
+    if j.get("error"):
+        out.append(f'<p class="muted">日本：{escape(str(j["error"]))}</p>')
+    elif j:
+        out.append(f"<p><b>日本</b>（法人企業統計 資本金 10 億円以上、金融保険以外；{escape(str(j.get('period')))}，{escape(str(j.get('avail')))} 起可用）："
+                   f"ICR {_fmt(j.get('icr'))} 倍（一年前 {_fmt(j.get('icr_1y'))} 倍；利息占营业利益 + 受取利息等 {_fmt(j.get('burden_pct'))}%）、"
+                   f"借款利率 {_fmt(j.get('r'), 2)}%/年（一年前 {_fmt(j.get('r_1y'), 2)}%） {sq(j.get('squeeze'), j.get('since'))}</p>")
+        secs = list(j.get("sectors") or [])
+        shown = secs[:top] if top else secs
+        rows = "".join(
+            f"<tr><td>{escape(str(s['sector']))}</td><td class='n'>{_fmt(s.get('icr'))}</td><td class='n'>{_fmt(s.get('icr_1y'))}</td>"
+            f"<td class='n'>{_fmt(s.get('r'), 2)}</td><td class='n'>{_fmt(s.get('r_1y'), 2)}</td>"
+            f"<td>{_HEAVY if s.get('state') else ''}</td></tr>" for s in shown)
+        more = f"（共 {len(secs)} 个业种，这里列利息负担最重的 {len(shown)} 个）" if top and len(secs) > len(shown) else ""
+        out.append(f"<div class='scroll'><table class='rel'><tr><th>东证业种（按 ICR 由低到高 = 利息负担由重到轻）{more}</th><th class='n'>ICR（倍）</th>"
+                   f"<th class='n'>一年前</th><th class='n'>借款利率（%/年）</th><th class='n'>一年前</th><th>状态</th></tr>{rows}</table></div>"
+                   f"<p class='muted'>「重且在加重」= ICR 低于全产业、比一年前低、借款利率比一年前高（{int(j.get('n_state') or 0)} 个业种）。</p>")
+    if u.get("error"):
+        out.append(f'<p class="muted">美国：{escape(str(u["error"]))}</p>')
+    elif u:
+        out.append(f"<p><b>美国非金融企业</b>（Z.1 + NIPA；{escape(str(u.get('quarter')))}，{escape(str(u.get('avail')))} 起可用）："
+                   f"ICR {_fmt(u.get('icr'))} 倍（一年前 {_fmt(u.get('icr_1y'))} 倍；利息占税前利润 + 利息 {_fmt(u.get('burden_pct'))}%）、"
+                   f"平均借款利率 {_fmt(u.get('r'), 2)}%/年（一年前 {_fmt(u.get('r_1y'), 2)}%）；穆迪 Baa 收益率 同季平均 {_fmt(u.get('baa_q'), 2)}%"
+                   f"（{escape(str(u.get('baa_last_month') or '—'))} {_fmt(u.get('baa_last'), 2)}%）→ 新借的钱比旧债贵 {_fmt(u.get('refi_gap'), 2, True)} pp "
+                   f"{sq(u.get('squeeze'), u.get('since'))}</p>")
+    if b.get("error"):
+        out.append(f'<p class="muted">BIS：{escape(str(b["error"]))}</p>')
+    elif b.get("rows"):
+        out.append(f"<p><b>BIS 非金融企业债务偿还比率 DSR</b>（{escape(str(b.get('quarter')))}；收入里用来还本付息的比例）："
+                   + "、".join(f"{escape(r['cty'])} {_fmt(r.get('dsr'))}%（一年 {_fmt(r.get('chg_1y'), 1, True)} pp）" for r in b["rows"]) + "</p>")
+    if v.get("stale"):
+        out.append(f"<p class='muted'>注意：{escape(str(v['stale']))}</p>")
+    out.append(f"<p class='muted'>{escape(str(v.get('note') or ''))}。每季更新（日本 / 美国 季末后第 3 个月的月末、BIS 约 5〜6 个月后）；"
+               f"来源：{escape(str(v.get('source') or ''))}。只作背景，不参与交易。</p>")
+    return "".join(out)
+
+
 def jq_html(j: dict | None) -> str:
     if not j:
         return '<p class="muted">还没有 J-Quants 数据（钥匙串里放好キー后运行 scripts/install_launchd_jquants.sh）</p>'
@@ -379,6 +431,7 @@ def render(d: dict, macro: dict | None = None, news: dict | None = None, full_ne
             f'<h2 style="margin-top:14px">市场健康度</h2>{health_html(hh)}'
             f'<h2 style="margin-top:14px">消费 / 零售与新公布的数据</h2>{releases_html(macro.get("releases") or [], macro.get("events"))}'
             f'<h2 style="margin-top:14px">能源消费（每月）</h2>{energy_html(d.get("energy"))}'
+            f'<h2 style="margin-top:14px">企业利息负担（每季，只作背景）</h2>{interest_html(d.get("interest_burden"), top=None if full_news else 8)}'
             f'<h2 style="margin-top:14px">经济威胁消息与影响链路</h2>{nh}'
             f'<h2 style="margin-top:14px">业种强弱</h2>{sectors_html(d.get("themes") or {})}'
             f'<h2 style="margin-top:14px">政策事件（事前名单 vs 实际，只展示）</h2>{policy_html(d.get("policy"))}'

@@ -1559,6 +1559,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     out["energy"] = pre.get("energy") or _energy_panel(today)   # 仪表盘：能源消费（每月）+ K4 前向记录（K4 也进判断层）
     out["cost_sales"] = pre.get("cost_sales") or _cost_sales_panel(today)   # 成本 × 销售（S2）：上个月末的分组 + 前向记录（S2 也进判断层）
     out["invest_flow"] = _invest_flow_panel(today)           # 投资流向：季度快照（㉟；每季取一次 e-Stat，只作背景，不影响交易）
+    out["interest_burden"] = _interest_burden_panel(today)   # 企业利息负担：季度快照（㊶ ③；每季取一次，只作背景，不影响交易）
     out["timeline"], out["earn_state"] = tlp["timeline"], tlp["earn_state"]   # 买卖时间线（每天按前一天收盘重算）、决算形态（㊱）
     out["fwdj"] = _fj_summary(ctx, baseline, eq) if fj_on else {"enabled": False, "baseline": baseline or {}}   # 判断层 + 基准账户对照
     from qbreak import combo_c as _CC
@@ -1921,6 +1922,17 @@ def _invest_flow_panel(today) -> dict:
         return IF.refresh_snapshot(today)
     except Exception as e:                                   # noqa: BLE001
         log.warning("投资流向快照失败（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
+
+
+def _interest_burden_panel(today) -> dict:
+    """企业利息负担的季度快照（qbreak/interest_burden.py，㊶ ③ 2026-10-03 用户要求加进仪表盘）：日本全产业与各业种 ICR / 借款利率、
+    美国 ICR 与新旧借款利差、BIS DSR；三个来源都已有应有的一季就不取数。只作背景，失败只记原因、不影响交易。"""
+    from qbreak import interest_burden as IB
+    try:
+        return IB.refresh_snapshot(today)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("企业利息负担快照失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 
