@@ -38,8 +38,14 @@
    （上限 20、同一家族 ≤ 3）；判定的数字、第二关三种（B2 的状态与美股指数不动）、题目范围、种子、ID 不重用（再加本循环第一段的 BCU / BCJ / BCB）都不变；
    轮次号接着编（第二段从第 2 轮起）。先决条件：B2 重算 = 第 1 轮 BCU 的第一关账户（每个年代 Calmar 差 ≤ PREREQ_TOL）、模拟盘规则指纹 = 采用后的指纹。
    第二段里替换 B2 已经拿着的资产（例：把 1482 换成别的债券）不能用 asset 类的第二关（平移换进来的资产会连 B2 已有的好处一起打乱，对照太弱）→ 这种做法不做。
+八 第二段的规则改动（2026-10-03 用户在停下（待办 ㊻）之后明确要求：「本段解除『汇率对冲』家族禁令（最多 3 个做法），接着做 / 然后照现行规则继续」）：
+   只在第二段解除「汇率对冲」家族的禁令（家族名「核心·汇率对冲」，同一家族上限仍是 3）；计数不重新开始（第二段接着 6 / 20 往下用，比重新计数保守）；
+   判定的数字、第二关（严格大于 400 次的最大值）、题目范围、ID 不重用都不变。照实写：以前「汇率对冲」的禁令只写在说明里，代码按家族名完全一致比较，
+   而本循环的家族名都带「核心·」前缀 → 代码其实没有拦；这次一并改成去掉「核心·」前缀再比（banned / family_base），并记下这一段由用户解除的家族
+   （segments[-1].unbanned）。汇率类以前在循环内外已试过约 8 个规则 → 多重检验的风险更高，找到也只是历史上的候选，要前向记录确认。
 用法：python scripts/research_loop6.py --status（进度，只读）；--baseline（重算 B1 与先决条件）；--init（登记时写 var/research_loop6.json；已存在就不动；
-      先决条件不过 → 不登记）；--baseline2 / --init2（第二段：重算 B2 与先决条件 / 登记第二段，已有就不动）。非投资建议。
+      先决条件不过 → 不登记）；--baseline2 / --init2（第二段：重算 B2 与先决条件 / 登记第二段，已有就不动）；
+      --resume-fx（第二段：用户解除「汇率对冲」家族禁令后回到 running，已解除就不动；八）。非投资建议。
 """
 from __future__ import annotations
 
@@ -147,7 +153,10 @@ def check_new_approaches(st: dict, approaches: list[dict], prev: set[str] | None
     （第二段起：家族上限按这一段算、本循环前面几段的 ID 也不能用）。"""
     R2.check_new_approaches(view(st), approaches)
     prev = (previous_ids() if prev is None else set(prev)) | earlier_ids(st)
+    bn = banned(st)
     for a in approaches:
+        if family_base(a.get("family")) in bn:
+            raise ValueError(f"家族「{a.get('family')}」不再加新规则（{a.get('id')}；这一段没有由用户解除）")
         if a.get("kind") not in KINDS:
             raise ValueError(f"做法 {a.get('id')} 没写第二关的类别（kind ∈ {KINDS}）")
         if not str(a.get("family") or "").startswith(FAMILY_PREFIX):
@@ -268,7 +277,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--init", action="store_true")
     ap.add_argument("--baseline2", action="store_true")
     ap.add_argument("--init2", action="store_true")
+    ap.add_argument("--resume-fx", action="store_true", help="第二段：用户解除「汇率对冲」家族禁令后回到 running（八；已解除就不动）")
     a = ap.parse_args(argv)
+    if a.resume_fx:
+        resume_segment2_fx()
+        print(status_text(load_state()))
+        return 0
     if a.baseline2 or a.init2:
         res = compute_baseline2()
         write_baseline2(res)
@@ -296,6 +310,36 @@ def main(argv: list[str] | None = None) -> int:
 # ───────────────────────── 第二段（2026-10-03 用户「采用 并且继续第六个研究循环」；见文件开头七） ─────────────────────────
 SEG2_FROM = 2                                                                # 第二段的第一轮
 B2_REF = {"Z": 1.162, "E": 0.808, "J": 0.749}                                # 第 1 轮 BCU 的第一关 Calmar（var/out/loop6_r01_bondcorr.json）
+
+
+def family_base(fam) -> str:
+    """「核心·汇率对冲」→「汇率对冲」：去掉本循环的「核心·」前缀，再和不再加的家族比（八）。"""
+    s = str(fam or "")
+    return s[len(FAMILY_PREFIX) + 1:] if s.startswith(FAMILY_PREFIX + "·") else s
+
+
+def banned(st: dict) -> tuple[str, ...]:
+    """这一段不再加新规则的家族 = BANNED − 这一段由用户解除的（segments[-1].unbanned；八）。"""
+    un = set((segment(st) or {}).get("unbanned") or [])
+    return tuple(b for b in BANNED if b not in un)
+
+
+def resume_segment2_fx(home: Path | None = None, when: str = "2026-10-03") -> dict:
+    """用户（待办 ㊻ ①②）：第二段解除「汇率对冲」家族禁令（上限 3），计数接着用，状态回到 running（已经解除过就不动）。"""
+    st = load_state(home)
+    sg = segment(st)
+    if not sg or "汇率对冲" in (sg.get("unbanned") or []):
+        return st
+    if not str(derive_status(view(st))).startswith("stopped"):
+        raise ValueError(f"第二段现在是 {derive_status(view(st))}，不是停下等决定")
+    pause = {k: sg[k] for k in ("status", "ended", "closest3") if k in sg}       # 停下时写的（照原样留在 pauses 里）
+    sg = {**{k: v for k, v in sg.items() if k not in ("ended", "closest3")}, "status": "running", "unbanned": ["汇率对冲"],
+          "pauses": list(sg.get("pauses") or []) + [pause],
+          "resumed": f"{when} 用户（待办 ㊻）「本段解除『汇率对冲』家族禁令（最多 3 个做法），接着做 / 然后照现行规则继续」→ running；"
+                     f"计数接着用（{used(view(st))} / {CAP}）；第二关门槛不变"}
+    st = {**st, "segments": list(st["segments"][:-1]) + [sg], "status": "running"}
+    save_state(st, home)
+    return st
 
 
 def segment(st: dict) -> dict:
@@ -339,6 +383,8 @@ def segment_text(st: dict) -> str:
     fc = family_counts(v)
     if fc:
         L.append("这一段的家族用量（上限 %d）：" % FAMILY_CAP + "、".join(f"{k} {n}" for k, n in sorted(fc.items())))
+    L.append("这一段不再加的家族：" + ("、".join(banned(st)) or "无")
+             + (f"（由用户解除：{'、'.join(sg['unbanned'])}；{sg.get('resumed', '')}）" if sg.get("unbanned") else ""))
     k0 = int(sg.get("from_round", SEG2_FROM))
     first = [a for r in st.get("rounds") or [] if int(r.get("round", 0)) < k0 for a in r.get("approaches") or []]
     ad = st.get("adopted") or {}

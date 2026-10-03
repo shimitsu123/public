@@ -185,3 +185,40 @@ def test_registered_segment2_if_present():
     assert sg["prereq_ok"] is True and sg["from_round"] == 2 and sg["cap"] == 20
     assert sg["fingerprint"] == (st.get("adopted") or {}).get("fingerprint_after")
     assert all(abs(sg["baseline"][e]["calmar"] - R6.B2_REF[e]) <= R6.PREREQ_TOL for e in R6.ERAS)
+    if sg.get("unbanned"):                                                                      # 八：用户在第二段解除的只有「汇率对冲」
+        assert sg["unbanned"] == ["汇率对冲"] and sg.get("pauses") and R6.banned(st) == ()
+
+
+def test_fx_ban_strips_core_prefix_and_segment2_unban(tmp_path, monkeypatch):
+    """八：不再加的家族去掉「核心·」前缀再比；第二段由用户解除「汇率对冲」后可以加（同一家族仍 ≤ 3），计数接着用、停下时写的留在 pauses。"""
+    assert R6.family_base("核心·汇率对冲") == "汇率对冲" and R6.family_base("汇率对冲") == "汇率对冲"
+    assert R6.family_base("核心·熊市避险资产") == "熊市避险资产" and R6.family_base(None) == ""
+    fx = {"id": "FXN1", "family": "核心·汇率对冲", "posthoc": True, "kind": "signal"}
+    with pytest.raises(ValueError):
+        R6.check_new_approaches(_st(), [fx], prev=set())                                         # 第一段：禁令照旧（带前缀也拦）
+    st = _seg_state()
+    assert R6.banned(st) == ("汇率对冲",)
+    with pytest.raises(ValueError):
+        R6.check_new_approaches(st, [fx], prev=set())                                            # 第二段没解除 → 不行
+    with pytest.raises(ValueError):
+        R6.resume_segment2_fx(home=_save(tmp_path, st))                                          # 不是停下等决定 → 不动
+    sg0 = {**st["segments"][-1], "status": "stopped:要用户决定", "ended": "e", "closest3": [{"id": "NDB"}]}
+    stopped = {**st, "status": "stopped:要用户决定", "segments": [sg0]}
+    out = R6.resume_segment2_fx(home=_save(tmp_path, stopped))
+    sg = R6.segment(out)
+    assert out["status"] == "running" and sg["status"] == "running" and sg["unbanned"] == ["汇率对冲"] and R6.banned(out) == ()
+    assert "ended" not in sg and "closest3" not in sg
+    assert sg["pauses"] == [{"status": "stopped:要用户决定", "ended": "e", "closest3": [{"id": "NDB"}]}]
+    assert R6.derive_status(R6.view(out)) == "running" and R6.used(R6.view(out)) == R6.used(R6.view(stopped))
+    assert R6.load_state(tmp_path) == out and R6.resume_segment2_fx(home=tmp_path) == out          # 已解除就不动
+    R6.check_new_approaches(out, [fx, {**fx, "id": "FXN2"}, {**fx, "id": "FXN3"}], prev=set())   # 同一家族上限 3
+    with pytest.raises(ValueError):
+        R6.check_new_approaches(out, [{**fx, "id": f"FXN{i}"} for i in range(4)], prev=set())
+    monkeypatch.setattr(R6, "rules_fingerprint", lambda home=None: "bbb")
+    assert "这一段不再加的家族：汇率对冲" in R6.status_text(st)
+    assert "这一段不再加的家族：无（由用户解除：汇率对冲" in R6.status_text(out)
+
+
+def _save(home, st):
+    R6.save_state(st, home)
+    return home

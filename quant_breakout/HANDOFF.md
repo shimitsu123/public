@@ -487,6 +487,7 @@ FJE = USD/JPY 急升 或 日経熊且日元牛，2026-10-02 用户「采用」�
   - 第二段第 4 轮 ZBX「核心的快速离场：S&P500 收在 250 日线下就照熊市处理」（登记 5ae519f）：**第一关不过**（-0.555；来回卖低买高，Z 回撤反而深到 −19.71%、2022 / 2025 各少赚约 10〜12 pp）→ 现行分界的带宽与确认有道理；独立扫描认为在现行规则内剩下的成功率偏低，最能提高的单一改动 = 这一段解除「汇率对冲」家族禁令（只能由用户决定）
   - 第二段第 5 轮 TB7「核心的双速离场（时点研究的 T7）」（登记 9cf93c6）：**第一关不过**（+0.062；E +0.151 但 J -0.089，2025 −14.7 pp、2022 −9.5 pp；S7 −0.014）→ 早离场类两个都在 V 形反弹前卖在低点
   - 2026-10-03 17:45 JST **第二段停下、等你决定（待办 ㊻；stopped:要用户决定）：6 / 20 用了、没找到**；最接近 NDB（第一关全过、第二关约第 89 百分位）。独立扫描认为现行规则内剩下的成功率偏低，最能提高的是本段解除「汇率对冲」家族禁令（只能由你决定）
+  - 2026-10-03 约 18:00 JST 用户选 ㊻ ①→②「本段解除『汇率对冲』家族禁令（最多 3 个做法），接着做 / 然后照现行规则继续」→ **第二段 running**（计数接着 6 / 20；规则改动写在 `scripts/research_loop6.py` 开头「八」；以前的禁令按家族名完全一致比较、带「核心·」前缀的没拦 → 一并修好）；先做汇率对冲家族（最多 3 个），之后照现行规则继续
 - 现在的选股方法放在楽天的美股还是立花的日経225（2026-09-29 用户问；登记 1ba090e、`scripts/market_compare_study.py` → `var/out/market_compare_study.md`）：
   同一套个股规则（W2 + X6、4 × 25%）、同一个推进器 → 按事先读法 **日経（立花）更好**（两个窗口的每笔净收益与个股层 Calmar 都是日経高）：
   每笔 2006〜2016 +2.74% vs +0.30%、2017〜 +0.55% vs −0.86%；楽天来回约 1% 的手续费每年约 4〜6 万円（立花 0.1〜0.3 万円），
@@ -558,7 +559,7 @@ FJE = USD/JPY 急升 或 日経熊且日元牛，2026-10-02 用户「采用」�
 - ㊳ ✅ 2026-10-02 用户「采用」研究循环的「更好候选」FJE（日元急升 或 日経熊且日元牛时，闲置资金从 1545 换成对冲版纳指 2845；美股熊照旧现金）
   → 模拟盘与 Mac 执行器的闲置资金 Q1 → Q1H，2026-10-01 收盘的决策起（10-02 06:57 / 07:40 起）（见上面「现在在哪一步」的 Q1H 一条、sim_changes 2026-10-02「配置变更」）。
   汇率改用 Yahoo JPY=X（及时）；2845 在立花 ｅ支店：现物可买东证上市 ETF（2026-09-29 查的一般规定），**上实盘前由用户本人在立花网站的銘柄情報确认一次 2845 本身能现物买**（Claude 不经手登录信息、不自动操作网站）
-- ㊻ 第六个研究循环第二段停下、等你决定（6 / 20 用了、没找到；最接近 NDB +0.160：第一关全过、第二关约第 89 百分位；sim_changes 同日「第六个研究循环第二段停下」）：
+- ㊻ ✅ 2026-10-03 用户「本段解除「汇率对冲」家族禁令（最多 3 个做法），接着做 / 然后照现行规则继续 / 并把企业利息负担加进仪表盘」（选 ①、用完后 ②；同时答了 ㊶ ③）→ 第二段 running（计数接着 6 / 20）；sim_changes 同日「用户决定（待办 ㊻ ①→②、㊶ ③）」。原来的说明：第六个研究循环第二段停下、等你决定（6 / 20 用了、没找到；最接近 NDB +0.160：第一关全过、第二关约第 89 百分位；sim_changes 同日「第六个研究循环第二段停下」）：
   ①「本段解除『汇率对冲』家族禁令（上限 3 个），接着做」—— 独立扫描的建议：1545 ↔ 2845 只差汇率、切换两边波动小（第二关的随机对照窄），
      日元避险的事件多、1986 年起能验证；代价是汇率类以前已经试过约 8 个 → 多重检验风险更高（第二关门槛不放宽，找到也要前向记录确认）；
   ②「照现行规则继续」（剩 14 个做法；剩下的思路每个约 3〜4%）；
@@ -582,7 +583,7 @@ FJE = USD/JPY 急升 或 日経熊且日元牛，2026-10-02 用户「采用」�
   ②「继续第三个研究循环」（剩下 5 个做法；先做一次新的选题扫描再逐轮登记）；
   ③（㊶ 的 ③ 还在）「把企业利息负担加进仪表盘」（只展示、每季度更新）；①③ 可以一起选。
   顺带：DeMark 指标现在的状态随时可以看 `python scripts/loop3_r07_demark.py --now`（日経225 / S&P500 / 纳指 100 的日线与周线 9 / 13，只描述）
-- ㊶ ✅ 2026-10-02 用户「继续现在的研究」（选 ②；同时加新题「Jason Perl 的观点」→ 第 7 轮）；③（利息负担加进仪表盘）没明说 → 还等你。原来的说明：第三个研究循环停下（9 / 20；第 6 轮你的题「企业利息负担」IBS / IBA 两个都第一关不过）→ 等你决定：
+- ㊶ ✅ 2026-10-02 用户「继续现在的研究」（选 ②；同时加新题「Jason Perl 的观点」→ 第 7 轮）；③（利息负担加进仪表盘）2026-10-03 用户在 ㊻ 里明确要 → 做（只展示、每季度更新）。原来的说明：第三个研究循环停下（9 / 20；第 6 轮你的题「企业利息负担」IBS / IBA 两个都第一关不过）→ 等你决定：
   ①「结束第三个循环」（以「没找到」结束；模拟盘照旧）—— 推荐：另一个只读检查估计剩下的题两关都过最好约 1%（NZS），其余 ≤ 0.5%；
   ②「继续第三个研究循环」（用剩下的 11 个做法；先做 NZS / RTX / ECL）；
   ③「把企业利息负担加进仪表盘」（只展示、每季度更新：日本全产业与各业种 ICR / 借款利率、美国 ICR 与新旧借款利差、BIS DSR；不进交易规则）；
@@ -691,7 +692,7 @@ FJE = USD/JPY 急升 或 日経熊且日元牛，2026-10-02 用户「采用」�
 - 第四个研究循环（选股，2026-10-03 起）：规则与状态 `scripts/research_loop4.py`（`--status` / `--baseline` / `--init`）→ `var/research_loop4.json`、`var/out/research_loop4_baseline.md` / `.json`；`tests/test_research_loop4.py`；每一轮一个 `scripts/loop4_rNN_*.py` → `var/out/loop4_rNN_*.md` / `.json`；事后诊断「完美选股」的上限 `scripts/loop4_oracle_diag.py` → `var/out/loop4_oracle_diag.md` / `.json`（`tests/test_loop4_oracle_diag.py`）；第二关门槛的诊断 `scripts/loop4_placebo_bar.py` → `var/out/loop4_placebo_bar.md` / `.json`；名额诊断 `scripts/loop4_exposure_diag.py` → `var/out/loop4_exposure_diag.md` / `.json`
 - 第五个研究循环（仓位结构，2026-10-03 起）：规则与状态 `scripts/research_loop5.py`（`--status` / `--baseline` / `--init`）→ `var/research_loop5.json`、`var/out/research_loop5_baseline.md` / `.json`；`tests/test_research_loop5.py`；每一轮一个 `scripts/loop5_rNN_*.py` → `var/out/loop5_rNN_*.md` / `.json`
 - 闲置资金 BCU（2026-10-03 采用）：`qbreak/bond_refuge.py`（`tests/test_bond_refuge.py`）→ 云端 `var/bond_refuge.json`；`run._br_compute` / `run._br_keys`
-- 第六个研究循环（核心层，2026-10-03 起）：规则与状态 `scripts/research_loop6.py`（`--status` / `--baseline` / `--init`；第二段 `--baseline2` / `--init2`、基准 B2 `scripts/loop6_common.py` → `var/out/research_loop6_b2.md`）→ `var/research_loop6.json`、`var/out/research_loop6_baseline.md` / `.json`；`tests/test_research_loop6.py`；每一轮一个 `scripts/loop6_rNN_*.py` → `var/out/loop6_rNN_*.md` / `.json`
+- 第六个研究循环（核心层，2026-10-03 起）：规则与状态 `scripts/research_loop6.py`（`--status` / `--baseline` / `--init`；第二段 `--baseline2` / `--init2`、基准 B2 `scripts/loop6_common.py` → `var/out/research_loop6_b2.md`；用户解除「汇率对冲」禁令后 `--resume-fx`）→ `var/research_loop6.json`、`var/out/research_loop6_baseline.md` / `.json`；`tests/test_research_loop6.py`；每一轮一个 `scripts/loop6_rNN_*.py` → `var/out/loop6_rNN_*.md` / `.json`
 - 第二个研究循环（2026-10-02 起；同日 20 个做法用完、没找到 → 结束）：规则与状态 `scripts/research_loop2.py`（`--status` / `--baseline` / `--init` / `--fingerprint`）→ `var/research_loop2.json`、`var/out/research_loop2_baseline.md` / `.json`；基准 B1 与账户接口 `scripts/loop2_common.py`；`tests/test_research_loop2.py`；每一轮一个 `scripts/loop2_rNN_*.py` → `var/out/loop2_rNN_*.md` / `.json`（第二关 `*_stage2_<ID>.md` / `.json`）
 - 行情缓存：`qbreak/data.py`（有效期 12 小时 + 按交易日历查新鲜度；盘中取的缓存在收盘后视为过期、重新下载 —— 2026-09-29 修正，以前收盘后 12 小时内会把盘中快照当成收盘价；重下载失败去掉那一根并记为「行情落后」）；**价格调整口径 v2（2026-09-30）**：不用 yfinance 的 auto_adjust，改为 `qbreak.data.adjust_prices` 按 Yahoo 的分红 / 拆股记录自己调整（同一口径，实测与 Yahoo 的 Adj Close 差 < 1e-6），**拆股当天的分红按拆股后口径**（Yahoo 把日本株分割与配当同一基準日的分红记成分割前每股金额 → 8766.T 2026-09-29 被当成 22.8% 的分红、之前价格整体调低、当天「涨」25.8%；横向扫描 1,076 只近 2 年 20 例，含 8035.T / 5401.T 2025-09-29），公司行为随缓存的 meta 保存（`actions_of` / `fixes_of`）、缓存 meta 带 `adj` 版本号（口径不同就重新下载）；**指数日线缺收盘 → 用当天 5 分钟线合成**（`fill_index_from_intraday`，只补 `^` 开头、已收盘的日子；Yahoo 的 ^N225 2026-09-29 只给开盘、收盘 NaN），记进 `FILLED`，日报「数据完整性 · 自动修复」列出；威胁指数的指数序列同样处理（`qbreak/threat.py`）
 - 下单前资格检查：`qbreak/eligibility.py`（快照 `var/out/eligibility.json`；只读检查 `run.py eligibility`）；退市时间表：`qbreak/delist_schedule.py`
