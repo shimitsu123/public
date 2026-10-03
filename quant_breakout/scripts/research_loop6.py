@@ -158,7 +158,21 @@ def add_round(st: dict, rnd: dict, prev: set[str] | None = None) -> dict:
 def status_text(st: dict) -> str:
     if not st:
         return "第六个研究循环还没有登记（var/research_loop6.json 不存在）。"
-    return R2.status_text(st).replace("第二个研究循环", "第六个研究循环", 1)
+    t = R2.status_text(st).replace("第二个研究循环", "第六个研究循环", 1)
+    ad = st.get("adopted") or {}                                             # 用户「采用」候选之后记下的（日期、候选、采用后的指纹）
+    if not ad:
+        return t
+    L = t.split("\n")
+    fp = st.get("fingerprint")
+    try:
+        now = rules_fingerprint()
+    except Exception:                                                        # noqa: BLE001
+        now = None
+    L.append(f"采用：{ad.get('date', '—')} 用户「采用」{ad.get('candidate', '—')} → 模拟盘 {ad.get('change', '—')}")
+    if ad.get("fingerprint_after") and now == ad["fingerprint_after"] and now != fp:
+        L = [x for x in L if not x.startswith("模拟盘规则：")]
+        L.append(f"模拟盘规则：已按「采用」改过（登记时 {fp} → 采用后 {now}）；要接着找，先以采用后的规则重新登记基准")
+    return "\n".join(L)
 
 
 # ───────────────────────── 基准重算（登记时、核对用） ─────────────────────────

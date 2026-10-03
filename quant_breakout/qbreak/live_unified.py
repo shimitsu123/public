@@ -724,6 +724,12 @@ def ic_text(ic: dict | None) -> str:
         t += f"（日元走强判定：{fh.get('text') or '—'}" + ("" if src == "云端" else f"；★ {src}") + "）"
         if fh.get("errors"):
             t += "；★ " + "；".join(f"{k}：{v}" for k, v in fh["errors"].items())
+    br = ic.get("bond_refuge")
+    if br:                                                  # BCU 股债相关判定（Q1HB；qbreak/bond_refuge.py）
+        src = str(br.get("source") or "")
+        t += f"（股债相关判定：{br.get('text') or '—'}" + ("" if src == "云端" else f"；★ {src}") + "）"
+        if br.get("errors"):
+            t += "；★ " + "；".join(f"{k}：{v}" for k, v in br["errors"].items())
     return t
 
 

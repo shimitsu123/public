@@ -818,7 +818,8 @@ def _core_all(cfg: dict) -> list[str]:
     return sorted(set(_unified_cfg(cfg).core) | set(IC.MODES[IC.mode_of(cfg)]["core"]))
 
 
-def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hook=None, extra_core=(), cc_hook=None, fh_hook=None):
+def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hook=None, extra_core=(), cc_hook=None, fh_hook=None,
+                    br_hook=None):
     """模拟盘（sim-day）与实盘执行器（live-u）共用：按 var/sim.json 建统一引擎 —— 行情到最新收盘（去掉未收盘的当日 K 线）、
     牛熊分界、汇率、明天成交的新仓倍数（宏观 / 板块 / 状态层）、决算前不进场。返回 (eng, ctx)；ctx.make(state) 用同一套
     输入再建一个引擎（例如执行器演练账户的状态）。"""
@@ -866,10 +867,11 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
     d10 = DataConfig(provider=provider, years=10, allow_synthetic=False).validate()
     det_cfg = load_config()
     det = Detector(det_cfg["detector"]["kind"], det_cfg["detector"]["params"])
-    bear = {}
+    bear, bench = {}, {}
     for m in ("JP", "US"):
         ix = drop_partial_bar(load_universe([BENCHMARK[m]], d10)[BENCHMARK[m]], m)
         bear[m] = pd.Series(np.asarray(det.states(ix["Close"])) == BEAR, index=ix.index)
+        bench[m] = ix["Close"]
     fxd = load_universe(["JPY=X"], DataConfig(provider=provider, years=2, allow_synthetic=False, min_bars=100).validate())
     fx = fxd["JPY=X"][["Open", "Close"]] if "JPY=X" in fxd else None
     gi = pd.DatetimeIndex(sorted(set().union(*[df.index for df in ind.values()])))
@@ -879,10 +881,15 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
     fh_pl = fh_info = None
     if icmode in IC.FX_HEDGE and len(gi):                  # FJE（qbreak/fx_hedge.py；2026-10-02 用户「采用」）：两个键 FH:UH / FH:HG
         fh_pl, fh_info = _fh_keys(bear, det, str(gi[-1].date()), provider, fh_hook)
+    br_pl = br_info = None
+    if icmode in IC.BOND_REFUGE and len(gi):               # BCU（qbreak/bond_refuge.py；2026-10-03 用户「采用」）：键 BR:BD
+        br_pl, br_info = _br_keys(bear, str(gi[-1].date()), provider, br_hook, spx=bench.get("US"))
     ic_status = {**IC.status(icmode, bear, gi[-1]), **IC.detail(icmode, ic_px, gi[-1], ic_last),
                  "since": (cfg.get("idle_cash") or {}).get("since")} if len(gi) else {"mode": icmode}
     if fh_info is not None:
         ic_status["fx_hedge"] = fh_info
+    if br_info is not None:
+        ic_status["bond_refuge"] = br_info
     ex = exec_configs(ucfg.stock_markets, u)
     ccost = {t: etf_cost(broker, t, market_of(t)) for t in core_all}
     extras, plans = _unified_extras(cfg, ucfg, u, dcfg, params, today)
@@ -940,7 +947,8 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
         return e
     ctx = SimpleNamespace(data=data, ind=ind, plans=plans, extras=extras, params=params, dcfg=dcfg, ucfg=ucfg, u=u,
                           broker=broker, today=today, ex=ex, ccost=ccost, make=make, gate=gate, fj=fj_pl, fj_on=fj_on, xmode=xmode,
-                          bar_date=bar_date, icmode=icmode, ic_status=ic_status, delist=delist, cc=cc_pl, cc_on=cc_on, fh=fh_pl)
+                          bar_date=bar_date, icmode=icmode, ic_status=ic_status, delist=delist, cc=cc_pl, cc_on=cc_on, fh=fh_pl,
+                          br=br_pl)
     return make(state), ctx
 
 
@@ -1261,6 +1269,76 @@ def _fh_keys(bear: dict, det, bar_date: str, provider: str, fh_hook=None) -> tup
     return pl, info
 
 
+def _br_compute(bear: dict, bar_date: str, provider: str, write: bool = True, spx=None, fred: dict | None = None) -> dict:
+    """BCU 的「可拿」（qbreak/bond_refuge.py）：S&P500（Yahoo ^GSPC，引擎同一份 10 年）+ FRED 国债收益率 / 短期利率（DGS7、DGS10、DFF、
+    IRSTCI01JPM156N）→ var/bond_refuge.json（write = True：云端 sim-day）。东证交易日 = 引擎同一份日経225 的日子（10 年）+ 最新 K 线那天。
+    执行器没有云端的文件时也用这个（write = False，本机现算）。spx / fred：测试用。算不了 → on = None（调用的地方按不拿 = 现金）。"""
+    import pandas as pd
+    from qbreak import bond_refuge as BR
+    from qbreak.utils import write_json
+    errors: dict = {}
+    try:
+        if spx is None:
+            from qbreak.data import load_universe
+            from qbreak.trader import drop_partial_bar
+            g = load_universe(["^GSPC"], DataConfig(provider=provider, years=10, allow_synthetic=False).validate()).get("^GSPC")
+            spx = drop_partial_bar(g, "US")["Close"] if g is not None else None
+        if spx is None or not len(spx.dropna()):
+            raise RuntimeError("S&P500（^GSPC）取不到")
+        if fred is None:
+            from qbreak import factors
+            fred = {sid: factors.fred(sid) for sid in BR.FRED_IDS}
+        jp = bear.get("JP")
+        if jp is None or not len(jp):
+            raise RuntimeError("日経225 的日子取不到")
+        d = pd.Timestamp(bar_date)
+        days = pd.DatetimeIndex(sorted(set(jp.index[jp.index <= d]) | {d}))
+        bond = BR.bond_hedged(fred["DGS7"], fred["DGS10"], fred["DFF"], fred["IRSTCI01JPM156N"])
+        bond = bond[bond.index < d]                         # 只用 d 之前的美国收盘（prev_on 本来就不用当天的；这里连文件里的日期也一致）
+        sp = spx.dropna()
+        sp = sp[sp.index < d]
+        st = BR.state(sp, bond, days)
+        if not len(st["on"]):
+            raise RuntimeError("相关算不了（数据不够 63 天）")
+        pl = BR.payload(bar_date, st, bear.get("US"), sp, bond)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("BCU 股债相关判定算不了（这一天按不拿 1482）：%s", e)
+        errors["计算"] = f"{type(e).__name__}: {e}"[:200]
+        pl = {"version": 1, "as_of": bar_date, "on": None, "series": {}, "errors": errors}
+    if write:
+        try:
+            write_json(paths.home() / BR.FILE, pl)
+        except Exception as e:                               # noqa: BLE001
+            log.warning("BCU 的文件写不了：%s", e)
+    return pl
+
+
+def _br_keys(bear: dict, bar_date: str, provider: str, br_hook=None, spx=None) -> tuple[dict, dict]:
+    """BCU 的键放进 bear（引擎 follow 模式：BR:BD = 美股牛 或 不可拿 → 1482 目标 0）。
+    云端（br_hook）：决策之前现算 → var/bond_refuge.json；Mac 执行器：读 scripts/liveu.sh 同步过来的同一个文件，
+    没覆盖最新 K 线 → 本机现算（日志 / 页面写明）。算不了 → 不拿 1482（= Q1H：美股熊现金）。返回 (文件内容, 日报 / 页面的摘要)。"""
+    import pandas as pd
+    from qbreak import bond_refuge as BR
+    source = "云端"
+    if br_hook is not None:
+        pl = br_hook(bear, bar_date, spx)
+    else:
+        pl = BR.load(paths.home() / BR.FILE)
+        if not BR.covers(pl, bar_date):
+            log.warning("%s 没覆盖最新 K 线 %s（文件 %s）→ 本机现算", BR.FILE, bar_date, (pl or {}).get("as_of"))
+            pl, source = _br_compute(bear, bar_date, provider, write=False, spx=spx), "本机现算（云端文件没同步到这一天）"
+    st = BR.state_from_payload(pl)
+    if st is None or (pl or {}).get("on") is None:
+        st = pd.Series([False], index=[pd.Timestamp(bar_date)])
+        source += "；算不了 → 按不拿 1482"
+    bear.update(BR.keys(st, bear.get("US") if bear.get("US") is not None else pd.Series(dtype=bool)))
+    info = {k: (pl or {}).get(k) for k in ("on", "since", "corr", "corr_date", "win", "us_bear", "hold", "bond_date", "spx_date",
+                                          "lag_days", "as_of")}
+    info.update({"source": source, "errors": dict((pl or {}).get("errors") or {}), "text": BR.text(pl)})
+    log.info("BCU 股债相关判定 %s（%s）：%s", bar_date, source, info["text"])
+    return pl, info
+
+
 def _cc_compute(ind: dict, bar_date: str, provider: str, market=None) -> dict:
     """关联搭配 C（qbreak/combo_c.py）：云端 sim-day 在引擎决策之前算 → var/combo_c.json（Mac 执行器读同一个文件）。
     候选 = 最新 K 线上成立的日本个股（核心除外）；单个特征算不了 = 0 票；日経225 / VIX 取不到或过期 → 这一天 C 不动（= 原规则）。
@@ -1432,8 +1510,10 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     from qbreak import idle_cash as _IC
     fh_hook = ((lambda bear, det, bar_date: _fh_compute(bear, det, bar_date, provider))     # FJE：决策之前现算 → var/fx_hedge.json
                if _IC.mode_of(cfg) in _IC.FX_HEDGE else None)
+    br_hook = ((lambda bear, bar_date, spx: _br_compute(bear, bar_date, provider, spx=spx))   # BCU：决策之前现算 → var/bond_refuge.json
+               if _IC.mode_of(cfg) in _IC.BOND_REFUGE else None)
     eng, ctx = _unified_engine(a, cfg, state, provider, extra_tickers=extra, fj_hook=hook, extra_core=xcore, cc_hook=cc_hook,
-                               fh_hook=fh_hook)
+                               fh_hook=fh_hook, br_hook=br_hook)
     data, plans, extras, params, dcfg, today = ctx.data, ctx.plans, ctx.extras, ctx.params, ctx.dcfg, ctx.today
     pcheck = _price_check_panel(data, today)                 # 行情交叉核对（J-Quants，㉚-1）：只报警，不改行情 / 交易
     idxs, cutoff = _new_bar_idxs(eng, state)

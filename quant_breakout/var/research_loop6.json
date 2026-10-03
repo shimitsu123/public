@@ -145,5 +145,13 @@
    ]
   }
  ],
- "found": "2026-10-03 JST 第 1 轮 BCU 两关都过 = 更好候选 → 循环按规则停下（status = found），等用户说「加进前向记录」或「采用」；模拟盘 / 执行器不改"
+ "found": "2026-10-03 JST 第 1 轮 BCU 两关都过 = 更好候选 → 循环按规则停下（status = found），等用户说「加进前向记录」或「采用」；模拟盘 / 执行器不改",
+ "adopted": {
+  "date": "2026-10-03",
+  "candidate": "BCU",
+  "change": "闲置资金 Q1H → Q1HB（美股熊且 S&P500 与对冲版美债 1482 的 63 天日收益负相关 → 拿 1482；qbreak/bond_refuge.py），2026-10-02 收盘的决策起",
+  "user": "采用（2026-10-03，同一句里还有「并且继续第六个研究循环」）",
+  "fingerprint_before": "e73f7f6c0149fe10",
+  "fingerprint_after": "60b6d5e5c8768c16"
+ }
 }

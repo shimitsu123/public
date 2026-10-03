@@ -99,5 +99,17 @@ def test_registered_state_if_present():
     assert all(abs(st["baseline"][e]["calmar"] - b5[e]["calmar"]) <= R6.PREREQ_TOL for e in R6.ERAS)
 
 
+def test_status_after_adoption(monkeypatch):
+    st = {"start": "2026-10-03", "baseline": {}, "fingerprint": "aaa", "rounds": [], "cap": R6.CAP,
+          "adopted": {"date": "2026-10-03", "candidate": "BCU", "change": "Q1H → Q1HB", "fingerprint_after": "bbb"}}
+    monkeypatch.setattr(R6, "rules_fingerprint", lambda home=None: "bbb")
+    monkeypatch.setattr(R2, "rules_fingerprint", lambda home=None: "bbb")
+    t = R6.status_text(st)
+    assert "采用：2026-10-03 用户「采用」BCU" in t and "已按「采用」改过" in t and "★" not in t
+    monkeypatch.setattr(R6, "rules_fingerprint", lambda home=None: "ccc")
+    monkeypatch.setattr(R2, "rules_fingerprint", lambda home=None: "ccc")
+    assert "★ 与登记时不同" in R6.status_text(st)                                           # 采用之后又改了别的 → 照旧提示
+
+
 def test_cli_status_is_read_only():
     assert R6.main(["--status"]) == 0

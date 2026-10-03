@@ -59,6 +59,13 @@ def _get(url: str, timeout: int = 60, tries: int = 3) -> bytes:
         except Exception as e:                          # noqa: BLE001
             last = e
             time.sleep(2 * (k + 1))
+    try:                                                # curl_cffi 一直失败（代理 502 等，2026-10-03 云端会话里见过）→ 系统 curl 再试一次
+        import shutil
+        import subprocess
+        if shutil.which("curl"):
+            return subprocess.run(["curl", "-sSfL", "--max-time", str(timeout), url], check=True, capture_output=True).stdout
+    except Exception as e:                              # noqa: BLE001
+        last = e
     raise RuntimeError(f"下载失败 {url}: {last}")
 
 
