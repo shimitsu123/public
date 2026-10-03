@@ -10462,5 +10462,64 @@
    "FJE 修正后 J 为负"
   ],
   "notes": "模拟盘的 FJE 去留、研究口径要不要改 → 待办 ㊼"
+ },
+ {
+  "line": 7249,
+  "date": "2026-10-03",
+  "title": "用户决定（待办 ㊼ ①「重新检验，不过就撤」）+ 研究口径改成修正口径：东证 d 日换汇用 d 当天（含）以前最近的 Yahoo JPY=X 值（QB_FX_ALIGN=prev 重现以前的结果）",
+  "kind": "decision",
+  "domain": "核心/配置",
+  "registration": "749398a",
+  "script": "scripts/equity_idle_study.py（fx_on / inr_on）",
+  "output": "—",
+  "candidates": [],
+  "baseline": "—",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "equity_idle_study 开头的说明本来就写「d 日早上的 USD/JPY」，代码用了 d 之前的 → 按说明改；以前登记过的研究数字都是原口径（不重算、不改判定）"
+ },
+ {
+  "line": 7273,
+  "date": "2026-10-03",
+  "title": "FJE 按修正口径重新检验（与第一个循环第 15 轮同一段代码、同一套两关）→ 第一关不过（J −0.034）→「撤掉」",
+  "kind": "study",
+  "domain": "核心/配置",
+  "registration": "749398a（scripts/fje_recheck.py；只运行一次）",
+  "script": "scripts/fje_recheck.py",
+  "output": "var/out/fje_recheck.md",
+  "candidates": [
+   {
+    "id": "FJE",
+    "rule": "FXE 多数决急升中 或 JBH 日経熊且日元牛，且美股牛 → 闲置资金拿对冲版纳指 2845（与第 15 轮相同）",
+    "result": "B0 1.005 / 0.578 / 0.674 → 1.064 / 0.616 / 0.640；Z +0.059、E +0.038、J −0.034（合计 +0.063）；S2 不过 → 第一关不过（当初原口径 +0.329）"
+   }
+  ],
+  "baseline": "B0（第一个循环，修正口径）Calmar Z 1.005 / E 0.578 / J 0.674",
+  "windows": "Z / E / J",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [
+   "原口径里的好处（E +0.193、J +0.088）大部分来自汇率时点偏差；1987〜2000 只有核心（无偏差）仍略好 0.432 → 0.468"
+  ],
+  "notes": "登记的判定：两关都过才保留；用户 ㊼ ① 事先同意不过就撤"
+ },
+ {
+  "line": 7283,
+  "date": "2026-10-03",
+  "title": "配置变更：闲置资金 Q1HB → Q1B（撤掉 FJE、BCU 照旧），2026-10-02 收盘的决策（10-05 06:57 / 07:40）起",
+  "kind": "config_change",
+  "domain": "核心/配置",
+  "registration": "—",
+  "script": "qbreak/idle_cash.py（Q1B）",
+  "output": "var/sim.json idle_cash",
+  "candidates": [],
+  "baseline": "—",
+  "windows": "—",
+  "verdict": "撤回",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "当时拿着 1545、2845 为 0 口 → 换方式不产生买卖；临时目录里 sim-day 与执行器演练账户各跑一次核对"
  }
 ]

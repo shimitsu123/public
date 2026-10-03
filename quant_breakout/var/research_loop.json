@@ -995,6 +995,20 @@
       "q95": 0.1543,
       "q99": 0.2253,
       "registration": "f1c205c"
+     },
+     "recheck": {
+      "date": "2026-10-03",
+      "script": "scripts/fje_recheck.py",
+      "registration": "749398a",
+      "why": "事后审计（scripts/fx_timing_audit.py）：研究合成价的汇率比信号旧约 17 小时 → 用户 ㊼ ① 研究口径改成修正口径后按同一套两关重新检验",
+      "d": {
+       "Z": 0.059,
+       "E": 0.038,
+       "J": -0.034
+      },
+      "sum": 0.063,
+      "verdict": "第一关不过",
+      "action": "撤掉模拟盘与执行器的 FJE（idle_cash Q1HB → Q1B，2026-10-02 收盘的决策起）"
      }
     }
    ]

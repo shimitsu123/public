@@ -144,6 +144,26 @@ def test_idle_cash_q1hb_config_and_one_etf_per_day():
     assert IC.status("Q1HB", bear, idx[3])["text"] == "现金"
 
 
+def test_idle_cash_q1b_drops_fje_keeps_bcu():
+    """2026-10-03 用户 ㊼ ①：FJE 按修正口径重新检验不过 → 撤掉（scripts/fje_recheck.py）；Q1B = Q1HB 去掉 2845：1545 跟美股牛熊、1482 同 BCU。"""
+    from dataclasses import replace
+    from qbreak import fx_hedge as FH
+    m, hb = IC.MODES["Q1B"], IC.MODES["Q1HB"]
+    assert m["core"] == {"1545.T": 1.0, "1482.T": 1.0} and m["core_mode"] == "follow"
+    assert m["core_index"] == {"1545.T": "US", "1482.T": BR.KEY} == {**{k: v for k, v in hb["core_index"].items() if k != "2845.T"}, "1545.T": "US"}
+    assert "Q1B" in IC.BOND_REFUGE and "Q1B" not in IC.FX_HEDGE and IC.uses_market("Q1B") == {"US"} and "Q1B" in IC.LABELS
+    idx = pd.bdate_range("2024-01-01", periods=4)
+    us_bear = pd.Series([False, False, True, True], index=idx)
+    hedge = pd.Series([False, True, True, False], index=idx)                                # FJE 的对冲中：Q1B 不再看
+    on = pd.Series([True, True, True, False], index=idx)
+    bear = {"US": us_bear, **FH.keys(hedge, us_bear), **BR.keys(on, us_bear)}
+    assert [IC.status("Q1B", bear, d)["hold"] for d in idx] == [["1545.T"], ["1545.T"], ["1482.T"], []]   # 日元走强也拿 1545
+    from qbreak.unified import UnifiedConfig
+    u = IC.apply(UnifiedConfig(), "Q1B", held={"1545.T": 4110, "2845.T": 30})              # 还拿着 2845 → 权重 0、下一次决策卖掉
+    assert u.core == {"1545.T": 1.0, "1482.T": 1.0, "2845.T": 0.0} and u.core_mode == "follow"
+    assert replace(u).core_index["1545.T"] == "US"
+
+
 def test_fee_entry_for_1482():
     from qbreak.fees import etf_cost
     c = etf_cost("tachibana", "1482.T", "JP")
