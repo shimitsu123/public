@@ -10844,5 +10844,22 @@
    "印尼 +0.074、德国 / 马来西亚 +0.019；西班牙 −0.042、日本 −0.041、澳大利亚 −0.032"
   ],
   "notes": "账户第一关引用 VCT（+0.354）；跨市场不成立 → VCT 的好处更可能只在纳指上；VCT 前向记录照旧"
+ },
+ {
+  "line": 7640,
+  "date": "2026-10-04",
+  "title": "第七个研究循环第 2 轮登记：VTX = 牛市里按自己指数的波动率连续调节仓位（账户 B3 + 17 个市场；运行前）",
+  "kind": "engineering",
+  "domain": "核心/配置",
+  "registration": "本提交（scripts/loop7_r02_voltarget.py 开头；登记后不改、只运行一次）",
+  "script": "scripts/loop7_r02_voltarget.py",
+  "output": "var/out/loop7_r02_voltarget.md",
+  "candidates": [],
+  "baseline": "账户 B3；每个市场自己的牛熊分界（牛 100%、其余现金）",
+  "windows": "账户 Z / E / J + 1987〜2000；横展开 1998-01-01〜2026-09-30",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "规模：账户 J 牛日 32.2% 减仓（平均比例 0.724）；17 个市场牛日 12〜47%；接线核对过；事前预期两关都过约 7%"
  }
 ]
