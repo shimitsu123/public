@@ -75,5 +75,48 @@
   }
  },
  "fingerprint": "3b2e8757be7b4a74",
- "rounds": []
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-04",
+   "title": "VCT 的通用版放到 17 个独立市场 VCX",
+   "registered": "34e543d",
+   "code": "34e543d",
+   "approaches": [
+    {
+     "id": "VCX",
+     "family": "核心·波动率",
+     "posthoc": true,
+     "kind": "cross",
+     "verdict": "第二关不过",
+     "sum": -0.0017,
+     "account_stage1": {
+      "ok": true,
+      "sum": 0.3540000000000001,
+      "source": "loop6_r09_volcash.json（VCT）"
+     },
+     "stage2": {
+      "C1": false,
+      "C2": false,
+      "C3": false,
+      "pooled": -0.001742,
+      "h1": 0.00335,
+      "h2": -0.008441,
+      "positive": 9,
+      "need": 12,
+      "n": 17,
+      "max": 0.00698,
+      "ge_stat": 34,
+      "q": {
+       "50": -0.00915,
+       "95": -0.000656,
+       "99": 0.003973
+      },
+      "pos_share": 4.2
+     },
+     "note": "账户第一关引用 VCT 全过（+0.354）；横展开：合并平均 -0.002（400 次同一 k 平移最大 +0.007、≥ 候选 34 次、约第 91.5 百分位；随机中位 -0.009）；Δ > 0 的市场 9 / 17（要 ≥ 12）；两半 +0.003 / -0.008 → C1〜C3 都不过"
+    }
+   ]
+  }
+ ]
 }
