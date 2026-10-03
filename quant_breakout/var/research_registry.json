@@ -10413,5 +10413,54 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "选项：① 本段解除汇率对冲家族禁令 ② 照现行规则继续 ③ 结束第六个循环"
+ },
+ {
+  "line": 7217,
+  "date": "2026-10-03",
+  "title": "第六个研究循环第二段第 6 轮：日元投机空头拥挤时一回落就先对冲 CRW → 按登记的规则两关都过（+0.229 > 400 次最大 +0.154）；事后审计：修正汇率时点后第一关不过（−0.004）",
+  "kind": "study",
+  "domain": "核心/配置",
+  "registration": "ad80a63（第二关 8ee6b54；规则改动 ea05e4f；事后 → S7 适用）",
+  "script": "scripts/loop6_r06_cotcrowd.py",
+  "output": "var/out/loop6_r06_cotcrowd.md",
+  "candidates": [
+   {
+    "id": "CRW",
+    "rule": "CFTC 日元期货投机净仓位占比在过去 3 年 20 分位以下（且净空）时，USD/JPY 跌破 20 日线就把核心换成 2845、收回 20 日线上换回",
+    "result": "第一关 +0.229（Z +0.120、E +0.075、J +0.034；S7 +0.009）；第二关 +0.229 > 最大 +0.154 → 更好候选（登记的规则）；修正汇率时点后 −0.004 → 不建议采用"
+   }
+  ],
+  "baseline": "B2 Calmar Z 1.162 / E 0.808 / J 0.749（原口径）",
+  "windows": "Z / E / J；S7 = 1987〜2000 只有核心",
+  "verdict": "提议(未采用)",
+  "stable_findings": [
+   "研究合成价的汇率比信号旧约 17 小时 → 汇率择时的回测好处偏乐观"
+  ],
+  "era_dependent_or_reversed": [
+   "原口径 2013 / 2004 / 2023 有利；修正后 E、J 为负"
+  ],
+  "notes": "第二段用掉 7 / 20；「核心·汇率对冲」第二段 1 / 3；循环停下（found）、等用户决定（待办 ㊼）"
+ },
+ {
+  "line": 7224,
+  "date": "2026-10-03",
+  "title": "事后审计：研究引擎里汇率的时点（Yahoo JPY=X 的 d 日值 ≈ 东京早上）→ 汇率择时偏乐观；修正后 FJE +0.294 → +0.063（J −0.034）、BCU +0.250 → +0.305、CRW +0.229 → −0.004",
+  "kind": "study",
+  "domain": "核心/配置",
+  "registration": "cb954cf（代码先提交、只运行一次；只描述，不改任何登记过的判定）",
+  "script": "scripts/fx_timing_audit.py",
+  "output": "var/out/fx_timing_audit.md",
+  "candidates": [],
+  "baseline": "B0 / B1 / B2 原口径 vs 修正口径",
+  "windows": "Z / E / J",
+  "verdict": "只展示",
+  "stable_findings": [
+   "Yahoo JPY=X 的 d 日值在事件日（干预、日银、CPI）都是事件前的值",
+   "BCU 不受影响"
+  ],
+  "era_dependent_or_reversed": [
+   "FJE 修正后 J 为负"
+  ],
+  "notes": "模拟盘的 FJE 去留、研究口径要不要改 → 待办 ㊼"
  }
 ]

@@ -1,11 +1,11 @@
 {
- "n": 98,
+ "n": 99,
  "by_layer": {
   "核心层": {
-   "n": 46,
-   "pass1": 13,
+   "n": 47,
+   "pass1": 14,
    "near": 9,
-   "found": 2,
+   "found": 3,
    "pctiles": [
     98.0,
     94.0,
@@ -19,7 +19,8 @@
     96.8,
     100.0,
     99.75,
-    89.0
+    89.0,
+    100.0
    ],
    "ids_pass1": [
     "FXH",
@@ -34,7 +35,8 @@
     "ZSP",
     "BCU",
     "BCB",
-    "NDB"
+    "NDB",
+    "CRW"
    ],
    "ids_near": [
     "VT20",
@@ -47,8 +49,8 @@
     "BAB",
     "NZS"
    ],
-   "pass1_pct": 28.3,
-   "near_pct": 19.6
+   "pass1_pct": 29.8,
+   "near_pct": 19.1
   },
   "个股层": {
    "n": 50,
@@ -297,6 +299,21 @@
    "ids_pass1": [],
    "ids_near": [],
    "pass1_pct": 0.0,
+   "near_pct": 0.0
+  },
+  "核心·汇率对冲": {
+   "n": 1,
+   "pass1": 1,
+   "near": 0,
+   "found": 1,
+   "pctiles": [
+    100.0
+   ],
+   "ids_pass1": [
+    "CRW"
+   ],
+   "ids_near": [],
+   "pass1_pct": 100.0,
    "near_pct": 0.0
   }
  },
@@ -1770,6 +1787,21 @@
    "found": false,
    "near": false,
    "pctile": null
+  },
+  {
+   "loop": 6,
+   "round": 6,
+   "id": "CRW",
+   "layer": "核心层",
+   "sub": "核心·汇率对冲",
+   "verdict": "更好候选",
+   "sum": 0.229,
+   "passed": 7,
+   "full": 7,
+   "pass1": true,
+   "found": true,
+   "near": false,
+   "pctile": 100.0
   }
  ]
 }
