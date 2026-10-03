@@ -1,8 +1,8 @@
 {
- "n": 97,
+ "n": 98,
  "by_layer": {
   "核心层": {
-   "n": 45,
+   "n": 46,
    "pass1": 13,
    "near": 9,
    "found": 2,
@@ -47,8 +47,8 @@
     "BAB",
     "NZS"
    ],
-   "pass1_pct": 28.9,
-   "near_pct": 20.0
+   "pass1_pct": 28.3,
+   "near_pct": 19.6
   },
   "个股层": {
    "n": 50,
@@ -289,7 +289,7 @@
    "near_pct": 10.0
   },
   "核心·择时（早离场）": {
-   "n": 1,
+   "n": 2,
    "pass1": 0,
    "near": 0,
    "found": 0,
@@ -1750,6 +1750,21 @@
    "verdict": "第一关不过",
    "sum": -0.555,
    "passed": 2,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": false,
+   "pctile": null
+  },
+  {
+   "loop": 6,
+   "round": 5,
+   "id": "TB7",
+   "layer": "核心层",
+   "sub": "核心·择时（早离场）",
+   "verdict": "第一关不过",
+   "sum": 0.062,
+   "passed": 4,
    "full": 7,
    "pass1": false,
    "found": false,
