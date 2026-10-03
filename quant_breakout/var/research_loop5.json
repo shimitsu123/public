@@ -210,6 +210,47 @@
      "note": "好处集中在 Z 2005；E −0.041"
     }
    ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-03",
+   "title": "按离 52 周高点远近 / 业种动量调仓位 H52 / ISM",
+   "registration": "ff79468（代码 04f2ae7）",
+   "script": "scripts/loop5_r04_hiind.py",
+   "approaches": [
+    {
+     "id": "H52",
+     "verdict": "第一关不过",
+     "sum": 0.038,
+     "family": "仓位·按信号",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 4,
+     "d": {
+      "Z": -0.016,
+      "E": 0.099,
+      "J": -0.045
+     },
+     "unseen": null,
+     "note": "E 好、J 差"
+    },
+    {
+     "id": "ISM",
+     "verdict": "第一关不过",
+     "sum": -0.342,
+     "family": "仓位·按业种",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 3,
+     "d": {
+      "Z": -0.276,
+      "E": -0.008,
+      "J": -0.058
+     },
+     "unseen": null,
+     "note": "Z 2005 −11 pp"
+    }
+   ]
   }
  ]
 }
