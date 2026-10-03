@@ -292,6 +292,47 @@
      "note": "Z 2005 −16.5 pp；S5 过"
     }
    ]
+  },
+  {
+   "round": 6,
+   "date": "2026-10-03",
+   "title": "按股息率 / 3 年反转调仓位 DYV / LTR",
+   "registration": "661b404（代码 fe7ae2c）",
+   "script": "scripts/loop5_r06_valrev.py",
+   "approaches": [
+    {
+     "id": "DYV",
+     "verdict": "第一关不过",
+     "sum": -0.041,
+     "family": "仓位·价值",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 3,
+     "d": {
+      "Z": -0.024,
+      "E": 0.001,
+      "J": -0.018
+     },
+     "unseen": null,
+     "note": "差都小；Jx 上有用"
+    },
+    {
+     "id": "LTR",
+     "verdict": "第一关不过",
+     "sum": -0.15,
+     "family": "仓位·长期反转",
+     "posthoc": false,
+     "kind": "size_trade",
+     "passed": 3,
+     "d": {
+      "Z": -0.157,
+      "E": 0.032,
+      "J": -0.025
+     },
+     "unseen": null,
+     "note": "Z 2005 −7.1 pp；E +0.032"
+    }
+   ]
   }
  ]
 }
