@@ -267,6 +267,12 @@
   −6% × ≥ 50% 只有 10 段 +3.75%（区间含 0），2006〜2016 与独立数据（1965〜2000、美国）都不成立；二 反弹时与主线关联高的票并不更强
   （日本 −0.067、美国 0.000）；三 暂时顶之后主线关联高的票并不跌得更多 → 都不通过 → **判定 A**，模拟盘不变。事后描述
   （`scripts/crash_mainline_posthoc.py`）：只有 ≤ −15% 的深跌在三段都为正（段数少、区间含 0），进场后平均还跌 6〜10%。
+- VCT「急跌时 1/3 离开纳指」前向记录（2026-10-04 用户 ㊽「把 VCT 加进前向记录」；规则在 `qbreak/vct_forward.py` 开头，只记录 / 展示，不改交易）：
+  第六个研究循环第三段第 9 轮 VCT（第一关全过 +0.354、三个年代回撤都浅，第二关约第 97 百分位）—— 美元计纳指总收益 σ20 高于 1986 年起的中位数（VT20 比例 < 1）
+  且收在 50 日线下 = 急跌信号，美股牛时 1/3 离开纳指（股债负相关 → 1482、否则现金）；2026-10-05 的 sim-day 起每天追加 `var/out/vct_forward.csv`（只追加、不补写），
+  日报「VCT 前向记录」卡片；复核 `python scripts/vct_forward.py --review`（两个「只有核心」的影子账户：B3 vs VCT）。满 1 年 ∧ 与 B3 不同 ≥ 40 天 / ≥ 2 段 ∧ B3 回撤到过 −10%
+  才判定：VCT Calmar ≥ B3 且回撤浅 ≥ 1 pp →「前向支持」（报告给你，要不要用由你决定）；Calmar < B3 − 0.05 →「前向不支持」；最迟 2031-10-04。
+  登记时（2026-10-02 收盘）信号不成立（σ20 15.2% < 中位数 18.1%、纳指在 50 日线上 +4.7%）。复核要不要加进季度例行任务：等你确认
 - 「≤ −15% 深跌」前向记录（2026-09-29，用户「把 ≤ −15% 深跌做成前向记录」；规则在 `qbreak/deepdip_forward.py` 开头，只记录 / 展示，不改交易）：
   日経225 13 周线乖离第一次 ≤ −15%（回到线之上才算新的一段；数据最后一天不判，事件晚一个交易日记下）+ 美国 S&P 500 −12% 作对照；
   2026-10-01 起 sim-day 每天追加 `var/out/deepdip_forward.csv`（只追加），日报「市场状态」下面一栏显示离触发线多远、事件之后 20 / 60 / 120 天的涨跌；
@@ -505,7 +511,8 @@
   - 第三段第 11 轮 CSV「信用利差急速走阔（Baa − 10 年美债 20 天 +0.20 pp）的牛市里 1/3 离开纳指」（登记 dd2a4a3）：**第一关不过**（+0.051；J +0.113，但 E −0.045：信用利差常在急跌之后才走阔；后一半 −0.191；S7 +0.022）→ 接着下一轮（第三段 5 / 13、合计 12 / 20）
   - 第三段第 12 轮 VPS「急跌且股债不是负相关时纳指换 S&P500」（登记 8d336ad）：**第一关不过**（+0.260；Z +0.298，但 J −0.038：回调之后纳指反弹更快；前一半 −0.014；S7 +0.054）→ 接着下一轮（第三段 6 / 13、合计 13 / 20）
   - 第三段第 13 轮 RSC「10 年美债收益率急升的牛市里 1/3 留现金」（登记 ceea493）：**第一关不过、只差 S4**（+0.081；Z +0.093、E +0.006、J −0.018；前一半 −0.021；S7 +0.028；2026-10-02 这条信号正成立，只描述）→ 接着下一轮（第三段 7 / 13、合计 14 / 20）
-  - 2026-10-04 约 01:30 JST **第三段停下、等你决定（待办 ㊽；stopped:要用户决定）：7 / 13 用了（合计 14 / 20）、没找到**；最接近 VCT（第一关全过 +0.354、第二关约第 97 百分位）/ RSC / VPS。独立扫描估计现行规则内剩下 6 个合计约 5%（有空位的都是择时类，择时类第二关去掉汇率时点影响后 0 / 8）；另有「家族按同一类信号还是按动作算」要你裁定（BPR / VPS 沿用了 VCT 的急跌信号，照实写在 sim_changes）
+  - 2026-10-04 约 00:55 JST **第三段停下、等你决定（待办 ㊽；stopped:要用户决定）：7 / 13 用了（合计 14 / 20）、没找到**；最接近 VCT（第一关全过 +0.354、第二关约第 97 百分位）/ RSC / VPS。独立扫描估计现行规则内剩下 6 个合计约 5%（有空位的都是择时类，择时类第二关去掉汇率时点影响后 0 / 8）；另有「家族按同一类信号还是按动作算」要你裁定（BPR / VPS 沿用了 VCT 的急跌信号，照实写在 sim_changes）
+  - 2026-10-04 约 01:05 JST 你选 ㊽ ① + ④（「把 VCT 加进前向记录 / 然后换别的方向继续研究」）→ **第六个研究循环结束**（14 / 20；站得住的两关都过只有 BCU，已采用）；模拟盘不变（Q1B = B3）；VCT 只做前向记录（见上面「VCT 前向记录」）；之后换方向另开第七个研究循环
 - 现在的选股方法放在楽天的美股还是立花的日経225（2026-09-29 用户问；登记 1ba090e、`scripts/market_compare_study.py` → `var/out/market_compare_study.md`）：
   同一套个股规则（W2 + X6、4 × 25%）、同一个推进器 → 按事先读法 **日経（立花）更好**（两个窗口的每笔净收益与个股层 Calmar 都是日経高）：
   每笔 2006〜2016 +2.74% vs +0.30%、2017〜 +0.55% vs −0.86%；楽天来回约 1% 的手续费每年约 4〜6 万円（立花 0.1〜0.3 万円），
@@ -548,6 +555,7 @@
 - ㉕ 2027-09-28 之后第一次：W2 前向记录的第一次年度判定 —— 每日记录在季度复核 2f 里自动算（看 `var/out/score_forward_review.md` 的 W2 一节）；全市场版在季度复核 2i 里自动算（2026-09-27 用户确认加入；手动：☁️ `python scripts/w2_forward_all.py --review`，云端有 J-Quants キー）/ 🤖 Mac：`bash scripts/with_jquants.sh ~/.qbreak/venv/bin/python scripts/w2_forward_all.py --review`（在 `~/qbreak-dev`）；「失效警报成立」→ 提议关掉 W2，用户确认才改；同一份复核里另有 K2（放量 ∧ 低 β）/ USW（美国对应行业弱）两个只记录不交易的标记（2026-09-27 用户确认登记；`qbreak/idio_forward.py`），每年判定一次，证实也只是记录
 - ㉖ 随时：时代主线前向记录的进度 ☁️🤖 `python scripts/era_outlook.py --review`（2026-10 起每月一次；记满 36 个月 ≈ 2029-10 起判定失效与否；
   2026-09-29 起另报 3 个月判定的 JP-S33Q / JP-THQ「下一季」与最新一季的影响占比，记满 12 个季度起判定）；已加进季度复核 2j（2026-09-27 用户确认；同时每季刷新展望 `var/out/era_outlook.md`）
+- ㊾ 随时 / 急跌时：VCT 前向记录 ☁️ `python scripts/vct_forward.py --review` / 🤖 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/vct_forward.py --status`（Mac 在 `~/qbreak-src/quant_breakout`，先 `git pull`；只读）；平时看日报那张卡片；满 1 年且有足够的急跌段才判定（见上面「VCT 前向记录」）；要不要加进季度例行任务：等你确认
 - ㉝ 随时 / 事件发生时：「≤ −15% 深跌」前向记录（日経225；对照 S&P 500 / DAX / FTSE 100） ☁️ `python scripts/deepdip_forward.py --review` / 🤖 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/deepdip_forward.py --status`
   （Mac 在 `~/qbreak-src/quant_breakout`，先 `git pull`；只读、不写文件）；平时看日报那一栏即可；有事件时日报标 ★，JP 满 5 个且都过了 60 个交易日起每次运行自动判定；只记录，用到交易要另外登记、用户确认）
 - ㉞ ✅ 2026-09-29 用户选「加进前向记录」：C_rel 从 2026-09-30 起每天记进 `var/out/threat_forward.csv`（列 C_rel；`qbreak/pressure.py`），
@@ -577,7 +585,7 @@
 - ㊳ ✅ 2026-10-02 用户「采用」研究循环的「更好候选」FJE（日元急升 或 日経熊且日元牛时，闲置资金从 1545 换成对冲版纳指 2845；美股熊照旧现金）
   → 模拟盘与 Mac 执行器的闲置资金 Q1 → Q1H，2026-10-01 收盘的决策起（10-02 06:57 / 07:40 起）（见上面「现在在哪一步」的 Q1H 一条、sim_changes 2026-10-02「配置变更」）。
   汇率改用 Yahoo JPY=X（及时）；2845 在立花 ｅ支店：现物可买东证上市 ETF（2026-09-29 查的一般规定），~~上实盘前由用户本人在立花网站的銘柄情報确认一次 2845 本身能现物买~~（2026-10-03 FJE 撤掉 → 不再需要；要确认的改成 1482）（Claude 不经手登录信息、不自动操作网站）
-- ㊽ 第六个研究循环第三段停下、等你决定（7 / 13 用了、合计 14 / 20、没找到；最接近 VCT +0.354：第一关全过、三个年代与 1987〜2000 回撤都浅，第二关约第 97 百分位；sim_changes 2026-10-04「第六个研究循环第三段停下」）：
+- ㊽ ✅ 2026-10-04 约 01:05 JST 用户「把 VCT 加进前向记录 / 然后换别的方向继续研究」（= ① + ④）→ 第六个研究循环结束；VCT 前向记录（`qbreak/vct_forward.py`，2026-10-05 的 sim-day 起）；家族今后按「同一层 + 同一类信号」算；换方向另开第七个研究循环（sim_changes 2026-10-04「用户决定（待办 ㊽ ① + ④）」）。原来的说明：第六个研究循环第三段停下、等你决定（7 / 13 用了、合计 14 / 20、没找到；最接近 VCT +0.354：第一关全过、三个年代与 1987〜2000 回撤都浅，第二关约第 97 百分位；sim_changes 2026-10-04「第六个研究循环第三段停下」）：
   ①「结束第六个循环、VCT 加进前向记录」（只记录、不改模拟盘与执行器；记录规则另行登记，每天只追加、复核时点与门槛先写定；要等真正的急跌才能确认）—— 期望价值最高；
   ②「结束第六个循环」（模拟盘保持现状 = B3）；
   ③「照现行规则继续」（剩 6 个，独立扫描估计合计约 5%；请顺便说家族按「同一类信号」算（第二个循环写定的，今后默认）还是按动作算）；
@@ -724,6 +732,7 @@
 - 第四个研究循环（选股，2026-10-03 起）：规则与状态 `scripts/research_loop4.py`（`--status` / `--baseline` / `--init`）→ `var/research_loop4.json`、`var/out/research_loop4_baseline.md` / `.json`；`tests/test_research_loop4.py`；每一轮一个 `scripts/loop4_rNN_*.py` → `var/out/loop4_rNN_*.md` / `.json`；事后诊断「完美选股」的上限 `scripts/loop4_oracle_diag.py` → `var/out/loop4_oracle_diag.md` / `.json`（`tests/test_loop4_oracle_diag.py`）；第二关门槛的诊断 `scripts/loop4_placebo_bar.py` → `var/out/loop4_placebo_bar.md` / `.json`；名额诊断 `scripts/loop4_exposure_diag.py` → `var/out/loop4_exposure_diag.md` / `.json`
 - 第五个研究循环（仓位结构，2026-10-03 起）：规则与状态 `scripts/research_loop5.py`（`--status` / `--baseline` / `--init`）→ `var/research_loop5.json`、`var/out/research_loop5_baseline.md` / `.json`；`tests/test_research_loop5.py`；每一轮一个 `scripts/loop5_rNN_*.py` → `var/out/loop5_rNN_*.md` / `.json`
 - 闲置资金 BCU（2026-10-03 采用）：`qbreak/bond_refuge.py`（`tests/test_bond_refuge.py`）→ 云端 `var/bond_refuge.json`；`run._br_compute` / `run._br_keys`
+- VCT 前向记录（2026-10-04 起）：规则 / 记录 / 复核 `qbreak/vct_forward.py`（sim-day 的 `_vct_forward_log`）→ `var/out/vct_forward.csv`；状态 / 复核 `scripts/vct_forward.py --status / --review`；`tests/test_vct_forward.py`
 - 第六个研究循环（核心层，2026-10-03 起）：规则与状态 `scripts/research_loop6.py`（`--status` / `--baseline` / `--init`；第二段 `--baseline2` / `--init2`、基准 B2 `scripts/loop6_common.py` → `var/out/research_loop6_b2.md`；用户解除「汇率对冲」禁令后 `--resume-fx`）→ `var/research_loop6.json`、`var/out/research_loop6_baseline.md` / `.json`；`tests/test_research_loop6.py`；每一轮一个 `scripts/loop6_rNN_*.py` → `var/out/loop6_rNN_*.md` / `.json`
 - 第二个研究循环（2026-10-02 起；同日 20 个做法用完、没找到 → 结束）：规则与状态 `scripts/research_loop2.py`（`--status` / `--baseline` / `--init` / `--fingerprint`）→ `var/research_loop2.json`、`var/out/research_loop2_baseline.md` / `.json`；基准 B1 与账户接口 `scripts/loop2_common.py`；`tests/test_research_loop2.py`；每一轮一个 `scripts/loop2_rNN_*.py` → `var/out/loop2_rNN_*.md` / `.json`（第二关 `*_stage2_<ID>.md` / `.json`）
 - 行情缓存：`qbreak/data.py`（有效期 12 小时 + 按交易日历查新鲜度；盘中取的缓存在收盘后视为过期、重新下载 —— 2026-09-29 修正，以前收盘后 12 小时内会把盘中快照当成收盘价；重下载失败去掉那一根并记为「行情落后」）；**价格调整口径 v2（2026-09-30）**：不用 yfinance 的 auto_adjust，改为 `qbreak.data.adjust_prices` 按 Yahoo 的分红 / 拆股记录自己调整（同一口径，实测与 Yahoo 的 Adj Close 差 < 1e-6），**拆股当天的分红按拆股后口径**（Yahoo 把日本株分割与配当同一基準日的分红记成分割前每股金额 → 8766.T 2026-09-29 被当成 22.8% 的分红、之前价格整体调低、当天「涨」25.8%；横向扫描 1,076 只近 2 年 20 例，含 8035.T / 5401.T 2025-09-29），公司行为随缓存的 meta 保存（`actions_of` / `fixes_of`）、缓存 meta 带 `adj` 版本号（口径不同就重新下载）；**指数日线缺收盘 → 用当天 5 分钟线合成**（`fill_index_from_intraday`，只补 `^` 开头、已收盘的日子；Yahoo 的 ^N225 2026-09-29 只给开盘、收盘 NaN），记进 `FILLED`，日报「数据完整性 · 自动修复」列出；威胁指数的指数序列同样处理（`qbreak/threat.py`）
@@ -761,6 +770,7 @@
 | 闲置资金 / 日元走强判定（FJE，2026-10-03 已撤） | 「为什么不再换 2845 了？」「FJE 还在用吗？」 | 不在用：2026-10-02 收盘的决策起 idle_cash.mode = "Q1B"（读 `var/sim.json` 的 idle_cash.note、`var/out/fje_recheck.md`）；`~/.qbreak/home/fx_hedge.json` 是 10-01 之前的旧文件 | 只读；要恢复（"Q1HB"）要你明确说、在 `~/qbreak-dev` 改 `var/sim.json` 并记 sim_changes |
 | 影子账户（判断型） | 「影子账户今天怎么样？比规则账户好吗？」 | 读 `var/out/shadow_today.json`、`var/out/shadow_equity.csv`（云端每天记）；中间统计 `python scripts/shadow_account.py evaluate --interim` | 只读；判断只在云端例行任务里做 |
 | 前向记录进度 | 「前向记录记了多少？X6 吊灯止损现在怎样？」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/score_forward.py --status`（在 `~/qbreak-src/quant_breakout`，读仓库里云端每天追加的记录；不联网、不写文件）；详细结果读季度复核的 `var/out/score_forward_review.md`、`w2_forward_all_review.md` | 只读；判定只在季度复核里做 |
+| VCT 前向记录 | 「VCT 今天有没有急跌信号？前向记录记了几天？」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/vct_forward.py --status`（在 `~/qbreak-src/quant_breakout`，读云端每天追加的 `var/out/vct_forward.csv`；不写文件）；也可看日报「VCT 前向记录」卡片 | 只读 / 只展示，不改交易 |
 | 深跌前向记录 | 「日経离 −15% 还有多远？深跌前向记录记了几个？」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/deepdip_forward.py --status`（在 `~/qbreak-src/quant_breakout`，读云端每天算好的 `var/out/unified_today.json`；不联网、不写文件）；也可直接看日报「深跌前向记录」一栏 | 只读 / 只展示，不改交易 |
 | 接下来要检查什么 | 「这个月 / 接下来要注意什么？」「什么时候判定 W2？」 | 读 `CHECK_TIMELINE.md` 与日报「检查日历」（`var/out/unified_today.json` 的 calendar） | 只读 |
 | 股票被踢出了吗 | 「要下单 / 手上的股票有没有被踢出日経225、被指定特別注意？」 | `QBREAK_HOME=~/.qbreak/home ~/.qbreak/venv/bin/python run.py eligibility`（在 `~/qbreak-src/quant_breakout`） | 只读；名单差异要改名单 → 你确认后云端改 |

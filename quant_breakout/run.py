@@ -1568,6 +1568,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     from qbreak import exit_rules as _EXR
     out["exit_mode"] = {"JP": ctx.xmode, "label": _EXR.LABELS[ctx.xmode]}   # 个股的离场方式（var/sim.json exits）
     out["idle_cash"] = ctx.ic_status                         # 闲置资金的方式与现在拿什么（var/sim.json idle_cash）
+    out["vct_forward"] = _vct_forward_log(ctx, today)        # VCT「急跌时 1/3 离开纳指」前向记录（只记录 / 展示，不影响交易）
     try:
         from qbreak import survey as _SV
         out["survey_failed"] = dict(_SV.LAST_FAILED)          # 因子调查取不到的数据源（日报「数据完整性」列出）
@@ -2039,6 +2040,19 @@ def _deepdip_forward_log(data: dict, today) -> dict:
         return DF.run_day(paths.out_dir() / DF.LOG_FILE, closes, members, str(today))
     except Exception as e:                                   # noqa: BLE001
         log.warning("深跌前向记录失败（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
+
+
+def _vct_forward_log(ctx, today) -> dict:
+    """VCT「急跌时 1/3 离开纳指」的前向记录（qbreak/vct_forward.py，2026-10-04 登记；用户 ㊽）：最新 K 线那天的急跌信号 + 模拟盘这一次算出的
+    美股牛熊 / 股债相关 → 追加一行 var/out/vct_forward.csv（只追加、不补写；唯一写者 = 云端 sim-day）。只记录 / 展示，不影响交易；
+    失败只记下原因（日报「数据完整性」会列出）。"""
+    from qbreak import vct_forward as VF
+    try:
+        info = VF.run_day(paths.out_dir() / VF.LOG_FILE, str(ctx.bar_date), str(today), ctx.ic_status)
+        return VF.card(info)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("VCT 前向记录失败（不影响交易）：%s", e)
         return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 

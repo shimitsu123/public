@@ -61,6 +61,7 @@ def build_unified_data() -> dict:
             "energy": td.get("energy") or {},                    # 仪表盘：能源消费（每月）+ K4 前向记录的状态（只作展示 / 记录）
             "era": td.get("era") or {},                          # 时代主线前向记录的状态（qbreak/era_forward.py；只记录）
             "deepdip": td.get("deepdip") or {},                  # 「≤ −15% 深跌」前向记录（qbreak/deepdip_forward.py；只记录 / 展示）
+            "vct_forward": td.get("vct_forward") or {},          # VCT「急跌时 1/3 离开纳指」前向记录（qbreak/vct_forward.py；只记录 / 展示）
             "policy": td.get("policy") or {},                    # 政策事件反应库（qbreak/policy_forward.py；只展示 + 前向记录）
             "eligibility": td.get("eligibility") or {},          # 下单前资格检查（qbreak/eligibility.py：被踢出 / 被指定的票不开新仓）
             "delist": td.get("delist") or {},                    # 股票池更新时间表（qbreak/delist_schedule.py：上場廃止到日自动去掉）
@@ -206,6 +207,9 @@ def missing_items(d: dict) -> list[str]:
     dd = d.get("deepdip") or {}
     if started and dd.get("error"):
         out.append(f"深跌前向记录（≤ −15%）：这次没算 / 没记上（{dd['error']}）—— 不影响交易；下次运行会按行情补上漏掉的事件")
+    vf = d.get("vct_forward") or {}
+    if started and (vf.get("error") or vf.get("note")):
+        out.append(f"VCT 前向记录：{vf.get('error') or vf.get('note')} —— 不影响交易；漏掉的一天不补写（复核时那一天按 B3）")
     infl = (d.get("themes") or {}).get("influence") or {}
     if started and infl.get("error"):
         out.append(f"各业种影响占比（J-Quants 東証業種別指数）：取不到（{infl['error']}）—— 时代主线旁边不标占比，不影响交易")
@@ -1178,7 +1182,7 @@ def render_unified_html(d: dict) -> str:
         watch="".join(watch) or "<tr><td colspan=12 class='muted'>尚无候补数据</td></tr>",
         timeline=_timeline_card(d),
         themes=_themes_html(d.get("themes") or {}, meta), policy=_policy_html(d.get("policy") or {}),
-        deepdip=_deepdip_html(d.get("deepdip") or {}), fwdj=_fwdj_html(d), combo_c=_combo_c_html(d),
+        deepdip=_deepdip_html(d.get("deepdip") or {}), vct=_vct_html(d.get("vct_forward") or {}), fwdj=_fwdj_html(d), combo_c=_combo_c_html(d),
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us), shadow=_shadow_html(d),
         elig=_eligibility_html(d, meta), delist=_delist_html(d, meta), cost_sales=_cost_sales_html(d.get("cost_sales") or {}),
         invest_flow=_invest_flow_html(d.get("invest_flow") or {}),
@@ -1387,6 +1391,34 @@ def _deepdip_html(dd: dict) -> str:
             f"历史参考（日本 / 美国是事后描述；欧洲是 2026-09-29 事先登记的核对，判定「方向一致」）：13 周线第一次到门槛之后 60 个交易日比平时多 {hist}；"
             "区间都含 0，之后 60 天涨的比例与任意一天差不多，买进后 60 天内平均还跌 6〜13%（任意一天买约 5〜6%）。"
             "规则见 qbreak/deepdip_forward.py 开头（2026-09-29 登记）。</p></section>")
+
+
+def _vct_html(v: dict) -> str:
+    """VCT「急跌时 1/3 离开纳指」前向记录（qbreak/vct_forward.py，2026-10-04 登记）：今天的急跌信号、VCT 的配置、与 B3 是否不同、记录进度。只作参考，不改交易。"""
+    if not v:
+        return ""
+    if v.get("error"):
+        return f"<section class='card'><h2>VCT 前向记录（只记录，不改交易）</h2><p class='muted'>这次没算出（{escape(str(v['error']))}）</p></section>"
+
+    def yn(x, a="是", b="否"):
+        return "—" if x is None or x == "" else (a if bool(x) else b)
+    gap = (f"纳指总收益 {float(v['ndx_tr']) / float(v['sma50']) * 100 - 100:+.1f}%（对 50 日线）"
+           if v.get("ndx_tr") not in (None, "") and v.get("sma50") not in (None, "") else "纳指对 50 日线 —")
+    ratio = f"VT20 比例 {float(v['vt_ratio']):.2f}" if v.get("vt_ratio") not in (None, "") else "VT20 比例 —"
+    if v.get("vct_1545") in (None, ""):
+        alloc = "VCT 的配置算不了（B3 的状态取不到）"
+    else:
+        u, b = float(v["vct_1545"]), float(v.get("vct_1482") or 0.0)
+        alloc = ("VCT：" + "、".join(x for x in (f"1545 {u * 100:.0f}%" if u > 0 else "", f"1482 {b * 100:.0f}%" if b > 0 else "",
+                                                    f"现金 {(1 - u - b) * 100:.0f}%" if 1 - u - b > 1e-9 else "") if x)
+                 + ("（与模拟盘 B3 不同）" if v.get("differ") else "（与模拟盘 B3 相同）"))
+    return ("<section class='card'><h2>VCT 前向记录（急跌时 1/3 离开纳指；只记录，不改交易）</h2>"
+            f"<p>{escape(str(v.get('date') or '—'))} 收盘的判定（美国 {escape(str(v.get('us_date') or '—'))}）：急跌信号 {yn(v.get('signal'), '成立', '不成立')}"
+            f"（高波动 {yn(v.get('high'))}：{ratio}；正在跌 {yn(v.get('down'))}：{gap}）；美股{yn(v.get('us_bear'), '熊', '牛')}；{alloc}。</p>"
+            f"<p class='muted'>已记 {v.get('rows', 0)} 天（{escape(str(v.get('start', '')))} 起），其中与 B3 不同 {v.get('differ_days', 0)} 天。"
+            "急跌信号 = 美元计纳指总收益的 20 日波动高于自 1986 年起的中位数（VT20 比例 < 1）且收在 50 日线下；美股牛时 1/3 离开纳指（股债负相关 → 1482、否则现金）。"
+            "历史（第六个研究循环第 9 轮，只运行一次）：三个年代回撤都变浅（J −29.61% → −22.03%），但多数年份少赚、随机对照约第 97 百分位 → 没采用、只前向记录。"
+            "复核 scripts/vct_forward.py --review；判定条件见 qbreak/vct_forward.py 开头（2026-10-04 登记）。</p></section>")
 
 
 def _policy_html(p: dict) -> str:
@@ -1599,6 +1631,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 {fwdj}
 {combo_c}
 {deepdip}
+{vct}
 <section class="card"><details><summary><h2 style="display:inline">大事件威胁指数的明细（只展示，不参与交易）</h2></summary>{threat}</details></section>
 <section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>主题 / 业种（近 3 月相对）</th><th>状态</th><th>最近一次决算的形态</th><th>突破</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
 <p class="muted">宏观顺风度 = 个股对日本 / 美国利率、油价、日元、信用利差，以及农产品、工业金属、黄金、天然气 ETF 的历史敏感度 × 近 60 个交易日的变化（当日横截面三分位：顺风 / 中性 / 逆风），只作参考：2026-09-25 事先登记研究显示它对之后 20 日的收益没有可靠的预测力（加商品后月末前 1/5 − 后 1/5 为 +0.35%，t 1.40；秩相关 0.006），交易排序不用它。</p>

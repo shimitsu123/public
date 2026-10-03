@@ -10745,5 +10745,45 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "选项：① 结束第六个循环、VCT 加进前向记录（只记录）② 结束第六个循环 ③ 照现行规则继续（剩 6）④ 别的方向；家族按同一类信号算还是按动作算要用户裁定"
+ },
+ {
+  "line": 7577,
+  "date": "2026-10-04",
+  "title": "用户决定（待办 ㊽ ① + ④）：第六个研究循环结束、VCT 加进前向记录；换别的方向继续研究",
+  "kind": "decision",
+  "domain": "核心/配置",
+  "registration": "—",
+  "script": "scripts/research_loop6.py",
+  "output": "var/research_loop6.json",
+  "candidates": [],
+  "baseline": "B3 Calmar Z 1.194 / E 0.627 / J 0.676",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "第六个循环 14 / 20、站得住的两关都过只有 BCU（已采用）；模拟盘不变；家族今后按「同一层 + 同一类信号」算"
+ },
+ {
+  "line": 7584,
+  "date": "2026-10-04",
+  "title": "VCT「急跌时 1/3 离开纳指」前向记录（只记录 / 展示，不改交易）",
+  "kind": "forward_record",
+  "domain": "核心/配置",
+  "registration": "本提交",
+  "script": "qbreak/vct_forward.py（sim-day 每天记；scripts/vct_forward.py --status / --review）",
+  "output": "var/out/vct_forward.csv；日报「VCT 前向记录」卡片；var/out/vct_forward_review.md（--review --write）",
+  "candidates": [
+   {
+    "id": "VCT",
+    "rule": "美元计纳指总收益 σ20 > 1986 年起的扩展中位数（VT20 比例 < 1）∧ 收在 50 日线下，美股牛时 1/3 离开纳指（股债负相关 → 1482、否则现金）",
+    "result": "登记时没有前向数据；历史（第六个循环第 9 轮）第一关全过 +0.354、第二关约第 97 百分位"
+   }
+  ],
+  "baseline": "B3（模拟盘现在的闲置资金 Q1B）的「只有核心」影子账户",
+  "windows": "决策日 ≥ 2026-10-02（2026-10-05 的 sim-day 起记）；满 1 年、不同 ≥ 40 天 / ≥ 2 段、B3 回撤到过 −10% 才判定；最迟 2031-10-04",
+  "verdict": "前向记录",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "前向支持 = VCT Calmar ≥ B3 且回撤浅 ≥ 1 pp；前向不支持 = VCT Calmar < B3 − 0.05；要不要用由用户决定"
  }
 ]
