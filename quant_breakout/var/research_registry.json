@@ -10127,5 +10127,59 @@
    "RGX：J +0.010、Jx 加权跑赢比例 +1.70 pp（2017 年以后这一层作用变小，但 dmean 仍负）"
   ],
   "notes": "第五个循环用掉 18 / 20；09-26 日経225 上「被这一层挡掉的更好」在现在的系统上不成立"
+ },
+ {
+  "line": 6743,
+  "date": "2026-10-03",
+  "title": "第五个研究循环（仓位结构）第 11 轮：按高成交量溢价调仓位 DVS（突破日量比）/ WVS（周线量比）→ 两个都第一关不过（Z 2005 −15.6 / −12.8 pp）",
+  "kind": "study",
+  "domain": "资金/执行/成本",
+  "registration": "e157e47（代码 6ade4a7；登记后代码未改、只运行一次；循环规则 3577846；不是事后组合）",
+  "script": "scripts/loop5_r11_volume.py",
+  "output": "var/out/loop5_r11_volume.md",
+  "candidates": [
+   {
+    "id": "DVS",
+    "rule": "突破日量比（vr1）在学习样本最高三分之一 34%、最低三分之一 12.5%，其余 25%",
+    "result": "合计 −0.226（Z −0.261、E −0.002、J +0.037）；S5 W 过、Jx 不过"
+   },
+   {
+    "id": "WVS",
+    "rule": "周线量比（w5v，W2 的连续值）同样分三档",
+    "result": "合计 −0.273（Z −0.269、E +0.016、J −0.020）；S5 W 不过、Jx 过"
+   }
+  ],
+  "baseline": "B1 Calmar Z 0.979 / E 0.749 / J 0.741",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30；S5 = W 2006〜2016 / Jx 2017〜（每笔超额 − O0 核心）",
+  "verdict": "不通过",
+  "stable_findings": [
+   "Z 2005 年的大赢家多半是低量的突破（按量加减仓 → Z −0.26 左右）"
+  ],
+  "era_dependent_or_reversed": [
+   "DVS：W 加仓那一边略好、Jx 更差；WVS 反过来（高成交量溢价在这批突破里没有稳定方向）"
+  ],
+  "notes": "第五个循环用掉 20 / 20（用完）"
+ },
+ {
+  "line": 6757,
+  "date": "2026-10-03",
+  "title": "第五个研究循环用完（exhausted，2026-10-03 12:50 JST）：20 / 20、没找到；最接近 BTS / X2F（只差 S5）/ RSK",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": "循环规则 3577846；各轮登记见 sim_changes",
+  "script": "scripts/research_loop5.py",
+  "output": "var/research_loop5.json",
+  "candidates": [],
+  "baseline": "B1 Calmar Z 0.979 / E 0.749 / J 0.741",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09-30",
+  "verdict": "变更/工程",
+  "stable_findings": [
+   "仓位规则在两个独立股票池（W / Jx）同方向的几乎没有（20 个里只有 HAL 过 S5）",
+   "去掉量化状态层 → E 回撤深 5.65 pp（这一层有用）"
+  ],
+  "era_dependent_or_reversed": [
+   "账户上的差主要来自 Z 2005 一个年份"
+  ],
+  "notes": "没找到（用完）；下一步：第六个研究循环（核心层；研究成功率统计里核心层第一关全过 27%、个股层 0%）"
  }
 ]

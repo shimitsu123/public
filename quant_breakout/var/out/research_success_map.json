@@ -1,5 +1,5 @@
 {
- "n": 86,
+ "n": 89,
  "by_layer": {
   "核心层": {
    "n": 37,
@@ -45,7 +45,7 @@
    "near_pct": 24.3
   },
   "个股层": {
-   "n": 47,
+   "n": 50,
    "pass1": 0,
    "near": 4,
    "found": 0,
@@ -58,7 +58,7 @@
     "X2F"
    ],
    "pass1_pct": 0.0,
-   "near_pct": 8.5
+   "near_pct": 8.0
   },
   "账户风险层": {
    "n": 2,
@@ -263,7 +263,7 @@
    "near_pct": 12.5
   },
   "仓位": {
-   "n": 17,
+   "n": 20,
    "pass1": 0,
    "near": 2,
    "found": 0,
@@ -274,7 +274,7 @@
     "X2F"
    ],
    "pass1_pct": 0.0,
-   "near_pct": 11.8
+   "near_pct": 10.0
   }
  },
  "rows": [
@@ -1562,6 +1562,51 @@
    "verdict": "第一关不过",
    "sum": 0.187,
    "passed": 5,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": false,
+   "pctile": null
+  },
+  {
+   "loop": 5,
+   "round": 10,
+   "id": "RGX",
+   "layer": "个股层",
+   "sub": "仓位",
+   "verdict": "第一关不过",
+   "sum": -0.186,
+   "passed": 2,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": false,
+   "pctile": null
+  },
+  {
+   "loop": 5,
+   "round": 11,
+   "id": "DVS",
+   "layer": "个股层",
+   "sub": "仓位",
+   "verdict": "第一关不过",
+   "sum": -0.226,
+   "passed": 3,
+   "full": 7,
+   "pass1": false,
+   "found": false,
+   "near": false,
+   "pctile": null
+  },
+  {
+   "loop": 5,
+   "round": 11,
+   "id": "WVS",
+   "layer": "个股层",
+   "sub": "仓位",
+   "verdict": "第一关不过",
+   "sum": -0.273,
+   "passed": 3,
    "full": 7,
    "pass1": false,
    "found": false,
