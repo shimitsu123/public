@@ -12053,5 +12053,47 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "设计前只数个数：同一天倒序排候选每个年代只改 1 笔成交 → 排序没用；接线核对通过；碰到 B3 成交 RSB 32 / BFX 44 笔（共 140）"
+ },
+ {
+  "line": 8594,
+  "date": "2026-10-04",
+  "title": "第十个研究循环第 3 轮 RSB / BFX → 两个都第一关不过；RSB 胜率 +3.71 pp、Z / E / J / W / Zx 都同方向，但 Z 账户 −0.151、Jx 每笔 −0.0005 pp",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "7231aad（登记后代码未改、只运行一次）",
+  "script": "scripts/loop10_r03_relfx.py",
+  "output": "var/out/loop10_r03_relfx.md",
+  "candidates": [
+   "RSB",
+   "BFX"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09（+ W / Jx / Zx）",
+  "verdict": "不通过",
+  "stable_findings": [
+   "RSB：比自己业种涨得多的突破更容易失败（Z / E / J、W、Zx 同方向，Jx 持平）"
+  ],
+  "era_dependent_or_reversed": [
+   "RSB / BFX：Z 账户变差",
+   "BFX：W / Jx 方向相反（汇率 β 不稳）"
+  ],
+  "notes": "5 个按个股挡的做法都提高胜率 +2.5〜+5.0 pp、都在 Z 伤账户；胜率诊断的 5 个同号特征用完"
+ },
+ {
+  "line": 8607,
+  "date": "2026-10-04",
+  "title": "第十个研究循环停下、等用户决定（8 / 20、没找到；最接近 X2G 只差 V3、JRM 只差 V6）→ 待办〔57〕",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "1450380（循环规则）",
+  "script": "scripts/research_loop10.py",
+  "output": "var/research_loop10.json",
+  "candidates": [],
+  "baseline": "B3",
+  "windows": "Z / E / J",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "结构性障碍：按个股挡在 Z 伤账户、排序没用、JRC 一族的 Zx 已看过；选项：前向检验 X2G / JRM（推荐）、继续、改账户范围、结束"
  }
 ]
