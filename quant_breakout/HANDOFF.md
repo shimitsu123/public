@@ -836,6 +836,7 @@
 | 市场偏向 / 威胁消息 | 「现在偏向哪边？」「有什么经济威胁消息？」 | `bash scripts/liveu.sh news --open`（仪表盘重写并打开），读 `~/.qbreak/home/cache/news/news.json` | 只读 |
 | J-Quants 今天的新数据 | 「持仓 / 候补最近有决算吗？」「今天有哪些予想修正？」 | 读 `~/.qbreak/home/out/jq_today.json`；要马上取：`bash scripts/liveu.sh jq` | 只读；キー不回显 |
 | 和云端对账 | 「今天和云端一致吗？不一致为什么？」 | 读日志的比较行（两边持仓、现金、权益差） | 只读 |
+| 每年交易多少笔 / 都买哪些股票 | 「现在每年大概交易多少笔？」「都买哪些股票？」 | `git -C ~/qbreak-src pull --ff-only` 后读 `var/out/b3_trades_summary.md`（现行规则 B3 在三个年代回测里的每年笔数、常买的股票与业种；2026-10-04 起）；现在离买点近的票看日报的候补队列 | 只读 / 只描述；回测不是预测；重算 `python scripts/b3_trades_summary.py` 在云端做（约 5 分钟） |
 | 为什么没买 / 为什么卖 | 「为什么今天没买 7203？」 | 查日志的 blocked / skipped（一手太贵、名额满、跳空 > 3%、决算前等） | 只读 |
 | 立花连得上吗 | 「检查立花连通（只读）」「用デモ环境检查」 | `bash scripts/liveu.sh probe [--demo]`（= `run.py tachibana-probe`：登录、取价、持仓、余力、注文一覧、立花銘柄マスタ；结果记在 `~/.qbreak/home/out/tachibana_probe_{live,demo}.json`，没有金额与密钥）；デモ一天的发单检查 `probe --demo --order-test` | 本番不发单；デモ才发单 |
 | 能上实盘了吗 | 「能上实盘了吗？」「上线门槛满足了吗？」 | `bash scripts/liveu.sh gate`（= `run.py live-gate`）：门槛 ①〜④（连续 10 天一致、没有状态不明的单、HALT 演练、デモ三点）+ 准备（本番只读检查、钥匙串 / 私钥 600、定时任务、自动唤醒）+ 参考 | 只读：不下单、不改文件、钥匙串只查有没有 |
