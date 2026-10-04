@@ -233,6 +233,52 @@
      }
     }
    ]
+  },
+  {
+   "round": 5,
+   "date": "2026-10-04",
+   "title": "日経短期过热 N25U / 日経在回调中 NDD",
+   "registered": "77651b2",
+   "script": "scripts/loop9_r05_marketext.py",
+   "output": "var/out/loop9_r05_marketext.md",
+   "approaches": [
+    {
+     "id": "N25U",
+     "family": "选股·大盘过热（逆向）",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.154,
+     "passed": 3,
+     "d": {
+      "Z": -0.166,
+      "E": 0.002,
+      "J": 0.01
+     },
+     "success": {
+      "win": 48.41,
+      "mean": 3.311
+     }
+    },
+    {
+     "id": "NDD",
+     "family": "选股·大盘短期趋势（顺向）",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.027,
+     "passed": 4,
+     "d": {
+      "Z": -0.028,
+      "E": -0.002,
+      "J": 0.003
+     },
+     "success": {
+      "win": 52.38,
+      "mean": 3.281
+     }
+    }
+   ]
   }
  ]
 }

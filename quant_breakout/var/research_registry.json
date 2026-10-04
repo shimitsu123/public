@@ -11774,5 +11774,49 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "第 1 轮运行之前列进计划，不是事后；N50DN 与 N5D 太像、家族到上限 → 不登记；rank 类（同一天的排序）几乎不起作用 → 不做"
+ },
+ {
+  "line": 8399,
+  "date": "2026-10-04",
+  "title": "第九个研究循环第 5 轮 N25U / NDD → 两个都第一关不过（N25U −0.154：过热日是突破的好时候；NDD −0.027：胜率 +1.6 pp 但账户不变）",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "77651b2（登记后代码未改、只运行一次）",
+  "script": "scripts/loop9_r05_marketext.py",
+  "output": "var/out/loop9_r05_marketext.md",
+  "candidates": [
+   "N25U",
+   "NDD"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "不通过",
+  "stable_findings": [
+   "逆向的大盘过热闸门（ADH、N25U）在 Z 都大幅为负"
+  ],
+  "era_dependent_or_reversed": [
+   "NDD：W 被挡的更差、Jx 被挡的更好"
+  ],
+  "notes": "N25U Z −0.166、E +0.002、J +0.010；NDD Z −0.028、E −0.002、J +0.003，S8 过"
+ },
+ {
+  "line": 8411,
+  "date": "2026-10-04",
+  "title": "登记：第九个研究循环第 6 轮 MDD 大盘出货日 ≥ 5 个不开新仓（date）/ RVS 20 日涨幅池子前 10% 不买（stock）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop9_r06_distrev.py",
+  "output": "var/out/loop9_r06_distrev.md",
+  "candidates": [
+   "MDD",
+   "RVS"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "第 4 轮运行时想的，不是变体；MDD 按 IBD 原版补了作废规则（只按个数）；RVS 只碰到 2 笔成交"
  }
 ]
