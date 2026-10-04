@@ -11842,5 +11842,25 @@
    "MDD 在 Z 账户变差（−0.044）"
   ],
   "notes": "MDD Z −0.044、E +0.020、J +0.006，S5 / S8 过、S1 / S2 / S4 不过；RVS 只碰到 2 笔成交"
+ },
+ {
+  "line": 8440,
+  "date": "2026-10-04",
+  "title": "登记：第九个研究循环第 7 轮 ONS 上个月隔夜收益池子前 10% 不买 / LVV 6 个月成交额变异系数池子前 10% 不买（stock）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop9_r07_sentliq.py",
+  "output": "var/out/loop9_r07_sentliq.md",
+  "candidates": [
+   "ONS",
+   "LVV"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "文献检索后剩下的弱 / 很弱候选；之后先验想法用完 → 循环停下由用户决定"
  }
 ]
