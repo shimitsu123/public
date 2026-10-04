@@ -53,5 +53,60 @@
   }
  },
  "fingerprint": "3b2e8757be7b4a74",
- "rounds": []
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-04",
+   "title": "期权的波动风险溢价 VRP（信息检查）+ 规则 VRN（牛市月末 VRP ≤ 0 → 下一个月核心 2/3）",
+   "registered": "f042dc6",
+   "code": "f042dc6",
+   "script": "scripts/loop8_r01_vrp.py",
+   "approaches": [
+    {
+     "id": "VRN",
+     "family": "期权·波动风险溢价",
+     "posthoc": false,
+     "kind": "cross",
+     "verdict": "第一关不过",
+     "info": {
+      "ok": true,
+      "pooled": 0.0889,
+      "p": 0.07,
+      "agree": 4,
+      "n": 5,
+      "post_pooled": 0.0169
+     },
+     "account_stage1": {
+      "ok": false,
+      "sum": 0.143,
+      "d": {
+       "Z": 0.166,
+       "E": -0.038,
+       "J": 0.015
+      },
+      "S1": true,
+      "S2": false,
+      "S3": true,
+      "S4": true,
+      "h1": 0.005,
+      "h2": 0.18
+     },
+     "stage2": {
+      "C1": false,
+      "C2": false,
+      "C3": false,
+      "pooled": -0.004747,
+      "h1": -0.002139,
+      "h2": -0.008469,
+      "positive": 0,
+      "need": 3,
+      "n": 4,
+      "max": 0.037119,
+      "ge_stat": 170
+     },
+     "note": "信息检查过（合并 IC +0.089、p = 0.070、4 / 5 个市场 IC > 0、2012 年以后 +0.017）；规则 VRN 第一关不过（S2：E −0.038）、横展开不过（合并 −0.005、0 / 4 为正）；信息集中在 VRP 高的一端（最高五分位之后 63 天：US +4.88%、EU +2.28%、IN +5.41%），VRP ≤ 0 的牛市月末之后并不差（US +0.83%、EU +1.76%）"
+    }
+   ]
+  }
+ ]
 }
