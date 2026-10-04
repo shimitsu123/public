@@ -12095,5 +12095,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "结构性障碍：按个股挡在 Z 伤账户、排序没用、JRC 一族的 Zx 已看过；选项：前向检验 X2G / JRM（推荐）、继续、改账户范围、结束"
+ },
+ {
+  "line": 8620,
+  "date": "2026-10-05",
+  "title": "用户决定（待办〔57〕②）：「继续用完剩下的 12 个做法」→ 第十个研究循环恢复（8 / 20、剩 12；规则不变）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "1450380（循环规则，不变）",
+  "script": "scripts/research_loop10.py",
+  "output": "var/research_loop10.json",
+  "candidates": [],
+  "baseline": "B3",
+  "windows": "Z / E / J",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "Zx 上看过的特征与闸门不再做变体"
  }
 ]
