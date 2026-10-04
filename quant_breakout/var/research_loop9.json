@@ -205,6 +205,34 @@
      }
     }
    ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-04",
+   "title": "业种宽度 SBW（AGE 是第四个循环 BAS 的事后变体 → 不登记）",
+   "registered": "c92a4de",
+   "script": "scripts/loop9_r04_base.py",
+   "output": "var/out/loop9_r04_base.md",
+   "approaches": [
+    {
+     "id": "SBW",
+     "family": "选股·业种宽度",
+     "kind": "stock",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": 0.039,
+     "passed": 5,
+     "d": {
+      "Z": 0.0,
+      "E": -0.003,
+      "J": 0.042
+     },
+     "success": {
+      "win": 50.4,
+      "mean": 3.313
+     }
+    }
+   ]
   }
  ]
 }

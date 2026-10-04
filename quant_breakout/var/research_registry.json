@@ -11733,5 +11733,46 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "第 1 轮运行之前列进计划，不是事后；挡得很少（成交碰到 0 / 2 / 3 笔）"
+ },
+ {
+  "line": 8377,
+  "date": "2026-10-04",
+  "title": "第九个研究循环第 4 轮 SBW → 第一关不过（合计 +0.039 全在 J 的 3 笔；S4 后一半 −0.012、S5 Jx 相反、S8 胜率 −0.33 pp）",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "c92a4de（登记后代码未改、只运行一次）",
+  "script": "scripts/loop9_r04_base.py",
+  "output": "var/out/loop9_r04_base.md",
+  "candidates": [
+   "SBW"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [
+   "SBW：W 被挡的更差、Jx 被挡的更好（两个池子相反）"
+  ],
+  "notes": "Z ±0、E −0.003、J +0.042；S1 / S2 / S3 / S6 / S7 过，S4 / S5 / S8 不过"
+ },
+ {
+  "line": 8386,
+  "date": "2026-10-04",
+  "title": "登记：第九个研究循环第 5 轮 N25U 日経比 25 日线高 ≥ 5% 不开新仓 / NDD 日経比 60 日高点低 ≥ 5% 不开新仓（date）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop9_r05_marketext.py",
+  "output": "var/out/loop9_r05_marketext.md",
+  "candidates": [
+   "N25U",
+   "NDD"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "第 1 轮运行之前列进计划，不是事后；N50DN 与 N5D 太像、家族到上限 → 不登记；rank 类（同一天的排序）几乎不起作用 → 不做"
  }
 ]
