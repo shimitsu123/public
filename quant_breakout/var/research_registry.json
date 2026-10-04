@@ -11058,5 +11058,24 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "2026-10-04 核对：股票池 225 只全部プライム（内国株式）、核心 1545 / 1482 都是 ETF・ETN → 现在买的都能在立花买；只挡买单，不改策略 / 仓位 / 股票池"
+ },
+ {
+  "line": 7822,
+  "date": "2026-10-04",
+  "title": "登记：各方法长处的等权组合 ENB —— 能在每个市场上算的 11 个「离场 / 减仓一侧」核心择时规则（T4〜T13、VCX / VTX / VSX）等权平均；B3 账户第一关 + 17 个市场横展开（用户：「把各个方法的长处都结合在一起可不可行」；运行前）",
+  "kind": "engineering",
+  "domain": "牛熊/择时",
+  "registration": "本提交（scripts/combo_strengths_study.py 开头；登记后不改、只运行一次）",
+  "script": "scripts/combo_strengths_study.py",
+  "output": "var/out/combo_strengths_study.md",
+  "candidates": [
+   "ENB"
+  ],
+  "baseline": "B3（账户）；每个市场自己的牛熊分界（牛 100%、其余现金）",
+  "windows": "Z / E / J + 1987〜2000（S7）；17 个市场 1998-01-01〜2026-09-30",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "成分按事先写定的选法（只用自己的指数 + 美国宏观、T0 牛时会减仓、参数不用 1998 年以后的数据、不是已写定不再用的信号），权重固定 1/11；登记前只数日子：发现平移会把 T 规则在熊市的 0 带进牛市 → T 规则在 T0 不是牛的日子记 1（候选不变，随机对照牛市平均 0.948 vs 真实 0.943）；事前预期「更好候选」约 3%；不改模拟盘"
  }
 ]
