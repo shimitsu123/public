@@ -444,18 +444,27 @@ def _eligibility_html(d: dict, meta: tuple) -> str:
                    f"{escape('、'.join(v.get('ours_only') or []) or '无')}；它有我们没有 {escape('、'.join(v.get('src_only') or []) or '无')}"
                    + (f"；已记录的纳入它还没更新 {escape('、'.join(v['lag']))}" if v.get("lag") else "") + "</li>"
                    for k, v in (e.get("diff") or {}).items())
-    return ("<section class='card'><h2>下单前资格检查（被踢出 / 被指定的票不开新仓）</h2>"
+    tk = e.get("tachibana") or {}
+    tk_bad = (tk.get("stock") or []) + (tk.get("core") or [])
+    tk_html = ("<h3>立花 ｅ支店能不能买</h3><p>" + (f"JPX 東証上場銘柄一覧 {escape(str(tk.get('as_of') or '—'))} 版："
+               f"股票池 + 核心 ETF {int(tk.get('checked') or 0)} 只" + ("都能买（内国株式 / ETF・ETN）" if not tk_bad and tk.get("fresh") else "")
+               ) + "</p>" + ("<ul>" + "".join(f"<li class='neg'>{escape(lab(x['code']))}：{escape(x['why'])}</li>" for x in tk_bad) + "</ul>"
+                             if tk_bad else "")) if tk else ""
+    return ("<section class='card'><h2>下单前资格检查（被踢出 / 被指定 / 立花买不了的票不买）</h2>"
             f"<p><b>{escape(str(e.get('text') or ''))}</b></p>"
             + (f"<h3>要你确认的事</h3><ul>{needs}</ul>" if needs else "")
             + (f"<h3>今天被挡掉的信号</h3><ul>{today}</ul>" if today else "")
             + (f"<h3>股票池里今天不开新仓的票</h3><div class='scroll'><table><tr><th>代码</th><th>理由</th></tr>{blocked}</table></div>"
                if blocked else "")
             + (f"<h3>持仓的标记（规则不自动卖）</h3><ul>{held}</ul>" if held else "")
+            + tk_html
             + f"<h3>日経225 名单对照</h3><ul>{diff or '<li class=muted>—</li>'}</ul>"
             + f"<details><summary class='muted'>数据来源（只存代码、类别、日期）</summary><ul>{srcs}</ul></details>"
             "<p class='muted'>规则（2026-09-28 用户要求「以后要确认要下单的股票被没被踢出」）：今天的交易股票池以外、日経225 待剔除、"
             "ja.wikipedia 名单里没有（var/index_changes.json 解释不了）、JPX 特別注意 / 監理 / 整理銘柄、上場廃止（含预定）→ 不开新个股仓；"
-            "必需来源超过 4 天没取到 → 当天不开新个股仓；执行器发买单前再查一次；核心 ETF 只看 JPX 标记。"
+            "必需来源超过 4 天（JPX 上場一覧 45 天）没取到 → 当天不开新个股仓；执行器发买单前再查一次；核心 ETF 看 JPX 标记 + 立花能不能买。"
+            "立花 ｅ支店买不了的（JPX 市場区分不是内国株式 / ETF・ETN、一覧里没有）→ 个股不开新仓、核心那份留现金；"
+            "执行器接立花本番时，发买单前再查立花自己的銘柄マスタ（qbreak/tradable.py；2026-10-04 用户要求「保证买的都能在立花买」）。"
             "持仓被标记只报警，要不要提前卖由你决定（人工买卖执行器管的票之前先 HALT）。代码在 qbreak/eligibility.py。</p></section>")
 
 

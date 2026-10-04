@@ -11041,5 +11041,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "横展开 q = 0 / 0.1 / 0.25 / 0.5 / 1 → 过 0% / 20% / 100% / 100% / 100%；单一序列 → 0% / 0% / 0〜30% / 40〜60% / 100%；以前没过主要是规则技能太弱、不是检验太严；继续找同类择时规则意义不大；下一步待办〔51〕由用户决定"
+ },
+ {
+  "line": 7798,
+  "date": "2026-10-04",
+  "title": "工程（用户要求）：保证买的都能在立花 ｅ支店买 —— 静态层（JPX 上場一覧的市場区分，G7）+ 券商层（立花銘柄マスタ，执行器发买单前）",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": "—",
+  "script": "qbreak/tradable.py",
+  "output": "var/out/eligibility.json（jpx_list）；执行器日志",
+  "candidates": [],
+  "baseline": "—",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "2026-10-04 核对：股票池 225 只全部プライム（内国株式）、核心 1545 / 1482 都是 ETF・ETN → 现在买的都能在立花买；只挡买单，不改策略 / 仓位 / 股票池"
  }
 ]

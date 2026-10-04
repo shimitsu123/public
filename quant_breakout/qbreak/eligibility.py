@@ -8,13 +8,17 @@
   ① 指数成分对照：ja.wikipedia「日経平均株価」构成銘柄一覧（主，约 225 只）、en.wikipedia「Nikkei 225」（参考，只报不挡）
   ② JPX 監理・整理銘柄（株式 / その他商品 = ETF）、特別注意銘柄（臨時剔除的直接原因）
   ③ JPX 上場廃止銘柄一覧（TOB / MBO / 合併 / 基準不適合，含预定日）
+  ④ JPX 東証上場銘柄一覧（data_j.xlsx，每月更新）的市場・商品区分 → 立花 ｅ支店能不能买（qbreak/tradable.py；2026-10-04 用户：
+     「保证现在买的股票只在立花证券里面都可以买」）：只存本系统可买种类的代码（一行）+ 其余代码的区分
 规则 —— 新开个股仓（模拟盘与执行器同一段决策代码 qbreak/unified.py；执行器发买单前再查一次）：
   G1 不在今天的交易股票池 → 不开新仓（只因持仓 / 执行器账户才取了行情的票）
   G2 指数待剔除（已公布、未生效，var/index_changes.json）→ 不开新仓（原有规则，这里一起显示）
   G3 我们的名单里有、ja.wikipedia 名单里没有，且 index_changes.json 的纳入记录解释不了 → 不开新仓（可能已被臨時剔除）
   G4 JPX 特別注意 / 監理（確認中・審査中）/ 整理銘柄 → 不开新仓
   G5 JPX 上場廃止（今天往前 30 天以后的日期，含预定）→ 不开新仓
-  G6 必需来源（ja.wikipedia + JPX 四页）有一个超过 4 天没取到（或从没取到）→ 今天不开新个股仓（确认不了就不买）
+  G6 必需来源（ja.wikipedia + JPX 四页 + JPX 上場一覧）有一个超过 4 天（上場一覧：45 天，月更）没取到（或从没取到）→ 今天不开新个股仓（确认不了就不买）
+  G7 立花 ｅ支店买不了（JPX 市場区分不是内国株式 / ETF・ETN，或一覧里没有）→ 不开新个股仓；核心 ETF → 模拟盘不买（那份留现金）、
+     执行器不下买单（上場一覧取不到时核心 ETF 用 tradable.CORE_VERIFIED 兜底）；卖单照常
   核心 ETF（1655）：G4 / G5（その他商品页）→ 执行器不下核心买单（卖单照常）；来源过期不挡核心
   持仓：被 G3〜G5 标记 → 只报警（规则不自动卖，与回测相同；要不要提前卖由用户决定，人工买卖前先 HALT）
   反方向：ja.wikipedia 有、我们没有（且不是已记录的剔除 / 已到日的上場廃止）→ 只报警：改名单要用户确认，记进 var/sim_changes.md
@@ -31,6 +35,8 @@ import re
 from dataclasses import dataclass, field
 
 from . import paths
+from . import tradable as TR
+from .jpx_list import URL as JPX_LIST_URL
 from .utils import atomic_write_text, read_json, setup_logging
 
 log = setup_logging("eligibility")
@@ -43,13 +49,18 @@ SOURCES = {
     "jpx_supervision_etf": "https://www.jpx.co.jp/listing/market-alerts/supervision/02.html",
     "jpx_alert": "https://www.jpx.co.jp/listing/measures/alert/index.html",
     "jpx_delisted": "https://www.jpx.co.jp/listing/stocks/delisted/index.html",
+    "jpx_list": JPX_LIST_URL,
 }
 LABEL = {"ja_wiki": "ja.wikipedia 日経225 名单", "en_wiki": "en.wikipedia 日経225 名单（参考）",
          "jpx_supervision": "JPX 監理・整理銘柄（株式）", "jpx_supervision_etf": "JPX 監理・整理銘柄（ETF 等）",
-         "jpx_alert": "JPX 特別注意銘柄", "jpx_delisted": "JPX 上場廃止銘柄一覧"}
-REQUIRED = ("ja_wiki", "jpx_supervision", "jpx_supervision_etf", "jpx_alert", "jpx_delisted")
+         "jpx_alert": "JPX 特別注意銘柄", "jpx_delisted": "JPX 上場廃止銘柄一覧",
+         "jpx_list": "JPX 東証上場銘柄一覧（市場区分：立花能不能买）"}
+REQUIRED = ("ja_wiki", "jpx_supervision", "jpx_supervision_etf", "jpx_alert", "jpx_delisted", "jpx_list")
 MAX_AGE_DAYS = 4                 # 周末 + 1 天假日也不算过期
+MAX_AGE_OF = {"jpx_list": 45}    # 上場一覧每月更新一次（月初公布上月末的版本）
 TTL_HOURS = 2.0                  # 2 小时内取过就不再取（07:40 的早上 + 09:05 的开盘后共用一次）
+TTL_OF = {"jpx_list": 20.0}      # 上場一覧（约 1 MB 的 xlsx）一天取一次就够
+JPX_LIST_MIN = 3000              # 解析出来的行数少于这个 → 当作解析失败（2026-08-31 版 4,441 行）
 DELIST_LOOKBACK_DAYS = 30
 N225_RANGE = (215, 235)          # 解析出来的成分数不在这个范围 → 当作解析失败（不用这次的结果）
 _CODE = r"[0-9]{3}[0-9A-Z]"
@@ -158,8 +169,20 @@ def parse_jpx_delisted(page: str) -> dict:
     return {"items": items}
 
 
+def parse_jpx_list(raw) -> dict:
+    """JPX 東証上場銘柄一覧：xlsx 的 bytes（正式）或「代码,市場・商品区分,日期」一行一只的文本（测试）→ tradable.split_segments 的形状。"""
+    if isinstance(raw, (bytes, bytearray)):
+        from .jpx_list import parse
+        df = parse(bytes(raw))
+        rows = zip(df["code"], df["market"], df["date"])
+    else:
+        rows = [(ln.split(",") + ["", "", ""])[:3] for ln in str(raw).splitlines() if ln.strip()]
+    return TR.split_segments(rows)
+
+
 PARSERS = {"ja_wiki": parse_ja_wiki, "en_wiki": parse_en_wiki, "jpx_supervision": parse_jpx_supervision,
-           "jpx_supervision_etf": parse_jpx_supervision, "jpx_alert": parse_jpx_alert, "jpx_delisted": parse_jpx_delisted}
+           "jpx_supervision_etf": parse_jpx_supervision, "jpx_alert": parse_jpx_alert, "jpx_delisted": parse_jpx_delisted,
+           "jpx_list": parse_jpx_list}
 
 
 def _validate(key: str, x: dict) -> None:
@@ -167,6 +190,8 @@ def _validate(key: str, x: dict) -> None:
         n = len(x.get("codes") or [])
         if not N225_RANGE[0] <= n <= N225_RANGE[1]:
             raise ValueError(f"解析出 {n} 只（应约 225 只）")
+    if key == "jpx_list" and int(x.get("n") or 0) < JPX_LIST_MIN:
+        raise ValueError(f"解析出 {x.get('n')} 行（应约 4,400 行）")
 
 
 # ── 快照：取数 + 保存 ──
@@ -179,6 +204,12 @@ def _fetch_url(url: str) -> str:
     """一次 25 秒、不重试：6 个页面最坏约 2.5 分钟（Mac 07:40 的运行要赶 08:55 的寄付截止）；失败就用上次成功的内容（4 天内有效）。"""
     from .factors import _get
     return _get(url, timeout=25, tries=1).decode("utf-8", "ignore")
+
+
+def _fetch_bytes(url: str) -> bytes:
+    """上場一覧（xlsx）：一次 40 秒、不重试；失败就用上次成功的内容（45 天内有效）。"""
+    from .factors import _get
+    return _get(url, timeout=40, tries=1)
 
 
 def snapshot_path():
@@ -209,13 +240,13 @@ def refresh(path=None, now=None, fetch=None, ttl_hours: float = TTL_HOURS, force
         ok_at = s.get("ok_at")
         if not force and ok_at:
             try:
-                if (now - dt.datetime.fromisoformat(ok_at)).total_seconds() < ttl_hours * 3600:
+                if (now - dt.datetime.fromisoformat(ok_at)).total_seconds() < max(ttl_hours, TTL_OF.get(key, 0.0)) * 3600:
                     continue
             except (TypeError, ValueError):
                 pass
         s["tried_at"] = now.isoformat(timespec="minutes")
         try:
-            x = PARSERS[key]((fetch or _fetch_url)(url))
+            x = PARSERS[key]((fetch or (_fetch_bytes if key == "jpx_list" else _fetch_url))(url))
             _validate(key, x)
             s = {**x, "ok_at": s["tried_at"], "tried_at": s["tried_at"], "error": ""}
         except Exception as e:                                    # noqa: BLE001
@@ -268,8 +299,12 @@ class Gate:
 
     def __post_init__(self):
         src = self.snap.get("sources") or {}
-        self.fresh = {k: (d := _ok_date(src.get(k) or {})) is not None and (self.today - d).days <= MAX_AGE_DAYS
+        self.fresh = {k: (d := _ok_date(src.get(k) or {})) is not None and (self.today - d).days <= MAX_AGE_OF.get(k, MAX_AGE_DAYS)
                       for k in SOURCES}
+        tl = src.get("jpx_list") or {}
+        self.t_allowed = set(filter(None, str(tl.get("allowed") or "").split(",")))
+        self.t_other = dict(tl.get("other") or {})
+        self.t_date = str(tl.get("date") or "")
         self.stale = [k for k in REQUIRED if not self.fresh[k]]
         eff = [c for c in self.changes if str(c.get("effective", "")) <= self.today.isoformat()]
         added = {x for c in eff for x in c.get("add", [])}
@@ -307,6 +342,17 @@ class Gate:
             out.append("ja.wikipedia 的日経225 名单里没有（可能已被臨時剔除；核实后改名单）")
         return out + self.flags.get(code, [])
 
+    def tachibana_reason(self, code: str, kind: str = "stock") -> str | None:
+        """G7 立花 ｅ支店能不能买（qbreak/tradable.py 静态层，JPX 上場一覧的市場区分）：None = 能买。
+        上場一覧过期或取不到：个股由 G6 挡（这里也不放行）；核心 ETF 用逐只核对过的名单（tradable.CORE_VERIFIED）兜底。"""
+        if not self.fresh.get("jpx_list"):
+            if kind == "core" and code in TR.CORE_VERIFIED:
+                return None
+            return "JPX 東証上場銘柄一覧过期或取不到 → 确认不了立花 ｅ支店能不能买，不买"
+        if code in self.t_allowed:
+            return None
+        return TR.segment_reason(code, self.t_other.get(code), self.t_date)
+
     def entry_block(self, ticker: str, i=None) -> str | None:
         """新开个股仓前的检查（引擎的 entry_gate_fn）：返回理由 = 不开；None = 可以。只管东证的票（美股个股不在这里查）。"""
         if not _tse(ticker):
@@ -318,15 +364,23 @@ class Gate:
             return "资格检查数据过期或取不到（" + "、".join(LABEL[k] for k in self.stale) + "）→ 确认不了，不开新个股仓"
         if code not in self.trade:
             return "不在今天的交易股票池（只因持仓才取了行情）"
-        r = self.reasons(code)
+        t = self.tachibana_reason(code, "stock")
+        r = self.reasons(code) + ([t] if t else [])
         return "；".join(r) if r else None
 
+    def core_block(self, ticker: str) -> str | None:
+        """核心 ETF 能不能买进（引擎的 core_gate_fn：模拟盘里立花买不了的核心那份留现金）。只看 G7（JPX 标记仍只挡执行器的买单）。"""
+        if not _tse(ticker):
+            return None
+        return self.tachibana_reason(_code(ticker), "core")
+
     def pre_send(self, ticker: str, side: str, kind: str) -> str | None:
-        """执行器发单前的最后一道：只查买单；核心 ETF 只看 JPX 标记（来源过期不挡核心）。"""
+        """执行器发单前的最后一道：只查买单；核心 ETF 看 JPX 标记 + G7（来源过期不挡核心：G7 用核对过的名单兜底）。"""
         if side != "BUY" or not _tse(ticker):
             return None
         if kind == "core":
-            r = self.flags.get(_code(ticker), [])
+            t = self.tachibana_reason(_code(ticker), "core")
+            r = self.flags.get(_code(ticker), []) + ([t] if t else [])
             return "；".join(r) if r else None
         return self.entry_block(ticker)
 
@@ -350,6 +404,8 @@ class Gate:
         src = self.snap.get("sources") or {}
         blocked = [{"code": c, "why": "；".join(self.reasons(c))} for c in sorted(self.trade) if self.reasons(c)]
         core = [{"code": c, "why": "；".join(self.flags[c])} for c in sorted(self.core) if self.flags.get(c)]
+        t_stock = [{"code": c, "why": w} for c in sorted(self.trade) if (w := self.tachibana_reason(c, "stock"))] if self.fresh.get("jpx_list") else []
+        t_core = [{"code": c, "why": w} for c in sorted(self.core) if (w := self.tachibana_reason(c, "core"))]
         ja = self.diff.get("ja_wiki") or {}
         warn_held = [h for h in held or [] if h.get("level") == "warn"]
         needs = []
@@ -366,15 +422,24 @@ class Gate:
             needs.append(f"持仓 {h['ticker']}（{h.get('account') or '—'}）：{h['why']} —— 规则不自动卖，要不要提前卖由你决定")
         for c in core:
             needs.append(f"核心 ETF {c['code']}：{c['why']} —— 执行器不下它的买单")
+        if t_stock:
+            needs.append("股票池里有立花 ｅ支店买不了的票：" + "、".join(f"{x['code']}（{x['why']}）" for x in t_stock)
+                         + " —— 已挡新仓；要不要从股票池去掉由你决定（改 qbreak/universes.py 要用户确认）")
+        for c in t_core:
+            needs.append(f"核心 ETF {c['code']}：{c['why']} —— 模拟盘那份留现金、执行器不下它的买单；换核心 ETF 要用户确认")
         return {"as_of": self.today.isoformat(), "stale": list(self.stale), "error": self.error,
                 "sources": {k: {"label": LABEL[k], "ok_at": (src.get(k) or {}).get("ok_at"), "fresh": self.fresh[k],
-                                "n": len((src.get(k) or {}).get("codes") or (src.get(k) or {}).get("items") or []),
+                                "n": len((src.get(k) or {}).get("codes") or (src.get(k) or {}).get("items") or [])
+                                or int((src.get(k) or {}).get("n") or 0),
                                 "note": (src.get(k) or {}).get("note", ""), "error": (src.get(k) or {}).get("error", "")}
                             for k in SOURCES},
                 "checked": len(self.trade), "blocked": blocked, "core": core, "held": list(held or []),
+                "tachibana": {"as_of": self.t_date, "fresh": bool(self.fresh.get("jpx_list")), "stock": t_stock, "core": t_core,
+                              "checked": len(self.trade) + len(self.core)},
                 "blocked_today": list(blocked_today or []), "diff": self.diff, "needs_user": needs,
                 "text": ("资格检查：" + ("；".join(needs) if needs else
-                                     f"股票池 {len(self.trade)} 只已核对，" + (f"{len(blocked)} 只不开新仓" if blocked else "没有被踢出 / 被指定的"))
+                                     f"股票池 {len(self.trade)} 只已核对，" + (f"{len(blocked)} 只不开新仓" if blocked else "没有被踢出 / 被指定的")
+                                     + f"；立花 ｅ支店都能买（JPX 上場一覧 {self.t_date or '—'} 版：股票池 + 核心 ETF {len(self.core)} 只）")
                          )}
 
 

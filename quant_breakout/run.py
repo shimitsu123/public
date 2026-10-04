@@ -944,6 +944,7 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
         e.live_fx_ok = is_trading_day(now_jst().date())    # 今天白天（日本营业日）才有换汇窗口
         e.entry_block_fn = eblock
         e.entry_gate_fn = gate.entry_block
+        e.core_gate_fn = gate.core_block                    # 立花 ｅ支店买不了的核心 ETF → 那份留现金（qbreak/tradable.py）
         return e
     ctx = SimpleNamespace(data=data, ind=ind, plans=plans, extras=extras, params=params, dcfg=dcfg, ucfg=ucfg, u=u,
                           broker=broker, today=today, ex=ex, ccost=ccost, make=make, gate=gate, fj=fj_pl, fj_on=fj_on, xmode=xmode,
@@ -2809,6 +2810,9 @@ def cmd_eligibility(a) -> int:
         print(f"  持仓 {h['ticker']}（{h['account']}）{'★ ' if h['level'] == 'warn' else ''}{h['why']}")
     for c in pn["core"]:
         print(f"  ★ 核心 ETF {c['code']}：{c['why']}")
+    tk = pn.get("tachibana") or {}
+    print(f"  立花 ｅ支店能不能买（JPX 上場一覧 {tk.get('as_of') or '—'} 版；股票池 + 核心 ETF {tk.get('checked', 0)} 只）："
+          + ("；".join(f"{x['code']} {x['why']}" for x in (tk.get("stock") or []) + (tk.get("core") or [])) or "都能买"))
     print(pn["text"])
     return 1 if pn["needs_user"] else 0
 
@@ -3259,6 +3263,31 @@ def _tachibana_order_test(b, spec) -> bool:
     return o.status in ("FILLED", "PARTIAL", "SENT")
 
 
+def _tachibana_tradable_check(b) -> str:
+    """只读：用立花自己的銘柄マスタ核对今天的股票池 + 核心 ETF 能不能买、売買単位与我们以为的一手是否一致（qbreak/tradable.py）。"""
+    from qbreak import tradable as TR
+    from qbreak.config import universe
+    from qbreak.fees import BROKERS
+    from qbreak.tick import lot_size
+    cfg = _sim_cfg() or {}
+    u = cfg.get("unified") or {}
+    pool = list(universe("JP", (u.get("universe") or {}).get("JP", "broad")))
+    core = _core_all(cfg) if cfg.get("mode") == "unified" else ["1655.T"]
+    m = b.issue_master(force=True)
+    today = dt.date.today()
+    bad = []
+    for t_ in pool + list(core):
+        c = t_.split(".")[0]
+        w = TR.broker_reason(c, m.get(c), today)
+        lot = int((BROKERS["tachibana"]["etf"].get(t_) or {}).get("lot", 1)) if t_ in core else lot_size(t_, "JP")
+        unit = str((m.get(c) or {}).get("unit") or "")
+        if not w and unit.isdigit() and int(unit) != lot:
+            w = f"売買単位 {unit} ≠ 我们以为的一手 {lot}（qbreak/fees.py / qbreak/tick.py 要改，否则买单会被挡）"
+        if w:
+            bad.append(f"{t_} {w}")
+    return (f"マスタ {len(m)} 件；股票池 {len(pool)} 只 + 核心 {len(core)} 只：" + ("都能买、一手一致" if not bad else "★ " + "；".join(bad)))
+
+
 def cmd_tachibana_probe(a) -> int:
     """只读连通性检查：登录 → 取价 → 持仓 → 余力。**默认绝不发单**；--order-test 只在デモ環境发单（检查字段与流程）。
     用它对着官方 API 仕様書逐项核对 TachibanaSpec，全部通过再考虑实盘。"""
@@ -3278,6 +3307,7 @@ def cmd_tachibana_probe(a) -> int:
         ("持仓", lambda: f"{ {t: p.qty for t, p in b.positions().items()} }"),
         ("买付余力", lambda: f"{b.cash():,.0f}"),
         ("注文一覧", lambda: f"{len(b.open_orders())} 件"),
+        ("立花銘柄マスタ：股票池 + 核心能不能买", lambda: _tachibana_tradable_check(b)),
     ]
     ok = True
     for name, fn in steps:

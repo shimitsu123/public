@@ -39,6 +39,16 @@ def _price(p):
     return {"p_errno": "0", SPEC.r_price_list: [{"sIssueCode": c, "pDPP": "2987"} for c in codes]}
 
 
+def _master(stk=None, mkt=None, kisei=""):
+    """立花銘柄マスタ三张的应答（缺省：7203 = 东证、普通、売買単位 100、没有规制）。"""
+    ok = {"p_errno": "0", "sResultCode": "0"}
+    stk = [{"sIssueCode": "7203", "sYusenSizyou": "00", "sBaibaiTani": "100", "sBaibaiTeisiC": " "}] if stk is None else stk
+    mkt = [{"sIssueCode": "7203", "sZyouzyouSizyou": "00", "sIssueKubunC": " ", "sZyouzyouKubun": "01",
+            "sZyouzyouHaisiDay": "00000000"}] if mkt is None else mkt
+    return {SPEC.clm_issue_mst: {**ok, SPEC.r_issue_mst: stk}, SPEC.clm_issue_mkt: {**ok, SPEC.r_issue_mkt: mkt},
+            SPEC.clm_issue_kisei: {**ok, SPEC.r_issue_kisei: kisei}}
+
+
 def _broker(**kw):
     resp = {
         SPEC.clm_login: LOGIN_OK,
@@ -50,6 +60,7 @@ def _broker(**kw):
             {"sUriOrderIssueCode": "7203", "sUriOrderZanKabuSuryou": "200", "sUriOrderGaisanBokaTanka": "2400"},
             {"sUriOrderIssueCode": "7203", "sUriOrderZanKabuSuryou": "100", "sUriOrderGaisanBokaTanka": "2700"}]},
         SPEC.clm_buying_power: {"p_errno": "0", "sResultCode": "0", "sSummaryGenkabuKaituke": "500000"},
+        **_master(),
     }
     resp.update(kw.pop("responses", {}))
     tr = FakeTransport(resp)
@@ -406,3 +417,62 @@ def test_quote_detail_returns_open_and_skips_blank():
     q = b.quote_detail(["7203.T", "6758.T"])
     assert q == {"7203.T": {"price": 3010.0, "open": 2995.0, "prev_close": 2980.0}}
     assert b.quotes(["7203.T", "6758.T"]) == {"7203.T": 3010.0}
+
+
+# ────────── 立花能不能买（买单前查立花自己的銘柄マスタ；qbreak/tradable.py）──────────
+def test_buy_checks_the_tachibana_issue_master_once_a_day_at_the_master_url():
+    b, tr = _broker()
+    _arm()
+    assert b.buy("7203.T", 100, client_id="c1").status == "FILLED"
+    assert b.buy("7203.T", 100, client_id="c2").status == "FILLED"
+    ms = [(u, p) for u, p in tr.sent if p["sCLMID"] in (SPEC.clm_issue_mst, SPEC.clm_issue_mkt, SPEC.clm_issue_kisei)]
+    assert len(ms) == 3 and all(u == "https://x/master/CCC/" for u, _ in ms)                  # 三张各取一次、发到 仮想URL（MASTER）
+    assert b.sell("7203.T", 100, client_id="s1").status == "FILLED"                            # 卖单不查
+    b2, tr2 = _broker()                                                                         # 同一天另一个进程：用缓存
+    assert b2.buy("7203.T", 100, client_id="c3").status == "FILLED"
+    assert not any(p["sCLMID"] == SPEC.clm_issue_mst for _, p in tr2.sent)
+
+
+@pytest.mark.parametrize("stk,mkt,kisei,qty,why", [
+    ([], None, "", 100, "マスタに 7203 がない"),
+    ([{"sIssueCode": "7203", "sYusenSizyou": "02", "sBaibaiTani": "100", "sBaibaiTeisiC": " "}], None, "", 100, "優先市場が東証ではない"),
+    ([{"sIssueCode": "7203", "sYusenSizyou": "00", "sBaibaiTani": "100", "sBaibaiTeisiC": "9"}], None, "", 100, "売買停止中"),
+    (None, [{"sIssueCode": "7203", "sZyouzyouSizyou": "00", "sIssueKubunC": " ", "sZyouzyouKubun": "03",
+             "sZyouzyouHaisiDay": "00000000"}], "", 100, "外国銘柄"),
+    (None, [{"sIssueCode": "7203", "sZyouzyouSizyou": "00", "sIssueKubunC": "05", "sZyouzyouKubun": "21",
+             "sZyouzyouHaisiDay": "00000000"}], "", 100, "PRO Market"),
+    (None, None, [{"sIssueCode": "7203", "sZyouzyouSizyou": "00", "sGenbutuKaituke": "1"}], 100, "取引禁止"),
+    (None, None, "", 50, "売買単位 100"),
+])
+def test_buy_blocked_when_the_issue_master_says_tachibana_cannot_buy_it(stk, mkt, kisei, qty, why):
+    b, tr = _broker(responses=_master(stk, mkt, kisei))
+    _arm()
+    o = b.buy("7203.T", qty, client_id="c1")
+    assert o.status == "BLOCKED" and why in o.note and not _orders(tr)                       # 一个注文都没发
+    assert b.sell("7203.T", 100, client_id="s1").status == "FILLED"
+
+
+def test_buy_blocked_when_the_issue_master_cannot_be_read_and_market_order_ban_does_not_block_limits():
+    bad = {SPEC.clm_issue_mst: {"p_errno": "0", "sResultCode": "991", "sResultText": "サービス時間外"}}
+    b, tr = _broker(responses=bad)
+    _arm()
+    o = b.buy("7203.T", 100, client_id="c1")
+    assert o.status == "BLOCKED" and "銘柄マスタ取不到" in o.note and not _orders(tr)          # 确认不了就不买
+    b2, _ = _broker(responses=_master(kisei=[{"sIssueCode": "7203", "sZyouzyouSizyou": "00", "sGenbutuKaituke": "2"}]))
+    assert b2.buy("7203.T", 100, limit=2990.0, client_id="c2", bar="2026-09-25").status == "SENT"   # 成行禁止：指値照常
+
+
+def test_probe_tradable_check_uses_the_master_for_pool_core_and_lot():
+    import run
+    from qbreak.config import universe
+    pool = [t.split(".")[0] for t in universe("JP", "broad")]
+    codes = pool + ["1655"]
+    stk = [{"sIssueCode": c, "sYusenSizyou": "00", "sBaibaiTani": "10" if c == "1655" else "100", "sBaibaiTeisiC": " "} for c in codes]
+    mkt = [{"sIssueCode": c, "sZyouzyouSizyou": "00", "sIssueKubunC": " ", "sZyouzyouKubun": "01", "sZyouzyouHaisiDay": "00000000"}
+           for c in codes]
+    b, _ = _broker(responses=_master(stk, mkt))
+    assert "都能买、一手一致" in run._tachibana_tradable_check(b)
+    stk2 = [dict(r, sBaibaiTani="1") if r["sIssueCode"] == "1655" else r for r in stk if r["sIssueCode"] != pool[0]]
+    b2, _ = _broker(responses=_master(stk2, mkt))
+    out = run._tachibana_tradable_check(b2)
+    assert f"{pool[0]}.T 立花の株式銘柄マスタに" in out and "1655.T 売買単位 1 ≠ 我们以为的一手 10" in out

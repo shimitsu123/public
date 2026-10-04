@@ -25,7 +25,9 @@ v4r10（2026-08-29 发布；v4r9 于 2026-09-27 废止；公开仕様書 https:/
 设计要点
   1. HTTP 层抽象成 `Transport`，测试用 `FakeTransport`，下单逻辑 100% 可测
   2. 凭证只从 **环境变量 / macOS 钥匙串 / 权限 600 的私钥文件** 读，代码、配置、日志里都不出现
-  3. 発注前有三道闸：HALT 文件 → ARM（环境变量或 arm 文件）→ 单笔金额上限
+  3. 発注前有三道闸：HALT 文件 → ARM（环境变量或 arm 文件）→ 单笔金额上限；买单再加一道「立花能不能买」：
+     立花自己的銘柄マスタ（v4r10 マスタ機能，每天早上取一次）里没有 / 優先市場不是东证 / 売買停止 / 外国株 / PRO Market /
+     30 天内上場廃止 / 現物買付「取引禁止」/ 数量不是売買単位的整数倍 → 不发（qbreak/tradable.py；マスタ取不到也不发）
   4. 发单类请求（新规 / 订正 / 取消）绝不自动重发，只有「会话已切断」(p_errno=2) 这种确定没处理的情况才重新登录再发一次
   5. 支持 **逆指値（stop order）**——这是盘中止损的真正保险，比程序轮询可靠
 """
@@ -46,9 +48,10 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .. import paths
+from .. import tradable as TR
 from ..calendar_jp import JST
 from ..tick import round_to_tick
-from ..utils import retry, setup_logging
+from ..utils import atomic_write_text, read_json, retry, setup_logging
 from .base import BaseBroker, BrokerError, Order, Position
 
 log = setup_logging("broker.tachibana")
@@ -92,6 +95,13 @@ class TachibanaSpec:
     clm_order_detail: str = "CLMOrderListDetail"
     clm_positions: str = "CLMGenbutuKabuList"
     clm_buying_power: str = "CLMZanKaiKanougaku"
+    # マスタ機能（v4r10：各个别情报的问合取得 → 仮想URL（MASTER）；API 说明：朝一度取得、日中は取得しない）
+    clm_issue_mst: str = "CLMStkGetIssueMstKabu"                # 株式銘柄マスタ（優先市場 / 売買単位 / 売買停止）
+    clm_issue_mkt: str = "CLMStkGetIssueSizyouMstKabu"          # 株式銘柄市場マスタ（上場市場 / 銘柄区分 / 上場区分 / 上場廃止日）
+    clm_issue_kisei: str = "CLMStkGetIssueSizyouKiseiKabu"      # 株式銘柄別・市場別規制情報（現物/買付 …）
+    r_issue_mst: str = "aCLMStkIssueMstKabu"
+    r_issue_mkt: str = "aCLMStkIssueSizyouMstKabu"
+    r_issue_kisei: str = "aCLMStkIssueSizyouKiseiKabu"
 
     # 共通項目
     f_clmid: str = "sCLMID"
@@ -314,7 +324,7 @@ class TachibanaBroker(BaseBroker):
                  creds: Credentials | None = None, demo: bool = False,
                  require_arm: bool = True, dry_run: bool = False,
                  limit_buffer_pct: float = 0.5, confirm_timeout_s: float = 20.0,
-                 max_order_value: float = 300_000):
+                 max_order_value: float = 300_000, check_tradable: bool = True):
         self.spec = spec or TachibanaSpec.load()
         self.tr = transport or HttpTransport(method=self.spec.http_method)
         self.creds = creds
@@ -332,6 +342,9 @@ class TachibanaBroker(BaseBroker):
         self._logged_in = False
         self._tax = ""                         # 登录应答里的账户课税区分（1 特定 / 3 一般 …）
         self.next_release = ""                 # 下一次 API 版本发布日（登录应答告知）
+        self.check_tradable = check_tradable   # 买单前查立花銘柄マスタ（qbreak/tradable.py）；只有离线测试才关
+        self._master: dict[str, dict] | None = None
+        self._master_day = ""
 
     # ── 会话 ──
     def _send(self, url: str, clmid: str, fields: dict, idempotent: bool) -> dict:
@@ -524,6 +537,45 @@ class TachibanaBroker(BaseBroker):
                     "（收盘后清空，这是防误单的最后一道人工闸）")
         return None
 
+    # ── 立花能不能买（买单前；qbreak/tradable.py）──
+    def issue_master(self, force: bool = False) -> dict[str, dict]:
+        """立花自己的銘柄マスタ三张 → {代码: 项目}（tradable.merge_master）。一天取一次（同一进程内存 + $QBREAK_HOME/cache/
+        tachibana_master.json，只有代码与几个区分，不是密钥）；取不到 → 抛 BrokerError（调用方当作「确认不了」）。"""
+        s = self.spec
+        today = dt.datetime.now(JST).strftime("%Y-%m-%d")
+        env = "demo" if self.demo else "live"
+        if not force and self._master is not None and self._master_day == today:
+            return self._master
+        fp = paths.home() / "cache" / "tachibana_master.json"
+        if not force:
+            d = read_json(fp, {}) or {}
+            if d.get("day") == today and d.get("env") == env and d.get("issues"):
+                self._master, self._master_day = dict(d["issues"]), today
+                return self._master
+        rows = {}
+        for clm, key in ((s.clm_issue_mst, s.r_issue_mst), (s.clm_issue_mkt, s.r_issue_mkt), (s.clm_issue_kisei, s.r_issue_kisei)):
+            rows[clm] = self._rows(self._call(clm, url_key=s.key_url_master).get(key))
+        m = TR.merge_master(rows[s.clm_issue_mst], rows[s.clm_issue_mkt], rows[s.clm_issue_kisei])
+        if not m:
+            raise BrokerError("立花の銘柄マスタが空（仕様変更？ `python run.py tachibana-probe --demo` で応答を確認）")
+        self._master, self._master_day = m, today
+        try:
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_text(fp, json.dumps({"day": today, "env": env, "issues": m}, ensure_ascii=False))
+        except OSError as e:                        # 缓存写不进去不影响判断
+            log.warning("銘柄マスタ缓存没写成：%s", e)
+        log.info("立花銘柄マスタ %d 件（%s）", len(m), today)
+        return m
+
+    def tradable_block(self, ticker: str, qty: int | None = None) -> str | None:
+        """买单前：立花銘柄マスタ里能不能买（None = 能）。マスタ取不到 → 不买（确认不了就不买）。"""
+        try:
+            m = self.issue_master()
+        except Exception as e:                      # noqa: BLE001
+            return f"立花の銘柄マスタ取不到（{type(e).__name__}: {e}）→ 确认不了能不能买，不下买单"[:300]
+        code = self._code(ticker)
+        return TR.broker_reason(code, m.get(code), dt.datetime.now(JST).date(), qty)
+
     def has_client_id(self, client_id: str) -> bool:
         return bool(client_id) and client_id in self._sent_ids
 
@@ -557,6 +609,8 @@ class TachibanaBroker(BaseBroker):
         notional = (px or ref or trig) * qty
 
         blocked = self._preflight(ticker, qty, notional)
+        if not blocked and side == "BUY" and self.check_tradable:
+            blocked = self.tradable_block(ticker, qty)
         if not blocked and side == "BUY" and not stop_trigger and not (px or ref):
             blocked = "成行买单估不出金额（取不到现在值），单笔上限无法检查 → 拒绝；请给指値"
         if not blocked and not self.dry_run:

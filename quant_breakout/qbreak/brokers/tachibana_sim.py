@@ -149,8 +149,27 @@ class SimExchange:
         self.calls[clm] = self.calls.get(clm, 0) + 1
         h = {s.clm_login: self._login, s.clm_new_order: self._new_order, s.clm_order_detail: self._detail,
              s.clm_positions: self._positions, s.clm_buying_power: self._bp, s.clm_price: self._price,
-             s.clm_cancel_order: self._cancel, s.clm_order_list: self._list}.get(clm)
+             s.clm_cancel_order: self._cancel, s.clm_order_list: self._list,
+             s.clm_issue_mst: self._mst, s.clm_issue_mkt: self._mst_mkt, s.clm_issue_kisei: self._mst_kisei}.get(clm)
         return h(payload) if h else self._ok(sCLMID=clm)
+
+    # ── マスタ：演练里的票都是东证、普通、没有规制；売買単位 = 引擎的一手 ──
+    def _codes(self) -> list[tuple[str, int]]:
+        eng = self.eng
+        return [(t.split(".")[0], int(eng.lots[j])) for t, j in eng.col.items() if t.endswith(".T")]
+
+    def _mst(self, p: dict) -> dict:
+        s = self.spec
+        return self._ok(**{s.r_issue_mst: [{"sIssueCode": c, "sYusenSizyou": "00", "sBaibaiTani": str(lot), "sBaibaiTeisiC": " "}
+                                           for c, lot in self._codes()]})
+
+    def _mst_mkt(self, p: dict) -> dict:
+        s = self.spec
+        return self._ok(**{s.r_issue_mkt: [{"sIssueCode": c, "sZyouzyouSizyou": "00", "sIssueKubunC": " ", "sZyouzyouKubun": "01",
+                                            "sZyouzyouHaisiDay": "00000000"} for c, _ in self._codes()]})
+
+    def _mst_kisei(self, p: dict) -> dict:
+        return self._ok(**{self.spec.r_issue_kisei: ""})                 # 没有规制：仕様上空列表是 ""
 
     def _login(self, p: dict) -> dict:
         s = self.spec

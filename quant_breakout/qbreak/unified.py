@@ -280,6 +280,7 @@ class UnifiedEngine:
         self.entry_block_fn = None                          # (票, 日) -> 拦截原因 | None（模拟盘：决算前 N 日不进场）
         self.entry_gate_fn = None                           # (票, 日) -> 理由 | None：下单前资格检查（qbreak/eligibility.py；模拟盘 / 执行器）
         self.gate_log: list[tuple[str, str, str]] = []      # 被资格检查挡掉的信号：(信号日, 票, 理由)
+        self.core_gate_fn = None                            # 票 -> 理由 | None：核心 ETF 在立花买不了（qbreak/tradable.py）→ 不买（那份留现金；卖照常）
         self.entry_priority_fn = None                       # (票, 日) -> 分数 | None：同一天的新仓候选按分数高的先（研究用；缺省 = 按代码）
 
     # ── 工具 ──
@@ -729,6 +730,12 @@ class UnifiedEngine:
                      - usd_stay * fx - us_exiting)
         w = {t: float(v) for t, v in cfg.core.items()}
         bear = {t: self._core_bear(t, i) for t in w}
+        gated = {}
+        if self.core_gate_fn is not None:                       # 立花买不了的核心 ETF：只挡买（那份留现金）；已有的照常按规则卖
+            for t in w:
+                why = self.core_gate_fn(t)
+                if why:
+                    gated[t] = why
         if cfg.core_mode == "follow":
             bull_w = sum(v for t, v in w.items() if not bear[t])
             share = {t: (v / bull_w if bull_w > 0 and not bear[t] else 0.0) for t, v in w.items()}
@@ -753,6 +760,9 @@ class UnifiedEngine:
                 sell = units - tgt
             elif tgt > units and (tgt - units) * price > band:
                 buy = tgt - units
+            if buy and t in gated:
+                self.gate_log.append((str(self.gidx[i].date()), t, gated[t]))
+                buy = 0
             orders[t] = [sell, buy]
         # 日元缺口（明早日本买入 + 换汇 > 现金 + 日本卖出所得）→ 卖核心补足，按跳空上限多卖
         short = reserve - cash_est

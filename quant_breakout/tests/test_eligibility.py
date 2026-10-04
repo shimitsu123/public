@@ -1,5 +1,5 @@
-"""qbreak/eligibility.py：下单前资格检查（被踢出 / 被指定 / 确认不了的票不开新个股仓）—— 解析、取数与保留旧值、G1〜G6、
-核心 ETF、持仓报警、引擎的资格闸、执行器发买单前的最后一道、日报块、旧命令 universe-update 不再改股票池。"""
+"""qbreak/eligibility.py：下单前资格检查（被踢出 / 被指定 / 确认不了的票不开新个股仓）—— 解析、取数与保留旧值、G1〜G7（G7 = 立花 ｅ支店
+能不能买：JPX 上場一覧的市場区分）、核心 ETF、持仓报警、引擎的资格闸（个股 + 核心）、执行器发买单前的最后一道、日报块、旧命令 universe-update 不再改股票池。"""
 import argparse
 import datetime as dt
 import json
@@ -40,11 +40,22 @@ DELISTED = ("<table><tr><th>上場廃止日</th><th>銘柄名</th><th>コード<
             "<tr><td>2026/06/01</td><td>Ｅ（株）</td><td>1111</td><td>プライム</td><td>上場維持基準への不適合</td></tr></table>")
 
 
+# JPX 東証上場銘柄一覧（测试用文本：代码,市場・商品区分,日期）：股票池 + 测试里出现的代码 = 内国株、1655 = ETF、凑够行数的假代码
+TEST_CODES = sorted(set(NIKKEI225) | {"1111", "2222", "3333", "4062", "543A", "5016", "5484", "6594", "7133", "7203", "9229", "9691"})
+
+
+def _jpx_list(extra=(), drop=()):
+    rows = [f"{c},プライム（内国株式）,20260831" for c in TEST_CODES if c not in drop]
+    rows += ["1655,ETF・ETN,20260831", "1545,ETF・ETN,20260831"] + [f"{c},{seg},20260831" for c, seg in extra]
+    rows += [f"Z{i:03d},スタンダード（内国株式）,20260831" for i in range(EL.JPX_LIST_MIN)]
+    return "\n".join(rows)
+
+
 def _pages(ja=None, en=None):
     ja = list(NIKKEI225) if ja is None else ja
     return {EL.SOURCES["ja_wiki"]: _ja_page(ja), EL.SOURCES["en_wiki"]: _en_page(en if en is not None else ja),
             EL.SOURCES["jpx_supervision"]: SUP, EL.SOURCES["jpx_supervision_etf"]: SUP_ETF,
-            EL.SOURCES["jpx_alert"]: ALERT, EL.SOURCES["jpx_delisted"]: DELISTED}
+            EL.SOURCES["jpx_alert"]: ALERT, EL.SOURCES["jpx_delisted"]: DELISTED, EL.SOURCES["jpx_list"]: _jpx_list()}
 
 
 def _now(h=7):
@@ -72,6 +83,11 @@ def test_parsers_read_codes_categories_and_dates():
         EL.parse_jpx_supervision("<html>改版</html>")
     with pytest.raises(ValueError):
         EL.parse_jpx_delisted("<table><tr><th>x</th></tr></table>")
+    j = EL.parse_jpx_list(_jpx_list(extra=[("2971", "REIT・ベンチャーファンド・カントリーファンド・インフラファンド"), ("9999", "PRO Market")]))
+    assert {"7203", "1655", "1545"} <= set(j["allowed"].split(",")) and j["date"] == "2026-08-31"
+    assert j["other"] == {"2971": "REIT・ベンチャーファンド・カントリーファンド・インフラファンド", "9999": "PRO Market"}
+    with pytest.raises(ValueError):
+        EL._validate("jpx_list", EL.parse_jpx_list("7203,プライム（内国株式）,20260831"))           # 解析出 1 行 → 不用
 
 
 # ── 取数 ──
@@ -83,10 +99,10 @@ def test_refresh_ttl_failure_keeps_last_good_and_validation(tmp_path):
         calls.append(url)
         return _pages()[url]
     s = EL.refresh(fp, now=_now(7), fetch=fetch)
-    assert len(calls) == 6 and all(v["ok_at"] == _now(7).isoformat(timespec="minutes") for v in s["sources"].values())
+    assert len(calls) == 7 and all(v["ok_at"] == _now(7).isoformat(timespec="minutes") for v in s["sources"].values())
     assert len(s["sources"]["ja_wiki"]["codes"]) == 225
     EL.refresh(fp, now=_now(8), fetch=lambda u: 1 / 0)                                     # 2 小时内：不再取
-    assert len(calls) == 6
+    assert len(calls) == 7
 
     def bad(url):
         if url == EL.SOURCES["jpx_alert"]:
@@ -99,6 +115,7 @@ def test_refresh_ttl_failure_keeps_last_good_and_validation(tmp_path):
     assert s2["sources"]["jpx_alert"]["items"][0]["code"] == "6594"                          # 上次成功的内容保留
     assert len(s2["sources"]["ja_wiki"]["codes"]) == 225 and "解析出 2 只" in s2["sources"]["ja_wiki"]["error"]
     assert s2["sources"]["jpx_delisted"]["ok_at"] == _now(10).isoformat(timespec="minutes")
+    assert s2["sources"]["jpx_list"]["ok_at"] == _now(7).isoformat(timespec="minutes")         # 上場一覧（月更）20 小时内不再取
 
 
 def test_refresh_takes_fresher_sources_from_the_repo_snapshot(tmp_path):
@@ -112,13 +129,14 @@ def test_refresh_takes_fresher_sources_from_the_repo_snapshot(tmp_path):
 
 
 # ── 判定 ──
-def _snap(ja, en=None, sup=(), etf=(), alert=(), delisted=(), ok=OK, ok_of=None):
+def _snap(ja, en=None, sup=(), etf=(), alert=(), delisted=(), ok=OK, ok_of=None, jl=None):
     ok_of = ok_of or {}
     S = lambda k, **x: {**x, "ok_at": ok_of.get(k, ok), "error": ""}                          # noqa: E731
     return {"sources": {"ja_wiki": S("ja_wiki", codes=sorted(ja)), "en_wiki": S("en_wiki", codes=sorted(en if en is not None else ja)),
                         "jpx_supervision": S("jpx_supervision", items=list(sup)),
                         "jpx_supervision_etf": S("jpx_supervision_etf", items=list(etf)),
-                        "jpx_alert": S("jpx_alert", items=list(alert)), "jpx_delisted": S("jpx_delisted", items=list(delisted))}}
+                        "jpx_alert": S("jpx_alert", items=list(alert)), "jpx_delisted": S("jpx_delisted", items=list(delisted)),
+                        "jpx_list": S("jpx_list", **(jl if jl is not None else EL.parse_jpx_list(_jpx_list())))}}
 
 
 def test_g1_g3_membership_and_both_directions_of_the_diff():
@@ -259,7 +277,49 @@ def test_universe_fix_and_universe_update_no_longer_overwrites(monkeypatch, caps
     import run
     pages = _pages()
     monkeypatch.setattr(EL, "_fetch_url", lambda u: pages[u])
+    monkeypatch.setattr(EL, "_fetch_bytes", lambda u: pages[u])                                 # 上場一覧：测试用文本
     rc = run.cmd_universe_update(argparse.Namespace())
     assert rc == 0 and not (paths.home() / "universe_JP.json").exists()
     out = capsys.readouterr().out
     assert "不再改股票池" in out and "JPX 特別注意銘柄" in out
+
+
+# ── G7：立花 ｅ支店能不能买（JPX 上場一覧的市場区分；qbreak/tradable.py）──
+def test_g7_blocks_stocks_and_core_etfs_tachibana_cannot_buy():
+    ours = {"7203", "6594", "4062"}
+    jl = EL.parse_jpx_list(_jpx_list(extra=[("2971", "REIT・ベンチャーファンド・カントリーファンド・インフラファンド"),
+                                            ("9999", "グロース（外国株式）"), ("1234", "PRO Market")], drop={"4062"}))
+    g = EL.Gate(TODAY, ours | {"9999", "1234"}, ours, _snap(ours, jl=jl), {"1655", "2971"})
+    assert g.entry_block("7203.T") is None and g.tachibana_reason("1655", "core") is None
+    assert "一覧（2026-08-31）里没有 4062" in g.entry_block("4062.T")                          # 一覧里找不到 → 确认不了就不买
+    assert "外国株式" in g.entry_block("9999.T") and "买不了" in g.entry_block("9999.T")
+    assert "PRO Market" in g.entry_block("1234.T")
+    assert "不是本系统在立花买的种类" in g.pre_send("2971.T", "BUY", "core") and g.pre_send("2971.T", "SELL", "core") is None
+    assert g.core_block("2971.T") and g.core_block("1655.T") is None
+    pn = g.panel()
+    assert [x["code"] for x in pn["tachibana"]["stock"]] == ["1234", "4062", "9999"] and pn["tachibana"]["as_of"] == "2026-08-31"
+    assert any("立花 ｅ支店买不了的票" in n for n in pn["needs_user"]) and any("核心 ETF 2971" in n for n in pn["needs_user"])
+
+
+def test_g7_stale_listing_blocks_new_stocks_but_core_falls_back_to_verified_list():
+    ours = {"7203"}
+    g = EL.Gate(TODAY, ours, ours, _snap(ours, ok_of={"jpx_list": "2026-08-01T07:00+09:00"}), {"1545", "1482"})
+    assert g.stale == ["jpx_list"] and "过期或取不到" in g.entry_block("7203.T")                # 58 天前：个股确认不了就不买
+    assert g.core_block("1545.T") is None and g.pre_send("1482.T", "BUY", "core") is None      # 核心：逐只核对过的名单兜底
+    assert "确认不了" in g.core_block("2244.T")
+    g2 = EL.Gate(TODAY, ours, ours, _snap(ours, ok_of={"jpx_list": "2026-08-20T07:00+09:00"}), {"1545"})
+    assert g2.stale == [] and g2.entry_block("7203.T") is None                                 # 月更：45 天内都算新
+    assert "立花 ｅ支店都能买" in g2.panel()["text"]
+
+
+def test_engine_core_gate_keeps_cash_instead_of_buying_a_core_etf_tachibana_cannot_buy():
+    from test_live_unified import _scenario
+    make, start = _scenario([1000.0] * 30, entry=(), bear_all=False)
+    free = make()
+    free.run(start)
+    assert int(free.st.core_units.get("1655.T", 0)) > 0                                       # 不设闸门：照常买核心
+    eng = make()
+    eng.core_gate_fn = lambda t: "立花 ｅ支店买不了（测试）" if t == "1655.T" else None
+    eng.run(start)
+    assert int(eng.st.core_units.get("1655.T", 0)) == 0                                       # 只挡买：那份留现金
+    assert any(x[1] == "1655.T" and "买不了" in x[2] for x in eng.gate_log)
