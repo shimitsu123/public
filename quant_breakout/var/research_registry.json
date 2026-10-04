@@ -11984,5 +11984,26 @@
    "WMV 与 N5D 实际相同"
   ],
   "notes": "JRM 过 V1〜V5、只差 V6；WMV 差 V3 / V4；MJR 差 V2 / V3 / V6；之后不再做 JRC 一族的变体（Zx 已看过）"
+ },
+ {
+  "line": 8544,
+  "date": "2026-10-04",
+  "title": "登记：第十个研究循环第 2 轮 MOM 12-1 个月涨得太多 / CLW 突破日收盘弱 / X2G 顾客业种短観没有改善（stock；都是事后 = 胜率诊断里三个年代同号的特征，V6 = Zx）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop10_r02_diagfeat.py",
+  "output": "var/out/loop10_r02_diagfeat.md",
+  "candidates": [
+   "MOM",
+   "CLW",
+   "X2G"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "门槛只用 425 个 W2 信号的特征分布（只数个数）；接线核对通过；碰到 B3 成交 MOM 38 / CLW 45 / X2G 40 笔（共 140）"
  }
 ]
