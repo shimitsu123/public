@@ -11585,5 +11585,66 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "kind = date；事前预期「更好候选」各约 1%"
+ },
+ {
+  "line": 8296,
+  "date": "2026-10-04",
+  "title": "修正（工程，不改规则）：第九个研究循环第 1 轮第一次运行在 S5 处出错（重复信号日对齐）→ 修正后重新运行（出错前没有输出任何结果）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "9713917",
+  "script": "scripts/loop9_r01_market.py",
+  "output": null,
+  "candidates": [],
+  "baseline": null,
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "规则、阈值、判定都不改"
+ },
+ {
+  "line": 8304,
+  "date": "2026-10-04",
+  "title": "第九个研究循环第 1 轮 ADH / N5D → 两个都第一关不过（ADH −0.260：过热期是突破的好时候；N5D +0.010：胜率 50.7% → 53.8% 但账户不变）",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "c3b06fa（修正 9713917；规则没改、只运行一次）",
+  "script": "scripts/loop9_r01_market.py",
+  "output": "var/out/loop9_r01_market.md",
+  "candidates": [
+   "ADH",
+   "N5D"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "不通过",
+  "stable_findings": [
+   "N5D 提高选股成功率（+3.0 pp）"
+  ],
+  "era_dependent_or_reversed": [
+   "ADH 在 Z 大幅变差（−0.298）"
+  ],
+  "notes": "ADH 合计 −0.260（Z −0.298、E +0.003、J +0.035）；N5D +0.010（Z −0.035、E +0.047、J −0.002），S8 过、S1 / S2 / S4 / S5 不过"
+ },
+ {
+  "line": 8317,
+  "date": "2026-10-04",
+  "title": "登记：第九个研究循环第 2 轮 BXT 日経涨 ≥ +1.5% 的日子不开新仓 / S5D S&P 500 在 50 日线下不开新仓（kind = date）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop9_r02_marketday.py",
+  "output": "var/out/loop9_r02_marketday.md",
+  "candidates": [
+   "BXT",
+   "S5D"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "第 1 轮运行之前就定下的两个做法，不是事后"
  }
 ]

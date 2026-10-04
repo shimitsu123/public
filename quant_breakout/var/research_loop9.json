@@ -1,7 +1,7 @@
 {
  "title": "第九个研究循环：选股成功率 —— 直到找到比现在（B3）更好的选股规则才停",
  "start": "2026-10-04",
- "registered": "本提交（登记）",
+ "registered": "1e75ebc",
  "user_request": "分析胜率低的原因 继续研究提高选股成功率 一直循环到 比现阶段的更好（2026-10-04 傍晚）",
  "rules": "scripts/research_loop9.py 开头（基准 B3、题目只限选股、第一关 S1〜S8、第二关、上限、家族、ID 不重用、停下的情况）",
  "status": "running",
@@ -67,5 +67,52 @@
  },
  "prereq_ok": true,
  "fingerprint": "3b2e8757be7b4a74",
- "rounds": []
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-04",
+   "title": "进场时的大盘状态：ADH 騰落レシオ ≥ 120 / N5D 日経在 50 日线下",
+   "registered": "c3b06fa（修正 9713917）",
+   "script": "scripts/loop9_r01_market.py",
+   "output": "var/out/loop9_r01_market.md",
+   "approaches": [
+    {
+     "id": "ADH",
+     "family": "选股·大盘过热（逆向）",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.26,
+     "passed": 3,
+     "d": {
+      "Z": -0.298,
+      "E": 0.003,
+      "J": 0.035
+     },
+     "success": {
+      "win": 51.05,
+      "mean": 3.878
+     }
+    },
+    {
+     "id": "N5D",
+     "family": "选股·大盘短期趋势（顺向）",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": 0.01,
+     "passed": 4,
+     "d": {
+      "Z": -0.035,
+      "E": 0.047,
+      "J": -0.002
+     },
+     "success": {
+      "win": 53.75,
+      "mean": 3.675
+     }
+    }
+   ]
+  }
+ ]
 }
