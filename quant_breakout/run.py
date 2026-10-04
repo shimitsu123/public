@@ -3047,14 +3047,92 @@ def cmd_daemon(a) -> int:
     return 0
 
 
+def _liveu_tag(a):
+    """(paper?, 账本标签, 账本路径)：模拟账户 / 立花本番 / デモ / dry-run 各一份账本，互不干扰。"""
+    paper = a.broker == "paper"
+    tag = "paper" if paper else "tachibana" + ("_demo" if a.demo else "") + ("_dryrun" if a.dry_run else "")
+    return paper, tag, paths.state_dir() / f"live_unified_{tag}.json"
+
+
 def cmd_live_unified(a) -> int:
     """一个账户方案（var/sim.json unified）的实盘执行器：早上对账 → 核对 → 决策 → 下寄付单；--phase open 开盘后补单。
-    --broker paper：模拟账户（PaperBroker，第二天早上按 K 线撮合）；tachibana：立花 e支店 API（--demo デモ環境、--dry-run 只算不发）。"""
+    --broker paper：模拟账户（PaperBroker，第二天早上按 K 线撮合）；tachibana：立花 e支店 API（--demo デモ環境、--dry-run 只算不发）。
+    除了 --status（只读），每次运行都先拿账本的运行锁（qbreak/live_unified.py 的 RunLock）：同一份账本同时只有一个进程在读写。"""
+    from qbreak.live_unified import ExecutorError, RunLock, mac_notify, register_flow
+    paper, tag, book = _liveu_tag(a)
+    if a.status:
+        return _live_unified_body(a)
+    try:
+        lock = RunLock(book.with_suffix(".lock"), wait_s=60.0 * float(a.lock_wait)).acquire()
+    except ExecutorError as e:
+        print(f"★ {e}")
+        if a.notify:
+            from qbreak import notify
+            t_ = f"qbreak {'模拟操盘' if paper else '立花实盘'} ★ 执行器没运行"
+            mac_notify(t_, str(e)[:200])
+            notify.send(t_, str(e), "warn")
+        return 3
+    try:
+        if a.halt_drill:
+            return _halt_drill(a, book, paper)
+        if a.flow is not None:
+            try:
+                rec = register_flow(book, a.flow, a.flow_note or "", a.flow_date)
+            except ValueError as e:
+                print(f"★ 没登记：{e}（例：bash scripts/liveu.sh flow 300000 --flow-date 2026-10-05；出金写负数）")
+                return 2
+            print(f"已登记{'入金' if rec['jpy'] > 0 else '出金'} {rec['jpy']:+,.0f} 円（{rec['date']}）"
+                  + (f"：{rec['seen_after']} 之后的现金同步里已经到账" if rec.get("seen_after")
+                     else "：还没看到到账，下次早上的对账里现金差对上了就记为到账")
+                  + "。只影响收益的计算与「现金突然变化」的提醒，下单本来就按券商的买付可能額；页面在下一次运行时更新")
+            return 0
+        return _live_unified_body(a)
+    finally:
+        lock.release()
+
+
+def _halt_drill(a, book, paper: bool) -> int:
+    """HALT 演练（上线门槛之一）：模拟账户今天早上的运行完成之后，建一个演练用的 HALT → 按正常流程跑一次执行器（HALT 存在 → 不下单，
+    账本记下 halt_seen）→ 删掉这次建的 HALT（真的 HALT 绝不碰：已经存在就不演练）。只用模拟账户。"""
+    from qbreak.calendar_jp import now_jst
+    from qbreak.live_unified import morning_done
+    from qbreak.trader import expected_last_bar
+    from qbreak.utils import atomic_write_text, read_json
+    halt = paths.halt_file()
+    if halt.exists():
+        print(f"HALT 已经存在（{halt}，真的停着）：演练不用做，也不会删它")
+        return 0
+    if not paper:
+        print("HALT 演练只用模拟账户做（--broker paper）")
+        return 2
+    exp = expected_last_bar(now_jst().date(), "JP").isoformat()
+    if not morning_done(read_json(book, {}) or {}, exp):
+        print(f"现在不能演练：模拟账户还没处理到 {exp}。交易日 07:40 的运行结束之后、收盘之前（或休市日）再做"
+              "（其他时间会用还没更新的输入做新的决策，和云端对不上）")
+        return 2
+    mark = f"HALT 演练 {now_jst():%Y-%m-%d %H:%M} JST（run.py live-u --halt-drill 建的，演练结束自动删除）"
+    atomic_write_text(halt, mark + "\n")
+    try:
+        rc = _live_unified_body(a)
+    finally:
+        if halt.exists() and halt.read_text(encoding="utf-8").startswith(mark):
+            halt.unlink()
+    today = now_jst().date().isoformat()
+    if today in ((read_json(book, {}) or {}).get("halt_seen") or []):
+        print(f"HALT 演练通过：HALT 存在时执行器没有下单（账本记下了 {today}；演练建的 HALT 已删除）")
+        return 0
+    print(f"★ HALT 演练没有记下来（退出码 {rc}）：把上面的输出发给 Claude")
+    return 1
+
+
+def _live_unified_body(a) -> int:
     import datetime as _dt
     from qbreak.calendar_jp import now_jst
     from qbreak.data import LAGGING
+    from qbreak.brokers.base import BrokerError
     from qbreak.live_unified import (ExecutorError, UnifiedExecutor, append_journal, compare_with_sim, daily_text,
-                                     load_state, mac_notify, resolve_order)
+                                     flows_in_change, invested_jpy, load_state, mac_notify, morning_done, open_pending,
+                                     record_compare, resolve_order)
     from qbreak.trader import expected_last_bar
     from qbreak.unified import UState
     from qbreak.utils import read_json, write_json
@@ -3066,9 +3144,7 @@ def cmd_live_unified(a) -> int:
     if "US" in ucfg.stock_markets:
         print("一个账户方案里有美股个股：立花 e支店不做美股，执行器不支持（sim.json unified.stock_markets 只留 JP）。")
         return 2
-    paper = a.broker == "paper"
-    tag = "paper" if paper else "tachibana" + ("_demo" if a.demo else "") + ("_dryrun" if a.dry_run else "")
-    book = paths.state_dir() / f"live_unified_{tag}.json"
+    paper, tag, book = _liveu_tag(a)
 
     def page(alert: str | None = None) -> None:     # 账本 + 日志的页面（每条路径都重写；scripts/liveu.sh 每天早上打开它）
         from qbreak import desktop_page
@@ -3108,6 +3184,20 @@ def cmd_live_unified(a) -> int:
             print(f"  [{e['level']}] {e['at']} {e['msg']}")
         page()
         return 0
+    if a.remote_halt:                                   # 云端对话里你说「停」→ 仓库的 var/HALT_REMOTE → 这里建本地 HALT（同一个 id 只生效一次）
+        _apply_remote_halt(a.remote_halt, paper, a.notify)
+    if a.retry:                                         # 08:35 / 09:20 的重试：已经完成就什么都不做（绝不换一份输入再决策一次）
+        b_ = read_json(book, {}) or {}
+        if paths.halt_file().exists():
+            print(f"HALT 生效中（{paths.halt_file()}）：重试不用做")
+            return 0
+        if a.phase == "open" and not open_pending(b_):
+            print("开盘后没有要补的买单（09:05 已经处理，或今天没有）：重试不用做")
+            return 0
+        if a.phase != "open" and morning_done(b_, expected_last_bar(now_jst().date(), "JP").isoformat()):
+            print("今天早上的运行已经完成：重试不用做")
+            return 0
+        print(f"★ 重试：{'开盘后的买单还没下' if a.phase == 'open' else '今天早上的运行没有完成'} → 现在按正常流程跑一次")
     if paper and cfg.get("start") and now_jst().date() < _dt.date.fromisoformat(cfg["start"]) and not a.force:
         print(f"模拟期开始日 {cfg['start']} 之前不推进模拟账户（与模拟盘同一天开始；--force 可提前演练）")
         page()
@@ -3159,17 +3249,25 @@ def cmd_live_unified(a) -> int:
             if not idxs:
                 print(f"没有新的完整交易日（截止 {cutoff}，上次决策 {state.last_date}）：只补下当前决策里还没下的单")
             ux.morning(idxs, corp=corp)
-    except ExecutorError as e:
-        print(f"★ 执行器停下（状态没有改动）：{e}")
-        page(f"执行器停下（状态没有改动，需要人工处理）：{e}")
+    except (ExecutorError, BrokerError) as e:
+        what = ("执行器停下（状态没有改动）" if isinstance(e, ExecutorError)
+                else "立花 API 出错，这次运行中断（已经发出的单都记在账本里，下一次运行接着对账）")
+        print(f"★ {what}：{e}")
+        page(f"{what}，需要人工处理：{e}")
         if a.notify:
             from qbreak import notify
             t_ = f"qbreak {'模拟操盘' if paper else '立花实盘'} ★ 执行器停下"
             mac_notify(t_, str(e)[:200])
-            notify.send(t_, str(e), "warn")
+            notify.send(t_, f"{what}：{e}", "warn")
         return 3
     sm = ux.summary()
-    cmp = compare_with_sim(eng.st, sim_state) if a.compare_sim else None
+    nr = str(getattr(broker, "next_release", "") or "")
+    if not paper and len(nr) >= 8 and nr[:8].isdigit() and nr[:8] >= now_jst().strftime("%Y%m%d"):
+        sm["notices"] = [f"立花通知：e支店 API 下一个版本的发布日 {nr[:4]}-{nr[4:6]}-{nr[6:8]}（之后旧版本会停用；在 Mac 对话里问"
+                         "「立花 API 要更新吗」，按官方仕様書核对 tachibana_spec.json 与适配器）"]
+    cmp = compare_with_sim(eng.st, sim_state, live=not paper) if a.compare_sim else None
+    record_compare(ux.book, cmp)                            # 上线门槛「连续 10 个交易日一致」用（run.py live-gate）
+    ux.save()
     sm["compare"] = cmp
     held = list(eng.st.pos) + [t for t, u_ in eng.st.core_units.items() if int(u_)]
     sm["eligibility"] = ctx.gate.panel(held=ctx.gate.held_alerts(held, "执行器"),
@@ -3182,11 +3280,17 @@ def cmd_live_unified(a) -> int:
     sm["exit_mode"] = ctx.xmode                              # 个股的离场方式（var/sim.json exits；与云端模拟盘同一个）
     sm["idle_cash"] = ctx.ic_status                          # 闲置资金的方式与现在拿什么（var/sim.json idle_cash；与云端模拟盘同一个）
     write_json(paths.out_dir() / f"live_unified_{tag}.json", sm)
-    title, short, body = daily_text(sm, eng.st, cmp, paper, float(ucfg.capital_jpy))
+    hist_ = eng.st.history or []
+    last_, prev_ = (str(hist_[-1][0]) if hist_ else None), (str(hist_[-2][0]) if len(hist_) > 1 else None)
+    title, short, body = daily_text(sm, eng.st, cmp, paper, float(ucfg.capital_jpy),
+                                    invested=invested_jpy(ucfg.capital_jpy, ux.book, last_),
+                                    flows_day=flows_in_change(ux.book, prev_, last_) if prev_ else 0.0)
+    if getattr(a, "halt_drill", False):
+        title += "（HALT 演练：HALT 存在时不下单）"
     append_journal(paths.out_dir() / f"live_unified_{tag}_journal.md", now_jst().strftime("%Y-%m-%d %H:%M JST"), title, body)
     if a.notify:
         from qbreak import notify
-        bad = bool(sm["blocked"]) or bool(cmp and cmp.get("comparable") and not cmp.get("same"))
+        bad = bool(sm["blocked"]) or bool(cmp and cmp.get("comparable") and not cmp.get("same")) or bool(sm.get("notices"))
         mac_notify(title, short)
         notify.send(title, body, "warn" if bad else "info")
     print(f"\n决策日 {sm['decided_on']} → 成交日 {sm['fill_day']}；权益 ¥{sm['equity_jpy']:,.0f}，现金 ¥{sm['cash_jpy']:,.0f}")
@@ -3210,6 +3314,50 @@ def cmd_live_unified(a) -> int:
     return 1 if sm["blocked"] and not paper else 0
 
 
+def _apply_remote_halt(path, paper: bool, notify_: bool) -> None:
+    """仓库里的 var/HALT_REMOTE 有没处理过的 id → 建本地 HALT（qbreak/live_unified.py apply_remote_halt）并通知。读不了就跳过（本机的 HALT 与其他闸门照常）。"""
+    from qbreak.live_unified import apply_remote_halt, mac_notify
+    p_ = Path(path).expanduser()
+    try:
+        msg = apply_remote_halt(p_.read_text(encoding="utf-8") if p_.exists() else None)
+    except Exception as e:                                # noqa: BLE001
+        log.warning("远程停止文件读不了（忽略）：%s", e)
+        return
+    if not msg:
+        return
+    print(f"★ {msg}：已建 HALT，之后买卖都不下（持仓不动）")
+    if notify_:
+        from qbreak import notify
+        t_ = f"qbreak {'模拟操盘' if paper else '立花实盘'} ★ 远程停止"
+        mac_notify(t_, msg[:200])
+        notify.send(t_, msg + "\n已建 HALT：之后买卖都不下、持仓不动。已经发到交易所的单不会被撤（要撤请在立花的网站 / App 上撤）。"
+                    "恢复：在 Mac 对话里明确说「恢复下单，删除 HALT」", "warn")
+
+
+def cmd_live_gate(a) -> int:
+    """立花实盘的上线门槛（HANDOFF 路线图 4）与本番运行的准备：只读（qbreak/live_gate.py）。全部满足 → 0，否则 1。"""
+    from qbreak import live_gate
+    print(f"── 立花实盘：上线门槛与准备（数据目录 {paths.home()}；只读）──")
+    text, ok = live_gate.report(live_gate.check())
+    print(text)
+    return 0 if ok else 1
+
+
+def cmd_remote_halt(a) -> int:
+    """云端对话里你说「停」：写仓库的 var/HALT_REMOTE（id = 现在的 JST 时间），由 Claude 提交推送；Mac 的执行器下一次运行
+    （07:40 / 08:35 / 09:05 / 09:20）拉到它就建本地 HALT。只能停、不能恢复（恢复只在 Mac 上明确说）。不在 Mac 上用。"""
+    from qbreak.calendar_jp import now_jst
+    from qbreak.utils import atomic_write_text
+    p_ = paths.PROJECT_ROOT / "var" / "HALT_REMOTE"
+    t = now_jst()
+    rid = f"{t:%Y%m%d-%H%M%S}"
+    reason = " ".join(str(a.reason or "用户在云端对话里说停").split())[:200]
+    atomic_write_text(p_, f"id: {rid}\nreason: {reason}\nat: {t:%Y-%m-%d %H:%M} JST\n")
+    print(f"已写 {p_}（id {rid}）。提交并推送之后，Mac 的执行器下一次运行（07:40 / 08:35 / 09:05 / 09:20）建本地 HALT；"
+          "已经发到交易所的单不会被撤；恢复只在 Mac 上（明确说「恢复下单，删除 HALT」）")
+    return 0
+
+
 def cmd_live_rehearse(a) -> int:
     """执行器用模拟账户演练：历史行情逐日回放（模拟券商 / 立花适配器 + 模拟交易所），与回测引擎逐日比较。"""
     import runpy
@@ -3227,10 +3375,12 @@ def _parse_time(s: str):
     return _dt.time(int(h), int(m))
 
 
-def _tachibana_order_test(b, spec) -> bool:
+def _tachibana_order_test(b, spec, rec: dict | None = None) -> bool:
     """デモ環境专用的一天发单检查（官方：デモ的价格不是真的，指値按指値成交、成行一律 100 円成交，第二天数据重置 →
     只能检查 API 的字段与流程，不能做多日演练）：当日指値买 1655.T 1 单元 → 約定照会（打印明细应答的字段名）→
-    余力与持仓的变化 → 寄付卖单 → 按注文番号撤单。"""
+    余力与持仓的变化 → 寄付卖单 → 按注文番号撤单。rec：上线门槛的三点（约定字段、余力 / 持仓变化、撤单）记在这里（不含金额）。"""
+    rec = rec if rec is not None else {}
+    rec["order_test"] = ot = {"ok": False, "buy": None, "fields_missing": None, "cash_or_pos_changed": None, "cancel": None}
     from qbreak.tick import round_to_tick
     b.dry_run, b.require_arm, b.max_order_value = False, False, 10_000_000
     t, qty = "1655.T", 10
@@ -3242,6 +3392,7 @@ def _tachibana_order_test(b, spec) -> bool:
     lim = round_to_tick(float(ref), t, "BUY")
     cash0, pos0 = b.cash(), b.positions().get(t)
     o = b.buy(t, qty, limit=lim, client_id=f"probe-{int(time.time())}")
+    ot["buy"] = o.status
     print(f"[{'OK' if o.status in ('FILLED', 'PARTIAL', 'SENT') else 'NG'}] 当日指値买    : {t} ×{qty} @ {lim:g} → {o.status}"
           f"（注文番号 {o.broker_id or '—'}，约定 {o.filled_qty} @ {o.filled_px:g}）{o.note}")
     if not o.broker_id:
@@ -3251,15 +3402,21 @@ def _tachibana_order_test(b, spec) -> bool:
     print(f"     約定照会的字段（对照 tachibana_spec.json 的 r_filled_qty / r_filled_px / r_status_code / r_exec_list）：{keys}")
     for k in (spec.r_filled_qty, spec.r_filled_px, spec.r_status_code, spec.r_exec_list):
         print(f"       {k} = {raw.get(k, '（没有这个字段）')!r}"[:200])
+    ot["fields_missing"] = [k for k in (spec.r_filled_qty, spec.r_filled_px, spec.r_status_code, spec.r_exec_list) if k not in raw]
     st = b.order_status(o.broker_id, o.extra.get("order_date", ""))
     cash1, pos1 = b.cash(), b.positions().get(t)
-    print(f"[OK] 约定与余力    : order_status {st}；买付可能額 {cash0:,.0f} → {cash1:,.0f} 円；"
+    ot["cash_or_pos_changed"] = bool(abs(cash1 - cash0) >= 1 or (pos1.qty if pos1 else 0) != (pos0.qty if pos0 else 0))
+    print(f"[{'OK' if ot['cash_or_pos_changed'] else 'NG'}] 约定与余力    : order_status {st}；买付可能額 {cash0:,.0f} → {cash1:,.0f} 円；"
           f"{t} 持仓 {pos0.qty if pos0 else 0} → {pos1.qty if pos1 else 0} 口")
     s_ = b.sell(t, qty, client_id=f"probe-s-{int(time.time())}", bar="next")      # 寄付成行：等下一个寄付，先撤掉
     print(f"[{'OK' if s_.status == 'SENT' else 'NG'}] 寄付卖单      : → {s_.status}（注文番号 {s_.broker_id or '—'}）{s_.note}")
+    ot["cancel"] = False
     if s_.broker_id:
         c = b.cancel_order(s_.broker_id, s_.extra.get("order_date", ""))
+        ot["cancel"] = bool(c)
         print(f"[{'OK' if c else 'NG'}] 按注文番号撤单 : {'已撤' if c else '失败（见日志）'}")
+    ot["ok"] = bool(o.status in ("FILLED", "PARTIAL", "SENT") and not ot["fields_missing"] and ot["cash_or_pos_changed"]
+                    and ot["cancel"])
     return o.status in ("FILLED", "PARTIAL", "SENT")
 
 
@@ -3288,6 +3445,11 @@ def _tachibana_tradable_check(b) -> str:
     return (f"マスタ {len(m)} 件；股票池 {len(pool)} 只 + 核心 {len(core)} 只：" + ("都能买、一手一致" if not bad else "★ " + "；".join(bad)))
 
 
+def _now_jst_text() -> str:
+    from qbreak.calendar_jp import now_jst
+    return now_jst().strftime("%Y-%m-%d %H:%M JST")
+
+
 def cmd_tachibana_probe(a) -> int:
     """只读连通性检查：登录 → 取价 → 持仓 → 余力。**默认绝不发单**；--order-test 只在デモ環境发单（检查字段与流程）。
     用它对着官方 API 仕様書逐项核对 TachibanaSpec，全部通过再考虑实盘。"""
@@ -3309,15 +3471,27 @@ def cmd_tachibana_probe(a) -> int:
         ("注文一覧", lambda: f"{len(b.open_orders())} 件"),
         ("立花銘柄マスタ：股票池 + 核心能不能买", lambda: _tachibana_tradable_check(b)),
     ]
-    ok = True
+    ok, rec = True, {"at": _now_jst_text(), "env": "demo" if a.demo else "live", "steps": {}}
     for name, fn in steps:
         try:
-            print(f"[OK] {name:<12}: {fn()}")
+            r_ = str(fn())
+            good = "★" not in r_                     # 立花銘柄マスタ的差异（买不了 / 一手不一致）也算没通过：被挡的票执行器不会买，但要确认
+            print(f"[{'OK' if good else 'NG'}] {name:<12}: {r_}")
         except Exception as e:                       # noqa: BLE001
             print(f"[NG] {name:<12}: {type(e).__name__}: {e}")
-            ok = False
+            good = False
+        rec["steps"][name] = good
+        ok = ok and good
     if ok and a.order_test:
-        ok = _tachibana_order_test(b, spec)
+        ok = _tachibana_order_test(b, spec, rec) and bool(rec["order_test"]["ok"])
+    rec.update(ok=ok, tax=b._tax or "", next_release=b.next_release or "")
+    try:                                             # 上线门槛（run.py live-gate）读这个文件：只有通过与否、课税区分，没有金额与密钥
+        from qbreak.utils import write_json
+        fp = paths.out_dir() / f"tachibana_probe_{rec['env']}.json"
+        write_json(fp, rec)
+        print(f"结果记在 {fp}（上线门槛的检查读它；没有金额与密钥）")
+    except Exception as e:                           # noqa: BLE001
+        print(f"★ 结果没记下来（不影响检查本身）：{e}")
     if a.dump_spec:
         print(f"\n已导出仕様模板 → {spec.dump_template()}")
         print("按官方仕様書改这个文件，程序会自动加载，其余代码不用动。")
@@ -3606,7 +3780,24 @@ def main(argv=None) -> int:
     lu.add_argument("--open", action="store_true", help="macOS：写完页面用浏览器打开（数据目录里有 NO_OPEN 文件就不打开）")
     lu.add_argument("--desktop", action="store_true", help="在桌面放一个指向页面的链接（在终端里做一次；定时任务不碰桌面文件夹）")
     lu.add_argument("--params", default=None)
+    lu.add_argument("--retry", action="store_true",
+                    help="重试（定时任务 08:35 / 09:20 用）：早上（或开盘后）的运行已经完成就什么都不做；没完成才按正常流程跑一次")
+    lu.add_argument("--remote-halt", default=None, metavar="PATH",
+                    help="远程停止文件（仓库的 var/HALT_REMOTE）：有没处理过的 id → 建本地 HALT（scripts/liveu.sh 自动传）")
+    lu.add_argument("--lock-wait", type=float, default=20.0, metavar="MIN",
+                    help="同一份账本有别的执行器进程在跑时最多等几分钟（默认 20）")
+    lu.add_argument("--flow", type=float, default=None, metavar="JPY",
+                    help="登记入金（正）/ 出金（负）：只影响收益的计算与提醒，不下单（bash scripts/liveu.sh flow …）")
+    lu.add_argument("--flow-note", default=None, metavar="TEXT")
+    lu.add_argument("--flow-date", default=None, metavar="YYYY-MM-DD", help="入出金的日期（默认今天）")
+    lu.add_argument("--halt-drill", action="store_true",
+                    help="HALT 演练（只用模拟账户、今天早上的运行完成之后）：建演练用的 HALT → 跑一次 → 删掉它（bash scripts/liveu.sh halt-drill）")
     lu.set_defaults(func=cmd_live_unified)
+    lg = sub.add_parser("live-gate", help="立花实盘的上线门槛与准备（只读：不下单、不改文件、不打印密钥）")
+    lg.set_defaults(func=cmd_live_gate)
+    rh = sub.add_parser("remote-halt", help="云端对话里说「停」：写 var/HALT_REMOTE，提交推送后 Mac 的执行器下一次运行时建本地 HALT")
+    rh.add_argument("--reason", default=None, metavar="TEXT")
+    rh.set_defaults(func=cmd_remote_halt)
 
     lr = sub.add_parser("live-u-rehearse", help="执行器用模拟账户演练：历史回放，与回测引擎逐日比较（var/out/live_rehearsal.md）")
     lr.add_argument("--windows", default="5y,20y")

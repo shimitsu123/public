@@ -130,3 +130,25 @@ def test_scripts_print_chinese_after_variables_without_dying(tmp_path, locales, 
     out, err = _bash({**env, "QBREAK_LOGIN_DELAY": "0"}, "scripts/liveu.sh", "login")   # 登录时的检查（假 Python 出错 → 如实说，不中断）
     assert "unbound variable" not in err, err
     assert "登录时的检查失败" in out
+
+
+@pytest.mark.parametrize("name", ["en_US.ISO-8859-1", "en_US.UTF-8"])
+def test_live_ops_paths_print_chinese_without_dying(tmp_path, locales, name):
+    """立花本番的定时任务（07:40 / 08:35 重试 / 09:05 / 09:20 重试）与 gate / flow / probe / halt-drill 子命令（2026-10-04 加）。"""
+    env = _env(tmp_path, locales, name)
+    out, err = _bash(env, "scripts/install_launchd_live_u.sh", "tachibana")
+    assert "unbound variable" not in err, err
+    for lb, hm in (("morning", "07:40"), ("retry", "08:35"), ("open", "09:05"), ("open2", "09:20")):
+        assert f"已注册 com.qbreak.liveu.{lb}：周一至五 {hm}" in out
+    retry = (tmp_path / "agents" / "com.qbreak.liveu.retry.plist").read_text(encoding="utf-8")
+    assert "<string>--retry</string>" in retry and "<string>tachibana</string>" in retry and "上线前检查（只读）" in out
+    out, err = _bash(env, "scripts/liveu.sh", "run", "--broker", "tachibana", "--phase", "open", "--retry")
+    assert "unbound variable" not in err, err
+    assert "运行没有完成（退出码 1）" in out                       # 假 Python 出错：重试没走完也照样标红
+    for args in (["gate"], ["flow"], ["flow", "300000"], ["probe"], ["halt-drill"]):
+        out, err = _bash(env, "scripts/liveu.sh", *args)
+        assert "unbound variable" not in err, (args, err)
+    out, _ = _bash(env, "scripts/liveu.sh", "flow")
+    assert "用法：bash scripts/liveu.sh flow 300000" in out
+    out, err = _bash(env, "scripts/install_launchd_live_u.sh", "uninstall")
+    assert "已卸载 com.qbreak.liveu.open2" in out and not (tmp_path / "agents" / "com.qbreak.liveu.retry.plist").exists()

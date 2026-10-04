@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # macOS：一个账户的执行器注册成定时 LaunchAgent（周一至五；按 Mac 的系统时区，应为日本时间）。
 #   bash scripts/install_launchd_live_u.sh              模拟操盘（默认）：07:40 一次（等云端当天的数据入库后运行）
-#   bash scripts/install_launchd_live_u.sh tachibana    立花本番：07:40 早上的单 + 09:05 开盘后补单（开户、デモ检查之后）
+#   bash scripts/install_launchd_live_u.sh tachibana    立花本番：07:40 早上的单 + 08:35 重试 + 09:05 开盘后补单 + 09:20 重试
+#                                                        （开户、过了上线门槛之后；重试 = 前一次没跑完才跑，跑完了什么都不做）
 #   bash scripts/install_launchd_live_u.sh uninstall    全部卸载
 # 执行器的状态、日志、ARM / HALT 都在 ~/.qbreak/home（QBREAK_LIVEU_HOME 可改），不在仓库里。
 set -euo pipefail
@@ -11,7 +12,7 @@ PROJ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV="${QBREAK_VENV:-$HOME/.qbreak/venv}"
 LHOME="${QBREAK_LIVEU_HOME:-$HOME/.qbreak/home}"
 AGENTS="${QBREAK_LAUNCH_AGENTS:-$HOME/Library/LaunchAgents}"
-LABELS=(com.qbreak.liveu.paper com.qbreak.liveu.morning com.qbreak.liveu.open)
+LABELS=(com.qbreak.liveu.paper com.qbreak.liveu.morning com.qbreak.liveu.retry com.qbreak.liveu.open com.qbreak.liveu.open2)
 
 unload() { if command -v launchctl >/dev/null 2>&1; then launchctl unload -w "$1" 2>/dev/null || true; fi; }
 load() { if command -v launchctl >/dev/null 2>&1; then launchctl load -w "$1"; else echo "（没有 launchctl：只生成了 $1）"; fi; }
@@ -95,7 +96,9 @@ if [ "$MODE" = "paper" ]; then
   plist com.qbreak.liveu.paper 7 40 run --broker paper
 else
   plist com.qbreak.liveu.morning 7 40 run --broker tachibana
+  plist com.qbreak.liveu.retry 8 35 run --broker tachibana --retry
   plist com.qbreak.liveu.open 9 5 run --broker tachibana --phase open
+  plist com.qbreak.liveu.open2 9 20 run --broker tachibana --phase open --retry
 fi
 
 # ③ 环境自检（Python 版本、依赖、行情连通性）
@@ -113,5 +116,14 @@ echo "看账本：  bash \"$PROJ/scripts/liveu.sh\" --broker $MODE --status"
 echo "手动跑一次（和定时任务相同）：bash \"$PROJ/scripts/liveu.sh\" run --broker $MODE"
 if [ "$MODE" = "tachibana" ]; then
   echo "解锁发单：echo ARMED > \"$LHOME/ARM\"；紧急停止：echo 停 > \"$LHOME/HALT\""
+  # Mac 睡着 / 关机时定时任务不跑：工作日 07:30 自动唤醒（要 sudo，脚本不替你做）；运行期间 liveu.sh 用 caffeinate 防止再睡
+  if command -v pmset >/dev/null 2>&1; then
+    if pmset -g sched 2>/dev/null | grep -qi "wake"; then
+      echo "自动唤醒：已有设定（pmset -g sched 查看；要工作日 07:40 之前）"
+    else
+      echo "★ 还没设定自动唤醒：在终端运行 sudo pmset repeat wakeorpoweron MTWRF 07:30:00（输入 Mac 的登录密码；接着电源、不合盖）"
+    fi
+  fi
+  echo "上线前检查（只读）：bash \"$PROJ/scripts/liveu.sh\" gate"
 fi
 echo "通知：第一次会以「スクリプトエディタ / Script Editor」的名义弹出，请在 系统设置 → 通知 里允许它"

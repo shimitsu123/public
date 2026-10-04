@@ -151,6 +151,11 @@ class UnifiedExecutor:
 
     def _gate(self, phase: str) -> str | None:
         if self.respect_halt and paths.halt_file().exists():
+            seen = self.book.setdefault("halt_seen", [])          # 上线门槛「HALT 演练过一次」的证据（run.py live-gate）
+            day = self.clock().date().isoformat()
+            if day not in seen:
+                seen.append(day)
+                self.book["halt_seen"] = seen[-30:]
             return f"存在 HALT 文件（{paths.halt_file()}）"
         if not self.check_clock or not self.eng.st.last_date:
             return None
@@ -245,7 +250,8 @@ class UnifiedExecutor:
         同一决策重复运行：已下过 / 已留到开盘后 / 状态不明的单不再下；BLOCKED（未发出）的会重试。"""
         eng, st, b = self.eng, self.eng.st, self.b
         d = st.last_date
-        why = self.blocked or self._gate("morning")
+        g = self._gate("morning")                           # 总是先看闸门（HALT 存在时记下演练的证据）
+        why = self.blocked or g
         if self.auto_cap and hasattr(b, "max_order_value"):
             b.max_order_value = round(eng.equity(k) * self.cap_mult)
         have = {o.cid: o for o in self.orders if o.decided_on == d}
@@ -375,7 +381,8 @@ class UnifiedExecutor:
 
     def open_phase(self) -> None:
         """实盘：开盘后（09:05 前后）下早上留下的买单。模拟账户不用调（_paper_open 里一起做）。"""
-        why = self.blocked or self._gate("open")
+        g = self._gate("open")                              # 总是先看闸门（HALT 存在时记下演练的证据）
+        why = self.blocked or g
         act = [o for o in self._active() if o.status == "DEFERRED"]
         if not act:
             self._event("info", "没有留到开盘后的买单")
@@ -529,8 +536,31 @@ class UnifiedExecutor:
             self.book.setdefault("cash_drift", []).append([st.last_date, round(drift, 2)])
             self.book["cash_drift"] = self.book["cash_drift"][-250:]
             if self.sync_cash:
+                self._match_flows(drift)
                 st.cash_jpy = cash
                 self.stats["cash_sync"] += 1
+
+    def _match_flows(self, drift: float) -> None:
+        """实盘的现金差里有没有入金 / 出金（run.py live-u --flow 登记）：还没到账的登记（合计，或其中一笔）≈ 这次的现金差 → 记下
+        「在哪个决策日之后到账」（seen_after；收益计算按它扣掉）；对不上、而且现金突然变化很大（≥ ¥50,000 且 ≥ 权益 2%）→ 提醒。
+        只影响收益的显示与提醒，不影响下单（仓位本来就按券商的买付可能額算）。"""
+        pend = [f for f in flows(self.book) if not f.get("seen_after")]
+        hit = match_flow(pend, drift)
+        if hit:
+            for f in hit:
+                f["seen_after"] = self.eng.st.last_date or ""
+            self._event("info", f"登记过的入出金 {sum(float(f['jpy']) for f in hit):+,.0f} 円已到账（收益计算里扣掉）")
+            return
+        hist = self.eng.st.history or []
+        eq = float(hist[-1][1]) if hist else abs(float(self.eng.st.cash_jpy))
+        if abs(drift) < max(50_000.0, 0.02 * eq):
+            return
+        if pend:
+            self._event("warn", f"现金突然变化 {drift:+,.0f} 円，和登记过还没到账的入出金 "
+                                f"{sum(float(f.get('jpy') or 0) for f in pend):+,.0f} 円对不上（金额写错？还没到账？）")
+        else:
+            self._event("warn", f"现金突然变化 {drift:+,.0f} 円：如果是入金 / 出金，请登记（只影响收益的计算、不影响下单）："
+                                f"bash scripts/liveu.sh flow {drift:+.0f} --broker tachibana")
 
     def on_corp_action(self, t: str, date: str, dividend: float, split: float, div_net: float) -> None:
         """公司行为同步：模拟券商的持仓 / 排队单，与执行器账本里还没成交的单（拆股：股数 ×k、价格 ÷k）。"""
@@ -677,8 +707,10 @@ def rehearse(make_engine, start, end=None, kind: str = "paper", workdir=None, ex
 
 
 # ══════════════════════════ 汇报：与模拟盘比较、通知、日志 ══════════════════════════
-def compare_with_sim(st: UState, sim: UState | None) -> dict:
-    """执行器账户 vs 模拟盘账户：同一决策日时逐项比较（个股股数、1655 口数、现金、权益）；不是同一天就不比（例如云端当天还没入库）。"""
+def compare_with_sim(st: UState, sim: UState | None, live: bool = False) -> dict:
+    """执行器账户 vs 模拟盘账户：同一决策日时逐项比较（个股股数、1655 口数、现金、权益）；不是同一天就不比（例如云端当天还没入库）。
+    live=True（立花实盘）：本金、税、实际手续费与成交价都和 ¥100 万的模拟盘不同，金额一定对不上 → 只比「拿的是不是同样的票」
+    （个股与核心 ETF 的品种），金额与权益差只写出来、不算不一致。"""
     pos = lambda s: {t: int(p.shares) for t, p in s.pos.items()}                     # noqa: E731
     core = lambda s: {t: int(u) for t, u in s.core_units.items() if int(u)}          # noqa: E731
     eq = lambda s: float(s.history[-1][1]) if s.history else None                    # noqa: E731
@@ -688,6 +720,20 @@ def compare_with_sim(st: UState, sim: UState | None) -> dict:
                        "不是同一天，这次不比（云端当天的例行任务可能还没入库）")
         return out
     diff = eq(st) - eq(sim) if eq(st) is not None and eq(sim) is not None else None
+    if live:
+        a, b = (sorted(pos(st)), sorted(core(st))), (sorted(pos(sim)), sorted(core(sim)))
+        same = a == b
+        out.update(comparable=True, same=same, equity_diff_jpy=diff, mode="holdings")
+        if same:
+            out["text"] = "与云端模拟盘拿的是同样的票（个股、核心 ETF 的品种；金额按各自的本金，不比）"
+        else:
+            parts = []
+            if a[0] != b[0]:
+                parts.append(f"个股 {'、'.join(a[0]) or '无'} vs 模拟盘 {'、'.join(b[0]) or '无'}")
+            if a[1] != b[1]:
+                parts.append(f"核心 ETF {'、'.join(a[1]) or '无'} vs 模拟盘 {'、'.join(b[1]) or '无'}")
+            out["text"] = "★ 与云端模拟盘拿的票不同：" + "；".join(parts) + "（看日志：没成交 / 被挡 / 人工交易？）"
+        return out
     same = pos(st) == pos(sim) and core(st) == core(sim) and abs(st.cash_jpy - sim.cash_jpy) < 1.0
     out.update(comparable=True, same=same, equity_diff_jpy=diff)
     if same:
@@ -742,19 +788,24 @@ def fj_text(fj: dict) -> str:
             + (f"个股减半 {len(h)} 只：{'、'.join(h[:8])}" if h else "没有个股减半"))
 
 
-def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: float) -> tuple[str, str, str]:
-    """(标题, 通知用的一行, 日志正文)。每个数字带单位。"""
+def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: float,
+               invested: float | None = None, flows_day: float = 0.0) -> tuple[str, str, str]:
+    """(标题, 通知用的一行, 日志正文)。每个数字带单位。invested = 起始本金 + 登记过的入出金（累计收益按它算）；
+    flows_day = 最近一个交易日之内登记的入出金（当日损益里扣掉，入金不算赚、出金不算亏）。"""
     hist = st.history or []
     eq = float(hist[-1][1]) if hist else float(sm.get("equity_jpy") or capital)
-    chg = eq - float(hist[-2][1]) if len(hist) > 1 else 0.0
-    ret = (eq / capital - 1) * 100 if capital else 0.0
+    chg = (eq - float(hist[-2][1]) if len(hist) > 1 else 0.0) - float(flows_day or 0.0)
+    base = float(invested if invested is not None else capital)
+    ret = (eq / base - 1) * 100 if base else 0.0
     title = f"qbreak {'模拟操盘' if paper else '立花实盘'} {sm.get('decided_on') or ''}"
     orders = [o for o in sm.get("orders") or [] if o.get("status") not in ("SKIPPED",)]
     short = f"权益 ¥{eq:,.0f}（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）｜下一开盘的单 {len(orders)} 笔"
     if cmp and cmp.get("comparable"):
-        short += "｜与云端一致" if cmp.get("same") else "｜★ 与云端不一致"
+        short += ("｜与云端一致" if cmp.get("mode") != "holdings" else "｜与云端同样的票") if cmp.get("same") else "｜★ 与云端不一致"
     if sm.get("blocked"):
         short += "｜★ 没下单"
+    if sm.get("notices"):
+        short += "｜★ 立花通知"
     el = sm.get("eligibility") or {}
     if el.get("needs_user"):
         short += "｜★ 资格检查要确认"
@@ -769,6 +820,11 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
         short += "｜★ 关联搭配 C 没生效"
     lines = [f"- 决策日 {sm.get('decided_on') or '—'} → 成交日 {sm.get('fill_day') or '—'}；权益 ¥{eq:,.0f}"
              f"（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）；现金 ¥{float(st.cash_jpy):,.0f}"]
+    if invested is not None and abs(float(invested) - float(capital)) >= 1.0:
+        lines.append(f"- 投入本金 ¥{float(invested):,.0f}（起始 ¥{float(capital):,.0f}，登记的入出金 {float(invested) - float(capital):+,.0f} 円）"
+                     + (f"；当日损益已扣掉入出金 {float(flows_day):+,.0f} 円" if flows_day else ""))
+    for n in sm.get("notices") or []:                       # 立花的通知（例如 API 新版本的发布日）
+        lines.append(f"- ★ {n}")
     held = [f"{t} {int(p.shares):,} 股（成本 ¥{float(p.entry_px):,.2f}，止损 ¥{float(p.stop_px):,.2f}）" for t, p in st.pos.items()]
     held += [f"{t} {int(u):,} 口" for t, u in st.core_units.items() if int(u)]
     lines.append("- 持仓：" + ("；".join(held) if held else "无（全部现金）"))
@@ -837,3 +893,194 @@ def mac_notify(title: str, text: str) -> bool:
         return True
     except Exception:                                    # noqa: BLE001
         return False
+
+
+# ══════════════════════════ 实盘的运行保障：锁、入出金、远程停止、重试 ══════════════════════════
+class RunLock:
+    """同一个账本同一时间只允许一个执行器进程（07:40 早上 / 08:35 重试 / 09:05 开盘后 / 09:20 重试 / --resolve / --flow）。
+    Mac 睡眠醒来时 launchd 会把错过的几个定时任务同时启动 → 没有锁就会两个进程同时读写账本（后写的覆盖先写的）。
+    fcntl.flock 独占锁：进程结束（含崩溃）时操作系统自动释放，不会留下「死锁文件」。等不到 → ExecutorError（这次不运行）。"""
+
+    def __init__(self, path, wait_s: float = 1200.0, poll_s: float = 5.0, sleep=None, mono=None):
+        import time as _t
+        self.path, self.wait_s, self.poll_s = path, float(wait_s), float(poll_s)
+        self._sleep, self._mono = sleep or _t.sleep, mono or _t.monotonic
+        self._f = None
+
+    def acquire(self) -> "RunLock":
+        import os
+        try:
+            import fcntl
+        except ImportError:                                   # Windows：执行器只在 Mac / Linux 上跑，这里不加锁
+            log.warning("没有 fcntl：执行器不加运行锁")
+            return self
+        from pathlib import Path
+        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+        f = open(self.path, "a+", encoding="utf-8")
+        t0 = self._mono()
+        while True:
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if self._mono() - t0 >= self.wait_s:
+                    f.seek(0)
+                    holder = f.read().strip() or "?"
+                    f.close()
+                    raise ExecutorError(f"另一个执行器还在运行（{holder}），等了 {self.wait_s / 60:.0f} 分钟仍没结束 → 这次不运行"
+                                        "（状态没有改动；在 Mac 对话里问「执行器为什么没跑完」）") from None
+                self._sleep(self.poll_s)
+        f.seek(0)
+        f.truncate()
+        f.write(f"pid {os.getpid()} 从 {now_jst():%Y-%m-%d %H:%M:%S JST}\n")
+        f.flush()
+        self._f = f
+        return self
+
+    def release(self) -> None:
+        if self._f is None:
+            return
+        try:
+            import fcntl
+            fcntl.flock(self._f.fileno(), fcntl.LOCK_UN)
+        finally:
+            self._f.close()
+            self._f = None
+
+    def __enter__(self) -> "RunLock":
+        return self.acquire()
+
+    def __exit__(self, *exc) -> None:
+        self.release()
+
+
+def flows(book: dict) -> list[dict]:
+    """登记过的入金（+）/ 出金（−）：[{"date", "jpy", "note", "at", "seen_after"?}]（seen_after = 在哪个决策日之后的现金同步里到账）。"""
+    return [f for f in (book or {}).get("flows") or [] if isinstance(f, dict)]
+
+
+def _flow_tol(jpy) -> float:
+    """登记的金额与现金差算「对上」的容差：¥5,000 或金额的 3%（当天的手续费、税、分红入账会混在现金差里）。"""
+    return max(5000.0, 0.03 * abs(float(jpy or 0)))
+
+
+def match_flow(pending: list[dict], drift: float) -> list[dict]:
+    """还没到账的登记里，哪几笔 ≈ 这次的现金差：先看全部合计，再看单笔（新的优先）。对不上 → []。"""
+    if not pending:
+        return []
+    tot = sum(float(f.get("jpy") or 0) for f in pending)
+    if abs(drift - tot) <= _flow_tol(tot):
+        return list(pending)
+    for f in reversed(pending):
+        if abs(drift - float(f.get("jpy") or 0)) <= _flow_tol(f.get("jpy")):
+            return [f]
+    return []
+
+
+def flow_reflected(f: dict, asof: str | None) -> bool:
+    """这笔入出金是否已经含在决策日 asof 的权益里：对上了现金差的（seen_after）→ seen_after 之后的决策日才含；
+    还没对上的 → 按登记的日期（≤ asof 就算含）。asof 为空 = 全部算。"""
+    if asof is None:
+        return True
+    sa = f.get("seen_after")
+    if sa:
+        return str(sa) < str(asof)
+    return str(f.get("date") or "") <= str(asof)
+
+
+def invested_jpy(capital: float, book: dict, asof: str | None = None) -> float:
+    """投入本金 = 起始本金 + 已经含在 asof 那天权益里的入出金（累计收益按它算）。"""
+    return float(capital) + sum(float(f.get("jpy") or 0) for f in flows(book) if flow_reflected(f, asof))
+
+
+def flows_in_change(book: dict, prev: str | None, last: str | None) -> float:
+    """权益从决策日 prev 到 last 的变化里含的入出金（当日损益里扣掉：入金不算赚、出金不算亏）。"""
+    if not last:
+        return 0.0
+    return sum(float(f.get("jpy") or 0) for f in flows(book)
+               if flow_reflected(f, last) and not (prev and flow_reflected(f, prev)))
+
+
+def register_flow(path, jpy: float, note: str = "", day: str | None = None) -> dict:
+    """登记一笔入金（正）/ 出金（负）。只影响收益的显示与「现金突然变化」的提醒；下单本来就按券商的买付可能額，不受影响。
+    如果最近几次早上的现金同步里已经出现过对得上的现金差（先到账、后登记），直接记为在那次到账。"""
+    if not jpy or abs(float(jpy)) < 1:
+        raise ValueError("入出金金额要 ≥ 1 円（入金写正数、出金写负数）")
+    if day is not None:
+        day = dt.date.fromisoformat(str(day)).isoformat()              # 日期写错直接报错，不存进账本
+    book = read_json(path, {}) or {}
+    rec = {"date": day or now_jst().date().isoformat(), "jpy": round(float(jpy), 2), "note": str(note or "")[:200],
+           "at": now_jst().isoformat(timespec="seconds")}
+    used = {str(f.get("seen_after")) for f in flows(book) if f.get("seen_after")}
+    for d, x in reversed((book.get("cash_drift") or [])[-5:]):
+        if d and str(d) not in used and abs(float(x) - rec["jpy"]) <= _flow_tol(rec["jpy"]):
+            rec["seen_after"] = str(d)
+            break
+    book.setdefault("flows", []).append(rec)
+    book.setdefault("events", []).append({"at": rec["at"], "level": "info",
+                                          "msg": f"登记{'入金' if rec['jpy'] > 0 else '出金'} {rec['jpy']:+,.0f} 円（{rec['date']}）{rec['note']}".rstrip()})
+    atomic_write_text(path, json.dumps(book, ensure_ascii=False, indent=1, default=_np))
+    return rec
+
+
+REMOTE_HALT_MARK = ".remote_halt_applied"
+
+
+def parse_remote_halt(text: str | None) -> dict | None:
+    """仓库里的 var/HALT_REMOTE（云端对话里用户说「停」时 Claude 提交推送）：每行「键: 值」，至少有 id；没有 id 就用全文当 id。"""
+    if not text or not text.strip():
+        return None
+    kv = {}
+    for ln in text.splitlines():
+        if ":" in ln:
+            k, v = ln.split(":", 1)
+            kv[k.strip().lower()] = v.strip()
+    import hashlib
+    rid = kv.get("id") or hashlib.sha1(text.strip().encode("utf-8")).hexdigest()[:12]    # 没写 id：用内容的稳定摘要
+    return {"id": rid, "reason": kv.get("reason") or kv.get("原因") or ""}
+
+
+def apply_remote_halt(text: str | None, home=None) -> str | None:
+    """Mac 的执行器每次运行前看一眼远程停止：没处理过的 id → 建本地 HALT 文件（买卖都不下、持仓不动）并记下这个 id；
+    同一个 id 不会再触发（所以在 Mac 上明确说「恢复下单，删除 HALT」之后不会被同一条远程停止又停住）。
+    返回给人看的一句话；没有新的远程停止 → None。已经发到交易所的单不会被撤（要撤请在立花网站 / App 上撤）。"""
+    from pathlib import Path
+    r = parse_remote_halt(text)
+    if r is None:
+        return None
+    base = Path(home) if home is not None else paths.home()
+    mark = base / REMOTE_HALT_MARK
+    if mark.exists() and mark.read_text(encoding="utf-8").strip() == r["id"]:
+        return None
+    halt = base / "HALT"
+    msg = f"远程停止（云端对话）{now_jst():%Y-%m-%d %H:%M JST}：{r['reason'] or '用户说停'}（id {r['id']}）"
+    if not halt.exists():
+        atomic_write_text(halt, msg + "\n恢复：在 Mac 对话里明确说「恢复下单，删除 HALT」\n")
+    atomic_write_text(mark, r["id"] + "\n")
+    return msg
+
+
+def morning_done(book: dict, expected_bar: str) -> bool:
+    """08:35 的重试用：今天早上的运行是否已经完成（账本已经处理到应有的决策日、而且这个决策没有 PLANNED / BLOCKED 的单）。
+    完成了就什么都不做 —— 绝不在同一个早上换一份输入再决策一次（那样可能多下单）。"""
+    st = (book or {}).get("state") or {}
+    if st.get("last_date") != expected_bar:
+        return False
+    return not any(o.get("decided_on") == expected_bar and o.get("status") in ("PLANNED", "BLOCKED")
+                   for o in (book or {}).get("orders") or [])
+
+
+def open_pending(book: dict) -> bool:
+    """09:20 的开盘后重试用：当前决策里还有留到开盘后、还没下的买单（DEFERRED）吗？没有 → 什么都不做（09:05 已经处理过 / 今天没有）。"""
+    d = ((book or {}).get("state") or {}).get("last_date")
+    return any(o.get("decided_on") == d and o.get("status") == "DEFERRED" for o in (book or {}).get("orders") or [])
+
+
+def record_compare(book: dict, cmp: dict | None) -> None:
+    """每天与云端比较的结果（上线门槛「连续 10 个交易日一致」用；run.py live-gate 读）。同一个决策日只记最后一次。"""
+    if not cmp or not cmp.get("exec_date"):
+        return
+    h = [x for x in book.get("compare_history") or [] if x.get("date") != cmp["exec_date"]]
+    h.append({"date": cmp["exec_date"], "comparable": bool(cmp.get("comparable")), "same": cmp.get("same"),
+              "mode": cmp.get("mode") or "exact"})
+    book["compare_history"] = sorted(h, key=lambda x: x["date"])[-250:]

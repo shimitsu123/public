@@ -53,6 +53,8 @@
   LaunchAgent `com.qbreak.jquants`（周一至五 19:30 + 07:05）取，整理结果 `~/.qbreak/home/out/jq_today.json`（只展示 / 研究）
 - 实盘相关（立花）：不创建 `~/.qbreak/home/ARM`、不删除 `HALT`、不加 `--no-arm`、不用 `--resolve` 登记成交，除非用户在这次对话里明确要求；
   用户说「停 / 今天不要下单」→ 立刻建 `~/.qbreak/home/HALT`（停下单不用再确认）；不在执行器之外向立花发任何单（不写临时脚本调 API 下单）；
+  「做一次 HALT 演练」→ `bash scripts/liveu.sh halt-drill`（只删它自己建的演练 HALT；真的 HALT 存在时不演练）；「能上实盘了吗」→ `bash scripts/liveu.sh gate`（只读）；
+  用户说入金 / 出金 → `bash scripts/liveu.sh flow <金额>`（出金写负数；只影响收益的计算与提醒，不下单）；
   用户想人工买卖执行器管的股票（股票池 + 1655）→ 先说明这会让第二天的持仓核对停下，建议先 HALT 再商量；
   下单前资格检查（`qbreak/eligibility.py`）与「立花能不能买」检查（`qbreak/tradable.py`：JPX 市場区分 + 立花銘柄マスタ）挡掉的票不要绕过；手上的票被标记（被踢出日経225 / JPX 指定 / 上場廃止预定）时规则不自动卖 →
   告诉用户、由用户决定（要人工卖先 HALT）；名单差异（`run.py eligibility`）要改 `qbreak/universes.py` 须用户确认并记 sim_changes.md；
@@ -67,5 +69,8 @@
 - 开发分支 `claude/rakuten-auto-trading-review-ka7lf0`：只推这个分支，不开 PR（除非用户要求）
 - 提交前在 `quant_breakout/` 跑 `set -o pipefail; python -m pytest -q`（必须全部通过）；推之前 `git pull --rebase`（例行任务每天也推 `var/`）
 - 代码、注释、提交信息里不写模型名
+- 用户在云端对话里说「停 / 今天不要下单」（人不在 Mac 旁边）→ 立刻在 `quant_breakout/` 跑 `python run.py remote-halt --reason "<用户原话>"`，
+  提交并推送 `var/HALT_REMOTE`（不用再确认；`git pull --rebase` 后推）→ Mac 的执行器下一次运行（07:40 / 08:35 / 09:05 / 09:20）建本地 HALT；
+  只能停、不能恢复（恢复只在 Mac 上、用户明确说）；告诉用户：已经发到交易所的单不会被撤（要撤在立花网站 / App 上撤）
 - shell 脚本：`$变量` 后面紧跟中文 / 全角字符时写成 `${变量}`（macOS 自带的 bash 3.2 在 UTF-8 下会把下一个字节算进变量名，
   `set -u` 时直接退出；`tests/test_shell_scripts.py` 会查）

@@ -11,6 +11,13 @@
 #   bash scripts/liveu.sh jq                         定时任务用（营业日 19:30 + 次日 07:05，scripts/install_launchd_jquants.sh）：J-Quants 新数据
 #   bash scripts/liveu.sh login                      登录 / 开机时（scripts/install_launchd_login.sh，RunAtLoad）：仪表盘没加载就加载、
 #                                                    交易日已过 07:40 而今天没跑 → 补跑模拟操盘、打开账本页面与仪表盘（遵守 NO_OPEN）
+#   bash scripts/liveu.sh run --broker tachibana --retry            定时任务用（立花 08:35）：早上的运行没完成才跑（不等云端）
+#   bash scripts/liveu.sh run --broker tachibana --phase open --retry   定时任务用（立花 09:20）：开盘后的买单还没下才跑
+#   bash scripts/liveu.sh gate                       上线门槛与准备（只读）：Mac 对话里问「能上实盘了吗」
+#   bash scripts/liveu.sh halt-drill                 HALT 演练（模拟账户；今天早上的运行完成之后）：建 HALT → 跑一次 → 删掉这次建的 HALT
+#   bash scripts/liveu.sh flow 300000 [--flow-note …]  登记入金（出金写负数）：只影响收益的计算与提醒，不下单
+#   bash scripts/liveu.sh probe [--demo [--order-test]]  立花 API 检查（只读；--order-test 只在デモ发单），结果给上线门槛用
+# 远程停止：云端对话里你说「停」→ 仓库的 var/HALT_REMOTE（run.py remote-halt）→ 这里每次运行前看一眼，新的 id → 建本地 HALT。
 # 页面（账本 + 日志）：~/.qbreak/home/out/page_paper.html（立花：page_tachibana.html），每次运行都重写；
 #   定时任务跑完自动用浏览器打开（不想弹出：touch ~/.qbreak/home/NO_OPEN）；运行没走完 → 页面顶上标红 + 通知。
 # 环境变量：QBREAK_LIVEU_HOME（默认 ~/.qbreak/home）、QBREAK_PYTHON（默认 ~/.qbreak/venv/bin/python）、
@@ -128,6 +135,34 @@ if [ "${1:-}" = "policy" ]; then                   # 政策事件库：bash scri
   exec "$PY" run.py policy-event "$@"
 fi
 
+# 下面几个子命令后面可以不带参数：用 ${1+"$@"}（macOS 自带的 bash 3.2 在 set -u 下展开空的 "$@" 可能报 unbound variable）
+if [ "${1:-}" = "gate" ]; then                     # 上线门槛与准备（只读：不下单、不改文件、不打印任何密钥）
+  shift
+  exec "$PY" run.py live-gate ${1+"$@"}
+fi
+
+if [ "${1:-}" = "halt-drill" ]; then               # HALT 演练：只用模拟账户、今天早上的运行完成之后；真的 HALT 已经存在就不做
+  shift
+  sync_inputs
+  exec "$PY" run.py live-u --broker paper --halt-drill ${1+"$@"}
+fi
+
+if [ "${1:-}" = "flow" ]; then                     # 登记入出金（默认立花的账本）：bash scripts/liveu.sh flow 300000 [--flow-note …] [--flow-date …]
+  shift
+  if [ $# -eq 0 ]; then
+    echo "用法：bash scripts/liveu.sh flow 300000 [--flow-note 备注] [--flow-date YYYY-MM-DD]（入金写正数、出金写负数）"
+    exit 2
+  fi
+  amt="$1"
+  shift
+  exec "$PY" run.py live-u --broker tachibana --flow="$amt" ${1+"$@"}
+fi
+
+if [ "${1:-}" = "probe" ]; then                    # 立花 API 检查：本番只读；--demo --order-test 在デモ环境发单检查
+  shift
+  exec "$PY" run.py tachibana-probe ${1+"$@"}
+fi
+
 if [ "${1:-}" = "desktop" ]; then                  # 在终端里做一次（第一次可能会问「终端」能否访问桌面文件夹：允许）
   shift
   sync_inputs
@@ -135,8 +170,14 @@ if [ "${1:-}" = "desktop" ]; then                  # 在终端里做一次（第
 fi
 
 if [ "${1:-}" = "run" ]; then
+  if [ -z "${QBREAK_CAFFEINATED:-}" ] && command -v caffeinate >/dev/null 2>&1; then
+    # macOS：运行期间不让 Mac 自己睡着（定时唤醒之后几分钟没人操作就会再睡，进程会被挂起；合盖照样会睡）
+    QBREAK_CAFFEINATED=1 exec caffeinate -i /bin/bash "$PROJ/scripts/liveu.sh" "$@"
+  fi
   shift
   case " $* " in *" --phase open "*) openphase=1 ;; *) openphase=0 ;; esac
+  case " $* " in *" --retry "*) retry=1 ;; *) retry=0 ;; esac
+  case " $* " in *" --broker tachibana "*) live=1 ;; *) live=0 ;; esac
   pullmsg=""
   if [ "$openphase" = "0" ]; then
     today="$(TZ=Asia/Tokyo date +%F)"
@@ -145,39 +186,70 @@ if [ "${1:-}" = "run" ]; then
       if [ "${QBREAK_LIVEU_PULL:-1}" = "1" ]; then
         if git pull -q --ff-only >/dev/null 2>&1; then
           pullmsg=""
+        elif [ "$retry" = "1" ] && sleep 15 && git pull -q --ff-only >/dev/null 2>&1; then
+          pullmsg=""                               # 重试和早上的运行可能同时 pull（.git 的锁）：等一下再试一次
         else                                       # 多半是仓库里有本地改动 / 本地提交：拉不下来就一直用旧代码旧数据 → 页面上标红
           pullmsg="git pull 失败（仓库里有本地改动或网络问题）：今天用的是本机现有的代码和数据；终端里运行 git -C $PROJ status 查看"
           echo "（${pullmsg}）"
         fi
       fi
+      [ "$retry" = "1" ] && break                  # 重试不等云端：早上的运行已经等过；没完成的话现在就用手上最新的输入
       d="$("$PY" -c 'import json;print(json.load(open("var/out/unified_today.json",encoding="utf-8")).get("date",""))' 2>/dev/null)"
       [ "$d" = "$today" ] && break
       if [ "$waited" -ge "${QBREAK_LIVEU_WAIT_MIN:-50}" ]; then
         echo "★ 等了 ${waited} 分钟，云端今天（${today}）的数据还没入库（最新 ${d:-无}）：用手上最新的判断层 / 宏观数值继续"
         break
       fi
+      if [ "$live" = "1" ] && [ "$(TZ=Asia/Tokyo date +%H%M)" -ge "${QBREAK_LIVEU_WAIT_UNTIL:-0830}" ]; then
+        echo "★ 已到 $(TZ=Asia/Tokyo date +%H:%M) JST，云端今天（${today}）的数据还没入库（最新 ${d:-无}）：寄付注文 08:55 截止，用手上最新的输入继续"
+        break
+      fi
       sleep 300
       waited=$((waited + 5))
     done
+    halt_remote="$PROJ/var/HALT_REMOTE"
+  else                                             # 开盘后不 pull（不换代码），只看一眼远程停止（git fetch 只更新远端分支的记录，不动工作区）
+    halt_remote="$QBREAK_HOME/.halt_remote_fetched"
+    rm -f "$halt_remote"
+    if [ "${QBREAK_LIVEU_PULL:-1}" = "1" ] && git fetch -q >/dev/null 2>&1; then
+      git show "@{u}:./var/HALT_REMOTE" > "$halt_remote" 2>/dev/null || rm -f "$halt_remote"
+    fi
   fi
   sync_inputs
   stamp="$QBREAK_HOME/logs/.run_started"
   : > "$stamp"
   sleep 1                                          # 页面的修改时间一定晚于这个标记（下面据此判断运行有没有走完）
   if [ "$openphase" = "1" ]; then
-    "$PY" run.py live-u --notify "$@"
+    "$PY" run.py live-u --notify --remote-halt "$halt_remote" "$@"
+  elif [ "$retry" = "1" ]; then                    # 重试：已经完成就什么都不做（不弹页面）；没完成才按正常流程跑
+    "$PY" run.py live-u --compare-sim "$PROJ/var/state/unified_state.json" --notify --remote-halt "$halt_remote" "$@"
   elif [ -n "$pullmsg" ]; then
-    "$PY" run.py live-u --compare-sim "$PROJ/var/state/unified_state.json" --notify --open --alert "$pullmsg" "$@"
+    "$PY" run.py live-u --compare-sim "$PROJ/var/state/unified_state.json" --notify --open --remote-halt "$halt_remote" --alert "$pullmsg" "$@"
   else
-    "$PY" run.py live-u --compare-sim "$PROJ/var/state/unified_state.json" --notify --open "$@"
+    "$PY" run.py live-u --compare-sim "$PROJ/var/state/unified_state.json" --notify --open --remote-halt "$halt_remote" "$@"
   fi
   rc=$?
-  if ! find "$QBREAK_HOME/out" -name 'page_*.html' -newer "$stamp" 2>/dev/null | grep -q .; then
+  updated=0
+  find "$QBREAK_HOME/out" -name 'page_*.html' -newer "$stamp" 2>/dev/null | grep -q . && updated=1
+  if [ "$retry" = "1" ] && [ "$rc" = "0" ] && [ "$updated" = "0" ]; then   # 重试没事可做（前一次已经跑完）：不写页面，也不是「运行没完成」
+    exit 0
+  fi
+  if [ "$updated" = "0" ]; then
     # 没走到写页面那一步（Python 出错、行情取不到……）：页面顶上标红 + 通知，别让人看着上一次的页面以为没事
     msg="$(TZ=Asia/Tokyo date '+%m/%d %H:%M') 的运行没有完成（退出码 ${rc}）：看 $QBREAK_HOME/logs/ 里的 .err / .out，或把它发给 Claude"
     echo "★ $msg"
     "$PY" run.py live-u "$@" --status --alert "$msg" $([ "$openphase" = "0" ] && echo --open) >/dev/null 2>&1
     mac_alert "qbreak ★ 运行没有完成" "$msg"
+  fi
+  if [ "$live" = "1" ] && [ "$openphase" = "0" ] && command -v caffeinate >/dev/null 2>&1; then
+    # 立花：早上跑完之后让 Mac 醒着到 09:25 JST（没人操作几分钟就会睡着 → 09:05 / 09:20 的开盘后补单会错过；合盖照样会睡）
+    hold="$("$PY" -c 'import datetime as d, zoneinfo as z
+n = d.datetime.now(z.ZoneInfo("Asia/Tokyo"))
+print(max(0, int((n.replace(hour=9, minute=25, second=0, microsecond=0) - n).total_seconds())))' 2>/dev/null || echo 0)"
+    if [ "${hold:-0}" -gt 0 ] 2>/dev/null; then
+      echo "（让 Mac 醒着到 09:25 JST：09:05 / 09:20 的开盘后补单按时运行）"
+      caffeinate -i -t "$hold"
+    fi
   fi
   exit "$rc"
 fi

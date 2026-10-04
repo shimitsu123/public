@@ -20,7 +20,10 @@ REPO="${QBREAK_REPO:-https://github.com/shimitsu123/public.git}"
 echo "── qbreak：Mac 一条命令安装 / 更新 ──"
 
 # ① ② 依赖 + 模拟操盘
-if [ -f "$AGENTS/com.qbreak.liveu.morning.plist" ]; then
+if [ -f "$AGENTS/com.qbreak.liveu.morning.plist" ] && { [ ! -f "$AGENTS/com.qbreak.liveu.retry.plist" ] || [ ! -f "$AGENTS/com.qbreak.liveu.open2.plist" ]; }; then
+  echo "② 立花本番的定时任务缺 08:35 / 09:20 的重试：重装立花模式（不动账本、ARM / HALT）……"
+  bash "$PROJ/scripts/install_launchd_live_u.sh" tachibana
+elif [ -f "$AGENTS/com.qbreak.liveu.morning.plist" ]; then
   echo "② 立花本番的定时任务已安装：不动（要重装：bash \"$PROJ/scripts/install_launchd_live_u.sh\" tachibana）"
   if [ -x "$VENV/bin/python" ]; then "$VENV/bin/python" -m pip install -q -r "$PROJ/requirements.txt" && echo "① 依赖已更新"; fi
 elif [ ! -f "$AGENTS/com.qbreak.liveu.paper.plist" ] || { [ "${QBREAK_SKIP_VENV:-}" != "1" ] && [ ! -x "$VENV/bin/python" ]; }; then

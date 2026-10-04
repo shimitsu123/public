@@ -80,20 +80,25 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
                     + (f"<br><a href='{trial.name}'>看试跑的页面（样子和以后每天的一样）</a>" if trial.exists() else "")
                     + "</section>")
     else:
+        from .live_unified import flows_in_change, invested_jpy
         hist = st.get("history") or []
         eq = float(hist[-1][1]) if hist else float(capital)
-        day = eq - float(hist[-2][1]) if len(hist) > 1 else 0.0
-        tot = eq - float(capital)
+        last_d, prev_d = (str(hist[-1][0]) if hist else None), (str(hist[-2][0]) if len(hist) > 1 else None)
+        inv = invested_jpy(capital, book, last_d)            # 起始本金 + 已经含在权益里的入出金（入金不算赚、出金不算亏）
+        day = eq - float(hist[-2][1]) - flows_in_change(book, prev_d, last_d) if len(hist) > 1 else 0.0
+        tot = eq - inv
         cmp = sm.get("compare") or {}
-        cmp_txt = ("与云端模拟盘一致" if cmp.get("same") else "★ 与云端模拟盘不一致") if cmp.get("comparable") else \
+        same_txt = "与云端模拟盘同样的票" if cmp.get("mode") == "holdings" else "与云端模拟盘一致"
+        cmp_txt = (same_txt if cmp.get("same") else "★ 与云端模拟盘不一致") if cmp.get("comparable") else \
             ("今天没有比（日期不同）" if cmp else "—")
+        base_txt = f"起始 {_yen(capital)}" if abs(inv - float(capital)) < 1 else f"投入本金 {_yen(inv)}（起始 {_yen(capital)}）"
         body.append(
             "<section class='card'><div class='kpi'>"
-            f"<div><span class='muted'>总权益</span><b>{_yen(eq)}</b><span class='muted'>起始 {_yen(capital)}</span></div>"
+            f"<div><span class='muted'>总权益</span><b>{_yen(eq)}</b><span class='muted'>{base_txt}</span></div>"
             f"<div><span class='muted'>当日损益</span><b class='{_cls(day)}'>{_yen(day, True)}</b>"
             f"<span class='muted'>{(day / (eq - day) * 100 if eq - day else 0):+.2f}%</span></div>"
             f"<div><span class='muted'>累计损益</span><b class='{_cls(tot)}'>{_yen(tot, True)}</b>"
-            f"<span class='muted'>{(tot / capital * 100 if capital else 0):+.2f}%</span></div>"
+            f"<span class='muted'>{(tot / inv * 100 if inv else 0):+.2f}%</span></div>"
             f"<div><span class='muted'>现金</span><b>{_yen(st.get('cash_jpy'))}</b></div>"
             f"<div><span class='muted'>决策日 → 下一成交日</span><b>{escape(str(st.get('last_date') or '—'))}</b>"
             f"<span class='muted'>→ {escape(str(sm.get('fill_day') or '—'))}</span></div>"
@@ -101,6 +106,8 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
             f"{escape(cmp_txt)}</b></div></div></section>")
         if sm.get("blocked"):
             body.append(f"<section class='card warn'><b>★ 没有下单：</b>{escape(str(sm['blocked']))}</section>")
+        for n_ in sm.get("notices") or []:                    # 立花的通知（例如 API 新版本的发布日）
+            body.append(f"<section class='card warn'><b>★ </b>{escape(str(n_))}</section>")
     mk = sm.get("market") or {}
     if mk:
         rows = []

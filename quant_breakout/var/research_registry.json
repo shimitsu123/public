@@ -11422,5 +11422,39 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "只回答 + 文档更正（HANDOFF / CHECK_TIMELINE 的「回撤 45% → HALT」改成实际情况）；不改规则；待办〔55〕"
+ },
+ {
+  "line": 8145,
+  "date": "2026-10-04",
+  "title": "用户决定（待办〔55〕①）：什么都不改 → 不重算资金规模表、不加自动回撤 HALT；模拟盘与执行器不变（B3）",
+  "kind": "decision",
+  "domain": "资金/执行/成本",
+  "registration": "—",
+  "script": null,
+  "output": null,
+  "candidates": [],
+  "baseline": "B3（不变）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "停下单仍只靠 HALT（Mac 上说「停」，或云端对话里说「停」→ 远程停止）"
+ },
+ {
+  "line": 8151,
+  "date": "2026-10-04",
+  "title": "工程（用户要求）：立花实盘的运行保障 —— 运行锁、08:35 / 09:20 重试、防睡眠、远程停止、入出金登记、实盘只比持仓品种、API 新版本通知、上线门槛检查、HALT 演练",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": null,
+  "script": "qbreak/live_unified.py；qbreak/live_gate.py；run.py live-u / live-gate / remote-halt；scripts/liveu.sh；scripts/install_launchd_live_u.sh",
+  "output": null,
+  "candidates": [],
+  "baseline": null,
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "只补工程，决策 / 下单的价格、数量、时点与资格检查都不变；开户后用户要做：デモ一天 probe --demo --order-test → 本番 probe → 入金 → 装立花定时任务 → sudo pmset 唤醒 → gate 全 OK → 明确说才建 ARM"
  }
 ]
