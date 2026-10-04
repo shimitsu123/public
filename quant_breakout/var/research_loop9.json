@@ -159,6 +159,52 @@
      }
     }
    ]
+  },
+  {
+   "round": 3,
+   "date": "2026-10-04",
+   "title": "日本相对核心 JRC / 开盘追高 GPT",
+   "registered": "f32c708",
+   "script": "scripts/loop9_r03_relative.py",
+   "output": "var/out/loop9_r03_relative.md",
+   "approaches": [
+    {
+     "id": "JRC",
+     "family": "选股·日本相对核心",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.232,
+     "passed": 5,
+     "d": {
+      "Z": -0.234,
+      "E": -0.013,
+      "J": 0.015
+     },
+     "success": {
+      "win": 67.32,
+      "mean": 5.609
+     }
+    },
+    {
+     "id": "GPT",
+     "family": "选股·开盘追高",
+     "kind": "stock",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": 0.041,
+     "passed": 7,
+     "d": {
+      "Z": 0.034,
+      "E": -0.002,
+      "J": 0.009
+     },
+     "success": {
+      "win": 51.87,
+      "mean": 3.484
+     }
+    }
+   ]
   }
  ]
 }
