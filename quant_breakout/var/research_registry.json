@@ -12159,5 +12159,26 @@
    "N3M / NVL：2017 年以后（Jx）反向、J 账户 −0.03 左右"
   ],
   "notes": "N3M 过 V1 / V2 / V5 / V6，差 V3（J −0.028、两半 −0.031 / −0.023）与 V4（Jx −1.33 pp）"
+ },
+ {
+  "line": 8653,
+  "date": "2026-10-05",
+  "title": "登记：第十个研究循环第 5 轮 CGO 套牢盘（低于一年成交量加权均价）/ H52 离 52 周高点远 / RNG 箱体太宽（stock；CGO 不是事后，H52 / RNG 事后）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop10_r05_anchor.py",
+  "output": "var/out/loop10_r05_anchor.md",
+  "candidates": [
+   "CGO",
+   "H52",
+   "RNG"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "接线核对通过；碰到 B3 成交 CGO 40 / H52 32 / RNG 37 笔（共 140）"
  }
 ]
