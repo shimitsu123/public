@@ -11247,5 +11247,24 @@
    "美国 IC 〜2016 −0.166 → 2017〜 +0.034（发表之后反过来）；日本 〜2016 +0.097 → 2017〜 −0.113"
   ],
   "notes": "第八个循环 3 / 10；来源「杠杆·融资余额」1 / 3；按规则不按看到的最高一档另做规则；模拟盘不变"
+ },
+ {
+  "line": 8004,
+  "date": "2026-10-04",
+  "title": "登记：第八个研究循环第 4 轮 资金流·投资部门别（外国投资者最近 13 周净买入占成交 FX）→ 信息检查 + 规则 FFL（月末 FX < 0 → 下一个月不开日本个股新仓）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（scripts/loop8_r04_foreign.py 开头；登记后不改、只运行一次）",
+  "script": "scripts/loop8_r04_foreign.py",
+  "output": "var/out/loop8_r04_foreign.md",
+  "candidates": [
+   "FFL"
+  ],
+  "baseline": "B3（账户）",
+  "windows": "信息检查：日経 2016-12〜2026-06 的已结束月末；规则：J（2017-01-01 起；Z / E 不变）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "方向 +（Froot, O'Connell & Seasholes 2001）；一个市场 → I2 前后两半；J-Quants Standard 只有 2016-10 起；事前预期「更好候选」约 0.75%"
  }
 ]
