@@ -11523,6 +11523,30 @@
   "verdict": "只展示",
   "stable_findings": [],
   "era_dependent_or_reversed": [],
-  "notes": "结果待运行（只运行一次）；不提候选、不占研究循环的名额"
+  "notes": "结果见第 8245 行（只运行一次）；不提候选、不占研究循环的名额"
+ },
+ {
+  "line": 8245,
+  "date": "2026-10-04",
+  "title": "结果：B3 的个股胜率为什么低 → 胜率 50.7% 远高于保本 27.3%（盈亏比 2.67）；输赢主要看持有期间日経方向（日経跌时胜率 24〜32%）；亏损一半是假突破、一半是涨过又还回去；J 只有 43.5% 跑赢核心",
+  "kind": "display",
+  "domain": "选股/买点",
+  "registration": "560c802（登记后代码未改、只运行一次）",
+  "script": "scripts/winrate_diag.py",
+  "output": "var/out/winrate_diag.md",
+  "candidates": [],
+  "baseline": "B3（不变）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "只展示",
+  "stable_findings": [
+   "胜率 > 保本胜率（三个年代都是）",
+   "日経跌时胜率低（三个年代都是）",
+   "C 在 J 挡掉的信号胜率 22%"
+  ],
+  "era_dependent_or_reversed": [
+   "E 的利润集中在最好的 5 笔",
+   "C 在 E / Z 几乎没有作用"
+  ],
+  "notes": "事后特征（三个年代同号）：x2 +、clv +、r12 −、rsec −、b_fx −（r12 C 已在用）；¥200 万多出来的 25 笔 32% / −0.70%；不改规则"
  }
 ]
