@@ -4,7 +4,7 @@
  "registered": "1e75ebc",
  "user_request": "分析胜率低的原因 继续研究提高选股成功率 一直循环到 比现阶段的更好（2026-10-04 傍晚）",
  "rules": "scripts/research_loop9.py 开头（基准 B3、题目只限选股、第一关 S1〜S8、第二关、上限、家族、ID 不重用、停下的情况）",
- "status": "running",
+ "status": "stopped:要用户决定",
  "cap": 20,
  "family_cap": 3,
  "family_prefix": "选股",
@@ -325,6 +325,80 @@
      }
     }
    ]
+  },
+  {
+   "round": 7,
+   "date": "2026-10-04",
+   "title": "隔夜情绪 ONS / 成交额波动 LVV（文献检索后剩下的弱候选）",
+   "registered": "a693d0c",
+   "script": "scripts/loop9_r07_sentliq.py",
+   "output": "var/out/loop9_r07_sentliq.md",
+   "approaches": [
+    {
+     "id": "ONS",
+     "family": "选股·隔夜情绪",
+     "kind": "stock",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": 0.007,
+     "passed": 5,
+     "d": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.007
+     },
+     "success": {
+      "win": 50.72,
+      "mean": 3.301
+     }
+    },
+    {
+     "id": "LVV",
+     "family": "选股·成交额波动",
+     "kind": "stock",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.002,
+     "passed": 5,
+     "d": {
+      "Z": -0.011,
+      "E": -0.001,
+      "J": 0.01
+     },
+     "success": {
+      "win": 52.25,
+      "mean": 3.486
+     }
+    }
+   ]
   }
- ]
+ ],
+ "stopped": {
+  "date": "2026-10-04",
+  "used": 13,
+  "reason": "先验想法用完（文献检索也确认）：剩下的只有事后变体（选股没有没看过的数据、S7 过不了）或新数据 / 改评判标准 → 要用户决定（待办〔56〕）",
+  "closest": [
+   {
+    "round": 3,
+    "id": "GPT",
+    "verdict": "第一关不过",
+    "sum": 0.041,
+    "passed": 7
+   },
+   {
+    "round": 4,
+    "id": "SBW",
+    "verdict": "第一关不过",
+    "sum": 0.039,
+    "passed": 5
+   },
+   {
+    "round": 2,
+    "id": "BXT",
+    "verdict": "第一关不过",
+    "sum": 0.022,
+    "passed": 5
+   }
+  ]
+ }
 }

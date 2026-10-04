@@ -11862,5 +11862,46 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "文献检索后剩下的弱 / 很弱候选；之后先验想法用完 → 循环停下由用户决定"
+ },
+ {
+  "line": 8458,
+  "date": "2026-10-04",
+  "title": "第九个研究循环第 7 轮 ONS / LVV → 两个都第一关不过（ONS +0.007、LVV −0.002；只碰到 2 / 6 笔，W / Jx 方向相反）",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "a693d0c（登记后代码未改、只运行一次）",
+  "script": "scripts/loop9_r07_sentliq.py",
+  "output": "var/out/loop9_r07_sentliq.md",
+  "candidates": [
+   "ONS",
+   "LVV"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [
+   "LVV：Jx 被挡的明显更差、W 被挡的更好"
+  ],
+  "notes": "ONS Z ±0、E ±0、J +0.007；LVV Z −0.011、E −0.001、J +0.010，S8 过"
+ },
+ {
+  "line": 8466,
+  "date": "2026-10-04",
+  "title": "第九个研究循环停下、等用户决定（13 / 20、没找到；先验想法用完；最接近 GPT / SBW / BXT；胜率能提高但账户不会因此变好）→ 待办〔56〕",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "1e75ebc（循环规则）",
+  "script": "scripts/research_loop9.py",
+  "output": "var/research_loop9.json",
+  "candidates": [],
+  "baseline": "B3",
+  "windows": "Z / E / J",
+  "verdict": "变更/工程",
+  "stable_findings": [
+   "按大盘状态挡能把胜率提高 2〜17 pp（MDD 的 W / Jx 都同方向），但账户 Calmar 不变或变差"
+  ],
+  "era_dependent_or_reversed": [],
+  "notes": "选项：① 结束（推荐）② MDD 进前向记录（只记录）③ 改评判标准 ④ 别的方向；都不改模拟盘"
  }
 ]
