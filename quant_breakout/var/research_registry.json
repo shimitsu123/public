@@ -11101,5 +11101,41 @@
    "成分在美国的好坏与在 17 个市场的好坏无关（秩相关 −0.01）：美国最好的 VSX / T13 / T12 在别处≈ 0，美国被否定的 T8 / T6 在别处最好（事后、只描述）"
   ],
   "notes": "回答「长处能不能结合」：可行、方向对（偶然互相抵消），但共同信息小（按检验力口径约 q ≈ 0.1，横展开要 ≈ 0.25 才能稳定认出）；模拟盘不变；下一步待办〔52〕"
+ },
+ {
+  "line": 7885,
+  "date": "2026-10-04",
+  "title": "用户决定（待办〔52〕之后）：「进行真正提高，需要新的、独立的信息来源的研究」→ 开第八个研究循环（新的独立信息来源）",
+  "kind": "decision",
+  "domain": "牛熊/择时",
+  "registration": "—",
+  "script": "scripts/research_loop8.py",
+  "output": "var/research_loop8.json",
+  "candidates": [],
+  "baseline": "B3",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "ENB 显示同一类信息（价格 / 波动 / 美国宏观）再组合也只到约 q ≈ 0.1 → 换新的信息来源；模拟盘不变"
+ },
+ {
+  "line": 7889,
+  "date": "2026-10-04",
+  "title": "登记：第八个研究循环（新的独立信息来源；先信息检查、过了才检验规则）+ 第 1 轮 期权的波动风险溢价 VRP（5 个市场的信息检查 + 规则 VRN：牛市月末 VRP ≤ 0 → 核心 2/3）",
+  "kind": "engineering",
+  "domain": "牛熊/择时",
+  "registration": "本提交（scripts/research_loop8.py、scripts/loop8_r01_vrp.py 开头；登记后不改、只运行一次）",
+  "script": "scripts/loop8_r01_vrp.py",
+  "output": "var/out/loop8_r01_vrp.md",
+  "candidates": [
+   "VRN"
+  ],
+  "baseline": "B3（账户）；每个市场自己的牛熊分界",
+  "windows": "信息检查：各市场全部月末（US 1990〜、EU 1999〜、AU / IN 2008〜、BR 2011〜）；规则：Z / E / J + 横展开 2009〜2026",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "信息检查 I1 合并 IC > 0 且 p ≤ 0.10、I2 ≥ 4 / 5、I3 2012 年以后 > 0；登记前修了 STOXX 文件里休市日的 0；事前预期「更好候选」约 2%"
  }
 ]
