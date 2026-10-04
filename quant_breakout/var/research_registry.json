@@ -11818,5 +11818,29 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "第 4 轮运行时想的，不是变体；MDD 按 IBD 原版补了作废规则（只按个数）；RVS 只碰到 2 笔成交"
+ },
+ {
+  "line": 8428,
+  "date": "2026-10-04",
+  "title": "第九个研究循环第 6 轮 MDD / RVS → 两个都第一关不过（MDD −0.018：选股成功率 +4.5 pp 且 W / Jx 都支持，但账户不变；RVS +0.001：只碰到 2 笔）",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "192c1d3（登记后代码未改、只运行一次）",
+  "script": "scripts/loop9_r06_distrev.py",
+  "output": "var/out/loop9_r06_distrev.md",
+  "candidates": [
+   "MDD",
+   "RVS"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "不通过",
+  "stable_findings": [
+   "MDD 提高选股成功率（+4.5 pp），W / Jx 两个池子同方向"
+  ],
+  "era_dependent_or_reversed": [
+   "MDD 在 Z 账户变差（−0.044）"
+  ],
+  "notes": "MDD Z −0.044、E +0.020、J +0.006，S5 / S8 过、S1 / S2 / S4 不过；RVS 只碰到 2 笔成交"
  }
 ]

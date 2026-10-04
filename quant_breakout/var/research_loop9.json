@@ -279,6 +279,52 @@
      }
     }
    ]
+  },
+  {
+   "round": 6,
+   "date": "2026-10-04",
+   "title": "大盘出货日 MDD / 短期反转 RVS",
+   "registered": "192c1d3",
+   "script": "scripts/loop9_r06_distrev.py",
+   "output": "var/out/loop9_r06_distrev.md",
+   "approaches": [
+    {
+     "id": "MDD",
+     "family": "选股·大盘出货日",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.018,
+     "passed": 5,
+     "d": {
+      "Z": -0.044,
+      "E": 0.02,
+      "J": 0.006
+     },
+     "success": {
+      "win": 55.23,
+      "mean": 3.893
+     }
+    },
+    {
+     "id": "RVS",
+     "family": "选股·短期反转",
+     "kind": "stock",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": 0.001,
+     "passed": 5,
+     "d": {
+      "Z": 0.0,
+      "E": -0.001,
+      "J": 0.002
+     },
+     "success": {
+      "win": 51.47,
+      "mean": 3.34
+     }
+    }
+   ]
   }
  ]
 }
