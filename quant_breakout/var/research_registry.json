@@ -11307,5 +11307,47 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "方向 −（Rapach, Ringgenberg & Zhou 2016），市场说法相反；不含 9999（ETF 等）；事前预期「更好候选」约 0.6%"
+ },
+ {
+  "line": 8045,
+  "date": "2026-10-04",
+  "title": "第八个研究循环第 5 轮 卖空·空売り比率（相对过去一年）→ 信息检查不过、只差 p（IC −0.188 方向与文献一致、两半 −0.130 / −0.112、p = 0.130）；规则 SSR 不检验",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "5a50664（登记后代码未改、只运行一次）",
+  "script": "scripts/loop8_r05_shortratio.py",
+  "output": "var/out/loop8_r05_shortratio.md",
+  "candidates": [
+   {
+    "id": "SSR",
+    "rule": "月末 x =（最近 21 天全市场空売り比率 − 再之前 250 天的平均）> 0 → 下一个月不开日本个股新仓（2017 年起）",
+    "result": "信息检查 IC −0.188（方向对）、两半 −0.130 / −0.112、单侧 p = 0.130 > 0.10 → 不过（只差 p；规则未检验）"
+   }
+  ],
+  "baseline": "B3（账户）",
+  "windows": "日経 2017-11〜2026-05 的已结束月末（103 个）",
+  "verdict": "接近(差一条)",
+  "stable_findings": [
+   "卖空比过去一年多 → 之后 63 天日経收益低：前后两半 IC 都为负（−0.130 / −0.112）；牛市月末 x > 0 之后 +0.34% vs ≤ 0 +3.52%（只描述）"
+  ],
+  "era_dependent_or_reversed": [],
+  "notes": "只差 I1 的 p（0.130 > 0.10）；J-Quants Standard 只有 2016-10 起；按规则不放宽、不重做；确认需要没看过的 2008〜2016 数据（Premium）"
+ },
+ {
+  "line": 8054,
+  "date": "2026-10-04",
+  "title": "第八个研究循环停下（要用户决定）：5 / 10、没找到；登记的 4 个来源都试过（期权溢价 = 风险补偿；融资余额 / 资金流 / 空売り比率信息检查不过，空売り只差 p）",
+  "kind": "decision",
+  "domain": "牛熊/择时",
+  "registration": "—",
+  "script": "scripts/research_loop8.py",
+  "output": "var/research_loop8.json",
+  "candidates": [],
+  "baseline": "B3",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "继续需要 J-Quants Premium（2008〜2016 的没看过的数据）或加新来源（改循环规则）→ 待办〔53〕；模拟盘不变"
  }
 ]

@@ -1,0 +1,73 @@
+{
+ "loop": 8,
+ "round": 5,
+ "ids": [
+  "SSR"
+ ],
+ "family": "卖空·空売り比率",
+ "posthoc": false,
+ "code": "5a50664",
+ "dirty": false,
+ "scale": {
+  "sr_days": 2439,
+  "sr_from": "2016-10-05",
+  "sr_to": "2026-10-02",
+  "sr_mean_first_year_pct": 38.6,
+  "sr_mean_last_year_pct": 39.4,
+  "x_from": "2017-11-30",
+  "n": 107,
+  "pos_pct": 48.6,
+  "pos_bull_pct": 39.0,
+  "blocked_days_pct": 43.3,
+  "blocked_segments": 14,
+  "latest": {
+   "date": "2026-09-30",
+   "x_pp": 2.79
+  }
+ },
+ "info": {
+  "judge": {
+   "ok": false,
+   "I1": false,
+   "I2": true,
+   "I3": true,
+   "pooled": -0.18847471774370692,
+   "p": 0.13,
+   "agree": 1,
+   "need": 1,
+   "n": 1,
+   "post_pooled": -0.18847471774370692,
+   "boot_ci": [
+    -0.37755438299029964,
+    0.07601797769477417
+   ]
+  },
+  "ic": -0.18847471774370692,
+  "halves": [
+   -0.13049773755656108,
+   -0.11150004268761206
+  ],
+  "n": 103,
+  "first": "2017-11-30",
+  "last": "2026-05-29",
+  "ic21": 0.04970972423802612,
+  "quintiles_pct": [
+   4.11,
+   5.36,
+   2.12,
+   2.75,
+   1.03
+  ],
+  "bull_hi": {
+   "n": 28,
+   "mean_pct": 0.34
+  },
+  "bull_lo": {
+   "n": 45,
+   "mean_pct": 3.52
+  },
+  "ic_level": -0.09263000078907917
+ },
+ "verdict": "信息检查不过",
+ "seconds": 4
+}
