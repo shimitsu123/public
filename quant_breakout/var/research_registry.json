@@ -11646,5 +11646,47 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "第 1 轮运行之前就定下的两个做法，不是事后"
+ },
+ {
+  "line": 8327,
+  "date": "2026-10-04",
+  "title": "第九个研究循环第 2 轮 BXT / S5D → 两个都第一关不过（BXT +0.022 最接近但 W 反过来；S5D −0.049）",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "235ff00（登记后代码未改、只运行一次）",
+  "script": "scripts/loop9_r02_marketday.py",
+  "output": "var/out/loop9_r02_marketday.md",
+  "candidates": [
+   "BXT",
+   "S5D"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [
+   "S5D 选股成功率反而下降"
+  ],
+  "notes": "BXT Z −0.011、E +0.016、J +0.017，S1 / S4 / S5 不过、S8 过；S5D Z −0.049、E / J 0"
+ },
+ {
+  "line": 8336,
+  "date": "2026-10-04",
+  "title": "登记：第九个研究循环第 3 轮 JRC 日経 60 天输给核心时不开新仓（date）/ GPT 开盘高开 > +1.5% 不买（stock）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop9_r03_relative.py",
+  "output": "var/out/loop9_r03_relative.md",
+  "candidates": [
+   "JRC",
+   "GPT"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "第 1 轮运行之前列进计划，不是事后；JRC 改动很大（E / J 八成以上成交）"
  }
 ]

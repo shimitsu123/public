@@ -182,3 +182,14 @@ def render(res: dict, title: str) -> str:
                  + f" → **{'第一关全过（要另行登记第二关）' if s['ok'] else R9.FAIL1}**")
     L += ["", f"用时 {res['seconds']} s。判定按 scripts/research_loop9.py。非投资建议。"]
     return "\n".join(L) + "\n"
+
+
+def git_head(*extra: str) -> tuple[str, bool]:
+    """(HEAD 短哈希, 判定相关的文件有没有未提交的改动)；extra = 这一轮自己的脚本等。"""
+    import subprocess
+    root = Path(__file__).resolve().parents[1]
+    files = ["scripts/loop9_common.py", "scripts/research_loop9.py", "scripts/loop6_common.py", "scripts/loop2_common.py", "scripts/loop_common.py",
+             "scripts/candle_portfolio.py", "qbreak/unified.py", "qbreak/fees.py", *extra]
+    code = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=root).stdout.strip()
+    dirty = bool(subprocess.run(["git", "status", "--porcelain", "--", *files], capture_output=True, text=True, cwd=root).stdout.strip())
+    return code, dirty

@@ -113,6 +113,52 @@
      }
     }
    ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-04",
+   "title": "大盘带动的突破 BXT / 美股在 50 日线下 S5D",
+   "registered": "235ff00",
+   "script": "scripts/loop9_r02_marketday.py",
+   "output": "var/out/loop9_r02_marketday.md",
+   "approaches": [
+    {
+     "id": "BXT",
+     "family": "选股·假突破（大盘带动）",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": 0.022,
+     "passed": 5,
+     "d": {
+      "Z": -0.011,
+      "E": 0.016,
+      "J": 0.017
+     },
+     "success": {
+      "win": 51.66,
+      "mean": 3.513
+     }
+    },
+    {
+     "id": "S5D",
+     "family": "选股·大盘短期趋势（顺向）",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.049,
+     "passed": 3,
+     "d": {
+      "Z": -0.049,
+      "E": 0.0,
+      "J": 0.0
+     },
+     "success": {
+      "win": 48.82,
+      "mean": 2.907
+     }
+    }
+   ]
   }
  ]
 }
