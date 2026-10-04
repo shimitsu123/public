@@ -11288,5 +11288,24 @@
    "个人投资者净买入的 IC +0.154（只描述）"
   ],
   "notes": "J-Quants Standard 只有 2016-10 起（10 年、一个市场）；按规则不改方向重做；模拟盘不变"
+ },
+ {
+  "line": 8032,
+  "date": "2026-10-04",
+  "title": "登记：第八个研究循环第 5 轮 卖空·空売り比率（全市场卖空占卖出，最近 21 天 − 再之前 250 天）→ 信息检查 + 规则 SSR（月末 > 0 → 下一个月不开日本个股新仓）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（scripts/loop8_r05_shortratio.py 开头；登记后不改、只运行一次）",
+  "script": "scripts/loop8_r05_shortratio.py",
+  "output": "var/out/loop8_r05_shortratio.md",
+  "candidates": [
+   "SSR"
+  ],
+  "baseline": "B3（账户）",
+  "windows": "信息检查：日経 2017-11〜2026-06 的已结束月末；规则：J（2017-01-01 起）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "方向 −（Rapach, Ringgenberg & Zhou 2016），市场说法相反；不含 9999（ETF 等）；事前预期「更好候选」约 0.6%"
  }
 ]
