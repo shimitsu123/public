@@ -11161,5 +11161,24 @@
    "VRP ≤ 0（规则 VRN 用的一端）之后并不差：牛市月末 US +0.83%、EU +1.76% → 减仓没有好处"
   ],
   "notes": "第八个循环 1 / 10；来源「期权·波动风险溢价」1 / 3；模拟盘不变；信息在高的一端 → 账户只能在美股熊市里用（牛市里已 100%）"
+ },
+ {
+  "line": 7936,
+  "date": "2026-10-04",
+  "title": "登记：第八个研究循环第 2 轮 期权的波动风险溢价「高的一端」VRB（月末 VRP ≥ 之前 60 个月末的 80 分位 → 熊市里先拿回 1/3；事后 → S7）",
+  "kind": "engineering",
+  "domain": "牛熊/择时",
+  "registration": "本提交（scripts/loop8_r02_vrphigh.py 开头；登记后不改、只运行一次）",
+  "script": "scripts/loop8_r02_vrphigh.py",
+  "output": "var/out/loop8_r02_vrphigh.md",
+  "candidates": [
+   "VRB"
+  ],
+  "baseline": "B3（账户）；每个市场自己的牛熊分界（牛 100%、其余现金）",
+  "windows": "Z / E / J + 1987〜2000（S7）；横展开 US / EU / AU / IN 2009-01-01〜2026-09-30",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "A 沿用第 1 轮（已过）；第二关的随机对照只在不是牛的日子上平移旗标（拿回的天数不变）；登记前因规模把「从头累计的分位」改成「之前 60 个月末」；事前预期「更好候选」约 3%"
  }
 ]
