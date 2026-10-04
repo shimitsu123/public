@@ -11490,5 +11490,39 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "多出来的笔数主要是以前一手太贵跳过的票（跳过 35 → 6 个）；E / Z 胜率几乎不变；胜率差在误差范围内（约 ±6 pp）；不改规则"
+ },
+ {
+  "line": 8227,
+  "date": "2026-10-04",
+  "title": "用户要求「分析胜率低的原因 继续研究提高选股成功率 一直循环到 比现阶段的更好」→ 恢复研究（只在选股方向；〔53〕①「暂停找新规则」结束）：先诊断胜率（只描述），再登记第九个研究循环",
+  "kind": "decision",
+  "domain": "选股/买点",
+  "registration": "—",
+  "script": null,
+  "output": null,
+  "candidates": [],
+  "baseline": "B3（不变）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "第八个循环保持结束；J-Quants 不升级；模拟盘与执行器在出现「更好候选」并由用户决定之前不改"
+ },
+ {
+  "line": 8236,
+  "date": "2026-10-04",
+  "title": "登记（只描述、事后）：现在的规则（B3）里日本个股的胜率为什么低（盈亏结构、亏损单类型、大盘 / 核心、进场状态、信号池 vs 成交、特征、每年、¥200 万多出来的单）",
+  "kind": "display",
+  "domain": "选股/买点",
+  "registration": "本提交（读法写在脚本开头；之后只运行一次）",
+  "script": "scripts/winrate_diag.py",
+  "output": "var/out/winrate_diag.md",
+  "candidates": [],
+  "baseline": "B3（不变）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "只展示",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "结果待运行（只运行一次）；不提候选、不占研究循环的名额"
  }
 ]
