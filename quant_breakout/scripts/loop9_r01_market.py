@@ -81,7 +81,8 @@ def below_ma_days(close: pd.Series, n: int = MA_N) -> pd.Series:
 def on_days(series: pd.Series, days: pd.DatetimeIndex) -> np.ndarray:
     """日期索引的闸门 → 对齐到 days（这个年代的交易日；当天没有值 → 用之前最后一个，最开头 → 不成立）。"""
     s = series[~series.index.duplicated(keep="last")].astype(bool).sort_index()
-    v = s.reindex(s.index.union(days)).ffill().reindex(days)
+    d = pd.DatetimeIndex(days)                                               # 信号日可以重复（同一天几个信号）→ 并集只用不重复的日子
+    v = s.reindex(s.index.union(d.unique())).ffill().reindex(d)
     return v.fillna(False).to_numpy(bool)
 
 

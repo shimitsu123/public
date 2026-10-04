@@ -147,3 +147,38 @@ def placebo_sums_date(W: dict, on_by_era: dict, base: dict, n: int = R9.PLACEBO_
         if (s + 1) % 50 == 0:
             log(f"日序列平移 {s + 1} / {n}（{time.time() - t0:.0f}s）")
     return out
+
+
+def _f(v, f="{:.3f}") -> str:
+    return "—" if v is None else f.format(v)
+
+
+def render(res: dict, title: str) -> str:
+    """一轮第一关的结果表（第 2 轮起共用；第 1 轮用它自己的 write，内容相同）。"""
+    L = [title, "",
+         f"代码 {res['code']}{'（有未提交的改动！）' if res['dirty'] else ''}；B3 与登记值的差：" + "、".join(f"{e} {_f(v, '{:+.4f}')}" for e, v in res["drift"].items()), "",
+         "| 做法 | 年代 | Calmar（B3 → 候选） | 差 | 年化 | 最大回撤 | 前一半 / 后一半 | 个股笔数 | 胜率 | 每笔 | 闸门天数 | 挡掉的信号 / 成交 |",
+         "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for k in res["ids"]:
+        for e in ERAS:
+            b, c = res["base"][e], res["cand"][k][e]
+            sc = res["scale"][e][k]
+            gd = (res.get("gate_days_pct") or {}).get(k, {}).get(e)
+            L.append(f"| {k} | {e} | {_f(b['calmar'])} → {_f(c['calmar'])} | {_f(None if c['calmar'] is None else c['calmar'] - b['calmar'], '{:+.3f}')} | "
+                     f"{_f(c['cagr'], '{:+.2f}')}% | {_f(c['dd'], '{:.2f}')}% | {_f(c['h1'])} / {_f(c['h2'])} | {b['n']} → {c['n']} | "
+                     f"{_f(b['win'], '{:.1f}')} → {_f(c['win'], '{:.1f}')}% | {_f(b['mean'], '{:+.2f}')} → {_f(c['mean'], '{:+.2f}')}% | "
+                     f"{'—' if gd is None else f'{gd}%'} | {sc['signals_blocked']} / {sc['trades_blocked']} |")
+    L += ["", "## 第一关（S1〜S8）", ""]
+    for k in res["ids"]:
+        s = res["stage1"][k]
+        su = s["success"]
+        o = res["other"][k]
+        L.append(f"- **{k}**：合计 {_f(s['sum'], '{:+.3f}')}（" + "、".join(f"{e} {_f(s['d'][e], '{:+.3f}')}" for e in ERAS) + "）；"
+                 + "、".join(f"{x} {'✓' if s[x] else '✗'}" for x in ("S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"))
+                 + f"；两半 {_f(s['h1'], '{:+.3f}')} / {_f(s['h2'], '{:+.3f}')}；选股成功率 {_f(su['base']['win'], '{:.2f}')}% → {_f(su['cand']['win'], '{:.2f}')}%、"
+                 f"每笔 {_f(su['base']['mean'], '{:+.3f}')} → {_f(su['cand']['mean'], '{:+.3f}')}%；W / Jx：" + "；".join(
+                     f"{x} 挡 {o[x]['gone_n']} / {o[x]['n']}（被挡的 {_f(o[x]['gone_win'], '{:.1f}')}% / {_f(o[x]['gone_mean'], '{:+.2f}')}%；"
+                     f"胜率差 {_f(o[x]['dwin'], '{:+.2f}')} pp、每笔差 {_f(o[x]['dmean'], '{:+.3f}')} pp）" for x in ("W", "Jx"))
+                 + f" → **{'第一关全过（要另行登记第二关）' if s['ok'] else R9.FAIL1}**")
+    L += ["", f"用时 {res['seconds']} s。判定按 scripts/research_loop9.py。非投资建议。"]
+    return "\n".join(L) + "\n"

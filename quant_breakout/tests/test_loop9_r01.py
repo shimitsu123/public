@@ -33,3 +33,9 @@ def test_on_days_aligns_and_forward_fills():
     s = pd.Series([True, False], index=pd.to_datetime(["2020-01-06", "2020-01-08"]))
     days = pd.bdate_range("2020-01-03", periods=5)                           # 1/3（之前没有值）、1/6、1/7、1/8、1/9
     assert list(R.on_days(s, days)) == [False, True, True, False, False]
+
+
+def test_on_days_handles_repeated_signal_dates():
+    s = pd.Series([True, False], index=pd.to_datetime(["2020-01-06", "2020-01-08"]))
+    d = pd.DatetimeIndex(pd.to_datetime(["2020-01-07", "2020-01-07", "2020-01-09", "2020-01-06"]))   # S5 的信号日有重复、不排序
+    assert list(R.on_days(s, d)) == [True, True, False, True]
