@@ -74,5 +74,103 @@
  },
  "prereq_ok": true,
  "fingerprint": "3b2e8757be7b4a74",
- "rounds": []
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-04",
+   "title": "大盘弱势多数决 WMV / 出货日 × 落后核心 MJR / 落后核心 ≥ 10 pp JRM（事后）",
+   "registered": "8b94e15",
+   "script": "scripts/loop10_r01_weakvote.py",
+   "output": "var/out/loop10_r01_weakvote.md",
+   "approaches": [
+    {
+     "id": "WMV",
+     "family": "选股·大盘弱势（多数决）",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.02,
+     "dmean": 0.343,
+     "sum": 0.012,
+     "passed": 4,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.035,
+      "E": 0.047,
+      "J": 0.0
+     },
+     "era_dwin": {
+      "Z": 6.7,
+      "E": -0.9,
+      "J": 4.5
+     }
+    },
+    {
+     "id": "MJR",
+     "family": "选股·出货日 × 相对核心",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 5.41,
+     "dmean": 0.867,
+     "sum": 0.029,
+     "passed": 3,
+     "checks": {
+      "V1": true,
+      "V2": false,
+      "V3": false,
+      "V4": true,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": 0.012,
+      "E": 0.02,
+      "J": -0.003
+     },
+     "era_dwin": {
+      "Z": 4.0,
+      "E": -3.7,
+      "J": 11.2
+     }
+    },
+    {
+     "id": "JRM",
+     "family": "选股·日本相对核心（宽松）",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.17,
+     "dmean": 0.368,
+     "sum": 0.112,
+     "passed": 5,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": true,
+      "V4": true,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": 0.026,
+      "E": 0.045,
+      "J": 0.041
+     },
+     "era_dwin": {
+      "Z": 1.9,
+      "E": -0.4,
+      "J": 6.3
+     }
+    }
+   ]
+  }
+ ]
 }

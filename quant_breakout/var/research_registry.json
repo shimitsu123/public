@@ -11958,5 +11958,31 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "第九个循环大盘闸门的组合与变体（事后）；接线核对通过"
+ },
+ {
+  "line": 8529,
+  "date": "2026-10-04",
+  "title": "第十个研究循环第 1 轮 WMV / MJR / JRM → 三个都第一关不过；JRM 只差 V6（胜率 +3.17 pp、账户三个年代都变好 +0.112、W / Jx 同方向，但没看过的 Zx 相反）",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "8b94e15（登记后代码未改、只运行一次）",
+  "script": "scripts/loop10_r01_weakvote.py",
+  "output": "var/out/loop10_r01_weakvote.md",
+  "candidates": [
+   "WMV",
+   "MJR",
+   "JRM"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09（+ W / Jx / Zx）",
+  "verdict": "不通过",
+  "stable_findings": [
+   "JRM：胜率 +3.17 pp、账户 Z / E / J 都变好（合计 +0.112）、W / Jx 同方向"
+  ],
+  "era_dependent_or_reversed": [
+   "JRM：没看过的 Zx（2001〜2006 非日経225）被挡的反而更好",
+   "WMV 与 N5D 实际相同"
+  ],
+  "notes": "JRM 过 V1〜V5、只差 V6；WMV 差 V3 / V4；MJR 差 V2 / V3 / V6；之后不再做 JRC 一族的变体（Zx 已看过）"
  }
 ]
