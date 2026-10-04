@@ -11266,5 +11266,27 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "方向 +（Froot, O'Connell & Seasholes 2001）；一个市场 → I2 前后两半；J-Quants Standard 只有 2016-10 起；事前预期「更好候选」约 0.75%"
+ },
+ {
+  "line": 8022,
+  "date": "2026-10-04",
+  "title": "第八个研究循环第 4 轮 资金流·投资部门别（外国投资者 13 周净买入占成交）→ 信息检查不过（IC −0.091 方向与文献相反、p = 0.741、两半 −0.362 / +0.194）；规则 FFL 不检验",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "2a41f61（登记后代码未改、只运行一次）",
+  "script": "scripts/loop8_r04_foreign.py",
+  "output": "var/out/loop8_r04_foreign.md",
+  "candidates": [
+   "FFL"
+  ],
+  "baseline": "B3（账户）",
+  "windows": "日経 2016-12〜2026-05 的已结束月末（114 个）",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [
+   "外国投资者净卖出最多的五分之一之后 63 天 +5.50%（反向，只描述）；前一半 IC −0.362、后一半 +0.194",
+   "个人投资者净买入的 IC +0.154（只描述）"
+  ],
+  "notes": "J-Quants Standard 只有 2016-10 起（10 年、一个市场）；按规则不改方向重做；模拟盘不变"
  }
 ]
