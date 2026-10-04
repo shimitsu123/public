@@ -11405,5 +11405,22 @@
   ],
   "era_dependent_or_reversed": [],
   "notes": "R1 / R2 按事先读法都是「分不出」；买得更便宜的天花板（正好买在最低）每年约 ¥18,438 做不到，收盘买对开盘买 ≈ 0；规模：每年约 0.18 笔新仓碰上急跌开盘；不改规则（〔53〕①）"
+ },
+ {
+  "line": 8124,
+  "date": "2026-10-04",
+  "title": "用户问「本金增多、可操作空间变大，考虑进去了么」→ 仓位按权益自动放大、资金规模研究（115c662）改善主要在 ¥300 万以前；文档更正：一个账户模式没有「回撤 45% 自动 HALT」",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": null,
+  "script": null,
+  "output": null,
+  "candidates": [],
+  "baseline": null,
+  "windows": "capital_study 主窗口 2016-10〜；手续费表 2026-09-25 官网；股票池日成交额 2026-07〜09",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "只回答 + 文档更正（HANDOFF / CHECK_TIMELINE 的「回撤 45% → HALT」改成实际情况）；不改规则；待办〔55〕"
  }
 ]
