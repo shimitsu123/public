@@ -11937,5 +11937,26 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "先决条件满足（B3 = 第九个循环登记值、指纹相同）；用新标准回看第九个循环的 13 个做法 0 个过（只是核对）"
+ },
+ {
+  "line": 8514,
+  "date": "2026-10-04",
+  "title": "登记：第十个研究循环第 1 轮 WMV 大盘弱势多数决 / MJR 出货日 × 日本落后核心 / JRM 日本落后核心 ≥ 10 pp（date；都是事后，V6 = Zx）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop10_r01_weakvote.py",
+  "output": "var/out/loop10_r01_weakvote.md",
+  "candidates": [
+   "WMV",
+   "MJR",
+   "JRM"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "第九个循环大盘闸门的组合与变体（事后）；接线核对通过"
  }
 ]
