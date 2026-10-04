@@ -11349,5 +11349,41 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "继续需要 J-Quants Premium（2008〜2016 的没看过的数据）或加新来源（改循环规则）→ 待办〔53〕；模拟盘不变"
+ },
+ {
+  "line": 8066,
+  "date": "2026-10-04",
+  "title": "用户决定（待办〔53〕①）：暂停找新规则 → 第八个研究循环结束；模拟盘与执行器不变（B3）",
+  "kind": "decision",
+  "domain": "牛熊/择时",
+  "registration": "—",
+  "script": "scripts/research_loop8.py",
+  "output": "var/research_loop8.json",
+  "candidates": [],
+  "baseline": "B3（不变）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "ended:用户决定（5 / 10、没找到）；不升级 J-Quants Premium、不加新来源；前向记录与季度复核照旧，2026-12-24 模拟期总结时再看；上一节标题的停下时间「约 15:00」应为约 12:50 JST"
+ },
+ {
+  "line": 8074,
+  "date": "2026-10-04",
+  "title": "立花能不能全自动、开盘时按分钟看日経好不好（用户问）→ 全自动：代码已能做（现行 API v4r10、2026-06-27 起登录不要电话认证），差开户与上线门槛；开盘分钟级监测：现在不建议",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": null,
+  "script": null,
+  "output": null,
+  "candidates": [],
+  "baseline": null,
+  "windows": "立花 / J-Quants 官方页面（2026-10-04 查看）；以前的执行时点研究（cfb3cbc）；云端执行器比较 09-25〜10-01",
+  "verdict": "只展示",
+  "stable_findings": [
+   "开盘成交没有劣势、等更低价往往等不到（exec_timing_study：次日全天分批 +0.009%、t 0.20）"
+  ],
+  "era_dependent_or_reversed": [],
+  "notes": "只回答、不改规则；分钟级研究的好处上限约每年 ¥3,000（每年 6〜7 笔 × 0.2% × 25%），J-Quants 分钟 add-on ¥5,500 / 月、只有 2 年；立花官方要求盘中不要频繁取价 / 轮询 → 真要做用 EVENT I/F；待办〔54〕"
  }
 ]

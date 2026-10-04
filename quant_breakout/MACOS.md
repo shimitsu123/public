@@ -299,6 +299,8 @@ bash scripts/liveu.sh policy add --category BOJ_CHANGE --subtype tighten --date 
 
 ## 2. 开户与 API 设定（v4r10，2026-09-25 核对）
 
+> 2026-10-04 再核对官方（https://www.e-shiten.jp/api/ 、/api/20260728.html，仅对该时点有效）：v4r10 是现行版本（2026-08-29 发布；v4r9 已于 2026-09-27 废止），适配器不用改。
+
 1. 网上填表 → 邮寄 / 自行打印开户文件 → 寄回 2 种身份证明与マイナンバー → 审查 → ID / 密码以簡易書留寄到。
    账户类型选 **特定口座（源泉徴収あり）**；不要用 NISA 做自动交易（NISA 买单只能当日限价、不能逆指値）
 2. 标准 Web 首次登录（电话认证一次）→ **注册パスキー**（官方只验证过 Windows 11，macOS 属「動作未確認」；可用 iPhone 等设备）
@@ -453,6 +455,8 @@ echo "手工停止" > var/HALT
   **不同股票不受此限**（「同一受渡日における同一資金での別銘柄への乗換売買」可能）。
 - 单元未满股（端株）只能卖（端株売却 / 買取請求），**不能买** → 个股只能按 100 股一手买（「単元未満株式の取扱い」页）。
 出处：https://www.e-shiten.jp/TorihikiRule/rule/order.html 、…/sakin_hibakari.html 、…/oddlot.html 、…/quantity.html 、https://www.e-shiten.jp/QA/answer14.html
+- **盘中不要频繁取价 / 轮询**（官方 2026-03-10「APIご利用に関するお願い」，2026-10-04 查看，仅对该时点有效）：08:00〜15:30 是向交易所收发注文的时段，请避免大量频繁的取价（CLMMfdsGetMarketPrice）与频繁的照会轮询；负荷过大时可能被停用 API（访问次数不公开）；价格历史在 18:00〜翌 03:30 更新、マスタ（銘柄マスタ等）在 05:30〜08:00 取最好。现在的执行器每天只在 07:40 / 09:05 各运行一次：07:40 的寄付单发完就走（不查约定），09:05 的补单每笔每秒查一次约定、最多 20 秒（`confirm_timeout_s`，一天最多几十次照会）—— 量很小；以后若要盘中实时看价，用 EVENT I/F（WebSocket 推送）而不是轮询。
+  出处：https://www.e-shiten.jp/api/20260310.html
 
 代码里对应 `DaemonConfig.max_round_trips_per_day = 1`，程序自己会先拦一道，
 不会等到被券商拒单才发现。
