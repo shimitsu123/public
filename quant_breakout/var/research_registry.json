@@ -11205,5 +11205,24 @@
    "VRP 选的时点不比随机好：候选 +0.005 < 随机中位 +0.008"
   ],
   "notes": "VRP 的信息是对风险的补偿：收益高但波动也大，按 Calmar 转不成好处；来源「期权·波动风险溢价」2 / 3，先不用第 3 个；模拟盘不变"
+ },
+ {
+  "line": 7975,
+  "date": "2026-10-04",
+  "title": "登记：第八个研究循环第 3 轮 杠杆·融资余额（FINRA 保证金负债 / JPX 信用买残 ÷ 指数，相对之前 60 个月的 z）→ 信息检查 + 规则 MLV（美股牛 ∧ z ≥ +1 → 核心 2/3）",
+  "kind": "engineering",
+  "domain": "牛熊/择时",
+  "registration": "本提交（scripts/loop8_r03_margin.py 开头；登记后不改、只运行一次）",
+  "script": "scripts/loop8_r03_margin.py",
+  "output": "var/out/loop8_r03_margin.md",
+  "candidates": [
+   "MLV"
+  ],
+  "baseline": "B3（账户）",
+  "windows": "信息检查：US 2002〜、JP 2007〜 的已结束月末；规则：Z / E / J（第二关单一序列 2000-01-04〜J）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "方向 −（Burger & Curtis 2017）；I2 两个市场都要 < 0；I3 2017 年以后；事前预期「更好候选」约 1%"
  }
 ]
