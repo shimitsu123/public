@@ -37,3 +37,8 @@ def test_summarize_counts_by_entry_date_and_excludes_open_and_1655():
 def test_summarize_empty_window():
     r = S.summarize([], [], "2020-01-01", "2021-01-01", {}, {})
     assert r["stock_n"] == 0 and r["top"] == [] and r["per_year"]["orders"] == 0.0
+
+
+def test_output_path_per_capital():
+    assert S.out_path().name == "b3_trades_summary" and S.out_path(1_000_000) == S.out_path()
+    assert S.out_path(2_000_000).name == "b3_trades_summary_cap2000000"          # 别的本金不覆盖模拟盘那份

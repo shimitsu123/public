@@ -9,7 +9,9 @@
 - 常买的股票（代码 + 公司名 + 东证 33 业种、次数、胜率、每笔净收益）、业种分布、J 的每个日历年。
 只写汇总（没有逐笔价格）→ var/out/b3_trades_summary.md / .json；原始行情只在内存。
 
-用法：python scripts/b3_trades_summary.py（约 4〜5 分钟）。非投资建议。
+用法：python scripts/b3_trades_summary.py [--capital 2000000]（约 4〜5 分钟；--capital = 起始本金，缺省 ¥100 万 = 模拟盘；
+其余规则全部不变，只把 var/sim.json 的 capital_jpy 换掉 → 名额的日元金额跟着变，「一手太贵」跳过的票变少；
+2026-10-04 用户问「如果定为 200 万的话大概胜率为多少」加的，结果写 var/out/b3_trades_summary_cap<本金>.md / .json）。非投资建议。
 """
 from __future__ import annotations
 
@@ -28,6 +30,12 @@ sys.path.insert(0, str(ROOT / "scripts"))
 ERAS = ("Z", "E", "J")
 OUT = ROOT / "var" / "out" / "b3_trades_summary"
 TOP = 25
+BASE_CAPITAL = 1_000_000
+
+
+def out_path(capital: int = BASE_CAPITAL) -> Path:
+    """缺省本金（¥100 万，模拟盘）→ b3_trades_summary；别的本金 → b3_trades_summary_cap<本金>（例：_cap2000000）。"""
+    return OUT if int(capital) == BASE_CAPITAL else OUT.with_name(f"{OUT.name}_cap{int(capital)}")
 
 
 def _names() -> tuple[dict, dict]:
@@ -82,16 +90,17 @@ def summarize(trades: list[dict], core_trades: list, a: str, b: str, names: dict
     return out
 
 
-def compute() -> dict:
+def compute(capital: int = BASE_CAPITAL) -> dict:
     import time
     import jq_study as JS
     import loop6_common as L6
     t0 = time.time()
     names, s33 = _names()
     W = L6.load3()
-    res = {}
+    over = {} if int(capital) == BASE_CAPITAL else {"cfg_over": {"capital_jpy": int(capital)}}   # 和 B3 的 cfg_over 按键合并
+    res = {"_capital": int(capital)}
     for e in ERAS:
-        acct = L6.run(W, e)
+        acct = L6.run(W, e, **over)
         eng = JS.RealLotEngine.LAST[-1]
         a, b = W["ctx"][e]["windows"][e]
         b = b or str(pd.Timestamp(W["ctx"][e]["end"]) + pd.Timedelta(days=1))[:10]
@@ -103,9 +112,10 @@ def compute() -> dict:
 
 
 def write(res: dict) -> None:
+    cap = int(res.get("_capital") or BASE_CAPITAL)
     lab = {"Z": "Z（2001-01〜2006-09，没看过的老年代）", "E": "E（2006-10〜2016-09）", "J": "J（2017-01〜2026-09，最近约 10 年）"}
-    L = ["# 现在的规则（B3）在历史上每年交易多少笔、都买了哪些股票（只描述；scripts/b3_trades_summary.py）", "",
-         "B3 = 模拟盘 / 执行器现在在用的那一套（W2 + C + X6 + 判断层 + 闲置资金 Q1B）；¥100 万起、立花费用、一手按当时真实股价；"
+    L = [f"# 现在的规则（B3）在历史上每年交易多少笔、都买了哪些股票（起始本金 ¥{cap:,}；只描述；scripts/b3_trades_summary.py）", "",
+         f"B3 = 模拟盘 / 执行器现在在用的那一套（W2 + C + X6 + 判断层 + 闲置资金 Q1B）；¥{cap:,} 起、立花费用、一手按当时真实股价；"
          "股票池 = 各年代的日経225（时点名单）。个股按买入日落在窗口内计（不含期末未平仓）；每年下的单 = 个股买 + 个股卖 + 核心 ETF 买卖。", "",
          "| 年代 | 年数 | 个股（笔 / 年） | 胜率 | 每笔净收益 | 持有天数中位 | 不同股票数 | 核心 ETF 买卖（笔 / 年） | 每年下的单（笔） | 一手太贵跳过的信号（整段） |",
          "|---|---|---|---|---|---|---|---|---|---|"]
@@ -131,11 +141,16 @@ def write(res: dict) -> None:
     L += ["", "读法：个股层每年只有几笔（W2 量能确认 + C 跳过 + 一手太贵跳过 + 4 个名额）；大部分资金平时在核心 ETF（1545 / 1482）或现金。"
           "回测不是预测；公司名取自 JPX 上场一览（2026-08-31 版），老年代的票可能已退市或改名。", "",
           f"用时 {res['_seconds']} s。非投资建议。"]
-    OUT.with_suffix(".md").write_text("\n".join(L) + "\n", encoding="utf-8")
-    OUT.with_suffix(".json").write_text(json.dumps(res, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    o = out_path(cap)
+    o.with_suffix(".md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    o.with_suffix(".json").write_text(json.dumps(res, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
-    r = compute()
+    import argparse
+    ap = argparse.ArgumentParser(description="现在的规则（B3）每年交易多少笔、买了哪些股票（只描述）")
+    ap.add_argument("--capital", type=int, default=BASE_CAPITAL, help="起始本金（日元，缺省 1000000 = 模拟盘）")
+    a = ap.parse_args()
+    r = compute(a.capital)
     write(r)
-    print(OUT.with_suffix(".md").read_text(encoding="utf-8"))
+    print(out_path(a.capital).with_suffix(".md").read_text(encoding="utf-8"))
