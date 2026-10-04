@@ -11548,5 +11548,22 @@
    "C 在 E / Z 几乎没有作用"
   ],
   "notes": "事后特征（三个年代同号）：x2 +、clv +、r12 −、rsec −、b_fx −（r12 C 已在用）；¥200 万多出来的 25 笔 32% / −0.70%；不改规则"
+ },
+ {
+  "line": 8269,
+  "date": "2026-10-04",
+  "title": "登记 第九个研究循环「选股成功率」：基准 B3；第一关 S1〜S7 + S8 选股成功率不降；第二关 400 次同样强度的随机挡（按个股 / 按日子）；上限 20、家族 ≤ 3",
+  "kind": "decision",
+  "domain": "选股/买点",
+  "registration": "本提交（规则 scripts/research_loop9.py 开头 + scripts/loop9_common.py）",
+  "script": "scripts/research_loop9.py",
+  "output": "var/out/research_loop9_baseline.md",
+  "candidates": [],
+  "baseline": "B3（Calmar Z 1.194 / E 0.627 / J 0.676）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "事前预期每个做法「更好候选」约 1〜2%；先试进场时的大盘状态与假突破两类；模拟盘与执行器不改"
  }
 ]
