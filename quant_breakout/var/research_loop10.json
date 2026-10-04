@@ -336,6 +336,103 @@
      }
     }
    ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-05",
+   "title": "日経波动高 NVL / 宽度低 BRD / 日経 3 个月跌 N3M 的日子不开新仓（事后）",
+   "registered": "b8fef1f",
+   "script": "scripts/loop10_r04_mktstate.py",
+   "output": "var/out/loop10_r04_mktstate.md",
+   "approaches": [
+    {
+     "id": "NVL",
+     "family": "选股·大盘波动",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -0.22,
+     "dmean": -0.191,
+     "sum": -0.137,
+     "passed": 3,
+     "checks": {
+      "V1": false,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.102,
+      "E": -0.023,
+      "J": -0.012
+     },
+     "era_dwin": {
+      "Z": -1.7,
+      "E": -1.9,
+      "J": 1.6
+     }
+    },
+    {
+     "id": "BRD",
+     "family": "选股·大盘宽度",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 1.07,
+     "dmean": -0.053,
+     "sum": -0.025,
+     "passed": 3,
+     "checks": {
+      "V1": false,
+      "V2": false,
+      "V3": false,
+      "V4": true,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.007,
+      "E": 0.012,
+      "J": -0.03
+     },
+     "era_dwin": {
+      "Z": 4.3,
+      "E": -2.4,
+      "J": 1.6
+     }
+    },
+    {
+     "id": "N3M",
+     "family": "选股·大盘中期趋势",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.2,
+     "dmean": 0.346,
+     "sum": 0.008,
+     "passed": 4,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": 0.037,
+      "E": -0.001,
+      "J": -0.028
+     },
+     "era_dwin": {
+      "Z": 9.3,
+      "E": 1.0,
+      "J": 2.7
+     }
+    }
+   ]
   }
  ],
  "stopped": {

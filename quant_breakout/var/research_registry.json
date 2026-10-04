@@ -12133,5 +12133,31 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "接线核对通过；碰到 B3 成交 NVL 42 / BRD 30 / N3M 25 笔（共 140）；NVL 在 Z 碰到 11 笔"
+ },
+ {
+  "line": 8640,
+  "date": "2026-10-05",
+  "title": "第十个研究循环第 4 轮 NVL / BRD / N3M → 三个都第一关不过；N3M 胜率 +3.20 pp、Z 账户 +0.037，但 J −0.028、Jx 反向",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "b8fef1f（登记后代码未改、只运行一次）",
+  "script": "scripts/loop10_r04_mktstate.py",
+  "output": "var/out/loop10_r04_mktstate.md",
+  "candidates": [
+   "NVL",
+   "BRD",
+   "N3M"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09（+ W / Jx / Zx）",
+  "verdict": "不通过",
+  "stable_findings": [
+   "大盘闸门在 2001〜2016 扩大池（W / Zx）里假想单笔都更好（+3〜+10 pp）",
+   "按日子挡在 Z 的账户比按个股挡好（N3M +0.037）"
+  ],
+  "era_dependent_or_reversed": [
+   "N3M / NVL：2017 年以后（Jx）反向、J 账户 −0.03 左右"
+  ],
+  "notes": "N3M 过 V1 / V2 / V5 / V6，差 V3（J −0.028、两半 −0.031 / −0.023）与 V4（Jx −1.33 pp）"
  }
 ]
