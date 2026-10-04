@@ -11456,5 +11456,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "只补工程，决策 / 下单的价格、数量、时点与资格检查都不变；开户后用户要做：デモ一天 probe --demo --order-test → 本番 probe → 入金 → 装立花定时任务 → sudo pmset 唤醒 → gate 全 OK → 明确说才建 ARM"
+ },
+ {
+  "line": 8199,
+  "date": "2026-10-04",
+  "title": "用户问「现在每年大概交易多少笔 大概都有哪些股票」→ B3 回测：最近约 10 年个股每年约 6.4 笔（52 只不同股票）、核心 ETF 每年约 12.3 笔、合计下单约 25 笔 / 年",
+  "kind": "display",
+  "domain": "资金/执行/成本",
+  "registration": "",
+  "script": "scripts/b3_trades_summary.py",
+  "output": "var/out/b3_trades_summary.md",
+  "candidates": [],
+  "baseline": "B3（不变）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "只展示",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "只描述（只有汇总，没有逐笔价格）；各年个股 2〜14 笔；业种以建設業、化学、情報・通信業为多；一手太贵跳过的信号 J 整段 35 个；不改规则"
  }
 ]
