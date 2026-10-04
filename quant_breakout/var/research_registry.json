@@ -11473,5 +11473,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "只描述（只有汇总，没有逐笔价格）；各年个股 2〜14 笔；业种以建設業、化学、情報・通信業为多；一手太贵跳过的信号 J 整段 35 个；不改规则"
+ },
+ {
+  "line": 8212,
+  "date": "2026-10-04",
+  "title": "用户问「如果定为 200 万的话大概胜率为多少」→ B3 回测 J：胜率 48.4% → 44.0%、每笔 +3.06% → +1.99%、个股 6.4 → 8.6 笔 / 年；账户年化 20.0% → 19.9%、回撤 −29.6% → −28.7%",
+  "kind": "display",
+  "domain": "资金/执行/成本",
+  "registration": "",
+  "script": "scripts/b3_trades_summary.py --capital 2000000",
+  "output": "var/out/b3_trades_summary_cap2000000.md",
+  "candidates": [],
+  "baseline": "B3（不变；只换起始本金）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "只展示",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "多出来的笔数主要是以前一手太贵跳过的票（跳过 35 → 6 个）；E / Z 胜率几乎不变；胜率差在误差范围内（约 ±6 pp）；不改规则"
  }
 ]
