@@ -171,6 +171,103 @@
      }
     }
    ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-04",
+   "title": "中期动量过高 MOM / 突破日收盘弱 CLW / 顾客业种短観没有改善 X2G（事后）",
+   "registered": "f17463f",
+   "script": "scripts/loop10_r02_diagfeat.py",
+   "output": "var/out/loop10_r02_diagfeat.md",
+   "approaches": [
+    {
+     "id": "MOM",
+     "family": "选股·中期动量过高",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 2.49,
+     "dmean": 0.407,
+     "sum": -0.272,
+     "passed": 2,
+     "checks": {
+      "V1": true,
+      "V2": false,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.332,
+      "E": 0.021,
+      "J": 0.039
+     },
+     "era_dwin": {
+      "Z": 2.2,
+      "E": -3.2,
+      "J": 5.6
+     }
+    },
+    {
+     "id": "CLW",
+     "family": "选股·突破日收盘弱",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 5.03,
+     "dmean": 0.746,
+     "sum": -0.066,
+     "passed": 3,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.109,
+      "E": 0.014,
+      "J": 0.029
+     },
+     "era_dwin": {
+      "Z": 6.7,
+      "E": 3.8,
+      "J": 4.1
+     }
+    },
+    {
+     "id": "X2G",
+     "family": "选股·顾客业种景气",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.88,
+     "dmean": 0.929,
+     "sum": -0.048,
+     "passed": 5,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": true,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.132,
+      "E": 0.026,
+      "J": 0.058
+     },
+     "era_dwin": {
+      "Z": 3.5,
+      "E": -0.7,
+      "J": 7.8
+     }
+    }
+   ]
   }
  ]
 }

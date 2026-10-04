@@ -12005,5 +12005,33 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "门槛只用 425 个 W2 信号的特征分布（只数个数）；接线核对通过；碰到 B3 成交 MOM 38 / CLW 45 / X2G 40 笔（共 140）"
+ },
+ {
+  "line": 8563,
+  "date": "2026-10-04",
+  "title": "第十个研究循环第 2 轮 MOM / CLW / X2G → 三个都第一关不过；X2G 只差 V3（胜率 +3.88 pp、W / Jx / 没看过的 Zx 都同方向，但 Z 账户 −0.132）",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "f17463f（登记后代码未改、只运行一次）",
+  "script": "scripts/loop10_r02_diagfeat.py",
+  "output": "var/out/loop10_r02_diagfeat.md",
+  "candidates": [
+   "MOM",
+   "CLW",
+   "X2G"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09（+ W / Jx / Zx）",
+  "verdict": "不通过",
+  "stable_findings": [
+   "X2G：顾客业种短観没有改善的不买 → 胜率 Z / J 与 W / Jx / Zx 都提高（合起来 +3.88 pp、每笔 +0.93 pp）",
+   "CLW：胜率三个年代都提高（+5.03 pp）"
+  ],
+  "era_dependent_or_reversed": [
+   "X2G：Z 账户 −0.132（成交净少 9 笔）",
+   "CLW：W / Zx 方向相反",
+   "MOM：E / Jx / Zx 方向相反、Z 账户 −0.332"
+  ],
+  "notes": "X2G 过 V1 / V2 / V4 / V5 / V6、只差 V3；挡掉约三成信号的做法在 Z 都伤账户；r12 / clv / x2 在 Zx 上已看过 → 之后的变体不能再用 Zx"
  }
 ]
