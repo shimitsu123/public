@@ -11565,5 +11565,25 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "事前预期每个做法「更好候选」约 1〜2%；先试进场时的大盘状态与假突破两类；模拟盘与执行器不改"
+ },
+ {
+  "line": 8283,
+  "date": "2026-10-04",
+  "title": "登记：第九个研究循环第 1 轮 进场时的大盘状态 → ADH 騰落レシオ ≥ 120 不开新仓 / N5D 日経在 50 日线下不开新仓（kind = date）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（登记后代码不改、只运行一次；循环规则 1e75ebc）",
+  "script": "scripts/loop9_r01_market.py",
+  "output": "var/out/loop9_r01_market.md",
+  "candidates": [
+   "ADH",
+   "N5D"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "kind = date；事前预期「更好候选」各约 1%"
  }
 ]
