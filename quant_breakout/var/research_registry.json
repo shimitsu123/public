@@ -12929,5 +12929,35 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "登记前只数个数：业种 18、H3a 250 个月、H3b 20 年、伙伴国指数 26（占日本出口 80〜87%）；统计复查提取 t 99 / p 45 / 区间 22 等，没看分布"
+ },
+ {
+  "line": 9053,
+  "date": "2026-10-05",
+  "title": "H3 业种与国家的关系（出口目的地）→ H3a 海外消息慢传 b +0.008（t 0.10）、H3b 关系变密切 IC −0.062（t −0.97，方向反而为负）→ 都不通过；海外涨跌当月就反映完",
+  "kind": "study",
+  "domain": "行业/主题/联动",
+  "registration": "351b8c3（登记后代码未改、只运行一次）",
+  "script": "scripts/country_link_study.py",
+  "output": "var/out/country_link_study.md",
+  "candidates": [
+   {
+    "id": "H3a",
+    "result": "不通过（b +0.008，t 0.10；两半 / TOPIX-17 同号但 ≈ 0）"
+   },
+   {
+    "id": "H3b",
+    "result": "不通过（IC −0.062，t −0.97；两半与 TOPIX-17 都为负）"
+   }
+  ],
+  "baseline": "全部有出口的业种（18 个）月 / 年",
+  "windows": "业种收益 2005-10〜2026-08；TOPIX-17 ETF 2008〜；Comtrade 1995〜2025",
+  "verdict": "不通过",
+  "stable_findings": [
+   "出口目的地国家的股价涨跌在日本业种层面当月就反映完（下个月 b ≈ 0，两半与 TOPIX-17 都 ≈ +0.008）"
+  ],
+  "era_dependent_or_reversed": [
+   "关系变密切（目的地 × 国家占比上升）之后 12 个月 IC 年份之间 −0.66〜+0.46 来回，平均略负"
+  ],
+  "notes": "描述：2025 年香港 +1.51 pp / 印度 +0.83 pp 上升、中国 −2.02 pp；非鉄金属 → 香港 / 瑞士 上升几乎都是 HS 71 贵金属（金价），不是生意关系"
  }
 ]
