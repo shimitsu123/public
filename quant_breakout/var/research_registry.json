@@ -12768,5 +12768,71 @@
    "SZS：扩大池每笔更好，日経225 账户变差"
   ],
   "notes": "三个都是事后；N52 路线 A 的 A1〜A3 都过，差在池子"
+ },
+ {
+  "line": 8951,
+  "date": "2026-10-05",
+  "title": "第十一个研究循环第 7 轮 TCY / VBK → 两个都第一关不过；TCY（个股周期定最长持有）胜率 +3.84 pp 但每笔 −0.59 pp、Z 账户 −0.195；VBK 合计 −0.543",
+  "kind": "study",
+  "domain": "出场/卖点",
+  "registration": "1714945（登记后代码未改、只运行一次）",
+  "script": "scripts/loop11_r07_last.py",
+  "output": "var/out/loop11_r07_last.md",
+  "candidates": [
+   "TCY",
+   "VBK"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "不通过",
+  "stable_findings": [
+   "只缩短持有 → 胜率升（六个样本都升）、每笔降（六个样本里五个降）"
+  ],
+  "era_dependent_or_reversed": [],
+  "notes": "TCY 是事后（第 1 轮 ULC 同一个特征）"
+ },
+ {
+  "line": 8959,
+  "date": "2026-10-05",
+  "title": "第十一个研究循环结束（20 / 20 用完）：没有找到「按股票种类 / 周期区分的更好卖法」；最接近 N52 / SZS / TAG（过 4 / 6）→ 待办〔59〕",
+  "kind": "engineering",
+  "domain": "出场/卖点",
+  "registration": "7329c45（循环规则）",
+  "script": "scripts/research_loop11.py",
+  "output": "var/research_loop11.json",
+  "candidates": [],
+  "baseline": "B3",
+  "windows": "Z / E / J",
+  "verdict": "变更/工程",
+  "stable_findings": [
+   "「小票放宽」在 W / Jx / Zx 扩大池每笔都更好（+0.24〜+1.07 pp），日経225 账户不行"
+  ],
+  "era_dependent_or_reversed": [
+   "最好的卖法跟着年代变（Z / J 放宽、E B3），不跟着种类变"
+  ],
+  "notes": "路线 A 三条全过的只有 N52（事后、扩大池每笔都变差）；B1 只过 VOK / X2T"
+ },
+ {
+  "line": 8974,
+  "date": "2026-10-05",
+  "title": "只描述：不同种类的股票，上涨周期差得不多（同一年代类与类之间最多差 5〜8 天，高波动短 2〜7 天），「最好的卖法」跟着年代变、不跟着种类变",
+  "kind": "study",
+  "domain": "出场/卖点",
+  "registration": "f6ee0f5（登记后代码未改、只运行一次）",
+  "script": "scripts/loop11_cycle_describe.py",
+  "output": "var/out/loop11_cycle_describe.md",
+  "candidates": [],
+  "baseline": "—（只描述）",
+  "windows": "日経225 W2 信号 425 个（Z / E / J）",
+  "verdict": "只展示",
+  "stable_findings": [
+   "高波动的票上涨段比低波动短 2〜7 天（三个年代同方向）",
+   "收紧（k 2）除金融地产外每一类每笔都最低"
+  ],
+  "era_dependent_or_reversed": [
+   "最好的卖法：Z 八类都是放宽、E 七类 B3、J 五类放宽 → 八类都是「年代间换」",
+   "成交额大小与周期的关系在年代之间方向会变"
+  ],
+  "notes": "回答用户「有可能每个股票种类周期都不一样？」；不算第十一个循环的做法"
  }
 ]
