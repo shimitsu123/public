@@ -441,6 +441,192 @@
      }
     }
    ]
+  },
+  {
+   "round": 3,
+   "date": "2026-10-05",
+   "title": "信息离散度 FRG / 对日経 β（学参数）BTK / 业种动量 SMK",
+   "registered": "8798b70",
+   "script": "scripts/loop11_r03_info.py",
+   "output": "var/out/loop11_r03_info.md",
+   "btk_full_map": {
+    "low": "base",
+    "mid": "base",
+    "high": "base"
+   },
+   "approaches": [
+    {
+     "id": "FRG",
+     "family": "卖法·信息离散度",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -1.76,
+     "dmean": -0.732,
+     "sum": -0.274,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.195,
+      "E": -0.101,
+      "J": 0.022
+     },
+     "era_dwin": {
+      "Z": -10.4,
+      "E": -3.8,
+      "J": 4.0
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.228,
+       "dmean": 0.3416,
+       "changed": 301
+      },
+      "Jx": {
+       "dwin": 0.0,
+       "dmean": -0.2142,
+       "changed": 501
+      },
+      "Zx": {
+       "dwin": 0.0,
+       "dmean": -0.1597,
+       "changed": 255
+      }
+     }
+    },
+    {
+     "id": "BTK",
+     "family": "卖法·对日経 β（学参数）",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": 0.0,
+     "dmean": 0.0,
+     "sum": 0.0,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": true,
+       "B3": true,
+       "V4": false,
+       "V5": false,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": true,
+       "A3": true,
+       "V4": false,
+       "V5": false,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.0
+     },
+     "era_dwin": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.0
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.0,
+       "dmean": 0.0,
+       "changed": 0
+      },
+      "Jx": {
+       "dwin": 0.0,
+       "dmean": 0.0,
+       "changed": 0
+      },
+      "Zx": {
+       "dwin": 0.0,
+       "dmean": 0.0,
+       "changed": 0
+      }
+     }
+    },
+    {
+     "id": "SMK",
+     "family": "卖法·业种动量",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -2.84,
+     "dmean": -1.712,
+     "sum": -0.326,
+     "passed": 2,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.268,
+      "E": 0.015,
+      "J": -0.073
+     },
+     "era_dwin": {
+      "Z": -5.2,
+      "E": 5.8,
+      "J": -8.1
+     },
+     "pools": {
+      "W": {
+       "dwin": -0.228,
+       "dmean": -0.0011,
+       "changed": 278
+      },
+      "Jx": {
+       "dwin": 0.761,
+       "dmean": 0.017,
+       "changed": 373
+      },
+      "Zx": {
+       "dwin": 0.262,
+       "dmean": 0.2223,
+       "changed": 242
+      }
+     }
+    }
+   ]
   }
  ]
 }
