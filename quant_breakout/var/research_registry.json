@@ -12486,5 +12486,30 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "脚本在第 1 轮结果之前写好；门槛只数个数；接线核对通过"
+ },
+ {
+  "line": 8826,
+  "date": "2026-10-05",
+  "title": "第十一个研究循环第 2 轮 SCY / SZK / VRK → 三个都第一关不过；SCY 学到「都不用改」；SZK 伤 Z 账户 −0.288，但「小票放宽」在 W / Jx / Zx 池子每笔都更好（+0.25〜+1.07 pp）",
+  "kind": "study",
+  "domain": "出场/卖点",
+  "registration": "a96ccb0（登记后代码未改、只运行一次）",
+  "script": "scripts/loop11_r02_sector.py",
+  "output": "var/out/loop11_r02_sector.md",
+  "candidates": [
+   "SCY",
+   "SZK",
+   "VRK"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "不通过",
+  "stable_findings": [
+   "成交额小的票卖法放宽（k 4、90 天）：W / Jx / Zx 三个池子每笔都更好"
+  ],
+  "era_dependent_or_reversed": [
+   "对日経225 成交，按成交额 / 方差比区分卖法都伤账户（Z / E）"
+  ],
+  "notes": "小票放宽的发现对 B3（只买日経225）用不上"
  }
 ]

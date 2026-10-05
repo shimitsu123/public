@@ -255,6 +255,192 @@
      }
     }
    ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-05",
+   "title": "业种景气循环（学参数）SCY / 规模流动性 SZK / 个股方差比 VRK",
+   "registered": "a96ccb0",
+   "script": "scripts/loop11_r02_sector.py",
+   "output": "var/out/loop11_r02_sector.md",
+   "scy_full_map": {
+    "cyc": "base",
+    "def": "base",
+    "fin": "base"
+   },
+   "approaches": [
+    {
+     "id": "SCY",
+     "family": "卖法·业种景气循环（学参数）",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": 0.0,
+     "dmean": 0.0,
+     "sum": 0.0,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": true,
+       "B3": true,
+       "V4": false,
+       "V5": false,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": true,
+       "A3": true,
+       "V4": false,
+       "V5": false,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.0
+     },
+     "era_dwin": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.0
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.0,
+       "dmean": 0.0,
+       "changed": 0
+      },
+      "Jx": {
+       "dwin": 0.0,
+       "dmean": 0.0,
+       "changed": 0
+      },
+      "Zx": {
+       "dwin": 0.0,
+       "dmean": 0.0,
+       "changed": 0
+      }
+     }
+    },
+    {
+     "id": "SZK",
+     "family": "卖法·规模流动性",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": 0.38,
+     "dmean": -0.846,
+     "sum": -0.361,
+     "passed": 4,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": true,
+       "B3": false,
+       "V4": true,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": true,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.288,
+      "E": -0.048,
+      "J": -0.025
+     },
+     "era_dwin": {
+      "Z": -1.2,
+      "E": 2.0,
+      "J": 0.8
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.685,
+       "dmean": 0.6909,
+       "changed": 438
+      },
+      "Jx": {
+       "dwin": 0.638,
+       "dmean": 0.249,
+       "changed": 734
+      },
+      "Zx": {
+       "dwin": 5.249,
+       "dmean": 1.0679,
+       "changed": 380
+      }
+     }
+    },
+    {
+     "id": "VRK",
+     "family": "卖法·个股自相关（方差比）",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -0.75,
+     "dmean": -0.709,
+     "sum": -0.195,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": 0.0,
+      "E": -0.186,
+      "J": -0.009
+     },
+     "era_dwin": {
+      "Z": -6.9,
+      "E": 4.6,
+      "J": -0.8
+     },
+     "pools": {
+      "W": {
+       "dwin": -0.685,
+       "dmean": -0.2182,
+       "changed": 308
+      },
+      "Jx": {
+       "dwin": 0.253,
+       "dmean": 0.0299,
+       "changed": 471
+      },
+      "Zx": {
+       "dwin": -0.525,
+       "dmean": -0.1871,
+       "changed": 260
+      }
+     }
+    }
+   ]
   }
  ]
 }
