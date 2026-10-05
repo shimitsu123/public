@@ -12564,5 +12564,35 @@
    "按种类区分卖法：J 略好、Z / E 变差"
   ],
   "notes": "学参数的（SCY、BTK）全样本都学到不改"
+ },
+ {
+  "line": 8859,
+  "date": "2026-10-05",
+  "title": "第十一个研究循环第 4 轮登记：ICY 业种自己的上涨周期（短 → 收紧、长 → 放宽）/ RSD 个别行情程度（与日経相关低 → 放宽、高 → 收紧）/ DVY 价值成长（低股息 → 放宽、高股息 → 收紧）",
+  "kind": "engineering",
+  "domain": "出场/卖点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop11_r04_industry.py",
+  "output": "var/out/loop11_r04_industry.md（运行后）",
+  "candidates": [
+   {
+    "id": "ICY",
+    "result": "登记"
+   },
+   {
+    "id": "RSD",
+    "result": "登记"
+   },
+   {
+    "id": "DVY",
+    "result": "登记"
+   }
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "脚本在第 3 轮结果之前写好；RSM → RSD（ID 以前用过）"
  }
 ]
