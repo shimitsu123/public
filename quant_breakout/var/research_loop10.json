@@ -534,6 +534,103 @@
      }
     }
    ]
+  },
+  {
+   "round": 6,
+   "date": "2026-10-05",
+   "title": "高风险特征三选二 RKB / 横截面分散高 DSW / 美股 3 个月跌 USR（事后）",
+   "registered": "36fe75c",
+   "script": "scripts/loop10_r06_riskdisp.py",
+   "output": "var/out/loop10_r06_riskdisp.md",
+   "approaches": [
+    {
+     "id": "RKB",
+     "family": "选股·高风险特征（多数决）",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -1.17,
+     "dmean": 0.344,
+     "sum": 0.023,
+     "passed": 1,
+     "checks": {
+      "V1": false,
+      "V2": false,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.032,
+      "E": 0.026,
+      "J": 0.029
+     },
+     "era_dwin": {
+      "Z": -5.1,
+      "E": -4.4,
+      "J": 1.6
+     }
+    },
+    {
+     "id": "DSW",
+     "family": "选股·横截面分散",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -1.76,
+     "dmean": 0.038,
+     "sum": -0.156,
+     "passed": 2,
+     "checks": {
+      "V1": false,
+      "V2": false,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.103,
+      "E": -0.049,
+      "J": -0.004
+     },
+     "era_dwin": {
+      "Z": 8.2,
+      "E": -9.5,
+      "J": 1.6
+     }
+    },
+    {
+     "id": "USR",
+     "family": "选股·美股回调",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -0.34,
+     "dmean": -0.061,
+     "sum": -0.038,
+     "passed": 2,
+     "checks": {
+      "V1": false,
+      "V2": false,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.027,
+      "E": -0.024,
+      "J": 0.013
+     },
+     "era_dwin": {
+      "Z": -2.4,
+      "E": -2.9,
+      "J": 3.4
+     }
+    }
+   ]
   }
  ],
  "stopped": {

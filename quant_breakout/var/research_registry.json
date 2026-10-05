@@ -12227,5 +12227,31 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "ID 登记前核对；接线核对通过；碰到 B3 成交 RKB 35 / DSW 45 / USR 15 笔（共 140）"
+ },
+ {
+  "line": 8690,
+  "date": "2026-10-05",
+  "title": "第十个研究循环第 6 轮 RKB / DSW / USR → 三个都第一关不过；胜率都没提高（−0.3〜−1.8 pp）",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "36fe75c（登记后代码未改、只运行一次）",
+  "script": "scripts/loop10_r06_riskdisp.py",
+  "output": "var/out/loop10_r06_riskdisp.md",
+  "candidates": [
+   "RKB",
+   "DSW",
+   "USR"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09（+ W / Jx / Zx）",
+  "verdict": "不通过",
+  "stable_findings": [
+   "大盘闸门（DSW / USR）在 2001〜2006 中小型股（Zx）里有效"
+  ],
+  "era_dependent_or_reversed": [
+   "DSW / USR：日経225 与 2017 年以后（Jx）不成立",
+   "RKB：账户合计 +0.023 但胜率 −1.17 pp"
+  ],
+  "notes": "三个都差 V1"
  }
 ]
