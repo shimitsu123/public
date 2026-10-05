@@ -72,3 +72,14 @@ def test_pair_stats():
     assert st["n"] == 3 and st["changed"] == 2
     assert abs(st["dwin"] - (100.0 - 200 / 3)) < 1e-2 and abs(st["dmean"] - (2.7 / 3 - 2.0 / 3)) < 1e-3
     assert C.pair_stats([np.nan], [np.nan], [True])["n"] == 0
+
+
+def test_zigzag_pivots_and_upleg_cycle():
+    c = np.array([100, 105, 110, 120, 108, 100, 96, 104, 112, 125, 130, 117, 110, 120, 135, 140, 127], float)
+    piv = C.zigzag_pivots(c, 0.10)
+    assert piv == [(0, "L"), (3, "H"), (6, "L"), (10, "H"), (12, "L")]           # 最后一段（12 → 15）还没反转 10% → 不算
+    atr = np.full(len(c), 0.0)
+    atr[:] = c * (0.10 / 3)                                                       # k = 3 × ATR% 中位数 = 10%
+    assert C.upleg_cycle(c, atr, len(c) - 1, n=len(c) - 1, k=3.0, min_legs=2) == 3.5   # 上涨段 0→3、6→10：3 天、4 天
+    assert np.isnan(C.upleg_cycle(c, atr, len(c) - 1, n=len(c) - 1, k=3.0, min_legs=3))
+    assert np.isnan(C.upleg_cycle(c, atr, 5, n=10))

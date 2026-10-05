@@ -133,6 +133,56 @@ def past_cycle(close: np.ndarray, entry: np.ndarray, pos: int, horizon: int = 60
     return float(np.median(vals)) if len(vals) >= min_n else float("nan")
 
 
+def zigzag_pivots(c: np.ndarray, theta: float) -> list[tuple[int, str]]:
+    """收盘价的之字形转折点（反转幅度 theta，比例）：[(位置, "H" / "L")]；只回已经确认的（最后一段没走完的不算）。"""
+    c = np.asarray(c, float)
+    n = len(c)
+    if n < 3 or not np.isfinite(theta) or theta <= 0:
+        return []
+    piv: list[tuple[int, str]] = []
+    mode = 0                                                                 # 0 = 还没定方向、1 = 上涨段、−1 = 下跌段
+    hi_i = lo_i = 0
+    for i in range(1, n):
+        x = c[i]
+        if not np.isfinite(x):
+            continue
+        if mode >= 0 and x > c[hi_i]:
+            hi_i = i
+        if mode <= 0 and x < c[lo_i]:
+            lo_i = i
+        if mode == 0:
+            if x >= c[lo_i] * (1 + theta):
+                piv.append((lo_i, "L"))
+                mode, hi_i = 1, i
+            elif x <= c[hi_i] * (1 - theta):
+                piv.append((hi_i, "H"))
+                mode, lo_i = -1, i
+        elif mode == 1 and x <= c[hi_i] * (1 - theta):
+            piv.append((hi_i, "H"))
+            mode, lo_i = -1, i
+        elif mode == -1 and x >= c[lo_i] * (1 + theta):
+            piv.append((lo_i, "L"))
+            mode, hi_i = 1, i
+    return piv
+
+
+def upleg_cycle(close: np.ndarray, atr: np.ndarray, pos: int, n: int = 500, k: float = 3.0, min_legs: int = 3) -> float:
+    """位置 pos（含）为止最近 n 个交易日：反转幅度 = k × 这段时间 ATR% 的中位数的之字形 → 走完的上涨段（低点 → 下一个高点）
+    的天数中位数；不够 n 天 / 上涨段少于 min_legs 段 → NaN。"""
+    if pos < n:
+        return float("nan")
+    c = np.asarray(close[pos - n:pos + 1], float)
+    a = np.asarray(atr[pos - n:pos + 1], float)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        ap = a / c
+    ap = ap[np.isfinite(ap) & (ap > 0)]
+    if not len(ap):
+        return float("nan")
+    piv = zigzag_pivots(c, k * float(np.median(ap)))
+    legs = [j - i for (i, a1), (j, b1) in zip(piv, piv[1:]) if a1 == "L" and b1 == "H"]
+    return float(np.median(legs)) if len(legs) >= min_legs else float("nan")
+
+
 def pair_stats(net_b, net_v, changed) -> dict:
     """配对假想单笔：两边都有的信号 → 笔数、换了参数的笔数、两边的胜率 / 每笔、胜率差（pp）、每笔差（pp）。"""
     b, v = np.asarray(net_b, float), np.asarray(net_v, float)

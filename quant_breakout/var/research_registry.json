@@ -12402,5 +12402,35 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "以前的卖法研究全部是所有股票同一套；按种类区分从来没做过"
+ },
+ {
+  "line": 8784,
+  "date": "2026-10-05",
+  "title": "第十一个研究循环第 1 轮登记：ULC 个股上涨段长度 / ERK 个股走势顺滑度 / VOK 波动分档（学参数）—— 按种类给每笔持仓收紧（k 2）/ 放宽（k 4、90 天）",
+  "kind": "engineering",
+  "domain": "出场/卖点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop11_r01_cycle.py",
+  "output": "var/out/loop11_r01_cycle.md（运行后）",
+  "candidates": [
+   {
+    "id": "ULC",
+    "result": "登记"
+   },
+   {
+    "id": "ERK",
+    "result": "登记"
+   },
+   {
+    "id": "VOK",
+    "result": "登记"
+   }
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "门槛只数个数；接线核对通过"
  }
 ]
