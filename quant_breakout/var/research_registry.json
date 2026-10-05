@@ -12647,5 +12647,35 @@
    "ICY 只在 Z 账户变好（+0.197），E / J 略差"
   ],
   "notes": "本循环第一次账户合计为正，但单笔层胜率与每笔都降"
+ },
+ {
+  "line": 8896,
+  "date": "2026-10-05",
+  "title": "第十一个研究循环第 6 轮登记：SZS 小票放宽（单边）/ TAG 趋势阶段（早段放宽、后段收紧）/ N52 52 周高点（近 → 放宽、远 → 收紧）",
+  "kind": "engineering",
+  "domain": "出场/卖点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop11_r06_stage.py",
+  "output": "var/out/loop11_r06_stage.md（运行后）",
+  "candidates": [
+   {
+    "id": "SZS",
+    "result": "登记"
+   },
+   {
+    "id": "TAG",
+    "result": "登记"
+   },
+   {
+    "id": "N52",
+    "result": "登记"
+   }
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "脚本在第 4〜5 轮结果之前写好；三个都是事后（V6 适用）；SZS 的池子几乎全是「小」"
  }
 ]
