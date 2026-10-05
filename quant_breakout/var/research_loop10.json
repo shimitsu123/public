@@ -433,6 +433,107 @@
      }
     }
    ]
+  },
+  {
+   "round": 5,
+   "date": "2026-10-05",
+   "title": "套牢盘 CGO / 离 52 周高点远 H5G / 箱体太宽 RNG（CGO 不是事后）",
+   "registered": "72c80c2",
+   "script": "scripts/loop10_r05_anchor.py",
+   "output": "var/out/loop10_r05_anchor.md",
+   "note": "登记的代码里 ID 写成 H52，与第五个循环的 H52（按离 52 周高点调仓位）重名 → 记录用 H5G；规则、代码、结果都不变",
+   "approaches": [
+    {
+     "id": "CGO",
+     "id_in_code": "CGO",
+     "family": "选股·价格锚点",
+     "kind": "stock",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -3.58,
+     "dmean": -0.492,
+     "sum": -0.101,
+     "passed": 2,
+     "checks": {
+      "V1": false,
+      "V2": false,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.053,
+      "E": -0.025,
+      "J": -0.023
+     },
+     "era_dwin": {
+      "Z": -3.6,
+      "E": -6.4,
+      "J": -2.9
+     }
+    },
+    {
+     "id": "H5G",
+     "id_in_code": "H52",
+     "family": "选股·价格锚点",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 0.18,
+     "dmean": -0.201,
+     "sum": -0.052,
+     "passed": 2,
+     "checks": {
+      "V1": false,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.007,
+      "E": -0.028,
+      "J": -0.017
+     },
+     "era_dwin": {
+      "Z": 1.0,
+      "E": -1.9,
+      "J": -0.3
+     }
+    },
+    {
+     "id": "RNG",
+     "id_in_code": "RNG",
+     "family": "选股·箱体宽松",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 5.25,
+     "dmean": 0.247,
+     "sum": -0.022,
+     "passed": 3,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.006,
+      "E": -0.035,
+      "J": 0.019
+     },
+     "era_dwin": {
+      "Z": 12.9,
+      "E": -1.3,
+      "J": 4.7
+     }
+    }
+   ]
   }
  ],
  "stopped": {

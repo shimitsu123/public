@@ -12180,5 +12180,31 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "接线核对通过；碰到 B3 成交 CGO 40 / H52 32 / RNG 37 笔（共 140）"
+ },
+ {
+  "line": 8665,
+  "date": "2026-10-05",
+  "title": "第十个研究循环第 5 轮 CGO / H5G / RNG → 三个都第一关不过；RNG 胜率 +5.25 pp 但 E 账户 −0.035、W / Zx 反向；价格锚点的方向与文献相反",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "72c80c2（登记后代码未改、只运行一次；代码里 H5G 写作 H52，与第五个循环重名，记录更正）",
+  "script": "scripts/loop10_r05_anchor.py",
+  "output": "var/out/loop10_r05_anchor.md",
+  "candidates": [
+   "CGO",
+   "H5G",
+   "RNG"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09（+ W / Jx / Zx）",
+  "verdict": "不通过",
+  "stable_findings": [
+   "从低位起来的突破（套牢盘多 / 离 52 周高点远）在 2001〜2016 反而更好"
+  ],
+  "era_dependent_or_reversed": [
+   "CGO / H5G：2017 年以后（Jx）才是文献的方向",
+   "RNG：E 账户与 W / Zx 反向"
+  ],
+  "notes": "CGO 是新特征（不是事后），胜率 −3.58 pp；RNG 过 V1 / V2 / V5"
  }
 ]
