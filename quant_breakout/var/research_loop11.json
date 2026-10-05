@@ -627,6 +627,187 @@
      }
     }
    ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-05",
+   "title": "业种自己的周期 ICY / 个别行情程度 RSD / 价值成长 DVY",
+   "registered": "c4b8937",
+   "script": "scripts/loop11_r04_industry.py",
+   "output": "var/out/loop11_r04_industry.md",
+   "approaches": [
+    {
+     "id": "ICY",
+     "family": "卖法·业种自己的周期",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -1.09,
+     "dmean": -0.444,
+     "sum": 0.116,
+     "passed": 4,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": true,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": 0.197,
+      "E": -0.04,
+      "J": -0.041
+     },
+     "era_dwin": {
+      "Z": -8.9,
+      "E": 4.4,
+      "J": -0.8
+     },
+     "pools": {
+      "W": {
+       "dwin": -1.37,
+       "dmean": -0.1997,
+       "changed": 316
+      },
+      "Jx": {
+       "dwin": -0.253,
+       "dmean": -0.0303,
+       "changed": 336
+      },
+      "Zx": {
+       "dwin": -0.262,
+       "dmean": -0.0502,
+       "changed": 256
+      }
+     }
+    },
+    {
+     "id": "RSD",
+     "family": "卖法·个别行情程度",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -1.43,
+     "dmean": -1.086,
+     "sum": -0.206,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.023,
+      "E": -0.15,
+      "J": -0.033
+     },
+     "era_dwin": {
+      "Z": -7.8,
+      "E": 2.3,
+      "J": -0.8
+     },
+     "pools": {
+      "W": {
+       "dwin": -2.055,
+       "dmean": -0.0525,
+       "changed": 312
+      },
+      "Jx": {
+       "dwin": -0.892,
+       "dmean": 0.0003,
+       "changed": 565
+      },
+      "Zx": {
+       "dwin": 3.412,
+       "dmean": 0.5208,
+       "changed": 290
+      }
+     }
+    },
+    {
+     "id": "DVY",
+     "family": "卖法·价值成长",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -1.11,
+     "dmean": -1.005,
+     "sum": -0.173,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.189,
+      "E": 0.028,
+      "J": -0.012
+     },
+     "era_dwin": {
+      "Z": -2.4,
+      "E": 4.6,
+      "J": -3.1
+     },
+     "pools": {
+      "W": {
+       "dwin": -1.598,
+       "dmean": -0.7579,
+       "changed": 246
+      },
+      "Jx": {
+       "dwin": -1.01,
+       "dmean": -0.3045,
+       "changed": 431
+      },
+      "Zx": {
+       "dwin": 0.262,
+       "dmean": 0.2439,
+       "changed": 221
+      }
+     }
+    }
+   ]
   }
  ]
 }
