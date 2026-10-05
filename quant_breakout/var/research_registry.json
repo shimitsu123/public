@@ -12456,5 +12456,35 @@
    "VOK：胜率升在 E，账户没跟上"
   ],
   "notes": "按种类区分卖法的第一批：没有通过的"
+ },
+ {
+  "line": 8814,
+  "date": "2026-10-05",
+  "title": "第十一个研究循环第 2 轮登记：SCY 业种景气循环（学参数）/ SZK 规模流动性（小 → 放宽、大 → 收紧）/ VRK 个股方差比（来回 → 收紧、走趋势 → 放宽）",
+  "kind": "engineering",
+  "domain": "出场/卖点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop11_r02_sector.py",
+  "output": "var/out/loop11_r02_sector.md（运行后）",
+  "candidates": [
+   {
+    "id": "SCY",
+    "result": "登记"
+   },
+   {
+    "id": "SZK",
+    "result": "登记"
+   },
+   {
+    "id": "VRK",
+    "result": "登记"
+   }
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "脚本在第 1 轮结果之前写好；门槛只数个数；接线核对通过"
  }
 ]
