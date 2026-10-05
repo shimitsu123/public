@@ -13362,8 +13362,8 @@
   "kind": "study",
   "domain": "选股/买点",
   "registration": "d915a9e（登记后代码未改、只运行一次）+ 事后诊断 a3968c4（只描述）",
-  "script": "scripts/turn_shape_study.py; scripts/turn_shape_posthoc.py",
-  "output": "var/out/turn_shape_study.md",
+  "script": "scripts/turn_shape_study.py; scripts/turn_shape_posthoc.py; scripts/turn_shape_atlas.py（图）",
+  "output": "var/out/turn_shape_study.md; var/out/turn_shape_atlas.html",
   "candidates": [
    {
     "id": "rise",
@@ -13378,7 +13378,7 @@
   "windows": "探索 2017-10-02〜2021-12-30；确认 2022-01-04〜2026-07-17（每 5 个交易日一个样本日，约 2,700 只 / 天）",
   "verdict": "不通过",
   "stable_findings": [
-   "起涨点之前 1〜3 个月平均跑输约 10%、最后 5 日急跌；起跌点镜像（两期一致）；月线上看不出形状",
+   "起涨点之前 2〜3 个月和大盘差不多、最后约 2 周急跌约 10%（最后 5 日约 −9%）；起跌点镜像（两期一致）；月线上看不出形状（2026-10-05 事后更正用词）",
    "图形认得出「今天是近 10 日新低 / 新高」，认不出之后会不会转：只在新低里比 AUC 0.58、十组 20 日超额 ≈ 0",
    "日线大陽線之后 20 日超额 −0.56 / −0.56 pp（两期一致，只描述）"
   ],
