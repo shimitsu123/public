@@ -12206,5 +12206,26 @@
    "RNG：E 账户与 W / Zx 反向"
   ],
   "notes": "CGO 是新特征（不是事后），胜率 −3.58 pp；RNG 过 V1 / V2 / V5"
+ },
+ {
+  "line": 8678,
+  "date": "2026-10-05",
+  "title": "登记：第十个研究循环第 6 轮 RKB 高风险特征三选二 / DSW 横截面分散高 / USR 美股 3 个月跌（RKB stock，DSW / USR date；都是事后，V6 = Zx）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop10_r06_riskdisp.py",
+  "output": "var/out/loop10_r06_riskdisp.md",
+  "candidates": [
+   "RKB",
+   "DSW",
+   "USR"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "ID 登记前核对；接线核对通过；碰到 B3 成交 RKB 35 / DSW 45 / USR 15 笔（共 140）"
  }
 ]
