@@ -47,6 +47,33 @@
     否定 = 胜率差 95% 区间上限 < 0 或每笔差 95% 区间上限 < −0.30 pp；其他 = 未定。另报：主对象里不管 W2 的全部、不限成交额、日経225 部分。
   - 来由与局限：卖出判定确认里事后看到（胜率 +4.2 pp、每笔 −0.03 pp，没看过的数据）；2006〜2016 日経225 不一致 → 只能靠这里的新数据。
     检出力（胜率差 +4 pp，99% 下限、80%）：主对象 W2 保留每年约 450 笔 → 约 2 年。证实也只是记录，改模拟盘要另做登记的组合研究并经用户确认。
+十、追加登记 第十个研究循环最接近的三个选股闸门 HWN / X2G / JRM（2026-10-05，用户「把 HWN、X2G、JRM 加进前向检验」；只记录、不交易；
+  定义与统计 qbreak/gate_forward.py）
+  - 来由：第十个研究循环（scripts/research_loop10.py：20 / 20 用完、没找到「胜率提高、账户不变差」的更好候选）最接近的三个 ——
+    HWN（5〜10 月不开新仓；Halloween 效应，不是事后）合起来胜率 +3.94 pp、六个样本都同方向，只差 V3（Z 账户 −0.350）；
+    X2G（x2 ≤ 0 不买；事后）+3.88 pp，只差 V3（Z −0.132）；JRM（日経落后核心 ≥ 10 pp 的日子不开新仓；事后）+3.17 pp、三个年代账户都更好，
+    只差 V6（Zx −0.96 pp）。都是在看过多次的历史数据上找到的 → 只有登记之后才发生的信号才是真正的样本外。
+  - 对象：第八节的配对（同一份 J-Quants 行情、同一批信号）里信号日 ≥ 2026-10-06（登记日的下一个东证交易日）、成熟、两边都已平仓的；
+    结果 = X6 那一边的净收益（模拟盘 2026-09-30 起的离场 = X6；与第十个循环 V4 / V6 的「假想单笔」同一个结果定义）。
+    主样本 = 主对象（成交额 ≥ ¥500 万）里 W2 保留的（B3 只买 W2 保留的）。照实写：C 只作用在日経225，这里不加（与研究的 V4 池子差一个 C）。
+  - 三个闸门（定义照第十个循环登记、运行过的代码，一个字不改；1 = 挡）：HWN 信号日的月份在 5〜10 月；X2G x2 ≤ 0（x2 = 复核时最新的
+    月末上市一览的 33 业种 → qbreak/score_forward.x2_load / x2_lookup：信号日当天或之前已可用的最近一次短観；缺值 → 不挡）；
+    JRM 日経225（^N225）最近 60 个交易日涨幅 − 1545 同期涨幅 ≤ −0.10（1545 = yfinance 1545.T 的真实收盘；研究里是合成价 = 纳指总收益 ×
+    美元日元，60 天涨幅上差别很小；一天变动超过 ±30% 的当作没调整的分割、那一天的变动记为 0；核心按日経的日子取之前最后一个值；
+    不够 60 天 → 不挡）。
+  - 假设（事先方向，每个闸门各自）：不挡的胜率 > 挡的，且每笔不更低。胜率差 / 每笔差 = 不挡 − 挡（pp）；区间 = 按信号月聚类的自助法
+    2,000 次（种子 20261005）。
+  - 判定（每年一次：与 W2 同一组日期 2027-09-28 … 2031-09-28 之后的那次复核；做过的年份不再做；每次用到那时为止的全部成熟样本）：
+      证实 = 胜率差的 99% 区间下限 > 0，且每笔差的点估计 ≥ 0（第十个循环 V1：每笔不降）→ 记为「新数据证实」；
+      否定 = 胜率差的 95% 区间上限 < 0，或每笔差的 95% 区间上限 < 0 → 记为「新数据否定」，这个闸门结束跟踪（记录照留）；
+      其他 = 未定；挡 / 不挡 任一组 < 10 笔或 < 3 个信号月 → 「样本不够、不判定」（也算做过那一年）。
+    另报（不判定）：主对象里的日経225（今天的成分）、不限成交额（W2 保留）、主对象里不管 W2 的全部；HWN 按日历月的笔数 / 胜率 / 每笔；标记缺值的笔数。
+  - 多重检验（照实写）：3 个闸门 × 最多 5 次判定；每次证实用 99%（单侧 0.5%）→ 15 次合起来误判最多约 7.5%。
+  - 检出力：登记后另跑 scripts/gate_forward_calib.py（只用已看过的历史池子 W / Jx / Zx 估计区间的宽度，不是检验），结果记在 sim_changes.md。
+    事前的看法：HWN / JRM 是按日子挡 → 新证据按「月」累积，不是按「笔」（一年 12 个月里 HWN 6 个挡、6 个不挡）→ 多半要很多年；
+    X2G 按业种挡、同一个月里两组都有 → 快一些。
+  - 证实 / 否定都只是记录：HWN / X2G 没过的是账户（Z 年代的 V3），单笔的前向检验回答不了账户的问题；要改模拟盘另写一份事先登记的
+    账户研究，并经用户确认。算不了（短観 / 1545 / 日経取不到）→ 那个闸门这次的列为空、报告里写原因，不影响另外两个与第一〜九节。
 """
 from __future__ import annotations
 
@@ -65,6 +92,7 @@ warnings.filterwarnings("ignore")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from qbreak import exit_forward as EF                                        # noqa: E402
+from qbreak import gate_forward as GF                                        # noqa: E402
 from qbreak import idio_forward as IF                                        # noqa: E402
 from qbreak import paths                                                     # noqa: E402
 from qbreak import w2_forward as W2F                                         # noqa: E402
@@ -79,7 +107,7 @@ LIQ_LOG = math.log10(LIQ_MIN_YEN)                                             # 
 HIST = "w2_forward_all_history.csv"
 LINES: list[str] = []
 assert W2_CUT == W2F.W2_CUT and JUDGE_DATES == W2F.JUDGE_DATES and (BOOT_N, SEED) == (W2F.BOOT_N, W2F.SEED)   # 登记值与共用模块一致
-assert IF.JUDGE_DATES == JUDGE_DATES and EF.JUDGE_DATES == JUDGE_DATES
+assert IF.JUDGE_DATES == JUDGE_DATES and EF.JUDGE_DATES == JUDGE_DATES and GF.JUDGE_DATES == JUDGE_DATES
 
 
 def say(s: str = "") -> None:
@@ -228,6 +256,50 @@ def x6_eval(P: pd.DataFrame, hist: pd.DataFrame | None, today, n225: set[str]) -
             "side": side, "r4": r4}
 
 
+def x2_values(tickers, dates, s33: dict[str, str] | None, fetch=None) -> np.ndarray | None:
+    """第十节：每个信号的 x2（复核时最新的月末上市一览的 33 业种 → qbreak/score_forward.x2_load / x2_lookup）；没有业种 → None。"""
+    from qbreak import score_forward as SF
+    m = {t: s33_of(s33 or {}, t) for t in set(tickers)}
+    m = {t: v for t, v in m.items() if v}
+    if not m:
+        return None
+    return SF.x2_lookup(SF.x2_load(m, fetch), list(dates), list(tickers))[0]
+
+
+def gate_frame(PX: pd.DataFrame, x2_fn, n225: pd.Series | None, core: pd.Series | None, note: list | None = None) -> pd.DataFrame:
+    """第十节：第八节的配对 → 信号日 ≥ GF.FORWARD_START、成熟、两边都已平仓的 + x2 / 三个闸门的标记。
+    x2_fn(tickers, dates) → x2 数组（取不到抛异常 → X2G 这次为空、原因记进 note）。"""
+    U = EF.usable(PX) if PX is not None and len(PX) else pd.DataFrame(columns=["ticker", "sig_date", "w2_keep", "main", "net_x6"])
+    if len(U):
+        U = U[pd.to_datetime(U["sig_date"]) >= pd.Timestamp(GF.FORWARD_START)].reset_index(drop=True)
+    x2 = None
+    if len(U):
+        try:
+            x2 = x2_fn(list(U["ticker"]), list(pd.to_datetime(U["sig_date"])))
+            if x2 is None and note is not None:
+                note.append("X2G 这次算不了（上市一览的业种取不到）")
+        except Exception as e:                                                # noqa: BLE001
+            if note is not None:
+                note.append(f"X2G 这次算不了（短観 / 业种取不到）：{type(e).__name__}: {e}")
+    return GF.add_flags(U, x2, n225, core)
+
+
+def gate_eval(G: pd.DataFrame, hist: pd.DataFrame | None, today, n225_set: set[str]) -> dict:
+    """第十节：主 = 主对象里 W2 保留的（每年一次判定）；另报不判定。"""
+    if not len(G):
+        G = G.assign(main=pd.Series(dtype=bool), w2_keep=pd.Series(dtype=float))
+    main = G["main"].astype(bool).to_numpy()
+    keep = pd.to_numeric(G["w2_keep"], errors="coerce").to_numpy(float) == 1
+    nn = G["ticker"].isin(n225_set).to_numpy() if len(G) else np.zeros(0, bool)
+    r = GF.review(G[main & keep], hist, today, prefix="all_")
+    side = {name: {k: GF.evaluate(G[m], f"g_{k.lower()}") for k in GF.IDS}
+            for name, m in (("主对象里的日経225 股票池（W2 保留）", main & keep & nn), ("不限成交额（W2 保留）", keep),
+                            ("主对象里不管 W2 的全部", main))}
+    return {"main": r, "side": side, "hwn_month": GF.by_month(G[main & keep]),
+            "jrm_on": round(float(np.nanmean(pd.to_numeric(G["g_jrm"], errors="coerce"))) * 100, 1) if len(G) and G["g_jrm"].notna().any() else None,
+            "x2_missing": int(G["x2"].isna().sum()) if len(G) else 0, "n_usable": int(len(G))}
+
+
 def decide(ev: dict, hist: pd.DataFrame | None, today) -> dict:
     """每年一次（JUDGE_DATES）：失效警报 95% / 证实 99%；判定过的年份记进历史，不再判定。"""
     year = W2F.due_date(today, JUDGE_DATES, W2F.history_done(hist, "all", "w2_year"))
@@ -286,6 +358,20 @@ def review(fetch: bool = True) -> int:
     hist = pd.read_csv(hist_fp) if hist_fp.exists() else pd.DataFrame()
     V = decide(ev, hist, today)
     x6 = x6_eval(PX, hist, today, n225) if PX is not None else None
+    g10, g10_note = None, []
+    if PX is not None:                                                        # 第十节：HWN / X2G / JRM（只记录；算不了 → 另报原因）
+        core = None
+        try:
+            core = load(GF.CORE_TICKER, "2000-01-01")["Close"]
+        except Exception as e:                                                # noqa: BLE001
+            g10_note.append(f"JRM 这次算不了（{GF.CORE_TICKER} 取不到）：{type(e).__name__}: {e}")
+        try:
+            G = gate_frame(PX, lambda tk, ds: x2_values(tk, ds, s33), jp_close, core, g10_note)
+            g10 = gate_eval(G, hist, today, n225)
+        except Exception as e:                                                # noqa: BLE001
+            g10_note.append(f"第十节这次算不了：{type(e).__name__}: {e}")
+    else:
+        g10_note.append("第八节的配对这次算不了 → 第十节也算不了")
     side = {"全部（不限成交额）": W2F.evaluate(F, date_col="sig_date", n=0) if len(F) else {"n": 0},
             "主对象里的日経225 股票池": W2F.evaluate(M[M["n225"]], date_col="sig_date", n=0) if len(M) else {"n": 0},
             "主对象里的其他股票": W2F.evaluate(M[~M["n225"]], date_col="sig_date", n=0) if len(M) else {"n": 0}}
@@ -344,6 +430,20 @@ def review(fetch: bool = True) -> int:
             say(f"- 另报 {k}：{EF.r4_summary_line(e)}")
     for x in x6_note:
         say(f"- {x}")
+    say(f"\n## 第十个循环最接近的三个选股闸门（第十节，主对象、W2 保留、信号日 ≥ {GF.FORWARD_START}、成熟、X6 离场的结果）：不挡 vs 挡")
+    if g10 is not None:
+        for x in GF.verdict_lines(g10["main"], today=today):
+            say(x)
+        for name, evs in g10["side"].items():
+            say(f"- 另报 {name}：" + "；".join(f"{k} 胜率差 " + (f"{e['dwin']:+.1f} pp（{e['keep']['n']} / {e['block']['n']} 笔）"
+                                                                if e.get("dwin") is not None else "—") for k, e in evs.items()))
+        if g10["hwn_month"]:
+            f = lambda s: f"{s['n']} 笔 {s['win']:.0f}% {s['mean']:+.2f}%" if s.get("n") else "—"                  # noqa: E731
+            say("- 另报 HWN 按日历月（只描述）：" + "；".join(f"{m} 月 {f(s)}" for m, s in g10["hwn_month"].items()))
+        say(f"- JRM 成立的信号占 {g10['jrm_on']}%；x2 缺值 {g10['x2_missing']} 笔（缺值不挡）" if g10["jrm_on"] is not None
+            else f"- x2 缺值 {g10['x2_missing']} 笔（缺值不挡）")
+    for x in g10_note:
+        say(f"- {x}")
     yr = by_year(M) if len(M) else {}
     if yr:
         say("\n| 信号年 | W2 保留 | 挡掉 |")
@@ -358,7 +458,8 @@ def review(fetch: bool = True) -> int:
     Path(f"{out}.md").write_text("\n".join(LINES) + "\n", encoding="utf-8")
     Path(f"{out}.json").write_text(json.dumps({"run": str(today.date()), "data_through": str(last_bar.date()), "refresh": info,
                                                "n_all": int(len(F)), "main": ev, "decision": V, "side": side, "by_year": yr,
-                                               "idio": idio, "idio_note": idio_note, "x6": x6, "x6_note": x6_note, "code": code},
+                                               "idio": idio, "idio_note": idio_note, "x6": x6, "x6_note": x6_note,
+                                               "g10": g10, "g10_note": g10_note, "code": code},
                                               ensure_ascii=False, indent=1,
                                               default=float), encoding="utf-8")
     row = {"run": str(today.date()), "scope": "all", "data_through": str(last_bar.date()), "closed": ev["n"], "w2_year": V["year"],
@@ -370,6 +471,8 @@ def review(fetch: bool = True) -> int:
                                    {"data_through": str(last_bar.date()), "code": code, "x6_sec_ok": x6["sec_ok"]}))
         rows.append(EF.r4_history_row(x6["r4"]["eval"], str(today.date()), "all_R4", "r4_year", x6["r4"]["year"],
                                       {"data_through": str(last_bar.date()), "code": code}))          # 第九节
+    if g10 is not None:                                                       # 第十节：判定过的年份下次不再判定
+        rows += GF.history_rows(g10["main"], str(today.date()), "all_", {"data_through": str(last_bar.date()), "code": code})
     pd.concat([hist, pd.DataFrame(rows)], ignore_index=True).to_csv(hist_fp, index=False)   # 只追加
     return 0
 

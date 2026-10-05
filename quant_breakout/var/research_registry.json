@@ -12323,5 +12323,26 @@
    "价格锚点方向与文献相反"
   ],
   "notes": "结构性障碍：挡掉约三成以上信号在 Z 伤账户；同一天换顺序只改 1 笔"
+ },
+ {
+  "line": 8733,
+  "date": "2026-10-05",
+  "title": "用户决定〔58〕①③：HWN / X2G / JRM 加进全市场前向检验（scripts/w2_forward_all.py 第十节，只记录、不交易）；另开第十一个研究循环（卖法，按股票种类）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（第十节的规则；登记之后才发生的信号 ≥ 2026-10-06）",
+  "script": "scripts/w2_forward_all.py（第十节）/ qbreak/gate_forward.py",
+  "output": "var/out/w2_forward_all_review.md（季度复核 2i）",
+  "candidates": [
+   "HWN",
+   "X2G",
+   "JRM"
+  ],
+  "baseline": "B3",
+  "windows": "全市场（J-Quants）2026-10-06〜；年度判定 2027-09-28〜2031-09-28",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "证实 = 胜率差（不挡 − 挡）99% 下限 > 0 且每笔差 ≥ 0；否定 = 胜率差或每笔差 95% 上限 < 0；只记录，改模拟盘另做账户研究并经用户确认"
  }
 ]

@@ -792,5 +792,12 @@
    }
   ],
   "summary": "20 个做法：V1 过 12 个、V3 只过 1 个（JRM）；最接近 HWN（只差 V3）/ X2G（只差 V3）/ JRM（只差 V6）；没找到 → 待办〔58〕"
+ },
+ "decision": {
+  "date": "2026-10-05",
+  "todo": "〔58〕",
+  "choice": "①③",
+  "user": "把 HWN、X2G、JRM 加进前向检验 / 换方向研究卖法，有可能每个股票种类周期都不一样？",
+  "note": "① 登记在 scripts/w2_forward_all.py 第十节（qbreak/gate_forward.py；只记录、不交易）；③ 另开第十一个研究循环（卖法）；本循环的结论不变（exhausted）"
  }
 }
