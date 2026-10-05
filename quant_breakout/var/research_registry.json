@@ -13328,5 +13328,31 @@
   ],
   "era_dependent_or_reversed": [],
   "notes": "价格：J-Quants TDnet 附加包 ¥11,000 / 月（税込），2026-10-05 查；TOB 可用 EDINET API 书类种别 240 / 290"
+ },
+ {
+  "line": 9302,
+  "date": "2026-10-05",
+  "title": "登记「所有股票的起涨点 / 起跌点 × 日 / 周 / 月线图形」：事后标注（按各股波动的 2σ 摆动）→ 46 个日 / 周 / 月线特征 + 30 种 K 线形态 × 3 周期的图集；上涨 / 下跌模型（逻辑回归）在 2022〜2026 检验，要比波动 / 规模 / 动量 / 20 日涨跌多出东西（G1〜G6）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（规则、代码与登记前个数；之后不改、只运行一次）",
+  "script": "scripts/turn_shape_study.py",
+  "output": "var/out/turn_shape_study.md（运行后）",
+  "candidates": [
+   {
+    "id": "rise",
+    "result": "登记"
+   },
+   {
+    "id": "fall",
+    "result": "登记"
+   }
+  ],
+  "baseline": "基础模型（σ60、log 时价总额、12-1 动量、20 日涨跌）",
+  "windows": "探索 2017-10-02〜2021-12-30；确认 2022-01-04〜2026-07-17（每 5 个交易日一个样本日）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "登记前只数个数：样本 1,162,144 行；起涨点 0.63% / 0.75%、起跌点 0.37% / 0.30%（探索 / 确认）；周 / 月线与 mtf.bars 一致"
  }
 ]
