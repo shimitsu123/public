@@ -12701,5 +12701,31 @@
    "HWT 在 Z 截断大涨（每笔 +6.00 → +2.60%）"
   ],
   "notes": "三个都是事后；X2T 两条路线都只差一点（Z −0.005、合计 −0.002）"
+ },
+ {
+  "line": 8920,
+  "date": "2026-10-05",
+  "title": "第十一个研究循环第 7 轮登记（最后 2 个）：TCY 个股上涨周期定最长持有（round(1.5 × C)、20〜60 天）/ VBK 突破当天量比（放量 → 放宽、缩量 → 收紧）",
+  "kind": "engineering",
+  "domain": "出场/卖点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop11_r07_last.py",
+  "output": "var/out/loop11_r07_last.md（运行后）",
+  "candidates": [
+   {
+    "id": "TCY",
+    "result": "登记"
+   },
+   {
+    "id": "VBK",
+    "result": "登记"
+   }
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "脚本在第 4〜6 轮结果之前写好；TCY 是事后（V6 适用）；20 / 20"
  }
 ]
