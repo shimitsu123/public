@@ -12432,5 +12432,29 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "门槛只数个数；接线核对通过"
+ },
+ {
+  "line": 8800,
+  "date": "2026-10-05",
+  "title": "第十一个研究循环第 1 轮 ULC / ERK / VOK → 三个都第一关不过；VOK（高波动的票放宽卖法，学参数）胜率 +2.21 pp、每笔 +0.16 pp，但 E / J 账户 −0.024 / −0.027、池子与两种学参数检验不支持",
+  "kind": "study",
+  "domain": "出场/卖点",
+  "registration": "cdfaff0（登记后代码未改、只运行一次）",
+  "script": "scripts/loop11_r01_cycle.py",
+  "output": "var/out/loop11_r01_cycle.md",
+  "candidates": [
+   "ULC",
+   "ERK",
+   "VOK"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [
+   "按个股周期 / 走势区分卖法：E 伤账户、J 略好",
+   "VOK：胜率升在 E，账户没跟上"
+  ],
+  "notes": "按种类区分卖法的第一批：没有通过的"
  }
 ]

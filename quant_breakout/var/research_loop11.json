@@ -69,5 +69,192 @@
  },
  "prereq_ok": true,
  "fingerprint": "3b2e8757be7b4a74",
- "rounds": []
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-05",
+   "title": "个股上涨段长度 ULC / 个股走势顺滑度 ERK / 波动分档（学参数）VOK",
+   "registered": "cdfaff0",
+   "script": "scripts/loop11_r01_cycle.py",
+   "output": "var/out/loop11_r01_cycle.md",
+   "vok_full_map": {
+    "low": "base",
+    "mid": "base",
+    "high": "wide"
+   },
+   "approaches": [
+    {
+     "id": "ULC",
+     "family": "卖法·个股上涨段长度",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": 1.34,
+     "dmean": -1.318,
+     "sum": -0.167,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.052,
+      "E": -0.151,
+      "J": 0.036
+     },
+     "era_dwin": {
+      "Z": -7.8,
+      "E": -1.4,
+      "J": 7.8
+     },
+     "pools": {
+      "W": {
+       "dwin": -0.228,
+       "dmean": -0.0673,
+       "changed": 272
+      },
+      "Jx": {
+       "dwin": -0.631,
+       "dmean": -0.1332,
+       "changed": 353
+      },
+      "Zx": {
+       "dwin": -1.312,
+       "dmean": -0.3638,
+       "changed": 202
+      }
+     }
+    },
+    {
+     "id": "ERK",
+     "family": "卖法·个股趋势顺滑度",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -1.44,
+     "dmean": -0.759,
+     "sum": 0.012,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": 0.186,
+      "E": -0.199,
+      "J": 0.025
+     },
+     "era_dwin": {
+      "Z": -4.6,
+      "E": -4.7,
+      "J": 2.4
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.913,
+       "dmean": 0.0446,
+       "changed": 294
+      },
+      "Jx": {
+       "dwin": 0.0,
+       "dmean": -0.2072,
+       "changed": 476
+      },
+      "Zx": {
+       "dwin": 0.525,
+       "dmean": 0.0245,
+       "changed": 233
+      }
+     }
+    },
+    {
+     "id": "VOK",
+     "family": "卖法·波动分档（学参数）",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": 2.21,
+     "dmean": 0.16,
+     "sum": -0.042,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": true,
+       "B2": true,
+       "B3": false,
+       "V4": false,
+       "V5": false,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": false,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": 0.009,
+      "E": -0.024,
+      "J": -0.027
+     },
+     "era_dwin": {
+      "Z": -1.0,
+      "E": 5.6,
+      "J": 1.6
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.0,
+       "dmean": 0.3006,
+       "changed": 133
+      },
+      "Jx": {
+       "dwin": 0.379,
+       "dmean": -0.0182,
+       "changed": 264
+      },
+      "Zx": {
+       "dwin": -1.05,
+       "dmean": 0.0321,
+       "changed": 94
+      }
+     }
+    }
+   ]
+  }
+ ]
 }
