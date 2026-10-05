@@ -12677,5 +12677,29 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "脚本在第 4〜5 轮结果之前写好；三个都是事后（V6 适用）；SZS 的池子几乎全是「小」"
+ },
+ {
+  "line": 8908,
+  "date": "2026-10-05",
+  "title": "第十一个研究循环第 5 轮 HWT / X2T / JRT（选股闸门改成收紧卖法）→ 三个都第一关不过；X2T 胜率 +2.03 pp、账户合计 +0.028，但 Z −0.025（容许 −0.02）、池子方向相反",
+  "kind": "study",
+  "domain": "出场/卖点",
+  "registration": "d7df49e（登记后代码未改、只运行一次）",
+  "script": "scripts/loop11_r05_gates.py",
+  "output": "var/out/loop11_r05_gates.md",
+  "candidates": [
+   "HWT",
+   "X2T",
+   "JRT"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [
+   "X2T 胜率提高主要来自 J（+4.0 pp），W / Zx 池子方向相反",
+   "HWT 在 Z 截断大涨（每笔 +6.00 → +2.60%）"
+  ],
+  "notes": "三个都是事后；X2T 两条路线都只差一点（Z −0.005、合计 −0.002）"
  }
 ]

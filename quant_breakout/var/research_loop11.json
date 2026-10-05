@@ -808,6 +808,187 @@
      }
     }
    ]
+  },
+  {
+   "round": 5,
+   "date": "2026-10-05",
+   "title": "选股闸门改收紧：HWT 5〜10 月 / X2T x2 ≤ 0 / JRT 日経落后核心（事后）",
+   "registered": "d7df49e",
+   "script": "scripts/loop11_r05_gates.py",
+   "output": "var/out/loop11_r05_gates.md",
+   "approaches": [
+    {
+     "id": "HWT",
+     "family": "卖法·选股闸门改收紧",
+     "kind": "label",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -0.06,
+     "dmean": -0.673,
+     "sum": -0.197,
+     "passed": 2,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      }
+     },
+     "d": {
+      "Z": -0.233,
+      "E": -0.018,
+      "J": 0.054
+     },
+     "era_dwin": {
+      "Z": -5.2,
+      "E": 2.3,
+      "J": 0.0
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.457,
+       "dmean": -0.2677,
+       "changed": 234
+      },
+      "Jx": {
+       "dwin": 1.01,
+       "dmean": 0.0677,
+       "changed": 365
+      },
+      "Zx": {
+       "dwin": -1.05,
+       "dmean": -0.6659,
+       "changed": 227
+      }
+     }
+    },
+    {
+     "id": "X2T",
+     "family": "卖法·选股闸门改收紧",
+     "kind": "label",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 2.03,
+     "dmean": 0.015,
+     "sum": 0.028,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": true,
+       "B2": true,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      }
+     },
+     "d": {
+      "Z": -0.025,
+      "E": 0.033,
+      "J": 0.02
+     },
+     "era_dwin": {
+      "Z": -0.7,
+      "E": 0.0,
+      "J": 4.0
+     },
+     "pools": {
+      "W": {
+       "dwin": -0.457,
+       "dmean": -0.4368,
+       "changed": 134
+      },
+      "Jx": {
+       "dwin": 0.126,
+       "dmean": 0.0709,
+       "changed": 186
+      },
+      "Zx": {
+       "dwin": -1.312,
+       "dmean": -0.2601,
+       "changed": 142
+      }
+     }
+    },
+    {
+     "id": "JRT",
+     "family": "卖法·选股闸门改收紧",
+     "kind": "label",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -0.36,
+     "dmean": -0.057,
+     "sum": 0.004,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": true,
+       "B3": true,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      },
+      "A": {
+       "A1": false,
+       "A2": true,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      }
+     },
+     "d": {
+      "Z": -0.01,
+      "E": 0.005,
+      "J": 0.009
+     },
+     "era_dwin": {
+      "Z": -1.8,
+      "E": 2.3,
+      "J": -1.6
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.228,
+       "dmean": -0.1151,
+       "changed": 35
+      },
+      "Jx": {
+       "dwin": 0.253,
+       "dmean": 0.0772,
+       "changed": 108
+      },
+      "Zx": {
+       "dwin": -1.575,
+       "dmean": -0.3569,
+       "changed": 60
+      }
+     }
+    }
+   ]
   }
  ]
 }
