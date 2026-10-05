@@ -12744,5 +12744,29 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "回答用户「有可能每个股票种类周期都不一样？」；在第 6〜7 轮结果之前写好"
+ },
+ {
+  "line": 8939,
+  "date": "2026-10-05",
+  "title": "第十一个研究循环第 6 轮 SZS / TAG / N52 → 三个都第一关不过；N52 胜率 +3.50 pp、账户合计 +0.115（三个年代都不差）但扩大池每笔都变差（V4 / V6）；SZS 池子更好、账户 −0.406",
+  "kind": "study",
+  "domain": "出场/卖点",
+  "registration": "6936508（登记后代码未改、只运行一次）",
+  "script": "scripts/loop11_r06_stage.py",
+  "output": "var/out/loop11_r06_stage.md",
+  "candidates": [
+   "SZS",
+   "TAG",
+   "N52"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "不通过",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [
+   "N52：日経225 账户三个年代都不差，但 W / Jx / Zx 池子每笔都变差",
+   "SZS：扩大池每笔更好，日経225 账户变差"
+  ],
+  "notes": "三个都是事后；N52 路线 A 的 A1〜A3 都过，差在池子"
  }
 ]
