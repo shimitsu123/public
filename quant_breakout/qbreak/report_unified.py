@@ -74,6 +74,7 @@ def build_unified_data() -> dict:
             "price_check": td.get("price_check") or {},          # 行情交叉核对（qbreak/price_check.py；yfinance × J-Quants，只报警）
             "fwdj": td.get("fwdj") or {},                        # 前向记录判断层（qbreak/fwd_judgment.py；2026-09-30 起影响日本个股新仓）
             "combo_c": td.get("combo_c") or {},                  # 关联搭配 C（qbreak/combo_c.py；2026-10-01 的决策起影响日本个股新仓）
+            "tbf": td.get("tbf") or {},                          # TBF 像起跌点就不买（qbreak/tbf.py；2026-10-05 的决策起影响日本个股新仓）
             "exit_mode": td.get("exit_mode") or {},              # 个股的离场方式（qbreak/exit_rules.py；var/sim.json exits）
             "idle_cash": td.get("idle_cash") or {},              # 闲置资金的方式与现在拿什么（qbreak/idle_cash.py；var/sim.json idle_cash）
             "survey_failed": td.get("survey_failed") or {},      # 因子调查取不到的数据源（qbreak/survey.LAST_FAILED）
@@ -199,6 +200,9 @@ def missing_items(d: dict) -> list[str]:
         out.append(f"关联搭配 C 今天没生效：{cc.get('why') or '—'} —— 明天的新仓按原规则（不跳过任何票）")
     elif cc.get("enabled") and cc.get("errors"):
         out.append("关联搭配 C 有算不了的项（按 0 票 / 这一天 C 不动）：" + "；".join(f"{k}：{v}" for k, v in cc["errors"].items()))
+    tb = d.get("tbf") or {}
+    if tb.get("enabled") and not tb.get("applied"):
+        out.append(f"TBF（像起跌点就不买）今天没生效：{tb.get('why') or '—'} —— 明天的新仓按原规则（不挡任何票）")
     ef = d.get("era") or {}
     if started and ef.get("error"):
         out.append(f"时代主线前向记录：这次没记上（{ef['error']}）—— 不影响交易；这个月不补写，下个月第一次运行照常记")
@@ -669,6 +673,46 @@ def _combo_c_html(d: dict) -> str:
             "<b>只用过去学时前推不成立</b>（2026-10-01 选股第二轮，登记 92e2ef2：每年只用之前的信号、按同一做法重学，2016〜2026 每笔只 +0.13 pp、2021-06 以后 −0.10 pp；"
             "C 的效果对学习样本怎么切很敏感）→ C 照旧在用，要不要关掉由你决定。"
             "关掉：var/sim.json 的 combo_c.enabled = false。非投资建议。</p></section>")
+
+
+def _tbf_html(d: dict) -> str:
+    """TBF「像起跌点就不买」（qbreak/tbf.py；2026-10-06 用户「把 TBF 加进现在的选股判断」，研究 scripts/turn_shape_combo.py 登记 23e248a /
+    结果 b36c893）：候选的日 / 周 / 月线三个尺度「像起跌点」的百分位、挡了哪些。"""
+    c = d.get("tbf") or {}
+    if not c.get("enabled"):
+        return ""
+    from .tbf import MIN_SCALES, SCALES, TOP
+    lab = {"D": "日线", "W": "周线", "M": "月线"}
+    if not c.get("applied"):
+        head = f"<p class='neg'>今天没生效：{escape(str(c.get('why') or '—'))}（明天按原规则）</p>"
+    else:
+        sk = c.get("skipped") or []
+        head = (f"<p>判定日 {escape(str(c.get('as_of')))}（最新收盘）：股票池可打分 {int(c.get('n_ref') or 0)} 只，其中 {int(c.get('skip_all_n') or 0)} 只「像起跌点」；"
+                + (f"明天不开新仓（TBF 挡掉）：<b>{escape('、'.join(sk))}</b>" if sk else "候选里没有要挡的") + "</p>")
+    rows = []
+    for t, v in sorted((c.get("stocks") or {}).items(), key=lambda kv: (not kv[1].get("skip"), kv[0])):
+        p = v.get("pct") or {}
+
+        def cell(k: str) -> str:
+            x = p.get(k)
+            if x is None:
+                return "<td class='n muted'>—</td>"
+            hot = float(x) > TOP
+            return f"<td class='n{' neg' if hot else ''}'>{float(x) * 100:.0f}%{'（最像）' if hot else ''}</td>"
+        rows.append(f"<tr><td>{escape(t)}</td>" + "".join(cell(k) for k in SCALES)
+                    + f"<td>{'<b>不买</b>' if v.get('skip') else ('不变' if v.get('scored') else '不变（算不出特征）')}</td></tr>")
+    tbl = ("<div class='scroll'><table><tr><th>候选</th>" + "".join(f"<th class='n'>{lab[k]}「像起跌点」百分位</th>" for k in SCALES)
+           + "<th>新仓</th></tr>" + "".join(rows) + "</table></div>") if rows else "<p class='muted'>最新收盘没有日本个股的买入候选</p>"
+    since = c.get("since")
+    return ("<section class='card'><h2>TBF 像起跌点就不买：日 / 周 / 月线三个尺度（"
+            + (f"{escape(str(since))} 的决策起" if since else "") + "影响日本个股新仓；用户要求）</h2>" + head + tbl
+            + f"<p class='muted'>做法：每天收盘，今天的股票池（日経225）里 45 个特征都算得出的票，用冻结的三个「起跌点」评分模型（日线 / 周线 / 月线，"
+            f"周 / 月线只用已完成的 K 线）各打一个分、在股票池里排百分位；&gt; {TOP * 100:.0f}% =「最像」；三个尺度里至少 {MIN_SCALES} 个最像 → 这只明天不开新仓，"
+            "其余不变（不放大）。基准账户（原规则）不加。每个候选的三个百分位记进前向记录 var/out/tbf_forward.csv（只追加）。</p>"
+            "<p class='muted'>证据（照实写）：研究（scripts/turn_shape_combo.py，登记 23e248a，结果 b36c893）里 TBF <b>第一关没过</b> —— "
+            "合起来胜率 50.73% → 57.01%、每笔 +3.25% → +4.05%，另外三个池子同方向；但账户 Calmar 合计只 +0.016，"
+            "评分模型没见过的 2022 年以后 Calmar −0.026（容许 −0.02）→ 改善主要在 2001〜2016。用户看过结果后要求加进来。"
+            "关掉：var/sim.json 的 tbf.enabled = false。非投资建议。</p></section>")
 
 
 def _fwdj_html(d: dict) -> str:
@@ -1191,7 +1235,7 @@ def render_unified_html(d: dict) -> str:
         watch="".join(watch) or "<tr><td colspan=12 class='muted'>尚无候补数据</td></tr>",
         timeline=_timeline_card(d),
         themes=_themes_html(d.get("themes") or {}, meta), policy=_policy_html(d.get("policy") or {}),
-        deepdip=_deepdip_html(d.get("deepdip") or {}), vct=_vct_html(d.get("vct_forward") or {}), fwdj=_fwdj_html(d), combo_c=_combo_c_html(d),
+        deepdip=_deepdip_html(d.get("deepdip") or {}), vct=_vct_html(d.get("vct_forward") or {}), fwdj=_fwdj_html(d), combo_c=_combo_c_html(d), tbf=_tbf_html(d),
         threat=_threat_html(d.get("threat") or {}), commod=_commod_html(d.get("commod") or [], with_us), shadow=_shadow_html(d),
         elig=_eligibility_html(d, meta), delist=_delist_html(d, meta), cost_sales=_cost_sales_html(d.get("cost_sales") or {}),
         invest_flow=_invest_flow_html(d.get("invest_flow") or {}),
@@ -1639,6 +1683,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 <section class="card"><h2>核心 ETF（闲置资金，表）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
 {fwdj}
 {combo_c}
+{tbf}
 {deepdip}
 {vct}
 <section class="card"><details><summary><h2 style="display:inline">大事件威胁指数的明细（只展示，不参与交易）</h2></summary>{threat}</details></section>

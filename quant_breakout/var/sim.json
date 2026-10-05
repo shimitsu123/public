@@ -94,5 +94,10 @@
   "enabled": true,
   "since": "2026-10-01",
   "note": "关联搭配 C「市场状态 × 个股特征」（qbreak/combo_c.py；研究 scripts/combo_all_study.py 登记 7f2ca59、结果 729c4ee、事后核对 63fa4d2；2026-10-01 用户「加进模拟盘并记录」）：2026-10-01 收盘的决策（10-02 06:57 JST 的 sim-day / 07:40 的执行器）起，只在「日経225 收盘在 200 日线上且 VIX < 20」时，日本个股候选按 5 个特征投票（vexp+、upper−、atrp−、r12−、us12−，三个年代一起学、冻结在 qbreak/combo_c.RULE），不利比有利多 2 票以上 → 这只不开新仓（×0），其余不变；其他市场格不动。云端 sim-day 决策前算 → var/combo_c.json，Mac 执行器经 scripts/liveu.sh 同步同一个文件。基准账户（原规则）不加。前向记录：scripts/score_forward.py 第十二节。enabled = false 即回到原规则。"
+ },
+ "tbf": {
+  "enabled": true,
+  "since": "2026-10-05",
+  "note": "TBF「像起跌点就不买」（qbreak/tbf.py；研究 scripts/turn_shape_combo.py 登记 23e248a、结果 b36c893；2026-10-06 用户「把 TBF 加进现在的选股判断」）：2026-10-05 收盘的决策（10-06 06:57 JST 的 sim-day / 07:40 的执行器）起，每天收盘时今天的股票池（日経225）里 45 个特征都算得出的票，用冻结的三个「起跌点」评分模型（日线 = turn_shape_wide U2、周 / 月线 = turn_shape_mtf；参数 var/tbf_model.json）各打分、在股票池里排百分位，三个尺度里至少两个 > 90% → 这只明天不开新仓（×0），其余不变。云端 sim-day 决策前算 → var/tbf.json，Mac 执行器经 scripts/liveu.sh 同步同一个文件。基准账户（原规则）不加。前向记录 var/out/tbf_forward.csv（只追加）。研究里第一关没过（2022 年以后账户 Calmar −0.026，容许 −0.02），用户看过结果后要求加进来。enabled = false 即回到原规则。"
  }
 }

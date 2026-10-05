@@ -819,7 +819,7 @@ def _core_all(cfg: dict) -> list[str]:
 
 
 def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hook=None, extra_core=(), cc_hook=None, fh_hook=None,
-                    br_hook=None):
+                    br_hook=None, tbf_hook=None):
     """模拟盘（sim-day）与实盘执行器（live-u）共用：按 var/sim.json 建统一引擎 —— 行情到最新收盘（去掉未收盘的当日 K 线）、
     牛熊分界、汇率、明天成交的新仓倍数（宏观 / 板块 / 状态层）、决算前不进场。返回 (eng, ctx)；ctx.make(state) 用同一套
     输入再建一个引擎（例如执行器演练账户的状态）。"""
@@ -934,13 +934,25 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
                 log.warning("关联搭配 C 算不了（今天按原规则）：%s", e)
         else:                                               # Mac 执行器：读云端算好、scripts/liveu.sh 同步过来的同一个文件
             cc_pl = CC.load(paths.home() / CC.FILE)
+    from qbreak import tbf as TBF
+    tbf_pl = None                                          # TBF 像起跌点就不买（2026-10-06 用户「把 TBF 加进现在的选股判断」；var/sim.json tbf.enabled 开关）
+    tbf_on = bool((cfg.get("tbf") or {}).get("enabled"))
+    if tbf_on:
+        if tbf_hook is not None:                            # 云端 sim-day：决策之前现算 → var/tbf.json
+            try:
+                tbf_pl = tbf_hook(ind, bar_date)
+            except Exception as e:                          # noqa: BLE001
+                log.warning("TBF 算不了（今天按原规则）：%s", e)
+        else:                                               # Mac 执行器：读云端算好、scripts/liveu.sh 同步过来的同一个文件
+            tbf_pl = TBF.load(paths.home() / TBF.FILE)
 
     def make(st, fj: bool = True, base: bool = False):
         """base = True：原规则（不加前向记录判断层与关联搭配 C、离场用死叉、闲置资金 1655）= 基准账户。
         闲置资金按这个账户自己的持仓配：以前的方式留下的 ETF 权重 0（下一次决策卖掉）。"""
         cfg_e = IC.apply(ucfg, "K0" if base else icmode, held=dict(st.core_units) if st is not None else None)
         e = UnifiedEngine(ind, cfg_e, params if base else params_x, ex, ccost, fx=fx, bear=bear, state=st)
-        _apply_live_mults(e, plans, None if (base or not fj) else fj_pl, bar_date, None if (base or not fj) else cc_pl)
+        _apply_live_mults(e, plans, None if (base or not fj) else fj_pl, bar_date, None if (base or not fj) else cc_pl,
+                          None if (base or not fj) else tbf_pl)
         e.live_fx_ok = is_trading_day(now_jst().date())    # 今天白天（日本营业日）才有换汇窗口
         e.entry_block_fn = eblock
         e.entry_gate_fn = gate.entry_block
@@ -948,7 +960,7 @@ def _unified_engine(a, cfg: dict, state, provider: str, extra_tickers=(), fj_hoo
         return e
     ctx = SimpleNamespace(data=data, ind=ind, plans=plans, extras=extras, params=params, dcfg=dcfg, ucfg=ucfg, u=u,
                           broker=broker, today=today, ex=ex, ccost=ccost, make=make, gate=gate, fj=fj_pl, fj_on=fj_on, xmode=xmode,
-                          bar_date=bar_date, icmode=icmode, ic_status=ic_status, delist=delist, cc=cc_pl, cc_on=cc_on, fh=fh_pl,
+                          bar_date=bar_date, icmode=icmode, ic_status=ic_status, delist=delist, cc=cc_pl, cc_on=cc_on, tbf=tbf_pl, tbf_on=tbf_on, fh=fh_pl,
                           br=br_pl)
     return make(state), ctx
 
@@ -991,18 +1003,22 @@ def _delist_update(today, state, ucfg=None) -> dict:
         return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 
-def _apply_live_mults(e, plans: dict, fj_pl: dict | None, bar_date: str | None, cc_pl: dict | None = None) -> dict | None:
+def _apply_live_mults(e, plans: dict, fj_pl: dict | None, bar_date: str | None, cc_pl: dict | None = None,
+                      tbf_pl: dict | None = None) -> dict | None:
     """明天成交的新仓倍数（与原模拟盘同一套宏观 / 板块 / 状态层）+ 前向记录判断层（只作用在日本个股：市场倍数与原有各层取 min，
     s < 0 的票 ×0.5 与板块倾斜取 min；同一天的候选 s 高的先、再按 F2，只用在最新一天的决策）+ 关联搭配 C（qbreak/combo_c.py：
-    「平静的牛市」里不利特征多 2 票以上的票 ×0，只用在最新一天的决策）。返回生效的判断层 | None。"""
+    「平静的牛市」里不利特征多 2 票以上的票 ×0，只用在最新一天的决策）+ TBF（qbreak/tbf.py：日 / 周 / 月线三个尺度里至少两个
+    「最像起跌点」的票 ×0，只用在最新一天的决策）。返回生效的判断层 | None。"""
     from qbreak import combo_c as CC
     from qbreak import fwd_judgment as FJ
+    from qbreak import tbf as TBF
     used = None
     for m, P in plans.items():
         sc, tm = P.scale, P.tmult or {}
         if m == "JP":
             sc, tm, used = FJ.apply(sc, tm, fj_pl, bar_date)
             tm, _ = CC.apply(tm, cc_pl, bar_date)
+            tm, _ = TBF.apply(tm, tbf_pl, bar_date)
         e.live_mult[m] = (sc, tm, P.block if isinstance(P.block, str) else None)
     if used is not None:
         last_i = len(e.gidx) - 1
@@ -1405,6 +1421,36 @@ def _cc_compute(ind: dict, bar_date: str, provider: str, market=None) -> dict:
     return pl
 
 
+def _tbf_compute(ind: dict, bar_date: str, cfg: dict) -> dict:
+    """TBF「像起跌点就不买」（qbreak/tbf.py）：云端 sim-day 在引擎决策之前算 → var/tbf.json（Mac 执行器读同一个文件）+ 前向记录
+    var/out/tbf_forward.csv（只追加）。参照 = 今天的日本股票池（同引擎的 universe()，已按退市时间表减过）；候选 = 最新 K 线上成立的日本个股。
+    算不了 → 文件写上原因、这一天不生效（= 原规则）。"""
+    from qbreak import tbf as TBF
+    from qbreak.config import universe
+    from qbreak.unified import market_of
+    from qbreak.utils import write_json
+    u = cfg.get("unified") or {}
+    core = set(u.get("core") or {})
+    pool = [t for t in universe("JP", (u.get("universe") or {}).get("JP", "broad")) if t in ind and t not in core]
+    cands = sorted(t for t in pool if market_of(t) == "JP" and len(ind[t]) and str(ind[t].index[-1].date()) == bar_date
+                   and bool(ind[t]["entry"].iloc[-1]))
+    try:
+        pl = TBF.compute(ind, bar_date, pool, cands)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("TBF 算不了（这一天不生效）：%s", e)
+        pl = TBF.payload(bar_date, {}, [], 0, {"行情": f"{type(e).__name__}: {e}"[:200]})
+    try:
+        write_json(paths.home() / TBF.FILE, pl)
+        n = TBF.append_forward(pl, paths.out_dir() / TBF.FORWARD)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("TBF 的文件 / 前向记录写不了：%s", e)
+        n = 0
+    sk = [t for t, v in (pl.get("stocks") or {}).items() if v.get("skip")]
+    log.info("TBF %s：股票池 %d 只可打分、%d 只像起跌点；候选 %d 只，不买 %d 只 %s；前向记录新写 %d 行", bar_date, pl.get("n_ref") or 0,
+             len(pl.get("skip_all") or []), len(pl.get("stocks") or {}), len(sk), sk, n)
+    return pl
+
+
 def _baseline_step(ctx, raw_before: dict | None) -> dict:
     """基准账户（原规则：不加前向记录判断层、离场用 MACD 死叉；2026-09-29 用户要求的改动都不加）：同一套行情、同一个引擎
     → var/state/unified_state_base.json。第一次 = 复制模拟盘当时（这次推进之前）的状态，之后每天各走各的；只作对照，失败不影响模拟盘。"""
@@ -1508,13 +1554,15 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     hook = (lambda ind, params, u, bar_date: _fj_compute(ind, params, u, bar_date, {**pre, "provider": provider})) if fj_on else None
     cc_on = bool((cfg.get("combo_c") or {}).get("enabled"))
     cc_hook = (lambda ind, bar_date: _cc_compute(ind, bar_date, provider)) if cc_on else None   # 关联搭配 C：决策之前现算
+    tbf_on = bool((cfg.get("tbf") or {}).get("enabled"))
+    tbf_hook = (lambda ind, bar_date: _tbf_compute(ind, bar_date, cfg)) if tbf_on else None    # TBF 像起跌点就不买：决策之前现算
     from qbreak import idle_cash as _IC
     fh_hook = ((lambda bear, det, bar_date: _fh_compute(bear, det, bar_date, provider))     # FJE：决策之前现算 → var/fx_hedge.json
                if _IC.mode_of(cfg) in _IC.FX_HEDGE else None)
     br_hook = ((lambda bear, bar_date, spx: _br_compute(bear, bar_date, provider, spx=spx))   # BCU：决策之前现算 → var/bond_refuge.json
                if _IC.mode_of(cfg) in _IC.BOND_REFUGE else None)
     eng, ctx = _unified_engine(a, cfg, state, provider, extra_tickers=extra, fj_hook=hook, extra_core=xcore, cc_hook=cc_hook,
-                               fh_hook=fh_hook, br_hook=br_hook)
+                               fh_hook=fh_hook, br_hook=br_hook, tbf_hook=tbf_hook)
     data, plans, extras, params, dcfg, today = ctx.data, ctx.plans, ctx.extras, ctx.params, ctx.dcfg, ctx.today
     pcheck = _price_check_panel(data, today)                 # 行情交叉核对（J-Quants，㉚-1）：只报警，不改行情 / 交易
     idxs, cutoff = _new_bar_idxs(eng, state)
@@ -1531,7 +1579,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
             eng.step(i)
             planned[str(eng.gidx[i].date())] = sorted(state.plan)
     st_path.write_text(_json.dumps(state.to_dict(), ensure_ascii=False, indent=1, default=float), encoding="utf-8")
-    baseline = (_baseline_step(ctx, raw) if (fj_on or cc_on or ctx.xmode != "DC" or ctx.icmode != "K0")   # 基准账户：同一天、同一套行情、原规则
+    baseline = (_baseline_step(ctx, raw) if (fj_on or cc_on or tbf_on or ctx.xmode != "DC" or ctx.icmode != "K0")   # 基准账户：同一天、同一套行情、原规则
                 else None)                                                                        #（对照改动的效果）
     executor = _executor_paper_step(ctx, state)            # 实盘执行器的演练账户：同一天、同一套行情，应与模拟盘逐日一致
     i_last = int(eng.gidx.searchsorted(pd.Timestamp(state.last_date))) if state.last_date else len(eng.gidx) - 1
@@ -1566,6 +1614,9 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     from qbreak import combo_c as _CC
     out["combo_c"] = {**_CC.summary(ctx.cc, ctx.bar_date, ctx.cc_on),                  # 关联搭配 C：今天的市场格、候选的投票与跳过
                       "since": (cfg.get("combo_c") or {}).get("since")}
+    from qbreak import tbf as _TBF
+    out["tbf"] = {**_TBF.summary(ctx.tbf, ctx.bar_date, ctx.tbf_on),                   # TBF 像起跌点就不买：候选的三个百分位与被挡的票
+                  "since": (cfg.get("tbf") or {}).get("since")}
     from qbreak import exit_rules as _EXR
     out["exit_mode"] = {"JP": ctx.xmode, "label": _EXR.LABELS[ctx.xmode]}   # 个股的离场方式（var/sim.json exits）
     out["idle_cash"] = ctx.ic_status                         # 闲置资金的方式与现在拿什么（var/sim.json idle_cash）
@@ -3277,6 +3328,8 @@ def _live_unified_body(a) -> int:
     sm["fwd_judgment"] = _fj_brief(ctx)                     # 前向记录判断层：云端算好的文件今天有没有生效（页面 / 日志）
     from qbreak import combo_c as _CC
     sm["combo_c"] = _CC.brief(ctx.cc, ctx.bar_date, ctx.cc_on)    # 关联搭配 C：云端算好的文件今天有没有生效、跳过了哪些
+    from qbreak import tbf as _TBF
+    sm["tbf"] = _TBF.brief(ctx.tbf, ctx.bar_date, ctx.tbf_on)     # TBF：云端算好的文件今天有没有生效、挡了哪些
     sm["exit_mode"] = ctx.xmode                              # 个股的离场方式（var/sim.json exits；与云端模拟盘同一个）
     sm["idle_cash"] = ctx.ic_status                          # 闲置资金的方式与现在拿什么（var/sim.json idle_cash；与云端模拟盘同一个）
     write_json(paths.out_dir() / f"live_unified_{tag}.json", sm)

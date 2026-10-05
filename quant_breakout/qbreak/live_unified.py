@@ -818,6 +818,9 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     cc = sm.get("combo_c") or {}
     if cc.get("enabled") and not cc.get("applied"):
         short += "｜★ 关联搭配 C 没生效"
+    tb = sm.get("tbf") or {}
+    if tb.get("enabled") and not tb.get("applied"):
+        short += "｜★ TBF 没生效"
     lines = [f"- 决策日 {sm.get('decided_on') or '—'} → 成交日 {sm.get('fill_day') or '—'}；权益 ¥{eq:,.0f}"
              f"（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）；现金 ¥{float(st.cash_jpy):,.0f}"]
     if invested is not None and abs(float(invested) - float(capital)) >= 1.0:
@@ -846,6 +849,9 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     if cc.get("enabled"):                                   # 关联搭配 C（云端算好的 combo_c.json）
         from .combo_c import text as cc_text
         lines.append(cc_text(cc))
+    if tb.get("enabled"):                                   # TBF 像起跌点就不买（云端算好的 tbf.json）
+        from .tbf import text as tbf_text
+        lines.append(tbf_text(tb))
     if sm.get("exit_mode") and sm["exit_mode"] != "DC":        # 个股的离场方式（var/sim.json exits）
         from .exit_rules import LABELS
         lines.append(f"- 个股离场：{LABELS.get(sm['exit_mode'], sm['exit_mode'])}（止损 / 跟踪 / 止盈 / 最长持有照旧）")

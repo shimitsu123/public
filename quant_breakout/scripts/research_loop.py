@@ -147,16 +147,19 @@ def _strip_notes(o):
 
 
 def rules_snapshot(home: Path | None = None) -> dict:
-    """决定 B0 的规则（不含说明文字）：sim.json 的有关项、best_params_JP.json、牛熊分界检测器、判断层与 C 的常数。"""
+    """决定 B0 的规则（不含说明文字）：sim.json 的有关项、best_params_JP.json、牛熊分界检测器、判断层与 C 的常数、
+    TBF（2026-10-06 用户要求加进选股判断）的开关、常数与冻结模型文件的指纹。"""
     from qbreak import combo_c as CC
     from qbreak import fwd_judgment as FJ
     from qbreak import paths
+    from qbreak import tbf as TBF
     home = Path(home) if home is not None else paths.home()
     sim = json.loads((home / "sim.json").read_text(encoding="utf-8"))
     bp = json.loads((home / "best_params_JP.json").read_text(encoding="utf-8"))
     bb = json.loads((home / "bullbear.json").read_text(encoding="utf-8"))
     fj, ex, ic, cc = (sim.get("fwd_judgment") or {}), (sim.get("exits") or {}), (sim.get("idle_cash") or {}), (sim.get("combo_c") or {})
-    return {"sim": _strip_notes({k: sim.get(k) for k in SIM_KEYS}),
+    tb = sim.get("tbf") or {}
+    snap = {"sim": _strip_notes({k: sim.get(k) for k in SIM_KEYS}),
             "fwd_judgment": {"enabled": fj.get("enabled"), "a5_k4_points": fj.get("a5_k4_points")},
             "exits": ex.get("JP"), "idle_cash": ic.get("mode"), "combo_c": cc.get("enabled"),
             "best_params_JP": bp, "bullbear": bb.get("detector"),
@@ -164,6 +167,12 @@ def rules_snapshot(home: Path | None = None) -> dict:
                          "STOCK_NEG_MULT": FJ.STOCK_NEG_MULT, "WARN_PCT": FJ.WARN_PCT},
             "combo_c_rule": {"RULE": {k: list(v) for k, v in CC.RULE.items()}, "VIX_MAX": CC.VIX_MAX, "MA": [CC.MA_N, CC.MA_MIN],
                              "SKIP_BELOW": CC.SKIP_BELOW}}
+    if tb:                                                   # 没有 tbf 这一项的旧配置 → 指纹与以前相同（B3 = 3b2e8757be7b4a74）
+        mf = paths.PROJECT_ROOT / "var" / TBF.MODEL_FILE
+        snap["sim"]["tbf"] = tb.get("enabled")
+        snap["tbf_rule"] = {"TOP": TBF.TOP, "MIN_SCALES": TBF.MIN_SCALES, "SCALES": list(TBF.SCALES),
+                            "model_sha": hashlib.sha256(mf.read_bytes()).hexdigest()[:16] if mf.exists() else None}
+    return snap
 
 
 def rules_fingerprint(home: Path | None = None) -> str:
