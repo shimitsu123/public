@@ -12253,5 +12253,26 @@
    "RKB：账户合计 +0.023 但胜率 −1.17 pp"
   ],
   "notes": "三个都差 V1"
+ },
+ {
+  "line": 8699,
+  "date": "2026-10-05",
+  "title": "登记：第十个研究循环第 7 轮（最后 3 个）HWN 5〜10 月不开新仓 / VEX 均量没放大 / DYL 股息率低（HWN 不是事后；VEX / DYL 事后，V6 = Zx）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop10_r07_final.py",
+  "output": "var/out/loop10_r07_final.md",
+  "candidates": [
+   "HWN",
+   "VEX",
+   "DYL"
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "ID 登记前核对；接线核对通过；碰到 B3 成交 HWN 55 / VEX 41 / DYL 38 笔（共 140）；DYL 在 Z 挡 65% 的信号"
  }
 ]
