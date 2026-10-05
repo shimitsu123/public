@@ -12334,9 +12334,18 @@
   "script": "scripts/w2_forward_all.py（第十节）/ qbreak/gate_forward.py",
   "output": "var/out/w2_forward_all_review.md（季度复核 2i）",
   "candidates": [
-   "HWN",
-   "X2G",
-   "JRM"
+   {
+    "id": "HWN",
+    "result": "前向检验登记（只记录）"
+   },
+   {
+    "id": "X2G",
+    "result": "前向检验登记（只记录）"
+   },
+   {
+    "id": "JRM",
+    "result": "前向检验登记（只记录）"
+   }
   ],
   "baseline": "B3",
   "windows": "全市场（J-Quants）2026-10-06〜；年度判定 2027-09-28〜2031-09-28",
@@ -12344,5 +12353,54 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "证实 = 胜率差（不挡 − 挡）99% 下限 > 0 且每笔差 ≥ 0；否定 = 胜率差或每笔差 95% 上限 < 0；只记录，改模拟盘另做账户研究并经用户确认"
+ },
+ {
+  "line": 8750,
+  "date": "2026-10-05",
+  "title": "HWN / X2G / JRM 前向检验的检出力（只算区间宽度）：按月聚类的标准误 4.7〜10.7 pp → 真实差 +8 pp 也要约 7〜18 年（按笔）以上；〔58〕的时间估计太乐观，已更正",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "0e3898c（前向检验的规则；本脚本只算宽度）",
+  "script": "scripts/gate_forward_calib.py",
+  "output": "var/out/gate_forward_calib.md",
+  "candidates": [
+   {
+    "id": "HWN",
+    "result": "胜率差标准误 4.7〜9.5 pp（+8 pp 要约 7〜14 年以上）"
+   },
+   {
+    "id": "X2G",
+    "result": "4.7〜7.4 pp（约 6.5〜8.5 年以上）"
+   },
+   {
+    "id": "JRM",
+    "result": "6.7〜10.7 pp（约 8〜18 年以上）"
+   }
+  ],
+  "baseline": "B3",
+  "windows": "W 2006〜2016、Jx 2017〜、Zx 2001〜2006（已看过的池子，只估宽度）",
+  "verdict": "前向记录",
+  "stable_findings": [
+   "按日子挡的闸门新证据按月累积，前向检验要很多年"
+  ],
+  "era_dependent_or_reversed": [],
+  "notes": "前向检验照旧（长期保险，不是快的答案）"
+ },
+ {
+  "line": 8761,
+  "date": "2026-10-05",
+  "title": "第十一个研究循环登记：卖法（按股票种类 / 周期区分）—— 两条路线（成功率 = 第十个循环 V1〜V3 / 账户 = 第九个循环 + 胜率不降 2 pp 以上）+ W / Jx 配对假想单笔 + 种类标签随机打乱第二关",
+  "kind": "engineering",
+  "domain": "出场/卖点",
+  "registration": "本提交（循环规则）",
+  "script": "scripts/research_loop11.py / scripts/loop11_common.py",
+  "output": "var/research_loop11.json（--init 后）",
+  "candidates": [],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09（+ W / Jx / Zx）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "以前的卖法研究全部是所有股票同一套；按种类区分从来没做过"
  }
 ]
