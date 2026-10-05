@@ -12594,5 +12594,35 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "脚本在第 3 轮结果之前写好；RSM → RSD（ID 以前用过）"
+ },
+ {
+  "line": 8872,
+  "date": "2026-10-05",
+  "title": "第十一个研究循环第 5 轮登记：HWT / X2T / JRT 把第十个循环的三个选股闸门（5〜10 月 / x2 ≤ 0 / 日経落后核心）改成「照买、卖得快」",
+  "kind": "engineering",
+  "domain": "出场/卖点",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/loop11_r05_gates.py",
+  "output": "var/out/loop11_r05_gates.md（运行后）",
+  "candidates": [
+   {
+    "id": "HWT",
+    "result": "登记"
+   },
+   {
+    "id": "X2T",
+    "result": "登记"
+   },
+   {
+    "id": "JRT",
+    "result": "登记"
+   }
+  ],
+  "baseline": "B3",
+  "windows": "Z / E / J（+ W / Jx / Zx）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "脚本在第 3〜4 轮结果之前写好；三个都是事后（V6 适用）"
  }
 ]
