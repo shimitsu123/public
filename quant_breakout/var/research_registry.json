@@ -13200,5 +13200,22 @@
    "只用判断层：Z +0.096 / E +0.060 / J +0.067、回撤浅，但后一半合计 −0.056、J 2025〜2026 每年少赚 9〜12 pp（只描述、事后）"
   ],
   "notes": "倍数为 0 的日子 46.1%、平均 0.448；2026-10-05 读数 ×0.5；判断层单独的结果是看了结果才看到的，要用只能另外登记（第二关 + 没看过的数据或前向记录）"
+ },
+ {
+  "line": 9223,
+  "date": "2026-10-05",
+  "title": "用户决定（待办〔64〕③）：回到〔63〕的选股方向 → TDnet 适时开示要加购 J-Quants 附加包（API 实测 403，✋ 待办〔65〕）；大量保有報告書（Standard 已含）现在就做",
+  "kind": "decision",
+  "domain": "选股/买点",
+  "registration": null,
+  "script": "scripts/lvs_data.py",
+  "output": null,
+  "candidates": [],
+  "baseline": "B3（模拟盘与执行器不变；闲置资金 Q1B 不受倍率影响）",
+  "windows": "—（决定与数据准备，没有运行候选）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "2026-10-05 实测：/v2/td/list → 403「This API is not available on your subscription」；/v2/edinet/large-volume-shareholders → 200（2026-10-02 提出 56 份）；TDnet 附加包 过去 5 年 ¥11,000 / 月（税込，官方价格页 2026-10-05，仅对检索时点有效）；大量保有原始记录含个人信息 → 只在 var/cache/jquants/edinet_lvs/"
  }
 ]
