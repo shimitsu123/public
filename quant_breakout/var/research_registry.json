@@ -12834,5 +12834,35 @@
    "成交额大小与周期的关系在年代之间方向会变"
   ],
   "notes": "回答用户「有可能每个股票种类周期都不一样？」；不算第十一个循环的做法"
+ },
+ {
+  "line": 8986,
+  "date": "2026-10-05",
+  "title": "用户决定〔59〕→ 新方向：业种「影响力」周期研究登记（H1-P 影响力到顶区 / H1-R 到头确认 → 之后跑输？H2-E 基本面占比连升而股价没跟上 → 之后跑赢？美国 1926〜 + 日本 TOPIX-17）",
+  "kind": "engineering",
+  "domain": "行业/主题/联动",
+  "registration": "本提交（登记后代码不改、只运行一次）",
+  "script": "scripts/industry_cycle_study.py",
+  "output": "var/out/industry_cycle_study.md（运行后）",
+  "candidates": [
+   {
+    "id": "IFP",
+    "result": "登记"
+   },
+   {
+    "id": "IFR",
+    "result": "登记"
+   },
+   {
+    "id": "IFE",
+    "result": "登记"
+   }
+  ],
+  "baseline": "全部业种月（E：同一判定月的全部业种）",
+  "windows": "美国 1926〜2026（KF49）/ 日本 2008〜2026（TOPIX-17）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "登记前只数个数：美国 P 28 / R 15 / E 220；日本 P 0 / R 0 / E 4 → H1 在日本没法验证；H3 公司与国家关系缺数据，这次不检验"
  }
 ]
