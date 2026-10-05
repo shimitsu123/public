@@ -13217,5 +13217,49 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "2026-10-05 实测：/v2/td/list → 403「This API is not available on your subscription」；/v2/edinet/large-volume-shareholders → 200（2026-10-02 提出 56 份）；TDnet 附加包 过去 5 年 ¥11,000 / 月（税込，官方价格页 2026-10-05，仅对检索时点有效）；大量保有原始记录含个人信息 → 只在 var/cache/jquants/edinet_lvs/"
+ },
+ {
+  "line": 9235,
+  "date": "2026-10-05",
+  "title": "登记大量保有報告書研究：突破过滤 L1〜L3（6826c2b）登记前个数覆盖太少（71 / 98 / 28 个信号 < 300 笔）→ 运行前修正：不运行、结论 = 不成立（覆盖太少）；改为事件研究 E1〜E3（提出之后 20 / 60 日超额）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "6826c2b（规则与代码）+ 本提交（运行前修正与记录；只数个数）",
+  "script": "scripts/lvs_study.py; scripts/lvs_event_study.py",
+  "output": "var/out/lvs_event_study.md（运行后）",
+  "candidates": [
+   {
+    "id": "L1",
+    "result": "不成立（覆盖太少：71 个信号）"
+   },
+   {
+    "id": "L2",
+    "result": "不成立（覆盖太少：98 个信号）"
+   },
+   {
+    "id": "L3",
+    "result": "不成立（覆盖太少：28 个信号）"
+   },
+   {
+    "id": "E1",
+    "result": "登记"
+   },
+   {
+    "id": "E2",
+    "result": "登记"
+   },
+   {
+    "id": "E3",
+    "result": "登记"
+   }
+  ],
+  "baseline": "突破过滤：全市場 W2 池；事件研究：同一天同一格（市值 × 过去 60 日收益五分位）等权平均",
+  "windows": "突破信号 2021-09-01〜2026-06-25；报告提出 2021-07-01〜（t1 + 59 个交易日 ≤ 2026-09-25）",
+  "verdict": "变更/工程",
+  "stable_findings": [
+   "全市場 W2 突破里信号前 60 天内有 5% 报告的只占 13.8%、有「一般报告的买进」只占 1.9%（日経225 0 个）→ 大量保有当突破过滤碰不到 B3"
+  ],
+  "era_dependent_or_reversed": [],
+  "notes": "特例报告（种别 4 / 5）几乎没有最近 60 日取得处分表；2026-05-01 义务日的 235 份不用；接线核对：随机日子的平均超额 −0.08 pp"
  }
 ]
