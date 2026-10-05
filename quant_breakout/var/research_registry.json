@@ -12274,5 +12274,54 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "ID 登记前核对；接线核对通过；碰到 B3 成交 HWN 55 / VEX 41 / DYL 38 笔（共 140）；DYL 在 Z 挡 65% 的信号"
+ },
+ {
+  "line": 8710,
+  "date": "2026-10-05",
+  "title": "第十个研究循环第 7 轮 HWN / VEX / DYL → 三个都第一关不过；HWN（5〜10 月不开新仓）只差 V3：胜率 +3.94 pp、六个样本都同方向，Z 账户 −0.350",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "863f3d2（登记后代码未改、只运行一次）",
+  "script": "scripts/loop10_r07_final.py",
+  "output": "var/out/loop10_r07_final.md",
+  "candidates": [
+   "HWN",
+   "VEX",
+   "DYL"
+  ],
+  "baseline": "B3",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09（+ W / Jx / Zx）",
+  "verdict": "不通过",
+  "stable_findings": [
+   "5〜10 月的突破更容易失败：Z / E / J、W、Jx、Zx 六个样本都同方向（+1.0〜+10.3 pp）"
+  ],
+  "era_dependent_or_reversed": [
+   "HWN：挡半年新仓 → Z 账户 −0.350、E −0.034",
+   "VEX：Z 账户 −0.232、Zx 反向",
+   "DYL：门槛对年代不均匀、E 胜率 −11.9 pp"
+  ],
+  "notes": "HWN 不是事后（文献先验），过 V1 / V2 / V4 / V5（V6 不适用）"
+ },
+ {
+  "line": 8721,
+  "date": "2026-10-05",
+  "title": "第十个研究循环结束（20 / 20 用完）：没有找到「胜率提高、账户不变差」的更好候选；最接近 HWN / X2G（只差 V3）/ JRM（只差 V6）→ 待办〔58〕",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "1450380（循环规则）",
+  "script": "scripts/research_loop10.py",
+  "output": "var/research_loop10.json",
+  "candidates": [],
+  "baseline": "B3",
+  "windows": "Z / E / J",
+  "verdict": "变更/工程",
+  "stable_findings": [
+   "胜率能提高（20 个里 12 个过 V1），但账户不变差（V3）只有 JRM 过"
+  ],
+  "era_dependent_or_reversed": [
+   "大盘闸门只在 2001〜2016 扩大池有效",
+   "价格锚点方向与文献相反"
+  ],
+  "notes": "结构性障碍：挡掉约三成以上信号在 Z 伤账户；同一天换顺序只改 1 笔"
  }
 ]

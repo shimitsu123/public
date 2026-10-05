@@ -4,7 +4,7 @@
  "registered": "1450380",
  "user_request": "胜率提高、账户不变差也算更好之类的也可以，继续研究（2026-10-04 晚，待办〔56〕③）",
  "rules": "scripts/research_loop10.py 开头（基准 B3、题目只限选股、第一关 V1〜V6、第二关、上限、家族、ID 不重用、停下的情况）",
- "status": "running",
+ "status": "exhausted",
  "cap": 20,
  "family_cap": 3,
  "family_prefix": "选股",
@@ -631,6 +631,103 @@
      }
     }
    ]
+  },
+  {
+   "round": 7,
+   "date": "2026-10-05",
+   "title": "5〜10 月不开新仓 HWN（不是事后）/ 均量没放大 VEX / 股息率低 DYL（事后）",
+   "registered": "863f3d2",
+   "script": "scripts/loop10_r07_final.py",
+   "output": "var/out/loop10_r07_final.md",
+   "approaches": [
+    {
+     "id": "HWN",
+     "family": "选股·季节",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": 3.94,
+     "dmean": 0.117,
+     "sum": -0.333,
+     "passed": 5,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": true,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.35,
+      "E": -0.034,
+      "J": 0.051
+     },
+     "era_dwin": {
+      "Z": 1.0,
+      "E": 4.5,
+      "J": 5.7
+     }
+    },
+    {
+     "id": "VEX",
+     "family": "选股·量能扩张",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.64,
+     "dmean": 0.85,
+     "sum": -0.215,
+     "passed": 4,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": true,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.232,
+      "E": -0.001,
+      "J": 0.018
+     },
+     "era_dwin": {
+      "Z": 9.3,
+      "E": 0.5,
+      "J": 3.8
+     }
+    },
+    {
+     "id": "DYL",
+     "family": "选股·股息",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -3.0,
+     "dmean": -0.599,
+     "sum": -0.431,
+     "passed": 1,
+     "checks": {
+      "V1": false,
+      "V2": false,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.351,
+      "E": -0.11,
+      "J": 0.03
+     },
+     "era_dwin": {
+      "Z": 4.3,
+      "E": -11.9,
+      "J": 0.8
+     }
+    }
+   ]
   }
  ],
  "stopped": {
@@ -664,5 +761,36 @@
    }
   ]
  },
- "resumed": "2026-10-05 08:20 JST 用户「② 继续用完剩下的 12 个做法」（待办〔57〕②）→ running；规则 1450380 不变；8 / 20，剩 12"
+ "resumed": "2026-10-05 08:20 JST 用户「② 继续用完剩下的 12 个做法」（待办〔57〕②）→ running；规则 1450380 不变；8 / 20，剩 12",
+ "exhausted": {
+  "date": "2026-10-05",
+  "used": 20,
+  "closest": [
+   {
+    "round": 7,
+    "id": "HWN",
+    "verdict": "第一关不过",
+    "dwin": 3.94,
+    "sum": -0.333,
+    "passed": 5
+   },
+   {
+    "round": 2,
+    "id": "X2G",
+    "verdict": "第一关不过",
+    "dwin": 3.88,
+    "sum": -0.048,
+    "passed": 5
+   },
+   {
+    "round": 1,
+    "id": "JRM",
+    "verdict": "第一关不过",
+    "dwin": 3.17,
+    "sum": 0.112,
+    "passed": 5
+   }
+  ],
+  "summary": "20 个做法：V1 过 12 个、V3 只过 1 个（JRM）；最接近 HWN（只差 V3）/ X2G（只差 V3）/ JRM（只差 V6）；没找到 → 待办〔58〕"
+ }
 }
