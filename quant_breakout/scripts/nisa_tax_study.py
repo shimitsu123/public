@@ -18,7 +18,9 @@
 一 基准与输入：B4 = B3 + TBF（模拟盘 2026-10-05 收盘的决策起的规则；规则指纹 1241753c8f2529c6）。每个年代（Z 2001-01-04〜2006-09-30、
   E 2006-10-01〜2016-09-30、J 2017-01-04〜2026-09-30）跑一次 B4（研究引擎，¥100 万起），取它的账本：个股成交（买卖日、价、股数、含两边手续费的盈亏）、
   核心 ETF 成交（日、票、买 / 卖、口数、价、手续费）、每天的税前权益、期末还拿着的核心 ETF。
-  先决条件：规则指纹 = 1241753c8f2529c6、B4 重算的 Calmar = turn_shape_combo 结果文件里 TBF 的（三个年代差 ≤ 0.0005）；不满足就停。
+  先决条件：规则指纹 = 1241753c8f2529c6、B4 重算 = turn_shape_combo 结果文件里 TBF 的（三个年代个股笔数与胜率相同、Calmar 差 ≤ 0.005）；不满足就停。
+  （运行前修正 2026-10-06：原来写「Calmar 差 ≤ 0.0005」，第一次运行在 E 停下 —— 当天 Yahoo / FRED 缓存刷新，E 年化 14.55% → 14.57%、
+  Calmar 0.627 → 0.628，个股 34 笔、胜率 50.0% 相同，Z / J 完全相同 = 数据漂移、不是规则不同；那时没有算出任何税后结果。）
   交易本身一笔都不改：税只叠在账本上（会计口径）。年化等按引擎全期的每日权益算（E 比研究的窗口多最后一天 2016-09-30；各做法同一口径）。
 
 二 税怎么算（全部做法共用）
@@ -95,7 +97,7 @@ MIN_GAIN, DD_TOL, TIE_EPS = 0.5, 2.0, 0.01
 CARRY_YEARS = 3
 ERAS = ("Z", "E", "J")
 FP = "1241753c8f2529c6"                                                      # B4 = B3 + TBF 的模拟盘规则指纹
-B4_TOL = 0.0005
+B4_TOL = 0.005                                                               # 运行前修正：0.0005 → 0.005（数据缓存刷新的漂移；另要求个股笔数与胜率相同）
 EPS = 1e-9
 ORDER = {"SELL_S": 0, "SELL_C": 1, "BUY_S": 2, "BUY_C": 3}                   # 一天之内：个股卖 → 核心卖 → 个股买 → 核心买（与引擎相同）
 OUT_MD, OUT_JSON = "nisa_tax_study.md", "nisa_tax_study.json"
@@ -382,6 +384,15 @@ def git_info() -> dict:
         return {"rev": "?", "dirty": None}
 
 
+def same_b4(now: dict, ref: dict) -> bool:
+    """B4 重算与参照是同一套规则：个股笔数与胜率相同、Calmar 差 ≤ B4_TOL（数据缓存刷新会让年化有很小的漂移）。"""
+    try:
+        return (int(now["n"]) == int(ref["n"]) and abs(float(now["win"]) - float(ref["win"])) < 1e-9
+                and abs(float(now["calmar"]) - float(ref["calmar"])) <= B4_TOL + 1e-12)
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
 def tbf_flags(W: dict, say=print) -> dict:
     """TBF 的旗子：policy_allin_study --prep 的缓存（同一套）；没有就按 turn_shape_combo 重算。先决条件（B4 重算 = TBF）会再核一次。"""
     from qbreak import paths
@@ -431,8 +442,8 @@ def run(say=print) -> dict:
         if len(g) != len(S):
             raise SystemExit("TBF 旗子与信号对不上 → 停")
         b4 = C9.acct(C9.run_block(W, e, g))
-        if abs(float(b4["calmar"]) - float(ref[e]["calmar"])) > B4_TOL:
-            raise SystemExit(f"先决条件不满足：{e} B4 重算 Calmar {b4['calmar']} ≠ turn_shape_combo 的 TBF {ref[e]['calmar']} → 停")
+        if not same_b4(b4, ref[e]):
+            raise SystemExit(f"先决条件不满足：{e} B4 重算 {b4} ≠ turn_shape_combo 的 TBF {ref[e]} → 停")
         L = ledger_of(JS.RealLotEngine.LAST[-1])
         res["base"][e] = b4
         res["pre"][e] = stats_of(L["eq"] * (DECIDE_SIZE / BASE))

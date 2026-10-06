@@ -33,7 +33,7 @@ def test_registration_constants():
     assert N.SIZES == (1_000_000, 3_000_000, 10_000_000) and N.DECIDE_SIZE == 1_000_000
     assert N.POLICIES == ("P0", "P0c", "N1", "N2", "N3", "N4") and N.CANDS == ("N1", "N2", "N3", "N4")
     assert N.TIE_ORDER == ("N2", "N3", "N1", "N4") and (N.MIN_GAIN, N.DD_TOL, N.TIE_EPS) == (0.5, 2.0, 0.01)
-    assert N.CARRY_YEARS == 3 and N.FP == "1241753c8f2529c6" and N.B4_TOL == 0.0005
+    assert N.CARRY_YEARS == 3 and N.FP == "1241753c8f2529c6" and N.B4_TOL == 0.005
     f = {p: N.flags(p) for p in N.POLICIES}
     assert not any(f["P0"].values()) and f["P0c"]["carry"] and not f["P0c"]["stock_nisa"]
     assert f["N1"]["stock_nisa"] and f["N1"]["core_nisa"] and not f["N1"]["nisa_first_sell"]
@@ -199,3 +199,11 @@ def test_judge_rules_and_tie_break():
     assert tie["pick"] == "N2"                                              # 差 < 0.01 pp 算相同 → N2 先
     none = N.judge(at({p: (0.4, 0.4, 0.4) for p in N.CANDS}))
     assert none["pick"] is None
+
+
+def test_same_b4_prerequisite():
+    ref = {"cagr": 14.55, "dd": -23.21, "calmar": 0.627, "n": 34, "mean": 2.423, "win": 50.0}
+    assert N.same_b4({**ref, "cagr": 14.57, "calmar": 0.628, "mean": 2.422}, ref)        # 2026-10-06 数据缓存刷新的漂移
+    assert not N.same_b4({**ref, "calmar": 0.633}, ref)                                   # 超过 0.005
+    assert not N.same_b4({**ref, "n": 35}, ref) and not N.same_b4({**ref, "win": 52.9}, ref)
+    assert not N.same_b4({"calmar": 0.627}, ref)

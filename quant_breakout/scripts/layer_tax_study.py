@@ -10,7 +10,9 @@
 一 账户（研究引擎，¥100 万起；年代 Z 2001-01-04〜2006-09-30、E 2006-10-01〜2016-09-30、J 2017-01-04〜2026-09-30，同 nisa_tax_study）：
   B4 = 模拟盘规则（B3 + TBF；规则指纹 1241753c8f2529c6）；
   O0 = B4 但这个年代全部 W2 信号都不开（em_tick 全 0 = 个股层关掉；核心 / 闲置资金 Q1B / 倍数 / 牛熊一切照旧；与 loop4_oracle_diag 的 O0 同一做法）。
-  先决条件：指纹 = 1241753c8f2529c6、B4 重算 = turn_shape_combo 的 TBF（Calmar 差 ≤ 0.0005）、O0 的个股笔数 = 0。不满足就停。
+  先决条件：指纹 = 1241753c8f2529c6、B4 重算 = turn_shape_combo 的 TBF（nisa_tax_study.same_b4：个股笔数与胜率相同、Calmar 差 ≤ 0.005）、
+  O0 的个股笔数 = 0。不满足就停。（运行前修正 2026-10-06：原来是「Calmar 差 ≤ 0.0005」，第一次运行在 E 停下 = 当天数据缓存刷新的漂移，
+  见 nisa_tax_study 一；停之前只打印了 Z 的税前 Δ +7.28 pp 与 O0 的 Calmar 0.532，没有任何税后结果。）
 二 税：nisa_tax_study 的 overlay（源泉徴収あり、清算口径、新 NISA 额度 / 上限）；做法 P0、P0c、N1〜N4（O0 没有个股 → N1 = N2、N3 = P0，照算）。
 三 量：个股层的税后贡献 Δ = B4 税后年化 − O0 税后年化（同一个做法、同一个规模；pp）；税前 Δ（同一口径：引擎全期的每日权益）也报；
   规模 ¥100 万（读法用）/ ¥300 万 / ¥1,000 万（只描述）。
@@ -102,8 +104,8 @@ def run(say=print) -> dict:
         if len(g) != len(S):
             raise SystemExit("TBF 旗子与信号对不上 → 停")
         b4 = C9.acct(C9.run_block(W, e, g))
-        if abs(float(b4["calmar"]) - float(ref[e]["calmar"])) > B4_TOL:
-            raise SystemExit(f"先决条件不满足：{e} B4 重算 Calmar {b4['calmar']} ≠ turn_shape_combo 的 TBF {ref[e]['calmar']} → 停")
+        if not NT.same_b4(b4, ref[e]):
+            raise SystemExit(f"先决条件不满足：{e} B4 重算 {b4} ≠ turn_shape_combo 的 TBF {ref[e]} → 停")
         LB = NT.ledger_of(JS.RealLotEngine.LAST[-1])
         o0 = C9.acct(C9.run_block(W, e, np.ones(len(S), bool)))
         LO = NT.ledger_of(JS.RealLotEngine.LAST[-1])
