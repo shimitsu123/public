@@ -14,8 +14,10 @@
   开盘后（F 的 09:05 前后）  run.py live-u --phase open
     ⑤ 留下的买单：用券商给的始値做同一条跳空过滤与名额检查，按当时的余力减到买得起，下当日限り指値（价格同上）
 
-手动指令（qbreak/manual_orders.py；页面 / run.py manual 写，manual_tag 给了才读）：卖出全部 / 减仓 / 闲置资金比例 / 不自动买回。
-  在「收盘离场判断之后、统一决策之前」变成执行器的单（与规则的卖单同一条路：同样的闸门、同样的对账），所以不会让持仓核对停下。
+手动指令（qbreak/manual_orders.py；页面 / run.py manual 写，manual_tag 给了才读）：卖出全部 / 减仓 / 调整持仓（股数 / 金额 / % ，
+  可加可减）/ 闲置资金比例 / 不自动买回。在「收盘离场判断之后、统一决策之前」变成执行器的单（与规则的单同一条路：同样的闸门、
+  同样的对账），所以不会让持仓核对停下。加仓 = 统一决策先给它留钱（不够就同一个开盘先卖核心 ETF）、寄付指値（与新仓同一条限价规则）、
+  只做一次；成交后并进原来的持仓（成本加权平均，止损 / 峰值 / 持有天数不变）。
 
 安全闸（任何一道不过 → 不下单，只记账、报警）：
   HALT 文件 / 行情没更新到应有的交易日 / 持仓与券商不一致 / 时间窗口不对 / 有状态不明的单；
@@ -48,6 +50,7 @@ log = setup_logging("live_unified")
 ACCEPTED = ("SENT", "FILLED", "PARTIAL")          # 券商已受理（可能已成交）
 UNKNOWN = ("SENDING", "ERROR")                     # 状态不明：可能已被受理 → 不重发，等人工确认
 MORNING_CUTOFF = dt.time(8, 55)                    # 寄付注文的最后时刻（留 5 分钟余量）
+MANUAL_REASONS = ("manual", "manual_trim", "manual_add")   # 手动指令变成的单（qbreak/manual_orders.py）
 OPEN_FROM, OPEN_UNTIL = dt.time(9, 0), dt.time(15, 25)
 
 
@@ -157,39 +160,49 @@ class UnifiedExecutor:
         """手动指令接进引擎：闲置资金比例 → 核心目标额 × 比例；手动卖出后不自动买回 → 新仓的资格检查多一条。"""
         eng, man = self.eng, self.manual
         eng.core_scale = man.core_pct / 100
+        man.m["cap_pct"] = round(float(eng.cfg.max_position_pct) * 100, 2)     # 页面的加仓上限（单只占总权益 %）
         base = eng.entry_gate_fn
 
         def gate(t: str, i: int) -> str | None:
             return (base(t, i) if base is not None else None) or man.block_reason(t, eng.gidx[i])
         eng.entry_gate_fn = gate
 
-    def _apply_manual(self, i: int) -> None:
-        """第 i 根 K 线的决策之前：等着的手动卖出 / 减仓 → 执行器的单（成交日 = i 的下一交易日；HALT 时不动）。"""
+    def _apply_manual(self, i: int, deciding: bool = True) -> None:
+        """第 i 根 K 线的决策之前（deciding）或同一决策补单之前：等着的手动卖出 / 减仓 / 调整 → 执行器的单
+        （成交日 = i 的下一交易日；HALT 时不动；加仓只在 deciding）。"""
         fill = next_trading_day(self.eng.gidx[i].date())
         halted = self.respect_halt and paths.halt_file().exists()
-        for lvl, msg in self.manual.apply(self.eng, i, fill, halted=halted):
+        for lvl, msg in self.manual.apply(self.eng, i, fill, halted=halted, deciding=deciding):
             self._event(lvl, msg)
 
     def _settle_manual(self) -> None:
-        """撤回中的手动指令：这次决策里它的卖单还没发到交易所 → 撤（不再重下）；已经发出的等对账。"""
+        """撤回中的手动指令：这次决策里它的单还没发到交易所 → 撤（不再重下）；已经发出的等对账。"""
         d = self.eng.st.last_date
+        out = ("PLANNED", "BLOCKED", "SKIPPED")
         sent = {o.ticker for o in self.orders if o.decided_on == d and o.side == "SELL" and o.kind == "stock"
-                and o.reason in ("manual", "manual_trim") and o.status not in ("PLANNED", "BLOCKED", "SKIPPED")}
-        for lvl, msg in self.manual.settle(self.eng.st, sent):
+                and o.reason in ("manual", "manual_trim") and o.status not in out}
+        sent_add = {o.ticker for o in self.orders if o.decided_on == d and o.reason == "manual_add"
+                    and o.status not in out + ("DEFERRED",)}            # 留到开盘后的加仓还没发出：可以撤
+        for lvl, msg in self.manual.settle(self.eng.st, sent, sent_add):
             self._event(lvl, msg)
-        for o in self.orders:                                # 撤掉的手动卖单还没发出的 → 不再重试
-            if o.decided_on == d and o.reason in ("manual", "manual_trim") and o.status in ("PLANNED", "BLOCKED") \
-                    and not self._manual_wanted(o):
+        for o in self.orders:                                # 撤掉的手动单还没发出的 → 不再重试
+            if o.decided_on == d and o.reason in MANUAL_REASONS and not self._manual_wanted(o) \
+                    and (o.status in ("PLANNED", "BLOCKED") or (o.reason == "manual_add" and o.status == "DEFERRED")):
                 o.status, o.note = "SKIPPED", "手动指令已撤回"
 
     def _manual_wanted(self, o: ExecOrder) -> bool:
-        """这笔手动卖单之后还要不要再下（没撤回、还在待卖 / 减仓里）。"""
+        """这笔手动单之后还要不要再下（没撤回、还在待卖 / 减仓 / 加仓里）。"""
         st = self.eng.st
         if self.manual.cancelling(o.ticker):
             return False
         if o.reason == "manual_trim":
             return o.ticker in self.manual.m["trims"] and o.ticker not in st.pending_exit
+        if o.reason == "manual_add":
+            return o.ticker in st.add_plan and o.ticker in self.manual.m["adds"]
         return st.pending_exit.get(o.ticker) == "manual"
+
+    def _manual_wanted_add(self, t: str) -> bool:
+        return not self.manual.cancelling(t) and t in self.manual.m["adds"]
 
     def fill_day(self) -> dt.date | None:
         d = self.eng.st.last_date
@@ -249,6 +262,8 @@ class UnifiedExecutor:
         lot = int(eng.lots[eng.col[o.ticker]])
         if o.kind == "core":
             return {"core": True, "cost": dict(eng.core_cost[o.ticker]), "lot": lot}
+        if o.side == "BUY" and o.reason == "manual_add":   # 手动加仓：已经持有的票，不占新名额
+            return {"lot": lot}
         if o.side == "BUY":
             return {"lot": lot, "cap": int(eng.cfg.max_positions), "excl": sorted(eng.core_set)}
         return {}
@@ -310,7 +325,9 @@ class UnifiedExecutor:
         for x in todo:
             t, side = x["ticker"], x["side"]
             kind = "core" if t in eng.core_set else "stock"
-            cid = x.get("cid") or f"U{d}-{side}-{t}"
+            cid = x.get("cid") or (f"U{d}-BUY-{t}-M" if x.get("reason") == "manual_add" else f"U{d}-{side}-{t}")
+            if x.get("reason") == "manual_add" and self.manual is not None and not self._manual_wanted_add(t):
+                continue                                    # 撤回了的加仓：不下
             o = have.get(cid)
             if o is not None and o.status not in ("PLANNED", "BLOCKED"):
                 deferring = deferring or (side == "BUY" and o.status == "DEFERRED")
@@ -399,7 +416,7 @@ class UnifiedExecutor:
                 if (locked or {}).get(o.ticker) == "up":
                     skip(o, "ストップ高張り付き —— 与模型相同")
                     continue
-                if npos >= eng.cfg.max_positions:
+                if npos >= eng.cfg.max_positions and o.reason != "manual_add":
                     skip(o, f"个股已有 {npos} 只（开盘的卖单没成交）—— 与模型相同")
                     continue
             qty, lim = o.qty, o.limit
@@ -426,12 +443,17 @@ class UnifiedExecutor:
             o.phase = "open"
             self._send(o, qty, bar="")
             if o.status in ACCEPTED:
-                npos += o.kind == "stock"
+                npos += o.kind == "stock" and o.reason != "manual_add"
                 if bp is not None:
                     bp -= self._reserve(o, qty, lim)
 
     def open_phase(self) -> None:
-        """实盘：开盘后（09:05 前后）下早上留下的买单。模拟账户不用调（_paper_open 里一起做）。"""
+        """实盘：开盘后（09:05 前后）下早上留下的买单。模拟账户不用调（_paper_open 里一起做）。
+        手动指令：先读新的撤回（留到开盘后、还没发出的加仓买单这时还能撤）；新的卖出 / 调整等下一次早上的运行。"""
+        if self.manual is not None:
+            for lvl, msg in self.manual.ingest():
+                self._event(lvl, msg)
+            self._settle_manual()
         g = self._gate("open")                              # 总是先看闸门（HALT 存在时记下演练的证据）
         why = self.blocked or g
         act = [o for o in self._active() if o.status == "DEFERRED"]
@@ -507,6 +529,9 @@ class UnifiedExecutor:
                 self.stats["model_diff"] += not self.paper
                 self._event("error", f"BUY {o.ticker} ×{o.qty}：{o.note}")
             if q <= 0:
+                if o.reason == "manual_add" and self.manual is not None:     # 手动加仓只做一次：没买成 → 指令结束
+                    self.manual.on_fill(o.ticker, "manual_add", 0, 0.0, str(eng.gidx[k].date()), st,
+                                        why=o.note or o.status)
                 if o.side == "SELL" and o.status == "UNFILLED":
                     self.stats["unfilled_sell"] += 1
                     again = self.manual is None or o.reason not in ("manual", "manual_trim") or self._manual_wanted(o)
@@ -547,6 +572,12 @@ class UnifiedExecutor:
                     self.manual.on_fill(o.ticker, o.reason, int(q), float(px), str(eng.gidx[k].date()), st)
             elif o.kind == "core":
                 eng._core_trade(o.ticker, o.side, int(q), k, px=px)
+            elif o.reason == "manual_add":                     # 手动加仓：并进原来的持仓（成本加权平均；止损 / 峰值不变）
+                if o.ticker not in st.pos:
+                    self._event("warn", f"BUY {o.ticker}（手动加仓）成交 {q} 股，但原来的持仓已经没了 → 按新仓记")
+                eng.add_fill(o.ticker, int(q), px, k)
+                if self.manual is not None:
+                    self.manual.on_fill(o.ticker, "manual_add", int(q), float(px), str(eng.gidx[k].date()), st)
             else:
                 if o.ticker in st.pos:
                     self._event("error", f"BUY {o.ticker} 成交，但状态里已有这只持仓（不重复记）")
@@ -559,6 +590,7 @@ class UnifiedExecutor:
                 st.pending_exit.pop(t)
         st.plan.clear()
         st.core_plan.clear()
+        st.add_plan.clear()
         if act:
             self.book.setdefault("history", []).append({"fill_bar": str(eng.gidx[k].date()),
                                                         "orders": [asdict(o) for o in act]})
@@ -686,9 +718,9 @@ class UnifiedExecutor:
             k = int(eng.gidx.searchsorted(dt.datetime.fromisoformat(eng.st.last_date)))
             if k < len(eng.gidx) and str(eng.gidx[k].date()) == eng.st.last_date:
                 eng.prime(k + 1)
-                if self.manual is not None:                 # 同一决策补单：撤回中的先处理，再把新的手动卖出 / 减仓加进这次的单
+                if self.manual is not None:                 # 同一决策补单：撤回中的先处理，再把新的手动卖出 / 减仓加进这次的单（加仓等下一次决策）
                     self._settle_manual()
-                    self._apply_manual(k)
+                    self._apply_manual(k, deciding=False)
                 self.place(k)
         self.save()
 
@@ -796,7 +828,7 @@ def compare_with_sim(st: UState, sim: UState | None, live: bool = False, manual:
     from .manual_orders import active as manual_active
     if manual_active(manual) and out.get("comparable") and not out.get("same"):
         out["manual"] = True                                # 有手动操作：与云端不同是预期的（上线门槛的「连续一致」照常中断）
-        out["text"] += "（有手动操作 —— 手动卖出 / 减仓 / 闲置资金比例 / 不买回 —— 与云端不同是预期的）"
+        out["text"] += "（有手动操作 —— 手动卖出 / 减仓 / 加仓 / 闲置资金比例 / 不买回 —— 与云端不同是预期的）"
     return out
 
 

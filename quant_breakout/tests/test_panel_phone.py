@@ -222,7 +222,8 @@ def test_render_mobile_layout_local_vs_remote():
     _book()
     html = panel.render("paper", "t" * 40, AT, phone={"port": 8766, "url": None, "devices": []})
     assert "viewport-fit=cover" in html and "rel='manifest'" in html and "apple-touch-icon" in html
-    assert "<dialog id='dlg-sell'>" in html and "<dialog id='dlg-trim'>" in html and "data-act='sell'" in html
+    assert "<dialog id='dlg-sell'>" in html and "<dialog id='dlg-adj'>" in html and "data-act='sell'" in html
+    assert "data-act='adj'" in html and "data-u='yen'" in html and "data-u='pct'" in html
     assert "data-px='2600'" in html and "data-shares='200'" in html and "停止下单（HALT）</button>" in html
     assert "id='phone'" in html and "打开手机操作" in html and "data-act='unpair'" not in html
     assert '"X-Qbreak-Token", "v": "' + "t" * 40 in html

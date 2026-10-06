@@ -6,6 +6,8 @@
   那天的条件不完全成立时注明（复权 / 数据修正 / 参数后来改过）。核心 ETF：闲置资金的方式与牛熊。
 现在趋势如何：收盘对 20 / 60 / 200 日线、20 日线 5 天的斜率、MACD 与信号线、1 / 3 个月涨跌、离持有以来最高、离止损 →
   一个标签（上升趋势 / 偏强 / 偏弱 / 下降趋势）。标签是均线位置的机械描述，不是预测；卖出仍只按规则（卖出线见买卖时间线）。
+走势图数据（chart_data；2026-10-06 用户「还可以看到个股和 etf 的走势」）：执行器每次运行写进汇总（out/live_unified_<账本>.json 的
+  charts），操作面板（本机 + 手机）画成折线图：收盘、20 / 60 日线、成交量、成本线与止损线。只在 Mac 本机，不入库。
 """
 from __future__ import annotations
 
@@ -215,6 +217,47 @@ def build(ind: dict, positions: dict, p, *, bar_date=None, pending: dict | None 
     return out
 
 
+CHART_BARS = 260                                  # 走势图：最近约 1 年的日 K（页面上可选 1 个月 / 3 个月 / 6 个月 / 1 年）
+
+
+def _nums(s: pd.Series, nd: int = 2) -> list:
+    out = []
+    for x in s.astype(float).tolist():
+        out.append(round(x, nd) if math.isfinite(x) else None)
+    return out
+
+
+def chart_data(ind: dict, rows: list[dict], bar_date=None, n: int = CHART_BARS) -> dict:
+    """操作面板的走势图数据（只展示）：每只票最近 n 根日 K 的开高低收与成交量 + 20 / 60 日线（用全部历史算，开头不缺）。
+    rows：[{"ticker", "kind": stock / core, "name", "entry_px", "entry_date", "stop_px", "shares" / "units"}]；
+    没有行情 / 算不出的票跳过（页面上显示「没有走势数据」）。"""
+    end = pd.Timestamp(str(bar_date)) if bar_date else None
+    out = {}
+    for r in rows:
+        t = str(r.get("ticker") or "")
+        df = ind.get(t)
+        if df is None or not len(df) or t in out:
+            continue
+        try:
+            d = df.loc[:end] if end is not None else df
+            d = d[d["Close"].astype(float).notna()]
+            if len(d) < 2:
+                continue
+            c = d["Close"].astype(float)
+            tail = d.tail(int(n))
+            ix = tail.index
+            vol = tail["Volume"].astype(float).fillna(0.0) if "Volume" in tail.columns else pd.Series(0.0, index=ix)
+            out[t] = {"kind": r.get("kind") or "stock", "name": r.get("name") or None,
+                      "d": [str(x.date()) for x in ix], "o": _nums(tail["Open"]), "h": _nums(tail["High"]),
+                      "l": _nums(tail["Low"]), "c": _nums(tail["Close"]),
+                      "v": [int(x) if math.isfinite(x) else 0 for x in vol.tolist()],
+                      "m20": _nums(c.rolling(20).mean().loc[ix]), "m60": _nums(c.rolling(60).mean().loc[ix]),
+                      "entry_px": _f(r.get("entry_px")), "entry_date": r.get("entry_date"), "stop_px": _f(r.get("stop_px"))}
+        except Exception:                                     # noqa: BLE001  展示用：一只算不出不影响别的
+            continue
+    return out
+
+
 def _core_why(t: str, ic: dict, bb: dict) -> str:
     """核心 ETF 为什么持有：闲置资金规则（没有个股占用的钱放进去）+ 方式 + S&P500 牛熊。"""
     parts = ["闲置资金规则：没有个股占用的钱放进核心 ETF（留 2% 现金缓冲）"]
@@ -262,13 +305,14 @@ def lines(hv: dict | None) -> list[str]:
     return out
 
 
-def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 · 现在趋势如何") -> str:
-    """一个 section 的内容（h2 + 每只票一块）。actions(row, kind) → 额外的 HTML（操作面板的按钮）；kind = stock / core。
-    两边页面都用 card / muted / scroll / pos / neg 这些 class。"""
+def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 · 现在趋势如何", toolbar: str = "") -> str:
+    """一个 section 的内容（h2 + 每只票一块）。actions(row, kind) → 额外的 HTML（操作面板的按钮 / 走势图）；kind = stock / core。
+    toolbar：放在说明下面、所有票上面的一行（操作面板的走势图期间切换）。两边页面都用 card / muted / scroll / pos / neg 这些 class。"""
     hv = hv or {}
     hs, cs = hv.get("holdings") or [], hv.get("core") or []
     H = [f"<h2>{escape(title)}</h2><div class='muted'>按 {escape(str(hv.get('bar_date') or '—'))} 收盘；只展示，不改交易。"
-         "趋势标签是均线位置的机械描述（上升趋势 / 偏强 / 偏弱 / 下降趋势），不是预测；卖出仍只按规则（卖出线见买卖时间线）。</div>"]
+         "趋势标签是均线位置的机械描述（上升趋势 / 偏强 / 偏弱 / 下降趋势），不是预测；卖出仍只按规则（卖出线见买卖时间线）。</div>"
+         + toolbar]
     if not hs and not cs:
         H.append("<div class='muted'>没有持仓</div>")
     for r in hs:
@@ -310,4 +354,4 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
 
 CSS = ".hv{border-top:1px solid var(--line);padding:8px 0}.hv:first-of-type{border-top:0}.hv ul{margin:4px 0 4px;padding-left:18px}"
 
-__all__ = ["build", "why_items", "trend", "why_line", "lines", "html", "TREND", "CSS"]
+__all__ = ["build", "why_items", "trend", "why_line", "lines", "html", "chart_data", "CHART_BARS", "TREND", "CSS"]

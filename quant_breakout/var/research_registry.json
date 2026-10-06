@@ -13950,5 +13950,22 @@
    "J（2017〜2026）个股层税后只 +0.14 pp / 年；N1 / N4（个股与核心抢 NISA 额度）下 J 为 −0.38 / −0.48 pp"
   ],
   "notes": "个股层让核心 ETF 多买卖（J：105 vs 24 次）；J 两个账户交的税几乎一样（¥823,621 vs ¥823,151）；只描述，不改策略"
+ },
+ {
+  "line": 9828,
+  "date": "2026-10-06",
+  "title": "调整个股持仓（股数 / 金额 / 占权益 %，可加可减；加仓只加已经持有的个股：只在新收盘的决策里做、钱不够先卖核心 ETF、单只上限 34%、资格 / 新仓倍数 0 / 决算前不加、只做一次）+ 操作面板的个股 / ETF 走势图（收盘、20 / 60 日线、成交量、成本 / 止损线）",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": null,
+  "script": "qbreak/manual_orders.py（adjust）、qbreak/unified.py（add_plan / add_room / add_fill / _exec_adds）、qbreak/live_unified.py（manual_add）、qbreak/panel.py（调整对话框、走势图）、qbreak/holding_view.py（chart_data）、run.py（manual adjust、charts）",
+  "output": "~/.qbreak/home/out/live_unified_<账本>.json 的 charts（Mac，不入库）；执行器账本 manual 段的 adds",
+  "candidates": [],
+  "baseline": null,
+  "windows": null,
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "没有手动指令时执行器与以前逐笔相同（原有执行器 / 演练 / 引擎测试全过）；模拟账户执行器的加仓与引擎的回测撮合逐笔一致；前一节「只能减不能加」按用户这次要求改为可以加（规则不加仓，「赢家加仓」研究的结论不变）；不改规则 / 参数 / 仓位"
  }
 ]

@@ -17,7 +17,7 @@
 #   bash scripts/liveu.sh halt-drill                 HALT 演练（模拟账户；今天早上的运行完成之后）：建 HALT → 跑一次 → 删掉这次建的 HALT
 #   bash scripts/liveu.sh flow 300000 [--flow-note …]  登记入金（出金写负数）：只影响收益的计算与提醒，不下单
 #   bash scripts/liveu.sh probe [--demo [--order-test]]  立花 API 检查（只读；--order-test 只在デモ发单），结果给上线门槛用
-#   bash scripts/liveu.sh manual list|sell 7203|trim 7203 --pct 10|core --pct 50|unblock 7203|cancel <id> [--broker tachibana]
+#   bash scripts/liveu.sh manual list|sell 7203|trim 7203 --pct 10|adjust 7203 --shares 300 (--yen / --pct)|core --pct 50|unblock 7203|cancel <id> [--broker tachibana]
 #                                                    手动指令：只写指令（数据目录 manual/）；下单由执行器在下一次能下寄付单的运行里做
 #   bash scripts/liveu.sh panel [--open]             本机操作面板 http://127.0.0.1:8765/（LaunchAgent com.qbreak.panel 常驻）：
 #                                                    账本、为什么持有 · 现在趋势、卖出 / 减仓 / 闲置资金比例 / 撤回 / 停止下单（按钮只写手动指令）

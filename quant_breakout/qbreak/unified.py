@@ -111,6 +111,7 @@ class UState:
     core_last: dict = field(default_factory=dict)      # ticker -> 最近收盘价
     pending_exit: dict = field(default_factory=dict)   # ticker -> 离场原因（下一个该市场开盘卖出）
     plan: dict = field(default_factory=dict)           # ticker -> [信号日收盘, 股数, 决策日]
+    add_plan: dict = field(default_factory=dict)       # ticker -> [决策日收盘, 加仓股数, 决策日, 指令 id]（执行器的手动加仓；回测 / 模拟盘没有）
     core_plan: dict = field(default_factory=dict)      # ticker -> ["SELL"/"BUY", 份额]
     fx_plan: list = field(default_factory=list)        # [{"dir": "JPY>USD"/"USD>JPY", "usd": 金额}]
     fx_reserve_jpy: float = 0.0                        # 日本开盘时要给换汇留的日元
@@ -186,6 +187,9 @@ def apply_corp_action(st: UState, ticker: str, date: str, dividend: float = 0.0,
             notes.append("计划单同步调整")
         if ticker in st.core_plan:
             st.core_plan[ticker][1] = int(int(st.core_plan[ticker][1]) * k + 1e-6)
+        if ticker in st.add_plan:
+            pl = st.add_plan[ticker]
+            pl[0], pl[1] = float(pl[0]) / k, int(int(pl[1]) * k + 1e-6)
     dv = float(dividend or 0)
     qty = (p.shares if p else 0) + int(st.core_units.get(ticker) or 0)
     if dv > 0 and qty > 0:
@@ -449,6 +453,48 @@ class UnifiedEngine:
         self._close(t, px, i, reason + part_note)
         self.st.pos[t] = rest
 
+    def add_fill(self, t: str, qty: int, px: float, i: int) -> None:
+        """手动加仓的成交（执行器；回测撮合也用）：并进已有的持仓 —— 成本按股数加权平均，扣现金与手续费；
+        止损 / 峰值 / 持有天数 / 跟踪止损是否已启动都不变（加仓不放宽、不重置离场规则）。持仓已经没了 → 按新仓记（_open）。"""
+        st = self.st
+        ps = st.pos.get(t)
+        if ps is None:
+            self._open(t, market_of(t), int(qty), px, i)
+            return
+        m, fee = ps.market, self.fees[ps.market]
+        notional = int(qty) * px
+        if m == "JP":
+            st.cash_jpy -= notional + fee(notional)
+        else:
+            st.cash_usd -= notional + fee(notional)
+            ps.entry_fx = (ps.entry_fx * ps.shares + float(self.fx_close[i]) * int(qty)) / (ps.shares + int(qty))
+        ps.entry_px = (ps.entry_px * ps.shares + px * int(qty)) / (ps.shares + int(qty))
+        ps.shares += int(qty)
+
+    def _exec_adds(self, m: str, i: int) -> None:
+        """回测撮合手动加仓（执行器的 PaperBroker 规则相同）：开盘比决策日收盘高过跳空上限 / ストップ高 → 不买；
+        现金不够 → 按单元减到买得起（与新仓相同）；只做一次（没买成就结束）。"""
+        st, A = self.st, self.A
+        ex, slip, fee = self.ex[m], self.slip[m], self.fees[m]
+        for t in [x for x in list(st.add_plan) if market_of(x) == m]:
+            c0, shares = st.add_plan.pop(t)[:2]
+            j = self.col.get(t)
+            if t not in st.pos or j is None or not A.has[i, j]:
+                continue
+            o = A.open[i, j]
+            if ex.max_entry_gap_pct and o > float(c0) * (1 + ex.max_entry_gap_pct / 100):
+                continue
+            if self._locked(i, j) == "up":
+                continue
+            px = o * (1 + slip)
+            lot = self._lot_for(t, i)
+            cash = st.cash_jpy - st.fx_reserve_jpy if m == "JP" else st.cash_usd
+            shares = int(shares)
+            while shares > 0 and shares * px + fee(shares * px) > cash:
+                shares -= lot
+            if shares > 0:
+                self.add_fill(t, shares, px, i)
+
     def _exec_fx(self, i: int, only: str | None = None) -> None:
         """执行计划的换汇。only="USD>JPY"：日本开盘前只换回日元（fx_before_jp_open）；其余留到开盘后。"""
         st, sp = self.st, self.cfg.fx_spread_yen
@@ -577,6 +623,39 @@ class UnifiedEngine:
         k = int(self.nxt["JP"][i])
         return self.live_fx_ok if k < 0 else bool(self.sess["JP"][k])
 
+    def _core_liq(self, i: int) -> float:
+        """核心 ETF 全部按第 i 天收盘（− 滑点 − 手续费）卖出能拿到的日元（统一决策的日元池用）。"""
+        st, A = self.st, self.A
+        core_liq = 0.0
+        for t, u in st.core_units.items():
+            if u and A.has[i, self.col[t]]:
+                cpx = float(A.close[i, self.col[t]]) * (1 - self.c_slip[t])
+                core_liq += u * cpx - self.c_fee[t]["SELL"](u * cpx)
+        return core_liq
+
+    def add_room(self, t: str, i: int) -> int:
+        """手动加仓（执行器；第 i 天收盘后、统一决策之前）：明早日本开盘能用的日元 —— 现金 + 待卖个股 + 核心 ETF 全部卖出
+        （与统一决策的日元池同一算法）− 已有的买入计划 / 别的加仓 —— × (1 − 现金缓冲)，按收盘 + 滑点最多能买 t 几股（整单元）。"""
+        st, cfg = self.st, self.cfg
+        m = market_of(t)
+        if m != "JP" or t not in self.col:
+            return 0
+        exit_ts = [x for x in st.pending_exit if x in st.pos]
+        pool = st.cash_jpy + sum(self._sell_net(x, i) for x in exit_ts if market_of(x) == "JP") + self._core_liq(i)
+        for t0, (c0, sh0, *_r) in list(st.plan.items()) + [(k, v) for k, v in st.add_plan.items() if k != t]:
+            if market_of(t0) == "JP":
+                px0 = float(c0) * (1 + self.slip["JP"])
+                pool -= int(sh0) * px0 + self.fees["JP"](int(sh0) * px0)
+        avail = pool * (1 - cfg.cash_buffer_pct / 100)
+        px = self._px_close(t, i) * (1 + self.slip["JP"])
+        lot = self._lot_for(t, i)
+        if not (px > 0) or avail <= 0:
+            return 0
+        n = int(math.floor(avail / px / lot)) * lot
+        while n > 0 and n * px + self.fees["JP"](n * px) > avail:
+            n -= lot
+        return max(n, 0)
+
     def _decide(self, i: int) -> None:
         st, A, cfg = self.st, self.A, self.cfg
         fx = float(self.fx_close[i])
@@ -584,11 +663,7 @@ class UnifiedEngine:
         exit_ts = [t for t in st.pending_exit if t in st.pos]
         jp_exit_net = sum(self._sell_net(t, i) for t in exit_ts if market_of(t) == "JP")
         us_exit_net = sum(self._sell_net(t, i) for t in exit_ts if market_of(t) == "US")
-        core_liq = 0.0
-        for t, u in st.core_units.items():
-            if u and A.has[i, self.col[t]]:
-                cpx = float(A.close[i, self.col[t]]) * (1 - self.c_slip[t])
-                core_liq += u * cpx - self.c_fee[t]["SELL"](u * cpx)
+        core_liq = self._core_liq(i)
         cash_est = st.cash_jpy + jp_exit_net                     # 明早日本开盘时的日元（不含核心卖出）
         sp, mg, buf = cfg.fx_spread_yen, 1 + cfg.margin_pct / 100, 1 - cfg.cash_buffer_pct / 100
         rb, rs = fx + sp, fx - sp                                # 买美元 / 卖美元的汇率（中值 ± 点差）
@@ -599,6 +674,13 @@ class UnifiedEngine:
         post = self._fx_ok(i)
         used_jpy = used_usd = 0.0                                # 已计划的日本 / 美股买入成本
         for t0, (c0, sh0, _) in st.plan.items():                 # 还没成交的旧计划（另一个市场休市时会跨过一次决策）先占住资金
+            m0 = market_of(t0)
+            px0 = c0 * (1 + self.slip[m0])
+            if m0 == "JP":
+                used_jpy += sh0 * px0 + self.fees[m0](sh0 * px0)
+            else:
+                used_usd += sh0 * px0 + self.fees[m0](sh0 * px0)
+        for t0, (c0, sh0, *_r) in st.add_plan.items():           # 手动加仓（执行器）：先占住资金（不占名额；钱不够 → 下面卖核心补）
             m0 = market_of(t0)
             px0 = c0 * (1 + self.slip[m0])
             if m0 == "JP":
@@ -816,6 +898,7 @@ class UnifiedEngine:
                     self._core_trade(t, "SELL", min(int(u), int(st.core_units.get(t, 0))), i)
                     st.core_plan.pop(t)
             self._exec_buys("JP", i)
+            self._exec_adds("JP", i)                                  # 手动加仓（执行器；回测 / 模拟盘没有）
             for t, (side, u) in list(st.core_plan.items()):          # 核心买入：个股买完后用剩余日元（留出换汇）
                 j = self.col[t]
                 if side == "BUY" and A.has[i, j]:
@@ -836,6 +919,7 @@ class UnifiedEngine:
         if self.sess["US"][i]:
             self._exec_exits("US", i)
             self._exec_buys("US", i)
+            self._exec_adds("US", i)
             self._check_exits("US", i)
         for j in np.flatnonzero(A.has[i]):
             self.last_bar[j] = i
@@ -923,6 +1007,12 @@ class UnifiedEngine:
             lim = round_to_tick(lim, t, "BUY") if m == "JP" else round(lim, 2)
             out[m].append({"side": "BUY", "ticker": t, "qty": int(sh), "type": "寄付指値" if m == "JP" else "开盘指値",
                            "limit": lim, "signal_close": c, "signal_date": d})
+        for t, (c, sh, d, *_r) in st.add_plan.items():           # 手动加仓（执行器）：限价规则与新仓相同（决策日收盘 ×(1+跳空上限)）
+            m = market_of(t)
+            lim = c * (1 + self.ex[m].max_entry_gap_pct / 100)
+            lim = round_to_tick(lim, t, "BUY") if m == "JP" else round(lim, 2)
+            out[m].append({"side": "BUY", "ticker": t, "qty": int(sh), "type": "寄付指値（手动加仓）" if m == "JP" else "开盘指値（手动加仓）",
+                           "limit": lim, "signal_close": c, "signal_date": d, "reason": "manual_add"})
         for t, (side, u) in st.core_plan.items():
             if side == "BUY":
                 j = self.col.get(t)

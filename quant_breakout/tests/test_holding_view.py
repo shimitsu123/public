@@ -145,3 +145,19 @@ def test_manual_and_panel_help_render():
         with pytest.raises(SystemExit) as e:
             run.main(cmd)
         assert e.value.code == 0
+
+
+def test_chart_data_tail_moving_averages_and_gaps():
+    idx = pd.bdate_range("2025-01-01", periods=300)
+    c = pd.Series(range(1000, 1300), index=idx, dtype=float)
+    df = pd.DataFrame({"Open": c - 1, "High": c + 2, "Low": c - 3, "Close": c, "Volume": 1000.0}, index=idx)
+    df.loc[idx[-3], "Close"] = float("nan")                      # 缺一根：跳过，不画成 0
+    out = HV.chart_data({"7203.T": df, "1545.T": df}, [{"ticker": "7203.T", "kind": "stock", "entry_px": 1250, "stop_px": 1200.0},
+                                                      {"ticker": "1545.T", "kind": "core", "name": "纳斯达克 100（1545）"},
+                                                      {"ticker": "9999.T"}], bar_date=str(idx[-2].date()), n=50)
+    a = out["7203.T"]
+    assert set(out) == {"7203.T", "1545.T"} and len(a["d"]) == 50 and a["d"][-1] == str(idx[-2].date())
+    assert a["c"][-1] == 1298.0 and a["entry_px"] == 1250.0 and a["stop_px"] == 1200.0 and a["kind"] == "stock"
+    assert a["m60"][0] is not None                                # 用全部历史算：期间开头的 60 日线也不缺
+    assert abs(a["m20"][-1] - (sum(range(1278, 1297)) + 1298) / 20) < 0.01  # 缺的那根不算进均线
+    assert str(idx[-3].date()) not in a["d"] and out["1545.T"]["name"] == "纳斯达克 100（1545）" and a["v"][-1] == 1000

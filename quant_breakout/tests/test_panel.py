@@ -154,3 +154,64 @@ def test_render_shows_reasons_trend_and_hides_buttons_for_pending_exit():
     assert html.count("卖出全部</button>") == 1 and "已排定开盘卖（dead_cross）" in html
     assert "规则目标额的 <b>60%</b>" in html and "9984.T" in html and "解除" in html
     assert "模拟账户：手动操作后会和云端模拟盘不一致" in html and "10/06（今天）" in html
+
+
+def test_submit_adjust_messages_and_due():
+    _book(pos={"6758.T": {"shares": 200, "entry_px": 900.0, "entry_date": "2026-09-01", "stop_px": 850.0, "last_close": 1000.0},
+               "7203.T": {"shares": 200, "entry_px": 2500.0, "entry_date": "2026-09-01", "stop_px": 2325.0, "last_close": 2600.0}})
+    ok, msg, rec = panel.submit({"book": "paper", "kind": "adjust", "ticker": "6758", "unit": "yen", "value": 100_000}, AT)
+    assert ok and rec["unit"] == "yen" and "估算卖 100 股" in msg and "10/06（今天）开盘前" in msg and "寄付成行" in msg
+    MO.append("paper", {"kind": "cancel", "target": rec["id"]})
+    b = json.loads((paths.state_dir() / "live_unified_paper.json").read_text(encoding="utf-8"))
+    b["manual"] = {"items": {rec["id"]: {**rec, "status": "cancelled"}}}
+    (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b), encoding="utf-8")
+    ok, msg, rec2 = panel.submit({"book": "paper", "kind": "adjust", "ticker": "6758", "unit": "pct", "value": 30}, AT)
+    assert ok and "估算加 100 股 → 300 股" in msg and "10/07（下一个交易日）" in msg and "寄付指値" in msg   # 07:40 的决策已经做了
+    ok, msg, _ = panel.submit({"book": "paper", "kind": "adjust", "ticker": "7203", "unit": "shares", "value": 400}, AT)
+    assert not ok and "不能再加" in msg                         # 已经约占 52%，单只上限 34%
+    b = json.loads((paths.state_dir() / "live_unified_paper.json").read_text(encoding="utf-8"))
+    only_wait = {"state": b["state"], "manual": {"items": {rec2["id"]: {**rec2, "status": "pending", "wait": True}}}}
+    (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(only_wait), encoding="utf-8")
+    MO.requests_path("paper").write_text(json.dumps(rec2, ensure_ascii=False) + "\n", encoding="utf-8")
+    assert not MO.due("paper", only_wait, AT)                   # 等下一次决策的加仓：不叫重试
+
+
+def test_render_adjust_buttons_and_charts():
+    _book(pos={"6758.T": {"shares": 200, "entry_px": 900.0, "entry_date": "2026-09-01", "stop_px": 850.0, "last_close": 1000.0}},
+          manual={"cap_pct": 34.0, "items": {}})
+    d = ["2026-10-01", "2026-10-02", "2026-10-05"]
+    ser = {"d": d, "o": [990.0, 995.0, 1001.0], "h": [1001.0, 1004.0, 1010.0], "l": [985.0, 990.0, 995.0], "c": [995.0, 1000.0, 1000.0],
+           "v": [100, 200, 300], "m20": [None, 990.0, 991.0], "m60": [None, None, None]}
+    charts = {"6758.T": {**ser, "kind": "stock", "entry_px": 900.0, "entry_date": "2026-09-01", "stop_px": 850.0},
+              "1545.T": {**ser, "kind": "core", "name": "纳斯达克 100（1545）"},
+              "1482.T": {**ser, "kind": "core", "name": "对冲版美国国债</script><b>x"}}
+    hv = {"bar_date": "2026-10-05", "holdings": [{"ticker": "6758.T", "shares": 200, "error": "x"}],
+          "core": [{"ticker": "1545.T", "name": "纳斯达克 100（1545）", "units": 100, "why": "闲置资金规则"}]}
+    (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps({"holding_view": hv, "charts": charts}), encoding="utf-8")
+    html = panel.render("paper", "t" * 40, AT)
+    assert "data-act='adj'" in html and "data-px='1000'" in html and "单只上限 34%" in html and "调整…</button>" in html
+    assert "data-t='6758.T' data-kind='stock'" in html and "data-t='1545.T' data-kind='core'" in html
+    assert "现在没拿" in html and "data-t='1482.T' data-kind='core'" in html and html.count("data-act='range'") == 4
+    assert "</script><b>x" not in html                         # 名字里的标签被转义（JSON 里 </ → <\/；HTML 里 escape）
+    raw = html.split("<script type='application/json' id='chart-data'>", 1)[1].split("</script>", 1)[0]
+    assert json.loads(raw)["1482.T"]["name"].endswith("<b>x") and '"addWhen": "10/07（下一个交易日）"' in html
+    assert "加仓 → <b>10/07（下一个交易日） 开盘</b>" in html
+    (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps({"holding_view": hv}), encoding="utf-8")
+    html = panel.render("paper", "t" * 40, AT)                  # 还没有走势数据：占位文字、没有期间切换
+    assert "走势图在执行器下一次运行之后显示" in html and "data-act='range'" not in html
+
+
+def test_page_script_is_valid_javascript(tmp_path):
+    """页面里的脚本整段能被 JavaScript 解析（Python 字符串里的 \\n 转义写错会让整页的按钮和走势图都不工作）。没有 node 就跳过。"""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("没有 node")
+    _book()
+    for mode in ("local", "remote"):
+        html = panel.render("paper", "t" * 40, AT, mode=mode, device={"name": "x"}, phone={"port": 8766, "url": None, "devices": []})
+        f = tmp_path / f"{mode}.js"
+        f.write_text(html.split("<script>")[-1].split("</script>")[0], encoding="utf-8")
+        r = subprocess.run([node, "--check", str(f)], capture_output=True, text=True, timeout=60)
+        assert r.returncode == 0, r.stderr[-500:]

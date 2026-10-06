@@ -2055,6 +2055,22 @@ def _timeline_panel(ctx, eng, state, todo: dict, extras: dict, elig: dict, eq: f
         return {"timeline": {"error": f"{type(e).__name__}: {e}"[:200]}, "earn_state": {}}
 
 
+def _charts(ctx, st, core: list) -> dict:
+    """操作面板的走势图数据（qbreak/holding_view.chart_data；2026-10-06 用户「还可以看到个股和 etf 的走势」）：持仓个股 + 核心 ETF
+    （拿着的在前，再是闲置资金方式里的其他 ETF）。只展示；算不出 → 空（页面照常）。"""
+    from qbreak import holding_view as HV
+    from qbreak.idle_cash import NAMES as IC_NAMES
+    try:
+        rows = [{"ticker": t, "kind": "stock", "entry_px": p_.entry_px, "entry_date": p_.entry_date, "stop_px": p_.stop_px}
+                for t, p_ in st.pos.items()]
+        held = [t for t, u_ in st.core_units.items() if int(u_ or 0)]
+        rows += [{"ticker": t, "kind": "core", "name": IC_NAMES.get(t, t)} for t in dict.fromkeys(held + list(core))]
+        return HV.chart_data(ctx.ind, rows, bar_date=st.last_date)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("走势图数据没算成（不影响交易）：%s", e)
+        return {}
+
+
 def _holding_view(ctx, st, extras: dict, equity) -> dict:
     """持仓「为什么持有 · 现在趋势如何」（qbreak/holding_view.py；2026-10-06 用户要求）：买入信号那天的规则读数 + 均线 / MACD 的现状。
     云端日报（模拟盘）与 Mac 页面 / 操作面板（执行器）共用；只展示，不影响交易；失败只记原因。"""
@@ -3253,7 +3269,7 @@ def _live_unified_body(a) -> int:
                              "active": 0}, today=now_jst().date().isoformat()):
             print(f"  {ln[2:]}")
         for r_ in _MO.unseen(tag, b_):
-            print(f"  手动指令 {r_['id']}：{_MO.LABEL[r_['kind']]} {r_.get('ticker') or ''} → 等执行器读（下一次运行）")
+            print(f"  手动指令 {r_['id']}：{_MO.describe(r_)} → 等执行器读（下一次运行）")
         page()
         return 0
     if a.remote_halt:                                   # 云端对话里你说「停」→ 仓库的 var/HALT_REMOTE → 这里建本地 HALT（同一个 id 只生效一次）
@@ -3358,6 +3374,7 @@ def _live_unified_body(a) -> int:
     sm["exit_mode"] = ctx.xmode                              # 个股的离场方式（var/sim.json exits；与云端模拟盘同一个）
     sm["idle_cash"] = ctx.ic_status                          # 闲置资金的方式与现在拿什么（var/sim.json idle_cash；与云端模拟盘同一个）
     sm["holding_view"] = _holding_view(ctx, eng.st, ctx.extras, sm["equity_jpy"])   # 每只持仓：为什么持有 · 现在趋势如何（页面 / 日志）
+    sm["charts"] = _charts(ctx, eng.st, list(eng.cfg.core))  # 操作面板的走势图：持仓个股 + 核心 ETF（只展示，只在 Mac 本机）
     write_json(paths.out_dir() / f"live_unified_{tag}.json", sm)
     hist_ = eng.st.history or []
     last_, prev_ = (str(hist_[-1][0]) if hist_ else None), (str(hist_[-2][0]) if len(hist_) > 1 else None)
@@ -3422,7 +3439,8 @@ def _manual_due(tag: str, book: dict) -> bool:
 def cmd_manual(a) -> int:
     """手动指令（2026-10-06 用户：「当持仓的时候可以在画面上点击卖出后 第二天或者当天就可以在立花自动交易 可以手动调节当前持仓股票百分比」）：
     只把指令写进数据目录的 manual/requests_<账本>.jsonl；真正下单的是执行器（下一次能下寄付单的运行；同样的闸门、同样的对账）。
-    list：看持仓占比、手动指令、不买回；sell / trim / core / unblock / cancel：写一条指令。页面（run.py panel）做的是同一件事。"""
+    list：看持仓占比、手动指令、不买回；sell / trim / adjust / core / unblock / cancel：写一条指令。页面（run.py panel）做的是同一件事。
+    adjust（2026-10-06 用户「也可以调节现在个股的持仓和金额」）：--shares N / --yen 金额 / --pct %（目标持仓；可加可减，加仓有闸门）。"""
     from qbreak import manual_orders as MO
     from qbreak.calendar_jp import now_jst
     from qbreak.utils import read_json
@@ -3447,16 +3465,26 @@ def cmd_manual(a) -> int:
         for ln in MO.lines(sm, today=now.date().isoformat()):
             print(f"  {ln[2:]}")
         for r_ in MO.unseen(tag, b_):
-            print(f"  手动指令 {r_['id']}：{MO.LABEL[r_['kind']]} {r_.get('ticker') or ''} → 等执行器读（下一次运行）")
+            print(f"  手动指令 {r_['id']}：{MO.describe(r_)} → 等执行器读（下一次运行）")
         print(f"现在写的卖出 / 减仓：最早 {day} 开盘执行（{'今天' if today else '下一个交易日'}；成交日 {MO.CUTOFF:%H:%M} 截止）")
+        ad, ad_today = MO.add_window(now, st.get("last_date"))
+        print(f"现在写的加仓（adjust 往上调）：最早 {ad} 开盘买（{'今天' if ad_today else '下一个交易日'}；只在新收盘的决策里做）")
         return 0
     req = {"kind": a.action, "source": "cli", "note": a.note}
-    if a.action in ("sell", "trim", "unblock"):
+    if a.action in ("sell", "trim", "adjust", "unblock"):
         req["ticker"] = a.target
+    if a.action == "adjust":
+        given = [(u, v) for u, v in (("shares", a.shares), ("yen", a.yen), ("pct", a.pct)) if v is not None]
+        if len(given) != 1:
+            print("★ 没写：adjust 要给且只给一个目标：--shares 股数 / --yen 金额 / --pct 占总权益 %")
+            return 2
+        req["unit"], req["value"] = given[0]
     if a.action == "cancel":
         req["target"] = a.target
     if a.action in ("trim", "core"):
         req["pct"] = a.pct
+    elif a.action == "adjust" and req.get("unit") != "pct":
+        req.pop("pct", None)
     if a.action == "sell":
         req["block_days"] = a.block_days
     try:
@@ -3469,8 +3497,16 @@ def cmd_manual(a) -> int:
         print(f"★ 没写：{why}")
         return 2
     rec = MO.append(tag, rec)
-    print(f"已写手动指令 {rec['id']}：{MO.LABEL[rec['kind']]}"
-          + (f" {rec['ticker']}" if rec.get("ticker") else "") + (f" {rec['pct']:g}%" if "pct" in rec else ""))
+    print(f"已写手动指令 {rec['id']}：{MO.describe(rec)}")
+    adj = MO.adjust_plan(rec, st, float((b_.get("manual") or {}).get("cap_pct") or MO.CAP_PCT)) if rec["kind"] == "adjust" else None
+    if adj and adj["delta"] > 0:
+        ad, ad_today = MO.add_window(now, st.get("last_date"))
+        print(f"按最近收盘 ¥{adj['px']:,.0f} 估算：加 {adj['delta']:,} 股（{adj['cur']:,} → {adj['target']:,} 股，约占权益 {adj['new_pct']:.1f}%）"
+              + ("；★ 超过单只上限，截到上限" if adj["capped"] else "")
+              + f"；执行器在 {ad}（{'今天' if ad_today else '下一个交易日'}）开盘前的运行里下寄付指値（钱不够时先卖核心 ETF；只做一次）")
+    elif adj:
+        print(f"按最近收盘 ¥{adj['px']:,.0f} 估算：卖 {-adj['delta']:,} 股（{adj['cur']:,} → {adj['target']:,} 股）；"
+              f"执行器在 {day}（{'今天' if today else '下一个交易日'}）开盘前的运行里下寄付成行单")
     if rec["kind"] in ("sell", "trim"):
         print(f"执行器在 {day}（{'今天' if today else '下一个交易日'}）开盘前的运行里下寄付成行单"
               + ("；现在在 07:45〜08:45 之间：可以马上跑一次 bash scripts/liveu.sh run --broker "
@@ -3961,13 +3997,15 @@ def main(argv=None) -> int:
     lu.add_argument("--halt-drill", action="store_true",
                     help="HALT 演练（只用模拟账户、今天早上的运行完成之后）：建演练用的 HALT → 跑一次 → 删掉它（bash scripts/liveu.sh halt-drill）")
     lu.set_defaults(func=cmd_live_unified)
-    mn = sub.add_parser("manual", help="手动指令：卖出 / 减仓 / 闲置资金比例 / 不买回 / 撤回（只写指令；下单由执行器在下一次运行里做）")
-    mn.add_argument("action", choices=["list", "sell", "trim", "core", "unblock", "cancel"])
-    mn.add_argument("target", nargs="?", default=None, help="sell / trim / unblock：代码（例 7203）；cancel：指令 id")
+    mn = sub.add_parser("manual", help="手动指令：卖出 / 减仓 / 调整持仓（可加可减）/ 闲置资金比例 / 不买回 / 撤回（只写指令；下单由执行器在下一次运行里做）")
+    mn.add_argument("action", choices=["list", "sell", "trim", "adjust", "core", "unblock", "cancel"])
+    mn.add_argument("target", nargs="?", default=None, help="sell / trim / adjust / unblock：代码（例 7203）；cancel：指令 id")
+    mn.add_argument("--shares", type=int, default=None, help="adjust：目标股数（单元向下取整）")
+    mn.add_argument("--yen", type=float, default=None, help="adjust：目标金额（円，按决策时的收盘换成股数）")
     mn.add_argument("--broker", default="paper", choices=["paper", "tachibana"])
     mn.add_argument("--demo", action="store_true", help="立花デモ環境的账本")
     mn.add_argument("--dry-run", action="store_true", help="立花 dry-run 的账本")
-    mn.add_argument("--pct", type=float, default=None, help="trim：减到总权益的 %%；core：规则目标额的 %%（100 = 照规则，0 = 全部卖出留现金）")
+    mn.add_argument("--pct", type=float, default=None, help="trim：减到总权益的 %%；adjust：目标占总权益的 %%；core：规则目标额的 %%（100 = 照规则，0 = 全部卖出留现金）")
     mn.add_argument("--block-days", type=int, default=20, help="sell：之后多少个交易日不自动买回（0 = 不限制，-1 = 一直）")
     mn.add_argument("--note", default=None, metavar="TEXT")
     mn.set_defaults(func=cmd_manual)
