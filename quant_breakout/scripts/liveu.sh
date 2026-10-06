@@ -17,6 +17,10 @@
 #   bash scripts/liveu.sh halt-drill                 HALT 演练（模拟账户；今天早上的运行完成之后）：建 HALT → 跑一次 → 删掉这次建的 HALT
 #   bash scripts/liveu.sh flow 300000 [--flow-note …]  登记入金（出金写负数）：只影响收益的计算与提醒，不下单
 #   bash scripts/liveu.sh probe [--demo [--order-test]]  立花 API 检查（只读；--order-test 只在デモ发单），结果给上线门槛用
+#   bash scripts/liveu.sh manual list|sell 7203|trim 7203 --pct 10|core --pct 50|unblock 7203|cancel <id> [--broker tachibana]
+#                                                    手动指令：只写指令（数据目录 manual/）；下单由执行器在下一次能下寄付单的运行里做
+#   bash scripts/liveu.sh panel [--open]             本机操作面板 http://127.0.0.1:8765/（LaunchAgent com.qbreak.panel 常驻）：
+#                                                    账本、为什么持有 · 现在趋势、卖出 / 减仓 / 闲置资金比例 / 撤回按钮（按钮只写手动指令）
 # 远程停止：云端对话里你说「停」→ 仓库的 var/HALT_REMOTE（run.py remote-halt）→ 这里每次运行前看一眼，新的 id → 建本地 HALT。
 # 页面（账本 + 日志）：~/.qbreak/home/out/page_paper.html（立花：page_tachibana.html），每次运行都重写；
 #   定时任务跑完自动用浏览器打开（不想弹出：touch ~/.qbreak/home/NO_OPEN）；运行没走完 → 页面顶上标红 + 通知。
@@ -156,6 +160,16 @@ if [ "${1:-}" = "flow" ]; then                     # 登记入出金（默认立
   amt="$1"
   shift
   exec "$PY" run.py live-u --broker tachibana --flow="$amt" ${1+"$@"}
+fi
+
+if [ "${1:-}" = "manual" ]; then                   # 手动指令：bash scripts/liveu.sh manual sell 7203 [--broker tachibana]（只写指令；下单由执行器做）
+  shift
+  exec "$PY" run.py manual ${1+"$@"}
+fi
+
+if [ "${1:-}" = "panel" ]; then                    # 本机操作面板（LaunchAgent com.qbreak.panel；手动：bash scripts/liveu.sh panel --open）
+  shift
+  exec "$PY" run.py panel ${1+"$@"}
 fi
 
 if [ "${1:-}" = "probe" ]; then                    # 立花 API 检查：本番只读；--demo --order-test 在デモ环境发单检查

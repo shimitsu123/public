@@ -13779,5 +13779,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "真实 5 分钟线合成 vs 正式日线：日经 10-05 收盘 −0.027%、S&P 10-02 +0.010%（开 / 高 / 低一致）；13 个指数重新下载无误判；不改规则 / 参数 / 仓位"
+ },
+ {
+  "line": 9695,
+  "date": "2026-10-06",
+  "title": "手动卖出 / 减仓 / 闲置资金比例（页面或命令行只写指令，执行器在下一次能下寄付单的运行里下单：同样的闸门与对账；成交日 08:55 前 → 当天开盘）+ 每只持仓「为什么持有（买入信号那天的规则读数）· 现在趋势（均线 / MACD 的机械描述）」横展开到日报、Mac 页面、操作面板、执行器日志",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": null,
+  "script": "qbreak/manual_orders.py、qbreak/panel.py、qbreak/holding_view.py、qbreak/live_unified.py、qbreak/unified.py（pre_decide_fn / core_scale）、run.py（manual / panel）、scripts/install_launchd_panel.sh",
+  "output": "~/.qbreak/home/manual/requests_<账本>.jsonl（Mac，不入库）；执行器账本 manual 段；unified_today.json / live_unified_<账本>.json 的 holding_view",
+  "candidates": [],
+  "baseline": null,
+  "windows": null,
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "没有手动指令时执行器与以前逐笔相同（原有执行器 / 演练测试全过）；只能卖 / 减不能手动买；模拟账户手动操作会中断上线门槛「连续一致」天数；不改规则 / 参数 / 仓位"
  }
 ]

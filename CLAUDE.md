@@ -55,15 +55,20 @@
   用户说「停 / 今天不要下单」→ 立刻建 `~/.qbreak/home/HALT`（停下单不用再确认）；不在执行器之外向立花发任何单（不写临时脚本调 API 下单）；
   「做一次 HALT 演练」→ `bash scripts/liveu.sh halt-drill`（只删它自己建的演练 HALT；真的 HALT 存在时不演练）；「能上实盘了吗」→ `bash scripts/liveu.sh gate`（只读）；
   用户说入金 / 出金 → `bash scripts/liveu.sh flow <金额>`（出金写负数；只影响收益的计算与提醒，不下单）；
-  用户想人工买卖执行器管的股票（股票池 + 1655）→ 先说明这会让第二天的持仓核对停下，建议先 HALT 再商量；
+  手动卖出 / 减仓 / 闲置资金比例（2026-10-06 起）：只经 `bash scripts/liveu.sh manual …` 或本机操作面板 http://127.0.0.1:8765/ 写「手动指令」，
+  下单由执行器在下一次能下寄付单的运行里做（闸门、对账照常，持仓核对不会停）；用户在这次对话里明确说要卖 / 减 / 改比例才写，没说账本就用模拟账户
+  （`--broker paper`），立花本番要用户说「立花」；写之前告诉用户：成交日 08:55 前 → 当天开盘、之后 → 下一个交易日开盘，卖出后默认 20 个交易日不自动买回，
+  模拟账户的手动操作会中断上线门槛「连续一致」的天数；只能卖 / 减，不能手动买；
+  用户要在立花网站 / App 上直接买卖执行器管的股票（股票池 + 核心 ETF）→ 先说明这会让第二天的持仓核对停下，建议先 HALT 再商量；
   下单前资格检查（`qbreak/eligibility.py`）与「立花能不能买」检查（`qbreak/tradable.py`：JPX 市場区分 + 立花銘柄マスタ）挡掉的票不要绕过；手上的票被标记（被踢出日経225 / JPX 指定 / 上場廃止预定）时规则不自动卖 →
-  告诉用户、由用户决定（要人工卖先 HALT）；名单差异（`run.py eligibility`）要改 `qbreak/universes.py` 须用户确认并记 sim_changes.md；
+  告诉用户、由用户决定（要卖就写手动卖出指令 `liveu.sh manual sell <代码>`）；名单差异（`run.py eligibility`）要改 `qbreak/universes.py` 须用户确认并记 sim_changes.md；
   退市时间表（`run.py delist-schedule`，`var/delist_schedule.json`）到了上場廃止日自动从股票池去掉（只减），补入仍要用户确认
 - 排查先看：`~/.qbreak/home/logs/com.qbreak.liveu.*.out|err`、`~/.qbreak/home/out/live_unified_paper_journal.md`、
   页面 `~/.qbreak/home/out/page_paper.html`、`bash scripts/liveu.sh --broker paper --status`、`launchctl list | grep qbreak`；
   市场仪表盘 / 经济威胁提醒（每 15 分钟）：`~/.qbreak/home/out/dashboard.html`、`~/.qbreak/home/logs/com.qbreak.news.out|err`（只展示与提醒，不下单）；
   J-Quants：`~/.qbreak/home/logs/com.qbreak.jquants.out|err`；登录 / 开机后的自动启动（补跑、打开页面）：
-  `~/.qbreak/home/logs/com.qbreak.login.out|err`
+  `~/.qbreak/home/logs/com.qbreak.login.out|err`；操作面板 / 手动指令：`bash scripts/liveu.sh manual list [--broker tachibana]`、
+  `~/.qbreak/home/logs/com.qbreak.panel.{out,err,retry.log}`
 
 ## 在云端（claude.ai/code 会话 / 例行任务）
 - 开发分支 `claude/rakuten-auto-trading-review-ka7lf0`：只推这个分支，不开 PR（除非用户要求）

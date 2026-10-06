@@ -282,6 +282,8 @@ class UnifiedEngine:
         self.gate_log: list[tuple[str, str, str]] = []      # 被资格检查挡掉的信号：(信号日, 票, 理由)
         self.core_gate_fn = None                            # 票 -> 理由 | None：核心 ETF 在立花买不了（qbreak/tradable.py）→ 不买（那份留现金；卖照常）
         self.entry_priority_fn = None                       # (票, 日) -> 分数 | None：同一天的新仓候选按分数高的先（研究用；缺省 = 按代码）
+        self.pre_decide_fn = None                           # 日 -> None：收盘离场判断之后、统一决策之前（执行器在这里放手动卖出；回测 / 模拟盘不设）
+        self.core_scale = 1.0                               # 核心 ETF 目标额 × 这个比例（执行器的手动「闲置资金比例」；回测 / 模拟盘 = 1）
 
     # ── 工具 ──
     @staticmethod
@@ -435,15 +437,16 @@ class UnifiedEngine:
         st.pos[t] = UPos(t, m, shares, px, str(self.gidx[i].date()), stop_px, px, px, hold=0,
                          entry_fx=float(self.fx_close[i]) if m == "US" else 1.0)
 
-    def sell_fill(self, t: str, qty: int, px: float, i: int, reason: str) -> None:
-        """实盘执行器：个股卖出的实际成交（可能部分成交：只卖出 qty 股，剩下的继续持有、留在待卖）。"""
+    def sell_fill(self, t: str, qty: int, px: float, i: int, reason: str, part_note: str = "（部分成交）") -> None:
+        """实盘执行器：个股卖出的实际成交（可能部分成交：只卖出 qty 股，剩下的继续持有、留在待卖）。
+        part_note：只卖一部分时记在成交理由后面的说明（手动减仓用「（手动减仓）」）。"""
         ps = self.st.pos[t]
         if qty >= ps.shares:
             self._close(t, px, i, reason)
             return
         rest = UPos(**{**asdict(ps), "shares": ps.shares - int(qty)})
         ps.shares = int(qty)
-        self._close(t, px, i, reason + "（部分成交）")
+        self._close(t, px, i, reason + part_note)
         self.st.pos[t] = rest
 
     def _exec_fx(self, i: int, only: str | None = None) -> None:
@@ -727,7 +730,7 @@ class UnifiedEngine:
                 stock_after += v
         usd_stay = st.cash_usd if usd_stay is None else max(0.0, usd_stay)
         tgt_total = (eq * (1 - cfg.core_buffer_pct / 100) - stock_after - reserve
-                     - usd_stay * fx - us_exiting)
+                     - usd_stay * fx - us_exiting) * float(self.core_scale)
         w = {t: float(v) for t, v in cfg.core.items()}
         bear = {t: self._core_bear(t, i) for t in w}
         gated = {}
@@ -836,6 +839,8 @@ class UnifiedEngine:
             self._check_exits("US", i)
         for j in np.flatnonzero(A.has[i]):
             self.last_bar[j] = i
+        if self.pre_decide_fn is not None:
+            self.pre_decide_fn(i)
         self._decide(i)
         eq = self.equity(i)
         st.last_date = str(self.gidx[i].date())

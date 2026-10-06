@@ -1610,6 +1610,7 @@ def cmd_sim_day_unified(a, cfg: dict) -> int:
     out["invest_flow"] = _invest_flow_panel(today)           # 投资流向：季度快照（㉟；每季取一次 e-Stat，只作背景，不影响交易）
     out["interest_burden"] = _interest_burden_panel(today)   # 企业利息负担：季度快照（㊶ ③；每季取一次，只作背景，不影响交易）
     out["timeline"], out["earn_state"] = tlp["timeline"], tlp["earn_state"]   # 买卖时间线（每天按前一天收盘重算）、决算形态（㊱）
+    out["holding_view"] = _holding_view(ctx, state, extras, eq)   # 每只持仓：为什么持有 · 现在趋势如何（只展示）
     out["fwdj"] = _fj_summary(ctx, baseline, eq) if fj_on else {"enabled": False, "baseline": baseline or {}}   # 判断层 + 基准账户对照
     from qbreak import combo_c as _CC
     out["combo_c"] = {**_CC.summary(ctx.cc, ctx.bar_date, ctx.cc_on),                  # 关联搭配 C：今天的市场格、候选的投票与跳过
@@ -2052,6 +2053,19 @@ def _timeline_panel(ctx, eng, state, todo: dict, extras: dict, elig: dict, eq: f
     except Exception as e:                                   # noqa: BLE001
         log.warning("买卖时间线失败（不影响交易）：%s", e)
         return {"timeline": {"error": f"{type(e).__name__}: {e}"[:200]}, "earn_state": {}}
+
+
+def _holding_view(ctx, st, extras: dict, equity) -> dict:
+    """持仓「为什么持有 · 现在趋势如何」（qbreak/holding_view.py；2026-10-06 用户要求）：买入信号那天的规则读数 + 均线 / MACD 的现状。
+    云端日报（模拟盘）与 Mac 页面 / 操作面板（执行器）共用；只展示，不影响交易；失败只记原因。"""
+    from qbreak import holding_view as HV
+    try:
+        return HV.build(ctx.ind, st.pos, ctx.params["JP"], bar_date=st.last_date, pending=dict(st.pending_exit),
+                        core_units=dict(st.core_units), ic=ctx.ic_status,
+                        bullbear_us=(((extras or {}).get("US") or {}).get("regime") or {}).get("bullbear"), equity=equity)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("持仓的持有理由 / 趋势没算出来（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 
 def _era_forward_log(themes: dict, today) -> dict:
@@ -3234,6 +3248,12 @@ def _live_unified_body(a) -> int:
             print(f"  单 {o['cid']}  {o['side']} {o['ticker']} ×{o['qty']}{lim}  {o['status']}  {o.get('note', '')}")
         for e in (b_.get("events") or [])[-10:]:
             print(f"  [{e['level']}] {e['at']} {e['msg']}")
+        from qbreak import manual_orders as _MO
+        for ln in _MO.lines({**(b_.get("manual") or {}), "items": list(((b_.get("manual") or {}).get("items") or {}).values()),
+                             "active": 0}, today=now_jst().date().isoformat()):
+            print(f"  {ln[2:]}")
+        for r_ in _MO.unseen(tag, b_):
+            print(f"  手动指令 {r_['id']}：{_MO.LABEL[r_['kind']]} {r_.get('ticker') or ''} → 等执行器读（下一次运行）")
         page()
         return 0
     if a.remote_halt:                                   # 云端对话里你说「停」→ 仓库的 var/HALT_REMOTE → 这里建本地 HALT（同一个 id 只生效一次）
@@ -3247,9 +3267,12 @@ def _live_unified_body(a) -> int:
             print("开盘后没有要补的买单（09:05 已经处理，或今天没有）：重试不用做")
             return 0
         if a.phase != "open" and morning_done(b_, expected_last_bar(now_jst().date(), "JP").isoformat()):
-            print("今天早上的运行已经完成：重试不用做")
-            return 0
-        print(f"★ 重试：{'开盘后的买单还没下' if a.phase == 'open' else '今天早上的运行没有完成'} → 现在按正常流程跑一次")
+            if not _manual_due(tag, b_):
+                print("今天早上的运行已经完成：重试不用做")
+                return 0
+            print("★ 今天早上的运行已经完成，但有新的手动指令（卖出 / 减仓 / 撤回）→ 现在跑一次：只把它加进今天开盘的单（不重新决策）")
+        else:
+            print(f"★ 重试：{'开盘后的买单还没下' if a.phase == 'open' else '今天早上的运行没有完成'} → 现在按正常流程跑一次")
     if paper and cfg.get("start") and now_jst().date() < _dt.date.fromisoformat(cfg["start"]) and not a.force:
         print(f"模拟期开始日 {cfg['start']} 之前不推进模拟账户（与模拟盘同一天开始；--force 可提前演练）")
         page()
@@ -3275,7 +3298,8 @@ def _live_unified_body(a) -> int:
               f"单笔上限 {'权益 ×1.05（自动）' if a.max_order_value is None else f'{a.max_order_value:,.0f} 円'}；"
               f"ARM {'关闭（--no-arm）' if a.no_arm else '需要'}；HALT 文件 {paths.halt_file()}")
     ux = UnifiedExecutor(eng, broker, book, paper=paper, check_clock=not (paper or a.no_clock),
-                         auto_cap=(not paper and a.max_order_value is None), pre_send=ctx.gate.pre_send)
+                         auto_cap=(not paper and a.max_order_value is None), pre_send=ctx.gate.pre_send,
+                         manual_tag=tag)                     # 页面 / run.py manual 写的手动指令（卖出 / 减仓 / 闲置资金比例）
     try:
         if a.phase == "open":
             if paper:
@@ -3317,7 +3341,7 @@ def _live_unified_body(a) -> int:
     if not paper and len(nr) >= 8 and nr[:8].isdigit() and nr[:8] >= now_jst().strftime("%Y%m%d"):
         sm["notices"] = [f"立花通知：e支店 API 下一个版本的发布日 {nr[:4]}-{nr[4:6]}-{nr[6:8]}（之后旧版本会停用；在 Mac 对话里问"
                          "「立花 API 要更新吗」，按官方仕様書核对 tachibana_spec.json 与适配器）"]
-    cmp = compare_with_sim(eng.st, sim_state, live=not paper) if a.compare_sim else None
+    cmp = compare_with_sim(eng.st, sim_state, live=not paper, manual=sm.get("manual")) if a.compare_sim else None
     record_compare(ux.book, cmp)                            # 上线门槛「连续 10 个交易日一致」用（run.py live-gate）
     ux.save()
     sm["compare"] = cmp
@@ -3333,6 +3357,7 @@ def _live_unified_body(a) -> int:
     sm["tbf"] = _TBF.brief(ctx.tbf, ctx.bar_date, ctx.tbf_on)     # TBF：云端算好的文件今天有没有生效、挡了哪些
     sm["exit_mode"] = ctx.xmode                              # 个股的离场方式（var/sim.json exits；与云端模拟盘同一个）
     sm["idle_cash"] = ctx.ic_status                          # 闲置资金的方式与现在拿什么（var/sim.json idle_cash；与云端模拟盘同一个）
+    sm["holding_view"] = _holding_view(ctx, eng.st, ctx.extras, sm["equity_jpy"])   # 每只持仓：为什么持有 · 现在趋势如何（页面 / 日志）
     write_json(paths.out_dir() / f"live_unified_{tag}.json", sm)
     hist_ = eng.st.history or []
     last_, prev_ = (str(hist_[-1][0]) if hist_ else None), (str(hist_[-2][0]) if len(hist_) > 1 else None)
@@ -3386,6 +3411,86 @@ def _apply_remote_halt(path, paper: bool, notify_: bool) -> None:
         mac_notify(t_, msg[:200])
         notify.send(t_, msg + "\n已建 HALT：之后买卖都不下、持仓不动。已经发到交易所的单不会被撤（要撤请在立花的网站 / App 上撤）。"
                     "恢复：在 Mac 对话里明确说「恢复下单，删除 HALT」", "warn")
+
+
+def _manual_due(tag: str, book: dict) -> bool:
+    """今天开盘之前还来得及、而且有要变成单的手动指令 → 重试要跑一次（qbreak/manual_orders.due）。"""
+    from qbreak import manual_orders as MO
+    return MO.due(tag, book)
+
+
+def cmd_manual(a) -> int:
+    """手动指令（2026-10-06 用户：「当持仓的时候可以在画面上点击卖出后 第二天或者当天就可以在立花自动交易 可以手动调节当前持仓股票百分比」）：
+    只把指令写进数据目录的 manual/requests_<账本>.jsonl；真正下单的是执行器（下一次能下寄付单的运行；同样的闸门、同样的对账）。
+    list：看持仓占比、手动指令、不买回；sell / trim / core / unblock / cancel：写一条指令。页面（run.py panel）做的是同一件事。"""
+    from qbreak import manual_orders as MO
+    from qbreak.calendar_jp import now_jst
+    from qbreak.utils import read_json
+    paper, tag, book = _liveu_tag(a)
+    b_ = read_json(book, {}) or {}
+    st = b_.get("state") or {}
+    now = now_jst()
+    day, today = MO.next_window(now)
+    if a.action == "list":
+        pct = MO.position_pct(st)
+        print(f"账本 {book}（{'模拟账户' if paper else '立花'}；决策日 {st.get('last_date') or '—'}）")
+        for t, p_ in (st.get("pos") or {}).items():
+            q = (st.get("pending_exit") or {}).get(t)
+            print(f"  {t} {int(p_['shares']):,} 股，约占权益 {pct.get(t) if pct.get(t) is not None else '—'}%"
+                  + (f"（已排定开盘卖：{MO.REASON_TEXT.get(q, q)}）" if q else ""))
+        for t, u_ in (st.get("core_units") or {}).items():
+            if int(u_):
+                print(f"  核心 {t} {int(u_):,} 口")
+        man = b_.get("manual") or {}
+        sm = {**man, "items": sorted((man.get("items") or {}).values(), key=lambda x: x.get("at", ""), reverse=True)}
+        print(f"  闲置资金比例：规则目标额的 {float(man.get('core_pct', 100.0)):g}%")
+        for ln in MO.lines(sm, today=now.date().isoformat()):
+            print(f"  {ln[2:]}")
+        for r_ in MO.unseen(tag, b_):
+            print(f"  手动指令 {r_['id']}：{MO.LABEL[r_['kind']]} {r_.get('ticker') or ''} → 等执行器读（下一次运行）")
+        print(f"现在写的卖出 / 减仓：最早 {day} 开盘执行（{'今天' if today else '下一个交易日'}；成交日 {MO.CUTOFF:%H:%M} 截止）")
+        return 0
+    req = {"kind": a.action, "source": "cli", "note": a.note}
+    if a.action in ("sell", "trim", "unblock"):
+        req["ticker"] = a.target
+    if a.action == "cancel":
+        req["target"] = a.target
+    if a.action in ("trim", "core"):
+        req["pct"] = a.pct
+    if a.action == "sell":
+        req["block_days"] = a.block_days
+    try:
+        rec = MO.normalize(req)
+    except ValueError as e:
+        print(f"★ 没写：{e}")
+        return 2
+    why = MO.check(rec, b_, tag)
+    if why:
+        print(f"★ 没写：{why}")
+        return 2
+    rec = MO.append(tag, rec)
+    print(f"已写手动指令 {rec['id']}：{MO.LABEL[rec['kind']]}"
+          + (f" {rec['ticker']}" if rec.get("ticker") else "") + (f" {rec['pct']:g}%" if "pct" in rec else ""))
+    if rec["kind"] in ("sell", "trim"):
+        print(f"执行器在 {day}（{'今天' if today else '下一个交易日'}）开盘前的运行里下寄付成行单"
+              + ("；现在在 07:45〜08:45 之间：可以马上跑一次 bash scripts/liveu.sh run --broker "
+                 + ("paper" if paper else "tachibana") + " --retry" if today and now.time() >= dt.time(7, 45) else ""))
+    elif rec["kind"] == "core":
+        print("闲置资金比例从下一次决策（下一个交易日早上的运行）起生效")
+    if paths.halt_file().exists():
+        print(f"★ HALT 生效中（{paths.halt_file()}）：执行器不会把它变成单，HALT 解除之后的下一次运行才处理")
+    if paper:
+        print("提醒：模拟账户上的手动操作会让它与云端模拟盘不再一致（上线门槛「连续 10 个交易日一致」的天数会中断）")
+    elif not (paths.home() / "ARM").exists():
+        print("提醒：立花还没解锁（没有 ARM 文件）：执行器照常处理，但单会被挡住，不会真的发出去")
+    return 0
+
+
+def cmd_panel(a) -> int:
+    """本机操作面板（qbreak/panel.py）：只在 127.0.0.1 上开一个页面 —— 账本、持有理由与趋势、卖出 / 减仓 / 闲置资金比例 / 撤回按钮。
+    按钮只写手动指令（与 run.py manual 相同）；下单永远由执行器做。"""
+    from qbreak import panel
+    return panel.serve(port=a.port, open_browser=a.open)
 
 
 def cmd_live_gate(a) -> int:
@@ -3847,6 +3952,20 @@ def main(argv=None) -> int:
     lu.add_argument("--halt-drill", action="store_true",
                     help="HALT 演练（只用模拟账户、今天早上的运行完成之后）：建演练用的 HALT → 跑一次 → 删掉它（bash scripts/liveu.sh halt-drill）")
     lu.set_defaults(func=cmd_live_unified)
+    mn = sub.add_parser("manual", help="手动指令：卖出 / 减仓 / 闲置资金比例 / 不买回 / 撤回（只写指令；下单由执行器在下一次运行里做）")
+    mn.add_argument("action", choices=["list", "sell", "trim", "core", "unblock", "cancel"])
+    mn.add_argument("target", nargs="?", default=None, help="sell / trim / unblock：代码（例 7203）；cancel：指令 id")
+    mn.add_argument("--broker", default="paper", choices=["paper", "tachibana"])
+    mn.add_argument("--demo", action="store_true", help="立花デモ環境的账本")
+    mn.add_argument("--dry-run", action="store_true", help="立花 dry-run 的账本")
+    mn.add_argument("--pct", type=float, default=None, help="trim：减到总权益的 %%；core：规则目标额的 %%（100 = 照规则，0 = 全部卖出留现金）")
+    mn.add_argument("--block-days", type=int, default=20, help="sell：之后多少个交易日不自动买回（0 = 不限制，-1 = 一直）")
+    mn.add_argument("--note", default=None, metavar="TEXT")
+    mn.set_defaults(func=cmd_manual)
+    pn = sub.add_parser("panel", help="本机操作面板（127.0.0.1）：账本 + 持有理由 + 卖出 / 减仓 / 比例按钮（按钮只写手动指令）")
+    pn.add_argument("--port", type=int, default=8765)
+    pn.add_argument("--open", action="store_true", help="启动后用浏览器打开")
+    pn.set_defaults(func=cmd_panel)
     lg = sub.add_parser("live-gate", help="立花实盘的上线门槛与准备（只读：不下单、不改文件、不打印密钥）")
     lg.set_defaults(func=cmd_live_gate)
     rh = sub.add_parser("remote-halt", help="云端对话里说「停」：写 var/HALT_REMOTE，提交推送后 Mac 的执行器下一次运行时建本地 HALT")

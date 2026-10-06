@@ -29,6 +29,17 @@
   上线门槛只读检查 `bash scripts/liveu.sh gate`、HALT 演练 `bash scripts/liveu.sh halt-drill`（只删它自己建的演练 HALT）。
   开户后你要做的只剩：デモ一天 `liveu.sh probe --demo --order-test` → 本番只读 `liveu.sh probe` → 入金 → `install_launchd_live_u.sh tachibana`
   → 终端里 `sudo pmset repeat wakeorpoweron MTWRF 07:30:00`（一次，要输入 Mac 的密码）→ `liveu.sh gate` 全 OK → 你明确说「开始实盘」才建 ARM
+- **手动卖出 / 减仓 / 闲置资金比例 + 持有理由与趋势（2026-10-06 用户要求；工程，不改规则；sim_changes 同日一节）**：
+  页面上点「卖出全部」「减到 X%」「闲置资金比例」（本机操作面板 http://127.0.0.1:8765/，LaunchAgent `com.qbreak.panel`）或 `bash scripts/liveu.sh manual …`
+  只写「手动指令」（`~/.qbreak/home/manual/requests_<账本>.jsonl`）；**下单永远是执行器**：在「收盘离场判断之后、统一决策之前」把指令变成单，
+  和规则的卖单同一条路（HALT / ARM / 持仓核对 / 单笔上限 / 时间窗口照常），所以第二天的持仓核对不会停。成交日 08:55 之前点的 → 当天开盘寄付成行
+  （07:40 已经跑完时：交易日 07:45〜08:50 面板叫执行器重试一次；立花另有 08:35 重试），之后点的 → 下一个交易日开盘。
+  卖出后默认 20 个交易日不自动买回（可选 0 / 5 / 60 / 一直）；减仓只能减（按单元向下取整）；闲置资金比例 = 规则目标额 × %（下一次决策起）；
+  撤回：执行器还没处理的马上撤，已交出的「之后不再重下」（已经发到交易所的那笔要在立花网站 / App 上撤）。规则同一天也要卖 → 按规则的单。
+  模拟账户上手动操作会和云端模拟盘不一致（上线门槛「连续 10 个交易日一致」的天数会中断；比较文字注明「有手动操作，是预期的」）。
+  每只持仓的「为什么持有」（买入信号那天的规则读数：横盘振幅、MACD 0 轴附近金叉、放量倍数、W2、离箱顶、出货日；业种 / 主题）与
+  「现在趋势」（收盘对 20 / 60 / 200 日线、20 日线斜率、MACD、1 / 3 个月、离持有以来最高、离止损 → 上升趋势 / 偏强 / 偏弱 / 下降趋势）：
+  云端日报 ② / ④、Mac 账本页面、操作面板、执行器日志都显示（`qbreak/holding_view.py`；只展示，不是预测）。
 - 顶底 / 牛熊分界第二轮（2026-09-26，事先登记 d3fb402）：T7〜T11 五个候选全部没过门槛 → 维持 T0，模拟盘不变，观察名单仍是 T2 / T3（`var/out/timing2_study.md`）
 - 顶底第三轮（2026-09-26，事先登记 12d69cb）：T12〜T15（给快速离场 / 提前回补加独立确认）全部没过 → 维持 T0。最接近的 T12（快速离场要信用确认）准确度与独立市场都更好，但 4 个半段里两个只持平（`var/out/timing3_study.md`）
 - 个股买点 / 卖点成功率（2026-09-26，事先登记 8ae49ea）：E1〜E4、X1 全部没过 → 维持现行。真突破箱顶（E4）胜率 42.5%→49.7%，但交易少 74%、盈亏比下降，组合更差；现行策略靠赔率而不是命中率赚钱（`var/out/signal_study.md`）
@@ -813,12 +824,15 @@
 3. 07:40 Mac（`scripts/liveu.sh run --broker paper`）：`git pull`，等云端当天的 `var/out/unified_today.json`（最多 50 分钟）
    → 把配置与输入拷到 `~/.qbreak/home` → 执行器：昨天的单按真实开盘价撮合 → 对账 → 决策 → 资格检查（Mac 自己再取一次）→ 下「下一开盘」的单
    → 与云端模拟盘逐日比较 → 通知中心 → 日志 → 重写页面并用浏览器打开（桌面的 `qbreak模拟操盘.html` 指向它）
+   （手动指令：执行器每次运行先读 `~/.qbreak/home/manual/`；07:40 跑完以后点的卖出 / 减仓，交易日 07:45〜08:50 由操作面板叫执行器重试一次 → 当天开盘）
 4. 立花上线后另有 09:05 的开盘后补单（开盘前余力不够的买单）
 
 ## 文件地图
 - `qbreak/unified.py` 一个账户的推进器（回测、模拟盘、执行器共用）；`qbreak/live_unified.py` 执行器（对账、下单、安全闸、演练、比较、日志）
 - `qbreak/brokers/tachibana.py` 立花 API v4r10 适配器；`qbreak/brokers/tachibana_sim.py` 模拟交易所（演练用）；`qbreak/brokers/paper.py` 模拟券商
 - `qbreak/bullbear.py` 牛熊分界 + 阶段；`qbreak/report_unified.py` 日报；`qbreak/desktop_page.py` Mac 的账本页面
+- 手动指令：`qbreak/manual_orders.py`（指令文件、检查、执行器里的 Manual：卖出 / 减仓 / 闲置资金比例 / 不买回 / 撤回）、`qbreak/panel.py`（本机操作面板
+  127.0.0.1:8765，只写指令）、`scripts/install_launchd_panel.sh`（LaunchAgent `com.qbreak.panel`）；持有理由与趋势：`qbreak/holding_view.py`
 - `run.py`：`sim-day`（云端）、`live-u`（执行器）、`live-u-rehearse`（演练）、`tachibana-probe`（连通性检查）、`doctor`
 - `scripts/liveu.sh`（Mac 上跑执行器；`news` = 市场仪表盘 + 经济威胁提醒）、`scripts/install_launchd_live_u.sh`（注册定时任务）、
   `scripts/install_launchd_news.sh`（仪表盘每 15 分钟）、`scripts/mac_bootstrap.sh`（一行安装）
@@ -908,7 +922,8 @@
 ## 在 Mac 对话里怎么问（2026-09-26 起用户只用 Mac 的 Claude 对话；规则见 CLAUDE.md「在用户的 Mac 上」）
 **用户问什么，Claude 就直接运行需要的命令并汇报结果**（不是把命令列给用户去跑；研究在 `~/qbreak-dev` 里一口气做完）。
 执行器管理买卖的方式：每个交易日 07:40 按规则自动决策、下「下一开盘」的单（立花上线后另有 09:05 开盘后补单）；
-你控制的是「开 / 停 / 只演练 / 确认状态不明的单」，**不是逐笔下指令**（系统不给买卖指令，也不在执行器之外发单）。
+你控制的是「开 / 停 / 只演练 / 确认状态不明的单」，以及 2026-10-06 起的**手动卖出 / 减仓 / 闲置资金比例**（只写指令，执行器在下一次能下寄付单的运行里下单，
+同样的闸门；不能手动买入）。系统不给买卖建议，也不在执行器之外发单。
 
 | 想做什么 | 这样问（例） | Claude 做什么 | 注意 |
 |---|---|---|---|
@@ -945,7 +960,12 @@
 | 停止下单 | 「停」「今天不要下单」 | 立刻建 `~/.qbreak/home/HALT`（买卖都不下，持仓不动） | 恢复要你明确说「恢复下单，删除 HALT」 |
 | 不在 Mac 旁边要停 | 在云端（手机）的 Claude 对话里说「停」「今天不要下单」 | 云端立刻 `python run.py remote-halt --reason "<你的原话>"` → 提交推送 `var/HALT_REMOTE` → Mac 的执行器下一次运行（07:40 / 08:35 / 09:05 / 09:20）建本地 HALT | 已经发到交易所的单不撤（要撤在立花网站 / App 上撤）；同一个 id 只生效一次；恢复只在 Mac 上明确说 |
 | 状态不明的单 | 「U2026-10-01-BUY-7203.T 在立花网页上是成交 100 股 3,001 円」 | `run.py live-u --broker tachibana --resolve … --filled 100 --px 3001` | 你先在立花的注文一覧看过；没成交就说「没成交」 |
-| 人工买卖 | —— | 目前没有这个功能：执行器管的股票（股票池 + 1655）人工买卖会让第二天的持仓核对停下 | 要人工平仓：先说「停」，再商量是否加「指定卖出 / 登记人工成交」功能 |
+| 手动卖出 / 减仓 | 「卖掉 7203」「7203 减到 10%」「立花的 7203 卖掉，之后一直不买回」 | 先说清楚哪个账本、什么时候成交、卖出后几天不买回 → `bash scripts/liveu.sh manual sell 7203 [--block-days 20\|0\|-1] [--broker tachibana]`、`manual trim 7203 --pct 10`；交易日 07:45〜08:50 且今天早上已跑完 → 再跑 `bash scripts/liveu.sh run --broker paper --retry`（立花 `--broker tachibana`）让它当天开盘执行 | 只写指令，下单由执行器做（HALT / ARM / 持仓核对照常）；没说账本 = 模拟账户（会中断「连续一致」天数）；立花要你说「立花」；只能卖 / 减 |
+| 闲置资金比例 | 「闲置资金只放一半」「核心 ETF 先全部卖掉留现金」「改回照规则」 | `bash scripts/liveu.sh manual core --pct 50`（0 = 卖出留现金；100 = 照规则） | 下一次决策（下一个交易日早上的运行）起生效；只改核心 ETF 的目标额 |
+| 看 / 撤回手动指令 | 「手动指令处理了吗？」「撤回刚才的卖出」「7203 解除不买回」 | `bash scripts/liveu.sh manual list`；`manual cancel <指令 id>`；`manual unblock 7203` | 已经发到交易所的那一笔要在立花网站 / App 上撤；撤回只保证「之后不再重下」 |
+| 操作面板 | 「打开操作面板」 | `open "http://127.0.0.1:8765/?book=paper"`（立花 `?book=tachibana`）；打不开 → `launchctl list \| grep qbreak.panel`，没有就 `bash scripts/install_launchd_panel.sh` | 只在这台 Mac 上；按钮只写指令 |
+| 为什么持有 / 现在趋势 | 「为什么买 7203？」「持仓现在趋势怎么样？」 | 读 `~/.qbreak/home/out/live_unified_paper.json` 的 holding_view（或账本页面 / 操作面板 / 日志）；云端模拟盘看 `var/out/unified_today.json` 的 holding_view 与日报 ② | 只展示：买入那天的规则读数 + 均线位置的机械描述，不是预测；不给买卖建议 |
+| 直接在立花网站 / App 上人工买卖 | —— | 执行器管的股票（股票池 + 核心 ETF）在执行器之外买卖会让第二天的持仓核对停下 | 要卖请用上面的手动卖出；真要在网站上操作：先说「停」，再商量 |
 | 研究 / 改规则 | 「用 J-Quants 数据研究 XX，先登记再跑」 | 在 `~/qbreak-dev` 里：登记（提交）→ 运行 → 结果写进 sim_changes → 推送 | 模拟盘 / 实盘规则只在你确认后改 |
 | 研究循环 | 「研究循环进度？」「停止研究循环」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/research_loop.py --status`（在 `~/qbreak-src/quant_breakout`，读 `var/research_loop.json`；只读）；停止 = 不再开新的一轮 | 循环只研究、只提议，不改模拟盘 / 执行器 |
 | 第二个研究循环 | 「第二个研究循环进度？」「停止研究循环」 | `git -C ~/qbreak-src pull --ff-only` 后 `env -u QBREAK_HOME ~/.qbreak/venv/bin/python scripts/research_loop2.py --status`（在 `~/qbreak-src/quant_breakout`，读 `var/research_loop2.json`；只读）；停止 = 不再开新的一轮 | 循环只研究、只提议，不改模拟盘 / 执行器 |

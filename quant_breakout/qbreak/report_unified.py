@@ -73,6 +73,7 @@ def build_unified_data() -> dict:
             "interest_burden": td.get("interest_burden") or {},  # 企业利息负担的季度快照（㊶ ③，qbreak/interest_burden.py；仪表盘里只作背景）
             "timeline": td.get("timeline") or {},                  # 买卖时间线（qbreak/timeline.py；每天按前一天收盘重算，只展示）
             "earn_state": td.get("earn_state") or {},              # 最近一次决算的形态（qbreak/earn_state.py，㊱；只展示）
+            "holding_view": td.get("holding_view") or {},          # 每只持仓：为什么持有 · 现在趋势如何（qbreak/holding_view.py；只展示）
             "calendar": td.get("calendar") or {},                # 检查日历（qbreak/check_calendar.py；只展示，全貌 CHECK_TIMELINE.md）
             "price_check": td.get("price_check") or {},          # 行情交叉核对（qbreak/price_check.py；yfinance × J-Quants，只报警）
             "fwdj": td.get("fwdj") or {},                        # 前向记录判断层（qbreak/fwd_judgment.py；2026-09-30 起影响日本个股新仓）
@@ -933,6 +934,7 @@ def _positions_block(d: dict, closes: dict) -> str:
     tl = d.get("timeline") or {}
     hs = {h.get("ticker"): h for h in (tl.get("holdings") or [])}
     es_map = (d.get("earn_state") or {}).get("states") or {}
+    hv = {r.get("ticker"): r for r in ((d.get("holding_view") or {}).get("holdings") or [])}
     cfg = d.get("config") or {}
     nmax = int((tl.get("slots") or {}).get("max") or cfg.get("max_positions") or 4)
     if not pos:
@@ -978,8 +980,23 @@ def _positions_block(d: dict, closes: dict) -> str:
                 f" · 止损 {_money(stop0, ccy)}</span> {_es_tag(es_map.get(t)) if (ccy == 'JPY' and es_map.get(t)) else ''}{qtxt}")
         rows.append(f'<div class="posrow"><div class="mlab">{head}</div><div class="mval">{val} {chip}</div><div class="mbar">{meter}</div>'
                     + _mrow("持有", f"最迟 {escape(str(mh.get('sell_day') or '—'))} 开盘卖", hmeter, f"{hold} / {hmax} 天",
-                            _chip(hst, f"还有 {left} 天")) + "</div>")
+                            _chip(hst, f"还有 {left} 天")) + _hv_lines(hv.get(t)) + "</div>")
     return f'<section class="card top"><h2>② 个股持仓（{len(pos)} / {nmax} 个名额）</h2>{"".join(rows)}</section>'
+
+
+def _hv_lines(r: dict | None) -> str:
+    """持仓仪表里每只票下面两行：为什么持有（买入信号那天的规则读数）· 现在趋势如何（均线 / MACD 的机械描述，不是预测）。"""
+    from .holding_view import TREND, why_line
+    if not r:
+        return ""
+    if r.get("error"):
+        return f'<div class="muted small">为什么持有 / 现在趋势：{escape(str(r["error"]))}</div>'
+    tr = r.get("trend") or {}
+    lab = tr.get("label") or "na"
+    st = {"up": "good", "strong": "info", "weak": "warn", "down": "serious"}.get(lab, "na")
+    tag = "".join(f" · {escape(str(r[k]))}" for k in ("s33", "theme") if r.get(k))
+    return (f'<div class="small"><b>为什么持有</b>：{escape(why_line(r))}<span class="muted">{tag}</span></div>'
+            f'<div class="small"><b>现在</b>：{_chip(st, TREND.get(lab, "—"))} <span class="muted">{escape(str(tr.get("text") or ""))}</span></div>')
 
 
 _SLOT_FILL = ("var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)")
@@ -1023,8 +1040,13 @@ def _allocation_block(d: dict, closes: dict, core_rows: str) -> str:
     tot = sum(v for _, v, _ in slices)
     leg = "".join(f'<li><span class="sw" style="background:{fill}"></span>{escape(n)} <b>{_money(v)}</b> <span class="muted">{(v / tot * 100 if tot else 0):.0f}%</span></li>'
                   for n, v, fill in slices if v > 0)
+    from .holding_view import TREND
+    why = "".join(f'<div class="small"><b>{escape(str(r.get("name") or r.get("ticker")))} 为什么持有</b>：{escape(str(r.get("why") or ""))}'
+                  + (f'；现在 {escape(TREND.get((r.get("trend") or {}).get("label"), "—"))}'
+                     f'<span class="muted">（{escape(str((r.get("trend") or {}).get("text") or ""))}）</span>' if r.get("trend") else "")
+                  + "</div>" for r in ((d.get("holding_view") or {}).get("core") or []))
     return (f'<section class="card top"><h2>④ 资产构成与核心 ETF（闲置资金）</h2><div class="alloc">{_donut(slices)}<ul class="legend">{leg}</ul></div>'
-            f'<div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core_rows}</table></div></section>')
+            f'{why}<div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core_rows}</table></div></section>')
 
 
 def _market_block(d: dict) -> str:
@@ -1665,7 +1687,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 :root[data-theme="dark"]{{--st-info:#6fb3d2;--s1:#3987e5;--s2:#199e70;--s3:#9085e9;--s4:#c98500}}
 .card.top{{border-left:3px solid var(--accent)}} .hero{{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;margin:2px 0 8px}} .hero .big{{font-size:34px;font-weight:600;line-height:1.1}} .hero .big2{{font-size:20px;font-weight:600}}
 .mrow,.posrow{{display:grid;grid-template-columns:1fr;gap:2px;padding:8px 0;border-top:1px solid var(--line)}} .mrow:first-of-type,.posrow:first-of-type{{border-top:0}}
-.posrow .mrow{{border-top:0;padding:4px 0 0}} .mlab{{font-size:14px}} .mval{{font-size:15px}} .mval b{{font-size:17px}}
+.posrow .mrow{{border-top:0;padding:4px 0 0}} .posrow>.small{{font-size:13px;padding-top:2px}} .card>.small{{font-size:13px;margin:2px 0}} .mlab{{font-size:14px}} .mval{{font-size:15px}} .mval b{{font-size:17px}}
 .meter{{width:100%;height:auto;display:block;max-width:520px}} .seg{{width:100%;height:auto;display:block;max-width:360px}}
 .st{{display:inline-block;border-radius:999px;padding:1px 8px;font-size:12px;font-weight:600;color:#fff;white-space:nowrap;vertical-align:middle}}
 .st-good{{background:var(--st-good)}} .st-warn{{background:var(--st-warn);color:#1d1d1b}} .st-serious{{background:var(--st-serious);color:#1d1d1b}} .st-crit{{background:var(--st-crit)}} .st-na{{background:var(--st-na)}} .st-info{{background:var(--st-info)}}

@@ -14,6 +14,9 @@
   开盘后（F 的 09:05 前后）  run.py live-u --phase open
     ⑤ 留下的买单：用券商给的始値做同一条跳空过滤与名额检查，按当时的余力减到买得起，下当日限り指値（价格同上）
 
+手动指令（qbreak/manual_orders.py；页面 / run.py manual 写，manual_tag 给了才读）：卖出全部 / 减仓 / 闲置资金比例 / 不自动买回。
+  在「收盘离场判断之后、统一决策之前」变成执行器的单（与规则的卖单同一条路：同样的闸门、同样的对账），所以不会让持仓核对停下。
+
 安全闸（任何一道不过 → 不下单，只记账、报警）：
   HALT 文件 / 行情没更新到应有的交易日 / 持仓与券商不一致 / 时间窗口不对 / 有状态不明的单；
   （立花）还有 ARM 未解锁、第二暗証番号缺失、单笔金额上限（默认 = 权益 ×1.05，核心 ETF 一笔可到权益的 100%）。
@@ -35,6 +38,7 @@ from . import paths
 from .brokers.base import state_tag
 from .brokers.paper import PaperBroker
 from .calendar_jp import next_trading_day, now_jst
+from .manual_orders import Manual
 from .tick import round_to_tick
 from .unified import UnifiedEngine, UState, market_of
 from .utils import atomic_write_text, read_json, setup_logging
@@ -99,7 +103,8 @@ class UnifiedExecutor:
 
     def __init__(self, eng: UnifiedEngine, broker, path=None, *, paper: bool | None = None,
                  respect_halt: bool = True, check_clock: bool = True, clock=None, sync_cash: bool | None = None,
-                 auto_cap: bool = False, cap_mult: float = 1.05, persist: bool = True, pre_send=None):
+                 auto_cap: bool = False, cap_mult: float = 1.05, persist: bool = True, pre_send=None,
+                 manual_tag: str | None = None):
         if "US" in eng.cfg.stock_markets or any(market_of(t) != "JP" for t in eng.cfg.core):
             raise ValueError("执行器只做东证（立花 e支店没有美股）：stock_markets 只能是 JP，核心 ETF 只能是东证上市的")
         self.eng, self.b = eng, broker
@@ -120,6 +125,9 @@ class UnifiedExecutor:
         self._fills: dict[str, tuple[int, float]] = {}
         self._reconciled: list[dict] = []
         self.diffs: list[dict] = []                         # 模型会成交、实际没成交的买单（与模拟盘出现差异的起点）
+        self.manual = Manual(self.book, manual_tag, self.clock) if manual_tag else None   # 手动指令（演练 / 回放不读）
+        if self.manual is not None:
+            self._wire_manual()
 
     # ── 账本 ──
     def _active(self) -> list[ExecOrder]:
@@ -144,6 +152,44 @@ class UnifiedExecutor:
         """这次运行不下单（状态照常对账、决策）。多个原因用「；」连起来。"""
         self.blocked = f"{self.blocked}；{reason}" if self.blocked else reason
         self._event("error", f"不下单：{reason}")
+
+    def _wire_manual(self) -> None:
+        """手动指令接进引擎：闲置资金比例 → 核心目标额 × 比例；手动卖出后不自动买回 → 新仓的资格检查多一条。"""
+        eng, man = self.eng, self.manual
+        eng.core_scale = man.core_pct / 100
+        base = eng.entry_gate_fn
+
+        def gate(t: str, i: int) -> str | None:
+            return (base(t, i) if base is not None else None) or man.block_reason(t, eng.gidx[i])
+        eng.entry_gate_fn = gate
+
+    def _apply_manual(self, i: int) -> None:
+        """第 i 根 K 线的决策之前：等着的手动卖出 / 减仓 → 执行器的单（成交日 = i 的下一交易日；HALT 时不动）。"""
+        fill = next_trading_day(self.eng.gidx[i].date())
+        halted = self.respect_halt and paths.halt_file().exists()
+        for lvl, msg in self.manual.apply(self.eng, i, fill, halted=halted):
+            self._event(lvl, msg)
+
+    def _settle_manual(self) -> None:
+        """撤回中的手动指令：这次决策里它的卖单还没发到交易所 → 撤（不再重下）；已经发出的等对账。"""
+        d = self.eng.st.last_date
+        sent = {o.ticker for o in self.orders if o.decided_on == d and o.side == "SELL" and o.kind == "stock"
+                and o.reason in ("manual", "manual_trim") and o.status not in ("PLANNED", "BLOCKED", "SKIPPED")}
+        for lvl, msg in self.manual.settle(self.eng.st, sent):
+            self._event(lvl, msg)
+        for o in self.orders:                                # 撤掉的手动卖单还没发出的 → 不再重试
+            if o.decided_on == d and o.reason in ("manual", "manual_trim") and o.status in ("PLANNED", "BLOCKED") \
+                    and not self._manual_wanted(o):
+                o.status, o.note = "SKIPPED", "手动指令已撤回"
+
+    def _manual_wanted(self, o: ExecOrder) -> bool:
+        """这笔手动卖单之后还要不要再下（没撤回、还在待卖 / 减仓里）。"""
+        st = self.eng.st
+        if self.manual.cancelling(o.ticker):
+            return False
+        if o.reason == "manual_trim":
+            return o.ticker in self.manual.m["trims"] and o.ticker not in st.pending_exit
+        return st.pending_exit.get(o.ticker) == "manual"
 
     def fill_day(self) -> dt.date | None:
         d = self.eng.st.last_date
@@ -256,10 +302,15 @@ class UnifiedExecutor:
             b.max_order_value = round(eng.equity(k) * self.cap_mult)
         have = {o.cid: o for o in self.orders if o.decided_on == d}
         bp, deferring = None, False
-        for x in eng.todo(k)["JP"]:
+        todo = eng.todo(k)["JP"]
+        if self.manual is not None:                         # 手动减仓：卖单，排在规则的卖单之后、买单之前
+            n_sell = sum(1 for x in todo if x["side"] == "SELL")
+            todo[n_sell:n_sell] = [{"side": "SELL", "ticker": t, "qty": n, "reason": "manual_trim", "cid": f"U{d}-SELL-{t}-M"}
+                                   for t, n, _ in self.manual.trim_orders(st)]
+        for x in todo:
             t, side = x["ticker"], x["side"]
             kind = "core" if t in eng.core_set else "stock"
-            cid = f"U{d}-{side}-{t}"
+            cid = x.get("cid") or f"U{d}-{side}-{t}"
             o = have.get(cid)
             if o is not None and o.status not in ("PLANNED", "BLOCKED"):
                 deferring = deferring or (side == "BUY" and o.status == "DEFERRED")
@@ -458,7 +509,11 @@ class UnifiedExecutor:
             if q <= 0:
                 if o.side == "SELL" and o.status == "UNFILLED":
                     self.stats["unfilled_sell"] += 1
-                    self._event("warn", f"SELL {o.ticker} 没成交（{o.note or '寄付で約定せず'}）→ 仍是待卖，今天再下")
+                    again = self.manual is None or o.reason not in ("manual", "manual_trim") or self._manual_wanted(o)
+                    self._event("warn", f"SELL {o.ticker} 没成交（{o.note or '寄付で約定せず'}）→ "
+                                        + ("仍是待卖，今天再下" if again else "手动指令已撤回，不再下"))
+                    if self.manual is not None and o.reason in ("manual", "manual_trim"):
+                        self.manual.on_fill(o.ticker, o.reason, 0, 0.0, str(eng.gidx[k].date()), st)
                 elif o.side == "BUY" and o.status == "UNFILLED":
                     self.stats["unfilled_buy"] += 1
                     j = eng.col.get(o.ticker)
@@ -477,11 +532,19 @@ class UnifiedExecutor:
                     self._event("error", f"SELL {o.ticker} 成交 {q} 股，但状态里没有这只持仓")
                     continue
                 full = q >= ps.shares
-                eng.sell_fill(o.ticker, min(int(q), ps.shares), px, k, st.pending_exit.get(o.ticker) or o.reason or "exit")
-                if full:
-                    st.pending_exit.pop(o.ticker, None)
+                if o.reason == "manual_trim":                 # 手动减仓：只卖一部分，剩下的照常持有（不是待卖）
+                    eng.sell_fill(o.ticker, min(int(q), ps.shares), px, k, "manual_trim", part_note="")
+                    if full:
+                        st.pending_exit.pop(o.ticker, None)
                 else:
-                    self._event("warn", f"SELL {o.ticker} 部分成交 {q}/{ps.shares} 股 → 剩下的仍是待卖")
+                    why = st.pending_exit.get(o.ticker) or o.reason or "exit"
+                    eng.sell_fill(o.ticker, min(int(q), ps.shares), px, k, why)
+                    if full:
+                        st.pending_exit.pop(o.ticker, None)
+                    else:
+                        self._event("warn", f"SELL {o.ticker} 部分成交 {q}/{ps.shares} 股 → 剩下的仍是待卖")
+                if self.manual is not None and o.reason in ("manual", "manual_trim"):
+                    self.manual.on_fill(o.ticker, o.reason, int(q), float(px), str(eng.gidx[k].date()), st)
             elif o.kind == "core":
                 eng._core_trade(o.ticker, o.side, int(q), k, px=px)
             else:
@@ -490,7 +553,7 @@ class UnifiedExecutor:
                     continue
                 eng._open(o.ticker, "JP", int(q), px, k)
             self._reconciled.append({"bar": str(eng.gidx[k].date()), "side": o.side, "ticker": o.ticker,
-                                     "qty": int(q), "px": round(float(px), 4), "kind": o.kind})
+                                     "qty": int(q), "px": round(float(px), 4), "kind": o.kind, "reason": o.reason})
         for t in list(st.pending_exit):
             if t not in st.pos:
                 st.pending_exit.pop(t)
@@ -500,6 +563,9 @@ class UnifiedExecutor:
             self.book.setdefault("history", []).append({"fill_bar": str(eng.gidx[k].date()),
                                                         "orders": [asdict(o) for o in act]})
         self.orders = [o for o in self.orders if o not in act]
+        if self.manual is not None:                         # 撤回中的手动指令：这时候已经没有在途的单 → 撤；持仓没了的 → 完成
+            for lvl, msg in self.manual.settle(st, set()):
+                self._event(lvl, msg)
 
     def check_broker(self) -> None:
         """券商持仓 = 状态持仓？（执行器管的票：状态里的持仓、核心 ETF、股票池里的票）不一致 → 这次不下单。
@@ -593,7 +659,12 @@ class UnifiedExecutor:
             self._paper_open(k)
         self._reconcile(k, self._collect_fills())
         self.check_broker()
-        self.eng.close_phase(k)
+        if place and self.manual is not None:              # 手动卖出 / 减仓：收盘离场判断之后、统一决策之前变成单
+            self.eng.pre_decide_fn = self._apply_manual
+        try:
+            self.eng.close_phase(k)
+        finally:
+            self.eng.pre_decide_fn = None
         if place:
             self.place(k)
 
@@ -601,6 +672,10 @@ class UnifiedExecutor:
         """实盘 / 模拟账户的早上：处理新收盘的交易日（通常 1 天）。实盘只能给今天的开盘下单 → 只在最后一天下单；
         中间错过的开盘（执行器没运行）等于没成交。没有新交易日 → 只补下当前决策里还没下的单。"""
         eng = self.eng
+        if self.manual is not None:                         # 页面 / 命令行写的新指令（闲置资金比例从这次决策起生效）
+            for lvl, msg in self.manual.ingest():
+                self._event(lvl, msg)
+            eng.core_scale = self.manual.core_pct / 100
         if idxs:
             eng.prime(idxs[0])
             if not self.paper and len(idxs) > 1:
@@ -611,6 +686,9 @@ class UnifiedExecutor:
             k = int(eng.gidx.searchsorted(dt.datetime.fromisoformat(eng.st.last_date)))
             if k < len(eng.gidx) and str(eng.gidx[k].date()) == eng.st.last_date:
                 eng.prime(k + 1)
+                if self.manual is not None:                 # 同一决策补单：撤回中的先处理，再把新的手动卖出 / 减仓加进这次的单
+                    self._settle_manual()
+                    self._apply_manual(k)
                 self.place(k)
         self.save()
 
@@ -628,6 +706,7 @@ class UnifiedExecutor:
                 "pending_exit": dict(st.pending_exit), "reconciled": list(self._reconciled),
                 "orders": [asdict(o) for o in self.orders if o.decided_on == st.last_date],
                 "blocked": self.blocked, "stats": dict(self.stats),
+                "manual": self.manual.summary() if self.manual is not None else None,
                 "events": (self.book.get("events") or [])[-30:] + self.events}
 
 
@@ -707,14 +786,24 @@ def rehearse(make_engine, start, end=None, kind: str = "paper", workdir=None, ex
 
 
 # ══════════════════════════ 汇报：与模拟盘比较、通知、日志 ══════════════════════════
-def compare_with_sim(st: UState, sim: UState | None, live: bool = False) -> dict:
+def compare_with_sim(st: UState, sim: UState | None, live: bool = False, manual: dict | None = None) -> dict:
     """执行器账户 vs 模拟盘账户：同一决策日时逐项比较（个股股数、1655 口数、现金、权益）；不是同一天就不比（例如云端当天还没入库）。
     live=True（立花实盘）：本金、税、实际手续费与成交价都和 ¥100 万的模拟盘不同，金额一定对不上 → 只比「拿的是不是同样的票」
-    （个股与核心 ETF 的品种），金额与权益差只写出来、不算不一致。"""
+    （个股与核心 ETF 的品种），金额与权益差只写出来、不算不一致。
+    manual = 执行器的手动指令汇总（qbreak/manual_orders.py）：有手动操作时不一致的文字后面注明「是预期的」。"""
+    out = {"exec_date": st.last_date, "sim_date": sim.last_date if sim else None, "comparable": False, "same": None}
+    out = _compare(st, sim, live, out)
+    from .manual_orders import active as manual_active
+    if manual_active(manual) and out.get("comparable") and not out.get("same"):
+        out["manual"] = True                                # 有手动操作：与云端不同是预期的（上线门槛的「连续一致」照常中断）
+        out["text"] += "（有手动操作 —— 手动卖出 / 减仓 / 闲置资金比例 / 不买回 —— 与云端不同是预期的）"
+    return out
+
+
+def _compare(st: UState, sim: UState | None, live: bool, out: dict) -> dict:
     pos = lambda s: {t: int(p.shares) for t, p in s.pos.items()}                     # noqa: E731
     core = lambda s: {t: int(u) for t, u in s.core_units.items() if int(u)}          # noqa: E731
     eq = lambda s: float(s.history[-1][1]) if s.history else None                    # noqa: E731
-    out = {"exec_date": st.last_date, "sim_date": sim.last_date if sim else None, "comparable": False, "same": None}
     if sim is None or not sim.last_date or st.last_date != sim.last_date:
         out["text"] = (f"模拟盘停在 {(sim.last_date if sim else None) or '—'}、执行器在 {st.last_date or '—'}："
                        "不是同一天，这次不比（云端当天的例行任务可能还没入库）")
@@ -821,6 +910,9 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     tb = sm.get("tbf") or {}
     if tb.get("enabled") and not tb.get("applied"):
         short += "｜★ TBF 没生效"
+    mn = sm.get("manual") or {}
+    if mn.get("active"):
+        short += f"｜手动指令 {int(mn['active'])} 条在处理"
     lines = [f"- 决策日 {sm.get('decided_on') or '—'} → 成交日 {sm.get('fill_day') or '—'}；权益 ¥{eq:,.0f}"
              f"（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）；现金 ¥{float(st.cash_jpy):,.0f}"]
     if invested is not None and abs(float(invested) - float(capital)) >= 1.0:
@@ -831,16 +923,22 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     held = [f"{t} {int(p.shares):,} 股（成本 ¥{float(p.entry_px):,.2f}，止损 ¥{float(p.stop_px):,.2f}）" for t, p in st.pos.items()]
     held += [f"{t} {int(u):,} 口" for t, u in st.core_units.items() if int(u)]
     lines.append("- 持仓：" + ("；".join(held) if held else "无（全部现金）"))
+    from .holding_view import lines as hv_lines
+    lines += hv_lines(sm.get("holding_view"))               # 每只持仓：为什么持有 · 现在趋势如何（只展示）
+    from .manual_orders import REASON_TEXT, lines as manual_lines
     for r in sm.get("reconciled") or []:
         unit = "口" if r.get("kind") == "core" else "股"
-        lines.append(f"- 已成交（{r['bar']} 开盘）：{'买' if r['side'] == 'BUY' else '卖'} {r['ticker']} {int(r['qty']):,} {unit} @ ¥{float(r['px']):,.2f}")
+        lines.append(f"- 已成交（{r['bar']} 开盘）：{'买' if r['side'] == 'BUY' else '卖'} {r['ticker']} {int(r['qty']):,} {unit} @ ¥{float(r['px']):,.2f}"
+                     + (f"（{REASON_TEXT[r['reason']]}）" if r.get("reason") in REASON_TEXT else ""))
     for o in sm.get("orders") or []:
         how = ("寄付成行" if o["side"] == "SELL" else
                f"{'寄付' if o.get('phase') == 'morning' and o.get('status') != 'DEFERRED' else '开盘后'}指値 ≤ ¥{float(o['limit']):,.0f}")
-        lines.append(f"- 下一开盘：{'卖' if o['side'] == 'SELL' else '买'} {o['ticker']} {_qty_txt(o)}（{how}）→ {o['status']}"
+        lines.append(f"- 下一开盘：{'卖' if o['side'] == 'SELL' else '买'} {o['ticker']} {_qty_txt(o)}（{how}"
+                     + (f"，{REASON_TEXT[o['reason']]}" if o.get("reason") in REASON_TEXT else "") + f"）→ {o['status']}"
                      + (f"：{o['note']}" if o.get("note") else ""))
     if not sm.get("orders"):
         lines.append("- 下一开盘：没有单")
+    lines += manual_lines(sm.get("manual"), today=sm.get("decided_on"))
     for m, bb in (sm.get("market") or {}).items():        # 牛熊：现在处于哪个阶段（只展示）
         if bb and bb.get("phase_label"):
             lines.append(f"- 牛熊（{ {'JP': '日経平均', 'US': 'S&P500'}.get(m, m)}）：{bb['phase_label']}：{bb.get('phase_text', '')}")

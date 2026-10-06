@@ -29,6 +29,7 @@ table{width:100%;border-collapse:collapse;font-size:14px} td,th{border-bottom:1p
 .tag{display:inline-block;padding:1px 8px;border-radius:10px;border:1px solid var(--line);font-size:13px}
 .scroll{overflow-x:auto} ul{margin:4px 0 10px;padding-left:20px} summary{cursor:pointer;font-weight:600;font-size:14px;margin:8px 0 2px}
 a{color:var(--accent)}
+.hv{border-top:1px solid var(--line);padding:8px 0}.hv:first-of-type{border-top:0}.hv ul{margin:4px 0;padding-left:18px}
 """
 
 
@@ -42,6 +43,23 @@ def _yen(v, sign: bool = False) -> str:
 
 def _cls(v) -> str:
     return "" if v is None or float(v) == 0 else ("pos" if float(v) > 0 else "neg")
+
+
+def _manual_card(tag: str, book: dict) -> str:
+    """手动操作（卖出 / 减仓 / 闲置资金比例）：操作面板的入口 + 现在有效的手动设定与指令（qbreak/manual_orders.py）。"""
+    from .manual_orders import lines, unseen
+    man = book.get("manual") or {}
+    sm = {**man, "items": sorted((man.get("items") or {}).values(), key=lambda x: x.get("at", ""), reverse=True)}
+    ls = [x[2:] for x in lines(sm, today=now_jst().date().isoformat())]
+    ls += [f"手动指令 {r['id']}：等执行器读（下一次运行）" for r in unseen(tag, book)]
+    url = f"http://127.0.0.1:8765/?book={tag}"
+    return ("<section class='card'><h2>手动操作（卖出 / 减仓 / 闲置资金比例）</h2>"
+            f"<div>操作面板：<a href='{escape(url)}'>{escape(url)}</a>（只在这台 Mac 上；面板没开时在 Mac 对话里说「打开操作面板」，"
+            "或直接说「卖掉 7203」「7203 减到 10%」「闲置资金比例改成 50%」）</div>"
+            "<div class='muted'>按钮只写指令；下单由执行器在下一次能下寄付单的运行里做（成交日 08:55 之前点的 → 当天开盘，之后 → 下一个交易日开盘），"
+            "HALT / ARM / 持仓核对照常。卖出后默认 20 个交易日不自动买回。</div>"
+            + ("<ul>" + "".join(f"<li>{escape(x)}</li>" for x in ls) + "</ul>" if ls else "<div class='muted'>现在没有手动设定或指令</div>")
+            + "</section>")
 
 
 def _journal_sections(text: str, n: int = 7) -> list[tuple[str, list[str]]]:
@@ -144,16 +162,23 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
                     "这次不开新仓；云端模拟盘每天算好 var/tbf.json、scripts/liveu.sh 同步到本机；日期对不上就按原规则；"
                     "证据：研究里第一关没过（2022 年以后账户略差），用户看过结果后要求加进来</div></section>")
     if st:
+        from .manual_orders import REASON_TEXT
+        from .timeline import REASON as _RS
         pend = st.get("pending_exit") or {}
         pos = "".join(f"<tr><td>{escape(t)}</td><td class='n'>{int(p['shares']):,} 股</td><td class='n'>{_yen(p['entry_px'])}</td>"
                       f"<td class='n'>{_yen(p['stop_px'])}</td><td>{escape(str(p['entry_date']))}</td>"
-                      f"<td>{'待卖（' + escape(str(pend[t])) + '）' if t in pend else ''}</td></tr>"
+                      f"<td>{'待卖（' + escape(REASON_TEXT.get(pend[t]) or _RS.get(pend[t], str(pend[t]))) + '）' if t in pend else ''}</td></tr>"
                       for t, p in (st.get("pos") or {}).items())
         pos += "".join(f"<tr><td>{escape(t)}</td><td class='n'>{int(u):,} 口</td><td class='n'>—</td><td class='n'>—</td>"
                        f"<td>—</td><td>闲置资金（S&P500）</td></tr>" for t, u in (st.get("core_units") or {}).items() if int(u))
         body.append("<section class='card'><h2>持仓</h2><div class='scroll'><table><tr><th>代码</th><th class='n'>数量</th>"
                     "<th class='n'>成本</th><th class='n'>止损</th><th>买入日</th><th>备注</th></tr>"
                     + (pos or "<tr><td colspan=6 class='muted'>无（全部现金）</td></tr>") + "</table></div></section>")
+        hv = sm.get("holding_view") or {}
+        if hv.get("holdings") or hv.get("core"):                # 每只持仓：为什么持有 · 现在趋势如何（执行器每次运行时算）
+            from .holding_view import html as hv_html
+            body.append("<section class='card'>" + hv_html(hv) + "</section>")
+        body.append(_manual_card(tag, book))
         orders = []
         for o in (book.get("orders") or []):
             if o.get("decided_on") != st.get("last_date"):
