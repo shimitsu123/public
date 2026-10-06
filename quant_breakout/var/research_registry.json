@@ -13813,5 +13813,142 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "按钮仍只写手动指令（下单永远是执行器）；手机上不能解除 HALT、不能配对新设备、不能手动买；Mac 睡着或没连 Tailscale 时手机打不开；不改规则 / 参数 / 仓位"
+ },
+ {
+  "line": 9764,
+  "date": "2026-10-06",
+  "title": "登记「税后收益 × 新 NISA：同一套交易放在哪个账户税后留下的最多」：B4 账本上叠税（会计口径，交易不改；源泉徴収あり、清算口径），做法 P0 全部特定口座 / P0c + 申告结转 / N1 NISA 优先 / N2 只核心放 NISA / N3 只个股放 NISA / N4 NISA 优先且先卖 NISA",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": "349c69f（规则、代码、测试与登记前个数；之后不改、只运行一次）",
+  "script": "scripts/nisa_tax_study.py",
+  "output": "var/out/nisa_tax_study.md / .json（运行后）",
+  "candidates": [
+   {
+    "id": "P0c",
+    "result": "登记"
+   },
+   {
+    "id": "N1",
+    "result": "登记"
+   },
+   {
+    "id": "N2",
+    "result": "登记"
+   },
+   {
+    "id": "N3",
+    "result": "登记"
+   },
+   {
+    "id": "N4",
+    "result": "登记"
+   }
+  ],
+  "baseline": "P0（B4 全部放特定口座，源泉徴収あり；B4 = B3 + TBF，规则指纹 1241753c8f2529c6）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09；规模 ¥100 万（判定）/ ¥300 万 / ¥1,000 万",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "判定：¥100 万时三个年代税后年化都 ≥ P0 + 0.5 pp 且回撤不深 2 pp → 取最少多的最大的（同分 N2 → N3 → N1 → N4）；只是提议（NISA 开在哪家、执行器按单指定课税区分要另外做）；登记前只看了个数：个股 Z 28 / E 34 / J 52 笔、核心 63 / 73 / 105 次、每年买入额 ÷ 平均权益 中位 2.07 / 1.33 / 2.57 倍"
+ },
+ {
+  "line": 9782,
+  "date": "2026-10-06",
+  "title": "登记「税后看个股层：B4 的日本个股层扣税之后，还比个股层关掉（O0）多不多」：同一套税的代码，量 B4 − O0 的税后年化差（P0 / P0c / N1〜N4）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "349c69f（与 nisa_tax_study 同一个提交；之后不改、只运行一次）",
+  "script": "scripts/layer_tax_study.py",
+  "output": "var/out/layer_tax_study.md / .json（运行后）",
+  "candidates": [],
+  "baseline": "O0 = B4 但全部 W2 信号都不开（个股层关掉；与 loop4_oracle_diag 的 O0 同一做法）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "读法事先写定（只描述）：P0 税后 Δ > 0 =「税后还有贡献」；税前 > 0 但税后 ≤ 0 =「只在税前有用」；N3 / N1 下 > 0 =「NISA 能救回来」；三个年代都 ≤ 0 → 汇报第一行写、用户决定"
+ },
+ {
+  "line": 9793,
+  "date": "2026-10-06",
+  "title": "运行前修正（登记 349c69f 的税后两项）：先决条件「B4 重算 = TBF 参照、Calmar 差 ≤ 0.0005」→「个股笔数与胜率相同、Calmar 差 ≤ 0.005」（当天行情缓存刷新：E 年化 14.55% → 14.57%，Z / J 相同；没有任何税后结果）",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": "8ce9655（运行前修正；其余规则一个字不改）",
+  "script": "scripts/nisa_tax_study.py（same_b4）、scripts/layer_tax_study.py",
+  "output": null,
+  "candidates": [],
+  "baseline": null,
+  "windows": null,
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "第一次运行在 E 停下（Calmar 0.628 vs 0.627）；停之前 layer_tax_study 打印了 Z 的税前 Δ +7.28 pp 与 O0 Calmar 0.532（税前、只描述）"
+ },
+ {
+  "line": 9802,
+  "date": "2026-10-06",
+  "title": "税后收益 × 新 NISA → 全部特定口座（P0）税后年化比税前少 3.37 / 2.69 / 3.95 pp；核心 ETF 放 NISA 成長投資枠（N2）在 ¥100 万时多 +1.68 / +2.06 / +1.39 pp → 按规则推荐 N2（提议，要用户决定）；N1 / N4 也满足、N3 不满足；申告结转只 E +0.16 pp",
+  "kind": "study",
+  "domain": "资金/执行/成本",
+  "registration": "349c69f（运行前修正 8ce9655：先决条件的容差；之后只运行一次）",
+  "script": "scripts/nisa_tax_study.py",
+  "output": "var/out/nisa_tax_study.md / .json",
+  "candidates": [
+   {
+    "id": "P0c",
+    "result": "只描述（申告结转：Z +0.00、E +0.16、J +0.00 pp）"
+   },
+   {
+    "id": "N1",
+    "result": "满足（+1.71 / +2.22 / +0.98 pp）"
+   },
+   {
+    "id": "N2",
+    "result": "推荐（+1.68 / +2.06 / +1.39 pp；¥300 万 +0.98 / +1.48 / +0.45、¥1,000 万 +0.30 / +0.61 / +0.20）"
+   },
+   {
+    "id": "N3",
+    "result": "不满足（+0.28 / +0.33 / +0.45 pp）"
+   },
+   {
+    "id": "N4",
+    "result": "满足（+1.56 / +2.19 / +0.88 pp）"
+   }
+  ],
+  "baseline": "P0：B4 全部特定口座（源泉徴収あり、清算口径）13.38% / 11.82% / 16.11%（税前 16.75% / 14.51% / 20.05%）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09；¥100 万（判定）/ ¥300 万 / ¥1,000 万",
+  "verdict": "提议(未采用)",
+  "stable_findings": [
+   "税前 → 税后（全部特定口座）三个年代都少约 2.7〜4.0 pp / 年（税前的约五分之一）；税的大头是核心 ETF 的实现收益（J：核心 ¥3,409,565 vs 个股 ¥644,686）",
+   "核心 ETF 放 NISA（N2）三个年代都多 +1.4〜2.1 pp（¥100 万）；账户越大越少（¥1,000 万 +0.2〜0.6 pp）",
+   "只把个股放 NISA（N3）三个年代都 < +0.5 pp：个股层小、亏损在 NISA 里还浪费抵扣"
+  ],
+  "era_dependent_or_reversed": [
+   "申告结转（P0c）只在 E 有用（+0.16 pp，2008 年那种亏损年）"
+  ],
+  "notes": "今天的税制与新 NISA 套到 2001〜2026（假设）；交易不变、税后账户按比例缩小、NISA 按比例拆零头；分红只在卖出时交税；O0 的 E 税后回撤 −30.93% 是 2016 年一次实现多年收益交税（事后只描述）；待办〔72〕"
+ },
+ {
+  "line": 9817,
+  "date": "2026-10-06",
+  "title": "税后看个股层（B4 vs 个股层关掉 O0）→ 个股层的年化贡献 税前 +7.28 / +1.58 / +0.46 pp、全部特定口座税后 +5.67 / +0.94 / +0.14 pp：三个年代税后都还有贡献，J 几乎为零（NISA 优先时 J 为负）",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "349c69f（运行前修正 8ce9655；之后只运行一次）",
+  "script": "scripts/layer_tax_study.py",
+  "output": "var/out/layer_tax_study.md / .json",
+  "candidates": [],
+  "baseline": "O0 = B4 但全部 W2 信号都不开：税前 9.47% / 12.93% / 19.59%，P0 税后 7.70% / 10.88% / 15.96%",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09",
+  "verdict": "只展示",
+  "stable_findings": [
+   "个股层税后在三个年代都还有贡献（P0：+5.67 / +0.94 / +0.14 pp）；没有「只在税前有用」的年代"
+  ],
+  "era_dependent_or_reversed": [
+   "J（2017〜2026）个股层税后只 +0.14 pp / 年；N1 / N4（个股与核心抢 NISA 额度）下 J 为 −0.38 / −0.48 pp"
+  ],
+  "notes": "个股层让核心 ETF 多买卖（J：105 vs 24 次）；J 两个账户交的税几乎一样（¥823,621 vs ¥823,151）；只描述，不改策略"
  }
 ]
