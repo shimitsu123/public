@@ -104,9 +104,11 @@ def test_submit_messages_and_halt_note():
     assert ok and "10/07（下一个交易日）开盘" in msg and "HALT" in msg
 
 
-def test_trigger_runs_retry_only_when_morning_done_and_due():
+def test_trigger_runs_retry_only_when_morning_done_and_due(monkeypatch):
     calls = []
     now = {"t": dt.datetime(2026, 10, 6, 8, 0, tzinfo=JST)}
+    import qbreak.calendar_jp as CJ
+    monkeypatch.setattr(CJ, "now_jst", lambda: now["t"])      # expected_last_bar 看真实时钟：真实日期 = 10-06 收盘后会算成 10-06 → 固定成假时钟
     trg = panel.Trigger(run=lambda tag: calls.append(tag), clock=lambda: now["t"])
     _book(last="2026-10-02")                                   # 早上的运行还没处理 10-05 → 不叫（它自己会读到指令）
     MO.append("paper", {"kind": "sell", "ticker": "7203"})
