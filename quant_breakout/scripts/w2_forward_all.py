@@ -74,6 +74,31 @@
     X2G 按业种挡、同一个月里两组都有 → 快一些。
   - 证实 / 否定都只是记录：HWN / X2G 没过的是账户（Z 年代的 V3），单笔的前向检验回答不了账户的问题；要改模拟盘另写一份事先登记的
     账户研究，并经用户确认。算不了（短観 / 1545 / 日経取不到）→ 那个闸门这次的列为空、报告里写原因，不影响另外两个与第一〜九节。
+十一、追加登记 趋势线研究最接近的做法 TQ08「日线支撑线短（第一个锚点到信号日 ≤ 75 根）的不买」（2026-10-07，用户〔74〕选 ②
+  「把 TQ08 加进全市场前向检验」；只记录、不交易；定义与统计 qbreak/tq08_forward.py）
+  - 来由：趋势线的质地特征研究（scripts/trendline_select_study.py，登记 603712a + 2f4f5af、只运行一次、结果 284f898）16 个「挡一端」做法里
+    最接近的：W / Jx 池子里 B4 会买的信号，挡 d_sup_len ≤ 75 根的那约三分之一 → Jx 胜率 +2.75 pp / 每笔 +0.307 pp（保留 − 全部）、
+    W 同向（+1.27 / +0.590）；但只在「重排组标签再挑最差一端」对照的 86.5 分位（门槛 95）→ 没有入围（Zx 与日経225 账户按规则没看）。
+    挡哪一端是看了 Jx 的结果挑的 → 只有登记之后才发生的信号才是真正的样本外。
+  - 对象：第八节的配对（同一份 J-Quants 行情、同一批信号）里信号日 ≥ 2026-10-08（登记日的下一个东证交易日）、成熟、两边都已平仓的；
+    结果 = X6 那一边的净收益（同第十节）；主样本 = 主对象（成交额 ≥ ¥500 万）里 W2 保留的。照实写：研究的池子还有 C（只作用在日経225）
+    与 TBF（模拟盘 B4 的一部分），这里都不加（同第十节不加 C）。
+  - 标记（定义照研究一个字不改；1 = 挡）：d_sup_len = 信号日的日线支撑线的第一个锚点到信号日的根数（trendline_select_study.ticker_features
+    的 F08；qbreak/trendline.py scan，k / L / gap / R = 5 / 250 / 10 / 60、容差 0.3 × ATR14、只用到信号日为止的 K 线）；
+    ≤ 75 根（研究冻结的三分位界线 BOUNDS["F08"][0] = 75）→ 挡；没有支撑线 / 76 根以上 / 收盘有值的行不到 60 根 → 不挡。
+    行情 = 第八节同一份 J-Quants 复权日线，每只票取收盘与开盘都有值的日子（candle_study.frames_from 同一个取法）。
+  - 假设（事先方向）：不挡的胜率 > 挡的，且每笔不更低。胜率差 / 每笔差 = 不挡 − 挡（pp）；区间 = 按信号月聚类的自助法 2,000 次（种子 20261007）。
+  - 判定（每年一次：与 W2 同一组日期 2027-09-28 … 2031-09-28 之后的那次复核；做过的年份不再做；每次用到那时为止的全部成熟样本）：同第十节 ——
+      证实 = 胜率差的 99% 区间下限 > 0，且每笔差的点估计 ≥ 0 → 记为「新数据证实」；
+      否定 = 胜率差的 95% 区间上限 < 0，或每笔差的 95% 区间上限 < 0 → 记为「新数据否定」，结束跟踪（记录照留）；
+      其他 = 未定；挡 / 不挡 任一组 < 10 笔或 < 3 个信号月 → 「样本不够、不判定」（也算做过那一年）。
+    另报（不判定）：主对象里的日経225（今天的成分）、不限成交额（W2 保留）、主对象里不管 W2 的全部；挡的比例；没有支撑线 / 没有特征行的笔数。
+  - 检出力（事前粗估，照实写）：主对象 W2 保留每年约 450 笔成熟配对、挡约三分之一 → 胜率差的标准误一年约 5 pp（按月聚类约 6〜7.5 pp）；
+    研究里 Jx 的「不挡 − 挡」约 +8 pp（= 保留 − 全部 ÷ 挡的比例；看了结果挑出来的，多半偏大）→ 就算真有 +8 pp，99% 下限 > 0
+    也要约 6〜10 年；+4 pp 要 25 年以上 → 5 次判定里多半是「未定」，比较快能回答的是「方向反过来」（否定）。
+  - 多重检验（照实写）：1 个做法 × 最多 5 次判定，证实用 99%（单侧 0.5%）→ 合起来误判最多约 2.5%；研究里本来就比了 16 个做法、挑了最接近的一个。
+  - 证实 / 否定都只是记录：要改模拟盘另写一份事先登记的账户研究（日経225 三个年代的 B4 账户 + 没看过的 Zx），并经用户确认。
+    算不了 → 这一节这次为空、报告里写原因，不影响第一〜十节。
 """
 from __future__ import annotations
 
@@ -95,6 +120,7 @@ from qbreak import exit_forward as EF                                        # n
 from qbreak import gate_forward as GF                                        # noqa: E402
 from qbreak import idio_forward as IF                                        # noqa: E402
 from qbreak import paths                                                     # noqa: E402
+from qbreak import tq08_forward as TQ                                        # noqa: E402
 from qbreak import w2_forward as W2F                                         # noqa: E402
 
 FORWARD_START = "2026-09-28"
@@ -107,7 +133,7 @@ LIQ_LOG = math.log10(LIQ_MIN_YEN)                                             # 
 HIST = "w2_forward_all_history.csv"
 LINES: list[str] = []
 assert W2_CUT == W2F.W2_CUT and JUDGE_DATES == W2F.JUDGE_DATES and (BOOT_N, SEED) == (W2F.BOOT_N, W2F.SEED)   # 登记值与共用模块一致
-assert IF.JUDGE_DATES == JUDGE_DATES and EF.JUDGE_DATES == JUDGE_DATES and GF.JUDGE_DATES == JUDGE_DATES
+assert IF.JUDGE_DATES == JUDGE_DATES and EF.JUDGE_DATES == JUDGE_DATES and GF.JUDGE_DATES == JUDGE_DATES and TQ.JUDGE_DATES == JUDGE_DATES
 
 
 def say(s: str = "") -> None:
@@ -300,6 +326,67 @@ def gate_eval(G: pd.DataFrame, hist: pd.DataFrame | None, today, n225_set: set[s
             "x2_missing": int(G["x2"].isna().sum()) if len(G) else 0, "n_usable": int(len(G))}
 
 
+def tq08_values(A: dict, PX: pd.DataFrame | None) -> pd.DataFrame:
+    """第十一节：第八节的配对里信号日 ≥ TQ.FORWARD_START 的票 → 同一份 J-Quants 行情（A 的 O / H / L / C；每只票取收盘与开盘都有值的日子 =
+    candle_study.frames_from 同一个取法）→ 每个（票, 信号日）的 d_sup_len 与有没有特征行（qbreak/tq08_forward.sup_len）。"""
+    cols = ["ticker", "sig_date", "d_sup_len", "tq08_row"]
+    if PX is None or not len(PX):
+        return pd.DataFrame(columns=cols)
+    S = PX[pd.to_datetime(PX["sig_date"]) >= pd.Timestamp(TQ.FORWARD_START)]
+    if not len(S):
+        return pd.DataFrame(columns=cols)
+    days = pd.DatetimeIndex(A["days"])
+    col = {t: j for j, t in enumerate(A["names"])}
+    rows = []
+    for t, g in S.groupby("ticker"):
+        v, j = None, col.get(t)
+        if j is not None:
+            ok = np.isfinite(np.asarray(A["C"][:, j], float)) & np.isfinite(np.asarray(A["O"][:, j], float))
+            df = pd.DataFrame({k: np.asarray(A[x][ok, j], np.float64) for k, x in (("Open", "O"), ("High", "H"), ("Low", "L"), ("Close", "C"))},
+                              index=days[ok])
+            v = TQ.sup_len(df)
+        for d in pd.to_datetime(g["sig_date"]).unique():
+            x, has = TQ.value_at(v, d)
+            rows.append({"ticker": t, "sig_date": pd.Timestamp(d), "d_sup_len": x, "tq08_row": has})
+    return pd.DataFrame(rows, columns=cols)
+
+
+def tq08_frame(PX: pd.DataFrame | None, V: pd.DataFrame | None) -> pd.DataFrame:
+    """第十一节：第八节的配对 → 信号日 ≥ TQ.FORWARD_START、成熟、两边都已平仓的 + d_sup_len 与 TQ08 的标记（1 = 挡；没有值 → 不挡）。"""
+    U = EF.usable(PX) if PX is not None and len(PX) else pd.DataFrame(columns=["ticker", "sig_date", "w2_keep", "main", "net_x6"])
+    if len(U):
+        U = U[pd.to_datetime(U["sig_date"]) >= pd.Timestamp(TQ.FORWARD_START)].reset_index(drop=True)
+    if not len(U):
+        return U.assign(d_sup_len=pd.Series(dtype=float), tq08_row=pd.Series(dtype=bool), **{TQ.FLAG: pd.Series(dtype=int)})
+    U = U.assign(sig_date=pd.to_datetime(U["sig_date"]))
+    V = V if V is not None and len(V) else pd.DataFrame(columns=["ticker", "sig_date", "d_sup_len", "tq08_row"])
+    V = V.assign(sig_date=pd.to_datetime(V["sig_date"])).drop_duplicates(["ticker", "sig_date"])
+    M = U.merge(V, on=["ticker", "sig_date"], how="left")
+    M["tq08_row"] = M["tq08_row"].astype("boolean").fillna(False).astype(bool)
+    M["d_sup_len"] = pd.to_numeric(M["d_sup_len"], errors="coerce")
+    M[TQ.FLAG] = TQ.flag(M["d_sup_len"], M["tq08_row"])
+    return M
+
+
+def tq08_eval(Q: pd.DataFrame, hist: pd.DataFrame | None, today, n225_set: set[str]) -> dict:
+    """第十一节：主 = 主对象里 W2 保留的（每年一次判定）；另报不判定。"""
+    if not len(Q):
+        Q = Q.assign(main=pd.Series(dtype=bool), w2_keep=pd.Series(dtype=float))
+    main = Q["main"].astype(bool).to_numpy()
+    keep = pd.to_numeric(Q["w2_keep"], errors="coerce").to_numpy(float) == 1
+    nn = Q["ticker"].isin(n225_set).to_numpy() if len(Q) else np.zeros(0, bool)
+    r = TQ.review(Q[main & keep], hist, today, prefix="all_")
+    side = {name: TQ.evaluate(Q[m]) for name, m in (("主对象里的日経225 股票池（W2 保留）", main & keep & nn),
+                                                    ("不限成交额（W2 保留）", keep), ("主对象里不管 W2 的全部", main))}
+    mk = Q[main & keep]
+    fl = pd.to_numeric(mk[TQ.FLAG], errors="coerce").to_numpy(float) if len(mk) else np.zeros(0)
+    row = mk["tq08_row"].to_numpy(bool) if len(mk) else np.zeros(0, bool)
+    dl = pd.to_numeric(mk["d_sup_len"], errors="coerce").to_numpy(float) if len(mk) else np.zeros(0)
+    return {"main": r, "side": side, "n_usable": int(len(Q)), "n_main": int(len(mk)),
+            "blocked_pct": round(float(np.nanmean(fl)) * 100, 1) if len(fl) else None,
+            "no_line": int((row & ~np.isfinite(dl)).sum()), "no_row": int((~row).sum())}
+
+
 def decide(ev: dict, hist: pd.DataFrame | None, today) -> dict:
     """每年一次（JUDGE_DATES）：失效警报 95% / 证实 99%；判定过的年份记进历史，不再判定。"""
     year = W2F.due_date(today, JUDGE_DATES, W2F.history_done(hist, "all", "w2_year"))
@@ -337,6 +424,14 @@ def review(fetch: bool = True) -> int:
     except Exception as e:                                                    # noqa: BLE001
         PX = None
         x6_note.append(f"X6 的配对这次算不了：{type(e).__name__}: {e}")
+    tq_note, TQV = [], None
+    if PX is not None:                                                        # 第十一节：TQ08 的 d_sup_len（要行情，在 del A 之前算）
+        try:
+            TQV = tq08_values(A, PX)
+        except Exception as e:                                                # noqa: BLE001
+            tq_note.append(f"第十一节这次算不了（d_sup_len）：{type(e).__name__}: {e}")
+    else:
+        tq_note.append("第八节的配对这次算不了 → 第十一节也算不了")
     idio_note = []
     us_pct = s33 = None
     try:                                                                      # 第七节：K2 / USW 的输入（取不到 → 对应列为空，另报原因）
@@ -372,6 +467,12 @@ def review(fetch: bool = True) -> int:
             g10_note.append(f"第十节这次算不了：{type(e).__name__}: {e}")
     else:
         g10_note.append("第八节的配对这次算不了 → 第十节也算不了")
+    tq = None
+    if TQV is not None:                                                       # 第十一节：TQ08（只记录；算不了 → 另报原因）
+        try:
+            tq = tq08_eval(tq08_frame(PX, TQV), hist, today, n225)
+        except Exception as e:                                                # noqa: BLE001
+            tq_note.append(f"第十一节这次算不了：{type(e).__name__}: {e}")
     side = {"全部（不限成交额）": W2F.evaluate(F, date_col="sig_date", n=0) if len(F) else {"n": 0},
             "主对象里的日経225 股票池": W2F.evaluate(M[M["n225"]], date_col="sig_date", n=0) if len(M) else {"n": 0},
             "主对象里的其他股票": W2F.evaluate(M[~M["n225"]], date_col="sig_date", n=0) if len(M) else {"n": 0}}
@@ -444,6 +545,16 @@ def review(fetch: bool = True) -> int:
             else f"- x2 缺值 {g10['x2_missing']} 笔（缺值不挡）")
     for x in g10_note:
         say(f"- {x}")
+    say(f"\n## 趋势线 TQ08（第十一节，主对象、W2 保留、信号日 ≥ {TQ.FORWARD_START}、成熟、X6 离场的结果）：不挡 vs 挡")
+    if tq is not None:
+        for x in TQ.verdict_lines(tq["main"], today=today):
+            say(x)
+        for name, e in tq["side"].items():
+            say(f"- 另报 {name}：{GF.summary_line(e)}")
+        say(f"- 主样本 {tq['n_main']} 笔里挡的占 {tq['blocked_pct'] if tq['blocked_pct'] is not None else '—'}%；"
+            f"没有支撑线 {tq['no_line']} 笔、没有特征行 {tq['no_row']} 笔（都算不挡）")
+    for x in tq_note:
+        say(f"- {x}")
     yr = by_year(M) if len(M) else {}
     if yr:
         say("\n| 信号年 | W2 保留 | 挡掉 |")
@@ -459,7 +570,7 @@ def review(fetch: bool = True) -> int:
     Path(f"{out}.json").write_text(json.dumps({"run": str(today.date()), "data_through": str(last_bar.date()), "refresh": info,
                                                "n_all": int(len(F)), "main": ev, "decision": V, "side": side, "by_year": yr,
                                                "idio": idio, "idio_note": idio_note, "x6": x6, "x6_note": x6_note,
-                                               "g10": g10, "g10_note": g10_note, "code": code},
+                                               "g10": g10, "g10_note": g10_note, "tq08": tq, "tq08_note": tq_note, "code": code},
                                               ensure_ascii=False, indent=1,
                                               default=float), encoding="utf-8")
     row = {"run": str(today.date()), "scope": "all", "data_through": str(last_bar.date()), "closed": ev["n"], "w2_year": V["year"],
@@ -473,6 +584,8 @@ def review(fetch: bool = True) -> int:
                                       {"data_through": str(last_bar.date()), "code": code}))          # 第九节
     if g10 is not None:                                                       # 第十节：判定过的年份下次不再判定
         rows += GF.history_rows(g10["main"], str(today.date()), "all_", {"data_through": str(last_bar.date()), "code": code})
+    if tq is not None:                                                        # 第十一节：判定过的年份下次不再判定
+        rows.append(TQ.history_row(tq["main"], str(today.date()), "all_", {"data_through": str(last_bar.date()), "code": code}))
     pd.concat([hist, pd.DataFrame(rows)], ignore_index=True).to_csv(hist_fp, index=False)   # 只追加
     return 0
 
