@@ -27,7 +27,7 @@ def test_normalize_accepts_codes_and_rejects_bad_input():
                                                                 "source": "cli"}
     assert MO.normalize({"kind": "trim", "ticker": "130a.t", "pct": "12.345"})["pct"] == 12.35
     assert MO.normalize({"kind": "core", "pct": 0, "source": "page<script>"})["source"] == "pagescript"
-    for bad, msg in [({"kind": "buy", "ticker": "7203"}, "不认识"), ({"kind": "sell", "ticker": "AAPL"}, "代码"),
+    for bad, msg in [({"kind": "short", "ticker": "7203"}, "不认识"), ({"kind": "sell", "ticker": "AAPL"}, "代码"),
                      ({"kind": "trim", "ticker": "7203", "pct": 120}, "0〜100"), ({"kind": "core"}, "比例"),
                      ({"kind": "trim", "ticker": "7203", "pct": "nan"}, "0〜100"),
                      ({"kind": "sell", "ticker": "7203", "block_days": 999}, "天数"),

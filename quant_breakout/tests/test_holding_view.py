@@ -63,14 +63,14 @@ def test_build_rows_core_and_errors(monkeypatch):
                   core_units={"1545.T": 50, "1655.T": 0}, ic={"label": "Q1 纳指", "text": "NASDAQ100（1545）"},
                   bullbear_us={"state": "bull", "phase_label": "牛市·稳固"}, equity=1_000_000)
     r = {x["ticker"]: x for x in hv["holdings"]}
-    assert r["7203.T"]["name"] == "トヨタ自動車" and r["7203.T"]["queued"] == "dead_cross"
+    assert r["7203.T"]["name"] == "トヨタ自動車" and r["7203.T"]["queued"] == "MACD 死叉"
     assert abs(r["7203.T"]["pct_equity"] - 300 * 1200 / 1e6 * 100) < 0.01 and r["7203.T"]["trend"]["label"] == "up"
     assert r["9999.T"]["error"] == "没有这只票的行情"
     assert [c["ticker"] for c in hv["core"]] == ["1545.T"] and "Q1 纳指" in hv["core"][0]["why"] and "牛市·稳固" in hv["core"][0]["why"]
     txt = "\n".join(HV.lines(hv))
     assert "7203.T トヨタ自動車 为什么持有" in txt and "现在：上升趋势" in txt and "9999.T：没有这只票的行情" in txt
     html = HV.html(hv, actions=lambda row, kind: f"<i>{kind}:{row['ticker']}</i>")
-    assert "<i>stock:7203.T</i>" in html and "<i>core:1545.T</i>" in html and "已排定开盘卖（dead_cross）" in html
+    assert "<i>stock:7203.T</i>" in html and "<i>core:1545.T</i>" in html and "已排定开盘卖（MACD 死叉）" in html
 
 
 def _write_book(tag="paper"):
@@ -147,17 +147,15 @@ def test_manual_and_panel_help_render():
         assert e.value.code == 0
 
 
-def test_chart_data_tail_moving_averages_and_gaps():
+def test_kline_payload_skips_missing_closes_and_uses_full_history():
+    """K 线（qbreak/kline.py，取代以前的折线图数据）：缺收盘的那根不画也不算进均线；期间开头的均线用全部历史算；带上成本 / 止损。"""
+    from qbreak import kline as KL
     idx = pd.bdate_range("2025-01-01", periods=300)
     c = pd.Series(range(1000, 1300), index=idx, dtype=float)
     df = pd.DataFrame({"Open": c - 1, "High": c + 2, "Low": c - 3, "Close": c, "Volume": 1000.0}, index=idx)
-    df.loc[idx[-3], "Close"] = float("nan")                      # 缺一根：跳过，不画成 0
-    out = HV.chart_data({"7203.T": df, "1545.T": df}, [{"ticker": "7203.T", "kind": "stock", "entry_px": 1250, "stop_px": 1200.0},
-                                                      {"ticker": "1545.T", "kind": "core", "name": "纳斯达克 100（1545）"},
-                                                      {"ticker": "9999.T"}], bar_date=str(idx[-2].date()), n=50)
-    a = out["7203.T"]
-    assert set(out) == {"7203.T", "1545.T"} and len(a["d"]) == 50 and a["d"][-1] == str(idx[-2].date())
-    assert a["c"][-1] == 1298.0 and a["entry_px"] == 1250.0 and a["stop_px"] == 1200.0 and a["kind"] == "stock"
-    assert a["m60"][0] is not None                                # 用全部历史算：期间开头的 60 日线也不缺
-    assert abs(a["m20"][-1] - (sum(range(1278, 1297)) + 1298) / 20) < 0.01  # 缺的那根不算进均线
-    assert str(idx[-3].date()) not in a["d"] and out["1545.T"]["name"] == "纳斯达克 100（1545）" and a["v"][-1] == 1000
+    df.loc[idx[-3], "Close"] = float("nan")
+    p = KL.payload(df, str(idx[-2].date()), {"kind": "stock", "entry_px": 1250.0, "stop_px": 1200.0})
+    a = p["tf"]["D"]
+    assert a["d"][-1] == str(idx[-2].date()) and a["c"][-1] == 1298.0 and p["entry_px"] == 1250.0 and p["stop_px"] == 1200.0
+    assert str(idx[-3].date()) not in a["d"] and a["ma30"][0] is not None and a["v"][-1] == 1000
+    assert abs(a["ma20"][-1] - (sum(range(1278, 1297)) + 1298) / 20) < 0.01

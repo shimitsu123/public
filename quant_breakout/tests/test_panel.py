@@ -151,7 +151,7 @@ def test_render_shows_reasons_trend_and_hides_buttons_for_pending_exit():
     (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps({"holding_view": hv, "fill_day": "2026-10-06"}), encoding="utf-8")
     html = panel.render("paper", "t" * 40, AT)
     assert "トヨタ自動車" in html and "上升趋势" in html and "放量 2.10 倍" in html
-    assert html.count("卖出全部</button>") == 1 and "已排定开盘卖（dead_cross）" in html
+    assert html.count("卖出全部</button>") == 1 and "已排定开盘卖（MACD 死叉）" in html
     assert "规则目标额的 <b>60%</b>" in html and "9984.T" in html and "解除" in html
     assert "模拟账户：手动操作后会和云端模拟盘不一致" in html and "10/06（今天）" in html
 
@@ -176,29 +176,115 @@ def test_submit_adjust_messages_and_due():
     assert not MO.due("paper", only_wait, AT)                   # 等下一次决策的加仓：不叫重试
 
 
-def test_render_adjust_buttons_and_charts():
+TR = {"D": {"label": "上升", "align": "多头排列"}, "W": {"label": "震荡", "align": ""}, "M": {"label": "下降", "align": "空头排列"}}
+
+
+def _kfile(tickers: dict) -> None:
+    (paths.out_dir() / "charts_paper.json").write_text(json.dumps({"asof": "2026-10-05", "tickers": tickers}, ensure_ascii=False),
+                                                       encoding="utf-8")
+
+
+def test_render_adjust_buttons_and_kline():
     _book(pos={"6758.T": {"shares": 200, "entry_px": 900.0, "entry_date": "2026-09-01", "stop_px": 850.0, "last_close": 1000.0}},
           manual={"cap_pct": 34.0, "items": {}})
-    d = ["2026-10-01", "2026-10-02", "2026-10-05"]
-    ser = {"d": d, "o": [990.0, 995.0, 1001.0], "h": [1001.0, 1004.0, 1010.0], "l": [985.0, 990.0, 995.0], "c": [995.0, 1000.0, 1000.0],
-           "v": [100, 200, 300], "m20": [None, 990.0, 991.0], "m60": [None, None, None]}
-    charts = {"6758.T": {**ser, "kind": "stock", "entry_px": 900.0, "entry_date": "2026-09-01", "stop_px": 850.0},
-              "1545.T": {**ser, "kind": "core", "name": "纳斯达克 100（1545）"},
-              "1482.T": {**ser, "kind": "core", "name": "对冲版美国国债</script><b>x"}}
+    kl = {"asof": "2026-10-05", "file": "charts_paper.json", "trend": {"6758.T": TR, "1545.T": TR},
+          "items": {"6758.T": {"kind": "stock"}, "1545.T": {"kind": "core", "name": "纳斯达克 100（1545）"},
+                    "1482.T": {"kind": "core", "name": "对冲版美国国债</script><b>x"}}}
     hv = {"bar_date": "2026-10-05", "holdings": [{"ticker": "6758.T", "shares": 200, "error": "x"}],
           "core": [{"ticker": "1545.T", "name": "纳斯达克 100（1545）", "units": 100, "why": "闲置资金规则"}]}
-    (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps({"holding_view": hv, "charts": charts}), encoding="utf-8")
+    _kfile({"6758.T": {"kind": "stock", "tf": {}}})
+    (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps({"holding_view": hv, "kline": kl}), encoding="utf-8")
     html = panel.render("paper", "t" * 40, AT)
     assert "data-act='adj'" in html and "data-px='1000'" in html and "单只上限 34%" in html and "调整…</button>" in html
     assert "data-t='6758.T' data-kind='stock'" in html and "data-t='1545.T' data-kind='core'" in html
-    assert "现在没拿" in html and "data-t='1482.T' data-kind='core'" in html and html.count("data-act='range'") == 4
-    assert "</script><b>x" not in html                         # 名字里的标签被转义（JSON 里 </ → <\/；HTML 里 escape）
-    raw = html.split("<script type='application/json' id='chart-data'>", 1)[1].split("</script>", 1)[0]
-    assert json.loads(raw)["1482.T"]["name"].endswith("<b>x") and '"addWhen": "10/07（下一个交易日）"' in html
-    assert "加仓 → <b>10/07（下一个交易日） 开盘</b>" in html
-    (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps({"holding_view": hv}), encoding="utf-8")
-    html = panel.render("paper", "t" * 40, AT)                  # 还没有走势数据：占位文字、没有期间切换
-    assert "走势图在执行器下一次运行之后显示" in html and "data-act='range'" not in html
+    assert "现在没拿" in html and "data-t='1482.T' data-kind='core'" in html and html.count("data-act='tf'") == 3
+    assert "</script><b>x" not in html and "对冲版美国国债&lt;/script&gt;" in html
+    assert "日K <b class='up'>上升</b> · 多头排列" in html and "周K <b class='muted'>震荡</b>" in html and "月K <b class='down'>下降</b>" in html
+    assert '"addWhen": "10/07（下一个交易日）"' in html and "加仓 / 买入 → <b>10/07（下一个交易日） 开盘</b>" in html
+    assert "chart-data" not in html and "红 = 涨（空心）" in html                 # K 线数据不内嵌，打开时才取（/api/chart）
+    (paths.out_dir() / "charts_paper.json").unlink()
+    html = panel.render("paper", "t" * 40, AT)                  # 还没有 K 线文件：占位文字、没有周期切换
+    assert "K 线在执行器下一次运行之后显示" in html and "data-act='tf'" not in html
+
+
+SG_ROWS = [
+    {"ticker": "6501.T", "code": "6501", "name": "日立", "sector": "電気機器", "status": "triggered", "status_text": "今天收盘出了买入信号",
+     "signal": True, "score": 88.5, "close": 3500.0, "vol_ratio": 1.4, "range_pct": 9.1, "to_box_top_pct": -0.5, "breakout": True,
+     "top_risk": "RSI72", "trend": TR, "rule": {"state": "blocked", "text": "信号成立但规则不买：个股名额已满（上限 4 只）"},
+     "buy": {"block": None, "warn": [], "lot": 100, "px": 3500.0, "limit": 3605, "rule_shares": 200, "planned": False}},
+    {"ticker": "8035.T", "code": "8035", "name": "東京エレクトロン", "status": "imminent", "status_text": "即将触发", "signal": False,
+     "score": 70.0, "close": 30000.0, "rule": {"state": "none", "text": "还没触发买入信号：规则不会买"},
+     "buy": {"block": "JPX 市場区分「プロ」：不买", "warn": [], "lot": 100, "px": 30000.0, "rule_shares": 0}},
+    {"ticker": "9984.T", "code": "9984", "name": "ソフトバンクG", "status": "watch", "status_text": "观察中", "signal": False,
+     "score": 50.0, "close": 9000.0, "rule": {"state": "none", "text": "还没触发买入信号：规则不会买"},
+     "buy": {"block": None, "warn": ["规则现在不开这只的新仓（新仓倍数 0）：执行器会挡"], "lot": 100, "px": 9000.0, "limit": 9270,
+             "rule_shares": 0}},
+]
+
+
+def _sm(rows=None):
+    (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps(
+        {"suggest": {"asof": "2026-10-05", "rows": SG_ROWS if rows is None else rows}}, ensure_ascii=False), encoding="utf-8")
+
+
+def test_render_suggestions_with_buy_buttons_and_gates():
+    _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
+    _sm()
+    html = panel.render("paper", "t" * 40, AT)
+    assert "建议的股票（规则的候选）" in html and "个股名额：拿着 1 只 + 排定买入 0 只 / 上限 4 只（空 3 个）" in html
+    assert html.count("data-act='buy'") == 2                                # 8035 被硬闸门挡：没有按钮
+    assert "data-t='6501.T'" in html and "data-sig='1'" in html and "data-rule='200'" in html and "data-limit='3605'" in html
+    assert "不能买：JPX 市場区分「プロ」：不买" in html and "顶部风险：RSI72" in html and "<span class='chip hot'>今天收盘出了买入信号" in html
+    assert "★ 规则现在不开这只的新仓（新仓倍数 0）：执行器会挡" in html and "真突破" in html
+    assert html.count("<details class='kl' open>") == 2 and "<details class='kl'><summary>" in html     # 观察中的 K 线默认收起
+    assert "按规则约 200 股 · 约 ¥700,000 · 约占权益 70.0%" in html
+    full = {t: {"shares": 100, "entry_px": 1000.0, "entry_date": "2026-09-01", "stop_px": 900.0, "last_close": 1000.0}
+            for t in ("7203.T", "6758.T", "6861.T", "6098.T")}
+    _book(pos=full, manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
+    html = panel.render("paper", "t" * 40, AT)
+    assert "data-act='buy'" not in html and "个股名额已满（4 / 4 只）：要买先卖出一只" in html
+    _sm([])
+    assert "今天没有出信号 / 即将触发 / 观察中的票" in panel.render("paper", "t" * 40, AT)
+
+
+def test_submit_buy_writes_instruction_and_checks():
+    _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T"]})
+    _sm()
+    ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501"}, AT)
+    assert ok and rec["unit"] == "rule" and "买入 6501.T（按规则的仓位，按最近收盘估算约 200 股 ≈ ¥700,000）" in msg
+    assert "10/07（下一个交易日）" in msg and "没有买入信号" not in msg
+    ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501"}, AT)
+    assert not ok and "没处理完" in msg
+    ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": "8035"}, AT)
+    assert not ok and "不能买：JPX" in msg
+    for t, why in (("7203", "已经持有"), ("1545", "核心 ETF")):
+        ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": t}, AT)
+        assert not ok and why in msg
+    ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "9984", "unit": "shares", "value": 300}, AT)
+    assert ok and rec["value"] == 300 and "买入 9984.T（300 股）" in msg and "没有买入信号" in msg
+    html = panel.render("paper", "t" * 40, AT)
+    assert html.count("data-act='cancel'") == 2 and "有一条没处理完的买入指令" in html
+
+
+def test_chart_endpoint_serves_one_ticker(server):
+    port, tok = server
+    _book()
+    big = {"kind": "stock", "tf": {"D": {"d": ["2026-10-05"] * 300, "c": [1.0] * 300}}}
+    _kfile({"7203.T": big})
+    code, body, hd = _req(port, "GET", "/api/chart?book=paper&t=7203.T")
+    j = json.loads(body)
+    assert code == 200 and j["ok"] and j["t"] == "7203.T" and j["data"]["kind"] == "stock" and j["asof"] == "2026-10-05"
+    assert "Content-Encoding" not in hd and hd.get("Cache-Control") == "no-store"
+    import gzip
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    c.request("GET", "/api/chart?book=paper&t=7203.T", headers={"Host": f"127.0.0.1:{port}", "Accept-Encoding": "gzip"})
+    r = c.getresponse()
+    raw = r.read()
+    assert r.getheader("Content-Encoding") == "gzip" and json.loads(gzip.decompress(raw))["data"] == big
+    c.close()
+    assert _req(port, "GET", "/api/chart?book=paper&t=9999.T")[0] == 404
+    assert _req(port, "GET", "/api/chart?book=paper&t=../x")[0] == 400
+    assert _req(port, "GET", "/api/chart?book=paper&t=7203.T", headers={"Host": "evil.example:80"})[0] == 421
 
 
 def test_page_script_is_valid_javascript(tmp_path):

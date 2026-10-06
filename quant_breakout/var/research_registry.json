@@ -13967,5 +13967,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "没有手动指令时执行器与以前逐笔相同（原有执行器 / 演练 / 引擎测试全过）；模拟账户执行器的加仓与引擎的回测撮合逐笔一致；前一节「只能减不能加」按用户这次要求改为可以加（规则不加仓，「赢家加仓」研究的结论不变）；不改规则 / 参数 / 仓位"
+ },
+ {
+  "line": 9859,
+  "date": "2026-10-06",
+  "title": "操作面板「建议的股票」（规则的候选：今天出了买入信号 / 即将触发 / 观察中 + 规则怎么处理 + 趋势标签）+ 手动买入新股（与规则的新仓同一条路：占名额、先留钱、寄付指値、同一套闸门、只做一次）+ 日K / 周K / 月K 蜡烛图（MA5 / 10 / 20 / 30）",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": null,
+  "script": "qbreak/manual_orders.py（buy、slots）、qbreak/live_unified.py（manual_buy）、qbreak/suggest.py、qbreak/kline.py、qbreak/panel.py（建议的股票、买入对话框、K 线、/api/chart）、run.py（_suggest、_kline、manual buy）",
+  "output": "~/.qbreak/home/out/live_unified_<账本>.json 的 suggest / kline 与 out/charts_<账本>.json（Mac，不入库）；执行器账本 manual 段的 buys",
+  "candidates": [],
+  "baseline": null,
+  "windows": null,
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "没有手动买入指令时执行器与以前逐笔相同；模拟账户执行器的手动买入与引擎（同一决策日放进同样的 plan）逐笔一致；趋势标签是均线位置的机械描述，不是预测；不改规则 / 参数 / 仓位 / 股票池"
  }
 ]

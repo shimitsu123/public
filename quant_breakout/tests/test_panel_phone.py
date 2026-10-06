@@ -201,6 +201,22 @@ def test_phone_port_needs_pairing_and_csrf(servers):
     assert _phone(pp, "POST", "/api/request", body, cookie=ck, csrf=csrf)[0] == 401
 
 
+def test_phone_chart_endpoint_needs_a_paired_device(servers):
+    lp, pp, tok = servers
+    _book()
+    (paths.out_dir() / "charts_paper.json").write_text(json.dumps({"asof": "2026-10-05", "tickers": {"7203.T": {"kind": "stock"}}}),
+                                                       encoding="utf-8")
+    code, txt, _ = _phone(pp, "GET", "/api/chart?book=paper&t=7203.T")
+    assert code == 401 and "7203" not in txt                                       # 没配对：K 线也拿不到
+    assert _phone(pp, "GET", "/api/chart?book=paper&t=7203.T", host="evil.example")[0] == 421
+    _, j = _local_post(lp, tok, "/api/pair/new", {})
+    _, _, hd = _phone(pp, "POST", "/api/pair", {"code": j["code"], "name": "iPhone"})
+    ck = re.match(r"qbd=([^;]+)", hd.get("Set-Cookie", "")).group(1)
+    code, txt, _ = _phone(pp, "GET", "/api/chart?book=paper&t=7203.T", cookie=ck)
+    assert code == 200 and json.loads(txt)["data"] == {"kind": "stock"}
+    assert _phone(pp, "GET", "/api/chart?book=paper&t=6758.T", cookie=ck)[0] == 404
+
+
 def test_unpair_static_files_and_local_halt(servers):
     lp, pp, tok = servers
     _book()

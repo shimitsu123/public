@@ -2055,20 +2055,72 @@ def _timeline_panel(ctx, eng, state, todo: dict, extras: dict, elig: dict, eq: f
         return {"timeline": {"error": f"{type(e).__name__}: {e}"[:200]}, "earn_state": {}}
 
 
-def _charts(ctx, st, core: list) -> dict:
-    """操作面板的走势图数据（qbreak/holding_view.chart_data；2026-10-06 用户「还可以看到个股和 etf 的走势」）：持仓个股 + 核心 ETF
-    （拿着的在前，再是闲置资金方式里的其他 ETF）。只展示；算不出 → 空（页面照常）。"""
+def _suggest(ctx, eng, man: dict | None) -> dict:
+    """操作面板的「建议的股票」（qbreak/suggest.py；2026-10-06 用户「根据趋势等等建议的股票也要加到里面 可以一键买的」）：
+    规则的候选（今天出了买入信号 / 即将触发 / 观察）+ 规则怎么处理 + 手动买入的闸门预览。只展示；算不出 → 空（页面照常）。"""
+    import datetime as _dt
     from qbreak import holding_view as HV
-    from qbreak.idle_cash import NAMES as IC_NAMES
+    from qbreak import suggest as SG
     try:
-        rows = [{"ticker": t, "kind": "stock", "entry_px": p_.entry_px, "entry_date": p_.entry_date, "stop_px": p_.stop_px}
-                for t, p_ in st.pos.items()]
-        held = [t for t, u_ in st.core_units.items() if int(u_ or 0)]
-        rows += [{"ticker": t, "kind": "core", "name": IC_NAMES.get(t, t)} for t in dict.fromkeys(held + list(core))]
-        return HV.chart_data(ctx.ind, rows, bar_date=st.last_date)
+        st = eng.st
+        if not st.last_date:
+            return {}
+        k = int(eng.gidx.searchsorted(_dt.datetime.fromisoformat(st.last_date)))
+        if k >= len(eng.gidx) or str(eng.gidx[k].date()) != st.last_date:
+            return {}
+        P = (getattr(ctx, "plans", None) or {}).get("JP")
+        return SG.build(ctx.ind, eng, k, ctx.params["JP"], pool=list(P.uni) if P is not None else None,
+                        names=HV.names(), manual=man)
     except Exception as e:                                   # noqa: BLE001
-        log.warning("走势图数据没算成（不影响交易）：%s", e)
-        return {}
+        log.warning("建议的股票没算成（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
+
+
+def _kline(ctx, st, core: list, sg: dict | None, tag: str) -> dict:
+    """操作面板的 K 线（qbreak/kline.py；2026-10-06 用户「趋势是做一个和图中一样的日周月的块块和线」）：持仓个股 + 核心 ETF
+    （拿着的在前，再是闲置资金方式里的其他 ETF）+ 建议的股票，日K / 周K / 月K + MA5/10/20/30 → 数据目录 out/charts_<账本>.json
+    （面板按需取，不入库）。月K 要 10 年行情：另取一次（缓存 12 小时）；取不到就用决策用的 2 年。返回 {"asof", "file", "trend"}；
+    只展示，算不出 → 空（页面照常）。"""
+    import datetime as _dt
+    from qbreak import kline as KL
+    from qbreak.data import load_universe
+    from qbreak.idle_cash import NAMES as IC_NAMES
+    from qbreak.trader import drop_partial_bar
+    from qbreak.utils import write_json
+    try:
+        info = {t: {"kind": "stock", "entry_px": round(float(p_.entry_px), 4), "entry_date": p_.entry_date,
+                    "stop_px": round(float(p_.stop_px), 4)} for t, p_ in st.pos.items()}
+        held = [t for t, u_ in st.core_units.items() if int(u_ or 0)]
+        for t in dict.fromkeys(held + list(core)):
+            info.setdefault(t, {"kind": "core", "name": IC_NAMES.get(t, t)})
+        for r in (sg or {}).get("rows") or []:
+            info.setdefault(r["ticker"], {"kind": "suggest", "name": r.get("name"),
+                                          "signal_date": (sg or {}).get("asof") if r.get("signal") else None})
+        ticks = sorted(info)
+        long = {}
+        try:
+            d10 = DataConfig(provider=ctx.dcfg.provider, years=10, allow_synthetic=False, min_bars=60).validate()
+            long = load_universe(ticks, d10)
+        except Exception as e:                               # noqa: BLE001
+            log.warning("K 线的 10 年行情取不到（用决策用的 2 年）：%s", e)
+        out = {}
+        for t in ticks:
+            df = long.get(t)
+            df = drop_partial_bar(df, "JP") if df is not None and len(df) else None
+            if df is None or not len(df):
+                df = ctx.ind.get(t)                          # 决策用的 2 年（收盘未完的当日 K 线已去掉）
+            pl = KL.payload(df, st.last_date, info[t]) if df is not None else None
+            if pl:
+                out[t] = pl
+        fp = paths.out_dir() / f"charts_{tag}.json"
+        write_json(fp, {"asof": st.last_date, "written": _dt.datetime.now().isoformat(timespec="seconds"), "tickers": out})
+        for r in (sg or {}).get("rows") or []:               # 卡片上的日 / 周 / 月趋势标签（不用先取 K 线）
+            r["trend"] = (out.get(r["ticker"]) or {}).get("trend") or KL.trends(ctx.ind.get(r["ticker"]), st.last_date)
+        return {"asof": st.last_date, "file": fp.name, "n": len(out), "trend": {t: v.get("trend") or {} for t, v in out.items()},
+                "items": {t: {"kind": v.get("kind"), "name": v.get("name")} for t, v in out.items()}}
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("K 线数据没算成（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 
 def _holding_view(ctx, st, extras: dict, equity) -> dict:
@@ -3374,7 +3426,8 @@ def _live_unified_body(a) -> int:
     sm["exit_mode"] = ctx.xmode                              # 个股的离场方式（var/sim.json exits；与云端模拟盘同一个）
     sm["idle_cash"] = ctx.ic_status                          # 闲置资金的方式与现在拿什么（var/sim.json idle_cash；与云端模拟盘同一个）
     sm["holding_view"] = _holding_view(ctx, eng.st, ctx.extras, sm["equity_jpy"])   # 每只持仓：为什么持有 · 现在趋势如何（页面 / 日志）
-    sm["charts"] = _charts(ctx, eng.st, list(eng.cfg.core))  # 操作面板的走势图：持仓个股 + 核心 ETF（只展示，只在 Mac 本机）
+    sm["suggest"] = _suggest(ctx, eng, ux.book.get("manual"))   # 操作面板「建议的股票」：规则的候选 + 手动买入的闸门预览（只展示）
+    sm["kline"] = _kline(ctx, eng.st, list(eng.cfg.core), sm["suggest"], tag)   # 日K / 周K / 月K（out/charts_<账本>.json；面板按需取）
     write_json(paths.out_dir() / f"live_unified_{tag}.json", sm)
     hist_ = eng.st.history or []
     last_, prev_ = (str(hist_[-1][0]) if hist_ else None), (str(hist_[-2][0]) if len(hist_) > 1 else None)
@@ -3439,8 +3492,10 @@ def _manual_due(tag: str, book: dict) -> bool:
 def cmd_manual(a) -> int:
     """手动指令（2026-10-06 用户：「当持仓的时候可以在画面上点击卖出后 第二天或者当天就可以在立花自动交易 可以手动调节当前持仓股票百分比」）：
     只把指令写进数据目录的 manual/requests_<账本>.jsonl；真正下单的是执行器（下一次能下寄付单的运行；同样的闸门、同样的对账）。
-    list：看持仓占比、手动指令、不买回；sell / trim / adjust / core / unblock / cancel：写一条指令。页面（run.py panel）做的是同一件事。
-    adjust（2026-10-06 用户「也可以调节现在个股的持仓和金额」）：--shares N / --yen 金额 / --pct %（目标持仓；可加可减，加仓有闸门）。"""
+    list：看持仓占比、手动指令、不买回；sell / trim / adjust / buy / core / unblock / cancel：写一条指令。页面（run.py panel）做的是同一件事。
+    adjust（2026-10-06 用户「也可以调节现在个股的持仓和金额」）：--shares N / --yen 金额 / --pct %（目标持仓；可加可减，加仓有闸门）。
+    buy（2026-10-06 用户「根据趋势等等建议的股票也要加到里面 可以一键买的」）：买一只还没拿的个股（默认按规则的仓位；
+    --shares / --yen / --pct 指定目标）；与规则的新仓同一套闸门，只在新收盘的决策里做。"""
     from qbreak import manual_orders as MO
     from qbreak.calendar_jp import now_jst
     from qbreak.utils import read_json
@@ -3468,22 +3523,25 @@ def cmd_manual(a) -> int:
             print(f"  手动指令 {r_['id']}：{MO.describe(r_)} → 等执行器读（下一次运行）")
         print(f"现在写的卖出 / 减仓：最早 {day} 开盘执行（{'今天' if today else '下一个交易日'}；成交日 {MO.CUTOFF:%H:%M} 截止）")
         ad, ad_today = MO.add_window(now, st.get("last_date"))
-        print(f"现在写的加仓（adjust 往上调）：最早 {ad} 开盘买（{'今天' if ad_today else '下一个交易日'}；只在新收盘的决策里做）")
+        print(f"现在写的加仓（adjust 往上调）/ 买入（buy）：最早 {ad} 开盘买（{'今天' if ad_today else '下一个交易日'}；只在新收盘的决策里做）")
+        s_ = MO.slots(b_, tag)
+        print(f"个股名额：拿着 {s_['held']} 只 + 排定买入 {s_['buys']} 只 / 上限 {s_['max']} 只（空 {s_['free']} 个）")
         return 0
     req = {"kind": a.action, "source": "cli", "note": a.note}
-    if a.action in ("sell", "trim", "adjust", "unblock"):
+    if a.action in ("sell", "trim", "adjust", "buy", "unblock"):
         req["ticker"] = a.target
-    if a.action == "adjust":
+    if a.action in ("adjust", "buy"):
         given = [(u, v) for u, v in (("shares", a.shares), ("yen", a.yen), ("pct", a.pct)) if v is not None]
-        if len(given) != 1:
-            print("★ 没写：adjust 要给且只给一个目标：--shares 股数 / --yen 金额 / --pct 占总权益 %")
+        if len(given) > 1 or (a.action == "adjust" and not given):
+            print(f"★ 没写：{a.action} 要给{'且只给' if a.action == 'adjust' else '最多'}一个目标：--shares 股数 / --yen 金额 / --pct 占总权益 %"
+                  + ("（buy 不给 = 按规则的仓位）" if a.action == "buy" else ""))
             return 2
-        req["unit"], req["value"] = given[0]
+        req["unit"], req["value"] = given[0] if given else ("rule", None)
     if a.action == "cancel":
         req["target"] = a.target
     if a.action in ("trim", "core"):
         req["pct"] = a.pct
-    elif a.action == "adjust" and req.get("unit") != "pct":
+    elif a.action in ("adjust", "buy") and req.get("unit") != "pct":
         req.pop("pct", None)
     if a.action == "sell":
         req["block_days"] = a.block_days
@@ -3492,12 +3550,22 @@ def cmd_manual(a) -> int:
     except ValueError as e:
         print(f"★ 没写：{e}")
         return 2
-    why = MO.check(rec, b_, tag)
+    sm_ = read_json(paths.out_dir() / f"live_unified_{tag}.json", {}) or {}
+    why = MO.check(rec, b_, tag, sm=sm_)
     if why:
         print(f"★ 没写：{why}")
         return 2
     rec = MO.append(tag, rec)
     print(f"已写手动指令 {rec['id']}：{MO.describe(rec)}")
+    if rec["kind"] == "buy":
+        ad, ad_today = MO.add_window(now, st.get("last_date"))
+        row = next((r for r in (sm_.get("suggest") or {}).get("rows") or [] if r.get("ticker") == rec["ticker"]), None)
+        if row is None:
+            print("★ 这只票不在执行器最近一次的「建议的股票」里（规则的候选）：执行器照样按规则的闸门检查，不过就不买")
+        elif row.get("status") != "triggered":
+            print("★ 这只票还没有买入信号（规则不会买）：手动买入是你自己的决定（没有回测验证）")
+        print(f"执行器在 {ad}（{'今天' if ad_today else '下一个交易日'}）开盘前的运行里按决策日的收盘定股数与限价（收盘 ×1.03），"
+              "下寄付指値（钱不够时同一个开盘先卖核心 ETF；名额满 / 开盘高于限价 → 不买；只做一次）；买入后按规则的止损 / 离场")
     adj = MO.adjust_plan(rec, st, float((b_.get("manual") or {}).get("cap_pct") or MO.CAP_PCT)) if rec["kind"] == "adjust" else None
     if adj and adj["delta"] > 0:
         ad, ad_today = MO.add_window(now, st.get("last_date"))
@@ -3997,15 +4065,15 @@ def main(argv=None) -> int:
     lu.add_argument("--halt-drill", action="store_true",
                     help="HALT 演练（只用模拟账户、今天早上的运行完成之后）：建演练用的 HALT → 跑一次 → 删掉它（bash scripts/liveu.sh halt-drill）")
     lu.set_defaults(func=cmd_live_unified)
-    mn = sub.add_parser("manual", help="手动指令：卖出 / 减仓 / 调整持仓（可加可减）/ 闲置资金比例 / 不买回 / 撤回（只写指令；下单由执行器在下一次运行里做）")
-    mn.add_argument("action", choices=["list", "sell", "trim", "adjust", "core", "unblock", "cancel"])
-    mn.add_argument("target", nargs="?", default=None, help="sell / trim / adjust / unblock：代码（例 7203）；cancel：指令 id")
-    mn.add_argument("--shares", type=int, default=None, help="adjust：目标股数（单元向下取整）")
-    mn.add_argument("--yen", type=float, default=None, help="adjust：目标金额（円，按决策时的收盘换成股数）")
+    mn = sub.add_parser("manual", help="手动指令：卖出 / 减仓 / 调整持仓（可加可减）/ 买入（新开仓）/ 闲置资金比例 / 不买回 / 撤回（只写指令；下单由执行器在下一次运行里做）")
+    mn.add_argument("action", choices=["list", "sell", "trim", "adjust", "buy", "core", "unblock", "cancel"])
+    mn.add_argument("target", nargs="?", default=None, help="sell / trim / adjust / buy / unblock：代码（例 7203）；cancel：指令 id")
+    mn.add_argument("--shares", type=int, default=None, help="adjust / buy：目标股数（单元向下取整）")
+    mn.add_argument("--yen", type=float, default=None, help="adjust / buy：目标金额（円，按决策时的收盘换成股数）")
     mn.add_argument("--broker", default="paper", choices=["paper", "tachibana"])
     mn.add_argument("--demo", action="store_true", help="立花デモ環境的账本")
     mn.add_argument("--dry-run", action="store_true", help="立花 dry-run 的账本")
-    mn.add_argument("--pct", type=float, default=None, help="trim：减到总权益的 %%；adjust：目标占总权益的 %%；core：规则目标额的 %%（100 = 照规则，0 = 全部卖出留现金）")
+    mn.add_argument("--pct", type=float, default=None, help="trim：减到总权益的 %%；adjust / buy：目标占总权益的 %%；core：规则目标额的 %%（100 = 照规则，0 = 全部卖出留现金）")
     mn.add_argument("--block-days", type=int, default=20, help="sell：之后多少个交易日不自动买回（0 = 不限制，-1 = 一直）")
     mn.add_argument("--note", default=None, metavar="TEXT")
     mn.set_defaults(func=cmd_manual)

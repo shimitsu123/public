@@ -6,9 +6,11 @@
   8766 手机：Tailscale Serve（bash scripts/liveu.sh phone on）把它放到 https://<Mac>.<tailnet>.ts.net/，只有你 Tailscale 里的设备能连；
        这一路永远要「已配对的设备」（qbreak/panel_phone.py：配对码只显示在 Mac 屏幕上；设备 cookie + 每台设备的 CSRF 令牌）
 页面（手机优先的版面；两边一样）：
-  GET  /?book=paper|tachibana   账本：持仓（为什么持有、现在趋势、约占权益、走势图）、核心 ETF（走势图）、手动指令、不买回、
-                                停止下单（HALT）；每只持仓有「卖出全部」「调整…」（股数 / 金额 / 占权益 %，可加可减；底部弹出确认），
-                                核心 ETF 有「闲置资金比例」，指令有「撤回」；走势图：收盘、20 / 60 日线、成交量、成本 / 止损线（期间 1〜12 个月）
+  GET  /?book=paper|tachibana   账本：持仓（为什么持有、现在趋势、约占权益、K 线）、核心 ETF（K 线）、建议的股票（规则的候选 + 「买入…」）、
+                                手动指令、不买回、停止下单（HALT）；每只持仓有「卖出全部」「调整…」（股数 / 金额 / 占权益 %，可加可减；底部弹出确认），
+                                核心 ETF 有「闲置资金比例」，指令有「撤回」；K 线：同花顺式日K / 周K / 月K（红涨空心、绿跌实心）+ MA5 / 10 / 20 / 30
+                                + 成交量 + 成本 / 止损线（2026-10-06 用户：「趋势是做一个和图中一样的日周月的块块和线 方便看的」）
+  GET  /api/chart?book=…&t=…    一只票的 K 线（执行器写的 out/charts_<账本>.json；打开 / 滑到那只票时才取；手机端口要已配对的设备）
   POST /api/request             写一条手动指令（qbreak/manual_orders.py；与 run.py manual 相同的检查）
   POST /api/halt                建 HALT（只能建、不能解除；解除只在 Mac 上、用户明确说）
   本机才有：POST /api/pair/new（生成配对码）、/api/device/revoke（取消一台设备）；手机才有：/api/pair、/api/unpair（退出这台设备）
@@ -23,6 +25,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import gzip
 import json
 import os
 import re
@@ -88,12 +91,12 @@ def _yen(v) -> str:
 # ───────────────────────── 页面（手机优先；Mac 上一样用） ─────────────────────────
 _CSS = """
 :root{--bg:#f2f2f7;--card:#fff;--fg:#1c1c1e;--muted:#6e6e73;--line:#e3e3e8;--pos:#1a7f37;--neg:#c62828;--accent:#2f5bd3;
---accent-fg:#fff;--chip:#eef0f6;--shadow:0 1px 2px rgba(0,0,0,.06);--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--vol:#c9c9d1}
+--accent-fg:#fff;--chip:#eef0f6;--shadow:0 1px 2px rgba(0,0,0,.06);--up:#e0373a;--down:#0e8f50;--ma10:#8e4bb3;--ma20:#c26a00;--ma30:#2a5db0}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0f0f11;--card:#1c1c1f;--fg:#ececf0;--muted:#a1a1a8;
 --line:#2e2e33;--pos:#4cc36b;--neg:#ff6b6b;--accent:#8aa8ff;--accent-fg:#0f0f11;--chip:#2a2a30;--shadow:none;
---s1:#3987e5;--s2:#d95926;--s3:#199e70;--vol:#46464e}}
+--up:#e8484d;--down:#17905a;--ma10:#a66fd0;--ma20:#c47f2c;--ma30:#5b8be0}}
 :root[data-theme="dark"]{--bg:#0f0f11;--card:#1c1c1f;--fg:#ececf0;--muted:#a1a1a8;--line:#2e2e33;--pos:#4cc36b;--neg:#ff6b6b;
---accent:#8aa8ff;--accent-fg:#0f0f11;--chip:#2a2a30;--shadow:none;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--vol:#46464e}
+--accent:#8aa8ff;--accent-fg:#0f0f11;--chip:#2a2a30;--shadow:none;--up:#e8484d;--down:#17905a;--ma10:#a66fd0;--ma20:#c47f2c;--ma30:#5b8be0}
 *{box-sizing:border-box} [hidden]{display:none!important} html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Hiragino Sans","PingFang SC",sans-serif;
 -webkit-tap-highlight-color:transparent;overflow-wrap:break-word}
@@ -139,18 +142,24 @@ color:var(--fg);cursor:pointer;touch-action:manipulation}.seg button:first-child
 .chart svg{display:block;width:100%;touch-action:pan-y;-webkit-user-select:none;user-select:none}
 .chart .grid{stroke:var(--line);stroke-width:1;shape-rendering:crispEdges}
 .chart .ax{fill:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
-.chart .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
-.chart .s1{stroke:var(--s1)}.chart .s2{stroke:var(--s2)}.chart .s3{stroke:var(--s3)}
-.chart .ref{stroke:var(--muted);stroke-width:1;shape-rendering:crispEdges}.chart .stop{stroke:var(--neg);stroke-width:1;shape-rendering:crispEdges}
+.chart .wk,.chart .bd,.chart .vl{stroke-width:1;shape-rendering:crispEdges}.chart .vl{opacity:.8}
+.chart .cu{stroke:var(--up);fill:var(--card)}.chart .cd{stroke:var(--down);fill:var(--down)}
+.chart .ma{fill:none;stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
+.chart .m5{stroke:var(--fg)}.chart .m10{stroke:var(--ma10)}.chart .m20{stroke:var(--ma20)}.chart .m30{stroke:var(--ma30)}
+.chart .ref{stroke:var(--muted);stroke-width:1;stroke-dasharray:4 3;shape-rendering:crispEdges}
+.chart .stop{stroke:var(--neg);stroke-width:1;stroke-dasharray:4 3;shape-rendering:crispEdges}
 .chart .rl{font-size:11px;fill:var(--fg);paint-order:stroke;stroke:var(--card);stroke-width:3px;stroke-linejoin:round}
-.chart .vol{fill:var(--vol)}.chart .xh{stroke:var(--muted);stroke-width:1;shape-rendering:crispEdges}
-.chart .dot{fill:var(--s1);stroke:var(--card);stroke-width:2}.chart .mk{fill:var(--card);stroke:var(--s1);stroke-width:2}
-.chart .tt{position:absolute;top:30px;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:10px;
-padding:8px 10px;font-size:13px;line-height:1.5;box-shadow:0 4px 16px rgba(0,0,0,.16);white-space:nowrap;z-index:2}
-.chart .tt b{font-variant-numeric:tabular-nums;font-size:14px}.chart .tt .m{color:var(--muted)}
+.chart .xh{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 2;shape-rendering:crispEdges}.chart .mk{fill:var(--accent)}
+.chart .ro{font-size:13px;line-height:1.45;color:var(--muted);font-variant-numeric:tabular-nums;min-height:2.9em;margin:2px 0 0}
+.chart .ro b{font-size:14px}.chart .ro .m{color:var(--fg)}
 .key{display:inline-block;width:14px;height:2px;border-radius:1px;vertical-align:middle;margin-right:6px}
-.key.s1{background:var(--s1)}.key.s2{background:var(--s2)}.key.s3{background:var(--s3)}.key.ref{background:var(--muted);height:1px}
-.key.stop{background:var(--neg);height:1px}
+.key.m5{background:var(--fg)}.key.m10{background:var(--ma10)}.key.m20{background:var(--ma20)}.key.m30{background:var(--ma30)}
+.up{color:var(--up)}.down{color:var(--down)}
+.tchips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.tchip{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--chip);font-size:13px;white-space:nowrap}
+.chip.hot{background:var(--accent);color:var(--accent-fg);font-weight:600}
+.meta{font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+details.kl>summary{color:var(--accent);font-size:14px}
 .legend{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:13px;color:var(--muted);margin:2px 0}
 .chart table{border-collapse:collapse;font-size:13px;width:100%;font-variant-numeric:tabular-nums;margin-top:4px}
 .chart td,.chart th{padding:4px 6px;border-top:1px solid var(--line);text-align:right;font-weight:400}
@@ -256,10 +265,53 @@ function adjPrev(){
     +'\\n'+CFG.addWhen+' 开盘「寄付指値」；钱不够时同一个开盘先卖核心 ETF；只做一次（没买到就结束）';
   go.textContent='确认买入 '+fmt(k)+' 股'; go.disabled=false;
 }
+// ── 买入（建议的股票 → 手动买入指令）：按规则的仓位 / 股数 / 金额 / 占权益 %；执行器在下一次新收盘的决策里按当时的收盘再算 ──
+let BUY = null;
+const bpct = n => CFG.eq>0 && BUY.px>0 ? (n*BUY.px/CFG.eq*100).toFixed(1)+'%' : '—';
+function buyCap(){ return BUY.px>0 && CFG.eq>0 ? Math.floor(CFG.eq*CFG.cap/100/BUY.px/BUY.lot+1e-9)*BUY.lot : 0; }
+function buyTarget(){
+  if(BUY.unit==='rule') return BUY.rule;
+  const v=parseFloat($('#buy-val').value); if(!(v>0) || !isFinite(v)) return null;
+  let raw; if(BUY.unit==='shares') raw=v; else if(!(BUY.px>0)) return null; else if(BUY.unit==='yen') raw=v/BUY.px; else raw=CFG.eq*v/100/BUY.px;
+  return Math.max(0, Math.floor(raw/BUY.lot+1e-9)*BUY.lot);
+}
+function buyShow(n){
+  const u=BUY.unit, e=$('#buy-val');
+  e.value = u==='shares' ? n : u==='yen' ? Math.round(n*BUY.px) : (CFG.eq>0 ? (n*BUY.px/CFG.eq*100).toFixed(1) : 0);
+}
+function buyUnit(u){
+  let n=buyTarget(); BUY.unit=u;
+  if(n!=null) n=Math.min(n, Math.max(buyCap(), BUY.lot));            // 换单位时不把超过单只上限的数带过去
+  document.querySelectorAll('#buy-seg button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.u===u ? 'true' : 'false'));
+  $('#buy-row').hidden = u==='rule';
+  if(u!=='rule'){
+    $('#buy-unit').textContent = {shares:'股', yen:'円', pct:'%'}[u];
+    $('#buy-val').step = u==='shares' ? BUY.lot : u==='yen' ? 1000 : 0.1;
+    buyShow(n==null || n<=0 ? (BUY.rule || BUY.lot) : n);
+  }
+  buyPrev();
+}
+function buyPrev(){
+  const go=$('#buy-go'), out=$('#buy-prev');
+  let n=buyTarget();
+  if(n==null){ out.textContent='输入要买多少（股数 / 金额 / 占总权益 %）'; go.textContent='确认买入'; go.disabled=true; return; }
+  const cap=buyCap(); let note='';
+  if(n>cap){ n=cap; note='\\n★ 超过单只上限 '+CFG.cap+'%：截到 '+fmt(n)+' 股'; }
+  if(n<=0){
+    out.textContent = BUY.unit==='rule' ? '按规则的仓位不够买 1 个单元（'+fmt(BUY.lot)+' 股 ≈ '+yen(BUY.lot*BUY.px)+'）：改用股数 / 金额试试'
+      : '不够 1 个单元（'+fmt(BUY.lot)+' 股 ≈ '+yen(BUY.lot*BUY.px)+'）';
+    go.textContent='确认买入'; go.disabled=true; return;
+  }
+  out.textContent='买入约 '+fmt(n)+' 股 · 约 '+yen(n*BUY.px)+' · 约占权益 '+bpct(n)+' · 限价约 '+yen(BUY.limit||BUY.px*1.03)+'（收盘 ×1.03）'+note
+    +'\\n'+CFG.addWhen+' 开盘「寄付指値」（执行器在前一天收盘后的决策里按那天的收盘定股数与限价）；钱不够时同一个开盘先卖核心 ETF；'
+    +'名额满 / 开盘高于限价 / ストップ高 → 不买；只做一次（没买到就结束）；买入后按规则的止损 / 离场';
+  go.textContent='确认买入约 '+fmt(n)+' 股'; go.disabled=false;
+}
 document.addEventListener('input', e=>{
   if(e.target.id==='core-pct') coreShow();
   if(e.target.id==='adj-val') adjPrev();
   if(e.target.id==='adj-range'){ adjShow(+e.target.value); adjPrev(); }
+  if(e.target.id==='buy-val') buyPrev();
 });
 document.addEventListener('DOMContentLoaded', ()=>{ const d=$('#dlg-ask'); if(d) d.addEventListener('close', ()=>{ if(ASK){ const r=ASK; ASK=null; r({ok:false}); } }); });
 document.addEventListener('click', async e=>{
@@ -294,7 +346,23 @@ document.addEventListener('click', async e=>{
     const v = ADJ.unit==='shares' ? n : parseFloat($('#adj-val').value);
     closeAll(); done(await api('/api/request',{book:CFG.book, kind:'adjust', ticker:ADJ.t, unit:ADJ.unit, value:v})); return;
   }
-  if(a==='range'){ RANGE=d.r; try{ localStorage.setItem('qbreak.range', RANGE); }catch(x){} drawAll(); return; }
+  if(a==='tf'){ TF=d.tf; try{ localStorage.setItem('qbreak.tf', TF); }catch(x){} drawAll(); return; }
+  if(a==='buy'){
+    BUY={t:d.t, px:+d.px, lot:+d.lot||LOT, rule:+d.rule||0, limit:+d.limit||0, unit:'rule'};
+    $('#buy-title').textContent='买入 '+d.code+(d.name ? ' '+d.name : '');
+    $('#buy-sig').textContent=(d.sig==='1' ? '今天收盘出了买入信号（'+d.rtext+'）。' : '★ '+d.status+'：还没有买入信号，规则不会买 —— 手动买入是你自己的决定（没有回测验证）。')
+      +(d.warn ? '\\n★ '+d.warn : '')+NOTE;
+    $('#buy-cap').textContent=CFG.cap;
+    buyUnit('rule'); sheet('#dlg-buy'); return;
+  }
+  if(a==='buy-unit'){ buyUnit(d.u); return; }
+  if(a==='buy-step'){ if(BUY.unit!=='rule'){ const n=buyTarget(); buyShow(Math.max(BUY.lot, (n==null||n<=0 ? BUY.lot : n)+(+d.d)*BUY.lot)); } buyPrev(); return; }
+  if(a==='buy-go'){
+    const n=buyTarget(); if(!n) return;
+    const body={book:CFG.book, kind:'buy', ticker:BUY.t, unit:BUY.unit};
+    if(BUY.unit!=='rule') body.value = BUY.unit==='shares' ? Math.min(n, buyCap()) : parseFloat($('#buy-val').value);
+    closeAll(); done(await api('/api/request', body)); return;
+  }
   if(a==='core-step'){ const r=$('#core-pct'); r.value=Math.max(0, Math.min(100, parseFloat(r.value)+parseFloat(d.d))); coreShow(); return; }
   if(a==='core'){
     const v=parseFloat($('#core-pct').value);
@@ -302,7 +370,7 @@ document.addEventListener('click', async e=>{
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:v})); return;
   }
   if(a==='cancel'){
-    const q=await ask('撤回 '+d.id, d.placed==='1' ? '之后不再重下。\\n如果这笔卖单已经发到交易所（今天开盘的单），要撤请在立花网站 / App 上撤；没撤的话开盘照常成交。' : '执行器还没处理：撤回之后不会下单。', '撤回');
+    const q=await ask('撤回 '+d.id, d.placed==='1' ? '之后不再重下。\\n如果这笔单已经发到交易所（今天开盘的单），要撤请在立花网站 / App 上撤；没撤的话开盘照常成交。' : '执行器还没处理：撤回之后不会下单。', '撤回');
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
   }
   if(a==='unblock'){
@@ -329,16 +397,18 @@ document.addEventListener('click', async e=>{
     if(q.ok){ const j=await api('/api/unpair',{}); if(j){ toast(j.msg); setTimeout(()=>location.reload(), 1200); } } return;
   }
 });
-// ── 走势图（数据 = 执行器每次运行写的汇总 charts；只展示）：收盘、20 / 60 日线、成交量、成本 / 止损线；十字线 + 读数 ──
-const CH = (()=>{ const e=$('#chart-data'); if(!e) return {}; try{ return JSON.parse(e.textContent||'{}'); }catch(x){ return {}; } })();
-const RANGES = {'1m':[22,'1 个月'], '3m':[65,'3 个月'], '6m':[130,'6 个月'], '1y':[260,'1 年']};
-let RANGE = '3m';
-try{ const v=localStorage.getItem('qbreak.range'); if(v && RANGES[v]) RANGE=v; }catch(x){}
+// ── K 线（同花顺式：日K / 周K / 月K；红 = 涨（空心）、绿 = 跌（实心）；MA5 / MA10 / MA20 / MA30；成本 / 止损线）──
+// 数据 = 执行器每次运行写的 out/charts_<账本>.json，打开 / 看到哪只票才取（/api/chart）；只展示
+const TFS = {D:'日K', W:'周K', M:'月K'};
+let TF = 'D';
+try{ const v=localStorage.getItem('qbreak.tf'); if(v && TFS[v]) TF=v; }catch(x){}
+const KD = {};
 const NS='http://www.w3.org/2000/svg', WD=['日','一','二','三','四','五','六'];
+const MAS=[['ma5','MA5','m5'],['ma10','MA10','m10'],['ma20','MA20','m20'],['ma30','MA30','m30']];
 function sv(tag, at, par){ const e=document.createElementNS(NS, tag); for(const k in at) e.setAttribute(k, at[k]); if(par) par.appendChild(e); return e; }
 function nd(tag, cls, text, par){ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; if(par) par.appendChild(e); return e; }
 function pxs(v){ if(v==null) return '—'; return '¥'+(v<1000 ? v.toLocaleString('ja-JP',{minimumFractionDigits:1, maximumFractionDigits:1}) : Math.round(v).toLocaleString('ja-JP')); }
-function pcs(v){ return (v>=0?'+':'')+v.toFixed(1)+'%'; }
+function pcs(v){ return (v>=0?'+':'')+v.toFixed(2)+'%'; }
 function nice(lo, hi, n){
   const raw=(hi-lo||Math.abs(hi)||1)/n, p=Math.pow(10, Math.floor(Math.log10(raw))), f=raw/p;
   const st=(f<1.5?1:f<3?2:f<3.5?2.5:f<7.5?5:10)*p, out=[];
@@ -346,98 +416,120 @@ function nice(lo, hi, n){
   return out;
 }
 function vfmt(v){ return v>=1e8 ? (v/1e8).toFixed(1)+' 亿' : v>=1e4 ? (v/1e4).toFixed(v>=1e6?0:1)+' 万' : String(v); }
-function tip(tt, D, i, held){
-  tt.textContent='';
-  const d=D.d[i], wd=WD[new Date(d+'T00:00:00').getDay()];
-  nd('div','m', d.slice(0,4)+'/'+d.slice(5).replace('-','/')+'（'+wd+'）', tt);
-  const r1=nd('div',null,null,tt); nd('b',null,pxs(D.c[i]),r1);
-  r1.appendChild(document.createTextNode(' 收盘'+(i>0 && D.c[i-1] && D.c[i]!=null ? '（'+pcs((D.c[i]/D.c[i-1]-1)*100)+'）' : '')));
-  nd('div','m','开 '+pxs(D.o[i])+' · 高 '+pxs(D.h[i])+' · 低 '+pxs(D.l[i]), tt);
-  for(const [cls, lab, a] of [['s2','20 日线',D.m20],['s3','60 日线',D.m60]]){
-    if(a[i]==null) continue;
-    const r=nd('div',null,null,tt); nd('i','key '+cls,null,r); nd('b',null,pxs(a[i]),r); r.appendChild(document.createTextNode(' '+lab));
-  }
-  nd('div','m','成交量 '+Number(D.v[i]||0).toLocaleString('ja-JP')+(D.kind==='core'?' 口':' 股'), tt);
-  if(held && D.entry_px && D.c[i]!=null) nd('div','m','比成本 '+pxs(D.entry_px)+' '+pcs((D.c[i]/D.entry_px-1)*100), tt);
+function dlab(d){ return TF==='M' ? d.slice(0,7).replace('-','/')+' 月' : TF==='W' ? d.replace(/-/g,'/')+' 那一周' : d.replace(/-/g,'/')+'（'+WD[new Date(d+'T00:00:00').getDay()]+'）'; }
+async function loadK(t){
+  if(KD[t] && KD[t]!=='error') return KD[t];
+  KD[t]='loading';
+  try{
+    const r=await fetch('/api/chart?book='+encodeURIComponent(CFG.book)+'&t='+encodeURIComponent(t), {credentials:'same-origin', cache:'no-store'});
+    if(r.status===404) KD[t]='none';
+    else if(!r.ok) KD[t]='error';
+    else { const j=await r.json(); KD[t]=(j && j.data) ? j.data : 'none'; }
+  }catch(e){ KD[t]='error'; }
+  return KD[t];
 }
-function drawChart(box){
-  const D=CH[box.dataset.t]; box.textContent='';
-  if(!D || !D.d || D.d.length<2){ box.className='chart empty muted small'; box.textContent='走势图在执行器下一次运行之后显示'; return; }
-  box.className='chart'; box.tabIndex=0;
-  const held = box.dataset.kind!=='core', N=D.d.length, k=Math.min(N, RANGES[RANGE][0]), s0=N-k;
-  const W=Math.max(260, Math.round(box.clientWidth||320)), x0=4, x1=W-58, padT=10, H1=168, gap=10, H2=36, padB=18;
+function legend(head, D, i){
+  head.textContent='';
+  nd('b',null,TFS[TF],head);
+  for(const [k,lab,cls] of MAS){ const v=D[k] && D[k][i]; const sp=nd('span',null,null,head); nd('i','key '+cls,null,sp); sp.appendChild(document.createTextNode(lab+' '+(v==null?'—':pxs(v)))); }
+}
+function readout(el, D, i, P){
+  el.textContent='';
+  const pc=i>0 ? D.c[i-1] : null, c=D.c[i], dir=(pc && c>=pc)?'up':(pc && c<pc)?'down':null;
+  nd('span','m', dlab(D.d[i])+' ', el);
+  nd('b',dir,'收 '+pxs(c)+(pc ? ' '+pcs((c/pc-1)*100) : ''),el);
+  el.appendChild(document.createTextNode(' · 开 '+pxs(D.o[i])+' 高 '+pxs(D.h[i])+' 低 '+pxs(D.l[i])
+    +(pc ? ' · 振幅 '+((D.h[i]-D.l[i])/pc*100).toFixed(2)+'%' : '')+' · 量 '+vfmt(D.v[i]||0)+(P.kind==='core'?' 口':' 股')
+    +(P.kind==='stock' && P.entry_px && c!=null ? ' · 比成本 '+pcs((c/P.entry_px-1)*100) : '')));
+}
+function drawK(box){
+  const t=box.dataset.t, P=KD[t];
+  const empty=s=>{ box.className='chart empty muted small'; box.textContent=s; };
+  if(P==null || P==='loading') return empty('K 线载入中…');
+  if(P==='none') return empty('K 线在执行器下一次运行之后显示');
+  if(P==='error') return empty('K 线取不到（面板连不上？）：点「刷新」再试');
+  const D=(P.tf||{})[TF];
+  if(!D || !D.d || D.d.length<2) return empty('没有'+TFS[TF]+'的数据');
+  box.className='chart'; box.tabIndex=0; box.textContent='';
+  const held=P.kind==='stock', N=D.d.length;
+  const W=Math.max(260, Math.round(box.clientWidth||320)), x0=2, x1=W-56, padT=8, H1=176, gap=10, H2=40, padB=18;
+  const k=Math.max(2, Math.min(N, Math.floor((x1-x0)/6))), s0=N-k, step=(x1-x0)/k;   // 一根 K 线占 6px：手机约 45 根，Mac 约 100 根
+  const X=i=> x0+(i-s0+0.5)*step, bw=Math.max(1, Math.min(13, step*0.68));
   const vb=padT+H1+gap+H2, H=vb+padB;
-  const X=i=> k<2 ? x0 : x0+(i-s0)*(x1-x0)/(k-1);
   const refs=[];
-  if(held && D.entry_px) refs.push(['ref','成本',D.entry_px]);
-  if(held && D.stop_px) refs.push(['stop','止损',D.stop_px]);
-  const vals=refs.map(r=>r[2]);
-  for(let i=s0;i<N;i++) for(const a of [D.c,D.m20,D.m60]) if(a[i]!=null) vals.push(a[i]);
-  let lo=Math.min(...vals), hi=Math.max(...vals); const pad=(hi-lo)*0.06 || hi*0.02 || 1; lo-=pad; hi+=pad;
-  const Y=v=> padT+H1-(v-lo)/(hi-lo)*H1;
-  let c0=null, c1=null; for(let i=s0;i<N;i++){ if(D.c[i]!=null){ if(c0==null) c0=D.c[i]; c1=D.c[i]; } }
-  const head=nd('div','legend',null,box);
-  nd('span',null,RANGES[RANGE][1]+'：'+pxs(c0)+' → '+pxs(c1)+(c0 ? '（'+pcs((c1/c0-1)*100)+'）' : ''), head);
-  for(const [cls, lab] of [['s1','收盘'],['s2','20 日线'],['s3','60 日线']].concat(refs.map(r=>[r[0], r[1]]))){
-    const sp=nd('span',null,null,head); nd('i','key '+cls,null,sp); sp.appendChild(document.createTextNode(lab));
+  if(held && P.entry_px) refs.push(['ref','成本',P.entry_px]);
+  if(held && P.stop_px) refs.push(['stop','止损',P.stop_px]);
+  let lo=Infinity, hi=-Infinity;
+  for(let i=s0;i<N;i++){
+    if(D.l[i]!=null) lo=Math.min(lo, D.l[i]); if(D.h[i]!=null) hi=Math.max(hi, D.h[i]);
+    for(const [m] of MAS){ const v=D[m] && D[m][i]; if(v!=null){ lo=Math.min(lo, v); hi=Math.max(hi, v); } }
   }
+  for(const r of refs){ lo=Math.min(lo, r[2]); hi=Math.max(hi, r[2]); }
+  const pad=(hi-lo)*0.05 || hi*0.02 || 1; lo-=pad; hi+=pad;
+  const Y=v=> padT+H1-(v-lo)/(hi-lo)*H1;
+  const head=nd('div','legend',null,box); legend(head, D, N-1);
+  const ro=nd('div','ro',null,box); readout(ro, D, N-1, P);                 // 读数固定在图上面（不盖住 K 线）：默认最新一根，点 / 指到哪根就是哪根
+  const tr=(P.trend||{})[TF], c0=D.c[s0], c1=D.c[N-1];
   const svg=sv('svg',{viewBox:'0 0 '+W+' '+H, width:W, height:H, role:'img',
-    'aria-label':box.dataset.t+' 走势（'+RANGES[RANGE][1]+'）：收盘 '+pxs(c0)+' → '+pxs(c1)}, box);
+    'aria-label':t+' '+TFS[TF]+'（最近 '+k+' 根）：'+pxs(c0)+' → '+pxs(c1)+(tr ? '，趋势 '+tr.label : '')}, box);
   for(const v of nice(lo, hi, 4)){
     const y=Math.round(Y(v))+0.5; sv('line',{x1:x0, x2:x1, y1:y, y2:y, 'class':'grid'}, svg);
     sv('text',{x:x1+6, y:y+4, 'class':'ax'}, svg).textContent=pxs(v);
   }
-  let lastX=-1e9, lastM=D.d[s0].slice(0,7);
+  let lastX=-1e9, prev=null;
   for(let i=s0;i<N;i++){
-    const d=D.d[i], m=d.slice(0,7); let lab=null;
-    if(k<=30){ if((N-1-i)%5===0) lab=(+d.slice(5,7))+'/'+(+d.slice(8,10)); }
-    else if(m!==lastM){ lab = d.slice(5,7)==='01' ? d.slice(2,4)+' 年' : (+d.slice(5,7))+' 月'; }
-    lastM=m;
+    const d=D.d[i], y=d.slice(0,4), m=+d.slice(5,7); let lab=null;
+    const key = TF==='M' ? y : TF==='W' ? y+'-'+Math.floor((m-1)/3) : d.slice(0,7);   // 日K 每月、周K 每季、月K 每年标一次
+    if(prev!=null && key!==prev) lab = TF==='M' ? y : (prev.slice(0,4)!==y ? y.slice(2)+' 年' : m+' 月');
+    prev=key;
     const x=X(i);
-    if(lab && x-lastX>=40 && x>=x0+12 && x<=x1-12){ sv('text',{x:x, y:H-4, 'class':'ax', 'text-anchor':'middle'}, svg).textContent=lab; lastX=x; }
+    if(lab && x-lastX>=44 && x>=x0+14 && x<=x1-14){ sv('text',{x:x, y:H-4, 'class':'ax', 'text-anchor':'middle'}, svg).textContent=lab; lastX=x; }
+  }
+  for(let i=s0;i<N;i++){
+    const o=D.o[i], h=D.h[i], l=D.l[i], c=D.c[i]; if(c==null) continue;
+    const up=c>=(o==null?c:o), x=X(i), cls=up?'cu':'cd';
+    const xx=Math.round(x)+0.5;
+    sv('line',{x1:xx, x2:xx, y1:Y(h==null?c:h), y2:Y(l==null?c:l), 'class':'wk '+cls}, svg);
+    const yt=Y(Math.max(o==null?c:o, c)), yb=Y(Math.min(o==null?c:o, c));
+    sv('rect',{x:(x-bw/2).toFixed(1), y:yt.toFixed(1), width:bw.toFixed(1), height:Math.max(1, yb-yt).toFixed(1), 'class':'bd '+cls}, svg);
   }
   const path=a=>{ let s='', pen=false; for(let i=s0;i<N;i++){ const v=a[i]; if(v==null){ pen=false; continue; } s+=(pen?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1); pen=true; } return s; };
-  sv('path',{d:path(D.m60), 'class':'ln s3'}, svg); sv('path',{d:path(D.m20), 'class':'ln s2'}, svg);
-  sv('path',{d:path(D.c), 'class':'ln s1'}, svg);
+  for(const [m,,cls] of MAS.slice().reverse()) if(D[m]) sv('path',{d:path(D[m]), 'class':'ma '+cls}, svg);
   let prevY=null;
   for(const [cls, lab, v] of refs){
     const y=Math.round(Y(v))+0.5; sv('line',{x1:x0, x2:x1, y1:y, y2:y, 'class':cls}, svg);
     const ty = prevY!=null && Math.abs(prevY-(y-4))<13 ? y+13 : y-4; prevY=ty;
     sv('text',{x:x0+4, y:ty, 'class':'rl'}, svg).textContent=lab+' '+pxs(v);
   }
-  if(held && D.entry_date && D.d[s0]<=D.entry_date){
-    let ie=-1; for(let i=s0;i<N;i++) if(D.d[i]>=D.entry_date){ ie=i; break; }
-    if(ie>=0 && D.c[ie]!=null){
-      const cx=X(ie), cy=Y(D.c[ie]); sv('circle',{cx:cx, cy:cy, r:4, 'class':'mk'}, svg);
-      sv('text',{x:cx, y:cy-9, 'class':'rl', 'text-anchor':'middle'}, svg).textContent='买入';
+  const mark = held ? [P.entry_date, '买入'] : (P.signal_date ? [P.signal_date, '信号'] : null);
+  if(mark && mark[0] && D.d[s0]<=mark[0]){
+    let ie=-1; for(let i=s0;i<N;i++) if(D.d[i]>=mark[0]){ ie=i; break; }
+    if(ie>=0 && D.l[ie]!=null){
+      const cx=X(ie), cy=Math.min(padT+H1-2, Y(D.l[ie])+9);
+      sv('path',{d:'M'+cx+' '+(cy-5)+'l4 7h-8z', 'class':'mk'}, svg);
+      sv('text',{x:cx, y:Math.min(padT+H1+8, cy+13), 'class':'rl', 'text-anchor':'middle'}, svg).textContent=mark[1];
     }
   }
   let vmax=0; for(let i=s0;i<N;i++) vmax=Math.max(vmax, D.v[i]||0);
-  const bw=Math.max(1, Math.min(24, (x1-x0)/Math.max(1,k-1)*0.6));
   if(vmax>0) for(let i=s0;i<N;i++){
     const h=(D.v[i]||0)/vmax*H2; if(h<0.5) continue;
-    const x=X(i)-bw/2, r=Math.min(4, bw/2, h), t=vb-h;
-    sv('path',{d:'M'+x+' '+vb+'V'+(t+r)+'Q'+x+' '+t+' '+(x+r)+' '+t+'H'+(x+bw-r)+'Q'+(x+bw)+' '+t+' '+(x+bw)+' '+(t+r)+'V'+vb+'Z', 'class':'vol'}, svg);
+    const up=D.c[i]!=null && D.o[i]!=null ? D.c[i]>=D.o[i] : true;
+    sv('rect',{x:(X(i)-bw/2).toFixed(1), y:(vb-h).toFixed(1), width:bw.toFixed(1), height:h.toFixed(1), 'class':'vl '+(up?'cu':'cd')}, svg);
   }
   sv('line',{x1:x0, x2:x1, y1:vb+0.5, y2:vb+0.5, 'class':'grid'}, svg);
-  if(vmax>0) sv('text',{x:x1+6, y:vb-H2+9, 'class':'ax'}, svg).textContent=vfmt(vmax)+(D.kind==='core' ? ' 口' : ' 股');
+  if(vmax>0) sv('text',{x:x1+6, y:vb-H2+9, 'class':'ax'}, svg).textContent=vfmt(vmax)+(P.kind==='core' ? ' 口' : ' 股');
   const xh=sv('line',{x1:0, x2:0, y1:padT, y2:vb, 'class':'xh', visibility:'hidden'}, svg);
-  const dot=sv('circle',{r:4, 'class':'dot', visibility:'hidden'}, svg);
-  const tt=nd('div','tt',null,box); tt.hidden=true;
+  const yh=sv('line',{x1:x0, x2:x1, y1:0, y2:0, 'class':'xh', visibility:'hidden'}, svg);
   let cur=null;
   const show=i=>{
     i=Math.max(s0, Math.min(N-1, i)); cur=i; const x=X(i);
     xh.setAttribute('x1',x); xh.setAttribute('x2',x); xh.setAttribute('visibility','visible');
-    if(D.c[i]!=null){ dot.setAttribute('cx',x); dot.setAttribute('cy',Y(D.c[i])); dot.setAttribute('visibility','visible'); }
-    else dot.setAttribute('visibility','hidden');
-    tip(tt, D, i, held); tt.hidden=false;
-    const sc=svg.getBoundingClientRect().width/W, bwid=box.clientWidth, tw=tt.offsetWidth;
-    let left=x*sc+12; if(left+tw>bwid) left=x*sc-12-tw; tt.style.left=Math.max(0, left)+'px';
-    tt.style.top=(svg.getBoundingClientRect().top-box.getBoundingClientRect().top+4)+'px';   // 读数框放在图的上沿（不盖住图例）
+    if(D.c[i]!=null){ const y=Y(D.c[i]); yh.setAttribute('y1',y); yh.setAttribute('y2',y); yh.setAttribute('visibility','visible'); }
+    legend(head, D, i); readout(ro, D, i, P);
   };
-  const hide=()=>{ cur=null; xh.setAttribute('visibility','hidden'); dot.setAttribute('visibility','hidden'); tt.hidden=true; };
+  const hide=()=>{ cur=null; xh.setAttribute('visibility','hidden'); yh.setAttribute('visibility','hidden'); legend(head, D, N-1); readout(ro, D, N-1, P); };
   box._hide=hide;
-  const at=ev=>{ const r=svg.getBoundingClientRect(); return Math.round(s0+((ev.clientX-r.left)*W/r.width-x0)/(x1-x0)*(k-1)); };
+  const at=ev=>{ const r=svg.getBoundingClientRect(); return s0+Math.floor(((ev.clientX-r.left)*W/r.width-x0)/step); };
   svg.addEventListener('pointermove', ev=>show(at(ev)));
   svg.addEventListener('pointerdown', ev=>show(at(ev)));
   svg.addEventListener('pointerleave', ev=>{ if(ev.pointerType!=='touch') hide(); });
@@ -447,21 +539,32 @@ function drawChart(box){
     else if(ev.key==='Escape') hide();
   });
   box.addEventListener('blur', hide);
-  const det=nd('details',null,null,box); nd('summary','muted small','最近 10 个交易日（表）',det);
+  const foot=nd('div','legend',null,box);
+  if(tr) nd('span',null,TFS[TF]+'趋势：'+tr.label+(tr.align ? '（'+tr.align+'）' : '')+' · 收盘在 MA20 '+(tr.above20?'上':'下')
+    +' · MA20 比 3 根前 '+(tr.slope20_pct>=0?'+':'')+tr.slope20_pct+'%', foot);
+  nd('span',null,'红 = 涨（空心）· 绿 = 跌（实心）', foot);
+  const det=nd('details',null,null,box); nd('summary','muted small','最近 10 根（表）',det);
   const tb=nd('table',null,null,det), hr=nd('tr',null,null,nd('thead',null,null,tb)), body=nd('tbody',null,null,tb);
-  for(const h of ['日期','收盘','涨跌','成交量']) nd('th',null,h,hr);
-  for(let i=N-1;i>=Math.max(1,N-10);i--){
-    const tr=nd('tr',null,null,body);
-    nd('td',null,D.d[i].slice(5).replace('-','/'),tr); nd('td',null,pxs(D.c[i]),tr);
-    nd('td',null,D.c[i]!=null && D.c[i-1] ? pcs((D.c[i]/D.c[i-1]-1)*100) : '—',tr);
-    nd('td',null,Number(D.v[i]||0).toLocaleString('ja-JP')+(D.kind==='core'?' 口':' 股'),tr);
+  for(const h of ['日期','开','高','低','收','涨跌','成交量']) nd('th',null,h,hr);
+  for(let i=N-1;i>=Math.max(0,N-10);i--){
+    const r=nd('tr',null,null,body), pc=i>0?D.c[i-1]:null;
+    nd('td',null,TF==='M'?D.d[i].slice(0,7).replace('-','/'):D.d[i].slice(5).replace('-','/'),r);
+    for(const a of [D.o,D.h,D.l,D.c]) nd('td',null,pxs(a[i]),r);
+    nd('td',(pc && D.c[i]>=pc)?'up':(pc && D.c[i]<pc)?'down':null, pc && D.c[i]!=null ? pcs((D.c[i]/pc-1)*100) : '—', r);
+    nd('td',null,Number(D.v[i]||0).toLocaleString('ja-JP'),r);
   }
 }
+async function showK(box){ if(!KD[box.dataset.t] || KD[box.dataset.t]==='error'){ drawK(box); await loadK(box.dataset.t); } drawK(box); }
 function drawAll(){
-  document.querySelectorAll('.chart[data-t]').forEach(drawChart);
-  document.querySelectorAll('[data-act=range]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.r===RANGE ? 'true' : 'false'));
+  document.querySelectorAll('.chart[data-t]').forEach(b=>{ if(KD[b.dataset.t] && b.offsetParent!==null) drawK(b); });
+  document.querySelectorAll('[data-act=tf]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.tf===TF ? 'true' : 'false'));
 }
-document.addEventListener('DOMContentLoaded', drawAll);
+const IO = ('IntersectionObserver' in window) ? new IntersectionObserver(es=>{ for(const e of es) if(e.isIntersecting){ IO.unobserve(e.target); showK(e.target); } }, {rootMargin:'200px'}) : null;
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.querySelectorAll('.chart[data-t]').forEach(b=>{ if(IO) IO.observe(b); else showK(b); });
+  drawAll();
+});
+document.addEventListener('toggle', e=>{ if(e.target.tagName==='DETAILS' && e.target.open) e.target.querySelectorAll('.chart[data-t]').forEach(b=>{ if(KD[b.dataset.t] && KD[b.dataset.t]!=='loading') drawK(b); }); }, true);
 document.addEventListener('pointerdown', ev=>{ if(!ev.target.closest('.chart')) document.querySelectorAll('.chart').forEach(b=>{ if(b._hide) b._hide(); }); });
 let RZ=null, LW=window.innerWidth;
 window.addEventListener('resize', ()=>{ clearTimeout(RZ); RZ=setTimeout(()=>{ if(Math.abs(window.innerWidth-LW)>2){ LW=window.innerWidth; drawAll(); } }, 150); });
@@ -521,6 +624,22 @@ def _dialogs(paper: bool) -> str:
             + ("模拟账户：手动操作后会和云端模拟盘不一致。" if paper else "") + "</div>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn primary' id='adj-go' data-act='adj-go'>确认</button></div>"
             "</div></dialog>"
+            "<dialog id='dlg-buy'><div class='sheet'><h3 id='buy-title'></h3><div id='buy-sig'></div>"
+            "<div style='margin-top:10px'><div class='seg' id='buy-seg' role='group' aria-label='买多少'>"
+            "<button data-act='buy-unit' data-u='rule' aria-pressed='true'>按规则</button>"
+            "<button data-act='buy-unit' data-u='shares' aria-pressed='false'>股数</button>"
+            "<button data-act='buy-unit' data-u='yen' aria-pressed='false'>金额 ¥</button>"
+            "<button data-act='buy-unit' data-u='pct' aria-pressed='false'>占权益 %</button></div></div>"
+            "<div class='adjrow' id='buy-row' hidden><button class='btn' data-act='buy-step' data-d='-1' aria-label='少一个单元'>−</button>"
+            "<div class='grow'><input type='number' id='buy-val' inputmode='decimal' min='0' aria-label='买多少'><span class='unit' id='buy-unit'>股</span></div>"
+            "<button class='btn' data-act='buy-step' data-d='1' aria-label='多一个单元'>＋</button></div>"
+            "<div id='buy-prev'></div><div class='muted small'>按规则 = 与规则的新仓同一个算法（总权益 × 25% × 新仓倍数，单元向下取整）。"
+            "执行器在下一次新收盘的决策里按那天的收盘再算一遍，过同样的闸门：资格检查 / 立花能不能买 / 手动卖出后不买回 / 决算前 / "
+            "新仓倍数 0 的票不买；个股最多 4 只（名额满不买）；单只最多占总权益 <span id='buy-cap'>34</span>%；钱不够时同一个开盘先卖核心 ETF；"
+            "开盘高于限价 / ストップ高 → 不买；只做一次。买入后与规则的持仓一样：止损按 ATR、跟踪止损 / 离场信号照常。"
+            + ("模拟账户：手动操作后会和云端模拟盘不一致。" if paper else "") + "</div>"
+            "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn primary' id='buy-go' data-act='buy-go'>确认买入</button></div>"
+            "</div></dialog>"
             "<dialog id='dlg-ask'><div class='sheet'><h3 id='ask-title'></h3><div id='ask-body'></div>"
             "<input type='text' id='ask-input' maxlength='120' hidden>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn primary' id='ask-ok' data-act='ask-ok'>确定</button></div>"
@@ -550,6 +669,91 @@ def _phone_card(phone: dict) -> str:
     return "".join(H)
 
 
+TF_LABEL = (("D", "日K"), ("W", "周K"), ("M", "月K"))
+
+
+def tchips(tr: dict | None) -> str:
+    """日K / 周K / 月K 的趋势标签（qbreak/kline.py；红 = 上升、绿 = 下降，文字本身就写着，不只靠颜色）。"""
+    out = []
+    for k, lab in TF_LABEL:
+        x = (tr or {}).get(k)
+        if not x:
+            continue
+        cls = {"上升": "up", "下降": "down"}.get(str(x.get("label")), "muted")
+        out.append(f"<span class='tchip'>{lab} <b class='{cls}'>{escape(str(x.get('label')))}</b>"
+                   + (f" · {escape(str(x['align']))}" if x.get("align") else "") + "</span>")
+    return f"<div class='tchips' aria-label='趋势'>{''.join(out)}</div>" if out else ""
+
+
+def tf_bar() -> str:
+    """K 线周期切换（一行，放在所有图上面；两处按钮是同一个开关）。"""
+    return ("<div class='chartbar'><span class='muted small'>K 线</span><div class='seg' role='group' aria-label='K 线周期'>"
+            + "".join(f"<button data-act='tf' data-tf='{k}' aria-pressed='{'true' if k == 'D' else 'false'}'>{v}</button>" for k, v in TF_LABEL)
+            + "</div><span class='muted small'>红 = 涨（空心）· 绿 = 跌（实心）· MA5 / 10 / 20 / 30</span></div>")
+
+
+def _suggest_card(sg: dict, book: dict, tag: str, buying: set, add_when: str, eq, cap: float, chart, bar: str) -> str:
+    """「建议的股票」= 规则的候选（qbreak/suggest.py）+ 每只的「买入…」（写手动买入指令；执行器下单前再查一遍）。"""
+    rows = sg.get("rows") or []
+    s = MO.slots(book, tag)
+    H = ["<section class='card' id='suggest'><h2>建议的股票（规则的候选）</h2>"
+         f"<div class='muted'>按 {escape(str(sg.get('asof') or '—'))} 收盘；按「今天出了买入信号 → 即将触发 → 观察中」和条件就绪度排，"
+         "不是收益预测，也不是建议。「买入…」只写一条手动买入指令："
+         f"<b>{escape(add_when)} 开盘</b>，执行器按规则的闸门再查一遍后下寄付指値。</div>"
+         f"<div class='small'>个股名额：拿着 {s['held']} 只 + 排定买入 {s['buys']} 只 / 上限 {s['max']} 只（空 {s['free']} 个）</div>"]
+    if sg.get("error"):
+        H.append(f"<div class='neg small'>★ 这次没算成：{escape(str(sg['error']))}</div>")
+    if not rows:
+        H.append("<div class='muted'>" + ("候选在执行器下一次运行之后显示" if not sg else "今天没有出信号 / 即将触发 / 观察中的票") + "</div></section>")
+        return "".join(H)
+    H.append(bar)
+    for r in rows:
+        t, b, ru = str(r["ticker"]), r.get("buy") or {}, r.get("rule") or {}
+        nm = f" {escape(str(r['name']))}" if r.get("name") else ""
+        st_cls = "chip hot" if r.get("status") == "triggered" else "chip"
+        meta = [f"就绪度 {r['score']:g}" if r.get("score") is not None else None,
+                f"收盘 ¥{r['close']:,.0f}" if r.get("close") is not None else None,
+                f"量比 {r['vol_ratio']:.2f} 倍" if r.get("vol_ratio") is not None else None,
+                f"横盘振幅 {r['range_pct']:.1f}%" if r.get("range_pct") is not None else None,
+                (f"距箱顶 {r['to_box_top_pct']:+.1f}%" if r.get("to_box_top_pct") is not None else None),
+                "真突破" if r.get("breakout") else None]
+        H.append(f"<div class='hv sg'><div class='head'><b>{escape(str(r.get('code') or t))}</b>{nm}"
+                 f"<span class='{st_cls}'>{escape(str(r.get('status_text') or ''))}</span>"
+                 + (f"<span class='chip'>{escape(str(r['sector']))}</span>" if r.get("sector") else "") + "</div>"
+                 f"<div class='meta'>{' · '.join(x for x in meta if x)}</div>"
+                 f"<div>{escape(str(ru.get('text') or ''))}</div>" + tchips(r.get("trend"))
+                 + (f"<div class='small neg'>★ 顶部风险：{escape(str(r['top_risk']))}</div>" if r.get("top_risk") else ""))
+        n, px, lot = int(b.get("rule_shares") or 0), float(b.get("px") or 0), int(b.get("lot") or MO.LOT)
+        why = None
+        if b.get("block"):
+            why = f"不能买：{b['block']}"
+        elif t in buying:
+            why = "有一条没处理完的买入指令（见下面「手动指令」，可以撤回）"
+        elif ru.get("state") in ("planned", "manual"):
+            why = "已经排在下一开盘买入（不用再点）"
+        elif s["free"] <= 0:
+            why = f"个股名额已满（{s['used']} / {s['max']} 只）：要买先卖出一只"
+        elif not (px > 0 and eq):
+            why = "没有收盘价 / 总权益：执行器下一次运行之后再买"
+        warn = "；".join(b.get("warn") or [])
+        if why:
+            H.append(f"<div class='act muted small'>{escape(why)}</div>")
+        else:
+            data = (f" data-t='{escape(t)}' data-code='{escape(str(r.get('code') or t))}' data-name='{escape(str(r.get('name') or ''))}'"
+                    f" data-px='{px:g}' data-lot='{lot}' data-rule='{n}' data-limit='{float(b.get('limit') or 0):g}'"
+                    f" data-sig='{1 if r.get('signal') else 0}' data-status='{escape(str(r.get('status_text') or ''))}'"
+                    f" data-rtext='{escape(str(ru.get('text') or ''))}' data-warn='{escape(warn)}'")
+            H.append(f"<div class='act'><button class='btn primary' data-act='buy'{data}>买入…</button>"
+                     f"<span class='muted small'>按规则约 {n:,} 股 · 约 {_yen(n * px)}"
+                     + (f" · 约占权益 {n * px / eq * 100:.1f}%" if eq else "") + "</span></div>"
+                     + (f"<div class='small neg'>★ {escape(warn)}</div>" if warn else ""))
+        H.append(f"<details class='kl'{' open' if r.get('status') in ('triggered', 'imminent') else ''}>"
+                 f"<summary>K 线（日K / 周K / 月K）</summary>{chart(t, 'suggest')}</details></div>")
+    H.append("<div class='muted small'>按规则的股数按最近收盘估算；手动买入是你自己的决定（没触发信号的票没有回测验证），会让账户和云端模拟盘不一致。"
+             "非投资建议。</div></section>")
+    return "".join(H)
+
+
 def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "local", device: dict | None = None,
            phone: dict | None = None) -> str:
     """操作面板页面（一个账本）。mode = local（Mac 本机：tok = 面板令牌）/ remote（手机：tok = 这台设备的 CSRF 令牌）。"""
@@ -565,7 +769,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     add_when = f"{aday:%m/%d}（{'今天' if atoday else '下一个交易日'}）"
     man = book.get("manual") or {}
     cap = float(man.get("cap_pct") or MO.CAP_PCT)
-    charts = sm.get("charts") or {}
+    kl = sm.get("kline") or {}
+    ktrend = kl.get("trend") or {}
+    has_k = bool(kl.get("file")) and (paths.out_dir() / str(kl["file"])).exists()
     halt = PP.halt_text()
     armed = (paths.home() / "ARM").exists()
     hist = st.get("history") or []
@@ -576,6 +782,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     busy = {r.get("ticker") for r in waiting if r.get("kind") in MO.POS_KINDS}
     busy |= {it.get("ticker") for it in (man.get("items") or {}).values()
              if it.get("kind") in MO.POS_KINDS and it.get("status") in MO.ACTIVE and not it.get("cancel_req")}
+    buying = {r.get("ticker") for r in waiting if r.get("kind") == "buy"}
+    buying |= {it.get("ticker") for it in (man.get("items") or {}).values()
+               if it.get("kind") == "buy" and it.get("status") in MO.ACTIVE and not it.get("cancel_req")}
     H = ["<header class='top'><div class='bar'><b>qbreak 操作面板</b><span class='sp'></span>"
          f"<span class='muted small'>{escape(now.strftime('%m/%d %H:%M JST'))}</span>"
          "<button class='btn sm' data-act='reload'>刷新</button></div>"
@@ -593,7 +802,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
              f"<div class='stats'><div><div class='muted'>总权益</div><div class='big'>{_yen(eq)}</div></div>"
              f"<div><div class='muted'>现金</div><div class='big'>{_yen(st.get('cash_jpy'))}</div></div></div>"
              f"<div>现在点卖出 / 减仓 → <b>{escape(when)} 开盘</b>执行（成交日 {MO.CUTOFF:%H:%M} 截止；之后点的算下一个交易日）；"
-             f"加仓 → <b>{escape(add_when)} 开盘</b>（只在新收盘的决策里做）。"
+             f"加仓 / 买入 → <b>{escape(add_when)} 开盘</b>（只在新收盘的决策里做）。"
              "按钮只写「手动指令」，下单由执行器在下一次能下寄付单的运行里做（同样的闸门、同样的对账）</div>"
              + "".join(f"<div class='{'neg' if 'HALT' in w or 'ARM' in w else 'muted'} small'>★ {w}</div>" for w in warn) + "</section>")
     if not st:
@@ -609,17 +818,20 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
 
     def chart(t: str, kind: str) -> str:
         return (f"<div class='chart' data-t='{escape(t)}' data-kind='{kind}'><span class='muted small'>"
-                f"{'走势图（要 JavaScript）' if t in charts else '走势图在执行器下一次运行之后显示'}</span></div>")
+                f"{'K 线（要 JavaScript）' if has_k else 'K 线在执行器下一次运行之后显示'}</span></div>")
 
     def actions(r: dict, kind: str) -> str:
         t = str(r["ticker"])
         if kind == "core":
-            return chart(t, "core")
+            return tchips(ktrend.get(t)) + chart(t, "core")
+        return tchips(ktrend.get(t)) + _actions(r, t)
+
+    def _actions(r: dict, t: str) -> str:
         p = (st.get("pos") or {}).get(t)
         if p is None:
             return "<div class='act muted'>（这只票已经不在执行器的账本里）</div>" + chart(t, "stock")
         if t in pend:
-            return (f"<div class='act'><b class='neg'>已排定开盘卖（{escape(MO.REASON_TEXT.get(pend[t], str(pend[t])))}）</b></div>"
+            return (f"<div class='act'><b class='neg'>已排定开盘卖（{escape(HV.EXIT_TEXT.get(pend[t], str(pend[t])))}）</b></div>"
                     + chart(t, "stock"))
         if t in busy:
             return "<div class='act muted'>有一条没处理完的手动指令（见下面「手动指令」，可以撤回）</div>" + chart(t, "stock")
@@ -632,16 +844,14 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                 f"<button class='btn' data-act='adj'{data} data-px='{px:g}'{'' if px > 0 and eq else ' disabled'}>调整…</button></div>"
                 f"<div class='muted small'>现在 {sh:,} 股 · 约 {_yen(sh * px)} · 约占权益 {f'{cur:.1f}' if cur is not None else '—'}%"
                 f"（调整：按股数 / 金额 / 占权益 %，可加可减；单只上限 {cap:g}%）</div>" + chart(t, "stock"))
-    bar = ("<div class='chartbar'><span class='muted small'>走势图期间</span><div class='seg' role='group' aria-label='走势图期间'>"
-           + "".join(f"<button data-act='range' data-r='{k}' aria-pressed='{'true' if k == '3m' else 'false'}'>{v}</button>"
-                     for k, v in (("1m", "1 个月"), ("3m", "3 个月"), ("6m", "6 个月"), ("1y", "1 年")))
-           + "</div></div>") if charts else ""
+    bar = tf_bar() if has_k else ""
     held_core = {str(r.get("ticker")) for r in hv.get("core") or []}
-    other = [(t, c) for t, c in charts.items() if c.get("kind") == "core" and t not in held_core]
-    more = ("<details class='hv'><summary class='muted'>闲置资金方式里的其他 ETF（现在没拿）的走势</summary>"
-            + "".join(f"<div class='hv'><b>{escape(str(c.get('name') or t))}</b> <span class='muted'>现在 0 口</span>{chart(t, 'core')}</div>"
-                      for t, c in other) + "</details>") if other else ""
+    other = [(t, c) for t, c in (kl.get("items") or {}).items() if c.get("kind") == "core" and t not in held_core]
+    more = ("<details class='hv'><summary class='muted'>闲置资金方式里的其他 ETF（现在没拿）的 K 线</summary>"
+            + "".join(f"<div class='hv'><b>{escape(str(c.get('name') or t))}</b> <span class='muted'>现在 0 口</span>"
+                      f"{tchips(ktrend.get(t))}{chart(t, 'core')}</div>" for t, c in other) + "</details>") if other else ""
     H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions, toolbar=bar) + more + "</section>")
+    H.append(_suggest_card(sm.get("suggest") or {}, book, tag, buying, add_when, eq, cap, chart, bar))
     cp = float(man.get("core_pct", 100.0))
     H.append("<section class='card' id='core'><h2>闲置资金（核心 ETF）比例</h2>"
              f"<div>现在：规则目标额的 <b>{cp:g}%</b>（100% = 照规则；0% = 卖出核心 ETF、留现金）</div>"
@@ -659,11 +869,11 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     rows = []
     for r in waiting:
         btn = (f"<button class='btn sm' data-act='cancel' data-id='{escape(r['id'])}' data-placed='0'>撤回</button>"
-               if r["kind"] in MO.POS_KINDS + ("core",) else "")
+               if r["kind"] in MO.ORDER_KINDS + ("core",) else "")
         rows.append(f"<div class='li'><div class='grow'><b>{_what(r)}</b> <span class='chip'>等执行器读</span>"
                     f"<div class='muted small'>{escape(str(r.get('at', ''))[5:16].replace('T', ' '))} · 下一次运行处理</div></div>{btn}</div>")
     for it in items[:20]:
-        can = it.get("status") in MO.ACTIVE and it.get("kind") in MO.POS_KINDS and not it.get("cancel_req")
+        can = it.get("status") in MO.ACTIVE and it.get("kind") in MO.ORDER_KINDS and not it.get("cancel_req")
         btn = (f"<button class='btn sm' data-act='cancel' data-id='{escape(it['id'])}' data-placed='{1 if it.get('status') == 'placed' else 0}'>撤回</button>"
                if can else "")
         rows.append(f"<div class='li'><div class='grow'><b>{_what(it)}</b> <span class='chip'>"
@@ -696,9 +906,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     cfg = {"auth": {"h": "X-Qbreak-Csrf" if remote else "X-Qbreak-Token", "v": tok}, "book": tag, "paper": paper,
            "when": when, "addWhen": add_when, "eq": eq or 0, "cap": cap, "lot": MO.LOT}
     js = _JS.replace("__CFG__", json.dumps(cfg, ensure_ascii=False).replace("</", "<\\/"))
-    data = json.dumps(charts, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
-    return (_head("qbreak 操作面板") + "<body>" + "".join(H) + _dialogs(paper)
-            + f"<script type='application/json' id='chart-data'>{data}</script><script>{js}</script></body></html>")
+    return _head("qbreak 操作面板") + "<body>" + "".join(H) + _dialogs(paper) + f"<script>{js}</script></body></html>"
 
 
 def pair_page(code: str = "") -> str:
@@ -729,8 +937,8 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
         rec = MO.normalize({**body, "source": source})
     except ValueError as e:
         return False, f"没写：{e}", None
-    book, _ = _load(tag)
-    why = MO.check(rec, book, tag)
+    book, sm = _load(tag)
+    why = MO.check(rec, book, tag, sm=sm)
     if why:
         return False, f"没写：{why}", None
     rec = MO.append(tag, rec, clock=(lambda: now) if now else None)
@@ -753,7 +961,18 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
         else:
             msg = (f"已写：{rec['ticker']} 调到 {MO.fmt_target(rec)}（估算卖 {-a['delta']:,} 股 → {a['target']:,} 股）"
                    f"→ 执行器在 {when}前的运行里下寄付成行单")
-    if paths.halt_file().exists() and k in MO.POS_KINDS:
+    if k == "buy":
+        st = book.get("state") or {}
+        ad, at = MO.add_window(now or now_jst(), st.get("last_date"))
+        row = next((r for r in (sm.get("suggest") or {}).get("rows") or [] if r.get("ticker") == rec["ticker"]), None)
+        est = ""
+        if row and rec.get("unit") == "rule":
+            n = int((row.get("buy") or {}).get("rule_shares") or 0)
+            est = f"，按最近收盘估算约 {n:,} 股 ≈ ¥{n * float((row.get('buy') or {}).get('px') or 0):,.0f}"
+        msg = (f"已写：买入 {rec['ticker']}（{MO.fmt_target(rec)}{est}）→ 执行器在 {ad:%m/%d}（{'今天' if at else '下一个交易日'}）"
+               "开盘前的运行里按决策日的收盘定股数与限价，下寄付指値（钱不够时先卖核心 ETF；名额满 / 开盘高于限价 → 不买；只做一次）"
+               + ("" if row and row.get("signal") else "；★ 这只还没有买入信号：规则不会买，是你自己的决定"))
+    if paths.halt_file().exists() and k in MO.ORDER_KINDS:
         msg += "；★ HALT 生效中：HALT 解除之后的下一次运行才处理"
     return True, msg + f"（指令 {rec['id']}）", rec
 
@@ -815,6 +1034,31 @@ class Trigger:
                 self.check()
             except Exception as e:                           # noqa: BLE001
                 log.warning("面板的定时检查出错（继续）：%s", e)
+
+
+# ───────────────────────── K 线数据（按需取） ─────────────────────────
+_CHART_T = re.compile(r"[0-9A-Z][0-9A-Z.^=\-]{0,14}")
+_CHART_CACHE: dict = {}
+_CHART_LOCK = threading.Lock()
+
+
+def chart_json(tag: str, t: str) -> tuple[int, dict]:
+    """一只票的 K 线（执行器写的 out/charts_<账本>.json；按文件的修改时间缓存）→ (HTTP 状态, JSON)。"""
+    fp = paths.out_dir() / f"charts_{tag}.json"
+    try:
+        mt = fp.stat().st_mtime
+    except OSError:
+        return 404, {"ok": False, "msg": "还没有 K 线（执行器下一次运行之后）"}
+    with _CHART_LOCK:
+        c = _CHART_CACHE.get(str(fp))
+        if c is None or c[0] != mt:
+            c = (mt, read_json(fp, {}) or {})
+            _CHART_CACHE[str(fp)] = c
+    data = c[1]
+    pl = (data.get("tickers") or {}).get(t)
+    if pl is None:
+        return 404, {"ok": False, "msg": f"没有 {t} 的 K 线"}
+    return 200, {"ok": True, "t": t, "asof": data.get("asof"), "data": pl}
 
 
 # ───────────────────────── HTTP ─────────────────────────
@@ -884,6 +1128,20 @@ class _Common(BaseHTTPRequestHandler):
             return None
         return body
 
+    def _chart(self, query: str) -> None:
+        """GET /api/chart?book=…&t=…：一只票的 K 线（只读；本机端口看 Host，手机端口要已配对的设备）。"""
+        t = str((parse_qs(query).get("t") or [""])[0]).strip().upper()
+        if not _CHART_T.fullmatch(t):
+            self._json(400, {"ok": False, "msg": "代码不对"})
+            return
+        code, obj = chart_json(_book_of(query), t)
+        body = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        hdrs = []
+        if "gzip" in str(self.headers.get("Accept-Encoding") or "") and len(body) > 1024:
+            body = gzip.compress(body, 6)
+            hdrs = [("Content-Encoding", "gzip"), ("Vary", "Accept-Encoding")]
+        self._send(code, body, "application/json; charset=utf-8", hdrs)
+
     def _page(self, render_fn) -> None:
         try:
             html = render_fn()
@@ -922,6 +1180,9 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
                 return
             u = urlparse(self.path)
             if self._static(u.path):
+                return
+            if u.path == "/api/chart":
+                self._chart(u.query)
                 return
             if u.path != "/":
                 self._text(404, "没有这个页面")
@@ -1006,10 +1267,16 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
             u = urlparse(self.path)
             if self._static(u.path):
                 return
-            if u.path not in ("/", "/pair"):
+            if u.path not in ("/", "/pair", "/api/chart"):
                 self._text(404, "没有这个页面")
                 return
             dev = PP.device_for(self.headers.get("Cookie"))
+            if u.path == "/api/chart":
+                if dev is None:
+                    self._json(401, {"ok": False, "msg": "这台设备还没配对（或已被取消）"})
+                else:
+                    self._chart(u.query)
+                return
             if dev is None:
                 code = (parse_qs(u.query).get("c") or [""])[0] if u.path == "/pair" else ""
                 self._page(lambda: pair_page(code))

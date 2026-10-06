@@ -6,8 +6,8 @@
   那天的条件不完全成立时注明（复权 / 数据修正 / 参数后来改过）。核心 ETF：闲置资金的方式与牛熊。
 现在趋势如何：收盘对 20 / 60 / 200 日线、20 日线 5 天的斜率、MACD 与信号线、1 / 3 个月涨跌、离持有以来最高、离止损 →
   一个标签（上升趋势 / 偏强 / 偏弱 / 下降趋势）。标签是均线位置的机械描述，不是预测；卖出仍只按规则（卖出线见买卖时间线）。
-走势图数据（chart_data；2026-10-06 用户「还可以看到个股和 etf 的走势」）：执行器每次运行写进汇总（out/live_unified_<账本>.json 的
-  charts），操作面板（本机 + 手机）画成折线图：收盘、20 / 60 日线、成交量、成本线与止损线。只在 Mac 本机，不入库。
+K 线（日K / 周K / 月K + MA5 / 10 / 20 / 30）：qbreak/kline.py（执行器写 out/charts_<账本>.json，操作面板按需取；只在 Mac 本机，不入库）。
+趋势标签的颜色：两边页面都给 pos / neg（绿 / 红）再加 up / down —— 操作面板按同花顺的习惯把 up 画成红、down 画成绿（与 K 线一致）。
 """
 from __future__ import annotations
 
@@ -20,6 +20,9 @@ import pandas as pd
 from . import paths
 
 TREND = {"up": "上升趋势", "strong": "偏强", "weak": "偏弱", "down": "下降趋势", "na": "数据不够"}
+EXIT_TEXT = {"stop": "止损", "gap_stop": "跳空止损", "trail": "跟踪止损", "take_profit": "止盈", "dead_cross": "MACD 死叉",
+             "climax": "放量阴线", "max_hold": "持有到期", "time_stop": "时间止损", "chandelier": "吊灯止损 X6", "sar_flip": "SAR 翻转",
+             "manual": "手动卖出", "manual_trim": "手动减仓"}             # 排在下一开盘卖出的理由（页面上显示中文）
 TREND_NOTE = {"up": "收盘在 20 日线上、20 日线在 60 日线上、20 日线向上", "strong": "收盘在 20 日线上（均线还没排成上升）",
               "weak": "收盘跌破 20 日线（均线还没排成下降）", "down": "收盘在 20 日线下、20 日线在 60 日线下、20 日线向下",
               "na": "K 线不到 60 根"}
@@ -54,6 +57,11 @@ def _lookup() -> tuple[dict, dict, dict]:
     from .themes import THEMES, members
     th = {c: THEMES[k][0] for c, k in members().items()}
     return load("jpx_names.json", "names"), load("industry_s33.json", "s33"), th
+
+
+def names() -> dict:
+    """代码 → 公司名（JPX 上場一覧的名称快照；操作面板的「建议的股票」也用）。"""
+    return _lookup()[0]
 
 
 def _row_before(df: pd.DataFrame, day) -> tuple[pd.Timestamp | None, pd.Series | None]:
@@ -182,7 +190,7 @@ def build(ind: dict, positions: dict, p, *, bar_date=None, pending: dict | None 
                "shares": int(ps.get("shares") or 0), "entry_date": ps.get("entry_date"), "entry_px": _f(ps.get("entry_px")),
                "stop_px": _f(ps.get("stop_px")), "hold": ps.get("hold")}
         if t in (pending or {}):
-            row["queued"] = str(pending[t])
+            row["queued"] = EXIT_TEXT.get(str(pending[t]), str(pending[t]))
         df = ind.get(t)
         if df is None or not len(df):
             row["error"] = "没有这只票的行情"
@@ -214,47 +222,6 @@ def build(ind: dict, positions: dict, p, *, bar_date=None, pending: dict | None 
             except Exception as e:                            # noqa: BLE001
                 row["error"] = f"{type(e).__name__}: {e}"[:160]
         out["core"].append(row)
-    return out
-
-
-CHART_BARS = 260                                  # 走势图：最近约 1 年的日 K（页面上可选 1 个月 / 3 个月 / 6 个月 / 1 年）
-
-
-def _nums(s: pd.Series, nd: int = 2) -> list:
-    out = []
-    for x in s.astype(float).tolist():
-        out.append(round(x, nd) if math.isfinite(x) else None)
-    return out
-
-
-def chart_data(ind: dict, rows: list[dict], bar_date=None, n: int = CHART_BARS) -> dict:
-    """操作面板的走势图数据（只展示）：每只票最近 n 根日 K 的开高低收与成交量 + 20 / 60 日线（用全部历史算，开头不缺）。
-    rows：[{"ticker", "kind": stock / core, "name", "entry_px", "entry_date", "stop_px", "shares" / "units"}]；
-    没有行情 / 算不出的票跳过（页面上显示「没有走势数据」）。"""
-    end = pd.Timestamp(str(bar_date)) if bar_date else None
-    out = {}
-    for r in rows:
-        t = str(r.get("ticker") or "")
-        df = ind.get(t)
-        if df is None or not len(df) or t in out:
-            continue
-        try:
-            d = df.loc[:end] if end is not None else df
-            d = d[d["Close"].astype(float).notna()]
-            if len(d) < 2:
-                continue
-            c = d["Close"].astype(float)
-            tail = d.tail(int(n))
-            ix = tail.index
-            vol = tail["Volume"].astype(float).fillna(0.0) if "Volume" in tail.columns else pd.Series(0.0, index=ix)
-            out[t] = {"kind": r.get("kind") or "stock", "name": r.get("name") or None,
-                      "d": [str(x.date()) for x in ix], "o": _nums(tail["Open"]), "h": _nums(tail["High"]),
-                      "l": _nums(tail["Low"]), "c": _nums(tail["Close"]),
-                      "v": [int(x) if math.isfinite(x) else 0 for x in vol.tolist()],
-                      "m20": _nums(c.rolling(20).mean().loc[ix]), "m60": _nums(c.rolling(60).mean().loc[ix]),
-                      "entry_px": _f(r.get("entry_px")), "entry_date": r.get("entry_date"), "stop_px": _f(r.get("stop_px"))}
-        except Exception:                                     # noqa: BLE001  展示用：一只算不出不影响别的
-            continue
     return out
 
 
@@ -329,19 +296,19 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
         items = "".join(f"<li>{'✓' if it['ok'] else ('✗' if it['ok'] is False else '·')} {escape(it['text'])}</li>"
                         for it in w.get("items") or [])
         lab = tr.get("label") or "na"
-        cls = {"up": "pos", "strong": "pos", "weak": "neg", "down": "neg"}.get(lab, "muted")
+        cls = {"up": "pos up", "strong": "pos up", "weak": "neg down", "down": "neg down"}.get(lab, "muted")
         ret = tr.get("ret_pct")
         H.append(f"<div class='hv'>{head}"
                  f"<div><b>为什么持有</b>：{escape(why_line(r))}</div>"
                  + (f"<details><summary class='muted'>买入那天的规则读数</summary><ul>{items}</ul></details>" if items else "")
                  + f"<div><b>现在</b>：<b class='{cls}'>{escape(TREND.get(lab, '—'))}</b>"
-                 + (f" <span class='{'pos' if ret >= 0 else 'neg'}'>{'浮盈' if ret >= 0 else '浮亏'} {ret:+.1f}%</span>" if ret is not None else "")
+                 + (f" <span class='{'pos up' if ret >= 0 else 'neg down'}'>{'浮盈' if ret >= 0 else '浮亏'} {ret:+.1f}%</span>" if ret is not None else "")
                  + f" <span class='muted'>（{escape(TREND_NOTE.get(lab, ''))}）</span><br><span class='muted'>{escape(tr.get('text') or '')}</span></div>"
                  + (actions(r, "stock") if actions else "") + "</div>")
     for r in cs:
         tr = r.get("trend") or {}
         lab = tr.get("label") or "na"
-        cls = {"up": "pos", "strong": "pos", "weak": "neg", "down": "neg"}.get(lab, "muted")
+        cls = {"up": "pos up", "strong": "pos up", "weak": "neg down", "down": "neg down"}.get(lab, "muted")
         H.append(f"<div class='hv'><b>{escape(r['name'])}</b> <span class='muted'>{r['units']:,} 口"
                  + (f" · 约占权益 {r['pct_equity']:.1f}%" if r.get("pct_equity") is not None else "") + " · 核心 ETF（闲置资金）</span>"
                  f"<div><b>为什么持有</b>：{escape(r['why'])}</div>"
@@ -354,4 +321,4 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
 
 CSS = ".hv{border-top:1px solid var(--line);padding:8px 0}.hv:first-of-type{border-top:0}.hv ul{margin:4px 0 4px;padding-left:18px}"
 
-__all__ = ["build", "why_items", "trend", "why_line", "lines", "html", "chart_data", "CHART_BARS", "TREND", "CSS"]
+__all__ = ["build", "why_items", "trend", "why_line", "lines", "html", "names", "TREND", "EXIT_TEXT", "CSS"]
