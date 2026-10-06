@@ -127,6 +127,15 @@ def test_scripts_print_chinese_after_variables_without_dying(tmp_path, locales, 
     assert "② 模拟操盘已安装" in out and "已注册 com.qbreak.news" in out and "④ J-Quants：钥匙串里还没有" in out
     assert "已注册 com.qbreak.login" in out and (tmp_path / "agents" / "com.qbreak.login.plist").exists()
     assert "⑤ ★ 没能建" in out and "已注册的定时任务：" in out
+    out, err = _bash(env, "scripts/mac_setup.sh", "--phone", "node")               # 连手机一起：假 Python 出错 → 如实说，其他步骤照常
+    assert "unbound variable" not in err, err
+    assert "④d ★ 手机访问没打开（退出码 1）" in out and "已注册的定时任务：" in out
+    (tmp_path / "lh" / "panel_phone.json").write_text("{}", encoding="utf-8")       # 以前打开过：每次更新都确认还在（不弹页面）
+    out, err = _bash(env, "scripts/mac_setup.sh")
+    assert "unbound variable" not in err, err
+    assert "④d ★ 手机访问没打开（退出码 1）" in out and "mac_setup.sh --phone <Tailscale 机器名>" not in out
+    out, err = _bash(env, "scripts/mac_setup.sh", "--bogus")
+    assert "不认识的参数 --bogus" in out
     out, err = _bash({**env, "QBREAK_LOGIN_DELAY": "0"}, "scripts/liveu.sh", "login")   # 登录时的检查（假 Python 出错 → 如实说，不中断）
     assert "unbound variable" not in err, err
     assert "登录时的检查失败" in out

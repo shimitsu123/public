@@ -453,10 +453,24 @@ def _devices_lines() -> list[str]:
     return out
 
 
+ADMIN_DNS = "https://login.tailscale.com/admin/dns"
+
+
+def _open(url: str, open_panel: bool) -> None:
+    """Mac 上用浏览器打开（NO_OPEN 存在 / 不是 Mac / 不要打开时不动）。"""
+    if open_panel and sys.platform == "darwin" and not (paths.home() / "NO_OPEN").exists():
+        try:
+            subprocess.run(["open", url], timeout=20, capture_output=True, check=False)
+        except Exception:                                    # noqa: BLE001
+            pass
+
+
 def cli(action: str = "status", port: int = PHONE_PORT, https_port: int = 443, yes: bool = False, out=print,
-        open_panel: bool = True) -> int:
+        open_panel: bool = True, confirm_name: str | None = None, wait_s: float = 20.0) -> int:
     """run.py panel-phone：on（打开手机访问）/ off（关闭）/ status（只读）/ forget（取消全部配对）。
-    从不打印配对码；只动 Tailscale Serve 的这一个 HTTPS 端口；Funnel 开着就拒绝。"""
+    从不打印配对码；只动 Tailscale Serve 的这一个 HTTPS 端口；Funnel 开着就拒绝。
+    confirm_name：用户确认过可以公开的机器名（scripts/mac_setup.sh --phone <机器名>）—— 只有这台 Mac 的机器名正好是它才算确认。
+    退出码：0 打开了 / 1 tailscale serve 失败 / 2 前提不满足（没装、没登录、Funnel、端口被占）/ 3 要确认机器名 / 4 要先打开 HTTPS。"""
     target = f"http://127.0.0.1:{int(port)}"
     out("── 手机操作（Tailscale Serve：只有你自己 Tailscale 里的设备能连；绝不用 Funnel）──")
     if action == "forget":
@@ -510,8 +524,10 @@ def cli(action: str = "status", port: int = PHONE_PORT, https_port: int = 443, y
         return 2
     # ── on ──
     if not info.get("magicdns") or not info.get("https"):
-        out("★ 先在 Tailscale 管理页（login.tailscale.com/admin/dns）打开 MagicDNS 与 HTTPS Certificates（Enable HTTPS），再运行一次")
-        return 2
+        out(f"★ 还要在 Tailscale 管理页 {ADMIN_DNS} 打开 MagicDNS 与 HTTPS Certificates（Enable HTTPS；只要点一次），再运行一次"
+            + ("（已经在 Mac 的浏览器里打开了这一页）" if open_panel and sys.platform == "darwin" else ""))
+        _open(ADMIN_DNS, open_panel)
+        return 4
     if si["funnel"]:
         out(f"★ {host}:{hp} 开着 Funnel（公开到互联网）：先关掉 tailscale funnel --https={hp} off；qbreak 只用 Serve（只在你的 tailnet 里）")
         return 2
@@ -519,14 +535,20 @@ def cli(action: str = "status", port: int = PHONE_PORT, https_port: int = 443, y
         out(f"★ Tailscale Serve 的 {hp} 端口已经被别的服务用（{si['proxy'] or '文件 / 文本'}）：不覆盖。换一个端口："
             "bash scripts/liveu.sh phone on --https-port 8443")
         return 2
-    if not ours and not yes and _norm(saved.get("url")) != _norm(url):
-        name, _, tailnet = host.partition(".")
+    name, _, tailnet = host.partition(".")
+    named = str(confirm_name or "").strip().lower()
+    if not ours and not yes and _norm(saved.get("url")) != _norm(url) and named != name:
+        if named:
+            out(f"★ 这台 Mac 在 Tailscale 里的机器名是「{name}」，不是确认过的「{named}」：没有打开（机器名改过、或不是这台 Mac）")
         out(f"★ 第一次打开：HTTPS 证书会把机器名「{name}」与 tailnet 名「{tailnet}」写进公开的证书透明度日志"
             "（Certificate Transparency），任何人都能查到（查到也连不上：只有你 Tailscale 里的设备能连）。")
         out("  名字里有姓名等个人信息 → 先在 Tailscale 管理页 Machines → 这台 Mac → Edit machine name 改成不含个人信息的名字"
             "（例 qbreak-mac），再运行一次")
-        out("  名字没问题 → bash scripts/liveu.sh phone on --yes")
+        out(f"  名字没问题 → bash scripts/mac_setup.sh --phone {name}（或 bash scripts/liveu.sh phone on --confirm-name {name}）")
         return 3
+    deadline = time.monotonic() + max(0.0, float(wait_s))
+    while not listening(port) and time.monotonic() < deadline:   # 刚重启的面板要几秒才起来
+        time.sleep(1.0)
     if not listening(port):
         out(f"★ 操作面板没在监听手机端口 127.0.0.1:{port}（没运行、或还是旧版本）：bash scripts/install_launchd_panel.sh 重启面板。"
             "Serve 照样打开，面板起来之后手机就能连")
@@ -546,11 +568,7 @@ def cli(action: str = "status", port: int = PHONE_PORT, https_port: int = 443, y
         "④ Safari 的「共享 → 添加到主屏幕」可以像 App 一样打开（主屏幕上要求重新配对的话，再生成一次配对码）")
     for ln in _devices_lines():
         out(ln)
-    if open_panel and sys.platform == "darwin" and not (paths.home() / "NO_OPEN").exists():
-        try:
-            subprocess.run(["open", "http://127.0.0.1:8765/#phone"], timeout=20, capture_output=True, check=False)
-        except Exception:                                    # noqa: BLE001
-            pass
+    _open("http://127.0.0.1:8765/#phone", open_panel)
     return 0
 
 

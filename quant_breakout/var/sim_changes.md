@@ -9753,4 +9753,10 @@ Mac 问法表、已知限制）；CHECK_TIMELINE（⑥ 执行层、08:35 / 09:20
   只调 serve --bg、不碰 funnel / 已打开不重复 / Funnel 开着拒绝 / 443 被占拒绝且不覆盖 / 8443 / off 只关自己的 / forget；代码更新后退出）。
 - 没做的 / 限制：Mac 睡着、关机或没连 Tailscale 时手机打不开（立花上线后交易日 07:30〜09:25 Mac 定时醒着；那时以外要停就在云端对话里说「停」→ var/HALT_REMOTE）；
   主屏幕上的网页与 Safari 的 cookie 可能分开（要求重新配对就再生成一次配对码）；手机上不能解除 HALT、不能配对新设备、不能手动买。非投资建议。
-- 全部 2,603 个测试通过（新增 8 个；原有的手动指令 / 面板 / 执行器测试照过）。
+- 全部 2,603 个测试通过（新增 8 个；原有的手动指令 / 面板 / 执行器测试照过）。（后续：2,604 个；修了测试里 1/16 概率误报的 CSRF 断言）
+- 后续（同日，用户：「机器已经和手机连上 上述的命令整合为一个我在mac的会话中让它直接pull代码后全部执行」；用户的 iPhone 与 Mac 已在同一个 tailnet，Mac 的 Tailscale 机器名 `node`）：一条命令 `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone node`
+  = 拉代码 → 依赖与全部定时任务 → 重启操作面板 → `phone on --confirm-name node`（只有机器名正好是 node 才算确认公开证书日志；不一样就停下说明）
+  → 等面板的手机端口起来（最多 20 秒）→ Tailscale Serve → 在 Mac 上打开面板的「手机」（配对码仍由用户自己在 Mac 屏幕上生成）。
+  HTTPS / MagicDNS 没开 → 退出码 4，并在 Mac 的浏览器里打开 Tailscale 管理页（login.tailscale.com/admin/dns），点一次 Enable HTTPS 后再运行。
+  以后照常的 `mac_setup.sh`（不带 --phone）：手机访问打开过的话也确认 Serve 还在（不弹页面）。测试：mac_setup.sh --phone（bash 3.2 的 locale 也跑）、
+  机器名不一致 → 不打开、确认名字不分大小写、等重启的面板、HTTPS 没开 → 4。

@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # macOS：拉完代码之后，一条命令把这台 Mac 上 qbreak 的环境与定时任务全部装好 / 更新（可以重复运行；不动账本、不下单、不碰 ARM / HALT）：
 #   git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh
+# 连手机上操作一起（第一次；node = 用户确认过可以写进公开证书日志的 Tailscale 机器名，名字不一样就不打开、停下说明）：
+#   git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone node
 # ① Python 依赖（~/.qbreak/venv）+ ② 模拟操盘 com.qbreak.liveu.paper（周一至五 07:40；没装就装，已装立花本番时不动）
 # ③ 市场仪表盘 + 经济威胁提醒 com.qbreak.news（每 15 分钟）
 # ④ J-Quants 定时取数 com.qbreak.jquants（钥匙串里有 qbreak-jquants 才装；只检查有没有，绝不读出值）
 # ④b 登录 / 开机后自动启动 com.qbreak.login（RunAtLoad：仪表盘没加载就加载、交易日已过 07:40 而今天没跑 → 补跑模拟操盘、打开页面）
 # ④c 本机操作面板 com.qbreak.panel（http://127.0.0.1:8765/ + 手机端口 127.0.0.1:8766；按钮只写手动指令，下单由执行器做）
+# ④d 手机上操作（--phone：打开 Tailscale Serve → 在 Mac 上打开面板的「手机」；以前打开过的：每次确认还在，不弹页面）
 # ⑤ 研究用的第二个克隆 ~/qbreak-dev（没有就建；没有本地改动就快进到最新）
 # ⑥ 自检：已注册的定时任务、页面在哪里
 set -euo pipefail
@@ -17,6 +20,16 @@ AGENTS="${QBREAK_LAUNCH_AGENTS:-$HOME/Library/LaunchAgents}"
 DEV="${QBREAK_DEV:-$HOME/qbreak-dev}"
 BRANCH="${QBREAK_BRANCH:-claude/rakuten-auto-trading-review-ka7lf0}"
 REPO="${QBREAK_REPO:-https://github.com/shimitsu123/public.git}"
+PHONE=""
+PHONE_NAME=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --phone) PHONE=1; if [ $# -gt 1 ] && [ "${2#-}" = "$2" ]; then PHONE_NAME="$2"; shift; fi ;;
+    --phone=*) PHONE=1; PHONE_NAME="${1#--phone=}" ;;
+    *) echo "不认识的参数 ${1}（可用：--phone [机器名]）"; exit 2 ;;
+  esac
+  shift
+done
 
 echo "── qbreak：Mac 一条命令安装 / 更新 ──"
 
@@ -52,6 +65,28 @@ bash "$PROJ/scripts/install_launchd_login.sh"
 # ④c 本机操作面板（http://127.0.0.1:8765/：卖出 / 减仓 / 闲置资金比例按钮只写手动指令，下单由执行器做）
 bash "$PROJ/scripts/install_launchd_panel.sh"
 
+# ④d 手机上操作（Tailscale Serve，只在你自己的 tailnet；绝不用 Funnel；配对码只在 Mac 的操作面板上生成）
+if [ -n "$PHONE" ] || [ -f "$LHOME/panel_phone.json" ]; then
+  set -- phone on
+  if [ -n "$PHONE_NAME" ]; then set -- "$@" --confirm-name "$PHONE_NAME"; fi
+  if [ -z "$PHONE" ]; then set -- "$@" --no-open; fi
+  prc=0
+  bash "$PROJ/scripts/liveu.sh" "$@" || prc=$?
+  if [ "$prc" = "0" ]; then
+    if [ -n "$PHONE" ]; then
+      echo "④d 手机访问已打开：在 Mac 屏幕上的操作面板「手机」里点「生成配对码」，用 iPhone 相机扫二维码（或 Safari 打开上面的地址、输入配对码）"
+    else
+      echo "④d 手机访问照常（Tailscale Serve 还在）"
+    fi
+  elif [ "$prc" = "3" ]; then
+    echo "④d ★ 第一次打开要确认机器名（见上面）：确认可以公开后运行 bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone <机器名>"
+  elif [ "$prc" = "4" ]; then
+    echo "④d ★ 先在 Tailscale 管理页打开 HTTPS（DNS → HTTPS Certificates → Enable HTTPS），然后再运行一次本命令"
+  else
+    echo "④d ★ 手机访问没打开（退出码 ${prc}）：看上面的说明；其他步骤照常完成"
+  fi
+fi
+
 # ⑤ 研究用的第二个克隆（改代码 / 做研究都在这里；~/qbreak-src 只 pull）
 if [ -d "$DEV/.git" ]; then
   if [ -n "$(git -C "$DEV" status --porcelain 2>/dev/null)" ]; then
@@ -72,5 +107,7 @@ echo
 echo "已注册的定时任务："
 if command -v launchctl >/dev/null 2>&1; then launchctl list 2>/dev/null | grep qbreak || echo "  （没有）"; else echo "  （这台机器没有 launchctl）"; fi
 echo "页面：账本 ${LHOME}/out/page_paper.html、市场仪表盘 ${LHOME}/out/dashboard.html、操作面板 http://127.0.0.1:8765/"
-echo "手机上操作（可选）：bash scripts/liveu.sh phone on（Tailscale Serve，只在你自己的 tailnet；配对码在操作面板「手机」里生成）"
+if [ -z "$PHONE" ] && [ ! -f "$LHOME/panel_phone.json" ]; then
+  echo "手机上操作（可选）：bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone <Tailscale 机器名>（只在你自己的 tailnet；配对码在操作面板「手机」里生成）"
+fi
 echo "以后在 Mac 的 Claude 对话里直接说要做什么（看账本、看仪表盘、更新、做研究），Claude 会自己运行需要的命令。"

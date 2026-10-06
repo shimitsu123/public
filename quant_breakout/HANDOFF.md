@@ -48,7 +48,9 @@
   `bash scripts/liveu.sh phone forget` 全部取消。手机能做的 = 操作面板能做的（只写手动指令，下单仍是执行器）+「停止下单（HALT）」（只能建、不能解除）。
   版面改成手机优先（底部弹出确认、减仓滑块带股数预览、暗色、可「添加到主屏幕」）；面板的代码更新（git pull）后自己退出、LaunchAgent 用新代码重启。
   限制：Mac 睡着 / 关机 / 没连 Tailscale 时手机打不开（立花上线后交易日 07:30〜09:25 Mac 定时醒着）——那时要停，在云端对话里说「停」；
-  机器名会写进公开的证书透明度日志（第一次 `phone on` 先显示机器名，要 `--yes` 确认）。
+  机器名会写进公开的证书透明度日志（第一次打开要确认机器名；用户 2026-10-06 确认了 `node`）。
+  **一条命令全部做完**（Mac 的 Claude 对话里说「拉代码，手机操作全部执行」）：
+  `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone node`
 - 顶底 / 牛熊分界第二轮（2026-09-26，事先登记 d3fb402）：T7〜T11 五个候选全部没过门槛 → 维持 T0，模拟盘不变，观察名单仍是 T2 / T3（`var/out/timing2_study.md`）
 - 顶底第三轮（2026-09-26，事先登记 12d69cb）：T12〜T15（给快速离场 / 提前回补加独立确认）全部没过 → 维持 T0。最接近的 T12（快速离场要信用确认）准确度与独立市场都更好，但 4 个半段里两个只持平（`var/out/timing3_study.md`）
 - 个股买点 / 卖点成功率（2026-09-26，事先登记 8ae49ea）：E1〜E4、X1 全部没过 → 维持现行。真突破箱顶（E4）胜率 42.5%→49.7%，但交易少 74%、盈亏比下降，组合更差；现行策略靠赔率而不是命中率赚钱（`var/out/signal_study.md`）
@@ -938,7 +940,7 @@
 
 | 想做什么 | 这样问（例） | Claude 做什么 | 注意 |
 |---|---|---|---|
-| 装 / 更新全部 | 「拉一下最新代码并更新」「把定时任务都装好」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh` | 不动账本、不下单 |
+| 装 / 更新全部 | 「拉一下最新代码并更新」「把定时任务都装好」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（手机访问打开过的话，这条也会确认 Tailscale Serve 还在、不弹页面） | 不动账本、不下单 |
 | 开机后补跑了吗 | 「今天开机后模拟操盘补跑了吗？」 | 读 `~/.qbreak/home/logs/com.qbreak.login.out`；`launchctl list \| grep qbreak` | 只读；立花本番不在登录时补跑 |
 | 闲置资金 / 股债相关判定（BCU） | 「美股熊市的时候闲置资金会拿什么？」「股债相关现在是多少？」 | 读 `~/.qbreak/home/bond_refuge.json`（云端同步来的判定：on / since / corr / corr_date / us_bear / hold / bond_date）与 `~/.qbreak/home/out/live_unified_paper_journal.md` 里「闲置资金」那一行；页面标「★ 本机现算」时看 `git -C ~/qbreak-src log -1 -- quant_breakout/var/bond_refuge.json` 云端那天写了没有 | 只读；改回 "Q1H"（美股熊只拿现金）要你明确说、在 `~/qbreak-dev` 改 `var/sim.json` 并记 sim_changes |
 | 闲置资金 / 日元走强判定（FJE，2026-10-03 已撤） | 「为什么不再换 2845 了？」「FJE 还在用吗？」 | 不在用：2026-10-02 收盘的决策起 idle_cash.mode = "Q1B"（读 `var/sim.json` 的 idle_cash.note、`var/out/fje_recheck.md`）；`~/.qbreak/home/fx_hedge.json` 是 10-01 之前的旧文件 | 只读；要恢复（"Q1HB"）要你明确说、在 `~/qbreak-dev` 改 `var/sim.json` 并记 sim_changes |
@@ -975,7 +977,7 @@
 | 闲置资金比例 | 「闲置资金只放一半」「核心 ETF 先全部卖掉留现金」「改回照规则」 | `bash scripts/liveu.sh manual core --pct 50`（0 = 卖出留现金；100 = 照规则） | 下一次决策（下一个交易日早上的运行）起生效；只改核心 ETF 的目标额 |
 | 看 / 撤回手动指令 | 「手动指令处理了吗？」「撤回刚才的卖出」「7203 解除不买回」 | `bash scripts/liveu.sh manual list`；`manual cancel <指令 id>`；`manual unblock 7203` | 已经发到交易所的那一笔要在立花网站 / App 上撤；撤回只保证「之后不再重下」 |
 | 操作面板 | 「打开操作面板」 | `open "http://127.0.0.1:8765/?book=paper"`（立花 `?book=tachibana`）；打不开 → `launchctl list \| grep qbreak.panel`，没有就 `bash scripts/install_launchd_panel.sh` | 只在这台 Mac 上；按钮只写指令 |
-| 手机上操作 | 「打开手机操作」「手机上怎么用」 | `bash scripts/liveu.sh phone on`（第一次先显示机器名：告诉用户「会写进公开的证书透明度日志」，用户同意再加 `--yes`）→ 把输出里的手机地址告诉用户 → 打开本机操作面板「手机」（`open "http://127.0.0.1:8765/#phone"`），请用户自己点「生成配对码」、在手机上输入 | 只用 Tailscale Serve（只在用户自己的 tailnet），绝不用 Funnel；配对码只显示在 Mac 屏幕上：Claude 不调配对接口、不读、不在对话里写 |
+| 手机上操作（一条命令全部做完） | 「拉代码，手机操作全部执行」「打开手机操作」「手机上怎么用」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone node`（拉代码 → 依赖与全部定时任务 → 重启操作面板 → Tailscale Serve 打开手机访问 → 在 Mac 上打开面板的「手机」）。`node` = 用户 2026-10-06 确认可以写进公开证书日志的 Tailscale 机器名：只有这台 Mac 的机器名正好是 node 才打开；名字不一样（退出码 3）→ 把显示的机器名告诉用户、用户同意后换成那个名字再运行；HTTPS 没开（退出码 4，已在浏览器里打开 Tailscale 管理页）→ 请用户点 Enable HTTPS 后再运行一次。打开之后请用户自己在 Mac 屏幕上点「生成配对码」、用 iPhone 相机扫码 | 只用 Tailscale Serve（只在用户自己的 tailnet），绝不用 Funnel；配对码只显示在 Mac 屏幕上：Claude 不调配对接口、不读、不在对话里写 |
 | 手机配对的状态 | 「手机配对了吗？」「有哪些设备能打开？」「手机打不开」 | `bash scripts/liveu.sh phone status`（只读：Tailscale、Serve、手机端口、已配对的设备，不含配对码）；手机打不开 → Mac 醒着吗、手机的 Tailscale 开着吗、`launchctl list \| grep qbreak.panel`、`~/.qbreak/home/logs/com.qbreak.panel.{out,err}` | 主屏幕上的网页要求重新配对时，再生成一次配对码（主屏幕与 Safari 的 cookie 可能是分开的） |
 | 取消手机配对 / 关掉手机访问 | 「取消 iPhone 的配对」「关掉手机访问」「手机丢了」 | 一台：操作面板「手机」里的「取消配对」；全部：`bash scripts/liveu.sh phone forget`；关掉：`bash scripts/liveu.sh phone off`（已配对的设备保留） | 手机丢了：先 `phone forget`，再请用户在 Tailscale 管理页把那台设备移除 |
 | 为什么持有 / 现在趋势 | 「为什么买 7203？」「持仓现在趋势怎么样？」 | 读 `~/.qbreak/home/out/live_unified_paper.json` 的 holding_view（或账本页面 / 操作面板 / 日志）；云端模拟盘看 `var/out/unified_today.json` 的 holding_view 与日报 ② | 只展示：买入那天的规则读数 + 均线位置的机械描述，不是预测；不给买卖建议 |

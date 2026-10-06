@@ -3498,7 +3498,8 @@ def cmd_panel_phone(a) -> int:
     """手机上操作（qbreak/panel_phone.py）：on = 用 Tailscale Serve 把面板的手机端口放到你自己的 tailnet（绝不用 Funnel）；
     off = 关闭；status = 只读；forget = 取消全部配对。从不打印配对码（配对码只在 Mac 的操作面板上生成、显示）。"""
     from qbreak import panel_phone
-    return panel_phone.cli(a.action, port=a.port, https_port=a.https_port, yes=a.yes, open_panel=not a.no_open)
+    return panel_phone.cli(a.action, port=a.port, https_port=a.https_port, yes=a.yes, open_panel=not a.no_open,
+                           confirm_name=a.confirm_name, wait_s=a.wait)
 
 
 def cmd_live_gate(a) -> int:
@@ -3980,6 +3981,9 @@ def main(argv=None) -> int:
     pp.add_argument("--port", type=int, default=8766, help="面板的手机端口（与 panel --phone-port 相同）")
     pp.add_argument("--https-port", type=int, default=443, help="Tailscale Serve 的 HTTPS 端口（443 被别的服务占用时用 8443）")
     pp.add_argument("--yes", action="store_true", help="确认机器名可以出现在公开的证书透明度日志里（第一次打开时要）")
+    pp.add_argument("--confirm-name", default=None, metavar="NAME",
+                    help="用户确认过可以公开的机器名：只有这台 Mac 的 Tailscale 机器名正好是它才算确认（mac_setup.sh --phone NAME 用）")
+    pp.add_argument("--wait", type=float, default=20.0, help="等面板的手机端口起来的最长秒数（刚重启面板时）")
     pp.add_argument("--no-open", action="store_true", help="打开之后不在 Mac 上打开操作面板")
     pp.set_defaults(func=cmd_panel_phone)
     lg = sub.add_parser("live-gate", help="立花实盘的上线门槛与准备（只读：不下单、不改文件、不打印密钥）")

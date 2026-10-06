@@ -110,7 +110,8 @@ def test_device_cookie_csrf_and_revoke():
     for bad in (None, "", "qbd=", f"qbd={did}.wrong-token-wrong-token-xx", f"qbd={ck}x", "qbd=../../etc.passwd", f"xqbd={ck}"):
         assert PP.device_for(bad) is None
     t = PP.csrf(did)
-    assert len(t) == 40 and PP.csrf_ok(did, t) and not PP.csrf_ok(did, "") and not PP.csrf_ok(did, t[:-1] + "0")
+    wrong = t[:-1] + ("1" if t[-1] == "0" else "0")                                  # 一定和真的不一样（原来 1/16 的概率相同）
+    assert len(t) == 40 and PP.csrf_ok(did, t) and not PP.csrf_ok(did, "") and not PP.csrf_ok(did, wrong)
     assert PP.csrf("000000000000") != t
     assert PP.revoke(did) and PP.device_for(f"qbd={ck}") is None and not PP.revoke(did)
     code, _ = PP.new_code()
@@ -276,7 +277,7 @@ def _status(magic=True, https=True, state="Running"):
 
 def _cli(action, **kw):
     lines = []
-    rc = PP.cli(action, out=lines.append, open_panel=False, **kw)
+    rc = PP.cli(action, out=lines.append, open_panel=False, **{"wait_s": 0, **kw})
     return rc, "\n".join(lines)
 
 
@@ -287,13 +288,15 @@ def test_panel_phone_cli_uses_serve_only(tmp_path, monkeypatch, capsys):
     assert _cli("status")[0] == 0
     st, logf = _fake_ts(tmp_path, monkeypatch, _status(magic=False))
     rc, out = _cli("on")
-    assert rc == 2 and "MagicDNS" in out and "Enable HTTPS" in out
+    assert rc == 4 and "MagicDNS" in out and "Enable HTTPS" in out and PP.ADMIN_DNS in out    # 要先打开 HTTPS（Mac 上会打开管理页）
     st, logf = _fake_ts(tmp_path, monkeypatch, _status())
     code, _ = PP.new_code()                                   # 有一个配对码在等：命令的输出里绝不出现
     rc, out = _cli("on")
-    assert rc == 3 and "证书透明度日志" in out and "qbreak-mac" in out and "--yes" in out
+    assert rc == 3 and "证书透明度日志" in out and "mac_setup.sh --phone qbreak-mac" in out
     assert "serve --bg" not in logf.read_text(encoding="utf-8")                      # 没确认之前不打开
-    rc, out = _cli("on", yes=True)
+    rc, out = _cli("on", confirm_name="node")                                       # 确认过的是别的名字 → 不打开
+    assert rc == 3 and "不是确认过的「node」" in out and "serve --bg" not in logf.read_text(encoding="utf-8")
+    rc, out = _cli("on", confirm_name="QBREAK-MAC")                                 # 机器名正好是确认过的那个（不分大小写）
     calls = logf.read_text(encoding="utf-8")
     assert rc == 0 and "serve --bg --https=443 http://127.0.0.1:8766" in calls and "funnel" not in calls
     assert f"https://{TS_HOST}/" in out and PP.phone_url() == f"https://{TS_HOST}/"
@@ -320,6 +323,31 @@ def test_panel_phone_cli_uses_serve_only(tmp_path, monkeypatch, capsys):
     assert json.loads(st.read_text(encoding="utf-8"))["serve"]["Web"][f"{TS_HOST}:443"]["Handlers"]["/"]["Proxy"] == "http://127.0.0.1:3000"
     ok, _, _ = PP.pair(PP.new_code()[0])
     assert ok and run.main(["panel-phone", "forget"]) == 0 and not PP.devices()
+
+
+def test_phone_on_waits_for_the_restarted_panel(tmp_path, monkeypatch):
+    """mac_setup.sh 刚重启面板：等手机端口起来再打开 Serve（等不到也照样打开、说明怎么重启面板）。"""
+    import socket
+    _fake_ts(tmp_path, monkeypatch, _status())
+    with socket.socket() as s0:
+        s0.bind(("127.0.0.1", 0))
+        port = s0.getsockname()[1]
+    srv = socket.socket()
+
+    def late():
+        srv.bind(("127.0.0.1", port))
+        srv.listen(1)
+    t = threading.Timer(1.2, late)
+    t.start()
+    try:
+        rc, out = _cli("on", yes=True, port=port, wait_s=8)
+    finally:
+        t.join()
+        srv.close()
+    assert rc == 0 and "没在监听" not in out and f"Serve → http://127.0.0.1:{port}" in out
+    PP.cli("off", out=lambda *_: None)
+    rc, out = _cli("on", yes=True, port=port, wait_s=0)                            # 面板没起来：照样打开，告诉怎么重启
+    assert rc == 0 and "没在监听手机端口" in out
 
 
 def test_code_watcher_exits_on_update(monkeypatch):
