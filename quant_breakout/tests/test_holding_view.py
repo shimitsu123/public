@@ -120,6 +120,9 @@ def test_mac_page_report_and_journal_show_reasons():
     MO.append("paper", {"kind": "sell", "ticker": "7203"})
     html = desktop_page.render("paper", 1_000_000, "2026-09-28")
     assert "为什么持有" in html and "放量 2.10 倍" in html and "偏弱" in html and "NASDAQ100（1545）" in html
+    assert "浮盈 +4.0%" in html
+    neg = {**HV_DOC, "holdings": [{**HV_DOC["holdings"][0], "trend": {**HV_DOC["holdings"][0]["trend"], "ret_pct": -2.7}}]}
+    assert "浮亏 -2.7%" in HV.html(neg) and "浮盈 -" not in HV.html(neg)
     assert "http://127.0.0.1:8765/?book=paper" in html and "等执行器读" in html
     d = {"positions": {"7203.T": {"market": "JP", "shares": 200, "entry_px": 2500.0, "stop_px": 2325.0, "entry_date": "2026-09-01"}},
          "timeline": {}, "earn_state": {}, "config": {"max_positions": 4}, "holding_view": HV_DOC}

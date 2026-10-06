@@ -291,7 +291,7 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
                  f"<div><b>为什么持有</b>：{escape(why_line(r))}</div>"
                  + (f"<details><summary class='muted'>买入那天的规则读数</summary><ul>{items}</ul></details>" if items else "")
                  + f"<div><b>现在</b>：<b class='{cls}'>{escape(TREND.get(lab, '—'))}</b>"
-                 + (f" <span class='{'pos' if ret >= 0 else 'neg'}'>浮盈 {ret:+.1f}%</span>" if ret is not None else "")
+                 + (f" <span class='{'pos' if ret >= 0 else 'neg'}'>{'浮盈' if ret >= 0 else '浮亏'} {ret:+.1f}%</span>" if ret is not None else "")
                  + f" <span class='muted'>（{escape(TREND_NOTE.get(lab, ''))}）</span><br><span class='muted'>{escape(tr.get('text') or '')}</span></div>"
                  + (actions(r, "stock") if actions else "") + "</div>")
     for r in cs:
