@@ -13984,5 +13984,80 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "没有手动买入指令时执行器与以前逐笔相同；模拟账户执行器的手动买入与引擎（同一决策日放进同样的 plan）逐笔一致；趋势标签是均线位置的机械描述，不是预测；不改规则 / 参数 / 仓位 / 股票池"
+ },
+ {
+  "line": 9896,
+  "date": "2026-10-06",
+  "title": "K 线副图 MACD（规则同一组参数 12 / 26 / 9）/ DMI（同花顺写法 14 / 6）一个开关切换 + 趋势线（连波谷的支撑线、连波峰的压力线、往后延长的点线、破线点；qbreak/trendline.py，面板与研究同一份）",
+  "kind": "engineering",
+  "domain": "展示",
+  "registration": null,
+  "script": "qbreak/trendline.py、qbreak/kline.py（macd / dmi / _trendline）、qbreak/panel.py（副图开关、趋势线 SVG）",
+  "output": "~/.qbreak/home/out/charts_<账本>.json 的 tf.*.dif / dea / mh / pdi / mdi / adx / adxr / tl（Mac，不入库）",
+  "candidates": [],
+  "baseline": null,
+  "windows": null,
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "只展示；趋势线第 t 根只用到 t 为止的 K 线（测试截断前后逐根相同）；参数 k / L / gap / R 看几张真实 K 线的画法定的（只看图形，没看收益）；延长线写明不是验证过的预测；均线与建议数量用户说不改"
+ },
+ {
+  "line": 9913,
+  "date": "2026-10-06",
+  "title": "登记「趋势线（连波谷 / 连波峰）能不能预测买卖点与走势、结合现在的选股方法（B4）会不会更好」：一 预测准确度（全部股票 6 个样本：通道方向 A1、买点事件 TU / TR、卖点事件 TD / TF）+ 二 结合 B4（TLB1 / TLB2 挡买点、TLS1 / TLS2 / TLS3 加卖点）",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（规则、代码、测试与登记前个数；之后不改、只运行一次）",
+  "script": "scripts/trendline_study.py（定义 qbreak/trendline.py）",
+  "output": "var/out/trendline_study.md / .json（运行后）",
+  "candidates": [
+   {
+    "id": "A1",
+    "result": "登记"
+   },
+   {
+    "id": "TU",
+    "result": "登记"
+   },
+   {
+    "id": "TR",
+    "result": "登记"
+   },
+   {
+    "id": "TD",
+    "result": "登记"
+   },
+   {
+    "id": "TF",
+    "result": "登记"
+   },
+   {
+    "id": "TLB1",
+    "result": "登记"
+   },
+   {
+    "id": "TLB2",
+    "result": "登记"
+   },
+   {
+    "id": "TLS1",
+    "result": "登记"
+   },
+   {
+    "id": "TLS2",
+    "result": "登记"
+   },
+   {
+    "id": "TLS3",
+    "result": "登记"
+   }
+  ],
+  "baseline": "B4 = B3 + TBF（规则指纹 1241753c8f2529c6）；A1 的对照 = 均线趋势标签（qbreak/kline.trend）",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09；池子 W（E）/ Jx（J，J2 行情里非日経225）/ Zx（Z）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "A 判定：6 个样本每个同方向 + 合起来 95%（按月聚类）不含 0 + |平均| ≥ 0.3 pp（A1 ② 比均线：≥ 5 个样本 > 0 + 合起来下限 > 0）；B 第一关 = research_loop11.stage1（posthoc = False，Zx 只描述），过了才另登记第二关；登记前只数个数：TLB1 只碰到 B4 成交 1 / 0 / 4 笔、TLB2 10 / 11 / 14 笔；先决条件改成税后研究同一个判断（E 0.628 vs 0.627 的缓存漂移）"
  }
 ]

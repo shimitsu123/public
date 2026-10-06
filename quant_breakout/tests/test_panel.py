@@ -198,13 +198,14 @@ def test_render_adjust_buttons_and_kline():
     assert "data-act='adj'" in html and "data-px='1000'" in html and "单只上限 34%" in html and "调整…</button>" in html
     assert "data-t='6758.T' data-kind='stock'" in html and "data-t='1545.T' data-kind='core'" in html
     assert "现在没拿" in html and "data-t='1482.T' data-kind='core'" in html and html.count("data-act='tf'") == 3
+    assert html.count("data-act='sub'") == 3 and "data-sub='macd'" in html and "data-sub='dmi'" in html     # 副图：量 / MACD / DMI
     assert "</script><b>x" not in html and "对冲版美国国债&lt;/script&gt;" in html
     assert "日K <b class='up'>上升</b> · 多头排列" in html and "周K <b class='muted'>震荡</b>" in html and "月K <b class='down'>下降</b>" in html
     assert '"addWhen": "10/07（下一个交易日）"' in html and "加仓 / 买入 → <b>10/07（下一个交易日） 开盘</b>" in html
     assert "chart-data" not in html and "红 = 涨（空心）" in html                 # K 线数据不内嵌，打开时才取（/api/chart）
     (paths.out_dir() / "charts_paper.json").unlink()
     html = panel.render("paper", "t" * 40, AT)                  # 还没有 K 线文件：占位文字、没有周期切换
-    assert "K 线在执行器下一次运行之后显示" in html and "data-act='tf'" not in html
+    assert "K 线在执行器下一次运行之后显示" in html and "data-act='tf'" not in html and "data-act='sub'" not in html
 
 
 SG_ROWS = [

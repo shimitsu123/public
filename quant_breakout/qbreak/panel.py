@@ -150,6 +150,13 @@ color:var(--fg);cursor:pointer;touch-action:manipulation}.seg button:first-child
 .chart .stop{stroke:var(--neg);stroke-width:1;stroke-dasharray:4 3;shape-rendering:crispEdges}
 .chart .rl{font-size:11px;fill:var(--fg);paint-order:stroke;stroke:var(--card);stroke-width:3px;stroke-linejoin:round}
 .chart .xh{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 2;shape-rendering:crispEdges}.chart .mk{fill:var(--accent)}
+.chart .tl{fill:none;stroke:var(--fg);stroke-width:1.6;stroke-dasharray:7 3;stroke-linecap:round}
+.chart .tlp{fill:none;stroke:var(--fg);stroke-width:1.4;stroke-dasharray:1.5 3;stroke-linecap:round;opacity:.85}
+.chart .tla{fill:var(--card);stroke:var(--fg);stroke-width:1.4}.chart .tbu{fill:var(--up)}.chart .tbd{fill:var(--down)}
+.chart .zl{stroke:var(--muted);stroke-width:1;shape-rendering:crispEdges}.chart .s1{fill:none;stroke-width:1.3;stroke-linejoin:round}
+.chart .dif{stroke:var(--fg)}.chart .dea{stroke:var(--ma20)}.chart .mhu{fill:var(--up)}.chart .mhd{fill:var(--down)}
+.chart .pdi{stroke:var(--up)}.chart .mdi{stroke:var(--down);stroke-dasharray:4 2}.chart .adx{stroke:var(--ma10)}
+.chart .adxr{stroke:var(--ma30);stroke-dasharray:1.5 2}.chart .sl{font-size:10.5px;fill:var(--muted);font-variant-numeric:tabular-nums}
 .chart .ro{font-size:13px;line-height:1.45;color:var(--muted);font-variant-numeric:tabular-nums;min-height:2.9em;margin:2px 0 0}
 .chart .ro b{font-size:14px}.chart .ro .m{color:var(--fg)}
 .key{display:inline-block;width:14px;height:2px;border-radius:1px;vertical-align:middle;margin-right:6px}
@@ -347,6 +354,7 @@ document.addEventListener('click', async e=>{
     closeAll(); done(await api('/api/request',{book:CFG.book, kind:'adjust', ticker:ADJ.t, unit:ADJ.unit, value:v})); return;
   }
   if(a==='tf'){ TF=d.tf; try{ localStorage.setItem('qbreak.tf', TF); }catch(x){} drawAll(); return; }
+  if(a==='sub'){ SUB=d.sub; try{ localStorage.setItem('qbreak.sub', SUB); }catch(x){} drawAll(); return; }
   if(a==='buy'){
     BUY={t:d.t, px:+d.px, lot:+d.lot||LOT, rule:+d.rule||0, limit:+d.limit||0, unit:'rule'};
     $('#buy-title').textContent='买入 '+d.code+(d.name ? ' '+d.name : '');
@@ -398,10 +406,12 @@ document.addEventListener('click', async e=>{
   }
 });
 // ── K 线（同花顺式：日K / 周K / 月K；红 = 涨（空心）、绿 = 跌（实心）；MA5 / MA10 / MA20 / MA30；成本 / 止损线）──
+// 副图：量 / MACD（规则同一组参数）/ DMI（同花顺写法）；趋势线：连波谷的支撑线、连波峰的压力线（qbreak/trendline.py）+ 往后延长的虚线 + 破线点
 // 数据 = 执行器每次运行写的 out/charts_<账本>.json，打开 / 看到哪只票才取（/api/chart）；只展示
-const TFS = {D:'日K', W:'周K', M:'月K'};
-let TF = 'D';
+const TFS = {D:'日K', W:'周K', M:'月K'}, SUBS = {v:'量', macd:'MACD', dmi:'DMI'};
+let TF = 'D', SUB = 'v', CPN = 0;
 try{ const v=localStorage.getItem('qbreak.tf'); if(v && TFS[v]) TF=v; }catch(x){}
+try{ const v=localStorage.getItem('qbreak.sub'); if(v && SUBS[v]) SUB=v; }catch(x){}
 const KD = {};
 const NS='http://www.w3.org/2000/svg', WD=['日','一','二','三','四','五','六'];
 const MAS=[['ma5','MA5','m5'],['ma10','MA10','m10'],['ma20','MA20','m20'],['ma30','MA30','m30']];
@@ -442,6 +452,13 @@ function readout(el, D, i, P){
     +(pc ? ' · 振幅 '+((D.h[i]-D.l[i])/pc*100).toFixed(2)+'%' : '')+' · 量 '+vfmt(D.v[i]||0)+(P.kind==='core'?' 口':' 股')
     +(P.kind==='stock' && P.entry_px && c!=null ? ' · 比成本 '+pcs((c/P.entry_px-1)*100) : '')));
 }
+function fmx(a, i, sg){ const v=a && a[i]; if(v==null) return '—'; const s=Math.abs(v)>=100 ? v.toFixed(0) : Math.abs(v)>=1 ? v.toFixed(2) : v.toFixed(3); return (sg && v>0 ? '+' : '')+s; }
+function subText(D, i, P){
+  const ind=P.ind||{}, m=ind.macd||[12,26,9], q=ind.dmi||[14,6];
+  if(SUB==='macd') return 'MACD('+m.join(',')+') DIF '+fmx(D.dif,i)+' · DEA '+fmx(D.dea,i)+' · 柱 '+fmx(D.mh,i,true);
+  if(SUB==='dmi') return 'DMI('+q.join(',')+') +DI '+fmx(D.pdi,i)+' · −DI '+fmx(D.mdi,i)+' · ADX '+fmx(D.adx,i)+' · ADXR '+fmx(D.adxr,i);
+  return '';
+}
 function drawK(box){
   const t=box.dataset.t, P=KD[t];
   const empty=s=>{ box.className='chart empty muted small'; box.textContent=s; };
@@ -451,9 +468,11 @@ function drawK(box){
   const D=(P.tf||{})[TF];
   if(!D || !D.d || D.d.length<2) return empty('没有'+TFS[TF]+'的数据');
   box.className='chart'; box.tabIndex=0; box.textContent='';
-  const held=P.kind==='stock', N=D.d.length;
-  const W=Math.max(260, Math.round(box.clientWidth||320)), x0=2, x1=W-56, padT=8, H1=176, gap=10, H2=40, padB=18;
-  const k=Math.max(2, Math.min(N, Math.floor((x1-x0)/6))), s0=N-k, step=(x1-x0)/k;   // 一根 K 线占 6px：手机约 45 根，Mac 约 100 根
+  const held=P.kind==='stock', N=D.d.length, TL=D.tl||null, PJ=TL && (TL.sup || TL.res) ? (TL.proj||0) : 0;
+  const sub=SUB, H2 = sub==='v' ? 40 : 64, gap = sub==='v' ? 10 : 18;
+  const W=Math.max(260, Math.round(box.clientWidth||320)), x0=2, x1=W-56, padT=8, H1=176, padB=18;
+  const slots=Math.max(4, Math.floor((x1-x0)/6));                          // 一根 K 线占 6px：手机约 45 根，Mac 约 100 根（右边留出趋势线往后延长的几根）
+  const k=Math.max(2, Math.min(N, slots-PJ)), s0=N-k, step=(x1-x0)/(k+PJ);
   const X=i=> x0+(i-s0+0.5)*step, bw=Math.max(1, Math.min(13, step*0.68));
   const vb=padT+H1+gap+H2, H=vb+padB;
   const refs=[];
@@ -465,6 +484,9 @@ function drawK(box){
     for(const [m] of MAS){ const v=D[m] && D[m][i]; if(v!=null){ lo=Math.min(lo, v); hi=Math.max(hi, v); } }
   }
   for(const r of refs){ lo=Math.min(lo, r[2]); hi=Math.max(hi, r[2]); }
+  const tly=(L,i)=> L.y1+L.b*(i-L.i1);                                      // 趋势线在第 i 根的值（i 可以超过最后一根 = 往后延长）
+  if(TL){ const sp=hi-lo; for(const s of ['sup','res']){ const L=TL[s]; if(!L) continue;
+    for(const v of [tly(L,N-1), tly(L,N-1+PJ)]) if(v>=lo-0.25*sp && v<=hi+0.25*sp){ lo=Math.min(lo,v); hi=Math.max(hi,v); } } }   // 离得太远的线不拉大坐标，超出的部分裁掉
   const pad=(hi-lo)*0.05 || hi*0.02 || 1; lo-=pad; hi+=pad;
   const Y=v=> padT+H1-(v-lo)/(hi-lo)*H1;
   const head=nd('div','legend',null,box); legend(head, D, N-1);
@@ -495,6 +517,26 @@ function drawK(box){
   }
   const path=a=>{ let s='', pen=false; for(let i=s0;i<N;i++){ const v=a[i]; if(v==null){ pen=false; continue; } s+=(pen?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1); pen=true; } return s; };
   for(const [m,,cls] of MAS.slice().reverse()) if(D[m]) sv('path',{d:path(D[m]), 'class':'ma '+cls}, svg);
+  if(PJ>0 || (TL && (TL.ev||[]).length)){
+    const id='kc'+(++CPN), cp=sv('clipPath',{id:id}, sv('defs',{},svg)); sv('rect',{x:x0, y:padT, width:x1-x0, height:H1}, cp);
+    const g=sv('g',{'clip-path':'url(#'+id+')'}, svg);
+    for(const [s, lab, below] of [['sup','支撑',true],['res','压力',false]]){
+      const L=TL[s]; if(!L) continue;
+      const ia=Math.max(L.i1, s0); if(ia>N-1) continue;
+      const p=(i)=> X(i).toFixed(1)+' '+Y(tly(L,i)).toFixed(1);
+      sv('path',{d:'M'+p(ia)+'L'+p(N-1), 'class':'tl'}, g);
+      sv('path',{d:'M'+p(N-1)+'L'+p(N-1+PJ), 'class':'tlp'}, g);
+      for(const ii of [L.i1, L.i2]) if(ii>=s0 && ii<N) sv('circle',{cx:X(ii).toFixed(1), cy:Y(tly(L,ii)).toFixed(1), r:2.6, 'class':'tla'}, g);
+      const ye=Math.max(padT+11, Math.min(padT+H1-3, below ? Y(tly(L,N-1+PJ))+13 : Y(tly(L,N-1+PJ))-6));   // 标签留在图里
+      sv('text',{x:(x1-3).toFixed(1), y:ye.toFixed(1), 'class':'rl', 'text-anchor':'end'}, g).textContent=lab+' '+pxs(L.now);
+    }
+    for(const [ii, kd] of (TL.ev||[])){                                    // ▲ 收盘突破压力线 / ▼ 收盘跌破支撑线（各自当时的线；连续几根只标第一次）
+      if(ii<s0 || ii>=N) continue;
+      const x=X(ii).toFixed(1);
+      if(kd==='rb'){ const y=Math.min(padT+H1-8, Y(D.l[ii]!=null ? D.l[ii] : D.c[ii])+4); sv('path',{d:'M'+x+' '+y.toFixed(1)+'l3.5 6h-7z', 'class':'tbu'}, g); }
+      else { const y=Math.max(padT+8, Y(D.h[ii]!=null ? D.h[ii] : D.c[ii])-4); sv('path',{d:'M'+x+' '+y.toFixed(1)+'l3.5 -6h-7z', 'class':'tbd'}, g); }
+    }
+  }
   let prevY=null;
   for(const [cls, lab, v] of refs){
     const y=Math.round(Y(v))+0.5; sv('line',{x1:x0, x2:x1, y1:y, y2:y, 'class':cls}, svg);
@@ -510,14 +552,34 @@ function drawK(box){
       sv('text',{x:cx, y:Math.min(padT+H1+8, cy+13), 'class':'rl', 'text-anchor':'middle'}, svg).textContent=mark[1];
     }
   }
-  let vmax=0; for(let i=s0;i<N;i++) vmax=Math.max(vmax, D.v[i]||0);
-  if(vmax>0) for(let i=s0;i<N;i++){
-    const h=(D.v[i]||0)/vmax*H2; if(h<0.5) continue;
-    const up=D.c[i]!=null && D.o[i]!=null ? D.c[i]>=D.o[i] : true;
-    sv('rect',{x:(X(i)-bw/2).toFixed(1), y:(vb-h).toFixed(1), width:bw.toFixed(1), height:h.toFixed(1), 'class':'vl '+(up?'cu':'cd')}, svg);
+  const st=vb-H2, pth=(a,F)=>{ let s='', pen=false; for(let i=s0;i<N;i++){ const v=a && a[i]; if(v==null){ pen=false; continue; } s+=(pen?'L':'M')+X(i).toFixed(1)+' '+F(v).toFixed(1); pen=true; } return s; };
+  let sl=null;
+  if(sub==='macd'){                                                         // MACD：柱 = DIF − DEA（规则的定义），0 轴居中
+    let m=0; for(let i=s0;i<N;i++) for(const a of [D.dif,D.dea,D.mh]){ const v=a && a[i]; if(v!=null) m=Math.max(m, Math.abs(v)); }
+    if(m>0){
+      const F=v=> st+H2/2-v/m*(H2/2-2), z=Math.round(F(0))+0.5;
+      sv('line',{x1:x0, x2:x1, y1:z, y2:z, 'class':'zl'}, svg);
+      for(let i=s0;i<N;i++){ const v=D.mh && D.mh[i]; if(v==null) continue; const y=F(v);
+        sv('rect',{x:(X(i)-bw/2).toFixed(1), y:Math.min(z,y).toFixed(1), width:bw.toFixed(1), height:Math.max(0.5, Math.abs(y-z)).toFixed(1), 'class':v>=0?'mhu':'mhd'}, svg); }
+      sv('path',{d:pth(D.dif,F), 'class':'s1 dif'}, svg); sv('path',{d:pth(D.dea,F), 'class':'s1 dea'}, svg);
+      sv('text',{x:x1+6, y:z+4, 'class':'ax'}, svg).textContent='0';
+    }
+  } else if(sub==='dmi'){                                                   // DMI：+DI 红实线、−DI 绿虚线、ADX 紫、ADXR 蓝点线
+    let m=30; for(let i=s0;i<N;i++) for(const a of [D.pdi,D.mdi,D.adx,D.adxr]){ const v=a && a[i]; if(v!=null) m=Math.max(m, v); }
+    const F=v=> vb-v/m*(H2-2);
+    for(const [a,cls] of [[D.adxr,'adxr'],[D.adx,'adx'],[D.mdi,'mdi'],[D.pdi,'pdi']]) if(a) sv('path',{d:pth(a,F), 'class':'s1 '+cls}, svg);
+    sv('text',{x:x1+6, y:st+9, 'class':'ax'}, svg).textContent=String(Math.round(m));
+  } else {
+    let vmax=0; for(let i=s0;i<N;i++) vmax=Math.max(vmax, D.v[i]||0);
+    if(vmax>0) for(let i=s0;i<N;i++){
+      const h=(D.v[i]||0)/vmax*H2; if(h<0.5) continue;
+      const up=D.c[i]!=null && D.o[i]!=null ? D.c[i]>=D.o[i] : true;
+      sv('rect',{x:(X(i)-bw/2).toFixed(1), y:(vb-h).toFixed(1), width:bw.toFixed(1), height:h.toFixed(1), 'class':'vl '+(up?'cu':'cd')}, svg);
+    }
+    if(vmax>0) sv('text',{x:x1+6, y:vb-H2+9, 'class':'ax'}, svg).textContent=vfmt(vmax)+(P.kind==='core' ? ' 口' : ' 股');
   }
+  if(sub!=='v'){ sl=sv('text',{x:x0+2, y:st-5, 'class':'sl'}, svg); sl.textContent=subText(D, N-1, P); }
   sv('line',{x1:x0, x2:x1, y1:vb+0.5, y2:vb+0.5, 'class':'grid'}, svg);
-  if(vmax>0) sv('text',{x:x1+6, y:vb-H2+9, 'class':'ax'}, svg).textContent=vfmt(vmax)+(P.kind==='core' ? ' 口' : ' 股');
   const xh=sv('line',{x1:0, x2:0, y1:padT, y2:vb, 'class':'xh', visibility:'hidden'}, svg);
   const yh=sv('line',{x1:x0, x2:x1, y1:0, y2:0, 'class':'xh', visibility:'hidden'}, svg);
   let cur=null;
@@ -525,9 +587,10 @@ function drawK(box){
     i=Math.max(s0, Math.min(N-1, i)); cur=i; const x=X(i);
     xh.setAttribute('x1',x); xh.setAttribute('x2',x); xh.setAttribute('visibility','visible');
     if(D.c[i]!=null){ const y=Y(D.c[i]); yh.setAttribute('y1',y); yh.setAttribute('y2',y); yh.setAttribute('visibility','visible'); }
-    legend(head, D, i); readout(ro, D, i, P);
+    legend(head, D, i); readout(ro, D, i, P); if(sl) sl.textContent=subText(D, i, P);
   };
-  const hide=()=>{ cur=null; xh.setAttribute('visibility','hidden'); yh.setAttribute('visibility','hidden'); legend(head, D, N-1); readout(ro, D, N-1, P); };
+  const hide=()=>{ cur=null; xh.setAttribute('visibility','hidden'); yh.setAttribute('visibility','hidden'); legend(head, D, N-1); readout(ro, D, N-1, P);
+    if(sl) sl.textContent=subText(D, N-1, P); };
   box._hide=hide;
   const at=ev=>{ const r=svg.getBoundingClientRect(); return s0+Math.floor(((ev.clientX-r.left)*W/r.width-x0)/step); };
   svg.addEventListener('pointermove', ev=>show(at(ev)));
@@ -542,6 +605,13 @@ function drawK(box){
   const foot=nd('div','legend',null,box);
   if(tr) nd('span',null,TFS[TF]+'趋势：'+tr.label+(tr.align ? '（'+tr.align+'）' : '')+' · 收盘在 MA20 '+(tr.above20?'上':'下')
     +' · MA20 比 3 根前 '+(tr.slope20_pct>=0?'+':'')+tr.slope20_pct+'%', foot);
+  if(TL && (TL.sup || TL.res)){
+    const one=(L,lab)=> lab+' '+pxs(L.now)+'（离收盘 '+(L.dist_pct>=0?'+':'')+L.dist_pct+'%，每根 '+(L.slope_pct>=0?'+':'')+L.slope_pct+'%，碰到 '+L.touch+' 次）';
+    const parts=[]; if(TL.sup) parts.push(one(TL.sup,'支撑')); if(TL.res) parts.push(one(TL.res,'压力'));
+    if(TL.chan) parts.push(TL.chan+(TL.pos!=null ? '（现价在通道的 '+TL.pos+'%）' : ''));
+    nd('span',null,'趋势线：'+parts.join(' · '), foot);
+    nd('span',null,'点线 = 往后延长 '+PJ+' 根（只是把线延长，不是验证过的预测）· ○ = 连线用的波谷 / 波峰 · ▲ 收盘突破压力线 · ▼ 收盘跌破支撑线', foot);
+  }
   nd('span',null,'红 = 涨（空心）· 绿 = 跌（实心）', foot);
   const det=nd('details',null,null,box); nd('summary','muted small','最近 10 根（表）',det);
   const tb=nd('table',null,null,det), hr=nd('tr',null,null,nd('thead',null,null,tb)), body=nd('tbody',null,null,tb);
@@ -558,6 +628,7 @@ async function showK(box){ if(!KD[box.dataset.t] || KD[box.dataset.t]==='error')
 function drawAll(){
   document.querySelectorAll('.chart[data-t]').forEach(b=>{ if(KD[b.dataset.t] && b.offsetParent!==null) drawK(b); });
   document.querySelectorAll('[data-act=tf]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.tf===TF ? 'true' : 'false'));
+  document.querySelectorAll('[data-act=sub]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.sub===SUB ? 'true' : 'false'));
 }
 const IO = ('IntersectionObserver' in window) ? new IntersectionObserver(es=>{ for(const e of es) if(e.isIntersecting){ IO.unobserve(e.target); showK(e.target); } }, {rootMargin:'200px'}) : null;
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -670,6 +741,7 @@ def _phone_card(phone: dict) -> str:
 
 
 TF_LABEL = (("D", "日K"), ("W", "周K"), ("M", "月K"))
+SUB_LABEL = (("v", "量"), ("macd", "MACD"), ("dmi", "DMI"))
 
 
 def tchips(tr: dict | None) -> str:
@@ -689,7 +761,9 @@ def tf_bar() -> str:
     """K 线周期切换（一行，放在所有图上面；两处按钮是同一个开关）。"""
     return ("<div class='chartbar'><span class='muted small'>K 线</span><div class='seg' role='group' aria-label='K 线周期'>"
             + "".join(f"<button data-act='tf' data-tf='{k}' aria-pressed='{'true' if k == 'D' else 'false'}'>{v}</button>" for k, v in TF_LABEL)
-            + "</div><span class='muted small'>红 = 涨（空心）· 绿 = 跌（实心）· MA5 / 10 / 20 / 30</span></div>")
+            + "</div><span class='muted small'>副图</span><div class='seg' role='group' aria-label='副图'>"
+            + "".join(f"<button data-act='sub' data-sub='{k}' aria-pressed='{'true' if k == 'v' else 'false'}'>{v}</button>" for k, v in SUB_LABEL)
+            + "</div><span class='muted small'>红 = 涨（空心）· 绿 = 跌（实心）· MA5 / 10 / 20 / 30 · 虚线 = 趋势线</span></div>")
 
 
 def _suggest_card(sg: dict, book: dict, tag: str, buying: set, add_when: str, eq, cap: float, chart, bar: str) -> str:

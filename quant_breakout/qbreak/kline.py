@@ -6,6 +6,10 @@
 周K = 每周（周五为一周的结束）实际交易日聚合：开 = 第一天开盘、高 / 低 = 最高 / 最低、收 = 最后一天收盘、量 = 合计，K 线的日期
 = 那周最后一个交易日；月K 同理按月。休市的周 / 月没有 K 线；最新一根可能还没走完（本周 / 本月到最新收盘为止）。
 MA 用全部历史算（窗口开头不缺）。趋势标签是均线位置的机械描述，不是预测：
+副图（2026-10-06 用户「加 MACD（规则用的就是它）或 DMI 副图」）：MACD = 规则同一组参数（StrategyParams 12 / 26 / 9，EMA；
+  柱 = DIF − DEA，同花顺的柱是它的 2 倍、形状一样）；DMI = 同花顺 / 通达信的写法（N 14、M 6：+DI / −DI 用 N 根的简单合计，
+  ADX = |+DI − −DI| ÷ (+DI + −DI) × 100 的 M 根平均，ADXR = (ADX + M 根前的 ADX) ÷ 2）；都在那个周期的 K 线上、用全部历史算。
+趋势线（qbreak/trendline.py：连波谷的支撑线、连波峰的压力线、往后延长的虚线、破线点）也在每个周期上算（tl）。
   上升 = 收盘在 MA20 上、MA20 比 3 根前高、MA5 在 MA20 上；下降 = 三个条件都反过来；其余 = 震荡。
   多头排列 = MA5 > MA10 > MA20 > MA30；空头排列 = 反过来（MA30 还没有时只看前三条）。
 """
@@ -13,10 +17,12 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import pandas as pd
 
 MAS = (5, 10, 20, 30)
 BARS = {"D": 250, "W": 160, "M": 120}            # 每个周期给页面的最近 K 线根数（日 ≈ 1 年、周 ≈ 3 年、月 = 10 年）
+DMI_N, DMI_M = 14, 6                              # 同花顺 DMI 的默认参数
 TF_NAME = {"D": "日K", "W": "周K", "M": "月K"}
 LABELS = ("上升", "下降", "震荡")
 SLOPE_BARS = 3                                     # MA20 的方向：比 3 根 K 线之前高 / 低
@@ -85,8 +91,31 @@ def trend(b: pd.DataFrame) -> dict | None:
             "chg_pct": _r(chg), "close": _r(last), "ma20": _r(m20), "date": str(b.index[-1].date())}
 
 
+def macd(b: pd.DataFrame) -> dict[str, pd.Series]:
+    """规则同一组参数的 MACD（qbreak.strategy.macd）：dif / dea / mh（柱 = DIF − DEA）。"""
+    from .config import StrategyParams
+    from .strategy import macd as _macd
+    p = StrategyParams()
+    dif, dea, mh = _macd(b["Close"].astype(float), p.macd_fast, p.macd_slow, p.macd_signal)
+    return {"dif": dif, "dea": dea, "mh": mh}
+
+
+def dmi(b: pd.DataFrame, n: int = DMI_N, m: int = DMI_M) -> dict[str, pd.Series]:
+    """同花顺 / 通达信写法的 DMI：pdi（+DI）/ mdi（−DI）/ adx / adxr（见模块说明）。"""
+    h, lo, c = (b[k].astype(float) for k in ("High", "Low", "Close"))
+    pc = c.shift(1)
+    tr = pd.Series(np.fmax(np.fmax((h - lo).to_numpy(), (h - pc).abs().to_numpy()), (lo - pc).abs().to_numpy()), index=b.index)
+    hd, ld = h - h.shift(1), lo.shift(1) - lo
+    dmp = hd.where((hd > 0) & (hd > ld), 0.0)
+    dmm = ld.where((ld > 0) & (ld > hd), 0.0)
+    trs = tr.rolling(n).sum().replace(0.0, np.nan)
+    pdi, mdi = dmp.rolling(n).sum() * 100 / trs, dmm.rolling(n).sum() * 100 / trs
+    adx = ((mdi - pdi).abs() / (mdi + pdi).replace(0.0, np.nan) * 100).rolling(m).mean()
+    return {"pdi": pdi, "mdi": mdi, "adx": adx, "adxr": (adx + adx.shift(m)) / 2}
+
+
 def series(b: pd.DataFrame, n: int) -> dict:
-    """最近 n 根 K 线（列式：d / o / h / l / c / v / ma5 / ma10 / ma20 / ma30）。"""
+    """最近 n 根 K 线（列式：d / o / h / l / c / v / ma5 / ma10 / ma20 / ma30 + 副图 dif / dea / mh / pdi / mdi / adx / adxr）。"""
     c = b["Close"].astype(float)
     ma = {f"ma{k}": c.rolling(k).mean() for k in MAS}
     t = b.tail(int(n))
@@ -96,6 +125,10 @@ def series(b: pd.DataFrame, n: int) -> dict:
            "v": [int(x) if _num(x) is not None else 0 for x in t["Volume"]]}
     for k, s in ma.items():
         out[k] = [_r(x) for x in s.loc[ix]]
+    for k, s in macd(b).items():
+        out[k] = [_r(x, 3) for x in s.loc[ix]]
+    for k, s in dmi(b).items():
+        out[k] = [_r(x, 1) for x in s.loc[ix]]
     return out
 
 
@@ -106,16 +139,30 @@ def payload(df: pd.DataFrame, bar_date=None, info: dict | None = None) -> dict |
     d = df.loc[:pd.Timestamp(str(bar_date))] if bar_date else df
     if d["Close"].astype(float).notna().sum() < 2:
         return None
-    out = {**(info or {}), "tf": {}, "trend": {}}
+    from .config import StrategyParams
+    sp = StrategyParams()
+    out = {**(info or {}), "tf": {}, "trend": {}, "ind": {"macd": [sp.macd_fast, sp.macd_slow, sp.macd_signal], "dmi": [DMI_N, DMI_M]}}
     for tf in ("D", "W", "M"):
         b = bars(d, tf)
         if len(b) < 2:
             continue
         out["tf"][tf] = series(b, BARS[tf])
+        tl = _trendline(b, tf)
+        if tl is not None:
+            out["tf"][tf]["tl"] = tl
         tr = trend(b)
         if tr is not None:
             out["trend"][tf] = tr
     return out if out["tf"] else None
+
+
+def _trendline(b: pd.DataFrame, tf: str) -> dict | None:
+    """那个周期最后一根时的趋势线（qbreak/trendline.summary；锚点位置按给页面的最近 BARS 根算）；算不出 → None。"""
+    from . import trendline as TL
+    try:                                                                 # 最后 BARS 根用得到的只有之前 L 根（ATR 的平滑 300 根后差 < 1e-9）→ 只扫这一段
+        return TL.summary(b.tail(BARS[tf] + TL.PARAMS[tf][1] + 300), tf, BARS[tf])
+    except Exception:                                                    # noqa: BLE001  只展示：算不出就不画
+        return None
 
 
 def trends(df: pd.DataFrame, bar_date=None) -> dict:
@@ -137,4 +184,5 @@ def chips(tr: dict | None) -> str:
     return " · ".join(f"{TF_NAME[k][0]} {tr[k]['label']}" for k in ("D", "W", "M") if k in tr) or "—"
 
 
-__all__ = ["MAS", "BARS", "TF_NAME", "LABELS", "ohlcv", "bars", "trend", "series", "payload", "trends", "chips"]
+__all__ = ["MAS", "BARS", "TF_NAME", "LABELS", "DMI_N", "DMI_M", "ohlcv", "bars", "trend", "macd", "dmi", "series", "payload",
+           "trends", "chips"]

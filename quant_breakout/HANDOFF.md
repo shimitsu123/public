@@ -66,6 +66,15 @@
   收盘对 MA20、MA20 比 3 根前、MA5 对 MA20 —— 均线位置的机械描述，不是预测）。周K / 月K = 实际交易日聚合（休市的周没有 K 线、日期 = 最后一个交易日）。
   数据：执行器每次运行另取 10 年日线（缓存 12 小时；取不到用决策用的 2 年）写 `~/.qbreak/home/out/charts_<账本>.json`（只在 Mac 本机，不入库），
   面板打开 / 滑到哪只票才取（`/api/chart`；手机要已配对的设备），页面不内嵌。操作面板的涨跌颜色改成同花顺习惯（红涨绿跌；警告仍是红）。
+- **K 线副图 MACD / DMI + 趋势线（2026-10-06 用户：「加 MACD（规则用的就是它）或 DMI 副图」「K线上面比如画一个直线 直线上面每次都可以到波谷的那个线
+  再画一个线每次都可以波峰 然后预测买卖点和未来走势 结合现在的选股方法 来预测行不行」；显示是工程，不改规则；sim_changes 同日两节）**：
+  K 线下面的副图一个开关切换「量 / MACD / DMI」（所有图一起，记在浏览器里）：MACD = 规则同一组参数（12 / 26 / 9，柱 = DIF − DEA，同花顺的柱是 2 倍、形状一样）；
+  DMI = 同花顺 / 通达信写法（14 / 6：+DI 红实线、−DI 绿虚线、ADX 紫、ADXR 蓝点线）；十字线移到哪根，副图的数值跟着变。
+  趋势线（`qbreak/trendline.py`，研究用同一份）：连波谷的支撑线、连波峰的压力线（墨色虚线，○ = 连线用的波谷 / 波峰）、往后延长的点线（日K 10 / 周K 6 / 月K 4 根）、
+  ▲ 收盘突破压力线 / ▼ 收盘跌破支撑线（连续几根只标第一次）；图下面写两条线的价位、离收盘 %、每根斜率 %、碰到几次、通道形态（上升 / 下降 / 横盘通道、
+  上升 / 下降 / 对称三角、扩散）与现价在通道里的位置。定义：波谷 = 比前 k 根都低、不高于后 k 根（后 k 根走完才确认）；支撑线 = 过两个波谷、
+  之后每根收盘都没跌破「线 − 0.3 × ATR14」、最近还被碰到过、碰到次数最多（一样多取离现价近的）；压力线对称；k / 回看 / 最小间隔 / 最近碰到：
+  日K 5 / 250 / 10 / 60 根、周K 3 / 156 / 6 / 26、月K 2 / 120 / 4 / 12。**延长线只是把线画长，不是验证过的预测**；能不能预测见下一条研究。
 - **手机上操作（2026-10-06 用户：「做一个可以在手机上操作的页面」；工程，不改规则；sim_changes 同日一节）**：
   操作面板除了本机 127.0.0.1:8765 另开手机端口 127.0.0.1:8766；`bash scripts/liveu.sh phone on` 用 Tailscale Serve 把它放到
   `https://<Mac 的机器名>.<tailnet>.ts.net/`（只有登录了你 Tailscale 账户的设备能连，HTTPS 证书自动；**绝不用 Funnel**）。
@@ -877,7 +886,8 @@
   `scripts/install_launchd_panel.sh`（LaunchAgent `com.qbreak.panel`）；
   加仓在引擎里：`UState.add_plan`、`add_room` / `add_fill` / `_exec_adds`（`qbreak/unified.py`），执行器的单 reason = manual_add（cid `U<决策日>-BUY-<票>-M`）；
   买入 = `UState.plan`（与规则的新仓同一笔计划）+ 账本 `manual.buys`，执行器的单 reason = manual_buy（cid 同上）；
-  建议的股票：`qbreak/suggest.py`（run.py `_suggest`）；K 线：`qbreak/kline.py`（run.py `_kline` → `out/charts_<账本>.json`）；
+  建议的股票：`qbreak/suggest.py`（run.py `_suggest`）；K 线：`qbreak/kline.py`（run.py `_kline` → `out/charts_<账本>.json`；副图 MACD / DMI、
+  趋势线 `qbreak/trendline.py`，测试 `tests/test_trendline.py`）；
   持有理由与趋势：`qbreak/holding_view.py`；测试 `tests/test_manual_adjust.py`、`tests/test_manual_buy.py`、`tests/test_suggest.py`、`tests/test_kline.py`
 - 手机上操作：`qbreak/panel_phone.py`（配对码 / 设备 / CSRF / HALT 只能建 / Tailscale Serve 的 on・off・status・forget / 二维码 / 主屏幕图标）、
   `qbreak/panel.py` 的手机端口 127.0.0.1:8766（`make_phone_handler`）、`run.py panel-phone`、测试 `tests/test_panel_phone.py`
@@ -1017,7 +1027,7 @@
 | 手机上操作（一条命令全部做完） | 「拉代码，手机操作全部执行」「打开手机操作」「手机上怎么用」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone node`（拉代码 → 依赖与全部定时任务 → 重启操作面板 → Tailscale Serve 打开手机访问 → 在 Mac 上打开面板的「手机」）。`node` = 用户 2026-10-06 确认可以写进公开证书日志的 Tailscale 机器名：只有这台 Mac 的机器名正好是 node 才打开；名字不一样（退出码 3）→ 把显示的机器名告诉用户、用户同意后换成那个名字再运行；HTTPS 没开（退出码 4，已在浏览器里打开 Tailscale 管理页）→ 请用户点 Enable HTTPS 后再运行一次。打开之后请用户自己在 Mac 屏幕上点「生成配对码」、用 iPhone 相机扫码 | 只用 Tailscale Serve（只在用户自己的 tailnet），绝不用 Funnel；配对码只显示在 Mac 屏幕上：Claude 不调配对接口、不读、不在对话里写 |
 | 手机配对的状态 | 「手机配对了吗？」「有哪些设备能打开？」「手机打不开」 | `bash scripts/liveu.sh phone status`（只读：Tailscale、Serve、手机端口、已配对的设备，不含配对码）；手机打不开 → Mac 醒着吗、手机的 Tailscale 开着吗、`launchctl list \| grep qbreak.panel`、`~/.qbreak/home/logs/com.qbreak.panel.{out,err}` | 主屏幕上的网页要求重新配对时，再生成一次配对码（主屏幕与 Safari 的 cookie 可能是分开的） |
 | 取消手机配对 / 关掉手机访问 | 「取消 iPhone 的配对」「关掉手机访问」「手机丢了」 | 一台：操作面板「手机」里的「取消配对」；全部：`bash scripts/liveu.sh phone forget`；关掉：`bash scripts/liveu.sh phone off`（已配对的设备保留） | 手机丢了：先 `phone forget`，再请用户在 Tailscale 管理页把那台设备移除 |
-| 看 K 线 / 趋势 | 「看一下 7203 的 K 线」「6501 周 K 怎么样」「核心 ETF 月 K」「建议的股票有哪些」 | 打开操作面板（Mac：`open "http://127.0.0.1:8765/?book=paper"`；手机：面板地址）→ 持仓 / 核心 ETF / 建议的股票下面的 K 线，上面的「日K / 周K / 月K」切换；对话里要数字就读 `~/.qbreak/home/out/charts_paper.json`（K 线与趋势标签）与 `live_unified_paper.json` 的 suggest / kline | 只展示；数据是执行器最近一次运行写的（不是盘中实时）；趋势标签是均线位置的机械描述 |
+| 看 K 线 / 趋势 | 「看一下 7203 的 K 线」「6501 周 K 怎么样」「核心 ETF 月 K」「建议的股票有哪些」「看 MACD / DMI」「趋势线 / 支撑压力在哪」 | 打开操作面板（Mac：`open "http://127.0.0.1:8765/?book=paper"`；手机：面板地址）→ 持仓 / 核心 ETF / 建议的股票下面的 K 线，上面的「日K / 周K / 月K」与「副图 量 / MACD / DMI」切换；对话里要数字就读 `~/.qbreak/home/out/charts_paper.json`（K 线、MACD / DMI、趋势线 `tf.*.tl`、趋势标签）与 `live_unified_paper.json` 的 suggest / kline | 只展示；数据是执行器最近一次运行写的（不是盘中实时）；趋势标签是均线位置的机械描述；趋势线的延长不是验证过的预测（研究结果见 sim_changes / `var/out/trendline_study.md`） |
 | 为什么持有 / 现在趋势 | 「为什么买 7203？」「持仓现在趋势怎么样？」 | 读 `~/.qbreak/home/out/live_unified_paper.json` 的 holding_view（或账本页面 / 操作面板 / 日志）；云端模拟盘看 `var/out/unified_today.json` 的 holding_view 与日报 ② | 只展示：买入那天的规则读数 + 均线位置的机械描述，不是预测；不给买卖建议 |
 | 直接在立花网站 / App 上人工买卖 | —— | 执行器管的股票（股票池 + 核心 ETF）在执行器之外买卖会让第二天的持仓核对停下 | 要卖请用上面的手动卖出；真要在网站上操作：先说「停」，再商量 |
 | 研究 / 改规则 | 「用 J-Quants 数据研究 XX，先登记再跑」 | 在 `~/qbreak-dev` 里：登记（提交）→ 运行 → 结果写进 sim_changes → 推送 | 模拟盘 / 实盘规则只在你确认后改 |
