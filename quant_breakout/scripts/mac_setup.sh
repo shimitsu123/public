@@ -5,7 +5,7 @@
 # ③ 市场仪表盘 + 经济威胁提醒 com.qbreak.news（每 15 分钟）
 # ④ J-Quants 定时取数 com.qbreak.jquants（钥匙串里有 qbreak-jquants 才装；只检查有没有，绝不读出值）
 # ④b 登录 / 开机后自动启动 com.qbreak.login（RunAtLoad：仪表盘没加载就加载、交易日已过 07:40 而今天没跑 → 补跑模拟操盘、打开页面）
-# ④c 本机操作面板 com.qbreak.panel（http://127.0.0.1:8765/；按钮只写手动指令，下单由执行器做）
+# ④c 本机操作面板 com.qbreak.panel（http://127.0.0.1:8765/ + 手机端口 127.0.0.1:8766；按钮只写手动指令，下单由执行器做）
 # ⑤ 研究用的第二个克隆 ~/qbreak-dev（没有就建；没有本地改动就快进到最新）
 # ⑥ 自检：已注册的定时任务、页面在哪里
 set -euo pipefail
@@ -72,4 +72,5 @@ echo
 echo "已注册的定时任务："
 if command -v launchctl >/dev/null 2>&1; then launchctl list 2>/dev/null | grep qbreak || echo "  （没有）"; else echo "  （这台机器没有 launchctl）"; fi
 echo "页面：账本 ${LHOME}/out/page_paper.html、市场仪表盘 ${LHOME}/out/dashboard.html、操作面板 http://127.0.0.1:8765/"
+echo "手机上操作（可选）：bash scripts/liveu.sh phone on（Tailscale Serve，只在你自己的 tailnet；配对码在操作面板「手机」里生成）"
 echo "以后在 Mac 的 Claude 对话里直接说要做什么（看账本、看仪表盘、更新、做研究），Claude 会自己运行需要的命令。"

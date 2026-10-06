@@ -22,6 +22,9 @@ var/out/jq_today.json
 var/out/*_partial.md
 var/out/*_partial.json
 
-# 手动指令（页面 / 命令行写、执行器读）与本机页面服务的令牌：只在 Mac 的数据目录，不入库
+# 手动指令（页面 / 命令行写、执行器读）、操作面板的令牌、手机配对（设备、手机地址）：只在 Mac 的数据目录，不入库
 var/manual/
 var/panel_token
+var/panel_devices.json*
+var/panel_devices.lock
+var/panel_phone.json

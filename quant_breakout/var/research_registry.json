@@ -13796,5 +13796,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "没有手动指令时执行器与以前逐笔相同（原有执行器 / 演练测试全过）；只能卖 / 减不能手动买；模拟账户手动操作会中断上线门槛「连续一致」天数；不改规则 / 参数 / 仓位"
+ },
+ {
+  "line": 9726,
+  "date": "2026-10-06",
+  "title": "操作面板可以在手机上用：面板另开手机端口 127.0.0.1:8766，Tailscale Serve 只在自己的 tailnet 里转过来（绝不用 Funnel）；手机永远要先配对（配对码只在 Mac 屏幕上、设备 cookie + CSRF）；手机优先的版面（底部弹出确认、减仓股数预览）+「停止下单（HALT）」只能建",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": null,
+  "script": "qbreak/panel_phone.py、qbreak/panel.py（make_phone_handler / render / pair_page）、run.py（panel --phone-port / panel-phone）、scripts/liveu.sh（phone）",
+  "output": "~/.qbreak/home/panel_devices.json、panel_phone.json（Mac，不入库）",
+  "candidates": [],
+  "baseline": null,
+  "windows": null,
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "按钮仍只写手动指令（下单永远是执行器）；手机上不能解除 HALT、不能配对新设备、不能手动买；Mac 睡着或没连 Tailscale 时手机打不开；不改规则 / 参数 / 仓位"
  }
 ]

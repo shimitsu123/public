@@ -63,12 +63,17 @@
   下单前资格检查（`qbreak/eligibility.py`）与「立花能不能买」检查（`qbreak/tradable.py`：JPX 市場区分 + 立花銘柄マスタ）挡掉的票不要绕过；手上的票被标记（被踢出日経225 / JPX 指定 / 上場廃止预定）时规则不自动卖 →
   告诉用户、由用户决定（要卖就写手动卖出指令 `liveu.sh manual sell <代码>`）；名单差异（`run.py eligibility`）要改 `qbreak/universes.py` 须用户确认并记 sim_changes.md；
   退市时间表（`run.py delist-schedule`，`var/delist_schedule.json`）到了上場廃止日自动从股票池去掉（只减），补入仍要用户确认
+- 手机上操作（2026-10-06 起）：只用 Tailscale **Serve**（`bash scripts/liveu.sh phone on|off|status|forget`；只在用户自己的 tailnet 里），
+  **绝不用 Tailscale Funnel**、不把面板绑到 127.0.0.1 以外、不用别的公开转发；第一次 `phone on` 会显示机器名（会写进公开的证书透明度日志）→
+  告诉用户、用户同意才加 `--yes`；配对码只显示在 Mac 的本机操作面板上：Claude 不调 `/api/pair/new`、不读 `~/.qbreak/home/panel_devices.json`、
+  不在对话 / 终端 / 日志里写配对码或设备令牌（请用户自己在 Mac 屏幕上点「生成配对码」）；手机页面的 HALT 只能建、不能解除（解除照旧只在 Mac 上、
+  用户明确说）；手机上点的卖出 / 减仓 / 比例和本机面板一样只是「手动指令」（规则同上一条）
 - 排查先看：`~/.qbreak/home/logs/com.qbreak.liveu.*.out|err`、`~/.qbreak/home/out/live_unified_paper_journal.md`、
   页面 `~/.qbreak/home/out/page_paper.html`、`bash scripts/liveu.sh --broker paper --status`、`launchctl list | grep qbreak`；
   市场仪表盘 / 经济威胁提醒（每 15 分钟）：`~/.qbreak/home/out/dashboard.html`、`~/.qbreak/home/logs/com.qbreak.news.out|err`（只展示与提醒，不下单）；
   J-Quants：`~/.qbreak/home/logs/com.qbreak.jquants.out|err`；登录 / 开机后的自动启动（补跑、打开页面）：
   `~/.qbreak/home/logs/com.qbreak.login.out|err`；操作面板 / 手动指令：`bash scripts/liveu.sh manual list [--broker tachibana]`、
-  `~/.qbreak/home/logs/com.qbreak.panel.{out,err,retry.log}`
+  `~/.qbreak/home/logs/com.qbreak.panel.{out,err,retry.log}`；手机：`bash scripts/liveu.sh phone status`（只读，不含配对码）
 
 ## 在云端（claude.ai/code 会话 / 例行任务）
 - 开发分支 `claude/rakuten-auto-trading-review-ka7lf0`：只推这个分支，不开 PR（除非用户要求）

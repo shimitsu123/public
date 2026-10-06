@@ -3487,10 +3487,18 @@ def cmd_manual(a) -> int:
 
 
 def cmd_panel(a) -> int:
-    """本机操作面板（qbreak/panel.py）：只在 127.0.0.1 上开一个页面 —— 账本、持有理由与趋势、卖出 / 减仓 / 闲置资金比例 / 撤回按钮。
+    """操作面板（qbreak/panel.py）：只在 127.0.0.1 上开页面 —— 账本、持有理由与趋势、卖出 / 减仓 / 闲置资金比例 / 撤回 / 停止下单按钮。
+    本机端口（默认 8765）+ 手机端口（默认 8766：Tailscale Serve 转过来，要先配对；0 = 不开）。
     按钮只写手动指令（与 run.py manual 相同）；下单永远由执行器做。"""
     from qbreak import panel
-    return panel.serve(port=a.port, open_browser=a.open)
+    return panel.serve(port=a.port, open_browser=a.open, phone_port=a.phone_port)
+
+
+def cmd_panel_phone(a) -> int:
+    """手机上操作（qbreak/panel_phone.py）：on = 用 Tailscale Serve 把面板的手机端口放到你自己的 tailnet（绝不用 Funnel）；
+    off = 关闭；status = 只读；forget = 取消全部配对。从不打印配对码（配对码只在 Mac 的操作面板上生成、显示）。"""
+    from qbreak import panel_phone
+    return panel_phone.cli(a.action, port=a.port, https_port=a.https_port, yes=a.yes, open_panel=not a.no_open)
 
 
 def cmd_live_gate(a) -> int:
@@ -3962,10 +3970,18 @@ def main(argv=None) -> int:
     mn.add_argument("--block-days", type=int, default=20, help="sell：之后多少个交易日不自动买回（0 = 不限制，-1 = 一直）")
     mn.add_argument("--note", default=None, metavar="TEXT")
     mn.set_defaults(func=cmd_manual)
-    pn = sub.add_parser("panel", help="本机操作面板（127.0.0.1）：账本 + 持有理由 + 卖出 / 减仓 / 比例按钮（按钮只写手动指令）")
+    pn = sub.add_parser("panel", help="操作面板（127.0.0.1）：账本 + 持有理由 + 卖出 / 减仓 / 比例 / 停止下单按钮（按钮只写手动指令）")
     pn.add_argument("--port", type=int, default=8765)
+    pn.add_argument("--phone-port", type=int, default=8766, help="手机端口（Tailscale Serve 用，要先配对；0 = 不开）")
     pn.add_argument("--open", action="store_true", help="启动后用浏览器打开")
     pn.set_defaults(func=cmd_panel)
+    pp = sub.add_parser("panel-phone", help="手机上操作：on / off / status / forget（Tailscale Serve，只在你的 tailnet 里；从不打印配对码）")
+    pp.add_argument("action", nargs="?", default="status", choices=["on", "off", "status", "forget"])
+    pp.add_argument("--port", type=int, default=8766, help="面板的手机端口（与 panel --phone-port 相同）")
+    pp.add_argument("--https-port", type=int, default=443, help="Tailscale Serve 的 HTTPS 端口（443 被别的服务占用时用 8443）")
+    pp.add_argument("--yes", action="store_true", help="确认机器名可以出现在公开的证书透明度日志里（第一次打开时要）")
+    pp.add_argument("--no-open", action="store_true", help="打开之后不在 Mac 上打开操作面板")
+    pp.set_defaults(func=cmd_panel_phone)
     lg = sub.add_parser("live-gate", help="立花实盘的上线门槛与准备（只读：不下单、不改文件、不打印密钥）")
     lg.set_defaults(func=cmd_live_gate)
     rh = sub.add_parser("remote-halt", help="云端对话里说「停」：写 var/HALT_REMOTE，提交推送后 Mac 的执行器下一次运行时建本地 HALT")

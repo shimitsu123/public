@@ -9722,3 +9722,35 @@ Mac 问法表、已知限制）；CHECK_TIMELINE（⑥ 执行层、08:35 / 09:20
   没给账本标签不读、日志与比较文字）；`tests/test_panel.py` 7（令牌 0600、只认本机 Host、令牌 / Origin / JSON / 大小、写指令、重试只在早上已完成且有指令时叫、页面按钮）；
   `tests/test_holding_view.py` 6（信号日读数、趋势标签、核心 ETF、命令行与帮助、页面 / 日报 / 日志）。原有执行器测试（与回测逐笔一致等）全部照过。全部 2,595 个通过。
 - 没做的：手动买入 / 加仓（只能按规则买）；盘中下单（只下寄付）；自动撤销已经发到交易所的单（要在立花网站 / App 上撤）。非投资建议。
+
+## 2026-10-06 工程（用户：「做一个可以在手机上操作的页面」）：操作面板可以在手机上用（Tailscale Serve + 设备配对）+ 手机优先的版面 +「停止下单（HALT）」按钮（不改规则 / 参数 / 仓位；按钮仍只写手动指令）
+- 怎么连：操作面板（`qbreak/panel.py`，LaunchAgent `com.qbreak.panel`）除了本机 127.0.0.1:8765，另开只给手机用的本机端口 127.0.0.1:8766（`run.py panel --phone-port`，0 = 不开）。
+  `bash scripts/liveu.sh phone on`（= `run.py panel-phone on`，`qbreak/panel_phone.py`）用 Tailscale Serve（`tailscale serve --bg --https=443 http://127.0.0.1:8766`）
+  把它放到 `https://<Mac 的机器名>.<tailnet>.ts.net/`：只有登录了用户自己 Tailscale 账户的设备能连，HTTPS 证书由 Tailscale 发。**绝不用 Funnel**（公开到互联网）：
+  发现这个端口开着 Funnel 就拒绝；443 已经被别的服务占用就拒绝、不覆盖（可换 `--https-port 8443`）；第一次打开先显示机器名（会写进公开的证书透明度日志），要 `--yes` 确认。
+  `phone off` 只关自己的那个端口；`phone status` 只读；`phone forget` 取消全部配对。从不打印配对码。
+  选这条路的理由：127.0.0.1 手机连不到；绑局域网 / 公网要暴露面板；经 GitHub / artifact 中转要把真实持仓放进公开仓库或外部服务、而且要改例行任务 → 都不要。
+  端口分开（8765 本机信任 / 8766 永远要配对）而不是看 Host / X-Forwarded-* 头来分：Tailscale 没写明转发时这些头怎么设，按端口分不依赖它。
+- 配对（手机端口永远要「已配对的设备」，没配对只看到输入配对码的页面，没有任何账本数据）：
+  Mac 的本机面板「手机」→「生成配对码」：8 位（不含 I O 0 1）、10 分钟、只能用一次、输错 5 次作废；只显示在 Mac 屏幕上（含二维码 = 手机地址 + 配对码；
+  二维码用可选依赖 qrcode，没装只显示配对码与地址）；文件里只存 HMAC 摘要。手机输入后发设备 cookie `qbd=<设备 id>.<令牌>`
+  （HttpOnly / Secure / SameSite=Strict / 180 天；文件里只存令牌的 SHA-256），写操作还要这台设备的 CSRF 令牌（HMAC(secret, 设备 id)，头 X-Qbreak-Csrf）。
+  最多 5 台；Mac 上可取消任何一台；手机上「退出这台设备」；`phone forget` 全部取消并换 secret（旧的 CSRF 令牌全部失效）。
+  数据目录（不入库）：`panel_devices.json`（0600）、`panel_phone.json`（手机地址）；仓库 `.gitignore` 加了 `var/panel_devices.json*`、`var/panel_devices.lock`、`var/panel_phone.json`。
+- 手机端口的其他防护：Host 只接受 `*.ts.net` / 本机（挡 DNS rebinding）；Origin（有的话）必须是页面自己；JSON ≤ 4 KB；写操作每分钟 ≤ 30 次、配对 ≤ 10 次；
+  只在 Mac 上才有的接口（生成配对码、取消别的设备）在手机端口一律 404；页面禁止被嵌入（CSP frame-ancestors 'none'）；页面不显示本机路径。
+- 「停止下单（HALT）」按钮（本机与手机都有）：建数据目录的 HALT（模拟账户和立花都停；已经发到交易所的单不撤）；**只能建、不能解除**（没有删除 HALT 的路，
+  解除照旧只在 Mac 上、用户明确说）；已经有 HALT 不覆盖；HALT 演练建的那个（演练结束会被删）→ 换成真的，免得被演练删掉。
+- 版面（本机与手机同一个，手机优先）：顶部固定的账本切换与刷新；总权益 / 现金大字；每只持仓「卖出全部」「减仓…」大按钮 → 底部弹出确认
+  （卖出：之后几天不买回 20 / 5 / 60 / 一直 / 不限制；减仓：滑块 + 按最近收盘与 100 股单元估算的「留几股、卖几股」，减到不足一个单元会写「等于全部卖出」）；
+  闲置资金比例 −10 / +10 + 滑块；手动指令列表（撤回）；不买回列表（解除）；安全区（刘海 / Home 条）、暗色、可「添加到主屏幕」（manifest + 纯 Python 画的图标）。
+- 面板的代码更新（git pull）之后自己退出（每 60 秒看一次 panel / panel_phone / manual_orders / holding_view 的修改时间），LaunchAgent 的 KeepAlive 用新代码重启。
+- 真实浏览器核对（云端 Chromium，iPhone 尺寸 390 / 375 px）：Mac 页面生成配对码与二维码 → 手机页面输入 → cookie HttpOnly / Secure / Strict → 账本显示、
+  页面不横向滚动 → 卖出 / 减仓底部弹出、减仓预览 → 写指令（source = phone）→ HALT 建成、页面变「HALT 生效中」、HALT 按钮消失 → 暗色；改代码后面板自己退出（实际看到）。
+- 测试：`tests/test_panel_phone.py` 8（配对码规则：只存摘要 / 0600 / 错 5 次作废 / 过期 / 一次 / 最多 5 台；cookie 与 CSRF、取消、全部取消换 secret；
+  HALT 只能建、不覆盖、接管演练的 HALT、源码里没有删除 HALT；两个端口的 HTTP：没配对看不到数据、Host / Origin / CSRF、配对、手机写指令、手机 HALT、
+  Mac 上取消后手机回到配对页、退出这台设备、图标与 manifest；本机 / 手机版面的区别；假的 tailscale 命令：没装 / 没开 MagicDNS / 第一次要 --yes /
+  只调 serve --bg、不碰 funnel / 已打开不重复 / Funnel 开着拒绝 / 443 被占拒绝且不覆盖 / 8443 / off 只关自己的 / forget；代码更新后退出）。
+- 没做的 / 限制：Mac 睡着、关机或没连 Tailscale 时手机打不开（立花上线后交易日 07:30〜09:25 Mac 定时醒着；那时以外要停就在云端对话里说「停」→ var/HALT_REMOTE）；
+  主屏幕上的网页与 Safari 的 cookie 可能分开（要求重新配对就再生成一次配对码）；手机上不能解除 HALT、不能配对新设备、不能手动买。非投资建议。
+- 全部 2,603 个测试通过（新增 8 个；原有的手动指令 / 面板 / 执行器测试照过）。

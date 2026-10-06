@@ -20,7 +20,9 @@
 #   bash scripts/liveu.sh manual list|sell 7203|trim 7203 --pct 10|core --pct 50|unblock 7203|cancel <id> [--broker tachibana]
 #                                                    手动指令：只写指令（数据目录 manual/）；下单由执行器在下一次能下寄付单的运行里做
 #   bash scripts/liveu.sh panel [--open]             本机操作面板 http://127.0.0.1:8765/（LaunchAgent com.qbreak.panel 常驻）：
-#                                                    账本、为什么持有 · 现在趋势、卖出 / 减仓 / 闲置资金比例 / 撤回按钮（按钮只写手动指令）
+#                                                    账本、为什么持有 · 现在趋势、卖出 / 减仓 / 闲置资金比例 / 撤回 / 停止下单（按钮只写手动指令）
+#   bash scripts/liveu.sh phone [on|off|status|forget] [--yes]  手机上操作：Tailscale Serve 把面板的手机端口（127.0.0.1:8766）放到
+#                                                    你自己的 tailnet（绝不用 Funnel）；配对码只在 Mac 的操作面板「手机」里生成、显示
 # 远程停止：云端对话里你说「停」→ 仓库的 var/HALT_REMOTE（run.py remote-halt）→ 这里每次运行前看一眼，新的 id → 建本地 HALT。
 # 页面（账本 + 日志）：~/.qbreak/home/out/page_paper.html（立花：page_tachibana.html），每次运行都重写；
 #   定时任务跑完自动用浏览器打开（不想弹出：touch ~/.qbreak/home/NO_OPEN）；运行没走完 → 页面顶上标红 + 通知。
@@ -170,6 +172,11 @@ fi
 if [ "${1:-}" = "panel" ]; then                    # 本机操作面板（LaunchAgent com.qbreak.panel；手动：bash scripts/liveu.sh panel --open）
   shift
   exec "$PY" run.py panel ${1+"$@"}
+fi
+
+if [ "${1:-}" = "phone" ]; then                    # 手机上操作：bash scripts/liveu.sh phone on（Tailscale Serve；从不打印配对码）
+  shift
+  exec "$PY" run.py panel-phone ${1+"$@"}
 fi
 
 if [ "${1:-}" = "probe" ]; then                    # 立花 API 检查：本番只读；--demo --order-test 在デモ环境发单检查
