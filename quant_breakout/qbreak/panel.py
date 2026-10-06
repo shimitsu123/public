@@ -611,6 +611,7 @@ function drawK(box){
     if(TL.chan) parts.push(TL.chan+(TL.pos!=null ? '（现价在通道的 '+TL.pos+'%）' : ''));
     nd('span',null,'趋势线：'+parts.join(' · '), foot);
     nd('span',null,'点线 = 往后延长 '+PJ+' 根（只是把线延长，不是验证过的预测）· ○ = 连线用的波谷 / 波峰 · ▲ 收盘突破压力线 · ▼ 收盘跌破支撑线', foot);
+    nd('span','muted','研究（2026-10-06，全部股票 2001〜2026）：通道方向、突破 / 跌破趋势线对之后 20 日都没有预测力，结合现在的选股方法也不更好 —— 趋势线只用来看图', foot);
   }
   nd('span',null,'红 = 涨（空心）· 绿 = 跌（实心）', foot);
   const det=nd('details',null,null,box); nd('summary','muted small','最近 10 根（表）',det);

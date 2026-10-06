@@ -14008,7 +14008,7 @@
   "title": "登记「趋势线（连波谷 / 连波峰）能不能预测买卖点与走势、结合现在的选股方法（B4）会不会更好」：一 预测准确度（全部股票 6 个样本：通道方向 A1、买点事件 TU / TR、卖点事件 TD / TF）+ 二 结合 B4（TLB1 / TLB2 挡买点、TLS1 / TLS2 / TLS3 加卖点）",
   "kind": "engineering",
   "domain": "选股/买点",
-  "registration": "本提交（规则、代码、测试与登记前个数；之后不改、只运行一次）",
+  "registration": "本提交 2f8b450（规则、代码、测试与登记前个数；之后不改、只运行一次）",
   "script": "scripts/trendline_study.py（定义 qbreak/trendline.py）",
   "output": "var/out/trendline_study.md / .json（运行后）",
   "candidates": [
@@ -14059,5 +14059,70 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "A 判定：6 个样本每个同方向 + 合起来 95%（按月聚类）不含 0 + |平均| ≥ 0.3 pp（A1 ② 比均线：≥ 5 个样本 > 0 + 合起来下限 > 0）；B 第一关 = research_loop11.stage1（posthoc = False，Zx 只描述），过了才另登记第二关；登记前只数个数：TLB1 只碰到 B4 成交 1 / 0 / 4 笔、TLB2 10 / 11 / 14 笔；先决条件改成税后研究同一个判断（E 0.628 vs 0.627 的缓存漂移）"
+ },
+ {
+  "line": 9937,
+  "date": "2026-10-06",
+  "title": "趋势线（连波谷 / 连波峰）能不能预测买卖点与走势、结合 B4 会不会更好 → 都不能：A1 通道方向合起来 −0.11 pp（E −0.61 显著反过来）、比均线标签 −0.06 pp；买点 TU +0.01 / TR −0.09、卖点 TD −0.07 / TF −0.01 pp（20 日超额）；TLB1 / TLB2 / TLS1 / TLS2 / TLS3 都第一关不过",
+  "kind": "study",
+  "domain": "选股/买点",
+  "registration": "2f8b450（之后只运行一次）",
+  "script": "scripts/trendline_study.py（定义 qbreak/trendline.py）",
+  "output": "var/out/trendline_study.md / .json",
+  "candidates": [
+   {
+    "id": "A1",
+    "result": "不过（合起来 −0.11 pp，−0.37〜+0.16；② 比均线 −0.06 pp）"
+   },
+   {
+    "id": "TU",
+    "result": "没用（+0.01 pp；只有 W +0.21 显著）"
+   },
+   {
+    "id": "TR",
+    "result": "没用（−0.09 pp，−0.16〜−0.01，反过来）"
+   },
+   {
+    "id": "TD",
+    "result": "没用（−0.07 pp，−0.15〜+0.01）"
+   },
+   {
+    "id": "TF",
+    "result": "没用（−0.01 pp）"
+   },
+   {
+    "id": "TLB1",
+    "result": "第一关不过（Calmar 合计 −0.001；只挡 1 / 0 / 4 笔）"
+   },
+   {
+    "id": "TLB2",
+    "result": "第一关不过（胜率 +2.30 pp、每笔 +0.87 pp、V4 过；Calmar Z −0.182 / E −0.021 / J +0.019，Z 胜率 −2.3 pp）"
+   },
+   {
+    "id": "TLS1",
+    "result": "第一关不过（Calmar 合计 −0.027；胜率 −1.06 pp、每笔 −0.51 pp）"
+   },
+   {
+    "id": "TLS2",
+    "result": "第一关不过（Calmar 合计 −0.024）"
+   },
+   {
+    "id": "TLS3",
+    "result": "第一关不过（Calmar 合计 −0.204；胜率 −6.25 pp、每笔 −2.33 pp）"
+   }
+  ],
+  "baseline": "B4 = B3 + TBF（Calmar Z 1.209 / E 0.628 / J 0.677；合起来 114 笔、胜率 57.0%、每笔 +4.04%）；A1 对照 = 均线趋势标签",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09；池子 W / Jx（2017〜）/ Zx",
+  "verdict": "不通过",
+  "stable_findings": [
+   "趋势线的方向（上升 / 下降通道）对之后 20 日的相对强弱没有信息（6 个样本正负各半，合起来 ≈ 0）；均线趋势标签同样 ≈ 0",
+   "突破压力线 / 跌破支撑线之后 20 日的超额只有 ±0.1 pp 左右（远小于来回成本与 0.3 pp 门槛）",
+   "碰到周线压力线就止盈三个年代都让账户变差（早卖砍掉大赢家，与以前的止盈研究一致）"
+  ],
+  "era_dependent_or_reversed": [
+   "A1 在 E（2006〜2016）显著反过来（上升通道之后跑输 0.61 pp）",
+   "TLB2 在 J 胜率 +7.1 pp、Calmar +0.019，在 Z Calmar −0.182（2001〜2006 被挡的是大赢家）"
+  ],
+  "notes": "面板的趋势线保留为看图用（图下写明研究结论）；不改模拟盘 / 执行器；待办〔73〕"
  }
 ]
