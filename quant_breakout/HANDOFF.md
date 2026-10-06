@@ -692,6 +692,7 @@
   18 个信号日特征（离日 / 周线支撑 / 压力几个 ATR、通道位置、斜率、碰到几次、线多长、最近破线没有）—— 一 在 6 个样本（Z / E / J / W / Jx / Zx）+ 第 7 个样本 U0（J-Quants 全市场时点面板约 4,400 只，只描述）上看
   高组 − 低组之后 20 日的超额；二 在 W / Jx 池子里 B4 会买的信号上探索「挡一端」的做法 TQ01〜TQ18（F12 / F14 = 上一轮 TLB2 的变体，不进候选）→ 入围 ≤ 3（含「重排组标签再挑最差一端」的随机对照）
   → 没看过的 Zx + Z / E / J 账户确认（research_loop11.stage1 posthoc + 规模 + 跨时期）。入围 ≠ 证据；结论上限 = 「候选 → 前向记录」
+  - **2026-10-06 结果：不能 → 模拟盘不变**（`var/out/trendline_select_study.md`）：横截面 18 个特征合起来都在 -0.27〜+0.18 pp / 20 日、秩相关 |ρ| ≤ 0.023 → 0 / 18「有信息」（全市场面板 U0 也 ≈ 0，唯一区间不含 0 的 F10 只 -0.14 pp）；16 个「挡一端」做法 0 个入围：最接近 TQ08「日线支撑线短的不买」Jx 胜率 +2.75 pp / 每笔 +0.307 pp、W 同向，但不比「重排组标签再挑最差一端」的对照好（86.5 分位；门槛 95）；没有入围 → Zx 与日経225 账户没看。与上一轮一致：趋势线只用来看图 → 待办〔74〕
 - 现在的选股方法放在楽天的美股还是立花的日経225（2026-09-29 用户问；登记 1ba090e、`scripts/market_compare_study.py` → `var/out/market_compare_study.md`）：
   同一套个股规则（W2 + X6、4 × 25%）、同一个推进器 → 按事先读法 **日経（立花）更好**（两个窗口的每笔净收益与个股层 Calmar 都是日経高）：
   每笔 2006〜2016 +2.74% vs +0.30%、2017〜 +0.55% vs −0.86%；楽天来回约 1% 的手续费每年约 4〜6 万円（立花 0.1〜0.3 万円），
@@ -764,6 +765,7 @@
 - ㊳ ✅ 2026-10-02 用户「采用」研究循环的「更好候选」FJE（日元急升 或 日経熊且日元牛时，闲置资金从 1545 换成对冲版纳指 2845；美股熊照旧现金）
   → 模拟盘与 Mac 执行器的闲置资金 Q1 → Q1H，2026-10-01 收盘的决策起（10-02 06:57 / 07:40 起）（见上面「现在在哪一步」的 Q1H 一条、sim_changes 2026-10-02「配置变更」）。
   汇率改用 Yahoo JPY=X（及时）；2845 在立花 ｅ支店：现物可买东证上市 ETF（2026-09-29 查的一般规定），~~上实盘前由用户本人在立花网站的銘柄情報确认一次 2845 本身能现物买~~（2026-10-03 FJE 撤掉 → 不再需要；要确认的改成 1482）（Claude 不经手登录信息、不自动操作网站）
+- 〔74〕 2026-10-06 「趋势线的质地特征能不能优化选股（全部股票横截面 + 结合 B4）」结果（sim_changes 2026-10-06 结果节；`var/out/trendline_select_study.md`）：不能（横截面 0 / 18 有信息、16 个做法 0 个入围；最接近 TQ08「日线支撑线短的不买」在 W / Jx 同向但不比重排对照好）。选项：① **趋势线这条线结束（推荐，按规则）**：面板上的趋势线继续只当看图用，模拟盘 / 执行器不变；② 把 TQ08 加进全市场前向检验（只记录、不交易；证据只到探索样本、没过对照 → 不推荐）；③ 面板上不画趋势线（只留副图 MACD / DMI；与〔73〕③ 同）。都不改模拟盘的交易规则
 - 〔73〕 2026-10-06 「趋势线能不能预测买卖点与走势、结合 B4」结果（sim_changes 2026-10-06 结果节；`var/out/trendline_study.md`）：都不能（预测准确度 7 个判断全部不过、结合 B4 的 5 个做法都第一关不过）。选项：① **维持现状（推荐，按规则）**：趋势线只在操作面板上看图用（图下已写「没有预测力」），模拟盘 / 执行器不变；② 最接近的 TLB2「上方周线压力线不到 1 × 周线 ATR 就不买」只加前向记录（只记录、不交易；它的胜率 / 每笔在三个池子同方向，但 2001〜2006 账户明显变差，证实也只是记录）；③ 面板上不画趋势线（只留副图 MACD / DMI）。都不改模拟盘的交易规则
 - 〔72〕 2026-10-06 「税后收益 × 新 NISA」结果（sim_changes 2026-10-06 结果节；`var/out/nisa_tax_study.md`、`var/out/layer_tax_study.md`）：按事先规则推荐 **N2：只把核心 ETF（1545 / 1482）的买入放 NISA 成長投資枠**（¥100 万时税后年化 +1.4〜2.1 pp；¥1,000 万时只 +0.2〜0.6 pp）。选项：① 用 N2 —— 先由你确认：现在的 NISA 开在哪家（一年只能一家；立花只有成長投資枠、没有つみたて投資枠）、今年额度已用多少、立花 NISA 能不能买 1545 / 1482（立花写明一部分 ETF 不在 NISA 对象里）、要不要选株式数比例配分方式；确认后另做执行器工程（按单指定课税区分 sZyoutoekiKazeiC、记额度 / 簿价、两个账户分别对账、模拟盘加税后账本，全部测试）再上实盘；② 只展示：日报 / 页面加「税前 vs 税后（P0 / N2）估算」，下单不变；③ 不用（照旧税前口径）。个股层税后三个年代都还有贡献（J 只 +0.14 pp），不建议因此改策略。都不改模拟盘的交易规则；税务按税务署 / 税理士 / 立花的说明为准
 - 〔71〕 2026-10-06 「市场风险报告的判断（维持避险等）放到过去的指数里」结果（sim_changes 2026-10-06 结果节；`var/out/report_judgment_backtest.md`）：风险准（避险之后 20 日内跌 5% 的机会美 3.14 倍 / 日 1.77 倍）、方向不准（避险之后平均收益反而更高）、照着做（避险 0% / 减仓 50%）不比一直拿着好、报告的 24h 崩盘概率六格都写高了（观望 / 减仓观察高 2.6〜19 倍）。选项：① **不改（推荐）**：判断层照旧（报告「避险」→ 不开新仓、「减仓观察」→ ×0.5，不卖核心）——这是把避险当「风险高」用，与 V2 一致；② 报告的「24h 崩盘概率」改写成历史同一状态的频率（美股 观望 ≈ 0.4% / 减仓观察 ≈ 2.5% / 避险 ≈ 10%，日经 ≈ 1.4 / 4.9 / 9.1%；只影响显示，模拟盘不用它）——要改两个市场风险例行任务的提示，你在对话里确认后才改；③ 另做登记研究：判断层（避险 → 不开新仓）对个股层到底有没有好处（把重现的状态放进 B4 账户，2006〜2026 与「不用判断层」比；这次没检验）；④ 暂停新研究。都不改模拟盘
@@ -894,7 +896,7 @@
   加仓在引擎里：`UState.add_plan`、`add_room` / `add_fill` / `_exec_adds`（`qbreak/unified.py`），执行器的单 reason = manual_add（cid `U<决策日>-BUY-<票>-M`）；
   买入 = `UState.plan`（与规则的新仓同一笔计划）+ 账本 `manual.buys`，执行器的单 reason = manual_buy（cid 同上）；
   建议的股票：`qbreak/suggest.py`（run.py `_suggest`）；K 线：`qbreak/kline.py`（run.py `_kline` → `out/charts_<账本>.json`；副图 MACD / DMI、
-  趋势线 `qbreak/trendline.py`，测试 `tests/test_trendline.py`）；
+  趋势线 `qbreak/trendline.py`，测试 `tests/test_trendline.py`；趋势线研究 `scripts/trendline_study.py` / `scripts/trendline_select_study.py`）；
   持有理由与趋势：`qbreak/holding_view.py`；测试 `tests/test_manual_adjust.py`、`tests/test_manual_buy.py`、`tests/test_suggest.py`、`tests/test_kline.py`
 - 手机上操作：`qbreak/panel_phone.py`（配对码 / 设备 / CSRF / HALT 只能建 / Tailscale Serve 的 on・off・status・forget / 二维码 / 主屏幕图标）、
   `qbreak/panel.py` 的手机端口 127.0.0.1:8766（`make_phone_handler`）、`run.py panel-phone`、测试 `tests/test_panel_phone.py`
@@ -1034,7 +1036,7 @@
 | 手机上操作（一条命令全部做完） | 「拉代码，手机操作全部执行」「打开手机操作」「手机上怎么用」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone node`（拉代码 → 依赖与全部定时任务 → 重启操作面板 → Tailscale Serve 打开手机访问 → 在 Mac 上打开面板的「手机」）。`node` = 用户 2026-10-06 确认可以写进公开证书日志的 Tailscale 机器名：只有这台 Mac 的机器名正好是 node 才打开；名字不一样（退出码 3）→ 把显示的机器名告诉用户、用户同意后换成那个名字再运行；HTTPS 没开（退出码 4，已在浏览器里打开 Tailscale 管理页）→ 请用户点 Enable HTTPS 后再运行一次。打开之后请用户自己在 Mac 屏幕上点「生成配对码」、用 iPhone 相机扫码 | 只用 Tailscale Serve（只在用户自己的 tailnet），绝不用 Funnel；配对码只显示在 Mac 屏幕上：Claude 不调配对接口、不读、不在对话里写 |
 | 手机配对的状态 | 「手机配对了吗？」「有哪些设备能打开？」「手机打不开」 | `bash scripts/liveu.sh phone status`（只读：Tailscale、Serve、手机端口、已配对的设备，不含配对码）；手机打不开 → Mac 醒着吗、手机的 Tailscale 开着吗、`launchctl list \| grep qbreak.panel`、`~/.qbreak/home/logs/com.qbreak.panel.{out,err}` | 主屏幕上的网页要求重新配对时，再生成一次配对码（主屏幕与 Safari 的 cookie 可能是分开的） |
 | 取消手机配对 / 关掉手机访问 | 「取消 iPhone 的配对」「关掉手机访问」「手机丢了」 | 一台：操作面板「手机」里的「取消配对」；全部：`bash scripts/liveu.sh phone forget`；关掉：`bash scripts/liveu.sh phone off`（已配对的设备保留） | 手机丢了：先 `phone forget`，再请用户在 Tailscale 管理页把那台设备移除 |
-| 看 K 线 / 趋势 | 「看一下 7203 的 K 线」「6501 周 K 怎么样」「核心 ETF 月 K」「建议的股票有哪些」「看 MACD / DMI」「趋势线 / 支撑压力在哪」 | 打开操作面板（Mac：`open "http://127.0.0.1:8765/?book=paper"`；手机：面板地址）→ 持仓 / 核心 ETF / 建议的股票下面的 K 线，上面的「日K / 周K / 月K」与「副图 量 / MACD / DMI」切换；对话里要数字就读 `~/.qbreak/home/out/charts_paper.json`（K 线、MACD / DMI、趋势线 `tf.*.tl`、趋势标签）与 `live_unified_paper.json` 的 suggest / kline | 只展示；数据是执行器最近一次运行写的（不是盘中实时）；趋势标签是均线位置的机械描述；趋势线的延长不是验证过的预测（研究结果见 sim_changes / `var/out/trendline_study.md`） |
+| 看 K 线 / 趋势 | 「看一下 7203 的 K 线」「6501 周 K 怎么样」「核心 ETF 月 K」「建议的股票有哪些」「看 MACD / DMI」「趋势线 / 支撑压力在哪」 | 打开操作面板（Mac：`open "http://127.0.0.1:8765/?book=paper"`；手机：面板地址）→ 持仓 / 核心 ETF / 建议的股票下面的 K 线，上面的「日K / 周K / 月K」与「副图 量 / MACD / DMI」切换；对话里要数字就读 `~/.qbreak/home/out/charts_paper.json`（K 线、MACD / DMI、趋势线 `tf.*.tl`、趋势标签）与 `live_unified_paper.json` 的 suggest / kline | 只展示；数据是执行器最近一次运行写的（不是盘中实时）；趋势标签是均线位置的机械描述；趋势线的延长不是验证过的预测（研究结果见 sim_changes / `var/out/trendline_study.md`、`var/out/trendline_select_study.md`：方向、破线、质地特征都没有信息） |
 | 为什么持有 / 现在趋势 | 「为什么买 7203？」「持仓现在趋势怎么样？」 | 读 `~/.qbreak/home/out/live_unified_paper.json` 的 holding_view（或账本页面 / 操作面板 / 日志）；云端模拟盘看 `var/out/unified_today.json` 的 holding_view 与日报 ② | 只展示：买入那天的规则读数 + 均线位置的机械描述，不是预测；不给买卖建议 |
 | 直接在立花网站 / App 上人工买卖 | —— | 执行器管的股票（股票池 + 核心 ETF）在执行器之外买卖会让第二天的持仓核对停下 | 要卖请用上面的手动卖出；真要在网站上操作：先说「停」，再商量 |
 | 研究 / 改规则 | 「用 J-Quants 数据研究 XX，先登记再跑」 | 在 `~/qbreak-dev` 里：登记（提交）→ 运行 → 结果写进 sim_changes → 推送 | 模拟盘 / 实盘规则只在你确认后改 |
