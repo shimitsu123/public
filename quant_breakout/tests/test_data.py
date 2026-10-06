@@ -206,3 +206,91 @@ def test_index_missing_close_is_filled_from_intraday(monkeypatch, tmp_path):
     assert D.fill_index_from_intraday("^N225", daily.copy()) is daily or len(D.fill_index_from_intraday("^N225", daily.copy())) == len(daily)
     _at(monkeypatch, 2026, 9, 29, 11, 0)                                                    # 09-29 盘中：应有 09-28 → 不落后、不合成
     assert D.fill_index_from_intraday("^N225", daily.copy()) is not None and not D.FILLED
+
+
+def _cal_bars(end: str, n: int = 300, market: str = "JP", drop=()) -> pd.DataFrame:
+    """按交易日历（东证 / 纽约）生成的日线，drop 里的日子去掉（模拟 Yahoo 中间漏一天）。"""
+    from qbreak import calendar_us as cu
+    cal = cj.is_trading_day if market == "JP" else cu.is_trading_day
+    days = [d for d in pd.bdate_range(end=end, periods=int(n * 1.2)) if cal(d.date())][-n:]
+    days = [d for d in days if str(d.date()) not in set(drop)]
+    c = np.linspace(100, 120, len(days))
+    return pd.DataFrame({"Open": c, "High": c * 1.01, "Low": c * 0.99, "Close": c, "Volume": 1e6}, index=pd.DatetimeIndex(days))
+
+
+def test_missing_days_uses_trading_calendars():
+    assert D.missing_days("^N225", _cal_bars("2026-10-06")) == []                           # 9/21〜23 连休不算缺
+    assert D.missing_days("^N225", _bars("2026-10-06")) == []                               # 多出来的日子（祝日也有 K 线）不管
+    assert D.missing_days("^N225", _cal_bars("2026-10-06", drop=["2026-10-05"])) == [dt.date(2026, 10, 5)]
+    assert D.missing_days("^N225", _cal_bars("2026-10-06", drop=["2026-09-24", "2026-10-01"])) == [dt.date(2026, 9, 24), dt.date(2026, 10, 1)]
+    assert D.missing_days("^N225", _cal_bars("2026-10-06", drop=["2026-09-10"])) == []      # 10 个交易日以前的不管
+    assert D.missing_days("^GSPC", _cal_bars("2026-09-11", market="US")) == []              # 9/7 劳动节不算缺
+    assert D.missing_days("^GSPC", _cal_bars("2026-09-11", market="US", drop=["2026-09-08"])) == [dt.date(2026, 9, 8)]
+    for t in ("^FTSE", "^GDAXI", "^TNX", "7203.T", "1655.T"):                               # 日历不同 / 不是指数 → 不查
+        assert D.missing_days(t, _cal_bars("2026-10-06", drop=["2026-10-05"])) == []
+
+
+def test_mid_gap_filled_from_intraday_and_unfilled_recorded(monkeypatch, tmp_path):
+    from qbreak import paths
+    monkeypatch.setattr(paths, "cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(D, "_has_parquet", lambda: False)
+    monkeypatch.setattr(D.time, "sleep", lambda s: None)
+    _at(monkeypatch, 2026, 10, 6, 10, 30)                                                   # 10-06 盘中：应有 10-05
+    monkeypatch.setattr(D, "_now_utc", lambda: dt.datetime(2026, 10, 6, 1, 30, tzinfo=dt.timezone.utc))
+    daily = _cal_bars("2026-10-06", drop=["2026-10-05"])                                    # 有 10-02、10-06（盘中）、没有 10-05
+    monkeypatch.setattr(D, "_yf_download", lambda batch, years, tries: {t: daily.copy() for t in batch})
+    calls = []
+
+    def fake_intraday(t, days=5, interval="5m"):
+        calls.append((t, days))
+        return pd.concat([_bars5m("2026-10-02", c=68309.0), _bars5m("2026-10-05", o=69000.0, c=69928.0), _bars5m("2026-10-06", n=20)])
+    monkeypatch.setattr(D, "_yf_intraday", fake_intraday)
+    D.FILLED.clear()
+    D.GAPS.clear()
+    D.LAGGING.clear()
+    got = D.load_universe(["^N225", "7203.T"], DataConfig(provider="yfinance", years=2, allow_synthetic=False).validate())
+    n = got["^N225"]
+    assert pd.Timestamp("2026-10-05") in n.index and abs(n.loc["2026-10-05", "Close"] - 69928.0) < 1e-6
+    assert abs(n.loc["2026-10-05", "Open"] - 69000.0) < 1e-6 and n.index[-1] == pd.Timestamp("2026-10-06")    # 盘中的 10-06 不动
+    assert D.FILLED["^N225"]["dates"] == ["2026-10-05"] and D.FILLED["^N225"]["gap_dates"] == ["2026-10-05"]
+    assert D.FILLED["^N225"]["expected"] is None and "^N225" not in D.GAPS and calls == [("^N225", 5)]   # 个股不取分钟线
+    import json
+    m = json.loads(D._meta_path("^N225", 2).read_text(encoding="utf-8"))
+    assert m["filled"] == ["2026-10-05"]
+    # 再读（缓存里已补上）→ 不再取分钟线
+    calls.clear()
+    D.load_universe(["^N225"], DataConfig(provider="yfinance", years=2, allow_synthetic=False).validate())
+    assert calls == [] and "^N225" not in D.GAPS
+    # 分钟线里没有那一天 / 取不到 → 原样返回，记进 GAPS
+    D.FILLED.clear()
+    monkeypatch.setattr(D, "_yf_intraday", lambda t, days=5, interval="5m": _bars5m("2026-10-06"))
+    same = D.fill_index_from_intraday("^N225", daily.copy())
+    assert len(same) == len(daily) and D.GAPS["^N225"]["dates"] == ["2026-10-05"] and not D.FILLED
+
+    def boom(t, days=5, interval="5m"):
+        raise RuntimeError("network")
+    monkeypatch.setattr(D, "_yf_intraday", boom)
+    D.GAPS.clear()
+    assert len(D.fill_index_from_intraday("^N225", daily.copy())) == len(daily) and D.GAPS["^N225"]["dates"] == ["2026-10-05"]
+    assert D.fill_index_from_intraday("^N225", _cal_bars("2026-10-06")) is not None and "^N225" not in D.GAPS   # 补齐了 → 清掉
+    # 缺日更早 → 分钟线取的天数要盖到那天（最多 59 天）
+    seen = []
+    monkeypatch.setattr(D, "_yf_intraday", lambda t, days=5, interval="5m": seen.append(days) or _bars5m("2026-09-24"))
+    D.fill_index_from_intraday("^N225", _cal_bars("2026-10-06", drop=["2026-09-24"]))
+    assert seen == [15] and D.FILLED["^N225"]["gap_dates"] == ["2026-09-24"]
+
+
+def test_gap_fill_error_never_blocks_loading(monkeypatch, tmp_path):
+    from qbreak import paths
+    monkeypatch.setattr(paths, "cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(D, "_has_parquet", lambda: False)
+    monkeypatch.setattr(D.time, "sleep", lambda s: None)
+    _at(monkeypatch, 2026, 10, 6, 10, 30)
+    daily = _cal_bars("2026-10-06", drop=["2026-10-05"])
+    monkeypatch.setattr(D, "_yf_download", lambda batch, years, tries: {t: daily.copy() for t in batch})
+
+    def bad(*a, **k):
+        raise ValueError("unexpected")
+    monkeypatch.setattr(D, "fill_index_from_intraday", bad)
+    got = D.load_universe(["^N225"], DataConfig(provider="yfinance", years=2, allow_synthetic=False).validate())
+    assert len(got["^N225"]) == len(daily)                                               # 原样返回，不报错

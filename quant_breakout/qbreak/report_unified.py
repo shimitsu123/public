@@ -46,6 +46,9 @@ def build_unified_data() -> dict:
             "usdjpy_src": "模拟盘状态" if hist and hist[-1][4] else td.get("usdjpy_src"),
             "preview": bool(td.get("preview")) and not hist, "data_dates": td.get("data_dates") or {},
             "lagging": td.get("lagging") or {},
+            "filled": td.get("filled") or {},                    # 指数日线用 5 分钟线合成的（「数据完整性 · 自动修复」）
+            "data_fixes": td.get("data_fixes") or [],            # 拆股当天分红口径的修正（同上）
+            "gaps": td.get("gaps") or {},                        # 指数日线中间缺日、5 分钟线也补不上的（「数据完整性」）
             "bar_date": st.get("last_date"),
             "positions": td.get("positions") or {}, "core_units": st.get("core_units") or {},
             "core_last": st.get("core_last") or {}, "todo": td.get("todo") or {}, "extras": td.get("extras") or {},
@@ -114,10 +117,14 @@ def fixed_items(d: dict) -> list[str]:
     """数据层自动修好的（不算缺，写在「数据完整性」下面让你看得见）：指数日线用分钟线合成、拆股当天的分红口径修正、能被分红解释的比值变化。"""
     out = []
     for k, v in sorted((d.get("filled") or {}).items()):
-        ds = "、".join(v.get("dates") or [])
+        dates, gd = list(v.get("dates") or []), list(v.get("gap_dates") or [])
+        ds = "、".join(dates)
+        tail = [x for x in dates if x not in gd]
+        why = "；".join(([f"{'、'.join(gd)} Yahoo 日线中间漏了（前后的日子都有）"] if gd else [])
+                       + ([f"{'、'.join(tail)} Yahoo 没给收盘（只有开盘）或还没更新"] if tail else []))
         c = v.get("close")
-        out.append(f"{k} {ds} 的日线 Yahoo 没给收盘（只有开盘）→ 用当天的 5 分钟线合成（收盘 {c:,.2f}；与正式收盘可能差 0.1% 以内，"
-                   "正式日线到了会自动换掉）—— 指数 / 核心 ETF 判断与判断层市场读数按合成的收盘" if isinstance(c, (int, float))
+        out.append(f"{k} {ds} 的日线：{why} → 用当天的 5 分钟线合成（{dates[-1]} 收盘 {c:,.2f}；与正式收盘可能差 0.1% 以内，"
+                   "正式日线到了会自动换掉）—— 指数 / 核心 ETF 判断与判断层市场读数按合成的日线" if isinstance(c, (int, float)) and dates
                    else f"{k} {ds} 的日线用 5 分钟线合成")
     for f in d.get("data_fixes") or []:
         out.append(f"{f.get('ticker')} {f.get('date')}：拆股 1 拆 {f.get('split'):g} 当天的分红 {f.get('div'):g} 円是拆股前每股的金额，Yahoo 当成 "
@@ -162,6 +169,8 @@ def missing_items(d: dict) -> list[str]:
     idx = {k: v for k, v in lag.items() if k.startswith("^") or k in ((cfg.get("core") or {}))}
     for k, v in idx.items():
         out.append(f"行情落后：{k} 最新 {v['last']}，应有 {v['expected']}（已重新下载仍缺，指数 / 核心 ETF 相关判断按旧数据）")
+    for k, v in sorted((d.get("gaps") or {}).items()):
+        out.append(f"行情中间缺日：{k} {'、'.join(v.get('dates') or [])}（Yahoo 日线漏了，5 分钟线也补不上；用到这只指数的指标少算这几天）")
     stocks = sorted(k for k in lag if k not in idx)
     if stocks:
         out.append(f"行情落后：个股 {len(stocks)} 只（例 {'、'.join(stocks[:3])} 最新 {lag[stocks[0]]['last']}，"

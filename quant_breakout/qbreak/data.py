@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -387,8 +387,38 @@ def behind(t: str, df: pd.DataFrame | None) -> tuple[str, str] | None:
     return (str(last), str(exp)) if last < exp else None
 
 
-FILLED: dict[str, dict] = {}       # 本进程里用分钟线合成的指数日线：{代码: {"dates": [...], "close": 最新合成收盘, "source": "yfinance 5m"}}
+FILLED: dict[str, dict] = {}       # 本进程里用分钟线合成的指数日线：{代码: {"dates": [...], "gap_dates": [中间缺的], "close": 最新合成收盘, "source": "yfinance 5m"}}
 FILL_MIN_BARS = 30                 # 一天至少要有这么多根 5 分钟线才合成（日本 60〜68 根、美国 78 根）
+GAP_LOOKBACK = 10                  # 中间缺日：日线最后一天之前往回看多少个交易日（Yahoo 的 5 分钟线只给最近约 60 天）
+GAP_TICKERS = {"JP": ("^N225", "^TPX", "^TOPX"),
+               "US": ("^GSPC", "^IXIC", "^NDX", "^DJI", "^RUT", "^SOX", "^VIX", "^VIX3M", "^SKEW", "^SP500TR")}
+GAPS: dict[str, dict] = {}         # 本进程里中间缺日、5 分钟线也补不上的指数：{代码: {"dates": [...]}}（日报「数据完整性」列出）
+
+
+def missing_days(ticker: str, df: pd.DataFrame | None, lookback: int = GAP_LOOKBACK) -> list:
+    """日线最后一天之前 lookback 个交易日里（按该市场的交易日历）缺的日子。Yahoo 指数日线偶尔中间漏一天
+    （例 ^N225 2026-10-05：有 10-02 与 10-06、没有 10-05）；behind 只看最后一天，查不出来。
+    只查交易日历确定的指数（GAP_TICKERS：东证 / 纽约的股票指数）；欧洲指数、债券 / 商品指数的休市日不同，不查（免得误报）。"""
+    m = next((k for k, v in GAP_TICKERS.items() if ticker in v), None)
+    if m is None or df is None or len(df) < 2:
+        return []
+    if m == "JP":
+        from .calendar_jp import is_trading_day
+    else:
+        from .calendar_us import is_trading_day
+    idx = pd.DatetimeIndex(df.index)
+    have = set(idx.normalize().date)
+    first, d = idx[0].date(), idx[-1].date()
+    out, n = [], 0
+    while n < lookback:
+        d -= timedelta(days=1)
+        if d < first:
+            break
+        if is_trading_day(d):
+            n += 1
+            if d not in have:
+                out.append(d)
+    return sorted(out)
 
 
 def _yf_intraday(ticker: str, days: int = 5, interval: str = "5m") -> pd.DataFrame:
@@ -399,21 +429,30 @@ def _yf_intraday(ticker: str, days: int = 5, interval: str = "5m") -> pd.DataFra
 
 
 def fill_index_from_intraday(ticker: str, df: pd.DataFrame | None, now: datetime | None = None) -> pd.DataFrame | None:
-    """指数（^ 开头）的日线落后于交易日历（Yahoo 偶尔只给开盘、收盘是 NaN，例 ^N225 2026-09-29）→ 用那几天的 5 分钟线合成日线
-    （开 = 第一根开盘、高 / 低 = 极值、收 = 最后一根收盘、量 = 合计）补上，只补已收盘的日子；合成的收盘与正式收盘可能差 0.1% 以内，
-    下次整段重新下载时会被正式日线换掉。补上的记进 FILLED（日报「数据完整性 · 自动修复」列出）。取不到 / 不够 → 原样返回。"""
+    """指数（^ 开头）的日线缺日 → 用那几天的 5 分钟线合成日线（开 = 第一根开盘、高 / 低 = 极值、收 = 最后一根收盘、量 = 合计）补上，
+    只补已收盘、5 分钟线够 FILL_MIN_BARS 根的日子；合成的收盘与正式收盘可能差 0.1% 以内，下次整段重新下载时会被正式日线换掉。
+    两种缺：① 最后一天落后于交易日历（behind；Yahoo 偶尔只给开盘、收盘是 NaN，例 ^N225 2026-09-29）；
+    ② 最近 GAP_LOOKBACK 个交易日中间漏了一天（missing_days；例 ^N225 2026-10-05，2026-10-06 加）。
+    补上的记进 FILLED（日报「数据完整性 · 自动修复」列出）；中间缺而分钟线也补不上的记进 GAPS（日报「数据完整性」列出）。
+    取不到 / 不够 → 原样返回。"""
     if df is None or not len(df) or not ticker.startswith("^"):
         return df
     b = behind(ticker, df)
-    if b is None:
+    gaps = missing_days(ticker, df)
+    if b is None and not gaps:
+        GAPS.pop(ticker, None)
         return df
     m = _market_of(ticker)
+    n_now = now or _now_utc()
+    span = (n_now.date() - min(gaps)).days + 3 if gaps else 5                     # 5 分钟线要盖到最早的缺日
     try:
-        bars = _yf_intraday(ticker)
+        bars = _yf_intraday(ticker, days=max(5, min(59, span)))
     except Exception as e:                                             # noqa: BLE001
         log.warning("%s 分钟线取不到（不合成日线）：%s", ticker, e)
-        return df
+        bars = None
     if bars is None or not len(bars) or "Close" not in bars.columns:
+        if gaps:
+            GAPS[ticker] = {"dates": [str(d) for d in gaps]}
         return df
     from zoneinfo import ZoneInfo
 
@@ -426,29 +465,35 @@ def fill_index_from_intraday(ticker: str, df: pd.DataFrame | None, now: datetime
     bars.index = idx
     bars = bars.dropna(subset=["Close"])
     last = pd.Timestamp(df.index[-1]).normalize()
-    exp = pd.Timestamp(b[1])
-    n_day, n_closed = market_session_closed(m, (now or _now_utc()).astimezone(tz))
-    added = []
+    exp = pd.Timestamp(b[1]) if b else last
+    want = {pd.Timestamp(g) for g in gaps}
+    n_day, n_closed = market_session_closed(m, n_now.astimezone(tz))
     rows = {}
     for day, g in bars.groupby(bars.index.tz_localize(None).normalize()):
         day = pd.Timestamp(day)
-        if day <= last or day > exp or len(g) < FILL_MIN_BARS:
+        if not (last < day <= exp or day in want) or len(g) < FILL_MIN_BARS:
             continue
         if day.date() == n_day and not n_closed:
             continue                                                   # 今天还没收盘
         vol = pd.to_numeric(g["Volume"], errors="coerce").fillna(0).sum() if "Volume" in g.columns else 0.0
         rows[day] = {"Open": float(g["Open"].iloc[0]), "High": float(g["High"].max()), "Low": float(g["Low"].min()),
                      "Close": float(g["Close"].iloc[-1]), "Volume": float(vol)}
-        added.append(day)
+    left = [d for d in gaps if pd.Timestamp(d) not in rows]
+    if left:
+        GAPS[ticker] = {"dates": [str(d) for d in left]}
+        log.warning("%s 日线中间缺 %s，5 分钟线也补不上", ticker, "、".join(str(d) for d in left))
+    else:
+        GAPS.pop(ticker, None)
     if not rows:
         return df
+    added = sorted(rows)
     add = pd.DataFrame.from_dict(rows, orient="index")[OHLCV]
     out = pd.concat([df[[c for c in OHLCV if c in df.columns]], add]).sort_index()
     out = out[~out.index.duplicated(keep="last")]
-    FILLED[ticker] = {"dates": [str(d.date()) for d in added], "close": rows[added[-1]]["Close"], "source": "yfinance 5m",
-                      "expected": b[1]}
-    log.warning("%s 日线只到 %s（应有 %s）→ 用 5 分钟线合成 %s（收盘 %.2f）", ticker, last.date(), b[1],
-                "、".join(str(d.date()) for d in added), rows[added[-1]]["Close"])
+    FILLED[ticker] = {"dates": [str(d.date()) for d in added], "gap_dates": [str(d.date()) for d in added if d in want],
+                      "close": rows[added[-1]]["Close"], "source": "yfinance 5m", "expected": b[1] if b else None}
+    log.warning("%s 日线缺 %s（最新 %s%s）→ 用 5 分钟线合成（收盘 %.2f）", ticker, "、".join(str(d.date()) for d in added), last.date(),
+                f"、应有 {b[1]}" if b else "", rows[added[-1]]["Close"])
     return out
 
 
@@ -538,13 +583,21 @@ def load_universe(tickers: list[str], cfg: DataConfig | None = None,
         if t not in out:
             log.warning("%s 重新下载失败，暂用旧缓存（最新 %s）", t, c.index[-1].date())
             out[t] = c
-    if cfg.provider == "yfinance":              # 指数的日线落后（Yahoo 只给开盘、收盘 NaN）→ 用 5 分钟线合成，补上的写进缓存
+    if cfg.provider == "yfinance":              # 指数的日线落后 / 中间缺日（Yahoo 只给开盘、收盘 NaN，或漏一天）→ 用 5 分钟线合成，补上的写进缓存
         for t in tickers:
-            if t.startswith("^") and t in out and behind(t, out[t]) is not None:
+            if not t.startswith("^") or t not in out:
+                continue
+            try:
+                if behind(t, out[t]) is None and not missing_days(t, out[t]):
+                    GAPS.pop(t, None)
+                    continue
                 filled = fill_index_from_intraday(t, out[t])
-                if filled is not None and len(filled) > len(out[t]):
-                    out[t] = filled
-                    _write_cache(t, cfg.years, filled, "yfinance", extra={"filled": FILLED[t]["dates"]})
+            except Exception as e:                                         # noqa: BLE001  补缺失败绝不挡住载入行情
+                log.warning("%s 指数日线补缺失败（按原样用）：%s", t, e)
+                continue
+            if filled is not None and len(filled) > len(out[t]):
+                out[t] = filled
+                _write_cache(t, cfg.years, filled, "yfinance", extra={"filled": FILLED[t]["dates"]})
     for t in tickers:
         b = behind(t, out.get(t))
         if b:

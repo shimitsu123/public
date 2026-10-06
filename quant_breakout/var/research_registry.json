@@ -13762,5 +13762,22 @@
    "照着做（避险 0% / 减仓观察 50%）的 Calmar 只在 2017〜 与美股 1990 年代更高（回撤减半、年化少 5〜7.5 pp），全期不比随机择时好"
   ],
   "notes": "报告 27 期下一个交易时段实际都没有 −3%（概率之和 美 3.39 / 日 2.84 次）；机械重现的总行动与报告一致 11 / 27 期（重现从 9/16 就是避险）；现在重现 美 避险（利率 + 原油）/ 日 减仓观察（日债）/ 总 避险；与现在相似的美股局面（利率红线 + 指数近高点 + VIX < 20）24 段之后 60 日平均 −1.38%（为正 39%，只描述）；模拟盘不变 → 待办〔71〕"
+ },
+ {
+  "line": 9671,
+  "date": "2026-10-06",
+  "title": "数据层：指数日线中间漏掉的日子（最近 10 个交易日、东证 / 纽约日历确定的股票指数）也用当天 5 分钟线合成补上（例 ^N225 2026-10-05）；日报「数据完整性 · 自动修复」改为真的显示 filled / data_fixes（2026-09-29 起一直没带上），补不上的列为「行情中间缺日」",
+  "kind": "engineering",
+  "domain": "数据/工程",
+  "registration": null,
+  "script": "qbreak/data.py（missing_days / fill_index_from_intraday / GAPS）、qbreak/report_unified.py、run.py",
+  "output": "var/out/unified_today.json 的 filled（gap_dates）/ gaps；日报「数据完整性」",
+  "candidates": [],
+  "baseline": null,
+  "windows": null,
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "真实 5 分钟线合成 vs 正式日线：日经 10-05 收盘 −0.027%、S&P 10-02 +0.010%（开 / 高 / 低一致）；13 个指数重新下载无误判；不改规则 / 参数 / 仓位"
  }
 ]

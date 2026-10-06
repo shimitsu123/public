@@ -368,3 +368,23 @@ def test_holdings_dashboard_is_on_top_with_meters_and_status():
     d["timeline"]["holdings"] = []
     html2 = RU.render_unified_html(d)
     assert "4 个名额全空" in html2 and "卖出线 ¥" not in html2
+
+
+def test_filled_gaps_and_data_fixes_reach_the_report_data():
+    """sim-day 写进 unified_today.json 的 filled / data_fixes / gaps 要进日报数据（2026-10-06 以前漏了，「自动修复」看不到 5 分钟线补的日线）。"""
+    _write(["JP"])
+    td = read_json(paths.out_dir() / "unified_today.json")
+    td["filled"] = {"^N225": {"dates": ["2026-10-05"], "gap_dates": ["2026-10-05"], "close": 69928.05, "source": "yfinance 5m",
+                              "expected": None}}
+    td["data_fixes"] = [{"ticker": "2501.T", "date": "2025-12-29", "div": 18.0, "split": 5.0, "yield_yahoo": 1.09, "yield_fixed": 0.22}]
+    td["gaps"] = {"^GSPC": {"dates": ["2026-10-02"]}}
+    write_json(paths.out_dir() / "unified_today.json", td)
+    html = write_unified_report().read_text(encoding="utf-8")
+    rd = read_json(paths.out_dir() / "report_data.json")
+    assert any("^N225 2026-10-05" in x and "中间漏了" in x and "69,928.05" in x for x in rd["fixed"])
+    assert any("2501.T" in x and "0.22%" in x for x in rd["fixed"])
+    assert any(x.startswith("行情中间缺日：^GSPC 2026-10-02") for x in rd["missing"])
+    assert "中间漏了" in html and "行情中间缺日" in html
+    from qbreak import report_unified as RU
+    tail = RU.fixed_items({"filled": {"^N225": {"dates": ["2026-10-05", "2026-10-06"], "gap_dates": ["2026-10-05"], "close": 70100.0}}})
+    assert "2026-10-05 Yahoo 日线中间漏了" in tail[0] and "2026-10-06 Yahoo 没给收盘" in tail[0] and "2026-10-06 收盘 70,100.00" in tail[0]
