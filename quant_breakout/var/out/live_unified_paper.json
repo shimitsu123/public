@@ -1,8 +1,8 @@
 {
  "broker": "PaperBroker",
- "decided_on": "2026-10-05",
- "fill_day": "2026-10-06",
- "equity_jpy": 1008375,
+ "decided_on": "2026-10-06",
+ "fill_day": "2026-10-07",
+ "equity_jpy": 1021938,
  "cash_jpy": 192,
  "positions": {},
  "core_units": {
@@ -25,6 +25,7 @@
   "cash_sync": 0,
   "gate": 0
  },
+ "manual": null,
  "events": [
   {
    "at": "2026-09-29T07:01:33+09:00",
@@ -44,8 +45,8 @@
  ],
  "same_as_sim": true,
  "compare": {
-  "exec_date": "2026-10-05",
-  "sim_date": "2026-10-05",
+  "exec_date": "2026-10-06",
+  "sim_date": "2026-10-06",
   "comparable": true,
   "same": true,
   "equity_diff_jpy": 0.0,

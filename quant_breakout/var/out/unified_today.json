@@ -1,7 +1,7 @@
 {
- "date": "2026-10-06",
- "bar_date": "2026-10-05",
- "equity_jpy": 1008374.69,
+ "date": "2026-10-07",
+ "bar_date": "2026-10-06",
+ "equity_jpy": 1021937.7,
  "cash_jpy": 192,
  "cash_usd": 0.0,
  "todo": {
@@ -38,37 +38,37 @@
     "quant_label": "risk_on",
     "quant_mult": 1.0,
     "above_ma200": true,
-    "vol20_pct": 22.0,
-    "dd252_pct": -3.4,
+    "vol20_pct": 22.1,
+    "dd252_pct": -2.2,
     "overlay_action": "避险",
     "overlay_mult": 0.0,
-    "overlay_as_of": "2026-10-05",
-    "crash_prob": 12.0,
+    "overlay_as_of": "2026-10-06",
+    "crash_prob": 10.0,
     "mult": 0.0,
     "label": "risk_on｜报告:避险",
     "bullbear": {
      "state": "bull",
      "since": "2025-07-02",
-     "days": 306,
+     "days": 307,
      "changed_today": false,
      "detector": "ma_band(L=250,b=0.03,k=5)",
-     "close": 69928.05,
-     "asof": "2026-10-05",
+     "close": 70773.8,
+     "asof": "2026-10-06",
      "flip_to": "bear",
-     "level": 56366.74,
+     "level": 56464.37,
      "need_days": 5,
-     "ma": 58110.04,
-     "distance_pct": 24.06,
+     "ma": 58210.69,
+     "distance_pct": 25.34,
      "phase": "bull_firm",
      "phase_label": "牛市·稳固",
-     "phase_text": "比 250 日均线高 20.3%（20 个交易日前 +14.2%，+6.2 个百分点，远离转熊线（走强））；要再跌 19.4% 并连续 5 天收在线下才会转熊",
-     "ma_dev_pct": 20.34,
-     "ma_dev_pct_prev": 14.17,
-     "ma_dev_change_pp": 6.2,
-     "to_flip_pct": -19.39,
+     "phase_text": "比 250 日均线高 21.6%（20 个交易日前 +13.8%，+7.8 个百分点，远离转熊线（走强））；要再跌 20.2% 并连续 5 天收在线下才会转熊",
+     "ma_dev_pct": 21.58,
+     "ma_dev_pct_prev": 13.8,
+     "ma_dev_change_pp": 7.8,
+     "to_flip_pct": -20.22,
      "confirm_days": 0,
      "confirm_need": 5,
-     "flip_line": 56366.74,
+     "flip_line": 56464.37,
      "index": "^N225",
      "gating": false
     },
@@ -77,7 +77,7 @@
     "fx": {},
     "fwd_judgment": {
      "applied": true,
-     "as_of": "2026-10-05",
+     "as_of": "2026-10-06",
      "points": 1,
      "mult": 0.75,
      "before": 0.0
@@ -85,37 +85,38 @@
    },
    "macro": {
     "features": {
-     "date": "2026-10-05",
-     "brent": 100.32,
-     "brent_chg20_pct": 4.196,
-     "us10y": 5.311,
-     "vix": 15.52,
-     "usdjpy": 157.818
+     "date": "2026-10-06",
+     "brent": 101.15,
+     "brent_chg20_pct": 3.299,
+     "us10y": 5.269,
+     "vix": 15.01,
+     "usdjpy": 158.104
     },
     "overlay": {
-     "as_of": "2026-10-05",
-     "source": "市场风险报告 2026-10-05 22:45 晚报",
-     "brent": 102.06,
-     "wti": 89.56,
-     "us10y": 5.28,
-     "us2y": 4.83,
-     "fed_hike_prob": 18.0,
+     "as_of": "2026-10-06",
+     "source": "市场风险报告 2026-10-06 22:28 晚报",
+     "brent": 98.67,
+     "wti": 87.77,
+     "us10y": 5.31,
+     "us2y": null,
+     "fed_hike_prob": null,
      "fed_next": "2026-10-28",
-     "vix": 16.25,
-     "hy_oas_bp": 324.0,
-     "usdjpy": 158.19,
-     "jgb10y": 3.09,
-     "boj_hike_prob": null,
+     "vix": 15.52,
+     "hy_oas_bp": 310.0,
+     "usdjpy": 158.0,
+     "jgb10y": 3.1,
+     "boj_hike_prob": 12.0,
      "boj_next": "2026-10-30",
-     "breadth_pct": 24.7,
+     "breadth_pct": 26.8,
      "stale": false,
      "age_days": 1
     },
     "mult": 0.5,
     "fired": [
-     "Brent 100 ≥ 100 → ×0.75",
-     "美 10Y 5.31% ≥ 5.2 → ×0.5",
-     "JGB 10Y 3.09% ≥ 3.05 → ×0.75"
+     "Brent 101 ≥ 100 → ×0.75",
+     "美 10Y 5.27% ≥ 5.2 → ×0.5",
+     "USD/JPY 158.1 ≥ 158（介入区，出口股） → ×0.75",
+     "JGB 10Y 3.10% ≥ 3.05 → ×0.75"
     ],
     "oil_state": "high",
     "sector_tilts": {
@@ -131,7 +132,7 @@
      },
      "software_internet": {
       "mult": 0.5,
-      "why": "10Y 5.31% ≥ 5：高估值成长 ×0.5",
+      "why": "10Y 5.27% ≥ 5：高估值成长 ×0.5",
       "n": 20
      },
      "trading": {
@@ -141,7 +142,7 @@
      },
      "semis": {
       "mult": 0.5,
-      "why": "10Y 5.31% ≥ 5：高估值成长 ×0.5",
+      "why": "10Y 5.27% ≥ 5：高估值成长 ×0.5",
       "n": 14
      },
      "retail": {
@@ -185,7 +186,7 @@
       "n": 5
      }
     },
-    "fill_date": "2026-10-06",
+    "fill_date": "2026-10-07",
     "event_block": null,
     "next_events": [
      {
@@ -231,327 +232,327 @@
    },
    "watchlist": [
     {
-     "ticker": "2432.T",
-     "status": "watch",
-     "score": 73.5,
-     "close": 2492.0,
-     "range_pct": 13.6,
-     "macd_gap_pct": -0.249,
-     "hist_up": false,
-     "vol_ratio": 0.79,
-     "to_box_top_pct": 8.2,
+     "ticker": "8795.T",
+     "status": "imminent",
+     "score": 44.6,
+     "close": 4892.0,
+     "range_pct": 10.7,
+     "macd_gap_pct": -0.099,
+     "hist_up": true,
+     "vol_ratio": 1.01,
+     "to_box_top_pct": 4.1,
      "breakout": false,
-     "lot_cost": 249200.0,
-     "affordable": true,
+     "lot_cost": 489200.0,
+     "affordable": false,
      "pref_ok": true,
      "pref_note": "",
-     "top_risk": "落后指数-7%",
-     "rsi": 44.0,
-     "rs_pct": -6.7,
-     "sector": "软件互联网",
-     "tilt": 0.5,
-     "tilt_why": "10Y 5.31% ≥ 5：高估值成长 ×0.5",
-     "fit": 0.172,
-     "fit_why": "油价↑ 受益；日本利率↑ 受益",
+     "top_risk": "落后指数-3%",
+     "rsi": 53.0,
+     "rs_pct": -3.3,
+     "sector": "保险",
+     "tilt": 1.0,
+     "tilt_why": "",
+     "fit": 0.118,
+     "fit_why": "美国利率↑ 受损；日本利率↑ 受益",
      "fit_tier": "顺风"
     },
     {
-     "ticker": "3861.T",
+     "ticker": "2432.T",
      "status": "watch",
-     "score": 72.4,
-     "close": 828.1,
-     "range_pct": 10.3,
-     "macd_gap_pct": -0.36,
+     "score": 71.3,
+     "close": 2490.0,
+     "range_pct": 12.6,
+     "macd_gap_pct": -0.305,
      "hist_up": false,
-     "vol_ratio": 1.15,
-     "to_box_top_pct": 6.2,
+     "vol_ratio": 0.81,
+     "to_box_top_pct": 8.3,
      "breakout": false,
-     "lot_cost": 82810.0,
+     "lot_cost": 249000.0,
      "affordable": true,
      "pref_ok": true,
      "pref_note": "",
-     "top_risk": "",
-     "rsi": 40.0,
-     "rs_pct": 1.7,
-     "sector": "纸浆",
+     "top_risk": "落后指数-10%",
+     "rsi": 44.0,
+     "rs_pct": -10.1,
+     "sector": "软件互联网",
      "tilt": 0.5,
-     "tilt_why": "油价高位：paper ×0.5",
-     "fit": 0.064,
-     "fit_why": "美国利率↑ 受损；农产品综合↑ 受益",
+     "tilt_why": "10Y 5.27% ≥ 5：高估值成长 ×0.5",
+     "fit": 0.189,
+     "fit_why": "油价↑ 受益；日本利率↑ 受益",
      "fit_tier": "顺风"
     },
     {
      "ticker": "7186.T",
      "status": "watch",
-     "score": 70.7,
-     "close": 1893.5,
+     "score": 69.8,
+     "close": 1940.0,
      "range_pct": 14.0,
-     "macd_gap_pct": 0.063,
-     "hist_up": false,
-     "vol_ratio": 0.67,
-     "to_box_top_pct": 4.1,
+     "macd_gap_pct": 0.192,
+     "hist_up": true,
+     "vol_ratio": 0.58,
+     "to_box_top_pct": 1.6,
      "breakout": false,
-     "lot_cost": 189350.0,
+     "lot_cost": 194000.0,
      "affordable": true,
      "pref_ok": true,
      "pref_note": "",
-     "top_risk": "",
-     "rsi": 52.0,
-     "rs_pct": 1.9,
+     "top_risk": "落后指数-1%",
+     "rsi": 57.0,
+     "rs_pct": -0.6,
      "sector": "银行",
      "tilt": 1.0,
      "tilt_why": "",
-     "fit": 0.578,
+     "fit": 0.471,
      "fit_why": "日本利率↑ 受益；美国利率↑ 受损",
-     "fit_tier": "顺风"
-    },
-    {
-     "ticker": "8750.T",
-     "status": "watch",
-     "score": 68.6,
-     "close": 1816.0,
-     "range_pct": 11.9,
-     "macd_gap_pct": -0.383,
-     "hist_up": false,
-     "vol_ratio": 0.87,
-     "to_box_top_pct": 5.9,
-     "breakout": false,
-     "lot_cost": 181600.0,
-     "affordable": true,
-     "pref_ok": true,
-     "pref_note": "",
-     "top_risk": "出货日6；落后指数-2%",
-     "rsi": 47.0,
-     "rs_pct": -1.6,
-     "sector": "保险",
-     "tilt": 1.0,
-     "tilt_why": "",
-     "fit": 0.05,
-     "fit_why": "美国利率↑ 受损；日本利率↑ 受益",
      "fit_tier": "顺风"
     },
     {
      "ticker": "8601.T",
      "status": "watch",
-     "score": 66.1,
-     "close": 1755.5,
+     "score": 62.9,
+     "close": 1772.5,
      "range_pct": 10.5,
-     "macd_gap_pct": -0.629,
-     "hist_up": false,
-     "vol_ratio": 1.11,
-     "to_box_top_pct": 8.1,
+     "macd_gap_pct": -0.576,
+     "hist_up": true,
+     "vol_ratio": 0.79,
+     "to_box_top_pct": 7.1,
      "breakout": false,
-     "lot_cost": 175550.0,
+     "lot_cost": 177250.0,
      "affordable": true,
      "pref_ok": true,
      "pref_note": "",
-     "top_risk": "长上影",
-     "rsi": 41.0,
-     "rs_pct": 2.2,
+     "top_risk": "落后指数-3%",
+     "rsi": 44.0,
+     "rs_pct": -3.1,
      "sector": "金融",
      "tilt": 1.0,
      "tilt_why": "",
-     "fit": 0.202,
+     "fit": 0.141,
      "fit_why": "美国利率↑ 受损；日本利率↑ 受益",
+     "fit_tier": "顺风"
+    },
+    {
+     "ticker": "8306.T",
+     "status": "watch",
+     "score": 44.6,
+     "close": 3671.0,
+     "range_pct": 12.8,
+     "macd_gap_pct": -0.071,
+     "hist_up": true,
+     "vol_ratio": 0.84,
+     "to_box_top_pct": 2.5,
+     "breakout": false,
+     "lot_cost": 367100.0,
+     "affordable": false,
+     "pref_ok": true,
+     "pref_note": "",
+     "top_risk": "",
+     "rsi": 55.0,
+     "rs_pct": 4.2,
+     "sector": "银行",
+     "tilt": 1.0,
+     "tilt_why": "",
+     "fit": 0.511,
+     "fit_why": "日本利率↑ 受益；美国利率↑ 受损",
      "fit_tier": "顺风"
     },
     {
      "ticker": "8316.T",
      "status": "watch",
-     "score": 45.7,
-     "close": 3374.0,
+     "score": 40.1,
+     "close": 3429.0,
      "range_pct": 13.1,
-     "macd_gap_pct": -0.039,
+     "macd_gap_pct": 0.066,
      "hist_up": true,
-     "vol_ratio": 0.88,
-     "to_box_top_pct": 4.8,
+     "vol_ratio": 0.71,
+     "to_box_top_pct": 3.1,
      "breakout": false,
-     "lot_cost": 337400.0,
+     "lot_cost": 342900.0,
      "affordable": false,
      "pref_ok": true,
      "pref_note": "",
-     "top_risk": "",
-     "rsi": 51.0,
-     "rs_pct": 1.6,
+     "top_risk": "落后指数-0%",
+     "rsi": 55.0,
+     "rs_pct": -0.4,
      "sector": "银行",
      "tilt": 1.0,
      "tilt_why": "",
-     "fit": 0.496,
+     "fit": 0.454,
      "fit_why": "日本利率↑ 受益；美国利率↑ 受损",
-     "fit_tier": "顺风"
-    },
-    {
-     "ticker": "8795.T",
-     "status": "watch",
-     "score": 38.0,
-     "close": 4779.0,
-     "range_pct": 10.7,
-     "macd_gap_pct": -0.241,
-     "hist_up": false,
-     "vol_ratio": 1.01,
-     "to_box_top_pct": 6.5,
-     "breakout": false,
-     "lot_cost": 477900.0,
-     "affordable": false,
-     "pref_ok": true,
-     "pref_note": "",
-     "top_risk": "落后指数-4%",
-     "rsi": 47.0,
-     "rs_pct": -4.1,
-     "sector": "保险",
-     "tilt": 1.0,
-     "tilt_why": "",
-     "fit": 0.153,
-     "fit_why": "美国利率↑ 受损；日本利率↑ 受益",
      "fit_tier": "顺风"
     },
     {
      "ticker": "9531.T",
      "status": "watch",
-     "score": 35.5,
-     "close": 6075.0,
+     "score": 38.1,
+     "close": 6098.0,
      "range_pct": 10.9,
-     "macd_gap_pct": -0.325,
-     "hist_up": false,
-     "vol_ratio": 0.86,
-     "to_box_top_pct": 6.2,
+     "macd_gap_pct": -0.321,
+     "hist_up": true,
+     "vol_ratio": 1.04,
+     "to_box_top_pct": 5.8,
      "breakout": false,
-     "lot_cost": 607500.0,
+     "lot_cost": 609800.0,
      "affordable": false,
      "pref_ok": true,
      "pref_note": "",
-     "top_risk": "落后指数-1%",
-     "rsi": 46.0,
-     "rs_pct": -0.6,
+     "top_risk": "落后指数-3%",
+     "rsi": 47.0,
+     "rs_pct": -3.1,
      "sector": "电力燃气",
      "tilt": 0.5,
      "tilt_why": "油价高位：utility ×0.5",
-     "fit": 0.078,
+     "fit": 0.007,
      "fit_why": "美国利率↑ 受损；日本利率↑ 受益",
      "fit_tier": "顺风"
     },
     {
-     "ticker": "1925.T",
-     "status": "watch",
-     "score": 78.0,
-     "close": 2154.0,
-     "range_pct": 10.5,
-     "macd_gap_pct": -0.291,
-     "hist_up": true,
-     "vol_ratio": 1.05,
-     "to_box_top_pct": 10.1,
-     "breakout": false,
-     "lot_cost": 215400.0,
-     "affordable": true,
-     "pref_ok": true,
-     "pref_note": "",
-     "top_risk": "落后指数-2%",
-     "rsi": 39.0,
-     "rs_pct": -2.1,
-     "sector": "建设",
-     "tilt": 1.0,
-     "tilt_why": "",
-     "fit": -0.285,
-     "fit_why": "美国利率↑ 受损；农产品综合↑ 受益",
-     "fit_tier": "中性"
-    },
-    {
      "ticker": "5406.T",
      "status": "watch",
-     "score": 75.1,
-     "close": 1993.0,
+     "score": 84.2,
+     "close": 2024.0,
      "range_pct": 14.3,
-     "macd_gap_pct": -0.197,
-     "hist_up": false,
-     "vol_ratio": 0.74,
-     "to_box_top_pct": 3.3,
+     "macd_gap_pct": -0.14,
+     "hist_up": true,
+     "vol_ratio": 0.76,
+     "to_box_top_pct": 1.7,
      "breakout": false,
-     "lot_cost": 199300.0,
+     "lot_cost": 202400.0,
      "affordable": true,
      "pref_ok": true,
      "pref_note": "",
      "top_risk": "",
-     "rsi": 48.0,
-     "rs_pct": 5.3,
+     "rsi": 54.0,
+     "rs_pct": 4.4,
      "sector": "钢铁金属",
      "tilt": 1.0,
      "tilt_why": "",
-     "fit": -0.269,
+     "fit": -0.277,
      "fit_why": "美国利率↑ 受损；日本利率↑ 受益",
+     "fit_tier": "中性"
+    },
+    {
+     "ticker": "1925.T",
+     "status": "watch",
+     "score": 77.3,
+     "close": 2152.5,
+     "range_pct": 10.5,
+     "macd_gap_pct": -0.27,
+     "hist_up": true,
+     "vol_ratio": 0.85,
+     "to_box_top_pct": 10.1,
+     "breakout": false,
+     "lot_cost": 215250.0,
+     "affordable": true,
+     "pref_ok": true,
+     "pref_note": "",
+     "top_risk": "长上影；落后指数-6%",
+     "rsi": 39.0,
+     "rs_pct": -5.9,
+     "sector": "建设",
+     "tilt": 1.0,
+     "tilt_why": "",
+     "fit": -0.34,
+     "fit_why": "美国利率↑ 受损；日元贬值↓ 受损",
      "fit_tier": "中性"
     },
     {
      "ticker": "2002.T",
      "status": "watch",
-     "score": 72.0,
-     "close": 1962.0,
+     "score": 75.3,
+     "close": 1956.0,
      "range_pct": 14.9,
-     "macd_gap_pct": -0.32,
+     "macd_gap_pct": -0.314,
      "hist_up": true,
-     "vol_ratio": 0.62,
-     "to_box_top_pct": 9.8,
+     "vol_ratio": 0.91,
+     "to_box_top_pct": 10.2,
      "breakout": false,
-     "lot_cost": 196200.0,
+     "lot_cost": 195600.0,
+     "affordable": true,
+     "pref_ok": true,
+     "pref_note": "",
+     "top_risk": "落后指数-6%",
+     "rsi": 42.0,
+     "rs_pct": -6.2,
+     "sector": "食品",
+     "tilt": 0.75,
+     "tilt_why": "油价高位：food ×0.75",
+     "fit": -0.212,
+     "fit_why": "美国利率↑ 受损；工业金属↑ 受损",
+     "fit_tier": "中性"
+    },
+    {
+     "ticker": "8750.T",
+     "status": "watch",
+     "score": 75.3,
+     "close": 1843.0,
+     "range_pct": 11.9,
+     "macd_gap_pct": -0.307,
+     "hist_up": true,
+     "vol_ratio": 0.87,
+     "to_box_top_pct": 4.3,
+     "breakout": false,
+     "lot_cost": 184300.0,
+     "affordable": true,
+     "pref_ok": true,
+     "pref_note": "",
+     "top_risk": "出货日6；落后指数-3%",
+     "rsi": 51.0,
+     "rs_pct": -2.7,
+     "sector": "保险",
+     "tilt": 1.0,
+     "tilt_why": "",
+     "fit": -0.05,
+     "fit_why": "美国利率↑ 受损；日本利率↑ 受益",
+     "fit_tier": "中性"
+    },
+    {
+     "ticker": "3861.T",
+     "status": "watch",
+     "score": 70.1,
+     "close": 828.9,
+     "range_pct": 10.3,
+     "macd_gap_pct": -0.38,
+     "hist_up": false,
+     "vol_ratio": 1.01,
+     "to_box_top_pct": 6.1,
+     "breakout": false,
+     "lot_cost": 82890.0,
      "affordable": true,
      "pref_ok": true,
      "pref_note": "",
      "top_risk": "落后指数-2%",
-     "rsi": 43.0,
-     "rs_pct": -1.9,
-     "sector": "食品",
-     "tilt": 0.75,
-     "tilt_why": "油价高位：food ×0.75",
-     "fit": -0.177,
-     "fit_why": "美国利率↑ 受损；工业金属↑ 受损",
+     "rsi": 40.0,
+     "rs_pct": -1.8,
+     "sector": "纸浆",
+     "tilt": 0.5,
+     "tilt_why": "油价高位：paper ×0.5",
+     "fit": -0.055,
+     "fit_why": "美国利率↑ 受损；油价↑ 受损",
      "fit_tier": "中性"
     },
     {
      "ticker": "9008.T",
      "status": "watch",
-     "score": 61.8,
-     "close": 741.1,
+     "score": 60.3,
+     "close": 746.7,
      "range_pct": 14.4,
-     "macd_gap_pct": -0.702,
-     "hist_up": false,
-     "vol_ratio": 0.68,
-     "to_box_top_pct": 13.0,
+     "macd_gap_pct": -0.645,
+     "hist_up": true,
+     "vol_ratio": 0.53,
+     "to_box_top_pct": 12.1,
      "breakout": false,
-     "lot_cost": 74110.0,
+     "lot_cost": 74670.0,
      "affordable": true,
      "pref_ok": true,
      "pref_note": "",
-     "top_risk": "出货日6；落后指数-1%",
-     "rsi": 36.0,
-     "rs_pct": -0.8,
+     "top_risk": "出货日6；落后指数-4%",
+     "rsi": 39.0,
+     "rs_pct": -4.3,
      "sector": "陆运",
      "tilt": 0.5,
      "tilt_why": "油价高位：land_transport ×0.5",
-     "fit": -0.265,
-     "fit_why": "美国利率↑ 受损；日本利率↑ 受益",
-     "fit_tier": "中性"
-    },
-    {
-     "ticker": "5233.T",
-     "status": "watch",
-     "score": 42.3,
-     "close": 4118.0,
-     "range_pct": 14.6,
-     "macd_gap_pct": 0.023,
-     "hist_up": true,
-     "vol_ratio": 1.16,
-     "to_box_top_pct": 4.8,
-     "breakout": false,
-     "lot_cost": 411800.0,
-     "affordable": false,
-     "pref_ok": true,
-     "pref_note": "",
-     "top_risk": "落后指数-0%",
-     "rsi": 52.0,
-     "rs_pct": -0.2,
-     "sector": "化学",
-     "tilt": 0.5,
-     "tilt_why": "油价高位：chemical ×0.5",
-     "fit": -0.168,
+     "fit": -0.33,
      "fit_why": "美国利率↑ 受损；日本利率↑ 受益",
      "fit_tier": "中性"
     },
@@ -559,49 +560,49 @@
      "ticker": "1928.T",
      "status": "watch",
      "score": 40.3,
-     "close": 3313.0,
+     "close": 3320.0,
      "range_pct": 12.8,
-     "macd_gap_pct": -0.066,
+     "macd_gap_pct": -0.07,
      "hist_up": false,
-     "vol_ratio": 0.74,
-     "to_box_top_pct": 11.5,
+     "vol_ratio": 0.76,
+     "to_box_top_pct": 11.3,
      "breakout": false,
-     "lot_cost": 331300.0,
+     "lot_cost": 332000.0,
      "affordable": false,
      "pref_ok": true,
      "pref_note": "",
-     "top_risk": "落后指数-4%",
-     "rsi": 42.0,
-     "rs_pct": -4.4,
+     "top_risk": "落后指数-8%",
+     "rsi": 43.0,
+     "rs_pct": -7.5,
      "sector": "建设",
      "tilt": 1.0,
      "tilt_why": "",
-     "fit": -0.195,
+     "fit": -0.228,
      "fit_why": "美国利率↑ 受损；日本利率↑ 受益",
      "fit_tier": "中性"
     },
     {
-     "ticker": "4042.T",
+     "ticker": "8630.T",
      "status": "watch",
-     "score": 38.6,
-     "close": 2618.5,
-     "range_pct": 14.2,
-     "macd_gap_pct": 0.411,
-     "hist_up": false,
-     "vol_ratio": 1.32,
-     "to_box_top_pct": 7.5,
+     "score": 39.2,
+     "close": 6652.0,
+     "range_pct": 14.6,
+     "macd_gap_pct": -0.239,
+     "hist_up": true,
+     "vol_ratio": 0.78,
+     "to_box_top_pct": 9.8,
      "breakout": false,
-     "lot_cost": 261850.0,
+     "lot_cost": 665200.0,
      "affordable": false,
      "pref_ok": true,
      "pref_note": "",
-     "top_risk": "落后指数-6%",
-     "rsi": 53.0,
-     "rs_pct": -5.7,
-     "sector": "化学",
-     "tilt": 0.5,
-     "tilt_why": "油价高位：chemical ×0.5",
-     "fit": -0.267,
+     "top_risk": "出货日6；落后指数-2%",
+     "rsi": 48.0,
+     "rs_pct": -2.1,
+     "sector": "保险",
+     "tilt": 1.0,
+     "tilt_why": "",
+     "fit": -0.394,
      "fit_why": "美国利率↑ 受损；日本利率↑ 受益",
      "fit_tier": "中性"
     }
@@ -612,26 +613,26 @@
     "bullbear": {
      "state": "bull",
      "since": "2025-05-19",
-     "days": 347,
+     "days": 348,
      "changed_today": false,
      "detector": "ma_band(L=250,b=0.03,k=5)",
-     "close": 7773.95,
-     "asof": "2026-10-05",
+     "close": 7818.93,
+     "asof": "2026-10-06",
      "flip_to": "bear",
-     "level": 6923.44,
+     "level": 6927.72,
      "need_days": 5,
-     "ma": 7137.56,
-     "distance_pct": 12.28,
+     "ma": 7141.98,
+     "distance_pct": 12.86,
      "phase": "bull_firm",
      "phase_label": "牛市·稳固",
-     "phase_text": "比 250 日均线高 8.9%（20 个交易日前 +9.4%，-0.5 个百分点，变化不大）；要再跌 10.9% 并连续 5 天收在线下才会转熊",
-     "ma_dev_pct": 8.92,
-     "ma_dev_pct_prev": 9.41,
-     "ma_dev_change_pp": -0.5,
-     "to_flip_pct": -10.94,
+     "phase_text": "比 250 日均线高 9.5%（20 个交易日前 +8.7%，+0.8 个百分点，变化不大）；要再跌 11.4% 并连续 5 天收在线下才会转熊",
+     "ma_dev_pct": 9.48,
+     "ma_dev_pct_prev": 8.7,
+     "ma_dev_change_pp": 0.8,
+     "to_flip_pct": -11.4,
      "confirm_days": 0,
      "confirm_need": 5,
-     "flip_line": 6923.44,
+     "flip_line": 6927.72,
      "index": "^GSPC"
     }
    },
@@ -673,9 +674,9 @@
   "note": "只展示，不参与交易（2026-09-25 事先登记研究：美股 AUC 0.66、日経 0.58，不足以预测时间段）",
   "event_def": "之后 60 个交易日内最低收盘比当天跌 ≥10%",
   "US": {
-   "date": "2026-10-05",
-   "value": 55.2,
-   "prev20": 45.5,
+   "date": "2026-10-06",
+   "value": 53.2,
+   "prev20": 47.1,
    "band": "50–60",
    "band_freq": 17.5,
    "base_rate": 14.4,
@@ -696,12 +697,12 @@
     {
      "k": "oil",
      "label": "油价冲击",
-     "pct": 94
+     "pct": 95
     },
     {
-     "k": "vix_d20",
-     "label": "VIX 20 日变化",
-     "pct": 64
+     "k": "curve",
+     "label": "利率曲线倒挂",
+     "pct": 60
     }
    ],
    "obs": [
@@ -713,17 +714,27 @@
     {
      "k": "gpr",
      "label": "地缘政治风险（GPR）",
-     "pct": 93
-    },
-    {
-     "k": "commod",
-     "label": "商品综合急涨",
-     "pct": 90
+     "pct": 94
     },
     {
      "k": "grains",
      "label": "粮食价格急涨",
-     "pct": 79
+     "pct": 84
+    },
+    {
+     "k": "commod",
+     "label": "商品综合急涨",
+     "pct": 84
+    },
+    {
+     "k": "natgas",
+     "label": "天然气急涨",
+     "pct": 64
+    },
+    {
+     "k": "gold",
+     "label": "黄金急涨（避险）",
+     "pct": 62
     },
     {
      "k": "commod_vol",
@@ -731,14 +742,14 @@
      "pct": 60
     },
     {
-     "k": "natgas",
-     "label": "天然气急涨",
-     "pct": 59
-    },
-    {
      "k": "delinq",
      "label": "企业贷款拖欠率上升",
      "pct": 57
+    },
+    {
+     "k": "gpr_jump",
+     "label": "地缘风险急升",
+     "pct": 53
     },
     {
      "k": "sloos",
@@ -751,40 +762,30 @@
      "pct": 47
     },
     {
-     "k": "gpr_jump",
-     "label": "地缘风险急升",
-     "pct": 46
-    },
-    {
-     "k": "gold",
-     "label": "黄金急涨（避险）",
-     "pct": 44
-    },
-    {
      "k": "gold_silver",
      "label": "金银比上升",
-     "pct": 38
+     "pct": 33
     },
     {
      "k": "copper",
      "label": "铜价下跌",
-     "pct": 34
+     "pct": 33
     }
    ],
    "watch": {
-    "date": "2026-10-05",
-    "gs_pct": 38.21,
-    "cv_pct": 60.47,
-    "W": 49.34,
-    "W_pct": 43.92,
-    "A0": 55.21,
-    "A0_pct": 61.91,
-    "gs_raw": -1.31,
-    "cv_raw": 19.83
+    "date": "2026-10-06",
+    "gs_pct": 33.45,
+    "cv_pct": 59.51,
+    "W": 46.48,
+    "W_pct": 38.85,
+    "A0": 53.19,
+    "A0_pct": 55.87,
+    "gs_raw": -2.23,
+    "cv_raw": 19.66
    },
    "domains": {
     "信用 / 破产代理": {
-     "pct": 42,
+     "pct": 46,
      "class": "两段都提升"
     },
     "就业": {
@@ -792,7 +793,7 @@
      "class": "只前半"
     },
     "利率 / 曲线": {
-     "pct": 78,
+     "pct": 77,
      "class": "都没有"
     },
     "货币政策 / 流动性": {
@@ -800,27 +801,27 @@
      "class": "都没有"
     },
     "汇率": {
-     "pct": 63,
+     "pct": 60,
      "class": "都没有"
     },
     "市场波动": {
-     "pct": 66,
+     "pct": 69,
      "class": "都没有"
     },
     "商品": {
-     "pct": 57,
+     "pct": 60,
      "class": "只后半"
     },
     "市场趋势": {
-     "pct": 35,
+     "pct": 25,
      "class": "两段都提升"
     },
     "地缘 / 不确定性": {
-     "pct": 81,
+     "pct": 84,
      "class": "只前半"
     },
     "财政": {
-     "pct": 13,
+     "pct": 20,
      "class": "两段都提升"
     },
     "通胀": {
@@ -844,23 +845,23 @@
      "class": "都没有"
     },
     "全球 / 中国": {
-     "pct": 40,
+     "pct": 32,
      "class": "两段都提升"
     },
     "运输 / 物流": {
-     "pct": 84,
+     "pct": 86,
      "class": "只后半"
     },
     "科技周期": {
-     "pct": 63,
+     "pct": 45,
      "class": "两段都提升"
     },
     "银行": {
-     "pct": 62,
+     "pct": 63,
      "class": "只前半"
     },
     "市场内部": {
-     "pct": 69,
+     "pct": 66,
      "class": "只后半"
     },
     "估值": {
@@ -873,10 +874,10 @@
     }
    },
    "wfc": {
-    "date": "2026-10-05",
+    "date": "2026-10-06",
     "show": "A0",
-    "p10": 0.15778725069836447,
-    "p15": 0.06833570868665348,
+    "p10": 0.14239249093216252,
+    "p15": 0.061962913683655446,
     "base10": 0.1361450240473548,
     "base15": 0.059748427672955975,
     "adopted": null,
@@ -892,16 +893,16 @@
     "top": null
    },
    "fwd": {
-    "A0x": 47.9,
-    "S": 48.1,
-    "DOM": 55.57
+    "A0x": 45.1,
+    "S": 46.4,
+    "DOM": 54.31
    },
    "fwd_plus": 3
   },
   "JP": {
-   "date": "2026-10-05",
-   "value": 62.2,
-   "prev20": 54.8,
+   "date": "2026-10-06",
+   "value": 62.8,
+   "prev20": 52.9,
    "band": "60–70",
    "band_freq": 33.5,
    "base_rate": 26.3,
@@ -922,29 +923,29 @@
     {
      "k": "rates",
      "label": "美债利率急升",
-     "pct": 95
+     "pct": 96
     },
     {
      "k": "jgb",
      "label": "日债利率急升",
-     "pct": 93
+     "pct": 90
     }
    ],
    "obs": [
     {
      "k": "epu",
      "label": "政策不确定性（EPU）",
-     "pct": 94
-    },
-    {
-     "k": "commod",
-     "label": "商品综合急涨",
-     "pct": 93
+     "pct": 95
     },
     {
      "k": "gpr",
      "label": "地缘政治风险（GPR）",
      "pct": 93
+    },
+    {
+     "k": "commod",
+     "label": "商品综合急涨",
+     "pct": 91
     },
     {
      "k": "jp_lng",
@@ -954,7 +955,7 @@
     {
      "k": "grains",
      "label": "粮食价格急涨",
-     "pct": 87
+     "pct": 82
     },
     {
      "k": "gpr_jp",
@@ -969,7 +970,7 @@
     {
      "k": "commod_vol",
      "label": "商品波动",
-     "pct": 58
+     "pct": 57
     },
     {
      "k": "delinq",
@@ -979,7 +980,7 @@
     {
      "k": "gold_silver",
      "label": "金银比上升",
-     "pct": 55
+     "pct": 52
     },
     {
      "k": "tankan_cash",
@@ -1002,37 +1003,37 @@
      "pct": 46
     },
     {
-     "k": "gold",
-     "label": "黄金急涨（避险）",
-     "pct": 41
-    },
-    {
      "k": "natgas",
      "label": "天然气急涨",
      "pct": 41
     },
     {
+     "k": "gold",
+     "label": "黄金急涨（避险）",
+     "pct": 35
+    },
+    {
      "k": "copper",
      "label": "铜价下跌",
-     "pct": 35
+     "pct": 33
     }
    ],
    "watch_jp": {
-    "date": "2026-10-05",
-    "Wj": 67.27,
-    "Wj_pct": 91.6,
-    "W2": 56.43,
-    "W2_pct": 56.43,
-    "A0": 62.2,
-    "A0_pct": 86.33,
-    "p_em_rel": 53.03,
-    "p_real10": 94.62,
+    "date": "2026-10-06",
+    "Wj": 67.79,
+    "Wj_pct": 92.38,
+    "W2": 54.95,
+    "W2_pct": 53.62,
+    "A0": 62.82,
+    "A0_pct": 87.52,
+    "p_em_rel": 57.7,
+    "p_real10": 95.25,
     "p_tankan_big": 37.57,
     "p_tankan_small": 56.2,
     "p_claims": 7.72,
-    "p_breadth": 96.75,
+    "p_breadth": 95.65,
     "p_boj": 94.62,
-    "p_jp_cgpi": 97.62
+    "p_jp_cgpi": 97.61
    },
    "domains": {
     "信用 / 破产代理": {
@@ -1044,7 +1045,7 @@
      "class": "只前半"
     },
     "利率 / 曲线": {
-     "pct": 78,
+     "pct": 79,
      "class": "只后半"
     },
     "货币政策 / 流动性": {
@@ -1052,19 +1053,19 @@
      "class": "都没有"
     },
     "汇率": {
-     "pct": 62,
+     "pct": 63,
      "class": "都没有"
     },
     "市场波动": {
-     "pct": 69,
+     "pct": 71,
      "class": "都没有"
     },
     "商品": {
-     "pct": 62,
+     "pct": 59,
      "class": "都没有"
     },
     "市场趋势": {
-     "pct": 13,
+     "pct": 10,
      "class": "只前半"
     },
     "地缘 / 不确定性": {
@@ -1072,7 +1073,7 @@
      "class": "都没有"
     },
     "财政": {
-     "pct": 17,
+     "pct": 19,
      "class": "只前半"
     },
     "通胀": {
@@ -1088,7 +1089,7 @@
      "class": "只前半"
     },
     "住房": {
-     "pct": 85,
+     "pct": 84,
      "class": "都没有"
     },
     "贸易 / 外需": {
@@ -1096,23 +1097,23 @@
      "class": "都没有"
     },
     "全球 / 中国": {
-     "pct": 43,
+     "pct": 44,
      "class": "两段都提升"
     },
     "运输 / 物流": {
-     "pct": 80,
+     "pct": 81,
      "class": "只后半"
     },
     "科技周期": {
-     "pct": 54,
+     "pct": 63,
      "class": "只前半"
     },
     "银行": {
-     "pct": 62,
+     "pct": 63,
      "class": "都没有"
     },
     "市场内部": {
-     "pct": 71,
+     "pct": 73,
      "class": "只后半"
     },
     "估值": {
@@ -1125,10 +1126,10 @@
     }
    },
    "wfc": {
-    "date": "2026-10-05",
+    "date": "2026-10-06",
     "show": "A0",
-    "p10": 0.2771569775347865,
-    "p15": 0.1597295080614406,
+    "p10": 0.27885843162674234,
+    "p15": 0.160912847627842,
     "base10": 0.2209324452901998,
     "base15": 0.12293054234062797,
     "adopted": null,
@@ -1144,8 +1145,8 @@
     "top": null
    },
    "fwd": {
-    "A0x": 58.2,
-    "S": 53.7
+    "A0x": 59.0,
+    "S": 53.9
    },
    "fwd_plus": 9
   },
@@ -1245,45 +1246,45 @@
  },
  "executor": {
   "same_as_sim": true,
-  "equity_jpy": 1008374.69,
+  "equity_jpy": 1021937.7,
   "equity_diff_jpy": 0.0,
   "orders": 0,
   "blocked": null,
-  "decided_on": "2026-10-05"
+  "decided_on": "2026-10-06"
  },
  "score_forward": {
   "logged": 0,
   "signals": 0,
   "days": [
-   "2026-09-29",
    "2026-09-30",
    "2026-10-01",
    "2026-10-02",
-   "2026-10-05"
+   "2026-10-05",
+   "2026-10-06"
   ],
   "model": "v1-20260917",
   "x2_survey": "2026-09-30",
   "wide": {
-   "logged": 0,
-   "signals": 1,
+   "logged": 1,
+   "signals": 2,
    "tickers": 714,
    "days": [
-    "2026-09-29",
     "2026-09-30",
     "2026-10-01",
     "2026-10-02",
-    "2026-10-05"
+    "2026-10-05",
+    "2026-10-06"
    ]
   }
  },
  "eligibility": {
-  "as_of": "2026-10-06",
+  "as_of": "2026-10-07",
   "stale": [],
   "error": "",
   "sources": {
    "ja_wiki": {
     "label": "ja.wikipedia 日経225 名单",
-    "ok_at": "2026-10-06T07:03+09:00",
+    "ok_at": "2026-10-07T07:04+09:00",
     "fresh": true,
     "n": 225,
     "note": "2026年10月1日現在",
@@ -1291,7 +1292,7 @@
    },
    "en_wiki": {
     "label": "en.wikipedia 日経225 名单（参考）",
-    "ok_at": "2026-10-06T07:03+09:00",
+    "ok_at": "2026-10-07T07:04+09:00",
     "fresh": true,
     "n": 225,
     "note": "",
@@ -1299,7 +1300,7 @@
    },
    "jpx_supervision": {
     "label": "JPX 監理・整理銘柄（株式）",
-    "ok_at": "2026-10-06T07:03+09:00",
+    "ok_at": "2026-10-07T07:04+09:00",
     "fresh": true,
     "n": 40,
     "note": "",
@@ -1307,7 +1308,7 @@
    },
    "jpx_supervision_etf": {
     "label": "JPX 監理・整理銘柄（ETF 等）",
-    "ok_at": "2026-10-06T07:03+09:00",
+    "ok_at": "2026-10-07T07:04+09:00",
     "fresh": true,
     "n": 2,
     "note": "",
@@ -1315,7 +1316,7 @@
    },
    "jpx_alert": {
     "label": "JPX 特別注意銘柄",
-    "ok_at": "2026-10-06T07:03+09:00",
+    "ok_at": "2026-10-07T07:04+09:00",
     "fresh": true,
     "n": 10,
     "note": "",
@@ -1323,7 +1324,7 @@
    },
    "jpx_delisted": {
     "label": "JPX 上場廃止銘柄一覧",
-    "ok_at": "2026-10-06T07:03+09:00",
+    "ok_at": "2026-10-07T07:04+09:00",
     "fresh": true,
     "n": 137,
     "note": "",
@@ -1331,7 +1332,7 @@
    },
    "jpx_list": {
     "label": "JPX 東証上場銘柄一覧（市場区分：立花能不能买）",
-    "ok_at": "2026-10-06T07:03+09:00",
+    "ok_at": "2026-10-07T07:04+09:00",
     "fresh": true,
     "n": 4447,
     "note": "",
@@ -1374,7 +1375,7 @@
   "text": "资格检查：股票池 225 只已核对，没有被踢出 / 被指定的；立花 ｅ支店都能买（JPX 上場一覧 2026-09-30 版：股票池 + 核心 ETF 3 只）"
  },
  "delist": {
-  "as_of": "2026-10-06",
+  "as_of": "2026-10-07",
   "items": [
    {
     "kind": "上場廃止",
@@ -1767,7 +1768,7 @@
     "src": "JPX 上場廃止銘柄一覧",
     "why": "TOB・MBO・株式併合",
     "last_trade": "2026-10-08",
-    "days_left": 3,
+    "days_left": 2,
     "removed": false
    },
    {
@@ -1781,7 +1782,7 @@
     "src": "JPX 上場廃止銘柄一覧",
     "why": "TOB・MBO・株式併合",
     "last_trade": "2026-10-08",
-    "days_left": 3,
+    "days_left": 2,
     "removed": false
    },
    {
@@ -1795,7 +1796,7 @@
     "src": "JPX 上場廃止銘柄一覧",
     "why": "TOB・MBO・株式併合",
     "last_trade": "2026-10-08",
-    "days_left": 3,
+    "days_left": 2,
     "removed": false
    },
    {
@@ -1809,7 +1810,7 @@
     "src": "JPX 上場廃止銘柄一覧",
     "why": "TOB・MBO・株式併合",
     "last_trade": "2026-10-16",
-    "days_left": 8,
+    "days_left": 7,
     "removed": false
    },
    {
@@ -1823,7 +1824,7 @@
     "src": "JPX 上場廃止銘柄一覧",
     "why": "上場維持基準不適合",
     "last_trade": "2026-12-30",
-    "days_left": 59,
+    "days_left": 58,
     "removed": false
    },
    {
@@ -1837,7 +1838,7 @@
     "src": "JPX 上場廃止銘柄一覧",
     "why": "上場維持基準不適合",
     "last_trade": "2027-02-26",
-    "days_left": 96,
+    "days_left": 95,
     "removed": false
    },
    {
@@ -1851,7 +1852,7 @@
     "src": "JPX 上場廃止銘柄一覧",
     "why": "上場維持基準不適合",
     "last_trade": "2027-02-26",
-    "days_left": 96,
+    "days_left": 95,
     "removed": false
    },
    {
@@ -1865,7 +1866,7 @@
     "src": "JPX 上場廃止銘柄一覧",
     "why": "上場維持基準不適合",
     "last_trade": "2027-03-31",
-    "days_left": 118,
+    "days_left": 117,
     "removed": false
    }
   ],
@@ -1948,24 +1949,24 @@
   "n_other": 30,
   "stale": false,
   "source_ok_at": {
-   "jpx_delisted": "2026-10-06T07:03+09:00",
-   "jpx_supervision": "2026-10-06T07:03+09:00",
-   "jpx_supervision_etf": "2026-10-06T07:03+09:00"
+   "jpx_delisted": "2026-10-07T07:04+09:00",
+   "jpx_supervision": "2026-10-07T07:04+09:00",
+   "jpx_supervision_etf": "2026-10-07T07:04+09:00"
   },
   "text": "股票池更新时间表：股票池里 0 只有上場廃止预定；JPX 一览另有 30 只不在股票池",
-  "updated": "2026-10-06T07:03+09:00"
+  "updated": "2026-10-07T07:04+09:00"
  },
  "themes": {
-  "asof": "2026-10-05",
+  "asof": "2026-10-06",
   "index": "^N225",
   "groups": {
    "水産・農林業": {
-    "r1m": -5.61,
-    "r3m": -7.07,
-    "r12": -9.6,
-    "rank3m": 27,
+    "r1m": -8.43,
+    "r3m": -8.88,
+    "r12": -6.38,
+    "rank3m": 28,
     "of": 30,
-    "rank12": 23,
+    "rank12": 21,
     "of12": 30,
     "r2_now": 0.011,
     "n": 4,
@@ -1984,14 +1985,14 @@
     }
    },
    "建設業": {
-    "r1m": -2.51,
-    "r3m": -10.64,
-    "r12": -3.74,
-    "rank3m": 29,
+    "r1m": -3.36,
+    "r3m": -11.26,
+    "r12": -4.72,
+    "rank3m": 30,
     "of": 30,
-    "rank12": 16,
+    "rank12": 17,
     "of12": 30,
-    "r2_now": 0.333,
+    "r2_now": 0.332,
     "n": 43,
     "r2_hist": {
      "2015": 0.582,
@@ -2008,10 +2009,10 @@
     }
    },
    "鉱業": {
-    "r1m": -11.39,
-    "r3m": 8.68,
-    "r12": 30.11,
-    "rank3m": 5,
+    "r1m": -8.19,
+    "r3m": 8.95,
+    "r12": 26.84,
+    "rank3m": 4,
     "of": 30,
     "rank12": 3,
     "of12": 30,
@@ -2032,14 +2033,14 @@
     }
    },
    "その他製品": {
-    "r1m": 0.21,
-    "r3m": 5.12,
-    "r12": 0.21,
+    "r1m": -0.2,
+    "r3m": 5.08,
+    "r12": 0.93,
     "rank3m": 8,
     "of": 30,
     "rank12": 14,
     "of12": 30,
-    "r2_now": 0.409,
+    "r2_now": 0.41,
     "n": 24,
     "r2_hist": {
      "2015": 0.741,
@@ -2056,9 +2057,9 @@
     }
    },
    "卸売業": {
-    "r1m": 0.57,
-    "r3m": 7.57,
-    "r12": 0.39,
+    "r1m": -0.29,
+    "r3m": 7.13,
+    "r12": 1.0,
     "rank3m": 6,
     "of": 30,
     "rank12": 13,
@@ -2080,12 +2081,12 @@
     }
    },
    "不動産業": {
-    "r1m": -4.33,
-    "r3m": -5.53,
-    "r12": -15.11,
-    "rank3m": 24,
+    "r1m": -5.05,
+    "r3m": -6.85,
+    "r12": -15.2,
+    "rank3m": 27,
     "of": 30,
-    "rank12": 26,
+    "rank12": 27,
     "of12": 30,
     "r2_now": 0.171,
     "n": 24,
@@ -2104,12 +2105,12 @@
     }
    },
    "食料品": {
-    "r1m": -3.08,
-    "r3m": -2.35,
-    "r12": -9.6,
-    "rank3m": 18,
+    "r1m": -5.78,
+    "r3m": -3.96,
+    "r12": -7.56,
+    "rank3m": 22,
     "of": 30,
-    "rank12": 24,
+    "rank12": 23,
     "of12": 30,
     "r2_now": 0.0,
     "n": 40,
@@ -2128,10 +2129,10 @@
     }
    },
    "情報・通信業": {
-    "r1m": -1.57,
-    "r3m": 10.26,
-    "r12": -24.85,
-    "rank3m": 4,
+    "r1m": -1.1,
+    "r3m": 7.35,
+    "r12": -24.97,
+    "rank3m": 5,
     "of": 30,
     "rank12": 30,
     "of12": 30,
@@ -2152,14 +2153,14 @@
     }
    },
    "サービス業": {
-    "r1m": -1.86,
-    "r3m": 4.96,
-    "r12": -15.22,
-    "rank3m": 9,
+    "r1m": -1.81,
+    "r3m": 4.16,
+    "r12": -14.83,
+    "rank3m": 10,
     "of": 30,
-    "rank12": 27,
+    "rank12": 26,
     "of12": 30,
-    "r2_now": 0.132,
+    "r2_now": 0.134,
     "n": 56,
     "r2_hist": {
      "2015": 0.659,
@@ -2176,10 +2177,10 @@
     }
    },
    "小売業": {
-    "r1m": -2.79,
-    "r3m": 0.06,
-    "r12": -17.73,
-    "rank3m": 13,
+    "r1m": -4.35,
+    "r3m": -1.13,
+    "r12": -16.46,
+    "rank3m": 14,
     "of": 30,
     "rank12": 29,
     "of12": 30,
@@ -2200,14 +2201,14 @@
     }
    },
    "精密機器": {
-    "r1m": 0.0,
-    "r3m": -4.69,
-    "r12": 17.35,
-    "rank3m": 22,
+    "r1m": 1.55,
+    "r3m": -2.76,
+    "r12": 16.33,
+    "rank3m": 18,
     "of": 30,
     "rank12": 6,
     "of12": 30,
-    "r2_now": 0.631,
+    "r2_now": 0.632,
     "n": 19,
     "r2_hist": {
      "2015": 0.81,
@@ -2224,14 +2225,14 @@
     }
    },
    "電気機器": {
-    "r1m": 7.16,
-    "r3m": -7.52,
-    "r12": 18.16,
-    "rank3m": 28,
+    "r1m": 8.14,
+    "r3m": -4.68,
+    "r12": 17.17,
+    "rank3m": 23,
     "of": 30,
     "rank12": 5,
     "of12": 30,
-    "r2_now": 0.85,
+    "r2_now": 0.851,
     "n": 88,
     "r2_hist": {
      "2015": 0.835,
@@ -2248,14 +2249,14 @@
     }
    },
    "繊維製品": {
-    "r1m": -3.25,
-    "r3m": -1.85,
-    "r12": -6.93,
+    "r1m": -2.63,
+    "r3m": -2.26,
+    "r12": -6.58,
     "rank3m": 17,
     "of": 30,
-    "rank12": 21,
+    "rank12": 22,
     "of12": 30,
-    "r2_now": 0.274,
+    "r2_now": 0.275,
     "n": 11,
     "r2_hist": {
      "2015": 0.676,
@@ -2272,14 +2273,14 @@
     }
    },
    "化学": {
-    "r1m": 1.94,
-    "r3m": -3.13,
-    "r12": 5.4,
-    "rank3m": 20,
+    "r1m": 2.36,
+    "r3m": -1.98,
+    "r12": 5.55,
+    "rank3m": 16,
     "of": 30,
-    "rank12": 10,
+    "rank12": 9,
     "of12": 30,
-    "r2_now": 0.629,
+    "r2_now": 0.63,
     "n": 74,
     "r2_hist": {
      "2015": 0.864,
@@ -2296,14 +2297,14 @@
     }
    },
    "ガラス・土石製品": {
-    "r1m": 5.27,
-    "r3m": -12.01,
-    "r12": 8.9,
-    "rank3m": 30,
+    "r1m": 7.15,
+    "r3m": -9.22,
+    "r12": 7.83,
+    "rank3m": 29,
     "of": 30,
     "rank12": 8,
     "of12": 30,
-    "r2_now": 0.673,
+    "r2_now": 0.675,
     "n": 19,
     "r2_hist": {
      "2015": 0.773,
@@ -2320,14 +2321,14 @@
     }
    },
    "輸送用機器": {
-    "r1m": -4.61,
-    "r3m": 0.44,
-    "r12": -9.08,
-    "rank3m": 12,
+    "r1m": -3.61,
+    "r3m": -0.89,
+    "r12": -10.05,
+    "rank3m": 13,
     "of": 30,
-    "rank12": 22,
+    "rank12": 24,
     "of12": 30,
-    "r2_now": 0.328,
+    "r2_now": 0.329,
     "n": 30,
     "r2_hist": {
      "2015": 0.813,
@@ -2344,14 +2345,14 @@
     }
    },
    "金属製品": {
-    "r1m": 1.37,
-    "r3m": -6.78,
-    "r12": -5.17,
+    "r1m": 0.96,
+    "r3m": -5.84,
+    "r12": -4.24,
     "rank3m": 25,
     "of": 30,
-    "rank12": 18,
+    "rank12": 16,
     "of12": 30,
-    "r2_now": 0.569,
+    "r2_now": 0.57,
     "n": 15,
     "r2_hist": {
      "2015": 0.692,
@@ -2368,14 +2369,14 @@
     }
    },
    "パルプ・紙": {
-    "r1m": -3.21,
-    "r3m": -0.69,
-    "r12": -6.6,
-    "rank3m": 14,
+    "r1m": -3.62,
+    "r3m": -1.19,
+    "r12": -6.33,
+    "rank3m": 15,
     "of": 30,
     "rank12": 20,
     "of12": 30,
-    "r2_now": 0.104,
+    "r2_now": 0.105,
     "n": 5,
     "r2_hist": {
      "2015": 0.381,
@@ -2392,14 +2393,14 @@
     }
    },
    "医薬品": {
-    "r1m": -3.69,
-    "r3m": -4.98,
-    "r12": -16.31,
-    "rank3m": 23,
+    "r1m": -4.81,
+    "r3m": -6.0,
+    "r12": -15.46,
+    "rank3m": 26,
     "of": 30,
     "rank12": 28,
     "of12": 30,
-    "r2_now": 0.068,
+    "r2_now": 0.069,
     "n": 24,
     "r2_hist": {
      "2015": 0.634,
@@ -2416,10 +2417,10 @@
     }
    },
    "非鉄金属": {
-    "r1m": -4.04,
-    "r3m": -3.7,
-    "r12": 44.91,
-    "rank3m": 21,
+    "r1m": 0.34,
+    "r3m": 0.27,
+    "r12": 42.19,
+    "rank3m": 12,
     "of": 30,
     "rank12": 2,
     "of12": 30,
@@ -2440,9 +2441,9 @@
     }
    },
    "石油・石炭製品": {
-    "r1m": 1.61,
-    "r3m": 11.57,
-    "r12": 12.38,
+    "r1m": 1.23,
+    "r3m": 10.81,
+    "r12": 12.73,
     "rank3m": 3,
     "of": 30,
     "rank12": 7,
@@ -2463,12 +2464,12 @@
     }
    },
    "ゴム製品": {
-    "r1m": -4.05,
-    "r3m": -1.65,
-    "r12": -3.92,
-    "rank3m": 16,
+    "r1m": -2.97,
+    "r3m": -3.47,
+    "r12": -5.29,
+    "rank3m": 20,
     "of": 30,
-    "rank12": 17,
+    "rank12": 18,
     "of12": 30,
     "r2_now": 0.338,
     "n": 5,
@@ -2487,9 +2488,9 @@
     }
    },
    "鉄鋼": {
-    "r1m": -3.65,
-    "r3m": 1.73,
-    "r12": -5.53,
+    "r1m": -2.27,
+    "r3m": 2.02,
+    "r12": -6.2,
     "rank3m": 11,
     "of": 30,
     "rank12": 19,
@@ -2511,14 +2512,14 @@
     }
    },
    "その他金融業": {
-    "r1m": -3.49,
-    "r3m": -2.96,
-    "r12": -13.81,
-    "rank3m": 19,
+    "r1m": -4.38,
+    "r3m": -3.7,
+    "r12": -13.64,
+    "rank3m": 21,
     "of": 30,
     "rank12": 25,
     "of12": 30,
-    "r2_now": 0.265,
+    "r2_now": 0.266,
     "n": 17,
     "r2_hist": {
      "2015": 0.731,
@@ -2535,12 +2536,12 @@
     }
    },
    "機械": {
-    "r1m": 3.66,
-    "r3m": -6.8,
-    "r12": 5.51,
-    "rank3m": 26,
+    "r1m": 4.33,
+    "r3m": -5.4,
+    "r12": 4.67,
+    "rank3m": 24,
     "of": 30,
-    "rank12": 9,
+    "rank12": 10,
     "of12": 30,
     "r2_now": 0.706,
     "n": 72,
@@ -2559,14 +2560,14 @@
     }
    },
    "銀行業": {
-    "r1m": 4.99,
-    "r3m": 14.62,
-    "r12": 47.49,
+    "r1m": 5.37,
+    "r3m": 15.03,
+    "r12": 47.58,
     "rank3m": 2,
     "of": 30,
     "rank12": 1,
     "of12": 30,
-    "r2_now": 0.289,
+    "r2_now": 0.29,
     "n": 51,
     "r2_hist": {
      "2015": 0.662,
@@ -2583,14 +2584,14 @@
     }
    },
    "証券、商品先物取引業": {
-    "r1m": -2.7,
-    "r3m": 5.79,
-    "r12": 4.97,
+    "r1m": -2.38,
+    "r3m": 6.25,
+    "r12": 3.99,
     "rank3m": 7,
     "of": 30,
-    "rank12": 11,
+    "rank12": 12,
     "of12": 30,
-    "r2_now": 0.377,
+    "r2_now": 0.378,
     "n": 13,
     "r2_hist": {
      "2015": 0.712,
@@ -2607,14 +2608,14 @@
     }
    },
    "保険業": {
-    "r1m": -0.01,
-    "r3m": -1.39,
-    "r12": 2.45,
-    "rank3m": 15,
+    "r1m": -0.63,
+    "r3m": -3.31,
+    "r12": 4.53,
+    "rank3m": 19,
     "of": 30,
-    "rank12": 12,
+    "rank12": 11,
     "of12": 30,
-    "r2_now": 0.155,
+    "r2_now": 0.156,
     "n": 8,
     "r2_hist": {
      "2015": 0.637,
@@ -2631,9 +2632,9 @@
     }
    },
    "海運業": {
-    "r1m": 0.58,
-    "r3m": 28.74,
-    "r12": 22.88,
+    "r1m": -1.04,
+    "r3m": 28.21,
+    "r12": 24.37,
     "rank3m": 1,
     "of": 30,
     "rank12": 4,
@@ -2655,14 +2656,14 @@
     }
    },
    "電気・ガス業": {
-    "r1m": -4.07,
-    "r3m": 4.56,
-    "r12": -0.17,
-    "rank3m": 10,
+    "r1m": -4.25,
+    "r3m": 4.8,
+    "r12": -0.7,
+    "rank3m": 9,
     "of": 30,
     "rank12": 15,
     "of12": 30,
-    "r2_now": 0.18,
+    "r2_now": 0.181,
     "n": 17,
     "r2_hist": {
      "2015": 0.519,
@@ -2680,13 +2681,13 @@
    },
    "T1": {
     "r1m": -5.08,
-    "r3m": 10.05,
-    "r12": 3.81,
+    "r3m": 10.23,
+    "r12": 2.96,
     "rank3m": 2,
     "of": 12,
-    "rank12": 9,
+    "rank12": 8,
     "of12": 12,
-    "r2_now": 0.167,
+    "r2_now": 0.168,
     "n": 11,
     "r2_hist": {
      "2015": 0.42,
@@ -2703,14 +2704,14 @@
     }
    },
    "T2": {
-    "r1m": -1.77,
-    "r3m": 2.34,
-    "r12": 4.58,
+    "r1m": -4.17,
+    "r3m": 2.5,
+    "r12": 6.44,
     "rank3m": 4,
     "of": 12,
-    "rank12": 7,
+    "rank12": 6,
     "of12": 12,
-    "r2_now": 0.08,
+    "r2_now": 0.081,
     "n": 5,
     "r2_hist": {
      "2015": 0.559,
@@ -2727,10 +2728,10 @@
     }
    },
    "T3": {
-    "r1m": 8.52,
-    "r3m": -8.58,
-    "r12": 60.89,
-    "rank3m": 7,
+    "r1m": 12.34,
+    "r3m": 0.15,
+    "r12": 57.95,
+    "rank3m": 5,
     "of": 12,
     "rank12": 1,
     "of12": 12,
@@ -2751,10 +2752,10 @@
     }
    },
    "T4": {
-    "r1m": 6.62,
-    "r3m": -4.06,
-    "r12": 19.82,
-    "rank3m": 5,
+    "r1m": 8.17,
+    "r3m": -1.16,
+    "r12": 17.95,
+    "rank3m": 6,
     "of": 12,
     "rank12": 5,
     "of12": 12,
@@ -2775,12 +2776,12 @@
     }
    },
    "T5": {
-    "r1m": 4.38,
-    "r3m": -15.74,
-    "r12": 2.41,
-    "rank3m": 9,
+    "r1m": 4.61,
+    "r3m": -15.44,
+    "r12": 0.25,
+    "rank3m": 11,
     "of": 12,
-    "rank12": 11,
+    "rank12": 9,
     "of12": 12,
     "r2_now": 0.42,
     "n": 6,
@@ -2799,12 +2800,12 @@
     }
    },
    "T6": {
-    "r1m": -2.3,
-    "r3m": -12.59,
-    "r12": 7.11,
-    "rank3m": 8,
+    "r1m": -1.92,
+    "r3m": -12.2,
+    "r12": 4.8,
+    "rank3m": 9,
     "of": 12,
-    "rank12": 6,
+    "rank12": 7,
     "of12": 12,
     "r2_now": 0.323,
     "n": 7,
@@ -2823,14 +2824,14 @@
     }
    },
    "T7": {
-    "r1m": 6.23,
-    "r3m": 4.61,
-    "r12": 2.85,
+    "r1m": 7.18,
+    "r3m": 6.85,
+    "r12": -3.28,
     "rank3m": 3,
     "of": 12,
-    "rank12": 10,
+    "rank12": 11,
     "of12": 12,
-    "r2_now": 0.14,
+    "r2_now": 0.142,
     "n": 3,
     "r2_hist": {
      "2015": 0.162,
@@ -2847,9 +2848,9 @@
     }
    },
    "T8": {
-    "r1m": 1.72,
-    "r3m": 14.13,
-    "r12": -35.18,
+    "r1m": 3.19,
+    "r3m": 11.34,
+    "r12": -34.81,
     "rank3m": 1,
     "of": 12,
     "rank12": 12,
@@ -2871,10 +2872,10 @@
     }
    },
    "T9": {
-    "r1m": 19.26,
-    "r3m": -17.66,
-    "r12": 38.82,
-    "rank3m": 10,
+    "r1m": 20.64,
+    "r3m": -7.54,
+    "r12": 33.39,
+    "rank3m": 7,
     "of": 12,
     "rank12": 3,
     "of12": 12,
@@ -2895,14 +2896,14 @@
     }
    },
    "T10": {
-    "r1m": 11.6,
-    "r3m": -20.31,
-    "r12": 39.45,
-    "rank3m": 11,
+    "r1m": 13.68,
+    "r3m": -13.19,
+    "r12": 38.62,
+    "rank3m": 10,
     "of": 12,
     "rank12": 2,
     "of12": 12,
-    "r2_now": 0.713,
+    "r2_now": 0.714,
     "n": 10,
     "r2_hist": {
      "2015": 0.688,
@@ -2919,14 +2920,14 @@
     }
    },
    "T11": {
-    "r1m": 5.56,
-    "r3m": -29.87,
-    "r12": 30.41,
+    "r1m": 8.01,
+    "r3m": -24.17,
+    "r12": 29.29,
     "rank3m": 12,
     "of": 12,
     "rank12": 4,
     "of12": 12,
-    "r2_now": 0.637,
+    "r2_now": 0.638,
     "n": 10,
     "r2_hist": {
      "2015": 0.679,
@@ -2943,14 +2944,14 @@
     }
    },
    "T13": {
-    "r1m": -1.68,
-    "r3m": -8.11,
-    "r12": 4.15,
-    "rank3m": 6,
+    "r1m": -1.53,
+    "r3m": -11.12,
+    "r12": 0.15,
+    "rank3m": 8,
     "of": 12,
-    "rank12": 8,
+    "rank12": 10,
     "of12": 12,
-    "r2_now": 0.328,
+    "r2_now": 0.329,
     "n": 6,
     "r2_hist": {
      "2015": 0.615,
@@ -3027,255 +3028,255 @@
    "themes": [
     [
      "T1",
-     14.95
+     14.96
     ],
     [
      "T8",
-     12.55
+     12.56
     ],
     [
      "T2",
-     2.95
+     2.96
     ]
    ],
    "industries": [
     [
      "海運業",
-     28.83
+     28.84
     ],
     [
      "銀行業",
-     17.49
+     17.34
     ],
     [
      "石油・石炭製品",
-     14.99
+     15.0
     ],
     [
      "鉱業",
-     10.47
+     10.48
     ],
     [
      "情報・通信業",
-     9.66
+     9.67
     ],
     [
      "証券、商品先物取引業",
-     8.83
+     8.84
     ],
     [
      "卸売業",
-     8.19
+     8.2
     ]
    ],
    "rank": {
     "T1": {
-     "q": 14.95,
+     "q": 14.96,
      "rank": 1,
      "of": 12
     },
     "T8": {
-     "q": 12.55,
+     "q": 12.56,
      "rank": 2,
      "of": 12
     },
     "T2": {
-     "q": 2.95,
+     "q": 2.96,
      "rank": 3,
      "of": 12
     },
     "T7": {
-     "q": 2.47,
+     "q": 2.48,
      "rank": 4,
      "of": 12
     },
     "T4": {
-     "q": -5.9,
+     "q": -5.89,
      "rank": 5,
      "of": 12
     },
     "T13": {
-     "q": -9.51,
+     "q": -9.5,
      "rank": 6,
      "of": 12
     },
     "T6": {
-     "q": -11.87,
+     "q": -11.86,
      "rank": 7,
      "of": 12
     },
     "T5": {
-     "q": -16.33,
+     "q": -16.32,
      "rank": 8,
      "of": 12
     },
     "T3": {
-     "q": -19.56,
+     "q": -19.55,
      "rank": 9,
      "of": 12
     },
     "T9": {
-     "q": -23.34,
+     "q": -23.33,
      "rank": 10,
      "of": 12
     },
     "T10": {
-     "q": -25.78,
+     "q": -25.76,
      "rank": 11,
      "of": 12
     },
     "T11": {
-     "q": -30.35,
+     "q": -30.34,
      "rank": 12,
      "of": 12
     },
     "海運業": {
-     "q": 28.83,
+     "q": 28.84,
      "rank": 1,
      "of": 30
     },
     "銀行業": {
-     "q": 17.49,
+     "q": 17.34,
      "rank": 2,
      "of": 30
     },
     "石油・石炭製品": {
-     "q": 14.99,
+     "q": 15.0,
      "rank": 3,
      "of": 30
     },
     "鉱業": {
-     "q": 10.47,
+     "q": 10.48,
      "rank": 4,
      "of": 30
     },
     "情報・通信業": {
-     "q": 9.66,
+     "q": 9.67,
      "rank": 5,
      "of": 30
     },
     "証券、商品先物取引業": {
-     "q": 8.83,
+     "q": 8.84,
      "rank": 6,
      "of": 30
     },
     "卸売業": {
-     "q": 8.19,
+     "q": 8.2,
      "rank": 7,
      "of": 30
     },
     "電気・ガス業": {
-     "q": 7.57,
+     "q": 7.58,
      "rank": 8,
      "of": 30
     },
     "その他製品": {
-     "q": 5.26,
+     "q": 5.27,
      "rank": 9,
      "of": 30
     },
     "サービス業": {
-     "q": 5.03,
+     "q": 5.04,
      "rank": 10,
      "of": 30
     },
     "鉄鋼": {
-     "q": 3.11,
+     "q": 3.12,
      "rank": 11,
      "of": 30
     },
     "輸送用機器": {
-     "q": 2.38,
+     "q": 2.4,
      "rank": 12,
      "of": 30
     },
     "パルプ・紙": {
-     "q": 1.1,
+     "q": 1.12,
      "rank": 13,
      "of": 30
     },
     "保険業": {
-     "q": 0.25,
+     "q": 0.26,
      "rank": 14,
      "of": 30
     },
     "その他金融業": {
-     "q": 0.17,
+     "q": 0.18,
      "rank": 15,
      "of": 30
     },
     "ゴム製品": {
-     "q": -0.58,
+     "q": -0.57,
      "rank": 16,
      "of": 30
     },
     "繊維製品": {
-     "q": -0.84,
+     "q": -0.83,
      "rank": 17,
      "of": 30
     },
     "小売業": {
-     "q": -1.27,
+     "q": -1.28,
      "rank": 18,
      "of": 30
     },
     "医薬品": {
-     "q": -3.26,
+     "q": -3.25,
      "rank": 19,
      "of": 30
     },
     "食料品": {
-     "q": -3.43,
+     "q": -3.42,
      "rank": 20,
      "of": 30
     },
     "不動産業": {
-     "q": -3.74,
+     "q": -3.73,
      "rank": 21,
      "of": 30
     },
     "化学": {
-     "q": -4.28,
+     "q": -4.27,
      "rank": 22,
      "of": 30
     },
     "金属製品": {
-     "q": -5.51,
+     "q": -5.5,
      "rank": 23,
      "of": 30
     },
     "水産・農林業": {
-     "q": -6.69,
+     "q": -6.68,
      "rank": 24,
      "of": 30
     },
     "機械": {
-     "q": -7.04,
+     "q": -7.03,
      "rank": 25,
      "of": 30
     },
     "非鉄金属": {
-     "q": -7.11,
+     "q": -7.1,
      "rank": 26,
      "of": 30
     },
     "精密機器": {
-     "q": -7.35,
+     "q": -7.34,
      "rank": 27,
      "of": 30
     },
     "建設業": {
-     "q": -9.15,
+     "q": -9.14,
      "rank": 28,
      "of": 30
     },
     "電気機器": {
-     "q": -9.58,
+     "q": -9.57,
      "rank": 29,
      "of": 30
     },
     "ガラス・土石製品": {
-     "q": -14.6,
+     "q": -14.59,
      "rank": 30,
      "of": 30
     }
@@ -3284,63 +3285,63 @@
     "quarter": "2026Q4",
     "range": [
      "2026-10-01",
-     "2026-10-05"
+     "2026-10-06"
     ],
-    "n_days": 3,
+    "n_days": 4,
     "themes": [
      [
       "T9",
-      9.82
+      10.61
      ],
      [
       "T10",
-      7.98
+      9.48
      ],
      [
       "T3",
-      6.41
+      8.42
      ]
     ],
     "industries": [
      [
       "電気機器",
-      4.36
+      4.39
      ],
      [
       "精密機器",
-      2.47
+      3.25
      ],
      [
       "ガラス・土石製品",
-      2.32
-     ],
-     [
-      "機械",
-      2.04
+      2.99
      ],
      [
       "非鉄金属",
-      1.59
+      2.6
+     ],
+     [
+      "機械",
+      1.89
      ],
      [
       "化学",
-      1.54
+      1.74
      ],
      [
       "金属製品",
-      0.45
+      0.54
      ]
     ]
    }
   },
   "emerging": {
    "window": [
-    "2026-03-31",
-    "2026-10-05"
+    "2026-04-01",
+    "2026-10-06"
    ],
    "before": [
-    "2025-03-21",
-    "2026-03-30"
+    "2025-03-24",
+    "2026-03-31"
    ],
    "n_stocks": 939,
    "links": [
@@ -3350,7 +3351,7 @@
      "own_ind": "ガラス・土石製品",
      "own_theme": null,
      "corr_now": 0.6,
-     "corr_before": -0.09
+     "corr_before": -0.08
     },
     {
      "ticker": "4021.T",
@@ -3366,7 +3367,7 @@
      "own_ind": "機械",
      "own_theme": null,
      "corr_now": 0.52,
-     "corr_before": -0.05
+     "corr_before": -0.06
     },
     {
      "ticker": "6134.T",
@@ -3382,7 +3383,7 @@
      "own_ind": "機械",
      "own_theme": null,
      "corr_now": 0.73,
-     "corr_before": 0.2
+     "corr_before": 0.21
     },
     {
      "ticker": "4182.T",
@@ -3401,14 +3402,6 @@
      "corr_before": 0.28
     },
     {
-     "ticker": "2127.T",
-     "group": "T8",
-     "own_ind": "サービス業",
-     "own_theme": null,
-     "corr_now": 0.62,
-     "corr_before": 0.12
-    },
-    {
      "ticker": "9101.T",
      "group": "水産・農林業",
      "own_ind": "海運業",
@@ -3425,12 +3418,12 @@
      "corr_before": 0.33
     },
     {
-     "ticker": "6651.T",
-     "group": "T4",
-     "own_ind": "電気機器",
+     "ticker": "2127.T",
+     "group": "T8",
+     "own_ind": "サービス業",
      "own_theme": null,
-     "corr_now": 0.59,
-     "corr_before": 0.1
+     "corr_now": 0.61,
+     "corr_before": 0.12
     },
     {
      "ticker": "2154.T",
@@ -3441,12 +3434,12 @@
      "corr_before": 0.14
     },
     {
-     "ticker": "6143.T",
-     "group": "T10",
-     "own_ind": "機械",
+     "ticker": "6651.T",
+     "group": "T4",
+     "own_ind": "電気機器",
      "own_theme": null,
-     "corr_now": 0.74,
-     "corr_before": 0.26
+     "corr_now": 0.58,
+     "corr_before": 0.1
     },
     {
      "ticker": "7595.T",
@@ -3463,12 +3456,20 @@
      "own_theme": null,
      "corr_now": 0.53,
      "corr_before": 0.06
+    },
+    {
+     "ticker": "6963.T",
+     "group": "T10",
+     "own_ind": "電気機器",
+     "own_theme": "T11",
+     "corr_now": 0.69,
+     "corr_before": 0.22
     }
    ],
-   "n_links": 150,
+   "n_links": 146,
    "clusters": [
     {
-     "n": 45,
+     "n": 42,
      "members": [
       "285A.T",
       "6941.T",
@@ -3507,16 +3508,13 @@
       "6856.T",
       "6113.T",
       "6361.T",
-      "6143.T",
+      "6383.T",
       "6268.T",
+      "6481.T",
       "6506.T",
       "6370.T",
-      "6481.T",
+      "6143.T",
       "6101.T",
-      "3436.T",
-      "6273.T",
-      "6383.T",
-      "6235.T",
       "6055.T",
       "6146.T",
       "7729.T",
@@ -3530,22 +3528,22 @@
       "6857.T",
       "6728.T"
      ],
-     "corr_now": 0.6,
-     "corr_before": 0.29,
+     "corr_now": 0.61,
+     "corr_before": 0.3,
      "industries": {
-      "機械": 17,
+      "機械": 15,
       "電気機器": 13,
       "化学": 7,
       "ガラス・土石製品": 2,
-      "金属製品": 2,
       "（不在 TOPIX 1000）": 1,
       "非鉄金属": 1,
+      "金属製品": 1,
       "サービス業": 1,
       "精密機器": 1
      },
      "themes": {
       "T9": 9,
-      "T10": 6,
+      "T10": 5,
       "T4": 1
      },
      "similar": [
@@ -3563,6 +3561,55 @@
       ]
      ],
      "kind": "跨业种的新联动群（候选新主题）"
+    },
+    {
+     "n": 9,
+     "members": [
+      "6479.T",
+      "6762.T",
+      "6976.T",
+      "6981.T",
+      "6996.T",
+      "6997.T",
+      "6999.T",
+      "6806.T",
+      "6963.T"
+     ],
+     "all_members": [
+      "6479.T",
+      "6762.T",
+      "6976.T",
+      "6981.T",
+      "6996.T",
+      "6997.T",
+      "6999.T",
+      "6806.T",
+      "6963.T"
+     ],
+     "corr_now": 0.64,
+     "corr_before": 0.27,
+     "industries": {
+      "電気機器": 8,
+      "（不在 TOPIX 1000）": 1
+     },
+     "themes": {
+      "T11": 7
+     },
+     "similar": [
+      [
+       "T11",
+       0.98
+      ],
+      [
+       "電気機器",
+       0.88
+      ],
+      [
+       "T10",
+       0.8
+      ]
+     ],
+     "kind": "同一业种内部的新联动"
     },
     {
      "n": 5,
@@ -3599,49 +3646,8 @@
        0.83
       ],
       [
-       "サービス業",
-       0.76
-      ]
-     ],
-     "kind": "跨业种的新联动群（候选新主题）"
-    },
-    {
-     "n": 5,
-     "members": [
-      "2281.T",
-      "2282.T",
-      "7164.T",
-      "7994.T",
-      "2331.T"
-     ],
-     "all_members": [
-      "2281.T",
-      "2282.T",
-      "7164.T",
-      "7994.T",
-      "2331.T"
-     ],
-     "corr_now": 0.62,
-     "corr_before": 0.27,
-     "industries": {
-      "食料品": 2,
-      "その他金融業": 1,
-      "その他製品": 1,
-      "サービス業": 1
-     },
-     "themes": {},
-     "similar": [
-      [
-       "食料品",
-       0.8
-      ],
-      [
-       "水産・農林業",
-       0.71
-      ],
-      [
        "小売業",
-       0.7
+       0.76
       ]
      ],
      "kind": "跨业种的新联动群（候选新主题）"
@@ -3661,7 +3667,7 @@
       "6702.T"
      ],
      "corr_now": 0.6,
-     "corr_before": 0.21,
+     "corr_before": 0.22,
      "industries": {
       "情報・通信業": 2,
       "サービス業": 1,
@@ -3689,220 +3695,219 @@
     {
      "n": 4,
      "members": [
-      "3167.T",
-      "4527.T",
-      "7780.T",
-      "7846.T"
+      "2281.T",
+      "2282.T",
+      "7164.T",
+      "7994.T"
      ],
      "all_members": [
-      "3167.T",
-      "4527.T",
-      "7780.T",
-      "7846.T"
+      "2281.T",
+      "2282.T",
+      "7164.T",
+      "7994.T"
      ],
-     "corr_now": 0.61,
-     "corr_before": 0.18,
+     "corr_now": 0.66,
+     "corr_before": 0.25,
      "industries": {
-      "卸売業": 1,
-      "医薬品": 1,
-      "精密機器": 1,
+      "食料品": 2,
+      "その他金融業": 1,
       "その他製品": 1
      },
      "themes": {},
      "similar": [
       [
        "食料品",
-       0.61
+       0.77
       ],
       [
        "水産・農林業",
-       0.59
+       0.68
       ],
       [
        "小売業",
-       0.57
+       0.67
       ]
      ],
      "kind": "跨业种的新联动群（候选新主题）"
     }
    ],
-   "n_new_pairs": 1671
+   "n_new_pairs": 1623
   },
   "n_loaded": 939,
   "n_wanted": 941,
   "influence": {
    "now": {
     "window": [
-     "2026-07-02",
-     "2026-10-05"
+     "2026-07-03",
+     "2026-10-06"
     ],
     "n_days": 63,
-    "r2": 0.99922,
+    "r2": 0.99971,
     "rows": {
      "電気機器": {
-      "share": 34.13,
-      "weight": 21.28,
-      "rel": -6.56
+      "share": 31.88,
+      "weight": 19.96,
+      "rel": -2.66
      },
      "銀行業": {
-      "share": 14.92,
-      "weight": 12.03,
-      "rel": 8.47
+      "share": 14.95,
+      "weight": 12.01,
+      "rel": 7.45
      },
      "機械": {
-      "share": 7.92,
-      "weight": 5.94,
-      "rel": -7.59
-     },
-     "非鉄金属": {
-      "share": 6.08,
-      "weight": 2.92,
-      "rel": -9.52
+      "share": 7.97,
+      "weight": 6.04,
+      "rel": -7.37
      },
      "卸売業": {
-      "share": 5.87,
-      "weight": 7.44,
-      "rel": 8.17
+      "share": 6.34,
+      "weight": 8.11,
+      "rel": 5.77
      },
-     "化学": {
-      "share": 5.02,
-      "weight": 5.1,
-      "rel": -6.12
+     "非鉄金属": {
+      "share": 5.21,
+      "weight": 2.48,
+      "rel": -1.45
      },
      "輸送用機器": {
-      "share": 4.75,
-      "weight": 5.82,
-      "rel": 1.99
+      "share": 4.82,
+      "weight": 5.9,
+      "rel": -0.64
      },
      "情報・通信業": {
-      "share": 4.34,
-      "weight": 5.7,
-      "rel": 9.83
+      "share": 4.78,
+      "weight": 6.44,
+      "rel": 4.78
+     },
+     "化学": {
+      "share": 4.64,
+      "weight": 4.72,
+      "rel": -5.28
      },
      "保険業": {
-      "share": 2.89,
-      "weight": 3.56,
-      "rel": 2.88
-     },
-     "その他金融業": {
-      "share": 2.88,
-      "weight": 2.73,
-      "rel": -4.42
+      "share": 3.63,
+      "weight": 4.43,
+      "rel": -0.06
      },
      "サービス業": {
-      "share": 2.39,
-      "weight": 3.92,
-      "rel": 20.22
+      "share": 2.75,
+      "weight": 4.47,
+      "rel": 18.81
+     },
+     "その他金融業": {
+      "share": 2.06,
+      "weight": 1.96,
+      "rel": -6.29
+     },
+     "ガラス・土石製品": {
+      "share": 1.99,
+      "weight": 1.32,
+      "rel": -17.23
      },
      "金属製品": {
-      "share": 1.75,
-      "weight": 1.27,
-      "rel": -12.57
-     },
-     "電気・ガス業": {
-      "share": 1.46,
-      "weight": 2.39,
-      "rel": 2.85
-     },
-     "その他製品": {
-      "share": 1.0,
-      "weight": 2.38,
-      "rel": 7.05
-     },
-     "不動産業": {
-      "share": 0.91,
-      "weight": 1.67,
-      "rel": -10.0
+      "share": 1.87,
+      "weight": 1.36,
+      "rel": -11.43
      },
      "建設業": {
-      "share": 0.9,
-      "weight": 1.12,
-      "rel": -12.3
+      "share": 1.43,
+      "weight": 1.81,
+      "rel": -14.14
      },
-     "食料品": {
-      "share": 0.54,
-      "weight": 1.95,
-      "rel": -0.94
+     "不動産業": {
+      "share": 0.95,
+      "weight": 1.75,
+      "rel": -12.71
      },
-     "医薬品": {
-      "share": 0.45,
-      "weight": 3.19,
-      "rel": -1.02
-     },
-     "鉄鋼": {
-      "share": 0.42,
-      "weight": 0.65,
-      "rel": 7.49
+     "その他製品": {
+      "share": 0.92,
+      "weight": 2.17,
+      "rel": 5.39
      },
      "精密機器": {
-      "share": 0.35,
-      "weight": 0.46,
-      "rel": -4.3
+      "share": 0.83,
+      "weight": 1.05,
+      "rel": -2.27
+     },
+     "医薬品": {
+      "share": 0.52,
+      "weight": 3.5,
+      "rel": -3.78
+     },
+     "食料品": {
+      "share": 0.51,
+      "weight": 1.83,
+      "rel": -2.69
+     },
+     "電気・ガス業": {
+      "share": 0.47,
+      "weight": 0.78,
+      "rel": 1.8
+     },
+     "石油・石炭製品": {
+      "share": 0.39,
+      "weight": 0.51,
+      "rel": 11.1
      },
      "陸運業": {
-      "share": 0.33,
-      "weight": 1.47,
-      "rel": -0.1
+      "share": 0.25,
+      "weight": 1.1,
+      "rel": -3.19
      },
      "小売業": {
-      "share": 0.31,
-      "weight": 5.0,
-      "rel": -3.82
+      "share": 0.25,
+      "weight": 3.7,
+      "rel": -5.34
      },
-     "倉庫・運輸関連業": {
-      "share": 0.22,
-      "weight": 0.61,
-      "rel": -5.2
+     "証券、商品先物取引業": {
+      "share": 0.2,
+      "weight": 0.18,
+      "rel": 4.84
      },
      "水産・農林業": {
-      "share": 0.11,
-      "weight": 1.23,
-      "rel": -8.07
+      "share": 0.15,
+      "weight": 1.72,
+      "rel": -10.82
      },
      "海運業": {
-      "share": 0.05,
-      "weight": 0.19,
-      "rel": 35.22
+      "share": 0.1,
+      "weight": 0.34,
+      "rel": 33.06
+     },
+     "倉庫・運輸関連業": {
+      "share": 0.08,
+      "weight": 0.21,
+      "rel": -6.76
+     },
+     "空運業": {
+      "share": 0.06,
+      "weight": 0.15,
+      "rel": -7.18
      },
      "鉱業": {
       "share": 0.0,
       "weight": 0.0,
-      "rel": 11.04
+      "rel": 11.07
      },
      "繊維製品": {
       "share": 0.0,
       "weight": 0.0,
-      "rel": 1.75
+      "rel": 0.8
      },
      "パルプ・紙": {
       "share": 0.0,
       "weight": 0.0,
-      "rel": 1.38
-     },
-     "石油・石炭製品": {
-      "share": 0.0,
-      "weight": 0.0,
-      "rel": 12.22
+      "rel": -0.61
      },
      "ゴム製品": {
       "share": 0.0,
       "weight": 0.0,
-      "rel": 5.24
+      "rel": 1.66
      },
-     "ガラス・土石製品": {
+     "鉄鋼": {
       "share": 0.0,
       "weight": 0.0,
-      "rel": -18.99
-     },
-     "空運業": {
-      "share": 0.0,
-      "weight": 0.0,
-      "rel": -1.33
-     },
-     "証券、商品先物取引業": {
-      "share": 0.0,
-      "weight": 0.0,
-      "rel": 5.47
+      "rel": 6.85
      }
     }
    },
@@ -4101,31 +4106,31 @@
   "status": {
    "JP": {
     "name": "日経225",
-    "date": "2026-10-05",
-    "dev": 6.06,
+    "date": "2026-10-06",
+    "dev": 7.34,
     "thr": -15.0,
-    "gap_pp": 21.06
+    "gap_pp": 22.34
    },
    "US": {
     "name": "S&P 500",
-    "date": "2026-10-05",
-    "dev": 1.72,
+    "date": "2026-10-06",
+    "dev": 2.3,
     "thr": -12.0,
-    "gap_pp": 13.72
+    "gap_pp": 14.3
    },
    "DE": {
     "name": "DAX",
-    "date": "2026-10-02",
-    "dev": -1.85,
+    "date": "2026-10-05",
+    "dev": -1.6,
     "thr": -14.0,
-    "gap_pp": 12.15
+    "gap_pp": 12.4
    },
    "UK": {
     "name": "FTSE 100",
-    "date": "2026-10-05",
-    "dev": -2.02,
+    "date": "2026-10-06",
+    "dev": -1.62,
     "thr": -11.2,
-    "gap_pp": 9.18
+    "gap_pp": 9.58
    }
   },
   "review": {
@@ -4873,19 +4878,18 @@
   ]
  },
  "macro_now": {
-  "generated": "2026-10-06 07:09 JST",
+  "generated": "2026-10-07 07:10 JST",
   "health": {
    "tiles": [
     {
      "key": "n225_ma",
      "label": "日経 离 250 日线",
      "unit": "%",
-     "value": 20.34,
+     "value": 21.58,
      "status": "good",
      "note": "牛熊分界 = 250 日线 ±3%：> +3% 正常、±3% 以内注意、< −3% 警戒",
      "ref": null,
      "spark": [
-      22.9795,
       21.8614,
       23.8754,
       22.726,
@@ -5004,20 +5008,20 @@
       15.4417,
       19.0567,
       17.75,
-      20.3373
+      20.3695,
+      21.5821
      ],
-     "asof": "2026-10-05"
+     "asof": "2026-10-06"
     },
     {
      "key": "vix",
      "label": "VIX 恐慌指数",
      "unit": "pt",
-     "value": 15.52,
+     "value": 15.01,
      "status": "good",
      "note": "≥ 22 注意、≥ 30 警戒",
      "ref": 22.0,
      "spark": [
-      19.5,
       18.92,
       19.31,
       18.71,
@@ -5136,20 +5140,20 @@
       16.34,
       16.39,
       15.31,
-      15.52
+      15.52,
+      15.01
      ],
-     "asof": "2026-10-05"
+     "asof": "2026-10-06"
     },
     {
      "key": "us10y",
      "label": "美国 10 年期利率",
      "unit": "%",
-     "value": 5.31,
+     "value": 5.27,
      "status": "bad",
      "note": "≥ 5% 注意（高估值成长 ×0.5）、≥ 5.2% 警戒",
      "ref": 5.0,
      "spark": [
-      4.292,
       4.294,
       4.323,
       4.31,
@@ -5268,20 +5272,20 @@
       5.293,
       5.237,
       5.277,
-      5.311
+      5.311,
+      5.269
      ],
-     "asof": "2026-10-05"
+     "asof": "2026-10-06"
     },
     {
      "key": "jgb10y",
      "label": "日本 10 年期利率",
      "unit": "%",
-     "value": 3.1,
+     "value": 3.08,
      "status": "warn",
      "note": "≥ 3.05% 注意、≥ 3.2% 警戒",
      "ref": 3.05,
      "spark": [
-      2.411,
       2.374,
       2.397,
       2.439,
@@ -5400,20 +5404,20 @@
       3.082,
       3.057,
       3.092,
-      3.097
+      3.097,
+      3.085
      ],
-     "asof": "2026-10-02"
+     "asof": "2026-10-05"
     },
     {
      "key": "usdjpy",
      "label": "美元日元",
      "unit": "円/USD",
-     "value": 157.82,
-     "status": "good",
+     "value": 158.1,
+     "status": "warn",
      "note": "≥ 158 = 介入警戒区（出口股 ×0.75）",
      "ref": 158.0,
      "spark": [
-      158.844,
       159.373,
       159.488,
       159.747,
@@ -5532,20 +5536,20 @@
       157.404,
       157.558,
       157.927,
-      157.818
+      157.734,
+      158.104
      ],
-     "asof": "2026-10-05"
+     "asof": "2026-10-06"
     },
     {
      "key": "brent",
      "label": "布伦特原油",
      "unit": "USD/桶",
-     "value": 100.32,
+     "value": 101.15,
      "status": "warn",
-     "note": "≥ 100 注意、≥ 115 警戒；20 日涨 ≥ 15% 也算注意；近 20 日 +4.2%",
+     "note": "≥ 100 注意、≥ 115 警戒；20 日涨 ≥ 15% 也算注意；近 20 日 +3.3%",
      "ref": 100.0,
      "spark": [
-      98.48,
       101.91,
       105.07,
       105.33,
@@ -5664,20 +5668,20 @@
       103.53,
       102.31,
       102.25,
-      100.32
+      100.32,
+      101.15
      ],
-     "asof": "2026-10-05"
+     "asof": "2026-10-06"
     },
     {
      "key": "hy",
      "label": "美国高收益债利差",
      "unit": "bp",
-     "value": 310.0,
+     "value": 312.0,
      "status": "good",
      "note": "≥ 330 注意、≥ 400 警戒（信用紧张）",
      "ref": 330.0,
      "spark": [
-      285.0,
       284.0,
       286.0,
       286.0,
@@ -5796,31 +5800,31 @@
       308.0,
       312.0,
       324.0,
-      310.0
+      310.0,
+      312.0
      ],
-     "asof": "2026-10-02"
+     "asof": "2026-10-05"
     },
     {
      "key": "breadth",
      "label": "美股宽度（站上 50 日线）",
      "unit": "%",
-     "value": 24.7,
-     "status": "warn",
+     "value": 26.8,
+     "status": "good",
      "note": "< 25% 注意（少数大票撑指数）（来自市场风险报告，没有历史曲线）",
      "ref": 25.0,
      "spark": [],
-     "asof": "2026-10-05"
+     "asof": "2026-10-06"
     },
     {
      "key": "threat_us",
      "label": "威胁指数 美股",
      "unit": "分",
-     "value": 55.21,
+     "value": 53.19,
      "status": "good",
      "note": "≥ 60 注意、≥ 80 警戒（只说明风险高低，不预测哪天）",
      "ref": 60.0,
      "spark": [
-      63.8315,
       61.9317,
       61.3451,
       62.0052,
@@ -5939,20 +5943,20 @@
       55.6351,
       57.4064,
       55.524,
-      55.2081
+      55.7057,
+      53.1902
      ],
-     "asof": "2026-10-05"
+     "asof": "2026-10-06"
     },
     {
      "key": "threat_jp",
      "label": "威胁指数 日経",
      "unit": "分",
-     "value": 62.2,
+     "value": 62.82,
      "status": "warn",
      "note": "≥ 60 注意、≥ 80 警戒",
      "ref": 60.0,
      "spark": [
-      72.1143,
       68.396,
       66.577,
       66.0983,
@@ -6071,9 +6075,10 @@
       64.8948,
       67.4571,
       66.4753,
-      62.1991
+      62.2364,
+      62.8199
      ],
-     "asof": "2026-10-05"
+     "asof": "2026-10-06"
     }
    ],
    "score": 70,
@@ -6283,7 +6288,7 @@
      4.2
     ],
     "seen": "2026-10-05T07:10+09:00",
-    "new": true
+    "new": false
    },
    {
     "key": "us_payroll",
@@ -6323,7 +6328,7 @@
      2.9
     ],
     "seen": "2026-10-05T07:10+09:00",
-    "new": true
+    "new": false
    },
    {
     "key": "us_cpi",
@@ -6390,75 +6395,81 @@
     "kind": "ELECTION",
     "home": "GL",
     "name": "以色列议会选举（中东局势 / 油价）"
+   },
+   {
+    "date": "2026-10-28",
+    "kind": "FOMC",
+    "home": "US",
+    "name": ""
    }
   ]
  },
  "news": {
-  "generated": "2026-10-06 07:09 JST",
+  "generated": "2026-10-07 07:10 JST",
   "summary": {
-   "n_events": 55,
-   "n_alerts": 0,
-   "max_threat": 1.5,
+   "n_events": 51,
+   "n_alerts": 3,
+   "max_threat": 2.7,
    "by_type": {
-    "credit": {
-     "label": "金融系统风险（银行危机 / 主权违约）",
-     "n": 1,
-     "alerts": 0,
-     "max_cred": 50,
+    "war": {
+     "label": "战争 / 军事冲突升级",
+     "n": 2,
+     "alerts": 1,
+     "max_cred": 90,
      "negative": true
     },
     "tariff": {
      "label": "关税 / 贸易摩擦 / 制裁",
-     "n": 32,
-     "alerts": 0,
-     "max_cred": 90,
+     "n": 26,
+     "alerts": 1,
+     "max_cred": 100,
      "negative": true
     },
-    "fed_hike": {
-     "label": "美联储加息 / 偏鹰",
-     "n": 6,
+    "boj_hike": {
+     "label": "日银加息 / 收紧",
+     "n": 8,
+     "alerts": 1,
+     "max_cred": 85,
+     "negative": true
+    },
+    "inflation": {
+     "label": "通胀升温",
+     "n": 1,
+     "alerts": 1,
+     "max_cred": 80,
+     "negative": true
+    },
+    "recession": {
+     "label": "景气转弱 / 衰退",
+     "n": 3,
      "alerts": 0,
      "max_cred": 80,
      "negative": true
     },
-    "war": {
-     "label": "战争 / 军事冲突升级",
+    "oil_up": {
+     "label": "原油供给冲击 / 油价急涨",
      "n": 2,
+     "alerts": 0,
+     "max_cred": 80,
+     "negative": true
+    },
+    "fed_hike": {
+     "label": "美联储加息 / 偏鹰",
+     "n": 3,
      "alerts": 0,
      "max_cred": 80,
      "negative": true
     },
     "bankruptcy": {
      "label": "企业破产",
-     "n": 2,
+     "n": 1,
      "alerts": 0,
      "max_cred": 70,
      "negative": true
     },
-    "disaster": {
-     "label": "自然灾害",
-     "n": 1,
-     "alerts": 0,
-     "max_cred": 60,
-     "negative": true
-    },
-    "recession": {
-     "label": "景气转弱 / 衰退",
-     "n": 1,
-     "alerts": 0,
-     "max_cred": 50,
-     "negative": true
-    },
-    "boj_hike": {
-     "label": "日银加息 / 收紧",
-     "n": 2,
-     "alerts": 0,
-     "max_cred": 50,
-     "negative": true
-    },
     "oil_down": {
      "label": "油价急跌",
-     "n": 8,
+     "n": 7,
      "alerts": 0,
      "max_cred": 80,
      "negative": false
@@ -6467,15 +6478,27 @@
    "sectors": [
     [
      "不动产",
-     -4.15
-    ],
-    [
-     "电力·燃气",
-     -3.85
+     -4.46
     ],
     [
      "医药品",
-     -1.8
+     -3.85
+    ],
+    [
+     "电力·燃气",
+     -1.47
+    ],
+    [
+     "零售",
+     -0.55
+    ],
+    [
+     "金融（除银行）",
+     -0.55
+    ],
+    [
+     "建设·资材",
+     -0.41
     ],
     [
      "汽车·运输机",
@@ -6486,24 +6509,20 @@
      0.14
     ],
     [
-     "零售",
-     0.36
-    ],
-    [
      "钢铁·有色",
-     0.55
+     0.45
     ],
     [
-     "金融（除银行）",
-     0.73
-    ],
-    [
-     "银行",
-     3.72
+     "商社·批发",
+     3.31
     ],
     [
      "能源资源",
-     4.33
+     5.09
+    ],
+    [
+     "银行",
+     8.56
     ]
    ]
   },
@@ -6513,7 +6532,7 @@
    "NHK 主要": 7,
    "Yahoo!ニュース 経済": 8,
    "Yahoo!ニュース 国際": 8,
-   "日本銀行": 69,
+   "日本銀行": 70,
    "財務省": 100,
    "FRB": 20,
    "Google ニュース": 100,
@@ -6522,7 +6541,7 @@
   }
  },
  "energy": {
-  "generated": "2026-10-06 07:03",
+  "generated": "2026-10-07 07:04",
   "rows": [
    {
     "key": "us_total",
@@ -7225,10 +7244,10 @@
   "steo_vintage": "2026-09",
   "forward": {
    "logged": true,
-   "rows": 7,
-   "k4_on": 7,
+   "rows": 8,
+   "k4_on": 8,
    "first": "2026-09-28",
-   "last": "2026-10-06"
+   "last": "2026-10-07"
   }
  },
  "cost_sales": {
@@ -7878,28 +7897,76 @@
   }
  },
  "timeline": {
-  "bar_date": "2026-10-05",
-  "s1": "2026-10-06",
-  "s2": "2026-10-07",
+  "bar_date": "2026-10-06",
+  "s1": "2026-10-07",
+  "s2": "2026-10-08",
   "orders": [],
   "holdings": [],
   "candidates": [
    {
+    "ticker": "8795.T",
+    "status": "imminent",
+    "score": 44.6,
+    "sector": "保险",
+    "close": 4892.0,
+    "range_pct": 10.7,
+    "vol_ma": 1349145,
+    "v_min": 2075717,
+    "v_w2": null,
+    "v_need": 2075717,
+    "w5v": 1.16,
+    "lo": 4899.09,
+    "hi": 5463.23,
+    "why": [],
+    "x_gc": 4899.09,
+    "hi_open": false,
+    "mult": 0.0,
+    "budget": 0,
+    "blocks": [
+     "新仓倍数 0（宏观 / 板块 / 判断层）"
+    ],
+    "earnings": "2026-11-13",
+    "state": {
+     "state": null,
+     "label": "不适用（没有营业利润）",
+     "disc": null,
+     "age_days": null,
+     "stale": false
+    },
+    "scen": {
+     "持平": {
+      "signal_day": "2026-10-08",
+      "buy_day": "2026-10-09",
+      "close": 4892.0,
+      "vol": 2083958,
+      "k": 2
+     },
+     "每天 +1%": {
+      "signal_day": "2026-10-07",
+      "buy_day": "2026-10-08",
+      "close": 4940.92,
+      "vol": 2075717,
+      "k": 1
+     },
+     "每天 −1%": null
+    }
+   },
+   {
     "ticker": "2432.T",
     "status": "watch",
-    "score": 73.5,
+    "score": 71.3,
     "sector": "软件互联网",
-    "close": 2492.0,
-    "range_pct": 13.6,
-    "vol_ma": 1065435,
-    "v_min": 1654695,
+    "close": 2490.0,
+    "range_pct": 12.6,
+    "vol_ma": 1063715,
+    "v_min": 1619384,
     "v_w2": null,
-    "v_need": 1654695,
+    "v_need": 1619384,
     "w5v": 1.27,
-    "lo": 2609.02,
-    "hi": 2920.52,
+    "lo": 2616.74,
+    "hi": 2956.56,
     "why": [],
-    "x_gc": 2609.02,
+    "x_gc": 2616.74,
     "hi_open": false,
     "mult": 0.0,
     "budget": 0,
@@ -7912,82 +7979,33 @@
      "label": "盈利连续恶化",
      "effect": null,
      "disc": "2026-08-05",
-     "age_days": 62,
+     "age_days": 63,
      "stale": false
     },
     "scen": {
      "持平": null,
-     "每天 +1%": {
-      "signal_day": "2026-10-09",
-      "buy_day": "2026-10-13",
-      "close": 2593.19,
-      "vol": 1625912,
-      "k": 4
-     },
-     "每天 −1%": null
-    }
-   },
-   {
-    "ticker": "3861.T",
-    "status": "watch",
-    "score": 72.4,
-    "sector": "纸浆",
-    "close": 828.1,
-    "range_pct": 10.3,
-    "vol_ma": 3553835,
-    "v_min": 5497038,
-    "v_w2": null,
-    "v_need": 5497038,
-    "w5v": 1.46,
-    "lo": 878.27,
-    "hi": 1011.81,
-    "why": [],
-    "x_gc": 878.27,
-    "hi_open": false,
-    "mult": 0.0,
-    "budget": 0,
-    "blocks": [
-     "新仓倍数 0（宏观 / 板块 / 判断层）"
-    ],
-    "earnings": "2026-11-06",
-    "state": {
-     "state": "N",
-     "label": "无特定形态",
-     "effect": null,
-     "disc": "2026-08-05",
-     "age_days": 62,
-     "stale": false
-    },
-    "scen": {
-     "持平": null,
-     "每天 +1%": {
-      "signal_day": "2026-10-09",
-      "buy_day": "2026-10-13",
-      "close": 861.72,
-      "vol": 5471555,
-      "k": 4
-     },
+     "每天 +1%": null,
      "每天 −1%": null
     }
    },
    {
     "ticker": "7186.T",
     "status": "watch",
-    "score": 70.7,
+    "score": 69.8,
     "sector": "银行",
-    "close": 1893.5,
+    "close": 1940.0,
     "range_pct": 14.0,
-    "vol_ma": 4321085,
-    "v_min": 6729982,
+    "vol_ma": 4273230,
+    "v_min": 6622598,
     "v_w2": null,
-    "v_need": 6729982,
+    "v_need": 6622598,
     "w5v": 1.49,
     "lo": null,
     "hi": null,
     "why": [
      "MACD 已在信号线之上（金叉已经过去）：要先回落到信号线下方再金叉"
     ],
-    "x_gc": 1881.66,
+    "x_gc": 1860.81,
     "mult": 0.0,
     "budget": 0,
     "blocks": [
@@ -8008,23 +8026,65 @@
     }
    },
    {
-    "ticker": "8750.T",
+    "ticker": "8601.T",
     "status": "watch",
-    "score": 68.6,
-    "sector": "保险",
-    "close": 1816.0,
-    "range_pct": 11.9,
-    "vol_ma": 9594620,
-    "v_min": 14988965,
+    "score": 62.9,
+    "sector": "金融",
+    "close": 1772.5,
+    "range_pct": 10.5,
+    "vol_ma": 5671370,
+    "v_min": 8784609,
     "v_w2": null,
-    "v_need": 14988965,
-    "w5v": 1.58,
-    "lo": null,
-    "hi": null,
-    "why": [
-     "收在临界价以上也不会出买点：出货日 6 ≥ 6"
+    "v_need": 8784609,
+    "w5v": 1.62,
+    "lo": 1915.61,
+    "hi": 2203.99,
+    "why": [],
+    "x_gc": 1915.61,
+    "hi_open": false,
+    "mult": 0.0,
+    "budget": 0,
+    "blocks": [
+     "新仓倍数 0（宏观 / 板块 / 判断层）"
     ],
-    "x_gc": 1931.68,
+    "earnings": "2026-10-30",
+    "state": {
+     "state": "T6",
+     "label": "盈利加速",
+     "effect": "+",
+     "disc": "2026-08-03",
+     "age_days": 65,
+     "stale": false
+    },
+    "scen": {
+     "持平": null,
+     "每天 +1%": {
+      "signal_day": "2026-10-13",
+      "buy_day": "2026-10-14",
+      "close": 1844.47,
+      "vol": 9297707,
+      "k": 4
+     },
+     "每天 −1%": null
+    }
+   },
+   {
+    "ticker": "8306.T",
+    "status": "watch",
+    "score": 44.6,
+    "sector": "银行",
+    "close": 3671.0,
+    "range_pct": 12.8,
+    "vol_ma": 42004395,
+    "v_min": 63768528,
+    "v_w2": null,
+    "v_need": 63768528,
+    "w5v": 1.28,
+    "lo": 3665.13,
+    "hi": 3952.36,
+    "why": [],
+    "x_gc": 3665.13,
+    "hi_open": false,
     "mult": 0.0,
     "budget": 0,
     "blocks": [
@@ -8039,56 +8099,19 @@
      "stale": false
     },
     "scen": {
-     "持平": null,
-     "每天 +1%": {
-      "signal_day": "2026-10-09",
-      "buy_day": "2026-10-13",
-      "close": 1889.74,
-      "vol": 15559246,
-      "k": 4
+     "持平": {
+      "signal_day": "2026-10-07",
+      "buy_day": "2026-10-08",
+      "close": 3671.0,
+      "vol": 63768528,
+      "k": 1
      },
-     "每天 −1%": null
-    }
-   },
-   {
-    "ticker": "8601.T",
-    "status": "watch",
-    "score": 66.1,
-    "sector": "金融",
-    "close": 1755.5,
-    "range_pct": 10.5,
-    "vol_ma": 5686105,
-    "v_min": 8834044,
-    "v_w2": null,
-    "v_need": 8834044,
-    "w5v": 1.62,
-    "lo": 1932.4,
-    "hi": 2186.62,
-    "why": [],
-    "x_gc": 1932.4,
-    "hi_open": false,
-    "mult": 0.0,
-    "budget": 0,
-    "blocks": [
-     "新仓倍数 0（宏观 / 板块 / 判断层）"
-    ],
-    "earnings": "2026-10-30",
-    "state": {
-     "state": "T6",
-     "label": "盈利加速",
-     "effect": "+",
-     "disc": "2026-08-03",
-     "age_days": 64,
-     "stale": false
-    },
-    "scen": {
-     "持平": null,
      "每天 +1%": {
-      "signal_day": "2026-10-13",
-      "buy_day": "2026-10-14",
-      "close": 1845.05,
-      "vol": 9399553,
-      "k": 5
+      "signal_day": "2026-10-07",
+      "buy_day": "2026-10-08",
+      "close": 3707.71,
+      "vol": 63768528,
+      "k": 1
      },
      "每天 −1%": null
     }
@@ -8096,20 +8119,21 @@
    {
     "ticker": "8316.T",
     "status": "watch",
-    "score": 45.7,
+    "score": 40.1,
     "sector": "银行",
-    "close": 3374.0,
+    "close": 3429.0,
     "range_pct": 13.1,
-    "vol_ma": 25803930,
-    "v_min": 39340865,
+    "vol_ma": 25154630,
+    "v_min": 38362768,
     "v_w2": null,
-    "v_need": 39340865,
+    "v_need": 38362768,
     "w5v": 1.29,
-    "lo": 3393.5,
-    "hi": 3706.34,
-    "why": [],
-    "x_gc": 3393.5,
-    "hi_open": false,
+    "lo": null,
+    "hi": null,
+    "why": [
+     "MACD 已在信号线之上（金叉已经过去）：要先回落到信号线下方再金叉"
+    ],
+    "x_gc": 3361.88,
     "mult": 0.0,
     "budget": 0,
     "blocks": [
@@ -8125,32 +8149,198 @@
     },
     "scen": {
      "持平": null,
+     "每天 +1%": null,
+     "每天 −1%": null
+    }
+   },
+   {
+    "ticker": "9531.T",
+    "status": "watch",
+    "score": 38.1,
+    "sector": "电力燃气",
+    "close": 6098.0,
+    "range_pct": 10.9,
+    "vol_ma": 1025440,
+    "v_min": 1580798,
+    "v_w2": null,
+    "v_need": 1580798,
+    "w5v": 1.32,
+    "lo": 6390.03,
+    "hi": 7034.64,
+    "why": [],
+    "x_gc": 6390.03,
+    "hi_open": false,
+    "mult": 0.0,
+    "budget": 0,
+    "blocks": [
+     "新仓倍数 0（宏观 / 板块 / 判断层）"
+    ],
+    "earnings": "2026-10-29",
+    "state": {
+     "state": "N",
+     "label": "无特定形态",
+     "effect": null,
+     "disc": "2026-07-30",
+     "age_days": 69,
+     "stale": false
+    },
+    "scen": {
+     "持平": null,
      "每天 +1%": {
-      "signal_day": "2026-10-06",
-      "buy_day": "2026-10-07",
-      "close": 3407.74,
-      "vol": 39340865,
-      "k": 1
+      "signal_day": "2026-10-09",
+      "buy_day": "2026-10-13",
+      "close": 6282.78,
+      "vol": 1644088,
+      "k": 3
      },
      "每天 −1%": null
     }
    },
    {
-    "ticker": "8795.T",
+    "ticker": "5406.T",
     "status": "watch",
-    "score": 38.0,
-    "sector": "保险",
-    "close": 4779.0,
-    "range_pct": 10.7,
-    "vol_ma": 1336055,
-    "v_min": 2077168,
+    "score": 84.2,
+    "sector": "钢铁金属",
+    "close": 2024.0,
+    "range_pct": 14.3,
+    "vol_ma": 1729060,
+    "v_min": 2643098,
     "v_w2": null,
-    "v_need": 2077168,
-    "w5v": 1.16,
-    "lo": 4967.62,
-    "hi": 5524.3,
+    "v_need": 2643098,
+    "w5v": 1.26,
+    "lo": 2057.05,
+    "hi": 2191.31,
     "why": [],
-    "x_gc": 4967.62,
+    "x_gc": 2057.05,
+    "hi_open": false,
+    "mult": 0.0,
+    "budget": 0,
+    "blocks": [
+     "新仓倍数 0（宏观 / 板块 / 判断层）"
+    ],
+    "earnings": "2026-11-10",
+    "state": {
+     "state": "N",
+     "label": "无特定形态",
+     "effect": null,
+     "disc": "2026-08-05",
+     "age_days": 63,
+     "stale": false
+    },
+    "scen": {
+     "持平": null,
+     "每天 +1%": {
+      "signal_day": "2026-10-08",
+      "buy_day": "2026-10-09",
+      "close": 2064.68,
+      "vol": 2665335,
+      "k": 2
+     },
+     "每天 −1%": null
+    }
+   },
+   {
+    "ticker": "1925.T",
+    "status": "watch",
+    "score": 77.3,
+    "sector": "建设",
+    "close": 2152.5,
+    "range_pct": 10.5,
+    "vol_ma": 4173155,
+    "v_min": 6423706,
+    "v_w2": null,
+    "v_need": 6423706,
+    "w5v": 1.5,
+    "lo": 2232.39,
+    "hi": 2758.45,
+    "why": [],
+    "x_gc": 2232.38,
+    "hi_open": false,
+    "mult": 0.0,
+    "budget": 0,
+    "blocks": [
+     "新仓倍数 0（宏观 / 板块 / 判断层）"
+    ],
+    "earnings": "2026-11-11",
+    "state": {
+     "state": "N",
+     "label": "无特定形态",
+     "effect": null,
+     "disc": "2026-08-06",
+     "age_days": 62,
+     "stale": false
+    },
+    "scen": {
+     "持平": null,
+     "每天 +1%": {
+      "signal_day": "2026-10-09",
+      "buy_day": "2026-10-13",
+      "close": 2217.72,
+      "vol": 6674191,
+      "k": 3
+     },
+     "每天 −1%": null
+    }
+   },
+   {
+    "ticker": "2002.T",
+    "status": "watch",
+    "score": 75.3,
+    "sector": "食品",
+    "close": 1956.0,
+    "range_pct": 14.9,
+    "vol_ma": 945270,
+    "v_min": 1464990,
+    "v_w2": null,
+    "v_need": 1464990,
+    "w5v": 1.13,
+    "lo": 2044.88,
+    "hi": 2420.52,
+    "why": [],
+    "x_gc": 2044.88,
+    "hi_open": false,
+    "mult": 0.0,
+    "budget": 0,
+    "blocks": [
+     "新仓倍数 0（宏观 / 板块 / 判断层）"
+    ],
+    "earnings": "2026-10-28",
+    "state": {
+     "state": "N",
+     "label": "无特定形态",
+     "effect": null,
+     "disc": "2026-07-30",
+     "age_days": 69,
+     "stale": false
+    },
+    "scen": {
+     "持平": null,
+     "每天 +1%": {
+      "signal_day": "2026-10-09",
+      "buy_day": "2026-10-13",
+      "close": 2015.27,
+      "vol": 1465504,
+      "k": 3
+     },
+     "每天 −1%": null
+    }
+   },
+   {
+    "ticker": "8750.T",
+    "status": "watch",
+    "score": 75.3,
+    "sector": "保险",
+    "close": 1843.0,
+    "range_pct": 11.9,
+    "vol_ma": 9665410,
+    "v_min": 14860687,
+    "v_w2": null,
+    "v_need": 14860687,
+    "w5v": 1.58,
+    "lo": 1915.65,
+    "hi": 2056.53,
+    "why": [],
+    "x_gc": 1915.65,
     "hi_open": false,
     "mult": 0.0,
     "budget": 0,
@@ -8168,223 +8358,44 @@
     "scen": {
      "持平": null,
      "每天 +1%": {
-      "signal_day": "2026-10-08",
-      "buy_day": "2026-10-09",
-      "close": 4923.81,
-      "vol": 2080591,
-      "k": 3
-     },
-     "每天 −1%": null
-    }
-   },
-   {
-    "ticker": "9531.T",
-    "status": "watch",
-    "score": 35.5,
-    "sector": "电力燃气",
-    "close": 6075.0,
-    "range_pct": 10.9,
-    "vol_ma": 1017990,
-    "v_min": 1576452,
-    "v_w2": null,
-    "v_need": 1576452,
-    "w5v": 1.32,
-    "lo": 6404.97,
-    "hi": 6981.52,
-    "why": [],
-    "x_gc": 6404.97,
-    "hi_open": false,
-    "mult": 0.0,
-    "budget": 0,
-    "blocks": [
-     "新仓倍数 0（宏观 / 板块 / 判断层）"
-    ],
-    "earnings": "2026-10-29",
-    "state": {
-     "state": "N",
-     "label": "无特定形态",
-     "effect": null,
-     "disc": "2026-07-30",
-     "age_days": 68,
-     "stale": false
-    },
-    "scen": {
-     "持平": null,
-     "每天 +1%": {
       "signal_day": "2026-10-09",
       "buy_day": "2026-10-13",
-      "close": 6321.67,
-      "vol": 1638995,
-      "k": 4
-     },
-     "每天 −1%": null
-    }
-   },
-   {
-    "ticker": "1925.T",
-    "status": "watch",
-    "score": 78.0,
-    "sector": "建设",
-    "close": 2154.0,
-    "range_pct": 10.5,
-    "vol_ma": 4183795,
-    "v_min": 6478436,
-    "v_w2": null,
-    "v_need": 6478436,
-    "w5v": 1.5,
-    "lo": 2243.69,
-    "hi": 2750.53,
-    "why": [],
-    "x_gc": 2243.69,
-    "hi_open": false,
-    "mult": 0.0,
-    "budget": 0,
-    "blocks": [
-     "新仓倍数 0（宏观 / 板块 / 判断层）"
-    ],
-    "earnings": "2026-11-11",
-    "state": {
-     "state": "N",
-     "label": "无特定形态",
-     "effect": null,
-     "disc": "2026-08-06",
-     "age_days": 61,
-     "stale": false
-    },
-    "scen": {
-     "持平": {
-      "signal_day": "2026-10-16",
-      "buy_day": "2026-10-19",
-      "close": 2154.0,
-      "vol": 7010325,
-      "k": 8
-     },
-     "每天 +1%": {
-      "signal_day": "2026-10-08",
-      "buy_day": "2026-10-09",
-      "close": 2219.27,
-      "vol": 6565013,
+      "close": 1898.84,
+      "vol": 15477456,
       "k": 3
      },
      "每天 −1%": null
     }
    },
    {
-    "ticker": "5406.T",
+    "ticker": "3861.T",
     "status": "watch",
-    "score": 75.1,
-    "sector": "钢铁金属",
-    "close": 1993.0,
-    "range_pct": 14.3,
-    "vol_ma": 1796725,
-    "v_min": 2697673,
+    "score": 70.1,
+    "sector": "纸浆",
+    "close": 828.9,
+    "range_pct": 10.3,
+    "vol_ma": 3570075,
+    "v_min": 5422703,
     "v_w2": null,
-    "v_need": 2697673,
-    "w5v": 1.26,
-    "lo": 2068.53,
-    "hi": 2194.25,
+    "v_need": 5422703,
+    "w5v": 1.46,
+    "lo": 877.19,
+    "hi": 1021.86,
     "why": [],
-    "x_gc": 2068.53,
+    "x_gc": 877.19,
     "hi_open": false,
     "mult": 0.0,
     "budget": 0,
     "blocks": [
      "新仓倍数 0（宏观 / 板块 / 判断层）"
     ],
-    "earnings": "2026-11-10",
+    "earnings": "2026-11-06",
     "state": {
      "state": "N",
      "label": "无特定形态",
      "effect": null,
      "disc": "2026-08-05",
-     "age_days": 62,
-     "stale": false
-    },
-    "scen": {
-     "持平": null,
-     "每天 +1%": {
-      "signal_day": "2026-10-08",
-      "buy_day": "2026-10-09",
-      "close": 2053.39,
-      "vol": 2710294,
-      "k": 3
-     },
-     "每天 −1%": null
-    }
-   },
-   {
-    "ticker": "2002.T",
-    "status": "watch",
-    "score": 72.0,
-    "sector": "食品",
-    "close": 1962.0,
-    "range_pct": 14.9,
-    "vol_ma": 957140,
-    "v_min": 1463044,
-    "v_w2": null,
-    "v_need": 1463044,
-    "w5v": 1.13,
-    "lo": 2052.19,
-    "hi": 2406.88,
-    "why": [],
-    "x_gc": 2052.19,
-    "hi_open": false,
-    "mult": 0.0,
-    "budget": 0,
-    "blocks": [
-     "新仓倍数 0（宏观 / 板块 / 判断层）"
-    ],
-    "earnings": "2026-10-28",
-    "state": {
-     "state": "N",
-     "label": "无特定形态",
-     "effect": null,
-     "disc": "2026-07-30",
-     "age_days": 68,
-     "stale": false
-    },
-    "scen": {
-     "持平": null,
-     "每天 +1%": {
-      "signal_day": "2026-10-08",
-      "buy_day": "2026-10-09",
-      "close": 2021.45,
-      "vol": 1485137,
-      "k": 3
-     },
-     "每天 −1%": null
-    }
-   },
-   {
-    "ticker": "9008.T",
-    "status": "watch",
-    "score": 61.8,
-    "sector": "陆运",
-    "close": 741.1,
-    "range_pct": 14.4,
-    "vol_ma": 2601620,
-    "v_min": 4100871,
-    "v_w2": null,
-    "v_need": 4100871,
-    "w5v": 1.31,
-    "lo": null,
-    "hi": null,
-    "why": [
-     "收在临界价以上也不会出买点：出货日 6 ≥ 6"
-    ],
-    "x_gc": 822.17,
-    "mult": 0.0,
-    "budget": 0,
-    "blocks": [
-     "新仓倍数 0（宏观 / 板块 / 判断层）"
-    ],
-    "earnings": "2026-11-10",
-    "state": {
-     "state": "N",
-     "label": "无特定形态",
-     "effect": null,
-     "disc": "2026-08-06",
-     "age_days": 61,
+     "age_days": 63,
      "stale": false
     },
     "scen": {
@@ -8392,31 +8403,30 @@
      "每天 +1%": {
       "signal_day": "2026-10-13",
       "buy_day": "2026-10-14",
-      "close": 778.9,
-      "vol": 4422834,
-      "k": 5
+      "close": 862.56,
+      "vol": 5506543,
+      "k": 4
      },
      "每天 −1%": null
     }
    },
    {
-    "ticker": "5233.T",
+    "ticker": "9008.T",
     "status": "watch",
-    "score": 42.3,
-    "sector": "化学",
-    "close": 4118.0,
-    "range_pct": 14.6,
-    "vol_ma": 468960,
-    "v_min": 737052,
+    "score": 60.3,
+    "sector": "陆运",
+    "close": 746.7,
+    "range_pct": 14.4,
+    "vol_ma": 2597445,
+    "v_min": 4056633,
     "v_w2": null,
-    "v_need": 737052,
-    "w5v": 1.14,
-    "lo": null,
-    "hi": null,
-    "why": [
-     "MACD 已在信号线之上（金叉已经过去）：要先回落到信号线下方再金叉"
-    ],
-    "x_gc": 4086.72,
+    "v_need": 4056633,
+    "w5v": 1.31,
+    "lo": 814.24,
+    "hi": 953.0,
+    "why": [],
+    "x_gc": 814.24,
+    "hi_open": false,
     "mult": 0.0,
     "budget": 0,
     "blocks": [
@@ -8428,12 +8438,18 @@
      "label": "无特定形态",
      "effect": null,
      "disc": "2026-08-06",
-     "age_days": 61,
+     "age_days": 62,
      "stale": false
     },
     "scen": {
      "持平": null,
-     "每天 +1%": null,
+     "每天 +1%": {
+      "signal_day": "2026-10-13",
+      "buy_day": "2026-10-14",
+      "close": 777.02,
+      "vol": 4322079,
+      "k": 4
+     },
      "每天 −1%": null
     }
    },
@@ -8442,17 +8458,17 @@
     "status": "watch",
     "score": 40.3,
     "sector": "建设",
-    "close": 3313.0,
+    "close": 3320.0,
     "range_pct": 12.8,
-    "vol_ma": 2539155,
-    "v_min": 3943468,
+    "vol_ma": 2527635,
+    "v_min": 3880679,
     "v_w2": null,
-    "v_need": 3943468,
+    "v_need": 3880679,
     "w5v": 1.04,
-    "lo": 3356.54,
-    "hi": 4094.04,
+    "lo": 3353.27,
+    "hi": 4098.66,
     "why": [],
-    "x_gc": 3356.53,
+    "x_gc": 3353.27,
     "hi_open": false,
     "mult": 0.0,
     "budget": 0,
@@ -8465,77 +8481,115 @@
      "label": "无特定形态",
      "effect": null,
      "disc": "2026-09-10",
-     "age_days": 26,
+     "age_days": 27,
      "stale": false
     },
     "scen": {
-     "持平": {
-      "signal_day": "2026-10-16",
-      "buy_day": "2026-10-19",
-      "close": 3313.0,
-      "vol": 3763029,
-      "k": 8
-     },
+     "持平": null,
      "每天 +1%": {
-      "signal_day": "2026-10-07",
-      "buy_day": "2026-10-08",
-      "close": 3379.59,
-      "vol": 3931156,
+      "signal_day": "2026-10-08",
+      "buy_day": "2026-10-09",
+      "close": 3386.73,
+      "vol": 3923460,
       "k": 2
      },
      "每天 −1%": null
     }
    },
    {
-    "ticker": "4042.T",
+    "ticker": "8630.T",
     "status": "watch",
-    "score": 38.6,
-    "sector": "化学",
-    "close": 2618.5,
-    "range_pct": 14.2,
-    "vol_ma": 1089255,
-    "v_min": 1688141,
+    "score": 39.2,
+    "sector": "保险",
+    "close": 6652.0,
+    "range_pct": 14.6,
+    "vol_ma": 2402210,
+    "v_min": 3691468,
     "v_w2": null,
-    "v_need": 1688141,
-    "w5v": 1.23,
-    "lo": null,
-    "hi": null,
-    "why": [
-     "MACD 已在信号线之上（金叉已经过去）：要先回落到信号线下方再金叉"
-    ],
-    "x_gc": 2465.55,
+    "v_need": 3691468,
+    "w5v": 1.22,
+    "lo": 6839.7,
+    "hi": 7961.22,
+    "why": [],
+    "x_gc": 6839.7,
+    "hi_open": false,
     "mult": 0.0,
     "budget": 0,
     "blocks": [
      "新仓倍数 0（宏观 / 板块 / 判断层）"
     ],
-    "earnings": "2026-11-05",
+    "earnings": "2026-11-19",
     "state": {
-     "state": "T6",
-     "label": "盈利加速",
-     "effect": "+",
-     "disc": "2026-08-04",
-     "age_days": 63,
+     "state": null,
+     "label": "不适用（没有营业利润）",
+     "disc": null,
+     "age_days": null,
      "stale": false
     },
     "scen": {
-     "持平": null,
-     "每天 +1%": null,
+     "持平": {
+      "signal_day": "2026-10-16",
+      "buy_day": "2026-10-19",
+      "close": 6652.0,
+      "vol": 3801670,
+      "k": 7
+     },
+     "每天 +1%": {
+      "signal_day": "2026-10-08",
+      "buy_day": "2026-10-09",
+      "close": 6785.71,
+      "vol": 3733339,
+      "k": 2
+     },
      "每天 −1%": null
     }
    }
   ],
   "sweep": [
    {
-    "ticker": "8316.T",
-    "first": "2026-10-06",
+    "ticker": "8306.T",
+    "first": "2026-10-07",
     "scen": {
-     "持平": null,
+     "持平": {
+      "signal_day": "2026-10-07",
+      "buy_day": "2026-10-08",
+      "close": 3671.0,
+      "vol": 63768528,
+      "k": 1
+     },
      "每天 +1%": {
-      "signal_day": "2026-10-06",
-      "buy_day": "2026-10-07",
-      "close": 3407.74,
-      "vol": 39340865,
+      "signal_day": "2026-10-07",
+      "buy_day": "2026-10-08",
+      "close": 3707.71,
+      "vol": 63768528,
+      "k": 1
+     },
+     "每天 −1%": null
+    },
+    "state": {
+     "state": null,
+     "label": "不适用（没有营业利润）",
+     "disc": null,
+     "age_days": null,
+     "stale": false
+    }
+   },
+   {
+    "ticker": "8795.T",
+    "first": "2026-10-07",
+    "scen": {
+     "持平": {
+      "signal_day": "2026-10-08",
+      "buy_day": "2026-10-09",
+      "close": 4892.0,
+      "vol": 2083958,
+      "k": 2
+     },
+     "每天 +1%": {
+      "signal_day": "2026-10-07",
+      "buy_day": "2026-10-08",
+      "close": 4940.92,
+      "vol": 2075717,
       "k": 1
      },
      "每天 −1%": null
@@ -8550,20 +8604,14 @@
    },
    {
     "ticker": "1928.T",
-    "first": "2026-10-07",
+    "first": "2026-10-08",
     "scen": {
-     "持平": {
-      "signal_day": "2026-10-16",
-      "buy_day": "2026-10-19",
-      "close": 3313.0,
-      "vol": 3763029,
-      "k": 8
-     },
+     "持平": null,
      "每天 +1%": {
-      "signal_day": "2026-10-07",
-      "buy_day": "2026-10-08",
-      "close": 3379.59,
-      "vol": 3931156,
+      "signal_day": "2026-10-08",
+      "buy_day": "2026-10-09",
+      "close": 3386.73,
+      "vol": 3923460,
       "k": 2
      },
      "每天 −1%": null
@@ -8573,104 +8621,7 @@
      "label": "无特定形态",
      "effect": null,
      "disc": "2026-09-10",
-     "age_days": 26,
-     "stale": false
-    }
-   },
-   {
-    "ticker": "8306.T",
-    "first": "2026-10-07",
-    "scen": {
-     "持平": null,
-     "每天 +1%": {
-      "signal_day": "2026-10-07",
-      "buy_day": "2026-10-08",
-      "close": 3687.66,
-      "vol": 64385029,
-      "k": 2
-     },
-     "每天 −1%": null
-    },
-    "state": {
-     "state": null,
-     "label": "不适用（没有营业利润）",
-     "disc": null,
-     "age_days": null,
-     "stale": false
-    }
-   },
-   {
-    "ticker": "1925.T",
-    "first": "2026-10-08",
-    "scen": {
-     "持平": {
-      "signal_day": "2026-10-16",
-      "buy_day": "2026-10-19",
-      "close": 2154.0,
-      "vol": 7010325,
-      "k": 8
-     },
-     "每天 +1%": {
-      "signal_day": "2026-10-08",
-      "buy_day": "2026-10-09",
-      "close": 2219.27,
-      "vol": 6565013,
-      "k": 3
-     },
-     "每天 −1%": null
-    },
-    "state": {
-     "state": "N",
-     "label": "无特定形态",
-     "effect": null,
-     "disc": "2026-08-06",
-     "age_days": 61,
-     "stale": false
-    }
-   },
-   {
-    "ticker": "1963.T",
-    "first": "2026-10-08",
-    "scen": {
-     "持平": null,
-     "每天 +1%": {
-      "signal_day": "2026-10-08",
-      "buy_day": "2026-10-09",
-      "close": 2322.81,
-      "vol": 2163961,
-      "k": 3
-     },
-     "每天 −1%": null
-    },
-    "state": {
-     "state": "T6",
-     "label": "盈利加速",
-     "effect": "+",
-     "disc": "2026-08-07",
-     "age_days": 60,
-     "stale": false
-    }
-   },
-   {
-    "ticker": "2002.T",
-    "first": "2026-10-08",
-    "scen": {
-     "持平": null,
-     "每天 +1%": {
-      "signal_day": "2026-10-08",
-      "buy_day": "2026-10-09",
-      "close": 2021.45,
-      "vol": 1485137,
-      "k": 3
-     },
-     "每天 −1%": null
-    },
-    "state": {
-     "state": "N",
-     "label": "无特定形态",
-     "effect": null,
-     "disc": "2026-07-30",
-     "age_days": 68,
+     "age_days": 27,
      "stale": false
     }
    },
@@ -8682,9 +8633,9 @@
      "每天 +1%": {
       "signal_day": "2026-10-08",
       "buy_day": "2026-10-09",
-      "close": 2053.39,
-      "vol": 2710294,
-      "k": 3
+      "close": 2064.68,
+      "vol": 2665335,
+      "k": 2
      },
      "每天 −1%": null
     },
@@ -8693,7 +8644,7 @@
      "label": "无特定形态",
      "effect": null,
      "disc": "2026-08-05",
-     "age_days": 62,
+     "age_days": 63,
      "stale": false
     }
    },
@@ -8701,13 +8652,19 @@
     "ticker": "8630.T",
     "first": "2026-10-08",
     "scen": {
-     "持平": null,
+     "持平": {
+      "signal_day": "2026-10-16",
+      "buy_day": "2026-10-19",
+      "close": 6652.0,
+      "vol": 3801670,
+      "k": 7
+     },
      "每天 +1%": {
       "signal_day": "2026-10-08",
       "buy_day": "2026-10-09",
-      "close": 6774.23,
-      "vol": 3775719,
-      "k": 3
+      "close": 6785.71,
+      "vol": 3733339,
+      "k": 2
      },
      "每天 −1%": null
     },
@@ -8720,61 +8677,16 @@
     }
    },
    {
-    "ticker": "8795.T",
+    "ticker": "9201.T",
     "first": "2026-10-08",
     "scen": {
      "持平": null,
      "每天 +1%": {
       "signal_day": "2026-10-08",
       "buy_day": "2026-10-09",
-      "close": 4923.81,
-      "vol": 2080591,
-      "k": 3
-     },
-     "每天 −1%": null
-    },
-    "state": {
-     "state": null,
-     "label": "不适用（没有营业利润）",
-     "disc": null,
-     "age_days": null,
-     "stale": false
-    }
-   },
-   {
-    "ticker": "2432.T",
-    "first": "2026-10-09",
-    "scen": {
-     "持平": null,
-     "每天 +1%": {
-      "signal_day": "2026-10-09",
-      "buy_day": "2026-10-13",
-      "close": 2593.19,
-      "vol": 1625912,
-      "k": 4
-     },
-     "每天 −1%": null
-    },
-    "state": {
-     "state": "T5",
-     "label": "盈利连续恶化",
-     "effect": null,
-     "disc": "2026-08-05",
-     "age_days": 62,
-     "stale": false
-    }
-   },
-   {
-    "ticker": "3861.T",
-    "first": "2026-10-09",
-    "scen": {
-     "持平": null,
-     "每天 +1%": {
-      "signal_day": "2026-10-09",
-      "buy_day": "2026-10-13",
-      "close": 861.72,
-      "vol": 5471555,
-      "k": 4
+      "close": 3067.44,
+      "vol": 3453454,
+      "k": 2
      },
      "每天 −1%": null
     },
@@ -8782,8 +8694,77 @@
      "state": "N",
      "label": "无特定形态",
      "effect": null,
-     "disc": "2026-08-05",
+     "disc": "2026-08-03",
+     "age_days": 65,
+     "stale": false
+    }
+   },
+   {
+    "ticker": "1925.T",
+    "first": "2026-10-09",
+    "scen": {
+     "持平": null,
+     "每天 +1%": {
+      "signal_day": "2026-10-09",
+      "buy_day": "2026-10-13",
+      "close": 2217.72,
+      "vol": 6674191,
+      "k": 3
+     },
+     "每天 −1%": null
+    },
+    "state": {
+     "state": "N",
+     "label": "无特定形态",
+     "effect": null,
+     "disc": "2026-08-06",
      "age_days": 62,
+     "stale": false
+    }
+   },
+   {
+    "ticker": "1963.T",
+    "first": "2026-10-09",
+    "scen": {
+     "持平": null,
+     "每天 +1%": {
+      "signal_day": "2026-10-09",
+      "buy_day": "2026-10-13",
+      "close": 2309.42,
+      "vol": 2164090,
+      "k": 3
+     },
+     "每天 −1%": null
+    },
+    "state": {
+     "state": "T6",
+     "label": "盈利加速",
+     "effect": "+",
+     "disc": "2026-08-07",
+     "age_days": 61,
+     "stale": false
+    }
+   },
+   {
+    "ticker": "2002.T",
+    "first": "2026-10-09",
+    "scen": {
+     "持平": null,
+     "每天 +1%": {
+      "signal_day": "2026-10-09",
+      "buy_day": "2026-10-13",
+      "close": 2015.27,
+      "vol": 1465504,
+      "k": 3
+     },
+     "每天 −1%": null
+    },
+    "state": {
+     "state": "N",
+     "label": "无特定形态",
+     "effect": null,
+     "disc": "2026-07-30",
+     "age_days": 69,
      "stale": false
     }
    },
@@ -8795,9 +8776,9 @@
      "每天 +1%": {
       "signal_day": "2026-10-09",
       "buy_day": "2026-10-13",
-      "close": 1889.74,
-      "vol": 15559246,
-      "k": 4
+      "close": 1898.84,
+      "vol": 15477456,
+      "k": 3
      },
      "每天 −1%": null
     },
@@ -8810,29 +8791,6 @@
     }
    },
    {
-    "ticker": "8801.T",
-    "first": "2026-10-09",
-    "scen": {
-     "持平": null,
-     "每天 +1%": {
-      "signal_day": "2026-10-09",
-      "buy_day": "2026-10-13",
-      "close": 1477.66,
-      "vol": 15406644,
-      "k": 4
-     },
-     "每天 −1%": null
-    },
-    "state": {
-     "state": "T5",
-     "label": "盈利连续恶化",
-     "effect": null,
-     "disc": "2026-08-07",
-     "age_days": 60,
-     "stale": false
-    }
-   },
-   {
     "ticker": "9531.T",
     "first": "2026-10-09",
     "scen": {
@@ -8840,9 +8798,9 @@
      "每天 +1%": {
       "signal_day": "2026-10-09",
       "buy_day": "2026-10-13",
-      "close": 6321.67,
-      "vol": 1638995,
-      "k": 4
+      "close": 6282.78,
+      "vol": 1644088,
+      "k": 3
      },
      "每天 −1%": null
     },
@@ -8851,7 +8809,53 @@
      "label": "无特定形态",
      "effect": null,
      "disc": "2026-07-30",
-     "age_days": 68,
+     "age_days": 69,
+     "stale": false
+    }
+   },
+   {
+    "ticker": "3861.T",
+    "first": "2026-10-13",
+    "scen": {
+     "持平": null,
+     "每天 +1%": {
+      "signal_day": "2026-10-13",
+      "buy_day": "2026-10-14",
+      "close": 862.56,
+      "vol": 5506543,
+      "k": 4
+     },
+     "每天 −1%": null
+    },
+    "state": {
+     "state": "N",
+     "label": "无特定形态",
+     "effect": null,
+     "disc": "2026-08-05",
+     "age_days": 63,
+     "stale": false
+    }
+   },
+   {
+    "ticker": "4507.T",
+    "first": "2026-10-13",
+    "scen": {
+     "持平": null,
+     "每天 +1%": {
+      "signal_day": "2026-10-13",
+      "buy_day": "2026-10-14",
+      "close": 2875.19,
+      "vol": 4882387,
+      "k": 4
+     },
+     "每天 −1%": null
+    },
+    "state": {
+     "state": "N",
+     "label": "无特定形态",
+     "effect": null,
+     "disc": "2026-08-03",
+     "age_days": 65,
      "stale": false
     }
    },
@@ -8863,9 +8867,9 @@
      "每天 +1%": {
       "signal_day": "2026-10-13",
       "buy_day": "2026-10-14",
-      "close": 4588.71,
-      "vol": 1153398,
-      "k": 5
+      "close": 4556.8,
+      "vol": 1148546,
+      "k": 4
      },
      "每天 −1%": null
     },
@@ -8873,7 +8877,7 @@
      "state": null,
      "label": "数据不足（凑不满 6 季连续）",
      "disc": "2026-08-12",
-     "age_days": 55,
+     "age_days": 56,
      "stale": false
     }
    },
@@ -8885,9 +8889,9 @@
      "每天 +1%": {
       "signal_day": "2026-10-13",
       "buy_day": "2026-10-14",
-      "close": 1845.05,
-      "vol": 9399553,
-      "k": 5
+      "close": 1844.47,
+      "vol": 9297707,
+      "k": 4
      },
      "每天 −1%": null
     },
@@ -8896,7 +8900,7 @@
      "label": "盈利加速",
      "effect": "+",
      "disc": "2026-08-03",
-     "age_days": 64,
+     "age_days": 65,
      "stale": false
     }
    },
@@ -8908,9 +8912,9 @@
      "每天 +1%": {
       "signal_day": "2026-10-13",
       "buy_day": "2026-10-14",
-      "close": 1784.09,
-      "vol": 2533569,
-      "k": 5
+      "close": 1778.39,
+      "vol": 2495154,
+      "k": 4
      },
      "每天 −1%": null
     },
@@ -8919,7 +8923,7 @@
      "label": "无特定形态",
      "effect": null,
      "disc": "2026-08-07",
-     "age_days": 60,
+     "age_days": 61,
      "stale": false
     }
    },
@@ -8931,9 +8935,9 @@
      "每天 +1%": {
       "signal_day": "2026-10-13",
       "buy_day": "2026-10-14",
-      "close": 778.9,
-      "vol": 4422834,
-      "k": 5
+      "close": 777.02,
+      "vol": 4322079,
+      "k": 4
      },
      "每天 −1%": null
     },
@@ -8942,76 +8946,7 @@
      "label": "无特定形态",
      "effect": null,
      "disc": "2026-08-06",
-     "age_days": 61,
-     "stale": false
-    }
-   },
-   {
-    "ticker": "9433.T",
-    "first": "2026-10-13",
-    "scen": {
-     "持平": null,
-     "每天 +1%": {
-      "signal_day": "2026-10-13",
-      "buy_day": "2026-10-14",
-      "close": 3040.57,
-      "vol": 14372452,
-      "k": 5
-     },
-     "每天 −1%": null
-    },
-    "state": {
-     "state": "N",
-     "label": "无特定形态",
-     "effect": null,
-     "disc": "2026-08-07",
-     "age_days": 60,
-     "stale": false
-    }
-   },
-   {
-    "ticker": "4507.T",
-    "first": "2026-10-15",
-    "scen": {
-     "持平": null,
-     "每天 +1%": {
-      "signal_day": "2026-10-15",
-      "buy_day": "2026-10-16",
-      "close": 2852.95,
-      "vol": 4761678,
-      "k": 7
-     },
-     "每天 −1%": null
-    },
-    "state": {
-     "state": "N",
-     "label": "无特定形态",
-     "effect": null,
-     "disc": "2026-08-03",
-     "age_days": 64,
-     "stale": false
-    }
-   },
-   {
-    "ticker": "7203.T",
-    "first": "2026-10-16",
-    "scen": {
-     "持平": {
-      "signal_day": "2026-10-16",
-      "buy_day": "2026-10-19",
-      "close": 2893.5,
-      "vol": 46028275,
-      "k": 8
-     },
-     "每天 +1%": null,
-     "每天 −1%": null
-    },
-    "state": {
-     "state": "N",
-     "label": "无特定形态",
-     "effect": null,
-     "disc": "2026-08-04",
-     "age_days": 63,
+     "age_days": 62,
      "stale": false
     }
    }
@@ -9042,12 +8977,6 @@
     ]
    },
    {
-    "date": "2026-11-05",
-    "items": [
-     "4042.T 决算（前 2 个交易日不进场）"
-    ]
-   },
-   {
     "date": "2026-11-06",
     "items": [
      "3861.T 决算（前 2 个交易日不进场）"
@@ -9058,8 +8987,7 @@
     "items": [
      "2432.T 决算（前 2 个交易日不进场）",
      "5406.T 决算（前 2 个交易日不进场）",
-     "9008.T 决算（前 2 个交易日不进场）",
-     "5233.T 决算（前 2 个交易日不进场）"
+     "9008.T 决算（前 2 个交易日不进场）"
     ]
    },
    {
@@ -9067,6 +8995,12 @@
     "items": [
      "7186.T 决算（前 2 个交易日不进场）",
      "1925.T 决算（前 2 个交易日不进场）"
+    ]
+   },
+   {
+    "date": "2026-11-12",
+    "items": [
+     "8316.T 决算（前 2 个交易日不进场）"
     ]
    }
   ],
@@ -9085,23 +9019,23 @@
    "label": "纳斯达克 100 1545 + 美股牛熊分界；美股熊且股债负相关时对冲版美债 1482（BCU）、其余现金",
    "state": "bull",
    "flip_to": "bear",
-   "level": 6923.44,
-   "close": 7773.95,
-   "distance_pct": 12.28,
+   "level": 6927.72,
+   "close": 7818.93,
+   "distance_pct": 12.86,
    "need_days": 5,
    "confirm_days": 0,
-   "asof": "2026-10-05"
+   "asof": "2026-10-06"
   }
  },
  "earn_state": {
-  "asof": "2026-10-06",
+  "asof": "2026-10-07",
   "states": {
    "1925.T": {
     "state": "N",
     "label": "无特定形态",
     "effect": null,
     "disc": "2026-08-06",
-    "age_days": 61,
+    "age_days": 62,
     "stale": false
    },
    "1928.T": {
@@ -9109,7 +9043,7 @@
     "label": "无特定形态",
     "effect": null,
     "disc": "2026-09-10",
-    "age_days": 26,
+    "age_days": 27,
     "stale": false
    },
    "1963.T": {
@@ -9117,7 +9051,7 @@
     "label": "盈利加速",
     "effect": "+",
     "disc": "2026-08-07",
-    "age_days": 60,
+    "age_days": 61,
     "stale": false
    },
    "2002.T": {
@@ -9125,7 +9059,7 @@
     "label": "无特定形态",
     "effect": null,
     "disc": "2026-07-30",
-    "age_days": 68,
+    "age_days": 69,
     "stale": false
    },
    "2432.T": {
@@ -9133,7 +9067,7 @@
     "label": "盈利连续恶化",
     "effect": null,
     "disc": "2026-08-05",
-    "age_days": 62,
+    "age_days": 63,
     "stale": false
    },
    "3861.T": {
@@ -9141,14 +9075,6 @@
     "label": "无特定形态",
     "effect": null,
     "disc": "2026-08-05",
-    "age_days": 62,
-    "stale": false
-   },
-   "4042.T": {
-    "state": "T6",
-    "label": "盈利加速",
-    "effect": "+",
-    "disc": "2026-08-04",
     "age_days": 63,
     "stale": false
    },
@@ -9157,15 +9083,7 @@
     "label": "无特定形态",
     "effect": null,
     "disc": "2026-08-03",
-    "age_days": 64,
-    "stale": false
-   },
-   "5233.T": {
-    "state": "N",
-    "label": "无特定形态",
-    "effect": null,
-    "disc": "2026-08-06",
-    "age_days": 61,
+    "age_days": 65,
     "stale": false
    },
    "5406.T": {
@@ -9173,7 +9091,7 @@
     "label": "无特定形态",
     "effect": null,
     "disc": "2026-08-05",
-    "age_days": 62,
+    "age_days": 63,
     "stale": false
    },
    "7186.T": {
@@ -9183,19 +9101,11 @@
     "age_days": null,
     "stale": false
    },
-   "7203.T": {
-    "state": "N",
-    "label": "无特定形态",
-    "effect": null,
-    "disc": "2026-08-04",
-    "age_days": 63,
-    "stale": false
-   },
    "8253.T": {
     "state": null,
     "label": "数据不足（凑不满 6 季连续）",
     "disc": "2026-08-12",
-    "age_days": 55,
+    "age_days": 56,
     "stale": false
    },
    "8306.T": {
@@ -9217,7 +9127,7 @@
     "label": "盈利加速",
     "effect": "+",
     "disc": "2026-08-03",
-    "age_days": 64,
+    "age_days": 65,
     "stale": false
    },
    "8630.T": {
@@ -9241,20 +9151,12 @@
     "age_days": null,
     "stale": false
    },
-   "8801.T": {
-    "state": "T5",
-    "label": "盈利连续恶化",
-    "effect": null,
-    "disc": "2026-08-07",
-    "age_days": 60,
-    "stale": false
-   },
    "9007.T": {
     "state": "N",
     "label": "无特定形态",
     "effect": null,
     "disc": "2026-08-07",
-    "age_days": 60,
+    "age_days": 61,
     "stale": false
    },
    "9008.T": {
@@ -9262,15 +9164,15 @@
     "label": "无特定形态",
     "effect": null,
     "disc": "2026-08-06",
-    "age_days": 61,
+    "age_days": 62,
     "stale": false
    },
-   "9433.T": {
+   "9201.T": {
     "state": "N",
     "label": "无特定形态",
     "effect": null,
-    "disc": "2026-08-07",
-    "age_days": 60,
+    "disc": "2026-08-03",
+    "age_days": 65,
     "stale": false
    },
    "9531.T": {
@@ -9278,17 +9180,44 @@
     "label": "无特定形态",
     "effect": null,
     "disc": "2026-07-30",
-    "age_days": 68,
+    "age_days": 69,
     "stale": false
    }
   },
   "errors": {}
  },
+ "holding_view": {
+  "bar_date": "2026-10-06",
+  "holdings": [],
+  "core": [
+   {
+    "ticker": "1545.T",
+    "name": "纳斯达克 100（1545）",
+    "units": 4110,
+    "why": "闲置资金规则：没有个股占用的钱放进核心 ETF（留 2% 现金缓冲）；方式 纳斯达克 100 1545 + 美股牛熊分界；美股熊且股债负相关时对冲版美债 1482（BCU）、其余现金；现在拿 纳斯达克 100（1545）；S&P500 牛市·稳固（比 250 日均线高 9.5%（20 个交易日前 +8.7%，+0.8 个百分点，变化不大）；要再跌 11.4% 并连续 5 天收在线下才会转熊）",
+    "trend": {
+     "label": "strong",
+     "close": 248.60000610351562,
+     "ma20": 235.76999893188477,
+     "ma60": 236.05594828424873,
+     "ma200": 219.15930343236826,
+     "slope20_pct": 0.9743252663996671,
+     "vs20_pct": 5.441747139057118,
+     "vs60_pct": 5.314018947813959,
+     "vs200_pct": 13.43347154789285,
+     "r1m_pct": 6.284742450030567,
+     "r3m_pct": 2.355458248885567,
+     "text": "收盘 ¥248.6：20 日线 ¥235.8（+5.4%）、60 日线 ¥236.1（+5.3%）、200 日线 ¥219.2（+13.4%）；20 日线 5 天 +1.0%；1 个月 +6.3%、3 个月 +2.4%"
+    },
+    "pct_equity": 99.98
+   }
+  ]
+ },
  "fwdj": {
   "enabled": true,
   "applied": true,
-  "as_of": "2026-10-05",
-  "bar_date": "2026-10-05",
+  "as_of": "2026-10-06",
+  "bar_date": "2026-10-06",
   "points": 1,
   "mult": 0.75,
   "halved": [],
@@ -9306,37 +9235,37 @@
    "points": 1,
    "mult": 0.75,
    "readings": {
-    "C_rel": 46.6,
-    "crel_pct": 45.5,
-    "tv_pct": 62.5,
-    "wj_pct": 91.6,
-    "w_pct": 56.1
+    "C_rel": 46.7,
+    "crel_pct": 45.8,
+    "tv_pct": 62.0,
+    "wj_pct": 92.4,
+    "w_pct": 47.1
    },
    "t23_bear": false,
    "k4_on": true,
    "deepdip": false,
-   "date": "2026-10-05"
+   "date": "2026-10-06"
   },
   "stocks": {},
   "errors": {},
   "baseline": {
    "since": "2026-09-30",
-   "last_date": "2026-10-05",
-   "equity_jpy": 1000590.98,
+   "last_date": "2026-10-06",
+   "equity_jpy": 1012455.98,
    "positions": [],
    "plan": []
   },
-  "equity_jpy": 1008374.69,
-  "diff_jpy": 7784
+  "equity_jpy": 1021937.7,
+  "diff_jpy": 9482
  },
  "combo_c": {
   "enabled": true,
   "applied": true,
-  "as_of": "2026-10-05",
-  "bar_date": "2026-10-05",
+  "as_of": "2026-10-06",
+  "bar_date": "2026-10-06",
   "on": true,
-  "n225_ma200": 0.1576,
-  "vix": 15.31,
+  "n225_ma200": 0.1697,
+  "vix": 15.52,
   "skipped": [],
   "kept": [],
   "scores": {},
@@ -9348,8 +9277,8 @@
  "tbf": {
   "enabled": true,
   "applied": true,
-  "as_of": "2026-10-05",
-  "bar_date": "2026-10-05",
+  "as_of": "2026-10-06",
+  "bar_date": "2026-10-06",
   "n_ref": 225,
   "skipped": [],
   "kept": [],
@@ -9374,43 +9303,43 @@
   "bond_refuge": {
    "on": false,
    "since": "2026-03-13",
-   "corr": 0.411,
-   "corr_date": "2026-10-05",
+   "corr": 0.404,
+   "corr_date": "2026-10-06",
    "win": 63,
    "us_bear": false,
    "hold": false,
-   "bond_date": "2026-10-02",
-   "spx_date": "2026-10-02",
-   "lag_days": 3,
-   "as_of": "2026-10-05",
+   "bond_date": "2026-10-05",
+   "spx_date": "2026-10-05",
+   "lag_days": 1,
+   "as_of": "2026-10-06",
    "source": "云端",
    "errors": {},
-   "text": "美股牛 → 不拿 1482（美股熊时才看）：股债 63 天相关 +0.41（到 2026-10-05，≥ 0 → 不拿，2026-03-13 起）；国债收益率到 2026-10-02"
+   "text": "美股牛 → 不拿 1482（美股熊时才看）：股债 63 天相关 +0.40（到 2026-10-06，≥ 0 → 不拿，2026-03-13 起）；国债收益率到 2026-10-05"
   }
  },
  "vct_forward": {
-  "date": "2026-10-05",
-  "us_date": "2026-10-05",
+  "date": "2026-10-06",
+  "us_date": "2026-10-06",
   "signal": false,
   "high": false,
   "down": false,
   "vt_ratio": 1.0,
-  "ndx_tr": 799.0725144480472,
-  "sma50": 758.2199237268561,
+  "ndx_tr": 802.7330322074364,
+  "sma50": 759.8792575528994,
   "us_bear": false,
   "bcu_on": false,
   "vct_1545": 1.0,
   "vct_1482": 0.0,
   "differ": false,
   "note": "",
-  "rows": 2,
+  "rows": 3,
   "differ_days": 0,
   "logged": true,
   "start": "2026-10-05"
  },
  "survey_failed": {},
  "calendar": {
-  "as_of": "2026-10-06",
+  "as_of": "2026-10-07",
   "horizon_days": 45,
   "items": [
    {
@@ -9489,9 +9418,9 @@
  },
  "jp_futures": null,
  "price_check": {
-  "asof": "2026-10-06",
-  "from": "2026-03-20",
-  "to": "2026-10-05",
+  "asof": "2026-10-07",
+  "from": "2026-03-21",
+  "to": "2026-10-06",
   "wanted": 228,
   "checked": 228,
   "alerts": [],
@@ -9524,27 +9453,29 @@
  "lagging": {
   "5202.T": {
    "last": "2026-09-30",
-   "expected": "2026-10-05"
+   "expected": "2026-10-06"
   },
   "6486.T": {
    "last": "2026-09-30",
-   "expected": "2026-10-05"
+   "expected": "2026-10-06"
   },
   "7240.T": {
    "last": "2026-09-30",
-   "expected": "2026-10-05"
+   "expected": "2026-10-06"
   }
  },
  "filled": {
   "^N225": {
    "dates": [
-    "2026-10-05"
+    "2026-10-06"
    ],
-   "close": 69928.046875,
+   "gap_dates": [],
+   "close": 70773.796875,
    "source": "yfinance 5m",
-   "expected": "2026-10-05"
+   "expected": "2026-10-06"
   }
  },
+ "gaps": {},
  "data_fixes": [
   {
    "ticker": "2501.T",
@@ -9561,6 +9492,14 @@
    "split": 3.0,
    "yield_yahoo": 1.19,
    "yield_fixed": 0.4
+  },
+  {
+   "ticker": "3099.T",
+   "date": "2026-09-29",
+   "div": 20.0,
+   "split": 2.0,
+   "yield_yahoo": 1.2,
+   "yield_fixed": 0.6
   },
   {
    "ticker": "4452.T",
