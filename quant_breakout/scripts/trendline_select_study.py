@@ -31,7 +31,8 @@
   「现在所有股票」在这里 = 这 6 个样本（覆盖 2001〜2026 三个时期、每期两组不同的票；今天的成员有幸存者偏差）+ 第 7 个样本 U0 = J-Quants 全市场时点面板
   （scripts/allstock_data：东证一般市場内国普通股约 4,400 只、2016-09〜2026-09、时点上市掩码、无幸存者偏差；只描述：与 J / Jx 同期、只加广度不加独立时期，
   二 的 B4 流水线只有前 6 个样本有）。U0 的样本日 = J 窗口（2017-01-04 起）每 5 个交易日一天；超额对同一天 U0 自己的等权平均。
-- 之后的收益 = 第 t + 1 天开盘买、第 t + 20 天收盘（%）；超额 = 减去同一天同一样本全部票（算得出的）的等权平均。每 5 个交易日取一天（同一批样本日也用于秩相关）。
+- 之后的收益 = 第 t + 1 天开盘买、第 t + 20 天收盘（%；「天」= 这只票自己有收盘的 K 线，停牌 / 缺行的票日期上会略长 —— 同上一轮）；超额 = 减去同一天同一样本全部票（算得出的）的等权平均。
+  每 5 个交易日取一天（同一批样本日也用于秩相关）。--prep 的 rows / sample_rows / have_pct 含之后收益算不出的最后 20 根（U0 除外）；--run 的面板不含 → 略小。
 - 每个特征每一天：连续 → 当天有值的票按名次三分位，差 = 高组平均超额 − 低组平均超额；整数 → {≥ 4} − {2}；bool → 是 − 否（两组各 ≥ 5 只）。
 - 标准误按月聚类（CR0）；「有信息」= 6 个样本的差同号、合起来 95% 区间不含 0、|平均| ≥ 0.3 pp（与上一轮同一门槛；方向不事先定 → 双侧）。U0 另列（同号与否只描述）。
 - 照实写：Z 与 Zx、E 与 W、J 与 Jx 两两同一批月份 → 「6 个样本同号」读作「3 个窗口 × 2 个样本」；零假设下 18 个特征按「3 个独立窗口同号 × 区间不含 0」估，
@@ -395,7 +396,7 @@ def placebo_pct(net: np.ndarray, g: np.ndarray, fid: str, i: int, dmean: float) 
     if not vals:
         return {"p95": None, "pct": None, "n": 0}
     vals = np.asarray(vals)
-    return {"p95": round(float(np.quantile(vals, 0.95)), 4), "pct": round(float((vals < dmean).mean() * 100), 1), "n": int(len(vals))}
+    return {"p95": float(np.quantile(vals, 0.95)), "pct": round(float((vals < dmean).mean() * 100), 1), "n": int(len(vals))}
 
 
 # ───────────────────────── 一：全部股票横截面 ─────────────────────────
@@ -439,9 +440,16 @@ def xsec(P: pd.DataFrame, days: pd.DatetimeIndex, fid: str) -> pd.DataFrame:
                          "n_lo": S["n_lo"].to_numpy(int), "rho": S["rho"].to_numpy(float)})
 
 
+def u0_days(FU: dict) -> pd.DatetimeIndex:
+    """U0 面板自己的交易日（全部票的日期并集）。"""
+    return pd.DatetimeIndex(np.unique(np.concatenate([f.index.to_numpy() for f in FU.values()])))
+
+
 def sample_days(W: dict, s: str, U0_days: pd.DatetimeIndex | None = None) -> tuple[tuple, pd.DatetimeIndex]:
     """样本的窗口与交易日（U0：J 窗口起点 2017-01-04、面板自己的交易日）。"""
     if s == U0:
+        if U0_days is None:
+            raise ValueError("U0 需要面板自己的交易日 U0_days")
         a, b = pd.Timestamp(U0_START), pd.Timestamp("2026-10-01")
         d = U0_days[(U0_days >= a) & (U0_days < b)]
         return (a, b), d
@@ -451,9 +459,27 @@ def sample_days(W: dict, s: str, U0_days: pd.DatetimeIndex | None = None) -> tup
     return win, days[(days >= win[0]) & (days < win[1])]
 
 
-def _one_sample(FL: dict, win, days, say, s: str) -> tuple[dict, dict, dict]:
-    P = TS.sample_panel(FL, win, COLS)
-    on = P[P["date"].isin(set(days[::EVERY]))]
+def sample_panel(FL: dict, win, days: pd.DatetimeIndex) -> pd.DataFrame:
+    """样本日（每 5 个交易日一天）的长表：日期、票、超额 + 18 个特征（只取样本日 → 与 trendline_study.sample_panel 在这些日子上相同；U0 才放得下）。"""
+    a, b = win
+    pick = pd.DatetimeIndex(days[::EVERY])
+    parts = []
+    for t, f in FL.items():
+        x = f.loc[f.index.isin(pick) & (f.index >= a) & (f.index < b), ["fwd"] + COLS]
+        if len(x):
+            parts.append(x.assign(ticker=t))
+    if not parts:
+        return pd.DataFrame(columns=["date", "ticker", "fwd", "ex", "month"] + COLS)
+    P = pd.concat(parts).rename_axis("date").reset_index()
+    P = P[np.isfinite(P["fwd"].to_numpy(float))]
+    P["ex"] = P["fwd"] - P.groupby("date")["fwd"].transform("mean")
+    P["month"] = P["date"].dt.strftime("%Y-%m")
+    return P
+
+
+def _one_sample(FL: dict, win, days, say, s: str) -> tuple[dict, dict, dict, dict]:
+    P = sample_panel(FL, win, days)
+    on = P
     cov = {f: round(float(np.isfinite(on[FEATS[f][0]].to_numpy(float)).mean() * 100), 1) if FEATS[f][2] != "bool"
            else round(float(on[FEATS[f][0]].astype(bool).mean() * 100), 1) for f in FIDS}
     by, parts = {}, {}
@@ -468,8 +494,8 @@ def _one_sample(FL: dict, win, days, say, s: str) -> tuple[dict, dict, dict]:
         by[f] = r
         if len(X):
             parts[f] = pd.DataFrame({"v": X["spread"].to_numpy(), "m": mon})
-    raw = {"rows": int(len(P)), "tickers": int(P["ticker"].nunique()), "sample_days": int(len(days[::EVERY]))}
-    say(f"一 {s}：{len(P)} 行、{P['ticker'].nunique()} 只票")
+    raw = {"sample_rows": int(len(P)), "tickers": int(P["ticker"].nunique()), "sample_days": int(len(days[::EVERY]))}
+    say(f"一 {s}：样本日 {len(P)} 票次、{P['ticker'].nunique()} 只票")
     return by, cov, raw, parts
 
 
@@ -490,8 +516,7 @@ def part_a(FLS: dict, W: dict, FU: dict | None, say=print) -> dict:
             out["pooled"][f] = TS.cluster_mean(X["v"], X["m"])
     out["judge"] = judge_a(out)
     if FU:
-        u_days = pd.DatetimeIndex(sorted(set().union(*[set(f.index) for f in FU.values()])))
-        win, days = sample_days(W, U0, u_days)
+        win, days = sample_days(W, U0, u0_days(FU))
         by, cov, raw, _ = _one_sample(FU, win, days, say, U0)
         out["coverage"][U0], out["raw"][U0] = cov, raw
         for f in FIDS:
@@ -522,11 +547,21 @@ def pool_xv(W: dict, FLS: dict, tbf_pool: dict, s: str) -> tuple[pd.DataFrame, p
 
 
 def _delta(net: np.ndarray, blk: np.ndarray) -> dict:
+    """保留 vs 全部（门槛比较用没有四舍五入的值；报告时才格式化）。"""
     import combo_all_common as CA
     dl = CA.delta(net, ~blk)
-    return {"n": int(dl["n"]), "kept": int(dl["kept"]), "changed": int(blk.sum()), "frac": round(float(blk.mean()), 4) if len(blk) else None,
-            "dwin": None if not np.isfinite(dl["dwin"]) else round(float(dl["dwin"]), 4),
-            "dmean": None if not np.isfinite(dl["dmean"]) else round(float(dl["dmean"]), 4)}
+    return {"n": int(dl["n"]), "kept": int(dl["kept"]), "changed": int(blk.sum()), "frac": float(blk.mean()) if len(blk) else None,
+            "dwin": None if not np.isfinite(dl["dwin"]) else float(dl["dwin"]),
+            "dmean": None if not np.isfinite(dl["dmean"]) else float(dl["dmean"])}
+
+
+def gates(dj: dict, dw: dict, placebo: dict | None) -> dict:
+    """入围 a〜d（纯函数；门槛见文件开头二）。"""
+    a = bool(dj.get("frac") is not None and dw.get("frac") is not None and BLOCK_LO <= dj["frac"] <= BLOCK_HI and BLOCK_LO <= dw["frac"] <= BLOCK_HI)
+    b = bool(dj.get("dwin") is not None and dj.get("dmean") is not None and dj["dwin"] >= WIN_MIN - 1e-9 and dj["dmean"] >= MEAN_MIN - 1e-9)
+    c = bool(dw.get("dwin") is not None and dw.get("dmean") is not None and dw["dwin"] > 1e-9 and dw["dmean"] >= -1e-9)
+    d = bool(placebo is not None and placebo.get("p95") is not None and dj.get("dmean") is not None and dj["dmean"] > placebo["p95"] + 1e-9)
+    return {"a": a, "b": b, "c": c, "d": d}
 
 
 def halves(X: pd.DataFrame, blk: np.ndarray, s: str) -> dict:
@@ -560,10 +595,7 @@ def explore(W: dict, FLS: dict, tbf_pool: dict, bounds: dict, say=print) -> tupl
                 r["halves"][s] = halves(XV[s][0], blk, s)
             dj, dw = r["delta"]["Jx"], r["delta"]["W"]
             r["placebo"] = placebo_pct(net["Jx"], g["Jx"], f, i, dj["dmean"] if dj["dmean"] is not None else -np.inf)
-            r["a"] = bool(dj["frac"] is not None and dw["frac"] is not None and BLOCK_LO <= dj["frac"] <= BLOCK_HI and BLOCK_LO <= dw["frac"] <= BLOCK_HI)
-            r["b"] = bool(dj["dwin"] is not None and dj["dmean"] is not None and dj["dwin"] >= WIN_MIN - 1e-9 and dj["dmean"] >= MEAN_MIN - 1e-9)
-            r["c"] = bool(dw["dwin"] is not None and dw["dmean"] is not None and dw["dwin"] > 1e-9 and dw["dmean"] >= -1e-9)
-            r["d"] = bool(r["placebo"]["p95"] is not None and dj["dmean"] is not None and dj["dmean"] > r["placebo"]["p95"] + 1e-9)
+            r.update(gates(dj, dw, r["placebo"]))
         else:
             r.update({"placebo": None, "a": False, "b": False, "c": False, "d": False})
         r["selected"] = bool(r["cand"] and r["a"] and r["b"] and r["c"] and r["d"])
@@ -606,6 +638,8 @@ def era_groups(W: dict, e: str, f: str, bounds: dict, tbf: np.ndarray, FL: dict)
 def boot_ci(net: np.ndarray, blocked: np.ndarray, months: np.ndarray) -> dict:
     """Zx 每笔差（保留 − 全部）的 95% 区间：按信号月聚类的自助法（只描述）。"""
     net, blocked, months = np.asarray(net, float), np.asarray(blocked, bool), np.asarray(months)
+    if not len(net):
+        return {"lo": None, "hi": None, "n": 0}
     um = np.unique(months)
     idx = {m: np.flatnonzero(months == m) for m in um}
     rng = np.random.default_rng(BOOT_SEED)
@@ -670,11 +704,10 @@ def b4_trades(W: dict, e: str, tbf: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame({"ticker": tr["ticker"].astype(str), "fill": pd.to_datetime(tr["entry_date"]), "sig": pd.DatetimeIndex(sig), "net": net})
 
 
-def describe_b4(W: dict, FLS: dict, tbf: dict, bounds: dict, final: list[str]) -> dict:
+def describe_b4(FLS: dict, b4tr: dict, bounds: dict, final: list[str]) -> dict:
     """只描述：B4 实际成交在信号日的分组 → 个数 / 胜率 / 每笔（只对入围的特征）。"""
     out = {}
-    for e in N225_ERAS:
-        tr = b4_trades(W, e, tbf[e])
+    for e, tr in b4tr.items():
         r = {"n": int(len(tr))}
         if final:
             V = values_at(FLS[e], tr["ticker"], tr["sig"])
@@ -688,7 +721,7 @@ def _group_counts(g: np.ndarray) -> dict:
     return {int(k): int(v) for k, v in zip(*np.unique(g, return_counts=True))}
 
 
-def counts(W: dict, FLS: dict, FU: dict | None, tbf: dict, tbf_pool: dict, tb: dict) -> dict:
+def counts(W: dict, FLS: dict, FU: dict | None, tbf: dict, tbf_pool: dict, tb: dict, b4tr: dict | None = None) -> dict:
     """登记前只数个数：每个样本的票数 / 行数、特征的有值比例；池子 / 日経225 信号在每个特征每一组的个数；B4 成交数；排名问题的规模。不算任何收益。"""
     import loop9_common as C9
     bounds = tb["bounds"]
@@ -698,8 +731,7 @@ def counts(W: dict, FLS: dict, FU: dict | None, tbf: dict, tbf_pool: dict, tb: d
         samples[U0] = FU
     for s, FL in samples.items():
         if s == U0:
-            u_days = pd.DatetimeIndex(sorted(set().union(*[set(f.index) for f in FL.values()])))
-            (a, b), days = sample_days(W, U0, u_days)
+            (a, b), days = sample_days(W, U0, u0_days(FL))
         else:
             (a, b), days = sample_days(W, s)
         pick = set(days[::EVERY])
@@ -726,7 +758,9 @@ def counts(W: dict, FLS: dict, FU: dict | None, tbf: dict, tbf_pool: dict, tb: d
         g = np.asarray(tbf[e], bool)
         Sk = S[~g]
         V = values_at(FLS[e], Sk["ticker"], Sk["date"])
-        tr = b4_trades(W, e, tbf[e])
+        tr = (b4tr or {}).get(e)
+        if tr is None:
+            tr = b4_trades(W, e, tbf[e])
         out["n225"][e] = {"signals": int(len(S)), "not_tbf": int(len(Sk)), "b4_trades": int(len(tr)),
                           "groups": {f: _group_counts(groups_of(V[FEATS[f][0]].to_numpy(), f, bounds, V["_has"].to_numpy())) for f in FIDS},
                           **slot_competition(Sk)}
@@ -746,10 +780,11 @@ def _sha(fp: Path) -> str | None:
 
 def git_info() -> dict:
     from qbreak import paths
+    root = str(paths.PROJECT_ROOT)
     try:
-        rev = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+        rev = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True, cwd=root).stdout.strip()
         dirty = bool(subprocess.run(["git", "status", "--porcelain", "--", "scripts/trendline_select_study.py", "scripts/trendline_study.py",
-                                     "qbreak/trendline.py", "qbreak/kline.py"], capture_output=True, text=True).stdout.strip())
+                                     "qbreak/trendline.py", "qbreak/kline.py"], capture_output=True, text=True, cwd=root).stdout.strip())
     except Exception:                                                        # noqa: BLE001
         rev, dirty = "?", None
     cp, cu = paths.sub("cache") / FLAGS_CACHE, paths.sub("cache") / U0_CACHE
@@ -824,8 +859,9 @@ def run(say=print) -> dict:
     res["finalists"] = finalists(expl)
     say(f"二 探索完成：入围 {res['finalists'] or '无'}；{time.time() - t0:.0f}s")
     res["confirm"] = confirm(W, FLS, tbf, tbf_pool, base, res["finalists"], expl, tb["bounds"], say) if res["finalists"] else {}
-    res["describe"] = describe_b4(W, FLS, tbf, tb["bounds"], res["finalists"])
-    res["counts"] = counts(W, FLS, FU, tbf, tbf_pool, tb)
+    b4tr = {e: b4_trades(W, e, tbf[e]) for e in N225_ERAS}
+    res["describe"] = describe_b4(FLS, b4tr, tb["bounds"], res["finalists"])
+    res["counts"] = counts(W, FLS, FU, tbf, tbf_pool, tb, b4tr)
     res["success_base"] = R10.pooled_trades(base)
     res["elapsed_s"] = round(time.time() - t0)
     return res
@@ -857,7 +893,7 @@ def report(res: dict) -> str:
     n_info = sum(1 for f in FIDS if j[f]["info"])
     L += ["", f"- 「有信息」= 6 个样本同号（读作 3 个窗口 × 2 个样本）+ 合起来 95% 区间不含 0 + |平均| ≥ {MIN_PP} pp → {n_info} / {len(FIDS)} 个特征"
           "（零假设下期望约 0.5〜0.7 个）。",
-          "- 有值比例（样本日里有线的票次 %，F01〜F18）：" + "；".join(f"{s} " + "/".join(str(A['coverage'][s][f]) for f in FIDS) for s in cols), "",
+          "- 有值比例（样本日里有线的票次 %，F01〜F18；F10 / F11 是「是」的比例）：" + "；".join(f"{s} " + "/".join(str(A['coverage'][s][f]) for f in FIDS) for s in cols), "",
           "## 二 结合 B4：探索（W / Jx 池子里 B4 会买的信号；保留 − 全部）→ 入围 → 确认", "",
           "三分位界线（W ∪ Jx 合起来，登记时冻结；有值个数）：" + "；".join(f"{f} {_f(b[0], '{:.4f}')} / {_f(b[1], '{:.4f}')}（{res['bounds_n'][f]}）" for f, b in res["bounds"].items()), "",
           "| 做法 | 特征 | 族 | 挡哪一端 | Jx 挡 / 全部 | Jx 胜率差 | Jx 每笔差 | 重排对照 95 分位 | W 挡 / 全部 | W 胜率差 | W 每笔差 | a b c d | 入围 |",
@@ -909,23 +945,23 @@ def report(res: dict) -> str:
     L += ["", "## 三 只描述", ""]
     ex = res["explore_extra"]
     L.append("- 排名问题的规模（同一天 ≥ 2 个 B4 会买的信号）：" + "；".join(f"{s} {ex['competition'][s]['days_ge2']} / {ex['competition'][s]['days']} 天（{ex['competition'][s]['signals_on_ge2']} 个信号）" for s in EXPLORE)
-             + "；日経225 " + "；".join(f"{e} {res['counts']['n225'][e]['days_ge2']} / {res['counts']['n225'][e]['days']} 天" for e in N225_ERAS))
+             + "；日経225（TBF 没挡的 W2 信号）" + "；".join(f"{e} {res['counts']['n225'][e]['days_ge2']} / {res['counts']['n225'][e]['days']} 天" for e in N225_ERAS))
     if fin:
         for e, r in res["describe"].items():
             parts = []
             for f in fin:
                 names = names_of(f)
-                parts.append(f"{f} " + " / ".join(f"{names[k][:4]} {v['n']} 笔 {v['win']:.0f}% {v['mean']:+.1f}%" for k, v in r[f].items()))
+                parts.append(f"{f} " + " / ".join(f"{names.get(k, f'G{k}')[:4]} {v['n']} 笔 {v['win']:.0f}% {v['mean']:+.1f}%" for k, v in r[f].items()))
             L.append(f"- B4 成交 {e}（{r['n']} 笔）信号日的分组（只列入围的）：" + "；".join(parts))
         for f in fin:
             names = names_of(f)
-            L.append(f"- Zx 分组 {CAND[f]}：" + " / ".join(f"{names[k][:4]} {v['n']} {v['win']:.0f}% {v['mean']:+.2f}%" for k, v in res["confirm"][f]["zx_table"].items()))
+            L.append(f"- Zx 分组 {CAND[f]}：" + " / ".join(f"{names.get(k, f'G{k}')[:4]} {v['n']} {v['win']:.0f}% {v['mean']:+.2f}%" for k, v in res["confirm"][f]["zx_table"].items()))
     L.append("- 探索全表（W / Jx；每组 个数 / 胜率 / 每笔；Zx 与日経225 的逐特征表只对入围者算）：")
     for s in EXPLORE:
         parts = []
         for f in FIDS:
             names = names_of(f)
-            parts.append(f"{f} " + " / ".join(f"{names[k][:4]} {v['n']} {v['win']:.0f}% {v['mean']:+.2f}%" for k, v in res["explore"][f]["tables"][s].items()))
+            parts.append(f"{f} " + " / ".join(f"{names.get(k, f'G{k}')[:4]} {v['n']} {v['win']:.0f}% {v['mean']:+.2f}%" for k, v in res["explore"][f]["tables"][s].items()))
         L.append(f"  - {s}：" + "；".join(parts))
     L += ["", f"用时 {res['elapsed_s']} s。只有汇总统计。非投资建议。"]
     return "\n".join(L) + "\n"
@@ -954,9 +990,15 @@ def main(argv=None) -> int:
     res = run(say)
     out_dir = Path(a.out_dir) if a.out_dir else paths.PROJECT_ROOT / "var" / "out"
     out_dir.mkdir(parents=True, exist_ok=True)
-    md = report(res)
+    (out_dir / OUT_JSON).write_text(json.dumps(res, ensure_ascii=False, indent=1, default=str), encoding="utf-8")   # 先存结果，再写报告
+    try:
+        md = report(res)
+    except Exception:                                                        # noqa: BLE001
+        import traceback
+        traceback.print_exc()
+        print(f"报告没写出来；结果已存 {out_dir / OUT_JSON}（报告可以从它重新生成）")
+        return 0
     (out_dir / OUT_MD).write_text(md, encoding="utf-8")
-    (out_dir / OUT_JSON).write_text(json.dumps(res, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     print(md)
     return 0
 

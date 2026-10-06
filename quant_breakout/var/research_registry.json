@@ -14124,5 +14124,87 @@
    "TLB2 在 J 胜率 +7.1 pp、Calmar +0.019，在 Z Calmar −0.182（2001〜2006 被挡的是大赢家）"
   ],
   "notes": "面板的趋势线保留为看图用（图下写明研究结论）；不改模拟盘 / 执行器；待办〔73〕"
+ },
+ {
+  "line": 9958,
+  "date": "2026-10-06",
+  "title": "登记「趋势线的质地特征能不能优化选股（全部股票横截面 + 结合 B4）」：18 个信号日特征（离线多远 / 通道位置 / 斜率 / 碰到几次 / 线多长 / 最近破线）在 6 个样本 + 全市场面板 U0 上的横截面 + W / Jx 探索「挡一端」TQ01〜TQ18（TQ12 / TQ14 不用）→ 入围 ≤ 3 → Zx + Z / E / J 账户确认",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "603712a（规则、代码、测试、冻结界线）+ 本提交（登记前个数；之后不改、只运行一次）",
+  "script": "scripts/trendline_select_study.py（定义 qbreak/trendline.py）",
+  "output": "var/out/trendline_select_study.md / .json（运行后）",
+  "candidates": [
+   {
+    "id": "TQ01",
+    "result": "登记"
+   },
+   {
+    "id": "TQ02",
+    "result": "登记"
+   },
+   {
+    "id": "TQ03",
+    "result": "登记"
+   },
+   {
+    "id": "TQ04",
+    "result": "登记"
+   },
+   {
+    "id": "TQ05",
+    "result": "登记"
+   },
+   {
+    "id": "TQ06",
+    "result": "登记"
+   },
+   {
+    "id": "TQ07",
+    "result": "登记"
+   },
+   {
+    "id": "TQ08",
+    "result": "登记"
+   },
+   {
+    "id": "TQ09",
+    "result": "登记"
+   },
+   {
+    "id": "TQ10",
+    "result": "登记"
+   },
+   {
+    "id": "TQ11",
+    "result": "登记"
+   },
+   {
+    "id": "TQ13",
+    "result": "登记"
+   },
+   {
+    "id": "TQ15",
+    "result": "登记"
+   },
+   {
+    "id": "TQ16",
+    "result": "登记"
+   },
+   {
+    "id": "TQ17",
+    "result": "登记"
+   },
+   {
+    "id": "TQ18",
+    "result": "登记"
+   }
+  ],
+  "baseline": "B4 = B3 + TBF（规则指纹 1241753c8f2529c6）；横截面的对照 = 同一天同一样本的等权平均",
+  "windows": "Z 2001-01〜2006-09、E 2006-10〜2016-09、J 2017-01〜2026-09；池子 W（E）/ Jx（J）/ Zx（Z）；U0 2017-01〜2026-09（J-Quants 全市场时点面板，只描述）",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "设计稿经三路独立审查后修订（随机对照 = 重排组标签再挑最差一端；只挡 G1 / G3 两端；整数分组写死；界线写成常量 --run 核对；Zx / 日経225 逐特征表只对入围者算；入围 ≤ 3 同族 ≤ 1；规模 ≥ 10% 与跨时期两条）；F12 / F14 = 上一轮 TLB2 变体不进候选；结论上限 = 候选 → 前向记录"
  }
 ]

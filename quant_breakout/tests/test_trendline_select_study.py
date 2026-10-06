@@ -27,7 +27,7 @@ def test_features_use_no_future_bars_including_midweek_cuts():
     full = T.ticker_features(df)
     assert list(full.columns) == ["fwd"] + T.COLS
     cols = T.COLS
-    for cut in (300, 452, 453, 455, 640, 642):                               # 含周一〜周四的截断点：周线用「上一根走完的周K」
+    for cut in (300, 452, 453, 454, 455, 640, 642):                          # 含周一〜周四的截断点（周线用「上一根走完的周K」）
         part = T.ticker_features(df.iloc[:cut + 1])
         a, b = full.loc[part.index, cols], part[cols]
         for c in cols:
@@ -109,7 +109,7 @@ def test_placebo_permutes_labels_and_repeats_the_selection():
         k = T.choose_group(net, gp, "F01")
         assert k in (1, 3) and net[gp == k].mean() <= net[gp == (4 - k)].mean()
         vals.append(CA.delta(net, gp != k)["dmean"])
-    assert abs(a["p95"] - round(float(np.quantile(vals, 0.95)), 4)) < 1e-9       # 与脚本里的对照逐次相同
+    assert abs(a["p95"] - float(np.quantile(vals, 0.95))) < 1e-9                  # 与脚本里的对照逐次相同（不四舍五入）
 
 
 def test_selection_rule_family_cap_and_no_cand():
@@ -172,6 +172,68 @@ def test_xsec_spread_and_rank_correlation_by_hand():
     a["pooled"]["F02"] = {"mean": -0.2, "lo": -0.3, "hi": -0.1}              # 不到 0.3 pp
     j = T.judge_a(a)
     assert not j["F01"]["info"] and not j["F02"]["info"] and j["F03"]["info"] and j["F03"]["sign"] == "−"
+
+
+def test_gates_values_at_and_report_smoke():
+    import json
+    import research_loop11 as R11
+    # a〜d 的边界（门槛比较用没有四舍五入的值）
+    dj = {"frac": 0.10, "dwin": 2.0, "dmean": 0.20}
+    dw = {"frac": 0.70, "dwin": 1e-6, "dmean": 0.0}
+    g = T.gates(dj, dw, {"p95": 0.1999})
+    assert g == {"a": True, "b": True, "c": True, "d": True}
+    assert not T.gates({**dj, "frac": 0.0999}, dw, {"p95": 0.1})["a"] and not T.gates({**dj, "dwin": 1.9999}, dw, {"p95": 0.1})["b"]
+    assert not T.gates(dj, {**dw, "dwin": 0.0}, {"p95": 0.1})["c"] and not T.gates(dj, dw, {"p95": 0.20})["d"] and not T.gates(dj, dw, None)["d"]
+    # values_at：找不到的（票, 日）→ NaN / _has False；单列路径（era_groups 用）
+    idx = pd.bdate_range("2024-01-01", periods=5)
+    FL = {"A.T": pd.DataFrame({c: np.float32(1.0) for c in T.COLS}, index=idx).assign(d_rb5=True, d_sb20=False)}
+    V = T.values_at(FL, ["A.T", "A.T", "B.T"], [idx[1], pd.Timestamp("2024-02-01"), idx[1]])
+    assert V["_has"].tolist() == [True, False, False] and V["d_res_atr"].iloc[0] == 1.0 and np.isnan(V["d_res_atr"].iloc[1])
+    V1 = T.values_at(FL, ["A.T"], [idx[2]], ["d_rb5"])
+    assert list(V1.columns) == ["d_rb5", "_has"] and V1["d_rb5"].iloc[0] == 1.0
+    # _delta 的字典满足 research_loop11.pool_ok（V4 / V6 用）
+    net = np.array([3.0, -1.0, 2.0, -2.0, 5.0, 1.0])
+    d = T._delta(net, np.array([False, True, False, True, False, False]))
+    assert d["changed"] == 2 and R11.pool_ok(d, "A") and R11.pool_ok(d, "B") and not R11.pool_ok({**d, "changed": 0}, "B")
+    # report()：没有入围 / 有入围 / 有 U0 的合成结果都能写出来，而且输出里没有个股代码
+    def cm(v):
+        return {"n": 10, "mean": v, "se": 0.1, "lo": v - 0.2, "hi": v + 0.2, "clusters": 5, "days": 10, "rho": 0.01, "n_hi": 30.0, "n_lo": 30.0}
+    cols = list(T.SAMPLES) + [T.U0]
+    A = {"by": {f: {s: cm(0.05) for s in cols} for f in T.FIDS}, "pooled": {f: cm(0.05) for f in T.FIDS},
+         "coverage": {s: {f: 90.0 for f in T.FIDS} for s in cols}, "raw": {s: {"sample_rows": 100, "tickers": 10, "sample_days": 10} for s in cols}}
+    A["judge"] = T.judge_a(A)
+    for f in T.FIDS:
+        A["judge"][f]["u0_same_sign"] = True
+    tab = {s: {0: {"n": 3, "win": 50.0, "mean": 0.1}, 1: {"n": 5, "win": 40.0, "mean": -1.0}, 2: {"n": 5, "win": 50.0, "mean": 0.5}, 3: {"n": 5, "win": 60.0, "mean": 1.0}} for s in T.EXPLORE}
+    dl = {"n": 18, "kept": 13, "changed": 5, "frac": 0.2778, "dwin": 3.0, "dmean": 0.5}
+    expl = {}
+    for f in T.FIDS:
+        cand = f in T.CAND_IDS
+        expl[f] = {"id": T.CAND[f], "col": T.FEATS[f][0], "family": T.FAM_OF[f], "cand": cand, "tables": tab, "group": 1 if cand else None,
+                   "group_name": T.names_of(f).get(1) if cand else None, "delta": {s: dict(dl) for s in T.EXPLORE} if cand else {},
+                   "halves": {s: {"前一半": dict(dl), "后一半": None} for s in T.EXPLORE} if cand else {},
+                   "placebo": {"p95": 0.3, "pct": 99.0, "n": 200} if cand else None, "a": cand, "b": cand, "c": cand, "d": cand, "selected": cand}
+    base = {e: {"cagr": 5.0, "dd": 10.0, "calmar": 0.5, "h1": 0.4, "h2": 0.6, "n": 30, "mean": 3.0, "win": 55.0} for e in T.N225_ERAS}
+    res = {"git": {"rev": "abc", "dirty": False}, "prereq": {"fingerprint": "x"}, "base": base, "bounds": {"F01": [0.1, 0.2]}, "bounds_n": {"F01": 100},
+           "A": A, "explore": expl, "explore_extra": {"n_pool": {s: 18 for s in T.EXPLORE}, "competition": {s: {"days": 9, "days_ge2": 2, "signals_on_ge2": 5} for s in T.EXPLORE}},
+           "finalists": [], "confirm": {}, "describe": {e: {"n": 30} for e in T.N225_ERAS},
+           "counts": {"n225": {e: {"days": 9, "days_ge2": 1} for e in T.N225_ERAS}}, "success_base": {}, "elapsed_s": 1}
+    md0 = T.report(res)
+    assert "没有" in md0 and "非投资建议" in md0
+    fin = T.finalists(expl)
+    assert len(fin) == 3
+    cand = {e: {**base[e], "calmar": 0.55, "blocked": 4} for e in T.N225_ERAS}
+    other = {s: dict(dl) for s in T.POOLS}
+    s1 = R11.stage1(cand, base, other, lenses=None, posthoc=True)
+    res["finalists"] = fin
+    res["confirm"] = {f: {"id": T.CAND[f], "group": 1, "cand": cand, "other": other, "stage1": s1,
+                          "scale": {e: {"blocked": 4, "signals": 30, "share": 0.13, "ok": True} for e in T.N225_ERAS},
+                          "cross": {"z_dwin": 0.0, "zx_dmean": 0.5, "ok": True}, "zx_ci": {"lo": -0.1, "hi": 0.9, "n": 2000},
+                          "zx_table": tab["W"], "candidate": bool(s1["ok"])} for f in fin}
+    res["describe"] = {e: {"n": 30, **{f: tab["W"] for f in fin}} for e in T.N225_ERAS}
+    md1 = T.report(res)
+    assert "确认" in md1 and all(T.CAND[f] in md1 for f in fin)
+    assert ".T" not in json.dumps(res, ensure_ascii=False, default=str) and ".T" not in md1
 
 
 def test_bootstrap_bounds_check_and_u0_frame():
