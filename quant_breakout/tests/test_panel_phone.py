@@ -185,7 +185,7 @@ def test_phone_port_needs_pairing_and_csrf(servers):
     assert _phone(pp, "POST", "/api/request", body, cookie=ck, csrf=csrf, host="evil.example")[0] == 421
     assert not MO.read_all("paper")
     code, txt, _ = _phone(pp, "POST", "/api/request", body, cookie=ck, csrf=csrf)
-    assert code == 200 and "10/06（今天）开盘" in json.loads(txt)["msg"]
+    assert code == 200 and "今天 09:00 开盘卖出" in json.loads(txt)["msg"]
     r = MO.read_all("paper")
     assert len(r) == 1 and r[0]["source"] == "phone" and r[0]["ticker"] == "7203.T"
     code, txt, _ = _phone(pp, "POST", "/api/halt", {"reason": "在外面"}, cookie=ck, csrf=csrf)

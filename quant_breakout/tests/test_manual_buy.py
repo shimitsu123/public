@@ -62,7 +62,7 @@ def test_check_buy_held_core_duplicate_and_slots():
     assert MO.check(n({"kind": "buy", "ticker": "6501"}), b) is None
     assert "已经持有" in MO.check(n({"kind": "buy", "ticker": "7203"}), b)
     assert "核心 ETF" in MO.check(n({"kind": "buy", "ticker": "1545"}), b)
-    assert "已经排在下一开盘买入" in MO.check(n({"kind": "buy", "ticker": "6501"}), _bk(plan=("6501.T",)))
+    assert "已经排在开盘买入" in MO.check(n({"kind": "buy", "ticker": "6501"}), _bk(plan=("6501.T",)))
     full = _bk(pos=("7203.T", "6758.T", "8035.T"), plan=("9984.T",))
     assert MO.slots(full) == {"held": 3, "buys": 1, "used": 4, "max": 4, "free": 0}
     assert "名额已满" in MO.check(n({"kind": "buy", "ticker": "6501"}), full)
@@ -104,17 +104,27 @@ def test_buy_reserves_cash_sells_core_and_opens_like_a_rule_entry():
     assert sm["active"] == 0 and MO.active(sm)                          # 做过买入 → 与云端不同是预期的
 
 
-def test_same_decision_retry_waits_for_the_next_decision():
+def test_same_decision_retry_waits_for_the_open_then_buys_in_session():
+    """07:40 的运行之后点的买入：08:35 的重试不买 → 09:00 开盘后盘中马上买（钱不够先卖核心 ETF）。"""
     r = _Run([1000.0] * 30, entry=(10,))
     r.until(14)
+    u0 = r.eng.st.core_units["1655.T"]
     rec = _buy(r)
     r.now["t"] = r.at(r.k - 1, 8, 35)                                   # 07:40 的运行之后
     r.ux.morning([])
     it = r.item(rec["id"])
-    assert it["status"] == "pending" and it["wait"] and "收盘后的决策" in it["msg"]
+    assert it["status"] == "pending" and it["wait"] and it["msg"] == "09:00 开盘后马上下单（盘中）"
     assert "B.T" not in r.eng.st.plan and not MO.due(TAG, r.ux.book, r.now["t"])
-    r.day()
-    assert r.item(rec["id"])["status"] == "placed" and "B.T" in r.eng.st.plan
+    res = r.session(9, 30)
+    it = r.item(rec["id"])
+    assert res["placed"] == 1 and it["status"] == "placed" and it["now"] and it["fill"]["qty"] == 100
+    assert "先卖核心 ETF 1655.T" in it["msg"] and "没有买入信号" in it["msg"]
+    fund = [o for o in r.ux.orders if o.reason == "manual_fund"]
+    assert len(fund) == 1 and fund[0].kind == "core" and fund[0].phase == "now" and fund[0].status == "FILLED"
+    r.day()                                                              # 第二天早上：对账记进账本，持仓核对照常
+    ps = r.eng.st.pos["B.T"]
+    assert ps.shares == 100 and ps.entry_date == str(r.eng.gidx[15].date()) and r.item(rec["id"])["status"] == "done"
+    assert r.eng.st.core_units["1655.T"] < u0 and r.exch.pos["B.T"] == 100 and not r.ux.blocked
 
 
 def test_buy_gates_reject_like_rule_entries():

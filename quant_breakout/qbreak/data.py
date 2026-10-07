@@ -651,3 +651,43 @@ def realtime_quotes(tickers: list[str]) -> dict[str, float]:
         except (KeyError, IndexError):
             continue
     return out
+
+
+def intraday_last(tickers: list[str], now: datetime | None = None, max_age_min: float = 60.0) -> dict[str, float]:
+    """模拟账户盘中手动单用的现在价：yfinance 1 分钟线最后一根的收盘（東証は約 15〜20 分遅れ）。
+    只认今天（JST）的、而且不早于 max_age_min 分钟之前的那一根（开盘后还没有今天的分钟线 / 停牌 → 不给价，执行器过几分钟再试）。
+    实盘不用它（用立花的現在値）。"""
+    import yfinance as yf
+
+    from .calendar_jp import JST
+    for nm in ("yfinance", "yfinance.data", "yfinance.utils"):
+        logging.getLogger(nm).setLevel(logging.CRITICAL)
+    tickers = sorted(set(tickers))
+    if not tickers:
+        return {}
+    try:
+        raw = yf.download(tickers, period="1d", interval="1m", progress=False, group_by="ticker", threads=False,
+                          auto_adjust=False, prepost=False)
+    except Exception as e:  # noqa: BLE001
+        log.warning("盘中价取不到: %s", e)
+        return {}
+    if raw is None or raw.empty:
+        return {}
+    n = (now or _now_utc()).astimezone(JST)
+    out: dict[str, float] = {}
+    for t in tickers:
+        try:
+            col = raw[t]["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw["Close"]
+        except KeyError:
+            continue
+        v = col.dropna()
+        if not len(v):
+            continue
+        ts = pd.Timestamp(v.index[-1])
+        ts = (ts.tz_localize("UTC") if ts.tzinfo is None else ts).tz_convert(JST)
+        if ts.date() != n.date() or (n - ts.to_pydatetime()).total_seconds() > max_age_min * 60:
+            continue
+        px = float(v.iloc[-1])
+        if px > 0:
+            out[t] = px
+    return out

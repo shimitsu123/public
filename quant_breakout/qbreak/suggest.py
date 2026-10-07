@@ -5,12 +5,13 @@
   triggered  今天收盘出了买入信号（规则明天开盘买；买不了的写出是哪道闸门 / 名额 / 钱）
   imminent   即将触发：横盘 + MACD 0 轴附近 + 离金叉不到收盘价的 0.15% + 量比 ≥ 1
   watch      观察：横盘 + MACD 0 轴附近（按条件就绪度取前几只）
-排序 = 状态 → 条件就绪度（0〜100）。拿着的票、核心 ETF 不列。每只附：
+排序 = 状态 → 条件就绪度（0〜100）。全部列出（2026-10-07 用户「建议的股票不限制个数」；以前最多 12 只、观察中最多 6 只）；
+拿着的票、核心 ETF 不列。每只附：
   rule  规则怎么处理（planned 已安排 / manual 手动买入已安排 / blocked 信号成立但不买 + 理由 / none 还没触发，规则不会买）
   buy   手动买入：block = 硬闸门（资格检查 / 立花能不能买 / 不在交易股票池 / 手动卖出后不买回）→ 页面不让点；
         warn = 现在会被挡、下一次决策可能变的（新仓倍数 0 / 决算前）；按规则的仓位估算（股数、金额、限价 = 收盘 ×1.03）
   trend 日K / 周K / 月K 的趋势标签（qbreak/kline.py；执行器再用长一点的行情补）
-执行器下单前还会在下一次决策里按当时的收盘、权益、名额、闸门再查一遍（这里只是预览）。
+执行器下单前还会按当时的价格、权益、名额、闸门再查一遍（这里只是预览）。
 """
 from __future__ import annotations
 
@@ -25,8 +26,6 @@ from .unified import market_of
 STATUS = {"triggered": "今天收盘出了买入信号", "imminent": "快要出买入信号（MACD 快要金叉、成交量不低）",
           "watch": "观察中（横着走、MACD 在 0 附近）"}                    # 2026-10-07：通俗说法（页面、日志）
 RULE = {"planned": "规则已安排买入", "manual": "手动买入已安排", "blocked": "信号成立但规则不买", "none": "还没触发：规则不会买"}
-MAX_ROWS = 12
-N_WATCH = 6
 NEED = {"Close", "entry", "range_pct", "is_range", "near_zero", "macd", "macd_sig", "macd_hist", "golden_cross", "vol_ratio",
         "box_top", "breakout"}                               # 条件就绪度要的列（核心 ETF 的 K 线没有这些 → 不列）
 
@@ -68,7 +67,7 @@ def _why_not(eng, t: str, i: int, em: float, gate: str | None, earn: str | None)
 
 
 def build(ind: dict, eng, i: int, params, pool: list[str] | None = None, names: dict | None = None,
-          manual: dict | None = None, max_rows: int = MAX_ROWS, n_watch: int = N_WATCH) -> dict:
+          manual: dict | None = None) -> dict:
     """第 i 根 K 线收盘后的决策之后（plan 已经排好）：规则的候选 → {"asof", "fill_day", "rows", "counts"}。
     ind：{代码: compute_indicators 的结果}；pool：交易股票池（默认 = 引擎里的东证个股）；names：代码 → 公司名；
     manual：执行器账本的 manual（看哪些是手动买入）。"""
@@ -95,8 +94,7 @@ def build(ind: dict, eng, i: int, params, pool: list[str] | None = None, names: 
     held = set(st.pos)
     counts = {k: sum(1 for r in rows if r["status"] == k) for k in STATUS}
     pick = [r for r in rows if r["status"] in ("triggered", "imminent") and r["ticker"] not in held]
-    pick += [r for r in rows if r["status"] == "watch" and r["ticker"] not in held][:n_watch]
-    pick = pick[:max_rows]
+    pick += [r for r in rows if r["status"] == "watch" and r["ticker"] not in held]          # 不限个数
     buys = ((manual or {}).get("buys") or {})
     gap = eng.ex["JP"].max_entry_gap_pct
     out = []
@@ -116,21 +114,21 @@ def build(ind: dict, eng, i: int, params, pool: list[str] | None = None, names: 
         sig = bool(A.entry[i, j])
         if t in st.plan and (buys.get(t) or {}).get("decided_on") == asof:
             p = st.plan[t]
-            rule = {"state": "manual", "text": f"手动买入已安排：{fill} 开盘寄付指値买 {int(p[1]):,} 股"
-                                               f"（限价 ¥{round_to_tick(float(p[0]) * (1 + gap / 100), t, 'BUY'):,g}）"}
+            rule = {"state": "manual", "text": f"手动买入已安排：{fill:%m/%d} 开盘买 {int(p[1]):,} 股"
+                                               f"（最高 ¥{round_to_tick(float(p[0]) * (1 + gap / 100), t, 'BUY'):,g}）"}
         elif t in st.plan:
             p = st.plan[t]
-            rule = {"state": "planned", "text": f"规则已安排：{fill} 开盘寄付指値买 {int(p[1]):,} 股"
-                                                f"（限价 ¥{round_to_tick(float(p[0]) * (1 + gap / 100), t, 'BUY'):,g}）"}
+            rule = {"state": "planned", "text": f"规则已安排：{fill:%m/%d} 开盘买 {int(p[1]):,} 股"
+                                                f"（最高 ¥{round_to_tick(float(p[0]) * (1 + gap / 100), t, 'BUY'):,g}）"}
         elif sig:
             rule = {"state": "blocked", "text": "信号成立但规则不买：" + _why_not(eng, t, i, em, gate, earn)}
         else:
-            rule = {"state": "none", "text": "还没触发买入信号：规则不会买（手动买入是你自己的决定，没有回测验证）"}
+            rule = {"state": "none", "text": "还没出买入信号：规则不会买"}
         warn = []
         if not gate and em <= 0:
-            warn.append("规则现在不开这只的新仓（新仓倍数 0）：执行器会挡")
+            warn.append("规则现在不开这只的新仓（新仓倍数 0）：会被挡")
         if not gate and earn:
-            warn.append(f"{earn}：执行器会挡")
+            warn.append(f"{earn}：会被挡")
         out.append({
             "ticker": t, "code": t.split(".")[0], "name": (names or {}).get(t.split(".")[0]),
             "sector": sector_cn(t, "JP"), "status": r["status"], "status_text": STATUS.get(r["status"], r["status"]),
@@ -160,4 +158,4 @@ def lines(sg: dict | None) -> list[str]:
     return out
 
 
-__all__ = ["build", "lines", "rule_shares", "STATUS", "RULE", "MAX_ROWS"]
+__all__ = ["build", "lines", "rule_shares", "STATUS", "RULE"]

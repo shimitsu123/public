@@ -60,18 +60,25 @@ def test_check_against_the_book():
     assert "没有「不自动买回」" in MO.check(n({"kind": "unblock", "ticker": "7203"}), book)
     assert "撤不了" in MO.check(n({"kind": "cancel", "target": "M20261006-080000-sell-7203"}), book)
     book["state"]["pending_exit"]["7203.T"] = "dead_cross"
-    assert "已经排在下一开盘卖出" in MO.check(n({"kind": "sell", "ticker": "7203"}), book)
+    assert "已经在卖出全部（MACD 死叉）" in MO.check(n({"kind": "sell", "ticker": "7203"}), book)
     book["state"]["pending_exit"] = {}
     MO.append(TAG, {"kind": "sell", "ticker": "7203"})                # 执行器还没读的同一只票
     assert "没处理完" in MO.check(n({"kind": "trim", "ticker": "7203", "pct": 5}), book, tag=TAG)
 
 
-def test_next_window_cutoff_weekend_and_holiday():
+def test_timing_session_lunch_close_weekend_and_holiday():
+    """2026-10-07 用户：盘中点的马上下单；开盘前点的等开盘；收盘后 / 休市日点的等下一个交易日开盘。"""
     at = lambda *a: dt.datetime(*a, tzinfo=JST)                         # noqa: E731
-    assert MO.next_window(at(2026, 10, 6, 8, 54)) == (dt.date(2026, 10, 6), True)
-    assert MO.next_window(at(2026, 10, 6, 8, 55)) == (dt.date(2026, 10, 7), False)
-    assert MO.next_window(at(2026, 10, 10, 10, 0)) == (dt.date(2026, 10, 13), False)   # 周六 → 周一是体育之日 → 周二
-    assert MO.next_window(at(2026, 10, 12, 7, 0)) == (dt.date(2026, 10, 13), False)
+    d6, d7 = dt.date(2026, 10, 6), dt.date(2026, 10, 7)
+    assert MO.timing(at(2026, 10, 6, 8, 54)) == ("open", d6) and MO.timing(at(2026, 10, 6, 8, 59)) == ("open", d6)
+    assert MO.timing(at(2026, 10, 6, 9, 0)) == ("now", d6) and MO.timing(at(2026, 10, 6, 11, 29)) == ("now", d6)
+    assert MO.timing(at(2026, 10, 6, 11, 30)) == ("lunch", d6) and MO.timing(at(2026, 10, 6, 12, 30)) == ("now", d6)
+    assert MO.timing(at(2026, 10, 6, 15, 24)) == ("now", d6) and MO.timing(at(2026, 10, 6, 15, 25)) == ("next", d7)
+    assert MO.timing(at(2026, 10, 10, 10, 0)) == ("next", dt.date(2026, 10, 13))        # 周六 → 周一是体育之日 → 周二
+    assert MO.timing(at(2026, 10, 12, 10, 0)) == ("next", dt.date(2026, 10, 13))
+    assert [MO.when_text(at(2026, 10, 6, h, m)) for h, m in ((8, 0), (10, 0), (12, 0), (16, 0))] == [
+        "今天 09:00 开盘", "马上（盘中）", "12:30 后场开盘", "10/07 开盘"]
+    assert MO.next_window(at(2026, 10, 6, 8, 55)) == (d6, True) and MO.next_window(at(2026, 10, 6, 15, 30)) == (d7, False)
 
 
 # ────────── ② 执行器 ──────────
@@ -120,6 +127,26 @@ class _Run:
     def until(self, k: int, **kw) -> None:
         while self.k <= k:
             self.day(**kw)
+
+    def quote(self, ts) -> dict:
+        """立花的現在値（模拟交易所：开盘后 = 当天的开盘价）。"""
+        return {t: d["price"] for t, d in self.b.quote_detail(list(ts)).items() if d.get("price")}
+
+    def session(self, hh: int = 10, mm: int = 0, quote=None) -> dict:
+        """成交日（第 self.k 根）的盘中：开盘撮合 → 09:05 开盘后补单 → hh:mm 盘中的手动指令（now_phase）。
+        之后照常 day()：同一天再开一次盘不会重复撮合（寄付单已经处理过）。"""
+        k = self.k
+        self.exch.open(k)
+        self.now["t"] = dt.datetime.combine(self.eng.gidx[k].date(), dt.time(9, 5), tzinfo=JST)
+        self.ux.open_phase()
+        self.now["t"] = dt.datetime.combine(self.eng.gidx[k].date(), dt.time(hh, mm), tzinfo=JST)
+        from qbreak.brokers import tachibana as tb
+        old = tb._sleep, self.b.confirm_timeout_s
+        tb._sleep, self.b.confirm_timeout_s = (lambda s: None), 5.0       # 盘中单发出后查约定（模拟交易所当场撮合）
+        try:
+            return self.ux.now_phase(quote or self.quote)
+        finally:
+            tb._sleep, self.b.confirm_timeout_s = old
 
     def ask(self, **req) -> dict:
         return MO.append(TAG, req, clock=lambda: self.at(self.k - 1, 6, 0))
@@ -335,7 +362,7 @@ def test_journal_lines_and_compare_note():
           "items": [{"id": "M1", "kind": "sell", "ticker": "7203.T", "status": "placed", "msg": "2026-10-07 开盘寄付成行卖出全部 300 股"},
                     {"id": "M0", "kind": "core", "pct": 50.0, "status": "done", "at": "2026-09-01T08:00:00+09:00", "msg": "x"}]}
     ls = MO.lines(sm, today="2026-10-06")
-    assert "规则目标额的 50%" in ls[0] and "到 2026-11-04" in ls[1] and "已交给执行器" in ls[2] and len(ls) == 3
+    assert "规则目标额的 50%" in ls[0] and "到 2026-11-04" in ls[1] and "已下单" in ls[2] and len(ls) == 3
     st = UState(cash_jpy=1.0, last_date="2026-10-06", history=[["2026-10-06", 1_000_000.0, 0, 0, 150]])
     sim = UState(cash_jpy=2.0, last_date="2026-10-06", history=[["2026-10-06", 1_000_000.0, 0, 0, 150]])
     st.pos["7203.T"] = UPos("7203.T", "JP", 100, 3000.0, "2026-10-01", 2800.0, 3000.0, 3000.0)

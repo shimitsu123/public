@@ -37,8 +37,8 @@ def test_why_reads_the_signal_day_before_entry():
     assert got["w2"]["ok"] and got["dist"]["ok"] and got["box"]["ok"] is None and "+1.0%" in got["box"]["text"]
     row = {"why": w, "entry_date": str(df.index[100].date()), "entry_px": 1003.0}
     line = HV.why_line(row)
-    assert "收盘出了买入信号：之前 60 天横着走（最高价和最低价只差 9.5%）" in line and "开盘买入，价格 ¥1,003" in line
-    assert "成交量放大到 20 日平均的 2.40 倍（这一周是前 10 周平均的 1.60 倍）" in line and "往上穿过慢线（金叉）" in line
+    assert line == (f"{sig.date()} 收盘出了买入信号（之前 60 天横着走（只差 9.5%），MACD 金叉，成交量是 20 日平均的 2.40 倍），"
+                    f"{df.index[100].date()} 开盘以 ¥1,003 买入")                      # 一句话：主要读数 + 哪天多少钱买入
     df.loc[sig, "entry"] = False                               # 复权 / 数据修正后条件不完全成立 → 注明
     assert "不完全成立" in HV.why_line({**row, "why": HV.why_items(df, row["entry_date"], P)})
     assert HV.why_items(df, str(df.index[0].date()), P)["signal_date"] is None
@@ -47,7 +47,8 @@ def test_why_reads_the_signal_day_before_entry():
 def test_trend_labels():
     up = HV.trend(_ind(np.linspace(1000, 1300, 220)), entry_px=1100, peak=1310, stop_px=1050)
     assert up["label"] == "up" and up["ret_pct"] > 0 and up["from_peak_pct"] < 0 and up["to_stop_pct"] < 0
-    assert "比 200 日均价高" in up["text"] and "MACD：上涨的力量占上风" in up["text"] and "就碰到止损线（碰到就按规则卖）" in up["text"]
+    assert up["text"].startswith("收盘 ¥1,300，比 20 日均价高 ") and "（均价往上）；MACD 偏涨" in up["text"]
+    assert "；1 个月 +" in up["text"] and "；比买入后最高价低 0.8%；离止损线 19.2%" in up["text"]
     assert up["text"] == HV.trend_text(up) and HV.trend_text({"text": "旧的说法"}) == "旧的说法" and HV.trend_text(None) == ""   # 旧汇总：原样
     down = HV.trend(_ind(np.linspace(1300, 1000, 220)))
     assert down["label"] == "down"
@@ -98,7 +99,7 @@ def test_run_manual_cli(capsys):
     assert run.main(["manual", "cancel", r[-1]["id"]]) == 0
     assert run.main(["manual", "list"]) == 0
     out = capsys.readouterr().out
-    assert "约占权益 52.0%" in out and "等执行器读" in out
+    assert "约占权益 52.0%" in out and "等下单" in out and "个股名额：空 3 个（拿着 1 + 排定买入 0，上限 4 只）" in out
     _write_book("tachibana")
     assert run.main(["manual", "core", "--pct", "50", "--broker", "tachibana"]) == 0
     assert "没有 ARM" in capsys.readouterr().out
@@ -121,11 +122,11 @@ def test_mac_page_report_and_journal_show_reasons():
     (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps({"holding_view": HV_DOC}, ensure_ascii=False), encoding="utf-8")
     MO.append("paper", {"kind": "sell", "ticker": "7203"})
     html = desktop_page.render("paper", 1_000_000, "2026-09-28")
-    assert "为什么持有" in html and "成交量放大到 20 日平均的 2.10 倍" in html and "偏弱" in html and "NASDAQ100（1545）" in html
+    assert "为什么持有" in html and "成交量是 20 日平均的 2.10 倍" in html and "偏弱" in html and "NASDAQ100（1545）" in html
     assert "浮盈 +4.0%" in html
     neg = {**HV_DOC, "holdings": [{**HV_DOC["holdings"][0], "trend": {**HV_DOC["holdings"][0]["trend"], "ret_pct": -2.7}}]}
     assert "浮亏 -2.7%" in HV.html(neg) and "浮盈 -" not in HV.html(neg)
-    assert "http://127.0.0.1:8765/?book=paper" in html and "等执行器读" in html
+    assert "http://127.0.0.1:8765/?book=paper" in html and "等下单" in html
     d = {"positions": {"7203.T": {"market": "JP", "shares": 200, "entry_px": 2500.0, "stop_px": 2325.0, "entry_date": "2026-09-01"}},
          "timeline": {}, "earn_state": {}, "config": {"max_positions": 4}, "holding_view": HV_DOC}
     blk = RU._positions_block(d, {"7203.T": 2600.0})

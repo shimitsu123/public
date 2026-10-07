@@ -19,9 +19,11 @@
   POST /api/request             写一条手动指令（qbreak/manual_orders.py；与 run.py manual 相同的检查）
   POST /api/halt                建 HALT（只能建、不能解除；解除只在 Mac 上、用户明确说）
   本机才有：POST /api/pair/new（生成配对码）、/api/device/revoke（取消一台设备）；手机才有：/api/pair、/api/unpair（退出这台设备）
-按钮只写指令：下单永远是执行器（下一次能下寄付单的运行；HALT / ARM / 持仓核对 / 单笔上限 / 资格检查照常）。
-  交易日 07:45〜08:50、今天早上的运行已经完成、有新的卖出 / 减仓 / 撤回 → 叫执行器跑一次重试
-  （bash scripts/liveu.sh run --broker … --retry，同一个账本最多 3 分钟一次）→ 当天开盘执行；之后点的 → 下一个交易日 07:40 的运行。
+按钮只写指令：下单永远是执行器（HALT / ARM / 持仓核对 / 单笔上限 / 资格检查照常）。什么时候下单（qbreak/manual_orders.py；
+2026-10-07 用户：「当天买入卖出的话在交易时间段就直接进行买入卖出 在交易时间之前的话就等交易时间的时候进行交易」）：
+  盘中（09:00〜11:30、12:30〜15:25）→ 面板马上叫执行器跑 bash scripts/liveu.sh run --broker … --phase now（同一个账本最多 1 分钟一次）；
+  交易日 07:45〜08:50、今天早上的运行已经完成、有新的卖出 / 调仓往下 / 撤回 → 叫一次重试（--retry，最多 3 分钟一次）→ 今天开盘的寄付单；
+  开盘前的买入 / 加仓 → 09:00 开盘后由 --phase now 下；收盘后点的 → 下一个交易日 07:40 的运行。
 安全：只绑 127.0.0.1；Host 头：本机端口只接受 127.0.0.1 / localhost，手机端口只接受 *.ts.net（挡 DNS rebinding）；写操作要
   ① 令牌（本机）/ 设备 cookie + CSRF 令牌（手机）② 自定义头（跨站表单发不出）③ Origin（有的话）必须是这个页面自己
   ④ application/json、≤ 4 KB ⑤ 每分钟最多 30 次（配对 10 次）。不读立花的认证信息、不连立花、不下单；页面禁止被嵌入。
@@ -56,7 +58,8 @@ log = setup_logging("panel")
 BOOKS = {"paper": "模拟账户", "tachibana": "立花（本番）", "tachibana_demo": "立花デモ"}
 MAX_BODY = 4096
 TRIGGER_FROM, TRIGGER_UNTIL = dt.time(7, 45), dt.time(8, 50)
-TRIGGER_GAP_S = 180
+TRIGGER_GAP_S = 180                     # 开盘前的重试：同一个账本最多 3 分钟一次
+NOW_GAP_S = 60                          # 盘中（--phase now）：同一个账本最多 1 分钟一次
 TOKEN_FILE = "panel_token"
 WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "holding_view.py", "kline.py", "suggest.py")
 
@@ -195,6 +198,7 @@ details.khelp ul{margin:4px 0;padding-left:18px;font-size:13px;line-height:1.55;
 .tchip{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--chip);font-size:13px;white-space:nowrap}
 .chip.hot{background:var(--accent);color:var(--accent-fg);font-weight:600}
 .meta{font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.sgh{font-size:15px;margin:14px 0 0;padding-top:10px;border-top:1px solid var(--line)}
 details.kl>summary{color:var(--accent);font-size:14px}
 .legend{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:13px;color:var(--muted);margin:2px 0}
 .chart table{border-collapse:collapse;font-size:13px;width:100%;font-variant-numeric:tabular-nums;margin-top:4px}
@@ -278,9 +282,9 @@ function ask(title, body, okText, opt){
   const inp=$('#ask-input'); inp.hidden=!opt.input; inp.value=''; inp.placeholder=opt.input||'';
   sheet('#dlg-ask'); return new Promise(res=>{ ASK=res; });
 }
-const NOTE = CFG.paper ? '\\n\\n模拟账户：手动操作后会和云端模拟盘不一致（上线门槛「连续 10 个交易日一致」的天数会中断）。' : '';
+const NOTE = CFG.paper ? '\\n\\n模拟账户：手动操作后会和云端模拟盘不一致。' : '';
 function coreShow(){ const r=$('#core-pct'); if(r) $('#core-val').textContent=r.value+'%'; }
-// ── 调仓（调整持仓：股数 / 金额 / 占权益 %）：按最近收盘估算；执行器按决策时的收盘与权益再算一次；调仓条按单元（LOT 股）分格 ──
+// ── 调仓（股数 / 金额 / 占权益 %）：按最近收盘估算；执行器下单时按当时的价格再算一次；调仓条按单元（LOT 股）分格 ──
 const LOT = CFG.lot || 100;
 let ADJ = null;
 const pctOf = n => CFG.eq>0 && ADJ.px>0 ? (n*ADJ.px/CFG.eq*100).toFixed(1)+'%' : '—';
@@ -321,11 +325,11 @@ function adjBar(){                                                         // �
   const pk=Math.min(100, have/n*100), num=n<=8 ? '' : ' '+fmt(ADJ.shares);            // ▲ 对准现在的位置：左半边往右写、右半边往左写（不出框）
   const kl=nd('span', 'k', pk<=60 ? '▲现在'+num : '现在'+num+' ▲', lab);
   kl.style.left=pk+'%'; kl.style.transform = pk<=60 ? 'translateX(-6px)' : 'translateX(calc(-100% + 6px))';
-  const capTxt = capN>=n ? '最右边 = 单只上限 '+CFG.cap+'%（约 '+fmt(capN*LOT)+' 股）'
-               : capN<have ? '单只上限 '+CFG.cap+'% ≈ '+fmt(capN*LOT)+' 股：现在已经超过，只能减'
+  const capTxt = capN>=n ? '最右边 = 单只上限 '+CFG.cap+'%'
+               : capN<have ? '单只上限 '+CFG.cap+'% ≈ '+fmt(capN*LOT)+' 股（现在已超过，只能减）'
                : '单只上限 '+CFG.cap+'% ≈ '+fmt(capN*LOT)+' 股';
-  note.textContent=(G===1 ? '一格 = 1 个单元 = '+fmt(LOT)+' 股（一次最少能买卖的股数）' : '一格 = '+G+' 个单元 = '+fmt(G*LOT)+' 股（单元太多，几个并成一格；拖动仍按 '+fmt(LOT)+' 股一步）')
-    +'；半透明 = 留着的、实心 = 要加的、红框 = 要卖的、斜线 = 超过上限不能加；'+capTxt;
+  note.textContent='一格 = '+fmt(G*LOT)+' 股'+(G>1 ? '（拖动按 '+fmt(LOT)+' 股一步）' : '')
+    +' · 半透明 留着 · 实心 要加 · 红框 要卖 · 斜线 超过上限 · '+capTxt;
   r.setAttribute('aria-valuetext', '目标 '+fmt(tgt*LOT)+' 股（'+tgt+' 个单元）；现在 '+fmt(ADJ.shares)+' 股');
 }
 function adjPrev(){
@@ -335,30 +339,28 @@ function adjPrev(){
   adjBar();
   if(n==null){ out.textContent='输入目标（股数 / 金额 / 占总权益 %）'; go.textContent='确认'; go.disabled=true; return; }
   if(n===c.shares){
-    out.textContent='按最近收盘 '+yen(c.px)+' 换算还是 '+fmt(n)+' 股（'+LOT+' 股单元向下取整）：不用调';
+    out.textContent='换算还是 '+fmt(n)+' 股：不用调';
     go.textContent='确认'; go.disabled=true; return;
   }
   if(n<c.shares){
     const k=c.shares-n;
     out.textContent='卖出 '+fmt(k)+' 股（约 '+yen(k*c.px)+'）：'+fmt(c.shares)+' → '+fmt(n)+' 股，约占权益 '+pctOf(n)
-      +'\\n'+CFG.when+' 开盘「寄付成行」'+(n===0 ? '；= 全部卖出（不设「不买回」；要设请用「卖出全部」）' : '');
+      +'\\n'+CFG.when+'卖出'+(n===0 ? '（= 全部卖出，不设「不买回」）' : '');
     go.textContent='确认卖出 '+fmt(k)+' 股'; go.className='btn danger'; go.disabled=false; return;
   }
   let t=n, note='';
   if(t>cap){ t=Math.max(cap, c.shares); note='\\n★ 超过单只上限 '+CFG.cap+'%：截到 '+fmt(t)+' 股'; }
   const k=t-c.shares;
   if(k<=0){
-    const nx=c.shares+LOT, full=CFG.eq>0 && c.shares*c.px/CFG.eq*100>=CFG.cap;
-    out.textContent = full ? '现在约占权益 '+pctOf(c.shares)+'，已经到单只上限 '+CFG.cap+'%：不能再加'
-      : '现在约占权益 '+pctOf(c.shares)+'；再加 1 个单元（'+fmt(LOT)+' 股，约 '+yen(LOT*c.px)+'）就约占 '+pctOf(nx)
-        +'，超过单只上限 '+CFG.cap+'%：不能再加';
+    const full=CFG.eq>0 && c.shares*c.px/CFG.eq*100>=CFG.cap;
+    out.textContent = full ? '已经到单只上限 '+CFG.cap+'%：不能再加' : '再加 '+fmt(LOT)+' 股就超过单只上限 '+CFG.cap+'%：不能再加';
     go.textContent='确认'; go.disabled=true; return;
   }
-  out.textContent='买入 '+fmt(k)+' 股（约 '+yen(k*c.px)+'，限价约 '+yen(c.px*1.03)+'）：'+fmt(c.shares)+' → '+fmt(t)+' 股，约占权益 '+pctOf(t)+note
-    +'\\n'+CFG.addWhen+' 开盘「寄付指値」；钱不够时同一个开盘先卖核心 ETF；只做一次（没买到就结束）';
+  out.textContent='买入 '+fmt(k)+' 股（约 '+yen(k*c.px)+'）：'+fmt(c.shares)+' → '+fmt(t)+' 股，约占权益 '+pctOf(t)+note
+    +'\\n'+CFG.when+'买入（最高 '+yen(c.px*1.03)+' = 收盘 ×1.03）；钱不够先卖核心 ETF；只做一次';
   go.textContent='确认买入 '+fmt(k)+' 股'; go.disabled=false;
 }
-// ── 买入（建议的股票 → 手动买入指令）：按规则的仓位 / 股数 / 金额 / 占权益 %；执行器在下一次新收盘的决策里按当时的收盘再算 ──
+// ── 买入（建议的股票 → 手动买入指令）：按规则的仓位 / 股数 / 金额 / 占权益 %；执行器下单时按当时的价格再算 ──
 let BUY = null;
 const bpct = n => CFG.eq>0 && BUY.px>0 ? (n*BUY.px/CFG.eq*100).toFixed(1)+'%' : '—';
 function buyCap(){ return BUY.px>0 && CFG.eq>0 ? Math.floor(CFG.eq*CFG.cap/100/BUY.px/BUY.lot+1e-9)*BUY.lot : 0; }
@@ -395,9 +397,8 @@ function buyPrev(){
       : '不够 1 个单元（'+fmt(BUY.lot)+' 股 ≈ '+yen(BUY.lot*BUY.px)+'）';
     go.textContent='确认买入'; go.disabled=true; return;
   }
-  out.textContent='买入约 '+fmt(n)+' 股 · 约 '+yen(n*BUY.px)+' · 约占权益 '+bpct(n)+' · 限价约 '+yen(BUY.limit||BUY.px*1.03)+'（收盘 ×1.03）'+note
-    +'\\n'+CFG.addWhen+' 开盘「寄付指値」（执行器在前一天收盘后的决策里按那天的收盘定股数与限价）；钱不够时同一个开盘先卖核心 ETF；'
-    +'名额满 / 开盘高于限价 / ストップ高 → 不买；只做一次（没买到就结束）；买入后按规则的止损 / 离场';
+  out.textContent='买入约 '+fmt(n)+' 股 · 约 '+yen(n*BUY.px)+' · 约占权益 '+bpct(n)+note
+    +'\\n'+CFG.when+'买入（最高 '+yen(BUY.limit||BUY.px*1.03)+' = 收盘 ×1.03）；名额满 / 价格更高 → 不买；只做一次';
   go.textContent='确认买入约 '+fmt(n)+' 股'; go.disabled=false;
 }
 document.addEventListener('input', e=>{
@@ -421,7 +422,7 @@ document.addEventListener('click', async e=>{
   if(a==='sell'){
     CUR={t:d.t, shares:+d.shares};
     $('#sell-title').textContent='卖出 '+d.t+(d.name?' '+d.name:'');
-    $('#sell-desc').textContent='全部 '+fmt(+d.shares)+' 股：执行器在 '+CFG.when+' 开盘以「寄付成行」卖出。'+NOTE;
+    $('#sell-desc').textContent='全部 '+fmt(+d.shares)+' 股 · '+CFG.when+'卖出'+NOTE;
     sheet('#dlg-sell'); return;
   }
   if(a==='sell-go'){
@@ -431,8 +432,7 @@ document.addEventListener('click', async e=>{
   if(a==='adj'){
     ADJ={t:d.t, shares:+d.shares, px:+d.px, unit:'shares'};
     $('#adj-title').textContent='调仓 '+d.t+(d.name?' '+d.name:'');
-    $('#adj-cur').textContent='现在 '+fmt(ADJ.shares)+' 股 · 约 '+yen(ADJ.shares*ADJ.px)+' · 约占权益 '+pctOf(ADJ.shares)
-      +'（按最近收盘 '+yen(ADJ.px)+'）';
+    $('#adj-cur').textContent='现在 '+fmt(ADJ.shares)+' 股 · 约 '+yen(ADJ.shares*ADJ.px)+' · 约占权益 '+pctOf(ADJ.shares);
     $('#adj-cap').textContent=CFG.cap; $('#adj-val').value='';             // 从这只票现在的股数开始（不带上一只票输过的数）
     const r=$('#adj-range'); r.max=Math.max(1, Math.ceil(Math.max(adjCap(), ADJ.shares, LOT)/LOT))*LOT; r.step=LOT; r.value=ADJ.shares;   // 整数个单元
     adjUnit('shares'); sheet('#dlg-adj'); return;
@@ -455,7 +455,7 @@ document.addEventListener('click', async e=>{
   if(a==='buy'){
     BUY={t:d.t, px:+d.px, lot:+d.lot||LOT, rule:+d.rule||0, limit:+d.limit||0, unit:'rule'};
     $('#buy-title').textContent='买入 '+d.code+(d.name ? ' '+d.name : '');
-    $('#buy-sig').textContent=(d.sig==='1' ? '今天收盘出了买入信号（'+d.rtext+'）。' : '★ '+d.status+'：还没有买入信号，规则不会买 —— 手动买入是你自己的决定（没有回测验证）。')
+    $('#buy-sig').textContent=(d.sig==='1' ? '今天出了买入信号（'+d.rtext+'）' : '★ '+d.status+'：还没有买入信号，规则不会买 —— 是你自己的决定')
       +(d.warn ? '\\n★ '+d.warn : '')+NOTE;
     $('#buy-cap').textContent=CFG.cap;
     buyUnit('rule'); sheet('#dlg-buy'); return;
@@ -471,11 +471,11 @@ document.addEventListener('click', async e=>{
   if(a==='core-step'){ const r=$('#core-pct'); r.value=Math.max(0, Math.min(100, parseFloat(r.value)+parseFloat(d.d))); coreShow(); return; }
   if(a==='core'){
     const v=parseFloat($('#core-pct').value);
-    const q=await ask('闲置资金比例 '+v+'%', '核心 ETF 的目标额 = 规则算出的 × '+v+'%：从下一次决策（下一个交易日早上的运行）起生效'+(v<100?'，多出来的留现金':'')+'。'+NOTE, '保存');
+    const q=await ask('闲置资金比例 '+v+'%', '核心 ETF 的目标额 = 规则算出的 × '+v+'%，下一次决策起生效'+(v<100?'（多出来的留现金）':'')+NOTE, '保存');
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:v})); return;
   }
   if(a==='cancel'){
-    const q=await ask('撤回 '+d.id, d.placed==='1' ? '之后不再重下。\\n如果这笔单已经发到交易所（今天开盘的单），要撤请在立花网站 / App 上撤；没撤的话开盘照常成交。' : '执行器还没处理：撤回之后不会下单。', '撤回');
+    const q=await ask('撤回 '+d.id, d.placed==='1' ? '之后不再下。已经发到交易所的单要在立花网站 / App 上撤。' : '还没下单：撤回之后不会下。', '撤回');
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
   }
   if(a==='unblock'){
@@ -483,7 +483,7 @@ document.addEventListener('click', async e=>{
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'unblock', ticker:d.t})); return;
   }
   if(a==='halt'){
-    const q=await ask('停止下单（HALT）', '全部账本（模拟账户和立花）从执行器的下一次运行起不下任何单，持仓不动。\\n已经发到交易所的单不会被撤（要撤在立花网站 / App 上撤）。\\n这里只能停：恢复只在 Mac 上（在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」）。', '停止下单', {danger:true, input:'原因（可不填）'});
+    const q=await ask('停止下单（HALT）', '全部账本（模拟和立花）从下一次运行起不下单、持仓不动。\\n已经发到交易所的单不会被撤（要撤在立花网站 / App 上撤）。\\n这里只能停：恢复只在 Mac 上（在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」）。', '停止下单', {danger:true, input:'原因（可不填）'});
     if(q.ok) done(await api('/api/halt',{reason:q.value})); return;
   }
   if(a==='pair-new'){
@@ -556,9 +556,8 @@ function readout(el, D, i, P, tf){
   el.textContent='';
   const pc=i>0 ? D.c[i-1] : null, c=D.c[i], dir=(pc && c!=null) ? (c>=pc ? 'up' : 'down') : null;
   nd('span','m', dlab(D.d[i], tf)+' ', el);
-  nd('b',dir,'收盘 '+pxs(c)+(pc && c!=null ? '（比前一'+KU[tf]+' '+pcs((c/pc-1)*100)+'）' : ''),el);
-  el.appendChild(document.createTextNode(' · 开盘 '+pxs(D.o[i])+' · 最高 '+pxs(D.h[i])+' · 最低 '+pxs(D.l[i])
-    +(pc && D.h[i]!=null && D.l[i]!=null ? ' · 高低差 '+((D.h[i]-D.l[i])/pc*100).toFixed(2)+'%' : '')+' · 成交 '+vfmt(D.v[i]||0)+(P.kind==='core'?' 口':' 股')
+  nd('b',dir,'收盘 '+pxs(c)+(pc && c!=null ? '（'+pcs((c/pc-1)*100)+'）' : ''),el);
+  el.appendChild(document.createTextNode(' · 开 '+pxs(D.o[i])+' · 高 '+pxs(D.h[i])+' · 低 '+pxs(D.l[i])+' · 量 '+vfmt(D.v[i]||0)+(P.kind==='core'?' 口':' 股')
     +(P.kind==='stock' && P.entry_px && c!=null ? ' · 比买入价 '+pcs((c/P.entry_px-1)*100) : '')));
 }
 function fmx(a, i, sg){ const v=a && a[i]; if(v==null) return '—'; const s=Math.abs(v)>=100 ? v.toFixed(0) : Math.abs(v)>=1 ? v.toFixed(2) : v.toFixed(3); return (sg && v>0 ? '+' : '')+s; }
@@ -568,78 +567,54 @@ function subText(D, i, sub){                                               // �
   if(sub==='dmi') return '+DI '+f1(D.pdi,i)+' · −DI '+f1(D.mdi,i)+' · ADX '+f1(D.adx,i)+' · ADXR '+f1(D.adxr,i);
   return '';
 }
-function kSubKey(el, P, tf, sub){                                          // 小图的图例 + 意思（不随十字线变）
+function kSubKey(el, P, tf, sub){                                          // 小图的图例（意思在「怎么看这张图」里）
   el.textContent='';
-  const row=nd('div','legend',null,el), u=KU[tf];
+  const row=nd('div','legend',null,el);
   const k=(c, t)=>{ const sp=nd('span',null,null,row); nd('i','key '+c,null,sp); sp.appendChild(document.createTextNode(t)); };
-  if(sub==='macd'){
-    const m=(P.ind||{}).macd||[12,26,9];
-    k('dif','快线 DIF'); k('dea','慢线 DEA'); k('box mhu','柱：快线在上'); k('box mhd','柱：快线在下');
-    nd('div',null,'MACD（'+m.join(', ')+'，和规则用的一样）看涨跌的力量：快线在慢线上面 = 上涨的力量占上风；柱子 = 两条线的差，柱子变长 = 力量在变强。'
-      +'快线在 0 附近往上穿过慢线（金叉）是规则买入的条件之一',el);
-  } else if(sub==='dmi'){
-    const q=(P.ind||{}).dmi||[14,6];
-    k('pdi','买方力量 +DI'); k('mdi','卖方力量 −DI'); k('adx','趋势强度 ADX'); k('adxr','ADXR（ADX 的平均）');
-    nd('div',null,'DMI（'+q.join(', ')+'）比买卖两边的力量：+DI 比 −DI 高 = 买的一方占上风；ADX 越高 = 趋势越明显（不分涨跌），'
-      +'一般 25 以上算明显、20 以下算没什么趋势。规则不用 DMI，只用来看',el);
-  } else {
-    k('box cu','收盘比开盘高'); k('box cd','收盘比开盘低');
-    nd('div',null,'量 = 每'+u+'成交了多少'+(P.kind==='core' ? '口' : '股')+'：柱子越高，买卖的人越多。规则买入时要成交量明显比平时多',el);
-  }
+  if(sub==='macd'){ k('dif','快线'); k('dea','慢线'); k('box mhu','柱 = 快线 − 慢线'); nd('span',null,'MACD '+((P.ind||{}).macd||[12,26,9]).join(','),row); }
+  else if(sub==='dmi'){ k('pdi','+DI 买方'); k('mdi','−DI 卖方'); k('adx','ADX 趋势强度'); k('adxr','ADXR'); nd('span',null,'DMI '+((P.ind||{}).dmi||[14,6]).join(','),row); }
+  else { k('box cu','涨'); k('box cd','跌'); nd('span',null,'成交量（'+(P.kind==='core' ? '口' : '股')+'）',row); }
 }
-function kSubNow(el, D, i, P, tf, sub){                                    // 小图「这一根」的读法（跟着十字线走）
+function kSubNow(el, D, i, P, tf, sub){                                    // 小图「这一根」一句话（跟着十字线走）
   let s='';
   if(sub==='macd'){
     const a=D.dif && D.dif[i], b=D.dea && D.dea[i], h=D.mh && D.mh[i], h0=i>0 && D.mh ? D.mh[i-1] : null;
     if(a==null || b==null) s='K 线还不够多，算不出来';
     else {
-      if(h!=null && h0!=null && h0<0 && h>=0) s='快线刚往上穿过慢线（金叉）';
-      else if(h!=null && h0!=null && h0>0 && h<=0) s='快线刚往下穿过慢线（死叉）';
-      else s=(a>=b ? '快线在慢线上面：上涨的力量占上风' : '快线在慢线下面：下跌的力量占上风')
-             +(h!=null && h0!=null ? (Math.abs(h)>Math.abs(h0) ? '，而且在变强' : '，但在变弱') : '');
-      s+='；快线在 0 线'+(a>=0 ? '上面（整体偏涨）' : '下面（整体偏跌）');
+      if(h!=null && h0!=null && h0<0 && h>=0) s='金叉（快线刚往上穿过慢线）';
+      else if(h!=null && h0!=null && h0>0 && h<=0) s='死叉（快线刚往下穿过慢线）';
+      else s=(a>=b ? '快线在慢线上面（涨的力量强）' : '快线在慢线下面（跌的力量强）')
+             +(h!=null && h0!=null ? (Math.abs(h)>Math.abs(h0) ? '，在变强' : '，在变弱') : '');
+      s+='；在 0 线'+(a>=0 ? '上面（偏涨）' : '下面（偏跌）');
     }
   } else if(sub==='dmi'){
     const p=D.pdi && D.pdi[i], m=D.mdi && D.mdi[i], x=D.adx && D.adx[i], x0=i>0 && D.adx ? D.adx[i-1] : null;
     if(p==null || m==null) s='K 线还不够多，算不出来';
     else {
-      s=p>=m ? '买方力量大于卖方' : '卖方力量大于买方';
-      if(x!=null) s+='；趋势强度 ADX '+x.toFixed(1)+(x>=25 ? '：趋势明显' : x<20 ? '：没什么趋势' : '：趋势一般')+(x0!=null ? (x>x0 ? '，在变强' : '，在变弱') : '');
+      s=p>=m ? '买方强' : '卖方强';
+      if(x!=null) s+='；ADX '+x.toFixed(1)+(x>=25 ? '（趋势明显）' : x<20 ? '（没什么趋势）' : '（趋势一般）')+(x0!=null ? (x>x0 ? '，在变强' : '，在变弱') : '');
     }
   } else {
     const v=D.v[i]||0; let sm=0, n=0;
     for(let j=Math.max(0, i-20); j<i; j++){ if(D.v[j]!=null){ sm+=D.v[j]; n++; } }
-    s='成交 '+vfmt(v)+(P.kind==='core' ? ' 口' : ' 股')+(n>=5 && sm>0 ? '，是之前 '+n+' '+KU[tf]+'平均的 '+(v/(sm/n)).toFixed(2)+' 倍' : '');
+    s='成交 '+vfmt(v)+(P.kind==='core' ? ' 口' : ' 股')+(n>=5 && sm>0 ? '，是前 '+n+' '+KU[tf]+'平均的 '+(v/(sm/n)).toFixed(2)+' 倍' : '');
   }
-  el.textContent=(i===D.d.length-1 ? '最新一根' : '这一根（'+sdate(D.d[i], tf)+'）')+'：'+s;
+  el.textContent=(i===D.d.length-1 ? '最新一根' : sdate(D.d[i], tf))+'：'+s;
 }
-function kTrend(el, tr, tf){                                               // 现在的趋势（kline.py 的标签换成日常的话 + 为什么）
+function kTrend(el, tr, tf){                                               // 现在的趋势（一句话；kline.py 的标签换成日常的话）
   const L=KPL.label||{}, A=KPL.align||{}, m=KMA[tf], sl=+tr.slope20_pct||0;
   nd('span',null,'现在的趋势：',el);
   nd('b', tr.label==='上升' ? 'up' : tr.label==='下降' ? 'down' : null, L[tr.label] || tr.label || '—', el);
-  el.appendChild(document.createTextNode(' —— 收盘在 20 '+m+'均价'+(tr.above20 ? '上面' : '下面')+'，20 '+m+'均价比 3 '+KU[tf]+'前'
-    +(Math.abs(sl)<0.005 ? '差不多' : (sl>0 ? '高 ' : '低 ')+Math.abs(sl)+'%')
-    +(tr.align ? '；'+(A[tr.align] || tr.align)+(tr.align==='多头排列' ? '（短期的均价线在上、长期的在下，一层一层排好）'
-                                              : tr.align==='空头排列' ? '（短期的均价线在下、长期的在上，一层一层排好）' : '') : '')));
+  el.appendChild(document.createTextNode('（收盘在 20 '+m+'均价'+(tr.above20 ? '上面' : '下面')+'，20 '+m+'均价'
+    +(Math.abs(sl)<0.005 ? '走平' : sl>0 ? '往上' : '往下')+'）'+(tr.align ? ' · '+(A[tr.align] || tr.align) : '')));
 }
-function kTL(el, TL, tf){                                                  // 现在的趋势线（日常的话；图上的记号在「怎么看这张图」里）
-  const u=KU[tf], C=KPL.chan||{}, eps=TL.eps||0;
-  const one=(L, sup)=>{
-    const d=L.dist_pct, s=L.slope_pct;
-    let w=(sup ? '下面的线（支撑线，连最近的低点）' : '上面的线（压力线，连最近的高点）')+' '+pxs(L.now);
-    if(d!=null) w+= sup ? (d<=0 ? '，比收盘低 '+Math.abs(d)+'%' : '，比收盘高 '+d+'%（收盘已经跌到这条线下面）')
-                        : (d>=0 ? '，比收盘高 '+d+'%' : '，比收盘低 '+Math.abs(d)+'%（收盘已经冲到这条线上面）');
-    if(s!=null) w+= Math.abs(s)<eps ? '，基本是平的' : '，每'+u+'往'+(s>0 ? '上 ' : '下 ')+Math.abs(s)+'%';
-    if(L.touch) w+='，股价碰到过 '+L.touch+' 次';
-    return w;
-  };
-  const pos = TL.pos==null ? '' : TL.pos>100 ? '；收盘在上面的线之上' : TL.pos<0 ? '；收盘在下面的线之下' : '；收盘在两条线之间、从下往上 '+TL.pos+'% 的位置';
-  nd('div',null,'现在的趋势线：'+(TL.chan ? (C[TL.chan] || TL.chan)+pos : '只找到'+(TL.sup ? '下面' : '上面')+'的一条'),el);
-  const ul=nd('ul',null,null,el);
-  if(TL.sup) nd('li',null,one(TL.sup, true),ul);
-  if(TL.res) nd('li',null,one(TL.res, false),ul);
-  nd('div','muted','研究（2026-10-06，全部股票 2001〜2026）：两条线朝哪边、股价冲过 / 跌破它们，对之后 20 天的涨跌都没有预测力；'
-    +'拿来帮现在的方法选股也没有更好 —— 趋势线只用来看图',el);
+function kTL(el, TL, tf){                                                  // 现在的趋势线（一句话；图上的记号在「怎么看这张图」里）
+  const C=KPL.chan||{};
+  const one=(L, sup)=>{ const d=L.dist_pct;
+    return (sup ? '支撑 ' : '压力 ')+pxs(L.now)+(d==null ? '' : sup ? (d<=0 ? '（比收盘低 '+Math.abs(d)+'%）' : '（已跌破）')
+                                                                : (d>=0 ? '（比收盘高 '+d+'%）' : '（已冲过）')); };
+  const parts=[]; if(TL.sup) parts.push(one(TL.sup, true)); if(TL.res) parts.push(one(TL.res, false));
+  nd('div',null,'趋势线：'+(TL.chan ? (C[TL.chan] || TL.chan) : '只找到'+(TL.sup ? '下面' : '上面')+'的一条')+(parts.length ? ' · '+parts.join(' · ') : ''),el);
 }
 function kHelp(box, P, tf, hasTL, PJ){                                         // 「怎么看这张图」（收起来；打开 / 关上记在这张图上，切换周期也不变）
   const det=nd('details','khelp',null,box); if(box.dataset.help==='1') det.open=true;
@@ -648,17 +623,16 @@ function kHelp(box, P, tf, hasTL, PJ){                                         /
   const ul=nd('ul',null,null,det), u=KU[tf], m=KMA[tf];
   const li=(...ps)=>{ const e=nd('li',null,null,ul); for(const p of ps) e.appendChild(typeof p==='string' ? document.createTextNode(p) : p); };
   const key=c=>nd('i','key '+c,null,null);
-  li('每根 K 线 = 1 '+u+'：中间粗的一段从开盘价到收盘价，上下的细线到最高价和最低价');
-  li(key('box cu'),'红色空心 = 收盘比开盘高（涨）　',key('box cd'),'绿色实心 = 收盘比开盘低（跌）');
-  li(key('m5'),'5 '+m+'均价 = 最近 5 '+u+'收盘价的平均，连起来就是这条线；',key('m10'),'10　',key('m20'),'20　',key('m30'),'30 '+m+'均价同理（越长越平滑、反应越慢）');
-  li('「往上走」= 收盘在 20 '+m+'均价上面、20 '+m+'均价比 3 '+u+'前高、5 '+m+'均价也在 20 '+m+'均价上面；「往下走」= 三个都反过来；其余 = 「横着走」');
-  if(P.kind==='stock') li(key('dash'),'买入价（加过仓就是平均）　',key('dash stop'),'止损线（跌到这里就按规则卖）　▲买入 = 买入的那一根');
-  else if(P.signal_date) li('▲信号 = 出买入信号的那一根');
-  if(hasTL) li(key('dash tl'),'趋势线：下面的连最近的低点（支撑线）、上面的连最近的高点（压力线）；点线 = 往后延长 '+PJ+' '+u+'（只是把线延长，不是预测）；'
-    +'○ = 连线用的低点 / 高点；▲ = 收盘冲过上面的线、▼ = 收盘跌破下面的线');
-  li('图下面的「量 / MACD / DMI」切换下面的小图：量 = 成交了多少；MACD = 涨跌的力量（规则买入时看它）；DMI = 买卖两边的力量和趋势强不强（规则不用）');
-  li('看以前的某一根：手指点一下或按住左右滑（鼠标指上去也行）；键盘：先点一下图，再用 ← → 一根一根看，Home / End 到最早 / 最新，Esc 回到最新');
-  li('图上画的都是过去的价格，不是预测；卖不卖只按规则');
+  li('每根 K 线 = 1 '+u+'：粗的一段 = 开盘到收盘，细线 = 最高到最低；',key('box cu'),'红色空心 = 涨　',key('box cd'),'绿色实心 = 跌');
+  li(key('m5'),'5　',key('m10'),'10　',key('m20'),'20　',key('m30'),'30 '+m+'均价 = 最近几'+u+'收盘价的平均');
+  li('往上走 = 收盘在 20 '+m+'均价上面、20 '+m+'均价往上、5 '+m+'均价在 20 '+m+'均价上面；往下走 = 反过来；其余 = 横着走');
+  if(P.kind==='stock') li(key('dash'),'买入价　',key('dash stop'),'止损线（跌到这里按规则卖）　▲买入 = 买入那一根');
+  else if(P.signal_date) li('▲信号 = 出买入信号那一根');
+  if(hasTL) li(key('dash tl'),'趋势线：下面连低点（支撑）、上面连高点（压力），点线 = 往后延长 '+PJ+' '+u+'；▲ 冲过压力线、▼ 跌破支撑线。'
+    +'研究（2026-10-06）：对之后的涨跌没有预测力，只用来看');
+  li('下面的小图：量 = 成交多少；MACD = 涨跌的力量（快线在 0 附近往上穿过慢线 = 金叉，是规则买入的条件之一）；DMI = 买卖哪边强、趋势强不强（规则不用）');
+  li('看以前的某一根：点一下或按住左右滑；键盘 ← → 一根一根看，Home / End 到最早 / 最新，Esc 回到最新');
+  li('图上都是过去的价格，不是预测');
 }
 function kBar(box, pos, act, opts, cur, label, hint){                      // 图的上边沿（周期）/ 下边沿（小图）的按钮
   const bar=nd('div','kbar '+pos,null,box), g=nd('div','seg',null,bar);
@@ -891,12 +865,13 @@ def _head(title: str) -> str:
             f"<title>{escape(title)}</title><style>{_CSS}</style></head>")
 
 
-def _dialogs(paper: bool) -> str:
+def _dialogs(paper: bool, cap: float = MO.CAP_PCT) -> str:
     bd = [("20", "20 个交易日（默认）"), ("5", "5 个交易日"), ("60", "60 个交易日"), ("-1", "一直（直到解除）"), ("0", "不限制")]
+    sim = "模拟账户：手动操作后会和云端模拟盘不一致。" if paper else ""
     return ("<dialog id='dlg-sell'><div class='sheet'><h3 id='sell-title'></h3><div id='sell-desc'></div>"
             "<fieldset><legend class='muted'>之后不自动买回</legend>"
             + "".join(f"<label><input type='radio' name='bd' value='{v}'{' checked' if v == '20' else ''}> {t}</label>" for v, t in bd)
-            + "</fieldset><div class='muted small'>卖出所得按规则：有新信号买新票，没有就进闲置资金 ETF（想留现金就把闲置资金比例调低）。</div>"
+            + "</fieldset><div class='muted small'>卖出的钱按规则：有新信号就买新票，没有就进闲置资金 ETF。</div>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn danger' data-act='sell-go'>确认卖出</button></div>"
             "</div></dialog>"
             "<dialog id='dlg-adj'><div class='sheet'><h3 id='adj-title'></h3><div id='adj-cur' class='muted'></div>"
@@ -910,11 +885,8 @@ def _dialogs(paper: bool) -> str:
             "<div class='lots'><div class='lots-bar' id='adj-bar' aria-hidden='true'></div>"
             "<input type='range' id='adj-range' min='0' max='100' step='100' value='0' aria-label='目标股数（一格 = 一次最少能买卖的股数）'></div>"
             "<div class='lots-lab' id='adj-lab' aria-hidden='true'></div><div class='muted small' id='adj-note'></div>"
-            "<div id='adj-prev'></div><div class='muted small'>目标 → 执行器按决策时的收盘与权益换成股数（单元向下取整），少于现在 → 卖出多出来的"
-            "（寄付成行）；多于现在 → 加仓（寄付指値 = 收盘 ×1.03，钱不够时同一个开盘先卖核心 ETF；单只最多占总权益 "
-            "<span id='adj-cap'>34</span>%；资格检查 / 新仓倍数 0 / 决算前的票不加；只做一次）。加仓后成本按股数平均，止损 / 持有天数不变。"
-            "规则里的「赢家加仓」研究没有通过：加仓是你的手动决定。"
-            + ("模拟账户：手动操作后会和云端模拟盘不一致。" if paper else "") + "</div>"
+            f"<div id='adj-prev'></div><div class='muted small'>一次最少 {MO.LOT} 股；单只上限 <span id='adj-cap'>{cap:g}</span>%。"
+            "加仓是你自己的决定（「赢家加仓」研究没有通过）；加仓后成本按股数平均，止损不变。" + sim + "</div>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn primary' id='adj-go' data-act='adj-go'>确认</button></div>"
             "</div></dialog>"
             "<dialog id='dlg-buy'><div class='sheet'><h3 id='buy-title'></h3><div id='buy-sig'></div>"
@@ -926,11 +898,8 @@ def _dialogs(paper: bool) -> str:
             "<div class='adjrow' id='buy-row' hidden><button class='btn' data-act='buy-step' data-d='-1' aria-label='少一个单元'>−</button>"
             "<div class='grow'><input type='number' id='buy-val' inputmode='decimal' min='0' aria-label='买多少'><span class='unit' id='buy-unit'>股</span></div>"
             "<button class='btn' data-act='buy-step' data-d='1' aria-label='多一个单元'>＋</button></div>"
-            "<div id='buy-prev'></div><div class='muted small'>按规则 = 与规则的新仓同一个算法（总权益 × 25% × 新仓倍数，单元向下取整）。"
-            "执行器在下一次新收盘的决策里按那天的收盘再算一遍，过同样的闸门：资格检查 / 立花能不能买 / 手动卖出后不买回 / 决算前 / "
-            "新仓倍数 0 的票不买；个股最多 4 只（名额满不买）；单只最多占总权益 <span id='buy-cap'>34</span>%；钱不够时同一个开盘先卖核心 ETF；"
-            "开盘高于限价 / ストップ高 → 不买；只做一次。买入后与规则的持仓一样：止损按 ATR、跟踪止损 / 离场信号照常。"
-            + ("模拟账户：手动操作后会和云端模拟盘不一致。" if paper else "") + "</div>"
+            f"<div id='buy-prev'></div><div class='muted small'>按规则 = 总权益 × 25% × 新仓倍数；单只上限 <span id='buy-cap'>{cap:g}</span>%。"
+            "下单前执行器再查资格、名额、决算前；买入后按规则止损、离场。</div>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn primary' id='buy-go' data-act='buy-go'>确认买入</button></div>"
             "</div></dialog>"
             "<dialog id='dlg-ask'><div class='sheet'><h3 id='ask-title'></h3><div id='ask-body'></div>"
@@ -988,65 +957,74 @@ def tchips(tr: dict | None) -> str:
     return f"<div class='tchips' aria-label='趋势'>{''.join(out)}</div>" if out else ""
 
 
-def _suggest_card(sg: dict, book: dict, tag: str, buying: set, add_when: str, eq, cap: float, chart) -> str:
-    """「建议的股票」= 规则的候选（qbreak/suggest.py）+ 每只的「买入…」（写手动买入指令；执行器下单前再查一遍）。"""
+GROUPS = (("triggered", "今天出了买入信号"), ("imminent", "快要出买入信号"), ("watch", "观察中"))
+
+
+def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, cap: float, chart) -> str:
+    """「建议的股票」= 规则的候选（qbreak/suggest.py；全部列出，按 出了信号 → 快要出 → 观察中 分组）+ 每只的「买入…」
+    （写手动买入指令；执行器下单前再查一遍）。"""
     rows = sg.get("rows") or []
     s = MO.slots(book, tag)
-    H = ["<section class='card' id='suggest'><h2>建议的股票（规则的候选）</h2>"
-         f"<div class='muted'>按 {escape(str(sg.get('asof') or '—'))} 收盘；按「今天收盘出了买入信号 → 快要出信号 → 观察中」和买入条件凑齐了多少排，"
-         "不是收益预测，也不是建议。「买入…」只写一条手动买入指令："
-         f"<b>{escape(add_when)} 开盘</b>，执行器按规则的闸门再查一遍后下寄付指値。</div>"
-         f"<div class='small'>个股名额：拿着 {s['held']} 只 + 排定买入 {s['buys']} 只 / 上限 {s['max']} 只（空 {s['free']} 个）</div>"]
+    cnt = {g: sum(1 for r in rows if r.get("status") == g) for g, _ in GROUPS}
+    H = [f"<section class='card' id='suggest'><h2>建议的股票（规则的候选，{len(rows)} 只）</h2>"
+         f"<div class='muted small'>按 {escape(str(sg.get('asof') or '—'))} 收盘。不是收益预测，也不是建议；点「买入…」→ {escape(when)}下单。</div>"
+         f"<div class='small'>个股名额：空 {s['free']} 个（拿着 {s['held']} + 排定买入 {s['buys']}，上限 {s['max']} 只）</div>"]
     if sg.get("error"):
         H.append(f"<div class='neg small'>★ 这次没算成：{escape(str(sg['error']))}</div>")
     if not rows:
         H.append("<div class='muted'>" + ("候选在执行器下一次运行之后显示" if not sg else "今天没有出信号 / 快要出信号 / 观察中的票") + "</div></section>")
         return "".join(H)
-    for r in rows:
-        t, b, ru = str(r["ticker"]), r.get("buy") or {}, r.get("rule") or {}
-        nm = f" {escape(str(r['name']))}" if r.get("name") else ""
-        st_cls = "chip hot" if r.get("status") == "triggered" else "chip"
-        tb = r.get("to_box_top_pct")
-        meta = [f"买入条件凑齐了 {r['score']:g} / 100" if r.get("score") is not None else None,
-                f"收盘 ¥{r['close']:,.0f}" if r.get("close") is not None else None,
-                f"成交量是 20 日平均的 {r['vol_ratio']:.2f} 倍" if r.get("vol_ratio") is not None else None,
-                f"之前横着走（最高最低只差 {r['range_pct']:.1f}%）" if r.get("range_pct") is not None else None,
-                (None if tb is None else f"比之前的最高价（箱顶）{'低' if tb < 0 else '高'} {abs(tb):.1f}%"),
-                "收盘冲过了之前的最高价（真突破）" if r.get("breakout") else None]
-        H.append(f"<div class='hv sg'><div class='head'><b>{escape(str(r.get('code') or t))}</b>{nm}"
-                 f"<span class='{st_cls}'>{escape(SG.STATUS.get(str(r.get('status')), str(r.get('status_text') or '')))}</span>"
-                 + (f"<span class='chip'>{escape(str(r['sector']))}</span>" if r.get("sector") else "") + "</div>"
-                 f"<div class='meta'>{' · '.join(x for x in meta if x)}</div>"
-                 f"<div>{escape(str(ru.get('text') or ''))}</div>" + tchips(r.get("trend"))
-                 + (f"<div class='small neg'>★ 顶部风险：{escape(str(r['top_risk']))}</div>" if r.get("top_risk") else ""))
-        n, px, lot = int(b.get("rule_shares") or 0), float(b.get("px") or 0), int(b.get("lot") or MO.LOT)
-        why = None
-        if b.get("block"):
-            why = f"不能买：{b['block']}"
-        elif t in buying:
-            why = "有一条没处理完的买入指令（见下面「手动指令」，可以撤回）"
-        elif ru.get("state") in ("planned", "manual"):
-            why = "已经排在下一开盘买入（不用再点）"
-        elif s["free"] <= 0:
-            why = f"个股名额已满（{s['used']} / {s['max']} 只）：要买先卖出一只"
-        elif not (px > 0 and eq):
-            why = "没有收盘价 / 总权益：执行器下一次运行之后再买"
-        warn = "；".join(b.get("warn") or [])
-        if why:
-            H.append(f"<div class='act muted small'>{escape(why)}</div>")
-        else:
-            data = (f" data-t='{escape(t)}' data-code='{escape(str(r.get('code') or t))}' data-name='{escape(str(r.get('name') or ''))}'"
-                    f" data-px='{px:g}' data-lot='{lot}' data-rule='{n}' data-limit='{float(b.get('limit') or 0):g}'"
-                    f" data-sig='{1 if r.get('signal') else 0}' data-status='{escape(SG.STATUS.get(str(r.get('status')), str(r.get('status_text') or '')))}'"
-                    f" data-rtext='{escape(str(ru.get('text') or ''))}' data-warn='{escape(warn)}'")
-            H.append(f"<div class='act'><button class='btn primary' data-act='buy'{data}>买入…</button>"
-                     f"<span class='muted small'>按规则约 {n:,} 股 · 约 {_yen(n * px)}"
-                     + (f" · 约占权益 {n * px / eq * 100:.1f}%" if eq else "") + "</span></div>"
-                     + (f"<div class='small neg'>★ {escape(warn)}</div>" if warn else ""))
-        H.append(f"<details class='kl'{' open' if r.get('status') in ('triggered', 'imminent') else ''}>"
-                 f"<summary>K 线（日K / 周K / 月K）</summary>{chart(t, 'suggest')}</details></div>")
-    H.append("<div class='muted small'>按规则的股数按最近收盘估算；手动买入是你自己的决定（没触发信号的票没有回测验证），会让账户和云端模拟盘不一致。"
-             "非投资建议。</div></section>")
+    for g, title in GROUPS:
+        grp = [r for r in rows if r.get("status") == g]
+        if not grp:
+            continue
+        H.append(f"<h3 class='sgh'>{escape(title)}（{cnt[g]} 只）</h3>")
+        for r in grp:
+            H.append(_suggest_row(r, s, buying, eq, chart))
+    H.append("<div class='muted small'>股数按最近收盘估算。</div></section>")
+    return "".join(H)
+
+
+def _suggest_row(r: dict, s: dict, buying: set, eq, chart) -> str:
+    t, b, ru = str(r["ticker"]), r.get("buy") or {}, r.get("rule") or {}
+    nm = f" {escape(str(r['name']))}" if r.get("name") else ""
+    meta = [f"条件凑齐 {r['score']:g} / 100" if r.get("score") is not None else None,
+            f"收盘 ¥{r['close']:,.0f}" if r.get("close") is not None else None,
+            f"量 {r['vol_ratio']:.2f} 倍" if r.get("vol_ratio") is not None else None,
+            "真突破" if r.get("breakout") else None]
+    H = [f"<div class='hv sg'><div class='head'><b>{escape(str(r.get('code') or t))}</b>{nm}"
+         + (f"<span class='chip'>{escape(str(r['sector']))}</span>" if r.get("sector") else "") + "</div>"
+         f"<div class='meta'>{' · '.join(x for x in meta if x)}</div>"
+         + (f"<div>{escape(str(ru.get('text') or ''))}</div>" if ru.get("state") not in (None, "none") else "")
+         + tchips(r.get("trend"))
+         + (f"<div class='small neg'>★ 顶部风险：{escape(str(r['top_risk']))}</div>" if r.get("top_risk") else "")]
+    n, px, lot = int(b.get("rule_shares") or 0), float(b.get("px") or 0), int(b.get("lot") or MO.LOT)
+    why = None
+    if b.get("block"):
+        why = f"不能买：{b['block']}"
+    elif t in buying:
+        why = "有一条买入指令在处理（见「手动指令」）"
+    elif ru.get("state") in ("planned", "manual"):
+        why = "已经排在开盘买入"
+    elif s["free"] <= 0:
+        why = f"个股名额已满（{s['used']} / {s['max']} 只）：先卖出一只"
+    elif not (px > 0 and eq):
+        why = "没有收盘价 / 总权益：执行器下一次运行之后再买"
+    warn = "；".join(b.get("warn") or [])
+    if why:
+        H.append(f"<div class='act muted small'>{escape(why)}</div>")
+    else:
+        st_txt = SG.STATUS.get(str(r.get("status")), str(r.get("status_text") or ""))
+        data = (f" data-t='{escape(t)}' data-code='{escape(str(r.get('code') or t))}' data-name='{escape(str(r.get('name') or ''))}'"
+                f" data-px='{px:g}' data-lot='{lot}' data-rule='{n}' data-limit='{float(b.get('limit') or 0):g}'"
+                f" data-sig='{1 if r.get('signal') else 0}' data-status='{escape(st_txt)}'"
+                f" data-rtext='{escape(str(ru.get('text') or ''))}' data-warn='{escape(warn)}'")
+        H.append(f"<div class='act'><button class='btn primary' data-act='buy'{data}>买入…</button>"
+                 f"<span class='muted small'>按规则约 {n:,} 股 · 约 {_yen(n * px)}"
+                 + (f" · 约占权益 {n * px / eq * 100:.1f}%" if eq else "") + "</span></div>"
+                 + (f"<div class='small neg'>★ {escape(warn)}</div>" if warn else ""))
+    H.append(f"<details class='kl'{' open' if r.get('status') in ('triggered', 'imminent') else ''}>"
+             f"<summary>K 线</summary>{chart(t, 'suggest')}</details></div>")
     return "".join(H)
 
 
@@ -1059,10 +1037,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     book, sm = _load(tag)
     st = book.get("state") or {}
     paper = tag.startswith("paper")
-    day, today = MO.next_window(now)
-    when = f"{day:%m/%d}（{'今天' if today else '下一个交易日'}）"
-    aday, atoday = MO.add_window(now, st.get("last_date"))
-    add_when = f"{aday:%m/%d}（{'今天' if atoday else '下一个交易日'}）"
+    when = MO.when_text(now)                                # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘
     man = book.get("manual") or {}
     cap = float(man.get("cap_pct") or MO.CAP_PCT)
     kl = sm.get("kline") or {}
@@ -1088,18 +1063,16 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
          + "</nav></header><main>"]
     warn = []
     if halt:
-        warn.append(f"HALT 生效中（{escape(halt)}）：手动指令会一直等着，HALT 解除之后的下一次运行才处理")
+        warn.append(f"HALT 生效中（{escape(halt)}）：不下单，解除之后才处理")
     if not paper and not armed:
-        warn.append("立花还没解锁（没有 ARM）：执行器照常处理，但单会被挡住，不会真的发出去")
+        warn.append("立花还没解锁（没有 ARM）：单会被挡住，不会真的发出去")
     if paper:
-        warn.append("这是模拟账户：手动操作后会和云端模拟盘不一致（上线门槛「连续 10 个交易日一致」的天数会中断）")
+        warn.append("模拟账户：手动操作后会和云端模拟盘不一致")
     H.append(f"<section class='card{' warn' if halt else ''}'><div class='head'><b>{escape(BOOKS.get(tag, tag))}</b>"
              f"<span class='chip'>决策日 {escape(str(st.get('last_date') or '—'))} → 成交日 {escape(str(sm.get('fill_day') or '—'))}</span></div>"
              f"<div class='stats'><div><div class='muted'>总权益</div><div class='big'>{_yen(eq)}</div></div>"
              f"<div><div class='muted'>现金</div><div class='big'>{_yen(st.get('cash_jpy'))}</div></div></div>"
-             f"<div>现在点卖出 / 减仓 → <b>{escape(when)} 开盘</b>执行（成交日 {MO.CUTOFF:%H:%M} 截止；之后点的算下一个交易日）；"
-             f"加仓 / 买入 → <b>{escape(add_when)} 开盘</b>（只在新收盘的决策里做）。"
-             "按钮只写「手动指令」，下单由执行器在下一次能下寄付单的运行里做（同样的闸门、同样的对账）</div>"
+             f"<div>现在点买卖 → <b>{escape(when)}</b>下单</div><div class='muted small'>{escape(MO.RULE_TEXT)}</div>"
              + "".join(f"<div class='{'neg' if 'HALT' in w or 'ARM' in w else 'muted'} small'>★ {w}</div>" for w in warn) + "</section>")
     if not st:
         H.append("<section class='card'>执行器还没有账本（第一次运行之后才有持仓）。</section>")
@@ -1127,10 +1100,12 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         if p is None:
             return "<div class='act muted'>（这只票已经不在执行器的账本里）</div>" + chart(t, "stock")
         if t in pend:
-            return (f"<div class='act'><b class='neg'>已排定开盘卖（{escape(HV.EXIT_TEXT.get(pend[t], str(pend[t])))}）</b></div>"
-                    + chart(t, "stock"))
+            if pend[t] != "manual" and r.get("queued"):
+                return chart(t, "stock")                     # 标题行已经写了「已排定开盘卖（…）」
+            lab = "已在卖出（手动）" if pend[t] == "manual" else f"已排定开盘卖（{HV.EXIT_TEXT.get(pend[t], str(pend[t]))}）"
+            return f"<div class='act'><b class='neg'>{escape(lab)}</b></div>" + chart(t, "stock")
         if t in busy:
-            return "<div class='act muted'>有一条没处理完的手动指令（见下面「手动指令」，可以撤回）</div>" + chart(t, "stock")
+            return "<div class='act muted'>有一条手动指令在处理（见「手动指令」）</div>" + chart(t, "stock")
         cur = pct.get(t)
         px = float(p.get("last_close") or p.get("entry_px") or 0)
         sh = int(p.get("shares") or 0)
@@ -1138,24 +1113,24 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         return ("<div class='act'>"
                 f"<button class='btn sell' data-act='sell'{data}>卖出全部</button>"
                 f"<button class='btn' data-act='adj'{data} data-px='{px:g}'{'' if px > 0 and eq else ' disabled'}>调仓…</button></div>"
-                f"<div class='muted small'>现在 {sh:,} 股 · 约 {_yen(sh * px)} · 约占权益 {f'{cur:.1f}' if cur is not None else '—'}%"
-                f"（调仓：按股数 / 金额 / 占权益 %，可加可减；一次最少 {MO.LOT} 股；单只上限 {cap:g}%）</div>" + chart(t, "stock"))
+                f"<div class='muted small'>现在 {sh:,} 股 · 约 {_yen(sh * px)} · 约占权益 {f'{cur:.1f}' if cur is not None else '—'}%</div>"
+                + chart(t, "stock"))
     held_core = {str(r.get("ticker")) for r in hv.get("core") or []}
     other = [(t, c) for t, c in (kl.get("items") or {}).items() if c.get("kind") == "core" and t not in held_core]
-    more = ("<details class='hv'><summary class='muted'>闲置资金方式里的其他 ETF（现在没拿）的 K 线</summary>"
+    more = ("<details class='hv'><summary class='muted'>其他闲置资金 ETF（现在没拿）的 K 线</summary>"
             + "".join(f"<div class='hv'><b>{escape(str(c.get('name') or t))}</b> <span class='muted'>现在 0 口</span>"
                       f"{tchips(ktrend.get(t))}{chart(t, 'core')}</div>" for t, c in other) + "</details>") if other else ""
     H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions) + more + "</section>")
-    H.append(_suggest_card(sm.get("suggest") or {}, book, tag, buying, add_when, eq, cap, chart))
+    H.append(_suggest_card(sm.get("suggest") or {}, book, tag, buying, when, eq, cap, chart))
     cp = float(man.get("core_pct", 100.0))
     H.append("<section class='card' id='core'><h2>闲置资金（核心 ETF）比例</h2>"
-             f"<div>现在：规则目标额的 <b>{cp:g}%</b>（100% = 照规则；0% = 卖出核心 ETF、留现金）</div>"
+             f"<div>现在：规则目标额的 <b>{cp:g}%</b>（100% = 照规则；0% = 全部留现金）</div>"
              "<div class='stepper'><button class='btn' data-act='core-step' data-d='-10' aria-label='减 10%'>−10</button>"
              f"<output id='core-val' class='big'>{cp:g}%</output>"
              "<button class='btn' data-act='core-step' data-d='10' aria-label='加 10%'>+10</button></div>"
              f"<input type='range' id='core-pct' min='0' max='100' step='5' value='{cp:g}' aria-label='闲置资金比例 %'>"
              "<div class='act'><button class='btn primary' data-act='core'>保存</button></div>"
-             "<div class='muted small'>从下一次决策（下一个交易日早上的运行）起生效；只改核心 ETF 的目标额，个股的规则不变。</div></section>")
+             "<div class='muted small'>下一次决策起生效；只改核心 ETF，个股照规则。</div></section>")
     items = sorted((man.get("items") or {}).values(), key=lambda x: x.get("at", ""), reverse=True)
 
     def _what(r: dict) -> str:
@@ -1165,14 +1140,15 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     for r in waiting:
         btn = (f"<button class='btn sm' data-act='cancel' data-id='{escape(r['id'])}' data-placed='0'>撤回</button>"
                if r["kind"] in MO.ORDER_KINDS + ("core",) else "")
-        rows.append(f"<div class='li'><div class='grow'><b>{_what(r)}</b> <span class='chip'>等执行器读</span>"
-                    f"<div class='muted small'>{escape(str(r.get('at', ''))[5:16].replace('T', ' '))} · 下一次运行处理</div></div>{btn}</div>")
+        rows.append(f"<div class='li'><div class='grow'><b>{_what(r)}</b> <span class='chip'>等下单</span>"
+                    f"<div class='muted small'>{escape(str(r.get('at', ''))[5:16].replace('T', ' '))}</div></div>{btn}</div>")
     for it in items[:20]:
-        can = it.get("status") in MO.ACTIVE and it.get("kind") in MO.ORDER_KINDS and not it.get("cancel_req")
+        can = (it.get("status") in MO.ACTIVE and it.get("kind") in MO.ORDER_KINDS and not it.get("cancel_req")
+               and not (it.get("status") == "placed" and it.get("now")))          # 盘中的单已经发到交易所：页面上撤不了
         btn = (f"<button class='btn sm' data-act='cancel' data-id='{escape(it['id'])}' data-placed='{1 if it.get('status') == 'placed' else 0}'>撤回</button>"
                if can else "")
         rows.append(f"<div class='li'><div class='grow'><b>{_what(it)}</b> <span class='chip'>"
-                    f"{escape(MO.STATUS.get(it.get('status'), str(it.get('status'))))}{'（撤回中）' if it.get('cancel_req') else ''}</span>"
+                    f"{escape(MO.status_text(it))}{'（撤回中）' if it.get('cancel_req') else ''}</span>"
                     f"<div class='muted small'>{escape(str(it.get('at', ''))[5:16].replace('T', ' '))}"
                     f"{(' · ' + escape(str(it['msg']))) if it.get('msg') else ''}</div></div>{btn}</div>")
     H.append("<section class='card' id='orders'><h2>手动指令</h2><div class='list'>"
@@ -1185,10 +1161,10 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             f"<button class='btn sm' data-act='unblock' data-t='{escape(t)}'>解除</button></div>" for t, b in bl.items()) + "</div></section>")
     if halt:
         H.append(f"<section class='card warn' id='halt'><h2 class='neg'>HALT 生效中</h2><div>{escape(halt)}</div>"
-                 "<div class='muted small'>执行器不下任何单（买卖都不下、持仓不动）。恢复只在 Mac 上：在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」。</div></section>")
+                 "<div class='muted small'>不下任何单、持仓不动。恢复只在 Mac 上：在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」。</div></section>")
     else:
-        H.append("<section class='card' id='halt'><h2>紧急停止</h2><div class='muted small'>停止全部账本（模拟账户和立花）的下单：执行器的下一次运行起"
-                 "买卖都不下、持仓不动。已经发到交易所的单不会被撤（要撤在立花网站 / App 上撤）。这里只能停、不能恢复。</div>"
+        H.append("<section class='card' id='halt'><h2>紧急停止</h2><div class='muted small'>全部账本（模拟和立花）从下一次运行起不下单、持仓不动；"
+                 "已经发到交易所的单不会被撤（要撤在立花网站 / App 上撤）。这里只能停、不能恢复。</div>"
                  "<div class='act'><button class='btn danger' data-act='halt'>停止下单（HALT）</button></div></section>")
     if not remote:
         H.append(_phone_card(phone or {}))
@@ -1206,10 +1182,10 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                  "非投资建议。</div><div class='act'><button class='btn sm' data-act='unpair'>退出这台设备</button></div></footer>")
     H.append("</main><div id='toast' class='toast' role='status' hidden></div>")
     cfg = {"auth": {"h": "X-Qbreak-Csrf" if remote else "X-Qbreak-Token", "v": tok}, "book": tag, "paper": paper, "remote": remote,
-           "when": when, "addWhen": add_when, "eq": eq or 0, "cap": cap, "lot": MO.LOT,
+           "when": when, "eq": eq or 0, "cap": cap, "lot": MO.LOT,
            "kp": {"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN}}      # K 线的通俗说法（qbreak/kline.py）
     js = _NET_JS + _JS.replace("__CFG__", json.dumps(cfg, ensure_ascii=False).replace("</", "<\\/"))
-    return _head("qbreak 操作面板") + "<body>" + "".join(H) + _dialogs(paper) + f"<script>{js}</script></body></html>"
+    return _head("qbreak 操作面板") + "<body>" + "".join(H) + _dialogs(paper, cap) + f"<script>{js}</script></body></html>"
 
 
 def pair_page(code: str = "") -> str:
@@ -1248,44 +1224,37 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     if why:
         return False, f"没写：{why}", None
     rec = MO.append(tag, rec, clock=(lambda: now) if now else None)
-    day, today = MO.next_window(now or now_jst())
-    when = f"{day:%m/%d}（{'今天' if today else '下一个交易日'}）开盘"
-    k = rec["kind"]
-    msg = {"sell": f"已写：卖出 {rec.get('ticker')} 全部 → 执行器在 {when}前的运行里下寄付成行单",
-           "trim": f"已写：{rec.get('ticker')} 减到约 {rec.get('pct', 0):g}% → 执行器在 {when}前的运行里下寄付成行单",
-           "core": f"已写：闲置资金比例 {rec.get('pct', 0):g}% → 从下一次决策起生效",
-           "unblock": f"已写：解除 {rec.get('ticker')} 的不自动买回 → 下一次运行生效",
-           "cancel": f"已写：撤回 {rec.get('target')} → 下一次运行处理"}.get(k)
+    when = MO.when_text(now or now_jst())                   # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘
+    k, t = rec["kind"], rec.get("ticker")
+    msg = {"sell": f"已写：卖出 {t} 全部 → {when}卖出",
+           "trim": f"已写：{t} 减到约 {rec.get('pct', 0):g}% → {when}卖出",
+           "core": f"已写：闲置资金比例 {rec.get('pct', 0):g}% → 下一次决策起生效",
+           "unblock": f"已写：解除 {t} 的不自动买回",
+           "cancel": f"已写：撤回 {rec.get('target')}"}.get(k)
     if k == "adjust":
         st = book.get("state") or {}
         a = MO.adjust_plan(rec, st, float((book.get("manual") or {}).get("cap_pct") or MO.CAP_PCT))
         if a["delta"] > 0:
-            ad, at = MO.add_window(now or now_jst(), st.get("last_date"))
-            msg = (f"已写：{rec['ticker']} 调到 {MO.fmt_target(rec)}（估算加 {a['delta']:,} 股 → {a['target']:,} 股"
-                   + ("，截到单只上限" if a["capped"] else "") + f"）→ 执行器在 {ad:%m/%d}（{'今天' if at else '下一个交易日'}）"
-                   "开盘前的运行里下寄付指値（钱不够时先卖核心 ETF；只做一次）")
+            msg = (f"已写：{t} 加 {a['delta']:,} 股（→ {a['target']:,} 股" + ("，截到单只上限" if a["capped"] else "")
+                   + f"）→ {when}买入")
         else:
-            msg = (f"已写：{rec['ticker']} 调到 {MO.fmt_target(rec)}（估算卖 {-a['delta']:,} 股 → {a['target']:,} 股）"
-                   f"→ 执行器在 {when}前的运行里下寄付成行单")
+            msg = f"已写：{t} 卖 {-a['delta']:,} 股（→ {a['target']:,} 股）→ {when}卖出"
     if k == "buy":
-        st = book.get("state") or {}
-        ad, at = MO.add_window(now or now_jst(), st.get("last_date"))
-        row = next((r for r in (sm.get("suggest") or {}).get("rows") or [] if r.get("ticker") == rec["ticker"]), None)
-        est = ""
+        row = next((r for r in (sm.get("suggest") or {}).get("rows") or [] if r.get("ticker") == t), None)
+        est = MO.fmt_target(rec)
         if row and rec.get("unit") == "rule":
-            n = int((row.get("buy") or {}).get("rule_shares") or 0)
-            est = f"，按最近收盘估算约 {n:,} 股 ≈ ¥{n * float((row.get('buy') or {}).get('px') or 0):,.0f}"
-        msg = (f"已写：买入 {rec['ticker']}（{MO.fmt_target(rec)}{est}）→ 执行器在 {ad:%m/%d}（{'今天' if at else '下一个交易日'}）"
-               "开盘前的运行里按决策日的收盘定股数与限价，下寄付指値（钱不够时先卖核心 ETF；名额满 / 开盘高于限价 → 不买；只做一次）"
-               + ("" if row and row.get("signal") else "；★ 这只还没有买入信号：规则不会买，是你自己的决定"))
+            est = f"约 {int((row.get('buy') or {}).get('rule_shares') or 0):,} 股"
+        msg = (f"已写：买入 {t}（{est}）→ {when}买入"
+               + ("" if row and row.get("signal") else "；★ 还没有买入信号：是你自己的决定"))
     if paths.halt_file().exists() and k in MO.ORDER_KINDS:
-        msg += "；★ HALT 生效中：HALT 解除之后的下一次运行才处理"
+        msg += "；★ HALT 生效中：解除之后才处理"
     return True, msg + f"（指令 {rec['id']}）", rec
 
 
 class Trigger:
-    """交易日 07:45〜08:50：今天早上的运行已经完成、又有新的卖出 / 减仓 / 调整 / 撤回 → 叫执行器跑一次重试（同一个账本最多 3 分钟一次；
-    加仓不在这次补单里做，等下一次决策）。"""
+    """面板写了手动指令之后叫执行器（同一个账本同一时间只跑一个）：
+    盘中（09:00〜11:30、12:30〜15:25）有要马上下的指令 → --phase now（同一个账本最多 1 分钟一次）；
+    交易日 07:45〜08:50、今天早上的运行已经完成、有新的卖出 / 调仓往下 / 撤回 → --retry（加进今天开盘的寄付单；最多 3 分钟一次）。"""
 
     def __init__(self, run=None, clock=None):
         self.run = run or self._spawn
@@ -1295,9 +1264,10 @@ class Trigger:
         self.lock = threading.Lock()
 
     @staticmethod
-    def _spawn(tag: str):
+    def _spawn(tag: str, mode: str = "retry"):
         broker = "paper" if tag == "paper" else "tachibana"
-        cmd = ["/bin/bash", str(paths.PROJECT_ROOT / "scripts" / "liveu.sh"), "run", "--broker", broker, "--retry"]
+        cmd = ["/bin/bash", str(paths.PROJECT_ROOT / "scripts" / "liveu.sh"), "run", "--broker", broker]
+        cmd += ["--phase", "now"] if mode == "now" else ["--retry"]
         if tag == "tachibana_demo":
             cmd.append("--demo")
         lf = open(paths.log_dir() / "com.qbreak.panel.retry.log", "a", encoding="utf-8")
@@ -1306,11 +1276,13 @@ class Trigger:
         return subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, cwd=str(paths.PROJECT_ROOT), start_new_session=True)
 
     def check(self) -> list[str]:
-        """看一遍各个账本；返回这次叫了重试的账本。"""
+        """看一遍各个账本；返回这次叫了执行器的账本。"""
         from .live_unified import morning_done
         from .trader import expected_last_bar
         now = self.clock()
-        if not is_trading_day(now.date()) or not TRIGGER_FROM <= now.time() < TRIGGER_UNTIL:
+        morning = is_trading_day(now.date()) and TRIGGER_FROM <= now.time() < TRIGGER_UNTIL
+        session = MO.timing(now)[0] == "now"
+        if not (morning or session):
             return []
         out = []
         with self.lock:
@@ -1318,20 +1290,26 @@ class Trigger:
                 p = self.procs.get(tag)
                 if p is not None and getattr(p, "poll", lambda: 0)() is None:
                     continue                                 # 上一次叫的还在跑
-                if time.monotonic() - self.last.get(tag, -1e9) < TRIGGER_GAP_S:
+                if time.monotonic() - self.last.get(tag, -1e9) < (TRIGGER_GAP_S if morning else NOW_GAP_S):
                     continue
                 book, _ = _load(tag)
-                if not morning_done(book, expected_last_bar(now.date(), "JP").isoformat()):
-                    continue                                 # 早上的运行还没完成：它自己会读到指令
-                if not MO.due(tag, book, now):
-                    continue
+                if morning:
+                    if not morning_done(book, expected_last_bar(now.date(), "JP").isoformat()):
+                        continue                             # 早上的运行还没完成：它自己会读到指令
+                    if not MO.due(tag, book, now):
+                        continue
+                    mode = "retry"
+                else:
+                    if not MO.now_due(tag, book, now):
+                        continue
+                    mode = "now"
                 self.last[tag] = time.monotonic()
                 try:
-                    self.procs[tag] = self.run(tag)
+                    self.procs[tag] = self.run(tag, mode)
                     out.append(tag)
-                    log.info("手动指令：叫执行器跑一次重试（%s）", tag)
+                    log.info("手动指令：叫执行器（%s，%s）", tag, mode)
                 except Exception as e:                       # noqa: BLE001
-                    log.warning("叫执行器重试失败（%s）：%s", tag, e)
+                    log.warning("叫执行器失败（%s，%s）：%s", tag, mode, e)
         return out
 
     def loop(self, stop: threading.Event, every: float = 30.0) -> None:
@@ -1463,7 +1441,8 @@ def _book_of(query: str) -> str:
 
 
 def _after_submit(trigger, rec: dict | None) -> None:
-    if trigger is not None and rec and rec["kind"] in MO.POS_KINDS + ("cancel",):
+    """写了买卖 / 撤回 → 马上看一次要不要叫执行器（盘中 → 马上下单；开盘前 → 重试加进今天的寄付单）。"""
+    if trigger is not None and rec and rec["kind"] in MO.ORDER_KINDS + ("cancel",):
         threading.Thread(target=trigger.check, daemon=True).start()
 
 

@@ -8,8 +8,9 @@
   一个标签（上涨中 / 偏强 / 偏弱 / 下跌中）。标签只是按收盘价和均价线的位置分的类，不是预测；卖出仍只按规则（卖出线见买卖时间线）。
 K 线（日K / 周K / 月K + MA5 / 10 / 20 / 30）：qbreak/kline.py（执行器写 out/charts_<账本>.json，操作面板按需取；只在 Mac 本机，不入库）。
 趋势标签的颜色：两边页面都给 pos / neg（绿 / 红）再加 up / down —— 操作面板按同花顺的习惯把 up 画成红、down 画成绿（与 K 线一致）。
-说法（2026-10-07 用户：「K线解释换成通俗易懂的说法 横展开」）：标签与说明都用日常的话（上涨中 / 偏强 / 偏弱 / 下跌中；均线 → 均价）；
-  现在趋势的那句话按存着的数字现算（trend_text），所以执行器以前算的汇总也显示新说法；操作面板、Mac 账本页、云端日报、日志共用。
+说法（2026-10-07 用户：「K线解释换成通俗易懂的说法 横展开」；同日：「去掉全体中重复/复杂的描述 留下简单的描述总结」）：
+  标签与说明都用日常的话、一句话说完（上涨中 / 偏强 / 偏弱 / 下跌中；均线 → 均价）；现在趋势的那句话按存着的数字现算（trend_text），
+  所以执行器以前算的汇总也显示新说法；操作面板、Mac 账本页、云端日报、日志共用。
 """
 from __future__ import annotations
 
@@ -171,33 +172,28 @@ def _hl(x, up: str = "高", down: str = "低") -> str:
 
 
 def trend_text(tr: dict | None) -> str:
-    """现在趋势的通俗说法：按存着的数字现算（旧的汇总也显示新说法）；没有数字 → 存着的 text（再没有 → 空）。"""
+    """现在趋势的一句话（按存着的数字现算，旧的汇总也显示新说法）：收盘、比 20 日均价、均价往哪边、MACD、1 个月涨跌、
+    比买入后最高价、离止损线。没有数字 → 存着的 text（再没有 → 空）。"""
     tr = tr or {}
     c, v20 = _f(tr.get("close")), _f(tr.get("vs20_pct"))
     if c is None or v20 is None:
         return str(tr.get("text") or "")
-    head = f"收盘 {_px(c)}：比 20 日均价{_hl(v20)}"
-    if _f(tr.get("vs60_pct")) is not None:
-        head += f"、比 60 日均价{_hl(_f(tr['vs60_pct']))}"
-    if _f(tr.get("vs200_pct")) is not None:
-        head += f"、比 200 日均价{_hl(_f(tr['vs200_pct']))}"
-    parts = [head]
+    head = f"收盘 {_px(c)}，比 20 日均价{_hl(v20)}"
     s = _f(tr.get("slope20_pct"))
     if s is not None:
-        parts.append("20 日均价最近 5 天" + ("基本没动" if abs(s) < 0.05 else f"往{'上' if s > 0 else '下'} {abs(s):.1f}%"))
+        head += "（均价" + ("走平" if abs(s) < 0.05 else f"往{'上' if s > 0 else '下'}") + "）"
+    parts = [head]
     if "macd_above" in tr:
-        parts.append("MACD：" + ("上涨的力量占上风" if tr["macd_above"] else "下跌的力量占上风")
-                     + ("，而且在变强" if tr.get("macd_widening") else "，但在变弱"))
-    r1, r3 = _f(tr.get("r1m_pct")), _f(tr.get("r3m_pct"))
+        parts.append("MACD " + ("偏涨" if tr["macd_above"] else "偏跌") + ("、在变强" if tr.get("macd_widening") else "、在变弱"))
+    r1 = _f(tr.get("r1m_pct"))
     if r1 is not None:
-        parts.append(f"最近 1 个月{_hl(r1, '涨', '跌').replace('差不多', '基本没动')}"
-                     + (f"、3 个月{_hl(r3, '涨', '跌').replace('差不多', '基本没动')}" if r3 is not None else ""))
+        parts.append(f"1 个月 {r1:+.1f}%")
     fp = _f(tr.get("from_peak_pct"))
-    if fp is not None:
-        parts.append("现在就是买入以来的最高价" if fp > -0.05 else f"比买入以来的最高价低 {abs(fp):.1f}%")
+    if fp is not None and fp <= -0.05:
+        parts.append(f"比买入后最高价低 {abs(fp):.1f}%")
     ts = _f(tr.get("to_stop_pct"))
     if ts is not None:
-        parts.append(f"再跌 {abs(ts):.1f}% 就碰到止损线（碰到就按规则卖）" if ts < 0 else "已经在止损线下面（按规则会卖）")
+        parts.append(f"离止损线 {abs(ts):.1f}%" if ts < 0 else "已在止损线下面（按规则会卖）")
     return "；".join(parts)
 
 
@@ -257,32 +253,33 @@ def build(ind: dict, positions: dict, p, *, bar_date=None, pending: dict | None 
 
 
 def _core_why(t: str, ic: dict, bb: dict) -> str:
-    """核心 ETF 为什么持有：闲置资金规则（没有个股占用的钱放进去）+ 方式 + S&P500 牛熊。"""
-    parts = ["闲置资金规则：没有个股占用的钱放进核心 ETF（留 2% 现金缓冲）"]
+    """核心 ETF 为什么持有（一句话）：闲置资金 + 方式 + S&P500 牛熊。"""
+    parts = ["闲置资金（没买个股的钱放这里，留 2% 现金）"]
     if ic.get("label") or ic.get("mode"):
-        parts.append(f"方式 {ic.get('label') or ic.get('mode')}；现在拿 {ic.get('text') or '—'}")
+        parts.append(f"{ic.get('label') or ic.get('mode')}：现在拿 {ic.get('text') or '—'}")
     if bb.get("state") in ("bull", "bear"):
-        parts.append(f"S&P500 {bb.get('phase_label') or ('牛市' if bb['state'] == 'bull' else '熊市')}"
-                     + (f"（{bb.get('phase_text')}）" if bb.get("phase_text") else ""))
+        parts.append(f"S&P500 {bb.get('phase_label') or ('牛市' if bb['state'] == 'bull' else '熊市')}")
     return "；".join(parts)
 
 
+WHY_KEYS = ("range", "macd", "volume")                      # why_line 那一句里说了的读数（页面的明细里不再重复）
+
+
 def why_line(row: dict) -> str:
-    """一句话：哪天收盘出了买点、主要读数 → 哪天开盘买。"""
+    """一句话：哪天收盘出了买入信号（主要读数）→ 哪天开盘、多少钱买入。"""
     w = row.get("why") or {}
     if not w.get("signal_date"):
         return "找不到买入信号那天的 K 线"
     bits = []
     if w.get("range_pct") is not None:
-        bits.append(f"之前 {w.get('range_n', 60)} 天横着走（最高价和最低价只差 {w['range_pct']:.1f}%）")
-    bits.append("MACD 快线在 0 附近往上穿过慢线（金叉）" if w.get("golden_cross") else "MACD 没有金叉")
+        bits.append(f"之前 {w.get('range_n', 60)} 天横着走（只差 {w['range_pct']:.1f}%）")
+    bits.append("MACD 金叉" if w.get("golden_cross") else "没有 MACD 金叉")
     if w.get("vol_ratio") is not None:
-        bits.append(f"成交量放大到 {w.get('vol_n', 20)} 日平均的 {w['vol_ratio']:.2f} 倍"
-                    + (f"（这一周是前 10 周平均的 {w['w5v']:.2f} 倍）" if w.get("w5v") is not None else ""))
-    s = (f"{w['signal_date']} 收盘出了买入信号：" + "，".join(bits)
-         + f"，{row.get('entry_date') or '—'} 开盘买入，价格 {_px(row.get('entry_px'))}")
+        bits.append(f"成交量是 {w.get('vol_n', 20)} 日平均的 {w['vol_ratio']:.2f} 倍")
+    s = (f"{w['signal_date']} 收盘出了买入信号（{'，'.join(bits)}），"
+         f"{row.get('entry_date') or '—'} 开盘以 {_px(row.get('entry_px'))} 买入")
     if w.get("ok") is False:
-        s += "（用现在的行情重算，那天的条件不完全成立：可能是拆股 / 分红调整了以前的价格、数据后来修正过，或规则的参数后来改过）"
+        s += "（按现在的行情重算，那天的条件不完全成立：复权 / 数据修正 / 参数改过）"
     return s
 
 
@@ -310,9 +307,8 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
     toolbar：放在说明下面、所有票上面的一行（操作面板的走势图期间切换）。两边页面都用 card / muted / scroll / pos / neg 这些 class。"""
     hv = hv or {}
     hs, cs = hv.get("holdings") or [], hv.get("core") or []
-    H = [f"<h2>{escape(title)}</h2><div class='muted'>按 {escape(str(hv.get('bar_date') or '—'))} 收盘；只展示，不改交易。"
-         "「上涨中 / 偏强 / 偏弱 / 下跌中」只是按收盘价和几条均价线的位置分的类，不是预测；卖不卖仍只按规则（卖出的价位见买卖时间线）。</div>"
-         + toolbar]
+    H = [f"<h2>{escape(title)}</h2><div class='muted'>按 {escape(str(hv.get('bar_date') or '—'))} 收盘。"
+         "趋势标签只是按收盘价和均价线的位置分的类，不是预测；卖不卖只按规则。</div>" + toolbar]
     if not hs and not cs:
         H.append("<div class='muted'>没有持仓</div>")
     for r in hs:
@@ -327,28 +323,27 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
             continue
         w, tr = r.get("why") or {}, r.get("trend") or {}
         items = "".join(f"<li>{'✓' if it['ok'] else ('✗' if it['ok'] is False else '·')} {escape(it['text'])}</li>"
-                        for it in w.get("items") or [])
+                        for it in w.get("items") or [] if it.get("key") not in WHY_KEYS)      # 一句话里已经说了的不重复
         lab = tr.get("label") or "na"
         cls = {"up": "pos up", "strong": "pos up", "weak": "neg down", "down": "neg down"}.get(lab, "muted")
         ret = tr.get("ret_pct")
         H.append(f"<div class='hv'>{head}"
                  f"<div><b>为什么持有</b>：{escape(why_line(r))}</div>"
-                 + (f"<details><summary class='muted'>买入那天的规则读数</summary><ul>{items}</ul></details>" if items else "")
+                 + (f"<details><summary class='muted'>买入那天的其他规则读数</summary><ul>{items}</ul></details>" if items else "")
                  + f"<div><b>现在</b>：<b class='{cls}'>{escape(TREND.get(lab, '—'))}</b>"
                  + (f" <span class='{'pos up' if ret >= 0 else 'neg down'}'>{'浮盈' if ret >= 0 else '浮亏'} {ret:+.1f}%</span>" if ret is not None else "")
-                 + f" <span class='muted'>（{escape(TREND_NOTE.get(lab, ''))}）</span><br><span class='muted'>{escape(trend_text(tr))}</span></div>"
+                 + f" <span class='muted'>{escape(trend_text(tr))}</span></div>"
                  + (actions(r, "stock") if actions else "") + "</div>")
     for r in cs:
         tr = r.get("trend") or {}
         lab = tr.get("label") or "na"
         cls = {"up": "pos up", "strong": "pos up", "weak": "neg down", "down": "neg down"}.get(lab, "muted")
         H.append(f"<div class='hv'><b>{escape(r['name'])}</b> <span class='muted'>{r['units']:,} 口"
-                 + (f" · 约占权益 {r['pct_equity']:.1f}%" if r.get("pct_equity") is not None else "") + " · 核心 ETF（闲置资金）</span>"
+                 + (f" · 约占权益 {r['pct_equity']:.1f}%" if r.get("pct_equity") is not None else "") + " · 核心 ETF</span>"
                  f"<div><b>为什么持有</b>：{escape(r['why'])}</div>"
                  + (f"<div><b>现在</b>：<b class='{cls}'>{escape(TREND.get(lab, '—'))}</b> <span class='muted'>{escape(trend_text(tr))}</span></div>"
                     if tr else "")
                  + (actions(r, "core") if actions else "") + "</div>")
-    H.append("<div class='muted'>非投资建议。</div>")
     return "".join(H)
 
 

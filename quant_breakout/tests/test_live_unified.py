@@ -406,7 +406,7 @@ def test_desktop_page_shows_book_orders_fills_market_and_journal(tmp_path):
     eq = float(st["history"][-1][1])
     assert f"¥{eq:,.0f}" in html and "起始 ¥1,000,000" in html and "★ 与云端模拟盘不一致" in html
     assert "牛市·稳固" in html and "熊市·回升" in html and "40,123.45 円" in html and "6,000.00 pt" in html
-    assert "<h2>持仓</h2>" in html and "<h2>下一开盘的单</h2>" in html and "<h2>最近成交</h2>" in html
+    assert "<h2>持仓</h2>" in html and "<h2>这次的单（开盘 / 盘中）</h2>" in html and "<h2>最近成交</h2>" in html
     fills = [o for h in book["history"] for o in h["orders"] if o["filled_qty"] > 0]
     assert fills and ("口</td>" in html or "股</td>" in html)
     assert html.index("2026-09-29 07:45 JST") < html.index("2026-09-28 07:45 JST")      # 日志：新的在上

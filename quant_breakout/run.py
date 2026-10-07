@@ -2076,6 +2076,9 @@ def _suggest(ctx, eng, man: dict | None) -> dict:
         return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 
+KLINE_LONG_WATCH = 12                                   # 观察中的候选：前几只取 10 年行情画月K（其余用 2 年）
+
+
 def _kline(ctx, st, core: list, sg: dict | None, tag: str) -> dict:
     """操作面板的 K 线（qbreak/kline.py；2026-10-06 用户「趋势是做一个和图中一样的日周月的块块和线」）：持仓个股 + 核心 ETF
     （拿着的在前，再是闲置资金方式里的其他 ETF）+ 建议的股票，日K / 周K / 月K + MA5/10/20/30 → 数据目录 out/charts_<账本>.json
@@ -2093,14 +2096,19 @@ def _kline(ctx, st, core: list, sg: dict | None, tag: str) -> dict:
         held = [t for t, u_ in st.core_units.items() if int(u_ or 0)]
         for t in dict.fromkeys(held + list(core)):
             info.setdefault(t, {"kind": "core", "name": IC_NAMES.get(t, t)})
-        for r in (sg or {}).get("rows") or []:
+        rows = (sg or {}).get("rows") or []
+        for r in rows:
             info.setdefault(r["ticker"], {"kind": "suggest", "name": r.get("name"),
                                           "signal_date": (sg or {}).get("asof") if r.get("signal") else None})
         ticks = sorted(info)
+        # 建议的股票不限个数（2026-10-07）：10 年行情（月K 用）只给持仓 / 核心 ETF / 出了信号和快要出信号的 + 观察中的前 KLINE_LONG_WATCH 只，
+        # 其余观察中的用决策用的 2 年（月K 只有约 24 根）—— 早上的运行不会因为候选多了而多下载很多
+        watch = [r["ticker"] for r in rows if r.get("status") == "watch"]
+        far = set(watch[KLINE_LONG_WATCH:])
         long = {}
         try:
             d10 = DataConfig(provider=ctx.dcfg.provider, years=10, allow_synthetic=False, min_bars=60).validate()
-            long = load_universe(ticks, d10)
+            long = load_universe([t for t in ticks if t not in far], d10)
         except Exception as e:                               # noqa: BLE001
             log.warning("K 线的 10 年行情取不到（用决策用的 2 年）：%s", e)
         out = {}
@@ -3196,6 +3204,9 @@ def cmd_live_unified(a) -> int:
     paper, tag, book = _liveu_tag(a)
     if a.status:
         return _live_unified_body(a)
+    if getattr(a, "phase", "") == "now" and not _now_work(tag, book):
+        print("没有要盘中下的手动指令（或现在不是交易时间 / 今天早上的运行还没完成 / HALT 生效中）：不用跑")
+        return 0
     try:
         lock = RunLock(book.with_suffix(".lock"), wait_s=60.0 * float(a.lock_wait)).acquire()
     except ExecutorError as e:
@@ -3368,8 +3379,11 @@ def _live_unified_body(a) -> int:
     ux = UnifiedExecutor(eng, broker, book, paper=paper, check_clock=not (paper or a.no_clock),
                          auto_cap=(not paper and a.max_order_value is None), pre_send=ctx.gate.pre_send,
                          manual_tag=tag)                     # 页面 / run.py manual 写的手动指令（卖出 / 减仓 / 闲置资金比例）
+    res_now = None
     try:
-        if a.phase == "open":
+        if a.phase == "now":                                 # 盘中：等着的手动指令马上下单（面板叫；先卖后买）
+            res_now = ux.now_phase(_now_quote(broker, paper))
+        elif a.phase == "open":
             if paper:
                 print("模拟账户的开盘撮合在第二天早上一起做，不用 --phase open")
                 return 0
@@ -3404,6 +3418,10 @@ def _live_unified_body(a) -> int:
             mac_notify(t_, str(e)[:200])
             notify.send(t_, f"{what}：{e}", "warn")
         return 3
+    if res_now is not None:
+        rc = _now_report(a, ux, res_now, paper, tag)
+        page()
+        return rc
     sm = ux.summary()
     nr = str(getattr(broker, "next_release", "") or "")
     if not paper and len(nr) >= 8 and nr[:8].isdigit() and nr[:8] >= now_jst().strftime("%Y%m%d"):
@@ -3447,7 +3465,7 @@ def _live_unified_body(a) -> int:
         print(f"  已对账 {r['bar']} {r['side']} {r['ticker']} {r['qty']:,} 股 @ ¥{r['px']:,.2f}")
     for o in sm["orders"]:
         lim = f" 限价 ¥{o['limit']:g}" if o.get("limit") else ""
-        print(f"  {o['side']} {o['ticker']} ×{o['qty']:,}{lim}（{'寄付' if o['phase'] == 'morning' else '开盘后'}）"
+        print(f"  {o['side']} {o['ticker']} ×{o['qty']:,}{lim}（{ {'morning': '寄付', 'now': '盘中'}.get(o['phase'], '开盘后')}）"
               f" → {o['status']} {o.get('note') or ''}".rstrip())
     if sm["blocked"]:
         print(f"★ 没有下单：{sm['blocked']}")
@@ -3489,13 +3507,54 @@ def _manual_due(tag: str, book: dict) -> bool:
     return MO.due(tag, book)
 
 
+def _now_work(tag: str, book_path) -> bool:
+    """--phase now 要不要跑：盘中、今天早上的运行已完成、有要马上下的手动指令（qbreak/manual_orders.now_due；
+    「明天开盘」的、刚试过的不算）。手动运行时也一样 —— 没事做就不建引擎、不连券商。"""
+    from qbreak import manual_orders as MO
+    from qbreak.utils import read_json
+    return MO.now_due(tag, read_json(book_path, {}) or {})
+
+
+def _now_quote(broker, paper: bool):
+    """盘中的现在价：立花 = 現在値（quote_detail 的 price）；模拟账户 = Yahoo 最新的 1 分钟线（约晚 20 分钟；qbreak/data.intraday_last）。"""
+    if not paper:
+        return lambda ts: {t: d["price"] for t, d in broker.quote_detail(list(ts)).items() if d.get("price")}
+    from qbreak.data import intraday_last
+    return intraday_last
+
+
+def _now_report(a, ux, res: dict, paper: bool, tag: str) -> int:
+    """--phase now 之后：汇总文件只更新手动指令 / 单 / 事件（不重算持仓理由、K 线），日志写一小节，有下单就通知。"""
+    from qbreak.calendar_jp import now_jst
+    from qbreak.live_unified import append_journal, mac_notify
+    from qbreak.utils import read_json, write_json
+    fp = paths.out_dir() / f"live_unified_{tag}.json"
+    sm0 = read_json(fp, {}) or {}
+    s1 = ux.summary()
+    sm0.update(manual=s1["manual"], orders=s1["orders"], events=s1["events"], now_at=now_jst().isoformat(timespec="seconds"))
+    write_json(fp, sm0)
+    lines = [f"- {x['ticker']}：{x['status']}（{x['msg']}）" for x in res.get("items") or []]
+    for ln in lines:
+        print(ln[2:])
+    n = int(res.get("placed") or 0)
+    title = f"qbreak {'模拟操盘' if paper else '立花实盘'} 盘中手动指令"
+    if lines:
+        append_journal(paths.out_dir() / f"live_unified_{tag}_journal.md", now_jst().strftime("%Y-%m-%d %H:%M JST"), title,
+                       "\n".join(lines))
+    if a.notify and lines:
+        from qbreak import notify
+        mac_notify(title, (f"下单 {n} 笔：" + "；".join(f"{x['ticker']} {x['status']}" for x in res.get("items") or []))[:200])
+        notify.send(title, "\n".join(lines), "info")
+    return 0
+
+
 def cmd_manual(a) -> int:
     """手动指令（2026-10-06 用户：「当持仓的时候可以在画面上点击卖出后 第二天或者当天就可以在立花自动交易 可以手动调节当前持仓股票百分比」）：
-    只把指令写进数据目录的 manual/requests_<账本>.jsonl；真正下单的是执行器（下一次能下寄付单的运行；同样的闸门、同样的对账）。
+    只把指令写进数据目录的 manual/requests_<账本>.jsonl；下单的是执行器（同样的闸门、同样的对账）。
     list：看持仓占比、手动指令、不买回；sell / trim / adjust / buy / core / unblock / cancel：写一条指令。页面（run.py panel）做的是同一件事。
-    adjust（2026-10-06 用户「也可以调节现在个股的持仓和金额」）：--shares N / --yen 金额 / --pct %（目标持仓；可加可减，加仓有闸门）。
-    buy（2026-10-06 用户「根据趋势等等建议的股票也要加到里面 可以一键买的」）：买一只还没拿的个股（默认按规则的仓位；
-    --shares / --yen / --pct 指定目标）；与规则的新仓同一套闸门，只在新收盘的决策里做。"""
+    adjust：--shares N / --yen 金额 / --pct %（目标持仓；可加可减，加仓有闸门）；buy：买一只还没拿的个股（默认按规则的仓位）。
+    什么时候下单（2026-10-07 用户：「当天买入卖出的话在交易时间段就直接进行买入卖出 在交易时间之前的话就等交易时间的时候进行交易」）：
+    盘中 → 马上（面板叫 --phase now）；开盘前 → 今天开盘；收盘后 → 下一个交易日开盘（qbreak/manual_orders.timing）。"""
     from qbreak import manual_orders as MO
     from qbreak.calendar_jp import now_jst
     from qbreak.utils import read_json
@@ -3503,14 +3562,14 @@ def cmd_manual(a) -> int:
     b_ = read_json(book, {}) or {}
     st = b_.get("state") or {}
     now = now_jst()
-    day, today = MO.next_window(now)
+    when = MO.when_text(now)                                  # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘
     if a.action == "list":
         pct = MO.position_pct(st)
         print(f"账本 {book}（{'模拟账户' if paper else '立花'}；决策日 {st.get('last_date') or '—'}）")
         for t, p_ in (st.get("pos") or {}).items():
             q = (st.get("pending_exit") or {}).get(t)
             print(f"  {t} {int(p_['shares']):,} 股，约占权益 {pct.get(t) if pct.get(t) is not None else '—'}%"
-                  + (f"（已排定开盘卖：{MO.REASON_TEXT.get(q, q)}）" if q else ""))
+                  + (f"（在卖出：{MO.REASON_TEXT.get(q, q)}）" if q else ""))
         for t, u_ in (st.get("core_units") or {}).items():
             if int(u_):
                 print(f"  核心 {t} {int(u_):,} 口")
@@ -3520,12 +3579,10 @@ def cmd_manual(a) -> int:
         for ln in MO.lines(sm, today=now.date().isoformat()):
             print(f"  {ln[2:]}")
         for r_ in MO.unseen(tag, b_):
-            print(f"  手动指令 {r_['id']}：{MO.describe(r_)} → 等执行器读（下一次运行）")
-        print(f"现在写的卖出 / 减仓：最早 {day} 开盘执行（{'今天' if today else '下一个交易日'}；成交日 {MO.CUTOFF:%H:%M} 截止）")
-        ad, ad_today = MO.add_window(now, st.get("last_date"))
-        print(f"现在写的加仓（adjust 往上调）/ 买入（buy）：最早 {ad} 开盘买（{'今天' if ad_today else '下一个交易日'}；只在新收盘的决策里做）")
+            print(f"  手动指令 {r_['id']}：{MO.describe(r_)} → 等下单")
+        print(f"现在写的买卖：{when}下单（{MO.RULE_TEXT}）")
         s_ = MO.slots(b_, tag)
-        print(f"个股名额：拿着 {s_['held']} 只 + 排定买入 {s_['buys']} 只 / 上限 {s_['max']} 只（空 {s_['free']} 个）")
+        print(f"个股名额：空 {s_['free']} 个（拿着 {s_['held']} + 排定买入 {s_['buys']}，上限 {s_['max']} 只）")
         return 0
     req = {"kind": a.action, "source": "cli", "note": a.note}
     if a.action in ("sell", "trim", "adjust", "buy", "unblock"):
@@ -3558,35 +3615,28 @@ def cmd_manual(a) -> int:
     rec = MO.append(tag, rec)
     print(f"已写手动指令 {rec['id']}：{MO.describe(rec)}")
     if rec["kind"] == "buy":
-        ad, ad_today = MO.add_window(now, st.get("last_date"))
         row = next((r for r in (sm_.get("suggest") or {}).get("rows") or [] if r.get("ticker") == rec["ticker"]), None)
         if row is None:
-            print("★ 这只票不在执行器最近一次的「建议的股票」里（规则的候选）：执行器照样按规则的闸门检查，不过就不买")
+            print("★ 这只票不在执行器最近一次的「建议的股票」里：执行器照样按规则的闸门检查，不过就不买")
         elif row.get("status") != "triggered":
-            print("★ 这只票还没有买入信号（规则不会买）：手动买入是你自己的决定（没有回测验证）")
-        print(f"执行器在 {ad}（{'今天' if ad_today else '下一个交易日'}）开盘前的运行里按决策日的收盘定股数与限价（收盘 ×1.03），"
-              "下寄付指値（钱不够时同一个开盘先卖核心 ETF；名额满 / 开盘高于限价 → 不买；只做一次）；买入后按规则的止损 / 离场")
+            print("★ 这只票还没有买入信号（规则不会买）：是你自己的决定（没有回测验证）")
     adj = MO.adjust_plan(rec, st, float((b_.get("manual") or {}).get("cap_pct") or MO.CAP_PCT)) if rec["kind"] == "adjust" else None
-    if adj and adj["delta"] > 0:
-        ad, ad_today = MO.add_window(now, st.get("last_date"))
-        print(f"按最近收盘 ¥{adj['px']:,.0f} 估算：加 {adj['delta']:,} 股（{adj['cur']:,} → {adj['target']:,} 股，约占权益 {adj['new_pct']:.1f}%）"
-              + ("；★ 超过单只上限，截到上限" if adj["capped"] else "")
-              + f"；执行器在 {ad}（{'今天' if ad_today else '下一个交易日'}）开盘前的运行里下寄付指値（钱不够时先卖核心 ETF；只做一次）")
-    elif adj:
-        print(f"按最近收盘 ¥{adj['px']:,.0f} 估算：卖 {-adj['delta']:,} 股（{adj['cur']:,} → {adj['target']:,} 股）；"
-              f"执行器在 {day}（{'今天' if today else '下一个交易日'}）开盘前的运行里下寄付成行单")
-    if rec["kind"] in ("sell", "trim"):
-        print(f"执行器在 {day}（{'今天' if today else '下一个交易日'}）开盘前的运行里下寄付成行单"
-              + ("；现在在 07:45〜08:45 之间：可以马上跑一次 bash scripts/liveu.sh run --broker "
-                 + ("paper" if paper else "tachibana") + " --retry" if today and now.time() >= dt.time(7, 45) else ""))
+    if adj:
+        print(f"按最近收盘 ¥{adj['px']:,.0f} 估算：{'加' if adj['delta'] > 0 else '卖'} {abs(adj['delta']):,} 股"
+              f"（{adj['cur']:,} → {adj['target']:,} 股）" + ("；★ 超过单只上限，截到上限" if adj["capped"] else ""))
+    if rec["kind"] in MO.ORDER_KINDS:
+        mode = MO.timing(now)[0]
+        print(f"{when}下单（{MO.RULE_TEXT}）"
+              + ("：操作面板开着的话会马上叫执行器；没开就运行 bash scripts/liveu.sh run --broker "
+                 + ("paper" if paper else "tachibana") + " --phase now" if mode == "now" else ""))
     elif rec["kind"] == "core":
         print("闲置资金比例从下一次决策（下一个交易日早上的运行）起生效")
     if paths.halt_file().exists():
-        print(f"★ HALT 生效中（{paths.halt_file()}）：执行器不会把它变成单，HALT 解除之后的下一次运行才处理")
+        print(f"★ HALT 生效中（{paths.halt_file()}）：解除之后才处理")
     if paper:
-        print("提醒：模拟账户上的手动操作会让它与云端模拟盘不再一致（上线门槛「连续 10 个交易日一致」的天数会中断）")
+        print("提醒：模拟账户的手动操作会让它和云端模拟盘不一致（上线门槛「连续 10 个交易日一致」的天数会中断）")
     elif not (paths.home() / "ARM").exists():
-        print("提醒：立花还没解锁（没有 ARM 文件）：执行器照常处理，但单会被挡住，不会真的发出去")
+        print("提醒：立花还没解锁（没有 ARM 文件）：单会被挡住，不会真的发出去")
     return 0
 
 
@@ -4030,10 +4080,11 @@ def main(argv=None) -> int:
     pcx = sub.add_parser("price-check", help="行情交叉核对：yfinance × J-Quants（近 200 天；复权错位 / 最新收盘 / 缺交易日；只读、只报警）")
     pcx.set_defaults(func=cmd_price_check)
 
-    lu = sub.add_parser("live-u", help="一个账户方案的实盘执行器：早上对账→决策→寄付单；--phase open 开盘后补单（立花 / 模拟账户）")
+    lu = sub.add_parser("live-u", help="一个账户方案的实盘执行器：早上对账→决策→寄付单；--phase open 开盘后补单；--phase now 盘中的手动指令（立花 / 模拟账户）")
     lu.add_argument("--broker", default="paper", choices=["paper", "tachibana"])
-    lu.add_argument("--phase", default="morning", choices=["morning", "open"],
-                    help="morning：成交日 08:55 前（Mac 定时任务 07:40）；open：成交日 09:05 前后（开盘前余力不够的买单）")
+    lu.add_argument("--phase", default="morning", choices=["morning", "open", "now"],
+                    help="morning：成交日 08:55 前（Mac 定时任务 07:40）；open：成交日 09:05 前后（开盘前余力不够的买单）；"
+                         "now：盘中（09:00〜11:30、12:30〜15:25）马上下等着的手动指令（面板叫）")
     lu.add_argument("--demo", action="store_true", help="立花デモ環境（账本与本番分开）")
     lu.add_argument("--dry-run", action="store_true", help="立花：登录与读取照常，发单只打印（账本单独一份）")
     lu.add_argument("--max-order-value", type=float, default=None, help="单笔上限（默认 权益 ×1.05）")
@@ -4066,7 +4117,7 @@ def main(argv=None) -> int:
     lu.add_argument("--halt-drill", action="store_true",
                     help="HALT 演练（只用模拟账户、今天早上的运行完成之后）：建演练用的 HALT → 跑一次 → 删掉它（bash scripts/liveu.sh halt-drill）")
     lu.set_defaults(func=cmd_live_unified)
-    mn = sub.add_parser("manual", help="手动指令：卖出 / 减仓 / 调整持仓（可加可减）/ 买入（新开仓）/ 闲置资金比例 / 不买回 / 撤回（只写指令；下单由执行器在下一次运行里做）")
+    mn = sub.add_parser("manual", help="手动指令：卖出 / 减仓 / 调仓（可加可减）/ 买入（新开仓）/ 闲置资金比例 / 不买回 / 撤回（只写指令；执行器下单：盘中马上、开盘前等开盘、收盘后等下一个交易日开盘）")
     mn.add_argument("action", choices=["list", "sell", "trim", "adjust", "buy", "core", "unblock", "cancel"])
     mn.add_argument("target", nargs="?", default=None, help="sell / trim / adjust / buy / unblock：代码（例 7203）；cancel：指令 id")
     mn.add_argument("--shares", type=int, default=None, help="adjust / buy：目标股数（单元向下取整）")

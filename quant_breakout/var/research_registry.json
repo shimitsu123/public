@@ -14355,5 +14355,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "数据里的趋势标签不变，只改显示；说明按数字在浏览器 / 显示时现算（旧文件也马上是新说法）；每张图的周期 / 小图各自记在图上，新图默认 = 最近一次选的（localStorage 同一个键）；顺带修好：上边沿按钮类名撞了页头的 sticky .top、第二只票的调仓框带着上一只的数；调仓条并格时「不变」误标「要卖」的错由 node 测试抓到并改正"
+ },
+ {
+  "line": 10132,
+  "date": "2026-10-07",
+  "title": "手动买卖盘中马上下单（盘中点的马上下、开盘前 / 午休点的等开盘、收盘后点的等下一个交易日开盘；面板盘中叫执行器 --phase now）+ 建议的股票不限个数（按出信号 / 快要出 / 观察中分组）+ 说明去重变短（面板、Mac 账本页、执行器日志、命令行）",
+  "kind": "engineering",
+  "domain": "数据/工程",
+  "registration": "—",
+  "script": "qbreak/live_unified.py（now_phase、place 跳过盘中下过单的票）、qbreak/manual_orders.py（timing / when_text / now_due / status_text / RULE_TEXT）、run.py（live-u --phase now、_now_work / _now_quote / _now_report、manual 的提示）、qbreak/data.py（intraday_last）、qbreak/panel.py（Trigger 盘中模式、说明）、qbreak/suggest.py（不限个数）、qbreak/holding_view.py、qbreak/desktop_page.py、scripts/liveu.sh",
+  "output": "—（页面与文字；盘中单记在账本的 orders 里，phase = now）",
+  "candidates": [],
+  "baseline": "—（不改规则 / 参数 / 仓位 / 股票池；没有手动指令时执行器与以前逐笔相同）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "盘中：先卖后买；立花 卖 = 現在値 −0.5%、买 = min(現在値 +0.5%, 收盘 ×1.03) 的当日限价，模拟账户 = Yahoo 1 分钟线（约晚 20 分钟）当场成交；现价超过收盘 ×1.03 不买；今天已经有执行器单的票 → 明天开盘；取不到现价 → 10 分钟后再试；第二天早上按实际成交对账（持仓核对照常）；盘中的单发出后执行器撤不了；建议的股票原来最多 12 只（用户 2026-10-06 说保持，这次改了）"
  }
 ]

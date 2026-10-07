@@ -46,18 +46,16 @@ def _cls(v) -> str:
 
 
 def _manual_card(tag: str, book: dict) -> str:
-    """手动操作（卖出 / 减仓 / 闲置资金比例）：操作面板的入口 + 现在有效的手动设定与指令（qbreak/manual_orders.py）。"""
-    from .manual_orders import lines, unseen
+    """手动操作：操作面板的入口 + 现在有效的手动设定与指令（qbreak/manual_orders.py）。"""
+    from .manual_orders import RULE_TEXT, lines, unseen
     man = book.get("manual") or {}
     sm = {**man, "items": sorted((man.get("items") or {}).values(), key=lambda x: x.get("at", ""), reverse=True)}
     ls = [x[2:] for x in lines(sm, today=now_jst().date().isoformat())]
-    ls += [f"手动指令 {r['id']}：等执行器读（下一次运行）" for r in unseen(tag, book)]
+    ls += [f"手动指令 {r['id']}：等下单" for r in unseen(tag, book)]
     url = f"http://127.0.0.1:8765/?book={tag}"
-    return ("<section class='card'><h2>手动操作（卖出 / 减仓 / 闲置资金比例）</h2>"
-            f"<div>操作面板：<a href='{escape(url)}'>{escape(url)}</a>（只在这台 Mac 上；面板没开时在 Mac 对话里说「打开操作面板」，"
-            "或直接说「卖掉 7203」「7203 减到 10%」「闲置资金比例改成 50%」）</div>"
-            "<div class='muted'>按钮只写指令；下单由执行器在下一次能下寄付单的运行里做（成交日 08:55 之前点的 → 当天开盘，之后 → 下一个交易日开盘），"
-            "HALT / ARM / 持仓核对照常。卖出后默认 20 个交易日不自动买回。</div>"
+    return ("<section class='card'><h2>手动操作</h2>"
+            f"<div>操作面板：<a href='{escape(url)}'>{escape(url)}</a>（只在这台 Mac 上；也可以在 Mac 对话里直接说「卖掉 7203」「7203 减到 10%」）</div>"
+            f"<div class='muted'>{escape(RULE_TEXT)}；卖出后默认 20 个交易日不自动买回。</div>"
             + ("<ul>" + "".join(f"<li>{escape(x)}</li>" for x in ls) + "</ul>" if ls else "<div class='muted'>现在没有手动设定或指令</div>")
             + "</section>")
 
@@ -184,12 +182,15 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
             if o.get("decided_on") != st.get("last_date"):
                 continue
             unit = "口" if o.get("kind") == "core" else "股"
-            how = ("寄付成行" if o["side"] == "SELL" else
-                   f"{'寄付' if o.get('phase') == 'morning' and o.get('status') != 'DEFERRED' else '开盘后'}指値 ≤ {_yen(o.get('limit'))}")
+            if o.get("phase") == "now":                    # 盘中的手动单（qbreak/live_unified.now_phase）
+                how = "盘中" + ("" if o["side"] == "SELL" else f"指値 ≤ {_yen(o.get('limit'))}")
+            else:
+                how = ("寄付成行" if o["side"] == "SELL" else
+                       f"{'寄付' if o.get('phase') == 'morning' and o.get('status') != 'DEFERRED' else '开盘后'}指値 ≤ {_yen(o.get('limit'))}")
             orders.append(f"<tr><td>{'卖' if o['side'] == 'SELL' else '买'}</td><td>{escape(o['ticker'])}</td>"
                           f"<td class='n'>{int(o.get('sent_qty') or o['qty']):,} {unit}</td><td>{escape(how)}</td>"
                           f"<td>{escape(str(o['status']))}</td><td class='muted'>{escape(str(o.get('note') or ''))[:120]}</td></tr>")
-        body.append("<section class='card'><h2>下一开盘的单</h2><div class='scroll'><table><tr><th>方向</th><th>代码</th>"
+        body.append("<section class='card'><h2>这次的单（开盘 / 盘中）</h2><div class='scroll'><table><tr><th>方向</th><th>代码</th>"
                     "<th class='n'>数量</th><th>方式</th><th>状态</th><th>说明</th></tr>"
                     + ("".join(orders) or "<tr><td colspan=6 class='muted'>没有</td></tr>") + "</table></div></section>")
         fills = []

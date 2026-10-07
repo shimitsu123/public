@@ -3,6 +3,7 @@
 # 所以每天 git pull（拿云端的代码、判断层、宏观数值、模拟盘状态）永远不会和本机的账本冲突。
 #   bash scripts/liveu.sh run --broker paper        定时任务用：git pull 等云端当天的数据入库 → 同步输入 → 执行器 → 通知 → 打开页面
 #   bash scripts/liveu.sh run --broker tachibana --phase open   定时任务用（立花 09:05）：开盘后补单（不等云端、不打开页面）
+#   bash scripts/liveu.sh run --broker paper --phase now        面板叫（盘中 09:00〜11:30、12:30〜15:25）：等着的手动指令马上下单（不等云端）
 #   bash scripts/liveu.sh --broker paper --status   手动：看账本（持仓、下一开盘的单、最近事件），顺便重写页面
 #   bash scripts/liveu.sh policy add …               政策事件库录入（官方来源；在 ~/qbreak-dev 里，之后 git add var/policy_events.csv 提交推送）
 #   bash scripts/liveu.sh desktop                    手动（在终端里做一次）：桌面上放一个指向页面的链接，并打开页面
@@ -18,7 +19,7 @@
 #   bash scripts/liveu.sh flow 300000 [--flow-note …]  登记入金（出金写负数）：只影响收益的计算与提醒，不下单
 #   bash scripts/liveu.sh probe [--demo [--order-test]]  立花 API 检查（只读；--order-test 只在デモ发单），结果给上线门槛用
 #   bash scripts/liveu.sh manual list|sell 7203|trim 7203 --pct 10|adjust 7203 --shares 300 (--yen / --pct)|buy 7203 [--shares / --yen / --pct]|core --pct 50|unblock 7203|cancel <id> [--broker tachibana]
-#                                                    手动指令：只写指令（数据目录 manual/）；下单由执行器在下一次能下寄付单的运行里做
+#                                                    手动指令：只写指令（数据目录 manual/）；下单由执行器做（盘中马上；开盘前等开盘；收盘后等下一个交易日开盘）
 #   bash scripts/liveu.sh panel [--open]             本机操作面板 http://127.0.0.1:8765/（LaunchAgent com.qbreak.panel 常驻）：
 #                                                    账本、为什么持有 · 现在趋势、卖出 / 减仓 / 闲置资金比例 / 撤回 / 停止下单（按钮只写手动指令）
 #   bash scripts/liveu.sh phone [on|off|status|forget] [--yes]  手机上操作：Tailscale Serve 把面板的手机端口（127.0.0.1:8766）放到
@@ -199,8 +200,9 @@ if [ "${1:-}" = "run" ]; then
     QBREAK_CAFFEINATED=1 exec caffeinate -i /bin/bash "$PROJ/scripts/liveu.sh" "$@"
   fi
   shift
-  case " $* " in *" --phase open "*) openphase=1 ;; *) openphase=0 ;; esac
+  case " $* " in *" --phase open "*|*" --phase now "*) openphase=1 ;; *) openphase=0 ;; esac   # 开盘后 / 盘中：不 pull、不等云端
   case " $* " in *" --retry "*) retry=1 ;; *) retry=0 ;; esac
+  case " $* " in *" --phase now "*) nowphase=1 ;; *) nowphase=0 ;; esac
   case " $* " in *" --broker tachibana "*) live=1 ;; *) live=0 ;; esac
   pullmsg=""
   if [ "$openphase" = "0" ]; then
@@ -255,8 +257,8 @@ if [ "${1:-}" = "run" ]; then
   rc=$?
   updated=0
   find "$QBREAK_HOME/out" -name 'page_*.html' -newer "$stamp" 2>/dev/null | grep -q . && updated=1
-  if [ "$retry" = "1" ] && [ "$rc" = "0" ] && [ "$updated" = "0" ]; then   # 重试没事可做（前一次已经跑完）：不写页面，也不是「运行没完成」
-    exit 0
+  if { [ "$retry" = "1" ] || [ "$nowphase" = "1" ]; } && [ "$rc" = "0" ] && [ "$updated" = "0" ]; then
+    exit 0                                         # 重试 / 盘中没事可做：不写页面，也不是「运行没完成」
   fi
   if [ "$updated" = "0" ]; then
     # 没走到写页面那一步（Python 出错、行情取不到……）：页面顶上标红 + 通知，别让人看着上一次的页面以为没事

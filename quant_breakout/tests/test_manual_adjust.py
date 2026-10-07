@@ -62,15 +62,7 @@ def test_target_shares_plan_and_check():
     assert "没有 6758.T" in MO.check(n({"kind": "adjust", "ticker": "6758", "unit": "shares", "value": 100}), book)
     MO.append(TAG, {"kind": "adjust", "ticker": "7203", "unit": "shares", "value": 100})
     assert "没处理完" in MO.check(n({"kind": "sell", "ticker": "7203"}), book, tag=TAG)
-    assert MO.describe({"kind": "adjust", "ticker": "7203.T", "unit": "yen", "value": 500000}) == "调整持仓 7203.T → ¥500,000"
-
-
-def test_add_window_follows_the_morning_decision():
-    at = lambda *a: dt.datetime(*a, tzinfo=JST)                         # noqa: E731
-    assert MO.add_window(at(2026, 10, 6, 6, 0), "2026-10-02") == (dt.date(2026, 10, 6), True)    # 今天 07:40 的运行还没做
-    assert MO.add_window(at(2026, 10, 6, 8, 10), "2026-10-05") == (dt.date(2026, 10, 7), False)  # 已经做了 → 明天
-    assert MO.add_window(at(2026, 10, 6, 20, 0), "2026-10-05") == (dt.date(2026, 10, 7), False)
-    assert MO.add_window(at(2026, 10, 10, 10, 0), "2026-10-08") == (dt.date(2026, 10, 13), False)  # 周六 → 周二（周一假日）
+    assert MO.describe({"kind": "adjust", "ticker": "7203.T", "unit": "yen", "value": 500000}) == "调仓 7203.T → ¥500,000"
 
 
 # ────────── ② 执行器：加仓 / 减仓 ──────────
@@ -118,18 +110,27 @@ def test_adjust_down_by_amount_is_a_trim():
     assert r.eng.st.pos["A.T"].shares == 100 and r.item(rec["id"])["status"] == "done"
 
 
-def test_same_decision_retry_does_not_add_but_waits_for_the_next_decision():
+def test_same_decision_retry_does_not_add_but_waits_for_the_open():
+    """07:40 的运行之后点的加仓：08:35 的重试不加（不改寄付单）→ 09:00 开盘后盘中马上下（2026-10-07 起）。"""
     r = _Run([1000.0] * 30, entry=(10,))
     r.until(14)
     rec = _req(r, unit="shares", value=300)
     r.now["t"] = r.at(r.k - 1, 8, 35)                                   # 07:40 的运行之后
     r.ux.morning([])
     it = r.item(rec["id"])
-    assert it["status"] == "pending" and it["wait"] and "收盘后的决策" in it["msg"] and "开盘买" in it["msg"]
+    assert it["status"] == "pending" and it["wait"] and it["msg"] == "09:00 开盘后马上下单（盘中）"
     assert not r.eng.st.add_plan and not any(o.reason == "manual_add" for o in r.ux.orders)
     assert not MO.due(TAG, r.ux.book, r.now["t"])                       # 不会一直叫重试
-    r.day()                                                              # 下一次决策：加仓
-    assert r.item(rec["id"])["status"] == "placed" and "wait" not in r.item(rec["id"])
+    assert MO.now_due(TAG, r.ux.book, r.at(r.k - 1, 10, 0))             # 盘中：面板叫执行器
+    res = r.session(10, 0)
+    it = r.item(rec["id"])
+    assert res["placed"] == 1 and it["status"] == "placed" and it["now"] and "wait" not in it and it["side"] == "BUY"
+    o = [x for x in r.ux.orders if x.reason == "manual_add"][0]
+    assert o.phase == "now" and o.status == "FILLED" and o.qty == 100
+    r.day()                                                              # 第二天早上的对账：并进原来的持仓
+    assert r.eng.st.pos["A.T"].shares == 300 and r.item(rec["id"])["status"] == "done" and "盘中买入" in r.item(rec["id"])["msg"]
+    r.day()
+    assert not r.ux.blocked
 
 
 def test_add_is_capped_at_the_single_position_limit():
