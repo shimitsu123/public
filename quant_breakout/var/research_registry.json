@@ -14434,7 +14434,10 @@
   "script": "scripts/watch_prob_study.py、qbreak/watch_prob.py",
   "output": "（运行后）var/out/watch_prob_study.md / .json；判定 A / B 才写 var/watch_prob.json",
   "candidates": [
-   "P（按比例排）"
+   {
+    "id": "P",
+    "result": "（登记；按比例排）"
+   }
   ],
   "baseline": "S（现在页面的顺序：快要出 → 观察中，组内 near_key）",
   "windows": "日経225；拟合 2006-01〜2019-12、留出 2020-01〜2026-09（t+10 ≤ 2026-10-06）",
@@ -14442,5 +14445,50 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "只排序与展示，不改交易；登记前个数：拟合 67,089 行 / 留出 40,864 行、54 个情况都 ≥ 50 行；第一次数个数时缓存重下载（留出 40,846 → 40,864）"
+ },
+ {
+  "line": 10286,
+  "date": "2026-10-07",
+  "title": "观察中的股票按「之后 10 个交易日内出买入信号的历史比例」排序 → 判定 A：排序与现在的顺序一样准（ΔC −0.0020，区间 −0.029〜+0.026）、比例准（MAD 0.92 pp）→ 面板按比例排并写百分比；比例很低（平均 2〜3%、最高情况约 9%）",
+  "kind": "display",
+  "domain": "选股/买点",
+  "registration": "4590820（登记后代码未改、只运行一次）",
+  "script": "scripts/watch_prob_study.py、qbreak/watch_prob.py",
+  "output": "var/out/watch_prob_study.md / .json、var/watch_prob.json",
+  "candidates": [
+   {
+    "id": "P",
+    "result": "按比例排：ΔC −0.0020、MAD 0.92 pp → A"
+   }
+  ],
+  "baseline": "S（快要出 → 观察中，组内 near_key）",
+  "windows": "日経225；拟合 2006-01〜2019-12、留出 2020-01〜2026-09",
+  "verdict": "采用",
+  "stable_findings": [
+   "估计 1〜4 天后金叉且其他条件都满足的情况最高（约 7〜9%）",
+   "已在信号线上离得远的最低（< 1%）",
+   "拟合期与留出期的比例差约 0.6 pp"
+  ],
+  "era_dependent_or_reversed": [
+   "2020〜2022 按比例排不如现在的顺序、2023〜2026 更好"
+  ],
+  "notes": "只排序与展示，不改交易；判定 A 写 var/watch_prob.json（全部期间重新拟合）；每天排第 1 只 10 天内出信号 5.2%（现在的顺序 4.9%）；H = 5 / 20 只描述"
+ },
+ {
+  "line": 10304,
+  "date": "2026-10-07",
+  "title": "下单按什么价（立花盘中按实时现价挂限价、模拟按 Yahoo 现价、盘外按开盘价）+ 晚了几分钟的范围 + 持仓的预计卖价 / 建议的股票的规则买价 + 建议的股票的盘中 K 线与现价（打开时才取、最多 12 只）+ ETF 调仓在执行器第一次算规则目标额之前也能用（按现在的口数估算）+ 观察中按历史比例排（Mac + 手机）",
+  "kind": "engineering",
+  "domain": "数据/工程",
+  "registration": "—",
+  "script": "qbreak/manual_orders.py（order_basis / delay_range / NOW_BUY_BUF / core_lot / core_u100_est / core_u100s）、qbreak/live_unified.py（_core_pending / now_phase 的估算）、qbreak/panel.py（quotes_json 的 extra / basis / rng、_dvol / _delay_min / _suggested、chart_json 并进建议的股票、规则的买价一行、观察中排序的页面、买入框的现价）、qbreak/suggest.py（rank / order_key）、qbreak/watch_prob.py、run.py（ETF 调仓的估算说明）",
+  "output": "—（页面与文字；/api/quotes 的 basis / rng / buy、?t=）",
+  "candidates": [],
+  "baseline": "—（不改规则 / 参数 / 仓位 / 股票池；执行器只在没有规则目标额时多了按估算调 ETF，其余逐笔相同）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "页面的现价（Yahoo 约晚 20 分钟）只用来看和估算；立花的单按下单那一刻的实时现价；估算的 ETF 规则目标在下一次决策换成准确的数；建议股票的现价接口只接受汇总里列着的票"
  }
 ]

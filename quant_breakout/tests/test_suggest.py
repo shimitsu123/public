@@ -9,6 +9,7 @@ import pandas as pd
 
 from qbreak import paths
 from qbreak import suggest as SG
+from qbreak import watch_prob as WP
 from qbreak.config import StrategyParams
 from qbreak.core import core_frame
 from qbreak.strategy import compute_indicators
@@ -158,7 +159,8 @@ def test_near_key_order():
         "d1", "d1_low_score", "d3_high", "d3_low", "down", "above", "w2", "warned", "blocked"]
 
 
-def test_build_sorts_imminent_and_watch_by_proximity():
+def test_build_sorts_imminent_and_watch_by_proximity(monkeypatch, tmp_path):
+    monkeypatch.setattr(WP, "FILE", tmp_path / "none.json")                # 没有比例表：以前的顺序
     ind, eng, i = _engine()
     eng.entry_gate_fn = lambda t, i_: "测试：资格检查挡" if t in ("B.T", "D.T") else None
     sg = SG.build(ind, eng, i, P)
@@ -174,3 +176,45 @@ def test_build_sorts_imminent_and_watch_by_proximity():
         assert watch[-1] == "D.T"                                          # 资格检查挡的放最后
     c = next(r for r in rows if r["ticker"] == "C.T")
     assert c["near"]["where"] in ("below_up", "below_down") and "离买入信号" in sg["note"]
+
+
+def test_build_ranks_by_the_registered_probability_when_the_table_exists(monkeypatch, tmp_path):
+    """有比例表（var/watch_prob.json，登记研究判定 A）：出了信号的在前；快要出 + 观察中合成一组，闸门 → 比例高的先 → near_key 其余。"""
+    monkeypatch.setattr(WP, "FILE", tmp_path / "none.json")
+    ind, eng, i = _engine()
+    old = SG.build(ind, eng, i, P)
+    rest0 = [r for r in old["rows"] if r["status"] != "triggered"]
+    assert not old["ranked"] and "离买入信号的远近" in old["note"] and all("prob" not in r for r in old["rows"])
+    assert [(r["ticker"], r["status"]) for r in rest0] == [("C.T", "imminent"), ("D.T", "watch")]   # 以前：快要出 → 观察中
+    cell = {r["ticker"]: WP.cell_of(r["near"], r["macd_gap_pct"], r["vol_ratio"]) for r in rest0}
+    rows = [cell["D.T"] + (int(k < 40),) for k in range(100)] + [cell["C.T"] + (0,) for _ in range(100)]   # D 的情况比例高
+    fp = tmp_path / "wp.json"
+    fp.write_text(json.dumps(WP.fit(rows, extra={"show_pct": True})), encoding="utf-8")
+    monkeypatch.setattr(WP, "FILE", fp)
+    sg = SG.build(ind, eng, i, P)
+    out = sg["rows"]
+    assert sg["ranked"] and sg["prob_h"] == 10 and sg["prob_pct"] and "历史比例" in sg["note"]
+    st = [r["status"] for r in out]
+    assert st[:2] == ["triggered", "triggered"]                           # 出了信号的照旧在前
+    rest = [r for r in out if r["status"] != "triggered"]
+    assert [r["ticker"] for r in rest] == ["D.T", "C.T"]                  # 比例高的先（观察中的 D 排到快要出的 C 前面）
+    assert rest[0]["prob"]["p"] > rest[1]["prob"]["p"] and rest[0]["prob"]["cell"] == "|".join(cell["D.T"])
+    eng.entry_gate_fn = lambda t, i_: "测试：资格检查挡" if t == "D.T" else None
+    assert [r["ticker"] for r in SG.build(ind, eng, i, P)["rows"] if r["status"] != "triggered"] == ["C.T", "D.T"]   # 闸门最先
+    plain = [{k: v for k, v in r.items() if k != "prob"} for r in out]   # 面板：执行器写的旧汇总没有 prob → 渲染时补上再排
+    again = SG.rank([dict(r) for r in reversed(plain)])
+    assert [r["ticker"] for r in again if r["status"] != "triggered"] == ["D.T", "C.T"]
+    assert [r["status"] for r in again][:2] == ["triggered", "triggered"] and all("prob" in r for r in again if r["status"] != "triggered")
+
+
+def test_order_key_without_and_with_probability():
+    def row(t, st="watch", p=None, where="below_up", days=1, miss=(), block=None):
+        r = {"ticker": t, "status": st, "buy": {"block": block, "warn": []}, "vol_ratio": 1.0, "score": 50.0,
+             "near": {"where": where, "days": days if where == "below_up" else None, "miss": list(miss)}}
+        if p is not None:
+            r["prob"] = {"p": p}
+        return r
+    rows = [row("w_lo", p=0.01), row("trig", "triggered"), row("imm", "imminent", p=0.05), row("w_hi", p=0.09, where="above"),
+            row("blocked", p=0.5, block="资格检查"), row("noprob")]
+    assert [r["ticker"] for r in sorted(rows, key=lambda r: SG.order_key(r, True))] == ["trig", "w_hi", "imm", "w_lo", "noprob", "blocked"]
+    assert [r["ticker"] for r in sorted(rows, key=lambda r: SG.order_key(r, False))] == ["trig", "imm", "w_lo", "noprob", "w_hi", "blocked"]

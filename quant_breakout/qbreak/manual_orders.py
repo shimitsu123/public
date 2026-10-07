@@ -329,34 +329,72 @@ def core_tickers(book: dict) -> set:
     return out
 
 
+def core_lot(book: dict | None, t: str) -> int:
+    """核心 ETF 一手几口：执行器记的（core_rule.lot）→ 立花的 ETF 表（qbreak/fees.py）→ 1。"""
+    n = int((((book or {}).get("core_rule") or {}).get("lot") or {}).get(t) or 0)
+    if n > 0:
+        return n
+    try:
+        from .fees import DEFAULT_BROKER, etf_cost
+        return max(1, int(etf_cost(DEFAULT_BROKER["JP"], t, "JP").get("lot") or 1))
+    except Exception:                                       # noqa: BLE001
+        return 1
+
+
+def core_u100_est(cur, plan) -> int:
+    """执行器还没用新代码决策过（账本没有 core_rule.units100）时，「闲置资金比例 100% 时的规则目标口数」的估算
+    （2026-10-07 用户「ETF的话也要可以进行调仓 现在的button我看是非活性」）= 现在的口数 + 最近一次决策排的开盘单（买 + / 卖 −）。
+    那次决策的比例是 100%（以前的代码没有比例）；规则在再平衡带（总权益的 10%）以内不调 → 与准确的目标可能差一点；
+    下一次决策写入准确的数（之后按准确的数）。plan = (方向, 口数) 或 None。"""
+    side, n = (list(plan or []) + [None, 0])[:2]
+    d = int(n or 0) if side == "BUY" else -int(n or 0) if side == "SELL" else 0
+    return max(0, int(cur or 0) + d)
+
+
+def core_u100s(book: dict | None) -> tuple[dict, bool]:
+    """各只核心 ETF 的规则目标口数（闲置资金比例 100% 时）→ ({票: 口数}, 是不是估算)。执行器算过（core_rule.units100）→ 用它；
+    还没算过、比例也还是 100%（没改过）→ 按 core_u100_est 估算（与执行器 now_phase 同一个算法）；比例改过却没算过 → ({}, False)。"""
+    cr = (book or {}).get("core_rule") or {}
+    if cr.get("units100"):
+        return {t: int(n) for t, n in cr["units100"].items()}, False
+    pct = float(((book or {}).get("manual") or {}).get("core_pct", 100.0))
+    if abs(float(cr.get("applied", 100.0)) - 100.0) > 1e-9 or abs(pct - 100.0) > 1e-9:
+        return {}, False
+    st = (book or {}).get("state") or {}
+    units, plan = st.get("core_units") or {}, st.get("core_plan") or {}
+    out = {t: core_u100_est(units.get(t, 0), plan.get(t)) for t in sorted(set(units) | set(plan))}
+    return {t: n for t, n in out.items() if n > 0 or int(units.get(t, 0) or 0) > 0}, True
+
+
 def core_info(book: dict | None, t: str) -> dict | None:
     """一只核心 ETF 的调仓用数字：{"cur" 现在口数, "u100" 规则目标（闲置资金比例 100% 时；最近一次决策算的）, "px", "lot", "eq",
-    "pct" 现在的比例, "selling" 规则这次在卖它}；不是核心 ETF / 执行器还没算过 → None。"""
+    "pct" 现在的比例, "selling" 规则这次在卖它, "approx" 规则目标是估算的（执行器还没算过：core_u100s）}；
+    不是核心 ETF / 规则目标估不了 → None。"""
     st = (book or {}).get("state") or {}
     cr = (book or {}).get("core_rule") or {}
-    if t not in core_tickers(book or {}) or t not in (cr.get("units100") or {}):
+    u100s, approx = core_u100s(book)
+    if t not in core_tickers(book or {}) or t not in u100s:
         return None
     hist = st.get("history") or []
     px = float((cr.get("px") or {}).get(t) or (st.get("core_last") or {}).get(t) or 0)
     plan = (st.get("core_plan") or {}).get(t) or []
     cur = int((st.get("core_units") or {}).get(t, 0))
-    u100 = int((cr.get("units100") or {}).get(t, 0))
-    return {"cur": cur, "u100": u100, "px": px, "lot": max(1, int((cr.get("lot") or {}).get(t) or 1)),
+    u100 = int(u100s.get(t, 0))
+    return {"cur": cur, "u100": u100, "px": px, "lot": core_lot(book, t),
             "eq": float(hist[-1][1]) if hist else 0.0, "pct": float(((book or {}).get("manual") or {}).get("core_pct", 100.0)),
-            "selling": u100 <= 0 or (len(plan) == 2 and plan[0] == "SELL" and int(plan[1]) >= cur > 0)}
+            "selling": u100 <= 0 or (len(plan) == 2 and plan[0] == "SELL" and int(plan[1]) >= cur > 0), "approx": approx}
 
 
 def core_effects(book: dict | None, pct: float, skip: str | None = None) -> list[tuple[str, int, int]]:
     """闲置资金比例改成 pct 时，各只核心 ETF（skip 以外）现在的口数 → 新比例下的目标口数（只列会变的）：[(票, 现在, 目标)]。
     比例对全部核心 ETF 一起生效（规则同时拿两只以上时，调一只另一只也跟着变）。"""
     st = (book or {}).get("state") or {}
-    cr = (book or {}).get("core_rule") or {}
-    u100s = dict(cr.get("units100") or {})
+    u100s = dict(core_u100s(book)[0])                        # 执行器还没算过 → 估算（比例还是 100% 时）
     if float(pct) <= 0:                                     # 比例 0%：拿着的都卖（执行器还没算过规则目标额的也一样）
         u100s.update({t: u100s.get(t, 0) for t, u in (st.get("core_units") or {}).items() if int(u) > 0})
     out = []
     for t, n100 in sorted(u100s.items()):
-        cur, lot = int((st.get("core_units") or {}).get(t, 0)), max(1, int((cr.get("lot") or {}).get(t) or 1))
+        cur, lot = int((st.get("core_units") or {}).get(t, 0)), core_lot(book, t)
         tg = int(math.floor(int(n100) * float(pct) / 100 / lot + 1e-9)) * lot
         if t != skip and tg != cur and (cur > 0 or tg > 0):
             out.append((t, cur, tg))
@@ -390,7 +428,7 @@ def core_rec(rec: dict, book: dict | None) -> dict | None:
         return out
     c = core_info(book, t)
     if c is None or c["cur"] <= 0:
-        raise ValueError(f"现在没有 {t}（或执行器还没算过它的目标额：下一次运行之后再调）")
+        raise ValueError(f"现在没有 {t}（或闲置资金比例改过、执行器还没算过它的目标额：下一次运行之后再调）")
     if c["selling"]:
         raise ValueError(f"规则这次在卖 {t}（熊市 / 换了 ETF）：开盘卖出，不用调")
     if c["px"] <= 0:
@@ -567,8 +605,9 @@ def now_due(tag: str, book: dict | None, now: dt.datetime | None = None) -> bool
     want = float(((book or {}).get("manual") or {}).get("core_pct", 100.0))
     if cr.get("units100"):                                  # 改了闲置资金比例、还没照它调（与执行器的 _core_pending 同一个判断）
         pend = cr.get("decided_on") == st.get("last_date") and abs(want - float(cr.get("applied", cr.get("pct", want)))) > 1e-9
-    else:                                                   # 执行器还没算过规则目标额：只有卖出全部（比例 0%）
-        pend = want <= 0 and any(int(u) > 0 for u in (st.get("core_units") or {}).values()) and cr.get("applied") != want
+    else:                                                   # 执行器还没算过规则目标额：卖出全部（比例 0%）照样卖；别的比例按估算的目标调（core_u100s）
+        pend = (abs(want - float(cr.get("applied", 100.0))) > 1e-9
+                and (any(int(u) > 0 for u in (st.get("core_units") or {}).values()) or bool(st.get("core_plan"))))
     if pend and cr.get("defer") != today:
         try:
             age = (now - dt.datetime.fromisoformat(str(cr["tried"]))).total_seconds() if cr.get("tried") else None
@@ -1182,6 +1221,41 @@ def sale_note(tag: str, now: dt.datetime) -> str:
     return f"实际在{when_text(now)}成交，按那时的价格"
 
 
+DELAY_MIN = 20                                              # Yahoo 1 分钟线大约晚这么多分钟（显示用）
+NOW_BUY_BUF = 0.005                                         # 盘中买单的限价：现价 +0.5%（执行器 live_unified 用同一个数；不超过决策日收盘 ×1.03）
+SESSION_MIN = 300                                           # 东证一天的交易时间（09:00〜11:30 + 12:30〜15:30，分钟）
+
+
+def order_basis(paper: bool, now: dt.datetime, side: str) -> str:
+    """下单用什么价（一句话；2026-10-07 用户「现在卖出的时候看到的股价差了20分钟 不能直接知道当时股价的话能依据什么价位进行下单」）。
+    页面上的现价是 Yahoo 1 分钟线（约晚 20 分钟），只用来看和估算；下单时：
+    立花 + 盘中 → 执行器下单那一刻向立花取实时现在值：卖 = 限价 现在值 −0.5%、买 = 限价 min(现在值 +0.5%, 决策日收盘 ×1.03)；
+    模拟账户 + 盘中 → 按执行器运行那一刻的 Yahoo 现价（也晚约 20 分钟）成交；午休 → 12:30 后场开始后同上；
+    开盘前 / 收盘后 → 卖 = 寄付成行（按开盘价）、买 = 寄付指値 收盘 ×1.03（开盘价更高就不买；开盘后才处理的按实时现价、限价同上）。"""
+    mode = timing(now)[0]
+    if mode in ("now", "lunch"):
+        head = "12:30 后场开始后，" if mode == "lunch" else ""
+        if paper:
+            return head + "模拟账户按执行器下单那一刻的 Yahoo 现价成交（与页面一样约晚 20 分钟" + (
+                "）" if side == "SELL" else "；现价超过收盘 ×1.03 → 不买）")
+        return (head + "立花在执行器下单那一刻取实时现价，" + ("限价 = 实时现价 −0.5%（成交多在限价〜现价之间）" if side == "SELL"
+                else "限价 = min(实时现价 +0.5%, 收盘 ×1.03)（现价已超过收盘 ×1.03 → 不买）"))
+    when = when_text(now)
+    return (f"{when}按开盘价卖（寄付成行）" if side == "SELL"
+            else f"{when}买：寄付指値 = 收盘 ×1.03（开盘价更高就不买；开盘后才处理的按实时现价，限价同样 ≤ 收盘 ×1.03）")
+
+
+def delay_range(sigma_d: float | None, minutes: float | None) -> float | None:
+    """现价晚了 minutes 分钟：这段时间里价格通常（约 95%）在 ±几 % 以内 = 2 × 日波动 × √(分钟 ÷ 一天的交易分钟)（只是估算）。"""
+    try:
+        s, m = float(sigma_d), float(minutes)
+    except (TypeError, ValueError):
+        return None
+    if not (math.isfinite(s) and s > 0 and math.isfinite(m) and m > 0):
+        return None
+    return round(2 * s * math.sqrt(min(m, SESSION_MIN) / SESSION_MIN) * 100, 2)
+
+
 def est_lines(e: dict | None, note: str = "") -> list[str]:
     """卖出的预计收益几行（面板的卖出确认框、命令行）：买入 → 现价 / 预计卖出 → 预计收益与收益率 → 手续费、税。"""
     if not e:
@@ -1257,7 +1331,7 @@ def lines(sm: dict | None, today: str | None = None) -> list[str]:
 
 
 __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEFAULT", "CAP_PCT", "MAX_POS", "SESSION", "Manual",
-           "append", "read_all", "unseen", "cancelled", "normalize", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "timing", "when_text",
+           "append", "read_all", "unseen", "cancelled", "normalize", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text",
            "next_window", "due",
            "RULE_TEXT", "NOW_NO_CANCEL",
            "now_due", "status_text", "entry_why", "buy_size", "requests_path", "position_pct", "target_shares", "adjust_plan",

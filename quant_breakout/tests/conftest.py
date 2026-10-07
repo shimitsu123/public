@@ -18,6 +18,7 @@ import pytest  # noqa: E402
 def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("QBREAK_HOME", str(tmp_path))
     monkeypatch.delenv("JQUANTS_API_KEY", raising=False)     # 测试绝不连 J-Quants（sim-day 的行情交叉核对没有キー就跳过）
+    monkeypatch.setattr("qbreak.watch_prob.FILE", tmp_path / "watch_prob.json")   # 观察中的比例表：默认没有（要用的测试自己写）
     yield tmp_path
 
 

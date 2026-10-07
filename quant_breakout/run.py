@@ -3658,7 +3658,8 @@ def cmd_manual(a) -> int:
         stop_ = float(rec["pct"]) <= 0
         if c_ and not stop_:
             print(f"按最近收盘 ¥{c_['px']:,.0f} 估算：{rec['ticker']} {c_['cur']:,} → {int(rec['target']):,} 口"
-                  f"（闲置资金比例 {c_['pct']:g}% → {rec['pct']:g}%）")
+                  f"（闲置资金比例 {c_['pct']:g}% → {rec['pct']:g}%）"
+                  + ("；规则目标额执行器还没算过：100% 先按现在的口数估算（下一次决策用准确的数）" if c_.get("approx") else ""))
         fx_ = MO.core_effects(b_, rec["pct"], skip=rec.get("ticker"))
         if fx_:
             print("★ 比例对全部核心 ETF 一起生效：" + "、".join(f"{x} {u0:,} → {u1:,} 口" for x, u0, u1 in fx_))

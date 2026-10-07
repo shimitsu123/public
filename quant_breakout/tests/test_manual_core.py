@@ -97,13 +97,44 @@ def test_core_rec_converts_sell_trim_adjust_into_the_ratio():
         assert _conv(bk, kind="sell")["pct"] == 0.0                       # 卖出全部 = 比例 0%：不用规则目标额（执行器还没算过 / 规则在卖也行）
     with pytest.raises(ValueError, match="现在没有"):
         _conv(_cbook(units=0), kind="sell")
-    bad = [(_cbook(units=0), "现在没有"), ({**_cbook(), "core_rule": {}}, "现在没有"), (_cbook(u100=0), "规则这次在卖"),
-           (_cbook(plan={"1655.T": ["SELL", 1130]}), "规则这次在卖"), (_cbook(px=0), "收盘价")]
-    for bk, why in bad:                                                   # 调仓要规则目标额
+    nocr = {**_cbook(), "core_rule": {}}
+    bad = [(_cbook(units=0), "现在没有"), ({**nocr, "manual": {"core_pct": 80.0}}, "现在没有"), (_cbook(u100=0), "规则这次在卖"),
+           (_cbook(plan={"1655.T": ["SELL", 1130]}), "规则这次在卖"), (_cbook(px=0), "收盘价"), (nocr, "收盘价")]
+    for bk, why in bad:                                                   # 调仓要规则目标额（比例改过又没算过 → 估不了）、收盘价
         with pytest.raises(ValueError, match=why):
             _conv(bk, kind="adjust", unit="shares", value=500)
     with pytest.raises(ValueError, match="目标口数"):
         MO.normalize({"kind": "core", "pct": 50, "ticker": "1655", "target": -1})
+
+
+def test_core_target_estimate_before_the_first_rule_run():
+    """执行器还没用新代码决策过（没有 core_rule.units100）：规则目标（比例 100%）≈ 现在的口数 + 这次决策排的开盘单；
+    比例改过（≠ 100%）或已经照估算调过 → 估不了（等下一次决策）。"""
+    assert MO.core_u100_est(1130, None) == 1130 and MO.core_u100_est(1130, ["BUY", 20]) == 1150
+    assert MO.core_u100_est(1130, ("SELL", 30)) == 1100 and MO.core_u100_est(10, ["SELL", 30]) == 0
+    b = _cbook()
+    b["core_rule"] = {}
+    b["state"]["core_last"] = {"1655.T": 700.0}
+    assert MO.core_u100s(b) == ({"1655.T": 1130}, True)
+    c = MO.core_info(b, "1655.T")
+    assert (c["u100"], c["lot"], c["px"], c["approx"], c["selling"]) == (1130, 10, 700.0, True, False)
+    a = _conv(b, kind="adjust", unit="shares", value=1000)
+    assert (a["pct"], a["target"]) == (88.5, 1000)                       # 1000 ÷ 1130（估算的 100%）
+    assert _conv(b, kind="adjust", unit="shares", value=5000)["target"] == 1130         # 不超过估算的规则目标
+    b["state"]["core_plan"] = {"1655.T": ["BUY", 20]}
+    assert MO.core_info(b, "1655.T")["u100"] == 1150
+    b["state"]["core_plan"] = {"1655.T": ["SELL", 1130]}
+    assert MO.core_info(b, "1655.T")["selling"]                           # 规则这次卖光 → 不调
+    b["state"]["core_plan"] = {}
+    assert MO.core_effects(b, 50.0) == [("1655.T", 1130, 560)]
+    for bad in ({"applied": 0.0}, {"applied": 80.0}):                    # 今天已经照别的比例调过
+        assert MO.core_u100s({**b, "core_rule": bad}) == ({}, False) and MO.core_info({**b, "core_rule": bad}, "1655.T") is None
+    assert MO.core_u100s({**b, "manual": {"core_pct": 80.0}}) == ({}, False)
+    assert MO.core_u100s(_cbook())[1] is False                            # 算过 → 用准确的数
+    b["manual"]["core_pct"] = 88.5                                       # 面板 / 命令行写了 → 执行器盘中照估算调（now_due 叫执行器）
+    assert MO.now_due("paper", b, dt.datetime(2026, 10, 6, 10, 0, tzinfo=JST))
+    b["core_rule"] = {"applied": 88.5}
+    assert not MO.now_due("paper", b, dt.datetime(2026, 10, 6, 10, 0, tzinfo=JST))
 
 
 def test_check_and_now_due_for_the_ratio():
@@ -333,10 +364,16 @@ def test_render_buttons_under_the_held_etf():
     assert "现在 1,130 口 · 约 ¥791,000 · 约占权益 79.1% · 闲置资金比例 100%" in h
     assert "id='core'" not in h                                            # 拿着 ETF：在它下面调，不另外放比例卡片
     assert "<div class='qt small' data-q='1655.T'></div>" in h and "<div class='qt small' data-q='7203.T'></div>" in h   # 现价的位置
-    _pbook(rule=False)                                                     # 执行器还没算过规则目标额：卖出全部照样可以，调仓等下一次运行
+    b = _pbook(rule=False)                                                 # 执行器还没算过规则目标额：100% 先按现在的口数估算，调仓照样可以
+    b["state"]["core_last"] = {"1655.T": 700.0}
+    (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
+    h = panel.render("paper", "tok", now=AT)
+    assert "data-act='core-sell'" in h and "data-act='adj' data-t='1655.T'" in h and "data-u100='1130'" in h and "data-approx='1'" in h
+    assert "规则目标额还没算过（执行器下一次决策才算）：100% 先按现在的口数估算" in h and "id='core'" not in h
+    _pbook(rule=False, pct=80.0)                                           # 比例改过却没算过：调仓等下一次运行
     h = panel.render("paper", "tok", now=AT)
     assert "data-act='core-sell'" in h and "data-act='adj' data-t='1655.T'" not in h and "id='core'" in h
-    assert "现在 1,130 口 · 调仓在执行器下一次运行（交易日 07:40）之后可用" in h
+    assert "现在 1,130 口 · 闲置资金比例改过：调仓在执行器下一次运行（交易日 07:40）之后可用" in h
     _pbook(plan={"1655.T": ["SELL", 1130]})
     h = panel.render("paper", "tok", now=AT)
     assert "规则在开盘卖出（熊市 / 换 ETF）" in h and "data-act='core-sell'" in h and "data-act='adj' data-t='1655.T'" not in h

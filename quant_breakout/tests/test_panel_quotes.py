@@ -119,14 +119,15 @@ def test_page_has_quote_slots_note_and_refresh():
 
 
 def test_quote_line_in_node(tmp_path):
-    """每只持仓下面的现价一行（盘中 = 时刻；不是今天 = 日期 + 「最近一个交易日」；涨红跌绿的颜色跟 K 线一样）。没有 node 就跳过。"""
+    """每只持仓下面的现价一行（盘中 = 时刻；不是今天 = 日期 + 「最近一个交易日」；涨红跌绿的颜色跟 K 线一样）+ 第二行「预计卖价」
+    （下单按什么价：模拟账户 = Yahoo 现价、立花 = 实时现价 −0.5% 的限价；收盘后 = 开盘价）+ 晚了几分钟的范围 + 预计收益。没有 node 就跳过。"""
     import shutil
     import subprocess
     node = shutil.which("node")
     if not node:
         pytest.skip("没有 node")
     from test_panel import _js_fn
-    fns = "\n".join(_js_fn(panel._JS, n) for n in ("nd", "pxs", "pcs", "qText", "showQ"))
+    fns = "\n".join(_js_fn(panel._JS, n) for n in ("nd", "pxs", "pcs", "syen", "spc", "hmOf", "qText", "rngText", "sellLines", "showQ"))
     js = """
 class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[]; this._t=''; this.className=''; this.dataset={}; }
   appendChild(c){ this.children.push(c); return c; }
@@ -135,13 +136,22 @@ const mk=t=>{ const e=new El('div'); e.dataset.q=t; return e; };
 const QS=[mk('7203.T'), mk('1655.T'), mk('9999.T')], NOTE=new El('div');
 const document={createElement:t=>new El(t), querySelectorAll:s=>QS};
 const $=s=>s==='#qt-note' ? NOTE : null;
+const fmt=n=>Number(n).toLocaleString('ja-JP');
 const yen=v=>'¥'+Math.round(v).toLocaleString('ja-JP');
+const CFG={paper:true};
 __FNS__
-showQ({ok:true, src:'Yahoo 1 分钟线（约晚 20 分钟）', live:true, asof:'2026-10-06T10:00+09:00', rows:{
-  '7203.T':{px:2650, at:'2026-10-06T09:40+09:00', today:true, kind:'stock', n:100, value:265000, chg_pct:1.92, pl_pct:6.0},
-  '1655.T':{px:707, at:'2026-10-03T15:24+09:00', today:false, kind:'core', n:1130, value:798910, chg_pct:-0.5, pl_pct:null}}});
-const out={a:QS[0].textContent, ac:QS[0].children[0].className, b:QS[1].textContent, bc:QS[1].children[0].className,
+const J={ok:true, src:'Yahoo 1 分钟线（约晚 20 分钟）', live:true, asof:'2026-10-06T10:00+09:00',
+  basis:{SELL:'模拟账户按执行器下单那一刻的 Yahoo 现价成交（与页面一样约晚 20 分钟）', BUY:'x'}, rows:{
+  '7203.T':{px:2650, at:'2026-10-06T09:40+09:00', today:true, kind:'stock', n:100, value:265000, chg_pct:1.92, pl_pct:6.0, delay:20, rng:0.9,
+            est:{pnl:15000, net_pct:5.4, ret_pct:6.0}},
+  '1655.T':{px:707, at:'2026-10-03T15:24+09:00', today:false, kind:'core', n:1130, value:798910, chg_pct:-0.5, pl_pct:null}}};
+showQ(J);
+const L=e=>e.children.slice(1).map(c=>c.textContent);
+const out={a:QS[0].children[0].textContent, a2:L(QS[0]), ac:QS[0].children[0].className,
+           b:QS[1].children[0].textContent, b2:L(QS[1]), bc:QS[1].children[0].className,
            c:QS[2].textContent, note:NOTE.textContent};
+CFG.paper=false; showQ(J); out.t2=L(QS[0]);
+showQ({...J, live:false, basis:{SELL:'10/07 开盘按开盘价卖（寄付成行）'}}); out.n2=L(QS[0]); out.note3=NOTE.textContent;
 showQ({ok:false}); out.gone=QS[0].textContent; out.note2=NOTE.textContent;
 showQ({ok:true, src:'Yahoo', live:false, asof:'2026-10-06T18:00+09:00', rows:{}}); out.none=QS[0].textContent;
 console.log(JSON.stringify(out));
@@ -152,8 +162,15 @@ console.log(JSON.stringify(out));
     assert p.returncode == 0, p.stderr[-800:]
     o = json.loads(p.stdout)
     assert o["a"] == "现价 ¥2,650（09:40） · 比昨收 +1.92% · 市值约 ¥265,000（100 股） · 比买入价 +6.00%" and o["ac"] == "up"
+    assert o["a2"] == ["预计卖价 约 ¥2,650 · 预计收益 +¥15,000（+5.40%，扣手续费、税前）",
+                       "下单：模拟账户按执行器下单那一刻的 Yahoo 现价成交（与页面一样约晚 20 分钟）；"
+                       "晚约 20 分钟：现在的价通常在 ¥2,626〜¥2,674（±0.9%）"]
     assert o["b"] == "现价 ¥707.0（10/03 15:24，最近一个交易日） · 比昨收 -0.50% · 市值约 ¥798,910（1,130 口）" and o["bc"] == "down"
+    assert o["b2"][0] == "预计卖价 约 ¥707.0" and not any("晚约" in x for x in o["b2"])   # 不是今天的价：没有范围、没有预计收益（成本不明）
+    assert o["t2"][0].startswith("预计卖价 约 ¥2,637〜¥2,650 · ")              # 立花：限价 = 实时现价 −0.5%
+    assert o["n2"][0].startswith("预计卖价：开盘价（参考现价 ¥2,650） · ") and o["n2"][1].startswith("下单：10/07 开盘按开盘价卖（寄付成行）")
     assert o["c"] == "现价取不到（Yahoo 没有这只的分钟线）"
-    assert o["note"] == "现价：Yahoo 1 分钟线（约晚 20 分钟），盘中每 1 分钟刷新；10:00 取"
-    assert o["gone"] == "" and o["note2"] == o["note"]                     # 接口出错：不显示错的价，说明一行留着上一次的
+    assert o["note"] == ("现价：Yahoo 1 分钟线（约晚 20 分钟），盘中每 1 分钟刷新；10:00 取；只用来看和估算 —— "
+                         "下单时立花用实时现价（模拟账户按 Yahoo 现价）")
+    assert o["gone"] == "" and o["note2"] == o["note3"]                    # 接口出错：不显示错的价，说明一行留着上一次的
     assert o["none"] == "现价暂时取不到（Yahoo 没回应：会自动再取）"            # 一只也没取到 = Yahoo 没回应

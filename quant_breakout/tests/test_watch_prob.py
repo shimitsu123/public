@@ -107,7 +107,7 @@ def test_load_and_for_row(tmp_path):
 
 
 def test_repo_table_if_present_is_valid():
-    t = WP.load()
+    t = WP.load(ROOT / "var" / "watch_prob.json")                        # 入库的那份（测试默认把 WP.FILE 指到空的临时目录）
     if t is None:
         pytest.skip("研究判定没写表（或还没运行）")
     assert t["h"] == 10 and t["m"] == 50 and "show_pct" in t

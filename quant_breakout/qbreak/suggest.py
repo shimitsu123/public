@@ -5,16 +5,20 @@
   triggered  今天收盘出了买入信号（规则明天开盘买；买不了的写出是哪道闸门 / 名额 / 钱）
   imminent   即将触发：横盘 + MACD 0 轴附近 + 离金叉不到收盘价的 0.15% + 量比 ≥ 1
   watch      观察：横盘 + MACD 0 轴附近（按条件就绪度取前几只）
-排序 = 状态；「快要出」「观察中」两组里按离买入信号的远近（2026-10-07 用户「观察中的股票要按照即将有可能会买的顺序进行排序」）：
-  ① 闸门（资格检查挡的放最后，新仓倍数 0 / 决算前的其次）→ ② 今天就不满足、金叉那天多半也不满足的条件数（横盘 / 0 轴附近 /
-  周线量比 W2 / 出货日 …）→ ③ MACD 估计几天后金叉（在信号线下往上靠的按天数；往下走的其次；已经在线上的最后）→ ④ 今天的量比高的先 →
-  ⑤ 条件就绪度（0〜100）。只是排序与展示（日报的候补队列照旧：状态 → 顺风 / 逆风 → 就绪度），不改交易。
+排序（只是排序与展示，不改交易；日报的候补队列照旧：状态 → 顺风 / 逆风 → 就绪度）：
+  出了信号的在前；其余（快要出 + 观察中）合成一组（2026-10-07 用户「观察的股票要进行买入优先级排序 比如最上面的最大概率会买入」，
+  登记研究 scripts/watch_prob_study.py 判定 A）：① 闸门（资格检查挡的放最后，新仓倍数 0 / 决算前的其次）→ ② 之后 10 个交易日内出买入信号的
+  历史比例（qbreak/watch_prob.py：同样情况 = MACD 在哪 × 还差的条件数 × 今天的量比）高的先 → ③ near_key 的其余部分。
+  没有比例表（var/watch_prob.json）→ 以前的顺序：快要出 → 观察中，组内 near_key = ① 闸门 → 今天就不满足、金叉那天多半也不满足的条件数
+  （横盘 / 0 轴附近 / 周线量比 W2 / 出货日 …）→ MACD 估计几天后金叉（在信号线下往上靠的按天数；往下走的其次；已经在线上的最后）→
+  今天的量比高的先 → 条件就绪度（0〜100）。
 全部列出（2026-10-07 用户「建议的股票不限制个数」；以前最多 12 只、观察中最多 6 只）；拿着的票、核心 ETF 不列。每只附：
   rule  规则怎么处理（planned 已安排 / manual 手动买入已安排 / blocked 信号成立但不买 + 理由 / none 还没触发，规则不会买）
   buy   手动买入：block = 硬闸门（资格检查 / 立花能不能买 / 不在交易股票池 / 手动卖出后不买回）→ 页面不让点；
         warn = 现在会被挡、下一次决策可能变的（新仓倍数 0 / 决算前）；按规则的仓位估算（股数、金额、限价 = 收盘 ×1.03）
   trend 日K / 周K / 月K 的趋势标签（qbreak/kline.py；执行器再用长一点的行情补）
   near  离买入信号还差什么（proximity；只给「快要出」「观察中」）+ near_text 一句话
+  prob  之后 10 个交易日内出买入信号的历史比例（watch_prob.for_row：p / n / y / h / cell / show；有比例表才有）
 执行器下单前还会按当时的价格、权益、名额、闸门再查一遍（这里只是预览）。
 """
 from __future__ import annotations
@@ -24,6 +28,7 @@ import math
 import numpy as np
 import pandas as pd
 
+from . import watch_prob as WP
 from .calendar_jp import next_trading_day
 from .tick import round_to_tick
 from .unified import market_of
@@ -111,6 +116,31 @@ def near_key(row: dict) -> tuple:
     w = n.get("where")
     d = int(n.get("days") or MAX_DAYS) if w == "below_up" else {"below_down": MAX_DAYS + 1, "above": MAX_DAYS + 2}.get(w, MAX_DAYS + 3)
     return (tier, len(n.get("miss") or []), d, -float(row.get("vol_ratio") or 0), -float(row.get("score") or 0))
+
+
+def order_key(row: dict, ranked: bool) -> tuple:
+    """建议的股票的顺序（小的在前）。ranked（有比例表）：出了信号的在前，其余（快要出 + 观察中）一组：闸门 → 比例高的先 → near_key 其余；
+    没有比例表：出了信号 → 快要出 → 观察中，组内 near_key。出了信号的组内保持原来的顺序（scan 的就绪度）。"""
+    st = row.get("status")
+    if st == "triggered":
+        return (0,)
+    nk = near_key(row)
+    if ranked:
+        p = (row.get("prob") or {}).get("p")
+        return (1, nk[0], -float(p) if p is not None else 1.0) + nk[1:]
+    return ({"imminent": 1, "watch": 2}.get(st, 9),) + nk
+
+
+def rank(rows: list, table: dict | None = None) -> list:
+    """给「快要出」「观察中」的行补上 prob（没有的话）并按 order_key 排（稳定排序）；table = None → 读 var/watch_prob.json。
+    面板渲染时也用（执行器早上写的旧汇总没有 prob → 这里补，更新代码后不用等下一次运行）。"""
+    tab = WP.load() if table is None else table
+    for r in rows:
+        if tab and "prob" not in r:
+            pr = WP.for_row(r, tab)
+            if pr:
+                r["prob"] = pr
+    return sorted(rows, key=lambda r: order_key(r, bool(tab)))
 
 
 def rule_shares(eng, t: str, i: int, em: float) -> int:
@@ -219,12 +249,14 @@ def build(ind: dict, eng, i: int, params, pool: list[str] | None = None, names: 
         if r["status"] != "triggered":                       # 离买入信号还差什么（排序 + 页面一句话）
             out[-1]["near"] = proximity(frames[t], params)
             out[-1]["near_text"] = near_text(out[-1]["near"], params)
-    order = {"triggered": 0, "imminent": 1, "watch": 2}       # 出了信号的照就绪度；后两组按离买入信号的远近（稳定排序）
-    out.sort(key=lambda x: (order.get(x["status"], 9),) + (near_key(x) if x["status"] != "triggered" else ()))
+    tab = WP.load()                                            # 有比例表 → 快要出 + 观察中按历史比例排（研究判定 A）；没有 → 以前的顺序
+    out = rank(out, tab or {})
     return {"asof": asof, "fill_day": fill.isoformat(), "equity": round(eq), "rows": out, "counts": counts,
+            "ranked": bool(tab), "prob_h": int((tab or {}).get("h") or WP.H), "prob_pct": bool((tab or {}).get("show_pct", True)),
             "max_positions": int(cfg.max_positions), "position_pct": float(cfg.position_pct),
             "cap_pct": round(float(cfg.max_position_pct) * 100, 2),
-            "note": "规则的候选（快要出 / 观察中按离买入信号的远近排序），不是收益预测，也不是建议；手动买入是你自己的决定。"}
+            "note": ("规则的候选（快要出 + 观察中按之后 10 个交易日内出买入信号的历史比例排）" if tab else
+                     "规则的候选（快要出 / 观察中按离买入信号的远近排序）") + "，不是收益预测，也不是建议；手动买入是你自己的决定。"}
 
 
 def lines(sg: dict | None) -> list[str]:
@@ -238,4 +270,4 @@ def lines(sg: dict | None) -> list[str]:
     return out
 
 
-__all__ = ["build", "lines", "rule_shares", "proximity", "near_text", "near_key", "MAX_DAYS", "FAR_DAYS", "STATUS", "RULE"]
+__all__ = ["build", "lines", "rule_shares", "proximity", "near_text", "near_key", "order_key", "rank", "MAX_DAYS", "FAR_DAYS", "STATUS", "RULE"]

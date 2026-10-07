@@ -282,6 +282,41 @@ def test_render_watch_rows_show_how_far_from_a_buy_signal():
     assert html.count("按离买入信号的远近排（越上面越可能先出信号；只是估算）") == 1   # 只有带 near 的组（旧的汇总没有 → 不写）
 
 
+def test_render_ranks_watch_rows_by_the_registered_probability(monkeypatch, tmp_path):
+    """有比例表（研究判定 A）：快要出 + 观察中合成一组，按 闸门 → 历史比例 → near_key 排，每只写第几 + 历史比例（旧汇总也在渲染时补）。"""
+    from qbreak import watch_prob as WP
+    _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
+    rows = [dict(r) for r in SG_ROWS]
+    rows[1] = {**rows[1], "buy": {**rows[1]["buy"], "block": None, "limit": 30900}, "macd_gap_pct": -0.05, "vol_ratio": 1.2,
+               "near": {"where": "below_up", "days": 1, "miss": ["周线量比（0.8，要 ≥ 1）"], "vol": 1.2}}
+    rows[2] = {**rows[2], "buy": {**rows[2]["buy"], "warn": []}, "macd_gap_pct": -0.3, "vol_ratio": 0.8,
+               "near": {"where": "below_down", "days": None, "miss": [], "vol": 0.8}}
+    extra = {"ticker": "6758.T", "code": "6758", "name": "ソニーG", "status": "watch", "signal": False, "score": 40.0, "close": 3000.0,
+             "rule": {"state": "none", "text": ""}, "macd_gap_pct": 0.5, "vol_ratio": 0.5,
+             "near": {"where": "above", "days": None, "miss": [], "vol": 0.5},
+             "buy": {"block": None, "warn": [], "lot": 100, "px": 3000.0, "limit": 3090, "rule_shares": 100}}
+    _sm(rows + [extra])
+    t = WP.fit([("down_far", "m0", "v_lo", int(k < 9)) for k in range(100)] + [("up_d1", "m1", "v_hi", int(k < 4)) for k in range(100)]
+               + [("above_far", "m0", "v_lo", 0) for _ in range(300)], extra={"show_pct": True})
+    fp = tmp_path / "wp.json"
+    fp.write_text(json.dumps(t), encoding="utf-8")
+    monkeypatch.setattr(WP, "FILE", fp)
+    html = panel.render("paper", "t" * 40, AT)
+    assert "<h3 class='sgh'>今天出了买入信号（1 只）</h3>" in html
+    assert "<h3 class='sgh'>观察中 · 3 只（按出买入信号的可能性排）</h3>" in html and "快要出买入信号（1 只）" not in html
+    i1, i2, i3 = html.index("<b>9984</b>"), html.index("<b>8035</b>"), html.index("<b>6758</b>")
+    assert i1 < i2 < i3                                                    # 比例：9984 > 8035 > 6758（与以前的 快要出 → 观察中 不同）
+    assert "<span class='rk'>1</span><b>9984</b>" in html and "<span class='rk'>3</span><b>6758</b>" in html
+    assert "<span class='chip hot'>快要出</span>" in html                     # 快要出的照样标出来
+    p1 = WP.prob(t, "down_far", "m0", "v_lo")
+    assert f"之后 10 个交易日内出买入信号：历史上约 <b>{p1['p'] * 100:.1f}%</b>（同样情况 100 次）" in html
+    assert "越上面越可能先出买入信号（同样情况的历史比例：日経225，2006〜2026）" in html
+    monkeypatch.setattr(WP, "FILE", tmp_path / "wp2.json")                 # 研究判定 B（只排序）：不写百分比
+    (tmp_path / "wp2.json").write_text(json.dumps({**t, "show_pct": False}), encoding="utf-8")
+    html = panel.render("paper", "t" * 40, AT)
+    assert "历史上约" not in html and "按之后 10 个交易日内出买入信号的历史比例排" in html
+
+
 def test_submit_buy_writes_instruction_and_checks():
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T"]})
     _sm()

@@ -105,6 +105,35 @@ def test_sell_all_before_the_first_rule_run_and_no_spurious_signal():
     assert "core_signal" not in r.ux.book["manual"] and r.eng.st.core_units.get("1655.T", 0) == 0 and not r.ux.blocked
 
 
+def test_adjust_before_the_first_rule_run_uses_the_estimate():
+    """更新之后第一次决策之前（没有 core_rule.units100）也能调仓（2026-10-07 用户「ETF的话也要可以进行调仓 现在的button我看是非活性」）：
+    规则目标（比例 100%）先按现在的口数估算 → 盘中照它卖到目标；第二天对账一致，决策写入准确的规则目标，不再调回去。"""
+    r = _paper("pa")
+    _morning(r, until=12)
+    u0 = r.eng.st.core_units["1655.T"]
+    r.ux.book.pop("core_rule")                                             # 更新之后第一次运行之前
+    c = MO.core_info(r.ux.book, "1655.T")
+    assert c["approx"] and c["u100"] == u0 + MO.core_u100_est(0, r.eng.st.core_plan.get("1655.T"))
+    tg = (u0 // 2) // 10 * 10
+    rec = _conv(r.ux.book, kind="adjust", unit="shares", value=tg)
+    assert rec["kind"] == "core" and rec["target"] == tg and 0 < rec["pct"] < 100
+    _write(r.tag, "M-core-a1", **rec)
+    r.now["t"] = _at(r, 10, 0)
+    assert MO.now_due(r.tag, r.ux.book, r.now["t"])
+    r.ux.now_phase(_quote(PX))
+    (o,) = _core_orders(r)
+    assert o.side == "SELL" and o.qty == u0 - tg and o.status == "FILLED"
+    cr = r.ux.book["core_rule"]
+    assert cr["applied"] == rec["pct"] and "units100" not in cr
+    assert not MO.now_due(r.tag, r.ux.book, _at(r, 10, 30))                 # 已经调了：面板不再叫
+    assert MO.core_info(r.ux.book, "1655.T") is None                      # 今天调过：等下一次决策（面板显示盘中的单）
+    _morning(r)                                                            # 对账 → 决策（这次写入准确的规则目标）
+    assert r.eng.st.core_units["1655.T"] == tg and r.ux.book["core_rule"]["units100"]["1655.T"] > 0
+    assert r.ux.book["core_rule"]["pct"] == rec["pct"] and not r.ux.blocked
+    _morning(r)
+    assert abs(r.eng.st.core_units["1655.T"] - tg) <= 0.1 * u0 and not r.ux.blocked   # 再平衡带以内不调回去
+
+
 # ────────── ② now_due / check / lines ──────────
 def test_now_due_check_and_lines_while_paused():
     at = lambda h, m: dt.datetime(2026, 10, 6, h, m, tzinfo=JST)        # noqa: E731
@@ -118,7 +147,10 @@ def test_now_due_check_and_lines_while_paused():
     assert not MO.now_due("pq", b, at(10, 0))
     b["core_rule"] = {}
     b["manual"]["core_pct"] = 50.0
-    assert not MO.now_due("pq", b, at(10, 0))                              # 不是卖出全部：等执行器算过规则目标额
+    assert MO.now_due("pq", b, at(10, 0))                                  # 不是卖出全部：按估算的规则目标额照样调（第 9 轮起）
+    b["core_rule"] = {"defer": "2026-10-06"}
+    assert not MO.now_due("pq", b, at(10, 0))                              # 今天说了「明天再调」
+    b["core_rule"] = {}
     b["manual"]["core_pct"] = 0.0
     b["state"]["core_units"] = {"1655.T": 0}
     assert not MO.now_due("pq", b, at(10, 0))                              # 没拿着

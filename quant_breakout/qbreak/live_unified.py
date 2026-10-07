@@ -56,7 +56,7 @@ UNKNOWN = ("SENDING", "ERROR")                     # 状态不明：可能已被
 MORNING_CUTOFF = dt.time(8, 55)                    # 寄付注文的最后时刻（留 5 分钟余量）
 MANUAL_REASONS = ("manual", "manual_trim", "manual_add", "manual_buy")   # 手动指令变成的单（qbreak/manual_orders.py）
 OPEN_FROM, OPEN_UNTIL = dt.time(9, 0), dt.time(15, 25)
-NOW_BUY_BUF = 0.005                                # 盘中手动买单的限价：现价 +0.5%（可成交的限价；不超过决策日收盘 ×1.03）
+NOW_BUY_BUF = MO.NOW_BUY_BUF                       # 盘中手动买单的限价：现价 +0.5%（可成交的限价；不超过决策日收盘 ×1.03；面板同一个数）
 
 
 def _np(x):
@@ -188,9 +188,12 @@ class UnifiedExecutor:
         if self.manual is None:
             return None
         want = float(self.manual.core_pct)
-        if not cr.get("units100"):                            # 执行器还没算过规则目标额：只有「卖出全部」（比例 0%）不用它，盘中照样卖
-            held = any(int(u) > 0 for u in self.eng.st.core_units.values())
-            return want if (today is not None and want <= 0 and held and cr.get("applied") != want
+        if not cr.get("units100"):                            # 执行器还没用新代码决策过（没有规则目标额）：上一次决策的比例 = 100%
+            if today is None:                                 # 决策：比例改了 / 盘中的单没成交完 → 这次直接调到目标（不看再平衡带）
+                return want if cr.get("redo") or abs(want - float(cr.get("applied", 100.0))) > 1e-9 else None
+            st = self.eng.st                                  # 盘中：卖出全部（0%）照样卖；别的比例按估算的目标调（MO.core_u100_est）
+            held = any(int(u) > 0 for u in st.core_units.values()) or bool(st.core_plan)
+            return want if (held and abs(want - float(cr.get("applied", 100.0))) > 1e-9
                             and cr.get("defer") != today.isoformat()) else None
         if today is not None and (cr.get("decided_on") != self.eng.st.last_date or cr.get("defer") == today.isoformat()):
             return None
@@ -606,7 +609,11 @@ class UnifiedExecutor:
                        key=lambda t: -int(st.core_units[t]) * float(eng._px_close(t, k)))
         core_moves = {}                                       # {票: (现在口数, 目标口数)}：目标 = 规则目标（比例 100%）× 新比例
         if core_want is not None:
-            u100s = cr.get("units100") or {t: 0 for t, u in st.core_units.items() if int(u) > 0}   # 没算过规则目标额 → 只会是卖出全部
+            u100s = cr.get("units100")
+            if not u100s:                                     # 没算过规则目标额：比例还是 100% → 现在的口数 + 今天开盘的单（与面板 MO.core_u100s 同一个估算）
+                u100s = ({t: MO.core_u100_est(st.core_units.get(t, 0), st.core_plan.get(t)) for t in set(st.core_units) | set(st.core_plan)}
+                         if abs(float(cr.get("applied", 100.0)) - 100.0) <= 1e-9 else
+                         {t: 0 for t, u in st.core_units.items() if int(u) > 0})          # 比例已经改过（今天调过）→ 只会是卖出全部
             for t, n100 in sorted(u100s.items()):
                 if t in eng.col:
                     lt = int(eng.lots[eng.col[t]])
