@@ -5,7 +5,7 @@
 # 面板 = http://127.0.0.1:8765/（只在这台 Mac 上能打开）：账本、每只持仓的「为什么持有 · 现在趋势」、卖出 / 减仓 / 闲置资金比例 / 撤回按钮。
 # 按钮只写「手动指令」（数据目录 manual/）；下单永远由执行器在下一次能下寄付单的运行里做（HALT / ARM / 持仓核对照常）。
 # 交易日 07:45〜08:50、今天早上的运行已经完成时，面板会叫执行器跑一次重试（scripts/liveu.sh run --retry），当天开盘就能执行。
-# 手机端口 127.0.0.1:8766 同时打开（要先配对；Tailscale Serve 转过来：bash scripts/liveu.sh phone on）。面板的代码 git pull 更新后自己退出，这里的 KeepAlive 用新代码重启。
+# 手机端口 127.0.0.1:8766 同时打开（按 Tailscale 账户登录或配对；Tailscale Serve 转过来：bash scripts/liveu.sh phone on）。面板的代码 git pull 更新后自己退出，这里的 KeepAlive 用新代码重启。
 set -euo pipefail
 
 MODE="${1:-install}"

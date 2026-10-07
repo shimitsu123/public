@@ -4,13 +4,14 @@
 两个只在本机（127.0.0.1）监听的端口（Mac 的 LaunchAgent com.qbreak.panel：scripts/install_launchd_panel.sh；或 bash scripts/liveu.sh panel）：
   8765 本机：http://127.0.0.1:8765/ —— 只有这台 Mac 能打开；写操作要令牌（数据目录 panel_token，0600）
   8766 手机：Tailscale Serve（bash scripts/liveu.sh phone on）把它放到 https://<Mac>.<tailnet>.ts.net/，只有你 Tailscale 里的设备能连；
-       这一路永远要「已配对的设备」（qbreak/panel_phone.py：配对码只显示在 Mac 屏幕上；设备 cookie + 每台设备的 CSRF 令牌）
+       这一路要「你本人」（qbreak/panel_phone.py）：按 Tailscale 账户登录（2026-10-07 起；只认这台 Mac 登录的账户，经 Serve 的路径密钥来的才算）
+       或已配对的设备（配对码只显示在 Mac 屏幕上；设备 cookie）；写操作都要 CSRF 令牌
 页面（手机优先的版面；两边一样）：
   GET  /?book=paper|tachibana   账本：持仓（为什么持有、现在趋势、约占权益、K 线）、核心 ETF（K 线）、建议的股票（规则的候选 + 「买入…」）、
                                 手动指令、不买回、停止下单（HALT）；每只持仓有「卖出全部」「调整…」（股数 / 金额 / 占权益 %，可加可减；底部弹出确认），
                                 核心 ETF 有「闲置资金比例」，指令有「撤回」；K 线：同花顺式日K / 周K / 月K（红涨空心、绿跌实心）+ MA5 / 10 / 20 / 30
                                 + 成交量 + 成本 / 止损线（2026-10-06 用户：「趋势是做一个和图中一样的日周月的块块和线 方便看的」）
-  GET  /api/chart?book=…&t=…    一只票的 K 线（执行器写的 out/charts_<账本>.json；打开 / 滑到那只票时才取；手机端口要已配对的设备）
+  GET  /api/chart?book=…&t=…    一只票的 K 线（执行器写的 out/charts_<账本>.json；打开 / 滑到那只票时才取；手机端口要你本人）
   POST /api/request             写一条手动指令（qbreak/manual_orders.py；与 run.py manual 相同的检查）
   POST /api/halt                建 HALT（只能建、不能解除；解除只在 Mac 上、用户明确说）
   本机才有：POST /api/pair/new（生成配对码）、/api/device/revoke（取消一台设备）；手机才有：/api/pair、/api/unpair（退出这台设备）
@@ -138,7 +139,7 @@ color:var(--fg);cursor:pointer;touch-action:manipulation}.seg button:first-child
 .adjrow .unit{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
 .chartbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 2px}
 .chart{position:relative;margin-top:10px;outline:none}.chart:focus-visible{box-shadow:0 0 0 2px var(--accent);border-radius:8px}
-.chart.empty{padding:6px 0}
+.chart.empty{padding:6px 0}.chart[data-retry]{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 .chart svg{display:block;width:100%;touch-action:pan-y;-webkit-user-select:none;user-select:none}
 .chart .grid{stroke:var(--line);stroke-width:1;shape-rendering:crispEdges}
 .chart .ax{fill:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
@@ -190,24 +191,54 @@ background:var(--fg);color:var(--bg);padding:12px 16px;border-radius:12px;box-sh
 footer{margin:16px 0;color:var(--muted);font-size:13px}
 """
 
+_NET_JS = """
+const TMO = 15000;                                                        // 15 秒没有回应就不再等（Mac 睡眠时请求会一直挂着）
+function timed(p, ac){
+  let tid;
+  const to=new Promise((_, rej)=>{ tid=setTimeout(()=>{ rej(Object.assign(new Error('timeout'), {name:'Timeout'})); try{ if(ac) ac.abort(); }catch(x){} }, TMO); });
+  return Promise.race([p, to]).finally(()=>clearTimeout(tid));
+}
+function req(url, opt){                                                   // → {r, j}（连内容一起 15 秒内读完；超时抛 name = 'Timeout'）
+  const ac=('AbortController' in window) ? new AbortController() : null;      // j = null：内容读不出来 / 不是 JSON（连接中途断了也是）
+  return timed((async()=>{ const r=await fetch(url, Object.assign({}, opt||{}, ac ? {signal:ac.signal} : {})); let j=null; try{ j=await r.json(); }catch(e){} return {r:r, j:j}; })(), ac);
+}
+"""
+
 _JS = """
 const CFG = __CFG__;
 const $ = s => document.querySelector(s);
 const fmt = n => Number(n).toLocaleString('ja-JP');
 const yen = v => '¥' + fmt(Math.round(v));
-function toast(t, bad){const m=$('#toast');m.textContent=t;m.className='toast'+(bad?' bad':'');m.hidden=false;
-  clearTimeout(toast.h);toast.h=setTimeout(()=>{m.hidden=true;}, bad?9000:6000);}
+function toast(t, bad, sticky){const m=$('#toast');m.textContent=t+(sticky?'\\n（点一下关闭）':'');m.className='toast'+(bad?' bad':'');m.hidden=false;
+  clearTimeout(toast.h); if(!sticky) toast.h=setTimeout(()=>{m.hidden=true;}, bad?9000:6000);}
 function busy(on){document.querySelectorAll('button').forEach(b=>{if(on){b.dataset.was=b.disabled?'1':'';b.disabled=true;}else{b.disabled=b.dataset.was==='1';}});}
+const HALT_TIP = CFG.remote ? '人不在 Mac 旁边时：在 claude.ai 的云端对话里说「停 / 今天不要下单」（Mac 的执行器下一次运行会停）'
+                            : '在 Mac 的 Claude 对话里说「停 / 今天不要下单」';
 async function api(path, body){
   busy(true);
+  const halt = path==='/api/halt', where = path==='/api/request' ? '在「手动指令」里确认' : '再看一下';
+  const fail = (t, sticky) => { toast(halt ? t+'\\n'+HALT_TIP : t, true, halt || sticky); return null; };   // HALT 失败：每种都提示云端的「停」、不自动消失
   try{
     const h={'Content-Type':'application/json'}; h[CFG.auth.h]=CFG.auth.v;
-    const r=await fetch(path,{method:'POST',headers:h,body:JSON.stringify(body||{}),credentials:'same-origin',cache:'no-store'});
-    let j={}; try{ j=await r.json(); }catch(e){}
+    const x=await req(path,{method:'POST',headers:h,body:JSON.stringify(body||{}),credentials:'same-origin',cache:'no-store'});
+    const r=x.r, j=x.j;
     busy(false);
-    if(!r.ok || !j.ok){ toast(j.msg || ('没写成（HTTP '+r.status+'）'), true); if(r.status===401) setTimeout(()=>location.reload(),1500); return null; }
+    if(r.ok && !j) return fail(halt ? 'HALT 可能已经建好，但回应读不出来：刷新后看有没有「HALT 生效中」'
+                                    : '回应读不出来：不确定有没有生效 —— 刷新后'+where+'，不要直接再点一次', true);
+    if(!r.ok || !j.ok){
+      if(r.status===401){ toast((j && j.msg) || '这台设备没被认出来：正在刷新…', true); setTimeout(()=>location.reload(),1500); return null; }
+      return fail((j && j.msg) || ('没写成（HTTP '+r.status+'）'));
+    }
     return j;
-  }catch(e){ busy(false); toast('连不上面板：'+e+'\\n（Mac 睡着了、面板没运行，或手机的 Tailscale 没连上）', true); return null; }
+  }catch(e){
+    busy(false);
+    if(e && e.name==='Timeout'){                                           // 请求可能已经到了 Mac：不确定有没有写进去
+      if(halt) return fail(CFG.remote ? 'HALT 可能没送到：超过 15 秒没有回应（Mac 可能在睡眠）' : 'HALT 可能没写成：面板超过 15 秒没有回应');
+      return fail(CFG.remote ? '超过 15 秒没有回应（Mac 可能在睡眠）：不确定有没有'+(path==='/api/request' ? '写进去' : '生效')+' —— Mac 醒来后刷新，'+where+'，不要直接再点一次'
+                             : '面板超过 15 秒没有回应：不确定有没有'+(path==='/api/request' ? '写进去' : '生效')+' —— 刷新后'+where+'，不要直接再点一次');
+    }
+    return fail((halt ? 'HALT 没送到：' : '')+'连不上面板：'+e+'\\n（Mac 睡着了、面板没运行，或手机的 Tailscale 没连上）');
+  }
 }
 function done(j){ if(!j) return; toast(j.msg || '已写'); setTimeout(()=>location.reload(), 2200); }
 function sheet(id){ const d=$(id); if(d.showModal){ if(!d.open) d.showModal(); } else d.setAttribute('open',''); return d; }
@@ -321,7 +352,12 @@ document.addEventListener('input', e=>{
   if(e.target.id==='buy-val') buyPrev();
 });
 document.addEventListener('DOMContentLoaded', ()=>{ const d=$('#dlg-ask'); if(d) d.addEventListener('close', ()=>{ if(ASK){ const r=ASK; ASK=null; r({ok:false}); } }); });
+document.addEventListener('keydown', e=>{ const b=e.target;                // 「点这里再试」也能用键盘（Enter / 空格）
+  if((e.key==='Enter' || e.key===' ') && b && b.matches && b.matches('.chart[data-retry]')){ e.preventDefault(); b.click(); } });
 document.addEventListener('click', async e=>{
+  if(e.target.closest('#toast')){ $('#toast').hidden=true; return; }       // 提示：点一下关闭
+  const rk=e.target.closest('.chart[data-retry]');
+  if(rk){ rk.removeAttribute('data-retry'); showK(rk); return; }           // K 线取不到 / 超时：点一下再取（同一只票已经在取 → 等那一个）
   const b=e.target.closest('[data-act]'); if(!b) return;
   const a=b.dataset.act, d=b.dataset;
   if(a==='reload'){ location.reload(); return; }
@@ -412,7 +448,7 @@ const TFS = {D:'日K', W:'周K', M:'月K'}, SUBS = {v:'量', macd:'MACD', dmi:'D
 let TF = 'D', SUB = 'v', CPN = 0;
 try{ const v=localStorage.getItem('qbreak.tf'); if(v && TFS[v]) TF=v; }catch(x){}
 try{ const v=localStorage.getItem('qbreak.sub'); if(v && SUBS[v]) SUB=v; }catch(x){}
-const KD = {};
+const KD = {}, KP = {};
 const NS='http://www.w3.org/2000/svg', WD=['日','一','二','三','四','五','六'];
 const MAS=[['ma5','MA5','m5'],['ma10','MA10','m10'],['ma20','MA20','m20'],['ma30','MA30','m30']];
 function sv(tag, at, par){ const e=document.createElementNS(NS, tag); for(const k in at) e.setAttribute(k, at[k]); if(par) par.appendChild(e); return e; }
@@ -427,16 +463,22 @@ function nice(lo, hi, n){
 }
 function vfmt(v){ return v>=1e8 ? (v/1e8).toFixed(1)+' 亿' : v>=1e4 ? (v/1e4).toFixed(v>=1e6?0:1)+' 万' : String(v); }
 function dlab(d){ return TF==='M' ? d.slice(0,7).replace('-','/')+' 月' : TF==='W' ? d.replace(/-/g,'/')+' 那一周' : d.replace(/-/g,'/')+'（'+WD[new Date(d+'T00:00:00').getDay()]+'）'; }
-async function loadK(t){
-  if(KD[t] && KD[t]!=='error') return KD[t];
+function loadK(t){
+  if(KD[t] && KD[t]!=='error' && KD[t]!=='timeout' && KD[t]!=='loading') return Promise.resolve(KD[t]);
+  if(KP[t]) return KP[t];                                                   // 同一只票已经在取：等同一个请求
   KD[t]='loading';
-  try{
-    const r=await fetch('/api/chart?book='+encodeURIComponent(CFG.book)+'&t='+encodeURIComponent(t), {credentials:'same-origin', cache:'no-store'});
-    if(r.status===404) KD[t]='none';
-    else if(!r.ok) KD[t]='error';
-    else { const j=await r.json(); KD[t]=(j && j.data) ? j.data : 'none'; }
-  }catch(e){ KD[t]='error'; }
-  return KD[t];
+  const p=(async()=>{
+    try{
+      const x=await req('/api/chart?book='+encodeURIComponent(CFG.book)+'&t='+encodeURIComponent(t), {credentials:'same-origin', cache:'no-store'});
+      if(x.r.status===404) KD[t]='none';
+      else if(x.r.status===401){ KD[t]='auth'; setTimeout(()=>location.reload(), 1500); }   // 这台设备没被认出来：刷新（会到配对页）
+      else if(!x.r.ok || !x.j) KD[t]='error';                                // 内容读不出来（连接中途断了）也算取不到：可以再点
+      else KD[t]=x.j.data ? x.j.data : 'none';
+    }catch(e){ KD[t]=(e && e.name==='Timeout') ? 'timeout' : 'error'; }   // 15 秒没有回应（Mac 睡眠时不会一直停在「载入中」）
+    return KD[t];
+  })();
+  KP[t]=p; p.then(()=>{ if(KP[t]===p) delete KP[t]; });
+  return p;
 }
 function legend(head, D, i){
   head.textContent='';
@@ -461,10 +503,14 @@ function subText(D, i, P){
 }
 function drawK(box){
   const t=box.dataset.t, P=KD[t];
+  box.removeAttribute('data-retry'); box.removeAttribute('role'); box.onkeydown=null; box.onblur=null; box._hide=null;
   const empty=s=>{ box.className='chart empty muted small'; box.textContent=s; };
+  const retry=s=>{ empty(s); box.setAttribute('data-retry', '1'); box.setAttribute('role', 'button'); box.tabIndex=0; };
   if(P==null || P==='loading') return empty('K 线载入中…');
   if(P==='none') return empty('K 线在执行器下一次运行之后显示');
-  if(P==='error') return empty('K 线取不到（面板连不上？）：点「刷新」再试');
+  if(P==='auth') return empty('这台设备没被认出来：正在刷新…');
+  if(P==='timeout') return retry(CFG.remote ? 'Mac 可能在睡眠：取不到（超过 15 秒没有回应；点这里再试）' : 'K 线取不到（面板超过 15 秒没有回应）：点这里再试');
+  if(P==='error') return retry('K 线取不到（面板连不上？）：点这里再试');
   const D=(P.tf||{})[TF];
   if(!D || !D.d || D.d.length<2) return empty('没有'+TFS[TF]+'的数据');
   box.className='chart'; box.tabIndex=0; box.textContent='';
@@ -596,12 +642,12 @@ function drawK(box){
   svg.addEventListener('pointermove', ev=>show(at(ev)));
   svg.addEventListener('pointerdown', ev=>show(at(ev)));
   svg.addEventListener('pointerleave', ev=>{ if(ev.pointerType!=='touch') hide(); });
-  box.addEventListener('keydown', ev=>{
+  box.onkeydown=ev=>{                                                       // 用属性不用 addEventListener：重画时换掉、不越积越多
     if(ev.key==='ArrowLeft' || ev.key==='ArrowRight'){ ev.preventDefault(); show((cur==null ? N-1 : cur)+(ev.key==='ArrowLeft' ? -1 : 1)); }
     else if(ev.key==='Home'){ ev.preventDefault(); show(s0); } else if(ev.key==='End'){ ev.preventDefault(); show(N-1); }
     else if(ev.key==='Escape') hide();
-  });
-  box.addEventListener('blur', hide);
+  };
+  box.onblur=hide;
   const foot=nd('div','legend',null,box);
   if(tr) nd('span',null,TFS[TF]+'趋势：'+tr.label+(tr.align ? '（'+tr.align+'）' : '')+' · 收盘在 MA20 '+(tr.above20?'上':'下')
     +' · MA20 比 3 根前 '+(tr.slope20_pct>=0?'+':'')+tr.slope20_pct+'%', foot);
@@ -625,7 +671,12 @@ function drawK(box){
     nd('td',null,Number(D.v[i]||0).toLocaleString('ja-JP'),r);
   }
 }
-async function showK(box){ if(!KD[box.dataset.t] || KD[box.dataset.t]==='error'){ drawK(box); await loadK(box.dataset.t); } drawK(box); }
+async function showK(box){
+  const t=box.dataset.t, s=KD[t];
+  if(!s || s==='error' || s==='timeout' || s==='loading'){ drawK(box); await loadK(t); }
+  drawK(box);
+  document.querySelectorAll('.chart[data-t]').forEach(b=>{ if(b!==box && b.dataset.t===t && b.offsetParent!==null) drawK(b); });   // 同一只票的别的图
+}
 function drawAll(){
   document.querySelectorAll('.chart[data-t]').forEach(b=>{ if(KD[b.dataset.t] && b.offsetParent!==null) drawK(b); });
   document.querySelectorAll('[data-act=tf]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.tf===TF ? 'true' : 'false'));
@@ -649,12 +700,14 @@ $('#code').addEventListener('input', e=>{ const p=e.target.selectionStart; e.tar
 $('#go').addEventListener('click', async ()=>{
   const b=$('#go'); b.disabled=true;
   try{
-    const r=await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',
-                                     body:JSON.stringify({code:$('#code').value, name:$('#name').value})});
-    let j={}; try{ j=await r.json(); }catch(e){}
+    const x=await req('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',
+                                   body:JSON.stringify({code:$('#code').value, name:$('#name').value})});
+    const r=x.r, j=x.j||{};
     if(r.ok && j.ok){ toast(j.msg); setTimeout(()=>location.replace('/'), 900); return; }
-    toast(j.msg || ('没配对成功（HTTP '+r.status+'）'), true);
-  }catch(e){ toast('连不上面板：'+e, true); }
+    toast(r.ok && !x.j ? '回应读不出来：刷新页面看看是不是已经配对好了（提示配对码无效的话，在 Mac 上重新生成）'
+                       : (j.msg || ('没配对成功（HTTP '+r.status+'）')), true);
+  }catch(e){ toast(e && e.name==='Timeout' ? 'Mac 可能在睡眠：超过 15 秒没有回应（Mac 醒来后再试；配对码 10 分钟内有效；提示配对码无效的话，在 Mac 上重新生成）'
+                                           : '连不上面板：'+e, true); }
   b.disabled=false;
 });
 """
@@ -726,6 +779,14 @@ def _phone_card(phone: dict) -> str:
     else:
         H.append("<div class='muted'>手机访问还没打开：在 Mac 的 Claude 对话里说「打开手机操作」（会运行 bash scripts/liveu.sh phone on：用 Tailscale，"
                  "只有你自己的设备能连）</div>")
+    ident = phone.get("identity") or {}
+    if ident.get("on"):
+        H.append(f"<div class='small'>按 Tailscale 账户登录：<b>开</b> —— 用这台 Mac 的 Tailscale 账户（{escape(str(ident.get('owner') or '—'))}）"
+                 "登录的手机打开手机地址就能用，不用配对；别的账户 / 带 tag 的设备用下面的配对码（备用）。"
+                 "<span class='muted'>改成只用配对：在 Mac 的 Claude 对话里说「手机只用配对」</span></div>")
+    elif ident:
+        H.append(f"<div class='small muted'>按 Tailscale 账户登录：{'关' if ident.get('off') else '现在不可用'}"
+                 f"（{escape(str(ident.get('why') or '—'))}）→ 手机要配对</div>")
     if not phone.get("port"):
         H.append("<div class='neg small'>★ 面板的手机端口没在监听（端口被占用？）：bash scripts/install_launchd_panel.sh 重启面板</div>")
     H.append("<div class='act'><button class='btn primary' data-act='pair-new'>生成配对码</button></div>"
@@ -973,14 +1034,21 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     if not remote:
         H.append(_phone_card(phone or {}))
         H.append("<footer>账本与日志的完整页面：数据目录 out/page_" + escape(tag) + ".html（每天早上自动打开）。非投资建议。</footer>")
+    elif (device or {}).get("kind") == "ts":                                # 按 Tailscale 账户登录（不用配对）
+        pd = device.get("paired")
+        H.append(f"<footer><div>已用 Tailscale 账户登录（{escape(str(device.get('login') or '—'))}；不用配对）。非投资建议。</div>"
+                 "<div class='muted small'>只认这台 Mac 登录的 Tailscale 账户。要改成只用配对：在 Mac 的 Claude 对话里说「手机只用配对」。</div>"
+                 + (f"<div class='muted small'>这台设备以前也配对过（{escape(str(pd))}）：不用了可以取消。</div>"
+                    "<div class='act'><button class='btn sm' data-act='unpair'>取消这台设备的配对</button></div>" if pd else "")
+                 + "</footer>")
     else:
         dv = device or {}
         H.append(f"<footer><div>这台设备：{escape(str(dv.get('name') or '手机'))}（配对 {escape(str(dv.get('created') or '')[:10])}）。"
                  "非投资建议。</div><div class='act'><button class='btn sm' data-act='unpair'>退出这台设备</button></div></footer>")
     H.append("</main><div id='toast' class='toast' role='status' hidden></div>")
-    cfg = {"auth": {"h": "X-Qbreak-Csrf" if remote else "X-Qbreak-Token", "v": tok}, "book": tag, "paper": paper,
+    cfg = {"auth": {"h": "X-Qbreak-Csrf" if remote else "X-Qbreak-Token", "v": tok}, "book": tag, "paper": paper, "remote": remote,
            "when": when, "addWhen": add_when, "eq": eq or 0, "cap": cap, "lot": MO.LOT}
-    js = _JS.replace("__CFG__", json.dumps(cfg, ensure_ascii=False).replace("</", "<\\/"))
+    js = _NET_JS + _JS.replace("__CFG__", json.dumps(cfg, ensure_ascii=False).replace("</", "<\\/"))
     return _head("qbreak 操作面板") + "<body>" + "".join(H) + _dialogs(paper) + f"<script>{js}</script></body></html>"
 
 
@@ -998,8 +1066,11 @@ def pair_page(code: str = "") -> str:
             "<input type='text' id='name' maxlength='20' placeholder='例：iPhone'>"
             "<div class='row'><button class='btn primary' id='go'>配对</button></div>"
             "<p class='muted small'>配对码 10 分钟内有效、只能用一次、输错 5 次作废。配对之后这台设备 180 天内不用再配对；"
-            "在 Mac 的面板上随时可以取消。</p></section></main><div id='toast' class='toast' role='status' hidden></div>"
-            f"<script>{_PAIR_JS}</script></body></html>")
+            "在 Mac 的面板上随时可以取消。</p>"
+            "<p class='muted small'>用和 Mac 同一个 Tailscale 账户登录的手机通常不用配对（Mac 上打开了「按 Tailscale 账户登录」时）："
+            "还是看到这一页 → 确认手机的 Tailscale App 登录的是同一个账户，或在 Mac 上运行 bash scripts/liveu.sh phone status 看一下。</p>"
+            "</section></main><div id='toast' class='toast' role='status' hidden></div>"
+            f"<script>{_NET_JS}{_PAIR_JS}</script></body></html>")
 
 
 # ───────────────────────── 写指令 ─────────────────────────
@@ -1204,7 +1275,7 @@ class _Common(BaseHTTPRequestHandler):
         return body
 
     def _chart(self, query: str) -> None:
-        """GET /api/chart?book=…&t=…：一只票的 K 线（只读；本机端口看 Host，手机端口要已配对的设备）。"""
+        """GET /api/chart?book=…&t=…：一只票的 K 线（只读；本机端口看 Host，手机端口要你本人：按账户登录或已配对的设备）。"""
         t = str((parse_qs(query).get("t") or [""])[0]).strip().upper()
         if not _CHART_T.fullmatch(t):
             self._json(400, {"ok": False, "msg": "代码不对"})
@@ -1262,7 +1333,7 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
             if u.path != "/":
                 self._text(404, "没有这个页面")
                 return
-            phone = {"port": phone_port, "url": PP.phone_url(), "devices": PP.devices()}
+            phone = {"port": phone_port, "url": PP.phone_url(), "devices": PP.devices(), "identity": PP.identity_state()}
             self._page(lambda: render(_book_of(u.query), tok, (clock or now_jst)(), mode="local", phone=phone))
 
         def do_POST(self):                                   # noqa: N802
@@ -1306,26 +1377,48 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
 
 
 def _hostport(v: str | None) -> str:
-    h = str(v or "").strip().lower()
-    return h[:-4] if h.endswith(":443") else h
+    return PP.hostport(v)
 
 
 def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
-    """手机端口（127.0.0.1:8766，Tailscale Serve 转过来）：永远要已配对的设备（cookie）；写操作还要这台设备的 CSRF 令牌。
-    没配对的只看到输入配对码的页面。配对码不在这里生成，也不能取消别的设备（只在 Mac 上）。"""
+    """手机端口（127.0.0.1:8766，Tailscale Serve 转过来）：要「你本人」—— 按 Tailscale 账户登录（qbreak/panel_phone.identity_for：
+    127.0.0.1 连过来、路径带着 Serve 的路径密钥、Host 对、Tailscale-User-Login 正好是这台 Mac 登录的账户、明确打开着）或已配对的设备（cookie）；
+    写操作还要 CSRF 令牌，Origin / Sec-Fetch-Site 必须是这个页面自己。Funnel（公开到互联网）来的请求一律拒绝。
+    路由前先去掉路径密钥（Serve 转过来的是「/<路径密钥>/原来的路径」）。
+    都不是的只看到输入配对码的页面。配对码不在这里生成，也不能取消别的设备（只在 Mac 上）。"""
     local = {f"127.0.0.1:{port}", f"localhost:{port}"}
     hits_pair: list[float] = []
     hits_post: list[float] = []
+    funnel_warned = [0.0]                                                # Funnel 的警告每 10 分钟最多写一次日志（公开后会有大量扫描）
 
     class P(_Common):
         def _host_ok(self) -> bool:
+            if self.headers.get(PP.TS_FUNNEL_H) is not None:              # Funnel（公开到互联网）来的：什么都不给
+                if time.monotonic() - funnel_warned[0] > 600 or not funnel_warned[0]:
+                    funnel_warned[0] = time.monotonic()
+                    log.warning("手机端口：收到经 Tailscale Funnel（公开到互联网）来的请求 → 拒绝（qbreak 只用 Serve；"
+                                "tailscale funnel status 看一下，关掉：tailscale funnel --https=443 off）")
+                self._text(403, "不接受经 Tailscale Funnel（公开到互联网）来的请求：qbreak 只用 Serve（只在你的 tailnet 里）")
+                return False
             h = str(self.headers.get("Host") or "").strip().lower()
             if h in local or PP.TS_HOST.match(h):
                 return True
             self._text(421, "只接受 Tailscale 的地址（*.ts.net）")
             return False
 
+        def _route(self) -> str:
+            """去掉 Serve 加的路径密钥之后的路径（没带的原样：配对的设备照旧能用，按账户登录不算）。"""
+            return PP.split_gate(self.path)[1]
+
+        def _who(self) -> dict | None:
+            """你本人：按 Tailscale 账户登录（不用配对）→ 否则已配对的设备 → 否则 None。"""
+            return PP.identity_for(self.headers, self.client_address[0], self.path) or PP.device_for(self.headers.get("Cookie"))
+
         def _origin_ok(self) -> bool:
+            sfs = self.headers.get("Sec-Fetch-Site")
+            if sfs is not None and sfs.strip().lower() != "same-origin":
+                self._json(403, {"ok": False, "msg": "来源不对（只接受这个页面自己）"})
+                return False
             o = self.headers.get("Origin")
             if o is None:
                 return True
@@ -1339,13 +1432,13 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
         def do_GET(self):                                    # noqa: N802
             if not self._host_ok():
                 return
-            u = urlparse(self.path)
+            u = urlparse(self._route())
             if self._static(u.path):
                 return
             if u.path not in ("/", "/pair", "/api/chart"):
                 self._text(404, "没有这个页面")
                 return
-            dev = PP.device_for(self.headers.get("Cookie"))
+            dev = self._who()
             if u.path == "/api/chart":
                 if dev is None:
                     self._json(401, {"ok": False, "msg": "这台设备还没配对（或已被取消）"})
@@ -1359,12 +1452,15 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
             if u.path == "/pair":
                 self._send(303, b"", "text/plain", [("Location", "/")])
                 return
+            if dev.get("kind") == "ts":                                   # 按账户登录、这台设备也配对过 → 页面上可以取消它的配对
+                paired = PP.device_for(self.headers.get("Cookie"))
+                dev = dict(dev, paired=paired["name"]) if paired else dev
             self._page(lambda: render(_book_of(u.query), PP.csrf(dev["id"]), (clock or now_jst)(), mode="remote", device=dev))
 
         def do_POST(self):                                   # noqa: N802
             if not self._host_ok():
                 return
-            path = urlparse(self.path).path
+            path = urlparse(self._route()).path
             if path not in ("/api/pair", "/api/request", "/api/halt", "/api/unpair"):
                 self._json(404, {"ok": False, "msg": "没有这个接口"})
                 return
@@ -1377,7 +1473,7 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
                 ok, msg, ck = PP.pair(body.get("code"), body.get("name"), self.headers.get("User-Agent"))
                 self._json(200 if ok else 400, {"ok": ok, "msg": msg}, [("Set-Cookie", PP.cookie_set(ck))] if ok else ())
                 return
-            dev = PP.device_for(self.headers.get("Cookie"))
+            dev = self._who()
             if dev is None:
                 self._json(401, {"ok": False, "msg": "这台设备还没配对（或已被取消）：刷新页面重新配对"})
                 return
@@ -1397,6 +1493,15 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
             elif path == "/api/halt":
                 ok, msg = PP.create_halt(body.get("reason"), f"手机 {dev['name']}", now)
                 self._json(200 if ok else 500, {"ok": ok, "msg": msg})
+            elif dev.get("kind") == "ts":                                  # 按账户登录：这台设备也配对过才有东西可退
+                paired = PP.device_for(self.headers.get("Cookie"))
+                if paired:
+                    PP.revoke(paired["id"])
+                    self._json(200, {"ok": True, "msg": "已取消这台设备的配对（按 Tailscale 账户登录照常能用）"},
+                               [("Set-Cookie", PP.cookie_clear())])
+                else:
+                    self._json(400, {"ok": False, "msg": "这是按 Tailscale 账户登录的（不用配对）：要改成只用配对，在 Mac 的 Claude 对话里说"
+                                                         "「手机只用配对」（bash scripts/liveu.sh phone identity off）"})
             else:
                 PP.revoke(dev["id"])
                 self._json(200, {"ok": True, "msg": "已退出：这台设备要重新配对才能打开"}, [("Set-Cookie", PP.cookie_clear())])
@@ -1445,7 +1550,7 @@ def serve(port: int = 8765, open_browser: bool = False, trigger: bool = True, ph
     threading.Thread(target=_watch_code, args=(stop, srv), daemon=True).start()
     url = f"http://127.0.0.1:{port}/"
     print(f"操作面板：{url}（只在本机；Ctrl-C 结束）"
-          + (f"；手机端口 127.0.0.1:{phone_port}（Tailscale Serve 用，要先配对）" if psrv else ""))
+          + (f"；手机端口 127.0.0.1:{phone_port}（Tailscale Serve 用；按 Tailscale 账户登录或配对）" if psrv else ""))
     log.info("操作面板启动 %s%s", url, f"（手机端口 {phone_port}）" if psrv else "")
     if open_browser:
         try:

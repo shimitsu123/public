@@ -65,7 +65,7 @@
   手指 / 鼠标 / 方向键移动十字线，MA 数值跟着变；下面有最近 10 根的表；每个周期一个趋势标签（上升 / 下降 / 震荡 + 多头 / 空头排列：
   收盘对 MA20、MA20 比 3 根前、MA5 对 MA20 —— 均线位置的机械描述，不是预测）。周K / 月K = 实际交易日聚合（休市的周没有 K 线、日期 = 最后一个交易日）。
   数据：执行器每次运行另取 10 年日线（缓存 12 小时；取不到用决策用的 2 年）写 `~/.qbreak/home/out/charts_<账本>.json`（只在 Mac 本机，不入库），
-  面板打开 / 滑到哪只票才取（`/api/chart`；手机要已配对的设备），页面不内嵌。操作面板的涨跌颜色改成同花顺习惯（红涨绿跌；警告仍是红）。
+  面板打开 / 滑到哪只票才取（`/api/chart`；手机要按 Tailscale 账户登录或已配对的设备），页面不内嵌。操作面板的涨跌颜色改成同花顺习惯（红涨绿跌；警告仍是红）。
 - **K 线副图 MACD / DMI + 趋势线（2026-10-06 用户：「加 MACD（规则用的就是它）或 DMI 副图」「K线上面比如画一个直线 直线上面每次都可以到波谷的那个线
   再画一个线每次都可以波峰 然后预测买卖点和未来走势 结合现在的选股方法 来预测行不行」；显示是工程，不改规则；sim_changes 同日两节）**：
   K 线下面的副图一个开关切换「量 / MACD / DMI」（所有图一起，记在浏览器里）：MACD = 规则同一组参数（12 / 26 / 9，柱 = DIF − DEA，同花顺的柱是 2 倍、形状一样）；
@@ -77,8 +77,9 @@
   日K 5 / 250 / 10 / 60 根、周K 3 / 156 / 6 / 26、月K 2 / 120 / 4 / 12。**延长线只是把线画长，不是验证过的预测**；研究（下面「趋势线能不能预测买卖点与走势」一条）的结论是不能 —— 图下面也写着。
 - **手机上操作（2026-10-06 用户：「做一个可以在手机上操作的页面」；工程，不改规则；sim_changes 同日一节）**：
   操作面板除了本机 127.0.0.1:8765 另开手机端口 127.0.0.1:8766；`bash scripts/liveu.sh phone on` 用 Tailscale Serve 把它放到
-  `https://<Mac 的机器名>.<tailnet>.ts.net/`（只有登录了你 Tailscale 账户的设备能连，HTTPS 证书自动；**绝不用 Funnel**）。
-  手机这一路永远要先配对：Mac 的操作面板「手机」→「生成配对码」（8 位、10 分钟、只能用一次、输错 5 次作废；只显示在 Mac 屏幕上，可扫二维码）
+  `https://<Mac 的机器名>.<tailnet>.ts.net/`（只有你 tailnet 里的设备能连，HTTPS 证书自动；**绝不用 Funnel**）。
+  手机这一路要「你本人」：2026-10-07 起默认按 Tailscale 账户登录（下面的子条）；配对是备用（别的账户 / 带 tag 的设备 / 关掉了按账户登录时）：
+  Mac 的操作面板「手机」→「生成配对码」（8 位、10 分钟、只能用一次、输错 5 次作废；只显示在 Mac 屏幕上，可扫二维码）
   → 手机输入 → 这台设备的 cookie（HttpOnly / Secure / SameSite=Strict，180 天）+ 每台设备的 CSRF 令牌；最多 5 台；Mac 上可取消任何一台，
   `bash scripts/liveu.sh phone forget` 全部取消。手机能做的 = 操作面板能做的（只写手动指令，下单仍是执行器）+「停止下单（HALT）」（只能建、不能解除）。
   版面改成手机优先（底部弹出确认、调整对话框带股数预览、暗色、可「添加到主屏幕」）；面板的代码更新（git pull）后自己退出、LaunchAgent 用新代码重启。
@@ -86,6 +87,25 @@
   机器名会写进公开的证书透明度日志（第一次打开要确认机器名；用户 2026-10-06 确认了 `node`）。
   **一条命令全部做完**（Mac 的 Claude 对话里说「拉代码，手机操作全部执行」）：
   `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone node`
+  - **2026-10-07 起按 Tailscale 账户登录，不用配对（用户：「手机以后不用配对也能连：改成按 Tailscale 身份认证」；配对码保留为备用）**：
+    `phone on` 记下这台 Mac 登录的 Tailscale 账户，并生成**路径密钥**（32 位十六进制随机串）：Serve 的目标变成 `http://127.0.0.1:8766/<路径密钥>`，
+    经 Serve 来的请求路径都是「/<路径密钥>/…」（手机的浏览器看不到；面板先去掉它再处理）。账户与路径密钥只在 `~/.qbreak/home/panel_phone.json`（0600）
+    与 Tailscale 的 Serve 设置里；终端 / 页面 / 日志 / HALT 里账户只显示打码后的（例 ab***@e***.com）、路径密钥不显示。
+    手机端口只在下面全部成立时把请求当成你本人：连过来的是 127.0.0.1（面板只监听 127.0.0.1）、路径带着正确的路径密钥（= 经 Serve 来的）、
+    不是 Funnel、Host = 手机地址、Tailscale-User-Login 头正好一个且与这台 Mac 的账户完全相同（Serve 会先删掉请求里自带的这个头再填；
+    非 ASCII 只认 Serve 的 `=?utf-8?q?…?=` 写法）、明确打开着（panel_phone.json 里 identity = true；文件没了 / 坏了 = 关）。
+    别的账户 / 带 tag 的设备照旧要配对；写操作照旧要 CSRF 令牌、Origin / Sec-Fetch-Site 必须是页面自己；经 Funnel 来的请求一律 403；HALT 照旧只能建、不能解除。
+    关掉（只用配对）：`bash scripts/liveu.sh phone identity off`；打开：`phone identity on`；`phone forget` 也会关掉（「全部取消」= 手机都要重新配对）；
+    关掉的选择 `phone off` 之后再 `on` 也记得。这台 Mac 上有别人的 macOS 用户账户 → 第一次 `phone on` 默认只用配对，`status` 会提醒。
+    以前（2026-10-06 版）打开过的：下一次 `mac_setup.sh`（每次更新都跑 `phone on`）自动把 Serve 换成带路径密钥的目标，不用再确认机器名。
+    照实写（剩下的风险，2026-10-07 安全复核后改正）：Mac 上的程序都能连 127.0.0.1:8766，冒充还要知道路径密钥 —— 能读 panel_phone.json（同一个 Mac 用户）
+    或 Tailscale 的 Serve 设置（按 Tailscale 的装法，别的 macOS 用户也可能读得到）的程序可以冒充；同一个 Mac 用户的程序本来就能读面板令牌。
+    用你的账户登录 Tailscale 的每一台设备（不只是手机）都算你本人。账户在这台 Mac 上换了 / 带上 tag：`phone on` 才更新（`status` 会提醒不一样）。
+    排查手机用 `bash scripts/liveu.sh phone status`（不显示路径密钥）；`tailscale serve status` 的原文里有路径密钥，不要贴进对话或别处。
+  - 同日：页面的请求 15 秒没有回应就不再等（Mac 睡眠时以前会一直停在「K 线载入中」）：K 线显示「Mac 可能在睡眠：取不到（点这里再试）」
+    （点一下或 Enter 重取；同一只票同时只发一个请求；回应读不出来也算取不到、可以再点；401 → 自动刷新到配对页）；
+    按钮写指令超时 / 回应读不出来 →「不确定有没有写进去，Mac 醒来后在『手动指令』里确认，不要直接再点」（别的按钮：「不确定有没有生效」）；
+    HALT 的每种失败（超时、连不上、HTTP 错误）→「可能没送到 / 没送到，人不在 Mac 旁边就在云端对话里说『停』」，这条提示不会自己消失（点一下关闭）
 - 顶底 / 牛熊分界第二轮（2026-09-26，事先登记 d3fb402）：T7〜T11 五个候选全部没过门槛 → 维持 T0，模拟盘不变，观察名单仍是 T2 / T3（`var/out/timing2_study.md`）
 - 顶底第三轮（2026-09-26，事先登记 12d69cb）：T12〜T15（给快速离场 / 提前回补加独立确认）全部没过 → 维持 T0。最接近的 T12（快速离场要信用确认）准确度与独立市场都更好，但 4 个半段里两个只持平（`var/out/timing3_study.md`）
 - 个股买点 / 卖点成功率（2026-09-26，事先登记 8ae49ea）：E1〜E4、X1 全部没过 → 维持现行。真突破箱顶（E4）胜率 42.5%→49.7%，但交易少 74%、盈亏比下降，组合更差；现行策略靠赔率而不是命中率赚钱（`var/out/signal_study.md`）
@@ -900,8 +920,8 @@
   建议的股票：`qbreak/suggest.py`（run.py `_suggest`）；K 线：`qbreak/kline.py`（run.py `_kline` → `out/charts_<账本>.json`；副图 MACD / DMI、
   趋势线 `qbreak/trendline.py`，测试 `tests/test_trendline.py`；趋势线研究 `scripts/trendline_study.py` / `scripts/trendline_select_study.py`；TQ08 前向检验 `qbreak/tq08_forward.py` + `scripts/w2_forward_all.py` 第十一节，测试 `tests/test_tq08_forward.py`）；
   持有理由与趋势：`qbreak/holding_view.py`；测试 `tests/test_manual_adjust.py`、`tests/test_manual_buy.py`、`tests/test_suggest.py`、`tests/test_kline.py`
-- 手机上操作：`qbreak/panel_phone.py`（配对码 / 设备 / CSRF / HALT 只能建 / Tailscale Serve 的 on・off・status・forget / 二维码 / 主屏幕图标）、
-  `qbreak/panel.py` 的手机端口 127.0.0.1:8766（`make_phone_handler`）、`run.py panel-phone`、测试 `tests/test_panel_phone.py`
+- 手机上操作：`qbreak/panel_phone.py`（配对码 / 设备 / CSRF / 按 Tailscale 账户登录 `identity_for` + 路径密钥 `split_gate` / HALT 只能建 / Tailscale Serve 的 on・off・status・forget・identity / 二维码 / 主屏幕图标）、
+  `qbreak/panel.py` 的手机端口 127.0.0.1:8766（`make_phone_handler`；页面请求 15 秒超时 `_NET_JS`）、`run.py panel-phone`、测试 `tests/test_panel_phone.py`
 - `run.py`：`sim-day`（云端）、`live-u`（执行器）、`live-u-rehearse`（演练）、`tachibana-probe`（连通性检查）、`doctor`
 - `scripts/liveu.sh`（Mac 上跑执行器；`news` = 市场仪表盘 + 经济威胁提醒）、`scripts/install_launchd_live_u.sh`（注册定时任务）、
   `scripts/install_launchd_news.sh`（仪表盘每 15 分钟）、`scripts/mac_bootstrap.sh`（一行安装）
@@ -1035,9 +1055,10 @@
 | 闲置资金比例 | 「闲置资金只放一半」「核心 ETF 先全部卖掉留现金」「改回照规则」 | `bash scripts/liveu.sh manual core --pct 50`（0 = 卖出留现金；100 = 照规则） | 下一次决策（下一个交易日早上的运行）起生效；只改核心 ETF 的目标额 |
 | 看 / 撤回手动指令 | 「手动指令处理了吗？」「撤回刚才的卖出」「7203 解除不买回」 | `bash scripts/liveu.sh manual list`；`manual cancel <指令 id>`；`manual unblock 7203` | 已经发到交易所的那一笔要在立花网站 / App 上撤；撤回只保证「之后不再重下」 |
 | 操作面板 | 「打开操作面板」 | `open "http://127.0.0.1:8765/?book=paper"`（立花 `?book=tachibana`）；打不开 → `launchctl list \| grep qbreak.panel`，没有就 `bash scripts/install_launchd_panel.sh` | 只在这台 Mac 上；按钮只写指令 |
-| 手机上操作（一条命令全部做完） | 「拉代码，手机操作全部执行」「打开手机操作」「手机上怎么用」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone node`（拉代码 → 依赖与全部定时任务 → 重启操作面板 → Tailscale Serve 打开手机访问 → 在 Mac 上打开面板的「手机」）。`node` = 用户 2026-10-06 确认可以写进公开证书日志的 Tailscale 机器名：只有这台 Mac 的机器名正好是 node 才打开；名字不一样（退出码 3）→ 把显示的机器名告诉用户、用户同意后换成那个名字再运行；HTTPS 没开（退出码 4，已在浏览器里打开 Tailscale 管理页）→ 请用户点 Enable HTTPS 后再运行一次。打开之后请用户自己在 Mac 屏幕上点「生成配对码」、用 iPhone 相机扫码 | 只用 Tailscale Serve（只在用户自己的 tailnet），绝不用 Funnel；配对码只显示在 Mac 屏幕上：Claude 不调配对接口、不读、不在对话里写 |
-| 手机配对的状态 | 「手机配对了吗？」「有哪些设备能打开？」「手机打不开」 | `bash scripts/liveu.sh phone status`（只读：Tailscale、Serve、手机端口、已配对的设备，不含配对码）；手机打不开 → Mac 醒着吗、手机的 Tailscale 开着吗、`launchctl list \| grep qbreak.panel`、`~/.qbreak/home/logs/com.qbreak.panel.{out,err}` | 主屏幕上的网页要求重新配对时，再生成一次配对码（主屏幕与 Safari 的 cookie 可能是分开的） |
-| 取消手机配对 / 关掉手机访问 | 「取消 iPhone 的配对」「关掉手机访问」「手机丢了」 | 一台：操作面板「手机」里的「取消配对」；全部：`bash scripts/liveu.sh phone forget`；关掉：`bash scripts/liveu.sh phone off`（已配对的设备保留） | 手机丢了：先 `phone forget`，再请用户在 Tailscale 管理页把那台设备移除 |
+| 手机上操作（一条命令全部做完） | 「拉代码，手机操作全部执行」「打开手机操作」「手机上怎么用」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone node`（拉代码 → 依赖与全部定时任务 → 重启操作面板 → Tailscale Serve 打开手机访问 → 在 Mac 上打开面板的「手机」）。`node` = 用户 2026-10-06 确认可以写进公开证书日志的 Tailscale 机器名：只有这台 Mac 的机器名正好是 node 才打开；名字不一样（退出码 3）→ 把显示的机器名告诉用户、用户同意后换成那个名字再运行；HTTPS 没开（退出码 4，已在浏览器里打开 Tailscale 管理页）→ 请用户点 Enable HTTPS 后再运行一次。打开之后：iPhone 的 Tailscale App 用和 Mac 同一个账户登录、Safari 打开手机地址就能用（2026-10-07 起按 Tailscale 账户登录，不用配对）；别的账户 / 带 tag 的设备才要请用户自己在 Mac 屏幕上点「生成配对码」、用相机扫码 | 只用 Tailscale Serve（只在用户自己的 tailnet），绝不用 Funnel；配对码只显示在 Mac 屏幕上：Claude 不调配对接口、不读、不在对话里写 |
+| 手机配对的状态 | 「手机配对了吗？」「有哪些设备能打开？」「手机打不开」 | `bash scripts/liveu.sh phone status`（只读：Tailscale、Serve、手机端口、已配对的设备、按 Tailscale 账户登录 开 / 关，不含配对码、账户只显示打码后的）；手机打不开 → Mac 醒着吗、手机的 Tailscale 开着吗、`launchctl list \| grep qbreak.panel`、`~/.qbreak/home/logs/com.qbreak.panel.{out,err}` | 按账户登录开着、自己的 iPhone 还是看到配对页 → 手机的 Tailscale App 登录的是不是同一个账户、`phone status` 里账户登录是不是「开」（「现在不可用」/「设置是旧的」/「和记下的账户不一样」→ 再运行一次 `bash scripts/liveu.sh phone on`）；只用配对时：主屏幕上的网页要求重新配对 → 再生成一次配对码（主屏幕与 Safari 的 cookie 可能是分开的） |
+| 手机只用配对 / 改回按账户登录 | 「手机只用配对」「手机按 Tailscale 账户登录」「手机不用配对」 | 只用配对：`bash scripts/liveu.sh phone identity off`；按账户登录：`bash scripts/liveu.sh phone identity on`；只看：`bash scripts/liveu.sh phone identity` | 用户在这次对话里明确说才改；账户名只显示打码后的、不写进仓库 / 对话；路径密钥不显示；Mac 上有别人的 macOS 用户账户 → 建议只用配对（第一次 `phone on` 也默认只用配对） |
+| 取消手机配对 / 关掉手机访问 | 「取消 iPhone 的配对」「关掉手机访问」「手机丢了」 | 一台：操作面板「手机」里的「取消配对」（按账户登录的手机页面底部也能取消这台设备以前的配对）；全部：`bash scripts/liveu.sh phone forget`（按 Tailscale 账户登录也一起关掉）；关掉：`bash scripts/liveu.sh phone off`（已配对的设备保留） | 手机丢了：先 `phone forget`（立刻挡住），再请用户在 Tailscale 管理页 Machines 把那台手机删掉（Remove）；删掉之后才 `phone identity on`（那台手机还在 tailnet、还登录着你的账户时，打开按账户登录它就又能用） |
 | 看 K 线 / 趋势 | 「看一下 7203 的 K 线」「6501 周 K 怎么样」「核心 ETF 月 K」「建议的股票有哪些」「看 MACD / DMI」「趋势线 / 支撑压力在哪」 | 打开操作面板（Mac：`open "http://127.0.0.1:8765/?book=paper"`；手机：面板地址）→ 持仓 / 核心 ETF / 建议的股票下面的 K 线，上面的「日K / 周K / 月K」与「副图 量 / MACD / DMI」切换；对话里要数字就读 `~/.qbreak/home/out/charts_paper.json`（K 线、MACD / DMI、趋势线 `tf.*.tl`、趋势标签）与 `live_unified_paper.json` 的 suggest / kline | 只展示；数据是执行器最近一次运行写的（不是盘中实时）；趋势标签是均线位置的机械描述；趋势线的延长不是验证过的预测（研究结果见 sim_changes / `var/out/trendline_study.md`、`var/out/trendline_select_study.md`：方向、破线、质地特征都没有信息） |
 | 为什么持有 / 现在趋势 | 「为什么买 7203？」「持仓现在趋势怎么样？」 | 读 `~/.qbreak/home/out/live_unified_paper.json` 的 holding_view（或账本页面 / 操作面板 / 日志）；云端模拟盘看 `var/out/unified_today.json` 的 holding_view 与日报 ② | 只展示：买入那天的规则读数 + 均线位置的机械描述，不是预测；不给买卖建议 |
 | 直接在立花网站 / App 上人工买卖 | —— | 执行器管的股票（股票池 + 核心 ETF）在执行器之外买卖会让第二天的持仓核对停下 | 要卖请用上面的手动卖出；真要在网站上操作：先说「停」，再商量 |

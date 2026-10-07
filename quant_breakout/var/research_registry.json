@@ -14321,5 +14321,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "证实 = 胜率差（不挡 − 挡）99% 下限 > 0 且每笔差 ≥ 0；否定 = 胜率差或每笔差 95% 上限 < 0；事前检出力：真有 +8 pp 也要约 6〜10 年 → 多半「未定」；研究里没过重排对照（86.5 分位），证据只到探索样本；改模拟盘另做账户研究并经用户确认"
+ },
+ {
+  "line": 10052,
+  "date": "2026-10-07",
+  "title": "手机按 Tailscale 账户登录（不用配对；只认这台 Mac 登录的账户、只信任 127.0.0.1 上带 Serve 路径密钥的请求里的 Tailscale-User-Login 头、默认关 / 明确打开才算、Funnel 来的请求一律拒绝；配对码留作备用）+ 页面请求 15 秒超时（Mac 睡眠时不再一直停在「K 线载入中」）",
+  "kind": "engineering",
+  "domain": "数据/工程",
+  "registration": "—",
+  "script": "qbreak/panel_phone.py（identity_for / split_gate / identity_state / panel-phone identity on|off）、qbreak/panel.py（手机端口：先去掉路径密钥再路由；_NET_JS、loadK / api 的失败处理）",
+  "output": "数据目录 panel_phone.json（0600：手机地址 + 路径密钥 + 这台 Mac 的账户 + 按账户登录开没开）；不入库",
+  "candidates": [],
+  "baseline": "—（不改规则 / 参数 / 仓位 / 股票池 / 下单逻辑）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "Tailscale Serve 先删请求里自带的身份头再按发请求的设备填、转发时目标路径 + 请求路径（官方说明 + 源码，2026-10-07 查）；提交前安全复核发现「127.0.0.1 + Host + 账户头」可被本机任何程序伪造（原始 socket 复现）→ 加 Serve 路径密钥、默认关（文件没了 / 坏了 = 关）、账户头只认 Serve 的写法、有别的 macOS 用户默认只用配对；写操作照旧要 CSRF、Origin / Sec-Fetch-Site 必须是页面自己；HALT 只能建；账户名只显示打码后的、路径密钥不显示；剩下的风险：能读 panel_phone.json 或 Tailscale Serve 设置的程序可以冒充"
  }
 ]

@@ -65,7 +65,7 @@ bash "$PROJ/scripts/install_launchd_login.sh"
 # ④c 本机操作面板（http://127.0.0.1:8765/：卖出 / 减仓 / 闲置资金比例按钮只写手动指令，下单由执行器做）
 bash "$PROJ/scripts/install_launchd_panel.sh"
 
-# ④d 手机上操作（Tailscale Serve，只在你自己的 tailnet；绝不用 Funnel；配对码只在 Mac 的操作面板上生成）
+# ④d 手机上操作（Tailscale Serve，只在你自己的 tailnet；绝不用 Funnel；按 Tailscale 账户登录，配对码（备用）只在 Mac 的操作面板上生成）
 if [ -n "$PHONE" ] || [ -f "$LHOME/panel_phone.json" ]; then
   set -- phone on
   if [ -n "$PHONE_NAME" ]; then set -- "$@" --confirm-name "$PHONE_NAME"; fi
@@ -74,7 +74,7 @@ if [ -n "$PHONE" ] || [ -f "$LHOME/panel_phone.json" ]; then
   bash "$PROJ/scripts/liveu.sh" "$@" || prc=$?
   if [ "$prc" = "0" ]; then
     if [ -n "$PHONE" ]; then
-      echo "④d 手机访问已打开：在 Mac 屏幕上的操作面板「手机」里点「生成配对码」，用 iPhone 相机扫二维码（或 Safari 打开上面的地址、输入配对码）"
+      echo "④d 手机访问已打开：照上面的「下一步」做（按 Tailscale 账户登录开着 → iPhone 用同一个账户登录 Tailscale、Safari 打开上面的地址就行；只用配对 → 在 Mac 的操作面板「手机」里点「生成配对码」）"
     else
       echo "④d 手机访问照常（Tailscale Serve 还在）"
     fi
@@ -108,6 +108,6 @@ echo "已注册的定时任务："
 if command -v launchctl >/dev/null 2>&1; then launchctl list 2>/dev/null | grep qbreak || echo "  （没有）"; else echo "  （这台机器没有 launchctl）"; fi
 echo "页面：账本 ${LHOME}/out/page_paper.html、市场仪表盘 ${LHOME}/out/dashboard.html、操作面板 http://127.0.0.1:8765/"
 if [ -z "$PHONE" ] && [ ! -f "$LHOME/panel_phone.json" ]; then
-  echo "手机上操作（可选）：bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone <Tailscale 机器名>（只在你自己的 tailnet；配对码在操作面板「手机」里生成）"
+  echo "手机上操作（可选）：bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone <Tailscale 机器名>（只在你自己的 tailnet；按 Tailscale 账户登录，配对码备用）"
 fi
 echo "以后在 Mac 的 Claude 对话里直接说要做什么（看账本、看仪表盘、更新、做研究），Claude 会自己运行需要的命令。"

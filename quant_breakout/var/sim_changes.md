@@ -10048,3 +10048,53 @@ Mac 问法表、已知限制）；CHECK_TIMELINE（⑥ 执行层、08:35 / 09:20
   之后要 ≥ 65 根 K 线才成熟 → 第一批成熟约在 2027-01 中旬，2027-04 的季度复核起才会有笔数；第一次判定 = 2027-09-28 之后的那次复核。
   复核历史 `var/out/w2_forward_all_history.csv` 只追加（scope all_TQ08、列 tq08_year）。
 - 模拟盘 / 执行器 / 例行任务不变；面板上的趋势线照旧只当看图用。非投资建议。
+
+## 2026-10-07 工程（用户：「手机以后不用配对也能连：改成按 Tailscale 身份认证 …… 另外请检查：Mac 睡眠时手机请求 /api/chart 会一直卡在「K 线载入中」，给 fetch 加超时」）：手机按 Tailscale 账户登录（配对码留作备用）+ 页面请求 15 秒超时（不改规则 / 参数 / 仓位 / 股票池 / 执行器的下单逻辑）
+- 用户原话（2026-10-07）：「手机以后不用配对也能连：改成按 Tailscale 身份认证 —— Tailscale Serve 会给每个请求加 Tailscale-User-Login 头，手机端口（8766，只监听 127.0.0.1）
+  只接受用户自己的 tailnet 账户；配对码保留为备用。请确认：只信任来自 127.0.0.1（也就是 Serve 转发过来）的这个头；绝不开 Funnel；HALT 只能建、不能解除照旧。
+  另外请检查：Mac 睡眠时手机请求 /api/chart 会一直卡在「K 线载入中」，给 fetch 加超时（例如 15 秒），超时后显示「Mac 可能在睡眠：取不到」。」
+- Tailscale Serve 的行为（2026-10-07 查；仅对本次检索时点有效）：官方说明 https://tailscale.com/kb/1312/serve「Identity headers」—— Serve 把请求转给本机服务时加
+  Tailscale-User-Login / -Name / -Profile-Pic；请求里自带的这些头会被删掉（防伪造）；带 tag 的设备、Funnel 来的请求不填身份；非 ASCII 用 RFC 2047 Q 编码；
+  建议后端只监听 localhost。源码 github.com/tailscale/tailscale（main）：ipn/ipnlocal/serve.go addTailscaleIdentityHeaders 先删 Tailscale-User-Login / -Name /
+  -Profile-Pic / Tailscale-Funnel-Request / Tailscale-Headers-Info；Funnel → 只设 Tailscale-Funnel-Request: ?1；本机发起（WhoIs 查不到）/ 带 tag → 不填；
+  非 ASCII 用 Go 的 mime.QEncoding.Encode("utf-8", …)（纯 ASCII 原样）；反向代理保留 Host（r.Out.Host = r.In.Host）；转发时 r.SetURL(目标) = 目标的路径 + 请求的路径
+  （根挂载点不去前缀）；cmd/tailscale/cli/serve_v2.go：同一个挂载点再 serve 一次是覆盖（只查 TCP 冲突）；ipn/serve.go ExpandProxyTargetValue 保留目标里的路径。
+- 安全复核（提交前，2026-10-07；看到复核意见后改的设计，都在这次提交里）：最初的版本只认「127.0.0.1 + Host + 账户头」，但 Mac 上任何能连 127.0.0.1:8766 的程序
+  （别的 macOS 用户、沙盒 App、Docker 的 host.docker.internal、ssh -R / ngrok 之类的转发）都能自己写这两个头（机器名在公开的证书日志里、账户是邮箱）冒充你本人
+  → 拿到 CSRF 令牌、写手动指令（含立花）或建 HALT（用原始 socket 复现过）。原来写的「同一个 Mac 用户本来就能读面板令牌，没有新增风险」对这些程序不成立，已改正。改成：
+  ① **路径密钥**：`phone on` 生成 32 位十六进制随机串（128 位），Serve 的目标 = `http://127.0.0.1:8766/<路径密钥>`；经 Serve 来的请求路径都是「/<路径密钥>/…」
+  （手机的浏览器看不到），面板先去掉再处理；按账户登录只在路径带着正确的路径密钥时才算。路径密钥只在数据目录 `panel_phone.json`（0600）与 Tailscale 的 Serve 设置里，
+  终端 / 页面 / 日志不显示（tailscale 的报错里也替换掉）。2026-10-06 版的目标（没有路径密钥）→ 下一次 `phone on`（mac_setup.sh 每次更新都跑）自动换掉，不用再确认机器名；
+  老版本 tailscale 不肯覆盖时先 `serve --https=443 --set-path=/ off` 再设。
+  ② **默认关、明确打开才算（fail-closed）**：请求时看 `panel_phone.json` 的 identity = true；文件没了 / 坏了 / 旧文件 = 关。选择另记在 `panel_devices.json` 的 identity_off
+  （`phone off` 删掉 panel_phone.json 之后再 `on` 也记得「关」）；配对的文件坏了 / 删了不会让关掉的重新打开。
+  ③ 账户头只认 Serve 的两种写法：纯 ASCII 原样、非 ASCII 的 `=?utf-8?q?…?=`（解出来必须真的含非 ASCII；B 编码、大写、把 ASCII 编码的写法都不认）。
+  ④ 这台 Mac 上有别人的 macOS 用户账户（UID ≥ 501、不含自己；打开了客人用户也算）→ 第一次 `phone on` 默认只用配对；明确打开后 `on` / `status` / `identity` 都提醒。
+  ⑤ `phone forget` / `identity on` 的说明：手机丢了 → 先在 Tailscale 管理页删掉那台手机，再打开按账户登录（按账户登录没有单台设备的取消）。
+  ⑥ 按账户登录、这台手机以前也配对过 → 页面底部可以「取消这台设备的配对」（cookie 一起清掉）。⑦ 记下的账户只在 `phone on` 时更新：`status` 发现这台 Mac 的账户换了 / 带上 tag 会提醒。
+- 怎么认（`qbreak/panel_phone.py` identity_for；全部成立才算你本人，否则照旧要配对）：① 连过来的是本机回环地址（127.0.0.1 / ::1；面板只监听 127.0.0.1）
+  ② 路径带着正确的路径密钥 ③ 没有 Tailscale-Funnel-Request（有 → 整个请求 403，静态文件也不给）④ Host = `phone on` 记下的手机地址
+  ⑤ Tailscale-User-Login 头正好一个、与 `phone on` 时这台 Mac 登录的 Tailscale 账户完全相同（tailscale status --json 的 Self.UserID → User[…].LoginName；
+  Mac 带 tag → 没有用户账户 → 只能配对）⑥ 明确打开着。
+- 写操作照旧要 CSRF 令牌（按账户登录的「设备 id」= ts- + 账户 SHA-256 前 10 位，HMAC 同配对的设备）、Origin 必须是页面自己；新增：手机端口的 POST 带 Sec-Fetch-Site
+  而且不是 same-origin → 403（配对的设备也一样）。按账户登录的页面底部写「已用 Tailscale 账户登录（打码的账户；不用配对）」；没有配对 cookie 时 POST /api/unpair → 400
+  （说明在 Mac 上 `phone identity off`）。HALT 照旧只能建、不能解除（HALT 文本里只写打码后的账户）。
+- 账户名：只记在数据目录 `panel_phone.json`（0600），终端 / 页面 / 日志 / HALT 里只出现打码后的（例 ab***@e***.com）；不入库。
+- 开关：`bash scripts/liveu.sh phone identity off`（只用配对）/ `phone identity on` / `phone identity`（只看）；`phone forget`（全部取消）也会关掉；
+  `phone status` 与 Mac 本机面板的「手机」卡片多一行「按 Tailscale 账户登录：开 / 关 / 现在不可用（原因）」。
+- 照实写（剩下的风险）：Mac 上的程序都能连 127.0.0.1:8766；冒充还要知道路径密钥 —— 能读 `panel_phone.json` 的（同一个 Mac 用户的程序，本来就能读面板令牌）
+  或能读 Tailscale Serve 设置的（按 Tailscale 的装法，别的 macOS 用户也可能读得到 → 有别人的账户时默认只用配对）可以冒充；`tailscale serve status` 的原文里有路径密钥，
+  不贴进对话 / 别处。用你的账户登录 Tailscale 的每一台设备（不只是手机）都算你本人。浏览器里的网页（DNS rebinding、跨站请求）走不通：Host 必须正好是手机地址、
+  跨站请求带不了自定义头、拿不到路径密钥。
+- 15 秒超时（`qbreak/panel.py` `_NET_JS`：Mac 本机页面、手机页面、配对页同一份）：fetch 连读完内容 15 秒内没完成 → 放弃并中止请求（AbortController）。
+  K 线：手机显示「Mac 可能在睡眠：取不到（超过 15 秒没有回应；点这里再试）」，Mac 本机显示「K 线取不到（面板超过 15 秒没有回应）：点这里再试」，点一下或 Enter 重取；
+  回应读不出来（连接中途断了）也算取不到、可以再点；401 → 自动刷新（到配对页）；同一只票同时只发一个请求（第二个图等同一个结果）。
+  按钮（卖出 / 调整 / 买入 / 撤回 …）超时或回应读不出来 →「不确定有没有写进去 —— Mac 醒来后刷新，在『手动指令』里确认，不要直接再点一次」（别的按钮：「不确定有没有生效」）；
+  HALT 的每种失败（超时、连不上、HTTP 错误、回应读不出来）都加「人不在 Mac 旁边时：在 claude.ai 的云端对话里说『停 / 今天不要下单』」，这条提示不自动消失（点一下关闭）。
+  顺带：K 线图的键盘处理改成属性（重画不再越积越多）；配对页超时提示加「提示配对码无效的话，在 Mac 上重新生成」。
+- 测试 `tests/test_panel_phone.py`：账户名解码（只认 Serve 的写法）/ 打码 / 回环地址 / 路径密钥的切分；identity_for 的每一条（路径密钥、回环、Funnel、Host、重复的头、大小写、
+  8443、RFC 2047、带 tag、0600、关掉 / forget、文件没了 / 坏了 / 旧文件 = 关）；端到端（经 Serve 的样子看得到账本；**不带路径密钥的本机伪造 → 配对页 / 401、写不进去、建不了 HALT**；
+  猜的路径密钥不算；写操作要 CSRF、Sec-Fetch-Site；HALT 文本打码；以前配对过的可以在按账户登录的页面取消；关掉后配对照旧能用）；命令行（路径密钥与账户只在 0600 的文件里、
+  不打印；关掉的选择 off → on 之后还在；有别的 macOS 用户 → 默认只用配对；旧的 Serve 目标自动换掉，老版本 tailscale 先关根路径；账户换了 status 提醒；带 tag 的 Mac）；
+  node 里实测：超时（15 秒换成 50〜60 毫秒）、回应读不出来、页面的 loadK / api 原样取出来跑（401 刷新、同一只票只发一个请求、HALT 每种失败都提示云端、超时文字按接口分开），
+  四种页面（Mac、手机按账户登录、手机配对、配对页）的脚本 node --check。Tailscale 只用 Serve，绝不用 Funnel。非投资建议。

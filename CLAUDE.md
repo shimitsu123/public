@@ -71,7 +71,8 @@
   退市时间表（`run.py delist-schedule`，`var/delist_schedule.json`）到了上場廃止日自动从股票池去掉（只减），补入仍要用户确认
 - 手机上操作（2026-10-06 起）：只用 Tailscale **Serve**（`bash scripts/liveu.sh phone on|off|status|forget`；只在用户自己的 tailnet 里），
   **绝不用 Tailscale Funnel**、不把面板绑到 127.0.0.1 以外、不用别的公开转发；第一次打开会显示机器名（会写进公开的证书透明度日志）→
-  用户 2026-10-06 已确认机器名 `node`（`mac_setup.sh --phone node` 只在机器名正好是 node 时才打开）；名字不一样就告诉用户、用户同意才换名字再运行；配对码只显示在 Mac 的本机操作面板上：Claude 不调 `/api/pair/new`、不读 `~/.qbreak/home/panel_devices.json`、
+  用户 2026-10-06 已确认机器名 `node`（`mac_setup.sh --phone node` 只在机器名正好是 node 时才打开）；名字不一样就告诉用户、用户同意才换名字再运行；
+  2026-10-07 起手机默认按 Tailscale 账户登录（不用配对）：只认这台 Mac 登录的 Tailscale 账户，只信任 127.0.0.1 上、路径带着 Serve 路径密钥（`phone on` 生成，Serve 的目标 = `http://127.0.0.1:8766/<路径密钥>`）的请求里的 Tailscale-User-Login 头，经 Funnel 来的请求一律拒绝；配对码留作备用；改登录方式（`bash scripts/liveu.sh phone identity on|off`）要用户在这次对话里明确说（`phone forget` 也会关掉按账户登录；手机丢了 → 先请用户在 Tailscale 管理页删掉那台手机，再打开）；账户名只显示打码后的、不写进仓库 / 对话 / 日志；路径密钥不显示、不读出 `~/.qbreak/home/panel_phone.json`，排查用 `bash scripts/liveu.sh phone status`、不把 `tailscale serve status` 的原文贴进对话；配对码只显示在 Mac 的本机操作面板上：Claude 不调 `/api/pair/new`、不读 `~/.qbreak/home/panel_devices.json`、
   不在对话 / 终端 / 日志里写配对码或设备令牌（请用户自己在 Mac 屏幕上点「生成配对码」）；手机页面的 HALT 只能建、不能解除（解除照旧只在 Mac 上、
   用户明确说）；手机上点的卖出 / 减仓 / 比例和本机面板一样只是「手动指令」（规则同上一条）
 - 排查先看：`~/.qbreak/home/logs/com.qbreak.liveu.*.out|err`、`~/.qbreak/home/out/live_unified_paper_journal.md`、
