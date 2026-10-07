@@ -359,7 +359,8 @@ def test_kline_plain_text_and_lot_bar_in_node(tmp_path):
     if not node:
         pytest.skip("没有 node")
     J = panel._JS
-    fns = "\n".join(_js_fn(J, n) for n in ("nd", "pxs", "pcs", "vfmt", "sdate", "kSubNow", "kTrend", "kTL", "ALOT", "UW", "adjCap", "adjBar"))
+    fns = "\n".join(_js_fn(J, n) for n in ("nd", "pxs", "pcs", "vfmt", "sdate", "isLive", "liveAt", "kSubNow", "kTrend", "kTL", "ALOT", "UW",
+                                            "adjCap", "adjBar"))
     kp = json.dumps({"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN}, ensure_ascii=False)
     js = """
 class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[]; this._t=''; this.className=''; this.style={}; this.attrs={};

@@ -37,8 +37,11 @@ def test_quote_rows_for_held_stocks_and_etfs():
     code, js = panel.quotes_json("paper", now=AT, fetch=_fetch(calls))
     assert code == 200 and js["ok"] and js["live"] and js["src"] == "Yahoo 1 分钟线（约晚 20 分钟）" and js["asof"] == "2026-10-06T10:00+09:00"
     assert calls == [["1655.T", "7203.T"]]                                 # 只取账本里持有的
-    assert js["rows"]["7203.T"] == {"px": 2650.0, "at": "2026-10-06T09:40+09:00", "today": True, "kind": "stock", "n": 100,
-                                    "value": 265_000, "chg_pct": 1.92, "pl_pct": 6.0}     # 比昨收 ¥2,600 / 比成本 ¥2,500
+    r = dict(js["rows"]["7203.T"])
+    est = r.pop("est")
+    assert r == {"px": 2650.0, "at": "2026-10-06T09:40+09:00", "today": True, "kind": "stock", "n": 100,
+                 "value": 265_000, "chg_pct": 1.92, "pl_pct": 6.0}                       # 比昨收 ¥2,600 / 比成本 ¥2,500
+    assert est["src"] == "live" and est["px"] == 2650.0 and est["pnl"] == 265_000 - 250_000 - 187 - 187 and est["lines"]
     c = js["rows"]["1655.T"]
     assert (c["kind"], c["n"], c["value"], c["chg_pct"], c["pl_pct"]) == ("core", 1130, 798_910, 1.0, None)   # 比上一次决策的收盘 ¥700
     night = dt.datetime(2026, 10, 7, 6, 30, tzinfo=JST)                      # 第二天开盘前：给的是前一个交易日的最后一根

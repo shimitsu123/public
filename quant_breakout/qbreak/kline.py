@@ -168,6 +168,80 @@ def payload(df: pd.DataFrame, bar_date=None, info: dict | None = None) -> dict |
     return out if out["tf"] else None
 
 
+LIST_KEYS = ("d", "o", "h", "l", "c", "v", "ma5", "ma10", "ma20", "ma30", "dif", "dea", "mh", "pdi", "mdi", "adx", "adxr")
+
+
+def with_live(pl: dict | None, bar: dict | None, at: str | None = None) -> dict | None:
+    """持仓的「今天这一根」（2026-10-07 用户：「现在持有的ETF/股票等等当天日线在交易时间在K线中要随时价钱反映」）：
+    bar = 那一天到 at 为止的 1 分钟线合计 {"d", "o", "h", "l", "c", "v"}（qbreak/data.intraday_quotes；约晚 20 分钟）。
+    日K：图里还没有这一天 → 加一根；周K / 月K：同一周 / 同一个月 → 并进最后一根（高 / 低取大小、收 = 现价、量相加），否则新开一根；
+    图里已经有这一天（正式日线）→ 不动。最后一根的均线 / MACD / DMI 用这一段重新算（之前的不动；MACD 的 EMA 从窗口开头起算，
+    250 / 160 / 120 根之后和全部历史的差可以忽略），趋势线的「现在的位置 / 离收盘多远」跟着最后一根更新。不改原来的 pl。只展示。"""
+    if not pl or not bar or not pl.get("tf"):
+        return pl
+    try:
+        d = pd.Timestamp(str(bar["d"]))
+        o, h, lo, c, v = (float(bar[k]) for k in ("o", "h", "l", "c", "v"))
+    except (KeyError, TypeError, ValueError):
+        return pl
+    if not all(math.isfinite(x) for x in (o, h, lo, c)) or c <= 0:
+        return pl
+    out = {**pl, "tf": dict(pl["tf"])}
+    done = []
+    for tf, sr in pl["tf"].items():
+        try:
+            s2 = _live_tf(tf, sr, d, o, h, lo, c, v)
+        except Exception:                                                # noqa: BLE001  只展示：这一个周期并不进去就照旧
+            s2 = None
+        if s2 is not None:
+            out["tf"][tf] = s2
+            done.append(tf)
+    if not done:
+        return pl
+    out["live"] = {"d": d.date().isoformat(), "at": at, "tf": done}
+    return out
+
+
+def _live_tf(tf: str, sr: dict, d: pd.Timestamp, o: float, h: float, lo: float, c: float, v: float) -> dict | None:
+    """with_live 的一个周期：并进去之后的那一段（不并 → None：图里已经有这一天、数据不全）。"""
+    dd = sr.get("d") or []
+    if len(dd) < 2 or any(len(sr.get(k) or []) != len(dd) for k in ("o", "h", "l", "c", "v")):
+        return None
+    last = pd.Timestamp(dd[-1])
+    if d <= last:
+        return None                                                      # 图里已经有这一天（或更新的）
+    df = pd.DataFrame({"Open": sr["o"], "High": sr["h"], "Low": sr["l"], "Close": sr["c"], "Volume": sr["v"]},
+                      index=pd.DatetimeIndex(dd), dtype=float)
+    frq = {"W": "W-FRI", "M": "M"}.get(tf)
+    same = frq is not None and d.to_period(frq) == last.to_period(frq)
+    if same:                                                             # 同一周 / 同一个月：并进最后一根
+        r = df.iloc[-1]
+        row = [r["Open"] if math.isfinite(r["Open"]) else o, float(np.nanmax([r["High"], h])), float(np.nanmin([r["Low"], lo])), c,
+               (r["Volume"] if math.isfinite(r["Volume"]) else 0.0) + v]
+        df = pd.concat([df.iloc[:-1], pd.DataFrame([row], columns=df.columns, index=pd.DatetimeIndex([d]))])
+    else:
+        df = pd.concat([df, pd.DataFrame([[o, h, lo, c, v]], columns=df.columns, index=pd.DatetimeIndex([d]))])
+    new = series(df, len(df))
+    s2 = {k: x for k, x in sr.items() if k not in LIST_KEYS}
+    for k in LIST_KEYS:
+        old = list(sr.get(k) or [])
+        s2[k] = (old[:-1] if same else old) + [new[k][-1]]
+    tl = sr.get("tl")
+    if tl:                                                               # 趋势线：现在的位置（最后一根）、离收盘多远
+        tl = {**tl}
+        n1 = len(s2["d"]) - 1
+        for side in ("sup", "res"):
+            L = tl.get(side)
+            if L and L.get("y1") is not None and L.get("b") is not None and L.get("i1") is not None:
+                now = float(L["y1"]) + float(L["b"]) * (n1 - int(L["i1"]))
+                tl[side] = {**L, "now": _r(now), "dist_pct": _r((now / c - 1) * 100)}
+        if tl.get("sup") and tl.get("res"):
+            w = tl["res"]["now"] - tl["sup"]["now"]
+            tl["pos"] = _r((c - tl["sup"]["now"]) / w * 100, 0) if w and w > 0 else None
+        s2["tl"] = tl
+    return s2
+
+
 def _trendline(b: pd.DataFrame, tf: str) -> dict | None:
     """那个周期最后一根时的趋势线（qbreak/trendline.summary；锚点位置按给页面的最近 BARS 根算）；算不出 → None。"""
     from . import trendline as TL
@@ -202,4 +276,4 @@ def chips(tr: dict | None) -> str:
 
 
 __all__ = ["MAS", "BARS", "TF_NAME", "LABELS", "PLAIN", "ALIGN_PLAIN", "UNIT", "CHAN_PLAIN", "DMI_N", "DMI_M", "ohlcv", "bars",
-           "trend", "macd", "dmi", "series", "payload", "trends", "chips", "plain"]
+           "trend", "macd", "dmi", "series", "payload", "trends", "chips", "plain", "with_live", "LIST_KEYS"]

@@ -390,8 +390,8 @@ def test_adjust_dialog_in_core_mode_in_node(tmp_path):
     node = shutil.which("node")
     if not node:
         pytest.skip("没有 node")
-    fns = "\n".join(_js_fn(panel._JS, n) for n in ("nd", "pctOf", "ALOT", "UW", "cpctOf", "adjCap", "adjTarget", "adjBar",
-                                                    "coreFx", "adjPrevCore"))
+    fns = "\n".join(_js_fn(panel._JS, n) for n in ("nd", "pxs", "pcs", "pctOf", "ALOT", "UW", "cpctOf", "adjCap", "adjTarget", "adjBar",
+                                                    "coreFx", "syen", "spc", "estOf", "jfee", "estPart", "estLine", "adjPrevCore"))
     js = """
 class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[]; this._t=''; this.className=''; this.style={}; this.attrs={};
   this.value=''; this.disabled=false; const s=this; this.classList={add(c){ s.className=(s.className ? s.className+' ' : '')+c; }}; }
@@ -401,6 +401,7 @@ class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[
 const document={createElement:t=>new El(t), createTextNode:t=>{ const e=new El('#text'); e._t=String(t); return e; }};
 const CFG={eq:1000000, cap:34, when:'马上（盘中）', cores:{'1655.T':{cur:1130, u100:1140, lot:10}}}, LOT=100;
 const fmt=n=>Number(n).toLocaleString('ja-JP'), yen=n=>'¥'+Math.round(n).toLocaleString('ja-JP');
+let QD=null;
 const R={max:'1140', value:'1130', attrs:{}, setAttribute(k,v){ this.attrs[k]=String(v); }};
 const ELS={'#adj-range':R, '#adj-bar':new El('div'), '#adj-lab':new El('div'), '#adj-note':new El('div'), '#adj-go':new El('button'),
            '#adj-prev':new El('div'), '#adj-val':new El('input')};

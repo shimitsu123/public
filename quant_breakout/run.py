@@ -3635,6 +3635,19 @@ def cmd_manual(a) -> int:
     if adj:
         print(f"按最近收盘 ¥{adj['px']:,.0f} 估算：{'加' if adj['delta'] > 0 else '卖'} {abs(adj['delta']):,} 股"
               f"（{adj['cur']:,} → {adj['target']:,} 股）" + ("；★ 超过单只上限，截到上限" if adj["capped"] else ""))
+    sold_ = None                                             # 卖出的股数 / 口数（预计收益用）：None = 全部，0 = 这条不卖
+    if rec["kind"] == "adjust":
+        sold_ = -adj["delta"] if adj and adj["delta"] < 0 else 0
+    elif rec["kind"] == "trim":                              # 减仓：按最近收盘换算的股数
+        a_ = MO.adjust_plan({**rec, "kind": "adjust", "unit": "pct", "value": rec.get("pct")}, st,
+                            float((b_.get("manual") or {}).get("cap_pct") or MO.CAP_PCT))
+        sold_ = max(0, -a_["delta"]) if a_ else 0
+    elif rec["kind"] == "core" and rec.get("ticker") and int(rec.get("target") or 0) > 0:
+        sold_ = max(0, int((st.get("core_units") or {}).get(rec["ticker"], 0)) - int(rec["target"]))
+    if rec.get("ticker") and rec["kind"] in ("sell", "trim", "adjust", "core") and sold_ != 0:
+        e_ = MO.sell_estimate(b_, rec["ticker"], sm=sm_, shares=sold_)
+        for ln in MO.est_lines(e_, MO.sale_note(tag, now)):
+            print(f"  {ln}")
     if rec["kind"] in MO.ORDER_KINDS:
         mode = MO.timing(now)[0]
         print(f"{when}下单（{MO.RULE_TEXT}）"

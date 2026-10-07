@@ -14406,5 +14406,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "买入信号 = 停着时规则的核心目标（比例 100% 的口数）从 0 变成 > 0 的那次决策；卖出时规则本来就想拿、之后一直想拿不算；上一次决策没有规则目标额不判（避免误报）；还没确认、规则又不拿了 → 信号撤掉（继续停买）；只提醒一次（通知只在那一天，页面 / 日志一直写到确认）；确认买入 = 比例 100%（盘中马上、开盘前 / 收盘后进下一次决策）。观察中的远近排序只是估算（MACD 差按最近一天的变化线性外推，事后没验证过准不准），不改交易。现价不用立花 API（不和执行器抢会话）。"
+ },
+ {
+  "line": 10232,
+  "date": "2026-10-07",
+  "title": "持仓（个股 + 核心 ETF）的 K 线盘中并进「今天这一根」（Yahoo 1 分钟线合成，日K / 周K / 月K、均线 / MACD / DMI / 趋势线跟着更新；收盘后到正式日线换上前写「暂定」）+ 卖出全部 / ETF 卖出 / 调仓减 / 命令行显示预计收益（买入信号那天的收盘 → 成交价 → 现价 / 预计卖出 → 扣两边手续费的收益与收益率、持有天数、税后约；Mac + 手机）",
+  "kind": "engineering",
+  "domain": "数据/工程",
+  "registration": "—",
+  "script": "qbreak/data.py（intraday_quotes 的 bar：今天到那个时刻的 1 分钟线合计）、qbreak/kline.py（with_live / _live_tf / LIST_KEYS）、qbreak/manual_orders.py（fee_jp / core_cost / sell_estimate / sale_note / est_lines / yen_px / TAX_PCT）、qbreak/panel.py（chart_json 并进今天这一根 + live.open、quotes_json 的 bar / est、CFG.est / CFG.fee、卖出与 ETF 确认框的预计收益、调仓减的一行、liveK / reloadK、盘中 / 暂定的标记）、run.py（manual 的卖出 / 调仓减 / 减仓打出预计收益）",
+  "output": "—（页面与文字；/api/chart 的 live、/api/quotes 的 bar / est 只展示）",
+  "candidates": [],
+  "baseline": "—（不改规则 / 参数 / 仓位 / 股票池；执行器的下单逻辑与以前逐笔相同）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "并进去的最后一根的指标用这一段（日 250 / 周 160 / 月 120 根）重新算，与全部历史重算一致（测试对过）；图里已经有这一天不并；数据缺字段或出错照样给原来的图。预计收益只是估算：现价约晚 20 分钟（Yahoo）、实际成交价会不同（模拟账户盘中按现价；立花盘中按立花的现在值 −0.5% 挂限价；开盘前 / 收盘后按开盘价），手续费按立花 個別コース（买入手续费按全部股数的一笔算、卖一部分按比例，与引擎平仓时一样），税按特定口座 20.315% 粗算（不含损益通算 / NISA）；核心 ETF 的成本 = 成交记录的移动平均，对不上现在的口数就不算收益。"
  }
 ]

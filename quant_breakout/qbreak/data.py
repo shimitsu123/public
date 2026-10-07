@@ -654,7 +654,9 @@ def realtime_quotes(tickers: list[str]) -> dict[str, float]:
 
 
 def intraday_quotes(tickers: list[str]) -> dict[str, dict]:
-    """操作面板「现价」用：yfinance 1 分钟线每只最后一根 → {票: {"px", "at"（JST ISO 时刻）}}（東証は約 15〜20 分遅れ；只展示）。
+    """操作面板「现价」用：yfinance 1 分钟线每只最后一根 → {票: {"px", "at"（JST ISO 时刻）, "bar"}}（東証は約 15〜20 分遅れ；只展示）。
+    bar = 那一天（最后一根所在的交易日）到那个时刻为止的日线：{"d", "o"（第一根的开盘）, "h", "l", "c"（= px）, "v"（合计）}
+    ——K 线图盘中把「今天这一根」画出来用（qbreak/kline.with_live）。
     不限今天：开盘前 / 收盘后 / 休市日给的是最近一个交易日的最后一根（页面写出时刻）。取不到 → 空。"""
     import yfinance as yf
 
@@ -675,15 +677,28 @@ def intraday_quotes(tickers: list[str]) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for t in tickers:
         try:
-            col = raw[t]["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw["Close"]
+            sub = raw[t] if isinstance(raw.columns, pd.MultiIndex) else raw
+            col = sub["Close"]
         except KeyError:
             continue
         v = col.dropna()
         if not len(v) or not float(v.iloc[-1]) > 0:
             continue
-        ts = pd.Timestamp(v.index[-1])
-        ts = (ts.tz_localize("UTC") if ts.tzinfo is None else ts).tz_convert(JST)
-        out[t] = {"px": float(v.iloc[-1]), "at": ts.isoformat(timespec="minutes")}
+        idx = pd.DatetimeIndex(v.index)
+        idx = (idx.tz_localize("UTC") if idx.tz is None else idx).tz_convert(JST)
+        ts, px = idx[-1], float(v.iloc[-1])
+        out[t] = {"px": px, "at": ts.isoformat(timespec="minutes")}
+        try:                                                 # 那一天到这个时刻为止的一根（只用最后一根所在的交易日）
+            day = sub.loc[v.index[idx.date == ts.date()]]
+            o = day["Open"].dropna()
+            h, lo = float(day["High"].max()), float(day["Low"].min())
+            vol = float(day["Volume"].fillna(0).sum()) if "Volume" in day.columns else 0.0
+            op = float(o.iloc[0]) if len(o) else px
+            out[t]["bar"] = {"d": ts.date().isoformat(), "o": op,
+                             "h": max(x for x in (h, op, px) if x == x), "l": min(x for x in (lo, op, px) if x == x),
+                             "c": px, "v": int(vol) if vol == vol else 0}
+        except (KeyError, ValueError, IndexError):           # 只有现价也行（K 线不画今天这一根）
+            pass
     return out
 
 

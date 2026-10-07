@@ -1082,6 +1082,151 @@ def active(sm: dict | None) -> bool:
             or any(it.get("status") == "done" and it.get("kind") in ORDER_KINDS for it in sm.get("items") or []))
 
 
+TAX_PCT = 20.315                        # 特定口座（源泉徴収あり）的税率 %：卖出的预计收益「税后约」用（只是估算）
+
+
+def fee_jp(notional: float) -> float:
+    """日本股票 / ETF 一笔的手续费（qbreak/fees：立花 個別コース，模拟账户也按它；只用来估算卖出收益）。"""
+    from .fees import BROKERS, DEFAULT_BROKER, FeeSchedule
+    tiers = BROKERS[DEFAULT_BROKER["JP"]]["markets"]["JP"].get("commission_tiers") or ()
+    return FeeSchedule(tiers=tuple(tiers))(notional)
+
+
+def core_cost(st: dict | None, t: str) -> dict | None:
+    """核心 ETF 现在这些口数的成本：账本的成交记录（state.core_trades：[日期, 票, BUY/SELL, 口数, 成交价, 手续费]）按移动平均算
+    （买入手续费算进成本；卖出按比例减）→ {"units", "avg_px"（不含手续费）, "cost"（含买入手续费）, "since"（这一段从哪天开始拿）}；
+    记录对不上现在的口数（拆股、记录不全）→ None。"""
+    st = st or {}
+    units, cost, pcost, since = 0, 0.0, 0.0, None
+    for row in st.get("core_trades") or []:
+        try:
+            d, tk, side, u, px, f = row[:6]
+            u, px, f = int(u), float(px), float(f or 0)
+        except (TypeError, ValueError):
+            return None
+        if tk != t or u <= 0:
+            continue
+        if side == "BUY":
+            if units <= 0:
+                since = str(d)
+            units, cost, pcost = units + u, cost + u * px + f, pcost + u * px
+        elif units > 0:
+            k = min(u, units) / units
+            cost, pcost, units = cost * (1 - k), pcost * (1 - k), units - min(u, units)
+            if units == 0:
+                cost, pcost, since = 0.0, 0.0, None
+    held = int((st.get("core_units") or {}).get(t, 0) or 0)
+    if held <= 0 or units != held:
+        return None
+    return {"units": units, "avg_px": pcost / units, "cost": cost, "since": since}
+
+
+def sell_estimate(book: dict | None, t: str, px: float | None = None, at: str | None = None, sm: dict | None = None,
+                  shares: int | None = None) -> dict | None:
+    """卖出的预计收益（2026-10-07 用户：「点击卖出全部的时候要显示预计收益 和买的时候股价和成交股价 收益率等等」；只展示、估算）。
+    个股：成本 = 账本的买入成交价（加仓后是加权平均）× 股数 + 买入手续费（按全部股数的一笔算、卖一部分按比例）；
+    「买的时候的股价」= 买入信号那天的收盘（执行器汇总的 holding_view；有的话）。核心 ETF：成交记录的移动平均（core_cost）。
+    px：现价（现价接口的 Yahoo 1 分钟线）；没给 → 账本里的最近收盘。手续费按立花 個別コース（fee_jp）；收益是税前。
+    shares：卖几股 / 口（默认全部）。不是拿着的票 → None；成本算不出 → 只有卖出金额（没有 pnl）。"""
+    st = (book or {}).get("state") or {}
+    p = (st.get("pos") or {}).get(t)
+    cc = None
+    if p is not None:
+        if str(p.get("market") or "JP").upper() != "JP" or not str(t).upper().endswith(".T"):
+            return None                                              # 美股（美元、别的手续费）不估
+        kind, held = "stock", int(p.get("shares") or 0)
+        entry = float(p.get("entry_px") or 0) or None
+        last = float(p.get("last_close") or 0)
+        info = {"entry_date": p.get("entry_date"), "hold": int(p.get("hold") or 0)}
+        hv = next((r for r in (((sm or {}).get("holding_view") or {}).get("holdings") or []) if r.get("ticker") == t), None)
+        w = (hv or {}).get("why") or {}
+        if w.get("signal_date") and w.get("close"):
+            info.update(sig_date=str(w["signal_date"]), sig_close=round(float(w["close"]), 2))
+    else:
+        held = int((st.get("core_units") or {}).get(t, 0) or 0)
+        if held <= 0:
+            return None
+        kind = "core"
+        cc = core_cost(st, t)
+        entry = cc["avg_px"] if cc else None
+        last = float((st.get("core_last") or {}).get(t) or (((book or {}).get("core_rule") or {}).get("px") or {}).get(t) or 0)
+        info = {"since": cc["since"]} if cc and cc.get("since") else {}
+    n = held if shares is None else max(0, min(int(shares), held))
+    live = bool(px) and float(px) > 0
+    price = float(px) if live else last
+    if n <= 0 or not price > 0:
+        return None
+    proceeds = price * n
+    sell_fee = fee_jp(proceeds)
+    out = {"t": t, "kind": kind, "n": n, "held": held, "px": round(price, 2), "src": "live" if live else "close",
+           "at": at if live else None, "close_date": st.get("last_date"), "proceeds": round(proceeds), "sell_fee": round(sell_fee),
+           **info}
+    if entry:
+        if kind == "stock":
+            cost, buy_fee = entry * n, fee_jp(entry * held) * n / held
+        else:
+            base = cc["cost"] * n / held
+            cost = entry * n
+            buy_fee = base - cost
+        base = cost + buy_fee
+        pnl = proceeds - sell_fee - base
+        out.update(entry_px=round(entry, 2), cost=round(cost), buy_fee=round(buy_fee), pnl=round(pnl),
+                   ret_pct=round((price / entry - 1) * 100, 2), net_pct=round(pnl / base * 100, 2) if base > 0 else None)
+    return out
+
+
+def sale_note(tag: str, now: dt.datetime) -> str:
+    """卖出的成交价会是什么（估算用的一句话）：盘中 → 模拟账户按现价、立花限价 = 现价 −0.5%；其他时间 → 按开盘价（寄付）。"""
+    if timing(now)[0] == "now":
+        return "模拟账户：盘中马上按现价成交" if tag.startswith("paper") else "立花：盘中马上卖，限价 = 现价 −0.5%，成交价可能略低"
+    return f"实际在{when_text(now)}成交，按那时的价格"
+
+
+def est_lines(e: dict | None, note: str = "") -> list[str]:
+    """卖出的预计收益几行（面板的卖出确认框、命令行）：买入 → 现价 / 预计卖出 → 预计收益与收益率 → 手续费、税。"""
+    if not e:
+        return []
+    u = "口" if e.get("kind") == "core" else "股"
+    md = lambda d: str(d or "")[5:10].replace("-", "/")                 # noqa: E731
+    out = []
+    if e.get("kind") == "stock":
+        if e.get("entry_px"):
+            out.append("买入：" + (f"{md(e['sig_date'])} 收盘 {yen_px(e['sig_close'])} 出信号 → " if e.get("sig_date") else "")
+                       + (f"{md(e.get('entry_date'))} " if e.get("entry_date") else "")
+                       + f"成交 {yen_px(e['entry_px'])} × {e['n']:,} {u}（成本约 ¥{e['cost']:,}）")
+    elif e.get("entry_px"):
+        out.append(f"买入：平均成本 {yen_px(e['entry_px'])} × {e['n']:,} {u}（成本约 ¥{e['cost']:,}"
+                   + (f"，{md(e['since'])} 起陆续买入" if e.get("since") else "") + "）")
+    else:
+        out.append("买入成本：成交记录对不上现在的口数，算不出收益（只看卖出金额）")
+    hm = str(e.get("at") or "")[11:16]
+    out.append((f"现价 {yen_px(e['px'])}（{hm}，Yahoo 约晚 20 分钟）" if e.get("src") == "live"
+                else f"最近收盘 {yen_px(e['px'])}（{md(e.get('close_date'))}）")
+               + f" → 预计卖出约 ¥{e['proceeds']:,}" + (f"（{note}）" if note else ""))
+    if e.get("pnl") is not None:
+        pnl = int(e["pnl"])
+        out.append(f"预计收益 {_sg(pnl)}¥{abs(pnl):,}"
+                   + (f"（{_sg(e['net_pct'])}{abs(e['net_pct']):.2f}%；" if e.get("net_pct") is not None else "（")
+                   + f"股价 {_sg(e['ret_pct'])}{abs(e['ret_pct']):.2f}%）" + (f" · 持有 {e['hold']} 个交易日" if e.get("hold") else ""))
+        fees = int(e.get("buy_fee") or 0) + int(e.get("sell_fee") or 0)
+        out.append(f"已扣两边手续费约 ¥{fees:,}；税前" + (f"，税后约 ¥{round(pnl * (1 - TAX_PCT / 100)):,}（特定口座按 {TAX_PCT:g}% 算）"
+                                                         if pnl > 0 else ""))
+    else:
+        out.append(f"卖出手续费约 ¥{int(e.get('sell_fee') or 0):,}")
+    return out
+
+
+def _sg(v) -> str:
+    """正负号：0 以上 +，负数 −（与日报的写法一样）。"""
+    return "+" if float(v) >= 0 else "−"
+
+
+def yen_px(v) -> str:
+    """股价的写法：整数不带小数（¥2,500），有零头的带到最多 2 位（¥691.67、¥893.5）。"""
+    v = float(v)
+    return f"¥{v:,.0f}" if abs(v - round(v)) < 0.005 else "¥" + f"{v:,.2f}".rstrip("0").rstrip(".")
+
+
 def signal_text(sg: dict | None) -> str:
     """闲置资金 ETF 的买入信号一句话：规则想买 1545.T 约 110 口（约 ¥2,277,000）。"""
     xs = [f"{x['ticker']} 约 {int(x.get('units') or 0):,} 口" + (f"（约 ¥{float(x['yen']):,.0f}）" if x.get("yen") else "")
@@ -1116,4 +1261,5 @@ __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEF
            "next_window", "due",
            "RULE_TEXT", "NOW_NO_CANCEL",
            "now_due", "status_text", "entry_why", "buy_size", "requests_path", "position_pct", "target_shares", "adjust_plan",
-           "cap_text", "fmt_target", "describe", "active", "lines", "signal_text", "core_pct_now", "LABEL", "STATUS", "REASON_TEXT"]
+           "cap_text", "fmt_target", "describe", "active", "lines", "signal_text", "core_pct_now",
+           "fee_jp", "core_cost", "sell_estimate", "sale_note", "est_lines", "yen_px", "TAX_PCT", "LABEL", "STATUS", "REASON_TEXT"]
