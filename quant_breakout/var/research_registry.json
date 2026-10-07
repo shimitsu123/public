@@ -14389,5 +14389,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "比例 = 目标口数 ÷ 比例 100% 时的规则目标口数（取让目标正好落在那个口数的最小两位小数）；规则同时拿两只以上核心 ETF 时调一只另一只也跟着变（预览 / 提示 / 命令行写出来）；今天已有执行器单 / 今天调过 / 照新比例下的单没全部成交（盘中或开盘、HALT 没下）的 ETF → 下一次决策照新比例；顺带修正：执行器还没读的比例 / 解除不买回被撤回时以前照样生效"
+ },
+ {
+  "line": 10198,
+  "date": "2026-10-07",
+  "title": "卖出闲置资金 ETF 之后停买（钱留现金）+ 规则从「不拿」变成「拿」时只提醒买入信号、你点「确认买入」才买 + ETF 的「卖出全部」一直在 + 持仓的现价（Yahoo 1 分钟线，约晚 20 分钟）+ 建议的股票「快要出 / 观察中」按离买入信号的远近排序（Mac + 手机）",
+  "kind": "engineering",
+  "domain": "数据/工程",
+  "registration": "—",
+  "script": "qbreak/manual_orders.py（core_rec 的卖出全部不要规则目标额、ingest 的 core_pause、now_due、check、core_effects、core_pct_now、signal_text、lines）、qbreak/live_unified.py（_core_pending 没有规则目标额时的卖出全部、_record_core 判买入信号、now_phase、daily_text 的通知）、qbreak/panel.py（ETF 下面一直有卖出全部、停买卡片 / 横幅 / 确认买入、现价 quotes_json + /api/quotes + 页面刷新、观察中的一句话）、qbreak/data.py（intraday_quotes）、qbreak/suggest.py（proximity / near_text / near_key 与排序）、run.py（manual 的停买 / 确认买入说明、manual list）",
+  "output": "—（页面与文字；执行器账本新键 manual.core_pause / manual.core_signal；/api/quotes 只展示）",
+  "candidates": [],
+  "baseline": "—（不改规则 / 参数 / 仓位 / 股票池；不卖 ETF、不停买时执行器与以前逐笔相同；日报的候补队列顺序不变）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "买入信号 = 停着时规则的核心目标（比例 100% 的口数）从 0 变成 > 0 的那次决策；卖出时规则本来就想拿、之后一直想拿不算；上一次决策没有规则目标额不判（避免误报）；还没确认、规则又不拿了 → 信号撤掉（继续停买）；只提醒一次（通知只在那一天，页面 / 日志一直写到确认）；确认买入 = 比例 100%（盘中马上、开盘前 / 收盘后进下一次决策）。观察中的远近排序只是估算（MACD 差按最近一天的变化线性外推，事后没验证过准不准），不改交易。现价不用立花 API（不和执行器抢会话）。"
  }
 ]

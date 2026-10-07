@@ -35,7 +35,7 @@
   和规则的卖单同一条路（HALT / ARM / 持仓核对 / 单笔上限 / 时间窗口照常），所以第二天的持仓核对不会停。成交日 08:55 之前点的 → 当天开盘寄付成行
   （07:40 已经跑完时：交易日 07:45〜08:50 面板叫执行器重试一次；立花另有 08:35 重试），之后点的 → 下一个交易日开盘
   （**2026-10-07 起改成：盘中点的马上下、开盘前 / 午休点的等开盘、收盘后点的等下一个交易日开盘**，见下面「手动买卖盘中马上下」一条）。
-  卖出后默认 20 个交易日不自动买回（可选 0 / 5 / 60 / 一直）；减仓只能减（按单元向下取整）；闲置资金比例 = 规则目标额 × %（下一次决策起；2026-10-07 起盘中写的马上照新比例调、拿着的核心 ETF 也能在它下面「卖出全部 / 调仓…」，见下面「拿着的核心 ETF 也能调」一条）；
+  卖出后默认 20 个交易日不自动买回（可选 0 / 5 / 60 / 一直）；减仓只能减（按单元向下取整）；闲置资金比例 = 规则目标额 × %（下一次决策起；2026-10-07 起盘中写的马上照新比例调、拿着的核心 ETF 也能在它下面「卖出全部 / 调仓…」，见下面「拿着的核心 ETF 也能调」一条；比例 0% / ETF 卖出全部 = 停买，出现买入信号只提醒、你确认才买，见「卖出闲置资金 ETF 之后停买」一条）；
   撤回：执行器还没处理的马上撤，已交出的「之后不再重下」（已经发到交易所的那笔要在立花网站 / App 上撤）。规则同一天也要卖 → 按规则的单。
   模拟账户上手动操作会和云端模拟盘不一致（上线门槛「连续 10 个交易日一致」的天数会中断；比较文字注明「有手动操作，是预期的」）。
   每只持仓的「为什么持有」（买入信号那天的规则读数：横盘振幅、MACD 0 轴附近金叉、放量倍数、W2、离箱顶、出货日；业种 / 主题）与
@@ -120,6 +120,23 @@
     今天已经照比例调过一次的 ETF、照新比例下的单没全部成交的（盘中的或开盘的；HALT 没下也算）→ 下一次决策照新比例；取不到现价 → 10 分钟后再试。
   - 命令行：`bash scripts/liveu.sh manual sell 1545` / `manual adjust 1545 --shares 50`（或 `--yen` / `--pct`）/ `manual trim 1545 --pct 30`（只减）。
   - 顺带修正：执行器还没读的「闲置资金比例 / 解除不买回」被撤回时以前照样生效 → 现在撤回有效。
+- **卖出闲置资金 ETF 之后停买 + 买入信号提醒 + 确认才买；持仓的现价；观察中按离买入信号的远近（2026-10-07 用户：「现在持仓的etf也要有卖出的button /
+  卖出口持有现金自动停止闲置资金买入etf，如果出现买入信号要提醒 确认之后才会继续买入 / 当天持有的股票、etf要知道现在的随时股价 /
+  观察中的股票要按照即将有可能会买的顺序进行排序」；工程，不改规则 / 参数 / 仓位 / 股票池；不卖 ETF 时执行器与以前逐笔相同；sim_changes 同日一节）**：
+  - 拿着的核心 ETF 下面一直有「卖出全部」：执行器还没算过规则目标额（更新后第一次运行之前）、规则在开盘卖出（熊市 / 换 ETF）时也有（那时「调仓…」不能用）。
+  - **卖出全部 = 停买闲置资金 ETF**（闲置资金比例 0%，钱留现金；账本 `manual.core_pause`）：之后规则每天的核心目标 × 0 = 不买。
+    **买入信号** = 停着时规则的核心目标从「不拿」（0 口）变成「拿」（例如熊市结束、换成另一只 ETF）→ 只提醒（`manual.core_signal`）：Mac 通知（出现的那一天）、
+    日志、账本页、操作面板顶上的红字 +「闲置资金」卡片；**你点「确认买入」（= 比例 100%）才买**（盘中点的马上照规则买、开盘前点的进早上的决策、
+    收盘后点的进下一个交易日的决策）。卖出时规则本来就想拿、之后一直没变 → 不算信号（卡片写「规则现在：想拿 X 约 N 口 / 不拿」，随时可以确认买入）；
+    想先买一部分：卡片里展开「按别的比例恢复」。命令行：`bash scripts/liveu.sh manual core --pct 100`。上一次决策没有规则目标额（更新后第一次）→ 不判信号；
+    还没确认、规则又不拿信号里的那几只了 → 信号撤掉（继续停买）。
+  - 持仓的现价：每只个股 / 核心 ETF 下面一行「现价 ¥（时刻）· 比昨收 % · 市值约 ¥（股 / 口）· 比买入价 %」（Yahoo 1 分钟线，约晚 20 分钟；只展示）；
+    盘中每 1 分钟、其他时间每 10 分钟刷新（手机切回来马上刷新）；Mac 与手机共用缓存（盘中 60 秒内只取一次、取不到 10 秒后再试）；接口 `/api/quotes`
+    （票只来自账本；手机端口要你本人）。不用立花 API 取价（不和执行器抢会话）；不是今天的价会写日期和「最近一个交易日」。
+  - 建议的股票：「快要出」「观察中」两组按离买入信号的远近排：资格检查挡的最后、新仓倍数 0 / 决算前的其次 → 今天就不满足的条件少的先（横盘、MACD 离 0 轴、
+    周线量比 W2、出货日 …）→ MACD 估计几天后金叉（在信号线下往上靠的按天数；往下走的其次；已经在线上的最后）→ 今天量比高的先 → 就绪度。
+    每只下面一句「离买入信号：MACD 约 N 天后金叉（按最近一天的变化估）；金叉那天量要 > 1.5 倍（今天 x 倍）；还差：…」（10 天以上只写「还远」）。
+    只是排序与展示（估算，不是预测）；日报的候补队列照旧（状态 → 顺风 / 逆风 → 就绪度）。
 - **手机上操作（2026-10-06 用户：「做一个可以在手机上操作的页面」；工程，不改规则；sim_changes 同日一节）**：
   操作面板除了本机 127.0.0.1:8765 另开手机端口 127.0.0.1:8766；`bash scripts/liveu.sh phone on` 用 Tailscale Serve 把它放到
   `https://<Mac 的机器名>.<tailnet>.ts.net/`（只有你 tailnet 里的设备能连，HTTPS 证书自动；**绝不用 Funnel**）。
@@ -958,14 +975,18 @@
 - `qbreak/brokers/tachibana.py` 立花 API v4r10 适配器；`qbreak/brokers/tachibana_sim.py` 模拟交易所（演练用）；`qbreak/brokers/paper.py` 模拟券商
 - `qbreak/bullbear.py` 牛熊分界 + 阶段；`qbreak/report_unified.py` 日报；`qbreak/desktop_page.py` Mac 的账本页面
 - 手动指令：`qbreak/manual_orders.py`（指令文件、检查、执行器里的 Manual：卖出 / 减仓 / 调整持仓（可加可减）/ 买入 / 闲置资金比例 / 不买回 / 撤回；
-  名额估算 `slots`；核心 ETF 的买卖 → 闲置资金比例 `core_info` / `core_rec` / `core_pct_for` / `core_effects`，执行器账本的 `core_rule`、
-  引擎的 `core_t100` / `core_exact`）、`qbreak/panel.py`（本机操作面板 127.0.0.1:8765，只写指令；「调仓…」「买入…」对话框、K 线、`/api/chart`）、
+  名额估算 `slots`；核心 ETF 的买卖 → 闲置资金比例 `core_info` / `core_rec` / `core_pct_for` / `core_effects` / `core_pct_now`，执行器账本的 `core_rule`、
+  引擎的 `core_t100` / `core_exact`；停买与买入信号 `manual.core_pause` / `manual.core_signal`（执行器 `_record_core` 判信号）、`signal_text`）、
+  `qbreak/panel.py`（本机操作面板 127.0.0.1:8765，只写指令；「调仓…」「买入…」对话框、K 线、`/api/chart`、持仓现价 `/api/quotes` = `quotes_json`
+  ← `qbreak/data.intraday_quotes`）、
   `scripts/install_launchd_panel.sh`（LaunchAgent `com.qbreak.panel`）；
   加仓在引擎里：`UState.add_plan`、`add_room` / `add_fill` / `_exec_adds`（`qbreak/unified.py`），执行器的单 reason = manual_add（cid `U<决策日>-BUY-<票>-M`）；
   买入 = `UState.plan`（与规则的新仓同一笔计划）+ 账本 `manual.buys`，执行器的单 reason = manual_buy（cid 同上）；
   建议的股票：`qbreak/suggest.py`（run.py `_suggest`）；K 线：`qbreak/kline.py`（run.py `_kline` → `out/charts_<账本>.json`；副图 MACD / DMI、
   趋势线 `qbreak/trendline.py`，测试 `tests/test_trendline.py`；趋势线研究 `scripts/trendline_study.py` / `scripts/trendline_select_study.py`；TQ08 前向检验 `qbreak/tq08_forward.py` + `scripts/w2_forward_all.py` 第十一节，测试 `tests/test_tq08_forward.py`）；
-  持有理由与趋势：`qbreak/holding_view.py`；测试 `tests/test_manual_adjust.py`、`tests/test_manual_buy.py`、`tests/test_suggest.py`、`tests/test_kline.py`
+  建议的股票的排序：`suggest.proximity` / `near_text` / `near_key`（离买入信号的远近，只展示）；
+  持有理由与趋势：`qbreak/holding_view.py`；测试 `tests/test_manual_adjust.py`、`tests/test_manual_buy.py`、`tests/test_suggest.py`、`tests/test_kline.py`、
+  `tests/test_manual_core.py`、`tests/test_core_pause.py`（停买 / 买入信号 / 确认买入）、`tests/test_panel_quotes.py`（现价）
 - 手机上操作：`qbreak/panel_phone.py`（配对码 / 设备 / CSRF / 按 Tailscale 账户登录 `identity_for` + 路径密钥 `split_gate` / HALT 只能建 / Tailscale Serve 的 on・off・status・forget・identity / 二维码 / 主屏幕图标）、
   `qbreak/panel.py` 的手机端口 127.0.0.1:8766（`make_phone_handler`；页面请求 15 秒超时 `_NET_JS`）、`run.py panel-phone`、测试 `tests/test_panel_phone.py`
 - `run.py`：`sim-day`（云端）、`live-u`（执行器）、`live-u-rehearse`（演练）、`tachibana-probe`（连通性检查）、`doctor`
@@ -1098,14 +1119,16 @@
 | 手动卖出 / 减仓 | 「卖掉 7203」「7203 减到 10%」「立花的 7203 卖掉，之后一直不买回」 | 先说清楚哪个账本、什么时候成交（盘中 = 马上、开盘前 = 今天开盘、收盘后 = 下一个交易日开盘；`manual list` 显示）、卖出后几天不买回 → `bash scripts/liveu.sh manual sell 7203 [--block-days 20\|0\|-1] [--broker tachibana]`、`manual trim 7203 --pct 10`；面板开着时它自己叫执行器（交易日 07:45〜08:50 `--retry`、盘中 `--phase now`），没开时：开盘前 `bash scripts/liveu.sh run --broker paper --retry`、盘中 `bash scripts/liveu.sh run --broker paper --phase now`（立花 `--broker tachibana`） | 只写指令，下单由执行器做（HALT / ARM / 持仓核对照常）；没说账本 = 模拟账户（会中断「连续一致」天数）；立花要你说「立花」；只能卖 / 减；盘中的单发出后撤不了 |
 | 调整持仓（加 / 减） | 「7203 调到 300 股」「6758 加到 50 万円」「7203 调到 20%」 | 先说清楚哪个账本、预计卖 / 买几股、什么时候成交 → `bash scripts/liveu.sh manual adjust 7203 --shares 300`（或 `--yen 500000` / `--pct 20`；立花加 `--broker tachibana`）；`manual list` 看最早哪天开盘 | 少于现在 = 减仓；多于现在 = 加仓：开盘前说的进决策（寄付）、07:40 之后 / 盘中说的开盘后盘中马上买（现价超过收盘 ×1.03 不买）、钱不够先卖核心 ETF、单只上限 34%、资格 / 新仓倍数 0 / 决算前不加、只做一次；买还没拿的票用下一行「买入」；Claude 不主动建议加仓 |
 | 买入（新开仓） | 「买 6501」「建议的股票里的 8035 买 50 万円」「按规则的仓位买 6501」 | 先说清楚哪个账本、按规则约几股、什么时候成交、这只有没有买入信号（`~/.qbreak/home/out/live_unified_paper.json` 的 suggest）→ `bash scripts/liveu.sh manual buy 6501`（按规则的仓位；或 `--shares 300` / `--yen 500000` / `--pct 20`；立花加 `--broker tachibana`）；`manual list` 看名额与最早哪天开盘 | 开盘前说的进决策（寄付）、07:40 之后 / 盘中说的开盘后盘中马上买（现价超过收盘 ×1.03 不买）、收盘后说的下一个交易日开盘、占名额（4 只满了先卖一只）、资格 / 立花能不能买 / 新仓倍数 0 / 决算前 / 不买回期内不买、单只上限 34%、只做一次；买入后按规则离场；没触发信号的票是用户自己的决定；Claude 不主动建议买哪只 |
-| 闲置资金比例 / 核心 ETF 调仓 | 「闲置资金只放一半」「核心 ETF 先全部卖掉留现金」「1545 调到 50 口」「改回照规则」 | `bash scripts/liveu.sh manual core --pct 50`（0 = 卖出留现金；100 = 照规则）；拿着的 ETF 也可以 `manual sell 1545` / `manual adjust 1545 --shares 50`（换算成比例） | 盘中说的马上照新比例调、开盘前 / 收盘后说的进下一次决策（这一次不看再平衡带）；之后每天按这个比例；比例对全部核心 ETF 一起生效（同时拿两只时另一只也跟着变，写之前告诉用户）；只改核心 ETF 的目标额 |
+| 闲置资金比例 / 核心 ETF 调仓 | 「闲置资金只放一半」「核心 ETF 先全部卖掉留现金」「1545 调到 50 口」「改回照规则」 | `bash scripts/liveu.sh manual core --pct 50`（0 = 卖出留现金并停买；100 = 照规则）；拿着的 ETF 也可以 `manual sell 1545` / `manual adjust 1545 --shares 50`（换算成比例） | 盘中说的马上照新比例调、开盘前 / 收盘后说的进下一次决策（这一次不看再平衡带）；之后每天按这个比例；比例对全部核心 ETF 一起生效（同时拿两只时另一只也跟着变，写之前告诉用户）；只改核心 ETF 的目标额；卖出全部 / 0% 之后停买：出现买入信号只提醒（下一行） |
+| 停买后恢复买 ETF | 「确认买入」「闲置资金 ETF 出现买入信号了，买吧」「恢复买 ETF」「停买状态怎么样」 | 看：`bash scripts/liveu.sh manual list`（停买从哪天起、有没有买入信号、规则现在想拿哪只约几口）；恢复：先告诉用户会买哪只约几口、什么时候下单 → `bash scripts/liveu.sh manual core --pct 100`（立花加 `--broker tachibana`；只买一部分 = `--pct 50` 等） | 用户在这次对话里明确说才写；Claude 不主动建议恢复；盘中说的马上照规则买、开盘前 / 收盘后说的进下一次决策；模拟账户的手动操作会中断「连续一致」天数 |
+| 持仓现在的价 | 「7203 现在多少钱」「持仓现在涨了多少」 | 操作面板每只持仓下面的「现价」一行；对话里：`curl -s "http://127.0.0.1:8765/api/quotes?book=paper"`（立花 `book=tachibana`） | 只展示；Yahoo 1 分钟线约晚 20 分钟，不是立花的价；盘中 60 秒缓存 |
 | 看 / 撤回手动指令 | 「手动指令处理了吗？」「撤回刚才的卖出」「7203 解除不买回」 | `bash scripts/liveu.sh manual list`；`manual cancel <指令 id>`；`manual unblock 7203` | 已经发到交易所的那一笔要在立花网站 / App 上撤；撤回只保证「之后不再重下」 |
 | 操作面板 | 「打开操作面板」 | `open "http://127.0.0.1:8765/?book=paper"`（立花 `?book=tachibana`）；打不开 → `launchctl list \| grep qbreak.panel`，没有就 `bash scripts/install_launchd_panel.sh` | 只在这台 Mac 上；按钮只写指令 |
 | 手机上操作（一条命令全部做完） | 「拉代码，手机操作全部执行」「打开手机操作」「手机上怎么用」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone node`（拉代码 → 依赖与全部定时任务 → 重启操作面板 → Tailscale Serve 打开手机访问 → 在 Mac 上打开面板的「手机」）。`node` = 用户 2026-10-06 确认可以写进公开证书日志的 Tailscale 机器名：只有这台 Mac 的机器名正好是 node 才打开；名字不一样（退出码 3）→ 把显示的机器名告诉用户、用户同意后换成那个名字再运行；HTTPS 没开（退出码 4，已在浏览器里打开 Tailscale 管理页）→ 请用户点 Enable HTTPS 后再运行一次。打开之后：iPhone 的 Tailscale App 用和 Mac 同一个账户登录、Safari 打开手机地址就能用（2026-10-07 起按 Tailscale 账户登录，不用配对）；别的账户 / 带 tag 的设备才要请用户自己在 Mac 屏幕上点「生成配对码」、用相机扫码 | 只用 Tailscale Serve（只在用户自己的 tailnet），绝不用 Funnel；配对码只显示在 Mac 屏幕上：Claude 不调配对接口、不读、不在对话里写 |
 | 手机配对的状态 | 「手机配对了吗？」「有哪些设备能打开？」「手机打不开」 | `bash scripts/liveu.sh phone status`（只读：Tailscale、Serve、手机端口、已配对的设备、按 Tailscale 账户登录 开 / 关，不含配对码、账户只显示打码后的）；手机打不开 → Mac 醒着吗、手机的 Tailscale 开着吗、`launchctl list \| grep qbreak.panel`、`~/.qbreak/home/logs/com.qbreak.panel.{out,err}` | 按账户登录开着、自己的 iPhone 还是看到配对页 → 手机的 Tailscale App 登录的是不是同一个账户、`phone status` 里账户登录是不是「开」（「现在不可用」/「设置是旧的」/「和记下的账户不一样」→ 再运行一次 `bash scripts/liveu.sh phone on`）；只用配对时：主屏幕上的网页要求重新配对 → 再生成一次配对码（主屏幕与 Safari 的 cookie 可能是分开的） |
 | 手机只用配对 / 改回按账户登录 | 「手机只用配对」「手机按 Tailscale 账户登录」「手机不用配对」 | 只用配对：`bash scripts/liveu.sh phone identity off`；按账户登录：`bash scripts/liveu.sh phone identity on`；只看：`bash scripts/liveu.sh phone identity` | 用户在这次对话里明确说才改；账户名只显示打码后的、不写进仓库 / 对话；路径密钥不显示；Mac 上有别人的 macOS 用户账户 → 建议只用配对（第一次 `phone on` 也默认只用配对） |
 | 取消手机配对 / 关掉手机访问 | 「取消 iPhone 的配对」「关掉手机访问」「手机丢了」 | 一台：操作面板「手机」里的「取消配对」（按账户登录的手机页面底部也能取消这台设备以前的配对）；全部：`bash scripts/liveu.sh phone forget`（按 Tailscale 账户登录也一起关掉）；关掉：`bash scripts/liveu.sh phone off`（已配对的设备保留） | 手机丢了：先 `phone forget`（立刻挡住），再请用户在 Tailscale 管理页 Machines 把那台手机删掉（Remove）；删掉之后才 `phone identity on`（那台手机还在 tailnet、还登录着你的账户时，打开按账户登录它就又能用） |
-| 看 K 线 / 趋势 | 「看一下 7203 的 K 线」「6501 周 K 怎么样」「核心 ETF 月 K」「建议的股票有哪些」「看 MACD / DMI」「趋势线 / 支撑压力在哪」 | 打开操作面板（Mac：`open "http://127.0.0.1:8765/?book=paper"`；手机：面板地址）→ 持仓 / 核心 ETF / 建议的股票下面的 K 线，每张图上边沿的「日K / 周K / 月K」与下边沿的「量 / MACD / DMI」各自切换（图下有日常说法的说明与「怎么看这张图」）；对话里要数字就读 `~/.qbreak/home/out/charts_paper.json`（K 线、MACD / DMI、趋势线 `tf.*.tl`、趋势标签）与 `live_unified_paper.json` 的 suggest / kline | 只展示；数据是执行器最近一次运行写的（不是盘中实时）；趋势标签是均线位置的机械描述；趋势线的延长不是验证过的预测（研究结果见 sim_changes / `var/out/trendline_study.md`、`var/out/trendline_select_study.md`：方向、破线、质地特征都没有信息） |
+| 看 K 线 / 趋势 | 「看一下 7203 的 K 线」「6501 周 K 怎么样」「核心 ETF 月 K」「建议的股票有哪些」「哪只最快会出买入信号」「看 MACD / DMI」「趋势线 / 支撑压力在哪」 | 打开操作面板（Mac：`open "http://127.0.0.1:8765/?book=paper"`；手机：面板地址）→ 持仓 / 核心 ETF / 建议的股票下面的 K 线，每张图上边沿的「日K / 周K / 月K」与下边沿的「量 / MACD / DMI」各自切换（图下有日常说法的说明与「怎么看这张图」）；对话里要数字就读 `~/.qbreak/home/out/charts_paper.json`（K 线、MACD / DMI、趋势线 `tf.*.tl`、趋势标签）与 `live_unified_paper.json` 的 suggest / kline | 只展示；数据是执行器最近一次运行写的（不是盘中实时）；趋势标签是均线位置的机械描述；趋势线的延长不是验证过的预测（研究结果见 sim_changes / `var/out/trendline_study.md`、`var/out/trendline_select_study.md`：方向、破线、质地特征都没有信息） |
 | 为什么持有 / 现在趋势 | 「为什么买 7203？」「持仓现在趋势怎么样？」 | 读 `~/.qbreak/home/out/live_unified_paper.json` 的 holding_view（或账本页面 / 操作面板 / 日志）；云端模拟盘看 `var/out/unified_today.json` 的 holding_view 与日报 ② | 只展示：买入那天的规则读数 + 均线位置的机械描述，不是预测；不给买卖建议 |
 | 直接在立花网站 / App 上人工买卖 | —— | 执行器管的股票（股票池 + 核心 ETF）在执行器之外买卖会让第二天的持仓核对停下 | 要卖请用上面的手动卖出；真要在网站上操作：先说「停」，再商量 |
 | 研究 / 改规则 | 「用 J-Quants 数据研究 XX，先登记再跑」 | 在 `~/qbreak-dev` 里：登记（提交）→ 运行 → 结果写进 sim_changes → 推送 | 模拟盘 / 实盘规则只在你确认后改 |

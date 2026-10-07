@@ -92,12 +92,16 @@ def test_core_rec_converts_sell_trim_adjust_into_the_ratio():
         _conv(b, kind="trim", pct=90)
     assert MO.core_rec(MO.normalize({"kind": "sell", "ticker": "7203"}), b) is None    # 个股：照原来的指令
     assert MO.describe(a) == "调仓 1655.T → 约 1,000 口（闲置资金比例 87.72%）"
-    assert MO.describe(_conv(b, kind="sell")) == "卖出全部 1655.T（闲置资金比例 0%）"
+    assert MO.describe(_conv(b, kind="sell")) == "卖出全部 1655.T（之后停买闲置资金 ETF）"
+    for bk in ({**_cbook(), "core_rule": {}}, _cbook(u100=0), _cbook(plan={"1655.T": ["SELL", 1130]}), _cbook(px=0)):
+        assert _conv(bk, kind="sell")["pct"] == 0.0                       # 卖出全部 = 比例 0%：不用规则目标额（执行器还没算过 / 规则在卖也行）
+    with pytest.raises(ValueError, match="现在没有"):
+        _conv(_cbook(units=0), kind="sell")
     bad = [(_cbook(units=0), "现在没有"), ({**_cbook(), "core_rule": {}}, "现在没有"), (_cbook(u100=0), "规则这次在卖"),
            (_cbook(plan={"1655.T": ["SELL", 1130]}), "规则这次在卖"), (_cbook(px=0), "收盘价")]
-    for bk, why in bad:
+    for bk, why in bad:                                                   # 调仓要规则目标额
         with pytest.raises(ValueError, match=why):
-            _conv(bk, kind="sell")
+            _conv(bk, kind="adjust", unit="shares", value=500)
     with pytest.raises(ValueError, match="目标口数"):
         MO.normalize({"kind": "core", "pct": 50, "ticker": "1655", "target": -1})
 
@@ -328,11 +332,14 @@ def test_render_buttons_under_the_held_etf():
     assert "data-act='core-sell'" in h and "data-core='1'" in h and "data-lot='10'" in h and "data-u100='1140'" in h
     assert "现在 1,130 口 · 约 ¥791,000 · 约占权益 79.1% · 闲置资金比例 100%" in h
     assert "id='core'" not in h                                            # 拿着 ETF：在它下面调，不另外放比例卡片
-    _pbook(rule=False)
+    assert "<div class='qt small' data-q='1655.T'></div>" in h and "<div class='qt small' data-q='7203.T'></div>" in h   # 现价的位置
+    _pbook(rule=False)                                                     # 执行器还没算过规则目标额：卖出全部照样可以，调仓等下一次运行
     h = panel.render("paper", "tok", now=AT)
-    assert "执行器下一次运行之后才能在这里调" in h and "data-act='core-sell'" not in h and "id='core'" in h
+    assert "data-act='core-sell'" in h and "data-act='adj' data-t='1655.T'" not in h and "id='core'" in h
+    assert "现在 1,130 口 · 调仓在执行器下一次运行（交易日 07:40）之后可用" in h
     _pbook(plan={"1655.T": ["SELL", 1130]})
-    assert "规则在开盘卖出（熊市 / 换 ETF）" in panel.render("paper", "tok", now=AT)
+    h = panel.render("paper", "tok", now=AT)
+    assert "规则在开盘卖出（熊市 / 换 ETF）" in h and "data-act='core-sell'" in h and "data-act='adj' data-t='1655.T'" not in h
     _pbook(pct=50.0, applied=100.0)
     assert "闲置资金比例 50%（还没照它调完，见「手动指令」）" in panel.render("paper", "tok", now=AT)
     _pbook(orders=[{"cid": "U2026-10-05-SELL-1655.T-N100000", "ticker": "1655.T", "side": "SELL", "kind": "core", "qty": 130,
@@ -354,7 +361,7 @@ def test_submit_etf_adjust_and_sell_become_the_ratio():
     assert not ok and "还是 87.72%：不用调" in msg                           # 执行器还没读的那条算「现在的比例」
     (MO.requests_path("paper")).unlink()
     ok, msg, rec = panel.submit({"book": "paper", "kind": "sell", "ticker": "1655.T"}, dt.datetime(2026, 10, 6, 8, 0, tzinfo=JST))
-    assert ok and rec["pct"] == 0.0 and msg.startswith("已写：卖出全部 1655.T（闲置资金比例 100% → 0%）→ 今天 09:00 开盘卖出")
+    assert ok and rec["pct"] == 0.0 and msg.startswith("已写：卖出全部 1655.T → 今天 09:00 开盘卖出；之后停买闲置资金 ETF（出现买入信号会提醒，你确认才买）")
     (MO.requests_path("paper")).unlink()
     ok, msg, _ = panel.submit({"book": "paper", "kind": "adjust", "ticker": "1655", "unit": "shares", "value": 1140}, AT)
     assert not ok and "还是 100%：不用调" in msg

@@ -5,18 +5,23 @@
   triggered  今天收盘出了买入信号（规则明天开盘买；买不了的写出是哪道闸门 / 名额 / 钱）
   imminent   即将触发：横盘 + MACD 0 轴附近 + 离金叉不到收盘价的 0.15% + 量比 ≥ 1
   watch      观察：横盘 + MACD 0 轴附近（按条件就绪度取前几只）
-排序 = 状态 → 条件就绪度（0〜100）。全部列出（2026-10-07 用户「建议的股票不限制个数」；以前最多 12 只、观察中最多 6 只）；
-拿着的票、核心 ETF 不列。每只附：
+排序 = 状态；「快要出」「观察中」两组里按离买入信号的远近（2026-10-07 用户「观察中的股票要按照即将有可能会买的顺序进行排序」）：
+  ① 闸门（资格检查挡的放最后，新仓倍数 0 / 决算前的其次）→ ② 今天就不满足、金叉那天多半也不满足的条件数（横盘 / 0 轴附近 /
+  周线量比 W2 / 出货日 …）→ ③ MACD 估计几天后金叉（在信号线下往上靠的按天数；往下走的其次；已经在线上的最后）→ ④ 今天的量比高的先 →
+  ⑤ 条件就绪度（0〜100）。只是排序与展示（日报的候补队列照旧：状态 → 顺风 / 逆风 → 就绪度），不改交易。
+全部列出（2026-10-07 用户「建议的股票不限制个数」；以前最多 12 只、观察中最多 6 只）；拿着的票、核心 ETF 不列。每只附：
   rule  规则怎么处理（planned 已安排 / manual 手动买入已安排 / blocked 信号成立但不买 + 理由 / none 还没触发，规则不会买）
   buy   手动买入：block = 硬闸门（资格检查 / 立花能不能买 / 不在交易股票池 / 手动卖出后不买回）→ 页面不让点；
         warn = 现在会被挡、下一次决策可能变的（新仓倍数 0 / 决算前）；按规则的仓位估算（股数、金额、限价 = 收盘 ×1.03）
   trend 日K / 周K / 月K 的趋势标签（qbreak/kline.py；执行器再用长一点的行情补）
+  near  离买入信号还差什么（proximity；只给「快要出」「观察中」）+ near_text 一句话
 执行器下单前还会按当时的价格、权益、名额、闸门再查一遍（这里只是预览）。
 """
 from __future__ import annotations
 
 import math
 
+import numpy as np
 import pandas as pd
 
 from .calendar_jp import next_trading_day
@@ -36,6 +41,76 @@ def _f(x, nd: int = 2):
     except (TypeError, ValueError):
         return None
     return round(v, nd) if math.isfinite(v) else None
+
+
+MAX_DAYS = 30                                                # 排序用：估出来超过 30 天 = 30 天
+FAR_DAYS = 10                                                # 页面：线性外推 10 天以上不可靠 → 只写「还远」
+
+
+def proximity(df: pd.DataFrame, p) -> dict:
+    """离规则的买入信号还差什么（今天收盘为止；只用来排序和展示，不改交易）。
+    where  below_up（MACD 在信号线下、往上靠）/ below_down（在线下、还在往下走）/ above（已经在线上：要先回落再金叉）/ unknown
+    days   below_up 时估计再过几个交易日金叉：(MACD − 信号线) 按最近一天的变化线性外推（只是估算；最多 MAX_DAYS）
+    miss   今天就不满足、金叉那天多半也不满足的条件（金叉那天的横盘看前一天的振幅 → 用今天的；W2 在同一周里不变）
+    vol    今天的量比（金叉那天要 > vol_mult：当天的量预先不知道，只作参考）"""
+    r, r1 = df.iloc[-1], df.iloc[-2]
+    close = float(r["Close"])
+    h, h1 = float(r["macd"] - r["macd_sig"]), float(r1["macd"] - r1["macd_sig"])
+    days = None
+    if not (np.isfinite(h) and np.isfinite(h1) and close > 0):
+        where = "unknown"
+    elif h > 0:
+        where = "above"
+    elif h - h1 > 0:
+        where = "below_up"
+        days = min(MAX_DAYS, int(math.floor(-h / (h - h1) + 1e-9)) + 1)      # 差 ≤ 0 → 第 days 天变成 > 0
+    else:
+        where = "below_down"
+    miss = []
+    rp = _f(r.get("range_pct"), 1)
+    if rp is None or not rp < p.range_x_pct:
+        miss.append(f"横盘（{p.range_n} 日振幅 {'—' if rp is None else f'{rp:g}%'}，要 < {p.range_x_pct:g}%）")
+    if close > 0 and np.isfinite(float(r["macd"])) and not abs(float(r["macd"])) / close * 100 < p.macd_zero_band_pct:
+        miss.append(f"MACD 离 0 轴（{abs(float(r['macd'])) / close * 100:.2f}%，要 < {p.macd_zero_band_pct:g}%）")
+    w = _f(r.get("w5v"))
+    if p.min_weekly_vol_ratio and w is not None and w < p.min_weekly_vol_ratio:
+        miss.append(f"周线量比（{w:g}，要 ≥ {p.min_weekly_vol_ratio:g}）")
+    dd = _f(r.get("dist_days"), 0)
+    if p.max_distribution_days and dd is not None and dd >= p.max_distribution_days:
+        miss.append(f"出货日（{p.distribution_lookback} 日内 {dd:g} 天，要 < {p.max_distribution_days}）")
+    rv = _f(r.get("rsi"), 0)
+    if p.max_rsi and rv is not None and rv > p.max_rsi:
+        miss.append(f"RSI（{rv:g}，要 ≤ {p.max_rsi:g}）")
+    ext = _f(r.get("ext_ma20_pct"), 1)
+    if p.max_ext_ma20_pct and ext is not None and ext > p.max_ext_ma20_pct:
+        miss.append(f"离 20 日线（+{ext:g}%，要 ≤ {p.max_ext_ma20_pct:g}%）")
+    if p.min_rs_pct > -900 and "rs_ok" in df.columns and not bool(r["rs_ok"]):
+        miss.append("相对强度（跑输指数）")
+    return {"where": where, "days": days, "miss": miss, "vol": _f(r.get("vol_ratio"))}
+
+
+def near_text(n: dict | None, p) -> str:
+    """离买入信号的一句话（页面用）。"""
+    n = n or {}
+    w = n.get("where")
+    a = {"below_up": f"MACD 约 {n.get('days')} 天后金叉（按最近一天的变化估）"
+                     if (n.get("days") or 0) < FAR_DAYS else f"MACD 往上靠，但离金叉还远（估计 {FAR_DAYS} 天以上）",
+         "below_down": "MACD 在信号线下、还在往下走（要先拐头）",
+         "above": "MACD 已经在信号线上（要先回落再金叉）"}.get(w, "MACD 算不出来")
+    parts = [a, f"金叉那天量要 > {p.vol_mult:g} 倍（今天 {n['vol']:g} 倍）" if n.get("vol") is not None
+             else f"金叉那天量要 > {p.vol_mult:g} 倍"]
+    if n.get("miss"):
+        parts.append("还差：" + "、".join(n["miss"]))
+    return "离买入信号：" + "；".join(parts)
+
+
+def near_key(row: dict) -> tuple:
+    """「快要出」「观察中」组里的顺序（小的在前）：闸门 → 还差的条件数 → 估计几天金叉 → 量比高的先 → 就绪度高的先。"""
+    b, n = row.get("buy") or {}, row.get("near") or {}
+    tier = 2 if b.get("block") else 1 if b.get("warn") else 0
+    w = n.get("where")
+    d = int(n.get("days") or MAX_DAYS) if w == "below_up" else {"below_down": MAX_DAYS + 1, "above": MAX_DAYS + 2}.get(w, MAX_DAYS + 3)
+    return (tier, len(n.get("miss") or []), d, -float(row.get("vol_ratio") or 0), -float(row.get("score") or 0))
 
 
 def rule_shares(eng, t: str, i: int, em: float) -> int:
@@ -141,10 +216,15 @@ def build(ind: dict, eng, i: int, params, pool: list[str] | None = None, names: 
                     "rule_shares": rule_shares(eng, t, i, em if em > 0 else 1.0),
                     "planned": t in st.plan},
         })
+        if r["status"] != "triggered":                       # 离买入信号还差什么（排序 + 页面一句话）
+            out[-1]["near"] = proximity(frames[t], params)
+            out[-1]["near_text"] = near_text(out[-1]["near"], params)
+    order = {"triggered": 0, "imminent": 1, "watch": 2}       # 出了信号的照就绪度；后两组按离买入信号的远近（稳定排序）
+    out.sort(key=lambda x: (order.get(x["status"], 9),) + (near_key(x) if x["status"] != "triggered" else ()))
     return {"asof": asof, "fill_day": fill.isoformat(), "equity": round(eq), "rows": out, "counts": counts,
             "max_positions": int(cfg.max_positions), "position_pct": float(cfg.position_pct),
             "cap_pct": round(float(cfg.max_position_pct) * 100, 2),
-            "note": "规则的候选（条件就绪度排序），不是收益预测，也不是建议；手动买入是你自己的决定。"}
+            "note": "规则的候选（快要出 / 观察中按离买入信号的远近排序），不是收益预测，也不是建议；手动买入是你自己的决定。"}
 
 
 def lines(sg: dict | None) -> list[str]:
@@ -158,4 +238,4 @@ def lines(sg: dict | None) -> list[str]:
     return out
 
 
-__all__ = ["build", "lines", "rule_shares", "STATUS", "RULE"]
+__all__ = ["build", "lines", "rule_shares", "proximity", "near_text", "near_key", "MAX_DAYS", "FAR_DAYS", "STATUS", "RULE"]

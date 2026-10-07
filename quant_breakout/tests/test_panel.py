@@ -270,6 +270,18 @@ def test_render_suggestions_with_buy_buttons_and_gates():
     assert "今天没有出信号 / 快要出信号 / 观察中的票" in panel.render("paper", "t" * 40, AT)
 
 
+def test_render_watch_rows_show_how_far_from_a_buy_signal():
+    _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
+    rows = [dict(r) for r in SG_ROWS]
+    rows[2]["near"] = {"where": "below_up", "days": 2, "miss": [], "vol": 0.8}
+    rows[2]["near_text"] = "离买入信号：MACD 约 2 天后金叉（按最近一天的变化估）；金叉那天量要 > 1.5 倍（今天 0.8 倍）"
+    _sm(rows)
+    html = panel.render("paper", "t" * 40, AT)
+    assert ("<div class='small near'>离买入信号：MACD 约 2 天后金叉（按最近一天的变化估）；金叉那天量要 &gt; 1.5 倍（今天 0.8 倍）</div>"
+            in html)
+    assert html.count("按离买入信号的远近排（越上面越可能先出信号；只是估算）") == 1   # 只有带 near 的组（旧的汇总没有 → 不写）
+
+
 def test_submit_buy_writes_instruction_and_checks():
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T"]})
     _sm()

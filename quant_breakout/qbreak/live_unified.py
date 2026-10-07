@@ -185,11 +185,15 @@ class UnifiedExecutor:
     def _core_pending(self, today: dt.date | None = None) -> float | None:
         """闲置资金比例改了、核心 ETF 还没照新比例调过（today 给了：今天也没说「明天再调」）→ 新比例（%）；否则 None。"""
         cr = self.book.get("core_rule") or {}
-        if self.manual is None or not cr:
-            return None
-        if today is not None and (cr.get("decided_on") != self.eng.st.last_date or cr.get("defer") == today.isoformat()):
+        if self.manual is None:
             return None
         want = float(self.manual.core_pct)
+        if not cr.get("units100"):                            # 执行器还没算过规则目标额：只有「卖出全部」（比例 0%）不用它，盘中照样卖
+            held = any(int(u) > 0 for u in self.eng.st.core_units.values())
+            return want if (today is not None and want <= 0 and held and cr.get("applied") != want
+                            and cr.get("defer") != today.isoformat()) else None
+        if today is not None and (cr.get("decided_on") != self.eng.st.last_date or cr.get("defer") == today.isoformat()):
+            return None
         if today is None and cr.get("redo"):                  # 盘中照新比例的单没成交完（对账时记下）→ 这次决策再照比例调
             return want
         return want if abs(want - float(cr.get("applied", cr.get("pct", want)))) > 1e-9 else None
@@ -205,6 +209,23 @@ class UnifiedExecutor:
               "lot": {t: int(eng.lots[eng.col[t]]) for t in sorted(eng.core_t100)}}
         if exact and eng.st.core_plan:
             cr.update(exact_on=eng.st.last_date, exact_plan=sorted(eng.st.core_plan))
+        prev = self.book.get("core_rule") or {}
+        if self.manual is not None and float(self.manual.core_pct) <= 0 and prev.get("units100") is not None:
+            p100 = prev.get("units100") or {}               # 停买闲置资金 ETF 时：规则从「不拿」变成「拿」= 买入信号 → 只提醒，你确认才买
+            new = [t for t, n in cr["units100"].items() if n > 0 and int(p100.get(t, 0)) <= 0]
+            if new:
+                sig = {"date": eng.st.last_date,
+                       "items": [{"ticker": t, "units": int(cr["units100"][t]), "px": cr["px"].get(t),
+                                  "yen": round(int(cr["units100"][t]) * float(cr["px"].get(t) or 0))} for t in new]}
+                self.manual.m["core_signal"] = sig
+                from .manual_orders import signal_text
+                self._event("warn", f"★ 闲置资金 ETF 买入信号（{sig['date']} 收盘）：{signal_text(sig)}；你卖出后停着："
+                                    "确认后才买（面板「确认买入」，或 liveu.sh manual core --pct 100）")
+            else:                                           # 还没确认、规则又不拿信号里的那几只了 → 信号撤掉（继续停买）
+                old = self.manual.m.get("core_signal") or {}
+                if old and not any(int(cr["units100"].get(x.get("ticker"), 0)) > 0 for x in old.get("items") or []):
+                    self.manual.m.pop("core_signal", None)
+                    self._event("info", f"闲置资金 ETF 的买入信号（{old.get('date')} 收盘）没了：规则又不拿了，继续停买")
         self.book["core_rule"] = cr
 
     def _settle_manual(self) -> None:
@@ -541,7 +562,7 @@ class UnifiedExecutor:
         if not todo and core_want is None:
             self.save()
             return out
-        cr = self.book.get("core_rule") or {}
+        cr = self.book.setdefault("core_rule", {}) if core_want is not None else (self.book.get("core_rule") or {})
         core_it = ([None] + sorted((it for it in man.m["items"].values() if it.get("kind") == "core" and it.get("status") == "done"),
                                    key=lambda x: x.get("at", "")))[-1]          # 最新生效的闲置资金比例指令（同一时刻 → 后写的）
         eng, st, b = self.eng, self.eng.st, self.b
@@ -585,7 +606,8 @@ class UnifiedExecutor:
                        key=lambda t: -int(st.core_units[t]) * float(eng._px_close(t, k)))
         core_moves = {}                                       # {票: (现在口数, 目标口数)}：目标 = 规则目标（比例 100%）× 新比例
         if core_want is not None:
-            for t, n100 in sorted((cr.get("units100") or {}).items()):
+            u100s = cr.get("units100") or {t: 0 for t, u in st.core_units.items() if int(u) > 0}   # 没算过规则目标额 → 只会是卖出全部
+            for t, n100 in sorted(u100s.items()):
                 if t in eng.col:
                     lt = int(eng.lots[eng.col[t]])
                     cur = int(st.core_units.get(t, 0))
@@ -911,9 +933,10 @@ class UnifiedExecutor:
                 cr["applied"] = core_want
                 cr.pop("tried", None)
                 cs, cm = ("盘中已调" if core_done else "完成"), "；".join(core_done) or "现在的口数已经是新比例的目标"
+            lab = "停买闲置资金 ETF（比例 0%）" if core_want <= 0 else f"闲置资金比例设为 {core_want:g}%"
             if core_it is not None:
-                core_it["msg"] = f"闲置资金比例设为 {core_want:g}%：{cm}"
-            self._event("info", f"闲置资金比例 {core_want:g}%：{cm}")
+                core_it["msg"] = f"{lab}：{cm}"
+            self._event("info", f"{lab}：{cm}")
             out["items"].append({"id": (core_it or {}).get("id", "core"), "ticker": f"闲置资金比例 {core_want:g}%", "status": cs,
                                  "msg": cm})
         self.save()
@@ -1410,6 +1433,8 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     mn = sm.get("manual") or {}
     if mn.get("active"):
         short += f"｜手动指令 {int(mn['active'])} 条在处理"
+    if mn.get("core_pause") and (mn.get("core_signal") or {}).get("date") == sm.get("decided_on"):
+        short += "｜★ 闲置资金 ETF 买入信号：确认后才买"         # 你卖出 ETF 后停着：规则从「不拿」变成「拿」（只提醒）
     lines = [f"- 决策日 {sm.get('decided_on') or '—'} → 成交日 {sm.get('fill_day') or '—'}；权益 ¥{eq:,.0f}"
              f"（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）；现金 ¥{float(st.cash_jpy):,.0f}"]
     if invested is not None and abs(float(invested) - float(capital)) >= 1.0:

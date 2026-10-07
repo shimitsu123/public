@@ -16,6 +16,7 @@
                                 （2026-10-07 用户：「K线的日周月button 要显示在每个K线的上面边沿方便看 / 量 MACD DMI 显示在每个K线的下面 /
                                 K线解释换成通俗易懂的说法 横展开 / 现在持有的股票可以进行调仓 按照最小一次成交股数分割调仓线」）
   GET  /api/chart?book=…&t=…    一只票的 K 线（执行器写的 out/charts_<账本>.json；打开 / 滑到那只票时才取；手机端口要你本人）
+  GET  /api/quotes?book=…       持有的个股与核心 ETF 的现价（Yahoo 1 分钟线，约晚 20 分钟；盘中 60 秒缓存；只展示；手机端口要你本人）
   POST /api/request             写一条手动指令（qbreak/manual_orders.py；与 run.py manual 相同的检查）
   POST /api/halt                建 HALT（只能建、不能解除；解除只在 Mac 上、用户明确说）
   本机才有：POST /api/pair/new（生成配对码）、/api/device/revoke（取消一台设备）；手机才有：/api/pair、/api/unpair（退出这台设备）
@@ -199,6 +200,7 @@ details.khelp ul{margin:4px 0;padding-left:18px;font-size:13px;line-height:1.55;
 .chip.hot{background:var(--accent);color:var(--accent-fg);font-weight:600}
 .meta{font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
 .sgh{font-size:15px;margin:14px 0 0;padding-top:10px;border-top:1px solid var(--line)}
+.near{line-height:1.5;margin:2px 0}
 details.kl>summary{color:var(--accent);font-size:14px}
 .legend{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:13px;color:var(--muted);margin:2px 0}
 .chart table{border-collapse:collapse;font-size:13px;width:100%;font-variant-numeric:tabular-nums;margin-top:4px}
@@ -374,14 +376,14 @@ function adjPrev(){
     +'\\n'+CFG.when+'买入（最高 '+yen(c.px*1.03)+' = 收盘 ×1.03）；钱不够先卖核心 ETF；只做一次';
   go.textContent='确认买入 '+fmt(k)+' 股'; go.disabled=false;
 }
-function coreFx(q, skip){                                                  // 同一个比例对别的核心 ETF（规则同时拿两只以上时）：会变的列出来
+function coreFx(q, skip, lab){                                             // 同一个比例对别的核心 ETF（规则同时拿两只以上时）：会变的列出来
   const C=CFG.cores||{}, out=[];
   for(const t of Object.keys(C)){
     if(t===skip) continue;
     const c=C[t], L=c.lot||1, tg=Math.floor(c.u100*q/100/L+1e-9)*L;
     if(tg!==c.cur && (c.cur>0 || tg>0)) out.push(t+' '+fmt(c.cur)+' → '+fmt(tg)+' 口');
   }
-  return out.length ? '\\n★ 同一比例也用在：'+out.join('、') : '';
+  return out.length ? '\\n'+(lab||'★ 同一比例也用在：')+out.join('、') : '';
 }
 function adjPrevCore(n){                                                   // 核心 ETF：目标口数 → 闲置资金比例（之后每天按它）
   const go=$('#adj-go'), out=$('#adj-prev'), c=ADJ, cap=adjCap();
@@ -481,9 +483,14 @@ document.addEventListener('click', async e=>{
     adjUnit('shares'); sheet('#dlg-adj'); return;
   }
   if(a==='core-sell'){
-    const q=await ask('卖出全部 '+d.t+(d.name?' '+d.name:''), '全部 '+fmt(+d.shares)+' 口 → 闲置资金比例 0%（闲置资金都留现金；改回 100% 就照规则）'
-      +coreFx(0, d.t)+'\\n'+CFG.when+'卖出'+NOTE, '卖出', {danger:true});
+    const q=await ask('卖出全部 '+d.t+(d.name?' '+d.name:''), '全部 '+fmt(+d.shares)+' 口：'+CFG.when+'卖出'+coreFx(0, d.t)
+      +'\\n卖出后停买闲置资金 ETF（钱留现金）；出现买入信号会提醒你，你点「确认买入」才买'+NOTE, '卖出', {danger:true});
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'sell', ticker:d.t})); return;
+  }
+  if(a==='core-resume'){                                                   // 停买后确认买入：闲置资金比例 0% → 100%（照规则）
+    const q=await ask('确认买入：恢复闲置资金买入 ETF', '闲置资金比例 0% → 100%（照规则）'+coreFx(100, '', '会买：')
+      +'\\n'+CFG.when+'买入；之后每天照规则调'+NOTE, '确认买入');
+    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:100})); return;
   }
   if(a==='adj-unit'){ adjUnit(d.u); return; }
   if(a==='adj-step'){ const n=adjTarget(); adjShow(Math.max(0, (n==null ? ADJ.shares : n)+(+d.d)*ALOT())); adjPrev(); return; }
@@ -879,6 +886,38 @@ document.addEventListener('toggle', e=>{ if(e.target.tagName==='DETAILS' && e.ta
 document.addEventListener('pointerdown', ev=>{ if(!ev.target.closest('.chart')) document.querySelectorAll('.chart').forEach(b=>{ if(b._hide) b._hide(); }); });
 let RZ=null, LW=window.innerWidth;
 window.addEventListener('resize', ()=>{ clearTimeout(RZ); RZ=setTimeout(()=>{ if(Math.abs(window.innerWidth-LW)>2){ LW=window.innerWidth; drawAll(); } }, 150); });
+// ── 持仓的现价（/api/quotes：Yahoo 1 分钟线，约晚 20 分钟；盘中每 1 分钟刷新，其他时间每 10 分钟）──
+function qText(q, kind){                                                   // 一只票的现价一行
+  const u = kind==='core' ? '口' : '股', hm = String(q.at||'').slice(11,16), d = String(q.at||'').slice(5,10).replace('-','/');
+  const parts=['现价 '+pxs(q.px)+'（'+(q.today ? hm : d+' '+hm)+(q.today ? '' : '，最近一个交易日')+'）'];
+  if(q.chg_pct!=null) parts.push('比昨收 '+pcs(q.chg_pct));
+  parts.push('市值约 '+yen(q.value)+'（'+Number(q.n).toLocaleString('ja-JP')+' '+u+'）');
+  if(q.pl_pct!=null) parts.push('比买入价 '+pcs(q.pl_pct));
+  return parts.join(' · ');
+}
+function showQ(j){
+  const R=(j && j.rows) || {}, none=!Object.keys(R).length;
+  document.querySelectorAll('.qt[data-q]').forEach(e=>{
+    const q=R[e.dataset.q];
+    e.textContent='';
+    if(!q){ e.textContent = !(j && j.ok) ? '' : none ? '现价暂时取不到（Yahoo 没回应：会自动再取）' : '现价取不到（Yahoo 没有这只的分钟线）'; return; }
+    const cls = q.chg_pct==null ? null : (q.chg_pct>=0 ? 'up' : 'down');
+    nd('span', cls, qText(q, q.kind), e);
+  });
+  const n=$('#qt-note'); if(n && j && j.ok) n.textContent='现价：'+j.src+(j.live ? '，盘中每 1 分钟刷新' : '')+'；'+String(j.asof||'').slice(11,16)+' 取';
+}
+let QTID=null, QLIVE=CFG.live;
+async function loadQ(){
+  if(!document.querySelector('.qt[data-q]')) return;
+  try{
+    const x=await req('/api/quotes?book='+encodeURIComponent(CFG.book), {credentials:'same-origin', cache:'no-store'});
+    if(x.r.ok && x.j){ showQ(x.j); QLIVE=!!x.j.live; }
+  }catch(e){}                                                              // 取不到（Mac 睡眠 / 没网）：保留上一次的
+  clearTimeout(QTID);
+  QTID=setTimeout(loadQ, QLIVE ? 60000 : 600000);                         // 盘中 1 分钟，其他时间 10 分钟（开盘后自动变快）
+}
+document.addEventListener('DOMContentLoaded', loadQ);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) loadQ(); });   // 手机切回来马上刷新
 """
 
 _PAIR_JS = """
@@ -1009,8 +1048,8 @@ GROUPS = (("triggered", "今天出了买入信号"), ("imminent", "快要出买�
 
 
 def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, cap: float, chart) -> str:
-    """「建议的股票」= 规则的候选（qbreak/suggest.py；全部列出，按 出了信号 → 快要出 → 观察中 分组）+ 每只的「买入…」
-    （写手动买入指令；执行器下单前再查一遍）。"""
+    """「建议的股票」= 规则的候选（qbreak/suggest.py；全部列出，按 出了信号 → 快要出 → 观察中 分组；后两组按离买入信号的远近）
+    + 每只的「买入…」（写手动买入指令；执行器下单前再查一遍）。"""
     rows = sg.get("rows") or []
     s = MO.slots(book, tag)
     cnt = {g: sum(1 for r in rows if r.get("status") == g) for g, _ in GROUPS}
@@ -1026,7 +1065,9 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, ca
         grp = [r for r in rows if r.get("status") == g]
         if not grp:
             continue
-        H.append(f"<h3 class='sgh'>{escape(title)}（{cnt[g]} 只）</h3>")
+        H.append(f"<h3 class='sgh'>{escape(title)}（{cnt[g]} 只）</h3>"
+                 + ("<div class='muted small'>按离买入信号的远近排（越上面越可能先出信号；只是估算）</div>"
+                    if g != "triggered" and any(r.get("near") for r in grp) else ""))
         for r in grp:
             H.append(_suggest_row(r, s, buying, eq, chart))
     H.append("<div class='muted small'>股数按最近收盘估算。</div></section>")
@@ -1043,6 +1084,7 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart) -> str:
     H = [f"<div class='hv sg'><div class='head'><b>{escape(str(r.get('code') or t))}</b>{nm}"
          + (f"<span class='chip'>{escape(str(r['sector']))}</span>" if r.get("sector") else "") + "</div>"
          f"<div class='meta'>{' · '.join(x for x in meta if x)}</div>"
+         + (f"<div class='small near'>{escape(str(r['near_text']))}</div>" if r.get("near_text") else "")   # 离买入信号还差什么（排序依据）
          + (f"<div>{escape(str(ru.get('text') or ''))}</div>" if ru.get("state") not in (None, "none") else "")
          + tchips(r.get("trend"))
          + (f"<div class='small neg'>★ 顶部风险：{escape(str(r['top_risk']))}</div>" if r.get("top_risk") else "")]
@@ -1123,12 +1165,16 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         warn.append("立花还没解锁（没有 ARM）：单会被挡住，不会真的发出去")
     if paper:
         warn.append("模拟账户：手动操作后会和云端模拟盘不一致")
+    cpause, csig = man.get("core_pause"), man.get("core_signal")      # 卖出 ETF 后停买；停着时规则从「不拿」变成「拿」= 买入信号
+    if cpause and csig:
+        warn.insert(0, escape(f"闲置资金 ETF 出现买入信号（{csig.get('date')} 收盘）：{MO.signal_text(csig)} → 确认后才买（见下面「闲置资金」）"))
     H.append(f"<section class='card{' warn' if halt else ''}'><div class='head'><b>{escape(BOOKS.get(tag, tag))}</b>"
              f"<span class='chip'>决策日 {escape(str(st.get('last_date') or '—'))} → 成交日 {escape(str(sm.get('fill_day') or '—'))}</span></div>"
              f"<div class='stats'><div><div class='muted'>总权益</div><div class='big'>{_yen(eq)}</div></div>"
              f"<div><div class='muted'>现金</div><div class='big'>{_yen(st.get('cash_jpy'))}</div></div></div>"
              f"<div>现在点买卖 → <b>{escape(when)}</b>下单</div><div class='muted small'>{escape(MO.RULE_TEXT)}</div>"
-             + "".join(f"<div class='{'neg' if 'HALT' in w or 'ARM' in w else 'muted'} small'>★ {w}</div>" for w in warn) + "</section>")
+             + "".join(f"<div class='{'neg' if 'HALT' in w or 'ARM' in w or '买入信号' in w else 'muted'} small'>★ {w}</div>" for w in warn)
+             + "</section>")
     if not st:
         H.append("<section class='card'>执行器还没有账本（第一次运行之后才有持仓）。</section>")
     hv = sm.get("holding_view") or {}
@@ -1148,30 +1194,40 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         t = str(r["ticker"])
         if kind == "core":
             return tchips(ktrend.get(t)) + _core_actions(r, t) + chart(t, "core")
-        return tchips(ktrend.get(t)) + _actions(r, t)
+        qt = f"<div class='qt small' data-q='{escape(t)}'></div>" if t in (st.get("pos") or {}) else ""   # 现价（/api/quotes）
+        return tchips(ktrend.get(t)) + qt + _actions(r, t)
 
     def _core_actions(r: dict, t: str) -> str:
-        """持有的核心 ETF：卖出全部 / 调仓…（都换算成「闲置资金比例」：规则每天把核心调回 规则目标额 × 比例）。"""
-        c = MO.core_info(book, t)
-        if c is None or c["cur"] <= 0:
-            return ("<div class='act muted small'>" + ("执行器下一次运行之后才能在这里调（还没算过规则目标额）" if not cr else
-                    "规则现在不按比例调这只（不在现在用的核心 ETF 里）") + "</div>")
-        if c["selling"]:
-            return "<div class='act'><b class='neg'>规则在开盘卖出（熊市 / 换 ETF）</b></div>"
+        """持有的核心 ETF：卖出全部（= 闲置资金比例 0%：卖出后停买，出现买入信号要你确认才买）/ 调仓…（换算成「闲置资金比例」：
+        规则每天把核心调回 规则目标额 × 比例）。执行器还没算过规则目标额（更新后第一次运行之前）也能卖出全部。"""
+        cur = int((st.get("core_units") or {}).get(t, 0))
+        if cur <= 0:
+            return ""
+        qt = f"<div class='qt small' data-q='{escape(t)}'></div>"                      # 现价（/api/quotes，盘中每 1 分钟刷新）
         if core_busy:
-            return "<div class='act muted'>有一条闲置资金比例的指令在处理（见「手动指令」）</div>"
+            return qt + "<div class='act muted'>有一条闲置资金比例的指令在处理（见「手动指令」）</div>"
         o = core_now.get(t)
         if o is not None:
             q, n = int(o.get("filled_qty") or 0), int(o.get("qty") or 0)
             got = "已成交" if q >= n > 0 else f"成交 {q:,} / {n:,} 口" if q > 0 else "等成交" if o.get("status") in ("SENT", "PARTIAL") else "结果不明"
-            return (f"<div class='act muted'>今天盘中已照比例{'卖出' if o.get('side') == 'SELL' else '买入'} {n:,} 口（{got}）："
+            return (qt + f"<div class='act muted'>今天盘中已照比例{'卖出' if o.get('side') == 'SELL' else '买入'} {n:,} 口（{got}）："
                     "口数明天早上对账后更新</div>")
+        c = MO.core_info(book, t)
+        px = c["px"] if c else float((st.get("core_last") or {}).get(t) or 0)
+        sell = (f"<button class='btn sell' data-act='core-sell' data-t='{escape(t)}' data-name='{escape(str(r.get('name') or ''))}'"
+                f" data-shares='{cur}'>卖出全部</button>")
+        if c is None:                                       # 执行器还没算过规则目标额：卖出全部照样可以，调仓等下一次运行
+            return (qt + "<div class='act'>" + sell + "<button class='btn' disabled>调仓…</button></div>"
+                    f"<div class='muted small'>现在 {cur:,} 口" + (f" · 约 {_yen(cur * px)}" if px > 0 else "")
+                    + " · 调仓在执行器下一次运行（交易日 07:40）之后可用</div>")
+        if c["selling"]:
+            return (qt + "<div class='act'>" + sell + "</div><div class='small'><b class='neg'>规则在开盘卖出（熊市 / 换 ETF）</b>"
+                    "<span class='muted'>；点「卖出全部」= 卖出后停买（之后要你确认才买）</span></div>")
         data = (f" data-t='{escape(t)}' data-name='{escape(str(r.get('name') or ''))}' data-shares='{c['cur']}' data-px='{round(c['px'], 4)}'"
                 f" data-core='1' data-lot='{c['lot']}' data-u100='{c['u100']}' data-cpct='{c['pct']:g}'")
         share = f"{c['cur'] * c['px'] / eq * 100:.1f}" if eq and c["px"] > 0 else "—"
-        return ("<div class='act'>"
-                f"<button class='btn sell' data-act='core-sell'{data}>卖出全部</button>"
-                f"<button class='btn' data-act='adj'{data}{'' if c['px'] > 0 and eq else ' disabled'}>调仓…</button></div>"
+        return (qt + "<div class='act'>" + sell
+                + f"<button class='btn' data-act='adj'{data}{'' if c['px'] > 0 and eq else ' disabled'}>调仓…</button></div>"
                 f"<div class='muted small'>现在 {c['cur']:,} 口 · 约 {_yen(c['cur'] * c['px'])} · 约占权益 {share}% · "
                 f"闲置资金比例 {c['pct']:g}%{'（还没照它调完，见「手动指令」）' if core_late else ''}</div>")
 
@@ -1200,18 +1256,34 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     more = ("<details class='hv'><summary class='muted'>其他闲置资金 ETF（现在没拿）的 K 线</summary>"
             + "".join(f"<div class='hv'><b>{escape(str(c.get('name') or t))}</b> <span class='muted'>现在 0 口</span>"
                       f"{tchips(ktrend.get(t))}{chart(t, 'core')}</div>" for t, c in other) + "</details>") if other else ""
-    H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions) + more + "</section>")
+    held_any = bool(st.get("pos")) or any(int(u) > 0 for u in (st.get("core_units") or {}).values())
+    H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions) + more
+             + ("<div id='qt-note' class='muted small'>现价：Yahoo 1 分钟线（约晚 20 分钟）</div>" if held_any else "") + "</section>")
     H.append(_suggest_card(sm.get("suggest") or {}, book, tag, buying, when, eq, cap, chart))
     cp = float(man.get("core_pct", 100.0))
-    if not any(MO.core_info(book, t) for t in held_core):   # 拿着核心 ETF 时在它下面调（卖出全部 / 调仓…）；没拿着时用这里
+    slider = ("<div class='stepper'><button class='btn' data-act='core-step' data-d='-10' aria-label='减 10%'>−10</button>"
+              f"<output id='core-val' class='big'>{cp:g}%</output>"
+              "<button class='btn' data-act='core-step' data-d='10' aria-label='加 10%'>+10</button></div>"
+              f"<input type='range' id='core-pct' min='0' max='100' step='5' value='{cp:g}' aria-label='闲置资金比例 %'>"
+              "<div class='act'><button class='btn primary' data-act='core'>保存</button></div>")
+    if cpause:                                              # 卖出 ETF 后停买：规则不自动买；出现买入信号只提醒，你点「确认买入」才买
+        want = [(t, int(n)) for t, n in (cr.get("units100") or {}).items() if int(n) > 0]
+        now_txt = ("想拿 " + "、".join(f"{t} 约 {n:,} 口" for t, n in want) if want else
+                   "不拿核心 ETF（熊市 / 没有闲置资金）") if cr.get("units100") is not None else "执行器下一次运行之后显示"
+        btn = ("<div class='act muted'>有一条闲置资金比例的指令在处理（见「手动指令」）</div>" if core_busy else
+               "<div class='act'><button class='btn primary' data-act='core-resume'>确认买入（恢复照规则）</button></div>")
+        H.append(f"<section class='card{' warn' if csig else ''}' id='core'><h2>闲置资金（核心 ETF）</h2>"
+                 f"<div><b>停买中</b>（{escape(str(cpause.get('since') or '—'))} 起"
+                 + (f"，你卖出 {escape(str(cpause['ticker']))}" if cpause.get("ticker") else "") + "）：闲置资金留现金，规则不自动买 ETF</div>"
+                 + (f"<div class='neg'><b>★ 买入信号（{escape(str(csig.get('date')))} 收盘）：{escape(MO.signal_text(csig))}</b></div>"
+                    if csig else "<div class='muted small'>出现买入信号（规则从「不拿」变成「拿」）会提醒你（Mac 通知 + 这里）</div>")
+                 + f"<div class='muted small'>规则现在：{escape(now_txt)}</div>" + btn
+                 + f"<div class='muted small'>确认后{escape(when)}照规则买入，之后每天照规则调。</div>"
+                 + f"<details class='hv'><summary class='muted'>按别的比例恢复（例：只放一半）</summary>{slider}</details></section>")
+    elif not any(MO.core_info(book, t) for t in held_core):   # 拿着核心 ETF 时在它下面调（卖出全部 / 调仓…）；没拿着时用这里
         H.append("<section class='card' id='core'><h2>闲置资金（核心 ETF）比例</h2>"
-                 f"<div>现在：规则目标额的 <b>{cp:g}%</b>（100% = 照规则；0% = 全部留现金）</div>"
-                 "<div class='stepper'><button class='btn' data-act='core-step' data-d='-10' aria-label='减 10%'>−10</button>"
-                 f"<output id='core-val' class='big'>{cp:g}%</output>"
-                 "<button class='btn' data-act='core-step' data-d='10' aria-label='加 10%'>+10</button></div>"
-                 f"<input type='range' id='core-pct' min='0' max='100' step='5' value='{cp:g}' aria-label='闲置资金比例 %'>"
-                 "<div class='act'><button class='btn primary' data-act='core'>保存</button></div>"
-                 f"<div class='muted small'>{escape(when)}照新比例调核心 ETF；之后每天按这个比例。个股照规则。</div></section>")
+                 f"<div>现在：规则目标额的 <b>{cp:g}%</b>（100% = 照规则；0% = 全部留现金）</div>" + slider
+                 + f"<div class='muted small'>{escape(when)}照新比例调核心 ETF；之后每天按这个比例。个股照规则。</div></section>")
     items = sorted((man.get("items") or {}).values(), key=lambda x: x.get("at", ""), reverse=True)
 
     def _what(r: dict) -> str:
@@ -1264,9 +1336,11 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                  "非投资建议。</div><div class='act'><button class='btn sm' data-act='unpair'>退出这台设备</button></div></footer>")
     H.append("</main><div id='toast' class='toast' role='status' hidden></div>")
     cfg = {"auth": {"h": "X-Qbreak-Csrf" if remote else "X-Qbreak-Token", "v": tok}, "book": tag, "paper": paper, "remote": remote,
-           "when": when, "eq": eq or 0, "cap": cap, "lot": MO.LOT,
-           "cores": {t: {"cur": int((st.get("core_units") or {}).get(t, 0)), "u100": int(n),            # 调一只核心 ETF 时别的跟着变多少
-                         "lot": max(1, int((cr.get("lot") or {}).get(t) or 1))} for t, n in (cr.get("units100") or {}).items()},
+           "when": when, "eq": eq or 0, "cap": cap, "lot": MO.LOT, "live": MO.timing(now)[0] == "now",   # 盘中：现价每 1 分钟刷新
+           "cores": {t: {"cur": int((st.get("core_units") or {}).get(t, 0)), "u100": int((cr.get("units100") or {}).get(t, 0)),
+                         "lot": max(1, int((cr.get("lot") or {}).get(t) or 1))}                  # 调一只核心 ETF 时别的跟着变多少
+                     for t in dict.fromkeys(list(cr.get("units100") or {})
+                                            + [t for t, u in (st.get("core_units") or {}).items() if int(u) > 0])},
            "kp": {"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN}}      # K 线的通俗说法（qbreak/kline.py）
     js = _NET_JS + _JS.replace("__CFG__", json.dumps(cfg, ensure_ascii=False).replace("</", "<\\/"))
     return _head("qbreak 操作面板") + "<body>" + "".join(H) + _dialogs(paper, cap) + f"<script>{js}</script></body></html>"
@@ -1306,6 +1380,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     except ValueError as e:
         return False, f"没写：{e}", None
     c0 = MO.core_info(book, rec["ticker"]) if rec["kind"] == "core" and rec.get("ticker") else None
+    pct0 = MO.core_pct_now(tag, book)                      # 写之前的闲置资金比例（含还没读的指令；0 = 停买中）
     why = MO.check(rec, book, tag, sm=sm)
     if why:
         return False, f"没写：{why}", None
@@ -1325,7 +1400,13 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
                    + f"）→ {when}买入")
         else:
             msg = f"已写：{t} 卖 {-a['delta']:,} 股（→ {a['target']:,} 股）→ {when}卖出"
-    if c0:
+    if k == "core" and not t and pct0 <= 0 < float(rec["pct"]):                    # 停买后确认买入
+        msg = f"已写：确认买入（闲置资金比例 0% → {rec['pct']:g}%）→ {when}照规则买入核心 ETF"
+    if k == "core" and t and int(rec.get("target") or 0) <= 0:                     # 核心 ETF 卖出全部：之后停买
+        fx = MO.core_effects(book, 0.0, skip=t)
+        msg = (f"已写：卖出全部 {t} → {when}卖出；之后停买闲置资金 ETF（出现买入信号会提醒，你确认才买）"
+               + ("；同一比例也用在：" + "、".join(f"{x} {a_:,} → {b_:,} 口" for x, a_, b_ in fx) if fx else ""))
+    elif c0:
         n = int(rec["target"]) - c0["cur"]
         fx = MO.core_effects(book, rec["pct"], skip=t)        # 规则同时拿两只以上核心 ETF 时：同一比例别的也跟着变
         msg = (f"已写：{'卖出全部 ' + t if int(rec['target']) <= 0 else t + (' 加 ' if n > 0 else ' 卖 ') + f'{abs(n):,} 口'}"
@@ -1435,6 +1516,52 @@ def chart_json(tag: str, t: str) -> tuple[int, dict]:
     if pl is None:
         return 404, {"ok": False, "msg": f"没有 {t} 的 K 线"}
     return 200, {"ok": True, "t": t, "asof": data.get("asof"), "data": pl}
+
+
+# ───────────────────────── 持仓的现价（按需取） ─────────────────────────
+_QUOTE_CACHE: dict = {}
+_QUOTE_LOCK = threading.Lock()
+
+
+def quotes_json(tag: str, now: dt.datetime | None = None, fetch=None) -> tuple[int, dict]:
+    """持有的个股与核心 ETF 的现价（Yahoo 1 分钟线，约晚 20 分钟；只展示，不下单）→ (HTTP 状态, JSON)。
+    同一组票盘中 60 秒内、其他时间 10 分钟内只取一次（Mac 与手机共用）；票由账本决定（不接受随便的代码）。"""
+    now = now or now_jst()
+    book, _ = _load(tag)
+    st, cr = book.get("state") or {}, book.get("core_rule") or {}
+    rows = {t: {"kind": "stock", "n": int(p.get("shares") or 0), "prev": float(p.get("last_close") or 0),
+                "cost": float(p.get("entry_px") or 0)} for t, p in (st.get("pos") or {}).items()}
+    rows.update({t: {"kind": "core", "n": int(u), "cost": 0.0,
+                     "prev": float((cr.get("px") or {}).get(t) or (st.get("core_last") or {}).get(t) or 0)}
+                 for t, u in (st.get("core_units") or {}).items() if int(u) > 0})
+    live = MO.timing(now)[0] == "now"
+    head = {"ok": True, "src": "Yahoo 1 分钟线（约晚 20 分钟）", "live": live, "asof": now.isoformat(timespec="minutes")}
+    if not rows:
+        return 200, {**head, "rows": {}}
+    key = (tag, tuple(sorted(rows)))
+    with _QUOTE_LOCK:
+        c = _QUOTE_CACHE.get(key)
+        if c is None or time.monotonic() - c[0] > (60 if live else 600):
+            if fetch is None:
+                from .data import intraday_quotes as fetch
+            try:
+                q = fetch(list(key[1])) or {}
+            except Exception as e:                           # noqa: BLE001
+                log.warning("现价取不到：%s", e)
+                q = {}
+            c = (time.monotonic(), q) if q else (time.monotonic() - (50 if live else 540), q)   # 取不到：10 秒 / 1 分钟后再试
+            _QUOTE_CACHE[key] = c
+    out = {}
+    for t, r in rows.items():
+        x = c[1].get(t)
+        if not x:
+            continue
+        px = float(x["px"])
+        out[t] = {"px": round(px, 2), "at": x.get("at"), "today": str(x.get("at") or "")[:10] == now.date().isoformat(),
+                  "kind": r["kind"], "n": r["n"], "value": round(px * r["n"]),
+                  "chg_pct": round((px / r["prev"] - 1) * 100, 2) if r["prev"] > 0 else None,
+                  "pl_pct": round((px / r["cost"] - 1) * 100, 2) if r["cost"] > 0 else None}
+    return 200, {**head, "rows": out}
 
 
 # ───────────────────────── HTTP ─────────────────────────
@@ -1561,6 +1688,9 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
             if u.path == "/api/chart":
                 self._chart(u.query)
                 return
+            if u.path == "/api/quotes":
+                self._json(*quotes_json(_book_of(u.query), (clock or now_jst)()))
+                return
             if u.path != "/":
                 self._text(404, "没有这个页面")
                 return
@@ -1666,15 +1796,17 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
             u = urlparse(self._route())
             if self._static(u.path):
                 return
-            if u.path not in ("/", "/pair", "/api/chart"):
+            if u.path not in ("/", "/pair", "/api/chart", "/api/quotes"):
                 self._text(404, "没有这个页面")
                 return
             dev = self._who()
-            if u.path == "/api/chart":
+            if u.path in ("/api/chart", "/api/quotes"):
                 if dev is None:
                     self._json(401, {"ok": False, "msg": "这台设备还没配对（或已被取消）"})
-                else:
+                elif u.path == "/api/chart":
                     self._chart(u.query)
+                else:
+                    self._json(*quotes_json(_book_of(u.query), (clock or now_jst)()))
                 return
             if dev is None:
                 code = (parse_qs(u.query).get("c") or [""])[0] if u.path == "/pair" else ""

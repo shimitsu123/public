@@ -107,3 +107,70 @@ def test_executor_summary_writes_kline_file_and_trends(monkeypatch):
     assert sg["rows"][0]["trend"] == p["trend"] and set(p["trend"]) >= {"D", "W"}       # 卡片上的趋势标签 = K 线文件里的
     for t_, ps in eng.st.pos.items():
         assert data["tickers"][t_]["kind"] == "stock" and data["tickers"][t_]["entry_px"] > 0
+
+
+# ────────── 「快要出」「观察中」按离买入信号的远近排序（2026-10-07 用户「观察中的股票要按照即将有可能会买的顺序进行排序」）──────────
+PW = StrategyParams(min_weekly_vol_ratio=1.0, max_distribution_days=6, max_upper_shadow_ratio=3.0)   # var/best_params_JP.json 同样的过滤
+
+
+def _two(h0, h1, **last):
+    """两天的指标（只要 proximity 用到的列）：h = MACD − 信号线。"""
+    base = {"Close": 1000.0, "macd_sig": 0.0, "range_pct": 10.0, "vol_ratio": 0.8, "w5v": 1.2, "dist_days": 2.0, "rsi": 50.0,
+            "ext_ma20_pct": 1.0}
+    return pd.DataFrame([{**base, "macd": h0}, {**base, "macd": h1, **last}])
+
+
+def test_proximity_estimates_days_to_the_cross_and_what_is_missing():
+    n = SG.proximity(_two(-0.9, -0.5), PW)                                  # 差 −0.9 → −0.5：一天 +0.4 → 第 2 天变成 +0.3
+    assert n == {"where": "below_up", "days": 2, "miss": [], "vol": 0.8}
+    assert SG.proximity(_two(-0.6, -0.4), PW)["days"] == 3                  # 一天 +0.2：第 2 天正好 0（不算金叉）→ 第 3 天
+    assert SG.proximity(_two(-0.3, -0.1), PW)["days"] == 1 and SG.proximity(_two(-0.1, 0.0), PW)["days"] == 1
+    assert SG.proximity(_two(-0.2, -0.1), PW)["days"] == 2                  # 一天 +0.1：明天正好 0 → 后天
+    assert SG.proximity(_two(-10.0, -9.99), PW)["days"] == SG.MAX_DAYS      # 太远：截到 30 天
+    assert SG.proximity(_two(-0.4, -0.5), PW)["where"] == "below_down" and SG.proximity(_two(-0.4, -0.5), PW)["days"] is None
+    assert SG.proximity(_two(-0.1, 0.2), PW)["where"] == "above"            # 今天已经金叉 / 在线上：要先回落
+    m = SG.proximity(_two(-0.9, -15.0, macd_sig=-14.5, range_pct=16.0, w5v=0.85, dist_days=6.0), PW)
+    assert m["where"] == "below_up" and m["days"] == 2
+    assert m["miss"] == ["横盘（60 日振幅 16%，要 < 15%）", "MACD 离 0 轴（1.50%，要 < 1%）", "周线量比（0.85，要 ≥ 1）",
+                         "出货日（20 日内 6 天，要 < 6）"]
+    assert SG.proximity(_two(-0.9, -0.5, w5v=np.nan), PW)["miss"] == []      # 周线历史不够：规则也不过滤
+    assert SG.proximity(_two(-0.9, -0.5, rsi=90.0, ext_ma20_pct=20.0), PW)["miss"] == []     # 没打开的过滤不算
+    on = StrategyParams(max_rsi=70.0, max_ext_ma20_pct=8.0)
+    assert SG.proximity(_two(-0.9, -0.5, rsi=90.0, ext_ma20_pct=20.0), on)["miss"] == ["RSI（90，要 ≤ 70）", "离 20 日线（+20%，要 ≤ 8%）"]
+    assert SG.near_text(n, PW) == "离买入信号：MACD 约 2 天后金叉（按最近一天的变化估）；金叉那天量要 > 1.5 倍（今天 0.8 倍）"
+    assert SG.near_text(m, PW).endswith("；还差：横盘（60 日振幅 16%，要 < 15%）、MACD 离 0 轴（1.50%，要 < 1%）、"
+                                        "周线量比（0.85，要 ≥ 1）、出货日（20 日内 6 天，要 < 6）")
+    assert SG.near_text({"where": "below_down", "vol": 1.2}, PW) == ("离买入信号：MACD 在信号线下、还在往下走（要先拐头）；"
+                                                                    "金叉那天量要 > 1.5 倍（今天 1.2 倍）")
+    assert "离金叉还远（估计 10 天以上）" in SG.near_text({"where": "below_up", "days": SG.MAX_DAYS}, PW)
+    assert "MACD 约 9 天后金叉" in SG.near_text({"where": "below_up", "days": 9}, PW)
+    assert "离金叉还远（估计 10 天以上）" in SG.near_text({"where": "below_up", "days": 10}, PW)
+
+
+def test_near_key_order():
+    def row(t, where="below_up", days=1, miss=(), block=None, warn=(), vol=1.0, score=50.0):
+        return {"ticker": t, "buy": {"block": block, "warn": list(warn)}, "vol_ratio": vol, "score": score,
+                "near": {"where": where, "days": days if where == "below_up" else None, "miss": list(miss)}}
+    rows = [row("blocked", block="资格检查"), row("warned", warn=["决算前：会被挡"]), row("w2", miss=["周线量比"]),
+            row("above", "above"), row("down", "below_down"), row("d3_low", days=3, vol=0.5), row("d3_high", days=3, vol=0.9),
+            row("d1_low_score", score=40.0), row("d1", score=60.0)]
+    assert [r["ticker"] for r in sorted(rows, key=SG.near_key)] == [
+        "d1", "d1_low_score", "d3_high", "d3_low", "down", "above", "w2", "warned", "blocked"]
+
+
+def test_build_sorts_imminent_and_watch_by_proximity():
+    ind, eng, i = _engine()
+    eng.entry_gate_fn = lambda t, i_: "测试：资格检查挡" if t in ("B.T", "D.T") else None
+    sg = SG.build(ind, eng, i, P)
+    rows = sg["rows"]
+    assert [r["status"] for r in rows] == sorted((r["status"] for r in rows), key=["triggered", "imminent", "watch"].index)
+    for g in ("imminent", "watch"):
+        grp = [r for r in rows if r["status"] == g]
+        assert grp and all(r["near_text"].startswith("离买入信号：") for r in grp)
+        assert [SG.near_key(r) for r in grp] == sorted(SG.near_key(r) for r in grp)
+    assert all("near" not in r for r in rows if r["status"] == "triggered")
+    watch = [r["ticker"] for r in rows if r["status"] == "watch"]
+    if "D.T" not in eng.st.pos:
+        assert watch[-1] == "D.T"                                          # 资格检查挡的放最后
+    c = next(r for r in rows if r["ticker"] == "C.T")
+    assert c["near"]["where"] in ("below_up", "below_down") and "离买入信号" in sg["note"]

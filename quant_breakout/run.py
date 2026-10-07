@@ -3457,7 +3457,10 @@ def _live_unified_body(a) -> int:
     append_journal(paths.out_dir() / f"live_unified_{tag}_journal.md", now_jst().strftime("%Y-%m-%d %H:%M JST"), title, body)
     if a.notify:
         from qbreak import notify
-        bad = bool(sm["blocked"]) or bool(cmp and cmp.get("comparable") and not cmp.get("same")) or bool(sm.get("notices"))
+        mn_ = sm.get("manual") or {}
+        sig_ = bool(mn_.get("core_pause")) and (mn_.get("core_signal") or {}).get("date") == sm.get("decided_on")   # 停买中出现买入信号
+        bad = (bool(sm["blocked"]) or bool(cmp and cmp.get("comparable") and not cmp.get("same")) or bool(sm.get("notices"))
+               or sig_)
         mac_notify(title, short)
         notify.send(title, body, "warn" if bad else "info")
     print(f"\n决策日 {sm['decided_on']} → 成交日 {sm['fill_day']}；权益 ¥{sm['equity_jpy']:,.0f}，现金 ¥{sm['cash_jpy']:,.0f}")
@@ -3578,6 +3581,12 @@ def cmd_manual(a) -> int:
         print(f"  闲置资金比例：规则目标额的 {float(man.get('core_pct', 100.0)):g}%")
         for ln in MO.lines(sm, today=now.date().isoformat()):
             print(f"  {ln[2:]}")
+        if man.get("core_pause"):                             # 停买中：规则现在想拿哪只（确认买入 = manual core --pct 100）
+            u100_ = (b_.get("core_rule") or {}).get("units100")
+            want_ = [(t, int(n)) for t, n in (u100_ or {}).items() if int(n) > 0]
+            print("  规则现在：" + ("执行器下一次运行之后显示" if u100_ is None else
+                                    "想拿 " + "、".join(f"{t} 约 {n:,} 口" for t, n in want_) if want_ else "不拿核心 ETF")
+                  + "（确认买入：bash scripts/liveu.sh manual core --pct 100）")
         for r_ in MO.unseen(tag, b_):
             print(f"  手动指令 {r_['id']}：{MO.describe(r_)} → 等下单")
         print(f"现在写的买卖：{when}下单（{MO.RULE_TEXT}）")
@@ -3613,6 +3622,7 @@ def cmd_manual(a) -> int:
     if why:
         print(f"★ 没写：{why}")
         return 2
+    pct0_ = MO.core_pct_now(tag, b_)                          # 写之前的闲置资金比例（0 = 停买中）
     rec = MO.append(tag, rec)
     print(f"已写手动指令 {rec['id']}：{MO.describe(rec)}")
     if rec["kind"] == "buy":
@@ -3632,16 +3642,23 @@ def cmd_manual(a) -> int:
                  + ("paper" if paper else "tachibana") + " --phase now" if mode == "now" else ""))
     elif rec["kind"] == "core":
         c_ = MO.core_info(b_, rec["ticker"]) if rec.get("ticker") else None
-        if c_:
+        stop_ = float(rec["pct"]) <= 0
+        if c_ and not stop_:
             print(f"按最近收盘 ¥{c_['px']:,.0f} 估算：{rec['ticker']} {c_['cur']:,} → {int(rec['target']):,} 口"
                   f"（闲置资金比例 {c_['pct']:g}% → {rec['pct']:g}%）")
         fx_ = MO.core_effects(b_, rec["pct"], skip=rec.get("ticker"))
         if fx_:
             print("★ 比例对全部核心 ETF 一起生效：" + "、".join(f"{x} {u0:,} → {u1:,} 口" for x, u0, u1 in fx_))
         mode = MO.timing(now)[0]
-        print(f"核心 ETF {when}照新比例调；之后每天按「规则目标额 × {rec['pct']:g}%」（改回 100% 就照规则）"
-              + ("：操作面板开着的话会马上叫执行器；没开就运行 bash scripts/liveu.sh run --broker "
-                 + ("paper" if paper else "tachibana") + " --phase now" if mode == "now" else ""))
+        hint_ = ("：操作面板开着的话会马上叫执行器；没开就运行 bash scripts/liveu.sh run --broker "
+                 + ("paper" if paper else "tachibana") + " --phase now" if mode == "now" else "")
+        if stop_:                                            # 卖出全部 / 比例 0%：之后停买，出现买入信号只提醒
+            print(f"核心 ETF {when}卖出；之后停买闲置资金 ETF（钱留现金；出现买入信号会提醒你，确认才买："
+                  f"bash scripts/liveu.sh manual core --pct 100）" + hint_)
+        elif pct0_ <= 0:                                     # 停买后确认买入
+            print(f"确认买入：停买结束，核心 ETF {when}照规则买入（闲置资金比例 0% → {rec['pct']:g}%）；之后每天照规则调" + hint_)
+        else:
+            print(f"核心 ETF {when}照新比例调；之后每天按「规则目标额 × {rec['pct']:g}%」（改回 100% 就照规则）" + hint_)
     if paths.halt_file().exists():
         print(f"★ HALT 生效中（{paths.halt_file()}）：解除之后才处理")
     if paper:
