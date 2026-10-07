@@ -3604,6 +3604,7 @@ def cmd_manual(a) -> int:
         req["block_days"] = a.block_days
     try:
         rec = MO.normalize(req)
+        rec = MO.core_rec(rec, b_) or rec                       # 持有的核心 ETF 的卖出 / 减仓 / 调仓 → 闲置资金比例（规则每天按它调核心）
     except ValueError as e:
         print(f"★ 没写：{e}")
         return 2
@@ -3630,7 +3631,17 @@ def cmd_manual(a) -> int:
               + ("：操作面板开着的话会马上叫执行器；没开就运行 bash scripts/liveu.sh run --broker "
                  + ("paper" if paper else "tachibana") + " --phase now" if mode == "now" else ""))
     elif rec["kind"] == "core":
-        print("闲置资金比例从下一次决策（下一个交易日早上的运行）起生效")
+        c_ = MO.core_info(b_, rec["ticker"]) if rec.get("ticker") else None
+        if c_:
+            print(f"按最近收盘 ¥{c_['px']:,.0f} 估算：{rec['ticker']} {c_['cur']:,} → {int(rec['target']):,} 口"
+                  f"（闲置资金比例 {c_['pct']:g}% → {rec['pct']:g}%）")
+        fx_ = MO.core_effects(b_, rec["pct"], skip=rec.get("ticker"))
+        if fx_:
+            print("★ 比例对全部核心 ETF 一起生效：" + "、".join(f"{x} {u0:,} → {u1:,} 口" for x, u0, u1 in fx_))
+        mode = MO.timing(now)[0]
+        print(f"核心 ETF {when}照新比例调；之后每天按「规则目标额 × {rec['pct']:g}%」（改回 100% 就照规则）"
+              + ("：操作面板开着的话会马上叫执行器；没开就运行 bash scripts/liveu.sh run --broker "
+                 + ("paper" if paper else "tachibana") + " --phase now" if mode == "now" else ""))
     if paths.halt_file().exists():
         print(f"★ HALT 生效中（{paths.halt_file()}）：解除之后才处理")
     if paper:
@@ -4119,7 +4130,7 @@ def main(argv=None) -> int:
     lu.set_defaults(func=cmd_live_unified)
     mn = sub.add_parser("manual", help="手动指令：卖出 / 减仓 / 调仓（可加可减）/ 买入（新开仓）/ 闲置资金比例 / 不买回 / 撤回（只写指令；执行器下单：盘中马上、开盘前等开盘、收盘后等下一个交易日开盘）")
     mn.add_argument("action", choices=["list", "sell", "trim", "adjust", "buy", "core", "unblock", "cancel"])
-    mn.add_argument("target", nargs="?", default=None, help="sell / trim / adjust / buy / unblock：代码（例 7203）；cancel：指令 id")
+    mn.add_argument("target", nargs="?", default=None, help="sell / trim / adjust / buy / unblock：代码（例 7203；拿着的核心 ETF 也行，sell / trim / adjust 换算成闲置资金比例）；cancel：指令 id")
     mn.add_argument("--shares", type=int, default=None, help="adjust / buy：目标股数（单元向下取整）")
     mn.add_argument("--yen", type=float, default=None, help="adjust / buy：目标金额（円，按决策时的收盘换成股数）")
     mn.add_argument("--broker", default="paper", choices=["paper", "tachibana"])

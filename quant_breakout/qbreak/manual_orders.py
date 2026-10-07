@@ -78,6 +78,20 @@ def normalize(req: dict) -> dict:
         if not _TICKER.match(t):
             raise ValueError(f"代码 {t or '—'} 不对（东证 4 位代码，例 7203 或 7203.T）")
         out["ticker"] = t
+    if kind == "core" and req.get("ticker"):              # 持有的核心 ETF 的卖出 / 调仓（换算成比例；票与目标口数只用来显示）
+        t = str(req.get("ticker") or "").strip().upper()
+        if "." not in t:
+            t += ".T"
+        if not _TICKER.match(t):
+            raise ValueError(f"代码 {t} 不对（东证 4 位代码，例 1545 或 1545.T）")
+        out["ticker"] = t
+        try:
+            tg = int(req.get("target", 0))
+        except (TypeError, ValueError):
+            raise ValueError("目标口数要是整数") from None
+        if not 0 <= tg <= 10_000_000:
+            raise ValueError("目标口数要在 0〜10,000,000 之间")
+        out["target"] = tg
     if kind in ("trim", "core"):
         try:
             pct = float(req.get("pct"))
@@ -231,6 +245,9 @@ def describe(r: dict) -> str:
     """一条指令的一句话：卖出全部 7203.T / 减仓 7203.T 10% / 调整持仓 7203.T → 300 股 / 买入 7203.T（按规则的仓位）/
     闲置资金比例 80%。"""
     k = r.get("kind")
+    if k == "core" and r.get("ticker"):
+        tg = int(r.get("target") or 0)
+        return (f"卖出全部 {r['ticker']}" if tg <= 0 else f"调仓 {r['ticker']} → 约 {tg:,} 口") + f"（闲置资金比例 {float(r['pct']):g}%）"
     s = LABEL.get(k, str(k)) + (f" {r['ticker']}" if r.get("ticker") else "")
     if k == "buy" and r.get("unit", "rule") == "rule":
         s += f"（{BUY_UNITS['rule']}）"
@@ -279,6 +296,11 @@ def _exit_text(why: str) -> str:
     return EXIT_TEXT.get(str(why)) or REASON_TEXT.get(str(why)) or str(why)
 
 
+def cancelled(waiting: list[dict]) -> set:
+    """指令文件里执行器还没读的撤回指向的指令 id（页面：这些不再算「在处理」、不再给撤回按钮）。"""
+    return {r.get("target") for r in waiting if r.get("kind") == "cancel"}
+
+
 def _live(items: dict, waiting: list[dict], kinds) -> list[dict]:
     """还没处理完的指令（账本里 pending / placed 且没在撤回 + 指令文件里执行器还没读、也没被撤回的）。"""
     out = [it for it in items.values() if it.get("kind") in kinds and it.get("status") in ACTIVE and not it.get("cancel_req")]
@@ -302,6 +324,78 @@ def core_tickers(book: dict) -> set:
         out |= set(NAMES)
     except Exception:                                       # noqa: BLE001
         pass
+    return out
+
+
+def core_info(book: dict | None, t: str) -> dict | None:
+    """一只核心 ETF 的调仓用数字：{"cur" 现在口数, "u100" 规则目标（闲置资金比例 100% 时；最近一次决策算的）, "px", "lot", "eq",
+    "pct" 现在的比例, "selling" 规则这次在卖它}；不是核心 ETF / 执行器还没算过 → None。"""
+    st = (book or {}).get("state") or {}
+    cr = (book or {}).get("core_rule") or {}
+    if t not in core_tickers(book or {}) or t not in (cr.get("units100") or {}):
+        return None
+    hist = st.get("history") or []
+    px = float((cr.get("px") or {}).get(t) or (st.get("core_last") or {}).get(t) or 0)
+    plan = (st.get("core_plan") or {}).get(t) or []
+    cur = int((st.get("core_units") or {}).get(t, 0))
+    u100 = int((cr.get("units100") or {}).get(t, 0))
+    return {"cur": cur, "u100": u100, "px": px, "lot": max(1, int((cr.get("lot") or {}).get(t) or 1)),
+            "eq": float(hist[-1][1]) if hist else 0.0, "pct": float(((book or {}).get("manual") or {}).get("core_pct", 100.0)),
+            "selling": u100 <= 0 or (len(plan) == 2 and plan[0] == "SELL" and int(plan[1]) >= cur > 0)}
+
+
+def core_effects(book: dict | None, pct: float, skip: str | None = None) -> list[tuple[str, int, int]]:
+    """闲置资金比例改成 pct 时，各只核心 ETF（skip 以外）现在的口数 → 新比例下的目标口数（只列会变的）：[(票, 现在, 目标)]。
+    比例对全部核心 ETF 一起生效（规则同时拿两只以上时，调一只另一只也跟着变）。"""
+    st = (book or {}).get("state") or {}
+    cr = (book or {}).get("core_rule") or {}
+    out = []
+    for t, n100 in sorted((cr.get("units100") or {}).items()):
+        cur, lot = int((st.get("core_units") or {}).get(t, 0)), max(1, int((cr.get("lot") or {}).get(t) or 1))
+        tg = int(math.floor(int(n100) * float(pct) / 100 / lot + 1e-9)) * lot
+        if t != skip and tg != cur and (cur > 0 or tg > 0):
+            out.append((t, cur, tg))
+    return out
+
+
+def core_pct_for(tg: int, u100: int, lot: int) -> float:
+    """目标口数 → 闲置资金比例（%，两位小数）：取「规则目标 × 比例」按单元向下取整后正好是 tg 的最小比例（直接四舍五入可能少一个单元）。"""
+    if u100 <= 0:
+        return 0.0
+    p = math.ceil(tg / u100 * 10000 - 1e-9) / 100
+    if int(math.floor(u100 * p / 100 / lot + 1e-9)) * lot != tg:
+        p = round(tg / u100 * 100, 2)
+    return p
+
+
+def core_rec(rec: dict, book: dict | None) -> dict | None:
+    """持有的核心 ETF 的卖出全部 / 减仓 / 调仓 → 「闲置资金比例」指令（规则每天把核心 ETF 调回「目标额 × 比例」，
+    只改这一次的单留不住）。比例 = 目标口数 ÷ 规则目标（比例 100% 时的口数）；对全部核心 ETF 一起生效。
+    不是核心 ETF → None；调不了 → ValueError（说明）。"""
+    t, k = rec.get("ticker"), rec.get("kind")
+    if k not in POS_KINDS or not t or t not in core_tickers(book or {}):
+        return None
+    c = core_info(book, t)
+    if c is None or c["cur"] <= 0:
+        raise ValueError(f"现在没有 {t}（或执行器还没算过它的目标额：下一次运行之后再调）")
+    if c["selling"]:
+        raise ValueError(f"规则这次在卖 {t}（熊市 / 换了 ETF）：开盘卖出，不用调")
+    if c["px"] <= 0:
+        raise ValueError(f"账本里没有 {t} 的收盘价（执行器跑过一次之后再调）")
+    if k == "sell":
+        tg = 0
+    elif k == "trim":
+        tg = int(math.floor(c["eq"] * float(rec["pct"]) / 100 / c["px"] / c["lot"] + 1e-9)) * c["lot"] if c["eq"] > 0 else 0
+        if tg >= c["cur"]:
+            raise ValueError(f"{t} 现在约占权益 {c['cur'] * c['px'] / c['eq'] * 100:.1f}%，目标 {float(rec['pct']):g}% 不低于现在："
+                             "减仓只能减不能加（要加用「调仓」）")
+    else:
+        tg = target_shares(rec["unit"], rec["value"], c["eq"], c["px"], c["lot"])
+    tg = min(tg, c["u100"])
+    out = {"kind": "core", "pct": core_pct_for(tg, c["u100"], c["lot"]), "ticker": t, "target": tg,
+           "source": rec.get("source") or "cli"}
+    if rec.get("note"):
+        out["note"] = rec["note"]
     return out
 
 
@@ -371,11 +465,20 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None)
             return f"{t} 现在 {a['cur']:,} 股，目标 {fmt_target(rec)} 换算也是 {a['want']:,} 股：不用调"
         if a["want"] > a["cur"] and a["delta"] <= 0:
             return f"{t} {cap_text(a['cur'], a['px'], a['eq'], a['cap_pct'], LOT)}"
+    if k == "core":
+        cur = float(man.get("core_pct", 100.0))
+        late = [r for r in waiting if r.get("kind") == "core" and r["id"] not in cancelled(waiting)]
+        if late:
+            cur = float(late[-1]["pct"])
+        if abs(float(rec["pct"]) - cur) < 0.005:
+            return (f"{t} 换算成闲置资金比例还是 {cur:g}%：不用调" if t else f"闲置资金比例现在就是 {cur:g}%：不用改")
     if k == "unblock" and t not in (man.get("blocks") or {}):
         return f"{t} 没有「不自动买回」的设定"
     if k == "cancel":
         it = items.get(rec["target"])
         if it is None:
+            if rec["target"] in cancelled(waiting):
+                return f"指令 {rec['target']} 已经在撤回中"
             if any(r["id"] == rec["target"] for r in waiting):
                 return None
             return f"没有指令 {rec['target']}"
@@ -440,9 +543,19 @@ def now_due(tag: str, book: dict | None, now: dt.datetime | None = None) -> bool
     st = (book or {}).get("state") or {}
     if str(st.get("last_date") or "") < prev_trading_day(now.date()).isoformat():
         return False                                        # 今天早上的运行还没完成（它会先处理这些指令）
-    if any(r["kind"] in ORDER_KINDS for r in unseen(tag, book)):
+    if any(r["kind"] in ORDER_KINDS + ("core",) for r in unseen(tag, book)):
         return True
     today = now.date().isoformat()
+    cr = (book or {}).get("core_rule") or {}
+    if cr and cr.get("decided_on") == st.get("last_date") and cr.get("defer") != today:
+        want = float(((book or {}).get("manual") or {}).get("core_pct", 100.0))
+        if abs(want - float(cr.get("applied", cr.get("pct", want)))) > 1e-9:
+            try:
+                age = (now - dt.datetime.fromisoformat(str(cr["tried"]))).total_seconds() if cr.get("tried") else None
+            except (TypeError, ValueError):
+                age = None
+            if age is None or age >= RETRY_S:
+                return True
     for it in (((book or {}).get("manual") or {}).get("items") or {}).values():
         if it.get("status") != "pending" or it.get("kind") not in ORDER_KINDS or it.get("hold") == today:
             continue
@@ -550,15 +663,18 @@ class Manual:
         （settle 在对账之后处理）。返回 [(级别, 说明)]。"""
         msgs = []
         items = self.m["items"]
-        for r in read_all(self.tag):
-            if r["id"] in items:
-                continue
+        new = [r for r in read_all(self.tag) if r["id"] not in items]
+        dropped = {r.get("target") for r in new if r["kind"] == "cancel"}   # 执行器读到之前就被撤回的（比例 / 解除是读到就生效的）
+        for r in new:
             it = {**r, "status": "pending"}
             items[r["id"]] = it
             k = r["kind"]
-            if k == "core":
+            if k in ("core", "unblock") and r["id"] in dropped:
+                it.update(status="cancelled", msg="执行器读到之前就撤回了")
+            elif k == "core":
                 self.m["core_pct"] = float(r["pct"])
-                it.update(status="done", msg=f"闲置资金比例设为 {r['pct']:g}%，下一次决策起生效")
+                it.update(status="done", msg=f"闲置资金比例设为 {r['pct']:g}%"
+                          + (f"（{r['ticker']} 约 {int(r.get('target') or 0):,} 口）" if r.get("ticker") else ""))
             elif k == "unblock":
                 gone = self.m["blocks"].pop(r["ticker"], None)
                 it.update(status="done" if gone else "rejected",
@@ -569,6 +685,8 @@ class Manual:
                     tg.update(status="cancelled", msg=f"已撤回（{r['id']}）")
                     for f in ("wait", "hold", "tried"):
                         tg.pop(f, None)
+                    it.update(status="done", msg=f"撤回 {r['target']}")
+                elif tg is not None and tg.get("status") == "cancelled" and r["target"] in dropped:
                     it.update(status="done", msg=f"撤回 {r['target']}")
                 elif tg is not None and tg.get("status") == "placed" and tg.get("now"):
                     it.update(status="rejected", msg=f"{r['target']}：{NOW_NO_CANCEL}")
@@ -953,7 +1071,8 @@ def lines(sm: dict | None, today: str | None = None) -> list[str]:
 
 
 __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEFAULT", "CAP_PCT", "MAX_POS", "SESSION", "Manual",
-           "append", "read_all", "unseen", "normalize", "check", "slots", "core_tickers", "timing", "when_text", "next_window", "due",
+           "append", "read_all", "unseen", "cancelled", "normalize", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "timing", "when_text",
+           "next_window", "due",
            "RULE_TEXT", "NOW_NO_CANCEL",
            "now_due", "status_text", "entry_why", "buy_size", "requests_path", "position_pct", "target_shares", "adjust_plan",
            "cap_text", "fmt_target", "describe", "active", "lines", "LABEL", "STATUS", "REASON_TEXT"]

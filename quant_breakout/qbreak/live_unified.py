@@ -182,6 +182,31 @@ class UnifiedExecutor:
         for lvl, msg in self.manual.apply(self.eng, i, fill, halted=halted, deciding=deciding):
             self._event(lvl, msg)
 
+    def _core_pending(self, today: dt.date | None = None) -> float | None:
+        """闲置资金比例改了、核心 ETF 还没照新比例调过（today 给了：今天也没说「明天再调」）→ 新比例（%）；否则 None。"""
+        cr = self.book.get("core_rule") or {}
+        if self.manual is None or not cr:
+            return None
+        if today is not None and (cr.get("decided_on") != self.eng.st.last_date or cr.get("defer") == today.isoformat()):
+            return None
+        want = float(self.manual.core_pct)
+        if today is None and cr.get("redo"):                  # 盘中照新比例的单没成交完（对账时记下）→ 这次决策再照比例调
+            return want
+        return want if abs(want - float(cr.get("applied", cr.get("pct", want)))) > 1e-9 else None
+
+    def _record_core(self, k: int, exact: bool = False) -> None:
+        """决策之后：核心 ETF 的规则目标（闲置资金比例 100% 时的口数）、收盘、单元、这次用的比例（页面 / 盘中的 ETF 调仓换算用）。
+        exact（这次照新比例直接调到目标）且有核心 ETF 的单 → 记下这些票：第二天对账时没全部成交（HALT / 没成交 / 没下）→ 下一次决策再照比例调。"""
+        eng = self.eng
+        pct = round(float(eng.core_scale) * 100, 2)
+        cr = {"decided_on": eng.st.last_date, "pct": pct, "applied": pct,
+              "units100": {t: int(n) for t, n in sorted(eng.core_t100.items())},
+              "px": {t: round(float(eng._px_close(t, k)), 4) for t in sorted(eng.core_t100)},
+              "lot": {t: int(eng.lots[eng.col[t]]) for t in sorted(eng.core_t100)}}
+        if exact and eng.st.core_plan:
+            cr.update(exact_on=eng.st.last_date, exact_plan=sorted(eng.st.core_plan))
+        self.book["core_rule"] = cr
+
     def _settle_manual(self) -> None:
         """撤回中的手动指令：这次决策里它的单还没发到交易所 → 撤（不再重下）；已经发出的等对账。"""
         d = self.eng.st.last_date
@@ -512,9 +537,13 @@ class UnifiedExecutor:
         now = self.clock()
         stamp, today = now.isoformat(timespec="seconds"), now.date()
         todo = [it for it in man.pending(MO.ORDER_KINDS) if it.get("hold") != today.isoformat()]   # 「明天开盘」的不再试
-        if not todo:
+        core_want = self._core_pending(today)                 # 闲置资金比例改了：核心 ETF 也马上照新比例调
+        if not todo and core_want is None:
             self.save()
             return out
+        cr = self.book.get("core_rule") or {}
+        core_it = ([None] + sorted((it for it in man.m["items"].values() if it.get("kind") == "core" and it.get("status") == "done"),
+                                   key=lambda x: x.get("at", "")))[-1]          # 最新生效的闲置资金比例指令（同一时刻 → 后写的）
         eng, st, b = self.eng, self.eng.st, self.b
         d = st.last_date
         k = int(eng.gidx.searchsorted(dt.datetime.fromisoformat(d))) if d else len(eng.gidx)
@@ -532,7 +561,12 @@ class UnifiedExecutor:
                 it.update(tried=stamp, msg=why)
             out["retry"] = len(todo)
             out["items"] = [{"id": it["id"], "ticker": it["ticker"], "status": MO.status_text(it), "msg": why} for it in todo]
-            self._event("warn" if "HALT" in why else "info", f"手动指令 {len(todo)} 条这次没下：{why}")
+            if core_want is not None:
+                cr["tried"] = stamp
+                out["retry"] += 1
+                out["items"].append({"id": (core_it or {}).get("id", "core"), "ticker": f"闲置资金比例 {core_want:g}%",
+                                     "status": "等", "msg": why})
+            self._event("warn" if "HALT" in why else "info", f"手动指令 {out['retry']} 条这次没下：{why}")
             self.save()
             return out
         unknown = [o for o in self._active() if o.status in UNKNOWN]
@@ -549,7 +583,16 @@ class UnifiedExecutor:
         busy = {o.ticker for o in self._active()}
         cores = sorted((t for t, u in st.core_units.items() if int(u) > 0 and t in eng.col),
                        key=lambda t: -int(st.core_units[t]) * float(eng._px_close(t, k)))
-        want_px = sorted({it["ticker"] for it in todo} | {t for t in cores if t not in busy})
+        core_moves = {}                                       # {票: (现在口数, 目标口数)}：目标 = 规则目标（比例 100%）× 新比例
+        if core_want is not None:
+            for t, n100 in sorted((cr.get("units100") or {}).items()):
+                if t in eng.col:
+                    lt = int(eng.lots[eng.col[t]])
+                    cur = int(st.core_units.get(t, 0))
+                    tgt = int(math.floor(int(n100) * core_want / 100 / lt + 1e-9)) * lt
+                    if tgt != cur or t in busy:               # 今天已经有单的：账本的口数还没算进今天的成交 → 下一次决策再调
+                        core_moves[t] = (cur, tgt)
+        want_px = sorted({it["ticker"] for it in todo} | {t for t in cores if t not in busy} | {t for t in core_moves if t not in busy})
         try:
             px = {t: float(v) for t, v in (quote(want_px) or {}).items() if v and float(v) > 0}
         except Exception as e:                                # noqa: BLE001
@@ -704,6 +747,64 @@ class UnifiedExecutor:
                 st.pending_exit.pop(t, None)
             else:
                 man.m["trims"].pop(t, None)
+        core_done, core_wait, core_retry = [], [], []
+        core_today = {o.ticker for o in self._active() if o.reason == "manual_core"}     # 今天已经照比例调过一次的 ETF
+
+        def core_side(side: str) -> None:
+            """闲置资金比例改了：核心 ETF 照新比例调（卖在个股买入之前、买在个股买入之后；目标 = 规则目标（比例 100%）× 新比例）。"""
+            for t, (cur, tgt) in core_moves.items():
+                if (tgt < cur) != (side == "SELL"):                 # 卖的在卖的那一轮、买的（和今天已经有单的）在买的那一轮
+                    continue
+                if t in core_today:
+                    core_wait.append(f"{t} 今天已经调过一次")
+                    continue
+                if t in busy:
+                    core_wait.append(f"{t} 今天已经有执行器的单")
+                    continue
+                p = px.get(t)
+                if not p:
+                    core_retry.append(f"{t} 取不到现价")
+                    continue
+                lt = lot_of(t)
+                if side == "SELL":
+                    n = cur - tgt if held is None else min(cur - tgt, held.get(t, 0))
+                    if n <= 0:
+                        core_wait.append(f"{t} 立花那边没有这么多口")
+                        continue
+                    o = ExecOrder(f"U{d}-SELL-{t}-{tag}", t, "SELL", "core", n, d, ref_px=p, reason="manual_core", phase="now")
+                else:
+                    gw = eng.core_gate_fn(t) if eng.core_gate_fn is not None else None
+                    if gw:
+                        core_done.append(f"{t} 不买（{gw}）：那份留现金")
+                        continue
+                    lim = round_to_tick(p * (1 + NOW_BUY_BUF), t, "BUY")
+                    unit_px = p * (1 + float(eng.c_slip[t])) if self.paper else lim
+                    fee = eng.c_fee[t]["BUY"]
+                    n, avail = tgt - cur, cash_now()
+                    while n > 0 and n * unit_px + fee(n * unit_px) > avail:
+                        n -= lt
+                    if n <= 0:
+                        core_done.append(f"{t} 现金不够 1 个单元：没买")
+                        continue
+                    o = ExecOrder(f"U{d}-BUY-{t}-{tag}", t, "BUY", "core", n, d, limit=lim, ref_px=p, reason="manual_core",
+                                  phase="now")
+                if self.paper:
+                    b.set_prices({t: p})
+                self.orders.append(o)
+                self._send(o, n, bar="")
+                busy.add(t)
+                what, q = ("卖出" if side == "SELL" else "买入"), int(o.filled_qty or 0)
+                if o.status in UNKNOWN:
+                    core_done.append(f"盘中{what} {t} {n:,} 口：下单结果不明，请在立花的注文一覧确认")
+                elif o.status in ACCEPTED:
+                    core_done.append(f"盘中{what} {t} {n:,} 口 @ ¥{float(o.filled_px):,.2f}" if q >= n else
+                                     f"盘中{what} {t}：成交 {q:,} / {n:,} 口，其余挂着（今天有效）" if q > 0 else
+                                     f"盘中{what} {t} {n:,} 口：已下单，等成交（今天有效）")
+                elif o.status == "BLOCKED":
+                    core_wait.append(f"{t} 没下（{o.note or '被挡'}）")
+                else:
+                    core_done.append(f"{t} 立花没受理：{o.note or o.status}")
+        core_side("SELL")                                     # 比例调低：先卖核心，腾出的现金个股买入也能用
         n_used = (len(st.pos) - sum(1 for x in st.pending_exit if x in st.pos) + sum(1 for x in st.plan if x not in st.pos)
                   + len({o.ticker for o in self._active() if o.phase == "now" and o.reason == "manual_buy"
                          and (o.status in ACCEPTED or o.status in UNKNOWN)}))
@@ -791,11 +892,30 @@ class UnifiedExecutor:
                 n_used += not add
             else:
                 man.m[key].pop(t, None)
+        core_side("BUY")                                      # 比例调高：个股买完再用剩下的现金买核心
         for it in todo:
             lvl = "warn" if it["status"] == "rejected" else "info"
             self._event(lvl, f"手动指令 {it['id']}：{it['ticker']} {MO.status_text(it)}：{it.get('msg') or ''}")
         out["items"] = [{"id": it["id"], "ticker": it["ticker"], "status": MO.status_text(it), "msg": it.get("msg") or ""}
                         for it in todo]
+        if core_want is not None:                             # 闲置资金比例：记下调到哪了（没调完的 → 一会儿再试 / 下一次决策照新比例）
+            if core_retry:
+                cr["tried"] = stamp
+                cs, cm = "等", "；".join(core_done + core_retry) + f"：{MO.RETRY_S // 60} 分钟后再试"
+                out["retry"] += 1
+            elif core_wait:
+                cr["defer"] = today.isoformat()
+                cs, cm = "明天开盘", "；".join(core_done + core_wait) + " → 下一次决策照新比例调（明天开盘）"
+                out["later"] += 1
+            else:
+                cr["applied"] = core_want
+                cr.pop("tried", None)
+                cs, cm = ("盘中已调" if core_done else "完成"), "；".join(core_done) or "现在的口数已经是新比例的目标"
+            if core_it is not None:
+                core_it["msg"] = f"闲置资金比例设为 {core_want:g}%：{cm}"
+            self._event("info", f"闲置资金比例 {core_want:g}%：{cm}")
+            out["items"].append({"id": (core_it or {}).get("id", "core"), "ticker": f"闲置资金比例 {core_want:g}%", "status": cs,
+                                 "msg": cm})
         self.save()
         return out
 
@@ -854,6 +974,8 @@ class UnifiedExecutor:
             o = act[n]
             q, px = fills.get(o.cid, (0, 0.0))
             o.filled_qty, o.filled_px = int(q), float(px)
+            if o.reason == "manual_core" and q < (o.sent_qty or o.qty) and self.book.get("core_rule"):
+                self.book["core_rule"]["redo"] = True         # 盘中照新比例的单没成交完 → 这次决策核心 ETF 直接调到目标（不看再平衡带）
             if o.status in ACCEPTED:
                 o.status = "FILLED" if q >= (o.sent_qty or o.qty) else ("PARTIAL" if q > 0 else "UNFILLED")
             elif o.status == "DEFERRED":                     # 开盘后的补单没有跑（09:05 的 --phase open）→ 这笔没买，与模型不同
@@ -919,6 +1041,11 @@ class UnifiedExecutor:
                     self.manual.on_fill(o.ticker, "manual_buy", int(q), float(px), str(eng.gidx[k].date()), st)
             self._reconciled.append({"bar": str(eng.gidx[k].date()), "side": o.side, "ticker": o.ticker,
                                      "qty": int(q), "px": round(float(px), 4), "kind": o.kind, "reason": o.reason})
+        cr = self.book.get("core_rule") or {}
+        if cr.get("exact_on") and cr["exact_on"] == st.last_date:   # 照新比例直接调的那次决策：核心 ETF 的单都成交了吗
+            done = {o.ticker for o in act if o.kind == "core" and o.filled_qty >= (o.sent_qty or o.qty) > 0}
+            if set(cr.get("exact_plan") or []) - done:
+                cr["redo"] = True                             # HALT / 没成交 / 没下 → 这次决策再照比例调（不看再平衡带）
         for t in list(st.pending_exit):
             if t not in st.pos:
                 st.pending_exit.pop(t)
@@ -1027,10 +1154,14 @@ class UnifiedExecutor:
         self.check_broker()
         if place and self.manual is not None:              # 手动卖出 / 减仓：收盘离场判断之后、统一决策之前变成单
             self.eng.pre_decide_fn = self._apply_manual
+        exact = self._core_pending() is not None            # 改了闲置资金比例、还没照新比例调过 → 这次核心 ETF 直接调到目标
+        self.eng.core_exact = exact
         try:
             self.eng.close_phase(k)
         finally:
             self.eng.pre_decide_fn = None
+            self.eng.core_exact = False
+        self._record_core(k, exact)
         if place:
             self.place(k)
 

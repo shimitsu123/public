@@ -207,8 +207,8 @@ def test_now_due_cases():
     assert not MO.now_due("nd", book, at(10, 0)) and MO.now_due("nd", book, at(10, 5))
     it["status"] = "placed"
     assert not MO.now_due("nd", book, at(10, 30))
-    MO.append("nd", {"kind": "core", "pct": 50}, clock=lambda: at(10, 40))           # 闲置资金比例：不用盘中跑
-    assert not MO.now_due("nd", book, at(10, 45))
+    MO.append("nd", {"kind": "core", "pct": 50}, clock=lambda: at(10, 40))           # 闲置资金比例（2026-10-07 起盘中也马上调核心 ETF）
+    assert MO.now_due("nd", book, at(10, 45))
 
 
 def test_live_u_phase_now_without_work_does_not_build_the_engine(monkeypatch, capsys):

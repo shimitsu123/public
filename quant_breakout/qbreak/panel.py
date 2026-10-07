@@ -286,14 +286,25 @@ const NOTE = CFG.paper ? '\\n\\n模拟账户：手动操作后会和云端模拟
 function coreShow(){ const r=$('#core-pct'); if(r) $('#core-val').textContent=r.value+'%'; }
 // ── 调仓（股数 / 金额 / 占权益 %）：按最近收盘估算；执行器下单时按当时的价格再算一次；调仓条按单元（LOT 股）分格 ──
 const LOT = CFG.lot || 100;
-let ADJ = null;
-const pctOf = n => CFG.eq>0 && ADJ.px>0 ? (n*ADJ.px/CFG.eq*100).toFixed(1)+'%' : '—';
-function adjCap(){ return ADJ.px>0 && CFG.eq>0 ? Math.floor(CFG.eq*CFG.cap/100/ADJ.px/LOT+1e-9)*LOT : 0; }
+let ADJ = null, ADJ_RULE = null;                                           // ADJ_RULE：调仓对话框里个股那行说明的原文（核心 ETF 换掉、个股换回）
+function pctOf(n){ return CFG.eq>0 && ADJ.px>0 ? (n*ADJ.px/CFG.eq*100).toFixed(1)+'%' : '—'; }
+function ALOT(){ return (ADJ && ADJ.lot) || LOT; }                         // 一个单元几股（核心 ETF：几口）
+function UW(){ return (ADJ && ADJ.core) ? '口' : '股'; }
+function cpctOf(n){                                                        // 核心 ETF：目标口数 → 闲置资金比例 %（与 manual_orders.core_pct_for 相同）
+  if(!(ADJ.u100>0)) return 0;
+  const m=Math.min(n, ADJ.u100), L=ALOT(); let p=Math.ceil(m/ADJ.u100*10000-1e-9)/100;
+  if(Math.floor(ADJ.u100*p/100/L+1e-9)*L!==m) p=Math.round(m/ADJ.u100*10000)/100;
+  return p;
+}
+function adjCap(){                                                          // 个股：单只上限 cap%；核心 ETF：规则目标额（比例 100%）
+  if(ADJ.core) return Math.floor((ADJ.u100||0)/ALOT())*ALOT();
+  return ADJ.px>0 && CFG.eq>0 ? Math.floor(CFG.eq*CFG.cap/100/ADJ.px/ALOT()+1e-9)*ALOT() : 0;
+}
 function adjTarget(){
   const v=parseFloat($('#adj-val').value); if(!(v>=0) || !isFinite(v)) return null;
   let raw;
   if(ADJ.unit==='shares') raw=v; else if(!(ADJ.px>0)) return null; else if(ADJ.unit==='yen') raw=v/ADJ.px; else raw=CFG.eq*v/100/ADJ.px;
-  return Math.max(0, Math.floor(raw/LOT+1e-9)*LOT);
+  return Math.max(0, Math.floor(raw/ALOT()+1e-9)*ALOT());
 }
 function adjShow(n){
   const u=ADJ.unit, e=$('#adj-val');
@@ -302,12 +313,13 @@ function adjShow(n){
 function adjUnit(u){
   const n=adjTarget(); ADJ.unit=u;
   document.querySelectorAll('#adj-seg button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.u===u ? 'true' : 'false'));
-  $('#adj-unit').textContent = {shares:'股', yen:'円', pct:'%'}[u];
-  $('#adj-val').step = u==='shares' ? LOT : u==='yen' ? 1000 : 0.1;
+  $('#adj-unit').textContent = {shares:UW(), yen:'円', pct:'%'}[u];
+  $('#adj-val').step = u==='shares' ? ALOT() : u==='yen' ? 1000 : 0.1;
   adjShow(n==null ? ADJ.shares : n); adjPrev();
 }
-function adjBar(){                                                         // 调仓条按「一次最少能买卖的股数」（1 个单元 = LOT 股）分格
+function adjBar(){                                                         // 调仓条按「一次最少能买卖的股数」（1 个单元 = LOT 股 / 口）分格
   const r=$('#adj-range'), bar=$('#adj-bar'), lab=$('#adj-lab'), note=$('#adj-note'); if(!r || !bar || !ADJ) return;
+  const LOT=ALOT(), U=UW();
   const n=Math.max(1, Math.round(+r.max/LOT)), have=Math.round(ADJ.shares/LOT), tgt=Math.round(+r.value/LOT), capN=Math.floor(adjCap()/LOT);
   const G=Math.ceil(n/50);                                                  // 单元太多（> 50）时几格并成一格，手机上也看得清
   bar.textContent='';
@@ -321,23 +333,25 @@ function adjBar(){                                                         // �
   const at=(j, text, cls)=>{ const p=j/n*100, e=nd('span', cls, text, lab); e.style.left=p+'%';
     if(p<=0) e.classList.add('l'); else if(p>=100) e.classList.add('r'); };
   if(n<=8 && G===1){ for(let j=0;j<=n;j++) at(j, fmt(j*LOT), 't'); }
-  else { at(0, '0', 't'); at(n, fmt(n*LOT)+' 股', 't'); }
+  else { at(0, '0', 't'); at(n, fmt(n*LOT)+' '+U, 't'); }
   const pk=Math.min(100, have/n*100), num=n<=8 ? '' : ' '+fmt(ADJ.shares);            // ▲ 对准现在的位置：左半边往右写、右半边往左写（不出框）
   const kl=nd('span', 'k', pk<=60 ? '▲现在'+num : '现在'+num+' ▲', lab);
   kl.style.left=pk+'%'; kl.style.transform = pk<=60 ? 'translateX(-6px)' : 'translateX(calc(-100% + 6px))';
-  const capTxt = capN>=n ? '最右边 = 单只上限 '+CFG.cap+'%'
-               : capN<have ? '单只上限 '+CFG.cap+'% ≈ '+fmt(capN*LOT)+' 股（现在已超过，只能减）'
-               : '单只上限 '+CFG.cap+'% ≈ '+fmt(capN*LOT)+' 股';
-  note.textContent='一格 = '+fmt(G*LOT)+' 股'+(G>1 ? '（拖动按 '+fmt(LOT)+' 股一步）' : '')
+  const lim = ADJ.core ? '规则目标额（比例 100%）' : '单只上限 '+CFG.cap+'%';
+  const capTxt = capN>=n ? '最右边 = '+lim
+               : capN<have ? lim+' ≈ '+fmt(capN*LOT)+' '+U+'（现在已超过，只能减）'
+               : lim+' ≈ '+fmt(capN*LOT)+' '+U;
+  note.textContent='一格 = '+fmt(G*LOT)+' '+U+(G>1 ? '（拖动按 '+fmt(LOT)+' '+U+'一步）' : '')
     +' · 半透明 留着 · 实心 要加 · 红框 要卖 · 斜线 超过上限 · '+capTxt;
-  r.setAttribute('aria-valuetext', '目标 '+fmt(tgt*LOT)+' 股（'+tgt+' 个单元）；现在 '+fmt(ADJ.shares)+' 股');
+  r.setAttribute('aria-valuetext', '目标 '+fmt(tgt*LOT)+' '+U+'（'+tgt+' 个单元）；现在 '+fmt(ADJ.shares)+' '+U);
 }
 function adjPrev(){
   const go=$('#adj-go'), out=$('#adj-prev'), c=ADJ, cap=adjCap(), n=adjTarget();
   go.className='btn primary';
   const r=$('#adj-range'); if(n!=null) r.value=Math.min(+r.max, n);
   adjBar();
-  if(n==null){ out.textContent='输入目标（股数 / 金额 / 占总权益 %）'; go.textContent='确认'; go.disabled=true; return; }
+  if(n==null){ out.textContent='输入目标（'+UW()+'数 / 金额 / 占总权益 %）'; go.textContent='确认'; go.disabled=true; return; }
+  if(c.core){ adjPrevCore(n); return; }
   if(n===c.shares){
     out.textContent='换算还是 '+fmt(n)+' 股：不用调';
     go.textContent='确认'; go.disabled=true; return;
@@ -359,6 +373,29 @@ function adjPrev(){
   out.textContent='买入 '+fmt(k)+' 股（约 '+yen(k*c.px)+'）：'+fmt(c.shares)+' → '+fmt(t)+' 股，约占权益 '+pctOf(t)+note
     +'\\n'+CFG.when+'买入（最高 '+yen(c.px*1.03)+' = 收盘 ×1.03）；钱不够先卖核心 ETF；只做一次';
   go.textContent='确认买入 '+fmt(k)+' 股'; go.disabled=false;
+}
+function coreFx(q, skip){                                                  // 同一个比例对别的核心 ETF（规则同时拿两只以上时）：会变的列出来
+  const C=CFG.cores||{}, out=[];
+  for(const t of Object.keys(C)){
+    if(t===skip) continue;
+    const c=C[t], L=c.lot||1, tg=Math.floor(c.u100*q/100/L+1e-9)*L;
+    if(tg!==c.cur && (c.cur>0 || tg>0)) out.push(t+' '+fmt(c.cur)+' → '+fmt(tg)+' 口');
+  }
+  return out.length ? '\\n★ 同一比例也用在：'+out.join('、') : '';
+}
+function adjPrevCore(n){                                                   // 核心 ETF：目标口数 → 闲置资金比例（之后每天按它）
+  const go=$('#adj-go'), out=$('#adj-prev'), c=ADJ, cap=adjCap();
+  let t=n, note='';
+  if(t>cap){ t=Math.max(cap, 0); note='\\n★ 超过规则目标额（比例 100%）：截到 '+fmt(t)+' 口'; }
+  const q=cpctOf(t), ratio='\\n闲置资金比例 '+c.cpct+'% → '+q+'%（之后每天按规则目标额 × '+q+'%）'+coreFx(q, c.t);
+  if(t===c.shares){ out.textContent='现在就是 '+fmt(t)+' 口：不用调'+note; go.textContent='确认'; go.disabled=true; return; }
+  if(q===c.cpct){
+    out.textContent='换算成闲置资金比例还是 '+q+'%：不用调'+note; go.textContent='确认'; go.disabled=true; return;
+  }
+  const k=Math.abs(t-c.shares), sell=t<c.shares;
+  out.textContent=(sell ? '卖出 ' : '买入 ')+fmt(k)+' 口（约 '+yen(k*c.px)+'）：'+fmt(c.shares)+' → '+fmt(t)+' 口，约占权益 '+pctOf(t)
+    +note+ratio+'\\n'+CFG.when+(sell ? '卖出' : '买入');
+  go.textContent=(sell ? '确认卖出 ' : '确认买入 ')+fmt(k)+' 口'; go.className=sell ? 'btn danger' : 'btn primary'; go.disabled=false;
 }
 // ── 买入（建议的股票 → 手动买入指令）：按规则的仓位 / 股数 / 金额 / 占权益 %；执行器下单时按当时的价格再算 ──
 let BUY = null;
@@ -430,15 +467,26 @@ document.addEventListener('click', async e=>{
     done(await api('/api/request',{book:CFG.book, kind:'sell', ticker:CUR.t, block_days:parseInt(bd,10)})); return;
   }
   if(a==='adj'){
-    ADJ={t:d.t, shares:+d.shares, px:+d.px, unit:'shares'};
+    const core=d.core==='1';
+    ADJ={t:d.t, shares:+d.shares, px:+d.px, unit:'shares', core:core, lot:core ? (+d.lot||1) : LOT, u100:+d.u100||0, cpct:+d.cpct||0};
     $('#adj-title').textContent='调仓 '+d.t+(d.name?' '+d.name:'');
-    $('#adj-cur').textContent='现在 '+fmt(ADJ.shares)+' 股 · 约 '+yen(ADJ.shares*ADJ.px)+' · 约占权益 '+pctOf(ADJ.shares);
-    $('#adj-cap').textContent=CFG.cap; $('#adj-val').value='';             // 从这只票现在的股数开始（不带上一只票输过的数）
-    const r=$('#adj-range'); r.max=Math.max(1, Math.ceil(Math.max(adjCap(), ADJ.shares, LOT)/LOT))*LOT; r.step=LOT; r.value=ADJ.shares;   // 整数个单元
+    $('#adj-cur').textContent='现在 '+fmt(ADJ.shares)+' '+UW()+' · 约 '+yen(ADJ.shares*ADJ.px)+' · 约占权益 '+pctOf(ADJ.shares)
+      +(core ? ' · 闲置资金比例 '+ADJ.cpct+'%' : '');
+    $('#adj-u-sh').textContent=UW()+'数';
+    const ru=$('#adj-rule'); if(ru){ if(ADJ_RULE==null) ADJ_RULE=ru.innerHTML;
+      if(core) ru.textContent='核心 ETF 按「闲置资金比例」调：比例 = 目标 ÷ 规则目标额（最右边 = 100% = 照规则）；之后每天按这个比例，改回 100% 就照规则。'+NOTE.trim();
+      else { ru.innerHTML=ADJ_RULE; $('#adj-cap').textContent=CFG.cap; } }
+    $('#adj-val').value='';                                                // 从这只票现在的股数开始（不带上一只票输过的数）
+    const L=ALOT(), r=$('#adj-range'); r.max=Math.max(1, Math.ceil(Math.max(adjCap(), ADJ.shares, L)/L))*L; r.step=L; r.value=ADJ.shares;   // 整数个单元
     adjUnit('shares'); sheet('#dlg-adj'); return;
   }
+  if(a==='core-sell'){
+    const q=await ask('卖出全部 '+d.t+(d.name?' '+d.name:''), '全部 '+fmt(+d.shares)+' 口 → 闲置资金比例 0%（闲置资金都留现金；改回 100% 就照规则）'
+      +coreFx(0, d.t)+'\\n'+CFG.when+'卖出'+NOTE, '卖出', {danger:true});
+    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'sell', ticker:d.t})); return;
+  }
   if(a==='adj-unit'){ adjUnit(d.u); return; }
-  if(a==='adj-step'){ const n=adjTarget(); adjShow(Math.max(0, (n==null ? ADJ.shares : n)+(+d.d)*LOT)); adjPrev(); return; }
+  if(a==='adj-step'){ const n=adjTarget(); adjShow(Math.max(0, (n==null ? ADJ.shares : n)+(+d.d)*ALOT())); adjPrev(); return; }
   if(a==='adj-go'){
     const n=adjTarget(); if(n==null || n===ADJ.shares) return;
     const v = ADJ.unit==='shares' ? n : parseFloat($('#adj-val').value);
@@ -876,7 +924,7 @@ def _dialogs(paper: bool, cap: float = MO.CAP_PCT) -> str:
             "</div></dialog>"
             "<dialog id='dlg-adj'><div class='sheet'><h3 id='adj-title'></h3><div id='adj-cur' class='muted'></div>"
             "<div style='margin-top:10px'><div class='seg' id='adj-seg' role='group' aria-label='目标的单位'>"
-            "<button data-act='adj-unit' data-u='shares' aria-pressed='true'>股数</button>"
+            "<button data-act='adj-unit' data-u='shares' aria-pressed='true' id='adj-u-sh'>股数</button>"
             "<button data-act='adj-unit' data-u='yen' aria-pressed='false'>金额 ¥</button>"
             "<button data-act='adj-unit' data-u='pct' aria-pressed='false'>占权益 %</button></div></div>"
             "<div class='adjrow'><button class='btn' data-act='adj-step' data-d='-1' aria-label='少一个单元'>−</button>"
@@ -885,7 +933,7 @@ def _dialogs(paper: bool, cap: float = MO.CAP_PCT) -> str:
             "<div class='lots'><div class='lots-bar' id='adj-bar' aria-hidden='true'></div>"
             "<input type='range' id='adj-range' min='0' max='100' step='100' value='0' aria-label='目标股数（一格 = 一次最少能买卖的股数）'></div>"
             "<div class='lots-lab' id='adj-lab' aria-hidden='true'></div><div class='muted small' id='adj-note'></div>"
-            f"<div id='adj-prev'></div><div class='muted small'>一次最少 {MO.LOT} 股；单只上限 <span id='adj-cap'>{cap:g}</span>%。"
+            f"<div id='adj-prev'></div><div class='muted small' id='adj-rule'>一次最少 {MO.LOT} 股；单只上限 <span id='adj-cap'>{cap:g}</span>%。"
             "加仓是你自己的决定（「赢家加仓」研究没有通过）；加仓后成本按股数平均，止损不变。" + sim + "</div>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn primary' id='adj-go' data-act='adj-go'>确认</button></div>"
             "</div></dialog>"
@@ -1050,10 +1098,17 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     pct = MO.position_pct(st)
     pend = st.get("pending_exit") or {}
     waiting = MO.unseen(tag, book)
-    busy = {r.get("ticker") for r in waiting if r.get("kind") in MO.POS_KINDS}
+    dropped = MO.cancelled(waiting)                                    # 执行器还没读、已经点了撤回的
+    busy = {r.get("ticker") for r in waiting if r.get("kind") in MO.POS_KINDS and r["id"] not in dropped}
     busy |= {it.get("ticker") for it in (man.get("items") or {}).values()
              if it.get("kind") in MO.POS_KINDS and it.get("status") in MO.ACTIVE and not it.get("cancel_req")}
-    buying = {r.get("ticker") for r in waiting if r.get("kind") == "buy"}
+    core_busy = any(r.get("kind") == "core" and r["id"] not in dropped for r in waiting)   # 执行器还没读的闲置资金比例指令
+    cr = book.get("core_rule") or {}
+    core_late = bool(cr) and abs(float(man.get("core_pct", 100.0)) - float(cr.get("applied", cr.get("pct", 100.0)))) > 1e-9
+    core_now = {str(o.get("ticker")): o for o in book.get("orders") or []          # 今天盘中已经照比例调过的核心 ETF（口数明天早上对账后更新）
+                if o.get("reason") == "manual_core" and o.get("decided_on") == st.get("last_date")
+                and o.get("status") in ("SENT", "FILLED", "PARTIAL", "SENDING", "ERROR")}
+    buying = {r.get("ticker") for r in waiting if r.get("kind") == "buy" and r["id"] not in dropped}
     buying |= {it.get("ticker") for it in (man.get("items") or {}).values()
                if it.get("kind") == "buy" and it.get("status") in MO.ACTIVE and not it.get("cancel_req")}
     H = ["<header class='top'><div class='bar'><b>qbreak 操作面板</b><span class='sp'></span>"
@@ -1092,8 +1147,33 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     def actions(r: dict, kind: str) -> str:
         t = str(r["ticker"])
         if kind == "core":
-            return tchips(ktrend.get(t)) + chart(t, "core")
+            return tchips(ktrend.get(t)) + _core_actions(r, t) + chart(t, "core")
         return tchips(ktrend.get(t)) + _actions(r, t)
+
+    def _core_actions(r: dict, t: str) -> str:
+        """持有的核心 ETF：卖出全部 / 调仓…（都换算成「闲置资金比例」：规则每天把核心调回 规则目标额 × 比例）。"""
+        c = MO.core_info(book, t)
+        if c is None or c["cur"] <= 0:
+            return ("<div class='act muted small'>" + ("执行器下一次运行之后才能在这里调（还没算过规则目标额）" if not cr else
+                    "规则现在不按比例调这只（不在现在用的核心 ETF 里）") + "</div>")
+        if c["selling"]:
+            return "<div class='act'><b class='neg'>规则在开盘卖出（熊市 / 换 ETF）</b></div>"
+        if core_busy:
+            return "<div class='act muted'>有一条闲置资金比例的指令在处理（见「手动指令」）</div>"
+        o = core_now.get(t)
+        if o is not None:
+            q, n = int(o.get("filled_qty") or 0), int(o.get("qty") or 0)
+            got = "已成交" if q >= n > 0 else f"成交 {q:,} / {n:,} 口" if q > 0 else "等成交" if o.get("status") in ("SENT", "PARTIAL") else "结果不明"
+            return (f"<div class='act muted'>今天盘中已照比例{'卖出' if o.get('side') == 'SELL' else '买入'} {n:,} 口（{got}）："
+                    "口数明天早上对账后更新</div>")
+        data = (f" data-t='{escape(t)}' data-name='{escape(str(r.get('name') or ''))}' data-shares='{c['cur']}' data-px='{round(c['px'], 4)}'"
+                f" data-core='1' data-lot='{c['lot']}' data-u100='{c['u100']}' data-cpct='{c['pct']:g}'")
+        share = f"{c['cur'] * c['px'] / eq * 100:.1f}" if eq and c["px"] > 0 else "—"
+        return ("<div class='act'>"
+                f"<button class='btn sell' data-act='core-sell'{data}>卖出全部</button>"
+                f"<button class='btn' data-act='adj'{data}{'' if c['px'] > 0 and eq else ' disabled'}>调仓…</button></div>"
+                f"<div class='muted small'>现在 {c['cur']:,} 口 · 约 {_yen(c['cur'] * c['px'])} · 约占权益 {share}% · "
+                f"闲置资金比例 {c['pct']:g}%{'（还没照它调完，见「手动指令」）' if core_late else ''}</div>")
 
     def _actions(r: dict, t: str) -> str:
         p = (st.get("pos") or {}).get(t)
@@ -1123,14 +1203,15 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions) + more + "</section>")
     H.append(_suggest_card(sm.get("suggest") or {}, book, tag, buying, when, eq, cap, chart))
     cp = float(man.get("core_pct", 100.0))
-    H.append("<section class='card' id='core'><h2>闲置资金（核心 ETF）比例</h2>"
-             f"<div>现在：规则目标额的 <b>{cp:g}%</b>（100% = 照规则；0% = 全部留现金）</div>"
-             "<div class='stepper'><button class='btn' data-act='core-step' data-d='-10' aria-label='减 10%'>−10</button>"
-             f"<output id='core-val' class='big'>{cp:g}%</output>"
-             "<button class='btn' data-act='core-step' data-d='10' aria-label='加 10%'>+10</button></div>"
-             f"<input type='range' id='core-pct' min='0' max='100' step='5' value='{cp:g}' aria-label='闲置资金比例 %'>"
-             "<div class='act'><button class='btn primary' data-act='core'>保存</button></div>"
-             "<div class='muted small'>下一次决策起生效；只改核心 ETF，个股照规则。</div></section>")
+    if not any(MO.core_info(book, t) for t in held_core):   # 拿着核心 ETF 时在它下面调（卖出全部 / 调仓…）；没拿着时用这里
+        H.append("<section class='card' id='core'><h2>闲置资金（核心 ETF）比例</h2>"
+                 f"<div>现在：规则目标额的 <b>{cp:g}%</b>（100% = 照规则；0% = 全部留现金）</div>"
+                 "<div class='stepper'><button class='btn' data-act='core-step' data-d='-10' aria-label='减 10%'>−10</button>"
+                 f"<output id='core-val' class='big'>{cp:g}%</output>"
+                 "<button class='btn' data-act='core-step' data-d='10' aria-label='加 10%'>+10</button></div>"
+                 f"<input type='range' id='core-pct' min='0' max='100' step='5' value='{cp:g}' aria-label='闲置资金比例 %'>"
+                 "<div class='act'><button class='btn primary' data-act='core'>保存</button></div>"
+                 f"<div class='muted small'>{escape(when)}照新比例调核心 ETF；之后每天按这个比例。个股照规则。</div></section>")
     items = sorted((man.get("items") or {}).values(), key=lambda x: x.get("at", ""), reverse=True)
 
     def _what(r: dict) -> str:
@@ -1139,8 +1220,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     rows = []
     for r in waiting:
         btn = (f"<button class='btn sm' data-act='cancel' data-id='{escape(r['id'])}' data-placed='0'>撤回</button>"
-               if r["kind"] in MO.ORDER_KINDS + ("core",) else "")
-        rows.append(f"<div class='li'><div class='grow'><b>{_what(r)}</b> <span class='chip'>等下单</span>"
+               if r["kind"] in MO.ORDER_KINDS + ("core",) and r["id"] not in dropped else "")
+        rows.append(f"<div class='li'><div class='grow'><b>{_what(r)}</b> <span class='chip'>"
+                    f"{'等下单（撤回中）' if r['id'] in dropped else '等下单'}</span>"
                     f"<div class='muted small'>{escape(str(r.get('at', ''))[5:16].replace('T', ' '))}</div></div>{btn}</div>")
     for it in items[:20]:
         can = (it.get("status") in MO.ACTIVE and it.get("kind") in MO.ORDER_KINDS and not it.get("cancel_req")
@@ -1183,6 +1265,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     H.append("</main><div id='toast' class='toast' role='status' hidden></div>")
     cfg = {"auth": {"h": "X-Qbreak-Csrf" if remote else "X-Qbreak-Token", "v": tok}, "book": tag, "paper": paper, "remote": remote,
            "when": when, "eq": eq or 0, "cap": cap, "lot": MO.LOT,
+           "cores": {t: {"cur": int((st.get("core_units") or {}).get(t, 0)), "u100": int(n),            # 调一只核心 ETF 时别的跟着变多少
+                         "lot": max(1, int((cr.get("lot") or {}).get(t) or 1))} for t, n in (cr.get("units100") or {}).items()},
            "kp": {"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN}}      # K 线的通俗说法（qbreak/kline.py）
     js = _NET_JS + _JS.replace("__CFG__", json.dumps(cfg, ensure_ascii=False).replace("</", "<\\/"))
     return _head("qbreak 操作面板") + "<body>" + "".join(H) + _dialogs(paper, cap) + f"<script>{js}</script></body></html>"
@@ -1215,11 +1299,13 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     tag = str(body.get("book") or "")
     if tag not in BOOKS:
         return False, "不认识的账本", None
+    book, sm = _load(tag)
     try:
         rec = MO.normalize({**body, "source": source})
+        rec = MO.core_rec(rec, book) or rec                  # 持有的核心 ETF 的卖出 / 调仓 → 闲置资金比例（规则每天按它调核心）
     except ValueError as e:
         return False, f"没写：{e}", None
-    book, sm = _load(tag)
+    c0 = MO.core_info(book, rec["ticker"]) if rec["kind"] == "core" and rec.get("ticker") else None
     why = MO.check(rec, book, tag, sm=sm)
     if why:
         return False, f"没写：{why}", None
@@ -1228,7 +1314,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     k, t = rec["kind"], rec.get("ticker")
     msg = {"sell": f"已写：卖出 {t} 全部 → {when}卖出",
            "trim": f"已写：{t} 减到约 {rec.get('pct', 0):g}% → {when}卖出",
-           "core": f"已写：闲置资金比例 {rec.get('pct', 0):g}% → 下一次决策起生效",
+           "core": f"已写：闲置资金比例 {rec.get('pct', 0):g}% → 核心 ETF {when}照新比例调",
            "unblock": f"已写：解除 {t} 的不自动买回",
            "cancel": f"已写：撤回 {rec.get('target')}"}.get(k)
     if k == "adjust":
@@ -1239,6 +1325,12 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
                    + f"）→ {when}买入")
         else:
             msg = f"已写：{t} 卖 {-a['delta']:,} 股（→ {a['target']:,} 股）→ {when}卖出"
+    if c0:
+        n = int(rec["target"]) - c0["cur"]
+        fx = MO.core_effects(book, rec["pct"], skip=t)        # 规则同时拿两只以上核心 ETF 时：同一比例别的也跟着变
+        msg = (f"已写：{'卖出全部 ' + t if int(rec['target']) <= 0 else t + (' 加 ' if n > 0 else ' 卖 ') + f'{abs(n):,} 口'}"
+               f"（闲置资金比例 {c0['pct']:g}% → {rec['pct']:g}%）→ {when}{'买入' if n > 0 else '卖出'}"
+               + ("；同一比例也用在：" + "、".join(f"{x} {a_:,} → {b_:,} 口" for x, a_, b_ in fx) if fx else ""))
     if k == "buy":
         row = next((r for r in (sm.get("suggest") or {}).get("rows") or [] if r.get("ticker") == t), None)
         est = MO.fmt_target(rec)
@@ -1246,7 +1338,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
             est = f"约 {int((row.get('buy') or {}).get('rule_shares') or 0):,} 股"
         msg = (f"已写：买入 {t}（{est}）→ {when}买入"
                + ("" if row and row.get("signal") else "；★ 还没有买入信号：是你自己的决定"))
-    if paths.halt_file().exists() and k in MO.ORDER_KINDS:
+    if paths.halt_file().exists() and k in MO.ORDER_KINDS + ("core",):
         msg += "；★ HALT 生效中：解除之后才处理"
     return True, msg + f"（指令 {rec['id']}）", rec
 
@@ -1441,8 +1533,8 @@ def _book_of(query: str) -> str:
 
 
 def _after_submit(trigger, rec: dict | None) -> None:
-    """写了买卖 / 撤回 → 马上看一次要不要叫执行器（盘中 → 马上下单；开盘前 → 重试加进今天的寄付单）。"""
-    if trigger is not None and rec and rec["kind"] in MO.ORDER_KINDS + ("cancel",):
+    """写了买卖 / 撤回 / 闲置资金比例 → 马上看一次要不要叫执行器（盘中 → 马上下单；开盘前 → 重试加进今天的寄付单）。"""
+    if trigger is not None and rec and rec["kind"] in MO.ORDER_KINDS + ("cancel", "core"):
         threading.Thread(target=trigger.check, daemon=True).start()
 
 

@@ -288,6 +288,8 @@ class UnifiedEngine:
         self.entry_priority_fn = None                       # (票, 日) -> 分数 | None：同一天的新仓候选按分数高的先（研究用；缺省 = 按代码）
         self.pre_decide_fn = None                           # 日 -> None：收盘离场判断之后、统一决策之前（执行器在这里放手动卖出；回测 / 模拟盘不设）
         self.core_scale = 1.0                               # 核心 ETF 目标额 × 这个比例（执行器的手动「闲置资金比例」；回测 / 模拟盘 = 1）
+        self.core_exact = False                             # True：这次决策核心 ETF 直接调到目标（不看再平衡带；执行器在手动改了比例之后用一次）
+        self.core_t100: dict[str, int] = {}                 # 最近一次决策里每只核心 ETF「比例 100% 时」的目标口数（执行器 / 页面：ETF 的调仓换算成比例）
 
     # ── 工具 ──
     @staticmethod
@@ -801,6 +803,7 @@ class UnifiedEngine:
         只有一只 ETF、没有美股时，与 core.core_orders 完全相同（引擎差分测试保证）。"""
         st, A, cfg = self.st, self.A, self.cfg
         st.core_plan = {}
+        self.core_t100 = {}
         if not cfg.core:
             return
         stock_after = us_exiting = 0.0
@@ -811,8 +814,8 @@ class UnifiedEngine:
             else:
                 stock_after += v
         usd_stay = st.cash_usd if usd_stay is None else max(0.0, usd_stay)
-        tgt_total = (eq * (1 - cfg.core_buffer_pct / 100) - stock_after - reserve
-                     - usd_stay * fx - us_exiting) * float(self.core_scale)
+        tgt_100 = eq * (1 - cfg.core_buffer_pct / 100) - stock_after - reserve - usd_stay * fx - us_exiting
+        tgt_total = tgt_100 * float(self.core_scale)
         w = {t: float(v) for t, v in cfg.core.items()}
         bear = {t: self._core_bear(t, i) for t in w}
         gated = {}
@@ -827,7 +830,7 @@ class UnifiedEngine:
         else:
             tot = sum(w.values()) or 1.0
             share = {t: (0.0 if bear[t] else v / tot) for t, v in w.items()}
-        band = cfg.band_pct / 100 * eq
+        band = 0.0 if self.core_exact else cfg.band_pct / 100 * eq
         orders = {}
         for t in w:
             j = self.col[t]
@@ -840,6 +843,7 @@ class UnifiedEngine:
             xe = self.core_expo.get(cfg.core_index.get(t, "JP"))
             xp = float(xe[i]) if xe is not None else 1.0
             tgt = 0 if bear[t] or share[t] <= 0 else int(np.floor(max(0.0, tgt_total * share[t] * xp) / price / lot)) * lot
+            self.core_t100[t] = 0 if bear[t] or share[t] <= 0 else int(np.floor(max(0.0, tgt_100 * share[t] * xp) / price / lot)) * lot
             sell = buy = 0
             if tgt < units and (tgt == 0 or (units - tgt) * price > band):
                 sell = units - tgt

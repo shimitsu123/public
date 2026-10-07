@@ -96,7 +96,7 @@ def test_submit_messages_and_halt_note():
     ok, msg, rec = panel.submit({"book": "paper", "kind": "trim", "ticker": "7203", "pct": 10}, AT)
     assert ok and rec["pct"] == 10.0 and "减到约 10%" in msg
     ok, msg, _ = panel.submit({"book": "tachibana", "kind": "core", "pct": 40}, dt.datetime(2026, 10, 6, 9, 30, tzinfo=JST))
-    assert ok and "下一次决策" in msg
+    assert ok and "马上（盘中）照新比例调" in msg                                          # 闲置资金比例：盘中写的也马上调核心 ETF
     assert panel.submit({"book": "../etc", "kind": "core", "pct": 40})[0] is False
     paths.halt_file().write_text("x", encoding="utf-8")
     _book("tachibana")
@@ -347,7 +347,7 @@ def test_kline_plain_text_and_lot_bar_in_node(tmp_path):
     if not node:
         pytest.skip("没有 node")
     J = panel._JS
-    fns = "\n".join(_js_fn(J, n) for n in ("nd", "pxs", "pcs", "vfmt", "sdate", "kSubNow", "kTrend", "kTL", "adjCap", "adjBar"))
+    fns = "\n".join(_js_fn(J, n) for n in ("nd", "pxs", "pcs", "vfmt", "sdate", "kSubNow", "kTrend", "kTL", "ALOT", "UW", "adjCap", "adjBar"))
     kp = json.dumps({"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN}, ensure_ascii=False)
     js = """
 class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[]; this._t=''; this.className=''; this.style={}; this.attrs={};
