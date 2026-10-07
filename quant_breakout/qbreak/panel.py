@@ -8,9 +8,13 @@
        或已配对的设备（配对码只显示在 Mac 屏幕上；设备 cookie）；写操作都要 CSRF 令牌
 页面（手机优先的版面；两边一样）：
   GET  /?book=paper|tachibana   账本：持仓（为什么持有、现在趋势、约占权益、K 线）、核心 ETF（K 线）、建议的股票（规则的候选 + 「买入…」）、
-                                手动指令、不买回、停止下单（HALT）；每只持仓有「卖出全部」「调整…」（股数 / 金额 / 占权益 %，可加可减；底部弹出确认），
-                                核心 ETF 有「闲置资金比例」，指令有「撤回」；K 线：同花顺式日K / 周K / 月K（红涨空心、绿跌实心）+ MA5 / 10 / 20 / 30
-                                + 成交量 + 成本 / 止损线（2026-10-06 用户：「趋势是做一个和图中一样的日周月的块块和线 方便看的」）
+                                手动指令、不买回、停止下单（HALT）；每只持仓有「卖出全部」「调仓…」（股数 / 金额 / 占权益 %，可加可减；
+                                调仓条按一次最少能买卖的股数（1 个单元 = 100 股）分格；底部弹出确认），
+                                核心 ETF 有「闲置资金比例」，指令有「撤回」；K 线：同花顺式（红涨空心、绿跌实心）+ 5 / 10 / 20 / 30 日均价
+                                + 买入价 / 止损线（2026-10-06 用户：「趋势是做一个和图中一样的日周月的块块和线 方便看的」）；
+                                每张图上边沿「日K / 周K / 月K」、下边沿「量 / MACD / DMI」各自切换，图下的说明用日常的话
+                                （2026-10-07 用户：「K线的日周月button 要显示在每个K线的上面边沿方便看 / 量 MACD DMI 显示在每个K线的下面 /
+                                K线解释换成通俗易懂的说法 横展开 / 现在持有的股票可以进行调仓 按照最小一次成交股数分割调仓线」）
   GET  /api/chart?book=…&t=…    一只票的 K 线（执行器写的 out/charts_<账本>.json；打开 / 滑到那只票时才取；手机端口要你本人）
   POST /api/request             写一条手动指令（qbreak/manual_orders.py；与 run.py manual 相同的检查）
   POST /api/halt                建 HALT（只能建、不能解除；解除只在 Mac 上、用户明确说）
@@ -39,9 +43,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from . import kline as KL
 from . import manual_orders as MO
 from . import panel_phone as PP
 from . import paths
+from . import suggest as SG
 from .calendar_jp import JST, is_trading_day, now_jst
 from .utils import read_json, setup_logging
 
@@ -52,7 +58,7 @@ MAX_BODY = 4096
 TRIGGER_FROM, TRIGGER_UNTIL = dt.time(7, 45), dt.time(8, 50)
 TRIGGER_GAP_S = 180
 TOKEN_FILE = "panel_token"
-WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "holding_view.py")
+WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "holding_view.py", "kline.py", "suggest.py")
 
 
 def token() -> str:
@@ -137,8 +143,27 @@ color:var(--fg);cursor:pointer;touch-action:manipulation}.seg button:first-child
 .seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-fg);font-weight:600}
 .adjrow{display:flex;align-items:center;gap:10px;margin:10px 0 4px}.adjrow .grow{position:relative}
 .adjrow .unit{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
-.chartbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 2px}
+.kbar{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap}.kbar .seg button{min-height:38px;padding:4px 16px;font-size:15px}
+.kbar.ktop{padding:0 0 6px;border-bottom:1px solid var(--line);margin-bottom:4px}.kbar.kbot{padding:6px 0 2px;border-top:1px solid var(--line);margin-top:2px}.kbar .hint{font-size:12px;color:var(--muted)}
+.kexp{font-size:13px;line-height:1.55;color:var(--muted);margin:4px 0}.kexp b{color:var(--fg)}.kexp b.up{color:var(--up)}.kexp b.down{color:var(--down)}
+.kexp.now{color:var(--fg)}.kexp .legend{margin:0 0 2px}.kexp ul{margin:2px 0;padding-left:18px}
+details.khelp{margin:2px 0 4px}details.khelp>summary{font-size:13px;color:var(--accent)}
+details.khelp ul{margin:4px 0;padding-left:18px;font-size:13px;line-height:1.55;color:var(--muted)}
+.lots{position:relative;height:44px;margin:8px 0 0}
+.lots-bar{position:absolute;left:14px;right:14px;top:15px;height:14px;display:flex;gap:2px;pointer-events:none}
+.lots-bar i{flex:1 1 0;min-width:1px;border-radius:3px;background:var(--line)}.lots-bar i.keep{background:var(--accent);opacity:.45}
+.lots-bar i.add{background:var(--accent)}.lots-bar i.cut{background:transparent;box-shadow:inset 0 0 0 2px var(--neg)}
+.lots-bar i.over{background:repeating-linear-gradient(135deg,var(--line) 0 3px,transparent 3px 6px)}
+.lots input[type=range]{position:absolute;left:0;top:0;width:100%;height:44px;margin:0;background:transparent;-webkit-appearance:none;appearance:none}
+.lots input[type=range]::-webkit-slider-runnable-track{height:44px;background:transparent;border:0}
+.lots input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:28px;height:28px;margin-top:8px;border-radius:50%;background:var(--card);border:2px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.lots input[type=range]::-moz-range-track{height:44px;background:transparent;border:0}
+.lots input[type=range]::-moz-range-thumb{box-sizing:border-box;width:28px;height:28px;border-radius:50%;background:var(--card);border:2px solid var(--accent)}
+.lots input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+.lots-lab{position:relative;height:34px;margin:2px 14px 0;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.lots-lab span{position:absolute;white-space:nowrap;transform:translateX(-50%)}.lots-lab span.t{top:0}.lots-lab span.k{top:16px;color:var(--fg);font-weight:600}.lots-lab span.l{transform:none}.lots-lab span.r{transform:translateX(-100%)}
 .chart{position:relative;margin-top:10px;outline:none}.chart:focus-visible{box-shadow:0 0 0 2px var(--accent);border-radius:8px}
+.chart:not(.empty){border:1px solid var(--line);border-radius:12px;padding:6px 10px 4px}
 .chart.empty{padding:6px 0}.chart[data-retry]{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 .chart svg{display:block;width:100%;touch-action:pan-y;-webkit-user-select:none;user-select:none}
 .chart .grid{stroke:var(--line);stroke-width:1;shape-rendering:crispEdges}
@@ -162,6 +187,9 @@ color:var(--fg);cursor:pointer;touch-action:manipulation}.seg button:first-child
 .chart .ro b{font-size:14px}.chart .ro .m{color:var(--fg)}
 .key{display:inline-block;width:14px;height:2px;border-radius:1px;vertical-align:middle;margin-right:6px}
 .key.m5{background:var(--fg)}.key.m10{background:var(--ma10)}.key.m20{background:var(--ma20)}.key.m30{background:var(--ma30)}
+.key.dif{background:var(--fg)}.key.dea{background:var(--ma20)}.key.pdi{background:var(--up)}.key.mdi{background:var(--down)}.key.adx{background:var(--ma10)}.key.adxr{background:var(--ma30)}
+.key.box{width:9px;height:9px;border-radius:2px}.key.cu{background:transparent;box-shadow:inset 0 0 0 1.5px var(--up)}.key.cd,.key.mhd{background:var(--down)}.key.mhu{background:var(--up)}
+.key.dash{height:0;background:none;border-top:2px dashed var(--muted);border-radius:0}.key.dash.stop{border-top-color:var(--neg)}.key.dash.tl{border-top-color:var(--fg)}
 .up{color:var(--up)}.down{color:var(--down)}
 .tchips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
 .tchip{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--chip);font-size:13px;white-space:nowrap}
@@ -252,7 +280,7 @@ function ask(title, body, okText, opt){
 }
 const NOTE = CFG.paper ? '\\n\\n模拟账户：手动操作后会和云端模拟盘不一致（上线门槛「连续 10 个交易日一致」的天数会中断）。' : '';
 function coreShow(){ const r=$('#core-pct'); if(r) $('#core-val').textContent=r.value+'%'; }
-// ── 调整持仓（股数 / 金额 / 占权益 %）：按最近收盘估算；执行器按决策时的收盘与权益再算一次 ──
+// ── 调仓（调整持仓：股数 / 金额 / 占权益 %）：按最近收盘估算；执行器按决策时的收盘与权益再算一次；调仓条按单元（LOT 股）分格 ──
 const LOT = CFG.lot || 100;
 let ADJ = null;
 const pctOf = n => CFG.eq>0 && ADJ.px>0 ? (n*ADJ.px/CFG.eq*100).toFixed(1)+'%' : '—';
@@ -274,11 +302,38 @@ function adjUnit(u){
   $('#adj-val').step = u==='shares' ? LOT : u==='yen' ? 1000 : 0.1;
   adjShow(n==null ? ADJ.shares : n); adjPrev();
 }
+function adjBar(){                                                         // 调仓条按「一次最少能买卖的股数」（1 个单元 = LOT 股）分格
+  const r=$('#adj-range'), bar=$('#adj-bar'), lab=$('#adj-lab'), note=$('#adj-note'); if(!r || !bar || !ADJ) return;
+  const n=Math.max(1, Math.round(+r.max/LOT)), have=Math.round(ADJ.shares/LOT), tgt=Math.round(+r.value/LOT), capN=Math.floor(adjCap()/LOT);
+  const G=Math.ceil(n/50);                                                  // 单元太多（> 50）时几格并成一格，手机上也看得清
+  bar.textContent='';
+  for(let a=0; a<n; a+=G){
+    const b=Math.min(n, a+G);                                               // 这一格 = 第 a+1〜b 个单元
+    const cls = (tgt<have && tgt<b && a<have) ? 'cut' : (have<tgt && have<b && a<tgt) ? 'add'      // 这一格碰到「要卖的」/「要加的」那一段
+              : (a<Math.min(have, tgt)) ? 'keep' : (a>=Math.max(capN, have)) ? 'over' : '';
+    nd('i', cls, null, bar);
+  }
+  lab.textContent='';
+  const at=(j, text, cls)=>{ const p=j/n*100, e=nd('span', cls, text, lab); e.style.left=p+'%';
+    if(p<=0) e.classList.add('l'); else if(p>=100) e.classList.add('r'); };
+  if(n<=8 && G===1){ for(let j=0;j<=n;j++) at(j, fmt(j*LOT), 't'); }
+  else { at(0, '0', 't'); at(n, fmt(n*LOT)+' 股', 't'); }
+  const pk=Math.min(100, have/n*100), num=n<=8 ? '' : ' '+fmt(ADJ.shares);            // ▲ 对准现在的位置：左半边往右写、右半边往左写（不出框）
+  const kl=nd('span', 'k', pk<=60 ? '▲现在'+num : '现在'+num+' ▲', lab);
+  kl.style.left=pk+'%'; kl.style.transform = pk<=60 ? 'translateX(-6px)' : 'translateX(calc(-100% + 6px))';
+  const capTxt = capN>=n ? '最右边 = 单只上限 '+CFG.cap+'%（约 '+fmt(capN*LOT)+' 股）'
+               : capN<have ? '单只上限 '+CFG.cap+'% ≈ '+fmt(capN*LOT)+' 股：现在已经超过，只能减'
+               : '单只上限 '+CFG.cap+'% ≈ '+fmt(capN*LOT)+' 股';
+  note.textContent=(G===1 ? '一格 = 1 个单元 = '+fmt(LOT)+' 股（一次最少能买卖的股数）' : '一格 = '+G+' 个单元 = '+fmt(G*LOT)+' 股（单元太多，几个并成一格；拖动仍按 '+fmt(LOT)+' 股一步）')
+    +'；半透明 = 留着的、实心 = 要加的、红框 = 要卖的、斜线 = 超过上限不能加；'+capTxt;
+  r.setAttribute('aria-valuetext', '目标 '+fmt(tgt*LOT)+' 股（'+tgt+' 个单元）；现在 '+fmt(ADJ.shares)+' 股');
+}
 function adjPrev(){
   const go=$('#adj-go'), out=$('#adj-prev'), c=ADJ, cap=adjCap(), n=adjTarget();
   go.className='btn primary';
+  const r=$('#adj-range'); if(n!=null) r.value=Math.min(+r.max, n);
+  adjBar();
   if(n==null){ out.textContent='输入目标（股数 / 金额 / 占总权益 %）'; go.textContent='确认'; go.disabled=true; return; }
-  const r=$('#adj-range'); r.value=Math.min(+r.max, n);
   if(n===c.shares){
     out.textContent='按最近收盘 '+yen(c.px)+' 换算还是 '+fmt(n)+' 股（'+LOT+' 股单元向下取整）：不用调';
     go.textContent='确认'; go.disabled=true; return;
@@ -375,11 +430,11 @@ document.addEventListener('click', async e=>{
   }
   if(a==='adj'){
     ADJ={t:d.t, shares:+d.shares, px:+d.px, unit:'shares'};
-    $('#adj-title').textContent='调整 '+d.t+(d.name?' '+d.name:'');
+    $('#adj-title').textContent='调仓 '+d.t+(d.name?' '+d.name:'');
     $('#adj-cur').textContent='现在 '+fmt(ADJ.shares)+' 股 · 约 '+yen(ADJ.shares*ADJ.px)+' · 约占权益 '+pctOf(ADJ.shares)
       +'（按最近收盘 '+yen(ADJ.px)+'）';
-    $('#adj-cap').textContent=CFG.cap;
-    const r=$('#adj-range'); r.max=Math.max(adjCap(), ADJ.shares, LOT); r.step=LOT; r.value=ADJ.shares;
+    $('#adj-cap').textContent=CFG.cap; $('#adj-val').value='';             // 从这只票现在的股数开始（不带上一只票输过的数）
+    const r=$('#adj-range'); r.max=Math.max(1, Math.ceil(Math.max(adjCap(), ADJ.shares, LOT)/LOT))*LOT; r.step=LOT; r.value=ADJ.shares;   // 整数个单元
     adjUnit('shares'); sheet('#dlg-adj'); return;
   }
   if(a==='adj-unit'){ adjUnit(d.u); return; }
@@ -389,8 +444,14 @@ document.addEventListener('click', async e=>{
     const v = ADJ.unit==='shares' ? n : parseFloat($('#adj-val').value);
     closeAll(); done(await api('/api/request',{book:CFG.book, kind:'adjust', ticker:ADJ.t, unit:ADJ.unit, value:v})); return;
   }
-  if(a==='tf'){ TF=d.tf; try{ localStorage.setItem('qbreak.tf', TF); }catch(x){} drawAll(); return; }
-  if(a==='sub'){ SUB=d.sub; try{ localStorage.setItem('qbreak.sub', SUB); }catch(x){} drawAll(); return; }
+  if(a==='ktf' || a==='ksub'){                                            // 一张图自己的周期 / 小图（别的图不变）；也记成新打开的图的默认
+    const bx=b.closest('.chart[data-t]'); if(!bx || !(a==='ktf' ? TFS : SUBS)[d.v]) return;
+    if(a==='ktf'){ bx.dataset.tf=TF=d.v; try{ localStorage.setItem('qbreak.tf', TF); }catch(x){} }
+    else { bx.dataset.sub=SUB=d.v; try{ localStorage.setItem('qbreak.sub', SUB); }catch(x){} }
+    drawK(bx);
+    const nb=bx.querySelector('[data-act="'+a+'"][data-v="'+d.v+'"]'); if(nb) nb.focus({preventScroll:true});   // 重画后焦点留在刚按的按钮上（键盘用）
+    return;
+  }
   if(a==='buy'){
     BUY={t:d.t, px:+d.px, lot:+d.lot||LOT, rule:+d.rule||0, limit:+d.limit||0, unit:'rule'};
     $('#buy-title').textContent='买入 '+d.code+(d.name ? ' '+d.name : '');
@@ -441,16 +502,21 @@ document.addEventListener('click', async e=>{
     if(q.ok){ const j=await api('/api/unpair',{}); if(j){ toast(j.msg); setTimeout(()=>location.reload(), 1200); } } return;
   }
 });
-// ── K 线（同花顺式：日K / 周K / 月K；红 = 涨（空心）、绿 = 跌（实心）；MA5 / MA10 / MA20 / MA30；成本 / 止损线）──
-// 副图：量 / MACD（规则同一组参数）/ DMI（同花顺写法）；趋势线：连波谷的支撑线、连波峰的压力线（qbreak/trendline.py）+ 往后延长的虚线 + 破线点
+// ── K 线（同花顺式：红 = 涨（空心）、绿 = 跌（实心）；5 / 10 / 20 / 30 日均价；买入价 / 止损线）──
+// 每张图自己的按钮（2026-10-07 用户：「K线的日周月button 要显示在每个K线的上面边沿方便看 / 量 MACD DMI 显示在每个K线的下面」）：
+//   上边沿 = 日K / 周K / 月K，下边沿 = 量 / MACD / DMI；每张图各自切换，新打开的图用最近一次选的（记在这台设备的浏览器里）
+// 说明都用日常的话（同日：「K线解释换成通俗易懂的说法 横展开」）：标签的说法来自 qbreak/kline.py（CFG.kp），其余按图里的数字现算
+// 小图：量 / MACD（规则同一组参数）/ DMI（同花顺写法）；趋势线：连低点的支撑线、连高点的压力线（qbreak/trendline.py）+ 往后延长的点线 + 破线点
 // 数据 = 执行器每次运行写的 out/charts_<账本>.json，打开 / 看到哪只票才取（/api/chart）；只展示
 const TFS = {D:'日K', W:'周K', M:'月K'}, SUBS = {v:'量', macd:'MACD', dmi:'DMI'};
-let TF = 'D', SUB = 'v', CPN = 0;
+const KU = {D:'天', W:'周', M:'个月'}, KMA = {D:'日', W:'周', M:'个月'};   // 一根 = 1 天 / 1 周 / 1 个月；20 日均价 / 20 周均价 / 20 个月均价
+const KPL = CFG.kp || {};
+let TF = 'D', SUB = 'v', CPN = 0;                                         // 新打开的图默认用的周期 / 小图（= 最近一次选的）
 try{ const v=localStorage.getItem('qbreak.tf'); if(v && TFS[v]) TF=v; }catch(x){}
 try{ const v=localStorage.getItem('qbreak.sub'); if(v && SUBS[v]) SUB=v; }catch(x){}
 const KD = {}, KP = {};
 const NS='http://www.w3.org/2000/svg', WD=['日','一','二','三','四','五','六'];
-const MAS=[['ma5','MA5','m5'],['ma10','MA10','m10'],['ma20','MA20','m20'],['ma30','MA30','m30']];
+const MAS=[['ma5',5,'m5'],['ma10',10,'m10'],['ma20',20,'m20'],['ma30',30,'m30']];
 function sv(tag, at, par){ const e=document.createElementNS(NS, tag); for(const k in at) e.setAttribute(k, at[k]); if(par) par.appendChild(e); return e; }
 function nd(tag, cls, text, par){ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; if(par) par.appendChild(e); return e; }
 function pxs(v){ if(v==null) return '—'; return '¥'+(v<1000 ? v.toLocaleString('ja-JP',{minimumFractionDigits:1, maximumFractionDigits:1}) : Math.round(v).toLocaleString('ja-JP')); }
@@ -462,7 +528,8 @@ function nice(lo, hi, n){
   return out;
 }
 function vfmt(v){ return v>=1e8 ? (v/1e8).toFixed(1)+' 亿' : v>=1e4 ? (v/1e4).toFixed(v>=1e6?0:1)+' 万' : String(v); }
-function dlab(d){ return TF==='M' ? d.slice(0,7).replace('-','/')+' 月' : TF==='W' ? d.replace(/-/g,'/')+' 那一周' : d.replace(/-/g,'/')+'（'+WD[new Date(d+'T00:00:00').getDay()]+'）'; }
+function dlab(d, tf){ return tf==='M' ? d.slice(0,4)+' 年 '+(+d.slice(5,7))+' 月' : tf==='W' ? '到 '+d.replace(/-/g,'/')+' 的一周' : d.replace(/-/g,'/')+'（'+WD[new Date(d+'T00:00:00').getDay()]+'）'; }
+function sdate(d, tf){ return tf==='M' ? d.slice(0,7).replace('-','/') : d.slice(5).replace('-','/'); }
 function loadK(t){
   if(KD[t] && KD[t]!=='error' && KD[t]!=='timeout' && KD[t]!=='loading') return Promise.resolve(KD[t]);
   if(KP[t]) return KP[t];                                                   // 同一只票已经在取：等同一个请求
@@ -480,49 +547,154 @@ function loadK(t){
   KP[t]=p; p.then(()=>{ if(KP[t]===p) delete KP[t]; });
   return p;
 }
-function legend(head, D, i){
+function legend(head, D, i, tf){
   head.textContent='';
-  nd('b',null,TFS[TF],head);
-  for(const [k,lab,cls] of MAS){ const v=D[k] && D[k][i]; const sp=nd('span',null,null,head); nd('i','key '+cls,null,sp); sp.appendChild(document.createTextNode(lab+' '+(v==null?'—':pxs(v)))); }
+  nd('b',null,'均价线',head);
+  for(const [k,n,cls] of MAS){ const v=D[k] && D[k][i]; const sp=nd('span',null,null,head); nd('i','key '+cls,null,sp); sp.appendChild(document.createTextNode(n+' '+KMA[tf]+' '+(v==null?'—':pxs(v)))); }
 }
-function readout(el, D, i, P){
+function readout(el, D, i, P, tf){
   el.textContent='';
-  const pc=i>0 ? D.c[i-1] : null, c=D.c[i], dir=(pc && c>=pc)?'up':(pc && c<pc)?'down':null;
-  nd('span','m', dlab(D.d[i])+' ', el);
-  nd('b',dir,'收 '+pxs(c)+(pc ? ' '+pcs((c/pc-1)*100) : ''),el);
-  el.appendChild(document.createTextNode(' · 开 '+pxs(D.o[i])+' 高 '+pxs(D.h[i])+' 低 '+pxs(D.l[i])
-    +(pc ? ' · 振幅 '+((D.h[i]-D.l[i])/pc*100).toFixed(2)+'%' : '')+' · 量 '+vfmt(D.v[i]||0)+(P.kind==='core'?' 口':' 股')
-    +(P.kind==='stock' && P.entry_px && c!=null ? ' · 比成本 '+pcs((c/P.entry_px-1)*100) : '')));
+  const pc=i>0 ? D.c[i-1] : null, c=D.c[i], dir=(pc && c!=null) ? (c>=pc ? 'up' : 'down') : null;
+  nd('span','m', dlab(D.d[i], tf)+' ', el);
+  nd('b',dir,'收盘 '+pxs(c)+(pc && c!=null ? '（比前一'+KU[tf]+' '+pcs((c/pc-1)*100)+'）' : ''),el);
+  el.appendChild(document.createTextNode(' · 开盘 '+pxs(D.o[i])+' · 最高 '+pxs(D.h[i])+' · 最低 '+pxs(D.l[i])
+    +(pc && D.h[i]!=null && D.l[i]!=null ? ' · 高低差 '+((D.h[i]-D.l[i])/pc*100).toFixed(2)+'%' : '')+' · 成交 '+vfmt(D.v[i]||0)+(P.kind==='core'?' 口':' 股')
+    +(P.kind==='stock' && P.entry_px && c!=null ? ' · 比买入价 '+pcs((c/P.entry_px-1)*100) : '')));
 }
 function fmx(a, i, sg){ const v=a && a[i]; if(v==null) return '—'; const s=Math.abs(v)>=100 ? v.toFixed(0) : Math.abs(v)>=1 ? v.toFixed(2) : v.toFixed(3); return (sg && v>0 ? '+' : '')+s; }
-function subText(D, i, P){
-  const ind=P.ind||{}, m=ind.macd||[12,26,9], q=ind.dmi||[14,6];
-  if(SUB==='macd') return 'MACD('+m.join(',')+') DIF '+fmx(D.dif,i)+' · DEA '+fmx(D.dea,i)+' · 柱 '+fmx(D.mh,i,true);
-  if(SUB==='dmi') return 'DMI('+q.join(',')+') +DI '+fmx(D.pdi,i)+' · −DI '+fmx(D.mdi,i)+' · ADX '+fmx(D.adx,i)+' · ADXR '+fmx(D.adxr,i);
+function f1(a, i){ const v=a && a[i]; return v==null ? '—' : v.toFixed(1); }
+function subText(D, i, sub){                                               // 小图左上角的数字（短：手机上一行放得下）
+  if(sub==='macd') return 'DIF '+fmx(D.dif,i)+' · DEA '+fmx(D.dea,i)+' · 柱 '+fmx(D.mh,i,true);
+  if(sub==='dmi') return '+DI '+f1(D.pdi,i)+' · −DI '+f1(D.mdi,i)+' · ADX '+f1(D.adx,i)+' · ADXR '+f1(D.adxr,i);
   return '';
+}
+function kSubKey(el, P, tf, sub){                                          // 小图的图例 + 意思（不随十字线变）
+  el.textContent='';
+  const row=nd('div','legend',null,el), u=KU[tf];
+  const k=(c, t)=>{ const sp=nd('span',null,null,row); nd('i','key '+c,null,sp); sp.appendChild(document.createTextNode(t)); };
+  if(sub==='macd'){
+    const m=(P.ind||{}).macd||[12,26,9];
+    k('dif','快线 DIF'); k('dea','慢线 DEA'); k('box mhu','柱：快线在上'); k('box mhd','柱：快线在下');
+    nd('div',null,'MACD（'+m.join(', ')+'，和规则用的一样）看涨跌的力量：快线在慢线上面 = 上涨的力量占上风；柱子 = 两条线的差，柱子变长 = 力量在变强。'
+      +'快线在 0 附近往上穿过慢线（金叉）是规则买入的条件之一',el);
+  } else if(sub==='dmi'){
+    const q=(P.ind||{}).dmi||[14,6];
+    k('pdi','买方力量 +DI'); k('mdi','卖方力量 −DI'); k('adx','趋势强度 ADX'); k('adxr','ADXR（ADX 的平均）');
+    nd('div',null,'DMI（'+q.join(', ')+'）比买卖两边的力量：+DI 比 −DI 高 = 买的一方占上风；ADX 越高 = 趋势越明显（不分涨跌），'
+      +'一般 25 以上算明显、20 以下算没什么趋势。规则不用 DMI，只用来看',el);
+  } else {
+    k('box cu','收盘比开盘高'); k('box cd','收盘比开盘低');
+    nd('div',null,'量 = 每'+u+'成交了多少'+(P.kind==='core' ? '口' : '股')+'：柱子越高，买卖的人越多。规则买入时要成交量明显比平时多',el);
+  }
+}
+function kSubNow(el, D, i, P, tf, sub){                                    // 小图「这一根」的读法（跟着十字线走）
+  let s='';
+  if(sub==='macd'){
+    const a=D.dif && D.dif[i], b=D.dea && D.dea[i], h=D.mh && D.mh[i], h0=i>0 && D.mh ? D.mh[i-1] : null;
+    if(a==null || b==null) s='K 线还不够多，算不出来';
+    else {
+      if(h!=null && h0!=null && h0<0 && h>=0) s='快线刚往上穿过慢线（金叉）';
+      else if(h!=null && h0!=null && h0>0 && h<=0) s='快线刚往下穿过慢线（死叉）';
+      else s=(a>=b ? '快线在慢线上面：上涨的力量占上风' : '快线在慢线下面：下跌的力量占上风')
+             +(h!=null && h0!=null ? (Math.abs(h)>Math.abs(h0) ? '，而且在变强' : '，但在变弱') : '');
+      s+='；快线在 0 线'+(a>=0 ? '上面（整体偏涨）' : '下面（整体偏跌）');
+    }
+  } else if(sub==='dmi'){
+    const p=D.pdi && D.pdi[i], m=D.mdi && D.mdi[i], x=D.adx && D.adx[i], x0=i>0 && D.adx ? D.adx[i-1] : null;
+    if(p==null || m==null) s='K 线还不够多，算不出来';
+    else {
+      s=p>=m ? '买方力量大于卖方' : '卖方力量大于买方';
+      if(x!=null) s+='；趋势强度 ADX '+x.toFixed(1)+(x>=25 ? '：趋势明显' : x<20 ? '：没什么趋势' : '：趋势一般')+(x0!=null ? (x>x0 ? '，在变强' : '，在变弱') : '');
+    }
+  } else {
+    const v=D.v[i]||0; let sm=0, n=0;
+    for(let j=Math.max(0, i-20); j<i; j++){ if(D.v[j]!=null){ sm+=D.v[j]; n++; } }
+    s='成交 '+vfmt(v)+(P.kind==='core' ? ' 口' : ' 股')+(n>=5 && sm>0 ? '，是之前 '+n+' '+KU[tf]+'平均的 '+(v/(sm/n)).toFixed(2)+' 倍' : '');
+  }
+  el.textContent=(i===D.d.length-1 ? '最新一根' : '这一根（'+sdate(D.d[i], tf)+'）')+'：'+s;
+}
+function kTrend(el, tr, tf){                                               // 现在的趋势（kline.py 的标签换成日常的话 + 为什么）
+  const L=KPL.label||{}, A=KPL.align||{}, m=KMA[tf], sl=+tr.slope20_pct||0;
+  nd('span',null,'现在的趋势：',el);
+  nd('b', tr.label==='上升' ? 'up' : tr.label==='下降' ? 'down' : null, L[tr.label] || tr.label || '—', el);
+  el.appendChild(document.createTextNode(' —— 收盘在 20 '+m+'均价'+(tr.above20 ? '上面' : '下面')+'，20 '+m+'均价比 3 '+KU[tf]+'前'
+    +(Math.abs(sl)<0.005 ? '差不多' : (sl>0 ? '高 ' : '低 ')+Math.abs(sl)+'%')
+    +(tr.align ? '；'+(A[tr.align] || tr.align)+(tr.align==='多头排列' ? '（短期的均价线在上、长期的在下，一层一层排好）'
+                                              : tr.align==='空头排列' ? '（短期的均价线在下、长期的在上，一层一层排好）' : '') : '')));
+}
+function kTL(el, TL, tf){                                                  // 现在的趋势线（日常的话；图上的记号在「怎么看这张图」里）
+  const u=KU[tf], C=KPL.chan||{}, eps=TL.eps||0;
+  const one=(L, sup)=>{
+    const d=L.dist_pct, s=L.slope_pct;
+    let w=(sup ? '下面的线（支撑线，连最近的低点）' : '上面的线（压力线，连最近的高点）')+' '+pxs(L.now);
+    if(d!=null) w+= sup ? (d<=0 ? '，比收盘低 '+Math.abs(d)+'%' : '，比收盘高 '+d+'%（收盘已经跌到这条线下面）')
+                        : (d>=0 ? '，比收盘高 '+d+'%' : '，比收盘低 '+Math.abs(d)+'%（收盘已经冲到这条线上面）');
+    if(s!=null) w+= Math.abs(s)<eps ? '，基本是平的' : '，每'+u+'往'+(s>0 ? '上 ' : '下 ')+Math.abs(s)+'%';
+    if(L.touch) w+='，股价碰到过 '+L.touch+' 次';
+    return w;
+  };
+  const pos = TL.pos==null ? '' : TL.pos>100 ? '；收盘在上面的线之上' : TL.pos<0 ? '；收盘在下面的线之下' : '；收盘在两条线之间、从下往上 '+TL.pos+'% 的位置';
+  nd('div',null,'现在的趋势线：'+(TL.chan ? (C[TL.chan] || TL.chan)+pos : '只找到'+(TL.sup ? '下面' : '上面')+'的一条'),el);
+  const ul=nd('ul',null,null,el);
+  if(TL.sup) nd('li',null,one(TL.sup, true),ul);
+  if(TL.res) nd('li',null,one(TL.res, false),ul);
+  nd('div','muted','研究（2026-10-06，全部股票 2001〜2026）：两条线朝哪边、股价冲过 / 跌破它们，对之后 20 天的涨跌都没有预测力；'
+    +'拿来帮现在的方法选股也没有更好 —— 趋势线只用来看图',el);
+}
+function kHelp(box, P, tf, hasTL, PJ){                                         // 「怎么看这张图」（收起来；打开 / 关上记在这张图上，切换周期也不变）
+  const det=nd('details','khelp',null,box); if(box.dataset.help==='1') det.open=true;
+  det.addEventListener('toggle', ()=>{ box.dataset.help = det.open ? '1' : ''; });
+  nd('summary',null,'怎么看这张图',det);
+  const ul=nd('ul',null,null,det), u=KU[tf], m=KMA[tf];
+  const li=(...ps)=>{ const e=nd('li',null,null,ul); for(const p of ps) e.appendChild(typeof p==='string' ? document.createTextNode(p) : p); };
+  const key=c=>nd('i','key '+c,null,null);
+  li('每根 K 线 = 1 '+u+'：中间粗的一段从开盘价到收盘价，上下的细线到最高价和最低价');
+  li(key('box cu'),'红色空心 = 收盘比开盘高（涨）　',key('box cd'),'绿色实心 = 收盘比开盘低（跌）');
+  li(key('m5'),'5 '+m+'均价 = 最近 5 '+u+'收盘价的平均，连起来就是这条线；',key('m10'),'10　',key('m20'),'20　',key('m30'),'30 '+m+'均价同理（越长越平滑、反应越慢）');
+  li('「往上走」= 收盘在 20 '+m+'均价上面、20 '+m+'均价比 3 '+u+'前高、5 '+m+'均价也在 20 '+m+'均价上面；「往下走」= 三个都反过来；其余 = 「横着走」');
+  if(P.kind==='stock') li(key('dash'),'买入价（加过仓就是平均）　',key('dash stop'),'止损线（跌到这里就按规则卖）　▲买入 = 买入的那一根');
+  else if(P.signal_date) li('▲信号 = 出买入信号的那一根');
+  if(hasTL) li(key('dash tl'),'趋势线：下面的连最近的低点（支撑线）、上面的连最近的高点（压力线）；点线 = 往后延长 '+PJ+' '+u+'（只是把线延长，不是预测）；'
+    +'○ = 连线用的低点 / 高点；▲ = 收盘冲过上面的线、▼ = 收盘跌破下面的线');
+  li('图下面的「量 / MACD / DMI」切换下面的小图：量 = 成交了多少；MACD = 涨跌的力量（规则买入时看它）；DMI = 买卖两边的力量和趋势强不强（规则不用）');
+  li('看以前的某一根：手指点一下或按住左右滑（鼠标指上去也行）；键盘：先点一下图，再用 ← → 一根一根看，Home / End 到最早 / 最新，Esc 回到最新');
+  li('图上画的都是过去的价格，不是预测；卖不卖只按规则');
+}
+function kBar(box, pos, act, opts, cur, label, hint){                      // 图的上边沿（周期）/ 下边沿（小图）的按钮
+  const bar=nd('div','kbar '+pos,null,box), g=nd('div','seg',null,bar);
+  g.setAttribute('role','group'); g.setAttribute('aria-label',label);
+  for(const k in opts){ const b=nd('button',null,opts[k],g); b.type='button'; b.dataset.act=act; b.dataset.v=k; b.setAttribute('aria-pressed', k===cur ? 'true' : 'false'); }
+  if(hint) nd('span','hint',hint,bar);
+  return bar;
 }
 function drawK(box){
   const t=box.dataset.t, P=KD[t];
   box.removeAttribute('data-retry'); box.removeAttribute('role'); box.onkeydown=null; box.onblur=null; box._hide=null;
-  const empty=s=>{ box.className='chart empty muted small'; box.textContent=s; };
+  const empty=s=>{ box.className='chart empty muted small'; box.removeAttribute('tabindex'); box.textContent=s; };
   const retry=s=>{ empty(s); box.setAttribute('data-retry', '1'); box.setAttribute('role', 'button'); box.tabIndex=0; };
   if(P==null || P==='loading') return empty('K 线载入中…');
   if(P==='none') return empty('K 线在执行器下一次运行之后显示');
   if(P==='auth') return empty('这台设备没被认出来：正在刷新…');
   if(P==='timeout') return retry(CFG.remote ? 'Mac 可能在睡眠：取不到（超过 15 秒没有回应；点这里再试）' : 'K 线取不到（面板超过 15 秒没有回应）：点这里再试');
   if(P==='error') return retry('K 线取不到（面板连不上？）：点这里再试');
-  const D=(P.tf||{})[TF];
-  if(!D || !D.d || D.d.length<2) return empty('没有'+TFS[TF]+'的数据');
-  box.className='chart'; box.tabIndex=0; box.textContent='';
+  let tf=box.dataset.tf, sub=box.dataset.sub;                              // 这张图自己的周期 / 小图：第一次画时用最近一次选的，之后各自记着
+  if(!TFS[tf]) tf=box.dataset.tf=TF;
+  if(!SUBS[sub]) sub=box.dataset.sub=SUB;
+  box.className='chart'; box.textContent='';
+  kBar(box, 'ktop', 'ktf', TFS, tf, 'K 线的周期', '每根 = 1 '+KU[tf]);           // 类名不用 top：页头的 .top 是 sticky
+  const D=(P.tf||{})[tf];
+  if(!D || !D.d || D.d.length<2){ box.removeAttribute('tabindex'); nd('div','muted small','没有'+TFS[tf]+'的数据（上市不久？换一个周期看看）',box); return; }
+  box.tabIndex=0;
   const held=P.kind==='stock', N=D.d.length, TL=D.tl||null, PJ=TL && (TL.sup || TL.res) ? (TL.proj||0) : 0;
-  const sub=SUB, H2 = sub==='v' ? 40 : 64, gap = sub==='v' ? 10 : 18;
-  const W=Math.max(260, Math.round(box.clientWidth||320)), x0=2, x1=W-56, padT=8, H1=176, padB=18;
-  const slots=Math.max(4, Math.floor((x1-x0)/6));                          // 一根 K 线占 6px：手机约 45 根，Mac 约 100 根（右边留出趋势线往后延长的几根）
+  const H2=56, gap=16;                                                      // 小图三种一样高：切换时下边沿的按钮不跳
+  const cs=getComputedStyle(box), inner=box.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0);
+  const W=Math.max(260, Math.round(inner>0 ? inner : 300)), x0=2, x1=W-56, padT=8, H1=176, padB=18;
+  const slots=Math.max(4, Math.floor((x1-x0)/6));                          // 一根 K 线占 6px：手机约 40 根，Mac 约 100 根（右边留出趋势线往后延长的几根）
   const k=Math.max(2, Math.min(N, slots-PJ)), s0=N-k, step=(x1-x0)/(k+PJ);
   const X=i=> x0+(i-s0+0.5)*step, bw=Math.max(1, Math.min(13, step*0.68));
   const vb=padT+H1+gap+H2, H=vb+padB;
   const refs=[];
-  if(held && P.entry_px) refs.push(['ref','成本',P.entry_px]);
+  if(held && P.entry_px) refs.push(['ref','买入价',P.entry_px]);
   if(held && P.stop_px) refs.push(['stop','止损',P.stop_px]);
   let lo=Infinity, hi=-Infinity;
   for(let i=s0;i<N;i++){
@@ -535,11 +707,11 @@ function drawK(box){
     for(const v of [tly(L,N-1), tly(L,N-1+PJ)]) if(v>=lo-0.25*sp && v<=hi+0.25*sp){ lo=Math.min(lo,v); hi=Math.max(hi,v); } } }   // 离得太远的线不拉大坐标，超出的部分裁掉
   const pad=(hi-lo)*0.05 || hi*0.02 || 1; lo-=pad; hi+=pad;
   const Y=v=> padT+H1-(v-lo)/(hi-lo)*H1;
-  const head=nd('div','legend',null,box); legend(head, D, N-1);
-  const ro=nd('div','ro',null,box); readout(ro, D, N-1, P);                 // 读数固定在图上面（不盖住 K 线）：默认最新一根，点 / 指到哪根就是哪根
-  const tr=(P.trend||{})[TF], c0=D.c[s0], c1=D.c[N-1];
+  const head=nd('div','legend',null,box); legend(head, D, N-1, tf);
+  const ro=nd('div','ro',null,box); readout(ro, D, N-1, P, tf);             // 读数固定在图上面（不盖住 K 线）：默认最新一根，点 / 指到哪根就是哪根
+  const tr=(P.trend||{})[tf], c0=D.c[s0], c1=D.c[N-1];
   const svg=sv('svg',{viewBox:'0 0 '+W+' '+H, width:W, height:H, role:'img',
-    'aria-label':t+' '+TFS[TF]+'（最近 '+k+' 根）：'+pxs(c0)+' → '+pxs(c1)+(tr ? '，趋势 '+tr.label : '')}, box);
+    'aria-label':t+' '+TFS[tf]+'（最近 '+k+' '+KU[tf]+'）：'+pxs(c0)+' → '+pxs(c1)+(tr ? '，'+((KPL.label||{})[tr.label] || tr.label) : '')}, box);
   for(const v of nice(lo, hi, 4)){
     const y=Math.round(Y(v))+0.5; sv('line',{x1:x0, x2:x1, y1:y, y2:y, 'class':'grid'}, svg);
     sv('text',{x:x1+6, y:y+4, 'class':'ax'}, svg).textContent=pxs(v);
@@ -547,8 +719,8 @@ function drawK(box){
   let lastX=-1e9, prev=null;
   for(let i=s0;i<N;i++){
     const d=D.d[i], y=d.slice(0,4), m=+d.slice(5,7); let lab=null;
-    const key = TF==='M' ? y : TF==='W' ? y+'-'+Math.floor((m-1)/3) : d.slice(0,7);   // 日K 每月、周K 每季、月K 每年标一次
-    if(prev!=null && key!==prev) lab = TF==='M' ? y : (prev.slice(0,4)!==y ? y.slice(2)+' 年' : m+' 月');
+    const key = tf==='M' ? y : tf==='W' ? y+'-'+Math.floor((m-1)/3) : d.slice(0,7);   // 日K 每月、周K 每季、月K 每年标一次
+    if(prev!=null && key!==prev) lab = tf==='M' ? y : (prev.slice(0,4)!==y ? y.slice(2)+' 年' : m+' 月');
     prev=key;
     const x=X(i);
     if(lab && x-lastX>=44 && x>=x0+14 && x<=x1-14){ sv('text',{x:x, y:H-4, 'class':'ax', 'text-anchor':'middle'}, svg).textContent=lab; lastX=x; }
@@ -576,7 +748,7 @@ function drawK(box){
       const ye=Math.max(padT+11, Math.min(padT+H1-3, below ? Y(tly(L,N-1+PJ))+13 : Y(tly(L,N-1+PJ))-6));   // 标签留在图里
       sv('text',{x:(x1-3).toFixed(1), y:ye.toFixed(1), 'class':'rl', 'text-anchor':'end'}, g).textContent=lab+' '+pxs(L.now);
     }
-    for(const [ii, kd] of (TL.ev||[])){                                    // ▲ 收盘突破压力线 / ▼ 收盘跌破支撑线（各自当时的线；连续几根只标第一次）
+    for(const [ii, kd] of (TL.ev||[])){                                    // ▲ 收盘冲过压力线 / ▼ 收盘跌破支撑线（各自当时的线；连续几根只标第一次）
       if(ii<s0 || ii>=N) continue;
       const x=X(ii).toFixed(1);
       if(kd==='rb'){ const y=Math.min(padT+H1-8, Y(D.l[ii]!=null ? D.l[ii] : D.c[ii])+4); sv('path',{d:'M'+x+' '+y.toFixed(1)+'l3.5 6h-7z', 'class':'tbu'}, g); }
@@ -624,50 +796,47 @@ function drawK(box){
     }
     if(vmax>0) sv('text',{x:x1+6, y:vb-H2+9, 'class':'ax'}, svg).textContent=vfmt(vmax)+(P.kind==='core' ? ' 口' : ' 股');
   }
-  if(sub!=='v'){ sl=sv('text',{x:x0+2, y:st-5, 'class':'sl'}, svg); sl.textContent=subText(D, N-1, P); }
+  if(sub!=='v'){ sl=sv('text',{x:x0+2, y:st-5, 'class':'sl'}, svg); sl.textContent=subText(D, N-1, sub); }
   sv('line',{x1:x0, x2:x1, y1:vb+0.5, y2:vb+0.5, 'class':'grid'}, svg);
   const xh=sv('line',{x1:0, x2:0, y1:padT, y2:vb, 'class':'xh', visibility:'hidden'}, svg);
   const yh=sv('line',{x1:x0, x2:x1, y1:0, y2:0, 'class':'xh', visibility:'hidden'}, svg);
+  kBar(box, 'kbot', 'ksub', SUBS, sub, '下面的小图显示什么');                  // 下边沿：量 / MACD / DMI
+  kSubKey(nd('div','kexp',null,box), P, tf, sub);
+  const sn=nd('div','kexp now',null,box); kSubNow(sn, D, N-1, P, tf, sub);
   let cur=null;
   const show=i=>{
     i=Math.max(s0, Math.min(N-1, i)); cur=i; const x=X(i);
     xh.setAttribute('x1',x); xh.setAttribute('x2',x); xh.setAttribute('visibility','visible');
     if(D.c[i]!=null){ const y=Y(D.c[i]); yh.setAttribute('y1',y); yh.setAttribute('y2',y); yh.setAttribute('visibility','visible'); }
-    legend(head, D, i); readout(ro, D, i, P); if(sl) sl.textContent=subText(D, i, P);
+    legend(head, D, i, tf); readout(ro, D, i, P, tf); if(sl) sl.textContent=subText(D, i, sub); kSubNow(sn, D, i, P, tf, sub);
   };
-  const hide=()=>{ cur=null; xh.setAttribute('visibility','hidden'); yh.setAttribute('visibility','hidden'); legend(head, D, N-1); readout(ro, D, N-1, P);
-    if(sl) sl.textContent=subText(D, N-1, P); };
+  const hide=()=>{ cur=null; xh.setAttribute('visibility','hidden'); yh.setAttribute('visibility','hidden'); legend(head, D, N-1, tf); readout(ro, D, N-1, P, tf);
+    if(sl) sl.textContent=subText(D, N-1, sub); kSubNow(sn, D, N-1, P, tf, sub); };
   box._hide=hide;
   const at=ev=>{ const r=svg.getBoundingClientRect(); return s0+Math.floor(((ev.clientX-r.left)*W/r.width-x0)/step); };
   svg.addEventListener('pointermove', ev=>show(at(ev)));
   svg.addEventListener('pointerdown', ev=>show(at(ev)));
   svg.addEventListener('pointerleave', ev=>{ if(ev.pointerType!=='touch') hide(); });
   box.onkeydown=ev=>{                                                       // 用属性不用 addEventListener：重画时换掉、不越积越多
+    if(ev.target!==box) return;                                             // 按钮 / 说明上按的键不动十字线
     if(ev.key==='ArrowLeft' || ev.key==='ArrowRight'){ ev.preventDefault(); show((cur==null ? N-1 : cur)+(ev.key==='ArrowLeft' ? -1 : 1)); }
     else if(ev.key==='Home'){ ev.preventDefault(); show(s0); } else if(ev.key==='End'){ ev.preventDefault(); show(N-1); }
     else if(ev.key==='Escape') hide();
   };
   box.onblur=hide;
-  const foot=nd('div','legend',null,box);
-  if(tr) nd('span',null,TFS[TF]+'趋势：'+tr.label+(tr.align ? '（'+tr.align+'）' : '')+' · 收盘在 MA20 '+(tr.above20?'上':'下')
-    +' · MA20 比 3 根前 '+(tr.slope20_pct>=0?'+':'')+tr.slope20_pct+'%', foot);
-  if(TL && (TL.sup || TL.res)){
-    const one=(L,lab)=> lab+' '+pxs(L.now)+'（离收盘 '+(L.dist_pct>=0?'+':'')+L.dist_pct+'%，每根 '+(L.slope_pct>=0?'+':'')+L.slope_pct+'%，碰到 '+L.touch+' 次）';
-    const parts=[]; if(TL.sup) parts.push(one(TL.sup,'支撑')); if(TL.res) parts.push(one(TL.res,'压力'));
-    if(TL.chan) parts.push(TL.chan+(TL.pos!=null ? '（现价在通道的 '+TL.pos+'%）' : ''));
-    nd('span',null,'趋势线：'+parts.join(' · '), foot);
-    nd('span',null,'点线 = 往后延长 '+PJ+' 根（只是把线延长，不是验证过的预测）· ○ = 连线用的波谷 / 波峰 · ▲ 收盘突破压力线 · ▼ 收盘跌破支撑线', foot);
-    nd('span','muted','研究（2026-10-06，全部股票 2001〜2026）：通道方向、突破 / 跌破趋势线对之后 20 日都没有预测力，结合现在的选股方法也不更好 —— 趋势线只用来看图', foot);
-  }
-  nd('span',null,'红 = 涨（空心）· 绿 = 跌（实心）', foot);
-  const det=nd('details',null,null,box); nd('summary','muted small','最近 10 根（表）',det);
+  if(tr) kTrend(nd('div','kexp',null,box), tr, tf);
+  if(TL && (TL.sup || TL.res)) kTL(nd('div','kexp',null,box), TL, tf);
+  kHelp(box, P, tf, !!(TL && (TL.sup || TL.res)), PJ);
+  const det=nd('details',null,null,box); if(box.dataset.tbl==='1') det.open=true;
+  det.addEventListener('toggle', ()=>{ box.dataset.tbl = det.open ? '1' : ''; });
+  nd('summary','muted small','最近 10 '+KU[tf]+'的数字（表）',det);
   const tb=nd('table',null,null,det), hr=nd('tr',null,null,nd('thead',null,null,tb)), body=nd('tbody',null,null,tb);
-  for(const h of ['日期','开','高','低','收','涨跌','成交量']) nd('th',null,h,hr);
+  for(const h of ['日期','开盘','最高','最低','收盘','涨跌','成交量']) nd('th',null,h,hr);
   for(let i=N-1;i>=Math.max(0,N-10);i--){
     const r=nd('tr',null,null,body), pc=i>0?D.c[i-1]:null;
-    nd('td',null,TF==='M'?D.d[i].slice(0,7).replace('-','/'):D.d[i].slice(5).replace('-','/'),r);
+    nd('td',null,sdate(D.d[i], tf),r);
     for(const a of [D.o,D.h,D.l,D.c]) nd('td',null,pxs(a[i]),r);
-    nd('td',(pc && D.c[i]>=pc)?'up':(pc && D.c[i]<pc)?'down':null, pc && D.c[i]!=null ? pcs((D.c[i]/pc-1)*100) : '—', r);
+    nd('td',(pc && D.c[i]!=null) ? (D.c[i]>=pc ? 'up' : 'down') : null, pc && D.c[i]!=null ? pcs((D.c[i]/pc-1)*100) : '—', r);
     nd('td',null,Number(D.v[i]||0).toLocaleString('ja-JP'),r);
   }
 }
@@ -679,13 +848,10 @@ async function showK(box){
 }
 function drawAll(){
   document.querySelectorAll('.chart[data-t]').forEach(b=>{ if(KD[b.dataset.t] && b.offsetParent!==null) drawK(b); });
-  document.querySelectorAll('[data-act=tf]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.tf===TF ? 'true' : 'false'));
-  document.querySelectorAll('[data-act=sub]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.sub===SUB ? 'true' : 'false'));
 }
 const IO = ('IntersectionObserver' in window) ? new IntersectionObserver(es=>{ for(const e of es) if(e.isIntersecting){ IO.unobserve(e.target); showK(e.target); } }, {rootMargin:'200px'}) : null;
 document.addEventListener('DOMContentLoaded', ()=>{
   document.querySelectorAll('.chart[data-t]').forEach(b=>{ if(IO) IO.observe(b); else showK(b); });
-  drawAll();
 });
 document.addEventListener('toggle', e=>{ if(e.target.tagName==='DETAILS' && e.target.open) e.target.querySelectorAll('.chart[data-t]').forEach(b=>{ if(KD[b.dataset.t] && KD[b.dataset.t]!=='loading') drawK(b); }); }, true);
 document.addEventListener('pointerdown', ev=>{ if(!ev.target.closest('.chart')) document.querySelectorAll('.chart').forEach(b=>{ if(b._hide) b._hide(); }); });
@@ -741,7 +907,9 @@ def _dialogs(paper: bool) -> str:
             "<div class='adjrow'><button class='btn' data-act='adj-step' data-d='-1' aria-label='少一个单元'>−</button>"
             "<div class='grow'><input type='number' id='adj-val' inputmode='decimal' min='0' aria-label='目标'><span class='unit' id='adj-unit'>股</span></div>"
             "<button class='btn' data-act='adj-step' data-d='1' aria-label='多一个单元'>＋</button></div>"
-            "<input type='range' id='adj-range' min='0' max='100' step='100' value='0' aria-label='目标股数'>"
+            "<div class='lots'><div class='lots-bar' id='adj-bar' aria-hidden='true'></div>"
+            "<input type='range' id='adj-range' min='0' max='100' step='100' value='0' aria-label='目标股数（一格 = 一次最少能买卖的股数）'></div>"
+            "<div class='lots-lab' id='adj-lab' aria-hidden='true'></div><div class='muted small' id='adj-note'></div>"
             "<div id='adj-prev'></div><div class='muted small'>目标 → 执行器按决策时的收盘与权益换成股数（单元向下取整），少于现在 → 卖出多出来的"
             "（寄付成行）；多于现在 → 加仓（寄付指値 = 收盘 ×1.03，钱不够时同一个开盘先卖核心 ETF；单只最多占总权益 "
             "<span id='adj-cap'>34</span>%；资格检查 / 新仓倍数 0 / 决算前的票不加；只做一次）。加仓后成本按股数平均，止损 / 持有天数不变。"
@@ -803,58 +971,50 @@ def _phone_card(phone: dict) -> str:
 
 
 TF_LABEL = (("D", "日K"), ("W", "周K"), ("M", "月K"))
-SUB_LABEL = (("v", "量"), ("macd", "MACD"), ("dmi", "DMI"))
 
 
 def tchips(tr: dict | None) -> str:
-    """日K / 周K / 月K 的趋势标签（qbreak/kline.py；红 = 上升、绿 = 下降，文字本身就写着，不只靠颜色）。"""
+    """日K / 周K / 月K 的趋势（qbreak/kline.py 的标签换成通俗说法：往上走 / 往下走 / 横着走 · 涨势整齐 / 跌势整齐；
+    红 = 往上、绿 = 往下，文字本身就写着，不只靠颜色）。"""
     out = []
     for k, lab in TF_LABEL:
         x = (tr or {}).get(k)
         if not x:
             continue
         cls = {"上升": "up", "下降": "down"}.get(str(x.get("label")), "muted")
-        out.append(f"<span class='tchip'>{lab} <b class='{cls}'>{escape(str(x.get('label')))}</b>"
-                   + (f" · {escape(str(x['align']))}" if x.get("align") else "") + "</span>")
+        al = KL.ALIGN_PLAIN.get(str(x.get("align") or ""), str(x.get("align") or ""))
+        out.append(f"<span class='tchip'>{lab} <b class='{cls}'>{escape(KL.plain(x.get('label')))}</b>"
+                   + (f" · {escape(al)}" if al else "") + "</span>")
     return f"<div class='tchips' aria-label='趋势'>{''.join(out)}</div>" if out else ""
 
 
-def tf_bar() -> str:
-    """K 线周期切换（一行，放在所有图上面；两处按钮是同一个开关）。"""
-    return ("<div class='chartbar'><span class='muted small'>K 线</span><div class='seg' role='group' aria-label='K 线周期'>"
-            + "".join(f"<button data-act='tf' data-tf='{k}' aria-pressed='{'true' if k == 'D' else 'false'}'>{v}</button>" for k, v in TF_LABEL)
-            + "</div><span class='muted small'>副图</span><div class='seg' role='group' aria-label='副图'>"
-            + "".join(f"<button data-act='sub' data-sub='{k}' aria-pressed='{'true' if k == 'v' else 'false'}'>{v}</button>" for k, v in SUB_LABEL)
-            + "</div><span class='muted small'>红 = 涨（空心）· 绿 = 跌（实心）· MA5 / 10 / 20 / 30 · 虚线 = 趋势线</span></div>")
-
-
-def _suggest_card(sg: dict, book: dict, tag: str, buying: set, add_when: str, eq, cap: float, chart, bar: str) -> str:
+def _suggest_card(sg: dict, book: dict, tag: str, buying: set, add_when: str, eq, cap: float, chart) -> str:
     """「建议的股票」= 规则的候选（qbreak/suggest.py）+ 每只的「买入…」（写手动买入指令；执行器下单前再查一遍）。"""
     rows = sg.get("rows") or []
     s = MO.slots(book, tag)
     H = ["<section class='card' id='suggest'><h2>建议的股票（规则的候选）</h2>"
-         f"<div class='muted'>按 {escape(str(sg.get('asof') or '—'))} 收盘；按「今天出了买入信号 → 即将触发 → 观察中」和条件就绪度排，"
+         f"<div class='muted'>按 {escape(str(sg.get('asof') or '—'))} 收盘；按「今天收盘出了买入信号 → 快要出信号 → 观察中」和买入条件凑齐了多少排，"
          "不是收益预测，也不是建议。「买入…」只写一条手动买入指令："
          f"<b>{escape(add_when)} 开盘</b>，执行器按规则的闸门再查一遍后下寄付指値。</div>"
          f"<div class='small'>个股名额：拿着 {s['held']} 只 + 排定买入 {s['buys']} 只 / 上限 {s['max']} 只（空 {s['free']} 个）</div>"]
     if sg.get("error"):
         H.append(f"<div class='neg small'>★ 这次没算成：{escape(str(sg['error']))}</div>")
     if not rows:
-        H.append("<div class='muted'>" + ("候选在执行器下一次运行之后显示" if not sg else "今天没有出信号 / 即将触发 / 观察中的票") + "</div></section>")
+        H.append("<div class='muted'>" + ("候选在执行器下一次运行之后显示" if not sg else "今天没有出信号 / 快要出信号 / 观察中的票") + "</div></section>")
         return "".join(H)
-    H.append(bar)
     for r in rows:
         t, b, ru = str(r["ticker"]), r.get("buy") or {}, r.get("rule") or {}
         nm = f" {escape(str(r['name']))}" if r.get("name") else ""
         st_cls = "chip hot" if r.get("status") == "triggered" else "chip"
-        meta = [f"就绪度 {r['score']:g}" if r.get("score") is not None else None,
+        tb = r.get("to_box_top_pct")
+        meta = [f"买入条件凑齐了 {r['score']:g} / 100" if r.get("score") is not None else None,
                 f"收盘 ¥{r['close']:,.0f}" if r.get("close") is not None else None,
-                f"量比 {r['vol_ratio']:.2f} 倍" if r.get("vol_ratio") is not None else None,
-                f"横盘振幅 {r['range_pct']:.1f}%" if r.get("range_pct") is not None else None,
-                (f"距箱顶 {r['to_box_top_pct']:+.1f}%" if r.get("to_box_top_pct") is not None else None),
-                "真突破" if r.get("breakout") else None]
+                f"成交量是 20 日平均的 {r['vol_ratio']:.2f} 倍" if r.get("vol_ratio") is not None else None,
+                f"之前横着走（最高最低只差 {r['range_pct']:.1f}%）" if r.get("range_pct") is not None else None,
+                (None if tb is None else f"比之前的最高价（箱顶）{'低' if tb < 0 else '高'} {abs(tb):.1f}%"),
+                "收盘冲过了之前的最高价（真突破）" if r.get("breakout") else None]
         H.append(f"<div class='hv sg'><div class='head'><b>{escape(str(r.get('code') or t))}</b>{nm}"
-                 f"<span class='{st_cls}'>{escape(str(r.get('status_text') or ''))}</span>"
+                 f"<span class='{st_cls}'>{escape(SG.STATUS.get(str(r.get('status')), str(r.get('status_text') or '')))}</span>"
                  + (f"<span class='chip'>{escape(str(r['sector']))}</span>" if r.get("sector") else "") + "</div>"
                  f"<div class='meta'>{' · '.join(x for x in meta if x)}</div>"
                  f"<div>{escape(str(ru.get('text') or ''))}</div>" + tchips(r.get("trend"))
@@ -877,7 +1037,7 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, add_when: str, eq
         else:
             data = (f" data-t='{escape(t)}' data-code='{escape(str(r.get('code') or t))}' data-name='{escape(str(r.get('name') or ''))}'"
                     f" data-px='{px:g}' data-lot='{lot}' data-rule='{n}' data-limit='{float(b.get('limit') or 0):g}'"
-                    f" data-sig='{1 if r.get('signal') else 0}' data-status='{escape(str(r.get('status_text') or ''))}'"
+                    f" data-sig='{1 if r.get('signal') else 0}' data-status='{escape(SG.STATUS.get(str(r.get('status')), str(r.get('status_text') or '')))}'"
                     f" data-rtext='{escape(str(ru.get('text') or ''))}' data-warn='{escape(warn)}'")
             H.append(f"<div class='act'><button class='btn primary' data-act='buy'{data}>买入…</button>"
                      f"<span class='muted small'>按规则约 {n:,} 股 · 约 {_yen(n * px)}"
@@ -977,17 +1137,16 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         data = f" data-t='{escape(t)}' data-name='{escape(str(r.get('name') or ''))}' data-shares='{sh}'"
         return ("<div class='act'>"
                 f"<button class='btn sell' data-act='sell'{data}>卖出全部</button>"
-                f"<button class='btn' data-act='adj'{data} data-px='{px:g}'{'' if px > 0 and eq else ' disabled'}>调整…</button></div>"
+                f"<button class='btn' data-act='adj'{data} data-px='{px:g}'{'' if px > 0 and eq else ' disabled'}>调仓…</button></div>"
                 f"<div class='muted small'>现在 {sh:,} 股 · 约 {_yen(sh * px)} · 约占权益 {f'{cur:.1f}' if cur is not None else '—'}%"
-                f"（调整：按股数 / 金额 / 占权益 %，可加可减；单只上限 {cap:g}%）</div>" + chart(t, "stock"))
-    bar = tf_bar() if has_k else ""
+                f"（调仓：按股数 / 金额 / 占权益 %，可加可减；一次最少 {MO.LOT} 股；单只上限 {cap:g}%）</div>" + chart(t, "stock"))
     held_core = {str(r.get("ticker")) for r in hv.get("core") or []}
     other = [(t, c) for t, c in (kl.get("items") or {}).items() if c.get("kind") == "core" and t not in held_core]
     more = ("<details class='hv'><summary class='muted'>闲置资金方式里的其他 ETF（现在没拿）的 K 线</summary>"
             + "".join(f"<div class='hv'><b>{escape(str(c.get('name') or t))}</b> <span class='muted'>现在 0 口</span>"
                       f"{tchips(ktrend.get(t))}{chart(t, 'core')}</div>" for t, c in other) + "</details>") if other else ""
-    H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions, toolbar=bar) + more + "</section>")
-    H.append(_suggest_card(sm.get("suggest") or {}, book, tag, buying, add_when, eq, cap, chart, bar))
+    H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions) + more + "</section>")
+    H.append(_suggest_card(sm.get("suggest") or {}, book, tag, buying, add_when, eq, cap, chart))
     cp = float(man.get("core_pct", 100.0))
     H.append("<section class='card' id='core'><h2>闲置资金（核心 ETF）比例</h2>"
              f"<div>现在：规则目标额的 <b>{cp:g}%</b>（100% = 照规则；0% = 卖出核心 ETF、留现金）</div>"
@@ -1047,7 +1206,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                  "非投资建议。</div><div class='act'><button class='btn sm' data-act='unpair'>退出这台设备</button></div></footer>")
     H.append("</main><div id='toast' class='toast' role='status' hidden></div>")
     cfg = {"auth": {"h": "X-Qbreak-Csrf" if remote else "X-Qbreak-Token", "v": tok}, "book": tag, "paper": paper, "remote": remote,
-           "when": when, "addWhen": add_when, "eq": eq or 0, "cap": cap, "lot": MO.LOT}
+           "when": when, "addWhen": add_when, "eq": eq or 0, "cap": cap, "lot": MO.LOT,
+           "kp": {"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN}}      # K 线的通俗说法（qbreak/kline.py）
     js = _NET_JS + _JS.replace("__CFG__", json.dumps(cfg, ensure_ascii=False).replace("</", "<\\/"))
     return _head("qbreak 操作面板") + "<body>" + "".join(H) + _dialogs(paper) + f"<script>{js}</script></body></html>"
 

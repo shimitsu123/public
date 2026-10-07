@@ -14338,5 +14338,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "Tailscale Serve 先删请求里自带的身份头再按发请求的设备填、转发时目标路径 + 请求路径（官方说明 + 源码，2026-10-07 查）；提交前安全复核发现「127.0.0.1 + Host + 账户头」可被本机任何程序伪造（原始 socket 复现）→ 加 Serve 路径密钥、默认关（文件没了 / 坏了 = 关）、账户头只认 Serve 的写法、有别的 macOS 用户默认只用配对；写操作照旧要 CSRF、Origin / Sec-Fetch-Site 必须是页面自己；HALT 只能建；账户名只显示打码后的、路径密钥不显示；剩下的风险：能读 panel_phone.json 或 Tailscale Serve 设置的程序可以冒充"
+ },
+ {
+  "line": 10102,
+  "date": "2026-10-07",
+  "title": "每张 K 线图上边沿「日K / 周K / 月K」、下边沿「量 / MACD / DMI」各自切换 + K 线 / 持仓 / 候选的说明换成日常的话（操作面板、Mac 账本页、云端日报、执行器日志共用）+「调仓…」的滑条按 1 个单元（100 股）分格",
+  "kind": "engineering",
+  "domain": "数据/工程",
+  "registration": "—",
+  "script": "qbreak/panel.py（kBar / kSubKey / kSubNow / kTrend / kTL / kHelp / adjBar）、qbreak/kline.py（PLAIN / ALIGN_PLAIN / CHAN_PLAIN / plain）、qbreak/holding_view.py（trend_text、TREND / TREND_NOTE 新说法）、qbreak/suggest.py（STATUS 新说法）、qbreak/report_unified.py",
+  "output": "—（页面与文字；K 线文件、汇总的格式不变）",
+  "candidates": [],
+  "baseline": "—（不改规则 / 参数 / 仓位 / 股票池 / 下单逻辑）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "数据里的趋势标签不变，只改显示；说明按数字在浏览器 / 显示时现算（旧文件也马上是新说法）；每张图的周期 / 小图各自记在图上，新图默认 = 最近一次选的（localStorage 同一个键）；顺带修好：上边沿按钮类名撞了页头的 sticky .top、第二只票的调仓框带着上一只的数；调仓条并格时「不变」误标「要卖」的错由 node 测试抓到并改正"
  }
 ]

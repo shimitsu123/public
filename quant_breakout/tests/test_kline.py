@@ -53,7 +53,10 @@ def test_trend_labels():
     assert td["label"] == "下降" and td["align"] == "空头排列" and not td["above20"]
     assert tf["label"] == "震荡" and not tf["above20"] and tf["slope20_pct"] > 0
     assert K.trend(K.bars(_df(np.linspace(100, 120, 22)), "D")) is None          # 不到 MA20 + 3 根
-    assert K.chips({"D": tu, "M": td}) == "日 上升 · 月 下降" and K.chips(None) == "—"
+    assert K.chips({"D": tu, "M": td}) == "日K 往上走 · 月K 往下走" and K.chips(None) == "—"
+    assert K.plain("震荡") == "横着走" and K.plain("别的") == "别的" and K.plain(None) == "—"          # 页面上的说法；数据里的标签不变
+    from qbreak import trendline as TLm
+    assert set(K.PLAIN) == set(K.LABELS) and set(K.CHAN_PLAIN) == set(TLm.CHANNELS)      # 每种通道都有通俗说法
 
 
 def test_payload_trims_to_decision_day_and_carries_info():

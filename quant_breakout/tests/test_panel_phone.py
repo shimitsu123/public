@@ -771,7 +771,7 @@ def test_chart_and_api_failure_paths_in_node(tmp_path):
     import subprocess
     node = _node()
     J = panel._JS
-    loadk = J[J.index("function loadK(t){"):J.index("function legend(head, D, i){")].replace("location.reload(), 1500", "location.reload(), 5")
+    loadk = J[J.index("function loadK(t){"):J.index("function legend(head, D, i, tf){")].replace("location.reload(), 1500", "location.reload(), 5")
     api = J[J.index("const HALT_TIP"):J.index("function done(j){")].replace("location.reload(),1500", "location.reload(),5")
     assert "KP[t]" in loadk and "'auth'" in loadk and "HALT_TIP" in api
     net = panel._NET_JS.replace("const TMO = 15000;", "const TMO = 60;")

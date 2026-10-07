@@ -37,7 +37,8 @@ def test_why_reads_the_signal_day_before_entry():
     assert got["w2"]["ok"] and got["dist"]["ok"] and got["box"]["ok"] is None and "+1.0%" in got["box"]["text"]
     row = {"why": w, "entry_date": str(df.index[100].date()), "entry_px": 1003.0}
     line = HV.why_line(row)
-    assert "横盘 60 天（振幅 9.5%）之后" in line and "放量 2.40 倍（周线量比 1.60）" in line and "开盘买入 @ ¥1,003" in line
+    assert "收盘出了买入信号：之前 60 天横着走（最高价和最低价只差 9.5%）" in line and "开盘买入，价格 ¥1,003" in line
+    assert "成交量放大到 20 日平均的 2.40 倍（这一周是前 10 周平均的 1.60 倍）" in line and "往上穿过慢线（金叉）" in line
     df.loc[sig, "entry"] = False                               # 复权 / 数据修正后条件不完全成立 → 注明
     assert "不完全成立" in HV.why_line({**row, "why": HV.why_items(df, row["entry_date"], P)})
     assert HV.why_items(df, str(df.index[0].date()), P)["signal_date"] is None
@@ -46,7 +47,8 @@ def test_why_reads_the_signal_day_before_entry():
 def test_trend_labels():
     up = HV.trend(_ind(np.linspace(1000, 1300, 220)), entry_px=1100, peak=1310, stop_px=1050)
     assert up["label"] == "up" and up["ret_pct"] > 0 and up["from_peak_pct"] < 0 and up["to_stop_pct"] < 0
-    assert "200 日线" in up["text"] and "MACD 在信号线" in up["text"]
+    assert "比 200 日均价高" in up["text"] and "MACD：上涨的力量占上风" in up["text"] and "就碰到止损线（碰到就按规则卖）" in up["text"]
+    assert up["text"] == HV.trend_text(up) and HV.trend_text({"text": "旧的说法"}) == "旧的说法" and HV.trend_text(None) == ""   # 旧汇总：原样
     down = HV.trend(_ind(np.linspace(1300, 1000, 220)))
     assert down["label"] == "down"
     dip = HV.trend(_ind(list(np.linspace(1000, 1300, 200)) + [1250.0] * 3))     # 上升之后跌破 20 日线、均线还没转下
@@ -68,7 +70,7 @@ def test_build_rows_core_and_errors(monkeypatch):
     assert r["9999.T"]["error"] == "没有这只票的行情"
     assert [c["ticker"] for c in hv["core"]] == ["1545.T"] and "Q1 纳指" in hv["core"][0]["why"] and "牛市·稳固" in hv["core"][0]["why"]
     txt = "\n".join(HV.lines(hv))
-    assert "7203.T トヨタ自動車 为什么持有" in txt and "现在：上升趋势" in txt and "9999.T：没有这只票的行情" in txt
+    assert "7203.T トヨタ自動車 为什么持有" in txt and "现在：上涨中" in txt and "9999.T：没有这只票的行情" in txt
     html = HV.html(hv, actions=lambda row, kind: f"<i>{kind}:{row['ticker']}</i>")
     assert "<i>stock:7203.T</i>" in html and "<i>core:1545.T</i>" in html and "已排定开盘卖（MACD 死叉）" in html
 
@@ -119,7 +121,7 @@ def test_mac_page_report_and_journal_show_reasons():
     (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps({"holding_view": HV_DOC}, ensure_ascii=False), encoding="utf-8")
     MO.append("paper", {"kind": "sell", "ticker": "7203"})
     html = desktop_page.render("paper", 1_000_000, "2026-09-28")
-    assert "为什么持有" in html and "放量 2.10 倍" in html and "偏弱" in html and "NASDAQ100（1545）" in html
+    assert "为什么持有" in html and "成交量放大到 20 日平均的 2.10 倍" in html and "偏弱" in html and "NASDAQ100（1545）" in html
     assert "浮盈 +4.0%" in html
     neg = {**HV_DOC, "holdings": [{**HV_DOC["holdings"][0], "trend": {**HV_DOC["holdings"][0]["trend"], "ret_pct": -2.7}}]}
     assert "浮亏 -2.7%" in HV.html(neg) and "浮盈 -" not in HV.html(neg)
@@ -129,7 +131,7 @@ def test_mac_page_report_and_journal_show_reasons():
     blk = RU._positions_block(d, {"7203.T": 2600.0})
     assert "为什么持有" in blk and "2026-08-29 收盘" in blk and "偏弱" in blk and "輸送用機器" in blk
     alloc = RU._allocation_block({**d, "core_units": {"1545.T": 100}, "core_last": {"1545.T": 30000.0}, "usdjpy": 150.0}, {}, "")
-    assert "NASDAQ100（1545） 为什么持有" in alloc and "上升趋势" in alloc
+    assert "NASDAQ100（1545） 为什么持有" in alloc and "上涨中" in alloc
     st = UState(cash_jpy=1.0, last_date="2026-10-05", history=[["2026-10-05", 1_000_000.0, 0, 0, 150]])
     st.pos["7203.T"] = UPos("7203.T", "JP", 200, 2500.0, "2026-09-01", 2325.0, 2600.0, 2600.0)
     _, _, body = daily_text({"decided_on": "2026-10-05", "orders": [], "events": [], "blocked": None, "holding_view": HV_DOC},

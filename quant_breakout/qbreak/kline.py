@@ -12,6 +12,8 @@ MA 用全部历史算（窗口开头不缺）。趋势标签是均线位置的�
 趋势线（qbreak/trendline.py：连波谷的支撑线、连波峰的压力线、往后延长的虚线、破线点）也在每个周期上算（tl）。
   上升 = 收盘在 MA20 上、MA20 比 3 根前高、MA5 在 MA20 上；下降 = 三个条件都反过来；其余 = 震荡。
   多头排列 = MA5 > MA10 > MA20 > MA30；空头排列 = 反过来（MA30 还没有时只看前三条）。
+页面上的说法（2026-10-07 用户：「K线解释换成通俗易懂的说法 横展开」）：数据里的标签不变，显示时换成 PLAIN / ALIGN_PLAIN / CHAN_PLAIN
+  （操作面板、日志都从这里取）：上升 → 往上走、下降 → 往下走、震荡 → 横着走；多头排列 → 涨势整齐、空头排列 → 跌势整齐。
 """
 from __future__ import annotations
 
@@ -25,6 +27,16 @@ BARS = {"D": 250, "W": 160, "M": 120}            # 每个周期给页面的最�
 DMI_N, DMI_M = 14, 6                              # 同花顺 DMI 的默认参数
 TF_NAME = {"D": "日K", "W": "周K", "M": "月K"}
 LABELS = ("上升", "下降", "震荡")
+PLAIN = {"上升": "往上走", "下降": "往下走", "震荡": "横着走"}                 # 页面 / 日志上的说法（数据里的标签不变）
+ALIGN_PLAIN = {"多头排列": "涨势整齐", "空头排列": "跌势整齐"}
+UNIT = {"D": "天", "W": "周", "M": "个月"}                                      # 一根 K 线 = 一天 / 一周 / 一个月
+CHAN_PLAIN = {"上升通道": "两条线都往上：股价在往上走的通道里",
+              "下降通道": "两条线都往下：股价在往下走的通道里",
+              "横盘通道": "两条线都差不多是平的：股价在一个箱子里上下",
+              "对称三角": "下面的线往上、上面的线往下：越收越窄，快要选方向",
+              "上升三角": "下面的线往上、上面的线是平的：低点越垫越高，顶着同一个价位",
+              "下降三角": "下面的线是平的、上面的线往下：高点越压越低，底在同一个价位",
+              "扩散": "两条线越张越开：上下波动越来越大"}
 SLOPE_BARS = 3                                     # MA20 的方向：比 3 根 K 线之前高 / 低
 
 
@@ -178,11 +190,16 @@ def trends(df: pd.DataFrame, bar_date=None) -> dict:
     return out
 
 
+def plain(label) -> str:
+    """数据里的趋势标签 → 页面上的说法（上升 → 往上走 …）；不认识的原样。"""
+    return PLAIN.get(str(label), str(label or "—"))
+
+
 def chips(tr: dict | None) -> str:
-    """「日 上升 · 周 震荡 · 月 上升」（日志 / 命令行用）。"""
+    """「日K 往上走 · 周K 横着走 · 月K 往上走」（日志 / 命令行用）。"""
     tr = tr or {}
-    return " · ".join(f"{TF_NAME[k][0]} {tr[k]['label']}" for k in ("D", "W", "M") if k in tr) or "—"
+    return " · ".join(f"{TF_NAME[k]} {plain(tr[k]['label'])}" for k in ("D", "W", "M") if k in tr) or "—"
 
 
-__all__ = ["MAS", "BARS", "TF_NAME", "LABELS", "DMI_N", "DMI_M", "ohlcv", "bars", "trend", "macd", "dmi", "series", "payload",
-           "trends", "chips"]
+__all__ = ["MAS", "BARS", "TF_NAME", "LABELS", "PLAIN", "ALIGN_PLAIN", "UNIT", "CHAN_PLAIN", "DMI_N", "DMI_M", "ohlcv", "bars",
+           "trend", "macd", "dmi", "series", "payload", "trends", "chips", "plain"]

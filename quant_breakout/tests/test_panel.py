@@ -150,7 +150,7 @@ def test_render_shows_reasons_trend_and_hides_buttons_for_pending_exit():
         {"ticker": "6758.T", "shares": 100, "error": "x"}], "core": []}
     (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps({"holding_view": hv, "fill_day": "2026-10-06"}), encoding="utf-8")
     html = panel.render("paper", "t" * 40, AT)
-    assert "トヨタ自動車" in html and "上升趋势" in html and "放量 2.10 倍" in html
+    assert "トヨタ自動車" in html and "上涨中" in html and "成交量放大到 20 日平均的 2.10 倍" in html
     assert html.count("卖出全部</button>") == 1 and "已排定开盘卖（MACD 死叉）" in html
     assert "规则目标额的 <b>60%</b>" in html and "9984.T" in html and "解除" in html
     assert "模拟账户：手动操作后会和云端模拟盘不一致" in html and "10/06（今天）" in html
@@ -195,14 +195,17 @@ def test_render_adjust_buttons_and_kline():
     _kfile({"6758.T": {"kind": "stock", "tf": {}}})
     (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps({"holding_view": hv, "kline": kl}), encoding="utf-8")
     html = panel.render("paper", "t" * 40, AT)
-    assert "data-act='adj'" in html and "data-px='1000'" in html and "单只上限 34%" in html and "调整…</button>" in html
+    assert "data-act='adj'" in html and "data-px='1000'" in html and "单只上限 34%" in html and "调仓…</button>" in html
+    assert "一次最少 100 股" in html and "id='adj-bar'" in html and "id='adj-lab'" in html     # 调仓条按单元分格
     assert "data-t='6758.T' data-kind='stock'" in html and "data-t='1545.T' data-kind='core'" in html
-    assert "现在没拿" in html and "data-t='1482.T' data-kind='core'" in html and html.count("data-act='tf'") == 3
-    assert html.count("data-act='sub'") == 3 and "data-sub='macd'" in html and "data-sub='dmi'" in html     # 副图：量 / MACD / DMI
+    assert "现在没拿" in html and "data-t='1482.T' data-kind='core'" in html
+    assert "data-act='tf'" not in html and "data-act='sub'" not in html                # 没有整页一排的切换：每张图自己的（脚本画）
+    assert "kBar(box, 'ktop', 'ktf', TFS" in html and "kBar(box, 'kbot', 'ksub', SUBS" in html     # 上边沿 日K / 周K / 月K、下边沿 量 / MACD / DMI
     assert "</script><b>x" not in html and "对冲版美国国债&lt;/script&gt;" in html
-    assert "日K <b class='up'>上升</b> · 多头排列" in html and "周K <b class='muted'>震荡</b>" in html and "月K <b class='down'>下降</b>" in html
+    assert "日K <b class='up'>往上走</b> · 涨势整齐" in html and "周K <b class='muted'>横着走</b>" in html
+    assert "月K <b class='down'>往下走</b> · 跌势整齐" in html and '"上升": "往上走"' in html     # 图下的说法也从 kline.py 来（CFG.kp）
     assert '"addWhen": "10/07（下一个交易日）"' in html and "加仓 / 买入 → <b>10/07（下一个交易日） 开盘</b>" in html
-    assert "chart-data" not in html and "红 = 涨（空心）" in html                 # K 线数据不内嵌，打开时才取（/api/chart）
+    assert "chart-data" not in html and "红色空心 = 收盘比开盘高（涨）" in html       # K 线数据不内嵌，打开时才取（/api/chart）
     (paths.out_dir() / "charts_paper.json").unlink()
     html = panel.render("paper", "t" * 40, AT)                  # 还没有 K 线文件：占位文字、没有周期切换
     assert "K 线在执行器下一次运行之后显示" in html and "data-act='tf'" not in html and "data-act='sub'" not in html
@@ -245,7 +248,7 @@ def test_render_suggestions_with_buy_buttons_and_gates():
     html = panel.render("paper", "t" * 40, AT)
     assert "data-act='buy'" not in html and "个股名额已满（4 / 4 只）：要买先卖出一只" in html
     _sm([])
-    assert "今天没有出信号 / 即将触发 / 观察中的票" in panel.render("paper", "t" * 40, AT)
+    assert "今天没有出信号 / 快要出信号 / 观察中的票" in panel.render("paper", "t" * 40, AT)
 
 
 def test_submit_buy_writes_instruction_and_checks():
@@ -302,3 +305,96 @@ def test_page_script_is_valid_javascript(tmp_path):
         f.write_text(html.split("<script>")[-1].split("</script>")[0], encoding="utf-8")
         r = subprocess.run([node, "--check", str(f)], capture_output=True, text=True, timeout=60)
         assert r.returncode == 0, r.stderr[-500:]
+
+
+def _js_fn(src: str, name: str) -> str:
+    """从页面脚本里取出一个顶层函数的全文（按大括号配对；这些函数的字符串里没有大括号）。"""
+    i = src.index(f"function {name}(")
+    j = src.index("{", i)
+    depth = 0
+    for k in range(j, len(src)):
+        depth += {"{": 1, "}": -1}.get(src[k], 0)
+        if depth == 0:
+            return src[i:k + 1]
+    raise ValueError(name)
+
+
+def test_kline_plain_text_and_lot_bar_in_node(tmp_path):
+    """页面脚本里的通俗说明（小图「这一根」、现在的趋势、趋势线）与调仓条（按 100 股分格）在 node 里实际跑（假的最小 DOM）。没有 node 就跳过。"""
+    import shutil
+    import subprocess
+    from qbreak import kline as KL
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("没有 node")
+    J = panel._JS
+    fns = "\n".join(_js_fn(J, n) for n in ("nd", "pxs", "pcs", "vfmt", "sdate", "kSubNow", "kTrend", "kTL", "adjCap", "adjBar"))
+    kp = json.dumps({"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN}, ensure_ascii=False)
+    js = """
+class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[]; this._t=''; this.className=''; this.style={}; this.attrs={};
+  const s=this; this.classList={add(c){ s.className=(s.className ? s.className+' ' : '')+c; }}; }
+  appendChild(c){ this.children.push(c); return c; }
+  set textContent(v){ this._t=String(v); this.children=[]; } get textContent(){ return this._t+this.children.map(c=>c.textContent).join(''); }
+  setAttribute(k,v){ this.attrs[k]=String(v); } }
+const document={createElement:t=>new El(t), createTextNode:t=>{ const e=new El('#text'); e._t=String(t); return e; }};
+const CFG={eq:5000000, cap:34, kp:__KP__}, KPL=CFG.kp, LOT=100, KU={D:'天', W:'周', M:'个月'}, KMA={D:'日', W:'周', M:'个月'};
+const fmt=n=>Number(n).toLocaleString('ja-JP');
+const R={max:'800', value:'600', attrs:{}, setAttribute(k,v){ this.attrs[k]=String(v); }};
+const ELS={'#adj-range':R, '#adj-bar':new El('div'), '#adj-lab':new El('div'), '#adj-note':new El('div')};
+const $=s=>ELS[s];
+let ADJ=null;
+__FNS__
+const out={};
+const bar=(shares, px, value)=>{ ADJ={shares:shares, px:px}; R.max=String(Math.max(1, Math.ceil(Math.max(adjCap(), shares, LOT)/LOT))*LOT); R.value=String(value);
+  adjBar(); return {cls:ELS['#adj-bar'].children.map(i=>i.className||'_'), lab:ELS['#adj-lab'].children.map(s=>s.textContent),
+                    note:ELS['#adj-note'].textContent, vt:R.attrs['aria-valuetext'], max:R.max}; };
+out.add=bar(600, 1931, 800); out.cut=bar(600, 1931, 0); out.keep=bar(600, 1931, 600); out.over=bar(1000, 1931, 800);
+out.many=bar(200, 10, 200); out.none=bar(100, 5000000, 100);
+const t=(f)=>{ const e=new El('div'); f(e); return e.textContent; };
+const DM={d:['2026-09-29','2026-09-30','2026-10-01'], dif:[-0.5,-0.2,0.3], dea:[0.1,0.0,0.1], mh:[-0.6,-0.2,0.2],
+          pdi:[20,30,31], mdi:[25,12,11], adx:[26,28,27], v:[100,100,100]};
+out.macd_last=t(e=>kSubNow(e, DM, 2, {kind:'stock'}, 'D', 'macd')); out.macd_mid=t(e=>kSubNow(e, DM, 1, {kind:'stock'}, 'D', 'macd'));
+out.dmi=t(e=>kSubNow(e, DM, 1, {kind:'stock'}, 'D', 'dmi'));
+const DV={d:Array.from({length:21}, (_, i)=>'2026-09-'+String(i+1).padStart(2,'0')), v:Array(20).fill(100).concat([250])};
+out.vol=t(e=>kSubNow(e, DV, 20, {kind:'stock'}, 'D', 'v')); out.vol_w=t(e=>kSubNow(e, DV, 20, {kind:'core'}, 'W', 'v'));
+out.trend_w=t(e=>kTrend(e, {label:'上升', align:'多头排列', above20:true, slope20_pct:0.52}, 'W'));
+out.trend_flat=t(e=>kTrend(e, {label:'震荡', align:'', above20:false, slope20_pct:0}, 'D'));
+out.tl=t(e=>kTL(e, {sup:{now:950, dist_pct:-5, slope_pct:0.12, touch:3}, res:{now:1100, dist_pct:10, slope_pct:0.01, touch:2},
+                    chan:'对称三角', pos:33, eps:0.02}, 'D'));
+out.tl_broken=t(e=>kTL(e, {sup:{now:1020, dist_pct:2, slope_pct:-0.5, touch:2}, res:{now:990, dist_pct:-1, slope_pct:0.3, touch:4},
+                           chan:'扩散', pos:120, eps:0.4}, 'M'));
+out.tl_one=t(e=>kTL(e, {res:{now:1100, dist_pct:10, slope_pct:0.2, touch:2}, eps:0.02}, 'W'));
+console.log(JSON.stringify(out));
+""".replace("__KP__", kp).replace("__FNS__", fns)
+    f = tmp_path / "k.js"
+    f.write_text(js, encoding="utf-8")
+    r = subprocess.run([node, str(f)], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr[-800:]
+    o = json.loads(r.stdout)
+    # 调仓条：一格 = 1 个单元（100 股）；留着的 / 要加的 / 要卖的 / 空着的
+    assert o["add"]["cls"] == ["keep"] * 6 + ["add"] * 2 and o["add"]["max"] == "800"            # 单只上限 34% ≈ 800 股
+    assert o["cut"]["cls"] == ["cut"] * 6 + ["_"] * 2 and o["keep"]["cls"] == ["keep"] * 6 + ["_"] * 2
+    assert o["add"]["lab"][:3] == ["0", "100", "200"] and any("现在" in x for x in o["add"]["lab"])
+    assert "一格 = 1 个单元 = 100 股（一次最少能买卖的股数）" in o["add"]["note"] and "最右边 = 单只上限 34%（约 800 股）" in o["add"]["note"]
+    assert o["add"]["vt"] == "目标 800 股（8 个单元）；现在 600 股"
+    assert o["over"]["cls"] == ["keep"] * 8 + ["cut"] * 2 and "现在已经超过，只能减" in o["over"]["note"]     # 已经超过上限：只能减
+    assert len(o["many"]["cls"]) == 50 and o["many"]["cls"][0] == "keep" and "一格 = 34 个单元 = 3,400 股" in o["many"]["note"]
+    assert o["many"]["lab"][:2] == ["0", "170,000 股"] and "▲现在 200" in o["many"]["lab"]
+    assert o["none"]["cls"] == ["keep"] and o["none"]["max"] == "100"                              # 1 个单元都超过上限
+    # 小图「这一根」：金叉 / 死叉 / 变强变弱 / 0 线；DMI；量比
+    assert o["macd_last"] == "最新一根：快线刚往上穿过慢线（金叉）；快线在 0 线上面（整体偏涨）"
+    assert o["macd_mid"] == "这一根（09/30）：快线在慢线下面：下跌的力量占上风，但在变弱；快线在 0 线下面（整体偏跌）"
+    assert o["dmi"] == "这一根（09/30）：买方力量大于卖方；趋势强度 ADX 28.0：趋势明显，在变强"
+    assert o["vol"] == "最新一根：成交 250 股，是之前 20 天平均的 2.50 倍" and "口，是之前 20 周平均的 2.50 倍" in o["vol_w"]
+    # 现在的趋势（kline.py 的说法）
+    assert o["trend_w"] == ("现在的趋势：往上走 —— 收盘在 20 周均价上面，20 周均价比 3 周前高 0.52%；"
+                            "涨势整齐（短期的均价线在上、长期的在下，一层一层排好）")
+    assert o["trend_flat"] == "现在的趋势：横着走 —— 收盘在 20 日均价下面，20 日均价比 3 天前差不多"
+    # 趋势线：上下两条、离收盘多远、每根往哪边、碰到几次、通道的说法、收盘在通道里的位置
+    assert "现在的趋势线：下面的线往上、上面的线往下：越收越窄，快要选方向；收盘在两条线之间、从下往上 33% 的位置" in o["tl"]
+    assert "下面的线（支撑线，连最近的低点） ¥950.0，比收盘低 5%，每天往上 0.12%，股价碰到过 3 次" in o["tl"]
+    assert "上面的线（压力线，连最近的高点） ¥1,100，比收盘高 10%，基本是平的，股价碰到过 2 次" in o["tl"]
+    assert "没有预测力" in o["tl"]
+    assert "（收盘已经跌到这条线下面）" in o["tl_broken"] and "（收盘已经冲到这条线上面）" in o["tl_broken"]
+    assert "收盘在上面的线之上" in o["tl_broken"] and "每个月往下 0.5%" in o["tl_broken"] and "基本是平的" in o["tl_broken"]
+    assert o["tl_one"].startswith("现在的趋势线：只找到上面的一条") and "每周往上 0.2%" in o["tl_one"]

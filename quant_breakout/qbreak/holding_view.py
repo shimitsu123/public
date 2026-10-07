@@ -1,13 +1,15 @@
 """holding_view.py — 每只持仓「为什么持有」与「现在趋势如何」（2026-10-06 用户：「持仓股票的时候要写出为什么持仓这个股票的原因等等
 现在趋势如何等等 横展开」）。只展示，不改交易；云端日报（模拟盘）、Mac 账本页面与操作面板（执行器）共用。
 
-为什么持有（个股）：买入信号那天（买入日的前一个交易日收盘）规则的各项读数 —— 横盘（过去 N 天振幅）、MACD 在 0 轴附近金叉、放量倍数、
-  周线量比 W2、离箱顶多远、不追高的几项（离 20 日线、RSI、出货日）、相对日経；再加业种 / 主题。行情按现在的复权价重算，
+为什么持有（个股）：买入信号那天（买入日的前一个交易日收盘）规则的各项读数 —— 横着走（过去 N 天最高最低差多少）、MACD 快线在 0 附近往上穿过慢线（金叉）、成交量放大几倍、
+  这一周的成交量 W2、离之前的最高价多远、不追高的几项（离 20 日均价、RSI、出货日）、比日経强多少；再加业种 / 主题。行情按现在的复权价重算，
   那天的条件不完全成立时注明（复权 / 数据修正 / 参数后来改过）。核心 ETF：闲置资金的方式与牛熊。
-现在趋势如何：收盘对 20 / 60 / 200 日线、20 日线 5 天的斜率、MACD 与信号线、1 / 3 个月涨跌、离持有以来最高、离止损 →
-  一个标签（上升趋势 / 偏强 / 偏弱 / 下降趋势）。标签是均线位置的机械描述，不是预测；卖出仍只按规则（卖出线见买卖时间线）。
+现在趋势如何：收盘比 20 / 60 / 200 日均价高还是低、20 日均价最近 5 天往哪边、MACD 快线在慢线上还是下、1 / 3 个月涨跌、离买入以来的最高价、离止损 →
+  一个标签（上涨中 / 偏强 / 偏弱 / 下跌中）。标签只是按收盘价和均价线的位置分的类，不是预测；卖出仍只按规则（卖出线见买卖时间线）。
 K 线（日K / 周K / 月K + MA5 / 10 / 20 / 30）：qbreak/kline.py（执行器写 out/charts_<账本>.json，操作面板按需取；只在 Mac 本机，不入库）。
 趋势标签的颜色：两边页面都给 pos / neg（绿 / 红）再加 up / down —— 操作面板按同花顺的习惯把 up 画成红、down 画成绿（与 K 线一致）。
+说法（2026-10-07 用户：「K线解释换成通俗易懂的说法 横展开」）：标签与说明都用日常的话（上涨中 / 偏强 / 偏弱 / 下跌中；均线 → 均价）；
+  现在趋势的那句话按存着的数字现算（trend_text），所以执行器以前算的汇总也显示新说法；操作面板、Mac 账本页、云端日报、日志共用。
 """
 from __future__ import annotations
 
@@ -19,13 +21,15 @@ import pandas as pd
 
 from . import paths
 
-TREND = {"up": "上升趋势", "strong": "偏强", "weak": "偏弱", "down": "下降趋势", "na": "数据不够"}
+TREND = {"up": "上涨中", "strong": "偏强", "weak": "偏弱", "down": "下跌中", "na": "数据不够"}
 EXIT_TEXT = {"stop": "止损", "gap_stop": "跳空止损", "trail": "跟踪止损", "take_profit": "止盈", "dead_cross": "MACD 死叉",
              "climax": "放量阴线", "max_hold": "持有到期", "time_stop": "时间止损", "chandelier": "吊灯止损 X6", "sar_flip": "SAR 翻转",
              "manual": "手动卖出", "manual_trim": "手动减仓"}             # 排在下一开盘卖出的理由（页面上显示中文）
-TREND_NOTE = {"up": "收盘在 20 日线上、20 日线在 60 日线上、20 日线向上", "strong": "收盘在 20 日线上（均线还没排成上升）",
-              "weak": "收盘跌破 20 日线（均线还没排成下降）", "down": "收盘在 20 日线下、20 日线在 60 日线下、20 日线向下",
-              "na": "K 线不到 60 根"}
+TREND_NOTE = {"up": "收盘价高于 20 日均价，20 日均价也高于 60 日均价、而且还在往上",
+              "strong": "收盘价高于 20 日均价，但均价还没排成上涨的样子",
+              "weak": "收盘价跌到 20 日均价下面，但均价还没排成下跌的样子",
+              "down": "收盘价低于 20 日均价，20 日均价也低于 60 日均价、而且还在往下",
+              "na": "K 线不到 60 根，看不出来"}
 
 
 def _f(x) -> float | None:
@@ -88,39 +92,41 @@ def why_items(df: pd.DataFrame, entry_date, p) -> dict:
         items.append({"key": key, "text": text, "ok": ok})
     rg = _f(prev.get("range_pct")) if prev is not None else None             # 横盘用「昨天为止」的振幅（与规则相同）
     if rg is not None:
-        add("range", f"横盘：之前 {p.range_n} 天的振幅 {rg:.1f}%（规则 < {p.range_x_pct:g}%）", rg < p.range_x_pct)
+        add("range", f"横着走：之前 {p.range_n} 天最高价和最低价只差 {rg:.1f}%（规则要 < {p.range_x_pct:g}%）", rg < p.range_x_pct)
     m, gc = _f(r.get("macd")), bool(r.get("golden_cross"))
     if m is not None and c:
         z = abs(m) / c * 100
-        add("macd", f"MACD {'金叉' if gc else '没有金叉'}，在 0 轴附近（|MACD| = 股价的 {z:.2f}%，规则 < {p.macd_zero_band_pct:g}%）",
-            gc and z < p.macd_zero_band_pct)
+        add("macd", f"MACD：{'快线在 0 附近往上穿过慢线（金叉）' if gc else '快线没有往上穿过慢线（没有金叉）'}"
+                    f"（离 0 = 股价的 {z:.2f}%，规则要 < {p.macd_zero_band_pct:g}%）", gc and z < p.macd_zero_band_pct)
     vr = _f(r.get("vol_ratio"))
     if vr is not None:
-        add("volume", f"放量：成交量是 {p.vol_ma_n} 日平均的 {vr:.2f} 倍（规则 > {p.vol_mult:g} 倍）", vr > p.vol_mult)
+        add("volume", f"成交量放大：是 {p.vol_ma_n} 日平均的 {vr:.2f} 倍（规则要 > {p.vol_mult:g} 倍）", vr > p.vol_mult)
     w = _f(r.get("w5v"))
     if w is not None and getattr(p, "min_weekly_vol_ratio", 0):
-        add("w2", f"周线量比 W2 {w:.2f}（最近完成的一周 ÷ 前 10 周平均，规则 ≥ {p.min_weekly_vol_ratio:g}）", w >= p.min_weekly_vol_ratio)
+        add("w2", f"这一周的成交量（W2）：最近完成的一周是前 10 周平均的 {w:.2f} 倍（规则要 ≥ {p.min_weekly_vol_ratio:g}）",
+            w >= p.min_weekly_vol_ratio)
     bt = _f(r.get("box_top"))
     if bt and c:
-        add("box", f"收盘 {_px(c)}，前 {p.range_n} 天最高 {_px(bt)}（{(c / bt - 1) * 100:+.1f}%"
-                   + ("；规则要突破" if p.require_breakout else "；规则不要求突破，只作参考") + "）",
+        add("box", f"收盘 {_px(c)}，之前 {p.range_n} 天的最高价 {_px(bt)}（{(c / bt - 1) * 100:+.1f}%"
+                   + ("；规则要收盘冲过它" if p.require_breakout else "；规则不要求冲过它，只作参考") + "）",
             (c > bt * (1 + p.breakout_buffer_pct / 100)) if p.require_breakout else None)
     ext = _f(r.get("ext_ma20_pct"))
     if ext is not None and p.max_ext_ma20_pct:
-        add("ext", f"离 20 日线 {ext:+.1f}%（不追高：规则 ≤ {p.max_ext_ma20_pct:g}%）", ext <= p.max_ext_ma20_pct)
+        add("ext", f"比 20 日均价 {ext:+.1f}%（不追高：规则要 ≤ {p.max_ext_ma20_pct:g}%）", ext <= p.max_ext_ma20_pct)
     rs = _f(r.get("rsi"))
     if rs is not None and p.max_rsi:
-        add("rsi", f"RSI {rs:.0f}（规则 ≤ {p.max_rsi:g}）", rs <= p.max_rsi)
+        add("rsi", f"RSI {rs:.0f}（涨得急不急；规则要 ≤ {p.max_rsi:g}）", rs <= p.max_rsi)
     dd = _f(r.get("dist_days"))
     if dd is not None and p.max_distribution_days:
-        add("dist", f"之前 {p.distribution_lookback} 天里出货日 {dd:.0f} 天（规则 < {p.max_distribution_days:g}）", dd < p.max_distribution_days)
+        add("dist", f"之前 {p.distribution_lookback} 天里放量下跌的日子（出货日）{dd:.0f} 天（规则要 < {p.max_distribution_days:g}）",
+            dd < p.max_distribution_days)
     rsp = _f(r.get("rs_pct"))
     if rsp is not None:
-        add("rs", f"{p.rs_n} 日相对日経 {rsp:+.1f} pt" + (f"（规则 ≥ {p.min_rs_pct:g}）" if p.min_rs_pct > -900 else "（只作参考）"),
+        add("rs", f"最近 {p.rs_n} 天比日経平均 {rsp:+.1f} pt" + (f"（规则要 ≥ {p.min_rs_pct:g}）" if p.min_rs_pct > -900 else "（只作参考）"),
             (rsp >= p.min_rs_pct) if p.min_rs_pct > -900 else None)
     sig = bool(r.get("entry")) if "entry" in r.index else None
     return {"signal_date": str(d.date()), "items": items, "ok": sig, "close": c, "vol_ratio": vr, "range_pct": rg,
-            "golden_cross": gc, "w5v": w, "range_n": p.range_n}
+            "golden_cross": gc, "w5v": w, "range_n": p.range_n, "vol_n": p.vol_ma_n}
 
 
 def trend(df: pd.DataFrame, entry_px=None, peak=None, stop_px=None) -> dict:
@@ -155,19 +161,44 @@ def trend(df: pd.DataFrame, entry_px=None, peak=None, stop_px=None) -> dict:
         out["from_peak_pct"] = (last / float(peak) - 1) * 100
     if _f(stop_px):
         out["to_stop_pct"] = (float(stop_px) / last - 1) * 100
-    parts = [f"收盘 {_px(last)}：20 日线 {_px(m20)}（{out['vs20_pct']:+.1f}%）、60 日线 {_px(m60)}（{out['vs60_pct']:+.1f}%）"
-             + (f"、200 日线 {_px(m200)}（{out['vs200_pct']:+.1f}%）" if m200 else ""),
-             f"20 日线 5 天 {slope:+.1f}%"]
-    if "macd_above" in out:
-        parts.append(f"MACD 在信号线{'上' if out['macd_above'] else '下'}、差距在{'变大' if out['macd_widening'] else '变小'}")
-    if out.get("r1m_pct") is not None:
-        parts.append(f"1 个月 {out['r1m_pct']:+.1f}%" + (f"、3 个月 {out['r3m_pct']:+.1f}%" if out.get("r3m_pct") is not None else ""))
-    if out.get("from_peak_pct") is not None:
-        parts.append(f"离持有以来最高 {out['from_peak_pct']:+.1f}%")
-    if out.get("to_stop_pct") is not None:
-        parts.append(f"止损线在 {out['to_stop_pct']:+.1f}%")
-    out["text"] = "；".join(parts)
+    out["text"] = trend_text(out)
     return out
+
+
+def _hl(x, up: str = "高", down: str = "低") -> str:
+    """+3.2 → 「高 3.2%」、-1.0 → 「低 1.0%」、差不多 0 → 「差不多」。"""
+    return "差不多" if abs(x) < 0.05 else f"{up if x > 0 else down} {abs(x):.1f}%"
+
+
+def trend_text(tr: dict | None) -> str:
+    """现在趋势的通俗说法：按存着的数字现算（旧的汇总也显示新说法）；没有数字 → 存着的 text（再没有 → 空）。"""
+    tr = tr or {}
+    c, v20 = _f(tr.get("close")), _f(tr.get("vs20_pct"))
+    if c is None or v20 is None:
+        return str(tr.get("text") or "")
+    head = f"收盘 {_px(c)}：比 20 日均价{_hl(v20)}"
+    if _f(tr.get("vs60_pct")) is not None:
+        head += f"、比 60 日均价{_hl(_f(tr['vs60_pct']))}"
+    if _f(tr.get("vs200_pct")) is not None:
+        head += f"、比 200 日均价{_hl(_f(tr['vs200_pct']))}"
+    parts = [head]
+    s = _f(tr.get("slope20_pct"))
+    if s is not None:
+        parts.append("20 日均价最近 5 天" + ("基本没动" if abs(s) < 0.05 else f"往{'上' if s > 0 else '下'} {abs(s):.1f}%"))
+    if "macd_above" in tr:
+        parts.append("MACD：" + ("上涨的力量占上风" if tr["macd_above"] else "下跌的力量占上风")
+                     + ("，而且在变强" if tr.get("macd_widening") else "，但在变弱"))
+    r1, r3 = _f(tr.get("r1m_pct")), _f(tr.get("r3m_pct"))
+    if r1 is not None:
+        parts.append(f"最近 1 个月{_hl(r1, '涨', '跌').replace('差不多', '基本没动')}"
+                     + (f"、3 个月{_hl(r3, '涨', '跌').replace('差不多', '基本没动')}" if r3 is not None else ""))
+    fp = _f(tr.get("from_peak_pct"))
+    if fp is not None:
+        parts.append("现在就是买入以来的最高价" if fp > -0.05 else f"比买入以来的最高价低 {abs(fp):.1f}%")
+    ts = _f(tr.get("to_stop_pct"))
+    if ts is not None:
+        parts.append(f"再跌 {abs(ts):.1f}% 就碰到止损线（碰到就按规则卖）" if ts < 0 else "已经在止损线下面（按规则会卖）")
+    return "；".join(parts)
 
 
 def _pos_dict(p) -> dict:
@@ -243,13 +274,15 @@ def why_line(row: dict) -> str:
         return "找不到买入信号那天的 K 线"
     bits = []
     if w.get("range_pct") is not None:
-        bits.append(f"横盘 {w.get('range_n', 60)} 天（振幅 {w['range_pct']:.1f}%）之后")
-    bits.append("MACD 在 0 轴附近金叉" if w.get("golden_cross") else "MACD 没有金叉")
+        bits.append(f"之前 {w.get('range_n', 60)} 天横着走（最高价和最低价只差 {w['range_pct']:.1f}%）")
+    bits.append("MACD 快线在 0 附近往上穿过慢线（金叉）" if w.get("golden_cross") else "MACD 没有金叉")
     if w.get("vol_ratio") is not None:
-        bits.append(f"放量 {w['vol_ratio']:.2f} 倍" + (f"（周线量比 {w['w5v']:.2f}）" if w.get("w5v") is not None else ""))
-    s = f"{w['signal_date']} 收盘：" + "、".join(bits) + f" → {row.get('entry_date') or '—'} 开盘买入 @ {_px(row.get('entry_px'))}"
+        bits.append(f"成交量放大到 {w.get('vol_n', 20)} 日平均的 {w['vol_ratio']:.2f} 倍"
+                    + (f"（这一周是前 10 周平均的 {w['w5v']:.2f} 倍）" if w.get("w5v") is not None else ""))
+    s = (f"{w['signal_date']} 收盘出了买入信号：" + "，".join(bits)
+         + f"，{row.get('entry_date') or '—'} 开盘买入，价格 {_px(row.get('entry_px'))}")
     if w.get("ok") is False:
-        s += "（按现在的复权行情重算，那天的条件不完全成立：复权 / 数据修正 / 参数后来改过）"
+        s += "（用现在的行情重算，那天的条件不完全成立：可能是拆股 / 分红调整了以前的价格、数据后来修正过，或规则的参数后来改过）"
     return s
 
 
@@ -264,11 +297,11 @@ def lines(hv: dict | None) -> list[str]:
         tr = r.get("trend") or {}
         out.append(f"- {head} 为什么持有：{why_line(r)}" + (f"；{r['s33']}" if r.get("s33") else "")
                    + (f"；主题 {r['theme']}" if r.get("theme") else ""))
-        out.append(f"- {head} 现在：{TREND.get(tr.get('label'), '—')}（{tr.get('text') or '—'}）")
+        out.append(f"- {head} 现在：{TREND.get(tr.get('label'), '—')}（{trend_text(tr) or '—'}）")
     for r in (hv or {}).get("core") or []:
         tr = r.get("trend") or {}
         out.append(f"- {r['name']} {r['units']:,} 口 为什么持有：{r['why']}；现在：{TREND.get(tr.get('label'), '—')}"
-                   + (f"（{tr.get('text')}）" if tr.get("text") else ""))
+                   + (f"（{trend_text(tr)}）" if trend_text(tr) else ""))
     return out
 
 
@@ -278,7 +311,7 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
     hv = hv or {}
     hs, cs = hv.get("holdings") or [], hv.get("core") or []
     H = [f"<h2>{escape(title)}</h2><div class='muted'>按 {escape(str(hv.get('bar_date') or '—'))} 收盘；只展示，不改交易。"
-         "趋势标签是均线位置的机械描述（上升趋势 / 偏强 / 偏弱 / 下降趋势），不是预测；卖出仍只按规则（卖出线见买卖时间线）。</div>"
+         "「上涨中 / 偏强 / 偏弱 / 下跌中」只是按收盘价和几条均价线的位置分的类，不是预测；卖不卖仍只按规则（卖出的价位见买卖时间线）。</div>"
          + toolbar]
     if not hs and not cs:
         H.append("<div class='muted'>没有持仓</div>")
@@ -303,7 +336,7 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
                  + (f"<details><summary class='muted'>买入那天的规则读数</summary><ul>{items}</ul></details>" if items else "")
                  + f"<div><b>现在</b>：<b class='{cls}'>{escape(TREND.get(lab, '—'))}</b>"
                  + (f" <span class='{'pos up' if ret >= 0 else 'neg down'}'>{'浮盈' if ret >= 0 else '浮亏'} {ret:+.1f}%</span>" if ret is not None else "")
-                 + f" <span class='muted'>（{escape(TREND_NOTE.get(lab, ''))}）</span><br><span class='muted'>{escape(tr.get('text') or '')}</span></div>"
+                 + f" <span class='muted'>（{escape(TREND_NOTE.get(lab, ''))}）</span><br><span class='muted'>{escape(trend_text(tr))}</span></div>"
                  + (actions(r, "stock") if actions else "") + "</div>")
     for r in cs:
         tr = r.get("trend") or {}
@@ -312,7 +345,7 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
         H.append(f"<div class='hv'><b>{escape(r['name'])}</b> <span class='muted'>{r['units']:,} 口"
                  + (f" · 约占权益 {r['pct_equity']:.1f}%" if r.get("pct_equity") is not None else "") + " · 核心 ETF（闲置资金）</span>"
                  f"<div><b>为什么持有</b>：{escape(r['why'])}</div>"
-                 + (f"<div><b>现在</b>：<b class='{cls}'>{escape(TREND.get(lab, '—'))}</b> <span class='muted'>{escape(tr.get('text') or '')}</span></div>"
+                 + (f"<div><b>现在</b>：<b class='{cls}'>{escape(TREND.get(lab, '—'))}</b> <span class='muted'>{escape(trend_text(tr))}</span></div>"
                     if tr else "")
                  + (actions(r, "core") if actions else "") + "</div>")
     H.append("<div class='muted'>非投资建议。</div>")
@@ -321,4 +354,4 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
 
 CSS = ".hv{border-top:1px solid var(--line);padding:8px 0}.hv:first-of-type{border-top:0}.hv ul{margin:4px 0 4px;padding-left:18px}"
 
-__all__ = ["build", "why_items", "trend", "why_line", "lines", "html", "names", "TREND", "EXIT_TEXT", "CSS"]
+__all__ = ["build", "why_items", "trend", "trend_text", "why_line", "lines", "html", "names", "TREND", "TREND_NOTE", "EXIT_TEXT", "CSS"]

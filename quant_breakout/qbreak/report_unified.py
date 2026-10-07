@@ -985,8 +985,8 @@ def _positions_block(d: dict, closes: dict) -> str:
 
 
 def _hv_lines(r: dict | None) -> str:
-    """持仓仪表里每只票下面两行：为什么持有（买入信号那天的规则读数）· 现在趋势如何（均线 / MACD 的机械描述，不是预测）。"""
-    from .holding_view import TREND, why_line
+    """持仓仪表里每只票下面两行：为什么持有（买入信号那天的规则读数）· 现在趋势如何（均价线 / MACD 的通俗描述，不是预测）。"""
+    from .holding_view import TREND, trend_text, why_line
     if not r:
         return ""
     if r.get("error"):
@@ -996,7 +996,7 @@ def _hv_lines(r: dict | None) -> str:
     st = {"up": "good", "strong": "info", "weak": "warn", "down": "serious"}.get(lab, "na")
     tag = "".join(f" · {escape(str(r[k]))}" for k in ("s33", "theme") if r.get(k))
     return (f'<div class="small"><b>为什么持有</b>：{escape(why_line(r))}<span class="muted">{tag}</span></div>'
-            f'<div class="small"><b>现在</b>：{_chip(st, TREND.get(lab, "—"))} <span class="muted">{escape(str(tr.get("text") or ""))}</span></div>')
+            f'<div class="small"><b>现在</b>：{_chip(st, TREND.get(lab, "—"))} <span class="muted">{escape(trend_text(tr))}</span></div>')
 
 
 _SLOT_FILL = ("var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)")
@@ -1040,10 +1040,10 @@ def _allocation_block(d: dict, closes: dict, core_rows: str) -> str:
     tot = sum(v for _, v, _ in slices)
     leg = "".join(f'<li><span class="sw" style="background:{fill}"></span>{escape(n)} <b>{_money(v)}</b> <span class="muted">{(v / tot * 100 if tot else 0):.0f}%</span></li>'
                   for n, v, fill in slices if v > 0)
-    from .holding_view import TREND
+    from .holding_view import TREND, trend_text
     why = "".join(f'<div class="small"><b>{escape(str(r.get("name") or r.get("ticker")))} 为什么持有</b>：{escape(str(r.get("why") or ""))}'
                   + (f'；现在 {escape(TREND.get((r.get("trend") or {}).get("label"), "—"))}'
-                     f'<span class="muted">（{escape(str((r.get("trend") or {}).get("text") or ""))}）</span>' if r.get("trend") else "")
+                     f'<span class="muted">（{escape(trend_text(r.get("trend")))}）</span>' if r.get("trend") else "")
                   + "</div>" for r in ((d.get("holding_view") or {}).get("core") or []))
     return (f'<section class="card top"><h2>④ 资产构成与核心 ETF（闲置资金）</h2><div class="alloc">{_donut(slices)}<ul class="legend">{leg}</ul></div>'
             f'{why}<div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core_rows}</table></div></section>')

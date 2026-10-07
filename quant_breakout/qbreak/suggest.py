@@ -22,7 +22,8 @@ from .calendar_jp import next_trading_day
 from .tick import round_to_tick
 from .unified import market_of
 
-STATUS = {"triggered": "今天收盘出了买入信号", "imminent": "即将触发", "watch": "观察中（横盘 + MACD 0 轴附近）"}
+STATUS = {"triggered": "今天收盘出了买入信号", "imminent": "快要出买入信号（MACD 快要金叉、成交量不低）",
+          "watch": "观察中（横着走、MACD 在 0 附近）"}                    # 2026-10-07：通俗说法（页面、日志）
 RULE = {"planned": "规则已安排买入", "manual": "手动买入已安排", "blocked": "信号成立但规则不买", "none": "还没触发：规则不会买"}
 MAX_ROWS = 12
 N_WATCH = 6
@@ -149,13 +150,13 @@ def build(ind: dict, eng, i: int, params, pool: list[str] | None = None, names: 
 
 
 def lines(sg: dict | None) -> list[str]:
-    """日志用：建议的股票（今天出了买入信号的 + 即将触发的）一行一只。"""
+    """日志用：建议的股票（今天出了买入信号的 + 快要出信号的）一行一只（说法按 STATUS，旧的汇总也是新说法）。"""
     out = []
     for r in (sg or {}).get("rows") or []:
         if r.get("status") not in ("triggered", "imminent"):
             continue
         nm = f" {r['name']}" if r.get("name") else ""
-        out.append(f"- 候选 {r['ticker']}{nm}：{r.get('status_text')}；{(r.get('rule') or {}).get('text') or ''}")
+        out.append(f"- 候选 {r['ticker']}{nm}：{STATUS.get(str(r.get('status')), r.get('status_text'))}；{(r.get('rule') or {}).get('text') or ''}")
     return out
 
 
