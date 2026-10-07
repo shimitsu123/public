@@ -14490,5 +14490,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "页面的现价（Yahoo 约晚 20 分钟）只用来看和估算；立花的单按下单那一刻的实时现价；估算的 ETF 规则目标在下一次决策换成准确的数；建议股票的现价接口只接受汇总里列着的票"
+ },
+ {
+  "line": 10327,
+  "date": "2026-10-07",
+  "title": "ETF 卡片「什么时候会自动卖」+ 离触发还有多远：最上面三格（离转熊线 %、已确认 n / 5 天、转熊后 现金 / 1482）+ 全部卖 / 卖完去哪 / 部分卖（买新个股钱不够）/ 不会因为什么卖；执行器汇总加新仓倍数 new_pos（Mac + 手机）",
+  "kind": "engineering",
+  "domain": "数据/工程",
+  "registration": "—",
+  "script": "qbreak/core_exit.py（build / market_row / market_tiles / partial_row / lines）、qbreak/panel.py（_exit_html、ETF 卡片按钮下面、CSS .axb / .axt / .dots）、run.py（_new_pos_brief → 汇总 new_pos）、qbreak/holding_view.py（核心 ETF「为什么持有」改正：不留 2% 现金）",
+  "output": "—（页面与文字；out/live_unified_<账本>.json 的 new_pos）",
+  "candidates": [],
+  "baseline": "—（不改规则 / 参数 / 仓位 / 股票池 / 执行器的下单逻辑；只把 _decide_core 的卖出条件写出来、填上执行器算好的数字）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "2026-10-07 读数：S&P500 7,818.93 pt、转熊线 6,927.72 pt（−11.4%）、确认 0 / 5 天；股债 63 天相关 +0.404 → 现在转熊就留现金；日本新仓倍数 0（风险报告「避险」）→ 暂时不会为买个股卖 ETF；标红的界线（离线 < 3%、股债相关 ≥ −0.1）只是页面提示，不是规则"
  }
 ]

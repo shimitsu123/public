@@ -168,6 +168,18 @@
     日経225 2006〜2026、三层收缩）→ 以前的远近排；每只写第几 +「之后 10 个交易日内出买入信号：历史上约 X%（同样情况 N 次）」，快要出的另有标记。
     留出期 2020〜2026：排序和以前一样准（一致率 0.667 vs 0.669）、比例准（平均误差 0.92 pp）；比例都很低（平均约 2〜3%，最高的情况约 9%）—— 只是排序与展示，
     出了信号还要过闸门 / 名额才会买；比例表固定（要更新另行登记）。
+- **ETF 卡片「什么时候会自动卖」+ 离触发还有多远（2026-10-07 用户：「现在成交的etf在什么情况下会自动卖出」→「把「自动卖出条件 + 离触发还有多远」
+  （离转熊线 −11.4%、确认 0/5 天、转熊后去现金还是 1482）直接显示在面板的 ETF 卡片上，Mac 和手机都能看到」；工程，只展示，不改规则 / 参数 / 仓位 / 股票池；
+  sim_changes 同日一节）**：操作面板（Mac 与手机同一个页面）拿着的核心 ETF 的按钮下面、K 线上面多一块（`qbreak/core_exit.py`）——
+  - 最上面三格：**离转熊线 %**（S&P500 现价 → 转熊线）、**已确认 n / 5 天**（圆点）、**转熊后**（现金 / 换 1482，附股债相关）；拿着 1482 时 = 离转牛线、已确认、股债 63 天相关。
+    快要触发（离线不到 3%、已经在线下确认中、股债相关 ≥ −0.1）或已经触发 → 标红；已转熊 → 「已转熊 / 下一个开盘 全部卖」。
+  - 下面几行：全部卖（S&P500 连续 5 天收在 250 日均价 ×0.97 下 → 下一个开盘寄付成行全部卖；线每天跟着均价动）、卖完去哪（Q1B：那时股债 63 天负相关 → 对冲版美债 1482，
+    否则现金；之后转回牛市再买回 1545）、部分卖（规则买新的日本个股、现金不够 → 同一个开盘先卖它补足 =（权益 × 25% × 新仓倍数 − 现金）× 1.03，现在约 1,060 口；
+    新仓倍数 0 / 个股满 4 只 / 现金够 → 不会；规则已排的写「MM/DD 开盘卖 N 口」）、不会因为（它自己跌 = 没有止损、纳指单独跌、汇率、风险报告「避险」/ 威胁指数）；
+    「时间线与历史」：翻转那天几点决策几点卖、2006 年以来中位数约 40 个交易日才判熊 / 误报 5 次、再平衡带 10%、手动操作也会卖。
+  - 数字 = 执行器早上的汇总（`out/live_unified_<账本>.json` 的 `market`（牛熊读数）/ `idle_cash`（方式与股债相关）/ 新加的 `new_pos`（新仓倍数与压住它的层、仓位、
+    跳空上限、再平衡带；run.py `_new_pos_brief`））；旧的汇总没有 `new_pos` → 部分卖写「下一次运行之后显示」；算不了 → 这一块不显示、按钮照旧。
+  - 顺带改正「为什么持有」里核心 ETF 的「留 2% 现金」→「只剩不够一个单元的零头现金」（统一引擎 core_buffer_pct = 0）。
 - **手机上操作（2026-10-06 用户：「做一个可以在手机上操作的页面」；工程，不改规则；sim_changes 同日一节）**：
   操作面板除了本机 127.0.0.1:8765 另开手机端口 127.0.0.1:8766；`bash scripts/liveu.sh phone on` 用 Tailscale Serve 把它放到
   `https://<Mac 的机器名>.<tailnet>.ts.net/`（只有你 tailnet 里的设备能连，HTTPS 证书自动；**绝不用 Funnel**）。
@@ -1021,6 +1033,8 @@
   下单按什么价 `manual_orders.order_basis` / 晚了几分钟的范围 `delay_range`（面板 `_dvol` / `_delay_min`）；建议的股票的现价 `quotes_json(…, extra=…)`（`/api/quotes?t=`，
   `SG_MAX` 只、只接受汇总里的）+ K 线并进今天这一根（`chart_json` 的 `_suggested`）；ETF 的规则目标估算 `manual_orders.core_u100s` / `core_u100_est`（执行器 `_core_pending` /
   `now_phase` 同一个）；测试 `tests/test_panel_suggest_live.py`；
+  ETF 卡片「什么时候会自动卖」：`qbreak/core_exit.py`（`build` / `market_row` / `market_tiles` / `partial_row`；面板 `_exit_html`；数字 = 执行器汇总的 `market` / `idle_cash` /
+  `new_pos` ← run.py `_new_pos_brief`；测试 `tests/test_core_exit.py`）；
   持有理由与趋势：`qbreak/holding_view.py`；测试 `tests/test_manual_adjust.py`、`tests/test_manual_buy.py`、`tests/test_suggest.py`、`tests/test_kline.py`、
   `tests/test_manual_core.py`、`tests/test_core_pause.py`（停买 / 买入信号 / 确认买入）、`tests/test_panel_quotes.py`（现价）、
   `tests/test_kline_live.py`（K 线盘中的一根）、`tests/test_sell_estimate.py`（卖出的预计收益）
@@ -1163,6 +1177,7 @@
 | 下单按什么价（现价晚 20 分钟怎么办） | 「页面的价晚了 20 分钟，卖的时候按什么价」「立花按什么价下单」「现在点卖会按多少成交」 | 操作面板每只持仓下面的「下单：…」一行；对话里：`curl -s "http://127.0.0.1:8765/api/quotes?book=paper"` 的 `basis.SELL` / `basis.BUY`（立花 `book=tachibana`） | 页面的现价（Yahoo）只用来看和估算；立花盘中按下单那一刻的实时现价挂限价（卖 −0.5%、买 +0.5% 且 ≤ 收盘 ×1.03）；模拟账户按 Yahoo 现价；盘外按开盘价。不承诺成交价 |
 | 建议的股票现在多少钱 / 现在买的价 | 「8035 现在多少钱」「现在买 6501 大概多少」「建议的股票的实时 K 线」 | 操作面板「建议的股票」那只的「K 线 · 现价」打开（快要出 / 出了信号的默认开着）；对话里：`curl -s "http://127.0.0.1:8765/api/quotes?book=paper&t=8035.T"` 的 `rows.<票>.buy`（lim = 现在买的限价、cap = 收盘 ×1.03、over = 现价已超过上限） | 只接受「建议的股票」里列着的票；规则的上限不是建议；买不买是用户自己的决定（Claude 不主动建议买哪只） |
 | 观察中哪只最可能先出买入信号 | 「观察中哪只最可能买」「排第一的是什么意思」 | 操作面板「观察中 · N 只（按出买入信号的可能性排）」：第几 + 历史比例（`var/watch_prob.json`，研究 `var/out/watch_prob_study.md`） | 历史比例都很低（平均约 2〜3%，最高约 9%）；出了信号还要过闸门 / 名额；只是排序与展示，不是预测、也不是建议 |
+| 闲置资金 ETF 什么时候会自动卖 | 「1545 什么时候会自动卖」「离转熊还有多远」「转熊后去现金还是 1482」 | 操作面板 ETF 卡片「什么时候会自动卖」：最上面三格（离转熊线 %、已确认 n / 5 天、转熊后 现金 / 1482）+ 全部卖 / 卖完去哪 / 部分卖 / 不会因为；对话里读 `~/.qbreak/home/out/live_unified_paper.json` 的 `market.US`（`to_flip_pct` / `confirm_days` / `flip_line`）、`idle_cash.bond_refuge`（`corr` / `on`）、`new_pos`（立花 `live_unified_tachibana.json`） | 只展示、按最近收盘（执行器早上 07:40 算）；规则只在 S&P500 连续 5 天收在 250 日均价 ×0.97 下时全部卖、没有止损；买新个股钱不够时部分卖；不借此建议卖或不卖 |
 | 看 / 撤回手动指令 | 「手动指令处理了吗？」「撤回刚才的卖出」「7203 解除不买回」 | `bash scripts/liveu.sh manual list`；`manual cancel <指令 id>`；`manual unblock 7203` | 已经发到交易所的那一笔要在立花网站 / App 上撤；撤回只保证「之后不再重下」 |
 | 操作面板 | 「打开操作面板」 | `open "http://127.0.0.1:8765/?book=paper"`（立花 `?book=tachibana`）；打不开 → `launchctl list \| grep qbreak.panel`，没有就 `bash scripts/install_launchd_panel.sh` | 只在这台 Mac 上；按钮只写指令 |
 | 手机上操作（一条命令全部做完） | 「拉代码，手机操作全部执行」「打开手机操作」「手机上怎么用」 | `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone node`（拉代码 → 依赖与全部定时任务 → 重启操作面板 → Tailscale Serve 打开手机访问 → 在 Mac 上打开面板的「手机」）。`node` = 用户 2026-10-06 确认可以写进公开证书日志的 Tailscale 机器名：只有这台 Mac 的机器名正好是 node 才打开；名字不一样（退出码 3）→ 把显示的机器名告诉用户、用户同意后换成那个名字再运行；HTTPS 没开（退出码 4，已在浏览器里打开 Tailscale 管理页）→ 请用户点 Enable HTTPS 后再运行一次。打开之后：iPhone 的 Tailscale App 用和 Mac 同一个账户登录、Safari 打开手机地址就能用（2026-10-07 起按 Tailscale 账户登录，不用配对）；别的账户 / 带 tag 的设备才要请用户自己在 Mac 屏幕上点「生成配对码」、用相机扫码 | 只用 Tailscale Serve（只在用户自己的 tailnet），绝不用 Funnel；配对码只显示在 Mac 屏幕上：Claude 不调配对接口、不读、不在对话里写 |

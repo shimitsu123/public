@@ -47,6 +47,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from . import core_exit as CX
 from . import kline as KL
 from . import manual_orders as MO
 from . import panel_phone as PP
@@ -66,7 +67,8 @@ TRIGGER_FROM, TRIGGER_UNTIL = dt.time(7, 45), dt.time(8, 50)
 TRIGGER_GAP_S = 180                     # 开盘前的重试：同一个账本最多 3 分钟一次
 NOW_GAP_S = 60                          # 盘中（--phase now）：同一个账本最多 1 分钟一次
 TOKEN_FILE = "panel_token"
-WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "holding_view.py", "kline.py", "suggest.py")
+WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "holding_view.py", "kline.py", "suggest.py", "watch_prob.py", "core_exit.py",
+         "idle_cash.py")
 
 
 def token() -> str:
@@ -208,6 +210,21 @@ details.khelp ul{margin:4px 0;padding-left:18px;font-size:13px;line-height:1.55;
 .rk{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 6px;border-radius:999px;background:var(--chip);font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
 .prob{margin:2px 0}.prob b{font-variant-numeric:tabular-nums}
 .qt .sellx{margin-top:2px}.qt[data-sq]{margin:4px 0}
+.axb{margin:10px 0 0;padding:8px 12px 4px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}.axb.hot{border-color:var(--neg)}
+.axh{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 10px;padding-bottom:4px}
+.axr{display:grid;grid-template-columns:4.4em minmax(0,1fr);gap:0 10px;padding:6px 0;border-top:1px solid var(--line)}
+.axk{font-size:13px;color:var(--muted);line-height:1.75}.axv{min-width:0;font-size:15px;line-height:1.5}
+.axm{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px}.axm .chip{font-variant-numeric:tabular-nums}
+.chip.bad{background:transparent;box-shadow:inset 0 0 0 1px var(--neg);color:var(--neg);font-weight:600}
+.dots{display:inline-flex;gap:3px;margin-right:6px;vertical-align:1px}
+.dots i{width:8px;height:8px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--muted)}.dots i.on{background:var(--neg);box-shadow:none}
+.axn{padding:6px 0 2px;border-top:1px solid var(--line)}
+.axd>summary{font-size:13px}.axd ul{margin:2px 0 6px;padding-left:18px;font-size:13px;line-height:1.55;color:var(--muted)}
+.axt{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px;margin:2px 0 8px}
+.axt>div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 8px 5px;min-width:0}
+.axt .l{font-size:12px;color:var(--muted);line-height:1.4}.axt .s{font-size:12px;color:var(--muted);line-height:1.4;overflow-wrap:anywhere}
+.axt .v{font-size:19px;font-weight:700;line-height:1.3;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.axt .bad{border-color:var(--neg)}.axt .bad .v{color:var(--neg)}
 .pl{margin:10px 0;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:14px;line-height:1.55;
 white-space:normal;font-variant-numeric:tabular-nums}.pl .up{color:var(--up)}.pl .down{color:var(--down)}.pl .muted{font-size:13px}
 .chart .live{stroke-dasharray:3 2}.chart .lv{font-size:10px;fill:var(--fg);paint-order:stroke;stroke:var(--card);stroke-width:3px;stroke-linejoin:round}
@@ -1270,6 +1287,40 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
     return "".join(H)
 
 
+def _exit_html(info: dict | None) -> str:
+    """拿着的核心 ETF「什么时候会自动卖」（qbreak/core_exit.py 的结果 → HTML）：全部卖的条件与离触发还有多远（离转熊线、确认几天）、
+    卖完去哪（现金 / 对冲版美债 1482）、部分卖（买新个股钱不够时）、不会因为什么卖；时间线与历史收在「时间线与历史」里。"""
+    if not info:
+        return ""
+
+    def dots(d) -> str:
+        if not d:
+            return ""
+        n, k = (int(x) for x in d)
+        return "<span class='dots' aria-hidden='true'>" + "".join(f"<i class='{'on' if i < n else ''}'></i>" for i in range(k)) + "</span>"
+
+    def chip(c: dict) -> str:
+        tone = {"bad": " bad", "hot": " hot"}.get(str(c.get("tone") or ""), "")
+        return f"<span class='chip{tone}'>{dots(c.get('dots'))}{escape(str(c['text']))}</span>"
+    tiles = "".join(
+        f"<div class='{'bad' if x.get('tone') == 'bad' else ''}'><div class='l'>{escape(str(x['label']))}</div>"
+        f"<div class='v'>{escape(str(x['value']))}</div>"
+        + (f"<div class='s'>{dots(x.get('dots'))}{escape(str(x.get('sub') or ''))}</div>" if x.get("sub") or x.get("dots") else "")
+        + "</div>" for x in info.get("tiles") or [])
+    rows = "".join(
+        f"<div class='axr'><div class='axk'>{escape(str(r['k']))}</div><div class='axv'><div>{escape(str(r['text']))}</div>"
+        + (f"<div class='axm'>{''.join(chip(c) for c in r['chips'])}</div>" if r.get("chips") else "")
+        + (f"<div class='muted small'>{escape(str(r['sub']))}</div>" if r.get("sub") else "") + "</div></div>"
+        for r in info.get("rows") or [])
+    notes = "".join(f"<li>{escape(str(n))}</li>" for n in info.get("notes") or [])
+    return (f"<div class='axb{' hot' if info.get('hot') else ''}' data-exit='{escape(str(info.get('t') or ''))}'>"
+            f"<div class='axh'><b>什么时候会自动卖</b><span class='muted small'>按 {escape(str(info.get('asof_md') or '—'))} 收盘</span></div>"
+            + (f"<div class='axt'>{tiles}</div>" if tiles else "")
+            + f"{rows}<div class='muted small axn'>{escape(str(info.get('never') or ''))}</div>"
+            + (f"<details class='axd'><summary class='muted'>时间线与历史</summary><ul>{notes}</ul></details>" if notes else "")
+            + "</div>")
+
+
 def _buy_price_line(r: dict, fill: str | None = None) -> str:
     """规则的买价一行：出了信号 → 下一个交易日（fill）开盘最高 收盘 ×1.03（寄付指値；开盘价更高就不买）；还没出 → 出信号那天收盘 ×1.03
     （按今天收盘的参考）。盘中现价来了以后，K 线上面那行写「现在买：…」（/api/quotes 的 buy）。只是规则的上限，不是建议。"""
@@ -1359,7 +1410,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     def actions(r: dict, kind: str) -> str:
         t = str(r["ticker"])
         if kind == "core":
-            return tchips(ktrend.get(t)) + _core_actions(r, t) + chart(t, "core")
+            return tchips(ktrend.get(t)) + _core_actions(r, t) + _core_exit(t) + chart(t, "core")
         qt = f"<div class='qt small' data-q='{escape(t)}'></div>" if t in (st.get("pos") or {}) else ""   # 现价（/api/quotes）
         return tchips(ktrend.get(t)) + qt + _actions(r, t)
 
@@ -1397,6 +1448,15 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                 f"<div class='muted small'>现在 {c['cur']:,} 口 · 约 {_yen(c['cur'] * c['px'])} · 约占权益 {share}% · "
                 f"闲置资金比例 {c['pct']:g}%{'（还没照它调完，见「手动指令」）' if core_late else ''}"
                 + ("<br>规则目标额还没算过（执行器下一次决策才算）：100% 先按现在的口数估算" if c.get("approx") else "") + "</div>")
+
+    def _core_exit(t: str) -> str:
+        """拿着的核心 ETF「什么时候会自动卖」+ 离触发还有多远（只展示；数字 = 执行器早上的汇总）。算不了 → 不显示（不影响按钮）。"""
+        try:
+            c = MO.core_info(book, t)
+            return _exit_html(CX.build(t, sm, book, px=c["px"] if c else None, lot=MO.core_lot(book, t)))
+        except Exception as e:                                # noqa: BLE001  展示用：一只算不出不影响页面
+            log.warning("ETF 卡片「什么时候会自动卖」没算成：%s", e)
+            return ""
 
     def _actions(r: dict, t: str) -> str:
         p = (st.get("pos") or {}).get(t)

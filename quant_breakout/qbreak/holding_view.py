@@ -254,7 +254,7 @@ def build(ind: dict, positions: dict, p, *, bar_date=None, pending: dict | None 
 
 def _core_why(t: str, ic: dict, bb: dict) -> str:
     """核心 ETF 为什么持有（一句话）：闲置资金 + 方式 + S&P500 牛熊。"""
-    parts = ["闲置资金（没买个股的钱放这里，留 2% 现金）"]
+    parts = ["闲置资金（没买个股的钱都放这里，只剩不够一个单元的零头现金）"]   # 统一引擎 core_buffer_pct = 0（var/sim.json 没设）
     if ic.get("label") or ic.get("mode"):
         parts.append(f"{ic.get('label') or ic.get('mode')}：现在拿 {ic.get('text') or '—'}")
     if bb.get("state") in ("bull", "bear"):

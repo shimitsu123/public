@@ -1510,6 +1510,31 @@ def _fj_brief(ctx) -> dict:
             "halved": sorted(t for t, v in (pl.get("stocks") or {}).items() if float(v.get("mult", 1.0)) < 1.0), "why": why}
 
 
+def _new_pos_brief(ctx, eng) -> dict:
+    """新仓倍数与仓位（操作面板 ETF 卡片「什么时候会自动卖」的部分卖出用，qbreak/core_exit.py；只展示）：
+    {"markets": {市场: {"mult": 最终倍数, "why": [[压住它的层, 倍数], …]}}, "position_pct", "max_positions", "gap_pct", "band_pct"}。"""
+    try:
+        out = {"markets": {}, "position_pct": float(eng.cfg.position_pct), "max_positions": int(eng.cfg.max_positions),
+               "gap_pct": float(eng.ex["JP"].max_entry_gap_pct), "band_pct": float(eng.cfg.band_pct)}
+        for m, e in (getattr(ctx, "extras", None) or {}).items():
+            rg = (e or {}).get("regime") or {}
+            if rg.get("final_mult") is None:
+                continue
+            fm = float(rg["final_mult"])
+            bb, fj, mc = rg.get("bullbear") or {}, rg.get("fwd_judgment") or {}, (e or {}).get("macro") or {}
+            use_q = REGIME_MODES.get(rg.get("regime_mode") or "quant", REGIME_MODES["quant"])[0]
+            layers = [(f"风险报告「{rg['overlay_action']}」" if rg.get("overlay_action") else None, rg.get("overlay_mult")),
+                      (f"量化层 {rg.get('quant_label')}" if use_q else None, rg.get("quant_mult")),
+                      ("牛熊分界 = 熊" if bb.get("gating") and bb.get("state") == "bear" else None, 0.0),
+                      ("宏观", mc.get("mult")), ("前向记录判断层" if fj.get("applied") else None, fj.get("mult"))]
+            why = [[n, float(v)] for n, v in layers if n and v is not None and float(v) < 1 and float(v) <= fm + 1e-9]
+            out["markets"][m] = {"mult": fm, "why": why}
+        return out
+    except Exception as e:                                   # noqa: BLE001  只展示：算不了不影响交易
+        log.warning("新仓倍数的汇总没算成（不影响交易）：%s", e)
+        return {"error": f"{type(e).__name__}: {e}"[:200]}
+
+
 def _new_bar_idxs(eng, state):
     """还没处理过的完整交易日（日本收盘 + 美股收盘都已知：日本时间 06:30 之后才算前一天完整）。第一次运行只取最新一天。"""
     import datetime as _dt
@@ -3436,6 +3461,7 @@ def _live_unified_body(a) -> int:
                                        blocked_today=[{"date": d_, "ticker": t_, "why": w_} for d_, t_, w_ in eng.gate_log])
     sm["delist"] = getattr(ctx, "delist", None) or {}          # 股票池更新时间表（上場廃止 / 定期入替；到日自动去掉）
     sm["market"] = {m: (e.get("regime") or {}).get("bullbear") for m, e in ctx.extras.items()}   # 牛熊：现在处于哪个阶段（页面 / 日志）
+    sm["new_pos"] = _new_pos_brief(ctx, eng)                # 新仓倍数与仓位：面板 ETF 卡片「什么时候会自动卖」的部分卖出（只展示）
     sm["fwd_judgment"] = _fj_brief(ctx)                     # 前向记录判断层：云端算好的文件今天有没有生效（页面 / 日志）
     from qbreak import combo_c as _CC
     sm["combo_c"] = _CC.brief(ctx.cc, ctx.bar_date, ctx.cc_on)    # 关联搭配 C：云端算好的文件今天有没有生效、跳过了哪些
