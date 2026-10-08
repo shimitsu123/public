@@ -4,6 +4,8 @@
 - 可以指定窗口的终点（探索只跑到 2021-12-31）
 - MixEngine：同一个组合里两种买点用不同的出场 —— 押し目买进的仓位不看日线死叉、满 HOLD_PB 个交易日就在下一交易日开盘卖
   （PB = {票: 押し目信号日的集合}；同一天突破与押し目都有 → 按突破算）
+- MixEngine.CHAND_K_DAY（NKT 研究用，scripts/nkt_study.py；缺省 None = 不变）：{日期: 吊灯倍数上限}，第 i 天收盘的离场判断里持有中的日本个股（非核心）
+  吊灯倍数 = min(这一笔的 k, 当天的值)（as-of 取值 asof_take，不向前填补 NaN；NaN = 不变；只收紧，k = 0 的不加吊灯；值 ≤ 0 → ValueError）
 """
 from __future__ import annotations
 
@@ -24,6 +26,26 @@ import ml_study as MS                                                        # n
 from qbreak import paths                                                     # noqa: E402
 
 TRADE_START = MS.TRADE_START
+
+
+def asof_pos(index, dates) -> np.ndarray:
+    """每个日期 d：index 里 ≤ d 的最后一个位置（没有 → −1）。index 必须递增、不重复（否则 ValueError）。
+    注意：d 在 index 最后一行之后 → 仍是最后一个位置（as-of 的本义）；调用方要用完整索引、之后的日子显式写 NaN。"""
+    ix = pd.DatetimeIndex(index)
+    if not (ix.is_monotonic_increasing and ix.is_unique):
+        raise ValueError("as-of 的索引必须递增、不重复")
+    return np.asarray(ix.searchsorted(pd.DatetimeIndex(dates), side="right"), dtype=np.int64) - 1
+
+
+def asof_take(s: pd.Series, dates) -> np.ndarray:
+    """as-of 取值：≤ d 的最后一行的值原样（那一行是 NaN 就是 NaN —— 不向前填补 NaN）；没有 → NaN。
+    与 qbreak.kline_series.on_days(s, dates, fill=NaN) 逐位相同（tests/test_candle_portfolio_kday.py 核对）。"""
+    pos = asof_pos(s.index, dates)
+    v = np.asarray(s.to_numpy(), dtype=float)
+    out = np.full(len(pos), np.nan)
+    ok = pos >= 0
+    out[ok] = v[pos[ok]]
+    return out
 
 
 class DDBrake:
@@ -71,9 +93,20 @@ class MixEngine(MS.MLEngine):
                                                                              # （第三个研究循环第 9 轮 ECL；挡掉的记在 skipped["entry_gap"]；缺省 None = 不变）
     SECTOR_CAP: dict | None = None                                           # {票: 東証业种}：同业种已经持有（不含明天要卖的）或今天已排 → 这只日本个股不开新仓
                                                                              # （第三个研究循环第 11 轮 SEC；挡掉的记在 skipped["sector_cap"]；缺省 None = 不变）
+    CHAND_K_DAY: pd.Series | None = None                                     # {日期: 吊灯倍数上限}：第 i 天收盘的离场判断里，持有中的日本个股（非核心）
+                                                                             # 吊灯倍数 = min(这笔的 k, 当天的值)（as-of；NaN = 不变；只收紧；k = 0 的不加吊灯）；
+                                                                             # 缺省 None = 不变；只研究用（NKT，scripts/nkt_study.py）
 
     def __init__(self, *a, **k):
+        kd = MixEngine.CHAND_K_DAY
+        if kd is not None:                                                   # 0 / 负数 = 关掉吊灯 = 放宽 → 不允许（NaN / inf 允许）
+            kv = np.asarray(pd.Series(kd).to_numpy(), dtype=float)
+            if (kv[np.isfinite(kv)] <= 0).any():
+                raise ValueError("CHAND_K_DAY 的值必须 > 0（0 / 负数会关掉吊灯，是放宽）")
         super().__init__(*a, **k)
+        self._kday = None if kd is None else asof_take(kd, self.gidx)
+        self._k_cap = None
+        self._kcap_cache = {}
         n = len(self.gidx)
         self.bear["XR"] = ~self.bear["US"]                                   # 「避险」核心：美股牛市时算熊（目标 0），美股熊市时算牛
         self.core_expo["XR"] = np.ones(n)
@@ -192,8 +225,22 @@ class MixEngine(MS.MLEngine):
                 ps = getattr(self, "st", None) and self.st.pos.get(t)
                 key = (t, ps.entry_date) if ps is not None else None
             if key is not None and key in td:
-                return td[key]
-        return MixEngine.PARAMS_T.get(t) or super()._p(t)
+                return self._k_capped(t, td[key])
+        return self._k_capped(t, MixEngine.PARAMS_T.get(t) or super()._p(t))
+
+    def _k_capped(self, t: str, p):
+        """CHAND_K_DAY：这次离场判断的上限 _k_cap 不是 None、比这笔的吊灯倍数小（且这笔有吊灯）、日本个股（非核心）→ 只换吊灯倍数的副本；
+        否则原样返回同一个对象（缺省一定走这里）。"""
+        cap = getattr(self, "_k_cap", None)
+        if (cap is None or not (p.exit_chandelier_k > 0 and cap < p.exit_chandelier_k) or t in self.core_set
+                or self.mkt[self.col[t]] != "JP"):
+            return p
+        key = (id(p), cap)
+        hit = self._kcap_cache.get(key)
+        if hit is None or hit[0] is not p:                                   # 缓存里存 p 本身（防止 id 复用）
+            hit = (p, replace(p, exit_chandelier_k=cap))
+            self._kcap_cache[key] = hit
+        return hit[1]
 
     def _is_pb(self, t: str) -> bool:
         s = MixEngine.PB.get(t)
@@ -235,9 +282,13 @@ class MixEngine(MS.MLEngine):
                 saved.append((j, bool(A.dead[i, j])))
                 due = (self.st.pos[t].hold + 1) >= MixEngine.HOLD_PB                 # hold 在父类里 +1 之后才检查
                 A.dead[i, j] = due or (MixEngine.PB_USE_DEAD and bool(A.dead[i, j]))
+        kday = getattr(self, "_kday", None)
+        if kday is not None and m == "JP" and np.isfinite(kday[i]):          # CHAND_K_DAY：这一天收盘的吊灯倍数上限（只在这次离场判断里有效）
+            self._k_cap = float(kday[i])
         try:
             super()._check_exits(m, i)
         finally:
+            self._k_cap = None
             for j, v in saved:
                 self.A.dead[i, j] = v
         ox = MixEngine.OPP_EXIT                                              # 跑输核心就离场（第 17 轮 OCX；原来另写的一个同名方法被这个覆盖 → 合到这里）
@@ -327,7 +378,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             em_scale: pd.Series | None = None, params_t: dict | None = None, em_tick: dict | None = None,
             params_td: dict | None = None, extra_expo: dict | None = None, dd_brake: dict | None = None,
             opp_exit: dict | None = None, exit_tick: dict | None = None, entry_gap: int | None = None,
-            sector_cap: dict | None = None, regime_floor: float | None = None) -> dict:
+            sector_cap: dict | None = None, regime_floor: float | None = None, chand_k_day: pd.Series | None = None) -> dict:
         names = list(ind)
         key = tuple(names) + (("nomult",) if not mult else ()) + ((("regime_floor", float(regime_floor)),) if regime_floor is not None and mult else ())
         if key not in em_cache and not mult:
@@ -376,6 +427,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
         MixEngine.EXIT_TICK = exit_tick or None
         MixEngine.ENTRY_GAP = entry_gap or None
         MixEngine.SECTOR_CAP = sector_cap or None
+        MixEngine.CHAND_K_DAY = chand_k_day
         try:
             c = replace(cfg, **cfg_over) if cfg_over else cfg
             xc = extra_core or {}
@@ -392,6 +444,7 @@ def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple]
             MixEngine.EXIT_TICK = None
             MixEngine.ENTRY_GAP = None
             MixEngine.SECTOR_CAP = None
+            MixEngine.CHAND_K_DAY = None
         tr = r.trades[r.trades["reason"] != "end"]
         st = tr[~tr["ticker"].isin(["1655.T", *(extra_core or {})])] if len(tr) else tr
         out = {w: {**CS.seg_stats(r.equity, a, b), "tot": seg_total(r.equity, a, b)} for w, (a, b) in windows.items()}

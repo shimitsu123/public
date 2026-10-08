@@ -14616,5 +14616,49 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "数字来自 var/out/month_up_dip_study.json（登记 ddfc854）；写明「不是预测」；核心 ETF 不显示"
+ },
+ {
+  "kind": "engineering",
+  "domain": "出场/卖点",
+  "candidates": [
+   {
+    "id": "NKT",
+    "result": "（登记）"
+   }
+  ],
+  "windows": "Z 2001〜2006 / E 2006〜2016 / J 2017〜2026 日経225 账户 + W / Jx / Zx 池子",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "line": 10398,
+  "date": "2026-10-08",
+  "title": "登记 NKT「日経日K 标签是『下降』的日子把全部持仓的吊灯从 3×ATR 收到 2×ATR」：信息检查（四池假想单笔 vs 日経状态循环平移 400 次，T 与 G 都过 95 分位）→ 账户第一关（posthoc）",
+  "registration": "本提交（规则、代码、测试与登记前个数；运行前，之后不改、只运行一次；DATA_FP 4cba1912cc330a3b）",
+  "script": "scripts/nkt_study.py、scripts/candle_portfolio.py（MixEngine.CHAND_K_DAY 钩子，缺省不启用）",
+  "output": "（运行后）var/out/nkt_study.md / .json",
+  "baseline": "B4（B3 + TBF）、X6 吊灯 k 3",
+  "notes": "登记前个数：日経「下降」占比 Z 34.7 / E 32.2 / J 25.9%；池子 N 249 / W 303 / Jx 606 / Zx 334；B4 持有期碰到下降且在吊灯带里 5 / 7 / 13 笔；N 池子日历剂量低于全部平移（可能带剂量限定语）；20 项核对全过"
+ },
+ {
+  "kind": "engineering",
+  "domain": "出场/卖点",
+  "candidates": [
+   {
+    "id": "WXA",
+    "result": "（登记）"
+   }
+  ],
+  "windows": "Z 2001〜2006 / E 2006〜2016 / J 2017〜2026 日経225 账户 + W / Jx / Zx 池子",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "line": 10416,
+  "date": "2026-10-08",
+  "title": "登记 WXA「一直放宽卖法（吊灯 4×ATR、最长 90 天）」的账户级检验（〔62〕当时的选项 ②；事后）：research_loop11 第一关（posthoc），通过也不叫更好候选",
+  "registration": "本提交（规则、代码、测试与登记前个数；运行前，之后不改、只运行一次；DATA_FP 8c9f176b0c7a4a30）",
+  "script": "scripts/wide_exit_study.py",
+  "output": "（运行后）var/out/wide_exit_study.md / .json",
+  "baseline": "B4（B3 + TBF）、X6 吊灯 k 3、最长 60 天",
+  "notes": "已知：一直放宽单笔 +0.420 %/笔（事后）；SZS 账户合计 −0.406；R2 Z −0.363；登记前个数：B4 重算 = 参照（1.209 / 0.628 / 0.677）、信号 80 / 77 / 92、池子 303 / 606 / 334；运行顺序 NKT 先、WXA 后"
  }
 ]
