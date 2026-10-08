@@ -14507,5 +14507,47 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "2026-10-07 读数：S&P500 7,818.93 pt、转熊线 6,927.72 pt（−11.4%）、确认 0 / 5 天；股债 63 天相关 +0.404 → 现在转熊就留现金；日本新仓倍数 0（风险报告「避险」）→ 暂时不会为买个股卖 ETF；标红的界线（离线 < 3%、股债相关 ≥ −0.1）只是页面提示，不是规则"
+ },
+ {
+  "line": 10343,
+  "date": "2026-10-08",
+  "title": "登记「月K 往上走（≥ 3 个月）时日K / 周K 往下走：买卖点的成功率与收益率」：面板同一个标签函数、as-of 口径；三个状态 MUDW（日周都跌）/ MUD（只有日K 跌）/ MUW（只有周K 跌）进入事件之后 20 个交易日的超额（比大盘 + 比同一天其他月涨的票）→ 买点 / 卖点判定；结合 B4 的三个卖点候选 MXDW / MXD / MXW",
+  "kind": "engineering",
+  "domain": "选股/买点",
+  "registration": "本提交（规则、代码、测试与登记前个数；运行前，之后不改、只运行一次；DATA_FP 7c2fedecdacfe0bf）",
+  "script": "scripts/month_up_dip_study.py、qbreak/kline_series.py",
+  "output": "（运行后）var/out/month_up_dip_study.md / .json",
+  "candidates": [
+   {
+    "id": "MUDW",
+    "result": "（登记）"
+   },
+   {
+    "id": "MUD",
+    "result": "（登记）"
+   },
+   {
+    "id": "MUW",
+    "result": "（登记）"
+   },
+   {
+    "id": "MXDW",
+    "result": "（登记）"
+   },
+   {
+    "id": "MXD",
+    "result": "（登记）"
+   },
+   {
+    "id": "MXW",
+    "result": "（登记）"
+   }
+  ],
+  "baseline": "全市场等权（同段同日成员）+ 同一天 MUB 同伴；B 部分 = B4（B3 + TBF）",
+  "windows": "Z 2001〜2006 / E 2006〜2016 / J 2017〜2026 日経225、J2 2017〜2026 时点 TOPIX 1000、W 2006〜2016 另一批 667 只；合并 Z + E + W + J2",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "登记前个数（只数个数）：事件 合并 MUDW 9,509 / MUD 21,229 / MUW 7,881（263 / 269 / 258 个月），五段都 ≥ 30 → 三个状态都能下判定；标签与面板函数 0 不一致（穷举 23.5 万次 + 抽样 3.4 万次）；Yahoo / J-Quants 标签一致率 日 97.8% / 周 95.2% / 月 91.6%；B 先决条件全过，B4 持有期内出现状态 Z + E + J 合计 2 / 9 / 5 笔（< 10 → 卖点候选多半「几乎不触发」）；事前预期多半「没有信息」或「方向一致但不够」"
  }
 ]
