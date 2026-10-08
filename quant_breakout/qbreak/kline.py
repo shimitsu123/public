@@ -103,6 +103,18 @@ def trend(b: pd.DataFrame) -> dict | None:
             "chg_pct": _r(chg), "close": _r(last), "ma20": _r(m20), "date": str(b.index[-1].date())}
 
 
+def month_up(b: pd.DataFrame, n: int = 3) -> bool | None:
+    """月K：最后一根（本月到最新收盘为止）是上升，且之前 n 根已完成的月K（各自那个月最后一天收盘时的标签）也都是上升 → True；
+    最后一根不是上升或之前有一根不是上升 → False；标签算不出（月K 不够 23 + n 根）→ None。
+    = 登记研究 scripts/month_up_dip_study.py 的「月线一段时间上涨」MUB（qbreak/kline_series.mub，n = 3）；面板的历史统计（qbreak/dip_stats.py）用。"""
+    if b is None or len(b) < 20 + SLOPE_BARS + n:
+        return None
+    labs = [trend(b.iloc[:len(b) - k]) for k in range(n + 1)]
+    if any(x is None for x in labs):
+        return None
+    return all(x["label"] == "上升" for x in labs)
+
+
 def macd(b: pd.DataFrame) -> dict[str, pd.Series]:
     """规则同一组参数的 MACD（qbreak.strategy.macd）：dif / dea / mh（柱 = DIF − DEA）。"""
     from .config import StrategyParams
@@ -164,6 +176,8 @@ def payload(df: pd.DataFrame, bar_date=None, info: dict | None = None) -> dict |
             out["tf"][tf]["tl"] = tl
         tr = trend(b)
         if tr is not None:
+            if tf == "M":
+                tr["up3"] = month_up(b)                     # 前 3 个已完成月K 也都往上走（面板的历史统计用）
             out["trend"][tf] = tr
     return out if out["tf"] else None
 
@@ -258,8 +272,11 @@ def trends(df: pd.DataFrame, bar_date=None) -> dict:
     d = df.loc[:pd.Timestamp(str(bar_date))] if bar_date else df
     out = {}
     for tf in ("D", "W", "M"):
-        tr = trend(bars(d, tf))
+        b = bars(d, tf)
+        tr = trend(b)
         if tr is not None:
+            if tf == "M":
+                tr["up3"] = month_up(b)
             out[tf] = tr
     return out
 
@@ -275,5 +292,5 @@ def chips(tr: dict | None) -> str:
     return " · ".join(f"{TF_NAME[k]} {plain(tr[k]['label'])}" for k in ("D", "W", "M") if k in tr) or "—"
 
 
-__all__ = ["MAS", "BARS", "TF_NAME", "LABELS", "PLAIN", "ALIGN_PLAIN", "UNIT", "CHAN_PLAIN", "DMI_N", "DMI_M", "ohlcv", "bars",
+__all__ = ["MAS", "BARS", "TF_NAME", "LABELS", "PLAIN", "ALIGN_PLAIN", "UNIT", "CHAN_PLAIN", "DMI_N", "DMI_M", "ohlcv", "bars", "month_up",
            "trend", "macd", "dmi", "series", "payload", "trends", "chips", "plain", "with_live", "LIST_KEYS"]

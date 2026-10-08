@@ -48,6 +48,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import core_exit as CX
+from . import dip_stats as DS
 from . import kline as KL
 from . import manual_orders as MO
 from . import panel_phone as PP
@@ -68,7 +69,7 @@ TRIGGER_GAP_S = 180                     # 开盘前的重试：同一个账本�
 NOW_GAP_S = 60                          # 盘中（--phase now）：同一个账本最多 1 分钟一次
 TOKEN_FILE = "panel_token"
 WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "holding_view.py", "kline.py", "suggest.py", "watch_prob.py", "core_exit.py",
-         "idle_cash.py")
+         "idle_cash.py", "dip_stats.py")
 
 
 def token() -> str:
@@ -210,6 +211,7 @@ details.khelp ul{margin:4px 0;padding-left:18px;font-size:13px;line-height:1.55;
 .rk{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 6px;border-radius:999px;background:var(--chip);font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
 .prob{margin:2px 0}.prob b{font-variant-numeric:tabular-nums}
 .qt .sellx{margin-top:2px}.qt[data-sq]{margin:4px 0}
+.dipst{color:var(--muted);line-height:1.5;margin:-2px 0 6px}.dipst b{color:var(--fg);font-weight:600}
 .axb{margin:10px 0 0;padding:8px 12px 4px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}.axb.hot{border-color:var(--neg)}
 .axh{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 10px;padding-bottom:4px}
 .axr{display:grid;grid-template-columns:4.4em minmax(0,1fr);gap:0 10px;padding:6px 0;border-top:1px solid var(--line)}
@@ -1172,9 +1174,10 @@ def _phone_card(phone: dict) -> str:
 TF_LABEL = (("D", "日K"), ("W", "周K"), ("M", "月K"))
 
 
-def tchips(tr: dict | None) -> str:
+def tchips(tr: dict | None, stats: bool = False) -> str:
     """日K / 周K / 月K 的趋势（qbreak/kline.py 的标签换成通俗说法：往上走 / 往下走 / 横着走 · 涨势整齐 / 跌势整齐；
-    红 = 往上、绿 = 往下，文字本身就写着，不只靠颜色）。"""
+    红 = 往上、绿 = 往下，文字本身就写着，不只靠颜色）。stats = True（个股）：现在是「月K 往上走 + 日K / 周K 往下走」三种组合之一时，
+    下面一行写登记研究的历史统计（qbreak/dip_stats.py；2026-10-08 用户选〔75〕②；只展示、不是预测）。"""
     out = []
     for k, lab in TF_LABEL:
         x = (tr or {}).get(k)
@@ -1184,7 +1187,11 @@ def tchips(tr: dict | None) -> str:
         al = KL.ALIGN_PLAIN.get(str(x.get("align") or ""), str(x.get("align") or ""))
         out.append(f"<span class='tchip'>{lab} <b class='{cls}'>{escape(KL.plain(x.get('label')))}</b>"
                    + (f" · {escape(al)}" if al else "") + "</span>")
-    return f"<div class='tchips' aria-label='趋势'>{''.join(out)}</div>" if out else ""
+    if not out:
+        return ""
+    ds = DS.line(tr) if stats else None
+    return (f"<div class='tchips' aria-label='趋势'>{''.join(out)}</div>"
+            + (f"<div class='dipst small'><b>{escape(ds['name'])}</b>：{escape(ds['text'])}</div>" if ds else ""))
 
 
 GROUPS = (("triggered", "今天出了买入信号"), ("imminent", "快要出买入信号"), ("watch", "观察中"))
@@ -1253,7 +1260,7 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
          + f"<div class='meta'>{' · '.join(x for x in meta if x)}</div>"
          + (f"<div class='small near'>{escape(str(r['near_text']))}</div>" if r.get("near_text") else "")   # 离买入信号还差什么（排序依据）
          + (f"<div>{escape(str(ru.get('text') or ''))}</div>" if ru.get("state") not in (None, "none") else "")
-         + tchips(r.get("trend"))
+         + tchips(r.get("trend"), stats=True)
          + (f"<div class='small neg'>★ 顶部风险：{escape(str(r['top_risk']))}</div>" if r.get("top_risk") else "")]
     n, px, lot = int(b.get("rule_shares") or 0), float(b.get("px") or 0), int(b.get("lot") or MO.LOT)
     why = None
@@ -1412,7 +1419,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         if kind == "core":
             return tchips(ktrend.get(t)) + _core_actions(r, t) + _core_exit(t) + chart(t, "core")
         qt = f"<div class='qt small' data-q='{escape(t)}'></div>" if t in (st.get("pos") or {}) else ""   # 现价（/api/quotes）
-        return tchips(ktrend.get(t)) + qt + _actions(r, t)
+        return tchips(ktrend.get(t), stats=True) + qt + _actions(r, t)
 
     def _core_actions(r: dict, t: str) -> str:
         """持有的核心 ETF：卖出全部（= 闲置资金比例 0%：卖出后停买，出现买入信号要你确认才买）/ 调仓…（换算成「闲置资金比例」：

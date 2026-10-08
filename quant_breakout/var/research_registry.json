@@ -14599,5 +14599,22 @@
    "J2 两半 MUW +0.48 → −0.58、MUD −0.29 → +0.18 pp"
   ],
   "notes": "买点与卖点都不成立；面板这些组合只当看图用。待办〔75〕。非投资建议"
+ },
+ {
+  "line": 10389,
+  "date": "2026-10-08",
+  "title": "用户决定〔75〕②：面板的趋势标签旁边只展示「月K 往上走 + 日K / 周K 往下走」三种组合的历史统计（个股；Mac + 手机）",
+  "kind": "engineering",
+  "domain": "展示",
+  "registration": "—",
+  "script": "qbreak/dip_stats.py、qbreak/kline.py（month_up / trend.M.up3）、qbreak/panel.py（tchips stats）",
+  "output": "—（页面）",
+  "candidates": [],
+  "baseline": "—（不改规则 / 参数 / 仓位 / 股票池）",
+  "windows": "—",
+  "verdict": "只展示",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "数字来自 var/out/month_up_dip_study.json（登记 ddfc854）；写明「不是预测」；核心 ETF 不显示"
  }
 ]
