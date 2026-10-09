@@ -11,11 +11,11 @@
 
 ## 三个本机任务
 
-| 本机任务（建议的名字） | 说明书（每次照做） | 时间（JST） | 云端后备（主会话改；用户确认后） |
+| 本机任务（建议的名字） | 说明书（每次照做） | 时间（JST） | 云端后备（改法见 [`cloud/README.md`](cloud/README.md)） |
 |---|---|---|---|
-| `qbreak-sim-daily` 模拟盘日报 | `routines/sim_daily.md` | 周一至五（Weekdays）06:45 | trig_01MMZVeTtxexr6y4sDhy4rxX，改到 07:20、最前面加「做过就跳过」 |
-| `qbreak-shadow` 影子账户判断 | `routines/shadow.md` | 周一至五（Weekdays）07:45 | trig_01WndiH4mZSiFkeExpsukNm4，改到 08:05、同上 |
-| `qbreak-quarterly` 顶底择时季度复核 | `routines/quarterly.md` | 1 / 4 / 7 / 10 月 12 日 09:56 | trig_01BA4ugENPhSrYW3QSd5djK6，改到 12:52、同上 |
+| `qbreak-sim-daily` 模拟盘日报 | `routines/sim_daily.md` | 周一至五（Weekdays）06:45 | trig_01MMZVeTtxexr6y4sDhy4rxX，改到 07:20、最前面加「做过就跳过」：**要在日报发帖的那个云端对话里改**（`cloud/sim_daily_cloud.md`） |
+| `qbreak-shadow` 影子账户判断 | `routines/shadow.md` | 周一至五（Weekdays）07:45 | trig_01WndiH4mZSiFkeExpsukNm4，改到 08:05、同上：**同上，在那个对话里改**（`cloud/shadow_cloud.md`） |
+| `qbreak-quarterly` 顶底择时季度复核 | `routines/quarterly.md` | 1 / 4 / 7 / 10 月 12 日 09:56 | trig_01BA4ugENPhSrYW3QSd5djK6，改到 12:52、同上：**2026-10-09 已改** |
 
 - 07:40 的执行器等的就是日报入库（`var/out/unified_today.json` 的 date = 今天）：Mac 06:45 开始，通常 07:10 前入库；Mac 没做 → 云端 07:20 补上。
 - 「做过就跳过」= 说明书最前面的 `bash scripts/routines.sh done-today sim|shadow|quarterly`：
@@ -40,7 +40,7 @@
 **先核对云端已经改成后备**（顺序很重要：云端还是原来的样子时，两边每天都做日报 / 影子账户，后推的那边 `git pull --rebase` 冲突）：
 Claude 有 Claude_Code_Remote 的 `get_trigger` 就**只读**取上表三个云端例行任务，确认每个的 prompt 最前面是
 `bash scripts/routines.sh done-today …`、时间是 07:20 / 08:05 / 12:52（JST）；没有这个工具 → 请用户在 claude.ai/code 的 Routines 页面看。
-**还没改 → 三个本机任务建成 Paused（暂停）**，告诉用户「云端改成后备要你在对话里确认（主会话改）；改好之后把本机任务切到 Active」——
+**还没改 → 三个本机任务建成 Paused（暂停）**，告诉用户「日报 / 影子账户的云端指令只能在它们发帖的那个云端对话里改：照 `routines/cloud/README.md` 发那一句；改好之后把本机任务切到 Active」——
 不要在云端还没改时就让本机任务按时运行。（万一撞车：`routines.sh push` / `done-today` 发现云端那天已经入库了同一份结果时，
 会把 Mac 的提交留在本地备份分支 `backup/routines-<日期>-<提交>`、克隆回到远端，不会一直停着。）
 

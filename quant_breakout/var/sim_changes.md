@@ -10546,7 +10546,7 @@ Mac 问法表、已知限制）；CHECK_TIMELINE（⑥ 执行层、08:35 / 09:20
 - 例行任务搬到 Mac：模拟盘日报（周一至五 06:45）、影子账户判断（07:45）、季度复核（1 / 4 / 7 / 10 月 12 日 09:56）改由 Mac 的 Claude 桌面版本机任务跑
   （官方：云端例行任务不能指派到个人 Mac，https://code.claude.com/docs/en/routines、https://code.claude.com/docs/en/desktop-scheduled-tasks，2026-10-09 检索，仅对本次检索时点有效）。
   专用克隆 `~/qbreak-sim`（mac_setup 建）；说明书 `quant_breakout/routines/`（云端 prompt 照抄、只改路径 / Python / 推送方式，规则与禁止事项不变）；`scripts/routines.sh done-today | check | run | deps | push`；
-  云端同名三个例行任务改为后备（最前面「做过就跳过」，时间改到 07:20 / 08:05 / 13:00；Mac 当天做过就跳过、没做就补上）；09:30 自检加「今天的日报没入库」；
+  云端同名三个例行任务改为后备（最前面「做过就跳过」，时间改到 07:20 / 08:05 / 12:52；Mac 当天做过就跳过、没做就补上）——季度复核 2026-10-09 已改（指令原文不变、只加第 0 步）；日报 / 影子账户的指令只能在它们发帖的那个云端对话里改（工具规定），后备版全文 `routines/cloud/{sim_daily,shadow}_cloud.md`、改法 `routines/cloud/README.md`（用户在那个对话里发一句）；09:30 自检加「今天的日报没入库」；
   Mac 工作日 06:40 唤醒（用户自己 `sudo pmset repeat wakeorpoweron MTWRF 06:40:00`）+ LaunchAgent `com.qbreak.wakehold`（06:40〜07:50 保持醒着）。
   `run.py sim-day` 等改仓库 var/ 的命令只由例行任务在 `~/qbreak-sim` 里运行（CLAUDE.md 相应改）。三个本机任务要用户在 Mac 的桌面版里说「装本机例行任务」才建。
 - 测试：全部 3,365 个通过（原来 3,120 个 + 新增 245 个）。非投资建议。
