@@ -14730,5 +14730,25 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "不再开新的卖法研究；X6 前向记录与季度复核照旧"
+ },
+ {
+  "line": 10482,
+  "date": "2026-10-09",
+  "title": "立花实盘缺口盘点（只读）：99 条 → 上实盘前必须修 7 组（通知到不了手机 / 没有死人开关、08:35 重试绕过持仓核对、09:05 补单上限仍是 ¥30 万、面板看不到运行结果、probe 误判通过、立花账本不在 .gitignore、面板失败每分钟重试）+ 建议 16 组 + 方便 7 组 + 用户开户事项 + 涉及规则 3 项",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": null,
+  "script": "—（只读审查；没改代码）",
+  "output": "var/out/tachibana_gap_audit.md",
+  "candidates": [],
+  "baseline": "现行执行器 run.py live-u + 立花适配器 v4r10（还没开户）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [
+   "执行器核心路径（演练与回测逐笔一致）不用改；缺的是出事时的通知、处理工具与几处实盘才会碰到的漏洞",
+   "官方（2026-10-09）：v4r10 现行、API 免费、08:00〜15:30 不要频繁轮询；NISA 买单只能指値・無条件・当日中"
+  ],
+  "era_dependent_or_reversed": [],
+  "notes": "待办〔77〕；官方信息仅对 2026-10-09 检索时点有效"
  }
 ]
