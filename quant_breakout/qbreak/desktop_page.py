@@ -30,7 +30,18 @@ table{width:100%;border-collapse:collapse;font-size:14px} td,th{border-bottom:1p
 .scroll{overflow-x:auto} ul{margin:4px 0 10px;padding-left:20px} summary{cursor:pointer;font-weight:600;font-size:14px;margin:8px 0 2px}
 a{color:var(--accent)}
 .hv{border-top:1px solid var(--line);padding:8px 0}.hv:first-of-type{border-top:0}.hv ul{margin:4px 0;padding-left:18px}
+.real{display:inline-block;padding:2px 10px;border-radius:10px;background:var(--neg);color:#fff;font-size:14px;font-weight:700;
+vertical-align:middle;margin-left:6px} body.real main{border-top:4px solid var(--neg)}
 """
+
+
+def page_title(tag: str) -> str:
+    """页面标题（B12 / UX-11）：模拟账户 / 立花本番（真钱）/ デモ / dry-run 分清楚，别把デモ当成实盘。"""
+    if tag.startswith("paper"):
+        return "qbreak 模拟操盘（立花 e支店 · 模拟账户）"
+    if tag == "tachibana":
+        return "qbreak 立花实盘"
+    return ("qbreak 立花" + ("デモ（不是真钱）" if "_demo" in tag else "") + (" dry-run（只算不发单）" if "_dryrun" in tag else ""))
 
 
 def _yen(v, sign: bool = False) -> str:
@@ -73,14 +84,19 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
     """alert：页面顶上的红色提示（例如这次运行失败）；note：普通说明（例如「这是试跑」）。"""
     book = read_json(paths.state_dir() / f"live_unified_{tag}.json", {}) or {}
     sm = read_json(paths.out_dir() / f"live_unified_{tag}.json", {}) or {}
+    from .live_unified import start_capital
+    capital = start_capital(book, capital)                   # 立花：第一次核对时的买付可能額（账本 capital_jpy）；没有 → sim.json 的本金
     jp = paths.out_dir() / f"live_unified_{tag}_journal.md"
     journal = jp.read_text(encoding="utf-8") if jp.exists() else ""
     st = book.get("state") or {}
     paper = tag.startswith("paper")
-    title = "qbreak 模拟操盘（立花 e支店 · 模拟账户）" if paper else "qbreak 立花实盘"
+    title = page_title(tag)
+    real = tag == "tachibana"                                # 真钱（立花本番）：醒目的标识
     now = now_jst()
     upd = now.strftime("%Y-%m-%d %H:%M JST")
-    body = [f"<h1>{escape(title)}</h1><div class='muted'>页面生成 {upd}；账本更新 {escape(str(book.get('updated') or '—'))}；"
+    badge = "<span class='real'>真钱（立花本番）</span>" if real else ""
+    body = [f"<h1>{escape(title)}{badge}</h1>"
+            f"<div class='muted'>页面生成 {upd}；账本更新 {escape(str(book.get('updated') or '—'))}；"
             "每个交易日 07:40 自动运行后更新，这个页面每 10 分钟自动刷新</div>",
             "<section id='stale' class='card warn' hidden></section>"]
     if (paths.out_dir() / "dashboard.html").exists():         # run.py news --page（每 15 分钟）写的市场仪表盘
@@ -105,8 +121,8 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
         tot = eq - inv
         cmp = sm.get("compare") or {}
         same_txt = "与云端模拟盘同样的票" if cmp.get("mode") == "holdings" else "与云端模拟盘一致"
-        cmp_txt = (same_txt if cmp.get("same") else "★ 与云端模拟盘不一致") if cmp.get("comparable") else \
-            ("今天没有比（日期不同）" if cmp else "—")
+        cmp_txt = (same_txt if cmp.get("same") else "上线初期：持仓不同是预期的" if cmp.get("early") else "★ 与云端模拟盘不一致") \
+            if cmp.get("comparable") else ("今天没有比（日期不同）" if cmp else "—")
         base_txt = f"起始 {_yen(capital)}" if abs(inv - float(capital)) < 1 else f"投入本金 {_yen(inv)}（起始 {_yen(capital)}）"
         body.append(
             "<section class='card'><div class='kpi'>"
@@ -118,12 +134,22 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
             f"<div><span class='muted'>现金</span><b>{_yen(st.get('cash_jpy'))}</b></div>"
             f"<div><span class='muted'>决策日 → 下一成交日</span><b>{escape(str(st.get('last_date') or '—'))}</b>"
             f"<span class='muted'>→ {escape(str(sm.get('fill_day') or '—'))}</span></div>"
-            f"<div><span class='muted'>对照</span><b style='font-size:15px' class='{'' if cmp.get('same') or not cmp.get('comparable') else 'neg'}'>"
+            f"<div><span class='muted'>对照</span><b style='font-size:15px' class='{'' if cmp.get('same') or cmp.get('early') or not cmp.get('comparable') else 'neg'}'>"
             f"{escape(cmp_txt)}</b></div></div></section>")
         if sm.get("blocked"):
             body.append(f"<section class='card warn'><b>★ 没有下单：</b>{escape(str(sm['blocked']))}</section>")
         for n_ in sm.get("notices") or []:                    # 立花的通知（例如 API 新版本的发布日）
             body.append(f"<section class='card warn'><b>★ </b>{escape(str(n_))}</section>")
+        if sm.get("decided_on") == st.get("last_date"):       # 数据依赖的提醒（B10）：这次运行的汇总才显示
+            from .live_unified import YF_FIX, lag_exit_lines
+            si, dp = sm.get("stale_inputs") or {}, sm.get("data_problem") or {}
+            if dp:
+                body.append(f"<section class='card warn'><b>★ 行情：</b>{escape('；'.join(str(x) for x in dp.get('why') or []))}"
+                            f"<div class='muted'>修法：{escape(str(dp.get('fix') or YF_FIX))}</div></section>")
+            for ln in lag_exit_lines(sm.get("lag_exits")):
+                body.append(f"<section class='card warn'><b>★ </b>{escape(ln)}</section>")
+            if si.get("text"):
+                body.append(f"<section class='card warn'><b>★ </b>{escape(str(si['text']))}</section>")
     mk = sm.get("market") or {}
     if mk:
         rows = []
@@ -227,9 +253,10 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
             f"<li class='{'neg' if e['level'] == 'error' else ''}'>{escape(str(e.get('at', ''))[:16])} {escape(str(e.get('msg', '')))}</li>"
             for e in reversed(ev)) + "</ul></section>")
     body.append(f"<div class='muted'>数据目录 {escape(str(paths.home()))}；详细日志 {escape(str(jp))}。非投资建议。</div>")
+    body_cls = " class='real'" if real else ""
     return ("<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
-            f"<meta http-equiv='refresh' content='600'><title>qbreak {'模拟操盘' if paper else '立花实盘'}</title><style>{_CSS}</style></head>"
-            f"<body><main>{''.join(body)}</main>{_STALE_JS % int(now.timestamp() * 1000)}</body></html>")
+            f"<meta http-equiv='refresh' content='600'><title>qbreak {'模拟操盘' if paper else '立花实盘' if real else '立花（不是真钱）'}</title>"
+            f"<style>{_CSS}</style></head><body{body_cls}><main>{''.join(body)}</main>{_STALE_JS % int(now.timestamp() * 1000)}</body></html>")
 
 
 # 页面过时的提示（浏览器里算）：生成之后的下一个工作日 07:40 JST（定时任务的时间）再过 2 小时还没重写 → 顶上显示。

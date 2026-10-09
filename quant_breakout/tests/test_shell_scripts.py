@@ -159,7 +159,8 @@ def test_live_ops_paths_print_chinese_without_dying(tmp_path, locales, name):
     out, err = _bash(env, "scripts/liveu.sh", "run", "--broker", "tachibana", "--phase", "open", "--retry")
     assert "unbound variable" not in err, err
     assert "运行没有完成（退出码 1）" in out                       # 假 Python 出错：重试没走完也照样标红
-    for args in (["gate"], ["flow"], ["flow", "300000"], ["probe"], ["halt-drill"], ["notify-test"], ["watchdog"]):
+    for args in (["gate"], ["flow"], ["flow", "300000"], ["probe"], ["halt-drill"], ["notify-test"], ["watchdog"],
+                 ["email-setup"], ["email-setup", "--host", "smtp.example.com", "--port", "465"]):
         out, err = _bash(env, "scripts/liveu.sh", *args)
         assert "unbound variable" not in err, (args, err)
     out, _ = _bash(env, "scripts/liveu.sh", "flow")

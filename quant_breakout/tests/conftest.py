@@ -25,6 +25,9 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setattr("qbreak.notify.KEYCHAIN", False)
     monkeypatch.setattr("qbreak.notify._CACHE", {})
     monkeypatch.setattr("qbreak.watch_prob.FILE", tmp_path / "watch_prob.json")   # 观察中的比例表：默认没有（要用的测试自己写）
+    monkeypatch.setattr("qbreak.watchdog.DAILY_FILE", tmp_path / "repo_var" / "out" / "unified_today.json")   # 09:30 自检不看仓库里真的日报
+    monkeypatch.setattr("qbreak.watchdog._remote_daily_date", lambda run=None: None)           # 也不看仓库远端的（要测的测试自己换）
+    monkeypatch.setattr("qbreak.data.LAGGING", {})          # 行情落后的记录是进程里的全局表：每个测试从空的开始（不被前面的测试带进来）
     yield tmp_path
 
 

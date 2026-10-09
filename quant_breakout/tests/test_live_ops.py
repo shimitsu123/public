@@ -258,13 +258,24 @@ def test_flow_cli_registers_in_the_tachibana_book(capsys):
 
 
 # ────────── 上线门槛（只读）──────────
-def _fake_run(security=0, launchctl="", pmset="Repeating power events:\n  wakepoweron at 7:30AM weekdays only\n"):
+def _fake_run(security=0, launchctl="", pmset="Repeating power events:\n  wakepoweron at 7:30AM weekdays only\n",
+              sntp=None, security_read=None):
+    """sntp：(退出码, 输出)，None = 没有这个命令；security_read：试读（-w）的 (退出码, stderr)，默认同 security。"""
     calls = []
 
     def run_(args, **kw):
         calls.append(list(args))
-        rc, out = {"security": (security, "keychain: secret-free attributes"), "launchctl": (0, launchctl),
-                   "pmset": (0, pmset)}[args[0]]
+        if args[0] == "security" and "-w" in args:              # 试读：值必须丢进 /dev/null（不进 gate 这个程序）
+            assert kw.get("stdout") == subprocess.DEVNULL and not kw.get("capture_output")
+            rc, err = security_read if security_read is not None else (security, "")
+            return subprocess.CompletedProcess(args, rc, None, err)
+        table = {"security": (security, "keychain: secret-free attributes"), "launchctl": (0, launchctl),
+                 "pmset": (0, pmset)}
+        if sntp is not None:
+            table["sntp"] = sntp
+        if args[0] not in table:
+            raise FileNotFoundError(args[0])                     # 没有这个命令（例如 Linux 上的 sntp / systemsetup）
+        rc, out = table[args[0]]
         return subprocess.CompletedProcess(args, rc, out, "")
     return run_, calls
 
@@ -292,7 +303,7 @@ def test_live_gate_reports_each_item_without_reading_secrets(tmp_path, monkeypat
     assert items["② 没有状态不明的单"]["ok"] is True and items["③ HALT 演练过一次"]["ok"] is False
     assert "probe --demo --order-test" in items["④ デモ发单检查（约定字段、余力变化、按注文番号撤单）"]["text"]
     assert items["⑥ 认证 ID 在钥匙串"]["ok"] is False and "-w（回车后输入，不要贴进聊天）" in items["⑥ 认证 ID 在钥匙串"]["text"]
-    assert all("-w" not in c for c in calls if c[0] == "security")                     # 只查有没有，绝不取出值
+    assert all("-w" not in c for c in calls if c[0] == "security")                     # 没有条目：只查有没有，不试读
     assert items["⑦ Mac 工作日早上自动唤醒"]["ok"] is True
     text, ok = G.report(list(items.values()))
     assert not ok and "【上线门槛】" in text and "★ 未完成" in text
@@ -316,11 +327,14 @@ def test_live_gate_reports_each_item_without_reading_secrets(tmp_path, monkeypat
     key.chmod(0o644)
     for lb in G.LIVE_LABELS + ("com.qbreak.watchdog",):                              # ⑧ 09:30 自检任务（2026-10-09 加）
         (agents / f"{lb}.plist").write_text("x", encoding="utf-8")
+    (paths.out_dir() / "live_unified_tachibana_dryrun_run.json").write_text(json.dumps(   # ⑤ 本番 dry-run 跑通过（LU-13）
+        {"at": "2026-10-08T07:50:00+09:00", "ok": True}), encoding="utf-8")
     run_, _ = _fake_run(security=0, launchctl="\n".join(f"-\t0\t{lb}" for lb in G.LIVE_LABELS + ("com.qbreak.watchdog",)))
-    items = {it["name"]: it for it in G.check(agents=agents, run=run_)}
+    today = __import__("datetime").date(2026, 10, 13)                    # ① 的最近一次比较要在 10 个交易日以内（B14）：日期固定
+    items = {it["name"]: it for it in G.check(agents=agents, run=run_, today=today)}
     assert items["⑥ 私钥文件"]["ok"] is False and "chmod 600" in items["⑥ 私钥文件"]["text"]       # 权限太宽
     key.chmod(0o600)
-    items = G.check(agents=agents, run=run_)
+    items = G.check(agents=agents, run=run_, today=today)
     text, ok = G.report(items)
     bad = [it["name"] for it in items if it["group"] != "参考" and it["ok"] is False]
     assert bad == ([] if G.importlib.util.find_spec("cryptography") else ["⑥ cryptography（解密虚拟 URL）"])

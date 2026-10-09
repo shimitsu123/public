@@ -13,7 +13,9 @@
            买入后与规则的持仓一样（止损按 ATR、规则离场）。
   core     闲置资金（核心 ETF）比例：规则的目标额 × pct %（100 = 照规则；0 = 留现金）。从下一次决策起一直有效
   unblock  解除「不自动买回」
-  cancel   撤回一条还没下的指令（target = 指令 id）；已经发到交易所的单要在立花网站 / App 上撤
+  cancel   撤回一条还没下的指令（target = 指令 id）；已经发到交易所的单用 cancel_order 撤
+  cancel_order  撤单：撤执行器今天已经发到交易所、还挂着的一笔单（cid = 执行器的单号；面板「今天的单」的「撤单」）→ 面板马上叫
+           执行器（--phase cancel；qbreak/live_ops.py）；已经成交的部分撤不了；撤掉的卖单如果规则明天还要卖会再下
 「赢家加仓」研究没有通过、没触发信号的票没有回测验证：加仓 / 买入都是用户自己的决定，会让账户和云端模拟盘不一致。
 
 什么时候下单（2026-10-07 用户：「当天买入卖出的话在交易时间段就直接进行买入卖出 在交易时间之前的话就等交易时间的时候进行交易」）：
@@ -37,7 +39,7 @@ import re
 from . import paths
 from .calendar_jp import is_trading_day, next_trading_day, now_jst, prev_trading_day
 
-KINDS = ("sell", "trim", "adjust", "buy", "core", "unblock", "cancel")
+KINDS = ("sell", "trim", "adjust", "buy", "core", "unblock", "cancel", "cancel_order")
 POS_KINDS = ("sell", "trim", "adjust")  # 针对一只持仓的指令
 ORDER_KINDS = POS_KINDS + ("buy",)      # 会变成单的指令（同一只票同时只能有一条没处理完的）
 UNITS = {"shares": "股", "yen": "円", "pct": "%"}
@@ -51,7 +53,9 @@ CUTOFF = dt.time(8, 55)                 # 寄付注文的最后时刻（与 live
 SESSION = ((dt.time(9, 0), dt.time(11, 30)), (dt.time(12, 30), dt.time(15, 25)))   # 盘中马上下单的时间（前場 / 後場；15:25 起是收盘竞价）
 RETRY_S = 600                           # 盘中没下成的指令（取不到现价等）：过多久再试
 LABEL = {"sell": "卖出全部", "trim": "减仓", "adjust": "调仓", "buy": "买入", "core": "闲置资金比例", "unblock": "解除不买回",
-         "cancel": "撤回指令"}
+         "cancel": "撤回指令", "cancel_order": "撤单"}
+CANCEL_UNTIL = dt.time(15, 30)          # 撤单：交易日这个时刻之前面板马上叫执行器（之后今天没成交的单都已失效）
+_CID = re.compile(r"^U(\d{4}-\d{2}-\d{2})-(BUY|SELL)-([0-9][0-9A-Z]{3}\.T)(-[0-9A-Za-z]{1,20})?$")
 STATUS = {"pending": "等下单", "placed": "已下单", "done": "完成", "rejected": "没执行", "cancelled": "已撤回",
           "superseded": "按规则的单卖"}
 REASON_TEXT = {"manual": "手动卖出", "manual_trim": "手动减仓", "manual_add": "手动加仓", "manual_buy": "手动买入",
@@ -117,6 +121,12 @@ def normalize(req: dict) -> dict:
         if not -1 <= bd <= BLOCK_MAX:
             raise ValueError(f"不买回的天数要在 -1〜{BLOCK_MAX} 之间")
         out["block_days"] = bd
+    if kind == "cancel_order":
+        cid = str(req.get("cid") or "").strip()
+        m = _CID.match(cid)
+        if not m:
+            raise ValueError("撤单要给执行器的单号（例 U2026-10-08-SELL-7203.T）")
+        out["cid"], out["ticker"] = cid, m.group(3)
     if kind == "cancel":
         tg = str(req.get("target") or "").strip()
         if not re.fullmatch(r"M[0-9A-Za-z\-]{6,60}", tg):
@@ -245,6 +255,8 @@ def describe(r: dict) -> str:
     """一条指令的一句话：卖出全部 7203.T / 减仓 7203.T 10% / 调整持仓 7203.T → 300 股 / 买入 7203.T（按规则的仓位）/
     闲置资金比例 80%。"""
     k = r.get("kind")
+    if k == "cancel_order":
+        return f"撤单 {r.get('ticker') or ''}（{r.get('cid') or '—'}）".replace("撤单 （", "撤单（")
     if k == "core" and r.get("ticker"):
         tg = int(r.get("target") or 0)
         if tg <= 0:
@@ -472,7 +484,7 @@ def core_pct_now(tag: str | None, book: dict | None) -> float:
     return float(late[-1]["pct"]) if late else float(((book or {}).get("manual") or {}).get("core_pct", 100.0))
 
 
-def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None) -> str | None:
+def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None, now: dt.datetime | None = None) -> str | None:
     """下指令时对着执行器账本看一眼（页面 / 命令行用；执行器下单前还会按最新的收盘再查一次）：不行 → 理由；行 → None。
     tag：账本标签（给了就连指令文件里执行器还没读的指令一起看，避免同一只票点两次）。
     sm：执行器的汇总（给了就看「建议的股票」里这只票的资格检查：被挡的不让写）。"""
@@ -527,6 +539,17 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None)
             if t and cur <= 0:
                 return f"已经在停买闲置资金 ETF（比例 0%）：{t} 在执行器下一次运行时卖出"
             return (f"{t} 换算成闲置资金比例还是 {cur:g}%：不用调" if t else f"闲置资金比例现在就是 {cur:g}%：不用改")
+    if k == "cancel_order":
+        from .live_ops import cancel_why
+        o = next((x for x in (book or {}).get("orders") or [] if x.get("cid") == rec["cid"]), None)
+        if o is None:
+            return f"账本里没有 {rec['cid']}（已经对账过了？）"
+        why = cancel_why(o, book, now or now_jst(), str(tag or "").startswith("paper"))
+        if why:
+            return f"{rec['cid']} 撤不了：{why}"
+        if any(x.get("kind") == "cancel_order" and x.get("cid") == rec["cid"]
+               for x in list(items.values()) + waiting if x.get("status", "pending") == "pending"):
+            return f"{rec['cid']} 已经在撤（等执行器）"
     if k == "unblock" and t not in (man.get("blocks") or {}):
         return f"{t} 没有「不自动买回」的设定"
     if k == "cancel":
@@ -546,7 +569,8 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None)
     return None
 
 
-NOW_NO_CANCEL = "盘中的单已经发到交易所，撤不了（要撤在立花网站 / App 上撤）"
+NOW_NO_CANCEL = ("盘中的单已经发到交易所，撤回指令撤不了：用面板「今天的单」的「撤单」撤（已经成交的部分撤不了），"
+                 "或在立花网站 / 手机网站撤")
 RULE_TEXT = "盘中点的马上下单；开盘前、午休点的等开盘；收盘后点的等下一个交易日开盘"
 
 
@@ -587,6 +611,18 @@ def due(tag: str, book: dict | None, now: dt.datetime | None = None) -> bool:
     items = ((book or {}).get("manual") or {}).get("items") or {}
     return any((it.get("status") == "pending" and it.get("kind") in POS_KINDS and not it.get("wait"))
                or (it.get("status") == "placed" and it.get("cancel_req")) for it in items.values())
+
+
+def cancel_due(tag: str, book: dict | None, now: dt.datetime | None = None) -> bool:
+    """有要执行器撤的单（执行器还没读的撤单指令，或读了还在等的）、而且是交易日 15:30 之前 → 面板叫执行器跑一次 --phase cancel
+    （开盘前 / 盘中都可以，不看「今天早上的运行完成没有」；HALT 时也叫：撤单只会减少风险）。"""
+    now = now or now_jst()
+    if not is_trading_day(now.date()) or now.time() >= CANCEL_UNTIL:
+        return False
+    if any(r["kind"] == "cancel_order" for r in unseen(tag, book)):
+        return True
+    return any(it.get("kind") == "cancel_order" and it.get("status") == "pending"
+               for it in (((book or {}).get("manual") or {}).get("items") or {}).values())
 
 
 def now_due(tag: str, book: dict | None, now: dt.datetime | None = None) -> bool:
@@ -717,12 +753,13 @@ class Manual:
                 if it.get("ticker") == t and it.get("kind") in kinds and it.get("status") == "placed"]
 
     # ── 读指令 ──
-    def ingest(self) -> list[tuple[str, str]]:
+    def ingest(self, only=None) -> list[tuple[str, str]]:
         """新指令 → items（pending）；core / unblock 当场生效；cancel：等执行器的马上撤，已交给执行器的记下「撤回中」
-        （settle 在对账之后处理）。返回 [(级别, 说明)]。"""
+        （settle 在对账之后处理）；cancel_order（撤单）：等执行器撤（--phase cancel）。only：只读这几种（撤单的运行只读撤单，
+        别的留给平时的运行）。返回 [(级别, 说明)]。"""
         msgs = []
         items = self.m["items"]
-        new = [r for r in read_all(self.tag) if r["id"] not in items]
+        new = [r for r in read_all(self.tag) if r["id"] not in items and (only is None or r["kind"] in only)]
         dropped = {r.get("target") for r in new if r["kind"] == "cancel"}   # 执行器读到之前就被撤回的（比例 / 解除是读到就生效的）
         for r in new:
             it = {**r, "status": "pending"}
@@ -757,9 +794,11 @@ class Manual:
                     it.update(status="rejected", msg=f"{r['target']}：{NOW_NO_CANCEL}")
                 elif tg is not None and tg.get("status") == "placed" and not tg.get("cancel_req"):
                     tg["cancel_req"] = r["id"]
-                    it.update(status="done", msg=f"撤回 {r['target']}：之后不再下（已经发到交易所的要在立花网站 / App 上撤）")
+                    it.update(status="done", msg=f"撤回 {r['target']}：之后不再下（已经发到交易所的单用「今天的单」的「撤单」撤）")
                 else:
                     it.update(status="rejected", msg=f"{r['target']} 不是还没完成的指令，撤不了")
+            elif k == "cancel_order":
+                it["msg"] = "等执行器撤单"
             else:
                 it["msg"] = "等执行器下单"
             msgs.append(("info", f"手动指令 {r['id']}：{describe(r)} → {it['msg']}"))
@@ -1103,7 +1142,7 @@ class Manual:
     # ── 汇报 ──
     def summary(self) -> dict:
         items = sorted(self.m["items"].values(), key=lambda x: x.get("at", ""), reverse=True)
-        keep = ("id", "at", "kind", "ticker", "pct", "unit", "value", "block_days", "target", "status", "msg", "decided_on",
+        keep = ("id", "at", "kind", "ticker", "cid", "pct", "unit", "value", "block_days", "target", "status", "msg", "decided_on",
                 "fill_day", "done_on", "fill", "shares", "side", "limit", "source", "note", "cancel_req", "wait", "now", "hold")
         return {"core_pct": self.core_pct, "core_pause": self.m.get("core_pause"), "core_signal": self.m.get("core_signal"),
                 "blocks": dict(self.m["blocks"]), "trims": dict(self.m["trims"]),
@@ -1332,7 +1371,7 @@ def lines(sm: dict | None, today: str | None = None) -> list[str]:
 
 __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEFAULT", "CAP_PCT", "MAX_POS", "SESSION", "Manual",
            "append", "read_all", "unseen", "cancelled", "normalize", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text",
-           "next_window", "due",
+           "next_window", "due", "cancel_due", "CANCEL_UNTIL",
            "RULE_TEXT", "NOW_NO_CANCEL",
            "now_due", "status_text", "entry_why", "buy_size", "requests_path", "position_pct", "target_shares", "adjust_plan",
            "cap_text", "fmt_target", "describe", "active", "lines", "signal_text", "core_pct_now",

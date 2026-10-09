@@ -3,6 +3,8 @@
 #   bash scripts/install_launchd_live_u.sh              模拟操盘（默认）：07:40 一次（等云端当天的数据入库后运行）
 #   bash scripts/install_launchd_live_u.sh tachibana    立花本番：07:40 早上的单 + 08:35 重试 + 09:05 开盘后补单 + 09:20 重试
 #                                                        （开户、过了上线门槛之后；重试 = 前一次没跑完才跑，跑完了什么都不做）
+#                                                        + 前一晚预检 com.qbreak.precheck（周日〜周四 20:00；scripts/install_launchd_precheck.sh）
+#   两种模式都装 com.qbreak.wakehold（周一至五 06:40 唤醒后 caffeinate 70 分钟：一直醒到 07:40 的执行器；scripts/install_launchd_wakehold.sh）
 #   bash scripts/install_launchd_live_u.sh uninstall    全部卸载
 # 执行器的状态、日志、ARM / HALT 都在 ~/.qbreak/home（QBREAK_LIVEU_HOME 可改），不在仓库里。
 set -euo pipefail
@@ -19,6 +21,8 @@ load() { if command -v launchctl >/dev/null 2>&1; then launchctl load -w "$1"; e
 
 if [ "$MODE" = "uninstall" ]; then
   for l in "${LABELS[@]}"; do unload "$AGENTS/$l.plist"; rm -f "$AGENTS/$l.plist"; echo "已卸载 $l"; done
+  bash "$PROJ/scripts/install_launchd_precheck.sh" uninstall      # 立花的前一晚预检一起卸
+  bash "$PROJ/scripts/install_launchd_wakehold.sh" uninstall      # 唤醒后保持清醒一起卸
   exit 0
 fi
 case "$MODE" in paper|tachibana) ;; *) echo "用法：$0 [paper|tachibana|uninstall]"; exit 2;; esac
@@ -41,8 +45,7 @@ else
     "$PYB" -m venv "$VENV"
   fi
   PYX="$VENV/bin/python"
-  "$PYX" -m pip install -q --upgrade pip
-  "$PYX" -m pip install -q -r "$PROJ/requirements.txt"
+  bash "$PROJ/scripts/install_deps.sh" "$PYX" || { echo "★ 依赖没装好：修好之后重跑本脚本"; exit 1; }   # requirements.lock（装不上 → requirements.txt）
 fi
 mkdir -p "$LHOME/logs" "$AGENTS"
 
@@ -77,7 +80,7 @@ $args  </array>
     <key>QBREAK_PYTHON</key><string>$PYX</string>
     <key>PYTHONIOENCODING</key><string>utf-8</string>
     <key>LANG</key><string>en_US.UTF-8</string>
-    <key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>StartCalendarInterval</key>
   <array>
@@ -94,12 +97,18 @@ PLISTEOF
 for l in "${LABELS[@]}"; do unload "$AGENTS/$l.plist"; rm -f "$AGENTS/$l.plist"; done   # 切换模式时不留旧任务
 if [ "$MODE" = "paper" ]; then
   plist com.qbreak.liveu.paper 7 40 run --broker paper
+  QBREAK_PYTHON="$PYX" bash "$PROJ/scripts/install_launchd_precheck.sh" uninstall   # 模拟模式不做立花的前一晚预检
 else
   plist com.qbreak.liveu.morning 7 40 run --broker tachibana
   plist com.qbreak.liveu.retry 8 35 run --broker tachibana --retry
   plist com.qbreak.liveu.open 9 5 run --broker tachibana --phase open
   plist com.qbreak.liveu.open2 9 20 run --broker tachibana --phase open --retry
+  QBREAK_PYTHON="$PYX" QBREAK_LIVEU_HOME="$LHOME" QBREAK_LAUNCH_AGENTS="$AGENTS" \
+    bash "$PROJ/scripts/install_launchd_precheck.sh"           # 前一晚预检（周日〜周四 20:00；只读：登录 → 取余力 → 登出）
 fi
+
+# 工作日 06:40 唤醒之后一直醒到 07:40 的执行器（不靠 Claude 桌面版的 Keep computer awake；两种模式都要）
+QBREAK_LIVEU_HOME="$LHOME" QBREAK_LAUNCH_AGENTS="$AGENTS" bash "$PROJ/scripts/install_launchd_wakehold.sh"
 
 # ③ 环境自检（Python 版本、依赖、行情连通性）
 QBREAK_HOME="$LHOME" "$PYX" "$PROJ/run.py" doctor || echo "★ doctor 有失败项（见上），修好再等明天早上的运行"
@@ -116,12 +125,13 @@ echo "看账本：  bash \"$PROJ/scripts/liveu.sh\" --broker $MODE --status"
 echo "手动跑一次（和定时任务相同）：bash \"$PROJ/scripts/liveu.sh\" run --broker $MODE"
 if [ "$MODE" = "tachibana" ]; then
   echo "解锁发单：echo ARMED > \"$LHOME/ARM\"；紧急停止：echo 停 > \"$LHOME/HALT\""
-  # Mac 睡着 / 关机时定时任务不跑：工作日 07:30 自动唤醒（要 sudo，脚本不替你做）；运行期间 liveu.sh 用 caffeinate 防止再睡
+  # Mac 睡着 / 关机时定时任务不跑：工作日 06:40 自动唤醒（2026-10-09 起；本机例行任务的日报 06:45，执行器只要 07:40 之前；
+  # 要 sudo，脚本不替你做）；06:40〜07:40 由 com.qbreak.wakehold（caffeinate）保持清醒；运行期间 liveu.sh 用 caffeinate 防止再睡
   if command -v pmset >/dev/null 2>&1; then
     if pmset -g sched 2>/dev/null | grep -qi "wake"; then
-      echo "自动唤醒：已有设定（pmset -g sched 查看；要工作日 07:40 之前）"
+      echo "自动唤醒：已有设定（pmset -g sched 查看；执行器要工作日 07:40 之前，本机例行任务要 06:50 之前：bash \"$PROJ/scripts/routines.sh\" check）"
     else
-      echo "★ 还没设定自动唤醒：在终端运行 sudo pmset repeat wakeorpoweron MTWRF 07:30:00（输入 Mac 的登录密码；接着电源、不合盖）"
+      echo "★ 还没设定自动唤醒：在终端运行 sudo pmset repeat wakeorpoweron MTWRF 06:40:00（输入 Mac 的登录密码；接着电源、不合盖）"
     fi
   fi
   echo "上线前检查（只读）：bash \"$PROJ/scripts/liveu.sh\" gate"

@@ -55,7 +55,7 @@ cat > "$F" <<PLISTEOF
     <key>QBREAK_PYTHON</key><string>$PYX</string>
     <key>PYTHONIOENCODING</key><string>utf-8</string>
     <key>LANG</key><string>en_US.UTF-8</string>
-    <key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>

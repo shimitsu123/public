@@ -14767,5 +14767,22 @@
   "stable_findings": [],
   "era_dependent_or_reversed": [],
   "notes": "待办〔77〕①；用户要自己做：gh auth login + git 身份、钥匙串 qbreak-webhook / qbreak-heartbeat、mac_setup 装 09:30 自检；云端例行任务照旧"
+ },
+ {
+  "line": 10527,
+  "date": "2026-10-09",
+  "title": "邮件通知（SMTP_SSL / 证书校验 / email-setup）+ 立花实盘缺口 B 组 16 项（撤单、状态不明候选、adopt / reconcile、账本备份、前一晚预检、冒烟测试与依赖锁、异常熔断、取价失败保留、终态码、値幅夹价、B13 错过寄付的卖单开盘后限价卖（用户同意）等）+ 例行任务搬到 Mac 的 Claude 桌面版本机任务（云端改后备）",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": null,
+  "script": "qbreak/notify.py、qbreak/live_ops.py、qbreak/book_backup.py、qbreak/precheck.py、qbreak/routines.py、qbreak/versions.py、qbreak/live_unified.py、qbreak/brokers/tachibana.py、qbreak/panel.py、run.py、scripts/liveu.sh、scripts/routines.sh、routines/*.md",
+  "output": "—（Mac 数据目录：out/precheck_tachibana.json、state/backup/ 等）",
+  "candidates": [],
+  "baseline": "—（除 B13 执行方式外不改交易规则 / 参数 / 仓位 / 股票池）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "B13 = 用户 2026-10-09「做〔77〕B」同意：立花早上错过寄付时规则卖单开盘后当日限价卖、买单当天不买；例行任务：日报 06:45 / 影子 07:45 / 季度复核 09:56 在 ~/qbreak-sim，云端后备 07:20 / 08:05 / 12:52；用户要在桌面版里说「装本机例行任务」"
  }
 ]

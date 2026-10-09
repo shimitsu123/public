@@ -71,7 +71,8 @@ FAIL_GAP_MAX_S = 900                    # 盘中执行器失败后的退避：NO
 FAIL_PAUSE_N = 3                        # 同一天连续失败几次 → 当天这个账本暂停自动叫执行器（新的手动指令 / 第二天恢复）
 TOKEN_FILE = "panel_token"
 WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "holding_view.py", "kline.py", "suggest.py", "watch_prob.py", "core_exit.py",
-         "idle_cash.py", "dip_stats.py", "run_status.py")
+         "idle_cash.py", "dip_stats.py", "run_status.py", "precheck.py", "calendar_jp.py",
+         "paths.py", "live_unified.py")         # 默认账本 / ARM 判定（paths）、数据依赖的提醒文字（live_unified）
 
 
 def token() -> str:
@@ -92,8 +93,9 @@ def token() -> str:
 
 
 def books() -> list[str]:
-    """有账本的执行器（模拟账户总列出来）。"""
-    return [t for t in BOOKS if t == "paper" or (paths.state_dir() / f"live_unified_{t}.json").exists()]
+    """有账本的执行器（模拟账户总列出来；装了立花本番时立花也总列出来，账本还没有也一样）。"""
+    dft = paths.default_book()
+    return [t for t in BOOKS if t in ("paper", dft) or (paths.state_dir() / f"live_unified_{t}.json").exists()]
 
 
 def _load(tag: str) -> tuple[dict, dict]:
@@ -143,6 +145,8 @@ color:var(--fg);cursor:pointer;touch-action:manipulation}
 .btn.sell{border-color:var(--neg);color:var(--neg);font-weight:600}
 .btn.danger{background:var(--neg);border-color:var(--neg);color:#fff;font-weight:600}
 .btn.sm{min-height:36px;padding:6px 12px;font-size:14px;flex:0 0 auto} .btn:disabled{opacity:.45;cursor:default}
+.top.real{border-bottom:3px solid var(--neg)} .real-badge{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--neg);
+color:#fff;font-size:13px;font-weight:700;white-space:nowrap}
 .list .li{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:10px 0}.list .li:first-child{border-top:0}
 .grow{flex:1;min-width:0}
 input[type=range]{width:100%;height:44px;accent-color:var(--accent)}
@@ -341,7 +345,7 @@ function ask(title, body, okText, opt){
   const inp=$('#ask-input'); inp.hidden=!opt.input; inp.value=''; inp.placeholder=opt.input||'';
   sheet('#dlg-ask'); return new Promise(res=>{ ASK=res; });
 }
-const NOTE = CFG.paper ? '\\n\\n模拟账户：手动操作后会和云端模拟盘不一致。' : '';
+const NOTE = CFG.paper ? '\\n\\n模拟账户：手动操作后会和云端模拟盘不一致。' : CFG.real ? '\\n\\n★ 真钱（立花本番）：执行器会在立花真的下单。' : '';
 function coreShow(){ const r=$('#core-pct'); if(r) $('#core-val').textContent=r.value+'%'; }
 // ── 调仓（股数 / 金额 / 占权益 %）：按最近收盘估算；执行器下单时按当时的价格再算一次；调仓条按单元（LOT 股）分格 ──
 const LOT = CFG.lot || 100;
@@ -588,8 +592,15 @@ document.addEventListener('click', async e=>{
     const q=await ask('闲置资金比例 '+v+'%', '核心 ETF 的目标额 = 规则算出的 × '+v+'%，下一次决策起生效'+(v<100?'（多出来的留现金）':'')+NOTE, '保存');
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:v})); return;
   }
+  if(a==='cancel-order'){                                                 // 撤单：执行器今天已经发到交易所、还挂着的单（面板马上叫执行器撤）
+    const q=await ask('撤单 '+(d.side==='BUY'?'买 ':'卖 ')+d.t+' '+fmt(+d.qty)+(d.core==='1'?' 口':' 股'),
+      (d.core==='1' ? '核心 ETF 的单：已经成交的部分撤不了；下一次决策照规则 / 闲置资金比例重新算目标，可能再买 / 再卖（要少拿用「闲置资金比例」）。'
+                    : '已经成交的部分撤不了；撤掉的卖单如果规则明天还要卖会再下；撤掉的个股买单不再买。')+(CFG.paper ? '' : '\\n马上发撤单到立花（之后看「今天的单」的状态）'),
+      '撤单', {danger:true});
+    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel_order', cid:d.cid})); return;
+  }
   if(a==='cancel'){
-    const q=await ask('撤回 '+d.id, d.placed==='1' ? '之后不再下。已经发到交易所的单要在立花网站 / App 上撤。' : '还没下单：撤回之后不会下。', '撤回');
+    const q=await ask('撤回 '+d.id, d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天的单」的「撤单」撤。' : '还没下单：撤回之后不会下。', '撤回');
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
   }
   if(a==='unblock'){
@@ -597,7 +608,7 @@ document.addEventListener('click', async e=>{
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'unblock', ticker:d.t})); return;
   }
   if(a==='halt'){
-    const q=await ask('停止下单（HALT）', '全部账本（模拟和立花）从下一次运行起不下单、持仓不动。\\n已经发到交易所的单不会被撤（要撤在立花网站 / App 上撤）。\\n这里只能停：恢复只在 Mac 上（在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」）。', '停止下单', {danger:true, input:'原因（可不填）'});
+    const q=await ask('停止下单（HALT）', '全部账本（模拟和立花）从下一次运行起不下单、持仓不动。\\n已经发到交易所的单不会被撤（要撤：「今天的单」的「撤单」，或立花网站 / 手机网站）。\\n这里只能停：恢复只在 Mac 上（在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」）。', '停止下单', {danger:true, input:'原因（可不填）'});
     if(q.ok) done(await api('/api/halt',{reason:q.value})); return;
   }
   if(a==='pair-new'){
@@ -1405,6 +1416,12 @@ def _run_lines(tag: str, book: dict, now: dt.datetime, halt: str | None) -> list
         if not paper and any(o["status"] in ("ERROR", "SENDING") for o in bad):
             out.append(("neg", "状态不明的单：去立花网站的注文一覧核对（手机网站 "
                                f"<a href='{ESHITEN_SP}' target='_blank' rel='noopener noreferrer'>{ESHITEN_SP}</a>），再在 Mac 对话里登记"))
+            unk = (rec or {}).get("unknown") if rec and rec.get("decided_on") == ld else None
+            if unk:                                        # 执行器停下时查的注文一覧候选（只读；qbreak/live_ops.unknown_candidates）
+                from .live_ops import unknown_text
+                out.append(("neg", "注文一覧里的候选（执行器停下时查的；登记要你在 Mac 对话里确认）："))
+                for ln in unknown_text(unk, drafts=False):
+                    out.append(("neg", escape(ln.strip())))
     if st and not halt and is_trading_day(today) and now.time() >= dt.time(8, 0):
         exp = prev_trading_day(today).isoformat()          # 今天早上应该处理到的决策日
         # 模拟账户：装着 07:40 的定时任务（com.qbreak.liveu.paper）就一直算在用 —— 连着几天没跑更要提醒；
@@ -1420,7 +1437,76 @@ def _run_lines(tag: str, book: dict, now: dt.datetime, halt: str | None) -> list
         rs = [rs] if isinstance(rs, str) else [str(x) for x in (rs if isinstance(rs, list) else [])]
         if is_today:
             out.append(("neg", f"★ 自检（{escape(when[6:])}）：{escape('；'.join(rs) or '没通过')}"))
+    if tag == "tachibana":                                 # 前一晚预检（qbreak/precheck.py）：今天 / 昨晚没通过的原因、要动手的提醒
+        from .precheck import last_result, panel_lines
+        for ln in panel_lines(last_result(), now):
+            out.append(("neg", escape(ln)))
     return out
+
+
+def _input_lines(sm: dict, st: dict) -> list[tuple[str, str]]:
+    """数据依赖的提醒（B10；Mac 与手机同一个）→ [(neg, 已转义的 HTML)]：执行器这次的汇总（out/live_unified_<账本>.json）里
+    判断层的输入几天没更新（C-08）、行情有问题 + 修法（C-09）、行情落后的持仓今天的离场判断被跳过（LU-03）。
+    汇总不是当前决策的（旧的）→ 不显示。只展示，不改任何东西。"""
+    from .live_unified import YF_FIX, lag_exit_lines
+    if not sm or not st or sm.get("decided_on") != st.get("last_date"):
+        return []
+    out: list[tuple[str, str]] = []
+    si, dp = sm.get("stale_inputs") or {}, sm.get("data_problem") or {}
+    if si.get("text"):
+        out.append(("neg", escape(f"★ {si['text']}")))
+    if dp:
+        out.append(("neg", escape(f"★ 行情：{'；'.join(str(x) for x in dp.get('why') or [])}。修法：{dp.get('fix') or YF_FIX}")))
+    for ln in lag_exit_lines(sm.get("lag_exits")):
+        out.append(("neg", escape(f"★ {ln}")))
+    return out
+
+
+def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list) -> str:
+    """「今天的单」（Mac 与手机同一个）：账本当前决策里执行器的单（票、买卖、股数、下法、限价、状态）。还挂着的单（SENT / PARTIAL，
+    今天的、立花有注文番号）给「撤单」按钮 → 写撤单指令（kind cancel_order），面板马上叫执行器撤（qbreak/live_ops.py）；
+    已经写了撤单指令的显示「撤单中」。立花 API / Mac 出故障那天：照这张表在立花网站下单，之后在 Mac 对话里说一声人工代下登记（adopt）。
+    没有单 → ""。只展示 + 写指令，不改账本。"""
+    from . import live_ops as LO
+    st = book.get("state") or {}
+    d = st.get("last_date")
+    orders = [o for o in book.get("orders") or [] if o.get("decided_on") == d]
+    if not orders:
+        return ""
+    items = ((book.get("manual") or {}).get("items") or {}).values()
+    asked = ({str(r.get("cid")) for r in waiting if r.get("kind") == "cancel_order"}
+             | {str(it.get("cid")) for it in items if it.get("kind") == "cancel_order" and it.get("status") == "pending"})
+    f = LO.fill_day_of(book)
+    stale = f is not None and f != now.date()               # 今天早上的运行没跑：这还是上一次决策的单（不是今天要下的）
+    rows = []
+    for o in orders:
+        core = o.get("kind") == "core"
+        unit = "口" if core else "股"
+        n = int(o.get("sent_qty") or o.get("qty") or 0)
+        lim = f"，限价 ≤ ¥{float(o['limit']):,g}" if o.get("limit") and o.get("side") == "BUY" else ""
+        q = int(o.get("filled_qty") or 0)
+        got = f"，成交 {q:,}/{n:,}" if q and o.get("status") in ("PARTIAL", "CANCELLED", "EXPIRED") else ""
+        note = str(o.get("note") or "")
+        if str(o.get("cid")) in asked:
+            btn = "<span class='chip'>撤单中</span>"
+        elif LO.cancel_why(o, book, now, paper) is None:
+            btn = (f"<button class='btn sm danger' data-act='cancel-order' data-cid='{escape(str(o.get('cid')))}' "
+                   f"data-t='{escape(str(o.get('ticker')))}' data-side='{escape(str(o.get('side')))}' data-qty='{n}' "
+                   f"data-core='{1 if core else 0}'>撤单</button>")
+        else:
+            btn = ""
+        rows.append(f"<div class='li'><div class='grow'><b>{'买' if o.get('side') == 'BUY' else '卖'} {escape(str(o.get('ticker')))} "
+                    f"{n:,} {unit}</b> <span class='chip'>{escape(LO.STATUS_TEXT.get(o.get('status'), str(o.get('status'))))}</span>"
+                    f"<div class='muted small'>{escape(LO.how_text(o) + lim + got)}"
+                    f"{(' · ' + escape(note[:140])) if note else ''}</div></div>{btn}</div>")
+    foot = (f"「撤单」：{LO.CANCEL_HINT}。{LO.CANCEL_HINT_CORE}。"
+            + ("" if paper or stale else
+               "立花 API / Mac 出故障那天：只照这张表里「被挡 / 不下 / 没下」的行在立花网站下单（「已下单 / 已成交 / 部分成交」的已经在交易所，"
+               "别再下），之后在 Mac 对话里说一声登记（人工代下）。"))
+    head = (f"上一次决策的单（成交日 {escape(str(f))}，不是今天：今天早上的运行还没跑）" if stale else
+            f"今天的单（执行器{'，成交日 ' + escape(str(f)) if f else ''}）")
+    return (f"<section class='card' id='today'><h2>{head}</h2>"
+            f"<div class='list'>{''.join(rows)}</div><div class='muted small'>{escape(foot)}</div></section>")
 
 
 def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "local", device: dict | None = None,
@@ -1440,7 +1526,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     ktrend = kl.get("trend") or {}
     has_k = bool(kl.get("file")) and (paths.out_dir() / str(kl["file"])).exists()
     halt = PP.halt_text()
-    armed = (paths.home() / "ARM").exists()
+    arm = paths.arm_state()                                 # 和立花适配器同一个判断（UX-12）：内容是 ARMED 才算解锁
+    real = tag == "tachibana"                               # 真钱（立花本番）：顶栏醒目的标识（B12 / UX-11）
     hist = st.get("history") or []
     eq = float(hist[-1][1]) if hist else None
     pct = MO.position_pct(st)
@@ -1455,26 +1542,35 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     core_late = bool(cr) and abs(float(man.get("core_pct", 100.0)) - float(cr.get("applied", cr.get("pct", 100.0)))) > 1e-9
     core_now = {str(o.get("ticker")): o for o in book.get("orders") or []          # 今天盘中已经照比例调过的核心 ETF（口数明天早上对账后更新）
                 if o.get("reason") == "manual_core" and o.get("decided_on") == st.get("last_date")
-                and o.get("status") in ("SENT", "FILLED", "PARTIAL", "SENDING", "ERROR")}
+                and (o.get("status") in ("SENT", "FILLED", "PARTIAL", "SENDING", "ERROR")
+                     or (o.get("status") in ("EXPIRED", "CANCELLED") and int(o.get("filled_qty") or 0) > 0))}   # 已失效 / 撤掉但成交过一部分：口数也变了
     buying = {r.get("ticker") for r in waiting if r.get("kind") == "buy" and r["id"] not in dropped}
     buying |= {it.get("ticker") for it in (man.get("items") or {}).values()
                if it.get("kind") == "buy" and it.get("status") in MO.ACTIVE and not it.get("cancel_req")}
-    H = ["<header class='top'><div class='bar'><b>qbreak 操作面板</b><span class='sp'></span>"
+    H = [f"<header class='top{' real' if real else ''}'><div class='bar'><b>qbreak 操作面板</b>"
+         + ("<span class='real-badge'>真钱（立花本番）</span>" if real else "") + "<span class='sp'></span>"
          f"<span class='muted small'>{escape(now.strftime('%m/%d %H:%M JST'))}</span>"
          "<button class='btn sm' data-act='reload'>刷新</button></div>"
-         "<nav class='tabs'>" + "".join(f"<a href='/?book={t}' class='{'on' if t == tag else ''}'>{escape(BOOKS[t])}</a>" for t in books())
+         "<nav class='tabs'>" + "".join(f"<a href='/?book={t}' class='{'on' if t == tag else ''}'>{escape(BOOKS[t])}</a>"
+                                       for t in BOOKS if t in books() or t == tag)        # 正在看的账本总在标签里
          + "</nav></header><main>"]
     warn = []
     if halt:
         warn.append(f"HALT 生效中（{escape(halt)}）：不下单，解除之后才处理")
-    if not paper and not armed:
+    if not paper and arm == "bad":
+        warn.append("ARM 文件在，但内容不是 ARMED（立花只认内容 ARMED）：单会被挡住，不会真的发出去")
+    elif not paper and arm == "off":
         warn.append("立花还没解锁（没有 ARM）：单会被挡住，不会真的发出去")
     if paper:
         warn.append("模拟账户：手动操作后会和云端模拟盘不一致")
+        if paths.live_installed() and not _scheduled(paths.PAPER_AGENT):   # 上线后模拟操盘的定时任务已卸载（LU-20 / OPS-06）
+            warn.append("模拟账户已停：装的是立花本番（模拟操盘的定时任务已卸载），这个账本不再推进，这里写的指令不会被执行"
+                        " → 用上面的「立花（本番）」")
     cpause, csig = man.get("core_pause"), man.get("core_signal")      # 卖出 ETF 后停买；停着时规则从「不拿」变成「拿」= 买入信号
     if cpause and csig:
         warn.insert(0, escape(f"闲置资金 ETF 出现买入信号（{csig.get('date')} 收盘）：{MO.signal_text(csig)} → 确认后才买（见下面「闲置资金」）"))
     runl = _run_lines(tag, book, now, halt)                # 执行器这次跑成没有 / 没下成的单 / 早上没跑完 / 09:30 自检
+    runl += _input_lines(sm, st)                           # 判断层的输入没更新 / 行情有问题 + 修法 / 离场判断被跳过（B10）
     tz = trigger.status(tag, now, book) if trigger is not None else None
     if tz:                                                 # 面板叫的执行器连续失败：暂停 / 退避（Trigger）
         runl.insert(0, (tz[0], escape(tz[1])))
@@ -1484,7 +1580,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
              f"<div class='stats'><div><div class='muted'>总权益</div><div class='big'>{_yen(eq)}</div></div>"
              f"<div><div class='muted'>现金</div><div class='big'>{_yen(st.get('cash_jpy'))}</div></div></div>"
              f"<div>现在点买卖 → <b>{escape(when)}</b>下单</div><div class='muted small'>{escape(MO.RULE_TEXT)}</div>"
-             + "".join(f"<div class='{'neg' if 'HALT' in w or 'ARM' in w or '买入信号' in w else 'muted'} small'>★ {w}</div>" for w in warn)
+             + "".join(f"<div class='{'neg' if 'HALT' in w or 'ARM' in w or '买入信号' in w or '已停' in w else 'muted'} small'>★ {w}</div>"
+                       for w in warn)
              + "".join(f"<div class='{c} small'>{h}</div>" for c, h in runl)
              + "</section>")
     if not st:
@@ -1521,7 +1618,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         o = core_now.get(t)
         if o is not None:
             q, n = int(o.get("filled_qty") or 0), int(o.get("qty") or 0)
-            got = "已成交" if q >= n > 0 else f"成交 {q:,} / {n:,} 口" if q > 0 else "等成交" if o.get("status") in ("SENT", "PARTIAL") else "结果不明"
+            got = ("已成交" if q >= n > 0 else f"成交 {q:,} / {n:,} 口" + {"EXPIRED": "，其余已失效", "CANCELLED": "，其余已撤"}.get(
+                str(o.get("status")), "") if q > 0
+                   else "等成交" if o.get("status") in ("SENT", "PARTIAL") else "结果不明")
             return (qt + f"<div class='act muted'>今天盘中已照比例{'卖出' if o.get('side') == 'SELL' else '买入'} {n:,} 口（{got}）："
                     "口数明天早上对账后更新</div>")
         c = MO.core_info(book, t)
@@ -1579,6 +1678,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             + "".join(f"<div class='hv'><b>{escape(str(c.get('name') or t))}</b> <span class='muted'>现在 0 口</span>"
                       f"{tchips(ktrend.get(t))}{chart(t, 'core')}</div>" for t, c in other) + "</details>") if other else ""
     held_any = bool(st.get("pos")) or any(int(u) > 0 for u in (st.get("core_units") or {}).values())
+    H.append(_orders_card(book, now, paper, waiting))       # 今天的单（执行器）：还挂着的给「撤单」；API / Mac 故障时照它在立花网站下
     H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions) + more
              + ("<div id='qt-note' class='muted small'>现价：Yahoo 1 分钟线（约晚 20 分钟）</div>" if held_any else "") + "</section>")
     H.append(_suggest_card(sm.get("suggest") or {}, book, tag, buying, when, eq, cap, chart))
@@ -1640,7 +1740,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                  "<div class='muted small'>不下任何单、持仓不动。恢复只在 Mac 上：在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」。</div></section>")
     else:
         H.append("<section class='card' id='halt'><h2>紧急停止</h2><div class='muted small'>全部账本（模拟和立花）从下一次运行起不下单、持仓不动；"
-                 "已经发到交易所的单不会被撤（要撤在立花网站 / App 上撤）。这里只能停、不能恢复。</div>"
+                 "已经发到交易所的单不会被撤（要撤：上面「今天的单」的「撤单」，或立花网站 / 手机网站）。这里只能停、不能恢复。</div>"
                  "<div class='act'><button class='btn danger' data-act='halt'>停止下单（HALT）</button></div></section>")
     if not remote:
         H.append(_phone_card(phone or {}))
@@ -1665,6 +1765,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             ests[t] = {**e, "lines": MO.est_lines(e, note)}
     u100s = MO.core_u100s(book)[0]                          # 规则目标（比例 100%）；执行器还没算过 → 估算（比例还是 100% 时）
     cfg = {"auth": {"h": "X-Qbreak-Csrf" if remote else "X-Qbreak-Token", "v": tok}, "book": tag, "paper": paper, "remote": remote,
+           "real": real,                                                                   # 真钱（立花本番）：确认框写明
            "when": when, "eq": eq or 0, "cap": cap, "lot": MO.LOT, "live": MO.timing(now)[0] == "now",   # 盘中：现价每 1 分钟刷新
            "cores": {t: {"cur": int((st.get("core_units") or {}).get(t, 0)), "u100": int(u100s.get(t, 0)),
                          "lot": MO.core_lot(book, t)}                                            # 调一只核心 ETF 时别的跟着变多少
@@ -1710,7 +1811,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
         return False, f"没写：{e}", None
     c0 = MO.core_info(book, rec["ticker"]) if rec["kind"] == "core" and rec.get("ticker") else None
     pct0 = MO.core_pct_now(tag, book)                      # 写之前的闲置资金比例（含还没读的指令；0 = 停买中）
-    why = MO.check(rec, book, tag, sm=sm)
+    why = MO.check(rec, book, tag, sm=sm, now=now)
     if why:
         return False, f"没写：{why}", None
     rec = MO.append(tag, rec, clock=(lambda: now) if now else None)
@@ -1720,7 +1821,8 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
            "trim": f"已写：{t} 减到约 {rec.get('pct', 0):g}% → {when}卖出",
            "core": f"已写：闲置资金比例 {rec.get('pct', 0):g}% → 核心 ETF {when}照新比例调",
            "unblock": f"已写：解除 {t} 的不自动买回",
-           "cancel": f"已写：撤回 {rec.get('target')}"}.get(k)
+           "cancel": f"已写：撤回 {rec.get('target')}",
+           "cancel_order": f"已写：撤单 {rec.get('ticker')}（{rec.get('cid')}）→ 执行器马上撤（已经成交的部分撤不了）"}.get(k)
     if k == "adjust":
         st = book.get("state") or {}
         a = MO.adjust_plan(rec, st, float((book.get("manual") or {}).get("cap_pct") or MO.CAP_PCT))
@@ -1780,7 +1882,7 @@ class Trigger:
     def _spawn(tag: str, mode: str = "retry"):
         broker = "paper" if tag == "paper" else "tachibana"
         cmd = ["/bin/bash", str(paths.PROJECT_ROOT / "scripts" / "liveu.sh"), "run", "--broker", broker]
-        cmd += ["--phase", "now"] if mode == "now" else ["--retry"]
+        cmd += ["--phase", mode] if mode in ("now", "cancel") else ["--retry"]
         if tag == "tachibana_demo":
             cmd.append("--demo")
         lf = open(paths.log_dir() / "com.qbreak.panel.retry.log", "a", encoding="utf-8")
@@ -1894,7 +1996,8 @@ class Trigger:
         today = now.date().isoformat()
         morning = is_trading_day(now.date()) and TRIGGER_FROM <= now.time() < TRIGGER_UNTIL
         session = MO.timing(now)[0] == "now"
-        names = books() if (morning or session) else []
+        cwin = is_trading_day(now.date()) and now.time() < MO.CANCEL_UNTIL     # 撤单：开盘前 / 午休也叫（15:30 之前）
+        names = books() if (morning or session or cwin) else []
         with self.lock:
             for tag in list(self.procs):
                 if tag not in names:
@@ -1908,12 +2011,15 @@ class Trigger:
                     continue                                 # 上一次叫的还在跑（结束了：这里记下成败，每次只 poll 一次）
                 if tag in self.paused and self._still_paused(tag, today):
                     continue                                 # 今天连续失败 3 次：等新的手动指令或明天
-                if self.mono() - self.last.get(tag, -1e9) < self._gap(tag, today, morning):
-                    continue                                 # 失败过：从看到失败起按连续失败次数加倍等
                 book, _ = _load(tag)
-                if not self._due(tag, book, now, morning):
+                if MO.cancel_due(tag, book, now):
+                    mode = "cancel"                          # 撤单指令：先撤（不看早上的运行完成没有；HALT 时也撤）
+                elif (morning or session) and self._due(tag, book, now, morning):
+                    mode = "retry" if morning else "now"
+                else:
                     continue                                 # 开盘前：早上的运行还没完成（它自己会读到指令）/ 没有新指令
-                mode = "retry" if morning else "now"
+                if self.mono() - self.last.get(tag, -1e9) < self._gap(tag, today, morning and mode != "cancel"):
+                    continue                                 # 失败过：从看到失败起按连续失败次数加倍等
                 self.last[tag] = self.mono()
                 try:
                     self.started[tag] = now
@@ -2212,13 +2318,14 @@ class _Common(BaseHTTPRequestHandler):
 
 
 def _book_of(query: str) -> str:
-    tag = (parse_qs(query).get("book") or ["paper"])[0]
-    return tag if tag in BOOKS else "paper"
+    """?book=… 的账本；没给 / 不认识 → 默认账本（B12：装了立花本番 → 立花；否则模拟账户；qbreak/paths.default_book）。"""
+    tag = (parse_qs(query).get("book") or [""])[0]
+    return tag if tag in BOOKS else paths.default_book()
 
 
 def _after_submit(trigger, rec: dict | None) -> None:
     """写了买卖 / 撤回 / 闲置资金比例 → 马上看一次要不要叫执行器（盘中 → 马上下单；开盘前 → 重试加进今天的寄付单）。"""
-    if trigger is not None and rec and rec["kind"] in MO.ORDER_KINDS + ("cancel", "core"):
+    if trigger is not None and rec and rec["kind"] in MO.ORDER_KINDS + ("cancel", "core", "cancel_order"):
         threading.Thread(target=trigger.check, daemon=True).start()
 
 

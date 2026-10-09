@@ -158,6 +158,7 @@ def _fake_run(monkeypatch, book, raise_on=None, now_new=()):
     ctx = SimpleNamespace(ex={"JP": None}, gate=gate, delist={}, extras={}, xmode="DC", ic_status={}, cc=None, bar_date=None,
                           cc_on=False, tbf=None, tbf_on=False)
     monkeypatch.setattr(run, "_netcheck", lambda: [])
+    monkeypatch.setattr("qbreak.trader.expected_last_bar", lambda today, market: dt.date(2026, 10, 8))   # 假引擎的行情到 10-08
     monkeypatch.setattr(run, "_unified_engine", lambda a, cfg, state, provider: (eng, ctx))
     monkeypatch.setattr(run, "_paper_broker_for_executor", lambda ucfg, ex: SimpleNamespace())
     monkeypatch.setattr(run, "_new_bar_idxs", lambda e, s: ([], "2026-10-08"))

@@ -396,7 +396,8 @@ def test_order_status_uses_execution_list_vwap():
 
 def test_order_status_falls_back_to_top_level_fields():
     b, _ = _broker()
-    assert b.order_status("A0001", "20260928") == {"filled_qty": 100, "avg_px": 3000.0, "status_code": "10", "status": ""}
+    assert b.order_status("A0001", "20260928") == {"filled_qty": 100, "avg_px": 3000.0, "status_code": "10", "status": "",
+                                                   "final": "FILLED"}
 
 
 def test_cancel_by_persisted_order_number_works_after_restart():

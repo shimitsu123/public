@@ -10523,3 +10523,30 @@ Mac 问法表、已知限制）；CHECK_TIMELINE（⑥ 执行层、08:35 / 09:20
   ② 手机通知：`security add-generic-password -s qbreak-webhook -a qbreak -w`（Discord / Slack / ntfy 的地址）→ `bash scripts/liveu.sh notify-test`；③ 外部心跳：healthchecks.io 之类建检查 → `qbreak-heartbeat`；
   ④ 拉代码后 `bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（装 09:30 自检）。
 - 测试：全部 3,120 个通过（原来 2,982 个 + 新增 138 个）。非投资建议。
+
+## 2026-10-09 工程（用户：「手机通知用邮件」「做〔77〕B」「连云端例行任务也搬到 Mac」）：邮件通知 + 立花实盘缺口 B 组 16 项 + 例行任务搬到 Mac 的 Claude 桌面版本机任务（云端改后备）；除 B13（用户同意的执行方式）外不改交易规则 / 参数 / 仓位 / 股票池
+- 规格事先写好、按文件分 8 段依次实现（每段配测试）→ 逐段对抗审查（40 条：blocker 2 / major 14 / minor 24）→ 全部修正 → 全部测试通过。条目号见 `var/out/tachibana_gap_audit.md`。
+- 用户补充（2026-10-09）：外部心跳用 healthchecks.io 免费 Hobbyist 方案；Claude 桌面版 ≥ 1.1.5368；Mac 一直开着、桌面版常驻。
+- 邮件：`qbreak/notify.py` 465 端口用 SMTP_SSL、其他 STARTTLS，两种都校验服务器证书（原来不校验）；应用专用密码里的空格去掉；多个收件人；EHLO 不带 Mac 的主机名。
+  设定 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup`（只在用户自己的终端里交互运行；没有终端就拒绝；Gmail 要 16 位应用专用密码；先发测试邮件、发成了才存进钥匙串 `qbreak-smtp`；不打印密码）。
+- B1 撤单：`liveu.sh cancel [<cid>…] --broker tachibana`、`liveu.sh halt-cancel`（先建 HALT 再撤；不写 --broker = 有账本的都撤）、面板 / 手机「今天的单」的「撤单」（写手动指令、执行器撤）；
+  只撤执行器自己今天还挂着的单，已成交部分撤不了；新状态 CANCELLED。B2 状态不明：发单前就失败（登录失败 / 连接被拒等）记 BLOCKED（没发出），只有可能已到服务器的才是状态不明；
+  受理应答没有注文番号 → 状态不明；`liveu.sh unknown`（只读）从注文一覧找候选并给登记命令草稿。B3 `liveu.sh reconcile`（只读）/ `liveu.sh adopt`（把用户在立花网站上的实际成交登记进账本；用户明确说才运行）；面板「今天的单」。
+- B4 账本备份（每次运行前，留最近 60 份）、立花账本读坏时不再悄悄从 ¥100 万重来（停下、`liveu.sh restore`）。B5 前一晚预检（LaunchAgent `com.qbreak.precheck`，周日〜周四 20:00，只读登录一次；
+  交付書面更新预告、API 新版本提醒在发布日之后也不消失、上线检查新出现的 ★ 通知）。B6 运行记录代码版本与包版本；新代码第一次用于立花本番前跑冒烟测试，不过 → 当天不下单；
+  `requirements.lock`（干净的虚拟环境里生成）+ `scripts/install_deps.sh`；单次运行异常熔断（规则单笔数 > (名额 + 核心只数) × 2 或金额 > 权益 × 2.2 → 全部不下；正常运行不会触发）；登录时检查 Python 环境。
+- B7 取价失败 → 开盘后买单保留到 09:20 再试；09:20 还没寄り付き → 不买并记入与模型的差异。B8 约定终态码（被拒 / 失效）。B9 盘中限价夹在値幅里（ストップ安附近的卖单不再被拒）、取不到现价不发成行。
+  B10 判断层输入过期 / Yahoo 取不到 → 通知升 warn 并写修法（不改数据源）。B11 实盘起始本金按第一次同步的券商余力（没入金时不锁成 ¥0）。B12 装了立花本番后面板默认立花账本、「真钱」标识、ARM 判定统一。
+- **B13（用户 2026-10-09「做〔77〕B」同意的执行方式变更；离场规则本身不变）**：立花本番早上错过寄付（成交日 08:55 之后才下单）时，规则的卖单改为开盘后当日限价卖（现价 × 0.995、夹在値幅里），
+  买单与核心 ETF 当天不买并记入与模型的差异；原来是整天不下。
+- B14 每次立花运行结束 logout；账本记这台 Mac 的识别码（不存主机名原文），另一台 Mac 运行会停下（换 Mac：`liveu.sh adopt-host`）；值守清单 / 退出实盘 / 换 Mac / 最后停止手段（立花网页把 API「無効化」）写进 MACOS。
+  上线门槛 ① 加「最近一次比较在 10 个交易日以内」（只防过期、数字不变；装了立花本番、有意卸掉模拟操盘时只量到卸掉的那天）。B15 过时说法统一（立花没有原生 App、旧守护进程的逆指値说法、NISA 买单限制、核心 ETF 1545 / 1482）。
+- B16 钥匙串「没有」与「锁着」分开提示；时钟偏差 / 自动对时检查；仕様覆盖文件只覆盖和默认不同的键；错误码对照表（官方参考手册；デモ核对后可改）；单元未满株拆开（零股请用户在网站上卖再登记）；
+  拆股生效日的单按拆股后调整；临时休市覆盖（`liveu.sh closed add|rm`，先核对 JPX 公告）；2027-03-01 起 1 口 ETF 的呼値；第二暗証错了不连发（跨进程记住）；日志轮换与磁盘检查；上线初期比较的说明；上线检查准备项补齐；下单前核对立花前日終値。
+- 例行任务搬到 Mac：模拟盘日报（周一至五 06:45）、影子账户判断（07:45）、季度复核（1 / 4 / 7 / 10 月 12 日 09:56）改由 Mac 的 Claude 桌面版本机任务跑
+  （官方：云端例行任务不能指派到个人 Mac，https://code.claude.com/docs/en/routines、https://code.claude.com/docs/en/desktop-scheduled-tasks，2026-10-09 检索，仅对本次检索时点有效）。
+  专用克隆 `~/qbreak-sim`（mac_setup 建）；说明书 `quant_breakout/routines/`（云端 prompt 照抄、只改路径 / Python / 推送方式，规则与禁止事项不变）；`scripts/routines.sh done-today | check | run | deps | push`；
+  云端同名三个例行任务改为后备（最前面「做过就跳过」，时间改到 07:20 / 08:05 / 13:00；Mac 当天做过就跳过、没做就补上）；09:30 自检加「今天的日报没入库」；
+  Mac 工作日 06:40 唤醒（用户自己 `sudo pmset repeat wakeorpoweron MTWRF 06:40:00`）+ LaunchAgent `com.qbreak.wakehold`（06:40〜07:50 保持醒着）。
+  `run.py sim-day` 等改仓库 var/ 的命令只由例行任务在 `~/qbreak-sim` 里运行（CLAUDE.md 相应改）。三个本机任务要用户在 Mac 的桌面版里说「装本机例行任务」才建。
+- 测试：全部 3,365 个通过（原来 3,120 个 + 新增 245 个）。非投资建议。

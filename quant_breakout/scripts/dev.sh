@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 本地开发全流程（2026-10-09 起：在 Mac 的 Claude 对话里问 / 答、改代码、做研究、测试、提交、推送（上传），不需要云端会话）：
 #   bash scripts/dev.sh check                只读：~/qbreak-dev 的分支与上游、能不能连到远端、推送权限（--dry-run）、git 的 user.name / user.email
-#                                            有没有设（只说有没有）、虚拟环境（Python ≥ 3.10 + pytest）、~/qbreak-src 有没有本地改动（第一次 / 出问题时跑）
+#                                            有没有设（只说有没有）、虚拟环境（Python ≥ 3.10 + pytest；依赖版本和 requirements.lock 一致吗，
+#                                            不一致只提醒）、~/qbreak-src 有没有本地改动（第一次 / 出问题时跑）
 #   bash scripts/dev.sh test [pytest 参数]   在 ~/qbreak-dev/quant_breakout 跑测试（默认全部；去掉 QBREAK_HOME → 测试只用临时目录）
 #   bash scripts/dev.sh push                 ~/qbreak-dev：有未提交的改动 → 停下；git pull --rebase（冲突 → 停下、不自动解决）→ git push
 #                                            → ~/qbreak-src 快进（07:40 的定时任务用新代码；它有本地改动 → 不动、提示）→ 列出推了哪几个提交
@@ -60,7 +61,7 @@ src_busy() {      # 交易日（周一至五）07:30〜09:35 JST：执行器早�
 }
 
 cmd_check() {
-  local ok=0 bad=0 cur up out rc n v mid st
+  local ok=0 bad=0 cur up out rc n v mid st lockl
   okl() { echo "[OK] $*"; ok=$((ok + 1)); }
   ngl() { echo "[★] $*"; bad=$((bad + 1)); }
   echo "── 本地开发环境检查（只读：不改文件、不推送）──"
@@ -119,9 +120,12 @@ cmd_check() {
   elif ! v="$("$PY" -c 'import sys; print("%d.%d" % sys.version_info[:2]); sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null)"; then
     ngl "Python ${v:-（读不出版本）} 低于 3.10（${PY}）：运行 mac_setup.sh 重建虚拟环境"
   elif ! "$PY" -c 'import pytest' >/dev/null 2>&1; then
-    ngl "Python ${v} 没有 pytest：\"${PY}\" -m pip install -r \"${PROJ}/requirements.txt\""
+    ngl "Python ${v} 没有 pytest：bash \"${PROJ}/scripts/install_deps.sh\" \"${PY}\"（按 requirements.lock 装）"
   else
     okl "测试环境：Python ${v} + pytest（${PY}）"
+    # 依赖的版本和 requirements.lock（云端测试通过的那一套）一致吗：不一致只提醒（[提醒] 不算 ★；交易照常）
+    lockl="$(cd "$PROJ" && "$PY" -m qbreak.versions lock-check 2>/dev/null)" || lockl=""
+    [ -n "$lockl" ] && printf '%s\n' "$lockl"
   fi
   if ! is_repo "$SRC"; then
     ngl "没有定时任务用的克隆 ${SRC}（07:40 的执行器从这里拉代码）：先装好 Mac 的模拟操盘（mac_bootstrap.sh）"

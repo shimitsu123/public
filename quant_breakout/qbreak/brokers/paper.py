@@ -168,6 +168,18 @@ class PaperBroker(BaseBroker):
     def pending(self) -> list[dict]:
         return list(self.state["pending"])
 
+    def cancel_pending(self, client_id: str) -> bool:
+        """撤一笔还在排队（次日开盘才撮合）的单：从队列里去掉，返回有没有撤到。已经成交的不动；client_id 照旧算「下过」（幂等）。"""
+        if not client_id:
+            return False
+        keep = [o for o in self.state["pending"] if o.get("client_id") != client_id]
+        if len(keep) == len(self.state["pending"]):
+            return False
+        self.state["pending"] = keep
+        self._save()
+        log.info("撤单（排队中）%s", client_id)
+        return True
+
     def expire_pending(self) -> list[dict]:
         """当日有效：今天开盘没成交的单全部作废（与真实券商的寄付 / 当日限り注文相同）。
         一个账户的执行器（live_unified）每天早上按模型状态重新下单，所以这里不顺延（顺延会与重新下的单重复）。"""

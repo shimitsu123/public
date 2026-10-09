@@ -76,7 +76,8 @@ def _stub_env(tmp_path, launchctl_list: str) -> dict:
     b.mkdir()
     log = tmp_path / "calls.log"
     stubs = {"launchctl": f'#!/bin/sh\necho "launchctl $*" >> "{log}"\n[ "$1" = list ] && printf "%s" "{launchctl_list}"\nexit 0\n',
-             "fakeopen": f'#!/bin/sh\necho "open $*" >> "{log}"\n', "pgrep": "#!/bin/sh\nexit 1\n"}
+             "fakeopen": f'#!/bin/sh\necho "open $*" >> "{log}"\n', "pgrep": "#!/bin/sh\nexit 1\n",
+             "osascript": f'#!/bin/sh\necho "osascript $*" >> "{log}"\nexit 0\n'}   # 不弹真的 Mac 通知
     for n, body in stubs.items():
         (b / n).write_text(body, encoding="utf-8")
         (b / n).chmod(0o755)

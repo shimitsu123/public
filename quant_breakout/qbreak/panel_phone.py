@@ -498,7 +498,7 @@ def create_halt(reason: str | None, who: str, now: dt.datetime | None = None) ->
     who = " ".join(str(who or "").split())[:40] or "面板"
     text = f"停止下单（{who}）{now:%Y-%m-%d %H:%M} JST：{why}\n恢复：在 Mac 对话里明确说「恢复下单，删除 HALT」\n"
     done = ("已建 HALT：执行器的下一次运行起不下任何单（模拟账户和立花都停；持仓不动）。已经发到交易所的单不会被撤："
-            "要撤请在立花网站 / App 上撤。恢复只在 Mac 上（在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」）")
+            "要撤用面板「今天的单」的「撤单」（或立花网站 / 手机网站）。恢复只在 Mac 上（在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」）")
     with _mu:
         try:
             fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)

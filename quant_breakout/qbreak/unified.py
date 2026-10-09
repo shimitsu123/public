@@ -1021,7 +1021,8 @@ class UnifiedEngine:
             if side == "BUY":
                 j = self.col.get(t)
                 c = float(self.A.close[i, j]) if j is not None and self.A.has[i, j] else float(st.core_last.get(t) or 0)
-                lim = round_to_tick(c * 1.02, t, "BUY") if c > 0 else None   # 实盘：成行会按涨停价占用余力 → 用指値
+                lim = (round_to_tick(c * 1.02, t, "BUY", lot=int(self.lots[j]) if j is not None else None)   # 一手 1 口的 ETF：2027-03 起 O 表
+                       if c > 0 else None)                                  # 实盘：成行会按涨停价占用余力 → 用指値
                 out["JP"].append({"side": "BUY", "ticker": t, "qty": int(u),
                                   "type": "寄付指値（个股买完后，用剩余日元；卖单成交后再下）", "limit": lim,
                                   "reason": "核心 ETF 调整"})

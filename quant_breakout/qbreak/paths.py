@@ -78,3 +78,51 @@ def params_file(market: str | None = None) -> Path:
 def halt_file() -> Path:
     """紧急停止开关（キルスイッチ / kill switch）：该文件存在则任何下单都被拒绝。"""
     return home() / "HALT"
+
+
+ARM_WORD = "ARMED"
+
+
+def arm_state() -> str:
+    """ARM（解锁发单）现在的状态 —— 和立花适配器同一个判断（UX-12：面板 / gate / manual / doctor 都用这里）：
+    环境变量 QBREAK_ARM=ARMED →「env」；数据目录的 ARM 文件内容（去空白、不分大小写）是 ARMED →「file」；
+    文件在、内容不是 ARMED（适配器会把每一笔挡成 BLOCKED）→「bad」；没有 →「off」。只读：不建、不删、不改 ARM。"""
+    if os.environ.get("QBREAK_ARM", "").strip().upper() == ARM_WORD:
+        return "env"
+    f = home() / "ARM"
+    if not f.exists():
+        return "off"
+    try:
+        txt = f.read_text(encoding="utf-8").strip().upper()
+    except (OSError, UnicodeDecodeError):
+        return "bad"
+    return "file" if txt == ARM_WORD else "bad"
+
+
+def armed() -> bool:
+    """解锁发单了吗（arm_state 是 env / file）。"""
+    return arm_state() in ("env", "file")
+
+
+LIVE_AGENT, PAPER_AGENT = "com.qbreak.liveu.morning", "com.qbreak.liveu.paper"
+
+
+def launch_agents() -> Path:
+    """LaunchAgents 目录（QBREAK_LAUNCH_AGENTS 可改：测试 / 别的位置）。只给路径，不建目录。"""
+    return Path(os.environ.get("QBREAK_LAUNCH_AGENTS") or Path.home() / "Library" / "LaunchAgents")
+
+
+def live_installed(agents: Path | None = None) -> bool:
+    """装了立花本番吗（B12 / LU-20 / OPS-06）：LaunchAgents 有 com.qbreak.liveu.morning 的 plist；
+    或立花本番的账本在、而模拟操盘的 plist（com.qbreak.liveu.paper）不在（install_launchd_live_u.sh tachibana 会卸掉它）。
+    只看文件，不调 launchctl、不建目录。"""
+    ag = Path(agents) if agents is not None else launch_agents()
+    if (ag / f"{LIVE_AGENT}.plist").exists():
+        return True
+    p = Path(os.environ.get("QBREAK_HOME") or (PROJECT_ROOT / "var"))
+    return (p / "state" / "live_unified_tachibana.json").exists() and not (ag / f"{PAPER_AGENT}.plist").exists()
+
+
+def default_book(agents: Path | None = None) -> str:
+    """面板（Mac + 手机）没指定账本时打开哪一个：装了立花本番 → tachibana（真钱）；否则 paper（模拟账户）。"""
+    return "tachibana" if live_installed(agents) else "paper"

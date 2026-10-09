@@ -5,7 +5,10 @@ run.py live-u 每次运行结束时写一份（正常结束 / 执行器停下 / 
 经 --status --alert 也写）；没事可做的重试 / 盘中运行不写（不覆盖上一次有内容的状态）。
   {"at": ISO, "phase": morning | retry | open | now, "ok": bool, "rc": int, "error": str | null, "blocked": str | null,
    "decided_on": 决策日, "bad_orders": [{cid, side, ticker, qty, status, note, kind}],  ← 当前决策里被挡 / 被拒 / 状态不明的单
-   "errors": [这次运行 error 级事件的文字，最多 5 条]}
+   "errors": [这次运行 error 级事件的文字，最多 5 条],
+   "code": git 短 hash（"?" = 读不了；云端每天推 var/ 也会变）, "code_tree": 只看代码的标识（代码真的变了才变）,
+   "py": {python, pandas, numpy, yfinance}（B6：qbreak/versions.py）,
+   "unknown": [{cid, ticker, side, qty, candidates: [{order_no, status, filled_qty, filled_px, …}]}]}  ← 只在因状态不明停下时（B2）
 """
 from __future__ import annotations
 
@@ -19,9 +22,9 @@ from . import paths
 from .calendar_jp import JST, now_jst
 from .utils import atomic_write_text
 
-BAD = ("BLOCKED", "REJECTED", "ERROR", "SENDING")    # 没下成（被挡 / 被拒）或状态不明（发送中断 / 网络错误）的单
-STATUS_TEXT = {"BLOCKED": "被挡", "REJECTED": "被拒", "ERROR": "状态不明", "SENDING": "状态不明"}
-PHASE_TEXT = {"morning": "早上的运行", "retry": "早上的重试", "open": "开盘后补单", "now": "盘中手动指令"}
+BAD = ("BLOCKED", "REJECTED", "ERROR", "SENDING", "EXPIRED")    # 没下成（被挡 / 被拒）、状态不明（发送中断 / 网络错误）或在立花那边已失效的单
+STATUS_TEXT = {"BLOCKED": "被挡", "REJECTED": "被拒", "ERROR": "状态不明", "SENDING": "状态不明", "EXPIRED": "已失效"}
+PHASE_TEXT = {"morning": "早上的运行", "retry": "早上的重试", "open": "开盘后补单", "now": "盘中手动指令", "cancel": "撤单"}
 KEEP_FAIL_S = 900                                     # liveu.sh 的「运行没有完成」紧跟在一次具体的失败之后：15 分钟内不盖掉更具体的原因
 MAX_ERROR = 600                                       # 错误文字最多留多少字（面板 / 手机显示）
 _URL = re.compile(r"https?://\S+")
@@ -132,14 +135,38 @@ def scrub(text) -> str | None:
 
 
 def build(book: dict | None, *, phase: str, ok: bool, rc: int, error: str | None = None, blocked: str | None = None,
-          since: str | None = None, events=(), now: dt.datetime | None = None) -> dict:
-    """一条运行状态。book：账本（dict；当前决策与单从这里取）；events：还没写进账本的事件（执行器停下时）。"""
+          since: str | None = None, events=(), now: dt.datetime | None = None, unknown: list | None = None) -> dict:
+    """一条运行状态。book：账本（dict；当前决策与单从这里取）；events：还没写进账本的事件（执行器停下时）；
+    unknown：状态不明的单在注文一覧里的候选（执行器因状态不明停下时；qbreak/live_ops.unknown_candidates）→ 字段 unknown。"""
+    from .versions import code_tree, code_version, py_versions
     book = book or {}
     d = (book.get("state") or {}).get("last_date")
-    return {"at": (now or now_jst()).isoformat(timespec="seconds"), "phase": phase, "ok": bool(ok), "rc": int(rc),
-            "error": scrub(error), "blocked": scrub(blocked), "decided_on": d,
-            "bad_orders": bad_orders(book.get("orders"), d),
-            "errors": run_errors(list(book.get("events") or []) + list(events or []), since)}
+    rec = {"at": (now or now_jst()).isoformat(timespec="seconds"), "phase": phase, "ok": bool(ok), "rc": int(rc),
+           "error": scrub(error), "blocked": scrub(blocked), "decided_on": d,
+           "bad_orders": bad_orders(book.get("orders"), d),
+           "errors": run_errors(list(book.get("events") or []) + list(events or []), since),
+           "code": code_version(), "code_tree": code_tree(),          # B6：这次用的提交（git 短 hash）、只看代码的标识（var/ 提交不变）
+           "py": dict(py_versions())}                                  # 与 Python / 依赖的版本
+    if unknown is not None:
+        rec["unknown"] = unknown_brief(unknown)
+    return rec
+
+
+def unknown_brief(unknown: list | None) -> list[dict]:
+    """状态不明的单与候选（面板 / 手机显示用的字段；文字去掉网址与本机路径）。"""
+    out = []
+    for u in unknown or []:
+        if not isinstance(u, dict):
+            continue
+        if u.get("error"):
+            out.append({"error": scrub(u["error"])})
+            continue
+        out.append({"cid": str(u.get("cid") or ""), "ticker": str(u.get("ticker") or ""), "side": str(u.get("side") or ""),
+                    "qty": int(u.get("qty") or 0), "kind": str(u.get("kind") or "stock"),
+                    **({"stale": str(u["stale"])[:10]} if u.get("stale") else {}),
+                    "candidates": [{k: c.get(k) for k in ("order_no", "status", "final", "qty", "filled_qty", "filled_px", "price", "time")}
+                                   for c in (u.get("candidates") or [])[:5] if isinstance(c, dict)]})
+    return out
 
 
 def write(tag: str, rec: dict, keep_recent_fail: bool = False) -> bool:

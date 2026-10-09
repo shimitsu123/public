@@ -223,6 +223,8 @@ python run.py report                           # 只重新生成 var/out/report.
 - 日本株用 `affordable` 股票池、单笔 34%/最多 3 只：¥100 万下多数东证大盘股 1 単元就超预算，默认池几乎买不了
 - 例行任务 id `trig_01MMZVeTtxexr6y4sDhy4rxX`（2026-09-25 重建：每周一至五 06:57 JST，汇报逐项带单位、先报「数据完整性」；发到固定的模拟盘对话里）；
   想停：让 Claude 删除它，或在 claude.ai 的 Routines 里禁用
+- 2026-10-09 起例行任务（模拟盘日报 / 影子账户判断 / 季度复核）在 Mac 的 Claude 桌面版本机任务里跑（`~/qbreak-sim`，说明书 [`routines/`](routines/README.md)），
+  云端同名例行任务是后备（Mac 当天做过就跳过）；检查：`bash scripts/routines.sh check`
 - 前提：运行环境的网络策略必须放行 [`network_allowlist.txt`](network_allowlist.txt) 里的域名；
   **改动只对新启动的会话生效**（这也是例行任务每次新开会话的原因）。`run.py doctor` 会逐个检查
 - 美股在日报里同时显示美元与折合日元（每日 USD/JPY 记录在 `var/out/fx.csv`），汇率贡献单列
@@ -497,7 +499,7 @@ A「今天的成分」与 B「当时的成分」结果完全相同（4×25%：�
 - 现物手续费（税込、電子交付）：**個別コース** 每笔 10 万 77 / 20 万 99 / 50 万 187 / 100 万 341 / 150 万 407 / 300 万 473 円…；
   **定額コース** 每日合计 12 万以内免费 / 20 万 176 / 50 万 253 / 100 万 506 円…；ETF 与股票同表；API 利用料 0 円；新开户前 60 营业日现物免费（未计入回测）。
 - API v4r10（2026-08-29 发布；v4r9 于 2026-09-27 废止）：登录 = **认证 ID（AuthID）+ RSA 私钥**解密虚拟 URL，**2026-06-27 起不再需要电话认证** → 可以每天全自动登录；
-  会话到 03:30 失效，03:30～05:30 停止登录；当日单 0:00～15:30，**15:30～16:30 不受理**，16:30～23:59 受理翌営業日分；每次登录都会收到「ログインメール」。
+  会话到 03:30 失效，03:30～05:30 停止登录；当日单 0:00～15:30，**15:30～16:30 不受理**，16:30～23:59 受理翌営業日分；登录通知邮件（ログインメール）官方只列了标准 Web 与手机网站，API 登录发不发待开户后确认（2026-10-09 更正；执行器按「会发」设计）。
 - **完全前受制度**：下买单时现金必须已经够；卖出的钱要**成交后**才能用于买别的股票 → 用卖指数 ETF 的钱买个股，必须等 9:00 寄付卖出成交后再下买单。
 
 两项事先登记的研究（规则先提交后运行，结果不改规则）：
@@ -858,6 +860,8 @@ python run.py live JP --broker rss --stop-mode intraday --protective-stop
 
 ### 盘中守护进程在做什么
 
+（旧的分市场方案。现行一个账户的执行器只在每个交易日 07:40 / 09:05 运行，**盘中不盯价、不挂逆指値**；见 MACOS.md §8。）
+
 ```
 休市 → 睡到下一个开市时刻          08:50 → 开市前对账
 09:00–11:30 / 12:30–15:30 → 每 60 秒：取现在值 → 更新峰值 → 检查止损/止盈 → 维护逆指値
@@ -867,19 +871,20 @@ python run.py live JP --broker rss --stop-mode intraday --protective-stop
 **盘中不重算信号**：当前策略的信号定义在收盘价上，回测也是这么验证的。盘中重算会产生
 大量盘中出现、收盘消失的假信号，而且无法用现有回测验证。真正的日内策略是另一个项目。
 
-**上线前清单**
+**上线前清单**（旧的分市场 / 楽天方案的清单；一个账户方案（现行）看 MACOS.md §7 与 `bash scripts/liveu.sh gate`）
 
 - [ ] `run.py doctor` 全绿
 - [ ] 立花：`tachibana-probe --demo` 全 `[OK]`，且已对着**官方 API 仕様書**改过 `~/.qbreak/home/tachibana_spec.json`
       （`TachibanaSpec` 的默认值是公开信息推断的，**不是验证过的**）
 - [ ] 楽天：`RssBridge.bas` 三处 `★TODO★` 已按当期「RSS 関数一覧」PDF 填写（默认占位实现会拒绝下单）
 - [ ] `--broker paper` 演练过至少一个完整交易日
-- [ ] `--protective-stop` 打开 —— **逆指値是盘中止损的真正保险**，进程崩了它还在
-- [ ] 口座选**特定口座**，不要用 NISA（自动交易会浪费非課税枠，且亏损不能损益通算）
+- [ ] （旧方案）`--protective-stop` 打开 —— 旧守护进程靠逆指値做盘中止损；**现行一个账户的执行器不挂逆指値**（离场只在 07:40 的决策里下寄付卖单）
+- [ ] 口座选**特定口座（源泉徴収あり）**：执行器默认只在特定口座交易（自动交易来回买卖会浪费非課税枠，且 NISA 的亏损不能损益通算）；
+      立花的 NISA 买单只能「指値・無条件・当日中」→ 〔72〕① N2（核心 ETF 放 NISA）是可选项，要先另做执行器工程、由用户决定（MACOS.md §2 第 1 步；2026-10-09）
 - [ ] `--max-order-value` 设成你能承受的单笔上限（跟模拟盘同档时默认 = 资金 ×1.1，因为核心 ETF 一笔可到 100%）；前两周 `--position-pct 0.05`（显式给出时覆盖同档的仓位），只买 1 単元
 - [ ] 熔断线先设 1%：`RiskConfig.daily_max_loss_pct`
-- [ ] 通知到手机：Mac 上把 Discord / Slack / ntfy 的通知地址存进钥匙串 `security add-generic-password -s qbreak-webhook -a qbreak -w`（回车后输入；定时任务读不到 `export` 的环境变量），`bash scripts/liveu.sh notify-test` 试发；外部心跳存 `qbreak-heartbeat`（每个交易日 09:30 自检时 ping）
-- [ ] 每天收盘后锁上 ARM
+- [ ] 通知到手机：邮件 → Mac 上你自己在终端 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup`（Gmail 应用专用密码，输入时不显示，先发一封测试邮件，发成了才存进钥匙串 `qbreak-smtp`）；或把 Discord / Slack / ntfy 的通知地址存进钥匙串 `security add-generic-password -s qbreak-webhook -a qbreak -w`（回车后输入；定时任务读不到 `export` 的环境变量），`bash scripts/liveu.sh notify-test` 试发；外部心跳存 `qbreak-heartbeat`（每个交易日 09:30 自检时 ping）
+- [ ] ARM：过了上线门槛、你在对话里明确说之后才建（内容 `ARMED`）；不会自动清空（每天全自动要它一直在）；要停用 = 删掉它或建 HALT
 
 **ARM（人工解锁）**：数据目录里有 `ARM`（内容 `ARMED`）才会发单，删掉就锁上。
 **紧急停止**：数据目录里建 `HALT` —— 任何下单立即被拒绝。

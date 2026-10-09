@@ -8,13 +8,16 @@
   • 卖单遇到当天一整天ストップ安（与引擎同一判断）→ 不成交、失效
   • 开盘后下的当日限り指値：开盘价 ≤ 指値（买）就按开盘价 + 滑点立即成交；否则收盘失效（这里没有盘中价格路径）
   • 手续费：立花個別コース（与回测同一函数）；买付可能額 = 现金 − 未成交买单的预留（指値 × 股数 + 手续费）
-  • 受理检查：买付余力不足 / 可卖股数不足 → 业务错误（sResultCode ≠ 0），适配器报成 REJECTED（与真实 API 相同的路径）
+  • 受理检查：买付余力不足 / 可卖股数不足 → 业务错误（sResultCode ≠ 0），适配器报成 REJECTED（与真实 API 相同的路径）；
+    限价不在呼値的格子上（按一手与执行日选表：2027-03-01 起分表、一手 1 口的 ETF 用 O 表）/ 在当天的制限値幅（前日終値 ± 値幅）之外 /
+    卖单股数不是一手的整数倍（单元未満株不能用普通注文卖）→ 也是业务错误（真实交易所 / 立花同样不受理）
+  • 时价：交易时间里给现在值 / 始値 = 当天开盘价；前日終値 = 上一交易日的收盘（开盘前也给，与真实 API 相同）
 """
 from __future__ import annotations
 
 import base64
 
-from ..tick import tick_size
+from ..tick import price_limit_jp, tick_size
 from .tachibana import Credentials, TachibanaSpec
 
 
@@ -37,6 +40,8 @@ class SimExchange:
         self.pem = self._key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
                                            serialization.NoEncryption())
         self.calls: dict[str, int] = {}
+        self.tick_on = None                     # 呼値表按哪天选（None = 今天，与引擎 / 适配器的取整相同；测试可以设 2027-03-01 之后）
+        self.order_time = ""                    # 注文一覧的受付时刻（YYYYMMDDHHMMSS；测试设，状态不明的单找候选用）
 
     def creds(self) -> Credentials:
         return Credentials("SIM-AUTH-ID", self.pem, "sim-second-pw")
@@ -191,6 +196,17 @@ class SimExchange:
         lim = 0.0 if price in (s.price_market, s.price_none, "") else float(price)
         if qty <= 0:
             return self._err("991011", "数量が不正です")
+        j = eng.col[t]
+        lot = int(eng.lots[j])
+        if side == "SELL" and lot > 1 and qty % lot:
+            return self._err("991022", f"単元未満株は通常の注文では売れません（売買単位 {lot}）")
+        if lim > 0:
+            u = tick_size(lim, t, self.tick_on, lot)
+            if abs(lim / u - round(lim / u)) > 1e-6:
+                return self._err("991013", f"呼値の単位が不正です（{lim:g}、呼値 {u:g}）")
+            prev = self._prev_close(j)
+            if prev > 0 and not (prev - price_limit_jp(prev) - 1e-9 <= lim <= prev + price_limit_jp(prev) + 1e-9):
+                return self._err("991014", f"値幅制限の範囲外です（{lim:g}、基準 {prev:g} ± {price_limit_jp(prev):g}）")
         if side == "BUY":
             if lim <= 0:
                 return self._err("991012", "演練では成行の買いは受け付けません")
@@ -201,10 +217,9 @@ class SimExchange:
             return self._err("991021", f"売付可能数量が不足しています（{self._sellable(t)} < {qty}）")
         self._no += 1
         o = {"no": f"S{self._no:07d}", "day": self._day(self.day_k), "ticker": t, "side": side, "qty": qty,
-             "lim": lim, "cond": cond, "filled": 0, "px": 0.0, "status": "1"}
+             "lim": lim, "cond": cond, "filled": 0, "px": 0.0, "status": "1", "at": self.order_time}
         self.orders[o["no"]] = o
         if cond == s.cond_normal and self.phase == "open":       # 开盘后的当日限り：按开盘价立即撮合
-            j = eng.col[t]
             if eng.A.has[self.k, j]:
                 op = float(eng.A.open[self.k, j])
                 if side == "SELL" or self._buy_ok(o, op):
@@ -237,9 +252,19 @@ class SimExchange:
             j = eng.col.get(t)
             live = self.phase == "open" and j is not None and 0 <= self.k and eng.A.has[self.k, j]
             op = repr(float(eng.A.open[self.k, j])) if live else ""
-            row.update({s.r_price: op, s.r_open: op, s.r_high: "", s.r_low: "", s.r_volume: "", s.r_prev_close: ""})
+            pc = self._prev_close(j) if j is not None else 0.0
+            row.update({s.r_price: op, s.r_open: op, s.r_high: "", s.r_low: "", s.r_volume: "",
+                        s.r_prev_close: repr(pc) if pc > 0 else ""})
             rows.append(row)
         return {"p_errno": "0", s.r_price_list: rows}
+
+    def _prev_close(self, j: int) -> float:
+        """前日終値（値幅的基準）：交易时间里 = 当天的上一交易日收盘；开盘前 / 收盘后 = 受理日（set_day 的那天）的上一交易日收盘。"""
+        eng = self.eng
+        i = (self.k if self.phase == "open" else self.day_k) - 1
+        if not (0 <= i < len(eng.gidx)) or not eng.A.has[i, j]:
+            return 0.0
+        return float(eng.A.close[i, j])
 
     def _cancel(self, p: dict) -> dict:
         s = self.spec
@@ -251,6 +276,9 @@ class SimExchange:
 
     def _list(self, p: dict) -> dict:
         s = self.spec
-        rows = [{s.r_list_order_no: o["no"], s.r_list_filled_qty: str(o["filled"])}
+        rows = [{s.r_list_order_no: o["no"], s.r_list_filled_qty: str(o["filled"]), s.r_list_code: o["ticker"].split(".")[0],
+                 s.r_list_side: s.side_buy if o["side"] == "BUY" else s.side_sell, s.r_list_qty: str(o["qty"]),
+                 s.r_list_price: repr(o["lim"]) if o["lim"] else "0", s.r_list_filled_px: repr(o["px"]) if o["filled"] else "",
+                 s.r_list_status_code: o["status"], s.r_list_time: o.get("at") or ""}
                 for o in self.orders.values() if o["day"] == self._day(self.day_k)]
         return self._ok(**{s.r_order_list: rows or ""})

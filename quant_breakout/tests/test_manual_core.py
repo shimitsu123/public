@@ -303,6 +303,42 @@ def test_tachibana_unfilled_intraday_etf_order_is_redone_by_the_next_decision():
     assert r.eng.st.core_units["1655.T"] == u0 - 50 and not r.ux.blocked
 
 
+class _NoCoreQuoteOnce(SimExchange):
+    """arm 之后第一次取 1655 的价取不到（适配器不发成行 → 没到交易所）；之后正常。"""
+    missed = arm = False
+
+    def _price(self, p):
+        res = super()._price(p)
+        if self.arm and not self.missed and "1655" in str(p.get(self.spec.f_target_codes) or ""):
+            for row in res.get(self.spec.r_price_list) or []:
+                if row.get(self.spec.r_price_code) == "1655":
+                    self.missed = True
+                    row[self.spec.r_price] = ""
+        return res
+
+
+def test_intraday_etf_order_retried_after_a_missing_quote_is_not_redone():
+    """盘中照新比例的核心单：那一刻取不到现价没发出（SKIPPED、没到交易所），10 分钟后重下成交了 → 第二天早上的对账
+    不把没发出的那笔当成「没成交」（不再把核心 ETF 直接调到目标、不多一笔交易；ADP-4）。"""
+    r = _Run([1000.0] * 30, exchange_cls=_NoCoreQuoteOnce, entry=())
+    r.until(12)
+    u0 = r.eng.st.core_units["1655.T"]
+    rec = _conv(r.ux.book, kind="adjust", unit="shares", value=u0 - 50)
+    _write(TAG, "M-core-q", **rec)
+    def q(ts):                                                            # 执行器看到的現在値有；适配器发单前取价那一刻取不到
+        res = r.quote(ts)
+        r.exch.arm = True
+        return res
+    r.session(10, 0, quote=q)
+    assert [o.status for o in _core_orders(r)] == ["SKIPPED"] and r.exch.missed
+    r.session(10, 11)
+    assert [o.status for o in _core_orders(r)] == ["SKIPPED", "FILLED"]
+    r.day()
+    assert r.eng.st.core_units["1655.T"] == u0 - 50 and not r.ux.blocked
+    assert "redo" not in r.ux.book["core_rule"] and "1655.T" not in r.eng.st.core_plan
+    assert "exact_on" not in r.ux.book["core_rule"]                       # 这次决策照规则（看再平衡带），没有「直接调到目标」
+
+
 class _NoOpenCoreSellOnce(SimExchange):
     """开盘（寄付）的 1655 卖单第一次没成交（例如在立花网站上撤了）。"""
     done = False

@@ -8,6 +8,9 @@ LaunchAgent com.qbreak.watchdog（周一至五 09:30，scripts/install_launchd_w
   （执行器停下的原因读运行状态文件 out/live_unified_<账本>_run.json，qbreak/run_status.py）。
 - HALT 存在：不算失败（心跳成功），通知「HALT 生效中」同一天只一次（qbreak/notify_seen.py）。
 - 模拟账户在模拟期开始日（sim.json 的 start）之前不推进：不算失败（心跳成功）。
+- 今天的模拟盘日报入库了吗（2026-10-09 起例行任务在 Mac 的 Claude 桌面版本机任务里跑，云端同名例行任务是后备）：交易日、
+  仓库（~/qbreak-src，paths.PROJECT_ROOT）的 var/out/unified_today.json 的 date ≠ 今天 → 原因「今天的模拟盘日报没入库（…）」
+  （07:40 的执行器用的是旧的判断层 / 宏观数值）；模拟期开始前 / 结束后、这个文件不在（不是仓库的克隆）→ 不报。两种账本都看。
 - 执行器正在运行（拿着运行锁；例：Mac 睡着错过 07:40，醒来时 launchd 把错过的任务和自检一起拉起）→ 等它结束再判定（最多 10 分钟）；
   还在跑 → 这次不判定、不发通知 / 心跳。
 - 写 out/watchdog_<账本>.json（at、ok、reasons；面板 / 手机顶部显示今天没通过的原因）。
@@ -36,6 +39,9 @@ OPEN_DONE = dt.time(9, 25)          # 这之后 09:05 / 09:20 的开盘后补单
 ESHITEN_SP = "https://kabuka.e-shiten.jp/mfds_smp.php"     # 立花 e支店的手机网站（注文一覧在这里看）
 HALT_KEY = "09:30 自检：HALT 生效中"                          # 去重用的固定文字（同一天只提醒一次）
 LOCK_WAIT_S, LOCK_POLL_S = 600, 15                            # 执行器正在运行：最多等 10 分钟、每 15 秒看一次
+DAILY_FILE = paths.PROJECT_ROOT / "var" / "out" / "unified_today.json"   # 例行任务入库的当天日报（执行器 07:40 git pull 之后读；测试换成临时文件）
+DAILY_REASON = "今天的模拟盘日报没入库（Mac 的本机例行任务没跑？桌面版开着吗？）"
+DAILY_UNPULLED = "今天的模拟盘日报已入库，但这台 Mac 的 ~/qbreak-src 没拉到"
 
 
 def installed(agents) -> str | None:
@@ -69,6 +75,46 @@ def _sim_start() -> str | None:
         v = (read_json(paths.home() / "sim.json", {}) or {}).get("start")
         return str(dt.date.fromisoformat(str(v))) if v else None
     except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _daily_missing(today: dt.date) -> str | None:
+    """今天的模拟盘日报没入库 → 原因；入库了 / 文件不在（不是仓库的克隆）/ 模拟期开始前 / 结束后 → None。只读。
+    模拟期读数据目录的 sim.json（liveu.sh 从仓库拷过来）；没有就读仓库的 var/sim.json。"""
+    from . import run_status as RS
+    if not DAILY_FILE.exists():
+        return None
+    cfg = RS.peek_json(paths.home() / "sim.json")
+    if cfg is None:
+        cfg = RS.peek_json(DAILY_FILE.parent.parent / "sim.json") or {}
+    day = today.isoformat()
+    start, end = str(cfg.get("start") or "")[:10], str(cfg.get("end") or "")[:10]
+    if (start and day < start) or (end and day > end):
+        return None
+    d = str((RS.peek_json(DAILY_FILE) or {}).get("date") or "")
+    if d == day:
+        return None
+    if _remote_daily_date() == day:                         # 远端有了、工作区没有：不是例行任务没跑，是这个克隆没拉到
+        return (f"{DAILY_UNPULLED}（git pull 失败——有本地改动？——或日报入库晚于早上最后一次拉取 08:35）：工作区最新的是 {d or '—'}，"
+                "07:40 的执行器用的是旧的判断层 / 宏观数值（在 Mac 对话里说「检查本地仓库」→ bash scripts/dev.sh check）")
+    return f"{DAILY_REASON}：仓库里最新的是 {d or '—'}（07:40 的执行器用的是旧的判断层 / 宏观数值；在 Mac 对话里问「例行任务今天跑了吗」）"
+
+
+def _remote_daily_date(run=None) -> str | None:
+    """远端（这个克隆上次 git fetch / pull 拿到的 @{u}；pull 合并失败时 fetch 也已经做了）里日报的日期。只读；读不了 → None。"""
+    import json
+    import subprocess
+    root = DAILY_FILE.parent.parent.parent                  # var/out/unified_today.json → quant_breakout/
+    try:
+        r = (run or subprocess.run)(["git", "-C", str(root), "show", "@{u}:./var/out/unified_today.json"],
+                                    capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    try:
+        return str((json.loads(r.stdout or "{}") or {}).get("date") or "") or None
+    except (ValueError, AttributeError):
         return None
 
 
@@ -138,6 +184,9 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
     if tag.startswith("tachibana") and now.time() >= OPEN_DONE and open_pending(book):
         n = sum(1 for o in book.get("orders") or [] if o.get("decided_on") == ld and o.get("status") == "DEFERRED")
         reasons.append(f"开盘后的买单还没下（{n} 笔：09:05 / 09:20 的补单没跑成）")
+    miss = _daily_missing(today)                              # 例行任务（Mac 的本机任务 / 云端后备）今天的日报
+    if miss:
+        reasons.append(miss)
     rec["reasons"] = reasons
     rec["halt"] = _halt()
     rec["ok"] = bool(rec["halt"]) or not reasons                # HALT 生效中：不下单是预期的，不算失败

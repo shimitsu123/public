@@ -37,9 +37,11 @@ var/out/live_unified_tachibana*
 var/out/tachibana_probe_*
 var/out/charts_tachibana*
 var/tachibana_spec.json
+var/tachibana_spec_defaults.json
 var/ARM
 var/HALT
 var/state/*.lock
+var/state/backup/
 var/*.pem
 var/out/watchdog_*
 var/out/notify_seen_*
