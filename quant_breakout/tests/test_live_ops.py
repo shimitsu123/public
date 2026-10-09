@@ -302,18 +302,21 @@ def test_live_gate_reports_each_item_without_reading_secrets(tmp_path, monkeypat
     (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(
         {"compare_history": [{"date": d, "comparable": True, "same": True} for d in days], "halt_seen": ["2026-10-06"]}),
         encoding="utf-8")
+    from qbreak.brokers.tachibana import TachibanaSpec, api_version
     (paths.out_dir() / "tachibana_probe_demo.json").write_text(json.dumps(
-        {"at": "2026-10-07 10:00 JST", "ok": True, "order_test": {"ok": True, "fields_missing": [], "cash_or_pos_changed": True,
-                                                                  "cancel": True}}), encoding="utf-8")
+        {"at": "2026-10-07 10:00 JST", "ok": True, "api": api_version(TachibanaSpec().base_demo),
+         "order_test": {"ok": True, "fields_missing": [], "cash_or_pos_changed": True, "cancel": True,
+                        "opening_limit_buy": "SENT", "opening_cancel": True}}), encoding="utf-8")
     (paths.out_dir() / "tachibana_probe_live.json").write_text(json.dumps(
-        {"at": "2026-10-08 08:00 JST", "ok": True, "tax": "1", "steps": {"登录": True}}), encoding="utf-8")
+        {"at": "2026-10-08 08:00 JST", "ok": True, "tax": "1", "steps": {"登录": True},
+         "api": api_version(TachibanaSpec().base_live)}), encoding="utf-8")
     key = tmp_path / ".qbreak" / "e_api_private_key.pem"
     key.parent.mkdir()
     key.write_text("x", encoding="utf-8")
     key.chmod(0o644)
-    for lb in G.LIVE_LABELS:
+    for lb in G.LIVE_LABELS + ("com.qbreak.watchdog",):                              # ⑧ 09:30 自检任务（2026-10-09 加）
         (agents / f"{lb}.plist").write_text("x", encoding="utf-8")
-    run_, _ = _fake_run(security=0, launchctl="\n".join(f"-\t0\t{lb}" for lb in G.LIVE_LABELS))
+    run_, _ = _fake_run(security=0, launchctl="\n".join(f"-\t0\t{lb}" for lb in G.LIVE_LABELS + ("com.qbreak.watchdog",)))
     items = {it["name"]: it for it in G.check(agents=agents, run=run_)}
     assert items["⑥ 私钥文件"]["ok"] is False and "chmod 600" in items["⑥ 私钥文件"]["text"]       # 权限太宽
     key.chmod(0o600)
@@ -322,6 +325,19 @@ def test_live_gate_reports_each_item_without_reading_secrets(tmp_path, monkeypat
     bad = [it["name"] for it in items if it["group"] != "参考" and it["ok"] is False]
     assert bad == ([] if G.importlib.util.find_spec("cryptography") else ["⑥ cryptography（解密虚拟 URL）"])
     assert ok is (not bad) and "特定口座" in text and "未解锁" in text
+
+
+def test_live_gate_unknown_orders_hint_uses_liveu(tmp_path, monkeypatch):
+    """② 状态不明的单：登记的命令经 liveu.sh、按账本给 --broker（直接 run.py 默认是模拟账户、仓库的 var/）。"""
+    from qbreak import live_gate as G
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (paths.state_dir() / "live_unified_tachibana.json").write_text(json.dumps(
+        {"orders": [{"cid": "U1", "side": "BUY", "ticker": "7203.T", "status": "ERROR"}]}), encoding="utf-8")
+    run_, _ = _fake_run(security=44)
+    it = {x["name"]: x for x in G.check(agents=tmp_path, run=run_)}["② 没有状态不明的单"]
+    assert it["ok"] is False and "立花 U1 BUY 7203.T" in it["text"]
+    assert "bash scripts/liveu.sh --broker tachibana --resolve <cid> --filled <股数> --px <均价>；没成交填 0" in it["text"]
+    assert "--broker paper" not in it["text"] and "run.py live-u" not in it["text"]
 
 
 def test_wake_schedule_parsing():
@@ -349,4 +365,5 @@ def test_demo_order_test_records_the_three_gate_points():
     assert run._tachibana_order_test(b, exch.spec, rec) is True
     ot = rec["order_test"]
     assert ot["ok"] and ot["fields_missing"] == [] and ot["cash_or_pos_changed"] and ot["cancel"] and ot["buy"] in ("SENT", "FILLED", "PARTIAL")
+    assert ot["opening_limit_buy"] == "SENT" and ot["opening_cancel"] is True                # 寄付指値买受理 → 按注文番号撤掉
     assert not any(isinstance(v, float) for v in ot.values())               # 不记金额

@@ -14750,5 +14750,22 @@
   ],
   "era_dependent_or_reversed": [],
   "notes": "待办〔77〕；官方信息仅对 2026-10-09 检索时点有效"
+ },
+ {
+  "line": 10501,
+  "date": "2026-10-09",
+  "title": "立花实盘缺口 A 组 7 项修好（手机通知 + 09:30 自检 / 外部心跳、08:35 重试前核对持仓、开盘后补单上限按权益、面板运行状态、probe 不误判 + 寄付指値买、公开仓库防呆、面板失败退避与通知去重）+ Mac 本地 Claude 全流程（dev.sh check / test / push；不需要云端会话）",
+  "kind": "engineering",
+  "domain": "资金/执行/成本",
+  "registration": null,
+  "script": "qbreak/notify.py、qbreak/watchdog.py、qbreak/run_status.py、qbreak/notify_seen.py、qbreak/live_unified.py、qbreak/live_gate.py、qbreak/panel.py、qbreak/brokers/tachibana.py、qbreak/paths.py、run.py、scripts/liveu.sh、scripts/dev.sh、scripts/install_launchd_watchdog.sh、scripts/mac_setup.sh",
+  "output": "—（Mac 数据目录：out/live_unified_<账本>_run.json、out/watchdog_<账本>.json）",
+  "candidates": [],
+  "baseline": "—（不改交易规则 / 参数 / 仓位 / 股票池 / 门槛的数字；没有新功能触发时执行器逐笔相同）",
+  "windows": "—",
+  "verdict": "变更/工程",
+  "stable_findings": [],
+  "era_dependent_or_reversed": [],
+  "notes": "待办〔77〕①；用户要自己做：gh auth login + git 身份、钥匙串 qbreak-webhook / qbreak-heartbeat、mac_setup 装 09:30 自检；云端例行任务照旧"
  }
 ]

@@ -38,6 +38,7 @@ import datetime as dt
 import json
 import math
 from dataclasses import asdict, dataclass
+from pathlib import Path
 
 from . import manual_orders as MO
 from . import paths
@@ -155,6 +156,14 @@ class UnifiedExecutor:
     def _event(self, level: str, msg: str) -> None:
         self.events.append({"at": self.clock().isoformat(timespec="seconds"), "level": level, "msg": msg})
         {"info": log.info, "warn": log.warning, "error": log.error}[level](msg)
+
+    def resolve_cmd(self) -> str:
+        """登记状态不明的单的命令（提示用）：经 liveu.sh（数据目录 ~/.qbreak/home）。直接跑 run.py 默认是模拟账户、仓库的 var/，
+        立花的入口在那里会被拒绝。"""
+        stem = Path(self.path).stem
+        br = "paper" if self.paper else ("tachibana" + (" --demo" if "_demo" in stem else "")
+                                         + (" --dry-run" if "_dryrun" in stem else ""))
+        return f"bash scripts/liveu.sh --broker {br} --resolve <cid> --filled <股数> --px <均价>"
 
     def block(self, reason: str) -> None:
         """这次运行不下单（状态照常对账、决策）。多个原因用「；」连起来。"""
@@ -534,6 +543,14 @@ class UnifiedExecutor:
             self._event("warn", f"开盘后的买单这次不下（仍保留，可稍后再跑）：{why}")
             self.save()
             return
+        if self.auto_cap and hasattr(self.b, "max_order_value"):
+            # 09:05 / 09:20 是新进程（broker 的上限是 run.py 传入的默认值）→ 与 place / now_phase 一样按决策日的权益 ×1.05；
+            # 权益只读账本状态与收盘价（不用 prime、不改状态）；算不出（没有价）→ 保留传入的上限
+            eng, d = self.eng, self.eng.st.last_date
+            k = int(eng.gidx.searchsorted(dt.datetime.fromisoformat(d))) if d else len(eng.gidx) - 1
+            eq = float(eng.equity(min(k, len(eng.gidx) - 1)))
+            if math.isfinite(eq) and eq > 0:
+                self.b.max_order_value = round(eq * self.cap_mult)
         morning = [o.ticker for o in self._active() if o.side == "BUY" and o.phase == "morning" and o.status in ACCEPTED]
         q = self.b.quote_detail(sorted({o.ticker for o in act} | set(morning)))
         self._place_deferred(lambda t: (q.get(t) or {}).get("open"))
@@ -597,8 +614,7 @@ class UnifiedExecutor:
         if unknown:
             raise ExecutorError("有状态不明的单（发送中断 / 网络错误，可能已被受理）："
                                 + "；".join(f"{o.cid} {o.side} {o.ticker} ×{o.sent_qty}" for o in unknown)
-                                + "。请在立花的注文一覧确认，然后登记：run.py live-u --resolve <cid> --filled <股数> --px <均价>"
-                                  "（没成交填 0）")
+                                + f"。请在立花的注文一覧确认，然后登记：{self.resolve_cmd()}（没成交填 0）")
         eng.prime(k + 1)
         if self.auto_cap and hasattr(b, "max_order_value"):
             b.max_order_value = round(eng.equity(k) * self.cap_mult)
@@ -1090,11 +1106,11 @@ class UnifiedExecutor:
             for lvl, msg in self.manual.settle(st, set()):
                 self._event(lvl, msg)
 
-    def check_broker(self) -> None:
-        """券商持仓 = 状态持仓？（执行器管的票：状态里的持仓、核心 ETF、股票池里的票）不一致 → 这次不下单。
-        现金：买付可能額 − 状态现金 ≥ 1 円 → 记下；实盘以券商为准（税、实际手续费、分红入账）。"""
-        eng, st, b = self.eng, self.eng.st, self.b
-        held = {t: int(p.qty) for t, p in b.positions().items() if int(p.qty) > 0}
+    def _position_diff(self) -> tuple[list[str], list[str]]:
+        """券商持仓 vs 状态持仓（执行器管的票：状态里的持仓、核心 ETF、股票池里的票）→（不一致的文字，执行器不管的持仓的文字）。
+        刚拆股、券商还没反映的不算不一致（记一条 warn）。"""
+        eng, st = self.eng, self.eng.st
+        held = {t: int(p.qty) for t, p in self.b.positions().items() if int(p.qty) > 0}
         exp = {t: int(p.shares) for t, p in st.pos.items()}
         for t, u in st.core_units.items():
             if int(u):
@@ -1111,11 +1127,25 @@ class UnifiedExecutor:
                 self._event("warn", f"{t}：刚拆股 1:{k:g}，券商那边还没反映（状态 {e:,} 股 / 券商 {h:,} 股），暂不当作不一致")
                 continue
             bad.append(f"{t} 状态 {e:,} 股 / 券商 {h:,} 股")
-        foreign = sorted(set(held) - managed)
-        if foreign:
-            self._event("warn", "账户里有执行器不管的持仓（不影响下单）：" + "、".join(f"{t} {held[t]:,} 股" for t in foreign))
+        return bad, [f"{t} {held[t]:,} 股" for t in sorted(set(held) - managed)]
+
+    def _block_mismatch(self, bad: list[str]) -> None:
         if bad:
             self.block("持仓与券商不一致：" + "；".join(bad) + "（人工交易？状态不明的单？公司行为？）请核对后再跑")
+
+    def check_positions(self) -> None:
+        """只核对持仓（同一决策补单之前：08:35 的重试是新进程，07:40 的不一致不会带过来）。不同步现金：
+        开盘前已经发出的买单占着买付可能額，这时候再同步会把现金算错。执行器不管的持仓 07:40 已经提醒过，这里不再提。"""
+        self._block_mismatch(self._position_diff()[0])
+
+    def check_broker(self) -> None:
+        """券商持仓 = 状态持仓？不一致 → 这次不下单（_position_diff）。
+        现金：买付可能額 − 状态现金 ≥ 1 円 → 记下；实盘以券商为准（税、实际手续费、分红入账）。"""
+        st, b = self.eng.st, self.b
+        bad, foreign = self._position_diff()
+        if foreign:
+            self._event("warn", "账户里有执行器不管的持仓（不影响下单）：" + "、".join(foreign))
+        self._block_mismatch(bad)
         cash = float(b.cash())
         drift = cash - st.cash_jpy
         if abs(drift) >= 1.0:
@@ -1174,8 +1204,7 @@ class UnifiedExecutor:
         if unknown:
             raise ExecutorError("有状态不明的单（发送中断 / 网络错误，可能已被受理）："
                                 + "；".join(f"{o.cid} {o.side} {o.ticker} ×{o.sent_qty}" for o in unknown)
-                                + "。请在立花的注文一覧确认，然后登记：run.py live-u --resolve <cid> --filled <股数> --px <均价>"
-                                  "（没成交填 0）")
+                                + f"。请在立花的注文一覧确认，然后登记：{self.resolve_cmd()}（没成交填 0）")
         if corp is not None:
             corp(k)
         if self.paper:
@@ -1213,6 +1242,14 @@ class UnifiedExecutor:
             k = int(eng.gidx.searchsorted(dt.datetime.fromisoformat(eng.st.last_date)))
             if k < len(eng.gidx) and str(eng.gidx[k].date()) == eng.st.last_date:
                 eng.prime(k + 1)
+                # 08:35 的重试是新进程：07:40 的「持仓不一致」不会带过来 → 开盘前再查一次持仓，不能绕过。
+                # 09:00 以后不查（今天的单可能已成交，券商持仓本来就和账本不同；寄付单 08:55 之后也被时间闸挡住）——
+                # 但成交日之前（决策做好、成交日在后面的休市日 / 周末）整天都查：那几天不会有新成交，寄付单的时间闸也不挡；
+                # 模拟账户第二天早上才撮合，不查；
+                # 已经因为别的原因不下单（例如行情没更新：账本还停在前一天、券商已有昨天的成交）→ 不查，免得多一条误报的「不一致」
+                now, f = self.clock(), self.fill_day()
+                if not self.paper and not self.blocked and (now.time() < dt.time(9, 0) or (f is not None and now.date() < f)):
+                    self.check_positions()
                 if self.manual is not None:                 # 同一决策补单：撤回中的先处理，再把新的手动卖出 / 减仓加进这次的单（加仓等下一次决策）
                     self._settle_manual()
                     self._apply_manual(k, deciding=False)
@@ -1420,6 +1457,11 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
         short += ("｜与云端一致" if cmp.get("mode") != "holdings" else "｜与云端同样的票") if cmp.get("same") else "｜★ 与云端不一致"
     if sm.get("blocked"):
         short += "｜★ 没下单"
+    from .run_status import actionable, bad_orders, bad_text, uncovered
+    # 适配器挡下 / 立花拒绝 / 状态不明的单（不经过 ux.block）；HALT 挡下的不算（HALT 生效中不下单是预期的）
+    bad = actionable(uncovered(bad_orders(sm.get("orders")), sm.get("blocked")))
+    if bad:
+        short += f"｜★ 没下 {len(bad)} 笔（{bad_text(bad)}）"
     if sm.get("notices"):
         short += "｜★ 立花通知"
     el = sm.get("eligibility") or {}
@@ -1531,6 +1573,25 @@ def mac_notify(title: str, text: str) -> bool:
 
 
 # ══════════════════════════ 实盘的运行保障：锁、入出金、远程停止、重试 ══════════════════════════
+def lock_held(path) -> bool:
+    """有别的进程拿着这份账本的运行锁（RunLock）→ True（执行器正在运行）。只试一下共享锁、马上放开；
+    锁文件不存在 / 没有 fcntl / 打不开 → False。不建文件、不等。"""
+    try:
+        import fcntl
+        f = open(path, "r", encoding="utf-8")
+    except (ImportError, OSError):
+        return False
+    try:
+        fcntl.flock(f.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
+    except OSError:
+        return True
+    else:
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        return False
+    finally:
+        f.close()
+
+
 class RunLock:
     """同一个账本同一时间只允许一个执行器进程（07:40 早上 / 08:35 重试 / 09:05 开盘后 / 09:20 重试 / --resolve / --flow）。
     Mac 睡眠醒来时 launchd 会把错过的几个定时任务同时启动 → 没有锁就会两个进程同时读写账本（后写的覆盖先写的）。

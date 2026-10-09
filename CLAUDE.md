@@ -31,24 +31,37 @@
   影响度历年值 `var/theme_influence.json` 每年 1 月用 `scripts/theme_influence.py` 加上刚结束的一年
 
 ## 在用户的 Mac 上（2026-09-26 起：用户只在 Mac 的 Claude 对话里提问与执行）
-用户的问法与对应的命令见 HANDOFF.md「在 Mac 对话里怎么问」。
+**2026-10-09 起：问、答、改代码、做研究、提交、推送（上传）都在 Mac 本地的 Claude 里做，不需要云端会话**
+（云端例行任务照旧，见下面与「在云端」一节）。用户的问法与对应的命令见 HANDOFF.md「在 Mac 对话里怎么问」。
 - **直接执行，不要只列命令**：用户问到的事凡是要运行命令才能回答或完成（看账本 / 页面 / 日志、拉代码、装或更新定时任务、取数、做研究），
   Claude 自己运行并把结果告诉用户；遇到权限确认就请用户点允许。只有下面「实盘相关」的几件事、改模拟盘规则、密钥，要用户在这次对话里明确说
 - **拉代码后一条命令装好 / 更新全部**（依赖、模拟操盘、市场仪表盘 + 经济威胁提醒、J-Quants 定时取数、研究用克隆）：
   `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（可重复运行，不动账本、不下单）
   连手机上操作一起（用户说「拉代码，手机操作全部执行」）：同一条命令后面加 `--phone node`（拉代码 → 全部更新 → 打开 Tailscale Serve → 在 Mac 上打开面板的「手机」；之后照常的更新会确认手机访问还在）
-- **研究一口气做完**：在 `~/qbreak-dev` 里走完「登记（提交推送）→ 运行 → 记进 sim_changes → 推送 → 汇报」，中途不停下来问；
-  只有推不上去（没配 GitHub 登录）或结果需要用户决定（要不要改模拟盘）时才停
+- **研究一口气做完**：在 `~/qbreak-dev` 里走完「登记（提交推送）→ 运行 → 记进 sim_changes → 推送 → 汇报」，中途不停下来问
+  （推送都用下面的 `bash scripts/dev.sh push`）；只有推不上去（没配 GitHub 登录）或结果需要用户决定（要不要改模拟盘）时才停
 - 两个克隆：`~/qbreak-src` = 每个交易日 07:40 定时任务用的仓库，**只 `git pull`，不改、不提交被跟踪的文件**（本地改动或本地提交会让
   定时任务拉不下来，模拟 / 实盘就用旧代码、旧数据）；`~/qbreak-dev` = 改代码、做研究用的第二个克隆（同一分支；第一次需要时建：
   `git clone -b claude/rakuten-auto-trading-review-ka7lf0 https://github.com/shimitsu123/public.git ~/qbreak-dev`）
-- 在 `~/qbreak-dev` 里改代码 / 做研究：规则同「在云端」一节（先登记后运行、全部测试通过才提交、`git pull --rebase` 后再推、不写模型名）；
-  推送要用户自己在 Mac 上配好 GitHub 登录（`gh auth login` 或 SSH 钥匙；不在对话里贴令牌），推不上去就停下告诉用户；
-  推上去之后 `git -C ~/qbreak-src pull --ff-only`（不拉也行，第二天 07:40 会自动拉）
-- 云端例行任务照旧（每个交易日 06:57 模拟盘日报、每季复核）：它们每天推 `var/`，所以 dev 克隆推之前一定先 `git pull --rebase`
+- 在 `~/qbreak-dev` 里改代码 / 做研究（规则同「在云端」一节：先登记后运行、全部测试通过才提交、不写模型名、只推开发分支、不开 PR），
+  流程（命令在 `quant_breakout/` 下运行，用哪个克隆里的 `scripts/dev.sh` 都行）：
+  `bash scripts/dev.sh check`（第一次 / 出问题时；只读：分支与上游、远端、推送权限、git 身份有没有设、Python ≥ 3.10 + pytest、`~/qbreak-src` 有没有本地改动）
+  → 在 `~/qbreak-dev` 改 → `bash scripts/dev.sh test`（全部通过才提交）→ `git commit`（不写模型名）
+  → `bash scripts/dev.sh push`（有未提交的改动 → 停下；先 `git pull --rebase`，冲突 → 停下、不自动解决；推送；再让 `~/qbreak-src` 快进
+  ——它有本地改动不动、交易日 07:30〜09:35 JST 不换代码（执行器早上的几次运行用同一份代码），不拉也行，下一个交易日 07:40 会自动拉）；
+  推不上去（没登录 GitHub）→ 停下，请用户自己在终端 `gh auth login`（或配 SSH 钥匙；令牌 / 密码不在对话里贴）；
+  git 的 user.name / user.email 没设 → 请用户自己设（公开仓库：用不暴露个人信息的名字与 GitHub 的 noreply 邮箱），Claude 不替用户填
+- 云端例行任务照旧（每个交易日 06:57 模拟盘日报、每季复核；改 / 停要用户在对话里另外确认）：它们每天推 `var/`，所以 dev 克隆推之前一定先
+  `git pull --rebase`（`dev.sh push` 自己先做）；Mac 的执行器仍在每个交易日 07:40 `git pull` 读它们推的文件
+- 停下单：在 Mac 上直接说「停 / 今天不要下单」→ 建本地 `~/.qbreak/home/HALT`（见下面「实盘相关」）；人不在 Mac 旁边时才用云端对话的远程停止（「在云端」一节）
 - 不在 Mac 上对仓库的 `var/` 运行 `run.py sim-day` / `sim-*` / `report` / `optimize` 等（会改被跟踪的文件；模拟盘只在云端跑）
 - 执行器只经 `scripts/liveu.sh`（它把数据目录设成 `~/.qbreak/home`）；直接跑 `run.py` 时先 `export QBREAK_HOME=~/.qbreak/home`
-  （只读命令也一样）；Python 用 `~/.qbreak/venv/bin/python`（macOS 自带的 3.9 不够）
+  （只读命令也一样；数据目录在仓库里时立花的入口会拒绝运行——公开仓库）；Python 用 `~/.qbreak/venv/bin/python`（macOS 自带的 3.9 不够）
+- 手机通知 / 外部心跳（2026-10-09 起）：地址是密钥，放钥匙串（`qbreak-webhook`：Discord / Slack / ntfy；`qbreak-smtp`；`qbreak-heartbeat`），
+  用户自己在终端 `security add-generic-password -s qbreak-webhook -a qbreak -w`（回车后输入，不贴进聊天）；Claude 只说有 / 没有；
+  试发 `bash scripts/liveu.sh notify-test`；09:30 自检（LaunchAgent `com.qbreak.watchdog`）：问「今天的自检过了吗」→ 看
+  `~/.qbreak/home/out/watchdog_{paper,tachibana}.json` 或跑 `bash scripts/liveu.sh watchdog --dry`（只判定、打印，不写、不发）；
+  不带 `--dry` = 重新自检一次（会重写结果文件，没通过会再发手机通知、让外部心跳报失败）→ 只在用户要「再自检一次」时跑
 - J-Quants（Standard，研究用）：密钥放钥匙串（服务名 `qbreak-jquants`，用户自己用 `security add-generic-password -s qbreak-jquants -a qbreak -w` 存），
   命令需要キー时用 `bash scripts/with_jquants.sh <命令>`（从钥匙串读进那个进程的环境变量、绝不回显）；每天的新数据由
   LaunchAgent `com.qbreak.jquants`（周一至五 19:30 + 07:05）取，整理结果 `~/.qbreak/home/out/jq_today.json`（只展示 / 研究）
@@ -86,9 +99,13 @@
   市场仪表盘 / 经济威胁提醒（每 15 分钟）：`~/.qbreak/home/out/dashboard.html`、`~/.qbreak/home/logs/com.qbreak.news.out|err`（只展示与提醒，不下单）；
   J-Quants：`~/.qbreak/home/logs/com.qbreak.jquants.out|err`；登录 / 开机后的自动启动（补跑、打开页面）：
   `~/.qbreak/home/logs/com.qbreak.login.out|err`；操作面板 / 手动指令：`bash scripts/liveu.sh manual list [--broker tachibana]`、
-  `~/.qbreak/home/logs/com.qbreak.panel.{out,err,retry.log}`；手机：`bash scripts/liveu.sh phone status`（只读，不含配对码）
+  `~/.qbreak/home/logs/com.qbreak.panel.{out,err,retry.log}`；手机：`bash scripts/liveu.sh phone status`（只读，不含配对码）；
+  执行器这次跑成没有：`~/.qbreak/home/out/live_unified_{paper,tachibana}_run.json`（面板顶部也显示）；09:30 自检：`~/.qbreak/home/out/watchdog_{paper,tachibana}.json`、
+  `~/.qbreak/home/logs/com.qbreak.watchdog.out|err`；本地改代码 / 推不上去：`bash scripts/dev.sh check`（只读）
 
-## 在云端（claude.ai/code 会话 / 例行任务）
+## 在云端（可选：例行任务照旧；人不在 Mac 旁边时也能用）
+- claude.ai/code 会话 / 例行任务（每个交易日 06:57 模拟盘日报、每季复核）。2026-10-09 起改代码 / 推送在 Mac 本地做（上一节），不需要云端会话；
+  例行任务照旧运行，改 / 停要用户在对话里另外确认
 - 开发分支 `claude/rakuten-auto-trading-review-ka7lf0`：只推这个分支，不开 PR（除非用户要求）
 - 提交前在 `quant_breakout/` 跑 `set -o pipefail; python -m pytest -q`（必须全部通过）；推之前 `git pull --rebase`（例行任务每天也推 `var/`）
 - 代码、注释、提交信息里不写模型名

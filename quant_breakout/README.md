@@ -835,7 +835,7 @@ python run.py pos rm 7203.T             # 卖出后移除
 ```bash
 python run.py live-u-rehearse                                # 用模拟账户演练（历史回放，与回测引擎逐日比较）
 bash scripts/install_launchd_live_u.sh                       # Mac 模拟操盘（默认 paper）：周一至五 07:40
-python run.py tachibana-probe --demo --order-test            # 开户后：デモ一天的发单检查（デモ是假价格、每天重置）
+bash scripts/liveu.sh probe --demo --order-test             # 开户后：デモ一天的发单检查（デモ是假价格、每天重置）
 bash scripts/install_launchd_live_u.sh tachibana             # 本番：07:40 早上的单 + 09:05 开盘后补单
 bash scripts/liveu.sh --broker tachibana --status            # 账本：持仓、下一开盘的单、最近事件
 ```
@@ -843,7 +843,7 @@ bash scripts/liveu.sh --broker tachibana --status            # 账本：持仓�
 **分市场方案（旧；一个账户模式下会拒绝运行）**
 
 ```bash
-python run.py tachibana-probe --demo --dump-spec   # 只读校验 API 仕様，绝不发单
+bash scripts/liveu.sh probe --demo --dump-spec    # 只读校验 API 仕様，绝不发单
 python run.py daemon JP --broker paper --dry-run   # 先用模拟盘演练一整个交易日
 python run.py daemon JP --broker tachibana --protective-stop   # 实盘常驻
 bash scripts/install_launchd.sh                    # 开机自启
@@ -870,7 +870,7 @@ python run.py live JP --broker rss --stop-mode intraday --protective-stop
 **上线前清单**
 
 - [ ] `run.py doctor` 全绿
-- [ ] 立花：`tachibana-probe --demo` 全 `[OK]`，且已对着**官方 API 仕様書**改过 `var/tachibana_spec.json`
+- [ ] 立花：`tachibana-probe --demo` 全 `[OK]`，且已对着**官方 API 仕様書**改过 `~/.qbreak/home/tachibana_spec.json`
       （`TachibanaSpec` 的默认值是公开信息推断的，**不是验证过的**）
 - [ ] 楽天：`RssBridge.bas` 三处 `★TODO★` 已按当期「RSS 関数一覧」PDF 填写（默认占位实现会拒绝下单）
 - [ ] `--broker paper` 演练过至少一个完整交易日
@@ -878,11 +878,13 @@ python run.py live JP --broker rss --stop-mode intraday --protective-stop
 - [ ] 口座选**特定口座**，不要用 NISA（自动交易会浪费非課税枠，且亏损不能损益通算）
 - [ ] `--max-order-value` 设成你能承受的单笔上限（跟模拟盘同档时默认 = 资金 ×1.1，因为核心 ETF 一笔可到 100%）；前两周 `--position-pct 0.05`（显式给出时覆盖同档的仓位），只买 1 単元
 - [ ] 熔断线先设 1%：`RiskConfig.daily_max_loss_pct`
-- [ ] 通知打开：`export QBREAK_WEBHOOK=https://...`（Discord/Slack/LINE 兼容）
+- [ ] 通知到手机：Mac 上把 Discord / Slack / ntfy 的通知地址存进钥匙串 `security add-generic-password -s qbreak-webhook -a qbreak -w`（回车后输入；定时任务读不到 `export` 的环境变量），`bash scripts/liveu.sh notify-test` 试发；外部心跳存 `qbreak-heartbeat`（每个交易日 09:30 自检时 ping）
 - [ ] 每天收盘后锁上 ARM
 
-**ARM（人工解锁）**：`echo ARMED > var/ARM` 才会发单，`rm var/ARM` 锁上。
-**紧急停止**：`echo x > var/HALT` —— 任何下单立即被拒绝。
+**ARM（人工解锁）**：数据目录里有 `ARM`（内容 `ARMED`）才会发单，删掉就锁上。
+**紧急停止**：数据目录里建 `HALT` —— 任何下单立即被拒绝。
+（Mac 上的执行器数据目录是 `~/.qbreak/home/`：`echo ARMED > ~/.qbreak/home/ARM` / `echo 停 > ~/.qbreak/home/HALT`；
+以前写的 `var/ARM` / `var/HALT` 是旧的分市场方案 —— 仓库是公开的，立花的入口在数据目录指向仓库的 `var/` 时会拒绝运行，那里的 `ARM` 没有用。）
 
 ---
 

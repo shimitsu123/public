@@ -67,9 +67,11 @@ MAX_BODY = 4096
 TRIGGER_FROM, TRIGGER_UNTIL = dt.time(7, 45), dt.time(8, 50)
 TRIGGER_GAP_S = 180                     # 开盘前的重试：同一个账本最多 3 分钟一次
 NOW_GAP_S = 60                          # 盘中（--phase now）：同一个账本最多 1 分钟一次
+FAIL_GAP_MAX_S = 900                    # 盘中执行器失败后的退避：NOW_GAP_S × 2^连续失败次数，最多 15 分钟
+FAIL_PAUSE_N = 3                        # 同一天连续失败几次 → 当天这个账本暂停自动叫执行器（新的手动指令 / 第二天恢复）
 TOKEN_FILE = "panel_token"
 WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "holding_view.py", "kline.py", "suggest.py", "watch_prob.py", "core_exit.py",
-         "idle_cash.py", "dip_stats.py")
+         "idle_cash.py", "dip_stats.py", "run_status.py")
 
 
 def token() -> str:
@@ -1342,9 +1344,89 @@ def _buy_price_line(r: dict, fill: str | None = None) -> str:
     return (f"<div class='small muted'>规则的买价：出信号那天的收盘 ×1.03 是第二天开盘的最高价（按今天收盘 ≈ ¥{float(lim):,.0f}）</div>")
 
 
+ESHITEN_SP = "https://kabuka.e-shiten.jp/mfds_smp.php"      # 立花 e支店的手机网站（注文一覧在这里看）
+
+
+def _scheduled(label: str) -> bool:
+    """这个定时任务的 plist 在不在（LaunchAgents 目录；QBREAK_LAUNCH_AGENTS 可改，测试用）。只看文件，不调 launchctl。"""
+    agents = Path(os.environ.get("QBREAK_LAUNCH_AGENTS") or Path.home() / "Library" / "LaunchAgents")
+    return (agents / f"{label}.plist").exists()
+
+
+def _run_lines(tag: str, book: dict, now: dt.datetime, halt: str | None) -> list[tuple[str, str]]:
+    """账本顶部的运行状态 → [(CSS 类 neg / muted, 已转义的 HTML)]（Mac 与手机同一个）：
+    执行器上一次跑成没有（out/live_unified_<账本>_run.json，qbreak/run_status.py）、当前决策里被挡 / 被拒 / 状态不明的单（读账本：
+    --resolve 登记之后马上消失）、交易日 08:00 之后今天早上的运行还没完成、今天 09:30 自检没通过（out/watchdog_<账本>.json）。
+    文件没有 / 读坏 → 那一项不显示（不报错）。只展示，不改任何东西。"""
+    from . import run_status as RS
+    from .calendar_jp import prev_trading_day
+    from .live_unified import lock_held, morning_done
+    out: list[tuple[str, str]] = []
+    now = now.astimezone(JST) if now.tzinfo else now
+    today = now.date()
+    paper = tag.startswith("paper")
+
+    def at(v) -> tuple[str, bool]:                         # (「10/09 07:41」, 是不是今天)
+        t = RS.ts(v)
+        if t is None:
+            return "—", False
+        t = t.astimezone(JST)
+        return t.strftime("%m/%d %H:%M"), t.date() == today
+    st = book.get("state") or {}
+    ld = st.get("last_date")
+    rec = RS.read(tag)
+    if rec:
+        when, is_today = at(rec.get("at"))
+        if rec.get("ok") is False:
+            out.append(("neg", f"★ 执行器 {escape(when)} 停下：{escape(str(rec.get('error') or '原因不明（看数据目录 logs/ 的 .err）'))}"))
+        else:
+            out.append(("muted", f"执行器：{escape(when)} 跑完 ✓（{escape(RS.PHASE_TEXT.get(rec.get('phase'), str(rec.get('phase') or '')))}）"))
+        if rec.get("blocked"):
+            day = "今天" if is_today else f"{when[:5]} "
+            out.append(("neg", f"★ {escape(day)}的单没下：{escape(str(rec['blocked']))}"))
+    bad = RS.bad_orders(book.get("orders"), ld) if ld else []
+    if rec and rec.get("decided_on") == ld:
+        bad = RS.uncovered(bad, rec.get("blocked"))       # 「★ 今天的单没下」已经说了原因的，不再逐笔列
+    if halt:                                               # HALT 挡下的：上面「HALT 生效中」已经说了
+        bad = RS.actionable(bad)
+    if any(o["status"] == "SENDING" for o in bad) and lock_held(paths.state_dir() / f"live_unified_{tag}.lock"):
+        # 执行器正在运行（拿着运行锁）：SENDING 是正在发的单（发之前先存账本），不是状态不明 → 不叫人去核对 / 登记
+        sending = [o for o in bad if o["status"] == "SENDING"]
+        bad = [o for o in bad if o["status"] != "SENDING"]
+        out.append(("muted", escape("发送中（执行器正在运行）：" + "、".join(
+            f"{o['ticker']} {'买' if o['side'] == 'BUY' else '卖'} {o['qty']:,} {'口' if o['kind'] == 'core' else '股'}"
+            for o in sending))))
+    if bad:
+        out.append(("neg", f"★ 有 {len(bad)} 笔被挡 / 被拒 / 状态不明（{escape(RS.bad_text(bad))}）："))
+        for o in bad:
+            unit = "口" if o["kind"] == "core" else "股"
+            out.append(("neg", escape(f"・{o['ticker']} {'买' if o['side'] == 'BUY' else '卖'} {o['qty']:,} {unit} "
+                                      f"{RS.STATUS_TEXT.get(o['status'], o['status'])}" + (f"：{o['note']}" if o["note"] else ""))))
+        if not paper and any(o["status"] in ("ERROR", "SENDING") for o in bad):
+            out.append(("neg", "状态不明的单：去立花网站的注文一覧核对（手机网站 "
+                               f"<a href='{ESHITEN_SP}' target='_blank' rel='noopener noreferrer'>{ESHITEN_SP}</a>），再在 Mac 对话里登记"))
+    if st and not halt and is_trading_day(today) and now.time() >= dt.time(8, 0):
+        exp = prev_trading_day(today).isoformat()          # 今天早上应该处理到的决策日
+        # 模拟账户：装着 07:40 的定时任务（com.qbreak.liveu.paper）就一直算在用 —— 连着几天没跑更要提醒；
+        # 没装（立花模式 / 不在 Mac 上）→ 只在账本最近两个交易日内动过时算（停用了的模拟账户不吵）
+        in_use = (tag == "tachibana" or (tag == "paper" and _scheduled("com.qbreak.liveu.paper"))
+                  or (bool(ld) and str(ld) >= prev_trading_day(prev_trading_day(today)).isoformat()))
+        if in_use and (not ld or str(ld) < exp or (str(ld) == exp and not morning_done(book, exp))):
+            out.append(("neg", f"★ 今天早上的运行还没完成（上次决策 {escape(str(ld or '—'))}）"))
+    wd = RS.peek_json(paths.out_dir() / f"watchdog_{tag}.json")
+    if wd and wd.get("ok") is False:
+        when, is_today = at(wd.get("at"))
+        rs = wd.get("reasons")
+        rs = [rs] if isinstance(rs, str) else [str(x) for x in (rs if isinstance(rs, list) else [])]
+        if is_today:
+            out.append(("neg", f"★ 自检（{escape(when[6:])}）：{escape('；'.join(rs) or '没通过')}"))
+    return out
+
+
 def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "local", device: dict | None = None,
-           phone: dict | None = None) -> str:
-    """操作面板页面（一个账本）。mode = local（Mac 本机：tok = 面板令牌）/ remote（手机：tok = 这台设备的 CSRF 令牌）。"""
+           phone: dict | None = None, trigger: "Trigger | None" = None) -> str:
+    """操作面板页面（一个账本）。mode = local（Mac 本机：tok = 面板令牌）/ remote（手机：tok = 这台设备的 CSRF 令牌）。
+    trigger：面板自动叫执行器的那个对象（顶部显示「盘中自动下单暂停」/ 失败后最早什么时候再叫）。"""
     from . import holding_view as HV
     now = now or now_jst()
     remote = mode == "remote"
@@ -1392,12 +1474,18 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     cpause, csig = man.get("core_pause"), man.get("core_signal")      # 卖出 ETF 后停买；停着时规则从「不拿」变成「拿」= 买入信号
     if cpause and csig:
         warn.insert(0, escape(f"闲置资金 ETF 出现买入信号（{csig.get('date')} 收盘）：{MO.signal_text(csig)} → 确认后才买（见下面「闲置资金」）"))
-    H.append(f"<section class='card{' warn' if halt else ''}'><div class='head'><b>{escape(BOOKS.get(tag, tag))}</b>"
+    runl = _run_lines(tag, book, now, halt)                # 执行器这次跑成没有 / 没下成的单 / 早上没跑完 / 09:30 自检
+    tz = trigger.status(tag, now, book) if trigger is not None else None
+    if tz:                                                 # 面板叫的执行器连续失败：暂停 / 退避（Trigger）
+        runl.insert(0, (tz[0], escape(tz[1])))
+    bad_run = any(c == "neg" for c, _ in runl)
+    H.append(f"<section class='card{' warn' if halt or bad_run else ''}'><div class='head'><b>{escape(BOOKS.get(tag, tag))}</b>"
              f"<span class='chip'>决策日 {escape(str(st.get('last_date') or '—'))} → 成交日 {escape(str(sm.get('fill_day') or '—'))}</span></div>"
              f"<div class='stats'><div><div class='muted'>总权益</div><div class='big'>{_yen(eq)}</div></div>"
              f"<div><div class='muted'>现金</div><div class='big'>{_yen(st.get('cash_jpy'))}</div></div></div>"
              f"<div>现在点买卖 → <b>{escape(when)}</b>下单</div><div class='muted small'>{escape(MO.RULE_TEXT)}</div>"
              + "".join(f"<div class='{'neg' if 'HALT' in w or 'ARM' in w or '买入信号' in w else 'muted'} small'>★ {w}</div>" for w in warn)
+             + "".join(f"<div class='{c} small'>{h}</div>" for c, h in runl)
              + "</section>")
     if not st:
         H.append("<section class='card'>执行器还没有账本（第一次运行之后才有持仓）。</section>")
@@ -1668,13 +1756,24 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
 class Trigger:
     """面板写了手动指令之后叫执行器（同一个账本同一时间只跑一个）：
     盘中（09:00〜11:30、12:30〜15:25）有要马上下的指令 → --phase now（同一个账本最多 1 分钟一次）；
-    交易日 07:45〜08:50、今天早上的运行已经完成、有新的卖出 / 调仓往下 / 撤回 → --retry（加进今天开盘的寄付单；最多 3 分钟一次）。"""
+    交易日 07:45〜08:50、今天早上的运行已经完成、有新的卖出 / 调仓往下 / 撤回 → --retry（加进今天开盘的寄付单；最多 3 分钟一次）。
+    失败退避（2026-10-09 立花实盘缺口 A7，条目 UX-04 / C-01：执行器失败后每分钟重叫 = 通知轰炸 + 反复登录立花，可能被判过负荷）：
+    记下每个账本上一次叫的进程的退出码（非 0 = 失败）；盘中连续失败 n 次 → 从看到失败起至少等 min(60 秒 × 2^n, 15 分钟)；
+    同一天连续失败 3 次（盘中 / 开盘前的重试一起算）→ 当天这个账本暂停自动叫，直到出现新的手动指令（叫那次执行器之后写的）或第二天；
+    成功一次就清零。只管面板自己叫的；07:40 / 08:35 / 09:05 / 09:20 的定时运行不受影响。"""
 
-    def __init__(self, run=None, clock=None):
+    def __init__(self, run=None, clock=None, mono=None):
         self.run = run or self._spawn
         self.clock = clock or now_jst
+        self.mono = mono or time.monotonic
         self.last: dict[str, float] = {}
         self.procs: dict[str, subprocess.Popen] = {}
+        self.started: dict[str, dt.datetime] = {}           # 账本 → 这次叫执行器的时刻（找这次的运行状态）
+        self.fails: dict[str, tuple[str, int]] = {}         # 账本 → (日期, 当天连续失败次数)
+        self.errs: dict[str, str] = {}                      # 账本 → 最后一次失败的原因
+        self.paused: dict[str, tuple[str, str]] = {}        # 账本 → (日期, 原因)：当天暂停自动叫执行器
+        self.pause_ids: dict[str, frozenset] = {}           # 暂停的基准：叫那次执行器时还没读的指令 id（出现不在里面的 = 新的指令 → 恢复）
+        self.spawn_ids: dict[str, frozenset] = {}           # 账本 → 叫执行器那一刻还没读的指令 id
         self.lock = threading.Lock()
 
     @staticmethod
@@ -1689,36 +1788,136 @@ class Trigger:
         lf.flush()
         return subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, cwd=str(paths.PROJECT_ROOT), start_new_session=True)
 
-    def check(self) -> list[str]:
-        """看一遍各个账本；返回这次叫了执行器的账本。"""
+    @staticmethod
+    def _unseen_ids(tag: str, book: dict | None = None) -> frozenset:
+        if book is None:
+            book = _load(tag)[0]
+        return frozenset(r["id"] for r in MO.unseen(tag, book))
+
+    def _nfail(self, tag: str, today: str) -> int:
+        d, n = self.fails.get(tag, ("", 0))
+        return n if d == today else 0
+
+    def _err(self, tag: str, rc) -> str:
+        """这次失败的原因：执行器写的运行状态文件（qbreak/run_status.py）里这次运行之后的 error；没有 → 退出码。"""
+        from . import run_status as RS
+        rec = RS.read(tag) or {}
+        try:
+            t, t0 = RS.ts(rec.get("at")), self.started.get(tag)
+            fresh = t is not None and (t0 is None or t >= t0 - dt.timedelta(seconds=5))
+        except TypeError:                                    # 时钟没带时区：不比较
+            fresh = True
+        if rec.get("ok") is False and rec.get("error") and fresh:
+            return str(rec["error"])
+        return f"退出码 {rc}（看数据目录 logs/com.qbreak.panel.retry.log）"
+
+    def _reap(self, tag: str, today: str) -> bool:
+        """上一次叫的执行器结束了 → 记下成败（退出码非 0 = 失败）。返回「还在跑」（每次只 poll 一次：
+        先看到「还在跑」、紧接着又看到「结束了」时，失败不会漏记）。没有进程对象 → False；没有 poll() 的当作已结束（成功）。"""
+        p = self.procs.get(tag)
+        if p is None:
+            return False
+        rc = getattr(p, "poll", lambda: 0)()
+        if rc is None:
+            return True                                    # 还在跑
+        del self.procs[tag]
+        if rc == 0:
+            self.fails.pop(tag, None)                      # 成功一次就清零
+            self.errs.pop(tag, None)
+            return False
+        n = self._nfail(tag, today) + 1
+        self.fails[tag] = (today, n)
+        self.errs[tag] = self._err(tag, rc)
+        self.last[tag] = self.mono()                       # 退避从「看到失败」算起（执行器可能跑了很久才失败）
+        log.warning("面板叫的执行器失败（%s，今天连续第 %d 次，退出码 %s）", tag, n, rc)
+        if n >= FAIL_PAUSE_N:
+            base = self.spawn_ids.get(tag, frozenset())
+            if self._unseen_ids(tag) - base:               # 这次运行期间你写了新的指令：等于「修好后写新的指令」→ 不暂停、重新计数
+                self.fails.pop(tag, None)
+                log.info("面板叫的执行器连续失败 %d 次（%s），但期间有新的手动指令：不暂停", n, tag)
+                return False
+            self.paused[tag] = (today, self.errs[tag])
+            self.pause_ids[tag] = base
+            log.warning("面板叫的执行器今天连续失败 %d 次（%s）：今天暂停自动叫（新的手动指令 / 明天恢复）", n, tag)
+        return False
+
+    def _still_paused(self, tag: str, today: str, book: dict | None = None) -> bool:
+        """暂停中：第二天 / 有新的手动指令（出现叫那次执行器时还没有的指令 id）→ 恢复（失败次数清零）。
+        指令被定时运行读掉（没读的变少）不算新的指令。"""
+        pz = self.paused.get(tag)
+        if not pz:
+            return False
+        if pz[0] == today and not (self._unseen_ids(tag, book) - self.pause_ids.get(tag, frozenset())):
+            return True
+        self.paused.pop(tag, None)
+        self.pause_ids.pop(tag, None)
+        self.fails.pop(tag, None)
+        log.info("面板自动叫执行器恢复（%s）：%s", tag, "第二天" if pz[0] != today else "有新的手动指令")
+        return False
+
+    def _gap(self, tag: str, today: str, morning: bool) -> float:
+        if morning:
+            return TRIGGER_GAP_S                           # 开盘前的重试照旧（3 分钟一次、到 08:50 为止）
+        return min(NOW_GAP_S * 2 ** self._nfail(tag, today), FAIL_GAP_MAX_S)
+
+    def _due(self, tag: str, book: dict, now: dt.datetime, morning: bool) -> bool:
+        """面板现在会不会为这个账本叫执行器（不看退避）：开盘前 = 早上的运行已完成 + 有新的卖出 / 调仓往下 / 撤回；
+        盘中 = 有要马上下的指令。"""
         from .live_unified import morning_done
         from .trader import expected_last_bar
+        if morning:
+            return morning_done(book, expected_last_bar(now.date(), "JP").isoformat()) and bool(MO.due(tag, book, now))
+        return bool(MO.now_due(tag, book, now))
+
+    def status(self, tag: str, now: dt.datetime | None = None, book: dict | None = None) -> tuple[str, str] | None:
+        """面板顶部的一行（未转义的文字）：(CSS 类, 文字)。今天暂停中 → ★；今天失败过、还有要叫执行器的指令 → 最早什么时候再叫；
+        没事（或已经没有要下的指令：之后不会再叫）→ None。book：render 已经读好的账本（不给就读）。"""
+        now = now or self.clock()
+        today = now.date().isoformat()
+        morning = is_trading_day(now.date()) and TRIGGER_FROM <= now.time() < TRIGGER_UNTIL
+        with self.lock:
+            pz = self.paused.get(tag)
+            if pz and pz[0] == today:
+                return ("neg", f"★ 盘中自动下单暂停：执行器连续失败 {FAIL_PAUSE_N} 次（{pz[1]}）；修好后写新的指令或明天自动恢复")
+            n = self._nfail(tag, today)
+            if n <= 0 or tag in self.procs or not (morning or MO.timing(now)[0] == "now"):
+                return None
+            wait = max(0.0, self._gap(tag, today, morning) - (self.mono() - self.last.get(tag, -1e9)))
+        if not self._due(tag, book if book is not None else _load(tag)[0], now, morning):
+            return None                                    # 指令已经被读掉 / 撤回：面板不会再叫，「最早几点再叫」就不对了
+        nxt = (now + dt.timedelta(seconds=wait)).strftime("%H:%M")
+        return ("muted", f"面板叫的执行器今天连续失败 {n} 次：最早 {nxt} 再自动叫（连续 {FAIL_PAUSE_N} 次失败当天暂停）")
+
+    def check(self) -> list[str]:
+        """看一遍各个账本；返回这次叫了执行器的账本。"""
         now = self.clock()
+        today = now.date().isoformat()
         morning = is_trading_day(now.date()) and TRIGGER_FROM <= now.time() < TRIGGER_UNTIL
         session = MO.timing(now)[0] == "now"
-        if not (morning or session):
+        names = books() if (morning or session) else []
+        with self.lock:
+            for tag in list(self.procs):
+                if tag not in names:
+                    self._reap(tag, today)                   # 这次不看的账本（不在叫的时段 / 不在列表里）：结束了就记下成败
+        if not names:
             return []
         out = []
         with self.lock:
-            for tag in books():
-                p = self.procs.get(tag)
-                if p is not None and getattr(p, "poll", lambda: 0)() is None:
-                    continue                                 # 上一次叫的还在跑
-                if time.monotonic() - self.last.get(tag, -1e9) < (TRIGGER_GAP_S if morning else NOW_GAP_S):
-                    continue
+            for tag in names:
+                if self._reap(tag, today):
+                    continue                                 # 上一次叫的还在跑（结束了：这里记下成败，每次只 poll 一次）
+                if tag in self.paused and self._still_paused(tag, today):
+                    continue                                 # 今天连续失败 3 次：等新的手动指令或明天
+                if self.mono() - self.last.get(tag, -1e9) < self._gap(tag, today, morning):
+                    continue                                 # 失败过：从看到失败起按连续失败次数加倍等
                 book, _ = _load(tag)
-                if morning:
-                    if not morning_done(book, expected_last_bar(now.date(), "JP").isoformat()):
-                        continue                             # 早上的运行还没完成：它自己会读到指令
-                    if not MO.due(tag, book, now):
-                        continue
-                    mode = "retry"
-                else:
-                    if not MO.now_due(tag, book, now):
-                        continue
-                    mode = "now"
-                self.last[tag] = time.monotonic()
+                if not self._due(tag, book, now, morning):
+                    continue                                 # 开盘前：早上的运行还没完成（它自己会读到指令）/ 没有新指令
+                mode = "retry" if morning else "now"
+                self.last[tag] = self.mono()
                 try:
+                    self.started[tag] = now
+                    self.spawn_ids[tag] = self._unseen_ids(tag, book)   # 暂停的基准：叫的这一刻还没读的指令
                     self.procs[tag] = self.run(tag, mode)
                     out.append(tag)
                     log.info("手动指令：叫执行器（%s，%s）", tag, mode)
@@ -2053,7 +2252,7 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
                 self._text(404, "没有这个页面")
                 return
             phone = {"port": phone_port, "url": PP.phone_url(), "devices": PP.devices(), "identity": PP.identity_state()}
-            self._page(lambda: render(_book_of(u.query), tok, (clock or now_jst)(), mode="local", phone=phone))
+            self._page(lambda: render(_book_of(u.query), tok, (clock or now_jst)(), mode="local", phone=phone, trigger=trigger))
 
         def do_POST(self):                                   # noqa: N802
             if not self._host_ok():
@@ -2176,7 +2375,8 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
             if dev.get("kind") == "ts":                                   # 按账户登录、这台设备也配对过 → 页面上可以取消它的配对
                 paired = PP.device_for(self.headers.get("Cookie"))
                 dev = dict(dev, paired=paired["name"]) if paired else dev
-            self._page(lambda: render(_book_of(u.query), PP.csrf(dev["id"]), (clock or now_jst)(), mode="remote", device=dev))
+            self._page(lambda: render(_book_of(u.query), PP.csrf(dev["id"]), (clock or now_jst)(), mode="remote", device=dev,
+                                      trigger=trigger))
 
         def do_POST(self):                                   # noqa: N802
             if not self._host_ok():

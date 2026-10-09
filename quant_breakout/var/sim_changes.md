@@ -10497,3 +10497,29 @@ Mac 问法表、已知限制）；CHECK_TIMELINE（⑥ 执行层、08:35 / 09:20
   但 NISA 买单只能「指値・無条件・当日中」；1545 / 1482 在资产运用业协会 2026-10-08 版的成長投資枠对象名单里（e支店逐只是否受理要开户后确认）；
   入金只能银行汇款（平日 9:00〜15:00 确认到账当天反映）、出金 14:00 截止；现物手续费 個別コース与 `qbreak/fees.py` 一致。
 - 结论：交易规则与执行器的核心路径（演练与回测逐笔一致）不用改；缺的是「出事时有人知道、能处理」的工程与几处实盘才会碰到的漏洞 → 待办〔77〕。非投资建议。
+
+## 2026-10-09 工程（用户：「先修 A 组 7 项」「改为以后在本地的 claude 也可以进行询问回复该代码上传等等操作没必要云端」）：立花实盘缺口 A 组 7 项修好 + Mac 本地 Claude 全流程（问 / 答 / 改代码 / 测试 / 提交 / 推送）；不改交易规则 / 参数 / 仓位 / 股票池 / 门槛的数字，没有新功能触发时执行器与以前逐笔相同
+- 待办〔77〕①。条目号见 `var/out/tachibana_gap_audit.md`；实现按事先写好的规格逐项做、每项配测试，之后逐项对抗审查（22 条，major 2 条），全部修正后再跑全部测试。
+- A1 通知到手机 + 「Mac 没跑」的提醒：`qbreak/notify.py` 的地址改从钥匙串读（`qbreak-webhook`：Discord / Slack / ntfy；`qbreak-smtp`；`qbreak-heartbeat`；环境变量优先；值绝不打印 / 记录），
+  `bash scripts/liveu.sh notify-test` 试发；liveu.sh「运行没有完成」那条路也发到手机（同一天同一段文字只发一次）。09:30 自检 `qbreak/watchdog.py`
+  （LaunchAgent `com.qbreak.watchdog`，`scripts/install_launchd_watchdog.sh`，mac_setup 两种模式都装）：今天早上的执行器跑完没有、有没有状态不明的单、（立花）开盘后的买单下了没有 →
+  没通过 → 手机 + Mac 通知 + 外部心跳报失败；通过 → 心跳成功。外部心跳（healthchecks.io 之类，用户自己建「周一至五 09:30 JST、宽限 30 分钟」）负责 Mac 关机 / 睡着 / 断网时的提醒。
+  为了让 09:30 自检按时跑，早上跑完让 Mac 醒着到 09:35（原来立花 09:25；模拟账户只在 07:40 定时任务本身、装了自检时）。
+  上线检查「准备」加 ⑧ 三项（手机通知通道、外部心跳、09:30 自检任务；钥匙串只查有没有）。
+- A2 08:35 重试前再核对一次持仓：同一决策补单（没有新 K 线）之前，开盘前（09:00 之前，或成交日之前的休市日）只比持仓（不同步现金）；不一致 → 不下单。原来 07:40 因持仓不一致挡住的单会在 08:35 照样发出。
+- A3 09:05 / 09:20 开盘后补单的单笔上限按权益 ×1.05（原来另起的进程用默认 ¥300,000 → 换核心 ETF 等大单被挡）。
+- A4 运行状态：`out/live_unified_<账本>_run.json`（at / phase / ok / error / blocked / 没下的单；只在 Mac 数据目录）；面板与手机每个账本顶部显示「跑完 ✓ / ★ 停下 / ★ 今天的单没下 / ★ N 笔被挡・被拒・状态不明 / ★ 今天早上的运行还没完成 / 09:30 自检没通过」；
+  通知的一行摘要加「★ 没下 N 笔」并升为 warn（HALT 挡下的不算）。新模块 `qbreak/run_status.py`。
+- A5 上线检查不再误判通过：probe 的取价 / 注文一覧调用失败 = NG；交易时间里取不到现价、盘外连前日終値都没有 = NG；デモ发单检查多测「寄付指値买」受理 + 按注文番号撤单；
+  结果文件记 API 版本段（例 e_api_v4r10），上线门槛 ④ / ⑤ 在版本变了或旧格式时要求重做。
+- A6 公开仓库防呆：`.gitignore` 加立花账本 / probe 结果 / 仕様文件 / ARM / HALT / 运行状态 / 自检结果等；数据目录在仓库里时立花的入口（live-u --broker tachibana、tachibana-probe、manual --broker tachibana、旧的分市场实盘、live-watchdog）拒绝运行（返回 2、不建文件）；
+  文档与提示里会被拒绝的直接 run.py 命令改成经 liveu.sh（例：登记状态不明的单 `bash scripts/liveu.sh --broker tachibana --resolve …`）。
+- A7 盘中执行器失败时面板不再每分钟重叫：连续失败等待加倍（最长 15 分钟），同一天 3 次后暂停自动叫（写新的手动指令或第二天恢复），面板显示原因；执行器停下 / 拿不到运行锁的通知同一天同一段文字只发一次（`qbreak/notify_seen.py`）。
+- L 本地 Claude 全流程：`scripts/dev.sh check | test | push`（check 只读：分支 / 上游 / 远端 / 推送权限（--dry-run）/ git 身份有没有设 / Python + pytest / ~/qbreak-src 有没有本地改动；
+  push：有未提交改动停下 → pull --rebase（冲突停下、回到 pull 之前）→ 查要推的提交（作者不是现在的 git 身份、提交信息带模型名 → 停下）→ 推送 → ~/qbreak-src 快进（交易日 07:30〜09:35 不换代码））；
+  CLAUDE.md「在用户的 Mac 上」写清：问、答、改代码、做研究、提交、推送都在 Mac 本地的 Claude 里做，不需要云端会话；云端例行任务（06:57 日报、季度复核）照旧，改 / 停要用户另外确认。
+  HANDOFF「在 Mac 对话里怎么问」与 MACOS.md 相应更新。
+- 用户要自己做的（不贴进聊天）：① Mac 终端 `gh auth login`（或 SSH 钥匙）与 git 的 user.name / user.email（用不暴露个人信息的名字与 GitHub 的 noreply 邮箱），之后 `bash scripts/dev.sh check`；
+  ② 手机通知：`security add-generic-password -s qbreak-webhook -a qbreak -w`（Discord / Slack / ntfy 的地址）→ `bash scripts/liveu.sh notify-test`；③ 外部心跳：healthchecks.io 之类建检查 → `qbreak-heartbeat`；
+  ④ 拉代码后 `bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（装 09:30 自检）。
+- 测试：全部 3,120 个通过（原来 2,982 个 + 新增 138 个）。非投资建议。

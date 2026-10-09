@@ -24,6 +24,27 @@ def home() -> Path:
     return p
 
 
+def repo_root() -> Path:
+    """git 仓库的根：项目根或它的上一级（仓库布局是 <仓库>/quant_breakout）里有 .git 的那个；都没有 → 项目根。
+    只往上看一级：再往上（例如家目录本身是 git 仓库）不算，免得把 ~/.qbreak/home 也当成仓库里面。"""
+    for d in (PROJECT_ROOT, PROJECT_ROOT.parent):
+        if (d / ".git").exists():
+            return d
+    return PROJECT_ROOT
+
+
+def inside_repo() -> bool:
+    """数据目录（照 home() 的算法，但不建目录）解析后在仓库里面 → True。
+    这是公开仓库：立花的账本 / 检查结果写进仓库的 var/，一次 git add 就会推上去（撤不回）；run.py 的立花入口用它拒绝运行。"""
+    p = Path(os.environ.get("QBREAK_HOME") or (PROJECT_ROOT / "var"))
+    try:
+        p = p.resolve()                                       # 相对路径按当前目录、符号链接按实际位置算
+    except OSError:
+        p = p.absolute()
+    root = repo_root().resolve()
+    return p == root or root in p.parents
+
+
 def sub(name: str) -> Path:
     p = home() / name
     p.mkdir(parents=True, exist_ok=True)

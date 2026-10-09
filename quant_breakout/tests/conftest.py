@@ -18,6 +18,12 @@ import pytest  # noqa: E402
 def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("QBREAK_HOME", str(tmp_path))
     monkeypatch.delenv("JQUANTS_API_KEY", raising=False)     # 测试绝不连 J-Quants（sim-day 的行情交叉核对没有キー就跳过）
+    for k in ("QBREAK_WEBHOOK", "QBREAK_SMTP", "QBREAK_HEARTBEAT"):
+        monkeypatch.delenv(k, raising=False)                  # 测试绝不发真的手机通知 / 心跳（在 Mac 上跑也不读钥匙串）
+    monkeypatch.setenv("QBREAK_NO_KEYCHAIN", "1")
+    monkeypatch.setenv("QBREAK_LAUNCH_AGENTS", str(tmp_path / "LaunchAgents"))   # 不看本机真的定时任务（在 Mac 上跑测试也一样）
+    monkeypatch.setattr("qbreak.notify.KEYCHAIN", False)
+    monkeypatch.setattr("qbreak.notify._CACHE", {})
     monkeypatch.setattr("qbreak.watch_prob.FILE", tmp_path / "watch_prob.json")   # 观察中的比例表：默认没有（要用的测试自己写）
     yield tmp_path
 

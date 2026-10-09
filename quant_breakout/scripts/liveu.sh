@@ -15,6 +15,10 @@
 #   bash scripts/liveu.sh run --broker tachibana --retry            定时任务用（立花 08:35）：早上的运行没完成才跑（不等云端）
 #   bash scripts/liveu.sh run --broker tachibana --phase open --retry   定时任务用（立花 09:20）：开盘后的买单还没下才跑
 #   bash scripts/liveu.sh gate                       上线门槛与准备（只读）：Mac 对话里问「能上实盘了吗」
+#   bash scripts/liveu.sh notify-test                手机通知：按钥匙串里设置了的通道（qbreak-webhook / qbreak-smtp）各发一条测试通知（不打印地址）
+#   bash scripts/liveu.sh watchdog                   09:30 自检（LaunchAgent com.qbreak.watchdog，scripts/install_launchd_watchdog.sh）：
+#                                                    今天早上的执行器跑完没有 → 没通过 → 手机 / Mac 通知 + 外部心跳（qbreak-heartbeat）报失败
+#   bash scripts/liveu.sh watchdog --dry             只看（Mac 对话里问「今天的自检过了吗」）：只判定、打印，不写结果文件、不发通知 / 心跳
 #   bash scripts/liveu.sh halt-drill                 HALT 演练（模拟账户；今天早上的运行完成之后）：建 HALT → 跑一次 → 删掉这次建的 HALT
 #   bash scripts/liveu.sh flow 300000 [--flow-note …]  登记入金（出金写负数）：只影响收益的计算与提醒，不下单
 #   bash scripts/liveu.sh probe [--demo [--order-test]]  立花 API 检查（只读；--order-test 只在デモ发单），结果给上线门槛用
@@ -151,6 +155,29 @@ if [ "${1:-}" = "gate" ]; then                     # 上线门槛与准备（只
   exec "$PY" run.py live-gate ${1+"$@"}
 fi
 
+if [ "${1:-}" = "notify-test" ]; then              # 手机通知的测试（地址在钥匙串 qbreak-webhook / qbreak-smtp；绝不打印）
+  shift
+  exec "$PY" run.py notify --test ${1+"$@"}
+fi
+
+if [ "${1:-}" = "watchdog" ]; then                 # 09:30 自检（只读账本、不下单）：没通过 → 手机 / Mac 通知 + 外部心跳报失败
+  shift                                            # --dry：只判定、打印（不写结果文件、不发通知 / 心跳）
+  wmax="${QBREAK_WATCHDOG_WAIT:-40}"               # 执行器还在运行时最多等几次（每次 15 秒；0 = 不等）
+  case " $* " in *" --dry "*) wmax=0 ;; esac
+  if [ "$wmax" -gt 0 ] 2>/dev/null && command -v pgrep >/dev/null 2>&1; then
+    # Mac 睡着错过 07:40 时，醒来 launchd 把错过的执行器和自检一起拉起：先让执行器起来，它还在跑（git pull / 等云端 / 下单）就等它结束，
+    # 不判定跑到一半的账本（运行锁之前还有 git pull，所以看进程；运行锁 Python 那边也会再看一次）
+    sleep 15
+    i=0
+    while [ "$i" -lt "$wmax" ] && pgrep -f "scripts/liveu.sh run" >/dev/null 2>&1; do
+      [ "$i" = "0" ] && echo "（执行器还在运行：等它结束再自检，最多 $((wmax * 15 / 60)) 分钟）"
+      sleep 15
+      i=$((i + 1))
+    done
+  fi
+  exec "$PY" run.py live-watchdog ${1+"$@"}
+fi
+
 if [ "${1:-}" = "halt-drill" ]; then               # HALT 演练：只用模拟账户、今天早上的运行完成之后；真的 HALT 已经存在就不做
   shift
   sync_inputs
@@ -265,15 +292,33 @@ if [ "${1:-}" = "run" ]; then
     msg="$(TZ=Asia/Tokyo date '+%m/%d %H:%M') 的运行没有完成（退出码 ${rc}）：看 $QBREAK_HOME/logs/ 里的 .err / .out，或把它发给 Claude"
     echo "★ $msg"
     "$PY" run.py live-u "$@" --status --alert "$msg" $([ "$openphase" = "0" ] && echo --open) >/dev/null 2>&1
-    mac_alert "qbreak ★ 运行没有完成" "$msg"
+    if [ "$rc" != "3" ]; then
+      # 退出码 3 = 执行器停下 / 拿不到运行锁：run.py 自己已经通知过（同一天同一个原因只发一次），这里不再发 Mac / 手机通知
+      mac_alert "qbreak ★ 运行没有完成" "$msg"
+      # 手机通知（钥匙串里设置了才发；正文不带本机路径；同一个账本、同一天、同一段文字只发一次）
+      pmsg="$(TZ=Asia/Tokyo date '+%m/%d %H:%M') 的运行没有完成（退出码 ${rc}）：在 Mac 对话里说「看一下执行器日志」"
+      "$PY" run.py notify --subject "qbreak $([ "$live" = "1" ] && echo 立花实盘 || echo 模拟操盘) ★ 运行没有完成" --text="$pmsg" \
+        --level warn --once "$([ "$live" = "1" ] && echo tachibana || echo paper)" >/dev/null 2>&1 || true
+    fi
   fi
-  if [ "$live" = "1" ] && [ "$openphase" = "0" ] && command -v caffeinate >/dev/null 2>&1; then
-    # 立花：早上跑完之后让 Mac 醒着到 09:25 JST（没人操作几分钟就会睡着 → 09:05 / 09:20 的开盘后补单会错过；合盖照样会睡）
+  # 早上跑完之后让 Mac 醒着到 09:35 JST（没人操作几分钟就会睡着 → 09:05 / 09:20 的开盘后补单、09:30 的自检会错过；合盖照样会睡）：
+  # 立花的早上 / 重试；模拟账户只在 07:40 的定时任务本身（launchd 把 XPC_SERVICE_NAME 设成任务名）、而且装了 09:30 自检时
+  # （登录时的补跑、面板叫的重试不等：不然登录后的页面、盘中的手动指令要等到 09:35）
+  wdog="${QBREAK_LAUNCH_AGENTS:-$HOME/Library/LaunchAgents}/com.qbreak.watchdog.plist"
+  holdwhy=""
+  if [ "$openphase" = "0" ]; then
+    if [ "$live" = "1" ]; then
+      holdwhy="09:05 / 09:20 的开盘后补单、09:30 的自检按时运行"
+    elif [ "$retry" = "0" ] && [ -f "$wdog" ] && [ "${XPC_SERVICE_NAME:-}" = "com.qbreak.liveu.paper" ]; then
+      holdwhy="09:30 的自检按时运行（不然外部心跳会误报「Mac 没跑」）"
+    fi
+  fi
+  if [ -n "$holdwhy" ] && command -v caffeinate >/dev/null 2>&1; then
     hold="$("$PY" -c 'import datetime as d, zoneinfo as z
 n = d.datetime.now(z.ZoneInfo("Asia/Tokyo"))
-print(max(0, int((n.replace(hour=9, minute=25, second=0, microsecond=0) - n).total_seconds())))' 2>/dev/null || echo 0)"
+print(max(0, int((n.replace(hour=9, minute=35, second=0, microsecond=0) - n).total_seconds())))' 2>/dev/null || echo 0)"
     if [ "${hold:-0}" -gt 0 ] 2>/dev/null; then
-      echo "（让 Mac 醒着到 09:25 JST：09:05 / 09:20 的开盘后补单按时运行）"
+      echo "（让 Mac 醒着到 09:35 JST：${holdwhy}）"
       caffeinate -i -t "$hold"
     fi
   fi

@@ -18,8 +18,8 @@ v4r10（2026-08-29 发布；v4r9 于 2026-09-27 废止；公开仕様書 https:/
 ═══════════════════════════════════════════════════════════════════════════
 ★ `TachibanaSpec` 的默认值按 2026-09-25 的公开仕様書（v4r10）逐项核对过，但**没有在真实账户上跑过**。
    本番发单前必须先在デモ環境通过（デモ用认证 ID 与密钥另行取得）：
-       python run.py tachibana-probe --demo
-   仕様改版时只改 var/tachibana_spec.json（覆盖这里的默认值），其余代码不用动。
+       bash scripts/liveu.sh probe --demo     （= run.py tachibana-probe --demo，数据目录 ~/.qbreak/home）
+   仕様改版时只改数据目录的 tachibana_spec.json（覆盖这里的默认值），其余代码不用动。
 ═══════════════════════════════════════════════════════════════════════════
 
 设计要点
@@ -37,6 +37,7 @@ import base64
 import datetime as dt
 import json
 import os
+import re
 import stat
 import subprocess
 import threading
@@ -183,7 +184,7 @@ class TachibanaSpec:
 
     @classmethod
     def load(cls) -> "TachibanaSpec":
-        """var/tachibana_spec.json があればそれで上書き（仕様改版時はここだけ直す）。"""
+        """データディレクトリ（Mac：~/.qbreak/home）の tachibana_spec.json があればそれで上書き（仕様改版時はここだけ直す）。"""
         fp = paths.home() / "tachibana_spec.json"
         if not fp.exists():
             return cls()
@@ -402,7 +403,7 @@ class TachibanaBroker(BaseBroker):
                                       "或本番 / デモ的密钥用反了") from None
         if s.key_url_request not in urls:
             raise BrokerError(f"登录响应里没有 {s.key_url_request}，仕様が想定と違います。"
-                              "`python run.py tachibana-probe --demo` で応答を確認してください")
+                              "`bash scripts/liveu.sh probe --demo`（= run.py tachibana-probe --demo）で応答を確認してください")
         self._urls = urls
         self._tax = str(res.get(s.f_tax) or "")
         self.next_release = str(res.get(s.key_next_release) or "")
@@ -449,9 +450,10 @@ class TachibanaBroker(BaseBroker):
             return [v]
         return [r for r in v if isinstance(r, dict)] if isinstance(v, list) else []
 
-    def quote_detail(self, tickers: list[str]) -> dict[str, dict[str, float]]:
+    def quote_detail(self, tickers: list[str], strict: bool = False) -> dict[str, dict[str, float]]:
         """批量取行情（1 次最多 120 只）：{票: {price 现在值, open 始値, high, low, prev_close 前日終値}}。
-        空值（开盘前 / 还没寄り付き / 休市 / 暂时拒绝时是 ""）不放进结果，不让一只票拖垮整轮。"""
+        空值（开盘前 / 还没寄り付き / 休市 / 暂时拒绝时是 ""）不放进结果，不让一只票拖垮整轮。
+        strict=True（tachibana-probe 用）：调用失败抛 BrokerError（带原因、不带 URL），不当成「没有行情」。"""
         s = self.spec
         cols = {"price": s.r_price, "open": s.r_open, "high": s.r_high, "low": s.r_low, "prev_close": s.r_prev_close}
         out: dict[str, dict[str, float]] = {}
@@ -462,6 +464,8 @@ class TachibanaBroker(BaseBroker):
                                  **{s.f_target_codes: ",".join(self._code(t) for t in chunk),
                                     s.f_target_cols: s.price_cols})
             except Exception as e:                  # noqa: BLE001
+                if strict:
+                    raise BrokerError(f"取价失败（{type(e).__name__}）：{_no_url(e)}"[:300]) from None
                 log.debug("取价失败 %s: %s", chunk[:3], e)
                 continue
             by = {str(r.get(s.r_price_code, "")).strip(): r for r in self._rows(res.get(s.r_price_list))}
@@ -557,7 +561,7 @@ class TachibanaBroker(BaseBroker):
             rows[clm] = self._rows(self._call(clm, url_key=s.key_url_master).get(key))
         m = TR.merge_master(rows[s.clm_issue_mst], rows[s.clm_issue_mkt], rows[s.clm_issue_kisei])
         if not m:
-            raise BrokerError("立花の銘柄マスタが空（仕様変更？ `python run.py tachibana-probe --demo` で応答を確認）")
+            raise BrokerError("立花の銘柄マスタが空（仕様変更？ `bash scripts/liveu.sh probe --demo`（= run.py tachibana-probe --demo）で応答を確認）")
         self._master, self._master_day = m, today
         try:
             fp.parent.mkdir(parents=True, exist_ok=True)
@@ -768,10 +772,13 @@ class TachibanaBroker(BaseBroker):
         ref = self._sent_ids.get(client_id)
         return bool(ref) and self.cancel_order(*ref)
 
-    def open_orders(self) -> list[dict]:
+    def open_orders(self, strict: bool = False) -> list[dict]:
+        """注文一覧（只读）。默认读不到 → []；strict=True（tachibana-probe 用）：调用失败抛 BrokerError（带原因、不带 URL）。"""
         try:
             return self._rows(self._call(self.spec.clm_order_list).get(self.spec.r_order_list))
         except Exception as e:                            # noqa: BLE001
+            if strict:
+                raise BrokerError(f"读取注文一覧失败（{type(e).__name__}）：{_no_url(e)}"[:300]) from None
             log.warning("读取注文一覧失败: %s", e)
             return []
 
@@ -786,6 +793,17 @@ class TachibanaBroker(BaseBroker):
 
 def _now() -> str:
     return dt.datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _no_url(e) -> str:
+    """异常文字里的 URL（虚拟 URL 带会话）换成「<URL>」：只留原因。"""
+    return re.sub(r"[A-Za-z][A-Za-z0-9+.-]*://\S+", "<URL>", str(e))
+
+
+def api_version(base: str) -> str:
+    """base URL 的版本段（例如 "e_api_v4r10"；公开仕様書上的路径，不是密钥）：probe 结果文件记它，上线门槛核对版本变了没有。"""
+    seg = [x for x in urllib.parse.urlsplit(str(base or "")).path.split("/") if x]
+    return seg[-1] if seg else ""
 
 
 def _mono() -> float:

@@ -9,7 +9,10 @@
 # ④b 登录 / 开机后自动启动 com.qbreak.login（RunAtLoad：仪表盘没加载就加载、交易日已过 07:40 而今天没跑 → 补跑模拟操盘、打开页面）
 # ④c 本机操作面板 com.qbreak.panel（http://127.0.0.1:8765/ + 手机端口 127.0.0.1:8766；按钮只写手动指令，下单由执行器做）
 # ④d 手机上操作（--phone：打开 Tailscale Serve → 在 Mac 上打开面板的「手机」；以前打开过的：每次确认还在，不弹页面）
+# ④e 09:30 自检 com.qbreak.watchdog（每个交易日：今天早上的执行器跑完没有；没通过 → 手机通知 + 外部心跳报失败；两种模式都装）
+#    + 手机通知 / 外部心跳的钥匙串（qbreak-webhook / qbreak-heartbeat）：只检查有没有，绝不读出值
 # ⑤ 研究用的第二个克隆 ~/qbreak-dev（没有就建；没有本地改动就快进到最新）
+# ⑤b 本地改代码 / 推送（2026-10-09 起不需要云端会话）：只打印怎么检查（scripts/dev.sh check；不在这里跑推送检查，免得慢）
 # ⑥ 自检：已注册的定时任务、页面在哪里
 set -euo pipefail
 
@@ -87,6 +90,19 @@ if [ -n "$PHONE" ] || [ -f "$LHOME/panel_phone.json" ]; then
   fi
 fi
 
+# ④e 09:30 自检（只读账本、不下单）+ 手机通知 / 外部心跳有没有设置（只查有没有，绝不读出值）
+bash "$PROJ/scripts/install_launchd_watchdog.sh"
+if command -v security >/dev/null 2>&1; then
+  for kc in qbreak-webhook qbreak-heartbeat; do
+    if security find-generic-password -s "$kc" -a qbreak >/dev/null 2>&1; then
+      echo "④e 钥匙串里有 ${kc}（只查了有没有）"
+    else
+      echo "④e 钥匙串里还没有 ${kc}（立花上线前要设）：在终端运行 security add-generic-password -s ${kc} -a qbreak -w（回车后输入，屏幕上不显示；不要贴进聊天）"
+    fi
+  done
+  echo "   发一条测试通知到手机：bash \"$PROJ/scripts/liveu.sh\" notify-test"
+fi
+
 # ⑤ 研究用的第二个克隆（改代码 / 做研究都在这里；~/qbreak-src 只 pull）
 if [ -d "$DEV/.git" ]; then
   if [ -n "$(git -C "$DEV" status --porcelain 2>/dev/null)" ]; then
@@ -101,6 +117,8 @@ elif git clone -q -b "$BRANCH" "$REPO" "$DEV" 2>/dev/null; then
 else
   echo "⑤ ★ 没能建 ${DEV}（网络或权限）：之后再运行本脚本"
 fi
+# ⑤b 本地改代码 / 推送（Mac 的 Claude 对话里：改 → dev.sh test → git commit → dev.sh push；push 后 ~/qbreak-src 自动快进）
+echo "⑤b 本地改代码 / 推送（不需要云端）：第一次或推不上去时运行 bash \"$PROJ/scripts/dev.sh\" check（只读：分支、远端、推送权限、git 身份、测试环境）"
 
 # ⑥ 自检
 echo
@@ -110,4 +128,4 @@ echo "页面：账本 ${LHOME}/out/page_paper.html、市场仪表盘 ${LHOME}/ou
 if [ -z "$PHONE" ] && [ ! -f "$LHOME/panel_phone.json" ]; then
   echo "手机上操作（可选）：bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone <Tailscale 机器名>（只在你自己的 tailnet；按 Tailscale 账户登录，配对码备用）"
 fi
-echo "以后在 Mac 的 Claude 对话里直接说要做什么（看账本、看仪表盘、更新、做研究），Claude 会自己运行需要的命令。"
+echo "以后在 Mac 的 Claude 对话里直接说要做什么（看账本、看仪表盘、更新、做研究、改代码并推送），Claude 会自己运行需要的命令（不需要云端会话）。"

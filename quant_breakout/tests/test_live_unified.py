@@ -194,6 +194,106 @@ def test_holdings_mismatch_blocks_orders():
     assert all(o.status == "BLOCKED" for o in ux.orders if o.decided_on == ux.eng.st.last_date and o.status != "DEFERRED")
 
 
+def _mismatch_at_0740():
+    """07:40：第 10 天收盘的决策要买 A.T，但券商那边多出一只执行器管的票（B.T 100 股，人工买的？）→ 这次的单都被挡。"""
+    make, start = _scenario([1000.0] * 30, entry=(10,), bear_all=True)
+    eng = make()
+    exch = SimExchange(eng, cash=eng.st.cash_jpy)
+    from qbreak.brokers.tachibana import TachibanaBroker
+    b = TachibanaBroker(transport=exch, spec=exch.spec, creds=exch.creds(), require_arm=False, confirm_timeout_s=0.0)
+    book = paths.state_dir() / "book.json"
+    ux = UnifiedExecutor(eng, b, book, paper=False, check_clock=False)
+    lo = int(eng.gidx.searchsorted(start))
+    eng.prime(lo)
+    for k in range(lo, 11):
+        exch.open(k)
+        ux.open_phase()
+        exch.close_day()
+        exch.set_day(k + 1)
+        if k == 10:
+            exch.pos["B.T"] = 100
+        ux.run_bar(k)
+    o = [x for x in ux.orders if x.ticker == "A.T"][0]
+    assert o.status == "BLOCKED" and "持仓与券商不一致" in o.note and exch.calls.get(NEW, 0) == 0
+    return {"ux": ux, "exchange": exch, "book": book}
+
+
+def _retry(r, hh, mm, paper=False):
+    """08:35 / 09:xx 的重试：新进程（新的执行器，blocked 是空的），同一账本、同一券商，没有新 K 线。"""
+    ux = r["ux"]
+    return UnifiedExecutor(ux.eng, ux.b, r["book"], paper=paper, check_clock=False,
+                           clock=lambda: dt.datetime(2026, 10, 9, hh, mm, tzinfo=JST))
+
+
+def test_retry_before_open_rechecks_holdings_and_stays_blocked():
+    r = _mismatch_at_0740()
+    exch = r["exchange"]
+    ux2 = _retry(r, 8, 35)
+    ux2.morning([])                                           # 不能因为是新进程就绕过持仓核对
+    assert exch.calls.get(NEW, 0) == 0
+    assert "持仓与券商不一致" in (ux2.blocked or "") and "B.T 状态 0 股 / 券商 100 股" in ux2.blocked
+    assert any(e["level"] == "error" and "持仓与券商不一致" in e["msg"] for e in ux2.book["events"])
+    o = [x for x in ux2.orders if x.ticker == "A.T"][0]
+    assert o.status == "BLOCKED" and "持仓与券商不一致" in o.note
+    # 对照：09:00 以后不再查（今天的单可能已成交）→ 同一账本这时候单就会发出（证明上面挡住的确实是要发的单）
+    ux3 = _retry(r, 9, 10)
+    ux3.morning([])
+    assert exch.calls.get(NEW, 0) == 1 and not ux3.blocked
+
+
+def test_retry_before_open_sends_when_holdings_match_again():
+    r = _mismatch_at_0740()
+    exch = r["exchange"]
+    del exch.pos["B.T"]                                       # 核对后处理好了（例如那笔已经卖掉）
+    exch.cash -= 1234.0                                       # 券商的买付可能額与状态差一点（例如税）
+    cash0 = r["ux"].eng.st.cash_jpy
+    ux2 = _retry(r, 8, 35)
+    ux2.morning([])
+    o = [x for x in ux2.orders if x.ticker == "A.T"][0]
+    assert o.status == "SENT" and exch.calls[NEW] == 1 and not ux2.blocked
+    assert ux2.eng.st.cash_jpy == cash0 and ux2.stats["cash_sync"] == 0       # 只核对持仓，不同步现金
+    ux2.morning([])                                           # 再重试一次：不重复下单
+    _retry(r, 8, 40).morning([])
+    assert exch.calls[NEW] == 1
+
+
+def test_retry_holdings_check_only_before_open_and_not_for_paper(tmp_path):
+    called = []
+    r = _mismatch_at_0740()
+    for hh, mm in ((9, 0), (12, 40)):
+        ux2 = _retry(r, hh, mm)
+        ux2.check_positions = lambda: called.append("live")
+        ux2.morning([])
+    make, start = _scenario([1000.0] * 30, entry=(10,), bear_all=True)
+    rp = rehearse(make, start, kind="paper", workdir=tmp_path)
+    up = _retry(rp, 8, 35, paper=True)
+    up.check_positions = lambda: called.append("paper")
+    up.morning([])
+    ux5 = _retry(r, 8, 35)
+    ux5.block("日本行情只到 2026-01-16（应有 2026-01-19）")    # 已经不下单（run.py 的行情检查）→ 不再查，免得误报
+    ux5.check_positions = lambda: called.append("blocked")
+    ux5.morning([])
+    assert called == []
+    ux4 = _retry(r, 8, 59)
+    ux4.check_positions = lambda: called.append("live")
+    ux4.morning([])
+    assert called == ["live"]
+
+
+def test_rerun_after_9_before_fill_day_still_rechecks_holdings():
+    """决策做好、成交日在后面（工作日的休市日 / 周末）：09:00 以后手动重跑也要核对持仓（寄付单的时间闸这时不挡）。"""
+    r = _mismatch_at_0740()
+    ux, exch = r["ux"], r["exchange"]
+    d, f = dt.date.fromisoformat(ux.eng.st.last_date), ux.fill_day()
+    assert d < f
+    ux2 = UnifiedExecutor(ux.eng, ux.b, r["book"], paper=False, check_clock=True,
+                          clock=lambda: dt.datetime.combine(d, dt.time(14, 0), tzinfo=JST))
+    ux2.morning([])
+    assert exch.calls.get(NEW, 0) == 0 and "持仓与券商不一致" in (ux2.blocked or "")
+    o = [x for x in ux2.orders if x.ticker == "A.T"][0]
+    assert o.status == "BLOCKED" and exch.pos.get("A.T", 0) == 0
+
+
 class _NetDown(SimExchange):
     """指定时刻起，下一笔新规注文遇到网络错误（服务器那边没收到）。"""
     fail = False
@@ -228,8 +328,11 @@ def test_unknown_order_stops_next_morning_until_resolved():
     day(10, ux)                                               # 第 10 天收盘后下 A.T 的买单 → 网络错误
     o = [x for x in ux.orders if x.ticker == "A.T"][0]
     assert o.status == "ERROR" and "状态不明" in o.note
-    with pytest.raises(ExecutorError, match="状态不明"):
+    with pytest.raises(ExecutorError, match="状态不明") as ei:
         day(11, ux)                                           # 第二天早上：不猜，停下
+    # 登记的命令经 liveu.sh（数据目录 ~/.qbreak/home；直接 run.py 默认是模拟账户、仓库的 var/）
+    assert "bash scripts/liveu.sh --broker tachibana --resolve <cid> --filled <股数> --px <均价>（没成交填 0）" in str(ei.value)
+    assert "run.py live-u" not in str(ei.value)
     resolve_order(book, o.cid, 0, 0.0)                        # 人工在注文一覧确认：没受理
     ux2 = UnifiedExecutor(eng, b, book, paper=False, check_clock=False)
     ux2.run_bar(11)
@@ -323,6 +426,52 @@ def test_missed_open_phase_is_flagged_as_divergence():
     assert any("开盘后补单没有运行" in e["msg"] for e in ux.book["events"] + ux.events)
 
 
+@pytest.mark.parametrize("auto", [True, False])
+def test_open_phase_in_new_process_caps_orders_by_equity(auto, monkeypatch):
+    """09:05 / 09:20 是另起的进程：broker 的单笔上限是 run.py 传入的默认 ¥300,000。卖个股 → 买核心 ETF 那天开盘前余力约 0，
+    核心买单（> ¥30 万）留到开盘后 → open_phase 按决策日的权益 ×1.05 设上限，照常发出；auto_cap=False 时仍按传入的上限（被挡）。"""
+    from qbreak.brokers import tachibana as tb
+    from qbreak.brokers.tachibana import TachibanaBroker
+    from qbreak.live_unified import load_state
+    monkeypatch.setattr(tb, "_sleep", lambda s: None)
+    n = 30
+    a = [1000.0] * 11 + [1000.0 + 100 * i for i in range(1, 9)] + [1800.0] * (n - 19)   # 第 10 天进场 → 涨到 1,800 円 → 第 20 天死叉
+    make, start = _scenario(a, [a[0]] + a[:-1], entry=(10,), dead=(20,), n=n)              # 开盘 = 前一天收盘（不跳空）
+    eng = make()
+    exch = SimExchange(eng, cash=eng.st.cash_jpy)
+    b = TachibanaBroker(transport=exch, spec=exch.spec, creds=exch.creds(), require_arm=False, confirm_timeout_s=0.0)
+    book = paths.state_dir() / "book.json"
+    ux = UnifiedExecutor(eng, b, book, paper=False, respect_halt=False, check_clock=False, auto_cap=True)
+    lo = int(eng.gidx.searchsorted(start))
+    eng.prime(lo)
+    for k in range(lo, 21):                                   # 每天：开盘撮合 → 开盘后补单 → 收盘后决策（同一个 broker 对象）
+        exch.open(k)
+        ux.open_phase()
+        exch.close_day()
+        exch.set_day(k + 1)
+        ux.run_bar(k)
+    big = [o for o in ux._active() if o.status == "DEFERRED" and o.kind == "core"]
+    assert len(big) == 1 and big[0].qty * big[0].limit > 300_000                        # 卖 A.T 的钱开盘后才到 → 核心买单留到开盘后
+    eq = eng.equity(20)
+    exch.open(21)
+    n0 = exch.calls[NEW]
+    b2 = TachibanaBroker(transport=exch, spec=exch.spec, creds=exch.creds(), require_arm=False, confirm_timeout_s=0.0,
+                         max_order_value=300_000)            # 09:05 新进程：run.py 传入的默认上限
+    eng2 = make()                                             # 新进程：引擎从账本读回状态（没有 prime）
+    eng2.st = load_state(book, CFG.capital_jpy)
+    ux2 = UnifiedExecutor(eng2, b2, book, paper=False, respect_halt=False, check_clock=False, auto_cap=auto)
+    st0 = json.dumps(eng2.st.to_dict(), default=_np, sort_keys=True)
+    ux2.open_phase()
+    o = next(x for x in ux2.orders if x.cid == big[0].cid)
+    assert json.dumps(eng2.st.to_dict(), default=_np, sort_keys=True) == st0          # 只设上限，不改状态
+    if auto:
+        assert b2.max_order_value == round(eq * 1.05) > 1_000_000
+        assert o.status in ("SENT", "FILLED", "PARTIAL") and o.sent_qty * o.limit > 300_000 and exch.calls[NEW] == n0 + 1
+    else:
+        assert b2.max_order_value == 300_000
+        assert o.status == "BLOCKED" and "上限 300,000" in o.note and exch.calls[NEW] == n0
+
+
 # ────────── Mac 模拟操盘：与云端模拟盘比较、汇报文字 ──────────
 def test_compare_with_sim_only_on_same_day_and_names_differences():
     from qbreak.live_unified import compare_with_sim
@@ -355,7 +504,8 @@ def test_daily_text_has_units_and_flags():
 
 
 def test_demo_order_test_runs_the_whole_order_cycle(capsys):
-    """tachibana-probe --demo --order-test 的流程（这里对着模拟交易所）：指値买 → 約定照会字段 → 余力 / 持仓变化 → 寄付卖 → 撤单。"""
+    """tachibana-probe --demo --order-test 的流程（这里对着模拟交易所）：指値买 → 約定照会字段 → 余力 / 持仓变化 → 寄付卖 → 撤单
+    → 寄付指値买（执行器最常用的单型，低于现价 10%）→ 撤单。"""
     import run
     from qbreak.brokers.tachibana import TachibanaBroker
     make, _ = _scenario([1000.0] * 30)
@@ -368,7 +518,10 @@ def test_demo_order_test_runs_the_whole_order_cycle(capsys):
     assert run._tachibana_order_test(b, exch.spec) is True
     out = capsys.readouterr().out
     assert "約定照会的字段" in out and "sYakuzyouSuryou" in out and "已撤" in out
-    assert exch.pos.get("1655.T") == 10 and [o["status"] for o in exch.orders.values()] == ["10", "7"]
+    assert "[OK] 寄付指値买" in out and "[OK] 寄付指値撤单 : 已撤" in out
+    assert exch.pos.get("1655.T") == 10 and [o["status"] for o in exch.orders.values()] == ["10", "7", "7"]
+    ob = list(exch.orders.values())[-1]                       # 寄付 + 价格（低于现价 10%）的买单，按注文番号撤掉了
+    assert ob["side"] == "BUY" and ob["cond"] == exch.spec.cond_opening and ob["lim"] == 630.0   # 1655 = 700 円 × 0.9
 
 
 # ────────── ④ Mac 上的页面（账本 + 日志）──────────

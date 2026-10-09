@@ -28,3 +28,19 @@ var/panel_token
 var/panel_devices.json*
 var/panel_devices.lock
 var/panel_phone.json
+
+# 立花的账本 / 检查结果 / 仕様文件 / 解锁（ARM）与停止（HALT）文件 / 运行锁 / 运行状态 / 自检 / 通知去重：只在 Mac 的数据目录
+# （~/.qbreak/home），不入库（真实账户的持仓、现金、单子进了公开仓库就撤不回）。run.py 的立花入口遇到数据目录在仓库里会直接拒绝运行，
+# 这里是第二道防线；远程停止 var/HALT_REMOTE 与模拟账户的 live_unified_paper* 照旧入库
+var/state/live_unified_tachibana*
+var/out/live_unified_tachibana*
+var/out/tachibana_probe_*
+var/out/charts_tachibana*
+var/tachibana_spec.json
+var/ARM
+var/HALT
+var/state/*.lock
+var/*.pem
+var/out/watchdog_*
+var/out/notify_seen_*
+var/out/live_unified_*_run.json
