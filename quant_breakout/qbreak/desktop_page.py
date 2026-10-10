@@ -121,7 +121,8 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
         tot = eq - inv
         cmp = sm.get("compare") or {}
         same_txt = "与云端模拟盘同样的票" if cmp.get("mode") == "holdings" else "与云端模拟盘一致"
-        cmp_txt = (same_txt if cmp.get("same") else "上线初期：持仓不同是预期的" if cmp.get("early") else "★ 与云端模拟盘不一致") \
+        cmp_txt = (same_txt if cmp.get("same") else "上线初期：持仓不同是预期的" if cmp.get("early")
+                   else "出金预留：持仓不同是预期的" if cmp.get("explained") else "★ 与云端模拟盘不一致") \
             if cmp.get("comparable") else ("今天没有比（日期不同）" if cmp else "—")
         base_txt = f"起始 {_yen(capital)}" if abs(inv - float(capital)) < 1 else f"投入本金 {_yen(inv)}（起始 {_yen(capital)}）"
         body.append(
@@ -134,7 +135,7 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
             f"<div><span class='muted'>现金</span><b>{_yen(st.get('cash_jpy'))}</b></div>"
             f"<div><span class='muted'>决策日 → 下一成交日</span><b>{escape(str(st.get('last_date') or '—'))}</b>"
             f"<span class='muted'>→ {escape(str(sm.get('fill_day') or '—'))}</span></div>"
-            f"<div><span class='muted'>对照</span><b style='font-size:15px' class='{'' if cmp.get('same') or cmp.get('early') or not cmp.get('comparable') else 'neg'}'>"
+            f"<div><span class='muted'>对照</span><b style='font-size:15px' class='{'' if cmp.get('same') or cmp.get('early') or cmp.get('explained') or not cmp.get('comparable') else 'neg'}'>"
             f"{escape(cmp_txt)}</b></div></div></section>")
         if sm.get("blocked"):
             body.append(f"<section class='card warn'><b>★ 没有下单：</b>{escape(str(sm['blocked']))}</section>")

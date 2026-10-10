@@ -145,3 +145,25 @@ def test_withdrawal_reserve_register_release_and_expiry(tmp_path):
     del book["flows"][0]["seen_after"]
     day[0] = dt.date(2026, 10, 6) + dt.timedelta(days=RESERVE_DAYS + 1)  # 14 天还没对上 → 解除并提醒
     assert f._reserve_now() == 0 and f.events[-1][0] == "warn" and book["flows"][0]["reserve_released"]
+
+
+def test_reserve_explains_missing_holdings_vs_sim():
+    """出金预留期间实盘少拿了几只（钱少了）→ 与云端比较标「预期」，不算不一致；实盘多拿了别的票 → 照常算不一致。"""
+    from qbreak.live_unified import compare_bad, compare_with_sim
+    from qbreak.unified import UPos, UState
+
+    def st(pos, core):
+        s = UState(cash_jpy=0.0, last_date="2026-10-08", history=[["2026-10-07", 1.0, 0, 0, 1], ["2026-10-08", 1.0, 0, 0, 1]])
+        s.pos = {t: UPos(t, "JP", 100, 1.0, "2026-10-01", 0.9, 1.0, 1.0) for t in pos}
+        s.core_units = dict(core)
+        return s
+    sim = st(["7203.T", "6758.T"], {"1545.T": 100})
+    live = st(["7203.T"], {})
+    book = {"flows": [{"date": "2026-10-07", "jpy": -300000.0, "reserve": True}],
+            "compare_history": [{"date": "2026-10-01", "comparable": True, "same": True}]}
+    c = compare_with_sim(live, sim, live=True, book=book)
+    assert c["explained"] == "出金预留" and not compare_bad(c) and "6758.T" in c["text"]
+    c2 = compare_with_sim(st(["7203.T", "9984.T"], {}), sim, live=True, book=book)      # 实盘多了 9984 → 真的不同
+    assert compare_bad(c2) and not c2.get("explained")
+    book["flows"][0]["seen_after"] = "2026-10-01"                                       # 早就到账了 → 不再解释
+    assert compare_bad(compare_with_sim(live, sim, live=True, book=book))

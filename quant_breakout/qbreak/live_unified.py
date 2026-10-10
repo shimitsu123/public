@@ -1926,6 +1926,11 @@ def compare_with_sim(st: UState, sim: UState | None, live: bool = False, manual:
         if why is not None:
             out["early"] = True
             out["text"] = f"{EARLY_TEXT}（{why}）"
+        else:
+            rw = reserve_reason(st, sim, book)
+            if rw is not None:                              # 出金预留：实盘少拿的票是钱少了造成的（预期的差异，不算不一致）
+                out["explained"] = "出金预留"
+                out["text"] = f"与云端模拟盘拿的票不同，是出金预留造成的（预期）：{rw}"
     from .manual_orders import active as manual_active
     if manual_active(manual) and out.get("comparable") and not out.get("same"):
         out["manual"] = True                                # 有手动操作：与云端不同是预期的（上线门槛的「连续一致」照常中断）
@@ -1959,9 +1964,43 @@ def early_reason(st: UState, sim: UState | None, book: dict | None) -> str | Non
     return "；".join(parts) or "实盘还没有持仓"
 
 
+def reserve_reason(st: UState, sim: UState | None, book: dict | None, days: int = 5) -> str | None:
+    """出金预留期间（或出金到账 / 预留解除后 days 天内）实盘与模拟盘拿的票不同，是不是只因为实盘的钱少了 → 说明文字；不是 → None。
+    要满足：有预留中的出金（或刚结束的）；实盘拿的票模拟盘都有（实盘多出来的 = 真的不同），即实盘只是少拿了几只 / 少拿了核心 ETF。
+    出金金额只在本机账本里（不进仓库）：模拟盘不知道，所以只能在这里把差异标成预期的。"""
+    if sim is None or not book:
+        return None
+    active = reserves(book)
+    recent = []
+    if not active:
+        try:
+            today = dt.date.fromisoformat(str(st.last_date)[:10])
+        except ValueError:
+            return None
+        for f in flows(book):
+            if not f.get("reserve"):
+                continue
+            end = str(f.get("seen_after") or f.get("reserve_released") or "")[:10]
+            try:
+                if end and (today - dt.date.fromisoformat(end)).days <= days:
+                    recent.append(f)
+            except ValueError:
+                continue
+        if not recent:
+            return None
+    lp, lc = set(st.pos), {t for t, u in st.core_units.items() if int(u)}
+    sp, sc = set(sim.pos), {t for t, u in sim.core_units.items() if int(u)}
+    if (lp - sp) or (lc - sc):
+        return None
+    miss = sorted((sp - lp) | (sc - lc))
+    amt = sum(-float(f.get("jpy") or 0) for f in (active or recent))
+    return (f"{'预留中' if active else '刚出金'} ¥{amt:,.0f}，实盘少拿了 {'、'.join(miss) or '—'}"
+            "（钱少了一手买不起 / 闲置资金 ETF 不买回）")
+
+
 def compare_bad(cmp: dict | None) -> bool:
-    """与云端比较的结果要不要算「不对」（通知升 warn）：能比、不一致、又不是上线初期（LU-12）。"""
-    return bool(cmp and cmp.get("comparable") and not cmp.get("same") and not cmp.get("early"))
+    """与云端比较的结果要不要算「不对」（通知升 warn）：能比、不一致、又不是上线初期（LU-12）/ 出金预留造成的（〔77〕C LU-19）。"""
+    return bool(cmp and cmp.get("comparable") and not cmp.get("same") and not cmp.get("early") and not cmp.get("explained"))
 
 
 def _compare(st: UState, sim: UState | None, live: bool, out: dict) -> dict:
@@ -2127,7 +2166,8 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     short = f"权益 ¥{eq:,.0f}（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）｜下一开盘的单 {len(orders)} 笔"
     if cmp and cmp.get("comparable"):
         short += (("｜与云端一致" if cmp.get("mode") != "holdings" else "｜与云端同样的票") if cmp.get("same")
-                  else "｜上线初期：持仓与云端不同（预期）" if cmp.get("early") else "｜★ 与云端不一致")
+                  else "｜上线初期：持仓与云端不同（预期）" if cmp.get("early")
+                  else "｜出金预留：持仓与云端不同（预期）" if cmp.get("explained") else "｜★ 与云端不一致")
     if sm.get("blocked"):
         short += "｜★ 没下单"
     from .run_status import actionable, bad_orders, bad_text, uncovered
@@ -2519,7 +2559,8 @@ def record_compare(book: dict, cmp: dict | None) -> None:
         return
     h = [x for x in book.get("compare_history") or [] if x.get("date") != cmp["exec_date"]]
     h.append({"date": cmp["exec_date"], "comparable": bool(cmp.get("comparable")), "same": cmp.get("same"),
-              "mode": cmp.get("mode") or "exact", **({"early": True} if cmp.get("early") else {})})
+              "mode": cmp.get("mode") or "exact", **({"early": True} if cmp.get("early") else {}),
+              **({"explained": cmp["explained"]} if cmp.get("explained") else {})})
     book["compare_history"] = sorted(h, key=lambda x: x["date"])[-250:]
 
 
