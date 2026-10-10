@@ -165,6 +165,11 @@ def _stale(env: str, rec: dict) -> str | None:
     return None
 
 
+def _general_ok() -> bool:
+    from .brokers.tachibana import tax_general_ok_file
+    return tax_general_ok_file().exists()
+
+
 def _tax_text(tax: str) -> str:
     """T5：1 特定 → 正常；3 一般 → ★ 要你确认（要自己申告；执行器默认不发）；5 / 6 NISA → ★ 执行器不发。只显示、不改门槛。"""
     from .brokers.tachibana import TAX_NAMES, tax_general_ok_file
@@ -484,7 +489,8 @@ def check(agents=None, run=subprocess.run, today: dt.date | None = None) -> list
     _timezone(add, run)
     _alerts(add, run, agents, rc_list, listing)
     tax = str(lv.get("tax") or "")
-    add("参考", "口座课税区分", None, _tax_text(tax))
+    tax_ok = None if tax == "" else (tax == "1" or (tax == "3" and _general_ok()))   # 〔77〕C 审查：区分不对时执行器不发单 → 门槛不能算过
+    add("准备" if tax_ok is False else "参考", "口座课税区分", tax_ok, _tax_text(tax))
     arm = paths.arm_state()                           # 和立花适配器同一个判断（UX-12）：内容是 ARMED 才算
     add("参考", "ARM（解锁发单）", None, {
         "file": "已解锁（ARM 文件内容 ARMED；要停用 = 删掉它或建 HALT）",

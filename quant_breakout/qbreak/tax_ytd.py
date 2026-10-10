@@ -5,6 +5,8 @@
   - 核心 ETF：state["core_trades"]（[日期, 票, BUY/SELL, 口数, 成交价, 手续费]）→ 按移动平均算每笔卖出的损益（买入手续费进成本）
 特定口座的源泉徴収按「年初以来的通算」算：年内累计收益为正时代扣 累计 × 20.315%，之后亏了会退还（还付）。
 这里只做估算（不按所得税 / 住民税分开取整），以立花的取引報告書 / 年間取引報告書为准；不影响下单。
+按约定日（成交日）分年：年末最后两个交易日的卖出按受渡日算属于下一年（以年間取引報告書为准）。
+核心 ETF 的买入记录不全（第一次同步时已有的持仓、拆股后没有成交记录）→ 那只之后的卖出算不了，ytd() 的 incomplete 列出（不猜）。
 """
 from __future__ import annotations
 
@@ -22,7 +24,7 @@ def _get(st, k: str):
     return st.get(k) if isinstance(st, dict) else getattr(st, k, None)
 
 
-def realized(st) -> list[dict]:
+def realized(st, bad: set | None = None) -> list[dict]:
     """全部已实现的卖出（日期升序）：{"date", "ticker", "kind": "stock" | "core", "shares", "px", "pnl"（円，含手续费）}。
     核心 ETF 的记录对不上（口数为负等）→ 那只的后面几笔跳过（不猜）。"""
     out: list[dict] = []
@@ -36,7 +38,7 @@ def realized(st) -> list[dict]:
         except (KeyError, TypeError, ValueError, AttributeError):
             continue
     book: dict[str, list] = {}                        # 票 → [口数, 成本（含买入手续费）]
-    bad: set[str] = set()
+    bad = set() if bad is None else bad               # 记录对不上的核心 ETF（之后的卖出算不了 → 调用方标出「不完整」）
     for row in _get(st, "core_trades") or []:
         try:
             d, t, side, u, px, f = row[:6]
@@ -69,9 +71,10 @@ def ytd(st: dict | None, year: int | str, upto: str | None = None) -> dict:
     """year 年（1/1 起，到 upto 为止，含当天）的汇总：
     {"year", "gain"（已实现损益合计，円）, "withheld"（预计累计代扣）, "n"（卖出笔数）, "stock_gain", "core_gain", "rows"}"""
     y = str(year)
-    rows = [r for r in realized(st) if r["date"][:4] == y and (upto is None or r["date"] <= upto)]
+    bad: set = set()
+    rows = [r for r in realized(st, bad) if r["date"][:4] == y and (upto is None or r["date"] <= upto)]
     g = sum(r["pnl"] for r in rows)
-    return {"year": int(y), "gain": round(g), "withheld": round(withheld(g)), "n": len(rows),
+    return {"year": int(y), "gain": round(g), "withheld": round(withheld(g)), "n": len(rows), "incomplete": sorted(bad),
             "stock_gain": round(sum(r["pnl"] for r in rows if r["kind"] == "stock")),
             "core_gain": round(sum(r["pnl"] for r in rows if r["kind"] == "core")), "rows": rows}
 

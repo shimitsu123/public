@@ -86,3 +86,29 @@ def test_drift_explained_by_estimated_tax_is_info():
     why, lvl = UnifiedExecutor._drift_why(-80000.0, 20315.0)
     assert lvl == "warn" and "其中预计譲渡益税代扣 ¥20,315" in why
     assert UnifiedExecutor._drift_why(50000.0, 0.0)[1] == "warn"
+
+
+def test_tax_pending_counts_each_withholding_once_and_expires():
+    """〔77〕C 审查：同一笔譲渡益税只在现金差里解释一次（以前最近 5 天每天早上都扣一次，会误报「现金突然变化，请登记入金」）。"""
+    from types import SimpleNamespace
+
+    class F:
+        _tax_now = UnifiedExecutor._tax_now
+        _tax_pending = UnifiedExecutor._tax_pending
+        _tax_seen = UnifiedExecutor._tax_seen
+
+    day = [dt.date(2026, 10, 6)]
+    f = F()
+    f.eng = SimpleNamespace(st=SimpleNamespace(trades=[{"ticker": "7203.T", "market": "JP", "exit_date": "2026-10-05",
+                                                          "shares": 100, "exit_px": 4000, "pnl_jpy": 300000}], core_trades=[]))
+    f.book = {}
+    f.clock = lambda: dt.datetime.combine(day[0], dt.time(7, 40), JST)
+    assert round(f._tax_pending()) == round(300000 * 0.20315)
+    f._tax_seen()                                              # 这天的现金差对上了
+    day[0] = dt.date(2026, 10, 7)
+    assert f._tax_pending() == 0                                # 第二天不再拿它解释
+    f.eng.st.trades.append({"ticker": "6758.T", "market": "JP", "exit_date": "2026-10-07", "shares": 100, "exit_px": 1,
+                            "pnl_jpy": -100000})
+    assert round(f._tax_pending()) == round(-100000 * 0.20315)  # 新的亏损 → 还付
+    day[0] = dt.date(2026, 10, 20)                              # 挂了 7 天以上还没见到 → 当作已经见到
+    assert f._tax_pending() == 0 and f.book["tax_seen"]["w"] == round(200000 * 0.20315, 2)

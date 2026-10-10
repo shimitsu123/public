@@ -1850,7 +1850,7 @@ def submit_flow(tag: str, body: dict, now: dt.datetime | None = None) -> tuple[b
         lock.release()
     log.info("面板登记%s %+.0f 円（%s）", "入金" if jpy > 0 else "出金", jpy, tag)
     return True, (f"已登记{'入金' if jpy > 0 else '出金'} {jpy:+,.0f} 円（{rec['date']}）：只影响收益的计算与提醒，不下单"
-                  + ("；已经对上之前的现金变化" if rec.get("seen_after") else "；到账后（下一次早上核对）自动对上")), {"id": "flow"}
+                  + ("；已经对上之前的现金变化" if rec.get("seen_after") else "；到账后（下一次早上核对）自动对上")), {"id": "flow", "kind": "flow"}
 
 
 def status_json(tag: str) -> tuple[int, dict]:
@@ -1902,7 +1902,9 @@ def _money_card(tag: str, book: dict, now: dt.datetime) -> str:
         H.append(f"<div class='small'>{y.get('year')} 年已实现 <b class='{cls(g)}'>{sy(g)}</b>（{int(y.get('n') or 0)} 笔：个股 {sy(y.get('stock_gain') or 0)}"
                  f" · 核心 ETF {sy(y.get('core_gain') or 0)}）· 预计已代扣 ¥{w:,.0f}"
                  + "</div>"
-                 "<div class='muted small'>特定口座（源泉徴収あり）20.315% 的估算，年内盈亏通算；以立花的取引報告書 / 年間取引報告書为准</div>")
+                 + (f"<div class='neg small'>★ 不完整：{escape('、'.join(y['incomplete']))} 的买入记录对不上，它的卖出没算进去</div>"
+                    if y.get("incomplete") else "")
+                 + "<div class='muted small'>特定口座（源泉徴収あり）20.315% 的估算，年内盈亏通算，按成交日分年；以立花的取引報告書 / 年間取引報告書为准</div>")
     rz = m.get("realized") or []
     if rz:
         H.append("<details class='hv'><summary class='muted'>最近的已实现损益（" + str(len(rz)) + " 笔）</summary><div class='list'>" + "".join(
@@ -2512,7 +2514,7 @@ def _book_of(query: str) -> str:
 
 def _after_submit(trigger, rec: dict | None) -> None:
     """写了买卖 / 撤回 / 闲置资金比例 → 马上看一次要不要叫执行器（盘中 → 马上下单；开盘前 → 重试加进今天的寄付单）。"""
-    if trigger is not None and rec and rec["kind"] in MO.ORDER_KINDS + ("cancel", "core", "cancel_order"):
+    if trigger is not None and rec and rec.get("kind") in MO.ORDER_KINDS + ("cancel", "core", "cancel_order"):
         threading.Thread(target=trigger.check, daemon=True).start()
 
 

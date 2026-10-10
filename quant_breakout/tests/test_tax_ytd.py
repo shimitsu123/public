@@ -61,3 +61,9 @@ def test_jq_live_cache_prune_keeps_recent_days():
         (d / name).write_bytes(b"x")
     assert jq_live.prune(dt.date(2026, 10, 10)) == 1
     assert sorted(p.name for p in d.glob("*.csv.gz")) == ["2026-09-01_fins.csv.gz", "notes.csv.gz"]
+
+
+def test_ytd_flags_incomplete_core_records():
+    st = {"core_trades": [["2026-10-01", "1545.T", "SELL", 10, 250.0, 0.0]]}
+    assert TY.ytd(st, 2026)["incomplete"] == ["1545.T"]
+    assert TY.ytd(_st(), 2026)["incomplete"] == []

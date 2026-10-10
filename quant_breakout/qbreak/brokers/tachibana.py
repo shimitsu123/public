@@ -759,14 +759,19 @@ class TachibanaBroker(BaseBroker):
         s = self.spec
         c = self.creds = self.creds or Credentials.from_env(demo=self.demo)
         base = s.base_demo if self.demo else s.base_live
-        if not self.demo:
+        locked = self._real_session()
+        if locked:
             acquire_live_session(id(self))          # TA-14：本番只允许一个进程登录（登录会把别的会话踢掉）
         try:
             self._login_body(s, c, base)
         except BaseException:
-            if not self.demo:
+            if locked:
                 release_live_session(id(self))
             raise
+
+    def _real_session(self) -> bool:
+        """登录的是真的立花本番吗（会话锁只管它）：デモ不算；历史演练的模拟交易所（tachibana_sim.SimExchange）不算。"""
+        return not self.demo and not getattr(self.tr, "is_sim", False)
 
     def _login_body(self, s, c, base) -> None:
         res = self._send(base + s.auth_path, s.clm_login, {s.f_auth_id: c.auth_id}, idempotent=True)
@@ -830,7 +835,7 @@ class TachibanaBroker(BaseBroker):
             log.warning("登出失败（忽略）: %s", _no_url(e))
         finally:
             self._logged_in = False
-            if not self.demo:
+            if self._real_session():
                 release_live_session(id(self))
 
     def _call(self, clmid: str, url_key: str | None = None, *, idempotent: bool = True, **kw) -> dict:

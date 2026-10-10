@@ -1600,7 +1600,7 @@ class UnifiedExecutor:
             return
         drift = cash - st.cash_jpy
         if abs(drift) >= 1.0:
-            tax = self._tax_recent() if self.sync_cash else 0.0
+            tax = self._tax_pending() if self.sync_cash else 0.0
             why, lvl = self._drift_why(drift, tax)
             self._event(lvl if self.sync_cash else "error",
                         f"现金差 {drift:+,.0f} 円（券商买付可能額 {cash:,.0f} / 模型 {st.cash_jpy:,.0f}）"
@@ -1609,17 +1609,45 @@ class UnifiedExecutor:
             self.book["cash_drift"] = self.book["cash_drift"][-250:]
             if self.sync_cash:
                 self._match_flows(drift, tax)
+                if abs(tax) >= 100 and abs(drift + tax) <= max(1_000.0, 0.15 * abs(tax)):
+                    self._tax_seen()                           # 这次的现金差就是这笔税：记下，之后的早上不再拿它解释
                 st.cash_jpy = cash
                 self.stats["cash_sync"] += 1
 
-    def _tax_recent(self) -> float:
-        """最近 5 天（含今天）的卖出造成的预计譲渡益税变化（円；正 = 多扣、负 = 还付）。模型现金不扣税 → 券商现金比模型少约这么多。"""
+    def _tax_now(self) -> tuple[str, float]:
+        """（今年，到今天为止的预计累计代扣）。"""
+        from .tax_ytd import ytd
+        today = self.clock().date()
+        return str(today.year), float(ytd(self.eng.st, today.year, upto=today.isoformat())["withheld"])
+
+    def _tax_pending(self) -> float:
+        """还没在现金差里见到的预计譲渡益税变化（円；正 = 多扣、负 = 还付）= 今年的预计累计代扣 − 账本记下的「已经见到的」
+        （账本 tax_seen：{year, w, since}）。模型现金不扣税 → 券商现金比模型少约这么多；见到一次之后就不再算（模型现金同步成券商的）。
+        挂了 7 天还没见到（例如券商不在约定日 / 受渡日扣、或算法与券商不同）→ 当作已经见到，不再拿来解释（只影响提醒的文字）。"""
         try:
-            from .tax_ytd import withheld_change
-            today = self.clock().date()
-            return float(withheld_change(self.eng.st, str(today - dt.timedelta(days=5)), str(today)))
+            year, w = self._tax_now()
         except Exception:                                      # noqa: BLE001
             return 0.0
+        seen = self.book.get("tax_seen") or {}
+        w0 = float(seen.get("w") or 0) if str(seen.get("year")) == year else 0.0
+        pend = w - w0
+        if abs(pend) < 1:
+            return 0.0
+        since = str(seen.get("pending_since") or "") if str(seen.get("year")) == year else ""
+        today = self.clock().date()
+        if not since:
+            self.book["tax_seen"] = {"year": year, "w": w0, "pending_since": today.isoformat()}
+        elif (today - dt.date.fromisoformat(since)).days > 7:
+            self._tax_seen()
+            return 0.0
+        return pend
+
+    def _tax_seen(self) -> None:
+        try:
+            year, w = self._tax_now()
+        except Exception:                                      # noqa: BLE001
+            return
+        self.book["tax_seen"] = {"year": year, "w": round(w, 2)}
 
     @staticmethod
     def _drift_why(drift: float, tax: float) -> tuple[str, str]:

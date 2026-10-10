@@ -126,3 +126,30 @@ def test_gate_save_and_load():
     LG.save([{"group": "门槛", "name": "a", "ok": True, "text": "OK"}, {"group": "参考", "name": "b", "ok": None, "text": "x"}])
     g = LG.load_saved()
     assert g["ok"] is True and [i["name"] for i in g["items"]] == ["a", "b"]
+
+
+def test_flow_over_http_with_trigger_answers_once():
+    """〔77〕C 审查：面板（带 Trigger）登记入出金 → 回 200 JSON（以前 _after_submit 读 rec["kind"] 抛错、连接断开，用户重试就登记两次）。"""
+    import http.client
+    import threading
+    from http.server import ThreadingHTTPServer
+    _book()
+    tok = panel.token()
+    trig = panel.Trigger(run=lambda *a, **k: None)
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), panel.make_handler(1, tok))
+    port = srv.server_address[1]
+    srv.RequestHandlerClass = panel.make_handler(port, tok, trigger=trig, clock=lambda: AT)
+    th = threading.Thread(target=srv.serve_forever, daemon=True)
+    th.start()
+    try:
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        c.request("POST", "/api/request", body=json.dumps({"book": "tachibana", "kind": "flow", "jpy": 5000}).encode("utf-8"),
+                  headers={"Host": f"127.0.0.1:{port}", "X-Qbreak-Token": tok, "Content-Type": "application/json"})
+        r = c.getresponse()
+        j = json.loads(r.read().decode("utf-8"))
+        assert r.status == 200 and j["ok"] and "已登记入金" in j["msg"]
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    b = json.loads((paths.state_dir() / "live_unified_tachibana.json").read_text(encoding="utf-8"))
+    assert [f["jpy"] for f in b["flows"]] == [5000]

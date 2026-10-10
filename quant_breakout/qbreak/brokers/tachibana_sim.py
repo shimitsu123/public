@@ -24,6 +24,7 @@ from .tachibana import Credentials, TachibanaSpec
 class SimExchange:
     """eng：演练用的 UnifiedEngine（只读它的行情数组、费用与滑点）；cash：起始现金（円）。
     时间推进由演练驱动：open(k) 开盘撮合 → [开盘后的单立即撮合] → close_day() 收盘失效 → set_day(k+1) 之后的单属于下一交易日。"""
+    is_sim = True                               # 立花适配器据此不拿真实的本番会话锁（〔77〕C TA-14）
 
     def __init__(self, eng, cash: float, spec: TachibanaSpec | None = None):
         from cryptography.hazmat.primitives import serialization

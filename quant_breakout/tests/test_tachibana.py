@@ -552,3 +552,30 @@ def test_demo_login_does_not_take_live_session_lock():
     b, _ = _broker(demo=True)
     b.login()
     assert _SESSION["f"] is None
+
+
+def test_sim_exchange_transport_does_not_take_live_session_lock():
+    from qbreak.brokers.tachibana import _SESSION
+
+    class SimTr(FakeTransport):
+        is_sim = True
+    b = TachibanaBroker(transport=SimTr({SPEC.clm_login: LOGIN_OK}), spec=SPEC, creds=Credentials("A", PEM, "2nd"))
+    b.spec.min_interval_s = 0.0
+    b.login()
+    assert b._logged_in and _SESSION["f"] is None
+
+
+def test_gate_tax_item_fails_preparation_when_category_blocks_orders():
+    import json as _json
+    from qbreak import live_gate
+    from qbreak.brokers.tachibana import tax_general_ok_file
+    fp = paths.out_dir() / "tachibana_probe_live.json"
+
+    def item(tax):
+        fp.write_text(_json.dumps({"tax": tax}), encoding="utf-8")
+        return [i for i in live_gate.check() if i["name"] == "口座课税区分"][0]
+    for tax, group, ok in (("5", "准备", False), ("3", "准备", False), ("1", "参考", True), ("", "参考", None)):
+        it = item(tax)
+        assert (it["group"], it["ok"]) == (group, ok), tax
+    tax_general_ok_file().write_text("ok", encoding="utf-8")
+    assert item("3")["ok"] is True
