@@ -83,6 +83,7 @@
   用户说「停 / 今天不要下单」→ 立刻建 `~/.qbreak/home/HALT`（停下单不用再确认）；不在执行器之外向立花发任何单（不写临时脚本调 API 下单）；
   「做一次 HALT 演练」→ `bash scripts/liveu.sh halt-drill`（只删它自己建的演练 HALT；真的 HALT 存在时不演练）；「能上实盘了吗」→ `bash scripts/liveu.sh gate`（只读）；
   用户说入金 / 出金 → `bash scripts/liveu.sh flow <金额>`（出金写负数；只影响收益的计算与提醒，不下单；面板的「登记入金 / 出金」同一个函数）；
+  出金预留 `--flow-reserve`（到账前决策按扣掉它算 = 动仓位：个股仓位变小、ETF 不买回、现金不够先卖核心 ETF；到账后自动解除）只在用户明确说「先留着 / 预留」时加；
   口座课税区分不是特定口座时执行器不发单（〔77〕C T5）：一般口座（3）只有用户在对话里明确同意才建 `~/.qbreak/home/TAX_GENERAL_OK`，NISA（5 / 6）不放行；
   交易时段保持清醒 `bash scripts/install_launchd_awake.sh`（耗电）只在用户同意时装；
   手动卖出 / 减仓 / 调整持仓 / 买入 / 闲置资金比例（2026-10-06 起）：只经 `bash scripts/liveu.sh manual …` 或本机操作面板 http://127.0.0.1:8765/ 写「手动指令」，

@@ -3300,14 +3300,17 @@ def cmd_live_unified(a) -> int:
             return _adopt_host(a, book, tag)
         if a.flow is not None:
             try:
-                rec = register_flow(book, a.flow, a.flow_note or "", a.flow_date)
+                rec = register_flow(book, a.flow, a.flow_note or "", a.flow_date, reserve=bool(getattr(a, "flow_reserve", False)))
             except ValueError as e:
                 print(f"★ 没登记：{e}（例：bash scripts/liveu.sh flow 300000 --flow-date 2026-10-05；出金写负数）")
                 return 2
             print(f"已登记{'入金' if rec['jpy'] > 0 else '出金'} {rec['jpy']:+,.0f} 円（{rec['date']}）"
                   + (f"：{rec['seen_after']} 之后的现金同步里已经到账" if rec.get("seen_after")
                      else "：还没看到到账，下次早上的对账里现金差对上了就记为到账")
-                  + "。只影响收益的计算与「现金突然变化」的提醒，下单本来就按券商的买付可能額；页面在下一次运行时更新")
+                  + ("。出金预留：到账之前，执行器每次决策都按扣掉这笔钱的现金 / 权益算（个股仓位相应变小、闲置资金 ETF 不买回；"
+                     "现金不够照规则先卖核心 ETF）；到账后自动解除" if rec.get("reserve") and not rec.get("seen_after") else
+                     "。只影响收益的计算与「现金突然变化」的提醒，下单本来就按券商的买付可能額")
+                  + "；页面在下一次运行时更新")
             return 0
         return _live_unified_body(a)
     except Exception as e:                                # 没接住的错误（行情取不到、程序错误…）：运行状态记下来，照常抛出（.err 里有出错位置）
@@ -5143,6 +5146,8 @@ def main(argv=None) -> int:
                     help="登记入金（正）/ 出金（负）：只影响收益的计算与提醒，不下单（bash scripts/liveu.sh flow …）")
     lu.add_argument("--flow-note", default=None, metavar="TEXT")
     lu.add_argument("--flow-date", default=None, metavar="YYYY-MM-DD", help="入出金的日期（默认今天）")
+    lu.add_argument("--flow-reserve", action="store_true",
+                    help="出金预留（只用于出金）：到账前的决策按扣掉这笔钱算（个股仓位变小、ETF 不买回）；到账后自动解除（〔77〕C LU-19）")
     lu.add_argument("--cancel", nargs="*", default=None, metavar="CID",
                     help="撤单：撤执行器自己今天还挂着的单（SENT / PARTIAL）；不给 CID = 全部（bash scripts/liveu.sh cancel …；"
                          "只在你明确说「撤单」时运行）")

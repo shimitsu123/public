@@ -287,6 +287,7 @@ class UnifiedEngine:
         self.core_gate_fn = None                            # 票 -> 理由 | None：核心 ETF 在立花买不了（qbreak/tradable.py）→ 不买（那份留现金；卖照常）
         self.entry_priority_fn = None                       # (票, 日) -> 分数 | None：同一天的新仓候选按分数高的先（研究用；缺省 = 按代码）
         self.pre_decide_fn = None                           # 日 -> None：收盘离场判断之后、统一决策之前（执行器在这里放手动卖出；回测 / 模拟盘不设）
+        self.cash_hold = 0.0                # 实盘执行器的出金预留（〔77〕C LU-19；円）：决策时当作已经出金（0 = 不影响，回测 / 模拟盘永远 0）
         self.core_scale = 1.0                               # 核心 ETF 目标额 × 这个比例（执行器的手动「闲置资金比例」；回测 / 模拟盘 = 1）
         self.core_exact = False                             # True：这次决策核心 ETF 直接调到目标（不看再平衡带；执行器在手动改了比例之后用一次）
         self.core_t100: dict[str, int] = {}                 # 最近一次决策里每只核心 ETF「比例 100% 时」的目标口数（执行器 / 页面：ETF 的调仓换算成比例）
@@ -929,7 +930,12 @@ class UnifiedEngine:
             self.last_bar[j] = i
         if self.pre_decide_fn is not None:
             self.pre_decide_fn(i)
-        self._decide(i)
+        hold = float(self.cash_hold or 0.0)
+        st.cash_jpy -= hold                       # 出金预留：决策按扣掉它的现金 / 权益算（不够 → 照规则卖核心 ETF 补足）
+        try:
+            self._decide(i)
+        finally:
+            st.cash_jpy += hold                   # 记账与收益照旧（钱还在账户里，出金到账时由现金同步扣掉）
         eq = self.equity(i)
         st.last_date = str(self.gidx[i].date())
         st.history.append([st.last_date, round(eq, 2), round(st.cash_jpy, 2), round(st.cash_usd, 2),

@@ -268,3 +268,24 @@ def test_usd_kept_while_other_us_candidates_are_imminent():
         runs[keep] = [(d, k) for d, k, *_ in ue.st.fx_trades]
     assert (str(D[5].date()), "USD>JPY") in runs[False]
     assert not any(k == "USD>JPY" and d == str(D[5].date()) for d, k in runs[True])
+
+
+def test_cash_hold_keeps_withdrawal_reserve_out_of_core_and_stocks():
+    """〔77〕C LU-19 出金预留：cash_hold = 0 与原来逐笔相同（上面的测试）；> 0 → 决策当作这笔钱已经出金：核心 ETF 少买、现金留着；记账的权益照旧含它。"""
+    ind, core_df, bear = _synthetic("JP", seed=7)
+    ind_all = {**ind, "1329.T": core_df}
+    cc = etf_cost("rakuten", "1329.T", "JP")
+    start = core_df.index[60]
+
+    def run(hold):
+        cfg = UnifiedConfig(capital_jpy=1_000_000, position_pct=0.25, max_positions=4, max_position_pct=0.34,
+                            stock_markets=("JP",), core={"1329.T": 1.0}, core_index={"1329.T": "JP"})
+        ue = UnifiedEngine(ind_all, cfg, {"JP": P, "US": P}, EX, {"1329.T": cc},
+                           bear={"JP": pd.Series(bear, index=core_df.index)})
+        ue.cash_hold = hold
+        return ue, ue.run(start=start)
+    u0, r0 = run(0.0)
+    u1, r1 = run(300_000.0)
+    assert u1.st.cash_jpy >= 300_000 * 0.85 > u0.st.cash_jpy               # 预留的钱一直留在现金里（再平衡带 10% 以内）
+    assert sum(r[3] for r in u1.st.core_trades if r[2] == "BUY") < sum(r[3] for r in u0.st.core_trades if r[2] == "BUY")
+    assert u1.st.history[-1][2] >= 300_000 * 0.85                           # 记账的现金含预留（钱还在账户里）

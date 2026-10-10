@@ -1614,6 +1614,24 @@ class UnifiedExecutor:
                 st.cash_jpy = cash
                 self.stats["cash_sync"] += 1
 
+    def _reserve_now(self) -> float:
+        """这次决策要预留的出金（円）：登记了预留、还没到账的出金合计；登记超过 RESERVE_DAYS 天还没对上到账 → 解除（记 released）并提醒。"""
+        today = self.clock().date()
+        for f in reserves(self.book):
+            try:
+                age = (today - dt.date.fromisoformat(str(f.get("date"))[:10])).days
+            except ValueError:
+                age = 0
+            if age > RESERVE_DAYS:
+                f["reserve_released"] = today.isoformat()
+                self._event("warn", f"出金预留 {f['jpy']:+,.0f} 円（{f.get('date')} 登记）{RESERVE_DAYS} 天还没对上到账 → 解除预留"
+                                    "（金额写错？已经到账但金额不同？在 Mac 对话里说一声；需要的话重新登记）")
+        hold = reserve_jpy(self.book)
+        if hold > 0:
+            self._event("info", f"出金预留 ¥{hold:,.0f}：这次决策按扣掉它的现金 / 权益算（个股仓位相应变小、闲置资金 ETF 不买回；"
+                                "现金不够照规则先卖核心 ETF）；出金到账后自动解除")
+        return hold
+
     def _tax_now(self) -> tuple[str, float]:
         """（今年，到今天为止的预计累计代扣）。"""
         from .tax_ytd import ytd
@@ -1690,6 +1708,10 @@ class UnifiedExecutor:
         只影响收益的显示与提醒，不影响下单（仓位本来就按券商的买付可能額算）。"""
         pend = [f for f in flows(self.book) if not f.get("seen_after")]
         hit = match_flow(pend, drift)
+        if not hit and abs(tax) >= 100:                   # 同一天还有譲渡益税：扣掉再对；对上了 = 这笔税也见到了
+            hit = match_flow(pend, drift + tax)
+            if hit:
+                self._tax_seen()
         if hit:
             for f in hit:
                 f["seen_after"] = self.eng.st.last_date or ""
@@ -1746,11 +1768,13 @@ class UnifiedExecutor:
             self.eng.pre_decide_fn = self._apply_manual
         exact = self._core_pending() is not None            # 改了闲置资金比例、还没照新比例调过 → 这次核心 ETF 直接调到目标
         self.eng.core_exact = exact
+        self.eng.cash_hold = 0.0 if self.paper else self._reserve_now()   # 出金预留（〔77〕C LU-19）：到账前按扣掉它决策
         try:
             self.eng.close_phase(k)
         finally:
             self.eng.pre_decide_fn = None
             self.eng.core_exact = False
+            self.eng.cash_hold = 0.0
         self._record_core(k, exact)
         if place:
             self.place(k)
@@ -2332,6 +2356,19 @@ def flows(book: dict) -> list[dict]:
     return [f for f in (book or {}).get("flows") or [] if isinstance(f, dict) and not f.get("in_start")]
 
 
+RESERVE_DAYS = 14                          # 出金预留：登记后这么多天还没对上到账 → 解除并提醒
+
+
+def reserves(book: dict | None) -> list[dict]:
+    """还在预留中的出金（〔77〕C LU-19）：登记时选了预留、还没到账、没解除的。"""
+    return [f for f in flows(book or {}) if f.get("reserve") and not f.get("seen_after") and not f.get("reserve_released")
+            and float(f.get("jpy") or 0) < 0]
+
+
+def reserve_jpy(book: dict | None) -> float:
+    return sum(-float(f.get("jpy") or 0) for f in reserves(book))
+
+
 def start_capital(book: dict | None, default: float) -> float:
     """起始本金：实盘账本第一次核对时的买付可能額（+ 持仓市值；账本 capital_jpy，B11）；没有（模拟账户 / 还没核对过）→ default
     （sim.json 的 capital_jpy）。只影响收益的显示，不影响下单。"""
@@ -2384,16 +2421,23 @@ def flows_in_change(book: dict, prev: str | None, last: str | None) -> float:
                if flow_reflected(f, last) and not (prev and flow_reflected(f, prev)))
 
 
-def register_flow(path, jpy: float, note: str = "", day: str | None = None) -> dict:
+def register_flow(path, jpy: float, note: str = "", day: str | None = None, reserve: bool = False) -> dict:
     """登记一笔入金（正）/ 出金（负）。只影响收益的显示与「现金突然变化」的提醒；下单本来就按券商的买付可能額，不受影响。
-    如果最近几次早上的现金同步里已经出现过对得上的现金差（先到账、后登记），直接记为在那次到账。"""
+    如果最近几次早上的现金同步里已经出现过对得上的现金差（先到账、后登记），直接记为在那次到账。
+    reserve=True（只用于出金；〔77〕C LU-19，2026-10-10 用户「加出金预留」）：到账之前，执行器每次决策都把这笔钱当作已经出金
+    （个股仓位按扣掉它的权益算、闲置资金 ETF 不买回、现金不够照规则先卖核心 ETF）；出金到账（现金差对上）后自动解除，
+    登记 14 天后还没对上也解除并提醒。"""
     if not jpy or abs(float(jpy)) < 1:
         raise ValueError("入出金金额要 ≥ 1 円（入金写正数、出金写负数）")
+    if reserve and float(jpy) > 0:
+        raise ValueError("预留只用于出金（写负数）：入金不用预留")
     if day is not None:
         day = dt.date.fromisoformat(str(day)).isoformat()              # 日期写错直接报错，不存进账本
     book = read_json(path, {}) or {}
     rec = {"date": day or now_jst().date().isoformat(), "jpy": round(float(jpy), 2), "note": str(note or "")[:200],
            "at": now_jst().isoformat(timespec="seconds")}
+    if reserve:
+        rec["reserve"] = True
     used = {str(f.get("seen_after")) for f in flows(book) if f.get("seen_after")}
     for d, x in reversed((book.get("cash_drift") or [])[-5:]):
         if d and str(d) not in used and abs(float(x) - rec["jpy"]) <= _flow_tol(rec["jpy"]):
@@ -2401,7 +2445,8 @@ def register_flow(path, jpy: float, note: str = "", day: str | None = None) -> d
             break
     book.setdefault("flows", []).append(rec)
     book.setdefault("events", []).append({"at": rec["at"], "level": "info",
-                                          "msg": f"登记{'入金' if rec['jpy'] > 0 else '出金'} {rec['jpy']:+,.0f} 円（{rec['date']}）{rec['note']}".rstrip()})
+                                          "msg": (f"登记{'入金' if rec['jpy'] > 0 else '出金'} {rec['jpy']:+,.0f} 円（{rec['date']}）{rec['note']}".rstrip()
+                                                  + ("；出金预留：到账前的决策按扣掉它算" if reserve and not rec.get("seen_after") else ""))})
     atomic_write_text(path, json.dumps(book, ensure_ascii=False, indent=1, default=_np))
     return rec
 

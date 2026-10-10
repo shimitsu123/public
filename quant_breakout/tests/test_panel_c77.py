@@ -153,3 +153,12 @@ def test_flow_over_http_with_trigger_answers_once():
         srv.server_close()
     b = json.loads((paths.state_dir() / "live_unified_tachibana.json").read_text(encoding="utf-8"))
     assert [f["jpy"] for f in b["flows"]] == [5000]
+
+
+def test_flow_reserve_from_panel_and_card():
+    _book()
+    ok, msg, _ = panel.submit({"book": "tachibana", "kind": "flow", "jpy": -200000, "reserve": True}, AT)
+    assert ok and "并预留" in msg
+    assert not panel.submit({"book": "tachibana", "kind": "flow", "jpy": 5000, "reserve": True}, AT)[0]   # 入金不能预留
+    h = panel.render("tachibana", "t" * 40, AT)
+    assert "出金预留中" in h and "id='flow-reserve'" in h

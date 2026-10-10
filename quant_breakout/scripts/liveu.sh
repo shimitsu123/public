@@ -337,7 +337,7 @@ fi
 if [ "${1:-}" = "flow" ]; then                     # 登记入出金（默认立花的账本）：bash scripts/liveu.sh flow 300000 [--flow-note …] [--flow-date …]
   shift
   if [ $# -eq 0 ]; then
-    echo "用法：bash scripts/liveu.sh flow 300000 [--flow-note 备注] [--flow-date YYYY-MM-DD]（入金写正数、出金写负数）"
+    echo "用法：bash scripts/liveu.sh flow 300000 [--flow-note 备注] [--flow-date YYYY-MM-DD] [--flow-reserve]（入金写正数、出金写负数；--flow-reserve = 出金到账前先留现金）"
     exit 2
   fi
   amt="$1"

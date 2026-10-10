@@ -112,3 +112,36 @@ def test_tax_pending_counts_each_withholding_once_and_expires():
     assert round(f._tax_pending()) == round(-100000 * 0.20315)  # 新的亏损 → 还付
     day[0] = dt.date(2026, 10, 20)                              # 挂了 7 天以上还没见到 → 当作已经见到
     assert f._tax_pending() == 0 and f.book["tax_seen"]["w"] == round(200000 * 0.20315, 2)
+
+
+def test_withdrawal_reserve_register_release_and_expiry(tmp_path):
+    """〔77〕C LU-19：登记出金时预留 → 到账前决策按扣掉它算；现金差对上（到账）自动解除；14 天还没对上也解除并提醒。入金不能预留。"""
+    import pytest
+    from types import SimpleNamespace
+    from qbreak.live_unified import RESERVE_DAYS, register_flow, reserve_jpy, reserves
+    bp = tmp_path / "live_unified_tachibana.json"
+    bp.write_text(json.dumps({"state": {}}), encoding="utf-8")
+    with pytest.raises(ValueError, match="只用于出金"):
+        register_flow(bp, 100000, reserve=True)
+    rec = register_flow(bp, -300000, "x", "2026-10-06", reserve=True)
+    book = json.loads(bp.read_text(encoding="utf-8"))
+    assert rec["reserve"] and reserve_jpy(book) == 300000 and len(reserves(book)) == 1
+
+    class F:
+        _reserve_now = UnifiedExecutor._reserve_now
+
+        def __init__(self):
+            self.events = []
+
+        def _event(self, lvl, msg):
+            self.events.append((lvl, msg))
+    day = [dt.date(2026, 10, 8)]
+    f = F()
+    f.book = book
+    f.clock = lambda: dt.datetime.combine(day[0], dt.time(7, 40), JST)
+    assert f._reserve_now() == 300000 and "出金预留 ¥300,000" in f.events[-1][1]
+    book["flows"][0]["seen_after"] = "2026-10-08"                       # 到账（现金差对上）→ 自动解除
+    assert f._reserve_now() == 0 and reserve_jpy(book) == 0
+    del book["flows"][0]["seen_after"]
+    day[0] = dt.date(2026, 10, 6) + dt.timedelta(days=RESERVE_DAYS + 1)  # 14 天还没对上 → 解除并提醒
+    assert f._reserve_now() == 0 and f.events[-1][0] == "warn" and book["flows"][0]["reserve_released"]

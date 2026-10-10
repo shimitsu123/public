@@ -611,8 +611,11 @@ document.addEventListener('click', async e=>{
   if(a==='flow'){                                                         // 〔77〕C UX-14：登记入金 / 出金（只影响收益的计算）
     const v=($('#flow-jpy').value||'').replace(/[,¥\\s]/g,''), n=+v;
     if(!v || !isFinite(n) || Math.abs(n)<1){ toast('金额：入金写正数、出金写负数（例 300000 / -300000）', true); return; }
-    const q=await ask((n>0?'登记入金 ':'登记出金 ')+(n>0?'+':'−')+'¥'+fmt(Math.abs(n)), '日期 '+($('#flow-date').value||'今天')+'。只影响收益的计算与「现金突然变化」的提醒，不下单。', '登记');
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'flow', jpy:n, date:$('#flow-date').value, note:$('#flow-note').value})); return;
+    const rs=!!($('#flow-reserve')||{}).checked && n<0;
+    const q=await ask((n>0?'登记入金 ':'登记出金 ')+(n>0?'+':'−')+'¥'+fmt(Math.abs(n))+(rs?'（预留）':''), '日期 '+($('#flow-date').value||'今天')+'。'+(rs ? '预留：到账前的决策按扣掉这笔钱算（个股仓位变小、闲置资金 ETF 不买回；现金不够先卖核心 ETF）；到账后自动解除。' : '只影响收益的计算与「现金突然变化」的提醒，不下单。'), '登记');
+    const rsv=!!($('#flow-reserve')||{}).checked;
+    if(rsv && n>0){ toast('预留只用于出金（写负数）', true); return; }
+    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'flow', jpy:n, date:$('#flow-date').value, note:$('#flow-note').value, reserve:rsv})); return;
   }
   if(a==='halt'){
     const q=await ask('停止下单（HALT）', '全部账本（模拟和立花）从下一次运行起不下单、持仓不动。\\n已经发到交易所的单不会被撤（要撤：「今天的单」的「撤单」，或立花网站 / 手机网站）。\\n这里只能停：恢复只在 Mac 上（在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」）。', '停止下单', {danger:true, input:'原因（可不填）'});
@@ -1842,13 +1845,19 @@ def submit_flow(tag: str, body: dict, now: dt.datetime | None = None) -> tuple[b
         lock = RunLock(bp.with_suffix(".lock"), wait_s=0).acquire()
     except ExecutorError:
         return False, "执行器正在运行：等它跑完（通常几分钟）再登记", None
+    reserve = bool(body.get("reserve"))
+    if reserve and jpy > 0:
+        return False, "预留只用于出金（写负数）：入金不用预留", None
     try:
-        rec = register_flow(bp, jpy, note, day)
+        rec = register_flow(bp, jpy, note, day, reserve=reserve)
     except ValueError as e:
         return False, f"没登记：{e}", None
     finally:
         lock.release()
     log.info("面板登记%s %+.0f 円（%s）", "入金" if jpy > 0 else "出金", jpy, tag)
+    if rec.get("reserve") and not rec.get("seen_after"):
+        return True, (f"已登记出金 {jpy:+,.0f} 円（{rec['date']}）并预留：到账前的决策按扣掉它算（个股仓位变小、闲置资金 ETF 不买回；"
+                      "现金不够照规则先卖核心 ETF）；到账后自动解除"), {"id": "flow", "kind": "flow"}
     return True, (f"已登记{'入金' if jpy > 0 else '出金'} {jpy:+,.0f} 円（{rec['date']}）：只影响收益的计算与提醒，不下单"
                   + ("；已经对上之前的现金变化" if rec.get("seen_after") else "；到账后（下一次早上核对）自动对上")), {"id": "flow", "kind": "flow"}
 
@@ -1923,12 +1932,20 @@ def _money_card(tag: str, book: dict, now: dt.datetime) -> str:
                  + "".join(f"<li>{escape(x)}</li>" for x in jl[1][:30]) + "</ul></details>")
     if not tag.startswith("paper") and tag not in READONLY:
         H.append("<details class='hv' id='flow'><summary class='muted'>登记入金 / 出金</summary>"
-                 "<div class='small muted'>入金写正数、出金写负数；只影响收益的计算与「现金突然变化」的提醒，不下单。"
-                 "注意：出金前卖出的钱，在出金到账之前会被规则当成闲置资金买回 ETF（要先留现金：Mac 对话里说）。</div>"
+                 "<div class='small muted'>入金写正数、出金写负数；只影响收益的计算与「现金突然变化」的提醒，不下单。</div>"
                  "<div class='act'><input id='flow-jpy' inputmode='numeric' placeholder='金额 例 300000 / -300000' aria-label='金额（円）'>"
                  f"<input id='flow-date' type='date' value='{now.date().isoformat()}' aria-label='日期'>"
                  "<input id='flow-note' maxlength='120' placeholder='备注（可不写）' aria-label='备注'>"
-                 "<button class='btn primary' data-act='flow'>登记</button></div></details>")
+                 "<button class='btn primary' data-act='flow'>登记</button></div>"
+                 "<label class='small'><input type='checkbox' id='flow-reserve'> 出金：到账前先留现金（预留）</label>"
+                 "<div class='muted small'>预留 = 到账之前每次决策都当作这笔钱已经出金：个股仓位按扣掉它的权益算（变小）、闲置资金 ETF 不买回、"
+                 "现金不够照规则先卖核心 ETF；到账（早上的现金核对对上）后自动解除，14 天还没对上也解除并提醒。"
+                 "不预留的话，出金前卖出的钱会被规则当成闲置资金买回 ETF。</div></details>")
+    from .live_unified import reserves
+    rv = reserves(book)
+    if rv:
+        H.insert(1, "<div class='neg small'>★ 出金预留中：" + escape("、".join(f"{f.get('date')} {float(f['jpy']):+,.0f} 円" for f in rv))
+                 + "（到账前的决策按扣掉它算；到账后自动解除）</div>")
     H.append("</section>")
     return "".join(H)
 
