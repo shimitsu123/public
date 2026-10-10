@@ -388,7 +388,12 @@ def run(agents, *, force: bool = False, now: dt.datetime | None = None, make_bro
 
 def _gate(agents) -> list[dict]:
     from . import live_gate
-    return live_gate.check(agents=agents)
+    items = live_gate.check(agents=agents)
+    try:
+        live_gate.save(items)                          # 面板「上线准备」卡片（〔77〕C UX-15）
+    except Exception:                                  # noqa: BLE001
+        pass
+    return items
 
 
 def panel_lines(rec: dict | None, now: dt.datetime) -> list[str]:

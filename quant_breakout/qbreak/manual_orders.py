@@ -1295,7 +1295,16 @@ def delay_range(sigma_d: float | None, minutes: float | None) -> float | None:
     return round(2 * s * math.sqrt(min(m, SESSION_MIN) / SESSION_MIN) * 100, 2)
 
 
-def est_lines(e: dict | None, note: str = "") -> list[str]:
+def ytd_gain(book: dict | None, day) -> float | None:
+    """账本里 day 那一年的已实现损益合计（円；特定口座的源泉徴収按它通算；qbreak/tax_ytd.py）。算不了 → None（照旧按单笔 20.315%）。"""
+    try:
+        from .tax_ytd import ytd
+        return float(ytd((book or {}).get("state") or {}, str(day)[:4], upto=str(day)[:10])["gain"])
+    except Exception:                                       # noqa: BLE001  只是展示
+        return None
+
+
+def est_lines(e: dict | None, note: str = "", ytd_gain: float | None = None) -> list[str]:
     """卖出的预计收益几行（面板的卖出确认框、命令行）：买入 → 现价 / 预计卖出 → 预计收益与收益率 → 手续费、税。"""
     if not e:
         return []
@@ -1322,8 +1331,17 @@ def est_lines(e: dict | None, note: str = "") -> list[str]:
                    + (f"（{_sg(e['net_pct'])}{abs(e['net_pct']):.2f}%；" if e.get("net_pct") is not None else "（")
                    + f"股价 {_sg(e['ret_pct'])}{abs(e['ret_pct']):.2f}%）" + (f" · 持有 {e['hold']} 个交易日" if e.get("hold") else ""))
         fees = int(e.get("buy_fee") or 0) + int(e.get("sell_fee") or 0)
-        out.append(f"已扣两边手续费约 ¥{fees:,}；税前" + (f"，税后约 ¥{round(pnl * (1 - TAX_PCT / 100)):,}（特定口座按 {TAX_PCT:g}% 算）"
-                                                         if pnl > 0 else ""))
+        if ytd_gain is None:
+            out.append(f"已扣两边手续费约 ¥{fees:,}；税前" + (f"，税后约 ¥{round(pnl * (1 - TAX_PCT / 100)):,}（特定口座按 {TAX_PCT:g}% 算）"
+                                                             if pnl > 0 else ""))
+        else:                                               # T7：按今年已实现的损益通算（特定口座的源泉徴収是年内累计算的）
+            from .tax_ytd import withheld
+            dtax = round(withheld(float(ytd_gain) + pnl) - withheld(float(ytd_gain)))
+            g = int(round(float(ytd_gain)))
+            what = (f"这笔约代扣 ¥{dtax:,}，税后约 ¥{pnl - dtax:,}" if dtax > 0 else
+                    f"这笔约退还已扣的 ¥{-dtax:,}" if dtax < 0 else "这笔不扣也不退")
+            out.append(f"已扣两边手续费约 ¥{fees:,}；税前。按今年已实现 {_sg(g)}¥{abs(g):,} 通算：{what}"
+                       f"（特定口座 {TAX_PCT:g}%，估算；以取引報告書为准）")
     else:
         out.append(f"卖出手续费约 ¥{int(e.get('sell_fee') or 0):,}")
     return out

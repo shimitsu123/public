@@ -1540,7 +1540,8 @@ class UnifiedExecutor:
         """券商持仓 vs 状态持仓（执行器管的票：状态里的持仓、核心 ETF、股票池里的票）→（不一致的文字，执行器不管的持仓的文字）。
         刚拆股、券商还没反映的不算不一致（记一条 warn）。"""
         eng, st = self.eng, self.eng.st
-        held = {t: int(p.qty) for t, p in self.b.positions().items() if int(p.qty) > 0}
+        self._last_held = self.b.positions()
+        held = {t: int(p.qty) for t, p in self._last_held.items() if int(p.qty) > 0}
         exp = {t: int(p.shares) for t, p in st.pos.items()}
         for t, u in st.core_units.items():
             if int(u):
@@ -1586,21 +1587,50 @@ class UnifiedExecutor:
             self._event("warn", "账户里有执行器不管的持仓（不影响下单）：" + "、".join(foreign))
         self._block_mismatch(bad)
         cash = float(b.cash())
+        if not self.paper:                                     # UX-07：「立花那边实际是什么」快照（持仓 + 余力；只展示）
+            try:
+                from . import broker_snapshot as BS
+                BS.record_check(Path(self.path).stem.replace("live_unified_", "", 1), getattr(self, "_last_held", {}) or {},
+                                cash, {"state": st.to_dict()})
+            except Exception as e:                             # noqa: BLE001  快照只是展示
+                log.warning("立花快照没写成（不影响运行）：%s", e)
         if (self.sync_cash and not self.paper and "capital_jpy" not in self.book
                 and not any(float(h[1] or 0) > 0 for h in st.history or [])):
             self._start_capital(cash, k)                   # 还没入金（买付可能額 0、没有持仓）→ 起始本金等第一次有钱的核对再定
             return
         drift = cash - st.cash_jpy
         if abs(drift) >= 1.0:
-            self._event("warn" if self.sync_cash else "error",
+            tax = self._tax_recent() if self.sync_cash else 0.0
+            why, lvl = self._drift_why(drift, tax)
+            self._event(lvl if self.sync_cash else "error",
                         f"现金差 {drift:+,.0f} 円（券商买付可能額 {cash:,.0f} / 模型 {st.cash_jpy:,.0f}）"
-                        + ("→ 以券商为准" if self.sync_cash else ""))
+                        + ("→ 以券商为准" if self.sync_cash else "") + (f"：{why}" if why and self.sync_cash else ""))
             self.book.setdefault("cash_drift", []).append([st.last_date, round(drift, 2)])
             self.book["cash_drift"] = self.book["cash_drift"][-250:]
             if self.sync_cash:
-                self._match_flows(drift)
+                self._match_flows(drift, tax)
                 st.cash_jpy = cash
                 self.stats["cash_sync"] += 1
+
+    def _tax_recent(self) -> float:
+        """最近 5 天（含今天）的卖出造成的预计譲渡益税变化（円；正 = 多扣、负 = 还付）。模型现金不扣税 → 券商现金比模型少约这么多。"""
+        try:
+            from .tax_ytd import withheld_change
+            today = self.clock().date()
+            return float(withheld_change(self.eng.st, str(today - dt.timedelta(days=5)), str(today)))
+        except Exception:                                      # noqa: BLE001
+            return 0.0
+
+    @staticmethod
+    def _drift_why(drift: float, tax: float) -> tuple[str, str]:
+        """UX-08 / T3：现金差能不能解释 →（说明，级别）。≈ −预计代扣 → 譲渡益税（info）；< ¥1,000 → 手续费 / 取整 / 利息（info）；
+        其他 → warn（入出金 / 分红到账 / 别的）。只影响提醒的级别与文字，现金照旧以券商为准。"""
+        if abs(tax) >= 100 and abs(drift + tax) <= max(1_000.0, 0.15 * abs(tax)):
+            return (f"≈ 预计{'譲渡益税代扣' if tax > 0 else '譲渡益税还付'} ¥{abs(tax):,.0f}（模型不扣税；以取引報告書为准）", "info")
+        if abs(drift) < 1_000:
+            return "小额差（手续费 / 取整 / 利息等）", "info"
+        pre = f"其中预计譲渡益税{'代扣' if tax > 0 else '还付'} ¥{abs(tax):,.0f}，其余 {drift + tax:+,.0f} 円" if abs(tax) >= 100 else ""
+        return (pre + "：" if pre else "") + "可能是入出金、分红到账或费用差", "warn"
 
     def _start_capital(self, cash: float, k: int | None) -> None:
         """B11：实盘账本第一次核对 → 起始本金 = 券商的买付可能額 + 已有持仓的市值；之前登记的入出金算进起始本金（不再另加）。"""
@@ -1626,7 +1656,7 @@ class UnifiedExecutor:
                             + f" 开始（sim.json 的 ¥{old:,.0f} 只是模拟盘的本金）"
                             + (f"；之前登记的入出金 {sum(float(f.get('jpy') or 0) for f in pre):+,.0f} 円算进起始本金" if pre else ""))
 
-    def _match_flows(self, drift: float) -> None:
+    def _match_flows(self, drift: float, tax: float = 0.0) -> None:
         """实盘的现金差里有没有入金 / 出金（run.py live-u --flow 登记）：还没到账的登记（合计，或其中一笔）≈ 这次的现金差 → 记下
         「在哪个决策日之后到账」（seen_after；收益计算按它扣掉）；对不上、而且现金突然变化很大（≥ ¥50,000 且 ≥ 权益 2%）→ 提醒。
         只影响收益的显示与提醒，不影响下单（仓位本来就按券商的买付可能額算）。"""
@@ -1639,14 +1669,17 @@ class UnifiedExecutor:
             return
         hist = self.eng.st.history or []
         eq = float(hist[-1][1]) if hist else abs(float(self.eng.st.cash_jpy))
-        if abs(drift) < max(50_000.0, 0.02 * eq):
+        rest = drift + tax                                     # T3：先扣掉预计的譲渡益税（代扣 / 还付），剩下的才拿去比对入出金
+        if abs(rest) < max(50_000.0, 0.02 * eq):
             return
         if pend:
             self._event("warn", f"现金突然变化 {drift:+,.0f} 円，和登记过还没到账的入出金 "
                                 f"{sum(float(f.get('jpy') or 0) for f in pend):+,.0f} 円对不上（金额写错？还没到账？）")
         else:
-            self._event("warn", f"现金突然变化 {drift:+,.0f} 円：如果是入金 / 出金，请登记（只影响收益的计算、不影响下单）："
-                                f"bash scripts/liveu.sh flow {drift:+.0f} --broker tachibana")
+            self._event("warn", f"现金突然变化 {drift:+,.0f} 円"
+                                + (f"（其中预计譲渡益税{'代扣' if tax > 0 else '还付'} ¥{abs(tax):,.0f}，不是入出金就不用登记）" if abs(tax) >= 100 else "")
+                                + f"：如果是入金 / 出金，请登记（只影响收益的计算、不影响下单）："
+                                f"bash scripts/liveu.sh flow {rest:+.0f} --broker tachibana")
 
     def on_corp_action(self, t: str, date: str, dividend: float, split: float, div_net: float) -> None:
         """公司行为同步：模拟券商的持仓 / 排队单，与执行器账本里还没成交的单（拆股：股数 ×k、价格 ÷k）。"""

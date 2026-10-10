@@ -62,7 +62,8 @@ from .utils import read_json, setup_logging
 
 log = setup_logging("panel")
 
-BOOKS = {"paper": "模拟账户", "tachibana": "立花（本番）", "tachibana_demo": "立花デモ"}
+BOOKS = {"paper": "模拟账户", "tachibana": "立花（本番）", "tachibana_demo": "立花デモ", "tachibana_dryrun": "立花 dry-run（只读）"}
+READONLY = {"tachibana_dryrun"}            # dry-run 的账本：只看（〔77〕C UX-15），面板不写指令
 MAX_BODY = 4096
 TRIGGER_FROM, TRIGGER_UNTIL = dt.time(7, 45), dt.time(8, 50)
 TRIGGER_GAP_S = 180                     # 开盘前的重试：同一个账本最多 3 分钟一次
@@ -70,7 +71,7 @@ NOW_GAP_S = 60                          # 盘中（--phase now）：同一个账
 FAIL_GAP_MAX_S = 900                    # 盘中执行器失败后的退避：NOW_GAP_S × 2^连续失败次数，最多 15 分钟
 FAIL_PAUSE_N = 3                        # 同一天连续失败几次 → 当天这个账本暂停自动叫执行器（新的手动指令 / 第二天恢复）
 TOKEN_FILE = "panel_token"
-WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "holding_view.py", "kline.py", "suggest.py", "watch_prob.py", "core_exit.py",
+WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "money_view.py", "broker_snapshot.py", "tax_ytd.py", "live_gate.py", "holding_view.py", "kline.py", "suggest.py", "watch_prob.py", "core_exit.py",
          "idle_cash.py", "dip_stats.py", "run_status.py", "precheck.py", "calendar_jp.py",
          "paths.py", "live_unified.py")         # 默认账本 / ARM 判定（paths）、数据依赖的提醒文字（live_unified）
 
@@ -607,6 +608,12 @@ document.addEventListener('click', async e=>{
     const q=await ask('解除 '+d.t+' 的不自动买回', '之后有买入信号就会按规则买。', '解除');
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'unblock', ticker:d.t})); return;
   }
+  if(a==='flow'){                                                         // 〔77〕C UX-14：登记入金 / 出金（只影响收益的计算）
+    const v=($('#flow-jpy').value||'').replace(/[,¥\\s]/g,''), n=+v;
+    if(!v || !isFinite(n) || Math.abs(n)<1){ toast('金额：入金写正数、出金写负数（例 300000 / -300000）', true); return; }
+    const q=await ask((n>0?'登记入金 ':'登记出金 ')+(n>0?'+':'−')+'¥'+fmt(Math.abs(n)), '日期 '+($('#flow-date').value||'今天')+'。只影响收益的计算与「现金突然变化」的提醒，不下单。', '登记');
+    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'flow', jpy:n, date:$('#flow-date').value, note:$('#flow-note').value})); return;
+  }
   if(a==='halt'){
     const q=await ask('停止下单（HALT）', '全部账本（模拟和立花）从下一次运行起不下单、持仓不动。\\n已经发到交易所的单不会被撤（要撤：「今天的单」的「撤单」，或立花网站 / 手机网站）。\\n这里只能停：恢复只在 Mac 上（在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」）。', '停止下单', {danger:true, input:'原因（可不填）'});
     if(q.ok) done(await api('/api/halt',{reason:q.value})); return;
@@ -1076,6 +1083,17 @@ document.addEventListener('toggle', e=>{                                   // �
 }, true);
 document.addEventListener('DOMContentLoaded', loadQ);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) loadQ(); });   // 手机切回来马上刷新
+(function(){                                                              // 〔77〕C UX-16：还有在处理的指令 → 每 10 秒问一次，状态变了就刷新（最多约 2 分钟）
+  const s0=(CFG.st||{}); if(!(s0.pending>0)) return;
+  let n=0;
+  async function tick(){
+    n++;
+    try{ const x=await req('/api/status?book='+encodeURIComponent(CFG.book),{credentials:'same-origin',cache:'no-store'});
+         if(x.r.ok && x.j && x.j.sig && x.j.sig!==s0.sig){ toast('状态更新了：刷新中…'); setTimeout(()=>location.reload(), 800); return; } }catch(e){}
+    if(n<12 && !document.hidden) setTimeout(tick, 10000);
+  }
+  setTimeout(tick, 10000);
+})();
 """
 
 _PAIR_JS = """
@@ -1561,6 +1579,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         warn.append("ARM 文件在，但内容不是 ARMED（立花只认内容 ARMED）：单会被挡住，不会真的发出去")
     elif not paper and arm == "off":
         warn.append("立花还没解锁（没有 ARM）：单会被挡住，不会真的发出去")
+    if tag in READONLY:
+        warn.append("dry-run 的账本：只能看（只算不发单），这里的按钮不会写指令")
     if paper:
         warn.append("模拟账户：手动操作后会和云端模拟盘不一致")
         if paths.live_installed() and not _scheduled(paths.PAPER_AGENT):   # 上线后模拟操盘的定时任务已卸载（LU-20 / OPS-06）
@@ -1586,6 +1606,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
              + "</section>")
     if not st:
         H.append("<section class='card'>执行器还没有账本（第一次运行之后才有持仓）。</section>")
+    H.append(_money_card(tag, book, now))                 # 〔77〕C：损益 / 年内已实现与预计代扣 / 最近成交 / 日志 / 入出金
+    H.append(_broker_card(tag, now))                      # 〔77〕C：立花那边实际是什么（快照）
+    H.append(_gate_card(tag))                             # 〔77〕C：上线准备
     hv = sm.get("holding_view") or {}
     if not hv.get("holdings") and not hv.get("core") and st:               # 还没有算过（旧的汇总）：用账本里的数字
         hv = {"bar_date": st.get("last_date"),
@@ -1759,10 +1782,11 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     H.append("</main><div id='toast' class='toast' role='status' hidden></div>")
     note = MO.sale_note(tag, now)
     ests = {}                                               # 拿着的票卖出全部的预计收益（按账本里的最近收盘；页面取到现价后换成现价的）
+    ytdg = MO.ytd_gain(book, now.date())                 # T7：卖出的预计代扣按今年已实现的损益通算
     for t in list(st.get("pos") or {}) + [t for t, u in (st.get("core_units") or {}).items() if int(u or 0) > 0]:
         e = MO.sell_estimate(book, t, sm=sm)
         if e:
-            ests[t] = {**e, "lines": MO.est_lines(e, note)}
+            ests[t] = {**e, "lines": MO.est_lines(e, note, ytdg)}
     u100s = MO.core_u100s(book)[0]                          # 规则目标（比例 100%）；执行器还没算过 → 估算（比例还是 100% 时）
     cfg = {"auth": {"h": "X-Qbreak-Csrf" if remote else "X-Qbreak-Token", "v": tok}, "book": tag, "paper": paper, "remote": remote,
            "real": real,                                                                   # 真钱（立花本番）：确认框写明
@@ -1771,7 +1795,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                          "lot": MO.core_lot(book, t)}                                            # 调一只核心 ETF 时别的跟着变多少
                      for t in dict.fromkeys(list(u100s) + [t for t, u in (st.get("core_units") or {}).items() if int(u) > 0])},
            "kp": {"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN},     # K 线的通俗说法（qbreak/kline.py）
-           "est": ests, "fee": [[c if c != float("inf") else 1e18, f] for c, f in FEE_TIERS]}   # 卖出的预计收益（按最近收盘；现价来了用现价的）
+           "est": ests, "fee": [[c if c != float("inf") else 1e18, f] for c, f in FEE_TIERS],
+           "st": status_json(tag)[1]}                                                         # 〔77〕C UX-16：还在处理的指令 → 每 10 秒问一次   # 卖出的预计收益（按最近收盘；现价来了用现价的）
     js = _NET_JS + _JS.replace("__CFG__", json.dumps(cfg, ensure_ascii=False).replace("</", "<\\/"))
     return _head("qbreak 操作面板") + "<body>" + "".join(H) + _dialogs(paper, cap) + f"<script>{js}</script></body></html>"
 
@@ -1798,11 +1823,173 @@ def pair_page(code: str = "") -> str:
 
 
 # ───────────────────────── 写指令 ─────────────────────────
+def submit_flow(tag: str, body: dict, now: dt.datetime | None = None) -> tuple[bool, str, dict | None]:
+    """〔77〕C UX-14：面板登记入金（+）/ 出金（−）。与 liveu.sh flow 同一个函数（live_unified.register_flow），拿账本的运行锁
+    （执行器在跑 → 不等，请稍后再试）。只影响收益的显示与「现金突然变化」的提醒，不下单、不改仓位。模拟账户不登记。"""
+    from .live_unified import ExecutorError, RunLock, register_flow
+    if tag.startswith("paper"):
+        return False, "模拟账户不用登记入出金（本金按 sim.json）", None
+    try:
+        jpy = float(str(body.get("jpy") or "").replace(",", "").replace("¥", "").strip())
+    except ValueError:
+        return False, "金额读不出来：入金写正数、出金写负数（例 300000 / -300000）", None
+    if not (1 <= abs(jpy) <= 1e10):
+        return False, "金额要 ≥ 1 円（入金写正数、出金写负数）", None
+    day = str(body.get("date") or "").strip() or None
+    note = str(body.get("note") or "")[:120]
+    bp = paths.state_dir() / f"live_unified_{tag}.json"
+    try:
+        lock = RunLock(bp.with_suffix(".lock"), wait_s=0).acquire()
+    except ExecutorError:
+        return False, "执行器正在运行：等它跑完（通常几分钟）再登记", None
+    try:
+        rec = register_flow(bp, jpy, note, day)
+    except ValueError as e:
+        return False, f"没登记：{e}", None
+    finally:
+        lock.release()
+    log.info("面板登记%s %+.0f 円（%s）", "入金" if jpy > 0 else "出金", jpy, tag)
+    return True, (f"已登记{'入金' if jpy > 0 else '出金'} {jpy:+,.0f} 円（{rec['date']}）：只影响收益的计算与提醒，不下单"
+                  + ("；已经对上之前的现金变化" if rec.get("seen_after") else "；到账后（下一次早上核对）自动对上")), {"id": "flow"}
+
+
+def status_json(tag: str) -> tuple[int, dict]:
+    """〔77〕C UX-16：页面要不要刷新（只读）→ {sig, pending}。sig = 手动指令的状态 + 执行器这次运行 + 当前决策的单的状态 的摘要；
+    页面拿着加载时的 sig，每 10 秒问一次，变了就刷新。pending = 还在处理的指令数（0 → 页面不轮询）。"""
+    import hashlib
+    from . import run_status as RS
+    book = read_json(paths.state_dir() / f"live_unified_{tag}.json", {}) or {}
+    man = book.get("manual") or {}
+    items = sorted(((str(k), str(v.get("status")), str(v.get("msg") or "")[:60], bool(v.get("cancel_req")))
+                    for k, v in (man.get("items") or {}).items()), key=lambda x: x[0])
+    waiting = sorted(str(r.get("id")) for r in MO.unseen(tag, book))
+    d = (book.get("state") or {}).get("last_date")
+    orders = sorted((str(o.get("cid")), str(o.get("status")), int(o.get("filled_qty") or 0))
+                    for o in book.get("orders") or [] if o.get("decided_on") == d)
+    rec = RS.read(tag) or {}
+    snap = read_json(paths.out_dir() / f"broker_snapshot_{tag}.json", {}) or {}
+    raw = json.dumps([items, waiting, orders, rec.get("at"), rec.get("ok"), snap.get("at")], ensure_ascii=False, default=str)
+    pend = len(waiting) + sum(1 for _, s, _, _ in items if s in MO.ACTIVE)
+    return 200, {"ok": True, "sig": hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16], "pending": pend}
+
+
+def _money_card(tag: str, book: dict, now: dt.datetime) -> str:
+    """〔77〕C UX-10 / T7 / UX-09 / UX-14：当日 / 累计损益、迷你权益曲线、年内已实现与预计代扣、最近成交、日志最新一节；实盘账本加
+    入出金登记。Mac 与手机同一个，可折叠。账本没有 → ""。只展示（入出金只影响收益的计算）。"""
+    from . import money_view as MV
+    try:
+        m = MV.summary(tag, book, today=now.date().isoformat())
+    except Exception as e:                                # noqa: BLE001  展示用
+        log.warning("面板的损益卡片没算成：%s", e)
+        return ""
+    if not m:
+        return ""
+
+    def sy(v) -> str:
+        return ("+" if v > 0 else "−" if v < 0 else "") + f"¥{abs(float(v)):,.0f}"
+
+    def cls(v) -> str:
+        return "pos" if v > 0 else "neg" if v < 0 else ""
+    y = m.get("ytd") or {}
+    H = ["<section class='card' id='money'><h2>损益</h2>"
+         f"<div class='stats'><div><div class='muted'>当日损益</div><div class='big {cls(m['day'])}'>{sy(m['day'])}</div>"
+         f"<div class='muted small'>{m['day_pct']:+.2f}%</div></div>"
+         f"<div><div class='muted'>累计损益</div><div class='big {cls(m['tot'])}'>{sy(m['tot'])}</div>"
+         f"<div class='muted small'>{m['tot_pct']:+.2f}%（投入本金 {_yen(m['inv'])}）</div></div></div>"
+         + MV.sparkline(m["spark"])]
+    if y:
+        g, w = float(y.get("gain") or 0), float(y.get("withheld") or 0)
+        H.append(f"<div class='small'>{y.get('year')} 年已实现 <b class='{cls(g)}'>{sy(g)}</b>（{int(y.get('n') or 0)} 笔：个股 {sy(y.get('stock_gain') or 0)}"
+                 f" · 核心 ETF {sy(y.get('core_gain') or 0)}）· 预计已代扣 ¥{w:,.0f}"
+                 + "</div>"
+                 "<div class='muted small'>特定口座（源泉徴収あり）20.315% 的估算，年内盈亏通算；以立花的取引報告書 / 年間取引報告書为准</div>")
+    rz = m.get("realized") or []
+    if rz:
+        H.append("<details class='hv'><summary class='muted'>最近的已实现损益（" + str(len(rz)) + " 笔）</summary><div class='list'>" + "".join(
+            f"<div class='li'><div class='grow'>{escape(r['date'][5:].replace('-', '/'))} 卖 {escape(r['ticker'])} {int(r['shares']):,} "
+            f"{'口' if r['kind'] == 'core' else '股'} @ ¥{float(r['px']):,.1f}</div><b class='{cls(r['pnl'])}'>{sy(r['pnl'])}</b></div>"
+            for r in rz) + "</div></details>")
+    fl = m.get("fills") or []
+    if fl:
+        H.append("<details class='hv'><summary class='muted'>最近成交（" + str(len(fl)) + " 笔）</summary><div class='list'>" + "".join(
+            f"<div class='li'><div class='grow'>{escape(str(f['date'])[5:].replace('-', '/'))} {'买' if f['side'] == 'BUY' else '卖'} "
+            f"{escape(f['ticker'])} {int(f['qty']):,} {'口' if f['kind'] == 'core' else '股'}</div><span>¥{float(f['px']):,.1f}</span></div>"
+            for f in fl) + "</div></details>")
+    jl = m.get("journal")
+    if jl:
+        H.append(f"<details class='hv'><summary class='muted'>日志：{escape(jl[0])}</summary><ul class='small'>"
+                 + "".join(f"<li>{escape(x)}</li>" for x in jl[1][:30]) + "</ul></details>")
+    if not tag.startswith("paper") and tag not in READONLY:
+        H.append("<details class='hv' id='flow'><summary class='muted'>登记入金 / 出金</summary>"
+                 "<div class='small muted'>入金写正数、出金写负数；只影响收益的计算与「现金突然变化」的提醒，不下单。"
+                 "注意：出金前卖出的钱，在出金到账之前会被规则当成闲置资金买回 ETF（要先留现金：Mac 对话里说）。</div>"
+                 "<div class='act'><input id='flow-jpy' inputmode='numeric' placeholder='金额 例 300000 / -300000' aria-label='金额（円）'>"
+                 f"<input id='flow-date' type='date' value='{now.date().isoformat()}' aria-label='日期'>"
+                 "<input id='flow-note' maxlength='120' placeholder='备注（可不写）' aria-label='备注'>"
+                 "<button class='btn primary' data-act='flow'>登记</button></div></details>")
+    H.append("</section>")
+    return "".join(H)
+
+
+def _broker_card(tag: str, now: dt.datetime) -> str:
+    """〔77〕C UX-07 / TA-06：「立花那边实际是什么」（数据目录 out/broker_snapshot_<账本>.json：执行器核对时 / liveu.sh broker 记的；
+    面板本身不连立花）。持仓 vs 账本差异标红、买付可能額、今天的单在立花的成交、立花现价与时刻。模拟账户 / 没有快照 → 说明怎么刷新。"""
+    from . import broker_snapshot as BS
+    if tag.startswith("paper"):
+        return ""
+    s = BS.load(tag)
+    how = "刷新：在 Mac 对话里说「看立花那边」（bash scripts/liveu.sh broker；只读）；装了立花本番后 11:35 / 15:45 自动刷新并通知"
+    if not s:
+        return (f"<section class='card' id='broker'><h2>立花那边</h2><div class='muted small'>还没有快照（执行器第一次核对之后才有）。"
+                f"{escape(how)}</div></section>")
+    bad = [r for r in s.get("compare") or [] if r.get("diff")]
+    q = s.get("quotes") or {}
+    rows = "".join(
+        f"<div class='li'><div class='grow'><b>{escape(r['ticker'])}</b> 立花 {int(r['broker']):,} / 账本 {int(r['ledger']):,}"
+        + (f" <b class='neg'>差 {int(r['diff']):+,}</b>" if r.get("diff") else " ✓")
+        + (f"<div class='muted small'>立花现价 ¥{float(q[r['ticker']]):,.1f}（{escape(str(s.get('quotes_at') or '')[11:16])}）</div>"
+           if r["ticker"] in q else "") + "</div></div>"
+        for r in s.get("compare") or [])
+    fl = BS.fills_lines(s)
+    return (f"<section class='card{' warn' if bad else ''}' id='broker'><h2>立花那边（{escape(str(s.get('at') or '')[5:16])}，"
+            f"{escape(str(s.get('source') or ''))}）</h2>"
+            f"<div>买付可能額 <b>{_yen(s.get('buying_power'))}</b></div>"
+            + (f"<div class='neg small'>★ 账本和立花不一致 {len(bad)} 只：下一次早上的核对会停下 → Mac 对话里说「核对持仓」</div>" if bad else "")
+            + f"<div class='list'>{rows or '<div class=li>立花那边没有持仓</div>'}</div>"
+            + (f"<div class='small'><b>今天的成交</b>（{escape(str(s.get('fills_at') or '')[11:16])}）</div><ul class='small'>"
+               + "".join(f"<li>{escape(x[2:])}</li>" for x in fl) + "</ul>" if fl else "")
+            + f"<div class='muted small'>只读的快照，不是实时；正式记账在下一个交易日 07:40。{escape(how)}</div></section>")
+
+
+def _gate_card(tag: str) -> str:
+    """〔77〕C UX-15：上线准备（最近一次「能上实盘了吗」/ 前一晚预检的结果：数据目录 out/gate.json；只读）。门槛与准备逐项 ✓ / ✗。"""
+    from . import live_gate as LG
+    if tag in READONLY or tag.endswith("_demo"):
+        return ""
+    g = LG.load_saved()
+    if not g:
+        return ("<section class='card' id='gate'><h2>上线准备</h2><div class='muted small'>还没检查过：在 Mac 对话里问「能上实盘了吗」"
+                "（bash scripts/liveu.sh gate；只读）</div></section>")
+    its = [it for it in g.get("items") or [] if it.get("group") in ("门槛", "准备")]
+    mark = {True: "✓", False: "✗", None: "—"}
+    return (f"<section class='card' id='gate'><details{' open' if tag == 'tachibana' and not g.get('ok') else ''}>"
+            f"<summary><b>上线准备</b> {'全部满足 ✓' if g.get('ok') else '还没全部满足'}"
+            f" <span class='muted small'>（{escape(str(g.get('at') or ''))} 的检查）</span></summary><div class='list'>"
+            + "".join(f"<div class='li'><div class='grow'><span class='{'neg' if it.get('ok') is False else ''}'>{mark.get(it.get('ok'), '—')}</span> "
+                      f"<b>{escape(str(it.get('name')))}</b><div class='muted small'>{escape(str(it.get('text'))[:200])}</div></div></div>"
+                      for it in its)
+            + "</div><div class='muted small'>重新检查：在 Mac 对话里问「能上实盘了吗」（只读）</div></details></section>")
+
+
 def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") -> tuple[bool, str, dict | None]:
     """页面的一次提交 → (成功?, 说明, 写进去的指令)。与 run.py manual 相同的检查。source：panel（Mac）/ phone（手机）。"""
     tag = str(body.get("book") or "")
     if tag not in BOOKS:
         return False, "不认识的账本", None
+    if tag in READONLY:
+        return False, "dry-run 的账本只能看：面板不写指令", None
+    if str(body.get("kind") or "") == "flow":
+        return submit_flow(tag, body, now)
     book, sm = _load(tag)
     try:
         rec = MO.normalize({**body, "source": source})
@@ -2210,7 +2397,7 @@ def quotes_json(tag: str, now: dt.datetime | None = None, fetch=None, extra: lis
             continue
         est = MO.sell_estimate(book, t, px=px, at=x.get("at"), sm=sm)   # 卖出全部的预计收益（按这个现价）
         if est:
-            out[t]["est"] = {**est, "lines": MO.est_lines(est, MO.sale_note(tag, now))}
+            out[t]["est"] = {**est, "lines": MO.est_lines(est, MO.sale_note(tag, now), MO.ytd_gain(book, now.date()))}
     return 200, {**head, "rows": out}
 
 
@@ -2355,6 +2542,9 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
             if u.path == "/api/quotes":
                 self._json(*quotes_json(_book_of(u.query), (clock or now_jst)(), extra=_extra_of(u.query)))
                 return
+            if u.path == "/api/status":
+                self._json(*status_json(_book_of(u.query)))
+                return
             if u.path != "/":
                 self._text(404, "没有这个页面")
                 return
@@ -2460,15 +2650,17 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
             u = urlparse(self._route())
             if self._static(u.path):
                 return
-            if u.path not in ("/", "/pair", "/api/chart", "/api/quotes"):
+            if u.path not in ("/", "/pair", "/api/chart", "/api/quotes", "/api/status"):
                 self._text(404, "没有这个页面")
                 return
             dev = self._who()
-            if u.path in ("/api/chart", "/api/quotes"):
+            if u.path in ("/api/chart", "/api/quotes", "/api/status"):
                 if dev is None:
                     self._json(401, {"ok": False, "msg": "这台设备还没配对（或已被取消）"})
                 elif u.path == "/api/chart":
                     self._chart(u.query, (clock or now_jst)())
+                elif u.path == "/api/status":
+                    self._json(*status_json(_book_of(u.query)))
                 else:
                     self._json(*quotes_json(_book_of(u.query), (clock or now_jst)(), extra=_extra_of(u.query)))
                 return

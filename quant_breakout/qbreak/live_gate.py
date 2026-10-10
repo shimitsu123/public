@@ -534,3 +534,19 @@ def report(items: list[dict]) -> tuple[str, bool]:
     lines.append("全部满足：可以在对话里明确说「上实盘」（建 ARM、先用较小金额跑 1〜2 周）" if ok
                  else "还没全部满足（★ 的几项）；这个检查只读，什么都没改")
     return "\n".join(lines), ok
+
+
+def save(items: list[dict], ok: bool | None = None) -> None:
+    """〔77〕C UX-15：最近一次的检查结果 → 数据目录 out/gate.json（面板「上线准备」卡片读；只放名字、✓/✗ 与一句话，不含密钥）。"""
+    from .calendar_jp import now_jst
+    from .utils import write_json
+    need = [it for it in items if it["group"] in ("门槛", "准备") and it["ok"] is not None]
+    write_json(paths.out_dir() / "gate.json", {"at": now_jst().strftime("%Y-%m-%d %H:%M"),
+                                               "ok": all(it["ok"] for it in need) if ok is None else ok,
+                                               "items": [{k: it[k] for k in ("group", "name", "ok", "text")} for it in items]})
+
+
+def load_saved() -> dict:
+    from .utils import read_json
+    return read_json(paths.out_dir() / "gate.json", {}) or {}
+

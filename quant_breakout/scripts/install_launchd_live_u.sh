@@ -4,6 +4,7 @@
 #   bash scripts/install_launchd_live_u.sh tachibana    立花本番：07:40 早上的单 + 08:35 重试 + 09:05 开盘后补单 + 09:20 重试
 #                                                        （开户、过了上线门槛之后；重试 = 前一次没跑完才跑，跑完了什么都不做）
 #                                                        + 前一晚预检 com.qbreak.precheck（周日〜周四 20:00；scripts/install_launchd_precheck.sh）
+#                                                        + 今天的成交 11:35 / 15:45（liveu.sh broker --notify；只读）
 #   两种模式都装 com.qbreak.wakehold（周一至五 06:40 唤醒后 caffeinate 70 分钟：一直醒到 07:40 的执行器；scripts/install_launchd_wakehold.sh）
 #   bash scripts/install_launchd_live_u.sh uninstall    全部卸载
 # 执行器的状态、日志、ARM / HALT 都在 ~/.qbreak/home（QBREAK_LIVEU_HOME 可改），不在仓库里。
@@ -14,7 +15,8 @@ PROJ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV="${QBREAK_VENV:-$HOME/.qbreak/venv}"
 LHOME="${QBREAK_LIVEU_HOME:-$HOME/.qbreak/home}"
 AGENTS="${QBREAK_LAUNCH_AGENTS:-$HOME/Library/LaunchAgents}"
-LABELS=(com.qbreak.liveu.paper com.qbreak.liveu.morning com.qbreak.liveu.retry com.qbreak.liveu.open com.qbreak.liveu.open2)
+LABELS=(com.qbreak.liveu.paper com.qbreak.liveu.morning com.qbreak.liveu.retry com.qbreak.liveu.open com.qbreak.liveu.open2
+        com.qbreak.liveu.fills1 com.qbreak.liveu.fills2)
 
 unload() { if command -v launchctl >/dev/null 2>&1; then launchctl unload -w "$1" 2>/dev/null || true; fi; }
 load() { if command -v launchctl >/dev/null 2>&1; then launchctl load -w "$1"; else echo "（没有 launchctl：只生成了 $1）"; fi; }
@@ -103,6 +105,8 @@ else
   plist com.qbreak.liveu.retry 8 35 run --broker tachibana --retry
   plist com.qbreak.liveu.open 9 5 run --broker tachibana --phase open
   plist com.qbreak.liveu.open2 9 20 run --broker tachibana --phase open --retry
+  plist com.qbreak.liveu.fills1 11 35 broker --broker tachibana --notify   # 〔77〕C：今天的成交（只读）→ 通知 + 面板「立花那边」
+  plist com.qbreak.liveu.fills2 15 45 broker --broker tachibana --notify
   QBREAK_PYTHON="$PYX" QBREAK_LIVEU_HOME="$LHOME" QBREAK_LAUNCH_AGENTS="$AGENTS" \
     bash "$PROJ/scripts/install_launchd_precheck.sh"           # 前一晚预检（周日〜周四 20:00；只读：登录 → 取余力 → 登出）
 fi

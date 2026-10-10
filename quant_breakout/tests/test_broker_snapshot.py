@@ -1,0 +1,88 @@
+"""〔77〕C：「立花那边实际是什么」快照 + 今天的成交（qbreak/broker_snapshot.py；只读）与现金差的拆分说明（UX-08 / T3）。"""
+import datetime as dt
+import json
+
+from qbreak import broker_snapshot as BS
+from qbreak import paths
+from qbreak.brokers.base import Position
+from qbreak.brokers.tachibana import TachibanaSpec
+from qbreak.calendar_jp import JST
+from qbreak.live_unified import UnifiedExecutor
+
+SPEC = TachibanaSpec()
+TODAY = dt.datetime.now(JST).date()
+
+
+class FakeBroker:
+    spec = SPEC
+
+    def __init__(self):
+        self.calls = []
+
+    def positions(self):
+        return {"7203.T": Position("7203.T", 200, 2400.0), "1545.T": Position("1545.T", 4110, 241.9),
+                "9999.T": Position("9999.T", 100, 10.0)}
+
+    def cash(self):
+        return 12345.0
+
+    def open_orders(self):
+        return [{SPEC.r_list_code: "7203", SPEC.r_list_side: SPEC.side_buy, SPEC.r_list_qty: "100", SPEC.r_list_price: "0",
+                 SPEC.r_list_filled_qty: "100", SPEC.r_list_filled_px: "3001", SPEC.r_list_status: "全部約定",
+                 SPEC.r_list_order_no: "A0001", SPEC.r_list_time: TODAY.strftime("%Y%m%d") + "090001"}]
+
+    def order_status(self, broker_id, order_date):
+        self.calls.append(broker_id)
+        if broker_id == "BAD":
+            raise RuntimeError("x")
+        return {"filled_qty": 100, "avg_px": 3001.0, "status": "全部約定", "final": "FILLED"}
+
+    def quotes(self, tickers):
+        return {t: 3010.0 for t in tickers}
+
+
+def _book():
+    d = TODAY.strftime("%Y%m%d")
+    return {"state": {"pos": {"7203.T": {"shares": 100}}, "core_units": {"1545.T": 4110}},
+            "orders": [{"cid": "c1", "ticker": "7203.T", "side": "BUY", "kind": "stock", "qty": 100, "sent_qty": 100,
+                        "status": "SENT", "broker_id": "A0001", "order_date": d},
+                       {"cid": "c2", "ticker": "6758.T", "side": "SELL", "kind": "stock", "qty": 100,
+                        "status": "SENT", "broker_id": "BAD", "order_date": d},
+                       {"cid": "old", "ticker": "6758.T", "side": "SELL", "kind": "stock", "qty": 100,
+                        "status": "FILLED", "broker_id": "Z9", "order_date": "20200101"}]}
+
+
+def test_refresh_writes_snapshot_with_compare_fills_and_quotes():
+    br = FakeBroker()
+    snap = BS.refresh(br, "tachibana", _book(), managed={"7203.T", "1545.T"})
+    on_disk = json.loads(BS.path("tachibana").read_text(encoding="utf-8"))
+    assert on_disk["buying_power"] == 12345 and on_disk["book"] == "tachibana"
+    assert {r["ticker"]: r["diff"] for r in snap["compare"]} == {"7203.T": 100, "1545.T": 0, "9999.T": 100}
+    assert snap["foreign"] == ["9999.T"]
+    assert br.calls == ["A0001", "BAD"]                                    # 只查今天的单
+    assert snap["orders"][0]["ticker"] == "7203.T" and snap["orders"][0]["side"] == "BUY"
+    assert snap["quotes"]["7203.T"] == 3010.0
+    lines = BS.fills_lines(snap)
+    assert "成交 100/100 股 @ ¥3,001.0" in lines[0] and "读不了约定" in lines[1]
+    assert any("7203.T" in ln for ln in BS.diff_lines(snap))
+    assert "auth" not in json.dumps(on_disk).lower()                      # 不带认证类字段
+
+
+def test_record_check_keeps_previous_orders_and_quotes():
+    BS.refresh(FakeBroker(), "tachibana", _book())
+    BS.record_check("tachibana", {"7203.T": Position("7203.T", 100, 2400.0)}, 999.0, _book())
+    s = BS.load("tachibana")
+    assert s["source"] == "执行器核对" and s["buying_power"] == 999
+    assert s["orders"] and s["quotes"] and s["fills_at"]                   # 注文 / 成交 / 现价留着（带它们自己的时刻）
+    assert [r["diff"] for r in s["compare"] if r["ticker"] == "7203.T"] == [0]
+    assert paths.out_dir() in BS.path("x").parents
+
+
+def test_drift_explained_by_estimated_tax_is_info():
+    why, lvl = UnifiedExecutor._drift_why(-20315.0, 20315.0)
+    assert lvl == "info" and "譲渡益税代扣" in why
+    why, lvl = UnifiedExecutor._drift_why(-300.0, 0.0)
+    assert lvl == "info" and "小额差" in why
+    why, lvl = UnifiedExecutor._drift_why(-80000.0, 20315.0)
+    assert lvl == "warn" and "其中预计譲渡益税代扣 ¥20,315" in why
+    assert UnifiedExecutor._drift_why(50000.0, 0.0)[1] == "warn"

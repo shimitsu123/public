@@ -219,7 +219,7 @@ def test_cli_prints_the_estimate_for_sells_only(capsys, monkeypatch):
     out = _cli(monkeypatch, capsys, "sell", "7203")
     assert "  买入：09/01 成交 ¥2,500 × 100 股（成本约 ¥250,000）" in out
     assert "  最近收盘 ¥2,600（10/05） → 预计卖出约 ¥260,000（模拟账户：盘中马上按现价成交）" in out
-    assert "  预计收益 +¥9,626（+3.85%；股价 +4.00%）" in out and "  已扣两边手续费约 ¥374；税前，税后约 ¥7,670" in out
+    assert "  预计收益 +¥9,626（+3.85%；股价 +4.00%）" in out and "  已扣两边手续费约 ¥374；税前。按今年已实现 " in out and "通算：这笔约代扣 ¥1,956，税后约 ¥7,670" in out
     MO.requests_path("paper").unlink()
     out = _cli(monkeypatch, capsys, "adjust", "1655", "--shares", "500")         # ETF 调仓减：卖 630 口
     assert "  买入：平均成本 ¥662.41 × 630 口（成本约 ¥417,316，09/01 起陆续买入）" in out

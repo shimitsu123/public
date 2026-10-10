@@ -154,7 +154,7 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
     if mk:
         rows = []
         for m, bb in mk.items():
-            name = {"JP": "日経平均", "US": "S&P500（1655 择时）"}.get(m, m)
+            name = {"JP": "日経平均", "US": "S&P500（美股牛熊分界：闲置资金 ETF 按它）"}.get(m, m)
             if not bb or bb.get("state") not in ("bull", "bear"):
                 rows.append(f"<li><b>{name}</b>：未知</li>")
                 continue
@@ -193,8 +193,10 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
                       f"<td class='n'>{_yen(p['stop_px'])}</td><td>{escape(str(p['entry_date']))}</td>"
                       f"<td>{'待卖（' + escape(REASON_TEXT.get(pend[t]) or _RS.get(pend[t], str(pend[t]))) + '）' if t in pend else ''}</td></tr>"
                       for t, p in (st.get("pos") or {}).items())
+        from .money_view import core_name
         pos += "".join(f"<tr><td>{escape(t)}</td><td class='n'>{int(u):,} 口</td><td class='n'>—</td><td class='n'>—</td>"
-                       f"<td>—</td><td>闲置资金（S&P500）</td></tr>" for t, u in (st.get("core_units") or {}).items() if int(u))
+                       f"<td>—</td><td>闲置资金（{escape(core_name(t, sm))}）</td></tr>"
+                       for t, u in (st.get("core_units") or {}).items() if int(u))
         body.append("<section class='card'><h2>持仓</h2><div class='scroll'><table><tr><th>代码</th><th class='n'>数量</th>"
                     "<th class='n'>成本</th><th class='n'>止损</th><th>买入日</th><th>备注</th></tr>"
                     + (pos or "<tr><td colspan=6 class='muted'>无（全部现金）</td></tr>") + "</table></div></section>")
@@ -203,6 +205,7 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
             from .holding_view import html as hv_html
             body.append("<section class='card'>" + hv_html(hv) + "</section>")
         body.append(_manual_card(tag, book))
+        from .broker_snapshot import STATUS_ZH as _ST       # 状态中文（UX-17）
         orders = []
         for o in (book.get("orders") or []):
             if o.get("decided_on") != st.get("last_date"):
@@ -215,7 +218,7 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
                        f"{'寄付' if o.get('phase') == 'morning' and o.get('status') != 'DEFERRED' else '开盘后'}指値 ≤ {_yen(o.get('limit'))}")
             orders.append(f"<tr><td>{'卖' if o['side'] == 'SELL' else '买'}</td><td>{escape(o['ticker'])}</td>"
                           f"<td class='n'>{int(o.get('sent_qty') or o['qty']):,} {unit}</td><td>{escape(how)}</td>"
-                          f"<td>{escape(str(o['status']))}</td><td class='muted'>{escape(str(o.get('note') or ''))[:120]}</td></tr>")
+                          f"<td>{escape(_ST.get(o['status'], str(o['status'])))}</td><td class='muted'>{escape(str(o.get('note') or ''))[:120]}</td></tr>")
         body.append("<section class='card'><h2>这次的单（开盘 / 盘中）</h2><div class='scroll'><table><tr><th>方向</th><th>代码</th>"
                     "<th class='n'>数量</th><th>方式</th><th>状态</th><th>说明</th></tr>"
                     + ("".join(orders) or "<tr><td colspan=6 class='muted'>没有</td></tr>") + "</table></div></section>")
@@ -232,6 +235,19 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
         body.append("<section class='card'><h2>最近成交</h2><div class='scroll'><table><tr><th>成交日</th><th>方向</th><th>代码</th>"
                     "<th class='n'>数量</th><th class='n'>成交价</th></tr>"
                     + ("".join(fills[:12]) or "<tr><td colspan=5 class='muted'>还没有</td></tr>") + "</table></div></section>")
+        from . import tax_ytd as TY                           # 〔77〕C T7 / UX-09：年内已实现损益与预计代扣（估算）
+        yr = str(st.get("last_date") or now.date().isoformat())[:4]
+        y = TY.ytd(st, yr)
+        rz = TY.realized(st)[::-1][:12]
+        if rz or y["n"]:
+            body.append(f"<section class='card'><h2>已实现损益（{yr} 年合计 <span class='{_cls(y['gain'])}'>{_yen(y['gain'], True)}</span>，"
+                        f"{y['n']} 笔；预计已代扣 {_yen(y['withheld'])}）</h2><div class='scroll'><table><tr><th>卖出日</th><th>代码</th>"
+                        "<th class='n'>数量</th><th class='n'>卖价</th><th class='n'>损益（含手续费）</th></tr>"
+                        + "".join(f"<tr><td>{escape(r['date'])}</td><td>{escape(r['ticker'])}</td>"
+                                  f"<td class='n'>{int(r['shares']):,} {'口' if r['kind'] == 'core' else '股'}</td>"
+                                  f"<td class='n'>¥{float(r['px']):,.1f}</td><td class='n {_cls(r['pnl'])}'>{_yen(r['pnl'], True)}</td></tr>"
+                                  for r in rz) + "</table></div><div class='muted'>特定口座（源泉徴収あり）20.315% 的估算、年内盈亏通算；"
+                        "核心 ETF 按移动平均成本；以立花的取引報告書 / 年間取引報告書为准</div></section>")
     tl_doc = read_json(paths.PROJECT_ROOT / "var" / "out" / "unified_today.json", {}) or {}   # 云端日报（07:40 拉代码时同步）
     if tl_doc.get("timeline"):
         from .earn_state import tag_html

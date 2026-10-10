@@ -3539,6 +3539,112 @@ def cmd_live_reconcile(a) -> int:
     return 1 if rep["bad"] else 0
 
 
+def cmd_live_broker(a) -> int:
+    """「立花那边实际是什么」+ 今天的成交（〔77〕C UX-07 / TA-06 / UX-06；只读：不下单、不改账本）：持仓、买付可能額、
+    注文一覧（今天）、账本里今天每笔单在立花的约定、立花现价 → 数据目录 out/broker_snapshot_<账本>.json（面板 / 手机读）。
+    拿账本运行锁（执行器在跑就等）+ 立花本番会话锁。--notify：有今天的单就发一条「今天的成交」通知（LaunchAgent 11:35 / 15:45 用）。
+    bash scripts/liveu.sh broker [--notify]。"""
+    from qbreak import broker_snapshot as BS
+    from qbreak import run_status as RS
+    if a.broker == "paper":
+        print("模拟账户没有「券商那边」：模拟成交当场确定，账本就是它（面板 / 账本页）")
+        return 0
+    rc_ = _refuse_repo_home(f"live-broker --broker {a.broker}")
+    if rc_ is not None:
+        return rc_
+    paper, tag, book = _liveu_tag(a)
+    b_ = RS.peek_json(book) or {}
+    if a.notify:                                         # 定时任务：休市日 / 还没有账本 → 什么都不做（不登录）
+        from qbreak.calendar_jp import is_trading_day, now_jst
+        today = now_jst().date()
+        if not is_trading_day(today) or not b_:
+            print(f"今天（{today}）{'休市' if not is_trading_day(today) else '还没有立花账本'}：不读立花")
+            return 0
+    from qbreak.live_unified import ExecutorError
+    try:
+        lock = _query_lock(book, a, "读立花")
+    except ExecutorError as e:
+        print(f"★ 这次没读（没登录立花）：{e}")
+        return 3
+    try:
+        br = _cancel_broker(a, paper)
+        try:
+            snap = BS.refresh(br, tag, b_, _managed_tickers(b_))
+        except Exception as e:                            # noqa: BLE001
+            print(f"★ 立花读不了（{type(e).__name__}）：{RS.scrub(str(e)) or ''}")
+            return 3
+        finally:
+            try:
+                br.logout()
+            except Exception:                             # noqa: BLE001
+                pass
+    finally:
+        lock.release()
+    print(f"立花那边（{snap['at']} JST；只读、不改账本）：买付可能額 ¥{snap['buying_power']:,.0f}")
+    for r in snap["positions"]:
+        q = (snap.get("quotes") or {}).get(r["ticker"])
+        print(f"  {r['ticker']}：{r['qty']:,}（概算簿価 ¥{r['avg_px']:,.1f}" + (f"，现价 ¥{q:,.1f}" if q else "") + "）")
+    if not snap["positions"]:
+        print("  没有持仓")
+    dl = BS.diff_lines(snap)
+    print("账本 vs 立花：" + ("一致" if not dl else "不一致 ↓（第二天早上的核对会停下；先看 bash scripts/liveu.sh reconcile）"))
+    for ln in dl:
+        print(ln)
+    fl = BS.fills_lines(snap)
+    print(f"今天的单 {len(fl)} 笔" + ("：" if fl else "（执行器今天没发单）"))
+    for ln in fl:
+        print(ln)
+    print(f"注文一覧（今天）{len(snap.get('orders') or [])} 件；正式记账仍在下一个交易日 07:40 的对账")
+    if a.notify and fl:
+        from qbreak import notify
+        notify.send(f"qbreak 立花：今天的成交（{snap['at'][11:16]}）", "\n".join(fl + (["账本 vs 立花不一致："] + dl if dl else [])),
+                    level="warn" if dl else "info")
+    return 1 if dl else 0
+
+
+def cmd_live_export(a) -> int:
+    """〔77〕C UX-18：交易记录导出 CSV（只读，不连券商）→ 数据目录 out/export/<账本>_<年>_{fills,realized,flows,cash_drift}.csv
+    （UTF-8 BOM：Excel / Numbers 直接打开；不含账户号、密钥；不入库）。--year 不给 = 今年。bash scripts/liveu.sh export [--year 2027]。"""
+    import csv
+    from qbreak import money_view as MV
+    from qbreak import run_status as RS
+    from qbreak import tax_ytd as TY
+    from qbreak.calendar_jp import now_jst
+    from qbreak.live_unified import flows as _flows
+    paper, tag, book = _liveu_tag(a)
+    b_ = RS.peek_json(book)
+    if not b_:
+        print(f"还没有账本（{book.name}）：执行器第一次运行之后才有")
+        return 0
+    y = str(a.year or now_jst().year)
+    st = b_.get("state") or {}
+    d = paths.out_dir() / "export"
+    d.mkdir(parents=True, exist_ok=True)
+    tables = {
+        "fills": (["成交日", "方向", "代码", "种类", "数量", "成交价"],
+                  [[f["date"], "买" if f["side"] == "BUY" else "卖", f["ticker"], "核心ETF" if f["kind"] == "core" else "个股", f["qty"], f["px"]]
+                   for f in MV.recent_fills(b_, n=100000)[::-1] if str(f["date"])[:4] == y]),
+        "realized": (["卖出日", "代码", "种类", "数量", "卖价", "损益（含手续费，円）"],
+                     [[r["date"], r["ticker"], "核心ETF" if r["kind"] == "core" else "个股", r["shares"], r["px"], round(r["pnl"])]
+                      for r in TY.realized(st) if r["date"][:4] == y]),
+        "flows": (["日期", "金额（円，入金+ / 出金−）", "备注", "到账（在哪个决策日之后）"],
+                  [[f.get("date"), f.get("jpy"), f.get("note"), f.get("seen_after") or ""] for f in _flows(b_) if str(f.get("date"))[:4] == y]),
+        "cash_drift": (["决策日", "现金差（券商 − 模型，円）"],
+                       [[x[0], x[1]] for x in b_.get("cash_drift") or [] if str(x[0])[:4] == y]),
+    }
+    print(f"导出 {tag} {y} 年（只读；数据目录 {d}）：")
+    for k, (head, rows) in tables.items():
+        fp = d / f"{tag}_{y}_{k}.csv"
+        with open(fp, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(head)
+            w.writerows(rows)
+        print(f"  {fp.name}：{len(rows)} 行")
+    yy = TY.ytd(st, y)
+    print(f"{y} 年已实现 {yy['gain']:+,} 円（{yy['n']} 笔），预计已代扣 ¥{yy['withheld']:,}（估算；以立花的年間取引報告書为准）")
+    return 0
+
+
 def cmd_live_adopt(a) -> int:
     """人工代下登记（立花实盘缺口 B3 / C-06）：你在立花网站上实际成交的单 → 执行器账本（立花 API / Mac 故障那天照「今天的单」
     人工下了单 → 第二天早上之前登记，执行器之后照常）。只在你在对话里明确说时由 Claude 运行（与 --resolve 同级）。
@@ -4216,7 +4322,7 @@ def cmd_manual(a) -> int:
         sold_ = max(0, int((st.get("core_units") or {}).get(rec["ticker"], 0)) - int(rec["target"]))
     if rec.get("ticker") and rec["kind"] in ("sell", "trim", "adjust", "core") and sold_ != 0:
         e_ = MO.sell_estimate(b_, rec["ticker"], sm=sm_, shares=sold_)
-        for ln in MO.est_lines(e_, MO.sale_note(tag, now)):
+        for ln in MO.est_lines(e_, MO.sale_note(tag, now), MO.ytd_gain(b_, now.date())):
             print(f"  {ln}")
     if rec["kind"] in MO.ORDER_KINDS:
         mode = MO.timing(now)[0]
@@ -4275,8 +4381,13 @@ def cmd_live_gate(a) -> int:
     """立花实盘的上线门槛（HANDOFF 路线图 4）与本番运行的准备：只读（qbreak/live_gate.py）。全部满足 → 0，否则 1。"""
     from qbreak import live_gate
     print(f"── 立花实盘：上线门槛与准备（数据目录 {paths.home()}；只读）──")
-    text, ok = live_gate.report(live_gate.check())
+    items = live_gate.check()
+    text, ok = live_gate.report(items)
     print(text)
+    try:
+        live_gate.save(items, ok)                      # 面板「上线准备」卡片读这一份（〔77〕C UX-15）
+    except Exception as e:                             # noqa: BLE001
+        log.warning("上线检查结果没存成（不影响）：%s", e)
     return 0 if ok else 1
 
 
@@ -4994,6 +5105,12 @@ def main(argv=None) -> int:
                     help="换 Mac：立花本番账本的机器标识改成这台（先备份；只在你明确说「换 Mac，账本归这台」时运行；"
                          "bash scripts/liveu.sh adopt-host --broker tachibana）")
     lu.set_defaults(func=cmd_live_unified)
+    ex = sub.add_parser("live-export", help="交易记录导出 CSV（成交 / 已实现损益 / 入出金 / 现金差；只读；bash scripts/liveu.sh export …）")
+    ex.add_argument("--year", type=int, default=None, help="哪一年（默认今年）")
+    ex.add_argument("--broker", default="tachibana", choices=["paper", "tachibana"])
+    ex.add_argument("--demo", action="store_true", help="立花デモ環境的账本")
+    ex.add_argument("--dry-run", action="store_true", help="立花 dry-run 的账本")
+    ex.set_defaults(func=cmd_live_export)
     rb = sub.add_parser("live-restore", help="执行器账本的备份（数据目录 state/backup/）：--list 只看；<备份文件名> 恢复"
                         "（先备份现在的账本、拿运行锁；只在你明确说时运行；bash scripts/liveu.sh restore …）")
     rb.add_argument("name", nargs="?", default=None, help="要恢复的备份文件名（--list 里看；只给文件名）")
@@ -5007,6 +5124,8 @@ def main(argv=None) -> int:
             ("live-unknown", "状态不明的单在立花注文一覧里的候选 + 登记命令草稿（只读；bash scripts/liveu.sh unknown …）", cmd_live_unknown),
             ("live-reconcile", "持仓核对：账本 vs 券商（股数、成本）、可能原因、登记草稿（只读；bash scripts/liveu.sh reconcile …）",
              cmd_live_reconcile),
+            ("live-broker", "立花那边实际是什么 + 今天的成交：持仓 / 余力 / 注文一覧 / 约定 / 现价 → 快照（只读；bash scripts/liveu.sh broker …）",
+             cmd_live_broker),
             ("live-adopt", "人工代下登记：在立花网站上实际成交的单 → 账本（先备份；只在你明确说时运行；bash scripts/liveu.sh adopt …）",
              cmd_live_adopt)):
         sp_ = sub.add_parser(name_, help=help_)
@@ -5022,6 +5141,8 @@ def main(argv=None) -> int:
             sp_.add_argument("--params", default=None)
         sp_.add_argument("--lock-wait", type=float, default=5.0, metavar="MIN",
                          help="执行器正在运行时最多等几分钟（默认 5；unknown / reconcile 也等：同时登录立花会把执行器的会话踢掉）")
+        if name_ == "live-broker":
+            sp_.add_argument("--notify", action="store_true", help="有今天的单就发一条「今天的成交」通知（定时任务用）")
         sp_.add_argument("--broker", default="tachibana", choices=["paper", "tachibana"])
         sp_.add_argument("--demo", action="store_true", help="立花デモ環境的账本")
         sp_.add_argument("--dry-run", action="store_true", help="立花 dry-run 的账本")
