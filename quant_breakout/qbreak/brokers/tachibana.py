@@ -542,6 +542,91 @@ def arm_block_text(demo: bool = False) -> str:
 
 
 # ══════════════════════════ 券商实现 ══════════════════════════
+# ────────── TA-14：立花本番会话锁（同一账户只能一个会话：另一个进程登录会把这边踢掉）──────────
+_SESSION: dict = {"f": None, "owners": set()}
+
+
+def session_lock_file() -> Path:
+    return paths.state_dir() / "tachibana_live_session.lock"
+
+
+def acquire_live_session(owner: int, wait_s: float | None = None, poll_s: float = 2.0, sleep=time.sleep, mono=time.monotonic) -> None:
+    """登录本番之前拿「立花本番会话锁」：执行器 / dry-run / probe / reconcile 等所有会登录本番的进程共用一把（fcntl.flock，
+    进程结束自动释放）。同一个进程里已经拿着 → 直接算拿到。别的进程拿着 → 等（默认 300 秒，QBREAK_TACHIBANA_SESSION_WAIT_S），
+    等不到 → BrokerError（没登录，不会把那边的会话踢掉）。"""
+    if _SESSION["f"] is not None:
+        _SESSION["owners"].add(owner)
+        return
+    try:
+        import fcntl
+    except ImportError:                                   # Windows：不加锁
+        return
+    if wait_s is None:
+        try:
+            wait_s = float(os.environ.get("QBREAK_TACHIBANA_SESSION_WAIT_S", "300"))
+        except ValueError:
+            wait_s = 300.0
+    fp = session_lock_file()
+    fp.parent.mkdir(parents=True, exist_ok=True)
+    f = open(fp, "a+", encoding="utf-8")
+    t0 = mono()
+    while True:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except OSError:
+            if mono() - t0 >= wait_s:
+                f.seek(0)
+                holder = f.read().strip() or "?"
+                f.close()
+                raise BrokerError(f"另一个进程正在用立花本番的会话（{holder}），等了 {wait_s:.0f} 秒还没结束 → 这次没登录"
+                                  "（同一账户只能一个会话，登录会把那边踢掉）。等执行器跑完再试") from None
+            sleep(poll_s)
+    f.seek(0)
+    f.truncate()
+    f.write(f"pid {os.getpid()} 从 {dt.datetime.now(JST):%Y-%m-%d %H:%M:%S JST}\n")
+    f.flush()
+    _SESSION["f"] = f
+    _SESSION["owners"].add(owner)
+
+
+def release_live_session(owner: int) -> None:
+    _SESSION["owners"].discard(owner)
+    f = _SESSION["f"]
+    if f is None or _SESSION["owners"]:
+        return
+    _SESSION["f"] = None
+    try:
+        import fcntl
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    except (ImportError, OSError):
+        pass
+    f.close()
+
+
+TAX_NAMES = {"1": "特定口座", "3": "一般口座", "5": "NISA", "6": "NISA（成長投資枠）"}
+
+
+def tax_general_ok_file() -> Path:
+    """用户明确同意用一般口座（课税区分 3，要自己申告）时建的文件（内容不论）；没有它 = 一般口座也不发单。"""
+    return paths.home() / "TAX_GENERAL_OK"
+
+
+def tax_problem(tax: str) -> str | None:
+    """T5：登录应答里的口座课税区分（sZyoutoekiKazeiC）能不能发单。1 特定 / 空（デモ等没给）→ 可以；
+    3 一般 → 只有用户同意过（TAX_GENERAL_OK）才行；5 / 6 NISA 和其他 → 不发（执行器按特定口座设计，NISA〔72〕用户选了不用）。"""
+    tax = str(tax or "").strip()
+    if tax in ("", "1"):
+        return None
+    if tax == "3" and tax_general_ok_file().exists():
+        return None
+    name = TAX_NAMES.get(tax, f"代码 {tax}")
+    if tax == "3":
+        return (f"口座课税区分是{name}（不是特定口座，要自己申告）：执行器默认不发。确认要用一般口座 → 用户在对话里明确说之后建 "
+                f"{tax_general_ok_file()}；或在立花开特定口座（源泉徴収あり）")
+    return f"口座课税区分是{name}：执行器只在特定口座下单（NISA 不用，〔72〕③），没发。请在立花确认口座区分"
+
+
 class TachibanaBroker(BaseBroker):
     market = "JP"
 
@@ -674,7 +759,18 @@ class TachibanaBroker(BaseBroker):
         s = self.spec
         c = self.creds = self.creds or Credentials.from_env(demo=self.demo)
         base = s.base_demo if self.demo else s.base_live
+        if not self.demo:
+            acquire_live_session(id(self))          # TA-14：本番只允许一个进程登录（登录会把别的会话踢掉）
+        try:
+            self._login_body(s, c, base)
+        except BaseException:
+            if not self.demo:
+                release_live_session(id(self))
+            raise
+
+    def _login_body(self, s, c, base) -> None:
         res = self._send(base + s.auth_path, s.clm_login, {s.f_auth_id: c.auth_id}, idempotent=True)
+        log.info("登录立花%s（%s）", "デモ" if self.demo else "本番", f"{dt.datetime.now(JST):%H:%M:%S JST}，对照ログインメール")
         try:
             self._check(s.clm_login, res)
         except BrokerError as e:
@@ -734,6 +830,8 @@ class TachibanaBroker(BaseBroker):
             log.warning("登出失败（忽略）: %s", _no_url(e))
         finally:
             self._logged_in = False
+            if not self.demo:
+                release_live_session(id(self))
 
     def _call(self, clmid: str, url_key: str | None = None, *, idempotent: bool = True, **kw) -> dict:
         """发到虚拟 URL。会话被切断（03:30 闭局 / 别处重新登录）时重新登录一次再发：p_errno=2 表示该请求没被处理，
@@ -994,6 +1092,12 @@ class TachibanaBroker(BaseBroker):
                 log.error("登录失败，未发单 %s %s x%d: %s", side, ticker, qty, _no_url(e))
                 return Order(ticker, side, want, px, _now(), "BLOCKED", client_id=client_id,
                              note=f"登录失败，没发单（{type(e).__name__}）：{_no_url(e)}"[:300])
+
+        if not self.dry_run:
+            why = tax_problem(self._tax)                 # T5：登录应答的口座课税区分不是特定口座 → 不发（NISA 区分绝不发）
+            if why:
+                log.warning("拒绝发单 %s %s x%d：%s", side, ticker, qty, why)
+                return Order(ticker, side, want, px, _now(), "BLOCKED", client_id=client_id, note=why)
 
         fields = {
             s.f_tax: self._tax or s.tax_specific,

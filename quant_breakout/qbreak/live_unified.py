@@ -532,6 +532,22 @@ class UnifiedExecutor:
             q -= lot
         return max(q, 0)
 
+    def _bp_why(self) -> str:
+        """T4：开盘后按余力减股 / 放弃时写原因。模型的余力不扣譲渡益税；最近几天有盈利卖出（预计代扣 ≥ ¥1,000）→ 写明「疑似
+        譲渡益税预扣占了余力」（立花在约定日还是受渡日扣，上线头几次核对：MACOS 第 5 步），否则写「余力规则与模型相同」。只是说明，不改下单。"""
+        if self.paper:
+            return "余力规则与模型相同"
+        try:
+            from .tax_ytd import withheld_change
+            fd = self.fill_day()
+            tax = withheld_change(self.eng.st, str(fd - dt.timedelta(days=4)), str(fd))
+        except Exception:                             # noqa: BLE001  只是说明文字
+            tax = 0.0
+        if tax >= 1000:
+            return (f"疑似譲渡益税预扣占了余力（最近的盈利卖出预计代扣约 ¥{tax:,.0f}；模型不扣税）—— "
+                    "这是与模型的差异，不是错误")
+        return "余力规则与模型相同"
+
     def _fit_limit(self, o: ExecOrder, qty: int, bp: float) -> float:
         """开盘后补单的限价：原限价（信号日收盘 ×1.03 / 核心 ×1.02）占用的余力放得下就用它；放不下就降到余力能承受的
         最高呼値（股数按模型的开盘价规则已经减过，所以这个价 ≥ 开盘价：价格还在开盘价附近就能成交）。"""
@@ -813,11 +829,11 @@ class UnifiedExecutor:
                 while qty > 0 and px * qty + fee(px * qty) > bp + 1e-9:
                     qty -= lot
                 if qty <= 0:
-                    skip(o, f"余力 {bp:,.0f} 円按开盘价买不起 1 单元 —— 与模型相同")
+                    skip(o, f"余力 {bp:,.0f} 円按开盘价买不起 1 单元 —— {self._bp_why()}")
                     continue
                 if qty < o.qty:
                     self.stats["reduced"] += 1
-                    self._event("info", f"BUY {o.ticker}：余力 {bp:,.0f} 円，按开盘价 {op:g} 减到 {qty} 股（计划 {o.qty}）—— 与模型相同")
+                    self._event("info", f"BUY {o.ticker}：余力 {bp:,.0f} 円，按开盘价 {op:g} 减到 {qty} 股（计划 {o.qty}）—— {self._bp_why()}")
                 lim = self._fit_limit(o, qty, bp)
                 if lim < float(o.limit):
                     self.stats["limit_lowered"] += 1

@@ -165,6 +165,20 @@ def _stale(env: str, rec: dict) -> str | None:
     return None
 
 
+def _tax_text(tax: str) -> str:
+    """T5：1 特定 → 正常；3 一般 → ★ 要你确认（要自己申告；执行器默认不发）；5 / 6 NISA → ★ 执行器不发。只显示、不改门槛。"""
+    from .brokers.tachibana import TAX_NAMES, tax_general_ok_file
+    if tax == "":
+        return "还不知道（本番只读检查之后显示）；源泉徴収あり / なし 看不出来，开户时选「特定口座（源泉徴収あり）」并在立花网站上确认"
+    if tax == "1":
+        return "特定口座（执行器按它发单；源泉徴収あり / なし 从 API 看不出来，请在立花网站上确认是「あり」）"
+    if tax == "3":
+        ok = tax_general_ok_file().exists()
+        return ("一般口座（你已同意用它：要自己申告）" if ok else
+                "★ 一般口座：执行器默认不发单（要自己申告）。确认要用 → 在对话里明确说；或在立花开特定口座（源泉徴収あり）")
+    return f"★ {TAX_NAMES.get(tax, '代码 ' + tax)}：执行器不在这个区分下单（NISA 不用，〔72〕③），单会被挡 → 请在立花确认口座区分"
+
+
 def _age(at, today: dt.date) -> str:
     """结果文件的 at（"YYYY-MM-DD HH:MM JST"）→ 「（N 天前做的）」；读不出 → ""。只显示、不判定。"""
     try:
@@ -470,8 +484,7 @@ def check(agents=None, run=subprocess.run, today: dt.date | None = None) -> list
     _timezone(add, run)
     _alerts(add, run, agents, rc_list, listing)
     tax = str(lv.get("tax") or "")
-    add("参考", "口座课税区分", None, {"1": "特定口座", "": "还不知道（本番只读检查之后显示）"}.get(
-        tax, f"{tax}（不是特定口座：执行器按口座的区分发单，没问题；报税方式不同）"))
+    add("参考", "口座课税区分", None, _tax_text(tax))
     arm = paths.arm_state()                           # 和立花适配器同一个判断（UX-12）：内容是 ARMED 才算
     add("参考", "ARM（解锁发单）", None, {
         "file": "已解锁（ARM 文件内容 ARMED；要停用 = 删掉它或建 HALT）",

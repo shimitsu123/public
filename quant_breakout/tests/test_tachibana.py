@@ -477,3 +477,78 @@ def test_probe_tradable_check_uses_the_master_for_pool_core_and_lot():
     b2, _ = _broker(responses=_master(stk2, mkt))
     out = run._tachibana_tradable_check(b2)
     assert f"{pool[0]}.T 立花の株式銘柄マスタに" in out and "1655.T 売買単位 1 ≠ 我们以为的一手 10" in out
+
+
+# ────────── T5：口座课税区分不是特定口座就不发 ──────────
+@pytest.mark.parametrize("tax,blocked", [("1", False), ("", False), ("3", True), ("5", True), ("6", True), ("9", True)])
+def test_non_specific_tax_category_blocks_orders(tax, blocked):
+    b, tr = _broker(responses={SPEC.clm_login: {**LOGIN_OK, "sZyoutoekiKazeiC": tax}})
+    _arm()
+    o = b.buy("7203.T", 100, client_id="c1")
+    if blocked:
+        assert o.status == "BLOCKED" and "口座课税区分" in o.note and _orders(tr) == []
+    else:
+        assert o.status == "FILLED" and len(_orders(tr)) == 1
+
+
+def test_general_account_only_with_explicit_ok_file():
+    from qbreak.brokers.tachibana import tax_general_ok_file
+    tax_general_ok_file().write_text("ok", encoding="utf-8")
+    b, tr = _broker(responses={SPEC.clm_login: {**LOGIN_OK, "sZyoutoekiKazeiC": "3"}})
+    _arm()
+    assert b.buy("7203.T", 100, client_id="c1").status == "FILLED"
+    assert _orders(tr)[0]["sZyoutoekiKazeiC"] == "3"
+    b2, tr2 = _broker(responses={SPEC.clm_login: {**LOGIN_OK, "sZyoutoekiKazeiC": "5"}})   # NISA 不因这个文件放行
+    assert b2.buy("7203.T", 100, client_id="c2").status == "BLOCKED" and _orders(tr2) == []
+
+
+def test_gate_tax_text_marks_non_specific():
+    from qbreak.live_gate import _tax_text
+    assert "★" not in _tax_text("1") and "特定口座" in _tax_text("1")
+    assert _tax_text("3").startswith("★ 一般口座") and _tax_text("5").startswith("★ NISA")
+    assert _tax_text("6").startswith("★ NISA（成長投資枠）")
+
+
+
+# ────────── TA-14：立花本番会话锁 ──────────
+def test_live_login_waits_for_other_process_session(monkeypatch):
+    import fcntl
+    from qbreak.brokers.tachibana import session_lock_file
+    monkeypatch.setenv("QBREAK_TACHIBANA_SESSION_WAIT_S", "0")
+    fp = session_lock_file()
+    fp.parent.mkdir(parents=True, exist_ok=True)
+    with open(fp, "a+", encoding="utf-8") as other:          # 另一个进程（另一个打开的文件）拿着锁
+        other.write("pid 999 从 测试\n")
+        other.flush()
+        fcntl.flock(other.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        b, tr = _broker()
+        with pytest.raises(BrokerError, match="另一个进程正在用立花本番的会话"):
+            b.login()
+        assert tr.sent == []                                   # 没登录 → 不会把那边的会话踢掉
+        fcntl.flock(other.fileno(), fcntl.LOCK_UN)
+    b.login()                                                  # 放开之后就能登录
+    assert b._logged_in
+
+
+def test_session_lock_released_on_logout_and_shared_in_process():
+    import fcntl
+    from qbreak.brokers.tachibana import _SESSION, session_lock_file
+    b1, _ = _broker()
+    b2, _ = _broker()
+    b1.login()
+    b2.login()                                                 # 同一个进程：不互相等
+    assert _SESSION["f"] is not None and len(_SESSION["owners"]) == 2
+    b1.logout()
+    assert _SESSION["f"] is not None                           # b2 还拿着
+    b2.logout()
+    assert _SESSION["f"] is None
+    with open(session_lock_file(), "a+", encoding="utf-8") as f:   # 真的放开了：别人能拿到
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
+def test_demo_login_does_not_take_live_session_lock():
+    from qbreak.brokers.tachibana import _SESSION
+    b, _ = _broker(demo=True)
+    b.login()
+    assert _SESSION["f"] is None
