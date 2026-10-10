@@ -31,6 +31,8 @@
 #                                                    只在你明确说「撤单」时运行）；halt-cancel --broker tachibana = 先建 HALT 再撤全部（「停并撤单」）
 #   bash scripts/liveu.sh unknown --broker tachibana   状态不明的单在立花注文一覧里的候选 + 登记命令草稿（只读）
 #   bash scripts/liveu.sh reconcile --broker tachibana  持仓核对：账本 vs 立花（股数、成本、可能原因、登记草稿；只读）
+#   bash scripts/liveu.sh onboard                       立花开户 → 上实盘的步骤与「现在还没完成的」（只读；可以重复跑）
+#   bash scripts/liveu.sh quality [--since 日期]         执行质量汇总（成交率 / 成交价差 / 没成交次数 / 与云端一致天数；只读）
 #   bash scripts/liveu.sh export [--year 2027]          交易记录导出 CSV（成交 / 已实现损益 / 入出金 / 现金差 → 数据目录 out/export/；只读）
 #   bash scripts/liveu.sh broker [--notify]             立花那边实际是什么（持仓 / 余力 / 注文一覧 / 今天的成交 / 现价）→ 面板的快照（只读）
 #   bash scripts/liveu.sh adopt --broker tachibana 7203 BUY 100 2500 [--date YYYY-MM-DD] [--note …]  人工代下登记：在立花网站上
@@ -391,6 +393,17 @@ fi
 if [ "${1:-}" = "unknown" ]; then                  # 状态不明的单的候选（只读：不下单、不改账本；默认立花的账本）
   shift
   exec "$PY" run.py live-unknown ${1+"$@"}
+fi
+
+if [ "${1:-}" = "onboard" ]; then                  # 立花开户 → 上实盘的一条龙引导（只读：不登录、不建 ARM）
+  shift
+  sync_inputs
+  exec "$PY" run.py live-onboard ${1+"$@"}
+fi
+
+if [ "${1:-}" = "quality" ]; then                  # 执行质量汇总（只读；默认立花的账本；--since YYYY-MM-DD）
+  shift
+  exec "$PY" run.py live-quality ${1+"$@"}
 fi
 
 if [ "${1:-}" = "export" ]; then                   # 交易记录导出 CSV（只读；默认立花的账本；--year 2027）

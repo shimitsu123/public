@@ -77,12 +77,14 @@
   2026-10-09 起同级（用户这次明确说才运行）：撤单 `bash scripts/liveu.sh cancel [<cid>…] --broker tachibana` / 停并撤单 `bash scripts/liveu.sh halt-cancel --broker tachibana`（不写 `--broker` = 有账本的都撤；用户说「撤单」；只撤执行器自己今天还挂着的单）、
   人工代下登记 `liveu.sh adopt --broker tachibana <代码> <BUY|SELL> <股数> <均价>`（用户给出在立花网站上的实际成交）、恢复账本 `liveu.sh restore --broker tachibana <备份文件名>`、
   换 Mac `liveu.sh adopt-host --broker tachibana`（用户说「换 Mac，账本归这台」，旧 Mac 已停）、临时休市 `liveu.sh closed add|rm`（先核对 JPX 官方公告）；
-  只读的可以直接跑：`liveu.sh unknown|reconcile --broker tachibana`（会登录立花一次；执行器在跑时自己等它结束再登录，最多 5 分钟）、`liveu.sh restore --broker tachibana --list`、`liveu.sh closed list`；前一晚预检 `liveu.sh precheck` 会登录立花一次 → 用户要「再预检一次」才跑；`liveu.sh precheck --ack-api <日子>`（API 新版本的预告核对过、不用更新 → 只清这个提醒，不登录）用户确认后才跑；
+  只读的可以直接跑：`liveu.sh unknown|reconcile|broker --broker tachibana`（会登录立花一次；执行器在跑时自己等它结束再登录，最多 5 分钟；所有登录本番的进程共用一把会话锁）、`liveu.sh quality|export|onboard`（只读账本 / 上线检查，不登录）、`liveu.sh restore --broker tachibana --list`、`liveu.sh closed list`；前一晚预检 `liveu.sh precheck` 会登录立花一次 → 用户要「再预检一次」才跑；`liveu.sh precheck --ack-api <日子>`（API 新版本的预告核对过、不用更新 → 只清这个提醒，不登录）用户确认后才跑；
   Mac 失控 / 联系不上时的最后停止手段：告诉用户自己在立花网页把「ｅ支店・API 利用設定」改成「無効化」（MACOS.md §8；Claude 不登录、不操作立花网站）；
   上线头几天 / 退出实盘 / 换 Mac 照 MACOS.md §1.6 / §1.14；
   用户说「停 / 今天不要下单」→ 立刻建 `~/.qbreak/home/HALT`（停下单不用再确认）；不在执行器之外向立花发任何单（不写临时脚本调 API 下单）；
   「做一次 HALT 演练」→ `bash scripts/liveu.sh halt-drill`（只删它自己建的演练 HALT；真的 HALT 存在时不演练）；「能上实盘了吗」→ `bash scripts/liveu.sh gate`（只读）；
-  用户说入金 / 出金 → `bash scripts/liveu.sh flow <金额>`（出金写负数；只影响收益的计算与提醒，不下单）；
+  用户说入金 / 出金 → `bash scripts/liveu.sh flow <金额>`（出金写负数；只影响收益的计算与提醒，不下单；面板的「登记入金 / 出金」同一个函数）；
+  口座课税区分不是特定口座时执行器不发单（〔77〕C T5）：一般口座（3）只有用户在对话里明确同意才建 `~/.qbreak/home/TAX_GENERAL_OK`，NISA（5 / 6）不放行；
+  交易时段保持清醒 `bash scripts/install_launchd_awake.sh`（耗电）只在用户同意时装；
   手动卖出 / 减仓 / 调整持仓 / 买入 / 闲置资金比例（2026-10-06 起）：只经 `bash scripts/liveu.sh manual …` 或本机操作面板 http://127.0.0.1:8765/ 写「手动指令」，
   下单由执行器做（2026-10-07 起）：盘中（09:00〜11:30、12:30〜15:25）写的马上下（面板叫 `liveu.sh run --phase now`）、开盘前 / 午休写的等开盘、
   收盘后 / 休市日写的等下一个交易日开盘（闸门、对账照常，持仓核对不会停）；用户在这次对话里明确说要卖 / 减 / 加 / 买 / 改比例才写，没说账本就用模拟账户

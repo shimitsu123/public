@@ -3645,6 +3645,56 @@ def cmd_live_export(a) -> int:
     return 0
 
 
+def cmd_live_quality(a) -> int:
+    """〔77〕C LU-18：执行质量汇总（只读，读账本，不连券商）：成交率、成交价差（bp）、没成交 / 被挡次数、与云端模拟盘的一致天数。
+    bash scripts/liveu.sh quality [--broker tachibana] [--since YYYY-MM-DD]。"""
+    from qbreak import exec_quality as EQ
+    from qbreak import run_status as RS
+    paper, tag, book = _liveu_tag(a)
+    b_ = RS.peek_json(book)
+    if not b_:
+        print(f"还没有账本（{book.name}）：执行器第一次运行之后才有")
+        return 0
+    print(f"── 执行质量（{tag}；只读）──")
+    for ln in EQ.lines(EQ.report(b_, since=a.since)):
+        print(ln)
+    return 0
+
+
+ONBOARD_STEPS = (
+    ("开户（特定口座・源泉徴収あり；手数料 個別コース）", "MACOS.md §2 第 1 步；邮寄书面，要几周"),
+    ("标准 Web 首次登录 + 注册パスキー（iPhone；2026-12 起网页交易 / 出金必须）", "MACOS.md §2 第 2 步"),
+    ("「ｅ支店・API 利用設定」=利用する → 下载认证 ID；公開キー登録", "MACOS.md §2 第 3〜4 步"),
+    ("凭证放进 Mac 的钥匙串 / 私钥 chmod 600（在你自己的终端里做，不贴进对话）", "MACOS.md §3"),
+    ("开户表上的配当金受領方式不要随手改（楽天 NISA 的分红免税要株式数比例配分）；ETF 目論見書要不要先在网站确认", "MACOS.md §2"),
+    ("デモ环境 probe（只读）→ デモ 发单检查一天", "bash scripts/liveu.sh probe --demo；MACOS.md §4"),
+    ("本番只读 probe → 本番 dry-run 跑一次 → doctor", "bash scripts/liveu.sh probe；bash scripts/liveu.sh run --broker tachibana --dry-run"),
+    ("上线门槛全部满足后，在对话里明确说「上实盘」（装立花本番定时任务、建 ARM、先用较小金额 → 〔77〕E1 开户后定）", "bash scripts/liveu.sh gate"),
+)
+
+
+def cmd_live_onboard(a) -> int:
+    """〔77〕C OPS-14：开户当天的一条龙引导（只读：不读不显示密钥、不登录立花、不建 ARM、不装定时任务）。按顺序列出步骤，
+    再跑一遍上线检查（liveu.sh gate 同一个），把还没完成的「准备 / 门槛」逐项列成下一步。可以重复跑。bash scripts/liveu.sh onboard。"""
+    from qbreak import live_gate
+    print("── 立花开户 → 上实盘：步骤（只读引导；每一步做完再跑一次本命令）──")
+    for i, (what, how) in enumerate(ONBOARD_STEPS, 1):
+        print(f"  {i}. {what}（{how}）")
+    items = live_gate.check()
+    try:
+        live_gate.save(items)
+    except Exception:                                      # noqa: BLE001
+        pass
+    todo = [it for it in items if it["group"] in ("准备", "门槛") and it["ok"] is False]
+    print("── 现在还没完成的（上线检查；只读）──" if todo else "── 上线检查：准备与门槛都满足 ──")
+    for it in todo:
+        txt = it["text"][2:] if it["text"].startswith("★ ") else it["text"]
+        print(f"  ★ {it['name']}：{txt}")
+    if todo:
+        print(f"下一步：{todo[0]['name']}")
+    return 0 if not todo else 1
+
+
 def cmd_live_adopt(a) -> int:
     """人工代下登记（立花实盘缺口 B3 / C-06）：你在立花网站上实际成交的单 → 执行器账本（立花 API / Mac 故障那天照「今天的单」
     人工下了单 → 第二天早上之前登记，执行器之后照常）。只在你在对话里明确说时由 Claude 运行（与 --resolve 同级）。
@@ -5105,6 +5155,14 @@ def main(argv=None) -> int:
                     help="换 Mac：立花本番账本的机器标识改成这台（先备份；只在你明确说「换 Mac，账本归这台」时运行；"
                          "bash scripts/liveu.sh adopt-host --broker tachibana）")
     lu.set_defaults(func=cmd_live_unified)
+    ob = sub.add_parser("live-onboard", help="立花开户 → 上实盘的一条龙引导（只读；bash scripts/liveu.sh onboard）")
+    ob.set_defaults(func=cmd_live_onboard)
+    eq_ = sub.add_parser("live-quality", help="执行质量汇总：成交率、成交价差、没成交 / 被挡次数、与云端一致天数（只读；bash scripts/liveu.sh quality …）")
+    eq_.add_argument("--since", default=None, metavar="YYYY-MM-DD", help="只算这天（成交日）之后的")
+    eq_.add_argument("--broker", default="tachibana", choices=["paper", "tachibana"])
+    eq_.add_argument("--demo", action="store_true", help="立花デモ環境的账本")
+    eq_.add_argument("--dry-run", action="store_true", help="立花 dry-run 的账本")
+    eq_.set_defaults(func=cmd_live_quality)
     ex = sub.add_parser("live-export", help="交易记录导出 CSV（成交 / 已实现损益 / 入出金 / 现金差；只读；bash scripts/liveu.sh export …）")
     ex.add_argument("--year", type=int, default=None, help="哪一年（默认今年）")
     ex.add_argument("--broker", default="tachibana", choices=["paper", "tachibana"])

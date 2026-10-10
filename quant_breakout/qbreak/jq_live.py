@@ -284,7 +284,30 @@ def run_now(client, now: dt.datetime | None = None, universe: set[str] | None = 
     d = derive(day, universe or set(), tags or {}, watch or [], yahoo_dates())
     d["phase"], d["fetch"] = phase, {k: (v if isinstance(v, (int, str)) else str(v)) for k, v in stat.items()}
     write_today(d)
+    prune()
     return d
+
+
+KEEP_DAYS = 400                          # 〔77〕C OPS-15：每天的缓存只留最近 400 天（derive 最多往回读 120 天的 fins）
+
+
+def prune(today: dt.date | None = None, keep_days: int = KEEP_DAYS) -> int:
+    """数据目录 cache/jquants/live/ 里文件名日期早于 today − keep_days 的 YYYY-MM-DD_*.csv.gz 删掉 → 删了几个。读不出日期的不动。"""
+    today = today or now_jst().date()
+    cut = today - dt.timedelta(days=keep_days)
+    n = 0
+    for fp in live_dir().glob("*.csv.gz"):
+        try:
+            d = dt.date.fromisoformat(fp.name[:10])
+        except ValueError:
+            continue
+        if d < cut:
+            try:
+                fp.unlink()
+                n += 1
+            except OSError:
+                pass
+    return n
 
 
 def as_text(d: dict) -> str:

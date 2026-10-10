@@ -51,3 +51,13 @@ def test_withheld_change_and_sale_effect_with_refund():
 def test_bad_core_records_are_skipped_not_guessed():
     st = {"core_trades": [["2026-10-01", "1545.T", "SELL", 10, 250.0, 0.0]]}
     assert TY.realized(st) == []
+
+
+def test_jq_live_cache_prune_keeps_recent_days():
+    import datetime as dt
+    from qbreak import jq_live
+    d = jq_live.live_dir()
+    for name in ("2025-01-01_fins.csv.gz", "2026-09-01_fins.csv.gz", "notes.csv.gz"):
+        (d / name).write_bytes(b"x")
+    assert jq_live.prune(dt.date(2026, 10, 10)) == 1
+    assert sorted(p.name for p in d.glob("*.csv.gz")) == ["2026-09-01_fins.csv.gz", "notes.csv.gz"]
