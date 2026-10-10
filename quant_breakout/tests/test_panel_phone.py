@@ -361,7 +361,7 @@ def test_phone_on_waits_for_the_restarted_panel(tmp_path, monkeypatch):
 
     def late():
         srv.bind(("127.0.0.1", port))
-        srv.listen(1)
+        srv.listen(16)       # 这个假面板从不 accept：backlog 1 在 macOS 上第二次连接就被拒，listening() 会被误判成没在监听
     t = threading.Timer(1.2, late)
     t.start()
     try:

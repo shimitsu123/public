@@ -310,6 +310,7 @@ def test_check_reports_everything_read_only_without_values(repos):
 
 
 @need_git
+@pytest.mark.skipif(sys.platform == "darwin", reason="真的 macOS 上 PATH 里有 security / pmset，「不是 macOS 就跳过」这几行只在 Linux 上成立")
 def test_check_without_the_clone_on_linux_skips_mac_only_items(tmp_path):
     rc, out = _run(tmp_path, "check", repo="none")
     assert rc == 1 and "[★] 没有例行任务用的克隆 " in out

@@ -1,12 +1,12 @@
 # 云端例行任务改成「后备」（2026-10-09 用户「连云端例行任务也搬到 Mac」）
 
-例行任务的指令（prompt）只能在它发帖的那个对话里改（工具规定：别的对话改不了）。
+例行任务的指令（prompt）：2026-10-10 实测别的对话（Mac 的 Claude 经 RemoteTrigger）也能改；原来写的「只能在发帖的对话里改」不对。
 
 | 云端例行任务 | 发帖的对话 | 后备版 | 状态 |
 |---|---|---|---|
 | 顶底择时季度复核 trig_01BA4ugENPhSrYW3QSd5djK6 | 改代码 / 研究的那个云端对话 | 最前面「做过就跳过」、时间 1 / 4 / 7 / 10 月 12 日 12:52 | 2026-10-09 已改 |
-| 模拟盘日报 trig_01MMZVeTtxexr6y4sDhy4rxX | 每天日报发帖的那个云端对话 | [`sim_daily_cloud.md`](sim_daily_cloud.md)，时间周一至五 07:20 | 要在那个对话里改 |
-| 影子账户判断 trig_01WndiH4mZSiFkeExpsukNm4 | 同上（每天日报发帖的那个对话） | [`shadow_cloud.md`](shadow_cloud.md)，时间周一至五 08:05 | 要在那个对话里改 |
+| 模拟盘日报 trig_01MMZVeTtxexr6y4sDhy4rxX | 每天日报发帖的那个云端对话 | [`sim_daily_cloud.md`](sim_daily_cloud.md)，时间周一至五 07:20 | 2026-10-10 已改 |
+| 影子账户判断 trig_01WndiH4mZSiFkeExpsukNm4 | 同上（每天日报发帖的那个对话） | [`shadow_cloud.md`](shadow_cloud.md)，时间周一至五 08:05 | 2026-10-10 已改 |
 
 **怎么改（你在 claude.ai/code 打开每天日报发帖的那个对话，发这一句）：**
 
