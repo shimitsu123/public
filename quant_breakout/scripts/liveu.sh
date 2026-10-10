@@ -72,13 +72,20 @@ PY="${QBREAK_PYTHON:-$HOME/.qbreak/venv/bin/python}"
 mkdir -p "$QBREAK_HOME/logs" "$QBREAK_HOME/out"
 cd "$PROJ" || exit 1
 
+SYNC_DEFAULT="sim.json best_params.json best_params_JP.json best_params_US.json bullbear.json index_changes.json
+macro.json macro_events.json market_regime.json threat_index.json threat_weights.json fwd_judgment.json
+delist_schedule.json combo_c.json fx_hedge.json bond_refuge.json tbf.json"
 sync_inputs() {   # 云端维护的配置与每天的输入（拷贝到本机的数据目录；本机写的东西不会回到仓库）
-  for f in sim.json best_params.json best_params_JP.json best_params_US.json bullbear.json index_changes.json \
-           macro.json macro_events.json market_regime.json threat_index.json threat_weights.json fwd_judgment.json \
-           delist_schedule.json combo_c.json fx_hedge.json bond_refuge.json tbf.json; do
+  # 清单每次现读仓库里的 var/sync_inputs.txt：07:40 的运行在中途 git pull，新加的输入文件当天就能同步
+  # （以前清单写在这个函数里，是 pull 之前读进来的旧版本 → 新文件第一天同步不到、执行器按原规则；2026-09-30 / 10-02 / 10-06 都发生过）
+  local list f
+  list="$SYNC_DEFAULT"
+  [ -f var/sync_inputs.txt ] && list="$(grep -v '^[[:space:]]*#' var/sync_inputs.txt)"
+  for f in $list; do
+    case "$f" in */*|..*) continue ;; esac        # 只认 var/ 下的文件名
     [ -f "var/$f" ] && cp -f "var/$f" "$QBREAK_HOME/$f"
   done
-  return 0          # 清单最后一个文件还不存在（例：云端第一次写 fwd_judgment.json 之前）也不算失败
+  return 0          # 清单里的文件还不存在（例：云端第一次写之前）也不算失败
 }
 
 mac_alert() {     # macOS 通知（文字经 argv 传入，不拼进脚本）

@@ -269,3 +269,35 @@ def test_liveu_run_keeps_the_mac_awake_for_the_watchdog_only_in_the_scheduled_ru
     env, log = _run_env(tmp_path, 0, QBREAK_WATCHDOG_WAIT="0")
     _bash(env, "scripts/liveu.sh", "watchdog", "--dry")
     assert "py run.py live-watchdog --dry" in _calls(log)
+
+
+def test_no_test_runs_install_scripts_with_a_bare_system_path():
+    """在 Mac 上跑测试时，PATH 只有 /usr/bin:/bin 会用到真的 /bin/launchctl（会停用真的定时任务）：
+    凡是把 PATH 写死成只有系统目录的测试，前面必须有自己的假 launchctl 目录。"""
+    import re
+    bad = []
+    for p in (ROOT / "tests").glob("test_*.py"):
+        for m in re.finditer(r'"PATH":\s*"/usr/bin:/bin"', p.read_text(encoding="utf-8")):
+            bad.append(f"{p.name}:{m.start()}")
+    assert not bad, bad
+
+
+
+def test_sync_inputs_reads_the_list_from_the_repo_each_time(tmp_path):
+    """liveu.sh 的 sync_inputs 每次现读 var/sync_inputs.txt（git pull 之后新加的输入文件当天就同步；以前清单写死在函数里、是 pull 之前的旧版本）。"""
+    lst = (ROOT / "var" / "sync_inputs.txt").read_text(encoding="utf-8")
+    names = {w for ln in lst.splitlines() if not ln.lstrip().startswith("#") for w in ln.split()}
+    assert {"sim.json", "fwd_judgment.json", "combo_c.json", "tbf.json"} <= names
+    src = (ROOT / "scripts" / "liveu.sh").read_text(encoding="utf-8")
+    body = src[src.index("sync_inputs() {"):src.index("\n}", src.index("sync_inputs() {"))]
+    assert "var/sync_inputs.txt" in body
+    work = tmp_path / "w"
+    (work / "var").mkdir(parents=True)
+    (work / "var" / "sync_inputs.txt").write_text("# c\nnew.json\n../evil.json\n", encoding="utf-8")
+    (work / "var" / "new.json").write_text("{}", encoding="utf-8")
+    home = tmp_path / "h"
+    home.mkdir()
+    fn = src[src.index('SYNC_DEFAULT="'):src.index("\n}", src.index("sync_inputs() {")) + 2]
+    r = subprocess.run(["bash", "-c", fn + "\nsync_inputs"], cwd=work, env={**os.environ, "QBREAK_HOME": str(home)},
+                       capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0 and (home / "new.json").exists() and not (tmp_path / "evil.json").exists()

@@ -9,6 +9,10 @@ sys.path.insert(0, str(ROOT))
 # 必须在 import qbreak 之前设置：日志/状态目录在首次 import 时就会被创建
 _TMP = tempfile.mkdtemp(prefix="qbreak_test_")
 os.environ["QBREAK_HOME"] = _TMP
+_GUARD = Path(_TMP) / "_guard_bin"     # 测试绝不调真的 launchctl：真的会按 plist 的 Label 卸掉 / 停用这台 Mac 上真的定时任务
+_GUARD.mkdir(exist_ok=True)            # （unload -w 写 disabled，2026-10 发生过）。自己带了假 launchctl 的测试放在更前面，照旧
+(_GUARD / "launchctl").write_text("#!/bin/sh\nexit 0\n")
+(_GUARD / "launchctl").chmod(0o755)
 
 import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
@@ -28,6 +32,7 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setattr("qbreak.watchdog.DAILY_FILE", tmp_path / "repo_var" / "out" / "unified_today.json")   # 09:30 自检不看仓库里真的日报
     monkeypatch.setattr("qbreak.watchdog._remote_daily_date", lambda run=None: None)           # 也不看仓库远端的（要测的测试自己换）
     monkeypatch.setattr("qbreak.data.LAGGING", {})          # 行情落后的记录是进程里的全局表：每个测试从空的开始（不被前面的测试带进来）
+    monkeypatch.setenv("PATH", f"{_GUARD}{os.pathsep}{os.environ.get('PATH', '')}")   # 假 launchctl 放最前面（见 _GUARD）
     from qbreak.brokers import tachibana as _tb
     _sess = {"f": None, "owners": set()}                     # 立花本番会话锁也是进程里的全局：每个测试从「没拿着」开始
     monkeypatch.setattr(_tb, "_SESSION", _sess)

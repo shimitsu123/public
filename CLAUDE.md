@@ -135,5 +135,6 @@
   提交并推送 `var/HALT_REMOTE`（不用再确认；`git pull --rebase` 后推）→ Mac 的执行器下一次运行（07:40 / 08:35 / 09:05 / 09:20）建本地 HALT；
   只能停、不能恢复（恢复只在 Mac 上、用户明确说）；告诉用户：已经发到交易所的单不会被撤（要撤：手机面板「今天的单」的「撤单」、
   在 Mac 对话里说「撤单」，或立花网站 / 手机网站 https://kabuka.e-shiten.jp/mfds_smp.php）；Mac 失控 / 联系不上 → 最后停止手段（MACOS.md §8：用户自己在立花网页把 API「無効化」）
+- 执行器新加从仓库 `var/` 读的输入文件：加进 `quant_breakout/var/sync_inputs.txt`（`liveu.sh` 每次现读，07:40 那次 git pull 之后当天就同步）
 - shell 脚本：`$变量` 后面紧跟中文 / 全角字符时写成 `${变量}`（macOS 自带的 bash 3.2 在 UTF-8 下会把下一个字节算进变量名，
   `set -u` 时直接退出；`tests/test_shell_scripts.py` 会查）

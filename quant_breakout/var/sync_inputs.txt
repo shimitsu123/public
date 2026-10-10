@@ -1,0 +1,5 @@
+# scripts/liveu.sh 每次运行时从仓库 var/ 拷贝到 Mac 数据目录（~/.qbreak/home）的输入文件（一行一个，或空格分开；# 开头是注释）。
+# 加新的输入文件：在这里加一行（同一次 07:40 的运行里 git pull 之后就会读到新清单）。只写 var/ 下的文件名。
+sim.json best_params.json best_params_JP.json best_params_US.json bullbear.json index_changes.json
+macro.json macro_events.json market_regime.json threat_index.json threat_weights.json fwd_judgment.json
+delist_schedule.json combo_c.json fx_hedge.json bond_refuge.json tbf.json

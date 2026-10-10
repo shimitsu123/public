@@ -59,12 +59,11 @@ def test_onboard_lists_steps_and_next(monkeypatch, capsys):
 
 def test_awake_agent_plist(tmp_path):
     agents, home = tmp_path / "la", tmp_path / "h"
-    env = {**os.environ, "QBREAK_LAUNCH_AGENTS": str(agents), "QBREAK_LIVEU_HOME": str(home), "PATH": "/usr/bin:/bin"}
     fake = tmp_path / "bin"
     fake.mkdir()
     (fake / "launchctl").write_text("#!/bin/sh\nexit 0\n")
     (fake / "launchctl").chmod(0o755)
-    env["PATH"] = f"{fake}:{env['PATH']}"
+    env = {**os.environ, "QBREAK_LAUNCH_AGENTS": str(agents), "QBREAK_LIVEU_HOME": str(home), "PATH": f"{fake}:/usr/bin:/bin"}
     r = subprocess.run(["bash", str(ROOT / "scripts" / "install_launchd_awake.sh")], env=env, capture_output=True, text=True, timeout=30)
     assert r.returncode == 0, r.stderr
     p = (agents / "com.qbreak.awake.plist").read_text(encoding="utf-8")

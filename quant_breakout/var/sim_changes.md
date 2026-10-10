@@ -10595,3 +10595,13 @@ Mac 问法表、已知限制）；CHECK_TIMELINE（⑥ 执行层、08:35 / 09:20
 - 不把出金金额推进仓库让模拟盘也照做：仓库是公开的，个人的入出金金额不进仓库；模拟盘照旧按 ¥100 万规则跑（日报现在本来就在 Mac 的本机例行任务里跑，云端只是后备）。
   上线门槛 ①（Mac 模拟操盘 vs 模拟盘）不受影响：模拟账户没有入出金。非投资建议。
 
+## 2026-10-11 工程（用户「调查一下还有哪些问题没有被完善到」）：两个反复出现的问题的根治 —— 不改交易规则
+- 新加的输入文件第一天没同步（2026-09-30 fwd_judgment.json、10-02 combo_c.json、10-06 tbf.json 都发生过 → 那天执行器按原规则、与云端可能不同）：
+  原因 = liveu.sh 的 sync_inputs 清单写死在函数里，07:40 的运行在中途 git pull，用的仍是 pull 之前读进来的旧清单。
+  → 清单改成仓库的 var/sync_inputs.txt，每次现读（pull 之后当天就用新清单）；没有这个文件时用脚本里的默认清单；只认 var/ 下的文件名。
+- Mac 的开机自动启动 com.qbreak.login 反复被停用（launchctl print-disabled 显示 disabled）：原因 = tests/test_mac_login.py 的一个测试把 PATH 写死成
+  只有系统目录，调了真的 /bin/launchctl，按临时 plist 里的 Label 卸掉并停用了真的 com.qbreak.login（在 Mac 上跑全部测试时每次都发生）。
+  → 这个测试用假的 launchctl；conftest 给所有测试的 PATH 前面放一个假的 launchctl；加一个静态检查（PATH 写死成系统目录的测试必须自带假 launchctl）。
+  mac_setup.sh 重新加载并启用它。
+- HANDOFF 待办：⑨ ⑩ ⑭ ⑱ ⑲ 核对后标 ✅。非投资建议。
+

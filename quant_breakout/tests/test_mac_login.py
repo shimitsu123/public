@@ -106,8 +106,12 @@ def test_liveu_login_shell_end_to_end(tmp_path):
 
 
 def test_install_launchd_login_plist(tmp_path):
+    b = tmp_path / "bin"                                   # 假的 launchctl：真的 /bin/launchctl 会按 plist 里的 Label 卸掉 / 停用这台 Mac 上
+    b.mkdir()                                              # 真的 com.qbreak.login（unload -w 写 disabled）——在 Mac 上跑测试时发生过
+    (b / "launchctl").write_text("#!/bin/sh\nexit 0\n")
+    (b / "launchctl").chmod(0o755)
     env = {**os.environ, "QBREAK_SKIP_VENV": "1", "QBREAK_PYTHON": sys.executable, "QBREAK_LAUNCH_AGENTS": str(tmp_path / "agents"),
-           "QBREAK_LIVEU_HOME": str(tmp_path / "home"), "PATH": "/usr/bin:/bin"}
+           "QBREAK_LIVEU_HOME": str(tmp_path / "home"), "PATH": f"{b}:/usr/bin:/bin"}
     r = subprocess.run(["bash", "scripts/install_launchd_login.sh"], cwd=ROOT, env=env, capture_output=True, timeout=60)
     out = r.stdout.decode("utf-8", "replace")
     plist = (tmp_path / "agents" / "com.qbreak.login.plist").read_text(encoding="utf-8")
