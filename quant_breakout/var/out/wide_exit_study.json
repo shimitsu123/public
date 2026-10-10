@@ -1,0 +1,2607 @@
+{
+ "registered": {
+  "ID": "WXA",
+  "NAME": "一直放宽卖法（个股层全部持仓：吊灯 4 × ATR14、最长持有 90 个交易日）的账户级检验",
+  "WIDE": {
+   "k": 4.0,
+   "mh": 90
+  },
+  "BASE": {
+   "k": 3.0,
+   "mh": 60
+  },
+  "DESC_SPECS": {
+   "WXA-k": {
+    "k": 4.0,
+    "mh": 60
+   },
+   "WXA-h": {
+    "k": 3.0,
+    "mh": 90
+   }
+  },
+  "POSTHOC": true,
+  "ERAS": [
+   "Z",
+   "E",
+   "J"
+  ],
+  "ERA_END": {
+   "Z": "2006-09-30",
+   "E": "2016-09-30",
+   "J": "2026-09-30"
+  },
+  "POOLS": [
+   "W",
+   "Jx",
+   "Zx"
+  ],
+  "POOL_SM": {
+   "W": "W",
+   "Jx": "J2",
+   "Zx": "Zx"
+  },
+  "POOL_ERA": {
+   "W": "E",
+   "Jx": "J",
+   "Zx": "Z"
+  },
+  "FP": "1241753c8f2529c6",
+  "B4_TOL": 0.005,
+  "B4_REF_N": {
+   "Z": 28,
+   "E": 34,
+   "J": 52
+  },
+  "RT_REF": 0.1496,
+  "RT_TOL": 5e-05,
+  "BASE_MATCH_MIN": 0.99,
+  "BASE_MATCH_TOL": 1e-06,
+  "MATURE_BARS": 95,
+  "TRUNC_BARS": 95,
+  "MIN_TRIG": 10,
+  "SLOTS": 4,
+  "BOOT_N": 2000,
+  "BOOT_BLOCK": 20,
+  "BOOT_SEED": 20261008,
+  "BOOT_Q": [
+   5.0,
+   95.0
+  ],
+  "DIV_YIELD_ASSUMED": [
+   2.0,
+   2.5
+  ],
+  "TRADING_DAYS": 245,
+  "NKT_REQUIRED": true,
+  "NKT_SCRIPT": "scripts/nkt_study.py",
+  "NKT_OUT": "nkt_study.json",
+  "NKT_RUN_FILES": [
+   "nkt_study.json",
+   "nkt_study.partial.json",
+   "nkt_study.md",
+   "nkt_study.json.tmp",
+   "nkt_study.partial.json.tmp"
+  ],
+  "CACHE_FILES": [
+   "loop10_zx.pkl",
+   "turn_shape_combo_models.pkl",
+   "turn_shape_combo_flags.pkl",
+   "combo_all_panel.pkl",
+   "candle_panels.npz"
+  ],
+  "ENGINE_DEFAULTS": {
+   "PB": {},
+   "HOLD_PB": 10,
+   "LIMIT_K": 0.0,
+   "PB_USE_DEAD": false,
+   "PREF_US": null,
+   "YEN_STRONG": null,
+   "EXTRA_BEAR": {},
+   "EXTRA_EXPO": {},
+   "PRIORITY": {},
+   "PARAMS_T": {},
+   "PARAMS_TD": {},
+   "DD_BRAKE": null,
+   "OPP_EXIT": null,
+   "EXIT_TICK": null,
+   "ENTRY_GAP": null,
+   "SECTOR_CAP": null,
+   "CHAND_K_DAY": null
+  },
+  "ENGINE_OPTIONAL": [
+   "CHAND_K_DAY"
+  ],
+  "REASONS": [
+   "chandelier",
+   "take_profit",
+   "trail",
+   "stop",
+   "climax",
+   "max_hold",
+   "end"
+  ],
+  "STOCK_SKIP": [
+   "1545.T",
+   "1482.T",
+   "1655.T",
+   "2845.T"
+  ],
+  "ZERO_VOL_ENV": "1",
+  "STAGE1_THRESHOLDS": {
+   "SUM_MIN_A": 0.03,
+   "WIN_TOL_A": 2.0,
+   "WIN_MIN": 2.0,
+   "ERA_WIN_TOL": 2.0,
+   "ERA_TOL": 0.02,
+   "DD_TOL": 2.0,
+   "HALF_TOL": 0.02,
+   "EPS": 1e-12,
+   "OTHER_POOLS": [
+    "W",
+    "Jx"
+   ],
+   "UNSEEN_POOL": "Zx"
+  },
+  "STAGE1_R10_KEYS": [
+   "WIN_MIN",
+   "ERA_WIN_TOL",
+   "ERA_TOL",
+   "DD_TOL",
+   "HALF_TOL",
+   "EPS"
+  ],
+  "EPS": 1e-12,
+  "SELF_FILES": [
+   "scripts/wide_exit_study.py",
+   "tests/test_wide_exit_study.py"
+  ],
+  "LOCK": "wide_exit_run.lock",
+  "MEMO_FROM": "1900-01-01",
+  "KNOWN": {
+   "model_switch": {
+    "src": "model_switch_study（规则 3ae491f，在 baa3823 上运行；sim_changes 第 9148〜9152 行「事后（登记外、只描述、不作判定）」；菜单口径第 9113 行）",
+    "sample": "日経225 W2 + 扩大池 B3 会买的信号合在一起（Z 93 + Zx 381；E 153 + W 438；J 172 + Jx 784）；假想单笔、按信号月平均、晚 5 个月；240 个决定月（结果月 2003-09〜2026-08）",
+    "g_wide": 0.42,
+    "g_wide_t": 2.31,
+    "g_wide_era": {
+     "Z": 0.923,
+     "E": 0.311,
+     "J": 0.355
+    },
+    "h_wide_vs_b3": 0.24,
+    "g_b3": 0.18,
+    "g_tight": -0.6,
+    "g_tight_t": -2.66,
+    "best_fixed": {
+     "Z": [
+      "放宽",
+      3.812
+     ],
+     "E": [
+      "B3",
+      1.571
+     ],
+     "J": [
+      "放宽",
+      0.423
+     ]
+    },
+    "note": "「一直放宽」是事后三个「一直」变体（收紧 / B3 / 放宽）里最好的一个 → 要按收缩读"
+   },
+   "loop11_cycle_describe": {
+    "src": "f6ee0f5；第 8979〜8981 行",
+    "sample": "日経225 W2 信号 425 个（含 TBF 会挡的）三套卖法的假想单笔",
+    "best": {
+     "Z": "放宽",
+     "E": "B3",
+     "J": "放宽"
+    },
+    "by_class_tight_b3_wide": {
+     "景气循环": [
+      0.48,
+      1.84,
+      2.06
+     ],
+     "防御": [
+      1.04,
+      2.62,
+      1.94
+     ],
+     "小成交额": [
+      0.43,
+      3.31,
+      3.57
+     ],
+     "大成交额": [
+      0.56,
+      1.17,
+      0.65
+     ],
+     "高波动": [
+      0.49,
+      1.49,
+      1.62
+     ],
+     "低波动": [
+      0.67,
+      3.12,
+      2.94
+     ]
+    }
+   },
+   "SZK": {
+    "src": "第十一个循环第 2 轮（a96ccb0；第 8830〜8831 行）",
+    "pool_n": {
+     "W": 438,
+     "Jx": 792,
+     "Zx": 381
+    },
+    "pool_small": {
+     "W": 437,
+     "Jx": 728,
+     "Zx": 380
+    },
+    "pool_dwin": {
+     "W": 0.7,
+     "Jx": 0.6,
+     "Zx": 5.2
+    },
+    "pool_dmean": {
+     "W": 0.69,
+     "Jx": 0.25,
+     "Zx": 1.07
+    }
+   },
+   "SZS": {
+    "src": "第 6 轮（6936508；第 8944〜8945 行）",
+    "trades_widened": {
+     "Z": 16,
+     "E": 17,
+     "J": 14
+    },
+    "pool_dmean": {
+     "W": 0.68,
+     "Jx": 0.24,
+     "Zx": 1.07
+    },
+    "calmar_d": {
+     "Z": -0.346,
+     "E": -0.057,
+     "J": -0.003
+    },
+    "calmar_sum": -0.406,
+    "dwin": 1.89,
+    "dmean": -0.51
+   },
+   "VOK": {
+    "src": "第 1 轮（cdfaff0；第 8806〜8808 行）",
+    "trades_widened": {
+     "Z": 5,
+     "E": 11,
+     "J": 24
+    },
+    "calmar_d": {
+     "Z": 0.009,
+     "E": -0.024,
+     "J": -0.027
+    },
+    "calmar_sum": -0.042,
+    "dwin": 2.21,
+    "dmean": 0.16
+   },
+   "N52": {
+    "src": "第 6 轮（6936508；第 8939〜8941 行）",
+    "calmar_d": {
+     "Z": 0.087,
+     "E": 0.007,
+     "J": 0.021
+    },
+    "calmar_sum": 0.115,
+    "note": "池子每笔都变差"
+   },
+   "TCY": {
+    "src": "第 7 轮（1714945；第 8953〜8955 行）",
+    "note": "最长持有按个股上涨周期缩短（20〜60 天）：方向相反、同一个维度",
+    "calmar_d": {
+     "Z": -0.195,
+     "E": -0.005,
+     "J": 0.046
+    },
+    "calmar_sum": -0.154,
+    "dwin": 3.84,
+    "dmean": -0.59,
+    "z_mean": [
+     6.0,
+     3.7
+    ]
+   },
+   "R2": {
+    "src": "政策参数研究 R2（第 3535、3552、3556 行）",
+    "note": "正面政策后用进攻参数（吊灯 k 4、90 天 + 止损 10% + 放量 ×1.2），部分时段",
+    "base": {
+     "Z": 1.732,
+     "E": 0.32,
+     "J": 0.4
+    },
+    "cand": {
+     "Z": 1.369,
+     "E": 0.316,
+     "J": 0.432
+    },
+    "calmar_d": {
+     "Z": -0.363,
+     "E": -0.004,
+     "J": 0.032
+    },
+    "ej_sum": 0.028,
+    "placebo_ej_median": -0.054,
+    "placebo_ej_p95": 0.006
+   },
+   "sel_monthly": {
+    "src": "c4b673c；第 3368〜3373 行",
+    "chand_k_4_minus_2": {
+     "Z": 3.3,
+     "E": 0.4,
+     "J": 0.3
+    },
+    "max_hold_90_minus_40": {
+     "Z": 0.2,
+     "E": 0.5,
+     "J": -0.1
+    }
+   },
+   "bsh_explore": {
+    "src": "第 2286〜2302 行",
+    "x6_mean": {
+     "E": [
+      0.6,
+      2.1
+     ],
+     "J": [
+      0.61,
+      1.35
+     ]
+    },
+    "x6_calmar_d": {
+     "E": 0.021,
+     "J": 0.017
+    },
+    "note": "赢家放宽 X1〜X5 每笔多 0.1〜0.7 pp 但 Calmar 不变或略差；H5（X1 + 最长 120 天）账户 Calmar 不变或略差；个股仓位平均只占资金 0〜18%"
+   },
+   "early_params": {
+    "src": "第 1034〜1038 行",
+    "note": "当时的死叉卖法：最长持有 40 / 90 日与现行完全一样（口径不同，只说明这个旋钮以前看过）"
+   },
+   "timeline_stats": {
+    "src": "第 3204〜3206 行",
+    "n": 150,
+    "hold_median": 18,
+    "reasons": {
+     "chandelier": 123,
+     "take_profit": 10,
+     "stop": 6,
+     "max_hold": 6,
+     "climax": 5
+    }
+   },
+   "meta_stats": {
+    "src": "research_meta_stats（第 9072〜9076 行）",
+    "n": 159,
+    "all_pos": 17,
+    "all_neg": 17,
+    "expect_each": 19.9
+   },
+   "B4_ref": {
+    "src": "var/out/turn_shape_combo.json 的 cand.TBF（已公开）",
+    "Z": {
+     "cagr": 16.75,
+     "dd": -13.86,
+     "calmar": 1.209,
+     "h1": 1.437,
+     "h2": 1.715,
+     "n": 28,
+     "win": 75.0,
+     "mean": 7.386
+    },
+    "E": {
+     "cagr": 14.55,
+     "dd": -23.21,
+     "calmar": 0.627,
+     "h1": 0.208,
+     "h2": 1.493,
+     "n": 34,
+     "win": 50.0,
+     "mean": 2.423,
+     "recomputed_2026_10_06": {
+      "cagr": 14.57,
+      "calmar": 0.628,
+      "h2": 1.496,
+      "mean": 2.422
+     }
+    },
+    "J": {
+     "cagr": 20.05,
+     "dd": -29.61,
+     "calmar": 0.677,
+     "h1": 0.712,
+     "h2": 0.764,
+     "n": 52,
+     "win": 51.9,
+     "mean": 3.306
+    },
+    "pooled": {
+     "n": 114,
+     "win": 57.0,
+     "mean": 4.04
+    }
+   }
+  },
+  "EXPECT": {
+   "pools": "W / Jx / Zx 每笔差都 > 0 的可能很高（B3 池子已知 +0.68 / +0.24 / +1.07 pp），胜率差多半也 > 0 → V4 / V6 多半过（不是独立证据）",
+   "d1": "日経225 单笔层：Z / J 放宽好、E 现行好",
+   "account": "每笔（合起来）可能略升（+0.3〜+1 pp，主要来自 Z / J）；胜率变化多半在 ±2 pp 内；E 的 Calmar 很可能 < −0.02；Z 偏负；合计 ≥ +0.03 不太可能 → 路线 A 多半卡在 A2（E / Z）或 A1；路线 B 多半卡在 B1",
+   "dilution": "单笔层的 +0.24 到账户层会被稀释（Calmar 合计约 +0.04，噪声 ±0.05〜0.35）并按赢家诅咒收缩",
+   "exits": "吊灯离场的比例下降，满最长持有（90 天）、止盈 +25% 的比例上升；持有中位从约 18 天升到约 22〜28 天；期末 end 与名额满挡掉的信号变多",
+   "trig_d10": "trig 远超 10；D10 合计区间多半含 0",
+   "pass_prob": "第一关通过的概率约 5% 或更低；路线 B ≤ 2%"
+  },
+  "V_PASS": "第一关通过（事后；路线 {routes}）",
+  "V_FAIL": "第一关不过",
+  "V_RARE": "没有判定（几乎不触发）",
+  "V_STOP": "没有判定（停在 {where}）",
+  "VERDICT_SAY": {
+   "pass": "事后第一关通过：这次账户层没变差 / 变好；但同一卖法的单笔结果以前已经看过、同一维度的部分账户结果以前是负的（四），本次账户层是唯一部分没看过的检验，而且第一关对这种量级的效应主要反映路径噪声",
+   "fail": "一直放宽（吊灯 4 × ATR、最长 90 天）在现行 B4 的账户里不比现行好（或好得不够）",
+   "rare": "几乎不触发（B4 的成交在 WXA 里改变的不到 10 笔）：照实写；〔62〕② 由用户决定（不重跑；要改须另行登记）",
+   "stop": "停在 {where}：照实写停在哪一步；〔62〕② 由用户决定（不重跑；要改须另行登记）"
+  },
+  "CAP": {
+   "pass": "不叫「更好候选」、不建议采用；模拟盘 / 执行器 / 参数都不变",
+   "fail": "〔62〕② 关闭；不做第二关；模拟盘 / 执行器 / 参数都不变",
+   "rare": "模拟盘 / 执行器 / 参数都不变",
+   "stop": "模拟盘 / 执行器 / 参数都不变",
+   "all": "任何结果都不改 var/sim.json、执行器、例行任务、策略参数（max_hold_days / 吊灯倍数）、仓位、股票池；要改离场参数 = 改策略参数，须用户在对话里明确要求、记进 sim_changes.md"
+  },
+  "OPT_END": "① 到此结束",
+  "OPT_STAGE2": "② 另行登记第二关（八：前向记录，只记录、不交易）",
+  "OPT_CLOSE": "① 到此结束（〔62〕② 关闭；不做第二关）",
+  "OPT_USER": "由用户决定（不重跑；要改须另行登记）",
+  "STAGE2": {
+   "only_forward": true,
+   "control": {
+    "k": 3.0,
+    "mh": 60
+   },
+   "candidate": {
+    "k": 4.0,
+    "mh": 90
+   },
+   "object_main": "scripts/w2_forward_all.py 第一节的主对象（东证一般市场的内国普通股、信号日 20 天平均成交额 ≥ ¥500 万）里 W2 保留的全部突破；不加 C、TBF",
+   "signal_from": "第二关登记提交日之后的第一个东证交易日",
+   "describe_only": [
+    "日経225（今天的成员）里 B4 会买的信号",
+    "不限成交额",
+    "不管 W2 的全部突破"
+   ],
+   "pairing": "同一个买入（次日开盘 × (1 + 滑点)），X6 与 WXA 的单笔净收益（exit_forward 的配对做法 + single_net 同一卖法）",
+   "mature_bars": 95,
+   "history_csv": "var/out/wxa_forward_history.csv",
+   "blind": "判定日之前只显示个数，不显示 WXA − X6 的差（只在判定日那一行写差与区间）；行情公开，盲只在本仓库的输出层面",
+   "judge_dates": [
+    "2027-09-28",
+    "2028-09-28",
+    "2029-09-28",
+    "2030-09-28",
+    "2031-09-28"
+   ],
+   "n_min": 400,
+   "start_rule": "从「主对象成熟配对 ≥ 400」首次满足之后的第一个判定日开始；做过的年份不再做",
+   "boot_n": 2000,
+   "cluster": "信号月",
+   "seed": "第二关登记时写定",
+   "confirm_ci": 99,
+   "confirm_win_tol": -2.0,
+   "negate_ci": 95,
+   "say_confirm": "单笔层前向确认（账户层未检验）",
+   "say_negate": "前向否定",
+   "say_expire": "没有判定（到期）",
+   "power_note": "到 2031 年约 2,000 个配对 → 80% 检出力只够 δ ≳ 0.35〜0.65 pp；已知的 +0.24 多半测不出",
+   "cap": "前向确认之后也不能进模拟盘 / 执行器：要再另行登记账户层的研究，并经用户在对话里明确同意、记 sim_changes"
+  },
+  "DATA_FP": "8c9f176b0c7a4a30",
+  "LIVE_FP": {
+   "bb:JPY=X@Z": "509fa136",
+   "bb:QQQ@Z": "324b422c",
+   "bb:^BSESN@Z": "e099bac2",
+   "bb:^GSPC@Z": "39de1247",
+   "bb:^N225@Z": "a3610558",
+   "bb:^NDX@Z": "55088e29",
+   "bb:^NSEI@Z": "99bea88c",
+   "bb:^SOX@Z": "0ba88351",
+   "bb:^SP500TR@Z": "7a9b374c",
+   "kw.extra_core:1545.T@Z": "c8f0190c",
+   "b1.extra_core:1482.T@Z": "e12547df",
+   "b1.extra_core:1545.T@Z": "77c47d8a",
+   "b1.extra_bear:US_BD@Z": "37a093f6",
+   "bear:IN@Z": "cd0ecf30",
+   "bear:JP@Z": "fed1b055",
+   "bear:US@Z": "aaf554c0",
+   "MA@Z": "daff9f75",
+   "bb:JPY=X@E": "e4db5d74",
+   "bb:QQQ@E": "3dbe710b",
+   "bb:^BSESN@E": "34672a7f",
+   "bb:^GSPC@E": "1efa95c2",
+   "bb:^N225@E": "58546c9e",
+   "bb:^NDX@E": "3bdd7a98",
+   "bb:^NSEI@E": "f46a45b3",
+   "bb:^SOX@E": "3fde3917",
+   "bb:^SP500TR@E": "2653eda1",
+   "kw.extra_core:1545.T@E": "c72d4de5",
+   "b1.extra_core:1482.T@E": "be114521",
+   "b1.extra_core:1545.T@E": "44d3260f",
+   "b1.extra_bear:US_BD@E": "1173bdad",
+   "bear:IN@E": "0bf14cdf",
+   "bear:JP@E": "e5010624",
+   "bear:US@E": "c37ff7f5",
+   "MA@E": "c546ebad",
+   "bb:JPY=X@J": "ef5e82e2",
+   "bb:QQQ@J": "1fec82bb",
+   "bb:^BSESN@J": "b92a5498",
+   "bb:^GSPC@J": "daef301a",
+   "bb:^N225@J": "f55443d1",
+   "bb:^NDX@J": "9a1a4d17",
+   "bb:^NSEI@J": "8fad6ebe",
+   "bb:^SOX@J": "a3334ab1",
+   "bb:^SP500TR@J": "a4cd4e2d",
+   "kw.extra_core:1545.T@J": "ef4d283d",
+   "b1.extra_core:1482.T@J": "48641dcb",
+   "b1.extra_core:1545.T@J": "2f1e54b5",
+   "b1.extra_bear:US_BD@J": "816261e9",
+   "bear:IN@J": "e9e7c336",
+   "bear:JP@J": "3766ee77",
+   "bear:US@J": "1155e774",
+   "MA@J": "8bd1b94c"
+  },
+  "B4_SNAP": {
+   "Z": {
+    "cagr": 16.75,
+    "dd": -13.86,
+    "calmar": 1.209,
+    "h1": 1.437,
+    "h2": 1.715,
+    "n": 28,
+    "mean": 7.386,
+    "win": 75.0
+   },
+   "E": {
+    "cagr": 14.57,
+    "dd": -23.21,
+    "calmar": 0.628,
+    "h1": 0.208,
+    "h2": 1.496,
+    "n": 34,
+    "mean": 2.422,
+    "win": 50.0
+   },
+   "J": {
+    "cagr": 20.05,
+    "dd": -29.61,
+    "calmar": 0.677,
+    "h1": 0.712,
+    "h2": 0.764,
+    "n": 52,
+    "mean": 3.306,
+    "win": 51.9
+   }
+  },
+  "PREP_COUNTS": {
+   "n225": {
+    "Z": {
+     "signals": 97,
+     "tbf_blocked": 14,
+     "c_skipped": 4,
+     "c_skipped_and_tbf": 1,
+     "b4_buy": 80,
+     "with_fill": 97,
+     "ptd_keys": 97,
+     "b4_trades_all": 28,
+     "b4_trades_key_found": 28,
+     "b4_trades_window": 28,
+     "b4_trades_end": 0,
+     "last95_trades": 0,
+     "last95_b4_buy_signals": 1,
+     "d1_mature": 80,
+     "d1_end_of_window": 0,
+     "d1_data_ended": 0,
+     "d1_no_signal_day": 0,
+     "reasons": {
+      "chandelier": 20,
+      "take_profit": 2,
+      "trail": 0,
+      "stop": 1,
+      "climax": 2,
+      "max_hold": 3,
+      "end": 0,
+      "other": 0
+     }
+    },
+    "E": {
+     "signals": 155,
+     "tbf_blocked": 44,
+     "c_skipped": 38,
+     "c_skipped_and_tbf": 4,
+     "b4_buy": 77,
+     "with_fill": 155,
+     "ptd_keys": 155,
+     "b4_trades_all": 34,
+     "b4_trades_key_found": 34,
+     "b4_trades_window": 34,
+     "b4_trades_end": 0,
+     "last95_trades": 0,
+     "last95_b4_buy_signals": 2,
+     "d1_mature": 77,
+     "d1_end_of_window": 0,
+     "d1_data_ended": 0,
+     "d1_no_signal_day": 0,
+     "reasons": {
+      "chandelier": 27,
+      "take_profit": 3,
+      "trail": 0,
+      "stop": 1,
+      "climax": 1,
+      "max_hold": 2,
+      "end": 0,
+      "other": 0
+     }
+    },
+    "J": {
+     "signals": 173,
+     "tbf_blocked": 49,
+     "c_skipped": 45,
+     "c_skipped_and_tbf": 13,
+     "b4_buy": 92,
+     "with_fill": 173,
+     "ptd_keys": 173,
+     "b4_trades_all": 52,
+     "b4_trades_key_found": 52,
+     "b4_trades_window": 52,
+     "b4_trades_end": 0,
+     "last95_trades": 0,
+     "last95_b4_buy_signals": 0,
+     "d1_mature": 92,
+     "d1_end_of_window": 0,
+     "d1_data_ended": 0,
+     "d1_no_signal_day": 0,
+     "reasons": {
+      "chandelier": 45,
+      "take_profit": 4,
+      "trail": 0,
+      "stop": 2,
+      "climax": 0,
+      "max_hold": 1,
+      "end": 0,
+      "other": 0
+     }
+    }
+   },
+   "pools": {
+    "W": {
+     "b4_buy": 303,
+     "no_data": 0,
+     "mature": 303,
+     "end_of_window": 0,
+     "data_ended": 0,
+     "no_signal_day": 0
+    },
+    "Jx": {
+     "b4_buy": 606,
+     "no_data": 0,
+     "mature": 589,
+     "end_of_window": 14,
+     "data_ended": 3,
+     "no_signal_day": 0
+    },
+    "Zx": {
+     "b4_buy": 334,
+     "no_data": 0,
+     "mature": 334,
+     "end_of_window": 0,
+     "data_ended": 0,
+     "no_signal_day": 0
+    }
+   }
+  }
+ },
+ "git": {
+  "rev": "af4fbc6",
+  "dirty": false,
+  "paths": [
+   "scripts",
+   "qbreak"
+  ],
+  "dirty_files": []
+ },
+ "attempts": [
+  {
+   "time": "2026-10-08T16:37:43+00:00",
+   "git": "af4fbc6",
+   "stage": "开始",
+   "error": null
+  }
+ ],
+ "nkt": {
+  "tracked": true,
+  "committed": true,
+  "pushed": true,
+  "ran": true,
+  "ran_kind": "完成",
+  "ran_files": [
+   "nkt_study.json",
+   "nkt_study.md"
+  ],
+  "ok": true
+ },
+ "frozen": [
+  "data.behind",
+  "data.partial_cached",
+  "data._yf_download",
+  "data.fill_index_from_intraday",
+  "data._read_cache（不看 TTL）",
+  "factors._get"
+ ],
+ "memo": [
+  "JPY=X",
+  "QQQ",
+  "^BSESN",
+  "^GSPC",
+  "^N225",
+  "^NDX",
+  "^NSEI",
+  "^SOX",
+  "^SP500TR"
+ ],
+ "prereq": {
+  "precheck": {
+   "home": {
+    "ok": true,
+    "qbreak_home_set": false
+   },
+   "self": {
+    "ok": true,
+    "bad": [],
+    "files": {
+     "scripts/wide_exit_study.py": {
+      "tracked": true,
+      "clean": true,
+      "pushed": true,
+      "upstream": true,
+      "committed": true
+     },
+     "tests/test_wide_exit_study.py": {
+      "tracked": true,
+      "clean": true,
+      "pushed": true,
+      "upstream": true,
+      "committed": true
+     }
+    }
+   },
+   "self_required": true,
+   "judge_thresholds": {
+    "ok": true,
+    "bad": []
+   },
+   "fingerprint": "1241753c8f2529c6",
+   "rt": 0.14959999999999998,
+   "id_check": {
+    "ok": true,
+    "hits": []
+   },
+   "engine": {
+    "ok": true,
+    "bad": [],
+    "has_chand_k_day": true
+   },
+   "nkt": {
+    "tracked": true,
+    "committed": true,
+    "pushed": true,
+    "ran": true,
+    "ran_kind": "完成",
+    "ran_files": [
+     "nkt_study.json",
+     "nkt_study.md"
+    ],
+    "ok": true
+   },
+   "nkt_required": true,
+   "cache": {
+    "ok": true,
+    "missing": []
+   },
+   "ok": true,
+   "why": []
+  },
+  "params": {
+   "x6": true,
+   "wide_diff": [
+    "exit_chandelier_k",
+    "max_hold_days"
+   ],
+   "k": 4.0,
+   "mh": 90
+  },
+  "b4": {
+   "fingerprint": "1241753c8f2529c6",
+   "fp_ok": true,
+   "ok": true,
+   "Z": {
+    "same_ref": true,
+    "ref_calmar": 1.209,
+    "wired": true,
+    "wired_all_keys": true
+   },
+   "E": {
+    "same_ref": true,
+    "ref_calmar": 0.627,
+    "wired": true,
+    "wired_all_keys": true
+   },
+   "J": {
+    "same_ref": true,
+    "ref_calmar": 0.677,
+    "wired": true,
+    "wired_all_keys": true
+   },
+   "fp_mine_ok": true
+  },
+  "wiring": {
+   "Z": {
+    "a_same": true,
+    "b_same": true,
+    "c_found": 28,
+    "c_n": 28,
+    "d_keys": 97,
+    "with_fill": 97,
+    "ok": true
+   },
+   "E": {
+    "a_same": true,
+    "b_same": true,
+    "c_found": 34,
+    "c_n": 34,
+    "d_keys": 155,
+    "with_fill": 155,
+    "ok": true
+   },
+   "J": {
+    "a_same": true,
+    "b_same": true,
+    "c_found": 52,
+    "c_n": 52,
+    "d_keys": 173,
+    "with_fill": 173,
+    "ok": true
+   }
+  },
+  "base_match": {
+   "W": {
+    "n": 303,
+    "match": 303,
+    "frac": 1.0
+   },
+   "Jx": {
+    "n": 606,
+    "match": 606,
+    "frac": 1.0
+   },
+   "Zx": {
+    "n": 334,
+    "match": 334,
+    "frac": 1.0
+   }
+  }
+ },
+ "stage": "done",
+ "stopped": null,
+ "errors": [],
+ "data_fp": {
+  "now": "8c9f176b0c7a4a30",
+  "registered": "8c9f176b0c7a4a30",
+  "same": true
+ },
+ "live_fp": {
+  "n": 51,
+  "registered_n": 51,
+  "diff": [
+   "b1.extra_core:1545.T@J",
+   "b1.extra_core:1545.T@Z",
+   "bb:QQQ@E",
+   "bb:QQQ@J",
+   "bb:QQQ@Z",
+   "kw.extra_core:1545.T@J",
+   "kw.extra_core:1545.T@Z"
+  ],
+  "now": {
+   "bb:JPY=X@Z": "509fa136",
+   "bb:QQQ@Z": "22fc475c",
+   "bb:^BSESN@Z": "e099bac2",
+   "bb:^GSPC@Z": "39de1247",
+   "bb:^N225@Z": "a3610558",
+   "bb:^NDX@Z": "55088e29",
+   "bb:^NSEI@Z": "99bea88c",
+   "bb:^SOX@Z": "0ba88351",
+   "bb:^SP500TR@Z": "7a9b374c",
+   "kw.extra_core:1545.T@Z": "bf96516c",
+   "b1.extra_core:1482.T@Z": "e12547df",
+   "b1.extra_core:1545.T@Z": "7ae52c1c",
+   "b1.extra_bear:US_BD@Z": "37a093f6",
+   "bear:IN@Z": "cd0ecf30",
+   "bear:JP@Z": "fed1b055",
+   "bear:US@Z": "aaf554c0",
+   "MA@Z": "daff9f75",
+   "bb:JPY=X@E": "e4db5d74",
+   "bb:QQQ@E": "aa8d8dea",
+   "bb:^BSESN@E": "34672a7f",
+   "bb:^GSPC@E": "1efa95c2",
+   "bb:^N225@E": "58546c9e",
+   "bb:^NDX@E": "3bdd7a98",
+   "bb:^NSEI@E": "f46a45b3",
+   "bb:^SOX@E": "3fde3917",
+   "bb:^SP500TR@E": "2653eda1",
+   "kw.extra_core:1545.T@E": "c72d4de5",
+   "b1.extra_core:1482.T@E": "be114521",
+   "b1.extra_core:1545.T@E": "44d3260f",
+   "b1.extra_bear:US_BD@E": "1173bdad",
+   "bear:IN@E": "0bf14cdf",
+   "bear:JP@E": "e5010624",
+   "bear:US@E": "c37ff7f5",
+   "MA@E": "c546ebad",
+   "bb:JPY=X@J": "ef5e82e2",
+   "bb:QQQ@J": "339a6c66",
+   "bb:^BSESN@J": "b92a5498",
+   "bb:^GSPC@J": "daef301a",
+   "bb:^N225@J": "f55443d1",
+   "bb:^NDX@J": "9a1a4d17",
+   "bb:^NSEI@J": "8fad6ebe",
+   "bb:^SOX@J": "a3334ab1",
+   "bb:^SP500TR@J": "a4cd4e2d",
+   "kw.extra_core:1545.T@J": "fd4fe1a1",
+   "b1.extra_core:1482.T@J": "48641dcb",
+   "b1.extra_core:1545.T@J": "5a6f0afe",
+   "b1.extra_bear:US_BD@J": "816261e9",
+   "bear:IN@J": "e9e7c336",
+   "bear:JP@J": "3766ee77",
+   "bear:US@J": "1155e774",
+   "MA@J": "8bd1b94c"
+  }
+ },
+ "b4_snap": {
+  "same": true,
+  "eras": {
+   "Z": true,
+   "E": true,
+   "J": true
+  }
+ },
+ "counts": {
+  "n225": {
+   "Z": {
+    "signals": 97,
+    "tbf_blocked": 14,
+    "c_skipped": 4,
+    "c_skipped_and_tbf": 1,
+    "b4_buy": 80,
+    "with_fill": 97,
+    "ptd_keys": 97,
+    "b4_trades_all": 28,
+    "b4_trades_key_found": 28,
+    "b4_trades_window": 28,
+    "b4_trades_end": 0,
+    "reasons": {
+     "chandelier": 20,
+     "take_profit": 2,
+     "trail": 0,
+     "stop": 1,
+     "climax": 2,
+     "max_hold": 3,
+     "end": 0,
+     "other": 0
+    },
+    "last95_trades": 0,
+    "last95_b4_buy_signals": 1,
+    "d1_mature": 80,
+    "d1_end_of_window": 0,
+    "d1_data_ended": 0,
+    "d1_no_signal_day": 0
+   },
+   "E": {
+    "signals": 155,
+    "tbf_blocked": 44,
+    "c_skipped": 38,
+    "c_skipped_and_tbf": 4,
+    "b4_buy": 77,
+    "with_fill": 155,
+    "ptd_keys": 155,
+    "b4_trades_all": 34,
+    "b4_trades_key_found": 34,
+    "b4_trades_window": 34,
+    "b4_trades_end": 0,
+    "reasons": {
+     "chandelier": 27,
+     "take_profit": 3,
+     "trail": 0,
+     "stop": 1,
+     "climax": 1,
+     "max_hold": 2,
+     "end": 0,
+     "other": 0
+    },
+    "last95_trades": 0,
+    "last95_b4_buy_signals": 2,
+    "d1_mature": 77,
+    "d1_end_of_window": 0,
+    "d1_data_ended": 0,
+    "d1_no_signal_day": 0
+   },
+   "J": {
+    "signals": 173,
+    "tbf_blocked": 49,
+    "c_skipped": 45,
+    "c_skipped_and_tbf": 13,
+    "b4_buy": 92,
+    "with_fill": 173,
+    "ptd_keys": 173,
+    "b4_trades_all": 52,
+    "b4_trades_key_found": 52,
+    "b4_trades_window": 52,
+    "b4_trades_end": 0,
+    "reasons": {
+     "chandelier": 45,
+     "take_profit": 4,
+     "trail": 0,
+     "stop": 2,
+     "climax": 0,
+     "max_hold": 1,
+     "end": 0,
+     "other": 0
+    },
+    "last95_trades": 0,
+    "last95_b4_buy_signals": 0,
+    "d1_mature": 92,
+    "d1_end_of_window": 0,
+    "d1_data_ended": 0,
+    "d1_no_signal_day": 0
+   }
+  },
+  "pools": {
+   "W": {
+    "b4_buy": 303,
+    "no_data": 0,
+    "mature": 303,
+    "end_of_window": 0,
+    "data_ended": 0,
+    "no_signal_day": 0
+   },
+   "Jx": {
+    "b4_buy": 606,
+    "no_data": 0,
+    "mature": 589,
+    "end_of_window": 14,
+    "data_ended": 3,
+    "no_signal_day": 0
+   },
+   "Zx": {
+    "b4_buy": 334,
+    "no_data": 0,
+    "mature": 334,
+    "end_of_window": 0,
+    "data_ended": 0,
+    "no_signal_day": 0
+   }
+  }
+ },
+ "base": {
+  "Z": {
+   "cagr": 16.75,
+   "dd": -13.86,
+   "calmar": 1.209,
+   "h1": 1.437,
+   "h2": 1.715,
+   "n": 28,
+   "mean": 7.386,
+   "win": 75.0
+  },
+  "E": {
+   "cagr": 14.57,
+   "dd": -23.21,
+   "calmar": 0.628,
+   "h1": 0.208,
+   "h2": 1.496,
+   "n": 34,
+   "mean": 2.422,
+   "win": 50.0
+  },
+  "J": {
+   "cagr": 20.05,
+   "dd": -29.61,
+   "calmar": 0.677,
+   "h1": 0.712,
+   "h2": 0.764,
+   "n": 52,
+   "mean": 3.306,
+   "win": 51.9
+  }
+ },
+ "cand": {
+  "Z": {
+   "cagr": 16.0,
+   "dd": -13.08,
+   "calmar": 1.223,
+   "h1": 1.417,
+   "h2": 1.704,
+   "n": 24,
+   "mean": 8.619,
+   "win": 66.7
+  },
+  "E": {
+   "cagr": 14.46,
+   "dd": -23.85,
+   "calmar": 0.606,
+   "h1": 0.208,
+   "h2": 1.511,
+   "n": 32,
+   "mean": 0.96,
+   "win": 43.8
+  },
+  "J": {
+   "cagr": 18.53,
+   "dd": -28.42,
+   "calmar": 0.652,
+   "h1": 0.684,
+   "h2": 0.758,
+   "n": 51,
+   "mean": 2.995,
+   "win": 49.0
+  }
+ },
+ "cand_invalid_coverage": null,
+ "coverage": {
+  "Z": {
+   "n": 24,
+   "found": 24
+  },
+  "E": {
+   "n": 32,
+   "found": 32
+  },
+  "J": {
+   "n": 51,
+   "found": 51
+  }
+ },
+ "trig": 98,
+ "pools": {
+  "W": {
+   "n": 303,
+   "changed": 303,
+   "win_b": 45.87,
+   "win_v": 45.21,
+   "mean_b": 2.259,
+   "mean_v": 2.98,
+   "dwin": -0.66,
+   "dmean": 0.7207,
+   "n_all": 303,
+   "n_mature": 303,
+   "n_immature_end": 0,
+   "n_immature_data": 0,
+   "n_no_signal_day": 0,
+   "one_nan": 0,
+   "both_nan": 0,
+   "diff_n": 236
+  },
+  "Jx": {
+   "n": 589,
+   "changed": 589,
+   "win_b": 40.41,
+   "win_v": 41.94,
+   "mean_b": 0.549,
+   "mean_v": 0.745,
+   "dwin": 1.528,
+   "dmean": 0.1956,
+   "n_all": 606,
+   "n_mature": 589,
+   "n_immature_end": 14,
+   "n_immature_data": 3,
+   "n_no_signal_day": 0,
+   "one_nan": 0,
+   "both_nan": 0,
+   "diff_n": 482
+  },
+  "Zx": {
+   "n": 334,
+   "changed": 334,
+   "win_b": 46.71,
+   "win_v": 50.9,
+   "mean_b": 2.44,
+   "mean_v": 3.525,
+   "dwin": 4.192,
+   "dmean": 1.0846,
+   "n_all": 334,
+   "n_mature": 334,
+   "n_immature_end": 0,
+   "n_immature_data": 0,
+   "n_no_signal_day": 0,
+   "one_nan": 0,
+   "both_nan": 0,
+   "diff_n": 245
+  }
+ },
+ "stage1": {
+  "posthoc": true,
+  "routes": {
+   "A": {
+    "A1": false,
+    "A2": false,
+    "A3": false,
+    "dwin": -5.592064272831607,
+    "dmean": -0.3965963272667645,
+    "sum": -0.03300000000000003,
+    "d": {
+     "Z": 0.014000000000000012,
+     "E": -0.02200000000000002,
+     "J": -0.025000000000000022
+    },
+    "dd": {
+     "Z": 0.7799999999999994,
+     "E": -0.6400000000000006,
+     "J": 1.1899999999999977
+    },
+    "h1": -0.04799999999999993,
+    "h2": -0.002000000000000224,
+    "V4": true,
+    "V5": true,
+    "V6": true,
+    "lenses": null,
+    "ok": false,
+    "passed": 3
+   },
+   "B": {
+    "B1": false,
+    "B2": false,
+    "B3": false,
+    "dwin": -5.592064272831607,
+    "dmean": -0.3965963272667645,
+    "era_dwin": {
+     "Z": -8.299999999999997,
+     "E": -6.200000000000003,
+     "J": -2.8999999999999986
+    },
+    "sum": -0.03300000000000003,
+    "d": {
+     "Z": 0.014000000000000012,
+     "E": -0.02200000000000002,
+     "J": -0.025000000000000022
+    },
+    "dd": {
+     "Z": 0.7799999999999994,
+     "E": -0.6400000000000006,
+     "J": 1.1899999999999977
+    },
+    "h1": -0.04799999999999993,
+    "h2": -0.002000000000000224,
+    "V4": false,
+    "V5": true,
+    "V6": true,
+    "lenses": null,
+    "ok": false,
+    "passed": 2
+   }
+  },
+  "ok_routes": [],
+  "ok": false,
+  "passed": 3,
+  "dwin": -5.592064272831607,
+  "dmean": -0.3965963272667645,
+  "sum": -0.03300000000000003,
+  "d": {
+   "Z": 0.014000000000000012,
+   "E": -0.02200000000000002,
+   "J": -0.025000000000000022
+  }
+ },
+ "describe": {
+  "D1": {
+   "Z": {
+    "n": 77,
+    "changed": 77,
+    "win_b": 58.44,
+    "win_v": 63.64,
+    "mean_b": 5.315,
+    "mean_v": 7.0,
+    "dwin": 5.195,
+    "dmean": 1.6852,
+    "n_all": 80,
+    "n_mature": 80,
+    "n_immature_end": 0,
+    "n_immature_data": 0,
+    "n_no_signal_day": 0,
+    "one_nan": 0,
+    "both_nan": 3,
+    "diff_n": 60
+   },
+   "E": {
+    "n": 77,
+    "changed": 77,
+    "win_b": 49.35,
+    "win_v": 48.05,
+    "mean_b": 3.762,
+    "mean_v": 2.324,
+    "dwin": -1.299,
+    "dmean": -1.4382,
+    "n_all": 77,
+    "n_mature": 77,
+    "n_immature_end": 0,
+    "n_immature_data": 0,
+    "n_no_signal_day": 0,
+    "one_nan": 0,
+    "both_nan": 0,
+    "diff_n": 59
+   },
+   "J": {
+    "n": 91,
+    "changed": 91,
+    "win_b": 48.35,
+    "win_v": 47.25,
+    "mean_b": 2.412,
+    "mean_v": 2.842,
+    "dwin": -1.099,
+    "dmean": 0.4294,
+    "n_all": 92,
+    "n_mature": 92,
+    "n_immature_end": 0,
+    "n_immature_data": 0,
+    "n_no_signal_day": 0,
+    "one_nan": 0,
+    "both_nan": 1,
+    "diff_n": 75
+   },
+   "all": {
+    "n": 245,
+    "changed": 245,
+    "win_b": 51.84,
+    "win_v": 52.65,
+    "mean_b": 3.749,
+    "mean_v": 3.986,
+    "dwin": 0.816,
+    "dmean": 0.2371,
+    "n_all": 249,
+    "n_mature": 249,
+    "n_immature_end": 0,
+    "n_immature_data": 0,
+    "n_no_signal_day": 0,
+    "one_nan": 0,
+    "both_nan": 4,
+    "diff_n": 194
+   }
+  },
+  "D2": {
+   "WXA-k": {
+    "spec": {
+     "k": 4.0,
+     "mh": 60
+    },
+    "acct": {
+     "Z": {
+      "cagr": 16.28,
+      "dd": -12.92,
+      "calmar": 1.26,
+      "h1": 1.417,
+      "h2": 1.772,
+      "n": 24,
+      "mean": 7.495,
+      "win": 66.7,
+      "d_calmar": 0.050999999999999934
+     },
+     "E": {
+      "cagr": 14.59,
+      "dd": -22.44,
+      "calmar": 0.65,
+      "h1": 0.239,
+      "h2": 1.5,
+      "n": 32,
+      "mean": 1.797,
+      "win": 46.9,
+      "d_calmar": 0.02200000000000002
+     },
+     "J": {
+      "cagr": 18.95,
+      "dd": -28.44,
+      "calmar": 0.666,
+      "h1": 0.708,
+      "h2": 0.762,
+      "n": 51,
+      "mean": 3.686,
+      "win": 51.0,
+      "d_calmar": -0.01100000000000001
+     }
+    },
+    "coverage": {
+     "Z": {
+      "n": 24,
+      "found": 24
+     },
+     "E": {
+      "n": 32,
+      "found": 32
+     },
+     "J": {
+      "n": 51,
+      "found": 51
+     }
+    },
+    "coverage_full": true,
+    "pools": {
+     "W": {
+      "n": 303,
+      "changed": 303,
+      "win_b": 45.87,
+      "win_v": 46.86,
+      "mean_b": 2.259,
+      "mean_v": 3.045,
+      "dwin": 0.99,
+      "dmean": 0.7861,
+      "n_all": 303,
+      "n_mature": 303,
+      "n_immature_end": 0,
+      "n_immature_data": 0,
+      "n_no_signal_day": 0,
+      "one_nan": 0,
+      "both_nan": 0,
+      "diff_n": 224
+     },
+     "Jx": {
+      "n": 589,
+      "changed": 589,
+      "win_b": 40.41,
+      "win_v": 42.28,
+      "mean_b": 0.549,
+      "mean_v": 0.691,
+      "dwin": 1.868,
+      "dmean": 0.1417,
+      "n_all": 606,
+      "n_mature": 589,
+      "n_immature_end": 14,
+      "n_immature_data": 3,
+      "n_no_signal_day": 0,
+      "one_nan": 0,
+      "both_nan": 0,
+      "diff_n": 459
+     },
+     "Zx": {
+      "n": 334,
+      "changed": 334,
+      "win_b": 46.71,
+      "win_v": 50.9,
+      "mean_b": 2.44,
+      "mean_v": 3.35,
+      "dwin": 4.192,
+      "dmean": 0.9094,
+      "n_all": 334,
+      "n_mature": 334,
+      "n_immature_end": 0,
+      "n_immature_data": 0,
+      "n_no_signal_day": 0,
+      "one_nan": 0,
+      "both_nan": 0,
+      "diff_n": 229
+     }
+    }
+   },
+   "WXA-h": {
+    "spec": {
+     "k": 3.0,
+     "mh": 90
+    },
+    "acct": {
+     "Z": {
+      "cagr": 16.65,
+      "dd": -13.85,
+      "calmar": 1.202,
+      "h1": 1.437,
+      "h2": 1.7,
+      "n": 28,
+      "mean": 7.725,
+      "win": 75.0,
+      "d_calmar": -0.007000000000000117
+     },
+     "E": {
+      "cagr": 14.55,
+      "dd": -23.02,
+      "calmar": 0.632,
+      "h1": 0.212,
+      "h2": 1.489,
+      "n": 34,
+      "mean": 2.198,
+      "win": 50.0,
+      "d_calmar": 0.0040000000000000036
+     },
+     "J": {
+      "cagr": 20.1,
+      "dd": -29.61,
+      "calmar": 0.679,
+      "h1": 0.712,
+      "h2": 0.767,
+      "n": 52,
+      "mean": 3.377,
+      "win": 51.9,
+      "d_calmar": 0.0020000000000000018
+     }
+    },
+    "coverage": {
+     "Z": {
+      "n": 28,
+      "found": 28
+     },
+     "E": {
+      "n": 34,
+      "found": 34
+     },
+     "J": {
+      "n": 52,
+      "found": 52
+     }
+    },
+    "coverage_full": true,
+    "pools": {
+     "W": {
+      "n": 303,
+      "changed": 303,
+      "win_b": 45.87,
+      "win_v": 45.54,
+      "mean_b": 2.259,
+      "mean_v": 2.258,
+      "dwin": -0.33,
+      "dmean": -0.0008,
+      "n_all": 303,
+      "n_mature": 303,
+      "n_immature_end": 0,
+      "n_immature_data": 0,
+      "n_no_signal_day": 0,
+      "one_nan": 0,
+      "both_nan": 0,
+      "diff_n": 12
+     },
+     "Jx": {
+      "n": 589,
+      "changed": 589,
+      "win_b": 40.41,
+      "win_v": 40.24,
+      "mean_b": 0.549,
+      "mean_v": 0.484,
+      "dwin": -0.17,
+      "dmean": -0.0651,
+      "n_all": 606,
+      "n_mature": 589,
+      "n_immature_end": 14,
+      "n_immature_data": 3,
+      "n_no_signal_day": 0,
+      "one_nan": 0,
+      "both_nan": 0,
+      "diff_n": 21
+     },
+     "Zx": {
+      "n": 334,
+      "changed": 334,
+      "win_b": 46.71,
+      "win_v": 46.71,
+      "mean_b": 2.44,
+      "mean_v": 2.473,
+      "dwin": 0.0,
+      "dmean": 0.0331,
+      "n_all": 334,
+      "n_mature": 334,
+      "n_immature_end": 0,
+      "n_immature_data": 0,
+      "n_no_signal_day": 0,
+      "one_nan": 0,
+      "both_nan": 0,
+      "diff_n": 15
+     }
+    }
+   }
+  },
+  "D3": {
+   "Z": {
+    "b": {
+     "reasons": {
+      "chandelier": 20,
+      "take_profit": 2,
+      "trail": 0,
+      "stop": 1,
+      "climax": 2,
+      "max_hold": 3,
+      "end": 0,
+      "other": 0
+     },
+     "hold": {
+      "n": 28,
+      "median": 31.0,
+      "p90": 55.800000000000004,
+      "mean": 31.071428571428573,
+      "sum": 870.0
+     }
+    },
+    "c": {
+     "reasons": {
+      "chandelier": 14,
+      "take_profit": 4,
+      "trail": 0,
+      "stop": 1,
+      "climax": 2,
+      "max_hold": 3,
+      "end": 0,
+      "other": 0
+     },
+     "hold": {
+      "n": 24,
+      "median": 40.0,
+      "p90": 89.1,
+      "mean": 46.958333333333336,
+      "sum": 1127.0
+     }
+    }
+   },
+   "E": {
+    "b": {
+     "reasons": {
+      "chandelier": 27,
+      "take_profit": 3,
+      "trail": 0,
+      "stop": 1,
+      "climax": 1,
+      "max_hold": 2,
+      "end": 0,
+      "other": 0
+     },
+     "hold": {
+      "n": 34,
+      "median": 25.0,
+      "p90": 50.8,
+      "mean": 26.852941176470587,
+      "sum": 913.0
+     }
+    },
+    "c": {
+     "reasons": {
+      "chandelier": 23,
+      "take_profit": 3,
+      "trail": 0,
+      "stop": 4,
+      "climax": 2,
+      "max_hold": 0,
+      "end": 0,
+      "other": 0
+     },
+     "hold": {
+      "n": 32,
+      "median": 32.5,
+      "p90": 59.7,
+      "mean": 35.25,
+      "sum": 1128.0
+     }
+    }
+   },
+   "J": {
+    "b": {
+     "reasons": {
+      "chandelier": 45,
+      "take_profit": 4,
+      "trail": 0,
+      "stop": 2,
+      "climax": 0,
+      "max_hold": 1,
+      "end": 0,
+      "other": 0
+     },
+     "hold": {
+      "n": 52,
+      "median": 30.0,
+      "p90": 48.9,
+      "mean": 26.673076923076923,
+      "sum": 1387.0
+     }
+    },
+    "c": {
+     "reasons": {
+      "chandelier": 38,
+      "take_profit": 6,
+      "trail": 1,
+      "stop": 5,
+      "climax": 1,
+      "max_hold": 0,
+      "end": 0,
+      "other": 0
+     },
+     "hold": {
+      "n": 51,
+      "median": 35.0,
+      "p90": 62.0,
+      "mean": 36.72549019607843,
+      "sum": 1873.0
+     }
+    }
+   },
+   "div_bias_J": {
+    "dhold": 10.052413273001509,
+    "lo": 0.08206051651429803,
+    "hi": 0.10257564564287254
+   }
+  },
+  "D4": {
+   "Z": {
+    "b": {
+     "n_end": 0,
+     "with_end": {
+      "n": 28,
+      "wins": 21,
+      "win": 75.0,
+      "mean": 7.385853683408359
+     },
+     "without_end": {
+      "n": 28,
+      "wins": 21,
+      "win": 75.0,
+      "mean": 7.385853683408359
+     }
+    },
+    "c": {
+     "n_end": 0,
+     "with_end": {
+      "n": 24,
+      "wins": 16,
+      "win": 66.66666666666666,
+      "mean": 8.618990652138574
+     },
+     "without_end": {
+      "n": 24,
+      "wins": 16,
+      "win": 66.66666666666666,
+      "mean": 8.618990652138574
+     }
+    }
+   },
+   "E": {
+    "b": {
+     "n_end": 0,
+     "with_end": {
+      "n": 34,
+      "wins": 17,
+      "win": 50.0,
+      "mean": 2.421740986219436
+     },
+     "without_end": {
+      "n": 34,
+      "wins": 17,
+      "win": 50.0,
+      "mean": 2.421740986219436
+     }
+    },
+    "c": {
+     "n_end": 0,
+     "with_end": {
+      "n": 32,
+      "wins": 14,
+      "win": 43.75,
+      "mean": 0.9602062532353176
+     },
+     "without_end": {
+      "n": 32,
+      "wins": 14,
+      "win": 43.75,
+      "mean": 0.9602062532353176
+     }
+    }
+   },
+   "J": {
+    "b": {
+     "n_end": 0,
+     "with_end": {
+      "n": 52,
+      "wins": 27,
+      "win": 51.92307692307693,
+      "mean": 3.3060997800227208
+     },
+     "without_end": {
+      "n": 52,
+      "wins": 27,
+      "win": 51.92307692307693,
+      "mean": 3.3060997800227208
+     }
+    },
+    "c": {
+     "n_end": 0,
+     "with_end": {
+      "n": 51,
+      "wins": 25,
+      "win": 49.01960784313725,
+      "mean": 2.994867115607617
+     },
+     "without_end": {
+      "n": 51,
+      "wins": 25,
+      "win": 49.01960784313725,
+      "mean": 2.994867115607617
+     }
+    }
+   }
+  },
+  "D5": {
+   "Z": {
+    "b": {
+     "signals": 80,
+     "no_fill_day": 0,
+     "traded": 28,
+     "full": 20,
+     "other": 32
+    },
+    "c": {
+     "signals": 80,
+     "no_fill_day": 0,
+     "traded": 24,
+     "full": 22,
+     "other": 34
+    },
+    "d_full": 2,
+    "d_traded": -4,
+    "skipped_b": {
+     "gap": 1,
+     "cash": 0,
+     "lot": 0,
+     "full": 1,
+     "no_bar": 0,
+     "rebuy": 0,
+     "macro": 41,
+     "limit_up": 0,
+     "limit_down_hold": 0,
+     "usd": 0,
+     "fx_window": 0,
+     "earnings": 0,
+     "gate": 0
+    },
+    "skipped_c": {
+     "gap": 1,
+     "cash": 0,
+     "lot": 1,
+     "full": 2,
+     "no_bar": 0,
+     "rebuy": 0,
+     "macro": 41,
+     "limit_up": 0,
+     "limit_down_hold": 0,
+     "usd": 0,
+     "fx_window": 0,
+     "earnings": 0,
+     "gate": 0
+    }
+   },
+   "E": {
+    "b": {
+     "signals": 77,
+     "no_fill_day": 0,
+     "traded": 34,
+     "full": 2,
+     "other": 41
+    },
+    "c": {
+     "signals": 77,
+     "no_fill_day": 0,
+     "traded": 32,
+     "full": 3,
+     "other": 42
+    },
+    "d_full": 1,
+    "d_traded": -2,
+    "skipped_b": {
+     "gap": 0,
+     "cash": 0,
+     "lot": 5,
+     "full": 1,
+     "no_bar": 0,
+     "rebuy": 0,
+     "macro": 74,
+     "limit_up": 0,
+     "limit_down_hold": 0,
+     "usd": 0,
+     "fx_window": 0,
+     "earnings": 0,
+     "gate": 0
+    },
+    "skipped_c": {
+     "gap": 0,
+     "cash": 0,
+     "lot": 5,
+     "full": 1,
+     "no_bar": 0,
+     "rebuy": 0,
+     "macro": 71,
+     "limit_up": 0,
+     "limit_down_hold": 0,
+     "usd": 0,
+     "fx_window": 0,
+     "earnings": 0,
+     "gate": 0
+    }
+   },
+   "J": {
+    "b": {
+     "signals": 92,
+     "no_fill_day": 0,
+     "traded": 52,
+     "full": 1,
+     "other": 39
+    },
+    "c": {
+     "signals": 92,
+     "no_fill_day": 0,
+     "traded": 51,
+     "full": 1,
+     "other": 40
+    },
+    "d_full": 0,
+    "d_traded": -1,
+    "skipped_b": {
+     "gap": 0,
+     "cash": 0,
+     "lot": 28,
+     "full": 0,
+     "no_bar": 0,
+     "rebuy": 0,
+     "macro": 46,
+     "limit_up": 0,
+     "limit_down_hold": 0,
+     "usd": 0,
+     "fx_window": 0,
+     "earnings": 0,
+     "gate": 0
+    },
+    "skipped_c": {
+     "gap": 0,
+     "cash": 0,
+     "lot": 29,
+     "full": 0,
+     "no_bar": 0,
+     "rebuy": 0,
+     "macro": 46,
+     "limit_up": 0,
+     "limit_down_hold": 0,
+     "usd": 0,
+     "fx_window": 0,
+     "earnings": 0,
+     "gate": 0
+    }
+   }
+  },
+  "D6": {
+   "Z": {
+    "both": {
+     "n": 23,
+     "n_closed": 23,
+     "b": {
+      "n": 23,
+      "wins": 18,
+      "win": 78.26086956521739,
+      "mean": 5.630884777045862
+     },
+     "c": {
+      "n": 23,
+      "wins": 15,
+      "win": 65.21739130434783,
+      "mean": 5.821981540330284
+     },
+     "dwin": -13.043478260869563,
+     "dmean": 0.19109676328442138,
+     "exit_changed": 19
+    },
+    "only_b": {
+     "n": 5,
+     "closed": {
+      "n": 5,
+      "wins": 3,
+      "win": 60.0,
+      "mean": 15.458710652675839
+     }
+    },
+    "only_c": {
+     "n": 1,
+     "closed": {
+      "n": 1,
+      "wins": 1,
+      "win": 100.0,
+      "mean": 72.95020022372924
+     }
+    }
+   },
+   "E": {
+    "both": {
+     "n": 31,
+     "n_closed": 31,
+     "b": {
+      "n": 31,
+      "wins": 16,
+      "win": 51.61290322580645,
+      "mean": 2.5835373053824786
+     },
+     "c": {
+      "n": 31,
+      "wins": 14,
+      "win": 45.16129032258064,
+      "mean": 1.0928098086483717
+     },
+     "dwin": -6.451612903225808,
+     "dmean": -1.4907274967341069,
+     "exit_changed": 25
+    },
+    "only_b": {
+     "n": 3,
+     "closed": {
+      "n": 3,
+      "wins": 1,
+      "win": 33.33333333333333,
+      "mean": 0.7498456882013272
+     }
+    },
+    "only_c": {
+     "n": 1,
+     "closed": {
+      "n": 1,
+      "wins": 0,
+      "win": 0.0,
+      "mean": -3.150503964569366
+     }
+    }
+   },
+   "J": {
+    "both": {
+     "n": 51,
+     "n_closed": 51,
+     "b": {
+      "n": 51,
+      "wins": 26,
+      "win": 50.98039215686274,
+      "mean": 3.219022670231298
+     },
+     "c": {
+      "n": 51,
+      "wins": 25,
+      "win": 49.01960784313725,
+      "mean": 2.994867115607617
+     },
+     "dwin": -1.9607843137254903,
+     "dmean": -0.22415555462368086,
+     "exit_changed": 45
+    },
+    "only_b": {
+     "n": 1,
+     "closed": {
+      "n": 1,
+      "wins": 1,
+      "win": 100.0,
+      "mean": 7.7470323793853195
+     }
+    },
+    "only_c": {
+     "n": 0,
+     "closed": {
+      "n": 0,
+      "wins": 0,
+      "win": null,
+      "mean": null
+     }
+    }
+   }
+  },
+  "D7": {
+   "Z": {
+    "2001": 0.0,
+    "2002": 0.0,
+    "2003": -0.5,
+    "2004": -5.87,
+    "2005": 1.42,
+    "2006": 0.97
+   },
+   "E": {
+    "2006": -0.52,
+    "2007": 0.45,
+    "2008": -0.02,
+    "2009": 0.0,
+    "2010": 2.1,
+    "2011": -1.06,
+    "2012": 0.49,
+    "2013": -4.48,
+    "2014": 0.86,
+    "2015": 0.14,
+    "2016": 0.0
+   },
+   "J": {
+    "2017": -4.8,
+    "2018": 0.0,
+    "2019": -1.37,
+    "2020": 1.21,
+    "2021": -4.11,
+    "2022": 0.53,
+    "2023": 0.54,
+    "2024": -1.97,
+    "2025": -5.26,
+    "2026": -0.86
+   }
+  },
+  "D8": {
+   "W": {
+    "loop11": {
+     "n": 303,
+     "changed": 303,
+     "win_b": 45.87,
+     "win_v": 45.21,
+     "mean_b": 2.259,
+     "mean_v": 2.98,
+     "dwin": -0.66,
+     "dmean": 0.7207
+    },
+    "h1": {
+     "n": 135,
+     "changed": 135,
+     "win_b": 34.81,
+     "win_v": 36.3,
+     "mean_b": -0.131,
+     "mean_v": -0.013,
+     "dwin": 1.481,
+     "dmean": 0.1185,
+     "n_all": 135,
+     "n_mature": 135,
+     "n_immature_end": 0,
+     "n_immature_data": 0,
+     "n_no_signal_day": 0,
+     "one_nan": 0,
+     "both_nan": 0,
+     "diff_n": 107
+    },
+    "h2": {
+     "n": 168,
+     "changed": 168,
+     "win_b": 54.76,
+     "win_v": 52.38,
+     "mean_b": 4.18,
+     "mean_v": 5.384,
+     "dwin": -2.381,
+     "dmean": 1.2047,
+     "n_all": 168,
+     "n_mature": 168,
+     "n_immature_end": 0,
+     "n_immature_data": 0,
+     "n_no_signal_day": 0,
+     "one_nan": 0,
+     "both_nan": 0,
+     "diff_n": 129
+    }
+   },
+   "Jx": {
+    "loop11": {
+     "n": 600,
+     "changed": 600,
+     "win_b": 40.5,
+     "win_v": 41.83,
+     "mean_b": 0.504,
+     "mean_v": 0.73,
+     "dwin": 1.333,
+     "dmean": 0.226
+    },
+    "h1": {
+     "n": 254,
+     "changed": 254,
+     "win_b": 38.58,
+     "win_v": 40.16,
+     "mean_b": 0.155,
+     "mean_v": 0.616,
+     "dwin": 1.575,
+     "dmean": 0.4607,
+     "n_all": 256,
+     "n_mature": 254,
+     "n_immature_end": 0,
+     "n_immature_data": 2,
+     "n_no_signal_day": 0,
+     "one_nan": 0,
+     "both_nan": 0,
+     "diff_n": 218
+    },
+    "h2": {
+     "n": 335,
+     "changed": 335,
+     "win_b": 41.79,
+     "win_v": 43.28,
+     "mean_b": 0.848,
+     "mean_v": 0.842,
+     "dwin": 1.493,
+     "dmean": -0.0054,
+     "n_all": 350,
+     "n_mature": 335,
+     "n_immature_end": 14,
+     "n_immature_data": 1,
+     "n_no_signal_day": 0,
+     "one_nan": 0,
+     "both_nan": 0,
+     "diff_n": 264
+    }
+   },
+   "Zx": {
+    "loop11": {
+     "n": 334,
+     "changed": 334,
+     "win_b": 46.71,
+     "win_v": 50.9,
+     "mean_b": 2.44,
+     "mean_v": 3.525,
+     "dwin": 4.192,
+     "dmean": 1.0846
+    },
+    "h1": {
+     "n": 161,
+     "changed": 161,
+     "win_b": 29.81,
+     "win_v": 35.4,
+     "mean_b": -0.719,
+     "mean_v": 0.11,
+     "dwin": 5.59,
+     "dmean": 0.8294,
+     "n_all": 161,
+     "n_mature": 161,
+     "n_immature_end": 0,
+     "n_immature_data": 0,
+     "n_no_signal_day": 0,
+     "one_nan": 0,
+     "both_nan": 0,
+     "diff_n": 126
+    },
+    "h2": {
+     "n": 173,
+     "changed": 173,
+     "win_b": 62.43,
+     "win_v": 65.32,
+     "mean_b": 5.381,
+     "mean_v": 6.703,
+     "dwin": 2.89,
+     "dmean": 1.3221,
+     "n_all": 173,
+     "n_mature": 173,
+     "n_immature_end": 0,
+     "n_immature_data": 0,
+     "n_no_signal_day": 0,
+     "one_nan": 0,
+     "both_nan": 0,
+     "diff_n": 119
+    }
+   }
+  },
+  "D9": {
+   "loop11_dist": {
+    "Z": {
+     "n": 20,
+     "min": -0.354,
+     "q1": -0.20450000000000002,
+     "median": -0.024,
+     "q3": 0.00225,
+     "max": 0.197
+    },
+    "E": {
+     "n": 20,
+     "min": -0.199,
+     "q1": -0.10800000000000001,
+     "median": -0.023,
+     "q3": 0.00125,
+     "max": 0.033
+    },
+    "J": {
+     "n": 20,
+     "min": -0.073,
+     "q1": -0.0285,
+     "median": -0.0015,
+     "q3": 0.02125,
+     "max": 0.054
+    },
+    "sum": {
+     "n": 20,
+     "min": -0.543,
+     "q1": -0.223,
+     "median": -0.1605,
+     "q3": 0.001,
+     "max": 0.116
+    }
+   },
+   "pools_vs_szs": {
+    "W": {
+     "now_dmean": 0.7207,
+     "szs_dmean": 0.68,
+     "now_dwin": -0.66,
+     "szk_dwin": 0.7
+    },
+    "Jx": {
+     "now_dmean": 0.1956,
+     "szs_dmean": 0.24,
+     "now_dwin": 1.528,
+     "szk_dwin": 0.6
+    },
+    "Zx": {
+     "now_dmean": 1.0846,
+     "szs_dmean": 1.07,
+     "now_dwin": 4.192,
+     "szk_dwin": 5.2
+    }
+   },
+   "acct_vs_known": {
+    "now": {
+     "Z": 0.014000000000000012,
+     "E": -0.02200000000000002,
+     "J": -0.025000000000000022
+    },
+    "now_sum": -0.03300000000000003,
+    "SZS": {
+     "Z": -0.346,
+     "E": -0.057,
+     "J": -0.003
+    },
+    "R2": {
+     "Z": -0.363,
+     "E": -0.004,
+     "J": 0.032
+    },
+    "VOK": {
+     "Z": 0.009,
+     "E": -0.024,
+     "J": -0.027
+    },
+    "TCY": {
+     "Z": -0.195,
+     "E": -0.005,
+     "J": 0.046
+    }
+   }
+  },
+  "D10": {
+   "ok": true,
+   "self_check": {
+    "Z": 1.209,
+    "E": 0.628,
+    "J": 0.677
+   },
+   "eras": {
+    "Z": {
+     "lo": -0.43209948312824975,
+     "hi": 0.16920386859245387,
+     "n_ok": 2000,
+     "T": 1413
+    },
+    "E": {
+     "lo": -0.046730506275617506,
+     "hi": 0.037400902827305,
+     "n_ok": 2000,
+     "T": 2445
+    },
+    "J": {
+     "lo": -0.14690214154074294,
+     "hi": 0.04490748856867502,
+     "n_ok": 2000,
+     "T": 2378
+    }
+   },
+   "sum": {
+    "lo": -0.4825318311193474,
+    "hi": 0.13966959860678396,
+    "n_ok": 2000
+   },
+   "contains_zero": true,
+   "n": 2000,
+   "block": 20,
+   "seeds": {
+    "Z": [
+     20261008,
+     0
+    ],
+    "E": [
+     20261008,
+     1
+    ],
+    "J": [
+     20261008,
+     2
+    ]
+   },
+   "q": [
+    5.0,
+    95.0
+   ]
+  },
+  "D11": {
+   "Z": {
+    "cutoff": "2006-05-17",
+    "b": {
+     "n": 28,
+     "wins": 21,
+     "win": 75.0,
+     "mean": 7.385853683408359
+    },
+    "c": {
+     "n": 24,
+     "wins": 16,
+     "win": 66.66666666666666,
+     "mean": 8.618990652138574
+    },
+    "end_b": 0,
+    "end_c": 0,
+    "dwin": -8.333333333333343,
+    "dmean": 1.2331369687302152
+   },
+   "E": {
+    "cutoff": "2016-05-16",
+    "b": {
+     "n": 34,
+     "wins": 17,
+     "win": 50.0,
+     "mean": 2.421740986219436
+    },
+    "c": {
+     "n": 32,
+     "wins": 14,
+     "win": 43.75,
+     "mean": 0.9602062532353176
+    },
+    "end_b": 0,
+    "end_c": 0,
+    "dwin": -6.25,
+    "dmean": -1.4615347329841186
+   },
+   "J": {
+    "cutoff": "2026-05-08",
+    "b": {
+     "n": 52,
+     "wins": 27,
+     "win": 51.92307692307693,
+     "mean": 3.3060997800227208
+    },
+    "c": {
+     "n": 51,
+     "wins": 25,
+     "win": 49.01960784313725,
+     "mean": 2.994867115607617
+    },
+    "end_b": 0,
+    "end_c": 0,
+    "dwin": -2.9034690799396756,
+    "dmean": -0.3112326644151038
+   },
+   "all": {
+    "b": {
+     "n": 114,
+     "wins": 65,
+     "win": 57.01754385964912,
+     "mean": 4.04438846691295
+    },
+    "c": {
+     "n": 107,
+     "wins": 55,
+     "win": 51.4018691588785,
+     "mean": 3.647856062157424
+    },
+    "dwin": -5.615674700770626,
+    "dmean": -0.39653240475552565
+   }
+  },
+  "D12": {
+   "Z": {
+    "b": {
+     "cagr": 16.748215479862694,
+     "dd": -13.8575328805301,
+     "calmar": 1.2086000895147806,
+     "n": 28,
+     "wins": 21,
+     "win": 75.0,
+     "mean": 7.385853683408359
+    },
+    "c": {
+     "cagr": 16.002165035301207,
+     "dd": -13.08048236024143,
+     "calmar": 1.2233619980208323,
+     "n": 24,
+     "wins": 16,
+     "win": 66.66666666666666,
+     "mean": 8.618990652138574
+    },
+    "d_calmar": 0.014761908506051746
+   },
+   "E": {
+    "b": {
+     "cagr": 14.569152948612164,
+     "dd": -23.20739758569338,
+     "calmar": 0.6277805555239672,
+     "n": 34,
+     "wins": 17,
+     "win": 50.0,
+     "mean": 2.421740986219436
+    },
+    "c": {
+     "cagr": 14.459091625842557,
+     "dd": -23.84766828210625,
+     "calmar": 0.6063104977307877,
+     "n": 32,
+     "wins": 14,
+     "win": 43.75,
+     "mean": 0.9602062532353176
+    },
+    "d_calmar": -0.021470057793179453
+   },
+   "J": {
+    "b": {
+     "cagr": 20.05439813971801,
+     "dd": -29.61031619021982,
+     "calmar": 0.6772774059853472,
+     "n": 52,
+     "wins": 27,
+     "win": 51.92307692307693,
+     "mean": 3.3060997800227208
+    },
+    "c": {
+     "cagr": 18.52613107719914,
+     "dd": -28.416153785754094,
+     "calmar": 0.6519577285820739,
+     "n": 51,
+     "wins": 25,
+     "win": 49.01960784313725,
+     "mean": 2.994867115607617
+    },
+    "d_calmar": -0.025319677403273344
+   },
+   "sum_d_calmar": -0.03202782669040105,
+   "pooled": {
+    "b": {
+     "n": 114,
+     "wins": 65,
+     "win": 57.01754385964912,
+     "mean": 4.04438846691295
+    },
+    "c": {
+     "n": 107,
+     "wins": 55,
+     "win": 51.4018691588785,
+     "mean": 3.647856062157424
+    },
+    "dwin": -5.615674700770626,
+    "dmean": -0.39653240475552565
+   },
+   "pools": {
+    "W": {
+     "n": 303,
+     "dwin": -0.6600660066006583,
+     "dmean": 0.7207458745874584
+    },
+    "Jx": {
+     "n": 589,
+     "dwin": 1.5280135823429575,
+     "dmean": 0.19558404074702906
+    },
+    "Zx": {
+     "n": 334,
+     "dwin": 4.191616766467071,
+     "dmean": 1.084628742514969
+    }
+   }
+  }
+ },
+ "verdict": "第一关不过",
+ "say": "一直放宽（吊灯 4 × ATR、最长 90 天）在现行 B4 的账户里不比现行好（或好得不够）",
+ "cap": "〔62〕② 关闭；不做第二关；模拟盘 / 执行器 / 参数都不变",
+ "options": [
+  "① 到此结束（〔62〕② 关闭；不做第二关）"
+ ],
+ "elapsed_s": 379,
+ "counts_diff": []
+}

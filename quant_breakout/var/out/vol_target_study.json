@@ -1,0 +1,94 @@
+{
+ "US": {
+  "target_vol": 0.1135,
+  "results": {
+   "B 现行牛熊择时": {
+    "cagr": 10.22,
+    "mdd": -26.6,
+    "calmar": 0.384,
+    "sharpe": 0.8,
+    "avg_exposure": 0.78,
+    "turnover_per_year": 0.77,
+    "h1_calmar": 0.418,
+    "h2_calmar": 0.468
+   },
+   "V1 波动率管理": {
+    "cagr": 9.99,
+    "mdd": -27.4,
+    "calmar": 0.364,
+    "sharpe": 0.9,
+    "avg_exposure": 0.79,
+    "turnover_per_year": 2.11,
+    "h1_calmar": 0.267,
+    "h2_calmar": 0.894
+   },
+   "V2 择时 × 波动率": {
+    "cagr": 8.77,
+    "mdd": -13.8,
+    "calmar": 0.636,
+    "sharpe": 0.89,
+    "avg_exposure": 0.68,
+    "turnover_per_year": 2.17,
+    "h1_calmar": 0.488,
+    "h2_calmar": 0.807
+   },
+   "H 买入持有": {
+    "cagr": 11.94,
+    "mdd": -55.2,
+    "calmar": 0.216,
+    "sharpe": 0.68,
+    "avg_exposure": 1.0,
+    "turnover_per_year": 0.0,
+    "h1_calmar": 0.14,
+    "h2_calmar": 0.475
+   }
+  },
+  "pick": "B 现行牛熊择时"
+ },
+ "JP": {
+  "target_vol": 0.1441,
+  "results": {
+   "B 现行牛熊择时": {
+    "cagr": 6.69,
+    "mdd": -34.3,
+    "calmar": 0.195,
+    "sharpe": 0.48,
+    "avg_exposure": 0.64,
+    "turnover_per_year": 1.06,
+    "h1_calmar": 0.109,
+    "h2_calmar": 0.374
+   },
+   "V1 波动率管理": {
+    "cagr": 5.46,
+    "mdd": -41.9,
+    "calmar": 0.13,
+    "sharpe": 0.43,
+    "avg_exposure": 0.76,
+    "turnover_per_year": 2.55,
+    "h1_calmar": 0.047,
+    "h2_calmar": 0.365
+   },
+   "V2 择时 × 波动率": {
+    "cagr": 4.61,
+    "mdd": -32.7,
+    "calmar": 0.141,
+    "sharpe": 0.44,
+    "avg_exposure": 0.51,
+    "turnover_per_year": 2.4,
+    "h1_calmar": 0.045,
+    "h2_calmar": 0.372
+   },
+   "H 买入持有": {
+    "cagr": 8.57,
+    "mdd": -60.4,
+    "calmar": 0.142,
+    "sharpe": 0.47,
+    "avg_exposure": 1.0,
+    "turnover_per_year": 0.0,
+    "h1_calmar": 0.053,
+    "h2_calmar": 0.446
+   }
+  },
+  "pick": "B 现行牛熊择时"
+ }
+}

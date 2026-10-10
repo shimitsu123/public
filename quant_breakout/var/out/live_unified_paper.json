@@ -1,0 +1,55 @@
+{
+ "broker": "PaperBroker",
+ "decided_on": "2026-10-08",
+ "fill_day": "2026-10-09",
+ "equity_jpy": 1017006,
+ "cash_jpy": 192,
+ "positions": {},
+ "core_units": {
+  "1545.T": 4110
+ },
+ "pending_exit": {},
+ "reconciled": [],
+ "orders": [],
+ "blocked": null,
+ "stats": {
+  "fills": 0,
+  "unfilled_sell": 0,
+  "unfilled_buy": 0,
+  "model_diff": 0,
+  "deferred": 0,
+  "reduced": 0,
+  "limit_lowered": 0,
+  "skipped": 0,
+  "blocked": 0,
+  "cash_sync": 0,
+  "gate": 0
+ },
+ "manual": null,
+ "events": [
+  {
+   "at": "2026-09-29T07:01:33+09:00",
+   "level": "info",
+   "msg": "BUY 1655.T ×1130 限价 895（盘中）→ FILLED"
+  },
+  {
+   "at": "2026-09-30T07:07:22+09:00",
+   "level": "info",
+   "msg": "SELL 1655.T ×1130（寄付）→ SENT 已排队，次日开盘成交"
+  },
+  {
+   "at": "2026-10-01T07:09:03+09:00",
+   "level": "info",
+   "msg": "BUY 1545.T ×4140 限价 244（盘中）→ FILLED 现金不足，4140→4110 股"
+  }
+ ],
+ "same_as_sim": true,
+ "compare": {
+  "exec_date": "2026-10-08",
+  "sim_date": "2026-10-08",
+  "comparable": true,
+  "same": true,
+  "equity_diff_jpy": 0.0,
+  "text": "与云端模拟盘一致（个股、核心 ETF、现金、权益）"
+ }
+}

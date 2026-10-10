@@ -1,0 +1,3079 @@
+{
+ "code": "2ff2daf（与提交的版本相同）",
+ "A": {
+  "profile": [
+   {
+    "lag": "0",
+    "n": 552,
+    "sig1_pct": 60.7,
+    "rep_pct": 63.9,
+    "prior_sig1_pct": 82.8,
+    "prior_rep_pct": 74.4,
+    "mean_abs_t": 3.27
+   },
+   {
+    "lag": "1",
+    "n": 552,
+    "sig1_pct": 11.6,
+    "rep_pct": 10.9,
+    "prior_sig1_pct": 18.2,
+    "prior_rep_pct": 22.2,
+    "mean_abs_t": 0.92
+   },
+   {
+    "lag": "2",
+    "n": 552,
+    "sig1_pct": 7.4,
+    "rep_pct": 9.8,
+    "prior_sig1_pct": 14.1,
+    "prior_rep_pct": 7.1,
+    "mean_abs_t": 0.86
+   },
+   {
+    "lag": "3",
+    "n": 552,
+    "sig1_pct": 5.3,
+    "rep_pct": 0.0,
+    "prior_sig1_pct": 3.0,
+    "prior_rep_pct": 0.0,
+    "mean_abs_t": 0.82
+   },
+   {
+    "lag": "4",
+    "n": 552,
+    "sig1_pct": 9.6,
+    "rep_pct": 11.3,
+    "prior_sig1_pct": 9.1,
+    "prior_rep_pct": 0.0,
+    "mean_abs_t": 0.88
+   },
+   {
+    "lag": "5",
+    "n": 552,
+    "sig1_pct": 9.2,
+    "rep_pct": 5.9,
+    "prior_sig1_pct": 11.1,
+    "prior_rep_pct": 0.0,
+    "mean_abs_t": 0.91
+   },
+   {
+    "lag": "10",
+    "n": 552,
+    "sig1_pct": 6.2,
+    "rep_pct": 0.0,
+    "prior_sig1_pct": 4.0,
+    "prior_rep_pct": 0.0,
+    "mean_abs_t": 0.88
+   },
+   {
+    "lag": "20",
+    "n": 552,
+    "sig1_pct": 6.0,
+    "rep_pct": 6.1,
+    "prior_sig1_pct": 3.0,
+    "prior_rep_pct": 33.3,
+    "mean_abs_t": 0.84
+   },
+   {
+    "lag": "1-5",
+    "n": 552,
+    "sig1_pct": 11.1,
+    "rep_pct": 13.1,
+    "prior_sig1_pct": 13.1,
+    "prior_rep_pct": 15.4,
+    "mean_abs_t": 0.95
+   },
+   {
+    "lag": "6-20",
+    "n": 552,
+    "sig1_pct": 12.5,
+    "rep_pct": 10.1,
+    "prior_sig1_pct": 15.2,
+    "prior_rep_pct": 13.3,
+    "mean_abs_t": 0.92
+   }
+  ],
+  "found_all": 1,
+  "rep_all": 0,
+  "found_prior": 1,
+  "rep_prior": 0,
+  "replicated": [],
+  "replicated_prior": [],
+  "imm_pairs": 148
+ },
+ "B": {
+  "decision": {
+   "per": {
+    "L1": {
+     "pass": false,
+     "fails": [
+      "样本外 AUC 0.519（95% 区间 0.4646〜0.5702），要 ≥ 0.55 且下限 > 0.5",
+      "O2 保留的胜率 48.84% − 全部 47.11% = +1.73 pp < +3.0",
+      "S0C2（跳过 + 优先）20 年 Calmar 0.353 < 现行 0.363",
+      "S0C2（跳过 + 优先）20 年回撤 -35.11% 深于现行 -35.02%",
+      "比对照 F2 的 AUC 差 -0.0277（95% 区间 -0.0816〜+0.0260），要 ≥ +0.02 且下限 > 0"
+     ],
+     "warnings": [
+      "只做分数优先（不跳过）的 20 年 Calmar 0.359 低于现行"
+     ]
+    },
+    "L2": {
+     "pass": false,
+     "fails": [
+      "样本外 AUC 0.5126（95% 区间 0.449〜0.5796），要 ≥ 0.55 且下限 > 0.5",
+      "O1 保留的胜率 40.96% − 全部 39.24% = +1.72 pp < +3.0",
+      "O2 保留的胜率 43.29% − 全部 47.11% = -3.82 pp < +3.0",
+      "O2 保留的每笔期望 +0.416% < 全部 +0.825%",
+      "S0C2（跳过 + 优先）20 年 Calmar 0.340 < 现行 0.363",
+      "比对照 F1 的 AUC 差 -0.0248（95% 区间 -0.0673〜+0.0134），要 ≥ +0.02 且下限 > 0"
+     ],
+     "warnings": [
+      "只做分数优先（不跳过）的 20 年 Calmar 0.357 低于现行",
+      "O2 AUC 0.4141 < 0.5"
+     ]
+    },
+    "L3": {
+     "pass": false,
+     "fails": [
+      "样本外 AUC 0.4689（95% 区间 0.4197〜0.5166），要 ≥ 0.55 且下限 > 0.5",
+      "O1 保留的胜率 39.86% − 全部 39.24% = +0.62 pp < +3.0",
+      "O2 保留的胜率 43.42% − 全部 47.11% = -3.69 pp < +3.0",
+      "O2 保留的每笔期望 +0.519% < 全部 +0.825%",
+      "S0C2（跳过 + 优先）20 年 Calmar 0.322 < 现行 0.363",
+      "S0C2（跳过 + 优先）20 年回撤 -37.05% 深于现行 -35.02%",
+      "比对照 F4 的 AUC 差 -0.0339（95% 区间 -0.0945〜+0.0178），要 ≥ +0.02 且下限 > 0"
+     ],
+     "warnings": [
+      "只做分数优先（不跳过）的 20 年 Calmar 0.356 低于现行",
+      "O1 AUC 0.4938 < 0.5",
+      "O2 AUC 0.445 < 0.5"
+     ]
+    },
+    "L4": {
+     "pass": false,
+     "fails": [
+      "样本外 AUC 0.5011（95% 区间 0.4549〜0.5426），要 ≥ 0.55 且下限 > 0.5",
+      "O1 保留的胜率 40.4% − 全部 39.24% = +1.16 pp < +3.0",
+      "O2 保留的胜率 47.89% − 全部 47.11% = +0.78 pp < +3.0",
+      "S0C2（跳过 + 优先）20 年 Calmar 0.342 < 现行 0.363",
+      "S0C2（跳过 + 优先）20 年回撤 -37.38% 深于现行 -35.02%",
+      "比对照 L4-0 的 AUC 差 -0.0229（95% 区间 -0.0669〜+0.0157），要 ≥ +0.02 且下限 > 0"
+     ],
+     "warnings": []
+    },
+    "L5": {
+     "pass": false,
+     "fails": [
+      "样本外 AUC 0.5389（95% 区间 0.4769〜0.5943），要 ≥ 0.55 且下限 > 0.5",
+      "O2 保留的胜率 45.68% − 全部 47.11% = -1.43 pp < +3.0",
+      "比对照 F2 的 AUC 差 -0.0078（95% 区间 -0.0302〜+0.0133），要 ≥ +0.02 且下限 > 0"
+     ],
+     "warnings": [
+      "只做分数优先（不跳过）的 20 年 Calmar 0.359 低于现行"
+     ]
+    }
+   },
+   "passed": []
+  },
+  "base": {
+   "all": {
+    "n": 479,
+    "win": 43.22,
+    "avg_win": 5.58,
+    "avg_loss": -3.12,
+    "payoff": 1.79,
+    "exp": 0.638,
+    "hold_med": 11.0
+   },
+   "halves": {
+    "O1": {
+     "n": 237,
+     "win": 39.24,
+     "avg_win": 5.44,
+     "avg_loss": -2.78,
+     "payoff": 1.96,
+     "exp": 0.447,
+     "hold_med": 10.0
+    },
+    "O2": {
+     "n": 242,
+     "win": 47.11,
+     "avg_win": 5.69,
+     "avg_loss": -3.51,
+     "payoff": 1.62,
+     "exp": 0.825,
+     "hold_med": 12.0
+    }
+   },
+   "s0c2": {
+    "broker": "tachibana",
+    "w20_cagr": 12.72,
+    "w20_dd_exact": -35.02065001208846,
+    "w20_calmar_exact": 0.3632142748809431,
+    "w20_trades": 350,
+    "w5_cagr": 22.96,
+    "w5_dd_exact": -20.942326952770387,
+    "w5_calmar_exact": 1.0963442625922093,
+    "w5_trades": 104
+   }
+  },
+  "univariate": {
+   "vol": {
+    "0": 0.5931,
+    "1": 0.5106,
+    "2": 0.501,
+    "3": 0.4951,
+    "5": 0.4888,
+    "10": 0.4617,
+    "20": 0.5137
+   },
+   "tight": {
+    "0": 0.4559,
+    "1": 0.4584,
+    "2": 0.4625,
+    "3": 0.4676,
+    "5": 0.4688,
+    "10": 0.5037,
+    "20": 0.5078
+   },
+   "brk": {
+    "0": 0.5351,
+    "1": 0.4726,
+    "2": 0.4612,
+    "3": 0.4552,
+    "5": 0.4811,
+    "10": 0.4953,
+    "20": 0.4934
+   },
+   "dist": {
+    "0": 0.5388,
+    "1": 0.5325,
+    "2": 0.5421,
+    "3": 0.5254,
+    "5": 0.5309,
+    "10": 0.531,
+    "20": 0.521
+   },
+   "shadow": {
+    "0": 0.512,
+    "1": 0.4624,
+    "2": 0.4944,
+    "3": 0.5049,
+    "5": 0.5,
+    "10": 0.4985,
+    "20": 0.5433
+   },
+   "rs": {
+    "0": 0.5251,
+    "1": 0.493,
+    "2": 0.4815,
+    "3": 0.4745,
+    "5": 0.4782,
+    "10": 0.4832,
+    "20": 0.4797
+   },
+   "trend": {
+    "0": 0.5014,
+    "1": 0.475,
+    "2": 0.472,
+    "3": 0.4708,
+    "5": 0.4797,
+    "10": 0.4845,
+    "20": 0.4856
+   },
+   "high": {
+    "0": 0.504,
+    "1": 0.4851,
+    "2": 0.4788,
+    "3": 0.4799,
+    "5": 0.4856,
+    "10": 0.4927,
+    "20": 0.4957
+   },
+   "squeeze": {
+    "0": 0.4818,
+    "1": 0.4839,
+    "2": 0.4932,
+    "3": 0.5024,
+    "5": 0.5132,
+    "10": 0.4898,
+    "20": 0.4506
+   },
+   "mkt": {
+    "0": 0.501,
+    "1": 0.4968,
+    "2": 0.4962,
+    "3": 0.4998,
+    "5": 0.4929,
+    "10": 0.4762,
+    "20": 0.4798
+   },
+   "ind_mom60": {
+    "0": 0.4563,
+    "1": 0.4567,
+    "2": 0.4544,
+    "3": 0.4491,
+    "5": 0.4483,
+    "10": 0.4416,
+    "20": 0.4738
+   },
+   "ind_breadth": {
+    "0": 0.4912,
+    "1": 0.4665,
+    "2": 0.4726,
+    "3": 0.4569,
+    "5": 0.4592,
+    "10": 0.4263,
+    "20": 0.4634
+   },
+   "ind_cobreak": {
+    "0": 0.5229,
+    "1": 0.5133,
+    "2": 0.5026,
+    "3": 0.5029,
+    "5": 0.495,
+    "10": 0.4774,
+    "20": 0.5081
+   },
+   "rel_ind60": {
+    "0": 0.5685,
+    "1": 0.5363,
+    "2": 0.5335,
+    "3": 0.5306,
+    "5": 0.5272,
+    "10": 0.5448,
+    "20": 0.4991
+   },
+   "ind_mom20": {
+    "0": 0.4666,
+    "1": 0.4611,
+    "2": 0.4459,
+    "3": 0.4453,
+    "5": 0.4431,
+    "10": 0.4513,
+    "20": 0.4549
+   }
+  },
+  "choices": {
+   "L1": {
+    "2013": {
+     "vol": 3,
+     "tight": 20,
+     "brk": 0,
+     "dist": 10,
+     "shadow": 5,
+     "rs": 5,
+     "trend": 3,
+     "high": 3,
+     "squeeze": 0,
+     "mkt": 10,
+     "ind_mom60": 5,
+     "ind_breadth": 20,
+     "ind_cobreak": 20,
+     "rel_ind60": 20,
+     "ind_mom20": 20
+    },
+    "2014": {
+     "vol": 0,
+     "tight": 20,
+     "brk": 0,
+     "dist": 20,
+     "shadow": 5,
+     "rs": 0,
+     "trend": 3,
+     "high": 20,
+     "squeeze": 10,
+     "mkt": 10,
+     "ind_mom60": 10,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 10,
+     "ind_mom20": 20
+    },
+    "2015": {
+     "vol": 0,
+     "tight": 20,
+     "brk": 20,
+     "dist": 3,
+     "shadow": 5,
+     "rs": 0,
+     "trend": 3,
+     "high": 3,
+     "squeeze": 0,
+     "mkt": 20,
+     "ind_mom60": 20,
+     "ind_breadth": 3,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 0
+    },
+    "2016": {
+     "vol": 1,
+     "tight": 20,
+     "brk": 20,
+     "dist": 20,
+     "shadow": 5,
+     "rs": 0,
+     "trend": 3,
+     "high": 3,
+     "squeeze": 0,
+     "mkt": 3,
+     "ind_mom60": 20,
+     "ind_breadth": 3,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2017": {
+     "vol": 1,
+     "tight": 20,
+     "brk": 0,
+     "dist": 20,
+     "shadow": 5,
+     "rs": 0,
+     "trend": 3,
+     "high": 3,
+     "squeeze": 5,
+     "mkt": 20,
+     "ind_mom60": 20,
+     "ind_breadth": 10,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2018": {
+     "vol": 1,
+     "tight": 5,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 0,
+     "rs": 0,
+     "trend": 3,
+     "high": 0,
+     "squeeze": 20,
+     "mkt": 20,
+     "ind_mom60": 1,
+     "ind_breadth": 3,
+     "ind_cobreak": 3,
+     "rel_ind60": 0,
+     "ind_mom20": 0
+    },
+    "2019": {
+     "vol": 1,
+     "tight": 20,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 20,
+     "mkt": 10,
+     "ind_mom60": 1,
+     "ind_breadth": 3,
+     "ind_cobreak": 3,
+     "rel_ind60": 0,
+     "ind_mom20": 0
+    },
+    "2020": {
+     "vol": 1,
+     "tight": 20,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 5,
+     "mkt": 20,
+     "ind_mom60": 2,
+     "ind_breadth": 3,
+     "ind_cobreak": 3,
+     "rel_ind60": 0,
+     "ind_mom20": 0
+    },
+    "2021": {
+     "vol": 1,
+     "tight": 5,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 3,
+     "high": 3,
+     "squeeze": 5,
+     "mkt": 10,
+     "ind_mom60": 2,
+     "ind_breadth": 3,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 0
+    },
+    "2022": {
+     "vol": 1,
+     "tight": 5,
+     "brk": 0,
+     "dist": 10,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 3,
+     "high": 0,
+     "squeeze": 5,
+     "mkt": 10,
+     "ind_mom60": 2,
+     "ind_breadth": 3,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 0
+    },
+    "2023": {
+     "vol": 1,
+     "tight": 5,
+     "brk": 0,
+     "dist": 10,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 3,
+     "high": 3,
+     "squeeze": 20,
+     "mkt": 10,
+     "ind_mom60": 2,
+     "ind_breadth": 10,
+     "ind_cobreak": 3,
+     "rel_ind60": 0,
+     "ind_mom20": 5
+    },
+    "2024": {
+     "vol": 0,
+     "tight": 5,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 3,
+     "high": 3,
+     "squeeze": 20,
+     "mkt": 10,
+     "ind_mom60": 10,
+     "ind_breadth": 10,
+     "ind_cobreak": 3,
+     "rel_ind60": 0,
+     "ind_mom20": 5
+    },
+    "2025": {
+     "vol": 0,
+     "tight": 5,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 3,
+     "high": 3,
+     "squeeze": 20,
+     "mkt": 10,
+     "ind_mom60": 10,
+     "ind_breadth": 10,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 5
+    },
+    "2026": {
+     "vol": 0,
+     "tight": 1,
+     "brk": 3,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 3,
+     "high": 3,
+     "squeeze": 20,
+     "mkt": 10,
+     "ind_mom60": 10,
+     "ind_breadth": 10,
+     "ind_cobreak": 0,
+     "rel_ind60": 0,
+     "ind_mom20": 5
+    }
+   },
+   "L2": {
+    "2013": {
+     "vol": 3,
+     "tight": 0,
+     "brk": 0,
+     "dist": 5,
+     "shadow": 2,
+     "rs": 5,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 0,
+     "mkt": 0,
+     "ind_mom60": 5,
+     "ind_breadth": 20,
+     "ind_cobreak": 20,
+     "rel_ind60": 20,
+     "ind_mom20": 20
+    },
+    "2014": {
+     "vol": 0,
+     "tight": 0,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 1,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 0,
+     "mkt": 0,
+     "ind_mom60": 10,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 10,
+     "ind_mom20": 20
+    },
+    "2015": {
+     "vol": 0,
+     "tight": 0,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 1,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 0,
+     "mkt": 0,
+     "ind_mom60": 20,
+     "ind_breadth": 10,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2016": {
+     "vol": 1,
+     "tight": 0,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 0,
+     "mkt": 0,
+     "ind_mom60": 20,
+     "ind_breadth": 10,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2017": {
+     "vol": 1,
+     "tight": 0,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 5,
+     "mkt": 0,
+     "ind_mom60": 20,
+     "ind_breadth": 10,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2018": {
+     "vol": 1,
+     "tight": 2,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 5,
+     "mkt": 0,
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 1,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2019": {
+     "vol": 1,
+     "tight": 0,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 5,
+     "mkt": 0,
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2020": {
+     "vol": 1,
+     "tight": 2,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 5,
+     "mkt": 0,
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2021": {
+     "vol": 1,
+     "tight": 2,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 5,
+     "mkt": 0,
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2022": {
+     "vol": 1,
+     "tight": 2,
+     "brk": 0,
+     "dist": 10,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 5,
+     "mkt": 0,
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2023": {
+     "vol": 1,
+     "tight": 20,
+     "brk": 0,
+     "dist": 10,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 5,
+     "mkt": 0,
+     "ind_mom60": 0,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2024": {
+     "vol": 0,
+     "tight": 20,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 5,
+     "mkt": 0,
+     "ind_mom60": 1,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2025": {
+     "vol": 0,
+     "tight": 20,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 5,
+     "mkt": 0,
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2026": {
+     "vol": 0,
+     "tight": 20,
+     "brk": 0,
+     "dist": 0,
+     "shadow": 20,
+     "rs": 0,
+     "trend": 0,
+     "high": 0,
+     "squeeze": 5,
+     "mkt": 0,
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 0,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    }
+   },
+   "L3": {
+    "2013": {
+     "ind_mom60": 5,
+     "ind_breadth": 20,
+     "ind_cobreak": 20,
+     "rel_ind60": 20,
+     "ind_mom20": 20
+    },
+    "2014": {
+     "ind_mom60": 10,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 10,
+     "ind_mom20": 20
+    },
+    "2015": {
+     "ind_mom60": 20,
+     "ind_breadth": 10,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2016": {
+     "ind_mom60": 20,
+     "ind_breadth": 10,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2017": {
+     "ind_mom60": 20,
+     "ind_breadth": 10,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2018": {
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 1,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2019": {
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2020": {
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2021": {
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2022": {
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2023": {
+     "ind_mom60": 0,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2024": {
+     "ind_mom60": 1,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2025": {
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 20,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    },
+    "2026": {
+     "ind_mom60": 20,
+     "ind_breadth": 0,
+     "ind_cobreak": 0,
+     "rel_ind60": 0,
+     "ind_mom20": 20
+    }
+   }
+  },
+  "tw_info": {
+   "2009": {
+    "rate_jp": {
+     "L": 5,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 0,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 1,
+     "keep": 1
+    },
+    "credit": {
+     "L": 10,
+     "keep": 7
+    },
+    "coffee": {
+     "L": 5,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 0,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 20,
+     "keep": 1
+    },
+    "broad": {
+     "L": 5,
+     "keep": 2
+    }
+   },
+   "2010": {
+    "rate_jp": {
+     "L": 5,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 2,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 0
+    },
+    "credit": {
+     "L": 5,
+     "keep": 2
+    },
+    "agri": {
+     "L": 3,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 5,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 2,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 1
+    },
+    "gold": {
+     "L": 0,
+     "keep": 0
+    },
+    "silver": {
+     "L": 5,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 5,
+     "keep": 0
+    },
+    "broad": {
+     "L": 5,
+     "keep": 0
+    }
+   },
+   "2011": {
+    "rate_jp": {
+     "L": 3,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 20,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 0
+    },
+    "credit": {
+     "L": 0,
+     "keep": 0
+    },
+    "agri": {
+     "L": 5,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 5,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 2,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 1
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 5,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 5,
+     "keep": 1
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 0
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2012": {
+    "rate_jp": {
+     "L": 5,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 20,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 0
+    },
+    "credit": {
+     "L": 0,
+     "keep": 2
+    },
+    "agri": {
+     "L": 3,
+     "keep": 1
+    },
+    "coffee": {
+     "L": 5,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 2,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 1
+    },
+    "gold": {
+     "L": 0,
+     "keep": 2
+    },
+    "silver": {
+     "L": 20,
+     "keep": 1
+    },
+    "natgas": {
+     "L": 5,
+     "keep": 1
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 1
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2013": {
+    "rate_jp": {
+     "L": 3,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 20,
+     "keep": 0
+    },
+    "oil": {
+     "L": 20,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 1
+    },
+    "credit": {
+     "L": 0,
+     "keep": 4
+    },
+    "agri": {
+     "L": 3,
+     "keep": 0
+    },
+    "corn": {
+     "L": 0,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 5,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 2,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 1
+    },
+    "iron": {
+     "L": 3,
+     "keep": 1
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 20,
+     "keep": 1
+    },
+    "plat": {
+     "L": 5,
+     "keep": 0
+    },
+    "pall": {
+     "L": 20,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 5,
+     "keep": 2
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 1
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2014": {
+    "rate_jp": {
+     "L": 3,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 20,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 1
+    },
+    "credit": {
+     "L": 0,
+     "keep": 3
+    },
+    "agri": {
+     "L": 3,
+     "keep": 0
+    },
+    "corn": {
+     "L": 0,
+     "keep": 1
+    },
+    "wheat": {
+     "L": 0,
+     "keep": 1
+    },
+    "soy": {
+     "L": 20,
+     "keep": 0
+    },
+    "sugar": {
+     "L": 20,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 5,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 20,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 1
+    },
+    "iron": {
+     "L": 10,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 20,
+     "keep": 1
+    },
+    "plat": {
+     "L": 10,
+     "keep": 0
+    },
+    "pall": {
+     "L": 20,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 3,
+     "keep": 2
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 0
+    },
+    "broad": {
+     "L": 5,
+     "keep": 0
+    }
+   },
+   "2015": {
+    "rate_jp": {
+     "L": 3,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 20,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 1
+    },
+    "credit": {
+     "L": 0,
+     "keep": 3
+    },
+    "agri": {
+     "L": 5,
+     "keep": 0
+    },
+    "corn": {
+     "L": 0,
+     "keep": 0
+    },
+    "wheat": {
+     "L": 0,
+     "keep": 0
+    },
+    "soy": {
+     "L": 0,
+     "keep": 0
+    },
+    "sugar": {
+     "L": 20,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 0,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 2,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 1
+    },
+    "copper": {
+     "L": 10,
+     "keep": 0
+    },
+    "iron": {
+     "L": 5,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 3
+    },
+    "silver": {
+     "L": 20,
+     "keep": 1
+    },
+    "plat": {
+     "L": 10,
+     "keep": 0
+    },
+    "pall": {
+     "L": 10,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 3,
+     "keep": 1
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 0
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2016": {
+    "rate_jp": {
+     "L": 3,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 20,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 1
+    },
+    "credit": {
+     "L": 0,
+     "keep": 4
+    },
+    "agri": {
+     "L": 3,
+     "keep": 0
+    },
+    "corn": {
+     "L": 0,
+     "keep": 2
+    },
+    "wheat": {
+     "L": 0,
+     "keep": 0
+    },
+    "soy": {
+     "L": 0,
+     "keep": 0
+    },
+    "sugar": {
+     "L": 20,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 5,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 2,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 1
+    },
+    "copper": {
+     "L": 20,
+     "keep": 0
+    },
+    "iron": {
+     "L": 10,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 20,
+     "keep": 1
+    },
+    "plat": {
+     "L": 10,
+     "keep": 0
+    },
+    "pall": {
+     "L": 20,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 5,
+     "keep": 1
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 1
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2017": {
+    "rate_jp": {
+     "L": 5,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 20,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 1
+    },
+    "credit": {
+     "L": 0,
+     "keep": 3
+    },
+    "agri": {
+     "L": 3,
+     "keep": 1
+    },
+    "corn": {
+     "L": 1,
+     "keep": 2
+    },
+    "wheat": {
+     "L": 0,
+     "keep": 0
+    },
+    "soy": {
+     "L": 0,
+     "keep": 0
+    },
+    "sugar": {
+     "L": 3,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 0,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 20,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 1
+    },
+    "copper": {
+     "L": 10,
+     "keep": 0
+    },
+    "alum": {
+     "L": 10,
+     "keep": 0
+    },
+    "iron": {
+     "L": 10,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 0
+    },
+    "silver": {
+     "L": 20,
+     "keep": 2
+    },
+    "plat": {
+     "L": 5,
+     "keep": 1
+    },
+    "pall": {
+     "L": 10,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 0,
+     "keep": 0
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 3
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2018": {
+    "rate_jp": {
+     "L": 5,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 20,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 1
+    },
+    "credit": {
+     "L": 0,
+     "keep": 3
+    },
+    "agri": {
+     "L": 5,
+     "keep": 0
+    },
+    "corn": {
+     "L": 0,
+     "keep": 2
+    },
+    "wheat": {
+     "L": 0,
+     "keep": 0
+    },
+    "soy": {
+     "L": 10,
+     "keep": 0
+    },
+    "sugar": {
+     "L": 3,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 5,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 20,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 2
+    },
+    "copper": {
+     "L": 10,
+     "keep": 0
+    },
+    "alum": {
+     "L": 10,
+     "keep": 0
+    },
+    "iron": {
+     "L": 10,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 20,
+     "keep": 1
+    },
+    "plat": {
+     "L": 5,
+     "keep": 1
+    },
+    "pall": {
+     "L": 10,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 0,
+     "keep": 0
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 3
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2019": {
+    "rate_jp": {
+     "L": 5,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 20,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 1
+    },
+    "credit": {
+     "L": 10,
+     "keep": 3
+    },
+    "agri": {
+     "L": 5,
+     "keep": 0
+    },
+    "corn": {
+     "L": 0,
+     "keep": 2
+    },
+    "wheat": {
+     "L": 0,
+     "keep": 0
+    },
+    "soy": {
+     "L": 10,
+     "keep": 0
+    },
+    "sugar": {
+     "L": 20,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 5,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 20,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 2
+    },
+    "copper": {
+     "L": 10,
+     "keep": 0
+    },
+    "alum": {
+     "L": 10,
+     "keep": 1
+    },
+    "iron": {
+     "L": 10,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 20,
+     "keep": 1
+    },
+    "plat": {
+     "L": 5,
+     "keep": 1
+    },
+    "pall": {
+     "L": 10,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 0,
+     "keep": 0
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 3
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2020": {
+    "rate_jp": {
+     "L": 5,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 20,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 1
+    },
+    "credit": {
+     "L": 0,
+     "keep": 2
+    },
+    "agri": {
+     "L": 3,
+     "keep": 1
+    },
+    "corn": {
+     "L": 0,
+     "keep": 1
+    },
+    "wheat": {
+     "L": 20,
+     "keep": 0
+    },
+    "soy": {
+     "L": 20,
+     "keep": 0
+    },
+    "sugar": {
+     "L": 3,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 5,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 20,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 1
+    },
+    "copper": {
+     "L": 10,
+     "keep": 0
+    },
+    "alum": {
+     "L": 10,
+     "keep": 0
+    },
+    "iron": {
+     "L": 0,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 20,
+     "keep": 1
+    },
+    "plat": {
+     "L": 5,
+     "keep": 1
+    },
+    "pall": {
+     "L": 10,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 0,
+     "keep": 0
+    },
+    "eugas": {
+     "L": 10,
+     "keep": 0
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 2
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2021": {
+    "rate_jp": {
+     "L": 5,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 20,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 0
+    },
+    "credit": {
+     "L": 0,
+     "keep": 4
+    },
+    "agri": {
+     "L": 3,
+     "keep": 1
+    },
+    "corn": {
+     "L": 0,
+     "keep": 0
+    },
+    "wheat": {
+     "L": 5,
+     "keep": 0
+    },
+    "soy": {
+     "L": 10,
+     "keep": 0
+    },
+    "sugar": {
+     "L": 1,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 5,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 20,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 3
+    },
+    "copper": {
+     "L": 10,
+     "keep": 0
+    },
+    "alum": {
+     "L": 20,
+     "keep": 0
+    },
+    "iron": {
+     "L": 0,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 20,
+     "keep": 2
+    },
+    "plat": {
+     "L": 3,
+     "keep": 0
+    },
+    "pall": {
+     "L": 10,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 0,
+     "keep": 0
+    },
+    "eugas": {
+     "L": 1,
+     "keep": 0
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 5
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2022": {
+    "rate_jp": {
+     "L": 5,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 20,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 0
+    },
+    "credit": {
+     "L": 0,
+     "keep": 5
+    },
+    "agri": {
+     "L": 3,
+     "keep": 1
+    },
+    "corn": {
+     "L": 0,
+     "keep": 0
+    },
+    "wheat": {
+     "L": 5,
+     "keep": 0
+    },
+    "soy": {
+     "L": 20,
+     "keep": 0
+    },
+    "sugar": {
+     "L": 2,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 5,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 20,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 3
+    },
+    "copper": {
+     "L": 20,
+     "keep": 0
+    },
+    "alum": {
+     "L": 10,
+     "keep": 1
+    },
+    "iron": {
+     "L": 0,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 20,
+     "keep": 2
+    },
+    "plat": {
+     "L": 3,
+     "keep": 0
+    },
+    "pall": {
+     "L": 10,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 0,
+     "keep": 0
+    },
+    "eugas": {
+     "L": 0,
+     "keep": 0
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 5
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2023": {
+    "rate_jp": {
+     "L": 3,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 2,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 0
+    },
+    "credit": {
+     "L": 0,
+     "keep": 5
+    },
+    "agri": {
+     "L": 3,
+     "keep": 0
+    },
+    "corn": {
+     "L": 0,
+     "keep": 0
+    },
+    "wheat": {
+     "L": 5,
+     "keep": 0
+    },
+    "soy": {
+     "L": 20,
+     "keep": 0
+    },
+    "sugar": {
+     "L": 2,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 20,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 20,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 2
+    },
+    "copper": {
+     "L": 20,
+     "keep": 0
+    },
+    "alum": {
+     "L": 10,
+     "keep": 0
+    },
+    "iron": {
+     "L": 0,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 20,
+     "keep": 2
+    },
+    "plat": {
+     "L": 2,
+     "keep": 0
+    },
+    "pall": {
+     "L": 20,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 5,
+     "keep": 0
+    },
+    "eugas": {
+     "L": 5,
+     "keep": 0
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 5
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2024": {
+    "rate_jp": {
+     "L": 5,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 2,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 0
+    },
+    "credit": {
+     "L": 0,
+     "keep": 4
+    },
+    "agri": {
+     "L": 3,
+     "keep": 0
+    },
+    "corn": {
+     "L": 20,
+     "keep": 1
+    },
+    "wheat": {
+     "L": 5,
+     "keep": 0
+    },
+    "soy": {
+     "L": 10,
+     "keep": 0
+    },
+    "sugar": {
+     "L": 5,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 20,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 20,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 2
+    },
+    "copper": {
+     "L": 0,
+     "keep": 1
+    },
+    "alum": {
+     "L": 10,
+     "keep": 0
+    },
+    "iron": {
+     "L": 0,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 20,
+     "keep": 2
+    },
+    "plat": {
+     "L": 2,
+     "keep": 0
+    },
+    "pall": {
+     "L": 20,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 5,
+     "keep": 0
+    },
+    "eugas": {
+     "L": 0,
+     "keep": 0
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 3
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2025": {
+    "rate_jp": {
+     "L": 5,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 2,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 0,
+     "keep": 0
+    },
+    "credit": {
+     "L": 0,
+     "keep": 3
+    },
+    "agri": {
+     "L": 3,
+     "keep": 0
+    },
+    "corn": {
+     "L": 0,
+     "keep": 0
+    },
+    "wheat": {
+     "L": 5,
+     "keep": 0
+    },
+    "soy": {
+     "L": 10,
+     "keep": 0
+    },
+    "sugar": {
+     "L": 5,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 20,
+     "keep": 0
+    },
+    "cocoa": {
+     "L": 5,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 2
+    },
+    "copper": {
+     "L": 0,
+     "keep": 1
+    },
+    "alum": {
+     "L": 10,
+     "keep": 0
+    },
+    "iron": {
+     "L": 0,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 20,
+     "keep": 2
+    },
+    "plat": {
+     "L": 2,
+     "keep": 0
+    },
+    "pall": {
+     "L": 20,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 5,
+     "keep": 0
+    },
+    "eugas": {
+     "L": 0,
+     "keep": 0
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 3
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   },
+   "2026": {
+    "rate_jp": {
+     "L": 0,
+     "keep": 0
+    },
+    "rate_us": {
+     "L": 2,
+     "keep": 0
+    },
+    "oil": {
+     "L": 5,
+     "keep": 0
+    },
+    "fx": {
+     "L": 1,
+     "keep": 0
+    },
+    "credit": {
+     "L": 0,
+     "keep": 3
+    },
+    "agri": {
+     "L": 3,
+     "keep": 0
+    },
+    "corn": {
+     "L": 0,
+     "keep": 0
+    },
+    "wheat": {
+     "L": 5,
+     "keep": 0
+    },
+    "soy": {
+     "L": 10,
+     "keep": 0
+    },
+    "sugar": {
+     "L": 20,
+     "keep": 0
+    },
+    "coffee": {
+     "L": 20,
+     "keep": 1
+    },
+    "cocoa": {
+     "L": 20,
+     "keep": 0
+    },
+    "metals": {
+     "L": 10,
+     "keep": 2
+    },
+    "copper": {
+     "L": 0,
+     "keep": 1
+    },
+    "alum": {
+     "L": 10,
+     "keep": 0
+    },
+    "iron": {
+     "L": 0,
+     "keep": 0
+    },
+    "gold": {
+     "L": 0,
+     "keep": 1
+    },
+    "silver": {
+     "L": 20,
+     "keep": 1
+    },
+    "plat": {
+     "L": 2,
+     "keep": 0
+    },
+    "pall": {
+     "L": 10,
+     "keep": 0
+    },
+    "natgas": {
+     "L": 5,
+     "keep": 0
+    },
+    "eugas": {
+     "L": 0,
+     "keep": 0
+    },
+    "gasoline": {
+     "L": 5,
+     "keep": 3
+    },
+    "broad": {
+     "L": 5,
+     "keep": 1
+    }
+   }
+  },
+  "results": {
+   "L1": {
+    "auc": {
+     "all": 0.519,
+     "O1": 0.5124,
+     "O2": 0.5204,
+     "lo": 0.4646,
+     "hi": 0.5702
+    },
+    "kept": {
+     "O1": {
+      "n": 149,
+      "win": 42.28,
+      "avg_win": 5.44,
+      "avg_loss": -2.76,
+      "payoff": 1.97,
+      "exp": 0.705,
+      "hold_med": 11.0
+     },
+     "O2": {
+      "n": 172,
+      "win": 48.84,
+      "avg_win": 5.73,
+      "avg_loss": -3.26,
+      "payoff": 1.76,
+      "exp": 1.131,
+      "hold_med": 13.0
+     }
+    },
+    "kept_all": {
+     "n": 321,
+     "win": 45.79,
+     "avg_win": 5.61,
+     "avg_loss": -3.02,
+     "payoff": 1.86,
+     "exp": 0.933,
+     "hold_med": 12.0
+    },
+    "all_half": {
+     "O1": {
+      "n": 237,
+      "win": 39.24,
+      "avg_win": 5.44,
+      "avg_loss": -2.78,
+      "payoff": 1.96,
+      "exp": 0.447,
+      "hold_med": 10.0
+     },
+     "O2": {
+      "n": 242,
+      "win": 47.11,
+      "avg_win": 5.69,
+      "avg_loss": -3.51,
+      "payoff": 1.62,
+      "exp": 0.825,
+      "hold_med": 12.0
+     }
+    },
+    "keep_share": 0.6687116564417178,
+    "terciles": {
+     "低": {
+      "n": 160,
+      "win": 39.38,
+      "avg_win": 5.16,
+      "avg_loss": -3.09,
+      "payoff": 1.67,
+      "exp": 0.16,
+      "hold_med": 10.5
+     },
+     "中": {
+      "n": 159,
+      "win": 42.14,
+      "avg_win": 5.7,
+      "avg_loss": -3.4,
+      "payoff": 1.68,
+      "exp": 0.436,
+      "hold_med": 11.0
+     },
+     "高": {
+      "n": 160,
+      "win": 48.12,
+      "avg_win": 5.81,
+      "avg_loss": -2.85,
+      "payoff": 2.04,
+      "exp": 1.317,
+      "hold_med": 12.5
+     }
+    },
+    "boot_keep": {
+     "dwin_lo": -0.58,
+     "dwin_hi": 5.964,
+     "dexp_lo": -0.089,
+     "dexp_hi": 0.707
+    },
+    "s0c2_skip": {
+     "broker": "tachibana",
+     "w20_cagr": 12.38,
+     "w20_dd_exact": -35.10658960463279,
+     "w20_calmar_exact": 0.35264034870440086,
+     "w20_trades": 273,
+     "w5_cagr": 21.56,
+     "w5_dd_exact": -20.85620175027001,
+     "w5_calmar_exact": 1.0337452743388846,
+     "w5_trades": 81
+    },
+    "s0c2_prio": {
+     "broker": "tachibana",
+     "w20_cagr": 12.64,
+     "w20_dd_exact": -35.246925502232905,
+     "w20_calmar_exact": 0.3586128384218718,
+     "w20_trades": 350,
+     "w5_cagr": 22.26,
+     "w5_dd_exact": -20.878693755720303,
+     "w5_calmar_exact": 1.06615865247323,
+     "w5_trades": 104
+    },
+    "dauc": {
+     "d": -0.0277,
+     "lo": -0.0816,
+     "hi": 0.026,
+     "n": 479
+    },
+    "ref_auc": 0.5467
+   },
+   "L2": {
+    "auc": {
+     "all": 0.5126,
+     "O1": 0.6116,
+     "O2": 0.4141,
+     "lo": 0.449,
+     "hi": 0.5796
+    },
+    "kept": {
+     "O1": {
+      "n": 166,
+      "win": 40.96,
+      "avg_win": 5.52,
+      "avg_loss": -2.91,
+      "payoff": 1.9,
+      "exp": 0.546,
+      "hold_med": 10.0
+     },
+     "O2": {
+      "n": 164,
+      "win": 43.29,
+      "avg_win": 5.56,
+      "avg_loss": -3.51,
+      "payoff": 1.58,
+      "exp": 0.416,
+      "hold_med": 11.5
+     }
+    },
+    "kept_all": {
+     "n": 330,
+     "win": 42.12,
+     "avg_win": 5.54,
+     "avg_loss": -3.2,
+     "payoff": 1.73,
+     "exp": 0.482,
+     "hold_med": 11.0
+    },
+    "all_half": {
+     "O1": {
+      "n": 237,
+      "win": 39.24,
+      "avg_win": 5.44,
+      "avg_loss": -2.78,
+      "payoff": 1.96,
+      "exp": 0.447,
+      "hold_med": 10.0
+     },
+     "O2": {
+      "n": 242,
+      "win": 47.11,
+      "avg_win": 5.69,
+      "avg_loss": -3.51,
+      "payoff": 1.62,
+      "exp": 0.825,
+      "hold_med": 12.0
+     }
+    },
+    "keep_share": 0.689161554192229,
+    "terciles": {
+     "低": {
+      "n": 160,
+      "win": 44.38,
+      "avg_win": 5.48,
+      "avg_loss": -2.86,
+      "payoff": 1.92,
+      "exp": 0.841,
+      "hold_med": 12.0
+     },
+     "中": {
+      "n": 159,
+      "win": 38.99,
+      "avg_win": 5.59,
+      "avg_loss": -3.14,
+      "payoff": 1.78,
+      "exp": 0.263,
+      "hold_med": 10.0
+     },
+     "高": {
+      "n": 160,
+      "win": 46.25,
+      "avg_win": 5.65,
+      "avg_loss": -3.36,
+      "payoff": 1.68,
+      "exp": 0.808,
+      "hold_med": 12.0
+     }
+    },
+    "boot_keep": {
+     "dwin_lo": -4.152,
+     "dwin_hi": 2.108,
+     "dexp_lo": -0.537,
+     "dexp_hi": 0.226
+    },
+    "s0c2_skip": {
+     "broker": "tachibana",
+     "w20_cagr": 11.75,
+     "w20_dd_exact": -34.57257510974424,
+     "w20_calmar_exact": 0.3398647616702487,
+     "w20_trades": 283,
+     "w5_cagr": 18.34,
+     "w5_dd_exact": -27.805789878986086,
+     "w5_calmar_exact": 0.6595748612004095,
+     "w5_trades": 74
+    },
+    "s0c2_prio": {
+     "broker": "tachibana",
+     "w20_cagr": 12.5,
+     "w20_dd_exact": -35.020662205056894,
+     "w20_calmar_exact": 0.3569321427107404,
+     "w20_trades": 350,
+     "w5_cagr": 23.19,
+     "w5_dd_exact": -21.53366442787148,
+     "w5_calmar_exact": 1.0769184259221896,
+     "w5_trades": 105
+    },
+    "dauc": {
+     "d": -0.0248,
+     "lo": -0.0673,
+     "hi": 0.0134,
+     "n": 479
+    },
+    "ref_auc": 0.5374
+   },
+   "L3": {
+    "auc": {
+     "all": 0.4689,
+     "O1": 0.4938,
+     "O2": 0.445,
+     "lo": 0.4197,
+     "hi": 0.5166
+    },
+    "kept": {
+     "O1": {
+      "n": 148,
+      "win": 39.86,
+      "avg_win": 5.74,
+      "avg_loss": -2.86,
+      "payoff": 2.0,
+      "exp": 0.566,
+      "hold_med": 11.0
+     },
+     "O2": {
+      "n": 152,
+      "win": 43.42,
+      "avg_win": 5.7,
+      "avg_loss": -3.46,
+      "payoff": 1.65,
+      "exp": 0.519,
+      "hold_med": 11.0
+     }
+    },
+    "kept_all": {
+     "n": 300,
+     "win": 41.67,
+     "avg_win": 5.72,
+     "avg_loss": -3.15,
+     "payoff": 1.81,
+     "exp": 0.542,
+     "hold_med": 11.0
+    },
+    "all_half": {
+     "O1": {
+      "n": 237,
+      "win": 39.24,
+      "avg_win": 5.44,
+      "avg_loss": -2.78,
+      "payoff": 1.96,
+      "exp": 0.447,
+      "hold_med": 10.0
+     },
+     "O2": {
+      "n": 242,
+      "win": 47.11,
+      "avg_win": 5.69,
+      "avg_loss": -3.51,
+      "payoff": 1.62,
+      "exp": 0.825,
+      "hold_med": 12.0
+     }
+    },
+    "keep_share": 0.6257668711656442,
+    "terciles": {
+     "低": {
+      "n": 160,
+      "win": 46.88,
+      "avg_win": 5.2,
+      "avg_loss": -3.05,
+      "payoff": 1.71,
+      "exp": 0.819,
+      "hold_med": 12.0
+     },
+     "中": {
+      "n": 159,
+      "win": 43.4,
+      "avg_win": 5.73,
+      "avg_loss": -3.11,
+      "payoff": 1.85,
+      "exp": 0.73,
+      "hold_med": 11.0
+     },
+     "高": {
+      "n": 160,
+      "win": 39.38,
+      "avg_win": 5.86,
+      "avg_loss": -3.2,
+      "payoff": 1.83,
+      "exp": 0.366,
+      "hold_med": 10.5
+     }
+    },
+    "boot_keep": {
+     "dwin_lo": -5.129,
+     "dwin_hi": 1.917,
+     "dexp_lo": -0.524,
+     "dexp_hi": 0.284
+    },
+    "s0c2_skip": {
+     "broker": "tachibana",
+     "w20_cagr": 11.95,
+     "w20_dd_exact": -37.05482439838256,
+     "w20_calmar_exact": 0.32249511889527716,
+     "w20_trades": 265,
+     "w5_cagr": 20.81,
+     "w5_dd_exact": -28.618680961661823,
+     "w5_calmar_exact": 0.7271474191238061,
+     "w5_trades": 71
+    },
+    "s0c2_prio": {
+     "broker": "tachibana",
+     "w20_cagr": 12.47,
+     "w20_dd_exact": -35.01231373747794,
+     "w20_calmar_exact": 0.3561604095490508,
+     "w20_trades": 348,
+     "w5_cagr": 22.96,
+     "w5_dd_exact": -20.942558912536313,
+     "w5_calmar_exact": 1.0963321194840254,
+     "w5_trades": 103
+    },
+    "dauc": {
+     "d": -0.0339,
+     "lo": -0.0945,
+     "hi": 0.0178,
+     "n": 479
+    },
+    "ref_auc": 0.5028
+   },
+   "L4": {
+    "auc": {
+     "all": 0.5011,
+     "O1": 0.5013,
+     "O2": 0.5084,
+     "lo": 0.4549,
+     "hi": 0.5426
+    },
+    "kept": {
+     "O1": {
+      "n": 198,
+      "win": 40.4,
+      "avg_win": 5.38,
+      "avg_loss": -2.77,
+      "payoff": 1.94,
+      "exp": 0.526,
+      "hold_med": 11.0
+     },
+     "O2": {
+      "n": 190,
+      "win": 47.89,
+      "avg_win": 6.02,
+      "avg_loss": -3.62,
+      "payoff": 1.66,
+      "exp": 0.996,
+      "hold_med": 12.0
+     }
+    },
+    "kept_all": {
+     "n": 388,
+     "win": 44.07,
+     "avg_win": 5.72,
+     "avg_loss": -3.16,
+     "payoff": 1.81,
+     "exp": 0.756,
+     "hold_med": 11.5
+    },
+    "all_half": {
+     "O1": {
+      "n": 237,
+      "win": 39.24,
+      "avg_win": 5.44,
+      "avg_loss": -2.78,
+      "payoff": 1.96,
+      "exp": 0.447,
+      "hold_med": 10.0
+     },
+     "O2": {
+      "n": 242,
+      "win": 47.11,
+      "avg_win": 5.69,
+      "avg_loss": -3.51,
+      "payoff": 1.62,
+      "exp": 0.825,
+      "hold_med": 12.0
+     }
+    },
+    "keep_share": 0.8077709611451943,
+    "terciles": {
+     "低": {
+      "n": 160,
+      "win": 42.5,
+      "avg_win": 6.18,
+      "avg_loss": -3.09,
+      "payoff": 2.0,
+      "exp": 0.851,
+      "hold_med": 11.0
+     },
+     "中": {
+      "n": 159,
+      "win": 45.28,
+      "avg_win": 5.16,
+      "avg_loss": -3.39,
+      "payoff": 1.52,
+      "exp": 0.48,
+      "hold_med": 11.0
+     },
+     "高": {
+      "n": 160,
+      "win": 41.88,
+      "avg_win": 5.41,
+      "avg_loss": -2.9,
+      "payoff": 1.87,
+      "exp": 0.582,
+      "hold_med": 11.0
+     }
+    },
+    "boot_keep": {
+     "dwin_lo": -1.142,
+     "dwin_hi": 2.705,
+     "dexp_lo": -0.118,
+     "dexp_hi": 0.334
+    },
+    "s0c2_skip": {
+     "broker": "tachibana",
+     "w20_cagr": 12.8,
+     "w20_dd_exact": -37.38426426603713,
+     "w20_calmar_exact": 0.34239004702383696,
+     "w20_trades": 314,
+     "w5_cagr": 22.9,
+     "w5_dd_exact": -19.647092937551957,
+     "w5_calmar_exact": 1.1655668384522517,
+     "w5_trades": 97
+    },
+    "s0c2_prio": {
+     "broker": "tachibana",
+     "w20_cagr": 12.85,
+     "w20_dd_exact": -35.113875115008966,
+     "w20_calmar_exact": 0.3659522043042021,
+     "w20_trades": 350,
+     "w5_cagr": 22.6,
+     "w5_dd_exact": -21.98333602643725,
+     "w5_calmar_exact": 1.028051428264625,
+     "w5_trades": 106
+    },
+    "dauc": {
+     "d": -0.0229,
+     "lo": -0.0669,
+     "hi": 0.0157,
+     "n": 479
+    },
+    "ref_auc": 0.524
+   },
+   "L5": {
+    "auc": {
+     "all": 0.5389,
+     "O1": 0.5181,
+     "O2": 0.5675,
+     "lo": 0.4769,
+     "hi": 0.5943
+    },
+    "kept": {
+     "O1": {
+      "n": 132,
+      "win": 43.18,
+      "avg_win": 5.14,
+      "avg_loss": -2.72,
+      "payoff": 1.89,
+      "exp": 0.674,
+      "hold_med": 10.0
+     },
+     "O2": {
+      "n": 162,
+      "win": 45.68,
+      "avg_win": 6.11,
+      "avg_loss": -3.34,
+      "payoff": 1.83,
+      "exp": 0.977,
+      "hold_med": 13.0
+     }
+    },
+    "kept_all": {
+     "n": 294,
+     "win": 44.56,
+     "avg_win": 5.69,
+     "avg_loss": -3.05,
+     "payoff": 1.86,
+     "exp": 0.841,
+     "hold_med": 11.5
+    },
+    "all_half": {
+     "O1": {
+      "n": 237,
+      "win": 39.24,
+      "avg_win": 5.44,
+      "avg_loss": -2.78,
+      "payoff": 1.96,
+      "exp": 0.447,
+      "hold_med": 10.0
+     },
+     "O2": {
+      "n": 242,
+      "win": 47.11,
+      "avg_win": 5.69,
+      "avg_loss": -3.51,
+      "payoff": 1.62,
+      "exp": 0.825,
+      "hold_med": 12.0
+     }
+    },
+    "keep_share": 0.6134969325153374,
+    "terciles": {
+     "低": {
+      "n": 160,
+      "win": 38.12,
+      "avg_win": 5.26,
+      "avg_loss": -3.13,
+      "payoff": 1.68,
+      "exp": 0.067,
+      "hold_med": 11.0
+     },
+     "中": {
+      "n": 159,
+      "win": 42.14,
+      "avg_win": 5.73,
+      "avg_loss": -3.12,
+      "payoff": 1.84,
+      "exp": 0.611,
+      "hold_med": 12.0
+     },
+     "高": {
+      "n": 160,
+      "win": 49.38,
+      "avg_win": 5.69,
+      "avg_loss": -3.11,
+      "payoff": 1.83,
+      "exp": 1.236,
+      "hold_med": 11.0
+     }
+    },
+    "boot_keep": {
+     "dwin_lo": -2.397,
+     "dwin_hi": 5.186,
+     "dexp_lo": -0.225,
+     "dexp_hi": 0.639
+    },
+    "s0c2_skip": {
+     "broker": "tachibana",
+     "w20_cagr": 12.95,
+     "w20_dd_exact": -34.40880141708269,
+     "w20_calmar_exact": 0.3763571954462443,
+     "w20_trades": 263,
+     "w5_cagr": 23.13,
+     "w5_dd_exact": -20.78674941522377,
+     "w5_calmar_exact": 1.1127280912454778,
+     "w5_trades": 79
+    },
+    "s0c2_prio": {
+     "broker": "tachibana",
+     "w20_cagr": 12.78,
+     "w20_dd_exact": -35.600621022809065,
+     "w20_calmar_exact": 0.3589825017887172,
+     "w20_trades": 348,
+     "w5_cagr": 22.58,
+     "w5_dd_exact": -20.83729375646194,
+     "w5_calmar_exact": 1.083634000840326,
+     "w5_trades": 103
+    },
+    "dauc": {
+     "d": -0.0078,
+     "lo": -0.0302,
+     "hi": 0.0133,
+     "n": 479
+    },
+    "ref_auc": 0.5467
+   }
+  }
+ }
+}

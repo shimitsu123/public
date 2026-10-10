@@ -1,0 +1,467 @@
+"""candle_portfolio.py — K 线研究的组合回测（S0C2 = var/sim.json 同一套设定；2026-09-27）。
+
+与 scripts/mtf_study.make_runner 同一套（1655 牛熊择时、宏观 / 板块 / 量化状态层、一手按当时真实股价、退市日卖出），多两样：
+- 可以指定窗口的终点（探索只跑到 2021-12-31）
+- MixEngine：同一个组合里两种买点用不同的出场 —— 押し目买进的仓位不看日线死叉、满 HOLD_PB 个交易日就在下一交易日开盘卖
+  （PB = {票: 押し目信号日的集合}；同一天突破与押し目都有 → 按突破算）
+- MixEngine.CHAND_K_DAY（NKT 研究用，scripts/nkt_study.py；缺省 None = 不变）：{日期: 吊灯倍数上限}，第 i 天收盘的离场判断里持有中的日本个股（非核心）
+  吊灯倍数 = min(这一笔的 k, 当天的值)（as-of 取值 asof_take，不向前填补 NaN；NaN = 不变；只收紧，k = 0 的不加吊灯；值 ≤ 0 → ValueError）
+"""
+from __future__ import annotations
+
+import json
+import sys
+import warnings
+from dataclasses import replace
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+warnings.filterwarnings("ignore")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import jq_study as JS                                                        # noqa: E402
+import ml_study as MS                                                        # noqa: E402
+from qbreak import paths                                                     # noqa: E402
+
+TRADE_START = MS.TRADE_START
+
+
+def asof_pos(index, dates) -> np.ndarray:
+    """每个日期 d：index 里 ≤ d 的最后一个位置（没有 → −1）。index 必须递增、不重复（否则 ValueError）。
+    注意：d 在 index 最后一行之后 → 仍是最后一个位置（as-of 的本义）；调用方要用完整索引、之后的日子显式写 NaN。"""
+    ix = pd.DatetimeIndex(index)
+    if not (ix.is_monotonic_increasing and ix.is_unique):
+        raise ValueError("as-of 的索引必须递增、不重复")
+    return np.asarray(ix.searchsorted(pd.DatetimeIndex(dates), side="right"), dtype=np.int64) - 1
+
+
+def asof_take(s: pd.Series, dates) -> np.ndarray:
+    """as-of 取值：≤ d 的最后一行的值原样（那一行是 NaN 就是 NaN —— 不向前填补 NaN）；没有 → NaN。
+    与 qbreak.kline_series.on_days(s, dates, fill=NaN) 逐位相同（tests/test_candle_portfolio_kday.py 核对）。"""
+    pos = asof_pos(s.index, dates)
+    v = np.asarray(s.to_numpy(), dtype=float)
+    out = np.full(len(pos), np.nan)
+    ok = pos >= 0
+    out[ok] = v[pos[ok]]
+    return out
+
+
+class DDBrake:
+    """账户回撤刹车（第二个研究循环第 5 轮 scripts/loop2_r05_ddbrake.py 登记；只研究用）：逐日 update(收盘权益, 美股熊) → 核心目标的倍数。
+    高点 P = 这一段美股牛里收盘权益的最高（美股熊的日子 → 清空；熊转牛那天的收盘重新起算）；收盘权益 < (1 − level) × P → mult，否则 1。
+    没有滞后带：回到那条线以上就恢复（第二天开盘生效，与核心的其它目标同一个时点）。"""
+
+    def __init__(self, level: float, mult: float):
+        self.level, self.mult, self.peak = float(level), float(mult), None
+
+    def update(self, eq: float, bear: bool) -> float:
+        if bear:
+            self.peak = None
+            return 1.0
+        self.peak = float(eq) if self.peak is None else max(self.peak, float(eq))
+        return self.mult if float(eq) < (1.0 - self.level) * self.peak else 1.0
+
+
+def opp_cost_hit(stock_ret: float, core_ret: float, hold: int, hold_min: int, gap: float) -> bool:
+    """跑输核心就离场（第二个研究循环第 17 轮 OCX）：持有 ≥ hold_min 天，且 个股自买入以来的涨跌 − 核心参照同期的涨跌 ≤ −gap。"""
+    return hold >= hold_min and np.isfinite(stock_ret) and np.isfinite(core_ret) and (stock_ret - core_ret) <= -gap + 1e-12
+
+
+class MixEngine(MS.MLEngine):
+    PB: dict[str, set] = {}
+    HOLD_PB = 10
+    LIMIT_K = 0.0                                                            # > 0：押し目用指値买（信号日收盘 − K × ATR），碰不到就不买
+    PB_USE_DEAD = False                                                      # True：押し目仓位另外按指标表的 dead_cross 列卖（例：反弹到 5 日线）
+    PREF_US: pd.Series | None = None                                         # 双动量：True = 美股（日元计）比日本强（按日期，向后填）
+    YEN_STRONG: pd.Series | None = None                                      # 汇率对冲切换：True = 日元走强趋势（按日期，向后填）
+    EXTRA_BEAR: dict = {}                                                    # 另外的牛熊判定 {键: 布尔 Series（True = 熊）}，核心 ETF 用 core_index 指向它
+    EXTRA_EXPO: dict = {}                                                    # 另外的键的持仓比例 {键: 0〜1 Series}（非熊时核心目标再乘；缺省 1 = 不变；
+                                                                             # 第二个研究循环第 1 轮「分批切换」用）
+    PRIORITY: dict = {}                                                      # {(票, 信号日): 分数}：同一天的新仓候选按分数高的先（没有的 = 0）
+    PARAMS_T: dict = {}                                                      # {票: StrategyParams}：这些票用另一套出场参数（例：ETF 趋势仓位；缺省空 = 不变）
+    PARAMS_TD: dict = {}                                                     # {(票, 成交日 "YYYY-MM-DD"): StrategyParams}：那一笔持仓用另一套出场参数
+                                                                             # （例：按月变的持有天数 / 止损，bnf_adapt_study；缺省空 = 不变；只研究用）
+    DD_BRAKE: dict | None = None                                             # 账户回撤刹车 {"level": 0.10, "mult": 0.5}（DDBrake；第二个研究循环第 5 轮；
+                                                                             # 缺省 None = 不变）；逐日记录在实例的 ddb_log [(日期, 倍数)]
+    OPP_EXIT: dict | None = None                                             # 跑输核心就离场 {"ref": "1545.T", "hold": 10, "gap": 0.05}（opp_cost_hit；
+                                                                             # 第二个研究循环第 17 轮；缺省 None = 不变）
+    EXIT_TICK: dict | None = None                                            # {票: {收盘日, …}}：那天收盘还拿着 → 第二天开盘卖（reason = pre_earnings；
+                                                                             # 第二个研究循环第 19 轮 EBX；缺省 None = 不变）
+    ENTRY_GAP: int | None = None                                             # 日本个股新仓的成交日之间至少隔几个东证交易日、同一个决策日最多排一笔
+                                                                             # （第三个研究循环第 9 轮 ECL；挡掉的记在 skipped["entry_gap"]；缺省 None = 不变）
+    SECTOR_CAP: dict | None = None                                           # {票: 東証业种}：同业种已经持有（不含明天要卖的）或今天已排 → 这只日本个股不开新仓
+                                                                             # （第三个研究循环第 11 轮 SEC；挡掉的记在 skipped["sector_cap"]；缺省 None = 不变）
+    CHAND_K_DAY: pd.Series | None = None                                     # {日期: 吊灯倍数上限}：第 i 天收盘的离场判断里，持有中的日本个股（非核心）
+                                                                             # 吊灯倍数 = min(这笔的 k, 当天的值)（as-of；NaN = 不变；只收紧；k = 0 的不加吊灯）；
+                                                                             # 缺省 None = 不变；只研究用（NKT，scripts/nkt_study.py）
+
+    def __init__(self, *a, **k):
+        kd = MixEngine.CHAND_K_DAY
+        if kd is not None:                                                   # 0 / 负数 = 关掉吊灯 = 放宽 → 不允许（NaN / inf 允许）
+            kv = np.asarray(pd.Series(kd).to_numpy(), dtype=float)
+            if (kv[np.isfinite(kv)] <= 0).any():
+                raise ValueError("CHAND_K_DAY 的值必须 > 0（0 / 负数会关掉吊灯，是放宽）")
+        super().__init__(*a, **k)
+        self._kday = None if kd is None else asof_take(kd, self.gidx)
+        self._k_cap = None
+        self._kcap_cache = {}
+        n = len(self.gidx)
+        self.bear["XR"] = ~self.bear["US"]                                   # 「避险」核心：美股牛市时算熊（目标 0），美股熊市时算牛
+        self.core_expo["XR"] = np.ones(n)
+        if MixEngine.PREF_US is not None:                                   # 双动量核心：两边都牛 → 拿强的；只有一边牛 → 拿它；都熊 → 现金
+            s = MixEngine.PREF_US
+            pu = s.reindex(self.gidx.union(s.index)).ffill().reindex(self.gidx).fillna(True).to_numpy(bool)
+            us_b, jp_b = self.bear["US"], self.bear["JP"]
+            self.bear["MU"] = us_b | (~jp_b & ~pu)
+            self.bear["MJ"] = jp_b | (~us_b & pu)
+            self.core_expo["MU"] = self.core_expo["MJ"] = np.ones(n)
+        if MixEngine.PRIORITY:
+            pr = MixEngine.PRIORITY
+            self.entry_priority_fn = lambda t, i: float(pr.get((t, self.gidx[i]), 0.0))   # i = 信号日（收盘时决定）的位置
+        for key, bs in MixEngine.EXTRA_BEAR.items():
+            self.bear[key] = bs.reindex(self.gidx.union(bs.index)).ffill().reindex(self.gidx).fillna(False).to_numpy(bool)
+            xs = MixEngine.EXTRA_EXPO.get(key)
+            self.core_expo[key] = (np.ones(n) if xs is None else
+                                   xs.reindex(self.gidx.union(xs.index)).ffill().reindex(self.gidx).fillna(1.0).clip(0.0, 1.0).to_numpy(float))
+        if MixEngine.YEN_STRONG is not None:                                # 美股牛市：日元走强 → 对冲版（HG），否则不对冲（UH）
+            s = MixEngine.YEN_STRONG
+            ys = s.reindex(self.gidx.union(s.index)).ffill().reindex(self.gidx).fillna(False).to_numpy(bool)
+            self.bear["UH"] = self.bear["US"] | ys
+            self.bear["HG"] = self.bear["US"] | ~ys
+            self.core_expo["UH"] = self.core_expo["HG"] = np.ones(n)
+
+    def _opp_exit(self, i: int, ox: dict) -> None:
+        """第 i 天收盘：日本个股持有 ≥ hold 天、自买入以来比核心参照（ref）少涨 ≥ gap → 第二天开盘卖（reason = opp_cost）；已排队离场的不动。"""
+        st, A = self.st, self.A
+        jr = self.col.get(ox["ref"])
+        if jr is None or not A.has[i, jr]:
+            return
+        for t in list(st.pos):
+            ps = st.pos[t]
+            if ps.market != "JP" or t in st.pending_exit:
+                continue
+            j = self.col[t]
+            ie = self.gidx.get_indexer([pd.Timestamp(ps.entry_date)])[0]
+            if not A.has[i, j] or ie < 0 or not A.has[ie, jr]:
+                continue
+            sr = float(A.close[i, j]) / float(ps.entry_px) - 1
+            cr = float(A.close[i, jr]) / float(A.close[ie, jr]) - 1
+            if opp_cost_hit(sr, cr, int(ps.hold), int(ox["hold"]), float(ox["gap"])):
+                st.pending_exit[t] = "opp_cost"
+
+    def _tick_exit(self, i: int, xt: dict) -> None:
+        """第 i 天收盘：日本个股在 xt[票] 的日子里还拿着、没排队离场 → 第二天开盘卖（reason = pre_earnings）。"""
+        d = pd.Timestamp(self.gidx[i]).normalize()
+        st = self.st
+        for t in list(st.pos):
+            ps = st.pos[t]
+            if ps.market != "JP" or t in st.pending_exit:
+                continue
+            if d in xt.get(t, ()):
+                st.pending_exit[t] = "pre_earnings"
+
+    def _decide(self, i: int) -> None:
+        bk = MixEngine.DD_BRAKE
+        if bk:
+            self._dd_brake(i, bk)
+        super()._decide(i)
+
+    def _dd_brake(self, i: int, bk: dict) -> None:
+        """第 i 天收盘：按收盘权益更新刹车 → 核心 ETF 各自的键在第 i 天的比例 = 原来的 × 倍数（_decide_core 读它，第二天开盘成交）。"""
+        if not hasattr(self, "_ddb"):
+            keys = {self.cfg.core_index.get(t, "JP") for t in self.cfg.core}
+            keys = [k for k in keys if k in self.core_expo]
+            self._ddb = DDBrake(bk["level"], bk["mult"])
+            self._ddb_base = {k: np.array(self.core_expo[k], dtype=float) for k in keys}
+            for k in keys:                                                   # 各键各用一份（有的键共用同一个数组）
+                self.core_expo[k] = np.array(self._ddb_base[k], dtype=float)
+            self.ddb_log = []
+        m = self._ddb.update(self.equity(i), bool(self.bear["US"][i]))
+        for k, base in self._ddb_base.items():
+            self.core_expo[k][i] = base[i] * m
+        self.ddb_log.append((self.gidx[i], m))
+
+    def _open(self, t: str, m: str, shares: int, px: float, i: int) -> None:
+        self._opening = (t, str(self.gidx[i].date()))                           # 开仓时止损按这一笔的参数（PARAMS_TD 以成交日为键）
+        try:
+            super()._open(t, m, shares, px, i)
+        finally:
+            self._opening = None
+        if MixEngine.ENTRY_GAP and m == "JP" and t not in self.core_set and t in self.st.pos:
+            self._jp_fill = i                                                # ECL：最近一笔日本个股新仓的成交日（位置）
+
+    def _entry_mult(self, t: str, i: int) -> float:
+        """SEC（SECTOR_CAP）：同业种已经持有（不含明天要卖的）或今天已排 → 0；
+        ECL（ENTRY_GAP = g）：第 i 天收盘决策 → 成交日 k；今天已经排了日本个股、或 k 与上一笔日本个股新仓的成交日不到 g 个交易日 → 0（不开）。"""
+        v = super()._entry_mult(t, i)
+        sc = MixEngine.SECTOR_CAP
+        if sc and v > 0 and t not in self.core_set and self.mkt[self.col[t]] == "JP" and sc.get(t) is not None:
+            st = self.st
+            mine = [x for x in st.pos if x not in st.pending_exit] + list(st.plan)
+            if any(x != t and x not in self.core_set and sc.get(x) == sc[t] for x in mine):
+                self.skipped["sector_cap"] = self.skipped.get("sector_cap", 0) + 1
+                return 0.0
+        g = MixEngine.ENTRY_GAP
+        if not g or v <= 0 or t in self.core_set or self.mkt[self.col[t]] != "JP":
+            return v
+        if any(x not in self.core_set and self.mkt[self.col[x]] == "JP" for x in self.st.plan):
+            blocked = True
+        else:
+            k, last = int(self.nxt["JP"][i]), getattr(self, "_jp_fill", None)
+            blocked = last is not None and k >= 0 and k - last < g
+        if blocked:
+            self.skipped["entry_gap"] = self.skipped.get("entry_gap", 0) + 1
+            return 0.0
+        return v
+
+    def _p(self, t: str):
+        td = MixEngine.PARAMS_TD
+        if td:
+            op = getattr(self, "_opening", None)
+            key = op if (op and op[0] == t) else None
+            if key is None:
+                ps = getattr(self, "st", None) and self.st.pos.get(t)
+                key = (t, ps.entry_date) if ps is not None else None
+            if key is not None and key in td:
+                return self._k_capped(t, td[key])
+        return self._k_capped(t, MixEngine.PARAMS_T.get(t) or super()._p(t))
+
+    def _k_capped(self, t: str, p):
+        """CHAND_K_DAY：这次离场判断的上限 _k_cap 不是 None、比这笔的吊灯倍数小（且这笔有吊灯）、日本个股（非核心）→ 只换吊灯倍数的副本；
+        否则原样返回同一个对象（缺省一定走这里）。"""
+        cap = getattr(self, "_k_cap", None)
+        if (cap is None or not (p.exit_chandelier_k > 0 and cap < p.exit_chandelier_k) or t in self.core_set
+                or self.mkt[self.col[t]] != "JP"):
+            return p
+        key = (id(p), cap)
+        hit = self._kcap_cache.get(key)
+        if hit is None or hit[0] is not p:                                   # 缓存里存 p 本身（防止 id 复用）
+            hit = (p, replace(p, exit_chandelier_k=cap))
+            self._kcap_cache[key] = hit
+        return hit[1]
+
+    def _is_pb(self, t: str) -> bool:
+        s = MixEngine.PB.get(t)
+        if not s:
+            return False
+        ps = self.st.pos[t]
+        k = int(self.gidx.searchsorted(pd.Timestamp(ps.entry_date))) - 1
+        return k >= 0 and self.gidx[k] in s
+
+    def _exec_buys(self, m: str, i: int) -> None:
+        """押し目的指値：第二天最低价碰到 信号日收盘 − K × ATR（信号日）才成交，成交价 = min(开盘, 指値)；碰不到 → 这笔不买。"""
+        saved = []
+        if MixEngine.LIMIT_K > 0 and MixEngine.PB and i > 0:
+            A, d0 = self.A, self.gidx[i - 1]
+            for t in [x for x in list(self.st.plan) if x in MixEngine.PB and d0 in MixEngine.PB[x] and x in self.col]:
+                j = self.col[t]
+                sig_close = self.st.plan[t][0]
+                lim = sig_close - MixEngine.LIMIT_K * A.atr[i - 1, j] if np.isfinite(A.atr[i - 1, j]) else np.nan
+                if not A.has[i, j] or not np.isfinite(lim) or not (A.low[i, j] <= lim):
+                    self.st.plan.pop(t)
+                    self.skipped["limit_miss"] = self.skipped.get("limit_miss", 0) + 1
+                    continue
+                saved.append((j, float(A.open[i, j])))
+                A.open[i, j] = min(float(A.open[i, j]), float(lim))
+        try:
+            super()._exec_buys(m, i)
+        finally:
+            for j, v in saved:
+                self.A.open[i, j] = v
+
+    def _check_exits(self, m: str, i: int) -> None:
+        saved = []
+        if MixEngine.PB:
+            A = self.A
+            for t in list(self.st.pos):
+                if self.st.pos[t].market != m or t not in self.col or not self._is_pb(t):
+                    continue
+                j = self.col[t]
+                saved.append((j, bool(A.dead[i, j])))
+                due = (self.st.pos[t].hold + 1) >= MixEngine.HOLD_PB                 # hold 在父类里 +1 之后才检查
+                A.dead[i, j] = due or (MixEngine.PB_USE_DEAD and bool(A.dead[i, j]))
+        kday = getattr(self, "_kday", None)
+        if kday is not None and m == "JP" and np.isfinite(kday[i]):          # CHAND_K_DAY：这一天收盘的吊灯倍数上限（只在这次离场判断里有效）
+            self._k_cap = float(kday[i])
+        try:
+            super()._check_exits(m, i)
+        finally:
+            self._k_cap = None
+            for j, v in saved:
+                self.A.dead[i, j] = v
+        ox = MixEngine.OPP_EXIT                                              # 跑输核心就离场（第 17 轮 OCX；原来另写的一个同名方法被这个覆盖 → 合到这里）
+        if ox and m == "JP":
+            self._opp_exit(i, ox)
+        xt = MixEngine.EXIT_TICK                                             # 指定日收盘还拿着就离场（第 19 轮 EBX：决算前卖出）
+        if xt and m == "JP":
+            self._tick_exit(i, xt)
+
+
+def regime_with_floor(qr: pd.Series, floor: float | None) -> pd.Series:
+    """量化状态层的逐日新仓倍数（0 / 0.75 / 1）→ 研究用的下限 max(倍数, floor)；floor = None → 原样（= B1，只研究用）。"""
+    return qr if floor is None else qr.clip(lower=float(floor))
+
+
+def bull_only(em: pd.DataFrame, bear_jp: pd.Series) -> pd.DataFrame:
+    """日本牛熊判定（收盘时）= 熊 → 第二天（成交日）的个股新仓倍数 = 0。em：成交日 × 票。"""
+    bj = bear_jp.reindex(em.index.union(bear_jp.index)).ffill().reindex(em.index).fillna(False).astype(bool)
+    prev = bj.shift(1, fill_value=False)
+    return em.mul((~prev).astype(float).to_numpy()[:, None])
+
+
+def seg_total(eq: pd.Series, a: str | None, b: str | None) -> float | None:
+    """一段时间的总收益 %（这一段最后一天的权益 ÷ 这一段第一天 − 1）。"""
+    e = eq.dropna()
+    if a:
+        e = e[e.index >= pd.Timestamp(a)]
+    if b:
+        e = e[e.index < pd.Timestamp(b)]
+    if len(e) < 2 or e.iloc[0] <= 0:
+        return None
+    return round(float(e.iloc[-1] / e.iloc[0] - 1) * 100, 2)
+
+
+def yearly(eq: pd.Series, start: str = TRADE_START) -> dict[str, float]:
+    e = eq.dropna()
+    e = e[e.index >= pd.Timestamp(start)]
+    if not len(e):
+        return {}
+    ye = e.groupby(e.index.year).last()
+    prev = pd.concat([pd.Series([e.iloc[0]], index=[ye.index[0] - 1]), ye.iloc[:-1]])
+    return {str(y): round(float(ye[y] / prev.iloc[k] - 1) * 100, 2) for k, y in enumerate(ye.index)}
+
+
+def make_runner(closes_all: pd.DataFrame, ratio: dict, windows: dict[str, tuple], end: str | None = None, start: str = TRADE_START,
+                years: int = 21):
+    """run(ind, p, pb=None) → {窗口: 年化 / 回撤 / Calmar, trades, win, win_<窗口>, hold, reasons, years}。
+    years：宏观序列与 1655 的 yfinance 年数（缺省 21 = 2005 起；2001〜2006 的窗口用 27）。"""
+    import capital_study as CS
+    from bullbear_study import SYM, load
+    from unified_study import spx_jpy_on_jp_days
+    import score_study as Z
+    from qbreak.bullbear import BEAR, Detector, load_config
+    from qbreak.config import DataConfig
+    from qbreak.core import core_frame
+    from qbreak.data import load_universe
+    from qbreak.fees import etf_cost
+    from qbreak.macro import build_entry_mult, features_frame, load_macro_series
+    from qbreak.regime import quant_regime_series
+    from qbreak.trader import load_params
+    from qbreak.unified import config_from_sim, exec_configs
+    sim = json.loads((paths.home() / "sim.json").read_text(encoding="utf-8"))
+    cfg = config_from_sim(sim)
+    broker = (sim.get("unified") or {}).get("broker", "tachibana")
+    d21 = DataConfig(provider="yfinance", years=years, allow_synthetic=False).validate()
+    us = load_params(market="US")
+    idx = {m: load(*SYM[m]) for m in ("JP", "US")}
+    fxdf = load("JPY=X", "2000-01-01")
+    fxdf = fxdf[(fxdf["Close"] > 60) & (fxdf["Close"] < 250)]
+    etf = load_universe(["1655.T"], d21)
+    core = core_frame(etf["1655.T"], spx_jpy_on_jp_days(idx["US"], fxdf["Close"], idx["JP"].index), div_yield_pct=1.3)
+    macro = features_frame(load_macro_series(d21))
+    det = load_config()["detector"]
+    det = Detector(det["kind"], det["params"])
+    bear = {m: pd.Series(np.asarray(det.states(idx[m]["Close"])) == BEAR, index=idx[m].index) for m in ("JP", "US")}
+    ex = exec_configs(("JP",), {"broker": broker})
+    cc = {"1655.T": etf_cost(broker, "1655.T", "JP")}
+    mc = sim.get("jp", {})
+    flag = lambda k, d=True: mc.get(k, sim.get(k, d))                          # noqa: E731
+    qr = quant_regime_series(idx["JP"])
+    em_cache: dict = {}
+
+    def run(ind: dict, p, pb: dict | None = None, hold_pb: int = 10, mult: bool = True, pb_free: bool = False,
+            limit_k: float = 0.0, pb_use_dead: bool = False, cfg_over: dict | None = None, jp_bull_only: bool = False,
+            extra_core: dict | None = None, pref_us: pd.Series | None = None, core_expo: dict | None = None,
+            yen_strong: pd.Series | None = None, extra_bear: dict | None = None, priority: dict | None = None,
+            em_scale: pd.Series | None = None, params_t: dict | None = None, em_tick: dict | None = None,
+            params_td: dict | None = None, extra_expo: dict | None = None, dd_brake: dict | None = None,
+            opp_exit: dict | None = None, exit_tick: dict | None = None, entry_gap: int | None = None,
+            sector_cap: dict | None = None, regime_floor: float | None = None, chand_k_day: pd.Series | None = None) -> dict:
+        names = list(ind)
+        key = tuple(names) + (("nomult",) if not mult else ()) + ((("regime_floor", float(regime_floor)),) if regime_floor is not None and mult else ())
+        if key not in em_cache and not mult:
+            g = pd.DatetimeIndex(sorted(set().union(*[ind[t].index for t in names])))
+            em_cache[key] = pd.DataFrame(1.0, index=g, columns=names)
+        if key not in em_cache:
+            g = pd.DatetimeIndex(sorted(set().union(*[ind[t].index for t in names])))
+            M, _ = build_entry_mult(g, names, "JP", macro, use_macro=bool(flag("use_macro")), use_sector=bool(flag("use_sector_tilt")),
+                                    use_events=False, closes=closes_all.reindex(index=g, columns=names))
+            M = M * regime_with_floor(qr, regime_floor).reindex(g).ffill().shift(1).fillna(1.0).values[:, None]   # regime_floor：研究用的状态层下限（缺省 None = 不变）
+            em_cache[key] = pd.DataFrame(M, index=g, columns=names)
+        em = em_cache[key]
+        if pb and pb_free:                                                  # 押し目信号的第二天：新仓倍数当 1（不受宏观 / 状态层限制）
+            em = em.copy()
+            for t, ds in pb.items():
+                if t not in em.columns:
+                    continue
+                c = em.columns.get_loc(t)
+                for d in ds:
+                    k = int(em.index.searchsorted(d)) + 1
+                    if k < len(em.index):
+                        em.iat[k, c] = 1.0
+        if jp_bull_only:
+            em = bull_only(em, bear["JP"])
+        if em_scale is not None:                                            # 按成交日再乘一个倍数（例：每月决定个股层开 / 关 / 减半）
+            sc = em_scale.reindex(em.index.union(em_scale.index)).ffill().reindex(em.index).fillna(1.0).to_numpy(float)
+            em = em.mul(sc[:, None])
+        if em_tick:                                                         # {(票, 信号日): 倍数}：那个信号的新仓倍数再乘一个数（成交日 = 信号日的下一个交易日）
+            em = em.copy()
+            for (t, d), f in em_tick.items():
+                if t in em.columns:
+                    k = int(em.index.searchsorted(pd.Timestamp(d))) + 1
+                    if k < len(em.index):
+                        em.iat[k, em.columns.get_loc(t)] *= float(f)
+        JS.RealLotEngine.RATIO, JS.RealLotEngine.LAST = ratio, []
+        MS.MLEngine.EXIT = {}
+        Z._PrioEngine.PRIO = None
+        MixEngine.PB, MixEngine.HOLD_PB, MixEngine.LIMIT_K, MixEngine.PB_USE_DEAD = (pb or {}), hold_pb, limit_k, pb_use_dead
+        MixEngine.PREF_US, MixEngine.YEN_STRONG, MixEngine.EXTRA_BEAR = pref_us, yen_strong, (extra_bear or {})
+        MixEngine.EXTRA_EXPO = extra_expo or {}
+        MixEngine.PRIORITY = priority or {}
+        MixEngine.PARAMS_T = params_t or {}
+        MixEngine.PARAMS_TD = params_td or {}
+        MixEngine.DD_BRAKE = dd_brake or None
+        MixEngine.OPP_EXIT = opp_exit or None
+        MixEngine.EXIT_TICK = exit_tick or None
+        MixEngine.ENTRY_GAP = entry_gap or None
+        MixEngine.SECTOR_CAP = sector_cap or None
+        MixEngine.CHAND_K_DAY = chand_k_day
+        try:
+            c = replace(cfg, **cfg_over) if cfg_over else cfg
+            xc = extra_core or {}
+            cc2 = {**cc, **{t: etf_cost(broker, t, "JP") for t in xc}}
+            eng = MixEngine({**ind, "1655.T": core, **xc}, c, {"JP": p, "US": us}, ex, cc2, fx=fxdf[["Open", "Close"]],
+                            entry_mult={"JP": em}, bear=bear, core_expo=core_expo)
+            r = eng.run(start=start, end=end)
+        finally:
+            MixEngine.PB, MixEngine.LIMIT_K, MixEngine.PB_USE_DEAD, MixEngine.PREF_US, MixEngine.YEN_STRONG = {}, 0.0, False, None, None
+            MixEngine.EXTRA_BEAR, MixEngine.PRIORITY, MixEngine.PARAMS_T, MixEngine.PARAMS_TD = {}, {}, {}, {}
+            MixEngine.EXTRA_EXPO = {}
+            MixEngine.DD_BRAKE = None
+            MixEngine.OPP_EXIT = None
+            MixEngine.EXIT_TICK = None
+            MixEngine.ENTRY_GAP = None
+            MixEngine.SECTOR_CAP = None
+            MixEngine.CHAND_K_DAY = None
+        tr = r.trades[r.trades["reason"] != "end"]
+        st = tr[~tr["ticker"].isin(["1655.T", *(extra_core or {})])] if len(tr) else tr
+        out = {w: {**CS.seg_stats(r.equity, a, b), "tot": seg_total(r.equity, a, b)} for w, (a, b) in windows.items()}
+        out.update({"trades": int(len(st)), "years": yearly(r.equity, start)})
+        if len(st):
+            ed = pd.to_datetime(st["entry_date"])
+            w = (st["pnl"] > 0).to_numpy()
+            out["win"] = round(float(w.mean() * 100), 1)
+            for k, (a, b) in windows.items():
+                m = (ed >= pd.Timestamp(a)).to_numpy() & ((ed < pd.Timestamp(b)).to_numpy() if b else True)
+                out[f"win_{k}"] = round(float(w[m].mean() * 100), 1) if m.any() else None
+                out[f"n_{k}"] = int(m.sum())
+            out["hold"] = round(float(st["hold_days"].mean()), 1)
+            out["reasons"] = {str(k): int(v) for k, v in st["reason"].value_counts().items()}
+            out["ret_mean"] = round(float(st["ret_pct"].mean()), 3) if "ret_pct" in st.columns else None
+        else:
+            out.update({"win": None, "hold": None, "reasons": {}})
+        out["skipped"] = {str(k): int(v) for k, v in eng.skipped.items()}
+        return out
+    return run

@@ -1,0 +1,566 @@
+{
+ "note": "只展示，不参与交易（2026-09-25 事先登记研究：美股 AUC 0.66、日経 0.58，不足以预测时间段）",
+ "event_def": "之后 60 个交易日内最低收盘比当天跌 ≥10%",
+ "US": {
+  "date": "2026-10-08",
+  "value": 47.2,
+  "prev20": 56.8,
+  "band": "40–50",
+  "band_freq": 9.0,
+  "base_rate": 14.4,
+  "auc": [
+   0.6695336428629806,
+   0.6127852316542803
+  ],
+  "hit80": [
+   3,
+   27
+  ],
+  "top": [
+   {
+    "k": "rates",
+    "label": "美债利率急升",
+    "pct": 94
+   },
+   {
+    "k": "oil",
+    "label": "油价冲击",
+    "pct": 86
+   },
+   {
+    "k": "curve",
+    "label": "利率曲线倒挂",
+    "pct": 60
+   }
+  ],
+  "obs": [
+   {
+    "k": "gpr",
+    "label": "地缘政治风险（GPR）",
+    "pct": 94
+   },
+   {
+    "k": "epu",
+    "label": "政策不确定性（EPU）",
+    "pct": 94
+   },
+   {
+    "k": "commod",
+    "label": "商品综合急涨",
+    "pct": 84
+   },
+   {
+    "k": "grains",
+    "label": "粮食价格急涨",
+    "pct": 69
+   },
+   {
+    "k": "natgas",
+    "label": "天然气急涨",
+    "pct": 63
+   },
+   {
+    "k": "delinq",
+    "label": "企业贷款拖欠率上升",
+    "pct": 57
+   },
+   {
+    "k": "gpr_jump",
+    "label": "地缘风险急升",
+    "pct": 53
+   },
+   {
+    "k": "gold",
+    "label": "黄金急涨（避险）",
+    "pct": 51
+   },
+   {
+    "k": "commod_vol",
+    "label": "商品波动",
+    "pct": 51
+   },
+   {
+    "k": "sloos",
+    "label": "银行收紧企业贷款（SLOOS）",
+    "pct": 49
+   },
+   {
+    "k": "chargeoff",
+    "label": "企业贷款核销率上升",
+    "pct": 47
+   },
+   {
+    "k": "copper",
+    "label": "铜价下跌",
+    "pct": 42
+   },
+   {
+    "k": "gold_silver",
+    "label": "金银比上升",
+    "pct": 38
+   }
+  ],
+  "watch": {
+   "date": "2026-10-08",
+   "gs_pct": 37.66,
+   "cv_pct": 51.03,
+   "W": 44.34,
+   "W_pct": 34.79,
+   "A0": 47.18,
+   "A0_pct": 38.34,
+   "gs_raw": -1.38,
+   "cv_raw": 17.97
+  },
+  "domains": {
+   "信用 / 破产代理": {
+    "pct": 44,
+    "class": "两段都提升"
+   },
+   "就业": {
+    "pct": 43,
+    "class": "只前半"
+   },
+   "利率 / 曲线": {
+    "pct": 76,
+    "class": "都没有"
+   },
+   "货币政策 / 流动性": {
+    "pct": 52,
+    "class": "都没有"
+   },
+   "汇率": {
+    "pct": 66,
+    "class": "都没有"
+   },
+   "市场波动": {
+    "pct": 61,
+    "class": "都没有"
+   },
+   "商品": {
+    "pct": 58,
+    "class": "只后半"
+   },
+   "市场趋势": {
+    "pct": 32,
+    "class": "两段都提升"
+   },
+   "地缘 / 不确定性": {
+    "pct": 84,
+    "class": "只前半"
+   },
+   "财政": {
+    "pct": 22,
+    "class": "两段都提升"
+   },
+   "通胀": {
+    "pct": 85,
+    "class": "只后半"
+   },
+   "增长 / 景气": {
+    "pct": 38,
+    "class": "两段都提升"
+   },
+   "消费": {
+    "pct": 51,
+    "class": "两段都提升"
+   },
+   "住房": {
+    "pct": 84,
+    "class": "只后半"
+   },
+   "贸易 / 外需": {
+    "pct": 3,
+    "class": "都没有"
+   },
+   "全球 / 中国": {
+    "pct": 42,
+    "class": "两段都提升"
+   },
+   "运输 / 物流": {
+    "pct": 84,
+    "class": "只后半"
+   },
+   "科技周期": {
+    "pct": 61,
+    "class": "两段都提升"
+   },
+   "银行": {
+    "pct": 63,
+    "class": "只前半"
+   },
+   "市场内部": {
+    "pct": 74,
+    "class": "只后半"
+   },
+   "估值": {
+    "pct": 88,
+    "class": "只后半"
+   },
+   "企业盈利": {
+    "pct": 10,
+    "class": "只前半"
+   }
+  },
+  "wfc": {
+   "date": "2026-10-08",
+   "show": "A0",
+   "p10": 0.10401363498069253,
+   "p15": 0.04619840949596027,
+   "base10": 0.1361450240473548,
+   "base15": 0.059748427672955975,
+   "adopted": null,
+   "best": "DOM",
+   "oos": {
+    "auc10": 0.6152060397493991,
+    "auc15": 0.5944061820137378,
+    "d_auc10": null,
+    "boot_p05": null,
+    "bss10": -0.01612807195117072,
+    "pass": null
+   },
+   "top": null
+  },
+  "fwd": {
+   "A0x": 38.4,
+   "S": 47.3,
+   "DOM": 55.8
+  },
+  "fwd_plus": 3
+ },
+ "JP": {
+  "date": "2026-10-08",
+  "value": 58.9,
+  "prev20": 57.4,
+  "band": "50–60",
+  "band_freq": 28.9,
+  "base_rate": 26.3,
+  "auc": [
+   0.5970936232537829,
+   0.5160272687705546
+  ],
+  "hit80": [
+   1,
+   48
+  ],
+  "top": [
+   {
+    "k": "oil",
+    "label": "油价冲击",
+    "pct": 95
+   },
+   {
+    "k": "rates",
+    "label": "美债利率急升",
+    "pct": 95
+   },
+   {
+    "k": "jgb",
+    "label": "日债利率急升",
+    "pct": 89
+   }
+  ],
+  "obs": [
+   {
+    "k": "gpr",
+    "label": "地缘政治风险（GPR）",
+    "pct": 94
+   },
+   {
+    "k": "epu",
+    "label": "政策不确定性（EPU）",
+    "pct": 94
+   },
+   {
+    "k": "jp_lng",
+    "label": "日本 LNG 价格急涨",
+    "pct": 90
+   },
+   {
+    "k": "commod",
+    "label": "商品综合急涨",
+    "pct": 86
+   },
+   {
+    "k": "grains",
+    "label": "粮食价格急涨",
+    "pct": 84
+   },
+   {
+    "k": "gpr_jp",
+    "label": "涉日地缘风险",
+    "pct": 74
+   },
+   {
+    "k": "tankan_lend",
+    "label": "短观：银行贷款态度收紧",
+    "pct": 63
+   },
+   {
+    "k": "commod_vol",
+    "label": "商品波动",
+    "pct": 58
+   },
+   {
+    "k": "delinq",
+    "label": "企业贷款拖欠率上升",
+    "pct": 57
+   },
+   {
+    "k": "gpr_jump",
+    "label": "地缘风险急升",
+    "pct": 53
+   },
+   {
+    "k": "natgas",
+    "label": "天然气急涨",
+    "pct": 50
+   },
+   {
+    "k": "tankan_cash",
+    "label": "短观：企业资金周转恶化",
+    "pct": 50
+   },
+   {
+    "k": "sloos",
+    "label": "银行收紧企业贷款（SLOOS）",
+    "pct": 49
+   },
+   {
+    "k": "chargeoff",
+    "label": "企业贷款核销率上升",
+    "pct": 47
+   },
+   {
+    "k": "gold",
+    "label": "黄金急涨（避险）",
+    "pct": 44
+   },
+   {
+    "k": "gold_silver",
+    "label": "金银比上升",
+    "pct": 37
+   },
+   {
+    "k": "copper",
+    "label": "铜价下跌",
+    "pct": 27
+   }
+  ],
+  "watch_jp": {
+   "date": "2026-10-08",
+   "Wj": 68.37,
+   "Wj_pct": 92.87,
+   "W2": 47.34,
+   "W2_pct": 39.75,
+   "A0": 58.94,
+   "A0_pct": 78.75,
+   "p_em_rel": 62.66,
+   "p_real10": 94.4,
+   "p_tankan_big": 37.57,
+   "p_tankan_small": 56.2,
+   "p_claims": 8.19,
+   "p_breadth": 95.74,
+   "p_boj": 94.61,
+   "p_jp_cgpi": 97.6
+  },
+  "domains": {
+   "信用 / 破产代理": {
+    "pct": 50,
+    "class": "只前半"
+   },
+   "就业": {
+    "pct": 43,
+    "class": "只前半"
+   },
+   "利率 / 曲线": {
+    "pct": 76,
+    "class": "只后半"
+   },
+   "货币政策 / 流动性": {
+    "pct": 58,
+    "class": "都没有"
+   },
+   "汇率": {
+    "pct": 62,
+    "class": "都没有"
+   },
+   "市场波动": {
+    "pct": 60,
+    "class": "都没有"
+   },
+   "商品": {
+    "pct": 58,
+    "class": "都没有"
+   },
+   "市场趋势": {
+    "pct": 21,
+    "class": "只前半"
+   },
+   "地缘 / 不确定性": {
+    "pct": 82,
+    "class": "都没有"
+   },
+   "财政": {
+    "pct": 17,
+    "class": "只前半"
+   },
+   "通胀": {
+    "pct": 85,
+    "class": "只后半"
+   },
+   "增长 / 景气": {
+    "pct": 38,
+    "class": "只前半"
+   },
+   "消费": {
+    "pct": 51,
+    "class": "只前半"
+   },
+   "住房": {
+    "pct": 84,
+    "class": "都没有"
+   },
+   "贸易 / 外需": {
+    "pct": 3,
+    "class": "都没有"
+   },
+   "全球 / 中国": {
+    "pct": 42,
+    "class": "两段都提升"
+   },
+   "运输 / 物流": {
+    "pct": 84,
+    "class": "只后半"
+   },
+   "科技周期": {
+    "pct": 60,
+    "class": "只前半"
+   },
+   "银行": {
+    "pct": 63,
+    "class": "都没有"
+   },
+   "市场内部": {
+    "pct": 70,
+    "class": "只后半"
+   },
+   "估值": {
+    "pct": 88,
+    "class": "都没有"
+   },
+   "企业盈利": {
+    "pct": 10,
+    "class": "只前半"
+   }
+  },
+  "wfc": {
+   "date": "2026-10-08",
+   "show": "A0",
+   "p10": 0.2646271482025465,
+   "p15": 0.15109521456836436,
+   "base10": 0.2209324452901998,
+   "base15": 0.12293054234062797,
+   "adopted": null,
+   "best": "LASSO",
+   "oos": {
+    "auc10": 0.5128859462213248,
+    "auc15": 0.5220019155608422,
+    "d_auc10": null,
+    "boot_p05": null,
+    "bss10": -0.03286701099289169,
+    "pass": null
+   },
+   "top": null
+  },
+  "fwd": {
+   "A0x": 54.2,
+   "S": 53.4
+  },
+  "fwd_plus": 9
+ },
+ "events": [
+  {
+   "date": "2026-10-14",
+   "kind": "CPI",
+   "home": "US",
+   "name": "9月CPI"
+  },
+  {
+   "date": "2026-10-25",
+   "kind": "ELECTION",
+   "home": "GL",
+   "name": "巴西大选决选（周日，如需要）",
+   "source": "https://www.tse.jus.br/comunicacao/noticias/2026/Marco/eleicoes-2026-confira-as-principais-datas-do-calendario-eleitoral",
+   "checked": "2026-09-25"
+  },
+  {
+   "date": "2026-10-27",
+   "kind": "ELECTION",
+   "home": "GL",
+   "name": "以色列议会选举（中东局势 / 油价）",
+   "source": "https://www.electionguide.org/elections/id/5092/",
+   "checked": "2026-09-25"
+  },
+  {
+   "date": "2026-10-28",
+   "kind": "FOMC",
+   "home": "US"
+  },
+  {
+   "date": "2026-10-30",
+   "kind": "BOJ",
+   "home": "JP",
+   "name": "含展望报告"
+  },
+  {
+   "date": "2026-10-30",
+   "kind": "INDEX",
+   "home": "JP",
+   "name": "新 TOPIX 首次定期入替实施（10 月最后营业日）：未续选的移行措置銘柄开始按季降权，本次系数 87.5%",
+   "source": "https://www.jpx.co.jp/markets/indices/revisions-indices/nlsgeu000005mj3q-att/RevisionsofTOPIX.pdf",
+   "checked": "2026-09-25"
+  },
+  {
+   "date": "2026-11-03",
+   "kind": "ELECTION",
+   "home": "US",
+   "name": "美国中期选举（东京 11/3 文化の日休市，日本 11/4 反应）",
+   "source": "https://www.fec.gov/help-candidates-and-committees/dates-and-deadlines/2026-reporting-dates/preg-report-notice-pacs-party-committees-2026/",
+   "checked": "2026-09-25"
+  },
+  {
+   "date": "2026-11-06",
+   "kind": "NFP",
+   "home": "US",
+   "name": "10月雇用统计"
+  },
+  {
+   "date": "2026-11-10",
+   "kind": "CPI",
+   "home": "US",
+   "name": "10月CPI"
+  },
+  {
+   "date": "2026-11-18",
+   "kind": "SUMMIT",
+   "home": "GL",
+   "name": "APEC 领导人会议（深圳，11/18–19）",
+   "source": "https://news.cgtn.com/news/2025-12-13/2026-APEC-meeting-to-be-held-Nov-18-19-in-Shenzhen-China-1J43L2Fb2w0/index.html",
+   "checked": "2026-09-25"
+  },
+  {
+   "date": "2026-11-29",
+   "kind": "OPEC",
+   "home": "GL",
+   "name": "第 42 次部长级会议（ONOMM，周日；2027 年产量基准）",
+   "source": "https://www.opec.org/pr-detail/605-7-june-2026.html",
+   "checked": "2026-09-25"
+  },
+  {
+   "date": "2026-12-04",
+   "kind": "NFP",
+   "home": "US",
+   "name": "11月雇用统计"
+  }
+ ]
+}

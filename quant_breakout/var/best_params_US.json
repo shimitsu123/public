@@ -1,0 +1,5 @@
+{
+ "exit_on_macd_dead_cross": false,
+ "trailing_stop_pct": 10.0,
+ "trailing_arm_pct": 3.0
+}

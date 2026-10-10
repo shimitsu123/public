@@ -1,0 +1,264 @@
+{
+ "title": "第八个研究循环：新的、独立的信息来源 —— 用从没拿来做过交易决定的信息找比 B3 更好的规则",
+ "start": "2026-10-04",
+ "registered": "本提交（登记）",
+ "user_request": "进行真正提高，需要新的、独立的信息来源的研究（2026-10-04，待办〔52〕之后）",
+ "why": "检验力测算 + 等权组合 ENB：价格 / 波动 / 美国宏观这一类信息再怎么组合技能也只到约 q ≈ 0.1 → 需要新的信息来源",
+ "rules": "scripts/research_loop8.py 开头",
+ "status": "ended:用户决定",
+ "cap": 10,
+ "family_cap": 3,
+ "sources": [
+  "期权·波动风险溢价",
+  "杠杆·融资余额",
+  "资金流·投资部门别",
+  "卖空·空売り比率"
+ ],
+ "criteria": {
+  "info": "信息检查 I1 合并 IC 方向一致且联合区块自助法单侧 p ≤ 0.1、I2 方向一致的市场 ≥ 2/3、I3 文献发表之后仍一致",
+  "stage1": "research_loop6.stage1（S1〜S4；事后设计的加 S7）在 B3 上",
+  "stage2": "≥ 4 个市场 → 横展开 research_loop7.judge；否则单一序列 400 次平移"
+ },
+ "baseline_def": "B3 = 模拟盘现在的闲置资金 Q1B（修正口径）",
+ "baseline": {
+  "Z": {
+   "cagr": 17.07,
+   "dd": -14.29,
+   "calmar": 1.194,
+   "n": 35,
+   "mean": 5.999,
+   "win": 65.7,
+   "h1": 1.422,
+   "h2": 1.722
+  },
+  "E": {
+   "cagr": 14.53,
+   "dd": -23.19,
+   "calmar": 0.627,
+   "n": 43,
+   "mean": 1.286,
+   "win": 41.9,
+   "h1": 0.215,
+   "h2": 1.479
+  },
+  "J": {
+   "cagr": 20.02,
+   "dd": -29.61,
+   "calmar": 0.676,
+   "n": 62,
+   "mean": 3.057,
+   "win": 48.4,
+   "h1": 0.722,
+   "h2": 0.79
+  }
+ },
+ "fingerprint": "3b2e8757be7b4a74",
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-04",
+   "title": "期权的波动风险溢价 VRP（信息检查）+ 规则 VRN（牛市月末 VRP ≤ 0 → 下一个月核心 2/3）",
+   "registered": "f042dc6",
+   "code": "f042dc6",
+   "script": "scripts/loop8_r01_vrp.py",
+   "approaches": [
+    {
+     "id": "VRN",
+     "family": "期权·波动风险溢价",
+     "posthoc": false,
+     "kind": "cross",
+     "verdict": "第一关不过",
+     "info": {
+      "ok": true,
+      "pooled": 0.0889,
+      "p": 0.07,
+      "agree": 4,
+      "n": 5,
+      "post_pooled": 0.0169
+     },
+     "account_stage1": {
+      "ok": false,
+      "sum": 0.143,
+      "d": {
+       "Z": 0.166,
+       "E": -0.038,
+       "J": 0.015
+      },
+      "S1": true,
+      "S2": false,
+      "S3": true,
+      "S4": true,
+      "h1": 0.005,
+      "h2": 0.18
+     },
+     "stage2": {
+      "C1": false,
+      "C2": false,
+      "C3": false,
+      "pooled": -0.004747,
+      "h1": -0.002139,
+      "h2": -0.008469,
+      "positive": 0,
+      "need": 3,
+      "n": 4,
+      "max": 0.037119,
+      "ge_stat": 170
+     },
+     "note": "信息检查过（合并 IC +0.089、p = 0.070、4 / 5 个市场 IC > 0、2012 年以后 +0.017）；规则 VRN 第一关不过（S2：E −0.038）、横展开不过（合并 −0.005、0 / 4 为正）；信息集中在 VRP 高的一端（最高五分位之后 63 天：US +4.88%、EU +2.28%、IN +5.41%），VRP ≤ 0 的牛市月末之后并不差（US +0.83%、EU +1.76%）"
+    }
+   ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-04",
+   "title": "期权的波动风险溢价「高的一端」VRB（美股熊 ∧ 月末 VRP ≥ 之前 60 个月末的 80 分位 → 先拿回 1/3；事后）",
+   "registered": "134c9d5",
+   "code": "134c9d5",
+   "script": "scripts/loop8_r02_vrphigh.py",
+   "approaches": [
+    {
+     "id": "VRB",
+     "family": "期权·波动风险溢价",
+     "posthoc": true,
+     "kind": "cross",
+     "verdict": "第一关不过",
+     "info": {
+      "reused_round": 1,
+      "ok": true
+     },
+     "account_stage1": {
+      "ok": false,
+      "sum": 0.075,
+      "d": {
+       "Z": -0.026,
+       "E": 0.101,
+       "J": 0.0
+      },
+      "S1": true,
+      "S2": false,
+      "S3": true,
+      "S4": false,
+      "S7": true,
+      "h1": -0.442,
+      "h2": 0.08,
+      "unseen": 0.003
+     },
+     "stage2": {
+      "C1": false,
+      "C2": false,
+      "C3": false,
+      "pooled": 0.004629,
+      "h1": 0.051889,
+      "h2": -0.029058,
+      "positive": 2,
+      "need": 3,
+      "n": 4,
+      "max": 0.037298,
+      "ge_stat": 268,
+      "pos_share": 81.8
+     },
+     "note": "第一关不过（S2：Z −0.026；S4：前一半 −0.442）；横展开合并 +0.005 < 随机中位 +0.008（81.8% 的随机为正）；熊市月末有旗标之后 63 天 US +6.01% vs −0.24%，但按 Calmar 几乎没有好处"
+    }
+   ]
+  },
+  {
+   "round": 3,
+   "date": "2026-10-04",
+   "title": "杠杆·融资余额（FINRA 保证金负债 / JPX 信用买残 ÷ 指数的 z）信息检查 + 规则 MLV",
+   "registered": "c28be44",
+   "code": "c28be44",
+   "script": "scripts/loop8_r03_margin.py",
+   "approaches": [
+    {
+     "id": "MLV",
+     "family": "杠杆·融资余额",
+     "posthoc": false,
+     "kind": "info",
+     "verdict": "信息检查不过",
+     "info": {
+      "ok": false,
+      "I1": false,
+      "I2": true,
+      "I3": true,
+      "pooled": -0.0645,
+      "p": 0.1575,
+      "agree": 2,
+      "n": 2,
+      "post_pooled": -0.0394
+     },
+     "note": "信息检查不过（合并 IC −0.064、p = 0.158）；US −0.119（〜2016 −0.166、2017〜 +0.034）、JP −0.009；规则不检验"
+    }
+   ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-04",
+   "title": "资金流·投资部门别（外国投资者最近 13 周净买入占成交 FX）信息检查 + 规则 FFL",
+   "registered": "2a41f61",
+   "code": "2a41f61",
+   "script": "scripts/loop8_r04_foreign.py",
+   "approaches": [
+    {
+     "id": "FFL",
+     "family": "资金流·投资部门别",
+     "posthoc": false,
+     "kind": "info",
+     "verdict": "信息检查不过",
+     "info": {
+      "ok": false,
+      "I1": false,
+      "I2": false,
+      "I3": false,
+      "ic": -0.0913,
+      "p": 0.741,
+      "halves": [
+       -0.3619,
+       0.1943
+      ]
+     },
+     "note": "信息检查不过（IC −0.091 方向相反、p = 0.741、两半 −0.362 / +0.194）；最低一档（外国人卖得最多）之后 +5.50%；规则不检验"
+    }
+   ]
+  },
+  {
+   "round": 5,
+   "date": "2026-10-04",
+   "title": "卖空·空売り比率（全市场卖空占卖出，相对过去一年）信息检查 + 规则 SSR",
+   "registered": "5a50664",
+   "code": "5a50664",
+   "script": "scripts/loop8_r05_shortratio.py",
+   "approaches": [
+    {
+     "id": "SSR",
+     "family": "卖空·空売り比率",
+     "posthoc": false,
+     "kind": "info",
+     "verdict": "信息检查不过",
+     "info": {
+      "ok": false,
+      "I1": false,
+      "I2": true,
+      "I3": true,
+      "ic": -0.1885,
+      "p": 0.13,
+      "halves": [
+       -0.1305,
+       -0.1115
+      ]
+     },
+     "note": "信息检查不过、只差 p（IC −0.188 方向对、两半 −0.130 / −0.112、p = 0.130）；只有 103 个月末；要确认需没看过的 2008〜2016 数据"
+    }
+   ]
+  }
+ ],
+ "stopped": {
+  "date": "2026-10-04",
+  "why": "登记的 4 个来源都试过；继续需要付费的旧数据（J-Quants Premium）或加新来源（改循环规则）→ 要用户决定（待办〔53〕）",
+  "closest3": [
+   "SSR（信息检查只差 p：IC −0.188、p = 0.130）",
+   "VRN（信息检查过；第一关 +0.143 但 E −0.038）",
+   "VRB（第一关 +0.075 但 Z −0.026）"
+  ]
+ },
+ "ended": "2026-10-04 下午 用户（待办〔53〕）选 ①「暂停找新规则」→ 第八个研究循环结束（5 / 10 用了、没找到；最接近 SSR / VRN / VRB）；不升级 J-Quants Premium、不加新来源；模拟盘与执行器不变（B3）；前向记录与季度复核照旧，2026-12-24 模拟期总结（⑬）时一起看要不要再开研究"
+}
