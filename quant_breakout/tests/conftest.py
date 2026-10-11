@@ -36,6 +36,7 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("QBREAK_NO_MENUBAR", "1")             # 测试里的 mac_setup.sh 不编译 / 不装菜单栏图标
     monkeypatch.setenv("QBREAK_APP_DIR", str(tmp_path / "app"))
     monkeypatch.setenv("QBREAK_JQ_LIVE", str(tmp_path / "no_mac_jq_live"))   # 决算日程不读本机真的 J-Quants 缓存
+    monkeypatch.setenv("QBREAK_TRANSLATE", str(tmp_path / "no_translate"))   # 不用本机真的翻译小工具（装没装语言包结果都一样）
     monkeypatch.delenv("JQUANTS_API_KEY", raising=False)
     from qbreak.brokers import tachibana as _tb
     _sess = {"f": None, "owners": set()}                     # 立花本番会话锁也是进程里的全局：每个测试从「没拿着」开始

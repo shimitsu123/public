@@ -68,3 +68,10 @@ def test_pre_glossary_and_tidy():
     assert "鲁比奥" in TR.pre("Rubio calls sanctions necessary") and "日本央行" in TR.pre("日銀が利上げ")
     assert TR.pre("住宅ローン【福岡発】").endswith("【福冈报道】") or "报道】" in TR.pre("住宅ローン【福岡発】")
     assert TR.tidy("在中期中期之前") == "在中期之前"
+
+
+def test_dashboard_shows_chinese_with_original():
+    from qbreak import dashboard as DB
+    import inspect
+    src = inspect.getsource(DB)
+    assert 'e.get("title_zh") or e["title"]' in src and "原文：{escape(e[\"title\"])}" in src

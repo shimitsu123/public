@@ -278,8 +278,10 @@ def news_full_html(events: list[dict], limit: int = 10) -> str:
         c = e.get("chain") or {}
         cred_cls = "b-good" if e["cred"] >= 80 else ("b-warn" if e["cred"] >= 60 else "b-bad")
         link = escape(str(e.get("link") or ""), quote=True)
-        tt = e.get("title_zh") or e["title"]                                  # 有中文译文用中文（2026-10-11）
+        tt = e.get("title_zh") or e["title"]                                  # 有中文译文用中文、原文附在后面（2026-10-11）
         title = f'<a href="{link}" target="_blank" rel="noopener">{escape(tt)}</a>' if link else escape(tt)
+        if e.get("title_zh") and str(e["title_zh"]).strip() != str(e["title"]).strip():
+            title += f'<br><span class="muted">原文：{escape(e["title"])}</span>'
         up = "、".join(f"{escape(s)} {v:+.1f}%" for s, v in c.get("up") or [])
         dn = "、".join(f"{escape(s)} {v:+.1f}%" for s, v in c.get("down") or [])
         rules = "、".join(f"{escape(s)}{'↑' if dd > 0 else '↓'}" for s, dd in (c.get("rules") or {}).items())
