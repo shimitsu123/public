@@ -104,6 +104,28 @@
      "verdict": "第一关不过"
     }
    ]
+  },
+  {
+   "round": 5,
+   "script": "scripts/loop12_r05_mix.py",
+   "route": "J + A/B",
+   "approaches": [
+    {
+     "id": "PEH",
+     "family": "选股·估值",
+     "rule": "PER ≥ J 信号 80 分位（17.6 倍）→ 不买（路线 J）"
+    },
+    {
+     "id": "FGR",
+     "family": "选股·成长",
+     "rule": "当期销售予想 < 上期实绩 → 不买（路线 J）"
+    },
+    {
+     "id": "TOM",
+     "family": "选股·日历",
+     "rule": "成交日在月中（第 6 个〜倒数第 6 个交易日）→ 不买（路线 A / B）"
+    }
+   ]
   }
  ]
 }

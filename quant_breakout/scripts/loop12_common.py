@@ -100,7 +100,7 @@ def placebo(W: dict, frac: dict, routes: list[str], base: dict, n: int, log=prin
 
 # ───────────────────────── J-Quants 特征（2016-10 起；按可用日 = 开示日之后第一个交易日对到信号日） ─────────────────────────
 FINS_COLS = ["DiscDate", "DiscTime", "Code", "DocType", "CurPerType", "CurFYEn", "NxtFYEn", "OP", "OdP", "NP", "FOP", "FOdP", "FNP",
-             "NxFOP", "NxFOdP", "NxFNp", "BPS", "ROE", "CFO", "CFI", "EqAR", "Sales"]
+             "NxFOP", "NxFOdP", "NxFNp", "BPS", "ROE", "CFO", "CFI", "EqAR", "Sales", "EPS", "FSales"]   # EPS / FSales：第 5 轮起
 
 
 def fins_rows() -> pd.DataFrame:
