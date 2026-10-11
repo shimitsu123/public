@@ -53,6 +53,28 @@
      "verdict": "第一关不过"
     }
    ]
+  },
+  {
+   "round": 3,
+   "script": "scripts/loop12_r03_fund3.py",
+   "route": "J",
+   "approaches": [
+    {
+     "id": "EQL",
+     "family": "选股·财务质量",
+     "rule": "自有资本比率 < 30%（金融业除外）→ 不买"
+    },
+    {
+     "id": "SAG",
+     "family": "选股·成长",
+     "rule": "累计销售额同比 < 0 → 不买"
+    },
+    {
+     "id": "OMG",
+     "family": "选股·利润率",
+     "rule": "累计营业利润率同比低 1 pp 以上 → 不买"
+    }
+   ]
   }
  ]
 }

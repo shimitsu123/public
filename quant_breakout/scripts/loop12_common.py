@@ -112,7 +112,8 @@ def fins_rows() -> pd.DataFrame:
     F = F[doc.str.contains("FinancialStatements") & ~doc.str.contains("REIT")].copy()
     out = pd.DataFrame({"ticker": JX._tickers(F["Code"]), "date": pd.to_datetime(F["DiscDate"]),
                         "time": F.get("DiscTime", pd.Series("", index=F.index)).fillna("").astype(str),
-                        "per": F["CurPerType"].fillna("").astype(str), "doc": F["DocType"].astype(str)})
+                        "per": F["CurPerType"].fillna("").astype(str), "doc": F["DocType"].astype(str),
+                        "fye": F["CurFYEn"].fillna("").astype(str)})                       # 第 3 轮起（同期对比用）
     for c in FINS_COLS[7:]:
         out[c] = pd.to_numeric(F[c], errors="coerce") if c in F.columns else np.nan
     return out.dropna(subset=["ticker"]).sort_values(["ticker", "date", "time"], kind="mergesort").reset_index(drop=True)
