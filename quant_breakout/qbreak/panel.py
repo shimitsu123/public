@@ -225,6 +225,10 @@ details.khelp ul{margin:4px 0;padding-left:18px;font-size:13px;line-height:1.55;
 .axk{font-size:13px;color:var(--muted);line-height:1.75}.axv{min-width:0;font-size:15px;line-height:1.5}
 .axm{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px}.axm .chip{font-variant-numeric:tabular-nums}
 .chip.bad{background:transparent;box-shadow:inset 0 0 0 1px var(--neg);color:var(--neg);font-weight:600}
+.chip.mid{color:var(--neg)}
+.chip.good{background:transparent;box-shadow:inset 0 0 0 1px var(--pos);color:var(--pos)}
+.nmk{margin:4px 0}.nmk>summary{list-style:none;cursor:pointer}.nmk>summary::-webkit-details-marker{display:none}
+.nml{margin:4px 0 0;padding-left:18px}.nml li{margin:4px 0}
 .dots{display:inline-flex;gap:3px;margin-right:6px;vertical-align:1px}
 .dots i{width:8px;height:8px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--muted)}.dots i.on{background:var(--neg);box-shadow:none}
 .axn{padding:6px 0 2px;border-top:1px solid var(--line)}
@@ -1181,6 +1185,13 @@ document.addEventListener('click', e=>{                                   // 选
   if(m){ e.preventDefault(); const g=document.querySelector('.sgg[data-g="'+m.dataset.sgmore+'"]');
          if(g) g.querySelectorAll('.sgmore').forEach(x=>x.hidden=false); m.closest('.act').remove(); }
 }, true);
+document.addEventListener('click', e=>{                                   // 选股 / 持仓的消息标记：点标题 → 「消息」页那一条
+  const a=e.target.closest('[data-nlink]'); if(!a) return;
+  const d=document.getElementById('n-'+a.dataset.nlink); if(!d) return;
+  e.preventDefault(); showTab('news', true); showMseg('news');
+  d.open=true; const pd=d.parentElement && d.parentElement.closest('details'); if(pd) pd.open=true; d.classList.add('hl');
+  setTimeout(()=>{ const top=document.querySelector('.top'); window.scrollTo(0, d.getBoundingClientRect().top+window.scrollY-((top&&top.offsetHeight)||0)-8); }, 50);
+}, true);
 function showMseg(s){ document.querySelectorAll('[data-mseg]').forEach(b=>b.classList.toggle('on', b.dataset.mseg===s));
   document.querySelectorAll('.mseg').forEach(g=>{ g.hidden = g.dataset.s!==s; }); }
 document.addEventListener('click', e=>{ const b=e.target.closest('[data-mseg]'); if(!b) return; e.preventDefault(); showMseg(b.dataset.mseg); }, true);
@@ -1322,7 +1333,7 @@ RANK_GROUPS = (("triggered", "今天出了买入信号"), ("rest", "观察中"))
 SG_PAGE = 5                               # 一组先显示几只（其余点「再显示」）
 
 
-def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, cap: float, chart) -> str:
+def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, cap: float, chart, marks: dict | None = None) -> str:
     """「建议的股票」= 规则的候选（qbreak/suggest.py；全部列出）+ 每只的「买入…」（写手动买入指令；执行器下单前再查一遍）。
     有比例表（var/watch_prob.json，登记研究判定 A）→ 出了信号 / 其余一组（闸门 → 之后 10 个交易日内出买入信号的历史比例 → near_key），
     每只写第几、历史比例；没有 → 以前的 出了信号 → 快要出 → 观察中（按离买入信号的远近）。"""
@@ -1330,6 +1341,7 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, ca
     rows = SG.rank([dict(r) for r in (sg.get("rows") or [])], tab or {})   # 旧汇总没有 prob 也在这里补上（更新代码后不用等执行器）
     ranked = bool(tab)
     s = MO.slots(book, tag)
+    marks = _news_marks([r["ticker"] for r in rows]) if marks is None else marks
     H = [f"<section class='card' id='suggest'><h2>建议的股票（规则的候选，{len(rows)} 只）</h2>"
          f"<div class='muted small'>按 {escape(str(sg.get('asof') or '—'))} 收盘。不是收益预测，也不是建议；点「买入…」→ {escape(when)}下单。</div>"
          f"<div class='small'>个股名额：空 {s['free']} 个（拿着 {s['held']} + 排定买入 {s['buys']}，上限 {s['max']} 只）</div>"]
@@ -1344,6 +1356,10 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, ca
         grp = [r for r in rows if r.get("status") != "triggered"] if g == "rest" else [r for r in rows if r.get("status") == g]
         if grp:
             groups.append((g, title, grp))
+    if marks:
+        n_big = sum(1 for m in marks.values() if m["dir"] == "down" and m["level"] == "大")
+        H.append(f"<div class='small'>最近 72 小时的消息影响到其中 {len(marks)} 只" + (f"（受损 大 {n_big} 只）" if n_big else "")
+                 + "：见每只名字下面的「消息」标记，点开看是哪几条</div>")
     if len(groups) > 1:                                      # 分段：一次只看一组（2026-10-11 用户：不要页面很长）
         H.append("<div class='seg sgseg' role='tablist'>" + "".join(
             f"<button type='button' data-sgg='{g}'{' class=on' if n == 0 else ''}>"
@@ -1359,13 +1375,51 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, ca
             if g != "triggered" and any(r.get("near") for r in grp):
                 H.append("<div class='muted small'>按离买入信号的远近排（越上面越可能先出信号；只是估算）</div>")
         for k, r in enumerate(grp, 1):
-            row = _suggest_row(r, s, buying, eq, chart, rank=k if g == "rest" else None, fill=sg.get("fill_day"))
+            row = _suggest_row(r, s, buying, eq, chart, rank=k if g == "rest" else None, fill=sg.get("fill_day"),
+                               mark=marks.get(str(r["ticker"])))
             H.append(row if k <= SG_PAGE else f"<div class='sgmore' hidden>{row}</div>")
         if len(grp) > SG_PAGE:
             H.append(f"<div class='act'><button class='btn' data-sgmore='{g}'>再显示 {len(grp) - SG_PAGE} 只</button></div>")
         H.append("</div>")
     H.append("<div class='muted small'>股数按最近收盘估算。</div></section>")
     return "".join(H)
+
+
+def _news_marks(tickers, now: dt.datetime | None = None) -> dict:
+    """最近 72 小时的经济威胁消息对这些票的影响（news.ticker_impacts；只展示，不参与交易）。取不到 → {}。"""
+    from . import news as NW
+    try:
+        now = (now or now_jst()).astimezone(JST)
+        cut = now - dt.timedelta(hours=NW.MAX_AGE_H)
+        ev = [e for e in (NW.load() or {}).get("events") or [] if (_ts_jst(e.get("time")) or cut) >= cut]
+        return NW.ticker_impacts(ev, [str(x) for x in tickers]) if ev else {}
+    except Exception as e:                                 # noqa: BLE001  展示用：算不出不影响页面
+        log.warning("消息影响标记没算成：%s", e)
+        return {}
+
+
+def _news_mark(m: dict | None) -> str:
+    """一只票的消息影响标记：「⚠ 消息：受损 大（2 条）」+ 点开看是哪几条（时间 JST、冲击、标题；点标题跳到「消息」页那一条）。
+    2026-10-11 用户：候选股票上如果实时消息中出现了对该股的影响，根据影响大小标记，并且可以看到对应的消息。"""
+    if not m:
+        return ""
+    down = m["dir"] == "down"
+    tone = {"大": "bad", "中": "mid"}.get(m["level"], "") if down else "good"      # 受损：大 = 红框、中 = 红字、小 = 普通
+    head = f"{'⚠' if down else '↑'} 消息：{'受损' if down else '受益'} {m['level']}（{len(m['items'])} 条，估算 {m['net']:+.1f}%）"
+    li = []
+    for i in m["items"][:6]:
+        t = _ts_jst(i.get("time"))
+        nid = escape(str(i.get("id") or ""))
+        li.append(f"<li><span class='muted'>{t.strftime('%m/%d %H:%M') if t else '—'} JST</span> "
+                  f"<b class='{'neg' if i['eff'] < 0 else 'pos'}'>{i['eff']:+.1f}%</b>"
+                  + (" <b class='neg'>★</b>" if i.get("alert") else "")
+                  + f" <span class='chip'>{escape('、'.join(i.get('labels') or []) or '其他')}</span><br>"
+                  f"<a href='?tab=news&amp;seg=news&amp;n={nid}' data-nlink='{nid}'>{escape(str(i.get('title') or '')[:120])}</a></li>")
+    more = len(m["items"]) - 6
+    return (f"<details class='nmk'><summary><span class='chip {tone}'>{escape(head)}</span></summary>"
+            f"<div class='muted small'>行业：{escape(str(m.get('sector') or ''))}。每条消息对这个行业的估算冲击 × 可信度（★ 达到提醒线的 ×1.5），最大的一条为主、其余递减加总；"
+            "≥ 1% 大、≥ 0.4% 中、其余小。只是粗估，不参与交易；点标题看「消息」页的详细。</div><ul class='small nml'>" + "".join(li)
+            + (f"<li class='muted'>另外 {more} 条影响较小</li>" if more > 0 else "") + "</ul></details>")
 
 
 def _prob_line(pr: dict | None) -> str:
@@ -1380,7 +1434,8 @@ def _prob_line(pr: dict | None) -> str:
             + (f"（同样情况 {n:,} 次）" if n else "（相近情况估算）") + "</div>")
 
 
-def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = None, fill: str | None = None) -> str:
+def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = None, fill: str | None = None,
+                 mark: dict | None = None) -> str:
     t, b, ru = str(r["ticker"]), r.get("buy") or {}, r.get("rule") or {}
     nm = f" {escape(str(r['name']))}" if r.get("name") else ""
     meta = [f"条件凑齐 {r['score']:g} / 100" if r.get("score") is not None else None,
@@ -1391,6 +1446,7 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
     H = [f"<div class='hv sg'><div class='head'>" + (f"<span class='rk'>{rank}</span>" if rank else "")
          + f"<b>{escape(str(r.get('code') or t))}</b>{nm}"
          + (f"<span class='chip'>{escape(str(r['sector']))}</span>" if r.get("sector") else "") + tag_ + "</div>"
+         + _news_mark(mark)                                 # 消息的影响（2026-10-11 用户）
          + _prob_line(r.get("prob") if rank else None)
          + f"<div class='meta'>{' · '.join(x for x in meta if x)}</div>"
          + (f"<div class='small near'>{escape(str(r['near_text']))}</div>" if r.get("near_text") else "")   # 离买入信号还差什么（排序依据）
@@ -1864,6 +1920,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                            for t, p in (st.get("pos") or {}).items()],
               "core": [{"ticker": t, "name": t, "units": int(u), "why": "闲置资金规则（核心 ETF）"}
                        for t, u in (st.get("core_units") or {}).items() if int(u)]}
+    hmarks = _news_marks(list((st.get("pos") or {}).keys()), now) if st.get("pos") else {}
 
     def chart(t: str, kind: str) -> str:
         return (f"<div class='chart' data-t='{escape(t)}' data-kind='{kind}'><span class='muted small'>"
@@ -1936,8 +1993,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         cur = pct.get(t)
         px = float(p.get("last_close") or p.get("entry_px") or 0)
         sh = int(p.get("shares") or 0)
+        nmk = _news_mark(hmarks.get(t))                    # 拿着的票也标（横展开）
         data = f" data-t='{escape(t)}' data-name='{escape(str(r.get('name') or ''))}' data-shares='{sh}'"
-        return ("<div class='act'>"
+        return (nmk + "<div class='act'>"
                 f"<button class='btn sell' data-act='sell'{data}>卖出全部</button>"
                 f"<button class='btn' data-act='adj'{data} data-px='{px:g}'{'' if px > 0 and eq else ' disabled'}>调仓…</button></div>"
                 f"<div class='muted small'>现在 {sh:,} 股 · 约 {_yen(sh * px)} · 约占权益 {f'{cur:.1f}' if cur is not None else '—'}%</div>"
@@ -1954,7 +2012,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions) + more
              + ("<div id='qt-note' class='muted small'>现价：Yahoo 1 分钟线（约晚 20 分钟）</div>" if held_any else "") + "</section>")
     H.append(PANE + "pick")
-    H.append(_suggest_card(sm.get("suggest") or {}, book, tag, buying, when, eq, cap, chart))
+    H.append(_suggest_card(sm.get("suggest") or {}, book, tag, buying, when, eq, cap, chart,
+                           marks=_news_marks([r["ticker"] for r in (sm.get("suggest") or {}).get("rows") or []], now)))
     H.append(PANE + "hold")
     cp = float(man.get("core_pct", 100.0))
     slider = ("<div class='stepper'><button class='btn' data-act='core-step' data-d='-10' aria-label='减 10%'>−10</button>"

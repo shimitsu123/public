@@ -353,6 +353,7 @@ def chain(evs: list[str], betas: dict, holdings: dict[str, str] | None = None, t
     return {"shocks": {f: round(x, 3) for f, x in shocks.items()},
             "shock_txt": "、".join(SHOCK_TXT[f].format(x) for f, x in shocks.items() if abs(x) > 1e-9),
             "up": up, "down": dn, "rules": {s: d for s, d in rules.items() if d},
+            "impacts": [(s, v) for s, v in imp if abs(v) >= 0.01],                 # 全部行业的估算冲击（%；个股标记用）
             "tickers_down": sorted(t for t, s in hold.items() if s in bad), "tickers_up": sorted(t for t, s in hold.items() if s in good)}
 
 
@@ -465,6 +466,47 @@ def holdings_map(tickers: list[str]) -> dict[str, str]:
         s = S33_TO_17.get(s33.get(str(t).split(".")[0], ""))
         if s:
             out[t] = s
+    return out
+
+
+RULE_PCT = 0.5          # 只有经验规则、没有敏感度估算的行业：当作 ±0.5% 的冲击
+LEVELS = ((1.0, "大"), (0.4, "中"), (0.1, "小"))
+
+
+def ticker_impacts(events: list[dict], tickers: list[str], sectors: dict[str, str] | None = None) -> dict[str, dict]:
+    """消息对个股的影响（2026-10-11 用户：「候选股票上如果实时消息中出现了对该股的影响，根据影响大小标记，并且可以看到对应的消息」）。
+    个股 → TOPIX-17 行业 → 每条消息对这个行业的估算冲击（chain.impacts，%；只有经验规则 → ±RULE_PCT）× 可信度 /100（达到提醒线的 ×1.5）
+    → 按影响大小排、第 k 条 ×0.5^k 加总（同一件事的多条报道不重复放大）：≥ 1.0 大、≥ 0.4 中、≥ 0.1 小（更小的不标）。只是展示用的粗估（敏感度来自 TOPIX-17 行业 ETF 的周敏感度），不参与交易。
+    → {代码: {"net", "level", "dir": "down" | "up", "items": [{id, time, title, labels, eff, alert, cred, sector}]}}"""
+    sectors = sectors if sectors is not None else holdings_map(tickers)
+    out: dict[str, dict] = {}
+    for t in tickers:
+        sec = sectors.get(t)
+        if not sec:
+            continue
+        items = []
+        for e in events or []:
+            c = e.get("chain") or {}
+            imp = {s: float(v) for s, v in (c.get("impacts") or (list(c.get("up") or []) + list(c.get("down") or [])))}
+            v = imp.get(sec)
+            if v is None:
+                d = (c.get("rules") or {}).get(sec)
+                v = RULE_PCT * (1 if d > 0 else -1) if d else None
+            if v is None:
+                continue
+            eff = v * float(e.get("cred") or 50) / 100 * (1.5 if e.get("alert") else 1.0)
+            if abs(eff) < 0.05:
+                continue
+            items.append({"id": e.get("id"), "time": e.get("time"), "title": e.get("title"), "labels": e.get("event_labels") or [],
+                          "eff": round(eff, 2), "alert": bool(e.get("alert")), "cred": e.get("cred"), "sector": sec})
+        if not items:
+            continue
+        items.sort(key=lambda i: -abs(i["eff"]))
+        net = round(sum(i["eff"] * 0.5 ** k for k, i in enumerate(items)), 2)   # 同一件事常有好几条报道：最大的一条为主、其余递减（不简单相加）
+        level = next((lab for th, lab in LEVELS if abs(net) >= th), None)
+        if level is None:
+            continue
+        out[t] = {"net": net, "level": level, "dir": "down" if net < 0 else "up", "sector": sec, "items": items}
     return out
 
 
