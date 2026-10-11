@@ -35,6 +35,8 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", f"{_GUARD}{os.pathsep}{os.environ.get('PATH', '')}")   # 假 launchctl 放最前面（见 _GUARD）
     monkeypatch.setenv("QBREAK_NO_MENUBAR", "1")             # 测试里的 mac_setup.sh 不编译 / 不装菜单栏图标
     monkeypatch.setenv("QBREAK_APP_DIR", str(tmp_path / "app"))
+    monkeypatch.setenv("QBREAK_JQ_LIVE", str(tmp_path / "no_mac_jq_live"))   # 决算日程不读本机真的 J-Quants 缓存
+    monkeypatch.delenv("JQUANTS_API_KEY", raising=False)
     from qbreak.brokers import tachibana as _tb
     _sess = {"f": None, "owners": set()}                     # 立花本番会话锁也是进程里的全局：每个测试从「没拿着」开始
     monkeypatch.setattr(_tb, "_SESSION", _sess)

@@ -2914,8 +2914,9 @@ def _fx_scale(cfg) -> tuple[float, dict]:
 
 
 def _earnings_provider():
-    from qbreak.events import YFinanceEarnings
-    return YFinanceEarnings()
+    """决算日：J-Quants 的决算发表预定日为主、Yahoo 后备（2026-10-11 用户「决算日程换 J-Quants 为主」；qbreak/events.JQuantsFirstEarnings）。"""
+    from qbreak.events import JQuantsFirstEarnings
+    return JQuantsFirstEarnings()
 
 
 def _index_mult(market: str, tickers: list[str], today, base: dict | None = None) -> dict:
