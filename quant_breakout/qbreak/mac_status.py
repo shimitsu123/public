@@ -118,11 +118,11 @@ def _translate_item() -> dict | None:
     s = TR.status()
     if not s["tool"]:
         return {"name": "翻译", "level": "info", "text": "翻译小工具没装（bash scripts/install_translate.sh）：通知照发、标题是原文"}
-    miss = [k for k, v in (s.get("langs") or {}).items() if v != "installed"]
+    miss = [k for k, v in (s.get("langs") or {}).items() if k == "en" and v != "installed"]   # 只翻英文（2026-10-11）
     if miss or not s.get("langs"):
         return {"name": "翻译", "level": "warn",
                 "text": "语言包没下载（" + "、".join({"ja": "日本語", "en": "English"}.get(m, m) for m in miss) + "）：系统设置 → 通用 → 语言与地区 → 翻译语言 → 下载（含 中文（简体））"}
-    return {"name": "翻译", "level": "ok", "text": "消息标题翻成中文（本机离线）"}
+    return {"name": "翻译", "level": "ok", "text": "英文消息标题翻成中文（本机离线；日文保持原文）"}
 
 
 def _phone_item() -> dict:

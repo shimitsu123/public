@@ -22,10 +22,10 @@ def test_to_zh_uses_tool_caches_and_falls_back(tmp_path, monkeypatch):
 
     def run(cmd, input=None, **k):
         calls.append(json.loads(input))
-        out = [{"zh": "中文:" + t, "src": "ja"} if "制裁" in t else {"zh": None, "err": "notInstalled"} for t in json.loads(input)]
+        out = [{"zh": "中文:" + t, "src": "en"} if "Sanctions" in t else {"zh": None, "err": "notInstalled"} for t in json.loads(input)]
         return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(out, ensure_ascii=False))
-    assert TR.to_zh(["対ロ制裁", "Stocks fall"], run=run) == ["中文:対ロ制裁", None]
-    assert TR.to_zh(["対ロ制裁"], run=lambda *a, **k: (_ for _ in ()).throw(AssertionError("缓存命中不该再翻"))) == ["中文:対ロ制裁"]
+    assert TR.to_zh(["Sanctions on Russia", "Stocks rise", "対ロ制裁"], run=run) == ["中文:Sanctions on Russia", None, None]   # 日文不翻
+    assert TR.to_zh(["Sanctions on Russia"], run=lambda *a, **k: (_ for _ in ()).throw(AssertionError("缓存命中不该再翻"))) == ["中文:Sanctions on Russia"]
     assert len(calls) == 1
 
 
@@ -35,9 +35,9 @@ def test_no_tool_returns_none(tmp_path, monkeypatch):
 
 
 def test_notify_lines_chinese_first_with_original():
-    t = NW.notify_lines([_ev("a", "原油高騰", "原油价格飙升"), _ev("b", "Oil spikes")])
-    assert "09:30 JST 原油价格飙升｜原油供给冲击" in t and "（原文：原油高騰）" in t
-    assert "Oil spikes" in t and "还没翻译成中文" in t
+    t = NW.notify_lines([_ev("a", "Oil prices soar", "油价飙升"), _ev("b", "Oil spikes"), _ev("c", "原油高騰")])
+    assert "09:30 JST 油价飙升｜原油供给冲击" in t and "（原文：Oil prices soar）" in t
+    assert "Oil spikes" in t and t.count("还没翻译成中文") == 1 and "原油高騰" in t        # 日文保持原文、不加提示
 
 
 def test_news_card_and_marks_show_chinese(monkeypatch):
@@ -75,3 +75,8 @@ def test_dashboard_shows_chinese_with_original():
     import inspect
     src = inspect.getsource(DB)
     assert 'e.get("title_zh") or e["title"]' in src and "原文：{escape(e[\"title\"])}" in src
+
+
+def test_only_english_is_translated():
+    assert TR.is_english("U.S. Stocks Mixed as Oil Spikes") and not TR.is_english("日銀が利上げ") and not TR.is_english("WSJ日本版：サウジ")
+    assert not TR.is_english("2026") and not TR.is_english("原油价格上涨")

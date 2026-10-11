@@ -113,9 +113,17 @@ def status() -> dict:
         return {"tool": True, "langs": {}}
 
 
+def is_english(s: str) -> bool:
+    """只翻英文（2026-10-11 用户「不用翻译日语，只翻译英翻译中」）：没有假名 / 汉字、拉丁字母为主 → 英文。"""
+    s = str(s or "")
+    if re.search(r"[\u3040-\u30ff\u3400-\u9fff\uff66-\uff9f]", s):
+        return False
+    return len(re.findall(r"[A-Za-z]", s)) >= 3
+
+
 def to_zh(texts: list[str], run=subprocess.run) -> list[str | None]:
-    """一批标题 → 中文（顺序对应；翻不了的 None）。缓存命中的不再翻；绝不抛。"""
-    texts = [str(t or "") for t in texts]
+    """一批标题 → 中文（顺序对应；不是英文 / 翻不了的 None）。缓存命中的不再翻；绝不抛。"""
+    texts = [str(t or "") if is_english(t) else "" for t in texts]
     cache = read_json(_cache_path(), {}) or {}
     out: list[str | None] = [cache.get(_key(t)) if t else None for t in texts]
     todo = sorted({t for t, z in zip(texts, out) if t and z is None})

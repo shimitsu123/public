@@ -637,7 +637,9 @@ def notify_lines(events: list[dict], n: int = 5) -> str:
     for e in events[:n]:
         zh, raw = e.get("title_zh"), str(e.get("title") or "")
         head = f"{str(e.get('time') or '')[11:16]} JST {zh or raw}｜{alert_text(e)}"
-        out.append(head + (f"\n（原文：{raw}）" if zh and zh.strip() != raw.strip() else ("" if zh else "\n（标题还没翻译成中文：上面是原文）")))
+        from .translate import is_english                      # 只翻英文：日文标题保持原文、不加提示（2026-10-11）
+        note = "" if zh or not is_english(raw) else "\n（英文标题还没翻译成中文：上面是原文）"
+        out.append(head + (f"\n（原文：{raw}）" if zh and zh.strip() != raw.strip() else note))
     return "\n".join(out)
 
 
