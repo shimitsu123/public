@@ -1,0 +1,29 @@
+{
+ "loop": 12,
+ "registered": "2026-10-12",
+ "cap": 20,
+ "rounds": [
+  {
+   "round": 1,
+   "script": "scripts/loop12_r01_fund.py",
+   "route": "J",
+   "approaches": [
+    {
+     "id": "PBH",
+     "family": "选股·估值",
+     "rule": "PBR ≥ J 信号 80 分位（1.46）→ 不买"
+    },
+    {
+     "id": "ROL",
+     "family": "选股·财务质量",
+     "rule": "ROE < 5% → 不买"
+    },
+    {
+     "id": "NXG",
+     "family": "选股·业绩指引",
+     "rule": "下期利润予想 < 本期实绩 → 不买"
+    }
+   ]
+  }
+ ]
+}
