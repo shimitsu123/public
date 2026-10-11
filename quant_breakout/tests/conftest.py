@@ -6,6 +6,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+# 面板脚本的语法检查等测试要 node：PATH 里没有（Mac 上 node 装在 nvm 里，launchd / dev.sh 的 PATH 不含）→ 用 nvm 里最新的那个
+# （2026-10-11：node 找不到 → 这些测试一直被跳过，面板脚本的语法错误两次漏到提交里）
+import shutil as _sh  # noqa: E402
+if not _sh.which("node"):
+    _nv = sorted((Path.home() / ".nvm" / "versions" / "node").glob("*/bin/node"))
+    if _nv:
+        os.environ["PATH"] = f"{_nv[-1].parent}{os.pathsep}{os.environ.get('PATH', '')}"
 # 必须在 import qbreak 之前设置：日志/状态目录在首次 import 时就会被创建
 _TMP = tempfile.mkdtemp(prefix="qbreak_test_")
 os.environ["QBREAK_HOME"] = _TMP

@@ -388,7 +388,8 @@ function cpctOf(n){                                                        // �
   if(Math.floor(ADJ.u100*p/100/L+1e-9)*L!==m) p=Math.round(m/ADJ.u100*10000)/100;
   return p;
 }
-function adjCap(){                                                          // 个股：单只上限 cap%；核心 ETF：规则目标额（比例 100%）
+function adjCap(){                                                          // 个股：单只上限 cap%；核心 ETF：规则目标额（比例 100%）；固定口数：总权益
+  if(ADJ.fix) return ADJ.px>0 && CFG.eq>0 ? Math.floor(CFG.eq/ADJ.px/ALOT()+1e-9)*ALOT() : 0;
   if(ADJ.core) return Math.floor((ADJ.u100||0)/ALOT())*ALOT();
   return ADJ.px>0 && CFG.eq>0 ? Math.floor(CFG.eq*CFG.cap/100/ADJ.px/ALOT()+1e-9)*ALOT() : 0;
 }
@@ -429,7 +430,7 @@ function adjBar(){                                                         // �
   const pk=Math.min(100, have/n*100), num=n<=8 ? '' : ' '+fmt(ADJ.shares);            // ▲ 对准现在的位置：左半边往右写、右半边往左写（不出框）
   const kl=nd('span', 'k', pk<=60 ? '▲现在'+num : '现在'+num+' ▲', lab);
   kl.style.left=pk+'%'; kl.style.transform = pk<=60 ? 'translateX(-6px)' : 'translateX(calc(-100% + 6px))';
-  const lim = ADJ.core ? '规则目标额（比例 100%）' : '单只上限 '+CFG.cap+'%';
+  const lim = ADJ.fix ? '总权益' : ADJ.core ? '规则目标额（比例 100%）' : '单只上限 '+CFG.cap+'%';
   const capTxt = capN>=n ? '最右边 = '+lim
                : capN<have ? lim+' ≈ '+fmt(capN*LOT)+' '+U+'（现在已超过，只能减）'
                : lim+' ≈ '+fmt(capN*LOT)+' '+U;
@@ -443,6 +444,7 @@ function adjPrev(){
   const r=$('#adj-range'); if(n!=null) r.value=Math.min(+r.max, n);
   adjBar();
   if(n==null){ out.textContent='输入目标（'+UW()+'数 / 金额 / 占总权益 %）'; go.textContent='确认'; go.disabled=true; return; }
+  if(c.fix){ adjPrevFix(n); return; }
   if(c.core){ adjPrevCore(n); return; }
   if(n===c.shares){
     out.textContent='换算还是 '+fmt(n)+' 股：不用调';
@@ -465,6 +467,15 @@ function adjPrev(){
   out.textContent='买入 '+fmt(k)+' 股（约 '+yen(k*c.px)+'）：'+fmt(c.shares)+' → '+fmt(t)+' 股，约占权益 '+pctOf(t)+note
     +'\\n'+CFG.when+'买入（最高 '+yen(c.px*1.03)+' = 收盘 ×1.03）；钱不够先卖核心 ETF；只做一次';
   go.textContent='确认买入 '+fmt(k)+' 股'; go.disabled=false;
+}
+function adjPrevFix(n){                                                    // 核心 ETF 固定口数（2026-10-11）：买入 / 卖出多少、占权益、什么时候、之后怎样
+  const c=ADJ, go=$('#adj-go'), out=$('#adj-prev'), cap=adjCap(), t=Math.min(n, cap), k=t-c.shares;
+  const head = k>0 ? '买入 '+fmt(k)+' 口（约 '+yen(k*c.px)+'）：' : k<0 ? '卖出 '+fmt(-k)+' 口（约 '+yen(-k*c.px)+'）：' : '保持现在的口数：';
+  out.textContent = head+fmt(c.shares)+' → '+fmt(t)+' 口，约 '+yen(t*c.px)+' · 约占权益 '+pctOf(t)+(n>cap ? '\\n★ 超过总权益：截到 '+fmt(t)+' 口' : '')
+    +'\\n下一次决策起（交易日 07:40，开盘下单）正好调到 '+fmt(t)+' 口，不再按规则（牛熊 / 股债相关）自动调；一直有效，直到点「恢复按规则」。'
+    +'\\n钱从哪来 / 剩下的去哪：核心目标额先扣掉这只，其余照规则分给其他核心 ETF（牛市 = 纳指 1545 相应减少 / 增加）；规则不拿别的 ETF 时剩下的留现金。';
+  go.textContent = k>0 ? '确认买入 '+fmt(k)+' 口' : k<0 ? '确认卖出 '+fmt(-k)+' 口' : '确认固定 '+fmt(t)+' 口';
+  go.className = k<0 ? 'btn danger' : 'btn primary'; go.disabled = !(c.px>0);
 }
 function coreFx(q, skip, lab){                                             // 同一个比例对别的核心 ETF（规则同时拿两只以上时）：会变的列出来
   const C=CFG.cores||{}, out=[];
@@ -587,6 +598,8 @@ document.addEventListener('click', async e=>{
   if(a==='adj-unit'){ adjUnit(d.u); return; }
   if(a==='adj-step'){ const n=adjTarget(); adjShow(Math.max(0, (n==null ? ADJ.shares : n)+(+d.d)*ALOT())); adjPrev(); return; }
   if(a==='adj-go'){
+    if(ADJ && ADJ.fix){ const n=adjTarget(); if(n==null) return; const u=Math.min(n, adjCap());
+      closeAll(); done(await api('/api/request',{book:CFG.book, kind:'corefix', ticker:ADJ.t, units:u})); return; }
     const n=adjTarget(); if(n==null || n===ADJ.shares) return;
     const v = ADJ.unit==='shares' ? n : parseFloat($('#adj-val').value);
     closeAll(); done(await api('/api/request',{book:CFG.book, kind:'adjust', ticker:ADJ.t, unit:ADJ.unit, value:v})); return;
@@ -638,15 +651,15 @@ document.addEventListener('click', async e=>{
       const q=await ask(d.name+'：恢复按规则', '下一次决策起，这只 ETF 又按规则（美股牛熊 / 股债相关）自动买卖。'+NOTE, '恢复');
       if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'corefix', ticker:d.t, clear:true})); return;
     }
-    const q=await ask(d.name+'：固定口数', '现在 '+fmt(cur)+' 口，约 '+yen(cur*px)+'（收盘 ¥'+px+'，单元 '+lot+' 口）。\\n写口数（例 '+(lot*100)+'），或写金额（例 ¥300000）。', '下一步', {input:'口数 或 ¥金额'});
-    if(!q.ok) return;
-    const s=String(q.value||'').replace(/[,\\s]/g,''); let u;
-    if(/[¥円]/.test(s)){ const y=+s.replace(/[¥円]/g,''); u=Math.floor(y/px/lot)*lot; } else { u=Math.floor((+s)/lot)*lot; }
-    if(!isFinite(u) || u<0){ toast('口数 / 金额看不懂：例 '+(lot*100)+' 或 ¥300000', true); return; }
-    const pct = eq>0 ? ' · 约占权益 '+(u*px/eq*100).toFixed(1)+'%' : '';
-    const q2=await ask('固定 '+d.name+' '+fmt(u)+' 口？', '约 '+yen(u*px)+pct+'。\\n下一次决策起（交易日 07:40，开盘下单）正好调到这个口数，不再按规则自动调；'
-      +'其余闲置资金照规则分给其他核心 ETF：规则现在拿的那只（牛市 = 纳指 1545）相应减少 / 增加；规则现在不拿别的 ETF 时，剩下的留现金。\\n一直有效，直到你点「恢复按规则」。'+NOTE, '固定');
-    if(q2.ok) done(await api('/api/request',{book:CFG.book, kind:'corefix', ticker:d.t, units:u})); return;
+    ADJ={t:d.t, shares:cur, px:px, unit:'shares', core:true, fix:true, lot:lot, u100:0, cpct:0, approx:false, name:d.name};
+    $('#adj-title').textContent=(cur>0 ? '固定口数 ' : '买入 ')+d.t+(d.name?' '+d.name:'');
+    $('#adj-cur').textContent='现在 '+fmt(cur)+' 口 · 约 '+yen(cur*px)+' · 约占权益 '+pctOf(cur)+' · 收盘 ¥'+px+' · 一个单元 '+fmt(lot)+' 口';
+    $('#adj-u-sh').textContent='口数';
+    const ru=$('#adj-rule'); if(ru){ if(ADJ_RULE==null) ADJ_RULE=ru.innerHTML;
+      ru.textContent='拖动滑条或输入目标（口数 / 金额 / 占总权益 %），按单元（'+fmt(lot)+' 口）取整；最右边 = 总权益全部。'+NOTE.trim(); }
+    $('#adj-val').value='';
+    const r=$('#adj-range'); r.max=Math.max(1, Math.ceil(Math.max(adjCap(), cur, lot)/lot))*lot; r.step=lot; r.value=cur;
+    adjUnit('shares'); sheet('#dlg-adj'); return;
   }
   if(a==='unblock'){
     const q=await ask('解除 '+d.t+' 的不自动买回', '之后有买入信号就会按规则买。', '解除');
