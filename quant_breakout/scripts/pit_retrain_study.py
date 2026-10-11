@@ -401,12 +401,21 @@ def load_data(coverage: bool = False) -> dict:
     caps = PD.market_caps(bars, no_s1)
     mem = {"U1": {d: PD.members(m, "t500") for d, m in snaps.items()},
            "U2": {d: PD.members(m, "t1000", caps.get(d)) for d, m in snaps.items()}}
+    import os as _os
+    import leap_data as LD
+    div_on = _os.environ.get("QB_JQ_DIV", "1") != "0"                       # 2026-10-12 起缺省加分红调整；QB_JQ_DIV=0 重现以前（只调拆股）
+    no_div: list[str] = []
     data, ratio = {}, {}
     for code, g in bars.groupby("Code"):
         yf = to_yf(code)
         if yf is None:
             continue
-        df, rt = PD.adjust(g)
+        df, rt = PD.adjust(g)                                               # rt（真实一手比例）只按拆股算，分红调整不动它
+        if len(df) >= 60 and div_on:
+            try:
+                df = PD.div_adjust(df, LD.actions(yf)["div"])
+            except Exception as e:                                          # noqa: BLE001  取不到分红 → 这只照旧（只调拆股），记下来
+                no_div.append(f"{yf}:{type(e).__name__}")
         if len(df) >= 60:
             data[yf], ratio[yf] = df, rt
     s33, s17 = {}, {}
@@ -415,7 +424,8 @@ def load_data(coverage: bool = False) -> dict:
         s33.update(dict(zip(m["Code"].astype(str).str[:4], m["S33Nm"].astype(str))))
         s17[d] = pd.Series(m["S17Nm"].astype(str).to_numpy(), index=m["Code"].astype(str).to_numpy())
     return {"snaps": snaps, "mem": mem, "data": data, "ratio": ratio, "u0": [t for t in u0 if t in data], "u0_all": u0,
-            "s33": s33, "s17": s17, "caps": caps, "bars_rows": int(len(bars)), "files": len(files)}
+            "s33": s33, "s17": s17, "caps": caps, "bars_rows": int(len(bars)), "files": len(files),
+            "div_adjusted": bool(div_on), "no_div": no_div}
 
 
 def universe_members(D: dict, u: str, days: pd.DatetimeIndex) -> tuple[list[str], dict[str, pd.Series]]:

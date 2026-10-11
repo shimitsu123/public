@@ -66,6 +66,31 @@ def adjust(raw: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     return out, (1.0 / after)[ok]
 
 
+def div_adjust(df: pd.DataFrame, div: pd.Series | None) -> pd.DataFrame:
+    """拆股调整后的 OHLC → 再做分红调整（与 yfinance auto_adjust 同一口径：除权日 x 之前的价格 × ∏(1 − 分红 ÷ 前一个交易日收盘)）。
+    div = 每股分红（按除权日；与 df 同一个拆股基准，例：Yahoo 的 actions）。成交量不动。没有分红 → 原样。
+    2026-10-12 用户「修研究数据并重跑」：J-Quants 只调拆股、研究引擎不加分红收入 → 跨 3 / 9 月末权利确定日的持有被多算一次除权下跌。"""
+    if div is None or not len(div) or df is None or not len(df):
+        return df
+    d = div[div > 0]
+    d = d[(d.index > df.index[0]) & (d.index <= df.index[-1])]
+    if not len(d):
+        return df
+    c = df["Close"]
+    f = pd.Series(1.0, index=df.index)
+    for x, amt in d.items():
+        k = df.index.searchsorted(x, side="left")                         # 除权日（或之后第一个交易日）
+        if k <= 0 or k >= len(df):
+            continue
+        prev = float(c.iloc[k - 1])
+        if prev > 0 and 0 < amt < prev:
+            f.iloc[:k] *= 1 - float(amt) / prev
+    out = df.copy()
+    for col in ("Open", "High", "Low", "Close"):
+        out[col] = df[col] * f
+    return out
+
+
 def market_caps(bars: pd.DataFrame, dates) -> dict[pd.Timestamp, pd.Series]:
     """{日期: 代码 → 当天市值}（只取给定的日期；缺值不算）。"""
     want = {str(pd.Timestamp(d).date()) for d in dates}
