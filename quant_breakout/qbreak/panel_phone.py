@@ -753,6 +753,71 @@ def _open(url: str, open_panel: bool) -> None:
             pass
 
 
+def health(port: int = PHONE_PORT) -> dict:
+    """手机访问现在通不通（只读；〔再发防止〕）→ {enabled, ok, url, problems: [文字], repairable}。
+    enabled = 以前打开过（panel_phone.json 有地址）；没打开过 → ok None、不查。不打印路径密钥、账户名。"""
+    saved = _saved()
+    url = str(saved.get("url") or "") or None
+    if not url:
+        return {"enabled": False, "ok": None, "url": None, "problems": [], "repairable": False}
+    probs, repair = [], False
+    if not listening(port):
+        probs.append(f"操作面板的手机端口 {port} 没在监听（面板没运行或正在重启）")
+    ts = find_cli()
+    if ts is None:
+        probs.append("没找到 tailscale 命令（Mac 上的 Tailscale App 被删了？）")
+    else:
+        info = ts_info(ts)
+        if not info["ok"] or info.get("state") != "Running" or not info.get("dns"):
+            probs.append(f"Mac 的 Tailscale 没在运行或没登录（{info.get('state') or info.get('err') or '—'}）：打开 Tailscale App、打开连接")
+        else:
+            hp = int(saved.get("https_port") or 443)
+            si = serve_info(ts, info["dns"], hp)
+            g = gate()
+            target = f"http://127.0.0.1:{int(port)}/{g}" if g else None
+            if si.get("funnel"):
+                probs.append("★ Funnel（公开到互联网）开着：tailscale funnel --https=%d off" % hp)
+            elif not (target and _norm(si.get("proxy")) == _norm(target)):
+                probs.append("Tailscale Serve 的设置不在了 / 变了（Mac 重启、Tailscale 更新后会发生）")
+                repair = not si.get("other_root") and (not si.get("proxy") or _ours_old(si.get("proxy"), port))
+            if _norm(f"https://{info['dns']}/" if hp == 443 else f"https://{info['dns']}:{hp}/") != _norm(url):
+                probs.append("这台 Mac 在 Tailscale 里的机器名变了：手机地址也变了（重新 bash scripts/liveu.sh phone on）")
+                repair = False
+    return {"enabled": True, "ok": not probs, "url": url, "problems": probs, "repairable": repair}
+
+
+def ensure(port: int = PHONE_PORT, notify=None, today: str | None = None) -> dict:
+    """定时（每 15 分钟的市场仪表盘任务 / 登录时）检查手机访问；Serve 的设置不在了（而且以前是 qbreak 设的）→ 自动重新打开一次
+    （同 phone on：机器名没变才做，绝不开 Funnel）；还是不通 → 通知一次（同一天同一个问题只一次）。返回 health() 的结果（修过的话是修之后的）。"""
+    h = health(port)
+    if not h["enabled"] or h["ok"]:
+        return h
+    if h["repairable"]:
+        lines: list[str] = []
+        rc = cli("on", port=port, yes=False, out=lines.append, open_panel=False, wait_s=5.0)
+        h2 = health(port)
+        h2["repaired"] = rc == 0 and bool(h2["ok"])
+        if h2["ok"]:
+            return h2
+        h = h2
+    key = "|".join(h["problems"])
+    today = today or dt.datetime.now(JST).strftime("%Y-%m-%d")
+    mark = paths.home() / ".phone_warned"
+    try:
+        last = mark.read_text(encoding="utf-8")
+    except OSError:
+        last = ""
+    if last != f"{today}|{key}":
+        try:
+            mark.write_text(f"{today}|{key}", encoding="utf-8")
+        except OSError:
+            pass
+        if notify is not None:
+            notify("qbreak ★ 手机连不上 Mac 的面板", "；".join(h["problems"])
+                   + "。修好之前手机打不开；在 Mac 对话里说「手机连不上」。手机只能用 " + str(h["url"]) + "（127.0.0.1 是手机自己，打不开）")
+    return h
+
+
 def cli(action: str = "status", port: int = PHONE_PORT, https_port: int = 443, yes: bool = False, out=print,
         open_panel: bool = True, confirm_name: str | None = None, wait_s: float = 20.0, value: str | None = None) -> int:
     """run.py panel-phone：on（打开手机访问）/ off（关闭）/ status（只读）/ forget（取消全部配对，按账户登录也关）/

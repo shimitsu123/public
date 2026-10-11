@@ -259,6 +259,11 @@ background:var(--fg);color:var(--bg);padding:12px 16px;border-radius:12px;box-sh
 .code{font:700 34px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:3px;text-align:center;margin:8px 0}
 .qr{display:flex;justify-content:center;margin:8px 0}.qr img{width:220px;height:220px;background:#fff;padding:10px;border-radius:12px}
 footer{margin:16px 0;color:var(--muted);font-size:13px}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;justify-content:space-around;background:var(--card);
+border-top:1px solid var(--line);padding:6px max(8px,env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 6px) max(8px,env(safe-area-inset-left))}
+.tabbar a{flex:1;text-align:center;color:var(--muted);text-decoration:none;font-size:12px;line-height:1.3;padding:4px 0}
+.tabbar a b{display:block;font-size:18px;color:var(--fg);font-weight:400} body{padding-bottom:calc(env(safe-area-inset-bottom) + 64px)}
+.spark{color:var(--accent);display:block;margin:4px 0 8px}
 """
 
 _NET_JS = """
@@ -1097,6 +1102,45 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) loadQ()
   }
   setTimeout(tick, 10000);
 })();
+(function(){                                                              // 网页 App：service worker（离线看上次的页面 + 推送）
+  if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{}); }
+  const age=(Date.now()-(+CFG.gen||Date.now()))/60000, el=$('#stale');
+  if(el && age>3){
+    el.textContent='★ 这是 '+(age<90 ? Math.round(age)+' 分钟' : Math.round(age/60)+' 小时')+'前的页面（连不上 Mac：Mac 睡着 / 关机 / Tailscale 没连上）。按钮现在点了也送不到 —— 连上之后下拉刷新。';
+    el.hidden=false;
+  }
+})();
+function b64key(s){ s=s.replace(/-/g,'+').replace(/_/g,'/'); s+='='.repeat((4-s.length%4)%4); const r=atob(s), o=new Uint8Array(r.length); for(let i=0;i<r.length;i++) o[i]=r.charCodeAt(i); return o; }
+function standalone(){ return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone===true; }
+async function pushReg(){ if(!('serviceWorker' in navigator) || !('PushManager' in window)) return null; return navigator.serviceWorker.ready; }
+async function pushState(){
+  const el=$('#push-st'); if(!el) return;
+  const reg=await pushReg().catch(()=>null);
+  if(!reg){ el.textContent=(/iPhone|iPad/.test(navigator.userAgent) && !standalone()) ? '要先在 Safari「共享 → 添加到主屏幕」，再从主屏幕的 qbreak 图标打开，才能打开推送（iOS 16.4 以上）' : '这个浏览器不支持推送'; return; }
+  const s=await reg.pushManager.getSubscription().catch(()=>null);
+  el.textContent = s ? '这台设备：推送已打开 ✓' : ('这台设备：推送没打开'+(typeof Notification!=='undefined' && Notification.permission==='denied' ? '（通知被拒绝了：在 iPhone 设置 → 通知 → qbreak 里打开）' : ''));
+}
+document.addEventListener('DOMContentLoaded', ()=>{ pushState(); });
+document.addEventListener('click', async e=>{
+  const b=e.target.closest('[data-act^="push-"]'); if(!b) return;
+  e.stopPropagation();
+  const a=b.dataset.act, reg=await pushReg().catch(()=>null);
+  if(!reg){ toast('这里打不开推送：iPhone 要从主屏幕的 qbreak 图标打开（Safari 的标签页里不行）', true); return; }
+  if(a==='push-on'){
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){ toast('没有允许通知：iPhone 设置 → 通知 → qbreak 里打开', true); return; }
+    let key=null; try{ const x=await req('/api/push/key',{credentials:'same-origin',cache:'no-store'}); key=x.j && x.j.key; }catch(err){}
+    if(!key){ toast('取不到推送的公钥（连不上 Mac？）', true); return; }
+    let s=null; try{ s=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64key(key)}); }catch(err){ toast('打开推送失败：'+err, true); return; }
+    const j=await api('/api/push/subscribe',{sub:s.toJSON()}); if(j) toast(j.msg||'已打开');
+  }else{
+    const s=await reg.pushManager.getSubscription();
+    if(!s){ toast('这台设备还没打开推送', true); return; }
+    if(a==='push-test'){ const j=await api('/api/push/test',{endpoint:s.endpoint}); if(j) toast(j.msg); }
+    else { await s.unsubscribe().catch(()=>{}); const j=await api('/api/push/unsubscribe',{endpoint:s.endpoint}); if(j) toast(j.msg); }
+  }
+  pushState();
+}, true);
 """
 
 _PAIR_JS = """
@@ -1574,7 +1618,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
          "<button class='btn sm' data-act='reload'>刷新</button></div>"
          "<nav class='tabs'>" + "".join(f"<a href='/?book={t}' class='{'on' if t == tag else ''}'>{escape(BOOKS[t])}</a>"
                                        for t in BOOKS if t in books() or t == tag)        # 正在看的账本总在标签里
-         + "</nav></header><main>"]
+         + "</nav></header><main><div id='top'></div><div id='stale' class='card warn small' role='status' hidden></div>"]
     warn = []
     if halt:
         warn.append(f"HALT 生效中（{escape(halt)}）：不下单，解除之后才处理")
@@ -1782,7 +1826,13 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         dv = device or {}
         H.append(f"<footer><div>这台设备：{escape(str(dv.get('name') or '手机'))}（配对 {escape(str(dv.get('created') or '')[:10])}）。"
                  "非投资建议。</div><div class='act'><button class='btn sm' data-act='unpair'>退出这台设备</button></div></footer>")
-    H.append("</main><div id='toast' class='toast' role='status' hidden></div>")
+    if remote:
+        H.append(_notify_card())                             # 推送（网页 App）
+    H.append("</main><nav class='tabbar' aria-label='跳到'>"
+             "<a href='#top'><b>⌂</b>总览</a><a href='#money'><b>¥</b>损益</a><a href='#holdings'><b>▤</b>持仓</a>"
+             "<a href='#today'><b>✓</b>今天的单</a>"
+             + ("<a href='#notify'><b>✉</b>通知</a>" if remote else "<a href='#phone'><b>☏</b>手机</a>")
+             + "</nav><div id='toast' class='toast' role='status' hidden></div>")
     note = MO.sale_note(tag, now)
     ests = {}                                               # 拿着的票卖出全部的预计收益（按账本里的最近收盘；页面取到现价后换成现价的）
     ytdg = MO.ytd_gain(book, now.date())                 # T7：卖出的预计代扣按今年已实现的损益通算
@@ -1799,7 +1849,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                      for t in dict.fromkeys(list(u100s) + [t for t, u in (st.get("core_units") or {}).items() if int(u) > 0])},
            "kp": {"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN},     # K 线的通俗说法（qbreak/kline.py）
            "est": ests, "fee": [[c if c != float("inf") else 1e18, f] for c, f in FEE_TIERS],
-           "st": status_json(tag)[1]}                                                         # 〔77〕C UX-16：还在处理的指令 → 每 10 秒问一次   # 卖出的预计收益（按最近收盘；现价来了用现价的）
+           "st": status_json(tag)[1],
+           "gen": int(dt.datetime.now().timestamp() * 1000)}                                    # 页面生成时刻（离线时显示「几分钟前的数据」）                                                         # 〔77〕C UX-16：还在处理的指令 → 每 10 秒问一次   # 卖出的预计收益（按最近收盘；现价来了用现价的）
     js = _NET_JS + _JS.replace("__CFG__", json.dumps(cfg, ensure_ascii=False).replace("</", "<\\/"))
     return _head("qbreak 操作面板") + "<body>" + "".join(H) + _dialogs(paper, cap) + f"<script>{js}</script></body></html>"
 
@@ -1978,6 +2029,17 @@ def _broker_card(tag: str, now: dt.datetime) -> str:
             + (f"<div class='small'><b>今天的成交</b>（{escape(str(s.get('fills_at') or '')[11:16])}）</div><ul class='small'>"
                + "".join(f"<li>{escape(x[2:])}</li>" for x in fl) + "</ul>" if fl else "")
             + f"<div class='muted small'>只读的快照，不是实时；正式记账在下一个交易日 07:40。{escape(how)}</div></section>")
+
+
+def _notify_card() -> str:
+    """手机（网页 App）：推送通知的开关。iPhone 要 iOS 16.4 以上、从「添加到主屏幕」的图标打开才能打开推送（Safari 的标签页里不行）。"""
+    return ("<section class='card' id='notify'><h2>通知（推送）</h2>"
+            "<div id='push-st' class='small'>检查中…</div>"
+            "<div class='act'><button class='btn primary' data-act='push-on'>在这台设备打开推送</button>"
+            "<button class='btn' data-act='push-test'>发一条测试</button><button class='btn' data-act='push-off'>关掉</button></div>"
+            "<div class='muted small'>打开后：成交、09:30 自检没通过、闲置资金 ETF 的买入信号、HALT、手机连不上等通知会直接弹到这台设备（和邮件同一段文字）。"
+            "iPhone：先在 Safari 里「共享 → 添加到主屏幕」，再从主屏幕的 qbreak 图标打开、点上面的按钮、允许通知（iOS 16.4 以上）。"
+            "这台设备以后都用主屏幕的图标打开 —— 不要用 127.0.0.1 的地址（那是手机自己，打不开）。</div></section>")
 
 
 def _gate_card(tag: str) -> str:
@@ -2435,7 +2497,62 @@ def _extra_of(query: str) -> list | None:
 
 # ───────────────────────── HTTP ─────────────────────────
 CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; "
-       "connect-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'")
+       "connect-src 'self'; worker-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'")
+
+# 网页 App 的 service worker（/sw.js）：① 页面与只读接口「网络优先、连不上用上次的」（Mac 睡着 / Tailscale 断了也能看上次的数据，
+# 页面顶上会写是几分钟前的）② 收推送（qbreak/webpush.py）→ 系统通知；点通知打开面板。只缓存这个面板自己（同源 GET），写操作从不缓存。
+SW_JS = r"""const C='qbreak-v1';
+self.addEventListener('install',e=>self.skipWaiting());
+self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
+function keep(r,res){ if(res && res.ok){ const cp=res.clone(); caches.open(C).then(c=>c.put(r.url,cp)).catch(()=>{}); } return res; }
+const OFF='<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>qbreak</title>'+
+  '<p style="font:16px -apple-system,sans-serif;padding:24px;line-height:1.6">连不上 Mac 的面板（Mac 睡着 / 关机 / 手机的 Tailscale 没连上），'+
+  '这台设备上也还没有存过页面。<br>Mac 醒来、Tailscale 连上之后下拉刷新。</p>';
+self.addEventListener('fetch',e=>{
+  const r=e.request; if(r.method!=='GET') return;
+  const u=new URL(r.url); if(u.origin!==self.location.origin) return;
+  if(r.mode==='navigate'){
+    e.respondWith(fetch(r).then(res=>keep(r,res)).catch(()=>caches.open(C).then(c=>c.match(r.url).then(m=>m||c.match(new URL('/',self.location).href)))
+      .then(m=>m||new Response(OFF,{headers:{'Content-Type':'text/html; charset=utf-8'}}))));
+    return;
+  }
+  if(['/api/status','/api/quotes','/api/chart'].indexOf(u.pathname)>=0){
+    e.respondWith(fetch(r).then(res=>keep(r,res)).catch(()=>caches.open(C).then(c=>c.match(r.url)).then(m=>m||Response.error())));
+  }
+});
+self.addEventListener('push',e=>{
+  let d={}; try{ d=e.data?e.data.json():{}; }catch(x){ d={title:'qbreak', body:e.data?e.data.text():''}; }
+  e.waitUntil(self.registration.showNotification(d.title||'qbreak',{body:d.body||'',data:{url:d.url||'/'},icon:'/apple-touch-icon.png',tag:d.tag||undefined}));
+});
+self.addEventListener('notificationclick',e=>{
+  e.notification.close(); const url=(e.notification.data&&e.notification.data.url)||'/';
+  e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(cs=>{
+    for(const c of cs){ if('focus' in c) return c.focus(); }
+    return self.clients.openWindow(url);
+  }));
+});
+"""
+
+
+def push_post(path: str, body: dict, who: str) -> tuple[int, dict]:
+    """推送的接口（本机与手机共用；手机要本人 + CSRF，本机要令牌 —— 调用方检查过）。"""
+    from . import webpush as WP
+    sub = body.get("sub") if isinstance(body.get("sub"), dict) else {}
+    ep = str(body.get("endpoint") or sub.get("endpoint") or "")
+    if path == "/api/push/subscribe":
+        ok, msg = WP.subscribe(who, sub, who)
+        if ok:
+            log.info("推送：%s 打开了推送", who)
+        return (200 if ok else 400), {"ok": ok, "msg": msg}
+    if path == "/api/push/unsubscribe":
+        WP.unsubscribe(ep)
+        return 200, {"ok": True, "msg": "这台设备的推送已关掉"}
+    s = WP.subs().get(WP.sub_id(ep))
+    if not s:
+        return 400, {"ok": False, "msg": "这台设备还没打开推送"}
+    code = WP.send_one(s, "qbreak 测试推送", "能看到这条 = 推送通了：成交、自检没过、买入信号、HALT 都会这样通知你。")
+    ok = code in (200, 201, 202)
+    return (200 if ok else 502), {"ok": ok, "msg": "已发一条测试推送" if ok else f"推送服务没收下（HTTP {code}）：关掉推送再打开一次试试"}
 
 
 class _Common(BaseHTTPRequestHandler):
@@ -2470,6 +2587,8 @@ class _Common(BaseHTTPRequestHandler):
             self._send(204, b"", "text/plain")
         elif path in ("/apple-touch-icon.png", "/apple-touch-icon-precomposed.png"):
             self._send(200, PP.touch_icon_png(), "image/png")
+        elif path == "/sw.js":
+            self._send(200, SW_JS.encode("utf-8"), "text/javascript; charset=utf-8", [("Service-Worker-Allowed", "/")])
         elif path == "/manifest.webmanifest":
             self._send(200, json.dumps(PP.MANIFEST, ensure_ascii=False).encode("utf-8"), "application/manifest+json; charset=utf-8")
         else:
@@ -2540,7 +2659,8 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
     hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
     origins = {f"http://{h}" for h in hosts}
     hits: list[float] = []
-    routes = ("/api/request", "/api/halt", "/api/pair/new", "/api/device/revoke")
+    routes = ("/api/request", "/api/halt", "/api/pair/new", "/api/device/revoke", "/api/push/subscribe", "/api/push/unsubscribe",
+              "/api/push/test")
 
     class H(_Common):
         def _host_ok(self) -> bool:
@@ -2563,6 +2683,10 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
                 return
             if u.path == "/api/status":
                 self._json(*status_json(_book_of(u.query)))
+                return
+            if u.path == "/api/push/key":
+                from . import webpush as WP
+                self._json(200, {"ok": True, "key": WP.public_key()})
                 return
             if u.path != "/":
                 self._text(404, "没有这个页面")
@@ -2597,6 +2721,8 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
             elif path == "/api/halt":
                 ok, msg = PP.create_halt(body.get("reason"), "Mac 操作面板", now)
                 self._json(200 if ok else 500, {"ok": ok, "msg": msg})
+            elif path.startswith("/api/push/"):
+                self._json(*push_post(path, body, "Mac"))
             elif path == "/api/pair/new":
                 code, exp = PP.new_code()
                 url = PP.phone_url()
@@ -2669,13 +2795,16 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
             u = urlparse(self._route())
             if self._static(u.path):
                 return
-            if u.path not in ("/", "/pair", "/api/chart", "/api/quotes", "/api/status"):
+            if u.path not in ("/", "/pair", "/api/chart", "/api/quotes", "/api/status", "/api/push/key"):
                 self._text(404, "没有这个页面")
                 return
             dev = self._who()
-            if u.path in ("/api/chart", "/api/quotes", "/api/status"):
+            if u.path in ("/api/chart", "/api/quotes", "/api/status", "/api/push/key"):
                 if dev is None:
                     self._json(401, {"ok": False, "msg": "这台设备还没配对（或已被取消）"})
+                elif u.path == "/api/push/key":
+                    from . import webpush as WP
+                    self._json(200, {"ok": True, "key": WP.public_key()})
                 elif u.path == "/api/chart":
                     self._chart(u.query, (clock or now_jst)())
                 elif u.path == "/api/status":
@@ -2700,7 +2829,8 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
             if not self._host_ok():
                 return
             path = urlparse(self._route()).path
-            if path not in ("/api/pair", "/api/request", "/api/halt", "/api/unpair"):
+            if path not in ("/api/pair", "/api/request", "/api/halt", "/api/unpair", "/api/push/subscribe", "/api/push/unsubscribe",
+                            "/api/push/test"):
                 self._json(404, {"ok": False, "msg": "没有这个接口"})
                 return
             if not self._origin_ok():
@@ -2732,6 +2862,8 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
             elif path == "/api/halt":
                 ok, msg = PP.create_halt(body.get("reason"), f"手机 {dev['name']}", now)
                 self._json(200 if ok else 500, {"ok": ok, "msg": msg})
+            elif path.startswith("/api/push/"):
+                self._json(*push_post(path, body, str(dev.get("name") or "手机")))
             elif dev.get("kind") == "ts":                                  # 按账户登录：这台设备也配对过才有东西可退
                 paired = PP.device_for(self.headers.get("Cookie"))
                 if paired:

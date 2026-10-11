@@ -36,7 +36,7 @@ ACCOUNT = "qbreak"
 KEYS = {"webhook": ("QBREAK_WEBHOOK", "qbreak-webhook"),       # 通道名 → (环境变量, 钥匙串服务名)
         "email": ("QBREAK_SMTP", "qbreak-smtp"),
         "heartbeat": ("QBREAK_HEARTBEAT", "qbreak-heartbeat")}
-LABEL = {"webhook": "webhook", "email": "邮件", "heartbeat": "外部心跳"}
+LABEL = {"webhook": "webhook", "email": "邮件", "heartbeat": "外部心跳", "push": "推送（网页 App）"}
 MAX_CHARS = 1900            # Discord 一条最多 2,000 字
 MAX_NTFY_BYTES = 3900       # ntfy 一条超过 4,096 字节会变成附件
 MAX_BEAT = 1000             # 心跳附带的说明
@@ -250,6 +250,14 @@ def send(subject: str, text: str, level: str = "info", run=None) -> dict[str, bo
             extra = "（格式应为 host:port:user:password:to）" if isinstance(e, SmtpFormatError) else ""
             log.warning("%s 通知失败：%s%s", LABEL[name], _why(e), extra)
             out[name] = False
+    try:                                                      # 网页 App（主屏幕上的面板）的推送：有订阅才发（qbreak/webpush.py）
+        from . import webpush
+        r = webpush.send(f"{'★ ' if level in ('warn', 'error') and not subject.startswith('★') else ''}{subject}", text)
+        if r is not None:
+            out["push"] = r
+    except Exception as e:                                    # noqa: BLE001
+        log.warning("推送失败：%s", type(e).__name__)
+        out["push"] = False
     return out
 
 

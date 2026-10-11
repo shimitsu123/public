@@ -97,6 +97,11 @@ bash "$PROJ/scripts/install_launchd_login.sh"
 # ④c 本机操作面板（http://127.0.0.1:8765/：卖出 / 减仓 / 闲置资金比例按钮只写手动指令，下单由执行器做）
 bash "$PROJ/scripts/install_launchd_panel.sh"
 
+# ④f 菜单栏上的 qbreak 状态图标（〔App 化〕B；要 swiftc，没有就跳过、其他照常）
+if [ "$(uname -s)" = "Darwin" ] && [ "${QBREAK_NO_MENUBAR:-}" != "1" ]; then
+  bash "$PROJ/scripts/install_launchd_menubar.sh" || echo "★ 菜单栏图标没装上（见上）：其他步骤照常"
+fi
+
 # ④d 手机上操作（Tailscale Serve，只在你自己的 tailnet；绝不用 Funnel；按 Tailscale 账户登录，配对码（备用）只在 Mac 的操作面板上生成）
 if [ -n "$PHONE" ] || [ -f "$LHOME/panel_phone.json" ]; then
   set -- phone on
@@ -176,7 +181,11 @@ echo "已注册的定时任务："
 if command -v launchctl >/dev/null 2>&1; then launchctl list 2>/dev/null | grep qbreak || echo "  （没有）"; else echo "  （这台机器没有 launchctl）"; fi
 bookpage="page_paper.html"
 [ -f "$AGENTS/com.qbreak.liveu.morning.plist" ] && bookpage="page_tachibana.html"     # 装了立花本番：账本页面是立花的（B12）
-echo "页面：账本 ${LHOME}/out/${bookpage}、市场仪表盘 ${LHOME}/out/dashboard.html、操作面板 http://127.0.0.1:8765/"
+echo "页面：账本 ${LHOME}/out/${bookpage}、市场仪表盘 ${LHOME}/out/dashboard.html、操作面板 http://127.0.0.1:8765/（只在这台 Mac 上）"
+purl="$("${VENV}/bin/python" -c 'from qbreak.panel_phone import phone_url; print(phone_url() or "")' 2>/dev/null || true)"
+if [ -n "$purl" ]; then
+  echo "手机：${purl}（从主屏幕的 qbreak 图标打开；127.0.0.1 是手机自己，手机上打不开）"
+fi
 if [ -z "$PHONE" ] && [ ! -f "$LHOME/panel_phone.json" ]; then
   echo "手机上操作（可选）：bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone <Tailscale 机器名>（只在你自己的 tailnet；按 Tailscale 账户登录，配对码备用）"
 fi

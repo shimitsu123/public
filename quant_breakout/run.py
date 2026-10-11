@@ -4463,6 +4463,8 @@ def cmd_notify(a) -> int:
         hb = notify.configured("heartbeat")
         print("外部心跳：" + ("已设置（测试不 ping：成功的 ping 会盖掉今天真正的检查；09:30 自检会 ping，"
                              "或运行 bash scripts/liveu.sh watchdog）" if hb else "没设置"))
+        if "push" not in res:
+            print("推送（网页 App）：没有设备打开（iPhone：从主屏幕的 qbreak 图标打开面板 → 「通知（推送）」→ 在这台设备打开推送）")
         if all(v is None for v in res.values()):
             print("一个通知通道都没设置：邮件（Gmail）→ 在你自己的终端运行 bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup"
                   "（问发件地址、应用专用密码（不显示）、收件地址，存进钥匙串后发一封测试邮件）；"

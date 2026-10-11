@@ -10605,3 +10605,15 @@ Mac 问法表、已知限制）；CHECK_TIMELINE（⑥ 执行层、08:35 / 09:20
   mac_setup.sh 重新加载并启用它。
 - HANDOFF 待办：⑨ ⑩ ⑭ ⑱ ⑲ 核对后标 ✅。非投资建议。
 
+## 2026-10-11 工程（用户「手机打不开网页，制定永久再发防止对策」「做 A + B」）：网页 App（推送 / 离线 / 标签栏）+ 菜单栏图标 + 手机连不上的再发防止 —— 不改交易规则
+- 打不开的原因：手机打开的是 http://127.0.0.1:8765（= iPhone 自己）。手机访问本身正常（Tailscale / Serve / 手机端口都通）。
+  再发防止：① 每 15 分钟（市场仪表盘任务）`python -m qbreak.mac_status --ensure-phone --write`：查 Tailscale / Serve / 手机端口，Serve 的设置不在了（qbreak 设的）
+  → 自动重新打开（机器名没变才做、绝不开 Funnel），修不好通知一次（同一天同一个问题一次）；② 账本页、mac_setup.sh、通知卡片都写明手机用 https://<机器名>.ts.net/、
+  127.0.0.1 只在 Mac 上；③ CLAUDE.md：对话里给手机的链接一律写手机地址；④ 网页 App（主屏幕图标）从此是手机的入口。
+- A 网页 App：service worker（/sw.js；CSP 加 worker-src 'self'）—— 页面与只读接口网络优先、连不上用上次的（顶上写「x 分钟前的页面」）；
+  Web Push（qbreak/webpush.py：RFC 8291 aes128gcm + RFC 8292 VAPID，只用 cryptography，按 RFC 的测试向量验证）：notify.send 多一个通道，所有现有通知
+  （成交、自检、买入信号、HALT、手机连不上…）也推到打开了推送的设备；VAPID 密钥与订阅只在数据目录（0600）；手机页面「通知（推送）」卡片；底部标签栏。
+- B 菜单栏图标：scripts/menubar/QbreakBar.swift（swiftc 编译成 ~/.qbreak/app/QbreakBar.app，LaunchAgent com.qbreak.menubar）：每 2 分钟 `qbreak.mac_status --write`，
+  ✓ / ! / ✕：执行器、09:30 自检、HALT、定时任务有没有被卸掉 / 停用（2026-10 测试误停用 login 那种）、手机访问、面板；菜单：打开面板 / 账本页 / 仪表盘、复制手机地址、刷新。
+- 不下单、不读密钥；全部测试通过。非投资建议。
+

@@ -33,6 +33,8 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setattr("qbreak.watchdog._remote_daily_date", lambda run=None: None)           # 也不看仓库远端的（要测的测试自己换）
     monkeypatch.setattr("qbreak.data.LAGGING", {})          # 行情落后的记录是进程里的全局表：每个测试从空的开始（不被前面的测试带进来）
     monkeypatch.setenv("PATH", f"{_GUARD}{os.pathsep}{os.environ.get('PATH', '')}")   # 假 launchctl 放最前面（见 _GUARD）
+    monkeypatch.setenv("QBREAK_NO_MENUBAR", "1")             # 测试里的 mac_setup.sh 不编译 / 不装菜单栏图标
+    monkeypatch.setenv("QBREAK_APP_DIR", str(tmp_path / "app"))
     from qbreak.brokers import tachibana as _tb
     _sess = {"f": None, "owners": set()}                     # 立花本番会话锁也是进程里的全局：每个测试从「没拿着」开始
     monkeypatch.setattr(_tb, "_SESSION", _sess)

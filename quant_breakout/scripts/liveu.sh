@@ -288,6 +288,7 @@ fi
 if [ "${1:-}" = "news" ]; then                     # 定时任务用（每 15 分钟）：经济威胁消息 + 新公布的数据 → 市场仪表盘；新的提醒 → 通知
   shift
   sync_inputs
+  "$PY" -m qbreak.mac_status --ensure-phone --write >/dev/null 2>&1 || true   # 手机访问断了自动修复 + 菜单栏的状态（不影响仪表盘）
   exec "$PY" run.py news --page --notify "$@"
 fi
 

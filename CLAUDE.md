@@ -106,6 +106,9 @@
   下单前资格检查（`qbreak/eligibility.py`）与「立花能不能买」检查（`qbreak/tradable.py`：JPX 市場区分 + 立花銘柄マスタ）挡掉的票不要绕过；手上的票被标记（被踢出日経225 / JPX 指定 / 上場廃止预定）时规则不自动卖 →
   告诉用户、由用户决定（要卖就写手动卖出指令 `liveu.sh manual sell <代码>`）；名单差异（`run.py eligibility`）要改 `qbreak/universes.py` 须用户确认并记 sim_changes.md；
   退市时间表（`run.py delist-schedule`，`var/delist_schedule.json`）到了上場廃止日自动从股票池去掉（只减），补入仍要用户确认
+- **给用户的面板链接（2026-10-11 再发防止：用户在 iPhone 上点了 127.0.0.1 打不开）**：对话、通知、页面里给「手机用」的链接一律写手机地址
+  （`bash scripts/liveu.sh phone status` 显示的 https://<机器名>.<tailnet>.ts.net/），`http://127.0.0.1:8765/` 只在说 Mac 本机时写、并注明「只在这台 Mac 上能打开」；
+  手机推荐从主屏幕的 qbreak 图标打开（网页 App，推送也要它）；手机连不上 → 先 `python -m qbreak.mac_status --print`（只读）看「手机访问」那一行
 - 手机上操作（2026-10-06 起）：只用 Tailscale **Serve**（`bash scripts/liveu.sh phone on|off|status|forget`；只在用户自己的 tailnet 里），
   **绝不用 Tailscale Funnel**、不把面板绑到 127.0.0.1 以外、不用别的公开转发；第一次打开会显示机器名（会写进公开的证书透明度日志）→
   用户 2026-10-06 已确认机器名 `node`（`mac_setup.sh --phone node` 只在机器名正好是 node 时才打开）；名字不一样就告诉用户、用户同意才换名字再运行；

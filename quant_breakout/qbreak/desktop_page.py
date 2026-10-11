@@ -64,8 +64,12 @@ def _manual_card(tag: str, book: dict) -> str:
     ls = [x[2:] for x in lines(sm, today=now_jst().date().isoformat())]
     ls += [f"手动指令 {r['id']}：等下单" for r in unseen(tag, book)]
     url = f"http://127.0.0.1:8765/?book={tag}"
+    from .panel_phone import phone_url
+    pu = phone_url()
     return ("<section class='card'><h2>手动操作</h2>"
-            f"<div>操作面板：<a href='{escape(url)}'>{escape(url)}</a>（只在这台 Mac 上；也可以在 Mac 对话里直接说「卖掉 7203」「7203 减到 10%」）</div>"
+            f"<div>操作面板：Mac 上 <a href='{escape(url)}'>{escape(url)}</a>（127.0.0.1 = 这台 Mac 自己，手机上打不开）"
+            + (f"；<b>手机</b>用 <a href='{escape(pu)}'>{escape(pu)}</a>" if pu else "")
+            + "；也可以在 Mac 对话里直接说「卖掉 7203」「7203 减到 10%」</div>"
             f"<div class='muted'>{escape(RULE_TEXT)}；卖出后默认 20 个交易日不自动买回。</div>"
             + ("<ul>" + "".join(f"<li>{escape(x)}</li>" for x in ls) + "</ul>" if ls else "<div class='muted'>现在没有手动设定或指令</div>")
             + "</section>")
