@@ -288,6 +288,7 @@ class UnifiedEngine:
         self.entry_priority_fn = None                       # (票, 日) -> 分数 | None：同一天的新仓候选按分数高的先（研究用；缺省 = 按代码）
         self.pre_decide_fn = None                           # 日 -> None：收盘离场判断之后、统一决策之前（执行器在这里放手动卖出；回测 / 模拟盘不设）
         self.cash_hold = 0.0                # 实盘执行器的出金预留（〔77〕C LU-19；円）：决策时当作已经出金（0 = 不影响，回测 / 模拟盘永远 0）
+        self.core_fix: dict[str, int] = {}                  # 核心 ETF 固定口数（执行器的手动「固定 ETF 口数」；回测 / 模拟盘 = 空）
         self.core_scale = 1.0                               # 核心 ETF 目标额 × 这个比例（执行器的手动「闲置资金比例」；回测 / 模拟盘 = 1）
         self.core_exact = False                             # True：这次决策核心 ETF 直接调到目标（不看再平衡带；执行器在手动改了比例之后用一次）
         self.core_t100: dict[str, int] = {}                 # 最近一次决策里每只核心 ETF「比例 100% 时」的目标口数（执行器 / 页面：ETF 的调仓换算成比例）
@@ -819,6 +820,11 @@ class UnifiedEngine:
         tgt_total = tgt_100 * float(self.core_scale)
         w = {t: float(v) for t, v in cfg.core.items()}
         bear = {t: self._core_bear(t, i) for t in w}
+        fix = {t: int(u) for t, u in (self.core_fix or {}).items() if t in w and A.has[i, self.col[t]]}
+        if fix:                                                 # 固定口数的 ETF 先拿走它的金额，剩下的照规则分给其他 ETF
+            fv = sum(u * float(A.close[i, self.col[t]]) for t, u in fix.items())
+            tgt_total, tgt_100 = max(0.0, tgt_total - fv), max(0.0, tgt_100 - fv)
+            w = {t: (0.0 if t in fix else v) for t, v in w.items()}
         gated = {}
         if self.core_gate_fn is not None:                       # 立花买不了的核心 ETF：只挡买（那份留现金）；已有的照常按规则卖
             for t in w:
@@ -845,10 +851,14 @@ class UnifiedEngine:
             xp = float(xe[i]) if xe is not None else 1.0
             tgt = 0 if bear[t] or share[t] <= 0 else int(np.floor(max(0.0, tgt_total * share[t] * xp) / price / lot)) * lot
             self.core_t100[t] = 0 if bear[t] or share[t] <= 0 else int(np.floor(max(0.0, tgt_100 * share[t] * xp) / price / lot)) * lot
+            bd = band
+            if t in fix:                                        # 固定口数：不看牛熊 / 再平衡带，正好调到这个口数
+                tgt = self.core_t100[t] = fix[t]
+                bd = 0.0
             sell = buy = 0
-            if tgt < units and (tgt == 0 or (units - tgt) * price > band):
+            if tgt < units and (tgt == 0 or (units - tgt) * price > bd):
                 sell = units - tgt
-            elif tgt > units and (tgt - units) * price > band:
+            elif tgt > units and (tgt - units) * price > bd:
                 buy = tgt - units
             if buy and t in gated:
                 self.gate_log.append((str(self.gidx[i].date()), t, gated[t]))

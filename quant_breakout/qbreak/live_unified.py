@@ -196,6 +196,7 @@ class UnifiedExecutor:
         """手动指令接进引擎：闲置资金比例 → 核心目标额 × 比例；手动卖出后不自动买回 → 新仓的资格检查多一条。"""
         eng, man = self.eng, self.manual
         eng.core_scale = man.core_pct / 100
+        eng.core_fix = {t: int(u) for t, u in (man.m.get("core_fix") or {}).items()}   # 核心 ETF 固定口数（手动；不按规则）
         man.m["cap_pct"] = round(float(eng.cfg.max_position_pct) * 100, 2)     # 页面的加仓 / 买入上限（单只占总权益 %）
         man.m["max_positions"] = int(eng.cfg.max_positions)                     # 页面的个股名额（买入要有空名额）
         man.m["core"] = sorted(eng.core_set)                                     # 核心 ETF（不能手动买，用闲置资金比例调）

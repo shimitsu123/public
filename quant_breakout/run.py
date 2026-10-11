@@ -4398,8 +4398,23 @@ def cmd_manual(a) -> int:
         print(f"个股名额：空 {s_['free']} 个（拿着 {s_['held']} + 排定买入 {s_['buys']}，上限 {s_['max']} 只）")
         return 0
     req = {"kind": a.action, "source": "cli", "note": a.note}
-    if a.action in ("sell", "trim", "adjust", "buy", "unblock"):
+    if a.action in ("sell", "trim", "adjust", "buy", "unblock", "corefix"):
         req["ticker"] = a.target
+    if a.action == "corefix":                                   # 核心 ETF 固定口数（--units N / --yen 金额 / --clear）
+        if a.clear:
+            req["clear"] = True
+        elif a.units is not None:
+            req["units"] = a.units
+        elif a.yen is not None:
+            c_ = MO.core_info(b_, (a.target or "").upper() + ("" if "." in (a.target or "") else ".T")) or {}
+            px_, lot_ = float(c_.get("px") or 0), int(c_.get("lot") or 1)
+            if px_ <= 0:
+                print("★ 没写：账本里还没有这只 ETF 的价格（执行器下一次运行之后再写，或用 --units）")
+                return 2
+            req["units"] = int(a.yen // px_ // lot_) * lot_
+        else:
+            print("★ 没写：corefix 要给 --units 口数 / --yen 金额 / --clear（恢复按规则）")
+            return 2
     if a.action in ("adjust", "buy"):
         given = [(u, v) for u, v in (("shares", a.shares), ("yen", a.yen), ("pct", a.pct)) if v is not None]
         if len(given) > 1 or (a.action == "adjust" and not given):
@@ -5297,7 +5312,9 @@ def main(argv=None) -> int:
         sp_.add_argument("--dry-run", action="store_true", help="立花 dry-run 的账本")
         sp_.set_defaults(func=fn_)
     mn = sub.add_parser("manual", help="手动指令：卖出 / 减仓 / 调仓（可加可减）/ 买入（新开仓）/ 闲置资金比例 / 不买回 / 撤回（只写指令；执行器下单：盘中马上、开盘前等开盘、收盘后等下一个交易日开盘）")
-    mn.add_argument("action", choices=["list", "sell", "trim", "adjust", "buy", "core", "unblock", "cancel"])
+    mn.add_argument("action", choices=["list", "sell", "trim", "adjust", "buy", "core", "corefix", "unblock", "cancel"])
+    mn.add_argument("--units", type=int, default=None, help="corefix：核心 ETF 固定的口数（0 = 固定不拿）")
+    mn.add_argument("--clear", action="store_true", help="corefix：恢复按规则")
     mn.add_argument("target", nargs="?", default=None, help="sell / trim / adjust / buy / unblock：代码（例 7203；拿着的核心 ETF 也行，sell / trim / adjust 换算成闲置资金比例）；cancel：指令 id")
     mn.add_argument("--shares", type=int, default=None, help="adjust / buy：目标股数（单元向下取整）")
     mn.add_argument("--yen", type=float, default=None, help="adjust / buy：目标金额（円，按决策时的收盘换成股数）")

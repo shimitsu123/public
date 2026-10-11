@@ -632,6 +632,22 @@ document.addEventListener('click', async e=>{
     const q=await ask('撤回 '+d.id, d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天的单」的「撤单」撤。' : '还没下单：撤回之后不会下。', '撤回');
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
   }
+  if(a==='corefix' || a==='corefix-clear'){                               // 核心 ETF 固定口数 / 恢复按规则（2026-10-11）
+    const px=+d.px||0, lot=+d.lot||1, eq=+d.eq||0, cur=+d.cur||0;
+    if(a==='corefix-clear'){
+      const q=await ask(d.name+'：恢复按规则', '下一次决策起，这只 ETF 又按规则（美股牛熊 / 股债相关）自动买卖。'+NOTE, '恢复');
+      if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'corefix', ticker:d.t, clear:true})); return;
+    }
+    const q=await ask(d.name+'：固定口数', '现在 '+fmt(cur)+' 口，约 '+yen(cur*px)+'（收盘 ¥'+px+'，单元 '+lot+' 口）。\\n写口数（例 '+(lot*100)+'），或写金额（例 ¥300000）。', '下一步', {input:'口数 或 ¥金额'});
+    if(!q.ok) return;
+    const s=String(q.value||'').replace(/[,\\s]/g,''); let u;
+    if(/[¥円]/.test(s)){ const y=+s.replace(/[¥円]/g,''); u=Math.floor(y/px/lot)*lot; } else { u=Math.floor((+s)/lot)*lot; }
+    if(!isFinite(u) || u<0){ toast('口数 / 金额看不懂：例 '+(lot*100)+' 或 ¥300000', true); return; }
+    const pct = eq>0 ? ' · 约占权益 '+(u*px/eq*100).toFixed(1)+'%' : '';
+    const q2=await ask('固定 '+d.name+' '+fmt(u)+' 口？', '约 '+yen(u*px)+pct+'。\\n下一次决策起（交易日 07:40，开盘下单）正好调到这个口数，不再按规则自动调；'
+      +'其余闲置资金照规则分给其他核心 ETF：规则现在拿的那只（牛市 = 纳指 1545）相应减少 / 增加；规则现在不拿别的 ETF 时，剩下的留现金。\\n一直有效，直到你点「恢复按规则」。'+NOTE, '固定');
+    if(q2.ok) done(await api('/api/request',{book:CFG.book, kind:'corefix', ticker:d.t, units:u})); return;
+  }
   if(a==='unblock'){
     const q=await ask('解除 '+d.t+' 的不自动买回', '之后有买入信号就会按规则买。', '解除');
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'unblock', ticker:d.t})); return;
@@ -2026,9 +2042,31 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     def actions(r: dict, kind: str) -> str:
         t = str(r["ticker"])
         if kind == "core":
-            return tchips(ktrend.get(t)) + _news_mark(hmarks.get(t)) + _core_actions(r, t) + _core_exit(t) + chart(t, "core")
+            return (tchips(ktrend.get(t)) + _news_mark(hmarks.get(t)) + _core_actions(r, t) + _corefix(t, str(r.get("name") or t))
+                    + _core_exit(t) + chart(t, "core"))
         qt = f"<div class='qt small' data-q='{escape(t)}'></div>" if t in (st.get("pos") or {}) else ""   # 现价（/api/quotes）
         return tchips(ktrend.get(t), stats=True) + qt + _actions(r, t)
+
+    def _corefix(t: str, name: str) -> str:
+        """核心 ETF 固定口数（2026-10-11 用户：持仓里的纳指 ETF、对冲美债也要能买入）：没拿的 →「买入…」、拿着的 →「固定口数…」；
+        已固定 → 写出来 +「恢复按规则」。只写手动指令（下一次决策起；其余闲置资金照规则分）。"""
+        if tag in READONLY:
+            return ""
+        fixed = (man.get("core_fix") or {}).get(t)
+        c = MO.core_info(book, t) or {}
+        px, lot = float(c.get("px") or 0), int(MO.core_lot(book, t) or 1)
+        cur = int((st.get("core_units") or {}).get(t, 0))
+        data = (f" data-t='{escape(t)}' data-name='{escape(name)}' data-px='{px:g}' data-lot='{lot}' data-cur='{cur}'"
+                f" data-eq='{float(eq or 0):.0f}'")
+        H_ = []
+        if fixed is not None:
+            H_.append(f"<div class='small'><b>手动固定 {int(fixed):,} 口</b>（不按规则自动调；其余闲置资金照规则）</div>")
+        btn = "买入…" if cur <= 0 and fixed is None else "固定口数…"
+        H_.append(f"<div class='act'><button class='btn' data-act='corefix'{data}{'' if px > 0 else ' disabled'}>{btn}</button>"
+                  + (f"<button class='btn' data-act='corefix-clear'{data}>恢复按规则</button>" if fixed is not None else "") + "</div>")
+        if px <= 0:
+            H_.append("<div class='muted small'>执行器下一次运行算出价格之后可用</div>")
+        return "".join(H_)
 
     def _core_actions(r: dict, t: str) -> str:
         """持有的核心 ETF：卖出全部（= 闲置资金比例 0%：卖出后停买，出现买入信号要你确认才买）/ 调仓…（换算成「闲置资金比例」：
@@ -2101,7 +2139,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     other = [(t, c) for t, c in (kl.get("items") or {}).items() if c.get("kind") == "core" and t not in held_core]
     more = ("<details class='hv'><summary class='muted'>其他闲置资金 ETF（现在没拿）的 K 线</summary>"
             + "".join(f"<div class='hv'><b>{escape(str(c.get('name') or t))}</b> <span class='muted'>现在 0 口</span>"
-                      f"{tchips(ktrend.get(t))}{chart(t, 'core')}</div>" for t, c in other) + "</details>") if other else ""
+                      f"{tchips(ktrend.get(t))}{_corefix(t, str(c.get('name') or t))}{chart(t, 'core')}</div>" for t, c in other)
+            + "</details>") if other else ""
     held_any = bool(st.get("pos")) or any(int(u) > 0 for u in (st.get("core_units") or {}).values())
     H.append(PANE + "trade")
     H.append(_orders_card(book, now, paper, waiting))       # 今天的单（执行器）：还挂着的给「撤单」；API / Mac 故障时照它在立花网站下

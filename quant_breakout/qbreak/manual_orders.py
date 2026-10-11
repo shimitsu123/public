@@ -39,7 +39,7 @@ import re
 from . import paths
 from .calendar_jp import is_trading_day, next_trading_day, now_jst, prev_trading_day
 
-KINDS = ("sell", "trim", "adjust", "buy", "core", "unblock", "cancel", "cancel_order")
+KINDS = ("sell", "trim", "adjust", "buy", "core", "corefix", "unblock", "cancel", "cancel_order")
 POS_KINDS = ("sell", "trim", "adjust")  # 针对一只持仓的指令
 ORDER_KINDS = POS_KINDS + ("buy",)      # 会变成单的指令（同一只票同时只能有一条没处理完的）
 UNITS = {"shares": "股", "yen": "円", "pct": "%"}
@@ -52,7 +52,7 @@ LOT = 100                               # 页面 / 命令行估算用的单元�
 CUTOFF = dt.time(8, 55)                 # 寄付注文的最后时刻（与 live_unified.MORNING_CUTOFF 相同）
 SESSION = ((dt.time(9, 0), dt.time(11, 30)), (dt.time(12, 30), dt.time(15, 25)))   # 盘中马上下单的时间（前場 / 後場；15:25 起是收盘竞价）
 RETRY_S = 600                           # 盘中没下成的指令（取不到现价等）：过多久再试
-LABEL = {"sell": "卖出全部", "trim": "减仓", "adjust": "调仓", "buy": "买入", "core": "闲置资金比例", "unblock": "解除不买回",
+LABEL = {"sell": "卖出全部", "trim": "减仓", "adjust": "调仓", "buy": "买入", "core": "闲置资金比例", "corefix": "固定 ETF 口数", "unblock": "解除不买回",
          "cancel": "撤回指令", "cancel_order": "撤单"}
 CANCEL_UNTIL = dt.time(15, 30)          # 撤单：交易日这个时刻之前面板马上叫执行器（之后今天没成交的单都已失效）
 _CID = re.compile(r"^U(\d{4}-\d{2}-\d{2})-(BUY|SELL)-([0-9][0-9A-Z]{3}\.T)(-[0-9A-Za-z]{1,20})?$")
@@ -96,6 +96,23 @@ def normalize(req: dict) -> dict:
         if not 0 <= tg <= 10_000_000:
             raise ValueError("目标口数要在 0〜10,000,000 之间")
         out["target"] = tg
+    if kind == "corefix":                                 # 核心 ETF 固定口数（2026-10-11 用户：持仓里的纳指 ETF、对冲美债也要能买入）
+        t = str(req.get("ticker") or "").strip().upper()
+        if "." not in t:
+            t += ".T"
+        if not _TICKER.match(t):
+            raise ValueError(f"代码 {t} 不对（东证 4 位代码，例 1545 或 1482.T）")
+        out["ticker"] = t
+        if req.get("clear"):
+            out["clear"] = True
+        else:
+            try:
+                u = int(req.get("units"))
+            except (TypeError, ValueError):
+                raise ValueError("要给口数（整数；0 = 固定不拿）") from None
+            if not 0 <= u <= 10_000_000:
+                raise ValueError("口数要在 0〜10,000,000 之间")
+            out["units"] = u
     if kind in ("trim", "core"):
         try:
             pct = float(req.get("pct"))
@@ -257,6 +274,9 @@ def describe(r: dict) -> str:
     k = r.get("kind")
     if k == "cancel_order":
         return f"撤单 {r.get('ticker') or ''}（{r.get('cid') or '—'}）".replace("撤单 （", "撤单（")
+    if k == "corefix":
+        return (f"{r['ticker']} 恢复按规则" if r.get("clear")
+                else f"固定 {r['ticker']} {int(r.get('units') or 0):,} 口（不按规则自动调）")
     if k == "core" and r.get("ticker"):
         tg = int(r.get("target") or 0)
         if tg <= 0:
@@ -533,6 +553,19 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
             return f"{t} 现在 {a['cur']:,} 股，目标 {fmt_target(rec)} 换算也是 {a['want']:,} 股：不用调"
         if a["want"] > a["cur"] and a["delta"] <= 0:
             return f"{t} {cap_text(a['cur'], a['px'], a['eq'], a['cap_pct'], LOT)}"
+    if k == "corefix":
+        if t not in core_tickers(book):
+            return f"{t} 不是核心 ETF（核心：{'、'.join(sorted(core_tickers(book))) or '—'}）"
+        fix = (man.get("core_fix") or {})
+        if rec.get("clear"):
+            return None if t in fix else f"{t} 本来就是按规则（没有固定口数）"
+        lot = core_lot(book, t)
+        if lot > 1 and int(rec["units"]) % lot:
+            return f"{t} 的单元是 {lot:,} 口：口数要是 {lot:,} 的倍数"
+        c = core_info(book, t) or {}
+        px, eq = float(c.get("px") or 0), float(c.get("eq") or 0)
+        if px > 0 and eq > 0 and int(rec["units"]) * px > eq * 1.001:
+            return f"{t} {int(rec['units']):,} 口约 ¥{int(rec['units']) * px:,.0f}，超过总权益 ¥{eq:,.0f}"
     if k == "core":
         cur = core_pct_now(tag, book)
         if abs(float(rec["pct"]) - cur) < 0.005:
@@ -777,6 +810,14 @@ class Manual:
                 it.update(status="done", msg=(f"卖出全部 {r['ticker']}，之后停买闲置资金 ETF（出现买入信号会提醒，你确认才买）"
                                               if float(r["pct"]) <= 0 and r.get("ticker") else f"闲置资金比例设为 {r['pct']:g}%"
                                               + (f"（{r['ticker']} 约 {int(r.get('target') or 0):,} 口）" if r.get("ticker") else "")))
+            elif k == "corefix":
+                fx = self.m.setdefault("core_fix", {})
+                if r.get("clear"):
+                    fx.pop(r["ticker"], None)
+                    it.update(status="done", msg=f"{r['ticker']} 恢复按规则（下一次决策起）")
+                else:
+                    fx[r["ticker"]] = int(r["units"])
+                    it.update(status="done", msg=f"{r['ticker']} 固定 {int(r['units']):,} 口（下一次决策起；其余闲置资金照规则）")
             elif k == "unblock":
                 gone = self.m["blocks"].pop(r["ticker"], None)
                 it.update(status="done" if gone else "rejected",
