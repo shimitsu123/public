@@ -182,7 +182,7 @@ if command -v launchctl >/dev/null 2>&1; then launchctl list 2>/dev/null | grep 
 bookpage="page_paper.html"
 [ -f "$AGENTS/com.qbreak.liveu.morning.plist" ] && bookpage="page_tachibana.html"     # 装了立花本番：账本页面是立花的（B12）
 echo "页面：账本 ${LHOME}/out/${bookpage}、市场仪表盘 ${LHOME}/out/dashboard.html、操作面板 http://127.0.0.1:8765/（只在这台 Mac 上）"
-purl="$("${VENV}/bin/python" -c 'from qbreak.panel_phone import phone_url; print(phone_url() or "")' 2>/dev/null || true)"
+purl="$(cd "$PROJ" && QBREAK_HOME="$LHOME" "${VENV}/bin/python" -c 'from qbreak.panel_phone import phone_url; print(phone_url() or "")' 2>/dev/null || true)"
 if [ -n "$purl" ]; then
   echo "手机：${purl}（从主屏幕的 qbreak 图标打开；127.0.0.1 是手机自己，手机上打不开）"
 fi
