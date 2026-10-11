@@ -52,7 +52,9 @@ func statusName(_ s: LanguageAvailability.Status) -> String {
           sessions[src] = TranslationSession(installedSource: Locale.Language(identifier: src), target: target)
         }
         let r = try await sessions[src]!.translate(t)
-        results.append(["zh": r.targetText, "src": src])
+        // 译文偶尔混进繁体字（2026-10-11 实测 41 条里 2 条）→ 统一转简体（ICU 的 Hant-Hans）
+        let simp = r.targetText.applyingTransform(StringTransform(rawValue: "Hant-Hans"), reverse: false) ?? r.targetText
+        results.append(["zh": simp, "src": src])
       } catch {
         let msg = "\(error)".contains("notInstalled") ? "notInstalled" : String("\(error)".prefix(120))
         results.append(["zh": NSNull(), "src": src, "err": msg])
