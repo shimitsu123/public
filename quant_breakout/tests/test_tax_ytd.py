@@ -67,3 +67,18 @@ def test_ytd_flags_incomplete_core_records():
     st = {"core_trades": [["2026-10-01", "1545.T", "SELL", 10, 250.0, 0.0]]}
     assert TY.ytd(st, 2026)["incomplete"] == ["1545.T"]
     assert TY.ytd(_st(), 2026)["incomplete"] == []
+
+
+def test_after_tax_counts_paid_years_and_liquidation():
+    """税后累计损益：历年已实现按年通算代扣 + 现在全部卖出还要扣的（含み益与今年已实现一起通算）。"""
+    from qbreak import tax_ytd as TY
+    st = {"trades": [{"ticker": "7203.T", "market": "JP", "exit_date": "2025-06-01", "shares": 100, "exit_px": 1, "pnl_jpy": 100000},
+                     {"ticker": "6758.T", "market": "JP", "exit_date": "2026-03-01", "shares": 100, "exit_px": 1, "pnl_jpy": -40000}],
+          "pos": {"9984.T": {"shares": 100, "entry_px": 1000.0, "last_close": 1500.0}},
+          "core_units": {"1545.T": 10}, "core_trades": [["2026-01-05", "1545.T", "BUY", 10, 200.0, 0.0]], "core_last": {"1545.T": 300.0}}
+    a = TY.after_tax(st, 600000.0, "2026-10-11")
+    r = 0.20315
+    assert a["paid"] == round(100000 * r)                                   # 2025 年；2026 年已实现为负 → 0
+    assert a["unreal"] == 50000 + 1000
+    assert a["extra"] == round((-40000 + 51000) * r)
+    assert a["after"] == round(600000 - 100000 * r - (-40000 + 51000) * r) and a["incomplete"] == []

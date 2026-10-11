@@ -92,3 +92,39 @@ def sale_effect(st: dict | None, gain: float, day: str) -> float:
     """假设 day 这天再卖出一笔收益 gain（円）：预计代扣的变化（正 = 这笔要扣多少、负 = 退还多少）。按 day 那一年、到 day 为止的累计。"""
     cum = ytd(st, day[:4], upto=day)["gain"]
     return withheld(cum + float(gain)) - withheld(cum)
+
+
+def after_tax(st: dict | None, tot: float, today: str) -> dict:
+    """税后累计损益（估算；2026-10-11 用户「总览里要加上税后的盈利」）：
+    累计损益 tot（账本的权益 − 投入本金，税前：账本里的现金不扣譲渡益税）
+      − 历年已实现收益的代扣（每年 1/1 重新通算：那一年的已实现合计为正 → × 20.315%，为负 → 0）
+      − 现在全部卖出还要多扣的（今年已实现 + 持仓的含み損益 一起通算后的代扣 − 今年已经扣的；含み損 → 负数 = 退还）。
+    含み損益：个股 = 股数 ×（最近收盘 − 买入价），核心 ETF = 口数 × 最近价格 − 移动平均成本（含买入手续费）；卖出手续费不算。
+    → {"after", "paid", "extra", "unreal", "by_year": {年: 已实现}, "incomplete": [...]}"""
+    from .manual_orders import core_cost
+    st = st or {}
+    bad: set = set()
+    by: dict[str, float] = {}
+    for r in realized(st, bad):
+        by[r["date"][:4]] = by.get(r["date"][:4], 0.0) + r["pnl"]
+    paid = sum(withheld(g) for g in by.values())
+    unreal = 0.0
+    for t, p in (st.get("pos") or {}).items():
+        try:
+            px = float(p.get("last_close") or p.get("entry_px") or 0)
+            unreal += int(p.get("shares") or 0) * (px - float(p.get("entry_px") or 0))
+        except (TypeError, ValueError, AttributeError):
+            bad.add(str(t))
+    for t, u in (st.get("core_units") or {}).items():
+        if int(u or 0) <= 0:
+            continue
+        c = core_cost(st, t)
+        px = float((st.get("core_last") or {}).get(t) or 0)
+        if c is None or px <= 0:
+            bad.add(str(t))
+            continue
+        unreal += int(u) * px - float(c["cost"])
+    g = by.get(str(today)[:4], 0.0)
+    extra = withheld(g + unreal) - withheld(g)
+    return {"after": round(float(tot) - paid - extra), "paid": round(paid), "extra": round(extra), "unreal": round(unreal),
+            "by_year": {y: round(v) for y, v in sorted(by.items())}, "incomplete": sorted(bad)}

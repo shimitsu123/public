@@ -2281,6 +2281,20 @@ def status_json(tag: str) -> tuple[int, dict]:
     return 200, {"ok": True, "sig": hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16], "pending": pend}
 
 
+def _after_tax_stat(m: dict, sy, cls) -> str:
+    """总览「损益」的第三格：税后累计损益（估算；tax_ytd.after_tax）。2026-10-11 用户「总览里要加上税后的盈利」。"""
+    a = m.get("after_tax") or {}
+    if "after" not in a:
+        return ""
+    inv = float(m.get("inv") or 0)
+    pct = f"{a['after'] / inv * 100:+.2f}%" if inv else ""
+    ex = float(a.get("extra") or 0)
+    return (f"<div><div class='muted'>税后累计损益（估算）</div><div class='big {cls(a['after'])}'>{sy(a['after'])}</div>"
+            f"<div class='muted small'>{pct} · 已代扣约 ¥{float(a.get('paid') or 0):,.0f}"
+            + (f" · 现在全部卖出还要扣约 ¥{ex:,.0f}" if ex > 0 else f" · 现在全部卖出约退还 ¥{-ex:,.0f}" if ex < 0 else "")
+            + ("（" + escape("、".join(a["incomplete"])) + " 的成本对不上，没算进去）" if a.get("incomplete") else "") + "</div></div>")
+
+
 def _money_card(tag: str, book: dict, now: dt.datetime) -> str:
     """〔77〕C UX-10 / T7 / UX-09 / UX-14：当日 / 累计损益、迷你权益曲线、年内已实现与预计代扣、最近成交、日志最新一节；实盘账本加
     入出金登记。Mac 与手机同一个，可折叠。账本没有 → ""。只展示（入出金只影响收益的计算）。"""
@@ -2303,7 +2317,8 @@ def _money_card(tag: str, book: dict, now: dt.datetime) -> str:
          f"<div class='stats'><div><div class='muted'>当日损益</div><div class='big {cls(m['day'])}'>{sy(m['day'])}</div>"
          f"<div class='muted small'>{m['day_pct']:+.2f}%</div></div>"
          f"<div><div class='muted'>累计损益</div><div class='big {cls(m['tot'])}'>{sy(m['tot'])}</div>"
-         f"<div class='muted small'>{m['tot_pct']:+.2f}%（投入本金 {_yen(m['inv'])}）</div></div></div>"
+         f"<div class='muted small'>{m['tot_pct']:+.2f}%（投入本金 {_yen(m['inv'])}）</div></div>"
+         + _after_tax_stat(m, sy, cls) + "</div>"
          + MV.sparkline(m["spark"])]
     if y:
         g, w = float(y.get("gain") or 0), float(y.get("withheld") or 0)
@@ -2312,7 +2327,9 @@ def _money_card(tag: str, book: dict, now: dt.datetime) -> str:
                  + "</div>"
                  + (f"<div class='neg small'>★ 不完整：{escape('、'.join(y['incomplete']))} 的买入记录对不上，它的卖出没算进去</div>"
                     if y.get("incomplete") else "")
-                 + "<div class='muted small'>特定口座（源泉徴収あり）20.315% 的估算，年内盈亏通算，按成交日分年；以立花的取引報告書 / 年間取引報告書为准</div>")
+                 + "<div class='muted small'>特定口座（源泉徴収あり）20.315% 的估算：每次卖出时按「今年 1/1 起已实现损益的合计」代扣或退还"
+                   "（年内盈亏通算），到 12/31 为止、第二年从 0 重新算；按成交日分年。税后累计 = 累计损益 − 历年代扣 − 现在全部卖出还要扣的。"
+                   "以立花的取引報告書 / 年間取引報告書为准</div>")
     rz = m.get("realized") or []
     if rz:
         H.append("<details class='hv'><summary class='muted'>最近的已实现损益（" + str(len(rz)) + " 笔）</summary><div class='list'>" + "".join(

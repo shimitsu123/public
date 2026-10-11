@@ -79,7 +79,11 @@ def summary(tag: str, book: dict | None, capital: float | None = None, today: st
     year = (today or last_d or "")[:4] or None
     y = TY.ytd(st, year) if year else {}
     rows = [r for r in TY.realized(st)][::-1][:10]
-    return {"eq": eq, "day": day, "day_pct": (day / (eq - day) * 100) if eq - day else 0.0, "tot": tot,
+    try:
+        at = TY.after_tax(st, tot, today or last_d or "")
+    except Exception:                                      # noqa: BLE001  展示用
+        at = {}
+    return {"after_tax": at, "eq": eq, "day": day, "day_pct": (day / (eq - day) * 100) if eq - day else 0.0, "tot": tot,
             "tot_pct": (tot / inv * 100) if inv else 0.0, "inv": inv, "cap": cap,
             "spark": [float(h[1]) for h in hist[-60:]], "ytd": {k: v for k, v in y.items() if k != "rows"},
             "realized": rows, "fills": recent_fills(book), "journal": journal_latest(tag)}
