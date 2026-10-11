@@ -98,6 +98,20 @@ def _watchdog_item(tag: str, now: dt.datetime) -> dict | None:
     return {"name": "09:30 自检", "level": "ok", "text": "通过"}
 
 
+def _charts_item(tag: str, now: dt.datetime) -> dict | None:
+    """面板 K 线的最后一根是不是最近一个已收盘的交易日（qbreak/charts_refresh；2026-10-11 周五收盘后日线没反映的再发防止）。
+    收盘后 2 小时内（补日线还在等 Yahoo）不算；没有 K 线文件 → 不显示。"""
+    from . import charts_refresh as CR
+    s = CR.stale(tag, now)
+    if not s["have"]:
+        return None
+    name = "K 线" + ("（立花）" if tag == "tachibana" else "")
+    grace = is_trading_day(now.date()) and CR.CLOSE_READY <= now.time() < CR.STALE_WARN
+    if s["stale"] and not grace:
+        return {"name": name, "level": "warn", "text": f"日线只到 {s['have']}（应有 {s['want']}）→ bash scripts/liveu.sh charts 补"}
+    return {"name": name, "level": "ok", "text": f"日线到 {s['have']}"}
+
+
 def _phone_item() -> dict:
     from . import panel_phone as PP
     try:
@@ -125,6 +139,9 @@ def build(now: dt.datetime | None = None, run=subprocess.run) -> dict:
         w = _watchdog_item(tag, now)
         if w:
             items.append(w)
+        c = _charts_item(tag, now)
+        if c:
+            items.append(c)
     items.append(_agents_item(run))
     items.append(_phone_item())
     from .panel_phone import listening

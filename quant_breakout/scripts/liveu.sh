@@ -285,9 +285,15 @@ PLANEOF
   exit 0
 fi
 
+if [ "${1:-}" = "charts" ]; then                   # 面板 K 线补日线（收盘后自动；手动：bash scripts/liveu.sh charts [--force]）
+  shift
+  exec "$PY" run.py charts-refresh "$@"
+fi
+
 if [ "${1:-}" = "news" ]; then                     # 定时任务用（每 15 分钟）：经济威胁消息 + 新公布的数据 → 市场仪表盘；新的提醒 → 通知
   shift
   sync_inputs
+  "$PY" run.py charts-refresh --if-stale >/dev/null 2>&1 || true   # 收盘后把正式日线补进面板的 K 线（周五 / 连休也不缺最后一根；不动账本）
   "$PY" -m qbreak.mac_status --ensure-phone --write >/dev/null 2>&1 || true   # 手机访问断了自动修复 + 菜单栏的状态（不影响仪表盘）
   exec "$PY" run.py news --page --notify "$@"
 fi

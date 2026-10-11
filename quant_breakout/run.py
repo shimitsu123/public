@@ -4486,6 +4486,17 @@ def cmd_manual(a) -> int:
     return 0
 
 
+def cmd_charts_refresh(a) -> int:
+    """收盘后把正式日线补进面板的 K 线（qbreak/charts_refresh.py；2026-10-11 用户「周五闭盘了日线也没反映」的永久对策）。"""
+    from qbreak import charts_refresh as CR
+    rc = 0
+    for tag in ([a.broker] if a.broker else CR.books()):
+        r = CR.refresh(tag, force=a.force)
+        print(f"[{tag}] {r['msg']}（有 {r.get('have') or '—'}，应有 {r.get('want')}）")
+        rc |= 0 if r.get("ok") else 1
+    return rc
+
+
 def cmd_panel(a) -> int:
     """操作面板（qbreak/panel.py）：只在 127.0.0.1 上开页面 —— 账本、持有理由与趋势、卖出 / 减仓 / 闲置资金比例 / 撤回 / 停止下单按钮。
     本机端口（默认 8765）+ 手机端口（默认 8766：Tailscale Serve 转过来；按 Tailscale 账户登录或配对的设备才看得到；0 = 不开）。
@@ -5295,6 +5306,11 @@ def main(argv=None) -> int:
     mn.add_argument("--block-days", type=int, default=20, help="sell：之后多少个交易日不自动买回（0 = 不限制，-1 = 一直）")
     mn.add_argument("--note", default=None, metavar="TEXT")
     mn.set_defaults(func=cmd_manual)
+    cr = sub.add_parser("charts-refresh", help="收盘后把正式日线补进操作面板的 K 线（out/charts_<账本>.json；不动账本、不做决策）")
+    cr.add_argument("--broker", default=None, help="只补这个账本（缺省 = 有 K 线文件的全部）")
+    cr.add_argument("--if-stale", action="store_true", help="只在落后时补（定时任务用；缺省也是）")
+    cr.add_argument("--force", action="store_true", help="不看落后、照样重画")
+    cr.set_defaults(func=cmd_charts_refresh)
     pn = sub.add_parser("panel", help="操作面板（127.0.0.1）：账本 + 持有理由 + 卖出 / 减仓 / 比例 / 停止下单按钮（按钮只写手动指令）")
     pn.add_argument("--port", type=int, default=8765)
     pn.add_argument("--phone-port", type=int, default=8766, help="手机端口（Tailscale Serve 用；按 Tailscale 账户登录或配对；0 = 不开）")

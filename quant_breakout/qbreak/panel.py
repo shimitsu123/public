@@ -1918,6 +1918,13 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     cap = float(man.get("cap_pct") or MO.CAP_PCT)
     kl = sm.get("kline") or {}
     ktrend = kl.get("trend") or {}
+    cdoc = _chart_data(tag) or {}
+    if (cdoc.get("bars_asof") or "") > str(kl.get("asof") or ""):   # 收盘后补过日线（charts_refresh）→ 趋势标签用更新过的（横展开）
+        fresh = {t_: v.get("trend") for t_, v in (cdoc.get("tickers") or {}).items() if v.get("trend")}
+        ktrend = {**ktrend, **fresh}
+        sg_ = dict(sm.get("suggest") or {})
+        sg_["rows"] = [({**r, "trend": fresh[r["ticker"]]} if r.get("ticker") in fresh else r) for r in sg_.get("rows") or []]
+        sm = {**sm, "suggest": sg_}
     has_k = bool(kl.get("file")) and (paths.out_dir() / str(kl["file"])).exists()
     halt = PP.halt_text()
     arm = paths.arm_state()                                 # 和立花适配器同一个判断（UX-12）：内容是 ARMED 才算解锁
