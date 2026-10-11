@@ -24,7 +24,8 @@
    "id": "IDX",
    "family": "选股·指数入替",
    "route": "AB",
-   "verdict": "第一关全过（路线 B）→ 第二关登记"
+   "verdict": "更好候选",
+   "note": "第二关 +5.36 pp > 400 次最大 +4.89 pp；与 DXD 9 月窗口重叠一半以上（事后成分）"
   },
   {
    "id": "VCP",
@@ -62,5 +63,6 @@
    "route": "J",
    "verdict": null
   }
- ]
+ ],
+ "status": "stopped:更好候选（IDX）→ 等用户决定；VCP / DDS / CSE / FYB / SRN / CHR 没运行"
 }
