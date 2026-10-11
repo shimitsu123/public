@@ -32,7 +32,7 @@ def test_levels_direction_and_rule_fallback():
 def test_panel_mark_html_links_to_news_item():
     m = NW.ticker_impacts([_ev("a1", [["自動車・輸送機", -2.0]], alert=True)], ["7203.T"], SEC)["7203.T"]
     h = panel._news_mark(m)
-    assert "受损 大" in h and "chip bad" in h and "data-nlink='a1'" in h and "n=a1" in h and "JST" in h
+    assert "受损 大" in h and "chip dnb" in h and "data-nlink='a1'" in h and "n=a1" in h and "JST" in h
     assert panel._news_mark(None) == ""
 
 
@@ -84,3 +84,19 @@ def test_news_card_hides_low_and_colors_levels():
     h = panel._news_card(NOW)
     assert "id='n-hi1'" in h and "id='n-mid1'" in h and "id='n-low1'" not in h
     assert "lv-hi" in h and "lv-mid" in h and "低的不显示（这次 1 条）" in h and "影响：" in h
+
+
+def test_mult_why_names_the_layer():
+    """「不买的原因」写清楚是哪一层（2026-10-11 用户）：风险报告避险 / 关联搭配 C / TBF …"""
+    from types import SimpleNamespace
+    import run
+    from qbreak import suggest as SG
+    reg = SimpleNamespace(overlay_mult=0.0, overlay_action="避险", overlay_as_of="2026-10-08", crash_prob=15.0, quant_mult=1.0)
+    P = SimpleNamespace(scale=0.0, tmult={}, block=None, bb={"state": "bull"}, reg=reg, macro_info={"mult": 0.5}, fx_info={})
+    e = SimpleNamespace(live_mult={}, gidx=[0])
+    run._apply_live_mults(e, {"JP": P}, None, "2026-10-08")
+    assert "市场风险报告（2026-10-08）的判断「避险」" in SG.mult_why(e, "7203.T") and "15%" in SG.mult_why(e, "7203.T")
+    P2 = SimpleNamespace(scale=1.0, tmult={}, block=None, bb={}, reg=None, macro_info={}, fx_info={})
+    tbf = {"enabled": True, "as_of": "2026-10-08", "skip_all": ["7203.T"], "errors": {}}
+    run._apply_live_mults(e, {"JP": P2}, None, "2026-10-08", tbf_pl=tbf)
+    assert SG.mult_why(e, "7203.T").startswith("TBF") and "新仓倍数 0（宏观" in SG.mult_why(e, "6758.T")

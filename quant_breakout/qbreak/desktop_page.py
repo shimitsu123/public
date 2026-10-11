@@ -15,9 +15,9 @@ from .calendar_jp import now_jst
 from .utils import atomic_write_text, read_json
 
 _CSS = """
-:root{--bg:#f7f7f5;--card:#fff;--fg:#1d1d1f;--muted:#6e6e73;--line:#e3e3e0;--pos:#1a7f37;--neg:#c62828;--accent:#2f5bd3}
+:root{--bg:#f7f7f5;--card:#fff;--fg:#1d1d1f;--muted:#6e6e73;--line:#e3e3e0;--pos:#1a7f37;--neg:#c62828;--accent:#2f5bd3;--up:#e0373a;--down:#0e8f50}
 @media (prefers-color-scheme: dark){:root{--bg:#161618;--card:#202023;--fg:#ececf0;--muted:#a1a1a8;--line:#34343a;
---pos:#4cc36b;--neg:#ff6b6b;--accent:#8aa8ff}}
+--pos:#4cc36b;--neg:#ff6b6b;--accent:#8aa8ff;--up:#e8484d;--down:#17905a}}
 *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 -apple-system,BlinkMacSystemFont,
 "Hiragino Sans","PingFang SC",sans-serif} main{max-width:980px;margin:0 auto;padding:20px 16px 40px}
 h1{font-size:20px;margin:0 0 4px} h2{font-size:16px;margin:0 0 8px} .muted{color:var(--muted);font-size:13px}
@@ -25,7 +25,7 @@ h1{font-size:20px;margin:0 0 4px} h2{font-size:16px;margin:0 0 8px} .muted{color
 .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .kpi div{border:1px solid var(--line);border-radius:8px;padding:8px 10px} .kpi b{display:block;font-size:18px}
 table{width:100%;border-collapse:collapse;font-size:14px} td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
-.n{text-align:right;font-variant-numeric:tabular-nums} .pos{color:var(--pos)} .neg{color:var(--neg)} .warn{border-color:var(--neg)}
+.n{text-align:right;font-variant-numeric:tabular-nums} .pos{color:var(--pos)} .neg{color:var(--neg)} .up{color:var(--up)} .down{color:var(--down)} .warn{border-color:var(--neg)}
 .tag{display:inline-block;padding:1px 8px;border-radius:10px;border:1px solid var(--line);font-size:13px}
 .scroll{overflow-x:auto} ul{margin:4px 0 10px;padding-left:20px} summary{cursor:pointer;font-weight:600;font-size:14px;margin:8px 0 2px}
 a{color:var(--accent)}
@@ -53,7 +53,7 @@ def _yen(v, sign: bool = False) -> str:
 
 
 def _cls(v) -> str:
-    return "" if v is None or float(v) == 0 else ("pos" if float(v) > 0 else "neg")
+    return "" if v is None or float(v) == 0 else ("up" if float(v) > 0 else "down")   # 涨红跌绿（2026-10-11 用户）
 
 
 def _manual_card(tag: str, book: dict) -> str:

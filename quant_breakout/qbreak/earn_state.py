@@ -135,7 +135,7 @@ def tag_html(s: dict | None) -> str:
         return "<span class='muted'>—</span>"
     lab = escape(str(s.get("label") or "—"))
     eff = s.get("effect")
-    cls = "pos" if eff == "+" else ("neg" if eff == "−" else "muted")
+    cls = "up" if eff == "+" else ("neg" if eff == "−" else "muted")
     old = "（旧）" if s.get("stale") else ""
     d = s.get("disc")
     tail = f"<span class='muted'> {escape(str(d))[5:]} 开示{old}</span>" if d else ""

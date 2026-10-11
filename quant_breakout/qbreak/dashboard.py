@@ -443,13 +443,13 @@ def render(d: dict, macro: dict | None = None, news: dict | None = None, full_ne
 
 _PAGE = """<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="refresh" content="300"><title>市场仪表盘</title><style>
-:root{{--bg:#fbfbf9;--fg:#1d1d1b;--muted:#6b6b66;--card:#ffffff;--line:#e4e2dc;--accent:#2f6f8f;--pos:#1f7a4d;--neg:#b23b2e}}
-@media (prefers-color-scheme: dark){{:root:not([data-theme="light"]){{--bg:#161615;--fg:#ecebe6;--muted:#a09f98;--card:#1f1f1d;--line:#34332f;--accent:#6fb3d2;--pos:#5cc08c;--neg:#e0796c}}}}
-:root[data-theme="dark"]{{--bg:#161615;--fg:#ecebe6;--muted:#a09f98;--card:#1f1f1d;--line:#34332f;--accent:#6fb3d2;--pos:#5cc08c;--neg:#e0796c}}
+:root{{--bg:#fbfbf9;--fg:#1d1d1b;--muted:#6b6b66;--card:#ffffff;--line:#e4e2dc;--accent:#2f6f8f;--pos:#1f7a4d;--neg:#b23b2e;--up:#e0373a;--down:#0e8f50}}
+@media (prefers-color-scheme: dark){{:root:not([data-theme="light"]){{--bg:#161615;--fg:#ecebe6;--muted:#a09f98;--card:#1f1f1d;--line:#34332f;--accent:#6fb3d2;--pos:#5cc08c;--neg:#e0796c;--up:#e8484d;--down:#17905a}}}}
+:root[data-theme="dark"]{{--bg:#161615;--fg:#ecebe6;--muted:#a09f98;--card:#1f1f1d;--line:#34332f;--accent:#6fb3d2;--pos:#5cc08c;--neg:#e0796c;--up:#e8484d;--down:#17905a}}
 *{{box-sizing:border-box}} body{{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 -apple-system,"Hiragino Sans","PingFang SC",sans-serif}}
 main{{max-width:980px;margin:0 auto;padding:16px}} h1{{font-size:20px;margin:4px 0 2px}} h2{{font-size:16px;margin:0 0 8px}} h3{{font-size:14px;margin:10px 0 4px}}
 .card{{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:12px 0}}
-.muted{{color:var(--muted);font-size:13px}} table{{width:100%;border-collapse:collapse;font-size:13px}}
+.up{{color:var(--up)}} .down{{color:var(--down)}} .muted{{color:var(--muted);font-size:13px}} table{{width:100%;border-collapse:collapse;font-size:13px}}
 td,th{{border-bottom:1px solid var(--line);padding:5px 4px;text-align:left;vertical-align:top}} .n{{text-align:right;font-variant-numeric:tabular-nums}}
 .scroll{{overflow-x:auto}} ul{{margin:4px 0 8px;padding-left:20px}} a{{color:var(--accent)}}
 </style></head><body><main><h1>市场仪表盘（每 15 分钟更新）</h1>

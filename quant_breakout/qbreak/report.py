@@ -224,19 +224,19 @@ _TEMPLATE = r'''<title>突破策略模拟盘</title>
 :root{
   --plane:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink-2:#52514e;--muted:#898781;
   --grid:#e1e0d9;--axis:#c3c2b7;--ring:rgba(11,11,11,.10);
-  --gain:#d03b3b;--loss:#2a78d6;--gain-soft:rgba(208,59,59,.12);--loss-soft:rgba(42,120,214,.12);
+  --gain:#d03b3b;--loss:#0e8f50;--gain-soft:rgba(208,59,59,.12);--loss-soft:rgba(14,143,80,.12);
   --accent:#5b4a3a;--warn-bg:#fff4e0;--warn-ink:#6b4a00;
   --font:"Noto Sans JP",-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --plane:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink-2:#c3c2b7;--muted:#898781;
   --grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);
-  --gain-soft:rgba(208,59,59,.22);--loss-soft:rgba(42,120,214,.22);
+  --gain-soft:rgba(208,59,59,.22);--loss-soft:rgba(14,143,80,.22);
   --accent:#d6c3ad;--warn-bg:#3a2b05;--warn-ink:#ffd67a;color-scheme:dark}}
 :root[data-theme="dark"]{
   --plane:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink-2:#c3c2b7;--muted:#898781;
   --grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);
-  --gain-soft:rgba(208,59,59,.22);--loss-soft:rgba(42,120,214,.22);
+  --gain-soft:rgba(208,59,59,.22);--loss-soft:rgba(14,143,80,.22);
   --accent:#d6c3ad;--warn-bg:#3a2b05;--warn-ink:#ffd67a;color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--plane);color:var(--ink);font-family:var(--font);margin:0;

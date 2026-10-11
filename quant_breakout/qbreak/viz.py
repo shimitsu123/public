@@ -32,7 +32,7 @@ def dot(status: str) -> str:
 
 
 def gauge(pos: float | None, left: str, right: str, value_txt: str = "", w: int = 220) -> str:
-    """半圆刻度：pos ∈ [−1, 1]（−1 = 最左、0 = 中线、+1 = 最右）；左半红、右半绿，中线 = 翻转线。"""
+    """半圆刻度：pos ∈ [−1, 1]（−1 = 最左、0 = 中线、+1 = 最右）；左半绿（熊）、右半红（牛），中线 = 翻转线（涨红跌绿）。"""
     h = w * 0.62
     cx, cy, r = w / 2, h - 18, w / 2 - 16
 
@@ -42,9 +42,9 @@ def gauge(pos: float | None, left: str, right: str, value_txt: str = "", w: int 
     x0, y0 = pt(-1, r)
     xm, ym = pt(0, r)
     x1, y1 = pt(1, r)
-    arcs = (f'<path d="M{x0:.1f},{y0:.1f} A{r:.1f},{r:.1f} 0 0 1 {xm:.1f},{ym:.1f}" fill="none" stroke="var(--neg)" '
+    arcs = (f'<path d="M{x0:.1f},{y0:.1f} A{r:.1f},{r:.1f} 0 0 1 {xm:.1f},{ym:.1f}" fill="none" stroke="var(--down)" '
             f'stroke-width="12" stroke-opacity=".35"/>'
-            f'<path d="M{xm:.1f},{ym:.1f} A{r:.1f},{r:.1f} 0 0 1 {x1:.1f},{y1:.1f}" fill="none" stroke="var(--pos)" '
+            f'<path d="M{xm:.1f},{ym:.1f} A{r:.1f},{r:.1f} 0 0 1 {x1:.1f},{y1:.1f}" fill="none" stroke="var(--up)" '
             f'stroke-width="12" stroke-opacity=".35"/>')
     p = _num(pos)
     needle = ""
@@ -54,8 +54,8 @@ def gauge(pos: float | None, left: str, right: str, value_txt: str = "", w: int 
                   f'stroke-linecap="round"/><circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" fill="var(--fg)"/>')
     return (f'<svg class="gauge" viewBox="0 0 {w} {h:.0f}" role="img" aria-label="{escape(left)} ↔ {escape(right)}：{escape(value_txt)}">'
             f'{arcs}<line x1="{xm:.1f}" y1="{ym - 9:.1f}" x2="{xm:.1f}" y2="{ym + 9:.1f}" stroke="var(--muted)" stroke-width="1.5"/>{needle}'
-            f'<text x="6" y="{h - 3:.0f}" font-size="12" fill="var(--neg)">{escape(left)}</text>'
-            f'<text x="{w - 6}" y="{h - 3:.0f}" font-size="12" fill="var(--pos)" text-anchor="end">{escape(right)}</text>'
+            f'<text x="6" y="{h - 3:.0f}" font-size="12" fill="var(--down)">{escape(left)}</text>'
+            f'<text x="{w - 6}" y="{h - 3:.0f}" font-size="12" fill="var(--up)" text-anchor="end">{escape(right)}</text>'
             + (f'<text x="{cx:.1f}" y="{cy - r * 0.35:.1f}" font-size="14" font-weight="600" fill="var(--fg)" text-anchor="middle">'
                f'{escape(value_txt)}</text>' if value_txt else "") + "</svg>")
 
@@ -131,7 +131,7 @@ def diverging(items: list[tuple[str, float]], unit: str = "%", w: int = 360, row
         y = k * row
         bw = abs(v) / m * half
         x = mid if v >= 0 else mid - bw
-        c = "var(--pos)" if v >= 0 else "var(--neg)"
+        c = "var(--up)" if v >= 0 else "var(--down)"   # 涨红跌绿
         tx = mid + bw + 3 if v >= 0 else mid - bw - 3
         out.append(f'<text x="{lw - 4}" y="{y + row * 0.7:.1f}" font-size="12" fill="var(--fg)" text-anchor="end">{escape(lab)}</text>'
                    f'<rect x="{x:.1f}" y="{y + 3}" width="{max(bw, 0.5):.1f}" height="{row - 6}" fill="{c}" fill-opacity=".8"/>'

@@ -226,7 +226,7 @@ details.khelp ul{margin:4px 0;padding-left:18px;font-size:13px;line-height:1.55;
 .axm{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px}.axm .chip{font-variant-numeric:tabular-nums}
 .chip.bad{background:transparent;box-shadow:inset 0 0 0 1px var(--neg);color:var(--neg);font-weight:600}
 .chip.mid{color:var(--neg)}.chip.gc{box-shadow:inset 0 0 0 1px var(--accent);background:transparent}
-.chip.good{background:transparent;box-shadow:inset 0 0 0 1px var(--pos);color:var(--pos)}
+.chip.upb{background:transparent;box-shadow:inset 0 0 0 1px var(--up);color:var(--up)}.chip.dnb{background:transparent;box-shadow:inset 0 0 0 1px var(--down);color:var(--down);font-weight:600}.chip.dnm{color:var(--down)}
 .nmk{margin:4px 0}.nmk>summary{list-style:none;cursor:pointer}.nmk>summary::-webkit-details-marker{display:none}
 .nml{margin:4px 0 0;padding-left:18px}.nml li{margin:4px 0}.nwin{margin:3px 0 0}
 details.nw.lv-hi{border-left:4px solid var(--neg);padding-left:8px}details.nw.lv-mid{border-left:4px solid #e08a00;padding-left:8px}
@@ -1171,7 +1171,7 @@ document.addEventListener('click', e=>{ const b=e.target.closest('[data-tabgo]')
   if(!k && h){ target=document.getElementById(h); const p=target && target.closest('.pane'); if(p) k=p.dataset.tab; }   // 旧的锚点（#holdings 等）
   if(!k){ try{ k=sessionStorage.getItem('qb-tab')||''; }catch(e){} }
   showTab(k||'home', true);
-  const seg=q.get('seg') || (q.get('n') ? 'news' : '');                  // 消息：通知记录 / 经济威胁
+  const seg=q.get('seg') || (q.get('l') ? 'log' : '');                   // 消息：经济威胁（默认）/ 通知记录
   if(seg) showMseg(seg);
   const l=q.get('l');                                                     // 推送点开：?tab=news&seg=log&l=<id> → 通知记录里那一条
   if(l){ const d=document.getElementById('l-'+l); if(d){ d.open=true; target=d; d.classList.add('hl'); } }
@@ -1407,14 +1407,14 @@ def _news_mark(m: dict | None) -> str:
     if not m:
         return ""
     down = m["dir"] == "down"
-    tone = {"大": "bad", "中": "mid"}.get(m["level"], "") if down else "good"      # 受损：大 = 红框、中 = 红字、小 = 普通
+    tone = {"大": "dnb", "中": "dnm"}.get(m["level"], "") if down else "upb"      # 涨红跌绿：受损 大 = 绿框、中 = 绿字、小 = 普通；受益 = 红框
     head = f"{'⚠' if down else '↑'} 消息：{'受损' if down else '受益'} {m['level']}（{len(m['items'])} 条，估算 {m['net']:+.1f}%）"
     li = []
     for i in m["items"][:6]:
         t = _ts_jst(i.get("time"))
         nid = escape(str(i.get("id") or ""))
         li.append(f"<li><span class='muted'>{t.strftime('%m/%d %H:%M') if t else '—'} JST</span> "
-                  f"<b class='{'neg' if i['eff'] < 0 else 'pos'}'>{i['eff']:+.1f}%</b>"
+                  f"<b class='{'down' if i['eff'] < 0 else 'up'}'>{i['eff']:+.1f}%</b>"
                   + (" <b class='neg'>★</b>" if i.get("alert") else "")
                   + f" <span class='chip'>{escape('、'.join(i.get('labels') or []) or '其他')}</span><br>"
                   + (f"<span class='small'>{escape(_window_text(i['timing']))}</span><br>" if i.get("timing") else "")
@@ -1470,6 +1470,33 @@ def _prob_line(pr: dict | None) -> str:
             + (f"（同样情况 {n:,} 次）" if n else "（相近情况估算）") + "</div>")
 
 
+OLD_EM0 = "新仓倍数 0（宏观 / 判断层 / 关联搭配 C / TBF 里有一层说现在不开这只的新仓）"
+
+
+def _fill_mult_why(w: str) -> str:
+    """执行器旧版写的「新仓倍数 0」没写是哪一层 → 用云端日报的市场层补上（2026-10-11 用户：要标清楚被什么规则挡住）。
+    新版执行器（suggest.mult_why）自己写清楚，这里不动。"""
+    if "（新仓倍数 0）：会被挡" not in w and OLD_EM0 not in w:
+        return w
+    try:
+        rg = (((read_json(paths.PROJECT_ROOT / "var" / "out" / "unified_today.json", {}) or {}).get("extras") or {}).get("JP") or {}).get("regime") or {}
+    except Exception:                                      # noqa: BLE001
+        rg = {}
+    why = []
+    if rg.get("overlay_mult") is not None and float(rg["overlay_mult"]) <= 0:
+        why.append(f"市场风险报告（{rg.get('overlay_as_of') or '—'}）的判断「{rg.get('overlay_action') or ''}」→ 新仓 ×0"
+                   + (f"（报告的急跌概率 {float(rg['crash_prob']):g}%）" if rg.get("crash_prob") is not None else ""))
+    if rg.get("quant_mult") is not None and float(rg["quant_mult"]) <= 0:
+        why.append("市场状态层 risk_off（日経225 跌破 200 日线 / 离一年高点 −12% 以上 / 波动率 > 35%）")
+    bb = rg.get("bullbear") or {}
+    if bb.get("gating") and bb.get("state") == "bear":
+        why.append(f"牛熊分界：{bb.get('since') or '—'} 起熊市")
+    if not why:
+        return w
+    txt = "；".join(why)
+    return w.replace("（新仓倍数 0）：会被挡", f"（新仓倍数 0）—— {txt}：会被挡").replace(OLD_EM0, f"新仓倍数 0 —— {txt}")
+
+
 def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = None, fill: str | None = None,
                  mark: dict | None = None) -> str:
     t, b, ru = str(r["ticker"]), r.get("buy") or {}, r.get("rule") or {}
@@ -1492,7 +1519,7 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
          + _prob_line(r.get("prob") if rank else None)
          + f"<div class='meta'>{' · '.join(x for x in meta if x)}</div>"
          + (f"<div class='small near'>{escape(str(r['near_text']))}</div>" if r.get("near_text") else "")   # 离买入信号还差什么（排序依据）
-         + (f"<div>{escape(str(ru.get('text') or ''))}</div>" if ru.get("state") not in (None, "none") else "")
+         + (f"<div>{escape(_fill_mult_why(str(ru.get('text') or '')))}</div>" if ru.get("state") not in (None, "none") else "")
          + tchips(r.get("trend"), stats=True)
          + (f"<div class='small neg'>★ 顶部风险：{escape(str(r['top_risk']))}</div>" if r.get("top_risk") else "")]
     n, px, lot = int(b.get("rule_shares") or 0), float(b.get("px") or 0), int(b.get("lot") or MO.LOT)
@@ -1507,7 +1534,7 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
         why = f"个股名额已满（{s['used']} / {s['max']} 只）：先卖出一只"
     elif not (px > 0 and eq):
         why = "没有收盘价 / 总权益：执行器下一次运行之后再买"
-    warn = "；".join(b.get("warn") or [])
+    warn = "；".join(_fill_mult_why(w) for w in b.get("warn") or [])
     if why:
         H.append(f"<div class='act muted small'>{escape(why)}</div>")
     else:
@@ -1793,8 +1820,8 @@ def _ts_jst(v):
 def _msg_seg() -> str:
     from . import notify as NT
     n = len(NT.history(60))
-    return ("<div class='seg sgseg' role='tablist'><button type='button' data-mseg='log' class='on'>通知记录 " + str(n) + "</button>"
-            "<button type='button' data-mseg='news'>经济威胁消息</button></div>")
+    return ("<div class='seg sgseg' role='tablist'><button type='button' data-mseg='news' class='on'>经济威胁消息</button>"   # 默认（2026-10-11 用户）
+            "<button type='button' data-mseg='log'>通知记录 " + str(n) + "</button></div>")
 
 
 def _notify_log_card() -> str:
@@ -1848,15 +1875,15 @@ def _news_card(now: dt.datetime) -> str:
         if c.get("shock_txt"):
             det.append(f"<div>冲击：{escape(str(c['shock_txt']))}</div>")
         if c.get("down"):
-            det.append("<div class='neg'>受损的行业：" + escape("、".join(f"{s} {v:+.1f}%" for s, v in c["down"])) + "</div>")
+            det.append("<div class='down'>受损的行业：" + escape("、".join(f"{s} {v:+.1f}%" for s, v in c["down"])) + "</div>")
         if c.get("up"):
-            det.append("<div class='pos'>受益的行业：" + escape("、".join(f"{s} {v:+.1f}%" for s, v in c["up"])) + "</div>")
+            det.append("<div class='up'>受益的行业：" + escape("、".join(f"{s} {v:+.1f}%" for s, v in c["up"])) + "</div>")
         if c.get("rules"):
             det.append("<div>经验规则：" + escape("、".join(f"{s}{'↑' if dd > 0 else '↓'}" for s, dd in c["rules"].items())) + "</div>")
         if c.get("tickers_down"):
-            det.append("<div class='neg'>受损方向的持仓 / 候补：" + escape("、".join(c["tickers_down"][:10])) + "</div>")
+            det.append("<div class='down'>受损方向的持仓 / 候补：" + escape("、".join(c["tickers_down"][:10])) + "</div>")
         if c.get("tickers_up"):
-            det.append("<div class='pos'>受益方向的持仓 / 候补：" + escape("、".join(c["tickers_up"][:10])) + "</div>")
+            det.append("<div class='up'>受益方向的持仓 / 候补：" + escape("、".join(c["tickers_up"][:10])) + "</div>")
         link = str(e.get("link") or "")
         if link.startswith("https://"):
             det.append(f"<div><a href='{escape(link)}' target='_blank' rel='noopener noreferrer'>原文</a></div>")
@@ -2145,8 +2172,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         H.append(_notify_card())                             # 推送（网页 App）
     H.append(PANE + "news")
     H.append(_msg_seg())                                     # 通知记录 / 经济威胁 两段
-    H.append("<div class='mseg' data-s='log'>" + _notify_log_card() + "</div>")
-    H.append("<div class='mseg' data-s='news' hidden>" + _news_card(now) + "</div>")
+    H.append("<div class='mseg' data-s='news'>" + _news_card(now) + "</div>")
+    H.append("<div class='mseg' data-s='log' hidden>" + _notify_log_card() + "</div>")
     H.append(PANE + "")                                      # 分组结束
     badges = _badges(book, st, sm, waiting, now)
     H.append("</main><nav class='tabbar' role='tablist' aria-label='分类'>"
@@ -2270,7 +2297,7 @@ def _money_card(tag: str, book: dict, now: dt.datetime) -> str:
         return ("+" if v > 0 else "−" if v < 0 else "") + f"¥{abs(float(v)):,.0f}"
 
     def cls(v) -> str:
-        return "pos" if v > 0 else "neg" if v < 0 else ""
+        return "up" if v > 0 else "down" if v < 0 else ""          # 涨红跌绿
     y = m.get("ytd") or {}
     H = ["<section class='card' id='money'><h2>损益</h2>"
          f"<div class='stats'><div><div class='muted'>当日损益</div><div class='big {cls(m['day'])}'>{sy(m['day'])}</div>"

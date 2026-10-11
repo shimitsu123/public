@@ -543,7 +543,7 @@ def html(tl: dict, state_tag=None) -> str:
                      if est else "—")
             q = h.get("queued")
             rows.append(f"<tr><td>{escape(h['ticker'])}<br><span class='muted'>{st(h.get('state'))}</span></td>"
-                        f"<td class='n'>{_px(h['close'])}<br><span class='{'pos' if h['ret_pct'] >= 0 else 'neg'}'>{h['ret_pct']:+.1f}%</span>"
+                        f"<td class='n'>{_px(h['close'])}<br><span class='{'up' if h['ret_pct'] >= 0 else 'down'}'>{h['ret_pct']:+.1f}%</span>"
                         f"<br><span class='muted'>第 {h['hold']} 天</span></td>"
                         f"<td>{('<b>已排定 ' + escape(q['sell_day']) + ' 开盘卖（' + escape(q['reason']) + '）</b><br>') if q else ''}{lv}</td>"
                         f"<td>{_md(mh.get('close_day'))} 收盘满 → {_md(mh.get('sell_day'))} 开盘</td>"

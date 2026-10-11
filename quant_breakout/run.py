@@ -1004,6 +1004,45 @@ def _delist_update(today, state, ucfg=None) -> dict:
         return {"error": f"{type(e).__name__}: {e}"[:200]}
 
 
+def _scale_why(P, sc: float) -> str | None:
+    """市场倍数是 0 时，是哪一层（牛熊分界 / 市场状态 / 宏观 / 汇率）—— 面板「为什么不买」写清楚（2026-10-11 用户）。"""
+    if sc > 0:
+        return None
+    out = []
+    bb = getattr(P, "bb", None) or {}
+    if bb.get("gating") and bb.get("state") == "bear":
+        out.append(f"牛熊分界：{bb.get('since') or '—'} 起熊市")
+    reg = getattr(P, "reg", None)
+    if reg is not None and float(getattr(reg, "overlay_mult", 1.0)) <= 0:
+        cp = getattr(reg, "crash_prob", None)
+        out.append(f"市场风险报告（{getattr(reg, 'overlay_as_of', None) or '—'}）的判断「{getattr(reg, 'overlay_action', '')}」→ 新仓 ×0"
+                   + (f"（报告的急跌概率 {float(cp):g}%）" if cp is not None else ""))
+    if reg is not None and float(getattr(reg, "quant_mult", 1.0)) <= 0:
+        out.append(f"市场状态层：日経225 {'跌破 200 日线' if not getattr(reg, 'above_ma200', True) else ''}"
+                   f"（离一年高点 {getattr(reg, 'dd252_pct', '—')}%、20 日波动率 {getattr(reg, 'vol20_pct', '—')}%）→ risk_off")
+    mi = getattr(P, "macro_info", None) or {}
+    if mi.get("mult") is not None and float(mi["mult"]) <= 0:
+        fired = mi.get("fired") or []
+        out.append("宏观层：" + ("、".join(str(x) for x in fired) if fired else "倍数 0"))
+    fx = getattr(P, "fx_info", None) or {}
+    if fx.get("scale") is not None and float(fx["scale"]) <= 0:
+        out.append("汇率层：日元太贵 / 太便宜")
+    return "；".join(out) or "市场倍数 0"
+
+
+def _tilt_why(m: str, t: str, P) -> str:
+    """单只票的倍数 0 来自 _plan_inputs：指数定期入替（待剔除）或板块倾斜（宏观逆风行业）。"""
+    try:
+        from qbreak.universes import index_pending
+        code = t.split(".")[0] if m.upper() == "JP" else t
+        if (index_pending(m, dt.date.today()).get(code) or {}).get("action") == "delete":
+            return "日経225 定期入替：已公布要剔除（生效前不开新仓）"
+    except Exception:                                         # noqa: BLE001
+        pass
+    from qbreak.sectors import sector_cn
+    return f"板块倾斜：{sector_cn(t, m)} 现在宏观逆风（行业倍数 0）"
+
+
 def _apply_live_mults(e, plans: dict, fj_pl: dict | None, bar_date: str | None, cc_pl: dict | None = None,
                       tbf_pl: dict | None = None) -> dict | None:
     """明天成交的新仓倍数（与原模拟盘同一套宏观 / 板块 / 状态层）+ 前向记录判断层（只作用在日本个股：市场倍数与原有各层取 min，
@@ -1014,12 +1053,41 @@ def _apply_live_mults(e, plans: dict, fj_pl: dict | None, bar_date: str | None, 
     from qbreak import fwd_judgment as FJ
     from qbreak import tbf as TBF
     used = None
+    e.mult_why = {}
     for m, P in plans.items():
         sc, tm = P.scale, P.tmult or {}
+        why_t: dict[str, str] = {}
+        for t, v in tm.items():                                 # 板块倾斜 / 指数入替（_plan_inputs 里已合在一起）
+            if float(v) <= 0:
+                why_t[t] = _tilt_why(m, t, P)
         if m == "JP":
+            sc0 = sc
             sc, tm, used = FJ.apply(sc, tm, fj_pl, bar_date)
-            tm, _ = CC.apply(tm, cc_pl, bar_date)
-            tm, _ = TBF.apply(tm, tbf_pl, bar_date)
+            if used is not None:
+                for t, v in tm.items():
+                    if float(v) <= 0 and t not in why_t:
+                        s_ = ((used.get("stocks") or {}).get(t) or {}).get("score")
+                        why_t[t] = f"判断层（前向记录）：这只的判断分 s = {s_}，现在不开新仓"
+            tm1, c_used = CC.apply(tm, cc_pl, bar_date)
+            for t, v in tm1.items():
+                if float(v) <= 0 and t not in why_t:
+                    sc_ = ((c_used or {}).get("stocks") or {}).get(t, {}).get("score")
+                    why_t[t] = ("关联搭配 C：「平静的牛市」（日経225 在 200 日线上、VIX 低）里不利特征偏多"
+                                + (f"（得分 {sc_}）" if sc_ is not None else "") + " → 跳过")
+            tm2, t_used = TBF.apply(tm1, tbf_pl, bar_date)
+            for t, v in tm2.items():
+                if float(v) <= 0 and t not in why_t:
+                    why_t[t] = "TBF（起跌点）：日 / 周 / 月线里至少两个尺度「最像起跌点」→ 不开新仓"
+            tm = tm2
+            if sc <= 0 < sc0:
+                fm = (used or {}).get("market") or {}
+                sc_why = f"判断层（前向记录）：市场倍数 {fm.get('mult', 0)}（{fm.get('points', '—')} 点）"
+            else:
+                sc_why = None
+        else:
+            sc_why = None
+        e.mult_why[m] = {"scale": _scale_why(P, sc) if sc <= 0 and not sc_why else sc_why, "tickers": why_t,
+                         "block": P.block if isinstance(P.block, str) else None}
         e.live_mult[m] = (sc, tm, P.block if isinstance(P.block, str) else None)
     if used is not None:
         last_i = len(e.gidx) - 1

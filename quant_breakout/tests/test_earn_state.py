@@ -86,7 +86,7 @@ def test_fetch_once_per_day_and_fall_back_to_cache():
 
 
 def test_tag_html():
-    assert "class='pos'" in ES.tag_html({"label": "扭亏为盈", "effect": "+", "disc": "2026-08-05"})
+    assert "class='up'" in ES.tag_html({"label": "扭亏为盈", "effect": "+", "disc": "2026-08-05"})
     t = ES.tag_html({"label": "盈转亏", "effect": "−", "disc": "2026-08-05", "stale": True})
     assert "class='neg'" in t and "08-05 开示（旧）" in t
     assert "class='muted'" in ES.tag_html({"label": "数据不足（凑不满 6 季连续）", "disc": None}) and "开示" not in ES.tag_html(

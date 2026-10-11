@@ -7,7 +7,7 @@
 现在趋势如何：收盘比 20 / 60 / 200 日均价高还是低、20 日均价最近 5 天往哪边、MACD 快线在慢线上还是下、1 / 3 个月涨跌、离买入以来的最高价、离止损 →
   一个标签（上涨中 / 偏强 / 偏弱 / 下跌中）。标签只是按收盘价和均价线的位置分的类，不是预测；卖出仍只按规则（卖出线见买卖时间线）。
 K 线（日K / 周K / 月K + MA5 / 10 / 20 / 30）：qbreak/kline.py（执行器写 out/charts_<账本>.json，操作面板按需取；只在 Mac 本机，不入库）。
-趋势标签的颜色：两边页面都给 pos / neg（绿 / 红）再加 up / down —— 操作面板按同花顺的习惯把 up 画成红、down 画成绿（与 K 线一致）。
+趋势标签的颜色：up / down —— 所有页面按涨红跌绿（2026-10-11 用户「整体红色是涨、绿色是跌」；与 K 线一致）。
 说法（2026-10-07 用户：「K线解释换成通俗易懂的说法 横展开」；同日：「去掉全体中重复/复杂的描述 留下简单的描述总结」）：
   标签与说明都用日常的话、一句话说完（上涨中 / 偏强 / 偏弱 / 下跌中；均线 → 均价）；现在趋势的那句话按存着的数字现算（trend_text），
   所以执行器以前算的汇总也显示新说法；操作面板、Mac 账本页、云端日报、日志共用。
@@ -325,19 +325,19 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
         items = "".join(f"<li>{'✓' if it['ok'] else ('✗' if it['ok'] is False else '·')} {escape(it['text'])}</li>"
                         for it in w.get("items") or [] if it.get("key") not in WHY_KEYS)      # 一句话里已经说了的不重复
         lab = tr.get("label") or "na"
-        cls = {"up": "pos up", "strong": "pos up", "weak": "neg down", "down": "neg down"}.get(lab, "muted")
+        cls = {"up": "up", "strong": "up", "weak": "down", "down": "down"}.get(lab, "muted")
         ret = tr.get("ret_pct")
         H.append(f"<div class='hv'>{head}"
                  f"<div><b>为什么持有</b>：{escape(why_line(r))}</div>"
                  + (f"<details><summary class='muted'>买入那天的其他规则读数</summary><ul>{items}</ul></details>" if items else "")
                  + f"<div><b>现在</b>：<b class='{cls}'>{escape(TREND.get(lab, '—'))}</b>"
-                 + (f" <span class='{'pos up' if ret >= 0 else 'neg down'}'>{'浮盈' if ret >= 0 else '浮亏'} {ret:+.1f}%</span>" if ret is not None else "")
+                 + (f" <span class='{'up' if ret >= 0 else 'down'}'>{'浮盈' if ret >= 0 else '浮亏'} {ret:+.1f}%</span>" if ret is not None else "")
                  + f" <span class='muted'>{escape(trend_text(tr))}</span></div>"
                  + (actions(r, "stock") if actions else "") + "</div>")
     for r in cs:
         tr = r.get("trend") or {}
         lab = tr.get("label") or "na"
-        cls = {"up": "pos up", "strong": "pos up", "weak": "neg down", "down": "neg down"}.get(lab, "muted")
+        cls = {"up": "up", "strong": "up", "weak": "down", "down": "down"}.get(lab, "muted")
         H.append(f"<div class='hv'><b>{escape(r['name'])}</b> <span class='muted'>{r['units']:,} 口"
                  + (f" · 约占权益 {r['pct_equity']:.1f}%" if r.get("pct_equity") is not None else "") + " · 核心 ETF</span>"
                  f"<div><b>为什么持有</b>：{escape(r['why'])}</div>"

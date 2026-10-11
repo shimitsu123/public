@@ -162,13 +162,26 @@ def rule_shares(eng, t: str, i: int, em: float) -> int:
     return max(0, int(math.floor(budget / px / lot)) * lot)
 
 
+def mult_why(eng, t: str) -> str:
+    """新仓倍数 0 是哪一层挡的（run.py _apply_live_mults 记的 eng.mult_why）：事件窗口 / 市场倍数（牛熊分界、市场状态、宏观、
+    判断层）/ 这只票（板块倾斜、指数入替、判断层、关联搭配 C、TBF）。记不到 → 列出可能的层。"""
+    mw = (getattr(eng, "mult_why", None) or {}).get(market_of(t)) or {}
+    if mw.get("block"):
+        return f"事件窗口：{mw['block']}"
+    if mw.get("scale"):
+        return str(mw["scale"])
+    if (mw.get("tickers") or {}).get(t):
+        return str(mw["tickers"][t])
+    return "新仓倍数 0（宏观 / 判断层 / 关联搭配 C / TBF 里有一层说现在不开这只的新仓）"
+
+
 def _why_not(eng, t: str, i: int, em: float, gate: str | None, earn: str | None) -> str:
     """信号成立、规则却没排买入的理由（与统一决策的检查同一个顺序）。"""
     st, cfg = eng.st, eng.cfg
     if gate:
         return f"资格检查：{gate}"
     if em <= 0:
-        return "新仓倍数 0（宏观 / 判断层 / 关联搭配 C / TBF 里有一层说现在不开这只的新仓）"
+        return f"新仓倍数 0 —— {mult_why(eng, t)}"
     if earn:
         return earn
     n_after = len(st.pos) - sum(1 for x in st.pending_exit if x in st.pos)
@@ -237,7 +250,7 @@ def build(ind: dict, eng, i: int, params, pool: list[str] | None = None, names: 
             rule = {"state": "none", "text": "还没出买入信号：规则不会买"}
         warn = []
         if not gate and em <= 0:
-            warn.append("规则现在不开这只的新仓（新仓倍数 0）：会被挡")
+            warn.append(f"规则现在不开这只的新仓（新仓倍数 0）—— {mult_why(eng, t)}：会被挡")
         if not gate and earn:
             warn.append(f"{earn}：会被挡")
         out.append({

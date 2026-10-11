@@ -665,7 +665,7 @@ def _combo_c_html(d: dict) -> str:
                 return "<td class='n muted'>—（0 票）</td>"
             txt = f"{float(x) * 100:+.1f}%" if k == "r12" else f"{float(x) * 100:.2f}%" if k == "atrp" else f"{float(x):.3f}"
             g = int(vt.get(k, 0))
-            return f"<td class='n'>{txt} <span class='{'pos' if g > 0 else 'neg' if g < 0 else 'muted'}'>{'+1' if g > 0 else '−1' if g < 0 else '0'}</span></td>"
+            return f"<td class='n'>{txt} <span class='{'up' if g > 0 else 'down' if g < 0 else 'muted'}'>{'+1' if g > 0 else '−1' if g < 0 else '0'}</span></td>"
         rows.append(f"<tr><td>{escape(t)}</td>" + "".join(cell(k) for k in FEATS)
                     + f"<td class='n'>{int(v.get('score', 0)):+d}</td><td>{'<b>跳过</b>' if v.get('skip') else '不变'}</td></tr>")
     tbl = ("<div class='scroll'><table><tr><th>候选</th>" + "".join(f"<th class='n'>{escape(LABELS[k])}</th>" for k in FEATS)
@@ -769,7 +769,7 @@ def _fwdj_html(d: dict) -> str:
     b = f.get("baseline") or {}
     diff = f.get("diff_jpy")
     base = (f"<p>基准账户（原规则：同一套行情、不加这一层、离场用死叉、闲置资金 1655 + 美股牛熊分界，{escape(str(b.get('since') or '—'))} 起）：权益 {_money(b.get('equity_jpy'))}；"
-            f"模拟盘 {_money(f.get('equity_jpy'))}；差 <b class='{'pos' if (diff or 0) > 0 else 'neg' if (diff or 0) < 0 else ''}'>"
+            f"模拟盘 {_money(f.get('equity_jpy'))}；差 <b class='{'up' if (diff or 0) > 0 else 'down' if (diff or 0) < 0 else ''}'>"
             f"{'—' if diff is None else ('+' if diff >= 0 else '−') + f'¥{abs(diff):,.0f}'}</b>"
             f"（持仓 基准 {len(b.get('positions') or [])} 只）</p>") if b and not b.get("error") else \
         f"<p class='muted'>基准账户：{escape(str(b.get('error') or '还没有'))}</p>"
@@ -790,7 +790,7 @@ def _shadow_html(d: dict) -> str:
     if not s:
         return ""
     diff = s.get("diff_pp")
-    cls = "pos" if (diff or 0) > 0 else "neg" if (diff or 0) < 0 else ""
+    cls = "up" if (diff or 0) > 0 else "down" if (diff or 0) < 0 else ""
     dec = s.get("last_decision") or {}
     orders = "；".join(f"{escape(o['side'])} {escape(o['ticker'])} {int(o['shares']):,} 股（{escape(o.get('reason') or '')}）"
                       for o in dec.get("orders") or []) or "不动"
@@ -920,7 +920,7 @@ def _account_block(d: dict) -> str:
            f'<div><span class="muted">USD/JPY（只影响核心 ETF 的日元价值）</span><b>{_fxr(fx)}</b><span class="muted">{escape(str(d.get("usdjpy_src") or ""))}</span></div>')
     return (f'<section class="card top"><h2>① 账户</h2>'
             f'<div class="hero"><span class="muted">总权益（日元）</span><b class="big">{_money(eq)}</b>'
-            f'<span class="{"pos" if (ret or 0) >= 0 else "neg"} big2">{ret_txt}</span><span class="muted">起始 {_money(cap)}</span></div>'
+            f'<span class="{"up" if (ret or 0) >= 0 else "down"} big2">{ret_txt}</span><span class="muted">起始 {_money(cap)}</span></div>'
             + _mrow("离峰值的回撤", f"峰值 {_money(peak)}；模拟期最大回撤 {escape(str(mdd))}%", meter, dd_txt, _chip(st))
             + f'<div class="kpi"><div><span class="muted">日元现金</span><b>{_money(d.get("cash_jpy"))}</b></div>{usd}'
             f'<div><span class="muted">个股名额 {held} / {nmax} 在用</span>{_segments(cells)}<span class="muted">持 {held} · 明天卖 {selling} · 明天买 {buying} · 空 {free}</span></div>'
@@ -965,7 +965,7 @@ def _positions_block(d: dict, closes: dict) -> str:
                  (F(hard * 1.06), 1, "good")]
         ticks = [(0, f"卖出线 {_money(hard, ccy)}"), (F(entry), f"成本 {_money(entry, ccy)}"), (1, f"止盈 {_money(tp, ccy)}")]
         meter = _meter(frac, st, zones, ticks, label=f"{t} 现价在卖出线与止盈之间的位置")
-        val = (f"现价 {_money(close, ccy)}<span class='{'pos' if pnl >= 0 else 'neg'}'>（{pnl:+.1f}%）</span>"
+        val = (f"现价 {_money(close, ccy)}<span class='{'up' if pnl >= 0 else 'down'}'>（{pnl:+.1f}%）</span>"
                f"<span class='muted'> 距止盈 {d_up:+.1f}%</span>" if close else "现价：今天没算出")
         chip = _chip(st, f"距{hard_rule} {d_down:+.1f}%" if d_down is not None else "位置未知")
         hold = int(h.get("hold") or p.get("hold") or 0)
@@ -1175,7 +1175,7 @@ def render_unified_html(d: dict) -> str:
                          f"<td class='n'>{_money(int(u) * px)}</td></tr>")
     tr_rows = "".join(
         f"<tr><td>{escape(t['exit_date'])}</td><td>{escape(t['ticker'])}</td><td>{'美股' if t['market'] == 'US' else '日本'}</td>"
-        f"<td class='n'>{t['shares']:,} 股</td><td class='n {'pos' if float(t['pnl_jpy']) > 0 else 'neg'}'>{_money(t['pnl_jpy'])}</td>"
+        f"<td class='n'>{t['shares']:,} 股</td><td class='n {'up' if float(t['pnl_jpy']) > 0 else 'down'}'>{_money(t['pnl_jpy'])}</td>"
         f"<td>{escape(t['reason'])}</td></tr>" for t in reversed(d.get("trades") or []))
     fx_rows = "".join(f"<tr><td>{escape(x[0])}</td><td>{'日元→美元' if x[1] == 'JPY>USD' else '美元→日元'}</td>"
                       f"<td class='n'>{_money(x[2], 'USD')}</td><td class='n'>{_fxr(x[3])}</td></tr>"
@@ -1352,7 +1352,7 @@ def _themes_html(th: dict, meta: tuple) -> str:
 
     def row(k, lab):
         x = g[k]
-        cls = "pos" if (x.get("r3m") or 0) > 0 else "neg"
+        cls = "up" if (x.get("r3m") or 0) > 0 else "down"
         return (f"<tr><td>{escape(lab)}</td><td class='n'>{x.get('n', 0)} 只</td><td class='n'>{_sg(x.get('r1m'))}</td>"
                 f"<td class='n {cls}'>{_sg(x.get('r3m'))}（{x.get('rank3m', '—')}/{x.get('of', '—')}）</td>"
                 f"<td class='n'>{_sg(x.get('r12'))}（{x.get('rank12', '—')}/{x.get('of12', '—')}）</td>"
@@ -1433,7 +1433,7 @@ def _influence_html(th: dict) -> str:
         return f"<p class='muted'>各业种影响占比：这次取不到（{escape(str(why))}）</p>"
     ml = {g for g, _ in ((th.get("era_q") or {}).get("industries") or [])}
     body = "".join(f"<tr><td>{'★ ' if g in ml else ''}{escape(str(g).replace('、', '・'))}</td><td class='n'>{v['share']:.1f}%</td><td class='n'>{v['weight']:.1f}%</td>"
-                   f"<td class='n {'pos' if v['rel'] > 0 else 'neg'}'>{v['rel']:+.1f}%</td></tr>" for g, v in rows[:10])
+                   f"<td class='n {'up' if v['rel'] > 0 else 'down'}'>{v['rel']:+.1f}%</td></tr>" for g, v in rows[:10])
     rest = sum(v["share"] for _, v in rows[10:])
     body += f"<tr><td class='muted'>其余 {len(rows) - 10} 个业种</td><td class='n'>{rest:.1f}%</td><td></td><td></td></tr>"
     w = now.get("window") or ["", ""]
@@ -1670,16 +1670,16 @@ def write_unified_report() -> Path:
 _PAGE = """<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>模拟盘日报</title>
 <style>
-:root{{--bg:#fbfbf9;--fg:#1d1d1b;--muted:#6b6b66;--card:#ffffff;--line:#e4e2dc;--accent:#2f6f8f;--pos:#1f7a4d;--neg:#b23b2e}}
-@media (prefers-color-scheme: dark){{:root:not([data-theme="light"]){{--bg:#161615;--fg:#ecebe6;--muted:#a09f98;--card:#1f1f1d;--line:#34332f;--accent:#6fb3d2;--pos:#5cc08c;--neg:#e0796c}}}}
-:root[data-theme="dark"]{{--bg:#161615;--fg:#ecebe6;--muted:#a09f98;--card:#1f1f1d;--line:#34332f;--accent:#6fb3d2;--pos:#5cc08c;--neg:#e0796c}}
+:root{{--bg:#fbfbf9;--fg:#1d1d1b;--muted:#6b6b66;--card:#ffffff;--line:#e4e2dc;--accent:#2f6f8f;--pos:#1f7a4d;--neg:#b23b2e;--up:#e0373a;--down:#0e8f50}}
+@media (prefers-color-scheme: dark){{:root:not([data-theme="light"]){{--bg:#161615;--fg:#ecebe6;--muted:#a09f98;--card:#1f1f1d;--line:#34332f;--accent:#6fb3d2;--pos:#5cc08c;--neg:#e0796c;--up:#e8484d;--down:#17905a}}}}
+:root[data-theme="dark"]{{--bg:#161615;--fg:#ecebe6;--muted:#a09f98;--card:#1f1f1d;--line:#34332f;--accent:#6fb3d2;--pos:#5cc08c;--neg:#e0796c;--up:#e8484d;--down:#17905a}}
 body{{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 -apple-system,"Hiragino Sans","Noto Sans CJK SC",sans-serif}}
 main{{max-width:880px;margin:0 auto;padding:16px}} h1{{font-size:20px;margin:4px 0 2px}} h2{{font-size:16px;margin:0 0 8px}} h3{{font-size:14px;margin:10px 0 4px}}
 .card{{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:12px 0}}
 .kpi{{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}} .kpi div{{border:1px solid var(--line);border-radius:8px;padding:8px}}
 .kpi b{{display:block;font-size:17px}} .muted{{color:var(--muted);font-size:13px}} ul{{margin:4px 0 8px;padding-left:20px}}
 table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom:1px solid var(--line);padding:5px 4px;text-align:left}}
-.n{{text-align:right;font-variant-numeric:tabular-nums}} .warn{{border-color:var(--neg)}} .pos{{color:var(--pos)}} .neg{{color:var(--neg)}} .spark{{width:100%;height:120px}}
+.n{{text-align:right;font-variant-numeric:tabular-nums}} .warn{{border-color:var(--neg)}} .pos{{color:var(--pos)}} .neg{{color:var(--neg)}} .up{{color:var(--up)}} .down{{color:var(--down)}} .spark{{width:100%;height:120px}}
 .scroll{{overflow-x:auto}} dt{{font-weight:600;margin-top:6px}} dd{{margin:0 0 4px}}
 .tag{{display:inline-block;border:1px solid var(--accent);color:var(--accent);border-radius:4px;padding:0 4px;font-size:12px;white-space:nowrap}} .tag.dim{{border-color:var(--line);color:var(--muted)}}
 :root{{--st-good:#0ca30c;--st-warn:#fab219;--st-serious:#ec835a;--st-crit:#d03b3b;--st-na:#8f8f89;--st-info:#2f6f8f;--s1:#2a78d6;--s2:#1baf7a;--s3:#4a3aa7;--s4:#eda100}}
