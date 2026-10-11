@@ -64,7 +64,8 @@
   （`bash scripts/routines.sh run …`）；`~/qbreak-src` / `~/qbreak-dev` 里不跑
 - 执行器只经 `scripts/liveu.sh`（它把数据目录设成 `~/.qbreak/home`）；直接跑 `run.py` 时先 `export QBREAK_HOME=~/.qbreak/home`
   （只读命令也一样；数据目录在仓库里时立花的入口会拒绝运行——公开仓库）；Python 用 `~/.qbreak/venv/bin/python`（macOS 自带的 3.9 不够）
-- 手机通知 / 外部心跳（2026-10-09 起）：地址是密钥，放钥匙串（`qbreak-webhook`：Discord / Slack / ntfy；`qbreak-smtp`；`qbreak-heartbeat`），
+- 手机通知（2026-10-11 起：用户「不用 Gmail，直接在 qbreak 里通知并记录」）：qbreak 推送（网页 App，`qbreak/webpush.py`）+ 通知记录（数据目录 out/notifications.jsonl，面板「消息 → 通知记录」）；
+  邮件 / webhook 改为可选（不再推荐 email-setup）。外部心跳（2026-10-09 起）：地址是密钥，放钥匙串（`qbreak-webhook`：Discord / Slack / ntfy；`qbreak-smtp`；`qbreak-heartbeat`），
   用户自己在终端 `security add-generic-password -s qbreak-webhook -a qbreak -w`（回车后输入，不贴进聊天）；邮件（2026-10-09 起用这个）：用户自己在「终端」App
   运行 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup`（交互输入 Gmail 应用专用密码，先发一封测试邮件、发成了才存进钥匙串 `qbreak-smtp`；Claude 不运行它）；Claude 只说有 / 没有；
   试发 `bash scripts/liveu.sh notify-test`；09:30 自检（LaunchAgent `com.qbreak.watchdog`）：问「今天的自检过了吗」→ 看

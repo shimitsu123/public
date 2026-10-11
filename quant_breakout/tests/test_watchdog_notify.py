@@ -158,7 +158,7 @@ def test_notify_command_never_prints_values(monkeypatch, posts, capsys):
     import run
     assert run.main(["notify", "--test"]) == 3
     out = capsys.readouterr().out
-    assert "webhook：没设置" in out and "security add-generic-password -s qbreak-webhook -a qbreak -w" in out
+    assert "webhook：没设置" in out and "在这台设备打开推送" in out and "通知记录：已记一条" in out
     monkeypatch.setenv("QBREAK_WEBHOOK", SECRET)
     monkeypatch.setenv("QBREAK_HEARTBEAT", BEAT)
     assert run.main(["notify", "--test"]) == 0
@@ -418,12 +418,13 @@ def test_gate_alert_items(tmp_path, monkeypatch):
             calls.append(list(args))
             return subprocess.CompletedProcess(args, 0, listing if args[0] == "launchctl" else "", "")
         return run_, calls
-    names = ("⑧ 手机通知通道（webhook / 邮件）", "⑧ 外部心跳（Mac 没跑的提醒）", "⑧ 09:30 自检任务（com.qbreak.watchdog）")
+    names = ("⑧ 手机通知通道（qbreak 推送）", "⑧ 外部心跳（Mac 没跑的提醒）", "⑧ 09:30 自检任务（com.qbreak.watchdog）")
     monkeypatch.setenv("QBREAK_WEBHOOK", SECRET)                                   # 环境变量有、钥匙串没有 → 定时任务读不到
     run_, calls = fake({})
     items = {it["name"]: it for it in G.check(agents=agents, run=run_)}
     assert [items[n]["ok"] for n in names] == [False, False, False]
-    assert "定时任务读不到" in items[names[0]]["text"] and "healthchecks.io" in items[names[1]]["text"]
+    assert "还没有设备打开 qbreak 推送" in items[names[0]]["text"] and "email-setup" not in items[names[0]]["text"]
+    assert "healthchecks.io" in items[names[1]]["text"]
     assert "没装" in items[names[2]]["text"]
     assert all("-w" not in c for c in calls if c[0] == "security")                # 只查有没有
     (agents / "com.qbreak.watchdog.plist").write_text("x", encoding="utf-8")
@@ -441,3 +442,12 @@ def test_gate_alert_items(tmp_path, monkeypatch):
         raise FileNotFoundError(args[0])                                          # 不是 macOS：前两项跳过，自检任务只看文件
     items = {it["name"]: it for it in G.check(agents=agents, run=none)}
     assert [items[n]["ok"] for n in names] == [None, None, True]
+    from qbreak import webpush as WP                                          # qbreak 推送有设备 → 不用 Gmail / webhook 也算有通道
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    pub = ec.generate_private_key(ec.SECP256R1()).public_key().public_bytes(serialization.Encoding.X962,
+                                                                             serialization.PublicFormat.UncompressedPoint)
+    assert WP.subscribe("iPhone", {"endpoint": "https://web.push.apple.com/x", "keys": {"p256dh": WP.b64u(pub), "auth": WP.b64u(b"0" * 16)}})[0]
+    run_, _ = fake({})
+    items = {it["name"]: it for it in G.check(agents=agents, run=run_)}
+    assert items[names[0]]["ok"] is True and "推送已打开的设备 1 台" in items[names[0]]["text"]

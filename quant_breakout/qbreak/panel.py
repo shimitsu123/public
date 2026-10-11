@@ -1165,6 +1165,10 @@ document.addEventListener('click', e=>{ const b=e.target.closest('[data-tabgo]')
   if(!k && h){ target=document.getElementById(h); const p=target && target.closest('.pane'); if(p) k=p.dataset.tab; }   // 旧的锚点（#holdings 等）
   if(!k){ try{ k=sessionStorage.getItem('qb-tab')||''; }catch(e){} }
   showTab(k||'home', true);
+  const seg=q.get('seg') || (q.get('n') ? 'news' : '');                  // 消息：通知记录 / 经济威胁
+  if(seg) showMseg(seg);
+  const l=q.get('l');                                                     // 推送点开：?tab=news&seg=log&l=<id> → 通知记录里那一条
+  if(l){ const d=document.getElementById('l-'+l); if(d){ d.open=true; target=d; d.classList.add('hl'); } }
   const n=q.get('n');                                                     // 推送点开：?tab=news&n=<id> → 展开那一条
   if(n){ const d=document.getElementById('n-'+n); if(d){ d.open=true; const pd=d.parentElement && d.parentElement.closest('details'); if(pd) pd.open=true; target=d; d.classList.add('hl'); } }
   if(target) setTimeout(()=>{ const top=document.querySelector('.top'); window.scrollTo(0, target.getBoundingClientRect().top+window.scrollY-((top&&top.offsetHeight)||0)-8); }, 50);
@@ -1177,6 +1181,9 @@ document.addEventListener('click', e=>{                                   // 选
   if(m){ e.preventDefault(); const g=document.querySelector('.sgg[data-g="'+m.dataset.sgmore+'"]');
          if(g) g.querySelectorAll('.sgmore').forEach(x=>x.hidden=false); m.closest('.act').remove(); }
 }, true);
+function showMseg(s){ document.querySelectorAll('[data-mseg]').forEach(b=>b.classList.toggle('on', b.dataset.mseg===s));
+  document.querySelectorAll('.mseg').forEach(g=>{ g.hidden = g.dataset.s!==s; }); }
+document.addEventListener('click', e=>{ const b=e.target.closest('[data-mseg]'); if(!b) return; e.preventDefault(); showMseg(b.dataset.mseg); }, true);
 """
 
 _PAIR_JS = """
@@ -1630,7 +1637,7 @@ TABS = {"home": ("⌂", "总览", "账户现在怎样：总权益、今天的运
         "hold": ("▤", "持仓", "现在拿着的个股与闲置资金 ETF：为什么拿、走势、卖出 / 调仓；立花那边的实际持仓"),
         "trade": ("⇄", "交易", "今天的单（执行器下的，可撤）与你写的手动指令、卖出后不买回的票"),
         "pick": ("☆", "选股", "规则的候选：出信号的、快要出的、观察中的，买入前看价格与 K 线"),
-        "news": ("⚠", "消息", "经济威胁消息：提醒的内容、时间、可信度、会影响哪些行业和持仓（推送点开到这里）"),
+        "news": ("⚠", "消息", "qbreak 发出的通知的记录，和经济威胁消息（内容、时间、可信度、影响的行业和持仓）；推送点开到这里"),
         "more": ("⋯", "更多", "通知设置、手机、上线准备、紧急停止（HALT）")}
 
 
@@ -1685,6 +1692,31 @@ def _ts_jst(v):
     return t.astimezone(JST) if t.tzinfo else t.replace(tzinfo=JST)
 
 
+def _msg_seg() -> str:
+    from . import notify as NT
+    n = len(NT.history(60))
+    return ("<div class='seg sgseg' role='tablist'><button type='button' data-mseg='log' class='on'>通知记录 " + str(n) + "</button>"
+            "<button type='button' data-mseg='news'>经济威胁消息</button></div>")
+
+
+def _notify_log_card() -> str:
+    """qbreak 发出的每一条通知（notify.send 记的；数据目录 out/notifications.jsonl，只在本机）：时刻（JST）、标题、内容。
+    推送点开 ?tab=news&seg=log&l=<id> → 展开这一条。2026-10-11 用户：不用 Gmail，直接在 qbreak 里通知并记录。"""
+    from . import notify as NT
+    hs = NT.history(60)
+    if not hs:
+        return ("<section class='card' id='nlog'><h2>通知记录</h2><div class='muted small'>还没有。qbreak 发出的通知（成交、09:30 自检、买入信号、HALT、"
+                "经济威胁、手机连不上…）都会记在这里；打开了推送的设备同时会弹出来。</div></section>")
+    rows = []
+    for k, h in enumerate(hs):
+        lv = str(h.get("level") or "info")
+        rows.append(f"<details class='hv nw' id='l-{escape(str(h.get('id')))}'{' open' if k == 0 else ''}><summary>"
+                    f"{'<b class=neg>★</b> ' if lv in ('warn', 'error') else ''}<span class='muted'>{escape(str(h.get('at') or '')[5:16].replace('-', '/'))} JST</span> "
+                    f"{escape(str(h.get('subject') or ''))}</summary><div style='white-space:pre-wrap'>{escape(str(h.get('text') or ''))}</div></details>")
+    return ("<section class='card' id='nlog'><h2>通知记录（最近 " + str(len(hs)) + " 条）</h2><div class='muted small'>时间都是日本时间（JST）。"
+            "qbreak 发出的每一条通知都记在这里（只在这台 Mac）；打开了推送的设备同时会弹出来。</div>" + "".join(rows) + "</section>")
+
+
 def _news_card(now: dt.datetime) -> str:
     """经济威胁消息（Mac 每 15 分钟取一次；数据目录 cache/news/news.json —— 第三方标题只在本机 / 手机页面上，不入库）。
     达到提醒线的在前；每条点开：发布时间、提醒时间、来源与可信度、冲击与影响链路（因子 → 行业 → 持仓 / 候补）、原文链接。只展示，不参与交易。"""
@@ -1730,10 +1762,10 @@ def _news_card(now: dt.datetime) -> str:
             det.append(f"<div><a href='{escape(link)}' target='_blank' rel='noopener noreferrer'>原文</a></div>")
         det.append("<div class='muted small'>只展示与提醒，不参与交易</div>")
         rows.append(f"<details class='hv nw' id='n-{escape(str(e.get('id')))}'><summary>"
-                    f"{'<b class=neg>★ 提醒</b> ' if e.get('alert') else ''}<span class='muted'>{escape(when(e.get('time')))}</span> "
+                    f"{'<b class=neg>★ 提醒</b> ' if e.get('alert') else ''}<span class='muted'>{escape(when(e.get('time')))} JST</span> "
                     f"<span class='chip'>{escape(lab)}</span><br>{escape(str(e.get('title') or '')[:140])}</summary>{''.join(det)}</details>")
     rest = rows[n_show:]
-    return (f"<section class='card' id='news'><h2>经济威胁消息</h2><div class='muted small'>Mac 每 15 分钟取一次；最近一次 {escape(str(d.get('generated') or '—'))}。"
+    return (f"<section class='card' id='news'><h2>经济威胁消息</h2><div class='muted small'>时间都是日本时间（JST）。Mac 每 15 分钟取一次；最近一次 {escape(str(d.get('generated') or '—'))}。"
             "★ = 达到提醒线（会推送到这台设备）。点一条看详细。</div>" + "".join(rows[:n_show])
             + (f"<details class='hv'><summary class='muted'>其余 {len(rest)} 条（威胁较低）</summary>{''.join(rest)}</details>" if rest else "")
             + "</section>")
@@ -2003,7 +2035,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     if remote:
         H.append(_notify_card())                             # 推送（网页 App）
     H.append(PANE + "news")
-    H.append(_news_card(now))                                # 经济威胁消息（推送点开到这里）
+    H.append(_msg_seg())                                     # 通知记录 / 经济威胁 两段
+    H.append("<div class='mseg' data-s='log'>" + _notify_log_card() + "</div>")
+    H.append("<div class='mseg' data-s='news' hidden>" + _news_card(now) + "</div>")
     H.append(PANE + "")                                      # 分组结束
     badges = _badges(book, st, sm, waiting, now)
     H.append("</main><nav class='tabbar' role='tablist' aria-label='分类'>"

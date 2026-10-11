@@ -28,6 +28,7 @@ import urllib.request
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 
+from . import paths
 from .utils import setup_logging
 
 log = setup_logging("notify")
@@ -229,8 +230,54 @@ def _email(conf: str, subject: str, text: str) -> int:
     return len(tos)
 
 
-def send(subject: str, text: str, level: str = "info", run=None, url: str = "/") -> dict[str, bool | None]:
-    """按设置了的通道发一条通知 → {webhook / email: True 发了 / False 失败 / None 没设置}。绝不抛（失败只记 warning）。"""
+LOG_FILE = "notifications.jsonl"         # 通知记录（数据目录 out/；面板「消息 → 通知记录」读；只在本机，不入库）
+LOG_KEEP = 500
+
+
+def record(subject: str, text: str, level: str = "info", url: str = "") -> str:
+    """记一条通知 → id（面板「消息 → 通知记录」；推送点开定位到它）。时刻按日本时间。最多留 LOG_KEEP 条。绝不抛。"""
+    import os
+    import secrets
+    from .calendar_jp import now_jst
+    rid = secrets.token_hex(5)
+    try:
+        p = paths.out_dir() / LOG_FILE
+        rec = {"id": rid, "at": now_jst().strftime("%Y-%m-%d %H:%M:%S"), "level": level, "subject": str(subject)[:200],
+               "text": str(text)[:2000], "url": url}
+        lines = p.read_text(encoding="utf-8").splitlines() if p.exists() else []
+        lines = (lines + [json.dumps(rec, ensure_ascii=False)])[-LOG_KEEP:]
+        tmp = p.with_name(p.name + f".tmp{os.getpid()}")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        os.replace(tmp, p)
+    except Exception as e:                                    # noqa: BLE001
+        log.warning("通知记录没写成：%s", type(e).__name__)
+    return rid
+
+
+def history(n: int = 60) -> list[dict]:
+    """最近 n 条通知（新的在前）。"""
+    p = paths.out_dir() / LOG_FILE
+    out = []
+    try:
+        for ln in reversed(p.read_text(encoding="utf-8").splitlines()):
+            try:
+                out.append(json.loads(ln))
+            except ValueError:
+                continue
+            if len(out) >= n:
+                break
+    except OSError:
+        pass
+    return out
+
+
+def send(subject: str, text: str, level: str = "info", run=None, url: str = "") -> dict[str, bool | None]:
+    """按设置了的通道发一条通知 → {webhook / email: True 发了 / False 失败 / None 没设置, push: …}。绝不抛（失败只记 warning）。
+    每一条先记进通知记录（面板「消息 → 通知记录」）；推送点开 → url（没给 = 通知记录里的这一条）。"""
+    rid = record(subject, text, level, url)
+    url = url or f"/?tab=news&seg=log&l={rid}"
     out: dict[str, bool | None] = {}
     for name in ("webhook", "email"):
         try:
@@ -252,7 +299,7 @@ def send(subject: str, text: str, level: str = "info", run=None, url: str = "/")
             out[name] = False
     try:                                                      # 网页 App（主屏幕上的面板）的推送：有订阅才发（qbreak/webpush.py）
         from . import webpush
-        r = webpush.send(f"{'★ ' if level in ('warn', 'error') and not subject.startswith('★') else ''}{subject}", text, url=url or "/")
+        r = webpush.send(f"{'★ ' if level in ('warn', 'error') and not subject.startswith('★') else ''}{subject}", text, url=url)
         if r is not None:
             out["push"] = r
     except Exception as e:                                    # noqa: BLE001

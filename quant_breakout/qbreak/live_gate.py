@@ -350,19 +350,25 @@ def _alerts(add, run, agents: Path, rc_list: int | None, listing: str) -> None:
         return NT.configured(name, run=run, env=False)
     env_only = "（环境变量有设置，但定时任务读不到 ~/.zshrc 的环境变量）"
     wh, em = kc("webhook"), kc("email")
-    if wh is None and em is None:
-        add("准备", "⑧ 手机通知通道（webhook / 邮件）", None, "不是 macOS（没有 security 命令）：跳过")
+    try:                                                   # 2026-10-11 用户：不用 Gmail，直接在 qbreak 里通知并记录 → 推送（网页 App）为主
+        from .webpush import subs as _push_subs
+        npush = len(_push_subs())
+    except Exception:                                      # noqa: BLE001
+        npush = 0
+    extra = [s for s, x in (("qbreak-webhook", wh), ("qbreak-smtp", em)) if x]
+    if npush:
+        add("准备", "⑧ 手机通知通道（qbreak 推送）", True,
+            f"推送已打开的设备 {npush} 台（面板「消息 → 通知记录」里每条都有记录）"
+            + (f"；另外钥匙串里有 {'、'.join(extra)}" if extra else "") + "；发一条试试：bash scripts/liveu.sh notify-test")
+    elif wh is None and em is None:
+        add("准备", "⑧ 手机通知通道（qbreak 推送）", None, "不是 macOS（没有 security 命令）：跳过")
     elif wh or em:
-        add("准备", "⑧ 手机通知通道（webhook / 邮件）", True,
-            "钥匙串里有 " + "、".join(s for s, x in (("qbreak-webhook", wh), ("qbreak-smtp", em)) if x)
-            + "（只查了有没有；发一条试试：bash scripts/liveu.sh notify-test）")
+        add("准备", "⑧ 手机通知通道（qbreak 推送）", True,
+            "钥匙串里有 " + "、".join(extra) + "（只查了有没有）；建议也在 iPhone 打开 qbreak 推送（主屏幕图标 →「更多 → 通知」）")
     else:
-        add("准备", "⑧ 手机通知通道（webhook / 邮件）", False,
-            "★ 钥匙串里没有 qbreak-webhook / qbreak-smtp"
-            + (env_only if os.environ.get("QBREAK_WEBHOOK") or os.environ.get("QBREAK_SMTP") else "")
-            + "：邮件（Gmail）→ 在你自己的终端运行 bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup（应用专用密码输入时不显示，存好后发一封测试邮件）；"
-              "或在 Discord / Slack / ntfy 建一个只给自己的通知地址，在终端运行 security add-generic-password -s qbreak-webhook -a qbreak -w"
-              "（回车后输入，不要贴进聊天），再 bash scripts/liveu.sh notify-test")
+        add("准备", "⑧ 手机通知通道（qbreak 推送）", False,
+            "★ 还没有设备打开 qbreak 推送：iPhone 从主屏幕的 qbreak 图标打开面板 →「更多」→「通知（推送）」→「在这台设备打开推送」→ 允许"
+            "（不用 Gmail / webhook；每条通知也记在面板「消息 → 通知记录」）")
     hb = kc("heartbeat")
     if hb is None:
         add("准备", "⑧ 外部心跳（Mac 没跑的提醒）", None, "不是 macOS（没有 security 命令）：跳过")

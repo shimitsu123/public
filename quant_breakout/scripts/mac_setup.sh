@@ -127,14 +127,13 @@ fi
 # ④e 09:30 自检（只读账本、不下单）+ 手机通知 / 外部心跳有没有设置（只查有没有，绝不读出值）
 bash "$PROJ/scripts/install_launchd_watchdog.sh"
 if command -v security >/dev/null 2>&1; then
-  for kc in qbreak-webhook qbreak-heartbeat; do
-    if security find-generic-password -s "$kc" -a qbreak >/dev/null 2>&1; then
-      echo "④e 钥匙串里有 ${kc}（只查了有没有）"
-    else
-      echo "④e 钥匙串里还没有 ${kc}（立花上线前要设）：在终端运行 security add-generic-password -s ${kc} -a qbreak -w（回车后输入，屏幕上不显示；不要贴进聊天）"
-    fi
-  done
-  echo "   发一条测试通知到手机：bash \"$PROJ/scripts/liveu.sh\" notify-test"
+  if security find-generic-password -s qbreak-heartbeat -a qbreak >/dev/null 2>&1; then
+    echo "④e 钥匙串里有 qbreak-heartbeat（只查了有没有）"
+  else
+    echo "④e 钥匙串里还没有 qbreak-heartbeat（立花上线前要设）：在终端运行 security add-generic-password -s qbreak-heartbeat -a qbreak -w（回车后输入，屏幕上不显示；不要贴进聊天）"
+  fi
+  echo "④e 手机通知：用 qbreak 推送（iPhone 从主屏幕的 qbreak 图标打开 →「更多 → 通知（推送）」）；每条通知也记在面板「消息 → 通知记录」（邮件 / webhook 可选，不用也行）"
+  echo "   发一条测试通知：bash \"$PROJ/scripts/liveu.sh\" notify-test"
 fi
 
 # ⑤ 研究用的第二个克隆（改代码 / 做研究都在这里；~/qbreak-src 只 pull）

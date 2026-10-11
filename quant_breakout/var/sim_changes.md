@@ -10624,3 +10624,11 @@ Mac 问法表、已知限制）；CHECK_TIMELINE（⑥ 执行层、08:35 / 09:20
 - 消息页：每条的发布时间、提醒时间（JST）、来源与可信度、冲击、受益 / 受损的行业、经验规则、受影响的持仓 / 候补、原文链接（第三方标题只在本机 / 手机页面，不入库）。
 - 经济威胁提醒的推送标题写发布时刻，点开 → 面板「消息」里展开那一条（/?tab=news&n=<id>）；今天的成交的推送点开 → 「交易」。非投资建议。
 
+## 2026-10-11 工程（用户「消息里的时间改为日本时间、横展开、再发防止」「不用 Gmail，直接在 qbreak 里通知并记录」「做一次 HALT 演练」）—— 不改交易规则
+- 时间：经济威胁消息的时间本来已按 JST 存（news._when），页面 / 推送补上「JST」标注。横展开：qbreak 包一 import 就把进程时区固定成 Asia/Tokyo
+  （qbreak/__init__.py；以前只有 run.py 入口固定，python -m qbreak.mac_status / mac_login、scripts/*.py 在 UTC 的机器上会差 9 小时）。
+  再发防止：tests/test_tz_jst.py（UTC 环境下 import 后是 JST、mac_status 入口打印 JST、scripts 里不带时区的 now() 必须经由 qbreak、新闻时间 UTC → JST）。
+- 通知：每条 notify.send 先记进通知记录（数据目录 out/notifications.jsonl，0600，最多 500 条），面板「消息」分「通知记录 / 经济威胁消息」两段；推送默认点开到记录里那一条。
+  上线检查 ⑧：qbreak 推送有设备就算有通道（邮件 / webhook 可选）；mac_setup / notify-test 不再推荐 Gmail。
+- HALT 演练：今天（10/11 周日）做不了 —— 模拟账户还没处理到 10/09 的收盘（下一次运行 10/13 07:40；10/12 体育の日休市）；演练程序自己拒绝、没留下 HALT。非投资建议。
+

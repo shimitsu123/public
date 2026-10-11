@@ -195,3 +195,21 @@ def test_notify_send_passes_url_to_push(monkeypatch):
     monkeypatch.setattr(WP, "send", lambda title, body, url="/", opener=None: got.update(url=url) or True)
     assert notify.send("经济威胁提醒", "x", "warn", url="/?tab=news&n=abc")["push"] is True
     assert got["url"] == "/?tab=news&n=abc"
+
+
+def test_notifications_are_recorded_and_shown_with_jst_and_deeplink(monkeypatch):
+    """2026-10-11 用户「不用 Gmail，直接在 qbreak 里通知并记录」：每条 notify.send 记进通知记录（0600），面板「消息 → 通知记录」显示，
+    推送的默认点开地址 = 通知记录里的这一条。"""
+    from qbreak import notify
+    got = {}
+    monkeypatch.setattr(WP, "send", lambda title, body, url="/", opener=None: got.update(url=url) or True)
+    notify.send("qbreak ★ 自检没通过", "原因：今天早上的运行没跑", "warn")
+    hs = notify.history()
+    assert hs[0]["subject"] == "qbreak ★ 自检没通过" and hs[0]["level"] == "warn"
+    assert got["url"] == f"/?tab=news&seg=log&l={hs[0]['id']}"
+    assert oct(os.stat(paths.out_dir() / notify.LOG_FILE).st_mode & 0o777) == "0o600"
+    for i in range(notify.LOG_KEEP + 5):
+        notify.record(f"s{i}", "t")
+    assert len((paths.out_dir() / notify.LOG_FILE).read_text(encoding="utf-8").splitlines()) == notify.LOG_KEEP
+    h = panel._notify_log_card()
+    assert "JST" in h and "id='l-" in h and "通知记录" in h

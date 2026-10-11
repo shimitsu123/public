@@ -2298,8 +2298,8 @@ def cmd_news(a) -> int:
             from qbreak import notify as NT
             first = fresh[0]
             t0 = str(first.get("time") or "")[5:16].replace("-", "/").replace("T", " ")
-            NT.send(f"经济威胁提醒（{t0} 发布）" if t0 else "经济威胁提醒",
-                    "\n".join(f"{str(e.get('time') or '')[11:16]} {e['title']}｜{NW.alert_text(e)}" for e in fresh[:5]),
+            NT.send(f"经济威胁提醒（{t0} JST 发布）" if t0 else "经济威胁提醒",
+                    "\n".join(f"{str(e.get('time') or '')[11:16]} JST {e['title']}｜{NW.alert_text(e)}" for e in fresh[:5]),
                     level="warn", url=f"/?tab=news&n={first['id']}")          # 推送点开 → 面板「消息」里展开这一条
     if a.page:
         old = MN.load()
@@ -4469,11 +4469,9 @@ def cmd_notify(a) -> int:
                              "或运行 bash scripts/liveu.sh watchdog）" if hb else "没设置"))
         if "push" not in res:
             print("推送（网页 App）：没有设备打开（iPhone：从主屏幕的 qbreak 图标打开面板 → 「通知（推送）」→ 在这台设备打开推送）")
+        print("通知记录：已记一条（面板「消息 → 通知记录」）")
         if all(v is None for v in res.values()):
-            print("一个通知通道都没设置：邮件（Gmail）→ 在你自己的终端运行 bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup"
-                  "（问发件地址、应用专用密码（不显示）、收件地址，存进钥匙串后发一封测试邮件）；"
-                  "webhook → 在终端运行 security add-generic-password -s qbreak-webhook -a qbreak -w"
-                  "（回车后输入 Discord / Slack / ntfy 的通知地址；屏幕上不显示，不要贴进聊天），再运行 bash scripts/liveu.sh notify-test")
+            print("还没有能弹到手机的通道：iPhone 从主屏幕的 qbreak 图标打开面板 →「更多 → 通知（推送）」→ 在这台设备打开推送（不用 Gmail / webhook）")
             return 3
         return 1 if any(v is False for v in res.values()) else 0
     if not a.subject:

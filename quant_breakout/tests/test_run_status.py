@@ -383,10 +383,10 @@ def test_panel_shows_todays_failed_watchdog_only():
     html = panel.render("paper", "t" * 40, at)
     assert "★ 自检（09:30）：今天早上的执行器没有跑完（上次决策 2026-10-02）；&lt;i&gt;x&lt;/i&gt;" in html
     wd.write_text(json.dumps({"at": "2026-10-05T09:30:05+09:00", "ok": False, "reasons": ["昨天的"]}), encoding="utf-8")
-    assert "自检" not in panel.render("paper", "t" * 40, at)
+    assert "★ 自检（" not in panel.render("paper", "t" * 40, at)
     wd.write_text(json.dumps({"at": "2026-10-06T09:30:05+09:00", "ok": True, "reasons": []}), encoding="utf-8")
-    assert "自检" not in panel.render("paper", "t" * 40, at)
+    assert "★ 自检（" not in panel.render("paper", "t" * 40, at)
     wd.write_text("{坏", encoding="utf-8")
     RS.path("paper").write_text("[1, 2", encoding="utf-8")
     html = panel.render("paper", "t" * 40, at)                                     # 读坏 → 不显示、不报错
-    assert "自检" not in html and "执行器：" not in html and wd.exists()
+    assert "★ 自检（" not in html and "执行器：" not in html and wd.exists()
