@@ -27,6 +27,28 @@
      "verdict": "第一关不过"
     }
    ]
+  },
+  {
+   "round": 2,
+   "script": "scripts/loop12_r02_fund2.py",
+   "route": "J",
+   "approaches": [
+    {
+     "id": "PRG",
+     "family": "选股·业绩指引",
+     "rule": "季度利润进度率比季节基准低 10 pp 以上 → 不买"
+    },
+    {
+     "id": "FCN",
+     "family": "选股·财务质量",
+     "rule": "最近年度自由现金流 < 0 → 不买"
+    },
+    {
+     "id": "MRH",
+     "family": "选股·信用",
+     "rule": "信用倍率 ≥ J 信号 80 分位（6.70）→ 不买"
+    }
+   ]
   }
  ]
 }
