@@ -229,7 +229,7 @@ def _email(conf: str, subject: str, text: str) -> int:
     return len(tos)
 
 
-def send(subject: str, text: str, level: str = "info", run=None) -> dict[str, bool | None]:
+def send(subject: str, text: str, level: str = "info", run=None, url: str = "/") -> dict[str, bool | None]:
     """按设置了的通道发一条通知 → {webhook / email: True 发了 / False 失败 / None 没设置}。绝不抛（失败只记 warning）。"""
     out: dict[str, bool | None] = {}
     for name in ("webhook", "email"):
@@ -252,7 +252,7 @@ def send(subject: str, text: str, level: str = "info", run=None) -> dict[str, bo
             out[name] = False
     try:                                                      # 网页 App（主屏幕上的面板）的推送：有订阅才发（qbreak/webpush.py）
         from . import webpush
-        r = webpush.send(f"{'★ ' if level in ('warn', 'error') and not subject.startswith('★') else ''}{subject}", text)
+        r = webpush.send(f"{'★ ' if level in ('warn', 'error') and not subject.startswith('★') else ''}{subject}", text, url=url or "/")
         if r is not None:
             out["push"] = r
     except Exception as e:                                    # noqa: BLE001

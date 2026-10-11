@@ -168,3 +168,30 @@ def test_menubar_swift_typechecks():
     r = subprocess.run(["swiftc", "-typecheck", str(ROOT / "scripts" / "menubar" / "QbreakBar.swift")],
                        capture_output=True, text=True, timeout=300)
     assert r.returncode == 0, r.stderr[-800:]
+
+
+def test_tabs_group_sections_and_news_deeplink(monkeypatch):
+    """面板分成 总览 / 持仓 / 交易 / 选股 / 消息 / 更多（_panes）；消息卡片显示发布 / 提醒时间、每条有 id（推送点开 ?tab=news&n=<id>）。"""
+    from qbreak import news as NW
+    from qbreak.utils import write_json
+    from test_panel import AT, _book
+    _book()
+    write_json(NW.cache_dir() / "news.json", {"generated": "2026-10-06 07:45 JST", "events": [
+        {"id": "abc123", "title": "Oil spikes", "link": "https://example.com/x", "time": "2026-10-06T06:30+09:00", "publisher": "X",
+         "n_sources": 3, "event_labels": ["原油供给冲击"], "severity": 2, "cred": 80, "cred_label": "高", "why": ["3 个来源"],
+         "alert": True, "threat": 1.5, "chain": {"shock_txt": "原油 +5%", "down": [["运输", -1.2]], "tickers_down": ["9020.T"]}}]})
+    write_json(NW.cache_dir() / "alerted.json", {"abc123": "2026-10-06T06:45"})
+    h = panel.render("paper", "t" * 40, AT, mode="remote", device={"name": "x", "kind": "ts", "id": "ts"})
+    for k in ("home", "hold", "trade", "pick", "news", "more"):
+        assert f"class='pane' data-tab='{k}'" in h and f"data-tabgo='{k}'" in h, k
+    assert "id='n-abc123'" in h and "10/06 06:30" in h and "提醒：10/06 06:45" in h and "原油 +5%" in h
+    assert h.count("<div class='pane'") == h.count("<div class='pane' data-tab=")
+    assert "<i class='badge'>1</i>" in h                                    # 消息 24 小时内的提醒数 / 持仓只数
+
+
+def test_notify_send_passes_url_to_push(monkeypatch):
+    from qbreak import notify
+    got = {}
+    monkeypatch.setattr(WP, "send", lambda title, body, url="/", opener=None: got.update(url=url) or True)
+    assert notify.send("经济威胁提醒", "x", "warn", url="/?tab=news&n=abc")["push"] is True
+    assert got["url"] == "/?tab=news&n=abc"

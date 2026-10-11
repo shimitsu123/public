@@ -2296,7 +2296,11 @@ def cmd_news(a) -> int:
             NW.notify_mac(f"qbreak 经济威胁提醒：{'、'.join(e['event_labels'])}", NW.alert_text(e))
         if fresh:
             from qbreak import notify as NT
-            NT.send("经济威胁提醒", "\n".join(f"{e['title']}｜{NW.alert_text(e)}" for e in fresh[:5]), level="warn")
+            first = fresh[0]
+            t0 = str(first.get("time") or "")[5:16].replace("-", "/").replace("T", " ")
+            NT.send(f"经济威胁提醒（{t0} 发布）" if t0 else "经济威胁提醒",
+                    "\n".join(f"{str(e.get('time') or '')[11:16]} {e['title']}｜{NW.alert_text(e)}" for e in fresh[:5]),
+                    level="warn", url=f"/?tab=news&n={first['id']}")          # 推送点开 → 面板「消息」里展开这一条
     if a.page:
         old = MN.load()
         try:
@@ -3601,7 +3605,7 @@ def cmd_live_broker(a) -> int:
     if a.notify and fl:
         from qbreak import notify
         notify.send(f"qbreak 立花：今天的成交（{snap['at'][11:16]}）", "\n".join(fl + (["账本 vs 立花不一致："] + dl if dl else [])),
-                    level="warn" if dl else "info")
+                    level="warn" if dl else "info", url="/?tab=trade")
     return 1 if dl else 0
 
 

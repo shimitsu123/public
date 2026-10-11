@@ -261,8 +261,15 @@ background:var(--fg);color:var(--bg);padding:12px 16px;border-radius:12px;box-sh
 footer{margin:16px 0;color:var(--muted);font-size:13px}
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;justify-content:space-around;background:var(--card);
 border-top:1px solid var(--line);padding:6px max(8px,env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 6px) max(8px,env(safe-area-inset-left))}
-.tabbar a{flex:1;text-align:center;color:var(--muted);text-decoration:none;font-size:12px;line-height:1.3;padding:4px 0}
-.tabbar a b{display:block;font-size:18px;color:var(--fg);font-weight:400} body{padding-bottom:calc(env(safe-area-inset-bottom) + 64px)}
+.tabbar button{flex:1;position:relative;background:none;border:0;color:var(--muted);font:inherit;font-size:11px;line-height:1.3;
+padding:4px 0;cursor:pointer;min-width:0}.tabbar button b{display:block;font-size:19px;color:var(--muted);font-weight:400}
+.tabbar button.on,.tabbar button.on b{color:var(--accent)}
+.tabbar .badge{position:absolute;top:0;left:50%;margin-left:6px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--neg);
+color:#fff;font-size:10px;font-style:normal;line-height:16px;text-align:center}
+.pane{display:none}.pane.on{display:block}
+.sgseg{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.sgseg button{flex:1;min-width:0;padding:8px 6px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit;font-size:14px}.sgseg button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.panehead{display:flex;flex-direction:column;gap:2px;margin:10px 2px 0}.panehead b{font-size:20px}.panehead span{color:var(--muted);font-size:13px}
+details.nw summary{line-height:1.5}details.nw.hl{outline:2px solid var(--accent);border-radius:8px;padding:4px}details.nw>div{margin:4px 0;font-size:14px} body{padding-bottom:calc(env(safe-area-inset-bottom) + 64px)}
 .spark{color:var(--accent);display:block;margin:4px 0 8px}
 """
 
@@ -1141,6 +1148,35 @@ document.addEventListener('click', async e=>{
   }
   pushState();
 }, true);
+const TABK=['home','hold','trade','pick','news','more'];                  // 标签页（总览 / 持仓 / 交易 / 选股 / 消息 / 更多）
+function showTab(k, keep){
+  if(TABK.indexOf(k)<0) k='home';
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on', p.dataset.tab===k));
+  document.querySelectorAll('[data-tabgo]').forEach(b=>{ const on=b.dataset.tabgo===k; b.classList.toggle('on', on); b.setAttribute('aria-selected', on?'true':'false'); });
+  try{ sessionStorage.setItem('qb-tab', k); }catch(e){}
+  if(location.hash!=='#tab='+k){ try{ history.replaceState(null, '', location.pathname+location.search+'#tab='+k); }catch(e){} }
+  if(!keep) window.scrollTo(0,0);
+}
+document.addEventListener('click', e=>{ const b=e.target.closest('[data-tabgo]'); if(!b) return; e.preventDefault(); showTab(b.dataset.tabgo); }, true);
+(function(){
+  const q=new URLSearchParams(location.search), h=location.hash.replace(/^#/,'');
+  let k=q.get('tab') || (h.indexOf('tab=')===0 ? h.slice(4) : '');
+  let target=null;
+  if(!k && h){ target=document.getElementById(h); const p=target && target.closest('.pane'); if(p) k=p.dataset.tab; }   // 旧的锚点（#holdings 等）
+  if(!k){ try{ k=sessionStorage.getItem('qb-tab')||''; }catch(e){} }
+  showTab(k||'home', true);
+  const n=q.get('n');                                                     // 推送点开：?tab=news&n=<id> → 展开那一条
+  if(n){ const d=document.getElementById('n-'+n); if(d){ d.open=true; const pd=d.parentElement && d.parentElement.closest('details'); if(pd) pd.open=true; target=d; d.classList.add('hl'); } }
+  if(target) setTimeout(()=>{ const top=document.querySelector('.top'); window.scrollTo(0, target.getBoundingClientRect().top+window.scrollY-((top&&top.offsetHeight)||0)-8); }, 50);
+})();
+document.addEventListener('click', e=>{                                   // 选股：分段（出信号 / 快要出 / 观察中）与「再显示」
+  const s=e.target.closest('[data-sgg]');
+  if(s){ e.preventDefault(); document.querySelectorAll('[data-sgg]').forEach(b=>b.classList.toggle('on', b===s));
+         document.querySelectorAll('.sgg').forEach(g=>{ g.hidden = g.dataset.g!==s.dataset.sgg; }); return; }
+  const m=e.target.closest('[data-sgmore]');
+  if(m){ e.preventDefault(); const g=document.querySelector('.sgg[data-g="'+m.dataset.sgmore+'"]');
+         if(g) g.querySelectorAll('.sgmore').forEach(x=>x.hidden=false); m.closest('.act').remove(); }
+}, true);
 """
 
 _PAIR_JS = """
@@ -1276,6 +1312,9 @@ GROUPS = (("triggered", "今天出了买入信号"), ("imminent", "快要出买�
 RANK_GROUPS = (("triggered", "今天出了买入信号"), ("rest", "观察中"))
 
 
+SG_PAGE = 5                               # 一组先显示几只（其余点「再显示」）
+
+
 def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, cap: float, chart) -> str:
     """「建议的股票」= 规则的候选（qbreak/suggest.py；全部列出）+ 每只的「买入…」（写手动买入指令；执行器下单前再查一遍）。
     有比例表（var/watch_prob.json，登记研究判定 A）→ 出了信号 / 其余一组（闸门 → 之后 10 个交易日内出买入信号的历史比例 → near_key），
@@ -1293,10 +1332,17 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, ca
         H.append("<div class='muted'>" + ("候选在执行器下一次运行之后显示" if not sg else "今天没有出信号 / 快要出信号 / 观察中的票") + "</div></section>")
         return "".join(H)
     h = int((tab or {}).get("h") or WP.H)
+    groups = []
     for g, title in (RANK_GROUPS if ranked else GROUPS):
         grp = [r for r in rows if r.get("status") != "triggered"] if g == "rest" else [r for r in rows if r.get("status") == g]
-        if not grp:
-            continue
+        if grp:
+            groups.append((g, title, grp))
+    if len(groups) > 1:                                      # 分段：一次只看一组（2026-10-11 用户：不要页面很长）
+        H.append("<div class='seg sgseg' role='tablist'>" + "".join(
+            f"<button type='button' data-sgg='{g}'{' class=on' if n == 0 else ''}>"
+            f"{escape('观察中' if g == 'rest' else str(title))} {len(grp)}</button>" for n, (g, title, grp) in enumerate(groups)) + "</div>")
+    for n, (g, title, grp) in enumerate(groups):
+        H.append(f"<div class='sgg' data-g='{g}'{'' if n == 0 else ' hidden'}>")
         if g == "rest":                                     # 快要出 + 观察中一组：按出买入信号的可能性排
             H.append(f"<h3 class='sgh'>观察中 · {len(grp)} 只（按出买入信号的可能性排）</h3>"
                      f"<div class='muted small'>越上面越可能先出买入信号（同样情况的历史比例：日経225，2006〜2026）。比例都不高；"
@@ -1306,7 +1352,11 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, ca
             if g != "triggered" and any(r.get("near") for r in grp):
                 H.append("<div class='muted small'>按离买入信号的远近排（越上面越可能先出信号；只是估算）</div>")
         for k, r in enumerate(grp, 1):
-            H.append(_suggest_row(r, s, buying, eq, chart, rank=k if g == "rest" else None, fill=sg.get("fill_day")))
+            row = _suggest_row(r, s, buying, eq, chart, rank=k if g == "rest" else None, fill=sg.get("fill_day"))
+            H.append(row if k <= SG_PAGE else f"<div class='sgmore' hidden>{row}</div>")
+        if len(grp) > SG_PAGE:
+            H.append(f"<div class='act'><button class='btn' data-sgmore='{g}'>再显示 {len(grp) - SG_PAGE} 只</button></div>")
+        H.append("</div>")
     H.append("<div class='muted small'>股数按最近收盘估算。</div></section>")
     return "".join(H)
 
@@ -1574,6 +1624,121 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list) -> st
             f"<div class='list'>{''.join(rows)}</div><div class='muted small'>{escape(foot)}</div></section>")
 
 
+PANE = "\x00PANE:"                                         # render 里的分组标记（_panes 用；不会出现在页面上）
+# 标签页（2026-10-11 用户：「总览的都分开、不要很长、每个部分归类成可以点的标签、一眼看上去就知道里面是什么」）
+TABS = {"home": ("⌂", "总览", "账户现在怎样：总权益、今天的运行有没有问题、损益与已实现、最近成交、日志"),
+        "hold": ("▤", "持仓", "现在拿着的个股与闲置资金 ETF：为什么拿、走势、卖出 / 调仓；立花那边的实际持仓"),
+        "trade": ("⇄", "交易", "今天的单（执行器下的，可撤）与你写的手动指令、卖出后不买回的票"),
+        "pick": ("☆", "选股", "规则的候选：出信号的、快要出的、观察中的，买入前看价格与 K 线"),
+        "news": ("⚠", "消息", "经济威胁消息：提醒的内容、时间、可信度、会影响哪些行业和持仓（推送点开到这里）"),
+        "more": ("⋯", "更多", "通知设置、手机、上线准备、紧急停止（HALT）")}
+
+
+def _panes(H: list) -> str:
+    """把 render 的片段按 PANE 标记包成 <div class='pane' data-tab=…>（同一个标签可以有几段，顺序照旧）；每个标签第一段前加一行说明。"""
+    out, cur, seen = [], None, set()
+    for h in H:
+        if isinstance(h, str) and h.startswith(PANE):
+            if cur:
+                out.append("</div>")
+            cur = h[len(PANE):] or None
+            if cur:
+                ic, lab, desc = TABS[cur]
+                head = "" if cur in seen else f"<div class='panehead'><b>{ic} {escape(lab)}</b><span>{escape(desc)}</span></div>"
+                seen.add(cur)
+                out.append(f"<div class='pane' data-tab='{cur}'>{head}")
+            continue
+        out.append(h or "")
+    if cur:
+        out.append("</div>")
+    return "".join(out)
+
+
+def _badges(book: dict, st: dict, sm: dict, waiting: list, now: dt.datetime) -> dict:
+    """标签上的数字：持仓 = 拿着的只数；交易 = 今天还挂着 / 等处理的单与指令；消息 = 24 小时内的提醒。"""
+    out = {}
+    n = len(st.get("pos") or {}) + sum(1 for u in (st.get("core_units") or {}).values() if int(u or 0) > 0)
+    if n:
+        out["hold"] = n
+    d = st.get("last_date")
+    act = sum(1 for o in book.get("orders") or [] if o.get("decided_on") == d and o.get("status") in ("SENT", "PARTIAL", "PLANNED", "DEFERRED", "SENDING"))
+    act += len(waiting) + sum(1 for it in ((book.get("manual") or {}).get("items") or {}).values() if it.get("status") in MO.ACTIVE)
+    if act:
+        out["trade"] = act
+    try:
+        from . import news as NW
+        ev = (NW.load() or {}).get("events") or []
+        cut = now - dt.timedelta(hours=24)
+        k = sum(1 for e in ev if e.get("alert") and _ts_jst(e.get("time")) and _ts_jst(e.get("time")) >= cut)
+        if k:
+            out["news"] = k
+    except Exception:                                      # noqa: BLE001
+        pass
+    return out
+
+
+def _ts_jst(v):
+    try:
+        t = dt.datetime.fromisoformat(str(v))
+    except (TypeError, ValueError):
+        return None
+    return t.astimezone(JST) if t.tzinfo else t.replace(tzinfo=JST)
+
+
+def _news_card(now: dt.datetime) -> str:
+    """经济威胁消息（Mac 每 15 分钟取一次；数据目录 cache/news/news.json —— 第三方标题只在本机 / 手机页面上，不入库）。
+    达到提醒线的在前；每条点开：发布时间、提醒时间、来源与可信度、冲击与影响链路（因子 → 行业 → 持仓 / 候补）、原文链接。只展示，不参与交易。"""
+    from . import news as NW
+    try:
+        d = NW.load() or {}
+        seen = read_json(NW.cache_dir() / "alerted.json", {}) or {}
+    except Exception:                                      # noqa: BLE001
+        d, seen = {}, {}
+    ev = d.get("events") or []
+    if not ev:
+        return ("<section class='card' id='news'><h2>经济威胁消息</h2><div class='muted small'>还没有（市场仪表盘的定时任务每 15 分钟取一次）</div></section>")
+    ev = sorted(ev, key=lambda e: (not e.get("alert"), -(float(e.get("threat") or 0))))[:40]
+    n_show = max(10, sum(1 for e in ev if e.get("alert")))
+
+    def when(v) -> str:
+        t = _ts_jst(v)
+        return t.strftime("%m/%d %H:%M") if t else "—"
+    rows = []
+    for e in ev:
+        c = e.get("chain") or {}
+        lab = "、".join(e.get("event_labels") or []) or "其他"
+        det = [f"<div>发布：<b>{escape(when(e.get('time')))} JST</b>"
+               + (f" · 提醒：{escape(when(seen.get(e.get('id'))))} JST" if seen.get(e.get("id")) else "") + "</div>",
+               f"<div>来源：{escape(str(e.get('publisher') or '—'))}（{int(e.get('n_sources') or 1)} 个来源）· 可信度 {escape(str(e.get('cred')))}"
+               f"（{escape(str(e.get('cred_label') or ''))}）· 严重度 {escape(str(e.get('severity')))} · 威胁 {float(e.get('threat') or 0):.2f}</div>"]
+        if e.get("why"):
+            det.append("<div class='muted small'>为什么可信：" + escape("；".join(str(x) for x in e["why"])) + "</div>")
+        if c.get("shock_txt"):
+            det.append(f"<div>冲击：{escape(str(c['shock_txt']))}</div>")
+        if c.get("down"):
+            det.append("<div class='neg'>受损的行业：" + escape("、".join(f"{s} {v:+.1f}%" for s, v in c["down"])) + "</div>")
+        if c.get("up"):
+            det.append("<div class='pos'>受益的行业：" + escape("、".join(f"{s} {v:+.1f}%" for s, v in c["up"])) + "</div>")
+        if c.get("rules"):
+            det.append("<div>经验规则：" + escape("、".join(f"{s}{'↑' if dd > 0 else '↓'}" for s, dd in c["rules"].items())) + "</div>")
+        if c.get("tickers_down"):
+            det.append("<div class='neg'>受损方向的持仓 / 候补：" + escape("、".join(c["tickers_down"][:10])) + "</div>")
+        if c.get("tickers_up"):
+            det.append("<div class='pos'>受益方向的持仓 / 候补：" + escape("、".join(c["tickers_up"][:10])) + "</div>")
+        link = str(e.get("link") or "")
+        if link.startswith("https://"):
+            det.append(f"<div><a href='{escape(link)}' target='_blank' rel='noopener noreferrer'>原文</a></div>")
+        det.append("<div class='muted small'>只展示与提醒，不参与交易</div>")
+        rows.append(f"<details class='hv nw' id='n-{escape(str(e.get('id')))}'><summary>"
+                    f"{'<b class=neg>★ 提醒</b> ' if e.get('alert') else ''}<span class='muted'>{escape(when(e.get('time')))}</span> "
+                    f"<span class='chip'>{escape(lab)}</span><br>{escape(str(e.get('title') or '')[:140])}</summary>{''.join(det)}</details>")
+    rest = rows[n_show:]
+    return (f"<section class='card' id='news'><h2>经济威胁消息</h2><div class='muted small'>Mac 每 15 分钟取一次；最近一次 {escape(str(d.get('generated') or '—'))}。"
+            "★ = 达到提醒线（会推送到这台设备）。点一条看详细。</div>" + "".join(rows[:n_show])
+            + (f"<details class='hv'><summary class='muted'>其余 {len(rest)} 条（威胁较低）</summary>{''.join(rest)}</details>" if rest else "")
+            + "</section>")
+
+
 def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "local", device: dict | None = None,
            phone: dict | None = None, trigger: "Trigger | None" = None) -> str:
     """操作面板页面（一个账本）。mode = local（Mac 本机：tok = 面板令牌）/ remote（手机：tok = 这台设备的 CSRF 令牌）。
@@ -1642,6 +1807,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     if tz:                                                 # 面板叫的执行器连续失败：暂停 / 退避（Trigger）
         runl.insert(0, (tz[0], escape(tz[1])))
     bad_run = any(c == "neg" for c, _ in runl)
+    H.append(PANE + "home")                               # ── 下面按标签页分组（_panes 把它们包成 <div class='pane'>）──
     H.append(f"<section class='card{' warn' if halt or bad_run else ''}'><div class='head'><b>{escape(BOOKS.get(tag, tag))}</b>"
              f"<span class='chip'>决策日 {escape(str(st.get('last_date') or '—'))} → 成交日 {escape(str(sm.get('fill_day') or '—'))}</span></div>"
              f"<div class='stats'><div><div class='muted'>总权益</div><div class='big'>{_yen(eq)}</div></div>"
@@ -1654,7 +1820,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     if not st:
         H.append("<section class='card'>执行器还没有账本（第一次运行之后才有持仓）。</section>")
     H.append(_money_card(tag, book, now))                 # 〔77〕C：损益 / 年内已实现与预计代扣 / 最近成交 / 日志 / 入出金
+    H.append(PANE + "hold")
     H.append(_broker_card(tag, now))                      # 〔77〕C：立花那边实际是什么（快照）
+    H.append(PANE + "more")
     H.append(_gate_card(tag))                             # 〔77〕C：上线准备
     hv = sm.get("holding_view") or {}
     if not hv.get("holdings") and not hv.get("core") and st:               # 还没有算过（旧的汇总）：用账本里的数字
@@ -1748,10 +1916,14 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             + "".join(f"<div class='hv'><b>{escape(str(c.get('name') or t))}</b> <span class='muted'>现在 0 口</span>"
                       f"{tchips(ktrend.get(t))}{chart(t, 'core')}</div>" for t, c in other) + "</details>") if other else ""
     held_any = bool(st.get("pos")) or any(int(u) > 0 for u in (st.get("core_units") or {}).values())
+    H.append(PANE + "trade")
     H.append(_orders_card(book, now, paper, waiting))       # 今天的单（执行器）：还挂着的给「撤单」；API / Mac 故障时照它在立花网站下
+    H.append(PANE + "hold")
     H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions) + more
              + ("<div id='qt-note' class='muted small'>现价：Yahoo 1 分钟线（约晚 20 分钟）</div>" if held_any else "") + "</section>")
+    H.append(PANE + "pick")
     H.append(_suggest_card(sm.get("suggest") or {}, book, tag, buying, when, eq, cap, chart))
+    H.append(PANE + "hold")
     cp = float(man.get("core_pct", 100.0))
     slider = ("<div class='stepper'><button class='btn' data-act='core-step' data-d='-10' aria-label='减 10%'>−10</button>"
               f"<output id='core-val' class='big'>{cp:g}%</output>"
@@ -1797,6 +1969,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                     f"{escape(MO.status_text(it))}{'（撤回中）' if it.get('cancel_req') else ''}</span>"
                     f"<div class='muted small'>{escape(str(it.get('at', ''))[5:16].replace('T', ' '))}"
                     f"{(' · ' + escape(str(it['msg']))) if it.get('msg') else ''}</div></div>{btn}</div>")
+    H.append(PANE + "trade")
     H.append("<section class='card' id='orders'><h2>手动指令</h2><div class='list'>"
              + ("".join(rows) or "<div class='li muted'>还没有</div>") + "</div></section>")
     bl = man.get("blocks") or {}
@@ -1805,6 +1978,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             f"<div class='li'><div class='grow'><b>{escape(t)}</b> <span class='muted'>"
             f"{'一直，直到解除' if b.get('until') is None else '到 ' + escape(str(b['until']))}</span></div>"
             f"<button class='btn sm' data-act='unblock' data-t='{escape(t)}'>解除</button></div>" for t, b in bl.items()) + "</div></section>")
+    H.append(PANE + "more")
     if halt:
         H.append(f"<section class='card warn' id='halt'><h2 class='neg'>HALT 生效中</h2><div>{escape(halt)}</div>"
                  "<div class='muted small'>不下任何单、持仓不动。恢复只在 Mac 上：在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」。</div></section>")
@@ -1828,10 +2002,14 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                  "非投资建议。</div><div class='act'><button class='btn sm' data-act='unpair'>退出这台设备</button></div></footer>")
     if remote:
         H.append(_notify_card())                             # 推送（网页 App）
-    H.append("</main><nav class='tabbar' aria-label='跳到'>"
-             "<a href='#top'><b>⌂</b>总览</a><a href='#money'><b>¥</b>损益</a><a href='#holdings'><b>▤</b>持仓</a>"
-             "<a href='#today'><b>✓</b>今天的单</a>"
-             + ("<a href='#notify'><b>✉</b>通知</a>" if remote else "<a href='#phone'><b>☏</b>手机</a>")
+    H.append(PANE + "news")
+    H.append(_news_card(now))                                # 经济威胁消息（推送点开到这里）
+    H.append(PANE + "")                                      # 分组结束
+    badges = _badges(book, st, sm, waiting, now)
+    H.append("</main><nav class='tabbar' role='tablist' aria-label='分类'>"
+             + "".join(f"<button type='button' role='tab' data-tabgo='{k}' aria-label='{escape(lab)}'><b>{ic}</b>{escape(lab)}"
+                       + (f"<i class='badge'>{badges[k]}</i>" if badges.get(k) else "") + "</button>"
+                       for k, (ic, lab, _) in TABS.items())
              + "</nav><div id='toast' class='toast' role='status' hidden></div>")
     note = MO.sale_note(tag, now)
     ests = {}                                               # 拿着的票卖出全部的预计收益（按账本里的最近收盘；页面取到现价后换成现价的）
@@ -1852,7 +2030,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
            "st": status_json(tag)[1],
            "gen": int(dt.datetime.now().timestamp() * 1000)}                                    # 页面生成时刻（离线时显示「几分钟前的数据」）                                                         # 〔77〕C UX-16：还在处理的指令 → 每 10 秒问一次   # 卖出的预计收益（按最近收盘；现价来了用现价的）
     js = _NET_JS + _JS.replace("__CFG__", json.dumps(cfg, ensure_ascii=False).replace("</", "<\\/"))
-    return _head("qbreak 操作面板") + "<body>" + "".join(H) + _dialogs(paper, cap) + f"<script>{js}</script></body></html>"
+    return _head("qbreak 操作面板") + "<body>" + _panes(H) + _dialogs(paper, cap) + f"<script>{js}</script></body></html>"
 
 
 def pair_page(code: str = "") -> str:
@@ -2501,7 +2679,7 @@ CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline
 
 # 网页 App 的 service worker（/sw.js）：① 页面与只读接口「网络优先、连不上用上次的」（Mac 睡着 / Tailscale 断了也能看上次的数据，
 # 页面顶上会写是几分钟前的）② 收推送（qbreak/webpush.py）→ 系统通知；点通知打开面板。只缓存这个面板自己（同源 GET），写操作从不缓存。
-SW_JS = r"""const C='qbreak-v1';
+SW_JS = r"""const C='qbreak-v2';
 self.addEventListener('install',e=>self.skipWaiting());
 self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
 function keep(r,res){ if(res && res.ok){ const cp=res.clone(); caches.open(C).then(c=>c.put(r.url,cp)).catch(()=>{}); } return res; }
@@ -2527,7 +2705,7 @@ self.addEventListener('push',e=>{
 self.addEventListener('notificationclick',e=>{
   e.notification.close(); const url=(e.notification.data&&e.notification.data.url)||'/';
   e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(cs=>{
-    for(const c of cs){ if('focus' in c) return c.focus(); }
+    for(const c of cs){ if('navigate' in c){ return c.navigate(url).then(w=>(w||c).focus()).catch(()=>c.focus()); } if('focus' in c) return c.focus(); }
     return self.clients.openWindow(url);
   }));
 });
