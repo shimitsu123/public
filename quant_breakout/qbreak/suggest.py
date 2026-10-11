@@ -118,17 +118,23 @@ def near_key(row: dict) -> tuple:
     return (tier, len(n.get("miss") or []), d, -float(row.get("vol_ratio") or 0), -float(row.get("score") or 0))
 
 
+def gc_days(row: dict) -> int:
+    """离 MACD 金叉的估计天数（排序用）：在信号线下往上靠 → 估计天数；往下走 → MAX_DAYS+1；已在线上 → +2；算不出 → +3。"""
+    n = row.get("near") or {}
+    w = n.get("where")
+    return int(n.get("days") or MAX_DAYS) if w == "below_up" else {"below_down": MAX_DAYS + 1, "above": MAX_DAYS + 2}.get(w, MAX_DAYS + 3)
+
+
 def order_key(row: dict, ranked: bool) -> tuple:
-    """建议的股票的顺序（小的在前）。ranked（有比例表）：出了信号的在前，其余（快要出 + 观察中）一组：闸门 → 比例高的先 → near_key 其余；
-    没有比例表：出了信号 → 快要出 → 观察中，组内 near_key。出了信号的组内保持原来的顺序（scan 的就绪度）。"""
+    """建议的股票的顺序（小的在前）。出了信号的在前（组内保持 scan 的就绪度）；其余（快要出 + 观察中）：
+    2026-10-11 起（用户「选股里面的股票按照距离金叉出现的临近日进行排序」）闸门 → 估计几天后 MACD 金叉（近的先）→
+    同样天数：快要出的先 → 历史比例高的先（ranked）→ 还差的条件数 → 量比 → 就绪度。只是排序与展示，不改交易。"""
     st = row.get("status")
     if st == "triggered":
         return (0,)
     nk = near_key(row)
-    if ranked:
-        p = (row.get("prob") or {}).get("p")
-        return (1, nk[0], -float(p) if p is not None else 1.0) + nk[1:]
-    return ({"imminent": 1, "watch": 2}.get(st, 9),) + nk
+    p = (row.get("prob") or {}).get("p") if ranked else None
+    return (1, nk[0], gc_days(row), {"imminent": 0}.get(st, 1), -float(p) if p is not None else 1.0) + (nk[1],) + nk[3:]
 
 
 def rank(rows: list, table: dict | None = None) -> list:
@@ -270,4 +276,4 @@ def lines(sg: dict | None) -> list[str]:
     return out
 
 
-__all__ = ["build", "lines", "rule_shares", "proximity", "near_text", "near_key", "order_key", "rank", "MAX_DAYS", "FAR_DAYS", "STATUS", "RULE"]
+__all__ = ["build", "lines", "rule_shares", "proximity", "near_text", "near_key", "gc_days", "order_key", "rank", "MAX_DAYS", "FAR_DAYS", "STATUS", "RULE"]

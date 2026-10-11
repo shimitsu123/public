@@ -27,7 +27,7 @@ import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
 from . import paths
-from .calendar_jp import JST, now_jst
+from .calendar_jp import JST, is_trading_day, next_trading_day, now_jst
 from .utils import read_json, write_json
 
 log = logging.getLogger(__name__)
@@ -419,7 +419,7 @@ def sector_betas(max_age_days: float = 7.0, inputs: dict | None = None) -> dict:
     fp = paths.out_dir() / "sector_betas.json"
     old = read_json(fp, {}) or {}
     try:
-        if old.get("date") and (now_jst().date() - dt.date.fromisoformat(old["date"])).days < max_age_days:
+        if old.get("date") and "assets" in old and (now_jst().date() - dt.date.fromisoformat(old["date"])).days < max_age_days:
             return old.get("betas") or {}
     except ValueError:
         pass
@@ -436,21 +436,24 @@ def sector_betas(max_age_days: float = 7.0, inputs: dict | None = None) -> dict:
         days = d["n225"].index[d["n225"].index >= d["n225"].index[-1] - pd.Timedelta(days=365 * 3)]
         lv = SN.factor_levels(days, d["n225"], d["jgb"], r["DGS10"], r["DCOILWTICO"], d["fx"], r["BAA10Y"])
         W = SN.weekly_changes(lv)
-        etf = load_universe(list(SECTOR_ETF_JP), DataConfig(provider="yfinance", years=5, allow_synthetic=False).validate())
-        out = {}
-        for sym, name in SECTOR_ETF_JP.items():
+        from .money_view import CORE_NAMES
+        etf = load_universe(list(SECTOR_ETF_JP) + list(CORE_NAMES), DataConfig(provider="yfinance", years=5, allow_synthetic=False).validate())
+
+        def fit(sym: str) -> dict:
             df = etf.get(sym)
             if df is None or not len(df):
-                continue
+                return {}
             y = SN.stock_weekly(df["Close"], W.index)
             row = {}
             for f in SN.FACTORS:
                 b = SN.pair_beta(y, W[f], W["mkt"], W.index[-1])
                 if b is not None:
                     row[f] = round(b[0], 4)
-            out[name] = row
-        write_json(fp, {"date": str(now_jst().date()), "note": "TOPIX-17 行业 ETF 周收益 ~ 大盘 + 单个因子，最近 104 周（qbreak/news.py）",
-                        "betas": out})
+            return row
+        out = {name: r for sym, name in SECTOR_ETF_JP.items() if (r := fit(sym))}
+        assets = {sym: r for sym in CORE_NAMES if (r := fit(sym))}      # 核心 ETF（持仓的标记用；2026-10-11）
+        write_json(fp, {"date": str(now_jst().date()), "note": "TOPIX-17 行业 ETF / 核心 ETF 周收益 ~ 大盘 + 单个因子，最近 104 周（qbreak/news.py）",
+                        "betas": out, "assets": assets})
         return out
     except Exception as e:                                                   # noqa: BLE001
         log.warning("行业敏感度计算失败（用旧的）：%s", e)
@@ -469,44 +472,114 @@ def holdings_map(tickers: list[str]) -> dict[str, str]:
     return out
 
 
+def asset_betas() -> dict:
+    """核心 ETF 的周敏感度（sector_betas 顺便算、缓存在 out/sector_betas.json 的 assets；这里只读，不联网）。"""
+    return (read_json(paths.out_dir() / "sector_betas.json", {}) or {}).get("assets") or {}
+
+
+# ── 消息的程度（2026-10-11 用户：威胁程度低的消息不用显示，按程度用颜色区分）──
+def level(e: dict) -> str:
+    """消息的程度：严重度 × 可信度 /100（正负面都算）→ 高（达到提醒线，或 ≥ 1.5）/ 中（≥ 0.8）/ 低（其余：面板不显示）。"""
+    s = float(e.get("severity") or 1) * float(e.get("cred") or 0) / 100
+    return "高" if e.get("alert") or s >= 1.5 else "中" if s >= 0.8 else "低"
+
+
+# ── 影响什么时候开始、持续多久（2026-10-11 用户：持仓要标大概什么时候影响、什么时候结束、影响多久）──
+# 每类事件对行业 / 资产价格的影响一般持续几个交易日（经验估计：决定公布类当天到两天消化；供给冲击 / 战争 / 关税几周；
+# 金融系统风险、衰退、疫情更久）。没有用历史消息回测过 → 页面写「经验估计」，只作参考。
+DURATION = {"boj_hike": (3, 10), "boj_decision": (1, 2), "fed_hike": (3, 10), "fed_cut": (3, 10), "fed_decision": (1, 2),
+            "intervention": (1, 5), "yen_weak": (2, 5), "yen_strong": (2, 5), "oil_up": (5, 20), "oil_down": (3, 10),
+            "credit": (10, 40), "bankruptcy": (1, 5), "war": (5, 20), "tariff": (5, 20), "semis": (5, 20), "disaster": (3, 10),
+            "pandemic": (20, 60), "recession": (10, 40), "inflation": (5, 15), "crash": (2, 10), "politics": (3, 10)}
+
+
+def _add_tdays(d: dt.date, n: int) -> dt.date:
+    for _ in range(max(0, n)):
+        d = next_trading_day(d)
+    return d
+
+
+def timing(e: dict, now: dt.datetime | None = None) -> dict | None:
+    """一条消息的影响期（日本时间）：开始 = 发布在交易日 09:00〜15:30 → 当天（盘中已开始反映），否则下一个交易日开盘；
+    持续 lo〜hi 个交易日（DURATION，几类事件取最长的）；结束 ≈ 开始 + hi − 1 个交易日。
+    → {start, end, lo, hi, intraday, state: 未开始 / 影响中 / 已过}；时间读不出 → None。"""
+    now = (now or now_jst()).astimezone(JST)
+    try:
+        t = dt.datetime.fromisoformat(str(e.get("time")))
+    except (TypeError, ValueError):
+        return None
+    t = t.astimezone(JST) if t.tzinfo else t.replace(tzinfo=JST)
+    d = t.date()
+    intraday = is_trading_day(d) and dt.time(9, 0) <= t.time() < dt.time(15, 30)
+    start = d if intraday or (is_trading_day(d) and t.time() < dt.time(9, 0)) else next_trading_day(d)
+    lo, hi = max((DURATION.get(k, (2, 5)) for k in e.get("events") or []), key=lambda x: x[1], default=(2, 5))
+    end = _add_tdays(start, hi - 1)
+    today = now.date()
+    if today > end or (today == end and now.time() >= dt.time(15, 30)):
+        state = "已过"
+    elif today < start or (today == start and now.time() < dt.time(9, 0)):
+        state = "未开始"
+    else:
+        state = "影响中"
+    return {"start": start.isoformat(), "end": end.isoformat(), "lo": lo, "hi": hi, "intraday": intraday, "state": state}
+
+
 RULE_PCT = 0.5          # 只有经验规则、没有敏感度估算的行业：当作 ±0.5% 的冲击
 LEVELS = ((1.0, "大"), (0.4, "中"), (0.1, "小"))
 
 
-def ticker_impacts(events: list[dict], tickers: list[str], sectors: dict[str, str] | None = None) -> dict[str, dict]:
+def ticker_impacts(events: list[dict], tickers: list[str], sectors: dict[str, str] | None = None,
+                   assets: dict | None = None, now: dt.datetime | None = None) -> dict[str, dict]:
     """消息对个股的影响（2026-10-11 用户：「候选股票上如果实时消息中出现了对该股的影响，根据影响大小标记，并且可以看到对应的消息」）。
     个股 → TOPIX-17 行业 → 每条消息对这个行业的估算冲击（chain.impacts，%；只有经验规则 → ±RULE_PCT）× 可信度 /100（达到提醒线的 ×1.5）
     → 按影响大小排、第 k 条 ×0.5^k 加总（同一件事的多条报道不重复放大）：≥ 1.0 大、≥ 0.4 中、≥ 0.1 小（更小的不标）。只是展示用的粗估（敏感度来自 TOPIX-17 行业 ETF 的周敏感度），不参与交易。
-    → {代码: {"net", "level", "dir": "down" | "up", "items": [{id, time, title, labels, eff, alert, cred, sector}]}}"""
+    核心 ETF（不在东证业种里）：直接用它自己的因子敏感度（asset_betas）× 这条消息的因子冲击。
+    每条附影响期（timing：开始 / 结束 / 持续几天，经验估计）；已经过了影响期的不算。
+    → {代码: {"net", "level", "dir": "down" | "up", "sector", "start", "end", "items": [{id, time, title, labels, eff, alert, cred, sector, timing}]}}"""
     sectors = sectors if sectors is not None else holdings_map(tickers)
+    assets = assets if assets is not None else asset_betas()
     out: dict[str, dict] = {}
     for t in tickers:
         sec = sectors.get(t)
-        if not sec:
+        ab = assets.get(t) if not sec else None
+        if not sec and not ab:
             continue
+        if not sec:
+            from .money_view import CORE_NAMES
+            sec = CORE_NAMES.get(t, t)
         items = []
         for e in events or []:
             c = e.get("chain") or {}
-            imp = {s: float(v) for s, v in (c.get("impacts") or (list(c.get("up") or []) + list(c.get("down") or [])))}
-            v = imp.get(sec)
+            if ab:
+                sh = c.get("shocks") or {}
+                v = round(sum(float(ab[f]) * float(x) for f, x in sh.items() if ab.get(f) is not None), 2) if sh else None
+            else:
+                imp = {s: float(v) for s, v in (c.get("impacts") or (list(c.get("up") or []) + list(c.get("down") or [])))}
+                v = imp.get(sec)
+                if v is None:
+                    d = (c.get("rules") or {}).get(sec)
+                    v = RULE_PCT * (1 if d > 0 else -1) if d else None
             if v is None:
-                d = (c.get("rules") or {}).get(sec)
-                v = RULE_PCT * (1 if d > 0 else -1) if d else None
-            if v is None:
+                continue
+            tm = timing(e, now)
+            if tm and tm["state"] == "已过":
                 continue
             eff = v * float(e.get("cred") or 50) / 100 * (1.5 if e.get("alert") else 1.0)
             if abs(eff) < 0.05:
                 continue
             items.append({"id": e.get("id"), "time": e.get("time"), "title": e.get("title"), "labels": e.get("event_labels") or [],
-                          "eff": round(eff, 2), "alert": bool(e.get("alert")), "cred": e.get("cred"), "sector": sec})
+                          "eff": round(eff, 2), "alert": bool(e.get("alert")), "cred": e.get("cred"), "sector": sec, "timing": tm})
         if not items:
             continue
         items.sort(key=lambda i: -abs(i["eff"]))
         net = round(sum(i["eff"] * 0.5 ** k for k, i in enumerate(items)), 2)   # 同一件事常有好几条报道：最大的一条为主、其余递减（不简单相加）
-        level = next((lab for th, lab in LEVELS if abs(net) >= th), None)
-        if level is None:
+        lv = next((lab for th, lab in LEVELS if abs(net) >= th), None)
+        if lv is None:
             continue
-        out[t] = {"net": net, "level": level, "dir": "down" if net < 0 else "up", "sector": sec, "items": items}
+        tms = [i["timing"] for i in items if i.get("timing")]
+        out[t] = {"net": net, "level": lv, "dir": "down" if net < 0 else "up", "sector": sec, "items": items,
+                  "start": min((x["start"] for x in tms), default=None), "end": max((x["end"] for x in tms), default=None),
+                  "main": items[0].get("timing")}                                # 影响最大的那条的影响期
     return out
 
 

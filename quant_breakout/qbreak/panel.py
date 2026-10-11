@@ -225,10 +225,12 @@ details.khelp ul{margin:4px 0;padding-left:18px;font-size:13px;line-height:1.55;
 .axk{font-size:13px;color:var(--muted);line-height:1.75}.axv{min-width:0;font-size:15px;line-height:1.5}
 .axm{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px}.axm .chip{font-variant-numeric:tabular-nums}
 .chip.bad{background:transparent;box-shadow:inset 0 0 0 1px var(--neg);color:var(--neg);font-weight:600}
-.chip.mid{color:var(--neg)}
+.chip.mid{color:var(--neg)}.chip.gc{box-shadow:inset 0 0 0 1px var(--accent);background:transparent}
 .chip.good{background:transparent;box-shadow:inset 0 0 0 1px var(--pos);color:var(--pos)}
 .nmk{margin:4px 0}.nmk>summary{list-style:none;cursor:pointer}.nmk>summary::-webkit-details-marker{display:none}
-.nml{margin:4px 0 0;padding-left:18px}.nml li{margin:4px 0}
+.nml{margin:4px 0 0;padding-left:18px}.nml li{margin:4px 0}.nwin{margin:3px 0 0}
+details.nw.lv-hi{border-left:4px solid var(--neg);padding-left:8px}details.nw.lv-mid{border-left:4px solid #e08a00;padding-left:8px}
+.chip.lvh{background:var(--neg);color:#fff;font-weight:600}.chip.lvm{background:#e08a00;color:#fff;font-weight:600}
 .dots{display:inline-flex;gap:3px;margin-right:6px;vertical-align:1px}
 .dots i{width:8px;height:8px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--muted)}.dots i.on{background:var(--neg);box-shadow:none}
 .axn{padding:6px 0 2px;border-top:1px solid var(--line)}
@@ -1367,13 +1369,14 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, ca
     for n, (g, title, grp) in enumerate(groups):
         H.append(f"<div class='sgg' data-g='{g}'{'' if n == 0 else ' hidden'}>")
         if g == "rest":                                     # 快要出 + 观察中一组：按出买入信号的可能性排
-            H.append(f"<h3 class='sgh'>观察中 · {len(grp)} 只（按出买入信号的可能性排）</h3>"
-                     f"<div class='muted small'>越上面越可能先出买入信号（同样情况的历史比例：日経225，2006〜2026）。比例都不高；"
+            H.append(f"<h3 class='sgh'>观察中 · {len(grp)} 只（按离 MACD 金叉的天数排）</h3>"
+                     f"<div class='muted small'>越上面越快出现金叉（按最近一天的变化估算的天数；同样天数时快要出的、历史比例高的在前；"
+                     "已经在信号线上 / 还在往下走的排在后面，闸门挡的最后）。金叉之外还要横盘、量等条件凑齐才出买入信号，"
                      "出了信号还要过闸门 / 名额才会买。</div>")
         else:
             H.append(f"<h3 class='sgh'>{escape(title)}（{len(grp)} 只）</h3>")
             if g != "triggered" and any(r.get("near") for r in grp):
-                H.append("<div class='muted small'>按离买入信号的远近排（越上面越可能先出信号；只是估算）</div>")
+                H.append("<div class='muted small'>按离 MACD 金叉的天数排（越上面越快金叉；只是估算）</div>")
         for k, r in enumerate(grp, 1):
             row = _suggest_row(r, s, buying, eq, chart, rank=k if g == "rest" else None, fill=sg.get("fill_day"),
                                mark=marks.get(str(r["ticker"])))
@@ -1391,8 +1394,8 @@ def _news_marks(tickers, now: dt.datetime | None = None) -> dict:
     try:
         now = (now or now_jst()).astimezone(JST)
         cut = now - dt.timedelta(hours=NW.MAX_AGE_H)
-        ev = [e for e in (NW.load() or {}).get("events") or [] if (_ts_jst(e.get("time")) or cut) >= cut]
-        return NW.ticker_impacts(ev, [str(x) for x in tickers]) if ev else {}
+        ev = [e for e in (NW.load() or {}).get("events") or [] if (_ts_jst(e.get("time")) or cut) >= cut and NW.level(e) != "低"]
+        return NW.ticker_impacts(ev, [str(x) for x in tickers], now=now) if ev else {}
     except Exception as e:                                 # noqa: BLE001  展示用：算不出不影响页面
         log.warning("消息影响标记没算成：%s", e)
         return {}
@@ -1414,12 +1417,45 @@ def _news_mark(m: dict | None) -> str:
                   f"<b class='{'neg' if i['eff'] < 0 else 'pos'}'>{i['eff']:+.1f}%</b>"
                   + (" <b class='neg'>★</b>" if i.get("alert") else "")
                   + f" <span class='chip'>{escape('、'.join(i.get('labels') or []) or '其他')}</span><br>"
-                  f"<a href='?tab=news&amp;seg=news&amp;n={nid}' data-nlink='{nid}'>{escape(str(i.get('title') or '')[:120])}</a></li>")
+                  + (f"<span class='small'>{escape(_window_text(i['timing']))}</span><br>" if i.get("timing") else "")
+                  + f"<a href='?tab=news&amp;seg=news&amp;n={nid}' data-nlink='{nid}'>{escape(str(i.get('title') or '')[:120])}</a></li>")
     more = len(m["items"]) - 6
-    return (f"<details class='nmk'><summary><span class='chip {tone}'>{escape(head)}</span></summary>"
+    win = ""
+    if m.get("start") and m.get("end"):
+        s, e = dt.date.fromisoformat(m["start"]), dt.date.fromisoformat(m["end"])
+        now_d = now_jst().date()
+        mn = m.get("main") or {}
+        me = dt.date.fromisoformat(mn["end"]) if mn.get("end") else e
+        win = (f"<div class='small nwin'>影响期（经验估计）：{_md(s)} {'起（已开始）' if s <= now_d else '开盘起'} → 主要那条约 {_md(me)} 前后结束"
+               f"（还有约 {_tdays(max(now_d, s), me)} 个交易日）" + (f"；全部最晚约 {_md(e)}" if e > me else "") + "</div>")
+    return (f"<details class='nmk'><summary><span class='chip {tone}'>{escape(head)}</span>{win}</summary>"
             f"<div class='muted small'>行业：{escape(str(m.get('sector') or ''))}。每条消息对这个行业的估算冲击 × 可信度（★ 达到提醒线的 ×1.5），最大的一条为主、其余递减加总；"
             "≥ 1% 大、≥ 0.4% 中、其余小。只是粗估，不参与交易；点标题看「消息」页的详细。</div><ul class='small nml'>" + "".join(li)
             + (f"<li class='muted'>另外 {more} 条影响较小</li>" if more > 0 else "") + "</ul></details>")
+
+
+WD = "一二三四五六日"
+
+
+def _md(d: dt.date) -> str:
+    return f"{d.month}/{d.day}（周{WD[d.weekday()]}）"
+
+
+def _tdays(a: dt.date, b: dt.date) -> int:
+    """a〜b（含两头）的交易日数。"""
+    from .calendar_jp import is_trading_day
+    n, x = 0, a
+    while x <= b:
+        n += is_trading_day(x)
+        x += dt.timedelta(days=1)
+    return n
+
+
+def _window_text(tm: dict) -> str:
+    """一条消息的影响期一句话：开始 → 结束、持续几天（经验估计）。"""
+    s, e = dt.date.fromisoformat(tm["start"]), dt.date.fromisoformat(tm["end"])
+    how = "盘中发布、当天已开始反映" if tm.get("intraday") else f"{_md(s)} 开盘起"
+    return f"影响：{how} → 约 {_md(e)} 前后结束（一般持续 {tm['lo']}〜{tm['hi']} 个交易日）· {tm['state']}"
 
 
 def _prob_line(pr: dict | None) -> str:
@@ -1443,6 +1479,12 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
             f"量 {r['vol_ratio']:.2f} 倍" if r.get("vol_ratio") is not None else None,
             "真突破" if r.get("breakout") else None]
     tag_ = ("<span class='chip hot'>快要出</span>" if r.get("status") == "imminent" else "") if rank else ""
+    nr = r.get("near") or {}
+    if r.get("status") != "triggered" and nr.get("where"):                # 离金叉（2026-10-11 用户：按离金叉的临近日排序）
+        gd = int(nr.get("days") or SG.MAX_DAYS)
+        tag_ += ("<span class='chip gc'>" + (f"金叉约 {gd} 天" if nr["where"] == "below_up" and gd < SG.FAR_DAYS
+                                             else "金叉还远" if nr["where"] == "below_up" else "要先拐头" if nr["where"] == "below_down"
+                                             else "已在线上" if nr["where"] == "above" else "金叉算不出") + "</span>")
     H = [f"<div class='hv sg'><div class='head'>" + (f"<span class='rk'>{rank}</span>" if rank else "")
          + f"<b>{escape(str(r.get('code') or t))}</b>{nm}"
          + (f"<span class='chip'>{escape(str(r['sector']))}</span>" if r.get("sector") else "") + tag_ + "</div>"
@@ -1785,8 +1827,10 @@ def _news_card(now: dt.datetime) -> str:
     ev = d.get("events") or []
     if not ev:
         return ("<section class='card' id='news'><h2>经济威胁消息</h2><div class='muted small'>还没有（市场仪表盘的定时任务每 15 分钟取一次）</div></section>")
-    ev = sorted(ev, key=lambda e: (not e.get("alert"), -(float(e.get("threat") or 0))))[:40]
-    n_show = max(10, sum(1 for e in ev if e.get("alert")))
+    n_low = sum(1 for e in ev if NW.level(e) == "低")         # 程度低的不显示（2026-10-11 用户）
+    ev = [e for e in ev if NW.level(e) != "低"]
+    ev = sorted(ev, key=lambda e: (NW.level(e) != "高", not e.get("alert"), -(float(e.get("threat") or 0)),
+                                   -(_ts_jst(e.get("time")) or dt.datetime.min.replace(tzinfo=JST)).timestamp()))[:40]
 
     def when(v) -> str:
         t = _ts_jst(v)
@@ -1816,15 +1860,20 @@ def _news_card(now: dt.datetime) -> str:
         link = str(e.get("link") or "")
         if link.startswith("https://"):
             det.append(f"<div><a href='{escape(link)}' target='_blank' rel='noopener noreferrer'>原文</a></div>")
+        tm = NW.timing(e, now)
+        if tm:
+            det.insert(1, f"<div>{escape(_window_text(tm))}（经验估计）</div>")
         det.append("<div class='muted small'>只展示与提醒，不参与交易</div>")
-        rows.append(f"<details class='hv nw' id='n-{escape(str(e.get('id')))}'><summary>"
+        lv = NW.level(e)
+        rows.append(f"<details class='hv nw lv-{'hi' if lv == '高' else 'mid'}' id='n-{escape(str(e.get('id')))}'><summary>"
+                    f"<span class='chip {'lvh' if lv == '高' else 'lvm'}'>{lv}</span> "
                     f"{'<b class=neg>★ 提醒</b> ' if e.get('alert') else ''}<span class='muted'>{escape(when(e.get('time')))} JST</span> "
                     f"<span class='chip'>{escape(lab)}</span><br>{escape(str(e.get('title') or '')[:140])}</summary>{''.join(det)}</details>")
-    rest = rows[n_show:]
+    legend = ("<div class='small'><span class='chip lvh'>高</span> 达到提醒线或 严重度 × 可信度 ≥ 1.5 · "
+              "<span class='chip lvm'>中</span> ≥ 0.8 · 低的不显示" + (f"（这次 {n_low} 条）" if n_low else "") + "</div>")
     return (f"<section class='card' id='news'><h2>经济威胁消息</h2><div class='muted small'>时间都是日本时间（JST）。Mac 每 15 分钟取一次；最近一次 {escape(str(d.get('generated') or '—'))}。"
-            "★ = 达到提醒线（会推送到这台设备）。点一条看详细。</div>" + "".join(rows[:n_show])
-            + (f"<details class='hv'><summary class='muted'>其余 {len(rest)} 条（威胁较低）</summary>{''.join(rest)}</details>" if rest else "")
-            + "</section>")
+            "★ = 达到提醒线（会推送到这台设备）。点一条看详细（含影响期）。</div>" + legend
+            + ("".join(rows) or "<div class='muted'>现在没有程度中以上的消息</div>") + "</section>")
 
 
 def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "local", device: dict | None = None,
@@ -1920,7 +1969,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                            for t, p in (st.get("pos") or {}).items()],
               "core": [{"ticker": t, "name": t, "units": int(u), "why": "闲置资金规则（核心 ETF）"}
                        for t, u in (st.get("core_units") or {}).items() if int(u)]}
-    hmarks = _news_marks(list((st.get("pos") or {}).keys()), now) if st.get("pos") else {}
+    _ht = list((st.get("pos") or {}).keys()) + [t for t, u in (st.get("core_units") or {}).items() if int(u or 0) > 0]
+    hmarks = _news_marks(_ht, now) if _ht else {}                     # 持仓（个股 + 拿着的核心 ETF）的消息影响
 
     def chart(t: str, kind: str) -> str:
         return (f"<div class='chart' data-t='{escape(t)}' data-kind='{kind}'><span class='muted small'>"
@@ -1929,7 +1979,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     def actions(r: dict, kind: str) -> str:
         t = str(r["ticker"])
         if kind == "core":
-            return tchips(ktrend.get(t)) + _core_actions(r, t) + _core_exit(t) + chart(t, "core")
+            return tchips(ktrend.get(t)) + _news_mark(hmarks.get(t)) + _core_actions(r, t) + _core_exit(t) + chart(t, "core")
         qt = f"<div class='qt small' data-q='{escape(t)}'></div>" if t in (st.get("pos") or {}) else ""   # 现价（/api/quotes）
         return tchips(ktrend.get(t), stats=True) + qt + _actions(r, t)
 

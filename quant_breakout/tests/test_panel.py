@@ -279,7 +279,7 @@ def test_render_watch_rows_show_how_far_from_a_buy_signal():
     html = panel.render("paper", "t" * 40, AT)
     assert ("<div class='small near'>离买入信号：MACD 约 2 天后金叉（按最近一天的变化估）；金叉那天量要 &gt; 1.5 倍（今天 0.8 倍）</div>"
             in html)
-    assert html.count("按离买入信号的远近排（越上面越可能先出信号；只是估算）") == 1   # 只有带 near 的组（旧的汇总没有 → 不写）
+    assert html.count("按离 MACD 金叉的天数排（越上面越快金叉；只是估算）") == 1   # 只有带 near 的组（旧的汇总没有 → 不写）
 
 
 def test_render_ranks_watch_rows_by_the_registered_probability(monkeypatch, tmp_path):
@@ -303,14 +303,15 @@ def test_render_ranks_watch_rows_by_the_registered_probability(monkeypatch, tmp_
     monkeypatch.setattr(WP, "FILE", fp)
     html = panel.render("paper", "t" * 40, AT)
     assert "<h3 class='sgh'>今天出了买入信号（1 只）</h3>" in html
-    assert "<h3 class='sgh'>观察中 · 3 只（按出买入信号的可能性排）</h3>" in html and "快要出买入信号（1 只）" not in html
+    assert "<h3 class='sgh'>观察中 · 3 只（按离 MACD 金叉的天数排）</h3>" in html and "快要出买入信号（1 只）" not in html
     i1, i2, i3 = html.index("<b>9984</b>"), html.index("<b>8035</b>"), html.index("<b>6758</b>")
-    assert i1 < i2 < i3                                                    # 比例：9984 > 8035 > 6758（与以前的 快要出 → 观察中 不同）
-    assert "<span class='rk'>1</span><b>9984</b>" in html and "<span class='rk'>3</span><b>6758</b>" in html
+    assert i2 < i1 < i3                                                    # 2026-10-11 起按离金叉：8035（约 1 天）→ 9984（往下走）→ 6758（已在线上）
+    assert "<span class='rk'>1</span><b>8035</b>" in html and "<span class='rk'>3</span><b>6758</b>" in html
+    assert "金叉约 1 天" in html and "要先拐头" in html and "已在线上" in html
     assert "<span class='chip hot'>快要出</span>" in html                     # 快要出的照样标出来
     p1 = WP.prob(t, "down_far", "m0", "v_lo")
     assert f"之后 10 个交易日内出买入信号：历史上约 <b>{p1['p'] * 100:.1f}%</b>（同样情况 100 次）" in html
-    assert "越上面越可能先出买入信号（同样情况的历史比例：日経225，2006〜2026）" in html
+    assert "越上面越快出现金叉（按最近一天的变化估算的天数" in html
     monkeypatch.setattr(WP, "FILE", tmp_path / "wp2.json")                 # 研究判定 B（只排序）：不写百分比
     (tmp_path / "wp2.json").write_text(json.dumps({**t, "show_pct": False}), encoding="utf-8")
     html = panel.render("paper", "t" * 40, AT)

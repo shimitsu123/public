@@ -197,13 +197,15 @@ def test_build_ranks_by_the_registered_probability_when_the_table_exists(monkeyp
     st = [r["status"] for r in out]
     assert st[:2] == ["triggered", "triggered"]                           # 出了信号的照旧在前
     rest = [r for r in out if r["status"] != "triggered"]
-    assert [r["ticker"] for r in rest] == ["D.T", "C.T"]                  # 比例高的先（观察中的 D 排到快要出的 C 前面）
-    assert rest[0]["prob"]["p"] > rest[1]["prob"]["p"] and rest[0]["prob"]["cell"] == "|".join(cell["D.T"])
+    exp = [r["ticker"] for r in sorted(rest, key=lambda r: (SG.gc_days(r), r["status"] != "imminent", -r["prob"]["p"]))]
+    assert [r["ticker"] for r in rest] == exp                             # 2026-10-11 起：离金叉近的先 → 快要出 → 比例高的先
+    d = next(r for r in rest if r["ticker"] == "D.T")
+    assert d["prob"]["p"] > next(r for r in rest if r["ticker"] == "C.T")["prob"]["p"] and d["prob"]["cell"] == "|".join(cell["D.T"])
     eng.entry_gate_fn = lambda t, i_: "测试：资格检查挡" if t == "D.T" else None
     assert [r["ticker"] for r in SG.build(ind, eng, i, P)["rows"] if r["status"] != "triggered"] == ["C.T", "D.T"]   # 闸门最先
     plain = [{k: v for k, v in r.items() if k != "prob"} for r in out]   # 面板：执行器写的旧汇总没有 prob → 渲染时补上再排
     again = SG.rank([dict(r) for r in reversed(plain)])
-    assert [r["ticker"] for r in again if r["status"] != "triggered"] == ["D.T", "C.T"]
+    assert [r["ticker"] for r in again if r["status"] != "triggered"] == exp
     assert [r["status"] for r in again][:2] == ["triggered", "triggered"] and all("prob" in r for r in again if r["status"] != "triggered")
 
 
@@ -216,5 +218,8 @@ def test_order_key_without_and_with_probability():
         return r
     rows = [row("w_lo", p=0.01), row("trig", "triggered"), row("imm", "imminent", p=0.05), row("w_hi", p=0.09, where="above"),
             row("blocked", p=0.5, block="资格检查"), row("noprob")]
-    assert [r["ticker"] for r in sorted(rows, key=lambda r: SG.order_key(r, True))] == ["trig", "w_hi", "imm", "w_lo", "noprob", "blocked"]
+    # 2026-10-11 起：离金叉近的先（already above = 最后）→ 同样天数快要出的先 → 比例高的先；闸门挡的最后
+    assert [r["ticker"] for r in sorted(rows, key=lambda r: SG.order_key(r, True))] == ["trig", "imm", "w_lo", "noprob", "w_hi", "blocked"]
     assert [r["ticker"] for r in sorted(rows, key=lambda r: SG.order_key(r, False))] == ["trig", "imm", "w_lo", "noprob", "w_hi", "blocked"]
+    rows.append(row("far", p=0.3, days=8))
+    assert [r["ticker"] for r in sorted(rows, key=lambda r: SG.order_key(r, True))][-3:] == ["far", "w_hi", "blocked"]
