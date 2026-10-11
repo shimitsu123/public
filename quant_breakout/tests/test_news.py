@@ -129,7 +129,7 @@ def test_jma_quake_becomes_severe_official_event():
 
 def test_new_alerts_only_once_and_expire(tmp_path):
     fp = tmp_path / "alerted.json"
-    ev = [{"id": "a", "alert": True}, {"id": "b", "alert": False}]
+    ev = [{"id": "a", "alert": True, "severity": 2, "cred": 80}, {"id": "b", "alert": False}]
     assert [e["id"] for e in NW.new_alerts(ev, fp, now=NOW)] == ["a"]
     assert NW.new_alerts(ev, fp, now=NOW + dt.timedelta(hours=1)) == []
     assert [e["id"] for e in NW.new_alerts(ev, fp, now=NOW + dt.timedelta(days=8))] == ["a"]   # 7 天后记录过期

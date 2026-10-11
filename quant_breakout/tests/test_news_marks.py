@@ -50,7 +50,16 @@ def test_level_hides_low_and_colors():
     assert NW.level({"severity": 1, "cred": 60}) == "低"
     assert NW.level({"severity": 1, "cred": 85}) == "中"
     assert NW.level({"severity": 2, "cred": 50}) == "中"
-    assert NW.level({"severity": 2, "cred": 80}) == "高" and NW.level({"severity": 1, "cred": 10, "alert": True}) == "高"
+    assert NW.level({"severity": 2, "cred": 80}) == "高" and NW.level({"severity": 1, "cred": 10, "alert": True}) == "低"   # 2026-10-12 起不再「提醒线 = 高」
+
+
+def test_push_only_high():
+    """2026-10-12 用户「只推送威胁度为高的，中的不用推送」：达到提醒线但 严重度 × 可信度 < 1.5（例 2 × 70）→ 不推。"""
+    hi = {"id": "h", "alert": True, "severity": 2, "cred": 80}
+    mid = {"id": "m", "alert": True, "severity": 2, "cred": 70}
+    pos = {"id": "p", "alert": False, "severity": 3, "cred": 90}
+    assert NW.pushable(hi) and not NW.pushable(mid) and not NW.pushable(pos)
+    assert [e["id"] for e in NW.new_alerts([hi, mid, pos])] == ["h"]
 
 
 def test_timing_start_end_and_state():

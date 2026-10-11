@@ -479,9 +479,15 @@ def asset_betas() -> dict:
 
 # ── 消息的程度（2026-10-11 用户：威胁程度低的消息不用显示，按程度用颜色区分）──
 def level(e: dict) -> str:
-    """消息的程度：严重度 × 可信度 /100（正负面都算）→ 高（达到提醒线，或 ≥ 1.5）/ 中（≥ 0.8）/ 低（其余：面板不显示）。"""
+    """消息的程度：严重度 × 可信度 /100（正负面都算）→ 高（≥ 1.5）/ 中（≥ 0.8）/ 低（其余：面板不显示）。
+    2026-10-12 起不再「达到提醒线就算高」：推送只推「高」（pushable），面板的高 / 中与推送一致。"""
     s = float(e.get("severity") or 1) * float(e.get("cred") or 0) / 100
-    return "高" if e.get("alert") or s >= 1.5 else "中" if s >= 0.8 else "低"
+    return "高" if s >= 1.5 else "中" if s >= 0.8 else "低"
+
+
+def pushable(e: dict) -> bool:
+    """推送（手机 / Mac 通知）：达到提醒线（负面、严重度 × 可信度够）且程度「高」（≥ 1.5）。2026-10-12 用户「只推送威胁度为高的，中的不用推送」。"""
+    return bool(e.get("alert")) and level(e) == "高"
 
 
 # ── 影响什么时候开始、持续多久（2026-10-11 用户：持仓要标大概什么时候影响、什么时候结束、影响多久）──
@@ -609,7 +615,7 @@ def new_alerts(events: list[dict], state_path=None, keep_h: float = 7 * 24, now:
                 keep[k] = v
         except (TypeError, ValueError):
             continue
-    out = [e for e in events if e["alert"] and e["id"] not in keep]
+    out = [e for e in events if pushable(e) and e["id"] not in keep]
     for e in out:
         keep[e["id"]] = now.isoformat(timespec="minutes")
     write_json(fp, keep)
@@ -618,7 +624,7 @@ def new_alerts(events: list[dict], state_path=None, keep_h: float = 7 * 24, now:
 
 def alert_text(e: dict) -> str:
     c = e["chain"]
-    parts = [f"{'、'.join(e['event_labels'])}｜可信度 {e['cred']}（{e['cred_label']}）"]
+    parts = [f"{'、'.join(e['event_labels'])}｜威胁度 {level(e)}｜可信度 {e['cred']}"]   # 不写「可信度（中）」：会被当成威胁度
     if c.get("shock_txt"):
         parts.append(f"冲击：{c['shock_txt']}")
     if c.get("down"):

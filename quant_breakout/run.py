@@ -2368,7 +2368,7 @@ def cmd_news(a) -> int:
             from qbreak import notify as NT
             first = fresh[0]
             t0 = str(first.get("time") or "")[5:16].replace("-", "/").replace("T", " ")
-            NT.send(f"经济威胁提醒（{t0} JST 发布）" if t0 else "经济威胁提醒",
+            NT.send(f"经济威胁 高（{t0} JST 发布）" if t0 else "经济威胁 高",
                     NW.notify_lines(fresh, 5),
                     level="warn", url=f"/?tab=news&n={first['id']}")          # 推送点开 → 面板「消息」里展开这一条
     if a.page:

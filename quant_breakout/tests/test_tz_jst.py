@@ -48,7 +48,7 @@ def test_news_times_are_labelled_jst():
     from qbreak import panel
     from qbreak.utils import write_json
     write_json(NW.cache_dir() / "news.json", {"generated": "2026-10-11 10:23 JST", "events": [
-        {"id": "u1", "title": "x", "time": "2026-10-10T15:46+00:00", "event_labels": ["t"], "alert": True, "threat": 1, "chain": {}}]})
+        {"id": "u1", "title": "x", "time": "2026-10-10T15:46+00:00", "event_labels": ["t"], "alert": True, "severity": 2, "cred": 80, "threat": 1.6, "chain": {}}]})
     h = panel._news_card(dt.datetime(2026, 10, 11, 10, 30))
     assert "10/11 00:46 JST" in h                                          # UTC 15:46 → JST 00:46（第二天）
     assert "时间都是日本时间（JST）" in h
