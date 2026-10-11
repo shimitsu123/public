@@ -102,6 +102,11 @@ if [ "$(uname -s)" = "Darwin" ] && [ "${QBREAK_NO_MENUBAR:-}" != "1" ]; then
   bash "$PROJ/scripts/install_launchd_menubar.sh" || echo "★ 菜单栏图标没装上（见上）：其他步骤照常"
 fi
 
+# ④g 消息标题翻成中文的本机离线翻译小工具（macOS Translation；要 swiftc，没有就跳过：通知照发、标题是原文）
+if [ "$(uname -s)" = "Darwin" ] && [ "${QBREAK_NO_MENUBAR:-}" != "1" ]; then
+  bash "$PROJ/scripts/install_translate.sh" || echo "★ 翻译小工具没装上（见上）：其他步骤照常"
+fi
+
 # ④d 手机上操作（Tailscale Serve，只在你自己的 tailnet；绝不用 Funnel；按 Tailscale 账户登录，配对码（备用）只在 Mac 的操作面板上生成）
 if [ -n "$PHONE" ] || [ -f "$LHOME/panel_phone.json" ]; then
   set -- phone on

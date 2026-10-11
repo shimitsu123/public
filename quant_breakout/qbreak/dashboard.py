@@ -278,7 +278,8 @@ def news_full_html(events: list[dict], limit: int = 10) -> str:
         c = e.get("chain") or {}
         cred_cls = "b-good" if e["cred"] >= 80 else ("b-warn" if e["cred"] >= 60 else "b-bad")
         link = escape(str(e.get("link") or ""), quote=True)
-        title = f'<a href="{link}" target="_blank" rel="noopener">{escape(e["title"])}</a>' if link else escape(e["title"])
+        tt = e.get("title_zh") or e["title"]                                  # 有中文译文用中文（2026-10-11）
+        title = f'<a href="{link}" target="_blank" rel="noopener">{escape(tt)}</a>' if link else escape(tt)
         up = "、".join(f"{escape(s)} {v:+.1f}%" for s, v in c.get("up") or [])
         dn = "、".join(f"{escape(s)} {v:+.1f}%" for s, v in c.get("down") or [])
         rules = "、".join(f"{escape(s)}{'↑' if dd > 0 else '↓'}" for s, dd in (c.get("rules") or {}).items())
@@ -461,7 +462,7 @@ def page(d: dict, macro: dict, news: dict, generated: str, jq: dict | None = Non
     src = "、".join(f"{escape(k)} {v if isinstance(v, int) else '✗'}" for k, v in (news.get("sources") or {}).items())
     al = [e for e in news.get("events") or [] if e.get("alert")]
     alert = (f'<div class="card" style="border-color:var(--neg)"><b>提醒 {len(al)} 件</b>：'
-             + "；".join(escape("、".join(e["event_labels"])) + f"（{escape(e['title'][:40])}…）" for e in al[:3]) + "</div>") if al else ""
+             + "；".join(escape("、".join(e["event_labels"])) + f"（{escape((e.get('title_zh') or e['title'])[:40])}…）" for e in al[:3]) + "</div>") if al else ""
     return _PAGE.format(generated=escape(generated), news_at=escape(str(news.get("generated") or "—")), sources=src or "—",
                         alert=alert, body=render(d, macro, news, full_news=True)
                         + f'<section class="card dash"><h2>J-Quants 每天的新信息</h2>{jq_html(jq)}</section>')

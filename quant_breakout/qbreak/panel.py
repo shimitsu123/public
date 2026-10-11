@@ -1428,7 +1428,7 @@ def _news_mark(m: dict | None) -> str:
                   + (" <b class='neg'>★</b>" if i.get("alert") else "")
                   + f" <span class='chip'>{escape('、'.join(i.get('labels') or []) or '其他')}</span><br>"
                   + (f"<span class='small'>{escape(_window_text(i['timing']))}</span><br>" if i.get("timing") else "")
-                  + f"<a href='?tab=news&amp;seg=news&amp;n={nid}' data-nlink='{nid}'>{escape(str(i.get('title') or '')[:120])}</a></li>")
+                  + f"<a href='?tab=news&amp;seg=news&amp;n={nid}' data-nlink='{nid}'>{escape(str(i.get('title_zh') or i.get('title') or '')[:120])}</a></li>")
     more = len(m["items"]) - 6
     win = ""
     if m.get("start") and m.get("end"):
@@ -1905,7 +1905,10 @@ def _news_card(now: dt.datetime) -> str:
         rows.append(f"<details class='hv nw lv-{'hi' if lv == '高' else 'mid'}' id='n-{escape(str(e.get('id')))}'><summary>"
                     f"<span class='chip {'lvh' if lv == '高' else 'lvm'}'>{lv}</span> "
                     f"{'<b class=neg>★ 提醒</b> ' if e.get('alert') else ''}<span class='muted'>{escape(when(e.get('time')))} JST</span> "
-                    f"<span class='chip'>{escape(lab)}</span><br>{escape(str(e.get('title') or '')[:140])}</summary>{''.join(det)}</details>")
+                    f"<span class='chip'>{escape(lab)}</span><br>{escape(str(e.get('title_zh') or e.get('title') or '')[:140])}"
+                    + (f"<br><span class='muted small'>原文：{escape(str(e.get('title') or '')[:140])}</span>"
+                       if e.get("title_zh") and str(e.get("title_zh")).strip() != str(e.get("title") or "").strip() else "")
+                    + f"</summary>{''.join(det)}</details>")
     legend = ("<div class='small'><span class='chip lvh'>高</span> 达到提醒线或 严重度 × 可信度 ≥ 1.5 · "
               "<span class='chip lvm'>中</span> ≥ 0.8 · 低的不显示" + (f"（这次 {n_low} 条）" if n_low else "") + "</div>")
     return (f"<section class='card' id='news'><h2>经济威胁消息</h2><div class='muted small'>时间都是日本时间（JST）。Mac 每 15 分钟取一次；最近一次 {escape(str(d.get('generated') or '—'))}。"

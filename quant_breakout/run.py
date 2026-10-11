@@ -2350,6 +2350,8 @@ def cmd_news(a) -> int:
     d = read_json(paths.PROJECT_ROOT / "var" / "out" / "unified_today.json", {}) or {}   # 云端模拟盘的当天数据（每天 git pull）
     items, stat = NW.fetch_all()
     events = NW.analyze(items, NW.sector_betas(), _news_holdings(d), now=now)
+    from qbreak import translate as TR                      # 标题翻成中文（本机离线；翻不了照常，用原文）
+    TR.annotate(events, only=lambda e: e.get("alert") or NW.level(e) != "低")
     gen = now.strftime("%Y-%m-%d %H:%M JST")
     NW.save(events, stat, gen)
     fresh = NW.new_alerts(events)
@@ -2358,16 +2360,16 @@ def cmd_news(a) -> int:
           + (f"；取不到：{'、'.join(bad)}" if bad else ""))
     for e in events[:8]:
         print(f"  {'★' if e['alert'] else ' '} 威胁 {e['threat']:.2f}｜可信度 {e['cred']}｜{'、'.join(e['event_labels'])}｜"
-              f"{e['publisher']}｜{e['title'][:60]}")
+              f"{e['publisher']}｜{TR.show(e)[:60]}")
     if a.notify:
         for e in fresh[:3]:
-            NW.notify_mac(f"qbreak 经济威胁提醒：{'、'.join(e['event_labels'])}", NW.alert_text(e))
+            NW.notify_mac(f"qbreak 经济威胁提醒：{'、'.join(e['event_labels'])}", f"{TR.show(e)}｜{NW.alert_text(e)}")
         if fresh:
             from qbreak import notify as NT
             first = fresh[0]
             t0 = str(first.get("time") or "")[5:16].replace("-", "/").replace("T", " ")
             NT.send(f"经济威胁提醒（{t0} JST 发布）" if t0 else "经济威胁提醒",
-                    "\n".join(f"{str(e.get('time') or '')[11:16]} JST {e['title']}｜{NW.alert_text(e)}" for e in fresh[:5]),
+                    NW.notify_lines(fresh, 5),
                     level="warn", url=f"/?tab=news&n={first['id']}")          # 推送点开 → 面板「消息」里展开这一条
     if a.page:
         old = MN.load()

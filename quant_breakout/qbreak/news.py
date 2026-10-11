@@ -567,7 +567,8 @@ def ticker_impacts(events: list[dict], tickers: list[str], sectors: dict[str, st
             eff = v * float(e.get("cred") or 50) / 100 * (1.5 if e.get("alert") else 1.0)
             if abs(eff) < 0.05:
                 continue
-            items.append({"id": e.get("id"), "time": e.get("time"), "title": e.get("title"), "labels": e.get("event_labels") or [],
+            items.append({"id": e.get("id"), "time": e.get("time"), "title": e.get("title"), "title_zh": e.get("title_zh"),
+                          "labels": e.get("event_labels") or [],
                           "eff": round(eff, 2), "alert": bool(e.get("alert")), "cred": e.get("cred"), "sector": sec, "timing": tm})
         if not items:
             continue
@@ -627,6 +628,17 @@ def alert_text(e: dict) -> str:
     if c.get("tickers_down"):
         parts.append("受损方向的持仓 / 候补：" + "、".join(c["tickers_down"][:6]))
     return "；".join(parts)
+
+
+def notify_lines(events: list[dict], n: int = 5) -> str:
+    """推送 / 通知记录的正文：每条「时刻 JST 中文标题｜类别、冲击、受损…」+ 下一行原文（有中文译文时）。
+    2026-10-11 用户「通知里面的新闻都要翻译为中文后进行通知」；翻不了 → 原文（照发）。"""
+    out = []
+    for e in events[:n]:
+        zh, raw = e.get("title_zh"), str(e.get("title") or "")
+        head = f"{str(e.get('time') or '')[11:16]} JST {zh or raw}｜{alert_text(e)}"
+        out.append(head + (f"\n（原文：{raw}）" if zh and zh.strip() != raw.strip() else ("" if zh else "\n（标题还没翻译成中文：上面是原文）")))
+    return "\n".join(out)
 
 
 def notify_mac(title: str, text: str) -> bool:

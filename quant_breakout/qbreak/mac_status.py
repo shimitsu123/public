@@ -112,6 +112,19 @@ def _charts_item(tag: str, now: dt.datetime) -> dict | None:
     return {"name": name, "level": "ok", "text": f"日线到 {s['have']}"}
 
 
+def _translate_item() -> dict | None:
+    """消息标题的中文翻译（本机离线；qbreak/translate.py）：小工具没装 / 语言包没下载 → 提醒（通知照发、标题是原文）。"""
+    from . import translate as TR
+    s = TR.status()
+    if not s["tool"]:
+        return {"name": "翻译", "level": "info", "text": "翻译小工具没装（bash scripts/install_translate.sh）：通知照发、标题是原文"}
+    miss = [k for k, v in (s.get("langs") or {}).items() if v != "installed"]
+    if miss or not s.get("langs"):
+        return {"name": "翻译", "level": "warn",
+                "text": "语言包没下载（" + "、".join({"ja": "日本語", "en": "English"}.get(m, m) for m in miss) + "）：系统设置 → 通用 → 语言与地区 → 翻译语言 → 下载（含 中文（简体））"}
+    return {"name": "翻译", "level": "ok", "text": "消息标题翻成中文（本机离线）"}
+
+
 def _phone_item() -> dict:
     from . import panel_phone as PP
     try:
@@ -143,6 +156,9 @@ def build(now: dt.datetime | None = None, run=subprocess.run) -> dict:
         if c:
             items.append(c)
     items.append(_agents_item(run))
+    tr = _translate_item()
+    if tr:
+        items.append(tr)
     items.append(_phone_item())
     from .panel_phone import listening
     items.append({"name": "操作面板", "level": "ok" if listening(8765) else "bad",
