@@ -1,0 +1,66 @@
+{
+ "loop": 13,
+ "registered": "2026-10-12",
+ "plan": [
+  {
+   "id": "SQW",
+   "family": "选股·日历",
+   "route": "AB",
+   "verdict": null
+  },
+  {
+   "id": "YRE",
+   "family": "选股·日历",
+   "route": "AB",
+   "verdict": null
+  },
+  {
+   "id": "MON",
+   "family": "选股·日历",
+   "route": "AB",
+   "verdict": null
+  },
+  {
+   "id": "IDX",
+   "family": "选股·指数入替",
+   "route": "AB",
+   "verdict": null
+  },
+  {
+   "id": "VCP",
+   "family": "选股·波动收缩",
+   "route": "AB",
+   "verdict": null
+  },
+  {
+   "id": "DDS",
+   "family": "选股·深跌",
+   "route": "AB",
+   "verdict": null
+  },
+  {
+   "id": "CSE",
+   "family": "选股·信用利差",
+   "route": "AB",
+   "verdict": null
+  },
+  {
+   "id": "FYB",
+   "family": "选股·业绩意外",
+   "route": "J",
+   "verdict": null
+  },
+  {
+   "id": "SRN",
+   "family": "选股·空売り",
+   "route": "J",
+   "verdict": null
+  },
+  {
+   "id": "CHR",
+   "family": "选股·现金",
+   "route": "J",
+   "verdict": null
+  }
+ ]
+}
