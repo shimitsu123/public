@@ -213,3 +213,13 @@ def test_notifications_are_recorded_and_shown_with_jst_and_deeplink(monkeypatch)
     assert len((paths.out_dir() / notify.LOG_FILE).read_text(encoding="utf-8").splitlines()) == notify.LOG_KEEP
     h = panel._notify_log_card()
     assert "JST" in h and "id='l-" in h and "通知记录" in h
+
+
+def test_buttons_show_loading_state():
+    """2026-10-11 用户：点「刷新」不知道有没有反应 → 顶部进度条 + 按钮转圈（刷新中…）；发指令时点的那个按钮转圈。"""
+    import datetime as dt
+    from qbreak import panel
+    from qbreak.calendar_jp import JST
+    h = panel.render("paper", "t" * 40, dt.datetime(2026, 10, 11, 12, 0, tzinfo=JST))
+    assert "id='pbar'" in h and "reloadPage(b, '刷新中…')" in h and "button.loading::before" in h
+    assert "prefers-reduced-motion" in h and "classList.toggle('loading'" in h

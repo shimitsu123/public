@@ -139,7 +139,7 @@ h1{font-size:20px;margin:0 0 8px} h2{font-size:17px;margin:0 0 8px} h3{font-size
 .chip{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--chip);font-size:13px;color:var(--fg);white-space:nowrap}
 .head{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}.head b{white-space:nowrap}
 .hv{border-top:1px solid var(--line);padding:12px 0}.hv ul{margin:4px 0;padding-left:18px} details summary{cursor:pointer;padding:4px 0}
-.act{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}.act .btn{flex:1 1 140px}
+#pbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:99;overflow:hidden;display:none;pointer-events:none}#pbar::after{content:'';position:absolute;top:0;bottom:0;left:-40%;width:40%;background:var(--accent);animation:qbbar 1s ease-in-out infinite}body.loading #pbar{display:block}body.loading .pane{opacity:.55;transition:opacity .15s}@keyframes qbbar{0%{left:-40%}100%{left:100%}}@keyframes qbspin{to{transform:rotate(360deg)}}.btn.loading,button.loading{opacity:.85;pointer-events:none}.btn.loading::before,button.loading::before{content:'';display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:qbspin .7s linear infinite}@media (prefers-reduced-motion:reduce){#pbar::after{animation:none;left:0;width:100%;opacity:.6}.btn.loading::before,button.loading::before{animation:none}}.act{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}.act .btn{flex:1 1 140px}
 .btn{font:inherit;font-size:16px;min-height:44px;padding:10px 16px;border-radius:12px;border:1px solid var(--line);background:var(--card);
 color:var(--fg);cursor:pointer;touch-action:manipulation}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
@@ -299,7 +299,17 @@ const fmt = n => Number(n).toLocaleString('ja-JP');
 const yen = v => '¥' + fmt(Math.round(v));
 function toast(t, bad, sticky){const m=$('#toast');m.textContent=t+(sticky?'\\n（点一下关闭）':'');m.className='toast'+(bad?' bad':'');m.hidden=false;
   clearTimeout(toast.h); if(!sticky) toast.h=setTimeout(()=>{m.hidden=true;}, bad?9000:6000);}
-function busy(on){document.querySelectorAll('button').forEach(b=>{if(on){b.dataset.was=b.disabled?'1':'';b.disabled=true;}else{b.disabled=b.dataset.was==='1';}});}
+let LASTBTN=null;                                                        // 最近点的按钮：处理中在它上面转圈（2026-10-11 用户：要有 loading 的感觉）
+document.addEventListener('pointerdown', e=>{ const b=e.target.closest && e.target.closest('button'); if(b) LASTBTN=b; }, true);
+document.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ const b=document.activeElement; if(b && b.tagName==='BUTTON') LASTBTN=b; } }, true);
+function loading(on){ document.body.classList.toggle('loading', !!on); }
+function busy(on){document.querySelectorAll('button').forEach(b=>{if(on){b.dataset.was=b.disabled?'1':'';b.disabled=true;}else{b.disabled=b.dataset.was==='1';}});
+  loading(on); const b=LASTBTN; if(b){ b.classList.toggle('loading', !!on); b.setAttribute('aria-busy', on?'true':'false'); } }
+function reloadPage(b, label){                                          // 刷新：按钮转圈 + 顶部进度条，然后重新载入
+  if(b){ b.classList.add('loading'); b.setAttribute('aria-busy','true'); if(label) b.textContent=label; b.disabled=true; }
+  loading(true); setTimeout(()=>location.reload(), 30); }
+window.addEventListener('beforeunload', ()=>loading(true));
+window.addEventListener('pageshow', e=>{ if(e.persisted){ loading(false); document.querySelectorAll('button.loading').forEach(b=>{b.classList.remove('loading'); b.disabled=false;}); } });
 const HALT_TIP = CFG.remote ? '人不在 Mac 旁边时：在 claude.ai 的云端对话里说「停 / 今天不要下单」（Mac 的执行器下一次运行会停）'
                             : '在 Mac 的 Claude 对话里说「停 / 今天不要下单」';
 async function api(path, body){
@@ -328,7 +338,7 @@ async function api(path, body){
     return fail((halt ? 'HALT 没送到：' : '')+'连不上面板：'+e+'\\n（Mac 睡着了、面板没运行，或手机的 Tailscale 没连上）');
   }
 }
-function done(j){ if(!j) return; toast(j.msg || '已写'); setTimeout(()=>location.reload(), 2200); }
+function done(j){ if(!j) return; toast(j.msg || '已写'); loading(true); setTimeout(()=>location.reload(), 2200); }
 function sheet(id){ const d=$(id); if(d.showModal){ if(!d.open) d.showModal(); } else d.setAttribute('open',''); return d; }
 function closeAll(){ document.querySelectorAll('dialog[open]').forEach(d=>{ if(d.close) d.close(); else d.removeAttribute('open'); }); }
 let ASK=null, CUR=null;
@@ -535,7 +545,7 @@ document.addEventListener('click', async e=>{
   if(rk){ rk.removeAttribute('data-retry'); showK(rk); return; }           // K 线取不到 / 超时：点一下再取（同一只票已经在取 → 等那一个）
   const b=e.target.closest('[data-act]'); if(!b) return;
   const a=b.dataset.act, d=b.dataset;
-  if(a==='reload'){ location.reload(); return; }
+  if(a==='reload'){ reloadPage(b, '刷新中…'); return; }
   if(a==='close'){ closeAll(); return; }
   if(a==='ask-ok'){ const v=$('#ask-input').value, r=ASK; ASK=null; closeAll(); if(r) r({ok:true, value:v}); return; }
   if(a==='sell'){
@@ -1110,7 +1120,7 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) loadQ()
   async function tick(){
     n++;
     try{ const x=await req('/api/status?book='+encodeURIComponent(CFG.book),{credentials:'same-origin',cache:'no-store'});
-         if(x.r.ok && x.j && x.j.sig && x.j.sig!==s0.sig){ toast('状态更新了：刷新中…'); setTimeout(()=>location.reload(), 800); return; } }catch(e){}
+         if(x.r.ok && x.j && x.j.sig && x.j.sig!==s0.sig){ toast('状态更新了：刷新中…'); loading(true); setTimeout(()=>location.reload(), 800); return; } }catch(e){}
     if(n<12 && !document.hidden) setTimeout(tick, 10000);
   }
   setTimeout(tick, 10000);
@@ -2207,7 +2217,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
            "st": status_json(tag)[1],
            "gen": int(dt.datetime.now().timestamp() * 1000)}                                    # 页面生成时刻（离线时显示「几分钟前的数据」）                                                         # 〔77〕C UX-16：还在处理的指令 → 每 10 秒问一次   # 卖出的预计收益（按最近收盘；现价来了用现价的）
     js = _NET_JS + _JS.replace("__CFG__", json.dumps(cfg, ensure_ascii=False).replace("</", "<\\/"))
-    return _head("qbreak 操作面板") + "<body>" + _panes(H) + _dialogs(paper, cap) + f"<script>{js}</script></body></html>"
+    return _head("qbreak 操作面板") + "<body><div id='pbar' role='progressbar' aria-label='加载中'></div>" + _panes(H) + _dialogs(paper, cap) + f"<script>{js}</script></body></html>"
 
 
 def pair_page(code: str = "") -> str:
