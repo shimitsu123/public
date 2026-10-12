@@ -254,6 +254,7 @@ RANK_GROUPS = (("triggered", "今天出了买入信号"), ("rest", "观察中"))
 SG_PAGE = 5                               # 一组先显示几只（其余点「再显示」）
 
 
+MANUAL_SHOW_DAYS = 2                                        # 「交易」的手动指令：已经处理完的只显示最近几天
 AUTO_NEAR_DAYS = 5                                          # 「快要出」列到几个交易日以内的估计金叉
 
 
@@ -1206,7 +1207,10 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         rows.append(f"<div class='li'><div class='grow'><b>{_what(r)}</b> <span class='chip'>"
                     f"{'等下单（撤回中）' if r['id'] in dropped else '等下单'}</span>"
                     f"<div class='muted small'>{escape(str(r.get('at', ''))[5:16].replace('T', ' '))}</div></div>{btn}</div>")
-    for it in items[:20]:
+    cut = now - dt.timedelta(days=MANUAL_SHOW_DAYS)                 # 2026-10-12 用户：「交易里面只显示两天以内的」
+    recent = [it for it in items if it.get("status") in MO.ACTIVE or (_ts_jst(it.get("at")) or cut) > cut]   # 没处理完的一直显示
+    old_n = len(items) - len(recent)
+    for it in recent[:20]:
         can = (it.get("status") in MO.ACTIVE and it.get("kind") in MO.ORDER_KINDS and not it.get("cancel_req")
                and not (it.get("status") == "placed" and it.get("now")))          # 盘中的单已经发到交易所：页面上撤不了
         btn = (f"<button class='btn sm danger' data-act='cancel' data-id='{escape(it['id'])}' data-placed='{1 if it.get('status') == 'placed' else 0}'"
@@ -1218,7 +1222,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                     f"{(' · ' + escape(str(it['msg']))) if it.get('msg') else ''}</div></div>{btn}</div>")
     H.append(PANE + "trade")
     H.append("<section class='card' id='orders'><h2>手动指令</h2><div class='list'>"
-             + ("".join(rows) or "<div class='li muted'>还没有</div>") + "</div></section>")
+             + ("".join(rows) or f"<div class='li muted'>最近 {MANUAL_SHOW_DAYS} 天没有</div>") + "</div>"
+             + (f"<div class='muted small'>只显示最近 {MANUAL_SHOW_DAYS} 天的（没处理完的一直显示）；更早的 {old_n} 条不显示</div>" if old_n else "")
+             + "</section>")
     bl = man.get("blocks") or {}
     if bl:
         H.append("<section class='card'><h2>手动卖出后不自动买回</h2><div class='list'>" + "".join(

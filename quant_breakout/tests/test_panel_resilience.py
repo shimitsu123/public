@@ -105,3 +105,17 @@ def test_auto_buy_card_lists_planned_and_near_with_days():
     assert "约 400 股" in h and "买不起" in h and "其中 1 只出了信号也买不起" in h
     assert "9007" not in h and "9008" not in h                                 # 超过 5 天 / 闸门挡的不列
     assert panel._auto_buy_card({}, book, "paper", 1_000_000) == ""
+
+
+def test_trade_tab_shows_only_last_two_days_except_unfinished():
+    """2026-10-12 用户：「交易里面的股票只显示两天以内的，两天以上的不要」—— 没处理完的（等下单 / 已下单）一直显示。"""
+    old, new = "2026-10-01T09:00:00+09:00", "2026-10-05T20:00:00+09:00"            # AT = 2026-10-06 08:00
+    items = {"M-old-done": {"id": "M-old-done", "kind": "sell", "ticker": "6758.T", "status": "done", "at": old},
+             "M-old-pend": {"id": "M-old-pend", "kind": "sell", "ticker": "7203.T", "status": "pending", "at": old},
+             "M-new-done": {"id": "M-new-done", "kind": "unblock", "ticker": "9984.T", "status": "done", "at": new}}
+    _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": items})
+    html = panel.render("paper", "t" * 40, AT)
+    i = html.index("<h2>手动指令</h2>")
+    card = html[i:html.index("</section>", i)]
+    assert "M-old-pend" in card and "M-old-done" not in card and "10-05 20:00" in card
+    assert "只显示最近 2 天的（没处理完的一直显示）；更早的 1 条不显示" in card
