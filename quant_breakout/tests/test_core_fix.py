@@ -50,4 +50,4 @@ def test_panel_shows_buy_and_fix_buttons():
     from test_panel import _book
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core_fix": {"1655.T": 100}})
     h = panel.render("paper", "t" * 40, dt.datetime(2026, 10, 11, 12, 0, tzinfo=JST))
-    assert "data-act='corefix'" in h and "a==='corefix'" in h
+    assert "data-act='corefix'" in h and "a==='corefix'" in panel._JS

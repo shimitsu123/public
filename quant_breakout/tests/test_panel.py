@@ -217,12 +217,12 @@ def test_render_adjust_buttons_and_kline():
     assert "data-t='6758.T' data-kind='stock'" in html and "data-t='1545.T' data-kind='core'" in html
     assert "现在没拿" in html and "data-t='1482.T' data-kind='core'" in html
     assert "data-act='tf'" not in html and "data-act='sub'" not in html                # 没有整页一排的切换：每张图自己的（脚本画）
-    assert "kBar(box, 'ktop', 'ktf', TFS" in html and "kBar(box, 'kbot', 'ksub', SUBS" in html     # 上边沿 日K / 周K / 月K、下边沿 量 / MACD / DMI
+    assert "kBar(box, 'ktop', 'ktf', TFS" in panel._JS and "kBar(box, 'kbot', 'ksub', SUBS" in panel._JS     # 上边沿 日K / 周K / 月K、下边沿 量 / MACD / DMI
     assert "</script><b>x" not in html and "对冲版美国国债&lt;/script&gt;" in html
     assert "日K <b class='up'>往上走</b> · 涨势整齐" in html and "周K <b class='muted'>横着走</b>" in html
     assert "月K <b class='down'>往下走</b> · 跌势整齐" in html and '"上升": "往上走"' in html     # 图下的说法也从 kline.py 来（CFG.kp）
     assert '"when": "今天 09:00 开盘"' in html and "addWhen" not in html
-    assert "chart-data" not in html and "红色空心 = 涨" in html       # K 线数据不内嵌，打开时才取（/api/chart）
+    assert "chart-data" not in html and "红色空心 = 涨" in panel._JS       # K 线数据不内嵌，打开时才取（/api/chart）
     (paths.out_dir() / "charts_paper.json").unlink()
     html = panel.render("paper", "t" * 40, AT)                  # 还没有 K 线文件：占位文字、没有周期切换
     assert "K 线在执行器下一次运行之后显示" in html and "data-act='tf'" not in html and "data-act='sub'" not in html
@@ -359,19 +359,32 @@ def test_chart_endpoint_serves_one_ticker(server):
 
 
 def test_page_script_is_valid_javascript(tmp_path):
-    """页面里的脚本整段能被 JavaScript 解析（Python 字符串里的 \\n 转义写错会让整页的按钮和走势图都不工作）。没有 node 就跳过。"""
+    """页面的脚本（qbreak/static/*.js，浏览器原生 ES 模块）每个都能按模块语法解析；页面只引用 main.js、配置是能解析的 JSON；
+    每个 import 的名字对方模块都 export 了。没有 node 就跳过语法检查。"""
+    import re
     import shutil
     import subprocess
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("没有 node")
     _book()
     for mode in ("local", "remote"):
         html = panel.render("paper", "t" * 40, AT, mode=mode, device={"name": "x"}, phone={"port": 8766, "url": None, "devices": []})
-        f = tmp_path / f"{mode}.js"
-        f.write_text(html.split("<script>")[-1].split("</script>")[0], encoding="utf-8")
+        assert "<script>" not in html and f"<script type='module' src='/static/main.js?v={panel.ASSET_V}'></script>" in html
+        cfg = json.loads(html.split("<script type='application/json' id='qb-cfg'>")[1].split("</script>")[0])
+        assert cfg["book"] == "paper" and "auth" in cfg
+    files = {f.name: f.read_text(encoding="utf-8") for f in panel.STATIC_DIR.glob("*.js")}
+    exports = {n: set(re.findall(r"^export (?:async )?(?:function|const|let) ([A-Za-z_$][\w$]*)", s, re.M))
+               | set(re.findall(r"^export (?:const|let) [^;]*?,\s*([A-Za-z_$][\w$]*)\s*=", s, re.M)) for n, s in files.items()}
+    for n, s in files.items():
+        for names, mod in re.findall(r"^import \{([^}]*)\} from '\./([\w]+\.js)';", s, re.M):
+            for x in (y.strip() for y in names.split(",")):
+                assert mod in files and x in exports[mod], (n, x, mod)
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("没有 node")
+    for n, s in files.items():
+        f = tmp_path / (n[:-3] + ".mjs")
+        f.write_text(s, encoding="utf-8")
         r = subprocess.run([node, "--check", str(f)], capture_output=True, text=True, timeout=60)
-        assert r.returncode == 0, r.stderr[-500:]
+        assert r.returncode == 0, (n, r.stderr[-500:])
 
 
 def _js_fn(src: str, name: str) -> str:

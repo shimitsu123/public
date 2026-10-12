@@ -221,5 +221,5 @@ def test_buttons_show_loading_state():
     from qbreak import panel
     from qbreak.calendar_jp import JST
     h = panel.render("paper", "t" * 40, dt.datetime(2026, 10, 11, 12, 0, tzinfo=JST))
-    assert "id='pbar'" in h and "reloadPage(b, '刷新中…')" in h and "button.loading::before" in h
-    assert "prefers-reduced-motion" in h and "classList.toggle('loading'" in h
+    assert "id='pbar'" in h and "reloadPage(b, '刷新中…')" in panel._JS and "button.loading::before" in panel._CSS
+    assert "prefers-reduced-motion" in panel._CSS and "classList.toggle('loading'" in panel._JS

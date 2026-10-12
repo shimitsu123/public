@@ -703,16 +703,19 @@ def test_render_identity_footer_and_timeout_script(tmp_path):
     dev = {"id": "ts-0123456789", "name": "Tailscale 账户 ow***@e***.com", "kind": "ts", "login": "ow***@e***.com"}
     remote = panel.render("paper", "c" * 40, AT, mode="remote", device=dev)
     assert "已用 Tailscale 账户登录（ow***@e***.com；不用配对）" in remote and "data-act='unpair'" not in remote
-    assert "TMO = 15000" in remote and "AbortController" in remote and "Mac 可能在睡眠：取不到" in remote
-    assert "data-retry" in remote and "'timeout'" in remote and "HALT 可能没送到" in remote and "HALT_TIP" in remote
-    assert "KP[t]" in remote and "'auth'" in remote and "box.onkeydown=" in remote and "addEventListener('keydown', ev=>" not in remote
+    js = panel._JS                                                    # 2026-10-12 起页面脚本是 /static/ 下的模块（页面里只引用）
+    assert "src='/static/main.js?v=" in remote and "id='qb-cfg'" in remote and "<script>" not in remote
+    assert "TMO = 15000" in js and "AbortController" in js and "Mac 可能在睡眠：取不到" in js
+    assert "data-retry" in js and "'timeout'" in js and "HALT 可能没送到" in js and "HALT_TIP" in js
+    assert "KP[t]" in js and "'auth'" in js and "box.onkeydown=" in js and "addEventListener('keydown', ev=>" not in js
     paired = panel.render("paper", "c" * 40, AT, mode="remote", device=dict(dev, paired="iPhone"))
     assert "以前也配对过（iPhone）" in paired and "data-act='unpair'" in paired
     local = panel.render("paper", "t" * 40, AT, phone={"port": 8766, "url": f"https://{TS_HOST}/", "devices": [],
                                                        "identity": {"on": True, "off": False, "owner": "ow***@e***.com", "why": None}})
     assert "按 Tailscale 账户登录：<b>开</b>" in local and '"remote": false' in local and "data-act='pair-new'" in local
     pg = panel.pair_page("")
-    assert "TMO = 15000" in pg and "Mac 可能在睡眠" in pg and "同一个 Tailscale 账户" in pg and "在 Mac 上重新生成" in pg
+    pjs = panel.js_plain("pair") + panel._NET_JS
+    assert "src='/static/pair.js?v=" in pg and "TMO = 15000" in pjs and "Mac 可能在睡眠" in pjs and "同一个 Tailscale 账户" in pg and "在 Mac 上重新生成" in pjs
 
 
 def _node():
@@ -758,11 +761,8 @@ globalThis.fetch = (url, opt) => new Promise((res, rej) => {
     pages = {"pair": panel.pair_page(""), "remote_ident": panel.render("paper", "c" * 40, AT, mode="remote", device=dev),
              "remote_paired": panel.render("paper", "c" * 40, AT, mode="remote", device={"id": "0123456789ab", "name": "iPhone"}),
              "local": panel.render("paper", "t" * 40, AT, phone={"port": 8766, "url": None, "devices": [], "identity": {}})}
-    for name, html in pages.items():
-        g = tmp_path / f"{name}.js"
-        g.write_text(html.split("<script>")[-1].split("</script>")[0], encoding="utf-8")
-        r = subprocess.run([node, "--check", str(g)], capture_output=True, text=True, timeout=60)
-        assert r.returncode == 0, (name, r.stderr[-500:])
+    for name, html in pages.items():                                   # 页面里没有内联脚本了：只引用 /static/ 的模块（各模块的语法见 test_panel）
+        assert "<script>" not in html and ("/static/pair.js" in html if name == "pair" else "/static/main.js" in html), name
 
 
 def test_chart_and_api_failure_paths_in_node(tmp_path):

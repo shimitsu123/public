@@ -421,7 +421,7 @@ def test_panel_confirm_note_names_real_money(tag, expect):
     from qbreak import panel as P
     html = P.render(tag, "t" * 40, MON_0800.replace(hour=20))
     assert ('"real": true' in html) is expect
-    assert "CFG.real ? '\\n\\n★ 真钱（立花本番）：执行器会在立花真的下单。'" in html
+    assert "CFG.real ? '\\n\\n★ 真钱（立花本番）：执行器会在立花真的下单。'" in P._JS
 
 
 # ────────── run.py 的接线（假的引擎 / 执行器：test_run_status 的那一套）──────────

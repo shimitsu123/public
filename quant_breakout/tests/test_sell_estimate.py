@@ -39,8 +39,7 @@ def _book(trades=TRADES, hold=26, last=2600.0, shares=100, eq=None):
 
 
 def _cfg(h: str) -> dict:
-    i = h.index("const CFG = ") + len("const CFG = ")
-    return json.loads(h[i:h.index(";\n", i)])
+    return json.loads(h.split("<script type='application/json' id='qb-cfg'>")[1].split("</script>")[0])   # 2026-10-12 起配置是 JSON 块
 
 
 # ────────── ① 估算 ──────────
