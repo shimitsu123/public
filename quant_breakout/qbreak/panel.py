@@ -752,8 +752,8 @@ document.addEventListener('click', async e=>{
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel_order', cid:d.cid})); return;
   }
   if(a==='cancel'){                                                       // 撤单前一定确认（2026-10-12 用户：防止误撤）：写清撤的是哪一条
-    const q=await ask('确认撤单？', (d.desc||d.id)+'\n\n'+(d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天的单」的「撤单」撤。' : '还没下单：撤掉之后不会下。')
-      +(+d.fund>0 ? '\n为这笔买入凑钱的 '+d.fund+' 条卖出也一起撤掉。' : '')+'\n（指令 '+d.id+'）', '确认撤单', {danger:true});
+    const q=await ask('确认撤单？', (d.desc||d.id)+'\\n\\n'+(d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天的单」的「撤单」撤。' : '还没下单：撤掉之后不会下。')
+      +(+d.fund>0 ? '\\n为这笔买入凑钱的 '+d.fund+' 条卖出也一起撤掉。' : '')+'\\n（指令 '+d.id+'）', '确认撤单', {danger:true});
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
   }
   if(a==='corefix' || a==='corefix-clear'){                               // 核心 ETF 固定口数 / 恢复按规则（2026-10-11）
