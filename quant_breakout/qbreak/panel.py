@@ -238,7 +238,9 @@ details.nw.lv-hi{border-left:4px solid var(--neg);padding-left:8px}details.nw.lv
 .axt{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px;margin:2px 0 8px}
 .axt>div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 8px 5px;min-width:0}
 .axt .l{font-size:12px;color:var(--muted);line-height:1.4}.axt .s{font-size:12px;color:var(--muted);line-height:1.4;overflow-wrap:anywhere}
-.axt .v{font-size:19px;font-weight:700;line-height:1.3;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.axt .v{font-size:clamp(15px,4.4vw,19px);font-weight:700;line-height:1.3;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.axt .mt{height:6px;border-radius:3px;background:var(--line);margin:3px 0 2px;overflow:hidden}.axt .mt i{display:block;height:100%;border-radius:3px;background:var(--muted)}
+.axt .mt.hot i{background:var(--neg)}
 .axt .bad{border-color:var(--neg)}.axt .bad .v{color:var(--neg)}
 .pl{margin:10px 0;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:14px;line-height:1.55;
 white-space:normal;font-variant-numeric:tabular-nums}.pl .up{color:var(--up)}.pl .down{color:var(--down)}.pl .muted{font-size:13px}
@@ -1611,6 +1613,8 @@ def _exit_html(info: dict | None) -> str:
     tiles = "".join(
         f"<div class='{'bad' if x.get('tone') == 'bad' else ''}'><div class='l'>{escape(str(x['label']))}</div>"
         f"<div class='v'>{escape(str(x['value']))}</div>"
+        + (f"<div class='mt{' hot' if x['meter'].get('hot') else ''}' title='离线越远条越长（15% 以上满格）'>"
+           f"<i style='width:{float(x['meter']['frac']) * 100:.0f}%'></i></div>" if x.get("meter") else "")
         + (f"<div class='s'>{dots(x.get('dots'))}{escape(str(x.get('sub') or ''))}</div>" if x.get("sub") or x.get("dots") else "")
         + "</div>" for x in info.get("tiles") or [])
     rows = "".join(

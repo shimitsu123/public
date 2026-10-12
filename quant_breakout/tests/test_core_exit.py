@@ -31,8 +31,8 @@ def test_nasdaq_etf_shows_distance_confirm_days_and_where_the_money_goes():
     """用户点名的三个数在最上面：离转熊线 −11.4%、已确认 0 / 5 天、转熊后留现金（股债相关 +0.40 不是负相关 → 不换 1482）。"""
     _stats_file()
     info = CX.build("1545.T", SM, BOOK, lot=10)
-    assert [(x["label"], x["value"]) for x in info["tiles"]] == [("离转熊线", "−11.4%"), ("已确认", "0 / 5 天"), ("转熊后", "留现金")]
-    assert info["tiles"][0]["sub"] == "7,819 → 6,928" and info["tiles"][1]["dots"] == (0, 5) and info["tiles"][2]["sub"] == "股债相关 +0.40"
+    assert [(x["label"], x["value"]) for x in info["tiles"]] == [("离转熊线", "↓ 11.4%"), ("已确认", "0 / 5 天"), ("转熊后", "留现金")]
+    assert info["tiles"][0]["sub"] == "跌到 6,928 转熊" and info["tiles"][0]["meter"] == {"frac": 0.76, "hot": False} and info["tiles"][1]["dots"] == (0, 5) and info["tiles"][2]["sub"] == "股债相关 +0.40"
     assert [r["k"] for r in info["rows"]] == ["全部卖", "卖完去哪", "部分卖"]
     full, after, part = info["rows"]
     assert full["text"] == "S&P500 连续 5 天收在转熊线下 → 下一个开盘全部卖（寄付成行）" and full["chips"] == []
@@ -48,7 +48,7 @@ def test_nasdaq_etf_shows_distance_confirm_days_and_where_the_money_goes():
     assert "转回牛市 = S&P500 连续 5 天收在转牛线上（250 日均价 × 1.03）" in notes and "交易日 07:40 执行器决策 → 09:00 开盘寄付成行卖出" in notes
     assert "从高点起中位数约 40 个交易日才判熊；误报 5 次（卖了又买回）" in notes and "不超过权益的 10% 就不动" in notes
     assert not info["hot"] and info["asof_md"] == "10/06" and (info["mode"], info["key"]) == ("Q1B", "US")
-    assert CX.lines(info)[0] == "离转熊线 −11.4%（7,819 → 6,928） · 已确认 0 / 5 天 · 转熊后 留现金（股债相关 +0.40）"
+    assert CX.lines(info)[0] == "离转熊线 ↓ 11.4%（跌到 6,928 转熊） · 已确认 0 / 5 天 · 转熊后 留现金（股债相关 +0.40）"
     (paths.home() / "bullbear.json").unlink()                       # 数据目录没有 → 用仓库里的 var/bullbear.json
     assert "个交易日才判熊" in " ".join(CX.build("1545.T", SM, BOOK, lot=10)["notes"])
 
@@ -65,7 +65,7 @@ def test_confirming_near_and_negative_correlation_turn_red():
     assert info["hot"] and info["rows"][1]["text"] == "现在转熊的话：换对冲版美债 1482"
     assert info["rows"][1]["sub"].startswith("股债 63 天相关 −0.21（10/06） < 0：那天还是负相关就换 1482，变成 ≥ 0 就留现金")
     t0 = CX.build("1545.T", {**SM, "market": {"US": {**BB_US, "to_flip_pct": -2.0, "phase": "bull_near"}}}, BOOK)["tiles"][0]
-    assert (t0["value"], t0["tone"]) == ("−2.0%", "bad")                       # 离转熊线不到 3%：标红
+    assert (t0["value"], t0["tone"], t0["meter"]["hot"]) == ("↓ 2.0%", "bad", True)                       # 离转熊线不到 3%：标红
     ic0 = {**IC_Q1B, "bond_refuge": {"on": None}}                              # 股债相关算不了 → 按不拿 1482
     assert CX.build("1545.T", {**SM, "idle_cash": ic0}, BOOK)["tiles"][2]["value"] == "留现金"
 
@@ -88,7 +88,7 @@ def test_hedged_treasury_1482_sells_on_us_bull_or_when_correlation_turns():
                                                         "win": 63, "us_bear": True, "hold": True}}
     book = {"state": {**ST, "core_units": {"1545.T": 0, "1482.T": 600}, "core_last": {"1482.T": 1500.0}}}
     info = CX.build("1482.T", {**SM, "market": {"US": bb}, "idle_cash": ic}, book)
-    assert [(x["label"], x["value"]) for x in info["tiles"]] == [("离转牛线", "+12.7%"), ("已确认", "0 / 5 天"), ("股债相关", "−0.25")]
+    assert [(x["label"], x["value"]) for x in info["tiles"]] == [("离转牛线", "↑ 12.7%"), ("已确认", "0 / 5 天"), ("股债相关", "−0.25")]
     assert info["tiles"][2]["sub"] == "63 天；≥ 0 就卖" and info["tiles"][2]["tone"] is None and not info["hot"]
     full, alt = info["rows"][:2]
     assert full["text"] == "S&P500 连续 5 天收在转牛线上 → 卖它、换回纳斯达克 100（1545）"
@@ -106,7 +106,7 @@ def test_leftover_etf_original_rule_and_missing_readings():
     info = CX.build("1655.T", SM, book)                                        # Q1B 里没有 1655（以前的方式留下的）
     assert info["tiles"][0]["value"] == "全部卖" and info["rows"][0]["text"].startswith("已经不在现在的闲置资金方式里") and info["hot"]
     info = CX.build("1655.T", {**SM, "idle_cash": {"mode": "K0", "label": IC.LABELS["K0"]}}, book)   # 原规则：1655 + 美股牛熊
-    assert [x["value"] for x in info["tiles"]] == ["−11.4%", "0 / 5 天", "留现金"] and "单独跌" not in info["never"]
+    assert [x["value"] for x in info["tiles"]] == ["↓ 11.4%", "0 / 5 天", "留现金"] and "单独跌" not in info["never"]
     assert info["rows"][1]["sub"] == "之后 S&P500 转回牛市 → 再买回 1655"
     info = CX.build("1545.T", {**SM, "market": {}}, BOOK)                     # 旧的汇总：没有牛熊读数
     assert info["tiles"] == [] and info["rows"][0]["sub"] == "S&P500 的牛熊读数还没有（执行器下一次运行之后显示）"
@@ -183,7 +183,7 @@ def test_panel_etf_card_shows_when_it_would_be_sold_on_mac_and_phone():
         i = h.index("data-exit='1545.T'")
         blk = h[i:h.index("data-kind='core'", i)]
         assert "<b>什么时候会自动卖</b><span class='muted small'>按 10/06 收盘</span>" in blk
-        assert "<div class='l'>离转熊线</div><div class='v'>−11.4%</div><div class='s'>7,819 → 6,928</div>" in blk
+        assert "<div class='l'>离转熊线</div><div class='v'>↓ 11.4%</div><div class='mt' title='离线越远条越长（15% 以上满格）'><i style='width:76%'></i></div><div class='s'>跌到 6,928 转熊</div>" in blk
         assert "<div class='l'>已确认</div><div class='v'>0 / 5 天</div>" in blk and blk.count("<i class=''></i>") == 5
         assert "<div class='l'>转熊后</div><div class='v'>留现金</div><div class='s'>股债相关 +0.40</div>" in blk
         assert "S&amp;P500 连续 5 天收在转熊线下 → 下一个开盘全部卖（寄付成行）" in blk and "现在转熊的话：留现金" in blk

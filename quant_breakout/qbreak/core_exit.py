@@ -62,6 +62,21 @@ def _sg(v, nd: int = 1) -> str:
     return "—" if v is None else f"{v:+.{nd}f}".replace("-", "−")
 
 
+FAR_PCT = 15.0                                               # 离翻转线 15% 以上 = 距离条满格（同市场仪表盘的牛熊刻度）
+
+
+def _away(dist) -> str:
+    """离翻转线多远 → 一眼能看的「↓ 11.2%」（还要跌）/「↑ 3.0%」（还要涨）；没有 → 「—」。"""
+    v = _f(dist)
+    return "—" if v is None else f"{'↓' if v < 0 else '↑'} {abs(v):.1f}%"
+
+
+def _meter(dist, hot: bool) -> dict | None:
+    """距离条：离线越远条越长（≥ FAR_PCT 满格），快到了标红。"""
+    v = _f(dist)
+    return None if v is None else {"frac": round(min(abs(v) / FAR_PCT, 1.0), 3), "hot": bool(hot)}
+
+
 def _code(t: str) -> str:
     return str(t).split(".")[0]
 
@@ -105,7 +120,7 @@ def market_row(bb: dict | None, m: str, flip_to: str, *, then: str = "下一个�
     if n >= 1:
         out["chips"].append({"text": f"已在{word}线{side} {abs(dist or 0):.1f}%，再 {max(k - n, 1)} 天就{word}", "tone": "bad"})
     elif dist is not None:
-        out["chips"].append({"text": f"离{word}线 {_sg(dist)}%", "tone": "bad" if hot else None})
+        out["chips"].append({"text": f"离{word}线还要{'跌' if dist < 0 else '涨'} {abs(dist):.1f}%", "tone": "bad" if hot else None})
     out["chips"].append({"text": f"已确认 {n} / {k} 天", "tone": "bad" if n >= 1 else None, "dots": (n, k)})
     mult = f"{1 - b:g}" if flip_to == "bear" else f"{1 + b:g}"
     out["formula"] = f"{word}线 {_pt(out['line'])} = {L} 日均价 {_pt(out['ma'])} × {mult}（线每天跟着均价动）"
@@ -128,8 +143,9 @@ def market_tiles(r: dict) -> list[dict]:
     if n >= 1:
         first = {"label": f"已在{word}线{side}", "value": f"{abs(dist or 0):.1f}%", "sub": f"{name} {_pt(r['close'])}", "tone": "bad"}
     else:
-        first = {"label": f"离{word}线", "value": f"{_sg(dist)}%" if dist is not None else "—",
-                 "sub": f"{_pt(r['close'])} → {_pt(r['line'])}", "tone": "bad" if r["hot"] else None}
+        move = "跌" if (dist or 0) < 0 else "涨"
+        first = {"label": f"离{word}线", "value": _away(dist), "meter": _meter(dist, r["hot"]),
+                 "sub": f"{move}到 {_pt(r['line'])} {word}" if r.get("line") is not None else "", "tone": "bad" if r["hot"] else None}
     return [first, {"label": "已确认", "value": f"{n} / {k} 天", "sub": f"再 {max(k - n, 1)} 天就{word}" if n >= 1 else "",
                     "dots": (n, k), "tone": "bad" if n >= 1 else None}]
 
