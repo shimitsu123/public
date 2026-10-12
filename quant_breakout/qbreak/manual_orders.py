@@ -149,6 +149,12 @@ def normalize(req: dict) -> dict:
         if not re.fullmatch(r"M[0-9A-Za-z\-]{6,60}", tg):
             raise ValueError("撤回要给指令 id（例 M20261006-081500-sell-7203）")
         out["target"] = tg
+    if kind in ("adjust", "buy"):                          # 买入钱不够 → 从持仓平摊凑（2026-10-12）：买的那条记 fund，凑钱卖的那几条记 fund_for
+        if str(req.get("fund") or "") == "split":
+            out["fund"] = "split"
+        ff = str(req.get("fund_for") or "").strip().upper()
+        if ff and _TICKER.match(ff):
+            out["fund_for"] = ff
     note = " ".join(str(req.get("note") or "").split())
     if note:
         out["note"] = note[:200]
@@ -319,6 +325,74 @@ def adjust_plan(rec: dict, state: dict, cap_pct: float = CAP_PCT, lot: int = LOT
     pct = (lambda n: round(n * px / eq * 100, 2) if eq > 0 and px > 0 else None)
     return {"cur": cur, "want": want, "target": tgt, "delta": tgt - cur, "px": px, "eq": eq, "cur_pct": pct(cur),
             "new_pct": pct(tgt), "capped": capped, "cap_pct": cap_pct}
+
+
+CASH_BUF_PCT = 1.0                      # 执行器的现金缓冲（config.cash_buffer_pct）：页面估算「现在能用的现金」用
+
+
+def fund_holdings(book: dict | None, tag: str | None = None) -> dict:
+    """「买入钱不够 → 从持仓平摊凑」用的数字（页面 CFG 与提交时的检查同一份）：
+    {"cash": 现在能用的现金（账本现金 × (1 − 缓冲)）, "hold": [{"t", "kind": stock / core, "cur", "px", "lot"}],
+     "busy": [还有没处理完的指令 / 规则在卖的票：不拿来凑]}。价格 = 账本里的最近收盘（估算）。"""
+    st = (book or {}).get("state") or {}
+    man = (book or {}).get("manual") or {}
+    waiting = unseen(tag, book) if tag else []
+    busy = {r.get("ticker") for r in _live(man.get("items") or {}, waiting, ORDER_KINDS) if r.get("ticker")}
+    busy |= set(st.get("pending_exit") or {})
+    hold = []
+    for t, p in (st.get("pos") or {}).items():
+        px = float(p.get("last_close") or p.get("entry_px") or 0)
+        hold.append({"t": t, "kind": "stock", "cur": int(p.get("shares") or 0), "px": px, "lot": LOT})
+    for t, u in (st.get("core_units") or {}).items():
+        c = core_info(book, t)
+        px = float((c or {}).get("px") or (st.get("core_last") or {}).get(t) or 0)
+        if int(u or 0) > 0:
+            hold.append({"t": t, "kind": "core", "cur": int(u), "px": px, "lot": core_lot(book, t)})
+    cash = float(st.get("cash_jpy") or 0) * (1 - CASH_BUF_PCT / 100)
+    return {"cash": round(cash), "hold": hold, "busy": sorted(busy)}
+
+
+def fund_split(cost: float, fh: dict, skip: str | None = None) -> dict | None:
+    """买入要花 cost 円、现金不够 → 差额按金额平摊到每只持仓（个股 + 核心 ETF；skip = 要买的这只、busy 的不算）：
+    每只先分「差额 ÷ 只数」，不够分的那只卖完、剩下的再平摊（注水法）；个股按单元取最接近的整数单元，
+    核心 ETF 补足剩下的（向上取整到单元）；还不够 → 个股再加单元（一单元金额小的先加）。
+    → {"short", "rows": [{"t", "kind", "cur", "sell", "yen", "after"}], "got", "left"（凑不齐的）}；现金够 → None。
+    页面的 fundSplit（qbreak/panel.py 的 JS）与这里同一个算法。"""
+    short = float(cost) - float(fh.get("cash") or 0)
+    if short <= 0:
+        return None
+    busy = set(fh.get("busy") or [])
+    H = [dict(h) for h in fh.get("hold") or [] if h["t"] != skip and h["t"] not in busy and h["cur"] > 0 and h["px"] > 0]
+    H.sort(key=lambda h: (h["cur"] * h["px"], h["t"]))
+    rem, k = short, len(H)
+    for h in H:
+        h["give"] = min(h["cur"] * h["px"], rem / k)
+        rem -= h["give"]
+        k -= 1
+    got = 0.0
+    for h in H:
+        h["sell"] = 0
+        if h["kind"] == "stock":
+            h["sell"] = min(h["cur"], int(round(h["give"] / h["px"] / h["lot"])) * h["lot"])
+            got += h["sell"] * h["px"]
+    cores = [h for h in H if h["kind"] == "core"]
+    need, k = short - got, len(cores)
+    for h in sorted(cores, key=lambda h: (h["cur"] * h["px"], h["t"])):
+        g = min(h["cur"] * h["px"], max(0.0, need) / k)
+        h["sell"] = min(h["cur"], int(math.ceil(g / h["px"] / h["lot"] - 1e-9)) * h["lot"])
+        need -= h["sell"] * h["px"]
+        k -= 1
+        got += h["sell"] * h["px"]
+    while got < short:                                     # 还不够：个股再加一个单元（一单元金额小的先加）
+        room = [h for h in H if h["kind"] == "stock" and h["sell"] + h["lot"] <= h["cur"]]
+        if not room:
+            break
+        h = min(room, key=lambda h: (h["lot"] * h["px"], h["t"]))
+        h["sell"] += h["lot"]
+        got += h["lot"] * h["px"]
+    rows = [{"t": h["t"], "kind": h["kind"], "cur": h["cur"], "sell": h["sell"], "yen": round(h["sell"] * h["px"]),
+             "after": h["cur"] - h["sell"]} for h in sorted(H, key=lambda h: h["t"]) if h["sell"] > 0]
+    return {"short": round(short), "rows": rows, "got": round(got), "left": round(max(0.0, short - got))}
 
 
 def _exit_text(why: str) -> str:

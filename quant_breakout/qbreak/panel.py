@@ -241,6 +241,12 @@ details.nw.lv-hi{border-left:4px solid var(--neg);padding-left:8px}details.nw.lv
 .axt .v{font-size:clamp(15px,4.4vw,19px);font-weight:700;line-height:1.3;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .axt .mt{height:6px;border-radius:3px;background:var(--line);margin:3px 0 2px;overflow:hidden}.axt .mt i{display:block;height:100%;border-radius:3px;background:var(--muted)}
 .axt .mt.hot i{background:var(--neg)}
+.buyr{width:100%;margin:8px 0 2px}
+.fund{margin:8px 0 4px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}.fund .fh{font-weight:600;margin-bottom:6px}
+.fseg{margin:0 0 6px}.frow{display:grid;grid-template-columns:5.2em minmax(0,1fr) auto;align-items:center;gap:2px 8px;padding:3px 0}
+.frow .ft{font-variant-numeric:tabular-nums}.frow .fv{font-size:13px;font-variant-numeric:tabular-nums;text-align:right}
+.fbar{height:6px;border-radius:3px;background:var(--line);overflow:hidden}.fbar i{display:block;height:100%;background:var(--neg);border-radius:3px}
+.frow .fsub{grid-column:2 / 4}
 .axf{display:flex;flex-wrap:wrap;align-items:center;gap:4px 2px}.axa{color:var(--muted);padding:0 3px}
 .axs{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:13px;line-height:1.5}
 .axs.bad{border-color:var(--neg);color:var(--neg)}.axs.hot{border-color:var(--neg)}
@@ -447,7 +453,7 @@ function adjBar(){                                                         // �
 }
 function adjPrev(){
   const go=$('#adj-go'), out=$('#adj-prev'), c=ADJ, cap=adjCap(), n=adjTarget();
-  go.className='btn primary';
+  go.className='btn primary'; ADJ.cost=0; fundBox($('#adj-fund'), 0, c.t);
   const r=$('#adj-range'); if(n!=null) r.value=Math.min(+r.max, n);
   adjBar();
   if(n==null){ out.textContent='输入目标（'+UW()+'数 / 金额 / 占总权益 %）'; go.textContent='确认'; go.disabled=true; return; }
@@ -471,8 +477,9 @@ function adjPrev(){
     out.textContent = full ? '已经到单只上限 '+CFG.cap+'%：不能再加' : '再加 '+fmt(LOT)+' 股就超过单只上限 '+CFG.cap+'%：不能再加';
     go.textContent='确认'; go.disabled=true; return;
   }
+  ADJ.cost=k*c.px*1.03; fundBox($('#adj-fund'), ADJ.cost, c.t);
   out.textContent='买入 '+fmt(k)+' 股（约 '+yen(k*c.px)+'）：'+fmt(c.shares)+' → '+fmt(t)+' 股，约占权益 '+pctOf(t)+note
-    +'\\n'+CFG.when+'买入（最高 '+yen(c.px*1.03)+' = 收盘 ×1.03）；钱不够先卖核心 ETF；只做一次';
+    +'\\n'+CFG.when+'买入（最高 '+yen(c.px*1.03)+' = 收盘 ×1.03）；只做一次';
   go.textContent='确认买入 '+fmt(k)+' 股'; go.disabled=false;
 }
 function adjPrevFix(n){                                                    // 核心 ETF 固定口数（2026-10-11）：买入 / 卖出多少、占权益、什么时候、之后怎样
@@ -507,6 +514,53 @@ function adjPrevCore(n){                                                   // �
     +(sell ? estLine(estOf(c.t), k, '口') : '')+note+ratio+'\\n'+CFG.when+(sell ? '卖出' : '买入');
   go.textContent=(sell ? '确认卖出 ' : '确认买入 ')+fmt(k)+' 口'; go.className=sell ? 'btn danger' : 'btn primary'; go.disabled=false;
 }
+// ── 买入钱不够 → 从持仓平摊凑（2026-10-12；与 manual_orders.fund_split 同一个算法）：差额按金额平分到每只持仓，
+//    不够分的卖完、剩下的再平分；个股按单元取最接近的整数单元，核心 ETF 补足剩下的 ──
+let FUND_MODE = 'split';
+function fundSplit(cost, skip){
+  const F=CFG.fund||{}, short=cost-(F.cash||0); if(!(short>0)) return null;
+  const busy=F.busy||[];
+  const H=(F.hold||[]).filter(h=>h.t!==skip && busy.indexOf(h.t)<0 && h.cur>0 && h.px>0).map(h=>Object.assign({}, h));
+  const by=(a,b)=>(a.cur*a.px-b.cur*b.px) || (a.t<b.t ? -1 : a.t>b.t ? 1 : 0);
+  H.sort(by);
+  let rem=short, k=H.length;
+  for(const h of H){ h.give=Math.min(h.cur*h.px, rem/k); rem-=h.give; k--; }
+  let got=0;
+  for(const h of H){ h.sell=0; if(h.kind==='stock'){ h.sell=Math.min(h.cur, Math.round(h.give/h.px/h.lot)*h.lot); got+=h.sell*h.px; } }
+  const cores=H.filter(h=>h.kind==='core').sort(by); let need=short-got; k=cores.length;
+  for(const h of cores){ const g=Math.min(h.cur*h.px, Math.max(0, need)/k);
+    h.sell=Math.min(h.cur, Math.ceil(g/h.px/h.lot-1e-9)*h.lot); need-=h.sell*h.px; k--; got+=h.sell*h.px; }
+  while(got<short){
+    const room=H.filter(h=>h.kind==='stock' && h.sell+h.lot<=h.cur); if(!room.length) break;
+    room.sort((a,b)=>(a.lot*a.px-b.lot*b.px) || (a.t<b.t ? -1 : 1)); const h=room[0]; h.sell+=h.lot; got+=h.lot*h.px;
+  }
+  const rows=H.filter(h=>h.sell>0).sort((a,b)=>a.t<b.t ? -1 : 1)
+    .map(h=>({t:h.t, kind:h.kind, cur:h.cur, sell:h.sell, yen:Math.round(h.sell*h.px), after:h.cur-h.sell}));
+  return {short:Math.round(short), rows:rows, got:Math.round(got), left:Math.round(Math.max(0, short-got))};
+}
+function fundBox(el, cost, skip){                                          // 拖动 / 输入时实时更新：要卖哪几只、各卖多少
+  if(!el) return; el.textContent='';
+  const F=CFG.fund||{}, p=cost>0 ? fundSplit(cost, skip) : null;
+  if(!p){ if(cost>0) nd('div', 'muted small', '现金约 '+yen(F.cash||0)+'：够买，不用卖别的', el); return; }
+  const box=nd('div', 'fund', null, el);
+  nd('div', 'fh', '现金约 '+yen(F.cash||0)+'，还差约 '+yen(p.short), box);
+  const seg=nd('div', 'seg fseg', null, box);
+  for(const [m, lab] of [['split', '各持仓平摊卖'], ['core', '只卖核心 ETF']]){
+    const b=nd('button', null, lab, seg); b.dataset.act='fund-mode'; b.dataset.m=m; b.setAttribute('aria-pressed', FUND_MODE===m ? 'true' : 'false'); }
+  if(FUND_MODE==='core'){ nd('div', 'muted small', '执行器按当时还缺多少卖核心 ETF（原来的做法）；核心 ETF 不够 → 少买', box); return; }
+  if(!p.rows.length){ nd('div', 'neg small', '没有能卖来凑的持仓（都有没处理完的指令 / 规则在卖）：执行器会少买', box); return; }
+  const mx=Math.max.apply(null, p.rows.map(r=>r.yen));
+  for(const r of p.rows){
+    const row=nd('div', 'frow', null, box), U=r.kind==='core' ? '口' : '股';
+    nd('span', 'ft', r.t.replace('.T', '')+(r.kind==='core' ? ' ETF' : ''), row);
+    const bar=nd('span', 'fbar', null, row); nd('i', null, null, bar).style.width=(r.yen/mx*100).toFixed(0)+'%';
+    nd('span', 'fv', '卖 '+fmt(r.sell)+' '+U+' ≈ '+yen(r.yen), row);
+    nd('div', 'muted small fsub', fmt(r.cur)+' → '+fmt(r.after)+' '+U+(r.after===0 ? '（全部卖出）' : ''), row);
+  }
+  nd('div', 'muted small', '合计约 '+yen(p.got)+(p.left>0 ? '，还差 '+yen(p.left)+' → 执行器会少买' : '')
+    +' · 按最近收盘估算，个股按 100 股取整', box);
+}
+function fundBody(body, cost){ if(FUND_MODE==='split' && cost>0 && fundSplit(cost, body.ticker)) body.fund={mode:'split', cost:Math.round(cost)}; return body; }
 // ── 买入（建议的股票 → 手动买入指令）：按规则的仓位 / 股数 / 金额 / 占权益 %；执行器下单时按当时的价格再算 ──
 let BUY = null;
 const bpct = n => CFG.eq>0 && BUY.px>0 ? (n*BUY.px/CFG.eq*100).toFixed(1)+'%' : '—';
@@ -540,10 +594,13 @@ function buyPrev(){
   const cap=buyCap(); let note='';
   if(n>cap){ n=cap; note='\\n★ 超过单只上限 '+CFG.cap+'%：截到 '+fmt(n)+' 股'; }
   if(n<=0){
+    fundBox($('#buy-fund'), 0, BUY.t);
     out.textContent = BUY.unit==='rule' ? '按规则的仓位不够买 1 个单元（'+fmt(BUY.lot)+' 股 ≈ '+yen(BUY.lot*BUY.px)+'）：改用股数 / 金额试试'
       : '不够 1 个单元（'+fmt(BUY.lot)+' 股 ≈ '+yen(BUY.lot*BUY.px)+'）';
     go.textContent='确认买入'; go.disabled=true; return;
   }
+  const br=$('#buy-range'); if(br) br.value=n;
+  BUY.cost=n*(BUY.limit||BUY.px*1.03); fundBox($('#buy-fund'), BUY.cost, BUY.t);
   out.textContent='买入约 '+fmt(n)+' 股 · 约 '+yen(n*BUY.px)+' · 约占权益 '+bpct(n)+note
     +'\\n'+CFG.when+'买入（最高 '+yen(BUY.limit||BUY.px*1.03)+' = 收盘 ×1.03）；名额满 / 价格更高 → 不买；只做一次';
   go.textContent='确认买入约 '+fmt(n)+' 股'; go.disabled=false;
@@ -553,6 +610,7 @@ document.addEventListener('input', e=>{
   if(e.target.id==='adj-val') adjPrev();
   if(e.target.id==='adj-range'){ adjShow(+e.target.value); adjPrev(); }
   if(e.target.id==='buy-val') buyPrev();
+  if(e.target.id==='buy-range'){ if(BUY.unit!=='shares') buyUnit('shares'); buyShow(+e.target.value); buyPrev(); }
 });
 document.addEventListener('DOMContentLoaded', ()=>{ const d=$('#dlg-ask'); if(d) d.addEventListener('close', ()=>{ if(ASK){ const r=ASK; ASK=null; r({ok:false}); } }); });
 document.addEventListener('keydown', e=>{ const b=e.target;                // 「点这里再试」也能用键盘（Enter / 空格）
@@ -603,13 +661,14 @@ document.addEventListener('click', async e=>{
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:100})); return;
   }
   if(a==='adj-unit'){ adjUnit(d.u); return; }
+  if(a==='fund-mode'){ FUND_MODE=d.m; if($('#dlg-buy').open) buyPrev(); else adjPrev(); return; }
   if(a==='adj-step'){ const n=adjTarget(); adjShow(Math.max(0, (n==null ? ADJ.shares : n)+(+d.d)*ALOT())); adjPrev(); return; }
   if(a==='adj-go'){
     if(ADJ && ADJ.fix){ const n=adjTarget(); if(n==null) return; const u=Math.min(n, adjCap());
       closeAll(); done(await api('/api/request',{book:CFG.book, kind:'corefix', ticker:ADJ.t, units:u})); return; }
     const n=adjTarget(); if(n==null || n===ADJ.shares) return;
     const v = ADJ.unit==='shares' ? n : parseFloat($('#adj-val').value);
-    closeAll(); done(await api('/api/request',{book:CFG.book, kind:'adjust', ticker:ADJ.t, unit:ADJ.unit, value:v})); return;
+    closeAll(); done(await api('/api/request', fundBody({book:CFG.book, kind:'adjust', ticker:ADJ.t, unit:ADJ.unit, value:v}, n>ADJ.shares ? ADJ.cost||0 : 0))); return;
   }
   if(a==='ktf' || a==='ksub'){                                            // 一张图自己的周期 / 小图（别的图不变）；也记成新打开的图的默认
     const bx=b.closest('.chart[data-t]'); if(!bx || !(a==='ktf' ? TFS : SUBS)[d.v]) return;
@@ -625,6 +684,7 @@ document.addEventListener('click', async e=>{
     $('#buy-sig').textContent=(d.sig==='1' ? '今天出了买入信号（'+d.rtext+'）' : '★ '+d.status+'：还没有买入信号，规则不会买 —— 是你自己的决定')
       +(d.warn ? '\\n★ '+d.warn : '')+NOTE;
     $('#buy-cap').textContent=CFG.cap;
+    { const r=$('#buy-range'), L=BUY.lot; r.min=L; r.step=L; r.max=Math.max(L, buyCap()); }
     buyUnit('rule'); sheet('#dlg-buy'); buyLive(); loadSQ(); return;            // 现价 + 现在买按什么价（Yahoo，约晚 20 分钟）
   }
   if(a==='buy-unit'){ buyUnit(d.u); return; }
@@ -633,7 +693,7 @@ document.addEventListener('click', async e=>{
     const n=buyTarget(); if(!n) return;
     const body={book:CFG.book, kind:'buy', ticker:BUY.t, unit:BUY.unit};
     if(BUY.unit!=='rule') body.value = BUY.unit==='shares' ? Math.min(n, buyCap()) : parseFloat($('#buy-val').value);
-    closeAll(); done(await api('/api/request', body)); return;
+    closeAll(); done(await api('/api/request', fundBody(body, BUY.cost||0))); return;
   }
   if(a==='core-step'){ const r=$('#core-pct'); r.value=Math.max(0, Math.min(100, parseFloat(r.value)+parseFloat(d.d))); coreShow(); return; }
   if(a==='core'){
@@ -1297,7 +1357,7 @@ def _dialogs(paper: bool, cap: float = MO.CAP_PCT) -> str:
             "<div class='lots'><div class='lots-bar' id='adj-bar' aria-hidden='true'></div>"
             "<input type='range' id='adj-range' min='0' max='100' step='100' value='0' aria-label='目标股数（一格 = 一次最少能买卖的股数）'></div>"
             "<div class='lots-lab' id='adj-lab' aria-hidden='true'></div><div class='muted small' id='adj-note'></div>"
-            f"<div id='adj-prev'></div><div class='muted small' id='adj-rule'>一次最少 {MO.LOT} 股；单只上限 <span id='adj-cap'>{cap:g}</span>%。"
+            f"<div id='adj-prev'></div><div id='adj-fund'></div><div class='muted small' id='adj-rule'>一次最少 {MO.LOT} 股；单只上限 <span id='adj-cap'>{cap:g}</span>%。"
             "加仓是你自己的决定（「赢家加仓」研究没有通过）；加仓后成本按股数平均，止损不变。" + sim + "</div>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn primary' id='adj-go' data-act='adj-go'>确认</button></div>"
             "</div></dialog>"
@@ -1310,7 +1370,8 @@ def _dialogs(paper: bool, cap: float = MO.CAP_PCT) -> str:
             "<div class='adjrow' id='buy-row' hidden><button class='btn' data-act='buy-step' data-d='-1' aria-label='少一个单元'>−</button>"
             "<div class='grow'><input type='number' id='buy-val' inputmode='decimal' min='0' aria-label='买多少'><span class='unit' id='buy-unit'>股</span></div>"
             "<button class='btn' data-act='buy-step' data-d='1' aria-label='多一个单元'>＋</button></div>"
-            f"<div id='buy-prev'></div><div class='muted small'>按规则 = 总权益 × 25% × 新仓倍数；单只上限 <span id='buy-cap'>{cap:g}</span>%。"
+            "<input type='range' id='buy-range' class='buyr' min='100' max='100' step='100' value='100' aria-label='买多少股（拖动；一格 = 一个单元）'>"
+            f"<div id='buy-prev'></div><div id='buy-fund'></div><div class='muted small'>按规则 = 总权益 × 25% × 新仓倍数；单只上限 <span id='buy-cap'>{cap:g}</span>%。"
             "下单前执行器再查资格、名额、决算前；买入后按规则止损、离场。</div>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn primary' id='buy-go' data-act='buy-go'>确认买入</button></div>"
             "</div></dialog>"
@@ -2288,6 +2349,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                          "lot": MO.core_lot(book, t)}                                            # 调一只核心 ETF 时别的跟着变多少
                      for t in dict.fromkeys(list(u100s) + [t for t, u in (st.get("core_units") or {}).items() if int(u) > 0])},
            "kp": {"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN},     # K 线的通俗说法（qbreak/kline.py）
+           "fund": MO.fund_holdings(book, tag),                                           # 买入钱不够 → 从持仓平摊凑（预览；提交时同一个算法再算）
            "est": ests, "fee": [[c if c != float("inf") else 1e18, f] for c, f in FEE_TIERS],
            "st": status_json(tag)[1],
            "gen": int(dt.datetime.now().timestamp() * 1000)}                                    # 页面生成时刻（离线时显示「几分钟前的数据」）                                                         # 〔77〕C UX-16：还在处理的指令 → 每 10 秒问一次   # 卖出的预计收益（按最近收盘；现价来了用现价的）
@@ -2539,6 +2601,26 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     why = MO.check(rec, book, tag, sm=sm, now=now)
     if why:
         return False, f"没写：{why}", None
+    fund, sells = body.get("fund") if rec["kind"] in ("buy", "adjust") else None, []
+    if isinstance(fund, dict) and fund.get("mode") == "split":   # 钱不够 → 从持仓平摊凑：个股写成调仓往下（先卖），核心 ETF 那份执行器按当时缺多少卖
+        try:
+            cost = float(fund.get("cost") or 0)
+        except (TypeError, ValueError):
+            cost = 0.0
+        plan = MO.fund_split(cost, MO.fund_holdings(book, tag), skip=rec["ticker"]) if cost > 0 else None
+        for r in (plan or {}).get("rows") or []:
+            if r["kind"] != "stock":
+                continue
+            sr = MO.normalize({"kind": "adjust", "ticker": r["t"], "unit": "shares", "value": r["after"],
+                               "fund_for": rec["ticker"], "source": source})
+            w = MO.check(sr, book, tag, sm=sm, now=now)
+            if w:
+                return False, f"没写（凑钱要卖的 {r['t']}：{w}）", None
+            sells.append((sr, r))
+        if plan:
+            rec["fund"] = "split"
+    for sr, _r in sells:                                   # 凑钱的卖先写：执行器先卖后买（同一次运行里 ① 卖 → ② 买）
+        MO.append(tag, sr, clock=(lambda: now) if now else None)
     rec = MO.append(tag, rec, clock=(lambda: now) if now else None)
     when = MO.when_text(now or now_jst())                   # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘
     k, t = rec["kind"], rec.get("ticker")
@@ -2575,6 +2657,8 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
             est = f"约 {int((row.get('buy') or {}).get('rule_shares') or 0):,} 股"
         msg = (f"已写：买入 {t}（{est}）→ {when}买入"
                + ("" if row and row.get("signal") else "；★ 还没有买入信号：是你自己的决定"))
+    if sells:
+        msg += "；凑钱先卖：" + "、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells) + "（核心 ETF 那份执行器按当时还缺多少卖）"
     if paths.halt_file().exists() and k in MO.ORDER_KINDS + ("core",):
         msg += "；★ HALT 生效中：解除之后才处理"
     return True, msg + f"（指令 {rec['id']}）", rec
