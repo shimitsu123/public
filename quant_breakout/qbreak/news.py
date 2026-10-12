@@ -132,6 +132,9 @@ EVENTS = {
     "politics": ("政局 / 财政", re.compile(r"(衆院解散|解散総選挙|内閣.{0,4}(総辞職|不信任)|政府閉鎖|債務上限|government shutdown|debt ceiling)", re.I),
                  {}, {}, 1, True, None),
 }
+# 朝鲜的导弹发射 / 核试验之类（2026-10-12 用户：「不用推送，也不用算成威胁因素」）：提到朝鲜的标题不算「战争 / 军事冲突」
+# （同一条里别的事件——股市急跌等——照常算）。
+NO_WAR = re.compile(r"(北朝鮮|北朝鲜|朝鲜|朝鮮中央|金正恩|平壌|平壤|North Korea|N\. ?Korea|Pyongyang|DPRK|Kim Jong)", re.I)
 CONFLICT = (("oil_down", "oil_up"), ("yen_strong", "yen_weak"), ("fed_cut", "fed_hike"))   # 同时命中 → 去掉后一个（方向以明确的价格用语为准）
 SHOCK_TXT = {"rate_jp": "日本 10Y {:+.2f} pp", "rate_us": "美国 10Y {:+.2f} pp", "fx": "美元日元 {:+.0f}%", "oil": "原油 {:+.0f}%",
              "credit": "信用利差 {:+.2f} pp"}
@@ -274,6 +277,8 @@ def source_score(it: dict) -> tuple[int, str]:
 
 def classify(text: str) -> list[str]:
     evs = [k for k, (_, rx, *_rest) in EVENTS.items() if rx.search(text)]
+    if "war" in evs and NO_WAR.search(text):
+        evs.remove("war")
     for keep, drop in CONFLICT:
         if keep in evs and drop in evs:
             evs.remove(drop)

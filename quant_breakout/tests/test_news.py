@@ -47,7 +47,10 @@ def test_parse_jma_intensity_filter():
     ("【米国市況】原油安で株は堅調－円急伸", ["oil_down", "yen_strong"], ["oil_up", "yen_weak"]),
     ("嘉手納基地に米軍長距離ミサイル発射機搬入へ", [], ["war"]),
     ("Pittsburgh pediatrician killed in home invasion", [], ["war"]),
-    ("北朝鮮が弾道ミサイルを発射", ["war"], []),
+    ("北朝鮮が弾道ミサイルを発射", [], ["war"]),                                  # 2026-10-12 用户：朝鲜导弹不算威胁
+    ("North Korea fires ballistic missile into sea, Japan says", [], ["war"]),
+    ("北朝鮮がミサイル発射、日経平均が急落", ["crash"], ["war"]),                   # 别的事件照常算
+    ("ロシアがウクライナにミサイル攻撃", ["war"], []),
     ("令和８年上半期の全国の税関における関税法違反事件の取締り状況", [], ["tariff"]),
     ("米国、日本車に追加関税を発動", ["tariff"], []),
     ("熊本県熊本地方でM3.6の地震 最大震度3", [], ["disaster"]),
