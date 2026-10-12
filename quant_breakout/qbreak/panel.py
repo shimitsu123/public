@@ -241,6 +241,11 @@ details.nw.lv-hi{border-left:4px solid var(--neg);padding-left:8px}details.nw.lv
 .axt .v{font-size:clamp(15px,4.4vw,19px);font-weight:700;line-height:1.3;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .axt .mt{height:6px;border-radius:3px;background:var(--line);margin:3px 0 2px;overflow:hidden}.axt .mt i{display:block;height:100%;border-radius:3px;background:var(--muted)}
 .axt .mt.hot i{background:var(--neg)}
+.axf{display:flex;flex-wrap:wrap;align-items:center;gap:4px 2px}.axa{color:var(--muted);padding:0 3px}
+.axs{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:13px;line-height:1.5}
+.axs.bad{border-color:var(--neg);color:var(--neg)}.axs.hot{border-color:var(--neg)}
+.axst{display:inline-block;margin-top:3px;font-size:12px;color:var(--muted)}
+.axn{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}.axx{font-size:12px;color:var(--muted);border:1px dashed var(--line);border-radius:999px;padding:1px 8px}
 .axt .bad{border-color:var(--neg)}.axt .bad .v{color:var(--neg)}
 .pl{margin:10px 0;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:14px;line-height:1.55;
 white-space:normal;font-variant-numeric:tabular-nums}.pl .up{color:var(--up)}.pl .down{color:var(--down)}.pl .muted{font-size:13px}
@@ -1617,17 +1622,29 @@ def _exit_html(info: dict | None) -> str:
            f"<i style='width:{float(x['meter']['frac']) * 100:.0f}%'></i></div>" if x.get("meter") else "")
         + (f"<div class='s'>{dots(x.get('dots'))}{escape(str(x.get('sub') or ''))}</div>" if x.get("sub") or x.get("dots") else "")
         + "</div>" for x in info.get("tiles") or [])
+    def flow(r: dict) -> str:                              # 一眼版：「条件 → 结果」两三个小块；详细的句子收进「详细说明」
+        steps = "<span class='axa'>→</span>".join(
+            f"<span class='axs{ {'bad': ' bad', 'hot': ' hot'}.get(str(s.get('tone') or ''), '')}'>{escape(str(s['text']))}</span>" for s in r["flow"])
+        state = f"<span class='axst'>{escape(str(r['hint']))}</span>" if r.get("hint") else ""
+        return f"<div class='axf'>{steps}</div>{state}"
     rows = "".join(
-        f"<div class='axr'><div class='axk'>{escape(str(r['k']))}</div><div class='axv'><div>{escape(str(r['text']))}</div>"
-        + (f"<div class='axm'>{''.join(chip(c) for c in r['chips'])}</div>" if r.get("chips") else "")
-        + (f"<div class='muted small'>{escape(str(r['sub']))}</div>" if r.get("sub") else "") + "</div></div>"
+        f"<div class='axr'><div class='axk'>{escape(str(r['k']))}</div><div class='axv'>"
+        + (flow(r) if r.get("flow") else f"<div>{escape(str(r['text']))}</div>"
+           + (f"<div class='muted small'>{escape(str(r['sub']))}</div>" if r.get("sub") else ""))
+        + (f"<div class='axm'>{''.join(chip(c) for c in r['chips'])}</div>" if r.get("chips") else "") + "</div></div>"
         for r in info.get("rows") or [])
-    notes = "".join(f"<li>{escape(str(n))}</li>" for n in info.get("notes") or [])
+    detail = [f"{r['k']}：{r['text']}" + (f"（{r['sub']}）" if r.get("sub") else "") for r in info.get("rows") or [] if r.get("flow")]
+    if info.get("never_tags"):
+        detail.append(str(info.get("never") or ""))
+    notes = "".join(f"<li>{escape(str(n))}</li>" for n in detail + list(info.get("notes") or []))
+    never = ("<div class='axn'><span class='muted small'>不会因为</span>"
+             + "".join(f"<span class='axx'>✕ {escape(str(x))}</span>" for x in info["never_tags"]) + "</div>"
+             if info.get("never_tags") else f"<div class='muted small axn'>{escape(str(info.get('never') or ''))}</div>")
     return (f"<div class='axb{' hot' if info.get('hot') else ''}' data-exit='{escape(str(info.get('t') or ''))}'>"
             f"<div class='axh'><b>什么时候会自动卖</b><span class='muted small'>按 {escape(str(info.get('asof_md') or '—'))} 收盘</span></div>"
             + (f"<div class='axt'>{tiles}</div>" if tiles else "")
-            + f"{rows}<div class='muted small axn'>{escape(str(info.get('never') or ''))}</div>"
-            + (f"<details class='axd'><summary class='muted'>时间线与历史</summary><ul>{notes}</ul></details>" if notes else "")
+            + f"{rows}{never}"
+            + (f"<details class='axd'><summary class='muted'>详细说明</summary><ul>{notes}</ul></details>" if notes else "")
             + "</div>")
 
 

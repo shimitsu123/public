@@ -94,7 +94,8 @@ def _det(bb: dict) -> tuple[int, float, int]:
     return L, b, k
 
 
-def market_row(bb: dict | None, m: str, flip_to: str, *, then: str = "下一个开盘全部卖（寄付成行）", label: str = "全部卖") -> dict:
+def market_row(bb: dict | None, m: str, flip_to: str, *, then: str = "下一个开盘全部卖（寄付成行）", label: str = "全部卖",
+               then_short: str = "下个开盘全部卖") -> dict:
     """牛熊分界的一条触发。flip_to = "bear"（牛市里拿着、等转熊）/ "bull"（熊市里拿着、等转牛）。
     返回 {"k", "text", "sub", "chips": [{"text", "tone": "bad" | "hot" | None, "dots": (已确认, 要几天)?}], "hot", "fired", 数字…}；
     hot = 快要触发 / 已经触发（页面标红）；fired = 已经翻过去了（这次决策就卖）。"""
@@ -108,11 +109,13 @@ def market_row(bb: dict | None, m: str, flip_to: str, *, then: str = "下一个�
            "line": _f(bb.get("flip_line") or bb.get("level")), "dist": _f(bb.get("to_flip_pct")),
            "confirm": int(bb.get("confirm_days") or 0), "phase": bb.get("phase"), "chips": [], "hot": False, "fired": False}
     head = f"{name} 连续 {k} 天收在{word}线{side} → {then}"
+    out["flow"] = [{"text": f"{name} 连续 {k} 天在{word}线{side}"}, {"text": then_short, "tone": "bad"}]   # 页面的一眼版（详细的在 text / sub）
     if st not in ("bull", "bear"):
         out.update(text=head, sub=f"{name} 的牛熊读数还没有（执行器下一次运行之后显示）")
         return out
     if (st == "bear") == (flip_to == "bear"):                 # 已经翻过去了：这次决策就卖
-        out.update(text=f"{name} 已{word}（{out['since'] or '—'} 起）→ {then}", sub=bb.get("phase_label") or "", hot=True, fired=True)
+        out.update(text=f"{name} 已{word}（{out['since'] or '—'} 起）→ {then}", sub=bb.get("phase_label") or "", hot=True, fired=True,
+                   flow=[{"text": f"{name} 已{word}", "tone": "bad"}, {"text": then_short, "tone": "bad"}])
         out["chips"].append({"text": f"已{word}", "tone": "bad"})
         return out
     n, dist = out["confirm"], out["dist"]
@@ -145,7 +148,7 @@ def market_tiles(r: dict) -> list[dict]:
     else:
         move = "跌" if (dist or 0) < 0 else "涨"
         first = {"label": f"离{word}线", "value": _away(dist), "meter": _meter(dist, r["hot"]),
-                 "sub": f"{move}到 {_pt(r['line'])} {word}" if r.get("line") is not None else "", "tone": "bad" if r["hot"] else None}
+                 "sub": f"{move}到 {_pt(r['line'])}" if r.get("line") is not None else "", "tone": "bad" if r["hot"] else None}
     return [first, {"label": "已确认", "value": f"{n} / {k} 天", "sub": f"再 {max(k - n, 1)} 天就{word}" if n >= 1 else "",
                     "dots": (n, k), "tone": "bad" if n >= 1 else None}]
 
@@ -196,6 +199,7 @@ def partial_row(t: str, sm: dict, st: dict, *, px: float | None, lot: int, cur: 
     est = (f"（一只新仓约 {_yen(per)}：约卖 {out['units']:,} 口）" if out["units"] else
            f"（一只新仓约 {_yen(per)}）" if per else "")
     out["text"] = f"规则要买新的日本个股、现金不够 → 同一个开盘先卖它补足{est}"
+    out["flow"] = [{"text": "买新个股缺钱"}, {"text": f"先卖约 {out['units']:,} 口" if out["units"] else "先卖一部分", "tone": "hot"}]
     plan = (st.get("core_plan") or {}).get(t) or []
     n_pos = len(st.get("pos") or {})
     if len(plan) == 2 and plan[0] == "SELL" and 0 < int(plan[1]) < cur:
@@ -203,18 +207,18 @@ def partial_row(t: str, sm: dict, st: dict, *, px: float | None, lot: int, cur: 
         adds = sorted(st.get("add_plan") or {})
         why_p = (f"给要买的个股腾钱：{'、'.join(_code(x) for x in buys)}" if buys else
                  "给手动加仓腾钱" if adds else "调回规则目标")
-        out.update(sub=f"规则已排（{why_p}）", fired=True)
+        out.update(sub=f"规则已排（{why_p}）", fired=True, hint="已排")
         out["chips"].append({"text": f"{_md(fill_day)} 开盘卖 {int(plan[1]):,} 口", "tone": "hot"})
     elif n_pos >= max_pos:
-        out["sub"] = f"个股已满 {max_pos} 只：不会为新仓再卖（卖掉一只之后才会）"
+        out.update(sub=f"个股已满 {max_pos} 只：不会为新仓再卖（卖掉一只之后才会）", hint="现在不会（个股已满）")
     elif mult is not None and mult <= 0:
-        out["sub"] = f"现在新仓倍数 0（{why or '规则现在不开新仓'}）：暂时不会"
+        out.update(sub=f"现在新仓倍数 0（{why or '规则现在不开新仓'}）：暂时不会", hint="现在不会（不开新仓）")
     elif per is not None and cash >= per:
-        out["sub"] = f"现在现金 {_yen(cash)} 够买一只：不用卖"
+        out.update(sub=f"现在现金 {_yen(cash)} 够买一只：不用卖", hint="现在不会（现金够）")
     elif mult is not None and mult < 1:
-        out["sub"] = f"现在新仓倍数 ×{mult:g}（{why or '—'}）：出了买入信号就会，按倍数卖得少一些"
+        out.update(sub=f"现在新仓倍数 ×{mult:g}（{why or '—'}）：出了买入信号就会，按倍数卖得少一些", hint=f"有买入信号就会（×{mult:g}）")
     elif mult is not None:
-        out["sub"] = "现在新仓倍数 ×1：出了买入信号就会（候选见下面「建议的股票」）"
+        out.update(sub="现在新仓倍数 ×1：出了买入信号就会（候选见下面「建议的股票」）", hint="有买入信号就会")
     else:
         out["sub"] = "新仓倍数在执行器下一次运行之后显示"
     return out
@@ -279,10 +283,11 @@ def build(t: str, sm: dict | None, book: dict | None, *, px: float | None = None
             short, long_, sub, tsub = "留现金", "留现金", "", ""
         if tiles:
             tiles.append({"label": "卖完" if r["fired"] else "转熊后", "value": short, "sub": tsub, "tone": None})
-        rows.append(_row("卖完去哪", f"卖完：{long_}" if r["fired"] else f"现在转熊的话：{long_}", (sub + "。" if sub else "") + back))
+        rows.append({**_row("卖完去哪", f"卖完：{long_}" if r["fired"] else f"现在转熊的话：{long_}", (sub + "。" if sub else "") + back),
+                     "flow": [{"text": short}, {"text": f"转回牛市再买回 {_code(t)}"}]})
     elif key == "BR:BD":                                      # 对冲版美债 1482：美股熊且股债负相关时才拿
         timing = "US"
-        r = market_row(mk.get("US"), "US", "bull", then="卖它、换回纳斯达克 100（1545）")
+        r = market_row(mk.get("US"), "US", "bull", then="卖它、换回纳斯达克 100（1545）", then_short="卖它、换回 1545")
         tiles += market_tiles(r)
         if tiles and not r["fired"]:
             r.update(chips=[], sub=r["formula"] + (f" · {r['phase_txt']}" if r["phase_txt"] else ""))
@@ -294,9 +299,10 @@ def build(t: str, sm: dict | None, book: dict | None, *, px: float | None = None
         hot = br.get("on") is not True or (c is not None and c >= CORR_NEAR)
         tiles.append({"label": "股债相关", "value": _sg(c, 2) if c is not None else "算不了",
                       "sub": f"{br.get('win', 63)} 天；≥ 0 就卖", "tone": "bad" if hot else None})
-        rows.append(_row("或", f"股债 {br.get('win', 63)} 天相关变成 ≥ 0 → 下一个开盘全部卖、留现金",
-                         f"S&P500 与对冲版美国 7〜10 年国债的日收益相关（{_md(br.get('corr_date'))}；国债起避险作用才拿）",
-                         hot=hot, fired=br.get("on") is False))
+        rows.append({**_row("或", f"股债 {br.get('win', 63)} 天相关变成 ≥ 0 → 下一个开盘全部卖、留现金",
+                            f"S&P500 与对冲版美国 7〜10 年国债的日收益相关（{_md(br.get('corr_date'))}；国债起避险作用才拿）",
+                            hot=hot, fired=br.get("on") is False),
+                     "flow": [{"text": "股债相关 ≥ 0"}, {"text": "下个开盘全部卖", "tone": "bad"}]})
     else:                                                     # 别的方式自己的开关（趋势 / 轮动 / 对冲 …）
         rows.append(_row("全部卖", f"「{label}」的开关变成「不拿」→ 下一个开盘全部卖"))
         for m in sorted(IC.uses_market(mode)):
@@ -306,9 +312,12 @@ def build(t: str, sm: dict | None, book: dict | None, *, px: float | None = None
     if pr:
         rows.append(pr)
     never = ["它自己跌多少都不卖（核心 ETF 没有止损）"]
+    never_tags = ["自己跌（没有止损）"]
     if key in ("US", "JP") and TRACKS.get(t) != key:
         never.append(f"{_own(t)} 单独跌（看的是 {IDX_NAME[key]}）")
+        never_tags.append(f"{_own(t)} 单独跌")
     never.append("汇率涨跌、风险报告「避险」/ 威胁指数（只管个股新仓）")
+    never_tags += ["汇率", "避险 / 威胁指数"]
     if timing:
         mrow = next((x for x in rows if x.get("m") == timing), None)
         k = mrow["need"] if mrow else 5
@@ -325,7 +334,7 @@ def build(t: str, sm: dict | None, book: dict | None, *, px: float | None = None
     asof = next((x.get("asof") for x in rows if x.get("asof")), None) or st.get("last_date")
     hot = any(x.get("hot") for x in rows) or any(x.get("tone") == "bad" for x in tiles)
     return {"t": t, "name": IC.NAMES.get(t, t), "mode": mode, "label": label, "key": key, "asof": asof, "asof_md": _md(asof),
-            "tiles": tiles, "rows": rows, "never": "不会因为：" + "；".join(never), "notes": notes, "hot": hot}
+            "tiles": tiles, "rows": rows, "never": "不会因为：" + "；".join(never), "never_tags": never_tags, "notes": notes, "hot": hot}
 
 
 def lines(info: dict | None) -> list[str]:
