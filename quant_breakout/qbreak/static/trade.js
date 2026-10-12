@@ -139,7 +139,7 @@ function adjPrevCore(n){                                                   // �
 }
 // ── 买入钱不够 → 从持仓平摊凑（2026-10-12；与 manual_orders.fund_split 同一个算法）：差额按金额平分到每只持仓，
 //    不够分的卖完、剩下的再平分；个股按单元取最接近的整数单元，核心 ETF 补足剩下的 ──
-let FUND_MODE = 'split';
+let FUND_MODE = 'split', FUND_PREV = 'split';                             // 'split' 各持仓平摊卖 / 'core' 只卖核心 ETF / 'all' 其他全部卖出（买入拖到最大时自动；2026-10-13）
 function fundSplit(cost, skip){
   const F=CFG.fund||{}, short=cost-(F.cash||0); if(!(short>0)) return null;
   const busy=F.busy||[];
@@ -167,13 +167,18 @@ function allocViz(el, cost, skip, p){                                       // �
   const order=Object.keys(now).sort((a,b)=>now[b]-now[a]); const col={}; order.forEach((t,i)=>col[t]=C[i%C.length]);
   if(skip && !(skip in col)) col[skip]=C[order.length%C.length];
   const after=Object.assign({}, now); let cash=F.cash||0;
-  if(p){
-    if(FUND_MODE==='split') for(const r of p.rows) after[r.t]=Math.max(0, (after[r.t]||0)-r.yen);
-    else { let need=p.short; for(const t of order){ const h=(F.hold||[]).find(x=>x.t===t); if(!h || h.kind!=='core' || t===skip || need<=0) continue;
-      const s=Math.min(after[t], need); after[t]-=s; need-=s; } }
-    cash=Math.max(0, cash+(FUND_MODE==='split' ? p.got : p.short)-cost);
-  } else cash=Math.max(0, cash-cost);
-  after[skip]=(after[skip]||0)+cost;
+  if(p && p.all){                                                          // 其他全部卖出：买入后只有这只 + 现金
+    for(const r of p.rows) after[r.t]=0;
+    cash=Math.max(0, cash+p.got-p.buy); after[skip]=(after[skip]||0)+p.buy;
+  } else {
+    if(p){
+      if(FUND_MODE==='split') for(const r of p.rows) after[r.t]=Math.max(0, (after[r.t]||0)-r.yen);
+      else { let need=p.short; for(const t of order){ const h=(F.hold||[]).find(x=>x.t===t); if(!h || h.kind!=='core' || t===skip || need<=0) continue;
+        const s=Math.min(after[t], need); after[t]-=s; need-=s; } }
+      cash=Math.max(0, cash+(FUND_MODE==='split' ? p.got : p.short)-cost);
+    } else cash=Math.max(0, cash-cost);
+    after[skip]=(after[skip]||0)+cost;
+  }
   const keys=order.concat(skip && order.indexOf(skip)<0 ? [skip] : []);
   const tot=o=>keys.reduce((s,t)=>s+(o[t]||0), 0);
   const T0=tot(now)+(F.cash||0), T1=tot(after)+cash; if(!(T0>0) || !(T1>0)) return;
@@ -191,16 +196,73 @@ function allocViz(el, cost, skip, p){                                       // �
     line(t, t.replace('.T', '')+(N[t] ? ' '+N[t] : '')+(t===skip && !(now[t]>0) ? '（新）' : ''), now[t]||0, after[t]||0, col[t]); }
   line('', '现金', F.cash||0, cash, 'var(--muted)');
 }
-function fundBox(el, cost, skip){                                          // 拖动 / 输入时实时更新：要卖哪几只、各卖多少
+function fundSeg(seg, withAll){                                            // 凑钱方式的三个按钮（「其他全部卖出」只在买入框里有）
+  const opts=[['split', '各持仓平摊卖'], ['core', '只卖核心 ETF']]; if(withAll) opts.push(['all', '其他全部卖出']);
+  for(const [m, lab] of opts){ const b=nd('button', null, lab, seg); b.dataset.act='fund-mode'; b.dataset.m=m; b.setAttribute('aria-pressed', FUND_MODE===m ? 'true' : 'false'); }
+}
+function fundAll(skip, px, lot){                                           // 其他全部卖出：除这只以外能卖的持仓全部 → 0；估计全卖之后买得起几股（照执行器的口径粗算：扣滑点、手续费、1% 缓冲）
+  const F=CFG.fund||{}, busy=F.busy||[], exiting=F.exiting||[], selling=F.selling||[], rows=[], keep=[]; let got=0;
+  for(const h of (F.hold||[])){
+    if(h.t===skip || !(h.cur>0)) continue;
+    if(!(h.px>0)){ keep.push({t:h.t, kind:h.kind, cur:h.cur, yen:0, why:'没有收盘价：执行器跑过一次再试'}); continue; }
+    const y=Math.round(h.cur*h.px), already=exiting.indexOf(h.t)>=0 ? '规则已在卖出全部' : selling.indexOf(h.t)>=0 ? '已有卖出全部的指令' : '';
+    if(busy.indexOf(h.t)>=0 && !already){ keep.push({t:h.t, kind:h.kind, cur:h.cur, yen:y, why:'有没处理完的指令：先撤回它'}); continue; }   // 提交时会拦下
+    rows.push({t:h.t, kind:h.kind, cur:h.cur, sell:h.cur, yen:y, after:0, note:already}); got+=y;
+  }
+  rows.sort((a,b)=>b.yen-a.yen);
+  const cash=F.cash||0, avail=Math.floor(cash+got*0.995*0.99);
+  const n=px>0 && lot>0 ? Math.floor(avail/(px*1.005)/lot)*lot : 0;
+  return {all:true, rows:rows, keep:keep, got:Math.round(got), cash:Math.round(cash), avail:avail, n:n, buy:Math.round(n*px), left:Math.max(0, avail-Math.round(n*px))};
+}
+function fundAllBox(el, skip, q, only){                                     // 「其他全部卖出」那一块：每只 → 0、核心 ETF 比例 → 0%、合计、能买几股
+  const F=CFG.fund||{};
+  allocViz(el, q.buy, skip, q);
+  const box=nd('div', 'fund', null, el);
+  nd('div', 'fh', '其他持仓全部卖出，只拿这只 + 现金', box);
+  if(only) nd('div', 'muted small', '个股名额已满：只能这样买（其他全部卖出）', box);
+  else fundSeg(nd('div', 'seg fseg', null, box), true);
+  for(const r of q.rows){
+    const row=nd('div', 'frow', null, box), U=r.kind==='core' ? '口' : '股';
+    nd('span', 'ft', r.t.replace('.T', '')+(r.kind==='core' ? ' ETF' : ''), row);
+    const bar=nd('span', 'fbar', null, row); nd('i', null, null, bar).style.width='100%';
+    nd('span', 'fv', '卖 '+fmt(r.sell)+' '+U+' ≈ '+yen(r.yen), row);
+    nd('div', 'muted small fsub', fmt(r.cur)+' → 0 '+U+'（'+(r.note || '全部卖出')+'）', row);
+  }
+  for(const r of q.keep){
+    const row=nd('div', 'frow', null, box);
+    nd('span', 'ft', r.t.replace('.T', ''), row); nd('span', 'fbar', null, row);
+    nd('span', 'fv neg', '留着', row);
+    nd('div', 'muted small fsub', r.why+'（提交会被拦下）', row);
+  }
+  const cp=F.core_pct==null ? 100 : F.core_pct;
+  if(cp>0) nd('div', 'small', '闲置资金比例 '+cp+'% → 0%：核心 ETF 卖出全部、之后停买（出现买入信号只提醒，你点「确认买入」才恢复）', box);
+  if((F.fix||[]).length) nd('div', 'small', '取消固定口数：'+F.fix.map(x=>x.replace('.T', '')).join('、')+'（之后按比例 0% 卖出）', box);
+  nd('div', 'muted small', '卖出合计约 '+yen(q.got)+' + 现金约 '+yen(q.cash)+' → 可用约 '+yen(q.avail)
+    +(q.n>0 ? '；买 '+fmt(q.n)+' 股 ≈ '+yen(q.buy)+'，剩现金约 '+yen(q.left) : '；不够 1 个单元：不买、留现金')
+    +' · 按最近收盘估算（税和手续费另计）；执行器在早上的决策里按全卖之后的钱再算', box);
+  nd('div', 'muted small', '这只在早上的决策里先卖后买（盘中 / 07:40 之后写的：其他持仓按指令卖，这只明天开盘买）。'
+    +'买入被挡（决算前 / 资格等）时其他不卖、比例还原；开盘跳空 / 没成交则其他已卖、留现金、不自动重买。'
+    +'卖出的个股不设「不买回」，规则之后仍可能用现金开新仓。'+(CFG.real ? '立花：卖出所得何时能用于买入未验证，买到的可能比预览少。' : ''), box);
+}
+function fundBox(el, cost, skip, opt){                                     // 拖动 / 输入时实时更新：要卖哪几只、各卖多少（opt：买入框才有 → 可选「其他全部卖出」）
   if(!el) return; el.textContent='';
+  if(FUND_MODE==='all' && opt){ fundAllBox(el, skip, opt.q, !!opt.only); return; }
   const F=CFG.fund||{}, p=cost>0 ? fundSplit(cost, skip) : null;
   if(cost>0) allocViz(el, cost, skip, p);
-  if(!p){ if(cost>0) nd('div', 'muted small', '现金约 '+yen(F.cash||0)+'：够买，不用卖别的', el); return; }
+  if(!p){
+    if(cost>0) nd('div', 'muted small', '现金约 '+yen(F.cash||0)+'：够买，不用卖别的', el);
+    else if(opt){                                                           // 买入框：输入不够 1 个单元 / 权益买不起 1 个单元 → 仍能选「其他全部卖出」
+      const box=nd('div', 'fund', null, el), none=!(opt.cap>0);
+      nd('div', 'fh', none ? '总权益按收盘价买不起 1 个单元' : '输入的数不够 1 个单元', box);
+      fundSeg(nd('div', 'seg fseg', null, box), true);
+      nd('div', 'muted small', none ? '选「其他全部卖出」= 其他持仓全部卖出、留现金、不买这只（下单时价格变了买得起才买）'
+                                    : '选「其他全部卖出」= 其他持仓全部卖出，按全卖之后的钱买这只', box);
+    }
+    return;
+  }
   const box=nd('div', 'fund', null, el);
   nd('div', 'fh', '现金约 '+yen(F.cash||0)+'，还差约 '+yen(p.short), box);
-  const seg=nd('div', 'seg fseg', null, box);
-  for(const [m, lab] of [['split', '各持仓平摊卖'], ['core', '只卖核心 ETF']]){
-    const b=nd('button', null, lab, seg); b.dataset.act='fund-mode'; b.dataset.m=m; b.setAttribute('aria-pressed', FUND_MODE===m ? 'true' : 'false'); }
+  fundSeg(nd('div', 'seg fseg', null, box), !!opt);
   if(FUND_MODE==='core'){ nd('div', 'muted small', '执行器按当时还缺多少卖核心 ETF（原来的做法）；核心 ETF 不够 → 少买', box); return; }
   if(!p.rows.length){ nd('div', 'neg small', '没有能卖来凑的持仓（都有没处理完的指令 / 规则在卖）：执行器会少买', box); return; }
   const mx=Math.max.apply(null, p.rows.map(r=>r.yen));
@@ -214,7 +276,24 @@ function fundBox(el, cost, skip){                                          // �
   nd('div', 'muted small', '合计约 '+yen(p.got)+(p.left>0 ? '，还差 '+yen(p.left)+' → 执行器会少买' : '')
     +' · 按最近收盘估算，个股按 100 股取整', box);
 }
-function fundBody(body, cost){ if(FUND_MODE==='split' && cost>0 && fundSplit(cost, body.ticker)) body.fund={mode:'split', cost:Math.round(cost)}; return body; }
+function fundBody(body, cost){
+  if(FUND_MODE==='all' && body.kind==='buy'){ body.fund={mode:'all'}; return body; }
+  if(FUND_MODE==='split' && cost>0 && fundSplit(cost, body.ticker)) body.fund={mode:'split', cost:Math.round(cost)};
+  return body;
+}
+function allPrev(n, cap, go, out){                                         // 「其他全部卖出，只拿这只」的预览（拖到最大 / 名额已满 / 手选）
+  const q=fundAll(BUY.t, BUY.px, BUY.lot);
+  BUY.cost=q.buy; fundBox($('#buy-fund'), q.buy, BUY.t, {q:q, only:BUY.fullOnly});
+  if(q.keep.length){ out.textContent='★ 有持仓现在卖不了（见下面「留着」）：先处理它再全部换成这只'; go.textContent='确认'; go.className='btn danger'; go.disabled=true; return; }
+  if(q.n<=0){
+    out.textContent='★ 其他持仓全部卖出（约 '+yen(q.got)+'）+ 现金约 '+yen(q.cash)+' 也不够 1 个单元（'+fmt(BUY.lot)+' 股 ≈ '+yen(BUY.lot*BUY.px)+'）'
+      +'\n→ 照样全部卖出、留现金、不买（下单时价格变了买得起才买）；'+CFG.when+'处理';
+    go.textContent='确认全部卖出（不买）'; go.className='btn danger'; go.disabled=false; return;
+  }
+  out.textContent='★ 其他持仓全部卖出，只拿这只 + 现金：买入约 '+fmt(q.n)+' 股 · 约 '+yen(q.buy)+' · 约占权益 '+bpct(q.n)
+    +'\n'+CFG.when+'先卖后买（最高 '+yen(BUY.limit||BUY.px*1.03)+' = 收盘 ×1.03）；执行器按当时的钱再算，可能少 1 个单元；只做一次';
+  go.textContent='确认：全卖其他、买入约 '+fmt(q.n)+' 股'; go.className='btn danger'; go.disabled=false;
+}
 // ── 买入（建议的股票 → 手动买入指令）：按规则的仓位 / 股数 / 金额 / 占权益 %；执行器下单时按当时的价格再算 ──
 export let BUY = null;
 const bpct = n => CFG.eq>0 && BUY.px>0 ? (n*BUY.px/CFG.eq*100).toFixed(1)+'%' : '—';
@@ -233,7 +312,7 @@ function buyUnit(u){
   let n=buyTarget(); BUY.unit=u;
   if(n!=null) n=Math.min(n, Math.max(buyCap(), BUY.lot));            // 换单位时不把超过单只上限的数带过去
   document.querySelectorAll('#buy-seg button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.u===u ? 'true' : 'false'));
-  $('#buy-row').hidden = u==='rule';
+  $('#buy-row').hidden = u==='rule' || !!(BUY && BUY.fullOnly);
   if(u!=='rule'){
     $('#buy-unit').textContent = {shares:'股', yen:'円', pct:'%'}[u];
     $('#buy-val').step = u==='shares' ? BUY.lot : u==='yen' ? 1000 : 0.1;
@@ -243,18 +322,21 @@ function buyUnit(u){
 }
 function buyPrev(){
   const go=$('#buy-go'), out=$('#buy-prev');
+  go.className='btn primary';
   let n=buyTarget();
-  if(n==null){ out.textContent='输入要买多少（股数 / 金额 / 占总权益 %）'; go.textContent='确认买入'; go.disabled=true; return; }
+  if(n==null && FUND_MODE!=='all'){ out.textContent='输入要买多少（股数 / 金额 / 占总权益 %）'; go.textContent='确认买入'; go.disabled=true; return; }
   const cap=buyCap(); let note='';
+  if(FUND_MODE==='all'){ allPrev(n, cap, go, out); return; }
+  if(n==null){ out.textContent='输入要买多少（股数 / 金额 / 占总权益 %）'; go.textContent='确认买入'; go.disabled=true; return; }
   if(n>cap){ n=cap; note='\n★ 超过'+capLab()+'：截到 '+fmt(n)+' 股'; }
   if(n<=0){
-    fundBox($('#buy-fund'), 0, BUY.t);
+    fundBox($('#buy-fund'), 0, BUY.t, {cap:cap});
     out.textContent = BUY.unit==='rule' ? '按规则的仓位不够买 1 个单元（'+fmt(BUY.lot)+' 股 ≈ '+yen(BUY.lot*BUY.px)+'）：改用股数 / 金额试试'
       : '不够 1 个单元（'+fmt(BUY.lot)+' 股 ≈ '+yen(BUY.lot*BUY.px)+'）';
     go.textContent='确认买入'; go.disabled=true; return;
   }
   const br=$('#buy-range'); if(br) br.value=n;
-  BUY.cost=n*(BUY.limit||BUY.px*1.03); fundBox($('#buy-fund'), BUY.cost, BUY.t);
+  BUY.cost=n*(BUY.limit||BUY.px*1.03); fundBox($('#buy-fund'), BUY.cost, BUY.t, {});   // {}：买入框 → 凑钱方式多一个「其他全部卖出」
   out.textContent='买入约 '+fmt(n)+' 股 · 约 '+yen(n*BUY.px)+' · 约占权益 '+bpct(n)+note
     +'\n'+CFG.when+'买入（最高 '+yen(BUY.limit||BUY.px*1.03)+' = 收盘 ×1.03）；名额满 / 价格更高 → 不买；只做一次';
   go.textContent='确认买入约 '+fmt(n)+' 股'; go.disabled=false;
@@ -264,7 +346,9 @@ document.addEventListener('input', e=>{
   if(e.target.id==='adj-val') adjPrev();
   if(e.target.id==='adj-range'){ adjShow(+e.target.value); adjPrev(); }
   if(e.target.id==='buy-val') buyPrev();
-  if(e.target.id==='buy-range'){ const v=+e.target.value;                // 先记下拖到的位置（换单位时 buyPrev 会把拖动条拨回旧的股数）
+  if(e.target.id==='buy-range'){ const v=+e.target.value, mx=+e.target.max;   // 先记下拖到的位置（换单位时 buyPrev 会把拖动条拨回旧的股数）
+    if(v>=mx && buyCap()>BUY.lot && FUND_MODE!=='all'){ FUND_PREV=FUND_MODE; FUND_MODE='all'; BUY.autoAll=true; }   // 拖到最右 = 其他全部卖出（2026-10-13 用户）；上限只有 1 个单元时不自动切（手选）
+    else if(v<mx && FUND_MODE==='all' && BUY.autoAll && !BUY.fullOnly){ FUND_MODE=FUND_PREV; BUY.autoAll=false; }   // 自动进入的，拖回来就还原；手选的不动
     if(BUY.unit!=='shares') buyUnit('shares'); buyShow(v); buyPrev(); }
 });
 document.addEventListener('DOMContentLoaded', ()=>{ const d=$('#dlg-ask'); if(d) d.addEventListener('close', ()=>{ if(ASK){ const r=ASK; ASK=null; r({ok:false}); } }); });
@@ -291,6 +375,7 @@ document.addEventListener('click', async e=>{
     done(await api('/api/request',{book:CFG.book, kind:'sell', ticker:CUR.t, block_days:parseInt(bd,10)})); return;
   }
   if(a==='adj'){
+    if(FUND_MODE==='all') FUND_MODE='split';                                // 「其他全部卖出」只属于买入框
     const core=d.core==='1';
     ADJ={t:d.t, shares:+d.shares, px:+d.px, unit:'shares', core:core, lot:core ? (+d.lot||1) : LOT, u100:+d.u100||0, cpct:+d.cpct||0, approx:d.approx==='1'};
     $('#adj-title').textContent='调仓 '+d.t+(d.name?' '+d.name:'');
@@ -316,7 +401,12 @@ document.addEventListener('click', async e=>{
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:100})); return;
   }
   if(a==='adj-unit'){ adjUnit(d.u); return; }
-  if(a==='fund-mode'){ FUND_MODE=d.m; if($('#dlg-buy').open) buyPrev(); else adjPrev(); return; }
+  if(a==='fund-mode'){
+    const inBuy=$('#dlg-buy').open; if(d.m==='all' && !inBuy) return;
+    if(inBuy && BUY && BUY.fullOnly && d.m!=='all') return;                // 名额已满：只能「其他全部卖出」
+    FUND_MODE=d.m; if(FUND_MODE!=='all') FUND_PREV=FUND_MODE; if(inBuy && BUY) BUY.autoAll=false;   // 手选的：拖回来也不还原
+    if(inBuy) buyPrev(); else adjPrev(); return;
+  }
   if(a==='adj-step'){ const n=adjTarget(); adjShow(Math.max(0, (n==null ? ADJ.shares : n)+(+d.d)*ALOT())); adjPrev(); return; }
   if(a==='adj-go'){
     if(ADJ && ADJ.fix){ const n=adjTarget(); if(n==null) return; const u=Math.min(n, adjCap());
@@ -334,20 +424,24 @@ document.addEventListener('click', async e=>{
     return;
   }
   if(a==='buy'){
-    BUY={t:d.t, px:+d.px, lot:+d.lot||LOT, rule:+d.rule||0, limit:+d.limit||0, unit:'rule'};
+    BUY={t:d.t, px:+d.px, lot:+d.lot||LOT, rule:+d.rule||0, limit:+d.limit||0, unit:'rule', autoAll:false, fullOnly:d.full==='1'};
+    FUND_MODE=FUND_PREV='split';
     $('#buy-title').textContent='买入 '+d.code+(d.name ? ' '+d.name : '');
     $('#buy-sig').textContent=(d.sig==='1' ? '今天出了买入信号（'+d.rtext+'）' : '★ '+d.status+'：还没有买入信号，规则不会买 —— 是你自己的决定')
       +(d.warn ? '\n★ '+d.warn : '')+NOTE;
     $('#buy-cap').textContent=CFG.cap;
     { const r=$('#buy-range'), L=BUY.lot; r.min=L; r.step=L; r.max=Math.max(L, buyCap()); }
-    buyUnit('rule'); sheet('#dlg-buy'); buyLive(); loadSQ(); return;            // 现价 + 现在买按什么价（Yahoo，约晚 20 分钟）
+    { const lock=BUY.fullOnly; $('#buy-range').disabled=lock; $('#buy-seg').hidden=lock; }   // 名额已满：只能「其他全部卖出」，股数由执行器定
+    if(BUY.fullOnly){ FUND_MODE='all'; buyUnit('shares'); } else buyUnit('rule');
+    sheet('#dlg-buy'); buyLive(); loadSQ(); return;            // 现价 + 现在买按什么价（Yahoo，约晚 20 分钟）
   }
   if(a==='buy-unit'){ buyUnit(d.u); return; }
   if(a==='buy-step'){ if(BUY.unit!=='rule'){ const n=buyTarget(); buyShow(Math.max(BUY.lot, (n==null||n<=0 ? BUY.lot : n)+(+d.d)*BUY.lot)); } buyPrev(); return; }
   if(a==='buy-go'){
-    const n=buyTarget(); if(!n) return;
+    const n=buyTarget(); if(!n && FUND_MODE!=='all') return;
     const body={book:CFG.book, kind:'buy', ticker:BUY.t, unit:BUY.unit};
-    if(BUY.unit!=='rule') body.value = BUY.unit==='shares' ? Math.min(n, buyCap()) : parseFloat($('#buy-val').value);
+    if(FUND_MODE==='all'){ body.unit='shares'; body.value=Math.max(buyCap(), BUY.lot); }   // 股数由执行器按全卖之后的钱再算
+    else if(BUY.unit!=='rule') body.value = BUY.unit==='shares' ? Math.min(n, buyCap()) : parseFloat($('#buy-val').value);
     closeAll(); done(await api('/api/request', fundBody(body, BUY.cost||0))); return;
   }
   if(a==='core-step'){ const r=$('#core-pct'); r.value=Math.max(0, Math.min(100, parseFloat(r.value)+parseFloat(d.d))); coreShow(); return; }
@@ -365,14 +459,15 @@ document.addEventListener('click', async e=>{
   }
   if(a==='cancel'){                                                       // 撤单前一定确认（2026-10-12 用户：防止误撤）：写清撤的是哪一条
     const q=await ask('确认撤单？', (d.desc||d.id)+'\n\n'+(d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天的单」的「撤单」撤。' : '还没下单：撤掉之后不会下。')
-      +(+d.fund>0 ? '\n为这笔买入凑钱的 '+d.fund+' 条卖出也一起撤掉。' : '')+'\n（指令 '+d.id+'）', '确认撤单', {danger:true});
+      +(+d.fund>0 ? '\n为这笔买入写的 '+d.fund+' 条卖出 / 闲置资金指令也一起撤掉（已经生效的闲置资金比例撤不了）。' : '')+'\n（指令 '+d.id+'）', '确认撤单', {danger:true});
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
   }
   if(a==='uncancel'){                                                     // 撤销一条撤回（2026-10-12）：原来的指令恢复「等下单」、撤回记录不再显示
     const q=await ask('撤销这条撤回？', (d.desc||d.id)+'\n\n撤销之后，原来的指令恢复「等下单」，照原来的时间处理；这条撤回不再显示。\n（指令 '+d.id+'）', '撤销撤回');
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'uncancel', target:d.id})); return;
   }
-  if(a==='corefix' || a==='corefix-clear'){                               // 核心 ETF 固定口数 / 恢复按规则（2026-10-11）
+  if(a==='corefix' || a==='corefix-clear'){
+    if(FUND_MODE==='all') FUND_MODE='split';                                // 「其他全部卖出」只属于买入框                               // 核心 ETF 固定口数 / 恢复按规则（2026-10-11）
     const px=+d.px||0, lot=+d.lot||1, eq=+d.eq||0, cur=+d.cur||0;
     if(a==='corefix-clear'){
       const q=await ask(d.name+'：恢复按规则', '下一次决策起，这只 ETF 又按规则（美股牛熊 / 股债相关）自动买卖。'+NOTE, '恢复');

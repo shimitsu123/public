@@ -1241,6 +1241,9 @@ class UnifiedExecutor:
         for it in buys:                                       # ② 买：买入 / 调仓往上
             t, add = it["ticker"], it["kind"] == "adjust"
             ps, j = st.pos.get(t), eng.col.get(t)
+            if not add and it.get("fund") == "all":           # 其他全部卖出、只拿这只：股数只在早上的决策里定（卖出所得才算得进来；2026-10-13）
+                later(it, "全部换成这只：其他持仓今天卖，这只在明天早上的决策里按全卖之后的钱买")
+                continue
             if not add and t in eng.core_set:
                 no(it, "核心 ETF 不能手动买（用「闲置资金比例」调）")
             elif not add and ps is not None:
@@ -1271,7 +1274,7 @@ class UnifiedExecutor:
                 cur = int(ps.shares)
                 want = MO.target_shares(it["unit"], it["value"], eq, p, lot)
                 if want > cap:
-                    notes.append(f"截到单只上限 {cap_pct:g}%")
+                    notes.append(f"截到{'总权益' if cap_pct >= 100 else f'单只上限 {cap_pct:g}%'}")
                 qty = (min(want, cap) - cur) // lot * lot
                 if qty <= 0:
                     no(it, f"现在 {cur:,} 股：{MO.cap_text(cur, p, eq, cap_pct, lot)}")
@@ -1279,7 +1282,7 @@ class UnifiedExecutor:
             else:
                 qty, basis = MO.buy_size(eng, it, eq, p, lot, float(eng._entry_mult(t, k)))
                 if qty > cap:
-                    notes.append(f"截到单只上限 {cap_pct:g}%")
+                    notes.append(f"截到{'总权益' if cap_pct >= 100 else f'单只上限 {cap_pct:g}%'}")
                     qty = cap
                 if qty <= 0:
                     no(it, f"{basis}不够买 1 个单元（{lot:,} 股 ≈ ¥{lot * p:,.0f}）：不买")
@@ -1788,6 +1791,7 @@ class UnifiedExecutor:
             for lvl, msg in self.manual.ingest():
                 self._event(lvl, msg)
             eng.core_scale = self.manual.core_pct / 100
+            eng.core_fix = {t: int(u) for t, u in (self.manual.m.get("core_fix") or {}).items()}   # 这次读到的固定口数 / 取消也在这次决策生效（2026-10-13 修：以前只在启动时读一次）
         if idxs:
             eng.prime(idxs[0])
             if not self.paper and len(idxs) > 1:

@@ -4422,8 +4422,11 @@ def cmd_manual(a) -> int:
                   + ("（buy 不给 = 按规则的仓位）" if a.action == "buy" else ""))
             return 2
         req["unit"], req["value"] = given[0] if given else ("rule", None)
-    if a.action == "cancel":
-        req["target"] = a.target
+    if a.action == "cancel":                                 # 撤回：与面板同一个函数（同批的卖出 / 闲置资金指令一起撤；2026-10-13）
+        sm_ = read_json(paths.out_dir() / f"live_unified_{tag}.json", {}) or {}
+        ok, msg, rec = MO.cancel_request(tag, b_, str(a.target or ""), source="cli", sm=sm_)
+        print(("" if ok else "★ ") + msg)
+        return 0 if ok else 2
     if a.action in ("trim", "core"):
         req["pct"] = a.pct
     elif a.action in ("adjust", "buy") and req.get("unit") != "pct":

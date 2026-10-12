@@ -531,11 +531,10 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
         why = "有一条买入指令在处理（见「手动指令」）"
     elif ru.get("state") in ("planned", "manual"):
         why = "已经排在开盘买入"
-    elif s["free"] <= 0:
-        why = f"个股名额已满（{s['used']} / {s['max']} 只）：先卖出一只"
     elif not (px > 0 and eq):
         why = "没有收盘价 / 总权益：执行器下一次运行之后再买"
     warn = "；".join(_fill_mult_why(w) for w in b.get("warn") or [])
+    full = s["free"] <= 0                                   # 名额满：只能「全部换成这只」（其他持仓全部卖出；2026-10-13 用户）
     if why:
         H.append(f"<div class='act muted small'>{escape(why)}</div>")
     else:
@@ -543,10 +542,10 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
         data = (f" data-t='{escape(t)}' data-code='{escape(str(r.get('code') or t))}' data-name='{escape(str(r.get('name') or ''))}'"
                 f" data-px='{px:g}' data-lot='{lot}' data-rule='{n}' data-limit='{float(b.get('limit') or 0):g}'"
                 f" data-sig='{1 if r.get('signal') else 0}' data-status='{escape(st_txt)}'"
-                f" data-rtext='{escape(str(ru.get('text') or ''))}' data-warn='{escape(warn)}'")
-        H.append(f"<div class='act'><button class='btn primary' data-act='buy'{data}>买入…</button>"
-                 f"<span class='muted small'>按规则约 {n:,} 股 · 约 {_yen(n * px)}"
-                 + (f" · 约占权益 {n * px / eq * 100:.1f}%" if eq else "") + "</span></div>"
+                f" data-rtext='{escape(str(ru.get('text') or ''))}' data-warn='{escape(warn)}'" + (" data-full='1'" if full else ""))
+        H.append(f"<div class='act'><button class='btn {'' if full else 'primary'}' data-act='buy'{data}>{'全部换成这只…' if full else '买入…'}</button>"
+                 + (f"<span class='muted small'>个股名额已满（{s['used']} / {s['max']} 只）：只能把其他持仓全部卖出来换这只</span></div>" if full else
+                    f"<span class='muted small'>按规则约 {n:,} 股 · 约 {_yen(n * px)}" + (f" · 约占权益 {n * px / eq * 100:.1f}%" if eq else "") + "</span></div>")
                  + (f"<div class='small neg'>★ {escape(warn)}</div>" if warn else ""))
     H.append(_buy_price_line(r, fill))                       # 规则的买价（2026-10-07 用户「建议的股票要给出合适的买价」）
     planned = " data-planned='1'" if ru.get("state") in ("planned", "manual") or b.get("planned") else ""   # 已排在开盘买：只写现价
@@ -1570,6 +1569,10 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     if str(body.get("kind") or "") == "flow":
         return submit_flow(tag, body, now)
     book, sm = _load(tag)
+    if str(body.get("kind") or "") in ("cancel", "uncancel"):   # 撤回 / 撤销撤回：与命令行同一个函数（同批指令一起；2026-10-13）
+        fn = MO.cancel_request if body.get("kind") == "cancel" else MO.uncancel_request
+        ok, msg, rec = fn(tag, book, str(body.get("target") or ""), now=now, source=source, **({"sm": sm} if body.get("kind") == "cancel" else {}))
+        return ok, msg + (f"（指令 {rec['id']}）" if ok and rec else ""), rec
     try:
         rec = MO.normalize({**body, "source": source})
         rec = MO.core_rec(rec, book) or rec                  # 持有的核心 ETF 的卖出 / 调仓 → 闲置资金比例（规则每天按它调核心）
@@ -1577,10 +1580,21 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
         return False, f"没写：{e}", None
     c0 = MO.core_info(book, rec["ticker"]) if rec["kind"] == "core" and rec.get("ticker") else None
     pct0 = MO.core_pct_now(tag, book)                      # 写之前的闲置资金比例（含还没读的指令；0 = 停买中）
-    why = MO.check(rec, book, tag, sm=sm, now=now)
+    fund = body.get("fund") if rec["kind"] in ("buy", "adjust", "corefix") else None
+    allp, going = None, None
+    if rec["kind"] == "buy" and isinstance(fund, dict) and fund.get("mode") == "all":   # 其他全部卖出，只拿这只（2026-10-13）
+        allp = MO.fund_all(book, tag, rec["ticker"])
+        if allp["blocked"]:
+            return False, f"没写（其他全部卖出）：{allp['blocked']}", None
+        row0 = next((r for r in (sm.get("suggest") or {}).get("rows") or [] if r.get("ticker") == rec["ticker"]), None)
+        warn0 = [str(w) for w in ((row0 or {}).get("buy") or {}).get("warn") or []]
+        if warn0:                                          # 执行器决策时会挡的（决算前 / 新仓倍数 0）：不让「全卖换这只」（否则卖光了却不买）
+            return False, "没写（其他全部卖出）：这只现在会被执行器挡下（" + "；".join(_fill_mult_why(w) for w in warn0) + "）：等它解除再做", None
+        going = {t for t, _c, _p in allp["sells"]}         # 名额按「卖完之后」算
+    why = MO.check(rec, book, tag, sm=sm, now=now, going=going)
     if why:
         return False, f"没写：{why}", None
-    fund, sells = body.get("fund") if rec["kind"] in ("buy", "adjust", "corefix") else None, []
+    sells = []
     if isinstance(fund, dict) and fund.get("mode") == "split":   # 钱不够 → 从持仓平摊凑：个股写成调仓往下（先卖），核心 ETF 那份执行器按当时缺多少卖
         try:
             cost = float(fund.get("cost") or 0)
@@ -1598,28 +1612,42 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
             sells.append((sr, r))
         if plan:
             rec["fund"] = "split"
-    for sr, _r in sells:                                   # 凑钱的卖先写：执行器先卖后买（同一次运行里 ① 卖 → ② 买）
-        MO.append(tag, sr, clock=(lambda: now) if now else None)
-    rec = MO.append(tag, rec, clock=(lambda: now) if now else None)
-    comp = []
-    if rec["kind"] == "cancel":                            # 撤「平摊凑钱」的买入：同一次写的凑钱卖出一起撤（2026-10-12）
-        allr = MO.read_all(tag) + list(((book.get("manual") or {}).get("items") or {}).values())
-        tg = next((x for x in allr if x.get("id") == rec["target"]), None)
-        gone = MO.cancelled(MO.unseen(tag, book))
-        for c in MO.fund_companions(tg or {}, allr):
-            st_c = (((book.get("manual") or {}).get("items") or {}).get(c["id"]) or {}).get("status", "pending")
-            if c["id"] in gone or st_c not in MO.ACTIVE or MO.check({"kind": "cancel", "target": c["id"]}, book, tag, now=now):
-                continue
-            MO.append(tag, {"kind": "cancel", "target": c["id"], "source": source}, clock=(lambda: now) if now else None)
-            comp.append(c)
+    elif allp is not None:                                 # 其他全部卖出：个股 adjust → 0；固定口数取消；闲置资金比例 → 0%（卖出全部 + 停买）；最后买入
+        for t, cur, _px in allp["sells"]:
+            sr = MO.normalize({"kind": "adjust", "ticker": t, "unit": "shares", "value": 0, "fund_for": rec["ticker"], "source": source})
+            w = MO.check(sr, book, tag, sm=sm, now=now)
+            if w:
+                return False, f"没写（要卖的 {t}：{w}）", None
+            sells.append((sr, {"t": t, "sell": cur, "kind": "stock"}))
+        for t in allp["core_clear"]:
+            sr = MO.normalize({"kind": "corefix", "ticker": t, "clear": True, "fund_for": rec["ticker"], "source": source,
+                               "prev_units": ((book.get("manual") or {}).get("core_fix") or {}).get(t)})
+            w = MO.check(sr, book, tag, sm=sm, now=now)
+            if w:
+                return False, f"没写（取消 {t} 的固定口数：{w}）", None
+            sells.append((sr, {"t": t, "sell": 0, "kind": "corefix"}))
+        if float(allp["core_pct"]) > 0:
+            sr = MO.normalize({"kind": "core", "pct": 0, "fund_for": rec["ticker"], "source": source, "prev_pct": allp["core_pct"]})
+            w = MO.check(sr, book, tag, sm=sm, now=now)
+            if w:
+                return False, f"没写（闲置资金比例 → 0%：{w}）", None
+            sells.append((sr, {"t": "core", "sell": 0, "kind": "core"}))
+        rec["fund"] = "all"
+    clock = (lambda: now) if now else None
+    if allp is not None:                                   # 其他全部卖出：先写买入再写同批（写到一半中断也不会只剩卖出；执行器反正先卖后买）
+        rec = MO.append(tag, rec, clock=clock)
+        for sr, _r in sells:
+            MO.append(tag, sr, clock=clock)
+    else:
+        for sr, _r in sells:                               # 凑钱的卖先写：执行器先卖后买（同一次运行里 ① 卖 → ② 买）
+            MO.append(tag, sr, clock=clock)
+        rec = MO.append(tag, rec, clock=clock)
     when = MO.when_text(now or now_jst())                   # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘
     k, t = rec["kind"], rec.get("ticker")
     msg = {"sell": f"已写：卖出 {t} 全部 → {when}卖出",
            "trim": f"已写：{t} 减到约 {rec.get('pct', 0):g}% → {when}卖出",
            "core": f"已写：闲置资金比例 {rec.get('pct', 0):g}% → 核心 ETF {when}照新比例调",
            "unblock": f"已写：解除 {t} 的不自动买回",
-           "cancel": f"已写：撤回 {rec.get('target')}" + (f"；为它凑钱的 {len(comp)} 条卖出也撤回" if comp else ""),
-           "uncancel": "已写：撤销撤回 → 原来的指令恢复「等下单」，那条撤回不再显示",
            "cancel_order": f"已写：撤单 {rec.get('ticker')}（{rec.get('cid')}）→ 执行器马上撤（已经成交的部分撤不了）"}.get(k)
     if k == "adjust":
         st = book.get("state") or {}
@@ -1653,7 +1681,23 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
             est = f"约 {int((row.get('buy') or {}).get('rule_shares') or 0):,} 股"
         msg = (f"已写：买入 {t}（{est}）→ {when}买入"
                + ("" if row and row.get("signal") else "；★ 还没有买入信号：是你自己的决定"))
-    if sells:
+    if rec.get("fund") == "all":
+        fx = MO.core_effects(book, 0.0)
+        etf = ("、".join(f"{x} {a_:,} → 0 口" for x, a_, _b in fx) or "、".join(f"{x} {u:,} → 0 口" for x, u in allp["cores"]))
+        parts = ["先全部卖出其他持仓：" + ("、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells if r["kind"] == "stock") or "（没有别的个股）")]
+        if any(r["kind"] == "corefix" for _s, r in sells):
+            parts.append("取消固定口数：" + "、".join(r["t"] for _s, r in sells if r["kind"] == "corefix") + (f"（{etf}：之后按比例 0% 卖出）" if etf else ""))
+        if any(r["kind"] == "core" for _s, r in sells):
+            parts.append(f"闲置资金比例 {allp['core_pct']:g}% → 0%（" + (etf + "；" if etf else "")
+                         + "之后停买闲置资金 ETF，出现买入信号只提醒、你点「确认买入」才恢复）")
+        elif not any(r["kind"] == "corefix" for _s, r in sells) and etf:
+            parts.append(f"闲置资金比例已经是 0%：{etf}（照旧卖出）")
+        if allp.get("also"):
+            parts.append("另外规则 / 别的指令还会买：" + "、".join(allp["also"]))
+        msg += ("；" + "；".join(parts) + "；这只在早上的决策里先卖后买（盘中 / 07:40 之后写的：其他持仓按指令卖，这只明天开盘买）"
+                "；全卖也不够 1 个单元就不买、留现金；买入被挡时其他不卖、比例还原；开盘跳空 / 没成交则其他已卖、留现金、不自动重买"
+                "；卖出的个股不设「不买回」，规则之后仍可能用现金开新仓")
+    elif sells:
         msg += ("；凑钱先卖：" + "、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells)
                 + ("（其余由别的核心 ETF 照规则减少）" if k == "corefix" else "（核心 ETF 那份执行器按当时还缺多少卖）"))
     if paths.halt_file().exists() and k in MO.ORDER_KINDS + ("core",):
