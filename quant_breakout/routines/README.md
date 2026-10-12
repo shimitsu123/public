@@ -58,18 +58,21 @@ Claude 有 Claude_Code_Remote 的 `get_trigger` 就**只读**取上表三个云�
 
 ```
 qbreak 模拟盘日报（Mac 本机例行任务）。市场风险报告 URL：<https://claude.ai/artifact/… 从云端「模拟盘日报」第 2 步抄>
+命令规矩（无人值守：只有和允许规则一字不差的命令才会自动执行，否则会停在权限确认、整个任务卡住）：每条 Bash 命令一字不差照抄这里和说明书写的（说明书写成 `cd ~/qbreak-sim/quant_breakout && …` 的就照抄这个样子）；不要自己再加 `; echo …`、`| …`、`2>&1`、`|| …` 之类，不要改写路径（`~/qbreak-sim` 就写 `~/qbreak-sim`）；要知道成功没有，看工具返回的退出码与输出。
 1. 运行 git -C ~/qbreak-sim pull -q --ff-only origin claude/rakuten-auto-trading-review-ka7lf0（失败也继续：第 0 步会判断）。
 2. 读 ~/qbreak-sim/quant_breakout/routines/sim_daily.md 全文（开头「Mac 上和云端版不同的」也要遵守），从第 0 步起严格照做（它取代任何旧的步骤说明；不要跳步、不要改策略）。
 ```
 
 ```
 qbreak 影子账户判断（Mac 本机例行任务）。市场风险报告 URL：<同上>
+命令规矩（无人值守：只有和允许规则一字不差的命令才会自动执行，否则会停在权限确认、整个任务卡住）：每条 Bash 命令一字不差照抄这里和说明书写的（说明书写成 `cd ~/qbreak-sim/quant_breakout && …` 的就照抄这个样子）；不要自己再加 `; echo …`、`| …`、`2>&1`、`|| …` 之类，不要改写路径（`~/qbreak-sim` 就写 `~/qbreak-sim`）；要知道成功没有，看工具返回的退出码与输出。
 1. 运行 git -C ~/qbreak-sim pull -q --ff-only origin claude/rakuten-auto-trading-review-ka7lf0（失败也继续：第 0a 步会判断）。
 2. 读 ~/qbreak-sim/quant_breakout/routines/shadow.md 全文（开头「Mac 上和云端版不同的」也要遵守），从第 0a 步起严格照做（它取代任何旧的步骤说明）。
 ```
 
 ```
 qbreak 顶底择时季度复核（Mac 本机例行任务）。
+命令规矩（无人值守：只有和允许规则一字不差的命令才会自动执行，否则会停在权限确认、整个任务卡住）：每条 Bash 命令一字不差照抄这里和说明书写的（说明书写成 `cd ~/qbreak-sim/quant_breakout && …` 的就照抄这个样子）；不要自己再加 `; echo …`、`| …`、`2>&1`、`|| …` 之类，不要改写路径（`~/qbreak-sim` 就写 `~/qbreak-sim`）；要知道成功没有，看工具返回的退出码与输出。
 1. 运行 git -C ~/qbreak-sim pull -q --ff-only origin claude/rakuten-auto-trading-review-ka7lf0（失败也继续：第 0b 步会判断）。
 2. 读 ~/qbreak-sim/quant_breakout/routines/quarterly.md 全文（开头「Mac 上和云端版不同的」也要遵守），从第 0 步起严格照做（它取代任何旧的步骤说明）。
 ```
@@ -85,6 +88,7 @@ qbreak 顶底择时季度复核（Mac 本机例行任务）。
 **绝不**写进全局的 `~/.claude/settings.json`（那会让 Mac 上每个 Claude 会话——包括处理实盘的那个——都自动允许），也不写宽的
 `Bash(git:*)`、`Bash(bash scripts/routines.sh run:*)`（= 任意 Python）、`Bash(bash scripts/with_jquants.sh:*)`（= 带着 J-Quants キー跑任意命令）。
 季度复核平时第 0 步就跳过，第一次完整运行在下一个复核日。
+2026-10-12 实际遇到：本机任务每天准时启动，但执行任务的 Claude 在第 1 步的命令后面自己加了 `; echo rc=$?` → 和允许规则对不上 → 停在权限确认、什么都没做（全靠云端后备）。所以上面三段固定文字都有「命令规矩」那一行；说明书里带重定向 / 循环的命令（日报的两条 `backtest … > var/out/backtest_*.txt`、影子账户等日报的 `until …; done`）也要照原文一字不差写进允许规则。
 
 ## 限制
 - 桌面版没开、Mac 睡着 / 关机 / 合盖 → 不跑；醒来后只补跑最近一次（说明书第 0 步「做过就跳过」：云端后备已经做了就跳过）。
