@@ -84,3 +84,24 @@ def test_cancel_split_buy_also_cancels_its_fund_sells():
     assert ok and "为它凑钱的 1 条卖出也撤回" in msg
     targets = {r["target"] for r in MO.read_all("paper") if r["kind"] == "cancel"}
     assert targets == {buy["id"], sells[0]["id"]}
+
+
+def test_auto_buy_card_lists_planned_and_near_with_days():
+    """2026-10-12 用户：「选股最上面还要有将会按照规则自动进行购买的股票，大概几天后」。"""
+    _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
+    sg = {"asof": "2026-10-09", "fill_day": "2026-10-13", "rows": [
+        {"ticker": "6501.T", "code": "6501", "name": "日立", "status": "triggered", "rule": {"state": "planned", "text": "规则已安排：10/13 开盘买 100 股"}},
+        {"ticker": "1925.T", "code": "1925", "name": "大和ハウス", "status": "imminent", "near": {"where": "below_up", "days": 3, "miss": []},
+         "prob": {"p": 0.09}, "buy": {"px": 500.0, "em": 1.0, "lot": 100}},
+        {"ticker": "2002.T", "code": "2002", "name": "日清製粉", "status": "watch", "near": {"where": "below_up", "days": 1, "miss": ["量"]},
+         "prob": {"p": 0.03}, "buy": {"px": 5000.0, "em": 0.5, "lot": 100}},
+        {"ticker": "9007.T", "code": "9007", "name": "小田急", "status": "watch", "near": {"where": "below_up", "days": 9}},
+        {"ticker": "9008.T", "code": "9008", "name": "京王", "status": "watch", "near": {"where": "below_up", "days": 2}, "buy": {"block": "JPX 指定"}}]}
+    book = json.loads((panel.paths.state_dir() / "live_unified_paper.json").read_text())
+    h = panel._auto_buy_card(sg, book, "paper", 1_000_000)
+    assert "<h2>规则接下来会自动买</h2>" in h and "已经出了买入信号" in h and "规则已安排：10/13 开盘买 100 股" in h
+    assert h.index("2002") < h.index("1925")                                   # 近的在前
+    assert "约 1 天" in h and "约 10/13 金叉" in h and "约 3 天" in h and "约 10/15 金叉" in h
+    assert "约 400 股" in h and "买不起" in h and "其中 1 只出了信号也买不起" in h
+    assert "9007" not in h and "9008" not in h                                 # 超过 5 天 / 闸门挡的不列
+    assert panel._auto_buy_card({}, book, "paper", 1_000_000) == ""

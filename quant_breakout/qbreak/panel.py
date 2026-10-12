@@ -242,6 +242,8 @@ details.nw.lv-hi{border-left:4px solid var(--neg);padding-left:8px}details.nw.lv
 .axt .mt{height:6px;border-radius:3px;background:var(--line);margin:3px 0 2px;overflow:hidden}.axt .mt i{display:block;height:100%;border-radius:3px;background:var(--muted)}
 .axt .mt.hot i{background:var(--neg)}
 .buyr{width:100%;margin:8px 0 2px}
+.abd{flex:none;min-width:4.6em;text-align:center;font-size:12px;font-weight:700;border:1px solid var(--line);border-radius:999px;padding:2px 8px;margin-right:8px;font-variant-numeric:tabular-nums}
+.abd.on{border-color:var(--up);color:var(--up)}
 .avr{display:grid;grid-template-columns:3.6em minmax(0,1fr);align-items:center;gap:8px}.avr .alb{margin:3px 0}
 .alb i.new{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.35) 0 4px,transparent 4px 8px)}
 .avg{grid-template-columns:12px minmax(0,1fr) auto}.alp.up{color:var(--up)}.alp.down{color:var(--down)}
@@ -1487,6 +1489,85 @@ RANK_GROUPS = (("triggered", "今天出了买入信号"), ("rest", "观察中"))
 SG_PAGE = 5                               # 一组先显示几只（其余点「再显示」）
 
 
+AUTO_NEAR_DAYS = 5                                          # 「快要出」列到几个交易日以内的估计金叉
+
+
+def _auto_buy_card(sg: dict, book: dict, tag: str, eq) -> str:
+    """选股最上面（2026-10-12 用户：「将会按照规则自动进行购买的股票，大概几天后」）：
+    ① 已经出了信号的：规则已安排（哪天开盘、几股）/ 信号成立但不买（为什么）；② 估计 AUTO_NEAR_DAYS 个交易日内 MACD 金叉的：
+    大概哪天、出了信号的话下一个交易日开盘买约几股（按现在的新仓倍数）、历史上 10 个交易日内真的出信号的比例（大多很低）。
+    只是规则的展示与估算，不是建议；金叉之外还要量等条件凑齐，出了信号还要过闸门 / 名额。"""
+    from .calendar_jp import next_trading_day
+    rows = [r for r in (sg or {}).get("rows") or [] if r.get("ticker")]
+    if not rows:
+        return ""
+    s = MO.slots(book, tag)
+    asof = _date_or_none(sg.get("asof"))
+    fill = _date_or_none(sg.get("fill_day"))
+    trig = [r for r in rows if r.get("status") == "triggered"]
+    near = sorted((r for r in rows if r.get("status") != "triggered" and (r.get("near") or {}).get("where") == "below_up"
+                   and int((r.get("near") or {}).get("days") or 99) <= AUTO_NEAR_DAYS and not (r.get("buy") or {}).get("block")),
+                  key=lambda r: (int(r["near"]["days"]), -float((r.get("prob") or {}).get("p") or 0)))
+
+    def name(r):
+        return f"<b>{escape(str(r.get('code') or r['ticker']))}</b> {escape(str(r.get('name') or ''))}"
+
+    def est_shares(r):
+        b = r.get("buy") or {}
+        px, em, lot = float(b.get("px") or r.get("close") or 0), float(b.get("em") or 0), int(b.get("lot") or 100)
+        if not (px > 0 and eq and em > 0):
+            return 0
+        return int(eq * CX.POS_PCT * min(1.0, em) / (px * 1.03) / lot) * lot
+    H = ["<section class='card' id='autobuy'><h2>规则接下来会自动买</h2>",
+         f"<div class='muted small'>按 {escape(str(sg.get('asof') or '—'))} 收盘。个股名额空 {s['free']} 个（上限 {s['max']} 只）。"
+         "只是规则的展示与估算，不是建议。</div>"]
+    if trig:
+        H.append("<h3 class='sgh'>已经出了买入信号</h3><div class='list'>")
+        for r in trig:
+            ru = r.get("rule") or {}
+            ok = ru.get("state") in ("planned", "manual")
+            H.append(f"<div class='li'><span class='abd{' on' if ok else ''}'>{'下个开盘' if ok else '不买'}</span>"
+                     f"<div class='grow'>{name(r)}<div class='small{'' if ok else ' muted'}'>{escape(str(ru.get('text') or ''))}</div></div></div>")
+        H.append("</div>")
+    if near:
+        sh_all = {r["ticker"]: est_shares(r) for r in near}
+        cant = sum(1 for v in sh_all.values() if v <= 0)
+        H.append(f"<h3 class='sgh'>估计 {AUTO_NEAR_DAYS} 个交易日内可能出信号（{len(near)} 只）</h3>")
+        if s["free"] <= 0:
+            H.append("<div class='neg small'>名额满：出了信号也不会买（先卖出一只）</div>")
+        elif cant:
+            H.append(f"<div class='small'>★ 其中 {cant} 只出了信号也买不起：现在一只新仓约 {_yen(eq * CX.POS_PCT * min(1.0, max(float((r.get('buy') or {}).get('em') or 0) for r in near)))}"
+                     "（总权益 × 25% × 新仓倍数），不够 100 股</div>")
+        H.append("<div class='list'>")
+        for r in near:
+            n = int(r["near"]["days"])
+            gc = asof
+            for _ in range(n):
+                gc = next_trading_day(gc) if gc else None
+            p = (r.get("prob") or {}).get("p")
+            sh = sh_all[r["ticker"]]
+            miss = (r.get("near") or {}).get("miss") or []
+            tag_ = ("<span class='chip'>名额满</span>" if s["free"] <= 0 else "<span class='chip'>买不起</span>" if sh <= 0
+                    else f"<span class='chip hot'>约 {sh:,} 股</span>")
+            sub = " · ".join(x for x in (f"约 {gc:%m/%d} 金叉" if gc else "", f"历史出信号 {float(p) * 100:.0f}%" if p is not None else "",
+                                         f"还差 {len(miss)} 个条件" if miss else "") if x)
+            H.append(f"<div class='li'><span class='abd'>约 {n} 天</span><div class='grow'>{name(r)} {tag_}"
+                     f"<div class='muted small'>{escape(sub)}</div></div></div>")
+        H.append("</div>")
+    if not trig and not near:
+        H.append(f"<div class='muted'>今天没有出信号的票，估计 {AUTO_NEAR_DAYS} 个交易日内金叉的也没有：规则近几天大概不会自动买个股</div>")
+    H.append("<div class='muted small'>天数与日期是按最近一天的变化估的；金叉之外还要量等条件凑齐才出买入信号（历史比例大多很低）；"
+             "出了信号下一个交易日开盘买。</div></section>")
+    return "".join(H)
+
+
+def _date_or_none(v):
+    try:
+        return dt.date.fromisoformat(str(v)[:10])
+    except (TypeError, ValueError):
+        return None
+
+
 def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, cap: float, chart, marks: dict | None = None) -> str:
     """「建议的股票」= 规则的候选（qbreak/suggest.py；全部列出）+ 每只的「买入…」（写手动买入指令；执行器下单前再查一遍）。
     有比例表（var/watch_prob.json，登记研究判定 A）→ 出了信号 / 其余一组（闸门 → 之后 10 个交易日内出买入信号的历史比例 → near_key），
@@ -2319,6 +2400,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions) + more
              + ("<div id='qt-note' class='muted small'>现价：Yahoo 1 分钟线（约晚 20 分钟）</div>" if held_any else "") + "</section>")
     H.append(PANE + "pick")
+    H.append(_auto_buy_card(sm.get("suggest") or {}, book, tag, eq))   # 最上面：规则接下来会自动买的（2026-10-12）
     H.append(_suggest_card(sm.get("suggest") or {}, book, tag, buying, when, eq, cap, chart,
                            marks=_news_marks([r["ticker"] for r in (sm.get("suggest") or {}).get("rows") or []], now)))
     H.append(PANE + "hold")
