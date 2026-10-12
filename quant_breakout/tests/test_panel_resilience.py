@@ -46,3 +46,41 @@ def test_internal_error_returns_json_not_dropped_connection(server, monkeypatch)
                          {"X-Qbreak-Token": tok, "Content-Type": "application/json", "Origin": f"http://127.0.0.1:{port}"})
     j = json.loads(body)
     assert code == 500 and j["ok"] is False and j["unsure"] is True and "不要直接再点" in j["msg"]
+
+
+def test_waiting_corefix_can_be_cancelled_with_clear_confirm():
+    """2026-10-12 用户：「等下单也可以选择撤单，点击撤单后要出来确认防止误撤销」：固定口数也给撤单按钮，确认框写明是哪一条。"""
+    _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T", "1482.T"]})
+    _sm()
+    ok, _m, rec = panel.submit({"book": "paper", "kind": "corefix", "ticker": "1482", "units": 300}, AT)
+    assert ok
+    html = panel.render("paper", "t" * 40, AT)
+    i = html.index(f"data-id='{rec['id']}'")
+    btn = html[html.rindex("<button", 0, i):html.index("</button>", i)]
+    assert "data-act='cancel'" in btn and ">撤单" in btn and "data-desc='" in btn and "1482.T" in btn
+    assert "ask('确认撤单？'" in html and "'确认撤单', {danger:true}" in html             # 一定先确认
+    ok, msg, _ = panel.submit({"book": "paper", "kind": "cancel", "target": rec["id"]}, AT)
+    assert ok and "撤回" in msg
+    b = json.loads((panel.paths.state_dir() / "live_unified_paper.json").read_text())
+    man = MO.Manual(b, "paper")
+    man.ingest()
+    assert man.m["items"][rec["id"]]["status"] == "cancelled" and "1482.T" not in (man.m.get("core_fix") or {})
+
+
+def test_cancel_split_buy_also_cancels_its_fund_sells():
+    b = _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T"]})
+    b["state"]["core_last"] = {"1545.T": 250.0}
+    (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
+    _sm()
+    ok, _m, buy = panel.submit({"book": "paper", "kind": "buy", "ticker": "9984", "unit": "shares", "value": 300,
+                                "fund": {"mode": "split", "cost": 645_000}}, AT)
+    assert ok and buy["fund"] == "split"
+    sells = [r for r in MO.read_all("paper") if r.get("fund_for") == "9984.T"]
+    assert len(sells) == 1
+    html = panel.render("paper", "t" * 40, AT)
+    i = html.index(f"data-id='{buy['id']}'")
+    assert "data-fund='1'" in html[i:html.index("</button>", i)]
+    ok, msg, _ = panel.submit({"book": "paper", "kind": "cancel", "target": buy["id"]}, AT)
+    assert ok and "为它凑钱的 1 条卖出也撤回" in msg
+    targets = {r["target"] for r in MO.read_all("paper") if r["kind"] == "cancel"}
+    assert targets == {buy["id"], sells[0]["id"]}

@@ -417,6 +417,13 @@ def _live(items: dict, waiting: list[dict], kinds) -> list[dict]:
                   and not any(c.get("kind") == "cancel" and c.get("target") == r["id"] for c in waiting)]
 
 
+def fund_companions(target: dict, recs: list[dict]) -> list[dict]:
+    """「从持仓平摊凑」的买入（fund = split）同一次提交写的凑钱卖出（fund_for = 这只票、同一时刻写的）：撤回买入时一起撤。"""
+    if target.get("fund") != "split":
+        return []
+    return [r for r in recs if r.get("fund_for") == target.get("ticker") and r.get("at") == target.get("at") and r.get("id") != target.get("id")]
+
+
 def _to_zero(r: dict) -> bool:
     """卖出全部，或减仓 / 调整到 0（这只票的名额在同一次决策里空出来）。"""
     k = r.get("kind")
@@ -873,7 +880,7 @@ class Manual:
             it = {**r, "status": "pending"}
             items[r["id"]] = it
             k = r["kind"]
-            if k in ("core", "unblock") and r["id"] in dropped:
+            if k in ("core", "unblock", "corefix") and r["id"] in dropped:   # corefix：读到就生效 → 读到之前撤回的不生效（2026-10-12）
                 it.update(status="cancelled", msg="执行器读到之前就撤回了")
             elif k == "core":
                 self.m["core_pct"] = float(r["pct"])

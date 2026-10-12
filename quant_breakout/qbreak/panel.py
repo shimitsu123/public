@@ -751,8 +751,9 @@ document.addEventListener('click', async e=>{
       '撤单', {danger:true});
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel_order', cid:d.cid})); return;
   }
-  if(a==='cancel'){
-    const q=await ask('撤回 '+d.id, d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天的单」的「撤单」撤。' : '还没下单：撤回之后不会下。', '撤回');
+  if(a==='cancel'){                                                       // 撤单前一定确认（2026-10-12 用户：防止误撤）：写清撤的是哪一条
+    const q=await ask('确认撤单？', (d.desc||d.id)+'\n\n'+(d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天的单」的「撤单」撤。' : '还没下单：撤掉之后不会下。')
+      +(+d.fund>0 ? '\n为这笔买入凑钱的 '+d.fund+' 条卖出也一起撤掉。' : '')+'\n（指令 '+d.id+'）', '确认撤单', {danger:true});
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
   }
   if(a==='corefix' || a==='corefix-clear'){                               // 核心 ETF 固定口数 / 恢复按规则（2026-10-11）
@@ -2352,15 +2353,17 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
 
     rows = []
     for r in waiting:
-        btn = (f"<button class='btn sm' data-act='cancel' data-id='{escape(r['id'])}' data-placed='0'>撤回</button>"
-               if r["kind"] in MO.ORDER_KINDS + ("core",) and r["id"] not in dropped else "")
+        btn = (f"<button class='btn sm danger' data-act='cancel' data-id='{escape(r['id'])}' data-placed='0' data-desc='{_what(r)}'"
+               f" data-fund='{len([x for x in MO.fund_companions(r, waiting) if x['id'] not in dropped])}'>撤单</button>"
+               if r["kind"] in MO.ORDER_KINDS + ("core", "corefix") and r["id"] not in dropped else "")
         rows.append(f"<div class='li'><div class='grow'><b>{_what(r)}</b> <span class='chip'>"
                     f"{'等下单（撤回中）' if r['id'] in dropped else '等下单'}</span>"
                     f"<div class='muted small'>{escape(str(r.get('at', ''))[5:16].replace('T', ' '))}</div></div>{btn}</div>")
     for it in items[:20]:
         can = (it.get("status") in MO.ACTIVE and it.get("kind") in MO.ORDER_KINDS and not it.get("cancel_req")
                and not (it.get("status") == "placed" and it.get("now")))          # 盘中的单已经发到交易所：页面上撤不了
-        btn = (f"<button class='btn sm' data-act='cancel' data-id='{escape(it['id'])}' data-placed='{1 if it.get('status') == 'placed' else 0}'>撤回</button>"
+        btn = (f"<button class='btn sm danger' data-act='cancel' data-id='{escape(it['id'])}' data-placed='{1 if it.get('status') == 'placed' else 0}'"
+               f" data-desc='{_what(it)}' data-fund='{len([x for x in MO.fund_companions(it, list(items)) if x.get('status') in MO.ACTIVE])}'>撤单</button>"
                if can else "")
         rows.append(f"<div class='li'><div class='grow'><b>{_what(it)}</b> <span class='chip'>"
                     f"{escape(MO.status_text(it))}{'（撤回中）' if it.get('cancel_req') else ''}</span>"
@@ -2702,13 +2705,24 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     for sr, _r in sells:                                   # 凑钱的卖先写：执行器先卖后买（同一次运行里 ① 卖 → ② 买）
         MO.append(tag, sr, clock=(lambda: now) if now else None)
     rec = MO.append(tag, rec, clock=(lambda: now) if now else None)
+    comp = []
+    if rec["kind"] == "cancel":                            # 撤「平摊凑钱」的买入：同一次写的凑钱卖出一起撤（2026-10-12）
+        allr = MO.read_all(tag) + list(((book.get("manual") or {}).get("items") or {}).values())
+        tg = next((x for x in allr if x.get("id") == rec["target"]), None)
+        gone = MO.cancelled(MO.unseen(tag, book))
+        for c in MO.fund_companions(tg or {}, allr):
+            st_c = (((book.get("manual") or {}).get("items") or {}).get(c["id"]) or {}).get("status", "pending")
+            if c["id"] in gone or st_c not in MO.ACTIVE or MO.check({"kind": "cancel", "target": c["id"]}, book, tag, now=now):
+                continue
+            MO.append(tag, {"kind": "cancel", "target": c["id"], "source": source}, clock=(lambda: now) if now else None)
+            comp.append(c)
     when = MO.when_text(now or now_jst())                   # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘
     k, t = rec["kind"], rec.get("ticker")
     msg = {"sell": f"已写：卖出 {t} 全部 → {when}卖出",
            "trim": f"已写：{t} 减到约 {rec.get('pct', 0):g}% → {when}卖出",
            "core": f"已写：闲置资金比例 {rec.get('pct', 0):g}% → 核心 ETF {when}照新比例调",
            "unblock": f"已写：解除 {t} 的不自动买回",
-           "cancel": f"已写：撤回 {rec.get('target')}",
+           "cancel": f"已写：撤回 {rec.get('target')}" + (f"；为它凑钱的 {len(comp)} 条卖出也撤回" if comp else ""),
            "cancel_order": f"已写：撤单 {rec.get('ticker')}（{rec.get('cid')}）→ 执行器马上撤（已经成交的部分撤不了）"}.get(k)
     if k == "adjust":
         st = book.get("state") or {}
