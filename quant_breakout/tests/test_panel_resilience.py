@@ -193,3 +193,24 @@ def test_uncancel_refused_when_setting_already_decided():
     p.write_text(json.dumps(b), encoding="utf-8")
     ok, msg, _ = panel.submit({"book": "paper", "kind": "uncancel", "target": cxl["id"]}, AT)
     assert not ok and "撤销不了" in msg
+
+
+def test_notify_log_shows_only_last_24_hours():
+    """2026-10-12 用户：「通知记录里面只显示 24 小时以内的记录」—— 卡片与「通知记录 N」按钮上的数字一致。"""
+    from qbreak import notify
+    p = panel.paths.out_dir() / notify.LOG_FILE
+    fmt = lambda h: (AT - __import__("datetime").timedelta(hours=h)).strftime("%Y-%m-%d %H:%M:%S")   # noqa: E731
+    recs = [{"id": "stale", "at": fmt(30), "level": "info", "subject": "旧的", "text": "x"},
+            {"id": "dayold", "at": fmt(23), "level": "warn", "subject": "一天前", "text": "y"},
+            {"id": "fresh", "at": fmt(1), "level": "info", "subject": "新的", "text": "z"}]
+    p.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in recs) + "\n", encoding="utf-8")
+    h = panel._notify_log_card(AT)
+    assert "id='l-fresh'" in h and "id='l-dayold'" in h and "id='l-stale'" not in h
+    assert "通知记录（最近 24 小时 2 条）" in h and "更早的 1 条不显示" in h
+    assert "通知记录 2</button>" in panel._msg_seg(AT)
+    _book()
+    html = panel.render("paper", "t" * 40, AT)
+    assert "id='l-stale'" not in html and "id='l-fresh'" in html
+    p.write_text(json.dumps(recs[0], ensure_ascii=False) + "\n", encoding="utf-8")
+    h = panel._notify_log_card(AT)
+    assert "最近 24 小时没有通知（更早的 1 条不显示）" in h and "id='l-" not in h and "通知记录 0</button>" in panel._msg_seg(AT)

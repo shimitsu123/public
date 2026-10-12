@@ -254,6 +254,7 @@ RANK_GROUPS = (("triggered", "今天出了买入信号"), ("rest", "观察中"))
 SG_PAGE = 5                               # 一组先显示几只（其余点「再显示」）
 
 
+NOTIFY_SHOW_H = 24                                          # 「消息 → 通知记录」只显示最近几小时发出的
 NEWS_SHOW_H = 24                                            # 「消息」的经济威胁消息只显示最近几小时发布的
 MANUAL_SHOW_DAYS = 2                                        # 「交易」的手动指令：已经处理完的只显示最近几天
 AUTO_NEAR_DAYS = 5                                          # 「快要出」列到几个交易日以内的估计金叉
@@ -862,28 +863,39 @@ def _ts_jst(v):
     return t.astimezone(JST) if t.tzinfo else t.replace(tzinfo=JST)
 
 
-def _msg_seg() -> str:
-    from . import notify as NT
-    n = len(NT.history(60))
+def _msg_seg(now: dt.datetime | None = None) -> str:
+    n = len(_recent_notices(now)[0])                       # 按钮上的数字 = 最近 24 小时的条数（与卡片一致）
     return ("<div class='seg sgseg' role='tablist'><button type='button' data-mseg='news' class='on'>经济威胁消息</button>"   # 默认（2026-10-11 用户）
             "<button type='button' data-mseg='log'>通知记录 " + str(n) + "</button></div>")
 
 
-def _notify_log_card() -> str:
-    """qbreak 发出的每一条通知（notify.send 记的；数据目录 out/notifications.jsonl，只在本机）：时刻（JST）、标题、内容。
-    推送点开 ?tab=news&seg=log&l=<id> → 展开这一条。2026-10-11 用户：不用 Gmail，直接在 qbreak 里通知并记录。"""
+def _recent_notices(now: dt.datetime | None = None) -> tuple[list[dict], int]:
+    """最近 NOTIFY_SHOW_H 小时内发出的通知（新的在前）与更早的条数（2026-10-12 用户：「通知记录里面只显示 24 小时以内的记录」）。
+    记的时刻读不出的也不显示。"""
     from . import notify as NT
+    now = now or now_jst()
+    cut = (now if now.tzinfo else now.replace(tzinfo=JST)) - dt.timedelta(hours=NOTIFY_SHOW_H)
     hs = NT.history(60)
+    keep = [h for h in hs if _ts_jst(h.get("at")) and _ts_jst(h.get("at")) >= cut]
+    return keep, len(hs) - len(keep)
+
+
+def _notify_log_card(now: dt.datetime | None = None) -> str:
+    """qbreak 发出的每一条通知（notify.send 记的；数据目录 out/notifications.jsonl，只在本机）：时刻（JST）、标题、内容；只显示最近 24 小时的。
+    推送点开 ?tab=news&seg=log&l=<id> → 展开这一条。2026-10-11 用户：不用 Gmail，直接在 qbreak 里通知并记录。"""
+    hs, n_old = _recent_notices(now)
     if not hs:
-        return ("<section class='card' id='nlog'><h2>通知记录</h2><div class='muted small'>还没有。qbreak 发出的通知（成交、09:30 自检、买入信号、HALT、"
-                "经济威胁、手机连不上…）都会记在这里；打开了推送的设备同时会弹出来。</div></section>")
+        return ("<section class='card' id='nlog'><h2>通知记录</h2><div class='muted small'>"
+                + (f"最近 {NOTIFY_SHOW_H} 小时没有通知（更早的 {n_old} 条不显示）。" if n_old else "还没有。")
+                + "qbreak 发出的通知（成交、09:30 自检、买入信号、HALT、经济威胁、手机连不上…）都会记在这里；打开了推送的设备同时会弹出来。</div></section>")
     rows = []
     for k, h in enumerate(hs):
         lv = str(h.get("level") or "info")
         rows.append(f"<details class='hv nw' id='l-{escape(str(h.get('id')))}'{' open' if k == 0 else ''}><summary>"
                     f"{'<b class=neg>★</b> ' if lv in ('warn', 'error') else ''}<span class='muted'>{escape(str(h.get('at') or '')[5:16].replace('-', '/'))} JST</span> "
                     f"{escape(str(h.get('subject') or ''))}</summary><div style='white-space:pre-wrap'>{escape(str(h.get('text') or ''))}</div></details>")
-    return ("<section class='card' id='nlog'><h2>通知记录（最近 " + str(len(hs)) + " 条）</h2><div class='muted small'>时间都是日本时间（JST）。"
+    return (f"<section class='card' id='nlog'><h2>通知记录（最近 {NOTIFY_SHOW_H} 小时 {len(hs)} 条）</h2><div class='muted small'>时间都是日本时间（JST）。"
+            f"只显示最近 {NOTIFY_SHOW_H} 小时的" + (f"（更早的 {n_old} 条不显示）" if n_old else "") + "；"
             "qbreak 发出的每一条通知都记在这里（只在这台 Mac）；打开了推送的设备同时会弹出来。</div>" + "".join(rows) + "</section>")
 
 
@@ -1286,9 +1298,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     if remote:
         H.append(_notify_card())                             # 推送（网页 App）
     H.append(PANE + "news")
-    H.append(_msg_seg())                                     # 通知记录 / 经济威胁 两段
+    H.append(_msg_seg(now))                                  # 通知记录 / 经济威胁 两段
     H.append("<div class='mseg' data-s='news'>" + _news_card(now) + "</div>")
-    H.append("<div class='mseg' data-s='log' hidden>" + _notify_log_card() + "</div>")
+    H.append("<div class='mseg' data-s='log' hidden>" + _notify_log_card(now) + "</div>")
     H.append(PANE + "")                                      # 分组结束
     badges = _badges(book, st, sm, waiting, now)
     H.append("</main><nav class='tabbar' role='tablist' aria-label='分类'>"
