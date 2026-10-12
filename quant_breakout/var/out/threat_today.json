@@ -2,11 +2,11 @@
  "note": "只展示，不参与交易（2026-09-25 事先登记研究：美股 AUC 0.66、日経 0.58，不足以预测时间段）",
  "event_def": "之后 60 个交易日内最低收盘比当天跌 ≥10%",
  "US": {
-  "date": "2026-10-09",
-  "value": 51.1,
-  "prev20": 55.3,
-  "band": "50–60",
-  "band_freq": 17.5,
+  "date": "2026-10-12",
+  "value": 47.8,
+  "prev20": 58.2,
+  "band": "40–50",
+  "band_freq": 9.0,
   "base_rate": 14.4,
   "auc": [
    0.6695336428629806,
@@ -20,12 +20,12 @@
    {
     "k": "rates",
     "label": "美债利率急升",
-    "pct": 94
+    "pct": 93
    },
    {
     "k": "oil",
     "label": "油价冲击",
-    "pct": 86
+    "pct": 87
    },
    {
     "k": "curve",
@@ -47,22 +47,22 @@
    {
     "k": "commod",
     "label": "商品综合急涨",
-    "pct": 84
+    "pct": 81
    },
    {
     "k": "natgas",
     "label": "天然气急涨",
-    "pct": 70
-   },
-   {
-    "k": "gold",
-    "label": "黄金急涨（避险）",
     "pct": 66
    },
    {
     "k": "grains",
     "label": "粮食价格急涨",
-    "pct": 66
+    "pct": 64
+   },
+   {
+    "k": "gold",
+    "label": "黄金急涨（避险）",
+    "pct": 60
    },
    {
     "k": "delinq",
@@ -87,41 +87,41 @@
    {
     "k": "commod_vol",
     "label": "商品波动",
-    "pct": 44
-   },
-   {
-    "k": "copper",
-    "label": "铜价下跌",
-    "pct": 37
+    "pct": 45
    },
    {
     "k": "gold_silver",
     "label": "金银比上升",
-    "pct": 31
+    "pct": 29
+   },
+   {
+    "k": "copper",
+    "label": "铜价下跌",
+    "pct": 28
    }
   ],
   "watch": {
-   "date": "2026-10-09",
-   "gs_pct": 31.47,
-   "cv_pct": 44.48,
-   "W": 37.98,
-   "W_pct": 23.27,
-   "A0": 51.09,
-   "A0_pct": 50.05,
-   "gs_raw": -2.69,
-   "cv_raw": 16.65
+   "date": "2026-10-12",
+   "gs_pct": 29.16,
+   "cv_pct": 45.13,
+   "W": 37.14,
+   "W_pct": 22.05,
+   "A0": 47.82,
+   "A0_pct": 40.2,
+   "gs_raw": -3.38,
+   "cv_raw": 16.76
   },
   "domains": {
    "信用 / 破产代理": {
-    "pct": 45,
+    "pct": 44,
     "class": "两段都提升"
    },
    "就业": {
-    "pct": 43,
+    "pct": 44,
     "class": "只前半"
    },
    "利率 / 曲线": {
-    "pct": 77,
+    "pct": 76,
     "class": "都没有"
    },
    "货币政策 / 流动性": {
@@ -129,27 +129,27 @@
     "class": "都没有"
    },
    "汇率": {
-    "pct": 65,
-    "class": "都没有"
-   },
-   "市场波动": {
     "pct": 67,
     "class": "都没有"
    },
+   "市场波动": {
+    "pct": 61,
+    "class": "都没有"
+   },
    "商品": {
-    "pct": 59,
+    "pct": 54,
     "class": "只后半"
    },
    "市场趋势": {
-    "pct": 28,
+    "pct": 27,
     "class": "两段都提升"
    },
    "地缘 / 不确定性": {
-    "pct": 82,
+    "pct": 83,
     "class": "只前半"
    },
    "财政": {
-    "pct": 16,
+    "pct": 14,
     "class": "两段都提升"
    },
    "通胀": {
@@ -173,23 +173,23 @@
     "class": "都没有"
    },
    "全球 / 中国": {
-    "pct": 38,
+    "pct": 36,
     "class": "两段都提升"
    },
    "运输 / 物流": {
-    "pct": 87,
+    "pct": 88,
     "class": "只后半"
    },
    "科技周期": {
-    "pct": 48,
+    "pct": 57,
     "class": "两段都提升"
    },
    "银行": {
-    "pct": 63,
+    "pct": 64,
     "class": "只前半"
    },
    "市场内部": {
-    "pct": 71,
+    "pct": 74,
     "class": "只后半"
    },
    "估值": {
@@ -202,10 +202,10 @@
    }
   },
   "wfc": {
-   "date": "2026-10-09",
+   "date": "2026-10-12",
    "show": "A0",
-   "p10": 0.128040484507556,
-   "p15": 0.05605389502304143,
+   "p10": 0.10830302589381313,
+   "p15": 0.04795667655944165,
    "base10": 0.1361450240473548,
    "base15": 0.059748427672955975,
    "adopted": null,
@@ -221,9 +221,9 @@
    "top": null
   },
   "fwd": {
-   "A0x": 43.4,
-   "S": 47.1,
-   "DOM": 55.11
+   "A0x": 38.9,
+   "S": 46.2,
+   "DOM": 54.88
   },
   "fwd_plus": 3
  },
@@ -489,17 +489,25 @@
    "date": "2026-10-25",
    "kind": "ELECTION",
    "home": "GL",
-   "name": "巴西大选决选（周日，如需要）",
-   "source": "https://www.tse.jus.br/comunicacao/noticias/2026/Marco/eleicoes-2026-confira-as-principais-datas-do-calendario-eleitoral",
-   "checked": "2026-09-25"
+   "name": "巴西大选决选（周日；Flávio Bolsonaro vs Lula，第一轮 47.0% / 45.2%）",
+   "source": "https://www12.senado.leg.br/noticias/materias/2026/10/04/flavio-bolsonaro-e-lula-disputam-o-segundo-turno-das-eleicoes-para-presidente",
+   "checked": "2026-10-12"
   },
   {
    "date": "2026-10-27",
    "kind": "ELECTION",
    "home": "GL",
    "name": "以色列议会选举（中东局势 / 油价）",
-   "source": "https://www.electionguide.org/elections/id/5092/",
-   "checked": "2026-09-25"
+   "source": "https://blogs.loc.gov/law/2026/10/falqs-israels-upcoming-election-on-october-27-2026/",
+   "checked": "2026-10-12"
+  },
+  {
+   "date": "2026-10-28",
+   "kind": "FISCAL",
+   "home": "GL",
+   "name": "英国秋季预算（Autumn Budget，OBR 预测同日）",
+   "source": "https://www.gov.uk/government/publications/chancellor-letter-to-the-treasury-select-committee-tsc-budget-2026-date",
+   "checked": "2026-10-12"
   },
   {
    "date": "2026-10-28",
@@ -517,8 +525,16 @@
    "kind": "INDEX",
    "home": "JP",
    "name": "新 TOPIX 首次定期入替实施（10 月最后营业日）：未续选的移行措置銘柄开始按季降权，本次系数 87.5%",
-   "source": "https://www.jpx.co.jp/markets/indices/revisions-indices/nlsgeu000005mj3q-att/RevisionsofTOPIX.pdf",
-   "checked": "2026-09-25"
+   "source": "https://www.jpx.co.jp/markets/indices/line-up/files/cal2_30_topix.pdf",
+   "checked": "2026-10-12"
+  },
+  {
+   "date": "2026-11-01",
+   "kind": "OPEC",
+   "home": "GL",
+   "name": "OPEC+ 7 国自愿减产小组月度会议（周日；阿联酋 2026-05-01 起退出 OPEC）",
+   "source": "https://www.opec.org/pr-detail/616-4-october-2026.html",
+   "checked": "2026-10-12"
   },
   {
    "date": "2026-11-03",
@@ -526,13 +542,21 @@
    "home": "US",
    "name": "美国中期选举（东京 11/3 文化の日休市，日本 11/4 反应）",
    "source": "https://www.fec.gov/help-candidates-and-committees/dates-and-deadlines/2026-reporting-dates/preg-report-notice-pacs-party-committees-2026/",
-   "checked": "2026-09-25"
+   "checked": "2026-10-12"
   },
   {
    "date": "2026-11-06",
    "kind": "NFP",
    "home": "US",
    "name": "10月雇用统计"
+  },
+  {
+   "date": "2026-11-09",
+   "kind": "TRADE",
+   "home": "GL",
+   "name": "美国对华 301 排除清单（178 项）与中国相关船舶港口费暂停的法定到期（23:59 ET；延到 1/10 的正式通知未发）",
+   "source": "https://www.federalregister.gov/documents/2025/12/01/2025-21671/notice-of-product-exclusion-extensions-chinas-acts-policies-and-practices-related-to-technology",
+   "checked": "2026-10-12"
   },
   {
    "date": "2026-11-10",
@@ -545,22 +569,46 @@
    "kind": "SUMMIT",
    "home": "GL",
    "name": "APEC 领导人会议（深圳，11/18–19）",
-   "source": "https://news.cgtn.com/news/2025-12-13/2026-APEC-meeting-to-be-held-Nov-18-19-in-Shenzhen-China-1J43L2Fb2w0/index.html",
-   "checked": "2026-09-25"
+   "source": "https://www.sz.gov.cn/en_szgov/news/infocus/APEC2026/News/content/post_12977146.html",
+   "checked": "2026-10-12"
+  },
+  {
+   "date": "2026-11-28",
+   "kind": "ELECTION",
+   "home": "GL",
+   "name": "台湾地方选举（直辖市长、县市长等；周六）",
+   "source": "https://cna.com.tw/news/aipl/202608200078.aspx",
+   "checked": "2026-10-12"
   },
   {
    "date": "2026-11-29",
    "kind": "OPEC",
    "home": "GL",
-   "name": "第 42 次部长级会议（ONOMM，周日；2027 年产量基准）",
-   "source": "https://www.opec.org/pr-detail/605-7-june-2026.html",
-   "checked": "2026-09-25"
+   "name": "第 42 次部长级会议（ONOMM）+ 第 69 次 JMMC（周日；2027 年产量基准）",
+   "source": "https://opec.org/pr-detail/617-4-october-2026.html",
+   "checked": "2026-10-12"
+  },
+  {
+   "date": "2026-11-30",
+   "kind": "INDEX",
+   "home": "GL",
+   "name": "MSCI 11 月指数审议实施（11-30 收盘、12-01 生效；11-11 公布）",
+   "source": "https://www.msci.com/eqb/pressreleases/archive/ir_dates.pdf",
+   "checked": "2026-10-12"
   },
   {
    "date": "2026-12-04",
    "kind": "NFP",
    "home": "US",
    "name": "11月雇用统计"
+  },
+  {
+   "date": "2026-12-04",
+   "kind": "TRADE",
+   "home": "US",
+   "name": "232 条款多晶硅及其衍生品：最低进口价 + 15% 关税生效（日本、欧盟封顶 15%）",
+   "source": "https://www.whitehouse.gov/presidential-actions/2026/08/adjusting-imports-of-polysilicon-and-its-derivatives-into-the-united-states/",
+   "checked": "2026-10-12"
   },
   {
    "date": "2026-12-09",
@@ -578,9 +626,9 @@
    "date": "2026-12-11",
    "kind": "FISCAL",
    "home": "US",
-   "name": "美国临时拨款（H.R.6500）到期，12/12 起可能政府停摆",
+   "name": "美国临时拨款（H.R.6500，P.L. 119-103）到期，12/12 00:01 ET 起可能政府停摆",
    "source": "https://www.whitehouse.gov/briefings-statements/2026/09/congressional-bill-h-r-6500-signed-into-law/",
-   "checked": "2026-09-25"
+   "checked": "2026-10-12"
   },
   {
    "date": "2026-12-11",
@@ -588,7 +636,7 @@
    "home": "US",
    "name": "Russell 美国指数 12 月重构（收盘后生效）",
    "source": "https://www.lseg.com/en/media-centre/press-releases/ftse-russell/2026/ftse-russell-announces-december-2026-russell-us-indexes-reconstitution-schedule",
-   "checked": "2026-09-25"
+   "checked": "2026-10-12"
   },
   {
    "date": "2026-12-11",
@@ -597,6 +645,14 @@
    "name": "12 月大 SQ（期货最后交易日 12/10）",
    "source": "https://www.jpx.co.jp/english/derivatives/rules/last-trading-day/tvdivq0000004gz8-att/2026_indexfutures_options_1_e.xlsx",
    "checked": "2026-09-25"
+  },
+  {
+   "date": "2026-12-12",
+   "kind": "POLITICS",
+   "home": "JP",
+   "name": "第 222 回临时国会会期末（10/5 召集、69 天；周六）",
+   "source": "https://www.shugiin.go.jp/internet/itdb_annai.nsf/html/statics/shiryo/kaiki.htm",
+   "checked": "2026-10-12"
   }
  ]
 }
