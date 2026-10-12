@@ -165,15 +165,16 @@ def test_slots_full_and_sell_first_in_the_same_decision():
     assert set(r.eng.st.pos) == {"B.T"} and r.item("M-a-buy")["status"] == "done"
 
 
-def test_buy_capped_at_single_position_limit_and_by_cash():
+def test_buy_not_capped_at_34pct_only_by_cash():
+    """2026-10-12 用户：手动买入「不要设上限」→ 不截到单只 34%，只受现金（+ 卖核心 ETF）限制。"""
     r = _Run([1000.0] * 30, entry=(10,))
     r.until(14)
     rec = _buy(r, unit="pct", value=60)
     r.day()
     it = r.item(rec["id"])
     eq = r.eng.equity(15)
-    assert it["status"] == "placed" and "单只上限 34%" in it["msg"]
-    assert it["shares"] * 1500 <= eq * 0.34 + 1e-6 and (it["shares"] + 100) * 1500 > eq * 0.34
+    assert it["status"] == "placed" and "单只上限" not in it["msg"]
+    assert it["shares"] * 1500 > eq * 0.34 and it["shares"] * 1500 <= eq * 0.60 + 1e-6
 
 
 def test_buy_is_one_shot_when_the_open_gaps_up():

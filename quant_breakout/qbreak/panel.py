@@ -242,6 +242,11 @@ details.nw.lv-hi{border-left:4px solid var(--neg);padding-left:8px}details.nw.lv
 .axt .mt{height:6px;border-radius:3px;background:var(--line);margin:3px 0 2px;overflow:hidden}.axt .mt i{display:block;height:100%;border-radius:3px;background:var(--muted)}
 .axt .mt.hot i{background:var(--neg)}
 .buyr{width:100%;margin:8px 0 2px}
+.alb{display:flex;height:16px;border-radius:8px;overflow:hidden;background:var(--line);margin:6px 0 8px}.alb i{display:block;height:100%;min-width:2px}
+.alb i+i{box-shadow:inset 1px 0 0 var(--card)}
+.all{display:grid;gap:2px}.alr{display:grid;grid-template-columns:12px minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:2px 0}
+.ald{width:10px;height:10px;border-radius:3px}.aln{overflow-wrap:anywhere}.alp{font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+.aly{font-size:12px;font-variant-numeric:tabular-nums;text-align:right;min-width:6.5em}
 .fund{margin:8px 0 4px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}.fund .fh{font-weight:600;margin-bottom:6px}
 .fseg{margin:0 0 6px}.frow{display:grid;grid-template-columns:5.2em minmax(0,1fr) auto;align-items:center;gap:2px 8px;padding:3px 0}
 .frow .ft{font-variant-numeric:tabular-nums}.frow .fv{font-size:13px;font-variant-numeric:tabular-nums;text-align:right}
@@ -338,6 +343,8 @@ async function api(path, body){
                                     : '回应读不出来：不确定有没有生效 —— 刷新后'+where+'，不要直接再点一次', true);
     if(!r.ok || !j.ok){
       if(r.status===401){ toast((j && j.msg) || '这台设备没被认出来：正在刷新…', true); setTimeout(()=>location.reload(),1500); return null; }
+      if((j && j.unsure) || (!j && r.status>=500))                         // 面板内部出错 / 中途断了：可能已经写进去了（2026-10-12 再发防止）
+        return fail((j && j.msg) || ('面板没正常回应（HTTP '+r.status+'）：不确定有没有'+(path==='/api/request' ? '写进去' : '生效')+' —— 刷新后'+where+'，不要直接再点一次'), true);
       return fail((j && j.msg) || ('没写成（HTTP '+r.status+'）'));
     }
     return j;
@@ -401,6 +408,7 @@ function cpctOf(n){                                                        // �
   if(Math.floor(ADJ.u100*p/100/L+1e-9)*L!==m) p=Math.round(m/ADJ.u100*10000)/100;
   return p;
 }
+function capLab(){ return CFG.cap>=100 ? '总权益' : '单只上限 '+CFG.cap+'%'; }   // 手动买入 / 加仓的上限（2026-10-12 起 = 总权益）
 function adjCap(){                                                          // 个股：单只上限 cap%；核心 ETF：规则目标额（比例 100%）；固定口数：总权益
   if(ADJ.fix) return ADJ.px>0 && CFG.eq>0 ? Math.floor(CFG.eq/ADJ.px/ALOT()+1e-9)*ALOT() : 0;
   if(ADJ.core) return Math.floor((ADJ.u100||0)/ALOT())*ALOT();
@@ -443,7 +451,7 @@ function adjBar(){                                                         // �
   const pk=Math.min(100, have/n*100), num=n<=8 ? '' : ' '+fmt(ADJ.shares);            // ▲ 对准现在的位置：左半边往右写、右半边往左写（不出框）
   const kl=nd('span', 'k', pk<=60 ? '▲现在'+num : '现在'+num+' ▲', lab);
   kl.style.left=pk+'%'; kl.style.transform = pk<=60 ? 'translateX(-6px)' : 'translateX(calc(-100% + 6px))';
-  const lim = ADJ.fix ? '总权益' : ADJ.core ? '规则目标额（比例 100%）' : '单只上限 '+CFG.cap+'%';
+  const lim = ADJ.fix ? '总权益' : ADJ.core ? '规则目标额（比例 100%）' : capLab();
   const capTxt = capN>=n ? '最右边 = '+lim
                : capN<have ? lim+' ≈ '+fmt(capN*LOT)+' '+U+'（现在已超过，只能减）'
                : lim+' ≈ '+fmt(capN*LOT)+' '+U;
@@ -470,11 +478,11 @@ function adjPrev(){
     go.textContent='确认卖出 '+fmt(k)+' 股'; go.className='btn danger'; go.disabled=false; return;
   }
   let t=n, note='';
-  if(t>cap){ t=Math.max(cap, c.shares); note='\\n★ 超过单只上限 '+CFG.cap+'%：截到 '+fmt(t)+' 股'; }
+  if(t>cap){ t=Math.max(cap, c.shares); note='\\n★ 超过'+capLab()+'：截到 '+fmt(t)+' 股'; }
   const k=t-c.shares;
   if(k<=0){
     const full=CFG.eq>0 && c.shares*c.px/CFG.eq*100>=CFG.cap;
-    out.textContent = full ? '已经到单只上限 '+CFG.cap+'%：不能再加' : '再加 '+fmt(LOT)+' 股就超过单只上限 '+CFG.cap+'%：不能再加';
+    out.textContent = full ? '已经到'+capLab()+'：不能再加' : '再加 '+fmt(LOT)+' 股就超过'+capLab()+'：不能再加';
     go.textContent='确认'; go.disabled=true; return;
   }
   ADJ.cost=k*c.px*1.03; fundBox($('#adj-fund'), ADJ.cost, c.t);
@@ -484,10 +492,11 @@ function adjPrev(){
 }
 function adjPrevFix(n){                                                    // 核心 ETF 固定口数（2026-10-11）：买入 / 卖出多少、占权益、什么时候、之后怎样
   const c=ADJ, go=$('#adj-go'), out=$('#adj-prev'), cap=adjCap(), t=Math.min(n, cap), k=t-c.shares;
+  ADJ.cost = k>0 ? k*c.px : 0; fundBox($('#adj-fund'), ADJ.cost, c.t);     // 2026-10-12：买的话钱不够 → 从持仓平摊凑（同个股买入）
   const head = k>0 ? '买入 '+fmt(k)+' 口（约 '+yen(k*c.px)+'）：' : k<0 ? '卖出 '+fmt(-k)+' 口（约 '+yen(-k*c.px)+'）：' : '保持现在的口数：';
   out.textContent = head+fmt(c.shares)+' → '+fmt(t)+' 口，约 '+yen(t*c.px)+' · 约占权益 '+pctOf(t)+(n>cap ? '\\n★ 超过总权益：截到 '+fmt(t)+' 口' : '')
     +'\\n下一次决策起（交易日 07:40，开盘下单）正好调到 '+fmt(t)+' 口，不再按规则（牛熊 / 股债相关）自动调；一直有效，直到点「恢复按规则」。'
-    +'\\n钱从哪来 / 剩下的去哪：核心目标额先扣掉这只，其余照规则分给其他核心 ETF（牛市 = 纳指 1545 相应减少 / 增加）；规则不拿别的 ETF 时剩下的留现金。';
+    +(k>0 ? '' : '\\n剩下的钱照规则分给其他核心 ETF；规则不拿别的 ETF 时留现金。');
   go.textContent = k>0 ? '确认买入 '+fmt(k)+' 口' : k<0 ? '确认卖出 '+fmt(-k)+' 口' : '确认固定 '+fmt(t)+' 口';
   go.className = k<0 ? 'btn danger' : 'btn primary'; go.disabled = !(c.px>0);
 }
@@ -592,7 +601,7 @@ function buyPrev(){
   let n=buyTarget();
   if(n==null){ out.textContent='输入要买多少（股数 / 金额 / 占总权益 %）'; go.textContent='确认买入'; go.disabled=true; return; }
   const cap=buyCap(); let note='';
-  if(n>cap){ n=cap; note='\\n★ 超过单只上限 '+CFG.cap+'%：截到 '+fmt(n)+' 股'; }
+  if(n>cap){ n=cap; note='\\n★ 超过'+capLab()+'：截到 '+fmt(n)+' 股'; }
   if(n<=0){
     fundBox($('#buy-fund'), 0, BUY.t);
     out.textContent = BUY.unit==='rule' ? '按规则的仓位不够买 1 个单元（'+fmt(BUY.lot)+' 股 ≈ '+yen(BUY.lot*BUY.px)+'）：改用股数 / 金额试试'
@@ -665,7 +674,7 @@ document.addEventListener('click', async e=>{
   if(a==='adj-step'){ const n=adjTarget(); adjShow(Math.max(0, (n==null ? ADJ.shares : n)+(+d.d)*ALOT())); adjPrev(); return; }
   if(a==='adj-go'){
     if(ADJ && ADJ.fix){ const n=adjTarget(); if(n==null) return; const u=Math.min(n, adjCap());
-      closeAll(); done(await api('/api/request',{book:CFG.book, kind:'corefix', ticker:ADJ.t, units:u})); return; }
+      closeAll(); done(await api('/api/request', fundBody({book:CFG.book, kind:'corefix', ticker:ADJ.t, units:u}, u>ADJ.shares ? (u-ADJ.shares)*ADJ.px : 0))); return; }
     const n=adjTarget(); if(n==null || n===ADJ.shares) return;
     const v = ADJ.unit==='shares' ? n : parseFloat($('#adj-val').value);
     closeAll(); done(await api('/api/request', fundBody({book:CFG.book, kind:'adjust', ticker:ADJ.t, unit:ADJ.unit, value:v}, n>ADJ.shares ? ADJ.cost||0 : 0))); return;
@@ -1357,7 +1366,7 @@ def _dialogs(paper: bool, cap: float = MO.CAP_PCT) -> str:
             "<div class='lots'><div class='lots-bar' id='adj-bar' aria-hidden='true'></div>"
             "<input type='range' id='adj-range' min='0' max='100' step='100' value='0' aria-label='目标股数（一格 = 一次最少能买卖的股数）'></div>"
             "<div class='lots-lab' id='adj-lab' aria-hidden='true'></div><div class='muted small' id='adj-note'></div>"
-            f"<div id='adj-prev'></div><div id='adj-fund'></div><div class='muted small' id='adj-rule'>一次最少 {MO.LOT} 股；单只上限 <span id='adj-cap'>{cap:g}</span>%。"
+            f"<div id='adj-prev'></div><div id='adj-fund'></div><div class='muted small' id='adj-rule'>一次最少 {MO.LOT} 股；最多加到总权益（钱不够从持仓平摊凑）<span id='adj-cap' hidden>{cap:g}</span>。"
             "加仓是你自己的决定（「赢家加仓」研究没有通过）；加仓后成本按股数平均，止损不变。" + sim + "</div>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn primary' id='adj-go' data-act='adj-go'>确认</button></div>"
             "</div></dialog>"
@@ -1371,7 +1380,8 @@ def _dialogs(paper: bool, cap: float = MO.CAP_PCT) -> str:
             "<div class='grow'><input type='number' id='buy-val' inputmode='decimal' min='0' aria-label='买多少'><span class='unit' id='buy-unit'>股</span></div>"
             "<button class='btn' data-act='buy-step' data-d='1' aria-label='多一个单元'>＋</button></div>"
             "<input type='range' id='buy-range' class='buyr' min='100' max='100' step='100' value='100' aria-label='买多少股（拖动；一格 = 一个单元）'>"
-            f"<div id='buy-prev'></div><div id='buy-fund'></div><div class='muted small'>按规则 = 总权益 × 25% × 新仓倍数；单只上限 <span id='buy-cap'>{cap:g}</span>%。"
+            f"<div id='buy-prev'></div><div id='buy-fund'></div><div class='muted small'>「按规则」= 规则自己的仓位（总权益 × 25% × 新仓倍数），只是默认值、不是上限；"
+            f"可以买到总权益（钱不够从持仓平摊凑）<span id='buy-cap' hidden>{cap:g}</span>。"
             "下单前执行器再查资格、名额、决算前；买入后按规则止损、离场。</div>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn primary' id='buy-go' data-act='buy-go'>确认买入</button></div>"
             "</div></dialog>"
@@ -1659,6 +1669,37 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
     H.append(f"<details class='kl'{' open' if r.get('status') in ('triggered', 'imminent') else ''}>"
              f"<summary>K 线 · 现价</summary><div class='qt small' data-sq='{escape(t)}'{planned}></div>{chart(t, 'suggest')}</details></div>")
     return "".join(H)
+
+
+ALLOC_COLORS = ("#4c7bf3", "#f0a030", "#9b6cf0", "#20a8a0", "#e5c53a", "#e870b0", "#a07850", "#6aa8e8")   # 不用红 / 绿（红涨绿跌另有含义）
+
+
+def _alloc_card(book: dict | None, hv: dict | None) -> str:
+    """持仓最上面的「仓位占比」（2026-10-12 用户：每个仓位占多少，用线性 / 扇形一眼看出来）：一条按金额分段的横条 + 每只一行
+    （颜色点、代码名称、占比、金额）；现金灰色放最后。按最近收盘估算（与「从持仓平摊凑」同一份数字）。没有持仓 → 空。"""
+    st = (book or {}).get("state") or {}
+    hold = MO.fund_holdings(book)["hold"]
+    names = {r.get("ticker"): r.get("name") for r in ((hv or {}).get("holdings") or []) + ((hv or {}).get("core") or [])}
+    items = [(h["t"], names.get(h["t"]) or "", h["cur"] * h["px"], h["kind"]) for h in hold if h["cur"] > 0 and h["px"] > 0]
+    if not items:
+        return ""
+    items.sort(key=lambda x: -x[2])
+    cash = max(0.0, float(st.get("cash_jpy") or 0))
+    total = sum(x[2] for x in items) + cash
+    if total <= 0:
+        return ""
+    rows = [(t, n, v, k, ALLOC_COLORS[i % len(ALLOC_COLORS)]) for i, (t, n, v, k) in enumerate(items)]
+    if cash > 0:
+        rows.append(("现金", "", cash, "cash", "var(--muted)"))
+    bar = "".join(f"<i style='width:{v / total * 100:.2f}%;background:{c}' title='{escape(t)} {v / total * 100:.1f}%'></i>"
+                  for t, _n, v, _k, c in rows)
+    legend = "".join(
+        f"<div class='alr'><span class='ald' style='background:{c}'></span>"
+        f"<span class='aln'><b>{escape(t.replace('.T', ''))}</b>{(' ' + escape(str(n).split('（')[0])) if n else ''}{' · ETF' if k == 'core' else ''}</span>"
+        f"<span class='alp'>{v / total * 100:.1f}%</span><span class='aly muted'>{_yen(v)}</span></div>"
+        for t, n, v, k, c in rows)
+    return (f"<section class='card' id='alloc'><div class='head'><b>仓位占比</b><span class='muted small'>合计 {_yen(total)} · 按最近收盘</span></div>"
+            f"<div class='alb' role='img' aria-label='仓位占比'>{bar}</div><div class='all'>{legend}</div></section>")
 
 
 def _exit_html(info: dict | None) -> str:
@@ -2038,7 +2079,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     paper = tag.startswith("paper")
     when = MO.when_text(now)                                # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘
     man = book.get("manual") or {}
-    cap = float(man.get("cap_pct") or MO.CAP_PCT)
+    cap = MO.MANUAL_CAP_PCT                                 # 手动买入 / 加仓的上限（2026-10-12：最多到总权益）
     kl = sm.get("kline") or {}
     ktrend = kl.get("trend") or {}
     cdoc = _chart_data(tag) or {}
@@ -2115,6 +2156,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         H.append("<section class='card'>执行器还没有账本（第一次运行之后才有持仓）。</section>")
     H.append(_money_card(tag, book, now))                 # 〔77〕C：损益 / 年内已实现与预计代扣 / 最近成交 / 日志 / 入出金
     H.append(PANE + "hold")
+    H.append(_alloc_card(book, sm.get("holding_view") or {}))  # 最上面：每个仓位占多少（2026-10-12）
     H.append(_broker_card(tag, now))                      # 〔77〕C：立花那边实际是什么（快照）
     H.append(PANE + "more")
     H.append(_gate_card(tag))                             # 〔77〕C：上线准备
@@ -2601,7 +2643,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     why = MO.check(rec, book, tag, sm=sm, now=now)
     if why:
         return False, f"没写：{why}", None
-    fund, sells = body.get("fund") if rec["kind"] in ("buy", "adjust") else None, []
+    fund, sells = body.get("fund") if rec["kind"] in ("buy", "adjust", "corefix") else None, []
     if isinstance(fund, dict) and fund.get("mode") == "split":   # 钱不够 → 从持仓平摊凑：个股写成调仓往下（先卖），核心 ETF 那份执行器按当时缺多少卖
         try:
             cost = float(fund.get("cost") or 0)
@@ -2632,12 +2674,17 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
            "cancel_order": f"已写：撤单 {rec.get('ticker')}（{rec.get('cid')}）→ 执行器马上撤（已经成交的部分撤不了）"}.get(k)
     if k == "adjust":
         st = book.get("state") or {}
-        a = MO.adjust_plan(rec, st, float((book.get("manual") or {}).get("cap_pct") or MO.CAP_PCT))
+        a = MO.adjust_plan(rec, st, MO.MANUAL_CAP_PCT)
         if a["delta"] > 0:
-            msg = (f"已写：{t} 加 {a['delta']:,} 股（→ {a['target']:,} 股" + ("，截到单只上限" if a["capped"] else "")
+            msg = (f"已写：{t} 加 {a['delta']:,} 股（→ {a['target']:,} 股" + ("，截到总权益" if a["capped"] else "")
                    + f"）→ {when}买入")
         else:
             msg = f"已写：{t} 卖 {-a['delta']:,} 股（→ {a['target']:,} 股）→ {when}卖出"
+    if k == "corefix":                                                             # 2026-10-12 再发防止：这一种以前没有说明 → msg None → 拼接崩溃 → 手机 502
+        msg = (f"已写：{t} 恢复按规则 → 下一次决策（交易日 07:40）起照规则调" if rec.get("clear") else
+               f"已写：{t} 固定 {int(rec.get('units') or 0):,} 口 → 下一次决策（交易日 07:40）起调到这个口数、开盘下单")
+    if msg is None:                                                                # 新加的指令种类忘了写说明：也给一句（不让拼接崩溃）
+        msg = f"已写：{MO.LABEL.get(k, k)}" + (f" {t}" if t else "") + f" → {when}处理"
     if k == "core" and not t and pct0 <= 0 < float(rec["pct"]):                    # 停买后确认买入
         msg = f"已写：确认买入（闲置资金比例 0% → {rec['pct']:g}%）→ {when}照规则买入核心 ETF"
     if k == "core" and t and int(rec.get("target") or 0) <= 0:                     # 核心 ETF 卖出全部：之后停买
@@ -2658,7 +2705,8 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
         msg = (f"已写：买入 {t}（{est}）→ {when}买入"
                + ("" if row and row.get("signal") else "；★ 还没有买入信号：是你自己的决定"))
     if sells:
-        msg += "；凑钱先卖：" + "、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells) + "（核心 ETF 那份执行器按当时还缺多少卖）"
+        msg += ("；凑钱先卖：" + "、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells)
+                + ("（其余由别的核心 ETF 照规则减少）" if k == "corefix" else "（核心 ETF 那份执行器按当时还缺多少卖）"))
     if paths.halt_file().exists() and k in MO.ORDER_KINDS + ("core",):
         msg += "；★ HALT 生效中：解除之后才处理"
     return True, msg + f"（指令 {rec['id']}）", rec
@@ -3102,7 +3150,32 @@ class _Common(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):                       # 不把请求逐条写进日志（页面每次刷新都会有）
         return
 
+    def handle_one_request(self):
+        """所有接口的总保护（2026-10-12 再发防止：处理里一出异常连接就断 → 手机经 Tailscale 看到 HTTP 502、以为没写成又点一次）：
+        异常 → 记日志、回一个能读的 JSON / 文字（写入类的接口：可能已经写进去了 → 先确认、不要直接再点）。"""
+        self._sent = False
+        try:
+            super().handle_one_request()
+        except (BrokenPipeError, ConnectionResetError):
+            raise
+        except Exception:                                   # noqa: BLE001
+            log.exception("面板处理请求出错：%s %s", getattr(self, "command", "?"), urlparse(getattr(self, "path", "") or "").path)
+            if self._sent:
+                return
+            path = urlparse(getattr(self, "path", "") or "").path
+            try:
+                if path.endswith("/api/request") or path.endswith("/api/halt"):
+                    self._json(500, {"ok": False, "unsure": True,
+                                     "msg": "面板内部出错（已记日志）：这次可能已经写进去了 —— 刷新后在「手动指令」里确认，不要直接再点一次"})
+                elif "/api/" in path:
+                    self._json(500, {"ok": False, "msg": "面板内部出错（已记日志）：刷新后再试"})
+                else:
+                    self._text(500, "面板内部出错（已记日志）：刷新后再试")
+            except Exception:                               # noqa: BLE001
+                pass
+
     def _send(self, code: int, body: bytes, ctype: str, headers=()) -> None:
+        self._sent = True
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))

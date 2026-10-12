@@ -185,7 +185,7 @@ def test_submit_adjust_messages_and_due():
     ok, msg, rec2 = panel.submit({"book": "paper", "kind": "adjust", "ticker": "6758", "unit": "pct", "value": 30}, AT)
     assert ok and "已写：6758.T 加 100 股（→ 300 股）→ 今天 09:00 开盘买入" in msg   # 07:40 的决策已经做了 → 开盘后盘中买
     ok, msg, _ = panel.submit({"book": "paper", "kind": "adjust", "ticker": "7203", "unit": "shares", "value": 400}, AT)
-    assert not ok and "不能再加" in msg                         # 已经约占 52%，单只上限 34%
+    assert ok and "已写：7203.T 加" in msg                     # 已经约占 52%：2026-10-12 起手动加仓不设单只上限（到总权益）
     b = json.loads((paths.state_dir() / "live_unified_paper.json").read_text(encoding="utf-8"))
     only_wait = {"state": b["state"], "manual": {"items": {rec2["id"]: {**rec2, "status": "pending", "wait": True}}}}
     (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(only_wait), encoding="utf-8")
@@ -212,7 +212,7 @@ def test_render_adjust_buttons_and_kline():
     _kfile({"6758.T": {"kind": "stock", "tf": {}}})
     (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps({"holding_view": hv, "kline": kl}), encoding="utf-8")
     html = panel.render("paper", "t" * 40, AT)
-    assert "data-act='adj'" in html and "data-px='1000'" in html and "单只上限 <span id='adj-cap'>34</span>%" in html and "调仓…</button>" in html
+    assert "data-act='adj'" in html and "data-px='1000'" in html and "最多加到总权益（钱不够从持仓平摊凑）" in html and "调仓…</button>" in html
     assert "一次最少 100 股" in html and "id='adj-bar'" in html and "id='adj-lab'" in html     # 调仓条按单元分格
     assert "data-t='6758.T' data-kind='stock'" in html and "data-t='1545.T' data-kind='core'" in html
     assert "现在没拿" in html and "data-t='1482.T' data-kind='core'" in html
@@ -396,7 +396,7 @@ def test_kline_plain_text_and_lot_bar_in_node(tmp_path):
         pytest.skip("没有 node")
     J = panel._JS
     fns = "\n".join(_js_fn(J, n) for n in ("nd", "pxs", "pcs", "vfmt", "sdate", "isLive", "liveAt", "kSubNow", "kTrend", "kTL", "ALOT", "UW",
-                                            "adjCap", "adjBar"))
+                                            "capLab", "adjCap", "adjBar"))
     kp = json.dumps({"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN}, ensure_ascii=False)
     js = """
 class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[]; this._t=''; this.className=''; this.style={}; this.attrs={};

@@ -46,6 +46,7 @@ UNITS = {"shares": "股", "yen": "円", "pct": "%"}
 BUY_UNITS = {"rule": "按规则的仓位", **UNITS}
 BLOCK_DEFAULT = 20                      # 手动卖出后多少个交易日不自动买回（默认）
 BLOCK_MAX = 250
+MANUAL_CAP_PCT = 100.0                  # 手动买入 / 加仓的上限（2026-10-12 用户：「不要设上限」→ 最多到总权益；钱不够从持仓平摊凑）。规则的新仓仍按 max_position_pct
 CAP_PCT = 34.0                          # 加仓上限：单只个股占总权益 %（执行器写进账本的 manual.cap_pct = 引擎的 max_position_pct；没有就用这个）
 MAX_POS = 4                             # 个股名额（执行器写进账本的 manual.max_positions = 引擎的 max_positions；没有就用这个）
 LOT = 100                               # 页面 / 命令行估算用的单元（东证个股 100 股；执行器按引擎的单元）
@@ -149,7 +150,7 @@ def normalize(req: dict) -> dict:
         if not re.fullmatch(r"M[0-9A-Za-z\-]{6,60}", tg):
             raise ValueError("撤回要给指令 id（例 M20261006-081500-sell-7203）")
         out["target"] = tg
-    if kind in ("adjust", "buy"):                          # 买入钱不够 → 从持仓平摊凑（2026-10-12）：买的那条记 fund，凑钱卖的那几条记 fund_for
+    if kind in ("adjust", "buy", "corefix"):               # 买入钱不够 → 从持仓平摊凑（2026-10-12）：买的那条记 fund，凑钱卖的那几条记 fund_for
         if str(req.get("fund") or "") == "split":
             out["fund"] = "split"
         ff = str(req.get("fund_for") or "").strip().upper()
@@ -620,7 +621,7 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
         if cur is not None and rec["pct"] >= cur:
             return f"{t} 现在约占权益 {cur:.1f}%，目标 {rec['pct']:g}% 不低于现在：减仓只能减不能加（要加用「调仓」）"
     if k == "adjust":
-        a = adjust_plan(rec, st, float(man.get("cap_pct") or CAP_PCT))
+        a = adjust_plan(rec, st, MANUAL_CAP_PCT)
         if a["px"] <= 0 or a["eq"] <= 0:
             return f"账本里没有 {t} 的收盘价 / 总权益（执行器跑过一次之后再调）"
         if a["want"] == a["cur"]:
@@ -1043,8 +1044,8 @@ class Manual:
         if not (px > 0 and eq > 0):
             it.update(status="rejected", decided_on=str(decided), msg="没有收盘价 / 总权益，算不了")
             return
-        cap_pct = float(cfg.max_position_pct) * 100
-        cap = int(math.floor(eq * float(cfg.max_position_pct) / px / lot + 1e-9)) * lot
+        cap_pct = MANUAL_CAP_PCT                            # 手动加仓：最多到总权益（2026-10-12；规则的新仓仍按 max_position_pct）
+        cap = int(math.floor(eq * cap_pct / 100 / px / lot + 1e-9)) * lot
         add = (min(want, cap) - cur) // lot * lot
         notes = []
         if want > cap:
@@ -1095,8 +1096,8 @@ class Manual:
             return no("没有收盘价 / 总权益，算不了")
         em = float(eng._entry_mult(t, i))
         want, basis = buy_size(eng, it, eq, px, lot, em)
-        cap_pct = float(cfg.max_position_pct) * 100
-        cap = int(math.floor(eq * float(cfg.max_position_pct) / px / lot + 1e-9)) * lot
+        cap_pct = MANUAL_CAP_PCT                            # 手动买入：最多到总权益（「按规则」的仓位本身仍 ≤ max_position_pct）
+        cap = int(math.floor(eq * cap_pct / 100 / px / lot + 1e-9)) * lot
         notes = []
         if want > cap:
             notes.append(f"超过单只上限 {cap_pct:g}%，截到 {cap:,} 股")

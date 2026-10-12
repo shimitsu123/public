@@ -1264,8 +1264,8 @@ class UnifiedExecutor:
             if p > top:
                 no(it, f"现价 ¥{p:,g} 比 {d} 收盘 ¥{c:,g} 高 {p / c - 1:+.1%}，超过 {gap:g}%：不买（与开盘买入同一个上限；只做一次）")
                 continue
-            cap_pct = float(cfg.max_position_pct) * 100
-            cap = int(math.floor(eq * float(cfg.max_position_pct) / p / lot + 1e-9)) * lot
+            cap_pct = MO.MANUAL_CAP_PCT                       # 手动买入 / 加仓：最多到总权益（2026-10-12 用户；规则的新仓不变）
+            cap = int(math.floor(eq * cap_pct / 100 / p / lot + 1e-9)) * lot
             notes = []
             if add:
                 cur = int(ps.shares)

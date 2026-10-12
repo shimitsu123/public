@@ -55,9 +55,11 @@ def test_target_shares_plan_and_check():
     book = {"state": st, "manual": {"items": {}, "blocks": {}}}
     n = MO.normalize
     assert "不用调" in MO.check(n({"kind": "adjust", "ticker": "7203", "unit": "shares", "value": 399}), book)
-    assert "不能再加" in MO.check(n({"kind": "adjust", "ticker": "7203", "unit": "pct", "value": 40}), book)
-    book["manual"]["cap_pct"] = 40.0                                     # 执行器写进账本的上限
-    assert MO.check(n({"kind": "adjust", "ticker": "7203", "unit": "pct", "value": 40}), book) is None
+    assert MO.check(n({"kind": "adjust", "ticker": "7203", "unit": "pct", "value": 40}), book) is None   # 2026-10-12 起手动加仓不设单只上限（到总权益）
+    assert MO.check(n({"kind": "adjust", "ticker": "7203", "unit": "pct", "value": 90}), book) is None
+    st["pos"]["7203.T"]["shares"] = 1000                                 # 已经 = 总权益：再加就超过
+    assert "不能再加" in MO.check(n({"kind": "adjust", "ticker": "7203", "unit": "shares", "value": 1200}), book)
+    st["pos"]["7203.T"]["shares"] = 300
     assert MO.check(n({"kind": "adjust", "ticker": "7203", "unit": "shares", "value": 100}), book) is None
     assert "没有 6758.T" in MO.check(n({"kind": "adjust", "ticker": "6758", "unit": "shares", "value": 100}), book)
     MO.append(TAG, {"kind": "adjust", "ticker": "7203", "unit": "shares", "value": 100})
@@ -133,16 +135,17 @@ def test_same_decision_retry_does_not_add_but_waits_for_the_open():
     assert not r.ux.blocked
 
 
-def test_add_is_capped_at_the_single_position_limit():
+def test_add_is_not_capped_at_34pct_anymore():
+    """2026-10-12 用户：手动加仓「不要设上限」→ 不再截到单只 34%（只受现金 + 核心 ETF 与总权益限制）。"""
     r = _Run([1000.0] * 30, entry=(10,))
     r.until(14)
     rec = _req(r, unit="pct", value=60)
     r.day()
     it = r.item(rec["id"])
-    assert it["status"] == "placed" and it["shares"] == 100 and "单只上限 34%" in it["msg"]       # 34% ≈ 300 股
+    assert it["status"] == "placed" and it["shares"] > 100 and "单只上限" not in it["msg"], it
 
 
-def test_add_rejected_when_already_near_the_limit():
+def test_add_beyond_34pct_is_placed():
     r2 = _Run([1000.0] * 30, entry=(10,))
     r2.until(14)
     r2.eng.st.pos["A.T"].shares = 300                                   # 已经约 30%：再加一个单元就超过 34%
@@ -151,7 +154,7 @@ def test_add_rejected_when_already_near_the_limit():
     r2.eng.st.cash_jpy -= 100_000
     rec2 = _req(r2, unit="shares", value=400, id="M-cap-2")
     r2.day()
-    assert r2.item(rec2["id"])["status"] == "rejected" and "不能再加" in r2.item(rec2["id"])["msg"]
+    assert r2.item(rec2["id"])["status"] == "placed" and r2.item(rec2["id"])["shares"] == 100
 
 
 def test_gates_block_adds_but_not_trims():

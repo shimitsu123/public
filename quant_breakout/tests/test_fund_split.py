@@ -91,3 +91,27 @@ def test_submit_without_split_is_unchanged():
     _sm()
     ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "9984", "unit": "shares", "value": 300}, AT)
     assert ok and "fund" not in rec and "凑钱" not in msg and [r["kind"] for r in MO.read_all("paper")] == ["buy"]
+
+
+def test_corefix_buy_with_split_trims_stocks_only():
+    """ETF 固定口数买入也平摊（2026-10-12）：个股写调仓往下；别的核心 ETF 那份由规则的核心目标自动减少（不写指令）。"""
+    b = _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T", "1482.T"]})
+    b["state"]["core_last"] = {"1545.T": 250.0}
+    b["state"]["cash_jpy"] = 0.0
+    (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
+    _sm()
+    ok, msg, rec = panel.submit({"book": "paper", "kind": "corefix", "ticker": "1482", "units": 100,
+                                 "fund": {"mode": "split", "cost": 150_000}}, AT)
+    assert ok and rec["fund"] == "split" and "固定 100 口" in msg and "其余由别的核心 ETF 照规则减少" in msg
+    reqs = MO.read_all("paper")
+    assert [r["kind"] for r in reqs] == ["adjust", "corefix"] and reqs[0]["ticker"] == "7203.T" and reqs[0]["fund_for"] == "1482.T"
+
+
+def test_alloc_card_shows_each_position_share():
+    book = {"state": {"cash_jpy": 100_000.0, "pos": {"7203.T": {"shares": 100, "last_close": 3000.0}},
+                      "core_units": {"1545.T": 2400}, "core_last": {"1545.T": 250.0}}}
+    h = panel._alloc_card(book, {"holdings": [{"ticker": "7203.T", "name": "トヨタ"}], "core": [{"ticker": "1545.T", "name": "纳斯达克100（1545）"}]})
+    assert "<b>仓位占比</b>" in h and "合计 ¥1,000,000" in h
+    assert h.index("<b>1545</b>") < h.index("<b>7203</b>") < h.index("<b>现金</b>")           # 金额大的在前，现金最后
+    assert "60.0%" in h and "30.0%" in h and "10.0%" in h and "纳斯达克100 · ETF" in h and "width:60.00%" in h
+    assert panel._alloc_card({"state": {"cash_jpy": 5.0}}, {}) == ""
