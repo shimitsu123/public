@@ -124,3 +124,17 @@ def test_news_card_newest_first():
     from qbreak import dashboard as DB
     hd = DB.news_full_html(evs)
     assert hd.index("title new_mid") < hd.index("title old_hi")
+
+
+def test_news_card_only_last_24_hours():
+    """2026-10-12 用户「消息面板只显示 24 小时之内的消息，以外的不显示」。"""
+    d = NW.cache_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    extra = {"cred_label": "高", "publisher": "x", "n_sources": 1, "why": [], "threat": 1.0, "severity": 2, "cred": 90, "events": ["oil_up"]}
+    evs = [{**_ev("fresh", [], hours=1), **extra}, {**_ev("day_old", [], hours=23), **extra}, {**_ev("stale", [], hours=30), **extra}]
+    (d / "news.json").write_text(json.dumps({"events": evs}), encoding="utf-8")
+    h = panel._news_card(NOW)
+    assert "id='n-fresh'" in h and "id='n-day_old'" in h and "id='n-stale'" not in h
+    assert "只显示最近 24 小时（更早的 1 条不显示）" in h
+    (d / "news.json").write_text(json.dumps({"events": [{**_ev("stale", [], hours=30), **extra}]}), encoding="utf-8")
+    assert "最近 24 小时没有程度中以上的消息" in panel._news_card(NOW)

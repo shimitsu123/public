@@ -254,6 +254,7 @@ RANK_GROUPS = (("triggered", "今天出了买入信号"), ("rest", "观察中"))
 SG_PAGE = 5                               # 一组先显示几只（其余点「再显示」）
 
 
+NEWS_SHOW_H = 24                                            # 「消息」的经济威胁消息只显示最近几小时发布的
 MANUAL_SHOW_DAYS = 2                                        # 「交易」的手动指令：已经处理完的只显示最近几天
 AUTO_NEAR_DAYS = 5                                          # 「快要出」列到几个交易日以内的估计金叉
 
@@ -844,7 +845,7 @@ def _badges(book: dict, st: dict, sm: dict, waiting: list, now: dt.datetime) -> 
     try:
         from . import news as NW
         ev = (NW.load() or {}).get("events") or []
-        cut = now - dt.timedelta(hours=24)
+        cut = now - dt.timedelta(hours=NEWS_SHOW_H)
         k = sum(1 for e in ev if NW.pushable(e) and _ts_jst(e.get("time")) and _ts_jst(e.get("time")) >= cut)
         if k:
             out["news"] = k
@@ -898,6 +899,9 @@ def _news_card(now: dt.datetime) -> str:
     ev = d.get("events") or []
     if not ev:
         return ("<section class='card' id='news'><h2>经济威胁消息</h2><div class='muted small'>还没有（市场仪表盘的定时任务每 15 分钟取一次）</div></section>")
+    cut = (now if now.tzinfo else now.replace(tzinfo=JST)) - dt.timedelta(hours=NEWS_SHOW_H)   # 只显示 24 小时内发布的（2026-10-12 用户）；发布时间读不出的也不显示
+    n_old = sum(1 for e in ev if not (_ts_jst(e.get("time")) and _ts_jst(e.get("time")) >= cut))
+    ev = [e for e in ev if _ts_jst(e.get("time")) and _ts_jst(e.get("time")) >= cut]
     n_low = sum(1 for e in ev if NW.level(e) == "低")         # 程度低的不显示（2026-10-11 用户）
     ev = [e for e in ev if NW.level(e) != "低"]
     ev = sorted(ev, key=lambda e: -(_ts_jst(e.get("time")) or dt.datetime.min.replace(tzinfo=JST)).timestamp())[:40]   # 最新的在上面（2026-10-12 用户）
@@ -943,10 +947,11 @@ def _news_card(now: dt.datetime) -> str:
                        if e.get("title_zh") and str(e.get("title_zh")).strip() != str(e.get("title") or "").strip() else "")
                     + f"</summary>{''.join(det)}</details>")
     legend = ("<div class='small'><span class='chip lvh'>高</span> 严重度 × 可信度 ≥ 1.5（负面且达到提醒线的会推送）· "
-              "<span class='chip lvm'>中</span> ≥ 0.8 · 低的不显示" + (f"（这次 {n_low} 条）" if n_low else "") + "</div>")
+              "<span class='chip lvm'>中</span> ≥ 0.8 · 低的不显示" + (f"（这次 {n_low} 条）" if n_low else "")
+              + f" · 只显示最近 {NEWS_SHOW_H} 小时" + (f"（更早的 {n_old} 条不显示）" if n_old else "") + "</div>")
     return (f"<section class='card' id='news'><h2>经济威胁消息</h2><div class='muted small'>时间都是日本时间（JST）。Mac 每 15 分钟取一次；最近一次 {escape(str(d.get('generated') or '—'))}。"
             "★ 已推送 = 威胁度高、推送到了手机。点一条看详细（含影响期）。</div>" + legend
-            + ("".join(rows) or "<div class='muted'>现在没有程度中以上的消息</div>") + "</section>")
+            + ("".join(rows) or f"<div class='muted'>最近 {NEWS_SHOW_H} 小时没有程度中以上的消息</div>") + "</section>")
 
 
 def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "local", device: dict | None = None,
