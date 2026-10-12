@@ -242,6 +242,9 @@ details.nw.lv-hi{border-left:4px solid var(--neg);padding-left:8px}details.nw.lv
 .axt .mt{height:6px;border-radius:3px;background:var(--line);margin:3px 0 2px;overflow:hidden}.axt .mt i{display:block;height:100%;border-radius:3px;background:var(--muted)}
 .axt .mt.hot i{background:var(--neg)}
 .buyr{width:100%;margin:8px 0 2px}
+.avr{display:grid;grid-template-columns:3.6em minmax(0,1fr);align-items:center;gap:8px}.avr .alb{margin:3px 0}
+.alb i.new{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.35) 0 4px,transparent 4px 8px)}
+.avg{grid-template-columns:12px minmax(0,1fr) auto}.alp.up{color:var(--up)}.alp.down{color:var(--down)}
 .alb{display:flex;height:16px;border-radius:8px;overflow:hidden;background:var(--line);margin:6px 0 8px}.alb i{display:block;height:100%;min-width:2px}
 .alb i+i{box-shadow:inset 1px 0 0 var(--card)}
 .all{display:grid;gap:2px}.alr{display:grid;grid-template-columns:12px minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:2px 0}
@@ -547,9 +550,40 @@ function fundSplit(cost, skip){
     .map(h=>({t:h.t, kind:h.kind, cur:h.cur, sell:h.sell, yen:Math.round(h.sell*h.px), after:h.cur-h.sell}));
   return {short:Math.round(short), rows:rows, got:Math.round(got), left:Math.round(Math.max(0, short-got))};
 }
+function allocViz(el, cost, skip, p){                                       // 买入前后的仓位占比（2026-10-12）：两条按金额分段的横条 + 每只「现在 → 买入后」
+  const F=CFG.fund||{}, A=CFG.alloc||{}, N=A.names||{}, C=A.colors||['#4c7bf3'];
+  const now={}; for(const h of (F.hold||[])) if(h.cur>0 && h.px>0) now[h.t]=(now[h.t]||0)+h.cur*h.px;
+  const order=Object.keys(now).sort((a,b)=>now[b]-now[a]); const col={}; order.forEach((t,i)=>col[t]=C[i%C.length]);
+  if(skip && !(skip in col)) col[skip]=C[order.length%C.length];
+  const after=Object.assign({}, now); let cash=F.cash||0;
+  if(p){
+    if(FUND_MODE==='split') for(const r of p.rows) after[r.t]=Math.max(0, (after[r.t]||0)-r.yen);
+    else { let need=p.short; for(const t of order){ const h=(F.hold||[]).find(x=>x.t===t); if(!h || h.kind!=='core' || t===skip || need<=0) continue;
+      const s=Math.min(after[t], need); after[t]-=s; need-=s; } }
+    cash=Math.max(0, cash+(FUND_MODE==='split' ? p.got : p.short)-cost);
+  } else cash=Math.max(0, cash-cost);
+  after[skip]=(after[skip]||0)+cost;
+  const keys=order.concat(skip && order.indexOf(skip)<0 ? [skip] : []);
+  const tot=o=>keys.reduce((s,t)=>s+(o[t]||0), 0);
+  const T0=tot(now)+(F.cash||0), T1=tot(after)+cash; if(!(T0>0) || !(T1>0)) return;
+  const box=nd('div', 'fund aviz', null, el); nd('div', 'fh', '买入前后的仓位占比', box);
+  const bar=(lab, o, c, T)=>{ const r=nd('div', 'avr', null, box); nd('span', 'avl muted small', lab, r); const b=nd('div', 'alb', null, r);
+    for(const t of keys){ const v=o[t]||0; if(v<=0) continue; const i=nd('i', null, null, b); i.style.width=(v/T*100).toFixed(2)+'%'; i.style.background=col[t];
+      if(t===skip) i.className='new'; }
+    if(c>0){ const i=nd('i', null, null, b); i.style.width=(c/T*100).toFixed(2)+'%'; i.style.background='var(--muted)'; } };
+  bar('现在', now, F.cash||0, T0); bar('买入后', after, cash, T1);
+  const leg=nd('div', 'all', null, box);
+  const line=(t, lab, a, b, c)=>{ const r=nd('div', 'alr avg', null, leg); const d=nd('span', 'ald', null, r); d.style.background=c;
+    nd('span', 'aln', lab, r); const pa=a/T0*100, pb=b/T1*100;
+    nd('span', 'alp'+(Math.abs(pb-pa)>=0.05 ? (pb>pa ? ' up' : ' down') : ''), pa.toFixed(1)+'% → '+pb.toFixed(1)+'%', r); };
+  for(const t of keys){ if(!(now[t]>0) && !(after[t]>0)) continue;
+    line(t, t.replace('.T', '')+(N[t] ? ' '+N[t] : '')+(t===skip && !(now[t]>0) ? '（新）' : ''), now[t]||0, after[t]||0, col[t]); }
+  line('', '现金', F.cash||0, cash, 'var(--muted)');
+}
 function fundBox(el, cost, skip){                                          // 拖动 / 输入时实时更新：要卖哪几只、各卖多少
   if(!el) return; el.textContent='';
   const F=CFG.fund||{}, p=cost>0 ? fundSplit(cost, skip) : null;
+  if(cost>0) allocViz(el, cost, skip, p);
   if(!p){ if(cost>0) nd('div', 'muted small', '现金约 '+yen(F.cash||0)+'：够买，不用卖别的', el); return; }
   const box=nd('div', 'fund', null, el);
   nd('div', 'fh', '现金约 '+yen(F.cash||0)+'，还差约 '+yen(p.short), box);
@@ -2391,7 +2425,11 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                          "lot": MO.core_lot(book, t)}                                            # 调一只核心 ETF 时别的跟着变多少
                      for t in dict.fromkeys(list(u100s) + [t for t, u in (st.get("core_units") or {}).items() if int(u) > 0])},
            "kp": {"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN},     # K 线的通俗说法（qbreak/kline.py）
-           "fund": MO.fund_holdings(book, tag),                                           # 买入钱不够 → 从持仓平摊凑（预览；提交时同一个算法再算）
+           "fund": MO.fund_holdings(book, tag),
+           "alloc": {"names": {r.get("ticker"): str(r.get("name") or "").split("（")[0]
+                               for r in ((sm.get("holding_view") or {}).get("holdings") or []) + ((sm.get("holding_view") or {}).get("core") or [])
+                               if r.get("ticker")},
+                     "colors": list(ALLOC_COLORS)},                                       # 买入框里「现在 / 买入后」的占比条（与持仓页同色）                                           # 买入钱不够 → 从持仓平摊凑（预览；提交时同一个算法再算）
            "est": ests, "fee": [[c if c != float("inf") else 1e18, f] for c, f in FEE_TIERS],
            "st": status_json(tag)[1],
            "gen": int(dt.datetime.now().timestamp() * 1000)}                                    # 页面生成时刻（离线时显示「几分钟前的数据」）                                                         # 〔77〕C UX-16：还在处理的指令 → 每 10 秒问一次   # 卖出的预计收益（按最近收盘；现价来了用现价的）

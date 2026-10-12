@@ -115,3 +115,33 @@ def test_alloc_card_shows_each_position_share():
     assert h.index("<b>1545</b>") < h.index("<b>7203</b>") < h.index("<b>现金</b>")           # 金额大的在前，现金最后
     assert "60.0%" in h and "30.0%" in h and "10.0%" in h and "纳斯达克100 · ETF" in h and "width:60.00%" in h
     assert panel._alloc_card({"state": {"cash_jpy": 5.0}}, {}) == ""
+
+
+def test_alloc_viz_before_after_in_node():
+    """买入框里「现在 / 买入后」的占比（JS）：新股从 0 → 买入额 / 总额，被卖的变少，两条都合计 100%。"""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("没有 node")
+    J = panel._JS
+    fns = "\n".join(_js_fn(J, n) for n in ("nd", "fundSplit", "allocViz"))
+    cfg = {"fund": _fh(150_000, ("7203.T", "stock", 1000, 2600.0, 100), ("1545.T", "core", 3000, 246.8, 10)),
+           "alloc": {"names": {"7203.T": "トヨタ"}, "colors": list(panel.ALLOC_COLORS)}}
+    js = """
+class El { constructor(t){ this.children=[]; this._t=''; this.className=''; this.style={}; }
+  appendChild(c){ this.children.push(c); return c; } set textContent(v){ this._t=String(v); this.children=[]; } get textContent(){ return this._t; } }
+const document={createElement:t=>new El(t)};
+let FUND_MODE='split'; const CFG=__CFG__;
+__FNS__
+const el=new El('div'); allocViz(el, 600000, '6501.T', fundSplit(600000, '6501.T'));
+const box=el.children[0], bars=box.children.filter(c=>c.className==='avr').map(r=>r.children[1].children.map(i=>parseFloat(i.style.width)));
+const leg=box.children.find(c=>c.className==='all').children.map(r=>[r.children[1].textContent, r.children[2].textContent]);
+console.log(JSON.stringify({bars:bars, leg:leg}));
+""".replace("__CFG__", json.dumps(cfg)).replace("__FNS__", fns)
+    r = subprocess.run([node, "-e", js], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr[-800:]
+    o = json.loads(r.stdout)
+    assert [round(sum(b)) for b in o["bars"]] == [100, 100]
+    leg = dict(o["leg"])
+    assert leg["6501（新）"].startswith("0.0% → ") and float(leg["6501（新）"].split("→ ")[1].rstrip("%")) > 15   # ¥600,000 ÷ 约 ¥3,490,000 ≈ 17%
+    a, b = (float(x.rstrip("%")) for x in leg["7203 トヨタ"].split(" → "))
+    assert b < a and "现金" in leg
