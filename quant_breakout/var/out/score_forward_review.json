@@ -1,0 +1,465 @@
+{
+ "eval": {
+  "combined": {
+   "count": {
+    "logged": 6,
+    "matched": 3,
+    "open": 1,
+    "unmatched": 3,
+    "closed": 2
+   },
+   "win": 0.0,
+   "exp": -2.066,
+   "auc": {
+    "F2": {
+     "auc": null,
+     "lo95": null,
+     "hi95": null,
+     "lo99": null,
+     "hi99": null
+    },
+    "vol": {
+     "auc": null,
+     "lo95": null,
+     "hi95": null,
+     "lo99": null,
+     "hi99": null
+    },
+    "ind_mom20": {
+     "auc": null,
+     "lo95": null,
+     "hi95": null,
+     "lo99": null,
+     "hi99": null
+    },
+    "ind_mom60": {
+     "auc": null,
+     "lo95": null,
+     "hi95": null,
+     "lo99": null,
+     "hi99": null
+    },
+    "rel_ind60": {
+     "auc": null,
+     "lo95": null,
+     "hi95": null,
+     "lo99": null,
+     "hi99": null
+    },
+    "F1": {
+     "auc": null,
+     "lo95": null,
+     "hi95": null,
+     "lo99": null,
+     "hi99": null
+    },
+    "F3": {
+     "auc": null,
+     "lo95": null,
+     "hi95": null,
+     "lo99": null,
+     "hi99": null
+    },
+    "F4": {
+     "auc": null,
+     "lo95": null,
+     "hi95": null,
+     "lo99": null,
+     "hi99": null
+    },
+    "F5": {
+     "auc": null,
+     "lo95": null,
+     "hi95": null,
+     "lo99": null,
+     "hi99": null
+    },
+    "breakout": {
+     "auc": null,
+     "lo95": null,
+     "hi95": null,
+     "lo99": null,
+     "hi99": null
+    },
+    "x2": {
+     "auc": null,
+     "lo95": null,
+     "hi95": null,
+     "lo99": null,
+     "hi99": null
+    }
+   },
+   "x2": {
+    "n": 2,
+    "clusters": 1
+   },
+   "f3_keep": {
+    "n": 1,
+    "win": 0.0,
+    "exp": -2.203
+   }
+  },
+  "N225": {
+   "count": {
+    "logged": 0,
+    "matched": 0,
+    "open": 0,
+    "unmatched": 0,
+    "closed": 0
+   },
+   "auc": {}
+  }
+ },
+ "decision": {
+  "combined": {
+   "checkpoint": null,
+   "text": "只报告进度：已平仓 2 笔（下一个判定时点 200 笔）"
+  },
+  "N225": {
+   "checkpoint": null,
+   "text": "还没有已平仓的信号"
+  }
+ },
+ "segments": {
+  "combined": {
+   "N225": {
+    "n": 0,
+    "F2": null,
+    "vol": null,
+    "ind_mom20": null,
+    "ind_mom60": null,
+    "rel_ind60": null,
+    "F1": null,
+    "F3": null,
+    "F4": null,
+    "F5": null,
+    "breakout": null,
+    "x2": null
+   },
+   "T500x": {
+    "n": 1,
+    "F2": null,
+    "vol": null,
+    "ind_mom20": null,
+    "ind_mom60": null,
+    "rel_ind60": null,
+    "F1": null,
+    "F3": null,
+    "F4": null,
+    "F5": null,
+    "breakout": null,
+    "x2": null
+   },
+   "S1x": {
+    "n": 1,
+    "F2": null,
+    "vol": null,
+    "ind_mom20": null,
+    "ind_mom60": null,
+    "rel_ind60": null,
+    "F1": null,
+    "F3": null,
+    "F4": null,
+    "F5": null,
+    "breakout": null,
+    "x2": null
+   },
+   "大中型": {
+    "n": 1,
+    "F2": null,
+    "vol": null,
+    "ind_mom20": null,
+    "ind_mom60": null,
+    "rel_ind60": null,
+    "F1": null,
+    "F3": null,
+    "F4": null,
+    "F5": null,
+    "breakout": null,
+    "x2": null
+   }
+  },
+  "N225": {}
+ },
+ "w2": {
+  "eval": {
+   "n": 2,
+   "keep": {
+    "n": 0
+   },
+   "drop": {
+    "n": 2,
+    "win": 0.0,
+    "mean": -2.066,
+    "pf": 0.0
+   },
+   "diff": null,
+   "months": 0
+  },
+  "year": null,
+  "checkpoint": null,
+  "alarm": null,
+  "confirmed": null,
+  "segments": {
+   "N225": {
+    "keep": {
+     "n": 0
+    },
+    "drop": {
+     "n": 0
+    }
+   },
+   "T500x": {
+    "keep": {
+     "n": 0
+    },
+    "drop": {
+     "n": 1,
+     "win": 0.0,
+     "mean": -1.93,
+     "pf": 0.0
+    }
+   },
+   "S1x": {
+    "keep": {
+     "n": 0
+    },
+    "drop": {
+     "n": 1,
+     "win": 0.0,
+     "mean": -2.203,
+     "pf": 0.0
+    }
+   }
+  }
+ },
+ "idio": {
+  "K2": {
+   "eval": {
+    "n": 2,
+    "keep": {
+     "n": 1,
+     "win": 0.0,
+     "mean": -2.203,
+     "pf": 0.0
+    },
+    "drop": {
+     "n": 1,
+     "win": 0.0,
+     "mean": -1.93,
+     "pf": 0.0
+    },
+    "diff": -0.273,
+    "months": 1,
+    "lo95": -0.273,
+    "hi95": -0.273,
+    "lo99": -0.273,
+    "hi99": -0.273
+   },
+   "year": null,
+   "alarm": null,
+   "confirmed": null,
+   "segments": {
+    "N225": {
+     "keep": {
+      "n": 0
+     },
+     "drop": {
+      "n": 0
+     }
+    },
+    "T500x": {
+     "keep": {
+      "n": 0
+     },
+     "drop": {
+      "n": 1,
+      "win": 0.0,
+      "mean": -1.93,
+      "pf": 0.0
+     }
+    },
+    "S1x": {
+     "keep": {
+      "n": 1,
+      "win": 0.0,
+      "mean": -2.203,
+      "pf": 0.0
+     },
+     "drop": {
+      "n": 0
+     }
+    }
+   }
+  },
+  "USW": {
+   "eval": {
+    "n": 0,
+    "keep": {
+     "n": 0
+    },
+    "drop": {
+     "n": 0
+    },
+    "diff": null,
+    "months": 0
+   },
+   "year": null,
+   "alarm": null,
+   "confirmed": null,
+   "segments": {
+    "N225": {
+     "keep": {
+      "n": 0
+     },
+     "drop": {
+      "n": 0
+     }
+    },
+    "T500x": {
+     "keep": {
+      "n": 0
+     },
+     "drop": {
+      "n": 0
+     }
+    },
+    "S1x": {
+     "keep": {
+      "n": 0
+     },
+     "drop": {
+      "n": 0
+     }
+    }
+   }
+  }
+ },
+ "x6": {
+  "eval": {
+   "n": 0,
+   "counts": {
+    "signals": 1,
+    "no_data": 0,
+    "no_fill": 1,
+    "open": 0,
+    "immature": 0
+   },
+   "cur": {
+    "n": 0
+   },
+   "x6": {
+    "n": 0
+   }
+  },
+  "checkpoint": null,
+  "side": {
+   "只看日経225（W2 保留）": {
+    "n": 0,
+    "counts": {
+     "signals": 0,
+     "no_data": 0,
+     "no_fill": 0,
+     "open": 0,
+     "immature": 0
+    },
+    "cur": {
+     "n": 0
+    },
+    "x6": {
+     "n": 0
+    }
+   },
+   "不管 W2 的全部突破（合并样本）": {
+    "n": 0,
+    "counts": {
+     "signals": 6,
+     "no_data": 0,
+     "no_fill": 2,
+     "open": 2,
+     "immature": 2
+    },
+    "cur": {
+     "n": 0
+    },
+    "x6": {
+     "n": 0
+    }
+   }
+  },
+  "r4": {
+   "eval": {
+    "n": 0,
+    "cur": {
+     "n": 0
+    },
+    "r4": {
+     "n": 0
+    }
+   },
+   "checkpoint": null,
+   "side": {
+    "只看日経225（W2 保留）": {
+     "n": 0,
+     "cur": {
+      "n": 0
+     },
+     "r4": {
+      "n": 0
+     }
+    },
+    "不管 W2 的全部突破（合并样本）": {
+     "n": 0,
+     "cur": {
+      "n": 0
+     },
+     "r4": {
+      "n": 0
+     }
+    }
+   }
+  },
+  "cc": {
+   "eval": {
+    "n": 0,
+    "keep": {
+     "n": 0
+    },
+    "drop": {
+     "n": 0
+    },
+    "diff": null,
+    "months": 0
+   },
+   "eval_all": {
+    "n": 0,
+    "keep": {
+     "n": 0
+    },
+    "drop": {
+     "n": 0
+    },
+    "diff": null,
+    "months": 0
+   },
+   "year": null,
+   "enough": false,
+   "alarm": null,
+   "confirmed": null,
+   "counts": {
+    "N225": {
+     "w2_signals": 0,
+     "no_cc": 0,
+     "on": 0,
+     "skip": 0
+    },
+    "合并": {
+     "w2_signals": 1,
+     "no_cc": 0,
+     "on": 1,
+     "skip": 0
+    }
+   }
+  }
+ }
+}
