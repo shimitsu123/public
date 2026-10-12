@@ -271,8 +271,10 @@ def news_summary_html(s: dict, generated: str | None = None) -> str:
 
 def news_full_html(events: list[dict], limit: int = 10) -> str:
     """Mac 页面用：逐条（标题、来源、可信度、事件、影响链路）。"""
+    from .news import level
+    events = sorted((e for e in events or [] if level(e) != "低"), key=lambda e: str(e.get("time") or ""), reverse=True)   # 最新的在上面、不显示低（同面板）
     if not events:
-        return '<p class="muted">最近 72 小时没有归类到经济事件的消息</p>'
+        return '<p class="muted">最近 72 小时没有程度中以上的经济消息</p>'
     out = []
     for e in events[:limit]:
         c = e.get("chain") or {}

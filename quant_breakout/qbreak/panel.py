@@ -1895,8 +1895,7 @@ def _news_card(now: dt.datetime) -> str:
         return ("<section class='card' id='news'><h2>经济威胁消息</h2><div class='muted small'>还没有（市场仪表盘的定时任务每 15 分钟取一次）</div></section>")
     n_low = sum(1 for e in ev if NW.level(e) == "低")         # 程度低的不显示（2026-10-11 用户）
     ev = [e for e in ev if NW.level(e) != "低"]
-    ev = sorted(ev, key=lambda e: (NW.level(e) != "高", not NW.pushable(e), -(float(e.get("threat") or 0)),
-                                   -(_ts_jst(e.get("time")) or dt.datetime.min.replace(tzinfo=JST)).timestamp()))[:40]
+    ev = sorted(ev, key=lambda e: -(_ts_jst(e.get("time")) or dt.datetime.min.replace(tzinfo=JST)).timestamp())[:40]   # 最新的在上面（2026-10-12 用户）
 
     def when(v) -> str:
         t = _ts_jst(v)

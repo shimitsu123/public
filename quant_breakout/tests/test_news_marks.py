@@ -109,3 +109,18 @@ def test_mult_why_names_the_layer():
     tbf = {"enabled": True, "as_of": "2026-10-08", "skip_all": ["7203.T"], "errors": {}}
     run._apply_live_mults(e, {"JP": P2}, None, "2026-10-08", tbf_pl=tbf)
     assert SG.mult_why(e, "7203.T").startswith("TBF") and "新仓倍数 0（宏观" in SG.mult_why(e, "6758.T")
+
+
+def test_news_card_newest_first():
+    """2026-10-12 用户「经济威胁消息要按照时间最新的在上面」：程度高的旧消息也排在新消息下面。"""
+    d = NW.cache_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    extra = {"cred_label": "高", "publisher": "x", "n_sources": 1, "why": [], "threat": 1.0}
+    evs = [{**_ev("old_hi", [], hours=10), **extra, "severity": 2, "cred": 90, "alert": True, "events": ["oil_up"]},
+           {**_ev("new_mid", [], hours=1), **extra, "severity": 1, "cred": 90, "events": ["oil_up"]}]
+    (d / "news.json").write_text(json.dumps({"events": evs}), encoding="utf-8")
+    h = panel._news_card(NOW)
+    assert h.index("id='n-new_mid'") < h.index("id='n-old_hi'")
+    from qbreak import dashboard as DB
+    hd = DB.news_full_html(evs)
+    assert hd.index("title new_mid") < hd.index("title old_hi")
