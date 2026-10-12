@@ -32,7 +32,7 @@ def test_every_kind_returns_a_message(kind):
 
 
 def test_all_kinds_covered():
-    assert set(MO.KINDS) - {"cancel", "cancel_order"} <= {k.split("_")[0] for k in BODIES}
+    assert set(MO.KINDS) - {"cancel", "cancel_order", "uncancel"} <= {k.split("_")[0] for k in BODIES}
 
 
 def test_internal_error_returns_json_not_dropped_connection(server, monkeypatch):  # noqa: F811
@@ -57,7 +57,7 @@ def test_waiting_corefix_can_be_cancelled_with_clear_confirm():
     html = panel.render("paper", "t" * 40, AT)
     i = html.index(f"data-id='{rec['id']}'")
     btn = html[html.rindex("<button", 0, i):html.index("</button>", i)]
-    assert "data-act='cancel'" in btn and ">撤单" in btn and "data-desc='" in btn and "1482.T" in btn
+    assert "data-act='cancel'" in btn and ">撤单" in btn and "data-desc='" in btn and "1482 对冲版" in btn
     assert "ask('确认撤单？'" in panel._JS and "'确认撤单', {danger:true}" in panel._JS             # 一定先确认
     ok, msg, _ = panel.submit({"book": "paper", "kind": "cancel", "target": rec["id"]}, AT)
     assert ok and "撤回" in msg
@@ -119,3 +119,77 @@ def test_trade_tab_shows_only_last_two_days_except_unfinished():
     card = html[i:html.index("</section>", i)]
     assert "M-old-pend" in card and "M-old-done" not in card and "10-05 20:00" in card
     assert "只显示最近 2 天的（没处理完的一直显示）；更早的 1 条不显示" in card
+
+
+def _orders_card(html: str) -> str:
+    i = html.index("<h2>手动指令</h2>")
+    return html[i:html.index("</section>", i)]
+
+
+def test_uncancel_before_executor_reads_restores_and_hides_the_cancel():
+    """2026-10-12 用户：「撤回指令也可以进行撤回，撤回的话会退回到下单，然后去掉撤销记录；只写代码不知道哪只股票，要写上名字」。"""
+    _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
+    _sm()
+    ok, _m, sell = panel.submit({"book": "paper", "kind": "sell", "ticker": "7203"}, AT)
+    ok2, _m, cxl = panel.submit({"book": "paper", "kind": "cancel", "target": sell["id"]}, AT)
+    assert ok and ok2
+    card = _orders_card(panel.render("paper", "t" * 40, AT))
+    assert "卖出全部 7203 トヨタ自動車" in card and "撤回：卖出全部 7203 トヨタ自動車" in card       # 写名字
+    assert f"data-act='uncancel' data-id='{cxl['id']}'" in card and "等下单（撤回中）" in card
+    assert "ask('撤销这条撤回？'" in panel._JS
+    ok, msg, _ = panel.submit({"book": "paper", "kind": "uncancel", "target": cxl["id"]}, AT)
+    assert ok and "原来的指令恢复「等下单」" in msg
+    card = _orders_card(panel.render("paper", "t" * 40, AT))
+    assert "撤回：" not in card and "撤销撤回" not in card and "等下单（撤回中）" not in card    # 撤回记录不再显示
+    assert f"data-act='cancel' data-id='{sell['id']}'" in card                                       # 原来的指令又能撤
+    assert "已经撤销过" in panel.submit({"book": "paper", "kind": "uncancel", "target": cxl["id"]}, AT)[1]
+    b = json.loads((panel.paths.state_dir() / "live_unified_paper.json").read_text())
+    man = MO.Manual(b, "paper")
+    man.ingest()
+    it = man.m["items"]
+    assert it[sell["id"]]["status"] == "pending" and it[cxl["id"]]["status"] == "voided"
+
+
+def test_uncancel_after_executor_read_restores_pending_order():
+    _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
+    _sm()
+    _o, _m, sell = panel.submit({"book": "paper", "kind": "sell", "ticker": "7203"}, AT)
+    p = panel.paths.state_dir() / "live_unified_paper.json"
+    b = json.loads(p.read_text())
+    man = MO.Manual(b, "paper")
+    man.ingest()                                                              # 执行器读了卖出
+    p.write_text(json.dumps(b), encoding="utf-8")
+    _o, _m, cxl = panel.submit({"book": "paper", "kind": "cancel", "target": sell["id"]}, AT)
+    b = json.loads(p.read_text())
+    man = MO.Manual(b, "paper")
+    man.ingest()                                                              # 执行器读了撤回 → 卖出变成已撤回
+    assert man.m["items"][sell["id"]]["status"] == "cancelled"
+    p.write_text(json.dumps(b), encoding="utf-8")
+    card = _orders_card(panel.render("paper", "t" * 40, AT))
+    assert f"data-act='uncancel' data-id='{cxl['id']}'" in card
+    ok, _m, _r = panel.submit({"book": "paper", "kind": "uncancel", "target": cxl["id"]}, AT)
+    assert ok
+    b = json.loads(p.read_text())
+    man = MO.Manual(b, "paper")
+    man.ingest()
+    assert man.m["items"][sell["id"]]["status"] == "pending" and man.m["items"][cxl["id"]]["status"] == "voided"
+    p.write_text(json.dumps(b), encoding="utf-8")
+    card = _orders_card(panel.render("paper", "t" * 40, AT))
+    assert "撤回：" not in card and "卖出全部 7203 トヨタ自動車" in card
+
+
+def test_uncancel_refused_when_setting_already_decided():
+    """固定口数这种读到就定了的：执行器读到之前撤回 → 读的时候已经不生效 → 之后撤销不了（给理由）。"""
+    _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T", "1482.T"]})
+    _sm()
+    _o, _m, fx = panel.submit({"book": "paper", "kind": "corefix", "ticker": "1482", "units": 300}, AT)
+    _o, _m, cxl = panel.submit({"book": "paper", "kind": "cancel", "target": fx["id"]}, AT)
+    card = _orders_card(panel.render("paper", "t" * 40, AT))
+    assert "固定 1482 对冲版美国 7〜10 年国债" in card or "固定 1482" in card
+    p = panel.paths.state_dir() / "live_unified_paper.json"
+    b = json.loads(p.read_text())
+    man = MO.Manual(b, "paper")
+    man.ingest()
+    p.write_text(json.dumps(b), encoding="utf-8")
+    ok, msg, _ = panel.submit({"book": "paper", "kind": "uncancel", "target": cxl["id"]}, AT)
+    assert not ok and "撤销不了" in msg

@@ -368,6 +368,10 @@ document.addEventListener('click', async e=>{
       +(+d.fund>0 ? '\n为这笔买入凑钱的 '+d.fund+' 条卖出也一起撤掉。' : '')+'\n（指令 '+d.id+'）', '确认撤单', {danger:true});
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
   }
+  if(a==='uncancel'){                                                     // 撤销一条撤回（2026-10-12）：原来的指令恢复「等下单」、撤回记录不再显示
+    const q=await ask('撤销这条撤回？', (d.desc||d.id)+'\n\n撤销之后，原来的指令恢复「等下单」，照原来的时间处理；这条撤回不再显示。\n（指令 '+d.id+'）', '撤销撤回');
+    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'uncancel', target:d.id})); return;
+  }
   if(a==='corefix' || a==='corefix-clear'){                               // 核心 ETF 固定口数 / 恢复按规则（2026-10-11）
     const px=+d.px||0, lot=+d.lot||1, eq=+d.eq||0, cur=+d.cur||0;
     if(a==='corefix-clear'){

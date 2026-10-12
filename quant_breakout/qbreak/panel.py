@@ -1201,18 +1201,43 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                  + f"<div class='muted small'>{escape(when)}照新比例调核心 ETF；之后每天按这个比例。个股照规则。</div></section>")
     items = sorted((man.get("items") or {}).values(), key=lambda x: x.get("at", ""), reverse=True)
 
+    nm = HV.names()                                        # 代码 → 公司名（2026-10-12 用户：只写代码不知道是哪只）
+    from .idle_cash import NAMES as IC_NAMES
+    allrec = {**{x["id"]: x for x in waiting}, **(man.get("items") or {})}
+    void = MO.voided(waiting)
+
+    def _tlabel(tk: str) -> str:
+        code = str(tk).split(".")[0]
+        n = str(IC_NAMES.get(tk) or "").split("（")[0] or nm.get(code) or ""
+        return f"{code} {n}".strip()
+
+    def _named(r: dict) -> str:
+        s, tk = MO.describe(r), r.get("ticker")
+        return s.replace(tk, _tlabel(tk)) if tk else s
+
     def _what(r: dict) -> str:
-        return escape(MO.describe(r))
+        if r.get("kind") == "cancel":                       # 撤回指令：写它撤的是哪一条（带名字）
+            tg = allrec.get(r.get("target"))
+            return escape("撤回：" + (_named(tg) if tg else str(r.get("target"))))
+        return escape(_named(r))
+
+    def _unbtn(r: dict) -> str:                             # 撤回指令的「撤销撤回」（能撤销才给）
+        if r.get("kind") != "cancel" or MO.check({"kind": "uncancel", "target": r["id"]}, book, tag, now=now):
+            return ""
+        return (f"<button class='btn sm' data-act='uncancel' data-id='{escape(r['id'])}' data-desc='{_what(r)}'>撤销撤回</button>")
 
     rows = []
     for r in waiting:
+        if r.get("kind") == "uncancel" or r["id"] in void:  # 撤销撤回本身、已被撤销的撤回：不显示（去掉撤销记录）
+            continue
         btn = (f"<button class='btn sm danger' data-act='cancel' data-id='{escape(r['id'])}' data-placed='0' data-desc='{_what(r)}'"
                f" data-fund='{len([x for x in MO.fund_companions(r, waiting) if x['id'] not in dropped])}'>撤单</button>"
-               if r["kind"] in MO.ORDER_KINDS + ("core", "corefix") and r["id"] not in dropped else "")
+               if r["kind"] in MO.ORDER_KINDS + ("core", "corefix") and r["id"] not in dropped else _unbtn(r))
         rows.append(f"<div class='li'><div class='grow'><b>{_what(r)}</b> <span class='chip'>"
                     f"{'等下单（撤回中）' if r['id'] in dropped else '等下单'}</span>"
                     f"<div class='muted small'>{escape(str(r.get('at', ''))[5:16].replace('T', ' '))}</div></div>{btn}</div>")
     cut = now - dt.timedelta(days=MANUAL_SHOW_DAYS)                 # 2026-10-12 用户：「交易里面只显示两天以内的」
+    items = [it for it in items if it.get("kind") != "uncancel" and it.get("status") != "voided"]   # 撤销撤回、已撤销的撤回：不显示
     recent = [it for it in items if it.get("status") in MO.ACTIVE or (_ts_jst(it.get("at")) or cut) > cut]   # 没处理完的一直显示
     old_n = len(items) - len(recent)
     for it in recent[:20]:
@@ -1220,7 +1245,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                and not (it.get("status") == "placed" and it.get("now")))          # 盘中的单已经发到交易所：页面上撤不了
         btn = (f"<button class='btn sm danger' data-act='cancel' data-id='{escape(it['id'])}' data-placed='{1 if it.get('status') == 'placed' else 0}'"
                f" data-desc='{_what(it)}' data-fund='{len([x for x in MO.fund_companions(it, list(items)) if x.get('status') in MO.ACTIVE])}'>撤单</button>"
-               if can else "")
+               if can else _unbtn(it))
         rows.append(f"<div class='li'><div class='grow'><b>{_what(it)}</b> <span class='chip'>"
                     f"{escape(MO.status_text(it))}{'（撤回中）' if it.get('cancel_req') else ''}</span>"
                     f"<div class='muted small'>{escape(str(it.get('at', ''))[5:16].replace('T', ' '))}"
@@ -1582,6 +1607,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
            "core": f"已写：闲置资金比例 {rec.get('pct', 0):g}% → 核心 ETF {when}照新比例调",
            "unblock": f"已写：解除 {t} 的不自动买回",
            "cancel": f"已写：撤回 {rec.get('target')}" + (f"；为它凑钱的 {len(comp)} 条卖出也撤回" if comp else ""),
+           "uncancel": "已写：撤销撤回 → 原来的指令恢复「等下单」，那条撤回不再显示",
            "cancel_order": f"已写：撤单 {rec.get('ticker')}（{rec.get('cid')}）→ 执行器马上撤（已经成交的部分撤不了）"}.get(k)
     if k == "adjust":
         st = book.get("state") or {}
@@ -2177,7 +2203,7 @@ def _book_of(query: str) -> str:
 
 def _after_submit(trigger, rec: dict | None) -> None:
     """写了买卖 / 撤回 / 闲置资金比例 → 马上看一次要不要叫执行器（盘中 → 马上下单；开盘前 → 重试加进今天的寄付单）。"""
-    if trigger is not None and rec and rec.get("kind") in MO.ORDER_KINDS + ("cancel", "core", "cancel_order"):
+    if trigger is not None and rec and rec.get("kind") in MO.ORDER_KINDS + ("cancel", "core", "cancel_order", "uncancel"):
         threading.Thread(target=trigger.check, daemon=True).start()
 
 

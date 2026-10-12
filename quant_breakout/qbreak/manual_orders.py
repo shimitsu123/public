@@ -39,7 +39,7 @@ import re
 from . import paths
 from .calendar_jp import is_trading_day, next_trading_day, now_jst, prev_trading_day
 
-KINDS = ("sell", "trim", "adjust", "buy", "core", "corefix", "unblock", "cancel", "cancel_order")
+KINDS = ("sell", "trim", "adjust", "buy", "core", "corefix", "unblock", "cancel", "cancel_order", "uncancel")
 POS_KINDS = ("sell", "trim", "adjust")  # 针对一只持仓的指令
 ORDER_KINDS = POS_KINDS + ("buy",)      # 会变成单的指令（同一只票同时只能有一条没处理完的）
 UNITS = {"shares": "股", "yen": "円", "pct": "%"}
@@ -54,10 +54,10 @@ CUTOFF = dt.time(8, 55)                 # 寄付注文的最后时刻（与 live
 SESSION = ((dt.time(9, 0), dt.time(11, 30)), (dt.time(12, 30), dt.time(15, 25)))   # 盘中马上下单的时间（前場 / 後場；15:25 起是收盘竞价）
 RETRY_S = 600                           # 盘中没下成的指令（取不到现价等）：过多久再试
 LABEL = {"sell": "卖出全部", "trim": "减仓", "adjust": "调仓", "buy": "买入", "core": "闲置资金比例", "corefix": "固定 ETF 口数", "unblock": "解除不买回",
-         "cancel": "撤回指令", "cancel_order": "撤单"}
+         "cancel": "撤回指令", "cancel_order": "撤单", "uncancel": "撤销撤回"}
 CANCEL_UNTIL = dt.time(15, 30)          # 撤单：交易日这个时刻之前面板马上叫执行器（之后今天没成交的单都已失效）
 _CID = re.compile(r"^U(\d{4}-\d{2}-\d{2})-(BUY|SELL)-([0-9][0-9A-Z]{3}\.T)(-[0-9A-Za-z]{1,20})?$")
-STATUS = {"pending": "等下单", "placed": "已下单", "done": "完成", "rejected": "没执行", "cancelled": "已撤回",
+STATUS = {"pending": "等下单", "placed": "已下单", "done": "完成", "rejected": "没执行", "cancelled": "已撤回", "voided": "已撤销",
           "superseded": "按规则的单卖"}
 REASON_TEXT = {"manual": "手动卖出", "manual_trim": "手动减仓", "manual_add": "手动加仓", "manual_buy": "手动买入",
                "manual_fund": "为手动买入先卖核心 ETF"}
@@ -145,7 +145,7 @@ def normalize(req: dict) -> dict:
         if not m:
             raise ValueError("撤单要给执行器的单号（例 U2026-10-08-SELL-7203.T）")
         out["cid"], out["ticker"] = cid, m.group(3)
-    if kind == "cancel":
+    if kind in ("cancel", "uncancel"):                    # uncancel（2026-10-12）：target = 那条撤回指令的 id
         tg = str(req.get("target") or "").strip()
         if not re.fullmatch(r"M[0-9A-Za-z\-]{6,60}", tg):
             raise ValueError("撤回要给指令 id（例 M20261006-081500-sell-7203）")
@@ -405,16 +405,22 @@ def _exit_text(why: str) -> str:
     return EXIT_TEXT.get(str(why)) or REASON_TEXT.get(str(why)) or str(why)
 
 
+def voided(recs: list[dict]) -> set:
+    """被「撤销撤回」作废的撤回指令 id（2026-10-12 用户：「撤回指令也可以撤回，退回到下单、去掉撤销记录」）。"""
+    return {r.get("target") for r in recs if r.get("kind") == "uncancel"}
+
+
 def cancelled(waiting: list[dict]) -> set:
-    """指令文件里执行器还没读的撤回指向的指令 id（页面：这些不再算「在处理」、不再给撤回按钮）。"""
-    return {r.get("target") for r in waiting if r.get("kind") == "cancel"}
+    """指令文件里执行器还没读的撤回指向的指令 id（页面：这些不再算「在处理」、不再给撤回按钮）；被撤销的撤回不算。"""
+    void = voided(waiting)
+    return {r.get("target") for r in waiting if r.get("kind") == "cancel" and r.get("id") not in void}
 
 
 def _live(items: dict, waiting: list[dict], kinds) -> list[dict]:
     """还没处理完的指令（账本里 pending / placed 且没在撤回 + 指令文件里执行器还没读、也没被撤回的）。"""
     out = [it for it in items.values() if it.get("kind") in kinds and it.get("status") in ACTIVE and not it.get("cancel_req")]
-    return out + [r for r in waiting if r.get("kind") in kinds
-                  and not any(c.get("kind") == "cancel" and c.get("target") == r["id"] for c in waiting)]
+    gone = cancelled(waiting)
+    return out + [r for r in waiting if r.get("kind") in kinds and r["id"] not in gone]
 
 
 def fund_companions(target: dict, recs: list[dict]) -> list[dict]:
@@ -667,6 +673,8 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
             return f"{rec['cid']} 已经在撤（等执行器）"
     if k == "unblock" and t not in (man.get("blocks") or {}):
         return f"{t} 没有「不自动买回」的设定"
+    if k == "uncancel":
+        return _uncancel_why(rec["target"], items, waiting)
     if k == "cancel":
         it = items.get(rec["target"])
         if it is None:
@@ -681,6 +689,29 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
             return f"指令 {rec['target']} 已经在撤回中"
         if it.get("now") and it.get("status") == "placed":
             return NOW_NO_CANCEL
+    return None
+
+
+def _uncancel_why(cid: str, items: dict, waiting: list[dict]) -> str | None:
+    """「撤销撤回」能不能做：撤回还没被执行器读 → 能；读了 → 原来的买卖指令被它撤成「已撤回」或标着「撤回中」才能恢复
+    （闲置资金比例 / 固定口数 / 解除不买回 读到时就定了，撤销不了）。原来那只票现在有别的指令在处理 → 不行（同一只票同时只能一条）。"""
+    c = items.get(cid) or next((r for r in waiting if r.get("id") == cid), None)
+    if c is None or c.get("kind") != "cancel":
+        return f"没有撤回指令 {cid}"
+    if cid in voided(waiting) or c.get("status") == "voided":
+        return "这条撤回已经撤销过了"
+    tid = c.get("target")
+    tg = items.get(tid) or next((r for r in waiting if r.get("id") == tid), None)
+    if tg is None:
+        return f"找不到它撤回的指令 {tid}"
+    if cid in items:                                       # 执行器已经读了这条撤回
+        ok = (tg.get("status") == "cancelled" and tg.get("kind") in ORDER_KINDS) or tg.get("cancel_req") == cid
+        if not ok:
+            return f"这条撤回已经处理完（原来的指令：{status_text(tg) if tg.get('status') else '—'}），撤销不了：要的话重新下一次指令"
+    if tg.get("kind") in ORDER_KINDS and tg.get("ticker"):
+        others = [r for r in _live(items, waiting, ORDER_KINDS) if r.get("ticker") == tg["ticker"] and r.get("id") != tid]
+        if others:
+            return f"{tg['ticker']} 现在已经有别的指令在处理（{describe(others[0])}）：先撤回那条"
     return None
 
 
@@ -721,7 +752,7 @@ def due(tag: str, book: dict | None, now: dt.datetime | None = None) -> bool:
     now = now or now_jst()
     if not is_trading_day(now.date()) or now.time() >= CUTOFF:
         return False
-    if any(r["kind"] in POS_KINDS + ("cancel",) for r in unseen(tag, book)):
+    if any(r["kind"] in POS_KINDS + ("cancel", "uncancel") for r in unseen(tag, book)):
         return True
     items = ((book or {}).get("manual") or {}).get("items") or {}
     return any((it.get("status") == "pending" and it.get("kind") in POS_KINDS and not it.get("wait"))
@@ -749,7 +780,7 @@ def now_due(tag: str, book: dict | None, now: dt.datetime | None = None) -> bool
     st = (book or {}).get("state") or {}
     if str(st.get("last_date") or "") < prev_trading_day(now.date()).isoformat():
         return False                                        # 今天早上的运行还没完成（它会先处理这些指令）
-    if any(r["kind"] in ORDER_KINDS + ("core",) for r in unseen(tag, book)):
+    if any(r["kind"] in ORDER_KINDS + ("core", "uncancel") for r in unseen(tag, book)):
         return True
     today = now.date().isoformat()
     cr = (book or {}).get("core_rule") or {}
@@ -875,7 +906,8 @@ class Manual:
         msgs = []
         items = self.m["items"]
         new = [r for r in read_all(self.tag) if r["id"] not in items and (only is None or r["kind"] in only)]
-        dropped = {r.get("target") for r in new if r["kind"] == "cancel"}   # 执行器读到之前就被撤回的（比例 / 解除是读到就生效的）
+        void = voided(read_all(self.tag))                     # 被「撤销撤回」作废的撤回
+        dropped = {r.get("target") for r in new if r["kind"] == "cancel" and r["id"] not in void}   # 执行器读到之前就被撤回的（比例 / 解除是读到就生效的）
         for r in new:
             it = {**r, "status": "pending"}
             items[r["id"]] = it
@@ -904,6 +936,23 @@ class Manual:
                 gone = self.m["blocks"].pop(r["ticker"], None)
                 it.update(status="done" if gone else "rejected",
                           msg=f"{r['ticker']} 解除「不自动买回」" if gone else f"{r['ticker']} 本来就没有「不自动买回」")
+            elif k == "cancel" and r["id"] in void:              # 读到之前就被撤销了：这条撤回不生效
+                it.update(status="voided", msg="这条撤回已撤销")
+            elif k == "uncancel":
+                c = items.get(r["target"])
+                tg = items.get((c or {}).get("target"))
+                if c is not None and c.get("status") == "voided":
+                    it.update(status="done", msg=f"撤销撤回：{(tg or {}).get('ticker') or (c or {}).get('target')} 照原来的指令处理")
+                elif c is not None and tg is not None and tg.get("status") == "cancelled" and tg.get("kind") in ORDER_KINDS:
+                    tg.update(status="pending", msg="撤回已撤销：恢复等下单")
+                    c.update(status="voided", msg="这条撤回已撤销")
+                    it.update(status="done", msg=f"撤销撤回：{tg.get('ticker')} 恢复等下单")
+                elif c is not None and tg is not None and tg.get("cancel_req") == c.get("id"):
+                    tg.pop("cancel_req", None)
+                    c.update(status="voided", msg="这条撤回已撤销")
+                    it.update(status="done", msg=f"撤销撤回：{tg.get('ticker')} 照原来的指令继续")
+                else:
+                    it.update(status="rejected", msg="这条撤回已经处理完，撤销不了：要的话重新下一次指令")
             elif k == "cancel":
                 tg = items.get(r["target"])
                 if tg is not None and tg.get("status") == "pending":
