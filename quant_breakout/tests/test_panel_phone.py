@@ -230,6 +230,10 @@ def test_unpair_static_files_and_local_halt(servers):
         assert c == 200 and hd["Content-Type"] == "image/png" and raw[:8] == b"\x89PNG\r\n\x1a\n" and raw[16:24] == bytes.fromhex("000000b4000000b4")
         c, raw, hd = _req(port, "GET", "/manifest.webmanifest", host=host)
         assert c == 200 and json.loads(raw)["display"] == "standalone"
+        for f, ct in (("main.js", "text/javascript"), ("trade.js", "text/javascript"), ("pair.js", "text/javascript"), ("panel.css", "text/css")):
+            c, raw, hd = _req(port, "GET", f"/static/{f}", host=host)            # 页面的模块与样式（2026-10-12 起是独立文件）
+            assert c == 200 and hd["Content-Type"].startswith(ct) and len(raw) > 100, (port, f)
+        assert _req(port, "GET", "/static/../panel.py", host=host)[0] == 404 and _req(port, "GET", "/static/nope.js", host=host)[0] == 404
     c, j = _local_post(lp, tok, "/api/halt", {"reason": "测试"})
     assert c == 200 and paths.halt_file().read_text(encoding="utf-8").startswith("停止下单（Mac 操作面板）")
 
@@ -579,6 +583,8 @@ def test_phone_identity_login_end_to_end(servers):
     code, txt, _ = _ts(pp, "GET", "/apple-touch-icon.png", extra={"Tailscale-Funnel-Request": "?1"})
     assert code == 403                                                             # Funnel 来的：什么都不给
     assert _ts(pp, "GET", "/apple-touch-icon.png")[0] == 200                       # 静态文件（带路径密钥）照常
+    assert _ts(pp, "GET", "/static/main.js")[0] == 200 and _ts(pp, "GET", "/static/core.js")[0] == 200   # 页面的模块也照常
+    assert _ts(pp, "GET", "/static/main.js", extra={"Tailscale-Funnel-Request": "?1"})[0] == 403
     # 这台手机以前也配对过：按账户登录的页面上可以取消它的配对（cookie 一起清掉）
     c, j = _local_post(lp, tok, "/api/pair/new", {})
     _, _, hd = _phone(pp, "POST", "/api/pair", {"code": j["code"], "name": "iPhone"})
