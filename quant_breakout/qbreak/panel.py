@@ -1387,7 +1387,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                 f" data-desc='{_what(r)}' data-fund='0' data-stuck='0'>撤回</button>")
 
     def _unbtn(r: dict) -> str:                             # 撤回指令的「撤销撤回」（能撤销才给；与提交同一个检查）
-        if r.get("kind") != "cancel" or MO.check({"kind": "uncancel", "target": r["id"]}, book, tag, sm=sm, now=now):
+        if r.get("kind") != "cancel" or MO.check({"kind": "uncancel", "target": r["id"]}, book, tag, sm=sm, now=now) \
+                or _uncancel_warn0(allrec, r["id"], sm):
             return ""
         tg = allrec.get(r.get("target")) or {}                # 确认框写恢复之后实际什么时候、按什么价处理（不是「原来的时间」；2026-10-13）
         hl = paths.halt_file().exists() and tg.get("kind") in MO.ORDER_KINDS + ("core", "corefix")
@@ -1729,6 +1730,15 @@ def _buy_warn0(sm: dict | None, t: str) -> list[str]:
     return [str(w) for w in ((row or {}).get("buy") or {}).get("warn") or []]
 
 
+def _uncancel_warn0(allrec: dict, cid: str, sm: dict | None) -> str | None:
+    """撤销撤回「从持仓凑钱的买入」（全部换成 / 平摊）：这只现在会被执行器挡（决算前 / 新仓倍数 0 …）→ 不给恢复（与提交时同一个检查；2026-10-14）。"""
+    tg = allrec.get((allrec.get(cid) or {}).get("target")) or {}
+    if tg.get("kind") != "buy" or tg.get("fund") not in ("all", "split"):
+        return None
+    warn0 = _buy_warn0(sm, str(tg.get("ticker") or ""))
+    return ("这只现在会被执行器挡下（" + "；".join(_fill_mult_why(w) for w in warn0) + "）：等它解除再重新提交") if warn0 else None
+
+
 def _close_of(book: dict | None, sm: dict | None, t: str) -> float | None:
     """这只票最近的收盘（建议的股票那一行 / 持仓的 last_close）：「全部换成」晚做时比较用。没有 → None。"""
     row = next((r for r in ((sm or {}).get("suggest") or {}).get("rows") or [] if r.get("ticker") == t), None) or {}
@@ -1776,6 +1786,11 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
                       f"指令 {out[0]['id']} 等 {len(out)} 条" + (f"；没写：{'；'.join(skip)}" if skip else "") + f"）→ {MO.NEXT_DECISION}"), out[0]
     if str(body.get("kind") or "") in ("cancel", "uncancel"):   # 撤回 / 撤销撤回：与命令行同一个函数（同批指令一起；2026-10-13）
         fn = MO.cancel_request if body.get("kind") == "cancel" else MO.uncancel_request
+        if body.get("kind") == "uncancel":
+            man = (book or {}).get("manual") or {}
+            why = _uncancel_warn0({**{x["id"]: x for x in MO.unseen(tag, book)}, **(man.get("items") or {})}, str(body.get("target") or ""), sm)
+            if why:
+                return False, f"撤销不了：{why}", None
         ok, msg, rec = fn(tag, book, str(body.get("target") or ""), now=now, source=source, sm=sm)
         return ok, msg + (f"（指令 {rec['id']}）" if ok and rec else ""), rec
     try:

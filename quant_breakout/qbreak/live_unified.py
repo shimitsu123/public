@@ -2046,17 +2046,23 @@ class UnifiedExecutor:
         """实盘 / 模拟账户的早上：处理新收盘的交易日（通常 1 天）。实盘只能给今天的开盘下单 → 只在最后一天下单；
         中间错过的开盘（执行器没运行）等于没成交。没有新交易日 → 只补下当前决策里还没下的单。"""
         eng = self.eng
+        old = (eng.core_scale, dict(eng.core_fix or {}))
         if self.manual is not None:                         # 页面 / 命令行写的新指令（闲置资金比例从这次决策起生效）
             for lvl, msg in self.manual.ingest():
                 self._event(lvl, msg)
             self._halt_mark()
             eng.core_scale = self.manual.core_pct / 100
             eng.core_fix = {t: int(u) for t, u in (self.manual.m.get("core_fix") or {}).items()}   # 这次读到的固定口数 / 取消也在这次决策生效（2026-10-13 修：以前只在启动时读一次）
+        new = (eng.core_scale, dict(eng.core_fix or {}))
         if idxs:
             eng.prime(idxs[0])
             if not self.paper and len(idxs) > 1:
                 self._event("warn", f"执行器有 {len(idxs) - 1} 个开盘没有运行（{eng.gidx[idxs[0]].date()} 之后），那几天没有下单")
+            today = self.clock().date()
             for n, k in enumerate(idxs):
+                if self.paper and old != new:               # 模拟账户补跑：成交日已经过了的旧 K 线照读到之前的比例 / 固定口数（不追溯；与手动单「补跑的旧 K 线不处理」同口径，2026-10-14）
+                    sc, fx = old if next_trading_day(eng.gidx[k].date()) < today else new
+                    eng.core_scale, eng.core_fix = sc, dict(fx)
                 self.run_bar(k, place=self.paper or n == len(idxs) - 1, corp=corp)
         elif eng.st.last_date:
             k = int(eng.gidx.searchsorted(dt.datetime.fromisoformat(eng.st.last_date)))

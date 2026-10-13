@@ -278,3 +278,15 @@ def test_ingest_log_names_core_companion_and_refreshes_prev_pct():
     msgs = [it[r["id"]]["msg"] for r in _reqs("uncancel")]
     assert all("None" not in m for m in msgs) and any(m.startswith("撤销撤回：闲置资金比例") for m in msgs), msgs
     assert all("None" not in str(x) for x in log)
+
+
+def test_allin_uncancel_refused_when_x_now_blocked_by_executor_gate():
+    """撤回之后 X 进了「会被执行器挡」（决算前 / 新仓倍数 0）：撤销撤回与提交同一个检查 → 不给恢复（2026-10-14）。"""
+    from test_panel import SG_ROWS
+    _buy, cx = _allin_then_cancel()
+    _sm([dict(r, buy={**r["buy"], "warn": ["规则现在不开这只的新仓（新仓倍数 0）：执行器会挡"]}) if r["ticker"] == "6501.T" else r
+         for r in SG_ROWS])
+    ok, msg, _ = _un(cx)
+    assert not ok and msg.startswith("撤销不了：这只现在会被执行器挡下（") and "等它解除再重新提交" in msg, msg
+    assert not _reqs("uncancel")
+    assert f"data-act='uncancel' data-id='{cx['id']}'" not in _card(panel.render("paper", "t" * 40, AT))
