@@ -1106,7 +1106,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
              if it.get("kind") in MO.POS_KINDS and it.get("status") in MO.ACTIVE and not it.get("cancel_req")}
     core_busy = any(r.get("kind") == "core" and r["id"] not in dropped for r in waiting)   # 执行器还没读的闲置资金比例指令
     cr = book.get("core_rule") or {}
-    bfix = {str(t_): int(u_) for t_, u_ in (man.get("core_fix") or {}).items()}   # 固定口数的 ETF：不跟闲置资金比例（卖出 / 调仓只改它的固定口数；2026-10-13）
+    bfix = MO.core_fixed(book, tag)                    # 固定口数的 ETF：不跟闲置资金比例（卖出 / 调仓只改它的固定口数；2026-10-13）；还没读的固定 / 恢复按规则也算（2026-10-14）
     core_late = bool(cr) and abs(float(man.get("core_pct", 100.0)) - float(cr.get("applied", cr.get("pct", 100.0)))) > 1e-9
     core_now = {str(o.get("ticker")): o for o in book.get("orders") or []          # 今天盘中已经照比例调过的核心 ETF（口数明天早上对账后更新）
                 if o.get("reason") == "manual_core" and o.get("decided_on") == st.get("last_date")
@@ -1312,7 +1312,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         now_txt = ("想拿 " + "、".join(f"{t} 约 {n:,} 口" for t, n in want) if want else
                    "不拿核心 ETF（熊市 / 没有闲置资金）") if cr.get("units100") is not None else "执行器下一次运行之后显示"
         ri = MO.resume_info(book, tag, now)                 # 确认之后什么时候买（规则不拿 / 今天已经有单 → 不是马上；2026-10-13）
+        la_why = MO.allin_busy_text(MO.live_allin(tag, book))   # 「全部换成」已下单 / 在等：不给恢复按钮（点了也会被拒；2026-10-14）
         btn = ("<div class='act muted'>有一条闲置资金比例的指令在处理（见「手动指令」）</div>" if core_busy else
+               f"<div class='act muted small'>{escape(la_why)}</div>" if la_why else
                f"<div class='act'><button class='btn primary' data-plan='{escape(ri['text'])}' data-act='core-resume'>确认买入（恢复照规则）</button></div>")
         fixl = ("<div class='small'>手动固定 " + "、".join(f"{escape(t)} {n:,} 口" for t, n in sorted(bfix.items()))
                 + ("（停买中也照买）" if any(n > 0 for n in bfix.values()) else "（不跟比例）") + "</div>") if bfix else ""
@@ -1322,8 +1324,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             parts = ([f"比例 {float(pp):g}%"] if pp is not None else []) + [f"{t} 固定 {int(u):,} 口" for t, u in sorted(pf.items())]
             if parts:
                 rb = ""
-                if pp is not None and 0 < float(pp) < 100 and not core_busy:
-                    rb = (f"<div class='act'><button class='btn' data-pct='{float(pp):g}' data-plan='{escape(ri['text'])}' data-act='core-restore'>"
+                if pp is not None and 0 < float(pp) < 100 and not core_busy and not la_why:
+                    rp = MO.resume_info(book, tag, now, pct=float(pp))   # 只买规则目标额的 N%（2026-10-14）
+                    rb = (f"<div class='act'><button class='btn' data-pct='{float(pp):g}' data-plan='{escape(rp['text'])}' data-act='core-restore'>"
                           f"恢复成 {float(pp):g}%</button></div>")
                 prev = (f"<div class='small'>「全部换成 {escape(str(cpause['allin']))}」之前：{escape('、'.join(parts))}"
                         + ("<span class='muted'>（比例 100% = 「确认买入」）</span>" if pp is not None and float(pp) >= 100 else "") + "</div>" + rb
@@ -1335,8 +1338,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                  + (f"<div class='neg'><b>★ 买入信号（{escape(str(csig.get('date')))} 收盘）：{escape(MO.signal_text(csig))}</b></div>"
                     if csig else "<div class='muted small'>出现买入信号（规则从「不拿」变成「拿」）会提醒你（Mac 通知 + 这里）</div>")
                  + f"<div class='muted small'>规则现在：{escape(now_txt)}</div>" + fixl + btn
-                 + f"<div class='muted small'>{escape(ri['text'])}。</div>" + prev
-                 + f"<details class='hv'><summary class='muted'>按别的比例恢复（例：只放一半）</summary>{slider}</details></section>")
+                 + ("" if la_why else f"<div class='muted small'>{escape(ri['text'])}。</div>") + prev
+                 + ("" if la_why else f"<details class='hv'><summary class='muted'>按别的比例恢复（例：只放一半）</summary>{slider}</details>")
+                 + "</section>")
     elif not any(MO.core_info(book, t) for t in held_core):   # 拿着核心 ETF 时在它下面调（卖出全部 / 调仓…）；没拿着时用这里
         H.append("<section class='card' id='core'><h2>闲置资金（核心 ETF）比例</h2>"
                  f"<div>现在：规则目标额的 <b>{cp:g}%</b>（100% = 照规则；0% = 全部留现金）</div>" + slider
@@ -1386,8 +1390,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         if r.get("kind") != "cancel" or MO.check({"kind": "uncancel", "target": r["id"]}, book, tag, sm=sm, now=now):
             return ""
         tg = allrec.get(r.get("target")) or {}                # 确认框写恢复之后实际什么时候、按什么价处理（不是「原来的时间」；2026-10-13）
-        hl = paths.halt_file().exists() and tg.get("kind") in MO.ORDER_KINDS + ("core",)
+        hl = paths.halt_file().exists() and tg.get("kind") in MO.ORDER_KINDS + ("core", "corefix")
         return (f"<button class='btn sm' data-act='uncancel' data-id='{escape(r['id'])}' data-desc='{_what(r)}'"
+                f" data-st='{escape(MO.wait_word(tg))}'"         # 恢复成「等下单」/「等执行器读」（比例 / 固定口数 / 解除不是单；2026-10-14）
                 f" data-when='{escape(MO.uncancel_when(tg, now, book, tag))}'" + (" data-halt='1'" if hl else "") + ">撤销撤回</button>")
 
     rows = []
@@ -1396,7 +1401,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             continue
         btn = (_cbtn(r, 0) if r["kind"] in MO.ORDER_KINDS + ("core", "corefix") and r["id"] not in dropped
                else _ubbtn(r) if r["kind"] == "unblock" and r["id"] not in dropped else _unbtn(r))
-        wt = "等下单" if r["kind"] in MO.ORDER_KINDS else "等执行器读"   # 比例 / 解除 / 撤回不是单（2026-10-13）
+        wt = MO.wait_word(r)                               # 比例 / 解除 / 撤回不是单（2026-10-13）
         rows.append(f"<div class='li'><div class='grow'><b>{_what(r)}</b> <span class='chip'>"
                     f"{wt + '（撤回中）' if r['id'] in dropped else wt}</span>"
                     f"<div class='muted small'>{escape(str(r.get('at', ''))[5:16].replace('T', ' '))}</div></div>{btn}</div>")
@@ -1424,9 +1429,12 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     if halt:
         hw = sorted((x for x in [it for it in (man.get("items") or {}).values() if it.get("status") == "pending"] + list(waiting)
                      if x.get("kind") in MO.ORDER_KINDS and x.get("id") not in dropped), key=lambda x: str(x.get("at") or ""))
+        hc = MO.halt_core((man.get("items") or {}).values(), waiting, dropped)
         H.append(f"<section class='card warn' id='halt'><h2 class='neg'>HALT 生效中</h2><div>{escape(halt)}</div>"
                  + (f"<div class='neg small'>等着的手动买卖指令 {len(hw)} 条（最早写于 {escape(MO.mmdd(hw[0].get('at')))}）：解除后照原样执行；"
                     "不想做了先在「交易」撤回</div>" if hw else "")                  # 2026-10-13 resume-other-3
+                 + (f"<div class='neg small'>HALT 期间改的闲置资金比例 / 固定口数 {len(hc)} 条：{escape(MO.halt_core_line(hc))}"
+                    "→ 解除后下一次决策照它买卖 ETF；不想这样先在「闲置资金」改回</div>" if hc else "")   # 2026-10-14：读到就生效，以前 HALT 卡片不列
                  + "<div class='muted small'>不下任何单、持仓不动。恢复只在 Mac 上：在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」。</div></section>")
     else:
         H.append("<section class='card' id='halt'><h2>紧急停止</h2><div class='muted small'>全部账本（模拟和立花）从下一次运行起不下单、持仓不动；"
@@ -1877,16 +1885,19 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     if msg is None:                                                                # 新加的指令种类忘了写说明：也给一句（不让拼接崩溃）
         msg = f"已写：{MO.LABEL.get(k, k)}" + (f" {t}" if t else "") + f" → {when}处理"
     if k == "core" and not t and pct0 <= 0 < float(rec["pct"]):                    # 停买后确认买入
-        ri = MO.resume_info(book, tag, now or now_jst())   # 规则不拿 / 今天已经有单 → 不是马上（2026-10-13）
-        msg = (f"已写：确认买入（闲置资金比例 0% → {rec['pct']:g}%）→ "
-               + (f"{when}照规则买入核心 ETF" if not ri["none"] and not ri["late"] else ri["text"]))
+        p1 = float(rec["pct"])
+        ri = MO.resume_info(book, tag, now or now_jst(), pct=p1)   # 规则不拿 / 今天已经有单 → 不是马上（2026-10-13）
+        full = p1 >= 100 - 1e-9                                    # 「恢复成 N%」只买规则目标额的 N%：不说照规则（2026-10-14）
+        msg = (f"已写：{'确认买入' if full else f'恢复成 {p1:g}%'}（闲置资金比例 0% → {rec['pct']:g}%）→ "
+               + ((f"{when}照规则买入核心 ETF" if full else f"{when}按规则目标额的 {p1:g}% 买入核心 ETF，之后每天按 {p1:g}% 调")
+                  if not ri["none"] and not ri["late"] else ri["text"]))
     if k == "core" and t and int(rec.get("target") or 0) <= 0:                     # 核心 ETF 卖出全部：之后停买
-        fx = MO.core_effects(book, 0.0, skip=t)
+        fx = MO.core_effects(book, 0.0, skip=t, tag=tag)
         msg = (f"已写：卖出全部 {t} → {when}卖出；之后停买闲置资金 ETF（出现买入信号会提醒，你确认才买）"
                + ("；同一比例也用在：" + "、".join(f"{x} {a_:,} → {b_:,} 口" for x, a_, b_ in fx) if fx else ""))
     elif c0:
         n = int(rec["target"]) - c0["cur"]
-        fx = MO.core_effects(book, rec["pct"], skip=t)        # 规则同时拿两只以上核心 ETF 时：同一比例别的也跟着变
+        fx = MO.core_effects(book, rec["pct"], skip=t, tag=tag)  # 规则同时拿两只以上核心 ETF 时：同一比例别的也跟着变
         msg = (f"已写：{'卖出全部 ' + t if int(rec['target']) <= 0 else t + (' 加 ' if n > 0 else ' 卖 ') + f'{abs(n):,} 口'}"
                f"（闲置资金比例 {c0['pct']:g}% → {rec['pct']:g}%）→ {when}{'买入' if n > 0 else '卖出'}"
                + ("；同一比例也用在：" + "、".join(f"{x} {a_:,} → {b_:,} 口" for x, a_, b_ in fx) if fx else ""))

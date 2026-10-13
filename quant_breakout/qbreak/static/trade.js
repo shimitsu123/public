@@ -420,10 +420,10 @@ document.addEventListener('click', async e=>{
       +'\n'+(d.plan || CFG.when+'买入；之后每天照规则调')+NOTE, '确认买入');   // 2026-10-13：规则不拿 / 今天已经有单 → 服务器写的实际时间
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:100})); return;
   }
-  if(a==='core-restore'){                                                  // 「全部换成」之前的比例（2026-10-13）：只在你点了之后写；固定口数不跟着恢复
+  if(a==='core-restore'){                                                  // 「全部换成」之前的比例（2026-10-13）：只在你点了之后写；固定口数不跟着恢复；只买规则目标额的 N%（2026-10-14）
     const v=+d.pct; if(!(v>0 && v<100)) return;
     const q=await ask('恢复成 '+v+'%：闲置资金比例', '闲置资金比例 0% → '+v+'%（规则目标额 × '+v+'%）'+coreFx(v, '', '会买：')
-      +'\n'+(d.plan || CFG.when+'照规则买入；之后每天照规则调')+'\n固定口数不会跟着恢复：要的话在各 ETF 下面重新点「固定口数…」'+NOTE, '恢复成 '+v+'%');
+      +'\n'+(d.plan || CFG.when+'按规则目标额的 '+v+'% 买入；之后每天按 '+v+'% 调')+'\n固定口数不会跟着恢复：要的话在各 ETF 下面重新点「固定口数…」'+NOTE, '恢复成 '+v+'%');
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:v})); return;
   }
   if(a==='adj-unit'){ adjUnit(d.u); return; }
@@ -493,8 +493,8 @@ document.addEventListener('click', async e=>{
       +(+d.fund>0 ? '\n为这笔买入写的 '+d.fund+' 条卖出 / 闲置资金指令也一起撤掉。' : '')+(+d.stuck>0 ? '\n另有 '+d.stuck+' 条已经生效 / 已在撤回中，撤不了（提交后会说明）。' : '')+'\n（指令 '+d.id+'）', '确认撤单', {danger:true});
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
   }
-  if(a==='uncancel'){                                                     // 撤销一条撤回（2026-10-12）：原来的指令恢复「等下单」、撤回记录不再显示
-    const q=await ask('撤销这条撤回？', (d.desc||d.id)+'\n\n撤销之后，原来的指令恢复「等下单」，这条撤回不再显示。\n什么时候处理：'
+  if(a==='uncancel'){                                                     // 撤销一条撤回（2026-10-12）：原来的指令恢复「等下单」/「等执行器读」（data-st；2026-10-14）、撤回记录不再显示
+    const q=await ask('撤销这条撤回？', (d.desc||d.id)+'\n\n撤销之后，原来的指令恢复「'+(d.st||'等下单')+'」，这条撤回不再显示。\n什么时候处理：'
       +(d.when||'执行器下一次运行时')+(d.halt==='1' ? '\n★ HALT 生效中（解除后才处理）' : '')+'\n（指令 '+d.id+'）', '撤销撤回');   // 2026-10-13：写实际的时间与价格（服务器算的），不是「原来的时间」
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'uncancel', target:d.id})); return;
   }

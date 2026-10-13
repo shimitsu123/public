@@ -4405,6 +4405,10 @@ def cmd_manual(a) -> int:
             print(f"★ HALT 生效中：等着的买卖指令 {len(wait_)} 条，解除后照原样执行"
                   + ("：" + "；".join(f"{x['id']} {MO.describe(x)}（写于 {MO.mmdd(x.get('at'))}）" for x in wait_)
                      + "（要不做：先 manual cancel <指令 id>）" if wait_ else "（没有）"))
+            hc_ = MO.halt_core(sm["items"], un_, gone_)   # HALT 中改的闲置资金比例 / 固定口数：读到就生效、解除后照它买卖 ETF（2026-10-14）
+            if hc_:
+                print(f"★ HALT 期间改的闲置资金比例 / 固定口数 {len(hc_)} 条，解除后下一次决策照它买卖 ETF：{MO.halt_core_line(hc_)}"
+                      "（要改回：manual core --pct N / manual corefix <ETF> --clear）")
         print(f"现在写的买卖：{when}下单（{MO.RULE_TEXT}）")
         s_ = MO.slots(b_, tag)
         print(f"个股名额：空 {s_['free']} 个（拿着 {s_['held']} + 排定买入 {s_['buys']}，上限 {s_['max']} 只）")
@@ -4507,7 +4511,7 @@ def cmd_manual(a) -> int:
             print(f"按最近收盘 ¥{c_['px']:,.0f} 估算：{rec['ticker']} {c_['cur']:,} → {int(rec['target']):,} 口"
                   f"（闲置资金比例 {c_['pct']:g}% → {rec['pct']:g}%）"
                   + ("；规则目标额执行器还没算过：100% 先按现在的口数估算（下一次决策用准确的数）" if c_.get("approx") else ""))
-        fx_ = MO.core_effects(b_, rec["pct"], skip=rec.get("ticker"))
+        fx_ = MO.core_effects(b_, rec["pct"], skip=rec.get("ticker"), tag=tag)   # 还没读的固定口数也算（2026-10-14）
         if fx_:
             print("★ 比例对全部核心 ETF 一起生效：" + "、".join(f"{x} {u0:,} → {u1:,} 口" for x, u0, u1 in fx_))
         mode = MO.timing(now)[0]
@@ -4517,11 +4521,16 @@ def cmd_manual(a) -> int:
             print(f"核心 ETF {when}卖出；之后停买闲置资金 ETF（钱留现金；出现买入信号会提醒你，确认才买："
                   f"bash scripts/liveu.sh manual core --pct 100）" + hint_)
         elif pct0_ <= 0:                                     # 停买后确认买入
-            ri_ = MO.resume_info(b_, tag, now)                # 规则不拿 / 今天已经有单 → 不是马上（2026-10-13）
+            p1_ = float(rec["pct"])
+            ri_ = MO.resume_info(b_, tag, now, pct=p1_)       # 规则不拿 / 今天已经有单 → 不是马上（2026-10-13）
+            hd_ = "确认买入" if p1_ >= 100 - 1e-9 else f"恢复成 {p1_:g}%"   # 不到 100% 不说照规则（2026-10-14）
             if ri_["none"] or ri_["late"]:
-                print(f"确认买入：停买结束（闲置资金比例 0% → {rec['pct']:g}%）；{ri_['text']}")
-            else:
+                print(f"{hd_}：停买结束（闲置资金比例 0% → {rec['pct']:g}%）；{ri_['text']}")
+            elif p1_ >= 100 - 1e-9:
                 print(f"确认买入：停买结束，核心 ETF {when}照规则买入（闲置资金比例 0% → {rec['pct']:g}%）；之后每天照规则调" + hint_)
+            else:
+                print(f"{hd_}：停买结束，核心 ETF {when}按规则目标额的 {p1_:g}% 买入（闲置资金比例 0% → {rec['pct']:g}%）；"
+                      f"之后每天按 {p1_:g}% 调" + hint_)
         else:
             print(f"核心 ETF {when}照新比例调；之后每天按「规则目标额 × {rec['pct']:g}%」（改回 100% 就照规则）" + hint_)
     if paths.halt_file().exists():

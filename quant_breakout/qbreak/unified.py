@@ -874,16 +874,16 @@ class UnifiedEngine:
                 self.gate_log.append((str(self.gidx[i].date()), t, gated[t]))
                 buy = 0
             orders[t] = [sell, buy]
-        if fix:
-            self._fund_fixed(i, fix, orders, tgts, cash_est - reserve)
-        # 日元缺口（明早日本买入 + 换汇 > 现金 + 日本卖出所得）→ 卖核心补足，按跳空上限多卖
+        # 日元缺口（明早日本买入 + 换汇 > 现金 + 日本卖出所得）→ 卖核心补足，按跳空上限多卖；
+        # 固定口数的 ETF 排在最后卖、它要加的口数不取消（之后 _fund_fixed 再卖别的 ETF 给它凑钱；2026-10-14）
         short = reserve - cash_est
         if short > 0:
             need = short * (1 + self.ex["JP"].max_entry_gap_pct / 100)
-            for t in sorted(orders, key=lambda x: -st.core_units.get(x, 0) * float(A.close[i, self.col[x]])):
+            for t in sorted(orders, key=lambda x: (x in fix, -st.core_units.get(x, 0) * float(A.close[i, self.col[x]]))):
                 units = int(st.core_units.get(t, 0))
                 if units <= 0 or need <= 0:
-                    orders[t][1] = 0
+                    if t not in fix:
+                        orders[t][1] = 0
                     continue
                 j = self.col[t]
                 price, lot, sl = float(A.close[i, j]), int(self.lots[j]), self.c_slip[t]
@@ -894,7 +894,10 @@ class UnifiedEngine:
                 orders[t] = [max(orders[t][0], u), 0]
                 need -= net(orders[t][0])
             for t in orders:
-                orders[t][1] = 0
+                if t not in fix or orders[t][0]:
+                    orders[t][1] = 0
+        if fix:                                                 # 缺口之后再凑固定口数的钱：先补完明早的日本买入，再卖别的 ETF 给固定的买入（2026-10-14）
+            self._fund_fixed(i, fix, orders, tgts, cash_est - reserve)
         for t, (sell, buy) in orders.items():
             if sell:
                 st.core_plan[t] = ["SELL", int(sell)]
@@ -903,7 +906,8 @@ class UnifiedEngine:
 
     def _fund_fixed(self, i: int, fix: dict, orders: dict, tgts: dict, free: float) -> None:
         """固定口数要加口数、现金不够（现金 − 明早日本买入与换汇 + 核心卖出所得 − 别的核心买入 < 固定的买入）→ 别的（不固定的）核心 ETF
-        在再平衡带里也卖出补足（最多卖到它自己的目标；按跳空上限多卖一点）。没有固定口数时不调用（回测 / 模拟盘不变；2026-10-13）。"""
+        在再平衡带里也卖出补足（最多卖到它自己的目标；按跳空上限多卖一点）。没有固定口数时不调用（回测 / 模拟盘不变；2026-10-13）。
+        在日元缺口那一步之后调用：缺口先补明早的日本买入、不取消固定的买入，剩下的再给固定的买入凑（以前先凑后被缺口取消；2026-10-14）。"""
         st, A = self.st, self.A
         gap = self.ex["JP"].max_entry_gap_pct / 100
         px = {t: float(A.close[i, self.col[t]]) for t in orders}

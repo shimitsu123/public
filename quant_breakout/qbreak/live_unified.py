@@ -1511,19 +1511,34 @@ class UnifiedExecutor:
 
     def _now_split_gate(self, todo: list[dict], k: int, d: str, px: dict, busy: set, later, retry, no) -> set:
         """盘中：平摊凑钱（fund = split）的买入在凑钱的卖出发出之前先过不涉及钱的闸门（2026-10-13：以前卖单先发、买入才被挡）。
-        被挡 → 买入和同一次提交写的凑钱卖出一起不做；这只今天已经有单 → 一起明天开盘；取不到现价 → 一起一会儿再试。→ 这次已处理的指令 id。"""
+        被挡 → 买入和同一次提交写的凑钱卖出一起不做；这只今天已经有单 → 一起明天开盘；取不到现价 → 一起一会儿再试。→ 这次已处理的指令 id。
+        平摊凑钱的加仓（调仓往上）也先过同一套加仓的闸门（_now_add_why；2026-10-14：以前只管买入）。"""
         gated: set = set()
         eng, st, cfg = self.eng, self.eng.st, self.eng.cfg
         gap = float(eng.ex["JP"].max_entry_gap_pct or 0)
         n0 = (len(st.pos) - sum(1 for x in st.pending_exit if x in st.pos) + sum(1 for x in st.plan if x not in st.pos)
               + len({o.ticker for o in self._active() if o.phase == "now" and o.reason == "manual_buy"
                      and (o.status in ACCEPTED or o.status in UNKNOWN)}))
-        for bi in [x for x in todo if x["kind"] == "buy" and x.get("fund") == "split" and x.get("status") == "pending"]:
+        for bi in [x for x in todo if x.get("fund") == "split" and not x.get("fund_for") and x["kind"] in ("buy", "adjust")
+                   and x.get("status") == "pending"]:
             t, j = bi["ticker"], eng.col.get(bi["ticker"])
             grp = [c for c in todo if c is not bi and c.get("fund_for") == t and c.get("at") == bi.get("at")
                    and c.get("status") == "pending"]
             going = {c["ticker"] for c in grp if MO._to_zero(c) and c["ticker"] in st.pos and c["ticker"] not in st.pending_exit}
             why = None
+            if bi["kind"] == "adjust":                        # 平摊凑钱的加仓（2026-10-14）
+                why, wait = self._now_add_why(bi, k, d, px, busy)
+                if wait:
+                    for x in [bi] + grp:
+                        (retry if wait.startswith("取不到现价") else later)(x, f"{wait}（加仓与凑钱的卖出一起）")
+                        gated.add(x["id"])
+                    continue
+                if why:
+                    no(bi, f"不加仓：{why} → 凑钱的卖出也不做")
+                    for x in grp:
+                        no(x, f"加仓 {t} 被挡 → 凑钱的卖出也不做")
+                    gated.update(x["id"] for x in [bi] + grp)
+                continue
             if t in eng.core_set:
                 why = "核心 ETF 不能手动买（用「闲置资金比例」调）"
             elif t in st.pos:
@@ -1559,6 +1574,43 @@ class UnifiedExecutor:
                     no(x, f"买入 {t} 被挡 → 凑钱的卖出也不做")
                 gated.update(x["id"] for x in [bi] + grp)
         return gated
+
+    def _now_add_why(self, it: dict, k: int, d: str, px: dict, busy: set) -> tuple[str | None, str | None]:
+        """盘中：平摊凑钱的加仓在凑钱的卖出之前先查（与 now_phase ② 的加仓同一套：持仓 / 在卖出全部 / 今天已经有单 / 行情 /
+        决算前等 / 资格检查 / 现价超过收盘 + 跳空上限 / 换算还是不是加仓；2026-10-14）→ (被挡的理由, 一起等的理由)。"""
+        eng, st, man = self.eng, self.eng.st, self.manual
+        t, j = it["ticker"], eng.col.get(it["ticker"])
+        ps = st.pos.get(t)
+        if ps is None:
+            return "执行器的账本里没有这只持仓（已经卖掉了？）", None
+        rule = st.pending_exit.get(t)
+        if rule:
+            return f"已经在卖出全部（{rule}）", None
+        if t in busy or t in man.m["trims"] or t in man.m["adds"]:
+            return None, "这只今天已经有执行器的单"
+        if j is None or not eng.A.has[k, j]:
+            return f"没有 {t} 在 {d} 的行情（不在股票池？停牌？）", None
+        why = MO.entry_why(eng, t, k)
+        if why:
+            return why, None
+        if self.pre_send is not None and self.pre_send(t, "BUY", "stock"):
+            return f"资格检查：{self.pre_send(t, 'BUY', 'stock')}", None
+        p = px.get(t)
+        if not p:
+            return None, f"取不到现价，{MO.RETRY_S // 60} 分钟后再试"
+        gap = float(eng.ex["JP"].max_entry_gap_pct or 0)
+        c = float(eng._px_close(t, k))
+        top = round_to_tick(c * (1 + gap / 100), t, "BUY")
+        if p > top:
+            return f"现价 ¥{p:,g} 比 {d} 收盘 ¥{c:,g} 高 {p / c - 1:+.1%}，超过 {gap:g}%（与开盘买入同一个上限；只做一次）", None
+        eq, lot, cur = float(eng.equity(k)), int(eng.lots[j]), int(ps.shares)
+        want = MO.target_shares(it["unit"], it["value"], eq, p, lot) if eq > 0 else cur
+        fw = MO.adjust_flip_why(it, cur, want)
+        if fw:
+            return fw, None
+        if want <= cur:
+            return f"按现价换算不是加仓了（现在 {cur:,} 股，目标换算 {want:,} 股）", None
+        return None, None
 
     # ── 撤单 / 状态不明的单的候选（qbreak/live_ops.py；缺口盘点 B1 / B2）──
     def cancel_orders(self, cids: list[str] | None = None, source: str = "") -> dict:
