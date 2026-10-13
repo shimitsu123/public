@@ -460,6 +460,10 @@ document.addEventListener('click', async e=>{
       '撤单', {danger:true});
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel_order', cid:d.cid})); return;
   }
+  if(a==='cancel' && d.kind==='unblock'){                                 // 还没读的「解除不买回」：撤回（2026-10-13）
+    const q=await ask('撤回这条解除？', (d.desc||d.id)+'\n\n执行器还没读：撤回之后不解除，「不自动买回」照旧。\n（指令 '+d.id+'）', '撤回', {danger:true});
+    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
+  }
   if(a==='cancel'){                                                       // 撤单前一定确认（2026-10-12 用户：防止误撤）：写清撤的是哪一条
     const q=await ask('确认撤单？', (d.desc||d.id)+'\n\n'+(d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天的单」的「撤单」撤。' : '还没下单：撤掉之后不会下。')
       +(+d.fund>0 ? '\n为这笔买入写的 '+d.fund+' 条卖出 / 闲置资金指令也一起撤掉。' : '')+(+d.stuck>0 ? '\n另有 '+d.stuck+' 条已经生效 / 已在撤回中，撤不了（提交后会说明）。' : '')+'\n（指令 '+d.id+'）', '确认撤单', {danger:true});
@@ -486,14 +490,14 @@ document.addEventListener('click', async e=>{
     const r=$('#adj-range'); r.max=Math.max(1, Math.ceil(Math.max(adjCap(), cur, lot)/lot))*lot; r.step=lot; r.value=cur;
     adjUnit('shares'); sheet('#dlg-adj'); return;
   }
-  if(a==='unblock-batch'){                                                // 「全部换成」卖掉的票：一次解除不自动买回（2026-10-13）
-    const ts=(d.ts||'').split(',').filter(Boolean);
-    const q=await ask('恢复按规则：「全部换成 '+d.x+'」卖出的 '+ts.length+' 只', ts.map(x=>x.replace('.T', '')).join('、')+'\n解除「不自动买回」：之后有买入信号就会按规则买。', '恢复按规则');
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'unblock', ticker:ts[0], tickers:ts})); return;
+  if(a==='unblock-batch'){                                                // 「全部换成」卖掉的票：只解除这一批的不自动买回（2026-10-13；说明由页面按账本写好）
+    const ps=(d.ids||'').split(',').filter(Boolean);                      // 「代码:设定 id」：设定换了 / 已经解除的服务器跳过
+    const q=await ask('恢复按规则：「全部换成 '+d.x+'」卖出的 '+ps.length+' 只', (d.msg||'')+NOTE, '恢复按规则');
+    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'unblock', ticker:ps[0].split(':')[0], tickers:ps})); return;
   }
   if(a==='unblock'){
-    const q=await ask('解除 '+d.t+' 的不自动买回', '之后有买入信号就会按规则买。', '解除');
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'unblock', ticker:d.t})); return;
+    const q=await ask('解除 '+d.t+' 的不自动买回', (d.msg||'')+NOTE, '解除');
+    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'unblock', ticker:d.t, block_id:d.id||undefined})); return;
   }
   if(a==='flow'){                                                         // 〔77〕C UX-14：登记入金 / 出金（只影响收益的计算）
     const v=($('#flow-jpy').value||'').replace(/[,¥\s]/g,''), n=+v;

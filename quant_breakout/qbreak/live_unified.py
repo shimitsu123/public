@@ -206,6 +206,8 @@ class UnifiedExecutor:
         def gate(t: str, i: int) -> str | None:
             return (base(t, i) if base is not None else None) or man.block_reason(t, eng.gidx[i])
         eng.entry_gate_fn = gate
+        eng.base_gate_fn = base                              # 资格检查本身（不含「不买回」）：建议的股票分开显示（2026-10-13）
+        eng.manual_gate_fn = lambda t, i, manual=False: man.block_reason(t, eng.gidx[i], manual=manual)   # 「不买回」这一条（manual：手动买入的口径）
 
     def _apply_manual(self, i: int, deciding: bool = True) -> None:
         """第 i 根 K 线的决策之前（deciding）或同一决策补单之前：等着的手动卖出 / 减仓 / 调整 → 执行器的单

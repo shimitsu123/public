@@ -273,8 +273,31 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq) -> str:
     asof = _date_or_none(sg.get("asof"))
     fill = _date_or_none(sg.get("fill_day"))
     trig = [r for r in rows if r.get("status") == "triggered"]
+    blocks = ((book or {}).get("manual") or {}).get("blocks") or {}
+    freed = MO.lifting(tag, book)
+
+    def gc_day(r):                                          # 估计金叉的 K 线日（asof 往后数 near.days 个交易日）
+        gc = asof
+        for _ in range(int((r.get("near") or {}).get("days") or 0)):
+            gc = next_trading_day(gc) if gc else None
+        return gc
+
+    def man_wait(r) -> str | None:                           # 挡的只是「手动卖出后不买回」：估计金叉那天已经到期 / 在解除 → 还列（2026-10-13）
+        b, t = r.get("buy") or {}, r["ticker"]
+        if not _man_block(b):
+            return None
+        if t not in blocks:
+            return "已解除"
+        if t in freed:
+            return "解除中"
+        u, gc = blocks[t].get("until"), gc_day(r)
+        return f"{str(u)[5:10].replace('-', '/')} 解除后" if u is not None and gc is not None and gc.isoformat() > str(u) else None
+
+    def keep(r) -> bool:
+        b = r.get("buy") or {}
+        return not b.get("block") or man_wait(r) is not None
     near = sorted((r for r in rows if r.get("status") != "triggered" and (r.get("near") or {}).get("where") == "below_up"
-                   and int((r.get("near") or {}).get("days") or 99) <= AUTO_NEAR_DAYS and not (r.get("buy") or {}).get("block")),
+                   and int((r.get("near") or {}).get("days") or 99) <= AUTO_NEAR_DAYS and keep(r)),
                   key=lambda r: (int(r["near"]["days"]), -float((r.get("prob") or {}).get("p") or 0)))
 
     def name(r):
@@ -309,14 +332,15 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq) -> str:
         H.append("<div class='list'>")
         for r in near:
             n = int(r["near"]["days"])
-            gc = asof
-            for _ in range(n):
-                gc = next_trading_day(gc) if gc else None
+            gc = gc_day(r)
             p = (r.get("prob") or {}).get("p")
             sh = sh_all[r["ticker"]]
             miss = (r.get("near") or {}).get("miss") or []
             tag_ = ("<span class='chip'>名额满</span>" if s["free"] <= 0 else "<span class='chip'>买不起</span>" if sh <= 0
                     else f"<span class='chip hot'>约 {sh:,} 股</span>")
+            mw = man_wait(r)
+            if mw:                                          # 现在还在「不买回」里：到期 / 解除之后才可能买
+                tag_ += f"<span class='chip'>{escape(mw)}</span>"
             sub = " · ".join(x for x in (f"约 {gc:%m/%d} 金叉" if gc else "", f"历史出信号 {float(p) * 100:.0f}%" if p is not None else "",
                                          f"还差 {len(miss)} 个条件" if miss else "") if x)
             H.append(f"<div class='li'><span class='abd'>约 {n} 天</span><div class='grow'>{name(r)} {tag_}"
@@ -327,6 +351,73 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq) -> str:
     H.append("<div class='muted small'>天数与日期是按最近一天的变化估的；金叉之外还要量等条件凑齐才出买入信号（历史比例大多很低）；"
              "出了信号下一个交易日开盘买。</div></section>")
     return "".join(H)
+
+
+def _man_block(b: dict | None) -> bool:
+    """「建议的股票」里这只的买入闸门是「手动卖出后不买回」（不是资格检查；旧汇总没有 block_kind → 按文字）。"""
+    b = b or {}
+    return bool(b.get("block")) and (b.get("block_kind") == "manual" or (
+        b.get("block_kind") is None and str(b.get("block")).startswith("手动卖出后不")))
+
+
+def _unblock_confirm(book: dict, tag: str, ts: list[str], what: str, selling: list[str]) -> str:
+    """「恢复按规则」/「解除」的确认（2026-10-13：一点一行，说清解除之后不会怎样、什么时候、还要过什么）。"""
+    st, man = (book or {}).get("state") or {}, (book or {}).get("manual") or {}
+    s = MO.slots(book, tag)
+    many = len(ts) > 1
+    L = [f"只解除{what}的「不自动买回」" + (f"（{'、'.join(t.split('.')[0] for t in ts)}）" if many else "") + "。",
+         f"不会把{'它们' if many else '它'}买回来，也不会马上买。",
+         f"{MO.NEXT_DECISION}，规则重新判断：只有那次决策看的那根 K 线出买入信号（MACD 金叉）才可能买；已经判断过的信号不会再用。",
+         f"买入还要有空名额（现在空 {s['free']} 个，上限 {s['max']} 只）、现金（账本现金 {_yen(float(st.get('cash_jpy') or 0))}）、"
+         "过资格检查 / 决算前 / 宏观。"]
+    if MO.core_pct_now(tag, book) <= 0 or man.get("core_pause"):
+        L.append("闲置资金 ETF 仍停买（0%，要另外点「确认买入」）；这批取消的固定口数不会恢复。")
+    if selling:
+        L.append(f"还没成交的卖出（{'、'.join(t.split('.')[0] for t in selling)}）不会撤：要停就用「撤回」/「撤单」。")
+    return "\n".join(L)
+
+
+def _blocks_card(book: dict, tag: str, bl: dict, tlabel) -> str:
+    """「交易」的「手动卖出后不自动买回」：「全部换成 X」按批一行（「恢复按规则」= 只解除这一批）+ 每只一行（「解除」）；
+    按钮带着页面看到的设定 id（设定换了 / 已经解除 → 不写；2026-10-13）。在解除的（还没读 / 等下一次决策）不给按钮。"""
+    lift = MO.lifting(tag, book)
+    pos = ((book or {}).get("state") or {}).get("pos") or {}
+    paused = MO.core_pct_now(tag, book) <= 0 or bool(((book or {}).get("manual") or {}).get("core_pause"))
+
+    def md(v) -> str:
+        return str(v or "")[5:10].replace("-", "/") or "—"
+
+    def bid(v) -> str:                                      # 设定的 id（格式不对的旧数据：不带 → 只按代码解除）
+        v = str(v or "")
+        return v if re.fullmatch(r"M[0-9A-Za-z_.\-]{1,80}", v) else ""
+    rows = []
+    for g in MO.batch_blocks(book):                          # 「全部换成 X」卖掉的：一批一次「恢复按规则」（2026-10-13 用户）
+        mem = g["members"]
+        names = "、".join(tlabel(m["t"]) + ("（解除中）" if m["t"] in lift else "" if m["state"] == "sold" else f"（{m['state']}）") for m in mem)
+        until = MO.block_text({"until": g["until"]})
+        todo = [m for m in mem if m["t"] not in lift]
+        sell = [m["t"] for m in todo if m["state"] != "sold"]
+        if todo:
+            msg = _unblock_confirm(book, tag, [m["t"] for m in todo], f"「全部换成 {tlabel(g['x'])}」这一批", sell)
+            btn = (f"<button class='btn sm' data-act='unblock-batch' data-ids='{escape(','.join(m['t'] + (':' + bid(m['id']) if bid(m['id']) else '') for m in todo))}'"
+                   f" data-x='{escape(tlabel(g['x']))}' data-msg='{escape(msg)}'>恢复按规则</button>")
+        else:
+            btn = "<span class='chip'>解除中（下一次决策起）</span>"
+        rows.append(f"<div class='li'><div class='grow'><b>「全部换成 {escape(tlabel(g['x']))}」（{md(g['at'] or g['since'])}）卖出的</b> "
+                    f"<span class='muted'>{escape(names)}</span><div class='muted small'>{escape(until)}"
+                    "；点「恢复按规则」= 只解除这一批（不买回、也不马上买）" + ("；闲置资金 ETF 不跟着恢复（仍停买）" if paused else "")
+                    + "</div></div>" + btn + "</div>")
+    for t, b in bl.items():
+        if t in lift:
+            btn = "<span class='chip'>解除中（下一次决策起）</span>"
+        else:
+            msg = _unblock_confirm(book, tag, [t], f" {tlabel(t)} ", [t] if t in pos else [])
+            btn = (f"<button class='btn sm' data-act='unblock' data-t='{escape(t)}' data-id='{escape(bid(b.get('id')))}'"
+                   f" data-msg='{escape(msg)}'>解除</button>")
+        rows.append(f"<div class='li'><div class='grow'><b>{escape(tlabel(t))}</b> <span class='muted'>{escape(MO.block_text(b))}</span></div>"
+                    + btn + "</div>")
+    return ("<section class='card' id='blocks'><h2>手动卖出后不自动买回</h2><div class='muted small'>到期 / 解除之前规则和手动都不买这几只；"
+            f"解除 = {escape(MO.NEXT_DECISION)}（不会买回，也不马上买）</div><div class='list'>" + "".join(rows) + "</div></section>")
 
 
 def _date_or_none(v):
@@ -344,6 +435,13 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, ca
     rows = SG.rank([dict(r) for r in (sg.get("rows") or [])], tab or {})   # 旧汇总没有 prob 也在这里补上（更新代码后不用等执行器）
     ranked = bool(tab)
     s = MO.slots(book, tag)
+    blocks = ((book or {}).get("manual") or {}).get("blocks") or {}
+    freed = {t: "「不自动买回」在解除：" + MO.NEXT_DECISION for t in MO.lifting(tag, book)}   # 不买回在解除 / 已经没了 → 手动买入不挡
+    freed.update({r["ticker"]: "「不自动买回」已经到期 / 解除（这里是上一次决策时的结果）" for r in rows
+                  if r.get("ticker") not in blocks and _man_block(r.get("buy"))})
+    for r in rows:
+        if _man_block(r.get("buy")) and r.get("ticker") in blocks:
+            r["buy"] = {**r["buy"], "block_until": blocks[r["ticker"]].get("until")}
     marks = _news_marks([r["ticker"] for r in rows]) if marks is None else marks
     H = [f"<section class='card' id='suggest'><h2>建议的股票（规则的候选，{len(rows)} 只）</h2>"
          f"<div class='muted small'>按 {escape(str(sg.get('asof') or '—'))} 收盘。不是收益预测，也不是建议；点「买入…」→ {escape(when)}下单。</div>"
@@ -380,7 +478,7 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, ca
                 H.append("<div class='muted small'>按离 MACD 金叉的天数排（越上面越快金叉；只是估算）</div>")
         for k, r in enumerate(grp, 1):
             row = _suggest_row(r, s, buying, eq, chart, rank=k if g == "rest" else None, fill=sg.get("fill_day"),
-                               mark=marks.get(str(r["ticker"])))
+                               mark=marks.get(str(r["ticker"])), freed=freed)
             H.append(row if k <= SG_PAGE else f"<div class='sgmore' hidden>{row}</div>")
         if len(grp) > SG_PAGE:
             H.append(f"<div class='act'><button class='btn' data-sgmore='{g}'>再显示 {len(grp) - SG_PAGE} 只</button></div>")
@@ -499,7 +597,7 @@ def _fill_mult_why(w: str) -> str:
 
 
 def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = None, fill: str | None = None,
-                 mark: dict | None = None) -> str:
+                 mark: dict | None = None, freed: dict | None = None) -> str:
     t, b, ru = str(r["ticker"]), r.get("buy") or {}, r.get("rule") or {}
     nm = f" {escape(str(r['name']))}" if r.get("name") else ""
     meta = [f"条件凑齐 {r['score']:g} / 100" if r.get("score") is not None else None,
@@ -525,7 +623,11 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
          + (f"<div class='small neg'>★ 顶部风险：{escape(str(r['top_risk']))}</div>" if r.get("top_risk") else "")]
     n, px, lot = int(b.get("rule_shares") or 0), float(b.get("px") or 0), int(b.get("lot") or MO.LOT)
     why = None
-    if b.get("block"):
+    lifted = _man_block(b) and t in (freed or {})           # 不买回在解除 / 已经没了：手动买入不挡（执行器下单前按最新的再查；2026-10-13）
+    if _man_block(b) and not lifted:                        # 与资格检查分开写（2026-10-13）
+        u = b.get("block_until")
+        why = f"手动卖出后不买回（可在「交易」解除）：{'到 ' + str(u) if u else '一直，直到解除' if 'block_until' in b else b['block']}"
+    elif b.get("block") and not lifted:
         why = f"不能买：{b['block']}"
     elif t in buying:
         why = "有一条买入指令在处理（见「手动指令」）"
@@ -535,6 +637,8 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
         why = "没有收盘价 / 总权益：执行器下一次运行之后再买"
     warn = "；".join(_fill_mult_why(w) for w in b.get("warn") or [])
     full = s["free"] <= 0                                   # 名额满：只能「全部换成这只」（其他持仓全部卖出；2026-10-13 用户）
+    if lifted:
+        H.append(f"<div class='muted small'>{escape(freed[t])}（规则出买入信号才买；手动买入可以写）</div>")
     if why:
         H.append(f"<div class='act muted small'>{escape(why)}</div>")
     else:
@@ -1245,6 +1349,12 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         return (f"<button class='btn sm danger' data-act='cancel' data-id='{escape(r['id'])}' data-placed='{placed}' data-desc='{_what(r)}'"
                 f" data-fund='{len(pl['todo'])}' data-stuck='{len(pl['stuck'])}'>撤单</button>")
 
+    def _ubbtn(r: dict) -> str:                             # 还没读的「解除不买回」：撤回（读到之前撤回 → 不解除；2026-10-13）
+        if MO.check({"kind": "cancel", "target": r["id"]}, book, tag, now=now):
+            return ""
+        return (f"<button class='btn sm danger' data-act='cancel' data-kind='unblock' data-id='{escape(r['id'])}' data-placed='0'"
+                f" data-desc='{_what(r)}' data-fund='0' data-stuck='0'>撤回</button>")
+
     def _unbtn(r: dict) -> str:                             # 撤回指令的「撤销撤回」（能撤销才给）
         if r.get("kind") != "cancel" or MO.check({"kind": "uncancel", "target": r["id"]}, book, tag, now=now):
             return ""
@@ -1254,9 +1364,11 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     for r in waiting:
         if r.get("kind") == "uncancel" or r["id"] in void:  # 撤销撤回本身、已被撤销的撤回：不显示（去掉撤销记录）
             continue
-        btn = (_cbtn(r, 0) if r["kind"] in MO.ORDER_KINDS + ("core", "corefix") and r["id"] not in dropped else _unbtn(r))
+        btn = (_cbtn(r, 0) if r["kind"] in MO.ORDER_KINDS + ("core", "corefix") and r["id"] not in dropped
+               else _ubbtn(r) if r["kind"] == "unblock" and r["id"] not in dropped else _unbtn(r))
+        wt = "等下单" if r["kind"] in MO.ORDER_KINDS else "等执行器读"   # 比例 / 解除 / 撤回不是单（2026-10-13）
         rows.append(f"<div class='li'><div class='grow'><b>{_what(r)}</b> <span class='chip'>"
-                    f"{'等下单（撤回中）' if r['id'] in dropped else '等下单'}</span>"
+                    f"{wt + '（撤回中）' if r['id'] in dropped else wt}</span>"
                     f"<div class='muted small'>{escape(str(r.get('at', ''))[5:16].replace('T', ' '))}</div></div>{btn}</div>")
     cut = now - dt.timedelta(days=MANUAL_SHOW_DAYS)                 # 2026-10-12 用户：「交易里面只显示两天以内的」
     items = [it for it in items if it.get("kind") != "uncancel" and it.get("status") != "voided"]   # 撤销撤回、已撤销的撤回：不显示
@@ -1277,15 +1389,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
              + "</section>")
     bl = man.get("blocks") or {}
     if bl:
-        grp = MO.batch_blocks(book)                          # 「全部换成 X」卖掉的：一次「恢复按规则」（2026-10-13 用户）
-        H.append("<section class='card'><h2>手动卖出后不自动买回</h2><div class='list'>" + "".join(
-            f"<div class='li'><div class='grow'><b>「全部换成 {escape(_tlabel(x))}」卖出的</b> <span class='muted'>"
-            f"{escape('、'.join(_tlabel(t) for t in ts))}</span><div class='muted small'>到期前规则不会自动买回；点「恢复按规则」= 全部解除</div></div>"
-            f"<button class='btn sm' data-act='unblock-batch' data-ts='{escape(','.join(ts))}' data-x='{escape(_tlabel(x))}'>恢复按规则</button></div>"
-            for x, ts in grp.items()) + "".join(
-            f"<div class='li'><div class='grow'><b>{escape(t)}</b> <span class='muted'>"
-            f"{'一直，直到解除' if b.get('until') is None else '到 ' + escape(str(b['until']))}</span></div>"
-            f"<button class='btn sm' data-act='unblock' data-t='{escape(t)}'>解除</button></div>" for t, b in bl.items()) + "</div></section>")
+        H.append(_blocks_card(book, tag, bl, _tlabel))
     H.append(PANE + "more")
     if halt:
         H.append(f"<section class='card warn' id='halt'><h2 class='neg'>HALT 生效中</h2><div>{escape(halt)}</div>"
@@ -1585,19 +1689,28 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     if str(body.get("kind") or "") == "flow":
         return submit_flow(tag, body, now)
     book, sm = _load(tag)
-    if str(body.get("kind") or "") == "unblock" and isinstance(body.get("tickers"), list) and len(body["tickers"]) > 1:   # 一次解除几只（「恢复按规则」）
-        recs = []
-        for tk in body["tickers"][:20]:
+    if str(body.get("kind") or "") == "unblock" and isinstance(body.get("tickers"), list) and body["tickers"]:   # 一次解除一批（「恢复按规则」）
+        recs, skip, seen = [], [], set()                    # 「代码:设定 id」：页面看到之后设定换了 / 已经解除的跳过（2026-10-13）；全都不行才拒绝
+        for x in body["tickers"][:20]:
+            tk, _s, bid = str(x).partition(":")
             try:
-                r = MO.normalize({"kind": "unblock", "ticker": tk, "source": source})
+                r = MO.normalize({"kind": "unblock", "ticker": tk, "source": source, **({"block_id": bid} if bid else {})})
             except ValueError as e:
-                return False, f"没写：{e}", None
+                skip.append(str(e))
+                continue
+            if r["ticker"] in seen:
+                continue
+            seen.add(r["ticker"])
             w = MO.check(r, book, tag, sm=sm, now=now)
             if w:
-                return False, f"没写：{w}", None
+                skip.append(w)
+                continue
             recs.append(r)
+        if not recs:
+            return False, "没写：" + "；".join(skip or ["没有要解除的"]), None
         out = MO.append_many(tag, recs, clock=(lambda: now) if now else None)
-        return True, f"已写：恢复按规则 → 解除 {'、'.join(r['ticker'] for r in out)} 的不自动买回（指令 {out[0]['id']} 等 {len(out)} 条）", out[0]
+        return True, (f"已写：恢复按规则 → 解除 {'、'.join(r['ticker'] for r in out)} 的不自动买回（不会买回，也不马上买；"
+                      f"指令 {out[0]['id']} 等 {len(out)} 条" + (f"；没写：{'；'.join(skip)}" if skip else "") + f"）→ {MO.NEXT_DECISION}"), out[0]
     if str(body.get("kind") or "") in ("cancel", "uncancel"):   # 撤回 / 撤销撤回：与命令行同一个函数（同批指令一起；2026-10-13）
         fn = MO.cancel_request if body.get("kind") == "cancel" else MO.uncancel_request
         ok, msg, rec = fn(tag, book, str(body.get("target") or ""), now=now, source=source, **({"sm": sm} if body.get("kind") == "cancel" else {}))
@@ -1673,6 +1786,8 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
         for sr, _r in sells:                               # 凑钱的卖先写：执行器先卖后买（同一次运行里 ① 卖 → ② 买）
             MO.append(tag, sr, clock=clock)
         rec = MO.append(tag, rec, clock=clock)
+    if rec["kind"] == "unblock":                           # 解除不是单：不会买回、也不马上买，下一次决策起才不挡（2026-10-13）
+        return True, f"已写：解除 {rec['ticker']} 的不自动买回（不会买回，也不马上买；指令 {rec['id']}）→ {MO.NEXT_DECISION}", rec
     when = MO.when_text(now or now_jst())                   # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘
     k, t = rec["kind"], rec.get("ticker")
     msg = {"sell": f"已写：卖出 {t} 全部 → {when}卖出",

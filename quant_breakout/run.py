@@ -4392,7 +4392,7 @@ def cmd_manual(a) -> int:
                                     "想拿 " + "、".join(f"{t} 约 {n:,} 口" for t, n in want_) if want_ else "不拿核心 ETF")
                   + "（确认买入：bash scripts/liveu.sh manual core --pct 100）")
         for r_ in MO.unseen(tag, b_):
-            print(f"  手动指令 {r_['id']}：{MO.describe(r_)} → 等下单")
+            print(f"  手动指令 {r_['id']}：{MO.describe(r_)} → {'等下单' if r_.get('kind') in MO.ORDER_KINDS else '等执行器读'}")
         print(f"现在写的买卖：{when}下单（{MO.RULE_TEXT}）")
         s_ = MO.slots(b_, tag)
         print(f"个股名额：空 {s_['free']} 个（拿着 {s_['held']} + 排定买入 {s_['buys']}，上限 {s_['max']} 只）")
@@ -4475,6 +4475,8 @@ def cmd_manual(a) -> int:
         print(f"{when}下单（{MO.RULE_TEXT}）"
               + ("：操作面板开着的话会马上叫执行器；没开就运行 bash scripts/liveu.sh run --broker "
                  + ("paper" if paper else "tachibana") + " --phase now" if mode == "now" else ""))
+    elif rec["kind"] == "unblock":                           # 解除不是单（2026-10-13）
+        print(f"不会买回、也不马上买 → {MO.NEXT_DECISION}；之后那次决策看的 K 线出买入信号，规则才可能买")
     elif rec["kind"] == "core":
         c_ = MO.core_info(b_, rec["ticker"]) if rec.get("ticker") else None
         stop_ = float(rec["pct"]) <= 0

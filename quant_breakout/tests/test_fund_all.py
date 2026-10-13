@@ -553,7 +553,9 @@ def test_allin_sells_set_no_rebuy_and_batch_unblock_restores_rule():
     assert "A.T" in blk and blk["A.T"]["id"] == "M-all-a" and blk["A.T"]["until"]
     r.ux.save()
     book = json.loads((panel.paths.state_dir() / "book.json").read_text())
-    assert MO.batch_blocks(book) == {"B.T": ["A.T"]}
+    g = MO.batch_blocks(book)                                                  # 一批一条（2026-10-13：带设定 id，设定换了不动新的）
+    assert len(g) == 1 and g[0]["x"] == "B.T" and [(m["t"], m["id"]) for m in g[0]["members"]] == [("A.T", "M-all-a")]
+    assert blk["A.T"]["fund_for"] == "B.T" and blk["A.T"]["batch_at"] == at              # 批的身份记在设定里（指令被裁掉也认得）
 
 
 def test_panel_batch_unblock_button_and_submit():
@@ -568,15 +570,17 @@ def test_panel_batch_unblock_button_and_submit():
     (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
     _sm()
     html = panel.render("paper", "t" * 40, AT)
-    assert "data-act='unblock-batch' data-ts='6758.T,7203.T'" in html and ">恢复按规则<" in html
+    assert "data-act='unblock-batch' data-ids='6758.T:M-x-b,7203.T:M-x-a'" in html and ">恢复按规则<" in html
     assert html.count("data-act='unblock' data-t=") == 3                        # 单只的「解除」照旧
     assert "a==='unblock-batch'" in panel._JS
     ok, msg, _ = panel.submit({"book": "paper", "kind": "unblock", "ticker": "6758.T", "tickers": ["6758.T", "7203.T"]}, AT)
-    assert ok and "恢复按规则 → 解除 6758.T、7203.T" in msg
+    assert ok and "恢复按规则 → 解除 6758.T、7203.T" in msg and msg.endswith("→ 下一次决策（交易日 07:40）起生效")
     assert [r["ticker"] for r in _reqs("unblock")] == ["6758.T", "7203.T"] and len({r["at"] for r in _reqs("unblock")}) == 1
     man = MO.Manual(b, "paper")
-    man.ingest()
-    assert set(man.m["blocks"]) == {"8306.T"}
+    man.ingest()                                                               # 读到不马上去掉：记下从哪一次决策起不挡（2026-10-13）
+    bl = man.m["blocks"]
+    assert set(bl) == {"6758.T", "7203.T", "8306.T"} and "lift_from" not in bl["8306.T"]
+    assert bl["6758.T"]["lift_from"] == bl["7203.T"]["lift_from"] == "2026-10-07"      # 10/06 08:00 写 → 10/07 07:40 的决策起
 
 
 def test_allin_buy_uses_all_money_without_cash_buffer():

@@ -175,9 +175,12 @@ def mult_why(eng, t: str) -> str:
     return "新仓倍数 0（宏观 / 判断层 / 关联搭配 C / TBF 里有一层说现在不开这只的新仓）"
 
 
-def _why_not(eng, t: str, i: int, em: float, gate: str | None, earn: str | None) -> str:
-    """信号成立、规则却没排买入的理由（与统一决策的检查同一个顺序）。"""
+def _why_not(eng, t: str, i: int, em: float, gate: str | None, earn: str | None, gate_kind: str | None = None,
+             until: str | None = None) -> str:
+    """信号成立、规则却没排买入的理由（与统一决策的检查同一个顺序）。gate_kind = manual：挡的是「手动卖出后不买回」（不是资格检查；2026-10-13）。"""
     st, cfg = eng.st, eng.cfg
+    if gate and gate_kind == "manual":
+        return f"手动卖出后不买回（可在「交易」解除）：{'一直，直到解除' if until is None else f'到 {until}'}"
     if gate:
         return f"资格检查：{gate}"
     if em <= 0:
@@ -229,6 +232,9 @@ def build(ind: dict, eng, i: int, params, pool: list[str] | None = None, names: 
         lot = int(eng.lots[j])
         em = float(eng._entry_mult(t, i))
         gate = eng.entry_gate_fn(t, i) if eng.entry_gate_fn is not None else None
+        mg = getattr(eng, "manual_gate_fn", None)            # 资格检查与「手动卖出后不买回」分开（2026-10-13：以前都写成「资格检查」）
+        gk = ("manual" if mg is not None and gate == mg(t, i) else "gate") if gate else None
+        until = (((manual or {}).get("blocks") or {}).get(t) or {}).get("until") if gk == "manual" else None
         earn = None
         if not gate and em > 0 and eng.entry_block_fn is not None and r["status"] in ("triggered", "imminent", "watch"):
             try:
@@ -245,7 +251,7 @@ def build(ind: dict, eng, i: int, params, pool: list[str] | None = None, names: 
             rule = {"state": "planned", "text": f"规则已安排：{fill:%m/%d} 开盘买 {int(p[1]):,} 股"
                                                 f"（最高 ¥{round_to_tick(float(p[0]) * (1 + gap / 100), t, 'BUY'):,g}）"}
         elif sig:
-            rule = {"state": "blocked", "text": "信号成立但规则不买：" + _why_not(eng, t, i, em, gate, earn)}
+            rule = {"state": "blocked", "text": "信号成立但规则不买：" + _why_not(eng, t, i, em, gate, earn, gk, until)}
         else:
             rule = {"state": "none", "text": "还没出买入信号：规则不会买"}
         warn = []
@@ -260,7 +266,7 @@ def build(ind: dict, eng, i: int, params, pool: list[str] | None = None, names: 
             "macd_gap_pct": _f(r.get("macd_gap_pct"), 3), "vol_ratio": _f(r.get("vol_ratio")),
             "to_box_top_pct": _f(r.get("to_box_top_pct"), 1), "breakout": bool(r.get("breakout")),
             "top_risk": r.get("top_risk") or "", "rsi": _f(r.get("rsi"), 0), "rule": rule,
-            "buy": {"block": gate, "warn": warn, "em": _f(em, 3), "lot": lot, "px": _f(px),
+            "buy": {"block": gate, "block_kind": gk, "block_until": until, "warn": warn, "em": _f(em, 3), "lot": lot, "px": _f(px),
                     "limit": round_to_tick(px * (1 + gap / 100), t, "BUY") if px > 0 else None,
                     "rule_shares": rule_shares(eng, t, i, em if em > 0 else 1.0),
                     "planned": t in st.plan},
