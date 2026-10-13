@@ -135,7 +135,7 @@ function coreFx(q, skip, lab){                                             // �
   for(const t of Object.keys(C)){
     if(t===skip) continue;
     const c=C[t], L=c.lot||1, tg=Math.floor(c.u100*q/100/L+1e-9)*L;
-    if(tg!==c.cur && (c.cur>0 || tg>0)) out.push(t+' '+fmt(c.cur)+' → '+fmt(tg)+' 口');
+    if(tg!==c.cur && (c.cur>0 || tg>0)) out.push(t+' '+fmt(c.cur)+' → '+fmt(tg)+' 口'+(lab ? (tg>c.cur ? '（买）' : '（卖）') : ''));
   }
   return out.length ? '\n'+(lab||'★ 同一比例也用在：')+out.join('、') : '';
 }
@@ -416,13 +416,13 @@ document.addEventListener('click', async e=>{
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'sell', ticker:d.t})); return;
   }
   if(a==='core-resume'){                                                   // 停买后确认买入：闲置资金比例 0% → 100%（照规则）
-    const q=await ask('确认买入：恢复闲置资金买入 ETF', '闲置资金比例 0% → 100%（照规则）'+coreFx(100, '', '会买：')
+    const q=await ask('确认买入：恢复闲置资金买入 ETF', '闲置资金比例 0% → 100%（照规则）'+coreFx(100, '', '会调：')
       +'\n'+(d.plan || CFG.when+'买入；之后每天照规则调')+NOTE, '确认买入');   // 2026-10-13：规则不拿 / 今天已经有单 → 服务器写的实际时间
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:100})); return;
   }
   if(a==='core-restore'){                                                  // 「全部换成」之前的比例（2026-10-13）：只在你点了之后写；固定口数不跟着恢复；只买规则目标额的 N%（2026-10-14）
     const v=+d.pct; if(!(v>0 && v<100)) return;
-    const q=await ask('恢复成 '+v+'%：闲置资金比例', '闲置资金比例 0% → '+v+'%（规则目标额 × '+v+'%）'+coreFx(v, '', '会买：')
+    const q=await ask('恢复成 '+v+'%：闲置资金比例', '闲置资金比例 0% → '+v+'%（规则目标额 × '+v+'%）'+coreFx(v, '', '会调：')
       +'\n'+(d.plan || CFG.when+'按规则目标额的 '+v+'% 买入；之后每天按 '+v+'% 调')+'\n固定口数不会跟着恢复：要的话在各 ETF 下面重新点「固定口数…」'+NOTE, '恢复成 '+v+'%');
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:v})); return;
   }
