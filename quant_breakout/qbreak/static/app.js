@@ -1,7 +1,16 @@
 // qbreak 操作面板：app.js（浏览器原生 ES 模块；由 qbreak/panel.py 以 /static/app.js 提供；不要用构建工具）
 import { $, CFG, api, loading, toast } from './core.js';
 import { req } from './net.js';
-   // 手机切回来马上刷新
+(function(){                                                              // 手机切回来马上刷新（2026-10-13 resume-other-9：以前只有注释没有代码）：页面生成（CFG.gen）超过约 10 分钟 → 重新载入，
+  const STALE_MS=10*60000;                                                //   确认框里的执行日期（CFG.when / when_all 等）不再是跨过 07:40 决策之前的；没有 gen → 不动；对话框开着 → 不丢输入，只提示
+  let busy=false;
+  document.addEventListener('visibilitychange', ()=>{
+    const g=Number(CFG && CFG.gen);
+    if(document.hidden || busy || !(g>0) || Date.now()-g<STALE_MS) return;
+    if(document.querySelector('dialog[open]')){ toast('这页是 '+Math.round((Date.now()-g)/60000)+' 分钟前的：关掉对话框后下拉刷新，再操作', true); return; }
+    busy=true; loading(true); location.reload();
+  });
+})();
 (function(){                                                              // 〔77〕C UX-16：还有在处理的指令 → 每 10 秒问一次，状态变了就刷新（最多约 2 分钟）
   const s0=(CFG.st||{}); if(!(s0.pending>0)) return;
   let n=0;

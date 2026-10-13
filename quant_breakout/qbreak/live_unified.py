@@ -220,6 +220,13 @@ class UnifiedExecutor:
                                           allin_check=self._allin_check):
             self._event(lvl, msg)
 
+    def _halt_mark(self) -> None:
+        """每次运行读完手动指令之后：HALT 中记下标记、等着的指令写明解除后照原样执行；HALT 解除后的第一次运行 → warn 列出积压的指令
+        （写于哪天；2026-10-13 resume-other-3：以前几天到几周前的指令解除后悄悄照原样下）。"""
+        halted = self.respect_halt and paths.halt_file().exists()
+        for lvl, msg in self.manual.halt_mark(halted):
+            self._event(lvl, msg)
+
     def _allin_check(self, t: str, i: int) -> str | None:
         """「全部换成 X」/ 平摊凑钱的买入：卖出之前先做下单时才查的检查（2026-10-13：以前卖单发出之后 X 的买单才被挡）→ 理由 / None。
         资格检查（pre_send）；LU-15 立花前日終値 vs 决策用的收盘（成交日当天生效拆股的票不比，与 place 相同）。"""
@@ -992,6 +999,7 @@ class UnifiedExecutor:
         if self.manual is not None:
             for lvl, msg in self.manual.ingest():
                 self._event(lvl, msg)
+            self._halt_mark()
             self._settle_manual()
         g = self._gate("open")                              # 总是先看闸门（HALT 存在时记下演练的证据）
         why = self.blocked or g
@@ -1061,6 +1069,7 @@ class UnifiedExecutor:
             return out
         for lvl, msg in man.ingest():
             self._event(lvl, msg)
+        self._halt_mark()
         self._settle_manual()
         now = self.clock()
         stamp, today = now.isoformat(timespec="seconds"), now.date()
@@ -1087,10 +1096,10 @@ class UnifiedExecutor:
         if why is None and self.blocked:                     # run.py --block-reason（例：新代码的冒烟测试没过）：盘中也不下，一会儿再试
             why = self.blocked
         if why:
-            for it in todo:
-                it.update(tried=stamp, msg=why)
+            for it in todo:                                   # HALT：每条写明解除后照原样执行（写于 MM/DD；2026-10-13）
+                it.update(tried=stamp, msg=MO.halt_text(it) if "HALT" in why else why)
             out["retry"] = len(todo)
-            out["items"] = [{"id": it["id"], "ticker": it["ticker"], "status": MO.status_text(it), "msg": why} for it in todo]
+            out["items"] = [{"id": it["id"], "ticker": it["ticker"], "status": MO.status_text(it), "msg": it["msg"]} for it in todo]
             if core_want is not None:
                 cr["tried"] = stamp
                 out["retry"] += 1
@@ -1988,6 +1997,7 @@ class UnifiedExecutor:
         if self.manual is not None:                         # 页面 / 命令行写的新指令（闲置资金比例从这次决策起生效）
             for lvl, msg in self.manual.ingest():
                 self._event(lvl, msg)
+            self._halt_mark()
             eng.core_scale = self.manual.core_pct / 100
             eng.core_fix = {t: int(u) for t, u in (self.manual.m.get("core_fix") or {}).items()}   # 这次读到的固定口数 / 取消也在这次决策生效（2026-10-13 修：以前只在启动时读一次）
         if idxs:
@@ -2411,6 +2421,8 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     if lx:
         short += f"｜★ {'、'.join(sorted(lx))} 的离场判断今天跳过"
     mn = sm.get("manual") or {}
+    if mn.get("halt_backlog"):                              # HALT 解除后的第一次运行：积压的手动指令照原样执行（2026-10-13）
+        short += "｜★ HALT 期间等着的手动指令现在照原样执行"
     if mn.get("active"):
         short += f"｜手动指令 {int(mn['active'])} 条在处理"
     if mn.get("core_pause") and (mn.get("core_signal") or {}).get("date") == sm.get("decided_on"):

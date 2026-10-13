@@ -4250,7 +4250,8 @@ def _live_unified_run(a, opened: list) -> int:
         bad = (bool(sm["blocked"]) or compare_bad(cmp)            # 上线初期拿的票不同（LU-12）不算
                or any(str(n_).startswith("★") for n_ in sm.get("notices") or [])   # 立花的预告：只有 ★（要动手）的升 warn
                or (not paper and bool(model_diff_orders(sm["orders"])))   # 错过寄付 / 09:20 没寄り付き：与模型不同（EXE-4）
-               or sig_ or bool(RS.actionable(RS.bad_orders(sm["orders"]))) or bool(RS.run_errors(ux.book.get("events"), t0))
+               or sig_ or bool(mn_.get("halt_backlog"))             # HALT 解除后照原样执行积压的手动指令（2026-10-13）
+               or bool(RS.actionable(RS.bad_orders(sm["orders"]))) or bool(RS.run_errors(ux.book.get("events"), t0))
                or bool(inc_) or bool(sm.get("odd_lots"))      # 没做完 / 有零股要在立花网站卖
                or bool(sm.get("stale_inputs")) or bool(sm.get("data_problem")) or bool(sm.get("lag_exits")))   # 判断层的输入没更新 / 行情有问题
         # ↑ 被挡 / 被拒 / 状态不明的单（适配器挡下的不经过 ux.block；HALT 挡下的不算）、这次运行的 error 事件 → warn
@@ -4333,7 +4334,8 @@ def _now_report(a, ux, res: dict, paper: bool, tag: str, since: str | None = Non
     s1 = ux.summary()
     sm0.update(manual=s1["manual"], orders=s1["orders"], events=s1["events"], now_at=now_jst().isoformat(timespec="seconds"))
     write_json(fp, sm0)
-    lines = [f"- {x['ticker']}：{x['status']}（{x['msg']}）" for x in res.get("items") or []]
+    hb_ = (s1.get("manual") or {}).get("halt_backlog")      # HALT 解除后的第一次运行：积压的手动指令照原样执行（2026-10-13）
+    lines = ([f"- ★ {hb_}"] if hb_ else []) + [f"- {x['ticker']}：{x['status']}（{x['msg']}）" for x in res.get("items") or []]
     for ln in lines:
         print(ln[2:])
     n = int(res.get("placed") or 0)
@@ -4344,9 +4346,10 @@ def _now_report(a, ux, res: dict, paper: bool, tag: str, since: str | None = Non
     if a.notify and lines:
         from qbreak import notify
         bad = RS.actionable(RS.bad_orders([asdict(o) if is_dataclass(o) else o for o in new]))   # HALT 挡下的不算失败
-        warn = bool(bad) or bool(RS.run_errors(ux.book.get("events"), since))
+        warn = bool(bad) or bool(hb_) or bool(RS.run_errors(ux.book.get("events"), since))
         star = f"★ 没下 {len(bad)} 笔（{RS.bad_text(bad)}）｜" if bad else ""       # 放最前面：Mac 通知只显示前 200 字
-        mac_notify(title, (star + f"下单 {n} 笔：" + "；".join(f"{x['ticker']} {x['status']}" for x in res.get("items") or []))[:200])
+        hb_star = "★ HALT 期间等着的手动指令现在照原样执行｜" if hb_ else ""     # 正文第一行已经列出每条
+        mac_notify(title, (star + hb_star + f"下单 {n} 笔：" + "；".join(f"{x['ticker']} {x['status']}" for x in res.get("items") or []))[:200])
         notify.send(title, (f"- {star.rstrip('｜')}\n" if star else "") + "\n".join(lines), "warn" if warn else "info")
     return 0
 
@@ -4392,7 +4395,16 @@ def cmd_manual(a) -> int:
                                     "想拿 " + "、".join(f"{t} 约 {n:,} 口" for t, n in want_) if want_ else "不拿核心 ETF")
                   + "（确认买入：bash scripts/liveu.sh manual core --pct 100）")
         for r_ in MO.unseen(tag, b_):
-            print(f"  手动指令 {r_['id']}：{MO.describe(r_)} → {'等下单' if r_.get('kind') in MO.ORDER_KINDS else '等执行器读'}")
+            print(f"  手动指令 {r_['id']}：{MO.describe(r_)} → {'等下单' if r_.get('kind') in MO.ORDER_KINDS else '等执行器读'}"
+                  f"（写于 {MO.mmdd(r_.get('at'))}）")
+        if paths.halt_file().exists():                        # HALT 中：解除之前先看清积压的买卖指令与写入日期（2026-10-13 resume-other-3）
+            un_ = MO.unseen(tag, b_)
+            gone_ = MO.cancelled(un_)                         # 已经点了撤回（执行器还没读）的不算
+            wait_ = [x for x in [it for it in sm["items"] if it.get("status") == "pending"] + un_
+                     if x.get("kind") in MO.ORDER_KINDS and x.get("id") not in gone_]
+            print(f"★ HALT 生效中：等着的买卖指令 {len(wait_)} 条，解除后照原样执行"
+                  + ("：" + "；".join(f"{x['id']} {MO.describe(x)}（写于 {MO.mmdd(x.get('at'))}）" for x in wait_)
+                     + "（要不做：先 manual cancel <指令 id>）" if wait_ else "（没有）"))
         print(f"现在写的买卖：{when}下单（{MO.RULE_TEXT}）")
         s_ = MO.slots(b_, tag)
         print(f"个股名额：空 {s_['free']} 个（拿着 {s_['held']} + 排定买入 {s_['buys']}，上限 {s_['max']} 只）")

@@ -1422,8 +1422,12 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         H.append(_blocks_card(book, tag, bl, _tlabel))
     H.append(PANE + "more")
     if halt:
+        hw = sorted((x for x in [it for it in (man.get("items") or {}).values() if it.get("status") == "pending"] + list(waiting)
+                     if x.get("kind") in MO.ORDER_KINDS and x.get("id") not in dropped), key=lambda x: str(x.get("at") or ""))
         H.append(f"<section class='card warn' id='halt'><h2 class='neg'>HALT 生效中</h2><div>{escape(halt)}</div>"
-                 "<div class='muted small'>不下任何单、持仓不动。恢复只在 Mac 上：在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」。</div></section>")
+                 + (f"<div class='neg small'>等着的手动买卖指令 {len(hw)} 条（最早写于 {escape(MO.mmdd(hw[0].get('at')))}）：解除后照原样执行；"
+                    "不想做了先在「交易」撤回</div>" if hw else "")                  # 2026-10-13 resume-other-3
+                 + "<div class='muted small'>不下任何单、持仓不动。恢复只在 Mac 上：在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」。</div></section>")
     else:
         H.append("<section class='card' id='halt'><h2>紧急停止</h2><div class='muted small'>全部账本（模拟和立花）从下一次运行起不下单、持仓不动；"
                  "已经发到交易所的单不会被撤（要撤：上面「今天的单」的「撤单」，或立花网站 / 手机网站）。这里只能停、不能恢复。</div>"

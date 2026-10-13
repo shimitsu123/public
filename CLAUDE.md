@@ -82,6 +82,8 @@
   Mac 失控 / 联系不上时的最后停止手段：告诉用户自己在立花网页把「ｅ支店・API 利用設定」改成「無効化」（MACOS.md §8；Claude 不登录、不操作立花网站）；
   上线头几天 / 退出实盘 / 换 Mac 照 MACOS.md §1.6 / §1.14；
   用户说「停 / 今天不要下单」→ 立刻建 `~/.qbreak/home/HALT`（停下单不用再确认）；不在执行器之外向立花发任何单（不写临时脚本调 API 下单）；
+  用户要删 HALT（恢复下单）→ 删之前先跑 `bash scripts/liveu.sh manual list --broker <账本>`（有账本的都看），把 HALT 期间等着的手动指令和写于哪天告诉用户
+  （解除后照原样执行；不要的先 `manual cancel`；2026-10-13 起）；
   「做一次 HALT 演练」→ `bash scripts/liveu.sh halt-drill`（只删它自己建的演练 HALT；真的 HALT 存在时不演练）；「能上实盘了吗」→ `bash scripts/liveu.sh gate`（只读）；
   用户说入金 / 出金 → `bash scripts/liveu.sh flow <金额>`（出金写负数；只影响收益的计算与提醒，不下单；面板的「登记入金 / 出金」同一个函数）；
   出金预留 `--flow-reserve`（到账前决策按扣掉它算 = 动仓位：个股仓位变小、ETF 不买回、现金不够先卖核心 ETF；到账后自动解除）只在用户明确说「先留着 / 预留」时加；

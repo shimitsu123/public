@@ -62,6 +62,8 @@ LABEL = {"sell": "卖出全部", "trim": "减仓", "adjust": "调仓", "buy": "�
 CANCEL_UNTIL = dt.time(15, 30)          # 撤单：交易日这个时刻之前面板马上叫执行器（之后今天没成交的单都已失效）
 RUN_AT = dt.time(7, 40)                 # 早上决策的运行时刻（与 mac_login.RUN_AFTER / launchd 的 07:40 相同）：解除不买回从这之后第一次决策起生效
 NEXT_DECISION = "下一次决策（交易日 07:40）起生效"
+HALT_WAIT_MSG = "HALT 中：解除后照原样执行"   # HALT 期间等着的手动指令的说明（2026-10-13：以前一直写「等执行器下单」）
+HALT_DONE_MSG = "HALT 已解除 → 照原样执行"
 _CID = re.compile(r"^U(\d{4}-\d{2}-\d{2})-(BUY|SELL)-([0-9][0-9A-Z]{3}\.T)(-[0-9A-Za-z]{1,20})?$")
 STATUS = {"pending": "等下单", "placed": "已下单", "done": "完成", "rejected": "没执行", "cancelled": "已撤回", "voided": "已撤销",
           "superseded": "按规则的单卖"}
@@ -371,6 +373,17 @@ def fmt_target(r: dict) -> str:
     if u == "yen":
         return f"¥{float(v):,.0f}"
     return f"{float(v):g}%"
+
+
+def mmdd(at) -> str:
+    """ISO 时刻 / 日期 → MM/DD（读不了 → —）。"""
+    s = str(at or "")
+    return s[5:10].replace("-", "/") if len(s) >= 10 else "—"
+
+
+def halt_text(it: dict) -> str:
+    """HALT 期间等着的指令的说明（2026-10-13 resume-other-3）：解除后照原样执行 + 写于哪天。"""
+    return f"{HALT_WAIT_MSG}（写于 {mmdd(it.get('at'))}）"
 
 
 def describe(r: dict) -> str:
@@ -1631,6 +1644,7 @@ class Manual:
         m.setdefault("core_pct", 100.0)
         m["tag"] = tag
         self.m = m
+        self.halt_backlog: str | None = None          # 这次运行：HALT 解除后照原样执行的积压指令（汇总 / 通知；halt_mark）
 
     # ── 设定 ──
     @property
@@ -1775,6 +1789,40 @@ class Manual:
         return sorted((it for it in self.m["items"].values() if it.get("status") == "pending" and it.get("kind") in kinds),
                       key=lambda x: x.get("at", ""))
 
+    def _halt_msgs(self, todo=None) -> None:
+        """HALT 中：等着的指令写「HALT 中：解除后照原样执行（写于 MM/DD）」（一样就不改，免得账本来回变）。"""
+        for it in (self.pending(ORDER_KINDS) if todo is None else todo):
+            msg = halt_text(it)
+            if it.get("msg") != msg:
+                it["msg"] = msg
+
+    def halt_mark(self, halted: bool) -> list[tuple[str, str]]:
+        """每次运行读完指令之后（2026-10-13 resume-other-3）：HALT 中 → 账本记下 halt_seen（第一次看到 / 最后一次看到的时刻）、
+        等着的指令写明解除后照原样执行；HALT 已解除、上一次还记着 halt_seen → 去掉标记，有积压的指令 → warn 列出每条（id 票 种类 写于 MM/DD），
+        self.halt_backlog 记下这段文字（这次运行的汇总 / 通知用）。返回 [(级别, 说明)]。"""
+        now = self.clock().isoformat(timespec="seconds")
+        if halted:
+            hs = self.m.get("halt_seen") if isinstance(self.m.get("halt_seen"), dict) else {}
+            self.m["halt_seen"] = {"since": hs.get("since") or now, "last": now}
+            self._halt_msgs()
+            return []
+        hs = self.m.pop("halt_seen", None)
+        if not hs:
+            return []
+        todo = self.pending(ORDER_KINDS)
+        if not todo:
+            return []
+        for it in todo:
+            if str(it.get("msg") or "").startswith(HALT_WAIT_MSG):
+                it["msg"] = f"{HALT_DONE_MSG}（写于 {mmdd(it.get('at'))}）"
+        since = (hs.get("since") if isinstance(hs, dict) else None) or ""
+        self.halt_backlog = (f"{len(todo)} 条手动指令在 HALT 期间等着，现在照原样执行："
+                             + "；".join(f"{it['id']} {it.get('ticker') or ''} {LABEL.get(it.get('kind'), it.get('kind'))} 写于 {mmdd(it.get('at'))}"
+                                         for it in todo)
+                             + (f"（HALT 从 {mmdd(since)} 起）" if since else "")
+                             + "。要不做：面板「撤回」或 liveu.sh manual cancel <id>")
+        return [("warn", self.halt_backlog)]
+
     def has_work(self) -> bool:
         """还有要变成单的手动指令（等执行器的 sell / trim / adjust / buy）或要处理的撤回。"""
         return bool(self.pending(ORDER_KINDS)) or any(it.get("cancel_req") and it.get("status") == "placed"
@@ -1808,7 +1856,8 @@ class Manual:
                 out.append(("info", f"「全部换成」整批 {n_all} 条：过了 {CUTOFF:%H:%M}，寄付来不及 → 全部换成整批：等下一次决策"))
             return out
         if halted:
-            return orphan + [("warn", f"手动指令 {len(todo)} 条没处理：HALT 生效中（解除之后才处理）")]
+            self._halt_msgs(todo)                           # 每条写明：HALT 中，解除后照原样执行（写于 MM/DD）
+            return orphan + [("warn", f"手动指令 {len(todo)} 条没处理：HALT 生效中（解除之后照原样执行）")]
         st, out = eng.st, list(orphan)
         today = now.date().isoformat()
         allin = {x["ticker"]: x for x in todo if x["kind"] == "buy" and x.get("fund") == "all"}   # 「全部换成 X」：整批只在决策里做（2026-10-13）
@@ -2449,7 +2498,8 @@ class Manual:
                 "adds": dict(self.m["adds"]), "buys": dict(self.m["buys"]), "cap_pct": self.m.get("cap_pct"),
                 "max_positions": self.m.get("max_positions"),
                 "items": [{k: v for k, v in it.items() if k in keep} for it in items[:30]],
-                "active": sum(1 for it in items if it.get("status") in ACTIVE)}
+                "active": sum(1 for it in items if it.get("status") in ACTIVE),
+                "halt_backlog": self.halt_backlog}
 
 
 def active(sm: dict | None) -> bool:
@@ -2678,6 +2728,8 @@ def lines(sm: dict | None, today: str | None = None) -> list[str]:
     if cp and sg:
         out.append(f"- ★ 闲置资金 ETF 买入信号（{sg.get('date')} 收盘）：" + signal_text(sg)
                    + "：确认后才买（面板「确认买入」，或 liveu.sh manual core --pct 100）")
+    if sm.get("halt_backlog"):                              # 这次运行：HALT 解除后照原样执行的积压指令（2026-10-13）
+        out.append(f"- ★ {sm['halt_backlog']}")
     for t, b in (sm.get("blocks") or {}).items():
         out.append(f"- {t}：不自动买回（{block_text(b)}）")
     for it in sm.get("items") or []:
@@ -2689,7 +2741,7 @@ def lines(sm: dict | None, today: str | None = None) -> list[str]:
 
 __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEFAULT", "CAP_PCT", "MAX_POS", "SESSION", "Manual",
            "append", "read_all", "unseen", "cancelled", "normalize", "batch_blocks", "lifting", "unblock_why", "lift_day", "rebuy_day",
-           "block_text", "NEXT_DECISION", "RUN_AT", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "OPEN_ST",
+           "block_text", "NEXT_DECISION", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "halt_text", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "OPEN_ST",
            "corefix_clear_text", "resume_info", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text",
            "next_window", "due", "cancel_due", "CANCEL_UNTIL",
            "RULE_TEXT", "NOW_NO_CANCEL",
