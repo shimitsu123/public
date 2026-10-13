@@ -292,7 +292,7 @@ function allPrev(n, cap, go, out){                                         // �
     go.textContent='确认全部卖出（不买）'; go.className='btn danger'; go.disabled=false; return;
   }
   out.textContent='★ 其他持仓全部卖出，只拿这只 + 现金：'+wa+'整批先卖后买；买入约 '+fmt(q.n)+' 股（估算 · 约 '+yen(q.buy)+' · 约占权益 '+bpct(q.n)+'）'
-    +'\n股数与限价（那天的收盘 ×1.03）由执行器在那次决策里按全卖之后的钱再算，可能少 1 个单元；只做一次';
+    +'\n股数与限价（决策日 = 前一交易日的收盘 ×1.03）由执行器在那次决策里按全卖之后的钱再算，可能少 1 个单元；只做一次';
   go.textContent='确认：全卖其他、买入约 '+fmt(q.n)+' 股'; go.className='btn danger'; go.disabled=false;
 }
 // ── 买入（建议的股票 → 手动买入指令）：按规则的仓位 / 股数 / 金额 / 占权益 %；执行器下单时按当时的价格再算 ──
@@ -324,10 +324,10 @@ function buyUnit(u){
 function buyPrev(){
   const go=$('#buy-go'), out=$('#buy-prev');
   go.className='btn primary';
+  { const bv=$('#buy-val'); if(bv && FUND_MODE!=='all') bv.disabled=false; }        // 离开「其他全部卖出」：输入框恢复（任何早退之前）
   let n=buyTarget();
   if(n==null && FUND_MODE!=='all'){ out.textContent='输入要买多少（股数 / 金额 / 占总权益 %）'; go.textContent='确认买入'; go.disabled=true; return; }
   const cap=buyCap(); let note='';
-  { const bv=$('#buy-val'); if(bv && FUND_MODE!=='all') bv.disabled=false; }
   if(FUND_MODE==='all'){ allPrev(n, cap, go, out); return; }
   if(n==null){ out.textContent='输入要买多少（股数 / 金额 / 占总权益 %）'; go.textContent='确认买入'; go.disabled=true; return; }
   if(n>cap){ n=cap; note='\n★ 超过'+capLab()+'：截到 '+fmt(n)+' 股'; }
@@ -407,6 +407,7 @@ document.addEventListener('click', async e=>{
     const inBuy=$('#dlg-buy').open; if(d.m==='all' && !inBuy) return;
     if(inBuy && BUY && BUY.fullOnly && d.m!=='all') return;                // 名额已满：只能「其他全部卖出」
     FUND_MODE=d.m; if(FUND_MODE!=='all') FUND_PREV=FUND_MODE; if(inBuy && BUY) BUY.autoAll=false;   // 手选的：拖回来也不还原
+    if(inBuy && FUND_MODE==='all' && BUY.unit!=='shares'){ buyUnit('shares'); return; }   // 金额 / % 单位下手选：先换成股数（输入框显示的是股数）
     if(inBuy) buyPrev(); else adjPrev(); return;
   }
   if(a==='adj-step'){ const n=adjTarget(); adjShow(Math.max(0, (n==null ? ADJ.shares : n)+(+d.d)*ALOT())); adjPrev(); return; }

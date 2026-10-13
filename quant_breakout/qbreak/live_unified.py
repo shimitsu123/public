@@ -67,6 +67,7 @@ LATE_BUY_NOTE = "错过寄付：今天不买（与模型不同 → 记入差异�
 LATE_CORE_NOTE = "错过寄付：核心 ETF 今天不调（下一次决策重新算目标；与模型不同 → 记入差异）"
 QUOTE_FAIL = "取价失败"                            # B7：开盘后补单取价整个失败（DEFERRED 全部保留，09:20 再试）
 NO_OPEN_WAIT = "还没寄り付き（特別気配？）：09:20 再看"
+ALLIN_WAIT = "「全部换成」等同批卖单成交"                   # 09:05：同批卖单立花那边还没约定 → 09:20 再按余力下（2026-10-13）
 NO_OPEN_FINAL = "到 09:20 还没有始値（特別気配 / 停牌）：今天不买（与模型不同 → 记入差异）"
 PRECLOSE_MAX_PCT = 3.0                             # LU-15：Yahoo 收盘 vs 立花前日終値 差超过这个 % → 那只的寄付买单不下（卖单只提醒）
 BREAKER_N, BREAKER_VALUE = 2, 2.2                  # C-11：规则单笔数 > (个股名额 + 核心 ETF 只数) × 2，或金额合计 > 权益 × 2.2 → 异常熔断
@@ -211,7 +212,7 @@ class UnifiedExecutor:
         （成交日 = i 的下一交易日；HALT 时不动；加仓只在 deciding）。"""
         fill = next_trading_day(self.eng.gidx[i].date())
         halted = self.respect_halt and paths.halt_file().exists()
-        for lvl, msg in self.manual.apply(self.eng, i, fill, halted=halted, deciding=deciding):
+        for lvl, msg in self.manual.apply(self.eng, i, fill, halted=halted, deciding=deciding, blocked=bool(self.blocked)):
             self._event(lvl, msg)
 
     def _core_pending(self, today: dt.date | None = None) -> float | None:
@@ -768,6 +769,23 @@ class UnifiedExecutor:
         self.save()
         return [o for o in self.orders if o.decided_on == d]
 
+    def _allin_unsold(self, t: str) -> list[str]:
+        """「全部换成 t」这次决策里同批的卖单（个股 adjust → 0 与核心 ETF）：立花那边还没全部约定的票。查不到 → 当作还没卖完。"""
+        d = self.eng.st.last_date
+        batch = {c.get("ticker") for c in MO.companions_in(self.manual.m["items"].get((self.manual.m["buys"].get(t) or {}).get("id")) or {},
+                                                            self.manual.m["items"]) if c.get("kind") in MO.POS_KINDS}
+        sells = [o for o in self.orders if o.decided_on == d and o.side == "SELL" and o.broker_id and o.status in ("SENT", "PARTIAL")
+                 and (o.ticker in batch or o.kind == "core")]
+        left = []
+        for o in sells:
+            try:
+                r = self.b.order_status(o.broker_id, o.order_date)
+                if int(r.get("filled_qty") or 0) < int(o.sent_qty or o.qty):
+                    left.append(o.ticker)
+            except Exception:                                 # noqa: BLE001
+                left.append(o.ticker)
+        return left
+
     def _place_deferred(self, get_open, locked: dict | None = None, no_open: str | None = None) -> None:
         """开盘后：留下的买单按实际始値做与模型相同的检查（没开盘价 / 跳空 / ストップ高 / 名额），再下单。
         实盘按「限价 × 股数 + 手续费 ≤ 当时余力」减股；模拟账户交给 PaperBroker 按实际成交价减（与引擎相同）。
@@ -790,20 +808,22 @@ class UnifiedExecutor:
             o.status, o.note = "SKIPPED", why
             self.stats["skipped"] += 1
             self._event("info", f"BUY {o.ticker}（开盘后）放弃：{why}")
-        waiting = []
-        unfilled_sells = [o for o in self.orders if o.side == "SELL" and o.decided_on == st.last_date and o.status in ("SENT", "PARTIAL")]
+        waiting, allin_wait = [], []
         for o in act:
             g = self._gate_buy(o)
             if g:
                 o.status, o.note = "SKIPPED", g
                 continue
             op = get_open(o.ticker)
-            if (no_open == "wait" and o.reason == "manual_buy" and bp is not None and unfilled_sells
-                    and (self.manual.m["buys"].get(o.ticker) or {}).get("allin")):   # 全部换成这只：钱靠同批的卖出，卖单还没成交 → 09:20 再看
-                o.note = f"同批的卖单还没成交（{'、'.join(x.ticker for x in unfilled_sells[:3])}）：09:20 再看"
-                waiting.append(o.ticker)
-                npos += 1
-                continue
+            if (no_open == "wait" and o.reason == "manual_buy" and bp is not None and self.manual is not None
+                    and (self.manual.m["buys"].get(o.ticker) or {}).get("allin") and self.clock().time() < dt.time(9, 20)):
+                left = self._allin_unsold(o.ticker)           # 全部换成这只：钱靠同批的卖出 → 向立花查约定，还没卖完 → 09:20 再按余力下
+                if left:
+                    if not str(o.note or "").startswith(QUOTE_FAIL):
+                        o.note = f"{ALLIN_WAIT}（{'、'.join(left[:3])} 还没约定）：09:20 再看"
+                    allin_wait.append(o.ticker)
+                    npos += 1
+                    continue
             if not op or op <= 0:
                 if no_open == "wait":                         # 还没寄り付き：保留，09:20 再看（先占着名额与余力：保持与模型相同的先后）
                     o.note = NO_OPEN_WAIT
@@ -856,6 +876,8 @@ class UnifiedExecutor:
                 npos += o.kind == "stock" and o.reason != "manual_add"
                 if bp is not None:
                     bp -= self._reserve(o, qty, lim)
+        if allin_wait:
+            self._event("info", f"BUY {'、'.join(allin_wait)}（开盘后）：{ALLIN_WAIT}，09:20 再按余力下（单保留）")
         if waiting:
             self._event("info", f"BUY {'、'.join(waiting)}（开盘后）：{NO_OPEN_WAIT}（单保留）")
 
@@ -1120,7 +1142,8 @@ class UnifiedExecutor:
                 buys.append(it)
                 continue
             if it.get("fund_for") in allin and it.get("at") == allin[it["fund_for"]]:
-                later(it, f"与「全部换成 {it['fund_for']}」一起：明天早上的决策先过闸门、再先卖后买")
+                it.update(hold=today.isoformat(), tried=stamp, msg=f"与「全部换成 {it['fund_for']}」一起：{MO.allin_when(self.clock(), self.book)}整批（先过闸门、再先卖后买）")
+                out["later"] += 1
                 continue
             ps, rule = st.pos.get(t), st.pending_exit.get(t)
             if ps is None:
@@ -1254,7 +1277,8 @@ class UnifiedExecutor:
             t, add = it["ticker"], it["kind"] == "adjust"
             ps, j = st.pos.get(t), eng.col.get(t)
             if not add and it.get("fund") == "all":           # 其他全部卖出、只拿这只：整批只在早上的决策里做（先过闸门；卖出所得才算得进来；2026-10-13）
-                later(it, "全部换成这只：整批在明天早上的决策里先过闸门、再先卖后买")
+                it.update(hold=today.isoformat(), tried=stamp, msg=f"全部换成这只：{MO.allin_when(self.clock(), self.book)}整批（那次决策先过闸门、再先卖后买）")
+                out["later"] += 1
                 continue
             if not add and t in eng.core_set:
                 no(it, "核心 ETF 不能手动买（用「闲置资金比例」调）")
@@ -1453,7 +1477,7 @@ class UnifiedExecutor:
             elif o.status in ("EXPIRED", "CANCELLED") and q >= (o.sent_qty or o.qty) > 0:   # 撤单之前已经全部成交
                 o.status = "FILLED"
             elif o.status == "DEFERRED":                     # 开盘后的补单没有跑（09:05 的 --phase open）→ 这笔没买，与模型不同
-                why_ = (str(o.note) if str(o.note).startswith((QUOTE_FAIL, NO_OPEN_WAIT))   # 跑了但没下成（取价失败 / 一直没寄り付き）
+                why_ = (str(o.note) if str(o.note).startswith((QUOTE_FAIL, NO_OPEN_WAIT, ALLIN_WAIT))   # 跑了但没下成（取价失败 / 一直没寄り付き / 等同批卖单）
                         else "开盘后补单没有运行（--phase open）")
                 o.status, o.note = "MISSED", f"{why_}，没买 —— 与模拟盘出现差异"
                 self.stats["model_diff"] += not self.paper
