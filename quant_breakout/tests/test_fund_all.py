@@ -37,14 +37,14 @@ def test_submit_all_writes_sells_corefix_core_then_buy():
     ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}}, AT)
     assert ok and rec["fund"] == "all" and rec["value"] == 300, msg
     rs = _reqs()
-    assert [r["kind"] for r in rs] == ["buy"] + ["adjust"] * 4 + ["corefix", "core"]          # 先写买入（写到一半中断也不会只剩卖出）
-    assert [r["ticker"] for r in rs[1:5]] == ["6758.T", "7203.T", "8306.T", "9432.T"] and all(r["value"] == 0 and r["unit"] == "shares" for r in rs[1:5])
+    assert [r["kind"] for r in rs] == ["buy"] + ["sell"] * 4 + ["corefix", "core"]            # 先写买入；个股是「卖出全部」（不自动买回）
+    assert [r["ticker"] for r in rs[1:5]] == ["6758.T", "7203.T", "8306.T", "9432.T"] and all(r["block_days"] == MO.BLOCK_DEFAULT for r in rs[1:5])
     assert rs[5]["clear"] is True and rs[5]["ticker"] == "1545.T" and rs[5]["prev_units"] == 100
     assert rs[6]["pct"] == 0 and "ticker" not in rs[6] and rs[6]["prev_pct"] == 100.0
     assert all(r["fund_for"] == "6501.T" for r in rs[1:]) and all(r["at"] == rec["at"] for r in rs)
     assert "先全部卖出其他持仓：6758.T 100 股、7203.T 100 股、8306.T 100 股、9432.T 100 股" in msg
     assert "取消固定口数：1545.T（1545.T 100 → 0 口：之后按比例 0% 卖出）" in msg and "闲置资金比例 100% → 0%（1545.T 100 → 0 口；之后停买" in msg
-    assert "全卖也不够 1 个单元就不买、留现金" in msg and "卖出的个股不设「不买回」" in msg
+    assert "全卖也不够 1 个单元就不买、留现金" in msg and "之后 20 个交易日规则不自动买回；「交易」里可一次「恢复按规则」" in msg
     assert msg.startswith("已写：全部换成 6501.T → 10/07 开盘整批先卖后买")                 # 10/06 08:00、今天的决策已做 → 下一个交易日
     assert len(MO.fund_companions(rec, rs)) == 6
 
@@ -82,7 +82,7 @@ def test_fund_all_skips_exiting_and_blocks_on_unfinished_instruction():
     plan = MO.fund_all(b, "paper", "6501.T")
     assert [t for t, _c, _p in plan["sells"]] == ["6758.T", "8306.T", "9432.T"] and plan["skip"][0][0] == "7203.T"
     ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}}, AT)
-    assert ok and [r["ticker"] for r in _reqs("adjust")] == ["6758.T", "8306.T", "9432.T"]
+    assert ok and [r["ticker"] for r in _reqs("sell")] == ["6758.T", "8306.T", "9432.T"]
     assert MO.fund_holdings(b, "paper")["exiting"] == ["7203.T"]
 
 
@@ -102,7 +102,7 @@ def test_cancel_all_buy_cancels_companions_before_executor_reads():
     man = MO.Manual(b, "paper")
     man.ingest()
     it = man.m["items"]
-    assert all(it[r["id"]]["status"] == "cancelled" for r in _reqs() if r["kind"] in ("adjust", "buy", "core", "corefix"))
+    assert all(it[r["id"]]["status"] == "cancelled" for r in _reqs() if r["kind"] in ("sell", "buy", "core", "corefix"))
     assert man.core_pct == 100.0 and man.m["core_fix"] == {"1545.T": 100}        # 读到之前撤回：比例 / 固定口数都没动
 
 
@@ -154,7 +154,7 @@ console.log(JSON.stringify({q:q, bars:bars, leg:leg, n0:q0.n, buy0:q0.buy}));
     o = json.loads(r.stdout)
     q = o["q"]
     assert [x["t"] for x in q["rows"]] == ["7203.T", "1545.T"] and all(x["after"] == 0 for x in q["rows"]) and q["keep"][0]["t"] == "8306.T"
-    assert q["got"] == 2_600_000 + 740_400 and q["avail"] == int(50_000 + q["got"] * 0.995 * 0.99)
+    assert q["got"] == 2_600_000 + 740_400 and q["avail"] == int(50_000 / 0.99 + q["got"] * 0.995)    # 不留 1% 现金缓冲
     assert q["n"] == (q["avail"] // (2000 * 1.005)) // 100 * 100 and q["buy"] == q["n"] * 2000 and q["n"] >= 1500
     assert [round(sum(b)) for b in o["bars"]] == [100, 100]
     leg = dict(o["leg"])
@@ -254,7 +254,7 @@ def test_cli_cancel_helper_cancels_companions_and_uncancel_restores_all():
     man = MO.Manual(b, "paper")
     man.ingest()
     it = man.m["items"]
-    assert it[buy["id"]]["status"] == "pending" and all(it[r["id"]]["status"] == "pending" for r in _reqs("adjust"))
+    assert it[buy["id"]]["status"] == "pending" and all(it[r["id"]]["status"] == "pending" for r in _reqs("sell"))
     assert it[cxl["id"]]["status"] == "voided"
     core = next(r for r in _reqs("core")); fix = next(r for r in _reqs("corefix"))
     assert it[core["id"]]["status"] == "pending" and it[fix["id"]]["status"] == "pending"   # 读到但不生效：等决策一起
@@ -264,7 +264,7 @@ def test_cli_cancel_helper_cancels_companions_and_uncancel_restores_all():
     ok, msg, cxl2 = MO.cancel_request("paper", b, buy["id"], now=AT, source="cli")
     assert ok and "为这笔买入写的 6 条" in msg
     # 单独撤销同批某条的撤回 → 拒绝（要整批跟着买入那条）
-    c_adj = [r for r in _reqs("cancel") if r["target"] == _reqs("adjust")[0]["id"]][-1]      # 第二批的那条（第一批的已撤销）
+    c_adj = [r for r in _reqs("cancel") if r["target"] == _reqs("sell")[0]["id"]][-1]      # 第二批的那条（第一批的已撤销）
     ok, msg, _ = MO.uncancel_request("paper", b, c_adj["id"], now=AT)
     assert not ok and "同批指令：要恢复请撤销买入那条的撤回" in msg
     html = panel.render("paper", "t" * 40, AT)
@@ -450,7 +450,7 @@ def test_second_allin_and_core_change_refused_while_batch_waits():
     ok, msg, _ = panel.submit({"book": "paper", "kind": "core", "pct": 50}, AT)
     assert not ok and "在等决策" in msg
     assert MO.core_pct_now("paper", json.loads((panel.paths.state_dir() / "live_unified_paper.json").read_text())) == 100.0   # 整批的 0% 等决策
-    adj = _reqs("adjust")[0]
+    adj = _reqs("sell")[0]
     ok, msg, _ = panel.submit({"book": "paper", "kind": "cancel", "target": adj["id"]}, AT)
     assert not ok and "撤回买入那条（整批一起撤）" in msg
 
@@ -536,3 +536,58 @@ def test_batch_written_in_one_write():
     _sm()
     ok, _m, _b = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}}, AT)
     assert ok and all(r.get("batch") == "all" for r in _reqs() if r["kind"] != "buy") and len({r["at"] for r in _reqs()}) == 1
+
+
+def test_allin_sells_set_no_rebuy_and_batch_unblock_restores_rule():
+    """2026-10-13 用户：「卖出的个股设『不买回』，需要一个回到规则的 button」—— 整批执行后个股 20 个交易日不自动买回；
+    「交易」里按批一次「恢复按规则」（解除这一批的全部）。"""
+    from test_manual_buy import _write
+    from test_manual_orders import TAG, _Run
+    r = _Run([1000.0] * 30, entry=(10,))
+    r.until(14)
+    at = r.at(r.k - 1, 6).isoformat()
+    _write({"kind": "sell", "ticker": "A.T", "block_days": 20, "fund_for": "B.T", "batch": "all", "source": "test", "id": "M-all-a", "at": at})
+    _write({"kind": "buy", "ticker": "B.T", "unit": "shares", "value": 100_000, "fund": "all", "source": "test", "id": "M-all-buy", "at": at})
+    r.day()
+    blk = r.ux.manual.m["blocks"]
+    assert "A.T" in blk and blk["A.T"]["id"] == "M-all-a" and blk["A.T"]["until"]
+    r.ux.save()
+    book = json.loads((panel.paths.state_dir() / "book.json").read_text())
+    assert MO.batch_blocks(book) == {"B.T": ["A.T"]}
+
+
+def test_panel_batch_unblock_button_and_submit():
+    b = _book4()
+    b["manual"]["items"] = {
+        "M-x-a": {"id": "M-x-a", "kind": "sell", "ticker": "7203.T", "fund_for": "6501.T", "batch": "all", "status": "done", "at": "2026-10-05T06:00:00+09:00"},
+        "M-x-b": {"id": "M-x-b", "kind": "sell", "ticker": "6758.T", "fund_for": "6501.T", "batch": "all", "status": "done", "at": "2026-10-05T06:00:00+09:00"},
+        "M-y": {"id": "M-y", "kind": "sell", "ticker": "8306.T", "status": "done", "at": "2026-10-04T06:00:00+09:00"}}
+    b["manual"]["blocks"] = {"7203.T": {"until": "2026-11-02", "since": "2026-10-05", "id": "M-x-a"},
+                             "6758.T": {"until": "2026-11-02", "since": "2026-10-05", "id": "M-x-b"},
+                             "8306.T": {"until": "2026-11-01", "since": "2026-10-04", "id": "M-y"}}
+    (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
+    _sm()
+    html = panel.render("paper", "t" * 40, AT)
+    assert "data-act='unblock-batch' data-ts='6758.T,7203.T'" in html and ">恢复按规则<" in html
+    assert html.count("data-act='unblock' data-t=") == 3                        # 单只的「解除」照旧
+    assert "a==='unblock-batch'" in panel._JS
+    ok, msg, _ = panel.submit({"book": "paper", "kind": "unblock", "ticker": "6758.T", "tickers": ["6758.T", "7203.T"]}, AT)
+    assert ok and "恢复按规则 → 解除 6758.T、7203.T" in msg
+    assert [r["ticker"] for r in _reqs("unblock")] == ["6758.T", "7203.T"] and len({r["at"] for r in _reqs("unblock")}) == 1
+    man = MO.Manual(b, "paper")
+    man.ingest()
+    assert set(man.m["blocks"]) == {"8306.T"}
+
+
+def test_allin_buy_uses_all_money_without_cash_buffer():
+    """2026-10-13 用户：「拖到最大」股数不留 1% 现金缓冲：add_room(buffer=False) 按全部的钱算（手续费 / 滑点照算）。"""
+    from test_manual_orders import _Run
+    r = _Run([1000.0] * 30, entry=(10,))
+    r.until(14)
+    i = r.k - 1
+    assert r.eng.add_room("B.T", i, buffer=False) >= r.eng.add_room("B.T", i)
+    st = r.eng.st
+    pool = st.cash_jpy + r.eng._core_liq(i) + sum(r.eng._sell_net(x, i) for x in st.pending_exit if x in st.pos)
+    px = r.eng._px_close("B.T", i) * (1 + r.eng.slip["JP"])
+    n = r.eng.add_room("B.T", i, buffer=False)
+    assert n * px <= pool and (n + 100) * px + r.eng.fees["JP"]((n + 100) * px) > pool      # 最后一手：再多 100 股就不够

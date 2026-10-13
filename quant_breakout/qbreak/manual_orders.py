@@ -153,7 +153,7 @@ def normalize(req: dict) -> dict:
         if not re.fullmatch(r"M[0-9A-Za-z\-]{6,60}", tg):
             raise ValueError("撤回要给指令 id（例 M20261006-081500-sell-7203）")
         out["target"] = tg
-    if kind in ("adjust", "buy", "corefix", "core"):       # 买入钱不够 → 从持仓平摊凑（2026-10-12）：买的那条记 fund，凑钱卖的那几条记 fund_for
+    if kind in ("adjust", "buy", "corefix", "core", "sell"):   # 买入钱不够 → 从持仓平摊凑（2026-10-12）：买的那条记 fund，凑钱卖的那几条记 fund_for
         if str(req.get("fund") or "") in ("split", "all"):   # all（2026-10-13）：拖到最大 = 其他持仓全部卖出、只拿这只 + 现金
             out["fund"] = str(req["fund"])
         ff = str(req.get("fund_for") or "").strip().upper()
@@ -533,6 +533,18 @@ def live_allin(tag: str | None, book: dict | None) -> list[dict]:
     items = ((book or {}).get("manual") or {}).get("items") or {}
     waiting = unseen(tag, book) if tag else []
     return [r for r in _live(items, waiting, ("buy",)) if r.get("fund") == "all"]
+
+
+def batch_blocks(book: dict | None) -> dict[str, list[str]]:
+    """「全部换成 X」卖掉、现在还在「不自动买回」里的票：{X: [票…]}（面板「恢复按规则」一次解除用）。"""
+    man = (book or {}).get("manual") or {}
+    items = man.get("items") or {}
+    out: dict[str, list[str]] = {}
+    for t, b in sorted((man.get("blocks") or {}).items()):
+        it = items.get(b.get("id")) or {}
+        if it.get("fund_for") and it.get("batch") == "all":
+            out.setdefault(it["fund_for"], []).append(t)
+    return out
 
 
 def companions_in(target: dict, items: dict) -> list[dict]:
@@ -1590,7 +1602,7 @@ class Manual:
             want = cap
         if want <= 0:
             return no(f"{basis}不够买 1 个单元（{lot:,} 股 ≈ ¥{lot * px:,.0f}）：不买")
-        room = eng.add_room(t, i)
+        room = eng.add_room(t, i, buffer=it.get("fund") != "all")   # 全部换成这只：不留 1% 现金缓冲，按全卖之后的钱买到最后一手（2026-10-13 用户）
         if room < want:
             notes.append(f"现金只够 {room:,} 股")
             want = room

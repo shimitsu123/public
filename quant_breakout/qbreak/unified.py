@@ -637,7 +637,7 @@ class UnifiedEngine:
                 core_liq += u * cpx - self.c_fee[t]["SELL"](u * cpx)
         return core_liq
 
-    def add_room(self, t: str, i: int) -> int:
+    def add_room(self, t: str, i: int, buffer: bool = True) -> int:
         """手动加仓（执行器；第 i 天收盘后、统一决策之前）：明早日本开盘能用的日元 —— 现金 + 待卖个股 + 核心 ETF 全部卖出
         （与统一决策的日元池同一算法）− 已有的买入计划 / 别的加仓 —— × (1 − 现金缓冲)，按收盘 + 滑点最多能买 t 几股（整单元）。"""
         st, cfg = self.st, self.cfg
@@ -651,7 +651,7 @@ class UnifiedEngine:
             if market_of(t0) == "JP":
                 px0 = float(c0) * (1 + self.slip["JP"])
                 pool -= int(sh0) * px0 + self.fees["JP"](int(sh0) * px0)
-        avail = pool * (1 - cfg.cash_buffer_pct / 100)
+        avail = pool * (1 - cfg.cash_buffer_pct / 100) if buffer else pool   # buffer=False：「全部换成这只」按全部的钱算（手续费 / 滑点照算）
         px = self._px_close(t, i) * (1 + self.slip["JP"])
         lot = self._lot_for(t, i)
         if not (px > 0) or avail <= 0:

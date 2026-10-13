@@ -1277,7 +1277,12 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
              + "</section>")
     bl = man.get("blocks") or {}
     if bl:
+        grp = MO.batch_blocks(book)                          # 「全部换成 X」卖掉的：一次「恢复按规则」（2026-10-13 用户）
         H.append("<section class='card'><h2>手动卖出后不自动买回</h2><div class='list'>" + "".join(
+            f"<div class='li'><div class='grow'><b>「全部换成 {escape(_tlabel(x))}」卖出的</b> <span class='muted'>"
+            f"{escape('、'.join(_tlabel(t) for t in ts))}</span><div class='muted small'>到期前规则不会自动买回；点「恢复按规则」= 全部解除</div></div>"
+            f"<button class='btn sm' data-act='unblock-batch' data-ts='{escape(','.join(ts))}' data-x='{escape(_tlabel(x))}'>恢复按规则</button></div>"
+            for x, ts in grp.items()) + "".join(
             f"<div class='li'><div class='grow'><b>{escape(t)}</b> <span class='muted'>"
             f"{'一直，直到解除' if b.get('until') is None else '到 ' + escape(str(b['until']))}</span></div>"
             f"<button class='btn sm' data-act='unblock' data-t='{escape(t)}'>解除</button></div>" for t, b in bl.items()) + "</div></section>")
@@ -1333,6 +1338,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
            "kp": {"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN},     # K 线的通俗说法（qbreak/kline.py）
            "fund": MO.fund_holdings(book, tag),
            "when_all": MO.allin_when(now, book, tag),                                     # 「全部换成这只」整批什么时候做
+           "block_days": MO.BLOCK_DEFAULT,                                                # 卖出后不自动买回的天数（默认）
            "alloc": {"names": {r.get("ticker"): str(r.get("name") or "").split("（")[0]
                                for r in ((sm.get("holding_view") or {}).get("holdings") or []) + ((sm.get("holding_view") or {}).get("core") or [])
                                if r.get("ticker")},
@@ -1579,6 +1585,19 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     if str(body.get("kind") or "") == "flow":
         return submit_flow(tag, body, now)
     book, sm = _load(tag)
+    if str(body.get("kind") or "") == "unblock" and isinstance(body.get("tickers"), list) and len(body["tickers"]) > 1:   # 一次解除几只（「恢复按规则」）
+        recs = []
+        for tk in body["tickers"][:20]:
+            try:
+                r = MO.normalize({"kind": "unblock", "ticker": tk, "source": source})
+            except ValueError as e:
+                return False, f"没写：{e}", None
+            w = MO.check(r, book, tag, sm=sm, now=now)
+            if w:
+                return False, f"没写：{w}", None
+            recs.append(r)
+        out = MO.append_many(tag, recs, clock=(lambda: now) if now else None)
+        return True, f"已写：恢复按规则 → 解除 {'、'.join(r['ticker'] for r in out)} 的不自动买回（指令 {out[0]['id']} 等 {len(out)} 条）", out[0]
     if str(body.get("kind") or "") in ("cancel", "uncancel"):   # 撤回 / 撤销撤回：与命令行同一个函数（同批指令一起；2026-10-13）
         fn = MO.cancel_request if body.get("kind") == "cancel" else MO.uncancel_request
         ok, msg, rec = fn(tag, book, str(body.get("target") or ""), now=now, source=source, **({"sm": sm} if body.get("kind") == "cancel" else {}))
@@ -1627,7 +1646,8 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
             rec["fund"] = "split"
     elif allp is not None:                                 # 其他全部卖出：个股 adjust → 0；固定口数取消；闲置资金比例 → 0%（卖出全部 + 停买）；最后买入
         for t, cur, _px in allp["sells"]:
-            sr = MO.normalize({"kind": "adjust", "ticker": t, "unit": "shares", "value": 0, "fund_for": rec["ticker"], "batch": "all", "source": source})
+            sr = MO.normalize({"kind": "sell", "ticker": t, "block_days": MO.BLOCK_DEFAULT, "fund_for": rec["ticker"], "batch": "all",
+                               "source": source})       # 卖出全部 + 不自动买回（2026-10-13 用户；整批执行时才设，「交易」里可一次「恢复按规则」）
             w = MO.check(sr, book, tag, sm=sm, now=now)
             if w:
                 return False, f"没写（要卖的 {t}：{w}）", None
@@ -1695,7 +1715,8 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     if rec.get("fund") == "all":
         fx = MO.core_effects(book, 0.0)
         etf = ("、".join(f"{x} {a_:,} → 0 口" for x, a_, _b in fx) or "、".join(f"{x} {u:,} → 0 口" for x, u in allp["cores"]))
-        parts = ["先全部卖出其他持仓：" + ("、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells if r["kind"] == "stock") or "（没有别的个股）")]
+        parts = ["先全部卖出其他持仓：" + ("、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells if r["kind"] == "stock") or "（没有别的个股）")
+                 + (f"（之后 {MO.BLOCK_DEFAULT} 个交易日规则不自动买回；「交易」里可一次「恢复按规则」）" if any(r["kind"] == "stock" for _s, r in sells) else "")]
         if any(r["kind"] == "corefix" for _s, r in sells):
             parts.append("取消固定口数：" + "、".join(r["t"] for _s, r in sells if r["kind"] == "corefix") + (f"（{etf}：之后按比例 0% 卖出）" if etf else ""))
         if any(r["kind"] == "core" for _s, r in sells):
@@ -1708,7 +1729,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
         wa = MO.allin_when(now or now_jst(), book, tag)
         msg = (f"已写：全部换成 {t} → {wa}整批先卖后买（那次决策先过闸门；股数由执行器按全卖之后的钱定）；" + "；".join(parts)
                + "；全卖也不够 1 个单元就不买、留现金；决策时买入被挡 → 整批不做、什么都不动；开盘跳空 / 没成交则其他已卖、留现金、不自动重买"
-               "；卖出的个股不设「不买回」，规则之后仍可能用现金开新仓")
+               "；规则对别的票仍可能用现金开新仓")
     elif sells:
         msg += ("；凑钱先卖：" + "、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells)
                 + ("（其余由别的核心 ETF 照规则减少）" if k == "corefix" else "（核心 ETF 那份执行器按当时还缺多少卖）"))

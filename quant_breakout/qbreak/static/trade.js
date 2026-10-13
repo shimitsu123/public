@@ -210,7 +210,7 @@ function fundAll(skip, px, lot){                                           // �
     rows.push({t:h.t, kind:h.kind, cur:h.cur, sell:h.cur, yen:y, after:0, note:already}); got+=y;
   }
   rows.sort((a,b)=>b.yen-a.yen);
-  const cash=F.cash||0, avail=Math.floor(cash+got*0.995*0.99);
+  const cash=F.cash||0, avail=Math.floor((cash/0.99)+got*0.995);          // 不留 1% 现金缓冲（2026-10-13 用户）：现金（缓冲前）+ 卖出（扣滑点 / 手续费约 0.5%）
   const n=px>0 && lot>0 ? Math.floor(avail/(px*1.005)/lot)*lot : 0;
   return {all:true, rows:rows, keep:keep, got:Math.round(got), cash:Math.round(cash), avail:avail, n:n, buy:Math.round(n*px), left:Math.max(0, avail-Math.round(n*px))};
 }
@@ -241,7 +241,7 @@ function fundAllBox(el, skip, q, only){                                     // �
     +(q.n>0 ? '；买 '+fmt(q.n)+' 股 ≈ '+yen(q.buy)+'，剩现金约 '+yen(q.left) : '；不够 1 个单元：不买、留现金')
     +' · 按最近收盘估算（税和手续费另计）；执行器在早上的决策里按全卖之后的钱再算', box);
   nd('div', 'muted small', '整批在 '+(CFG.when_all||'下一次决策')+' 一起做：先过闸门（决算前 / 资格 / 名额），再先卖后买；被挡则整批不做、什么都不动。'
-    +'开盘跳空 / 没成交则其他已卖、留现金、不自动重买。卖出的个股不设「不买回」，规则之后仍可能用现金开新仓。'
+    +'开盘跳空 / 没成交则其他已卖、留现金、不自动重买。卖出的个股 '+(CFG.block_days||20)+' 个交易日内规则不自动买回（「交易」里可一次「恢复按规则」）；规则对别的票仍可能用现金开新仓。'
     +(CFG.real ? '立花：卖出所得何时能用于买入未验证（买单等同批卖单成交到 09:20），买到的可能比预览少。' : ''), box);
 }
 function fundBox(el, cost, skip, opt){                                     // 拖动 / 输入时实时更新：要卖哪几只、各卖多少（opt：买入框才有 → 可选「其他全部卖出」）
@@ -485,6 +485,11 @@ document.addEventListener('click', async e=>{
     $('#adj-val').value='';
     const r=$('#adj-range'); r.max=Math.max(1, Math.ceil(Math.max(adjCap(), cur, lot)/lot))*lot; r.step=lot; r.value=cur;
     adjUnit('shares'); sheet('#dlg-adj'); return;
+  }
+  if(a==='unblock-batch'){                                                // 「全部换成」卖掉的票：一次解除不自动买回（2026-10-13）
+    const ts=(d.ts||'').split(',').filter(Boolean);
+    const q=await ask('恢复按规则：「全部换成 '+d.x+'」卖出的 '+ts.length+' 只', ts.map(x=>x.replace('.T', '')).join('、')+'\n解除「不自动买回」：之后有买入信号就会按规则买。', '恢复按规则');
+    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'unblock', ticker:ts[0], tickers:ts})); return;
   }
   if(a==='unblock'){
     const q=await ask('解除 '+d.t+' 的不自动买回', '之后有买入信号就会按规则买。', '解除');
