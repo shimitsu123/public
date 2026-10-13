@@ -79,7 +79,7 @@ def test_paused_morning_decision_keeps_the_cash_and_the_signal_is_raised_once():
     r.eng.core_t100 = {**r.eng.core_t100, "1655.T": 0}                     # 还没确认，规则又不拿了（例如又进熊市）→ 信号撤掉、继续停买
     r.ux._record_core(k)
     assert "core_signal" not in r.ux.book["manual"] and r.ux.book["manual"]["core_pct"] == 0.0
-    assert any("买入信号" in e["msg"] and "没了" in e["msg"] for e in r.ux.events)
+    assert any(e["level"] == "warn" and "买入信号" in e["msg"] and "已撤：规则又不拿了，继续停买" in e["msg"] for e in r.ux.events)
 
 
 def test_sell_all_before_the_first_rule_run_and_no_spurious_signal():

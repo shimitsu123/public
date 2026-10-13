@@ -292,6 +292,7 @@ class UnifiedEngine:
         self.core_scale = 1.0                               # 核心 ETF 目标额 × 这个比例（执行器的手动「闲置资金比例」；回测 / 模拟盘 = 1）
         self.core_exact = False                             # True：这次决策核心 ETF 直接调到目标（不看再平衡带；执行器在手动改了比例之后用一次）
         self.core_t100: dict[str, int] = {}                 # 最近一次决策里每只核心 ETF「比例 100% 时」的目标口数（执行器 / 页面：ETF 的调仓换算成比例）
+        self.core_rule100: dict[str, int] = {}              # 同上，但固定口数的 ETF 是「不固定时规则自己的」目标（含牛熊；页面「恢复按规则」与停买中的买入信号用；2026-10-13）
 
     # ── 工具 ──
     @staticmethod
@@ -806,7 +807,7 @@ class UnifiedEngine:
         只有一只 ETF、没有美股时，与 core.core_orders 完全相同（引擎差分测试保证）。"""
         st, A, cfg = self.st, self.A, self.cfg
         st.core_plan = {}
-        self.core_t100 = {}
+        self.core_t100, self.core_rule100 = {}, {}
         if not cfg.core:
             return
         stock_after = us_exiting = 0.0
@@ -819,11 +820,13 @@ class UnifiedEngine:
         usd_stay = st.cash_usd if usd_stay is None else max(0.0, usd_stay)
         tgt_100 = eq * (1 - cfg.core_buffer_pct / 100) - stock_after - reserve - usd_stay * fx - us_exiting
         tgt_total = tgt_100 * float(self.core_scale)
-        w = {t: float(v) for t, v in cfg.core.items()}
+        w0 = w = {t: float(v) for t, v in cfg.core.items()}
         bear = {t: self._core_bear(t, i) for t in w}
         fix = {t: int(u) for t, u in (self.core_fix or {}).items() if t in w and A.has[i, self.col[t]]}
+        raw_100 = tgt_100
+        fval = {t: u * float(A.close[i, self.col[t]]) for t, u in fix.items()}
         if fix:                                                 # 固定口数的 ETF 先拿走它的金额，剩下的照规则分给其他 ETF
-            fv = sum(u * float(A.close[i, self.col[t]]) for t, u in fix.items())
+            fv = sum(fval.values())
             tgt_total, tgt_100 = max(0.0, tgt_total - fv), max(0.0, tgt_100 - fv)
             w = {t: (0.0 if t in fix else v) for t, v in w.items()}
         gated = {}
@@ -832,14 +835,15 @@ class UnifiedEngine:
                 why = self.core_gate_fn(t)
                 if why:
                     gated[t] = why
-        if cfg.core_mode == "follow":
-            bull_w = sum(v for t, v in w.items() if not bear[t])
-            share = {t: (v / bull_w if bull_w > 0 and not bear[t] else 0.0) for t, v in w.items()}
-        else:
-            tot = sum(w.values()) or 1.0
-            share = {t: (0.0 if bear[t] else v / tot) for t, v in w.items()}
+        def shares_of(wd: dict) -> dict:
+            if cfg.core_mode == "follow":
+                bull_w = sum(v for t, v in wd.items() if not bear[t])
+                return {t: (v / bull_w if bull_w > 0 and not bear[t] else 0.0) for t, v in wd.items()}
+            tot = sum(wd.values()) or 1.0
+            return {t: (0.0 if bear[t] else v / tot) for t, v in wd.items()}
+        share = shares_of(w)
         band = 0.0 if self.core_exact else cfg.band_pct / 100 * eq
-        orders = {}
+        orders, tgts = {}, {}
         for t in w:
             j = self.col[t]
             if not A.has[i, j]:
@@ -852,10 +856,15 @@ class UnifiedEngine:
             xp = float(xe[i]) if xe is not None else 1.0
             tgt = 0 if bear[t] or share[t] <= 0 else int(np.floor(max(0.0, tgt_total * share[t] * xp) / price / lot)) * lot
             self.core_t100[t] = 0 if bear[t] or share[t] <= 0 else int(np.floor(max(0.0, tgt_100 * share[t] * xp) / price / lot)) * lot
+            self.core_rule100[t] = self.core_t100[t]
             bd = band
             if t in fix:                                        # 固定口数：不看牛熊 / 再平衡带，正好调到这个口数
+                o100 = max(0.0, raw_100 - sum(v for u, v in fval.items() if u != t))   # 规则自己的目标：只把这只的固定口数去掉（别的固定照旧；2026-10-13）
+                osh = shares_of({u: (0.0 if u in fix and u != t else v) for u, v in w0.items()})
+                self.core_rule100[t] = 0 if bear[t] or osh[t] <= 0 else int(np.floor(max(0.0, o100 * osh[t] * xp) / price / lot)) * lot
                 tgt = self.core_t100[t] = fix[t]
                 bd = 0.0
+            tgts[t] = tgt
             sell = buy = 0
             if tgt < units and (tgt == 0 or (units - tgt) * price > bd):
                 sell = units - tgt
@@ -865,6 +874,8 @@ class UnifiedEngine:
                 self.gate_log.append((str(self.gidx[i].date()), t, gated[t]))
                 buy = 0
             orders[t] = [sell, buy]
+        if fix:
+            self._fund_fixed(i, fix, orders, tgts, cash_est - reserve)
         # 日元缺口（明早日本买入 + 换汇 > 现金 + 日本卖出所得）→ 卖核心补足，按跳空上限多卖
         short = reserve - cash_est
         if short > 0:
@@ -889,6 +900,32 @@ class UnifiedEngine:
                 st.core_plan[t] = ["SELL", int(sell)]
             elif buy:
                 st.core_plan[t] = ["BUY", int(buy)]
+
+    def _fund_fixed(self, i: int, fix: dict, orders: dict, tgts: dict, free: float) -> None:
+        """固定口数要加口数、现金不够（现金 − 明早日本买入与换汇 + 核心卖出所得 − 别的核心买入 < 固定的买入）→ 别的（不固定的）核心 ETF
+        在再平衡带里也卖出补足（最多卖到它自己的目标；按跳空上限多卖一点）。没有固定口数时不调用（回测 / 模拟盘不变；2026-10-13）。"""
+        st, A = self.st, self.A
+        gap = self.ex["JP"].max_entry_gap_pct / 100
+        px = {t: float(A.close[i, self.col[t]]) for t in orders}
+        net = (lambda t, u: u * px[t] * (1 - self.c_slip[t]) - self.c_fee[t]["SELL"](u * px[t] * (1 - self.c_slip[t])) if u > 0 else 0.0)
+        cost = (lambda t, u: u * px[t] * (1 + self.c_slip[t]) + self.c_fee[t]["BUY"](u * px[t] * (1 + self.c_slip[t])) if u > 0 else 0.0)
+        want = sum(cost(t, orders[t][1]) for t in orders if t in fix)
+        if want <= 0:
+            return
+        free += sum(net(t, s) for t, (s, b) in orders.items()) - sum(cost(t, b) for t, (s, b) in orders.items() if t not in fix)
+        lack = (want - free) * (1 + gap)
+        if lack <= 0:
+            return
+        for t in sorted((t for t in orders if t not in fix), key=lambda x: -int(st.core_units.get(x, 0)) * px[x]):
+            units, lot = int(st.core_units.get(t, 0)), int(self.lots[self.col[t]])
+            room = units - int(tgts.get(t, units)) - int(orders[t][0])
+            if room <= 0 or lack <= 0:
+                continue
+            u = min(room, int(np.ceil(lack / px[t] / lot)) * lot)
+            while u < room and net(t, u) < lack:
+                u += lot
+            orders[t][0] += u
+            lack -= net(t, u)
 
     # ── 分阶段（实盘执行器：开盘的成交来自券商，收盘后的离场判断与决策用同一套代码）──
     def begin_day(self, i: int) -> None:

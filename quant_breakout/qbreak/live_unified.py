@@ -264,12 +264,17 @@ class UnifiedExecutor:
               "units100": {t: int(n) for t, n in sorted(eng.core_t100.items())},
               "px": {t: round(float(eng._px_close(t, k)), 4) for t in sorted(eng.core_t100)},
               "lot": {t: int(eng.lots[eng.col[t]]) for t in sorted(eng.core_t100)}}
+        fixed = sorted(t for t in (eng.core_fix or {}) if t in eng.core_t100)
+        if fixed:                                           # 固定口数的 ETF：units100 = 固定的口数；规则自己的目标（不固定时）另记（页面「恢复按规则」；2026-10-13）
+            cr["rule100"] = {t: int(eng.core_rule100.get(t, 0)) for t in fixed}
+            cr["band_pct"] = float(eng.cfg.band_pct)        # 再平衡带（总权益 %）：「恢复按规则」的差额在带内 → 规则可能不动
         if exact and eng.st.core_plan:
             cr.update(exact_on=eng.st.last_date, exact_plan=sorted(eng.st.core_plan))
         prev = self.book.get("core_rule") or {}
         if self.manual is not None and float(self.manual.core_pct) <= 0 and prev.get("units100") is not None:
-            p100 = prev.get("units100") or {}               # 停买闲置资金 ETF 时：规则从「不拿」变成「拿」= 买入信号 → 只提醒，你确认才买
-            new = [t for t, n in cr["units100"].items() if n > 0 and int(p100.get(t, 0)) <= 0]
+            own = lambda c: {t: int((c.get("rule100") or {}).get(t, n)) for t, n in (c.get("units100") or {}).items()}   # noqa: E731
+            p100, n100 = own(prev), own(cr)                 # 停买闲置资金 ETF 时：规则从「不拿」变成「拿」= 买入信号 → 只提醒，你确认才买
+            new = [t for t, n in n100.items() if n > 0 and int(p100.get(t, 0)) <= 0 and t not in fixed]   # 手动固定的不算（停买中也照买；2026-10-13）
             if new:
                 sig = {"date": eng.st.last_date,
                        "items": [{"ticker": t, "units": int(cr["units100"][t]), "px": cr["px"].get(t),
@@ -278,11 +283,11 @@ class UnifiedExecutor:
                 from .manual_orders import signal_text
                 self._event("warn", f"★ 闲置资金 ETF 买入信号（{sig['date']} 收盘）：{signal_text(sig)}；你卖出后停着："
                                     "确认后才买（面板「确认买入」，或 liveu.sh manual core --pct 100）")
-            else:                                           # 还没确认、规则又不拿信号里的那几只了 → 信号撤掉（继续停买）
+            else:                                           # 还没确认、规则又不拿信号里的那几只了 → 信号撤掉（继续停买；通知：2026-10-13）
                 old = self.manual.m.get("core_signal") or {}
-                if old and not any(int(cr["units100"].get(x.get("ticker"), 0)) > 0 for x in old.get("items") or []):
+                if old and not any(int(n100.get(x.get("ticker"), 0)) > 0 for x in old.get("items") or []):
                     self.manual.m.pop("core_signal", None)
-                    self._event("info", f"闲置资金 ETF 的买入信号（{old.get('date')} 收盘）没了：规则又不拿了，继续停买")
+                    self._event("warn", f"闲置资金 ETF 买入信号（{old.get('date')} 收盘）已撤：规则又不拿了，继续停买")
         self.book["core_rule"] = cr
 
     def _settle_manual(self) -> None:
@@ -1129,8 +1134,9 @@ class UnifiedExecutor:
                 u100s = ({t: MO.core_u100_est(st.core_units.get(t, 0), st.core_plan.get(t)) for t in set(st.core_units) | set(st.core_plan)}
                          if abs(float(cr.get("applied", 100.0)) - 100.0) <= 1e-9 else
                          {t: 0 for t, u in st.core_units.items() if int(u) > 0})          # 比例已经改过（今天调过）→ 只会是卖出全部
+            fixed = set(man.m.get("core_fix") or {}) | set(eng.core_fix or {})   # 固定口数的 ETF：比例不管它（下一次决策照固定口数；2026-10-13）
             for t, n100 in sorted(u100s.items()):
-                if t in eng.col:
+                if t in eng.col and t not in fixed:
                     lt = int(eng.lots[eng.col[t]])
                     cur = int(st.core_units.get(t, 0))
                     tgt = int(math.floor(int(n100) * core_want / 100 / lt + 1e-9)) * lt

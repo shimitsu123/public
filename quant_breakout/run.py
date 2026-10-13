@@ -4435,7 +4435,7 @@ def cmd_manual(a) -> int:
         req["block_days"] = a.block_days
     try:
         rec = MO.normalize(req)
-        rec = MO.core_rec(rec, b_) or rec                       # 持有的核心 ETF 的卖出 / 减仓 / 调仓 → 闲置资金比例（规则每天按它调核心）
+        rec = MO.core_rec(rec, b_, tag) or rec                  # 持有的核心 ETF 的卖出 / 减仓 / 调仓 → 闲置资金比例；固定口数的 → 改固定口数（2026-10-13）
     except ValueError as e:
         print(f"★ 没写：{e}")
         return 2
@@ -4479,6 +4479,13 @@ def cmd_manual(a) -> int:
         print(f"{when}下单（{MO.RULE_TEXT}）"
               + ("：操作面板开着的话会马上叫执行器；没开就运行 bash scripts/liveu.sh run --broker "
                  + ("paper" if paper else "tachibana") + " --phase now" if mode == "now" else ""))
+    elif rec["kind"] == "corefix":                           # 固定口数 / 恢复按规则（2026-10-13：说清会怎样）
+        if rec.get("clear"):
+            print(MO.corefix_clear_text(b_, rec["ticker"], tag, now))
+        else:
+            print(f"下一次决策（交易日 07:40）起 {rec['ticker']} 调到 {int(rec.get('units') or 0):,} 口、开盘下单；不按规则自动调，直到 corefix --clear")
+            if rec.get("from_kind"):
+                print("这只 ETF 是手动固定的：只改它的固定口数（别的 ETF 与闲置资金比例不变）")
     elif rec["kind"] == "unblock":                           # 解除不是单（2026-10-13）
         print(f"不会买回、也不马上买 → {MO.NEXT_DECISION}；之后那次决策看的 K 线出买入信号，规则才可能买")
     elif rec["kind"] == "core":
@@ -4498,7 +4505,11 @@ def cmd_manual(a) -> int:
             print(f"核心 ETF {when}卖出；之后停买闲置资金 ETF（钱留现金；出现买入信号会提醒你，确认才买："
                   f"bash scripts/liveu.sh manual core --pct 100）" + hint_)
         elif pct0_ <= 0:                                     # 停买后确认买入
-            print(f"确认买入：停买结束，核心 ETF {when}照规则买入（闲置资金比例 0% → {rec['pct']:g}%）；之后每天照规则调" + hint_)
+            ri_ = MO.resume_info(b_, tag, now)                # 规则不拿 / 今天已经有单 → 不是马上（2026-10-13）
+            if ri_["none"] or ri_["late"]:
+                print(f"确认买入：停买结束（闲置资金比例 0% → {rec['pct']:g}%）；{ri_['text']}")
+            else:
+                print(f"确认买入：停买结束，核心 ETF {when}照规则买入（闲置资金比例 0% → {rec['pct']:g}%）；之后每天照规则调" + hint_)
         else:
             print(f"核心 ETF {when}照新比例调；之后每天按「规则目标额 × {rec['pct']:g}%」（改回 100% 就照规则）" + hint_)
     if paths.halt_file().exists():

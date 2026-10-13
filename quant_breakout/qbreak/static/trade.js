@@ -110,9 +110,25 @@ function adjPrevFix(n){                                                    // �
   const head = k>0 ? '买入 '+fmt(k)+' 口（约 '+yen(k*c.px)+'）：' : k<0 ? '卖出 '+fmt(-k)+' 口（约 '+yen(-k*c.px)+'）：' : '保持现在的口数：';
   out.textContent = head+fmt(c.shares)+' → '+fmt(t)+' 口，约 '+yen(t*c.px)+' · 约占权益 '+pctOf(t)+(n>cap ? '\n★ 超过总权益：截到 '+fmt(t)+' 口' : '')
     +'\n下一次决策起（交易日 07:40，开盘下单）正好调到 '+fmt(t)+' 口，不再按规则（牛熊 / 股债相关）自动调；一直有效，直到点「恢复按规则」。'
-    +(k>0 ? '' : '\n剩下的钱照规则分给其他核心 ETF；规则不拿别的 ETF 时留现金。');
+    +(k>0 ? fixFundNote(k*c.px, c.t) : '\n剩下的钱照规则分给其他核心 ETF；规则不拿别的 ETF 时留现金。');
   go.textContent = k>0 ? '确认买入 '+fmt(k)+' 口' : k<0 ? '确认卖出 '+fmt(-k)+' 口' : '确认固定 '+fmt(t)+' 口';
   go.className = k<0 ? 'btn danger' : 'btn primary'; go.disabled = !(c.px>0);
+}
+function fixFundNote(cost, skip){                                         // 固定口数加口数、现金不够（2026-10-13）：别的（不固定的）核心 ETF 能卖多少
+  const F=CFG.fund||{}, C=CFG.cores||{}, fix=F.fix||[], short=cost-(F.cash||0);
+  if(!(short>0)) return '';
+  let need=short;                                                          // 平摊卖：个股那份写成卖出指令，核心 ETF 那份由执行器卖
+  if(FUND_MODE==='split'){ const p=fundSplit(cost, skip); need=p ? p.rows.filter(r=>r.kind==='core').reduce((a,r)=>a+r.yen, 0)+p.left : short; }
+  if(!(need>0)) return '';
+  const q=F.core_pct==null ? 100 : F.core_pct; let room=0;
+  for(const h of (F.hold||[])){                                            // 执行器最多卖到它们自己的规则目标（目标 = 规则目标额 × 闲置资金比例）
+    if(h.kind!=='core' || h.t===skip || fix.indexOf(h.t)>=0 || !(h.cur>0) || !(h.px>0)) continue;
+    const c=C[h.t], L=h.lot||1, tg=c ? Math.floor(c.u100*q/100/L+1e-9)*L : h.cur;
+    room+=Math.max(0, h.cur-tg)*h.px;
+  }
+  return room>=need
+    ? '\n现金不够的约 '+yen(need)+'：执行器在那次决策里先卖别的核心 ETF 补足（在再平衡带以内也卖，最多卖到它们的规则目标）'
+    : '\n★ 钱可能不够：还差约 '+yen(need)+'，别的核心 ETF 最多能卖约 '+yen(room)+'（只卖到它们的规则目标）→ 执行器按当时的钱少买';
 }
 function coreFx(q, skip, lab){                                             // 同一个比例对别的核心 ETF（规则同时拿两只以上时）：会变的列出来
   const C=CFG.cores||{}, out=[];
@@ -401,8 +417,14 @@ document.addEventListener('click', async e=>{
   }
   if(a==='core-resume'){                                                   // 停买后确认买入：闲置资金比例 0% → 100%（照规则）
     const q=await ask('确认买入：恢复闲置资金买入 ETF', '闲置资金比例 0% → 100%（照规则）'+coreFx(100, '', '会买：')
-      +'\n'+CFG.when+'买入；之后每天照规则调'+NOTE, '确认买入');
+      +'\n'+(d.plan || CFG.when+'买入；之后每天照规则调')+NOTE, '确认买入');   // 2026-10-13：规则不拿 / 今天已经有单 → 服务器写的实际时间
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:100})); return;
+  }
+  if(a==='core-restore'){                                                  // 「全部换成」之前的比例（2026-10-13）：只在你点了之后写；固定口数不跟着恢复
+    const v=+d.pct; if(!(v>0 && v<100)) return;
+    const q=await ask('恢复成 '+v+'%：闲置资金比例', '闲置资金比例 0% → '+v+'%（规则目标额 × '+v+'%）'+coreFx(v, '', '会买：')
+      +'\n'+(d.plan || CFG.when+'照规则买入；之后每天照规则调')+'\n固定口数不会跟着恢复：要的话在各 ETF 下面重新点「固定口数…」'+NOTE, '恢复成 '+v+'%');
+    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:v})); return;
   }
   if(a==='adj-unit'){ adjUnit(d.u); return; }
   if(a==='fund-mode'){
@@ -480,7 +502,7 @@ document.addEventListener('click', async e=>{
     if(FUND_MODE==='all') FUND_MODE='split';                                // 「其他全部卖出」只属于买入框                               // 核心 ETF 固定口数 / 恢复按规则（2026-10-11）
     const px=+d.px||0, lot=+d.lot||1, eq=+d.eq||0, cur=+d.cur||0;
     if(a==='corefix-clear'){
-      const q=await ask(d.name+'：恢复按规则', '下一次决策起，这只 ETF 又按规则（美股牛熊 / 股债相关）自动买卖。'+NOTE, '恢复');
+      const q=await ask(d.name+'：恢复按规则', (d.plan || '下一次决策起，这只 ETF 又按规则（美股牛熊 / 股债相关）自动买卖。')+NOTE, '恢复');   // 2026-10-13：会买 / 卖多少、今天的单（服务器算）
       if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'corefix', ticker:d.t, clear:true})); return;
     }
     ADJ={t:d.t, shares:cur, px:px, unit:'shares', core:true, fix:true, lot:lot, u100:0, cpct:0, approx:false, name:d.name};
