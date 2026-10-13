@@ -248,6 +248,11 @@ def _sm(rows=None):
         {"suggest": {"asof": "2026-10-05", "rows": SG_ROWS if rows is None else rows}}, ensure_ascii=False), encoding="utf-8")
 
 
+def _sm_nowarn():
+    """同 _sm()，但 9984 没有「执行器会挡」的警告（从持仓凑钱买会被拒的那种；2026-10-13）。"""
+    _sm([dict(r, buy={**r["buy"], "warn": []}) for r in SG_ROWS])
+
+
 def test_render_suggestions_with_buy_buttons_and_gates():
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
     _sm()

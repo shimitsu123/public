@@ -4445,6 +4445,10 @@ def cmd_manual(a) -> int:
         print(f"★ 没写：{why}")
         return 2
     pct0_ = MO.core_pct_now(tag, b_)                          # 写之前的闲置资金比例（0 = 停买中）
+    if rec["kind"] == "adjust":                               # 写入时预览的方向（+1 加 / −1 减）：执行时换算方向相反 → 不执行（2026-10-13）
+        a0_ = MO.adjust_plan(rec, st, MO.MANUAL_CAP_PCT)
+        if a0_["delta"]:
+            rec.update(dir=1 if a0_["delta"] > 0 else -1, cur0=int(a0_["cur"]))
     rec = MO.append(tag, rec)
     print(f"已写手动指令 {rec['id']}：{MO.describe(rec)}")
     if rec["kind"] == "buy":

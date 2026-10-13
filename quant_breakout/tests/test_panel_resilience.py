@@ -7,7 +7,7 @@ import pytest
 from qbreak import manual_orders as MO
 from qbreak import panel
 
-from test_panel import AT, _book, _req, _sm, server  # noqa: F401（pytest 夹具）
+from test_panel import AT, _book, _req, _sm, _sm_nowarn, server  # noqa: F401（pytest 夹具）
 
 BODIES = {
     "sell": {"ticker": "7203"},
@@ -71,7 +71,7 @@ def test_cancel_split_buy_also_cancels_its_fund_sells():
     b = _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T"]})
     b["state"]["core_last"] = {"1545.T": 250.0}
     (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
-    _sm()
+    _sm_nowarn()
     ok, _m, buy = panel.submit({"book": "paper", "kind": "buy", "ticker": "9984", "unit": "shares", "value": 300,
                                 "fund": {"mode": "split", "cost": 645_000}}, AT)
     assert ok and buy["fund"] == "split"

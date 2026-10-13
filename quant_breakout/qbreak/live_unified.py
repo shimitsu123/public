@@ -68,6 +68,8 @@ LATE_CORE_NOTE = "错过寄付：核心 ETF 今天不调（下一次决策重新
 QUOTE_FAIL = "取价失败"                            # B7：开盘后补单取价整个失败（DEFERRED 全部保留，09:20 再试）
 NO_OPEN_WAIT = "还没寄り付き（特別気配？）：09:20 再看"
 ALLIN_WAIT = "「全部换成」等同批卖单成交"                   # 09:05：同批卖单立花那边还没约定 → 09:20 再按余力下（2026-10-13）
+ALLIN_SENT_TAG = "（「全部换成」的卖单已发出 → 没买就钱留现金）"   # X 的买单被挡、同批卖单已发出：单的说明后缀
+HALT_WAIT = "开盘后补单被挡"                       # 09:05 / 09:20 被 HALT / 持仓不一致挡住：留到开盘后的买单的说明（明天对账写进「没买」的原因；2026-10-13）
 NO_OPEN_FINAL = "到 09:20 还没有始値（特別気配 / 停牌）：今天不买（与模型不同 → 记入差异）"
 PRECLOSE_MAX_PCT = 3.0                             # LU-15：Yahoo 收盘 vs 立花前日終値 差超过这个 % → 那只的寄付买单不下（卖单只提醒）
 BREAKER_N, BREAKER_VALUE = 2, 2.2                  # C-11：规则单笔数 > (个股名额 + 核心 ETF 只数) × 2，或金额合计 > 权益 × 2.2 → 异常熔断
@@ -214,8 +216,25 @@ class UnifiedExecutor:
         （成交日 = i 的下一交易日；HALT 时不动；加仓只在 deciding）。"""
         fill = next_trading_day(self.eng.gidx[i].date())
         halted = self.respect_halt and paths.halt_file().exists()
-        for lvl, msg in self.manual.apply(self.eng, i, fill, halted=halted, deciding=deciding, blocked=bool(self.blocked)):
+        for lvl, msg in self.manual.apply(self.eng, i, fill, halted=halted, deciding=deciding, blocked=bool(self.blocked),
+                                          allin_check=self._allin_check):
             self._event(lvl, msg)
+
+    def _allin_check(self, t: str, i: int) -> str | None:
+        """「全部换成 X」/ 平摊凑钱的买入：卖出之前先做下单时才查的检查（2026-10-13：以前卖单发出之后 X 的买单才被挡）→ 理由 / None。
+        资格检查（pre_send）；LU-15 立花前日終値 vs 决策用的收盘（成交日当天生效拆股的票不比，与 place 相同）。"""
+        if self.pre_send is not None:
+            why = self.pre_send(t, "BUY", "stock")
+            if why:
+                return f"资格检查：{why}"
+        d = self.eng.gidx[i].date()
+        if self._splits_today([t], d=d.isoformat(), f=next_trading_day(d)):
+            return None
+        pc = self._prev_closes([t]).get(t)
+        c = float(self.eng._px_close(t, i) or 0)
+        if pc and c > 0 and abs(pc / c - 1) * 100 > PRECLOSE_MAX_PCT:
+            return f"Yahoo 收盘 ¥{c:,g} 和立花前日終値 ¥{pc:,g} 差 {abs(pc / c - 1) * 100:.1f}%（拆股 / 数据错？）"
+        return None
 
     def _core_pending(self, today: dt.date | None = None) -> float | None:
         """闲置资金比例改了、核心 ETF 还没照新比例调过（today 给了：今天也没说「明天再调」）→ 新比例（%）；否则 None。"""
@@ -370,10 +389,12 @@ class UnifiedExecutor:
                 and not o.broker_id and (o.phase == "late" or CUTOFF_TEXT in str(o.note))]
 
     # ── LU-22：成交日当天生效的拆股 ──
-    def _splits_today(self, tickers) -> dict[str, list[tuple[str, float]]]:
-        """公司行为数据里 日期 ∈ (决策日, 成交日] 的拆股 / 合并 → {票: [(日期, 比例)]}。没有数据 / 取不到 / 模拟账户 → {}（照旧）。"""
+    def _splits_today(self, tickers, d: str | None = None, f: dt.date | None = None) -> dict[str, list[tuple[str, float]]]:
+        """公司行为数据里 日期 ∈ (决策日, 成交日] 的拆股 / 合并 → {票: [(日期, 比例)]}。没有数据 / 取不到 / 模拟账户 → {}（照旧）。
+        d / f：决策之前（手动指令的闸门）用这次决策的决策日 / 成交日；不给 → 账本的。"""
         prov = self.corp_provider
-        d, f = self.eng.st.last_date, self.fill_day()
+        if d is None:
+            d, f = self.eng.st.last_date, self.fill_day()
         if prov is None or self.paper or not d or f is None:
             return {}
         from .corpactions import due
@@ -762,6 +783,7 @@ class UnifiedExecutor:
             self._send(o, o.qty, bar=d)
             if o.status in ACCEPTED:
                 bp -= need
+        self._allin_after_place(d)                          # 「全部换成」过了闸门、这次运行却没下成 → 整批退回 / 卖单已发出则提醒
         self._remember_closes(k)                            # LU-22：下一次决策判断行情有没有按拆股调整用
         if why:
             self._event("warn", f"{d} 的决策没有下单：{why}")
@@ -770,6 +792,78 @@ class UnifiedExecutor:
                                 "（2026-10-09 用户同意；与模型不同的记入差异）")
         self.save()
         return [o for o in self.orders if o.decided_on == d]
+
+    def _allin_after_place(self, d: str) -> None:
+        """「全部换成 X」这次决策过了闸门（同批已生效）、X 的买单却被挡（BLOCKED）/ 不下（SKIPPED）时（2026-10-13）：
+        同批卖单一笔都没发出（异常熔断 / 整个运行被挡 / 适配器挡下）→ 整批退回（待卖、不买回、闲置资金比例、固定口数恢复原样，
+        指令回到「等下一次决策」）；卖单已经发出 → 不悄悄当成「只做一次」结束：提醒「卖单已发出、X 没买（钱留现金）」并写清楚指令说明。"""
+        man = self.manual
+        if man is None:
+            return
+        eng, st, items = self.eng, self.eng.st, man.m["items"]
+        for X, x in list(man.m["buys"].items()):
+            it = items.get(x.get("id")) or {}
+            if not x.get("allin") or x.get("decided_on") != d or it.get("status") != "placed":
+                continue
+            xo = next((o for o in self.orders if o.decided_on == d and o.side == "BUY" and o.ticker == X
+                       and o.reason == "manual_buy"), None)
+            if xo is None or xo.status not in ("BLOCKED", "SKIPPED"):
+                continue
+            mine = {c.get("ticker") for c in MO.companions_in(it, items) if c.get("kind") in MO.POS_KINDS}
+            sells = [o for o in self.orders if o.decided_on == d and o.side == "SELL"
+                     and (o.kind == "core" or (o.ticker in mine and o.reason in ("manual", "manual_trim")))]
+            out = [o for o in sells if o.status not in ("PLANNED", "BLOCKED", "SKIPPED", "REJECTED")]
+            note = str(xo.note or xo.status).split(ALLIN_SENT_TAG)[0]
+            if not out:
+                prev = float((it.get("undo_core") or {}).get("pct", man.core_pct))
+                for lvl, msg in man.allin_rollback(eng, it, note):
+                    self._event(lvl, msg)
+                txt = f"「全部换成 {X}」没下成（{note}）→ 整批退回"[:300]
+                for o in sells + [xo]:
+                    if o.status in ("PLANNED", "BLOCKED"):
+                        o.status, o.note = "SKIPPED", txt
+                st.core_plan = {}                           # 核心 ETF 这次按比例 0% 算的单不再下（下一次决策按恢复的比例重算）
+                cr = self.book.get("core_rule")
+                if cr is not None and cr.get("decided_on") == d:
+                    cr["pct"] = cr["applied"] = round(prev, 2)
+                    cr.pop("exact_on", None)
+                    cr.pop("exact_plan", None)
+                self._allin_slots(d, txt)
+                self._event("warn", f"★ 「全部换成 {X}」这次没下成（{note}）：同批的卖单一笔都没发出 → 整批退回（持仓、不自动买回、"
+                                    "闲置资金比例 / 固定口数恢复原样），等下一次决策重新过闸门")
+                continue
+            flag = f"{d}|{xo.status}|{note}"
+            if it.get("allin_warn") == flag:
+                continue
+            it["allin_warn"] = flag
+            names = "、".join(sorted({o.ticker for o in out}))
+            if xo.status == "SKIPPED":                      # 这笔不会再试：指令结束（只做一次），钱留现金
+                man.m["buys"].pop(X, None)
+                st.plan.pop(X, None)
+                it.update(status="rejected", msg=f"卖单已发出，{X} 没买（{note}）：钱留现金（只做一次：要买请再点一次）")
+            else:                                           # BLOCKED：同一决策之后的运行还会再试
+                xo.note = f"{note}{ALLIN_SENT_TAG}"[:300]
+                it["msg"] = f"卖单已发出；{X} 的买单被挡（{note}）→ 之后的运行再试，一直挡着就不买（钱留现金）"
+            self._event("warn", f"★ 「全部换成 {X}」的卖单已发出（{names}），{X} 没买（{note}）：钱留现金"
+                                + ("" if xo.status == "SKIPPED" else "；之后的运行再试买入"))
+
+    def _allin_slots(self, d: str, txt: str) -> None:
+        """「全部换成」整批退回之后：这次决策规则按「其他都卖掉」排的新仓超出个股名额 → 超出的（后排的）不下（2026-10-13）。"""
+        eng, st, man = self.eng, self.eng.st, self.manual
+        n_hold = sum(1 for t in st.pos if t not in st.pending_exit)
+        extra = [t for t in st.plan if t not in st.pos]
+        over = n_hold + len(extra) - int(eng.cfg.max_positions)
+        for t in reversed(extra):
+            if over <= 0:
+                break
+            if t in man.m["buys"]:                          # 你自己的买入：不动
+                continue
+            st.plan.pop(t, None)
+            over -= 1
+            for o in self.orders:
+                if o.decided_on == d and o.ticker == t and o.side == "BUY" and o.status in ("PLANNED", "BLOCKED", "DEFERRED"):
+                    o.status, o.note = "SKIPPED", f"{txt}：个股名额不够，这笔新仓不下"[:300]
+            self._event("warn", f"BUY {t}：{txt} → 个股名额不够（上限 {eng.cfg.max_positions} 只），这笔新仓不下")
 
     def _allin_unsold(self, t: str) -> list[str]:
         """「全部换成 t」这次决策里同批的卖单（个股 adjust → 0 与核心 ETF）：立花那边还没全部约定的票。查不到 → 当作还没卖完。"""
@@ -904,6 +998,8 @@ class UnifiedExecutor:
             return
         why = why or self._mismatch_today()
         if why:
+            for o in act:                                   # 被挡的原因记在单上：没有再跑 → 明天对账写进「没买」的原因（2026-10-13）
+                o.note = f"{HALT_WAIT}（{why}）"[:300]
             self._event("warn", f"开盘后的{'买单' if act else '卖单'}这次不下（仍保留，可稍后再跑）：{why}")
             self.save()
             return
@@ -1134,11 +1230,14 @@ class UnifiedExecutor:
                     short -= n * net - float(eng.c_fee[c]["SELL"](n * net))
             return notes
 
+        gated = self._now_split_gate(todo, k, d, px, busy, later, retry, no)
         buys = []
         allin = {x["ticker"]: x.get("at") for x in man.m["items"].values()      # 「全部换成 X」的买入还在等：同批的卖出也一起等那次决策
                  if x.get("kind") == "buy" and x.get("fund") == "all" and x.get("status") == "pending"}
         for it in todo:                                       # ① 卖：卖出全部 / 减仓 / 调仓往下（调仓往上放到 ②）
             t, kind = it["ticker"], it["kind"]
+            if it["status"] != "pending" or it["id"] in gated:   # 平摊凑钱的闸门这次已经处理过（被挡 / 一会儿再试 / 明天）
+                continue
             it.pop("wait", None)
             if kind == "buy":
                 buys.append(it)
@@ -1176,6 +1275,10 @@ class UnifiedExecutor:
                 target = int(math.floor(eq * float(it["pct"]) / 100 / p / lot)) * lot
             else:
                 target = MO.target_shares(it["unit"], it["value"], eq, p, lot)
+                fw = MO.adjust_flip_why(it, cur, target)      # 凑钱的卖出不变成买入；方向和写入时预览的相反 → 不执行（2026-10-13）
+                if fw:
+                    no(it, fw)
+                    continue
                 if target == cur:
                     no(it, f"现在 {cur:,} 股，目标 {MO.fmt_target(it)} 换算也是 {target:,} 股：不用调")
                     continue
@@ -1391,6 +1494,57 @@ class UnifiedExecutor:
         self.save()
         return out
 
+    def _now_split_gate(self, todo: list[dict], k: int, d: str, px: dict, busy: set, later, retry, no) -> set:
+        """盘中：平摊凑钱（fund = split）的买入在凑钱的卖出发出之前先过不涉及钱的闸门（2026-10-13：以前卖单先发、买入才被挡）。
+        被挡 → 买入和同一次提交写的凑钱卖出一起不做；这只今天已经有单 → 一起明天开盘；取不到现价 → 一起一会儿再试。→ 这次已处理的指令 id。"""
+        gated: set = set()
+        eng, st, cfg = self.eng, self.eng.st, self.eng.cfg
+        gap = float(eng.ex["JP"].max_entry_gap_pct or 0)
+        n0 = (len(st.pos) - sum(1 for x in st.pending_exit if x in st.pos) + sum(1 for x in st.plan if x not in st.pos)
+              + len({o.ticker for o in self._active() if o.phase == "now" and o.reason == "manual_buy"
+                     and (o.status in ACCEPTED or o.status in UNKNOWN)}))
+        for bi in [x for x in todo if x["kind"] == "buy" and x.get("fund") == "split" and x.get("status") == "pending"]:
+            t, j = bi["ticker"], eng.col.get(bi["ticker"])
+            grp = [c for c in todo if c is not bi and c.get("fund_for") == t and c.get("at") == bi.get("at")
+                   and c.get("status") == "pending"]
+            going = {c["ticker"] for c in grp if MO._to_zero(c) and c["ticker"] in st.pos and c["ticker"] not in st.pending_exit}
+            why = None
+            if t in eng.core_set:
+                why = "核心 ETF 不能手动买（用「闲置资金比例」调）"
+            elif t in st.pos:
+                why = "已经持有：要加仓用「调仓」"
+            elif t in st.plan:
+                why = "已经排在今天开盘买入（规则的信号）"
+            elif j is None or not eng.A.has[k, j]:
+                why = f"没有 {t} 在 {d} 的行情（不在股票池？停牌？）"
+            elif MO.entry_why(eng, t, k):
+                why = MO.entry_why(eng, t, k)
+            elif n0 - len(going) >= cfg.max_positions:
+                why = f"个股名额已满（卖完凑钱的之后仍满，上限 {cfg.max_positions} 只）"
+            elif self.pre_send is not None and self.pre_send(t, "BUY", "stock"):
+                why = f"资格检查：{self.pre_send(t, 'BUY', 'stock')}"
+            elif t in busy:
+                for x in [bi] + grp:
+                    later(x, "这只今天已经有执行器的单（买入与凑钱的卖出一起）")
+                    gated.add(x["id"])
+                continue
+            elif not px.get(t):
+                for x in [bi] + grp:
+                    retry(x, f"取不到现价，{MO.RETRY_S // 60} 分钟后再试（买入与凑钱的卖出一起）")
+                    gated.add(x["id"])
+                continue
+            else:
+                p, c = px[t], float(eng._px_close(t, k))
+                top = round_to_tick(c * (1 + gap / 100), t, "BUY")
+                if p > top:
+                    why = f"现价 ¥{p:,g} 比 {d} 收盘 ¥{c:,g} 高 {p / c - 1:+.1%}，超过 {gap:g}%（与开盘买入同一个上限；只做一次）"
+            if why:
+                no(bi, f"不买：{why} → 凑钱的卖出也不做")
+                for x in grp:
+                    no(x, f"买入 {t} 被挡 → 凑钱的卖出也不做")
+                gated.update(x["id"] for x in [bi] + grp)
+        return gated
+
     # ── 撤单 / 状态不明的单的候选（qbreak/live_ops.py；缺口盘点 B1 / B2）──
     def cancel_orders(self, cids: list[str] | None = None, source: str = "") -> dict:
         """撤执行器自己今天的、还挂着的单（SENT / PARTIAL；立花：有注文番号）。cids=None → 全部这种单。撤完用 order_status 再确认 →
@@ -1479,7 +1633,7 @@ class UnifiedExecutor:
             elif o.status in ("EXPIRED", "CANCELLED") and q >= (o.sent_qty or o.qty) > 0:   # 撤单之前已经全部成交
                 o.status = "FILLED"
             elif o.status == "DEFERRED":                     # 开盘后的补单没有跑（09:05 的 --phase open）→ 这笔没买，与模型不同
-                why_ = (str(o.note) if str(o.note).startswith((QUOTE_FAIL, NO_OPEN_WAIT, ALLIN_WAIT))   # 跑了但没下成（取价失败 / 一直没寄り付き / 等同批卖单）
+                why_ = (str(o.note) if str(o.note).startswith((QUOTE_FAIL, NO_OPEN_WAIT, ALLIN_WAIT, HALT_WAIT))   # 跑了但没下成（取价失败 / 一直没寄り付き / 等同批卖单 / HALT）
                         else "开盘后补单没有运行（--phase open）")
                 o.status, o.note = "MISSED", f"{why_}，没买 —— 与模拟盘出现差异"
                 self.stats["model_diff"] += not self.paper

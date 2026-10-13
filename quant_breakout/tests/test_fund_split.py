@@ -10,7 +10,7 @@ import pytest
 from qbreak import manual_orders as MO
 from qbreak import panel
 
-from test_panel import AT, _book, _js_fn, _sm
+from test_panel import AT, _book, _js_fn, _sm, _sm_nowarn
 
 
 def _fh(cash, *hold, busy=()):
@@ -75,7 +75,7 @@ def test_submit_with_split_writes_sells_first_then_buy():
     b = _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T"]})
     b["state"]["core_last"] = {"1545.T": 250.0}
     (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
-    _sm()
+    _sm_nowarn()                                                              # 会被执行器挡的不让平摊凑钱（test_split_refuses_warned_buy）
     fh = MO.fund_holdings(json.loads((panel.paths.state_dir() / "live_unified_paper.json").read_text()), "paper")
     assert fh["cash"] == 495_000 and {h["t"] for h in fh["hold"]} == {"7203.T", "1545.T"}
     ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "9984", "unit": "shares", "value": 300,

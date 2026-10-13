@@ -219,6 +219,7 @@ function fundAllBox(el, skip, q, only){                                     // �
   allocViz(el, q.buy, skip, q);
   const box=nd('div', 'fund', null, el);
   nd('div', 'fh', '其他持仓全部卖出，只拿这只 + 现金', box);
+  nd('div', 'muted small', '执行时拿着的这只以外的个股和 ETF 全部卖出（包括写指令之后规则 / 别的指令买进的）；下面是现在拿着的', box);   // 2026-10-13：执行时再扫一遍
   if(only) nd('div', 'muted small', '个股名额已满：只能这样买（其他全部卖出）', box);
   else fundSeg(nd('div', 'seg fseg', null, box), true);
   for(const r of q.rows){
@@ -275,6 +276,7 @@ function fundBox(el, cost, skip, opt){                                     // �
   }
   nd('div', 'muted small', '合计约 '+yen(p.got)+(p.left>0 ? '，还差 '+yen(p.left)+' → 执行器会少买' : '')
     +' · 按最近收盘估算，个股按 100 股取整', box);
+  if(opt) nd('div', 'muted small', '买入先过闸门，被挡则凑钱的卖出也不做；开盘跳空 / 价格更高没买到时，凑钱的卖出照样会卖', box);   // 2026-10-13
 }
 function fundBody(body, cost){
   if(FUND_MODE==='all' && body.kind==='buy'){ body.fund={mode:'all'}; return body; }
@@ -509,7 +511,8 @@ document.addEventListener('click', async e=>{
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'flow', jpy:n, date:$('#flow-date').value, note:$('#flow-note').value, reserve:rsv})); return;
   }
   if(a==='halt'){
-    const q=await ask('停止下单（HALT）', '全部账本（模拟和立花）从下一次运行起不下单、持仓不动。\n已经发到交易所的单不会被撤（要撤：「今天的单」的「撤单」，或立花网站 / 手机网站）。\n这里只能停：恢复只在 Mac 上（在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」）。', '停止下单', {danger:true, input:'原因（可不填）'});
+    const q=await ask('停止下单（HALT）', '全部账本（模拟和立花）从下一次运行起不下单、持仓不动。\n已经发到交易所的单不会被撤（要撤：「今天的单」的「撤单」，或立花网站 / 手机网站）。\n这里只能停：恢复只在 Mac 上（在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」）。'
+      +(CFG.halt_allin ? '\n注意：'+CFG.halt_allin+'。' : ''), '停止下单', {danger:true, input:'原因（可不填）'});   // 2026-10-13：同批卖单已在交易所
     if(q.ok) done(await api('/api/halt',{reason:q.value})); return;
   }
   if(a==='pair-new'){

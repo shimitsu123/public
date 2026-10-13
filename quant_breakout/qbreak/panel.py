@@ -1442,6 +1442,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
            "kp": {"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN},     # K 线的通俗说法（qbreak/kline.py）
            "fund": MO.fund_holdings(book, tag),
            "when_all": MO.allin_when(now, book, tag),                                     # 「全部换成这只」整批什么时候做
+           "halt_allin": MO.allin_halt_note(book),                                         # HALT 确认框：同批卖单已在交易所 → X 不会买
            "block_days": MO.BLOCK_DEFAULT,                                                # 卖出后不自动买回的天数（默认）
            "alloc": {"names": {r.get("ticker"): str(r.get("name") or "").split("（")[0]
                                for r in ((sm.get("holding_view") or {}).get("holdings") or []) + ((sm.get("holding_view") or {}).get("core") or [])
@@ -1679,6 +1680,25 @@ def _gate_card(tag: str) -> str:
             + "</div><div class='muted small'>重新检查：在 Mac 对话里问「能上实盘了吗」（只读）</div></details></section>")
 
 
+def _buy_warn0(sm: dict | None, t: str) -> list[str]:
+    """建议的股票里这只的「会被执行器挡下」（决算前 / 新仓倍数 0 …）：从持仓凑钱买（全部换成 / 平摊）之前先拒（卖了却不买）。"""
+    row = next((r for r in ((sm or {}).get("suggest") or {}).get("rows") or [] if r.get("ticker") == t), None)
+    return [str(w) for w in ((row or {}).get("buy") or {}).get("warn") or []]
+
+
+def _close_of(book: dict | None, sm: dict | None, t: str) -> float | None:
+    """这只票最近的收盘（建议的股票那一行 / 持仓的 last_close）：「全部换成」晚做时比较用。没有 → None。"""
+    row = next((r for r in ((sm or {}).get("suggest") or {}).get("rows") or [] if r.get("ticker") == t), None) or {}
+    for v in (row.get("close"), (row.get("buy") or {}).get("px"),
+              ((((book or {}).get("state") or {}).get("pos") or {}).get(t) or {}).get("last_close")):
+        try:
+            if v and float(v) > 0:
+                return round(float(v), 4)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
 def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") -> tuple[bool, str, dict | None]:
     """页面的一次提交 → (成功?, 说明, 写进去的指令)。与 run.py manual 相同的检查。source：panel（Mac）/ phone（手机）。"""
     tag = str(body.get("book") or "")
@@ -1731,11 +1751,18 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
         allp = MO.fund_all(book, tag, rec["ticker"])
         if allp["blocked"]:
             return False, f"没写（其他全部卖出）：{allp['blocked']}", None
-        row0 = next((r for r in (sm.get("suggest") or {}).get("rows") or [] if r.get("ticker") == rec["ticker"]), None)
-        warn0 = [str(w) for w in ((row0 or {}).get("buy") or {}).get("warn") or []]
+        warn0 = _buy_warn0(sm, rec["ticker"])
         if warn0:                                          # 执行器决策时会挡的（决算前 / 新仓倍数 0）：不让「全卖换这只」（否则卖光了却不买）
             return False, "没写（其他全部卖出）：这只现在会被执行器挡下（" + "；".join(_fill_mult_why(w) for w in warn0) + "）：等它解除再做", None
         going = {t for t, _c, _p in allp["sells"]}         # 名额按「卖完之后」算
+        rec["allin_fill"] = MO.allin_fill(now or now_jst(), book, tag).isoformat()   # 预计哪天开盘做：晚了（HALT / 晚跑）执行时会说明（2026-10-13）
+        xc = _close_of(book, sm, rec["ticker"])
+        if xc:
+            rec["x_close"] = xc
+    elif rec["kind"] == "buy" and isinstance(fund, dict) and fund.get("mode") == "split":
+        warn0 = _buy_warn0(sm, rec["ticker"])
+        if warn0:                                          # 平摊凑钱也一样：会被挡的买入不写（否则凑钱的卖出卖了却不买；2026-10-13）
+            return False, "没写（从持仓凑钱买）：这只现在会被执行器挡下（" + "；".join(_fill_mult_why(w) for w in warn0) + "）：等它解除再做", None
     why = MO.check(rec, book, tag, sm=sm, now=now, going=going)
     if why:
         return False, f"没写：{why}", None
@@ -1750,7 +1777,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
             if r["kind"] != "stock":
                 continue
             sr = MO.normalize({"kind": "adjust", "ticker": r["t"], "unit": "shares", "value": r["after"],
-                               "fund_for": rec["ticker"], "source": source})
+                               "fund_for": rec["ticker"], "source": source, "dir": -1, "cur0": r.get("cur")})
             w = MO.check(sr, book, tag, sm=sm, now=now)
             if w:
                 return False, f"没写（凑钱要卖的 {r['t']}：{w}）", None
@@ -1780,11 +1807,15 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
             sells.append((sr, {"t": "core", "sell": 0, "kind": "core"}))
         rec["fund"] = "all"
     clock = (lambda: now) if now else None
+    if rec["kind"] == "adjust" and not rec.get("fund_for"):   # 写入时预览的方向（+1 加 / −1 减）：执行时换算方向相反 → 不执行（2026-10-13）
+        a0 = MO.adjust_plan(rec, book.get("state") or {}, MO.MANUAL_CAP_PCT)
+        if a0["delta"]:
+            rec.update(dir=1 if a0["delta"] > 0 else -1, cur0=int(a0["cur"]))
     if allp is not None:                                   # 全部换成：买入 + 同批一次写进文件（执行器不会只读到一半）
         rec = MO.append_many(tag, [rec] + [sr for sr, _r in sells], clock=clock)[0]
+    elif sells:                                            # 平摊凑钱：凑钱的卖在前、买入在后，一次写进文件（同一时刻 = 同一组；2026-10-13）
+        rec = MO.append_many(tag, [sr for sr, _r in sells] + [rec], clock=clock)[-1]
     else:
-        for sr, _r in sells:                               # 凑钱的卖先写：执行器先卖后买（同一次运行里 ① 卖 → ② 买）
-            MO.append(tag, sr, clock=clock)
         rec = MO.append(tag, rec, clock=clock)
     if rec["kind"] == "unblock":                           # 解除不是单：不会买回、也不马上买，下一次决策起才不挡（2026-10-13）
         return True, f"已写：解除 {rec['ticker']} 的不自动买回（不会买回，也不马上买；指令 {rec['id']}）→ {MO.NEXT_DECISION}", rec
@@ -1830,7 +1861,8 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     if rec.get("fund") == "all":
         fx = MO.core_effects(book, 0.0)
         etf = ("、".join(f"{x} {a_:,} → 0 口" for x, a_, _b in fx) or "、".join(f"{x} {u:,} → 0 口" for x, u in allp["cores"]))
-        parts = ["先全部卖出其他持仓：" + ("、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells if r["kind"] == "stock") or "（没有别的个股）")
+        parts = ["执行时拿着的 " + t + " 以外的个股和 ETF 全部卖出（包括写指令之后规则 / 别的指令买进的）；现在拿着的："
+                 + ("、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells if r["kind"] == "stock") or "（没有别的个股）")
                  + (f"（之后 {MO.BLOCK_DEFAULT} 个交易日规则不自动买回；「交易」里可一次「恢复按规则」）" if any(r["kind"] == "stock" for _s, r in sells) else "")]
         if any(r["kind"] == "corefix" for _s, r in sells):
             parts.append("取消固定口数：" + "、".join(r["t"] for _s, r in sells if r["kind"] == "corefix") + (f"（{etf}：之后按比例 0% 卖出）" if etf else ""))
@@ -1840,14 +1872,15 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
         elif not any(r["kind"] == "corefix" for _s, r in sells) and etf:
             parts.append(f"闲置资金比例已经是 0%：{etf}（照旧卖出）")
         if allp.get("also"):
-            parts.append("另外规则 / 别的指令还会买：" + "、".join(allp["also"]))
+            parts.append("另外规则 / 别的指令开盘还会买：" + "、".join(allp["also"]) + "（买进了的，执行时一起卖出）")
         wa = MO.allin_when(now or now_jst(), book, tag)
         msg = (f"已写：全部换成 {t} → {wa}整批先卖后买（那次决策先过闸门；股数由执行器按全卖之后的钱定）；" + "；".join(parts)
                + "；全卖也不够 1 个单元就不买、留现金；决策时买入被挡 → 整批不做、什么都不动；开盘跳空 / 没成交则其他已卖、留现金、不自动重买"
                "；规则对别的票仍可能用现金开新仓")
     elif sells:
         msg += ("；凑钱先卖：" + "、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells)
-                + ("（其余由别的核心 ETF 照规则减少）" if k == "corefix" else "（核心 ETF 那份执行器按当时还缺多少卖）"))
+                + ("（其余由别的核心 ETF 照规则减少）" if k == "corefix" else "（核心 ETF 那份执行器按当时还缺多少卖）")
+                + ("；买入先过闸门，被挡则凑钱的卖出也不做；开盘跳空 / 价格更高没买到时，凑钱的卖出照样会卖" if k == "buy" else ""))
     if paths.halt_file().exists() and k in MO.ORDER_KINDS + ("core",):
         msg += "；★ HALT 生效中：解除之后才处理"
     return True, msg + f"（指令 {rec['id']}）", rec
@@ -2405,6 +2438,21 @@ def _book_of(query: str) -> str:
     return tag if tag in BOOKS else paths.default_book()
 
 
+def _halt_allin(msg: str) -> str:
+    """HALT 之后（2026-10-13 resume-other-4）：「全部换成 X」同批卖单已在交易所、X 等开盘后补 → 回复里写明卖单照样成交、X 不会买。"""
+    notes = []
+    for t in books():
+        if t in READONLY:
+            continue
+        try:
+            n = MO.allin_halt_note(_load(t)[0])
+        except Exception:                                   # noqa: BLE001 —— 提醒取不到不影响 HALT 本身
+            n = None
+        if n:
+            notes.append(f"{BOOKS.get(t, t)}：{n}")
+    return msg + ("；" + "；".join(notes) if notes else "")
+
+
 def _after_submit(trigger, rec: dict | None) -> None:
     """写了买卖 / 撤回 / 闲置资金比例 → 马上看一次要不要叫执行器（盘中 → 马上下单；开盘前 → 重试加进今天的寄付单）。"""
     if trigger is not None and rec and rec.get("kind") in MO.ORDER_KINDS + ("cancel", "core", "cancel_order", "uncancel"):
@@ -2477,7 +2525,7 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
                 self._json(200 if ok else 400, {"ok": ok, "msg": msg, "id": (rec or {}).get("id")})
             elif path == "/api/halt":
                 ok, msg = PP.create_halt(body.get("reason"), "Mac 操作面板", now)
-                self._json(200 if ok else 500, {"ok": ok, "msg": msg})
+                self._json(200 if ok else 500, {"ok": ok, "msg": _halt_allin(msg) if ok else msg})
             elif path.startswith("/api/push/"):
                 self._json(*push_post(path, body, "Mac"))
             elif path == "/api/pair/new":
@@ -2618,7 +2666,7 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
                 self._json(200 if ok else 400, {"ok": ok, "msg": msg, "id": (rec or {}).get("id")})
             elif path == "/api/halt":
                 ok, msg = PP.create_halt(body.get("reason"), f"手机 {dev['name']}", now)
-                self._json(200 if ok else 500, {"ok": ok, "msg": msg})
+                self._json(200 if ok else 500, {"ok": ok, "msg": _halt_allin(msg) if ok else msg})
             elif path.startswith("/api/push/"):
                 self._json(*push_post(path, body, str(dev.get("name") or "手机")))
             elif dev.get("kind") == "ts":                                  # 按账户登录：这台设备也配对过才有东西可退

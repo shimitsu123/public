@@ -12,7 +12,7 @@ import pytest
 from qbreak import manual_orders as MO
 from qbreak import panel
 
-from test_panel import AT, _book, _js_fn, _sm
+from test_panel import AT, _book, _js_fn, _sm, _sm_nowarn
 
 
 def _book4(**kw):
@@ -42,7 +42,7 @@ def test_submit_all_writes_sells_corefix_core_then_buy():
     assert rs[5]["clear"] is True and rs[5]["ticker"] == "1545.T" and rs[5]["prev_units"] == 100
     assert rs[6]["pct"] == 0 and "ticker" not in rs[6] and rs[6]["prev_pct"] == 100.0
     assert all(r["fund_for"] == "6501.T" for r in rs[1:]) and all(r["at"] == rec["at"] for r in rs)
-    assert "先全部卖出其他持仓：6758.T 100 股、7203.T 100 股、8306.T 100 股、9432.T 100 股" in msg
+    assert "执行时拿着的 6501.T 以外的个股和 ETF 全部卖出（包括写指令之后规则 / 别的指令买进的）；现在拿着的：6758.T 100 股、7203.T 100 股、8306.T 100 股、9432.T 100 股" in msg
     assert "取消固定口数：1545.T（1545.T 100 → 0 口：之后按比例 0% 卖出）" in msg and "闲置资金比例 100% → 0%（1545.T 100 → 0 口；之后停买" in msg
     assert "全卖也不够 1 个单元就不买、留现金" in msg and "之后 20 个交易日规则不自动买回；「交易」里可一次「恢复按规则」" in msg
     assert msg.startswith("已写：全部换成 6501.T → 10/07 开盘整批先卖后买")                 # 10/06 08:00、今天的决策已做 → 下一个交易日
@@ -67,7 +67,7 @@ def test_submit_all_skips_core_when_pct_already_zero():
     assert ok and not _reqs("core") and "闲置资金比例已经是 0%：1545.T 100 → 0 口（照旧卖出）" in msg
 
 
-def test_fund_all_skips_exiting_and_blocks_on_unfinished_instruction():
+def test_fund_all_writes_exiting_and_blocks_on_unfinished_instruction():
     b = _book4()
     b["state"]["pending_exit"] = {"7203.T": "macd"}
     b["manual"]["items"] = {"M-trim": {"id": "M-trim", "kind": "trim", "ticker": "6758.T", "pct": 5.0, "status": "pending", "at": "2026-10-05T20:00:00+09:00"}}
@@ -80,9 +80,9 @@ def test_fund_all_skips_exiting_and_blocks_on_unfinished_instruction():
     b["manual"]["items"] = {}
     (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
     plan = MO.fund_all(b, "paper", "6501.T")
-    assert [t for t, _c, _p in plan["sells"]] == ["6758.T", "8306.T", "9432.T"] and plan["skip"][0][0] == "7203.T"
+    assert [t for t, _c, _p in plan["sells"]] == ["6758.T", "7203.T", "8306.T", "9432.T"] and not plan["skip"]   # 规则在卖的也写（执行时只设「不买回」，2026-10-13）
     ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}}, AT)
-    assert ok and [r["ticker"] for r in _reqs("sell")] == ["6758.T", "8306.T", "9432.T"]
+    assert ok and [r["ticker"] for r in _reqs("sell")] == ["6758.T", "7203.T", "8306.T", "9432.T"], msg
     assert MO.fund_holdings(b, "paper")["exiting"] == ["7203.T"]
 
 
@@ -112,7 +112,7 @@ def test_cancel_read_split_buy_writes_one_cancel_per_companion():
     b["state"]["core_last"] = {"1545.T": 250.0}
     b["state"]["cash_jpy"] = 0.0
     (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
-    _sm()
+    _sm_nowarn()
     ok, _m, buy = panel.submit({"book": "paper", "kind": "buy", "ticker": "9984", "unit": "shares", "value": 300,
                                 "fund": {"mode": "split", "cost": 150_000}}, AT)
     assert ok and len(_reqs("adjust")) == 1
@@ -459,7 +459,7 @@ def test_split_companion_can_still_be_cancelled_and_restored_alone():
     b = _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T"]})
     b["state"]["core_last"] = {"1545.T": 250.0}
     (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
-    _sm()
+    _sm_nowarn()
     ok, _m, buy = panel.submit({"book": "paper", "kind": "buy", "ticker": "9984", "unit": "shares", "value": 300, "fund": {"mode": "split", "cost": 645_000}}, AT)
     adj = _reqs("adjust")[0]
     ok, msg, cx = panel.submit({"book": "paper", "kind": "cancel", "target": adj["id"]}, AT)
