@@ -776,15 +776,16 @@ def cancel_request(tag: str, book: dict | None, target: str, now: dt.datetime | 
 
 
 def uncancel_request(tag: str, book: dict | None, cancel_id: str, now: dt.datetime | None = None,
-                     source: str = "cli") -> tuple[bool, str, dict | None]:
+                     source: str = "cli", sm: dict | None = None) -> tuple[bool, str, dict | None]:
     """撤销一条撤回（面板与命令行共用）：撤的是「平摊凑钱 / 其他全部卖出」的买入 → 同批指令的撤回一起撤销；
-    有一条撤销不了（已被执行器读到并处理）→ 整个拒绝（要的话重新提交一次）。"""
+    有一条撤销不了（已被执行器读到并处理）→ 整个拒绝（要的话重新提交一次）。说明里写恢复之后什么时候、按什么价处理
+    （与面板确认框同一句 uncancel_when；HALT 中写明解除后才处理；2026-10-13）。"""
     book = book or {}
     try:
         rec = normalize({"kind": "uncancel", "target": cancel_id, "source": source})
     except ValueError as e:
         return False, f"没写：{e}", None
-    why = check(rec, book, tag, now=now)
+    why = check(rec, book, tag, sm=sm, now=now)
     if why:
         return False, f"没写：{why}", None
     items = (book.get("manual") or {}).get("items") or {}
@@ -794,7 +795,7 @@ def uncancel_request(tag: str, book: dict | None, cancel_id: str, now: dt.dateti
     allr = list(byid.values())
     c = byid.get(cancel_id) or {}
     tg = byid.get(c.get("target")) or {}
-    extra = []
+    extra, back = [], []
     if tg.get("fund") in ("split", "all"):                 # 能不能整批恢复 check 已经查过：这里只收集同批的撤回
         void = voided(waiting)
         for cp in fund_companions(tg, allr):
@@ -802,12 +803,24 @@ def uncancel_request(tag: str, book: dict | None, cancel_id: str, now: dt.dateti
                        and x.get("status") != "voided"), None)
             if cc is not None:
                 extra.append(cc["id"])
+                back.append(cp)
     clock = (lambda: now) if now else None
     recs = append_many(tag, [{"kind": "uncancel", "target": cancel_id, "source": source}]
                        + [{"kind": "uncancel", "target": cid, "source": source} for cid in extra], clock=clock)
     rec = recs[0]
-    msg = ("已写：撤销撤回 → 原来的指令恢复「等下单」" + (f"（同批的 {len(extra)} 条卖出 / 闲置资金指令一起恢复）" if extra else "")
-           + "，那条撤回不再显示")
+    st = book.get("state") or {}
+    if tg.get("fund") == "split" and back:                 # 凑钱的卖出：写清卖多少（check 已经保证现在还会卖；2026-10-13）
+        rows = []
+        for cp in back:
+            a = adjust_plan(cp, st, MANUAL_CAP_PCT) if cp.get("kind") == "adjust" else None
+            rows.append(f"{cp.get('ticker')} 卖 {a['cur'] - a['want']:,} 股（{a['cur']:,} → {a['want']:,} 股）" if a else describe(cp))
+        head = "（凑钱的卖出一起恢复：" + "、".join(rows) + "）"
+    else:
+        head = f"（同批的 {len(extra)} 条卖出 / 闲置资金指令一起恢复）" if extra else ""
+    msg = (f"已写：撤销撤回 → 原来的指令恢复「等下单」{head}，那条撤回不再显示；"
+           + uncancel_when(tg, now or now_jst(), book, tag))
+    if paths.halt_file().exists() and (tg.get("kind") in ORDER_KINDS + ("core",)):
+        msg += "；★ HALT 生效中（解除后才处理）"
     return True, msg, rec
 
 
@@ -1063,7 +1076,7 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
         if la:
             return f"「全部换成 {la[0]['ticker']}」在等决策（里面有闲置资金比例 / 固定口数）：先撤回它（整批一起撤），再改"
     if k == "uncancel":
-        return _uncancel_why(rec["target"], items, waiting)
+        return _uncancel_why(rec["target"], items, waiting, book=book, tag=tag, sm=sm, now=now)
     if k == "cancel":
         tg0 = items.get(rec["target"]) or next((r for r in waiting if r.get("id") == rec["target"]), None)
         if tg0 is not None and allin_member(tg0) and tg0.get("kind") != "buy":
@@ -1094,9 +1107,12 @@ def _cancel_why(target: str, items: dict, waiting: list[dict]) -> str | None:
     return None
 
 
-def _uncancel_why(cid: str, items: dict, waiting: list[dict]) -> str | None:
+def _uncancel_why(cid: str, items: dict, waiting: list[dict], book: dict | None = None, tag: str | None = None,
+                  sm: dict | None = None, now: dt.datetime | None = None) -> str | None:
     """「撤销撤回」能不能做：撤回还没被执行器读 → 能；读了 → 原来的买卖指令被它撤成「已撤回」或标着「撤回中」才能恢复
-    （闲置资金比例 / 固定口数 / 解除不买回 读到时就定了，撤销不了）。原来那只票现在有别的指令在处理 → 不行（同一只票同时只能一条）。"""
+    （闲置资金比例 / 固定口数 / 解除不买回 读到时就定了，撤销不了）。原来那只票现在有别的指令在处理 → 不行（同一只票同时只能一条）。
+    给了 book（2026-10-13）：撤回之后同一只票又写过别的买卖指令 → 不行（恢复旧的会盖掉之后的决定）；凑钱的卖出现在已经不卖了 → 不行；
+    「全部换成 X」按现在的账本重查（fund_all 被挡 / X 已经持有 / 买入本身的检查 / 撤回之后又做过别的「全部换成」→ 请重新提交）。"""
     c = items.get(cid) or next((r for r in waiting if r.get("id") == cid), None)
     if c is None or c.get("kind") != "cancel":
         return f"没有撤回指令 {cid}"
@@ -1125,27 +1141,91 @@ def _uncancel_why(cid: str, items: dict, waiting: list[dict]) -> str | None:
         others = [r for r in live_allin_recs(items, waiting) if r.get("id") != tid]
         if others:
             return f"「全部换成 {others[0]['ticker']}」还在处理：同时只能有一个「全部换成」"
+    comps = fund_companions(tg, allr) if tg.get("fund") in ("split", "all") else []
+    ids = {tid} | {cp["id"] for cp in comps}
+    st = (book.get("state") or {}) if book is not None else None
+    if book is not None:                                   # 2026-10-13：撤回之后这只票又有过别的指令 / 凑钱的卖出已经不卖了 → 不恢复
+        w = _later_why(tg, c, allr, ids) or (_fund_sell_why(tg, st) if batch_buy(tg, allr) is None else None)
+        if w:
+            return w
     if tg.get("fund") in ("split", "all"):                 # 买入那条：同批的撤回也都要能撤销，否则整个不行
         void = voided(waiting)
-        comps = fund_companions(tg, allr)
-        ids = {tid} | {cp["id"] for cp in comps}
         for cp in comps:
             cc = next((x for x in allr if x.get("kind") == "cancel" and x.get("target") == cp["id"] and x["id"] not in void
                        and x.get("status") != "voided"), None)
             if cc is None:
                 continue
-            w = _uncancel_why_one(cc["id"], items, waiting, ids)
+            w = _uncancel_why_one(cc["id"], items, waiting, ids, st=st if tg.get("fund") == "split" else None)
             if w:
                 return f"同批的「{describe(cp)}」的撤回撤销不了（{w}）→ 要的话重新提交一次"
+    if book is not None and tg.get("kind") == "buy" and tg.get("fund") == "all":
+        w = _allin_recheck(tg, ids, allr, items, waiting, book, tag, sm, now)
+        if w:
+            return f"「全部换成 {tg.get('ticker')}」按现在的账本重新检查没通过（{w}）：请重新提交「全部换成」"
     return None
+
+
+def _later_why(tg: dict, c: dict, allr: list[dict], skip=()) -> str | None:
+    """撤回（c）之后，同一只票又写过别的买卖指令（不管状态；同批的不算）→ 恢复旧的会盖掉之后的决定（2026-10-13）。"""
+    t = tg.get("ticker")
+    if tg.get("kind") not in ORDER_KINDS or not t:
+        return None
+    ca, skip = str(c.get("at") or ""), set(skip) | {tg.get("id")}
+    later = [r for r in allr if r.get("kind") in ORDER_KINDS and r.get("ticker") == t and r.get("id") not in skip
+             and str(r.get("at") or "") > ca]
+    return f"撤回之后 {t} 已经有过别的指令（{later[0]['id']}）：请重新下" if later else None
+
+
+def _fund_sell_why(tg: dict, st: dict | None) -> str | None:
+    """凑钱的卖出（adjust 带 fund_for）恢复之前看现在的持仓（2026-10-13）：已经不拿 / 现在已经不高于目标 → 恢复了也不会卖（绝不改成买入）。"""
+    if st is None or tg.get("kind") != "adjust" or not tg.get("fund_for"):
+        return None
+    t = tg.get("ticker")
+    cur = int(((st.get("pos") or {}).get(t) or {}).get("shares") or 0)
+    if cur <= 0:
+        return f"{t} 现在已经不持有：凑钱的卖出用不上"
+    want = adjust_plan(tg, st, MANUAL_CAP_PCT)["want"]
+    if want >= cur:
+        return f"{t} 现在 {cur:,} 股，已经不高于凑钱卖出的目标 {want:,} 股：恢复了也不会卖"
+    return None
+
+
+def _as_cancelled(book: dict, ids) -> dict:
+    """账本的一个看法：ids 这几条当作已撤回（撤销撤回前按现在的账本重查「全部换成」用；不改原来的账本）。"""
+    man = book.get("manual") or {}
+    items = {k: ({**v, "status": "cancelled"} if k in ids else v) for k, v in (man.get("items") or {}).items()}
+    return {**book, "manual": {**man, "items": items}}
+
+
+def _allin_recheck(tg: dict, ids, allr: list[dict], items: dict, waiting: list[dict], book: dict, tag: str | None,
+                   sm: dict | None, now: dt.datetime | None) -> str | None:
+    """「全部换成 X」撤销撤回之前按现在的账本重查（2026-10-13）：X 已经持有 / 撤回之后又做过别的「全部换成」/ fund_all 被挡
+    （持仓上有别的没处理完的指令、有还没读的固定口数）/ 买入本身过不了 check（名额、资格 …）→ 理由。执行时拿着的都卖、比例 0%、
+    取消全部固定口数（Manual._allin_sweep / _allin_apply_core），所以写入之后多拿的票不用在这里比。"""
+    X = tg.get("ticker")
+    if X in (((book.get("state") or {}).get("pos")) or {}):
+        return f"{X} 现在已经持有"
+    gone = cancelled(waiting)
+    later = [r for r in allr if r.get("kind") == "buy" and r.get("fund") == "all" and r.get("id") not in ids
+             and str(r.get("at") or "") > str(tg.get("at") or "")
+             and (r.get("status") in ("done", "placed", "pending") if r["id"] in items else r["id"] not in gone)]
+    if later:
+        return f"撤回之后已经有过「全部换成 {later[0].get('ticker')}」（{later[0]['id']}）"
+    view = _as_cancelled(book, ids)                        # 同批自己（还在撤回中）不算「别的指令」
+    fa = fund_all(view, tag, X)
+    if fa["blocked"]:
+        return fa["blocked"]
+    rec = {k: tg[k] for k in ("kind", "ticker", "unit", "value", "pct", "fund") if k in tg}
+    return check(rec, view, tag, sm=sm, now=now, going={t for t, _c, _p in fa["sells"]})
 
 
 def live_allin_recs(items: dict, waiting: list[dict]) -> list[dict]:
     return [r for r in _live(items, waiting, ("buy",)) if r.get("fund") == "all"]
 
 
-def _uncancel_why_one(cid: str, items: dict, waiting: list[dict], batch_ids=()) -> str | None:
-    """一条撤回自己能不能撤销（不看同批规则）；它恢复的那只票现在有别的指令（同批以外）在处理 → 不行。"""
+def _uncancel_why_one(cid: str, items: dict, waiting: list[dict], batch_ids=(), st: dict | None = None) -> str | None:
+    """一条撤回自己能不能撤销（不看同批规则）；它恢复的那只票现在有别的指令（同批以外）在处理 → 不行。
+    st（平摊凑钱的同批才给；2026-10-13）：撤回之后这只票又写过别的指令 / 凑钱的卖出现在已经不卖了（不拿 / 不高于目标）→ 不行。"""
     c = items.get(cid) or next((r for r in waiting if r.get("id") == cid), None)
     if c is None or c.get("kind") != "cancel":
         return f"没有撤回指令 {cid}"
@@ -1163,6 +1243,9 @@ def _uncancel_why_one(cid: str, items: dict, waiting: list[dict], batch_ids=()) 
         busy = [r for r in _live(items, waiting, ORDER_KINDS) if r.get("ticker") == tg["ticker"] and r.get("id") not in set(batch_ids) | {tid}]
         if busy:
             return f"{tg['ticker']} 现在已经有别的指令在处理（{describe(busy[0])}）：先撤回那条"
+    if st is not None:
+        allr = list(items.values()) + [r for r in waiting if r["id"] not in items]
+        return _later_why(tg, c, allr, batch_ids) or _fund_sell_why(tg, st)
     return None
 
 
@@ -1216,6 +1299,39 @@ def allin_when(now: dt.datetime, book: dict | None, tag: str | None = None) -> s
     """allin_fill 的文字：今天 → 「今天 09:00 开盘」；否则「MM/DD 开盘」。"""
     f = allin_fill(now, book, tag)
     return "今天 09:00 开盘" if f == now.date() else f"{f:%m/%d} 开盘"
+
+
+def uncancel_when(tg: dict | None, now: dt.datetime, book: dict | None, tag: str | None = None) -> str:
+    """撤销撤回之后，恢复的指令什么时候、按什么价处理（面板确认框的 data-when 与 uncancel_request 的说明同一句；2026-10-13）：
+    「全部换成 X」→ allin_when 那次决策整批先卖后买（卖出那时拿着的全部；列出现在拿着的）；买卖 → 和新写一条一样
+    （盘中马上按现价下单、午休等后场、开盘前 / 收盘后等开盘：order_basis）；比例 / 固定口数 / 解除 → 读到 / 下一次决策起。"""
+    tg = tg or {}
+    k, t = tg.get("kind"), tg.get("ticker")
+    st = (book or {}).get("state") or {}
+    if k == "buy" and tg.get("fund") == "all":
+        held = [f"{x} {int(p.get('shares') or 0):,} 股" for x, p in sorted((st.get("pos") or {}).items())
+                if x != t and int(p.get("shares") or 0) > 0]
+        held += [f"{x} {int(u):,} 口" for x, u in sorted((st.get("core_units") or {}).items()) if int(u or 0) > 0]
+        return (f"{allin_when(now, book, tag)}整批先卖后买（那次决策先过闸门）：卖出那时拿着的 {t} 以外的全部个股和 ETF"
+                f"（现在：{'、'.join(held) if held else '没有别的'}）、闲置资金比例 0%、取消全部固定口数")
+    if k in ORDER_KINDS:
+        side = "BUY" if k == "buy" else "SELL"
+        if k == "adjust" and not tg.get("fund_for"):
+            try:
+                d = int(tg.get("dir") or 0) or adjust_plan(tg, st, MANUAL_CAP_PCT)["delta"]
+            except (KeyError, TypeError, ValueError):
+                d = 0
+            side = "BUY" if d > 0 else "SELL"
+        mode = timing(now)[0]
+        out = ("马上（盘中）下单：" if mode == "now" else "") + order_basis(str(tag or "").startswith("paper"), now, side)
+        return out + ("（凑钱的卖出同一时间先卖）" if k == "buy" and tg.get("fund") == "split" else "")
+    if k == "core":
+        return f"执行器读到就生效：核心 ETF {when_text(now)}照新比例调"
+    if k == "corefix":
+        return "下一次决策（交易日 07:40）起照它调"
+    if k == "unblock":
+        return NEXT_DECISION
+    return "执行器下一次运行时处理"
 
 
 def next_window(now: dt.datetime) -> tuple[dt.date, bool]:
@@ -1394,6 +1510,11 @@ class Manual:
         return [it for it in self.m["items"].values()
                 if it.get("ticker") == t and it.get("kind") in kinds and it.get("status") == "placed"]
 
+    def _fresh_prev(self, tg: dict | None) -> None:
+        """恢复的「全部换成」同批比例 0%：prev_pct（之后撤不了时提示「把比例设回 N%」用）按现在的比例（撤回期间可能改过；2026-10-13）。"""
+        if tg is not None and tg.get("kind") == "core" and tg.get("fund_for"):
+            tg["prev_pct"] = self.core_pct
+
     # ── 读指令 ──
     def ingest(self, only=None) -> list[tuple[str, str]]:
         """新指令 → items（pending）；core 当场生效、unblock 记 lift_from（下一次决策起生效）；cancel：等执行器的马上撤，已交给执行器的记下「撤回中」
@@ -1447,18 +1568,21 @@ class Manual:
             elif k == "uncancel":
                 c = items.get(r["target"])
                 tg = items.get((c or {}).get("target"))
+                what = describe(tg) if tg else (c or {}).get("target")   # 2026-10-13：比例那条没有代码（以前写成「None」）
                 if c is not None and c.get("status") == "voided":
-                    it.update(status="done", msg=f"撤销撤回：{(tg or {}).get('ticker') or (c or {}).get('target')} 照原来的指令处理")
+                    self._fresh_prev(tg)
+                    it.update(status="done", msg=f"撤销撤回：{what} 照原来的指令处理")
                 elif c is not None and tg is not None and tg.get("status") == "cancelled" and (tg.get("kind") in ORDER_KINDS or tg.get("fund_for")):
+                    self._fresh_prev(tg)
                     tg.update(status="pending", msg="撤回已撤销：恢复等下单")
                     for f in ("cancel_req", "wait", "hold", "tried"):   # 2026-10-13 修：cancel_req 残留会让下一次决策又撤一次
                         tg.pop(f, None)
                     c.update(status="voided", msg="这条撤回已撤销")
-                    it.update(status="done", msg=f"撤销撤回：{tg.get('ticker')} 恢复等下单")
+                    it.update(status="done", msg=f"撤销撤回：{what} 恢复等下单")
                 elif c is not None and tg is not None and tg.get("cancel_req") == c.get("id"):
                     tg.pop("cancel_req", None)
                     c.update(status="voided", msg="这条撤回已撤销")
-                    it.update(status="done", msg=f"撤销撤回：{tg.get('ticker')} 照原来的指令继续")
+                    it.update(status="done", msg=f"撤销撤回：{what} 照原来的指令继续")
                 else:
                     it.update(status="rejected", msg="这条撤回已经处理完，撤销不了：要的话重新下一次指令")
             elif k == "cancel":

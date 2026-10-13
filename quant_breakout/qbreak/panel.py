@@ -1355,10 +1355,13 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         return (f"<button class='btn sm danger' data-act='cancel' data-kind='unblock' data-id='{escape(r['id'])}' data-placed='0'"
                 f" data-desc='{_what(r)}' data-fund='0' data-stuck='0'>撤回</button>")
 
-    def _unbtn(r: dict) -> str:                             # 撤回指令的「撤销撤回」（能撤销才给）
-        if r.get("kind") != "cancel" or MO.check({"kind": "uncancel", "target": r["id"]}, book, tag, now=now):
+    def _unbtn(r: dict) -> str:                             # 撤回指令的「撤销撤回」（能撤销才给；与提交同一个检查）
+        if r.get("kind") != "cancel" or MO.check({"kind": "uncancel", "target": r["id"]}, book, tag, sm=sm, now=now):
             return ""
-        return (f"<button class='btn sm' data-act='uncancel' data-id='{escape(r['id'])}' data-desc='{_what(r)}'>撤销撤回</button>")
+        tg = allrec.get(r.get("target")) or {}                # 确认框写恢复之后实际什么时候、按什么价处理（不是「原来的时间」；2026-10-13）
+        hl = paths.halt_file().exists() and tg.get("kind") in MO.ORDER_KINDS + ("core",)
+        return (f"<button class='btn sm' data-act='uncancel' data-id='{escape(r['id'])}' data-desc='{_what(r)}'"
+                f" data-when='{escape(MO.uncancel_when(tg, now, book, tag))}'" + (" data-halt='1'" if hl else "") + ">撤销撤回</button>")
 
     rows = []
     for r in waiting:
@@ -1733,7 +1736,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
                       f"指令 {out[0]['id']} 等 {len(out)} 条" + (f"；没写：{'；'.join(skip)}" if skip else "") + f"）→ {MO.NEXT_DECISION}"), out[0]
     if str(body.get("kind") or "") in ("cancel", "uncancel"):   # 撤回 / 撤销撤回：与命令行同一个函数（同批指令一起；2026-10-13）
         fn = MO.cancel_request if body.get("kind") == "cancel" else MO.uncancel_request
-        ok, msg, rec = fn(tag, book, str(body.get("target") or ""), now=now, source=source, **({"sm": sm} if body.get("kind") == "cancel" else {}))
+        ok, msg, rec = fn(tag, book, str(body.get("target") or ""), now=now, source=source, sm=sm)
         return ok, msg + (f"（指令 {rec['id']}）" if ok and rec else ""), rec
     try:
         rec = MO.normalize({**body, "source": source})

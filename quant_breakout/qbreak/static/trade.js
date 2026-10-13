@@ -472,7 +472,8 @@ document.addEventListener('click', async e=>{
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
   }
   if(a==='uncancel'){                                                     // 撤销一条撤回（2026-10-12）：原来的指令恢复「等下单」、撤回记录不再显示
-    const q=await ask('撤销这条撤回？', (d.desc||d.id)+'\n\n撤销之后，原来的指令恢复「等下单」，照原来的时间处理；这条撤回不再显示。\n（指令 '+d.id+'）', '撤销撤回');
+    const q=await ask('撤销这条撤回？', (d.desc||d.id)+'\n\n撤销之后，原来的指令恢复「等下单」，这条撤回不再显示。\n什么时候处理：'
+      +(d.when||'执行器下一次运行时')+(d.halt==='1' ? '\n★ HALT 生效中（解除后才处理）' : '')+'\n（指令 '+d.id+'）', '撤销撤回');   // 2026-10-13：写实际的时间与价格（服务器算的），不是「原来的时间」
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'uncancel', target:d.id})); return;
   }
   if(a==='corefix' || a==='corefix-clear'){
