@@ -791,12 +791,19 @@ class UnifiedExecutor:
             self.stats["skipped"] += 1
             self._event("info", f"BUY {o.ticker}（开盘后）放弃：{why}")
         waiting = []
+        unfilled_sells = [o for o in self.orders if o.side == "SELL" and o.decided_on == st.last_date and o.status in ("SENT", "PARTIAL")]
         for o in act:
             g = self._gate_buy(o)
             if g:
                 o.status, o.note = "SKIPPED", g
                 continue
             op = get_open(o.ticker)
+            if (no_open == "wait" and o.reason == "manual_buy" and bp is not None and unfilled_sells
+                    and (self.manual.m["buys"].get(o.ticker) or {}).get("allin")):   # 全部换成这只：钱靠同批的卖出，卖单还没成交 → 09:20 再看
+                o.note = f"同批的卖单还没成交（{'、'.join(x.ticker for x in unfilled_sells[:3])}）：09:20 再看"
+                waiting.append(o.ticker)
+                npos += 1
+                continue
             if not op or op <= 0:
                 if no_open == "wait":                         # 还没寄り付き：保留，09:20 再看（先占着名额与余力：保持与模型相同的先后）
                     o.note = NO_OPEN_WAIT
@@ -1104,11 +1111,16 @@ class UnifiedExecutor:
             return notes
 
         buys = []
+        allin = {x["ticker"]: x.get("at") for x in man.m["items"].values()      # 「全部换成 X」的买入还在等：同批的卖出也一起等那次决策
+                 if x.get("kind") == "buy" and x.get("fund") == "all" and x.get("status") == "pending"}
         for it in todo:                                       # ① 卖：卖出全部 / 减仓 / 调仓往下（调仓往上放到 ②）
             t, kind = it["ticker"], it["kind"]
             it.pop("wait", None)
             if kind == "buy":
                 buys.append(it)
+                continue
+            if it.get("fund_for") in allin and it.get("at") == allin[it["fund_for"]]:
+                later(it, f"与「全部换成 {it['fund_for']}」一起：明天早上的决策先过闸门、再先卖后买")
                 continue
             ps, rule = st.pos.get(t), st.pending_exit.get(t)
             if ps is None:
@@ -1241,8 +1253,8 @@ class UnifiedExecutor:
         for it in buys:                                       # ② 买：买入 / 调仓往上
             t, add = it["ticker"], it["kind"] == "adjust"
             ps, j = st.pos.get(t), eng.col.get(t)
-            if not add and it.get("fund") == "all":           # 其他全部卖出、只拿这只：股数只在早上的决策里定（卖出所得才算得进来；2026-10-13）
-                later(it, "全部换成这只：其他持仓今天卖，这只在明天早上的决策里按全卖之后的钱买")
+            if not add and it.get("fund") == "all":           # 其他全部卖出、只拿这只：整批只在早上的决策里做（先过闸门；卖出所得才算得进来；2026-10-13）
+                later(it, "全部换成这只：整批在明天早上的决策里先过闸门、再先卖后买")
                 continue
             if not add and t in eng.core_set:
                 no(it, "核心 ETF 不能手动买（用「闲置资金比例」调）")

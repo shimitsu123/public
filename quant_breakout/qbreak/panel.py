@@ -1232,6 +1232,13 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             return escape("撤回：" + (_named(tg) if tg else str(r.get("target"))))
         return escape(_named(r))
 
+    def _cbtn(r: dict, placed: int) -> str:                 # 「撤单」：同批一起撤的条数按 cancel_plan（与实际撤的一致）；同批卖单已在交易所 → 不给按钮
+        pl = MO.cancel_plan(tag, book, r["id"], now=now)
+        if pl["sent"] and (pl["target"] or {}).get("fund") in ("split", "all"):
+            return "<span class='chip'>同批卖单已在交易所：要撤先撤那几笔卖单</span>"
+        return (f"<button class='btn sm danger' data-act='cancel' data-id='{escape(r['id'])}' data-placed='{placed}' data-desc='{_what(r)}'"
+                f" data-fund='{len(pl['todo'])}' data-stuck='{len(pl['stuck'])}'>撤单</button>")
+
     def _unbtn(r: dict) -> str:                             # 撤回指令的「撤销撤回」（能撤销才给）
         if r.get("kind") != "cancel" or MO.check({"kind": "uncancel", "target": r["id"]}, book, tag, now=now):
             return ""
@@ -1241,9 +1248,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     for r in waiting:
         if r.get("kind") == "uncancel" or r["id"] in void:  # 撤销撤回本身、已被撤销的撤回：不显示（去掉撤销记录）
             continue
-        btn = (f"<button class='btn sm danger' data-act='cancel' data-id='{escape(r['id'])}' data-placed='0' data-desc='{_what(r)}'"
-               f" data-fund='{len([x for x in MO.fund_companions(r, waiting) if x['id'] not in dropped])}'>撤单</button>"
-               if r["kind"] in MO.ORDER_KINDS + ("core", "corefix") and r["id"] not in dropped else _unbtn(r))
+        btn = (_cbtn(r, 0) if r["kind"] in MO.ORDER_KINDS + ("core", "corefix") and r["id"] not in dropped else _unbtn(r))
         rows.append(f"<div class='li'><div class='grow'><b>{_what(r)}</b> <span class='chip'>"
                     f"{'等下单（撤回中）' if r['id'] in dropped else '等下单'}</span>"
                     f"<div class='muted small'>{escape(str(r.get('at', ''))[5:16].replace('T', ' '))}</div></div>{btn}</div>")
@@ -1254,9 +1259,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     for it in recent[:20]:
         can = (it.get("status") in MO.ACTIVE and it.get("kind") in MO.ORDER_KINDS and not it.get("cancel_req")
                and not (it.get("status") == "placed" and it.get("now")))          # 盘中的单已经发到交易所：页面上撤不了
-        btn = (f"<button class='btn sm danger' data-act='cancel' data-id='{escape(it['id'])}' data-placed='{1 if it.get('status') == 'placed' else 0}'"
-               f" data-desc='{_what(it)}' data-fund='{len([x for x in MO.fund_companions(it, list(items)) if x.get('status') in MO.ACTIVE])}'>撤单</button>"
-               if can else _unbtn(it))
+        btn = (_cbtn(it, 1 if it.get("status") == "placed" else 0) if can else _unbtn(it))
         rows.append(f"<div class='li'><div class='grow'><b>{_what(it)}</b> <span class='chip'>"
                     f"{escape(MO.status_text(it))}{'（撤回中）' if it.get('cancel_req') else ''}</span>"
                     f"<div class='muted small'>{escape(str(it.get('at', ''))[5:16].replace('T', ' '))}"
@@ -1323,6 +1326,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                      for t in dict.fromkeys(list(u100s) + [t for t, u in (st.get("core_units") or {}).items() if int(u) > 0])},
            "kp": {"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN},     # K 线的通俗说法（qbreak/kline.py）
            "fund": MO.fund_holdings(book, tag),
+           "when_all": MO.allin_when(now, book),                                          # 「全部换成这只」整批什么时候做
            "alloc": {"names": {r.get("ticker"): str(r.get("name") or "").split("（")[0]
                                for r in ((sm.get("holding_view") or {}).get("holdings") or []) + ((sm.get("holding_view") or {}).get("core") or [])
                                if r.get("ticker")},
@@ -1694,9 +1698,10 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
             parts.append(f"闲置资金比例已经是 0%：{etf}（照旧卖出）")
         if allp.get("also"):
             parts.append("另外规则 / 别的指令还会买：" + "、".join(allp["also"]))
-        msg += ("；" + "；".join(parts) + "；这只在早上的决策里先卖后买（盘中 / 07:40 之后写的：其他持仓按指令卖，这只明天开盘买）"
-                "；全卖也不够 1 个单元就不买、留现金；买入被挡时其他不卖、比例还原；开盘跳空 / 没成交则其他已卖、留现金、不自动重买"
-                "；卖出的个股不设「不买回」，规则之后仍可能用现金开新仓")
+        wa = MO.allin_when(now or now_jst(), book)
+        msg = (f"已写：全部换成 {t} → {wa}整批先卖后买（那次决策先过闸门；股数由执行器按全卖之后的钱定）；" + "；".join(parts)
+               + "；全卖也不够 1 个单元就不买、留现金；决策时买入被挡 → 整批不做、什么都不动；开盘跳空 / 没成交则其他已卖、留现金、不自动重买"
+               "；卖出的个股不设「不买回」，规则之后仍可能用现金开新仓")
     elif sells:
         msg += ("；凑钱先卖：" + "、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells)
                 + ("（其余由别的核心 ETF 照规则减少）" if k == "corefix" else "（核心 ETF 那份执行器按当时还缺多少卖）"))
@@ -2491,7 +2496,7 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
 def _mtimes() -> dict:
     base = Path(__file__).resolve().parent
     out = {}
-    for n in WATCH:
+    for n in list(WATCH) + [f"static/{f.name}" for f in sorted(STATIC_DIR.iterdir()) if f.suffix in STATIC_TYPES]:   # 页面的 JS / CSS 更新也重启（?v 才会变）
         try:
             out[n] = (base / n).stat().st_mtime
         except OSError:

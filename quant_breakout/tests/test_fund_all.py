@@ -44,7 +44,8 @@ def test_submit_all_writes_sells_corefix_core_then_buy():
     assert all(r["fund_for"] == "6501.T" for r in rs[1:]) and all(r["at"] == rec["at"] for r in rs)
     assert "先全部卖出其他持仓：6758.T 100 股、7203.T 100 股、8306.T 100 股、9432.T 100 股" in msg
     assert "取消固定口数：1545.T（1545.T 100 → 0 口：之后按比例 0% 卖出）" in msg and "闲置资金比例 100% → 0%（1545.T 100 → 0 口；之后停买" in msg
-    assert "全卖也不够 1 个单元就不买、留现金" in msg and "卖出的个股不设「不买回」" in msg and "这只明天开盘买" in msg
+    assert "全卖也不够 1 个单元就不买、留现金" in msg and "卖出的个股不设「不买回」" in msg
+    assert msg.startswith("已写：全部换成 6501.T → 10/07 开盘整批先卖后买")                 # 10/06 08:00、今天的决策已做 → 下一个交易日
     assert len(MO.fund_companions(rec, rs)) == 6
 
 
@@ -222,7 +223,8 @@ def test_morning_applies_corefix_clear_in_the_same_decision():
     r.ask(kind="corefix", ticker="1655", clear=True)
     r.ask(kind="core", pct=0)
     r.day()
-    assert r.eng.core_fix == {} and r.eng.st.core_plan["1655.T"] == ["SELL", want] or tuple(r.eng.st.core_plan["1655.T"]) == ("SELL", want)
+    assert r.eng.core_fix == {}
+    assert tuple(r.eng.st.core_plan["1655.T"]) == ("SELL", want)
     r.day()
     assert r.eng.st.core_units.get("1655.T", 0) == 0
 
@@ -237,7 +239,8 @@ def test_submit_all_refused_when_executor_would_block_the_buy():
 
 
 def test_cli_cancel_helper_cancels_companions_and_uncancel_restores_all():
-    """命令行撤回（run.py manual cancel）与面板同一个函数：同批一起撤；撤销撤回也同批一起恢复；同批有一条已被处理 → 拒绝撤销。"""
+    """命令行撤回（run.py manual cancel）与面板同一个函数：同批一起撤；撤销撤回也同批一起恢复；单独撤销同批某条 → 拒绝。
+    同批的比例 / 固定口数在执行器读到时只是「等决策一起生效」（pending）→ 读到之后也能撤。"""
     _book4(core_fix={"1545.T": 100})
     _sm()
     ok, _m, buy = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}}, AT)
@@ -252,17 +255,96 @@ def test_cli_cancel_helper_cancels_companions_and_uncancel_restores_all():
     man.ingest()
     it = man.m["items"]
     assert it[buy["id"]]["status"] == "pending" and all(it[r["id"]]["status"] == "pending" for r in _reqs("adjust"))
-    assert it[cxl["id"]]["status"] == "voided" and man.core_pct == 0.0 and man.m["core_fix"] == {}   # 读到：比例 0% / 取消固定口数生效
-    # 已被执行器读过（处理过）的撤回：撤销不了 → 整个拒绝
+    assert it[cxl["id"]]["status"] == "voided"
+    core = next(r for r in _reqs("core")); fix = next(r for r in _reqs("corefix"))
+    assert it[core["id"]]["status"] == "pending" and it[fix["id"]]["status"] == "pending"   # 读到但不生效：等决策一起
+    assert man.core_pct == 100.0 and man.m["core_fix"] == {"1545.T": 100}
     (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
+    # 读到之后撤回：同批 6 条都还是 pending → 都能撤
     ok, msg, cxl2 = MO.cancel_request("paper", b, buy["id"], now=AT, source="cli")
-    assert ok and "闲置资金比例 100% → 0% 已经生效，撤不了：要恢复把比例设回 100%" in msg and "1545.T 的固定口数已取消（撤不了）" in msg
-    man = MO.Manual(b, "paper")
-    man.ingest()                                                              # 这次的撤回被读到：买入与 4 条卖出 → 已撤回
+    assert ok and "为这笔买入写的 6 条" in msg
+    # 单独撤销同批某条的撤回 → 拒绝（要整批跟着买入那条）
+    c_adj = [r for r in _reqs("cancel") if r["target"] == _reqs("adjust")[0]["id"]][-1]      # 第二批的那条（第一批的已撤销）
+    ok, msg, _ = MO.uncancel_request("paper", b, c_adj["id"], now=AT)
+    assert not ok and "同批指令：要恢复请撤销买入那条的撤回" in msg
+    html = panel.render("paper", "t" * 40, AT)
+    i = html.index(f"data-id='{cxl2['id']}'")
+    assert "data-act='uncancel'" in html[i - 60:i + 10] or f"data-act='uncancel' data-id='{cxl2['id']}'" in html   # 买入那条的撤回有按钮
+    assert f"data-act='uncancel' data-id='{c_adj['id']}'" not in html                     # 同批那条没有
+
+
+def test_cancel_refused_once_batch_sells_are_at_the_exchange():
+    """立花账本：07:40 决策已把同批卖单发到交易所（寄付）→ 只撤买入会变成「全卖不买」→ 拒绝，提示先用「撤单」撤卖单。"""
+    from test_manual_buy import _write
+    from test_manual_orders import TAG, _Run
+    r = _Run([1000.0] * 30, entry=(10,))
+    r.until(14)
+    at = r.at(r.k - 1, 6).isoformat()
+    _write({"kind": "adjust", "ticker": "A.T", "unit": "shares", "value": 0, "fund_for": "B.T", "source": "test", "id": "M-all-a", "at": at})
+    _write({"kind": "core", "pct": 0, "fund_for": "B.T", "source": "test", "id": "M-all-core", "at": at, "prev_pct": 100})
+    _write({"kind": "buy", "ticker": "B.T", "unit": "shares", "value": 100_000, "fund": "all", "source": "test", "id": "M-all-buy", "at": at})
+    r.day()                                                                   # 决策：A 寄付卖单已发出、核心 ETF 卖单已发出、买入 DEFERRED
+    assert r.item("M-all-a")["status"] == "placed" and r.item("M-all-buy")["status"] == "placed"
+    r.ux.save()
+    book = json.loads((panel.paths.state_dir() / "book.json").read_text())
+    ok, msg, _ = MO.cancel_request(TAG, book, "M-all-buy", now=r.at(r.k - 1, 8, 0), source="cli")
+    assert not ok and "已经发到交易所" in msg and "全卖不买" in msg
+    plan = MO.cancel_plan(TAG, book, "M-all-buy", now=r.at(r.k - 1, 8, 0))
+    assert [c["id"] for c in plan["sent"]] == ["M-all-a"] and [c["id"] for c in plan["stuck"]] == ["M-all-core"] and not plan["todo"]
+
+
+def test_uncancel_clears_cancel_req_so_next_decision_really_buys():
+    """回归（第二轮审计）：撤销撤回后 cancel_req 残留 → 下一次决策执行器自己又撤一次。"""
+    from test_manual_buy import _write
+    from test_manual_orders import TAG, _Run
+    r = _Run([1000.0] * 30, entry=(10,))
+    r.until(14)
+    at = r.at(r.k - 1, 6).isoformat()
+    _write({"kind": "buy", "ticker": "B.T", "unit": "shares", "value": 100, "source": "test", "id": "M-buy-plain", "at": at})
+    r.day()
+    assert r.item("M-buy-plain")["status"] == "placed"
+    r.ux.save()
+    book = json.loads((panel.paths.state_dir() / "book.json").read_text())
+    ok, _m, cxl = MO.cancel_request(TAG, book, "M-buy-plain", now=r.at(r.k - 1, 8, 0), source="cli")
+    assert ok, _m
+    r.now["t"] = r.at(r.k - 1, 8, 0)
+    r.ux.morning([])                                                          # 补单：读到撤回 → 这笔买入不下
+    assert r.item("M-buy-plain")["status"] == "cancelled"
+    r.ux.save()
+    book = json.loads((panel.paths.state_dir() / "book.json").read_text())
+    ok, msg_u, _u = MO.uncancel_request(TAG, book, cxl["id"], now=r.at(r.k - 1, 8, 30), source="cli")
+    assert ok, msg_u
+    r.day()                                                                   # 下一次决策：恢复的买入真的下单（不再被 settle 撤）
+    assert r.item("M-buy-plain")["status"] == "placed" and "cancel_req" not in r.item("M-buy-plain")
+    r.day()
+    assert "B.T" in r.eng.st.pos and r.item("M-buy-plain")["status"] == "done"
+
+
+def test_submit_message_says_when_the_batch_runs():
+    _book4()
+    _sm()
+    ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}},
+                              AT.replace(hour=10))                             # 盘中：下一个交易日
+    assert ok and msg.startswith("已写：全部换成 6501.T → 10/07 开盘整批先卖后买") and "马上（盘中）买入" not in msg
+    MO.requests_path("paper").unlink()                                        # 上一条买入还在等 → 清掉再写
+    b = _book4()
+    b["state"]["last_date"] = "2026-10-02"                                    # 今天 08:00、今天的决策还没做 → 今天开盘
     (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
-    ok, msg, _ = MO.uncancel_request("paper", b, cxl2["id"], now=AT)
-    assert ok                                                                 # 买卖类被撤成「已撤回」的能恢复（同批 4 条卖出一起）
-    assert "同批的 4 条" in msg
+    ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}}, AT)
+    assert ok and msg.startswith("已写：全部换成 6501.T → 今天 09:00 开盘整批先卖后买")
+    assert MO.describe({"kind": "buy", "ticker": "6501.T", "unit": "shares", "value": 300, "fund": "all"}) == "全部换成这只 6501.T（其他全卖；股数由执行器按全卖之后的钱定）"
+
+
+def test_add_room_and_manual_sizing_exclude_cash_hold():
+    from test_manual_orders import _Run
+    r = _Run([1000.0] * 30, entry=(10,))
+    r.until(14)
+    i = r.k - 1
+    room0 = r.eng.add_room("B.T", i)
+    eq0 = MO.Manual._numbers(r.eng, i, "B.T")[0]
+    r.eng.cash_hold = 300_000.0
+    assert r.eng.add_room("B.T", i) <= room0 - 100 and MO.Manual._numbers(r.eng, i, "B.T")[0] == eq0 - 300_000.0
+    r.eng.cash_hold = 0.0
 
 
 def test_executor_intraday_all_in_sells_today_and_buys_next_morning():
@@ -277,10 +359,13 @@ def test_executor_intraday_all_in_sells_today_and_buys_next_morning():
     _write({"kind": "core", "pct": 0, "fund_for": "B.T", "source": "test", "id": "M-all-core", "at": at, "prev_pct": 100})
     _write({"kind": "buy", "ticker": "B.T", "unit": "shares", "value": 100_000, "fund": "all", "source": "test", "id": "M-all-buy", "at": at})
     res = r.session(10, 0)
-    assert r.item("M-all-a")["status"] == "placed" and r.item("M-all-buy")["status"] == "pending" and r.item("M-all-buy").get("hold")
-    assert "明天早上的决策" in r.item("M-all-buy")["msg"] and res["later"] >= 1
-    r.day()                                                                   # 明天 07:40：对账（A 已卖、1655 已卖）→ 决策：B 按全卖之后的钱买
-    assert r.item("M-all-buy")["status"] == "placed" and int(r.eng.st.plan["B.T"][1]) == 600
+    assert r.item("M-all-a")["status"] == "pending" and r.item("M-all-a").get("hold") and "一起" in r.item("M-all-a")["msg"]   # 同批卖出也等
+    assert r.item("M-all-buy")["status"] == "pending" and r.item("M-all-buy").get("hold") and res["later"] >= 2
+    assert r.item("M-all-core")["status"] == "pending" and r.ux.manual.core_pct == 100.0   # 比例也等那次决策
+    assert "A.T" in r.eng.st.pos and r.eng.st.core_units["1655.T"] == u                 # 今天什么都没卖
+    r.day()                                                                   # 明天 07:40 决策：闸门过 → 比例 0% 生效、A 待卖、B 按全卖之后的钱买
+    assert r.item("M-all-buy")["status"] == "placed" and int(r.eng.st.plan["B.T"][1]) == 600 and r.ux.manual.core_pct == 0.0
+    assert r.eng.st.pending_exit.get("A.T") == "manual" and r.eng.st.core_plan["1655.T"][0] == "SELL"
     r.day()
     assert set(r.eng.st.pos) == {"B.T"} and r.eng.st.core_units.get("1655.T", 0) == 0 and r.item("M-all-buy")["status"] == "done"
 
@@ -295,11 +380,13 @@ def test_executor_retry_window_all_in_holds_buy_to_next_decision():
     _write({"kind": "adjust", "ticker": "A.T", "unit": "shares", "value": 0, "fund_for": "B.T", "source": "test", "id": "M-all-a", "at": at})
     _write({"kind": "buy", "ticker": "B.T", "unit": "shares", "value": 100_000, "fund": "all", "source": "test", "id": "M-all-buy", "at": at})
     r.now["t"] = r.at(r.k - 1, 8, 0)
-    r.ux.morning([])                                                          # 同一决策的补单（--retry）
-    assert r.item("M-all-a")["status"] == "placed" and r.item("M-all-buy")["status"] == "pending"
+    r.ux.morning([])                                                          # 同一决策的补单（--retry）：整批等下一次决策
+    assert r.item("M-all-a")["status"] == "pending" and r.item("M-all-a").get("hold") and r.item("M-all-buy")["status"] == "pending"
     assert r.item("M-all-buy").get("hold") and not r.item("M-all-buy").get("wait") and "下一次决策" in r.item("M-all-buy")["msg"]
-    r.day()                                                                   # 今天开盘 A 卖掉；明天 07:40 决策：B 用全部的钱买
-    assert r.item("M-all-buy")["status"] == "placed" and "A.T" not in r.eng.st.pos
+    r.day()                                                                   # 今天开盘什么都不动；明天 07:40 决策：先卖后买
+    assert "A.T" in r.eng.st.pos and r.item("M-all-buy")["status"] == "placed" and r.eng.st.pending_exit.get("A.T") == "manual"
+    r.day()
+    assert set(r.eng.st.pos) == {"B.T"}
 
 
 def test_executor_gate_rejects_all_in_buy_then_nothing_is_sold_and_settings_restored():
@@ -321,8 +408,9 @@ def test_executor_gate_rejects_all_in_buy_then_nothing_is_sold_and_settings_rest
     _write({"kind": "core", "pct": 0, "fund_for": "B.T", "source": "test", "id": "M-all-core", "at": at, "prev_pct": 100})
     _write({"kind": "buy", "ticker": "B.T", "unit": "shares", "value": 100_000, "fund": "all", "source": "test", "id": "M-all-buy", "at": at})
     r.day()
-    assert r.item("M-all-buy")["status"] == "rejected" and "决算前 2 天" in r.item("M-all-buy")["msg"] and "其他持仓不卖" in r.item("M-all-buy")["msg"]
+    assert r.item("M-all-buy")["status"] == "rejected" and "决算前 2 天" in r.item("M-all-buy")["msg"] and "整批不做" in r.item("M-all-buy")["msg"]
     assert r.item("M-all-a")["status"] == "rejected" and "A.T" not in r.eng.st.pending_exit
+    assert r.item("M-all-core")["status"] == "rejected" and r.item("M-all-fix")["status"] == "rejected"   # 比例 / 固定口数从没生效过
     assert r.ux.manual.core_pct == 100.0 and r.eng.core_scale == 1.0 and r.eng.core_fix == {"1655.T": want} and r.ux.manual.m["core_fix"] == {"1655.T": want}
     r.day()
     assert "A.T" in r.eng.st.pos and int(r.eng.st.core_units["1655.T"]) == want

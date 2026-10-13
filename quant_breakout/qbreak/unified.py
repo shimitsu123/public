@@ -645,7 +645,8 @@ class UnifiedEngine:
         if m != "JP" or t not in self.col:
             return 0
         exit_ts = [x for x in st.pending_exit if x in st.pos]
-        pool = st.cash_jpy + sum(self._sell_net(x, i) for x in exit_ts if market_of(x) == "JP") + self._core_liq(i)
+        pool = (st.cash_jpy - float(self.cash_hold or 0.0)                   # 出金预留不能买（2026-10-13 修）
+                + sum(self._sell_net(x, i) for x in exit_ts if market_of(x) == "JP") + self._core_liq(i))
         for t0, (c0, sh0, *_r) in list(st.plan.items()) + [(k, v) for k, v in st.add_plan.items() if k != t]:
             if market_of(t0) == "JP":
                 px0 = float(c0) * (1 + self.slip["JP"])

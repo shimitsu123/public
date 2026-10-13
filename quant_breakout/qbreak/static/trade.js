@@ -240,9 +240,9 @@ function fundAllBox(el, skip, q, only){                                     // �
   nd('div', 'muted small', '卖出合计约 '+yen(q.got)+' + 现金约 '+yen(q.cash)+' → 可用约 '+yen(q.avail)
     +(q.n>0 ? '；买 '+fmt(q.n)+' 股 ≈ '+yen(q.buy)+'，剩现金约 '+yen(q.left) : '；不够 1 个单元：不买、留现金')
     +' · 按最近收盘估算（税和手续费另计）；执行器在早上的决策里按全卖之后的钱再算', box);
-  nd('div', 'muted small', '这只在早上的决策里先卖后买（盘中 / 07:40 之后写的：其他持仓按指令卖，这只明天开盘买）。'
-    +'买入被挡（决算前 / 资格等）时其他不卖、比例还原；开盘跳空 / 没成交则其他已卖、留现金、不自动重买。'
-    +'卖出的个股不设「不买回」，规则之后仍可能用现金开新仓。'+(CFG.real ? '立花：卖出所得何时能用于买入未验证，买到的可能比预览少。' : ''), box);
+  nd('div', 'muted small', '整批在 '+(CFG.when_all||'下一次决策')+' 一起做：先过闸门（决算前 / 资格 / 名额），再先卖后买；被挡则整批不做、什么都不动。'
+    +'开盘跳空 / 没成交则其他已卖、留现金、不自动重买。卖出的个股不设「不买回」，规则之后仍可能用现金开新仓。'
+    +(CFG.real ? '立花：卖出所得何时能用于买入未验证（买单等同批卖单成交到 09:20），买到的可能比预览少。' : ''), box);
 }
 function fundBox(el, cost, skip, opt){                                     // 拖动 / 输入时实时更新：要卖哪几只、各卖多少（opt：买入框才有 → 可选「其他全部卖出」）
   if(!el) return; el.textContent='';
@@ -282,16 +282,17 @@ function fundBody(body, cost){
   return body;
 }
 function allPrev(n, cap, go, out){                                         // 「其他全部卖出，只拿这只」的预览（拖到最大 / 名额已满 / 手选）
-  const q=fundAll(BUY.t, BUY.px, BUY.lot);
+  const q=fundAll(BUY.t, BUY.px, BUY.lot), wa=CFG.when_all||'下一次决策';
   BUY.cost=q.buy; fundBox($('#buy-fund'), q.buy, BUY.t, {q:q, only:BUY.fullOnly});
+  const bv=$('#buy-val'); if(bv){ bv.disabled=true; bv.value=q.n; }                 // 股数由执行器定：输入框只显示估算
   if(q.keep.length){ out.textContent='★ 有持仓现在卖不了（见下面「留着」）：先处理它再全部换成这只'; go.textContent='确认'; go.className='btn danger'; go.disabled=true; return; }
   if(q.n<=0){
     out.textContent='★ 其他持仓全部卖出（约 '+yen(q.got)+'）+ 现金约 '+yen(q.cash)+' 也不够 1 个单元（'+fmt(BUY.lot)+' 股 ≈ '+yen(BUY.lot*BUY.px)+'）'
-      +'\n→ 照样全部卖出、留现金、不买（下单时价格变了买得起才买）；'+CFG.when+'处理';
+      +'\n→ 照样全部卖出、留现金、不买（那天价格变了买得起才买）；'+wa+'整批处理';
     go.textContent='确认全部卖出（不买）'; go.className='btn danger'; go.disabled=false; return;
   }
-  out.textContent='★ 其他持仓全部卖出，只拿这只 + 现金：买入约 '+fmt(q.n)+' 股 · 约 '+yen(q.buy)+' · 约占权益 '+bpct(q.n)
-    +'\n'+CFG.when+'先卖后买（最高 '+yen(BUY.limit||BUY.px*1.03)+' = 收盘 ×1.03）；执行器按当时的钱再算，可能少 1 个单元；只做一次';
+  out.textContent='★ 其他持仓全部卖出，只拿这只 + 现金：'+wa+'整批先卖后买；买入约 '+fmt(q.n)+' 股（估算 · 约 '+yen(q.buy)+' · 约占权益 '+bpct(q.n)+'）'
+    +'\n股数与限价（那天的收盘 ×1.03）由执行器在那次决策里按全卖之后的钱再算，可能少 1 个单元；只做一次';
   go.textContent='确认：全卖其他、买入约 '+fmt(q.n)+' 股'; go.className='btn danger'; go.disabled=false;
 }
 // ── 买入（建议的股票 → 手动买入指令）：按规则的仓位 / 股数 / 金额 / 占权益 %；执行器下单时按当时的价格再算 ──
@@ -326,6 +327,7 @@ function buyPrev(){
   let n=buyTarget();
   if(n==null && FUND_MODE!=='all'){ out.textContent='输入要买多少（股数 / 金额 / 占总权益 %）'; go.textContent='确认买入'; go.disabled=true; return; }
   const cap=buyCap(); let note='';
+  { const bv=$('#buy-val'); if(bv && FUND_MODE!=='all') bv.disabled=false; }
   if(FUND_MODE==='all'){ allPrev(n, cap, go, out); return; }
   if(n==null){ out.textContent='输入要买多少（股数 / 金额 / 占总权益 %）'; go.textContent='确认买入'; go.disabled=true; return; }
   if(n>cap){ n=cap; note='\n★ 超过'+capLab()+'：截到 '+fmt(n)+' 股'; }
@@ -436,7 +438,7 @@ document.addEventListener('click', async e=>{
     sheet('#dlg-buy'); buyLive(); loadSQ(); return;            // 现价 + 现在买按什么价（Yahoo，约晚 20 分钟）
   }
   if(a==='buy-unit'){ buyUnit(d.u); return; }
-  if(a==='buy-step'){ if(BUY.unit!=='rule'){ const n=buyTarget(); buyShow(Math.max(BUY.lot, (n==null||n<=0 ? BUY.lot : n)+(+d.d)*BUY.lot)); } buyPrev(); return; }
+  if(a==='buy-step'){ if(FUND_MODE==='all') return; if(BUY.unit!=='rule'){ const n=buyTarget(); buyShow(Math.max(BUY.lot, (n==null||n<=0 ? BUY.lot : n)+(+d.d)*BUY.lot)); } buyPrev(); return; }
   if(a==='buy-go'){
     const n=buyTarget(); if(!n && FUND_MODE!=='all') return;
     const body={book:CFG.book, kind:'buy', ticker:BUY.t, unit:BUY.unit};
@@ -459,7 +461,7 @@ document.addEventListener('click', async e=>{
   }
   if(a==='cancel'){                                                       // 撤单前一定确认（2026-10-12 用户：防止误撤）：写清撤的是哪一条
     const q=await ask('确认撤单？', (d.desc||d.id)+'\n\n'+(d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天的单」的「撤单」撤。' : '还没下单：撤掉之后不会下。')
-      +(+d.fund>0 ? '\n为这笔买入写的 '+d.fund+' 条卖出 / 闲置资金指令也一起撤掉（已经生效的闲置资金比例撤不了）。' : '')+'\n（指令 '+d.id+'）', '确认撤单', {danger:true});
+      +(+d.fund>0 ? '\n为这笔买入写的 '+d.fund+' 条卖出 / 闲置资金指令也一起撤掉。' : '')+(+d.stuck>0 ? '\n另有 '+d.stuck+' 条已经生效 / 已在撤回中，撤不了（提交后会说明）。' : '')+'\n（指令 '+d.id+'）', '确认撤单', {danger:true});
     if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
   }
   if(a==='uncancel'){                                                     // 撤销一条撤回（2026-10-12）：原来的指令恢复「等下单」、撤回记录不再显示

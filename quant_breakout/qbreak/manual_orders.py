@@ -11,8 +11,9 @@
   buy      买入一只还没拿的个股（unit = rule 按规则的仓位〔默认〕/ shares / yen / pct）：与规则的新仓同一套闸门
            （占名额〔最多 4 只〕、不能买核心 ETF、最多到总权益、资格检查 / 立花能不能买 / 不买回 / 决算前 / 新仓倍数 0）；只做一次；
            买入后与规则的持仓一样（止损按 ATR、规则离场）。fund = split：钱不够从持仓平摊凑（同批写的 adjust 带 fund_for）；
-           fund = all（2026-10-13）：其他持仓全部卖出、只拿这只 + 现金（同批：个股 adjust → 0、corefix clear、core pct=0；股数 = 总权益上限再按钱截，
-           只在早上的决策里定；买入被挡 → 同批作废、比例 / 固定口数还原；撤回 / 撤销撤回同批一起：cancel_request / uncancel_request）。
+           fund = all（2026-10-13）：其他持仓全部卖出、只拿这只 + 现金（同批：个股 adjust → 0、corefix clear、core pct=0，带 fund_for）：整批只在早上的决策里做
+           （同批的比例 / 固定口数读到时只是 pending，那次决策先过 _allin_gate 再 _allin_apply_core 生效；被挡 → _allin_abort 整批作废；盘中 / 补单窗口 → 整批 hold）；
+           股数 = 总权益上限再按钱截；撤回 / 撤销撤回同批一起：cancel_plan / cancel_request / uncancel_request（同批卖单已在交易所 → 拒绝）。
   core     闲置资金（核心 ETF）比例：规则的目标额 × pct %（100 = 照规则；0 = 留现金）。从下一次决策起一直有效
   unblock  解除「不自动买回」
   cancel   撤回一条还没下的指令（target = 指令 id）；已经发到交易所的单用 cancel_order 撤
@@ -297,6 +298,8 @@ def describe(r: dict) -> str:
         if tg <= 0:
             return f"卖出全部 {r['ticker']}（之后停买闲置资金 ETF）"
         return f"调仓 {r['ticker']} → 约 {tg:,} 口（闲置资金比例 {float(r['pct']):g}%）"
+    if k == "buy" and r.get("fund") == "all":
+        return f"全部换成这只 {r['ticker']}（其他全卖；股数由执行器按全卖之后的钱定）"
     s = LABEL.get(k, str(k)) + (f" {r['ticker']}" if r.get("ticker") else "")
     if k == "buy" and r.get("unit", "rule") == "rule":
         s += f"（{BUY_UNITS['rule']}）"
@@ -487,18 +490,30 @@ def companions_in(target: dict, items: dict) -> list[dict]:
     return fund_companions(target, list(items.values()))
 
 
-def cancel_request(tag: str, book: dict | None, target: str, now: dt.datetime | None = None, source: str = "cli",
-                   sm: dict | None = None) -> tuple[bool, str, dict | None]:
-    """撤回一条指令（面板与命令行共用，2026-10-13）：是「从持仓平摊凑」/「其他全部卖出」的买入 → 同一次写的卖出 / 闲置资金指令一起撤；
-    读到就生效的（闲置资金比例 / 固定口数）与已发到交易所的卖单撤不了 → 写进说明。→ (成功?, 说明, 撤回那条记录)。"""
+def _at_exchange(book: dict, c: dict) -> bool:
+    """同批的这条卖出 / 闲置资金指令，它这次决策的单是不是已经发到交易所（寄付已受理、盘中已发）：撤回指令撤不了。"""
+    st = book.get("state") or {}
+    d = st.get("last_date")
+    out = ("PLANNED", "BLOCKED", "SKIPPED")
+    for o in book.get("orders") or []:
+        if o.get("decided_on") != d or o.get("side") != "SELL" or o.get("status") in out:
+            continue
+        if c.get("kind") in POS_KINDS and o.get("ticker") == c.get("ticker") and o.get("reason") in ("manual", "manual_trim"):
+            return True
+        if c.get("kind") == "core" and o.get("kind") == "core":
+            return True
+    return False
+
+
+def cancel_plan(tag: str, book: dict | None, target: str, now: dt.datetime | None = None, sm: dict | None = None) -> dict:
+    """撤回一条指令会怎样（只读；面板按钮与 cancel_request 同一口径）：{"why": 不能撤的原因 / None, "target", "todo": 一起撤的同批,
+    "stuck": 撤不了的（读到就生效的比例 / 固定口数、已在撤回中…）, "sent": 单已发到交易所的同批卖出（撤回指令撤不了 → 要用「撤单」）}。"""
     book = book or {}
     try:
-        rec = normalize({"kind": "cancel", "target": target, "source": source})
+        rec = normalize({"kind": "cancel", "target": target, "source": "panel"})
     except ValueError as e:
-        return False, f"没写：{e}", None
+        return {"why": str(e), "target": None, "todo": [], "stuck": [], "sent": []}
     why = check(rec, book, tag, sm=sm, now=now)
-    if why:
-        return False, f"没写：{why}", None
     items = (book.get("manual") or {}).get("items") or {}
     byid = {x["id"]: x for x in read_all(tag)}
     byid.update(items)                                     # 执行器读过的以账本里的为准（有状态）；同一条不重复
@@ -513,13 +528,32 @@ def cancel_request(tag: str, book: dict | None, target: str, now: dt.datetime | 
             if c.get("kind") in ("core", "corefix") and st_c == "done":
                 stuck.append(c)                            # 读到就生效的：撤不了
             continue
+        if _at_exchange(book, c):
+            sent.append(c)
+            continue
         w = check({"kind": "cancel", "target": c["id"]}, book, tag, now=now)
         if w:
             (sent if w == NOW_NO_CANCEL else stuck).append(c)
             continue
         todo.append(c)
+    return {"why": why, "target": tg, "todo": todo, "stuck": stuck, "sent": sent}
+
+
+def cancel_request(tag: str, book: dict | None, target: str, now: dt.datetime | None = None, source: str = "cli",
+                   sm: dict | None = None) -> tuple[bool, str, dict | None]:
+    """撤回一条指令（面板与命令行共用，2026-10-13）：是「从持仓平摊凑」/「其他全部卖出」的买入 → 同一次写的卖出 / 闲置资金指令一起撤；
+    同批卖单已发到交易所 → 拒绝（只撤买入会变成「全卖不买」：先用「撤单」撤卖单）；读到就生效的比例 / 固定口数撤不了 → 写进说明。
+    → (成功?, 说明, 撤回那条记录)。"""
+    book = book or {}
+    plan = cancel_plan(tag, book, target, now=now, sm=sm)
+    if plan["why"]:
+        return False, f"没写：{plan['why']}", None
+    tg, todo, stuck, sent = plan["target"], plan["todo"], plan["stuck"], plan["sent"]
+    if sent and tg.get("fund") in ("split", "all"):
+        return (False, f"没写：同批的 {len(sent)} 条卖出（{'、'.join(describe(c) for c in sent)}）的单已经发到交易所，撤回指令撤不了；"
+                       "只撤买入会变成「全卖不买」→ 要撤先用「今天的单」的「撤单」撤掉那几笔卖单，或者不撤", None)
     clock = (lambda: now) if now else None
-    rec = append(tag, rec, clock=clock)
+    rec = append(tag, normalize({"kind": "cancel", "target": target, "source": source}), clock=clock)
     for c in todo:
         append(tag, {"kind": "cancel", "target": c["id"], "source": source}, clock=clock)
     msg = f"已写：撤回 {target}"
@@ -534,8 +568,6 @@ def cancel_request(tag: str, book: dict | None, target: str, now: dt.datetime | 
             msg += f"；{c.get('ticker')} 的固定口数已取消（撤不了）：要的话重新点「固定口数…」"
         else:
             msg += f"；{describe(c)} 撤不了（{status_text(c) if c.get('status') else '已处理'}）"
-    if sent:
-        msg += f"；{len(sent)} 条卖出已发到交易所，撤回撤不了：用「今天的单」的「撤单」"
     return True, msg, rec
 
 
@@ -559,17 +591,13 @@ def uncancel_request(tag: str, book: dict | None, cancel_id: str, now: dt.dateti
     c = byid.get(cancel_id) or {}
     tg = byid.get(c.get("target")) or {}
     extra = []
-    if tg.get("fund") in ("split", "all"):
+    if tg.get("fund") in ("split", "all"):                 # 能不能整批恢复 check 已经查过：这里只收集同批的撤回
         void = voided(waiting)
         for cp in fund_companions(tg, allr):
             cc = next((x for x in allr if x.get("kind") == "cancel" and x.get("target") == cp["id"] and x["id"] not in void
                        and x.get("status") != "voided"), None)
-            if cc is None:
-                continue                                   # 这条同批指令没被撤（例如读到就生效的）：不用恢复
-            w = _uncancel_why(cc["id"], items, waiting)
-            if w:
-                return False, f"没写：同批的「{describe(cp)}」的撤回撤销不了（{w}）→ 要的话重新提交一次", None
-            extra.append(cc["id"])
+            if cc is not None:
+                extra.append(cc["id"])
     clock = (lambda: now) if now else None
     rec = append(tag, rec, clock=clock)
     for cid in extra:
@@ -861,6 +889,37 @@ def _uncancel_why(cid: str, items: dict, waiting: list[dict]) -> str | None:
         others = [r for r in _live(items, waiting, ORDER_KINDS) if r.get("ticker") == tg["ticker"] and r.get("id") != tid]
         if others:
             return f"{tg['ticker']} 现在已经有别的指令在处理（{describe(others[0])}）：先撤回那条"
+    if tg.get("fund_for"):                                 # 同批的卖出 / 闲置资金指令：只能整批跟着买入那条一起恢复
+        return f"这是「全部换成 {tg['fund_for']}」的同批指令：要恢复请撤销买入那条的撤回（整批一起）"
+    if tg.get("fund") in ("split", "all"):                 # 买入那条：同批的撤回也都要能撤销，否则整个不行
+        allr = list(items.values()) + [r for r in waiting if r["id"] not in items]
+        void = voided(waiting)
+        for cp in fund_companions(tg, allr):
+            cc = next((x for x in allr if x.get("kind") == "cancel" and x.get("target") == cp["id"] and x["id"] not in void
+                       and x.get("status") != "voided"), None)
+            if cc is None:
+                continue
+            w = _uncancel_why_one(cc["id"], items, waiting)
+            if w:
+                return f"同批的「{describe(cp)}」的撤回撤销不了（{w}）→ 要的话重新提交一次"
+    return None
+
+
+def _uncancel_why_one(cid: str, items: dict, waiting: list[dict]) -> str | None:
+    """一条撤回自己能不能撤销（不看同批）。"""
+    c = items.get(cid) or next((r for r in waiting if r.get("id") == cid), None)
+    if c is None or c.get("kind") != "cancel":
+        return f"没有撤回指令 {cid}"
+    if cid in voided(waiting) or c.get("status") == "voided":
+        return "已经撤销过"
+    tid = c.get("target")
+    tg = items.get(tid) or next((r for r in waiting if r.get("id") == tid), None)
+    if tg is None:
+        return f"找不到它撤回的指令 {tid}"
+    if cid in items:
+        ok = (tg.get("status") == "cancelled" and (tg.get("kind") in ORDER_KINDS or tg.get("fund_for"))) or tg.get("cancel_req") == cid
+        if not ok:
+            return f"已经处理完（原来的指令：{status_text(tg) if tg.get('status') else '—'}）"
     return None
 
 
@@ -887,6 +946,16 @@ def when_text(now: dt.datetime) -> str:
     """一句话：马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘。"""
     mode, d = timing(now)
     return {"now": "马上（盘中）", "open": "今天 09:00 开盘", "lunch": "12:30 后场开盘"}.get(mode) or f"{d:%m/%d} 开盘"
+
+
+def allin_when(now: dt.datetime, book: dict | None) -> str:
+    """「全部换成这只」整批什么时候做：交易日 08:55 前、今天的决策还没做 → 今天开盘；否则下一个交易日开盘（整批在那次决策里先过闸门、先卖后买）。"""
+    mode, d = timing(now)
+    st = (book or {}).get("state") or {}
+    if mode == "open" and str(st.get("last_date") or "") < prev_trading_day(d).isoformat():
+        return "今天 09:00 开盘"
+    nd = d if mode == "next" else next_trading_day(d)
+    return f"{nd:%m/%d} 开盘"
 
 
 def next_window(now: dt.datetime) -> tuple[dt.date, bool]:
@@ -963,6 +1032,8 @@ def status_text(it: dict) -> str:
     s = it.get("status")
     if s == "placed" and it.get("now"):
         return "盘中已成交" if it.get("fill") else "盘中已下单"
+    if s == "pending" and (it.get("fund") == "all" or it.get("fund_for")):
+        return "等下一次决策（整批）"
     if s == "pending" and it.get("hold"):
         return "明天开盘"
     return STATUS.get(s, str(s))
@@ -1063,6 +1134,8 @@ class Manual:
             k = r["kind"]
             if k in ("core", "unblock", "corefix") and r["id"] in dropped:   # corefix：读到就生效 → 读到之前撤回的不生效（2026-10-12）
                 it.update(status="cancelled", msg="执行器读到之前就撤回了")
+            elif k in ("core", "corefix") and r.get("fund_for"):   # 「全部换成 X」的同批：等那次决策先过闸门再一起生效（2026-10-13）
+                it["msg"] = f"等「全部换成 {r['fund_for']}」的决策一起生效"
             elif k == "core":
                 self.m["core_pct"] = float(r["pct"])
                 if float(r["pct"]) <= 0:                     # 停买闲置资金 ETF（卖出全部 / 比例 0%）：之后出现买入信号只提醒，你确认才买
@@ -1092,8 +1165,10 @@ class Manual:
                 tg = items.get((c or {}).get("target"))
                 if c is not None and c.get("status") == "voided":
                     it.update(status="done", msg=f"撤销撤回：{(tg or {}).get('ticker') or (c or {}).get('target')} 照原来的指令处理")
-                elif c is not None and tg is not None and tg.get("status") == "cancelled" and tg.get("kind") in ORDER_KINDS:
+                elif c is not None and tg is not None and tg.get("status") == "cancelled" and (tg.get("kind") in ORDER_KINDS or tg.get("fund_for")):
                     tg.update(status="pending", msg="撤回已撤销：恢复等下单")
+                    for f in ("cancel_req", "wait", "hold", "tried"):   # 2026-10-13 修：cancel_req 残留会让下一次决策又撤一次
+                        tg.pop(f, None)
                     c.update(status="voided", msg="这条撤回已撤销")
                     it.update(status="done", msg=f"撤销撤回：{tg.get('ticker')} 恢复等下单")
                 elif c is not None and tg is not None and tg.get("cancel_req") == c.get("id"):
@@ -1152,12 +1227,15 @@ class Manual:
             return [("warn", f"手动指令 {len(todo)} 条没处理：HALT 生效中（解除之后才处理）")]
         st, out = eng.st, []
         decided = eng.gidx[i].date()
-        if deciding:                                        # 「其他全部卖出」的买入：先查不涉及钱的闸门，被挡 → 同批的卖出作废、比例 / 固定口数还原（2026-10-13）
-            for it in [x for x in todo if x["kind"] == "buy" and x.get("fund") == "all"]:
+        allin = {x["ticker"]: x for x in todo if x["kind"] == "buy" and x.get("fund") == "all"}   # 「全部换成 X」：整批只在决策里做（2026-10-13）
+        if deciding:                                        # 先查不涉及钱的闸门：被挡 → 整批不做（什么都没动）；过了 → 同批的比例 / 固定口数这时才生效
+            for it in list(allin.values()):
                 why = self._allin_gate(eng, i, it, todo)
                 if why:
-                    for lvl, msg in self._allin_abort(eng, it, decided, why):
-                        out.append((lvl, msg))
+                    out += self._allin_abort(eng, it, decided, why)
+                    allin.pop(it["ticker"], None)
+                else:
+                    out += self._allin_apply_core(eng, it)
             todo = [x for x in todo if x.get("status") == "pending"]
         for it in todo:
             t = it["ticker"]
@@ -1165,11 +1243,15 @@ class Manual:
             rule = st.pending_exit.get(t)
             for f in ("wait", "hold", "tried"):
                 it.pop(f, None)
+            if not deciding and it.get("fund_for") in allin and it.get("at") == allin[it["fund_for"]].get("at"):
+                it.update(hold=now.date().isoformat(), msg=f"与「全部换成 {it['fund_for']}」一起等下一次决策（先过闸门再先卖后买）")
+                out.append(("info", f"手动指令 {it['id']}：{t} {it['msg']}"))
+                continue
             if it["kind"] == "buy":
                 if ps is not None:
                     it.update(status="rejected", msg="已经持有：要加仓用「调仓」")
-                elif not deciding and it.get("fund") == "all":   # 全部换成这只：只在决策里定股数（卖出所得才算得进来）→ 下一次决策
-                    it.update(hold=now.date().isoformat(), msg="全部换成这只：其他持仓按指令卖，这只在下一次决策（明天 07:40）先卖后买")
+                elif not deciding and it.get("fund") == "all":   # 全部换成这只：整批只在决策里做 → 下一次决策
+                    it.update(hold=now.date().isoformat(), msg="全部换成这只：整批等下一次决策（先过闸门，再先卖后买）")
                 elif not deciding:
                     it.update(wait=True, msg=_wait_text(now, fill_day))
                 else:
@@ -1225,27 +1307,35 @@ class Manual:
         return None
 
     def _allin_abort(self, eng, it: dict, decided: dt.date, why: str) -> list[tuple[str, str]]:
-        """买入被挡 → 这笔「其他全部卖出」整体不做：同批还没处理的卖出作废；读到就生效的闲置资金比例 / 固定口数还原到原来的值。"""
+        """买入被挡 → 这笔「其他全部卖出」整批不做：同批还没处理的卖出 / 比例 / 固定口数都作废（它们在这之前什么都没动）。"""
         t, out = it["ticker"], []
-        it.update(status="rejected", decided_on=str(decided), msg=f"不买：{why} → 其他持仓不卖，闲置资金比例 / 固定口数还原")
+        it.update(status="rejected", decided_on=str(decided), msg=f"不买：{why} → 整批不做（其他持仓不卖，闲置资金比例 / 固定口数不变）")
         out.append(("warn", f"手动指令 {it['id']}：{t} {it['msg']}"))
         for c in companions_in(it, self.m["items"]):
-            k = c.get("kind")
-            if k in ORDER_KINDS and c.get("status") == "pending":
-                c.update(status="rejected", decided_on=str(decided), msg=f"买入 {t} 被挡 → 不卖")
-                for f in ("wait", "hold", "tried"):
-                    c.pop(f, None)
-            elif k == "core" and c.get("status") == "done" and c.get("prev_pct") is not None:
-                self.m["core_pct"] = float(c["prev_pct"])
-                if float(c["prev_pct"]) > 0:
-                    self.m.pop("core_pause", None)
-                    self.m.pop("core_signal", None)
-                eng.core_scale = float(c["prev_pct"]) / 100
-                c.update(msg=f"买入 {t} 被挡 → 闲置资金比例还原到 {float(c['prev_pct']):g}%")
-            elif k == "corefix" and c.get("status") == "done" and c.get("clear") and c.get("prev_units") is not None:
-                self.m.setdefault("core_fix", {})[c["ticker"]] = int(c["prev_units"])
-                eng.core_fix = {x: int(u) for x, u in self.m["core_fix"].items()}
-                c.update(msg=f"买入 {t} 被挡 → {c['ticker']} 的固定口数还原为 {int(c['prev_units']):,} 口")
+            if c.get("status") != "pending":
+                continue
+            c.update(status="rejected", decided_on=str(decided), msg=f"买入 {t} 被挡 → 整批不做")
+            for f in ("wait", "hold", "tried"):
+                c.pop(f, None)
+            out.append(("info", f"手动指令 {c['id']}：{c.get('ticker') or '闲置资金'} {c['msg']}"))
+        return out
+
+    def _allin_apply_core(self, eng, it: dict) -> list[tuple[str, str]]:
+        """闸门过了：同批的闲置资金比例 0% / 取消固定口数这时生效（同一次决策里核心 ETF 就按它卖）。"""
+        out = []
+        for c in companions_in(it, self.m["items"]):
+            if c.get("status") != "pending":
+                continue
+            if c.get("kind") == "core":
+                self.m["core_pct"] = float(c["pct"])
+                if float(c["pct"]) <= 0:
+                    self.m["core_pause"] = {"since": self.clock().date().isoformat(), "id": c["id"], "ticker": None}
+                eng.core_scale = float(c["pct"]) / 100
+                c.update(status="done", msg=f"闲置资金比例设为 {float(c['pct']):g}%（与「全部换成 {it['ticker']}」一起生效）")
+            elif c.get("kind") == "corefix" and c.get("clear"):
+                self.m.setdefault("core_fix", {}).pop(c["ticker"], None)
+                eng.core_fix = {x: int(u) for x, u in (self.m.get("core_fix") or {}).items()}
+                c.update(status="done", msg=f"{c['ticker']} 取消固定口数（与「全部换成 {it['ticker']}」一起生效）")
             else:
                 continue
             out.append(("info", f"手动指令 {c['id']}：{c.get('ticker') or '闲置资金'} {c['msg']}"))
@@ -1253,8 +1343,9 @@ class Manual:
 
     @staticmethod
     def _numbers(eng, i: int, t: str) -> tuple[float, float, int]:
-        """(第 i 天收盘后的总权益, t 的收盘, t 的单元)。"""
-        return float(eng.equity(i)), float(eng._px_close(t, i)), (int(eng.lots[eng.col[t]]) if t in eng.col else LOT)
+        """(第 i 天收盘后的总权益 − 出金预留, t 的收盘, t 的单元)。"""
+        return (float(eng.equity(i)) - float(getattr(eng, "cash_hold", 0.0) or 0.0), float(eng._px_close(t, i)),
+                (int(eng.lots[eng.col[t]]) if t in eng.col else LOT))
 
     def _place(self, eng, i: int, it: dict, ps, decided: dt.date, fill_day: dt.date, target: int | None = None) -> None:
         """卖出全部（sell）/ 减到 pct %（trim）/ 减到 target 股（adjust 的减仓方向）→ 开盘的寄付成行卖单。"""
@@ -1381,7 +1472,7 @@ class Manual:
         from .tick import round_to_tick
         lim = round_to_tick(px * (1 + gap / 100), t, "BUY")
         st.plan[t] = [px, int(want), str(decided)]
-        self.m["buys"][t] = {"id": it["id"], "shares": int(want), "decided_on": str(decided), "limit": lim}
+        self.m["buys"][t] = {"id": it["id"], "shares": int(want), "decided_on": str(decided), "limit": lim, "allin": it.get("fund") == "all"}
         sig = bool(eng.A.entry[i, j])
         it.update(status="placed", decided_on=str(decided), fill_day=str(fill_day), shares=int(want), side="BUY", limit=lim,
                   msg=f"{fill_day:%m/%d} 开盘买入 {want:,} 股（限价 ¥{lim:,g}；约 ¥{want * px:,.0f}，约占权益 {want * px / eq * 100:.1f}%；"
