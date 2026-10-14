@@ -1726,7 +1726,8 @@ def _notify_card() -> str:
             "<div id='push-st' class='small'>检查中…</div>"
             "<div class='act'><button class='btn primary' data-act='push-on'>在这台设备打开推送</button>"
             "<button class='btn' data-act='push-test'>发一条测试</button><button class='btn' data-act='push-off'>关掉</button></div>"
-            "<div class='muted small'>打开后：成交、09:30 自检没通过、闲置资金 ETF 的买入信号、HALT、手机连不上等通知会直接弹到这台设备（和邮件同一段文字）。"
+            "<div class='muted small'>打开后：每个工作日 09:30 自检推一条（通过 / 休市 / 没通过；哪个工作日没收到 → Mac 多半关机 / 睡着 / 断网）、"
+            "成交、闲置资金 ETF 的买入信号、HALT、手机连不上等通知会直接弹到这台设备（和邮件同一段文字）。"
             "iPhone：先在 Safari 里「共享 → 添加到主屏幕」，再从主屏幕的 qbreak 图标打开、点上面的按钮、允许通知（iOS 16.4 以上）。"
             "这台设备以后都用主屏幕的图标打开 —— 不要用 127.0.0.1 的地址（那是手机自己，打不开）。</div></section>")
 
@@ -2583,7 +2584,8 @@ def push_post(path: str, body: dict, who: str) -> tuple[int, dict]:
     s = WP.subs().get(WP.sub_id(ep))
     if not s:
         return 400, {"ok": False, "msg": "这台设备还没打开推送"}
-    code = WP.send_one(s, "qbreak 测试推送", "能看到这条 = 推送通了：成交、自检没过、买入信号、HALT 都会这样通知你。")
+    code = WP.send_one(s, "qbreak 测试推送", "能看到这条 = 推送通了：每个工作日 09:30 的自检（哪天没收到 → Mac 多半关机 / 睡着 / 断网）、"
+                                           "成交、买入信号、HALT 都会这样通知你。")
     ok = code in (200, 201, 202)
     return (200 if ok else 502), {"ok": ok, "msg": "已发一条测试推送" if ok else f"推送服务没收下（HTTP {code}）：关掉推送再打开一次试试"}
 

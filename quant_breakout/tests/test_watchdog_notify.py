@@ -236,10 +236,11 @@ def _o(cid, status, d=DONE, side="BUY", ticker="7203.T", qty=100):
 
 class _Rec:
     def __init__(self):
-        self.sent, self.beats, self.macs = [], [], []
+        self.sent, self.beats, self.macs, self.resends = [], [], [], []
 
-    def send(self, title, text, level="info"):
+    def send(self, title, text, level="info", resend=False):
         self.sent.append((title, text, level))
+        self.resends.append(resend)
         return {"webhook": True, "email": None}
 
     def beat(self, ok, msg=""):
@@ -251,10 +252,11 @@ class _Rec:
         return True
 
 
-def _run(tmp_path, now=TUE, kind="tachibana", r=None):
+def _run(tmp_path, now=TUE, kind="tachibana", r=None, naps=None):
     r = r or _Rec()
     lines = []
-    rc = watchdog.run(_agents(tmp_path, kind), now, send=r.send, beat=r.beat, mac=r.mac, out=lines.append)
+    naps = [] if naps is None else naps
+    rc = watchdog.run(_agents(tmp_path, kind), now, send=r.send, beat=r.beat, mac=r.mac, out=lines.append, sleep=naps.append)
     return rc, r, "\n".join(lines)
 
 
@@ -300,6 +302,15 @@ def test_watchdog_holiday_and_done_push_once_a_day(tmp_path):
     assert [x[0] for x in r.sent] == ["qbreak 立花实盘 ✓ 10:15 自检通过"] and "今天没有单" in r.sent[0][1]
 
 
+def test_orders_brief_counts_cancelled_orders_by_name():
+    """通过那条推送里的单数摘要：撤掉的单（CANCELLED，面板 / liveu.sh cancel）算「已撤」，不算「其他」（2026-10-14 复核）。"""
+    os_ = [{"decided_on": DONE, "status": "FILLED"}, {"decided_on": DONE, "status": "CANCELLED"},
+           {"decided_on": DONE, "status": "SKIPPED"}, {"decided_on": "2026-10-02", "status": "CANCELLED"}]
+    assert watchdog.orders_brief({"orders": os_}, DONE) == "今天的单 2 笔：成交 1、已撤 1"
+    assert watchdog.orders_brief({"orders": [{"decided_on": DONE, "status": "WEIRD"}]}, DONE) == "今天的单 1 笔：其他 1"
+    assert watchdog.orders_brief({}, DONE) == "今天没有单"
+
+
 def test_watchdog_fail_after_ok_still_pushes_and_ok_after_fail_says_so(tmp_path):
     """同一天：通过（推了）→ 没通过（照推 warn）→ 又通过（再推一次，说早些时候没通过）→ 再通过（不再推）。"""
     _book(orders=[_o("a", "SENT")])
@@ -307,7 +318,8 @@ def test_watchdog_fail_after_ok_still_pushes_and_ok_after_fail_says_so(tmp_path)
     assert rc == 0 and [x[2] for x in r.sent] == ["info"]
     _book(orders=[_o("a", "ERROR")])
     rc, r, out = _run(tmp_path, now=TUE.replace(minute=50))
-    assert rc == 1 and len(r.sent) == 1 and r.sent[0][2] == "warn" and r.sent[0][0] == "qbreak 立花实盘 ★ 09:30 自检没通过"
+    assert rc == 1 and len(r.sent) == 1 and r.sent[0][2] == "warn" and r.sent[0][0] == "qbreak 立花实盘 ★ 09:50 自检没通过"   # 真的运行时刻
+    assert r.macs[0][0] == "qbreak 立花实盘 ★ 09:50 自检没通过"
     assert _wd()["push"] == {"at": "2026-10-06T09:50:00+09:00", "state": "sent", "why": "webhook 已发"}
     _book(orders=[{**_o("a", "FILLED")}])
     rc, r, out = _run(tmp_path, now=TUE.replace(hour=10, minute=20))
@@ -327,20 +339,26 @@ def test_watchdog_records_the_push_result_and_retries_when_it_did_not_reach_the_
             super().__init__()
             self.res = res
 
-        def send(self, title, text, level="info"):
+        def send(self, title, text, level="info", resend=False):
             self.sent.append((title, text, level))
+            self.resends.append(resend)
             return self.res
-    rc, r, out = _run(tmp_path, r=_Push({"webhook": None, "email": None, "push": False}))
-    assert rc == 0 and len(r.sent) == 1 and "★ 推送没发成（推送（网页 App） 失败）" in out
-    assert _wd()["push"] == {"at": "2026-10-06T09:30:00+09:00", "state": "failed", "why": "推送（网页 App） 失败"}
+    naps = []
+    rc, r, out = _run(tmp_path, r=_Push({"webhook": None, "email": None, "push": False}), naps=naps)
+    assert rc == 0 and len(r.sent) == 2 and r.resends == [False, True] and naps == [watchdog.RETRY_S]   # 60 秒后重推一次（只一次）
+    assert "60 秒后再推一次" in out and "★ 推送没发成（推送（网页 App） 失败；60 秒后重推也没成）" in out
+    assert _wd()["push"] == {"at": "2026-10-06T09:30:00+09:00", "state": "failed", "why": "推送（网页 App） 失败；60 秒后重推也没成"}
     book = json.loads((paths.state_dir() / "live_unified_tachibana.json").read_text(encoding="utf-8"))
     top = "\n".join(h for _, h in panel._run_lines("tachibana", book, TUE.replace(minute=40), None))
-    assert "★ 10/06 09:30 自检的推送没发成（推送（网页 App） 失败" in top and "在这台设备打开推送" in top
+    assert "★ 10/06 09:30 自检的推送没发成（推送（网页 App） 失败；60 秒后重推也没成）：今天不会自动再推" in top
+    assert "「再自检一次」" in top and "下一次会再推" not in top and "在这台设备打开推送" not in top   # 失败 ≠ 没有通道：不叫你重新打开推送
     it = mac_status._watchdog_item("tachibana", TUE.replace(minute=40))
-    assert it["level"] == "warn" and it["text"].startswith("通过；★ 推送没发成") and "在这台设备打开推送" in it["text"]
-    rc, r, out = _run(tmp_path, now=TUE.replace(minute=45), r=_Push({"webhook": None, "email": None}))   # 没推到 → 再推（没有通道）
+    assert it["level"] == "warn" and it["text"].startswith("通过；★ 推送没发成") and "「再自检一次」" in it["text"]
+    rc, r, out = _run(tmp_path, now=TUE.replace(minute=45), r=_Push({"webhook": None, "email": None}), naps=naps)   # 没推到 → 再推（没有通道）
     assert len(r.sent) == 1 and _wd()["push"]["state"] == "none" and "没有设备打开 qbreak 推送" in _wd()["push"]["why"]
-    assert "★ 没推到手机" in out
+    assert "★ 没推到手机" in out and naps == [watchdog.RETRY_S]                    # 没有通道：不重推（等也没用）
+    it = mac_status._watchdog_item("tachibana", TUE.replace(minute=46))
+    assert "在这台设备打开推送" in it["text"]                                     # 没有通道：教你打开推送
     rc, r, out = _run(tmp_path, now=TUE.replace(minute=50), r=_Push({"webhook": None, "email": None, "push": True}))
     assert len(r.sent) == 1 and _wd()["push"]["state"] == "sent"
     top = "\n".join(h for _, h in panel._run_lines("tachibana", book, TUE.replace(minute=55), None))
@@ -476,16 +494,20 @@ def test_watchdog_pushes_once_a_day_when_the_executor_never_finishes(tmp_path):
         assert r.sent[0][1].startswith("执行器已经跑了 10 分钟以上还没结束")
     finally:
         lock.release()
-    _book(last="2026-10-07", orders=[_o("a", "SENT", d="2026-10-07")])            # 今天已经判定过：判定不了也不盖掉
+    _book(last="2026-10-07", orders=[_o("a", "SENT", d="2026-10-07")])            # 今天已经判定过（通过、推了）
     rc, r, out = _run(tmp_path, now=TUE + dt.timedelta(days=2))
+    assert rc == 0 and [x[0] for x in r.sent] == ["qbreak 立花实盘 ✓ 09:30 自检通过"]
     lock = RunLock(lp).acquire()
+    lp.write_text("pid 1 从 2026-10-08 11:50:00 JST\n", encoding="utf-8")         # 12:00 再自检、等了 10 分钟还在跑
     try:
-        r2 = _Rec()
-        watchdog.run(_agents(tmp_path), TUE + dt.timedelta(days=2, minutes=30), send=r2.send, beat=r2.beat, mac=r2.mac,
-                     out=lambda *a: None, sleep=lambda s: None)
+        r2, lines = _Rec(), []
+        rc = watchdog.run(_agents(tmp_path), TUE + dt.timedelta(days=2, hours=2, minutes=30), send=r2.send, beat=r2.beat, mac=r2.mac,
+                          out=lines.append, sleep=lambda s: None)
     finally:
         lock.release()
-    assert len(r2.sent) == 1 and _wd()["ok"] is True and _wd()["at"] == "2026-10-08T09:30:00+09:00"
+    # 「再自检一次」时执行器在跑（例：面板叫的）：早上已经确认过 → 不推「判定不了…早上的单下没下还不知道」、不盖掉（2026-10-14 复核）
+    assert rc == 0 and not r2.sent and not r2.macs and _wd()["ok"] is True and _wd()["at"] == "2026-10-08T09:30:00+09:00"
+    assert "今天 09:30 已经判定过（通过）；这次执行器还在跑（从 11:50 起已经跑了 20 分钟），不再判定、不推送" in lines[-1]
 
 
 def test_watchdog_keeps_local_paths_out_of_what_it_sends(tmp_path, monkeypatch):
@@ -608,6 +630,112 @@ def test_watchdog_halt_is_not_a_failure_and_reminds_once_a_day(tmp_path):
     assert _wd()["push"]["at"] == "2026-10-06T09:30:00+09:00"
     rc, r, out = _run(tmp_path, now=TUE + dt.timedelta(days=1))                    # 第二天：再提醒一次
     assert len(r.sent) == 1
+
+
+def test_watchdog_halt_push_that_did_not_reach_the_phone_is_pushed_again(tmp_path):
+    """HALT 当天那条没推到手机（2026-10-14 复核：以前同一天再自检不再推，和面板「再自检一次会再推」不一致）→ 再自检时再推；
+    推到了之后不再推；Mac 通知只在第一次。"""
+    paths.halt_file().write_text("HALT 2026-10-05 用户说停\n", encoding="utf-8")
+    _book(orders=[_o("a", "SENT")])
+
+    class _Push(_Rec):
+        def __init__(self, res):
+            super().__init__()
+            self.res = res
+
+        def send(self, title, text, level="info", resend=False):
+            self.sent.append((title, text, level))
+            return self.res
+    rc, r, out = _run(tmp_path, r=_Push({"webhook": None, "email": None, "push": False}))
+    assert rc == 0 and [x[0] for x in r.sent] == ["qbreak 立花实盘：HALT 生效中"] * 2 and len(r.macs) == 1   # 60 秒后重推了一次
+    assert _wd()["push"]["state"] == "failed"
+    rc, r, out = _run(tmp_path, now=TUE.replace(minute=50), r=_Push({"webhook": None, "email": None, "push": True}))
+    assert [x[0] for x in r.sent] == ["qbreak 立花实盘：HALT 生效中"] and not r.macs and _wd()["push"]["state"] == "sent"
+    assert _wd()["push"]["at"] == "2026-10-06T09:50:00+09:00"
+    rc, r, out = _run(tmp_path, now=TUE.replace(hour=10), r=_Push({"push": True}))
+    assert not r.sent and "今天已经推过 HALT" in out and _wd()["push"]["at"] == "2026-10-06T09:50:00+09:00"
+
+
+def test_watchdog_push_retries_once_after_a_transient_failure(tmp_path, monkeypatch):
+    """设置了的通道都没发成（网络抖动）→ 60 秒后重推一次（只一次）：成了 → sent（说明第一次没成）；重推不再记进通知记录
+    （notify.send(resend=True)）。没通过的 warn 也一样。"""
+    _book(orders=[_o("a", "SENT")])
+
+    class _Flaky(_Rec):
+        def __init__(self, results):
+            super().__init__()
+            self.results = list(results)
+
+        def send(self, title, text, level="info", resend=False):
+            self.sent.append((title, text, level))
+            self.resends.append(resend)
+            return self.results.pop(0)
+    naps = []
+    rc, r, out = _run(tmp_path, r=_Flaky([{"webhook": False, "email": None}, {"webhook": True, "email": None}]), naps=naps)
+    assert rc == 0 and naps == [60] and r.resends == [False, True] and r.sent[0] == r.sent[1]
+    assert _wd()["push"] == {"at": "2026-10-06T09:30:00+09:00", "state": "sent", "why": "webhook 已发（第一次没发成，60 秒后重推）"}
+    assert watchdog.push_text(_wd()["push"]) is None
+    _book(orders=[_o("a", "ERROR")])
+    naps.clear()
+    rc, r, out = _run(tmp_path, now=TUE.replace(minute=40), r=_Flaky([{"push": False}, {"push": False}]), naps=naps)
+    assert rc == 1 and [x[2] for x in r.sent] == ["warn", "warn"] and naps == [60] and _wd()["push"]["state"] == "failed"
+    # notify.send(resend=True)：同一条再发，不再记进通知记录
+    monkeypatch.setenv("QBREAK_WEBHOOK", SECRET)
+    monkeypatch.setattr(notify.urllib.request, "urlopen", lambda req, timeout=None: _Resp())
+    n0 = len(notify.history(500))
+    assert notify.send("t", "x", "warn")["webhook"] is True and len(notify.history(500)) == n0 + 1
+    assert notify.send("t", "x", "warn", resend=True)["webhook"] is True and len(notify.history(500)) == n0 + 1
+
+
+def test_watchdog_pushes_once_a_day_when_the_check_itself_crashes(tmp_path, monkeypatch):
+    """自检程序自己出错（2026-10-14 复核：以前只写日志、退出 1，当天一条推送都没有，看起来和 Mac 关机一样）→ 推一条 warn
+    「★ HH:MM 自检出错」（只写异常的类型名，不带路径 / 值）+ Mac 通知，同一天只一次；今天还没有判定结果 → 写 ok = None（面板 ★）；
+    已经判定过 → 不盖掉；--dry 照常抛（只给对话看）。"""
+    from qbreak import mac_status, panel
+    _book(orders=[_o("a", "SENT")])
+    real = watchdog.evaluate
+
+    def boom(tag, now=None):
+        raise TypeError(f"bad value at {paths.home()}/state/x.json SECRET")
+    monkeypatch.setattr(watchdog, "evaluate", boom)
+    rc, r, out = _run(tmp_path)
+    assert rc == 1 and len(r.sent) == 1 and len(r.macs) == 1
+    title, text, level = r.sent[0]
+    assert title == "qbreak 立花实盘 ★ 09:30 自检出错" and level == "warn"
+    assert text == "TypeError：这次没判定（今天早上的单下没下还不知道）。\n在 Mac 对话里说「看一下自检日志」"
+    wd = _wd()
+    assert wd["ok"] is None and wd["note"].startswith("自检程序出错（TypeError）") and wd["push"]["state"] == "sent"
+    leaked = text + r.macs[0][1] + out + json.dumps(wd, ensure_ascii=False)
+    assert "SECRET" not in leaked and str(paths.home()) not in leaked
+    book = json.loads((paths.state_dir() / "live_unified_tachibana.json").read_text(encoding="utf-8"))
+    top = "\n".join(h for _, h in panel._run_lines("tachibana", book, TUE.replace(minute=40), None))
+    assert "★ 自检（09:30）判定不了：自检程序出错（TypeError）" in top
+    assert mac_status._watchdog_item("tachibana", TUE.replace(minute=40))["level"] == "warn"
+    rc, r, out = _run(tmp_path, now=TUE.replace(minute=45))                       # 同一天再出错：不再推
+    assert rc == 1 and not r.sent and not r.macs and "今天已经推过「自检出错」" in out
+    with pytest.raises(TypeError):                                                 # --dry：照常抛（run.main 记日志、退出 1）
+        watchdog.run(_agents(tmp_path), TUE, send=r.send, beat=r.beat, mac=r.mac, out=lambda *a: None, dry=True)
+    assert not r.sent
+    monkeypatch.setattr(watchdog, "evaluate", real)                                # 第二天：先通过（推了），之后再出错 → 推一次、不盖掉通过
+    _book(last="2026-10-06", orders=[])
+    rc, r, out = _run(tmp_path, now=TUE + dt.timedelta(days=1))
+    assert rc == 0 and _wd()["ok"] is True
+    monkeypatch.setattr(watchdog, "evaluate", boom)
+    rc, r, out = _run(tmp_path, now=TUE + dt.timedelta(days=1, hours=1))
+    assert rc == 1 and [x[0] for x in r.sent] == ["qbreak 立花实盘 ★ 10:30 自检出错"]
+    assert _wd()["ok"] is True and _wd()["at"] == "2026-10-07T09:30:00+09:00"
+
+
+def test_watchdog_command_pushes_when_the_check_crashes(tmp_path, monkeypatch, capsys):
+    """run.py live-watchdog（LaunchAgent 走的路）：自检出错 → 退出 1，但推了一条、写了结果文件（以前 run.main 只记日志）。"""
+    import run
+    _book(orders=[_o("a", "SENT")])
+    sent = []
+    monkeypatch.setattr(notify, "send", lambda t, x, lv="info", **k: sent.append((t, lv)) or {"push": True})
+    monkeypatch.setattr(watchdog, "evaluate", lambda tag, now=None: (_ for _ in ()).throw(TypeError("x")))
+    assert run.main(["live-watchdog", "--agents", str(_agents(tmp_path))]) == 1
+    assert len(sent) == 1 and sent[0][0].endswith("自检出错") and sent[0][1] == "warn"
+    assert _wd()["ok"] is None and "TypeError" in _wd()["note"]
 
 
 def test_watchdog_command_uses_agents_dir(tmp_path, monkeypatch, capsys):

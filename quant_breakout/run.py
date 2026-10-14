@@ -4664,7 +4664,7 @@ def cmd_notify(a) -> int:
 def cmd_live_watchdog(a) -> int:
     """09:30 自检（qbreak/watchdog.py；LaunchAgent com.qbreak.watchdog → scripts/liveu.sh watchdog）：今天早上的执行器跑完没有、
     有没有状态不明的单、（立花）开盘后的买单下了没有 → 没通过就发手机 / Mac 通知；通过 / 平日休市也推一条（每个工作日一条，
-    2026-10-14 起代替外部心跳；同一天只一次）。只读账本、不下单。"""
+    2026-10-14 起代替外部心跳；同一天只一次）；自检程序自己出错也推一条「★ 自检出错」（watchdog.run 接住，退出 1）。只读账本、不下单。"""
     import os
     from pathlib import Path
     from qbreak import watchdog

@@ -87,7 +87,7 @@ def _watchdog_item(tag: str, now: dt.datetime) -> dict | None:
     """今天的 09:30 自检（out/watchdog_<账本>.json）：结果 + 每天那条推送发成没有（2026-10-14 起代替外部心跳）。
     不是今天的 / 没有 → 不显示。"""
     from . import run_status as RS
-    from .watchdog import PUSH_FIX, push_text, push_word
+    from .watchdog import push_fix, push_text, push_word
     wd = RS.peek_json(paths.out_dir() / f"watchdog_{tag}.json")
     if not wd:
         return None
@@ -96,7 +96,7 @@ def _watchdog_item(tag: str, now: dt.datetime) -> dict | None:
         return None
     p = wd.get("push") if isinstance(wd.get("push"), dict) else None
     pt = push_text(p)
-    tail = "" if p is None else f"；{push_word(p)}" + (f" → {PUSH_FIX}" if pt else "")
+    tail = "" if p is None else f"；{push_word(p)}" + (f" → {push_fix(p)}" if pt else "")
     if wd.get("ok") is False:
         rs = wd.get("reasons")
         rs = [rs] if isinstance(rs, str) else [str(x) for x in (rs if isinstance(rs, list) else [])]

@@ -2,10 +2,11 @@
 # macOS：09:30 自检注册成 LaunchAgent（com.qbreak.watchdog，周一至五 09:30；按 Mac 的系统时区，应为日本时间）。
 #   bash scripts/install_launchd_watchdog.sh             注册（要先装好模拟操盘：scripts/install_launchd_live_u.sh 建的虚拟环境）
 #   bash scripts/install_launchd_watchdog.sh uninstall   卸载
-# 每个交易日 09:30 运行 scripts/liveu.sh watchdog（规则在 qbreak/watchdog.py；只读账本、不下单）：
+# 每个工作日（周一至五，含平日休市）09:30 运行 scripts/liveu.sh watchdog（规则在 qbreak/watchdog.py；只读账本、不下单）：
 #   今天早上的执行器跑完没有、有没有状态不明的单、（立花）开盘后的买单下了没有 → 没通过 → 手机推送（warn）+ Mac 通知；
 #   通过 / 平日休市 / 模拟期开始前 → 也推一条（info，同一天只一次）；HALT 生效中 → 「HALT 生效中」那条（同一天只一次）。
-# 每个工作日推一条 = Mac 还活着（2026-10-14 起代替外部心跳）：哪天 09:30 左右没收到 → Mac 多半关机 / 睡着 / 断网（那时推不出来）。
+# 每个工作日推一条 = Mac 还活着（2026-10-14 起代替外部心跳）：哪天 09:30 左右没收到 → Mac 多半关机 / 断网（那时推不出来）；
+#   睡着 → 醒来之后才推（标题是真的时刻）；自检程序自己出错 → 也推一条「★ 自检出错」。
 set -euo pipefail
 
 MODE="${1:-install}"

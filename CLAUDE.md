@@ -66,7 +66,7 @@
   （只读命令也一样；数据目录在仓库里时立花的入口会拒绝运行——公开仓库）；Python 用 `~/.qbreak/venv/bin/python`（macOS 自带的 3.9 不够）
 - 手机通知（2026-10-11 起：用户「不用 Gmail，直接在 qbreak 里通知并记录」）：qbreak 推送（网页 App，`qbreak/webpush.py`）+ 通知记录（数据目录 out/notifications.jsonl，面板「消息 → 通知记录」）；
   邮件 / webhook 改为可选（不再推荐 email-setup）。外部心跳（healthchecks.io 之类）2026-10-14 起不用（用户「不用做 healthchecks.io 心跳 check，改为每天用 qbreak 进行推送就可以」）：
-  09:30 自检每个工作日推一条到手机（通过 / 休市 / 没通过；同一天的「通过」只推一次），哪天没收到 = Mac 多半关机 / 睡着 / 断网；不再建议设 `qbreak-heartbeat`（设了照样 ping，没设是正常）。
+  09:30 自检每个工作日推一条到手机（通过 / 休市 / 没通过 / 自检出错；同一天的「通过」只推一次，早些时候没通过或那条没推到手机 → 再推），哪天没收到 = Mac 多半关机 / 睡着 / 断网；不再建议设 `qbreak-heartbeat`（设了照样 ping，没设是正常）。
   通道的地址是密钥，放钥匙串（`qbreak-webhook`：Discord / Slack / ntfy；`qbreak-smtp`），
   用户自己在终端 `security add-generic-password -s qbreak-webhook -a qbreak -w`（回车后输入，不贴进聊天）；邮件（2026-10-09 起用这个）：用户自己在「终端」App
   运行 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup`（交互输入 Gmail 应用专用密码，先发一封测试邮件、发成了才存进钥匙串 `qbreak-smtp`；Claude 不运行它）；Claude 只说有 / 没有；

@@ -274,11 +274,12 @@ def history(n: int = 60) -> list[dict]:
     return out
 
 
-def send(subject: str, text: str, level: str = "info", run=None, url: str = "") -> dict[str, bool | None]:
+def send(subject: str, text: str, level: str = "info", run=None, url: str = "", resend: bool = False) -> dict[str, bool | None]:
     """按设置了的通道发一条通知 → {webhook / email: True 发了 / False 失败 / None 没设置, push: …}。绝不抛（失败只记 warning）。
-    每一条先记进通知记录（面板「消息 → 通知记录」）；推送点开 → url（没给 = 通知记录里的这一条）。"""
-    rid = record(subject, text, level, url)
-    url = url or f"/?tab=news&seg=log&l={rid}"
+    每一条先记进通知记录（面板「消息 → 通知记录」）；推送点开 → url（没给 = 通知记录里的这一条）。
+    resend = 刚才那条都没发成、同一条再发一次（09:30 自检 60 秒后的重推）：不再记进通知记录，推送点开 → 通知记录。"""
+    rid = None if resend else record(subject, text, level, url)
+    url = url or (f"/?tab=news&seg=log&l={rid}" if rid else "/?tab=news&seg=log")
     out: dict[str, bool | None] = {}
     for name in ("webhook", "email"):
         try:
@@ -425,7 +426,8 @@ def setup_email(host: str | None = None, port: int | None = None, *, run=None, a
     value = f"{host}:{port}:{user}:{pw}:{','.join(tos)}"
     from .calendar_jp import now_jst
     body = (f"这是 qbreak 的测试邮件（{now_jst():%Y-%m-%d %H:%M} JST）：收到了就说明邮件通知通了。\n"
-            "之后执行器停下、09:30 自检没通过、有状态不明的单等会发到这个地址。\n"
+            "之后每个工作日 09:30 自检会发一封（通过 / 休市 / 没通过；哪个工作日没收到 → Mac 多半关机 / 睡着 / 断网），"
+            "执行器停下、有状态不明的单等也会发到这个地址。\n"
             "建议在 Gmail 建一个过滤器：主题含 qbreak → 不要送进垃圾邮件、标星。")
     out("先用这个设置发一封测试邮件（发成了才存进钥匙串）……")
     n, store = 0, True
