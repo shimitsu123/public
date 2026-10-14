@@ -243,6 +243,12 @@ SG_ROWS = [
 ]
 
 
+def _card(html: str, cid: str) -> str:
+    """页面里 id = cid 的那张卡片（<section class='card' id='…'> 到它的 </section>）。"""
+    i = html.index(f"<section class='card' id='{cid}'>")
+    return html[i:html.index("</section>", i) + len("</section>")]
+
+
 def _sm(rows=None):
     (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps(
         {"suggest": {"asof": "2026-10-05", "rows": SG_ROWS if rows is None else rows}}, ensure_ascii=False), encoding="utf-8")
@@ -260,11 +266,12 @@ def test_render_suggestions_with_buy_buttons_and_gates():
     assert "建议的股票（规则的候选，3 只）" in html and "个股名额：空 3 个（拿着 1 + 排定买入 0，上限 4 只）" in html
     assert ("<h3 class='sgh'>今天出了买入信号（1 只）</h3>" in html and "<h3 class='sgh'>快要出买入信号（1 只）</h3>" in html
             and "<h3 class='sgh'>观察中（1 只）</h3>" in html)
-    assert html.count("data-act='buy'") == 2                                # 8035 被硬闸门挡：没有按钮
+    sgc = _card(html, "suggest")                                           # 「规则接下来会自动买」点开的也有同一只的按钮（2026-10-14）：这里只数建议的股票
+    assert sgc.count("data-act='buy'") == 2                                 # 8035 被硬闸门挡：没有按钮
     assert "data-t='6501.T'" in html and "data-sig='1'" in html and "data-rule='200'" in html and "data-limit='3605'" in html
     assert "不能买：JPX 市場区分「プロ」：不买" in html and "顶部风险：RSI72" in html
     assert "★ 规则现在不开这只的新仓（新仓倍数 0）：执行器会挡" in html and "真突破" in html
-    assert html.count("<details class='kl' open>") == 2 and "<details class='kl'><summary>" in html     # 观察中的 K 线默认收起
+    assert sgc.count("<details class='kl' open>") == 2 and "<details class='kl'><summary>" in sgc     # 观察中的 K 线默认收起
     assert "按规则约 200 股 · 约 ¥700,000 · 约占权益 70.0%" in html
     full = {t: {"shares": 100, "entry_px": 1000.0, "entry_date": "2026-09-01", "stop_px": 900.0, "last_close": 1000.0}
             for t in ("7203.T", "6758.T", "6861.T", "6098.T")}

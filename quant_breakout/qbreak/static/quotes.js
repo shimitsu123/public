@@ -65,10 +65,11 @@ function showSQ(j){
   });
   buyLive();
 }
-function sqWant(){                                                         // 要取现价的建议股票：打开的 K 线 + 买入框里的（最多 12 只）
+function sqWant(){                                                         // 要取现价的建议股票：买入框里的 + 「规则接下来会自动买」点开的 + 打开的 K 线（最多 12 只）
   const s=[];
   const d=$('#dlg-buy'); if(BUY && d && d.open) s.push(BUY.t);
-  document.querySelectorAll('#suggest details.kl[open] .chart[data-t]').forEach(b=>{ if(s.indexOf(b.dataset.t)<0) s.push(b.dataset.t); });
+  document.querySelectorAll('#autobuy details.abx[open] details.kl[open] .chart[data-t], #suggest details.kl[open] .chart[data-t]')   // 页面顺序：上面的卡片先
+    .forEach(b=>{ if(s.indexOf(b.dataset.t)<0) s.push(b.dataset.t); });
   return s.slice(0, 12);
 }
 export async function loadSQ(){
@@ -114,8 +115,8 @@ async function loadQ(){
   clearTimeout(QTID);
   QTID=setTimeout(loadQ, QLIVE ? 60000 : 600000);                         // 盘中 1 分钟，其他时间 10 分钟（开盘后自动变快）
 }
-document.addEventListener('toggle', e=>{                                   // 打开一只建议股票的 K 线 → 取它的现价（并进今天这一根）
-  if(e.target.tagName==='DETAILS' && e.target.open && e.target.closest('#suggest')){ clearTimeout(SQT); SQT=setTimeout(loadSQ, 300); }
+document.addEventListener('toggle', e=>{                                   // 打开一只建议股票的 K 线（或「规则接下来会自动买」的一行）→ 取它的现价（并进今天这一根）
+  if(e.target.tagName==='DETAILS' && e.target.open && e.target.closest('#suggest, #autobuy')){ clearTimeout(SQT); SQT=setTimeout(loadSQ, 300); }
 }, true);
 document.addEventListener('DOMContentLoaded', loadQ);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) loadQ(); });

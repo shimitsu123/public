@@ -130,6 +130,12 @@ details.nw.lv-hi{border-left:4px solid var(--neg);padding-left:8px}details.nw.lv
 .buyr{width:100%;margin:8px 0 2px}
 .abd{flex:none;min-width:4.6em;text-align:center;font-size:12px;font-weight:700;border:1px solid var(--line);border-radius:999px;padding:2px 8px;margin-right:8px;font-variant-numeric:tabular-nums}
 .abd.on{border-color:var(--up);color:var(--up)}
+/* 规则接下来会自动买：每一行点开 = 建议的股票里同一只（2026-10-14；默认收起） */
+.abx{border-top:1px solid var(--line)}.list>.abx:first-child{border-top:0}
+.abx>summary{display:flex;gap:10px;align-items:center;padding:10px 0;list-style:none}.abx>summary::-webkit-details-marker{display:none}
+.abx>summary::after{content:'';flex:none;width:7px;height:7px;margin:0 6px 0 0;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
+.abx[open]>summary::after{transform:rotate(45deg)}.abx .abs{display:block}.abx .grow{overflow-wrap:anywhere}
+.abxb>.hv{border-top:1px dashed var(--line);padding:8px 0 12px}
 .avr{display:grid;grid-template-columns:3.6em minmax(0,1fr);align-items:center;gap:8px}.avr .alb{margin:3px 0}
 .alb i.new{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.35) 0 4px,transparent 4px 8px)}
 .avg{grid-template-columns:12px minmax(0,1fr) auto}.alp.up{color:var(--up)}.alp.down{color:var(--down)}

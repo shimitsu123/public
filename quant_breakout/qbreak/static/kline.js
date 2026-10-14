@@ -333,7 +333,10 @@ const IO = ('IntersectionObserver' in window) ? new IntersectionObserver(es=>{ f
 document.addEventListener('DOMContentLoaded', ()=>{
   document.querySelectorAll('.chart[data-t]').forEach(b=>{ if(IO) IO.observe(b); else showK(b); });
 });
-document.addEventListener('toggle', e=>{ if(e.target.tagName==='DETAILS' && e.target.open) e.target.querySelectorAll('.chart[data-t]').forEach(b=>{ if(KD[b.dataset.t] && KD[b.dataset.t]!=='loading') drawK(b); }); }, true);
+document.addEventListener('toggle', e=>{ if(e.target.tagName==='DETAILS' && e.target.open) e.target.querySelectorAll('.chart[data-t]').forEach(b=>{   // 打开的那块里的图：按现在的宽度重画
+  if(KD[b.dataset.t] && KD[b.dataset.t]!=='loading') drawK(b);
+  else if(!KD[b.dataset.t] && !b.closest('details:not([open])')){ if(IO) IO.unobserve(b); showK(b); }   // 还没取过、现在看得到（「规则接下来会自动买」点开的一行等）：马上取，不等滚到
+}); }, true);
 document.addEventListener('pointerdown', ev=>{ if(!ev.target.closest('.chart')) document.querySelectorAll('.chart').forEach(b=>{ if(b._hide) b._hide(); }); });
 let RZ=null, LW=window.innerWidth;
 window.addEventListener('resize', ()=>{ clearTimeout(RZ); RZ=setTimeout(()=>{ if(Math.abs(window.innerWidth-LW)>2){ LW=window.innerWidth; drawAll(); } }, 150); });
