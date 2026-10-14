@@ -595,18 +595,22 @@ if [ "${1:-}" = "run" ]; then
     msg="$(TZ=Asia/Tokyo date '+%m/%d %H:%M') 的运行没有完成（退出码 ${rc}）：看 $QBREAK_HOME/logs/ 里的 .err / .out，或把它发给 Claude"
     echo "★ $msg"
     "$PY" run.py live-u "$@" --status --alert "$msg" $([ "$openphase" = "0" ] && echo --open) >/dev/null 2>&1
-    if [ "$rc" != "3" ]; then
-      # 退出码 3 = 执行器停下 / 拿不到运行锁：run.py 自己已经通知过（同一天同一个原因只发一次），这里不再发 Mac / 手机通知
+    case " $* " in *" --phase open "*) runph=open ;; *" --phase now "*) runph=now ;; *" --phase cancel "*) runph=cancel ;; *) runph=morning ;; esac
+    # 退出码 3 = 执行器停下 / 拿不到运行锁：run.py 自己已经通知过（同一天同一个原因只发一次），这里不再发 Mac / 手机通知；
+    # 别的：同一个账本、同一段（早上 + 重试 / 开盘后 / 盘中 / 撤单）、同一个退出码一天只弹一次 Mac 通知、发一次手机通知
+    # （2026-10-14 复核 G19：正文带时刻 → run.py notify --once 按文字去重不起作用，定时 / 面板 / 补跑每失败一次就再发一遍；页面照样每次标红）
+    if [ "$rc" != "3" ] && once_today "runfail ${runkind} ${runph} ${rc}"; then
       mac_alert "qbreak ★ 运行没有完成" "$msg"
-      # 手机通知（钥匙串里设置了才发；正文不带本机路径；同一个账本、同一天、同一段文字只发一次）
+      # 手机通知（钥匙串里设置了才发；正文不带本机路径）
       pmsg="$(TZ=Asia/Tokyo date '+%m/%d %H:%M') 的运行没有完成（退出码 ${rc}）：在 Mac 对话里说「看一下执行器日志」"
       "$PY" run.py notify --subject "qbreak $([ "$live" = "1" ] && echo 立花实盘 || echo 模拟操盘) ★ 运行没有完成" --text="$pmsg" \
-        --level warn --once "$([ "$live" = "1" ] && echo tachibana || echo paper)" >/dev/null 2>&1 || true
+        --level warn >/dev/null 2>&1 || true
     fi
   fi
   # 早上跑完之后让 Mac 醒着到 09:35 JST（没人操作几分钟就会睡着 → 09:05 / 09:20 的开盘后补单、09:30 的自检会错过；合盖照样会睡）：
   # 立花的早上 / 重试；模拟账户只在 07:40 的定时任务本身（launchd 把 XPC_SERVICE_NAME 设成任务名）、而且装了 09:30 自检时
-  # （登录时的补跑、面板叫的重试不等：不然登录后的页面、盘中的手动指令要等到 09:35）；立花的面板叫的（QBREAK_NO_HOLD）放到后台等、进程马上结束
+  # （登录时的补跑、面板叫的重试不等：不然登录后的页面、盘中的手动指令要等到 09:35）；立花只有定时任务本身（com.qbreak.liveu.*）在进程里等，
+  # 别的（面板叫的 QBREAK_NO_HOLD、对话 / 终端里的「再试一次」）放到后台等、进程马上结束
   wdog="${QBREAK_LAUNCH_AGENTS:-$HOME/Library/LaunchAgents}/com.qbreak.watchdog.plist"
   holdwhy=""
   if [ "$openphase" = "0" ]; then
@@ -620,13 +624,25 @@ if [ "${1:-}" = "run" ]; then
     hold="$("$PY" -c 'import datetime as d, zoneinfo as z
 n = d.datetime.now(z.ZoneInfo("Asia/Tokyo"))
 print(max(0, int((n.replace(hour=9, minute=35, second=0, microsecond=0) - n).total_seconds())))' 2>/dev/null || echo 0)"
-    if [ "${hold:-0}" -gt 0 ] 2>/dev/null && [ -n "${QBREAK_NO_HOLD:-}" ]; then
-      # 面板叫的（Trigger 设 QBREAK_NO_HOLD=1；2026-10-14 G2）：不在这个进程里等到 09:35 —— 面板要等它结束才会再叫执行器，
-      # 等的这段时间撤单、盘中的手动指令都下不了。让 Mac 醒着的 caffeinate 放到后台（已经有一个在等就不再开），这次运行马上结束
-      if ! { command -v pgrep >/dev/null 2>&1 && pgrep -f "caffeinate -i -t" >/dev/null 2>&1; }; then
+    case "${XPC_SERVICE_NAME:-}" in com.qbreak.liveu.*) injob=1 ;; *) injob=0 ;; esac
+    if [ "${hold:-0}" -gt 0 ] 2>/dev/null && { [ -n "${QBREAK_NO_HOLD:-}" ] || [ "$injob" = "0" ]; }; then
+      # 不是 07:40 / 08:35 的定时任务本身（面板叫的 QBREAK_NO_HOLD=1、Mac 对话里「再试一次」、终端；2026-10-14 G2 + 复核）：
+      # 不在这个进程里等到 09:35 —— 面板要等它结束才会再叫执行器（等的时候撤单、盘中指令都下不了），对话里的命令会一直等到超时。
+      # 让 Mac 醒着的 caffeinate 放到后台，这次运行马上结束。已经有一个「我们放的、今天的、还在」的就不再开（数据目录 logs/.hold.pid
+      # 记「pid 日期」；以前用 pgrep 找进程名，06:40 起醒 70 分钟的 com.qbreak.wakehold 也算进去 → 它 07:50 结束后没人让 Mac 醒着）
+      hpf="$QBREAK_HOME/logs/.hold.pid"
+      hday="$(TZ=Asia/Tokyo date +%F)"
+      hpid=""; hd=""
+      [ -f "$hpf" ] && read -r hpid hd < "$hpf" 2>/dev/null
+      case "$hpid" in ''|*[!0-9]*) hpid="" ;; esac
+      if [ -n "$hpid" ] && [ "$hd" = "$hday" ] && kill -0 "$hpid" 2>/dev/null \
+        && ps -p "$hpid" -o command= 2>/dev/null | grep -q caffeinate; then
+        :
+      else
         nohup caffeinate -i -t "$hold" >/dev/null 2>&1 &
+        printf '%s %s\n' "$!" "$hday" > "$hpf" 2>/dev/null || true
       fi
-      echo "（让 Mac 醒着到 09:35 JST：${holdwhy}；面板叫的 → 放到后台，这次运行马上结束）"
+      echo "（让 Mac 醒着到 09:35 JST：${holdwhy}；不是定时任务本身 → 放到后台，这次运行马上结束）"
     elif [ "${hold:-0}" -gt 0 ] 2>/dev/null; then
       echo "（让 Mac 醒着到 09:35 JST：${holdwhy}）"
       caffeinate -i -t "$hold"

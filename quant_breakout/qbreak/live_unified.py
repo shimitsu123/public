@@ -44,6 +44,7 @@ from pathlib import Path
 
 from . import manual_orders as MO
 from . import paths
+from . import run_status as RS
 from .brokers.base import state_tag
 from .brokers.paper import PaperBroker
 from .calendar_jp import next_trading_day, now_jst, prev_trading_day
@@ -975,6 +976,26 @@ class UnifiedExecutor:
                 left.append(o.ticker)
         return left
 
+    def _fund_left(self, orders: list[ExecOrder]) -> list[ExecOrder]:
+        """盘中为手动买入凑钱卖的核心 ETF 单里还挂着、还没全部成交的（G5 复核，2026-10-14）。立花：查注文（約定照会；查不到 →
+        当作还没成交；终态〔失效 / 取消 / 被拒〕→ 不会再成交，不等）；模拟账户当场成交 → 按单上的成交。"""
+        left = []
+        for o in orders:
+            if o.status not in ("SENT", "PARTIAL"):
+                continue
+            q = int(o.filled_qty or 0)
+            if o.broker_id and not self.paper:
+                try:
+                    r = self.b.order_status(o.broker_id, o.order_date)
+                    if r.get("final") in ("REJECTED", "EXPIRED", "CANCELLED"):
+                        continue
+                    q = max(q, int(r.get("filled_qty") or 0))
+                except Exception:                             # noqa: BLE001
+                    pass
+            if q < int(o.sent_qty or o.qty):
+                left.append(o)
+        return left
+
     def _place_deferred(self, get_open, locked: dict | None = None, no_open: str | None = None) -> None:
         """开盘后：留下的买单按实际始値做与模型相同的检查（没开盘价 / 跳空 / ストップ高 / 名额），再下单。
         实盘按「限价 × 股数 + 手续费 ≤ 当时余力」减股；模拟账户交给 PaperBroker 按实际成交价减（与引擎相同）。
@@ -1163,8 +1184,11 @@ class UnifiedExecutor:
 
     @staticmethod
     def _halt_note(o: ExecOrder) -> bool:
-        """这笔单是 HALT 挡下的（早上的闸门 / 开盘后补单的 HALT_WAIT）：HALT 中不下单是预期的。"""
-        return "HALT" in str(o.note or "")
+        """这笔单是 HALT 挡下的（早上的闸门 / 适配器的 HALT 检查：说明以 RS.HALT_NOTE「存在 HALT 文件」开头；开盘后补单的 HALT_WAIT
+        后面跟着同一个原因）：HALT 中不下单是预期的。2026-10-14 复核：以前只看说明里有没有「HALT」—— 没 ARM 的说明
+        （「…要停用 = 删掉它或建 HALT」）也算成 HALT：写「HALT 生效中」、连续没发出的天数与没卖掉的天数都不算、09:30 自检不报。"""
+        n = str(o.note or "")
+        return n.startswith(RS.HALT_NOTE) or n.startswith(f"{HALT_WAIT}（{RS.HALT_NOTE}")
 
     def _unsent_why(self, o: ExecOrder) -> str:
         """没发出的单（BLOCKED / REJECTED）的原因，写进手动指令的说明（HALT 的说明里有数据目录的路径 → 换成「HALT 生效中」）。"""
@@ -1326,7 +1350,8 @@ class UnifiedExecutor:
         d = st.last_date
         k = int(eng.gidx.searchsorted(dt.datetime.fromisoformat(d))) if d else len(eng.gidx)
         why = None
-        if self.respect_halt and paths.halt_file().exists():
+        halted = self.respect_halt and paths.halt_file().exists()   # 按 HALT 文件本身判断（不看原因文字里有没有「HALT」）
+        if halted:
             why = "HALT 生效中，解除之后才处理"
         elif MO.timing(now)[0] != "now":
             why = "现在不是交易时间（09:00〜11:30、12:30〜15:25）"
@@ -1338,7 +1363,7 @@ class UnifiedExecutor:
             why = self.blocked
         if why:
             for it in todo:                                   # HALT：每条写明解除后照原样执行（写于 MM/DD；2026-10-13）
-                it.update(tried=stamp, msg=MO.halt_text(it) if "HALT" in why else why)
+                it.update(tried=stamp, msg=MO.halt_text(it) if halted else why)
             out["retry"] = len(todo)
             out["items"] = [{"id": it["id"], "ticker": it["ticker"], "status": MO.status_text(it), "msg": it["msg"]} for it in todo]
             if core_want is not None:
@@ -1346,7 +1371,7 @@ class UnifiedExecutor:
                 out["retry"] += 1
                 out["items"].append({"id": (core_it or {}).get("id", "core"), "ticker": f"闲置资金比例 {core_want:g}%",
                                      "status": "等", "msg": why})
-            self._event("warn" if "HALT" in why else "info", f"手动指令 {out['retry']} 条这次没下：{why}")
+            self._event("warn" if halted else "info", f"手动指令 {out['retry']} 条这次没下：{why}")
             self.save()
             return out
         mm = self._mismatch_today()
@@ -1401,7 +1426,9 @@ class UnifiedExecutor:
             return int(eng.lots[eng.col[t]]) if t in eng.col else MO.LOT
 
         def later(it: dict, msg: str) -> None:              # 今天不下 → 明天早上的运行（明天开盘）
-            it.update(hold=today.isoformat(), tried=stamp, msg=f"{msg} → 明天开盘处理")
+            tail = MO.UNK_LATER if UNK_STOP in msg else "明天开盘处理"   # 前面有一笔状态不明：登记之前之后的运行都停（G3 复核）
+            it.update(hold=today.isoformat(), tried=stamp, msg=f"{msg} → {tail}")
+            it.pop("fund_wait", None)
             out["later"] += 1
 
         def retry(it: dict, msg: str) -> None:              # 一会儿再试
@@ -1410,7 +1437,7 @@ class UnifiedExecutor:
 
         def no(it: dict, msg: str, status: str = "rejected") -> None:
             it.update(status=status, decided_on=d, msg=msg)
-            for f in ("hold", "tried"):
+            for f in ("hold", "tried", "fund_wait"):
                 it.pop(f, None)
             out["rejected"] += 1
 
@@ -1437,7 +1464,7 @@ class UnifiedExecutor:
                     it["fill"] = {"qty": q, "px": round(float(o.filled_px), 2)}
                 if o.side == "BUY":
                     it["limit"] = o.limit
-                for f in ("hold", "tried", "wait"):
+                for f in ("hold", "tried", "wait", "fund_wait"):
                     it.pop(f, None)
                 out["placed"] += 1
                 return True
@@ -1489,9 +1516,10 @@ class UnifiedExecutor:
                 val += net - float(eng.c_fee[c]["SELL"](net))
             return ok, val, noq, bz
 
-        def fund(short: float) -> tuple[list[str], dict, list[str]]:
-            """钱不够：卖核心 ETF 补 short 円（今天有单的、取不到现价的核心不动；按现价）。→ (说明, {票: 卖出口数}, 没下成的说明)。"""
-            notes, sold, fails = [], {}, []
+        def fund(short: float) -> tuple[list[str], dict, list[str], list[ExecOrder]]:
+            """钱不够：卖核心 ETF 补 short 円（今天有单的、取不到现价的核心不动；按现价）。
+            → (说明, {票: 卖出口数}, 没下成的说明, 受理了的卖单)。"""
+            notes, sold, fails, fos = [], {}, [], []
             for c, u, pc in fund_src()[0]:
                 if short <= 0 or self._unk_stop:             # 前面有一笔状态不明：不再发（G3）
                     break
@@ -1508,10 +1536,17 @@ class UnifiedExecutor:
                 if o.status in ACCEPTED:
                     notes.append(f"先卖核心 ETF {c} {n:,} 口")
                     sold[c] = n
+                    fos.append(o)
                     short -= n * net - float(eng.c_fee[c]["SELL"](n * net))
                 else:
                     fails.append(f"{c} {o.status} {o.note}".strip()[:120])
-            return notes, sold, fails
+            return notes, sold, fails, fos
+
+        def fund_wait(it: dict, left: list[ExecOrder], head: str = "") -> None:
+            """凑钱的核心卖单受理了、还没（全部）成交：卖出的钱还没进余力（立花的买付可能額按约定算）→ 等它成交再买，一会儿再试
+            （G5 复核，2026-10-14：以前马上按「现金 + 核心 ETF 不够」作废买入，核心照样卖了）。到 15:25 还没成交 → 改到开盘（G18）。"""
+            names = "、".join(f"{o_.ticker} {int(o_.sent_qty or o_.qty):,} 口" for o_ in left)
+            retry(it, f"{head + '；' if head else ''}凑钱的核心 ETF 卖单（{names}）还没成交：等成交之后再买，{MO.RETRY_S // 60} 分钟后再试")
 
         def sold_txt(sold: dict) -> str:                    # 凑钱的核心卖单已经发出、买入却没成：说清楚（G5）
             return ("；已卖核心 ETF " + "、".join(f"{c} {n:,} 口" for c, n in sold.items()) + "（凑钱；钱留现金）") if sold else ""
@@ -1743,7 +1778,17 @@ class UnifiedExecutor:
             if tt:
                 retry(it, f"{tt}：确认不了能不能买，{MO.RETRY_S // 60} 分钟后再试")
                 continue
-            avail, sold = cash_now(), {}
+            fwc = set(it.get("fund_wait") or ())
+            fw = [o_ for o_ in self._active() if o_.cid in fwc and o_.phase == "now"]
+            if fwc and not fw:
+                it.pop("fund_wait", None)                     # 别的决策的（已经过了一天）：不再等
+            if fw:                                            # 之前为它卖的核心 ETF：还没成交 → 再等；成交了 / 不再挂着 → 照常（钱已经在余力里）
+                left = self._fund_left(fw)
+                if left:
+                    fund_wait(it, left)
+                    continue
+                it.pop("fund_wait", None)
+            avail, sold = cash_now(), {o_.ticker: int(o_.sent_qty or o_.qty) for o_ in fw}
             if need(qty) > avail:                             # 卖核心补：按缓冲之前的金额算（卖出所得也要先扣缓冲）
                 _ok, val, noq, bz = fund_src()
                 room = avail + val * (1 - buf)                # 能卖的核心全卖之后最多能用的钱
@@ -1758,17 +1803,23 @@ class UnifiedExecutor:
                     else:
                         no(it, f"现金 + 核心 ETF 不够买 1 个单元：不{'加' if add else '买'}{rsv_txt}")
                     continue
-                fn, sold, fails = fund((need(qty) - avail) / max(1e-9, 1 - buf))
+                fn, sold2, fails, fos = fund((need(qty) - avail) / max(1e-9, 1 - buf))
                 notes += fn
+                sold.update(sold2)
                 if self._unk_stop:                            # 凑钱的核心卖单状态不明：买入不发（G3；不当成「钱不够」作废）
                     later(it, "；".join(notes + [UNK_STOP]))
                     continue
-                if fails and not sold:                        # 凑钱的核心卖单一笔都没下成：不当成「钱不够」（明天开盘）
+                if fails and not sold2:                       # 凑钱的核心卖单一笔都没下成：不当成「钱不够」（明天开盘）
                     later(it, f"凑钱的核心 ETF 卖单没下成（{'；'.join(fails)}）")
                     continue
                 if bz > 0 and need(qty) > room:
                     notes.append("今天已经有执行器的单的核心 ETF 没拿来凑")
                 avail = cash_now()
+                left = [o_ for o_ in fos if o_.status in ("SENT", "PARTIAL") and int(o_.filled_qty or 0) < int(o_.sent_qty or o_.qty)]
+                if left and need(qty) > avail:                # 卖单受理了、还没成交：钱还没到 → 等成交再买（G5 复核）
+                    it["fund_wait"] = [o_.cid for o_ in fos]
+                    fund_wait(it, left, "；".join(fn))
+                    continue
             q0 = qty
             while qty > 0 and need(qty) > avail:
                 qty -= lot
@@ -1807,7 +1858,9 @@ class UnifiedExecutor:
                 out["retry"] += 1
             elif core_wait:
                 cr["defer"] = today.isoformat()
-                cs, cm = "明天开盘", "；".join(core_done + core_wait) + " → 下一次决策照新比例调（明天开盘）"
+                unk = any(UNK_STOP in x for x in core_wait)  # 前面有一笔状态不明：登记之前不会有下一次决策（G3 复核）
+                cs, cm = (("等登记", "；".join(core_done + core_wait) + " → 先登记那笔状态不明的单（见通知），登记之后的下一次决策照新比例调")
+                          if unk else ("明天开盘", "；".join(core_done + core_wait) + " → 下一次决策照新比例调（明天开盘）"))
                 out["later"] += 1
             else:
                 cr["applied"] = core_want

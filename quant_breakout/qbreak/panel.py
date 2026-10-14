@@ -1391,8 +1391,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             return ""
         if pl["sent"] and (pl["target"] or {}).get("fund") == "all":
             return "<span class='chip'>同批卖单还挂在交易所：要撤先用「今天的单」撤那几笔卖单</span>"
+        wt = f" data-wtxt='{escape(MO.now_sell_withdrawn(r))}'" if placed == 2 else ""   # 15:30 失效的盘中卖出：按下单那天写（G16 复核）
         return (f"<button class='btn sm danger' data-act='cancel' data-id='{escape(r['id'])}' data-placed='{placed}' data-desc='{_what(r)}'"
-                f" data-fund='{len(pl['todo'])}' data-stuck='{len(pl['stuck'])}'>撤单</button>")
+                f" data-fund='{len(pl['todo'])}' data-stuck='{len(pl['stuck'])}'{wt}>撤单</button>")
 
     def _ubbtn(r: dict) -> str:                             # 还没读的「解除不买回」：撤回（读到之前撤回 → 不解除；2026-10-13）
         if MO.check({"kind": "cancel", "target": r["id"]}, book, tag, now=now):
@@ -1978,14 +1979,22 @@ def _trigger_notify(tag: str, title: str, text: str, level: str = "warn") -> Non
     notify.send(title, text, level)
 
 
+def _unknown_open(book: dict | None) -> bool:
+    """账本的当前决策里有状态不明的单（SENDING / ERROR）：执行器登记之前不下单、每次运行都停下（撤单除外）。"""
+    d = ((book or {}).get("state") or {}).get("last_date")
+    return bool(d) and any(isinstance(o, dict) and o.get("decided_on") == d and o.get("status") in ("SENDING", "ERROR")
+                           for o in (book or {}).get("orders") or [])
+
+
 class Trigger:
     """面板写了手动指令之后叫执行器（同一个账本同一时间只跑一个）：
     盘中（09:00〜11:30、12:30〜15:25）有要马上下的指令 → --phase now（同一个账本最多 1 分钟一次）；
     交易日 07:45〜08:55（寄付截止 MO.CUTOFF；2026-10-14 G20：以前到 08:50）、今天早上的决策已经做了（账本处理到应有的决策日；
     有单被挡也算 —— 以前要「完成」才叫，被挡时新写的卖出加不进寄付单）、有新的卖出 / 调仓往下 / 撤回 → --retry（加进今天开盘的寄付单；最多 3 分钟一次）。
     模拟账户补跑（G9；2026-10-14）：装着 07:40 的定时任务（没装立花本番）、交易日 07:45〜15:30、今天早上的运行还没完成（Mac 07:40 睡着 /
-    运行失败）、没有执行器在跑（运行锁 + liveu.sh 的运行标记）、连续 2 分钟都这样 → 叫一次照常的运行（--retry：没完成就按正常流程跑；
-    同一天最多 3 次、相隔至少 20 分钟；模拟期开始日之前 / HALT 不叫）。立花本番（真钱）永远不补跑。
+    运行失败）、没有执行器在跑（运行锁 + liveu.sh 的运行标记）、连续 2 分钟都这样 → 叫一次照常的运行（与登录时的补跑相同：等云端的日报；
+    同一天最多 3 次、相隔至少 20 分钟；模拟期开始日之前 / HALT / 有状态不明的单不叫）。立花本番（真钱）永远不补跑。
+    HALT 中开盘前不叫 --retry（它什么都不做）；当前决策里有状态不明的单 → 除了撤单什么都不叫（登记之前执行器每次都停下；2026-10-14 复核）。
     失败退避（2026-10-09 立花实盘缺口 A7，条目 UX-04 / C-01：执行器失败后每分钟重叫 = 通知轰炸 + 反复登录立花，可能被判过负荷）：
     记下每个账本上一次叫的进程的退出码（非 0 = 失败）；盘中连续失败 n 次 → 从看到失败起至少等 min(60 秒 × 2^n, 15 分钟)；
     同一天连续失败 3 次（盘中 / 开盘前的重试一起算）→ 当天这个账本暂停自动叫，直到出现新的手动指令（叫那次执行器之后写的）、
@@ -2017,12 +2026,19 @@ class Trigger:
         self._load_pauses()
 
     @staticmethod
-    def _spawn(tag: str, mode: str = "retry"):
+    def _argv(tag: str, mode: str = "retry") -> list[str]:
+        """叫执行器的命令。catchup（模拟账户补跑）= 照常的运行（与登录时的补跑 mac_login 相同：等云端的日报入库、照常通知；
+        2026-10-14 复核：以前用 --retry，不等日报 → 例行任务晚了时按昨天的输入决策）。"""
         broker = "paper" if tag == "paper" else "tachibana"
         cmd = ["/bin/bash", str(paths.PROJECT_ROOT / "scripts" / "liveu.sh"), "run", "--broker", broker]
-        cmd += ["--phase", mode] if mode in ("now", "cancel") else ["--retry"]   # catchup（模拟账户补跑）= --retry：没完成就按正常流程跑
+        cmd += ["--phase", mode] if mode in ("now", "cancel") else [] if mode == "catchup" else ["--retry"]
         if tag == "tachibana_demo":
             cmd.append("--demo")
+        return cmd
+
+    @classmethod
+    def _spawn(cls, tag: str, mode: str = "retry"):
+        cmd = cls._argv(tag, mode)
         lf = open(paths.log_dir() / "com.qbreak.panel.retry.log", "a", encoding="utf-8")
         lf.write(f"\n── {now_jst():%Y-%m-%d %H:%M:%S} JST {'早上的运行没完成 → 补跑' if mode == 'catchup' else '手动指令'} → {' '.join(cmd[1:])}\n")
         lf.flush()
@@ -2152,8 +2168,12 @@ class Trigger:
 
     def _due(self, tag: str, book: dict, now: dt.datetime, morning: bool) -> bool:
         """面板现在会不会为这个账本叫执行器（不看退避）：开盘前 = 今天早上的决策已经做了（账本处理到应有的决策日；有单被挡也算，
-        G20）+ 有新的卖出 / 调仓往下 / 撤回；盘中 = 有要马上下的指令。"""
+        G20）+ 有新的卖出 / 调仓往下 / 撤回（HALT 时不算：MO.due）；盘中 = 有要马上下的指令。
+        当前决策里有状态不明的单 → 不叫（2026-10-14 复核：执行器登记之前每次都停下 → 以前连叫 3 次失败、当天暂停、发暂停通知；
+        面板顶部已经写着去核对 / 登记）。"""
         from .trader import expected_last_bar
+        if _unknown_open(book):
+            return False
         if morning:
             ld = str((book.get("state") or {}).get("last_date") or "")
             return ld == expected_last_bar(now.date(), "JP").isoformat() and bool(MO.due(tag, book, now))
@@ -2171,9 +2191,9 @@ class Trigger:
             self.behind.pop(tag, None)
             return False
         ld = str((book.get("state") or {}).get("last_date") or "")
-        if not ld or ld >= prev_trading_day(now.date()).isoformat():
+        if not ld or ld >= prev_trading_day(now.date()).isoformat() or _unknown_open(book):
             self.behind.pop(tag, None)
-            return False                                     # 完成了（或账本还没有：第一次运行不归面板）
+            return False                                     # 完成了（或账本还没有：第一次运行不归面板）/ 有状态不明的单（登记之前跑也会停下）
         from .watchdog import _sim_start
         start = _sim_start()
         if start and today < start:

@@ -293,7 +293,7 @@ def test_g16_expired_intraday_sell_can_be_withdrawn_and_is_not_sold_again():
     r.ux.morning([k])
     r.k += 1
     it = r.item(rec["id"])
-    assert it["status"] == "cancelled" and it["msg"].endswith("盘中的单已失效，明天不再卖")
+    assert it["status"] == "cancelled" and it["msg"].endswith(f"{day:%m/%d} 盘中的单已失效，之后不再卖")   # 按下单那天写（不写「明天」）
     assert "A.T" in r.eng.st.pos and "A.T" not in r.eng.st.pending_exit and "A.T" not in r.ux.manual.m["blocks"]
     assert not [x for x in r.ux.orders if x.ticker == "A.T" and x.side == "SELL"]
     assert "unsold" not in r.ux.book

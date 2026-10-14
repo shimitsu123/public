@@ -144,7 +144,7 @@ def _manual_unsent(book: dict, exp: str, today: dt.date, done: bool) -> list[str
     from .live_ops import MANUAL_REASONS, _manual_item
     bad = [o for o in book.get("orders") or [] if isinstance(o, dict) and o.get("decided_on") == exp
            and o.get("reason") in MANUAL_REASONS and o.get("status") in ("BLOCKED", "REJECTED")
-           and o.get("phase") != "now" and not RS.is_halt(o) and "HALT" not in str(o.get("note") or "")]
+           and o.get("phase") != "now" and not RS.is_halt(o)]        # 只认 HALT 的说明开头（没 ARM 的说明里也有「HALT」字样；2026-10-14 复核）
     out = []
     if done and bad:
         out.append(f"决策 {exp} 有 {len(bad)} 笔手动指令的单没发出：" + "；".join(_otext(o) for o in bad[:5])

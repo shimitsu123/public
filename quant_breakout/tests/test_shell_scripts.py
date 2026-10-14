@@ -263,7 +263,7 @@ def test_liveu_run_keeps_the_mac_awake_for_the_watchdog_only_in_the_scheduled_ru
         env, log = _run_env(tmp_path, 1, **extra)
         _bash(env, "scripts/liveu.sh", *args)
         assert "caffeinate" not in _calls(log), args
-    env, log = _run_env(tmp_path, 1)
+    env, log = _run_env(tmp_path, 1, XPC_SERVICE_NAME="com.qbreak.liveu.retry")
     _bash(env, "scripts/liveu.sh", "run", "--broker", "tachibana", "--retry")
     assert "caffeinate -i -t 600" in _calls(log)                        # 立花的定时运行：照旧在进程里等
     env, log = _run_env(tmp_path, 0, QBREAK_WATCHDOG_WAIT="0")
@@ -275,33 +275,79 @@ def test_liveu_run_keeps_the_mac_awake_for_the_watchdog_only_in_the_scheduled_ru
 def test_liveu_run_from_the_panel_does_not_hold_until_0935(tmp_path):
     """2026-10-14 G2：面板叫的立花 --retry（Trigger 设 QBREAK_NO_HOLD=1）跑完马上结束 —— 以前在进程里 caffeinate 到 09:35，
     面板一直以为它「还在跑」，撤单、盘中指令都不再叫执行器。让 Mac 醒着的 caffeinate 放到后台（已经有一个在等就不再开）；
-    定时任务（没有 QBREAK_NO_HOLD）照旧在进程里等。假 caffeinate 等 2 秒才记「done」：liveu.sh 返回时还没有 done = 没在进程里等。"""
+    定时任务本身（XPC_SERVICE_NAME = com.qbreak.liveu.*）照旧在进程里等。复核：对话 / 终端里的「再试一次」（没有 QBREAK_NO_HOLD、
+    也不是定时任务）也放到后台（以前在进程里等到 09:35 → 对话的命令超时）；「已经有一个在等」按数据目录 logs/.hold.pid（pid 日期）认，
+    不再按进程名（06:40 的 com.qbreak.wakehold 的 caffeinate 也算进去 → 它 07:50 结束后没人让 Mac 醒着）。
+    假 caffeinate 等 2 秒才记「done」：liveu.sh 返回时还没有 done = 没在进程里等。"""
+    import datetime as dt
     import time
+    from zoneinfo import ZoneInfo
+    JST = ZoneInfo("Asia/Tokyo")
     b = tmp_path / "bin"
+    hpf = tmp_path / "lh" / "logs" / ".hold.pid"
 
-    def stubs(pgrep_rc: int) -> None:
+    def stubs() -> None:
         (b / "caffeinate").write_text('#!/bin/sh\necho "caffeinate $*" >> "$CALLS"\n'
                                       'case "$*" in *-t*) sleep 2; echo "caffeinate-done" >> "$CALLS" ;; esac\n', encoding="utf-8")
-        (b / "pgrep").write_text(f"#!/bin/sh\nexit {pgrep_rc}\n", encoding="utf-8")   # 这台 Mac 上真的在等的 caffeinate 不算
+        (b / "pgrep").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")   # 别的 caffeinate（wakehold）在跑：不再算数
         (b / "pgrep").chmod(0o755)
+
+    def done_soon(log) -> bool:
+        for _ in range(60):                                              # 后台的那个照样让 Mac 醒着（假的 2 秒后记 done）
+            if "caffeinate-done" in _calls(log):
+                return True
+            time.sleep(0.1)
+        return False
     env, log = _run_env(tmp_path, 1, QBREAK_NO_HOLD="1")
-    stubs(1)
+    stubs()
     out, _ = _bash(env, "scripts/liveu.sh", "run", "--broker", "tachibana", "--retry")
     assert "放到后台，这次运行马上结束" in out and "caffeinate-done" not in _calls(log)
-    for _ in range(60):                                                  # 后台的那个照样让 Mac 醒着（假的 2 秒后记 done）
-        if "caffeinate-done" in _calls(log):
-            break
-        time.sleep(0.1)
-    assert "caffeinate -i -t 600" in _calls(log) and "caffeinate-done" in _calls(log)
-    env, log = _run_env(tmp_path, 1, QBREAK_NO_HOLD="1")                 # 已经有一个在等（pgrep 找到）→ 不再开
-    stubs(0)
+    assert hpf.exists() and hpf.read_text(encoding="utf-8").split()[1] == dt.datetime.now(JST).date().isoformat()
+    assert done_soon(log) and "caffeinate -i -t 600" in _calls(log)
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "caffeinate").write_text("#!/bin/sh\nsleep 30\n", encoding="utf-8")
+    (other / "caffeinate").chmod(0o755)
+    sleeper = subprocess.Popen(["/bin/sh", str(other / "caffeinate"), "-i", "-t", "600"],   # 我们放的那个还在等 → 不再开
+                               start_new_session=True)
+    try:
+        time.sleep(0.2)
+        hpf.write_text(f"{sleeper.pid} {dt.datetime.now(JST).date().isoformat()}\n", encoding="utf-8")
+        env, log = _run_env(tmp_path, 1, QBREAK_NO_HOLD="1")
+        out, _ = _bash(env, "scripts/liveu.sh", "run", "--broker", "tachibana", "--retry")
+        time.sleep(0.3)
+        assert "放到后台" in out and "caffeinate -i -t" not in _calls(log)
+    finally:
+        os.killpg(sleeper.pid, 9)
+        sleeper.wait()
+    hpf.write_text(f"{sleeper.pid} 2000-01-01\n", encoding="utf-8")       # 记录的那个已经结束 / 是别的日子的 → 再开一个
+    env, log = _run_env(tmp_path, 1)                                     # 对话 / 终端里的「再试一次」：也放到后台
+    stubs()
     out, _ = _bash(env, "scripts/liveu.sh", "run", "--broker", "tachibana", "--retry")
-    time.sleep(0.5)
-    assert "放到后台" in out and "caffeinate -i -t" not in _calls(log)
-    env, log = _run_env(tmp_path, 1)                                     # 定时任务：照旧在进程里等
-    stubs(1)
+    assert "放到后台" in out and "caffeinate-done" not in _calls(log) and done_soon(log)
+    env, log = _run_env(tmp_path, 1, XPC_SERVICE_NAME="com.qbreak.liveu.morning")   # 定时任务本身：照旧在进程里等
+    stubs()
     out, _ = _bash(env, "scripts/liveu.sh", "run", "--broker", "tachibana", "--retry")
     assert "caffeinate-done" in _calls(log) and "放到后台" not in out
+
+
+@pytest.mark.skipif(not shutil.which("bash"), reason="需要 bash")
+def test_liveu_run_failure_notice_once_a_day_per_book_phase_and_code(tmp_path):
+    """2026-10-14 复核 G19：「运行没有完成」的 Mac 通知 / 手机通知同一个账本、同一段、同一个退出码一天只发一次（正文带时刻：以前按文字去重
+    不起作用，定时 / 面板 / 补跑每失败一次就再发一遍）；页面照样每次标红；别的段 / 别的退出码照发。"""
+    for _ in range(2):
+        env, log = _run_env(tmp_path, 1, QBREAK_NO_HOLD="1")
+        out, _ = _bash(env, "scripts/liveu.sh", "run", "--broker", "paper", "--retry")
+        c = _calls(log)
+        assert "运行没有完成（退出码 1）" in out and "--status --alert" in c
+    assert "osascript" not in c and " notify " not in c                  # 第二次：不再弹、不再发
+    env, log = _run_env(tmp_path, 1)
+    _bash(env, "scripts/liveu.sh", "run", "--broker", "paper", "--phase", "now")
+    c = _calls(log)
+    assert "osascript" in c and "py run.py notify --subject" in c        # 盘中那一段：第一次照发
+    env, log = _run_env(tmp_path, 2)
+    _bash(env, "scripts/liveu.sh", "run", "--broker", "paper", "--retry")
+    assert "osascript" in _calls(log)                                    # 别的退出码：照发
 
 
 def test_no_test_runs_install_scripts_with_a_bare_system_path():
