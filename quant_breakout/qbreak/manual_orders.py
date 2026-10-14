@@ -1599,6 +1599,24 @@ def when_text(now: dt.datetime) -> str:
     return {"now": "马上（盘中）", "open": "今天 09:00 开盘", "lunch": "12:30 后场开盘"}.get(mode) or f"{d:%m/%d} 开盘"
 
 
+def morning_behind(book: dict | None, now: dt.datetime) -> bool:
+    """交易日、执行器账本的上一次决策（state.last_date）还在前一个交易日之前 = 今天早上的运行还没完成（与 now_due / 执行器 now_phase
+    同一个判断：这时盘中的路不下单，等早上的运行先处理）。没有账本 / 账本里没有决策日（还没跑过）→ False（照常的说法）。"""
+    st = (book or {}).get("state") or {}
+    ld = str(st.get("last_date") or "")
+    return bool(ld) and is_trading_day(now.date()) and ld < prev_trading_day(now.date()).isoformat()
+
+
+def when_for(now: dt.datetime, book: dict | None) -> str:
+    """when_text 加上「今天早上的运行还没完成」（G9；2026-10-14）：盘中 / 午休点的，但今天早上的运行还没完成（Mac 07:40 睡着、
+    运行失败…）→ 不是马上：补跑早上的运行之后才下（模拟账户：面板会自动补跑；立花：只按定时任务 / 你说再跑），没补跑 → 下一个交易日开盘。
+    面板的「现在点买卖 → …」、确认框、提交后的提示、命令行同一句。"""
+    mode, d = timing(now)
+    if mode in ("now", "lunch") and morning_behind(book, now):
+        return f"补跑早上的运行之后（今天早上的运行还没完成；没补跑 → {next_trading_day(d):%m/%d} 开盘）"
+    return when_text(now)
+
+
 def allin_fill(now: dt.datetime, book: dict | None, tag: str | None = None) -> dt.date:
     """「全部换成这只」整批实际在哪天开盘做：下一次决策 = 上一次决策的 K 线（state.last_date）之后那根 K 线的决策，成交日是再下一个交易日；
     那天已经过了寄付截止（08:55）/ 执行器正在跑（这次读不到）→ 再往后一个交易日。祝日 / 年末年始前后也对。"""
@@ -1648,10 +1666,13 @@ def uncancel_when(tg: dict | None, now: dt.datetime, book: dict | None, tag: str
                 d = 0
             side = "BUY" if d > 0 else "SELL"
         mode = timing(now)[0]
+        if mode in ("now", "lunch") and morning_behind(book, now):       # 今天早上的运行还没完成：不是马上（G9；2026-10-14）
+            return (f"{when_for(now, book)}下单：" + order_basis(str(tag or "").startswith("paper"), now, side)
+                    + ("（凑钱的卖出同一时间先卖）" if k == "buy" and tg.get("fund") == "split" else ""))
         out = ("马上（盘中）下单：" if mode == "now" else "") + order_basis(str(tag or "").startswith("paper"), now, side)
         return out + ("（凑钱的卖出同一时间先卖）" if k == "buy" and tg.get("fund") == "split" else "")
     if k == "core":
-        return f"执行器读到就生效：核心 ETF {when_text(now)}照新比例调"
+        return f"执行器读到就生效：核心 ETF {when_for(now, book)}照新比例调"
     if k == "corefix":
         return "下一次决策（交易日 07:40）起照它调"
     if k == "unblock":
@@ -1730,8 +1751,46 @@ def now_due(tag: str, book: dict | None, now: dt.datetime | None = None) -> bool
     return False
 
 
-def status_text(it: dict) -> str:
-    """指令的状态（页面 / 日志）：盘中的单分「盘中已成交 / 盘中已下单」；明天再处理的写「明天开盘」。"""
+def rolled_over(it: dict, now: dt.datetime) -> dt.date | None:
+    """盘中试过、没下成（取不到现价 / 早上的运行还没完成 / 这次运行不下单…：tried）、那天的盘中已经结束（15:25 起）的买卖指令 →
+    接下来哪天开盘处理（那天早上的决策照常把它变成寄付单）；不是这种 → None（G18；2026-10-14：以前收盘后还写「10 分钟后再试」）。
+    HALT 中等着的、「明天开盘」（hold）、等上一笔 / 等开盘（wait）、「全部换成」整批不算；那天的开盘也过了（早上的运行没跑）→ None。"""
+    if (it.get("status") != "pending" or it.get("kind") not in ORDER_KINDS or not it.get("tried") or it.get("hold")
+            or it.get("wait") or allin_member(it) or str(it.get("msg") or "").startswith(HALT_WAIT_MSG)):
+        return None
+    try:
+        d = dt.datetime.fromisoformat(str(it["tried"])).date()
+    except (TypeError, ValueError):
+        return None
+    if now.date() < d or (now.date() == d and now.time() < SESSION[1][1]):
+        return None
+    nd = next_trading_day(d)
+    if now.date() > nd or (now.date() == nd and now.time() >= CUTOFF):
+        return None
+    return nd
+
+
+def rolled_text(it: dict, now: dt.datetime) -> str | None:
+    """rolled_over 的状态文字：「今天盘中没下成 → 10/15 开盘（寄付）」（前一天试的写「10/14 盘中没下成 → …」）。"""
+    nd = rolled_over(it, now)
+    if nd is None:
+        return None
+    d = dt.datetime.fromisoformat(str(it["tried"])).date()
+    return ("今天" if d == now.date() else f"{d:%m/%d} ") + f"盘中没下成 → {nd:%m/%d} 开盘（寄付）"
+
+
+_RETRY_TAIL = re.compile(r"[，,：:；;]?\s*\d+ 分钟后再试")
+
+
+def msg_text(it: dict, now: dt.datetime | None = None) -> str:
+    """页面 / 日志显示的说明：盘中已经结束、改到开盘的（rolled_over）去掉「N 分钟后再试」（G18）。"""
+    m = str(it.get("msg") or "")
+    return _RETRY_TAIL.sub("", m) if now is not None and rolled_over(it, now) else m
+
+
+def status_text(it: dict, now: dt.datetime | None = None) -> str:
+    """指令的状态（页面 / 日志）：盘中的单分「盘中已成交 / 盘中已下单」；明天再处理的写「明天开盘」；
+    now（页面 / 命令行）：盘中没下成、盘中已经结束的写「今天盘中没下成 → MM/DD 开盘（寄付）」（G18）；等上一笔成交的写「等上一笔成交」（G10）。"""
     s = it.get("status")
     if s == "placed" and it.get("now"):
         return "盘中已成交" if it.get("fill") else "盘中已下单"
@@ -1742,6 +1801,12 @@ def status_text(it: dict) -> str:
         return "等下一次决策（整批）"
     if s == "pending" and it.get("hold"):
         return "明天开盘"
+    if s == "pending" and it.get("wait") == "prev":
+        return "等上一笔成交"
+    if s == "pending" and now is not None:
+        r = rolled_text(it, now)
+        if r:
+            return r
     return STATUS.get(s, str(s))
 
 
@@ -2141,7 +2206,15 @@ class Manual:
                     oi.update(status="superseded", msg=f"「全部换成 {it['fund_for']}」整只卖出 → 这笔减仓不再单独下")
                 self._place(eng, i, it, ps, decided, fill_day)
             elif t in self.m["trims"] or t in self.m["adds"]:
-                it["msg"] = "同一只票的上一笔手动单还没成交完：成交后再处理"
+                # 等上一笔成交（G10；2026-10-14）：标 wait = "prev" → 开盘前的补单（MO.due）不再每 3 分钟叫一次执行器；
+                # 上一笔第二天早上对账记完之后，那次决策照常处理（apply 开头会去掉 wait）
+                prev = self.m["trims"].get(t) or self.m["adds"].get(t) or {}
+                pi = self.m["items"].get(prev.get("id")) or {}
+                try:
+                    pf = max(dt.date.fromisoformat(str(pi.get("fill_day") or "")[:10]), fill_day)
+                except ValueError:
+                    pf = fill_day
+                it.update(wait="prev", msg=f"等 {t} 的上一笔成交（最早 {next_trading_day(pf):%m/%d} 早上的决策）")
                 out.append(("info", f"手动指令 {it['id']}：{t} {it['msg']}"))
                 continue
             elif it["kind"] == "adjust":
@@ -3067,8 +3140,8 @@ def signal_text(sg: dict | None) -> str:
     return "规则想买 " + "、".join(xs) if xs else "规则想买核心 ETF"
 
 
-def lines(sm: dict | None, today: str | None = None) -> list[str]:
-    """日志 / 通知用：手动指令的几行（没有就空）。today = 这一天完成的也列出来。"""
+def lines(sm: dict | None, today: str | None = None, now: dt.datetime | None = None) -> list[str]:
+    """日志 / 通知用：手动指令的几行（没有就空）。today = 这一天完成的也列出来；now → 状态按那一刻（盘中没下成、改到开盘：G18）。"""
     sm = sm or {}
     out = []
     cp, sg = sm.get("core_pause"), sm.get("core_signal")
@@ -3087,16 +3160,17 @@ def lines(sm: dict | None, today: str | None = None) -> list[str]:
     for it in sm.get("items") or []:
         if it.get("status") in ACTIVE or (today and str(it.get("done_on") or "") >= today) \
                 or (today and str(it.get("at") or "")[:10] >= today):
-            out.append(f"- 手动 {describe(it)}：{status_text(it)}" + (f"（{it['msg']}）" if it.get("msg") else ""))
+            m = msg_text(it, now)
+            out.append(f"- 手动 {describe(it)}：{status_text(it, now)}" + (f"（{m}）" if m else ""))
     return out
 
 
 __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEFAULT", "CAP_PCT", "MAX_POS", "SESSION", "Manual",
            "append", "read_all", "read_known", "is_pruned", "KEEP_ITEMS", "PAPER_IDLE", "paper_refuse", "unseen", "cancelled", "normalize", "batch_blocks", "lifting", "unblock_why", "lift_day", "rebuy_day",
            "block_text", "NEXT_DECISION", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "OPEN_ST",
-           "corefix_clear_text", "resume_info", "wait_word", "allin_busy_text", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text",
+           "corefix_clear_text", "resume_info", "wait_word", "allin_busy_text", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text", "when_for", "morning_behind",
            "next_window", "due", "cancel_due", "CANCEL_UNTIL",
            "RULE_TEXT", "NOW_NO_CANCEL", "NOW_FILLED_NO_CANCEL", "NOW_BUY_LAPSED", "NOW_SELL_WITHDRAWN", "now_expired", "now_cancel_why",
-           "now_due", "status_text", "entry_why", "buy_size", "requests_path", "position_pct", "target_shares", "adjust_plan",
+           "now_due", "status_text", "rolled_over", "rolled_text", "msg_text", "entry_why", "buy_size", "requests_path", "position_pct", "target_shares", "adjust_plan",
            "cap_text", "fmt_target", "describe", "active", "lines", "signal_text", "core_pct_now",
            "fee_jp", "core_cost", "sell_estimate", "sale_note", "est_lines", "yen_px", "TAX_PCT", "LABEL", "STATUS", "REASON_TEXT"]

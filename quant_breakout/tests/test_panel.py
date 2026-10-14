@@ -1,4 +1,4 @@
-"""本机操作面板（qbreak/panel.py）：只接受本机、要令牌、只写手动指令；交易日 07:45〜08:50 早上的运行完成后叫执行器重试。"""
+"""本机操作面板（qbreak/panel.py）：只接受本机、要令牌、只写手动指令；交易日 07:45〜08:55 早上的决策做了之后叫执行器重试。"""
 import datetime as dt
 import http.client
 import json
@@ -117,10 +117,10 @@ def test_trigger_runs_retry_in_the_morning_and_now_in_the_session(monkeypatch):
     MO.append("paper", {"kind": "sell", "ticker": "7203"})
     assert trg.check() == [] and calls == []
     _book(last="2026-10-05")
-    assert trg.check() == ["paper"] and calls == [("paper", "retry")]     # 07:45〜08:50：加进今天开盘的寄付单
+    assert trg.check() == ["paper"] and calls == [("paper", "retry")]     # 07:45〜08:55：加进今天开盘的寄付单
     assert trg.check() == []                                    # 3 分钟之内不重复
     trg.last.clear()
-    now["t"] = dt.datetime(2026, 10, 6, 8, 55, tzinfo=JST)      # 过了 08:50、还没开盘：等 09:00
+    now["t"] = dt.datetime(2026, 10, 6, 8, 55, tzinfo=JST)      # 过了 08:55（寄付截止）、还没开盘：等 09:00
     assert trg.check() == []
     now["t"] = dt.datetime(2026, 10, 6, 9, 30, tzinfo=JST)      # 盘中：马上下（--phase now）
     assert trg.check() == ["paper"] and calls[-1] == ("paper", "now")

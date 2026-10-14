@@ -94,6 +94,28 @@ mac_alert() {     # macOS 通知（文字经 argv 传入，不拼进脚本）
     "$1" "$2" >/dev/null 2>&1 || true
 }
 
+once_today() {    # 同一天同一段文字只做一次 → 0 = 今天第一次（数据目录 .mac_alerted 记「日期 摘要」，只留今天的；2026-10-14 G19）
+  # 不用 Python：冒烟测试没过时 Python 那边可能就是坏的
+  local f="$QBREAK_HOME/.mac_alerted" today sum
+  today="$(TZ=Asia/Tokyo date +%F)"
+  sum="$(printf '%s' "$1" | cksum | awk '{print $1}')"
+  grep -qx "${today} ${sum}" "$f" 2>/dev/null && return 1
+  { grep "^${today} " "$f" 2>/dev/null; printf '%s %s\n' "$today" "$sum"; } > "$f.tmp" 2>/dev/null && mv -f "$f.tmp" "$f" 2>/dev/null
+  return 0
+}
+
+active_run() {    # liveu.sh run 还在跑吗（运行标记 logs/.running.<账本>.<pid>、3 小时以内、进程还在）→ 0 = 在跑（2026-10-14 G24）
+  # 标记从拉代码 / 等云端起、到执行器跑完为止；之后让 Mac 醒着到 09:35 的那段不算（以前按进程名看 → 自检一直等到 09:35）
+  local f pid
+  while IFS= read -r f; do
+    pid="${f##*.}"
+    case "$pid" in ''|*[!0-9]*) continue ;; esac
+    if kill -0 "$pid" 2>/dev/null; then return 0; fi
+    rm -f "$f" 2>/dev/null || true                 # 进程已经没了（被杀 / 断电）：留下的标记删掉
+  done < <(find "$QBREAK_HOME/logs" -maxdepth 1 -name '.running.*' -mmin -180 2>/dev/null)
+  return 1
+}
+
 rotate_logs() {   # OPS-15：logs/ 下超过 5 MB 的 .out / .err → 轮换（.1 → .2 → .3，只留 3 份）。没有进程开着的 → 改名；
   # 有进程开着的（常驻的面板、这次运行自己的日志）→ 复制成 .1 再清空原文件（launchd 按追加方式写，清空后接着从头写）
   local f n sz max="${QBREAK_LOG_MAX_BYTES:-5242880}"
@@ -184,7 +206,9 @@ smoke_check() {   # B6：立花本番这次用的代码（只看代码的标识�
     SMOKE_REASON="新代码的冒烟测试没过（${head}）：今天不下单"
   fi
   echo "★ ${SMOKE_REASON}（对账 / 决策照常；详情在数据目录 logs/smoke_test.log）"
-  mac_alert "qbreak 立花实盘 ★ 冒烟测试没过" "$SMOKE_REASON"
+  if once_today "smoke ${SMOKE_REASON}"; then      # 同一天同一个原因只弹一次 Mac 通知（面板 / 重试每次运行都会再跑冒烟测试；G19）
+    mac_alert "qbreak 立花实盘 ★ 冒烟测试没过" "$SMOKE_REASON"
+  fi
   "$PY" run.py notify --subject "qbreak 立花实盘 ★ 新代码的冒烟测试没过" \
     --text="${SMOKE_REASON}（对账 / 决策照常，单都不下）。在 Mac 对话里说「看一下冒烟测试日志」" --level warn --once tachibana >/dev/null 2>&1 || true
   return 0
@@ -327,15 +351,17 @@ fi
 if [ "${1:-}" = "watchdog" ]; then                 # 09:30 自检（只读账本、不下单）：没通过 → 手机 / Mac 通知 + 外部心跳报失败
   shift                                            # --dry：只判定、打印（不写结果文件、不发通知 / 心跳）
   wmax="${QBREAK_WATCHDOG_WAIT:-40}"               # 执行器还在运行时最多等几次（每次 15 秒；0 = 不等）
+  wpoll="${QBREAK_WATCHDOG_POLL:-15}"              # 每次等几秒（测试用）
   case " $* " in *" --dry "*) wmax=0 ;; esac
-  if [ "$wmax" -gt 0 ] 2>/dev/null && command -v pgrep >/dev/null 2>&1; then
-    # Mac 睡着错过 07:40 时，醒来 launchd 把错过的执行器和自检一起拉起：先让执行器起来，它还在跑（git pull / 等云端 / 下单）就等它结束，
-    # 不判定跑到一半的账本（运行锁之前还有 git pull，所以看进程；运行锁 Python 那边也会再看一次）
-    sleep 15
+  if [ "$wmax" -gt 0 ] 2>/dev/null; then
+    # Mac 睡着错过 07:40 时，醒来 launchd 把错过的执行器和自检一起拉起：先让执行器起来，它还在跑（拉代码 / 等云端 / 决策 / 下单）
+    # 就等它结束，不判定跑到一半的账本（运行锁之前还有 git pull，所以看 liveu.sh 的运行标记；运行锁 Python 那边也会再看一次）。
+    # 跑完之后让 Mac 醒着到 09:35 的那段不等（2026-10-14 G24：以前按进程名看，那段也算在跑 → 自检拖到 09:36 以后）
+    sleep "$wpoll"
     i=0
-    while [ "$i" -lt "$wmax" ] && pgrep -f "scripts/liveu.sh run" >/dev/null 2>&1; do
-      [ "$i" = "0" ] && echo "（执行器还在运行：等它结束再自检，最多 $((wmax * 15 / 60)) 分钟）"
-      sleep 15
+    while [ "$i" -lt "$wmax" ] && active_run; do
+      [ "$i" = "0" ] && echo "（执行器还在运行（拉代码 / 等云端 / 决策 / 下单）：等它结束再自检，最多 $((wmax * wpoll / 60)) 分钟）"
+      sleep "$wpoll"
       i=$((i + 1))
     done
   fi
@@ -490,6 +516,10 @@ if [ "${1:-}" = "run" ]; then
     QBREAK_CAFFEINATED=1 exec caffeinate -i /bin/bash "$PROJ/scripts/liveu.sh" "$@"
   fi
   shift
+  case " $* " in *" --broker tachibana "*) runkind=tachibana ;; *) runkind=paper ;; esac
+  runmark="$QBREAK_HOME/logs/.running.${runkind}.$$"   # 运行标记（09:30 自检 / 面板的补跑看它；跑完、开始等 09:35 之前删掉；G24）
+  : > "$runmark" 2>/dev/null || true
+  trap 'rm -f "$runmark" 2>/dev/null' EXIT
   rotate_logs
   disk_check
   case " $* " in *" --phase open "*|*" --phase now "*|*" --phase cancel "*) openphase=1 ;; *) openphase=0 ;; esac   # 开盘后 / 盘中 / 撤单：不 pull、不等云端
@@ -554,6 +584,7 @@ if [ "${1:-}" = "run" ]; then
     "$PY" run.py live-u --compare-sim "$PROJ/var/state/unified_state.json" --notify --open --remote-halt "$halt_remote" ${blockarg[@]+"${blockarg[@]}"} "$@"
   fi
   rc=$?
+  rm -f "$runmark" 2>/dev/null || true             # 执行器跑完了：之后（标红 / 通知 / 让 Mac 醒着到 09:35）不算在跑
   updated=0
   find "$QBREAK_HOME/out" -name 'page_*.html' -newer "$stamp" 2>/dev/null | grep -q . && updated=1
   if { [ "$retry" = "1" ] || [ "$nowphase" = "1" ]; } && [ "$rc" = "0" ] && [ "$updated" = "0" ]; then

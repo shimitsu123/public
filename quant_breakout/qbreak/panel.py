@@ -23,8 +23,9 @@
 按钮只写指令：下单永远是执行器（HALT / ARM / 持仓核对 / 单笔上限 / 资格检查照常）。什么时候下单（qbreak/manual_orders.py；
 2026-10-07 用户：「当天买入卖出的话在交易时间段就直接进行买入卖出 在交易时间之前的话就等交易时间的时候进行交易」）：
   盘中（09:00〜11:30、12:30〜15:25）→ 面板马上叫执行器跑 bash scripts/liveu.sh run --broker … --phase now（同一个账本最多 1 分钟一次）；
-  交易日 07:45〜08:50、今天早上的运行已经完成、有新的卖出 / 调仓往下 / 撤回 → 叫一次重试（--retry，最多 3 分钟一次）→ 今天开盘的寄付单；
+  交易日 07:45〜08:55、今天早上的决策已经做了、有新的卖出 / 调仓往下 / 撤回 → 叫一次重试（--retry，最多 3 分钟一次）→ 今天开盘的寄付单；
   开盘前的买入 / 加仓 → 09:00 开盘后由 --phase now 下；收盘后点的 → 下一个交易日 07:40 的运行。
+  模拟账户今天早上的运行没完成（Mac 07:40 睡着等）、没有执行器在跑 → 面板补跑一次（一天最多 3 次；立花不补跑；2026-10-14 G9）。
 安全：只绑 127.0.0.1；Host 头：本机端口只接受 127.0.0.1 / localhost，手机端口只接受 *.ts.net（挡 DNS rebinding）；写操作要
   ① 令牌（本机）/ 设备 cookie + CSRF 令牌（手机）② 自定义头（跨站表单发不出）③ Origin（有的话）必须是这个页面自己
   ④ application/json、≤ 4 KB ⑤ 每分钟最多 30 次（配对 10 次）。不读立花的认证信息、不连立花、不下单；页面禁止被嵌入。
@@ -65,8 +66,12 @@ log = setup_logging("panel")
 BOOKS = {"paper": "模拟账户", "tachibana": "立花（本番）", "tachibana_demo": "立花デモ", "tachibana_dryrun": "立花 dry-run（只读）"}
 READONLY = {"tachibana_dryrun"}            # dry-run 的账本：只看（〔77〕C UX-15），面板不写指令
 MAX_BODY = 4096
-TRIGGER_FROM, TRIGGER_UNTIL = dt.time(7, 45), dt.time(8, 50)
+TRIGGER_FROM, TRIGGER_UNTIL = dt.time(7, 45), MO.CUTOFF   # 开盘前的重试：07:45〜08:55（与寄付截止对齐；2026-10-14 G20：以前到 08:50）
 TRIGGER_GAP_S = 180                     # 开盘前的重试：同一个账本最多 3 分钟一次
+CATCHUP_FROM = dt.time(7, 45)           # 模拟账户补跑（今天早上的运行没完成；G9）：交易日这之后、15:30 之前
+CATCHUP_GRACE_S = 120                   # 连续这么久都「没完成、没有执行器在跑」才补跑（Mac 醒来时先让 launchd 拉起错过的 07:40）
+CATCHUP_GAP_S = 1200                    # 补跑之间至少隔 20 分钟
+CATCHUP_MAX = 3                         # 一天最多补跑几次
 NOW_GAP_S = 60                          # 盘中（--phase now）：同一个账本最多 1 分钟一次
 FAIL_GAP_MAX_S = 900                    # 盘中执行器失败后的退避：NOW_GAP_S × 2^连续失败次数，最多 15 分钟
 FAIL_PAUSE_N = 3                        # 同一天连续失败几次 → 当天这个账本暂停自动叫执行器（新的手动指令 / 第二天恢复）
@@ -825,8 +830,11 @@ def _run_lines(tag: str, book: dict, now: dt.datetime, halt: str | None) -> list
         # 没装（立花模式 / 不在 Mac 上）→ 只在账本最近两个交易日内动过时算（停用了的模拟账户不吵）
         in_use = (tag == "tachibana" or (tag == "paper" and _scheduled("com.qbreak.liveu.paper"))
                   or (bool(ld) and str(ld) >= prev_trading_day(prev_trading_day(today)).isoformat()))
-        if in_use and (not ld or str(ld) < exp or (str(ld) == exp and not morning_done(book, exp))):
+        if in_use and (not ld or str(ld) < exp):
             out.append(("neg", f"★ 今天早上的运行还没完成（上次决策 {escape(str(ld or '—'))}）"))
+        elif in_use and str(ld) == exp and not morning_done(book, exp):   # 决策做了、有单没下（G20：以前也写「运行还没完成」）
+            from .live_unified import morning_unsent
+            out.append(("neg", f"★ 今天早上的决策做了（决策日 {escape(exp)}），但有 {morning_unsent(book, exp)} 笔单没下（被挡 / 还没发）"))
     wd = RS.peek_json(paths.out_dir() / f"watchdog_{tag}.json")
     if wd and wd.get("ok") is False:
         when, is_today = at(wd.get("at"))
@@ -1085,7 +1093,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     book, sm = _load(tag)
     st = book.get("state") or {}
     paper = tag.startswith("paper")
-    when = MO.when_text(now)                                # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘
+    when = MO.when_for(now, book)                           # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘 / 早上的运行没完成（G9）
     man = book.get("manual") or {}
     cap = MO.MANUAL_CAP_PCT                                 # 手动买入 / 加仓的上限（2026-10-12：最多到总权益）
     kl = sm.get("kline") or {}
@@ -1422,9 +1430,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                and not (now_it and MO.now_cancel_why(it, now)))   # 盘中的单还挂在交易所：页面上撤不了；15:30 失效的卖出能撤回（G16）
         btn = (_cbtn(it, 2 if now_it else (1 if it.get("status") == "placed" else 0)) if can else _unbtn(it))
         rows.append(f"<div class='li'><div class='grow'><b>{_what(it)}</b> <span class='chip'>"
-                    f"{escape(MO.status_text(it))}{'（撤回中）' if it.get('cancel_req') else ''}</span>"
+                    f"{escape(MO.status_text(it, now))}{'（撤回中）' if it.get('cancel_req') else ''}</span>"   # 盘中没下成 → 开盘（G18）
                     f"<div class='muted small'>{escape(str(it.get('at', ''))[5:16].replace('T', ' '))}"
-                    f"{(' · ' + escape(str(it['msg']))) if it.get('msg') else ''}</div></div>{btn}</div>")
+                    f"{(' · ' + escape(MO.msg_text(it, now))) if it.get('msg') else ''}</div></div>{btn}</div>")
     H.append(PANE + "trade")
     H.append("<section class='card' id='orders'><h2>手动指令</h2><div class='list'>"
              + ("".join(rows) or f"<div class='li muted'>最近 {MANUAL_SHOW_DAYS} 天没有</div>") + "</div>"
@@ -1888,7 +1896,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
         rec = MO.append(tag, rec, clock=clock)
     if rec["kind"] == "unblock":                           # 解除不是单：不会买回、也不马上买，下一次决策起才不挡（2026-10-13）
         return True, f"已写：解除 {rec['ticker']} 的不自动买回（不会买回，也不马上买；指令 {rec['id']}）→ {MO.NEXT_DECISION}", rec
-    when = MO.when_text(now or now_jst())                   # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘
+    when = MO.when_for(now or now_jst(), book)              # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘 / 早上的运行没完成（G9）
     k, t = rec["kind"], rec.get("ticker")
     msg = {"sell": f"已写：卖出 {t} 全部 → {when}卖出",
            "trim": f"已写：{t} 减到约 {rec.get('pct', 0):g}% → {when}卖出",
@@ -1962,19 +1970,35 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
     return True, msg + f"（指令 {rec['id']}）", rec
 
 
+def _trigger_notify(tag: str, title: str, text: str, level: str = "warn") -> None:
+    """面板自动叫执行器的提醒（暂停 / 盘中没下成改到开盘）：Mac 通知 + 手机通知（qbreak 推送 / 通知记录）。去重在 Trigger._flush。"""
+    from . import notify
+    from .live_unified import mac_notify
+    mac_notify(title, text[:200])
+    notify.send(title, text, level)
+
+
 class Trigger:
     """面板写了手动指令之后叫执行器（同一个账本同一时间只跑一个）：
     盘中（09:00〜11:30、12:30〜15:25）有要马上下的指令 → --phase now（同一个账本最多 1 分钟一次）；
-    交易日 07:45〜08:50、今天早上的运行已经完成、有新的卖出 / 调仓往下 / 撤回 → --retry（加进今天开盘的寄付单；最多 3 分钟一次）。
+    交易日 07:45〜08:55（寄付截止 MO.CUTOFF；2026-10-14 G20：以前到 08:50）、今天早上的决策已经做了（账本处理到应有的决策日；
+    有单被挡也算 —— 以前要「完成」才叫，被挡时新写的卖出加不进寄付单）、有新的卖出 / 调仓往下 / 撤回 → --retry（加进今天开盘的寄付单；最多 3 分钟一次）。
+    模拟账户补跑（G9；2026-10-14）：装着 07:40 的定时任务（没装立花本番）、交易日 07:45〜15:30、今天早上的运行还没完成（Mac 07:40 睡着 /
+    运行失败）、没有执行器在跑（运行锁 + liveu.sh 的运行标记）、连续 2 分钟都这样 → 叫一次照常的运行（--retry：没完成就按正常流程跑；
+    同一天最多 3 次、相隔至少 20 分钟；模拟期开始日之前 / HALT 不叫）。立花本番（真钱）永远不补跑。
     失败退避（2026-10-09 立花实盘缺口 A7，条目 UX-04 / C-01：执行器失败后每分钟重叫 = 通知轰炸 + 反复登录立花，可能被判过负荷）：
     记下每个账本上一次叫的进程的退出码（非 0 = 失败）；盘中连续失败 n 次 → 从看到失败起至少等 min(60 秒 × 2^n, 15 分钟)；
-    同一天连续失败 3 次（盘中 / 开盘前的重试一起算）→ 当天这个账本暂停自动叫，直到出现新的手动指令（叫那次执行器之后写的）或第二天；
-    成功一次就清零。只管面板自己叫的；07:40 / 08:35 / 09:05 / 09:20 的定时运行不受影响。"""
+    同一天连续失败 3 次（盘中 / 开盘前的重试一起算）→ 当天这个账本暂停自动叫，直到出现新的手动指令（叫那次执行器之后写的）、
+    执行器之后跑成了一次（例：你在 Mac 对话里说「再试一次」）或第二天；成功一次就清零。暂停时通知一次（G23），暂停记在状态目录
+    panel_trigger.json（面板重启也接着停，第二天作废）。
+    盘中没下成、改到开盘（G18）：交易日 15:25 之后看一次，今天盘中试过没下成的指令 → 通知一次「盘中没下成、改到开盘：N 条」。
+    只管面板自己叫的；07:40 / 08:35 / 09:05 / 09:20 的定时运行不受影响。"""
 
-    def __init__(self, run=None, clock=None, mono=None):
+    def __init__(self, run=None, clock=None, mono=None, notify=None):
         self.run = run or self._spawn
         self.clock = clock or now_jst
         self.mono = mono or time.monotonic
+        self.notify = notify or _trigger_notify
         self.last: dict[str, float] = {}
         self.procs: dict[str, subprocess.Popen] = {}
         self.started: dict[str, dt.datetime] = {}           # 账本 → 这次叫执行器的时刻（找这次的运行状态）
@@ -1982,23 +2006,55 @@ class Trigger:
         self.errs: dict[str, str] = {}                      # 账本 → 最后一次失败的原因
         self.paused: dict[str, tuple[str, str]] = {}        # 账本 → (日期, 原因)：当天暂停自动叫执行器
         self.pause_ids: dict[str, frozenset] = {}           # 暂停的基准：叫那次执行器时还没读的指令 id（出现不在里面的 = 新的指令 → 恢复）
+        self.pause_at: dict[str, dt.datetime] = {}          # 暂停的时刻（之后执行器跑成了一次 → 恢复）
         self.spawn_ids: dict[str, frozenset] = {}           # 账本 → 叫执行器那一刻还没读的指令 id
+        self.catchups: dict[str, tuple[str, int]] = {}      # 账本 → (日期, 今天补跑了几次)
+        self.catch_last: dict[str, float] = {}              # 账本 → 上一次补跑的单调时刻
+        self.behind: dict[str, tuple[str, float]] = {}      # 账本 → (日期, 从什么时候起一直「早上的运行没完成、没有执行器在跑」)
+        self.rolled: dict[str, str] = {}                    # 账本 → 哪天已经看过「盘中没下成、改到开盘」
+        self.outbox: list[tuple[str, str, str, str]] = []   # 要发的提醒（账本, 标题, 正文, 级别）：锁外面发
         self.lock = threading.Lock()
+        self._load_pauses()
 
     @staticmethod
     def _spawn(tag: str, mode: str = "retry"):
         broker = "paper" if tag == "paper" else "tachibana"
         cmd = ["/bin/bash", str(paths.PROJECT_ROOT / "scripts" / "liveu.sh"), "run", "--broker", broker]
-        cmd += ["--phase", mode] if mode in ("now", "cancel") else ["--retry"]
+        cmd += ["--phase", mode] if mode in ("now", "cancel") else ["--retry"]   # catchup（模拟账户补跑）= --retry：没完成就按正常流程跑
         if tag == "tachibana_demo":
             cmd.append("--demo")
         lf = open(paths.log_dir() / "com.qbreak.panel.retry.log", "a", encoding="utf-8")
-        lf.write(f"\n── {now_jst():%Y-%m-%d %H:%M:%S} JST 手动指令 → {' '.join(cmd[1:])}\n")
+        lf.write(f"\n── {now_jst():%Y-%m-%d %H:%M:%S} JST {'早上的运行没完成 → 补跑' if mode == 'catchup' else '手动指令'} → {' '.join(cmd[1:])}\n")
         lf.flush()
         env = {**os.environ, "QBREAK_NO_HOLD": "1"}        # 跑完马上结束，不在进程里等到 09:35（liveu.sh 把让 Mac 醒着放到后台；2026-10-14 G2：
         #                                                   以前立花的 --retry 一直活到 09:35，这段时间面板不再叫执行器 → 撤单、盘中指令都卡住）
         return subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, cwd=str(paths.PROJECT_ROOT), start_new_session=True,
                                 env=env)
+
+    # ── 暂停记在状态目录（面板重启也接着停；G23） ──
+    def _load_pauses(self) -> None:
+        from . import run_status as RS
+        d = RS.peek_json(paths.state_dir() / RS.TRIGGER_FILE) or {}
+        today = self.clock().date().isoformat()
+        for tag, rec in (d.items() if isinstance(d, dict) else []):
+            if isinstance(rec, dict) and rec.get("day") == today and tag in BOOKS:
+                self.paused[tag] = (today, str(rec.get("why") or ""))
+                self.pause_ids[tag] = frozenset(str(x) for x in rec.get("ids") or [])
+                self.fails[tag] = (today, FAIL_PAUSE_N)
+                t = RS.ts(rec.get("at"))
+                if t is not None:
+                    self.pause_at[tag] = t
+
+    def _save_pauses(self) -> None:
+        from .utils import atomic_write_text
+        d = {tag: {"day": day, "why": why, "ids": sorted(self.pause_ids.get(tag, frozenset())),
+                   "at": (self.pause_at.get(tag) or self.clock()).isoformat(timespec="seconds")}
+             for tag, (day, why) in self.paused.items()}
+        try:
+            from . import run_status as RS
+            atomic_write_text(paths.state_dir() / RS.TRIGGER_FILE, json.dumps(d, ensure_ascii=False, indent=1))
+        except Exception as e:                               # noqa: BLE001
+            log.warning("面板自动叫执行器的暂停没记下（面板重启后会忘）：%s", e)
 
     @staticmethod
     def _unseen_ids(tag: str, book: dict | None = None) -> frozenset:
@@ -2050,48 +2106,112 @@ class Trigger:
                 return False
             self.paused[tag] = (today, self.errs[tag])
             self.pause_ids[tag] = base
-            log.warning("面板叫的执行器今天连续失败 %d 次（%s）：今天暂停自动叫（新的手动指令 / 明天恢复）", n, tag)
+            self.pause_at[tag] = self.clock()
+            self._save_pauses()
+            name = BOOKS.get(tag, tag)
+            self.outbox.append((tag, f"qbreak {name} ★ 面板自动下单今天暂停",
+                                f"今天剩下的盘中指令不会再自动下：执行器连续失败 {n} 次（{self.errs[tag]}）。"
+                                "修好后写一条新的指令，或在 Mac 对话里说「再试一次」；明天自动恢复", "warn"))
+            log.warning("面板叫的执行器今天连续失败 %d 次（%s）：今天暂停自动叫（新的手动指令 / 再跑成一次 / 明天恢复）", n, tag)
         return False
 
+    def _ran_ok_since(self, tag: str) -> bool:
+        """暂停之后执行器跑成了一次（运行状态文件 ok、时刻在暂停之后；例：在 Mac 对话里说「再试一次」→ 手动跑了一次）。"""
+        from . import run_status as RS
+        t0 = self.pause_at.get(tag)
+        rec = RS.read(tag) or {}
+        t = RS.ts(rec.get("at"))
+        try:
+            return t0 is not None and t is not None and rec.get("ok") is True and t > t0
+        except TypeError:                                    # 时钟没带时区：不比较
+            return False
+
     def _still_paused(self, tag: str, today: str, book: dict | None = None) -> bool:
-        """暂停中：第二天 / 有新的手动指令（出现叫那次执行器时还没有的指令 id）→ 恢复（失败次数清零）。
+        """暂停中：第二天 / 有新的手动指令（出现叫那次执行器时还没有的指令 id）/ 暂停之后执行器跑成了一次 → 恢复（失败次数清零）。
         指令被定时运行读掉（没读的变少）不算新的指令。"""
         pz = self.paused.get(tag)
         if not pz:
             return False
-        if pz[0] == today and not (self._unseen_ids(tag, book) - self.pause_ids.get(tag, frozenset())):
+        new = pz[0] == today and bool(self._unseen_ids(tag, book) - self.pause_ids.get(tag, frozenset()))
+        ok = pz[0] == today and not new and self._ran_ok_since(tag)
+        if pz[0] == today and not new and not ok:
             return True
         self.paused.pop(tag, None)
         self.pause_ids.pop(tag, None)
+        self.pause_at.pop(tag, None)
         self.fails.pop(tag, None)
-        log.info("面板自动叫执行器恢复（%s）：%s", tag, "第二天" if pz[0] != today else "有新的手动指令")
+        self._save_pauses()
+        log.info("面板自动叫执行器恢复（%s）：%s", tag,
+                 "第二天" if pz[0] != today else ("有新的手动指令" if new else "执行器之后跑成了一次"))
         return False
 
     def _gap(self, tag: str, today: str, morning: bool) -> float:
         if morning:
-            return TRIGGER_GAP_S                           # 开盘前的重试照旧（3 分钟一次、到 08:50 为止）
+            return TRIGGER_GAP_S                           # 开盘前的重试照旧（3 分钟一次、到 08:55 为止）
         return min(NOW_GAP_S * 2 ** self._nfail(tag, today), FAIL_GAP_MAX_S)
 
     def _due(self, tag: str, book: dict, now: dt.datetime, morning: bool) -> bool:
-        """面板现在会不会为这个账本叫执行器（不看退避）：开盘前 = 早上的运行已完成 + 有新的卖出 / 调仓往下 / 撤回；
-        盘中 = 有要马上下的指令。"""
-        from .live_unified import morning_done
+        """面板现在会不会为这个账本叫执行器（不看退避）：开盘前 = 今天早上的决策已经做了（账本处理到应有的决策日；有单被挡也算，
+        G20）+ 有新的卖出 / 调仓往下 / 撤回；盘中 = 有要马上下的指令。"""
         from .trader import expected_last_bar
         if morning:
-            return morning_done(book, expected_last_bar(now.date(), "JP").isoformat()) and bool(MO.due(tag, book, now))
+            ld = str((book.get("state") or {}).get("last_date") or "")
+            return ld == expected_last_bar(now.date(), "JP").isoformat() and bool(MO.due(tag, book, now))
         return bool(MO.now_due(tag, book, now))
+
+    def _catchup_due(self, tag: str, book: dict, now: dt.datetime) -> bool:
+        """模拟账户补跑（G9）：见类的说明。连续 CATCHUP_GRACE_S 秒都「没完成、没有执行器在跑」才叫（Mac 醒来时 launchd 也会把错过的
+        07:40 拉起来：先让它起来）。立花永远不补跑。"""
+        from . import run_status as RS
+        from .calendar_jp import prev_trading_day
+        from .live_unified import lock_held
+        today = now.date().isoformat()
+        if (tag != "paper" or not is_trading_day(now.date()) or not (CATCHUP_FROM <= now.time() < MO.CANCEL_UNTIL)
+                or not _scheduled(paths.PAPER_AGENT) or paths.live_installed() or paths.halt_file().exists()):
+            self.behind.pop(tag, None)
+            return False
+        ld = str((book.get("state") or {}).get("last_date") or "")
+        if not ld or ld >= prev_trading_day(now.date()).isoformat():
+            self.behind.pop(tag, None)
+            return False                                     # 完成了（或账本还没有：第一次运行不归面板）
+        from .watchdog import _sim_start
+        start = _sim_start()
+        if start and today < start:
+            return False                                     # 模拟期开始日之前执行器本来就不推进模拟账户
+        if lock_held(paths.state_dir() / f"live_unified_{tag}.lock") or RS.runs_active("paper"):
+            self.behind.pop(tag, None)
+            return False                                     # 有执行器在跑（拉代码 / 等云端 / 决策）：等它
+        d, n = self.catchups.get(tag, ("", 0))
+        if d == today and n >= CATCHUP_MAX:
+            return False
+        if d == today and self.mono() - self.catch_last.get(tag, -1e9) < CATCHUP_GAP_S:
+            return False
+        bd, since = self.behind.get(tag, ("", 0.0))
+        if bd != today:
+            self.behind[tag] = (today, self.mono())
+            return False
+        return self.mono() - since >= CATCHUP_GRACE_S
 
     def status(self, tag: str, now: dt.datetime | None = None, book: dict | None = None) -> tuple[str, str] | None:
         """面板顶部的一行（未转义的文字）：(CSS 类, 文字)。今天暂停中 → ★；今天失败过、还有要叫执行器的指令 → 最早什么时候再叫；
-        没事（或已经没有要下的指令：之后不会再叫）→ None。book：render 已经读好的账本（不给就读）。"""
+        今天补跑过早上的运行 → 说一声；没事（或已经没有要下的指令：之后不会再叫）→ None。book：render 已经读好的账本（不给就读）。"""
         now = now or self.clock()
         today = now.date().isoformat()
         morning = is_trading_day(now.date()) and TRIGGER_FROM <= now.time() < TRIGGER_UNTIL
         with self.lock:
             pz = self.paused.get(tag)
             if pz and pz[0] == today:
-                return ("neg", f"★ 盘中自动下单暂停：执行器连续失败 {FAIL_PAUSE_N} 次（{pz[1]}）；修好后写新的指令或明天自动恢复")
+                return ("neg", f"★ 盘中自动下单暂停：执行器连续失败 {FAIL_PAUSE_N} 次（{pz[1]}）；修好后写新的指令或明天自动恢复"
+                               "（也可以在 Mac 对话里说「再试一次」）")
             n = self._nfail(tag, today)
+            cd, cn = self.catchups.get(tag, ("", 0))
+            if n <= 0 and cd == today and cn > 0 and tag not in self.procs:
+                b = book if book is not None else _load(tag)[0]
+                from .calendar_jp import prev_trading_day
+                if str((b.get("state") or {}).get("last_date") or "") < prev_trading_day(now.date()).isoformat():
+                    return ("neg", f"★ 今天早上的运行没完成：面板已经补跑了 {cn} 次还是没完成（最多 {CATCHUP_MAX} 次）"
+                                   "：在 Mac 对话里说「看一下执行器日志」")
+                return None
             if n <= 0 or tag in self.procs or not (morning or MO.timing(now)[0] == "now"):
                 return None
             wait = max(0.0, self._gap(tag, today, morning) - (self.mono() - self.last.get(tag, -1e9)))
@@ -2100,45 +2220,85 @@ class Trigger:
         nxt = (now + dt.timedelta(seconds=wait)).strftime("%H:%M")
         return ("muted", f"面板叫的执行器今天连续失败 {n} 次：最早 {nxt} 再自动叫（连续 {FAIL_PAUSE_N} 次失败当天暂停）")
 
+    def _rollover(self, tag: str, now: dt.datetime) -> None:
+        """交易日 15:25 之后看一次（G18）：今天盘中试过、没下成、改到开盘的指令 → 提醒一次「盘中没下成、改到开盘：N 条」。"""
+        today = now.date().isoformat()
+        if self.rolled.get(tag) == today or not is_trading_day(now.date()) or now.time() < MO.SESSION[1][1]:
+            return
+        self.rolled[tag] = today
+        items = ((_load(tag)[0].get("manual") or {}).get("items") or {}).values()
+        rows = [it for it in items if MO.rolled_over(it, now) and str(it.get("tried") or "")[:10] == today]
+        if not rows:
+            return
+        nd = MO.rolled_over(rows[0], now)
+        body = "\n".join(f"- {MO.describe(it)}：{MO.msg_text(it, now) or '没下成'}" for it in rows[:10]) + ("\n…" if len(rows) > 10 else "")
+        self.outbox.append((tag, f"qbreak {BOOKS.get(tag, tag)} 盘中没下成、改到开盘：{len(rows)} 条",
+                            f"{body}\n→ {nd:%m/%d} 开盘（寄付）照常处理；不要了就在面板「交易」里撤回", "info"))
+
+    def _flush(self, now: dt.datetime) -> None:
+        """锁外面发提醒：同一个账本、同一天、同一段文字只发一次（qbreak/notify_seen.py）。"""
+        from . import notify_seen as NS
+        with self.lock:
+            box, self.outbox = self.outbox, []
+        for tag, title, text, level in box:
+            try:
+                if NS.first(tag, f"面板|{title}|{text}", now):
+                    self.notify(tag, title, text, level)
+            except Exception as e:                           # noqa: BLE001
+                log.warning("面板的提醒没发成（%s）：%s", tag, e)
+
     def check(self) -> list[str]:
         """看一遍各个账本；返回这次叫了执行器的账本。"""
         now = self.clock()
         today = now.date().isoformat()
         morning = is_trading_day(now.date()) and TRIGGER_FROM <= now.time() < TRIGGER_UNTIL
         session = MO.timing(now)[0] == "now"
-        cwin = is_trading_day(now.date()) and now.time() < MO.CANCEL_UNTIL     # 撤单：开盘前 / 午休也叫（15:30 之前）
+        cwin = is_trading_day(now.date()) and now.time() < MO.CANCEL_UNTIL     # 撤单 / 补跑：开盘前 / 午休也叫（15:30 之前）
         names = books() if (morning or session or cwin) else []
         with self.lock:
             for tag in list(self.procs):
                 if tag not in names:
                     self._reap(tag, today)                   # 这次不看的账本（不在叫的时段 / 不在列表里）：结束了就记下成败
-        if not names:
-            return []
+            if is_trading_day(now.date()) and now.time() >= MO.SESSION[1][1]:
+                for tag in books():
+                    try:
+                        self._rollover(tag, now)
+                    except Exception as e:                   # noqa: BLE001
+                        log.warning("盘中没下成的汇总出错（%s）：%s", tag, e)
         out = []
-        with self.lock:
-            for tag in names:
-                if self._reap(tag, today):
-                    continue                                 # 上一次叫的还在跑（结束了：这里记下成败，每次只 poll 一次）
-                if tag in self.paused and self._still_paused(tag, today):
-                    continue                                 # 今天连续失败 3 次：等新的手动指令或明天
-                book, _ = _load(tag)
-                if MO.cancel_due(tag, book, now):
-                    mode = "cancel"                          # 撤单指令：先撤（不看早上的运行完成没有；HALT 时也撤）
-                elif (morning or session) and self._due(tag, book, now, morning):
-                    mode = "retry" if morning else "now"
-                else:
-                    continue                                 # 开盘前：早上的运行还没完成（它自己会读到指令）/ 没有新指令
-                if self.mono() - self.last.get(tag, -1e9) < self._gap(tag, today, morning and mode != "cancel"):
-                    continue                                 # 失败过：从看到失败起按连续失败次数加倍等
-                self.last[tag] = self.mono()
-                try:
-                    self.started[tag] = now
-                    self.spawn_ids[tag] = self._unseen_ids(tag, book)   # 暂停的基准：叫的这一刻还没读的指令
-                    self.procs[tag] = self.run(tag, mode)
-                    out.append(tag)
-                    log.info("手动指令：叫执行器（%s，%s）", tag, mode)
-                except Exception as e:                       # noqa: BLE001
-                    log.warning("叫执行器失败（%s，%s）：%s", tag, mode, e)
+        if names:
+            with self.lock:
+                for tag in names:
+                    if self._reap(tag, today):
+                        continue                             # 上一次叫的还在跑（结束了：这里记下成败，每次只 poll 一次）
+                    if tag in self.paused and self._still_paused(tag, today):
+                        continue                             # 今天连续失败 3 次：等新的手动指令 / 再跑成一次 / 明天
+                    book, _ = _load(tag)
+                    if MO.cancel_due(tag, book, now):
+                        mode = "cancel"                      # 撤单指令：先撤（不看早上的运行完成没有；HALT 时也撤）
+                    elif self._catchup_due(tag, book, now):
+                        mode = "catchup"                     # 模拟账户：今天早上的运行没完成、没有执行器在跑 → 补跑（G9）
+                    elif (morning or session) and self._due(tag, book, now, morning):
+                        mode = "retry" if morning else "now"
+                    else:
+                        continue                             # 开盘前：早上的决策还没做（它自己会读到指令）/ 没有新指令
+                    if self.mono() - self.last.get(tag, -1e9) < self._gap(tag, today, morning and mode not in ("cancel", "catchup")):
+                        continue                             # 失败过：从看到失败起按连续失败次数加倍等
+                    self.last[tag] = self.mono()
+                    try:
+                        self.started[tag] = now
+                        self.spawn_ids[tag] = self._unseen_ids(tag, book)   # 暂停的基准：叫的这一刻还没读的指令
+                        self.procs[tag] = self.run(tag, mode)
+                        if mode == "catchup":
+                            d, n = self.catchups.get(tag, ("", 0))
+                            self.catchups[tag] = (today, (n if d == today else 0) + 1)
+                            self.catch_last[tag] = self.mono()
+                            self.behind.pop(tag, None)
+                        out.append(tag)
+                        log.info("%s：叫执行器（%s，%s）", "早上的运行没完成" if mode == "catchup" else "手动指令", tag, mode)
+                    except Exception as e:                   # noqa: BLE001
+                        log.warning("叫执行器失败（%s，%s）：%s", tag, mode, e)
+        self._flush(now)
         return out
 
     def loop(self, stop: threading.Event, every: float = 30.0) -> None:

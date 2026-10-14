@@ -12,7 +12,10 @@ LaunchAgent com.qbreak.watchdog（周一至五 09:30，scripts/install_launchd_w
   仓库（~/qbreak-src，paths.PROJECT_ROOT）的 var/out/unified_today.json 的 date ≠ 今天 → 原因「今天的模拟盘日报没入库（…）」
   （07:40 的执行器用的是旧的判断层 / 宏观数值）；模拟期开始前 / 结束后、这个文件不在（不是仓库的克隆）→ 不报。两种账本都看。
 - 执行器正在运行（拿着运行锁；例：Mac 睡着错过 07:40，醒来时 launchd 把错过的任务和自检一起拉起）→ 等它结束再判定（最多 10 分钟）；
-  还在跑 → 这次不判定、不发通知 / 心跳。
+  还在跑 → 这次不判定、不发通知 / 心跳。（scripts/liveu.sh watchdog 在这之前先看 liveu.sh run 的运行标记：拉代码 / 等云端也算在跑；
+  跑完之后让 Mac 醒着到 09:35 的那段不算 —— 以前按进程名看，一直等到 09:35；2026-10-14 G24）
+- 该下了还没下的手动指令（盘中 / 开盘该下的买卖、闲置资金比例；过了该下的时刻 10 分钟以上）→ 原因（面板没开 / 自动下单暂停 /
+  早上的运行没完成；2026-10-14 G24）。
 - 写 out/watchdog_<账本>.json（at、ok、reasons；面板 / 手机顶部显示今天没通过的原因）。
 - 外部心跳发了没有也记进去（heartbeat：{at, state: sent / failed / not_set, why}；why 不含地址）；没发成 → 手机通知 + Mac 通知
   同一天只一次（地址格式不对 → 叫你在「终端」App 重新存一次钥匙串）；面板顶部 / 菜单栏的状态显示（2026-10-14 G12）。
@@ -158,6 +161,71 @@ def _manual_unsent(book: dict, exp: str, today: dt.date, done: bool) -> list[str
     return out
 
 
+MANUAL_GRACE_S = 600                # 手动指令过了该下的时刻这么久还没下 → 自检报（G24）
+
+
+def _due_at(at, today: dt.date) -> dt.datetime | None:
+    """一条手动指令今天最晚该在什么时刻下（G24）：写于开盘前 / 前几天 → 今天 09:00 开盘；盘中写的 → 写的时刻；午休写的 → 12:30；
+    收盘后 / 休市日写的 → 下一个交易日 09:00（在今天之后 → None）。读不了 → None。"""
+    from . import manual_orders as MO
+    try:
+        w = dt.datetime.fromisoformat(str(at))
+    except (TypeError, ValueError):
+        return None
+    w = w.astimezone(JST) if w.tzinfo else w.replace(tzinfo=JST)
+    mode, d = MO.timing(w)
+    if mode == "now":
+        t = w
+    elif mode == "lunch":
+        t = dt.datetime.combine(d, MO.SESSION[1][0], tzinfo=JST)
+    else:
+        t = dt.datetime.combine(d, MO.SESSION[0][0], tzinfo=JST)
+    if t.date() < today:
+        t = dt.datetime.combine(today, MO.SESSION[0][0], tzinfo=JST)
+    return t if t.date() == today else None
+
+
+def _manual_waiting(tag: str, book: dict, now: dt.datetime, done: bool) -> list[str]:
+    """该下了还没下的手动指令（G24；2026-10-14）：盘中 / 开盘该下的买卖（执行器读了还在等的，或面板叫的执行器根本没读到的；
+    闲置资金比例没读到的也算），过了该下的时刻 10 分钟以上 → 一条原因（面板没开 / 自动下单暂停 / 早上的运行没完成…）。
+    「明天开盘」、等上一笔成交、「全部换成」整批、撤回中的不算；盘中正在一会儿再试（取不到现价等，面板上写着）的不算。"""
+    from . import manual_orders as MO
+    from . import run_status as RS
+    today = now.date()
+    td = today.isoformat()
+    items = (book.get("manual") or {}).get("items") or {}
+    rows: list[tuple[dict, str]] = []
+    for it in items.values():
+        if (not isinstance(it, dict) or it.get("status") != "pending" or it.get("kind") not in MO.ORDER_KINDS
+                or it.get("hold") == td or it.get("wait") == "prev" or MO.allin_member(it) or it.get("cancel_req")):
+            continue
+        tr = RS.ts(it.get("tried"))
+        if tr is not None and (now - tr).total_seconds() < MO.RETRY_S + 300:
+            continue
+        rows.append((it, str(it.get("msg") or "执行器读了，还没下")))
+    try:
+        waiting = MO.unseen(tag, book)
+    except Exception:                                         # noqa: BLE001  指令文件读不了：只看账本里的
+        waiting = []
+    gone = MO.cancelled(waiting)
+    for r in waiting:
+        if r.get("kind") in MO.ORDER_KINDS + ("core",) and not MO.allin_member(r) and r.get("id") not in gone:
+            rows.append((r, "执行器还没读到"))
+    late = []
+    for it, why in sorted(rows, key=lambda x: str(x[0].get("at") or "")):
+        t = _due_at(it.get("at"), today)
+        if t is not None and (now - t).total_seconds() >= MANUAL_GRACE_S:
+            late.append(f"{it.get('id')}（{MO.describe(it)}，写于 {MO.mmdd(it.get('at'))}）：{why}")
+    if not late:
+        return []
+    pz = RS.trigger_paused(tag, td)
+    hint = (f"面板自动下单今天暂停了（{pz.get('why') or '执行器连续失败'}）" if pz else
+            "今天早上的运行还没完成：补跑之后才下" if not done and str(((book.get("state") or {}).get("last_date")) or "")
+            < prev_trading_day(today).isoformat() else
+            "面板没开（盘中的单要面板叫执行器）？在 Mac 对话里说「看一下面板」")
+    return [f"有 {len(late)} 条手动指令到现在还没下（{hint}）：" + "；".join(late[:5]) + ("…" if len(late) > 5 else "")]
+
+
 def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
     """→ {"at", "tag", "trading", "judged", "ok", "halt", "reasons": [...], "note"}。只读（账本读坏也不改名）。"""
     from . import run_status as RS
@@ -207,6 +275,8 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
                            + ("…" if len(stuck) > 5 else ""))
     if str(ld or "") == exp:                                  # 手动指令的单没发出（被拒 / 连续几天被挡；G7）
         reasons += _manual_unsent(book, exp, today, done)
+    if not _halt():                                           # 该下了还没下的手动指令（面板没开 / 暂停 / 早上没跑完；G24）
+        reasons += _manual_waiting(tag, book, now, done)
     unk = [o for o in book.get("orders") or [] if isinstance(o, dict) and o.get("status") in UNKNOWN]
     if unk:
         what = "、".join(f"{o.get('ticker')} {'买' if o.get('side') == 'BUY' else '卖'} {int(o.get('sent_qty') or o.get('qty') or 0):,}"
@@ -374,4 +444,4 @@ def _after_beat(r: dict, hb: tuple[bool | None, str], tag: str, name: str, now, 
         out("  （今天已经提醒过外部心跳没发成：这次不再发通知）")
 
 
-__all__ = ["installed", "evaluate", "write", "run", "path", "beat_text", "beat_fix", "LABEL"]
+__all__ = ["installed", "evaluate", "write", "run", "path", "beat_text", "beat_fix", "LABEL", "MANUAL_GRACE_S"]

@@ -34,6 +34,7 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("QBREAK_NO_KEYCHAIN", "1")
     monkeypatch.setenv("QBREAK_LAUNCH_AGENTS", str(tmp_path / "LaunchAgents"))   # 不看本机真的定时任务（在 Mac 上跑测试也一样）
     monkeypatch.setattr("qbreak.notify.KEYCHAIN", False)
+    monkeypatch.setattr("qbreak.live_unified.mac_notify", lambda title, text: False)   # 测试不弹真的 Mac 通知（要看的测试自己换）
     monkeypatch.setattr("qbreak.notify._CACHE", {})
     monkeypatch.setattr("qbreak.watch_prob.FILE", tmp_path / "watch_prob.json")   # 观察中的比例表：默认没有（要用的测试自己写）
     monkeypatch.setattr("qbreak.watchdog.DAILY_FILE", tmp_path / "repo_var" / "out" / "unified_today.json")   # 09:30 自检不看仓库里真的日报

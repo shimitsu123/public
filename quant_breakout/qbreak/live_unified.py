@@ -3199,6 +3199,13 @@ def morning_done(book: dict, expected_bar: str) -> bool:
                    for o in (book or {}).get("orders") or [])
 
 
+def morning_unsent(book: dict, expected_bar: str) -> int:
+    """决策 expected_bar 里还没下的单（PLANNED / BLOCKED）有几笔（G20；2026-10-14：面板 / 重试分清「决策做了，但有 N 笔没下」
+    与「早上的运行还没完成」）。"""
+    return sum(1 for o in (book or {}).get("orders") or []
+               if o.get("decided_on") == expected_bar and o.get("status") in ("PLANNED", "BLOCKED"))
+
+
 def late_pending(book: dict) -> bool:
     """09:20 的开盘后重试用（B13）：当前决策里还有早上错过寄付、还没发出的个股卖单吗（时间窗口挡下的，或开盘后那一刻取不到现价的）。"""
     d = ((book or {}).get("state") or {}).get("last_date")

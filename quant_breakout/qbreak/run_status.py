@@ -186,3 +186,44 @@ def write(tag: str, rec: dict, keep_recent_fail: bool = False) -> bool:
 def read(tag: str) -> dict | None:
     """读运行状态文件：没有 / 读坏 → None（面板不显示，不报错）。"""
     return peek_json(path(tag))
+
+
+# ── liveu.sh run 的运行标记、面板自动叫执行器的暂停（2026-10-14 G9 / G23 / G24） ──
+RUN_MARK_MAX_S = 3 * 3600                             # 超过 3 小时的运行标记不算（进程被杀 / 断电留下的）
+TRIGGER_FILE = "panel_trigger.json"                   # 状态目录：面板自动叫执行器今天暂停的账本（面板重启也接着停；第二天作废）
+
+
+def runs_active(broker: str | None = None, now: float | None = None) -> list[int]:
+    """scripts/liveu.sh run 正在运行的进程（数据目录 logs/.running.<paper|tachibana>.<pid>：从拉代码 / 等云端起、到执行器跑完为止；
+    之后让 Mac 醒着到 09:35 的那段不算）→ 还活着的 pid。broker = paper / tachibana（None = 都看）。只读。"""
+    import os
+    import time
+    t = time.time() if now is None else float(now)
+    out = []
+    try:
+        fs = list(paths.log_dir().glob(f".running.{broker}.*" if broker else ".running.*"))
+    except OSError:
+        return []
+    for f in fs:
+        try:
+            pid = int(f.name.rsplit(".", 1)[1])
+            if pid <= 1 or t - f.stat().st_mtime > RUN_MARK_MAX_S:
+                continue
+            os.kill(pid, 0)
+        except PermissionError:                         # 进程在（别的用户的）：算在跑
+            pass
+        except (ValueError, IndexError, OSError):
+            continue
+        out.append(pid)
+    return sorted(out)
+
+
+def trigger_paused(tag: str, day: str | None = None) -> dict | None:
+    """面板自动叫执行器今天暂停了吗（qbreak/panel.Trigger 记的；09:30 自检 / 面板读）→ {"day", "why", "ids", "at"}；没有 → None。"""
+    d = peek_json(paths.state_dir() / TRIGGER_FILE) or {}
+    rec = d.get(tag) if isinstance(d, dict) else None
+    if not isinstance(rec, dict):
+        return None
+    if day is not None and rec.get("day") != day:
+        return None
+    return rec

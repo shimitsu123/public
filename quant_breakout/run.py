@@ -4052,6 +4052,7 @@ def _live_unified_run(a, opened: list) -> int:
         return 0
     if a.remote_halt:                                   # 云端对话里你说「停」→ 仓库的 var/HALT_REMOTE → 这里建本地 HALT（同一个 id 只生效一次）
         _apply_remote_halt(a.remote_halt, paper, a.notify)
+    quiet_retry = False
     if a.retry:                                         # 08:35 / 09:20 的重试：已经完成就什么都不做（绝不换一份输入再决策一次）
         b_ = read_json(book, {}) or {}
         if paths.halt_file().exists():
@@ -4060,13 +4061,20 @@ def _live_unified_run(a, opened: list) -> int:
         if a.phase == "open" and not open_pending(b_) and not late_pending(b_):
             print("开盘后没有要补的买单 / 错过寄付的卖单（09:05 已经处理，或今天没有）：重试不用做")
             return 0
-        if a.phase != "open" and morning_done(b_, expected_last_bar(now_jst().date(), "JP").isoformat()):
+        exp_ = expected_last_bar(now_jst().date(), "JP").isoformat()
+        if a.phase != "open" and morning_done(b_, exp_):
             if not _manual_due(tag, b_):
                 print("今天早上的运行已经完成：重试不用做")
                 return 0
+            quiet_retry = True                              # 只为手动指令跑：什么都没变就不再发通知（G10；2026-10-14）
             print("★ 今天早上的运行已经完成，但有新的手动指令（卖出 / 减仓 / 撤回）→ 现在跑一次：只把它加进今天开盘的单（不重新决策）")
         else:
-            print(f"★ 重试：{'开盘后的买单还没下' if a.phase == 'open' else '今天早上的运行没有完成'} → 现在按正常流程跑一次")
+            from qbreak.live_unified import morning_unsent
+            n_un = morning_unsent(b_, exp_) if str((b_.get("state") or {}).get("last_date") or "") == exp_ else 0
+            why_ = ("开盘后的买单还没下" if a.phase == "open" else
+                    f"今天早上的决策做了（决策日 {exp_}），但有 {n_un} 笔单没下（被挡 / 还没发）" if n_un else
+                    "今天早上的运行没有完成")             # G20：分清「决策做了，有单没下」与「运行没完成」
+            print(f"★ 重试：{why_} → 现在按正常流程跑一次")
     if paper and cfg.get("start") and now_jst().date() < _dt.date.fromisoformat(cfg["start"]) and not a.force:
         print(f"模拟期开始日 {cfg['start']} 之前不推进模拟账户（与模拟盘同一天开始；--force 可提前演练）")
         page()
@@ -4114,6 +4122,7 @@ def _live_unified_run(a, opened: list) -> int:
                          manual_tag=tag)                     # 页面 / run.py manual 写的手动指令（卖出 / 减仓 / 闲置资金比例）
     res_now = None
     cids0 = {o.cid for o in ux.orders}                      # 盘中：这次新下的单 = 运行之后多出来的
+    man0 = _manual_snap(ux.book)                            # 只为手动指令的重试：运行前的指令状态（没变 → 不再通知；G10）
     try:
         if tag == "tachibana":                               # 立花本番：账本属于哪台 Mac（OPS-04：两台 Mac 同时跑会重复下单）
             from qbreak.live_unified import check_host
@@ -4242,7 +4251,10 @@ def _live_unified_run(a, opened: list) -> int:
     if getattr(a, "halt_drill", False):
         title += "（HALT 演练：HALT 存在时不下单）"
     append_journal(paths.out_dir() / f"live_unified_{tag}_journal.md", now_jst().strftime("%Y-%m-%d %H:%M JST"), title, body)
-    if a.notify:
+    if a.notify and quiet_retry and not any(o.cid not in cids0 for o in ux.orders) and _manual_snap(ux.book) == man0 \
+            and not RS.run_errors(ux.book.get("events"), t0):
+        print("（重试：没有新的单、手动指令也没有变化 → 不再发通知）")     # G10：以前同一条「等上一笔成交」每 3 分钟通知一次
+    elif a.notify:
         from qbreak import notify
         mn_ = sm.get("manual") or {}
         sig_ = bool(mn_.get("core_pause")) and (mn_.get("core_signal") or {}).get("date") == sm.get("decided_on")   # 停买中出现买入信号
@@ -4300,6 +4312,12 @@ def _apply_remote_halt(path, paper: bool, notify_: bool) -> None:
                     "恢复：在 Mac 对话里明确说「恢复下单，删除 HALT」", "warn")
 
 
+def _manual_snap(book: dict) -> dict:
+    """账本里手动指令的 {id: (状态, 说明)}（重试 / 盘中的运行前后比较：什么都没变就不再通知；G10 / G19，2026-10-14）。"""
+    items = ((book or {}).get("manual") or {}).get("items") or {}
+    return {str(k): (v.get("status"), v.get("msg")) for k, v in items.items() if isinstance(v, dict)}
+
+
 def _manual_due(tag: str, book: dict) -> bool:
     """今天开盘之前还来得及、而且有要变成单的手动指令 → 重试要跑一次（qbreak/manual_orders.due）。"""
     from qbreak import manual_orders as MO
@@ -4336,7 +4354,8 @@ def _now_report(a, ux, res: dict, paper: bool, tag: str, since: str | None = Non
     sm0.update(manual=s1["manual"], orders=s1["orders"], events=s1["events"], now_at=now_jst().isoformat(timespec="seconds"))
     write_json(fp, sm0)
     hb_ = (s1.get("manual") or {}).get("halt_backlog")      # HALT 解除后的第一次运行：积压的手动指令照原样执行（2026-10-13）
-    lines = ([f"- ★ {hb_}"] if hb_ else []) + [f"- {x['ticker']}：{x['status']}（{x['msg']}）" for x in res.get("items") or []]
+    items = res.get("items") or []
+    lines = ([f"- ★ {hb_}"] if hb_ else []) + [f"- {x['ticker']}：{x['status']}（{x['msg']}）" for x in items]
     for ln in lines:
         print(ln[2:])
     n = int(res.get("placed") or 0)
@@ -4345,13 +4364,23 @@ def _now_report(a, ux, res: dict, paper: bool, tag: str, since: str | None = Non
         append_journal(paths.out_dir() / f"live_unified_{tag}_journal.md", now_jst().strftime("%Y-%m-%d %H:%M JST"), title,
                        "\n".join(lines))
     if a.notify and lines:
-        from qbreak import notify
+        from qbreak import notify, notify_seen
         bad = RS.actionable(RS.bad_orders([asdict(o) if is_dataclass(o) else o for o in new]))   # HALT 挡下的不算失败
-        warn = bool(bad) or bool(hb_) or bool(RS.run_errors(ux.book.get("events"), since))
+        # 同一条指令、同样的状态与说明今天只通知一次（G19；2026-10-14：取不到现价 / 早上的运行没完成时以前每 10 分钟通知一次）；
+        # 日志 / 终端照写每次的；新下的单被挡 / 被拒、HALT 积压、这次运行的新 error → 照发
+        fresh = [x for x in items if notify_seen.first(tag, f"盘中手动指令|{x.get('id')}|{x.get('status')}|{x.get('msg')}")]
+        errs = [e for e in RS.run_errors(ux.book.get("events"), since) if notify_seen.first(tag, f"盘中运行错误|{e}")]
+        if not (fresh or bad or hb_ or errs):
+            print("（这些指令的状态与上次通知的一样：这次不再发 Mac / 手机通知，只写终端与日志）")
+            return 0
+        warn = bool(bad) or bool(hb_) or bool(errs)
         star = f"★ 没下 {len(bad)} 笔（{RS.bad_text(bad)}）｜" if bad else ""       # 放最前面：Mac 通知只显示前 200 字
         hb_star = "★ HALT 期间等着的手动指令现在照原样执行｜" if hb_ else ""     # 正文第一行已经列出每条
-        mac_notify(title, (star + hb_star + f"下单 {n} 笔：" + "；".join(f"{x['ticker']} {x['status']}" for x in res.get("items") or []))[:200])
-        notify.send(title, (f"- {star.rstrip('｜')}\n" if star else "") + "\n".join(lines), "warn" if warn else "info")
+        show = fresh or items
+        mac_notify(title, (star + hb_star + f"下单 {n} 笔：" + "；".join(f"{x['ticker']} {x['status']}" for x in show))[:200])
+        body = ([f"- ★ {hb_}"] if hb_ else []) + [f"- {x['ticker']}：{x['status']}（{x['msg']}）" for x in show] \
+            + [f"- ★ {e}" for e in errs]
+        notify.send(title, (f"- {star.rstrip('｜')}\n" if star else "") + "\n".join(body), "warn" if warn else "info")
     return 0
 
 
@@ -4373,7 +4402,7 @@ def cmd_manual(a) -> int:
     b_ = read_json(book, {}) or {}
     st = b_.get("state") or {}
     now = now_jst()
-    when = MO.when_text(now)                                  # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘
+    when = MO.when_for(now, b_)                               # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘 / 早上的运行没完成（G9）
     if a.action == "list":
         pct = MO.position_pct(st)
         print(f"账本 {book}（{'模拟账户' if paper else '立花'}；决策日 {st.get('last_date') or '—'}）")
@@ -4387,7 +4416,7 @@ def cmd_manual(a) -> int:
         man = b_.get("manual") or {}
         sm = {**man, "items": sorted((man.get("items") or {}).values(), key=lambda x: x.get("at", ""), reverse=True)}
         print(f"  闲置资金比例：规则目标额的 {float(man.get('core_pct', 100.0)):g}%")
-        for ln in MO.lines(sm, today=now.date().isoformat()):
+        for ln in MO.lines(sm, today=now.date().isoformat(), now=now):
             print(f"  {ln[2:]}")
         if man.get("core_pause"):                             # 停买中：规则现在想拿哪只（确认买入 = manual core --pct 100）
             u100_ = (b_.get("core_rule") or {}).get("units100")

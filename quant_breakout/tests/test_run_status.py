@@ -224,8 +224,13 @@ def test_now_phase_warns_only_for_orders_sent_in_this_run(monkeypatch):
     assert rec["phase"] == "now" and rec["ok"] is True and {o["cid"] for o in rec["bad_orders"]} == {"U-A", "N1-BUY-7203.T"}
     sent2 = _fake_run(monkeypatch, _book_dict([morning_blocked]), now_new=[{**rej, "status": "SENT"}])
     assert run.main(["live-u", "--broker", "paper", "--phase", "now", "--force", "--notify"]) == 0
-    assert [x for x in sent2 if x[0] == "send"][0][3] == "info"                       # 早上被挡的那笔不让盘中的通知变 warn
-    assert [x for x in sent2 if x[0] == "mac"][0][2] == "下单 0 笔：7203.T 没执行"           # 没有问题时与原来完全相同
+    assert sent2 == []                                  # 同一条指令、同样的状态今天已经通知过 → 不再通知（G19；日志照写）
+    from qbreak import notify_seen as NS
+    NS.path("paper").unlink()                                                          # 换一天（去重记录清掉）
+    sent3 = _fake_run(monkeypatch, _book_dict([morning_blocked]), now_new=[{**rej, "status": "SENT"}])
+    assert run.main(["live-u", "--broker", "paper", "--phase", "now", "--force", "--notify"]) == 0
+    assert [x for x in sent3 if x[0] == "send"][0][3] == "info"                       # 早上被挡的那笔不让盘中的通知变 warn
+    assert [x for x in sent3 if x[0] == "mac"][0][2] == "下单 0 笔：7203.T 没执行"           # 没有问题时与原来完全相同
 
 
 def test_halt_blocked_orders_are_not_failures_in_the_notice(monkeypatch):
@@ -334,8 +339,9 @@ def test_panel_flags_a_morning_run_that_has_not_finished():
     assert "★ 今天早上的运行还没完成（上次决策 2026-10-02）" in panel.render("paper", "t" * 40, AT)
     assert "今天早上的运行还没完成" not in panel.render("paper", "t" * 40, AT.replace(hour=7, minute=59))
     assert "今天早上的运行还没完成" not in panel.render("paper", "t" * 40, dt.datetime(2026, 10, 10, 9, 0, tzinfo=JST))   # 周六
-    _book(orders=[_o("U1", "BLOCKED", d="2026-10-05", note="行情落后")])               # 处理到了，但单被挡 → 还没完成
-    assert "★ 今天早上的运行还没完成（上次决策 2026-10-05）" in panel.render("paper", "t" * 40, AT)
+    _book(orders=[_o("U1", "BLOCKED", d="2026-10-05", note="行情落后")])               # 处理到了，但单被挡 → 分开说（G20）
+    h = panel.render("paper", "t" * 40, AT)
+    assert "★ 今天早上的决策做了（决策日 2026-10-05），但有 1 笔单没下（被挡 / 还没发）" in h and "今天早上的运行还没完成" not in h
     _book(orders=[_o("U1", "SENT", d="2026-10-05")])
     assert "今天早上的运行还没完成" not in panel.render("paper", "t" * 40, AT)
     _book(last="2026-09-18")                                                       # 停用了的模拟账户：不吵
