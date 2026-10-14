@@ -376,3 +376,15 @@ def test_journal_lines_and_compare_note():
     title, short, body = daily_text(sm2, st, None, True, 1_000_000)
     assert "（寄付成行，手动卖出）" in body and "（手动减仓）" in body and "手动指令 1 条在处理" in short
     assert "闲置资金比例：手动设为" in body
+
+
+def test_summary_keeps_what_describe_needs_for_corefix_lines():
+    """日志 / 通知的「- 手动 …」行按 summary 写：固定口数的口数、恢复按规则、全部换成要带着（2026-10-15：写成了「固定 1482.T 0 口」）。"""
+    from types import SimpleNamespace
+    items = {"M1": {"id": "M1", "at": "2026-10-14T19:21:18+09:00", "kind": "corefix", "ticker": "1482.T", "units": 678,
+                    "fund": "split", "status": "done", "done_on": "2026-10-15"},
+             "M2": {"id": "M2", "at": "2026-10-14T19:22:00+09:00", "kind": "corefix", "ticker": "1545.T", "clear": True,
+                    "status": "done", "done_on": "2026-10-15"}}
+    ux = SimpleNamespace(m={"items": items, "blocks": {}, "trims": {}, "adds": {}, "buys": {}}, core_pct=100.0, halt_backlog=None)
+    out = "\n".join(MO.lines(MO.Manual.summary(ux), today="2026-10-15"))
+    assert "固定 1482.T 678 口" in out and "1545.T 恢复按规则" in out and " 0 口" not in out

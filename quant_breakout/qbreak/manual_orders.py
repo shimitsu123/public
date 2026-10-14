@@ -2946,7 +2946,7 @@ class Manual:
         items = sorted(self.m["items"].values(), key=lambda x: x.get("at", ""), reverse=True)
         keep = ("id", "at", "kind", "ticker", "cid", "pct", "unit", "value", "block_days", "target", "status", "msg", "decided_on",
                 "fill_day", "done_on", "fill", "shares", "side", "limit", "source", "note", "cancel_req", "wait", "now", "hold",
-                "unsent", "void_on")
+                "unsent", "void_on", "units", "clear", "fund", "fund_for", "from_kind")   # describe 要的（固定口数 / 恢复按规则 / 全部换成；2026-10-15：日志写成「固定 1482.T 0 口」）
         return {"core_pct": self.core_pct, "core_pause": self.m.get("core_pause"), "core_signal": self.m.get("core_signal"),
                 "blocks": dict(self.m["blocks"]), "trims": dict(self.m["trims"]),
                 "adds": dict(self.m["adds"]), "buys": dict(self.m["buys"]), "cap_pct": self.m.get("cap_pct"),
