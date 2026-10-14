@@ -488,3 +488,15 @@ console.log(JSON.stringify(out));
     assert o["tl_broken"] == "趋势线：两条线越张越开：上下波动越来越大 · 支撑 ¥1,020（已跌破） · 压力 ¥990.0（已冲过）"
     assert o["tl_one"] == "趋势线：只找到上面的一条 · 压力 ¥1,100（比收盘高 10%）"
     assert "没有预测力" in J                                                                   # 研究结论在「怎么看这张图」里说一次
+
+
+def test_trade_badge_counts_what_the_trade_tab_shows():
+    """「交易」标签的数字 = 卡片上还在处理的行：撤销撤回本身、被撤销的撤回不算（2026-10-15 用户：只有一条却标 3）。"""
+    fix = {"id": "M1-corefix", "kind": "corefix", "ticker": "1482.T", "at": "2026-10-14T19:21:18+09:00"}
+    can = {"id": "M2-cancel", "kind": "cancel", "target": "M1-corefix", "at": "2026-10-14T23:08:22+09:00"}
+    unc = {"id": "M3-uncancel", "kind": "uncancel", "target": "M2-cancel", "at": "2026-10-14T23:32:14+09:00"}
+    st = {"last_date": "2026-10-13", "pos": {}, "core_units": {}}
+    book = {"state": st, "orders": []}
+    assert panel._badges(book, st, {}, [fix, can, unc], AT).get("trade") == 1     # 固定口数 → 撤回 → 撤销撤回：只剩固定口数一条
+    assert panel._badges(book, st, {}, [fix, can], AT).get("trade") == 2          # 撤回还没读：固定口数（撤回中）+ 撤回，卡片上两行
+    assert "trade" not in panel._badges(book, st, {}, [], AT)

@@ -1007,7 +1007,9 @@ def _badges(book: dict, st: dict, sm: dict, waiting: list, now: dt.datetime) -> 
         out["hold"] = n
     d = st.get("last_date")
     act = sum(1 for o in book.get("orders") or [] if o.get("decided_on") == d and o.get("status") in ("SENT", "PARTIAL", "PLANNED", "DEFERRED", "SENDING"))
-    act += len(waiting) + sum(1 for it in ((book.get("manual") or {}).get("items") or {}).values() if it.get("status") in MO.ACTIVE)
+    void = MO.voided(waiting)                              # 与「手动指令」卡片显示的一致：撤销撤回本身、被撤销的撤回不算（2026-10-15 用户：只有一条却标 3）
+    act += sum(1 for r in waiting if r.get("kind") != "uncancel" and r.get("id") not in void)
+    act += sum(1 for it in ((book.get("manual") or {}).get("items") or {}).values() if it.get("status") in MO.ACTIVE)
     if act:
         out["trade"] = act
     try:
