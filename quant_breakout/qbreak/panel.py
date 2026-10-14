@@ -763,7 +763,8 @@ def _scheduled(label: str) -> bool:
 def _run_lines(tag: str, book: dict, now: dt.datetime, halt: str | None) -> list[tuple[str, str]]:
     """账本顶部的运行状态 → [(CSS 类 neg / muted, 已转义的 HTML)]（Mac 与手机同一个）：
     执行器上一次跑成没有（out/live_unified_<账本>_run.json，qbreak/run_status.py）、当前决策里被挡 / 被拒 / 状态不明的单（读账本：
-    --resolve 登记之后马上消失）、交易日 08:00 之后今天早上的运行还没完成、今天 09:30 自检没通过（out/watchdog_<账本>.json）。
+    --resolve 登记之后马上消失）、交易日 08:00 之后今天早上的运行还没完成、今天 09:30 自检没通过（out/watchdog_<账本>.json）、
+    最后一次外部心跳没发成（同一个文件的 heartbeat）。
     文件没有 / 读坏 → 那一项不显示（不报错）。只展示，不改任何东西。"""
     from . import run_status as RS
     from .calendar_jp import prev_trading_day
@@ -833,6 +834,11 @@ def _run_lines(tag: str, book: dict, now: dt.datetime, halt: str | None) -> list
         rs = [rs] if isinstance(rs, str) else [str(x) for x in (rs if isinstance(rs, list) else [])]
         if is_today:
             out.append(("neg", f"★ 自检（{escape(when[6:])}）：{escape('；'.join(rs) or '没通过')}"))
+    if isinstance(wd, dict):                               # 外部心跳没发成（09:30 自检记的；原因不含地址；2026-10-14 G12）
+        from .watchdog import beat_text
+        bt = beat_text(wd.get("heartbeat"))
+        if bt:
+            out.append(("neg", f"★ {escape(at((wd.get('heartbeat') or {}).get('at') or wd.get('at'))[0])} {escape(bt)}"))
     if tag == "tachibana":                                 # 前一晚预检（qbreak/precheck.py）：今天 / 昨晚没通过的原因、要动手的提醒
         from .precheck import last_result, panel_lines
         for ln in panel_lines(last_result(), now):
@@ -1761,6 +1767,10 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
         return False, "dry-run 的账本只能看：面板不写指令", None
     if str(body.get("kind") or "") == "flow":
         return submit_flow(tag, body, now)
+    if str(body.get("kind") or "") != "cancel":            # 模拟账户的执行器没装、立花装了：写了也没人执行（2026-10-14 G13；撤回照旧能写）
+        why = MO.paper_refuse(tag)
+        if why:
+            return False, why, None
     book, sm = _load(tag)
     if str(body.get("kind") or "") == "unblock" and isinstance(body.get("tickers"), list) and body["tickers"]:   # 一次解除一批（「恢复按规则」）
         recs, skip, seen = [], [], set()                    # 「代码:设定 id」：页面看到之后设定换了 / 已经解除的跳过（2026-10-13）；全都不行才拒绝
@@ -1984,7 +1994,10 @@ class Trigger:
         lf = open(paths.log_dir() / "com.qbreak.panel.retry.log", "a", encoding="utf-8")
         lf.write(f"\n── {now_jst():%Y-%m-%d %H:%M:%S} JST 手动指令 → {' '.join(cmd[1:])}\n")
         lf.flush()
-        return subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, cwd=str(paths.PROJECT_ROOT), start_new_session=True)
+        env = {**os.environ, "QBREAK_NO_HOLD": "1"}        # 跑完马上结束，不在进程里等到 09:35（liveu.sh 把让 Mac 醒着放到后台；2026-10-14 G2：
+        #                                                   以前立花的 --retry 一直活到 09:35，这段时间面板不再叫执行器 → 撤单、盘中指令都卡住）
+        return subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, cwd=str(paths.PROJECT_ROOT), start_new_session=True,
+                                env=env)
 
     @staticmethod
     def _unseen_ids(tag: str, book: dict | None = None) -> frozenset:

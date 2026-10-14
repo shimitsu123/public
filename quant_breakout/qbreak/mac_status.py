@@ -98,6 +98,25 @@ def _watchdog_item(tag: str, now: dt.datetime) -> dict | None:
     return {"name": "09:30 自检", "level": "ok", "text": "通过"}
 
 
+def _beat_item(tag: str) -> dict | None:
+    """外部心跳（09:30 自检 ping 的；out/watchdog_<账本>.json 的 heartbeat，原因不含地址）：最后一次没发成 → bad；发了 → ok；
+    没设置 / 没记 → 不显示（没设置由上线检查 ⑧ 管）（2026-10-14 G12）。"""
+    from . import run_status as RS
+    from .watchdog import beat_text
+    wd = RS.peek_json(paths.out_dir() / f"watchdog_{tag}.json")
+    hb = wd.get("heartbeat") if isinstance(wd, dict) else None
+    if not isinstance(hb, dict):
+        return None
+    t = RS.ts(hb.get("at"))
+    when = t.astimezone(JST).strftime("%m/%d %H:%M") if t else "—"
+    bt = beat_text(hb)
+    if bt:
+        return {"name": "外部心跳", "level": "bad", "text": f"{when} {bt}"[:240]}
+    if hb.get("state") == "sent":
+        return {"name": "外部心跳", "level": "ok", "text": f"{when} 已发"}
+    return None
+
+
 def _charts_item(tag: str, now: dt.datetime) -> dict | None:
     """面板 K 线的最后一根是不是最近一个已收盘的交易日（qbreak/charts_refresh；2026-10-11 周五收盘后日线没反映的再发防止）。
     收盘后 2 小时内（补日线还在等 Yahoo）不算；没有 K 线文件 → 不显示。"""
@@ -152,6 +171,9 @@ def build(now: dt.datetime | None = None, run=subprocess.run) -> dict:
         w = _watchdog_item(tag, now)
         if w:
             items.append(w)
+        hb = _beat_item(tag)
+        if hb:
+            items.append(hb)
         c = _charts_item(tag, now)
         if c:
             items.append(c)

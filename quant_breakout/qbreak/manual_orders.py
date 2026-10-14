@@ -72,6 +72,7 @@ STATUS = {"pending": "等下单", "placed": "已下单", "done": "完成", "reje
 REASON_TEXT = {"manual": "手动卖出", "manual_trim": "手动减仓", "manual_add": "手动加仓", "manual_buy": "手动买入",
                "manual_fund": "为手动买入先卖核心 ETF"}
 ACTIVE = ("pending", "placed")
+KEEP_ITEMS = 200                        # 执行器账本里只留最近这么多条指令记录（Manual.settle；删掉的记进水位 manual.pruned，不会再被读成新指令）
 _TICKER = re.compile(r"^[0-9][0-9A-Z]{3}\.T$")
 
 
@@ -292,10 +293,46 @@ def read_all(tag: str) -> list[dict]:
     return out
 
 
+PAPER_IDLE = "模拟账户的执行器没装：指令不会被执行；要在立花下单请选「立花」"
+
+
+def paper_refuse(tag: str, agents=None) -> str | None:
+    """往模拟账户写手动指令之前（面板 submit 与 run.py manual 同一个判断；2026-10-14 G13）：模拟账户的执行器
+    （LaunchAgent com.qbreak.liveu.paper）没装、立花本番（com.qbreak.liveu.morning）装了 → 拒绝的原因（写了也没人执行，
+    却以为下了单）；模拟账户装着 / 两个都没装（不在 Mac 上、只看）/ 立花的账本 → None（照旧）。只看 plist 在不在，不调 launchctl。
+    agents：LaunchAgents 目录（默认 paths.launch_agents()，QBREAK_LAUNCH_AGENTS 可改；测试注入）。"""
+    from pathlib import Path
+    if not str(tag or "").startswith("paper"):
+        return None
+    ag = Path(agents) if agents is not None else paths.launch_agents()
+    if (ag / f"{paths.PAPER_AGENT}.plist").exists() or not (ag / f"{paths.LIVE_AGENT}.plist").exists():
+        return None
+    return PAPER_IDLE
+
+
+def is_pruned(r: dict, man: dict | None) -> bool:
+    """指令文件里的这条是执行器整理账本时删掉的旧记录（Manual.settle 只留最近 KEEP_ITEMS 条；2026-10-14 G1）→ True。
+    指令文件只追加、从不清理，以前按「id 不在账本里」判断新指令，删掉的旧记录会被当成新指令再读一次（几周前被拒的卖出全部又卖、
+    最早的比例 0% 每次都读回来）。账本 manual.pruned 记水位：at = 删掉的记录里最晚的写入时刻、ids = 正好在这个时刻写的那几条；
+    at 早于水位、或等于水位且 id 在 ids 里、又不在账本里的 = 删掉的。新写的指令时刻总晚于已经读过的（同一秒的看 ids），不会被挡。"""
+    p = (man or {}).get("pruned") or {}
+    mark = str(p.get("at") or "")
+    if not mark or r.get("id") in ((man or {}).get("items") or {}):
+        return False
+    ra = str(r.get("at") or "")
+    return ra < mark or (ra == mark and r.get("id") in set(p.get("ids") or ()))
+
+
+def read_known(tag: str, book: dict | None) -> list[dict]:
+    """指令文件里的指令，去掉执行器整理账本时删掉的旧记录（is_pruned）：判断「新 / 还没读 / 同批」都用它（2026-10-14 G1）。"""
+    man = (book or {}).get("manual") or {}
+    return [r for r in read_all(tag) if not is_pruned(r, man)]
+
+
 def unseen(tag: str, book: dict | None) -> list[dict]:
-    """指令文件里执行器还没读进账本的指令（页面显示「等执行器读」用）。"""
+    """指令文件里执行器还没读进账本的指令（页面显示「等执行器读」用）；整理账本时删掉的旧记录不算（2026-10-14 G1）。"""
     have = set(((book or {}).get("manual") or {}).get("items") or {})
-    return [r for r in read_all(tag) if r["id"] not in have]
+    return [r for r in read_known(tag, book) if r["id"] not in have]
 
 
 def add_trading_days(d: dt.date, n: int) -> dt.date:
@@ -766,7 +803,7 @@ def cancel_plan(tag: str, book: dict | None, target: str, now: dt.datetime | Non
     why = check(rec, book, tag, sm=sm, now=now)
     items = (book.get("manual") or {}).get("items") or {}
     waiting = unseen(tag, book)
-    byid = {x["id"]: x for x in read_all(tag)}
+    byid = {x["id"]: x for x in read_known(tag, book)}    # 整理账本时删掉的旧记录不算（2026-10-14 G1）
     byid.update(items)                                     # 执行器读过的以账本里的为准（有状态）；同一条不重复
     tg = byid.get(target) or {}
     gone = cancelled(waiting)
@@ -844,7 +881,7 @@ def uncancel_request(tag: str, book: dict | None, cancel_id: str, now: dt.dateti
         return False, f"没写：{why}", None
     items = (book.get("manual") or {}).get("items") or {}
     waiting = unseen(tag, book)
-    byid = {x["id"]: x for x in read_all(tag)}
+    byid = {x["id"]: x for x in read_known(tag, book)}    # 整理账本时删掉的旧记录不算（2026-10-14 G1）
     byid.update(items)
     allr = list(byid.values())
     c = byid.get(cancel_id) or {}
@@ -1750,8 +1787,10 @@ class Manual:
         别的留给平时的运行）。返回 [(级别, 说明)]。"""
         msgs = []
         items = self.m["items"]
-        new = [r for r in read_all(self.tag) if r["id"] not in items and (only is None or r["kind"] in only)]
-        void = voided(read_all(self.tag))                     # 被「撤销撤回」作废的撤回
+        recs = read_all(self.tag)
+        new = [r for r in recs if r["id"] not in items and not is_pruned(r, self.m)   # 整理账本时删掉的旧记录不再读（2026-10-14 G1）
+               and (only is None or r["kind"] in only)]
+        void = voided(recs)                                   # 被「撤销撤回」作废的撤回
         dropped = {r.get("target") for r in new if r["kind"] == "cancel" and r["id"] not in void}   # 执行器读到之前就被撤回的（比例 / 解除是读到就生效的）
         for r in new:
             it = {**r, "status": "pending"}
@@ -2571,11 +2610,22 @@ class Manual:
             out.append(("info", f"手动指令 {it['id']}：{t} {it['msg']}"))
         out += self.prune_blocks(st.last_date)
         items = self.m["items"]
-        if len(items) > 200:
-            for k in sorted(items, key=lambda x: items[x].get("at", ""))[:len(items) - 200]:
-                if items[k].get("status") not in ACTIVE:
-                    items.pop(k)
+        if len(items) > KEEP_ITEMS:
+            old = sorted(items, key=lambda x: str(items[x].get("at") or ""))[:len(items) - KEEP_ITEMS]
+            self._mark_pruned([items.pop(k) for k in old if items[k].get("status") not in ACTIVE])
         return out
+
+    def _mark_pruned(self, gone: list[dict]) -> None:
+        """删掉的旧记录记进水位 manual.pruned（is_pruned 用；2026-10-14 G1）：at = 删掉过的里最晚的写入时刻（只往后走），
+        ids = 正好在这个时刻写的那几条（同一秒还留着的不算删掉）。"""
+        ats = [str(x.get("at") or "") for x in gone]
+        if not any(ats):
+            return
+        p = self.m.get("pruned") or {}
+        mark = max(ats + [str(p.get("at") or "")])
+        ids = set(p.get("ids") or ()) if str(p.get("at") or "") == mark else set()
+        ids |= {x["id"] for x, a in zip(gone, ats) if a == mark and x.get("id")}
+        self.m["pruned"] = {"at": mark, "ids": sorted(ids)}
 
     def prune_blocks(self, last) -> list[tuple[str, str]]:
         """到期 / 解除生效的「不买回」去掉（2026-10-13：按账本的 K 线 last_date，不按时钟 —— 补跑的旧 K 线不会提前放开）：
@@ -2848,7 +2898,7 @@ def lines(sm: dict | None, today: str | None = None) -> list[str]:
 
 
 __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEFAULT", "CAP_PCT", "MAX_POS", "SESSION", "Manual",
-           "append", "read_all", "unseen", "cancelled", "normalize", "batch_blocks", "lifting", "unblock_why", "lift_day", "rebuy_day",
+           "append", "read_all", "read_known", "is_pruned", "KEEP_ITEMS", "PAPER_IDLE", "paper_refuse", "unseen", "cancelled", "normalize", "batch_blocks", "lifting", "unblock_why", "lift_day", "rebuy_day",
            "block_text", "NEXT_DECISION", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "OPEN_ST",
            "corefix_clear_text", "resume_info", "wait_word", "allin_busy_text", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text",
            "next_window", "due", "cancel_due", "CANCEL_UNTIL",

@@ -4413,6 +4413,11 @@ def cmd_manual(a) -> int:
         s_ = MO.slots(b_, tag)
         print(f"个股名额：空 {s_['free']} 个（拿着 {s_['held']} + 排定买入 {s_['buys']}，上限 {s_['max']} 只）")
         return 0
+    if a.action != "cancel":                                  # 模拟账户的执行器没装、立花装了：写了也没人执行（2026-10-14 G13；撤回照旧能写）
+        why_ = MO.paper_refuse(tag)
+        if why_:
+            print(f"★ 没写：{why_}（命令行：--broker tachibana）")
+            return 2
     req = {"kind": a.action, "source": "cli", "note": a.note}
     if a.action in ("sell", "trim", "adjust", "buy", "unblock", "corefix"):
         req["ticker"] = a.target

@@ -308,22 +308,52 @@ def send(subject: str, text: str, level: str = "info", run=None, url: str = "") 
     return out
 
 
-def heartbeat(ok: bool, msg: str = "", run=None) -> bool | None:
+_BEAT_SCHEME = re.compile(r"(?i)https?://")
+
+
+def beat_addr_why(url: str) -> str | None:
+    """外部心跳地址的格式问题（只说是哪一种，不含地址本身）→「地址不是 http(s):// 开头」/「地址里有空白或换行」/「地址格式不对」；
+    没问题 → None。前后的空白先去掉再看（钥匙串 / 环境变量的值常带换行）（2026-10-14 G12）。"""
+    u = (url or "").strip()
+    if not _BEAT_SCHEME.match(u):
+        return "地址不是 http(s):// 开头"
+    if any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in u):
+        return "地址里有空白或换行"
+    try:
+        if not urllib.parse.urlsplit(u).hostname:
+            return "地址格式不对"
+    except ValueError:
+        return "地址格式不对"
+    return None
+
+
+def heartbeat_detail(ok: bool, msg: str = "", run=None) -> tuple[bool | None, str]:
     """外部心跳（healthchecks.io 之类）：设置了 → 成功 POST 到地址、失败 POST 到「地址/fail」（正文 msg，≤ 1,000 字）。
-    → True 发了 / False 没发成 / None 没设置。绝不抛。"""
+    → (True, "") 发了 / (False, 原因) 没发成 / (None, "") 没设置。原因不含地址（「地址不是 http(s):// 开头」/「地址里有空白或换行」/
+    「地址格式不对」/ HTTP 状态码 / 连不上…；09:30 自检把它写进 out/watchdog_<账本>.json、面板顶部显示）。绝不抛（2026-10-14 G12）。"""
     try:
-        url = get("heartbeat", run)
+        url = (get("heartbeat", run) or "").strip()
     except Exception:                                         # noqa: BLE001
-        url = None
+        url = ""
     if not url:
-        return None
-    try:
-        _post(url.rstrip("/") + ("" if ok else "/fail"), str(msg or "")[:MAX_BEAT].encode("utf-8"),
-              {"Content-Type": "text/plain; charset=utf-8"})
-        return True
-    except Exception as e:                                    # noqa: BLE001
-        log.warning("外部心跳没发成：%s", _why(e))
-        return False
+        return None, ""
+    why = beat_addr_why(url)
+    if why is None:
+        try:
+            _post(url.rstrip("/") + ("" if ok else "/fail"), str(msg or "")[:MAX_BEAT].encode("utf-8"),
+                  {"Content-Type": "text/plain; charset=utf-8"})
+            return True, ""
+        except ValueError:                                    # urllib 的 ValueError 文字里带着地址：不记，只说格式不对
+            why = "地址格式不对"
+        except Exception as e:                                # noqa: BLE001
+            why = _why(e)
+    log.warning("外部心跳没发成：%s（钥匙串 qbreak-heartbeat；地址不记）", why)
+    return False, why
+
+
+def heartbeat(ok: bool, msg: str = "", run=None) -> bool | None:
+    """外部心跳 → True 发了 / False 没发成 / None 没设置（原因见 heartbeat_detail）。绝不抛。"""
+    return heartbeat_detail(ok, msg, run)[0]
 
 
 def mask_addr(addr: str) -> str:
@@ -438,5 +468,5 @@ def setup_email(host: str | None = None, port: int | None = None, *, run=None, a
     return 0
 
 
-__all__ = ["send", "heartbeat", "channels", "configured", "get", "reset", "is_ntfy", "KEYS",
-           "parse_smtp", "split_addrs", "setup_email", "mask_addr", "SmtpFormatError"]
+__all__ = ["send", "heartbeat", "heartbeat_detail", "beat_addr_why", "channels", "configured", "get", "reset", "is_ntfy",
+           "KEYS", "parse_smtp", "split_addrs", "setup_email", "mask_addr", "SmtpFormatError"]

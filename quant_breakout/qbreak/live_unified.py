@@ -71,6 +71,7 @@ ALLIN_WAIT = "「全部换成」等同批卖单成交"                   # 09:05
 ALLIN_SENT_TAG = "（「全部换成」的卖单已发出 → 没买就钱留现金）"   # X 的买单被挡、同批卖单已发出：单的说明后缀
 HALT_WAIT = "开盘后补单被挡"                       # 09:05 / 09:20 被 HALT / 持仓不一致挡住：留到开盘后的买单的说明（明天对账写进「没买」的原因；2026-10-13）
 NO_OPEN_FINAL = "到 09:20 还没有始値（特別気配 / 停牌）：今天不买（与模型不同 → 记入差异）"
+UNK_STOP = "这次运行前面有一笔下单结果不明（可能已被受理）→ 剩下的单不发"   # G3：同一次发单里有一笔变成 SENDING / ERROR 之后（2026-10-14）
 PRECLOSE_MAX_PCT = 3.0                             # LU-15：Yahoo 收盘 vs 立花前日終値 差超过这个 % → 那只的寄付买单不下（卖单只提醒）
 BREAKER_N, BREAKER_VALUE = 2, 2.2                  # C-11：规则单笔数 > (个股名额 + 核心 ETF 只数) × 2，或金额合计 > 权益 × 2.2 → 异常熔断
 
@@ -158,6 +159,7 @@ class UnifiedExecutor:
         self._reconciled: list[dict] = []
         self.diffs: list[dict] = []                         # 模型会成交、实际没成交的买单（与模拟盘出现差异的起点）
         self.incomplete: str | None = None                  # 这次运行没做完（例如开盘后补单取价失败，单都保留）→ 运行状态 ok=False
+        self._unk_stop: str | None = None                   # 这次运行里变成状态不明的第一笔单（cid）：之后 _send 一笔都不发（G3；2026-10-14）
         self.corp_provider = None                           # 公司行为数据（run.py 给立花）：成交日当天生效的拆股 → 寄付单按拆股后下（LU-22）
         self.manual = Manual(self.book, manual_tag, self.clock) if manual_tag else None   # 手动指令（演练 / 回放不读）
         if self.manual is not None:
@@ -189,6 +191,29 @@ class UnifiedExecutor:
         br = "paper" if self.paper else ("tachibana" + (" --demo" if "_demo" in stem else "")
                                          + (" --dry-run" if "_dryrun" in stem else ""))
         return f"bash scripts/liveu.sh --broker {br} --resolve <cid> --filled <股数> --px <均价>"
+
+    def unknown_why(self) -> str | None:
+        """当前决策里有状态不明的单（SENDING / ERROR：发送中断 / 网络错误，可能已被受理）→ 不下单的理由；没有 → None。
+        文件头的安全闸「有状态不明的单 → 不下单」所有发单的入口都用它（2026-10-14 G3：早上的决策 run_bar、没有新 K 线的补单 morning、
+        开盘后 open_phase、盘中 now_phase；以前 open_phase / 补单不查）。登记要你在立花的注文一覧核对之后自己做（--resolve），执行器不猜。"""
+        unk = [o for o in self._active() if o.status in UNKNOWN]
+        if not unk:
+            return None
+        return ("有状态不明的单（发送中断 / 网络错误，可能已被受理）："
+                + "；".join(f"{o.cid} {o.side} {o.ticker} ×{o.sent_qty}" for o in unk)
+                + f"。请在立花的注文一覧确认，然后登记：{self.resolve_cmd()}（没成交填 0）。要你自己核对后登记（执行器不猜）")
+
+    def _raise_if_unknown(self) -> None:
+        """有状态不明的单 → ExecutorError（这次运行不改状态、不下单；run.py 通知并列出注文一覧里的候选）。"""
+        why = self.unknown_why()
+        if why:
+            raise ExecutorError(why)
+
+    def _stop_if_unknown(self, o: ExecOrder) -> None:
+        """刚发的这笔变成状态不明 → 这次运行剩下的单一笔都不发（_send 开头挡；G3，2026-10-14：以前同一次循环里照样发后面的单）。"""
+        if o.status in UNKNOWN and self._unk_stop is None:
+            self._unk_stop = o.cid
+            self.block(f"{o.side} {o.ticker} ×{o.sent_qty} 下单结果不明 → 这次运行剩下的单不发。{self.unknown_why() or ''}".rstrip("。"))
 
     def block(self, reason: str) -> None:
         """这次运行不下单（状态照常对账、决策）。多个原因用「；」连起来。"""
@@ -624,6 +649,14 @@ class UnifiedExecutor:
         """bar 非空 = 寄付（开盘集合竞价）；空 = 盘中当日限り。先把「发送中」写进账本再发（崩溃后不会重发）。
         立花的卖单里不足一手的部分（C-14：拆股 / 合并后的零股）不发：整数手照常下，零股记进 odd_lots 并提醒你在立花网站卖。"""
         b = self.b
+        if self._unk_stop:                                  # 这次运行前面有一笔状态不明：剩下的一笔都不发（G3；留到开盘后的买单保持 DEFERRED）
+            o.note = f"{UNK_STOP}（{self._unk_stop}）"[:300]
+            if o.status != "DEFERRED":
+                o.status = "BLOCKED"
+                self.stats["blocked"] += 1
+            self._event("warn", f"{o.side} {o.ticker} ×{qty} 不发：{o.note}")
+            self.save()
+            return
         odd = self._odd_lot(o, qty)
         if odd:
             txt = self._note_odd(o.ticker, odd)
@@ -644,6 +677,7 @@ class UnifiedExecutor:
         except Exception as e:                          # noqa: BLE001  适配器本身不该抛；抛了就按状态不明处理
             o.status, o.note = "ERROR", f"状态不明（{type(e).__name__}）：{e}"[:300]
             self._event("error", f"{o.side} {o.ticker} ×{qty}：{o.note}")
+            self._stop_if_unknown(o)
             self.save()
             return
         o.status = r.status if r.status in ACCEPTED + ("BLOCKED", "REJECTED", "EXPIRED", "ERROR") else "ERROR"
@@ -662,6 +696,7 @@ class UnifiedExecutor:
         lvl = "info" if o.status in ACCEPTED else ("warn" if o.status in ("BLOCKED", "REJECTED", "EXPIRED") else "error")
         self._event(lvl, f"{o.side} {o.ticker} ×{qty}{f' 限价 {o.limit:g}' if o.limit and o.side == 'BUY' else ''}"
                          f"（{'寄付' if bar else ('盘中' if o.phase == 'now' else '开盘后')}）→ {o.status} {o.note}".rstrip())
+        self._stop_if_unknown(o)
         self.save()
 
     def place(self, k: int) -> list[ExecOrder]:
@@ -995,7 +1030,9 @@ class UnifiedExecutor:
         立花（B7）：取价整个失败 → 一笔都不动（DEFERRED 全部保留）、记 warn、self.incomplete（运行状态 ok=False），09:20 照常再跑；
         个别票还没有始値：final=False（09:05）保留到 09:20 再看，final=True（09:20 的重试）放弃并记入差异；
         final=None（演练 / 测试：一天只跑一次开盘后）→ 没有始値 = 那天没有 K 线，放弃（模型也不买）。
-        B13：早上错过寄付、还没发出的个股卖单在这里补成当日限价卖。LU-21：今天早上的持仓核对不一致 → 这里也不下。"""
+        B13：早上错过寄付、还没发出的个股卖单在这里补成当日限价卖。LU-21：今天早上的持仓核对不一致 → 这里也不下。
+        有状态不明的单 → 停下（ExecutorError，什么都不改；2026-10-14 G3：以前 09:05 / 09:20 照样补发）。"""
+        self._raise_if_unknown()
         if self.manual is not None:
             for lvl, msg in self.manual.ingest():
                 self._event(lvl, msg)
@@ -1123,11 +1160,7 @@ class UnifiedExecutor:
                                      "status": "明天开盘", "msg": msg})
             self.save()
             return out
-        unknown = [o for o in self._active() if o.status in UNKNOWN]
-        if unknown:
-            raise ExecutorError("有状态不明的单（发送中断 / 网络错误，可能已被受理）："
-                                + "；".join(f"{o.cid} {o.side} {o.ticker} ×{o.sent_qty}" for o in unknown)
-                                + f"。请在立花的注文一覧确认，然后登记：{self.resolve_cmd()}（没成交填 0）")
+        self._raise_if_unknown()
         eng.prime(k + 1)
         if self.auto_cap and hasattr(b, "max_order_value"):
             b.max_order_value = round(eng.equity(k) * self.cap_mult)
@@ -1223,7 +1256,7 @@ class UnifiedExecutor:
             """钱不够：卖核心 ETF 补 short 円（今天有单的核心不动；按现价）。返回说明。"""
             notes = []
             for c in cores:
-                if short <= 0:
+                if short <= 0 or self._unk_stop:             # 前面有一笔状态不明：不再发（G3）
                     break
                 u, pc = int(st.core_units.get(c, 0)), px.get(c)
                 if held is not None:
@@ -1252,6 +1285,9 @@ class UnifiedExecutor:
         for it in todo:                                       # ① 卖：卖出全部 / 减仓 / 调仓往下（调仓往上放到 ②）
             t, kind = it["ticker"], it["kind"]
             if it["status"] != "pending" or it["id"] in gated:   # 平摊凑钱的闸门这次已经处理过（被挡 / 一会儿再试 / 明天）
+                continue
+            if self._unk_stop:                                # 前面有一笔下单结果不明：这次不再发（G3；登记之后的运行再处理）
+                later(it, UNK_STOP)
                 continue
             it.pop("wait", None)
             if kind == "buy":
@@ -1334,6 +1370,9 @@ class UnifiedExecutor:
             for t, (cur, tgt) in core_moves.items():
                 if (tgt < cur) != (side == "SELL"):                 # 卖的在卖的那一轮、买的（和今天已经有单的）在买的那一轮
                     continue
+                if self._unk_stop:                                  # 前面有一笔下单结果不明：不再发（G3）
+                    core_wait.append(f"{t} {UNK_STOP}")
+                    continue
                 if t in core_today:
                     core_wait.append(f"{t} 今天已经调过一次")
                     continue
@@ -1396,6 +1435,9 @@ class UnifiedExecutor:
         for it in buys:                                       # ② 买：买入 / 调仓往上
             t, add = it["ticker"], it["kind"] == "adjust"
             ps, j = st.pos.get(t), eng.col.get(t)
+            if self._unk_stop:                                # 前面有一笔下单结果不明：这次不再发（G3）
+                later(it, UNK_STOP)
+                continue
             if not add and it.get("fund") == "all":           # 其他全部卖出、只拿这只：整批只在早上的决策里做（先过闸门；卖出所得才算得进来；2026-10-13）
                 it.update(hold=today.isoformat(), tried=stamp, msg=f"全部换成这只：{MO.allin_when(self.clock(), self.book)}整批（那次决策先过闸门、再先卖后买）")
                 out["later"] += 1
@@ -1452,6 +1494,9 @@ class UnifiedExecutor:
             avail = cash_now()
             if need(qty) > avail:                             # 卖核心补：按缓冲之前的金额算（卖出所得也要先扣缓冲）
                 notes += fund((need(qty) - avail) / max(1e-9, 1 - float(cfg.cash_buffer_pct) / 100))
+                if self._unk_stop:                            # 凑钱的核心卖单状态不明：买入不发（G3；不当成「钱不够」作废）
+                    later(it, "；".join(notes + [UNK_STOP]))
+                    continue
                 avail = cash_now()
             q0 = qty
             while qty > 0 and need(qty) > avail:
@@ -2016,11 +2061,7 @@ class UnifiedExecutor:
     # ── 一天 ──
     def run_bar(self, k: int, place: bool = True, corp=None) -> None:
         """第 k 根 K 线（已收盘）：[公司行为] → [模拟账户：第 k 天开盘撮合] → 对账 → 核对 → 收盘决策 → [下单]。"""
-        unknown = [o for o in self._active() if o.status in UNKNOWN]
-        if unknown:
-            raise ExecutorError("有状态不明的单（发送中断 / 网络错误，可能已被受理）："
-                                + "；".join(f"{o.cid} {o.side} {o.ticker} ×{o.sent_qty}" for o in unknown)
-                                + f"。请在立花的注文一覧确认，然后登记：{self.resolve_cmd()}（没成交填 0）")
+        self._raise_if_unknown()
         if corp is not None:
             corp(k)
         if self.paper:
@@ -2067,6 +2108,7 @@ class UnifiedExecutor:
         elif eng.st.last_date:
             k = int(eng.gidx.searchsorted(dt.datetime.fromisoformat(eng.st.last_date)))
             if k < len(eng.gidx) and str(eng.gidx[k].date()) == eng.st.last_date:
+                self._raise_if_unknown()                    # 补单（08:35 重试 / 面板）也过「状态不明 → 不下单」（G3；2026-10-14）
                 eng.prime(k + 1)
                 # 08:35 的重试是新进程：07:40 的「持仓不一致」不会带过来 → 开盘前再查一次持仓，不能绕过。
                 # 09:00 以后不查（今天的单可能已成交，券商持仓本来就和账本不同；寄付单 08:55 之后也被时间闸挡住）——

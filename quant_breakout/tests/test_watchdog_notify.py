@@ -151,6 +151,40 @@ def test_heartbeat_success_and_fail_urls(monkeypatch, posts):
         raise urllib.error.URLError(OSError("down"))
     monkeypatch.setattr(notify.urllib.request, "urlopen", fail)
     assert notify.heartbeat(True) is False                                           # 绝不抛
+    assert notify.heartbeat_detail(True) == (False, "连不上（OSError）")
+
+
+def test_heartbeat_bad_address_gives_a_safe_reason_and_never_logs_it(monkeypatch, posts, caplog):
+    """钥匙串里的心跳地址格式不对（2026-10-14 G12：urllib 的 ValueError 以前只记「ValueError」）：不发；原因只说是哪种问题、
+    不含地址；前后的空白去掉照发。"""
+    lg = logging.getLogger("qbreak")
+    lg.addHandler(caplog.handler)
+    try:
+        with caplog.at_level(logging.WARNING, logger="qbreak"):
+            for bad, why in (("hc-ping.example/uuid-SECRET", "地址不是 http(s):// 开头"),
+                             ("https://hc-ping.example/uuid- SECRET", "地址里有空白或换行"),
+                             ("https://hc-ping.example/uuid-\nSECRET", "地址里有空白或换行"),
+                             ("https://hc-ping.example/uuid-\u3000SECRET", "地址里有空白或换行"),
+                             ("https:///uuid-SECRET", "地址格式不对")):
+                notify.reset()
+                run_ = _kc({"qbreak-heartbeat": bad})
+                assert notify.heartbeat_detail(True, "x", run_) == (False, why)
+                assert notify.heartbeat(False, "x", run_) is False
+                assert notify.beat_addr_why(bad) == why
+            assert not posts
+            monkeypatch.setenv("QBREAK_HEARTBEAT", "  " + BEAT + " \n")
+            assert notify.heartbeat_detail(True, "ok") == (True, "") and posts[-1][0] == BEAT   # 前后的空白去掉
+
+            def bad_url(req, timeout=None):
+                raise ValueError("unknown url type: " + req.full_url)                # urllib 的文字里带着地址
+            monkeypatch.setattr(notify.urllib.request, "urlopen", bad_url)
+            assert notify.heartbeat_detail(True, "x") == (False, "地址格式不对")
+    finally:
+        lg.removeHandler(caplog.handler)
+        notify.reset()
+    log_text = caplog.text
+    assert "地址不是 http(s):// 开头" in log_text and "地址里有空白或换行" in log_text and "地址格式不对" in log_text
+    assert "SECRET" not in log_text and "hc-ping.example" not in log_text
 
 
 # ────────── ② run.py notify ──────────
@@ -215,8 +249,8 @@ class _Rec:
         return True
 
 
-def _run(tmp_path, now=TUE, kind="tachibana"):
-    r = _Rec()
+def _run(tmp_path, now=TUE, kind="tachibana", r=None):
+    r = r or _Rec()
     lines = []
     rc = watchdog.run(_agents(tmp_path, kind), now, send=r.send, beat=r.beat, mac=r.mac, out=lines.append)
     return rc, r, "\n".join(lines)
@@ -243,7 +277,8 @@ def test_watchdog_holiday_and_done_ping_success_without_notifying(tmp_path):
     _book(orders=[_o("a", "SENT"), _o("b", "FILLED", side="SELL")])
     rc, r, out = _run(tmp_path)
     assert rc == 0 and not r.sent and not r.macs and r.beats[0][0] is True and "自检通过" in out
-    assert _wd() == {"at": "2026-10-06T09:30:00+09:00", "ok": True, "reasons": [], "halt": None, "note": ""}
+    assert _wd() == {"at": "2026-10-06T09:30:00+09:00", "ok": True, "reasons": [], "halt": None, "note": "",
+                     "heartbeat": {"at": "2026-10-06T09:30:00+09:00", "state": "sent", "why": ""}}
 
 
 def test_watchdog_morning_not_done_notifies_and_fails_the_heartbeat(tmp_path):
@@ -339,6 +374,53 @@ def test_watchdog_keeps_local_paths_out_of_what_it_sends(tmp_path, monkeypatch):
     assert RS.scrub(f"{paths.home()}/HALT") == "数据目录/HALT"
 
 
+class _Beat(_Rec):
+    """心跳返回 (状态, 原因)（notify.heartbeat_detail 的形状）；None → 没设置。"""
+    def __init__(self, res):
+        super().__init__()
+        self.res = res
+
+    def beat(self, ok, msg=""):
+        self.beats.append((ok, msg))
+        return self.res
+
+
+def test_watchdog_records_the_heartbeat_and_warns_once_a_day_when_it_fails(tmp_path, monkeypatch, posts):
+    """外部心跳没发成（2026-10-14 G12：以前只在日志里记「ValueError」，没人知道）：结果文件记 heartbeat（原因不含地址）、
+    手机 + Mac 通知同一天只一次（教你在「终端」重新存钥匙串）；面板顶部（Mac 与手机）/ 菜单栏的状态显示；发成了就消失。"""
+    from qbreak import mac_status, panel
+    _book(orders=[_o("a", "SENT")])
+    monkeypatch.setenv("QBREAK_HEARTBEAT", "hc-ping.example/uuid-SECRET")          # 真的 heartbeat_detail（不注入 beat）
+    r, lines = _Rec(), []
+    rc = watchdog.run(_agents(tmp_path), TUE, send=r.send, mac=r.mac, out=lines.append)
+    out = "\n".join(lines)
+    assert rc == 0 and not posts and _wd()["ok"] is True                           # 自检本身通过
+    assert _wd()["heartbeat"] == {"at": "2026-10-06T09:30:00+09:00", "state": "failed", "why": "地址不是 http(s):// 开头"}
+    assert "心跳 ★ 没发成（地址不是 http(s):// 开头）" in out
+    assert len(r.sent) == 1 and r.sent[0][0] == "qbreak 立花实盘：外部心跳没发成" and r.sent[0][2] == "warn"
+    assert "地址不是 http(s):// 开头" in r.sent[0][1] and "security add-generic-password -U -s qbreak-heartbeat -a qbreak -w" in r.sent[0][1]
+    assert len(r.macs) == 1
+    seen_all = out + json.dumps(_wd(), ensure_ascii=False) + r.sent[0][1] + r.macs[0][1]
+    assert "SECRET" not in seen_all and "hc-ping.example" not in seen_all
+    book = json.loads((paths.state_dir() / "live_unified_tachibana.json").read_text(encoding="utf-8"))
+    top = "\n".join(h for _, h in panel._run_lines("tachibana", book, TUE.replace(minute=40), None))
+    assert "★ 10/06 09:30 外部心跳没发成（地址不是 http(s):// 开头）" in top and "SECRET" not in top
+    it = mac_status._beat_item("tachibana")
+    assert it["level"] == "bad" and "地址不是 http(s):// 开头" in it["text"] and it["name"] == "外部心跳"
+    rc, r, out = _run(tmp_path, now=TUE.replace(minute=45), r=_Beat((False, "HTTP 404")))   # 同一天：不再通知，结果照记
+    assert not r.sent and not r.macs and "今天已经提醒过外部心跳没发成" in out and _wd()["heartbeat"]["why"] == "HTTP 404"
+    _book(last="2026-10-06", orders=[_o("a", "SENT", d="2026-10-06")])
+    rc, r, out = _run(tmp_path, now=TUE + dt.timedelta(days=1), r=_Beat((False, "连不上（OSError）")))   # 第二天：再提醒一次
+    assert rc == 0 and len(r.sent) == 1 and "多半是网络问题" in r.sent[0][1]
+    rc, r, out = _run(tmp_path, now=TUE + dt.timedelta(days=1, minutes=5), r=_Beat((True, "")))       # 发成了：面板上消失
+    book = json.loads((paths.state_dir() / "live_unified_tachibana.json").read_text(encoding="utf-8"))
+    top = "\n".join(h for _, h in panel._run_lines("tachibana", book, TUE + dt.timedelta(days=1, minutes=10), None))
+    assert _wd()["heartbeat"]["state"] == "sent" and "外部心跳" not in top and not r.sent
+    assert mac_status._beat_item("tachibana")["level"] == "ok"
+    rc, r, out = _run(tmp_path, now=TUE + dt.timedelta(days=1, minutes=6), r=_Beat((None, "")))      # 没设置：只记、不显示
+    assert _wd()["heartbeat"]["state"] == "not_set" and mac_status._beat_item("tachibana") is None and not r.sent
+
+
 def test_watchdog_dry_only_prints(tmp_path):
     """liveu.sh watchdog --dry（Mac 对话里问「今天的自检过了吗」）：只判定、打印；不写结果文件、不发通知 / 心跳。"""
     _book(last="2026-10-02")
@@ -363,6 +445,7 @@ def test_watchdog_command_refuses_a_data_dir_inside_the_repo(tmp_path, monkeypat
     calls = []
     monkeypatch.setattr(notify, "send", lambda *a, **k: calls.append("send"))
     monkeypatch.setattr(notify, "heartbeat", lambda *a, **k: calls.append("beat"))
+    monkeypatch.setattr(notify, "heartbeat_detail", lambda *a, **k: calls.append("beat"))
     agents = _agents(tmp_path, "paper")
     assert run.main(["live-watchdog", "--agents", str(agents)]) == 2
     assert calls == [] and "不能放进仓库的 var/" in capsys.readouterr().out and list(repo.rglob("*")) == []

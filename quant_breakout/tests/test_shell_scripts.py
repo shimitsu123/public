@@ -265,10 +265,43 @@ def test_liveu_run_keeps_the_mac_awake_for_the_watchdog_only_in_the_scheduled_ru
         assert "caffeinate" not in _calls(log), args
     env, log = _run_env(tmp_path, 1)
     _bash(env, "scripts/liveu.sh", "run", "--broker", "tachibana", "--retry")
-    assert "caffeinate -i -t 600" in _calls(log)                        # 立花：照旧
+    assert "caffeinate -i -t 600" in _calls(log)                        # 立花的定时运行：照旧在进程里等
     env, log = _run_env(tmp_path, 0, QBREAK_WATCHDOG_WAIT="0")
     _bash(env, "scripts/liveu.sh", "watchdog", "--dry")
     assert "py run.py live-watchdog --dry" in _calls(log)
+
+
+@pytest.mark.skipif(not shutil.which("bash"), reason="需要 bash")
+def test_liveu_run_from_the_panel_does_not_hold_until_0935(tmp_path):
+    """2026-10-14 G2：面板叫的立花 --retry（Trigger 设 QBREAK_NO_HOLD=1）跑完马上结束 —— 以前在进程里 caffeinate 到 09:35，
+    面板一直以为它「还在跑」，撤单、盘中指令都不再叫执行器。让 Mac 醒着的 caffeinate 放到后台（已经有一个在等就不再开）；
+    定时任务（没有 QBREAK_NO_HOLD）照旧在进程里等。假 caffeinate 等 2 秒才记「done」：liveu.sh 返回时还没有 done = 没在进程里等。"""
+    import time
+    b = tmp_path / "bin"
+
+    def stubs(pgrep_rc: int) -> None:
+        (b / "caffeinate").write_text('#!/bin/sh\necho "caffeinate $*" >> "$CALLS"\n'
+                                      'case "$*" in *-t*) sleep 2; echo "caffeinate-done" >> "$CALLS" ;; esac\n', encoding="utf-8")
+        (b / "pgrep").write_text(f"#!/bin/sh\nexit {pgrep_rc}\n", encoding="utf-8")   # 这台 Mac 上真的在等的 caffeinate 不算
+        (b / "pgrep").chmod(0o755)
+    env, log = _run_env(tmp_path, 1, QBREAK_NO_HOLD="1")
+    stubs(1)
+    out, _ = _bash(env, "scripts/liveu.sh", "run", "--broker", "tachibana", "--retry")
+    assert "放到后台，这次运行马上结束" in out and "caffeinate-done" not in _calls(log)
+    for _ in range(60):                                                  # 后台的那个照样让 Mac 醒着（假的 2 秒后记 done）
+        if "caffeinate-done" in _calls(log):
+            break
+        time.sleep(0.1)
+    assert "caffeinate -i -t 600" in _calls(log) and "caffeinate-done" in _calls(log)
+    env, log = _run_env(tmp_path, 1, QBREAK_NO_HOLD="1")                 # 已经有一个在等（pgrep 找到）→ 不再开
+    stubs(0)
+    out, _ = _bash(env, "scripts/liveu.sh", "run", "--broker", "tachibana", "--retry")
+    time.sleep(0.5)
+    assert "放到后台" in out and "caffeinate -i -t" not in _calls(log)
+    env, log = _run_env(tmp_path, 1)                                     # 定时任务：照旧在进程里等
+    stubs(1)
+    out, _ = _bash(env, "scripts/liveu.sh", "run", "--broker", "tachibana", "--retry")
+    assert "caffeinate-done" in _calls(log) and "放到后台" not in out
 
 
 def test_no_test_runs_install_scripts_with_a_bare_system_path():

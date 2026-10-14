@@ -356,6 +356,18 @@ def test_halt_cancel_creates_halt_before_the_lock_and_book_check(monkeypatch, ca
 
 
 # ══════════════════════════ ② 状态不明的单的候选 ══════════════════════════
+def _stops_until_resolved(r, k=11):
+    """状态不明的单：当天开盘后的补单（09:05 / 09:20 的 open_phase）就停（2026-10-14 G3）→ 第二天早上的运行也停。"""
+    r.exch.open(k)
+    with pytest.raises(ExecutorError):
+        r.ux.open_phase()
+    r.exch.close_day()
+    r.exch.set_day(k + 1)
+    r.now["t"] = _at(next_trading_day(r.eng.gidx[k].date()), 7, 40)
+    with pytest.raises(ExecutorError):
+        r.ux.run_bar(k)
+
+
 def _unknown_rig(exch_cls=_Timeout):
     def boom(k, r):
         if k == 10:
@@ -396,8 +408,7 @@ def test_unknown_without_candidates_and_run_status_and_panel_show_them(monkeypat
     assert o.status == "ERROR"
     c = r.ux.unknown_candidates()
     assert c[0]["candidates"] == [] and "多半没受理" in "\n".join(LO.unknown_text(c))
-    with pytest.raises(ExecutorError):
-        r.day(11)
+    _stops_until_resolved(r)
     unk = run._unknown_for(r.ux, SimpleNamespace(broker="tachibana", demo=False, dry_run=False))
     assert unk and unk[0]["cid"] == o.cid
     assert unk[0]["stale"] == r.f.isoformat() and unk[0]["candidates"] == []   # 第二天早上：注文一覧里本来就没有昨天的单
@@ -418,8 +429,7 @@ def test_unknown_order_from_yesterday_gets_no_filled_zero_advice():
     import run
     r = _unknown_rig()
     o = _order(r)
-    with pytest.raises(ExecutorError):
-        r.day(11)
+    _stops_until_resolved(r)
     unk = run._unknown_for(r.ux, SimpleNamespace(broker="tachibana", demo=False, dry_run=False))
     assert unk[0]["cid"] == o.cid and unk[0]["stale"] == r.f.isoformat() and unk[0]["candidates"] == []
     for drafts in (True, False):
