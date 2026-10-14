@@ -315,9 +315,10 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
     def item(badge: str, main: str, r: dict) -> str:        # 一行：收起时 = 原来的一行摘要；点开 = 建议的股票里同一只（K 线默认打开）
         t = str(r["ticker"])
         body = _suggest_row(r, s, buying or set(), eq, chart, rank=c["rank"].get(t), fill=sg.get("fill_day"),
-                            mark=c["marks"].get(t), freed=c["freed"], ckind="autobuy", kl_open=True)
+                            mark=c["marks"].get(t), freed=c["freed"], ckind="autobuy", kl_open=True, rank_label=True)
         return (f"<details class='abx' data-t='{escape(t)}'><summary>{badge}<span class='grow'>{main}</span></summary>"
-                f"<div class='abxb'>{body}</div></details>")
+                f"<div class='abxb'>{body}<div class='abxe'><button type='button' class='btn' data-abxclose='1'>收起</button></div>"
+                "</div></details>")                          # 底下也能收起（点开的一行很长：不用滚回摘要；2026-10-14 复核）
 
     def gc_day(r):                                          # 估计金叉的 K 线日（asof 往后数 near.days 个交易日）
         gc = asof
@@ -634,9 +635,10 @@ def _fill_mult_why(w: str) -> str:
 
 
 def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = None, fill: str | None = None,
-                 mark: dict | None = None, freed: dict | None = None, ckind: str = "suggest", kl_open: bool | None = None) -> str:
+                 mark: dict | None = None, freed: dict | None = None, ckind: str = "suggest", kl_open: bool | None = None,
+                 rank_label: bool = False) -> str:
     """「建议的股票」的一只（「规则接下来会自动买」点开的也是它：ckind = autobuy、K 线默认打开 kl_open；2026-10-14）。
-    元素不带 id（同一只票可以在两张卡里各出现一次）。"""
+    元素不带 id（同一只票可以在两张卡里各出现一次）。rank_label：名次徽章写成「观察中第 N」（在别的卡片里光一个数会被当成那张卡的序号）。"""
     t, b, ru = str(r["ticker"]), r.get("buy") or {}, r.get("rule") or {}
     nm = f" {escape(str(r['name']))}" if r.get("name") else ""
     meta = [f"条件凑齐 {r['score']:g} / 100" if r.get("score") is not None else None,
@@ -650,7 +652,9 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
         tag_ += ("<span class='chip gc'>" + (f"金叉约 {gd} 天" if nr["where"] == "below_up" and gd < SG.FAR_DAYS
                                              else "金叉还远" if nr["where"] == "below_up" else "要先拐头" if nr["where"] == "below_down"
                                              else "已在线上" if nr["where"] == "above" else "金叉算不出") + "</span>")
-    H = [f"<div class='hv sg'><div class='head'>" + (f"<span class='rk'>{rank}</span>" if rank else "")
+    rk = ((f"<span class='rk' title='在下面「建议的股票」的观察中排第 {rank}'>观察中第 {rank}</span>" if rank_label
+           else f"<span class='rk'>{rank}</span>") if rank else "")
+    H = [f"<div class='hv sg'><div class='head'>" + rk
          + f"<b>{escape(str(r.get('code') or t))}</b>{nm}"
          + (f"<span class='chip'>{escape(str(r['sector']))}</span>" if r.get("sector") else "") + tag_ + "</div>"
          + _news_mark(mark)                                 # 消息的影响（2026-10-11 用户）
@@ -1540,6 +1544,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     u100s = MO.core_u100s(book)[0]                          # 规则目标（比例 100%）；执行器还没算过 → 估算（比例还是 100% 时）
     cfg = {"auth": {"h": "X-Qbreak-Csrf" if remote else "X-Qbreak-Token", "v": tok}, "book": tag, "paper": paper, "remote": remote,
            "real": real,                                                                   # 真钱（立花本番）：确认框写明
+           "sq_max": SG_MAX,                                                               # 建议的股票的现价一次最多取几只（quotes.js）
            "when": when, "eq": eq or 0, "cap": cap, "lot": MO.LOT, "live": MO.timing(now)[0] == "now",   # 盘中：现价每 1 分钟刷新
            "cores": {t: {"cur": int((st.get("core_units") or {}).get(t, 0)), "u100": int(u100s.get(t, 0)),
                          "lot": MO.core_lot(book, t)}                                            # 调一只核心 ETF 时别的跟着变多少
@@ -3013,6 +3018,13 @@ def _watch_code(stop: threading.Event, srv, every: float = 60.0) -> None:
             return
 
 
+class _Srv(ThreadingHTTPServer):
+    """面板的 HTTP 服务器：等着接的连接多留一些（socketserver 默认 5：一下点开很多行、K 线 / 现价同时取时会在 TCP 层被拒，
+    页面显示「K 线取不到」；2026-10-14 复核）。"""
+    request_queue_size = 64
+    daemon_threads = True
+
+
 def serve(port: int = 8765, open_browser: bool = False, trigger: bool = True, phone_port: int | None = PP.PHONE_PORT) -> int:
     """在 127.0.0.1:port（本机）与 127.0.0.1:phone_port（手机，Tailscale Serve 用；0 = 不开）上运行（前台；LaunchAgent 用 KeepAlive 守着）。"""
     tok = token()
@@ -3020,11 +3032,11 @@ def serve(port: int = 8765, open_browser: bool = False, trigger: bool = True, ph
     psrv = None
     if phone_port:
         try:
-            psrv = ThreadingHTTPServer(("127.0.0.1", int(phone_port)), make_phone_handler(int(phone_port), trg))
+            psrv = _Srv(("127.0.0.1", int(phone_port)), make_phone_handler(int(phone_port), trg))
         except OSError as e:
             log.warning("手机端口 127.0.0.1:%s 打不开（%s）：手机访问不可用", phone_port, e)
             print(f"★ 手机端口 127.0.0.1:{phone_port} 打不开（{e}）：手机访问不可用，本机面板照常")
-    srv = ThreadingHTTPServer(("127.0.0.1", int(port)), make_handler(int(port), tok, trg, phone_port=int(phone_port) if psrv else None))
+    srv = _Srv(("127.0.0.1", int(port)), make_handler(int(port), tok, trg, phone_port=int(phone_port) if psrv else None))
     stop = threading.Event()
     if psrv is not None:
         threading.Thread(target=psrv.serve_forever, daemon=True).start()

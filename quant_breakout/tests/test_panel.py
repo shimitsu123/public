@@ -291,7 +291,7 @@ def test_render_watch_rows_show_how_far_from_a_buy_signal():
     _sm(rows)
     html = panel.render("paper", "t" * 40, AT)
     assert ("<div class='small near'>离买入信号：MACD 约 2 天后金叉（按最近一天的变化估）；金叉那天量要 &gt; 1.5 倍（今天 0.8 倍）</div>"
-            in html)
+            in _card(html, "suggest"))                                     # 只看建议的股票（自动买那张卡点开的也是同一行）
     assert html.count("按离 MACD 金叉的天数排（越上面越快金叉；只是估算）") == 1   # 只有带 near 的组（旧的汇总没有 → 不写）
 
 
@@ -347,7 +347,7 @@ def test_submit_buy_writes_instruction_and_checks():
     ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "9984", "unit": "shares", "value": 300}, AT)
     assert ok and rec["value"] == 300 and "买入 9984.T（300 股）" in msg and "没有买入信号" in msg
     html = panel.render("paper", "t" * 40, AT)
-    assert html.count("data-act='cancel'") == 2 and "有一条买入指令在处理（见「手动指令」）" in html
+    assert html.count("data-act='cancel'") == 2 and "有一条买入指令在处理（见「手动指令」）" in _card(html, "suggest")
 
 
 def test_chart_endpoint_serves_one_ticker(server):

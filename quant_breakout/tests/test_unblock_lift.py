@@ -12,7 +12,7 @@ from qbreak.calendar_jp import JST, next_trading_day
 from test_fund_all import _book4, _reqs
 from test_manual_buy import _write
 from test_manual_orders import TAG, _Run, _sell_req
-from test_panel import AT, _book, _sm
+from test_panel import AT, _book, _card, _sm
 
 D = dt.date
 
@@ -209,7 +209,9 @@ def test_suggest_and_auto_buy_card_for_manual_block():
                    "em": 1.0, "rule_shares": 100}}
     _sm([row])
     html = panel.render("paper", "t" * 40, AT)
-    assert "手动卖出后不买回（可在「交易」解除）：到 2026-10-07" in html and "资格检查：手动" not in html
+    sg = _card(html, "suggest")                                             # 建议的股票（自动买那张卡点开的是同一行：另外查）
+    assert "手动卖出后不买回（可在「交易」解除）：到 2026-10-07" in sg and "资格检查：手动" not in html
+    assert "手动卖出后不买回（可在「交易」解除）：到 2026-10-07" in _card(html, "autobuy")
     book = json.loads((panel.paths.state_dir() / "live_unified_paper.json").read_text())
     h = panel._auto_buy_card({"asof": "2026-10-05", "rows": [row]}, book, "paper", 1_000_000)
     assert "6501" in h and "10/07 解除后" in h                                # 估计 10/08 金叉 > 到期 10/07：还列
@@ -220,7 +222,7 @@ def test_suggest_and_auto_buy_card_for_manual_block():
     why = MO.check(MO.normalize({"kind": "buy", "ticker": "6501"}), book, "paper", sm={"suggest": {"rows": [row]}})
     assert "不能买" not in str(why)                                           # 在解除：上一次决策的结果不再挡手动买入
     html = panel.render("paper", "t" * 40, AT)
-    assert "「不自动买回」在解除：下一次决策（交易日 07:40）起生效（规则出买入信号才买；手动买入可以写）" in html
+    assert "「不自动买回」在解除：下一次决策（交易日 07:40）起生效（规则出买入信号才买；手动买入可以写）" in _card(html, "suggest")
     assert "解除中" in panel._auto_buy_card({"asof": "2026-10-05", "rows": [row2]}, book, "paper", 1_000_000)
     assert suggest._why_not(SimpleNamespace(st=None, cfg=None), "6501.T", 0, 1.0, "x", None, gate_kind="manual", until=None) == "手动卖出后不买回（可在「交易」解除）：一直，直到解除"
 

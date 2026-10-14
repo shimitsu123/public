@@ -57,7 +57,7 @@ function buyLines(q, j, full){                                             // �
 function showSQ(j){
   const R=(j && j.rows) || {};
   document.querySelectorAll('.qt[data-sq]').forEach(e=>{
-    const q=R[e.dataset.sq]; if(!q) return;                                // 没取的（K 线没打开）不动
+    const q=R[e.dataset.sq]; if(!q || e.dataset.over) return;              // 没取的（K 线没打开）/ 超过一次能取的只数（写着说明）不动
     e.textContent='';
     nd('span', q.chg_pct==null ? null : (q.chg_pct>=0 ? 'up' : 'down'), priceHead(q), e);
     if(e.dataset.planned==='1') return;                                    // 已排在开盘买：只写现价
@@ -65,15 +65,30 @@ function showSQ(j){
   });
   buyLive();
 }
-function sqWant(){                                                         // 要取现价的建议股票：买入框里的 + 「规则接下来会自动买」点开的 + 打开的 K 线（最多 12 只）
+const SQMAX = CFG.sq_max || 12;                                            // 一次最多取几只（= 服务器的 SG_MAX）
+let RECENT = [];                                                          // 最近点开的票（新的在前）：打开的超过 SQMAX 只时先取它们
+function sqAll(){                                                         // 要取现价的建议股票：买入框里的 → 最近点开的 → 其余打开的（页面顺序）
+  const open=[];
+  document.querySelectorAll('#autobuy details.abx[open] details.kl[open] .chart[data-t], #suggest details.kl[open] .chart[data-t]')
+    .forEach(b=>{ if(open.indexOf(b.dataset.t)<0) open.push(b.dataset.t); });
   const s=[];
   const d=$('#dlg-buy'); if(BUY && d && d.open) s.push(BUY.t);
-  document.querySelectorAll('#autobuy details.abx[open] details.kl[open] .chart[data-t], #suggest details.kl[open] .chart[data-t]')   // 页面顺序：上面的卡片先
-    .forEach(b=>{ if(s.indexOf(b.dataset.t)<0) s.push(b.dataset.t); });
-  return s.slice(0, 12);
+  for(const t of RECENT.concat(open)) if(open.indexOf(t)>=0 && s.indexOf(t)<0) s.push(t);
+  return s;
+}
+function sqWant(){ return sqAll().slice(0, SQMAX); }
+function sqOver(over, n){                                                 // 这次取不到的（超过 SQMAX 只）：写一行说明，不留空、不留上一次的旧价
+  document.querySelectorAll('.qt[data-sq]').forEach(e=>{
+    if(over.indexOf(e.dataset.sq)>=0){
+      e.dataset.over='1'; e.textContent='';
+      nd('span', 'muted', '现价一次最多取 '+SQMAX+' 只（现在打开了 '+n+' 只）：收起几行再看', e);
+    }else if(e.dataset.over){ delete e.dataset.over; e.textContent=''; }
+  });
 }
 export async function loadSQ(){
-  const ts=sqWant(); if(!ts.length) return;
+  const all=sqAll(), ts=all.slice(0, SQMAX);
+  sqOver(all.slice(SQMAX), all.length);
+  if(!ts.length) return;
   try{
     const x=await req('/api/quotes?book='+encodeURIComponent(CFG.book)+'&t='+encodeURIComponent(ts.join(',')), {credentials:'same-origin', cache:'no-store'});
     if(x.r.ok && x.j){ SQ={...x.j, rows:{...((SQ && SQ.rows) || {}), ...(x.j.rows || {})}}; showSQ(SQ); liveK(x.j.rows||{}, x.j.live); }
@@ -116,7 +131,10 @@ async function loadQ(){
   QTID=setTimeout(loadQ, QLIVE ? 60000 : 600000);                         // 盘中 1 分钟，其他时间 10 分钟（开盘后自动变快）
 }
 document.addEventListener('toggle', e=>{                                   // 打开一只建议股票的 K 线（或「规则接下来会自动买」的一行）→ 取它的现价（并进今天这一根）
-  if(e.target.tagName==='DETAILS' && e.target.open && e.target.closest('#suggest, #autobuy')){ clearTimeout(SQT); SQT=setTimeout(loadSQ, 300); }
+  const d=e.target; if(d.tagName!=='DETAILS' || !d.closest('#suggest, #autobuy')) return;
+  if(d.open){ const c=d.querySelector('.chart[data-t]'), t=d.matches('details.abx, details.kl') && c ? c.dataset.t : null;
+              if(t) RECENT=[t].concat(RECENT.filter(x=>x!==t)).slice(0, 50); }   // 最近点开的排前面
+  if(d.open || document.querySelector('.qt[data-sq][data-over]')){ clearTimeout(SQT); SQT=setTimeout(loadSQ, 300); }   // 收起了几行：超过的那些现在取
 }, true);
 document.addEventListener('DOMContentLoaded', loadQ);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) loadQ(); });

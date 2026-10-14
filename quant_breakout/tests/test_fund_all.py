@@ -12,7 +12,7 @@ import pytest
 from qbreak import manual_orders as MO
 from qbreak import panel
 
-from test_panel import AT, _book, _js_fn, _sm, _sm_nowarn
+from test_panel import AT, _book, _card, _js_fn, _sm, _sm_nowarn
 
 
 def _book4(**kw):
@@ -53,7 +53,9 @@ def test_submit_all_allowed_when_slots_full_and_button_rendered():
     _book4()                                                                  # 4 / 4 只：名额满
     _sm()
     html = panel.render("paper", "t" * 40, AT)
-    assert "data-full='1'" in html and ">全部换成这只…<" in html and "只能把其他持仓全部卖出来换这只" in html
+    sg, ab = _card(html, "suggest"), _card(html, "autobuy")                  # 两张卡各查（「规则接下来会自动买」点开的也是同一行，2026-10-14）
+    assert "data-full='1'" in sg and ">全部换成这只…<" in sg and "只能把其他持仓全部卖出来换这只" in sg
+    assert ab.count("data-full='1'") == ab.count("data-act='buy'") >= 1 and ">全部换成这只…<" in ab
     ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300}, AT)
     assert not ok and "名额已满" in msg
     ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}}, AT)

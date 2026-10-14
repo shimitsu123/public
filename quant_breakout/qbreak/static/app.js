@@ -101,6 +101,14 @@ document.addEventListener('click', e=>{                                   // 选
   d.open=true; const pd=d.parentElement && d.parentElement.closest('details'); if(pd) pd.open=true; d.classList.add('hl');
   setTimeout(()=>{ const top=document.querySelector('.top'); window.scrollTo(0, d.getBoundingClientRect().top+window.scrollY-((top&&top.offsetHeight)||0)-8); }, 50);
 }, true);
+document.addEventListener('click', e=>{                                   // 「规则接下来会自动买」点开的一行底下的「收起」：收起并回到那一行的摘要（点开的一行很长；2026-10-14）
+  const b=e.target.closest('[data-abxclose]'); if(!b) return;
+  const d=b.closest('details.abx'); if(!d) return;
+  e.preventDefault(); d.open=false;
+  const sm=d.querySelector('summary'), top=document.querySelector('.top'), h=(top&&top.offsetHeight)||0, y=sm.getBoundingClientRect().top;
+  if(y<h || y>window.innerHeight-40) window.scrollTo(0, y+window.scrollY-h-8);   // 摘要在页头下面 / 屏幕外 → 滚到页头下面
+  sm.focus({preventScroll:true});
+}, true);
 function showMseg(s){ document.querySelectorAll('[data-mseg]').forEach(b=>b.classList.toggle('on', b.dataset.mseg===s));
   document.querySelectorAll('.mseg').forEach(g=>{ g.hidden = g.dataset.s!==s; }); }
 document.addEventListener('click', e=>{ const b=e.target.closest('[data-mseg]'); if(!b) return; e.preventDefault(); showMseg(b.dataset.mseg); }, true);

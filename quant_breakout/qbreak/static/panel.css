@@ -136,6 +136,7 @@ details.nw.lv-hi{border-left:4px solid var(--neg);padding-left:8px}details.nw.lv
 .abx>summary::after{content:'';flex:none;width:7px;height:7px;margin:0 6px 0 0;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
 .abx[open]>summary::after{transform:rotate(45deg)}.abx .abs{display:block}.abx .grow{overflow-wrap:anywhere}
 .abxb>.hv{border-top:1px dashed var(--line);padding:8px 0 12px}
+.abxe{display:flex;justify-content:flex-end;padding:0 0 12px}.abxe .btn::after{content:' ▲'}.abxb .rk{font-size:12px;font-weight:600;white-space:nowrap}
 .avr{display:grid;grid-template-columns:3.6em minmax(0,1fr);align-items:center;gap:8px}.avr .alb{margin:3px 0}
 .alb i.new{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.35) 0 4px,transparent 4px 8px)}
 .avg{grid-template-columns:12px minmax(0,1fr) auto}.alp.up{color:var(--up)}.alp.down{color:var(--down)}

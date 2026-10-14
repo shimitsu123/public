@@ -1,12 +1,18 @@
 """「规则接下来会自动买」每一行可以点开（2026-10-14 用户：「选股中的估计 5 个交易日内可能出现信号的股票也要可以能看到 K 线，
 也可以有买入的 button 等等」）：收起时 = 原来的一行摘要；点开 = 「建议的股票」里同一只同一行（_suggest_row：买入… / 不能买的理由、
 规则的买价、K 线 · 现价），默认收起；同一只票在两张卡里各一份，元素不带 id。"""
+import json
 import re
+import shutil
+import subprocess
 from collections import Counter
 
-from qbreak import panel
+import pytest
 
-from test_panel import AT, _book, _card, _sm
+from qbreak import panel
+from qbreak import watch_prob as WP
+
+from test_panel import AT, _book, _card, _js_fn, _sm
 
 NEAR = {"ticker": "1925.T", "code": "1925", "name": "大和ハウス", "sector": "建設業", "status": "imminent", "signal": False,
         "score": 70.0, "close": 4000.0, "near": {"where": "below_up", "days": 2, "miss": ["量"]}, "prob": {"p": 0.09},
@@ -109,7 +115,7 @@ def test_no_duplicate_ids_and_chart_kinds(monkeypatch):
 def test_quotes_and_kline_scripts_cover_both_cards():
     js = panel._JS
     assert "#autobuy details.abx[open] details.kl[open] .chart[data-t], #suggest details.kl[open] .chart[data-t]" in js   # 点开的行也取现价
-    assert "e.target.closest('#suggest, #autobuy')" in js                    # 点开就取（不用等下一次刷新）
+    assert "if(d.tagName!=='DETAILS' || !d.closest('#suggest, #autobuy')) return;" in js   # 点开就取（不用等下一次刷新）
     assert "document.querySelectorAll('.qt[data-sq]')" in js                  # 现价写进同一只的每一处（不是只写第一处）
     assert "document.addEventListener('toggle', e=>{ if(e.target.tagName==='DETAILS' && e.target.open) e.target.querySelectorAll('.chart[data-t]')" in js
     assert "else if(!KD[b.dataset.t] && !b.closest('details:not([open])')){ if(IO) IO.unobserve(b); showK(b); }" in js   # 点开就取 K 线
@@ -122,3 +128,84 @@ def test_card_without_chart_or_ctx_still_renders():
     book = json.loads((panel.paths.state_dir() / "live_unified_paper.json").read_text())
     h = panel._auto_buy_card({"asof": "2026-10-05", "rows": [NEAR]}, book, "paper", 1_000_000)
     assert "<details class='abx' data-t='1925.T'>" in h and "data-kind='autobuy'" in h and "data-act='buy'" in h
+
+
+RK = re.compile(r"<span class='rk'[^>]*>[^<]*</span>")
+
+
+def test_ranked_rows_match_and_badge_says_what_it_is(monkeypatch, tmp_path):
+    """有比例表（生产里有 var/watch_prob.json）：名次徽章 / 历史比例 / 快要出 也和建议的股票同一行；
+    自动买那张卡里的徽章写明「观察中第 N」（光一个数会被当成这张卡的序号；2026-10-14 复核）。"""
+    _setup(monkeypatch=monkeypatch)
+    t = WP.fit([("down_far", "m0", "v_lo", int(k < 9)) for k in range(100)] + [("up_d1", "m1", "v_hi", int(k < 4)) for k in range(100)]
+               + [("above_far", "m0", "v_lo", 0) for _ in range(300)], extra={"show_pct": True})
+    fp = tmp_path / "wp.json"
+    fp.write_text(json.dumps(t), encoding="utf-8")
+    monkeypatch.setattr(WP, "FILE", fp)
+    html = panel.render("paper", "t" * 40, AT)
+    ab, sg = _card(html, "autobuy"), _card(html, "suggest")
+    seen = []
+    for tk in ("1925.T", "6501.T"):
+        a, b = _row(ab, tk, "autobuy"), _row(sg, tk, "suggest")
+        n = re.search(r"<span class='rk'>(\d+)</span>", b).group(1)       # 建议的股票：光一个数（那张卡里的顺序）
+        assert f"<span class='rk' title='在下面「建议的股票」的观察中排第 {n}'>观察中第 {n}</span>" in a, tk
+        assert "<div class='small prob'>" in a                              # 历史比例那一行也在
+        assert RK.sub("", a).replace(" open>", ">") == RK.sub("", b).replace(" open>", ">"), tk
+        seen.append(int(n))
+    assert len(set(seen)) == 2 and "<span class='chip hot'>快要出</span>" in _abx(ab, "1925.T")   # 名次 = 建议的股票里的（不是这张卡的顺序）
+    assert "<span class='rk'" not in _abx(ab, "8306.T")                     # 出了信号的不排名（与建议的股票一样）
+
+
+def test_expanded_row_has_a_close_button_at_the_bottom(monkeypatch):
+    _setup(monkeypatch=monkeypatch)
+    ab = _card(panel.render("paper", "t" * 40, AT), "autobuy")
+    for tk in ("1925.T", "6501.T", "8306.T"):
+        one = _abx(ab, tk)
+        assert one.count("data-abxclose") == 1, tk
+        assert "<div class='abxe'><button type='button' class='btn' data-abxclose='1'>收起</button></div></div></details>" in one, tk
+    js = panel._JS
+    assert "const b=e.target.closest('[data-abxclose]'); if(!b) return;" in js and "const d=b.closest('details.abx'); if(!d) return;" in js
+    assert "e.preventDefault(); d.open=false;" in js                        # 收起后把摘要滚到页头下面（在屏幕外时）
+
+
+def test_panel_server_accepts_bursts_of_connections():
+    """一下点开很多行：K 线 / 现价同时取（socketserver 默认只排 5 个连接，多了在 TCP 层被拒；2026-10-14 复核）。"""
+    assert issubclass(panel._Srv, panel.ThreadingHTTPServer) and panel._Srv.request_queue_size >= 32 and panel._Srv.daemon_threads
+    import inspect
+    src = inspect.getsource(panel.serve)
+    assert src.count("_Srv((\"127.0.0.1\"") == 2 and "ThreadingHTTPServer(" not in src       # 本机端口与手机端口都用它
+
+
+def test_quotes_take_recent_first_and_explain_the_ones_over_the_limit(tmp_path):
+    """点开超过 12 只：买入框 → 最近点开的 → 其余（页面顺序）取前 12 只；取不到的写一行说明（不留空、不留旧价）。"""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("没有 node")
+    js = panel._JS
+    assert "CFG.sq_max" in js and panel.render  # noqa: B018
+    fns = "\n".join(_js_fn(js, n) for n in ("sqAll", "sqWant", "sqOver"))
+    src = """
+function nd(tag, cls, text, par){ const e={tag, cls, text}; if(par) par.kids.push(e); return e; }
+const OPEN = __OPEN__;
+const QT = OPEN.concat(['2432.T']).map(t=>({dataset:{sq:t}, kids:[], set textContent(v){ this.kids=[]; this.txt=v; }}));
+QT[0].dataset.over='1';
+const document = {querySelectorAll: s => s.indexOf('.qt[data-sq]')===0 ? QT : OPEN.map(t=>({dataset:{t}}))};
+let DLG = {open:true}; const $ = s => s==='#dlg-buy' ? DLG : null;
+let BUY = {t:'7777.T'}; const SQMAX = 12; let RECENT = ['9531.T', '1111.T'];
+__FNS__
+const all = sqAll(), want = sqWant();
+sqOver(all.slice(SQMAX), all.length);
+console.log(JSON.stringify({all, want, qt: QT.map(e=>({t:e.dataset.sq, over:e.dataset.over||null, n:e.kids.length, txt:e.kids.length ? e.kids[0].text : null}))}));
+""".replace("__FNS__", fns).replace("__OPEN__", json.dumps([f"{1000 + k}.T" for k in range(12)] + ["9531.T"]))
+    f = tmp_path / "q.js"
+    f.write_text(src, encoding="utf-8")
+    p = subprocess.run([node, str(f)], capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr[-800:]
+    o = json.loads(p.stdout)
+    assert o["all"][:2] == ["7777.T", "9531.T"] and "1111.T" not in o["all"]   # 买入框 → 最近点开的（收起了的不算）→ 其余
+    assert o["want"] == o["all"][:12] and o["all"][12:] == ["1010.T", "1011.T"]
+    over = {e["t"]: e for e in o["qt"]}
+    for tk in ("1010.T", "1011.T"):
+        assert over[tk]["over"] == "1" and over[tk]["txt"] == "现价一次最多取 12 只（现在打开了 14 只）：收起几行再看"
+    assert over["1000.T"]["over"] is None and over["9531.T"]["over"] is None   # 以前超过、现在轮到了：说明去掉（等现价写进来）
+    assert over["2432.T"]["over"] is None and over["2432.T"]["n"] == 0        # 没打开的不动
