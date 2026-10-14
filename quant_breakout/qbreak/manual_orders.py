@@ -509,7 +509,8 @@ CASH_BUF_PCT = 1.0                      # 执行器的现金缓冲（config.cash
 
 def fund_holdings(book: dict | None, tag: str | None = None) -> dict:
     """「买入钱不够 → 从持仓平摊凑」用的数字（页面 CFG 与提交时的检查同一份）：
-    {"cash": 现在能用的现金（账本现金 × (1 − 缓冲)）, "hold": [{"t", "kind": stock / core, "cur", "px", "lot"}],
+    {"cash": 现在能用的现金（(账本现金 − 立花的出金预留) × (1 − 缓冲)）, "reserve": 扣掉的出金预留,
+     "hold": [{"t", "kind": stock / core, "cur", "px", "lot"}],
      "busy": [还有没处理完的指令 / 规则在卖的票：不拿来凑]}。价格 = 账本里的最近收盘（估算）。"""
     st = (book or {}).get("state") or {}
     man = (book or {}).get("manual") or {}
@@ -525,9 +526,15 @@ def fund_holdings(book: dict | None, tag: str | None = None) -> dict:
         px = float((c or {}).get("px") or (st.get("core_last") or {}).get(t) or 0)
         if int(u or 0) > 0:
             hold.append({"t": t, "kind": "core", "cur": int(u), "px": px, "lot": core_lot(book, t)})
-    cash = float(st.get("cash_jpy") or 0) * (1 - CASH_BUF_PCT / 100)
+    paper = str(tag).startswith("paper") if tag else "Paper" in str((book or {}).get("broker") or "")
+    if paper:
+        rsv = 0.0
+    else:                                                  # 出金预留（立花）：执行器的决策与盘中买入都不拿它买（G4；2026-10-14）
+        from .live_unified import reserve_jpy
+        rsv = float(reserve_jpy(book))
+    cash = max(0.0, float(st.get("cash_jpy") or 0) - rsv) * (1 - CASH_BUF_PCT / 100)
     selling = {r.get("ticker") for r in _live(man.get("items") or {}, waiting, ORDER_KINDS) if _to_zero(r)}
-    return {"cash": round(cash), "hold": hold, "busy": sorted(busy), "exiting": sorted(st.get("pending_exit") or {}),
+    return {"cash": round(cash), "reserve": round(rsv), "hold": hold, "busy": sorted(busy), "exiting": sorted(st.get("pending_exit") or {}),
             "selling": sorted(selling - set(st.get("pending_exit") or {})),               # 已有卖出全部指令的（会卖、所得能用）
             "core_pct": core_pct_now(tag, book) if tag else float(man.get("core_pct", 100.0)),   # 「其他全部卖出」的预览用（2026-10-13）
             "fix": sorted(man.get("core_fix") or {})}
@@ -1220,9 +1227,34 @@ def core_rec(rec: dict, book: dict | None, tag: str | None = None) -> dict | Non
     return out
 
 
+DEAD_BUY = ("SKIPPED", "BLOCKED", "EXPIRED", "REJECTED", "CANCELLED", "MISSED", "UNFILLED")   # 开盘的买单这样结束（一股没成交）= 今天不会再买
+
+
+def plan_live(plan, orders, d) -> set:
+    """计划里的个股买入（规则的新仓 / 早上的手动买入）去掉「这次决策的买单都结束了、一股没成交」的（跳空 / 被挡 / 失效…：今天不会再买）
+    → 还算「排在开盘买入」、还占名额的票（G14；2026-10-14：以前开盘被跳过的新仓到第二天对账前一直占着名额、挡着同一只的手动买入）。
+    orders：执行器的单（ExecOrder 或账本里的 dict）；d：决策日；还没有单的照算（还没下）。页面、命令行、执行器盘中共用。"""
+    def g(o, k):
+        return o.get(k) if isinstance(o, dict) else getattr(o, k, None)
+    dead: dict = {}
+    for o in orders or []:
+        if g(o, "decided_on") != d or g(o, "side") != "BUY" or g(o, "kind") != "stock" or g(o, "phase") == "now":
+            continue
+        t = g(o, "ticker")
+        dead[t] = dead.get(t, True) and g(o, "status") in DEAD_BUY and int(g(o, "filled_qty") or 0) <= 0
+    return {t for t in plan or {} if not dead.get(t, False)}
+
+
+def live_plan(book: dict | None) -> set:
+    """账本的开盘计划里还算数的买入（plan_live；页面 / 命令行用）。"""
+    st = (book or {}).get("state") or {}
+    return plan_live(st.get("plan") or {}, list((book or {}).get("orders") or []), st.get("last_date"))
+
+
 def slots(book: dict, tag: str | None = None, going=None) -> dict:
     """个股名额的估算（页面 / 命令行；执行器在决策时按当时的持仓再算）：下一次决策时还拿着的（不算排在开盘卖出、
-    有卖出全部 / 减到 0 指令的、going 里这次就要卖到 0 的）+ 已经排定的买入（规则的计划 + 手动买入指令）→ {"held", "buys", "used", "max", "free"}。"""
+    有卖出全部 / 减到 0 指令的、going 里这次就要卖到 0 的）+ 已经排定的买入（规则的计划 + 手动买入指令）→ {"held", "buys", "used", "max", "free"}。
+    开盘的买单已经结束、一股没成交的计划不算（live_plan；2026-10-14 G14）。"""
     st = (book or {}).get("state") or {}
     man = (book or {}).get("manual") or {}
     waiting = unseen(tag, book) if tag else []
@@ -1230,7 +1262,7 @@ def slots(book: dict, tag: str | None = None, going=None) -> dict:
     pos, pend = st.get("pos") or {}, st.get("pending_exit") or {}
     gone = {r.get("ticker") for r in live if _to_zero(r)} | set(going or ())
     held = [t for t in pos if t not in pend and t not in gone]
-    buys = ({t for t in (st.get("plan") or {}) if t not in pos}
+    buys = ({t for t in live_plan(book) if t not in pos}
             | {r.get("ticker") for r in live if r.get("kind") == "buy"})
     mx = int(man.get("max_positions") or MAX_POS)
     return {"held": len(held), "buys": len(buys), "used": len(held) + len(buys), "max": mx,
@@ -1261,7 +1293,7 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
                 return f"{t} 已经持有：要加仓用「调仓」"
             if t in core_tickers(book):
                 return f"{t} 是核心 ETF：不能手动买（用「闲置资金比例」调）"
-            if t in (st.get("plan") or {}):
+            if t in live_plan(book):                       # 开盘被跳过 / 被挡、一股没买的不算（G14；2026-10-14）
                 return f"{t} 已经排在开盘买入（规则的信号），不用再点"
         else:
             if t not in pos:
@@ -1945,7 +1977,8 @@ class Manual:
         blocked（这次运行不下单）：「全部换成」整批、买入、调仓往上、平摊凑钱的整组都留到下一次能下单的决策（2026-10-13：以前买入被当成没买到）。
         平摊凑钱（fund = split）的买入在任何卖出之前先过不涉及钱的闸门（_buy_gate）：被挡 → 买入和凑钱的卖出一起不做（2026-10-13）；
         平摊凑钱的加仓（调仓往上）同样先过 _add_gate（2026-10-14）。
-        allin_check(票, i)：执行器替「全部换成」/ 平摊凑钱的买入在卖出之前先做下单时才查的检查（资格检查、LU-15 前日終値）→ 理由 / None。
+        allin_check(票, i)：执行器替「全部换成」/ 平摊凑钱的买入在卖出之前先做下单时才查的检查（资格检查、立花能不能买、LU-15 前日終値）→ 理由 / None；
+        普通的买入 / 加仓排进计划之前也查（规则会为它卖核心 ETF；G5 / G15，2026-10-14）。
         返回 [(级别, 说明)]。"""
         decided = eng.gidx[i].date()
         orphan = self._allin_orphans(decided)               # 买入已经结束的「全部换成」：同批还 pending 的一律作废（整批不做）
@@ -2042,7 +2075,7 @@ class Manual:
                 elif not deciding:
                     it.update(wait=True, msg=_wait_text(now, fill_day))
                 else:
-                    self._buy(eng, i, it, decided, fill_day)
+                    self._buy(eng, i, it, decided, fill_day, pre=None if it.get("fund") in ("all", "split") else allin_check)
                     if it.get("fund") == "all":
                         it["msg"] += self._allin_late(eng, i, it, fill_day)
                 lvl = "warn" if it["status"] == "rejected" else "info"
@@ -2076,7 +2109,7 @@ class Manual:
                 out.append(("info", f"手动指令 {it['id']}：{t} {it['msg']}"))
                 continue
             elif it["kind"] == "adjust":
-                self._adjust(eng, i, it, ps, decided, fill_day, deciding)
+                self._adjust(eng, i, it, ps, decided, fill_day, deciding, pre=None if it.get("fund") == "split" else allin_check)
                 if it["status"] == "pending":
                     out.append(("info", f"手动指令 {it['id']}：{t} {it['msg']}"))
                     continue
@@ -2373,9 +2406,10 @@ class Manual:
             it.update(status="placed", decided_on=str(decided), fill_day=str(fill_day), shares=int(n_sell), side="SELL",
                       msg=f"{fill_day:%m/%d} 开盘卖出 {n_sell:,} 股（{ps.shares:,} → {target:,} 股，约占权益 {new_pct:.1f}%）")
 
-    def _adjust(self, eng, i: int, it: dict, ps, decided: dt.date, fill_day: dt.date, deciding: bool) -> None:
+    def _adjust(self, eng, i: int, it: dict, ps, decided: dt.date, fill_day: dt.date, deciding: bool, pre=None) -> None:
         """调仓：按第 i 天收盘与权益把目标换成股数 → 少于现在 → 卖出多的部分；多于现在 → 加仓（闸门见模块说明）；一样 → 不用调。
-        凑钱的卖出（fund_for）绝不变成买入；写入时预览的方向（dir）和现在换算的方向相反 → 不执行（2026-10-13）。"""
+        凑钱的卖出（fund_for）绝不变成买入；写入时预览的方向（dir）和现在换算的方向相反 → 不执行（2026-10-13）。
+        pre：执行器的下单前检查（加仓时；见 _add）。"""
         t = it["ticker"]
         eq, px, lot = self._numbers(eng, i, t)
         cur = int(ps.shares)
@@ -2393,9 +2427,21 @@ class Manual:
         if not deciding:
             it.update(wait=True, msg=_wait_text(self.clock(), fill_day))
             return
-        self._add(eng, i, it, ps, decided, fill_day, want)
+        self._add(eng, i, it, ps, decided, fill_day, want, pre=pre)
 
-    def _add(self, eng, i: int, it: dict, ps, decided: dt.date, fill_day: dt.date, want: int) -> None:
+    @staticmethod
+    def _pre_why(pre, t: str, i: int) -> str | None:
+        """普通的买入 / 加仓：执行器的下单前检查（资格检查、立花能不能买、LU-15 前日終値；allin_check）在排进计划之前先做
+        （G5 / G15；2026-10-14：以前规则先为它卖了核心 ETF、开盘时买单才被挡）→ 理由 / None。检查本身出错 → None
+        （照常排进计划：发单时执行器还会再查；与「全部换成」的出错先不做不同 —— 这里没有先卖的）。"""
+        if pre is None:
+            return None
+        try:
+            return pre(t, i)
+        except Exception:                                   # noqa: BLE001
+            return None
+
+    def _add(self, eng, i: int, it: dict, ps, decided: dt.date, fill_day: dt.date, want: int, pre=None) -> None:
         t, st, cfg = it["ticker"], eng.st, eng.cfg
         eq, px, lot = self._numbers(eng, i, t)
         cur = int(ps.shares)
@@ -2405,6 +2451,10 @@ class Manual:
             return
         if not (px > 0 and eq > 0):
             it.update(status="rejected", decided_on=str(decided), msg="没有收盘价 / 总权益，算不了")
+            return
+        why = self._pre_why(pre, t, i)
+        if why:                                             # 开盘时会被挡的：不排进计划（规则不为它卖核心 ETF；G5 / G15）
+            it.update(status="rejected", decided_on=str(decided), msg=f"不加仓：{why}（只做一次）")
             return
         cap_pct = MANUAL_CAP_PCT                            # 手动加仓：最多到总权益（2026-10-12；规则的新仓仍按 max_position_pct）
         cap = int(math.floor(eq * cap_pct / 100 / px / lot + 1e-9)) * lot
@@ -2432,9 +2482,10 @@ class Manual:
                   msg=f"{fill_day:%m/%d} 开盘买入 {add:,} 股（限价 ¥{lim:,g}；{cur:,} → {cur + add:,} 股，"
                       f"约占权益 {(cur + add) * px / eq * 100:.1f}%）" + "".join(f"；{n}" for n in notes))
 
-    def _buy(self, eng, i: int, it: dict, decided: dt.date, fill_day: dt.date) -> None:
+    def _buy(self, eng, i: int, it: dict, decided: dt.date, fill_day: dt.date, pre=None) -> None:
         """手动买入（新开仓）：与规则的新仓同一套闸门（资格检查 / 决算前 / 新仓倍数 0 / 名额），按规则的仓位或目标定股数
-        （单只上限 34%、现金 + 核心 ETF 能凑出的钱），放进统一决策的 plan（开盘的寄付指値；统一决策先给它留钱）。"""
+        （单只上限 34%、现金 + 核心 ETF 能凑出的钱），放进统一决策的 plan（开盘的寄付指値；统一决策先给它留钱）。
+        pre：执行器的下单前检查（资格检查、立花能不能买、LU-15；_pre_why）—— 过不了的不排进计划（G5 / G15；2026-10-14）。"""
         t, st, cfg = it["ticker"], eng.st, eng.cfg
 
         def no(msg: str) -> None:
@@ -2456,6 +2507,9 @@ class Manual:
         eq, px, lot = self._numbers(eng, i, t)
         if not (px > 0 and eq > 0):
             return no("没有收盘价 / 总权益，算不了")
+        why = self._pre_why(pre, t, i)
+        if why:                                             # 开盘时会被挡的：不排进计划（规则不为它卖核心 ETF；G5 / G15）
+            return no(f"不买：{why}（只做一次）")
         em = float(eng._entry_mult(t, i))
         want, basis = buy_size(eng, it, eq, px, lot, em)
         cap_pct = MANUAL_CAP_PCT                            # 手动买入：最多到总权益（「按规则」的仓位本身仍 ≤ max_position_pct）
@@ -2500,6 +2554,21 @@ class Manual:
         return out
 
     # ── 成交 → 完成 ──
+    def requeue(self, ticker: str, reason: str, bar: str, why: str) -> bool:
+        """开盘的手动买入 / 加仓因为系统原因一股没买（异常熔断 / HALT / 开盘后补单没跑 / 请求没发出…；执行器 _system_miss）：
+        不当成「没买到 → 只做一次」，指令回到「等下单」，对账之后这次的决策重新处理（闸门、股数、钱都按新的收盘再算）——
+        与「这次运行不下单 → 等下一次能下单的决策」同一口径（G21；2026-10-14）。「全部换成」、撤回中的不走这里 → False（照旧 on_fill）。"""
+        key = "adds" if reason == "manual_add" else "buys"
+        x = self.m[key].get(ticker)
+        it = self.m["items"].get((x or {}).get("id")) or {}
+        if not x or x.get("allin") or it.get("fund") == "all" or it.get("cancel_req") or it.get("status") != "placed":
+            return False
+        self.m[key].pop(ticker, None)
+        for f in ("decided_on", "fill_day", "shares", "side", "limit", "now", "fill", "hold", "wait", "tried"):
+            it.pop(f, None)
+        it.update(status="pending", msg=f"{bar} 开盘没下成（{str(why)[:120]}）→ 系统原因，不算没买到：等下一次能下单的决策")
+        return True
+
     def on_fill(self, ticker: str, reason: str, qty: int, px: float, bar: str, st, why: str = "") -> None:
         """执行器对账时每笔手动单（reason manual / manual_trim / manual_add / manual_buy）的结果（qty = 0：没成交；why = 单的说明）。
         bar = 成交日；盘中下的单（item 的 now，成交日同一天）写「盘中」，否则写「开盘」。"""

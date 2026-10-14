@@ -254,20 +254,21 @@ function fundAllBox(el, skip, q, only){                                     // �
   const cp=F.core_pct==null ? 100 : F.core_pct;
   if(cp>0) nd('div', 'small', '闲置资金比例 '+cp+'% → 0%：核心 ETF 卖出全部、之后停买（出现买入信号只提醒，你点「确认买入」才恢复）', box);
   if((F.fix||[]).length) nd('div', 'small', '取消固定口数：'+F.fix.map(x=>x.replace('.T', '')).join('、')+'（之后按比例 0% 卖出）', box);
-  nd('div', 'muted small', '卖出合计约 '+yen(q.got)+' + 现金约 '+yen(q.cash)+' → 可用约 '+yen(q.avail)
+  nd('div', 'muted small', '卖出合计约 '+yen(q.got)+' + 现金约 '+yen(q.cash)+rsvTxt()+' → 可用约 '+yen(q.avail)
     +(q.n>0 ? '；买 '+fmt(q.n)+' 股 ≈ '+yen(q.buy)+'，剩现金约 '+yen(q.left) : '；不够 1 个单元：不买、留现金')
     +' · 按最近收盘估算（税和手续费另计）；执行器在早上的决策里按全卖之后的钱再算', box);
   nd('div', 'muted small', '整批在 '+(CFG.when_all||'下一次决策')+' 一起做：先过闸门（决算前 / 资格 / 名额），再先卖后买；被挡则整批不做、什么都不动。'
     +'开盘跳空 / 没成交则其他已卖、留现金、不自动重买。卖出的个股 '+(CFG.block_days||20)+' 个交易日内规则不自动买回（「交易」里可一次「恢复按规则」）；规则对别的票仍可能用现金开新仓。'
     +(CFG.real ? '立花：卖出所得何时能用于买入未验证（买单等同批卖单成交到 09:20），买到的可能比预览少。' : ''), box);
 }
+function rsvTxt(){ const r=(CFG.fund||{}).reserve||0; return r>0 ? '（已扣出金预留 '+yen(r)+'）' : ''; }   // 立花：出金预留不拿来买（执行器同一口径；2026-10-14 G4）
 function fundBox(el, cost, skip, opt){                                     // 拖动 / 输入时实时更新：要卖哪几只、各卖多少（opt：买入框才有 → 可选「其他全部卖出」）
   if(!el) return; el.textContent='';
   if(FUND_MODE==='all' && opt){ fundAllBox(el, skip, opt.q, !!opt.only); return; }
   const F=CFG.fund||{}, p=cost>0 ? fundSplit(cost, skip) : null;
   if(cost>0) allocViz(el, cost, skip, p);
   if(!p){
-    if(cost>0) nd('div', 'muted small', '现金约 '+yen(F.cash||0)+'：够买，不用卖别的', el);
+    if(cost>0) nd('div', 'muted small', '现金约 '+yen(F.cash||0)+rsvTxt()+'：够买，不用卖别的', el);
     else if(opt){                                                           // 买入框：输入不够 1 个单元 / 权益买不起 1 个单元 → 仍能选「其他全部卖出」
       const box=nd('div', 'fund', null, el), none=!(opt.cap>0);
       nd('div', 'fh', none ? '总权益按收盘价买不起 1 个单元' : '输入的数不够 1 个单元', box);
@@ -278,7 +279,7 @@ function fundBox(el, cost, skip, opt){                                     // �
     return;
   }
   const box=nd('div', 'fund', null, el);
-  nd('div', 'fh', '现金约 '+yen(F.cash||0)+'，还差约 '+yen(p.short), box);
+  nd('div', 'fh', '现金约 '+yen(F.cash||0)+rsvTxt()+'，还差约 '+yen(p.short), box);
   fundSeg(nd('div', 'seg fseg', null, box), !!opt);
   if(FUND_MODE==='core'){ nd('div', 'muted small', '执行器按当时还缺多少卖核心 ETF（原来的做法）；核心 ETF 不够 → 少买', box); return; }
   if(!p.rows.length){ nd('div', 'neg small', '没有能卖来凑的持仓（都有没处理完的指令 / 规则在卖）：执行器会少买', box); return; }
