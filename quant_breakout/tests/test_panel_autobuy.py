@@ -57,10 +57,12 @@ def _abx(card: str, t: str) -> str:
 
 
 def _sg_undeduped(monkeypatch) -> str:
-    """不去重时的建议的股票（测试用：把自动买那张卡列的代码清空）—— 对比点开的一行与建议的股票里会有的那一行一样。"""
+    """不去重时的建议的股票（测试用：把自动买那张卡列的代码清空，补回 2026-10-15 前「今天出了买入信号」那一组）——
+    对比点开的一行与建议的股票里会有的那一行一样。"""
     orig = panel._auto_pick
     with monkeypatch.context() as m:
         m.setattr(panel, "_auto_pick", lambda *a, **k: {**orig(*a, **k), "tickers": set()})
+        m.setattr(panel, "GROUPS", (("triggered", "今天出了买入信号"),) + panel.GROUPS)
         return _card(panel.render("paper", "t" * 40, AT), "suggest")
 
 
@@ -208,7 +210,7 @@ def test_ranked_rows_have_no_badge_above_and_ranks_without_gaps_below(monkeypatc
     ranks = [(int(n), c) for n, c in re.findall(r"<span class='rk'>(\d+)</span><b>(\d+)</b>", sg)]
     assert [n for n, _ in ranks] == [1, 2, 3] and {c for _, c in ranks} == {"9008", "7203", "6758"}   # 不跳号（去重前 1925 / 6501 也占名次）
     before = [int(n) for n in re.findall(r"<span class='rk'>(\d+)</span>", full)]
-    assert before == [1, 2, 3, 4, 5]
+    assert before == [1, 2, 3, 4, 5, 6]                                     # 测试用的不去重渲染：每只都占名次
     assert "建议的股票（规则的候选，3 只）" in sg and "已列的 3 只不在这里重复" in sg and "<h3 class='sgh'>观察中 · 3 只" in sg
 
 
@@ -265,3 +267,19 @@ console.log(JSON.stringify({all, want, qt: QT.map(e=>({t:e.dataset.sq, over:e.da
         assert over[tk]["over"] == "1" and over[tk]["txt"] == "现价一次最多取 12 只（现在打开了 14 只）：收起几行再看"
     assert over["1000.T"]["over"] is None and over["9531.T"]["over"] is None   # 以前超过、现在轮到了：说明去掉（等现价写进来）
     assert over["2432.T"]["over"] is None and over["2432.T"]["n"] == 0        # 没打开的不动
+
+
+def test_triggered_rows_only_in_the_autobuy_card(monkeypatch):
+    """出了信号的全部在「规则接下来会自动买」（_auto_pick 的 trig 不挑）：资格检查挡的出了信号的也在那里；建议的股票没有
+    「今天出了买入信号」那一组（分组表里也没有了；2026-10-15 复核）。"""
+    assert "triggered" not in dict(panel.GROUPS) and "triggered" not in dict(panel.RANK_GROUPS)
+    _setup(monkeypatch=monkeypatch)
+    trg = {**TRIG, "ticker": "9009.T", "code": "9009", "buy": {**TRIG["buy"], "block": "JPX 指定"}}
+    _sm([TRIG, trg, GATED, FAR])
+    html = panel.render("paper", "t" * 40, AT)
+    ab, sg = _card(html, "autobuy"), _card(html, "suggest")
+    assert "<details class='abx' data-t='8306.T'>" in ab and "<details class='abx' data-t='9009.T'>" in ab
+    assert "不能买：JPX 指定" in _abx(ab, "9009.T")
+    assert "8306" not in sg and "9009" not in sg and "今天出了买入信号" not in sg and "data-sgg='triggered'" not in sg
+    assert "建议的股票（规则的候选，2 只）" in sg and "已列的 2 只不在这里重复" in sg
+    assert "<details class='kl' open>" not in sg                            # 观察中的 K 线默认收起（出了信号的只在上面，点开就开着）
