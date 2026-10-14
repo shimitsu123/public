@@ -4246,8 +4246,9 @@ def _live_unified_run(a, opened: list) -> int:
         from qbreak import notify
         mn_ = sm.get("manual") or {}
         sig_ = bool(mn_.get("core_pause")) and (mn_.get("core_signal") or {}).get("date") == sm.get("decided_on")   # 停买中出现买入信号
-        from qbreak.live_unified import compare_bad, model_diff_orders
+        from qbreak.live_unified import compare_bad, model_diff_orders, unsold_long, voided_today
         bad = (bool(sm["blocked"]) or compare_bad(cmp)            # 上线初期拿的票不同（LU-12）不算
+               or bool(voided_today(sm)) or bool(unsold_long(sm))   # 手动买入作废（G17）/ 卖单连续 2 天以上没卖掉（G26）
                or any(str(n_).startswith("★") for n_ in sm.get("notices") or [])   # 立花的预告：只有 ★（要动手）的升 warn
                or (not paper and bool(model_diff_orders(sm["orders"])))   # 错过寄付 / 09:20 没寄り付き：与模型不同（EXE-4）
                or sig_ or bool(mn_.get("halt_backlog"))             # HALT 解除后照原样执行积压的手动指令（2026-10-13）

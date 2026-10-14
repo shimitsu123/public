@@ -132,6 +132,32 @@ def _otext(o: dict) -> str:
             + (f"：{note}" if note else ""))
 
 
+def _manual_unsent(book: dict, exp: str, today: dt.date, done: bool) -> list[str]:
+    """决策 exp 里没发出的手动指令的单（被挡 / 被拒；HALT 不算；G7，2026-10-14）：早上的运行跑完（morning_done）时被拒的单
+    以前一声不响 → 列出来（没跑完时上面「有 N 笔没下」已经逐笔列了）；同一条指令连续 2 个成交日以上没发出（指令的 unsent，
+    执行器下单时记）→ ★。"""
+    from . import manual_orders as MO
+    from . import run_status as RS
+    from .live_ops import MANUAL_REASONS, _manual_item
+    bad = [o for o in book.get("orders") or [] if isinstance(o, dict) and o.get("decided_on") == exp
+           and o.get("reason") in MANUAL_REASONS and o.get("status") in ("BLOCKED", "REJECTED")
+           and o.get("phase") != "now" and not RS.is_halt(o) and "HALT" not in str(o.get("note") or "")]
+    out = []
+    if done and bad:
+        out.append(f"决策 {exp} 有 {len(bad)} 笔手动指令的单没发出：" + "；".join(_otext(o) for o in bad[:5])
+                   + ("…" if len(bad) > 5 else ""))
+    seen = set()
+    for o in bad:
+        it = _manual_item(book, o) or {}
+        u = it.get("unsent") or {}
+        n = int(u.get("n") or 0) if str(u.get("last") or "") == today.isoformat() and not u.get("halt") else 0
+        if n >= 2 and it.get("id") not in seen:
+            seen.add(it.get("id"))
+            out.append(f"★ 手动指令 {it.get('id')}（{MO.describe(it)}）连续 {n} 个交易日没发出（{u.get('why') or '被挡'}）："
+                       "在 Mac 对话里看一下原因；不要了就在面板撤回")
+    return out
+
+
 def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
     """→ {"at", "tag", "trading", "judged", "ok", "halt", "reasons": [...], "note"}。只读（账本读坏也不改名）。"""
     from . import run_status as RS
@@ -179,6 +205,8 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
         if stuck:
             reasons.append(f"决策 {exp} 处理了，但有 {len(stuck)} 笔没下：" + "；".join(_otext(o) for o in stuck[:5])
                            + ("…" if len(stuck) > 5 else ""))
+    if str(ld or "") == exp:                                  # 手动指令的单没发出（被拒 / 连续几天被挡；G7）
+        reasons += _manual_unsent(book, exp, today, done)
     unk = [o for o in book.get("orders") or [] if isinstance(o, dict) and o.get("status") in UNKNOWN]
     if unk:
         what = "、".join(f"{o.get('ticker')} {'买' if o.get('side') == 'BUY' else '卖'} {int(o.get('sent_qty') or o.get('qty') or 0):,}"

@@ -826,7 +826,7 @@ def cancel_plan(tag: str, book: dict | None, target: str, now: dt.datetime | Non
             if c.get("kind") in ("core", "corefix") and st_c == "done":
                 stuck.append(c)                            # 已经生效、单不在交易所（或已成交）：撤不了
             continue
-        w = _cancel_why(c["id"], items, waiting)
+        w = _cancel_why(c["id"], items, waiting, now=now)
         if w:
             (sent if w == NOW_NO_CANCEL else stuck).append(c)
             continue
@@ -1379,12 +1379,12 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
             if b0 is not None and (b0.get("status") in ACTIVE or b0["id"] not in items) and b0["id"] not in cancelled(waiting) \
                     and not b0.get("cancel_req"):
                 return f"这是「全部换成 {tg0['fund_for']}」的同批指令：撤回买入那条（整批一起撤）"
-        return _cancel_why(rec["target"], items, waiting)
+        return _cancel_why(rec["target"], items, waiting, now=now)
     return None
 
 
-def _cancel_why(target: str, items: dict, waiting: list[dict]) -> str | None:
-    """一条指令本身能不能撤回（不看整批规则）。"""
+def _cancel_why(target: str, items: dict, waiting: list[dict], now: dt.datetime | None = None) -> str | None:
+    """一条指令本身能不能撤回（不看整批规则）。盘中已下单的按 now_cancel_why（15:30 之后失效的盘中卖出可以撤回；G16）。"""
     if True:
         it = items.get(target)
         if it is None:
@@ -1398,7 +1398,7 @@ def _cancel_why(target: str, items: dict, waiting: list[dict]) -> str | None:
         if it.get("cancel_req"):
             return f"指令 {target} 已经在撤回中"
         if it.get("now") and it.get("status") == "placed":
-            return NOW_NO_CANCEL
+            return now_cancel_why(it, now or now_jst())
     return None
 
 
@@ -1546,6 +1546,36 @@ def _uncancel_why_one(cid: str, items: dict, waiting: list[dict], batch_ids=(), 
 
 NOW_NO_CANCEL = ("盘中的单已经发到交易所，撤回指令撤不了：用面板「今天的单」的「撤单」撤（已经成交的部分撤不了），"
                  "或在立花网站 / 手机网站撤")
+NOW_FILLED_NO_CANCEL = "盘中的单已经全部成交（明天早上对账之后完成），撤不了"
+NOW_BUY_LAPSED = "盘中的买单已在 15:30 失效（没成交的部分不会再买）：明天早上对账之后这条指令结束，不用撤"
+NOW_SELL_WITHDRAWN = "盘中的单已在 15:30 失效 → 明天不再卖（明天早上对账之后结束；今天已经成交的部分照记）"
+
+
+def now_expired(it: dict, now: dt.datetime) -> bool:
+    """盘中下的单（now）在交易所已经失效：当日限り → 成交日早于今天，或就是今天、已过 15:30（G16；2026-10-14）。"""
+    fd = str(it.get("fill_day") or "")
+    if not fd:
+        return False
+    today = now.date().isoformat()
+    return fd < today or (fd == today and now.time() >= CANCEL_UNTIL)
+
+
+def now_cancel_why(it: dict, now: dt.datetime) -> str | None:
+    """盘中已下单的指令能不能撤回（G16；2026-10-14：以前 15:30 之后这里叫你用「撤单」、「撤单」又说已收盘不用撤，
+    没成交的手动卖出第二天开盘照样再卖、撤不掉）：交易时间里单还挂在交易所 → NOW_NO_CANCEL（用「撤单」）；
+    全部成交了 → 撤不了；15:30 之后单已失效 → 卖出可以撤回（明天不再卖，对账之后生效；到下一次决策之前都行），
+    买入不用撤（对账之后结束、不会再买）。不是盘中已下单的 → None。"""
+    if not (it.get("now") and it.get("status") == "placed"):
+        return None
+    if int((it.get("fill") or {}).get("qty") or 0) >= int(it.get("shares") or 0) > 0:
+        return NOW_FILLED_NO_CANCEL
+    if not now_expired(it, now):
+        return NOW_NO_CANCEL
+    if it.get("side") == "BUY":
+        return NOW_BUY_LAPSED
+    return None
+
+
 RULE_TEXT = "盘中点的马上下单；开盘前、午休点的等开盘；收盘后点的等下一个交易日开盘"
 
 
@@ -1705,6 +1735,9 @@ def status_text(it: dict) -> str:
     s = it.get("status")
     if s == "placed" and it.get("now"):
         return "盘中已成交" if it.get("fill") else "盘中已下单"
+    u = it.get("unsent") or {}
+    if s == "placed" and u.get("last"):                    # 这次的单没发出（被挡 / 被拒）：卖出等再下；被拒的买入不再重下（G7；2026-10-14）
+        return "没发出，等再下" if u.get("retry", True) else "没发出（只做一次）"
     if s == "pending" and allin_member(it):
         return "等下一次决策（整批）"
     if s == "pending" and it.get("hold"):
@@ -1895,8 +1928,11 @@ class Manual:
                     it.update(status="done", msg=f"撤回 {r['target']}")
                 elif tg is not None and tg.get("status") == "cancelled" and r["target"] in dropped:
                     it.update(status="done", msg=f"撤回 {r['target']}")
-                elif tg is not None and tg.get("status") == "placed" and tg.get("now"):
-                    it.update(status="rejected", msg=f"{r['target']}：{NOW_NO_CANCEL}")
+                elif tg is not None and tg.get("status") == "placed" and tg.get("now") and now_cancel_why(tg, self.clock()):
+                    it.update(status="rejected", msg=f"{r['target']}：{now_cancel_why(tg, self.clock())}")
+                elif tg is not None and tg.get("status") == "placed" and tg.get("now") and not tg.get("cancel_req"):
+                    tg["cancel_req"] = r["id"]                # 15:30 之后失效的盘中卖出：对账之后撤（待卖 / 减仓去掉，明天不再卖；G16）
+                    it.update(status="done", msg=f"撤回 {r['target']}：{NOW_SELL_WITHDRAWN}")
                 elif tg is not None and tg.get("status") == "placed" and not tg.get("cancel_req"):
                     tg["cancel_req"] = r["id"]
                     it.update(status="done", msg=f"撤回 {r['target']}：之后不再下（已经发到交易所的单用「今天的单」的「撤单」撤）")
@@ -2569,15 +2605,92 @@ class Manual:
         it.update(status="pending", msg=f"{bar} 开盘没下成（{str(why)[:120]}）→ 系统原因，不算没买到：等下一次能下单的决策")
         return True
 
-    def on_fill(self, ticker: str, reason: str, qty: int, px: float, bar: str, st, why: str = "") -> None:
+    def _item_for(self, ticker: str, reason: str) -> dict | None:
+        """这笔手动单（reason manual / manual_trim / manual_add / manual_buy）对应的、已下单的指令；没有 → None。"""
+        key = {"manual_trim": "trims", "manual_add": "adds", "manual_buy": "buys"}.get(reason)
+        if key:
+            it = self.m["items"].get((self.m[key].get(ticker) or {}).get("id"))
+            return it if it is not None and it.get("status") == "placed" else None
+        skip = {(self.m["trims"].get(ticker) or {}).get("id"), (self.m["adds"].get(ticker) or {}).get("id")}
+        return next((it for it in self._active_for(ticker) if it["id"] not in skip), None)
+
+    def on_not_sent(self, ticker: str, reason: str, day: str, why: str, st=None, final: bool = False,
+                    halt: bool = False, retry: bool = True) -> dict | None:
+        """手动指令的单没发出（BLOCKED / REJECTED：被挡、被拒，单根本没到交易所；G7，2026-10-14：以前说明一直停在「MM/DD 开盘卖出全部」，
+        看不出没发出、也不知道之后会再下）。day = 这笔单的成交日。
+        卖出 / 减仓：指令留着（待卖 / 减仓照旧 → 下一次决策重新下），说明写「MM/DD 没发出（原因）→ 下一次决策再下」；
+        同一条连续几个成交日没发出记进 unsent（n；HALT 的日子不算也不中断，09:30 自检 2 天以上标 ★）。
+        买入 / 加仓：下单时（final=False）只记说明（被挡的同一决策之后的运行还会再试；retry=False：被券商拒绝的不再重下）；
+        对账时不是系统原因（final=True）→ 结束（只做一次，on_fill 的口径），返回这条指令（作废）。"""
+        it = self._item_for(ticker, reason)
+        if it is None:
+            return None
+        day, why = str(day), str(why or "被挡")[:120]
+        buy = reason in ("manual_add", "manual_buy")
+        if buy and final:
+            it.pop("unsent", None)
+            return self.on_fill(ticker, reason, 0, 0.0, day, st, why=why, sent=False)
+        u = dict(it.get("unsent") or {})
+        if u.get("last") != day:
+            u["msg0"] = str(it.get("msg") or "")[:300]    # 同一天之后的运行发出了 → 说明恢复（on_sent）
+            if not halt:
+                u["n"] = int(u.get("n") or 0) + 1
+        u.update(last=day, why=why, halt=bool(halt), retry=bool(retry or not buy))
+        it["unsent"] = u
+        if buy:
+            it["msg"] = f"{mmdd(day)} 没发出（{why}）→ " + ("之后的运行再试" if retry else "不再重下：明天早上对账之后结束（只做一次）")
+        else:
+            it["msg"] = f"{mmdd(day)} 没发出（{why}）→ " + ("HALT 解除后的决策再下" if halt else "下一次决策再下")
+        return None
+
+    def on_sent(self, ticker: str, reason: str, day: str, qty: int, decided: str, how: str = "开盘") -> None:
+        """手动指令的单这次发出了（受理 / 状态不明；G7，2026-10-14）：清掉「没发出」的记录（同一天先没发出、之后的运行发出了 → 说明恢复）；
+        卖出 / 减仓是之后的决策重新下的（成交日变了、盘中下的没成交改到开盘卖）→ 成交日、决策日、股数与说明跟着更新
+        （以前一直显示第一次的成交日 / 「盘中已下单」）。how：开盘 / 当日限价（错过寄付）。"""
+        it = self._item_for(ticker, reason)
+        if it is None:
+            return
+        u = it.pop("unsent", None) or {}
+        day = str(day)
+        same = str(it.get("fill_day") or "") == day and not it.get("now")
+        back = u.get("msg0") if u.get("last") == day else None
+        if reason not in ("manual", "manual_trim") or (same and how == "开盘"):
+            if same and back:
+                it["msg"] = back
+            return
+        prev = "" if same else str(it.get("msg") or "").split(" → ")[0]
+        it.pop("now", None)
+        it.update(fill_day=day, decided_on=str(decided), shares=int(qty),
+                  msg=f"{mmdd(day)} {how}{'卖出' if same else '再卖'} {int(qty):,} 股" + (f"（上次：{prev}）" if prev else ""))
+
+    def on_odd(self, ticker: str, reason: str, qty: int, px: float, bar: str, rest: int) -> dict | None:
+        """手动卖出全部 / 减仓成交之后，要卖的只剩零股（不足一手；立花的 API 普通注文卖不了）→ 这条指令结束（G22；2026-10-14：以前一直
+        「已下单」、之后每天建一笔「零股：这笔不下」的单）。待卖由执行器去掉、减仓这里去掉；零股记在账本 odd_lots（通知 / 面板），
+        在立花网站卖完说一声登记（liveu.sh adopt）。模拟账户不拆零股（整笔按模型卖，与模型相同），不会走到这里。"""
+        it = self._item_for(ticker, reason)
+        if it is None:
+            return None
+        if reason == "manual_trim":
+            self.m["trims"].pop(ticker, None)
+        it.pop("unsent", None)
+        sold = f"{bar} {_when(it, bar)}卖出 {int(qty):,} 股 @ ¥{float(px):,.2f}；" if qty > 0 else ""
+        it.update(status="done", done_on=bar, fill={"qty": int(qty), "px": round(float(px), 2)},
+                  msg=f"{sold}剩 {int(rest):,} 股零股：API 卖不了，请在立花网站卖后说一声登记（adopt）")
+        return it
+
+    def on_fill(self, ticker: str, reason: str, qty: int, px: float, bar: str, st, why: str = "",
+                sent: bool = True) -> dict | None:
         """执行器对账时每笔手动单（reason manual / manual_trim / manual_add / manual_buy）的结果（qty = 0：没成交；why = 单的说明）。
-        bar = 成交日；盘中下的单（item 的 now，成交日同一天）写「盘中」，否则写「开盘」。"""
+        bar = 成交日；盘中下的单（item 的 now，成交日同一天）写「盘中」，否则写「开盘」。
+        卖出 / 减仓没成交：why（例「登记为没成交」：状态不明的单 --resolve 0 股；G11）代替「没成交」。
+        买入 / 加仓一股没买、指令结束（作废，不是你撤回的）→ 记 void_on（日报「★ 手动买入作废」）并返回这条指令（执行器记 warn；G17，
+        2026-10-14）；sent=False：单根本没发出（被挡 / 被拒）→ 写「没下成」。其余 → None。"""
         fill = {"qty": int(qty), "px": round(float(px), 2)}
         if reason in ("manual_add", "manual_buy"):
             add = reason == "manual_add"
             x = self.m["adds" if add else "buys"].pop(ticker, None)
             if not x:
-                return
+                return None
             it = self.m["items"].get(x["id"]) or {}
             when = _when(it, bar)
             late = "；撤回来不及：交易所的单已经成交" if it.get("cancel_req") else ""
@@ -2585,31 +2698,35 @@ class Manual:
             if qty <= 0 and it.get("cancel_req"):
                 it.update(status="cancelled", done_on=bar, msg=f"已撤回（{it['cancel_req']}）：{bar} 没有买")
             elif qty <= 0:
-                it.update(status="rejected", done_on=bar,
-                          msg=f"{bar} {when}没买到{('（' + why + '）') if why else ''} → 只做一次，要{'加' if add else '买'}请再点一次")
+                it.update(status="rejected", done_on=bar, void_on=bar,
+                          msg=f"{bar} {when}{'没买到' if sent else '没下成'}{('（' + why + '）') if why else ''}"
+                              f" → 只做一次，要{'加' if add else '买'}请再点一次")
+                it.pop("unsent", None)
+                return it
             elif qty < int(x["shares"]):
                 it.update(status="done", done_on=bar, fill=fill,
                           msg=f"{bar} {when}买入 {qty:,} 股 @ ¥{px:,.2f}（计划 {int(x['shares']):,} 股，只成交一部分；{done}）{late}")
             else:
                 it.update(status="done", done_on=bar, fill=fill, msg=f"{bar} {when}买入 {qty:,} 股 @ ¥{px:,.2f}（{done}）{late}")
-            return
+            return None
+        miss = f"的单{why}" if why else "没成交"             # 卖出 / 减仓没成交（why：登记为没成交，G11）
         if reason == "manual_trim":
             x = self.m["trims"].get(ticker)
             if not x:
-                return
+                return None
             it = self.m["items"].get(x["id"]) or {}
             when = _when(it, bar)
             if qty <= 0:
-                it["msg"] = f"{bar} {when}没成交 → 下一开盘再卖"
-                return
+                it["msg"] = f"{bar} {when}{miss} → 下一开盘再卖"
+                return None
             left = int(x["shares"]) - int(qty)
             if left > 0 and ticker in st.pos:
                 x["shares"] = left                          # 部分成交：剩下的下一次再卖
                 it["msg"] = f"{bar} {when}卖出 {qty:,} 股 @ ¥{px:,.2f}，还差 {left:,} 股（下一开盘再卖）"
-                return
+                return None
             self.m["trims"].pop(ticker, None)
             it.update(status="done", done_on=bar, fill=fill, msg=f"{bar} {when}卖出 {qty:,} 股 @ ¥{px:,.2f}（减仓完成）")
-            return
+            return None
         for it in self._active_for(ticker):
             if (self.m["trims"].get(ticker) or {}).get("id") == it["id"] or (self.m["adds"].get(ticker) or {}).get("id") == it["id"]:
                 continue
@@ -2620,7 +2737,8 @@ class Manual:
             elif qty > 0:
                 it["msg"] = f"{bar} {when}只成交 {qty:,} 股 @ ¥{px:,.2f}，剩下的下一开盘再卖"
             else:
-                it["msg"] = f"{bar} {when}没成交 → 下一开盘再卖"
+                it["msg"] = f"{bar} {when}{miss} → 下一开盘再卖"
+        return None
 
     def settle(self, st, sent: set | None = None, sent_add: set | None = None) -> list[tuple[str, str]]:
         """对账之后（或没有新交易日时下单之前）：撤回中的指令 → 交易所那边没有在途的单就撤（之后不再重下）；
@@ -2635,6 +2753,10 @@ class Manual:
                     if it.get("status") == "placed":
                         it.update(status="rejected", msg=f"这笔{'加仓' if what == '加' else '买入'}没有成交记录 → 结束"
                                                          f"（要{what}请再点一次）")
+                        if not it.get("cancel_req"):           # 作废（不是你撤回的）：日报「★ 手动买入作废」+ warn（G17；2026-10-14）
+                            it.update(done_on=st.last_date, void_on=st.last_date)
+                            it.pop("unsent", None)
+                            out.append(("warn", f"★ 手动{'加仓' if what == '加' else '买入'} {t} 作废：{it['msg']}"))
         for it in self.m["items"].values():
             if it.get("status") != "placed" or it.get("kind") not in ORDER_KINDS:
                 continue
@@ -2675,7 +2797,9 @@ class Manual:
                     self.m["blocks"].pop(t)
             if mine_trim:
                 self.m["trims"].pop(t, None)
-            it.update(status="cancelled", msg=f"已撤回（{it['cancel_req']}）：之后不再下这笔卖单")
+            it.pop("unsent", None)
+            it.update(status="cancelled", msg=f"已撤回（{it['cancel_req']}）："
+                                              + ("盘中的单已失效，明天不再卖" if it.get("now") else "之后不再下这笔卖单"))   # G16
             out.append(("info", f"手动指令 {it['id']}：{t} {it['msg']}"))
         out += self.prune_blocks(st.last_date)
         items = self.m["items"]
@@ -2719,7 +2843,8 @@ class Manual:
     def summary(self) -> dict:
         items = sorted(self.m["items"].values(), key=lambda x: x.get("at", ""), reverse=True)
         keep = ("id", "at", "kind", "ticker", "cid", "pct", "unit", "value", "block_days", "target", "status", "msg", "decided_on",
-                "fill_day", "done_on", "fill", "shares", "side", "limit", "source", "note", "cancel_req", "wait", "now", "hold")
+                "fill_day", "done_on", "fill", "shares", "side", "limit", "source", "note", "cancel_req", "wait", "now", "hold",
+                "unsent", "void_on")
         return {"core_pct": self.core_pct, "core_pause": self.m.get("core_pause"), "core_signal": self.m.get("core_signal"),
                 "blocks": dict(self.m["blocks"]), "trims": dict(self.m["trims"]),
                 "adds": dict(self.m["adds"]), "buys": dict(self.m["buys"]), "cap_pct": self.m.get("cap_pct"),
@@ -2971,7 +3096,7 @@ __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEF
            "block_text", "NEXT_DECISION", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "OPEN_ST",
            "corefix_clear_text", "resume_info", "wait_word", "allin_busy_text", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text",
            "next_window", "due", "cancel_due", "CANCEL_UNTIL",
-           "RULE_TEXT", "NOW_NO_CANCEL",
+           "RULE_TEXT", "NOW_NO_CANCEL", "NOW_FILLED_NO_CANCEL", "NOW_BUY_LAPSED", "NOW_SELL_WITHDRAWN", "now_expired", "now_cancel_why",
            "now_due", "status_text", "entry_why", "buy_size", "requests_path", "position_pct", "target_shares", "adjust_plan",
            "cap_text", "fmt_target", "describe", "active", "lines", "signal_text", "core_pct_now",
            "fee_jp", "core_cost", "sell_estimate", "sale_note", "est_lines", "yen_px", "TAX_PCT", "LABEL", "STATUS", "REASON_TEXT"]

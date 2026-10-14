@@ -1417,9 +1417,10 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     recent = [it for it in items if it.get("status") in MO.ACTIVE or (_ts_jst(it.get("at")) or cut) > cut]   # 没处理完的一直显示
     old_n = len(items) - len(recent)
     for it in recent[:20]:
+        now_it = it.get("status") == "placed" and it.get("now")
         can = (it.get("status") in MO.ACTIVE and it.get("kind") in MO.ORDER_KINDS and not it.get("cancel_req")
-               and not (it.get("status") == "placed" and it.get("now")))          # 盘中的单已经发到交易所：页面上撤不了
-        btn = (_cbtn(it, 1 if it.get("status") == "placed" else 0) if can else _unbtn(it))
+               and not (now_it and MO.now_cancel_why(it, now)))   # 盘中的单还挂在交易所：页面上撤不了；15:30 失效的卖出能撤回（G16）
+        btn = (_cbtn(it, 2 if now_it else (1 if it.get("status") == "placed" else 0)) if can else _unbtn(it))
         rows.append(f"<div class='li'><div class='grow'><b>{_what(it)}</b> <span class='chip'>"
                     f"{escape(MO.status_text(it))}{'（撤回中）' if it.get('cancel_req') else ''}</span>"
                     f"<div class='muted small'>{escape(str(it.get('at', ''))[5:16].replace('T', ' '))}"

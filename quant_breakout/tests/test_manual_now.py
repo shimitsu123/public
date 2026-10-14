@@ -173,7 +173,7 @@ def test_now_order_cannot_be_cancelled_and_is_not_placed_again():
     assert r.ux.now_phase(_quote(PX))["placed"] == 1
     assert r.eng.st.pending_exit.get("A.T") == "manual" and "A.T" not in _held(r)
     why = MO.check(MO.normalize({"kind": "cancel", "target": rec["id"]}), r.ux.book, r.tag)
-    assert why == MO.NOW_NO_CANCEL
+    assert why == MO.NOW_FILLED_NO_CANCEL                                    # 模拟账户当场全部成交：撤不了（不再叫你用「撤单」；G16）
     _req(r, kind="cancel", ticker="A.T", target=rec["id"], id="M-cancel-A")  # 绕过页面的检查直接写：执行器也不撤
     r.now["t"] = _at(r, 10, 30)
     r.ux.morning([])                                                          # 同一天再跑一次早上的流程（例如开机后的补跑）
