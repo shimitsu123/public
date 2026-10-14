@@ -883,7 +883,7 @@ python run.py live JP --broker rss --stop-mode intraday --protective-stop
       立花的 NISA 买单只能「指値・無条件・当日中」→ 〔72〕① N2（核心 ETF 放 NISA）是可选项，要先另做执行器工程、由用户决定（MACOS.md §2 第 1 步；2026-10-09）
 - [ ] `--max-order-value` 设成你能承受的单笔上限（跟模拟盘同档时默认 = 资金 ×1.1，因为核心 ETF 一笔可到 100%）；前两周 `--position-pct 0.05`（显式给出时覆盖同档的仓位），只买 1 単元
 - [ ] 熔断线先设 1%：`RiskConfig.daily_max_loss_pct`
-- [ ] 通知到手机：邮件 → Mac 上你自己在终端 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup`（Gmail 应用专用密码，输入时不显示，先发一封测试邮件，发成了才存进钥匙串 `qbreak-smtp`）；或把 Discord / Slack / ntfy 的通知地址存进钥匙串 `security add-generic-password -s qbreak-webhook -a qbreak -w`（回车后输入；定时任务读不到 `export` 的环境变量），`bash scripts/liveu.sh notify-test` 试发；外部心跳存 `qbreak-heartbeat`（每个交易日 09:30 自检时 ping）
+- [ ] 通知到手机：邮件 → Mac 上你自己在终端 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup`（Gmail 应用专用密码，输入时不显示，先发一封测试邮件，发成了才存进钥匙串 `qbreak-smtp`）；或把 Discord / Slack / ntfy 的通知地址存进钥匙串 `security add-generic-password -s qbreak-webhook -a qbreak -w`（回车后输入；定时任务读不到 `export` 的环境变量），`bash scripts/liveu.sh notify-test` 试发（2026-10-11 起主要用 qbreak 推送：iPhone 从主屏幕的 qbreak 图标打开面板 →「更多 → 通知（推送）」）；09:30 自检每个工作日推一条到手机（2026-10-14 起代替外部心跳，不用 `qbreak-heartbeat`）
 - [ ] ARM：过了上线门槛、你在对话里明确说之后才建（内容 `ARMED`）；不会自动清空（每天全自动要它一直在）；要停用 = 删掉它或建 HALT
 
 **ARM（人工解锁）**：数据目录里有 `ARM`（内容 `ARMED`）才会发单，删掉就锁上。

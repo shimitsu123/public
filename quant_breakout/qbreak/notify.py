@@ -1,10 +1,11 @@
-"""notify.py — 通知到手机（webhook / 邮件）+ 外部心跳（死人开关）。默认关闭：没有配置就什么都不发。
+"""notify.py — 通知到手机（qbreak 推送 / webhook / 邮件）+ 外部心跳（可选）。默认关闭：没有配置就什么都不发。
 
 原版 README 的检查清单里写了「熔断时发通知，不要静默」，但代码里没有实现。这里给三样（值都是密钥：绝不打印、不记录、不提交，只说「有 / 没有」）：
   QBREAK_WEBHOOK   = https://...                     Discord / Slack（发 JSON）；主机名含 ntfy 的（ntfy.sh 或自建）发纯文本
   QBREAK_SMTP      = host:port:user:password:to      邮件（Gmail 需用应用专用密码；端口 465 = SMTP_SSL，其他端口 = STARTTLS；
                                                      密码里的空格去掉；to 可以逗号分隔多个，空 = 发给自己）
-  QBREAK_HEARTBEAT = https://hc-ping.com/<uuid>      外部心跳（healthchecks.io 之类）：成功 POST 到这个地址、失败 POST 到「地址/fail」
+  QBREAK_HEARTBEAT = https://hc-ping.com/<uuid>      外部心跳（可选；2026-10-14 起不用、不再推荐：09:30 自检每个工作日推一条到手机代替它）：
+                                                     设了才 ping —— 成功 POST 到这个地址、失败 POST 到「地址/fail」
 来源：环境变量优先；没有时在 macOS 上从钥匙串读（服务名 qbreak-webhook / qbreak-smtp / qbreak-heartbeat，账户 qbreak）——
   定时任务（launchd）读不到 ~/.zshrc 的环境变量，所以 Mac 上放钥匙串。存法（你自己在终端，回车后输入，不要贴进聊天）：
     security add-generic-password -s qbreak-webhook -a qbreak -w

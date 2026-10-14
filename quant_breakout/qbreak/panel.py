@@ -768,8 +768,8 @@ def _scheduled(label: str) -> bool:
 def _run_lines(tag: str, book: dict, now: dt.datetime, halt: str | None) -> list[tuple[str, str]]:
     """账本顶部的运行状态 → [(CSS 类 neg / muted, 已转义的 HTML)]（Mac 与手机同一个）：
     执行器上一次跑成没有（out/live_unified_<账本>_run.json，qbreak/run_status.py）、当前决策里被挡 / 被拒 / 状态不明的单（读账本：
-    --resolve 登记之后马上消失）、交易日 08:00 之后今天早上的运行还没完成、今天 09:30 自检没通过（out/watchdog_<账本>.json）、
-    最后一次外部心跳没发成（同一个文件的 heartbeat）。
+    --resolve 登记之后马上消失）、交易日 08:00 之后今天早上的运行还没完成、今天 09:30 自检的结果与那条推送发成没有
+    （out/watchdog_<账本>.json 的 ok / push）、设了外部心跳（可选）却没发成（同一个文件的 heartbeat）。
     文件没有 / 读坏 → 那一项不显示（不报错）。只展示，不改任何东西。"""
     from . import run_status as RS
     from .calendar_jp import prev_trading_day
@@ -836,13 +836,24 @@ def _run_lines(tag: str, book: dict, now: dt.datetime, halt: str | None) -> list
             from .live_unified import morning_unsent
             out.append(("neg", f"★ 今天早上的决策做了（决策日 {escape(exp)}），但有 {morning_unsent(book, exp)} 笔单没下（被挡 / 还没发）"))
     wd = RS.peek_json(paths.out_dir() / f"watchdog_{tag}.json")
-    if wd and wd.get("ok") is False:
+    if isinstance(wd, dict):                               # 今天的 09:30 自检 + 每天那条推送发成没有（2026-10-14 起代替外部心跳）
+        from .watchdog import push_text
         when, is_today = at(wd.get("at"))
-        rs = wd.get("reasons")
-        rs = [rs] if isinstance(rs, str) else [str(x) for x in (rs if isinstance(rs, list) else [])]
+        p = wd.get("push") if isinstance(wd.get("push"), dict) else None
         if is_today:
-            out.append(("neg", f"★ 自检（{escape(when[6:])}）：{escape('；'.join(rs) or '没通过')}"))
-    if isinstance(wd, dict):                               # 外部心跳没发成（09:30 自检记的；原因不含地址；2026-10-14 G12）
+            rs = wd.get("reasons")
+            rs = [rs] if isinstance(rs, str) else [str(x) for x in (rs if isinstance(rs, list) else [])]
+            pt = push_text(p)
+            if wd.get("ok") is False:
+                out.append(("neg", f"★ 自检（{escape(when[6:])}）：{escape('；'.join(rs) or '没通过')}"))
+            elif wd.get("ok") is None:
+                out.append(("neg", f"★ 自检（{escape(when[6:])}）判定不了：{escape(str(wd.get('note') or '—'))}"))
+            elif p and p.get("state") == "sent" and not pt:
+                base = "通过（HALT 生效中）" if wd.get("halt") else (str(wd.get("note") or "") or "通过")
+                out.append(("muted", f"自检（{escape(when[6:])}）：{escape(base)}；已推送到手机"))
+            if pt:
+                out.append(("neg", f"★ {escape(at(p.get('at') or wd.get('at'))[0])} {escape(pt)}"))
+    if isinstance(wd, dict):                               # 外部心跳（可选）设了却没发成（09:30 自检记的；原因不含地址；2026-10-14 G12）
         from .watchdog import beat_text
         bt = beat_text(wd.get("heartbeat"))
         if bt:

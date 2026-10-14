@@ -21,8 +21,9 @@
 #   bash scripts/liveu.sh email-setup [--host H --port P]  邮件通知的设置（只在你自己的终端里运行，不是 Claude 运行的命令）：问发件 Gmail 地址、
 #                                                    应用专用密码（输入时不显示）、收件地址 → 存进钥匙串 qbreak-smtp → 发一封测试邮件（不打印密码）
 #   bash scripts/liveu.sh watchdog                   09:30 自检（LaunchAgent com.qbreak.watchdog，scripts/install_launchd_watchdog.sh）：
-#                                                    今天早上的执行器跑完没有 → 没通过 → 手机 / Mac 通知 + 外部心跳（qbreak-heartbeat）报失败
-#   bash scripts/liveu.sh watchdog --dry             只看（Mac 对话里问「今天的自检过了吗」）：只判定、打印，不写结果文件、不发通知 / 心跳
+#                                                    今天早上的执行器跑完没有 → 每个工作日推一条到手机（通过 / 休市；没通过 = warn + Mac 通知；
+#                                                    2026-10-14 起代替外部心跳，同一天的「通过」只推一次）
+#   bash scripts/liveu.sh watchdog --dry             只看（Mac 对话里问「今天的自检过了吗」）：只判定、打印，不写结果文件、不推送
 #   bash scripts/liveu.sh halt-drill                 HALT 演练（模拟账户；今天早上的运行完成之后）：建 HALT → 跑一次 → 删掉这次建的 HALT
 #   bash scripts/liveu.sh flow 300000 [--flow-note …]  登记入金（出金写负数）：只影响收益的计算与提醒，不下单
 #   bash scripts/liveu.sh restore --broker tachibana --list   账本的备份（只读；每次执行器运行开始时自动备份，留最近 60 份）
@@ -348,8 +349,8 @@ if [ "${1:-}" = "email-setup" ]; then              # 邮件通知的设置（交
   exec "$PY" run.py notify --setup-email ${1+"$@"}
 fi
 
-if [ "${1:-}" = "watchdog" ]; then                 # 09:30 自检（只读账本、不下单）：没通过 → 手机 / Mac 通知 + 外部心跳报失败
-  shift                                            # --dry：只判定、打印（不写结果文件、不发通知 / 心跳）
+if [ "${1:-}" = "watchdog" ]; then                 # 09:30 自检（只读账本、不下单）：每个工作日推一条到手机；没通过 → 手机 / Mac 通知
+  shift                                            # --dry：只判定、打印（不写结果文件、不推送）
   wmax="${QBREAK_WATCHDOG_WAIT:-40}"               # 执行器还在运行时最多等几次（每次 15 秒；0 = 不等）
   wpoll="${QBREAK_WATCHDOG_POLL:-15}"              # 每次等几秒（测试用）
   case " $* " in *" --dry "*) wmax=0 ;; esac
@@ -617,7 +618,7 @@ if [ "${1:-}" = "run" ]; then
     if [ "$live" = "1" ]; then
       holdwhy="09:05 / 09:20 的开盘后补单、09:30 的自检按时运行"
     elif [ "$retry" = "0" ] && [ -f "$wdog" ] && [ "${XPC_SERVICE_NAME:-}" = "com.qbreak.liveu.paper" ]; then
-      holdwhy="09:30 的自检按时运行（不然外部心跳会误报「Mac 没跑」）"
+      holdwhy="09:30 的自检按时运行（每个工作日那条推送按时到手机）"
     fi
   fi
   if [ -n "$holdwhy" ] && command -v caffeinate >/dev/null 2>&1; then

@@ -5,7 +5,7 @@
 > **现在（立花还没开户）：先在 Mac 上做模拟操盘 —— 见 §1.7，一条命令装好，每个交易日早上自动跑、发通知、与云端模拟盘逐日比较。**
 > §5〜§6 的分市场守护进程是旧的「每个市场一个账户」方案，一个账户模式下会拒绝运行，只作参考；§7 清单里的 `--protective-stop`、§8 表的后几行与
 > 「逆指値是永远在岗的保险」也是旧方案的说法（2026-10-09 标明）：**现行执行器不挂逆指値、盘中不盯价**，离场只在每个交易日 07:40 的决策里下寄付卖单
-> （Mac 那天没跑就不卖 → 09:30 自检 + 外部心跳提醒，§1.6「运行保障」）。
+> （Mac 那天没跑就不卖 → 09:30 自检每个工作日推一条到手机，那天没收到 = Mac 没跑，§1.6「运行保障」）。
 > 上线后的运维（2026-10-09 补）：§1.6「上线头 5 个交易日的值守清单」「退出实盘 / 回到模拟」、§1.14「换 Mac」、§8「最后停止手段」（立花网页把 API 利用設定「無効化」）。
 
 > 面向：Mac + 不装 Excel + 想开机自启、全天常驻、自动买卖。
@@ -119,7 +119,7 @@ python3 run.py pos add 7203.T 100 3000   # 在楽天 App 成交后登记
 | 上线门槛是否满足 | `bash scripts/liveu.sh gate`（只读）：门槛 ①〜④（2026-10-09 起 ① 的最近一次比较还要在 10 个交易日以内，过期 ★：模拟操盘停了就不再拿以前的连续一致算数；`install_launchd_live_u.sh tachibana` 有意卸掉模拟操盘之后，只量到模拟操盘最后一次运行的那天 → install 到 ARM 之间隔多久都行）+ 准备（本番只读检查、本番 dry-run 跑通过、钥匙串 / 私钥权限 600、doctor（`bash scripts/liveu.sh doctor` 的结果）、定时任务、自动唤醒、Mac 的时区是日本）+ 参考（课税区分、ARM 三种状态 / HALT、入出金） |
 | HALT 演练 | `bash scripts/liveu.sh halt-drill`：模拟账户今天早上的运行完成之后（收盘前或休市日），建演练用的 HALT → 跑一次（不下单、账本记下）→ 删掉它；真的 HALT 已经存在就不演练、也不碰 |
 | 出事时人不在 Mac 前（2026-10-09 补） | **手机通知**：通知地址是密钥，放钥匙串（`qbreak-webhook`：Discord / Slack / ntfy；`qbreak-smtp`：`host:port:user:password:to`）——定时任务（launchd）读不到 `~/.zshrc` 的 `export`。**邮件（2026-10-09 起用这个）**：你自己在「终端」App 运行 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup`（问发件 Gmail 地址、应用专用密码（输入时不显示，空格自动去掉）、收件地址（回车 = 同发件，多个用逗号）→ 先发一封测试邮件 → 发成了才存进钥匙串 `qbreak-smtp`（覆盖旧值；服务器拒绝 = 密码 / 地址不对 → 不存，网络问题 → 问你存不存），打印「已发 / 失败（原因）」；不打印密码、不写文件；Claude 不运行它，也不要把密码贴进聊天）；Gmail 要先开两步验证，再在 https://myaccount.google.com/apppasswords 建应用专用密码（16 位字母）；改 Google 密码会让应用专用密码失效（失效后再运行一次 email-setup）；iPhone 上在「邮件」或 Gmail App 打开通知；建议在 Gmail 建过滤器：主题含 qbreak → 不送进垃圾邮件、标星；别的邮箱 `--host smtp.example.com --port 465`（465 = SMTP_SSL，其他端口 = STARTTLS，都验证证书）。webhook：你自己在终端 `security add-generic-password -s qbreak-webhook -a qbreak -w`（回车后输入，不贴进聊天）。`bash scripts/liveu.sh notify-test` 试发（只打印「已发 / 失败 / 没设置」，不打印地址）。执行器停下 / 拿不到运行锁的通知：同一个账本、同一天、同一段文字只发一次 |
-| Mac 整个早上没跑（关机 / 睡着 / 断网）、跑了但没下成单 | **09:30 自检**（LaunchAgent `com.qbreak.watchdog`，周一至五 09:30，`mac_setup.sh` 装；只看：`bash scripts/liveu.sh watchdog --dry`（不写、不发）；`bash scripts/liveu.sh watchdog` = 重新自检一次（会重写结果、没通过会再发通知 / 心跳报失败；不下单）；执行器还在运行时等它结束再判定）：今天早上的执行器跑完没有、有没有状态不明的单、（立花）开盘后的买单下了没有 → 没通过 → 手机 + Mac 通知 + 外部心跳报失败；HALT 生效中不算失败（同一天提醒一次）；结果 `~/.qbreak/home/out/watchdog_<账本>.json`。**外部心跳**（另一半）：在 healthchecks.io 之类建「周一至五 09:30 JST、宽限 30 分钟」的检查，ping 地址存钥匙串 `qbreak-heartbeat` → 自检本身没跑（Mac 关机 / 睡着 / 断网）时那边推送到手机。早上跑完让 Mac 醒到 09:35（立花；模拟账户在装了自检时只在 07:40 的定时任务本身） |
+| Mac 整个早上没跑（关机 / 睡着 / 断网）、跑了但没下成单 | **09:30 自检**（LaunchAgent `com.qbreak.watchdog`，周一至五 09:30，`mac_setup.sh` 装；只看：`bash scripts/liveu.sh watchdog --dry`（不写、不发）；`bash scripts/liveu.sh watchdog` = 重新自检一次（会重写结果；没通过会再推一条，通过且今天已经推过就不再推；不下单）；执行器还在运行时等它结束再判定，一直在跑 → 推「★ 自检判定不了」）：今天早上的执行器跑完没有、有没有状态不明的单、（立花）开盘后的买单下了没有 → 没通过 → 手机 + Mac 通知；HALT 生效中不算失败（「HALT 生效中」同一天推一次）；结果 `~/.qbreak/home/out/watchdog_<账本>.json`（push = 那条推送发成没有，面板顶部 / 菜单栏显示）。**每个工作日推一条**（2026-10-14 起代替外部心跳 healthchecks.io：通过 →「✓ HH:MM 自检通过」、平日休市 →「今天休市（系统正常）」，同一天只一次）→ 哪个工作日 09:30 左右没收到 = 自检本身没跑（Mac 关机 / 睡着 / 断网），靠你发现。早上跑完让 Mac 醒到 09:35（立花；模拟账户在装了自检时只在 07:40 的定时任务本身） |
 | 执行器这次跑成没有 | 面板 / 手机每个账本顶部一行运行状态（`out/live_unified_<账本>_run.json`）：跑完 ✓ / ★ 停下（原因）/ ★ 今天的单没下 / ★ 被挡 · 被拒 · 状态不明的单（票、方向、股数）/ ★ 今天早上的运行还没完成 / 09:30 自检没通过的原因；有这些情况时 Mac 通知的级别也变成 warn |
 | 盘中面板叫的执行器一直失败 | 失败后等待加倍（1 分钟起，最多 15 分钟）；同一天连续失败 3 次 → 当天这个账本暂停自动叫（面板顶部「★ 盘中自动下单暂停」），写新的手动指令或第二天恢复 |
 | 07:40 因持仓不一致被挡，08:35 的重试 | 重试在开盘前（09:00 前）再核对一次持仓（不做现金同步），不一致照样不下单——不会因为换了一个进程就绕过核对 |
@@ -164,7 +164,7 @@ bash scripts/liveu.sh --broker tachibana --resolve U2026-10-01-BUY-7203.T --fill
    跑通过一次 = gate「准备」的「⑤ 本番 dry-run」OK）；`bash scripts/liveu.sh doctor`（环境自检，结果给 gate 的「⑥ doctor」看）
 4. 本番：`bash scripts/liveu.sh probe`（本番只读检查）→ 入金 → `bash scripts/install_launchd_live_u.sh tachibana`
    （07:40 早上的单 + 08:35 重试 + 09:05 开盘后补单 + 09:20 重试）→ 终端里 `sudo pmset repeat wakeorpoweron MTWRF 06:40:00`（一次；2026-10-09 起 06:40，§1.13）
-   → 手机通知与外部心跳存进钥匙串（上面「运行保障」表；邮件：你自己在终端 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup`；`bash scripts/liveu.sh notify-test` 试发）
+   → iPhone 打开 qbreak 推送（主屏幕的 qbreak 图标 →「更多 → 通知（推送）」；09:30 自检每个工作日推一条到这里；邮件 / webhook 可选；`bash scripts/liveu.sh notify-test` 试发）
    → `bash scripts/liveu.sh gate` 全部 OK（含 Mac 的时区是日本 +0900：定时任务按本地时间触发）→ 你明确说之后 `echo ARMED > ~/.qbreak/home/ARM`
    （Mac 上执行器的数据目录是 `~/.qbreak/home`，ARM / HALT 都放这里）
    装了立花本番之后：操作面板（Mac + 手机）不带 `?book=` 默认打开立花（顶上红色「真钱（立花本番）」），模拟账户页标「已停」；
@@ -189,7 +189,7 @@ HALT 不撤已经发出的单：要撤就说「撤单」（面板「今天的单
 | 07:40〜07:50 | 通知与面板「今天的单」：今天发了哪些寄付单（票、买卖、股数、限价）、与云端模拟盘拿的是不是同样的票；面板顶部运行状态 ✓ / ★（`bash scripts/liveu.sh --broker tachibana --status`） | 单的票 / 股数明显不对（例：股数多了一位、不是规则会买的票、同一只票重复）、出现「异常熔断」、看不懂的 ★ |
 | 08:35 | 只有 07:40 没跑完时才有重试；运行状态与 `~/.qbreak/home/logs/com.qbreak.liveu.retry.out` | 重试也停下、原因看不懂 |
 | 09:00〜09:25 | 寄付成交之后：立花网站的注文一覧 / 約定照会和面板「今天的单」对得上；09:05 / 09:20 开盘后补单（余力放不下的买单）下了没有 | 立花那边有面板上没有的单（另一台 Mac / 人工）、状态不明的单（先 `bash scripts/liveu.sh unknown --broker tachibana` 看候选；它会登录立花一次，09:05 / 09:20 的执行器在跑时自己等它结束再登录，免得把执行器的会话踢掉） |
-| 09:30 | 09:30 自检（没通过才有通知；外部心跳那边没报警） | 自检没通过、原因不是 HALT |
+| 09:30 | 09:30 自检的推送（每个工作日一条：「✓ 自检通过」/ ★ 没通过；09:30 左右没收到 = Mac 没跑） | 自检没通过、原因不是 HALT；09:30 左右没收到推送（先看 Mac 开着没有） |
 | 收盘后 | 約定照会的成交价 / 手续费和面板一致（個別コース的表）；面板的权益、现金 | 手续费 / 成交和面板差得离谱 |
 | 第二天 07:40 | 对账：昨天的成交（股数 / 均价）记进账本、持仓核对一致；现金按買付可能額对齐（约定基准还是受渡基准、开盘卖出后余力何时反映 —— デモ验证不了，头几天对照立花的余力画面记一下） | 持仓核对不一致：执行器自己已经不下单 → 先 `bash scripts/liveu.sh reconcile --broker tachibana` 看原因，不要直接改账本 |
 
@@ -364,7 +364,7 @@ git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/m
 （没装就装；立花本番已装时不动，缺前一晚预检 `com.qbreak.precheck` 就补上）→ ③ 市场仪表盘 + 经济威胁提醒 `com.qbreak.news` → ④ J-Quants 定时取数 `com.qbreak.jquants`
 （钥匙串里有 `qbreak-jquants` 才装；只检查有没有，不读出值）→ ⑤ 研究用的第二个克隆 `~/qbreak-dev`（没有就建；没有本地改动就更新）
 → ④b 登录 / 开机后自动启动 `com.qbreak.login`（见 1.11）→ ④c 操作面板 → ④e 09:30 自检 `com.qbreak.watchdog`（两种模式都装；
-钥匙串里的 `qbreak-webhook` / `qbreak-heartbeat` 只查有没有）→ ⑤b 打印本地改代码 / 推送的检查命令 → ⑤c 例行任务用的第三个克隆 `~/qbreak-sim`（§1.13）
+每个工作日推一条到手机；打开推送的设备只数台数）→ ⑤b 打印本地改代码 / 推送的检查命令 → ⑤c 例行任务用的第三个克隆 `~/qbreak-sim`（§1.13）
 → ⑥ 列出已注册的定时任务与页面位置。
 
 以后在 Mac 的 Claude 对话里**直接说要做什么**（「更新一下」「今天怎么样」「持仓最近有决算吗」「研究一下 ××」）：
@@ -450,7 +450,7 @@ bash scripts/liveu.sh policy add --category BOJ_CHANGE --subtype tighten --date 
    - 私钥 `~/.qbreak/e_api_private_key.pem`（在数据目录的**上一层**；デモ的 `e_api_private_key_demo.pem` 也一样）→ 新 Mac 上
      `chmod 700 ~/.qbreak` 与 `chmod 600 ~/.qbreak/e_api_private_key.pem`（别的用户可读时程序会拒绝启动）；
    - 钥匙串不一定跟着走（移行アシスタント / iCloud 钥匙串以外）：在新 Mac 的终端**你自己**重新存（回车后输入，不显示）——
-     `qbreak-tachibana-authid` / `qbreak-tachibana-2nd`（デモ的 `-demo`，§3）、邮件 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup`、`qbreak-webhook` / `qbreak-heartbeat` / `qbreak-jquants`；
+     `qbreak-tachibana-authid` / `qbreak-tachibana-2nd`（デモ的 `-demo`，§3）、邮件 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup`、`qbreak-webhook` / `qbreak-jquants`（有设的才存）；换好后 `bash scripts/liveu.sh notify-test` 确认手机收得到推送；
    - 旧 Mac 要卖掉 / 送人：先把上面这些从旧 Mac 删掉（数据目录、私钥、钥匙串里 `qbreak-` 开头的条目）。
 3. **新 Mac**：§1.7 的一行安装 → `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`
    → 时区选东京、`sudo pmset repeat wakeorpoweron MTWRF 06:40:00`、Claude 桌面版开机自动打开 + 在对话里说「装本机例行任务」（§1.13）；
@@ -602,13 +602,13 @@ sudo pmset repeat wakeorpoweron MTWRF 08:40:00
       现价的字段名确认不了；`liveu.sh gate` 的 ⑤ 会提醒）
 - [ ] `--broker paper` 演练过至少一个完整交易日
 - [ ] （只有旧的分市场方案）`--protective-stop` 打开。**现行执行器不挂逆指値**：离场只在每个交易日 07:40 的决策里下寄付卖单（盘中不盯价）；
-      Mac 那天没跑就不卖 → 靠 09:30 自检 + 外部心跳提醒你（下面两项）
+      Mac 那天没跑就不卖 → 靠 09:30 自检每个工作日推一条到手机（那天没收到 = Mac 没跑；下面两项）
 - [ ] 单笔上限：默认 = 资金 ×1.1（核心 ETF 一笔可到 100%）；前两周可 `--position-pct 0.05`（覆盖同档仓位）
 - [ ] 立花：守护进程默认 16:45 下次日单（15:30～16:30 不受理）；目前一个进程只管一个分仓，两个分仓合并到一个会话之前不要同时跑两个守护进程（新登录会踢掉旧会话）
 - [ ] 手机通知：邮件 → 你自己在终端 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup`（Gmail 应用专用密码，输入时不显示；先发一封测试邮件，发成了才存进钥匙串 `qbreak-smtp`）；
       或 webhook 地址存钥匙串 `security add-generic-password -s qbreak-webhook -a qbreak -w`（回车后输入；Discord / Slack / ntfy；
       定时任务读不到 `export` 的环境变量）→ `bash scripts/liveu.sh notify-test` 收到
-- [ ] 外部心跳：healthchecks.io 之类建「周一至五 09:30 JST、宽限 30 分钟」的检查，ping 地址存钥匙串 `qbreak-heartbeat`；
+- [ ] 每天的自检推送（2026-10-14 起代替外部心跳，不用 healthchecks.io）：iPhone 打开 qbreak 推送、工作日 09:30 左右收到「✓ 自检通过」；
       09:30 自检 `com.qbreak.watchdog` 已装（`bash scripts/mac_setup.sh`）；`bash scripts/liveu.sh gate` 的 ⑧ 三项 OK
 - [ ] 立花的命令都经 `bash scripts/liveu.sh`（数据目录 `~/.qbreak/home`；数据目录在仓库里时立花的入口会拒绝运行）
 - [ ] 账户是**特定口座（源泉徴収あり）**：执行器只按口座的默认区分下单；NISA（〔72〕① N2）是可选项，要先另做执行器工程、由你决定（§2 第 1 步）；
@@ -648,7 +648,7 @@ echo "手工停止" > ~/.qbreak/home/HALT
 | 一个账户的执行器：人不在 Mac 旁边要停 | 云端对话里说「停」→ `var/HALT_REMOTE` → 下一次运行建 HALT | 已发出的单不撤（手机面板「今天的单」的「撤单」，或立花手机网站 https://kabuka.e-shiten.jp/mfds_smp.php） |
 | 一个账户的执行器：Mac 失控 / 联系不上，HALT 传不过去（2026-10-09 补） | —— | **最后停止手段**（本节末尾）：你在立花网页把「ｅ支店・API 利用設定」改成「無効化」→ API 马上失效；挂着的单在网页上撤 |
 | 一个账户的执行器：立花 API / Mac 出故障那天（2026-10-09 补） | 面板 / 手机「今天的单」列出今天应下的单（票、买卖、股数、下法、限价、状态）| ① 只照这张表里状态是「被挡 / 不下 / 没下」的行在立花网站下单（「已下单 / 已成交 / 部分成交」的已经在交易所，别再下；标题写着「上一次决策的单（…不是今天）」= 今天早上的运行还没跑，那张表不是今天要下的）（API 故障时官方也要求在标准 Web 上操作）② 第二天早上 07:40 之前在 Mac 对话里说一声 → `bash scripts/liveu.sh adopt --broker tachibana <代码> <BUY\|SELL> <股数> <均价> [--date …]`（实际成交数与均价看立花「約定照会」；先备份账本）③ `bash scripts/liveu.sh reconcile --broker tachibana` 看账本与立花一致 → 执行器照常（不登记的话第二天的持仓核对会挡住全部下单） |
-| 一个账户的执行器：整个早上都没跑 / 跑了没下成单（2026-10-09 补） | 09:30 自检没通过 → 手机 + Mac 通知 + 外部心跳报失败；Mac 关机 / 睡着 / 断网（自检也没跑）→ 心跳服务那边没收到 ping，推送到手机 | 当天没下的单不补（第二天早上照常对账、决策）；状态不明的单在立花注文一覧核对后登记 |
+| 一个账户的执行器：整个早上都没跑 / 跑了没下成单（2026-10-09 补） | 09:30 自检没通过 → 手机 + Mac 通知；Mac 关机 / 睡着 / 断网（自检也没跑）→ 那天 09:30 左右收不到每天那条推送（2026-10-14 起代替外部心跳），靠你发现 | 当天没下的单不补（第二天早上照常对账、决策）；状态不明的单在立花注文一覧核对后登记 |
 | 一个账户的执行器：盘中面板叫的执行器一直失败 | 等待加倍（最多 15 分钟），同一天连续 3 次 → 当天暂停自动叫；通知同一天同一段文字只发一次 | 修好后写新的手动指令，或第二天自动恢复 |
 | （旧方案）守护进程崩溃 | launchd 30 秒内拉起，从磁盘恢复状态并对账 | 旧方案的逆指値挂在券商侧（**现行执行器不挂逆指値**） |
 | （旧方案）Mac 空闲休眠 | `caffeinate -i` 阻止；合盖仍会睡 | 旧方案靠逆指値（`--protective-stop`）；现行执行器见本表前几行 |
@@ -656,7 +656,7 @@ echo "手工停止" > ~/.qbreak/home/HALT
 | （旧方案）API 报错 | 本轮捕获并记日志，下一轮继续；不会让守护进程死掉 | 心跳文件可判断存活 |
 
 （旧方案的一句话：「程序是"更聪明的手"，逆指値是"永远在岗的保险"」。**现行一个账户的执行器不挂逆指値**：券商那边没有任何保护单，
-离场只在每个交易日 07:40 的决策里下寄付卖单；Mac 那天没跑 → 那天不卖，靠 09:30 自检 + 外部心跳提醒你，再由你决定（手动卖 / 立花网站）。
+离场只在每个交易日 07:40 的决策里下寄付卖单；Mac 那天没跑 → 那天不卖，靠 09:30 自检每个工作日那条推送（没收到 = Mac 没跑）提醒你，再由你决定（手动卖 / 立花网站）。
 要不要另挂灾难用的逆指値属于交易规则，没有研究过、现在不做。）
 
 交易时段保持清醒（〔77〕C OPS-13 / UX-13；可选）：手机面板与盘中的手动单要 Mac 醒着，执行器自己的 caffeinate 只到 09:25。

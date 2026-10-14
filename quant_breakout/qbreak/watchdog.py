@@ -1,28 +1,32 @@
-"""watchdog.py — 09:30 自检：死人开关的本机一半 + 外部心跳（只看、只提醒；不下单、不改账本）。
+"""watchdog.py — 09:30 自检：死人开关的本机一半 + 每个工作日推一条到手机（只看、只提醒；不下单、不改账本）。
 
 LaunchAgent com.qbreak.watchdog（周一至五 09:30，scripts/install_launchd_watchdog.sh）→ scripts/liveu.sh watchdog → run.py live-watchdog。
 - 看装的是哪种：<LaunchAgents>/com.qbreak.liveu.morning.plist 在 → 立花本番的账本（tachibana）；否则 com.qbreak.liveu.paper.plist 在 →
   模拟账户（paper）；都不在 → 只打印、不发。
-- 休市日 → 心跳成功（「休市」）。交易日：今天早上的运行跑完了（账本处理到上一个交易日、这个决策没有 PLANNED / BLOCKED 的单）、
-  没有状态不明的单、（立花）没有留到现在的开盘后买单（DEFERRED）→ 心跳成功、不发通知；否则 → 手机通知 + Mac 通知 + 心跳失败，原因写清
+- 每个工作日推一条（2026-10-14 用户「不用做 healthchecks.io 心跳 check，改为每天用 qbreak 进行推送就可以」：代替外部心跳）：
+  通过 →「✓ HH:MM 自检通过」（info；决策日、今天的单几笔成交 / 挂着）；平日休市 →「今天休市（系统正常）」；模拟期开始前 → 说明；
+  同一个账本同一天只推一次（qbreak/notify_seen.py：「再自检一次」/ 补跑不再推）；早些时候没通过、现在通过 → 再推一次。
+  哪个工作日 09:30 左右没收到 → Mac 多半关机 / 睡着 / 断网（那时 qbreak 推不出来，靠你发现「今天没收到」）。周末不推。
+- 交易日：今天早上的运行跑完了（账本处理到上一个交易日、这个决策没有 PLANNED / BLOCKED 的单）、没有状态不明的单、（立花）没有留到
+  现在的开盘后买单（DEFERRED）→ 通过；否则 → 手机通知（warn，每次）+ Mac 通知，原因写清
   （执行器停下的原因读运行状态文件 out/live_unified_<账本>_run.json，qbreak/run_status.py）。
-- HALT 存在：不算失败（心跳成功），通知「HALT 生效中」同一天只一次（qbreak/notify_seen.py）。
-- 模拟账户在模拟期开始日（sim.json 的 start）之前不推进：不算失败（心跳成功）。
+- HALT 存在：不算失败；「HALT 生效中」同一天只推一次，这一条就是当天的推送（不再另推「通过」）。
+- 模拟账户在模拟期开始日（sim.json 的 start）之前不推进：不算失败。
 - 今天的模拟盘日报入库了吗（2026-10-09 起例行任务在 Mac 的 Claude 桌面版本机任务里跑，云端同名例行任务是后备）：交易日、
   仓库（~/qbreak-src，paths.PROJECT_ROOT）的 var/out/unified_today.json 的 date ≠ 今天 → 原因「今天的模拟盘日报没入库（…）」
   （07:40 的执行器用的是旧的判断层 / 宏观数值）；模拟期开始前 / 结束后、这个文件不在（不是仓库的克隆）→ 不报。两种账本都看。
 - 执行器正在运行（拿着运行锁；例：Mac 睡着错过 07:40，醒来时 launchd 把错过的任务和自检一起拉起）→ 等它结束再判定（最多 10 分钟）；
-  还在跑 → 这次不判定、不发通知 / 心跳。（scripts/liveu.sh watchdog 在这之前先看 liveu.sh run 的运行标记：拉代码 / 等云端也算在跑；
-  跑完之后让 Mac 醒着到 09:35 的那段不算 —— 以前按进程名看，一直等到 09:35；2026-10-14 G24）
+  还在跑 → 这次不判定，推一条 warn「自检判定不了：执行器已经跑了 N 分钟」（同一天只一次；2026-10-14 起，以前一声不响）。
+  （scripts/liveu.sh watchdog 在这之前先看 liveu.sh run 的运行标记：拉代码 / 等云端也算在跑；跑完之后让 Mac 醒着到 09:35 的那段不算 ——
+  以前按进程名看，一直等到 09:35；2026-10-14 G24）
 - 该下了还没下的手动指令（盘中 / 开盘该下的买卖、闲置资金比例；过了该下的时刻 10 分钟以上）→ 原因（面板没开 / 自动下单暂停 /
   早上的运行没完成；2026-10-14 G24）。
-- 写 out/watchdog_<账本>.json（at、ok、reasons；面板 / 手机顶部显示今天没通过的原因）。
-- 外部心跳发了没有也记进去（heartbeat：{at, state: sent / failed / not_set, why}；why 不含地址）；没发成 → 手机通知 + Mac 通知
-  同一天只一次（地址格式不对 → 叫你在「终端」App 重新存一次钥匙串）；面板顶部 / 菜单栏的状态显示（2026-10-14 G12）。
+- 写 out/watchdog_<账本>.json（at、ok、reasons、halt、note、push）：面板 / 手机顶部、菜单栏显示今天的结果与推送发成没有
+  （push：{at, state: sent / failed / none, why}；none = 没有能推到手机的通道）。
+- 外部心跳（可选，2026-10-14 起不用、不再推荐）：钥匙串 qbreak-heartbeat 有地址时照旧 ping（成功 / 「地址/fail」），结果记 heartbeat
+  （{at, state: sent / failed, why}；why 不含地址），没发成 → 手机 + Mac 通知同一天只一次；没设置 = 正常，什么都不说、不记。
 - 发出去的文字（手机通知 / 心跳）里的本机路径换成「数据目录」/「~」（不带 Mac 的用户名）。
-- dry=True（liveu.sh watchdog --dry）：只判定、打印；不写结果文件、不发通知 / 心跳、不等运行锁。
-外部心跳（healthchecks.io 之类）是另一半：在服务上建「周一至五 09:30 JST、宽限 30 分钟」的检查 —— Mac 关机 / 睡着 / 断网时
-这里根本不会运行、不会 ping，服务那边就会推送到手机。地址存钥匙串 qbreak-heartbeat（qbreak/notify.py）。
+- dry=True（liveu.sh watchdog --dry）：只判定、打印；不写结果文件、不推送、不等运行锁。
 """
 from __future__ import annotations
 
@@ -44,8 +48,13 @@ OPEN_DONE = dt.time(9, 25)          # 这之后 09:05 / 09:20 的开盘后补单
 ESHITEN_SP = "https://kabuka.e-shiten.jp/mfds_smp.php"     # 立花 e支店的手机网站（注文一覧在这里看）
 HALT_KEY = "09:30 自检：HALT 生效中"                          # 去重用的固定文字（同一天只提醒一次）
 BEAT_KEY = "09:30 自检：外部心跳没发成"                        # 同上（2026-10-14 G12）
+DAILY_KEY = "09:30 自检：每个工作日的推送"                     # 同上：通过 / 休市 / 模拟期开始前的推送（2026-10-14 代替外部心跳）
+STUCK_KEY = "09:30 自检：执行器一直在跑，判定不了"             # 同上
+DAILY_LINE = "每个工作日 09:30 左右推一条；哪天没收到 → Mac 多半关机 / 睡着 / 断网"
+PUSH_FIX = ("iPhone 从主屏幕的 qbreak 图标打开面板 →「更多 → 通知（推送）」→「在这台设备打开推送」→ 允许"
+            "（iPhone 设置里也要允许 qbreak 的通知）；每条也记在面板「消息 → 通知记录」")
 BEAT_RESAVE = ("在「终端」App 重新存一次：security add-generic-password -U -s qbreak-heartbeat -a qbreak -w"
-               "（回车后输入地址；不要贴进聊天）")
+               "（回车后输入地址；不要贴进聊天）；不用外部心跳了就删掉：security delete-generic-password -s qbreak-heartbeat -a qbreak")
 LOCK_WAIT_S, LOCK_POLL_S = 600, 15                            # 执行器正在运行：最多等 10 分钟、每 15 秒看一次
 DAILY_FILE = paths.PROJECT_ROOT / "var" / "out" / "unified_today.json"   # 例行任务入库的当天日报（执行器 07:40 git pull 之后读；测试换成临时文件）
 DAILY_REASON = "今天的模拟盘日报没入库（Mac 的本机例行任务没跑？桌面版开着吗？）"
@@ -226,8 +235,26 @@ def _manual_waiting(tag: str, book: dict, now: dt.datetime, done: bool) -> list[
     return [f"有 {len(late)} 条手动指令到现在还没下（{hint}）：" + "；".join(late[:5]) + ("…" if len(late) > 5 else "")]
 
 
+ORDER_WORDS = (("成交", ("FILLED", "RESOLVED")), ("部分成交", ("PARTIAL",)), ("挂着", ("SENT",)),
+               ("开盘后再下", ("DEFERRED",)), ("没成交", ("UNFILLED", "MISSED", "EXPIRED")),
+               ("没下", ("PLANNED", "BLOCKED", "REJECTED")), ("状态不明", ("SENDING", "ERROR")))
+
+
+def orders_brief(book: dict, exp: str) -> str:
+    """决策 exp 的单（今天下的）→「今天没有单」/「今天的单 3 笔：成交 1、挂着 2」（只数笔数，不写价格；不下的 SKIPPED 不算）。"""
+    os_ = [o for o in (book or {}).get("orders") or [] if isinstance(o, dict) and o.get("decided_on") == exp
+           and o.get("status") != "SKIPPED"]
+    if not os_:
+        return "今天没有单"
+    parts = [f"{w} {n}" for w, sts in ORDER_WORDS if (n := sum(1 for o in os_ if o.get("status") in sts))]
+    known = {s for _, sts in ORDER_WORDS for s in sts}
+    other = sum(1 for o in os_ if o.get("status") not in known)
+    return f"今天的单 {len(os_)} 笔：" + "、".join(parts + ([f"其他 {other}"] if other else []))
+
+
 def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
-    """→ {"at", "tag", "trading", "judged", "ok", "halt", "reasons": [...], "note"}。只读（账本读坏也不改名）。"""
+    """→ {"at", "tag", "trading", "judged", "ok", "halt", "reasons": [...], "note", "decided", "orders"}。只读（账本读坏也不改名）。
+    decided / orders：今天早上应该处理到的决策日与那次的单的笔数（通过时的推送用；不写进结果文件）。"""
     from . import run_status as RS
     from .live_unified import UNKNOWN, morning_done, open_pending
     now = now or now_jst()
@@ -291,33 +318,146 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
     if miss:
         reasons.append(miss)
     rec["reasons"] = reasons
+    rec["decided"], rec["orders"] = exp, orders_brief(book, exp)
     rec["halt"] = _halt()
     rec["ok"] = bool(rec["halt"]) or not reasons                # HALT 生效中：不下单是预期的，不算失败
     return rec
 
 
 def write(rec: dict) -> None:
-    """out/watchdog_<账本>.json（面板读 at / ok / reasons / heartbeat）。写不成只记 warning。"""
-    keys = ("at", "ok", "reasons", "halt", "note") + (("heartbeat",) if "heartbeat" in rec else ())
+    """out/watchdog_<账本>.json（面板 / 菜单栏读 at / ok / reasons / halt / note / push / heartbeat）。写不成只记 warning。
+    ok = None：这次没判定（执行器一直在跑）。heartbeat 只在设了外部心跳时有。"""
+    keys = ("at", "ok", "reasons", "halt", "note") + tuple(k for k in ("push", "heartbeat") if k in rec)
     try:
-        atomic_write_text(path(rec["tag"]), json.dumps({k: rec[k] for k in keys}, ensure_ascii=False, indent=1))
+        atomic_write_text(path(rec["tag"]), json.dumps({k: rec.get(k) for k in keys}, ensure_ascii=False, indent=1))
     except Exception as e:                                    # noqa: BLE001
         log.warning("自检结果文件没写成（不影响交易）：%s", e)
 
 
+def today_rec(tag: str, today: dt.date) -> dict | None:
+    """今天写过的结果文件（读不了 / 不是今天的 → None）。只读。"""
+    from . import run_status as RS
+    wd = RS.peek_json(path(tag))
+    if not isinstance(wd, dict):
+        return None
+    t = RS.ts(wd.get("at"))
+    return wd if t is not None and t.astimezone(JST).date() == today else None
+
+
+def _hm(at) -> str:
+    from . import run_status as RS
+    t = RS.ts(at)
+    return t.astimezone(JST).strftime("%H:%M") if t else "—"
+
+
 def _sent(res) -> str:
-    """{webhook / email: True / False / None} → 「webhook 已发、邮件 没设置」（不含任何值）。"""
+    """{webhook / email / push: True / False / None} → 「推送（网页 App） 已发、webhook 没设置」（不含任何值）。"""
     from .notify import LABEL as NL
     word = {True: "已发", False: "★ 失败", None: "没设置"}
     return "、".join(f"{NL.get(k, k)} {word.get(v, v)}" for k, v in (res or {}).items()) or "—"
 
 
+def push_state(res, at: str) -> dict:
+    """notify.send 的结果 → 结果文件的 push：{at, state, why}（不含任何地址）。有一个通道发成 → sent；设置了的都失败 → failed；
+    一个通道都没有（没有设备打开 qbreak 推送、也没设 webhook / 邮件：只记进了通知记录）→ none。"""
+    from .notify import LABEL as NL
+    res = res if isinstance(res, dict) else {}
+    ok = [NL.get(k, k) for k, v in res.items() if v is True]
+    bad = [NL.get(k, k) for k, v in res.items() if v is False]
+    if ok:
+        return {"at": at, "state": "sent", "why": "、".join(ok) + " 已发" + (f"（{'、'.join(bad)} 失败）" if bad else "")}
+    if bad:
+        return {"at": at, "state": "failed", "why": "、".join(bad) + " 失败"}
+    return {"at": at, "state": "none", "why": "没有设备打开 qbreak 推送（也没设 webhook / 邮件）：只记进了面板「消息 → 通知记录」"}
+
+
+def push_word(p) -> str:
+    """结果文件的 push → 一小段（终端 / 菜单栏 / 面板）。"""
+    if not isinstance(p, dict):
+        return "—"
+    st = p.get("state")
+    if st == "sent":
+        return "已推送"
+    if st == "failed":
+        return f"★ 推送没发成（{p.get('why') or '原因不明'}）"
+    if st == "none":
+        return "★ 没推到手机（没有设备打开 qbreak 推送）"
+    return str(p.get("why") or st or "—")
+
+
+def push_text(p) -> str | None:
+    """push 没发成 / 没有通道 → 一句话 + 怎么做（面板顶部 / 菜单栏 / 上线检查）；发了 / 没记 → None。"""
+    if not isinstance(p, dict) or p.get("state") not in ("failed", "none"):
+        return None
+    head = (f"自检的推送没发成（{p.get('why') or '原因不明'}；网络问题的话下一次会再推）" if p["state"] == "failed"
+            else "自检没推到手机（没有设备打开 qbreak 推送）")
+    return f"{head} → {PUSH_FIX}"
+
+
+def _carry(prev: dict | None, at: str) -> dict:
+    """今天已经推过：沿用今天那次的 push（没记 → skipped）。"""
+    p = (prev or {}).get("push")
+    if isinstance(p, dict) and p.get("state"):
+        return p
+    return {"at": at, "state": "skipped", "why": "今天已经推过（这次不再推）"}
+
+
+def _daily(title, text, tag: str, now, send, seen, prev: dict | None, at: str, force: bool = False) -> tuple[dict | None, bool]:
+    """每个工作日的那一条（通过 / 休市 / 模拟期开始前）→ (结果文件的 push, 这次推了没有)。同一个账本同一天只推一次；
+    force（早些时候没通过、现在通过）或今天那次没推到手机 → 照推。title = None（周末）→ 不推、不记。"""
+    if title is None:
+        return None, False
+    first = seen(tag, DAILY_KEY, now)
+    old = _carry(prev, at)
+    if first or force or old.get("state") in ("failed", "none"):
+        return push_state(send(title, text, "info"), at), True
+    return old, False
+
+
+def _lock_since(lock, today: dt.date) -> dt.datetime | None:
+    """运行锁文件里执行器开始的时刻（RunLock 写「pid N 从 YYYY-MM-DD HH:MM:SS JST」）；读不了 / 不是今天 → None。只读。"""
+    import re
+    try:
+        m = re.search(r"从 (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", Path(lock).read_text(encoding="utf-8", errors="replace"))
+        t = dt.datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S").replace(tzinfo=JST) if m else None
+    except (OSError, ValueError):
+        return None
+    return t if t is not None and t.date() == today else None
+
+
+def _stuck(tag: str, name: str, lock, now: dt.datetime, send, mac, seen, out) -> int:
+    """执行器跑了 LOCK_WAIT_S 以上还没结束：这次不判定 → 推一条 warn（同一天只一次；2026-10-14 起，以前一声不响）。
+    今天还没有结果文件 → 写一份「判定不了」（ok = None）；今天已经判定过 → 不盖掉那次的结果。"""
+    now = now.astimezone(JST) if now.tzinfo else now.replace(tzinfo=JST)
+    since = _lock_since(lock, now.date())
+    mins = int((now - since).total_seconds() // 60) if since is not None and now >= since else None
+    ran = f"从 {since:%H:%M} 起已经跑了 {mins} 分钟" if mins is not None else f"已经跑了 {LOCK_WAIT_S // 60} 分钟以上"
+    note = f"执行器{ran}还没结束：这次不判定"
+    rec = {"at": now.isoformat(timespec="seconds"), "tag": tag, "ok": None, "reasons": [], "halt": _halt(), "note": note}
+    out(f"{name}（{now:%Y-%m-%d %H:%M} JST）：{note}")
+    if seen(tag, STUCK_KEY, now):
+        title = f"qbreak {name} ★ {now:%H:%M} 自检判定不了"
+        text = (f"{note}（今天早上的单下没下还不知道）。\n在 Mac 对话里说「看一下执行器日志」；跑完之后问「今天的自检过了吗」"
+                "（bash scripts/liveu.sh watchdog --dry，只看不发）")
+        res = send(title, text, "warn")
+        mac(title, note[:200])
+        rec["push"] = push_state(res, rec["at"])
+        out(f"  推送：{push_word(rec['push'])}（{_sent(res)}）")
+    else:
+        out("  （今天已经推过「判定不了」：这次不再推）")
+    if today_rec(tag, now.date()) is None:
+        write(rec)
+    return 0
+
+
 def run(agents, now: dt.datetime | None = None, *, send=None, beat=None, mac=None, seen=None, out=print, sleep=None,
         dry: bool = False) -> int:
-    """自检一次：（执行器正在运行 → 等它结束）判定 → 写结果文件 → 通知 / 心跳。0 = 通过（含休市、HALT、还早、没装、
+    """自检一次：（执行器正在运行 → 等它结束）判定 → 写结果文件 → 推送 /（设了的话）外部心跳。0 = 通过（含休市、HALT、还早、没装、
     模拟期开始前、执行器一直在跑），1 = 没通过。dry：只判定、打印（不写、不发、不等）。
+    推送（2026-10-14 起每个工作日一条，代替外部心跳）：通过 / 平日休市 / 模拟期开始前 → info，同一个账本同一天只一次（_daily）；
+    HALT →「HALT 生效中」一天一次（就是当天那条）；没通过 → warn，每次；执行器一直在跑 →「判定不了」warn 一天一次（_stuck）。
     send / beat / mac / seen / sleep：测试注入（默认 qbreak.notify.send / heartbeat_detail、Mac 通知、qbreak.notify_seen.first、time.sleep；
-    beat 返回 (状态, 原因) 或只返回状态都行）。心跳的结果写进结果文件、没发成同一天提醒一次（_after_beat）。"""
+    beat 返回 (状态, 原因) 或只返回状态都行，None = 没设外部心跳）。"""
     from . import notify, notify_seen
     from . import run_status as RS
     from .live_unified import lock_held
@@ -329,7 +469,7 @@ def run(agents, now: dt.datetime | None = None, *, send=None, beat=None, mac=Non
         from .live_unified import mac_notify as mac
     tag = installed(agents)
     if tag is None:
-        out(f"没装执行器的定时任务（{agents} 里 {LIVE_PLIST} / {PAPER_PLIST} 都没有）：只打印，不发通知、不发心跳")
+        out(f"没装执行器的定时任务（{agents} 里 {LIVE_PLIST} / {PAPER_PLIST} 都没有）：只打印，不推送")
         return 0
     name = "立花实盘" if tag == "tachibana" else "模拟操盘"
     lock = paths.state_dir() / f"live_unified_{tag}.lock"
@@ -339,11 +479,9 @@ def run(agents, now: dt.datetime | None = None, *, send=None, beat=None, mac=Non
         while lock_held(lock) and waited < LOCK_WAIT_S:
             sleep(LOCK_POLL_S)
             waited += LOCK_POLL_S
-        if lock_held(lock):
-            out(f"{name}：执行器跑了 {LOCK_WAIT_S // 60} 分钟以上还没结束 → 这次不判定、不发通知 / 心跳"
-                "（心跳服务那边过了宽限时间会提醒；之后只看：bash scripts/liveu.sh watchdog --dry）")
-            return 0
         now = None if now is None else now + dt.timedelta(seconds=waited)
+        if lock_held(lock):
+            return _stuck(tag, name, lock, now or now_jst(), send, mac, seen, out)
     now = now or now_jst()
     r = evaluate(tag, now)
     when = r["at"][:16].replace("T", " ")
@@ -357,41 +495,70 @@ def run(agents, now: dt.datetime | None = None, *, send=None, beat=None, mac=Non
         return 0 if r["ok"] else 1
     r["reasons"] = [RS.local_paths_out(x) for x in r["reasons"]]   # 手机通知 / 心跳的正文不带本机路径（Mac 的用户名）
     if not r["judged"]:
-        out(f"{name}（{when} JST）：{r['note']}；不发心跳")
+        out(f"{name}（{when} JST）：{r['note']}；不推送")
         return 0
+    today, hhmm = dt.date.fromisoformat(r["at"][:10]), when[11:16]
+    prev = today_rec(tag, today)                              # 今天早些时候的结果（这次写之前读）
     write(r)
     if not r["trading"] or (r["ok"] and r["note"] and not r["reasons"]):   # 休市 / 模拟期开始日之前
+        if r["trading"]:
+            title, text = f"qbreak {name} ✓ {hhmm} 自检：模拟期开始前", f"{r['note']}。\n{DAILY_LINE}"
+        elif today.weekday() < 5:                             # 平日的休市（祝日 / 年末年始）：照推，说系统正常
+            title, text = (f"qbreak {name}：今天休市（系统正常）",
+                           f"{today:%m/%d} 休市：执行器今天不下单；{hhmm} 自检照常运行。\n{DAILY_LINE}")
+        else:                                                 # 周末：不推
+            title = text = None
+        p, pushed = _daily(title, text, tag, now, send, seen, prev, r["at"])
         hb = _hb(beat(True, f"qbreak {name}：{r['note']}"))
-        out(f"{name}（{when} JST）：{r['note']} → 心跳 {_beat(hb)}")
-        _after_beat(r, hb, tag, name, now, send, mac, seen, out)
+        out(f"{name}（{when} JST）：{r['note']}{_tail(p, pushed, hb)}")
+        _finish(r, p, hb, tag, name, now, send, mac, seen, out)
         return 0
     if r["halt"]:
         extra = ("\n另外：" + "；".join(r["reasons"])) if r["reasons"] else ""
         text = RS.local_paths_out(f"HALT 生效中（{r['halt']}）：执行器不下单、持仓不动；解除只在 Mac 上、你明确说之后{extra}")
-        if seen(tag, HALT_KEY, now):
+        if seen(tag, HALT_KEY, now):                          # 这一条就是今天的推送（不再另推「通过」）
             title = f"qbreak {name}：HALT 生效中"
             res = send(title, text, "info")
             mac(title, text[:200])
+            p = push_state(res, r["at"])
             out(f"{name}（{when} JST）：{text}\n  通知：{_sent(res)}")
         else:
-            out(f"{name}（{when} JST）：{text}\n  （今天已经提醒过 HALT：这次不再发通知）")
+            p = _carry(prev, r["at"])
+            out(f"{name}（{when} JST）：{text}\n  （今天已经推过 HALT：这次不再推）")
         hb = _hb(beat(True, f"qbreak {name}：HALT 生效中"))
-        out(f"  心跳 {_beat(hb)}")
-        _after_beat(r, hb, tag, name, now, send, mac, seen, out)
+        if hb[0] is not None:
+            out(f"  外部心跳 {_beat(hb)}")
+        _finish(r, p, hb, tag, name, now, send, mac, seen, out)
         return 0
     if r["ok"]:
+        back = bool(prev) and prev.get("ok") is False         # 早些时候没通过、现在通过：照推（说一声好了）
+        lead = f"现在通过了（{_hm(prev.get('at'))} 没通过）。\n" if back else ""
+        title = f"qbreak {name} ✓ {hhmm} 自检通过"
+        text = f"{lead}决策 {r.get('decided') or '—'} 处理完；{r.get('orders') or '今天没有单'}。\n{DAILY_LINE}"
+        p, pushed = _daily(title, text, tag, now, send, seen, prev, r["at"], force=back)
         hb = _hb(beat(True, f"qbreak {name}：{when} 自检通过"))
-        out(f"{name}（{when} JST）：自检通过（今天早上的运行跑完、没有状态不明的单） → 心跳 {_beat(hb)}")
-        _after_beat(r, hb, tag, name, now, send, mac, seen, out)
+        out(f"{name}（{when} JST）：自检通过（今天早上的运行跑完、没有状态不明的单）{_tail(p, pushed, hb)}")
+        _finish(r, p, hb, tag, name, now, send, mac, seen, out)
         return 0
     title = f"qbreak {name} ★ 09:30 自检没通过"
     text = "\n".join(f"- {x}" for x in r["reasons"])
     res = send(title, text, "warn")
     mac(title, r["reasons"][0][:200])
     hb = _hb(beat(False, f"{title}\n{text}"))
-    out(f"{title}（{when} JST）：\n{text}\n  通知：{_sent(res)}；心跳（失败）{_beat(hb)}")
-    _after_beat(r, hb, tag, name, now, send, mac, seen, out)
+    out(f"{title}（{when} JST）：\n{text}\n  通知：{_sent(res)}" + (f"；外部心跳（失败）{_beat(hb)}" if hb[0] is not None else ""))
+    _finish(r, push_state(res, r["at"]), hb, tag, name, now, send, mac, seen, out)
     return 1
+
+
+def _tail(p: dict | None, pushed: bool, hb: tuple[bool | None, str]) -> str:
+    """终端那一行的结尾：→ 推送 已推送 / 今天已经推过 / 周末不推；设了外部心跳才说心跳。"""
+    if p is None:
+        s = " → 周末不推送"
+    elif not pushed:
+        s = " → 今天已经推过（这次不再推）"
+    else:
+        s = f" → 推送 {push_word(p)}"
+    return s + (f"；外部心跳 {_beat(hb)}" if hb[0] is not None else "")
 
 
 def _hb(res) -> tuple[bool | None, str]:
@@ -405,7 +572,7 @@ def _beat(hb) -> str:
     ok, why = _hb(hb)
     if ok is False:
         return f"★ 没发成（{why or '原因不明'}）"
-    return {True: "已发", None: "没设置（钥匙串 qbreak-heartbeat）"}.get(ok, str(ok))
+    return {True: "已发"}.get(ok, "没设置")
 
 
 def beat_fix(why: str) -> str:
@@ -419,20 +586,26 @@ def beat_fix(why: str) -> str:
 
 
 def beat_text(hb: dict | None) -> str | None:
-    """结果文件里的 heartbeat 没发成 → 一句话（面板顶部 / 菜单栏的状态用）；发了 / 没设置 / 没记 → None。"""
+    """结果文件里的 heartbeat 没发成 → 一句话（面板顶部 / 菜单栏的状态用）；发了 / 没设置 / 没记 → None。
+    外部心跳 2026-10-14 起是可选的（每天的推送代替它）：只在设了地址、又没发成时才说。"""
     if not isinstance(hb, dict) or hb.get("state") != "failed":
         return None
     why = str(hb.get("why") or "原因不明")
-    return f"外部心跳没发成（{why}）：Mac 关机 / 睡着时心跳服务那边就提醒不了。{beat_fix(why)}"
+    return f"外部心跳没发成（{why}）：钥匙串里设了 qbreak-heartbeat（可选）。{beat_fix(why)}"
 
 
-def _after_beat(r: dict, hb: tuple[bool | None, str], tag: str, name: str, now, send, mac, seen, out) -> None:
-    """心跳的结果写进结果文件；没发成 → 手机通知 + Mac 通知（同一天只一次）。文字里没有地址（2026-10-14 G12）。"""
+def _finish(r: dict, p: dict | None, hb: tuple[bool | None, str], tag: str, name: str, now, send, mac, seen, out) -> None:
+    """推送与外部心跳的结果写进结果文件（push；heartbeat 只在设了地址时）；心跳没发成 → 手机 + Mac 通知（同一天只一次）。
+    文字里没有地址（2026-10-14 G12）。"""
+    if p is not None:
+        r["push"] = p
     ok, why = hb
-    state = {True: "sent", False: "failed"}.get(ok, "not_set")
-    r["heartbeat"] = {"at": r["at"], "state": state, "why": (why or "原因不明") if state == "failed" else ""}
+    if ok is None:                                            # 没设外部心跳：正常（2026-10-14 起不用），不记、不说
+        r.pop("heartbeat", None)
+    else:
+        r["heartbeat"] = {"at": r["at"], "state": "sent" if ok else "failed", "why": "" if ok else (why or "原因不明")}
     write(r)
-    text = beat_text(r["heartbeat"])
+    text = beat_text(r.get("heartbeat"))
     if not text:
         return
     if seen(tag, BEAT_KEY, now):
@@ -444,4 +617,5 @@ def _after_beat(r: dict, hb: tuple[bool | None, str], tag: str, name: str, now, 
         out("  （今天已经提醒过外部心跳没发成：这次不再发通知）")
 
 
-__all__ = ["installed", "evaluate", "write", "run", "path", "beat_text", "beat_fix", "LABEL", "MANUAL_GRACE_S"]
+__all__ = ["installed", "evaluate", "write", "run", "path", "beat_text", "beat_fix", "push_state", "push_word", "push_text",
+           "today_rec", "orders_brief", "LABEL", "MANUAL_GRACE_S", "DAILY_LINE", "PUSH_FIX"]

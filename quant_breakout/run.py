@@ -4637,12 +4637,12 @@ def cmd_notify(a) -> int:
         res = notify.send("qbreak 测试通知", f"这是一条测试通知（{now_jst():%Y-%m-%d %H:%M} JST）：手机收到了就说明通知通了。", "info")
         for k, v in res.items():
             print(f"{notify.LABEL[k]}：{word[v]}")
-        hb = notify.configured("heartbeat")
-        print("外部心跳：" + ("已设置（测试不 ping：成功的 ping 会盖掉今天真正的检查；09:30 自检会 ping，"
-                             "或运行 bash scripts/liveu.sh watchdog）" if hb else "没设置"))
+        if notify.configured("heartbeat"):                   # 外部心跳 2026-10-14 起不用（可选）：设了才说，没设什么都不说
+            print("外部心跳（可选）：已设置（测试不 ping：成功的 ping 会盖掉今天真正的检查；09:30 自检会 ping）")
         if "push" not in res:
             print("推送（网页 App）：没有设备打开（iPhone：从主屏幕的 qbreak 图标打开面板 → 「通知（推送）」→ 在这台设备打开推送）")
         print("通知记录：已记一条（面板「消息 → 通知记录」）")
+        print("09:30 自检每个工作日推一条到这里；哪天 09:30 左右没收到 → Mac 多半关机 / 睡着 / 断网")
         if all(v is None for v in res.values()):
             print("还没有能弹到手机的通道：iPhone 从主屏幕的 qbreak 图标打开面板 →「更多 → 通知（推送）」→ 在这台设备打开推送（不用 Gmail / webhook）")
             return 3
@@ -4663,11 +4663,12 @@ def cmd_notify(a) -> int:
 
 def cmd_live_watchdog(a) -> int:
     """09:30 自检（qbreak/watchdog.py；LaunchAgent com.qbreak.watchdog → scripts/liveu.sh watchdog）：今天早上的执行器跑完没有、
-    有没有状态不明的单、（立花）开盘后的买单下了没有 → 没通过就发手机 / Mac 通知 + 外部心跳报失败；通过 → 心跳成功。只读账本、不下单。"""
+    有没有状态不明的单、（立花）开盘后的买单下了没有 → 没通过就发手机 / Mac 通知；通过 / 平日休市也推一条（每个工作日一条，
+    2026-10-14 起代替外部心跳；同一天只一次）。只读账本、不下单。"""
     import os
     from pathlib import Path
     from qbreak import watchdog
-    rc_ = _refuse_repo_home("live-watchdog")                  # 数据目录在仓库里：判定的是别的账本（云端的模拟盘），还会发真的通知 / 心跳
+    rc_ = _refuse_repo_home("live-watchdog")                  # 数据目录在仓库里：判定的是别的账本（云端的模拟盘），还会发真的推送
     if rc_ is not None:
         return rc_
     agents = Path(a.agents or os.environ.get("QBREAK_LAUNCH_AGENTS") or Path.home() / "Library" / "LaunchAgents")
@@ -5063,7 +5064,7 @@ def cmd_doctor(a) -> int:
         print(f"yfinance 连通: ★ 失败 {type(e).__name__}: {e}")
     import os as _os
     if (paths.home() / "heartbeat.json").exists():           # OPS-16：只有旧的分市场守护进程写它（现行执行器不用；以前「无」会误导）
-        print("心跳文件    : 存在（旧的分市场守护进程写的；现行执行器不用它。Mac 没跑的提醒 = 09:30 自检 + 外部心跳）")
+        print("心跳文件    : 存在（旧的分市场守护进程写的；现行执行器不用它。Mac 没跑的提醒 = 09:30 自检每个工作日推一条到手机）")
     print(f"ARM 状态    : {'ARMED ★ 当前允许发单' if _armed() else '未解锁（禁止发单）'}")
     kp = Path(_os.environ.get("TACHIBANA_PRIVATE_KEY") or Path.home() / ".qbreak" / "e_api_private_key.pem").expanduser()
     aid = "已设置" if (_os.environ.get("TACHIBANA_AUTH_ID") or _os.environ.get("TACHIBANA_AUTH_ID_FILE")) else "环境变量未设置（也可放钥匙串）"
@@ -5436,9 +5437,9 @@ def main(argv=None) -> int:
     nf.add_argument("--host", default=None, help="--setup-email：发件服务器（默认 smtp.gmail.com）")
     nf.add_argument("--port", type=int, default=None, help="--setup-email：端口（默认 587 = STARTTLS；465 = SMTP_SSL）")
     nf.set_defaults(func=cmd_notify)
-    wd = sub.add_parser("live-watchdog", help="09:30 自检：今天早上的执行器跑完没有 → 没通过就通知手机 + 外部心跳报失败（只读，不下单）")
+    wd = sub.add_parser("live-watchdog", help="09:30 自检：今天早上的执行器跑完没有 → 推一条到手机（每个工作日；没通过 = warn）（只读，不下单）")
     wd.add_argument("--agents", default=None, help="LaunchAgents 目录（默认 QBREAK_LAUNCH_AGENTS 或 ~/Library/LaunchAgents）")
-    wd.add_argument("--dry", action="store_true", help="只判定、打印（不写结果文件、不发通知 / 心跳）：Mac 对话里问「今天的自检过了吗」用")
+    wd.add_argument("--dry", action="store_true", help="只判定、打印（不写结果文件、不推送）：Mac 对话里问「今天的自检过了吗」用")
     wd.set_defaults(func=cmd_live_watchdog)
     pc = sub.add_parser("live-precheck", help="前一晚预检（立花本番，只读）：登录 → 取余力 → 登出；交付書面 / API 版本的预告、上线门槛新出现的 ★ → 通知")
     pc.add_argument("--agents", default=None, help="LaunchAgents 目录（默认 QBREAK_LAUNCH_AGENTS 或 ~/Library/LaunchAgents）")

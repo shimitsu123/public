@@ -14,7 +14,8 @@
  （④ / ⑤：结果文件记着当时的 API 版本段；与现在的仕様不同、或是没记版本的旧格式 → 要重新做；做了几天只显示、不判定）
  ⑤ 还有：本番 dry-run 跑通过（只算不发单；dry-run 账本的运行状态）；⑥ 还有：doctor 通过（out/doctor.json；没做过只提醒）
  ⑦ 立花的定时任务已装（含前一晚预检 com.qbreak.precheck）、Mac 每个交易日早上自动唤醒（pmset）、Mac 的时区是日本（date +%z）
- ⑧ 人不在 Mac 前也知道出事：手机通知通道（钥匙串 qbreak-webhook / qbreak-smtp）、外部心跳（qbreak-heartbeat）、09:30 自检任务（com.qbreak.watchdog）
+ ⑧ 人不在 Mac 前也知道出事：手机通知通道（qbreak 推送；钥匙串 qbreak-webhook / qbreak-smtp 可选）、每个工作日 09:30 自检推一条到手机
+   （2026-10-14 起代替外部心跳：推得到手机 + 最近一次推送没失败）、09:30 自检任务（com.qbreak.watchdog）
 参考（不算门槛）：口座课税区分、ARM / HALT 现在的状态、登记过的入出金。
 """
 from __future__ import annotations
@@ -342,13 +343,49 @@ def _doctor(add, today: dt.date) -> None:
             + (f"：{'；'.join(probs)}" if probs else "") + f"（修好后再做 {DOCTOR_CMD}；依赖坏了 → bash scripts/mac_setup.sh）")
 
 
+DAILY_PUSH = "⑧ 每天的自检推送（Mac 没跑的提醒）"
+
+
+def _last_push() -> dict | None:
+    """两个账本的 09:30 自检结果里最新的那条推送（out/watchdog_<账本>.json 的 push）；都没有 → None。只读。"""
+    from . import run_status as RS
+    best = None
+    for tag in ("tachibana", "paper"):
+        wd = RS.peek_json(paths.out_dir() / f"watchdog_{tag}.json")
+        p = wd.get("push") if isinstance(wd, dict) else None
+        if isinstance(p, dict) and p.get("state") in ("sent", "failed", "none") and (best is None or str(p.get("at") or "") > str(best.get("at") or "")):
+            best = p
+    return best
+
+
+def _daily_push(add, npush: int, wh, em) -> None:
+    """⑧ 每个工作日 09:30 自检推一条到手机（2026-10-14 用户「不用做 healthchecks.io 心跳 check，改为每天用 qbreak 进行推送就可以」）：
+    推得到手机（有设备打开 qbreak 推送，或钥匙串里有 webhook / 邮件）+ 最近一次自检的推送没失败。外部心跳不再要求。"""
+    from .watchdog import push_text
+    lead = "每个工作日 09:30 自检推一条到手机（2026-10-14 起代替外部心跳）：哪天 09:30 左右没收到 → Mac 多半关机 / 睡着 / 断网"
+    if not npush and wh is None and em is None:
+        add("准备", DAILY_PUSH, None, "不是 macOS（没有 security 命令）：跳过")
+        return
+    if not (npush or wh or em):
+        add("准备", DAILY_PUSH, False, f"★ 推不到手机（先做上一行「手机通知通道」）。{lead}")
+        return
+    p = _last_push()
+    pt = push_text(p)
+    if pt and not (p.get("state") == "none" and npush):         # 上次没有通道、之后打开了推送 → 下一次自检确认
+        add("准备", DAILY_PUSH, False, f"★ 最近一次（{str(p.get('at') or '—')[:16].replace('T', ' ')}）{pt}")
+        return
+    last = (f"；最近一次 {str(p.get('at') or '—')[:16].replace('T', ' ')} 已推送" if p and p.get("state") == "sent"
+            else "；下一次 09:30 自检确认推到了没有")
+    add("准备", DAILY_PUSH, True, lead + last)
+
+
 def _alerts(add, run, agents: Path, rc_list: int | None, listing: str) -> None:
-    """⑧ 人不在 Mac 前也知道出事：手机通知通道、外部心跳、09:30 自检任务（只查钥匙串里有没有，不取出值；不发通知）。"""
+    """⑧ 人不在 Mac 前也知道出事：手机通知通道、每个工作日 09:30 自检的推送（2026-10-14 起代替外部心跳）、09:30 自检任务
+    （只查钥匙串里有没有，不取出值；推送的订阅只数台数，不读地址；不发通知）。"""
     from . import notify as NT
 
     def kc(name: str):                                # 钥匙串里有没有（定时任务读不到 ~/.zshrc 的环境变量 → 只看钥匙串）
         return NT.configured(name, run=run, env=False)
-    env_only = "（环境变量有设置，但定时任务读不到 ~/.zshrc 的环境变量）"
     wh, em = kc("webhook"), kc("email")
     try:                                                   # 2026-10-11 用户：不用 Gmail，直接在 qbreak 里通知并记录 → 推送（网页 App）为主
         from .webpush import subs as _push_subs
@@ -369,17 +406,7 @@ def _alerts(add, run, agents: Path, rc_list: int | None, listing: str) -> None:
         add("准备", "⑧ 手机通知通道（qbreak 推送）", False,
             "★ 还没有设备打开 qbreak 推送：iPhone 从主屏幕的 qbreak 图标打开面板 →「更多」→「通知（推送）」→「在这台设备打开推送」→ 允许"
             "（不用 Gmail / webhook；每条通知也记在面板「消息 → 通知记录」）")
-    hb = kc("heartbeat")
-    if hb is None:
-        add("准备", "⑧ 外部心跳（Mac 没跑的提醒）", None, "不是 macOS（没有 security 命令）：跳过")
-    elif hb:
-        add("准备", "⑧ 外部心跳（Mac 没跑的提醒）", True, "钥匙串里有 qbreak-heartbeat（只查了有没有；每个交易日 09:30 自检时 ping）")
-    else:
-        add("准备", "⑧ 外部心跳（Mac 没跑的提醒）", False,
-            "★ 钥匙串里没有 qbreak-heartbeat" + (env_only if os.environ.get("QBREAK_HEARTBEAT") else "")
-            + "：在 healthchecks.io 之类的服务建一个「周一至五 09:30 JST、宽限 30 分钟」的检查（时区选 Asia/Tokyo），"
-              "把 ping 地址存进钥匙串：security add-generic-password -s qbreak-heartbeat -a qbreak -w（回车后输入，不要贴进聊天）；"
-              "Mac 关机 / 睡着 / 断网时那边会推送到手机")
+    _daily_push(add, npush, wh, em)
     lb = "com.qbreak.watchdog"
     has = (agents / f"{lb}.plist").exists()
     loaded = rc_list != 0 or lb in listing

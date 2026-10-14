@@ -3,10 +3,9 @@
 #   bash scripts/install_launchd_watchdog.sh             注册（要先装好模拟操盘：scripts/install_launchd_live_u.sh 建的虚拟环境）
 #   bash scripts/install_launchd_watchdog.sh uninstall   卸载
 # 每个交易日 09:30 运行 scripts/liveu.sh watchdog（规则在 qbreak/watchdog.py；只读账本、不下单）：
-#   今天早上的执行器跑完没有、有没有状态不明的单、（立花）开盘后的买单下了没有 → 没通过 → 手机通知 + Mac 通知 + 外部心跳报失败；
-#   通过 / 休市 / HALT 生效中 → 外部心跳报成功（HALT 同一天只提醒一次）。
-# 外部心跳（另一半）：在 healthchecks.io 之类的服务建「周一至五 09:30 JST、宽限 30 分钟」的检查，ping 地址存钥匙串 qbreak-heartbeat
-#   （security add-generic-password -s qbreak-heartbeat -a qbreak -w，回车后输入）：Mac 关机 / 睡着 / 断网时那边推送到手机。
+#   今天早上的执行器跑完没有、有没有状态不明的单、（立花）开盘后的买单下了没有 → 没通过 → 手机推送（warn）+ Mac 通知；
+#   通过 / 平日休市 / 模拟期开始前 → 也推一条（info，同一天只一次）；HALT 生效中 → 「HALT 生效中」那条（同一天只一次）。
+# 每个工作日推一条 = Mac 还活着（2026-10-14 起代替外部心跳）：哪天 09:30 左右没收到 → Mac 多半关机 / 睡着 / 断网（那时推不出来）。
 set -euo pipefail
 
 MODE="${1:-install}"
@@ -68,5 +67,5 @@ $cal  </array>
 </plist>
 PLISTEOF
 load "$F"
-echo "已注册 ${LABEL}：周一至五 09:30 → scripts/liveu.sh watchdog（今天早上的执行器跑完没有；没通过 → 手机通知 + 外部心跳报失败）"
+echo "已注册 ${LABEL}：周一至五 09:30 → scripts/liveu.sh watchdog（今天早上的执行器跑完没有；每个工作日推一条到手机，没通过 = ★）"
 echo "只看一次（不写、不发）：bash \"$PROJ/scripts/liveu.sh\" watchdog --dry；日志 ${LHOME}/logs/${LABEL}.out / .err"

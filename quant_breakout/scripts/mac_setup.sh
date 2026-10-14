@@ -11,8 +11,8 @@
 # ④b 登录 / 开机后自动启动 com.qbreak.login（RunAtLoad：仪表盘没加载就加载、交易日已过 07:40 而今天没跑 → 补跑模拟操盘、打开页面）
 # ④c 本机操作面板 com.qbreak.panel（http://127.0.0.1:8765/ + 手机端口 127.0.0.1:8766；按钮只写手动指令，下单由执行器做）
 # ④d 手机上操作（--phone：打开 Tailscale Serve → 在 Mac 上打开面板的「手机」；以前打开过的：每次确认还在，不弹页面）
-# ④e 09:30 自检 com.qbreak.watchdog（每个交易日：今天早上的执行器跑完没有；没通过 → 手机通知 + 外部心跳报失败；两种模式都装）
-#    + 手机通知 / 外部心跳的钥匙串（qbreak-webhook / qbreak-heartbeat）：只检查有没有，绝不读出值
+# ④e 09:30 自检 com.qbreak.watchdog（每个工作日推一条到手机：通过 / 休市 / 没通过；2026-10-14 起代替外部心跳；两种模式都装）
+#    + 有几台设备打开了 qbreak 推送（只数台数，不读推送地址）
 # ⑤ 研究用的第二个克隆 ~/qbreak-dev（没有就建；没有本地改动就快进到最新）
 # ⑤b 本地改代码 / 推送（2026-10-09 起不需要云端会话）：只打印怎么检查（scripts/dev.sh check；不在这里跑推送检查，免得慢）
 # ⑤c 例行任务用的第三个克隆 ~/qbreak-sim（2026-10-09 起模拟盘日报 / 影子账户 / 季度复核在 Claude 桌面版的本机任务里跑，
@@ -129,17 +129,19 @@ if [ -n "$PHONE" ] || [ -f "$LHOME/panel_phone.json" ]; then
   fi
 fi
 
-# ④e 09:30 自检（只读账本、不下单）+ 手机通知 / 外部心跳有没有设置（只查有没有，绝不读出值）
+# ④e 09:30 自检（只读账本、不下单；每个工作日推一条到手机 = Mac 还活着，2026-10-14 起代替外部心跳）+ 打开推送的设备有几台（只数台数）
 bash "$PROJ/scripts/install_launchd_watchdog.sh"
-if command -v security >/dev/null 2>&1; then
-  if security find-generic-password -s qbreak-heartbeat -a qbreak >/dev/null 2>&1; then
-    echo "④e 钥匙串里有 qbreak-heartbeat（只查了有没有）"
-  else
-    echo "④e 钥匙串里还没有 qbreak-heartbeat（立花上线前要设）：在终端运行 security add-generic-password -s qbreak-heartbeat -a qbreak -w（回车后输入，屏幕上不显示；不要贴进聊天）"
-  fi
-  echo "④e 手机通知：用 qbreak 推送（iPhone 从主屏幕的 qbreak 图标打开 →「更多 → 通知（推送）」）；每条通知也记在面板「消息 → 通知记录」（邮件 / webhook 可选，不用也行）"
-  echo "   发一条测试通知：bash \"$PROJ/scripts/liveu.sh\" notify-test"
+npush="$(cd "$PROJ" && QBREAK_HOME="$LHOME" "${VENV}/bin/python" -c 'from qbreak.webpush import subs; print(len(subs()))' 2>/dev/null || true)"
+case "$npush" in ''|*[!0-9]*) npush="" ;; esac
+if [ -n "$npush" ] && [ "$npush" -gt 0 ]; then
+  echo "④e 手机推送：打开推送的设备 ${npush} 台；09:30 自检每个工作日推一条（哪天 09:30 左右没收到 → Mac 多半关机 / 睡着 / 断网）"
+elif [ -n "$npush" ]; then
+  echo "④e ★ 还没有设备打开 qbreak 推送：iPhone 从主屏幕的 qbreak 图标打开面板 →「更多 → 通知（推送）」→ 在这台设备打开推送；"
+  echo "   09:30 自检每个工作日推一条到那里（每条也记在面板「消息 → 通知记录」；邮件 / webhook 可选）"
+else
+  echo "④e 手机推送：数不了打开推送的设备（虚拟环境 ${VENV} 不在？）；09:30 自检每个工作日推一条到打开了推送的手机"
 fi
+echo "   发一条测试通知：bash \"$PROJ/scripts/liveu.sh\" notify-test"
 
 # ⑤ 研究用的第二个克隆（改代码 / 做研究都在这里；~/qbreak-src 只 pull）
 if [ -d "$DEV/.git" ]; then

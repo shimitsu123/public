@@ -84,37 +84,44 @@ def _book_item(tag: str, now: dt.datetime) -> dict:
 
 
 def _watchdog_item(tag: str, now: dt.datetime) -> dict | None:
+    """今天的 09:30 自检（out/watchdog_<账本>.json）：结果 + 每天那条推送发成没有（2026-10-14 起代替外部心跳）。
+    不是今天的 / 没有 → 不显示。"""
     from . import run_status as RS
+    from .watchdog import PUSH_FIX, push_text, push_word
     wd = RS.peek_json(paths.out_dir() / f"watchdog_{tag}.json")
     if not wd:
         return None
     t = RS.ts(wd.get("at"))
     if t is None or t.astimezone(JST).date() != now.date():
         return None
+    p = wd.get("push") if isinstance(wd.get("push"), dict) else None
+    pt = push_text(p)
+    tail = "" if p is None else f"；{push_word(p)}" + (f" → {PUSH_FIX}" if pt else "")
     if wd.get("ok") is False:
         rs = wd.get("reasons")
         rs = [rs] if isinstance(rs, str) else [str(x) for x in (rs if isinstance(rs, list) else [])]
-        return {"name": "09:30 自检", "level": "bad", "text": "没通过：" + ("；".join(rs) or "—")[:160]}
-    return {"name": "09:30 自检", "level": "ok", "text": "通过"}
+        return {"name": "09:30 自检", "level": "bad", "text": ("没通过：" + ("；".join(rs) or "—")[:160] + tail)[:400]}
+    if wd.get("ok") is None:
+        return {"name": "09:30 自检", "level": "warn", "text": (f"判定不了：{wd.get('note') or '—'}" + tail)[:400]}
+    base = "通过（HALT 生效中）" if wd.get("halt") else (str(wd.get("note") or "") or "通过")
+    return {"name": "09:30 自检", "level": "warn" if pt else "ok", "text": (base + tail)[:400]}
 
 
 def _beat_item(tag: str) -> dict | None:
-    """外部心跳（09:30 自检 ping 的；out/watchdog_<账本>.json 的 heartbeat，原因不含地址）：最后一次没发成 → bad；发了 → ok；
-    没设置 / 没记 → 不显示（没设置由上线检查 ⑧ 管）（2026-10-14 G12）。"""
+    """外部心跳（可选；2026-10-14 起不用，每天的推送代替它）：只在设了地址、最后一次没发成时显示 bad（out/watchdog_<账本>.json 的
+    heartbeat，原因不含地址）；发了 / 没设置 / 没记 → 不显示（2026-10-14 G12）。"""
     from . import run_status as RS
     from .watchdog import beat_text
     wd = RS.peek_json(paths.out_dir() / f"watchdog_{tag}.json")
     hb = wd.get("heartbeat") if isinstance(wd, dict) else None
     if not isinstance(hb, dict):
         return None
+    bt = beat_text(hb)
+    if not bt:
+        return None
     t = RS.ts(hb.get("at"))
     when = t.astimezone(JST).strftime("%m/%d %H:%M") if t else "—"
-    bt = beat_text(hb)
-    if bt:
-        return {"name": "外部心跳", "level": "bad", "text": f"{when} {bt}"[:240]}
-    if hb.get("state") == "sent":
-        return {"name": "外部心跳", "level": "ok", "text": f"{when} 已发"}
-    return None
+    return {"name": "外部心跳", "level": "bad", "text": f"{when} {bt}"[:240]}
 
 
 def _charts_item(tag: str, now: dt.datetime) -> dict | None:
