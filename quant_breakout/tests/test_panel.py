@@ -222,7 +222,8 @@ def test_render_adjust_buttons_and_kline():
     assert "日K <b class='up'>往上走</b> · 涨势整齐" in html and "周K <b class='muted'>横着走</b>" in html
     assert "月K <b class='down'>往下走</b> · 跌势整齐" in html and '"上升": "往上走"' in html     # 图下的说法也从 kline.py 来（CFG.kp）
     assert '"when": "今天 09:00 开盘"' in html and "addWhen" not in html
-    assert "chart-data" not in html and "红色空心 = 涨" in panel._JS       # K 线数据不内嵌，打开时才取（/api/chart）
+    assert "chart-data" not in html                                     # K 线数据不内嵌，打开时才取（/api/chart）
+    assert "红色空心 = 涨" not in panel._JS and "红色空心 = 涨" in _card(html, "khelp")   # 说明整页一份（服务器画；2026-10-15）
     (paths.out_dir() / "charts_paper.json").unlink()
     html = panel.render("paper", "t" * 40, AT)                  # 还没有 K 线文件：占位文字、没有周期切换
     assert "K 线在执行器下一次运行之后显示" in html and "data-act='tf'" not in html and "data-act='sub'" not in html
@@ -263,16 +264,18 @@ def test_render_suggestions_with_buy_buttons_and_gates():
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
     _sm()
     html = panel.render("paper", "t" * 40, AT)
-    assert "建议的股票（规则的候选，3 只）" in html and "个股名额：空 3 个（拿着 1 + 排定买入 0，上限 4 只）" in html
-    assert ("<h3 class='sgh'>今天出了买入信号（1 只）</h3>" in html and "<h3 class='sgh'>快要出买入信号（1 只）</h3>" in html
-            and "<h3 class='sgh'>观察中（1 只）</h3>" in html)
-    sgc = _card(html, "suggest")                                           # 「规则接下来会自动买」点开的也有同一只的按钮（2026-10-14）：这里只数建议的股票
-    assert sgc.count("data-act='buy'") == 2                                 # 8035 被硬闸门挡：没有按钮
-    assert "data-t='6501.T'" in html and "data-sig='1'" in html and "data-rule='200'" in html and "data-limit='3605'" in html
-    assert "不能买：JPX 市場区分「プロ」：不买" in html and "顶部风险：RSI72" in html
-    assert "★ 规则现在不开这只的新仓（新仓倍数 0）：执行器会挡" in html and "真突破" in html
-    assert sgc.count("<details class='kl' open>") == 2 and "<details class='kl'><summary>" in sgc     # 观察中的 K 线默认收起
-    assert "按规则约 200 股 · 约 ¥700,000 · 约占权益 70.0%" in html
+    sgc, ab = _card(html, "suggest"), _card(html, "autobuy")
+    # 出了信号的 6501 在上面「规则接下来会自动买」里（2026-10-15 起建议的股票不重复列）：只数 = 这里列的
+    assert "建议的股票（规则的候选，2 只）" in sgc and "上面「规则接下来会自动买」已列的 1 只不在这里重复" in sgc
+    assert "个股名额：空 3 个（拿着 1 + 排定买入 0，上限 4 只）" in sgc
+    assert "<b>6501</b>" not in sgc and "今天出了买入信号" not in sgc            # 空了的组（与它的分段按钮）不出现
+    assert "<h3 class='sgh'>快要出买入信号（1 只）</h3>" in sgc and "<h3 class='sgh'>观察中（1 只）</h3>" in sgc
+    assert sgc.count("data-act='buy'") == 1                                 # 8035 被硬闸门挡：没有按钮
+    assert "data-t='6501.T'" in ab and "data-sig='1'" in ab and "data-rule='200'" in ab and "data-limit='3605'" in ab
+    assert "不能买：JPX 市場区分「プロ」：不买" in sgc and "顶部风险：RSI72" in ab
+    assert "★ 规则现在不开这只的新仓（新仓倍数 0）：执行器会挡" in sgc and "真突破" in ab
+    assert sgc.count("<details class='kl' open>") == 1 and "<details class='kl'><summary>" in sgc     # 观察中的 K 线默认收起
+    assert "按规则约 200 股 · 约 ¥700,000 · 约占权益 70.0%" in ab
     full = {t: {"shares": 100, "entry_px": 1000.0, "entry_date": "2026-09-01", "stop_px": 900.0, "last_close": 1000.0}
             for t in ("7203.T", "6758.T", "6861.T", "6098.T")}
     _book(pos=full, manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
@@ -286,12 +289,12 @@ def test_render_suggestions_with_buy_buttons_and_gates():
 def test_render_watch_rows_show_how_far_from_a_buy_signal():
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
     rows = [dict(r) for r in SG_ROWS]
-    rows[2]["near"] = {"where": "below_up", "days": 2, "miss": [], "vol": 0.8}
-    rows[2]["near_text"] = "离买入信号：MACD 约 2 天后金叉（按最近一天的变化估）；金叉那天量要 > 1.5 倍（今天 0.8 倍）"
+    rows[2]["near"] = {"where": "below_up", "days": 8, "miss": [], "vol": 0.8}   # 8 天：不在「规则接下来会自动买」（5 天以内）里
+    rows[2]["near_text"] = "离买入信号：MACD 约 8 天后金叉（按最近一天的变化估）；金叉那天量要 > 1.5 倍（今天 0.8 倍）"
     _sm(rows)
     html = panel.render("paper", "t" * 40, AT)
-    assert ("<div class='small near'>离买入信号：MACD 约 2 天后金叉（按最近一天的变化估）；金叉那天量要 &gt; 1.5 倍（今天 0.8 倍）</div>"
-            in _card(html, "suggest"))                                     # 只看建议的股票（自动买那张卡点开的也是同一行）
+    assert ("<div class='small near'>离买入信号：MACD 约 8 天后金叉（按最近一天的变化估）；金叉那天量要 &gt; 1.5 倍（今天 0.8 倍）</div>"
+            in _card(html, "suggest")) and "9984" not in _card(html, "autobuy")
     assert html.count("按离 MACD 金叉的天数排（越上面越快金叉；只是估算）") == 1   # 只有带 near 的组（旧的汇总没有 → 不写）
 
 
@@ -315,13 +318,17 @@ def test_render_ranks_watch_rows_by_the_registered_probability(monkeypatch, tmp_
     fp.write_text(json.dumps(t), encoding="utf-8")
     monkeypatch.setattr(WP, "FILE", fp)
     html = panel.render("paper", "t" * 40, AT)
-    assert "<h3 class='sgh'>今天出了买入信号（1 只）</h3>" in html
-    assert "<h3 class='sgh'>观察中 · 3 只（按离 MACD 金叉的天数排）</h3>" in html and "快要出买入信号（1 只）" not in html
+    sgc, ab = _card(html, "suggest"), _card(html, "autobuy")
+    # 6501（出了信号）与 8035（约 1 天金叉）在上面「规则接下来会自动买」里，建议的股票不重复列（2026-10-15）
+    assert "今天出了买入信号" not in sgc and "data-sgg" not in sgc            # 只剩一组：没有分段按钮
+    assert "<h3 class='sgh'>观察中 · 2 只（按离 MACD 金叉的天数排）</h3>" in sgc and "快要出买入信号（1 只）" not in html
     i1, i2, i3 = html.index("<b>9984</b>"), html.index("<b>8035</b>"), html.index("<b>6758</b>")
     assert i2 < i1 < i3                                                    # 2026-10-11 起按离金叉：8035（约 1 天）→ 9984（往下走）→ 6758（已在线上）
-    assert "<span class='rk'>1</span><b>8035</b>" in html and "<span class='rk'>3</span><b>6758</b>" in html
-    assert "金叉约 1 天" in html and "要先拐头" in html and "已在线上" in html
-    assert "<span class='chip hot'>快要出</span>" in html                     # 快要出的照样标出来
+    assert "<b>8035</b>" not in sgc and "<b>8035</b>" in ab
+    assert "<span class='rk'>1</span><b>9984</b>" in sgc and "<span class='rk'>2</span><b>6758</b>" in sgc   # 名次按这里列的从 1 数（不跳号）
+    assert "<span class='rk'" not in ab                                     # 自动买那张卡不带名次徽章
+    assert "金叉约 1 天" in ab and "要先拐头" in sgc and "已在线上" in sgc
+    assert "<span class='chip hot'>快要出</span>" in ab                       # 快要出的照样标出来（在自动买那张卡点开的一行里）
     p1 = WP.prob(t, "down_far", "m0", "v_lo")
     assert f"之后 10 个交易日内出买入信号：历史上约 <b>{p1['p'] * 100:.1f}%</b>（同样情况 100 次）" in html
     assert "越上面越快出现金叉（按最近一天的变化估算的天数" in html
@@ -487,7 +494,36 @@ console.log(JSON.stringify(out));
     assert o["tl"] == "趋势线：下面的线往上、上面的线往下：越收越窄，快要选方向 · 支撑 ¥950.0（比收盘低 5%） · 压力 ¥1,100（比收盘高 10%）"
     assert o["tl_broken"] == "趋势线：两条线越张越开：上下波动越来越大 · 支撑 ¥1,020（已跌破） · 压力 ¥990.0（已冲过）"
     assert o["tl_one"] == "趋势线：只找到上面的一条 · 压力 ¥1,100（比收盘高 10%）"
-    assert "没有预测力" in J                                                                   # 研究结论在「怎么看这张图」里说一次
+    assert "没有预测力" not in J and "没有预测力" in panel._kline_help()     # 研究结论在整页一份的「怎么看 K 线图」里说一次（2026-10-15）
+
+
+def test_one_kline_help_for_the_whole_page_and_no_number_table():
+    """2026-10-15 用户：「去掉每个股票中的如何看这张图 整体留一个解释就行」「不需要最近十个月的数字的数据 看图就行」：
+    整页只有一份收起的「怎么看 K 线图」（选股最下面、建议的股票之后；服务器画）；每张图不再画说明与数字表。"""
+    _book(pos={"6758.T": {"shares": 200, "entry_px": 900.0, "entry_date": "2026-09-01", "stop_px": 850.0, "last_close": 1000.0}},
+          manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
+    _sm()
+    for mode in ("local", "remote"):
+        html = panel.render("paper", "t" * 40, AT, mode=mode, device={"name": "x"}, phone={"port": 8766, "url": None, "devices": []})
+        assert html.count("怎么看 K 线图") == 1 and "怎么看这张图" not in html and "的数字（表）" not in html
+        hp = _card(html, "khelp")
+        assert hp.startswith("<section class='card' id='khelp'><details class='khelp'><summary>怎么看 K 线图</summary><ul>")   # 默认收起
+        pick = html[html.index("<div class='pane' data-tab='pick'>"):]
+        pick = pick[:pick.index("<div class='pane' data-tab=", 1)]
+        assert pick.index("id='autobuy'") < pick.index("id='suggest'") < pick.index("id='khelp'")   # 选股最下面
+        for x in ("红色空心 = 涨", "绿色实心 = 跌", "<i class='key m5'></i>5", "<i class='key m30'></i>30 日（周 / 个月）均价",
+                  "▲买入 = 买入那一根", "▲信号 = 出买入信号那一根", "<i class='key dash stop'></i>止损线", "<i class='key dash tl'></i>趋势线",
+                  "研究（2026-10-06）：对之后的涨跌没有预测力", "金叉，是规则买入的条件之一", "DMI = 买卖哪边强、趋势强不强（规则不用）",
+                  "← →", "Home / End", "Esc", "图上都是过去的价格，不是预测"):
+            assert x in hp, x
+    J = (panel.STATIC_DIR / "kline.js").read_text(encoding="utf-8")
+    for x in ("kHelp", "khelp", "怎么看这张图", "的数字（表）", "'table'", "'thead'", "'tbody'", "dataset.tbl", "dataset.help"):
+        assert x not in J, x                                                # 每张图的说明 / 数字表（与它们的状态）都去掉
+    assert "kTrend(nd('div','kexp',null,box), tr, tf)" in J and "kTL(nd('div','kexp',null,box), TL, tf)" in J   # 图下各自的一句话照旧
+    assert "kSubKey(nd('div','kexp',null,box), P, tf, sub)" in J and "kSubNow(sn, D, N-1, P, tf, sub)" in J
+    css = (panel.STATIC_DIR / "panel.css").read_text(encoding="utf-8")
+    assert ".chart table" not in css and ".chart td" not in css and ".abxb .rk" not in css and ".kexp ul" not in css
+    assert "details.khelp>summary" in css
 
 
 def test_trade_badge_counts_what_the_trade_tab_shows():

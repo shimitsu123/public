@@ -271,10 +271,29 @@ def _chart_box(t: str, kind: str, has_k: bool = True) -> str:
             f"{'K 线（要 JavaScript）' if has_k else 'K 线在执行器下一次运行之后显示'}</span></div>")
 
 
+def _kline_help() -> str:
+    """整页只有一份的「怎么看 K 线图」（2026-10-15 用户：「去掉每个股票中的如何看这张图 整体留一个解释就行」）：选股最下面、默认收起；
+    持仓 / 核心 ETF / 选股的每张图（日K / 周K / 月K）都按它看。图下面各自的一句话（最新一根、现在的趋势、趋势线）照旧在每张图里。"""
+    def k(c: str) -> str:
+        return f"<i class='key {c}'></i>"
+    li = (f"每根 K 线 = 1 天 / 1 周 / 1 个月（图上边沿选 日K / 周K / 月K）：粗的一段 = 开盘到收盘，细线 = 最高到最低；"
+          f"{k('box cu')}红色空心 = 涨　{k('box cd')}绿色实心 = 跌",
+          f"{k('m5')}5　{k('m10')}10　{k('m20')}20　{k('m30')}30 日（周 / 个月）均价 = 最近几根收盘价的平均",
+          "往上走 = 收盘在 20 均价上面、20 均价往上、5 均价在 20 均价上面；往下走 = 反过来；其余 = 横着走",
+          f"拿着的股票：{k('dash')}买入价　{k('dash stop')}止损线（跌到这里按规则卖）　▲买入 = 买入那一根；候选：▲信号 = 出买入信号那一根",
+          f"{k('dash tl')}趋势线：下面连低点（支撑）、上面连高点（压力），点线 = 往后延长；▲ 冲过压力线、▼ 跌破支撑线。"
+          "研究（2026-10-06）：对之后的涨跌没有预测力，只用来看",
+          "下面的小图：量 = 成交多少；MACD = 涨跌的力量（快线在 0 附近往上穿过慢线 = 金叉，是规则买入的条件之一）；DMI = 买卖哪边强、趋势强不强（规则不用）",
+          "看以前的某一根：点一下或按住左右滑；键盘 ← → 一根一根看，Home / End 到最早 / 最新，Esc 回到最新",
+          "图上都是过去的价格，不是预测")
+    return ("<section class='card' id='khelp'><details class='khelp'><summary>怎么看 K 线图</summary><ul>"
+            + "".join(f"<li>{x}</li>" for x in li) + "</ul></details></section>")
+
+
 def _suggest_ctx(sg: dict, book: dict, tag: str, marks: dict | None = None) -> dict:
     """「规则接下来会自动买」与「建议的股票」共用的一份（2026-10-14：两张卡里同一只票的内容 / 按钮 / 不能买的理由一样，只算一次）：
     排好的行（SG.rank：旧汇总没有 prob 也在这里补上，更新代码后不用等执行器）、不买回在解除 / 已经没了的说明（freed：手动买入不挡）、
-    消息标记、个股名额、观察中的名次（有比例表时）。"""
+    消息标记、个股名额、自动买那张卡列哪几只（auto = _auto_pick：建议的股票不再列这几只，2026-10-15）。"""
     tab = WP.load()
     rows = SG.rank([dict(r) for r in ((sg or {}).get("rows") or []) if r.get("ticker")], tab or {})
     blocks = ((book or {}).get("manual") or {}).get("blocks") or {}
@@ -286,39 +305,17 @@ def _suggest_ctx(sg: dict, book: dict, tag: str, marks: dict | None = None) -> d
         if _man_block(r.get("buy")) and r["ticker"] in blocks:
             r["buy"] = {**r["buy"], "block_until": blocks[r["ticker"]].get("until")}
     marks = _news_marks([r["ticker"] for r in rows]) if marks is None else marks
-    rest = [r for r in rows if r.get("status") != "triggered"]
     return {"tab": tab, "rows": rows, "blocks": blocks, "lifting": lifting, "freed": freed, "marks": marks or {},
-            "slots": MO.slots(book, tag), "rank": {str(r["ticker"]): k for k, r in enumerate(rest, 1)} if tab else {}}
+            "slots": MO.slots(book, tag), "auto": _auto_pick(sg, rows, blocks, lifting)}
 
 
-def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None, chart=None, ctx: dict | None = None) -> str:
-    """选股最上面（2026-10-12 用户：「将会按照规则自动进行购买的股票，大概几天后」）：
-    ① 已经出了信号的：规则已安排（哪天开盘、几股）/ 信号成立但不买（为什么）；② 估计 AUTO_NEAR_DAYS 个交易日内 MACD 金叉的：
-    大概哪天、出了信号的话下一个交易日开盘买约几股（按现在的新仓倍数）、历史上 10 个交易日内真的出信号的比例（大多很低）。
-    只是规则的展示与估算，不是建议；金叉之外还要量等条件凑齐，出了信号还要过闸门 / 名额。
-    每一行可以点开（2026-10-14 用户：「估计 5 个交易日内可能出现信号的股票也要可以能看到 K 线，也可以有买入的 button」；默认收起）=
-    「建议的股票」里这只同一行（_suggest_row：消息、条件、买入… / 全部换成这只… 或不能买的理由、规则的买价、K 线 · 现价；共用 ctx）。"""
+def _auto_pick(sg: dict, rows: list, blocks: dict, lifting) -> dict:
+    """「规则接下来会自动买」列哪几只 —— 只在这里算（2026-10-15 用户：「去掉估计五个交易日内和建议的股票中重复的股票」：
+    这几只「建议的股票」不再列，两张卡用同一份、不会对不上）。
+    trig = 已经出了买入信号的（全部）；near = 估计 AUTO_NEAR_DAYS 个交易日内 MACD 金叉的（挡着的不列，只有「手动卖出后不买回」
+    在估计金叉那天已经到期 / 在解除的还列）；gc = 估计金叉的 K 线日；wait = 还在不买回里的说明（「10/07 解除后」等）；tickers = 全部代码。"""
     from .calendar_jp import next_trading_day
-    sg = sg or {}
-    c = ctx if ctx is not None else _suggest_ctx(sg, book, tag)
-    rows = c["rows"]
-    if not rows:
-        return ""
-    s = c["slots"]
-    asof = _date_or_none(sg.get("asof"))
-    fill = _date_or_none(sg.get("fill_day"))
-    trig = [r for r in rows if r.get("status") == "triggered"]
-    blocks = c["blocks"]
-    freed = c["lifting"]
-    chart = chart or _chart_box
-
-    def item(badge: str, main: str, r: dict) -> str:        # 一行：收起时 = 原来的一行摘要；点开 = 建议的股票里同一只（K 线默认打开）
-        t = str(r["ticker"])
-        body = _suggest_row(r, s, buying or set(), eq, chart, rank=c["rank"].get(t), fill=sg.get("fill_day"),
-                            mark=c["marks"].get(t), freed=c["freed"], ckind="autobuy", kl_open=True, rank_label=True)
-        return (f"<details class='abx' data-t='{escape(t)}'><summary>{badge}<span class='grow'>{main}</span></summary>"
-                f"<div class='abxb'>{body}<div class='abxe'><button type='button' class='btn' data-abxclose='1'>收起</button></div>"
-                "</div></details>")                          # 底下也能收起（点开的一行很长：不用滚回摘要；2026-10-14 复核）
+    asof = _date_or_none((sg or {}).get("asof"))
 
     def gc_day(r):                                          # 估计金叉的 K 线日（asof 往后数 near.days 个交易日）
         gc = asof
@@ -332,17 +329,54 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
             return None
         if t not in blocks:
             return "已解除"
-        if t in freed:
+        if t in lifting:
             return "解除中"
         u, gc = blocks[t].get("until"), gc_day(r)
         return f"{str(u)[5:10].replace('-', '/')} 解除后" if u is not None and gc is not None and gc.isoformat() > str(u) else None
 
-    def keep(r) -> bool:
-        b = r.get("buy") or {}
-        return not b.get("block") or man_wait(r) is not None
-    near = sorted((r for r in rows if r.get("status") != "triggered" and (r.get("near") or {}).get("where") == "below_up"
-                   and int((r.get("near") or {}).get("days") or 99) <= AUTO_NEAR_DAYS and keep(r)),
-                  key=lambda r: (int(r["near"]["days"]), -float((r.get("prob") or {}).get("p") or 0)))
+    trig = [r for r in rows if r.get("status") == "triggered"]
+    near, wait = [], {}
+    for r in rows:
+        nr = r.get("near") or {}
+        if r.get("status") == "triggered" or nr.get("where") != "below_up" or int(nr.get("days") or 99) > AUTO_NEAR_DAYS:
+            continue
+        mw = man_wait(r)
+        if (r.get("buy") or {}).get("block") and mw is None:
+            continue
+        near.append(r)
+        if mw:
+            wait[str(r["ticker"])] = mw
+    near.sort(key=lambda r: (int(r["near"]["days"]), -float((r.get("prob") or {}).get("p") or 0)))
+    return {"trig": trig, "near": near, "gc": {str(r["ticker"]): gc_day(r) for r in near}, "wait": wait,
+            "tickers": {str(r["ticker"]) for r in trig + near}}
+
+
+def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None, chart=None, ctx: dict | None = None) -> str:
+    """选股最上面（2026-10-12 用户：「将会按照规则自动进行购买的股票，大概几天后」）：
+    ① 已经出了信号的：规则已安排（哪天开盘、几股）/ 信号成立但不买（为什么）；② 估计 AUTO_NEAR_DAYS 个交易日内 MACD 金叉的：
+    大概哪天、出了信号的话下一个交易日开盘买约几股（按现在的新仓倍数）、历史上 10 个交易日内真的出信号的比例（大多很低）。
+    只是规则的展示与估算，不是建议；金叉之外还要量等条件凑齐，出了信号还要过闸门 / 名额。列哪几只 = ctx["auto"]（_auto_pick）。
+    每一行可以点开（2026-10-14 用户：「估计 5 个交易日内可能出现信号的股票也要可以能看到 K 线，也可以有买入的 button」；默认收起）=
+    这只在「建议的股票」里会有的那一行（_suggest_row：消息、条件、买入… / 全部换成这只… 或不能买的理由、规则的买价、K 线 · 现价；共用 ctx），
+    不带名次徽章（2026-10-15 起这几只不在建议的股票里重复，名次指不到那边）。"""
+    sg = sg or {}
+    c = ctx if ctx is not None else _suggest_ctx(sg, book, tag)
+    rows = c["rows"]
+    if not rows:
+        return ""
+    s = c["slots"]
+    a = c["auto"]
+    trig, near = a["trig"], a["near"]
+    chart = chart or _chart_box
+    ranked = bool(c["tab"])
+
+    def item(badge: str, main: str, r: dict) -> str:        # 一行：收起时 = 原来的一行摘要；点开 = 建议的股票的那一行（K 线默认打开）
+        t = str(r["ticker"])
+        body = _suggest_row(r, s, buying or set(), eq, chart, fill=sg.get("fill_day"), mark=c["marks"].get(t), freed=c["freed"],
+                            ckind="autobuy", kl_open=True, ranked=ranked and r.get("status") != "triggered")
+        return (f"<details class='abx' data-t='{escape(t)}'><summary>{badge}<span class='grow'>{main}</span></summary>"
+                f"<div class='abxb'>{body}<div class='abxe'><button type='button' class='btn' data-abxclose='1'>收起</button></div>"
+                "</div></details>")                          # 底下也能收起（点开的一行很长：不用滚回摘要；2026-10-14 复核）
 
     def name(r):
         return f"<b>{escape(str(r.get('code') or r['ticker']))}</b> {escape(str(r.get('name') or ''))}"
@@ -357,7 +391,7 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
          f"<div class='muted small'>按 {escape(str(sg.get('asof') or '—'))} 收盘。个股名额空 {s['free']} 个（上限 {s['max']} 只）。"
          "只是规则的展示与估算，不是建议。</div>"]
     if trig or near:
-        H.append("<div class='muted small'>点一行展开：K 线 · 现价、买入…（和下面「建议的股票」里同一只一样）</div>")
+        H.append("<div class='muted small'>点一行展开：K 线 · 现价、买入…（这几只不在下面「建议的股票」里重复）</div>")
     if trig:
         H.append("<h3 class='sgh'>已经出了买入信号</h3><div class='list'>")
         for r in trig:
@@ -378,13 +412,13 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
         H.append("<div class='list'>")
         for r in near:
             n = int(r["near"]["days"])
-            gc = gc_day(r)
+            gc = a["gc"].get(str(r["ticker"]))
             p = (r.get("prob") or {}).get("p")
             sh = sh_all[r["ticker"]]
             miss = (r.get("near") or {}).get("miss") or []
             tag_ = ("<span class='chip'>名额满</span>" if s["free"] <= 0 else "<span class='chip'>买不起</span>" if sh <= 0
                     else f"<span class='chip hot'>约 {sh:,} 股</span>")
-            mw = man_wait(r)
+            mw = a["wait"].get(str(r["ticker"]))
             if mw:                                          # 现在还在「不买回」里：到期 / 解除之后才可能买
                 tag_ += f"<span class='chip'>{escape(mw)}</span>"
             sub = " · ".join(x for x in (f"约 {gc:%m/%d} 金叉" if gc else "", f"历史出信号 {float(p) * 100:.0f}%" if p is not None else "",
@@ -474,16 +508,28 @@ def _date_or_none(v):
 
 def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, cap: float, chart, marks: dict | None = None,
                   ctx: dict | None = None) -> str:
-    """「建议的股票」= 规则的候选（qbreak/suggest.py；全部列出）+ 每只的「买入…」（写手动买入指令；执行器下单前再查一遍）。
+    """「建议的股票」= 规则的候选（qbreak/suggest.py）+ 每只的「买入…」（写手动买入指令；执行器下单前再查一遍）。
+    上面「规则接下来会自动买」已经列的（ctx["auto"]，_auto_pick）不再列（2026-10-15 用户：去掉重复的股票）：标题的只数 = 这里列的，
+    另写一行跳过了几只；名次按这里列的从 1 数起。
     有比例表（var/watch_prob.json，登记研究判定 A）→ 出了信号 / 其余一组（闸门 → 之后 10 个交易日内出买入信号的历史比例 → near_key），
     每只写第几、历史比例；没有 → 以前的 出了信号 → 快要出 → 观察中（按离买入信号的远近）。ctx = _suggest_ctx（与「规则接下来会自动买」共用）。"""
     sg = sg or {}
     c = ctx if ctx is not None else _suggest_ctx(sg, book, tag, marks)
-    tab, rows, s, freed, marks = c["tab"], c["rows"], c["slots"], c["freed"], c["marks"]
+    tab, s, freed = c["tab"], c["slots"], c["freed"]
+    skip = c["auto"]["tickers"]
+    rows = [r for r in c["rows"] if str(r["ticker"]) not in skip]
+    n_skip = len(c["rows"]) - len(rows)
+    marks = {t: m for t, m in c["marks"].items() if t not in skip}
     ranked = bool(tab)
-    H = [f"<section class='card' id='suggest'><h2>建议的股票（规则的候选，{len(rows)} 只）</h2>"
-         f"<div class='muted small'>按 {escape(str(sg.get('asof') or '—'))} 收盘。不是收益预测，也不是建议；点「买入…」→ {escape(when)}下单。</div>"
-         f"<div class='small'>个股名额：空 {s['free']} 个（拿着 {s['held']} + 排定买入 {s['buys']}，上限 {s['max']} 只）</div>"]
+    H = [f"<section class='card' id='suggest'><h2>建议的股票（规则的候选，{len(rows)} 只）</h2>"]
+    if not rows and n_skip:                                 # 候选都在上面那张卡里：一行，不留空卡片
+        H.append(f"<div class='muted'>候选 {n_skip} 只都在上面「规则接下来会自动买」里（点开一行看 K 线、买入…），这里不重复</div>"
+                 + (f"<div class='neg small'>★ 这次没算成：{escape(str(sg['error']))}</div>" if sg.get("error") else "") + "</section>")
+        return "".join(H)
+    H += [f"<div class='muted small'>按 {escape(str(sg.get('asof') or '—'))} 收盘。不是收益预测，也不是建议；点「买入…」→ {escape(when)}下单。</div>",
+          f"<div class='small'>个股名额：空 {s['free']} 个（拿着 {s['held']} + 排定买入 {s['buys']}，上限 {s['max']} 只）</div>"]
+    if n_skip:
+        H.append(f"<div class='muted small'>上面「规则接下来会自动买」已列的 {n_skip} 只不在这里重复</div>")
     if sg.get("error"):
         H.append(f"<div class='neg small'>★ 这次没算成：{escape(str(sg['error']))}</div>")
     if not rows:
@@ -636,29 +682,31 @@ def _fill_mult_why(w: str) -> str:
 
 def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = None, fill: str | None = None,
                  mark: dict | None = None, freed: dict | None = None, ckind: str = "suggest", kl_open: bool | None = None,
-                 rank_label: bool = False) -> str:
+                 ranked: bool | None = None) -> str:
     """「建议的股票」的一只（「规则接下来会自动买」点开的也是它：ckind = autobuy、K 线默认打开 kl_open；2026-10-14）。
-    元素不带 id（同一只票可以在两张卡里各出现一次）。rank_label：名次徽章写成「观察中第 N」（在别的卡片里光一个数会被当成那张卡的序号）。"""
+    rank = 名次徽章（只在建议的股票里）；ranked = 在按历史比例排的一组里（「快要出」标记 + 历史比例那一行；不给 = 有 rank 就算）——
+    自动买那张卡里的行不带徽章、照样有这两样（2026-10-15：那几只不在建议的股票里重复，名次指不到那边）。
+    元素不带 id（持仓里拿着的票与这里的图各自一份也不冲突）。"""
     t, b, ru = str(r["ticker"]), r.get("buy") or {}, r.get("rule") or {}
     nm = f" {escape(str(r['name']))}" if r.get("name") else ""
     meta = [f"条件凑齐 {r['score']:g} / 100" if r.get("score") is not None else None,
             f"收盘 ¥{r['close']:,.0f}" if r.get("close") is not None else None,
             f"量 {r['vol_ratio']:.2f} 倍" if r.get("vol_ratio") is not None else None,
             "真突破" if r.get("breakout") else None]
-    tag_ = ("<span class='chip hot'>快要出</span>" if r.get("status") == "imminent" else "") if rank else ""
+    rk_on = bool(rank) if ranked is None else ranked
+    tag_ = ("<span class='chip hot'>快要出</span>" if r.get("status") == "imminent" else "") if rk_on else ""
     nr = r.get("near") or {}
     if r.get("status") != "triggered" and nr.get("where"):                # 离金叉（2026-10-11 用户：按离金叉的临近日排序）
         gd = int(nr.get("days") or SG.MAX_DAYS)
         tag_ += ("<span class='chip gc'>" + (f"金叉约 {gd} 天" if nr["where"] == "below_up" and gd < SG.FAR_DAYS
                                              else "金叉还远" if nr["where"] == "below_up" else "要先拐头" if nr["where"] == "below_down"
                                              else "已在线上" if nr["where"] == "above" else "金叉算不出") + "</span>")
-    rk = ((f"<span class='rk' title='在下面「建议的股票」的观察中排第 {rank}'>观察中第 {rank}</span>" if rank_label
-           else f"<span class='rk'>{rank}</span>") if rank else "")
+    rk = f"<span class='rk'>{rank}</span>" if rank else ""
     H = [f"<div class='hv sg'><div class='head'>" + rk
          + f"<b>{escape(str(r.get('code') or t))}</b>{nm}"
          + (f"<span class='chip'>{escape(str(r['sector']))}</span>" if r.get("sector") else "") + tag_ + "</div>"
          + _news_mark(mark)                                 # 消息的影响（2026-10-11 用户）
-         + _prob_line(r.get("prob") if rank else None)
+         + _prob_line(r.get("prob") if rk_on else None)
          + f"<div class='meta'>{' · '.join(x for x in meta if x)}</div>"
          + (f"<div class='small near'>{escape(str(r['near_text']))}</div>" if r.get("near_text") else "")   # 离买入信号还差什么（排序依据）
          + (f"<div>{escape(_fill_mult_why(str(ru.get('text') or '')))}</div>" if ru.get("state") not in (None, "none") else "")
@@ -1364,8 +1412,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     H.append(PANE + "pick")
     sgd = sm.get("suggest") or {}
     sctx = _suggest_ctx(sgd, book, tag, marks=_news_marks([r["ticker"] for r in sgd.get("rows") or [] if r.get("ticker")], now))
-    H.append(_auto_buy_card(sgd, book, tag, eq, buying=buying, chart=chart, ctx=sctx))   # 最上面：规则接下来会自动买的（2026-10-12；点开 = 下面同一只，2026-10-14）
-    H.append(_suggest_card(sgd, book, tag, buying, when, eq, cap, chart, ctx=sctx))
+    H.append(_auto_buy_card(sgd, book, tag, eq, buying=buying, chart=chart, ctx=sctx))   # 最上面：规则接下来会自动买的（2026-10-12；每行点开 = K 线、买入…，2026-10-14）
+    H.append(_suggest_card(sgd, book, tag, buying, when, eq, cap, chart, ctx=sctx))      # 上面已列的不重复（2026-10-15）
+    H.append(_kline_help())                                 # 整页一份的「怎么看 K 线图」（每张图不再各带一份；2026-10-15）
     H.append(PANE + "hold")
     cp = float(man.get("core_pct", 100.0))
     slider = ("<div class='stepper'><button class='btn' data-act='core-step' data-d='-10' aria-label='减 10%'>−10</button>"

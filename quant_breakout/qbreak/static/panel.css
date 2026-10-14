@@ -50,9 +50,10 @@ color:var(--fg);cursor:pointer;touch-action:manipulation}.seg button:first-child
 .kbar{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap}.kbar .seg button{min-height:38px;padding:4px 16px;font-size:15px}
 .kbar.ktop{padding:0 0 6px;border-bottom:1px solid var(--line);margin-bottom:4px}.kbar.kbot{padding:6px 0 2px;border-top:1px solid var(--line);margin-top:2px}.kbar .hint{font-size:12px;color:var(--muted)}
 .kexp{font-size:13px;line-height:1.55;color:var(--muted);margin:4px 0}.kexp b{color:var(--fg)}.kexp b.up{color:var(--up)}.kexp b.down{color:var(--down)}
-.kexp.now{color:var(--fg)}.kexp .legend{margin:0 0 2px}.kexp ul{margin:2px 0;padding-left:18px}
-details.khelp{margin:2px 0 4px}details.khelp>summary{font-size:13px;color:var(--accent)}
-details.khelp ul{margin:4px 0;padding-left:18px;font-size:13px;line-height:1.55;color:var(--muted)}
+.kexp.now{color:var(--fg)}.kexp .legend{margin:0 0 2px}
+/* 整页一份的「怎么看 K 线图」（选股最下面；2026-10-15：每张图不再各带一份） */
+details.khelp>summary{font-weight:600;color:var(--accent)}
+details.khelp ul{margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--muted)}details.khelp li{margin:3px 0}
 .lots{position:relative;height:44px;margin:8px 0 0}
 .lots-bar{position:absolute;left:14px;right:14px;top:15px;height:14px;display:flex;gap:2px;pointer-events:none}
 .lots-bar i{flex:1 1 0;min-width:1px;border-radius:3px;background:var(--line)}.lots-bar i.keep{background:var(--accent);opacity:.45}
@@ -136,7 +137,7 @@ details.nw.lv-hi{border-left:4px solid var(--neg);padding-left:8px}details.nw.lv
 .abx>summary::after{content:'';flex:none;width:7px;height:7px;margin:0 6px 0 0;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
 .abx[open]>summary::after{transform:rotate(45deg)}.abx .abs{display:block}.abx .grow{overflow-wrap:anywhere}
 .abxb>.hv{border-top:1px dashed var(--line);padding:8px 0 12px}
-.abxe{display:flex;justify-content:flex-end;padding:0 0 12px}.abxe .btn::after{content:' ▲'}.abxb .rk{font-size:12px;font-weight:600;white-space:nowrap}
+.abxe{display:flex;justify-content:flex-end;padding:0 0 12px}.abxe .btn::after{content:' ▲'}
 .avr{display:grid;grid-template-columns:3.6em minmax(0,1fr);align-items:center;gap:8px}.avr .alb{margin:3px 0}
 .alb i.new{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.35) 0 4px,transparent 4px 8px)}
 .avg{grid-template-columns:12px minmax(0,1fr) auto}.alp.up{color:var(--up)}.alp.down{color:var(--down)}
@@ -161,9 +162,6 @@ white-space:normal;font-variant-numeric:tabular-nums}.pl .up{color:var(--up)}.pl
 .chart .live{stroke-dasharray:3 2}.chart .lv{font-size:10px;fill:var(--fg);paint-order:stroke;stroke:var(--card);stroke-width:3px;stroke-linejoin:round}
 details.kl>summary{color:var(--accent);font-size:14px}
 .legend{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:13px;color:var(--muted);margin:2px 0}
-.chart table{border-collapse:collapse;font-size:13px;width:100%;font-variant-numeric:tabular-nums;margin-top:4px}
-.chart td,.chart th{padding:4px 6px;border-top:1px solid var(--line);text-align:right;font-weight:400}
-.chart td:first-child,.chart th:first-child{text-align:left}.chart th{color:var(--muted)}
 .stepper{display:flex;align-items:center;gap:12px;margin:8px 0}.stepper output{flex:1;text-align:center}
 dialog{border:0;padding:0;background:var(--card);color:var(--fg);width:100%;max-width:min(720px,100%);max-height:88vh;
 margin:auto auto 0;border-radius:18px 18px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.25)}

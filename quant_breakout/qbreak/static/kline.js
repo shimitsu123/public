@@ -8,6 +8,8 @@ import { req } from './net.js';
 // 说明都用日常的话（同日：「K线解释换成通俗易懂的说法 横展开」）：标签的说法来自 qbreak/kline.py（CFG.kp），其余按图里的数字现算
 // 小图：量 / MACD（规则同一组参数）/ DMI（同花顺写法）；趋势线：连低点的支撑线、连高点的压力线（qbreak/trendline.py）+ 往后延长的点线 + 破线点
 // 数据 = 执行器每次运行写的 out/charts_<账本>.json，打开 / 看到哪只票才取（/api/chart）；只展示
+// 每张图不带说明 / 数字表（2026-10-15 用户：「整体留一个解释就行」「不需要最近十个月的数字 看图就行」）：
+//   整页一份「怎么看 K 线图」在选股最下面（服务器画：panel._kline_help）；图下面只留各自的一句话（最新一根、现在的趋势、趋势线）
 export const TFS = {D:'日K', W:'周K', M:'月K'}, SUBS = {v:'量', macd:'MACD', dmi:'DMI'};
 const KU = {D:'天', W:'周', M:'个月'}, KMA = {D:'日', W:'周', M:'个月'};   // 一根 = 1 天 / 1 周 / 1 个月；20 日均价 / 20 周均价 / 20 个月均价
 const KPL = CFG.kp || {};
@@ -69,7 +71,7 @@ function subText(D, i, sub){                                               // �
   if(sub==='dmi') return '+DI '+f1(D.pdi,i)+' · −DI '+f1(D.mdi,i)+' · ADX '+f1(D.adx,i)+' · ADXR '+f1(D.adxr,i);
   return '';
 }
-function kSubKey(el, P, tf, sub){                                          // 小图的图例（意思在「怎么看这张图」里）
+function kSubKey(el, P, tf, sub){                                          // 小图的图例（意思在选股最下面的「怎么看 K 线图」里）
   el.textContent='';
   const row=nd('div','legend',null,el);
   const k=(c, t)=>{ const sp=nd('span',null,null,row); nd('i','key '+c,null,sp); sp.appendChild(document.createTextNode(t)); };
@@ -112,31 +114,13 @@ function kTrend(el, tr, tf){                                               // �
   el.appendChild(document.createTextNode('（收盘在 20 '+m+'均价'+(tr.above20 ? '上面' : '下面')+'，20 '+m+'均价'
     +(Math.abs(sl)<0.005 ? '走平' : sl>0 ? '往上' : '往下')+'）'+(tr.align ? ' · '+(A[tr.align] || tr.align) : '')));
 }
-function kTL(el, TL, tf){                                                  // 现在的趋势线（一句话；图上的记号在「怎么看这张图」里）
+function kTL(el, TL, tf){                                                  // 现在的趋势线（一句话；图上的记号在选股最下面的「怎么看 K 线图」里）
   const C=KPL.chan||{};
   const one=(L, sup)=>{ const d=L.dist_pct;
     return (sup ? '支撑 ' : '压力 ')+pxs(L.now)+(d==null ? '' : sup ? (d<=0 ? '（比收盘低 '+Math.abs(d)+'%）' : '（已跌破）')
                                                                 : (d>=0 ? '（比收盘高 '+d+'%）' : '（已冲过）')); };
   const parts=[]; if(TL.sup) parts.push(one(TL.sup, true)); if(TL.res) parts.push(one(TL.res, false));
   nd('div',null,'趋势线：'+(TL.chan ? (C[TL.chan] || TL.chan) : '只找到'+(TL.sup ? '下面' : '上面')+'的一条')+(parts.length ? ' · '+parts.join(' · ') : ''),el);
-}
-function kHelp(box, P, tf, hasTL, PJ){                                         // 「怎么看这张图」（收起来；打开 / 关上记在这张图上，切换周期也不变）
-  const det=nd('details','khelp',null,box); if(box.dataset.help==='1') det.open=true;
-  det.addEventListener('toggle', ()=>{ box.dataset.help = det.open ? '1' : ''; });
-  nd('summary',null,'怎么看这张图',det);
-  const ul=nd('ul',null,null,det), u=KU[tf], m=KMA[tf];
-  const li=(...ps)=>{ const e=nd('li',null,null,ul); for(const p of ps) e.appendChild(typeof p==='string' ? document.createTextNode(p) : p); };
-  const key=c=>nd('i','key '+c,null,null);
-  li('每根 K 线 = 1 '+u+'：粗的一段 = 开盘到收盘，细线 = 最高到最低；',key('box cu'),'红色空心 = 涨　',key('box cd'),'绿色实心 = 跌');
-  li(key('m5'),'5　',key('m10'),'10　',key('m20'),'20　',key('m30'),'30 '+m+'均价 = 最近几'+u+'收盘价的平均');
-  li('往上走 = 收盘在 20 '+m+'均价上面、20 '+m+'均价往上、5 '+m+'均价在 20 '+m+'均价上面；往下走 = 反过来；其余 = 横着走');
-  if(P.kind==='stock') li(key('dash'),'买入价　',key('dash stop'),'止损线（跌到这里按规则卖）　▲买入 = 买入那一根');
-  else if(P.signal_date) li('▲信号 = 出买入信号那一根');
-  if(hasTL) li(key('dash tl'),'趋势线：下面连低点（支撑）、上面连高点（压力），点线 = 往后延长 '+PJ+' '+u+'；▲ 冲过压力线、▼ 跌破支撑线。'
-    +'研究（2026-10-06）：对之后的涨跌没有预测力，只用来看');
-  li('下面的小图：量 = 成交多少；MACD = 涨跌的力量（快线在 0 附近往上穿过慢线 = 金叉，是规则买入的条件之一）；DMI = 买卖哪边强、趋势强不强（规则不用）');
-  li('看以前的某一根：点一下或按住左右滑；键盘 ← → 一根一根看，Home / End 到最早 / 最新，Esc 回到最新');
-  li('图上都是过去的价格，不是预测');
 }
 function kBar(box, pos, act, opts, cur, label, hint){                      // 图的上边沿（周期）/ 下边沿（小图）的按钮
   const bar=nd('div','kbar '+pos,null,box), g=nd('div','seg',null,bar);
@@ -298,7 +282,7 @@ export function drawK(box){
   svg.addEventListener('pointerdown', ev=>show(at(ev)));
   svg.addEventListener('pointerleave', ev=>{ if(ev.pointerType!=='touch') hide(); });
   box.onkeydown=ev=>{                                                       // 用属性不用 addEventListener：重画时换掉、不越积越多
-    if(ev.target!==box) return;                                             // 按钮 / 说明上按的键不动十字线
+    if(ev.target!==box) return;                                             // 按钮上按的键不动十字线
     if(ev.key==='ArrowLeft' || ev.key==='ArrowRight'){ ev.preventDefault(); show((cur==null ? N-1 : cur)+(ev.key==='ArrowLeft' ? -1 : 1)); }
     else if(ev.key==='Home'){ ev.preventDefault(); show(s0); } else if(ev.key==='End'){ ev.preventDefault(); show(N-1); }
     else if(ev.key==='Escape') hide();
@@ -306,19 +290,6 @@ export function drawK(box){
   box.onblur=hide;
   if(tr) kTrend(nd('div','kexp',null,box), tr, tf);
   if(TL && (TL.sup || TL.res)) kTL(nd('div','kexp',null,box), TL, tf);
-  kHelp(box, P, tf, !!(TL && (TL.sup || TL.res)), PJ);
-  const det=nd('details',null,null,box); if(box.dataset.tbl==='1') det.open=true;
-  det.addEventListener('toggle', ()=>{ box.dataset.tbl = det.open ? '1' : ''; });
-  nd('summary','muted small','最近 10 '+KU[tf]+'的数字（表）',det);
-  const tb=nd('table',null,null,det), hr=nd('tr',null,null,nd('thead',null,null,tb)), body=nd('tbody',null,null,tb);
-  for(const h of ['日期','开盘','最高','最低','收盘','涨跌','成交量']) nd('th',null,h,hr);
-  for(let i=N-1;i>=Math.max(0,N-10);i--){
-    const r=nd('tr',null,null,body), pc=i>0?D.c[i-1]:null;
-    nd('td',null,sdate(D.d[i], tf),r);
-    for(const a of [D.o,D.h,D.l,D.c]) nd('td',null,pxs(a[i]),r);
-    nd('td',(pc && D.c[i]!=null) ? (D.c[i]>=pc ? 'up' : 'down') : null, pc && D.c[i]!=null ? pcs((D.c[i]/pc-1)*100) : '—', r);
-    nd('td',null,Number(D.v[i]||0).toLocaleString('ja-JP'),r);
-  }
 }
 export async function showK(box){
   const t=box.dataset.t, s=KD[t];
