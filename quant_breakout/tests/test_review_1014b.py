@@ -165,7 +165,13 @@ def test_trigger_does_not_spawn_while_an_order_is_unknown(monkeypatch):
     assert calls == [] and "paper" not in trg.paused
     _book(last="2026-10-05", orders=[{**unk, "status": "SENT"}])   # 对照：登记了 → 照常叫
     step(60)
-    assert trg.check() == ["paper"] and calls == ["now"]
+    # D3（2026-10-15）：成交日 09:25 之后模拟账户先按开盘价撮合排队的寄付单（09:00 的成交在 10:00 的手动单之前），之后才是盘中的手动单
+    assert trg.check() == ["paper"] and calls == ["open"]
+    bk = _book(last="2026-10-05", orders=[{**unk, "status": "SENT"}])
+    bk["paper_open"] = {"decided_on": "2026-10-05", "at": "2026-10-06T09:25:00+09:00"}   # 撮合过了（执行器会把单改成 FILLED；这里只看 Trigger）
+    (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(bk, ensure_ascii=False), encoding="utf-8")
+    step(60)
+    assert trg.check() == ["paper"] and calls == ["open", "now"]
 
 
 def test_paper_catch_up_skips_unknown_orders_and_runs_normally(monkeypatch):

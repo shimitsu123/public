@@ -81,15 +81,16 @@ def fill_day_of(book: dict | None) -> dt.date | None:
         return None
 
 
-def how_text(o) -> str:
-    """这笔单的下法（面板「今天的单」/ 命令行）：寄付成行 / 寄付指値 / 开盘后 / 盘中 / 错过寄付后当日限价。"""
+def how_text(o, paper: bool = False) -> str:
+    """这笔单的下法（面板「今天的单」/ 命令行）：寄付成行 / 寄付指値 / 开盘后 / 盘中 / 错过寄付后当日限价。
+    模拟账户（D3；2026-10-15）：开盘后的买单写「开盘后（09:25 前后按开盘价）」—— 不是立花的当日限り指値，是面板 09:25 前后按 1 分钟线的开盘价撮合。"""
     ph = _g(o, "phase") or "morning"
     if ph == "now":
         return "盘中"
     if ph == "late":
         return "错过寄付 → 当日限价"
     if ph == "open" or _g(o, "status") == "DEFERRED":
-        return "开盘后（当日限り指値）"
+        return "开盘后（09:25 前后按开盘价）" if paper else "开盘后（当日限り指値）"
     return "寄付指値" if _g(o, "side") == "BUY" else "寄付成行"
 
 
@@ -476,7 +477,7 @@ def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
         if (_g(o, "phase") or "morning") != "morning":
             return "模拟账户：盘中 / 开盘后的单当场成交了，撤不了"
         if now.time() >= OPEN_T:
-            return "模拟账户：寄付单已经在 09:00 开盘撮合（第二天早上记账），撤不了"
+            return "模拟账户：寄付单已经在 09:00 开盘（今天 09:25 前后按开盘价撮合；D3），撤不了"
         return None
     if not _g(o, "broker_id"):
         return "没有注文番号：撤不了（在立花网站的注文一覧核对）"

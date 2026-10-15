@@ -3324,7 +3324,8 @@ def _refuse_repo_home(what: str) -> int | None:
 
 def cmd_live_unified(a) -> int:
     """一个账户方案（var/sim.json unified）的实盘执行器：早上对账 → 核对 → 决策 → 下寄付单；--phase open 开盘后补单。
-    --broker paper：模拟账户（PaperBroker，第二天早上按 K 线撮合）；tachibana：立花 e支店 API（--demo デモ環境、--dry-run 只算不发）。
+    --broker paper：模拟账户（PaperBroker；成交日 09:25 前后面板叫 --phase open 按 1 分钟线的开盘价当天撮合（D3，2026-10-15），
+    没叫成就第二天早上按 K 线撮合）；tachibana：立花 e支店 API（--demo デモ環境、--dry-run 只算不发）。
     除了 --status（只读），每次运行都先拿账本的运行锁（qbreak/live_unified.py 的 RunLock）：同一份账本同时只有一个进程在读写。"""
     from qbreak.live_unified import ExecutorError, RunLock, register_flow
     if a.broker != "paper":                                   # 立花（含 --demo / --dry-run / --status / --flow / --resolve）：数据目录不能在仓库里
@@ -3351,6 +3352,10 @@ def cmd_live_unified(a) -> int:
         return _live_unified_body(a)
     if getattr(a, "phase", "") == "now" and not _now_work(tag, book):
         print("没有要盘中下的手动指令（或现在不是交易时间 / 今天早上的运行还没完成 / HALT 生效中）：不用跑")
+        return 0
+    if getattr(a, "phase", "") == "open" and paper and not _paper_open_work(book):
+        print("模拟账户现在不用开盘撮合（只在成交日 09:25〜11:30、有排队的寄付单 / 等开盘后的买单、还没撮合过时做；"
+              "没做的第二天早上照旧按日线撮合）：不用跑")
         return 0
     cancel_ = getattr(a, "cancel", None) is not None or getattr(a, "phase", "") == "cancel"    # 撤单（B1；不建引擎）
     if getattr(a, "phase", "") == "cancel" and getattr(a, "cancel", None) is None and not _cancel_work(tag, book):
@@ -4191,7 +4196,7 @@ def _live_unified_run(a, opened: list) -> int:
     ux = UnifiedExecutor(eng, broker, book, paper=paper, check_clock=not (paper or a.no_clock),
                          auto_cap=(not paper and a.max_order_value is None), pre_send=ctx.gate.pre_send,
                          manual_tag=tag)                     # 页面 / run.py manual 写的手动指令（卖出 / 减仓 / 闲置资金比例）
-    res_now = None
+    res_now = res_open = None
     cids0 = {o.cid for o in ux.orders}                      # 盘中：这次新下的单 = 运行之后多出来的
     man0 = _manual_snap(ux.book)                            # 只为手动指令的重试：运行前的指令状态（没变 → 不再通知；G10）
     try:
@@ -4205,10 +4210,11 @@ def _live_unified_run(a, opened: list) -> int:
         if a.phase == "now":                                 # 盘中：等着的手动指令马上下单（面板叫；先卖后买）
             res_now = ux.now_phase(_now_quote(broker, paper))
         elif a.phase == "open":
-            if paper:
-                print("模拟账户的开盘撮合在第二天早上一起做，不用 --phase open")
-                return 0
-            ux.open_phase(final=bool(a.retry))               # 09:20 的重试是最后一次：还没有始値的票这时放弃（记入差异）
+            if paper:                                        # 模拟账户：成交日 09:25 前后按 1 分钟线的开盘价当天撮合（D3；2026-10-15）
+                from qbreak.data import intraday_open
+                res_open = ux.open_phase(feed=intraday_open, corp=_corp_actions_provider())
+            else:
+                ux.open_phase(final=bool(a.retry))           # 09:20 的重试是最后一次：还没有始値的票这时放弃（记入差异）
         else:
             if not paper:                                    # 实盘：行情没更新到应有的交易日就不下单（通知写原因 + 修法，C-09）
                 exp = expected_last_bar(now_jst().date(), "JP")
@@ -4268,6 +4274,12 @@ def _live_unified_run(a, opened: list) -> int:
         rc = _now_report(a, ux, res_now, paper, tag, since=t0, new=[o for o in ux.orders if o.cid not in cids0])
         _run_status(a, tag, ok=True, rc=rc, blocked=ux.blocked, book=ux.book, since=t0)
         page()
+        return rc
+    if res_open is not None:                                # 模拟账户的开盘撮合：做了才写运行状态 / 页面（分钟线还没到 → 只打印，面板下一轮再叫）
+        rc = _paper_open_report(a, ux, res_open, tag, since=t0)
+        if res_open.get("done"):
+            _run_status(a, tag, ok=True, rc=rc, blocked=ux.blocked, book=ux.book, since=t0)
+            page()
         return rc
     sm = ux.summary()
     if not paper:                                           # 立花的预告（B5 / C-04 / TA-09）：交付書面的更新预定日、API 新版本 → 账本 + 提醒
@@ -4408,6 +4420,16 @@ def _now_work(tag: str, book_path) -> bool:
     return MO.now_due(tag, read_json(book_path, {}) or {})
 
 
+def _paper_open_work(book_path) -> bool:
+    """模拟账户 --phase open 要不要跑（D3；2026-10-15）：成交日 09:25〜11:30、还没撮合过、有排队的寄付单 / 等开盘后的买单
+    （qbreak/live_unified.paper_open_due；面板 Trigger 同一个判断）；已经撮合过、HALT 挡下的开盘后买单还在 → 也跑（解除后手动再跑）。
+    没事做就不建引擎、不取行情。"""
+    from qbreak.calendar_jp import now_jst
+    from qbreak.live_unified import paper_open_due
+    from qbreak.utils import read_json
+    return paper_open_due(read_json(book_path, {}) or {}, now_jst(), rerun=True)
+
+
 def _now_quote(broker, paper: bool):
     """盘中的现在价：立花 = 現在値（quote_detail 的 price）；模拟账户 = Yahoo 最新的 1 分钟线（约晚 20 分钟；qbreak/data.intraday_last）。"""
     if not paper:
@@ -4459,6 +4481,55 @@ def _now_report(a, ux, res: dict, paper: bool, tag: str, since: str | None = Non
         body = ([f"- ★ {hb_}"] if hb_ else []) + [f"- {_lab(x['ticker'])}：{x['status']}（{x['msg']}）" for x in show] \
             + [f"- ★ {e}" for e in errs]
         notify.send(title, (f"- {star.rstrip('｜')}\n" if star else "") + "\n".join(body), "warn" if warn else "info")
+    return 0
+
+
+def _paper_open_report(a, ux, res: dict, tag: str, since: str | None = None) -> int:
+    """模拟账户当天的开盘撮合（--phase open；D3，2026-10-15）之后：汇总文件只更新单 / 手动指令 / 事件（与 --phase now 同口径，
+    不重算持仓理由、K 线；交易页马上看到成交），日志写一小节，通知一次（同样的内容今天只通知一次）。这次没做 → 只打印原因。"""
+    from qbreak import live_ops as _LO
+    from qbreak import run_status as RS
+    from qbreak.calendar_jp import now_jst
+    from qbreak.live_unified import append_journal, mac_notify, otag
+    from qbreak.utils import read_json, write_json
+    if not res.get("done"):
+        print(f"模拟账户开盘撮合这次没做：{res.get('why') or '—'}")
+        return 0
+    fp = paths.out_dir() / f"live_unified_{tag}.json"
+    sm0 = read_json(fp, {}) or {}
+    s1 = ux.summary()
+    sm0.update(manual=s1["manual"], orders=s1["orders"], events=s1["events"], open_at=now_jst().isoformat(timespec="seconds"))
+    write_json(fp, sm0)
+    lines, warn = [], False
+    for o in res.get("fills") or []:
+        lines.append(f"- {otag(o.side, o.ticker, o.filled_qty, o.kind)} 开盘成交 @ ¥{o.filled_px:,.2f}")
+    for o in res.get("unfilled") or []:
+        warn = warn or o.side == "SELL"
+        lines.append(f"- {'★ ' if o.side == 'SELL' else ''}{otag(o.side, o.ticker, o.sent_qty or o.qty, o.kind)} 没成交：{o.note}")
+    for o in res.get("deferred") or []:
+        if int(o.filled_qty or 0) > 0:
+            lines.append(f"- {otag(o.side, o.ticker, o.filled_qty, o.kind)}（开盘后）成交 @ ¥{o.filled_px:,.2f}")
+        else:
+            lines.append(f"- {otag(o.side, o.ticker, o.qty, o.kind)}（开盘后）{_LO.STATUS_TEXT.get(o.status, o.status)}：{o.note or ''}".rstrip("："))
+    if res.get("deferred_why"):
+        warn = True
+        lines.append(f"- ★ 开盘后的买单这次没下（单保留）：{res['deferred_why']}")
+    errs = RS.run_errors(ux.book.get("events"), since)
+    warn = warn or bool(errs)
+    lines += [f"- ★ {e}" for e in errs]
+    for ln in lines:
+        print(ln[2:])
+    title = "qbreak 模拟操盘 开盘撮合（09:25 前后，按开盘价）"
+    if lines:
+        append_journal(paths.out_dir() / f"live_unified_{tag}_journal.md", now_jst().strftime("%Y-%m-%d %H:%M JST"), title,
+                       "\n".join(lines))
+    if a.notify and lines:
+        from qbreak import notify, notify_seen
+        if not notify_seen.first(tag, _seen_txt("开盘撮合|" + "|".join(lines))):
+            print("（同样的开盘撮合结果今天已经通知过：只写终端与日志）")
+            return 0
+        mac_notify(title, "；".join(ln[2:] for ln in lines)[:200])
+        notify.send(title, "\n".join(lines), "warn" if warn else "info")
     return 0
 
 

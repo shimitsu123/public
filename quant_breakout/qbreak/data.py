@@ -741,3 +741,55 @@ def intraday_last(tickers: list[str], now: datetime | None = None, max_age_min: 
         if px > 0:
             out[t] = px
     return out
+
+
+def intraday_open(tickers: list[str], now: datetime | None = None) -> dict[str, dict]:
+    """模拟账户当天的开盘撮合（live_unified 的 _paper_settle；D3，2026-10-15 用户「盘中下的单应该是进行实时成交的」）用的开盘价：
+    yfinance 1 分钟线里今天（JST）第一根的开盘（= 寄付価格；東証は約 15〜20 分遅れ → 09:25 前后 09:00 那几根才到）
+    → {票: {"open", "high", "low"（到现在为止今天的最高 / 最低：判断会不会一整天张贴在ストップ高 / 安）, "first", "last"（第一根 / 最后一根的 HH:MM）}}。
+    今天还没有分钟线（特別気配で未寄付 / 停牌 / 数据还没到）的票不给（执行器整批不撮合，过几分钟再试）；取不到 → 空。"""
+    import yfinance as yf
+
+    from .calendar_jp import JST
+    for nm in ("yfinance", "yfinance.data", "yfinance.utils"):
+        logging.getLogger(nm).setLevel(logging.CRITICAL)
+    tickers = sorted(set(tickers))
+    if not tickers:
+        return {}
+    try:
+        raw = yf.download(tickers, period="1d", interval="1m", progress=False, group_by="ticker", threads=False,
+                          auto_adjust=False, prepost=False)
+    except Exception as e:  # noqa: BLE001
+        log.warning("开盘价（1 分钟线）取不到: %s", e)
+        return {}
+    if raw is None or raw.empty:
+        return {}
+    n = (now or _now_utc()).astimezone(JST)
+    out: dict[str, dict] = {}
+    for t in tickers:
+        try:
+            sub = raw[t] if isinstance(raw.columns, pd.MultiIndex) else raw
+            o = sub["Open"]
+        except KeyError:
+            continue
+        o = o.dropna()
+        o = o[o > 0]
+        if not len(o):
+            continue
+        idx = pd.DatetimeIndex(o.index)
+        idx = (idx.tz_localize("UTC") if idx.tz is None else idx).tz_convert(JST)
+        today = idx.date == n.date()
+        if not today.any():
+            continue
+        day = sub.loc[o.index[today]]
+        op = float(o[today].iloc[0])
+        try:
+            hi = float(pd.to_numeric(day["High"], errors="coerce").max())
+            lo = float(pd.to_numeric(day["Low"], errors="coerce").min())
+        except KeyError:
+            hi = lo = float("nan")
+        hi = max(x for x in (hi, op) if x == x)
+        lo = min(x for x in (lo, op) if x == x)
+        ts = idx[today]
+        out[t] = {"open": op, "high": hi, "low": lo, "first": f"{ts[0]:%H:%M}", "last": f"{ts[-1]:%H:%M}"}
+    return out

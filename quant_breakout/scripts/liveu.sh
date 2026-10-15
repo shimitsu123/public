@@ -528,6 +528,9 @@ if [ "${1:-}" = "run" ]; then
   case " $* " in *" --phase open "*|*" --phase now "*|*" --phase cancel "*) openphase=1 ;; *) openphase=0 ;; esac   # 开盘后 / 盘中 / 撤单：不 pull、不等云端
   case " $* " in *" --retry "*) retry=1 ;; *) retry=0 ;; esac
   case " $* " in *" --phase now "*|*" --phase cancel "*) nowphase=1 ;; *) nowphase=0 ;; esac   # 没事可做时不写页面（不算没跑完）
+  if [ "$runkind" = "paper" ]; then                # 模拟账户的开盘撮合（面板 09:25 前后叫；D3，2026-10-15）：分钟线还没到 / 已经做过 → 不写页面，也不算没跑完
+    case " $* " in *" --phase open "*) nowphase=1 ;; esac
+  fi
   case " $* " in *" --broker tachibana "*) live=1 ;; *) live=0 ;; esac
   pullmsg=""
   # 面板叫的（QBREAK_LIVEU_PULL=fetch；2026-10-15 用户「qbreak网页app经常卡住 永久解决」）：不 pull —— 以前面板的 --retry 顺手拉下新代码，

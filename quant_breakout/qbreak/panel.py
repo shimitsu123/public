@@ -80,6 +80,7 @@ CATCHUP_GRACE_S = 120                   # 连续这么久都「没完成、没�
 CATCHUP_GAP_S = 1200                    # 补跑之间至少隔 20 分钟
 CATCHUP_MAX = 3                         # 一天最多补跑几次
 NOW_GAP_S = 60                          # 盘中（--phase now）：同一个账本最多 1 分钟一次
+OPEN_GAP_S = 300                        # 模拟账户的开盘撮合（--phase open；D3，2026-10-15）：1 分钟线还没到时最多 5 分钟再叫一次
 FAIL_GAP_MAX_S = 900                    # 盘中执行器失败后的退避：NOW_GAP_S × 2^连续失败次数，最多 15 分钟
 FAIL_PAUSE_N = 3                        # 同一天连续失败几次 → 当天这个账本暂停自动叫执行器（新的手动指令 / 第二天恢复）
 TOKEN_FILE = "panel_token"
@@ -1073,7 +1074,10 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
         n = int(o.get("sent_qty") or o.get("qty") or 0)
         lim = f"，限价 ≤ ¥{float(o['limit']):,g}" if o.get("limit") and o.get("side") == "BUY" else ""
         q = int(o.get("filled_qty") or 0)
-        got = f"，成交 {q:,}/{n:,}" if q and o.get("status") in ("PARTIAL", "CANCELLED", "EXPIRED") else ""
+        px = float(o.get("filled_px") or 0)
+        got = (f"，成交 {q:,}/{n:,}" if q and o.get("status") in ("PARTIAL", "CANCELLED", "EXPIRED") else
+               f"，成交 {q:,}{f'/{n:,}' if q < n else ''} @ ¥{px:,.2f}" if q and px > 0 and o.get("status") == "FILLED" else "")
+        #   ↑ 已成交写成交价（模拟账户 09:25 前后的开盘撮合之后交易页马上看到；D3，2026-10-15）
         note = str(o.get("note") or "")
         cid = str(o.get("cid"))
         if cid in asked:
@@ -1127,7 +1131,7 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
                     f"</b> <span class='chip'>{escape(chip)}</span>"
                     + (f"<div class='neg small'>{escape(why)}</div>" if why else "")
                     + (f"<div class='small'>{escape(fixn[cid])}</div>" if cid in fixn else "")
-                    + f"<div class='muted small'>{escape(LO.how_text(o) + lim + got)}"
+                    + f"<div class='muted small'>{escape(LO.how_text(o, paper) + lim + got)}"
                     f"{(' · ' + escape(NM.annotate(note)[:160])) if note else ''}</div></div>{btn}</div>")
     foot = (f"「撤单」：{LO.CANCEL_HINT}。{LO.CANCEL_HINT_CORE}。执行器还没发出的单（计划 / 等开盘后）也能撤：撤了执行器就不再发。"
             + ("" if paper or stale else
@@ -1208,7 +1212,8 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     """「交易」标签里哪些行还会做事（2026-10-15 用户：「撤单后 / 没有执行下单等等的话交易处的数字不显示」）—— 标签上的数字、
     /api/status 的 pending、「今天的单」/「手动指令」每一行怎么写都按这一个判断（数字 = 还会做事的行数）：
       执行器的单（当前决策）：已经结束的（成交 / 撤单 / 不下 / 被挡 / 失效 / 被拒…）、已经写了撤单的（撤单中）不算；
-        还没发出的（PLANNED / DEFERRED）：HALT 生效中不发 → 不算（模拟账户的 DEFERRED 除外：下一次运行的 _paper_open 不看 HALT、照样撮合）；
+        还没发出的（PLANNED / DEFERRED）：HALT 生效中不发 → 不算（模拟账户的 DEFERRED 也一样：D3 起 09:25 前后的开盘撮合按立花 09:05 的
+        闸门下，HALT 中不下；开盘撮合时被 HALT 挡下的「等开盘后」→ 不算，明早对账记为没买）；
         买单开盘时一定买不起一单元（LO.unfunded_buys：凑钱的卖单撤了等）→ 不算；
         立花：成交日的交易所已经收盘（15:30 之后 / 成交日已过）→ 什么都不会再发生（明早对账），不算；模拟账户的单下一次运行按那天的开盘价撮合 → 照算。
       手动指令：撤回 / 撤单 / 撤销撤回本身不算，被撤回（还没读的撤回、撤回中）的不算，被撤单的单的指令、一定买不起的手动买入 / 加仓不算；
@@ -1224,6 +1229,7 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
        等下一次决策（07:40）才读的固定口数 / 解除 / 收盘后写的买卖不算（2026-10-15：以前晚上固定了口数，页面整晚每 10 秒问一次；
        「交易」的数字 n 照算）}。只读。"""
     from . import live_ops as LO
+    from .live_unified import HALT_WAIT as LU_HALT_WAIT
     st = book.get("state") or {}
     d = st.get("last_date")
     cur = [o for o in book.get("orders") or [] if o.get("decided_on") == d]
@@ -1265,8 +1271,12 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
                          + "，明早对账记账（之后什么都不会再发生）")
             if manual and o.get("side") == "BUY" and s in LO.AT_EXCH:   # 手动买入 / 加仓只做一次：失效了指令也不会再做事（卖单没卖完的下一次开盘再卖 → 照算）
                 fin[cid] = "（单已失效：没成交的部分不会再买，明早对账后结束）"
-        elif halt and (s == "PLANNED" or (s == "DEFERRED" and not paper)):   # 模拟账户的「等开盘后」下一次运行照样按开盘价撮合（_paper_open 不看 HALT）→ 照算
-            rows[cid] = ("不会下单（HALT）", "HALT 生效中：还没发出的单不下" + ("" if paper else "（开盘后的补单在 09:05 / 09:20：那之前解除才会下）"))
+        elif paper and s == "DEFERRED" and str(o.get("note") or "").startswith(LU_HALT_WAIT):   # 开盘撮合时被 HALT 挡下（D3）
+            rows[cid] = ("不会下单（HALT）", "开盘撮合时 HALT 生效中：这笔没下（11:30 之前解除后可以再跑一次 "
+                         "bash scripts/liveu.sh run --broker paper --phase open，否则明早对账记为没买）")
+        elif halt and s in ("PLANNED", "DEFERRED"):         # 模拟账户的「等开盘后」：09:25 前后的开盘撮合按同样的闸门（D3，2026-10-15）
+            rows[cid] = ("不会下单（HALT）", "HALT 生效中：还没发出的单不下"
+                         + ("（开盘撮合在 09:25 前后：那之前解除才会下）" if paper else "（开盘后的补单在 09:05 / 09:20：那之前解除才会下）"))
         elif cid in unf:
             x = unf[cid]
             gone = [g for g in x["gone"] if g.get("status") == "CANCELLED" or str(g.get("cid")) in asked]
@@ -2494,7 +2504,7 @@ def _pull_mode(tag: str, mode: str, book: dict | None = None, now: dt.datetime |
     fetch 只给今天早上的决策已经在账本里之后的运行：撤单（不建引擎）、盘中（MO.now_due 要早上的运行完成）、开盘前的重试（_due 要决策日对上）。
     补跑（早上的运行没完成：Mac 07:40 睡着 / 运行失败）= 代替 07:40 的照常运行 → 要拉云端当天的日报 / 判断层，照常 pull；
     重试时决策万一还不在账本里（run.py --retry 会按正常流程跑 = 当早上的运行）→ 也照常 pull（liveu.sh 自己也再看一次：mac_login --decided）。"""
-    if mode in ("now", "cancel"):
+    if mode in ("now", "cancel", "open"):               # open：模拟账户的开盘撮合（D3；早上的决策已经在账本里才会叫）
         return "fetch"
     if mode == "catchup":
         return None
@@ -2547,6 +2557,9 @@ class Trigger:
     执行器之后跑成了一次（例：你在 Mac 对话里说「再试一次」）或第二天；成功一次就清零。暂停时通知一次（G23），暂停记在状态目录
     panel_trigger.json（面板重启也接着停，第二天作废）。
     盘中没下成、改到开盘（G18）：交易日 15:25 之后看一次，今天盘中试过没下成的指令 → 通知一次「盘中没下成、改到开盘：N 条」。
+    模拟账户的开盘撮合（D3；2026-10-15）：成交日 09:25〜11:30、有排队的寄付单 / 等开盘后的买单、还没撮合过
+    （live_unified.paper_open_due；HALT 不挡）→ --phase open（Yahoo 1 分钟线约晚 20 分钟：还没到就下一轮再叫，最多 5 分钟一次；
+    撤单 / 补跑优先，同样的失败退避与暂停、同样的运行锁；QBREAK_LIVEU_PULL=fetch）。到 11:30 还没做成 → 第二天早上照旧撮合。launchd 不改。
     只管面板自己叫的；07:40 / 08:35 / 09:05 / 09:20 的定时运行不受影响。"""
 
     def __init__(self, run=None, clock=None, mono=None, notify=None):
@@ -2567,6 +2580,7 @@ class Trigger:
         self.catch_last: dict[str, float] = {}              # 账本 → 上一次补跑的单调时刻
         self.behind: dict[str, tuple[str, float]] = {}      # 账本 → (日期, 从什么时候起一直「早上的运行没完成、没有执行器在跑」)
         self.rolled: dict[str, str] = {}                    # 账本 → 哪天已经看过「盘中没下成、改到开盘」
+        self.open_last: dict[str, float] = {}               # 账本 → 上一次叫开盘撮合的单调时刻（1 分钟线还没到：OPEN_GAP_S 之后再叫；D3）
         self.outbox: list[tuple[str, str, str, str]] = []   # 要发的提醒（账本, 标题, 正文, 级别）：锁外面发
         self.lock = threading.Lock()
         self._load_pauses()
@@ -2577,7 +2591,7 @@ class Trigger:
         2026-10-14 复核：以前用 --retry，不等日报 → 例行任务晚了时按昨天的输入决策）。"""
         broker = "paper" if tag == "paper" else "tachibana"
         cmd = ["/bin/bash", str(paths.PROJECT_ROOT / "scripts" / "liveu.sh"), "run", "--broker", broker]
-        cmd += ["--phase", mode] if mode in ("now", "cancel") else [] if mode == "catchup" else ["--retry"]
+        cmd += ["--phase", mode] if mode in ("now", "cancel", "open") else [] if mode == "catchup" else ["--retry"]
         if tag == "tachibana_demo":
             cmd.append("--demo")
         return cmd
@@ -2586,7 +2600,8 @@ class Trigger:
     def _spawn(cls, tag: str, mode: str = "retry"):
         cmd = cls._argv(tag, mode)
         lf = open(paths.log_dir() / "com.qbreak.panel.retry.log", "a", encoding="utf-8")
-        lf.write(f"\n── {now_jst():%Y-%m-%d %H:%M:%S} JST {'早上的运行没完成 → 补跑' if mode == 'catchup' else '手动指令'} → {' '.join(cmd[1:])}\n")
+        what = {"catchup": "早上的运行没完成 → 补跑", "open": "模拟账户开盘撮合（09:25 前后）"}.get(mode, "手动指令")
+        lf.write(f"\n── {now_jst():%Y-%m-%d %H:%M:%S} JST {what} → {' '.join(cmd[1:])}\n")
         lf.flush()
         env = {**os.environ, "QBREAK_NO_HOLD": "1"}        # 跑完马上结束，不在进程里等到 09:35（liveu.sh 把让 Mac 醒着放到后台；2026-10-14 G2：
         #                                                   以前立花的 --retry 一直活到 09:35，这段时间面板不再叫执行器 → 撤单、盘中指令都卡住）
@@ -2611,7 +2626,8 @@ class Trigger:
                 "fails": {k: list(v) for k, v in self.fails.items()}, "errs": dict(self.errs),
                 "spawn_ids": {k: sorted(v) for k, v in self.spawn_ids.items()},
                 "catchups": {k: list(v) for k, v in self.catchups.items()}, "catch_last": dict(self.catch_last),
-                "behind": {k: list(v) for k, v in self.behind.items()}, "rolled": dict(self.rolled)}
+                "behind": {k: list(v) for k, v in self.behind.items()}, "rolled": dict(self.rolled),
+                "open_last": dict(self.open_last)}
 
     def import_state(self, d: dict) -> None:
         """execv 之前的进程交过来的状态（格式不对的跳过；暂停另外记在状态目录、构造时已经读了）。"""
@@ -2629,6 +2645,7 @@ class Trigger:
             self.catch_last.update({k: float(v) for k, v in (d.get("catch_last") or {}).items()})
             self.behind.update({k: (str(v[0]), float(v[1])) for k, v in (d.get("behind") or {}).items()})
             self.rolled.update({k: str(v) for k, v in (d.get("rolled") or {}).items()})
+            self.open_last.update({k: float(v) for k, v in (d.get("open_last") or {}).items()})
         except (TypeError, ValueError, IndexError, AttributeError) as e:
             log.warning("面板重启：接过来的自动叫执行器的状态格式不对（跳过一部分）：%s", e)
 
@@ -2764,6 +2781,14 @@ class Trigger:
             return ld == expected_last_bar(now.date(), "JP").isoformat() and bool(MO.due(tag, book, now))
         return bool(MO.now_due(tag, book, now))
 
+    def _open_due(self, tag: str, book: dict, now: dt.datetime) -> bool:
+        """模拟账户的开盘撮合（D3；2026-10-15）：live_unified.paper_open_due（成交日 09:25〜11:30、有排队的寄付单 / 等开盘后的买单、
+        还没撮合过、没有状态不明的单）+ 上一次叫开盘撮合之后过了 OPEN_GAP_S（1 分钟线还没到 → 执行器什么都不改、下一轮再叫）。"""
+        from .live_unified import paper_open_due
+        if tag != "paper" or not paper_open_due(book, now):
+            return False
+        return self.mono() - self.open_last.get(tag, -1e9) >= OPEN_GAP_S
+
     def _catchup_due(self, tag: str, book: dict, now: dt.datetime) -> bool:
         """模拟账户补跑（G9）：见类的说明。连续 CATCHUP_GRACE_S 秒都「没完成、没有执行器在跑」才叫（Mac 醒来时 launchd 也会把错过的
         07:40 拉起来：先让它起来）。立花永远不补跑。"""
@@ -2883,6 +2908,8 @@ class Trigger:
                         mode = "cancel"                      # 撤单指令：先撤（不看早上的运行完成没有；HALT 时也撤）
                     elif self._catchup_due(tag, book, now):
                         mode = "catchup"                     # 模拟账户：今天早上的运行没完成、没有执行器在跑 → 补跑（G9）
+                    elif self._open_due(tag, book, now):
+                        mode = "open"                        # 模拟账户：09:25 前后按 1 分钟线的开盘价当天撮合（D3）
                     elif (morning or session) and self._due(tag, book, now, morning):
                         mode = "retry" if morning else "now"
                     else:
@@ -2894,13 +2921,16 @@ class Trigger:
                         self.started[tag] = now
                         self.spawn_ids[tag] = self._unseen_ids(tag, book)   # 暂停的基准：叫的这一刻还没读的指令
                         self.procs[tag] = self.run(tag, mode)
+                        if mode == "open":
+                            self.open_last[tag] = self.mono()
                         if mode == "catchup":
                             d, n = self.catchups.get(tag, ("", 0))
                             self.catchups[tag] = (today, (n if d == today else 0) + 1)
                             self.catch_last[tag] = self.mono()
                             self.behind.pop(tag, None)
                         out.append(tag)
-                        log.info("%s：叫执行器（%s，%s）", "早上的运行没完成" if mode == "catchup" else "手动指令", tag, mode)
+                        log.info("%s：叫执行器（%s，%s）", {"catchup": "早上的运行没完成", "open": "模拟账户开盘撮合"}.get(mode, "手动指令"),
+                                 tag, mode)
                     except Exception as e:                   # noqa: BLE001
                         log.warning("叫执行器失败（%s，%s）：%s", tag, mode, e)
         self._flush(now)

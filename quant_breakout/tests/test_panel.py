@@ -696,7 +696,8 @@ def test_trade_badge_skips_orders_with_cancel_pending():
 
 def test_trade_badge_under_halt():
     """HALT（立花）：还没发出的单（PLANNED / DEFERRED）不发 → 不算、写「不会下单（HALT）」；已经在交易所的（SENT）照算；
-    手动指令照算（解除后照原样执行）。模拟账户的 DEFERRED 下一次运行照样撮合（_paper_open 不看 HALT）→ 照算。"""
+    手动指令照算（解除后照原样执行）。模拟账户的 DEFERRED：D3（2026-10-15）起 09:25 前后的开盘撮合按立花 09:05 同样的闸门下
+    → HALT 中也不算、写「开盘撮合在 09:25 前后」（以前：第二天早上的 _paper_open 不看 HALT → 照算）。"""
     b = _book1015("tachibana", sell="SENT", cash=2_000_000.0,
                   items={"M5-sell": {"id": "M5-sell", "kind": "sell", "ticker": "7203.T", "status": "pending", "at": "2026-10-15T08:00:00+09:00"}})
     b["orders"].append({**b["orders"][1], "cid": "U2026-10-14-BUY-2845.T", "ticker": "2845.T", "status": "PLANNED", "ref_px": 3699.0})
@@ -711,7 +712,9 @@ def test_trade_badge_under_halt():
         html = panel.render("tachibana", "t" * 40, AT15)
         assert "<i class='badge'>2</i>" in _tabbtn(html, "trade") and "不会下单（HALT）" in _card(html, "today")
         p = _book1015(sell="SENT", fix={})
-        assert panel._badges(p, p["state"], {}, [], AT15, "paper").get("trade") == 2      # 模拟账户：DEFERRED 照算
+        assert panel._badges(p, p["state"], {}, [], AT15, "paper").get("trade") == 1      # 模拟账户：排队的卖单照算，DEFERRED 不算（D3）
+        lp = panel._trade_live(p, [], AT15, "paper")
+        assert lp["orders"]["U2026-10-14-BUY-1482.T"][0] == "不会下单（HALT）" and "09:25" in lp["orders"]["U2026-10-14-BUY-1482.T"][1]
     finally:
         paths.halt_file().unlink()
 

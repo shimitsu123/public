@@ -156,7 +156,10 @@ class PaperBroker(BaseBroker):
             f = self._fill_now(o["ticker"], o["side"], o["qty"], o["client_id"] + "-f", when=bar,
                                lot=int(x.get("lot") or 0), cost=x.get("cost"), core=bool(x.get("core")))
             f.extra.update({"fill_date": bar, "fill_time": OPEN_TIME.get(self.market, "09:00"),
-                            "queued_bar": o["bar"], "ref_px": o["ref_px"]})
+                            "queued_bar": o["bar"], "ref_px": o["ref_px"], "open": px})
+            if o["side"] == "SELL" and f.status == "FILLED":   # 那笔平仓记录在哪（reprice 事后按正式开盘价改记用；D3，2026-10-15）
+                led = "core_trades" if x.get("core") else "closed_trades"
+                f.extra["ledger"] = [led, len(self.state.get(led) or []) - 1]
             if self.state["orders"] and self.state["orders"][-1].get("client_id") == f.client_id:
                 self.state["orders"][-1]["extra"] = f.extra       # 落盘也带上
                 self._save()
@@ -167,6 +170,45 @@ class PaperBroker(BaseBroker):
 
     def pending(self) -> list[dict]:
         return list(self.state["pending"])
+
+    def reprice(self, client_id: str, new_open: float, cost: dict | None = None) -> float | None:
+        """一笔开盘成交事后按另一个开盘价改记（D3，2026-10-15：模拟账户当天 09:25 前后按 1 分钟线第一根的开盘撮合，第二天早上的
+        正式日线开盘价不同 → 按正式的改记，保持与云端模拟盘一致）：成交价 = new_open ×(1 ± 滑点)，股数不变；
+        现金按差额（含手续费的差）调整，买：持仓成本跟着改；卖：已实现盈亏与那笔平仓记录跟着改。→ 新的成交价；找不到那笔成交 → None。"""
+        rec = next((o for o in reversed(self.state["orders"]) if o.get("client_id") == client_id and o.get("status") == "FILLED"), None)
+        if rec is None or not new_open or new_open <= 0:
+            return None
+        side, t, q = rec["side"], rec["ticker"], int(rec.get("filled_qty") or 0)
+        old = float(rec.get("filled_px") or 0)
+        slip, fee_f = self._cost(side, cost)
+        if q <= 0 or old <= 0:
+            return None
+        if side == "BUY":
+            new = float(new_open) * (1 + slip)
+            diff = -((new * q + fee_f(new * q)) - (old * q + fee_f(old * q)))
+            d = self.state["positions"].get(t)
+            if d and int(d["qty"]) > 0:
+                d["avg_px"] = (float(d["avg_px"]) * int(d["qty"]) + (new - old) * min(q, int(d["qty"]))) / int(d["qty"])
+                if abs(float(d.get("peak") or 0) - old) < 1e-9:
+                    d["peak"] = new
+        else:
+            new = float(new_open) * (1 - slip)
+            diff = (new * q - fee_f(new * q)) - (old * q - fee_f(old * q))
+            self.state["realized_pnl"] = float(self.state.get("realized_pnl", 0.0)) + diff
+            led = (rec.get("extra") or {}).get("ledger") or []
+            rows = self.state.get(led[0]) if len(led) == 2 else None
+            if rows and 0 <= int(led[1]) < len(rows) and rows[int(led[1])].get("ticker") == t:
+                e = rows[int(led[1])]
+                e["exit_px"] = round(new, 4)
+                e["pnl"] = round(float(e.get("pnl") or 0) + diff, 2)
+                if e.get("entry_px"):
+                    e["ret_pct"] = round((new / float(e["entry_px"]) - 1) * 100, 3)
+        self.state["cash"] = float(self.state["cash"]) + diff
+        rec.update(filled_px=new, price=new)
+        rec.setdefault("extra", {})["repriced"] = {"from": round(old, 4), "to": round(new, 4), "open": float(new_open)}
+        self._save()
+        log.info("改记 %s %s x%d：%.2f → %.2f（正式开盘价 %.2f）", side, t, q, old, new, new_open)
+        return new
 
     def cancel_pending(self, client_id: str) -> bool:
         """撤一笔还在排队（次日开盘才撮合）的单：从队列里去掉，返回有没有撤到。已经成交的不动；client_id 照旧算「下过」（幂等）。"""

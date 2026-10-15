@@ -13,6 +13,8 @@
        放不下的（要等开盘卖出的钱）连同排在它后面的买单一起留到开盘后，保持与模型相同的先后
   开盘后（F 的 09:05 前后）  run.py live-u --phase open
     ⑤ 留下的买单：用券商给的始値做同一条跳空过滤与名额检查，按当时的余力减到买得起，下当日限り指値（价格同上）
+       模拟账户（D3；2026-10-15）：F 的 09:25〜11:30 面板叫一次 --phase open → 按 1 分钟线的开盘价当天撮合排队的寄付单，
+       再按实际现金下留下的买单（_paper_settle）；第二天早上不再撮合，只按正式日线开盘价改记。没叫成 → 第二天早上照旧撮合（后备）
   盘中（F 的 09:00〜11:30、12:30〜15:25；页面点了手动指令时面板叫）  run.py live-u --phase now
     ⑥ 等着的手动指令马上下单（now_phase：先卖后买；单记在这次决策里，第二天早上的对账记进账本）
 
@@ -49,7 +51,7 @@ from . import paths
 from . import run_status as RS
 from .brokers.base import state_tag
 from .brokers.paper import PaperBroker
-from .calendar_jp import next_trading_day, now_jst, prev_trading_day
+from .calendar_jp import is_trading_day, next_trading_day, now_jst, prev_trading_day
 from .manual_orders import Manual
 from .tick import round_to_tick
 from .unified import UnifiedEngine, UState, market_of
@@ -75,6 +77,9 @@ ALLIN_SENT_TAG = "（「全部换成」的卖单已发出 → 没买就钱留现
 FUND_WAIT = "凑钱的卖单还没约定"                    # 09:05：等开盘后的买单的凑钱卖单立花那边还没约定 → 09:20 再按余力下（D2 / M9；2026-10-15）
 HALT_WAIT = "开盘后补单被挡"                       # 09:05 / 09:20 被 HALT / 持仓不一致挡住：留到开盘后的买单的说明（明天对账写进「没买」的原因；2026-10-13）
 NO_OPEN_FINAL = "到 09:20 还没有始値（特別気配 / 停牌）：今天不买（与模型不同 → 记入差异）"
+PAPER_OPEN_FROM, PAPER_OPEN_UNTIL = dt.time(9, 25), dt.time(11, 30)   # 模拟账户当天的开盘撮合（D3；2026-10-15）：Yahoo 1 分钟线约晚 20 分钟 →
+#                                                    09:25 之后 09:00 那几根才到；到 11:30 还没撮合成 → 第二天早上照旧按日线的开盘价撮合（后备）
+PAPER_OPEN_WAIT = "开盘价（1 分钟线）还没到"          # 模拟账户的开盘撮合这次不做（整批：有一只没有今天的分钟线 / 可能一整天张贴）
 UNK_STOP = "这次运行前面有一笔下单结果不明（可能已被受理）→ 剩下的单不发"   # G3：同一次发单里有一笔变成 SENDING / ERROR 之后（2026-10-14）
 BLOCK_RETRY = ("立花の銘柄マスタ取不到", "登录失败，没发单", "没连上立花，没发单")   # 立花适配器 BLOCKED：请求根本没发出、过一会儿可能就好（G15）
 PRECLOSE_MAX_PCT = 3.0                             # LU-15：Yahoo 收盘 vs 立花前日終値 差超过这个 % → 那只的寄付买单不下（卖单只提醒）
@@ -173,7 +178,8 @@ def load_state(path, capital: float) -> UState:
 
 class UnifiedExecutor:
     """eng：用账本里的状态建好的 UnifiedEngine（行情要包含到最新收盘）；broker：PaperBroker（模拟账户）或 TachibanaBroker。
-    paper=True 时第 k 天的开盘由这里用 K 线撮合（PaperBroker 的规则与引擎逐条相同）；实盘的开盘在交易所，第二天早上查成交。"""
+    paper=True 时第 k 天的开盘由这里撮合（PaperBroker 的规则与引擎逐条相同）：成交日 09:25 前后按 1 分钟线的开盘价当天撮合（D3），
+    没撮合过就第二天早上按 K 线撮合；实盘的开盘在交易所，第二天早上查成交。"""
 
     def __init__(self, eng: UnifiedEngine, broker, path=None, *, paper: bool | None = None,
                  respect_halt: bool = True, check_clock: bool = True, clock=None, sync_cash: bool | None = None,
@@ -691,6 +697,15 @@ class UnifiedExecutor:
                     "这是与模型的差异，不是错误")
         return "余力规则与模型相同"
 
+    def _paper_when(self) -> str:
+        """模拟账户的成交日怎么写：今天 → 「今天」，否则「10/16」（D3）。"""
+        f = self.fill_day()
+        return "今天" if f is None or f == self.clock().date() else f"{f:%m/%d}"
+
+    def _paper_queue_note(self) -> str:
+        """模拟账户排队的寄付单的说明（D3；2026-10-15）：成交日 09:25 前后面板叫执行器按当天的开盘价撮合（没叫成 → 第二天早上照旧撮合）。"""
+        return f"已排队：{self._paper_when()} 09:25 前后按开盘价撮合"
+
     # ── 资金依赖（fund_src；D2，2026-10-15）──
     def _lot(self, o) -> int:
         t = o.get("ticker") if isinstance(o, dict) else o.ticker
@@ -804,14 +819,16 @@ class UnifiedExecutor:
         o.status = r.status if r.status in ACCEPTED + ("BLOCKED", "REJECTED", "EXPIRED", "ERROR") else "ERROR"
         o.broker_id, o.order_date = str(r.broker_id or ""), str((r.extra or {}).get("order_date") or "")
         o.note = (r.note or "")[:300]
+        if self.paper and bar and o.status == "SENT":       # 模拟账户排队的寄付单：成交日 09:25 前后按开盘价撮合（D3；以前写「次日开盘成交」，实际第二天早上才记账）
+            o.note = self._paper_queue_note()
         odd2 = int((r.extra or {}).get("odd_lot") or 0)
         if odd2 and o.side == "SELL" and not self.paper:    # 立花銘柄マスタ的売買単位与行情配置不同：适配器拆出的零股（只发了整数手）
             o.sent_qty = max(0, int(qty) - odd2)
             self._note_odd(o.ticker, odd2, int((r.extra or {}).get("lot") or 0) or None)
         if self.paper and r.status in ("FILLED", "PARTIAL", "EXPIRED") and r.filled_qty > 0:
             self._fills[o.cid] = (int(r.filled_qty), float(r.filled_px))       # 模拟账户盘中单：立即成交
-        if o.phase == "now" and r.filled_qty > 0:          # 盘中的手动单：成交记在单上（模拟账户第二天早上的对账从这里读）
-            o.filled_qty, o.filled_px = int(r.filled_qty), float(r.filled_px)
+        if (o.phase == "now" or (self.paper and o.phase == "open")) and r.filled_qty > 0:   # 盘中的手动单 / 模拟账户开盘撮合时的开盘后买单：
+            o.filled_qty, o.filled_px = int(r.filled_qty), float(r.filled_px)   # 成交记在单上（模拟账户第二天早上的对账从这里读；D3）
         if o.status == "BLOCKED":
             self.stats["blocked"] += 1
         lvl = "info" if o.status in ACCEPTED else ("warn" if o.status in ("BLOCKED", "REJECTED", "EXPIRED") else "error")
@@ -948,6 +965,8 @@ class UnifiedExecutor:
                 o.status, o.phase = "DEFERRED", "open"
                 o.fund_src = self._fund_srcs_now(d)         # 要等这些卖单卖出的钱（撤了 / 没成交 → 当场重算；D2，2026-10-15）
                 o.note = ("排在前面的买单留到开盘后 → 这笔也留到开盘后（保持与模型相同的先后）" if deferring else
+                          f"开盘前现金 {bp:,.0f} 円 < 按限价预留 {need:,.0f} 円 → {self._paper_when()} 09:25 前后按开盘价撮合"
+                          "（先撮合寄付单，再按那时的现金检查、减股买）" if self.paper else
                           f"开盘前余力 {bp:,.0f} 円 < 按限价预留 {need:,.0f} 円 → 开盘后按始値检查、减股再下")
                 deferring = True
                 self.stats["deferred"] += 1
@@ -1128,9 +1147,11 @@ class UnifiedExecutor:
                 o.fund_src = []                               # 凑钱的卖单都约定了：钱在余力里，照常
         return waits, strict
 
-    def _place_deferred(self, get_open, locked: dict | None = None, no_open: str | None = None) -> None:
+    def _place_deferred(self, get_open, locked: dict | None = None, no_open: str | None = None, cash_bp: bool = False) -> None:
         """开盘后：留下的买单按实际始値做与模型相同的检查（没开盘价 / 跳空 / ストップ高 / 名额），再下单。
         实盘按「限价 × 股数 + 手续费 ≤ 当时余力」减股；模拟账户交给 PaperBroker 按实际成交价减（与引擎相同）。
+        cash_bp（模拟账户当天的开盘撮合；D3，2026-10-15）：与立花 09:05 同一条路 —— 按模拟券商的现金先按「开盘价 ×(1+滑点) + 手续费」减股
+        （与 PaperBroker 的减法相同，股数一样），凑钱的卖单没了 → 不拿别的钱部分买（★ 交易）；限价不用改（模拟券商按开盘价成交）。
         no_open：立花这时还没有始値的票（B7）——"wait"（09:05）保留 DEFERRED，09:20 再看；"final"（09:20 的重试）放弃，
         记入与模型的差异（模型按日线开盘价，晚开盘也照买）；None（模拟账户 / 演练：没有开盘价 = 那天没有 K 线）→ 放弃，模型也不买。"""
         eng, st, b = self.eng, self.eng.st, self.b
@@ -1144,7 +1165,11 @@ class UnifiedExecutor:
         if not self.paper:                                    # 实盘：早上的寄付买单，股票还没开盘（特別気配で未寄付）→ 之后可能成交，先占名额
             npos += len({o.ticker for o in self._active() if o.side == "BUY" and o.kind == "stock" and o.phase == "morning"
                          and o.status in ("SENT", "PARTIAL") and o.ticker not in held and not get_open(o.ticker)})
-        bp = None if self.paper else max(0.0, float(b.cash()) - float(reserve_jpy(self.book)))   # 出金预留不拿来买（M15；与 now_phase 同口径）
+        bp = (None if self.paper and not cash_bp else float(b.cash()) if self.paper
+              else max(0.0, float(b.cash()) - float(reserve_jpy(self.book))))   # 出金预留不拿来买（M15；与 now_phase 同口径）
+        bpw = "现金" if self.paper else "余力"
+        dead = [x for x in self._active() if x.side == "SELL" and x.phase != "now"
+                and LO.src_done(x, self.clock(), self.fill_day())]   # 这次决策里不会（全部）成交的卖单（撤了 / 被拒 / 失效 / 没成交）
 
         def skip(o: ExecOrder, why: str, lvl: str = "info") -> None:
             o.status, o.note = "SKIPPED", why[:300]
@@ -1211,17 +1236,24 @@ class UnifiedExecutor:
                     qty -= lot
                 u_ = "口" if o.kind == "core" else "股"
                 if o.cid in strict and qty < o.qty:           # 凑钱的卖单撤了 / 被拒 / 失效：不拿别的钱部分买（D2；2026-10-15）
-                    skip(o, f"{strict[o.cid]} → 不会下（余力 {bp:,.0f} 円按开盘价 ¥{op:,g} 买不起计划的 {o.qty:,} {u_}；"
+                    skip(o, f"{strict[o.cid]} → 不会下（{bpw} {bp:,.0f} 円按开盘价 ¥{op:,g} 买不起计划的 {o.qty:,} {u_}；"
                             "不拿别的钱部分买）", "warn")
                     continue
+                if qty <= 0 and dead:                         # 旧账本（没有 fund_src）也说清：这次决策的卖单没成交 → 等着的钱没来（★ 交易；D3，2026-10-15 事故重放）
+                    skip(o, f"{LO.src_text(dead)} → 钱没来：{bpw} {bp:,.0f} 円按开盘价 ¥{op:,g} 买不起 1 单元，不会下", "warn")
+                    continue
                 if qty <= 0:
-                    skip(o, f"余力 {bp:,.0f} 円按开盘价买不起 1 单元 —— {self._bp_why()}")
+                    skip(o, f"{bpw} {bp:,.0f} 円按开盘价买不起 1 单元 —— {self._bp_why()}")
                     continue
                 if qty < o.qty:
                     self.stats["reduced"] += 1
-                    self._event("info", f"买 {_lab(o.ticker)}：余力 {bp:,.0f} 円，按开盘价 ¥{op:,g} 减到 {qty:,} {u_}（计划 {o.qty:,} {u_}）—— {self._bp_why()}")
-                lim = self._fit_limit(o, qty, bp)
-                if lim < float(o.limit):
+                    self._event("info", f"买 {_lab(o.ticker)}：{bpw} {bp:,.0f} 円，按开盘价 ¥{op:,g} 减到 {qty:,} {u_}（计划 {o.qty:,} {u_}）—— {self._bp_why()}")
+                if self.paper:                                # 模拟账户：按开盘价成交（限价不用放进余力）
+                    b.set_prices({o.ticker: float(op)})
+                    lim = o.limit
+                else:
+                    lim = self._fit_limit(o, qty, bp)
+                if not self.paper and lim < float(o.limit):
                     self.stats["limit_lowered"] += 1
                     self._event("info", f"买 {_lab(o.ticker)}：限价 ¥{o.limit:,g} 占用的余力放不下 → 降到 ¥{lim:,g}（开盘 ¥{op:,g}）")
                     o.note = f"限价 {o.limit:g}→{lim:g}（余力）"
@@ -1231,11 +1263,11 @@ class UnifiedExecutor:
             o.phase = "open"
             if o.cid in strict:
                 o.fund_src = []                               # 凑钱的卖单没了、余力放得下全部：照常下（依赖已经判断过）
-            self._send(o, qty, bar="")
+            self._send(o, o.qty if self.paper else qty, bar="")   # 模拟账户：照计划的股数发，模拟券商按同一规则减（对账与后备路径相同）
             if o.status in ACCEPTED:
                 npos += o.kind == "stock" and o.reason != "manual_add"
                 if bp is not None:
-                    bp -= self._reserve(o, qty, lim)
+                    bp = float(b.cash()) if self.paper else bp - self._reserve(o, qty, lim)
         if allin_wait:
             self._event("info", f"买 {_labs(allin_wait, limit=6)}（开盘后）：{ALLIN_WAIT}，09:20 再按余力下（单保留）")
         if fund_wait:
@@ -1243,8 +1275,10 @@ class UnifiedExecutor:
         if waiting:
             self._event("info", f"买 {_labs(waiting, limit=6)}（开盘后）：{NO_OPEN_WAIT}（单保留）")
 
-    def open_phase(self, final: bool | None = None) -> None:
-        """实盘：开盘后（09:05 前后）下早上留下的买单。模拟账户不用调（_paper_open 里一起做）。
+    def open_phase(self, final: bool | None = None, feed=None, corp=None) -> dict | None:
+        """实盘：开盘后（09:05 前后）下早上留下的买单。模拟账户（D3；2026-10-15）：成交日 09:25〜11:30 面板叫一次 →
+        按 1 分钟线的开盘价当天撮合排队的寄付单、再按实际现金下等开盘后的买单（_paper_settle；feed = data.intraday_open，
+        corp = 公司行为数据：成交日有除息 / 拆股的票 → 今天不做）→ 结果 dict；没叫成 → 第二天早上的 _paper_open 照旧撮合（后备）。
         手动指令：先读新的撤回（留到开盘后、还没发出的加仓买单这时还能撤）；新的卖出 / 调整等下一次早上的运行。
         立花（B7）：取价整个失败 → 一笔都不动（DEFERRED 全部保留）、记 warn、self.incomplete（运行状态 ok=False），09:20 照常再跑；
         个别票还没有始値：final=False（09:05）保留到 09:20 再看，final=True（09:20 的重试）放弃并记入差异；
@@ -1257,6 +1291,8 @@ class UnifiedExecutor:
                 self._event(lvl, msg)
             self._halt_mark()
             self._settle_manual()
+        if self.paper:
+            return self._paper_settle(feed, corp)
         g = self._gate("open")                              # 总是先看闸门（HALT 存在时记下演练的证据）
         why = self.blocked or g
         act = [o for o in self._active() if o.status == "DEFERRED"]
@@ -1305,6 +1341,209 @@ class UnifiedExecutor:
             self._allin_after_open(self.eng.st.last_date, f.isoformat() if f else self.clock().date().isoformat())   # G8
             self._sync_manual(self.eng.st.last_date)
         self.save()
+
+    # ── 模拟账户当天的开盘撮合（D3；2026-10-15）──
+    def _paper_settle(self, feed, corp=None) -> dict:
+        """模拟账户当天的开盘撮合（D3；2026-10-15 用户：撤了凑钱的卖单之后，买单当天就该显示没买与原因；交易页要马上看到成交）。
+        成交日 09:25〜11:30（面板 Trigger 叫 --phase open）：用 Yahoo 1 分钟线今天第一根的开盘（= 寄付価格；
+        feed(票, now) → {票: {"open", "high", "low", "first"}}）撮合排队的寄付单（PaperBroker 与引擎逐条相同：跳空 / 名额 / 现金减股），
+        再按撮合之后的实际现金下等开盘后的买单（_place_deferred(cash_bp=True)：与立花 09:05 同一条路，HALT / 持仓不一致同样挡）。
+        成交记在模拟券商（fill_date = 今天）与单上；book["paper_open"] 记下用的开盘价 → 第二天早上的 _paper_open 不再撮合，
+        只在正式日线开盘价不同时按它改记（与云端模拟盘一致）。
+        整批做或整批不做：有一只还没有今天的分钟线 / 开在涨跌停附近一直没打开 → 这次不做（下一轮再试）；开盘价超出制限値幅（拆股？数据错？）/
+        成交日有公司行为 → 今天不做；到 11:30 还没做成 → 第二天早上照旧按日线撮合（后备，与以前相同）。
+        → {"done", "why", "wait", "fills": [单], "unfilled": [单], "deferred": [单], "deferred_why"}。"""
+        eng, st, b = self.eng, self.eng.st, self.b
+        d, f, now = st.last_date, self.fill_day(), self.clock()
+        res: dict = {"done": False, "why": None, "wait": False, "fills": [], "unfilled": [], "deferred": [], "deferred_why": None}
+        po = self.book.get("paper_open") or {}
+        if po.get("decided_on") != d:
+            po = {"decided_on": d}
+        act = self._active()
+        queued = [o for o in act if o.status == "SENT" and o.phase == "morning"]
+        dfr = [o for o in act if o.status == "DEFERRED"]
+        in_win = (f is not None and now.date() == f and is_trading_day(now.date())
+                  and PAPER_OPEN_FROM <= now.time() < PAPER_OPEN_UNTIL)
+
+        def out(why: str, wait: bool = False, lvl: str = "info") -> dict:
+            res["why"], res["wait"] = why, wait
+            self.book["paper_open"] = po
+            self._event(lvl, f"模拟账户开盘撮合这次没做：{why}")
+            self.save()
+            return res
+        if po.get("at"):                                     # 已经撮合过：HALT 挡下的开盘后买单，解除后手动再跑 → 只下它们
+            if dfr and po.get("deferred_why") and in_win:
+                self._paper_deferred(po, res)
+                self._allin_after_open(d, f.isoformat())
+                self._sync_manual(d)
+                self.book["paper_open"] = po
+                self.save()
+                res["done"] = bool(res["deferred"])
+                return res
+            res["why"] = f"今天的开盘撮合已经做过（{str(po['at'])[11:16]}）"
+            return res
+        if po.get("stop"):
+            res["why"] = f"今天不做开盘撮合：{po['stop']}"
+            return res
+        if not queued and not dfr:
+            res["why"] = "没有排队的寄付单 / 等开盘后的买单"
+            return res
+        if f is None or now.date() != f or not is_trading_day(now.date()):
+            res["why"] = f"今天不是成交日（成交日 {f}）"
+            return res
+        if not in_win:
+            res["why"] = (f"开盘撮合只在成交日 {PAPER_OPEN_FROM:%H:%M}〜{PAPER_OPEN_UNTIL:%H:%M} 做"
+                          "（之后留给明天早上按日线照旧撮合）")
+            return res
+        tick = sorted({o.ticker for o in queued + dfr})
+        po["tries"] = int(po.get("tries") or 0) + 1
+        po["last"] = now.isoformat(timespec="seconds")
+        if corp is not None:                                 # 成交日有除息 / 拆股：明天早上的 corp(k) 要先于撮合（分红 / 股数），今天不做
+            from .corpactions import due
+            hit = []
+            for t in tick:
+                try:
+                    if due(corp, t, str(d), f.isoformat()):
+                        hit.append(t)
+                except Exception:                            # noqa: BLE001  取不到：下面的制限値幅检查兜底（拆股）
+                    pass
+            if hit:
+                po["stop"] = f"{_labs(hit, limit=3, short=True)} 今天有公司行为（除息 / 拆股）→ 明天早上按日线一起撮合"
+                return out(po["stop"])
+        try:
+            q = (feed(tick, now) or {}) if feed is not None else {}
+        except Exception as e:                               # noqa: BLE001  取不到：下一轮再试
+            q = {}
+            self._event("info", f"1 分钟线没取到（{type(e).__name__}: {str(e)[:120]}）")
+        miss = [t for t in tick if not float((q.get(t) or {}).get("open") or 0) > 0]
+        if miss:
+            po["why"] = f"{PAPER_OPEN_WAIT}：{_labs(miss, limit=4, short=True)}"
+            return out(f"{po['why']}（下一轮再试；到 {PAPER_OPEN_UNTIL:%H:%M} 还没有 → 明天早上照旧撮合）", wait=True)
+        from .tick import limit_lock, price_limit_jp
+        kd = int(eng.gidx.searchsorted(dt.datetime.fromisoformat(str(d))))
+        bad, lk = [], []
+        for t in tick:
+            j, x = eng.col.get(t), q[t]
+            op = float(x["open"])
+            prev = float(eng.A.close[kd, j]) if j is not None and kd < len(eng.gidx) and eng.A.has[kd, j] else 0.0
+            if prev <= 0:
+                continue
+            if abs(op - prev) > price_limit_jp(prev) * 1.001:
+                bad.append(f"{_lab(t, short=True)} 开盘 ¥{op:,g} / 前日收盘 ¥{prev:,g}")
+            elif t not in eng.core_set and limit_lock(prev, float(x.get("high") or op), float(x.get("low") or op), op, "JP"):
+                lk.append(t)
+        if bad:                                              # 制限値幅之外的开盘价不可能是真的（拆股后的价 / 数据错）→ 今天不做
+            po["stop"] = "开盘价超出制限値幅（拆股？数据问题？）：" + "；".join(bad[:3]) + " → 明天早上按日线撮合"
+            return out(po["stop"], lvl="warn")
+        if lk:                                               # 开在涨跌停附近、到现在没打开：可能一整天张贴（日线才判断得了）
+            po["why"] = f"{_labs(lk, limit=3, short=True)} 开在涨跌停附近、到现在没打开（可能一整天张贴）"
+            return out(f"{po['why']}（下一轮再看；到 {PAPER_OPEN_UNTIL:%H:%M} 还这样 → 明天早上按日线撮合）", wait=True)
+        opens = {t: float(q[t]["open"]) for t in tick}
+        by = {o.cid: o for o in act}
+        fills, seen = {}, set()
+        for r in b.fill_pending(opens, f.isoformat(), max_gap_pct=eng.ex["JP"].max_entry_gap_pct, locked=None):
+            cid = r.client_id[:-2] if r.client_id.endswith("-f") else r.client_id
+            seen.add(cid)
+            o = by.get(cid)
+            if o is None or o.status != "SENT":
+                self._event("warn", f"模拟券商的队列里有一笔不在这次决策里（{r.client_id}，{r.status}）：只记在模拟券商")
+                continue
+            u = "口" if o.kind == "core" else "股"
+            op = opens.get(o.ticker)
+            if r.status == "FILLED" and r.filled_qty > 0:
+                q_, px_ = int(r.filled_qty), float(r.filled_px)
+                o.status, o.filled_qty, o.filled_px = "FILLED", q_, px_   # 现金不足减了股：照记成交的股数（明早对账与后备路径相同 → PARTIAL）
+                o.note = (f"{f:%m/%d} 开盘撮合 {q_:,} {u} @ ¥{px_:,.2f}（开盘 ¥{op:,g}，1 分钟线）"
+                          + (f"；{r.note}" if r.note else ""))[:300]
+                fills[cid] = {"b": r.client_id, "open": op, "q": q_, "px": round(px_, 4)}
+                res["fills"].append(o)
+            else:
+                o.status, o.note = "UNFILLED", f"{f:%m/%d} 开盘没成交：{r.note or r.status}"[:300]
+                res["unfilled"].append(o)
+        for o in queued:
+            if o.cid not in seen and o.status == "SENT":
+                o.status, o.note = "UNFILLED", "模拟券商的队列里没有这笔 → 没成交"
+                res["unfilled"].append(o)
+        po.update(at=now.isoformat(timespec="seconds"), fill=f.isoformat(), src="1m", opens=opens, fills=fills,
+                  first={t: q[t].get("first") for t in tick if q[t].get("first")})
+        po.pop("why", None)
+        self.book["paper_open"] = po
+        self.stats["fills"] += len(res["fills"])
+        self._event("info", f"模拟账户开盘撮合（{now:%H:%M}，1 分钟线的开盘价）：成交 {len(res['fills'])} 笔"
+                            + (f"、没成交 {len(res['unfilled'])} 笔" if res["unfilled"] else "")
+                            + ("".join(f"；{_otag(o, o.filled_qty)} @ ¥{o.filled_px:,.2f}" for o in res["fills"][:8])))
+        for o in res["unfilled"]:
+            self._event("warn" if o.side == "SELL" else "info", f"{_otag(o)}：{o.note}")
+        self.save()                                          # 模拟券商已经落盘：先存账本（下面的开盘后买单再存一次）
+        if dfr:
+            self._paper_deferred(po, res)
+        self._allin_after_open(d, f.isoformat())             # 「全部换成」的买入被放弃 → 当天结束、提醒（G8）
+        self._sync_manual(d)
+        self.book["paper_open"] = po
+        res["done"] = True
+        self.save()
+        return res
+
+    def _paper_deferred(self, po: dict, res: dict) -> None:
+        """开盘撮合之后：等开盘后的买单按撮合之后的实际现金下（与立花 09:05 同一条路；HALT / 持仓不一致 → 这次不下、单保留，
+        说明写「开盘后补单被挡」，11:30 之前解除后可以手动再跑一次 --phase open，否则明天早上对账记为没买）。"""
+        why = self.blocked or self._gate("open") or self._mismatch_today()
+        dfr = [o for o in self._active() if o.status == "DEFERRED"]
+        if why:
+            for o in dfr:
+                o.note = f"{HALT_WAIT}（{why}）"[:300]
+            po["deferred_why"] = res["deferred_why"] = why
+            self._event("warn", f"开盘后的买单这次不下（单保留；{PAPER_OPEN_UNTIL:%H:%M} 之前解除后可以再跑 "
+                                f"bash scripts/liveu.sh run --broker paper --phase open，否则明天早上记为没买）：{why}")
+            return
+        opens = po.get("opens") or {}
+        self._place_deferred(lambda t: opens.get(t), None, cash_bp=True)
+        po["deferred_at"] = self.clock().isoformat(timespec="seconds")
+        po.pop("deferred_why", None)
+        fl = po.setdefault("fills", {})
+        for o in dfr:
+            if o.status in ACCEPTED and int(o.filled_qty or 0) > 0:
+                fl[o.cid] = {"b": o.cid, "open": opens.get(o.ticker), "q": int(o.filled_qty), "px": round(float(o.filled_px), 4)}
+                o.note = (f"{self.fill_day():%m/%d} 开盘后按开盘价 ¥{opens.get(o.ticker) or 0:,g} 撮合 {int(o.filled_qty):,} "
+                          f"{'口' if o.kind == 'core' else '股'} @ ¥{float(o.filled_px):,.2f}" + (f"；{o.note}" if o.note else ""))[:300]
+        res["deferred"] = dfr
+
+    def _paper_resettle(self, k: int, po: dict, act: list[ExecOrder]) -> None:
+        """第二天早上（_paper_open）：昨天 09:25 前后已经按 1 分钟线撮合过 → 不再撮合；成交按第 k 天的正式日线开盘价改记
+        （开盘价不同的才改：PaperBroker.reprice，股数不变；与云端模拟盘一致），再把成交交给对账。
+        按日线开盘价判断的结果（跳空 / ストップ高安）与撮合时不同 → 只提醒（已经发生的成交不撤）。"""
+        eng, b = self.eng, self.b
+        bar = str(eng.gidx[k].date())
+        by = {o.cid: o for o in act}
+        same = po.get("fill") == bar
+        if not same:
+            self._event("warn", f"模拟账户：开盘撮合是按 {po.get('fill')} 做的，这根 K 线是 {bar} → 不按日线改记（成交照撮合时的价）")
+        gap = eng.ex["JP"].max_entry_gap_pct
+        rep, diff = [], []
+        fl = po.get("fills") or {}
+        for o in act:
+            if o.phase not in ("morning", "open") or o.side not in ("BUY", "SELL"):
+                continue
+            x, j = fl.get(o.cid), eng.col.get(o.ticker)
+            off = float(eng.A.open[k, j]) if same and j is not None and eng.A.has[k, j] else None
+            if x is not None and off and abs(off - float(x.get("open") or 0)) > 1e-6 * off:
+                new = b.reprice(x["b"], off, cost=self._paper_extra(o).get("cost"))
+                if new is not None:
+                    rep.append(f"{_otag(o, o.filled_qty)} ¥{float(o.filled_px):,.2f}→¥{new:,.2f}（开盘 ¥{float(x['open']):,g}→¥{off:,g}）")
+                    o.filled_px = float(new)
+            if x is not None and int(o.filled_qty or 0) > 0:
+                self._fills[o.cid] = (int(o.filled_qty), float(o.filled_px))
+            if off is None or o.kind != "stock" or o.cid not in fl and o.status != "UNFILLED":
+                continue
+            lk = eng._locked(k, j)
+            would = (not (gap and off > o.ref_px * (1 + gap / 100)) and lk != "up") if o.side == "BUY" else lk != "down"
+            if would != (x is not None):
+                diff.append(f"{_otag(o)}：撮合时{'成交' if x is not None else '没成交'}，按日线开盘 ¥{off:,g} 会{'成交' if would else '不成交'}")
+        if rep:
+            self._event("info", f"模拟账户：{po.get('fill')} 09:25 前后按 1 分钟线开盘价撮合的 {len(rep)} 笔按正式日线开盘价改记"
+                                "（与云端模拟盘一致）：" + "；".join(rep[:8]))
+        if diff:
+            self._event("warn", "模拟账户：1 分钟线开盘与日线开盘判断不同（成交已经发生，不撤；与云端模拟盘可能出现差异）：" + "；".join(diff[:6]))
 
     # ── 盘中：手动指令马上下单 ──
     @staticmethod
@@ -1669,7 +1908,7 @@ class UnifiedExecutor:
             act_ = self._active()
             res = sum(self._reserve(o, o.qty) for o in act_ if o.side == "BUY"
                       and ((o.status == "DEFERRED" and not LO.orphan(o, act_, now, fday))   # 孤儿（凑钱的卖单没了）不留钱（D4）
-                           or (self.paper and o.phase == "morning" and o.status in ACCEPTED)))
+                           or (self.paper and o.phase == "morning" and o.status == "SENT")))   # 模拟账户还在排队的寄付买单（开盘撮合之后现金已经扣了；D3）
             return (float(b.cash()) - res - rsv) * (1 - buf)
 
         def fund_src(skip=None) -> tuple[list, float, float, float]:
@@ -2493,7 +2732,9 @@ class UnifiedExecutor:
     # ── 成交 → 状态 ──
     def _paper_open(self, k: int) -> None:
         """模拟账户：用第 k 天的开盘价撮合前一天排队的寄付单（PaperBroker 的规则与引擎逐条相同），再下开盘后的买单；
-        当天没成交的单作废（与真实券商相同）。"""
+        当天没成交的单作废（与真实券商相同）。
+        D3（2026-10-15）：成交日 09:25 前后已经按 1 分钟线撮合过（book["paper_open"]）→ 这里不再撮合（幂等），只按正式日线开盘价改记
+        （_paper_resettle），开盘后的买单那时已经处理（下了 / HALT 挡下 → 对账记为没买）；没撮合过（面板不在 / 没叫成 / 今天不做）→ 照旧（后备）。"""
         eng, b = self.eng, self.b
         act = self._active()
         tick = sorted({o.ticker for o in act if o.ticker in eng.col})
@@ -2504,7 +2745,11 @@ class UnifiedExecutor:
             if v:
                 locked[t] = v
         by = {o.cid: o for o in act}
-        if act:
+        po = self.book.pop("paper_open", None) or {}
+        settled = bool(po.get("at")) and po.get("decided_on") == eng.st.last_date
+        if settled:
+            self._paper_resettle(k, po, act)
+        elif act:
             for r in b.fill_pending(opens, str(eng.gidx[k].date()), max_gap_pct=eng.ex["JP"].max_entry_gap_pct,
                                     locked=locked):
                 cid = r.client_id[:-2] if r.client_id.endswith("-f") else r.client_id
@@ -2513,6 +2758,10 @@ class UnifiedExecutor:
                 elif cid in by:
                     by[cid].note = (r.note or "")[:300]
         b.expire_pending()
+        if settled and (po.get("deferred_at") or po.get("deferred_why")):   # 开盘后的买单撮合时已经处理过
+            bar = str(eng.gidx[k].date())
+            self._allin_after_open(bar, bar)
+            return
         dead = {o.cid for o in act if o.side == "SELL" and o.status in ACCEPTED and o.phase != "now" and o.cid not in self._fills}
         if any(o.fund_src for o in act if o.status == "DEFERRED"):   # 凑钱的寄付卖单没成交（撤了的在撤单时已经算过）→ 按开盘后的现金重算（D2）
 
@@ -2967,7 +3216,7 @@ class UnifiedExecutor:
                 # 08:35 的重试是新进程：07:40 的「持仓不一致」不会带过来 → 开盘前再查一次持仓，不能绕过。
                 # 09:00 以后不查（今天的单可能已成交，券商持仓本来就和账本不同；寄付单 08:55 之后也被时间闸挡住）——
                 # 但成交日之前（决策做好、成交日在后面的休市日 / 周末）整天都查：那几天不会有新成交，寄付单的时间闸也不挡；
-                # 模拟账户第二天早上才撮合，不查；
+                # 模拟账户不查（券商是本地的 PaperBroker，持仓就是账本自己记的；成交日 09:25 前后的开盘撮合见 _paper_settle，2026-10-15）；
                 # 已经因为别的原因不下单（例如行情没更新：账本还停在前一天、券商已有昨天的成交）→ 不查，免得多一条误报的「不一致」
                 now, f = self.clock(), self.fill_day()
                 if not self.paper and not self.blocked and (now.time() < dt.time(9, 0) or (f is not None and now.date() < f)):
@@ -3770,6 +4019,31 @@ def open_pending(book: dict) -> bool:
     """09:20 的开盘后重试用：当前决策里还有留到开盘后、还没下的买单（DEFERRED）吗？没有 → 什么都不做（09:05 已经处理过 / 今天没有）。"""
     d = ((book or {}).get("state") or {}).get("last_date")
     return any(o.get("decided_on") == d and o.get("status") == "DEFERRED" for o in (book or {}).get("orders") or [])
+
+
+def paper_open_due(book: dict | None, now: dt.datetime, rerun: bool = False) -> bool:
+    """模拟账户当天的开盘撮合（D3；2026-10-15 用户：撤单 / 买入之后要当天就看到成交，不要等到第二天早上）该不该叫一次
+    （面板 Trigger 与 run.py 的预检共用）：今天是成交日（决策日的下一个交易日）、09:25〜11:30、这次决策还没撮合过 / 没放弃、
+    有排队的寄付单（SENT）或等开盘后的买单（DEFERRED）、没有状态不明的单。HALT 不挡（排队的寄付单 09:00 已经在「交易所」撮合了；
+    开盘后的买单到时候再过闸门，与立花 09:05 相同）。rerun（run.py 的预检，手动再跑）：已经撮合过、开盘后的买单被 HALT 挡下还在 → 也算
+    （面板不自动再叫：HALT 解除后你说「再试一次」才跑）。"""
+    book = book or {}
+    d = str((book.get("state") or {}).get("last_date") or "")
+    if not d or not is_trading_day(now.date()) or not PAPER_OPEN_FROM <= now.time() < PAPER_OPEN_UNTIL:
+        return False
+    try:
+        if next_trading_day(dt.date.fromisoformat(d[:10])) != now.date():
+            return False
+    except ValueError:
+        return False
+    po = book.get("paper_open") or {}
+    cur = [o for o in book.get("orders") or [] if o.get("decided_on") == d]
+    if any(o.get("status") in UNKNOWN for o in cur):
+        return False
+    if po.get("decided_on") == d and (po.get("at") or po.get("stop")):
+        return bool(rerun and po.get("at") and po.get("deferred_why") and any(o.get("status") == "DEFERRED" for o in cur))
+    return any((o.get("status") == "SENT" and (o.get("phase") or "morning") == "morning") or o.get("status") == "DEFERRED"
+               for o in cur)
 
 
 def record_compare(book: dict, cmp: dict | None) -> None:
