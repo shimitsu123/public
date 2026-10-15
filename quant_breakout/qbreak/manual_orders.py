@@ -2381,6 +2381,25 @@ def status_text(it: dict, now: dt.datetime | None = None) -> str:
     return STATUS.get(s, str(s))
 
 
+FIX_WAIT = "生效中 · 还没照它调"
+
+
+def fix_status_text(it: dict, items, book: dict | None, tag: str | None = None) -> str | None:
+    """固定口数指令（corefix）执行器已经读了（完成）、但还没照它排单（corefix_pending）→「生效中 · 还没照它调」；别的 → None。
+    只看这只最新的那条 corefix（含恢复按规则）；与 now_due / 执行器同一个判断（2026-10-16 复核：以前写「完成」，像是已经调好了）。"""
+    if it.get("kind") != "corefix" or it.get("status") != "done" or it.get("clear"):
+        return None
+    t = it.get("ticker")
+    same = [x for x in items if x.get("kind") == "corefix" and x.get("ticker") == t and x.get("status") == "done"]
+    if not same or max(same, key=lambda x: str(x.get("at") or "")).get("id") != it.get("id"):
+        return None
+    try:
+        p = corefix_pending(book, tag)
+    except Exception:                                        # noqa: BLE001  展示用：算不出就照旧写「完成」
+        return None
+    return FIX_WAIT if t in p and p[t] == int(it.get("units") or 0) else None
+
+
 def entry_why(eng, t: str, i: int) -> str | None:
     """买入 / 加仓的闸门（与规则的新仓相同）：资格检查 / 手动卖出后不买回（entry_gate_fn）、决算前（entry_block_fn）、新仓倍数 0。"""
     why = eng.entry_gate_fn(t, i) if eng.entry_gate_fn is not None else None
@@ -3730,8 +3749,10 @@ def signal_text(sg: dict | None) -> str:
     return "规则想买 " + "、".join(xs) if xs else "规则想买核心 ETF"
 
 
-def lines(sm: dict | None, today: str | None = None, now: dt.datetime | None = None) -> list[str]:
-    """日志 / 通知用：手动指令的几行（没有就空）。today = 这一天完成的也列出来；now → 状态按那一刻（盘中没下成、改到开盘：G18）。"""
+def lines(sm: dict | None, today: str | None = None, now: dt.datetime | None = None, book: dict | None = None,
+          tag: str | None = None) -> list[str]:
+    """日志 / 通知用：手动指令的几行（没有就空）。today = 这一天完成的也列出来；now → 状态按那一刻（盘中没下成、改到开盘：G18）。
+    book（manual list）→ 还没照它调的固定口数写「生效中 · 还没照它调」（fix_status_text）。"""
     sm = sm or {}
     out = []
     cp, sg = sm.get("core_pause"), sm.get("core_signal")
@@ -3751,13 +3772,14 @@ def lines(sm: dict | None, today: str | None = None, now: dt.datetime | None = N
         if it.get("status") in ACTIVE or (today and str(it.get("done_on") or "") >= today) \
                 or (today and str(it.get("at") or "")[:10] >= today):
             m = msg_text(it, now)
-            out.append(f"- 手动 {describe(it)}：{status_text(it, now)}" + (f"（{m}）" if m else ""))
+            st = (fix_status_text(it, sm.get("items") or [], book, tag) if book is not None else None) or status_text(it, now)
+            out.append(f"- 手动 {describe(it)}：{st}" + (f"（{m}）" if m else ""))
     return out
 
 
 __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEFAULT", "CAP_PCT", "MAX_POS", "SESSION", "Manual",
            "append", "read_all", "read_known", "is_pruned", "KEEP_ITEMS", "PAPER_IDLE", "paper_refuse", "unseen", "cancelled", "normalize", "batch_blocks", "lifting", "unblock_why", "lift_day", "rebuy_day",
-           "block_text", "NEXT_DECISION", "next_decision", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "HALT_CORE_AFTER", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "busy_today", "OPEN_ST",
+           "block_text", "FIX_WAIT", "fix_status_text", "NEXT_DECISION", "next_decision", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "HALT_CORE_AFTER", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "busy_today", "OPEN_ST",
            "corefix_clear_text", "resume_info", "wait_word", "wait_text", "fix_applied", "corefix_pending", "allin_busy_text", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text", "when_for", "morning_behind",
            "next_window", "due", "cancel_due", "CANCEL_UNTIL",
            "RULE_TEXT", "UNK_LATER", "NOW_NO_CANCEL", "NOW_FILLED_NO_CANCEL", "NOW_BUY_LAPSED", "NOW_SELL_WITHDRAWN", "now_sell_withdrawn", "now_lapsed", "now_expired", "now_cancel_why",

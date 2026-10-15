@@ -453,3 +453,22 @@ def test_next_decision_text_has_the_date():
     """UI F5：「下一次决策（MM/DD 07:40）起生效」：周五收盘后 → 下周一；早上 07:40 之前 → 今天。"""
     assert MO.next_decision(dt.datetime(2026, 10, 16, 16, 0, tzinfo=JST)) == "下一次决策（10/19 07:40）起生效"
     assert MO.next_decision(dt.datetime(2026, 10, 15, 7, 0, tzinfo=JST)) == "下一次决策（10/15 07:40）起生效"
+
+
+def test_fix_status_text_waiting_until_applied():
+    """读进执行器、还没照它排单的固定口数：状态写「生效中 · 还没照它调」，不写「完成」（2026-10-16 复核：10-15 的 679 口显示「完成」）。"""
+    old = {"kind": "corefix", "ticker": "1482.T", "units": 678, "id": "M1", "at": "2026-10-14T19:21:00+09:00", "status": "done"}
+    new = {"kind": "corefix", "ticker": "1482.T", "units": 679, "id": "M2", "at": "2026-10-15T08:48:29+09:00", "status": "done"}
+    items = [new, old]
+    book = {"core_rule": {"decided_on": "2026-10-14", "fix_applied": {"1482.T": 678}}, "manual": {"core_fix": {"1482.T": 679}, "items": {}}}
+    assert MO.fix_status_text(new, items, book) == MO.FIX_WAIT
+    assert MO.fix_status_text(old, items, book) is None                       # 旧的那条照旧「完成」
+    sm = {"items": items}
+    ln = MO.lines(sm, today="2026-10-15", book=book)
+    assert any(MO.FIX_WAIT in x and "679" in x for x in ln) and not any(MO.FIX_WAIT in x and "678" in x for x in ln)
+    assert not any(MO.FIX_WAIT in x for x in MO.lines(sm, today="2026-10-15"))   # 没给账本（日志 / 通知）：照旧
+    book["core_rule"]["fix_applied"] = {"1482.T": 679}                        # 照它排了单 → 完成
+    assert MO.fix_status_text(new, items, book) is None
+    clr = {"kind": "corefix", "ticker": "1482.T", "clear": True, "id": "M3", "at": "2026-10-15T10:00:00+09:00", "status": "done"}
+    book["core_rule"]["fix_applied"] = {"1482.T": 678}
+    assert MO.fix_status_text(new, items + [clr], book) is None               # 后面有一条恢复按规则：这条不是现在的

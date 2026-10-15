@@ -4598,7 +4598,15 @@ def cmd_manual(a) -> int:
         man = b_.get("manual") or {}
         sm = {**man, "items": sorted((man.get("items") or {}).values(), key=lambda x: x.get("at", ""), reverse=True)}
         print(f"  闲置资金比例：规则目标额的 {float(man.get('core_pct', 100.0)):g}%")
-        for ln in MO.lines(sm, today=now.date().isoformat(), now=now):
+        try:                                                  # 固定口数（含还没读的）：生效中、还没照它调的写什么时候下（2026-10-16 复核：以前 list 里看不到）
+            from qbreak import live_ops as LO_
+            fpend_, fwhen_ = LO_.fix_pending_when(b_, now, tag)
+            for t, u_ in MO.core_fixed(b_, tag).items():
+                print(f"  固定口数：{_labq(t, f'{int(u_):,} 口')}（不按规则自动调）"
+                      + (f"：{MO.FIX_WAIT} → {fwhen_}" if fpend_.get(t) == int(u_) and fwhen_ else ""))
+        except Exception as e_:                               # noqa: BLE001  展示用：算不出不影响 list
+            print(f"  固定口数：算不出（{type(e_).__name__}）")
+        for ln in MO.lines(sm, today=now.date().isoformat(), now=now, book=b_, tag=tag):
             print(f"  {_ann(ln[2:])}")
         if man.get("core_pause"):                             # 停买中：规则现在想拿哪只（确认买入 = manual core --pct 100）
             u100_ = (b_.get("core_rule") or {}).get("units100")

@@ -1914,7 +1914,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                and not (now_it and MO.now_cancel_why(it, now)))   # 盘中的单还挂在交易所：页面上撤不了；15:30 失效的卖出能撤回（G16）
         btn = (_cbtn(it, 2 if now_it else (1 if it.get("status") == "placed" else 0)) if can else _unbtn(it))
         rows.append(f"<div class='li'><div class='grow'><b>{_what(it)}</b> <span class='chip'>"
-                    f"{escape(MO.status_text(it, now))}{'（撤回中）' if it.get('cancel_req') else escape(tlive['itxt'].get(it.get('id'), ''))}</span>"   # 盘中没下成 → 开盘（G18）
+                    f"{escape(MO.fix_status_text(it, items, book, tag) or MO.status_text(it, now))}{'（撤回中）' if it.get('cancel_req') else escape(tlive['itxt'].get(it.get('id'), ''))}</span>"   # 盘中没下成 → 开盘（G18）
                     f"<div class='muted small'>{escape(str(it.get('at', ''))[5:16].replace('T', ' '))}"
                     f"{(' · ' + escape(MO.msg_text(it, now))) if it.get('msg') else ''}</div></div>{btn}</div>")
     H.append(PANE + "trade")
