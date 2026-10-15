@@ -171,17 +171,304 @@ def unfunded_buys(book: dict | None, asked=(), drop=(), cash: float | None = Non
     return out
 
 
+# ══════════════════════════ 资金依赖（fund_src）：凑钱的卖单没成交 → 靠它的钱的买单当场重算（D2 / D4；2026-10-15）══════════════════════════
+# 2026-10-15 事故：07:40 照「固定 1482 678 口」排了「卖 1545 4,110 口（寄付）→ 买 1482 678 口（现金不够 → 等开盘后）」，08:05 撤了卖单 →
+# 买单成了孤儿（撤不了、仍写「开盘后再下」、模拟账户第二天早上被拒、不推送）。执行器排单时把凑钱的卖单记在买单的 fund_src 上；
+# 卖单到了没成交的终态（撤单 / 被拒 / 失效 / 没成交 / 今天不会再试的没发出）→ fund_cascade 按实际现金重算这笔买单：
+# 够 → 照常；够一部分 → 减股；不够一单元 → 不下（SKIPPED）+ ★ 交易 提醒。撤单那一刻（cancel_core）、发单结果（_send）、
+# 开盘撮合 / 开盘后补单、对账都调它；面板的撤单确认框用 apply=False 预览同一个结果。旧账本没有 fund_src → 不推测（照旧）。
+DEP_OPEN = ("PLANNED", "BLOCKED", "DEFERRED")        # 依赖单还没发到交易所：级联只动这些
+SRC_WORD = {"CANCELLED": "已撤", "REJECTED": "被拒", "EXPIRED": "已失效", "UNFILLED": "没成交", "SKIPPED": "没下",
+            "MISSED": "没下", "RESOLVED": "登记为没成交", "BLOCKED": "没发出", "PLANNED": "没发出"}
+CUTOFF_T = dt.time(8, 55)                            # 寄付注文的最后时刻（live_unified.MORNING_CUTOFF）：之后早上被挡的单不再重试
+LATE_UNTIL = dt.time(9, 30)                          # 立花早上错过寄付的个股卖单：09:05 / 09:20 的开盘后运行补发（之后不再试）
+BUY_PAD, SELL_PAD = 0.005, 0.01                      # 估算：买按参考价 ×(1+0.5%)（滑点 + 手续费）；还会成交的卖单按参考价 ×(1−1%)
+LIVE_SRC = ("SENDING", "SENT", "PARTIAL", "FILLED", "ERROR", "DEFERRED")
+
+
+def _set(o, **kw) -> None:
+    """ExecOrder 或 dict 都能改。"""
+    for k, v in kw.items():
+        if isinstance(o, dict):
+            o[k] = v
+        else:
+            setattr(o, k, v)
+
+
+def blocked_retry(o, now: dt.datetime | None, fill: dt.date | None = None) -> bool:
+    """还没发出的单（PLANNED / BLOCKED）今天还会再发吗（D4；2026-10-15）：盘中的单（phase now）不会（一会儿再试的是新的一笔）；
+    成交日之前 / 08:55 之前的早上的单会（08:35 的重试 / 面板的 --retry 再发）；立花早上错过寄付的个股卖单 09:05 / 09:20 的开盘后运行补成
+    当日限价卖。其余（08:55 之后的被挡、成交日已过）不会。now=None → 当成还会（不下结论）。"""
+    if (_g(o, "phase") or "morning") == "now":
+        return False
+    if now is None:
+        return True
+    if fill is not None:
+        if now.date() < fill:
+            return True
+        if now.date() > fill:
+            return False
+    if now.time() < CUTOFF_T:
+        return True
+    from .live_unified import CUTOFF_TEXT
+    return (_g(o, "side") == "SELL" and (_g(o, "kind") or "stock") == "stock" and _g(o, "status") == "BLOCKED"
+            and not _g(o, "broker_id") and (_g(o, "phase") == "late" or CUTOFF_TEXT in str(_g(o, "note") or ""))
+            and now.time() < LATE_UNTIL)
+
+
+def src_done(o, now: dt.datetime | None, fill: dt.date | None = None) -> bool:
+    """凑钱的卖单已经不会（全部）成交了 = 它的钱不会（全部）来：撤了 / 被拒 / 失效 / 没成交 / 没下 / 今天不会再发的没发出。
+    还在交易所 / 发送中 / 状态不明 / 已成交 → 不算。"""
+    s = _g(o, "status")
+    if s in LIVE_SRC:
+        return False
+    if s in ("PLANNED", "BLOCKED"):
+        return not blocked_retry(o, now, fill)
+    return int(_g(o, "filled_qty") or 0) < int(_g(o, "sent_qty") or _g(o, "qty") or 0)
+
+
+def _src_dead(s, cid: str, now, fill, dead) -> bool:
+    """凑钱的卖单 cid（s = 账本里的那笔；找不到 → 当成不会来）没了吗；dead：另外当成「撤掉」的卖单（确认框预览）。"""
+    if s is None:
+        return True
+    if str(cid) in dead:
+        return int(_g(s, "filled_qty") or 0) < int(_g(s, "sent_qty") or _g(s, "qty") or 0)
+    return src_done(s, now, fill)
+
+
+def fund_srcs(o, orders) -> list:
+    """买单 o 的凑钱卖单（账本里找得到的；旧账本没有 fund_src → []）。"""
+    by = {str(_g(x, "cid")): x for x in orders}
+    return [by[str(c)] for c in (_g(o, "fund_src") or []) if str(c) in by]
+
+
+def orphan(o, orders, now: dt.datetime | None, fill: dt.date | None = None, dead=()) -> bool:
+    """还没发出的买单（PLANNED / BLOCKED / DEFERRED）的凑钱卖单全部不会成交了（孤儿：开盘后要用的钱不会来）。旧账本（没有 fund_src）→ False。"""
+    src = [str(c) for c in (_g(o, "fund_src") or [])]
+    if _g(o, "side") != "BUY" or _g(o, "status") not in DEP_OPEN or not src:
+        return False
+    by = {str(_g(x, "cid")): x for x in orders}
+    dead = {str(c) for c in dead or ()}
+    return all(_src_dead(by.get(c), c, now, fill, dead) for c in src)
+
+
+def busy(o, orders, now: dt.datetime | None, fill: dt.date | None = None) -> bool:
+    """这笔单让它那只票算「今天已经有执行器的单」吗（D4；执行器 now_phase、手动指令的「什么时候下」、面板共用一处；2026-10-15）：
+    成交过（含部分）/ 在交易所 / 发送中 / 状态不明 → 算；等开盘后的（DEFERRED）钱还会来 → 算，凑钱的卖单都没了（孤儿）→ 不算；
+    计划 / 被挡的今天还会再发 → 算；撤了 / 不下 / 被拒 / 失效、今天不会再发的被挡、盘中没到交易所的 → 不算（撤单之后当天还能写新的指令马上下）。
+    「同一只票当天执行器只下一笔」的规则不变（成交过的照算）。"""
+    if int(_g(o, "filled_qty") or 0) > 0:
+        return True
+    s = _g(o, "status")
+    if s in ("SENDING", "SENT", "PARTIAL", "FILLED", "ERROR"):
+        return True
+    if s == "DEFERRED":
+        return not orphan(o, orders, now, fill)
+    if s in ("PLANNED", "BLOCKED"):
+        return blocked_retry(o, now, fill) and not orphan(o, orders, now, fill)
+    return False
+
+
+def src_text(srcs, dead=()) -> str:
+    """「凑钱的卖单 卖 1545 纳斯达克 100：4,110 口 已撤（08:05）」（代码带名字；撤单的时刻从单的说明里取）。"""
+    import re
+    dead = {str(c) for c in dead or ()}
+    parts = []
+    for s in srcs:
+        n = int(_g(s, "sent_qty") or _g(s, "qty") or 0)
+        st = _g(s, "status")
+        w = "要撤" if str(_g(s, "cid")) in dead and st in CANCELLABLE + UNSENT + ("BLOCKED",) else SRC_WORD.get(st, STATUS_TEXT.get(st, st))
+        m = re.search(r"你撤了单（(\d\d:\d\d)", str(_g(s, "note") or ""))
+        q = int(_g(s, "filled_qty") or 0)
+        parts.append(f"{_side(s)} {_labq(_g(s, 'ticker'), f'{n:,} {_unit(s)}')} {w}" + (f"（{m.group(1)}）" if m else "")
+                     + (f"（已成交 {q:,}）" if q else ""))
+    return "凑钱的卖单 " + ("、".join(parts) if parts else "（账本里找不到）")
+
+
+def _lot_est(o, book: dict | None) -> int:
+    """一单元：核心 ETF 按账本记的（core_rule.lot，没记 = 1），个股按东证的売買単位。"""
+    if (_g(o, "kind") or "stock") == "core":
+        return int((((book or {}).get("core_rule") or {}).get("lot") or {}).get(_g(o, "ticker")) or 1)
+    from .tick import lot_size
+    return int(lot_size(str(_g(o, "ticker")), "JP"))
+
+
+def _need_est(o, q: int) -> float:
+    """买 q 股 / 口大约要的钱：参考价（个股 = 信号日收盘，核心 = 决策日收盘；没有 → 限价）×(1+0.5%)。"""
+    px = float(_g(o, "ref_px") or 0) or float(_g(o, "limit") or 0)
+    return px * int(q) * (1 + BUY_PAD)
+
+
+def fund_cascade(orders, *, cash, now: dt.datetime | None, need=None, lot_of=None, book: dict | None = None,
+                 partial: bool = True, reduce: bool = True, dead=(), queued: bool = False, apply: bool = True,
+                 fill: dt.date | None = None, add_live: bool = True) -> list[dict]:
+    """凑钱的卖单没了（任何一笔到了没成交的终态）的、还没发出的买单 → 按现在能用的钱重算（D2；2026-10-15）。
+    能用的钱 = cash（券商余力 / 现金；可以是函数：有要重算的买单才取）− 模拟账户排队的寄付买单（queued）+ 还会成交的凑钱卖单按参考价 ×(1−1%)
+    （按单的先后：前面还会下的、还没发出的买单先占）。每笔：够 → 照常；不够 → partial 时减到放得下的整单元（reduce=False：留给开盘时券商减），
+    一单元也放不下 → 不下（SKIPPED）。apply：改单（状态 / 股数 / 说明；凑钱卖单里没了的从 fund_src 去掉）；False → 只预览（撤单确认框）。
+    dead：另外当成「撤掉」的卖单 cid（预览）；add_live=False：还会成交的卖单的钱已经在 cash 里（模拟账户开盘撮合之后）。→ [{o, act: keep | reduce | skip, qty, was, srcs, note, free}]。"""
+    dead = {str(c) for c in dead or ()}
+    by = {str(_g(x, "cid")): x for x in orders}
+    hit = {}
+    for o in orders:
+        src = [str(c) for c in (_g(o, "fund_src") or [])]
+        if _g(o, "side") != "BUY" or _g(o, "status") not in DEP_OPEN or not src:
+            continue
+        gone = [c for c in src if _src_dead(by.get(c), c, now, fill, dead)]
+        if gone:
+            hit[id(o)] = (gone, [c for c in src if c not in gone])
+    if not hit:
+        return []
+    need = need or _need_est
+    lot_of = lot_of or (lambda o: _lot_est(o, book))
+    pool = float(cash() if callable(cash) else cash)
+    if queued:                                             # 模拟账户：排队的寄付买单开盘先撮合（PaperBroker 的现金还没扣它）
+        pool -= sum(need(o, int(_g(o, "sent_qty") or _g(o, "qty") or 0)) for o in orders
+                    if _g(o, "side") == "BUY" and _g(o, "status") == "SENT" and (_g(o, "phase") or "morning") == "morning")
+    live = {}
+    for o in orders:                                       # 还会成交的凑钱卖单：开盘卖出的钱（每笔只算一次）
+        if not add_live or _g(o, "side") != "BUY" or _g(o, "status") not in DEP_OPEN:
+            continue
+        for c in _g(o, "fund_src") or []:
+            s = by.get(str(c))
+            if s is not None and str(c) not in dead and not src_done(s, now, fill) and _g(s, "status") != "FILLED":
+                left = int(_g(s, "sent_qty") or _g(s, "qty") or 0) - int(_g(s, "filled_qty") or 0)
+                live[str(c)] = max(0, left) * float(_g(s, "ref_px") or 0) * (1 - SELL_PAD)
+    pool += sum(live.values())
+    out = []
+    for o in orders:
+        if _g(o, "side") != "BUY" or _g(o, "status") not in DEP_OPEN:
+            continue
+        n0 = int(_g(o, "qty") or 0)
+        if id(o) not in hit:
+            if busy(o, orders, now, fill):                 # 别的还会下的买单（排在前面的先占钱）
+                pool -= need(o, n0)
+            continue
+        gone, keep = hit[id(o)]
+        srcs = [by[c] for c in gone if c in by]
+        st = src_text(srcs, dead) + (f"（另有 {len(gone) - len(srcs)} 笔账本里找不到）" if len(srcs) < len(gone) else "")
+        u = _unit(o)
+        lot = max(1, int(lot_of(o) or 1))
+        free = pool
+        if n0 > 0 and need(o, n0) <= pool + 1e-9:
+            act, q = "keep", n0
+        else:
+            q = (n0 // lot) * lot if partial else 0
+            while q > 0 and need(o, q) > pool + 1e-9:
+                q -= lot
+            act = "skip" if q <= 0 else ("reduce" if reduce else "keep")
+            if act == "keep":
+                q = n0
+        when = "开盘后下" if _g(o, "status") == "DEFERRED" else "照常下"
+        if act == "skip":
+            note = (f"{st} → 不会下（现在能用的钱约 ¥{max(free, 0):,.0f}，按参考价买 {lot:,} {u}要约 ¥{need(o, lot):,.0f}）")
+        elif act == "reduce":
+            note = f"{st} → 按现在能用的钱（约 ¥{max(free, 0):,.0f}）减到 {q:,} {u}（原计划 {n0:,} {u}；{when}）"
+        else:
+            note = f"{st}；现在能用的钱够（约 ¥{max(free, 0):,.0f}）：照常（{when}）"
+        if act != "skip":
+            pool -= need(o, q if act == "reduce" else n0)
+        out.append({"o": o, "act": act, "qty": int(q if act != "skip" else 0), "was": n0, "srcs": srcs, "note": note[:300],
+                    "free": round(free, 2)})
+        if apply:
+            if act == "skip":
+                _set(o, status="SKIPPED", note=note[:300], fund_src=[])
+            else:
+                _set(o, note=note[:300], fund_src=list(keep), **({"qty": int(q)} if act == "reduce" else {}))
+    return out
+
+
+def cascade_events(res: list[dict]) -> list[tuple[str, str]]:
+    """fund_cascade 的结果 → [(级别, 文字)]：不下 / 减股 = ★ 交易 warn（推送），照常 = info。"""
+    ev = []
+    for r in res:
+        o = r["o"]
+        what = f"买 {_labq(_g(o, 'ticker'), f'{int(r['was']):,} {_unit(o)}')}"
+        if r["act"] == "keep":
+            ev.append(("info", f"{what}：{r['note']}"))
+        else:
+            ev.append(("warn", f"★ 交易：{what}：{r['note']}"))
+    return ev
+
+
+def cascade_rows(res: list[dict]) -> list[dict]:
+    """fund_cascade 的结果 → 可以存 / 显示的字典（不带单对象）。"""
+    return [{"cid": str(_g(r["o"], "cid")), "ticker": _g(r["o"], "ticker"), "kind": _g(r["o"], "kind") or "stock", "act": r["act"],
+             "qty": r["qty"], "was": r["was"], "note": r["note"]} for r in res]
+
+
+def deps_of(o, orders) -> list:
+    """撤这笔卖单会影响的买单：fund_src 里有它、还没发出的（执行器字段；旧账本 → []）。"""
+    c = str(_g(o, "cid"))
+    return [x for x in orders if _g(x, "side") == "BUY" and _g(x, "status") in DEP_OPEN
+            and c in [str(y) for y in (_g(x, "fund_src") or [])]]
+
+
+def next_decision_text(now: dt.datetime) -> str:
+    """下一次决策（交易日 07:40）是哪天 →「MM/DD 07:40」（panel._next_decision 同一个算法）。"""
+    d0 = now.date()
+    d1 = d0 if is_trading_day(d0) and now.time() < dt.time(7, 40) else next_trading_day(d0)
+    return f"{d1:%m/%d} 07:40"
+
+
+def _core_fix_of(book: dict | None, tag: str | None = None) -> dict:
+    """现在的固定口数（含还没读的 corefix：manual_orders.core_fixed；取不到 → 账本里的）。"""
+    try:
+        from .manual_orders import core_fixed
+        return dict(core_fixed(book, tag) or {})
+    except Exception:                                      # noqa: BLE001  只是说明
+        return {t: int(u) for t, u in ((((book or {}).get("manual") or {}).get("core_fix")) or {}).items()}
+
+
+def cancel_hint(o, book: dict | None, now: dt.datetime, tag: str | None = None) -> str:
+    """撤这笔单之后会怎样（M5：按单的来源选；确认框 / 命令行 / 推送共用；2026-10-15）。以前一律写个股版「撤掉的卖单如果规则明天还要卖会再下」，
+    固定口数排出的核心单撤了、固定口数仍有效 → 下一次决策会再排同样的单，提示却叫你改闲置资金比例（固定的 ETF 不跟比例）。"""
+    s, t, side, kind = _g(o, "status"), _g(o, "ticker"), _g(o, "side"), (_g(o, "kind") or "stock")
+    head = "还没发到交易所：撤了执行器就不再发" if s in UNSENT + ("BLOCKED",) else "已经成交的部分撤不了"
+    nd = next_decision_text(now)
+    r = _g(o, "reason") or ""
+    if r in MANUAL_REASONS:
+        return f"{head}；手动指令的单：那条指令也撤回（之后不再下；已经成交的部分照记）"
+    if r == "manual_fund":
+        return f"{head}；这是盘中为手动买入凑钱的核心 ETF 卖单：那条买入默认一起撤回（钱不够就不买）"
+    if kind == "core":
+        fx = _core_fix_of(book, tag)
+        d = ((book or {}).get("state") or {}).get("last_date")
+        mine = [x for x in (book or {}).get("orders") or [] if x.get("decided_on") == d]
+        if t in fx:
+            return (f"{head}；{_lab(t)} 手动固定 {int(fx[t]):,} 口仍有效 → {nd} 的决策还会再排同样的单"
+                    f"（不想要 → 「持仓」里 {_lab(t)} 下面点「恢复按规则」）")
+        drv = [x.get("ticker") for x in mine if x.get("kind") == "core" and x.get("side") == "BUY" and x.get("ticker") in fx]
+        if side == "SELL" and drv:
+            fl = "、".join(f"{_lab(x)} {int(fx[x]):,} 口" for x in dict.fromkeys(drv))
+            return (f"{head}；这笔卖出是为手动固定（{fl}）凑钱：固定口数仍有效 → {nd} 的决策还会再排同样的换仓"
+                    f"（不想要 → 「持仓」里那只 ETF 下面点「恢复按规则」）")
+        if r == "manual_core":
+            return f"{head}；照闲置资金比例调的单：比例不变 → {nd} 的决策照比例再算目标，可能再买 / 再卖"
+        return f"{head}；核心 ETF 的单：{nd} 的决策照规则 / 闲置资金比例重新算目标，可能再买 / 再卖（要少拿用「闲置资金比例」）"
+    if side == "SELL":
+        return f"{head}；规则明天还要卖就会再下（与「没成交」同一处理）"
+    return f"{head}；撤掉的个股买单不再买（信号只在那天开盘有效）"
+
+
 # ══════════════════════════ B1 撤单 ══════════════════════════
 def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
-    """这笔单现在能不能撤：能 → None；不能 → 理由。面板（显示「撤单」按钮）、手动指令的检查、执行器共用。"""
+    """这笔单现在能不能撤：能 → None；不能 → 理由。面板（显示「撤单」按钮）、手动指令的检查、执行器共用。
+    执行器自己还没发到交易所的单（PLANNED / DEFERRED：计划 / 等开盘后）也能撤 = 执行器不再发（D2；2026-10-15：以前撤了凑钱的卖单，
+    等开盘后的买单撤不了）：成交日当天、立花在收盘（15:30）之前。"""
     st = _g(o, "status")
-    if st not in CANCELLABLE:
-        return f"状态是「{STATUS_TEXT.get(st, st)}」：只撤还挂着的单（已下单 / 部分成交）"
+    unsent = st in UNSENT
+    if st not in CANCELLABLE and not unsent:
+        return f"状态是「{STATUS_TEXT.get(st, st)}」：只撤还挂着的单（已下单 / 部分成交）或执行器还没发出的单（计划 / 等开盘后）"
     if _g(o, "decided_on") != ((book or {}).get("state") or {}).get("last_date"):
         return "不是当前决策的单（已经对账过了）"
     f = fill_day_of(book)
     if f != now.date():
         return f"不是今天的单（成交日 {f}）"
+    if unsent:
+        if not paper and now.time() >= CLOSE_T:
+            return "已经收盘（15:30）：这笔今天不会再发了，不用撤"
+        return None
     if paper:
         if (_g(o, "phase") or "morning") != "morning":
             return "模拟账户：盘中 / 开盘后的单当场成交了，撤不了"
@@ -224,7 +511,8 @@ def _withdraw_manual(book: dict, o, now: dt.datetime) -> str | None:
     if it is None or it.get("cancel_req"):
         return None
     it["cancel_req"] = f"撤单 {_g(o, 'cid')}"
-    it["msg"] = f"{now:%m/%d %H:%M} 你撤了交易所的单：这条指令也撤回（之后不再下；已经成交的部分照记）"
+    where = "执行器还没发出的单" if "还没发到交易所" in str(_g(o, "note") or "") or "执行器不再发" in str(_g(o, "note") or "") else "交易所的单"
+    it["msg"] = f"{now:%m/%d %H:%M} 你撤了{where}：这条指令也撤回（之后不再下；已经成交的部分照记）"
     try:                                                   # 指令写的是什么（「卖出全部 7203 トヨタ自動車」；2026-10-15）
         from .manual_orders import describe
         what = describe(it)
@@ -234,9 +522,14 @@ def _withdraw_manual(book: dict, o, now: dt.datetime) -> str | None:
 
 
 def _cancel_one(o, b, paper: bool, now: dt.datetime, source: str, polls: int) -> tuple[str, str]:
-    """撤一笔 → ("done" | "failed" | "skipped", 说明)。成功：o.status = CANCELLED（立花：filled_qty / filled_px 记撤单时的成交）。"""
+    """撤一笔 → ("done" | "failed" | "skipped", 说明)。成功：o.status = CANCELLED（立花：filled_qty / filled_px 记撤单时的成交）。
+    执行器还没发出的单（PLANNED / DEFERRED）：不连券商，记 CANCELLED = 执行器不再发（D2；2026-10-15）。"""
     n = int(_g(o, "sent_qty") or _g(o, "qty") or 0)
     who = f"，{source}" if source else ""
+    if _g(o, "status") in UNSENT:
+        _set(o, status="CANCELLED", fund_src=[],
+             note=f"你撤了单（{now:%H:%M}{who}）：还没发到交易所，执行器不再发"[:300])
+        return "done", _g(o, "note")
     if paper:
         fn = getattr(b, "cancel_pending", None)
         if fn is None or not fn(o.cid):
@@ -291,15 +584,21 @@ def _cancel_one(o, b, paper: bool, now: dt.datetime, source: str, polls: int) ->
 
 
 def cancel_core(orders: list, book: dict, get_broker, cids=None, *, paper: bool, now: dt.datetime, source: str = "",
-                polls: int = POLLS) -> dict:
-    """撤单的核心（执行器 / 不建引擎的 cancel_book 共用）。orders：ExecOrder 列表（原地改）；get_broker()：要撤时才取券商（没有要撤的
-    就不连券商）；cids=None → 今天全部还挂着的执行器单。返回 {"done", "failed", "skipped": [{cid, ticker, side, qty, why}],
-    "events": [(级别, 文字)], "by_cid": {cid: (结果, 说明)}}。"""
-    res = {"done": [], "pending": [], "failed": [], "skipped": [], "events": [], "by_cid": {}}
+                polls: int = POLLS, deps=None, cash=None, need=None, lot_of=None, tag: str | None = None,
+                reserve: float = 0.0, queued: bool | None = None) -> dict:
+    """撤单的核心（执行器 / 不建引擎的 cancel_book 共用）。orders：ExecOrder 列表（原地改）；get_broker()：要撤交易所的单时才取券商
+    （没有要撤的 / 只撤执行器还没发出的单就不连券商）；cids=None → 今天全部还挂着的执行器单（只撤交易所里的：停并撤单的口径）。
+    撤了凑钱的卖单（D2；2026-10-15）：deps（{cid: "cancel" | "keep"} 或一个值）="cancel" → 靠它的钱、还没发出的买单一起撤
+    （CANCELLED，手动指令也撤回）；其余（"keep" / 没写）→ fund_cascade 按现在能用的钱重算（照常 / 减股 / 不下 + ★ 交易 提醒）。
+    盘中为手动买入凑钱的核心卖单（fund_wait）被撤 → 那条买入默认也撤回（M16；deps="keep" 时留着、按现金重新算）。
+    cash：重算用的钱（数或函数；没给 → 模拟账户 = 模拟券商的现金 − 排队的寄付买单，立花 = 券商余力 − 出金预留 reserve，没连券商 → cash_hi）。
+    返回 {"done", "pending", "failed", "skipped": [{cid, ticker, side, qty, why, kind, hint}], "events": [(级别, 文字)],
+    "by_cid": {cid: (结果, 说明)}, "fund": [cascade_rows]}。"""
+    res = {"done": [], "pending": [], "failed": [], "skipped": [], "events": [], "by_cid": {}, "fund": []}
     by = {o.cid: o for o in orders}
     targets = []
     if cids is None:
-        targets = [o for o in orders if cancel_why(o, book, now, paper) is None]
+        targets = [o for o in orders if o.status in CANCELLABLE and cancel_why(o, book, now, paper) is None]
         if not targets:
             res["note"] = "今天没有还挂着的执行器单（不用撤）"
     else:
@@ -314,11 +613,21 @@ def cancel_core(orders: list, book: dict, get_broker, cids=None, *, paper: bool,
                 res["by_cid"][c] = ("skipped", why)
                 continue
             targets.append(o)
-    b = get_broker() if targets else None
+    hints = {o.cid: cancel_hint(o, book, now, tag) for o in targets}       # 撤之前算（状态还没改）
+    holder: dict = {}
+
+    def broker():
+        if "b" not in holder:
+            holder["b"] = get_broker()
+        return holder["b"]
+    if any(o.status in CANCELLABLE for o in targets):
+        broker()
+    mode = deps if isinstance(deps, dict) else {}
+    fill = fill_day_of(book)
     for o in targets:
-        kind, why = _cancel_one(o, b, paper, now, source, polls)
+        kind, why = _cancel_one(o, holder.get("b"), paper, now, source, polls)
         n = int(o.sent_qty or o.qty)
-        rec = {"cid": o.cid, "ticker": o.ticker, "side": o.side, "qty": n, "why": why, "kind": o.kind or "stock"}
+        rec = {"cid": o.cid, "ticker": o.ticker, "side": o.side, "qty": n, "why": why, "kind": o.kind or "stock", "hint": hints[o.cid]}
         if kind in ("done", "pending"):
             w = _withdraw_manual(book, o, now)
             if w:
@@ -328,6 +637,53 @@ def cancel_core(orders: list, book: dict, get_broker, cids=None, *, paper: bool,
         lvl = "info" if kind in ("done", "pending") else "warn"
         res["events"].append((lvl, f"撤单 {_side(o)} {_labq(o.ticker, f'{n:,} {_unit(o)}')}（{o.cid}）："
                                    + {"done": "撤掉了 —— ", "pending": "撤单已受理 —— "}.get(kind, "没撤 —— ") + rec["why"]))
+        if kind not in ("done", "pending") or o.side != "SELL":
+            continue
+        m = mode.get(o.cid) if isinstance(deps, dict) else deps
+        if m == "cancel":                                  # 你选了「一起撤买单」：靠它的钱、还没发出的买单一起撤（执行器不再发）
+            for x in deps_of(o, orders):
+                h = cancel_hint(x, book, now, tag)
+                x.status, x.fund_src = "CANCELLED", []
+                x.note = f"你撤了单（{now:%H:%M}{'，' + source if source else ''}）：和凑钱的卖单 {_lab(o.ticker)} 一起撤，执行器不再发"[:300]
+                xr = {"cid": x.cid, "ticker": x.ticker, "side": x.side, "qty": int(x.qty), "why": x.note, "kind": x.kind or "stock",
+                      "hint": h}
+                w = _withdraw_manual(book, x, now)
+                if w:
+                    xr["why"] = f"{x.note}；{w}"
+                res["done"].append(xr)
+                res["by_cid"][x.cid] = ("done", xr["why"])
+                res["events"].append(("info", f"撤单 买 {_labq(x.ticker, f'{int(x.qty):,} {_unit(x)}')}（{x.cid}）：撤掉了 —— {xr['why']}"))
+        for it in (((book or {}).get("manual") or {}).get("items") or {}).values():   # 盘中为手动买入凑钱的核心卖单（M16）
+            if o.cid not in [str(c) for c in it.get("fund_wait") or []] or it.get("status") != "pending":
+                continue
+            if m == "keep":                                # 你选了只撤卖单：买入留着，执行器下一次按现金重新算
+                it.pop("fund_wait", None)
+                it["msg"] = f"{now:%m/%d %H:%M} 凑钱的核心 ETF 卖单 {_lab(o.ticker)} 被你撤了：这条买入按现在的现金重新算（钱不够就不买）"
+                continue
+            it.update(status="cancelled", msg=f"{now:%m/%d %H:%M} 凑钱的核心 ETF 卖单 {_lab(o.ticker)} 被你撤了：这条买入也撤回（之后不再下）")
+            for f in ("wait", "hold", "tried", "fund_wait"):
+                it.pop(f, None)
+            res["events"].append(("info", f"手动指令 {it.get('id')}（买 {_lab(it.get('ticker'))}）：凑钱的卖单被撤 → 也撤回"))
+    if res["done"] or res["pending"]:
+        q = paper if queued is None else queued
+
+        def cash_now() -> float:
+            if cash is not None:
+                return float(cash() if callable(cash) else cash)
+            if paper:
+                return float(broker().cash())
+            b_ = holder.get("b")
+            if b_ is not None and hasattr(b_, "cash"):
+                return float(b_.cash()) - float(reserve or 0)
+            return cash_hi(book, tag) - float(reserve or 0)
+        try:
+            fr = fund_cascade(orders, cash=cash_now, now=now, need=need, lot_of=lot_of, book=book, partial=True,
+                              queued=q, fill=fill)
+        except Exception as e:                             # noqa: BLE001  重算失败不影响撤单本身：记下、09:05 / 开盘撮合再判断
+            fr = []
+            res["events"].append(("warn", f"★ 交易：撤单之后重算靠这笔卖出的钱的买单没算成（{type(e).__name__}：{e}）：开盘后补单时再判断"))
+        res["fund"] = cascade_rows(fr)
+        res["events"] += cascade_events(fr)
     return res
 
 
@@ -340,9 +696,23 @@ def cancel_text(res: dict) -> list[str]:
             what = " ".join(x for x in ({"BUY": "买", "SELL": "卖"}.get(r.get("side"), ""), _lab(r.get("ticker")),
                                         f"{q:,} {'口' if r.get('kind') == 'core' else '股'}" if q else "") if x)
             out.append(f"{head}：{what}（{r['cid']}）—— {r['why']}")
+    for r in res.get("fund") or []:                       # 靠撤掉的卖单的钱的买单：重算的结果（D2；2026-10-15）
+        u = "口" if r.get("kind") == "core" else "股"
+        out.append(("★ " if r.get("act") != "keep" else "") + f"买 {_labq(r.get('ticker'), f'{int(r.get('was') or 0):,} {u}')}：{r.get('note')}")
     if res.get("note"):
         out.append(res["note"])
     return out
+
+
+def _reserve_of(book: dict | None, paper: bool) -> float:
+    """出金预留（立花：到账前不拿它买；模拟账户 0）。"""
+    if paper:
+        return 0.0
+    try:
+        from .live_unified import reserve_jpy
+        return float(reserve_jpy(book) or 0)
+    except Exception:                                      # noqa: BLE001
+        return 0.0
 
 
 def cancel_book(path, get_broker, cids=None, *, paper: bool, tag: str | None = None, requests: bool = False,
@@ -365,9 +735,12 @@ def cancel_book(path, get_broker, cids=None, *, paper: bool, tag: str | None = N
         cids = [str(it.get("cid") or "") for it in items]
     orders = [ExecOrder.from_dict(o) for o in book.get("orders") or []]
     if requests and not items:
-        res = {"done": [], "pending": [], "failed": [], "skipped": [], "events": [], "by_cid": {}, "note": "没有要处理的撤单指令"}
+        res = {"done": [], "pending": [], "failed": [], "skipped": [], "events": [], "by_cid": {}, "fund": [],
+               "note": "没有要处理的撤单指令"}
     else:
-        res = cancel_core(orders, book, get_broker, cids, paper=paper, now=now, source=source, polls=polls)
+        deps = {str(it.get("cid") or ""): it.get("deps") for it in items if it.get("deps")} if items else None
+        res = cancel_core(orders, book, get_broker, cids, paper=paper, now=now, source=source, polls=polls, deps=deps, tag=tag,
+                          reserve=_reserve_of(book, paper))
     done_items = []
     for it in items:
         kind, why = res["by_cid"].get(str(it.get("cid") or ""), ("skipped", "没处理"))
@@ -756,4 +1129,6 @@ def save_book(path, book: dict, st=None, now: dt.datetime | None = None) -> None
 
 
 __all__ = ["CANCELLABLE", "STATUS_TEXT", "CANCEL_HINT", "CANCEL_HINT_CORE", "RESOLVE_NOTE", "cancel_why", "cancel_core", "cancel_book", "cancel_text",
+           "DEP_OPEN", "SRC_WORD", "blocked_retry", "src_done", "fund_srcs", "orphan", "busy", "src_text", "fund_cascade",
+           "cascade_events", "cascade_rows", "deps_of", "next_decision_text", "cancel_hint",
            "fill_day_of", "how_text", "unknown_candidates", "unknown_text", "resolve_draft", "reconcile_report", "adopt", "save_book"]

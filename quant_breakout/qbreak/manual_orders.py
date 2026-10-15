@@ -162,6 +162,11 @@ def normalize(req: dict) -> dict:
         if not m:
             raise ValueError("撤单要给执行器的单号（例 U2026-10-08-SELL-7203.T）")
         out["cid"], out["ticker"] = cid, m.group(3)
+        dp = str(req.get("deps") or "").strip()            # 撤凑钱的卖单时，靠它的钱的买单：cancel = 一起撤 / keep = 只撤卖单（D2；2026-10-15）
+        if dp:
+            if dp not in ("cancel", "keep"):
+                raise ValueError("deps 只能是 cancel（一起撤买单）或 keep（只撤卖单）")
+            out["deps"] = dp
     if kind == "unblock" and req.get("block_id"):           # 面板带上它看到的那个「不买回」设定的 id（2026-10-13）：设定换了 / 解除了 → 执行器不动新的
         bid = str(req.get("block_id") or "").strip()
         if not re.fullmatch(r"M[0-9A-Za-z_.\-]{1,80}", bid):
@@ -1053,8 +1058,11 @@ OPEN_ST = ("PLANNED", "DEFERRED", "SENDING", "SENT", "PARTIAL", "ERROR")   # 执
 
 
 def orders_today(book: dict | None, now: dt.datetime, t: str | None = None, open_only: bool = False) -> list[dict]:
-    """账本当前决策里成交日是今天的执行器的单（盘中根本没到交易所的不算 = 与执行器 now_phase「今天已经有执行器的单」同一个判断；
-    2026-10-13）。t：只看这只；open_only：只看还没结束的（OPEN_ST）。今天早上的决策还没跑（成交日不是今天）→ []。"""
+    """账本当前决策里成交日是今天、还活着的执行器的单（live_ops.busy：成交过 / 在交易所 / 发送中 / 状态不明 / 钱还会来的等开盘后 /
+    今天还会再发的计划；撤了 / 不下 / 被拒 / 失效 / 盘中没到交易所 / 凑钱的卖单没了的孤儿不算 = 与执行器 now_phase「今天已经有执行器的单」
+    同一个判断；2026-10-13，D4 2026-10-15：以前撤了的单也算，撤单之后当天写不了新的）。t：只看这只；open_only：只看还没结束的（OPEN_ST）。
+    今天早上的决策还没跑（成交日不是今天）→ []。"""
+    from . import live_ops as LO
     st = (book or {}).get("state") or {}
     d = st.get("last_date")
     try:
@@ -1063,15 +1071,22 @@ def orders_today(book: dict | None, now: dt.datetime, t: str | None = None, open
     except ValueError:
         return []
     out = []
-    for o in (book or {}).get("orders") or []:
-        if o.get("decided_on") != d or (t is not None and o.get("ticker") != t):
+    cur = [o for o in (book or {}).get("orders") or [] if o.get("decided_on") == d]
+    for o in cur:
+        if t is not None and o.get("ticker") != t:
             continue
-        if o.get("phase") == "now" and o.get("status") in ("BLOCKED", "SKIPPED") and not o.get("broker_id"):
+        if not LO.busy(o, cur, now, now.date()):
             continue
         if open_only and o.get("status") not in OPEN_ST:
             continue
         out.append(o)
     return out
+
+
+def busy_today(book: dict | None, t: str, now: dt.datetime) -> bool:
+    """这只票今天已经有执行器还活着的单吗（D4；2026-10-15）：执行器 now_phase「这只今天已经有执行器的单 → 明天开盘」、
+    手动指令「什么时候下」的说明（when_for）、面板共用 live_ops.busy 一处逻辑。同一只票当天执行器只下一笔（成交过的照算）。"""
+    return bool(orders_today(book, now, t))
 
 
 def _order_word(o: dict) -> str:
@@ -1939,13 +1954,16 @@ def morning_behind(book: dict | None, now: dt.datetime) -> bool:
     return bool(ld) and is_trading_day(now.date()) and ld < prev_trading_day(now.date()).isoformat()
 
 
-def when_for(now: dt.datetime, book: dict | None) -> str:
+def when_for(now: dt.datetime, book: dict | None, ticker: str | None = None) -> str:
     """when_text 加上「今天早上的运行还没完成」（G9；2026-10-14）：盘中 / 午休点的，但今天早上的运行还没完成（Mac 07:40 睡着、
     运行失败…）→ 不是马上：补跑早上的运行之后才下（模拟账户：面板会自动补跑；立花：只按定时任务 / 你说再跑），没补跑 → 下一个交易日开盘。
+    ticker：这只今天已经有执行器还活着的单（busy_today；D4，2026-10-15）→ 盘中不下第二笔：下一个交易日开盘。
     面板的「现在点买卖 → …」、确认框、提交后的提示、命令行同一句。"""
     mode, d = timing(now)
     if mode in ("now", "lunch") and morning_behind(book, now):
         return f"补跑早上的运行之后（今天早上的运行还没完成；没补跑 → {next_trading_day(d):%m/%d} 开盘）"
+    if ticker and mode in ("now", "lunch") and busy_today(book, ticker, now):
+        return f"{next_trading_day(d):%m/%d} 开盘（{names.label(ticker)} 今天已经有执行器的单：同一只当天只下一笔）"
     return when_text(now)
 
 
@@ -3535,7 +3553,7 @@ def lines(sm: dict | None, today: str | None = None, now: dt.datetime | None = N
 
 __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEFAULT", "CAP_PCT", "MAX_POS", "SESSION", "Manual",
            "append", "read_all", "read_known", "is_pruned", "KEEP_ITEMS", "PAPER_IDLE", "paper_refuse", "unseen", "cancelled", "normalize", "batch_blocks", "lifting", "unblock_why", "lift_day", "rebuy_day",
-           "block_text", "NEXT_DECISION", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "OPEN_ST",
+           "block_text", "NEXT_DECISION", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "busy_today", "OPEN_ST",
            "corefix_clear_text", "resume_info", "wait_word", "allin_busy_text", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text", "when_for", "morning_behind",
            "next_window", "due", "cancel_due", "CANCEL_UNTIL",
            "RULE_TEXT", "UNK_LATER", "NOW_NO_CANCEL", "NOW_FILLED_NO_CANCEL", "NOW_BUY_LAPSED", "NOW_SELL_WITHDRAWN", "now_sell_withdrawn", "now_lapsed", "now_expired", "now_cancel_why",

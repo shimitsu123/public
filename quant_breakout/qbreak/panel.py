@@ -226,6 +226,9 @@ def _dialogs(paper: bool, cap: float = MO.CAP_PCT) -> str:
             "</div></dialog>"
             "<dialog id='dlg-ask'><div class='sheet'><h3 id='ask-title'></h3><div id='ask-pl' class='pl' hidden></div><div id='ask-body'></div>"
             "<input type='text' id='ask-input' maxlength='120' hidden>"
+            # 另外的选择（撤凑钱的卖单：「只撤卖单」「撤单并恢复按规则」；D2，2026-10-15）：平时不显示
+            "<div class='row' id='ask-alts' hidden><button class='btn' id='ask-alt' data-act='ask-alt' hidden></button>"
+            "<button class='btn' id='ask-alt2' data-act='ask-alt' hidden></button></div>"
             "<div class='row'><button class='btn' id='ask-no' data-act='close'>取消</button><button class='btn primary' id='ask-ok' data-act='ask-ok'>确定</button></div>"
             "</div></dialog>")
 
@@ -1048,7 +1051,10 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
     已经写了撤单指令的显示「撤单中」。立花 API / Mac 出故障那天：照这张表在立花网站下单，之后在 Mac 对话里说一声人工代下登记（adopt）。
     不会再做事的单（_trade_live：凑钱的卖单撤了、开盘时一定买不起 / HALT / 已收盘）把状态换成「不会下单（预计）」等并写原因，
     固定口数还有效时提醒下一次决策还会再排（2026-10-15）；卖单的「撤单」确认框列出靠这笔卖出的钱、撤了就下不成的买单（data-deps）。
-    没有单 → ""。只展示 + 写指令，不改账本。"""
+    D2（2026-10-15）：执行器还没发出的单（计划 / 等开盘后）也给「撤单」（撤 = 执行器不再发）；撤之后会怎样按单的来源写（data-hint：LO.cancel_hint）；
+    卖单有靠它的钱的买单（执行器记的 fund_src）→ 确认框给几个按钮（data-depn / data-keep / data-fix）：「一起撤买单」「只撤卖单（买 X 不会下 /
+    减到 N 口 / 照常）」，买单是固定口数排的再加「撤单并恢复按规则」；会怎样用 LO.fund_cascade(apply=False) 预览（与撤单那一刻执行器的重算同一个函数）。
+    旧账本（没有 fund_src）照旧用 unfunded_buys 写说明。没有单 → ""。只展示 + 写指令，不改账本。"""
     from . import live_ops as LO
     st = book.get("state") or {}
     d = st.get("last_date")
@@ -1073,8 +1079,29 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
         if cid in asked:
             btn = "<span class='chip'>撤单中</span>"
         elif LO.cancel_why(o, book, now, paper) is None:
-            deps = ""
-            if o.get("side") == "SELL":                     # 靠这笔卖出的钱的买单：撤了就下不成（只是确认框里说明；2026-10-15）
+            deps, alt = "", ""
+            dx = LO.deps_of(o, orders) if o.get("side") == "SELL" else []
+            if dx:                                          # 执行器记了靠这笔卖出的钱的买单（fund_src；D2）：预览撤掉之后它们会怎样
+                try:
+                    pv = {str(r["o"].get("cid")): r for r in LO.fund_cascade(
+                        orders, cash=_cash_hi(book, tag) - LO._reserve_of(book, paper), now=now, book=book, dead={cid}, apply=False,
+                        fill=f, queued=paper) if cid in [str(x.get("cid")) for x in r["srcs"]]}
+                except (TypeError, ValueError, KeyError):  # 账本里的数读不了：不预览（只写有哪几笔）
+                    pv = {}
+                fixed = MO.core_fixed(book, tag)
+                bits, kw = [], []
+                for b in dx:
+                    u = "口" if b.get("kind") == "core" else "股"
+                    r = pv.get(str(b.get("cid")))
+                    w = ("按现在的钱重算" if r is None else "不会下" if r["act"] == "skip"
+                         else f"减到 {int(r['qty']):,} {u}" if r["act"] == "reduce" else "照常")
+                    bits.append(f"买 {NM.qty(b.get('ticker'), f'{int(b.get('qty') or 0):,} {u}')}（只撤卖单 → {w}）")
+                    kw.append(f"买 {NM.label(b.get('ticker'))} {w}")
+                deps = "靠这笔卖出的钱、执行器还没发出的买单：" + "、".join(bits) + "（已经成交的部分卖出的钱照样能用）"
+                fx = next((str(b.get("ticker")) for b in dx if b.get("kind") == "core" and b.get("ticker") in fixed), "")
+                alt = (f" data-depn='{len(dx)}' data-keep='{escape('只撤卖单（' + '；'.join(kw) + '）')}'"
+                       + (f" data-fix='{escape(fx)}' data-fixname='{escape(NM.name(fx) or '')}'" if fx else ""))
+            elif o.get("side") == "SELL":                   # 旧账本（没有 fund_src）：靠这笔卖出的钱的买单撤了就下不成（只是确认框里说明；2026-10-15）
                 try:
                     cash = _cash_hi(book, tag)
                     base = LO.unfunded_buys(book, asked, cash=cash) if base is None else base
@@ -1088,7 +1115,8 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
                             + "（已经成交的部分卖出的钱照样能用）")
             btn = (f"<button class='btn sm danger' data-act='cancel-order' data-cid='{escape(cid)}' "
                    f"data-t='{escape(str(o.get('ticker')))}' data-side='{escape(str(o.get('side')))}' data-qty='{n}' "
-                   f"data-core='{1 if core else 0}'" + (f" data-deps='{escape(deps)}'" if deps else "")
+                   f"data-core='{1 if core else 0}' data-unsent='{1 if o.get('status') in LO.UNSENT else 0}' "
+                   f"data-hint='{escape(LO.cancel_hint(o, book, now, tag))}'" + (f" data-deps='{escape(deps)}'" if deps else "") + alt
                    + f" data-name='{escape(NM.name(o.get('ticker')) or '')}'>撤单</button>")      # 名字放最后（确认框标题；2026-10-15）
         else:
             btn = ""
@@ -1101,7 +1129,7 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
                     + (f"<div class='small'>{escape(fixn[cid])}</div>" if cid in fixn else "")
                     + f"<div class='muted small'>{escape(LO.how_text(o) + lim + got)}"
                     f"{(' · ' + escape(NM.annotate(note)[:160])) if note else ''}</div></div>{btn}</div>")
-    foot = (f"「撤单」：{LO.CANCEL_HINT}。{LO.CANCEL_HINT_CORE}。"
+    foot = (f"「撤单」：{LO.CANCEL_HINT}。{LO.CANCEL_HINT_CORE}。执行器还没发出的单（计划 / 等开盘后）也能撤：撤了执行器就不再发。"
             + ("" if paper or stale else
                "立花 API / Mac 出故障那天：只照这张表里「被挡 / 不下 / 没下」的行在立花网站下单（「已下单 / 已成交 / 部分成交」的已经在交易所，"
                "别再下），之后在 Mac 对话里说一声登记（人工代下）。"))
@@ -1217,7 +1245,8 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     fin = {}                                                # 手动单已经做完了（全部成交 / 立花收盘后失效的买单）→ {cid: 指令后面加的说明}
     for o in cur:
         cid, s, t = str(o.get("cid")), o.get("status"), str(o.get("ticker"))
-        if o.get("kind") == "core" and t in fixed and (s == "CANCELLED" or cid in asked or cid in unf):   # 撤了 / 下不成，固定口数却还在
+        if o.get("kind") == "core" and t in fixed and (s == "CANCELLED" or cid in asked or cid in unf    # 撤了 / 下不成，固定口数却还在
+                                                       or (s == "SKIPPED" and "凑钱的卖单" in str(o.get("note") or ""))):   # 凑钱的卖单没了、执行器不下了（D2）
             fix[cid] = (f"{NM.label(t)} 手动固定 {int(fixed[t]):,} 口仍然有效：下一次决策（{_next_decision(now)}）还会再排同样的单；不想要 → 在「持仓」"
                         + ("" if int((st.get("core_units") or {}).get(t) or 0) > 0 else "的「其他闲置资金 ETF（现在没拿）」")
                         + f"里 {NM.label(t)} 下面点「恢复按规则」")
@@ -2350,7 +2379,8 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
         rec = MO.append(tag, rec, clock=clock)
     if rec["kind"] == "unblock":                           # 解除不是单：不会买回、也不马上买，下一次决策起才不挡（2026-10-13）
         return True, f"已写：解除 {NM.label(rec['ticker'])} 的不自动买回（不会买回，也不马上买；指令 {rec['id']}）→ {MO.NEXT_DECISION}", rec
-    when = MO.when_for(now or now_jst(), book)              # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘 / 早上的运行没完成（G9）
+    when = MO.when_for(now or now_jst(), book,              # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘 / 早上的运行没完成（G9）
+                       rec.get("ticker") if rec["kind"] in MO.ORDER_KINDS else None)   # 这只今天已经有执行器还活着的单 → 下一个交易日开盘（D4）
     k, t = rec["kind"], rec.get("ticker")
     tl = NM.label(t) if t else ""                           # 说明里的票都写「代码 名字」（2026-10-15 用户：只写代码不知道是哪只；指令 id / cid 原样）
     msg = {"sell": f"已写：卖出 {tl} 全部 → {when}卖出",

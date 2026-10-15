@@ -3475,17 +3475,47 @@ def _live_cancel(a, tag: str, book, paper: bool) -> int:
     lines = LO.cancel_text(res)
     for ln in lines:
         print(ln)
+    hints = []                                                # 撤之后会怎样：按每笔单的来源写（M5；2026-10-15：以前一律个股版的 CANCEL_HINT）
+    for r in (res.get("done") or []) + (res.get("pending") or []):
+        h = r.get("hint") or LO.CANCEL_HINT
+        hints.append(f"{'买' if r.get('side') == 'BUY' else '卖'} {_lab_cancel(r.get('ticker'))}：{h}")
+    for ln in dict.fromkeys(hints):
+        print(f"撤掉的单 {ln}")
     if res["done"] or res.get("pending"):
-        print(f"撤掉的单：{LO.CANCEL_HINT}；明天早上的对账照{'模拟券商' if paper else '立花'}的实际成交记账")
+        print(f"明天早上的对账照{'模拟券商' if paper else '立花'}的实际成交记账")
     if res["done"] or res.get("pending") or res["failed"] or res.get("items"):
         _refresh_after_book_change(tag)
+    trade = [r for r in res.get("fund") or [] if r.get("act") != "keep"]   # 靠撤掉的卖单的钱的买单不下 / 减股（D2）→ ★ 交易 warn
     if getattr(a, "notify", False) and (res["done"] or res.get("pending") or res["failed"] or res["skipped"]):
         from qbreak import notify
         from qbreak.live_unified import mac_notify
-        title = f"qbreak {'模拟操盘' if paper else '立花实盘'} 撤单" + (" ★ 有没撤成的" if res["failed"] else "")
+        title = (("★ 交易：" if trade else "") + f"qbreak {'模拟操盘' if paper else '立花实盘'} 撤单"
+                 + (" ★ 有没撤成的" if res["failed"] else "") + ("（靠它的钱的买单不下 / 减股）" if trade else ""))
+        body = lines + [f"撤掉的单 {x}" for x in dict.fromkeys(hints)]
         mac_notify(title, "；".join(lines)[:200])
-        notify.send(title, "\n".join(f"- {x}" for x in lines), "warn" if res["failed"] else "info")
+        notify.send(title, "\n".join(f"- {x}" for x in body), "warn" if res["failed"] or trade else "info")
     return 1 if res["failed"] else 0
+
+
+def _trade_warn_push(warns: list, paper: bool) -> None:
+    """这次运行里「★ 交易」的提醒（执行器 trade_warns：凑钱的卖单撤了 / 被拒 / 失效 → 买单不下 / 减股…）推一条 warn（手机 + Mac）。
+    以前（2026-10-15 事故）孤儿买单第二天早上才被拒、不推送。"""
+    from qbreak import notify
+    from qbreak.live_unified import mac_notify
+    from qbreak.names import annotate
+    ws = [annotate(str(w)) for w in dict.fromkeys(warns)]
+    title = f"★ 交易：qbreak {'模拟操盘' if paper else '立花实盘'} 买单不下 / 减股（凑钱的卖单没了）"
+    try:
+        mac_notify(title, "；".join(ws)[:200])
+        notify.send(title, "\n".join(f"- {w}" for w in ws), "warn")
+    except Exception as e:                                # noqa: BLE001  通知失败不影响运行结果
+        log.warning("★ 交易 的提醒没发出：%s", type(e).__name__)
+
+
+def _lab_cancel(t) -> str:
+    """撤单说明里的票：「1545 纳斯达克 100」（代码带名字；2026-10-15）。"""
+    from qbreak.names import label
+    return label(t) if t else ""
 
 
 def _unknown_for(ux, a) -> list | None:
@@ -4232,6 +4262,8 @@ def _live_unified_run(a, opened: list) -> int:
                 body_ += "\n注文一覧里的候选（只读）：\n" + "\n".join(_LO.unknown_text(unk, _broker_args(a), drafts=False))
             _notify_once(tag, f"qbreak {'模拟操盘' if paper else '立花实盘'} ★ 执行器停下", body_, str(e))
         return 3
+    if a.notify and getattr(ux, "trade_warns", None):       # 凑钱的卖单没了 → 靠它的钱的买单不下 / 减股：单独推一条 ★ 交易（D2；2026-10-15）
+        _trade_warn_push(ux.trade_warns, paper)
     if res_now is not None:
         rc = _now_report(a, ux, res_now, paper, tag, since=t0, new=[o for o in ux.orders if o.cid not in cids0])
         _run_status(a, tag, ok=True, rc=rc, blocked=ux.blocked, book=ux.book, since=t0)
@@ -4583,6 +4615,7 @@ def cmd_manual(a) -> int:
             print(f"  {ln}")
     if rec["kind"] in MO.ORDER_KINDS:
         mode = MO.timing(now)[0]
+        when = MO.when_for(now, b_, rec.get("ticker"))       # 这只今天已经有执行器还活着的单 → 下一个交易日开盘（D4；2026-10-15）
         print(f"{when}下单（{MO.RULE_TEXT}）"
               + ("：操作面板开着的话会马上叫执行器；没开就运行 bash scripts/liveu.sh run --broker "
                  + ("paper" if paper else "tachibana") + " --phase now" if mode == "now" else ""))

@@ -9,6 +9,10 @@ function ask(title, body, okText, opt){
   const ok=$('#ask-ok'); ok.textContent=okText||'确定'; ok.className='btn '+(opt.danger?'danger':'primary');
   const no=$('#ask-no'); if(no) no.textContent=opt.cancel||'取消';         // 「取消下单」（确认下单框；2026-10-15）/ 平时「取消」
   const inp=$('#ask-input'); inp.hidden=!opt.input; inp.value=''; inp.placeholder=opt.input||'';
+  const alts=opt.alt||[], box=$('#ask-alts');                              // 另外的选择（撤凑钱的卖单：只撤卖单 / 撤单并恢复按规则；D2，2026-10-15）→ {ok:true, alt:v}
+  ['#ask-alt','#ask-alt2'].forEach((id,i)=>{ const b=$(id); if(!b) return; const x=alts[i];
+    b.hidden=!x; if(x){ b.textContent=nameify(x.text); b.dataset.v=x.v; b.className='btn'+(x.danger?' danger':''); } });
+  if(box) box.hidden=!alts.length;
   sheet('#dlg-ask'); const bd=$('#ask-body'); if(bd) bd.scrollTop=0;      // 说明从头看起（上一个框滚过的位置不带过来）
   return new Promise(res=>{ ASK=res; });
 }
@@ -404,6 +408,7 @@ document.addEventListener('click', async e=>{
   if(a==='reload'){ reloadPage(b, '刷新中…'); return; }
   if(a==='close'){ closeAll(); return; }
   if(a==='ask-ok'){ const v=$('#ask-input').value, r=ASK; ASK=null; closeAll(); if(r) r({ok:true, value:v}); return; }
+  if(a==='ask-alt'){ const r=ASK; ASK=null; closeAll(); if(r) r({ok:true, alt:d.v}); return; }
   if(a==='sell'){
     CUR={t:d.t, shares:+d.shares};
     $('#sell-title').textContent='卖出 '+tlab(d.t, d.name);                // 「7203 トヨタ自動車」（不带 .T；名字查不到只写代码）
@@ -499,13 +504,24 @@ document.addEventListener('click', async e=>{
     const q=await ask('闲置资金比例 '+v+'%', '核心 ETF 的目标额 = 规则算出的 × '+v+'%，下一次决策起生效'+(v<100?'（多出来的留现金）':'')+NOTE, '保存');
     if(q.ok) done(await post({book:CFG.book, kind:'core', pct:v})); return;
   }
-  if(a==='cancel-order'){                                                 // 撤单：执行器今天已经发到交易所、还挂着的单（面板马上叫执行器撤）
+  if(a==='cancel-order'){                                                 // 撤单：执行器今天的单（还挂着的 / 还没发出的计划・等开盘后；面板马上叫执行器撤）
+    const hint=d.hint || (d.core==='1' ? '核心 ETF 的单：已经成交的部分撤不了；下一次决策照规则 / 闲置资金比例重新算目标，可能再买 / 再卖（要少拿用「闲置资金比例」）'
+                    : '已经成交的部分撤不了；撤掉的卖单如果规则明天还要卖会再下；撤掉的个股买单不再买');   // 撤之后会怎样：服务器按单的来源写（data-hint；M5，2026-10-15）
+    const dep=+d.depn||0, alt=[];                                         // 靠这笔卖出的钱、执行器还没发出的买单（fund_src；D2）：几个按钮
+    if(dep>0){ alt.push({text:d.keep||'只撤卖单', v:'keep'}); if(d.fix) alt.push({text:'撤单并恢复按规则（'+tlab(d.fix, d.fixname)+'）', v:'fix', danger:true}); }
     const q=await ask('撤单 '+(d.side==='BUY'?'买 ':'卖 ')+tqty(d.t, fmt(+d.qty)+(d.core==='1'?' 口':' 股'), d.name),
-      (d.core==='1' ? '核心 ETF 的单：已经成交的部分撤不了；下一次决策照规则 / 闲置资金比例重新算目标，可能再买 / 再卖（要少拿用「闲置资金比例」）。'
-                    : '已经成交的部分撤不了；撤掉的卖单如果规则明天还要卖会再下；撤掉的个股买单不再买。')+(CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天的单」的状态）')
-      +(d.deps ? '\n★ '+d.deps : ''),                                   // 靠这笔卖出的钱的买单撤了就下不成（服务器算：data-deps；2026-10-15）
-      '撤单', {danger:true});
-    if(q.ok) done(await post({book:CFG.book, kind:'cancel_order', cid:d.cid})); return;
+      hint+'。'+(d.unsent==='1' ? '' : (CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天的单」的状态）'))
+      +(d.deps ? '\n★ '+d.deps : '')                                    // 靠这笔卖出的钱的买单（服务器算：data-deps；2026-10-15）
+      +(dep>0 ? '\n「一起撤买单」= 这几笔买单也撤（执行器不再发）；「只撤卖单」= 买单按现在的钱重算'+(d.fix ? '；「撤单并恢复按规则」= 一起撤、再取消固定口数（下一次决策照规则）' : '') : ''),
+      dep>0 ? '一起撤买单' : '撤单', {danger:true, alt:alt});
+    if(!q.ok) return;
+    const body={book:CFG.book, kind:'cancel_order', cid:d.cid};
+    if(dep>0) body.deps = q.alt==='keep' ? 'keep' : 'cancel';
+    const j=await post(body);
+    if(q.alt!=='fix' || !j){ done(j); return; }
+    const k=await post({book:CFG.book, kind:'corefix', ticker:d.fix, clear:true});   // 恢复按规则：服务器给「确认下单」框（取消 → 只撤了单）
+    done(k ? {msg:(j.msg||'已写撤单')+'\n'+(k.msg||'已写恢复按规则')} : j);
+    return;
   }
   if(a==='cancel' && d.kind==='unblock'){                                 // 还没读的「解除不买回」：撤回（2026-10-13）
     const q=await ask('撤回这条解除？', (d.desc||d.id)+'\n\n执行器还没读：撤回之后不解除，「不自动买回」照旧。\n（指令 '+d.id+'）', '撤回', {danger:true});
