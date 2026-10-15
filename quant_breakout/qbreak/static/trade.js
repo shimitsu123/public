@@ -7,8 +7,25 @@ let ASK=null, CUR=null;
 function ask(title, body, okText, opt){
   opt=opt||{}; $('#ask-title').textContent=title; $('#ask-body').textContent=body; plBox($('#ask-pl'), opt.pl||null);
   const ok=$('#ask-ok'); ok.textContent=okText||'确定'; ok.className='btn '+(opt.danger?'danger':'primary');
+  const no=$('#ask-no'); if(no) no.textContent=opt.cancel||'取消';         // 「取消下单」（确认下单框；2026-10-15）/ 平时「取消」
   const inp=$('#ask-input'); inp.hidden=!opt.input; inp.value=''; inp.placeholder=opt.input||'';
-  sheet('#dlg-ask'); return new Promise(res=>{ ASK=res; });
+  sheet('#dlg-ask'); const bd=$('#ask-body'); if(bd) bd.scrollTop=0;      // 说明从头看起（上一个框滚过的位置不带过来）
+  return new Promise(res=>{ ASK=res; });
+}
+// 写一条手动指令（2026-10-15 用户：「盘中固定口数点击确定的话要出现确认下单和取消下单的确认，不要直接下单」）：服务器说要先确认
+// （固定口数 / 恢复按规则：need_confirm + 服务器算好的「要下什么单、什么时候、按什么价、钱够不够卖哪几只」）→ 弹框，
+// 点「确认下单」才带上 token 再发一次（服务器重算一样才写；账本 / 时间段变了 → 再给一次新的确认框）；「取消下单」什么都不写。
+async function post(body){
+  let j=await api('/api/request', body);
+  for(let n=0; j && j.need_confirm; n++){
+    const c=j.confirm||{};
+    if(n>=3 || !c.token){ toast((j.msg||'没写')+'\n（情况一直在变：刷新页面后再试）', true, true); return null; }
+    const q=await ask(c.title||'确认下单', (c.changed ? '★ 刚才看到的内容变了（账本更新 / 过了时间段），这是最新的：\n\n' : '')+(c.text||'')+NOTE,
+                      '确认下单', {cancel:'取消下单', danger:!!c.danger});
+    if(!q.ok){ toast('已取消：什么都没写，不会下单'); return null; }
+    j=await api('/api/request', Object.assign({}, body, {confirm:c.token}));
+  }
+  return j;
 }
 // ── 调仓（股数 / 金额 / 占权益 %）：按最近收盘估算；执行器下单时按当时的价格再算一次；调仓条按单元（LOT 股）分格 ──
 const LOT = CFG.lot || 100;
@@ -110,8 +127,9 @@ function adjPrevFix(n){                                                    // �
   const head = k>0 ? '买入 '+fmt(k)+' 口（约 '+yen(k*c.px)+'）：' : k<0 ? '卖出 '+fmt(-k)+' 口（约 '+yen(-k*c.px)+'）：' : '保持现在的口数：';
   out.textContent = head+fmt(c.shares)+' → '+fmt(t)+' 口，约 '+yen(t*c.px)+' · 约占权益 '+pctOf(t)+(n>cap ? '\n★ 超过总权益：截到 '+fmt(t)+' 口' : '')
     +'\n下一次决策起（交易日 07:40，开盘下单）正好调到 '+fmt(t)+' 口，不再按规则（牛熊 / 股债相关）自动调；一直有效，直到点「恢复按规则」。'
-    +(k>0 ? fixFundNote(k*c.px, c.t) : '\n剩下的钱照规则分给其他核心 ETF；规则不拿别的 ETF 时留现金。');
-  go.textContent = k>0 ? '确认买入 '+fmt(k)+' 口' : k<0 ? '确认卖出 '+fmt(-k)+' 口' : '确认固定 '+fmt(t)+' 口';
+    +(k>0 ? fixFundNote(k*c.px, c.t) : '\n剩下的钱照规则分给其他核心 ETF；规则不拿别的 ETF 时留现金。')
+    +'\n点「确定」→ 先列出要下的单（哪几只、多少口、什么时候、按什么价），再点「确认下单」才写；盘中也不会马上下单。';   // 2026-10-15
+  go.textContent = k>0 ? '确定：买入 '+fmt(k)+' 口' : k<0 ? '确定：卖出 '+fmt(-k)+' 口' : '确定：固定 '+fmt(t)+' 口';
   go.className = k<0 ? 'btn danger' : 'btn primary'; go.disabled = !(c.px>0);
 }
 function fixFundNote(cost, skip){                                         // 固定口数加口数、现金不够（2026-10-13）：别的（不固定的）核心 ETF 能卖多少
@@ -393,7 +411,7 @@ document.addEventListener('click', async e=>{
   }
   if(a==='sell-go'){
     const bd=document.querySelector('input[name=bd]:checked').value; closeAll();
-    done(await api('/api/request',{book:CFG.book, kind:'sell', ticker:CUR.t, block_days:parseInt(bd,10)})); return;
+    done(await post({book:CFG.book, kind:'sell', ticker:CUR.t, block_days:parseInt(bd,10)})); return;
   }
   if(a==='adj'){
     if(FUND_MODE==='all') FUND_MODE='split';                                // 「其他全部卖出」只属于买入框
@@ -414,18 +432,18 @@ document.addEventListener('click', async e=>{
   if(a==='core-sell'){
     const q=await ask('卖出全部 '+d.t+(d.name?' '+d.name:''), '全部 '+fmt(+d.shares)+' 口：'+CFG.when+'卖出'+coreFx(0, d.t)
       +'\n卖出后停买闲置资金 ETF（钱留现金）；出现买入信号会提醒你，你点「确认买入」才买'+NOTE, '卖出', {danger:true, pl:estOf(d.t)});
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'sell', ticker:d.t})); return;
+    if(q.ok) done(await post({book:CFG.book, kind:'sell', ticker:d.t})); return;
   }
   if(a==='core-resume'){                                                   // 停买后确认买入：闲置资金比例 0% → 100%（照规则）
     const q=await ask('确认买入：恢复闲置资金买入 ETF', '闲置资金比例 0% → 100%（照规则）'+coreFx(100, '', '会调：')
       +'\n'+(d.plan || CFG.when+'买入；之后每天照规则调')+NOTE, '确认买入');   // 2026-10-13：规则不拿 / 今天已经有单 → 服务器写的实际时间
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:100})); return;
+    if(q.ok) done(await post({book:CFG.book, kind:'core', pct:100})); return;
   }
   if(a==='core-restore'){                                                  // 「全部换成」之前的比例（2026-10-13）：只在你点了之后写；固定口数不跟着恢复；只买规则目标额的 N%（2026-10-14）
     const v=+d.pct; if(!(v>0 && v<100)) return;
     const q=await ask('恢复成 '+v+'%：闲置资金比例', '闲置资金比例 0% → '+v+'%（规则目标额 × '+v+'%）'+coreFx(v, '', '会调：')
       +'\n'+(d.plan || CFG.when+'按规则目标额的 '+v+'% 买入；之后每天按 '+v+'% 调')+'\n固定口数不会跟着恢复：要的话在各 ETF 下面重新点「固定口数…」'+NOTE, '恢复成 '+v+'%');
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:v})); return;
+    if(q.ok) done(await post({book:CFG.book, kind:'core', pct:v})); return;
   }
   if(a==='adj-unit'){ adjUnit(d.u); return; }
   if(a==='fund-mode'){
@@ -438,10 +456,10 @@ document.addEventListener('click', async e=>{
   if(a==='adj-step'){ const n=adjTarget(); adjShow(Math.max(0, (n==null ? ADJ.shares : n)+(+d.d)*ALOT())); adjPrev(); return; }
   if(a==='adj-go'){
     if(ADJ && ADJ.fix){ const n=adjTarget(); if(n==null) return; const u=Math.min(n, adjCap());
-      closeAll(); done(await api('/api/request', fundBody({book:CFG.book, kind:'corefix', ticker:ADJ.t, units:u}, u>ADJ.shares ? (u-ADJ.shares)*ADJ.px : 0))); return; }
+      closeAll(); done(await post(fundBody({book:CFG.book, kind:'corefix', ticker:ADJ.t, units:u}, u>ADJ.shares ? (u-ADJ.shares)*ADJ.px : 0))); return; }
     const n=adjTarget(); if(n==null || n===ADJ.shares) return;
     const v = ADJ.unit==='shares' ? n : parseFloat($('#adj-val').value);
-    closeAll(); done(await api('/api/request', fundBody({book:CFG.book, kind:'adjust', ticker:ADJ.t, unit:ADJ.unit, value:v}, n>ADJ.shares ? ADJ.cost||0 : 0))); return;
+    closeAll(); done(await post(fundBody({book:CFG.book, kind:'adjust', ticker:ADJ.t, unit:ADJ.unit, value:v}, n>ADJ.shares ? ADJ.cost||0 : 0))); return;
   }
   if(a==='ktf' || a==='ksub'){                                            // 一张图自己的周期 / 小图（别的图不变）；也记成新打开的图的默认
     const bx=b.closest('.chart[data-t]'); if(!bx || !(a==='ktf' ? TFS : SUBS)[d.v]) return;
@@ -470,42 +488,42 @@ document.addEventListener('click', async e=>{
     const body={book:CFG.book, kind:'buy', ticker:BUY.t, unit:BUY.unit};
     if(FUND_MODE==='all'){ body.unit='shares'; body.value=Math.max(buyCap(), BUY.lot); }   // 股数由执行器按全卖之后的钱再算
     else if(BUY.unit!=='rule') body.value = BUY.unit==='shares' ? Math.min(n, buyCap()) : parseFloat($('#buy-val').value);
-    closeAll(); done(await api('/api/request', fundBody(body, BUY.cost||0))); return;
+    closeAll(); done(await post(fundBody(body, BUY.cost||0))); return;
   }
   if(a==='core-step'){ const r=$('#core-pct'); r.value=Math.max(0, Math.min(100, parseFloat(r.value)+parseFloat(d.d))); coreShow(); return; }
   if(a==='core'){
     const v=parseFloat($('#core-pct').value);
     const q=await ask('闲置资金比例 '+v+'%', '核心 ETF 的目标额 = 规则算出的 × '+v+'%，下一次决策起生效'+(v<100?'（多出来的留现金）':'')+NOTE, '保存');
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'core', pct:v})); return;
+    if(q.ok) done(await post({book:CFG.book, kind:'core', pct:v})); return;
   }
   if(a==='cancel-order'){                                                 // 撤单：执行器今天已经发到交易所、还挂着的单（面板马上叫执行器撤）
     const q=await ask('撤单 '+(d.side==='BUY'?'买 ':'卖 ')+d.t+' '+fmt(+d.qty)+(d.core==='1'?' 口':' 股'),
       (d.core==='1' ? '核心 ETF 的单：已经成交的部分撤不了；下一次决策照规则 / 闲置资金比例重新算目标，可能再买 / 再卖（要少拿用「闲置资金比例」）。'
-                    : '已经成交的部分撤不了；撤掉的卖单如果规则明天还要卖会再下；撤掉的个股买单不再买。')+(CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天的单」的状态）'),
+                    : '已经成交的部分撤不了；撤掉的卖单如果规则明天还要卖会再下；撤掉的个股买单不再买。')+(CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天的单」的状态）')
+      +(d.deps ? '\n★ '+d.deps : ''),                                   // 靠这笔卖出的钱的买单撤了就下不成（服务器算：data-deps；2026-10-15）
       '撤单', {danger:true});
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel_order', cid:d.cid})); return;
+    if(q.ok) done(await post({book:CFG.book, kind:'cancel_order', cid:d.cid})); return;
   }
   if(a==='cancel' && d.kind==='unblock'){                                 // 还没读的「解除不买回」：撤回（2026-10-13）
     const q=await ask('撤回这条解除？', (d.desc||d.id)+'\n\n执行器还没读：撤回之后不解除，「不自动买回」照旧。\n（指令 '+d.id+'）', '撤回', {danger:true});
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
+    if(q.ok) done(await post({book:CFG.book, kind:'cancel', target:d.id})); return;
   }
   if(a==='cancel'){                                                       // 撤单前一定确认（2026-10-12 用户：防止误撤）：写清撤的是哪一条
     const q=await ask('确认撤单？', (d.desc||d.id)+'\n\n'+(d.placed==='2' ? (d.wtxt||'盘中的单已在 15:30 失效：撤回之后下一次开盘不再卖（下一次早上的对账之后结束；已经成交的部分照记）')+'。'   // G16（2026-10-14；复核：服务器按下单那天写 data-wtxt）
       : d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天的单」的「撤单」撤。' : '还没下单：撤掉之后不会下。')
       +(+d.fund>0 ? '\n为这笔买入写的 '+d.fund+' 条卖出 / 闲置资金指令也一起撤掉。' : '')+(+d.stuck>0 ? '\n另有 '+d.stuck+' 条已经生效 / 已在撤回中，撤不了（提交后会说明）。' : '')+'\n（指令 '+d.id+'）', '确认撤单', {danger:true});
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'cancel', target:d.id})); return;
+    if(q.ok) done(await post({book:CFG.book, kind:'cancel', target:d.id})); return;
   }
   if(a==='uncancel'){                                                     // 撤销一条撤回（2026-10-12）：原来的指令恢复「等下单」/「等执行器读」（data-st；2026-10-14）、撤回记录不再显示
     const q=await ask('撤销这条撤回？', (d.desc||d.id)+'\n\n撤销之后，原来的指令恢复「'+(d.st||'等下单')+'」，这条撤回不再显示。\n什么时候处理：'
       +(d.when||'执行器下一次运行时')+(d.halt==='1' ? '\n★ HALT 生效中（解除后才处理）' : '')+'\n（指令 '+d.id+'）', '撤销撤回');   // 2026-10-13：写实际的时间与价格（服务器算的），不是「原来的时间」
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'uncancel', target:d.id})); return;
+    if(q.ok) done(await post({book:CFG.book, kind:'uncancel', target:d.id})); return;
   }
   if(a==='corefix' || a==='corefix-clear'){
     if(FUND_MODE==='all') FUND_MODE='split';                                // 「其他全部卖出」只属于买入框                               // 核心 ETF 固定口数 / 恢复按规则（2026-10-11）
     const px=+d.px||0, lot=+d.lot||1, eq=+d.eq||0, cur=+d.cur||0;
-    if(a==='corefix-clear'){
-      const q=await ask(d.name+'：恢复按规则', (d.plan || '下一次决策起，这只 ETF 又按规则（美股牛熊 / 股债相关）自动买卖。')+NOTE, '恢复');   // 2026-10-13：会买 / 卖多少、今天的单（服务器算）
-      if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'corefix', ticker:d.t, clear:true})); return;
+    if(a==='corefix-clear'){                                               // 2026-10-15：直接给「确认下单」框（服务器算：会买 / 卖多少、别的 ETF、什么时候、今天的单），点「确认下单」才写
+      done(await post({book:CFG.book, kind:'corefix', ticker:d.t, clear:true})); return;
     }
     ADJ={t:d.t, shares:cur, px:px, unit:'shares', core:true, fix:true, lot:lot, u100:0, cpct:0, approx:false, name:d.name};
     $('#adj-title').textContent=(cur>0 ? '固定口数 ' : '买入 ')+d.t+(d.name?' '+d.name:'');
@@ -520,11 +538,11 @@ document.addEventListener('click', async e=>{
   if(a==='unblock-batch'){                                                // 「全部换成」卖掉的票：只解除这一批的不自动买回（2026-10-13；说明由页面按账本写好）
     const ps=(d.ids||'').split(',').filter(Boolean);                      // 「代码:设定 id」：设定换了 / 已经解除的服务器跳过
     const q=await ask('恢复按规则：「全部换成 '+d.x+'」卖出的 '+ps.length+' 只', (d.msg||'')+NOTE, '恢复按规则');
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'unblock', ticker:ps[0].split(':')[0], tickers:ps})); return;
+    if(q.ok) done(await post({book:CFG.book, kind:'unblock', ticker:ps[0].split(':')[0], tickers:ps})); return;
   }
   if(a==='unblock'){
     const q=await ask('解除 '+d.t+' 的不自动买回', (d.msg||'')+NOTE, '解除');
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'unblock', ticker:d.t, block_id:d.id||undefined})); return;
+    if(q.ok) done(await post({book:CFG.book, kind:'unblock', ticker:d.t, block_id:d.id||undefined})); return;
   }
   if(a==='flow'){                                                         // 〔77〕C UX-14：登记入金 / 出金（只影响收益的计算）
     const v=($('#flow-jpy').value||'').replace(/[,¥\s]/g,''), n=+v;
@@ -533,7 +551,7 @@ document.addEventListener('click', async e=>{
     const q=await ask((n>0?'登记入金 ':'登记出金 ')+(n>0?'+':'−')+'¥'+fmt(Math.abs(n))+(rs?'（预留）':''), '日期 '+($('#flow-date').value||'今天')+'。'+(rs ? '预留：到账前的决策按扣掉这笔钱算（个股仓位变小、闲置资金 ETF 不买回；现金不够先卖核心 ETF）；到账后自动解除。' : '只影响收益的计算与「现金突然变化」的提醒，不下单。'), '登记');
     const rsv=!!($('#flow-reserve')||{}).checked;
     if(rsv && n>0){ toast('预留只用于出金（写负数）', true); return; }
-    if(q.ok) done(await api('/api/request',{book:CFG.book, kind:'flow', jpy:n, date:$('#flow-date').value, note:$('#flow-note').value, reserve:rsv})); return;
+    if(q.ok) done(await post({book:CFG.book, kind:'flow', jpy:n, date:$('#flow-date').value, note:$('#flow-note').value, reserve:rsv})); return;
   }
   if(a==='halt'){
     const q=await ask('停止下单（HALT）', '全部账本（模拟和立花）从下一次运行起不下单、持仓不动。\n已经发到交易所的单不会被撤（要撤：「今天的单」的「撤单」，或立花网站 / 手机网站）。\n这里只能停：恢复只在 Mac 上（在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」）。'

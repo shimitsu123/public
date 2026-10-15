@@ -10,7 +10,7 @@ import pytest
 from qbreak import manual_orders as MO
 from qbreak import panel
 
-from test_panel import AT, _book, _js_fn, _sm, _sm_nowarn
+from test_panel import AT, _book, _js_fn, _sm, _sm_nowarn, _submit_ok
 
 
 def _fh(cash, *hold, busy=()):
@@ -100,8 +100,8 @@ def test_corefix_buy_with_split_trims_stocks_only():
     b["state"]["cash_jpy"] = 0.0
     (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
     _sm()
-    ok, msg, rec = panel.submit({"book": "paper", "kind": "corefix", "ticker": "1482", "units": 100,
-                                 "fund": {"mode": "split", "cost": 150_000}}, AT)
+    ok, msg, rec = _submit_ok({"book": "paper", "kind": "corefix", "ticker": "1482", "units": 100,
+                               "fund": {"mode": "split", "cost": 150_000}}, AT)
     assert ok and rec["fund"] == "split" and "固定 100 口" in msg and "其余由别的核心 ETF 照规则减少" in msg
     reqs = MO.read_all("paper")
     assert [r["kind"] for r in reqs] == ["adjust", "corefix"] and reqs[0]["ticker"] == "7203.T" and reqs[0]["fund_for"] == "1482.T"

@@ -653,11 +653,12 @@ def realtime_quotes(tickers: list[str]) -> dict[str, float]:
     return out
 
 
-def intraday_quotes(tickers: list[str]) -> dict[str, dict]:
+def intraday_quotes(tickers: list[str], timeout: float = 10) -> dict[str, dict]:
     """操作面板「现价」用：yfinance 1 分钟线每只最后一根 → {票: {"px", "at"（JST ISO 时刻）, "bar"}}（東証は約 15〜20 分遅れ；只展示）。
     bar = 那一天（最后一根所在的交易日）到那个时刻为止的日线：{"d", "o"（第一根的开盘）, "h", "l", "c"（= px）, "v"（合计）}
     ——K 线图盘中把「今天这一根」画出来用（qbreak/kline.with_live）。
-    不限今天：开盘前 / 收盘后 / 休市日给的是最近一个交易日的最后一根（页面写出时刻）。取不到 → 空。"""
+    不限今天：开盘前 / 收盘后 / 休市日给的是最近一个交易日的最后一根（页面写出时刻）。取不到 → 空。
+    timeout：每个请求的秒数（面板用 4 秒：Yahoo 卡住时不让页面等；2026-10-15）。"""
     import yfinance as yf
 
     from .calendar_jp import JST
@@ -668,7 +669,7 @@ def intraday_quotes(tickers: list[str]) -> dict[str, dict]:
         return {}
     try:
         raw = yf.download(tickers, period="1d", interval="1m", progress=False, group_by="ticker", threads=False,
-                          auto_adjust=False, prepost=False)
+                          auto_adjust=False, prepost=False, timeout=timeout)
     except Exception as e:  # noqa: BLE001
         log.warning("现价取不到: %s", e)
         return {}

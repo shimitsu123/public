@@ -4500,6 +4500,12 @@ def cmd_manual(a) -> int:
         a0_ = MO.adjust_plan(rec, st, MO.MANUAL_CAP_PCT)
         if a0_["delta"]:
             rec.update(dir=1 if a0_["delta"] > 0 else -1, cur0=int(a0_["cur"]))
+    pv_ = None                                               # 固定口数：写之前算（写了之后会把这条当成「现在的固定」）；与页面「确认下单」框同一个内容
+    if rec["kind"] == "corefix":                             # （2026-10-15；命令行在对话里说清楚之后才写，不再问；算不出来也照常写）
+        try:
+            pv_ = MO.corefix_preview(b_, tag, rec, now, sm=sm_, halt=paths.halt_file().exists())
+        except Exception as e:                               # noqa: BLE001
+            print(f"（预计的单算不出来：{e}；指令照常写）")
     rec = MO.append(tag, rec)
     print(f"已写手动指令 {rec['id']}：{MO.describe(rec)}")
     if rec["kind"] == "buy":
@@ -4537,6 +4543,8 @@ def cmd_manual(a) -> int:
             print(f"下一次决策（交易日 07:40）起 {rec['ticker']} 调到 {int(rec.get('units') or 0):,} 口、开盘下单；不按规则自动调，直到 corefix --clear")
             if rec.get("from_kind"):
                 print("这只 ETF 是手动固定的：只改它的固定口数（别的 ETF 与闲置资金比例不变）")
+        for ln in (pv_ or {}).get("text", "").split("\n")[1:]:       # 与页面「确认下单」框同一份：预计的单（别的 ETF 卖多少）、哪天、按什么价（2026-10-15）
+            print(f"  {ln}")
     elif rec["kind"] == "unblock":                           # 解除不是单（2026-10-13）
         print(f"不会买回、也不马上买 → {MO.NEXT_DECISION}；之后那次决策看的 K 线出买入信号，规则才可能买")
     elif rec["kind"] == "core":

@@ -9,7 +9,7 @@ from qbreak import manual_orders as MO
 from qbreak import panel, paths
 
 from test_fund_all import _book4, _reqs
-from test_panel import AT, _book, _sm, _sm_nowarn
+from test_panel import AT, _book, _sm, _sm_nowarn, _submit_ok
 
 BP = lambda: paths.state_dir() / "live_unified_paper.json"   # noqa: E731
 
@@ -66,7 +66,7 @@ def test_allin_uncancel_refused_when_a_later_allin_already_done():
 
 def test_allin_uncancel_refused_when_unread_corefix_written_after_the_cancel():
     _buy, cx = _allin_then_cancel()
-    ok, msg, _fx = panel.submit({"book": "paper", "kind": "corefix", "ticker": "1545", "units": 50}, AT + dt.timedelta(minutes=1))
+    ok, msg, _fx = _submit_ok({"book": "paper", "kind": "corefix", "ticker": "1545", "units": 50}, AT + dt.timedelta(minutes=1))
     assert ok, msg
     ok, msg, _ = _un(cx, AT + dt.timedelta(minutes=2))
     assert not ok and "按现在的账本重新检查没通过" in msg and "固定口数" in msg and "请重新提交「全部换成」" in msg, msg

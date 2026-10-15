@@ -2,6 +2,7 @@
 import datetime as dt
 import http.client
 import json
+import logging
 import os
 import threading
 from http.server import ThreadingHTTPServer
@@ -51,6 +52,19 @@ def _req(port, method, path, body=None, headers=None):
     out = r.status, r.read().decode("utf-8"), dict(r.getheaders())
     c.close()
     return out
+
+
+def _nofetch(ts):
+    return {}
+
+
+def _submit_ok(body, now=AT, source="panel"):
+    """固定口数 / 恢复按规则要先「确认下单」（2026-10-15）：第一次 → need_confirm（什么都没写），带上服务器给的 token 再交一次 = 点了「确认下单」。
+    别的指令照旧一次就写。测试里不联网取现价。"""
+    ok, msg, rec = panel.submit(body, now, source=source, fetch=_nofetch)
+    if not ok and (rec or {}).get("need_confirm"):
+        return panel.submit({**body, "confirm": rec["confirm"]["token"]}, now, source=source, fetch=_nofetch)
+    return ok, msg, rec
 
 
 def test_token_is_private_and_stable():
@@ -387,7 +401,9 @@ def test_page_script_is_valid_javascript(tmp_path):
     _book()
     for mode in ("local", "remote"):
         html = panel.render("paper", "t" * 40, AT, mode=mode, device={"name": "x"}, phone={"port": 8766, "url": None, "devices": []})
-        assert "<script>" not in html and f"<script type='module' src='/static/main.js?v={panel.ASSET_V}'></script>" in html
+        assert html.count("<script>") == 1 and f"<script>{panel.BOOT_JS}</script>" in html     # 只有 boot.js 内联（CSP 用它的 sha256 放行）
+        assert f"'{panel.BOOT_SHA}'" in panel.CSP and "'unsafe-inline'" not in panel.CSP.split("script-src")[1].split(";")[0]
+        assert f"<script type='module' src='/static/main.js?v={panel.ASSET_V}'></script>" in html
         cfg = json.loads(html.split("<script type='application/json' id='qb-cfg'>")[1].split("</script>")[0])
         assert cfg["book"] == "paper" and "auth" in cfg
     files = {f.name: f.read_text(encoding="utf-8") for f in panel.STATIC_DIR.glob("*.js")}
@@ -497,20 +513,38 @@ console.log(JSON.stringify(out));
     assert "没有预测力" not in J and "没有预测力" in panel._kline_help()     # 研究结论在整页一份的「怎么看 K 线图」里说一次（2026-10-15）
 
 
+def _pane(html: str, tab: str) -> str:
+    """一个标签页的全部内容（同一个标签可以有几段：按顺序拼起来）。"""
+    out, k = [], 0
+    while True:
+        i = html.find(f"<div class='pane' data-tab='{tab}'>", k)
+        if i < 0:
+            return "".join(out)
+        j = html.find("<div class='pane' data-tab=", i + 1)
+        j = html.find("</main>", i) if j < 0 else j
+        out.append(html[i:j])
+        k = j
+
+
 def test_one_kline_help_for_the_whole_page_and_no_number_table():
     """2026-10-15 用户：「去掉每个股票中的如何看这张图 整体留一个解释就行」「不需要最近十个月的数字的数据 看图就行」：
-    整页只有一份收起的「怎么看 K 线图」（选股最下面、建议的股票之后；服务器画）；每张图不再画说明与数字表。"""
+    整页只有一份收起的「怎么看 K 线图」（服务器画）；每张图不再画说明与数字表。同日用户「选股中的怎么看K线图要放到持仓中的K线的上面」：
+    这一份在「持仓」的 K 线上面（持仓卡片之前），选股最上面只留一行「去看 ›」跳过去（app.js data-khelpgo）。"""
     _book(pos={"6758.T": {"shares": 200, "entry_px": 900.0, "entry_date": "2026-09-01", "stop_px": 850.0, "last_close": 1000.0}},
           manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
     _sm()
     for mode in ("local", "remote"):
         html = panel.render("paper", "t" * 40, AT, mode=mode, device={"name": "x"}, phone={"port": 8766, "url": None, "devices": []})
-        assert html.count("怎么看 K 线图") == 1 and "怎么看这张图" not in html and "的数字（表）" not in html
+        assert html.count("id='khelp'") == 1 and html.count("<summary>怎么看 K 线图</summary>") == 1
+        assert "怎么看这张图" not in html and "的数字（表）" not in html
         hp = _card(html, "khelp")
         assert hp.startswith("<section class='card' id='khelp'><details class='khelp'><summary>怎么看 K 线图</summary><ul>")   # 默认收起
-        pick = html[html.index("<div class='pane' data-tab='pick'>"):]
-        pick = pick[:pick.index("<div class='pane' data-tab=", 1)]
-        assert pick.index("id='autobuy'") < pick.index("id='suggest'") < pick.index("id='khelp'")   # 选股最下面
+        hold, pick = _pane(html, "hold"), _pane(html, "pick")
+        assert "id='khelp'" in hold and "id='khelp'" not in pick
+        assert hold.index("id='khelp'") < hold.index("id='holdings'") < hold.index("data-t='6758.T' data-kind='stock'")   # 持仓的 K 线上面
+        assert "data-kind=" not in hold[:hold.index("id='khelp'")]                     # 上面没有别的 K 线
+        assert pick.count("怎么看 K 线图") == 1 and "data-khelpgo='1'" in pick and "<details" not in pick[:pick.index("data-khelpgo")]   # 选股：只一行指过去
+        assert pick.index("data-khelpgo") < pick.index("id='autobuy'") < pick.index("id='suggest'")
         for x in ("红色空心 = 涨", "绿色实心 = 跌", "<i class='key m5'></i>5", "<i class='key m30'></i>30 日（周 / 个月）均价",
                   "▲买入 = 买入那一根", "▲信号 = 出买入信号那一根", "<i class='key dash stop'></i>止损线", "<i class='key dash tl'></i>趋势线",
                   "研究（2026-10-06）：对之后的涨跌没有预测力", "金叉，是规则买入的条件之一", "DMI = 买卖哪边强、趋势强不强（规则不用）",
@@ -523,16 +557,259 @@ def test_one_kline_help_for_the_whole_page_and_no_number_table():
     assert "kSubKey(nd('div','kexp',null,box), P, tf, sub)" in J and "kSubNow(sn, D, N-1, P, tf, sub)" in J
     css = (panel.STATIC_DIR / "panel.css").read_text(encoding="utf-8")
     assert ".chart table" not in css and ".chart td" not in css and ".abxb .rk" not in css and ".kexp ul" not in css
-    assert "details.khelp>summary" in css
+    assert "details.khelp>summary" in css and ".khgo a{" in css
+    A = (panel.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    assert "closest('[data-khelpgo]')" in A and "showTab('hold', true); d.open=true;" in A
+
+
+def test_kline_help_stays_in_hold_pane_without_holdings():
+    """没有持仓（也没有核心 ETF）：说明照样在「持仓」那个位置（持仓卡片之前），整页一份。"""
+    _book(pos={}, manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
+    b = json.loads((paths.state_dir() / "live_unified_paper.json").read_text(encoding="utf-8"))
+    b["state"]["core_units"] = {}
+    (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b), encoding="utf-8")
+    _sm()
+    html = panel.render("paper", "t" * 40, AT)
+    hold = _pane(html, "hold")
+    assert html.count("id='khelp'") == 1 and hold.index("id='khelp'") < hold.index("id='holdings'")
 
 
 def test_trade_badge_counts_what_the_trade_tab_shows():
-    """「交易」标签的数字 = 卡片上还在处理的行：撤销撤回本身、被撤销的撤回不算（2026-10-15 用户：只有一条却标 3）。"""
+    """「交易」标签的数字 = 卡片上还会做事的行：撤销撤回本身、被撤销的撤回不算（2026-10-15 用户：只有一条却标 3）；
+    同日用户「撤单后 / 没有执行下单等等的话交易处的数字不显示」：撤回还没读 → 被撤回的那条与撤回本身都不算（以前算 2）。"""
     fix = {"id": "M1-corefix", "kind": "corefix", "ticker": "1482.T", "at": "2026-10-14T19:21:18+09:00"}
     can = {"id": "M2-cancel", "kind": "cancel", "target": "M1-corefix", "at": "2026-10-14T23:08:22+09:00"}
     unc = {"id": "M3-uncancel", "kind": "uncancel", "target": "M2-cancel", "at": "2026-10-14T23:32:14+09:00"}
     st = {"last_date": "2026-10-13", "pos": {}, "core_units": {}}
     book = {"state": st, "orders": []}
     assert panel._badges(book, st, {}, [fix, can, unc], AT).get("trade") == 1     # 固定口数 → 撤回 → 撤销撤回：只剩固定口数一条
-    assert panel._badges(book, st, {}, [fix, can], AT).get("trade") == 2          # 撤回还没读：固定口数（撤回中）+ 撤回，卡片上两行
+    assert "trade" not in panel._badges(book, st, {}, [fix, can], AT)             # 撤回还没读：固定口数（撤回中）不会做事、撤回本身不算
+    assert panel._trade_live(book, [fix, can], AT)["busy"] == 0                   # 都还没读的「指令 + 它的撤回」：没有要等的（2026-10-15 复核：
+                                                                                    # 以前算 2 → 页面一直每 10 秒问、执行器读的时候整页刷新）
     assert "trade" not in panel._badges(book, st, {}, [], AT)
+    book["manual"] = {"items": {"M1-corefix": {**fix, "status": "pending"}}}      # 执行器读了固定口数、撤回还没读
+    assert "trade" not in panel._badges(book, st, {}, [can], AT)
+    assert panel._trade_live(book, [can], AT)["busy"] == 1                        # 撤回指着执行器读过的指令：等它读撤回（页面照样问）
+    assert panel._badges(book, st, {}, [], AT).get("trade") == 1
+    book["manual"]["items"]["M1-corefix"]["cancel_req"] = "撤回"                    # 执行器读了撤回（撤回中）
+    assert "trade" not in panel._badges(book, st, {}, [], AT)
+    assert panel._trade_live(book, [], AT)["busy"] == 1                           # 撤回中：还在处理
+    book["manual"]["items"]["M1-corefix"]["status"] = "cancelled"                 # 撤回完了：什么都不用等
+    assert panel._trade_live(book, [], AT)["busy"] == 0
+
+
+AT15 = dt.datetime(2026, 10, 15, 8, 15, tzinfo=JST)                              # 2026-10-15（四）08:15：成交日 = 今天
+
+
+def _book1015(tag="paper", sell="CANCELLED", buy="DEFERRED", cash=192.0, items=None, fix=None, sell_cid="U2026-10-14-SELL-1545.T"):
+    """2026-10-15 早上的真实状态（模拟账户）：你撤了 1545.T 的卖单（凑钱的），1482.T 的买单 678 口还在「等开盘后」，现金只有 192 円，
+    固定口数 1482.T 678 口还有效。"""
+    orders = [{"cid": sell_cid, "ticker": "1545.T", "side": "SELL", "kind": "core", "qty": 4110, "decided_on": "2026-10-14",
+               "limit": None, "ref_px": 243.7, "phase": "morning", "status": sell, "sent_qty": 4110, "filled_qty": 0,
+               "note": "你撤了单（08:05，面板的撤单指令）" if sell == "CANCELLED" else "已排队，次日开盘成交"},
+              {"cid": "U2026-10-14-BUY-1482.T", "ticker": "1482.T", "side": "BUY", "kind": "core", "qty": 678, "decided_on": "2026-10-14",
+               "limit": 1503.0, "ref_px": 1474.0, "phase": "open", "status": buy, "sent_qty": 0, "filled_qty": 0,
+               "note": "开盘前余力 192 円 < 按限价预留 1,019,441 円 → 开盘后按始値检查、减股再下"}]
+    st = {"last_date": "2026-10-14", "cash_jpy": cash, "history": [["2026-10-14", 1_001_799.0, cash, 0, 150]], "pos": {},
+          "pending_exit": {}, "core_units": {"1545.T": 4110, "1482.T": 0}}
+    b = {"state": st, "orders": orders, "core_rule": {"lot": {"1482.T": 1, "1545.T": 10}},
+         "manual": {"items": items or {}, "core_fix": {"1482.T": 678} if fix is None else fix, "core_pct": 100.0}}
+    (paths.state_dir() / f"live_unified_{tag}.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
+    return b
+
+
+def _tabbtn(html: str, k: str) -> str:
+    i = html.index(f"data-tabgo='{k}'")
+    return html[i:html.index("</button>", i)]
+
+
+def test_trade_badge_gone_when_funding_sell_cancelled_and_buy_cannot_be_paid():
+    """2026-10-15 用户「撤单后 / 没有执行下单等等的话交易处的数字不显示」（真实状态）：凑钱的 1545.T 卖单撤了、现金 192 円 →
+    1482.T 的 DEFERRED 买单开盘时连 1 口（跌停价约 1,174 円）都买不起 → 不算、写「不会下单（预计）」+ 原因；固定口数还在 → 提醒明天还会再排。"""
+    from qbreak import live_ops as LO
+    b = _book1015()
+    assert set(LO.unfunded_buys(b)) == {"U2026-10-14-BUY-1482.T"}
+    x = LO.unfunded_buys(b)["U2026-10-14-BUY-1482.T"]
+    assert x["need"] == 1474.0 - 300 and x["lot"] == 1 and x["sells"] == 0 and [g["ticker"] for g in x["gone"]] == ["1545.T"]
+    assert "trade" not in panel._badges(b, b["state"], {}, [], AT15, "paper")
+    lv = panel._trade_live(b, [], AT15, "paper", halt=False)
+    chip, why = lv["orders"]["U2026-10-14-BUY-1482.T"]
+    assert chip == "不会下单（预计）" and "资金来源的卖单已撤（卖 1545.T 4,110 口）" in why and "¥192" in why and "¥1,174" in why
+    assert "手动固定 678 口仍然有效" in lv["fix"]["U2026-10-14-BUY-1482.T"] and "10/16 07:40" in lv["fix"]["U2026-10-14-BUY-1482.T"]
+    assert "「其他闲置资金 ETF（现在没拿）」里 1482.T 下面点「恢复按规则」" in lv["fix"]["U2026-10-14-BUY-1482.T"]
+    html = panel.render("paper", "t" * 40, AT15)
+    assert "class='badge'" not in _tabbtn(html, "trade")
+    card = _card(html, "today")
+    assert "<span class='chip'>不会下单（预计）</span>" in card and "资金来源的卖单已撤" in card and "手动固定 678 口仍然有效" in card
+    assert "<span class='chip'>已撤单</span>" in card
+    assert panel.status_json("paper")[1]["pending"] == 0
+    b = _book1015(fix={})                                                     # 没有固定口数：不写那条提醒
+    assert not panel._trade_live(b, [], AT15, "paper", halt=False)["fix"]
+
+
+def test_trade_badge_keeps_fundable_deferred_buy_and_cancel_confirm_lists_it():
+    """凑钱的卖单还在（模拟账户排队中）→ 1482.T 的 DEFERRED 买单开盘后能下 → 照算（卖 + 买 = 2）；
+    卖单的「撤单」确认框写明撤了之后这笔买单下不成（data-deps）。"""
+    b = _book1015(sell="SENT")
+    assert panel._badges(b, b["state"], {}, [], AT15, "paper").get("trade") == 2
+    assert not panel._trade_live(b, [], AT15, "paper", halt=False)["orders"]
+    html = panel.render("paper", "t" * 40, AT15)
+    assert "<i class='badge'>2</i>" in _tabbtn(html, "trade")
+    card = _card(html, "today")
+    assert "不会下单" not in card and "data-act='cancel-order' data-cid='U2026-10-14-SELL-1545.T'" in card
+    assert "data-deps='撤掉之后，今天等这笔卖出的钱的买单预计下不成（开盘时现金不够一单元）：买 1482.T 678 口" in card
+    J = (panel.STATIC_DIR / "trade.js").read_text(encoding="utf-8")
+    assert "+(d.deps ? '\\n★ '+d.deps : '')" in J
+    b = _book1015(sell="SENT", cash=2_000_000.0)                             # 现金本来就够：撤卖单也不影响买单 → 不写
+    assert "data-deps" not in _card(panel.render("paper", "t" * 40, AT15), "today")
+    st = panel.status_json("paper")[1]
+    assert st["pending"] == 2 and st["busy"] == 0
+
+
+def test_trade_badge_skips_orders_with_cancel_pending():
+    """撤单指令还没处理（指令文件里还没读 / 账本里 pending）：那笔单「撤单中」不算；它是凑钱的卖单 → 买单也下不成、不算；撤单指令本身不算。"""
+    b = _book1015(sell="SENT")
+    co = {"id": "M3-cancel_order", "kind": "cancel_order", "cid": "U2026-10-14-SELL-1545.T", "ticker": "1545.T",
+          "at": "2026-10-15T08:05:16+09:00"}
+    assert "trade" not in panel._badges(b, b["state"], {}, [co], AT15, "paper")
+    lv = panel._trade_live(b, [co], AT15, "paper", halt=False)
+    assert lv["asked"] == {"U2026-10-14-SELL-1545.T"} and lv["busy"] == 1
+    assert "资金来源的卖单已撤（卖 1545.T 4,110 口）" in lv["orders"]["U2026-10-14-BUY-1482.T"][1]
+    b = _book1015(sell="SENT", items={"M3-cancel_order": {**co, "status": "pending"}})
+    assert "trade" not in panel._badges(b, b["state"], {}, [], AT15, "paper")
+    card = _card(panel.render("paper", "t" * 40, AT15), "today")
+    assert "<span class='chip'>撤单中</span>" in card and "<span class='chip'>不会下单（预计）</span>" in card
+    mb = _book1015(sell="SENT", items={"M3-cancel_order": {**co, "status": "pending"},           # 手动卖出的单在撤单中：指令也不算、写出来
+                                       "M4-sell": {"id": "M4-sell", "kind": "sell", "ticker": "1545.T", "status": "placed",
+                                                   "at": "2026-10-14T20:00:00+09:00"}})
+    mb["orders"][0]["reason"] = "manual"
+    lv = panel._trade_live(mb, [], AT15, "paper", halt=False)
+    assert lv["n"] == 0 and lv["itxt"] == {"M4-sell": "（单在撤单中）"}
+
+
+def test_trade_badge_under_halt():
+    """HALT（立花）：还没发出的单（PLANNED / DEFERRED）不发 → 不算、写「不会下单（HALT）」；已经在交易所的（SENT）照算；
+    手动指令照算（解除后照原样执行）。模拟账户的 DEFERRED 下一次运行照样撮合（_paper_open 不看 HALT）→ 照算。"""
+    b = _book1015("tachibana", sell="SENT", cash=2_000_000.0,
+                  items={"M5-sell": {"id": "M5-sell", "kind": "sell", "ticker": "7203.T", "status": "pending", "at": "2026-10-15T08:00:00+09:00"}})
+    b["orders"].append({**b["orders"][1], "cid": "U2026-10-14-BUY-2845.T", "ticker": "2845.T", "status": "PLANNED", "ref_px": 3699.0})
+    (paths.state_dir() / "live_unified_tachibana.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
+    assert panel._badges(b, b["state"], {}, [], AT15, "tachibana").get("trade") == 4   # 没有 HALT：卖 + 买 2 + 手动卖出
+    paths.halt_file().write_text("测试", encoding="utf-8")
+    try:
+        assert panel._badges(b, b["state"], {}, [], AT15, "tachibana").get("trade") == 2   # 卖（在交易所）+ 手动卖出
+        lv = panel._trade_live(b, [], AT15, "tachibana")
+        assert lv["orders"]["U2026-10-14-BUY-1482.T"][0] == "不会下单（HALT）" and "09:05 / 09:20" in lv["orders"]["U2026-10-14-BUY-1482.T"][1]
+        assert lv["orders"]["U2026-10-14-BUY-2845.T"][0] == "不会下单（HALT）"
+        html = panel.render("tachibana", "t" * 40, AT15)
+        assert "<i class='badge'>2</i>" in _tabbtn(html, "trade") and "不会下单（HALT）" in _card(html, "today")
+        p = _book1015(sell="SENT", fix={})
+        assert panel._badges(p, p["state"], {}, [], AT15, "paper").get("trade") == 2      # 模拟账户：DEFERRED 照算
+    finally:
+        paths.halt_file().unlink()
+
+
+def test_trade_badge_tachibana_after_close():
+    """立花：成交日 15:30 之后（成交日已过也一样）交易所那边什么都不会再发生 → 当前决策的单不算、写「已收盘」；模拟账户照算。"""
+    b = _book1015("tachibana", sell="SENT", cash=2_000_000.0, fix={})
+    late = AT15.replace(hour=16)
+    assert panel._badges(b, b["state"], {}, [], AT15, "tachibana").get("trade") == 2
+    assert "trade" not in panel._badges(b, b["state"], {}, [], late, "tachibana")
+    lv = panel._trade_live(b, [], late, "tachibana", halt=False)
+    assert lv["orders"]["U2026-10-14-SELL-1545.T"] == ("已收盘", "成交日 10/15 的交易所已经收盘：没成交的部分已失效，明早对账记账（之后什么都不会再发生）")
+    assert "这笔没下" in lv["orders"]["U2026-10-14-BUY-1482.T"][1]
+    assert "trade" not in panel._badges(b, b["state"], {}, [], AT15 + dt.timedelta(days=1), "tachibana")
+    p = _book1015(sell="SENT", cash=2_000_000.0, fix={})
+    assert panel._badges(p, p["state"], {}, [], late, "paper").get("trade") == 2
+
+
+def test_trade_badge_skips_manual_orders_that_are_already_done():
+    """2026-10-15 复核：手动卖出盘中成交了，指令还是「已下单」（明早对账才结束）→ 以前标签上一整天还是 1。现在单全部成交 → 指令不算、
+    「手动指令」那一行写「已成交」；立花收盘后：手动买入的单失效了（只做一次）→ 不算，卖单没卖完的部分下一次开盘再卖 → 照算。"""
+    items = {"M9-sell": {"id": "M9-sell", "kind": "sell", "ticker": "7203.T", "status": "placed", "at": "2026-10-15T09:30:00+09:00"},
+             "M7-buy": {"id": "M7-buy", "kind": "buy", "ticker": "6758.T", "status": "placed", "at": "2026-10-15T09:31:00+09:00"}}
+    def bk(sell_st, buy_st):
+        o = {"decided_on": "2026-10-14", "phase": "now", "sent_at": "2026-10-15T09:30:05+09:00", "limit": 2500.0, "ref_px": 2500.0}
+        st = {"last_date": "2026-10-14", "cash_jpy": 900_000.0, "pos": {"7203.T": {"shares": 100}}, "core_units": {}}
+        return {"state": st, "manual": {"items": json.loads(json.dumps(items)), "buys": {"6758.T": {"id": "M7-buy"}}},
+                "orders": [{**o, "cid": "N-SELL-7203.T", "ticker": "7203.T", "side": "SELL", "kind": "stock", "qty": 100, "reason": "manual",
+                            "status": sell_st, "sent_qty": 100, "filled_qty": 100 if sell_st == "FILLED" else 0},
+                           {**o, "cid": "N-BUY-6758.T", "ticker": "6758.T", "side": "BUY", "kind": "stock", "qty": 100, "reason": "manual_buy",
+                            "status": buy_st, "sent_qty": 100, "filled_qty": 100 if buy_st == "FILLED" else 0}]}
+    noon = AT15.replace(hour=11)
+    lv = panel._trade_live(bk("FILLED", "FILLED"), [], noon, "paper", halt=False)
+    assert lv["n"] == 0 and lv["busy"] == 0 and lv["items"] == {"M9-sell", "M7-buy"}
+    assert lv["itxt"]["M9-sell"] == "（已成交：明早对账后这条指令结束）" == lv["itxt"]["M7-buy"]
+    lv = panel._trade_live(bk("SENT", "UNFILLED"), [], noon, "paper", halt=False)
+    assert lv["n"] == 2 and lv["itxt"] == {"M7-buy": "（单已失效：没成交的部分不会再买，明早对账后结束）"}   # 卖单还挂着：单 + 指令
+    late = AT15.replace(hour=16)                                                # 立花 15:30 之后：两笔都「已收盘」
+    lv = panel._trade_live(bk("SENT", "SENT"), [], late, "tachibana", halt=False)
+    assert lv["orders"]["N-SELL-7203.T"][0] == lv["orders"]["N-BUY-6758.T"][0] == "已收盘"
+    assert lv["n"] == 1 and "M9-sell" not in lv["items"] and "失效" in lv["itxt"]["M7-buy"]   # 卖出指令照算（明天开盘再卖），买入不算
+
+
+def test_trade_badge_and_status_survive_unreadable_book_numbers(caplog, monkeypatch):
+    """账本里有读不了的数（旧执行器写的 None 口数…）：「交易」的数字按以前的数法、/api/status 照样 200（2026-10-15 复核：以前 500 →
+    页面的连接检查显示「连不上 Mac」）。"""
+    b = _book1015(fix={"1482.T": None})
+    w = [{"id": "M1-sell", "kind": "sell", "ticker": "7203.T", "at": "2026-10-15T08:00:00+09:00"}]
+    with caplog.at_level(logging.WARNING, logger="qbreak"):
+        lv = panel._trade_live(b, w, AT15, "paper", halt=False)
+    assert lv["n"] == lv["busy"] == 1 and lv["orders"] == {} and "没算成" in caplog.text
+    code, j = panel.status_json("paper")
+    assert code == 200 and j["ok"] is True and "v" in j
+    monkeypatch.setattr(panel, "_status_json", lambda tag: 1 / 0)
+    code, j = panel.status_json("paper")
+    assert code == 200 and j["ok"] is True and j["err"] == "ZeroDivisionError" and j["busy"] == 0 and j["v"] == panel.ASSET_V
+
+
+def test_today_card_marks_the_old_note_of_a_buy_that_will_not_be_placed():
+    """「不会下单（预计）」旁边执行器写的旧说明（「开盘后按始値检查、减股再下」）加上「原先：」（2026-10-15 复核：两句挨着像矛盾）。"""
+    _book1015()
+    card = _card(panel.render("paper", "t" * 40, AT15), "today")
+    assert "<span class='chip'>不会下单（预计）</span>" in card and "原先：开盘前余力 192 円" in card
+    _book1015(sell="SENT")
+    card = _card(panel.render("paper", "t" * 40, AT15), "today")
+    assert "原先：" not in card and "开盘前余力 192 円" in card
+
+
+def _btn(html: str, act: str, t: str) -> str:
+    i = html.find(f"data-act='{act}' data-t='{t}'")
+    return "" if i < 0 else html[i:html.index("</button>", i)]
+
+
+def test_corefix_card_shows_a_registered_change_and_the_buttons_after_it():
+    """确认之后、执行器还没读：ETF 下面写「已登记：…」、按钮按登记之后的样子（恢复按规则登记了 → 不再给「恢复按规则」；
+    2026-10-15 复核：以前页面上还是原来的按钮，像没写成、会再点一次）。撤回了 → 回到原来的样子。"""
+    _book1015()                                                                   # 1482.T 手动固定 678 口（还没拿）
+    kl = {"items": {"1482.T": {"kind": "core", "name": "1482.T"}, "1545.T": {"kind": "core", "name": "1545.T"}}}
+    (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps({"kline": kl}), encoding="utf-8")   # 「其他闲置资金 ETF（现在没拿）」
+    html = panel.render("paper", "t" * 40, AT15)
+    assert "手动固定 678 口</b>" in html and _btn(html, "corefix-clear", "1482.T") and _btn(html, "corefix", "1482.T").endswith("固定口数…")
+    rec = MO.append("paper", {"kind": "corefix", "ticker": "1482", "clear": True}, clock=lambda: AT15)
+    html = panel.render("paper", "t" * 40, AT15)
+    assert "已登记：恢复按规则</b>" in html and "在那之前还是手动固定 678 口" in html and "要撤回也在那里" in html
+    assert not _btn(html, "corefix-clear", "1482.T") and _btn(html, "corefix", "1482.T").endswith("买入…")   # 恢复按规则之后没拿 → 买入…
+    MO.append("paper", {"kind": "cancel", "target": rec["id"]}, clock=lambda: AT15 + dt.timedelta(minutes=1))
+    html = panel.render("paper", "t" * 40, AT15)
+    assert "已登记：" not in html and _btn(html, "corefix-clear", "1482.T")
+    MO.append("paper", {"kind": "corefix", "ticker": "1545", "units": 100}, clock=lambda: AT15 + dt.timedelta(minutes=2))
+    html = panel.render("paper", "t" * 40, AT15)
+    assert "已登记：固定 100 口</b>" in html and _btn(html, "corefix", "1545.T").endswith("固定口数…")
+    assert not _btn(html, "corefix-clear", "1545.T")                           # 只固定在还没读的指令里：要取消 → 撤回那条
+
+
+def test_status_signature_changes_with_trade_count():
+    """/api/status：pending = 「交易」的数字；数字变了 sig 一定变（HALT 建了 / 删了，账本别的地方没变）。"""
+    _book1015("tachibana", sell="SENT", cash=2_000_000.0, fix={})
+    s0 = panel.status_json("tachibana")[1]
+    paths.halt_file().write_text("测试", encoding="utf-8")
+    try:
+        s1 = panel.status_json("tachibana")[1]
+    finally:
+        paths.halt_file().unlink()
+    if s0["pending"] != s1["pending"]:                                       # 现在是成交日收盘之前（真实时钟）才会不同
+        assert s0["sig"] != s1["sig"]
+    A = (panel.STATIC_DIR / "conn.js").read_text(encoding="utf-8")         # 2026-10-15 起状态轮询在 conn.js（连接检查一起做）
+    assert "+(st0.busy !== undefined ? st0.busy : st0.pending)" in A        # 轮询看还在处理的指令（busy），不是「交易」的数字
+    assert "+(j.busy !== undefined ? j.busy : j.pending)" in A

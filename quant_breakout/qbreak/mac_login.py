@@ -55,6 +55,18 @@ def live_alert(now: dt.datetime, home: Path, running: bool) -> str | None:
             "登录时不补跑真钱的单")
 
 
+def decided(home: Path, tag: str, today: dt.date) -> bool:
+    """今天早上的决策已经在账本里了吗（账本处理到上一个交易日 = 应有的决策日；有单被挡 / 没下也算）。scripts/liveu.sh 用：面板叫的运行
+    （QBREAK_LIVEU_PULL=fetch，不 git pull）只在这之后才不 pull；还不在 → 这次运行要当早上的运行，照常 pull 拉云端当天的日报（2026-10-15）。
+    账本读不了 → False（照常 pull）。这里不加载 pandas。"""
+    try:
+        book = json.loads((home / "state" / f"live_unified_{tag}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    ld = str((((book if isinstance(book, dict) else {}).get("state") or {}).get("last_date")) or "")
+    return bool(ld) and ld >= prev_trading_day(today).isoformat()
+
+
 def ran_today(home: Path, today: dt.date) -> bool:
     fp = home / "out" / "live_unified_paper.json"
     return fp.exists() and dt.datetime.fromtimestamp(fp.stat().st_mtime, JST).date() == today
@@ -107,8 +119,11 @@ def main(argv=None) -> int:
     ap.add_argument("--agents", default=str(Path.home() / "Library" / "LaunchAgents"))
     ap.add_argument("--loaded", default="", help="launchctl list 里已加载的 com.qbreak.*（逗号分隔）")
     ap.add_argument("--running", default="0")
+    ap.add_argument("--decided", metavar="账本", help="只看今天早上的决策在不在这个账本里（paper / tachibana…）：在 → 退出码 0，不在 → 1（liveu.sh 用）")
     a = ap.parse_args(argv)
     now = dt.datetime.fromisoformat(os.environ["QBREAK_NOW"]).replace(tzinfo=JST) if os.environ.get("QBREAK_NOW") else now_jst()
+    if a.decided:
+        return 0 if decided(paths.home(), a.decided, now.date()) else 1
     p = plan(now, paths.home(), Path(a.agents), {x for x in a.loaded.split(",") if x}, a.running == "1")
     for n in p["notes"]:
         print(f"NOTE\t{n}")

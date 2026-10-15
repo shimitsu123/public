@@ -20,7 +20,7 @@ from qbreak.unified import UnifiedConfig, UnifiedEngine
 
 from test_live_unified import EX, P, _frame
 from test_manual_now import _at, _quote
-from test_panel import _js_fn
+from test_panel import _js_fn, _submit_ok
 
 CC = {t: etf_cost("tachibana", t, "JP") for t in ("1545.T", "1482.T")}
 CFG2 = UnifiedConfig(capital_jpy=1_000_000, position_pct=0.25, max_positions=4, max_position_pct=0.34,
@@ -276,10 +276,10 @@ def test_panel_submit_texts_for_fixed_etf():
     """固定的 ETF 上点卖出 → 提交说明写「只改这只 ETF 的固定口数」；「恢复按规则」→ 写之后会怎样。"""
     r = _paper2()
     _fixed_1482(r)
-    ok, msg, rec = panel.submit({"book": r.tag, "kind": "sell", "ticker": "1482"}, _at(r, 16, 0))
+    ok, msg, rec = _submit_ok({"book": r.tag, "kind": "sell", "ticker": "1482"}, _at(r, 16, 0))
     assert ok and rec["kind"] == "corefix" and rec["units"] == 0 and "只改这只 ETF 的固定口数" in msg
     MO.requests_path(r.tag).unlink()
-    ok, msg, rec = panel.submit({"book": r.tag, "kind": "corefix", "ticker": "1482", "clear": True}, _at(r, 16, 0))
+    ok, msg, rec = _submit_ok({"book": r.tag, "kind": "corefix", "ticker": "1482", "clear": True}, _at(r, 16, 0))
     assert ok and msg.startswith("已写：1482.T 恢复按规则 → 下一次决策（交易日 07:40）起这只 ETF 又按规则")
     assert "下一次决策全部卖出 100 口" in msg
 
@@ -316,7 +316,9 @@ def test_trade_js_restore_dialogs_and_fixed_funding_note():
     src = (paths.PROJECT_ROOT / "qbreak" / "static" / "trade.js").read_text(encoding="utf-8")
     assert "if(a==='core-restore'){" in src and "kind:'core', pct:v" in src
     assert "(d.plan || CFG.when+'买入；之后每天照规则调')" in src
-    assert "(d.plan || '下一次决策起，这只 ETF 又按规则（美股牛熊 / 股债相关）自动买卖。')" in src
+    # 「恢复按规则」（2026-10-15 起）：不再先弹本地确认框，直接交给服务器 → 服务器回「确认下单」框（列出要下的单）→ 点了才写
+    assert "done(await post({book:CFG.book, kind:'corefix', ticker:d.t, clear:true}))" in src
+    assert "async function post(" in src and "'确认下单'" in src and "cancel:'取消下单'" in src
     node = _node()
     if not node:
         return
@@ -346,11 +348,13 @@ def test_cli_sell_on_a_fixed_etf_and_clear_texts(capsys, monkeypatch):
     assert run.main(["manual", "sell", "1482", "--broker", "paper"]) == 0
     out = capsys.readouterr().out
     assert "这只 ETF 是手动固定的：只改它的固定口数（别的 ETF 与闲置资金比例不变）" in out
+    assert "  什么时候：" in out and "  以上是预计" in out                               # 与页面「确认下单」框同一份说明（命令行不用确认，照旧直接写；2026-10-15）
     assert [(x["kind"], x.get("units"), x.get("from_kind")) for x in MO.read_all("paper")[n0:]] == [("corefix", 0, "sell")]
     assert run.main(["manual", "cancel", MO.read_all("paper")[-1]["id"], "--broker", "paper"]) == 0
     capsys.readouterr()
     assert run.main(["manual", "corefix", "1482", "--clear", "--broker", "paper"]) == 0
-    assert "规则现在不拿（熊市 / 换 ETF）→ 下一次决策全部卖出 100 口" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "规则现在不拿（熊市 / 换 ETF）→ 下一次决策全部卖出 100 口" in out and "  之后这只 ETF 每天照规则" in out
 
 
 def test_cli_resume_when_the_rule_holds_nothing(capsys, monkeypatch):

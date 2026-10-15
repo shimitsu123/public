@@ -51,8 +51,8 @@ color:var(--fg);cursor:pointer;touch-action:manipulation}.seg button:first-child
 .kbar.ktop{padding:0 0 6px;border-bottom:1px solid var(--line);margin-bottom:4px}.kbar.kbot{padding:6px 0 2px;border-top:1px solid var(--line);margin-top:2px}.kbar .hint{font-size:12px;color:var(--muted)}
 .kexp{font-size:13px;line-height:1.55;color:var(--muted);margin:4px 0}.kexp b{color:var(--fg)}.kexp b.up{color:var(--up)}.kexp b.down{color:var(--down)}
 .kexp.now{color:var(--fg)}.kexp .legend{margin:0 0 2px}
-/* 整页一份的「怎么看 K 线图」（选股最下面；2026-10-15：每张图不再各带一份） */
-details.khelp>summary{font-weight:600;color:var(--accent)}
+/* 整页一份的「怎么看 K 线图」（「持仓」的 K 线上面；选股只有一行 .khgo 指过去；2026-10-15：每张图不再各带一份） */
+details.khelp>summary{font-weight:600;color:var(--accent)}.khgo{margin:8px 2px 0;color:var(--muted)}.khgo a{color:var(--accent);white-space:nowrap}
 details.khelp ul{margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--muted)}details.khelp li{margin:3px 0}
 .lots{position:relative;height:44px;margin:8px 0 0}
 .lots-bar{position:absolute;left:14px;right:14px;top:15px;height:14px;display:flex;gap:2px;pointer-events:none}
@@ -169,6 +169,8 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .sheet{padding:18px max(16px,env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 18px) max(16px,env(safe-area-inset-left));
 overflow:auto;white-space:pre-line}
 @media (min-width:760px){dialog{margin:auto;border-radius:18px;max-width:520px}}
+/* 确认框（2026-10-15「确认下单 / 取消下单」）：标题与两个按钮一直看得到，中间的说明自己滚动（长的框在 iPhone 上不再一打开就停在最下面、看不到标题） */
+#dlg-ask .sheet{max-height:88vh;display:flex;flex-direction:column}#dlg-ask .sheet>*{flex:none}#dlg-ask #ask-body{flex:1 1 auto;min-height:0;overflow:auto}
 fieldset{border:0;margin:8px 0;padding:0;white-space:normal}
 fieldset label{display:flex;align-items:center;gap:10px;min-height:44px;border-top:1px solid var(--line)}fieldset label:first-of-type{border-top:0}
 input[type=radio]{width:20px;height:20px;accent-color:var(--accent)}
@@ -191,3 +193,14 @@ color:#fff;font-size:10px;font-style:normal;line-height:16px;text-align:center}
 .panehead{display:flex;flex-direction:column;gap:2px;margin:10px 2px 0}.panehead b{font-size:20px}.panehead span{color:var(--muted);font-size:13px}
 details.nw summary{line-height:1.5}details.nw.hl{outline:2px solid var(--accent);border-radius:8px;padding:4px}details.nw>div{margin:4px 0;font-size:14px} body{padding-bottom:calc(env(safe-area-inset-bottom) + 64px)}
 .spark{color:var(--accent);display:block;margin:4px 0 8px}
+/* 连接条（conn.js；2026-10-15「qbreak网页app经常卡住 永久解决这个问题」）：连不上 Mac → 顶上「连不上 Mac（N 秒后重试）」+「重试」；
+   状态变了但对话框开着 →「关掉对话框后自动刷新」。提示（toast）放在标签栏上面（以前盖住标签栏）。 */
+.conn{position:fixed;left:0;right:0;top:0;z-index:30;display:flex;gap:10px;align-items:center;
+padding:calc(env(safe-area-inset-top) + 8px) max(14px,env(safe-area-inset-right)) 8px max(14px,env(safe-area-inset-left));
+background:var(--accent);color:var(--accent-fg);font-size:14px;line-height:1.45;box-shadow:0 4px 16px rgba(0,0,0,.2)}
+.conn.warn{background:var(--neg);color:#fff}.conn[hidden]{display:none}
+.conn .conn-t{flex:1;min-width:0}.conn button{flex:none;min-height:40px;padding:8px 14px;border:0;border-radius:10px;background:rgba(0,0,0,.25);color:inherit;font:inherit;font-weight:600}
+/* 2026-10-15 复核：连接条在页头里（跟着页头吸顶，不盖住「刷新」/ 时刻 / 账本切换）；对话框开着时在对话框最上面（遮罩上面，点得到「现在刷新」） */
+.top>.conn{position:static;max-width:720px;margin:0 auto 8px;padding:8px 12px;border-radius:10px;box-shadow:none}
+dialog>.conn{position:sticky;top:0;z-index:2;padding:10px 14px;border-radius:18px 18px 0 0;box-shadow:none}
+.toast{bottom:calc(env(safe-area-inset-bottom) + 72px)}dialog .toast{bottom:calc(env(safe-area-inset-bottom) + 16px)}

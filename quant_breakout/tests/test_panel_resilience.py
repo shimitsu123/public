@@ -7,7 +7,7 @@ import pytest
 from qbreak import manual_orders as MO
 from qbreak import panel
 
-from test_panel import AT, _book, _req, _sm, _sm_nowarn, server  # noqa: F401（pytest 夹具）
+from test_panel import AT, _book, _req, _sm, _sm_nowarn, _submit_ok, server  # noqa: F401（pytest 夹具）
 
 BODIES = {
     "sell": {"ticker": "7203"},
@@ -25,7 +25,7 @@ def test_every_kind_returns_a_message(kind):
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T"], "blocked": {"7203.T": {"until": "2026-12-01"}}})
     _sm()
     body = {"ticker": "1545", "clear": True} if kind == "corefix_clear" else BODIES[kind]
-    ok, msg, rec = panel.submit({"book": "paper", "kind": kind.split("_")[0], **body}, AT)
+    ok, msg, rec = panel.submit({"book": "paper", "kind": kind.split("_")[0], **body}, AT, fetch=lambda ts: {})   # 不联网取现价
     assert isinstance(msg, str) and msg, (kind, msg)
     if ok:
         assert msg.startswith("已写") and rec["id"] in msg
@@ -52,7 +52,7 @@ def test_waiting_corefix_can_be_cancelled_with_clear_confirm():
     """2026-10-12 用户：「等下单也可以选择撤单，点击撤单后要出来确认防止误撤销」：固定口数也给撤单按钮，确认框写明是哪一条。"""
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T", "1482.T"]})
     _sm()
-    ok, _m, rec = panel.submit({"book": "paper", "kind": "corefix", "ticker": "1482", "units": 300}, AT)
+    ok, _m, rec = _submit_ok({"book": "paper", "kind": "corefix", "ticker": "1482", "units": 300}, AT)
     assert ok
     html = panel.render("paper", "t" * 40, AT)
     i = html.index(f"data-id='{rec['id']}'")
@@ -182,7 +182,7 @@ def test_uncancel_refused_when_setting_already_decided():
     """固定口数这种读到就定了的：执行器读到之前撤回 → 读的时候已经不生效 → 之后撤销不了（给理由）。"""
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T", "1482.T"]})
     _sm()
-    _o, _m, fx = panel.submit({"book": "paper", "kind": "corefix", "ticker": "1482", "units": 300}, AT)
+    _o, _m, fx = _submit_ok({"book": "paper", "kind": "corefix", "ticker": "1482", "units": 300}, AT)
     _o, _m, cxl = panel.submit({"book": "paper", "kind": "cancel", "target": fx["id"]}, AT)
     card = _orders_card(panel.render("paper", "t" * 40, AT))
     assert "固定 1482 对冲版美国 7〜10 年国债" in card or "固定 1482" in card

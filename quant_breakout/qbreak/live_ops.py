@@ -80,6 +80,84 @@ def how_text(o) -> str:
     return "寄付指値" if _g(o, "side") == "BUY" else "寄付成行"
 
 
+# ══════════════════════════ 还没发出的买单开盘时下不下得成（只读；面板「交易」的数字与「不会下单」）══════════════════════════
+UNSENT = ("PLANNED", "DEFERRED")                     # 还没发到交易所（重试 / 开盘后补单时才下）
+AT_EXCH = ("SENDING", "SENT", "PARTIAL")             # 已经发到（正在发到）交易所
+LIVE = UNSENT + AT_EXCH
+
+
+def px_band(px: float) -> tuple[float, float]:
+    """前日終値 px → (跌停价, 涨停价)（JPX 制限値幅：开盘价出不了这个范围）。"""
+    from .tick import price_limit_jp
+    w = price_limit_jp(float(px))
+    return max(float(px) - w, 0.0), float(px) + w
+
+
+def cash_hi(book: dict | None, tag: str | None) -> float:
+    """开盘时能用的现金的上限（unfunded_buys 用）：账本现金、模拟账户的券商现金、今天的券商快照的余力 取大（看不到的入金不算漏）。
+    面板「交易」的「不会下单（预计）」与固定口数 / 恢复按规则的确认框、提交说明同一个数（2026-10-15 复核：以前只在面板里）。"""
+    from . import paths
+    v = [float(((book or {}).get("state") or {}).get("cash_jpy") or 0)]
+    if tag:
+        try:
+            if tag.startswith("paper"):
+                v.append(float((read_json(paths.state_dir() / f"live_unified_{tag}_broker.json", {}) or {}).get("cash") or 0))
+            snap = read_json(paths.out_dir() / f"broker_snapshot_{tag}.json", {}) or {}
+            if str(snap.get("at") or "")[:10] == now_jst().date().isoformat():
+                v.append(float(snap.get("buying_power") or 0))
+        except (TypeError, ValueError, OSError):
+            pass
+    return max(v)
+
+
+def unfunded_buys(book: dict | None, asked=(), drop=(), cash: float | None = None) -> dict[str, dict]:
+    """当前决策里还没发出的买单（DEFERRED / PLANNED）里，开盘时一定下不成的 → {cid: 说明用的数}（只读、纯函数；2026-10-15 用户
+    「撤单后 / 没有执行下单等等的话交易处的数字不显示」：撤了凑钱的卖单、现金只有 192 円，1482.T 的买单还算「等开盘后」）。
+    执行器开盘后补单（_place_deferred：立花按「开盘价 ×(1+滑点) + 手续费 ≤ 余力」、模拟账户 PaperBroker._buy_now 按同一条减到整单元）
+    减到 0 → 不下（放弃 / 资金不足）。开盘价开盘前不知道 → 保守地估（只有一定下不成才算）：
+      能用的钱的上限 = cash（默认账本现金；面板传入账本现金 / 券商余力取大）+ 登记了还没对上的入金
+                       + 还会成交的卖单（没撤、没在撤单中：asked / drop 之外）按涨停价全部卖掉 + 已经成交的卖出按涨停价
+      一单元的下限   = 单元（核心 ETF 按账本记的，没记 = 1；个股 100 股）× 跌停价（不算滑点、手续费）
+    上限 < 下限 → 下不成。估不出（没有参考价）→ 不下结论（不列）。只是展示，不改执行器的行为。
+    asked = 已经写了撤单的单的 cid；drop = 当成撤掉的卖单（撤单确认框「撤掉之后哪些买单下不成」）。"""
+    st = (book or {}).get("state") or {}
+    d = st.get("last_date")
+    cur = [o for o in (book or {}).get("orders") or [] if o.get("decided_on") == d]
+    if not any(o.get("side") == "BUY" and o.get("status") in UNSENT for o in cur):
+        return {}
+    off = {str(x) for x in asked} | {str(x) for x in drop}
+    c0 = float(st.get("cash_jpy") or 0) if cash is None else float(cash)
+    c0 += sum(float(f.get("jpy") or 0) for f in (book or {}).get("flows") or []          # 入金登记了、现金同步还没对上：券商那边可能已经能用
+              if isinstance(f, dict) and float(f.get("jpy") or 0) > 0 and not f.get("seen_after") and not f.get("in_start"))
+    sells, gone = 0.0, []
+    for o in cur:
+        if o.get("side") != "SELL":
+            continue
+        px = float(o.get("ref_px") or 0)
+        if px <= 0:
+            return {}                                       # 估不出这笔卖出的钱：不下结论
+        live = o.get("status") in LIVE and str(o.get("cid")) not in off
+        sells += (int(o.get("sent_qty") or o.get("qty") or 0) if live else int(o.get("filled_qty") or 0)) * px_band(px)[1]
+        if not live and int(o.get("filled_qty") or 0) < int(o.get("sent_qty") or o.get("qty") or 0):
+            gone.append(o)                                  # 撤了 / 在撤单中 / 没成交 / 没下的卖单（说明「资金来源的卖单已撤」用）
+    lots = ((book or {}).get("core_rule") or {}).get("lot") or {}
+    out = {}
+    for o in cur:
+        if o.get("side") != "BUY" or o.get("status") not in UNSENT:
+            continue
+        px = float(o.get("ref_px") or 0)
+        lo = px_band(px)[0] if px > 0 else 0.0
+        if o.get("kind") == "core":
+            lot = int(lots.get(o.get("ticker")) or 1)
+        else:
+            from .tick import lot_size
+            lot = lot_size(str(o.get("ticker")), "JP")
+        need = lot * lo
+        if need > 0 and c0 + sells < need - 1e-9:
+            out[str(o.get("cid"))] = {"cash": c0, "sells": sells, "need": need, "lot": lot, "gone": gone}
+    return out
+
+
 # ══════════════════════════ B1 撤单 ══════════════════════════
 def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
     """这笔单现在能不能撤：能 → None；不能 → 理由。面板（显示「撤单」按钮）、手动指令的检查、执行器共用。"""

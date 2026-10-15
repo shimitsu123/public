@@ -9,7 +9,7 @@ import { req } from './net.js';
 // 小图：量 / MACD（规则同一组参数）/ DMI（同花顺写法）；趋势线：连低点的支撑线、连高点的压力线（qbreak/trendline.py）+ 往后延长的点线 + 破线点
 // 数据 = 执行器每次运行写的 out/charts_<账本>.json，打开 / 看到哪只票才取（/api/chart）；只展示
 // 每张图不带说明 / 数字表（2026-10-15 用户：「整体留一个解释就行」「不需要最近十个月的数字 看图就行」）：
-//   整页一份「怎么看 K 线图」在选股最下面（服务器画：panel._kline_help）；图下面只留各自的一句话（最新一根、现在的趋势、趋势线）
+//   整页一份「怎么看 K 线图」在「持仓」的 K 线上面（服务器画：panel._kline_help）；图下面只留各自的一句话（最新一根、现在的趋势、趋势线）
 export const TFS = {D:'日K', W:'周K', M:'月K'}, SUBS = {v:'量', macd:'MACD', dmi:'DMI'};
 const KU = {D:'天', W:'周', M:'个月'}, KMA = {D:'日', W:'周', M:'个月'};   // 一根 = 1 天 / 1 周 / 1 个月；20 日均价 / 20 周均价 / 20 个月均价
 const KPL = CFG.kp || {};
@@ -31,6 +31,11 @@ function nice(lo, hi, n){
 function vfmt(v){ return v>=1e8 ? (v/1e8).toFixed(1)+' 亿' : v>=1e4 ? (v/1e4).toFixed(v>=1e6?0:1)+' 万' : String(v); }
 function dlab(d, tf){ return tf==='M' ? d.slice(0,4)+' 年 '+(+d.slice(5,7))+' 月' : tf==='W' ? '到 '+d.replace(/-/g,'/')+' 的一周' : d.replace(/-/g,'/')+'（'+WD[new Date(d+'T00:00:00').getDay()]+'）'; }
 function sdate(d, tf){ return tf==='M' ? d.slice(0,7).replace('-','/') : d.slice(5).replace('-','/'); }
+function authReload(){                                                     // 2026-10-15 复核：以前每张 401 的图各自 1.5 秒后 location.reload()，不管对话框开没开（输入的口数会丢）
+  if(typeof window.qbAuth==='function'){ window.qbAuth(); return; }       // conn.js：等对话框关掉 / 输入完、只刷新一次
+  if(authReload.on) return; authReload.on=1;
+  (function wait(){ if(document.querySelector('dialog[open]')) setTimeout(wait, 2000); else location.reload(); })();
+}
 function loadK(t){
   if(KD[t] && KD[t]!=='error' && KD[t]!=='timeout' && KD[t]!=='loading') return Promise.resolve(KD[t]);
   if(KP[t]) return KP[t];                                                   // 同一只票已经在取：等同一个请求
@@ -39,7 +44,7 @@ function loadK(t){
     try{
       const x=await req('/api/chart?book='+encodeURIComponent(CFG.book)+'&t='+encodeURIComponent(t), {credentials:'same-origin', cache:'no-store'});
       if(x.r.status===404) KD[t]='none';
-      else if(x.r.status===401){ KD[t]='auth'; setTimeout(()=>location.reload(), 1500); }   // 这台设备没被认出来：刷新（会到配对页）
+      else if(x.r.status===401){ KD[t]='auth'; authReload(); }             // 这台设备没被认出来：刷新（会到配对页；对话框开着 / 正在输入 → 等关掉；几张图一起也只一次）
       else if(!x.r.ok || !x.j) KD[t]='error';                                // 内容读不出来（连接中途断了）也算取不到：可以再点
       else KD[t]=x.j.data ? x.j.data : 'none';
     }catch(e){ KD[t]=(e && e.name==='Timeout') ? 'timeout' : 'error'; }   // 15 秒没有回应（Mac 睡眠时不会一直停在「载入中」）
@@ -71,7 +76,7 @@ function subText(D, i, sub){                                               // �
   if(sub==='dmi') return '+DI '+f1(D.pdi,i)+' · −DI '+f1(D.mdi,i)+' · ADX '+f1(D.adx,i)+' · ADXR '+f1(D.adxr,i);
   return '';
 }
-function kSubKey(el, P, tf, sub){                                          // 小图的图例（意思在选股最下面的「怎么看 K 线图」里）
+function kSubKey(el, P, tf, sub){                                          // 小图的图例（意思在「持仓」K 线上面的「怎么看 K 线图」里）
   el.textContent='';
   const row=nd('div','legend',null,el);
   const k=(c, t)=>{ const sp=nd('span',null,null,row); nd('i','key '+c,null,sp); sp.appendChild(document.createTextNode(t)); };
@@ -114,7 +119,7 @@ function kTrend(el, tr, tf){                                               // �
   el.appendChild(document.createTextNode('（收盘在 20 '+m+'均价'+(tr.above20 ? '上面' : '下面')+'，20 '+m+'均价'
     +(Math.abs(sl)<0.005 ? '走平' : sl>0 ? '往上' : '往下')+'）'+(tr.align ? ' · '+(A[tr.align] || tr.align) : '')));
 }
-function kTL(el, TL, tf){                                                  // 现在的趋势线（一句话；图上的记号在选股最下面的「怎么看 K 线图」里）
+function kTL(el, TL, tf){                                                  // 现在的趋势线（一句话；图上的记号在「持仓」K 线上面的「怎么看 K 线图」里）
   const C=KPL.chan||{};
   const one=(L, sup)=>{ const d=L.dist_pct;
     return (sup ? '支撑 ' : '压力 ')+pxs(L.now)+(d==null ? '' : sup ? (d<=0 ? '（比收盘低 '+Math.abs(d)+'%）' : '（已跌破）')

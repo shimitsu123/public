@@ -43,6 +43,7 @@ function showQ(j){
     +'；只用来看和估算 —— 下单时立花用实时现价（模拟账户按 Yahoo 现价）';
 }
 let SQ = null;                                                            // 建议的股票最近一次取到的现价
+let SQERR = false;                                                        // 最近一次取现价失败了（买入框写「取不到」，不一直「载入中」）
 function priceHead(q){ return '现价 '+pxs(q.px)+'（'+hmOf(q)+(q.today ? '，约晚 20 分钟' : '')+'）'+(q.chg_pct!=null ? ' · 比收盘 '+pcs(q.chg_pct) : ''); }
 function buyLines(q, j, full){                                             // 建议的股票：现在买按什么价（规则同一条：≤ 收盘 ×1.03）；full = 买入框（多写一行下单依据）
   const live=!!(j && j.live), b=q.buy||{}, B=(j && j.basis && j.basis.BUY) || '', out=[];
@@ -89,16 +90,18 @@ export async function loadSQ(){
   const all=sqAll(), ts=all.slice(0, SQMAX);
   sqOver(all.slice(SQMAX), all.length);
   if(!ts.length) return;
+  let ok=false;
   try{
     const x=await req('/api/quotes?book='+encodeURIComponent(CFG.book)+'&t='+encodeURIComponent(ts.join(',')), {credentials:'same-origin', cache:'no-store'});
-    if(x.r.ok && x.j){ SQ={...x.j, rows:{...((SQ && SQ.rows) || {}), ...(x.j.rows || {})}}; showSQ(SQ); liveK(x.j.rows||{}, x.j.live); }
+    if(x.r.ok && x.j){ ok=true; SQ={...x.j, rows:{...((SQ && SQ.rows) || {}), ...(x.j.rows || {})}}; showSQ(SQ); liveK(x.j.rows||{}, x.j.live); }
   }catch(e){}                                                              // 取不到：保留上一次的
+  SQERR=!ok; if(!ok) buyLive();                                           // 买入框不再一直停在「现价载入中…」（2026-10-15）
 }
 export function buyLive(){                                                        // 买入框：现价 + 现在买按什么价 + 下单依据
   const e=$('#buy-live'); if(!e || !BUY) return;
   const q=SQ && SQ.rows && SQ.rows[BUY.t];
   e.textContent='';
-  if(!q){ e.textContent='现价载入中…（Yahoo，约晚 20 分钟）'; return; }
+  if(!q){ e.textContent=SQERR ? '现价取不到（Mac 连不上？连上之后会自动再取）：下单时执行器按当时的价格算' : '现价载入中…（Yahoo，约晚 20 分钟）'; return; }
   nd('div', q.chg_pct==null ? null : (q.chg_pct>=0 ? 'up' : 'down'), priceHead(q), e);
   for(const l of buyLines(q, SQ, true)) nd('div', 'muted', l, e);
 }
@@ -138,3 +141,4 @@ document.addEventListener('toggle', e=>{                                   // �
 }, true);
 document.addEventListener('DOMContentLoaded', loadQ);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) loadQ(); });
+window.addEventListener('qb-reconnect', ()=>loadQ());                     // conn.js：连不上之后又连上了 → 马上再取现价

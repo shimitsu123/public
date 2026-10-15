@@ -2,10 +2,8 @@
 ① HALT 中：等着的买卖指令写明「HALT 中：解除后照原样执行（写于 MM/DD）」（同样的文字不反复改）、账本的 manual 里记 halt_seen；
 ② HALT 解除后的第一次运行（早上 / 开盘后 / 盘中 now）→ warn 事件列出积压的指令（id、票、种类、写于哪天），标记清掉、只说一次；
    日报的一行摘要标 ★；没有积压 → 悄悄清掉标记；③ 面板的 HALT 卡片与 manual list 列出积压；
-④ app.js：页面回到前台、生成超过约 10 分钟 → 重新载入（没有 gen → 不动；对话框开着 → 只提示）。"""
+④ 页面回到前台、生成超过约 10 分钟 → 重新载入（没有 gen → 不动；对话框开着 → 只提示；2026-10-15 起在 conn.js）。"""
 import datetime as dt
-import json
-import subprocess
 
 import pytest
 
@@ -171,7 +169,7 @@ def test_cli_manual_list_under_halt_shows_the_backlog_with_dates(capsys, monkeyp
     assert "★ HALT 生效中" not in capsys.readouterr().out
 
 
-# ────────── ④ app.js：切回来时页面过时 → 重新载入 ──────────
+# ────────── ④ conn.js（2026-10-15 前是 app.js）：切回来时页面过时 → 重新载入 ──────────
 def _node():
     import shutil
     node = shutil.which("node")
@@ -181,32 +179,17 @@ def _node():
 
 
 def test_app_js_reloads_a_stale_page_when_it_becomes_visible(tmp_path):
-    src = (panel.STATIC_DIR / "app.js").read_text(encoding="utf-8")
-    i = src.index("(function(){", src.index("import { req }"))
-    frag = src[i:src.index("})();", i) + 5]
-    assert "手机切回来马上刷新" in frag and "visibilitychange" in frag and "CFG.gen" in frag and "location.reload()" in frag
-    harness = "function setup(CFG, document, location, loading, toast){\n" + frag + "\n}\n" + r"""
-function run(cfg, steps){
-  let fn=null, reloads=0, toasts=0, dlg=null;
-  const doc={hidden:true, addEventListener:(e,f)=>{ if(e==='visibilitychange') fn=f; }, querySelector:s=>dlg};
-  setup(cfg, doc, {reload:()=>{reloads++;}}, ()=>{}, ()=>{toasts++;});
-  for(const s of steps){ doc.hidden=s.hidden; dlg=s.dlg||null; fn(); }
-  return [reloads, toasts];
-}
-const now=Date.now(), M=60000, V={hidden:false}, out={};
-out.nogen=run({}, [V, V]);
-out.badgen=run({gen:'x'}, [V]);
-out.fresh=run({gen:now-5*M}, [V]);
-out.hidden=run({gen:now-11*M}, [{hidden:true}]);
-out.stale=run({gen:now-11*M}, [V, V]);
-out.dialog=run({gen:now-30*M}, [{hidden:false, dlg:{}}]);
-out.nocfg=run(null, [V]);
-console.log(JSON.stringify(out));
+    """切回来时页面超过约 10 分钟 → 重新载入；对话框开着 → 不丢输入，只提示。2026-10-15 起在 conn.js（先确认连得上 Mac 再刷新，
+    对话框关掉后自动刷新；「qbreak网页app经常卡住」）。各种情形见 test_panel_stuck。"""
+    from panel_js_harness import run_conn
+    _node()
+    assert "visibilitychange" in (panel.STATIC_DIR / "conn.js").read_text(encoding="utf-8")
+    steps = r"""
+  DOC.hidden = true; dfire('visibilitychange'); await advance(1000);
+  DOC.hidden = false; dfire('visibilitychange'); await advance(100);
+  return {r: R.reloads, b: banner()};
 """
-    f = tmp_path / "t.js"
-    f.write_text(harness, encoding="utf-8")
-    p = subprocess.run([_node(), str(f)], capture_output=True, text=True, timeout=30)
-    assert p.returncode == 0, p.stderr
-    out = json.loads(p.stdout)
-    assert out == {"nogen": [0, 0], "badgen": [0, 0], "fresh": [0, 0], "hidden": [0, 0], "stale": [1, 0],
-                   "dialog": [0, 1], "nocfg": [0, 0]}
+    assert run_conn(tmp_path, steps, gen_ago_min=11)["r"] == 1
+    assert run_conn(tmp_path, steps, gen_ago_min=5)["r"] == 0
+    o = run_conn(tmp_path, "DOC.dlg = {};" + steps, gen_ago_min=30)
+    assert o["r"] == 0 and "关掉对话框后自动刷新" in o["b"]

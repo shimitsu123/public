@@ -1,38 +1,20 @@
 // qbreak 操作面板：app.js（浏览器原生 ES 模块；由 qbreak/panel.py 以 /static/app.js 提供；不要用构建工具）
-import { $, CFG, api, loading, toast } from './core.js';
+import { $, api, toast } from './core.js';
+import { beacon } from './conn.js';
 import { req } from './net.js';
-(function(){                                                              // 手机切回来马上刷新（2026-10-13 resume-other-9：以前只有注释没有代码）：页面生成（CFG.gen）超过约 10 分钟 → 重新载入，
-  const STALE_MS=10*60000;                                                //   确认框里的执行日期（CFG.when / when_all 等）不再是跨过 07:40 决策之前的；没有 gen → 不动；对话框开着 → 不丢输入，只提示
-  let busy=false;
-  document.addEventListener('visibilitychange', ()=>{
-    const g=Number(CFG && CFG.gen);
-    if(document.hidden || busy || !(g>0) || Date.now()-g<STALE_MS) return;
-    if(document.querySelector('dialog[open]')){ toast('这页是 '+Math.round((Date.now()-g)/60000)+' 分钟前的：关掉对话框后下拉刷新，再操作', true); return; }
-    busy=true; loading(true); location.reload();
-  });
-})();
-(function(){                                                              // 〔77〕C UX-16：还有在处理的指令 → 每 10 秒问一次，状态变了就刷新（最多约 2 分钟）
-  const s0=(CFG.st||{}); if(!(s0.pending>0)) return;
-  let n=0;
-  async function tick(){
-    n++;
-    try{ const x=await req('/api/status?book='+encodeURIComponent(CFG.book),{credentials:'same-origin',cache:'no-store'});
-         if(x.r.ok && x.j && x.j.sig && x.j.sig!==s0.sig){ toast('状态更新了：刷新中…'); loading(true); setTimeout(()=>location.reload(), 800); return; } }catch(e){}
-    if(n<12 && !document.hidden) setTimeout(tick, 10000);
-  }
-  setTimeout(tick, 10000);
-})();
-(function(){                                                              // 网页 App：service worker（离线看上次的页面 + 推送）
-  if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{}); }
-  const age=(Date.now()-(+CFG.gen||Date.now()))/60000, el=$('#stale');
-  if(el && age>3){
-    el.textContent='★ 这是 '+(age<90 ? Math.round(age)+' 分钟' : Math.round(age/60)+' 小时')+'前的页面（连不上 Mac：Mac 睡着 / 关机 / Tailscale 没连上）。按钮现在点了也送不到 —— 连上之后下拉刷新。';
-    el.hidden=false;
+// 切回来时页面旧了就刷新、在处理的指令状态变了就刷新、页面顶上「这是 N 分钟前的页面」：2026-10-15 起都在 conn.js（先确认连得上 Mac 再刷新、
+// 对话框开着不刷新；以前这里直接 location.reload()，连不上时停在「刷新中…」）。
+(function(){                                                              // 网页 App：service worker（连不上时看上次的页面 + 推送）
+  if('serviceWorker' in navigator){                                      // updateViaCache: 'none' → sw.js 本身不走 HTTP 缓存（面板换了新代码马上用新的）
+    navigator.serviceWorker.register('/sw.js',{scope:'/', updateViaCache:'none'}).catch(err=>beacon('sw-register', String(err)));
   }
 })();
 function b64key(s){ s=s.replace(/-/g,'+').replace(/_/g,'/'); s+='='.repeat((4-s.length%4)%4); const r=atob(s), o=new Uint8Array(r.length); for(let i=0;i<r.length;i++) o[i]=r.charCodeAt(i); return o; }
 function standalone(){ return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone===true; }
-async function pushReg(){ if(!('serviceWorker' in navigator) || !('PushManager' in window)) return null; return navigator.serviceWorker.ready; }
+async function pushReg(){                                                // service worker 3 秒还没准备好 → 当作没有（以前一直等 → 推送那一行与按钮没反应）
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  return Promise.race([navigator.serviceWorker.ready, new Promise(res=>setTimeout(()=>res(null), 3000))]);
+}
 async function pushState(){
   const el=$('#push-st'); if(!el) return;
   const reg=await pushReg().catch(()=>null);
@@ -108,6 +90,12 @@ document.addEventListener('click', e=>{                                   // 「
   const sm=d.querySelector('summary'), top=document.querySelector('.top'), h=(top&&top.offsetHeight)||0, y=sm.getBoundingClientRect().top;
   if(y<h || y>window.innerHeight-40) window.scrollTo(0, y+window.scrollY-h-8);   // 摘要在页头下面 / 屏幕外 → 滚到页头下面
   sm.focus({preventScroll:true});
+}, true);
+document.addEventListener('click', e=>{                                   // 选股的「怎么看 K 线图 去看 ›」→「持仓」里那一份（打开、滚到它；2026-10-15）
+  const a=e.target.closest('[data-khelpgo]'); if(!a) return;
+  const d=document.querySelector('#khelp details'); if(!d) return;
+  e.preventDefault(); showTab('hold', true); d.open=true;
+  setTimeout(()=>{ const top=document.querySelector('.top'); window.scrollTo(0, d.getBoundingClientRect().top+window.scrollY-((top&&top.offsetHeight)||0)-8); }, 50);
 }, true);
 function showMseg(s){ document.querySelectorAll('[data-mseg]').forEach(b=>b.classList.toggle('on', b.dataset.mseg===s));
   document.querySelectorAll('.mseg').forEach(g=>{ g.hidden = g.dataset.s!==s; }); }

@@ -182,10 +182,11 @@ def test_tabs_group_sections_and_news_deeplink(monkeypatch):
          "alert": True, "threat": 1.5, "chain": {"shock_txt": "原油 +5%", "down": [["运输", -1.2]], "tickers_down": ["9020.T"]}}]})
     write_json(NW.cache_dir() / "alerted.json", {"abc123": "2026-10-06T06:45"})
     h = panel.render("paper", "t" * 40, AT, mode="remote", device={"name": "x", "kind": "ts", "id": "ts"})
-    for k in ("home", "hold", "trade", "pick", "news", "more"):
-        assert f"class='pane' data-tab='{k}'" in h and f"data-tabgo='{k}'" in h, k
+    for k in ("home", "hold", "trade", "pick", "news", "more"):                # 一开始显示的那一页服务器就标上 on（2026-10-15：不等脚本）
+        assert f"class='pane{' on' if k == 'home' else ''}' data-tab='{k}'" in h and f"data-tabgo='{k}'" in h, k
     assert "id='n-abc123'" in h and "10/06 06:30" in h and "提醒：10/06 06:45" in h and "原油 +5%" in h
     assert h.count("<div class='pane'") == h.count("<div class='pane' data-tab=")
+    assert h.count("<div class='pane on'") == h.count("<div class='pane on' data-tab='home'") >= 1
     assert "<i class='badge'>1</i>" in h                                    # 消息 24 小时内的提醒数 / 持仓只数
 
 

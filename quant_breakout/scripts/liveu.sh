@@ -62,7 +62,9 @@
 #   没过 → 这次执行器加 --block-reason（对账 / 决策照常、单都不下）+ 通知；过了 → 数据目录 .smoke_ok 记下这个标识
 #   （只看代码：qbreak / run.py / scripts / tests / requirements.*；云端每天推的 var/ 提交不算新代码）。
 # 环境变量：QBREAK_LIVEU_HOME（默认 ~/.qbreak/home）、QBREAK_PYTHON（默认 ~/.qbreak/venv/bin/python）、
-#          QBREAK_LIVEU_WAIT_MIN（等云端入库的最长分钟数，默认 50）、QBREAK_LIVEU_PULL（1 = 先 git pull，默认 1）、
+#          QBREAK_LIVEU_WAIT_MIN（等云端入库的最长分钟数，默认 50）、QBREAK_LIVEU_PULL（1 = 先 git pull，默认 1；
+#          fetch = 不 pull、不换代码，只 git fetch 看一眼远程停止 —— 面板叫的 --retry / --phase now / --phase cancel 用，
+#          今天早上的决策还不在账本里时照常 pull（当早上的运行）；0 = 都不做）、
 #          QBREAK_SMOKE_TIMEOUT（冒烟测试最长秒数，默认 600）、QBREAK_LOG_MAX_BYTES（日志轮换的大小，默认 5 MB）
 set -uo pipefail
 
@@ -528,7 +530,26 @@ if [ "${1:-}" = "run" ]; then
   case " $* " in *" --phase now "*|*" --phase cancel "*) nowphase=1 ;; *) nowphase=0 ;; esac   # 没事可做时不写页面（不算没跑完）
   case " $* " in *" --broker tachibana "*) live=1 ;; *) live=0 ;; esac
   pullmsg=""
-  if [ "$openphase" = "0" ]; then
+  # 面板叫的（QBREAK_LIVEU_PULL=fetch；2026-10-15 用户「qbreak网页app经常卡住 永久解决」）：不 pull —— 以前面板的 --retry 顺手拉下新代码，
+  # 面板看到代码变了就重启（10-15 08:12 正在操作时）、也绕过了 dev.sh「交易日 07:30〜09:35 不换代码」；早上 07:40 的运行已经拉过（面板只在
+  # 早上的决策做完之后才叫 --retry）。远程停止照样看（git fetch，不动工作区）。
+  case "${QBREAK_LIVEU_PULL:-1}" in fetch) nopull=1 ;; *) nopull=0 ;; esac
+  if [ "$nopull" = "1" ] && [ "$openphase" = "0" ]; then
+    # 只有今天早上的决策已经在账本里才不 pull：还不在（Mac 07:40 睡着 / 运行没完成）→ 这次运行就是早上的运行（run.py --retry 按正常流程跑），
+    # 照常 git pull 拉云端当天的日报 / 判断层（面板也按账本判断：panel._pull_mode；这里再看一次）
+    case " $* " in *" --broker tachibana "*) btag=tachibana ;; *) btag=paper ;; esac
+    if [ "$btag" = "tachibana" ]; then
+      case " $* " in *" --demo "*) btag="${btag}_demo" ;; esac
+      case " $* " in *" --dry-run "*) btag="${btag}_dryrun" ;; esac
+    fi
+    if ! "$PY" -m qbreak.mac_login --decided "$btag" >/dev/null 2>&1; then
+      nopull=0
+      QBREAK_LIVEU_PULL=1
+      export QBREAK_LIVEU_PULL
+      echo "（面板叫的运行，但今天早上的决策还不在账本 ${btag} 里：这次当早上的运行，照常 git pull 拉云端当天的数据）"
+    fi
+  fi
+  if [ "$openphase" = "0" ] && [ "$nopull" = "0" ]; then
     today="$(TZ=Asia/Tokyo date +%F)"
     waited=0
     while :; do                                    # 例行任务的日报（2026-10-09 起 Mac 的本机任务 06:45，通常 07:10 前；没做 → 云端后备 07:20）推上来
@@ -557,11 +578,13 @@ if [ "${1:-}" = "run" ]; then
       waited=$((waited + 5))
     done
     halt_remote="$PROJ/var/HALT_REMOTE"
-  else                                             # 开盘后不 pull（不换代码），只看一眼远程停止（git fetch 只更新远端分支的记录，不动工作区）
+  else                                             # 开盘后 / 面板叫的不 pull（不换代码），只看一眼远程停止（git fetch 只更新远端分支的记录，不动工作区）
     halt_remote="$QBREAK_HOME/.halt_remote_fetched"
     rm -f "$halt_remote"
-    if [ "${QBREAK_LIVEU_PULL:-1}" = "1" ] && git fetch -q >/dev/null 2>&1; then
-      git show "@{u}:./var/HALT_REMOTE" > "$halt_remote" 2>/dev/null || rm -f "$halt_remote"
+    if [ "${QBREAK_LIVEU_PULL:-1}" != "0" ]; then
+      if git fetch -q >/dev/null 2>&1 || { sleep 2 && git fetch -q >/dev/null 2>&1; }; then   # 和别的运行同时 fetch / pull（.git 的锁）：等一下再试一次
+        git show "@{u}:./var/HALT_REMOTE" > "$halt_remote" 2>/dev/null || rm -f "$halt_remote"
+      fi
     fi
   fi
   sync_inputs

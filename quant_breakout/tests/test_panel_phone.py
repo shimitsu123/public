@@ -380,16 +380,18 @@ def test_phone_on_waits_for_the_restarted_panel(tmp_path, monkeypatch):
 
 
 def test_code_watcher_exits_on_update(monkeypatch):
-    seq = iter([{"panel.py": 1.0}, {"panel.py": 1.0}, {"panel.py": 2.0}])
-    monkeypatch.setattr(panel, "_mtimes", lambda: next(seq))
+    """git pull 改了代码 → 文件不再变之后先试 import，再标上平滑重启、停止接新连接（2026-10-15 起不是直接退出；细节见 test_panel_stuck）。"""
+    seq = [{"panel.py": 1.0}, {"panel.py": 1.0}, {"panel.py": 2.0}]
+    monkeypatch.setattr(panel, "_mtimes", lambda: seq.pop(0) if len(seq) > 1 else seq[0])
     calls = []
 
     class Srv:
         def shutdown(self):
             calls.append(1)
     stop = threading.Event()
-    panel._watch_code(stop, Srv(), every=0.01)
-    assert calls == [1]
+    srv = Srv()
+    panel._watch_code(stop, srv, every=0.01, stable=0.05, preflight=lambda: True)
+    assert calls == [1] and srv.qb_restart is True
 
 
 # ───────────────────────── 按 Tailscale 账户登录（2026-10-07）＋ 15 秒超时 ─────────────────────────
@@ -710,7 +712,7 @@ def test_render_identity_footer_and_timeout_script(tmp_path):
     remote = panel.render("paper", "c" * 40, AT, mode="remote", device=dev)
     assert "已用 Tailscale 账户登录（ow***@e***.com；不用配对）" in remote and "data-act='unpair'" not in remote
     js = panel._JS                                                    # 2026-10-12 起页面脚本是 /static/ 下的模块（页面里只引用）
-    assert "src='/static/main.js?v=" in remote and "id='qb-cfg'" in remote and "<script>" not in remote
+    assert "src='/static/main.js?v=" in remote and "id='qb-cfg'" in remote and remote.count("<script>") == 1   # 只有内联的 boot.js
     assert "TMO = 15000" in js and "AbortController" in js and "Mac 可能在睡眠：取不到" in js
     assert "data-retry" in js and "'timeout'" in js and "HALT 可能没送到" in js and "HALT_TIP" in js
     assert "KP[t]" in js and "'auth'" in js and "box.onkeydown=" in js and "addEventListener('keydown', ev=>" not in js
@@ -767,8 +769,9 @@ globalThis.fetch = (url, opt) => new Promise((res, rej) => {
     pages = {"pair": panel.pair_page(""), "remote_ident": panel.render("paper", "c" * 40, AT, mode="remote", device=dev),
              "remote_paired": panel.render("paper", "c" * 40, AT, mode="remote", device={"id": "0123456789ab", "name": "iPhone"}),
              "local": panel.render("paper", "t" * 40, AT, phone={"port": 8766, "url": None, "devices": [], "identity": {}})}
-    for name, html in pages.items():                                   # 页面里没有内联脚本了：只引用 /static/ 的模块（各模块的语法见 test_panel）
-        assert "<script>" not in html and ("/static/pair.js" in html if name == "pair" else "/static/main.js" in html), name
+    for name, html in pages.items():                                   # 内联的只有 boot.js（CSP 的 sha256）；其余只引用 /static/ 的模块（各模块的语法见 test_panel）
+        assert html.count("<script>") == (0 if name == "pair" else 1), name
+        assert ("/static/pair.js" in html if name == "pair" else "/static/main.js" in html), name
 
 
 def test_chart_and_api_failure_paths_in_node(tmp_path):
@@ -777,15 +780,16 @@ def test_chart_and_api_failure_paths_in_node(tmp_path):
     import subprocess
     node = _node()
     J = panel._JS
-    loadk = J[J.index("function loadK(t){"):J.index("function legend(head, D, i, tf){")].replace("location.reload(), 1500", "location.reload(), 5")
+    loadk = J[J.index("function authReload(){"):J.index("function legend(head, D, i, tf){")].replace("setTimeout(wait, 2000)", "setTimeout(wait, 5)")
     api = J[J.index("const HALT_TIP"):J.index("function done(j){")].replace("location.reload(),1500", "location.reload(),5")
-    assert "KP[t]" in loadk and "'auth'" in loadk and "HALT_TIP" in api
+    assert "KP[t]" in loadk and "'auth'" in loadk and "function loadK(t){" in loadk and "HALT_TIP" in api
     net = panel._NET_JS.replace("const TMO = 15000;", "const TMO = 60;")
     harness = net + r"""
 globalThis.window = globalThis;
 const CFG = {book: 'paper', remote: true, auth: {h: 'X-Qbreak-Csrf', v: 'c'}};
 const KD = {}, KP = {};
 let reloads = 0; globalThis.location = {reload: () => { reloads++; }};
+let DIALOG = false; globalThis.document = {querySelector: (s) => (s === 'dialog[open]' && DIALOG) ? {} : null};
 const toasts = []; function toast(t, bad, sticky){ toasts.push({t, bad: !!bad, sticky: !!sticky}); }
 function busy(){}
 const calls = {};
@@ -798,7 +802,7 @@ globalThis.fetch = (url, opt) => new Promise((res, rej) => {
   if (m === 'OK') return res({ok: true, status: 200, json: body({ok: true, data: {kind: 'stock'}})});
   if (m === 'NONE') return res({ok: false, status: 404, json: body({ok: false})});
   if (m === 'BAD' || m === '/api/request:bad') return res({ok: true, status: 200, json: async () => { throw new TypeError('net'); }});
-  if (m === 'AUTH' || m === '/api/request:401') return res({ok: false, status: 401, json: body({ok: false, msg: '这台设备还没配对'})});
+  if (m.startsWith('AUTH') || m === '/api/request:401') return res({ok: false, status: 401, json: body({ok: false, msg: '这台设备还没配对'})});
   if (m === 'ERR' || m === '/api/halt:502') return res({ok: false, status: 502, json: async () => { throw new SyntaxError('html'); }});
   if (m === 'SLOW') return setTimeout(() => res({ok: true, status: 200, json: body({ok: true, data: {kind: 'core'}})}), 20);
   if (m === '/api/halt:net') return rej(new TypeError('Failed to fetch'));
@@ -813,7 +817,12 @@ const eq = (a, b, m) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new
   eq(await loadK('BAD'), 'error', 'bad body → error (retryable)');
   eq(await loadK('ERR'), 'error', '502');
   eq(await loadK('HANG'), 'timeout', 'hang');
-  eq(await loadK('AUTH'), 'auth', '401'); await sleep(30); eq(reloads, 1, '401 reloads');
+  DIALOG = true;                                                   // 对话框开着（正在输入口数）：先不刷新（2026-10-15 复核）
+  eq(await loadK('AUTH'), 'auth', '401'); await sleep(30); eq(reloads, 0, '401 waits for the dialog');
+  DIALOG = false; await sleep(30); eq(reloads, 1, '401 reloads after the dialog closes');
+  eq(await loadK('AUTH2'), 'auth', '401 again'); await sleep(30); eq(reloads, 1, 'several charts: one reload');
+  let qb = 0; window.qbAuth = () => { qb++; };                    // conn.js 在：交给它（等对话框 / 只刷新一次）
+  eq(await loadK('AUTH3'), 'auth', '401 conn'); eq(qb, 1, 'qbAuth'); eq(reloads, 1, 'no direct reload'); delete window.qbAuth;
   const p1 = loadK('SLOW'), p2 = loadK('SLOW');
   if (p1 !== p2) throw new Error('in-flight not shared');
   eq(await p1, {kind: 'core'}, 'slow'); eq(calls.SLOW, 1, 'one request'); eq('SLOW' in KP, false, 'KP cleared');

@@ -230,8 +230,10 @@ def test_panel_server_accepts_bursts_of_connections():
     """一下点开很多行：K 线 / 现价同时取（socketserver 默认只排 5 个连接，多了在 TCP 层被拒；2026-10-14 复核）。"""
     assert issubclass(panel._Srv, panel.ThreadingHTTPServer) and panel._Srv.request_queue_size >= 32 and panel._Srv.daemon_threads
     import inspect
-    src = inspect.getsource(panel.serve)
-    assert src.count("_Srv((\"127.0.0.1\"") == 2 and "ThreadingHTTPServer(" not in src       # 本机端口与手机端口都用它
+    src = inspect.getsource(panel.serve)                                  # 2026-10-15 起两个端口都经 _make_srv（平滑重启时接着用原来的监听 socket）
+    assert src.count("_make_srv(") == 2 and "ThreadingHTTPServer(" not in src       # 本机端口与手机端口都用它
+    mk = inspect.getsource(panel._make_srv)
+    assert mk.count("_Srv((\"127.0.0.1\"") == 2 and "ThreadingHTTPServer(" not in mk
 
 
 def test_quotes_take_recent_first_and_explain_the_ones_over_the_limit(tmp_path):

@@ -6,29 +6,48 @@ export const $ = s => document.querySelector(s);
 export const fmt = n => Number(n).toLocaleString('ja-JP');
 export const yen = v => '¥' + fmt(Math.round(v));
 export function toast(t, bad, sticky){const m=$('#toast');m.textContent=t+(sticky?'\n（点一下关闭）':'');m.className='toast'+(bad?' bad':'');m.hidden=false;
+  const d=document.querySelector('dialog[open]'), host=d || document.body;  // 对话框开着：提示放进对话框里（以前在对话框底下被盖住 → 点了「确定」像没反应；2026-10-15）
+  if(m.parentNode!==host) host.appendChild(m);
   clearTimeout(toast.h); if(!sticky) toast.h=setTimeout(()=>{m.hidden=true;}, bad?9000:6000);}
+document.addEventListener('close', e=>{ const m=$('#toast'); if(m && e.target.contains && e.target.contains(m)) document.body.appendChild(m); }, true);   // 对话框关了：提示回到页面上
 let LASTBTN=null;                                                        // 最近点的按钮：处理中在它上面转圈（2026-10-11 用户：要有 loading 的感觉）
 document.addEventListener('pointerdown', e=>{ const b=e.target.closest && e.target.closest('button'); if(b) LASTBTN=b; }, true);
 document.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ const b=document.activeElement; if(b && b.tagName==='BUTTON') LASTBTN=b; } }, true);
 export function loading(on){ document.body.classList.toggle('loading', !!on); }
-function busy(on){document.querySelectorAll('button').forEach(b=>{if(on){b.dataset.was=b.disabled?'1':'';b.disabled=true;}else{b.disabled=b.dataset.was==='1';}});
-  loading(on); const b=LASTBTN; if(b){ b.classList.toggle('loading', !!on); b.setAttribute('aria-busy', on?'true':'false'); } }
-export function reloadPage(b, label){                                          // 刷新：按钮转圈 + 顶部进度条，然后重新载入
-  if(b){ b.classList.add('loading'); b.setAttribute('aria-busy','true'); if(label) b.textContent=label; b.disabled=true; }
-  loading(true); setTimeout(()=>location.reload(), 30); }
+// 处理中：别的按钮先不让点（不会重复写）。2026-10-15「网页app经常卡住」：以前连标签栏 / 刷新 / HALT 也一起锁住、两个请求叠在一起时
+// 先回来的那个就把按钮全放开了 → 改成计数，标签栏 / 刷新 / HALT / 连接条的按钮一直能点，请求结束（含出错、超时）一定放开
+const FREE = '.tabbar button, [data-act=reload], [data-act=halt], #conn button, #bootbar button';
+let BUSYN = 0;
+function busy(on){
+  BUSYN = Math.max(0, BUSYN + (on ? 1 : -1));
+  if(on && BUSYN>1) return;
+  if(!on && BUSYN>0) return;
+  document.querySelectorAll('button').forEach(b=>{ if(b.matches(FREE)) return;
+    if(on){ b.dataset.was=b.disabled?'1':''; b.disabled=true; } else if(b.dataset.was!==undefined){ b.disabled=b.dataset.was==='1'; delete b.dataset.was; } });
+  loading(on);
+  if(on){ const b=LASTBTN; if(b){ b.classList.add('loading'); b.setAttribute('aria-busy','true'); } }
+  else document.querySelectorAll('button.loading').forEach(b=>{ b.classList.remove('loading'); b.setAttribute('aria-busy','false'); });
+}
+function reloadNow(){ if(typeof window.qbReload==='function') window.qbReload('user'); else location.reload(); }   // conn.js：先确认连得上 Mac 再刷新
+export function reloadPage(b, label){                                          // 刷新：按钮转圈 + 顶部进度条，然后重新载入（连不上 → 连接条倒数重试，按钮放开）
+  if(b){ b.classList.add('loading'); b.setAttribute('aria-busy','true'); if(label){ if(!b.dataset.label0) b.dataset.label0=b.textContent; b.textContent=label; } b.disabled=true; }
+  loading(true); setTimeout(reloadNow, 30); }
 window.addEventListener('beforeunload', ()=>loading(true));
 window.addEventListener('pageshow', e=>{ if(e.persisted){ loading(false); document.querySelectorAll('button.loading').forEach(b=>{b.classList.remove('loading'); b.disabled=false;}); } });
 const HALT_TIP = CFG.remote ? '人不在 Mac 旁边时：在 claude.ai 的云端对话里说「停 / 今天不要下单」（Mac 的执行器下一次运行会停）'
                             : '在 Mac 的 Claude 对话里说「停 / 今天不要下单」';
-export async function api(path, body){
+export async function api(path, body){                                  // 写操作（POST）：busy 一定在 finally 里放开（超时 / 出错也是）
   busy(true);
+  try{ return await post1(path, body); }finally{ busy(false); }
+}
+async function post1(path, body){
   const halt = path==='/api/halt', where = path==='/api/request' ? '在「手动指令」里确认' : '再看一下';
   const fail = (t, sticky) => { toast(halt ? t+'\n'+HALT_TIP : t, true, halt || sticky); return null; };   // HALT 失败：每种都提示云端的「停」、不自动消失
   try{
     const h={'Content-Type':'application/json'}; h[CFG.auth.h]=CFG.auth.v;
     const x=await req(path,{method:'POST',headers:h,body:JSON.stringify(body||{}),credentials:'same-origin',cache:'no-store'});
     const r=x.r, j=x.j;
-    busy(false);
+    if(j && j.need_confirm && !j.ok) return j;                             // 要先确认（固定口数 / 恢复按规则；200 + ok:false）：什么都没写 → 调用方弹「确认下单」框（trade.js post；2026-10-15）
     if(r.ok && !j) return fail(halt ? 'HALT 可能已经建好，但回应读不出来：刷新后看有没有「HALT 生效中」'
                                     : '回应读不出来：不确定有没有生效 —— 刷新后'+where+'，不要直接再点一次', true);
     if(!r.ok || !j.ok){
@@ -39,7 +58,6 @@ export async function api(path, body){
     }
     return j;
   }catch(e){
-    busy(false);
     if(e && e.name==='Timeout'){                                           // 请求可能已经到了 Mac：不确定有没有写进去
       if(halt) return fail(CFG.remote ? 'HALT 可能没送到：超过 15 秒没有回应（Mac 可能在睡眠）' : 'HALT 可能没写成：面板超过 15 秒没有回应');
       return fail(CFG.remote ? '超过 15 秒没有回应（Mac 可能在睡眠）：不确定有没有'+(path==='/api/request' ? '写进去' : '生效')+' —— Mac 醒来后刷新，'+where+'，不要直接再点一次'
@@ -48,7 +66,7 @@ export async function api(path, body){
     return fail((halt ? 'HALT 没送到：' : '')+'连不上面板：'+e+'\n（Mac 睡着了、面板没运行，或手机的 Tailscale 没连上）');
   }
 }
-export function done(j){ if(!j) return; toast(j.msg || '已写'); loading(true); setTimeout(()=>location.reload(), 2200); }
+export function done(j){ if(!j) return; toast(j.msg || '已写'); loading(true); setTimeout(reloadNow, 2200); }
 export function sheet(id){ const d=$(id); if(d.showModal){ if(!d.open) d.showModal(); } else d.setAttribute('open',''); return d; }
 export function closeAll(){ document.querySelectorAll('dialog[open]').forEach(d=>{ if(d.close) d.close(); else d.removeAttribute('open'); }); }
 export function syen(v){ return (v<0 ? '−' : '+')+'¥'+fmt(Math.abs(Math.round(v))); }

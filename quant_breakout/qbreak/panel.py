@@ -33,14 +33,20 @@
 """
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import gzip
+import hashlib
 import json
+import logging
 import math
 import os
 import re
 import secrets
+import signal
+import socket
 import subprocess
+import sys
 import threading
 import time
 from html import escape
@@ -78,7 +84,8 @@ FAIL_PAUSE_N = 3                        # 同一天连续失败几次 → 当天
 TOKEN_FILE = "panel_token"
 WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "money_view.py", "broker_snapshot.py", "tax_ytd.py", "live_gate.py", "holding_view.py", "kline.py", "suggest.py", "watch_prob.py", "core_exit.py",
          "idle_cash.py", "dip_stats.py", "run_status.py", "precheck.py", "calendar_jp.py",
-         "paths.py", "live_unified.py")         # 默认账本 / ARM 判定（paths）、数据依赖的提醒文字（live_unified）
+         "paths.py", "live_unified.py",         # 默认账本 / ARM 判定（paths）、数据依赖的提醒文字（live_unified）
+         "live_ops.py", "data.py")              # 「预计不会下单」与执行器同一个判断（live_ops）、盘中现价（data）：2026-10-15 复核补上
 
 
 def token() -> str:
@@ -119,14 +126,38 @@ def _yen(v) -> str:
 # ───────────────────────── 页面（手机优先；Mac 上一样用） ─────────────────────────
 STATIC_DIR = Path(__file__).resolve().parent / "static"     # 页面的 JS（浏览器原生 ES 模块）与 CSS（2026-10-12 从 Python 字符串搬出来）
 STATIC_TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
-JS_MODULES = ("net", "core", "trade", "kline", "quotes", "app")   # main.js 按这个顺序引入；pair.js 是配对页的
+JS_MODULES = ("net", "core", "conn", "trade", "kline", "quotes", "app")   # main.js 按这个顺序引入；pair.js 是配对页的
 
 
 def _static_files() -> dict[str, bytes]:
+    """磁盘上的 static/（原样）。面板只在启动时读一次（STATIC）。"""
     return {f.name: f.read_bytes() for f in sorted(STATIC_DIR.iterdir()) if f.suffix in STATIC_TYPES}
 
 
-ASSET_V = __import__("hashlib").sha1(b"".join(_static_files().values())).hexdigest()[:10]   # 引用时加 ?v=（代码更新后不用旧的）
+_STATIC_RAW = _static_files()
+ASSET_V = hashlib.sha1(b"".join(_STATIC_RAW.values())).hexdigest()[:10]   # 引用时加 ?v=（代码更新后不用旧的）
+BOOT_ID = secrets.token_hex(4)                              # 这个面板进程（重启 / 平滑重启后变）：/api/status 带着
+_IMPORT_RE = re.compile(r"""(\b(?:from|import)\s*)(['"])\./([A-Za-z0-9_]+\.js)\2""")
+
+
+def _versioned(name: str, raw: bytes) -> bytes:
+    """模块里的 import './x.js' → './x.js?v=ASSET_V'（2026-10-15「网页app经常卡住」：以前子模块不带版本 → service worker /
+    浏览器缓存里新旧模块混在一起，一个 import 对不上整页的脚本都不跑，只剩页头和标签栏）。"""
+    if not name.endswith(".js"):
+        return raw
+    s = raw.decode("utf-8")
+    return _IMPORT_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}./{m.group(3)}?v={ASSET_V}{m.group(2)}", s).encode("utf-8")
+
+
+# 启动时读一次、之后只给这一份（与 ASSET_V 是同一批字节；2026-10-15：以前每次请求现读磁盘 → git pull 之后、面板重启之前，
+# 旧页面配上新的 JS）。带 ?v= 的：只给版本对的（不对 → 404，页面的 boot.js 重新载入拿新页面），可以长期缓存；gzip 预先压好。
+STATIC = {n: _versioned(n, b) for n, b in _STATIC_RAW.items()}
+STATIC_GZ = {n: gzip.compress(b, 9) for n, b in STATIC.items()}
+# boot.js 直接写进页面（2026-10-15 复核「网页app经常卡住」：以前是 /static/boot.js?v= —— 页面是旧进程给的、它向新进程要 → 版本不对 404；
+# 或网络在页面到了之后断了 → 接手的脚本自己也没载入，页面照旧卡死）。CSP 不开 'unsafe-inline'，只放行这一段的 sha256。
+BOOT_JS = STATIC["boot.js"].decode("utf-8")
+assert "</script" not in BOOT_JS.lower()
+BOOT_SHA = "sha256-" + base64.b64encode(hashlib.sha256(BOOT_JS.encode("utf-8")).digest()).decode("ascii")
 _CSS = (STATIC_DIR / "panel.css").read_text(encoding="utf-8")
 def js_plain(name: str) -> str:
     """一个模块去掉 import 行与 export 前缀 → 普通脚本（测试在 node 里拼起来跑用）。"""
@@ -194,7 +225,7 @@ def _dialogs(paper: bool, cap: float = MO.CAP_PCT) -> str:
             "</div></dialog>"
             "<dialog id='dlg-ask'><div class='sheet'><h3 id='ask-title'></h3><div id='ask-pl' class='pl' hidden></div><div id='ask-body'></div>"
             "<input type='text' id='ask-input' maxlength='120' hidden>"
-            "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn primary' id='ask-ok' data-act='ask-ok'>确定</button></div>"
+            "<div class='row'><button class='btn' id='ask-no' data-act='close'>取消</button><button class='btn primary' id='ask-ok' data-act='ask-ok'>确定</button></div>"
             "</div></dialog>")
 
 
@@ -272,7 +303,8 @@ def _chart_box(t: str, kind: str, has_k: bool = True) -> str:
 
 
 def _kline_help() -> str:
-    """整页只有一份的「怎么看 K 线图」（2026-10-15 用户：「去掉每个股票中的如何看这张图 整体留一个解释就行」）：选股最下面、默认收起；
+    """整页只有一份的「怎么看 K 线图」（2026-10-15 用户：「去掉每个股票中的如何看这张图 整体留一个解释就行」）：「持仓」的 K 线上面
+    （持仓卡片之前；同日用户：「选股中的怎么看K线图要放到持仓中的K线的上面」；选股只留一行「去看 ›」指过来）、默认收起；
     持仓 / 核心 ETF / 选股的每张图（日K / 周K / 月K）都按它看。图下面各自的一句话（最新一根、现在的趋势、趋势线）照旧在每张图里。"""
     def k(c: str) -> str:
         return f"<i class='key {c}'></i>"
@@ -971,10 +1003,12 @@ def _input_lines(sm: dict, st: dict) -> list[tuple[str, str]]:
     return out
 
 
-def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list) -> str:
+def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live: dict | None = None, tag: str | None = None) -> str:
     """「今天的单」（Mac 与手机同一个）：账本当前决策里执行器的单（票、买卖、股数、下法、限价、状态）。还挂着的单（SENT / PARTIAL，
     今天的、立花有注文番号）给「撤单」按钮 → 写撤单指令（kind cancel_order），面板马上叫执行器撤（qbreak/live_ops.py）；
     已经写了撤单指令的显示「撤单中」。立花 API / Mac 出故障那天：照这张表在立花网站下单，之后在 Mac 对话里说一声人工代下登记（adopt）。
+    不会再做事的单（_trade_live：凑钱的卖单撤了、开盘时一定买不起 / HALT / 已收盘）把状态换成「不会下单（预计）」等并写原因，
+    固定口数还有效时提醒下一次决策还会再排（2026-10-15）；卖单的「撤单」确认框列出靠这笔卖出的钱、撤了就下不成的买单（data-deps）。
     没有单 → ""。只展示 + 写指令，不改账本。"""
     from . import live_ops as LO
     st = book.get("state") or {}
@@ -982,9 +1016,9 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list) -> st
     orders = [o for o in book.get("orders") or [] if o.get("decided_on") == d]
     if not orders:
         return ""
-    items = ((book.get("manual") or {}).get("items") or {}).values()
-    asked = ({str(r.get("cid")) for r in waiting if r.get("kind") == "cancel_order"}
-             | {str(it.get("cid")) for it in items if it.get("kind") == "cancel_order" and it.get("status") == "pending"})
+    live = live or _trade_live(book, waiting, now, tag)
+    asked, dead, fixn = live["asked"], live["orders"], live["fix"]
+    base = None
     f = LO.fill_day_of(book)
     stale = f is not None and f != now.date()               # 今天早上的运行没跑：这还是上一次决策的单（不是今天要下的）
     rows = []
@@ -996,17 +1030,36 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list) -> st
         q = int(o.get("filled_qty") or 0)
         got = f"，成交 {q:,}/{n:,}" if q and o.get("status") in ("PARTIAL", "CANCELLED", "EXPIRED") else ""
         note = str(o.get("note") or "")
-        if str(o.get("cid")) in asked:
+        cid = str(o.get("cid"))
+        if cid in asked:
             btn = "<span class='chip'>撤单中</span>"
         elif LO.cancel_why(o, book, now, paper) is None:
-            btn = (f"<button class='btn sm danger' data-act='cancel-order' data-cid='{escape(str(o.get('cid')))}' "
+            deps = ""
+            if o.get("side") == "SELL":                     # 靠这笔卖出的钱的买单：撤了就下不成（只是确认框里说明；2026-10-15）
+                try:
+                    cash = _cash_hi(book, tag)
+                    base = LO.unfunded_buys(book, asked, cash=cash) if base is None else base
+                    after = LO.unfunded_buys(book, asked, drop={cid}, cash=cash)
+                except (TypeError, ValueError, KeyError):  # 账本里的数读不了：不写（只是说明）
+                    base, after = base or {}, {}
+                hit = [b for b in orders if str(b.get("cid")) in after and str(b.get("cid")) not in base and str(b.get("cid")) not in dead]
+                if hit:
+                    deps = ("撤掉之后，今天等这笔卖出的钱的买单预计下不成（开盘时现金不够一单元）："
+                            + "、".join(f"买 {b.get('ticker')} {int(b.get('qty') or 0):,} {'口' if b.get('kind') == 'core' else '股'}" for b in hit)
+                            + "（已经成交的部分卖出的钱照样能用）")
+            btn = (f"<button class='btn sm danger' data-act='cancel-order' data-cid='{escape(cid)}' "
                    f"data-t='{escape(str(o.get('ticker')))}' data-side='{escape(str(o.get('side')))}' data-qty='{n}' "
-                   f"data-core='{1 if core else 0}'>撤单</button>")
+                   f"data-core='{1 if core else 0}'" + (f" data-deps='{escape(deps)}'" if deps else "") + ">撤单</button>")
         else:
             btn = ""
+        chip, why = dead.get(cid) or (LO.STATUS_TEXT.get(o.get("status"), str(o.get("status"))), "")
+        if note and chip.startswith("不会下单"):              # 执行器排单时写的打算（「开盘后按始値检查、减股再下」）已经不会发生：标成原先的（2026-10-15 复核）
+            note = "原先：" + note
         rows.append(f"<div class='li'><div class='grow'><b>{'买' if o.get('side') == 'BUY' else '卖'} {escape(str(o.get('ticker')))} "
-                    f"{n:,} {unit}</b> <span class='chip'>{escape(LO.STATUS_TEXT.get(o.get('status'), str(o.get('status'))))}</span>"
-                    f"<div class='muted small'>{escape(LO.how_text(o) + lim + got)}"
+                    f"{n:,} {unit}</b> <span class='chip'>{escape(chip)}</span>"
+                    + (f"<div class='neg small'>{escape(why)}</div>" if why else "")
+                    + (f"<div class='small'>{escape(fixn[cid])}</div>" if cid in fixn else "")
+                    + f"<div class='muted small'>{escape(LO.how_text(o) + lim + got)}"
                     f"{(' · ' + escape(note[:140])) if note else ''}</div></div>{btn}</div>")
     foot = (f"「撤单」：{LO.CANCEL_HINT}。{LO.CANCEL_HINT_CORE}。"
             + ("" if paper or stale else
@@ -1028,8 +1081,10 @@ TABS = {"home": ("⌂", "总览", "账户现在怎样：总权益、今天的运
         "more": ("⋯", "更多", "通知设置、手机、上线准备、紧急停止（HALT）")}
 
 
-def _panes(H: list) -> str:
-    """把 render 的片段按 PANE 标记包成 <div class='pane' data-tab=…>（同一个标签可以有几段，顺序照旧）；每个标签第一段前加一行说明。"""
+def _panes(H: list, on: str | None = "home") -> str:
+    """把 render 的片段按 PANE 标记包成 <div class='pane' data-tab=…>（同一个标签可以有几段，顺序照旧）；每个标签第一段前加一行说明。
+    on：服务器先显示的标签（class 'pane on'；2026-10-15「网页app经常卡住」：以前全靠脚本加 on，一个模块没载入整页空白、按钮都点不动）。"""
+    on = on if on in TABS else "home"
     out, cur, seen = [], None, set()
     for h in H:
         if isinstance(h, str) and h.startswith(PANE):
@@ -1040,7 +1095,7 @@ def _panes(H: list) -> str:
                 ic, lab, desc = TABS[cur]
                 head = "" if cur in seen else f"<div class='panehead'><b>{ic} {escape(lab)}</b><span>{escape(desc)}</span></div>"
                 seen.add(cur)
-                out.append(f"<div class='pane' data-tab='{cur}'>{head}")
+                out.append(f"<div class='pane{' on' if cur == on else ''}' data-tab='{cur}'>{head}")
             continue
         out.append(h or "")
     if cur:
@@ -1048,17 +1103,158 @@ def _panes(H: list) -> str:
     return "".join(out)
 
 
-def _badges(book: dict, st: dict, sm: dict, waiting: list, now: dt.datetime) -> dict:
-    """标签上的数字：持仓 = 拿着的只数；交易 = 今天还挂着 / 等处理的单与指令；消息 = 24 小时内的提醒。"""
+CANCEL_KINDS = ("cancel", "cancel_order", "uncancel")    # 撤回 / 撤单 / 撤销撤回：本身不是买卖，不算「还会做事」
+
+
+def _cash_hi(book: dict, tag: str | None) -> float:
+    """开盘时能用的现金的上限（unfunded_buys 用）：live_ops.cash_hi（确认框 / 提交说明也用同一个；2026-10-15 复核）。"""
+    from . import live_ops as LO
+    return LO.cash_hi(book, tag)
+
+
+def _next_decision(now: dt.datetime) -> str:
+    """下一次决策（交易日 07:40）是哪天 → 「MM/DD 07:40」。"""
+    from .calendar_jp import next_trading_day
+    d0 = now.date()
+    d1 = d0 if is_trading_day(d0) and now.time() < dt.time(7, 40) else next_trading_day(d0)
+    return f"{d1:%m/%d} 07:40"
+
+
+def _trade_live(book: dict, waiting: list, now: dt.datetime, tag: str | None = None, halt: bool | None = None) -> dict:
+    """_trade_live_calc，算不成（账本里有读不了的数：旧执行器写的 None、不是数字的口数…）→ 记日志、按以前的数法（等着的指令 + 还在处理的
+    指令）给数字（2026-10-15 复核：/api/status 是页面的连接检查、页面本身也用它 —— 以前一个读不了的数就 500，手机上显示「连不上 Mac」）。"""
+    try:
+        return _trade_live_calc(book, waiting, now, tag, halt)
+    except Exception as e:                                 # noqa: BLE001  只是数字与说明：不能让页面 / 连接检查打不开
+        log.warning("「交易」的数字没算成（%s：%s）：按等着的指令 + 还在处理的指令数", type(e).__name__, e)
+    try:
+        items = ((book.get("manual") or {}).get("items") or {}).values()
+        k = len(waiting) + sum(1 for it in items if isinstance(it, dict) and it.get("status") in MO.ACTIVE)
+        asked = {str(r.get("cid")) for r in waiting if isinstance(r, dict) and r.get("kind") == "cancel_order"}
+    except Exception:                                      # noqa: BLE001
+        k, asked = 0, set()
+    return {"orders": {}, "fix": {}, "items": set(), "itxt": {}, "asked": asked, "n": k, "busy": k}
+
+
+def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | None = None, halt: bool | None = None) -> dict:
+    """「交易」标签里哪些行还会做事（2026-10-15 用户：「撤单后 / 没有执行下单等等的话交易处的数字不显示」）—— 标签上的数字、
+    /api/status 的 pending、「今天的单」/「手动指令」每一行怎么写都按这一个判断（数字 = 还会做事的行数）：
+      执行器的单（当前决策）：已经结束的（成交 / 撤单 / 不下 / 被挡 / 失效 / 被拒…）、已经写了撤单的（撤单中）不算；
+        还没发出的（PLANNED / DEFERRED）：HALT 生效中不发 → 不算（模拟账户的 DEFERRED 除外：下一次运行的 _paper_open 不看 HALT、照样撮合）；
+        买单开盘时一定买不起一单元（LO.unfunded_buys：凑钱的卖单撤了等）→ 不算；
+        立花：成交日的交易所已经收盘（15:30 之后 / 成交日已过）→ 什么都不会再发生（明早对账），不算；模拟账户的单下一次运行按那天的开盘价撮合 → 照算。
+      手动指令：撤回 / 撤单 / 撤销撤回本身不算，被撤回（还没读的撤回、撤回中）的不算，被撤单的单的指令、一定买不起的手动买入 / 加仓不算；
+        单已经做完的（全部成交；立花收盘后已失效的买单 —— 没成交的部分不会再买）：指令还是「已下单」、明早对账才结束 → 不算
+        （2026-10-15 复核：盘中手动卖出成交了，标签上一整天还是 1）；卖单没卖完的部分下一次开盘再卖 → 照算。
+        HALT 中等着的照算（解除后照原样执行）。
+    → {"orders": {cid: (标签, 说明) —— 不会做事的单怎么写}, "fix": {cid: 固定口数还有效的提醒}, "items": 不算的指令 id,
+       "itxt": {指令 id: 状态后面加的说明（单在撤单中 / 预计下不成 / 已做完）},
+       "asked": 撤单中的 cid, "n": 数字, "busy": 还在处理的指令数（页面每 10 秒问一次要不要刷新）= 还会做事的手动指令
+       + 还在处理的撤单 / 撤回（单还挂着的撤单、执行器读了还在撤的、指着执行器读过的指令的撤回）；
+       都还没读的「指令 + 它的撤回」不算（2026-10-15 复核：撤回了唯一一条之后页面还一直每 10 秒问、状态一变就刷新）}。只读。"""
+    from . import live_ops as LO
+    st = book.get("state") or {}
+    d = st.get("last_date")
+    cur = [o for o in book.get("orders") or [] if o.get("decided_on") == d]
+    man = book.get("manual") or {}
+    items = man.get("items") or {}
+    halt = paths.halt_file().exists() if halt is None else halt
+    paper = (tag or "").startswith("paper") or str(book.get("broker") or "").startswith("Paper")
+    void = MO.voided(waiting)
+    wl = [r for r in waiting if r.get("kind") != "uncancel" and r.get("id") not in void]
+    asked = ({str(r.get("cid")) for r in wl if r.get("kind") == "cancel_order"}
+             | {str(it.get("cid")) for it in items.values() if it.get("kind") == "cancel_order" and it.get("status") == "pending"})
+    try:
+        unf = LO.unfunded_buys(book, asked, cash=_cash_hi(book, tag))
+    except (TypeError, ValueError, KeyError):              # 账本里的数读不了：不下结论（照算），页面不能因为它打不开
+        unf = {}
+    fixed = MO.core_fixed(book, tag)
+    f = LO.fill_day_of(book)
+    rows, fix, dead, n = {}, {}, set(), 0
+    fin = {}                                                # 手动单已经做完了（全部成交 / 立花收盘后失效的买单）→ {cid: 指令后面加的说明}
+    for o in cur:
+        cid, s, t = str(o.get("cid")), o.get("status"), str(o.get("ticker"))
+        if o.get("kind") == "core" and t in fixed and (s == "CANCELLED" or cid in asked or cid in unf):   # 撤了 / 下不成，固定口数却还在
+            fix[cid] = (f"{t} 手动固定 {int(fixed[t]):,} 口仍然有效：下一次决策（{_next_decision(now)}）还会再排同样的单；不想要 → 在「持仓」"
+                        + ("" if int((st.get("core_units") or {}).get(t) or 0) > 0 else "的「其他闲置资金 ETF（现在没拿）」")
+                        + f"里 {t} 下面点「恢复按规则」")
+        manual = o.get("reason") in LO.MANUAL_REASONS
+        if s not in LO.LIVE:
+            if manual and (s == "FILLED" or (o.get("side") == "BUY" and s in ("UNFILLED", "EXPIRED"))):
+                fin[cid] = ("（已成交：明早对账后这条指令结束）" if s == "FILLED"
+                            else "（单已失效：没成交的部分不会再买，明早对账后结束）")
+            continue
+        u = "口" if o.get("kind") == "core" else "股"
+        day = (_ts_jst(o.get("sent_at")) or now).date() if o.get("phase") == "now" else f
+        if cid in asked:
+            dead.add(cid)                                   # 「撤单中」（卡片上已经这样写）
+        elif not paper and tag and day is not None and (day < now.date() or (day == now.date() and now.time() >= LO.CLOSE_T)):
+            rows[cid] = ("已收盘", f"成交日 {day:%m/%d} 的交易所已经收盘：" + ("没成交的部分已失效" if s in LO.AT_EXCH else "这笔没下")
+                         + "，明早对账记账（之后什么都不会再发生）")
+            if manual and o.get("side") == "BUY" and s in LO.AT_EXCH:   # 手动买入 / 加仓只做一次：失效了指令也不会再做事（卖单没卖完的下一次开盘再卖 → 照算）
+                fin[cid] = "（单已失效：没成交的部分不会再买，明早对账后结束）"
+        elif halt and (s == "PLANNED" or (s == "DEFERRED" and not paper)):   # 模拟账户的「等开盘后」下一次运行照样按开盘价撮合（_paper_open 不看 HALT）→ 照算
+            rows[cid] = ("不会下单（HALT）", "HALT 生效中：还没发出的单不下" + ("" if paper else "（开盘后的补单在 09:05 / 09:20：那之前解除才会下）"))
+        elif cid in unf:
+            x = unf[cid]
+            gone = [g for g in x["gone"] if g.get("status") == "CANCELLED" or str(g.get("cid")) in asked]
+            src = ("资金来源的卖单已撤（" + "、".join(f"卖 {g.get('ticker')} {int(g.get('sent_qty') or g.get('qty') or 0):,} "
+                                                  f"{'口' if g.get('kind') == 'core' else '股'}" for g in gone) + "）；") if gone else ""
+            rows[cid] = ("不会下单（预计）", f"{src}开盘时能用的钱最多约 {_yen(x['cash'] + x['sells'])}，按跌停价买 {x['lot']:,} {u}也要约 "
+                         f"{_yen(x['need'])}：开盘后这笔下不成（执行器会放弃）")
+            dead.add(cid)
+        else:
+            n += 1
+    itxt, done_it, live_it = {}, {}, set()                  # 被撤单 / 一定买不起 / 已经做完的手动买卖：指令也不会再做事（「手动指令」那一行跟着写）
+    for o in cur:
+        if o.get("reason") not in LO.MANUAL_REASONS:
+            continue
+        cid = str(o.get("cid"))
+        it = LO._manual_item(book, o)
+        if not (it and it.get("id")):
+            continue
+        if cid in dead:
+            itxt[it["id"]] = "（单在撤单中）" if cid in asked else "（预计下不成：见「今天的单」）"
+        elif cid in fin:
+            done_it.setdefault(it["id"], fin[cid])
+        elif o.get("status") in LO.LIVE:
+            live_it.add(it["id"])                           # 同一条指令还有别的单在做 → 照算
+    for k, v in done_it.items():
+        if k not in live_it and k not in itxt:
+            itxt[k] = v
+    gone_it = set(itxt)
+    dropped = MO.cancelled(wl)
+    skip = set(gone_it)
+    act = 0                                                 # 还会做事的手动指令（busy 用）
+    for r in wl:
+        if r.get("kind") in CANCEL_KINDS or r["id"] in dropped:
+            skip.add(r["id"])
+        else:
+            act += 1
+    for it in items.values():
+        if it.get("status") not in MO.ACTIVE:
+            continue
+        if it.get("kind") in CANCEL_KINDS or it.get("cancel_req") or it.get("id") in gone_it or it.get("id") in dropped:
+            skip.add(it.get("id"))                          # 还没读的撤回指着的、执行器读了在撤回中的：不会再做事
+        else:
+            act += 1
+    n += act
+    live_cids = {str(o.get("cid")) for o in cur if o.get("status") in LO.LIVE}
+    flight = (len(asked & live_cids)                        # 撤单：单还挂着（执行器还没撤完）
+              + sum(1 for it in items.values() if it.get("status") in MO.ACTIVE and it.get("cancel_req"))   # 撤回中（执行器读了、还在撤）
+              + sum(1 for r in wl if r.get("kind") == "cancel" and (items.get(r.get("target")) or {}).get("status") in MO.ACTIVE
+                    and not (items.get(r.get("target")) or {}).get("cancel_req")))   # 还没读的撤回、指着执行器已经读过的指令
+    return {"orders": rows, "fix": fix, "items": skip, "itxt": itxt, "asked": asked, "n": n, "busy": act + flight}
+
+
+def _badges(book: dict, st: dict, sm: dict, waiting: list, now: dt.datetime, tag: str | None = None,
+            live: dict | None = None) -> dict:
+    """标签上的数字：持仓 = 拿着的只数；交易 = 还会做事的单与指令（_trade_live：撤了 / 不会下单的不算；2026-10-15）；消息 = 24 小时内的提醒。"""
     out = {}
     n = len(st.get("pos") or {}) + sum(1 for u in (st.get("core_units") or {}).values() if int(u or 0) > 0)
     if n:
         out["hold"] = n
-    d = st.get("last_date")
-    act = sum(1 for o in book.get("orders") or [] if o.get("decided_on") == d and o.get("status") in ("SENT", "PARTIAL", "PLANNED", "DEFERRED", "SENDING"))
-    void = MO.voided(waiting)                              # 与「手动指令」卡片显示的一致：撤销撤回本身、被撤销的撤回不算（2026-10-15 用户：只有一条却标 3）
-    act += sum(1 for r in waiting if r.get("kind") != "uncancel" and r.get("id") not in void)
-    act += sum(1 for it in ((book.get("manual") or {}).get("items") or {}).values() if it.get("status") in MO.ACTIVE)
+    act = (live or _trade_live(book, waiting, now, tag))["n"]
     if act:
         out["trade"] = act
     try:
@@ -1185,9 +1381,10 @@ def _news_card(now: dt.datetime) -> str:
 
 
 def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "local", device: dict | None = None,
-           phone: dict | None = None, trigger: "Trigger | None" = None) -> str:
+           phone: dict | None = None, trigger: "Trigger | None" = None, tab: str | None = None) -> str:
     """操作面板页面（一个账本）。mode = local（Mac 本机：tok = 面板令牌）/ remote（手机：tok = 这台设备的 CSRF 令牌）。
-    trigger：面板自动叫执行器的那个对象（顶部显示「盘中自动下单暂停」/ 失败后最早什么时候再叫）。"""
+    trigger：面板自动叫执行器的那个对象（顶部显示「盘中自动下单暂停」/ 失败后最早什么时候再叫）。
+    tab：?tab=…（服务器先把这个标签显示出来，脚本没跑起来也看得到内容；默认总览）。"""
     from . import holding_view as HV
     now = now or now_jst()
     remote = mode == "remote"
@@ -1216,6 +1413,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     pend = st.get("pending_exit") or {}
     waiting = MO.unseen(tag, book)
     dropped = MO.cancelled(waiting)                                    # 执行器还没读、已经点了撤回的
+    tlive = _trade_live(book, waiting, now, tag, halt=bool(halt))      # 「交易」里哪些行还会做事：数字、「今天的单」/「手动指令」的写法同一个判断（2026-10-15）
     busy = {r.get("ticker") for r in waiting if r.get("kind") in MO.POS_KINDS and r["id"] not in dropped}
     busy |= {it.get("ticker") for it in (man.get("items") or {}).values()
              if it.get("kind") in MO.POS_KINDS and it.get("status") in MO.ACTIVE and not it.get("cancel_req")}
@@ -1302,10 +1500,15 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
 
     def _corefix(t: str, name: str) -> str:
         """核心 ETF 固定口数（2026-10-11 用户：持仓里的纳指 ETF、对冲美债也要能买入）：没拿的 →「买入…」、拿着的 →「固定口数…」；
-        已固定 → 写出来 +「恢复按规则」。只写手动指令（下一次决策起；其余闲置资金照规则分）。"""
+        已固定 → 写出来 +「恢复按规则」。只写手动指令（下一次决策起；其余闲置资金照规则分）。
+        已经写了、执行器还没读的固定 / 恢复按规则 → 写「已登记：…（下一次决策起）」、按钮按登记之后的样子（恢复按规则登记了 → 不再给「恢复按规则」；
+        2026-10-15 复核：以前确认之后页面上还是原来的按钮，像没写成、会再点一次）。"""
         if tag in READONLY:
             return ""
         fixed = (man.get("core_fix") or {}).get(t)
+        pend = [r for r in waiting if r.get("kind") == "corefix" and r.get("ticker") == t and r["id"] not in dropped and not r.get("fund_for")]
+        last = pend[-1] if pend else None                   # 执行器读的时候按写的顺序：最后一条说了算
+        eff = bfix.get(t) if last is not None else fixed    # 登记之后的样子（core_fixed：还没读的也算上）
         c = MO.core_info(book, t) or {}
         px, lot = float(c.get("px") or 0), int(MO.core_lot(book, t) or 1)
         cur = int((st.get("core_units") or {}).get(t, 0))
@@ -1313,13 +1516,20 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                 f" data-eq='{float(eq or 0):.0f}'")
         H_ = []
         plan = ""
-        if fixed is not None:
+        if last is not None:
+            H_.append("<div class='small'><b>已登记：" + ("恢复按规则" if last.get("clear") else f"固定 {int(last.get('units') or 0):,} 口")
+                      + "</b><span class='muted'>（执行器还没读；下一次决策起生效、什么时候下单见「交易」→「手动指令」"
+                      + (f"，在那之前还是手动固定 {int(fixed):,} 口" if fixed is not None else "")
+                      + "）。要撤回也在那里</span></div>")
+        elif fixed is not None:
             H_.append(f"<div class='small'><b>手动固定 {int(fixed):,} 口</b>（不按规则自动调、不跟闲置资金比例；其余闲置资金照规则）"
                       "<span class='muted'>；卖出 / 减仓 / 加仓：「固定口数…」（0 口 = 全部卖出）</span></div>")
+        can_clear = fixed is not None and eff is not None   # 恢复按规则：账本里固定着、也没登记过恢复（只固定在还没读的指令里的 → 撤回那条）
+        if can_clear:
             plan = f" data-plan='{escape(MO.corefix_clear_text(book, t, tag, now))}'"   # 「恢复按规则」之后会怎样（2026-10-13）
-        btn = "买入…" if cur <= 0 and fixed is None else "固定口数…"
+        btn = "买入…" if cur <= 0 and eff is None else "固定口数…"
         H_.append(f"<div class='act'><button class='btn' data-act='corefix'{data}{'' if px > 0 else ' disabled'}>{btn}</button>"
-                  + (f"<button class='btn'{plan} data-act='corefix-clear'{data}>恢复按规则</button>" if fixed is not None else "") + "</div>")
+                  + (f"<button class='btn'{plan} data-act='corefix-clear'{data}>恢复按规则</button>" if can_clear else "") + "</div>")
         if px <= 0:
             H_.append("<div class='muted small'>执行器下一次运行算出价格之后可用</div>")
         return "".join(H_)
@@ -1406,16 +1616,17 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             + "</details>") if other else ""
     held_any = bool(st.get("pos")) or any(int(u) > 0 for u in (st.get("core_units") or {}).values())
     H.append(PANE + "trade")
-    H.append(_orders_card(book, now, paper, waiting))       # 今天的单（执行器）：还挂着的给「撤单」；API / Mac 故障时照它在立花网站下
+    H.append(_orders_card(book, now, paper, waiting, tlive, tag))   # 今天的单（执行器）：还挂着的给「撤单」；API / Mac 故障时照它在立花网站下
     H.append(PANE + "hold")
+    H.append(_kline_help())                                 # 整页一份的「怎么看 K 线图」：持仓的 K 线上面（2026-10-15 用户：「选股中的怎么看K线图要放到持仓中的K线的上面」）
     H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions) + more
              + ("<div id='qt-note' class='muted small'>现价：Yahoo 1 分钟线（约晚 20 分钟）</div>" if held_any else "") + "</section>")
     H.append(PANE + "pick")
+    H.append("<div class='khgo small'>怎么看 K 线图：说明在「持仓」的 K 线上面 <a href='#khelp' data-khelpgo='1'>去看 ›</a></div>")   # 选股只留一行指过去（2026-10-15）
     sgd = sm.get("suggest") or {}
     sctx = _suggest_ctx(sgd, book, tag, marks=_news_marks([r["ticker"] for r in sgd.get("rows") or [] if r.get("ticker")], now))
     H.append(_auto_buy_card(sgd, book, tag, eq, buying=buying, chart=chart, ctx=sctx))   # 最上面：规则接下来会自动买的（2026-10-12；每行点开 = K 线、买入…，2026-10-14）
     H.append(_suggest_card(sgd, book, tag, buying, when, eq, cap, chart, ctx=sctx))      # 上面已列的不重复（2026-10-15）
-    H.append(_kline_help())                                 # 整页一份的「怎么看 K 线图」（每张图不再各带一份；2026-10-15）
     H.append(PANE + "hold")
     cp = float(man.get("core_pct", 100.0))
     slider = ("<div class='stepper'><button class='btn' data-act='core-step' data-d='-10' aria-label='减 10%'>−10</button>"
@@ -1533,7 +1744,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                and not (now_it and MO.now_cancel_why(it, now)))   # 盘中的单还挂在交易所：页面上撤不了；15:30 失效的卖出能撤回（G16）
         btn = (_cbtn(it, 2 if now_it else (1 if it.get("status") == "placed" else 0)) if can else _unbtn(it))
         rows.append(f"<div class='li'><div class='grow'><b>{_what(it)}</b> <span class='chip'>"
-                    f"{escape(MO.status_text(it, now))}{'（撤回中）' if it.get('cancel_req') else ''}</span>"   # 盘中没下成 → 开盘（G18）
+                    f"{escape(MO.status_text(it, now))}{'（撤回中）' if it.get('cancel_req') else escape(tlive['itxt'].get(it.get('id'), ''))}</span>"   # 盘中没下成 → 开盘（G18）
                     f"<div class='muted small'>{escape(str(it.get('at', ''))[5:16].replace('T', ' '))}"
                     f"{(' · ' + escape(MO.msg_text(it, now))) if it.get('msg') else ''}</div></div>{btn}</div>")
     H.append(PANE + "trade")
@@ -1580,9 +1791,10 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     H.append("<div class='mseg' data-s='news'>" + _news_card(now) + "</div>")
     H.append("<div class='mseg' data-s='log' hidden>" + _notify_log_card(now) + "</div>")
     H.append(PANE + "")                                      # 分组结束
-    badges = _badges(book, st, sm, waiting, now)
+    badges = _badges(book, st, sm, waiting, now, tag, tlive)
     H.append("</main><nav class='tabbar' role='tablist' aria-label='分类'>"
-             + "".join(f"<button type='button' role='tab' data-tabgo='{k}' aria-label='{escape(lab)}'><b>{ic}</b>{escape(lab)}"
+             + "".join(f"<button type='button' role='tab' data-tabgo='{k}' aria-label='{escape(lab)}'"
+                       + (" class='on' aria-selected='true'" if k == (tab if tab in TABS else "home") else "") + f"><b>{ic}</b>{escape(lab)}"
                        + (f"<i class='badge'>{badges[k]}</i>" if badges.get(k) else "") + "</button>"
                        for k, (ic, lab, _) in TABS.items())
              + "</nav><div id='toast' class='toast' role='status' hidden></div>")
@@ -1612,11 +1824,13 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                                if r.get("ticker")},
                      "colors": list(ALLOC_COLORS)},                                       # 买入框里「现在 / 买入后」的占比条（与持仓页同色）                                           # 买入钱不够 → 从持仓平摊凑（预览；提交时同一个算法再算）
            "est": ests, "fee": [[c if c != float("inf") else 1e18, f] for c, f in FEE_TIERS],
-           "st": status_json(tag)[1],
+           "st": status_json(tag)[1], "v": ASSET_V,
            "gen": int(dt.datetime.now().timestamp() * 1000)}                                    # 页面生成时刻（离线时显示「几分钟前的数据」）                                                         # 〔77〕C UX-16：还在处理的指令 → 每 10 秒问一次   # 卖出的预计收益（按最近收盘；现价来了用现价的）
     cfg_json = json.dumps(cfg, ensure_ascii=False).replace("</", "<\\/")
-    return _head("qbreak 操作面板") + "<body><div id='pbar' role='progressbar' aria-label='加载中'></div>" + _panes(H) + _dialogs(paper, cap) + (f"<script type='application/json' id='qb-cfg'>{cfg_json}</script>"
-              f"<script type='module' src='/static/main.js?v={ASSET_V}'></script></body></html>")
+    pre = "".join(f"<link rel='modulepreload' href='/static/{m}.js?v={ASSET_V}'>" for m in JS_MODULES)   # 模块一起取（不用一层层等 import）；没载入成 → boot.js 确认这些都拿得到了再重新载入（2026-10-15）
+    return _head("qbreak 操作面板") + "<body><div id='pbar' role='progressbar' aria-label='加载中'></div>" + _panes(H, tab) + _dialogs(paper, cap) + (f"<script type='application/json' id='qb-cfg'>{cfg_json}</script>"
+              f"<script>{BOOT_JS}</script>"                                 # 普通脚本、写在页面里、先跑：模块 / 样式没载入成（网络 / 版本）→ 页面上说、自动重新载入
+              + pre + f"<script type='module' src='/static/main.js?v={ASSET_V}'></script></body></html>")
 
 
 def pair_page(code: str = "") -> str:
@@ -1678,23 +1892,37 @@ def submit_flow(tag: str, body: dict, now: dt.datetime | None = None) -> tuple[b
 
 
 def status_json(tag: str) -> tuple[int, dict]:
-    """〔77〕C UX-16：页面要不要刷新（只读）→ {sig, pending}。sig = 手动指令的状态 + 执行器这次运行 + 当前决策的单的状态 的摘要；
-    页面拿着加载时的 sig，每 10 秒问一次，变了就刷新。pending = 还在处理的指令数（0 → 页面不轮询）。"""
+    """〔77〕C UX-16：页面要不要刷新（只读）→ {sig, pending, busy, v, boot}。页面的连接检查也用它（2026-10-15：页面开着就每 10〜30 秒问一次，
+    切回来 / 联网时马上问；连不上 → 页面顶上「连不上 Mac（N 秒后重试）」，不再卡在刷新里）。sig = 手动指令的状态 + 执行器这次运行 + 当前决策的单的状态
+    + 「交易」的数字 的摘要；页面拿着加载时的 sig，每 10 秒问一次，变了就刷新。pending = 「交易」标签的数字（_trade_live：还会做事的单与指令，
+    2026-10-15）；busy = 还在处理的指令数（0 → 页面不轮询；以前的 pending）。
+    算不成（账本里有读不了的东西）→ 照样 200（ok、sig 固定、数字 0、带 err）：页面的连接检查只看 Mac 连不连得上，
+    不能因为账本里一个数显示「连不上 Mac」、页面也不能因为它打不开（2026-10-15 复核）。"""
+    try:
+        return _status_json(tag)
+    except Exception as e:                                 # noqa: BLE001
+        log.warning("/api/status 没算成（%s：%s）：照样回 200（连接检查不受影响）", type(e).__name__, e)
+        return 200, {"ok": True, "sig": "err", "pending": 0, "busy": 0, "v": ASSET_V, "boot": BOOT_ID, "err": type(e).__name__}
+
+
+def _status_json(tag: str) -> tuple[int, dict]:
     import hashlib
     from . import run_status as RS
     book = read_json(paths.state_dir() / f"live_unified_{tag}.json", {}) or {}
     man = book.get("manual") or {}
     items = sorted(((str(k), str(v.get("status")), str(v.get("msg") or "")[:60], bool(v.get("cancel_req")))
                     for k, v in (man.get("items") or {}).items()), key=lambda x: x[0])
-    waiting = sorted(str(r.get("id")) for r in MO.unseen(tag, book))
+    wrecs = MO.unseen(tag, book)
+    waiting = sorted(str(r.get("id")) for r in wrecs)
+    live = _trade_live(book, wrecs, now_jst(), tag)
     d = (book.get("state") or {}).get("last_date")
     orders = sorted((str(o.get("cid")), str(o.get("status")), int(o.get("filled_qty") or 0))
                     for o in book.get("orders") or [] if o.get("decided_on") == d)
     rec = RS.read(tag) or {}
     snap = read_json(paths.out_dir() / f"broker_snapshot_{tag}.json", {}) or {}
-    raw = json.dumps([items, waiting, orders, rec.get("at"), rec.get("ok"), snap.get("at")], ensure_ascii=False, default=str)
-    pend = len(waiting) + sum(1 for _, s, _, _ in items if s in MO.ACTIVE)
-    return 200, {"ok": True, "sig": hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16], "pending": pend}
+    raw = json.dumps([items, waiting, orders, rec.get("at"), rec.get("ok"), snap.get("at"), live["n"]], ensure_ascii=False, default=str)
+    return 200, {"ok": True, "sig": hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16], "pending": live["n"], "busy": live["busy"],
+                 "v": ASSET_V, "boot": BOOT_ID}                # 页面的连接检查（conn.js）：v 变了 = 面板换了新代码 → 空闲时重新载入
 
 
 def _after_tax_stat(m: dict, sy, cls) -> str:
@@ -1872,8 +2100,59 @@ def _close_of(book: dict | None, sm: dict | None, t: str) -> float | None:
     return None
 
 
-def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") -> tuple[bool, str, dict | None]:
-    """页面的一次提交 → (成功?, 说明, 写进去的指令)。与 run.py manual 相同的检查。source：panel（Mac）/ phone（手机）。"""
+FIX_CONFIRM_MSG = "还没写：固定口数 / 恢复按规则要先看「确认下单」框、点了「确认下单」才写（页面是旧的话：刷新页面后再点一次）"
+
+
+def _fix_quotes(tag: str, tickers, now: dt.datetime, fetch=None, wait: float = 3.0) -> dict:
+    """确认下单框估金额用的现价（Yahoo 1 分钟线，约晚 20 分钟；只估金额，不影响写什么）：先用现价接口的缓存（Mac 与手机共用）；
+    没有的另开线程取、最多等 wait 秒（Yahoo 慢 / 取不到 → 按最近收盘估，不让确认框卡住；取回来的放进缓存，下一次用）。"""
+    want = sorted(set(tickers))
+    if not want:
+        return {}
+    ttl = 60 if MO.timing(now)[0] == "now" else 600
+    out: dict = {}
+    with _QUOTE_LOCK:
+        for (tg, _k), (at, q) in list(_QUOTE_CACHE.items()):
+            if tg == tag and time.monotonic() - at <= ttl:
+                out.update({t: q[t] for t in want if t in (q or {}) and t not in out})
+    miss = [t for t in want if t not in out]
+    if not miss:
+        return out
+    box: dict = {}
+
+    def run():
+        f = fetch
+        if f is None:
+            from .data import intraday_quotes as f
+        try:
+            q = f(miss) or {}
+        except Exception as e:                               # noqa: BLE001
+            log.warning("现价取不到（确认框）：%s", e)
+            q = {}
+        box["q"] = q
+        with _QUOTE_LOCK:
+            _QUOTE_CACHE[(tag, ("fix",) + tuple(miss))] = (time.monotonic(), q) if q else (time.monotonic() - ttl + 10, q)
+    th = threading.Thread(target=run, daemon=True)
+    th.start()
+    th.join(wait)
+    out.update(box.get("q") or {})
+    return out
+
+
+def _req_reply(ok: bool, msg: str, rec: dict | None) -> tuple[int, dict]:
+    """/api/request 的回应（本机与手机共用）：要先确认（固定口数 / 恢复按规则：submit 回 need_confirm）→ 200 + ok:false + 确认框的内容，
+    什么都没写（2026-10-15 复核：以前 409，每次「固定口数…」浏览器控制台都记一条资源载入错误，其实没出错）；
+    旧页面（没有确认框的 JS）看 ok:false 照旧显示 msg（= 没写 + 刷新）。没带确认的请求照样什么都不写。"""
+    if not ok and isinstance(rec, dict) and rec.get("need_confirm"):
+        return 200, {"ok": False, "need_confirm": True, "msg": msg, "confirm": rec.get("confirm")}
+    return (200 if ok else 400), {"ok": ok, "msg": msg, "id": (rec or {}).get("id")}
+
+
+def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fetch=None) -> tuple[bool, str, dict | None]:
+    """页面的一次提交 → (成功?, 说明, 写进去的指令)。与 run.py manual 相同的检查。source：panel（Mac）/ phone（手机）。
+    固定口数 / 恢复按规则（kind corefix；固定的 ETF 上点的卖出 / 减仓 / 调仓换算成的也算）：body 没带 confirm（= 确认框给的 token）或
+    token 对不上（账本 / 时间段变了）→ 不写，回 (False, FIX_CONFIRM_MSG, {"need_confirm": True, "confirm": 确认框})（2026-10-15）。
+    fetch：确认框估金额取现价用（测试换掉；默认 Yahoo）。"""
     tag = str(body.get("book") or "")
     if tag not in BOOKS:
         return False, "不认识的账本", None
@@ -1988,6 +2267,18 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
                 return False, f"没写（闲置资金比例 → 0%：{w}）", None
             sells.append((sr, {"t": "core", "sell": 0, "kind": "core"}))
         rec["fund"] = "all"
+    if rec["kind"] == "corefix":                            # 固定口数 / 恢复按规则：先给「确认下单 / 取消下单」，点了「确认下单」（带 token）才写
+        n0 = now or now_jst()                               # （2026-10-15 用户：盘中固定口数点「确定」不要直接下单；旧页面 / 缓存的页面也绕不过去）
+        ss = [(r["t"], int(r["sell"]), float(r.get("yen") or 0) / max(1, int(r["sell"]))) for _s, r in sells if r.get("kind") == "stock"]
+        halt = paths.halt_file().exists()
+        pv = MO.corefix_preview(book, tag, rec, n0, sm=sm, stock_sells=ss, halt=halt)
+        got = str(body.get("confirm") or "")
+        if got != pv["token"]:
+            q = _fix_quotes(tag, [rec["ticker"]] + [m["t"] for m in pv["plan"]["moves"]], n0, fetch)
+            if q:
+                pv = MO.corefix_preview(book, tag, rec, n0, sm=sm, stock_sells=ss, quotes=q, halt=halt)
+            return False, FIX_CONFIRM_MSG, {"need_confirm": True, "confirm": {
+                "title": pv["title"], "text": pv["text"], "token": pv["token"], "danger": pv["danger"], "changed": bool(got)}}
     clock = (lambda: now) if now else None
     if rec["kind"] == "adjust" and not rec.get("fund_for"):   # 写入时预览的方向（+1 加 / −1 减）：执行时换算方向相反 → 不执行（2026-10-13）
         a0 = MO.adjust_plan(rec, book.get("state") or {}, MO.MANUAL_CAP_PCT)
@@ -2018,7 +2309,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel") ->
             msg = f"已写：{t} 卖 {-a['delta']:,} 股（→ {a['target']:,} 股）→ {when}卖出"
     if k == "corefix":                                                             # 2026-10-12 再发防止：这一种以前没有说明 → msg None → 拼接崩溃 → 手机 502
         msg = (f"已写：{t} 恢复按规则 → " + MO.corefix_clear_text(book, t, tag, now or now_jst()) if rec.get("clear") else   # 2026-10-13：会怎样
-               f"已写：{t} 固定 {int(rec.get('units') or 0):,} 口 → 下一次决策（交易日 07:40）起调到这个口数、开盘下单")
+               f"已写：{t} 固定 {int(rec.get('units') or 0):,} 口 → 不是现在下单：{MO.corefix_fill(now or now_jst(), book, tag)['text']}")   # 2026-10-15：实际哪天
         if rec.get("from_kind"):                                                   # 固定口数的 ETF 上点的卖出 / 减仓 / 调仓（2026-10-13）
             msg += "（这只是手动固定的：只改这只 ETF 的固定口数，别的 ETF 与闲置资金比例不变；不是盘中马上下单）"
     if msg is None:                                                                # 新加的指令种类忘了写说明：也给一句（不让拼接崩溃）
@@ -2090,6 +2381,49 @@ def _unknown_open(book: dict | None) -> bool:
                            for o in (book or {}).get("orders") or [])
 
 
+def _pull_mode(tag: str, mode: str, book: dict | None = None, now: dt.datetime | None = None) -> str | None:
+    """面板叫的执行器要不要 git pull（2026-10-15）→ "fetch"（不 pull、不换代码，只 git fetch 看一眼远程停止）/ None（照常 pull）。
+    fetch 只给今天早上的决策已经在账本里之后的运行：撤单（不建引擎）、盘中（MO.now_due 要早上的运行完成）、开盘前的重试（_due 要决策日对上）。
+    补跑（早上的运行没完成：Mac 07:40 睡着 / 运行失败）= 代替 07:40 的照常运行 → 要拉云端当天的日报 / 判断层，照常 pull；
+    重试时决策万一还不在账本里（run.py --retry 会按正常流程跑 = 当早上的运行）→ 也照常 pull（liveu.sh 自己也再看一次：mac_login --decided）。"""
+    if mode in ("now", "cancel"):
+        return "fetch"
+    if mode == "catchup":
+        return None
+    from .calendar_jp import prev_trading_day
+    now = now or now_jst()
+    b = book if book is not None else _load(tag)[0]
+    ld = str(((b or {}).get("state") or {}).get("last_date") or "")
+    return "fetch" if ld and ld >= prev_trading_day(now.date()).isoformat() else None
+
+
+class _Adopted:
+    """面板平滑重启（execv）之前叫的执行器：新进程只知道进程号（还是它的子进程：execv 不换进程号）。poll() 与 Popen 一样：
+    还在跑 → None；结束了 → 退出码（不是自己的子进程了 / 已经被收走 → 看进程还在不在，不在当作 0）。"""
+
+    def __init__(self, pid: int):
+        self.pid = pid
+        self.returncode = None
+
+    def poll(self):
+        if self.returncode is not None:
+            return self.returncode
+        try:
+            pid, status = os.waitpid(self.pid, os.WNOHANG)
+            if pid == 0:
+                return None
+            self.returncode = os.waitstatus_to_exitcode(status)
+        except ChildProcessError:
+            try:
+                os.kill(self.pid, 0)
+                return None
+            except PermissionError:
+                return None
+            except OSError:
+                self.returncode = 0
+        return self.returncode
+
+
 class Trigger:
     """面板写了手动指令之后叫执行器（同一个账本同一时间只跑一个）：
     盘中（09:00〜11:30、12:30〜15:25）有要马上下的指令 → --phase now（同一个账本最多 1 分钟一次）；
@@ -2148,8 +2482,47 @@ class Trigger:
         lf.flush()
         env = {**os.environ, "QBREAK_NO_HOLD": "1"}        # 跑完马上结束，不在进程里等到 09:35（liveu.sh 把让 Mac 醒着放到后台；2026-10-14 G2：
         #                                                   以前立花的 --retry 一直活到 09:35，这段时间面板不再叫执行器 → 撤单、盘中指令都卡住）
+        if env.get("QBREAK_LIVEU_PULL") != "0":             # 0 = 本来就关掉了 pull：照旧
+            pm = _pull_mode(tag, mode)
+            if pm:
+                env["QBREAK_LIVEU_PULL"] = pm              # 重试 / 盘中 / 撤单不 git pull、不换代码，只 fetch 看远程停止（2026-10-15「网页app经常卡住」：
+            else:                                          #   10-15 08:12 面板叫的 --retry 拉下新代码 → 面板重启、正在操作的手机 502）
+                env.pop("QBREAK_LIVEU_PULL", None)         # 当早上的运行（补跑等）：照常 pull 拉云端当天的输入（面板自己的环境里有 fetch 也不带过去）
         return subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, cwd=str(paths.PROJECT_ROOT), start_new_session=True,
                                 env=env)
+
+    # ── 面板平滑重启（os.execv，同一个进程号）时把状态交给新的进程：还在跑的执行器、失败次数、补跑次数（2026-10-15） ──
+    def export_state(self) -> dict:
+        """交给 execv 之后的新进程（JSON；单调时钟是全系统的，跨进程照样能比）。调用方拿着 self.lock。"""
+        procs = {}
+        for tag, p in self.procs.items():
+            pid = getattr(p, "pid", None)
+            if isinstance(pid, int) and pid > 1:
+                procs[tag] = pid
+        return {"procs": procs, "started": {k: v.isoformat() for k, v in self.started.items()}, "last": dict(self.last),
+                "fails": {k: list(v) for k, v in self.fails.items()}, "errs": dict(self.errs),
+                "spawn_ids": {k: sorted(v) for k, v in self.spawn_ids.items()},
+                "catchups": {k: list(v) for k, v in self.catchups.items()}, "catch_last": dict(self.catch_last),
+                "behind": {k: list(v) for k, v in self.behind.items()}, "rolled": dict(self.rolled)}
+
+    def import_state(self, d: dict) -> None:
+        """execv 之前的进程交过来的状态（格式不对的跳过；暂停另外记在状态目录、构造时已经读了）。"""
+        if not isinstance(d, dict):
+            return
+        try:
+            for tag, pid in (d.get("procs") or {}).items():
+                self.procs[tag] = _Adopted(int(pid))
+            self.started.update({k: dt.datetime.fromisoformat(v) for k, v in (d.get("started") or {}).items()})
+            self.last.update({k: float(v) for k, v in (d.get("last") or {}).items()})
+            self.fails.update({k: (str(v[0]), int(v[1])) for k, v in (d.get("fails") or {}).items()})
+            self.errs.update({k: str(v) for k, v in (d.get("errs") or {}).items()})
+            self.spawn_ids.update({k: frozenset(str(x) for x in v) for k, v in (d.get("spawn_ids") or {}).items()})
+            self.catchups.update({k: (str(v[0]), int(v[1])) for k, v in (d.get("catchups") or {}).items()})
+            self.catch_last.update({k: float(v) for k, v in (d.get("catch_last") or {}).items()})
+            self.behind.update({k: (str(v[0]), float(v[1])) for k, v in (d.get("behind") or {}).items()})
+            self.rolled.update({k: str(v) for k, v in (d.get("rolled") or {}).items()})
+        except (TypeError, ValueError, IndexError, AttributeError) as e:
+            log.warning("面板重启：接过来的自动叫执行器的状态格式不对（跳过一部分）：%s", e)
 
     # ── 暂停记在状态目录（面板重启也接着停；G23） ──
     def _load_pauses(self) -> None:
@@ -2516,8 +2889,90 @@ def _live_bar(tag: str, t: str) -> dict | None:
 
 # ───────────────────────── 持仓的现价（按需取） ─────────────────────────
 FEE_TIERS = tuple(_BROKERS[_DEFAULT_BROKER["JP"]]["markets"]["JP"].get("commission_tiers") or ())   # 页面算部分卖出的手续费（= MO.fee_jp）
-_QUOTE_CACHE: dict = {}
-_QUOTE_LOCK = threading.Lock()
+_QUOTE_CACHE: dict = {}                                     # (账本, 票的组) → (取到的单调时刻, {票: 现价})
+_QUOTE_LOCK = threading.Lock()                              # 只在读写上面这个 dict 时拿着；下载在锁外（2026-10-15「网页app经常卡住」：以前整段
+#                                                             Yahoo 下载都拿着它 → Yahoo 一慢，现价 40 秒、持仓 / 建议股票的 K 线 92 秒，页面 15 秒放弃「取不到」）
+_QUOTE_FLIGHT: dict = {}                                    # 正在下载的组 → (threading.Event, 开始的单调时刻)（同一组同一时间只下载一次，别的请求等它）
+QUOTE_FLIGHT_MAX_S = 60.0                                   # 一次下载最多算这么久：卡住了（Yahoo 不回、超时也没起作用）→ 不再等它，下一个请求重新下载
+#                                                             （以前没有上限：一次卡住，这一组的现价就永远停在旧的 / 空的，直到面板重启；2026-10-15）
+_QUOTE_FAILN: dict = {}                                     # 组 → 连续取不到几次（退避：盘中 10 → 30 → 120 秒；其他时间至少 60 秒）
+QUOTE_WAIT_S = 8.0                                          # 没有现价时请求最多等下载这么久（页面 15 秒放弃）；等不到先回空的，下载在后台接着跑完放进缓存
+QUOTE_FRESH_WAIT_S = 2.5                                    # 有上一次的现价时最多等新的这么久（Yahoo 正常 0.3〜1.4 秒）；等不到先回上一次的（每只带时刻）
+QUOTE_BACKOFF_S = (10, 30, 120)
+QUOTE_TIMEOUT_S = 4                                         # yfinance 每个请求的超时（默认 10 秒；一只一只取）
+_QUOTE_WARN = [0.0]                                         # 取不到 / 很慢的警告：每分钟最多写一次日志
+
+
+def _quote_fetch(key, tickers: list, fetch, live: bool, prev, ev: threading.Event | None = None) -> None:
+    """后台下载一组现价（锁外）→ 放进缓存、叫醒等着的请求。取不到：留着上一次的现价（每只带时刻），按连续失败次数退避再试。
+    ev：这次下载的 Event（超过 QUOTE_FLIGHT_MAX_S 被放弃、已经有新的下载接手 → 只在自己取到了时写缓存，不动新的那次的记录）。"""
+    t0 = time.perf_counter()
+    m0 = time.monotonic()
+    try:
+        q = fetch(list(tickers)) or {}
+        err = ""
+    except Exception as e:                                   # noqa: BLE001
+        q, err = {}, f"{type(e).__name__}: {e}"[:200]
+    el = time.perf_counter() - t0
+    with _QUOTE_LOCK:
+        fl = _QUOTE_FLIGHT.get(key)
+        mine = fl is not None and (ev is None or fl[0] is ev)
+        if q:
+            _QUOTE_CACHE[key] = (time.monotonic(), q)
+            _QUOTE_FAILN.pop(key, None)
+        elif mine or not (_QUOTE_CACHE.get(key) and _QUOTE_CACHE[key][0] > m0):   # 被放弃的那次取不到：不盖掉之后取到的
+            n = _QUOTE_FAILN.get(key, 0) + 1
+            _QUOTE_FAILN[key] = n
+            ttl = 60 if live else 600
+            wait = QUOTE_BACKOFF_S[min(n, len(QUOTE_BACKOFF_S)) - 1] if live else max(60, QUOTE_BACKOFF_S[min(n, len(QUOTE_BACKOFF_S)) - 1])
+            _QUOTE_CACHE[key] = (time.monotonic() - ttl + wait, (prev or {}) if isinstance(prev, dict) else {})
+        if mine:
+            _QUOTE_FLIGHT.pop(key, None)
+            ev = fl[0]
+    if ev is not None:
+        ev.set()
+    if (not q or el > 5) and time.monotonic() - _QUOTE_WARN[0] > 60:
+        _QUOTE_WARN[0] = time.monotonic()
+        log.warning("现价%s（%d 只，用时 %.1f 秒%s）", "取不到" if not q else "很慢", len(tickers), el, f"；{err}" if err else "")
+
+
+def _short_timeout(f):
+    """取现价的函数接受 timeout → 用 QUOTE_TIMEOUT_S 秒（yfinance 默认 10 秒）；不接受（换成别的取法）→ 原样。"""
+    import functools
+    import inspect
+    try:
+        ok = "timeout" in inspect.signature(f).parameters
+    except (TypeError, ValueError):
+        ok = False
+    return functools.partial(f, timeout=QUOTE_TIMEOUT_S) if ok else f
+
+
+def _quotes_cached(key, tickers: list, fetch, live: bool) -> dict:
+    """一组票的现价（Mac 与手机共用缓存：盘中 60 秒、其他时间 10 分钟）。过期了 → 后台下载（同一组只下载一次），
+    请求最多等 QUOTE_FRESH_WAIT_S（有上一次的）/ QUOTE_WAIT_S（没有）秒；等不到先回手上有的。"""
+    ttl = 60 if live else 600
+    with _QUOTE_LOCK:
+        c = _QUOTE_CACHE.get(key)
+        if c is not None and time.monotonic() - c[0] <= ttl:
+            return c[1]
+        fl = _QUOTE_FLIGHT.get(key)
+        if fl is not None and time.monotonic() - fl[1] > QUOTE_FLIGHT_MAX_S:   # 上一次下载卡住了：不再等它（它晚到的结果照样放进缓存）
+            log.warning("现价下载超过 %.0f 秒没结束（%d 只）：重新下载", QUOTE_FLIGHT_MAX_S, len(tickers))
+            fl = None
+        if fl is None:
+            if fetch is None:
+                from .data import intraday_quotes
+                fetch = _short_timeout(intraday_quotes)
+            ev = threading.Event()
+            _QUOTE_FLIGHT[key] = (ev, time.monotonic())
+            threading.Thread(target=_quote_fetch, args=(key, list(tickers), fetch, live, c[1] if c else None, ev),
+                             daemon=True, name="qbreak-quotes").start()
+        else:
+            ev = fl[0]
+    ev.wait(QUOTE_FRESH_WAIT_S if c and c[1] else QUOTE_WAIT_S)
+    with _QUOTE_LOCK:
+        c2 = _QUOTE_CACHE.get(key)
+    return (c2 or c or (0.0, {}))[1]
 
 
 SG_MAX = 12                                                  # 现价接口一次最多取几只建议的股票（页面只要打开的 K 线 / 买入框里的）
@@ -2567,21 +3022,10 @@ def quotes_json(tag: str, now: dt.datetime | None = None, fetch=None, extra: lis
     if not rows:
         return 200, {**head, "rows": {}}
     key = (tag, ("sg",) + tuple(sorted(rows)) if extra is not None else tuple(sorted(rows)))
-    with _QUOTE_LOCK:
-        c = _QUOTE_CACHE.get(key)
-        if c is None or time.monotonic() - c[0] > (60 if live else 600):
-            if fetch is None:
-                from .data import intraday_quotes as fetch
-            try:
-                q = fetch(list(sorted(rows))) or {}
-            except Exception as e:                           # noqa: BLE001
-                log.warning("现价取不到：%s", e)
-                q = {}
-            c = (time.monotonic(), q) if q else (time.monotonic() - (50 if live else 540), q)   # 取不到：10 秒 / 1 分钟后再试
-            _QUOTE_CACHE[key] = c
+    q = _quotes_cached(key, sorted(rows), fetch, live)       # 下载在锁外、同一组只下载一次、最多等几秒（2026-10-15）
     out = {}
     for t, r in rows.items():
-        x = c[1].get(t)
+        x = q.get(t)
         if not x:
             continue
         px = float(x["px"])
@@ -2623,29 +3067,84 @@ def _extra_of(query: str) -> list | None:
 
 
 # ───────────────────────── HTTP ─────────────────────────
-CSP = ("default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; "
+CSP = (f"default-src 'none'; script-src 'self' '{BOOT_SHA}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; "
        "connect-src 'self'; worker-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'")
 
 # 网页 App 的 service worker（/sw.js）：① 页面与只读接口「网络优先、连不上用上次的」（Mac 睡着 / Tailscale 断了也能看上次的数据，
 # 页面顶上会写是几分钟前的）② 收推送（qbreak/webpush.py）→ 系统通知；点通知打开面板。只缓存这个面板自己（同源 GET），写操作从不缓存。
-SW_JS = r"""const C='qbreak-v3';
+# 2026-10-15 用户「qbreak网页app经常卡住 永久解决这个问题」（以前：没有超时、Tailscale Serve 的 502 原样显示 → 主屏幕 App 停在「刷新中…」/
+# 白屏 / Bad Gateway，没有刷新键只能划掉重开）：
+#   页面：网络 6 秒没回 / 5xx / 连不上 → 给存着的页面（标上 qb-cache：页面顶上写「连不上 Mac」、连上后自动刷新）或离线页（每 5 秒自动重试 +
+#         大的「重新连接」）；网络晚到的照样存下（下一次用）。只存操作面板本身（X-Qbreak-Page: main），按账本存一份（不按 ?tab= 等存很多份）。
+#   /static/…?v=：版本不变内容就不变 → 缓存优先（不再新旧模块混用）；页面换了新版本后删掉别的版本。
+#   /api/quotes、/api/chart：网络 12 秒没回 / 5xx → 存着的（标上 X-Qbreak-Cache：页面知道连不上）；最多存 40 条。
+#   /api/status、/api/clientlog 不经这里（连接检查要看真的网络）。缓存名换了 → 旧缓存在 activate 时删掉。
+SW_JS = r"""const C='qbreak-v4', NAV_MS=6000, NET_MS=25000, STATIC_MS=8000, API_MS=12000, API_MAX=40;
 self.addEventListener('install',e=>self.skipWaiting());
-self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
-function keep(r,res){ if(res && res.ok){ const cp=res.clone(); caches.open(C).then(c=>c.put(r.url,cp)).catch(()=>{}); } return res; }
-const OFF='<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>qbreak</title>'+
-  '<p style="font:16px -apple-system,sans-serif;padding:24px;line-height:1.6">连不上 Mac 的面板（Mac 睡着 / 关机 / 手机的 Tailscale 没连上），'+
-  '这台设备上也还没有存过页面。<br>Mac 醒来、Tailscale 连上之后下拉刷新。</p>';
+self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k))))
+  .then(()=>self.clients.claim())));
+function tfetch(u,init,ms){ const ac=new AbortController(), t=setTimeout(()=>ac.abort(),ms);
+  return fetch(u,Object.assign({},init||{},{signal:ac.signal})).finally(()=>clearTimeout(t)); }
+function late(ms){ return new Promise(res=>setTimeout(()=>res(null),ms)); }
+let PATIENT=0;                                           // 页面（conn.js）刚确认连得上 Mac、要刷新：下一次导航等网络到 NET_MS（页面生成得慢也拿新的，不换成存着的再来回刷新）
+self.addEventListener('message',e=>{ if(e.data && e.data.qb==='patient'){ PATIENT=Date.now()+15000; if(e.ports && e.ports[0]) e.ports[0].postMessage(1); } });
+function pageKey(u){ return new URL('/?qb-page='+encodeURIComponent(u.searchParams.get('book')||''),self.location).href; }
+function marked(m,head){ const h=new Headers(m.headers); h.delete('Content-Length'); h.delete('Content-Encoding'); for(const k in head) h.set(k,head[k]); return h; }
+function stale(m){ return m.text().then(t=>new Response(t.replace('<head>',"<head><meta name='qb-cache' content='1'>"),{status:200,headers:marked(m,{})})); }
+function offline(url){                                   // 网址去掉 #tab=…（2026-10-15 复核：带着 # 时「重新连接」与 5 秒的自动刷新都只是同一页里跳锚点，一个请求都不发）
+  const u=String(url).split('#')[0].replace(/[<>"']/g,'').replace(/&/g,'&amp;');
+  return new Response('<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'+
+    '<meta http-equiv=refresh content="5;url='+u+'"><title>qbreak</title><style>body{font:17px -apple-system,sans-serif;margin:0;padding:max(24px,env(safe-area-inset-top)) 20px 24px;'+
+    'line-height:1.6;background:#f2f2f7;color:#111}@media (prefers-color-scheme:dark){body{background:#0f0f11;color:#eee}}'+
+    'a{display:block;margin:24px 0 12px;padding:18px;border-radius:14px;background:#0a84ff;color:#fff;text-align:center;font-weight:600;text-decoration:none;font-size:19px}'+
+    '.m{color:#888;font-size:14px}</style><h2>连不上 Mac 的面板</h2><p>Mac 睡着 / 关机 / 面板正在重启，或手机的 Tailscale 没连上；这台设备上还没有存过页面。</p>'+
+    '<a href="'+u+'">重新连接</a><p class=m>每 5 秒自动重试一次，连上了就自动打开（不用划掉 App）。</p>',
+    {headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}});
+}
+function prune(c,html){                                    // 页面换了新版本：删掉别的版本的 /static/
+  const v=(html.match(/main\.js\?v=([0-9a-f]+)/)||[])[1]; if(!v) return;
+  return c.keys().then(ks=>Promise.all(ks.filter(k=>{ const u=new URL(k.url); return u.pathname.indexOf('/static/')===0 && u.searchParams.get('v') && u.searchParams.get('v')!==v; })
+    .map(k=>c.delete(k))));
+}
+function page(e,r,u){
+  const key=pageKey(u);
+  const net=tfetch(r.url,{credentials:'same-origin',cache:'no-store',redirect:'manual'},NET_MS).then(res=>{
+    if(res.type==='opaqueredirect' || res.status<500){
+      if(res.ok && res.headers.get('X-Qbreak-Page')==='main'){ const cp=res.clone();
+        e.waitUntil(caches.open(C).then(c=>cp.clone().text().then(t=>c.put(key,cp).then(()=>prune(c,t)))).catch(()=>{})); }
+      return res;
+    }
+    throw new Error('HTTP '+res.status);
+  });
+  e.waitUntil(net.catch(()=>null));
+  const wait=Date.now()<PATIENT ? NET_MS : NAV_MS; PATIENT=0;
+  return Promise.race([net.catch(()=>null),late(wait)]).then(res=>res ||
+    caches.open(C).then(c=>c.match(key,{ignoreVary:true})).then(m=>m ? stale(m) : offline(r.url)).catch(()=>offline(r.url)));
+}
+function asset(e,r,u){
+  return caches.open(C).then(c=>c.match(r.url,{ignoreVary:true}).then(m=>{
+    if(m && u.searchParams.get('v')) return m;            // 带版本的：内容不会变
+    return tfetch(r,{},STATIC_MS).then(res=>{ if(res.ok) e.waitUntil(c.put(r.url,res.clone()).catch(()=>{}));
+      if(res.status>=500 && m) return m; return res; }).catch(()=>m || Response.error());
+  }));
+}
+function api(e,r){                                        // 网络 12 秒没回 / 5xx → 存着的（标上 X-Qbreak-Cache）；没存过 → 原样（5xx）/ 出错
+  const old=res=>caches.open(C).then(c=>c.match(r.url,{ignoreVary:true}))
+    .then(m=>m ? new Response(m.body,{status:m.status,headers:marked(m,{'X-Qbreak-Cache':'1'})}) : (res || Response.error()), ()=>res || Response.error());
+  return tfetch(r,{},API_MS).then(res=>{
+    if(res.status>=500) return old(res);
+    if(res.ok){ const cp=res.clone(); e.waitUntil(caches.open(C).then(c=>c.put(r.url,cp).then(()=>c.keys()).then(ks=>{
+      const a=ks.filter(k=>new URL(k.url).pathname.indexOf('/api/')===0); return Promise.all(a.slice(0,Math.max(0,a.length-API_MAX)).map(k=>c.delete(k))); })).catch(()=>{})); }
+    return res;
+  },()=>old(null));
+}
 self.addEventListener('fetch',e=>{
   const r=e.request; if(r.method!=='GET') return;
   const u=new URL(r.url); if(u.origin!==self.location.origin) return;
-  if(r.mode==='navigate'){
-    e.respondWith(fetch(r).then(res=>keep(r,res)).catch(()=>caches.open(C).then(c=>c.match(r.url).then(m=>m||c.match(new URL('/',self.location).href)))
-      .then(m=>m||new Response(OFF,{headers:{'Content-Type':'text/html; charset=utf-8'}}))));
-    return;
-  }
-  if(['/api/status','/api/quotes','/api/chart'].indexOf(u.pathname)>=0 || u.pathname.indexOf('/static/')===0){   // 页面的 JS / CSS 也缓存（离线时打开上次的页面要用）
-    e.respondWith(fetch(r).then(res=>keep(r,res)).catch(()=>caches.open(C).then(c=>c.match(r.url)).then(m=>m||Response.error())));
-  }
+  if(r.mode==='navigate'){ e.respondWith(page(e,r,u)); return; }
+  if(u.pathname.indexOf('/static/')===0){ e.respondWith(asset(e,r,u)); return; }   // 页面的 JS / CSS 也缓存（离线时打开上次的页面要用）
+  if(u.pathname==='/manifest.webmanifest' || u.pathname==='/apple-touch-icon.png'){ e.respondWith(asset(e,r,u)); return; }   // 连不上时用存着的（2026-10-15 复核：每次打开存着的页面都记「Manifest fetch failed」）
+  if(u.pathname==='/api/quotes' || u.pathname==='/api/chart') e.respondWith(api(e,r));
 });
 self.addEventListener('push',e=>{
   let d={}; try{ d=e.data?e.data.json():{}; }catch(x){ d={title:'qbreak', body:e.data?e.data.text():''}; }
@@ -2659,6 +3158,26 @@ self.addEventListener('notificationclick',e=>{
   }));
 });
 """
+
+
+_CLOG_HITS: list[float] = []
+_CLOG_LOCK = threading.Lock()
+CLOG_MAX = 30                                               # 页面报告每分钟最多记几条（两个端口一起）
+
+
+def client_log(query: str, who: str) -> None:
+    """GET /api/clientlog?e=种类&d=说明：页面自己报的「请求超时 / 连不上多久 / 用了存着的旧页面 / 脚本没载入成」→ 面板日志（WARNING）。
+    2026-10-15「网页app经常卡住」：以前手机上卡住什么都不留，事后查不出是哪一步。不发给第三方；只记种类与简短说明（路径、错误名、秒数），
+    控制字符去掉、截短，每分钟最多 CLOG_MAX 条。"""
+    q = parse_qs(query)
+    e = re.sub(r"[^0-9A-Za-z_\-]", "", str((q.get("e") or [""])[0]))[:24] or "?"
+    d = re.sub(r"[\x00-\x1f\x7f]", " ", str((q.get("d") or [""])[0]))[:200]
+    now_m = time.monotonic()
+    with _CLOG_LOCK:
+        _CLOG_HITS[:] = [x for x in _CLOG_HITS if now_m - x < 60] + [now_m]
+        if len(_CLOG_HITS) > CLOG_MAX:
+            return
+    log.warning("页面报告（%s）：%s %s", who, e, d)
 
 
 def push_post(path: str, body: dict, who: str) -> tuple[int, dict]:
@@ -2693,6 +3212,7 @@ class _Common(BaseHTTPRequestHandler):
         """所有接口的总保护（2026-10-12 再发防止：处理里一出异常连接就断 → 手机经 Tailscale 看到 HTTP 502、以为没写成又点一次）：
         异常 → 记日志、回一个能读的 JSON / 文字（写入类的接口：可能已经写进去了 → 先确认、不要直接再点）。"""
         self._sent = False
+        self._counted = None                                # 算进「正在处理的请求」了（POST = 写）：平滑重启 / 退出前等它做完
         try:
             super().handle_one_request()
         except (BrokenPipeError, ConnectionResetError):
@@ -2712,13 +3232,24 @@ class _Common(BaseHTTPRequestHandler):
                     self._text(500, "面板内部出错（已记日志）：刷新后再试")
             except Exception:                               # noqa: BLE001
                 pass
+        finally:
+            if self._counted is not None:
+                _INFLIGHT.leave(self._counted)
+                self._counted = None
 
-    def _send(self, code: int, body: bytes, ctype: str, headers=()) -> None:
+    def parse_request(self):
+        ok = super().parse_request()
+        if ok and getattr(self, "_counted", None) is None:   # 请求行读到了才算（空闲的预连接不算）
+            self._counted = self.command == "POST"
+            _INFLIGHT.enter(self._counted)
+        return ok
+
+    def _send(self, code: int, body: bytes, ctype: str, headers=(), cache: str = "no-store") -> None:
         self._sent = True
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
@@ -2734,7 +3265,25 @@ class _Common(BaseHTTPRequestHandler):
     def _text(self, code: int, msg: str) -> None:
         self._send(code, msg.encode("utf-8"), "text/plain; charset=utf-8")
 
-    def _static(self, path: str) -> bool:
+    def _gz(self) -> bool:
+        return "gzip" in str(self.headers.get("Accept-Encoding") or "")
+
+    def _asset(self, name: str, query: str) -> None:
+        """/static/<name>[?v=…]：启动时读好的那一份（STATIC）。带 ?v= 的只给版本对的（可以长期缓存；service worker 缓存优先）；
+        版本不对 → 404（旧页面配新面板：页面的 boot.js 看到载入失败 → 重新载入）；不带 ?v=（以前存下的旧页面）→ 现在的、不让缓存。
+        boot.js 例外：什么版本都给现在的（不让缓存；以前存下的、还引用 /static/boot.js?v=旧 的页面也有人接手；2026-10-15 复核）。"""
+        v = (parse_qs(query).get("v") or [""])[0]
+        if v and v != ASSET_V and name == "boot.js":
+            v = ""
+        if v and v != ASSET_V:
+            self._send(404, "版本不对（面板刚更新）：重新载入页面".encode("utf-8"), "text/plain; charset=utf-8")
+            return
+        gz = self._gz()
+        hdrs = [("Vary", "Accept-Encoding")] + ([("Content-Encoding", "gzip")] if gz else [])
+        self._send(200, STATIC_GZ[name] if gz else STATIC[name], STATIC_TYPES[Path(name).suffix], hdrs,
+                   cache="public, max-age=31536000, immutable" if v else "no-cache")
+
+    def _static(self, path: str, query: str = "") -> bool:
         """不含任何数据的静态东西（图标、manifest）：不用配对也给（主屏幕图标要用）。"""
         if path == "/favicon.ico":
             self._send(204, b"", "text/plain")
@@ -2742,8 +3291,8 @@ class _Common(BaseHTTPRequestHandler):
             self._send(200, PP.touch_icon_png(), "image/png")
         elif path == "/sw.js":
             self._send(200, SW_JS.encode("utf-8"), "text/javascript; charset=utf-8", [("Service-Worker-Allowed", "/")])
-        elif path.startswith("/static/") and path[8:] in _static_files():   # 页面的 JS / CSS（不含任何数据；不用配对也给）
-            self._send(200, _static_files()[path[8:]], STATIC_TYPES[Path(path).suffix])
+        elif path.startswith("/static/") and path[8:] in STATIC:            # 页面的 JS / CSS（不含任何数据；不用配对也给）
+            self._asset(path[8:], query)
         elif path == "/manifest.webmanifest":
             self._send(200, json.dumps(PP.MANIFEST, ensure_ascii=False).encode("utf-8"), "application/manifest+json; charset=utf-8")
         else:
@@ -2788,13 +3337,21 @@ class _Common(BaseHTTPRequestHandler):
             hdrs = [("Content-Encoding", "gzip"), ("Vary", "Accept-Encoding")]
         self._send(code, body, "application/json; charset=utf-8", hdrs)
 
-    def _page(self, render_fn) -> None:
+    def _page(self, render_fn, kind: str = "main") -> None:
+        """页面（kind：main = 操作面板 / pair = 配对页；X-Qbreak-Page 头：service worker 只把操作面板存成「连不上时给的旧页面」）。
+        浏览器说收 gzip 就压（224 KB → 约 35 KB；2026-10-15：手机走 Tailscale 中继时整页重新下载很慢，看着像卡住）。"""
         try:
             html = render_fn()
         except Exception as e:                               # noqa: BLE001
             log.exception("面板页面出错")
             html = f"<!doctype html><meta charset='utf-8'><p>页面出错：{escape(type(e).__name__)}: {escape(str(e))[:300]}</p>"
-        self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
+            kind = "error"
+        body = html.encode("utf-8")
+        hdrs = [("X-Qbreak-Page", kind), ("Vary", "Accept-Encoding")]
+        if self._gz() and len(body) > 1024:
+            body = gzip.compress(body, 5)
+            hdrs.append(("Content-Encoding", "gzip"))
+        self._send(200, body, "text/html; charset=utf-8", hdrs)
 
 
 def _book_of(query: str) -> str:
@@ -2824,8 +3381,9 @@ def _after_submit(trigger, rec: dict | None) -> None:
         threading.Thread(target=trigger.check, daemon=True).start()
 
 
-def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None, phone_port: int | None = None):
-    """本机端口（127.0.0.1:8765）：只接受本机的 Host；写操作要面板令牌。配对码在这里生成（只显示在 Mac 屏幕上）。"""
+def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None, phone_port=None):
+    """本机端口（127.0.0.1:8765）：只接受本机的 Host；写操作要面板令牌。配对码在这里生成（只显示在 Mac 屏幕上）。
+    phone_port：手机端口号（None = 没开）或者每次现问的函数（serve：手机端口晚些重试打开了也显示出来）。"""
     hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
     origins = {f"http://{h}" for h in hosts}
     hits: list[float] = []
@@ -2843,7 +3401,7 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
             if not self._host_ok():
                 return
             u = urlparse(self.path)
-            if self._static(u.path):
+            if self._static(u.path, u.query):
                 return
             if u.path == "/api/chart":
                 self._chart(u.query, (clock or now_jst)())
@@ -2854,6 +3412,10 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
             if u.path == "/api/status":
                 self._json(*status_json(_book_of(u.query)))
                 return
+            if u.path == "/api/clientlog":
+                client_log(u.query, "Mac")
+                self._send(204, b"", "text/plain")
+                return
             if u.path == "/api/push/key":
                 from . import webpush as WP
                 self._json(200, {"ok": True, "key": WP.public_key()})
@@ -2861,8 +3423,9 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
             if u.path != "/":
                 self._text(404, "没有这个页面")
                 return
-            phone = {"port": phone_port, "url": PP.phone_url(), "devices": PP.devices(), "identity": PP.identity_state()}
-            self._page(lambda: render(_book_of(u.query), tok, (clock or now_jst)(), mode="local", phone=phone, trigger=trigger))
+            phone = {"port": phone_port() if callable(phone_port) else phone_port, "url": PP.phone_url(), "devices": PP.devices(), "identity": PP.identity_state()}
+            self._page(lambda: render(_book_of(u.query), tok, (clock or now_jst)(), mode="local", phone=phone, trigger=trigger,
+                                      tab=(parse_qs(u.query).get("tab") or [None])[0]))
 
         def do_POST(self):                                   # noqa: N802
             if not self._host_ok():
@@ -2887,7 +3450,7 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
                 if ok:
                     log.info("面板写了手动指令 %s（%s）", rec["id"], body.get("book"))
                     _after_submit(trigger, rec)
-                self._json(200 if ok else 400, {"ok": ok, "msg": msg, "id": (rec or {}).get("id")})
+                self._json(*_req_reply(ok, msg, rec))
             elif path == "/api/halt":
                 ok, msg = PP.create_halt(body.get("reason"), "Mac 操作面板", now)
                 self._json(200 if ok else 500, {"ok": ok, "msg": _halt_allin(msg) if ok else msg})
@@ -2963,15 +3526,18 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
             if not self._host_ok():
                 return
             u = urlparse(self._route())
-            if self._static(u.path):
+            if self._static(u.path, u.query):
                 return
-            if u.path not in ("/", "/pair", "/api/chart", "/api/quotes", "/api/status", "/api/push/key"):
+            if u.path not in ("/", "/pair", "/api/chart", "/api/quotes", "/api/status", "/api/push/key", "/api/clientlog"):
                 self._text(404, "没有这个页面")
                 return
             dev = self._who()
-            if u.path in ("/api/chart", "/api/quotes", "/api/status", "/api/push/key"):
+            if u.path in ("/api/chart", "/api/quotes", "/api/status", "/api/push/key", "/api/clientlog"):
                 if dev is None:
                     self._json(401, {"ok": False, "msg": "这台设备还没配对（或已被取消）"})
+                elif u.path == "/api/clientlog":
+                    client_log(u.query, "手机")
+                    self._send(204, b"", "text/plain")
                 elif u.path == "/api/push/key":
                     from . import webpush as WP
                     self._json(200, {"ok": True, "key": WP.public_key()})
@@ -2984,7 +3550,7 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
                 return
             if dev is None:
                 code = (parse_qs(u.query).get("c") or [""])[0] if u.path == "/pair" else ""
-                self._page(lambda: pair_page(code))
+                self._page(lambda: pair_page(code), "pair")
                 return
             if u.path == "/pair":
                 self._send(303, b"", "text/plain", [("Location", "/")])
@@ -2993,7 +3559,7 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
                 paired = PP.device_for(self.headers.get("Cookie"))
                 dev = dict(dev, paired=paired["name"]) if paired else dev
             self._page(lambda: render(_book_of(u.query), PP.csrf(dev["id"]), (clock or now_jst)(), mode="remote", device=dev,
-                                      trigger=trigger))
+                                      trigger=trigger, tab=(parse_qs(u.query).get("tab") or [None])[0]))
 
         def do_POST(self):                                   # noqa: N802
             if not self._host_ok():
@@ -3028,7 +3594,7 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
                 if ok:
                     log.info("手机（%s）写了手动指令 %s（%s）", dev["name"], rec["id"], body.get("book"))
                     _after_submit(trigger, rec)
-                self._json(200 if ok else 400, {"ok": ok, "msg": msg, "id": (rec or {}).get("id")})
+                self._json(*_req_reply(ok, msg, rec))
             elif path == "/api/halt":
                 ok, msg = PP.create_halt(body.get("reason"), f"手机 {dev['name']}", now)
                 self._json(200 if ok else 500, {"ok": ok, "msg": _halt_allin(msg) if ok else msg})
@@ -3060,47 +3626,266 @@ def _mtimes() -> dict:
     return out
 
 
-def _watch_code(stop: threading.Event, srv, every: float = 60.0) -> None:
-    """git pull 改了面板的代码 → 退出（LaunchAgent 的 KeepAlive 用新代码重启）。"""
-    first = _mtimes()
+WATCH_EVERY_S = 5.0                     # 多久看一次代码文件的修改时间
+RESTART_STABLE_S = 10.0                 # 改了之后这么久没再变才重启（一次 git pull 改好几个文件只重启一次；不读写到一半的文件）
+RESTART_DRAIN_S = 10.0                  # 重启 / 退出前等正在处理的请求做完：读的最多这么久
+RESTART_DRAIN_WRITE_S = 30.0            # 有写指令 / HALT 正在处理：最多这么久（绝不在写的中途换进程）
+TERM_DRAIN_S = (3.0, 10.0)              # 收到 SIGTERM（launchctl kickstart -k / unload）：读 / 写最多等几秒再退出（launchd 20 秒后强杀）
+PHONE_RETRY_S = 2.0                     # 手机端口打不开（旧进程还占着等）：后台多久重试一次
+PHONE_RETRY_FAST_FOR_S = 60.0           # 头这么久每 PHONE_RETRY_S 秒；之后每 PHONE_RETRY_SLOW_S 秒（一直试，开了就接上）
+PHONE_RETRY_SLOW_S = 30.0
+
+
+_PREFLIGHT_PY = r"""
+import importlib, pathlib, re, sys
+import qbreak.panel
+pkg = pathlib.Path(qbreak.panel.__file__).parent
+rx = re.compile(r"^[ \t]*from \.(\w*) import ([\w ,]+)", re.M)
+todo, seen = ["panel"], set()
+while todo:
+    m = todo.pop()
+    if m in seen:
+        continue
+    seen.add(m)
+    try:
+        importlib.import_module("qbreak." + m)
+        src = (pkg / (m + ".py")).read_text(encoding="utf-8")
+    except ModuleNotFoundError as e:
+        if (e.name or "").split(".")[0] == "qbreak":
+            raise
+        continue
+    except OSError:
+        continue
+    for a, names in rx.findall(src):
+        for n in ([a] if a else [x.strip().split(" as ")[0].strip() for x in names.split(",")]):
+            if n and ((pkg / (n + ".py")).exists() or (pkg / n / "__init__.py").exists()):
+                todo.append(n)
+print(len(seen))
+"""
+
+
+def _preflight() -> bool:
+    """新代码起得来吗：另一个进程里 import qbreak.panel，再把它（与它用到的 qbreak 模块）在函数里才 import 的 qbreak 模块也 import 一遍
+    （60 秒；2026-10-15 复核：以前只 import qbreak.panel，函数里才 import 的模块坏了照样换进来、页面 / 请求一用到就出错）。
+    缺的不是 qbreak 自己的模块（可选的依赖）不算。起不来 → False（不重启、照旧用旧代码；以前直接退出 → 新代码起不来、面板就没了）。"""
+    try:
+        r = subprocess.run([sys.executable, "-c", _PREFLIGHT_PY], cwd=str(paths.PROJECT_ROOT), capture_output=True,
+                           text=True, timeout=60, check=False)
+    except Exception as e:                                   # noqa: BLE001  试不了 → 照旧重启（和以前一样）
+        log.warning("面板的新代码没法先试（%s）：照旧重启", e)
+        return True
+    if r.returncode != 0:
+        log.warning("面板的新代码 import 失败：不重启、继续用旧代码（修好之后再改到文件就会再试）\n%s", (r.stderr or "")[-800:])
+        return False
+    return True
+
+
+def _watch_code(stop: threading.Event, srv, every: float = WATCH_EVERY_S, stable: float = RESTART_STABLE_S, preflight=None) -> None:
+    """git pull 改了面板的代码 → 平滑重启（2026-10-15 用户「qbreak网页app经常卡住 永久解决这个问题」：以前每 60 秒看一次、一变就退出等 launchd
+    重启 → 0.5〜1.8 秒连不上（手机经 Tailscale Serve 看到空的 502）、正在处理的现价 / K 线 / 写指令被切断；10-07〜10-15 启动了 61 次）：
+    ① 文件 stable 秒没再变才动；② 先在另一个进程里试着 import 新代码（坏了 → 不重启、记日志）；③ srv.shutdown()（停止接新连接；
+    监听端口不关，新连接在内核里排队）→ serve() 等正在处理的请求做完（写指令最多 30 秒）→ os.execv 换成新代码（同一个进程号、同一个监听端口：
+    手机看不到 502，最多晚 1 秒左右）。"""
+    base = _mtimes()
+    bad = None                                               # import 失败的那一版：文件再变了才再试
     while not stop.wait(every):
-        if _mtimes() != first:
-            log.info("面板的代码更新了：退出，让 LaunchAgent 用新代码重启")
-            print("面板的代码更新了（git pull）：退出；LaunchAgent 会用新代码重启（手动运行的话再运行一次）")
-            srv.shutdown()
-            return
+        cur = _mtimes()
+        if cur == base or cur == bad:
+            continue
+        last, since = cur, time.monotonic()
+        while True:                                          # 等文件不再变
+            if stop.wait(min(1.0, every)):
+                return
+            now_m = _mtimes()
+            if now_m != last:
+                last, since = now_m, time.monotonic()
+            elif time.monotonic() - since >= stable:
+                break
+        if last == base:                                     # 改回去了
+            continue
+        if not (preflight or _preflight)():
+            bad = last
+            continue
+        log.info("面板的代码更新了：平滑重启（监听端口不关；等正在处理的请求做完再换新代码）")
+        print("面板的代码更新了（git pull）：平滑重启（同一个进程号；手机不会断）")
+        srv.qb_restart = True
+        srv.shutdown()
+        return
+
+
+class _Inflight:
+    """正在处理的请求（两个端口一起算；write = POST）：平滑重启 / 收到 SIGTERM 时等它们做完再换进程 / 退出。"""
+
+    def __init__(self):
+        self.cv = threading.Condition()
+        self.n = 0
+        self.w = 0
+
+    def enter(self, write: bool) -> None:
+        with self.cv:
+            self.n += 1
+            self.w += 1 if write else 0
+
+    def leave(self, write: bool) -> None:
+        with self.cv:
+            self.n -= 1
+            self.w -= 1 if write else 0
+            self.cv.notify_all()
+
+    def drain(self, read_s: float, write_s: float) -> bool:
+        """等到没有正在处理的请求（有写的最多 write_s 秒，只有读的最多 read_s 秒）→ True；等不到 → False。"""
+        t0 = time.monotonic()
+        with self.cv:
+            while self.n > 0:
+                left = t0 + (write_s if self.w > 0 else read_s) - time.monotonic()
+                if left <= 0:
+                    return False
+                self.cv.wait(min(0.2, left))
+        return True
+
+
+_INFLIGHT = _Inflight()
 
 
 class _Srv(ThreadingHTTPServer):
     """面板的 HTTP 服务器：等着接的连接多留一些（socketserver 默认 5：一下点开很多行、K 线 / 现价同时取时会在 TCP 层被拒，
-    页面显示「K 线取不到」；2026-10-14 复核）。"""
+    页面显示「K 线取不到」；2026-10-14 复核）。平滑重启时排队的连接也在这里等。"""
     request_queue_size = 64
     daemon_threads = True
 
 
+FDS_ENV, TRIGGER_ENV = "QBREAK_PANEL_FDS", "QBREAK_PANEL_TRIGGER"   # 平滑重启（execv）交给新进程的：监听 socket 的 fd、自动叫执行器的状态
+
+
+def _make_srv(port: int, handler, fd: int | None = None) -> _Srv:
+    """监听 127.0.0.1:port。fd = 平滑重启前的进程留下的监听 socket（确认是 127.0.0.1:port 才接着用：端口一直没关，排队的连接照样接）；
+    用不了 → 照常 bind。"""
+    if fd is not None:
+        try:
+            sk = socket.socket(fileno=fd)
+        except OSError as e:
+            log.warning("平滑重启：接不上原来的监听 socket（fd %s：%s）：重新 bind", fd, e)
+        else:
+            try:
+                ok = sk.type == socket.SOCK_STREAM and tuple(sk.getsockname()[:2]) == ("127.0.0.1", int(port))
+            except OSError:
+                ok = False
+            if ok:
+                os.set_inheritable(fd, False)
+                srv = _Srv(("127.0.0.1", int(port)), handler, bind_and_activate=False)
+                srv.socket.close()
+                srv.socket = sk
+                srv.server_address = sk.getsockname()
+                srv.server_name, srv.server_port = "127.0.0.1", int(port)
+                return srv
+            sk.close()
+    return _Srv(("127.0.0.1", int(port)), handler)
+
+
+def _handoff() -> tuple[dict, dict | None]:
+    """平滑重启前的进程留下的东西（从环境变量里拿掉：不传给执行器等子进程）→ ({端口: fd}, 自动叫执行器的状态 | None)。"""
+    fds = {}
+    for part in (os.environ.pop(FDS_ENV, "") or "").split(","):
+        try:
+            p_, f_ = part.split(":")
+            fds[int(p_)] = int(f_)
+        except ValueError:
+            continue
+    raw = os.environ.pop(TRIGGER_ENV, "")
+    try:
+        trg = json.loads(raw) if raw else None
+    except ValueError:
+        trg = None
+    return fds, trg
+
+
+def _reexec(servers: list, trg: "Trigger | None") -> None:
+    """平滑重启：监听 socket 留给新进程（不关端口），os.execve 用同样的命令行换成新代码（同一个进程号：launchd 看不到退出、
+    面板叫的执行器还是它的子进程）。成功不返回；失败 → 返回（调用方照旧关端口退出，launchd 重启）。"""
+    env = dict(os.environ)
+    try:
+        env[FDS_ENV] = ",".join(f"{s.server_address[1]}:{s.socket.fileno()}" for s in servers if s is not None)
+        for s in servers:
+            if s is not None:
+                os.set_inheritable(s.socket.fileno(), True)
+        argv = [sys.executable] + list(getattr(sys, "orig_argv", [sys.executable] + sys.argv)[1:])
+        for h in logging.getLogger("qbreak").handlers:
+            h.flush()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        if trg is None:
+            os.execve(sys.executable, argv, env)
+        with trg.lock:                                       # 正在叫执行器的那一下做完再换（新进程接着管它）
+            env[TRIGGER_ENV] = json.dumps(trg.export_state(), ensure_ascii=False)
+            os.execve(sys.executable, argv, env)
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("平滑重启没成（%s）：退出，让 LaunchAgent 用新代码重启", e)
+
+
 def serve(port: int = 8765, open_browser: bool = False, trigger: bool = True, phone_port: int | None = PP.PHONE_PORT) -> int:
-    """在 127.0.0.1:port（本机）与 127.0.0.1:phone_port（手机，Tailscale Serve 用；0 = 不开）上运行（前台；LaunchAgent 用 KeepAlive 守着）。"""
+    """在 127.0.0.1:port（本机）与 127.0.0.1:phone_port（手机，Tailscale Serve 用；0 = 不开）上运行（前台；LaunchAgent 用 KeepAlive 守着）。
+    代码更新 → 平滑重启（_watch_code / _reexec）；SIGTERM → 等正在处理的请求做完再退出（launchd 重启）。"""
+    fds, tstate = _handoff()
+    for p_ in [x for x in fds if x not in (int(port), int(phone_port or 0))]:   # 交过来但这次不用的端口（参数改了）：关掉
+        try:
+            os.close(fds.pop(p_))
+        except OSError:
+            pass
     tok = token()
     trg = Trigger() if trigger else None
-    psrv = None
-    if phone_port:
+    if trg is not None and tstate:
+        trg.import_state(tstate)
+    pbox: list = [None]                                      # 手机端口的服务（打开之后才有；重试的线程也会写 → plock）
+    plock = threading.Lock()
+    # 先开本机端口（打不开 = 旧进程还占着 → 退出、launchd 重启），再开手机端口：手机端口打不开不再一直没有（2026-10-15 复核：
+    # 以前先开手机端口、打不开就整个进程都没有手机访问，要等下一次重启）→ 后台每 2 秒重试（1 分钟后每 30 秒），开了就接上
+    srv = _make_srv(int(port), make_handler(int(port), tok, trg, phone_port=lambda: int(phone_port) if pbox[0] is not None else None),
+                    fds.get(int(port)))
+    stop, term = threading.Event(), threading.Event()
+
+    def _phone_try(first: bool) -> bool:
         try:
-            psrv = _Srv(("127.0.0.1", int(phone_port)), make_phone_handler(int(phone_port), trg))
+            s_ = _make_srv(int(phone_port), make_phone_handler(int(phone_port), trg), fds.get(int(phone_port)) if first else None)
         except OSError as e:
-            log.warning("手机端口 127.0.0.1:%s 打不开（%s）：手机访问不可用", phone_port, e)
-            print(f"★ 手机端口 127.0.0.1:{phone_port} 打不开（{e}）：手机访问不可用，本机面板照常")
-    srv = _Srv(("127.0.0.1", int(port)), make_handler(int(port), tok, trg, phone_port=int(phone_port) if psrv else None))
-    stop = threading.Event()
-    if psrv is not None:
-        threading.Thread(target=psrv.serve_forever, daemon=True).start()
+            if first:
+                log.warning("手机端口 127.0.0.1:%s 打不开（%s）：后台重试，本机面板照常", phone_port, e)
+                print(f"★ 手机端口 127.0.0.1:{phone_port} 打不开（{e}）：后台重试，本机面板照常")
+            return False
+        with plock:
+            if stop.is_set():                                # 正在退出：不再开
+                s_.server_close()
+                return True
+            pbox[0] = s_
+        threading.Thread(target=s_.serve_forever, daemon=True).start()
+        if not first:
+            log.info("手机端口 127.0.0.1:%s 重试后打开了", phone_port)
+        return True
+
+    def _phone_retry() -> None:
+        t0 = time.monotonic()
+        while not stop.wait(PHONE_RETRY_S if time.monotonic() - t0 < PHONE_RETRY_FAST_FOR_S else PHONE_RETRY_SLOW_S):
+            if _phone_try(False):
+                return
+    if phone_port and not _phone_try(True):
+        threading.Thread(target=_phone_retry, daemon=True).start()
+
+    def _on_term(signum, frame):                             # launchctl kickstart -k / unload：等正在处理的请求做完再退出
+        if not term.is_set():
+            term.set()
+            threading.Thread(target=srv.shutdown, daemon=True).start()
+    try:
+        signal.signal(signal.SIGTERM, _on_term)
+    except ValueError:                                       # 不在主线程（测试）：照旧
+        pass
     if trg is not None:
         threading.Thread(target=trg.loop, args=(stop,), daemon=True).start()
     threading.Thread(target=_watch_code, args=(stop, srv), daemon=True).start()
     url = f"http://127.0.0.1:{port}/"
     print(f"操作面板：{url}（只在本机；Ctrl-C 结束）"
-          + (f"；手机端口 127.0.0.1:{phone_port}（Tailscale Serve 用；按 Tailscale 账户登录或配对）" if psrv else ""))
-    log.info("操作面板启动 %s%s", url, f"（手机端口 {phone_port}）" if psrv else "")
-    if open_browser:
+          + (f"；手机端口 127.0.0.1:{phone_port}（Tailscale Serve 用；按 Tailscale 账户登录或配对）" if pbox[0] is not None else "")
+          + ("（平滑重启：接着用原来的端口）" if fds else ""))
+    log.info("操作面板启动 %s%s%s", url, f"（手机端口 {phone_port}）" if pbox[0] is not None else "", "（平滑重启）" if fds else "")
+    if open_browser and not fds:
         try:
             subprocess.run(["open", url], timeout=20, capture_output=True, check=False)
         except Exception:                                    # noqa: BLE001
@@ -3110,9 +3895,26 @@ def serve(port: int = 8765, open_browser: bool = False, trigger: bool = True, ph
     except KeyboardInterrupt:
         pass
     finally:
-        stop.set()
+        with plock:
+            stop.set()                                       # 之后重试的线程不再开手机端口
+            psrv = pbox[0]
         if psrv is not None:
             psrv.shutdown()
+        restart = bool(getattr(srv, "qb_restart", False)) and not term.is_set()
+        if not restart:                                      # SIGTERM / Ctrl-C：先关监听（排队的连接马上被拒、浏览器 / Serve 马上重试，
+            for s_ in (srv, psrv):                           # 不干等到下面的 drain 做完；新进程也能马上 bind）。平滑重启不关（交给新进程）
+                if s_ is not None:
+                    try:
+                        s_.socket.close()
+                    except OSError:
+                        pass
+        if restart or term.is_set():
+            rs, ws = (RESTART_DRAIN_S, RESTART_DRAIN_WRITE_S) if restart else TERM_DRAIN_S
+            if not _INFLIGHT.drain(rs, ws):
+                log.warning("%s：还有 %d 个请求没做完（等了 %.0f 秒）", "平滑重启" if restart else "退出", _INFLIGHT.n, ws if _INFLIGHT.w else rs)
+        if restart:
+            _reexec([srv, psrv], trg)                        # 成功就不回来了
+        if psrv is not None:
             psrv.server_close()
         srv.server_close()
     return 0
