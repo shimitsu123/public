@@ -130,9 +130,9 @@ function adjPrevFix(n){                                                    // �
   ADJ.cost = k>0 ? k*c.px : 0; fundBox($('#adj-fund'), ADJ.cost, c.t);     // 2026-10-12：买的话钱不够 → 从持仓平摊凑（同个股买入）
   const head = k>0 ? '买入 '+fmt(k)+' 口（约 '+yen(k*c.px)+'）：' : k<0 ? '卖出 '+fmt(-k)+' 口（约 '+yen(-k*c.px)+'）：' : '保持现在的口数：';
   out.textContent = head+fmt(c.shares)+' → '+fmt(t)+' 口，约 '+yen(t*c.px)+' · 约占权益 '+pctOf(t)+(n>cap ? '\n★ 超过总权益：截到 '+fmt(t)+' 口' : '')
-    +'\n下一次决策起（交易日 07:40，开盘下单）正好调到 '+fmt(t)+' 口，不再按规则（牛熊 / 股债相关）自动调；一直有效，直到点「恢复按规则」。'
+    +'\n什么时候：'+(CFG.when_fix||'下一次决策（交易日 07:40）→ 那天 09:00 开盘')+'；正好调到 '+fmt(t)+' 口，之后不再按规则（牛熊 / 股债相关）自动调；一直有效，直到点「恢复按规则」。'   // D1（2026-10-15）：与执行器同一个时段口径
     +(k>0 ? fixFundNote(k*c.px, c.t) : '\n剩下的钱照规则分给其他核心 ETF；规则不拿别的 ETF 时留现金。')
-    +'\n点「确定」→ 先列出要下的单（哪几只、多少口、什么时候、按什么价），再点「确认下单」才写；盘中也不会马上下单。';   // 2026-10-15
+    +'\n点「确定」→ 先列出要下的单（哪几只、多少口、什么时候、按什么价），再点「确认下单」才写。';   // 2026-10-15
   go.textContent = k>0 ? '确定：买入 '+fmt(k)+' 口' : k<0 ? '确定：卖出 '+fmt(-k)+' 口' : '确定：固定 '+fmt(t)+' 口';
   go.className = k<0 ? 'btn danger' : 'btn primary'; go.disabled = !(c.px>0);
 }
@@ -143,11 +143,14 @@ function fixFundNote(cost, skip){                                         // 固
   if(FUND_MODE==='split'){ const p=fundSplit(cost, skip); need=p ? p.rows.filter(r=>r.kind==='core').reduce((a,r)=>a+r.yen, 0)+p.left : short; }
   if(!(need>0)) return '';
   const q=F.core_pct==null ? 100 : F.core_pct; let room=0;
-  for(const h of (F.hold||[])){                                            // 执行器最多卖到它们自己的规则目标（目标 = 规则目标额 × 闲置资金比例）
-    if(h.kind!=='core' || h.t===skip || fix.indexOf(h.t)>=0 || !(h.cur>0) || !(h.px>0)) continue;
-    const c=C[h.t], L=h.lot||1, tg=c ? Math.floor(c.u100*q/100/L+1e-9)*L : h.cur;
+  for(const h of (F.hold||[])){                                            // 决策：最多卖到它们自己的规则目标（目标 = 规则目标额 × 闲置资金比例）
+    if(h.kind!=='core' || h.t===skip || fix.indexOf(h.t)>=0 || !(h.cur>0) || !(h.px>0)) continue;   // 盘中（D1）：按缺多少卖，最多卖光
+    const c=C[h.t], L=h.lot||1, tg=CFG.fix_now ? 0 : (c ? Math.floor(c.u100*q/100/L+1e-9)*L : h.cur);
     room+=Math.max(0, h.cur-tg)*h.px;
   }
+  if(CFG.fix_now) return room>=need
+    ? '\n现金不够的约 '+yen(need)+'：执行器盘中先卖没固定的核心 ETF 补足（大的先卖、按缺多少卖），卖出成交后再买'
+    : '\n★ 钱可能不够：还差约 '+yen(need)+'，没固定的核心 ETF 全卖也只有约 '+yen(room)+' → 执行器按当时的钱少买';
   return room>=need
     ? '\n现金不够的约 '+yen(need)+'：执行器在那次决策里先卖别的核心 ETF 补足（在再平衡带以内也卖，最多卖到它们的规则目标）'
     : '\n★ 钱可能不够：还差约 '+yen(need)+'，别的核心 ETF 最多能卖约 '+yen(room)+'（只卖到它们的规则目标）→ 执行器按当时的钱少买';
@@ -512,7 +515,7 @@ document.addEventListener('click', async e=>{
     const q=await ask('撤单 '+(d.side==='BUY'?'买 ':'卖 ')+tqty(d.t, fmt(+d.qty)+(d.core==='1'?' 口':' 股'), d.name),
       hint+'。'+(d.unsent==='1' ? '' : (CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天的单」的状态）'))
       +(d.deps ? '\n★ '+d.deps : '')                                    // 靠这笔卖出的钱的买单（服务器算：data-deps；2026-10-15）
-      +(dep>0 ? '\n「一起撤买单」= 这几笔买单也撤（执行器不再发）；「只撤卖单」= 买单按现在的钱重算'+(d.fix ? '；「撤单并恢复按规则」= 一起撤、再取消固定口数（下一次决策照规则）' : '') : ''),
+      +(dep>0 ? '\n「一起撤买单」= 这几笔买单也撤（执行器不再发）；「只撤卖单」= 买单按现在的钱重算'+(d.fix ? '；「撤单并恢复按规则」= 一起撤、再取消固定口数（照规则调：什么时候见下一个确认框）' : '') : ''),
       dep>0 ? '一起撤买单' : '撤单', {danger:true, alt:alt});
     if(!q.ok) return;
     const body={book:CFG.book, kind:'cancel_order', cid:d.cid};

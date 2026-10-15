@@ -156,6 +156,11 @@ def test_due_ignores_core_only_and_handled_requests():
     b = _book()
     MO.append("paper", {"kind": "core", "pct": 50})
     assert not MO.due("paper", b, AT)
+    MO.append("paper", {"kind": "corefix", "ticker": "1545", "units": 50})   # 固定口数（D1）：不进寄付的补单（due）、开盘后马上（now_due）
+    assert not MO.due("paper", b, AT) and not MO.now_due("paper", b, AT)
+    assert MO.now_due("paper", b, dt.datetime(2026, 10, 6, 9, 0, tzinfo=JST))
+    MO.requests_path("paper").unlink()
+    MO.append("paper", {"kind": "core", "pct": 50})
     rec = MO.append("paper", {"kind": "sell", "ticker": "7203"})
     assert MO.due("paper", b, AT) and not MO.due("paper", b, dt.datetime(2026, 10, 6, 8, 55, tzinfo=JST))
     b["manual"] = {"items": {r["id"]: {**r, "status": "placed"} for r in MO.read_all("paper")}}
@@ -790,7 +795,8 @@ def test_corefix_card_shows_a_registered_change_and_the_buttons_after_it():
     assert "手动固定 678 口</b>" in html and _btn(html, "corefix-clear", "1482.T") and _btn(html, "corefix", "1482.T").endswith("固定口数…")
     rec = MO.append("paper", {"kind": "corefix", "ticker": "1482", "clear": True}, clock=lambda: AT15)
     html = panel.render("paper", "t" * 40, AT15)
-    assert "已登记：恢复按规则</b>" in html and "在那之前还是手动固定 678 口" in html and "要撤回也在那里" in html
+    assert "已登记：恢复按规则</b>" in html and "在那之前还是手动固定 678 口" in html and "要撤回在「交易」→「手动指令」" in html
+    assert "（执行器还没读；今天 09:00 开盘后马上（按现价限价，不是寄付）；" in html   # 什么时候下单（D1：与执行器同一个时段口径）
     assert not _btn(html, "corefix-clear", "1482.T") and _btn(html, "corefix", "1482.T").endswith("买入…")   # 恢复按规则之后没拿 → 买入…
     MO.append("paper", {"kind": "cancel", "target": rec["id"]}, clock=lambda: AT15 + dt.timedelta(minutes=1))
     html = panel.render("paper", "t" * 40, AT15)

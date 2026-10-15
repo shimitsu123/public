@@ -229,7 +229,11 @@ def test_clear_text_while_paused_and_with_todays_order():
     _morning(r2)
     plan = r2.eng.st.core_plan.get("1545.T")
     assert plan and plan[0] == "SELL"
-    txt = MO.corefix_clear_text(r2.ux.book, "1545.T", r2.tag, _at(r2, 8, 0))
+    txt = MO.corefix_clear_text(r2.ux.book, "1545.T", r2.tag, _at(r2, 8, 0))   # 决策之后、开盘前（D1）：09:00 开盘后马上，先等还挂着的寄付单
+    assert txt.startswith("今天 09:00 开盘后马上（按现价限价，不是寄付）调到规则现在的口数")
+    assert f"今天开盘已排的 1545 纳斯达克 100 卖 {plan[1]:,} 口 还挂着：先等它成交 / 撤掉，再按成交后的口数调" in txt
+    assert "今天的单成交后约 1,000 口" in txt and "→ 买 420 口" in txt
+    txt = MO.corefix_clear_text(r2.ux.book, "1545.T", r2.tag, _at(r2, 16, 0))  # 收盘后：下一次决策那条路（照旧）
     assert f"今天开盘已排的 1545 纳斯达克 100 卖 {plan[1]:,} 口照常（要不做：「今天的单」→ 撤单）；下一次决策起照规则，可能反向买卖" in txt
     assert "今天的单成交后约 1,000 口" in txt
 
@@ -268,6 +272,10 @@ def test_panel_fixed_etf_has_no_ratio_buttons_and_the_clear_button_explains():
     assert "data-act='core-sell' data-t='1482.T'" not in h and "data-act='core-sell' data-t='1545.T'" in h
     assert "手动固定：卖出 / 减仓 / 加仓用下面的「固定口数…」" in h
     assert "1482.T" not in _cfg(h)["cores"] and "1545.T" in _cfg(h)["cores"]
+    m = re.search(r"data-plan='([^']*)' data-act='corefix-clear' data-t='1482.T'", h)
+    assert m and m.group(1).startswith("马上（盘中）按现价下单（模拟账户当场成交）调到规则现在的口数")   # 盘中（D1）：马上调到规则的口数
+    assert "规则现在不拿（熊市 / 换 ETF）→ 全部卖出 100 口" in m.group(1)
+    h = panel.render(r.tag, "tok", now=_at(r, 16, 0))                     # 收盘后：下一次决策
     m = re.search(r"data-plan='([^']*)' data-act='corefix-clear' data-t='1482.T'", h)
     assert m and "规则现在不拿（熊市 / 换 ETF）→ 下一次决策全部卖出 100 口" in m.group(1)
 

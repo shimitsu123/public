@@ -4118,7 +4118,7 @@ def _live_unified_run(a, opened: list) -> int:
                              "active": 0}, today=now_jst().date().isoformat()):
             print(f"  {NM.annotate(ln[2:])}")
         for r_ in _MO.unseen(tag, b_):
-            print(f"  手动指令 {r_['id']}：{_MO.describe(r_)} → 等执行器读（下一次运行）")
+            print(f"  手动指令 {r_['id']}：{_MO.describe(r_)} → {_MO.wait_text(r_, now_jst(), b_, tag)}")   # 什么时候（D1 / D5，2026-10-15）
         page()
         return 0
     if a.remote_halt:                                   # 云端对话里你说「停」→ 仓库的 var/HALT_REMOTE → 这里建本地 HALT（同一个 id 只生效一次）
@@ -4507,7 +4507,7 @@ def cmd_manual(a) -> int:
                                     "想拿 " + "、".join(f"{_lab(t)} 约 {n:,} 口" for t, n in want_) if want_ else "不拿核心 ETF")
                   + "（确认买入：bash scripts/liveu.sh manual core --pct 100）")
         for r_ in MO.unseen(tag, b_):
-            print(f"  手动指令 {r_['id']}：{MO.describe(r_)} → {'等下单' if r_.get('kind') in MO.ORDER_KINDS else '等执行器读'}"
+            print(f"  手动指令 {r_['id']}：{MO.describe(r_)} → {MO.wait_text(r_, now, b_, tag)}"   # 什么时候（D1 / D5，2026-10-15：与面板 / 执行器同一个时段口径）
                   f"（写于 {MO.mmdd(r_.get('at'))}）")
         if paths.halt_file().exists():                        # HALT 中：解除之前先看清积压的买卖指令与写入日期（2026-10-13 resume-other-3）
             un_ = MO.unseen(tag, b_)
@@ -4623,7 +4623,10 @@ def cmd_manual(a) -> int:
         if rec.get("clear"):
             print(_ann(MO.corefix_clear_text(b_, rec["ticker"], tag, now)))
         else:
-            print(f"下一次决策（交易日 07:40）起 {_lab(rec['ticker'])} 调到 {int(rec.get('units') or 0):,} 口、开盘下单；不按规则自动调，直到 corefix --clear")
+            fl_ = MO.corefix_fill(now, b_, tag)              # D1（2026-10-15）：盘中 / 开盘前写的也马上按现价下（与卖出 / 买入同一个时段口径）
+            print(f"{_lab(rec['ticker'])} 调到 {int(rec.get('units') or 0):,} 口：{fl_['text']}；之后不按规则自动调，直到 corefix --clear"
+                  + ("：操作面板开着的话会马上叫执行器；没开就运行 bash scripts/liveu.sh run --broker "
+                     + ("paper" if paper else "tachibana") + " --phase now" if fl_["mode"] == "now" else ""))
             if rec.get("from_kind"):
                 print("这只 ETF 是手动固定的：只改它的固定口数（别的 ETF 与闲置资金比例不变）")
         for ln in (pv_ or {}).get("text", "").split("\n")[1:]:       # 与页面「确认下单」框同一份：预计的单（别的 ETF 卖多少）、哪天、按什么价（2026-10-15）

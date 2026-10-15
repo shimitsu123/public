@@ -431,6 +431,9 @@ def cancel_hint(o, book: dict | None, now: dt.datetime, tag: str | None = None) 
         return f"{head}；手动指令的单：那条指令也撤回（之后不再下；已经成交的部分照记）"
     if r == "manual_fund":
         return f"{head}；这是盘中为手动买入凑钱的核心 ETF 卖单：那条买入默认一起撤回（钱不够就不买）"
+    if r == "fix_fund":                                     # 盘中为固定口数凑钱的卖单（D1；2026-10-15）
+        return (f"{head}；这是盘中为手动固定口数凑钱的核心 ETF 卖单：撤了就不再为这次固定口数凑钱，固定的那只按手上的钱少买"
+                f"（固定口数仍有效 → {nd} 的决策还会再排）")
     if kind == "core":
         fx = _core_fix_of(book, tag)
         d = ((book or {}).get("state") or {}).get("last_date")

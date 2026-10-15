@@ -207,6 +207,9 @@ class UnifiedExecutor:
         self.manual = Manual(self.book, manual_tag, self.clock) if manual_tag else None   # 手动指令（演练 / 回放不读）
         if self.manual is not None:
             self._wire_manual()
+            cr0 = self.book.get("core_rule")
+            if cr0 and "fix_applied" not in cr0:            # 旧账本（D1 之前）：现在的固定口数已经由那时的决策排过单 → 不追溯（读新指令之前记下）
+                cr0["fix_applied"] = {str(t): int(u) for t, u in sorted((self.manual.m.get("core_fix") or {}).items())}
 
     # ── 账本 ──
     def _active(self) -> list[ExecOrder]:
@@ -379,6 +382,7 @@ class UnifiedExecutor:
             cr["band_pct"] = float(eng.cfg.band_pct)        # 再平衡带（总权益 %）：「恢复按规则」的差额在带内 → 规则可能不动
         if exact and eng.st.core_plan:
             cr.update(exact_on=eng.st.last_date, exact_plan=sorted(eng.st.core_plan))
+        cr["fix_applied"] = {str(t): int(u) for t, u in sorted((eng.core_fix or {}).items())}   # 这次决策照哪些固定口数排了单（D1：盘中 fix_moves 的起点）
         prev = self.book.get("core_rule") or {}
         if self.manual is not None and float(self.manual.core_pct) <= 0 and prev.get("units100") is not None:
             own = lambda c: {t: int((c.get("rule100") or {}).get(t, n)) for t, n in (c.get("units100") or {}).items()}   # noqa: E731
@@ -997,6 +1001,7 @@ class UnifiedExecutor:
                 cr = self.book.get("core_rule")
                 if cr is not None and cr.get("decided_on") == d:
                     cr["pct"] = cr["applied"] = round(prev, 2)
+                    cr["fix_applied"] = {str(t): int(u) for t, u in sorted((man.m.get("core_fix") or {}).items())}   # 恢复的固定口数：等下一次决策（盘中不另调；D1）
                     cr.pop("exact_on", None)
                     cr.pop("exact_plan", None)
                 self._allin_slots(d, txt)
@@ -1474,6 +1479,10 @@ class UnifiedExecutor:
         立花能不能买 / 不买回 / 决算前 / 新仓倍数 0、名额、单只上限、单笔上限；买入限价 = min(现价 +0.5%, 决策日收盘 ×1.03)
         （现价高于收盘 ×1.03 → 不买，与开盘买入同一个上限）；钱不够 → 先卖核心 ETF（今天有单的核心不动），还不够就减股。
         今天已经有执行器的单的票（规则 / 手动，开盘或盘中）不下第二笔 → 明天早上的运行处理（明天开盘）。
+        固定口数（D1；2026-10-15 用户「盘中下的单应该是进行实时成交的」）：固定口数 ≠ 最近一次照它排了单的口数（MO.corefix_pending）→
+        这只 ETF 照它调（fix_moves：先卖后买；恢复按规则 = 规则自己的目标 × 闲置资金比例）；同一只今天还没到交易所的核心单被取代，
+        已经在交易所的先等它成交 / 撤掉（不叠单）；买入的钱不够 → 先卖不固定的核心 ETF（与手动买入的凑钱同一套）。
+        核心 ETF 的盘中买单（比例与固定口数）限价 = min(现价 +0.5%, 决策日收盘 ×1.02)（M14）。
         返回 {"placed", "later", "rejected", "retry"} 各几条 + "items"（每条指令的状态与说明）。"""
         out = {"placed": 0, "later": 0, "rejected": 0, "retry": 0, "items": []}
         man = self.manual
@@ -1487,12 +1496,21 @@ class UnifiedExecutor:
         stamp, today = now.isoformat(timespec="seconds"), now.date()
         todo = [it for it in man.pending(MO.ORDER_KINDS) if it.get("hold") != today.isoformat()]   # 「明天开盘」的不再试
         core_want = self._core_pending(today)                 # 闲置资金比例改了：核心 ETF 也马上照新比例调
-        if not todo and core_want is None:
+        fix_want = MO.corefix_pending(self.book, None, now)   # 固定口数改了、还没照它调（D1；与面板 now_due 同一个判断）→ {票: 口数 | None（恢复按规则）}
+        if not todo and core_want is None and not fix_want:
             self.save()
             return out
         cr = self.book.setdefault("core_rule", {}) if core_want is not None else (self.book.get("core_rule") or {})
         core_it = ([None] + sorted((it for it in man.m["items"].values() if it.get("kind") == "core" and it.get("status") == "done"),
                                    key=lambda x: x.get("at", "")))[-1]          # 最新生效的闲置资金比例指令（同一时刻 → 后写的）
+        fix_its: dict = {}                                    # 每只 ETF 最新生效的固定口数 / 恢复按规则指令（说明写在它上面）
+        for x in sorted((x for x in man.m["items"].values() if x.get("kind") == "corefix" and x.get("status") == "done"
+                         and not x.get("fund_for")), key=lambda x: x.get("at", "")):
+            fix_its[x["ticker"]] = x
+
+        def fix_row(t: str, u, status: str, msg: str) -> dict:
+            lab = f"{_lab(t)} 恢复按规则" if u is None else f"{_lab(t)} 固定 {int(u):,} 口"
+            return {"id": (fix_its.get(t) or {}).get("id", "corefix"), "ticker": t, "status": status, "msg": f"{lab}：{msg}"}
         eng, st, b = self.eng, self.eng.st, self.b
         d = st.last_date
         k = int(eng.gidx.searchsorted(dt.datetime.fromisoformat(d))) if d else len(eng.gidx)
@@ -1518,6 +1536,11 @@ class UnifiedExecutor:
                 out["retry"] += 1
                 out["items"].append({"id": (core_it or {}).get("id", "core"), "ticker": f"闲置资金比例 {core_want:g}%",
                                      "status": "等", "msg": why})
+            if fix_want:                                      # 固定口数：一会儿再试（HALT：解除后照它买卖 ETF）
+                cr["fix_tried"] = stamp
+                for t_, u_ in sorted(fix_want.items()):
+                    out["retry"] += 1
+                    out["items"].append(fix_row(t_, u_, "等", MO.HALT_CORE_MSG if halted else why))
             self._event("warn" if halted else "info", f"手动指令 {out['retry']} 条这次没下：{why}")
             self.save()
             return out
@@ -1534,6 +1557,10 @@ class UnifiedExecutor:
                 out["later"] += 1
                 out["items"].append({"id": (core_it or {}).get("id", "core"), "ticker": f"闲置资金比例 {core_want:g}%",
                                      "status": "明天开盘", "msg": msg})
+            for t_, u_ in sorted(fix_want.items()):            # 固定口数：今天不再试，下一次决策照它调（D1）
+                cr.setdefault("fix_defer", {})[t_] = {"day": today.isoformat(), "units": u_}
+                out["later"] += 1
+                out["items"].append(fix_row(t_, u_, "明天开盘", msg))
             self.save()
             return out
         self._raise_if_unknown()
@@ -1554,7 +1581,7 @@ class UnifiedExecutor:
                 u100s = ({t: MO.core_u100_est(st.core_units.get(t, 0), st.core_plan.get(t)) for t in set(st.core_units) | set(st.core_plan)}
                          if abs(float(cr.get("applied", 100.0)) - 100.0) <= 1e-9 else
                          {t: 0 for t, u in st.core_units.items() if int(u) > 0})          # 比例已经改过（今天调过）→ 只会是卖出全部
-            fixed = set(man.m.get("core_fix") or {}) | set(eng.core_fix or {})   # 固定口数的 ETF：比例不管它（下一次决策照固定口数；2026-10-13）
+            fixed = set(man.m.get("core_fix") or {}) | set(eng.core_fix or {}) | set(fix_want)   # 固定口数的 ETF：比例不管它（固定口数那段照它调；2026-10-13 / D1）
             for t, n100 in sorted(u100s.items()):
                 if t in eng.col and t not in fixed:
                     lt = int(eng.lots[eng.col[t]])
@@ -1562,7 +1589,8 @@ class UnifiedExecutor:
                     tgt = int(math.floor(int(n100) * core_want / 100 / lt + 1e-9)) * lt
                     if tgt != cur or t in busy:               # 今天已经有单的：账本的口数还没算进今天的成交 → 下一次决策再调
                         core_moves[t] = (cur, tgt)
-        want_px = sorted({it["ticker"] for it in todo} | {t for t in cores if t not in busy} | {t for t in core_moves if t not in busy})
+        want_px = sorted({it["ticker"] for it in todo} | {t for t in cores if t not in busy} | {t for t in core_moves if t not in busy}
+                         | set(fix_want))
         try:
             px = {t: float(v) for t, v in (quote(want_px) or {}).items() if v and float(v) > 0}
         except Exception as e:                                # noqa: BLE001
@@ -1644,11 +1672,15 @@ class UnifiedExecutor:
                            or (self.paper and o.phase == "morning" and o.status in ACCEPTED)))
             return (float(b.cash()) - res - rsv) * (1 - buf)
 
-        def fund_src() -> tuple[list, float, float, float]:
+        def fund_src(skip=None) -> tuple[list, float, float, float]:
             """凑钱能卖的核心 ETF（G6；2026-10-14）→ ([(票, 能卖的口数, 现价)], 全卖的净额, 取不到现价的按收盘估的净额,
-            今天已经有执行器的单的按收盘估的净额)。后两种这次不卖：取不到现价 → 一会儿再试，今天有单 → 明天开盘。"""
+            今天已经有执行器的单的按收盘估的净额)。后两种这次不卖：取不到现价 → 一会儿再试，今天有单 → 明天开盘。
+            skip：不拿来凑的（默认：这次要照固定口数调的 ETF；给固定口数凑钱时另外不卖固定的；D1）。"""
+            skip = set(fix_want) if skip is None else set(skip)
             ok, val, noq, bz = [], 0.0, 0.0, 0.0
             for c in cores:
+                if c in skip:
+                    continue
                 u = int(st.core_units.get(c, 0))
                 if held is not None:
                     u = min(u, held.get(c, 0))
@@ -1667,18 +1699,18 @@ class UnifiedExecutor:
                 val += net - float(eng.c_fee[c]["SELL"](net))
             return ok, val, noq, bz
 
-        def fund(short: float) -> tuple[list[str], dict, list[str], list[ExecOrder]]:
-            """钱不够：卖核心 ETF 补 short 円（今天有单的、取不到现价的核心不动；按现价）。
-            → (说明, {票: 卖出口数}, 没下成的说明, 受理了的卖单)。"""
+        def fund(short: float, skip=None, reason: str = "manual_fund") -> tuple[list[str], dict, list[str], list[ExecOrder]]:
+            """钱不够：卖核心 ETF 补 short 円（今天有单的、取不到现价的核心不动；按现价）。reason：manual_fund（手动买入）/
+            fix_fund（固定口数；D1）。→ (说明, {票: 卖出口数}, 没下成的说明, 受理了的卖单)。"""
             notes, sold, fails, fos = [], {}, [], []
-            for c, u, pc in fund_src()[0]:
+            for c, u, pc in fund_src(skip)[0]:
                 if short <= 0 or self._unk_stop:             # 前面有一笔状态不明：不再发（G3）
                     break
                 lot_c, net = lot_of(c), pc * (1 - float(eng.c_slip[c]))
                 n = min(u, int(math.ceil(short / max(net * 0.995, 1e-9) / lot_c)) * lot_c)
                 if n <= 0:
                     continue
-                o = ExecOrder(f"U{d}-SELL-{c}-{tag}", c, "SELL", "core", n, d, ref_px=pc, reason="manual_fund", phase="now")
+                o = ExecOrder(f"U{d}-SELL-{c}-{tag}", c, "SELL", "core", n, d, ref_px=pc, reason=reason, phase="now")
                 if self.paper:
                     b.set_prices({c: pc})
                 self.orders.append(o)
@@ -1799,6 +1831,246 @@ class UnifiedExecutor:
         core_done, core_wait, core_retry = [], [], []
         core_today = {o.ticker for o in self._active() if o.reason == "manual_core" and not self._unsent_now(o)}   # 今天已经照比例调过一次的 ETF
 
+        def core_lim(t: str, p: float, lt: int) -> tuple[float, str | None]:
+            """盘中核心 ETF 买单的限价（比例与固定口数一样；M14，2026-10-15：以前只有 现价 +0.5%，急涨时追高）：
+            min(现价 +0.5%, 决策日收盘 ×1.02（与早上的核心买单同一个上限）)，再夹进当天的制限値幅（立花适配器发单时也夹）；
+            现价高于收盘 ×1.02 → 这次不买，一会儿再试（与个股盘中买入「现价超过收盘 ×1.03 不买」同一个写法）。→ (限价, 不买的理由)。"""
+            c = float(eng._px_close(t, k) or 0)
+            raw = round_to_tick(p * (1 + NOW_BUY_BUF), t, "BUY", lot=lt)
+            if c <= 0:
+                return raw, None
+            cap = round_to_tick(c * MO.CORE_BUY_LIMIT, t, "BUY", lot=lt)
+            if p > c * MO.CORE_BUY_LIMIT + 1e-9:
+                return 0.0, f"现价 ¥{p:,g} 高于 {d} 收盘 ¥{c:,g} ×{MO.CORE_BUY_LIMIT:g}（¥{cap:,g}）：这次不买"
+            return min(raw, cap, round_to_tick(LO.px_band(c)[1], t, "BUY", lot=lt)), None
+
+        # ── 固定口数（D1；2026-10-15）：每只改了固定口数的 ETF 照它调（先卖后买；买入钱不够 → 先卖不固定的核心 ETF）──
+        fix_res: dict[str, tuple[str, str]] = {}            # 票 → ("done" | "retry" | "later", 说明)
+        fix_go: dict[str, dict] = {}                         # 票 → {cur, tgt, lot, u, unsent}：这次要调的
+        fix_placed: set = set()
+        nf = next_trading_day(today)
+        nd_txt = f"{nf:%m/%d} 07:40 的决策 → {nf:%m/%d} 09:00 开盘"
+        fix_skip = set(fix_want) | set(man.m.get("core_fix") or {}) | set(core_moves)   # 给固定口数凑钱：只卖不固定、这次比例也不调的核心 ETF
+
+        def fix_prep() -> None:
+            """每只：目标（固定口数；恢复按规则 = 规则目标 rule100 × 闲置资金比例）、现在口数（账本 + 今天已经成交的）、
+            今天同一只的单：还没到交易所的（之后被取代）/ 还挂在交易所的（不叠单：先等）。"""
+            for t, u in sorted(fix_want.items()):
+                tl = _lab(t)
+                if self._unk_stop:                            # 前面有一笔下单结果不明：不再发（G3）
+                    fix_res[t] = ("later", f"{tl} {UNK_STOP} → {MO.UNK_LATER}")
+                    continue
+                if t not in eng.col:
+                    fix_res[t] = ("later", f"行情里没有 {tl} → 下一次决策照它调（{nd_txt}）")
+                    continue
+                lt = lot_of(t)
+                r100 = (cr.get("rule100") or {}).get(t) if u is None else None
+                unsent, live, net, sides = [], [], 0, set()
+                for o in self._active():
+                    if o.ticker != t:
+                        continue
+                    if o.status in ("PLANNED", "DEFERRED") or (o.status == "BLOCKED" and not self._unsent_now(o)):
+                        unsent.append(o)                      # 还没到交易所：下新的单时被取代
+                        continue
+                    if u is None and r100 is None:
+                        continue
+                    q = int(o.filled_qty or 0)
+                    if o.status in ("SENT", "PARTIAL") or o.status in UNKNOWN:
+                        fin = ""
+                        if o.status in ("SENT", "PARTIAL") and o.broker_id and not self.paper:
+                            try:                              # 立花：早上的寄付单可能已经成交了（账本明天早上才记）→ 查注文
+                                r_ = self.b.order_status(o.broker_id, o.order_date)
+                                q, fin = max(q, int(r_.get("filled_qty") or 0)), str(r_.get("final") or "")
+                            except Exception:                 # noqa: BLE001  查不到：当作还挂着
+                                fin = ""
+                        if not fin and q < int(o.sent_qty or o.qty):
+                            live.append(o)
+                    if q > 0:
+                        net += q if o.side == "BUY" else -q
+                        sides.add(o.side)
+                if u is None and r100 is None:                # 恢复按规则、规则自己的目标还没算过：盘中不调；今天还没发出的（为固定口数排的）同样被取代
+                    pre = fix_supersede({"unsent": unsent})
+                    fix_res[t] = ("done", f"{pre}规则自己的目标执行器还没算过 → 盘中不调，下一次决策照规则（{nd_txt}）")
+                    continue
+                tgt = int(u) if u is not None else int(math.floor(int(r100) * float(man.core_pct) / 100 / lt + 1e-9)) * lt
+                if live:                                      # 不叠单：模拟账户的寄付单等开盘撮合、立花的等成交 / 撤掉
+                    fix_res[t] = ("retry", "先等今天还挂着的 " + "、".join(_otag(o, o.sent_qty or o.qty) for o in live)
+                                  + " 单成交 / 撤掉，再按成交后的口数调")
+                    continue
+                cur = max(0, int(st.core_units.get(t, 0)) + net)
+                if tgt != cur and sides == {"BUY", "SELL"}:   # 差金決済：同一只当天已经买过也卖过 → 不再来回
+                    fix_res[t] = ("later", f"{tl} 今天已经买过也卖过（差金決済：同一只当天不再来回买卖）→ 下一次决策照它调（{nd_txt}）")
+                    continue
+                fix_go[t] = {"cur": cur, "tgt": tgt, "lot": lt, "u": u, "unsent": unsent}
+
+        def fix_supersede(info: dict) -> str:
+            """同一只今天还没到交易所的核心单（计划 / 等开盘后 / 被挡）→ SKIPPED「被新的固定口数取代」（执行器不再发；
+            卖单：靠它的钱的买单按现在的钱重算，D2）。→ 说明的开头。"""
+            gone = []
+            for o in info["unsent"]:
+                if o.status in ("PLANNED", "DEFERRED", "BLOCKED"):
+                    o.status, o.note = "SKIPPED", f"被新的固定口数取代（{now:%H:%M}）"
+                    gone.append(_otag(o, o.qty))
+                    if o.side == "SELL":
+                        self._on_source_final(o)
+            info["unsent"] = []
+            return ("今天还没发出的 " + "、".join(gone) + " 被取代；") if gone else ""
+
+        def fix_keep(info: dict) -> str:                    # 这次不调（一会儿再试）：今天还没发出的单先照原计划
+            if not info["unsent"]:
+                return ""
+            return "；今天还没发出的 " + "、".join(_otag(o, o.qty) for o in info["unsent"]) + " 先照原计划（不要就在「今天的单」撤单）"
+
+        def fix_sent(t: str, o: ExecOrder, n: int, pre: str, notes: list[str]) -> None:
+            what, q, tl = ("卖出" if o.side == "SELL" else "买入"), int(o.filled_qty or 0), _lab(t)
+            tail = "".join(f"；{x}" for x in notes)
+            if o.status in UNKNOWN:
+                fix_res[t] = ("done", f"{pre}盘中{what} {NM.qty(t, f'{n:,} 口')}：下单结果不明，{self.unk_hint}{tail}")
+            elif o.status in ACCEPTED:
+                fix_placed.add(t)
+                fix_res[t] = ("done", pre + (f"盘中{what} {NM.qty(t, f'{n:,} 口')} @ ¥{float(o.filled_px):,.2f}" if q >= n else
+                                             f"盘中{what} {tl}：成交 {q:,} / {n:,} 口，其余挂着（今天有效）" if q > 0 else
+                                             f"盘中{what} {NM.qty(t, f'{n:,} 口')}：已下单，等成交（今天有效）") + tail)
+            elif o.status == "BLOCKED" and block_kind(o.note) == "retry":   # 取不到现价 / 登录失败 / 没连上：一会儿再试（G15）
+                m = f"{tl} 取不到现价" if str(o.note).startswith(NO_QUOTE) else f"{tl} 没下（{str(o.note)[:80]}）"
+                o.status, o.note = "SKIPPED", f"{o.note}：{MO.RETRY_S // 60} 分钟后再试（下一次是新的一笔）"[:300]
+                fix_res[t] = ("retry", pre + m)
+            elif o.status == "BLOCKED":
+                fix_res[t] = ("later", f"{pre}{tl} 没下（{o.note or '被挡'}）→ 下一次决策照它调（{nd_txt}）")
+            elif o.status == "EXPIRED" and q > 0:
+                fix_placed.add(t)
+                fix_res[t] = ("done", f"{pre}盘中{what} {tl}：成交 {q:,} / {n:,} 口，其余已失效（{o.note}）{tail}")
+            else:
+                fix_res[t] = ("later", f"{pre}{tl} {self.bname}没受理 / 已失效：{o.note or o.status} → 下一次决策照它调（{nd_txt}）")
+
+        def fix_side(side: str) -> None:
+            """固定口数：卖的在卖的那一轮（个股买入之前）、买的在个股买入之后（比例的核心买入之前）。"""
+            for t, info in sorted(fix_go.items()):
+                cur, tgt, tl = info["cur"], info["tgt"], _lab(t)
+                if t in fix_res:
+                    continue
+                if tgt == cur:                                # 已经是这个口数：今天还没发出的旧单也不再发
+                    if side == "SELL":
+                        fix_res[t] = ("done", fix_supersede(info) + f"现在 {cur:,} 口：已经是这个口数，不用买卖")
+                    continue
+                if (tgt < cur) != (side == "SELL"):
+                    continue
+                if self._unk_stop:
+                    fix_res[t] = ("later", f"{tl} {UNK_STOP} → {MO.UNK_LATER}")
+                    continue
+                p = px.get(t)
+                if side == "SELL":
+                    n = cur - tgt if held is None else min(cur - tgt, held.get(t, 0))
+                    if n <= 0:
+                        fix_res[t] = ("later", fix_supersede(info) + f"{self.bname}那边没有 {tl} 可卖（账本 + 今天的成交 {cur:,} 口）"
+                                               f" → 下一次决策照它调（{nd_txt}）")
+                        continue
+                    if not p:
+                        fix_res[t] = ("retry", f"{tl} 取不到现价" + fix_keep(info))
+                        continue
+                    pre = fix_supersede(info)
+                    o = ExecOrder(f"U{d}-SELL-{t}-{tag}", t, "SELL", "core", n, d, ref_px=p, reason="core_fix", phase="now")
+                    if self.paper:
+                        b.set_prices({t: p})
+                    self.orders.append(o)
+                    self._send(o, n, bar="")
+                    busy.add(t)
+                    fix_sent(t, o, n, pre, [f"{cur:,} → {cur - n:,} 口"])
+                    continue
+                fix_buy(t, info, p)
+
+        def fix_buy(t: str, info: dict, p: float | None) -> None:
+            tl, lt, cur, tgt = _lab(t), info["lot"], info["cur"], info["tgt"]
+            gw = eng.core_gate_fn(t) if eng.core_gate_fn is not None else None
+            if gw:                                            # 立花买不了的核心 ETF：不买（那份留现金；与决策同一个闸门）
+                fix_res[t] = ("done", fix_supersede(info) + f"{tl} 不买（{gw}）：那份留现金")
+                return
+            if not p:
+                fix_res[t] = ("retry", f"{tl} 取不到现价" + fix_keep(info))
+                return
+            lim, cw = core_lim(t, p, lt)
+            if cw:
+                fix_res[t] = ("retry", f"{tl} {cw}" + fix_keep(info))
+                return
+            n = tgt - cur
+            unit_px = min(p * (1 + float(eng.c_slip[t])), lim) if self.paper else lim   # 模拟账户按现价 + 滑点成交；实盘按限价占余力
+            fee = eng.c_fee[t]["BUY"]
+
+            def need(q_: int) -> float:
+                return q_ * unit_px + fee(q_ * unit_px)
+            ff = (cr.get("fix_fund") or {}).get(t) or {}
+            done_f = ([o_ for o_ in self._active() if o_.cid in (ff.get("cids") or [])]
+                      if ff and ff.get("units", -1) == info["u"] else [])   # 之前为同一个固定口数凑钱卖的（只凑一次：撤了 / 没成交的不再凑）
+            fit = fix_its.get(t) or {}
+            comp_t = {c.get("ticker") for c in MO.companions_in(fit, man.m["items"]) if c.get("kind") in MO.POS_KINDS}
+            comp = [o_ for o_ in self._active() if o_.ticker in comp_t and o_.side == "SELL" and o_.phase == "now"
+                    and o_.reason in ("manual", "manual_trim")]   # 平摊凑钱（fund = split）一起写的个股卖出：同一次 now_phase 先卖了
+            act_ = self._active()
+            freed = sum(self._reserve(o_, o_.qty) for o_ in info["unsent"] if o_.side == "BUY" and o_.status == "DEFERRED"
+                        and not LO.orphan(o_, act_, now, fday)) * (1 - buf)   # 被取代的旧买单不再占着钱
+            avail = cash_now() + freed
+            left = self._fund_left(comp + done_f)
+            if left and need(n) > avail:                      # 凑钱的卖单还没成交：卖出的钱还没进余力 → 等成交再买
+                fix_res[t] = ("retry", "凑钱的卖单（" + "、".join(_otag(o_, o_.sent_qty or o_.qty) for o_ in left)
+                              + "）还没成交：等成交之后再买" + fix_keep(info))
+                return
+            pre, fos, notes = "", [], []
+            if need(n) > avail and not done_f:                # 现金不够：先卖不固定的核心 ETF 补足（按缺多少卖，大的先卖）
+                _ok, val, noq, bz = fund_src(fix_skip | {t})
+                room = avail + val * (1 - buf)
+                if need(n) > room and noq > 0:
+                    names = _labs([x for x in cores if x not in busy and x not in fix_skip and not px.get(x)])
+                    fix_res[t] = ("retry", f"凑钱要卖的核心 ETF {names} 取不到现价" + fix_keep(info))
+                    return
+                if need(lt) > room:
+                    sells = [o_ for o_ in act_ if o_.side == "SELL" and o_.status in ("SENT", "PARTIAL")
+                             and int(o_.filled_qty or 0) < int(o_.sent_qty or o_.qty)]
+                    if sells:                                 # 今天还挂着的卖单（例：模拟账户的寄付卖单等开盘撮合）卖出的钱还没到 → 等
+                        fix_res[t] = ("retry", "现金不够：先等今天还挂着的 " + "、".join(_otag(o_, o_.sent_qty or o_.qty) for o_ in sells[:3])
+                                      + " 成交（卖出的钱到了再买）" + fix_keep(info))
+                        return
+                    why = (f"凑钱要卖的核心 ETF {_labs([x for x in cores if x in busy and x not in fix_skip])} 今天已经有执行器的单"
+                           if bz > 0 and need(lt) <= room + bz * (1 - buf) else f"现金 + 不固定的核心 ETF 不够买 1 个单元{rsv_txt}")
+                    fix_res[t] = ("later", fix_supersede(info) + f"{tl}：{why} → 下一次决策照它调（{nd_txt}）")
+                    return
+                pre = fix_supersede(info)
+                avail = cash_now()
+                fn, sold, fails, fos = fund(max(0.0, need(n) - avail) / max(1e-9, 1 - buf), fix_skip | {t}, "fix_fund")
+                notes += fn
+                if fos:
+                    cr.setdefault("fix_fund", {})[t] = {"units": info["u"], "cids": [o_.cid for o_ in fos]}
+                if self._unk_stop:                            # 凑钱的核心卖单状态不明：买入不发（G3）
+                    fix_res[t] = ("later", pre + "；".join(notes + [UNK_STOP]) + f" → {MO.UNK_LATER}")
+                    return
+                if fails and not sold:                        # 凑钱的核心卖单一笔都没下成
+                    fix_res[t] = ("later", pre + f"凑钱的核心 ETF 卖单没下成（{'；'.join(fails)}）→ 下一次决策照它调（{nd_txt}）")
+                    return
+                avail = cash_now()
+                left = [o_ for o_ in fos if o_.status in ("SENT", "PARTIAL") and int(o_.filled_qty or 0) < int(o_.sent_qty or o_.qty)]
+                if left and need(n) > avail:                  # 卖单受理了、还没成交：钱还没到 → 等成交再买
+                    fix_res[t] = ("retry", pre + "；".join(fn) + "；凑钱的卖单还没成交：等成交之后再买")
+                    return
+            elif done_f and need(n) > avail:
+                notes.append("之前为它凑钱的卖单没全部成交 → 今天不再凑钱")
+            q = n
+            while q > 0 and need(q) > avail:
+                q -= lt
+            if q <= 0:
+                fix_res[t] = ("later", (pre or fix_supersede(info)) + "；".join(notes + [f"现金不够买 1 个单元{rsv_txt}"])
+                              + f" → 下一次决策照它调（{nd_txt}）")
+                return
+            if q < n:
+                notes.append(f"现金只够 {q:,} 口（还差 {n - q:,} 口：下一次决策照它调）")
+            pre = pre or fix_supersede(info)
+            o = ExecOrder(f"U{d}-BUY-{t}-{tag}", t, "BUY", "core", q, d, limit=lim, ref_px=p, reason="core_fix", phase="now")
+            o.fund_src = list(dict.fromkeys([o_.cid for o_ in comp] + [o_.cid for o_ in done_f + fos]))   # 这笔买入靠哪些卖单的钱（D2）
+            if self.paper:
+                b.set_prices({t: p})
+            self.orders.append(o)
+            self._send(o, q, bar="")
+            busy.add(t)
+            fix_sent(t, o, q, pre, [f"{cur:,} → {cur + q:,} 口"] + notes)
+
         def core_side(side: str) -> None:
             """闲置资金比例改了：核心 ETF 照新比例调（卖在个股买入之前、买在个股买入之后；目标 = 规则目标（比例 100%）× 新比例）。"""
             for t, (cur, tgt) in core_moves.items():
@@ -1830,8 +2102,11 @@ class UnifiedExecutor:
                     if gw:
                         core_done.append(f"{tl} 不买（{gw}）：那份留现金")
                         continue
-                    lim = round_to_tick(p * (1 + NOW_BUY_BUF), t, "BUY", lot=lt)     # 一手 1 口的 ETF：2027-03-01 起用 O 表
-                    unit_px = p * (1 + float(eng.c_slip[t])) if self.paper else lim
+                    lim, cw = core_lim(t, p, lt)                      # min(现价 +0.5%, 收盘 ×1.02)（M14）；一手 1 口的 ETF：2027-03-01 起用 O 表
+                    if cw:
+                        core_retry.append(f"{tl} {cw}")
+                        continue
+                    unit_px = min(p * (1 + float(eng.c_slip[t])), lim) if self.paper else lim
                     fee = eng.c_fee[t]["BUY"]
                     n, avail = tgt - cur, cash_now()
                     while n > 0 and n * unit_px + fee(n * unit_px) > avail:
@@ -1864,6 +2139,8 @@ class UnifiedExecutor:
                 else:
                     core_done.append(f"{tl} {self.bname}没受理：{o.note or o.status}")
         core_side("SELL")                                     # 比例调低：先卖核心，腾出的现金个股买入也能用
+        fix_prep()
+        fix_side("SELL")                                      # 固定口数调低：同样先卖（D1）
         live = MO.plan_live(st.plan, self.orders, d)         # 规则 / 手动的开盘买入：一股没买就被跳过 / 被挡的不算（G14；2026-10-14）
         n_used = (len(st.pos) - sum(1 for x in st.pending_exit if x in st.pos) + sum(1 for x in live if x not in st.pos)
                   + len({o.ticker for o in self._active() if o.phase == "now" and o.reason == "manual_buy"
@@ -2009,6 +2286,7 @@ class UnifiedExecutor:
                 man.m[key].pop(t, None)
                 if got_of(fsell):                             # 凑钱的核心已经卖了、买单没成：写清楚（G5；只算成交了的，M16）
                     it["msg"] = f"{it.get('msg') or ''}{sold_txt(got_of(fsell))}"[:400]
+        fix_side("BUY")                                       # 固定口数调高：个股买完再买（钱不够 → 先卖不固定的核心 ETF；D1）
         core_side("BUY")                                      # 比例调高：个股买完再用剩下的现金买核心
         for it in todo:
             lvl = "warn" if it["status"] == "rejected" else "info"
@@ -2036,6 +2314,31 @@ class UnifiedExecutor:
             self._event("info", f"{lab}：{cm}")
             out["items"].append({"id": (core_it or {}).get("id", "core"), "ticker": f"闲置资金比例 {core_want:g}%", "status": cs,
                                  "msg": cm})
+        if fix_want:                                          # 固定口数：记下照它调到哪了（D1）—— 调了 → fix_applied；一会儿再试 → fix_tried；
+            fa = cr.setdefault("fix_applied", MO.fix_applied(self.book))   # 今天不再试 → fix_defer（同一个口数；写了新的又会试）
+            for t, u in sorted(fix_want.items()):
+                res, msg = fix_res.get(t) or ("retry", f"{_lab(t)} 这次没处理")
+                if res == "done":
+                    if u is None:
+                        fa.pop(t, None)
+                    else:
+                        fa[t] = int(u)
+                    (cr.get("fix_defer") or {}).pop(t, None)
+                    sw = "盘中已调" if t in fix_placed else "完成"
+                    out["placed"] += int(t in fix_placed)
+                elif res == "retry":
+                    cr["fix_tried"] = stamp
+                    msg, sw = msg + f"：{MO.RETRY_S // 60} 分钟后再试", "等"
+                    out["retry"] += 1
+                else:
+                    cr.setdefault("fix_defer", {})[t] = {"day": today.isoformat(), "units": u}
+                    sw = "等登记" if UNK_STOP in msg else "下一次决策"
+                    out["later"] += 1
+                row = fix_row(t, u, sw, msg)
+                if t in fix_its:
+                    fix_its[t]["msg"] = row["msg"][:400]
+                self._event("warn" if res == "later" else "info", row["msg"])
+                out["items"].append(row)
         self.save()
         return out
 

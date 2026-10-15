@@ -102,9 +102,14 @@ def test_corefix_buy_with_split_trims_stocks_only():
     _sm()
     ok, msg, rec = _submit_ok({"book": "paper", "kind": "corefix", "ticker": "1482", "units": 100,
                                "fund": {"mode": "split", "cost": 150_000}}, AT)
-    assert ok and rec["fund"] == "split" and "固定 100 口" in msg and "其余由别的核心 ETF 照规则减少" in msg
+    assert ok and rec["fund"] == "split" and "固定 100 口 → 今天 09:00 开盘后马上（按现价限价，不是寄付）" in msg
+    assert "其余由没固定的核心 ETF 补：现金不够时执行器盘中先卖它们补足" in msg              # 决策之后、开盘前写的：开盘后马上（D1）
     reqs = MO.read_all("paper")
     assert [r["kind"] for r in reqs] == ["adjust", "corefix"] and reqs[0]["ticker"] == "7203.T" and reqs[0]["fund_for"] == "1482.T"
+    MO.requests_path("paper").unlink()
+    ok, msg, rec = _submit_ok({"book": "paper", "kind": "corefix", "ticker": "1482", "units": 100,
+                               "fund": {"mode": "split", "cost": 150_000}}, AT.replace(hour=16))
+    assert ok and "其余由别的核心 ETF 照规则减少" in msg                                   # 收盘后写的：那次决策里
 
 
 def test_alloc_card_shows_each_position_share():

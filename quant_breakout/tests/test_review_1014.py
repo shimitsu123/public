@@ -102,7 +102,9 @@ def test_uncancel_of_a_ratio_goes_back_to_waiting_for_the_executor():
     assert f"data-act='uncancel' data-id='{cxl['id']}'" in h and "data-st='等执行器读'" in h
     ok, msg, _ = panel.submit({"book": "paper", "kind": "uncancel", "target": cxl["id"]}, AT)
     assert ok and "原来的指令恢复「等执行器读」" in msg and "「等下单」" not in msg
-    assert MO.wait_word({"kind": "sell"}) == "等下单" and MO.wait_word({"kind": "corefix"}) == "等执行器读"
+    assert MO.wait_word({"kind": "sell"}) == "等下单" and MO.wait_word({"kind": "core"}) == "等执行器读"
+    assert MO.wait_word({"kind": "corefix"}) == "等下单"                  # D1（2026-10-15）：固定口数当天按时段下单
+    assert MO.wait_word({"kind": "corefix", "fund_for": "B.T", "batch": "all"}) == "等执行器读"   # 「全部换成」同批的：等那次决策
     js = (panel.STATIC_DIR / "trade.js").read_text(encoding="utf-8")
     assert "原来的指令恢复「'+(d.st||'等下单')+'」" in js
 

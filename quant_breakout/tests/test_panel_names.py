@@ -71,7 +71,7 @@ def test_broker_card_fills_keep_buy_sell():
 
 def test_busy_counts_only_what_changes_soon():
     """busy（页面每 10 秒问一次要不要刷新）：晚上固定的口数要等下一次决策（07:40）→ 不算（以前整晚每 10 秒问）；
-    「交易」的数字照算。盘中的卖出 / 07:45〜08:55 的卖出 → 面板马上叫执行器 → 算。"""
+    「交易」的数字照算。盘中的卖出 / 07:45〜08:55 的卖出 / 盘中的固定口数（D1，2026-10-15）→ 面板马上叫执行器 → 算。"""
     b = _book1015(sell="CANCELLED", buy="CANCELLED")
     fix = {"id": "M1-corefix", "kind": "corefix", "ticker": "1482.T", "units": 678, "at": "2026-10-14T19:21:18+09:00"}
     lv = panel._trade_live(b, [fix], AT_NIGHT, "paper", halt=False)
@@ -79,7 +79,7 @@ def test_busy_counts_only_what_changes_soon():
     sell = {"id": "M2-sell", "kind": "sell", "ticker": "1545.T", "at": "2026-10-15T10:10:00+09:00"}
     b["state"]["last_date"] = "2026-10-14"
     assert panel._trade_live(b, [sell], AT_SESSION, "paper", halt=False)["busy"] == 1
-    assert panel._trade_live(b, [fix], AT_SESSION, "paper", halt=False)["busy"] == 0      # 固定口数盘中写的也等下一次决策
+    assert panel._trade_live(b, [fix], AT_SESSION, "paper", halt=False)["busy"] == 1      # 固定口数盘中写的：面板马上叫执行器（D1）
     assert panel._trade_live(b, [sell], AT_SESSION, "paper", halt=True)["busy"] == 0      # HALT：面板不叫执行器
 
 

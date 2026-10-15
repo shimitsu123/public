@@ -1309,7 +1309,7 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
         if r.get("status") == "placed":
             return session and bool(r.get("now"))           # 盘中下的单还挂着：随时可能成交
         k = r.get("kind")
-        return (session and k in MO.ORDER_KINDS + ("core",)) or (morning and k in MO.POS_KINDS and not r.get("wait"))
+        return (session and k in MO.ORDER_KINDS + ("core", "corefix")) or (morning and k in MO.POS_KINDS and not r.get("wait"))   # 固定口数盘中也马上（D1）
     for r in wl:
         if r.get("kind") in CANCEL_KINDS or r["id"] in dropped:
             skip.add(r["id"])
@@ -1590,7 +1590,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
 
     def _corefix(t: str, name: str) -> str:
         """核心 ETF 固定口数（2026-10-11 用户：持仓里的纳指 ETF、对冲美债也要能买入）：没拿的 →「买入…」、拿着的 →「固定口数…」；
-        已固定 → 写出来 +「恢复按规则」。只写手动指令（下一次决策起；其余闲置资金照规则分）。
+        已固定 → 写出来 +「恢复按规则」。只写手动指令（什么时候下单 = corefix_fill：盘中马上 / 开盘后马上 / 下一次决策，D1；其余闲置资金照规则分）。
         已经写了、执行器还没读的固定 / 恢复按规则 → 写「已登记：…（下一次决策起）」、按钮按登记之后的样子（恢复按规则登记了 → 不再给「恢复按规则」；
         2026-10-15 复核：以前确认之后页面上还是原来的按钮，像没写成、会再点一次）。"""
         if tag in READONLY:
@@ -1608,9 +1608,10 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         plan = ""
         if last is not None:
             H_.append("<div class='small'><b>已登记：" + ("恢复按规则" if last.get("clear") else f"固定 {int(last.get('units') or 0):,} 口")
-                      + "</b><span class='muted'>（执行器还没读；下一次决策起生效、什么时候下单见「交易」→「手动指令」"
-                      + (f"，在那之前还是手动固定 {int(fixed):,} 口" if fixed is not None else "")
-                      + "）。要撤回也在那里</span></div>")
+                      + "</b><span class='muted'>（执行器还没读；" + escape(MO.corefix_fill(now, book, tag)["text"])   # D1（2026-10-15）：以前一律「下一次决策起」
+                      + "；要撤回在「交易」→「手动指令」"
+                      + (f"；在那之前还是手动固定 {int(fixed):,} 口" if fixed is not None else "")
+                      + "）</span></div>")
         elif fixed is not None:
             H_.append(f"<div class='small'><b>手动固定 {int(fixed):,} 口</b>（不按规则自动调、不跟闲置资金比例；其余闲置资金照规则）"
                       "<span class='muted'>；卖出 / 减仓 / 加仓：「固定口数…」（0 口 = 全部卖出）</span></div>")
@@ -1814,9 +1815,12 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         btn = (_cbtn(r, 0) if r["kind"] in MO.ORDER_KINDS + ("core", "corefix") and r["id"] not in dropped
                else _ubbtn(r) if r["kind"] == "unblock" and r["id"] not in dropped else _unbtn(r))
         wt = MO.wait_word(r)                               # 比例 / 解除 / 撤回不是单（2026-10-13）
+        wx = "" if r["id"] in dropped or r["kind"] in CANCEL_KINDS else MO.wait_text(r, now, book, tag)
+        wx = wx[len(wt) + 1:] if wx.startswith(wt + "：") else ""   # 什么时候（D1 / D5，2026-10-15：与 now_due / 执行器同一个时段口径；固定口数写具体日子）
         rows.append(f"<div class='li'><div class='grow'><b>{_what(r)}</b> <span class='chip'>"
                     f"{wt + '（撤回中）' if r['id'] in dropped else wt}</span>"
-                    f"<div class='muted small'>{escape(str(r.get('at', ''))[5:16].replace('T', ' '))}</div></div>{btn}</div>")
+                    f"<div class='muted small'>{escape(str(r.get('at', ''))[5:16].replace('T', ' '))}"
+                    f"{(' · ' + escape(wx)) if wx else ''}</div></div>{btn}</div>")
     cut = now - dt.timedelta(days=MANUAL_SHOW_DAYS)                 # 2026-10-12 用户：「交易里面只显示两天以内的」
     items = [it for it in items if it.get("kind") != "uncancel" and it.get("status") != "voided"]   # 撤销撤回、已撤销的撤回：不显示
     recent = [it for it in items if it.get("status") in MO.ACTIVE or (_ts_jst(it.get("at")) or cut) > cut]   # 没处理完的一直显示
@@ -1889,6 +1893,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         if e:
             ests[t] = {**e, "lines": MO.est_lines(e, note, ytdg)}
     u100s = MO.core_u100s(book)[0]                          # 规则目标（比例 100%）；执行器还没算过 → 估算（比例还是 100% 时）
+    fx_fill = MO.corefix_fill(now, book, tag)
     cfg = {"auth": {"h": "X-Qbreak-Csrf" if remote else "X-Qbreak-Token", "v": tok}, "book": tag, "paper": paper, "remote": remote,
            "real": real,                                                                   # 真钱（立花本番）：确认框写明
            "sq_max": SG_MAX,                                                               # 建议的股票的现价一次最多取几只（quotes.js）
@@ -1900,6 +1905,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
            "kp": {"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN},     # K 线的通俗说法（qbreak/kline.py）
            "fund": MO.fund_holdings(book, tag),
            "when_all": MO.allin_when(now, book, tag),                                     # 「全部换成这只」整批什么时候做
+           "when_fix": fx_fill["text"], "fix_now": fx_fill["intraday"],                   # 固定口数什么时候下单 / 盘中按现价（D1；与执行器同一个时段口径）
            "halt_allin": MO.allin_halt_note(book),                                         # HALT 确认框：同批卖单已在交易所 → X 不会买
            "block_days": MO.BLOCK_DEFAULT,                                                # 卖出后不自动买回的天数（默认）
            "alloc": {"names": {r.get("ticker"): _nm(r.get("ticker"), r.get("name"))      # 别名（旧页面脚本用）；新的看 CFG.names
@@ -2396,11 +2402,12 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
                    + f"）→ {when}买入")
         else:
             msg = f"已写：{tl} 卖 {-a['delta']:,} 股（→ {a['target']:,} 股）→ {when}卖出"
+    fill = MO.corefix_fill(now or now_jst(), book, tag) if k == "corefix" else None
     if k == "corefix":                                                             # 2026-10-12 再发防止：这一种以前没有说明 → msg None → 拼接崩溃 → 手机 502
         msg = (f"已写：{tl} 恢复按规则 → " + MO.corefix_clear_text(book, t, tag, now or now_jst()) if rec.get("clear") else   # 2026-10-13：会怎样
-               f"已写：{tl} 固定 {int(rec.get('units') or 0):,} 口 → 不是现在下单：{MO.corefix_fill(now or now_jst(), book, tag)['text']}")   # 2026-10-15：实际哪天
+               f"已写：{tl} 固定 {int(rec.get('units') or 0):,} 口 → {fill['text']}")   # D1（2026-10-15）：盘中 / 开盘前写的也马上按现价下，与卖出 / 买入同一个时段口径
         if rec.get("from_kind"):                                                   # 固定口数的 ETF 上点的卖出 / 减仓 / 调仓（2026-10-13）
-            msg += "（这只是手动固定的：只改这只 ETF 的固定口数，别的 ETF 与闲置资金比例不变；不是盘中马上下单）"
+            msg += "（这只是手动固定的：只改这只 ETF 的固定口数，别的 ETF 与闲置资金比例不变）"
     if msg is None:                                                                # 新加的指令种类忘了写说明：也给一句（不让拼接崩溃）
         msg = f"已写：{MO.LABEL.get(k, k)}" + (f" {tl}" if t else "") + f" → {when}处理"
     if k == "core" and not t and pct0 <= 0 < float(rec["pct"]):                    # 停买后确认买入
@@ -2456,10 +2463,14 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
                "；规则对别的票仍可能用现金开新仓")
     elif sells:
         msg += ("；凑钱先卖：" + "、".join(NM.qty(r['t'], f"{r['sell']:,} 股") for _s, r in sells)
-                + ("（其余由别的核心 ETF 照规则减少：现金不够时执行器在那次决策里先卖它们补足，再平衡带以内也卖）" if k == "corefix" else "（核心 ETF 那份执行器按当时还缺多少卖）")
+                + (("（其余由没固定的核心 ETF 补：现金不够时执行器盘中先卖它们补足，这几笔卖出先成交再买）" if fill["intraday"] else
+                     "（其余由别的核心 ETF 照规则减少：现金不够时执行器在那次决策里先卖它们补足，再平衡带以内也卖）") if k == "corefix"
+                   else "（核心 ETF 那份执行器按当时还缺多少卖）")
                 + ("；买入先过闸门，被挡则凑钱的卖出也不做；开盘跳空 / 价格更高没买到时，凑钱的卖出照样会卖" if k == "buy" else ""))
     if paths.halt_file().exists() and k in MO.ORDER_KINDS + ("core",):
         msg += "；★ HALT 生效中：解除之后才处理"
+    elif paths.halt_file().exists() and k == "corefix":                            # D7：固定口数读到就生效，ETF 的单等解除后的决策（与执行器写的同一句）
+        msg += f"；★ {MO.HALT_CORE_MSG}"
     return True, msg + f"（指令 {rec['id']}）", rec
 
 
