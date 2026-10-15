@@ -1183,7 +1183,8 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
                     r = pv.get(str(b.get("cid")))
                     w = ("按现在的钱重算" if r is None else "不会下" if r["act"] == "skip"
                          else f"减到 {int(r['qty']):,} {u}" if r["act"] == "reduce" else "照常")
-                    bits.append(f"买 {NM.qty(b.get('ticker'), f'{int(b.get('qty') or 0):,} {u}')}（只撤卖单 → {w}）")
+                    q_txt = f"{int(b.get('qty') or 0):,} {u}"     # 先算好数量文字（Python 3.10 / 3.11 不允许 f-string 里嵌套同种引号）
+                    bits.append(f"买 {NM.qty(b.get('ticker'), q_txt)}（只撤卖单 → {w}）")
                     kw.append(f"买 {NM.label(b.get('ticker'))} {w}")
                 deps = "靠这笔卖出的钱、执行器还没发出的买单：" + "、".join(bits) + "（已经成交的部分卖出的钱照样能用）"
                 fx = next((str(b.get("ticker")) for b in dx if b.get("kind") == "core" and b.get("ticker") in fixed), "")

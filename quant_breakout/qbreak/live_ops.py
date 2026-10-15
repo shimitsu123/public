@@ -396,7 +396,8 @@ def cascade_events(res: list[dict]) -> list[tuple[str, str]]:
     ev = []
     for r in res:
         o = r["o"]
-        what = f"买 {_labq(_g(o, 'ticker'), f'{int(r['was']):,} {_unit(o)}')}"
+        qty_txt = f"{int(r['was']):,} {_unit(o)}"            # 先算好数量文字（Python 3.10 / 3.11 不允许 f-string 里嵌套同种引号）
+        what = f"买 {_labq(_g(o, 'ticker'), qty_txt)}"
         if r["act"] == "keep" or r.get("model"):          # 与模型相同的不下 / 照常：info（不推 ★ 交易）
             ev.append(("info", f"{what}：{r['note']}"))
         else:
@@ -1191,7 +1192,8 @@ def cancel_text(res: dict) -> list[str]:
             out.append(f"{head}：{what}（{r['cid']}）—— {r['why']}")
     for r in res.get("fund") or []:                       # 靠撤掉的卖单的钱的买单：重算的结果（D2；2026-10-15）
         u = "口" if r.get("kind") == "core" else "股"
-        out.append(("★ " if r.get("act") != "keep" else "") + f"买 {_labq(r.get('ticker'), f'{int(r.get('was') or 0):,} {u}')}：{r.get('note')}")
+        qty_txt = f"{int(r.get('was') or 0):,} {u}"          # 先算好数量文字（Python 3.10 / 3.11 不允许 f-string 里嵌套同种引号）
+        out.append(("★ " if r.get("act") != "keep" else "") + f"买 {_labq(r.get('ticker'), qty_txt)}：{r.get('note')}")
     if res.get("note"):
         out.append(res["note"])
     return out
