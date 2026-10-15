@@ -7,6 +7,7 @@
   ③ 固定规则：每月第一个交易日（月度记录）、季度复核（1 / 4 / 7 / 10 月 12 日）、日経225 定期入替的公布（3 月 / 9 月上旬）；
   ④ 事先写定的判定 / 评估日（模拟期结束、影子账户评估、W2 / K2 / USW / 卖法 X6 与 R4 年度判定、K4、时代主线与 S2 的 36 / 60 个月）。
 每一项：date、what（事项）、check（看什么 / 怎么做）、who（自动 / 例行任务 / Mac / 你）、src（依据）。
+what 里的代码都带名字（「上場廃止 8035 東京エレクトロン」；2026-10-15 用户：只写代码不知道是哪只；qbreak/names.py，查不到只写代码）。
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import datetime as dt
 import json
 from pathlib import Path
 
+from . import names as NM
 from . import paths
 
 HORIZON_DAYS = 45
@@ -103,7 +105,7 @@ def items(today: dt.date, horizon: int = HORIZON_DAYS, events=None, changes=None
                               ("date", "上場廃止日（从股票池自动去掉）", "日报「股票池更新时间表」确认已去掉；日経225 的补入銘柄要你确认后加进名单")):
             d = str(r.get(key) or "")[:10]
             if d and within(d):
-                out.append({"date": d, "what": f"上場廃止 {r['code']}：{lab}（{r.get('why') or '—'}；{who.rstrip('；') or '—'}）",
+                out.append({"date": d, "what": f"上場廃止 {NM.label(r['code'])}：{lab}（{r.get('why') or '—'}；{who.rstrip('；') or '—'}）",
                             "who": "自动 + 你", "src": "qbreak/delist_schedule.py（var/delist_schedule.json）", "check": chk})
     for e in (events if events is not None else _events()):
         kind, d, name = e.get("kind"), str(e.get("date") or "")[:10], str(e.get("name") or "")
@@ -121,7 +123,8 @@ def items(today: dt.date, horizon: int = HORIZON_DAYS, events=None, changes=None
         for key, lab in (("announced", "公布（待剔除股从今天起不开新仓）"), ("effective", "生效（股票池自动增删）")):
             d = str(c.get(key) or "")[:10]
             if d and within(d):
-                out.append({"date": d, "what": f"日経225 入替{lab}：+{'/'.join(c.get('add') or [])} −{'/'.join(c.get('delete') or [])}",
+                out.append({"date": d, "what": f"日経225 入替{lab}：+{NM.labels(c.get('add') or [], ' / ', short=True)}"
+                                                   f" −{NM.labels(c.get('delete') or [], ' / ', short=True)}",
                             "who": "自动", "src": "var/index_changes.json", "check": "日报「下单前资格检查」确认待剔除 / 新纳入的票；持仓里有待剔除股 → 规则照常持有到出场信号"})
     for d in first_trading_days(today, end):
         out.append({"date": d.isoformat(), "what": "月度记录（每月第一个交易日）", "who": "自动（sim-day）",

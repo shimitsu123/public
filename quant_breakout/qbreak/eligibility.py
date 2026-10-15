@@ -4,7 +4,8 @@
 日本経済新聞 2025-10-27「日経平均、特別注意銘柄指定のニデックを除外 イビデンを補充」），名单没跟上 ——
 静态名单 + var/index_changes.json 只覆盖定期入替。en.wikipedia 的名单到 2026-09-28 还列着ニデック：只看一个来源也会漏。
 
-每天查三类公开来源（只存代码、类别、日期；不存公司名、理由原文与链接）→ var/out/eligibility.json：
+每天查三类公开来源（只存代码、类别、日期 + JPX 页上的公开銘柄名；不存理由原文与链接）→ var/out/eligibility.json
+（2026-10-15 用户「只写代码不知道是哪只」：JPX 页的銘柄名一起存；上場一覧的全部名字另写数据目录 cache/jpx_names_all.json，不入库）：
   ① 指数成分对照：ja.wikipedia「日経平均株価」构成銘柄一覧（主，约 225 只）、en.wikipedia「Nikkei 225」（参考，只报不挡）
   ② JPX 監理・整理銘柄（株式 / その他商品 = ETF）、特別注意銘柄（臨時剔除的直接原因）
   ③ JPX 上場廃止銘柄一覧（TOB / MBO / 合併 / 基準不適合，含预定日）
@@ -34,6 +35,7 @@ import json
 import re
 from dataclasses import dataclass, field
 
+from . import names as NM
 from . import paths
 from . import tradable as TR
 from .jpx_list import URL as JPX_LIST_URL
@@ -108,19 +110,44 @@ def _rows(tb: str) -> list[list[str]]:
     return [[_txt(c) for c in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", r, re.S)] for r in re.findall(r"<tr.*?</tr>", tb, re.S)]
 
 
+def _clean_name(s: str | None) -> str | None:
+    """JPX 表里的銘柄名 →「ニデック」（去掉（株）/ 株式会社；空、「-」、代码或日期 → None）。"""
+    s = re.sub(r"[（(]株[）)]|株式会社", "", str(s or "")).strip()
+    if not s or s in ("-", "－", "―") or re.fullmatch(_CODE, s) or _date(s):
+        return None
+    return s[:60]
+
+
+def _name_at(hdr: list[str] | None, r: list[str], code: str) -> str | None:
+    """銘柄名（JPX 公开数据；2026-10-15 用户：只写代码不知道是哪只）：按表头里「銘柄名」与「コード」的相对位置取
+    （rowspan 的续行少了前面几格也对得上）；表头没有「銘柄名」/ 位置不对 → None。"""
+    if not hdr or "コード" not in hdr or code not in r:
+        return None
+    j = next((i for i, h in enumerate(hdr) if "銘柄名" in h), None)
+    if j is None:
+        return None
+    i = r.index(code) + (j - hdr.index("コード"))
+    return _clean_name(r[i]) if 0 <= i < len(r) else None
+
+
 def _items(page: str, cat_of) -> list[dict]:
-    """有「コード」列的表 → [{code, cat, date}]；代码 / 日期按内容认（列顺序、rowspan 的续行都不影响）。"""
+    """有「コード」列的表 → [{code, cat, date, name}]；代码 / 日期按内容认（列顺序、rowspan 的续行都不影响）；
+    name = 銘柄名（取得到才有；qbreak/names.py 给已退市、上場一覧里没有了的票加名字）。"""
     out = []
     for head, tb in _tables(page):
         rows = _rows(tb)
         if not any("コード" in r for r in rows):
             continue
+        hdr = next((r for r in rows if "コード" in r), None)
         cat = cat_of(head)
         for r in rows:
             code = next((c for c in r if re.fullmatch(_CODE, c)), None)
             d = next((x for x in (_date(c) for c in r) if x), None)
             if code and cat:
-                out.append({"code": code, "cat": cat, "date": d})
+                it = {"code": code, "cat": cat, "date": d}
+                if nm := _name_at(hdr, r, code):
+                    it["name"] = nm
+                out.append(it)
     return out
 
 
@@ -150,7 +177,8 @@ _WHY = (("TOB・MBO・株式併合", ("公開買付", "株式併合", "ＭＢＯ
 
 
 def parse_jpx_delisted(page: str) -> dict:
-    """上場廃止銘柄一覧：[{code, cat:"上場廃止", date:上場廃止日, why:归类后的短标签}]（理由原文不存）。"""
+    """上場廃止銘柄一覧：[{code, cat:"上場廃止", date:上場廃止日, why:归类后的短标签, name:銘柄名}]（理由原文不存；
+    name 取得到才有 —— 已经退市的票上場一覧里没有了，日报 / 提醒靠它写名字）。"""
     items = []
     for _, tb in _tables(page):
         rows = _rows(tb)
@@ -163,21 +191,33 @@ def parse_jpx_delisted(page: str) -> dict:
                 continue
             reason = r[-1] if r else ""
             why = next((lab for lab, kws in _WHY if any(k in reason for k in kws)), "その他")
-            items.append({"code": code, "cat": "上場廃止", "date": d, "why": why})
+            it = {"code": code, "cat": "上場廃止", "date": d, "why": why}
+            if nm := _name_at(rows[0], r, code):
+                it["name"] = nm
+            items.append(it)
     if not items:
         raise ValueError("没有找到「上場廃止日」的表（JPX 改版？）")
     return {"items": items}
 
 
 def parse_jpx_list(raw) -> dict:
-    """JPX 東証上場銘柄一覧：xlsx 的 bytes（正式）或「代码,市場・商品区分,日期」一行一只的文本（测试）→ tradable.split_segments 的形状。"""
+    """JPX 東証上場銘柄一覧：xlsx 的 bytes（正式）或「代码,市場・商品区分,日期[,銘柄名]」一行一只的文本（测试）→ tradable.split_segments 的形状。
+    銘柄名（全部上市品种，含 ETF）放在 names_all（有才放）：refresh() 拿出来写数据目录的 cache/jpx_names_all.json（qbreak/names.py 读），
+    不进 eligibility.json（4,000 多行；那份快照云端会入库）。"""
     if isinstance(raw, (bytes, bytearray)):
         from .jpx_list import parse
         df = parse(bytes(raw))
-        rows = zip(df["code"], df["market"], df["date"])
+        rows = list(zip(df["code"], df["market"], df["date"]))
+        nm = dict(zip(df["code"], df["name"]))
     else:
-        rows = [(ln.split(",") + ["", "", ""])[:3] for ln in str(raw).splitlines() if ln.strip()]
-    return TR.split_segments(rows)
+        cells = [(ln.split(",") + ["", "", "", ""])[:4] for ln in str(raw).splitlines() if ln.strip()]
+        rows, nm = [c[:3] for c in cells], {c[0]: c[3] for c in cells}
+    out = TR.split_segments(rows)
+    nm = {str(c).strip(): str(n).strip() for c, n in nm.items()
+          if isinstance(c, str) and isinstance(n, str) and str(c).strip() and str(n).strip()}
+    if nm:
+        out["names_all"] = nm
+    return out
 
 
 PARSERS = {"ja_wiki": parse_ja_wiki, "en_wiki": parse_en_wiki, "jpx_supervision": parse_jpx_supervision,
@@ -229,6 +269,17 @@ def _ok_date(s: dict) -> dt.date | None:
         return None
 
 
+def _save_names_all(nm: dict | None, as_of=None) -> None:
+    """上場一覧的銘柄名 → 数据目录 cache/jpx_names_all.json（qbreak/names.py 的第 5 个来源；只在本机、不入库）。写不了不影响资格检查。"""
+    if not nm:
+        return
+    try:
+        from .names import save_all
+        save_all(nm, as_of=str(as_of or ""))
+    except Exception as e:                                        # noqa: BLE001  名字只是展示用
+        log.warning("JPX 上場一覧的名字没写成（不影响资格检查）：%s", e)
+
+
 def refresh(path=None, now=None, fetch=None, ttl_hours: float = TTL_HOURS, force: bool = False, fallback=None) -> dict:
     """逐个来源重取（2 小时内取过的跳过）；某个来源失败 → 保留上次成功的内容与日期，记下错误。
     fallback：另一份快照（Mac 上 = 仓库里云端写的 var/out/eligibility.json），某来源比自己新就用它的。"""
@@ -248,6 +299,7 @@ def refresh(path=None, now=None, fetch=None, ttl_hours: float = TTL_HOURS, force
         try:
             x = PARSERS[key]((fetch or (_fetch_bytes if key == "jpx_list" else _fetch_url))(url))
             _validate(key, x)
+            _save_names_all(x.pop("names_all", None), x.get("date"))
             s = {**x, "ok_at": s["tried_at"], "tried_at": s["tried_at"], "error": ""}
         except Exception as e:                                    # noqa: BLE001
             s["error"] = f"{type(e).__name__}: {e}"[:200]
@@ -332,6 +384,16 @@ class Gate:
                 if txt not in self.flags[it["code"]]:
                     self.flags[it["code"]].append(txt)
 
+    def label(self, t) -> str:
+        """提醒文字里的「代码 名字」（2026-10-15 用户：只写代码不知道是哪只）：qbreak/names.py → 这份快照里 JPX 页的銘柄名
+        （已退市、名字表里没有了的票；快照还没写进数据目录时 names.py 读不到）→ 只写代码。"""
+        if NM.name(t):
+            return NM.label(t)
+        c = _code(t)
+        nm = next((str(it["name"]) for s in (self.snap.get("sources") or {}).values() if isinstance(s, dict)
+                   for it in s.get("items") or [] if isinstance(it, dict) and str(it.get("code")) == c and it.get("name")), None)
+        return f"{c} {nm}" if nm else NM.label(t)
+
     # 个股：G2〜G5 的理由（不含来源过期 / 不在股票池）
     def reasons(self, code: str) -> list[str]:
         out = []
@@ -400,7 +462,9 @@ class Gate:
         return out
 
     def panel(self, held: list[dict] | None = None, blocked_today: list | None = None) -> dict:
-        """日报 / 页面用的汇总（只有代码、类别、日期）。needs_user = 需要人工看的事（报警）。"""
+        """日报 / 页面用的汇总（结构里只有代码、类别、日期）。needs_user = 需要人工看的事（报警）：文字里每只写「代码 + 公开名称」
+        （「持仓 7203 トヨタ自動車（模拟盘）」；2026-10-15 用户：只写代码不知道是哪只 —— 要你决定卖不卖的提醒必须一眼认出是哪只；
+        名字 = qbreak/names.py 的 JPX 公开数据，可以进公开日报；查不到只写代码）。"""
         src = self.snap.get("sources") or {}
         blocked = [{"code": c, "why": "；".join(self.reasons(c))} for c in sorted(self.trade) if self.reasons(c)]
         core = [{"code": c, "why": "；".join(self.flags[c])} for c in sorted(self.core) if self.flags.get(c)]
@@ -414,19 +478,24 @@ class Gate:
         if self.stale:
             needs.append("资格检查数据过期或取不到：" + "、".join(
                 f"{LABEL[k]}（最后 {(src.get(k) or {}).get('ok_at') or '从没取到'}）" for k in self.stale))
+        lab = self.label
+
+        def labs(xs, n=8) -> str:                                    # 一长串（指数大换血那天）：前 n 只 +「等 N 只」，全部见名单对照
+            xs = list(xs)
+            return "、".join(map(lab, xs[:n])) + (f" 等 {len(xs)} 只" if len(xs) > n else "")
         if ja.get("ours_only"):
-            needs.append("我们的日経225 名单里有、ja.wikipedia 没有：" + "、".join(ja["ours_only"]) + "（已挡新仓；核实后改名单，要用户确认）")
+            needs.append("我们的日経225 名单里有、ja.wikipedia 没有：" + labs(ja["ours_only"]) + "（已挡新仓；核实后改名单，要用户确认）")
         if ja.get("src_only"):
-            needs.append("ja.wikipedia 的日経225 有、我们没有：" + "、".join(ja["src_only"]) + "（可能漏了纳入；加进股票池要用户确认）")
+            needs.append("ja.wikipedia 的日経225 有、我们没有：" + labs(ja["src_only"]) + "（可能漏了纳入；加进股票池要用户确认）")
         for h in warn_held:
-            needs.append(f"持仓 {h['ticker']}（{h.get('account') or '—'}）：{h['why']} —— 规则不自动卖，要不要提前卖由你决定")
+            needs.append(f"持仓 {lab(h['ticker'])}（{h.get('account') or '—'}）：{h['why']} —— 规则不自动卖，要不要提前卖由你决定")
         for c in core:
-            needs.append(f"核心 ETF {c['code']}：{c['why']} —— 执行器不下它的买单")
+            needs.append(f"核心 ETF {lab(c['code'])}：{c['why']} —— 执行器不下它的买单")
         if t_stock:
-            needs.append("股票池里有立花 ｅ支店买不了的票：" + "、".join(f"{x['code']}（{x['why']}）" for x in t_stock)
-                         + " —— 已挡新仓；要不要从股票池去掉由你决定（改 qbreak/universes.py 要用户确认）")
+            needs.append("股票池里有立花 ｅ支店买不了的票：" + "、".join(f"{lab(x['code'])}（{x['why']}）" for x in t_stock[:6])
+                         + (f" 等 {len(t_stock)} 只" if len(t_stock) > 6 else "") + " —— 已挡新仓；要不要从股票池去掉由你决定（改 qbreak/universes.py 要用户确认）")
         for c in t_core:
-            needs.append(f"核心 ETF {c['code']}：{c['why']} —— 模拟盘那份留现金、执行器不下它的买单；换核心 ETF 要用户确认")
+            needs.append(f"核心 ETF {lab(c['code'])}：{c['why']} —— 模拟盘那份留现金、执行器不下它的买单；换核心 ETF 要用户确认")
         return {"as_of": self.today.isoformat(), "stale": list(self.stale), "error": self.error,
                 "sources": {k: {"label": LABEL[k], "ok_at": (src.get(k) or {}).get("ok_at"), "fresh": self.fresh[k],
                                 "n": len((src.get(k) or {}).get("codes") or (src.get(k) or {}).get("items") or [])

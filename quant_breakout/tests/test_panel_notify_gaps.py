@@ -183,7 +183,7 @@ def test_sell_after_a_placed_trim_waits_for_the_fill_without_retrying_every_3_mi
         clk["m"] += 30
     assert calls == ["retry"]                                              # 以前：08:00〜08:55 每 3 分钟一次（约 18 次）
     it = r.item("M-sell")
-    assert it["status"] == "pending" and it.get("wait") == "prev" and it["msg"].startswith("等 A.T 的上一笔成交")
+    assert it["status"] == "pending" and it.get("wait") == "prev" and it["msg"].startswith("等 A 的上一笔成交")
     assert MO.status_text(it) == "等上一笔成交" and not MO.due(TAG, r.ux.book, t0)
     r.day()                                                                # 第二天早上：上一笔记完 → 照常处理
     it = r.item("M-sell")

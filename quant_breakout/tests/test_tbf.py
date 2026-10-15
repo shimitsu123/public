@@ -183,7 +183,7 @@ def test_apply_brief_and_text():
     assert TBF.apply({}, None, "2026-10-05") == ({}, None)
     b = TBF.brief(pl, "2026-10-05", True)
     assert b["applied"] and b["skipped"] == ["A.T"] and b["kept"] == ["B.T"] and b["skip_all_n"] == 2
-    assert "不买 1 只：A.T" in TBF.text(b) and "210" in TBF.text(b)
+    assert "不买 1 只：A" in TBF.text(b) and "A.T" not in TBF.text(b) and "210" in TBF.text(b)   # 名字表里没有的票只写代码（2026-10-15）
     nb = TBF.brief(pl, "2026-10-06", True)
     assert not nb["applied"] and "★ TBF" in TBF.text(nb) and "2026-10-05" in TBF.text(nb)
     assert not TBF.brief(None, "2026-10-05", True)["applied"] and TBF.brief(pl, "2026-10-05", False) == {"enabled": False}
@@ -271,7 +271,7 @@ def test_report_card_and_executor_text():
                                     "B.T": {"pct": {"D": 0.5, "W": None, "M": 0.1}, "top": [], "skip": False, "scored": True}},
                      ["A.T"], 210)
     h = _tbf_html({"tbf": {**TBF.summary(pl, "2026-10-05", True), "since": TBF.SINCE}})
-    assert "TBF" in h and "A.T" in h and "不买" in h and "非投资建议" in h and "97%" in h
+    assert "TBF" in h and "<td>A</td>" in h and "不买" in h and "非投资建议" in h and "97%" in h   # 候选写「代码 名字」、去 .T（2026-10-15）
     assert _tbf_html({"tbf": {"enabled": False}}) == "" and _tbf_html({}) == ""
     assert "今天没生效" in _tbf_html({"tbf": TBF.summary(pl, "2026-10-06", True)})
     st = SimpleNamespace(pos={}, core_units={}, cash_jpy=1_000_000.0, history=[])
@@ -280,4 +280,4 @@ def test_report_card_and_executor_text():
     assert "TBF" in short and "没生效" in body
     sm["tbf"] = TBF.brief(pl, "2026-10-05", True)
     _, short, body = daily_text(sm, st, None, True, 1_000_000.0)
-    assert "不买 1 只：A.T" in body
+    assert "不买 1 只：A" in body

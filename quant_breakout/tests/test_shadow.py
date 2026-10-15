@@ -54,6 +54,17 @@ def test_validate_rejections():
     assert any("不加杠杆" in e for e in bad(_dec([_o("1329.T", "BUY", 30)])))  # ¥1,200,000 > 现金
     assert any("持有 0 股" in e for e in bad(_dec([_o("7203.T", "SELL", 100)])))
     assert any("出现两次" in e for e in bad(_dec([_o("7203.T", "BUY", 100), _o("7203.T", "BUY", 100)])))
+    # 2026-10-15：错误里的票写「代码 名字」（不带 .T）、ETF 的数量写「口」；输入格式的说明照旧（ticker 写 7203.T）
+    from qbreak import names as NM
+    assert f"{NM.label('1655.T')} 买 15 口不是 10 的倍数" in bad(_dec([_o("1655.T", "BUY", 15)]))
+    assert f"{NM.label('7203.T')} 卖 100 股 > 持有 0 股" in bad(_dec([_o("7203.T", "SELL", 100)]))
+    assert SH.unit("1329.T") == "口" and SH.unit("7203.T") == "股"
+    # 不在可选范围：原样回显输入（格式问题看得出来），查得到名字再括号补上；写错的 ticker 照原样
+    e = next(e for e in bad(_dec([_o("1545.T", "BUY", 10)])) if "不在可选范围" in e)
+    assert e.startswith("1545.T（纳斯达克 100）不在可选范围（日経225 成分股 + ")
+    e = next(e for e in bad(_dec([_o("7203", "BUY", 100)])) if "不在可选范围" in e)
+    assert e.startswith("7203（トヨタ自動車）不在可选范围") and e.endswith("ticker 写成 7203.T 这样）")
+    assert any(e.startswith("ZZZZ 不在可选范围") for e in bad(_dec([_o("ZZZZ", "BUY", 100)])))
 
 
 def test_record_is_append_only_and_goes_to_pending(tmp_path):

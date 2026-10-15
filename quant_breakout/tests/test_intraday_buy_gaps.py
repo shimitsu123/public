@@ -109,7 +109,7 @@ def test_g5_refusal_after_core_was_sold_says_so():
     r.session(10, 0, quote=_quote(QX))
     it = r.item("M-g5s")
     assert it["status"] == "rejected" and "立花没受理：余力不足" in it["msg"]
-    assert "已卖核心 ETF 1655.T" in it["msg"] and "钱留现金" in it["msg"]
+    assert "已卖核心 ETF 1655 S&P500" in it["msg"] and "钱留现金" in it["msg"]
 
 
 # ────────── G6：凑钱的核心 ETF 今天有单 / 取不到现价 ──────────
@@ -121,7 +121,7 @@ def test_g6_core_with_an_order_today_means_tomorrow_not_shortfall():
     res = r.session(10, 0, quote=_quote(QX))
     it = r.item("M-g6")
     assert res["later"] == 1 and it["status"] == "pending" and it.get("hold")
-    assert "凑钱要卖的核心 ETF 1655.T 今天已经有执行器的单" in it["msg"] and MO.status_text(it) == "明天开盘"
+    assert "凑钱要卖的核心 ETF 1655 S&P500 今天已经有执行器的单" in it["msg"] and MO.status_text(it) == "明天开盘"
 
 
 def test_g6_core_without_a_quote_retries():
@@ -132,7 +132,7 @@ def test_g6_core_without_a_quote_retries():
     res = r.session(10, 0, quote=_quote({"A.T": 1000.0, "B.T": 1500.0}))   # 核心 ETF 这一刻取不到现价
     it = r.item("M-g6q")
     assert res["retry"] == 1 and it["status"] == "pending" and not it.get("hold")
-    assert "凑钱要卖的核心 ETF 1655.T 取不到现价" in it["msg"] and dict(r.exch.pos) == u0
+    assert "凑钱要卖的核心 ETF 1655 S&P500 取不到现价" in it["msg"] and dict(r.exch.pos) == u0
     res = r.session(10, 10, quote=_quote(QX))                             # 10 分钟后取到了 → 卖核心补、买入
     assert res["placed"] == 1 and r.item("M-g6q")["status"] == "placed"
 
@@ -231,7 +231,7 @@ def test_g15_adapter_permanent_block_after_funding_is_rejected_and_says_core_was
     r.session(10, 0, quote=_quote(QX))
     it = r.item("M-g15a")
     assert it["status"] == "rejected" and "取引禁止" in it["msg"] and "只做一次" in it["msg"]   # 以前：明天开盘
-    assert "已卖核心 ETF 1655.T" in it["msg"]
+    assert "已卖核心 ETF 1655 S&P500" in it["msg"]
 
 
 def test_g15_adapter_transient_block_retries_and_the_later_fill_counts():

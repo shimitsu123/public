@@ -39,7 +39,8 @@ def out_path(capital: int = BASE_CAPITAL) -> Path:
 
 
 def _names() -> tuple[dict, dict]:
-    nm = json.loads((ROOT / "var" / "jpx_names.json").read_text(encoding="utf-8")).get("names") or {}
+    from qbreak import names as NM                # JPX 公开名单（2026-10-15 起经 qbreak/names.py：仓库快照之外还退回本机全部上市品种 / 已退市名）
+    nm = NM.names_map()
     s33 = json.loads((ROOT / "var" / "industry_s33.json").read_text(encoding="utf-8")).get("s33") or {}
     return nm, s33
 

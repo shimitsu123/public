@@ -22,6 +22,7 @@ import math
 import re
 
 from . import idle_cash as IC
+from . import names as NM
 from . import paths
 from .utils import read_json
 
@@ -154,15 +155,17 @@ def market_tiles(r: dict) -> list[dict]:
 
 
 def _bcu_after(br: dict | None) -> tuple[str, str, str, str]:
-    """Q1B：美股转熊那天闲置资金去哪（按现在的股债相关；那天的判定才算数）→ (格子里的字, 一句话, 补充, 格子的补充)。"""
+    """Q1B：美股转熊那天闲置资金去哪（按现在的股债相关；那天的判定才算数）→ (格子里的字, 一句话, 补充, 格子的补充)。
+    1482 写成「代码 名字」：格子里用短名「1482 对冲美债」，句子里用全名（2026-10-15 用户：只写代码不知道是哪只）。"""
     br = br or {}
     on, cs = br.get("on"), _sg(br.get("corr"), 2)
     head = f"股债 {br.get('win', 63)} 天相关 {cs}（{_md(br.get('corr_date'))}）"
+    bd, bd_s = NM.label("1482.T"), NM.label("1482.T", short=True)
     if on is None:
-        return "留现金", "留现金", "股债相关算不了（国债收益率没更新）→ 按不拿对冲版美债 1482", "股债相关算不了"
+        return "留现金", "留现金", f"股债相关算不了（国债收益率没更新）→ 按不拿 {bd}", "股债相关算不了"
     if on:
-        return "换 1482", "换对冲版美债 1482", f"{head} < 0：那天还是负相关就换 1482，变成 ≥ 0 就留现金", f"股债相关 {cs}"
-    return ("留现金", "留现金", f"{head}，{br.get('since') or '—'} 起不是负相关；< 0 才换对冲版美债 1482", f"股债相关 {cs}")
+        return f"换 {bd_s}", f"换 {bd}", f"{head} < 0：那天还是负相关就换 {bd_s}，变成 ≥ 0 就留现金", f"股债相关 {cs}"
+    return ("留现金", "留现金", f"{head}，{br.get('since') or '—'} 起不是负相关；< 0 才换 {bd}", f"股债相关 {cs}")
 
 
 def _jp_mult(sm: dict) -> tuple[float | None, str]:
@@ -205,7 +208,7 @@ def partial_row(t: str, sm: dict, st: dict, *, px: float | None, lot: int, cur: 
     if len(plan) == 2 and plan[0] == "SELL" and 0 < int(plan[1]) < cur:
         buys = sorted(st.get("plan") or {})
         adds = sorted(st.get("add_plan") or {})
-        why_p = (f"给要买的个股腾钱：{'、'.join(_code(x) for x in buys)}" if buys else
+        why_p = (f"给要买的个股腾钱：{NM.labels(buys, limit=4)}" if buys else            # 代码 + 名字（2026-10-15）
                  "给手动加仓腾钱" if adds else "调回规则目标")
         out.update(sub=f"规则已排（{why_p}）", fired=True, hint="已排")
         out["chips"].append({"text": f"{_md(fill_day)} 开盘卖 {int(plan[1]):,} 口", "tone": "hot"})
@@ -225,7 +228,8 @@ def partial_row(t: str, sm: dict, st: dict, *, px: float | None, lot: int, cur: 
 
 
 def _own(t: str) -> str:
-    return str(IC.NAMES.get(t, t)).split("（")[0]
+    """只有名字（「纳斯达克 100」；查不到 → 代码）。"""
+    return NM.name(t) or _code(t)
 
 
 def _stats(m: str) -> dict:
@@ -275,7 +279,7 @@ def build(t: str, sm: dict | None, book: dict | None, *, px: float | None = None
         elif tiles:
             r["chips"] = []
         rows.append(r)
-        back = f"之后 {IDX_NAME[key]} 转回牛市 → 再买回 {_code(t)}"
+        back = f"之后 {IDX_NAME[key]} 转回牛市 → 再买回 {NM.label(t)}"
         notes.append(f"转回牛市 = {IDX_NAME[key]} 连续 {r['need']} 天收在转牛线上（{r['L']} 日均价 × {1 + r['b']:g}）")
         if mode in IC.BOND_REFUGE and key == "US":
             short, long_, sub, tsub = _bcu_after(ic.get("bond_refuge") or {})
@@ -284,10 +288,11 @@ def build(t: str, sm: dict | None, book: dict | None, *, px: float | None = None
         if tiles:
             tiles.append({"label": "卖完" if r["fired"] else "转熊后", "value": short, "sub": tsub, "tone": None})
         rows.append({**_row("卖完去哪", f"卖完：{long_}" if r["fired"] else f"现在转熊的话：{long_}", (sub + "。" if sub else "") + back),
-                     "flow": [{"text": short}, {"text": f"转回牛市再买回 {_code(t)}"}]})
+                     "flow": [{"text": short}, {"text": f"转回牛市再买回 {NM.label(t, short=True)}"}]})
     elif key == "BR:BD":                                      # 对冲版美债 1482：美股熊且股债负相关时才拿
         timing = "US"
-        r = market_row(mk.get("US"), "US", "bull", then="卖它、换回纳斯达克 100（1545）", then_short="卖它、换回 1545")
+        r = market_row(mk.get("US"), "US", "bull", then=f"卖它、换回 {NM.label('1545.T')}",
+                       then_short=f"卖它、换回 {NM.label('1545.T', short=True)}")
         tiles += market_tiles(r)
         if tiles and not r["fired"]:
             r.update(chips=[], sub=r["formula"] + (f" · {r['phase_txt']}" if r["phase_txt"] else ""))
@@ -333,7 +338,8 @@ def build(t: str, sm: dict | None, book: dict | None, *, px: float | None = None
     notes.append("你自己点「卖出全部 / 调仓…」、改闲置资金比例，或手动买入 / 加仓个股钱不够时也会卖它（不算自动）；HALT 时什么单都不下")
     asof = next((x.get("asof") for x in rows if x.get("asof")), None) or st.get("last_date")
     hot = any(x.get("hot") for x in rows) or any(x.get("tone") == "bad" for x in tiles)
-    return {"t": t, "name": IC.NAMES.get(t, t), "mode": mode, "label": label, "key": key, "asof": asof, "asof_md": _md(asof),
+    # name = 只有名字（以前「纳斯达克 100（1545）」；2026-10-15）
+    return {"t": t, "name": _own(t), "mode": mode, "label": label, "key": key, "asof": asof, "asof_md": _md(asof),
             "tiles": tiles, "rows": rows, "never": "不会因为：" + "；".join(never), "never_tags": never_tags, "notes": notes, "hot": hot}
 
 

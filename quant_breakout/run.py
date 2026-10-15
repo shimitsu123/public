@@ -538,7 +538,7 @@ def cmd_pos(a) -> int:
         print(f"现金已设为 {amount:,.0f}")
     pos = b.positions()
     print(f"现金 {b.cash():,.0f}   持仓：" + (
-        "无" if not pos else ", ".join(f"{t} {p.qty}股@{p.avg_px:,.0f}" for t, p in pos.items())))
+        "无" if not pos else ", ".join(f"{_tqty(t, f'{p.qty}股')}@{p.avg_px:,.0f}" for t, p in pos.items())))
     return 0
 
 
@@ -1416,7 +1416,7 @@ def _br_keys(bear: dict, bar_date: str, provider: str, br_hook=None, spx=None) -
     st = BR.state_from_payload(pl)
     if st is None or (pl or {}).get("on") is None:
         st = pd.Series([False], index=[pd.Timestamp(bar_date)])
-        source += "；算不了 → 按不拿 1482"
+        source += "；算不了 → 按不拿 1482 对冲美债"
     bear.update(BR.keys(st, bear.get("US") if bear.get("US") is not None else pd.Series(dtype=bool)))
     info = {k: (pl or {}).get(k) for k in ("on", "since", "corr", "corr_date", "win", "us_bear", "hold", "bond_date", "spx_date",
                                           "lag_days", "as_of")}
@@ -2181,18 +2181,19 @@ def _kline(ctx, st, core: list, sg: dict | None, tag: str) -> dict:
     import datetime as _dt
     from qbreak import kline as KL
     from qbreak.data import load_universe
-    from qbreak.idle_cash import NAMES as IC_NAMES
+    from qbreak import names as NM
     from qbreak.trader import drop_partial_bar
     from qbreak.utils import write_json
     try:
-        info = {t: {"kind": "stock", "entry_px": round(float(p_.entry_px), 4), "entry_date": p_.entry_date,
+        # name = 只有名字（不带代码；查不到 → None）：持仓个股以前没有、核心 ETF 以前是「纳斯达克 100（1545）」（2026-10-15 用户：只写代码不知道是哪只）
+        info = {t: {"kind": "stock", "name": NM.name(t), "entry_px": round(float(p_.entry_px), 4), "entry_date": p_.entry_date,
                     "stop_px": round(float(p_.stop_px), 4)} for t, p_ in st.pos.items()}
         held = [t for t, u_ in st.core_units.items() if int(u_ or 0)]
         for t in dict.fromkeys(held + list(core)):
-            info.setdefault(t, {"kind": "core", "name": IC_NAMES.get(t, t)})
+            info.setdefault(t, {"kind": "core", "name": NM.name(t)})
         rows = (sg or {}).get("rows") or []
         for r in rows:
-            info.setdefault(r["ticker"], {"kind": "suggest", "name": r.get("name"),
+            info.setdefault(r["ticker"], {"kind": "suggest", "name": r.get("name") or NM.name(r["ticker"]),
                                           "signal_date": (sg or {}).get("asof") if r.get("signal") else None})
         ticks = sorted(info)
         # 建议的股票不限个数（2026-10-07）：10 年行情（月K 用）只给持仓 / 核心 ETF / 出了信号和快要出信号的 + 观察中的前 KLINE_LONG_WATCH 只，
@@ -2810,7 +2811,8 @@ def _unified_preview(a, cfg: dict) -> int:
         print(f"[{m}] 牛熊分界 {bb.get('state')}（数据日 {bb.get('asof')}）"
               + ("" if e.get("core_only") else f"；候补队列 {len(e.get('watchlist') or [])} 只"))
     if LAGGING:
-        print("行情落后（已重下载仍缺最近交易日）：" + "、".join(f"{t} {v['last']}（应有 {v['expected']}）" for t, v in LAGGING.items()))
+        from qbreak.names import label
+        print("行情落后（已重下载仍缺最近交易日）：" + "、".join(f"{label(t)} {v['last']}（应有 {v['expected']}）" for t, v in LAGGING.items()))
     return 0
 
 
@@ -3044,18 +3046,19 @@ def cmd_eligibility(a) -> int:
     for k, x in pn["sources"].items():
         print(f"  {x['label']}：{'有效' if x['fresh'] else '★ 过期 / 取不到'}（最后成功 {x['ok_at'] or '—'}；"
               f"{x['n']} 条{('；' + x['note']) if x.get('note') else ''}{('；错误 ' + x['error']) if x.get('error') else ''}）")
+    from qbreak.names import label, labels                 # 代码 + 名字、不打印 Python 列表（2026-10-15 用户：只写代码不知道是哪只）
     for k, dd in pn["diff"].items():
-        print(f"  名单对照 {EL.LABEL[k]}：我们有它没有 {dd['ours_only'] or '无'}；它有我们没有 {dd['src_only'] or '无'}；"
-              f"已记录的纳入它还没更新 {dd['lag'] or '无'}")
+        print(f"  名单对照 {EL.LABEL[k]}：我们有它没有 {labels(dd['ours_only']) or '无'}；它有我们没有 {labels(dd['src_only']) or '无'}；"
+              f"已记录的纳入它还没更新 {labels(dd['lag']) or '无'}")
     for b in pn["blocked"]:
-        print(f"  不开新仓 {b['code']}：{b['why']}")
+        print(f"  不开新仓 {label(b['code'])}：{b['why']}")
     for h in pn["held"]:
-        print(f"  持仓 {h['ticker']}（{h['account']}）{'★ ' if h['level'] == 'warn' else ''}{h['why']}")
+        print(f"  持仓 {label(h['ticker'])}（{h['account']}）{'★ ' if h['level'] == 'warn' else ''}{h['why']}")
     for c in pn["core"]:
-        print(f"  ★ 核心 ETF {c['code']}：{c['why']}")
+        print(f"  ★ 核心 ETF {label(c['code'])}：{c['why']}")
     tk = pn.get("tachibana") or {}
     print(f"  立花 ｅ支店能不能买（JPX 上場一覧 {tk.get('as_of') or '—'} 版；股票池 + 核心 ETF {tk.get('checked', 0)} 只）："
-          + ("；".join(f"{x['code']} {x['why']}" for x in (tk.get("stock") or []) + (tk.get("core") or [])) or "都能买"))
+          + ("；".join(f"{label(x['code'])} {x['why']}" for x in (tk.get("stock") or []) + (tk.get("core") or [])) or "都能买"))
     print(pn["text"])
     return 1 if pn["needs_user"] else 0
 
@@ -3083,7 +3086,8 @@ def cmd_delist_schedule(a) -> int:
     for ln in DS.lines(d):
         print(ln)
     gone = sorted(set(before) - set(after))
-    print(f"交易股票池 {len(after)} 只" + (f"（这次去掉 {'、'.join(gone)}）" if gone else "（这次没有去掉的）") + f"；文件 {DS.path()}")
+    from qbreak.names import labels
+    print(f"交易股票池 {len(after)} 只" + (f"（这次去掉 {labels(gone)}）" if gone else "（这次没有去掉的）") + f"；文件 {DS.path()}")
     return 1 if d.get("needs_user") or d.get("error") else 0
 
 
@@ -3659,9 +3663,12 @@ def cmd_live_broker(a) -> int:
     finally:
         lock.release()
     print(f"立花那边（{snap['at']} JST；只读、不改账本）：买付可能額 ¥{snap['buying_power']:,.0f}")
-    for r in snap["positions"]:
+    from qbreak import names as NM
+    core_ = set((b_.get("state") or {}).get("core_units") or {}) | set(NM.ETF_NAMES)
+    for r in snap["positions"]:                           # 代码 + 名字、ETF 是「口」（2026-10-15 用户：只写代码不知道是哪只）
         q = (snap.get("quotes") or {}).get(r["ticker"])
-        print(f"  {r['ticker']}：{r['qty']:,}（概算簿価 ¥{r['avg_px']:,.1f}" + (f"，现价 ¥{q:,.1f}" if q else "") + "）")
+        print(f"  {NM.label(r['ticker'])}：{r['qty']:,} {'口' if r['ticker'] in core_ else '股'}（概算簿価 ¥{r['avg_px']:,.1f}"
+              + (f"，现价 ¥{q:,.1f}" if q else "") + "）")
     if not snap["positions"]:
         print("  没有持仓")
     dl = BS.diff_lines(snap)
@@ -3698,12 +3705,15 @@ def cmd_live_export(a) -> int:
     st = b_.get("state") or {}
     d = paths.out_dir() / "export"
     d.mkdir(parents=True, exist_ok=True)
+    from qbreak.names import name as _nm                  # 「代码」后面加一列「名称」（查不到 → 空；2026-10-15 用户：只写代码不知道是哪只）
     tables = {
-        "fills": (["成交日", "方向", "代码", "种类", "数量", "成交价"],
-                  [[f["date"], "买" if f["side"] == "BUY" else "卖", f["ticker"], "核心ETF" if f["kind"] == "core" else "个股", f["qty"], f["px"]]
+        "fills": (["成交日", "方向", "代码", "名称", "种类", "数量", "成交价"],
+                  [[f["date"], "买" if f["side"] == "BUY" else "卖", f["ticker"], _nm(f["ticker"]) or "",
+                    "核心ETF" if f["kind"] == "core" else "个股", f["qty"], f["px"]]
                    for f in MV.recent_fills(b_, n=100000)[::-1] if str(f["date"])[:4] == y]),
-        "realized": (["卖出日", "代码", "种类", "数量", "卖价", "损益（含手续费，円）"],
-                     [[r["date"], r["ticker"], "核心ETF" if r["kind"] == "core" else "个股", r["shares"], r["px"], round(r["pnl"])]
+        "realized": (["卖出日", "代码", "名称", "种类", "数量", "卖价", "损益（含手续费，円）"],
+                     [[r["date"], r["ticker"], _nm(r["ticker"]) or "", "核心ETF" if r["kind"] == "core" else "个股",
+                       r["shares"], r["px"], round(r["pnl"])]
                       for r in TY.realized(st) if r["date"][:4] == y]),
         "flows": (["日期", "金额（円，入金+ / 出金−）", "备注", "到账（在哪个决策日之后）"],
                   [[f.get("date"), f.get("jpy"), f.get("note"), f.get("seen_after") or ""] for f in _flows(b_) if str(f.get("date"))[:4] == y]),
@@ -3864,12 +3874,36 @@ def cmd_live_restore(a) -> int:
     return 0
 
 
+def _tlab(t) -> str:
+    """给人看的代码：个股 / ETF →「7203 トヨタ自動車」、指数 →「日経平均（^N225）」；查不到名字只写代码
+    （2026-10-15 用户：只写代码不知道是哪只）。"""
+    from qbreak import names as NM
+    t = str(t or "")
+    if t.startswith("^"):
+        n = NM.name(t)
+        return f"{n}（{t}）" if n else t
+    return NM.label(t)
+
+
+def _tqty(t, s: str) -> str:
+    """_tlab 后面紧跟数量：「1329 日経225：1 口」（名字可能以数字结尾，隔「：」；names.qty，2026-10-15 复核）。"""
+    from qbreak import names as NM
+    return f"{_tlab(t)} {s}" if str(t or "").startswith("^") else NM.qty(t, s)
+
+
+def _seen_txt(text) -> str:
+    """notify_seen 去重键用的文字：转调 qbreak/names.seen_key（「7203 トヨタ自動車」「7203 トヨタ」「7203.T」都还原成「7203.T」——
+    代码后面加名字、名字表更新、全称 / 简称不同都不当成新的原因；面板的通知去重也用它，所以放到 names.py；2026-10-15）。"""
+    from qbreak import names as NM
+    return NM.seen_key(text)
+
+
 def _notify_once(tag: str, title: str, text: str, short: str) -> bool:
     """执行器停下 / 拿不到运行锁的通知：同一个账本、同一天、同一段文字只发一次 Mac 通知与手机通知（qbreak/notify_seen.py，
     记在 out/notify_seen_<账本>.json）；之后只打印（launchd 的 .out 日志照写）。返回这次发了没有。"""
     from qbreak import notify, notify_seen
     from qbreak.live_unified import mac_notify
-    if not notify_seen.first(tag, text):
+    if not notify_seen.first(tag, _seen_txt(text)):          # 键不受名字影响（2026-10-15）
         print("（同一个原因今天已经通知过：这次不再发 Mac / 手机通知，只写终端与日志）")
         log.info("通知去重（%s）：今天已经通知过同样的原因，这次不发：%s", tag, title)
         return False
@@ -4024,28 +4058,35 @@ def _live_unified_run(a, opened: list) -> int:
             desktop_page.show(p_)
     if a.resolve:
         o = resolve_order(book, a.resolve, a.filled, a.px)
-        print(f"已登记：{o['cid']} 成交 {o['filled_qty']} 股 @ {o['filled_px']:g}；下次早上的对账按这个记账")
+        from qbreak.names import label as _lab
+        print(f"已登记：{o['cid']}（{'买' if o.get('side') == 'BUY' else '卖'} {_lab(o.get('ticker'))}）成交 {int(o['filled_qty'] or 0):,} "
+              f"{'口' if o.get('kind') == 'core' else '股'} @ ¥{o['filled_px']:,g}；下次早上的对账按这个记账")
         page()
         return 0
     if a.status:
         b_ = read_json(book, {}) or {}
         st = b_.get("state") or {}
         print(f"账本 {book}（更新 {b_.get('updated', '—')}）\n决策日 {st.get('last_date') or '—'}；现金 ¥{float(st.get('cash_jpy') or 0):,.0f}")
+        from qbreak import names as NM                  # 代码 + 名字、买 / 卖、口 / 股（2026-10-15 用户：只写代码不知道是哪只；
+        #                                                 名字和数量之间隔「：」—— 名字可能以数字结尾：「1545 纳斯达克 100：4,110 口」）
         for t, p_ in (st.get("pos") or {}).items():
-            print(f"  持仓 {t} {int(p_['shares']):,} 股  成本 ¥{float(p_['entry_px']):,.2f}  止损 ¥{float(p_['stop_px']):,.2f}  "
+            sh = f"{int(p_['shares']):,} 股"
+            print(f"  持仓 {NM.qty(t, sh)}  成本 ¥{float(p_['entry_px']):,.2f}  止损 ¥{float(p_['stop_px']):,.2f}  "
                   f"买入 {p_['entry_date']}" + ("  （待卖）" if t in (st.get("pending_exit") or {}) else ""))
         for t, u_ in (st.get("core_units") or {}).items():
             if int(u_):
-                print(f"  核心 {t} {int(u_):,} 口")
+                print(f"  核心 {NM.qty(t, f'{int(u_):,} 口')}")
         for o in b_.get("orders", []):
-            lim = f" 限价 ¥{o['limit']:g}" if o.get("limit") else ""
-            print(f"  单 {o['cid']}  {o['side']} {o['ticker']} ×{o['qty']}{lim}  {o['status']}  {o.get('note', '')}")
+            lim = f" 限价 ¥{o['limit']:,g}" if o.get("limit") else ""
+            q_ = f"{int(o['qty'] or 0):,} {'口' if o.get('kind') == 'core' else '股'}"
+            print(f"  单 {o['cid']}  {'买' if o['side'] == 'BUY' else '卖'} {NM.qty(o['ticker'], q_)}"
+                  f"{lim}  {o['status']}  {NM.annotate(o.get('note', ''))}")
         for e in (b_.get("events") or [])[-10:]:
-            print(f"  [{e['level']}] {e['at']} {e['msg']}")
+            print(f"  [{e['level']}] {e['at']} {NM.annotate(e['msg'])}")              # 以前写下的事件只有代码 → 显示时补名字
         from qbreak import manual_orders as _MO
         for ln in _MO.lines({**(b_.get("manual") or {}), "items": list(((b_.get("manual") or {}).get("items") or {}).values()),
                              "active": 0}, today=now_jst().date().isoformat()):
-            print(f"  {ln[2:]}")
+            print(f"  {NM.annotate(ln[2:])}")
         for r_ in _MO.unseen(tag, b_):
             print(f"  手动指令 {r_['id']}：{_MO.describe(r_)} → 等执行器读（下一次运行）")
         page()
@@ -4147,7 +4188,7 @@ def _live_unified_run(a, opened: list) -> int:
                     data_why.append(f"日本行情只到 {last}（应有 {exp}）")
                 late = sorted(t for t in LAGGING if t in ("^GSPC", "^N225", "1655.T") or t in state.pos or t in eng.cfg.core)
                 if late:
-                    late_txt = "行情落后：" + "、".join(f"{t} {LAGGING[t]['last']}（应有 {LAGGING[t]['expected']}）" for t in late)
+                    late_txt = "行情落后：" + "、".join(f"{_tlab(t)} {LAGGING[t]['last']}（应有 {LAGGING[t]['expected']}）" for t in late)
                     ux.block(late_txt)
                     data_why.append(late_txt)
             else:                                            # 模拟账户：不挡（不影响下单），但通知写原因 + 修法（C-09）——Yahoo 连得上、
@@ -4158,7 +4199,7 @@ def _live_unified_run(a, opened: list) -> int:
                     if last < exp:
                         data_why.append(f"日本行情只到 {last}（应有 {exp}）")
                     elif "^N225" in LAGGING:
-                        data_why.append(f"行情落后：^N225 {LAGGING['^N225']['last']}（应有 {LAGGING['^N225']['expected']}）")
+                        data_why.append(f"行情落后：{_tlab('^N225')} {LAGGING['^N225']['last']}（应有 {LAGGING['^N225']['expected']}）")
             idxs, cutoff = _new_bar_idxs(eng, state)
             prov = _corp_actions_provider()
             if not paper:
@@ -4271,11 +4312,13 @@ def _live_unified_run(a, opened: list) -> int:
         mac_notify(title, short)
         notify.send(title, body, "warn" if bad else "info")
     print(f"\n决策日 {sm['decided_on']} → 成交日 {sm['fill_day']}；权益 ¥{sm['equity_jpy']:,.0f}，现金 ¥{sm['cash_jpy']:,.0f}")
+    from qbreak.live_unified import otag                 # 「卖 1545 纳斯达克 100 4,110 口」（以前「SELL 1545.T ×4,110」；2026-10-15 用户：只写代码不知道是哪只）
     for r in sm["reconciled"]:
-        print(f"  已对账 {r['bar']} {r['side']} {r['ticker']} {r['qty']:,} 股 @ ¥{r['px']:,.2f}")
+        print(f"  已对账 {r['bar']} {otag(r['side'], r['ticker'], r['qty'], r.get('kind') or 'stock')} @ ¥{r['px']:,.2f}")
     for o in sm["orders"]:
-        lim = f" 限价 ¥{o['limit']:g}" if o.get("limit") else ""
-        print(f"  {o['side']} {o['ticker']} ×{o['qty']:,}{lim}（{ {'morning': '寄付', 'now': '盘中'}.get(o['phase'], '开盘后')}）"
+        lim = f" 限价 ¥{o['limit']:,g}" if o.get("limit") else ""
+        print(f"  {otag(o['side'], o['ticker'], o['qty'], o.get('kind') or 'stock')}{lim}"
+              f"（{ {'morning': '寄付', 'now': '盘中'}.get(o['phase'], '开盘后')}）"
               f" → {o['status']} {o.get('note') or ''}".rstrip())
     if sm["blocked"]:
         print(f"★ 没有下单：{sm['blocked']}")
@@ -4315,7 +4358,8 @@ def _apply_remote_halt(path, paper: bool, notify_: bool) -> None:
 def _manual_snap(book: dict) -> dict:
     """账本里手动指令的 {id: (状态, 说明)}（重试 / 盘中的运行前后比较：什么都没变就不再通知；G10 / G19，2026-10-14）。"""
     items = ((book or {}).get("manual") or {}).get("items") or {}
-    return {str(k): (v.get("status"), v.get("msg")) for k, v in items.items() if isinstance(v, dict)}
+    # 说明按 seen_key 比：执行器把旧的「7203.T」说明改写成「7203 トヨタ自動車」、名字表更新后补上名字，都不算「变了」（2026-10-15）
+    return {str(k): (v.get("status"), _seen_txt(v.get("msg"))) for k, v in items.items() if isinstance(v, dict)}
 
 
 def _manual_due(tag: str, book: dict) -> bool:
@@ -4355,7 +4399,8 @@ def _now_report(a, ux, res: dict, paper: bool, tag: str, since: str | None = Non
     write_json(fp, sm0)
     hb_ = (s1.get("manual") or {}).get("halt_backlog")      # HALT 解除后的第一次运行：积压的手动指令照原样执行（2026-10-13）
     items = res.get("items") or []
-    lines = ([f"- ★ {hb_}"] if hb_ else []) + [f"- {x['ticker']}：{x['status']}（{x['msg']}）" for x in items]
+    from qbreak.names import label as _lab               # 代码 + 名字（2026-10-15 用户：只写代码不知道是哪只）
+    lines = ([f"- ★ {hb_}"] if hb_ else []) + [f"- {_lab(x['ticker'])}：{x['status']}（{x['msg']}）" for x in items]
     for ln in lines:
         print(ln[2:])
     n = int(res.get("placed") or 0)
@@ -4368,8 +4413,9 @@ def _now_report(a, ux, res: dict, paper: bool, tag: str, since: str | None = Non
         bad = RS.actionable(RS.bad_orders([asdict(o) if is_dataclass(o) else o for o in new]))   # HALT 挡下的不算失败
         # 同一条指令、同样的状态与说明今天只通知一次（G19；2026-10-14：取不到现价 / 早上的运行没完成时以前每 10 分钟通知一次）；
         # 日志 / 终端照写每次的；新下的单被挡 / 被拒、HALT 积压、这次运行的新 error → 照发
-        fresh = [x for x in items if notify_seen.first(tag, f"盘中手动指令|{x.get('id')}|{x.get('status')}|{x.get('msg')}")]
-        errs = [e for e in RS.run_errors(ux.book.get("events"), since) if notify_seen.first(tag, f"盘中运行错误|{e}")]
+        # 键用 _seen_txt：说明里的「7203 トヨタ自動車」与以前的「7203.T」算同一段（加名字不重发；2026-10-15）
+        fresh = [x for x in items if notify_seen.first(tag, _seen_txt(f"盘中手动指令|{x.get('id')}|{x.get('status')}|{x.get('msg')}"))]
+        errs = [e for e in RS.run_errors(ux.book.get("events"), since) if notify_seen.first(tag, _seen_txt(f"盘中运行错误|{e}"))]
         if not (fresh or bad or hb_ or errs):
             print("（这些指令的状态与上次通知的一样：这次不再发 Mac / 手机通知，只写终端与日志）")
             return 0
@@ -4377,8 +4423,8 @@ def _now_report(a, ux, res: dict, paper: bool, tag: str, since: str | None = Non
         star = f"★ 没下 {len(bad)} 笔（{RS.bad_text(bad)}）｜" if bad else ""       # 放最前面：Mac 通知只显示前 200 字
         hb_star = "★ HALT 期间等着的手动指令现在照原样执行｜" if hb_ else ""     # 正文第一行已经列出每条
         show = fresh or items
-        mac_notify(title, (star + hb_star + f"下单 {n} 笔：" + "；".join(f"{x['ticker']} {x['status']}" for x in show))[:200])
-        body = ([f"- ★ {hb_}"] if hb_ else []) + [f"- {x['ticker']}：{x['status']}（{x['msg']}）" for x in show] \
+        mac_notify(title, (star + hb_star + f"下单 {n} 笔：" + "；".join(f"{_lab(x['ticker'], short=True)} {x['status']}" for x in show))[:200])
+        body = ([f"- ★ {hb_}"] if hb_ else []) + [f"- {_lab(x['ticker'])}：{x['status']}（{x['msg']}）" for x in show] \
             + [f"- ★ {e}" for e in errs]
         notify.send(title, (f"- {star.rstrip('｜')}\n" if star else "") + "\n".join(body), "warn" if warn else "info")
     return 0
@@ -4393,6 +4439,9 @@ def cmd_manual(a) -> int:
     盘中 → 马上（面板叫 --phase now）；开盘前 → 今天开盘；收盘后 → 下一个交易日开盘（qbreak/manual_orders.timing）。"""
     from qbreak import manual_orders as MO
     from qbreak.calendar_jp import now_jst
+    from qbreak.names import annotate as _ann
+    from qbreak.names import label as _lab                    # 代码 + 名字（2026-10-15 用户：只写代码不知道是哪只）
+    from qbreak.names import qty as _labq                     # 名字后面紧跟数量：「1545 纳斯达克 100：4,110 口」（名字可能以数字结尾；2026-10-15 复核）
     from qbreak.utils import read_json
     if a.broker != "paper":                                   # 立花的手动指令（含 list）：数据目录不能在仓库里
         rc_ = _refuse_repo_home(f"manual {a.action} --broker {a.broker}")
@@ -4408,21 +4457,22 @@ def cmd_manual(a) -> int:
         print(f"账本 {book}（{'模拟账户' if paper else '立花'}；决策日 {st.get('last_date') or '—'}）")
         for t, p_ in (st.get("pos") or {}).items():
             q = (st.get("pending_exit") or {}).get(t)
-            print(f"  {t} {int(p_['shares']):,} 股，约占权益 {pct.get(t) if pct.get(t) is not None else '—'}%"
+            sh_ = f"{int(p_['shares']):,} 股"
+            print(f"  {_labq(t, sh_)}，约占权益 {pct.get(t) if pct.get(t) is not None else '—'}%"
                   + (f"（在卖出：{MO.REASON_TEXT.get(q, q)}）" if q else ""))
         for t, u_ in (st.get("core_units") or {}).items():
             if int(u_):
-                print(f"  核心 {t} {int(u_):,} 口")
+                print(f"  核心 {_labq(t, f'{int(u_):,} 口')}")
         man = b_.get("manual") or {}
         sm = {**man, "items": sorted((man.get("items") or {}).values(), key=lambda x: x.get("at", ""), reverse=True)}
         print(f"  闲置资金比例：规则目标额的 {float(man.get('core_pct', 100.0)):g}%")
         for ln in MO.lines(sm, today=now.date().isoformat(), now=now):
-            print(f"  {ln[2:]}")
+            print(f"  {_ann(ln[2:])}")
         if man.get("core_pause"):                             # 停买中：规则现在想拿哪只（确认买入 = manual core --pct 100）
             u100_ = (b_.get("core_rule") or {}).get("units100")
             want_ = [(t, int(n)) for t, n in (u100_ or {}).items() if int(n) > 0]
             print("  规则现在：" + ("执行器下一次运行之后显示" if u100_ is None else
-                                    "想拿 " + "、".join(f"{t} 约 {n:,} 口" for t, n in want_) if want_ else "不拿核心 ETF")
+                                    "想拿 " + "、".join(f"{_lab(t)} 约 {n:,} 口" for t, n in want_) if want_ else "不拿核心 ETF")
                   + "（确认买入：bash scripts/liveu.sh manual core --pct 100）")
         for r_ in MO.unseen(tag, b_):
             print(f"  手动指令 {r_['id']}：{MO.describe(r_)} → {'等下单' if r_.get('kind') in MO.ORDER_KINDS else '等执行器读'}"
@@ -4437,7 +4487,7 @@ def cmd_manual(a) -> int:
                      + "（要不做：先 manual cancel <指令 id>）" if wait_ else "（没有）"))
             hc_ = MO.halt_core(sm["items"], un_, gone_)   # HALT 中改的闲置资金比例 / 固定口数：读到就生效、解除后照它买卖 ETF（2026-10-14）
             if hc_:
-                print(f"★ HALT 期间改的闲置资金比例 / 固定口数 {len(hc_)} 条，解除后下一次决策照它买卖 ETF：{MO.halt_core_line(hc_)}"
+                print(f"★ HALT 期间改的闲置资金比例 / 固定口数 {len(hc_)} 条，解除后下一次决策照它买卖 ETF：{_ann(MO.halt_core_line(hc_))}"
                       "（要改回：manual core --pct N / manual corefix <ETF> --clear）")
         print(f"现在写的买卖：{when}下单（{MO.RULE_TEXT}）")
         s_ = MO.slots(b_, tag)
@@ -4476,7 +4526,7 @@ def cmd_manual(a) -> int:
     if a.action == "cancel":                                 # 撤回：与面板同一个函数（同批的卖出 / 闲置资金指令一起撤；2026-10-13）
         sm_ = read_json(paths.out_dir() / f"live_unified_{tag}.json", {}) or {}
         ok, msg, rec = MO.cancel_request(tag, b_, str(a.target or ""), source="cli", sm=sm_)
-        print(("" if ok else "★ ") + msg)
+        print(("" if ok else "★ ") + _ann(msg))
         return 0 if ok else 2
     if a.action in ("trim", "core"):
         req["pct"] = a.pct
@@ -4493,7 +4543,7 @@ def cmd_manual(a) -> int:
     sm_ = read_json(paths.out_dir() / f"live_unified_{tag}.json", {}) or {}
     why = MO.check(rec, b_, tag, sm=sm_)
     if why:
-        print(f"★ 没写：{why}")
+        print(f"★ 没写：{_ann(why)}")
         return 2
     pct0_ = MO.core_pct_now(tag, b_)                          # 写之前的闲置资金比例（0 = 停买中）
     if rec["kind"] == "adjust":                               # 写入时预览的方向（+1 加 / −1 减）：执行时换算方向相反 → 不执行（2026-10-13）
@@ -4538,9 +4588,9 @@ def cmd_manual(a) -> int:
                  + ("paper" if paper else "tachibana") + " --phase now" if mode == "now" else ""))
     elif rec["kind"] == "corefix":                           # 固定口数 / 恢复按规则（2026-10-13：说清会怎样）
         if rec.get("clear"):
-            print(MO.corefix_clear_text(b_, rec["ticker"], tag, now))
+            print(_ann(MO.corefix_clear_text(b_, rec["ticker"], tag, now)))
         else:
-            print(f"下一次决策（交易日 07:40）起 {rec['ticker']} 调到 {int(rec.get('units') or 0):,} 口、开盘下单；不按规则自动调，直到 corefix --clear")
+            print(f"下一次决策（交易日 07:40）起 {_lab(rec['ticker'])} 调到 {int(rec.get('units') or 0):,} 口、开盘下单；不按规则自动调，直到 corefix --clear")
             if rec.get("from_kind"):
                 print("这只 ETF 是手动固定的：只改它的固定口数（别的 ETF 与闲置资金比例不变）")
         for ln in (pv_ or {}).get("text", "").split("\n")[1:]:       # 与页面「确认下单」框同一份：预计的单（别的 ETF 卖多少）、哪天、按什么价（2026-10-15）
@@ -4551,12 +4601,13 @@ def cmd_manual(a) -> int:
         c_ = MO.core_info(b_, rec["ticker"]) if rec.get("ticker") else None
         stop_ = float(rec["pct"]) <= 0
         if c_ and not stop_:
-            print(f"按最近收盘 ¥{c_['px']:,.0f} 估算：{rec['ticker']} {c_['cur']:,} → {int(rec['target']):,} 口"
+            mv_ = f"{c_['cur']:,} → {int(rec['target']):,} 口"
+            print(f"按最近收盘 ¥{c_['px']:,.0f} 估算：{_labq(rec['ticker'], mv_)}"
                   f"（闲置资金比例 {c_['pct']:g}% → {rec['pct']:g}%）"
                   + ("；规则目标额执行器还没算过：100% 先按现在的口数估算（下一次决策用准确的数）" if c_.get("approx") else ""))
         fx_ = MO.core_effects(b_, rec["pct"], skip=rec.get("ticker"), tag=tag)   # 还没读的固定口数也算（2026-10-14）
         if fx_:
-            print("★ 比例对全部核心 ETF 一起生效：" + "、".join(f"{x} {u0:,} → {u1:,} 口" for x, u0, u1 in fx_))
+            print("★ 比例对全部核心 ETF 一起生效：" + "、".join(_labq(x, f"{u0:,} → {u1:,} 口") for x, u0, u1 in fx_))
         mode = MO.timing(now)[0]
         hint_ = ("：操作面板开着的话会马上叫执行器；没开就运行 bash scripts/liveu.sh run --broker "
                  + ("paper" if paper else "tachibana") + " --phase now" if mode == "now" else "")
@@ -4568,7 +4619,7 @@ def cmd_manual(a) -> int:
             ri_ = MO.resume_info(b_, tag, now, pct=p1_)       # 规则不拿 / 今天已经有单 → 不是马上（2026-10-13）
             hd_ = "确认买入" if p1_ >= 100 - 1e-9 else f"恢复成 {p1_:g}%"   # 不到 100% 不说照规则（2026-10-14）
             if ri_["none"] or ri_["late"]:
-                print(f"{hd_}：停买结束（闲置资金比例 0% → {rec['pct']:g}%）；{ri_['text']}")
+                print(f"{hd_}：停买结束（闲置资金比例 0% → {rec['pct']:g}%）；{_ann(ri_['text'])}")
             elif p1_ >= 100 - 1e-9:
                 print(f"确认买入：停买结束，核心 ETF {when}照规则买入（闲置资金比例 0% → {rec['pct']:g}%）；之后每天照规则调" + hint_)
             else:
@@ -4810,7 +4861,7 @@ def _tachibana_order_test(b, spec, rec: dict | None = None) -> bool:
     cash0, pos0 = b.cash(), b.positions().get(t)
     o = b.buy(t, qty, limit=lim, client_id=f"probe-{int(time.time())}")
     ot["buy"] = o.status
-    print(f"[{'OK' if o.status in ('FILLED', 'PARTIAL', 'SENT') else 'NG'}] 当日指値买    : {t} ×{qty} @ {lim:g} → {o.status}"
+    print(f"[{'OK' if o.status in ('FILLED', 'PARTIAL', 'SENT') else 'NG'}] 当日指値买    : {_tqty(t, f'{qty:,} 口')} @ ¥{lim:,g} → {o.status}"
           f"（注文番号 {o.broker_id or '—'}，约定 {o.filled_qty} @ {o.filled_px:g}）{o.note}")
     if not o.broker_id:
         return False
@@ -4824,7 +4875,7 @@ def _tachibana_order_test(b, spec, rec: dict | None = None) -> bool:
     cash1, pos1 = b.cash(), b.positions().get(t)
     ot["cash_or_pos_changed"] = bool(abs(cash1 - cash0) >= 1 or (pos1.qty if pos1 else 0) != (pos0.qty if pos0 else 0))
     print(f"[{'OK' if ot['cash_or_pos_changed'] else 'NG'}] 约定与余力    : order_status {st}；买付可能額 {cash0:,.0f} → {cash1:,.0f} 円；"
-          f"{t} 持仓 {pos0.qty if pos0 else 0} → {pos1.qty if pos1 else 0} 口")
+          f"{_tlab(t)} 持仓 {pos0.qty if pos0 else 0} → {pos1.qty if pos1 else 0} 口")
     s_ = b.sell(t, qty, client_id=f"probe-s-{int(time.time())}", bar="next")      # 寄付成行：等下一个寄付，先撤掉
     print(f"[{'OK' if s_.status == 'SENT' else 'NG'}] 寄付卖单      : → {s_.status}（注文番号 {s_.broker_id or '—'}）{s_.note}")
     ot["cancel"] = False
@@ -4847,7 +4898,7 @@ def _order_test_opening_limit_buy(b, t: str, qty: int, ref: float, ot: dict) -> 
     o = b.buy(t, qty, limit=lim, client_id=f"probe-ob-{int(time.time())}", bar="next")
     ot["opening_limit_buy"] = o.status
     accepted = bool(o.broker_id) and o.status in ("SENT", "FILLED", "PARTIAL")
-    print(f"[{'OK' if accepted else 'NG'}] 寄付指値买    : {t} ×{qty} @ {lim:g}（执行器每天最常用的单型；低于现价 10%，不让它成交）"
+    print(f"[{'OK' if accepted else 'NG'}] 寄付指値买    : {_tqty(t, f'{qty:,} 口')} @ ¥{lim:,g}（执行器每天最常用的单型；低于现价 10%，不让它成交）"
           f"→ {o.status}（注文番号 {o.broker_id or '—'}）{o.note}")
     if not accepted:
         ot["opening_cancel"] = False
@@ -4893,7 +4944,8 @@ def _tachibana_tradable_check(b) -> str:
         if not w and unit.isdigit() and int(unit) != lot:
             w = f"売買単位 {unit} ≠ 我们以为的一手 {lot}（qbreak/fees.py / qbreak/tick.py 要改，否则买单会被挡）"
         if w:
-            bad.append(f"{t_} {w}")
+            lab = _tlab(t_)
+            bad.append(w if lab in w else f"{lab} {w}")   # 理由里已经写了「1332 ニッスイ」（マスタにない）→ 不再在前面重复一遍（2026-10-15）
     return (f"マスタ {len(m)} 件；股票池 {len(pool)} 只 + 核心 {len(core)} 只：" + ("都能买、一手一致" if not bad else "★ " + "；".join(bad)))
 
 
@@ -4918,13 +4970,13 @@ def _probe_quote_text(b, now=None, info: dict | None = None) -> str:
     pc = {t: q[t]["prev_close"] for t in PROBE_QUOTE if (q.get(t) or {}).get("prev_close")}
 
     def fmt(d: dict) -> str:
-        return "、".join(f"{t.split('.')[0]} {v:,g} 円" for t, v in d.items())
+        return "、".join(_tqty(t, f"{v:,g} 円") for t, v in d.items())          # 代码 + 名字（2026-10-15）
     if is_trading_day(now.date()) and dt.time(9, 0) <= now.time() <= dt.time(15, 30):
         if info is not None:
             info["price_checked"] = bool(px)
         if not px:
             return "★ 交易时间里取不到现价（字段名不对？）" + (f"；前日終値 {fmt(pc)}" if pc else "；前日終値也没有")
-        miss = [t.split(".")[0] for t in PROBE_QUOTE if t not in px]
+        miss = [_tlab(t) for t in PROBE_QUOTE if t not in px]
         return f"现价 {fmt(px)}" + (f"（{'、'.join(miss)} 没有现价：还没寄り付き？）" if miss else "")
     if not pc:
         return "★ 连前日終値都没有：字段名可能不对" + (f"（现价 {fmt(px)}）" if px else "")
@@ -4962,7 +5014,7 @@ def _tachibana_probe_run(a, opened: list) -> int:
                                                    f"下次版本发布 {b.next_release or '未公布'}；"
                                                    f"交付書面更新预定 {getattr(b, 'doc_update', '') or '未公布'}")[1]),
         ("取价 7203 / 1329 / 1655", lambda: _probe_quote_text(b, info=qinfo)),   # 调用失败 = NG；交易时间里没有现价 = ★
-        ("持仓", lambda: f"{ {t: p.qty for t, p in b.positions().items()} }"),
+        ("持仓", lambda: "、".join(_tqty(t, f"{p.qty:,}") for t, p in b.positions().items()) or "无"),   # 不打印 dict（2026-10-15）
         ("买付余力", lambda: f"{b.cash():,.0f}"),
         ("注文一覧", lambda: f"{len(b.open_orders(strict=True))} 件"),         # 调用失败 = NG（不当成 0 件）
         ("立花銘柄マスタ：股票池 + 核心能不能买", lambda: _tachibana_tradable_check(b)),

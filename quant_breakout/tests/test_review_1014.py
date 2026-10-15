@@ -59,7 +59,7 @@ def test_allin_placed_hides_restore_buttons_and_does_not_say_withdraw():
         now = _at(r, hh, 0)
         h = panel.render(r.tag, "tok", now=now)
         assert "data-act='core-restore'" not in h and "data-act='core-resume'" not in h and "恢复成 50%" not in h
-        assert "「全部换成 B.T」今天已下单、在执行" in h
+        assert "「全部换成 B」今天已下单、在执行" in h                 # 文字写 label（假代码没名字：只写代码；2026-10-15）
         for pct in (50, 100):
             ok, msg, _ = panel.submit({"book": r.tag, "kind": "core", "pct": pct}, now)
             assert not ok and "今天已下单、在执行" in msg and "先撤回" not in msg
@@ -81,13 +81,13 @@ def test_pending_manual_buy_blocks_allin_and_allin_blocks_a_new_buy():
     _write({"kind": "buy", "ticker": "A.T", "unit": "shares", "value": 100, "source": "test", "id": "M-a-buy",
             "at": r.at(r.k - 1, 5).isoformat()})
     fa = MO.fund_all(r.ux.book, TAG, "B.T")
-    assert fa["blocked"] and "A.T 有还没执行的买入指令（M-a-buy）" in fa["blocked"] and "先撤回它" in fa["blocked"]
+    assert fa["blocked"] and "A 有还没执行的买入指令（M-a-buy）" in fa["blocked"] and "先撤回它" in fa["blocked"]
     MO.requests_path(TAG).unlink()
     at = r.at(r.k - 1, 6).isoformat()
     _write({"kind": "core", "pct": 0, "fund_for": "B.T", "batch": "all", "source": "test", "id": "M-all-core", "at": at, "prev_pct": 100})
     _write({"kind": "buy", "ticker": "B.T", "unit": "shares", "value": 100_000, "fund": "all", "source": "test", "id": "M-all-buy", "at": at})
     why = MO.check({"kind": "buy", "ticker": "A.T", "unit": "rule"}, r.ux.book, TAG)   # 测试用的票（A.T）不过 normalize
-    assert why and "「全部换成 B.T」在等决策" in why and "A.T 会和它在同一次决策里买进" in why
+    assert why and "「全部换成 B」在等决策" in why and "A 会和它在同一次决策里买进" in why
 
 
 # ────────── ④ 撤销撤回的状态词 ──────────
@@ -150,7 +150,7 @@ def test_split_add_blocked_at_decision_sells_nothing():
     r.day()
     a, b = r.item("M-sp-a"), r.item("M-sp-b")
     assert a["status"] == "rejected" and a["msg"].startswith("不加仓：决算前 2 天") and "凑钱的卖出也不做" in a["msg"]
-    assert b["status"] == "rejected" and "加仓 A.T 被挡 → 凑钱的卖出也不做" in b["msg"]
+    assert b["status"] == "rejected" and "加仓 A 被挡 → 凑钱的卖出也不做" in b["msg"]
     assert "B.T" not in r.ux.manual.m["trims"] and not _orders(r, "B.T", "SELL")
     r.day()
     assert int(r.eng.st.pos["B.T"].shares) == shb and int(r.eng.st.pos["A.T"].shares) == sha
@@ -174,7 +174,7 @@ def test_split_add_blocked_intraday_sends_no_funding_sell():
     r.session(10, 0)
     a, b = r.item("M-sp-a"), r.item("M-sp-b")
     assert a["status"] == "rejected" and "决算前 2 天" in a["msg"] and "凑钱的卖出也不做" in a["msg"]
-    assert b["status"] == "rejected" and "加仓 A.T 被挡" in b["msg"]
+    assert b["status"] == "rejected" and "加仓 A 被挡" in b["msg"]
     assert not _orders(r, "B.T", "SELL") and int(r.eng.st.pos["B.T"].shares) == shb
 
 
@@ -196,7 +196,7 @@ def test_core_written_during_halt_is_marked_listed_and_reported_on_lift(capsys, 
     h = panel.render(r.tag, "tok", now=_at(r, 16, 0))
     card = h[h.index("id='halt'"):]
     card = card[:card.index("</section>")]
-    assert "HALT 期间改的闲置资金比例 / 固定口数 2 条" in card and "M-core-0 卖出全部 1545.T（之后停买闲置资金 ETF） 写于 01/05" in card
+    assert "HALT 期间改的闲置资金比例 / 固定口数 2 条" in card and "M-core-0 卖出全部 1545 纳斯达克 100（之后停买闲置资金 ETF） 写于 01/05" in card
     assert "解除后下一次决策照它买卖 ETF" in card
     from qbreak import calendar_jp as CJ
     import run
@@ -209,7 +209,7 @@ def test_core_written_during_halt_is_marked_listed_and_reported_on_lift(capsys, 
     _morning(r)
     ev = [e for e in r.ux.book["events"] if "HALT 期间改的闲置资金比例 / 固定口数" in e["msg"]]
     assert len(ev) == 1 and ev[0]["level"] == "warn"
-    assert ev[0]["msg"].startswith("HALT 期间改的闲置资金比例 / 固定口数 2 条，下一次决策照它买卖 ETF：M-core-0 卖出全部 1545.T")
+    assert ev[0]["msg"].startswith("HALT 期间改的闲置资金比例 / 固定口数 2 条，下一次决策照它买卖 ETF：M-core-0 卖出全部 1545 纳斯达克 100")
     assert "要改回" in ev[0]["msg"] and "manual cancel" not in ev[0]["msg"]
     it = r.ux.book["manual"]["items"]
     assert not it["M-core-0"].get("halt") and MO.HALT_CORE_MSG not in it["M-core-0"]["msg"]

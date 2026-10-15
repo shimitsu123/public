@@ -72,12 +72,14 @@ def test_parsers_read_codes_categories_and_dates():
     assert [(i["code"], i["cat"], i["date"]) for i in s] == [("7133", "監理銘柄（確認中）", "2026-09-25"),
                                                              ("9229", "監理銘柄（審査中）", "2026-04-01"),
                                                              ("9691", "整理銘柄", "2026-09-16")]
+    assert [i.get("name") for i in s] == ["Ａ", "Ｂ", "Ｃ"]                                # 銘柄名（JPX 公开数据；去掉（株）；2026-10-15）
     assert EL.parse_jpx_supervision(SUP_ETF)["items"] == []                                  # 没有 ETF 被指定也算取到
     a = EL.parse_jpx_alert(ALERT)["items"]
-    assert a == [{"code": "6594", "cat": "特別注意銘柄", "date": "2025-10-28"}]               # 续行（指定継続日 / -）跳过
+    assert a == [{"code": "6594", "cat": "特別注意銘柄", "date": "2025-10-28", "name": "ニデック"}]   # 续行（指定継続日 / -）跳过
     d = EL.parse_jpx_delisted(DELISTED)["items"]
     assert [(i["code"], i["date"], i["why"]) for i in d] == [("5484", "2026-10-19", "TOB・MBO・株式併合"),
                                                              ("1111", "2026-06-01", "上場維持基準不適合")]
+    assert [i.get("name") for i in d] == ["Ｄ", "Ｅ"]
     assert "理由" not in json.dumps(d, ensure_ascii=False) and "買収" not in json.dumps(d, ensure_ascii=False)   # 理由原文不存
     with pytest.raises(ValueError):
         EL.parse_jpx_supervision("<html>改版</html>")
@@ -86,6 +88,9 @@ def test_parsers_read_codes_categories_and_dates():
     j = EL.parse_jpx_list(_jpx_list(extra=[("2971", "REIT・ベンチャーファンド・カントリーファンド・インフラファンド"), ("9999", "PRO Market")]))
     assert {"7203", "1655", "1545"} <= set(j["allowed"].split(",")) and j["date"] == "2026-08-31"
     assert j["other"] == {"2971": "REIT・ベンチャーファンド・カントリーファンド・インフラファンド", "9999": "PRO Market"}
+    assert "names_all" not in j                                                              # 测试文本没有第 4 列（銘柄名）→ 不放
+    jn = EL.parse_jpx_list("7203,プライム（内国株式）,20260831,トヨタ自動車\n1545,ETF・ETN,20260831,ＮＥＸＴ　ＦＵＮＤＳ　ＮＡＳＤＡＱ")
+    assert jn["names_all"] == {"7203": "トヨタ自動車", "1545": "ＮＥＸＴ　ＦＵＮＤＳ　ＮＡＳＤＡＱ"} and jn["n"] == 2
     with pytest.raises(ValueError):
         EL._validate("jpx_list", EL.parse_jpx_list("7203,プライム（内国株式）,20260831"))           # 解析出 1 行 → 不用
 
@@ -196,7 +201,7 @@ def test_core_etf_flag_blocks_core_buys_only_and_held_alerts():
     assert [(x["ticker"], x["level"]) for x in h] == [("1655.T", "warn"), ("543A.T", "info"), ("6594.T", "warn")]
     pn = g.panel(held=h)
     assert pn["core"][0]["code"] == "1655" and any("核心 ETF 1655" in n for n in pn["needs_user"])
-    assert any("持仓 6594.T（模拟盘）" in n and "不自动卖" in n for n in pn["needs_user"])
+    assert any("持仓 6594 ニデック（模拟盘）" in n and "不自动卖" in n for n in pn["needs_user"])        # 代码 + 名字（2026-10-15）
     assert not any("543A" in n for n in pn["needs_user"])                                     # 按记录剔除的持仓只是提示
 
 
@@ -265,7 +270,7 @@ def test_daily_text_and_report_show_eligibility_alerts():
     pn = g.panel(held=g.held_alerts(["6594.T"], "执行器"), blocked_today=[{"date": "2026-09-25", "ticker": "6594.T", "why": "x"}])
     sm = {"decided_on": "2026-09-25", "fill_day": "2026-09-28", "orders": [], "eligibility": pn}
     title, short, body = daily_text(sm, UState(cash_jpy=1e6), None, True, 1e6)
-    assert "★ 资格检查要确认" in short and "持仓 6594.T（执行器）" in body
+    assert "★ 资格检查要确认" in short and "持仓 6594 ニデック（执行器）" in body
     html = _eligibility_html({"eligibility": pn}, ({}, {}, {"6594": "ニデック"}))
     assert "下单前资格检查" in html and "6594 ニデック" in html and "今天被挡掉的信号" in html
     miss = missing_items({"eligibility": pn})

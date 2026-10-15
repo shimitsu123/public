@@ -273,7 +273,8 @@ def main(argv=None) -> int:
     Ms = Ms[(Ms.index >= pd.Timestamp("2005-10-31")) & (Ms.index <= D.index.max())]
     T2 = sync_table(Xs, SC.past(Ms, 3), MON, H_m)
     from qbreak import jpx_list as JX
-    nm = JX.names()
+    from qbreak import names as NM
+    nm = NM.names_map()                          # 2026-10-15 起：与日报同一份名字（JPX 公开名单 + ETF / 指数名）
     say("\n个股（日経225，同期；✓ = 两半一致）：")
     stock_rows = {}
     for s in Xs.columns:

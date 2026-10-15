@@ -70,10 +70,14 @@ def test_build_rows_core_and_errors(monkeypatch):
     assert abs(r["7203.T"]["pct_equity"] - 300 * 1200 / 1e6 * 100) < 0.01 and r["7203.T"]["trend"]["label"] == "up"
     assert r["9999.T"]["error"] == "没有这只票的行情"
     assert [c["ticker"] for c in hv["core"]] == ["1545.T"] and "Q1 纳指" in hv["core"][0]["why"] and "牛市·稳固" in hv["core"][0]["why"]
+    assert hv["core"][0]["name"] == "纳斯达克 100"                                          # 只放名字（qbreak/names.py；2026-10-15）
     txt = "\n".join(HV.lines(hv))
-    assert "7203.T トヨタ自動車 为什么持有" in txt and "现在：上涨中" in txt and "9999.T：没有这只票的行情" in txt
+    # 代码在前、不带 .T、带名字（2026-10-15 用户：只写代码不知道是哪只）；查不到名字的只写代码
+    assert "7203 トヨタ自動車 为什么持有" in txt and "现在：上涨中" in txt and "- 9999：没有这只票的行情" in txt
+    assert "- 1545 纳斯达克 100：50 口 为什么持有" in txt and ".T" not in txt.replace("NASDAQ100（1545）", "")
     html = HV.html(hv, actions=lambda row, kind: f"<i>{kind}:{row['ticker']}</i>")
     assert "<i>stock:7203.T</i>" in html and "<i>core:1545.T</i>" in html and "已排定开盘卖（MACD 死叉）" in html
+    assert "<b>7203</b> トヨタ自動車" in html and "<b>1545 纳斯达克 100</b>" in html
 
 
 def _write_book(tag="paper"):
@@ -122,7 +126,8 @@ def test_mac_page_report_and_journal_show_reasons():
     (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps({"holding_view": HV_DOC}, ensure_ascii=False), encoding="utf-8")
     MO.append("paper", {"kind": "sell", "ticker": "7203"})
     html = desktop_page.render("paper", 1_000_000, "2026-09-28")
-    assert "为什么持有" in html and "成交量是 20 日平均的 2.10 倍" in html and "偏弱" in html and "NASDAQ100（1545）" in html
+    # 核心 ETF 的标题按 qbreak/names.py 的表写「1545 纳斯达克 100」（旧汇总里存的「NASDAQ100（1545）」不再原样显示；2026-10-15）
+    assert "为什么持有" in html and "成交量是 20 日平均的 2.10 倍" in html and "偏弱" in html and "1545 纳斯达克 100" in html
     assert "浮盈 +4.0%" in html
     neg = {**HV_DOC, "holdings": [{**HV_DOC["holdings"][0], "trend": {**HV_DOC["holdings"][0]["trend"], "ret_pct": -2.7}}]}
     assert "浮亏 -2.7%" in HV.html(neg) and "浮盈 -" not in HV.html(neg)
@@ -132,12 +137,12 @@ def test_mac_page_report_and_journal_show_reasons():
     blk = RU._positions_block(d, {"7203.T": 2600.0})
     assert "为什么持有" in blk and "2026-08-29 收盘" in blk and "偏弱" in blk and "輸送用機器" in blk
     alloc = RU._allocation_block({**d, "core_units": {"1545.T": 100}, "core_last": {"1545.T": 30000.0}, "usdjpy": 150.0}, {}, "")
-    assert "NASDAQ100（1545） 为什么持有" in alloc and "上涨中" in alloc
+    assert "1545 纳斯达克 100 为什么持有" in alloc and "上涨中" in alloc                    # 代码在前 + 名字（2026-10-15 起，以前「NASDAQ100（1545）」）
     st = UState(cash_jpy=1.0, last_date="2026-10-05", history=[["2026-10-05", 1_000_000.0, 0, 0, 150]])
     st.pos["7203.T"] = UPos("7203.T", "JP", 200, 2500.0, "2026-09-01", 2325.0, 2600.0, 2600.0)
     _, _, body = daily_text({"decided_on": "2026-10-05", "orders": [], "events": [], "blocked": None, "holding_view": HV_DOC},
                             st, None, True, 1_000_000)
-    assert "7203.T トヨタ自動車 为什么持有：2026-08-29 收盘" in body and "7203.T トヨタ自動車 现在：偏弱" in body
+    assert "7203 トヨタ自動車 为什么持有：2026-08-29 收盘" in body and "7203 トヨタ自動車 现在：偏弱" in body
 
 
 def test_manual_and_panel_help_render():

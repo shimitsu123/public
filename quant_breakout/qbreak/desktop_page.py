@@ -4,12 +4,15 @@
 写一个不依赖网络的 HTML（深浅色自适应，每 10 分钟自动刷新；超过应有的更新时间没更新 → 页面顶上提示）。每个数字都带单位。
 页面本身放在数据目录 out/ 下：macOS 的「桌面」文件夹受隐私保护，定时任务（launchd）直接写那里可能被拒绝；
 桌面上只放一个指向它的链接（scripts/liveu.sh desktop，在终端里做一次）。
+代码都带名字（2026-10-15 用户：只写代码不知道是哪只）：表格的代码格下面一行小字写名字（qbreak/names.py，查不到只写代码）；
+存下来的文字（日志、提醒、单子的说明、手动指令）显示时过一次 names.annotate（以前写的也带上名字；命令行、cid、指令 id 不动）。
 """
 from __future__ import annotations
 
 from html import escape
 from pathlib import Path
 
+from . import names as NM
 from . import paths
 from .calendar_jp import now_jst
 from .utils import atomic_write_text, read_json
@@ -52,6 +55,18 @@ def _yen(v, sign: bool = False) -> str:
     return s
 
 
+def _tcell(t) -> str:
+    """表格的代码格：代码（不带 .T）+ 下面一行小字名字；查不到名字只写代码。"""
+    n = NM.name(t)
+    c = escape(NM.code(t))
+    return f"{c}<br><span class='muted'>{escape(n)}</span>" if n and n != NM.code(t) else c
+
+
+def _ann(x) -> str:
+    """存下来的文字 → 显示用（查得到名字的「7203.T」→「7203 トヨタ自動車」；命令行 / cid / 指令 id 不动）。"""
+    return NM.annotate(str(x))
+
+
 def _cls(v) -> str:
     return "" if v is None or float(v) == 0 else ("up" if float(v) > 0 else "down")   # 涨红跌绿（2026-10-11 用户）
 
@@ -62,17 +77,26 @@ def _manual_card(tag: str, book: dict) -> str:
     man = book.get("manual") or {}
     sm = {**man, "items": sorted((man.get("items") or {}).values(), key=lambda x: x.get("at", ""), reverse=True)}
     ls = [x[2:] for x in lines(sm, today=now_jst().date().isoformat())]
-    ls += [f"手动指令 {r['id']}：等下单" for r in unseen(tag, book)]
+    ls += [f"手动指令 {r['id']}（{_what(r)}）：等下单" for r in unseen(tag, book)]    # 只写 id 看不出是哪只 → 带上这条是什么
     url = f"http://127.0.0.1:8765/?book={tag}"
     from .panel_phone import phone_url
     pu = phone_url()
     return ("<section class='card'><h2>手动操作</h2>"
             f"<div>操作面板：Mac 上 <a href='{escape(url)}'>{escape(url)}</a>（127.0.0.1 = 这台 Mac 自己，手机上打不开）"
             + (f"；<b>手机</b>用 <a href='{escape(pu)}'>{escape(pu)}</a>" if pu else "")
-            + "；也可以在 Mac 对话里直接说「卖掉 7203」「7203 减到 10%」</div>"
+            + "；也可以在 Mac 对话里直接说「卖掉 7203 トヨタ自動車」「7203 トヨタ自動車 减到 10%」</div>"
             f"<div class='muted'>{escape(RULE_TEXT)}；卖出后默认 20 个交易日不自动买回。</div>"
-            + ("<ul>" + "".join(f"<li>{escape(x)}</li>" for x in ls) + "</ul>" if ls else "<div class='muted'>现在没有手动设定或指令</div>")
+            + ("<ul>" + "".join(f"<li>{escape(_ann(x))}</li>" for x in ls) + "</ul>" if ls else "<div class='muted'>现在没有手动设定或指令</div>")
             + "</section>")
+
+
+def _what(r: dict) -> str:
+    """一条手动指令是什么（manual_orders.describe；读不了的旧记录 → 只写代码）。"""
+    from .manual_orders import describe
+    try:
+        return describe(r)
+    except Exception:                                    # noqa: BLE001  旧格式 / 缺字段：不让页面坏掉
+        return NM.label(r.get("ticker")) if r.get("ticker") else str(r.get("kind") or "—")
 
 
 def _journal_sections(text: str, n: int = 7) -> list[tuple[str, list[str]]]:
@@ -107,7 +131,7 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
         body.append("<div class='muted'><a href='dashboard.html'>市场仪表盘</a>：现在偏向哪边、市场健康度、新公布的数据、"
                     "经济威胁消息与影响链路（每 15 分钟更新）</div>")
     if alert:
-        body.append(f"<section class='card warn'><b>★ {escape(str(alert))}</b></section>")
+        body.append(f"<section class='card warn'><b>★ {escape(_ann(alert))}</b></section>")
     if note:
         body.append(f"<section class='card'>{escape(str(note))}</section>")
     if not st:
@@ -142,19 +166,19 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
             f"<div><span class='muted'>对照</span><b style='font-size:15px' class='{'' if cmp.get('same') or cmp.get('early') or cmp.get('explained') or not cmp.get('comparable') else 'neg'}'>"
             f"{escape(cmp_txt)}</b></div></div></section>")
         if sm.get("blocked"):
-            body.append(f"<section class='card warn'><b>★ 没有下单：</b>{escape(str(sm['blocked']))}</section>")
+            body.append(f"<section class='card warn'><b>★ 没有下单：</b>{escape(_ann(sm['blocked']))}</section>")
         for n_ in sm.get("notices") or []:                    # 立花的通知（例如 API 新版本的发布日）
-            body.append(f"<section class='card warn'><b>★ </b>{escape(str(n_))}</section>")
+            body.append(f"<section class='card warn'><b>★ </b>{escape(_ann(n_))}</section>")
         if sm.get("decided_on") == st.get("last_date"):       # 数据依赖的提醒（B10）：这次运行的汇总才显示
             from .live_unified import YF_FIX, lag_exit_lines
             si, dp = sm.get("stale_inputs") or {}, sm.get("data_problem") or {}
             if dp:
-                body.append(f"<section class='card warn'><b>★ 行情：</b>{escape('；'.join(str(x) for x in dp.get('why') or []))}"
+                body.append(f"<section class='card warn'><b>★ 行情：</b>{escape(_ann('；'.join(str(x) for x in dp.get('why') or [])))}"
                             f"<div class='muted'>修法：{escape(str(dp.get('fix') or YF_FIX))}</div></section>")
             for ln in lag_exit_lines(sm.get("lag_exits")):
-                body.append(f"<section class='card warn'><b>★ </b>{escape(ln)}</section>")
+                body.append(f"<section class='card warn'><b>★ </b>{escape(_ann(ln))}</section>")
             if si.get("text"):
-                body.append(f"<section class='card warn'><b>★ </b>{escape(str(si['text']))}</section>")
+                body.append(f"<section class='card warn'><b>★ </b>{escape(_ann(si['text']))}</section>")
     mk = sm.get("market") or {}
     if mk:
         rows = []
@@ -174,7 +198,7 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
     if fj.get("enabled"):                                    # 前向记录判断层：云端算好的文件今天有没有生效
         from .live_unified import fj_text
         body.append(f"<section class='card{'' if fj.get('applied') else ' warn'}'><h2>前向记录判断层</h2>"
-                    f"<div>{escape(fj_text(fj)[2:])}</div><div class='muted'>云端模拟盘每天算好 var/fwd_judgment.json、"
+                    f"<div>{escape(_ann(fj_text(fj)[2:]))}</div><div class='muted'>云端模拟盘每天算好 var/fwd_judgment.json、"
                     "scripts/liveu.sh 同步到本机；日期对不上就按原规则（与云端模拟盘的对照会显示不一致）</div></section>")
     cc = sm.get("combo_c") or {}
     if cc.get("enabled"):                                    # 关联搭配 C：云端算好的文件今天有没有生效、跳过了哪些
@@ -194,15 +218,14 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
         from .manual_orders import REASON_TEXT
         from .timeline import REASON as _RS
         pend = st.get("pending_exit") or {}
-        pos = "".join(f"<tr><td>{escape(t)}</td><td class='n'>{int(p['shares']):,} 股</td><td class='n'>{_yen(p['entry_px'])}</td>"
+        pos = "".join(f"<tr><td>{_tcell(t)}</td><td class='n'>{int(p['shares']):,} 股</td><td class='n'>{_yen(p['entry_px'])}</td>"
                       f"<td class='n'>{_yen(p['stop_px'])}</td><td>{escape(str(p['entry_date']))}</td>"
                       f"<td>{'待卖（' + escape(REASON_TEXT.get(pend[t]) or _RS.get(pend[t], str(pend[t]))) + '）' if t in pend else ''}</td></tr>"
                       for t, p in (st.get("pos") or {}).items())
-        from .money_view import core_name
-        pos += "".join(f"<tr><td>{escape(t)}</td><td class='n'>{int(u):,} 口</td><td class='n'>—</td><td class='n'>—</td>"
-                       f"<td>—</td><td>闲置资金（{escape(core_name(t, sm))}）</td></tr>"
+        pos += "".join(f"<tr><td>{_tcell(t)}</td><td class='n'>{int(u):,} 口</td><td class='n'>—</td><td class='n'>—</td>"
+                       f"<td>—</td><td>闲置资金 ETF</td></tr>"                     # 名字已在代码格（以前备注里再写一遍「纳斯达克 100（1545）」）
                        for t, u in (st.get("core_units") or {}).items() if int(u))
-        body.append("<section class='card'><h2>持仓</h2><div class='scroll'><table><tr><th>代码</th><th class='n'>数量</th>"
+        body.append("<section class='card'><h2>持仓</h2><div class='scroll'><table><tr><th>代码 / 名字</th><th class='n'>数量</th>"
                     "<th class='n'>成本</th><th class='n'>止损</th><th>买入日</th><th>备注</th></tr>"
                     + (pos or "<tr><td colspan=6 class='muted'>无（全部现金）</td></tr>") + "</table></div></section>")
         hv = sm.get("holding_view") or {}
@@ -221,10 +244,10 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
             else:
                 how = ("寄付成行" if o["side"] == "SELL" else
                        f"{'寄付' if o.get('phase') == 'morning' and o.get('status') != 'DEFERRED' else '开盘后'}指値 ≤ {_yen(o.get('limit'))}")
-            orders.append(f"<tr><td>{'卖' if o['side'] == 'SELL' else '买'}</td><td>{escape(o['ticker'])}</td>"
+            orders.append(f"<tr><td>{'卖' if o['side'] == 'SELL' else '买'}</td><td>{_tcell(o['ticker'])}</td>"
                           f"<td class='n'>{int(o.get('sent_qty') or o['qty']):,} {unit}</td><td>{escape(how)}</td>"
-                          f"<td>{escape(_ST.get(o['status'], str(o['status'])))}</td><td class='muted'>{escape(str(o.get('note') or ''))[:120]}</td></tr>")
-        body.append("<section class='card'><h2>这次的单（开盘 / 盘中）</h2><div class='scroll'><table><tr><th>方向</th><th>代码</th>"
+                          f"<td>{escape(_ST.get(o['status'], str(o['status'])))}</td><td class='muted'>{escape(_ann(o.get('note') or '')[:120])}</td></tr>")
+        body.append("<section class='card'><h2>这次的单（开盘 / 盘中）</h2><div class='scroll'><table><tr><th>方向</th><th>代码 / 名字</th>"
                     "<th class='n'>数量</th><th>方式</th><th>状态</th><th>说明</th></tr>"
                     + ("".join(orders) or "<tr><td colspan=6 class='muted'>没有</td></tr>") + "</table></div></section>")
         fills = []
@@ -233,11 +256,11 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
                 if int(o.get("filled_qty") or 0) > 0:
                     unit = "口" if o.get("kind") == "core" else "股"
                     fills.append(f"<tr><td>{escape(str(h.get('fill_bar')))}</td><td>{'卖' if o['side'] == 'SELL' else '买'}</td>"
-                                 f"<td>{escape(o['ticker'])}</td><td class='n'>{int(o['filled_qty']):,} {unit}</td>"
+                                 f"<td>{_tcell(o['ticker'])}</td><td class='n'>{int(o['filled_qty']):,} {unit}</td>"
                                  f"<td class='n'>¥{float(o['filled_px']):,.2f}</td></tr>")
             if len(fills) >= 12:
                 break
-        body.append("<section class='card'><h2>最近成交</h2><div class='scroll'><table><tr><th>成交日</th><th>方向</th><th>代码</th>"
+        body.append("<section class='card'><h2>最近成交</h2><div class='scroll'><table><tr><th>成交日</th><th>方向</th><th>代码 / 名字</th>"
                     "<th class='n'>数量</th><th class='n'>成交价</th></tr>"
                     + ("".join(fills[:12]) or "<tr><td colspan=5 class='muted'>还没有</td></tr>") + "</table></div></section>")
         from . import tax_ytd as TY                           # 〔77〕C T7 / UX-09：年内已实现损益与预计代扣（估算）
@@ -246,9 +269,9 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
         rz = TY.realized(st)[::-1][:12]
         if rz or y["n"]:
             body.append(f"<section class='card'><h2>已实现损益（{yr} 年合计 <span class='{_cls(y['gain'])}'>{_yen(y['gain'], True)}</span>，"
-                        f"{y['n']} 笔；预计已代扣 {_yen(y['withheld'])}）</h2><div class='scroll'><table><tr><th>卖出日</th><th>代码</th>"
+                        f"{y['n']} 笔；预计已代扣 {_yen(y['withheld'])}）</h2><div class='scroll'><table><tr><th>卖出日</th><th>代码 / 名字</th>"
                         "<th class='n'>数量</th><th class='n'>卖价</th><th class='n'>损益（含手续费）</th></tr>"
-                        + "".join(f"<tr><td>{escape(r['date'])}</td><td>{escape(r['ticker'])}</td>"
+                        + "".join(f"<tr><td>{escape(r['date'])}</td><td>{_tcell(r['ticker'])}</td>"
                                   f"<td class='n'>{int(r['shares']):,} {'口' if r['kind'] == 'core' else '股'}</td>"
                                   f"<td class='n'>¥{float(r['px']):,.1f}</td><td class='n {_cls(r['pnl'])}'>{_yen(r['pnl'], True)}</td></tr>"
                                   for r in rz) + "</table></div><div class='muted'>特定口座（源泉徴収あり）20.315% 的估算、年内盈亏通算；"
@@ -266,12 +289,12 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
     if secs:
         body.append("<section class='card'><h2>日志（最近 7 次运行，点开看更早的）</h2>" + "".join(
             f"<details{' open' if i == 0 else ''}><summary>{escape(h)}</summary><ul>"
-            + "".join(f"<li>{escape(x)}</li>" for x in items) + "</ul></details>" for i, (h, items) in enumerate(secs))
+            + "".join(f"<li>{escape(_ann(x))}</li>" for x in items) + "</ul></details>" for i, (h, items) in enumerate(secs))
             + "</section>")
     ev = [e for e in (book.get("events") or []) if e.get("level") in ("warn", "error")][-8:]
     if ev:
         body.append("<section class='card'><h2>最近的提醒</h2><ul>" + "".join(
-            f"<li class='{'neg' if e['level'] == 'error' else ''}'>{escape(str(e.get('at', ''))[:16])} {escape(str(e.get('msg', '')))}</li>"
+            f"<li class='{'neg' if e['level'] == 'error' else ''}'>{escape(str(e.get('at', ''))[:16])} {escape(_ann(e.get('msg', '')))}</li>"
             for e in reversed(ev)) + "</ul></section>")
     body.append(f"<div class='muted'>数据目录 {escape(str(paths.home()))}；详细日志 {escape(str(jp))}。非投资建议。</div>")
     body_cls = " class='real'" if real else ""

@@ -311,22 +311,25 @@ def prune(today: dt.date | None = None, keep_days: int = KEEP_DAYS) -> int:
 
 
 def as_text(d: dict) -> str:
+    # 2026-10-15 用户：只写代码不知道是哪只 → 代码后面带名字（qbreak/names.py：JPX 公开名单；不用 J-Quants 的 CoName）
+    from . import names as NM
+    lab_ = lambda c: NM.label(c, short=True)                                   # noqa: E731  「8306 三菱UFJ FG」（一行放很多只 → 短名）
     lines = [f"J-Quants {d.get('day')}（{d.get('phase')}）"]
     es = d.get("earnings_soon") or []
     mine = [e for e in es if e["tag"] != "股票池"]
     lines.append(f"  10 个营业日内决算：股票池 {len(es)} 只（持仓 / 候补 {len(mine)} 只"
-                 + (f"：{'、'.join(e['code'] + ' ' + e['date'] for e in mine[:6])}" if mine else "") + "）")
+                 + (f"：{'、'.join(lab_(e['code']) + ' ' + e['date'] for e in mine[:6])}" if mine else "") + "）")
     bad = [e for e in es if e.get("mismatch")]
     if bad:
-        lines.append("  ★ 与 Yahoo 日程不一致：" + "、".join(f"{e['code']} J-Quants {e['date']} / Yahoo {e['yahoo']}" for e in bad[:6]))
+        lines.append("  ★ 与 Yahoo 日程不一致：" + "、".join(f"{lab_(e['code'])} J-Quants {e['date']} / Yahoo {e['yahoo']}" for e in bad[:6]))
     rv = d.get("revisions") or []
     if rv:
-        lines.append("  会社予想（当天开示）：" + "、".join(f"{r['code']} {r['main']} {r['main_chg_pct']:+.1f}%（{r['doc']}）"
-                                                  if r.get("main_chg_pct") is not None else f"{r['code']}（{r['doc']}）" for r in rv[:8]))
+        lines.append("  会社予想（当天开示）：" + "、".join(f"{lab_(r['code'])} {r['main']} {r['main_chg_pct']:+.1f}%（{r['doc']}）"
+                                                  if r.get("main_chg_pct") is not None else f"{lab_(r['code'])}（{r['doc']}）" for r in rv[:8]))
     for k, lab in (("margin_alerts", "日々公表信用残"), ("short_reports", "空売り残高報告"), ("splits", "拆股 / 合并")):
         v = uniq_codes(d.get(k) or [])
         if v:
-            lines.append(f"  {lab}：{len(v)} 只（" + "、".join(v[:10]) + ("…" if len(v) > 10 else "") + "）")
+            lines.append(f"  {lab}：{len(v)} 只（" + "、".join(lab_(c) for c in v[:6]) + ("…" if len(v) > 6 else "") + "）")
     ls = d.get("listings") or {}
     if ls.get("new") or ls.get("gone"):
         lines.append(f"  新上市 {len(ls.get('new') or [])} 只、退市 {len(ls.get('gone') or [])} 只")

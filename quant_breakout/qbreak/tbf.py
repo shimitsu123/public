@@ -29,6 +29,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from . import names as NM
+
 FILE = "tbf.json"
 MODEL_FILE = "tbf_model.json"
 FORWARD = "tbf_forward.csv"
@@ -305,7 +307,8 @@ def text(b: dict) -> str:
     sk = b.get("skipped") or []
     n = len(sk) + len(b.get("kept") or [])
     return (f"- TBF 像起跌点就不买（{b.get('as_of')}）：股票池 {b.get('n_ref')} 只里 {b.get('skip_all_n')} 只「像起跌点」；候选 {n} 只，"
-            + (f"不买 {len(sk)} 只：{'、'.join(sk[:8])}" if sk else "没有要挡的"))
+            # 挡掉的票写「代码 名字」、超过 8 只「等 N 只」（2026-10-15 用户：只写代码不知道是哪只）
+            + (f"不买 {len(sk)} 只：{NM.labels(sk, limit=8)}" if sk else "没有要挡的"))
 
 
 def summary(pl: dict | None, as_of: str | None, enabled: bool) -> dict:

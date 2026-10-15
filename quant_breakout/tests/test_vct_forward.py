@@ -155,5 +155,6 @@ def test_wired_into_sim_day_and_report():
                          "ndx_tr": 95.0, "sma50": 100.0, "us_bear": False, "vct_1545": 2 / 3, "vct_1482": 0.0, "differ": True,
                          "rows": 3, "differ_days": 1, "start": VF.FORWARD_START})
     assert "急跌信号 成立" in html and "现金 33%" in html and "与模拟盘 B3 不同" in html and "-5.0%（对 50 日线）" in html
+    assert "VCT：1545 纳斯达克 100：67%、现金 33%" in html                     # 名字以数字结尾：和比例隔「：」（2026-10-15 复核）
     assert RU._vct_html({}) == "" and "没算出" in RU._vct_html({"error": "x"})
     assert "{vct}" in inspect.getsource(RU)

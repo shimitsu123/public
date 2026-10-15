@@ -4,8 +4,42 @@ import { req } from './net.js';
 export const CFG = JSON.parse(document.getElementById('qb-cfg').textContent);   // 页面里的 <script type="application/json" id="qb-cfg">（服务器生成）
 export const $ = s => document.querySelector(s);
 export const fmt = n => Number(n).toLocaleString('ja-JP');
+// 票的「代码 名字」（2026-10-15 用户：「如果只有股票代号标记的话不知道是哪个股票 名字也要有」）：与 qbreak/names.py 的 label / annotate
+// 同一写法 —— 代码在前、空一格、名字，不带 .T；查不到名字只写代码。名字表 = CFG.names（服务器按这一页上的票给；不联网）。
+const NAMES = CFG.names || {};
+function code(t){ const s=String(t==null ? '' : t).trim(); return s.slice(-2)==='.T' ? s.slice(0, -2) : s; }
+export function tlab(t, name){                                           // name：按钮 data-name 等别处给的（旧写法「纳斯达克 100（1545）」去掉「（代码）」）
+  const s=String(t==null ? '' : t).trim(), c=code(s);
+  let n=String(name || NAMES[s] || NAMES[c+'.T'] || '').trim();
+  const tail='（'+c+'）', tail2='（'+c+'.T）';
+  if(n.slice(-tail.length)===tail) n=n.slice(0, -tail.length).trim(); else if(n.slice(-tail2.length)===tail2) n=n.slice(0, -tail2.length).trim();
+  return (n && n!==s && n!==c) ? c+' '+n : c;
+}
+export function tqty(t, s, name){                                       // 名字后面紧跟数量：「1545 纳斯达克 100：4,110 → 96 口」（名字可能以数字结尾，
+  const l=tlab(t, name);                                                 // 直接接数量读不出哪个是口数；2026-10-15 复核）；查不到名字「5202 100 股」= names.qty
+  return l===code(t) ? l+' '+s : l+'：'+s;
+}
+const CMD = /(^|[^A-Za-z0-9_])(bash|liveu\.sh|run\.py|python3?|dev\.sh|routines\.sh|adopt|manual\s+(sell|adjust|trim|buy|corefix|core|cancel|unblock|list))(?![A-Za-z0-9_])/;
+export function nameify(text){                                           // 兜底：文字里查得到名字的「7203.T」→「7203 トヨタ自動車」；重复跑结果不变
+  if(typeof text!=='string' || text.indexOf('.T')<0) return text;        // （cid / 指令 id、引号 / = / 斜线后面的、链接、要复制粘贴的命令行那一行都不动）
+  try{
+    return text.split('\n').map(ln=>{
+      if(ln.indexOf('.T')<0 || CMD.test(ln)) return ln;
+      return ln.replace(/([0-9][0-9A-Z]{3})\.T(?![A-Za-z0-9_\-]|\.[A-Za-z0-9])/g, (m, c, i)=>{
+        const p=i>0 ? ln[i-1] : '';
+        if(p && /[A-Za-z0-9_\-.\/'"=]/.test(p)) return m;
+        if(/https?:\/\/\S*$/.test(ln.slice(0, i))) return m;
+        const n=NAMES[c+'.T'];
+        if(!n) return m;
+        const after=ln.slice(i+m.length).replace(/^[ 　]+/, ''), before=ln.slice(Math.max(0, i-n.length-2), i);
+        if(after.indexOf(n)===0 || before.indexOf(n)>=0) return c;      // 已经带着名字：只去 .T
+        return c+' '+n;
+      });
+    }).join('\n');
+  }catch(e){ return text; }
+}
 export const yen = v => '¥' + fmt(Math.round(v));
-export function toast(t, bad, sticky){const m=$('#toast');m.textContent=t+(sticky?'\n（点一下关闭）':'');m.className='toast'+(bad?' bad':'');m.hidden=false;
+export function toast(t, bad, sticky){const m=$('#toast');m.textContent=nameify(String(t==null ? '' : t))+(sticky?'\n（点一下关闭）':'');m.className='toast'+(bad?' bad':'');m.hidden=false;
   const d=document.querySelector('dialog[open]'), host=d || document.body;  // 对话框开着：提示放进对话框里（以前在对话框底下被盖住 → 点了「确定」像没反应；2026-10-15）
   if(m.parentNode!==host) host.appendChild(m);
   clearTimeout(toast.h); if(!sticky) toast.h=setTimeout(()=>{m.hidden=true;}, bad?9000:6000);}

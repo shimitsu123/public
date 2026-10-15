@@ -16,6 +16,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from qbreak import names as NM                                               # noqa: E402
 from qbreak import paths                                                     # noqa: E402
 from qbreak import vct_forward as VF                                         # noqa: E402
 
@@ -35,15 +36,16 @@ def opens(first: str, provider: str = "yfinance") -> dict[str, pd.Series]:
 def text(rv: dict, today: str) -> str:
     j = rv.get("judge") or {}
     b3, vc = rv.get("b3") or {}, rv.get("vct") or {}
+    u, b = NM.label("1545.T", short=True), NM.label("1482.T", short=True)   # 代码带名字（2026-10-15 用户：只写代码不知道是哪只）
     L = [f"# VCT 前向记录复核（{today}；规则 qbreak/vct_forward.py 开头，2026-10-04 登记）", "",
          f"**判定：{j.get('label', '—')}**", "",
          f"- 记录 {rv.get('rows', 0)} 天；与 B3 不同 {j.get('differ_days', 0)} 天、≥ 5 天的段 {j.get('segments_5d', 0)} 段；"
          f"第一个决策日起 {j.get('days', 0)} 天；B3 影子账户最深回撤 {_f(j.get('b3_dd_min'), '{:.2f}%')}",
          f"- 可以判定的条件：{json.dumps(j.get('need') or {}, ensure_ascii=False)}",
          "", "| 影子账户（只有核心） | 累计 | 年化 | 最大回撤 | Calmar |", "|---|---:|---:|---:|---:|",
-         f"| B3（1545 / 1482 / 现金） | {_f(b3.get('ret'), '{:+.2f}%')} | {_f(b3.get('cagr'), '{:+.2f}%')} | {_f(b3.get('dd'), '{:.2f}%')} | {_f(b3.get('calmar'), '{:.3f}')} |",
+         f"| B3（{u} / {b} / 现金） | {_f(b3.get('ret'), '{:+.2f}%')} | {_f(b3.get('cagr'), '{:+.2f}%')} | {_f(b3.get('dd'), '{:.2f}%')} | {_f(b3.get('calmar'), '{:.3f}')} |",
          f"| VCT | {_f(vc.get('ret'), '{:+.2f}%')} | {_f(vc.get('cagr'), '{:+.2f}%')} | {_f(vc.get('dd'), '{:.2f}%')} | {_f(vc.get('calmar'), '{:.3f}')} |",
-         "", "不同的段：" + ("；".join(f"{s['from']}〜{s['to']}（{s['days']} 天，1545 {_f(s.get('r1545'), '{:+.2f}%')}）"
+         "", "不同的段：" + ("；".join(f"{s['from']}〜{s['to']}（{s['days']} 天，{u} {_f(s.get('r1545'), '{:+.2f}%')}）"
                                        for s in rv.get("segments") or []) or "还没有"),
          "", "开盘到开盘的收益、现金 0、换仓扣 0.1% × 换的比例；决策日 d 的配置从 d 之后第一个东证交易日开盘起生效。非投资建议。"]
     return "\n".join(L)

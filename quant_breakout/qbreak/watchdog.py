@@ -145,13 +145,20 @@ def _remote_daily_date(run=None) -> str | None:
         return None
 
 
+def _olab(o: dict) -> str:
+    """「1482 对冲版美国 7〜10 年国债 买 678 口」（代码 + 名字、口 / 股；2026-10-15 用户：只写代码不知道是哪只）。"""
+    from .names import label
+    unit = "口" if o.get("kind") == "core" else "股"
+    return (f"{label(o.get('ticker')) if o.get('ticker') else '—'} {'买' if o.get('side') == 'BUY' else '卖'} "
+            f"{int(o.get('sent_qty') or o.get('qty') or 0):,} {unit}")
+
+
 def _otext(o: dict) -> str:
     from . import run_status as RS
+    from .names import annotate
     st = {**RS.STATUS_TEXT, "PLANNED": "还没发"}.get(o.get("status"), str(o.get("status")))
-    unit = "口" if o.get("kind") == "core" else "股"
-    note = str(o.get("note") or "")
-    return (f"{o.get('ticker')} {'买' if o.get('side') == 'BUY' else '卖'} {int(o.get('sent_qty') or o.get('qty') or 0):,} {unit} {st}"
-            + (f"：{note}" if note else ""))
+    note = annotate(str(o.get("note") or ""))                # 以前写下的说明只有代码 → 补名字
+    return f"{_olab(o)} {st}" + (f"：{note}" if note else "")
 
 
 def _manual_unsent(book: dict, exp: str, today: dt.date, done: bool) -> list[str]:
@@ -316,8 +323,7 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
         reasons += _manual_waiting(tag, book, now, done)
     unk = [o for o in book.get("orders") or [] if isinstance(o, dict) and o.get("status") in UNKNOWN]
     if unk:
-        what = "、".join(f"{o.get('ticker')} {'买' if o.get('side') == 'BUY' else '卖'} {int(o.get('sent_qty') or o.get('qty') or 0):,}"
-                        for o in unk[:5])
+        what = "、".join(_olab(o) for o in unk[:5]) + (f" 等 {len(unk)} 笔" if len(unk) > 5 else "")
         reasons.append(f"有状态不明的单 {len(unk)} 笔（{what}）：" + (
             "在 Mac 对话里看一下" if tag.startswith("paper")
             else f"去立花的注文一覧核对（手机网站 {ESHITEN_SP}），再在 Mac 对话里登记"))
@@ -327,7 +333,8 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
     miss = _daily_missing(today)                              # 例行任务（Mac 的本机任务 / 云端后备）今天的日报
     if miss:
         reasons.append(miss)
-    rec["reasons"] = reasons
+    from .names import annotate                               # 执行器 / 运行状态文件里只有代码的原因 → 补名字（命令行、cid 不动；2026-10-15）
+    rec["reasons"] = [annotate(x) for x in reasons]
     rec["decided"], rec["orders"] = exp, orders_brief(book, exp)
     rec["halt"] = _halt()
     rec["ok"] = bool(rec["halt"]) or not reasons                # HALT 生效中：不下单是预期的，不算失败

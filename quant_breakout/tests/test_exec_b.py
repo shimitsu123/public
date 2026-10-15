@@ -196,7 +196,7 @@ def test_late_morning_sells_with_a_day_limit_and_skips_buys():
     assert not any(o["ticker"] == "B.T" for o in r.exch.orders.values())
     assert any("早上错过寄付" in e["msg"] for e in ux.book["events"]) and not ux.blocked
     _, short, body = daily_text(ux.summary(), r.eng.st, None, False, 1_000_000)     # 通知看得到与模型的差异（EXE-4）
-    assert "★ 与模型不同 1 笔" in short and "- ★ 与模型不同：买 B.T" in body and LATE_BUY_NOTE in body
+    assert "★ 与模型不同 1 笔" in short and "- ★ 与模型不同：买 B 100 股" in body and LATE_BUY_NOTE in body
     _, short_p, _ = daily_text(ux.summary(), r.eng.st, None, True, 1_000_000)
     assert "与模型不同" not in short_p                                               # 模拟账户不加
 
@@ -510,7 +510,7 @@ def test_odd_lot_sell_sends_whole_lots_and_records_the_rest():
     assert any("剩下 50 股不足一手" in e["msg"] for e in r.ux.book["events"])
     sm = r.ux.summary()
     _, short, body = daily_text(sm, r.eng.st, None, False, 1_000_000)
-    assert "★ 零股 1 只要在立花网站卖" in short and "A.T 有 50 股不足一手" in body
+    assert "★ 零股 1 只要在立花网站卖" in short and "★ A 有 50 股不足一手" in body
 
 
 def test_paper_account_never_splits_odd_lots():

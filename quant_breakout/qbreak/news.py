@@ -556,8 +556,8 @@ def ticker_impacts(events: list[dict], tickers: list[str], sectors: dict[str, st
         if not sec and not ab:
             continue
         if not sec:
-            from .money_view import CORE_NAMES
-            sec = CORE_NAMES.get(t, t)
+            from .names import label                    # 「1545 纳斯达克 100」（2026-10-15 统一成「代码 名字」，不再「名字（代码）」）
+            sec = label(t)
         items = []
         for e in events or []:
             c = e.get("chain") or {}
@@ -636,8 +636,9 @@ def alert_text(e: dict) -> str:
         parts.append("受损：" + "、".join(f"{s} {v:+.1f}%" for s, v in c["down"]))
     if c.get("rules"):
         parts.append("经验规则：" + "、".join(f"{s}{'↑' if d > 0 else '↓'}" for s, d in c["rules"].items()))
-    if c.get("tickers_down"):
-        parts.append("受损方向的持仓 / 候补：" + "、".join(c["tickers_down"][:6]))
+    if c.get("tickers_down"):                      # 2026-10-15 用户：只写代码不知道是哪只 → 代码 + 简称、最多 4 只（推送 / Mac 通知有长度上限）
+        from .names import labels
+        parts.append("受损方向的持仓 / 候补：" + labels([str(t) for t in c["tickers_down"]], limit=4, short=True))
     return "；".join(parts)
 
 
@@ -655,12 +656,18 @@ def notify_lines(events: list[dict], n: int = 5) -> str:
 
 
 def notify_mac(title: str, text: str) -> bool:
-    """macOS 通知中心（只在 Mac 上；失败不影响任何东西）。"""
+    """macOS 通知中心（只在 Mac 上；失败不影响任何东西）。
+    代码后面补简称再截断（2026-10-15 用户：只写代码不知道是哪只；notify.compact，失败照原文）。"""
     import subprocess
     import sys
     if sys.platform != "darwin":
         return False
     esc = lambda s: s.replace("\\", "\\\\").replace('"', '\\"')                 # noqa: E731
+    try:
+        from .notify import compact
+        title, text = compact(title), compact(text)
+    except Exception:                                                        # noqa: BLE001
+        pass
     try:
         subprocess.run(["osascript", "-e", f'display notification "{esc(text[:220])}" with title "{esc(title[:60])}"'],
                        check=False, timeout=10, capture_output=True)

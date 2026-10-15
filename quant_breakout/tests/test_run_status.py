@@ -230,7 +230,7 @@ def test_now_phase_warns_only_for_orders_sent_in_this_run(monkeypatch):
     sent3 = _fake_run(monkeypatch, _book_dict([morning_blocked]), now_new=[{**rej, "status": "SENT"}])
     assert run.main(["live-u", "--broker", "paper", "--phase", "now", "--force", "--notify"]) == 0
     assert [x for x in sent3 if x[0] == "send"][0][3] == "info"                       # 早上被挡的那笔不让盘中的通知变 warn
-    assert [x for x in sent3 if x[0] == "mac"][0][2] == "下单 0 笔：7203.T 没执行"           # 没有问题时与原来完全相同
+    assert [x for x in sent3 if x[0] == "mac"][0][2] == "下单 0 笔：7203 トヨタ自動車 没执行"   # 没有问题时与原来相同（票带名字，2026-10-15）
 
 
 def test_halt_blocked_orders_are_not_failures_in_the_notice(monkeypatch):
@@ -310,8 +310,8 @@ def test_panel_shows_a_stopped_executor_and_unplaced_orders_escaped():
     html = panel.render("tachibana", "t" * 40, AT)
     assert "★ 执行器 10/06 08:35 停下：执行器停下：&lt;b&gt;有状态不明的单&lt;/b&gt;" in html and "<b>有状态" not in html
     assert "★ 有 2 笔被挡 / 被拒 / 状态不明（被拒 1、状态不明 1）" in html
-    assert "・7203.T 买 100 股 状态不明：状态不明（&lt;script&gt;x&lt;/script&gt;）" in html and "<script>x" not in html
-    assert "・6758.T 卖 100 股 被拒：余力不足" in html
+    assert "・7203 トヨタ自動車 买 100 股 状态不明：状态不明（&lt;script&gt;x&lt;/script&gt;）" in html and "<script>x" not in html
+    assert "・6758 ソニーグループ 卖 100 股 被拒：余力不足" in html
     assert f"href='{panel.ESHITEN_SP}'" in html and "再在 Mac 对话里登记" in html
     assert "<section class='card warn'>" in html
 
@@ -322,7 +322,7 @@ def test_panel_blocked_run_is_said_once_and_paper_gets_no_tachibana_hint():
     _write_rec(blocked="行情落后：^N225", decided_on="2026-10-05")
     html = panel.render("paper", "t" * 40, AT)
     assert "★ 今天的单没下：行情落后：^N225" in html and "★ 有 1 笔被挡 / 被拒 / 状态不明（状态不明 1）" in html
-    assert "・1655.T 买 300 口 状态不明" in html and panel.ESHITEN_SP not in html
+    assert "・1655 S&amp;P500 买 300 口 状态不明" in html and panel.ESHITEN_SP not in html
     _write_rec(blocked="行情落后：^N225", decided_on="2026-10-05", at="2026-10-05T07:41:00+09:00")
     assert "★ 10/05 的单没下" in panel.render("paper", "t" * 40, AT)
 
@@ -368,7 +368,7 @@ def test_panel_sending_order_while_the_executor_runs_is_not_unknown():
         html = panel.render("tachibana", "t" * 40, AT)
     finally:
         lock.release()
-    assert "发送中（执行器正在运行）：7203.T 买 100 股" in html
+    assert "发送中（执行器正在运行）：7203 トヨタ自動車 买 100 股" in html
     assert "状态不明" not in html and panel.ESHITEN_SP not in html
     html = panel.render("tachibana", "t" * 40, AT)                                 # 运行结束了还是 SENDING → 状态不明
     assert "★ 有 1 笔被挡 / 被拒 / 状态不明（状态不明 1）" in html and panel.ESHITEN_SP in html

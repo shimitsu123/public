@@ -234,7 +234,7 @@ def test_breaker_after_the_gate_rolls_the_whole_batch_back():
     assert r.item("M-all-core")["status"] == "pending" and "M-all-buy-auto-A" not in m["items"]
     assert "A.T" not in r.eng.st.pending_exit and "A.T" not in m["blocks"] and "B.T" not in r.eng.st.plan
     assert r.ux.manual.core_pct == 100.0 and "core_pause" not in m and r.eng.core_scale == 1.0
-    assert any("★ 「全部换成 B.T」这次没下成" in e["msg"] for e in _ev(r))
+    assert any("★ 「全部换成 B」这次没下成" in e["msg"] for e in _ev(r))      # 文字里的票写 label（假代码没有名字 → 只写代码；2026-10-15）
     assert all(o.status == "SKIPPED" for o in r.ux.orders if o.decided_on == r.eng.st.last_date)
     del r.ux._breaker
     r.ux.blocked = None
@@ -252,8 +252,8 @@ def test_sells_sent_but_x_not_bought_is_reported_not_silently_voided():
     r.ux._gate_buy = lambda o: "测试：不下" if o.ticker == "B.T" else None
     r.day()
     it = r.item("M-all-buy")
-    assert it["status"] == "rejected" and it["msg"].startswith("卖单已发出，B.T 没买（测试：不下）：钱留现金")
-    assert any(e["level"] == "warn" and e["msg"].startswith("★ 「全部换成 B.T」的卖单已发出") for e in _ev(r))
+    assert it["status"] == "rejected" and it["msg"].startswith("卖单已发出，B 没买（测试：不下）：钱留现金")
+    assert any(e["level"] == "warn" and e["msg"].startswith("★ 「全部换成 B」的卖单已发出") for e in _ev(r))
     assert r.eng.st.pending_exit.get("A.T") == "manual" and "B.T" not in r.eng.st.plan
 
 
@@ -271,9 +271,37 @@ def test_sells_sent_but_x_blocked_by_prev_close_keeps_trying_and_warns():
     xo = next(o for o in _orders(r, "B.T", "BUY") if o.decided_on == r.eng.st.last_date)
     assert xo.status == "BLOCKED" and ALLIN_SENT_TAG in xo.note
     it = r.item("M-all-buy")
-    assert it["status"] == "placed" and it["msg"].startswith("卖单已发出；B.T 的买单被挡")
-    n = sum(1 for e in _ev(r) if e["msg"].startswith("★ 「全部换成 B.T」的卖单已发出"))
+    assert it["status"] == "placed" and it["msg"].startswith("卖单已发出；B 的买单被挡")
+    n = sum(1 for e in _ev(r) if e["msg"].startswith("★ 「全部换成 B」的卖单已发出"))
     assert n == 1
+
+
+def test_long_block_reason_keeps_the_sent_tag_and_warns_once():
+    """被挡的原因很长（几条闸门原因用「；」连起来、代码带名字之后更长）：后缀 ALLIN_SENT_TAG 不被 300 字截掉，
+    下一次运行 split 得到同一段原因 → 不重复 ★ 提醒、后缀残片不漏进指令说明（2026-10-15 复核）。"""
+    r = _Run([1000.0] * 30, entry=(10,))
+    r.until(14)
+    _allin(r, r.at(r.k - 1, 6).isoformat())
+    calls = {"n": 0}
+
+    def pcs(ts):
+        calls["n"] += 1
+        return {} if calls["n"] == 1 else {"B.T": 2000.0}
+    r.ux._prev_closes = pcs
+    r.day()
+    d = r.eng.st.last_date
+    xo = next(o for o in _orders(r, "B.T", "BUY") if o.decided_on == d)
+    assert xo.status == "BLOCKED"
+    xo.note = "；".join(f"测试闸门原因 {i:02d}：7203 トヨタ自動車 的行情落后（最后一根 2026-10-1{i % 10}）" for i in range(12))   # ≈ 500 字
+    warns = lambda: sum(1 for e in _ev(r) if e["msg"].startswith("★ 「全部换成 B」的卖单已发出"))   # noqa: E731
+    n0 = warns()
+    r.ux._allin_after_place(d)
+    assert xo.note.endswith(ALLIN_SENT_TAG) and len(xo.note) <= 300 and warns() == n0 + 1
+    for _ in range(2):                                                         # 之后的运行：原因没变 → 不再提醒
+        r.ux._allin_after_place(d)
+    assert warns() == n0 + 1 and xo.note.endswith(ALLIN_SENT_TAG) and xo.note.count(ALLIN_SENT_TAG) == 1
+    msg = r.item("M-all-buy")["msg"]
+    assert ALLIN_SENT_TAG[:6] not in msg and msg.startswith("卖单已发出；B 的买单被挡（测试闸门原因 00")
 
 
 # ────────── ⑦ HALT 挡住开盘后补单 ──────────
@@ -286,7 +314,7 @@ def test_halt_between_morning_and_open_note_on_deferred_buy_and_reply_warns():
     assert xo.status == "DEFERRED"
     book = json.loads((paths.state_dir() / "book.json").read_text(encoding="utf-8"))
     note = MO.allin_halt_note(book)
-    assert note and "「全部换成 B.T」的卖单已在交易所会成交，B.T 不会买（钱留现金）" in note
+    assert note and "「全部换成 B」的卖单已在交易所会成交，B 不会买（钱留现金）" in note
     paths.halt_file().write_text("测试", encoding="utf-8")
     try:
         r.day()
@@ -311,7 +339,7 @@ def test_panel_halt_reply_mentions_live_batch():
               {"cid": "x2", "ticker": "7203.T", "side": "SELL", "kind": "stock", "status": "SENT", "decided_on": d, "reason": "manual"}]
     _book(last=d, orders=orders, manual={"items": items, "blocks": {}})
     msg = panel._halt_allin("已停止")
-    assert msg.startswith("已停止；") and "「全部换成 6501.T」的卖单已在交易所会成交，6501.T 不会买（钱留现金）" in msg
+    assert msg.startswith("已停止；") and "「全部换成 6501 日立製作所」的卖单已在交易所会成交，6501 日立製作所 不会买（钱留现金）" in msg
     _book(last=d, orders=[dict(orders[0], status="SENT"), orders[1]], manual={"items": items, "blocks": {}})
     assert panel._halt_allin("已停止") == "已停止"
 
@@ -385,4 +413,4 @@ def test_panel_all_in_records_expected_fill_day_and_close():
     ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}}, AT)
     assert ok and rec["allin_fill"] and rec["x_close"] == 3500.0
     assert dt.date.fromisoformat(rec["allin_fill"]) >= AT.date()
-    assert "执行时拿着的 6501.T 以外的个股和 ETF 全部卖出（包括写指令之后规则 / 别的指令买进的）" in msg
+    assert "执行时拿着的 6501 日立製作所 以外的个股和 ETF 全部卖出（包括写指令之后规则 / 别的指令买进的）" in msg

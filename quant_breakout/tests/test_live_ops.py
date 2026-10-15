@@ -141,7 +141,7 @@ def test_live_compare_checks_the_same_holdings_not_amounts():
     other = st(100, 5_000.0, 1_003_000.0)
     other.pos["6758.T"] = other.pos.pop("7203.T")
     r = compare_with_sim(st(300, 12_345.0, 3_100_000.0), other, live=True)
-    assert r["same"] is False and "个股 7203.T vs 模拟盘 6758.T" in r["text"]
+    assert r["same"] is False and "个股 7203 トヨタ自動車 vs 模拟盘 6758 ソニーグループ" in r["text"]
     _, short, _ = daily_text({"decided_on": "2026-10-06", "orders": []}, st(300, 1.0, 3.0), r, False, 1_000_000)
     assert "★ 与云端不一致" in short
 
@@ -349,9 +349,12 @@ def test_live_gate_unknown_orders_hint_uses_liveu(tmp_path, monkeypatch):
         {"orders": [{"cid": "U1", "side": "BUY", "ticker": "7203.T", "status": "ERROR"}]}), encoding="utf-8")
     run_, _ = _fake_run(security=44)
     it = {x["name"]: x for x in G.check(agents=tmp_path, run=run_)}["② 没有状态不明的单"]
-    assert it["ok"] is False and "立花 U1 BUY 7203.T" in it["text"]
+    from qbreak import names as NM                          # cid 照原样 + 「买 7203 トヨタ自動車」（2026-10-15 起，以前「BUY 7203.T」）
+    assert it["ok"] is False and f"立花 U1（买 {NM.label('7203.T')}）" in it["text"]
     assert "bash scripts/liveu.sh --broker tachibana --resolve <cid> --filled <股数> --px <均价>；没成交填 0" in it["text"]
     assert "--broker paper" not in it["text"] and "run.py live-u" not in it["text"]
+    assert G._order_txt({"side": "SELL", "ticker": "1545.T", "kind": "core", "qty": 1200}) == f"卖 {NM.label('1545.T')} 1,200 口"   # ETF = 口
+    assert G._order_txt({"side": "BUY", "ticker": "7203.T", "kind": "stock", "qty": 100}) == f"买 {NM.label('7203.T')} 100 股"
 
 
 def test_wake_schedule_parsing():

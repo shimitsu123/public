@@ -54,7 +54,7 @@ def test_corefix_refused_without_confirm_and_nothing_written():
     assert not ok and msg == panel.FIX_CONFIRM_MSG and "刷新页面" in msg            # 旧页面：照旧显示 msg（没写 + 刷新）
     assert rec["need_confirm"] is True and "id" not in rec
     c = rec["confirm"]
-    assert c["title"] == "确认下单：1482.T 固定 678 口" and re.fullmatch(r"[0-9a-f]{16}", c["token"]) and c["changed"] is False
+    assert c["title"] == "确认下单：1482 对冲版美国 7〜10 年国债 固定 678 口" and re.fullmatch(r"[0-9a-f]{16}", c["token"]) and c["changed"] is False
     assert MO.read_all("paper") == [] and not MO.requests_path("paper").exists()
     code, j = panel._req_reply(ok, msg, rec)
     assert code == 200 and j["ok"] is False and j["need_confirm"] is True and j["confirm"]["token"] == c["token"]
@@ -66,18 +66,18 @@ def test_preview_lists_funding_sells_timing_price_and_persistence():
     q = {"1482.T": {"px": 1480.0, "at": "2026-10-15T09:52:00+09:00"}, "1545.T": {"px": 244.0, "at": "2026-10-15T09:52:00+09:00"}}
     _ok, _m, rec = panel.submit(_fix(), AT1012, fetch=lambda ts: {t: q[t] for t in ts if t in q})
     t = rec["confirm"]["text"]
-    assert "1482.T " in t and "现在 0 口 → 固定 678 口（买入 678 口）" in t
+    assert "1482 对冲版美国 7〜10 年国债：现在 0 口 → 固定 678 口（买入 678 口）" in t          # 票写「代码 名字」（2026-10-15）
     assert "估算：678 口 × 约 ¥1,480 ≈ ¥1,003,440（Yahoo 09:52 的价，约晚 20 分钟；估算、税前、不含手续费）" in t
-    assert "· 卖出 1545.T " in t and "约 4,110 口（约 ¥1,002,840；4,110 → 0 口）：给 1482.T 腾钱" in t
-    assert "· 买入 1482.T " in t and "0 → 678 口）：固定口数" in t
-    assert "现金约 ¥192：不够 → 执行器在那次决策里先卖上面的 1545.T 约 4,110 口 补足" in t
+    assert "· 卖出 1545 纳斯达克 100 约 4,110 口（约 ¥1,002,840；4,110 → 0 口）：给 1482 对冲版美国 7〜10 年国债 腾钱" in t
+    assert "· 买入 1482 对冲版美国 7〜10 年国债 约 678 口" in t and "0 → 678 口）：固定口数" in t
+    assert "现金约 ¥192：不够 → 执行器在那次决策里先卖上面的 1545 纳斯达克 100 约 4,110 口 补足" in t
     assert "什么时候：现在是盘中，不会马上下单；10/16 07:40 的运行（下一次决策）读到 → 10/16 09:00 开盘下单" in t
     assert "按什么价：模拟账户按那天的开盘价（含滑点）成交；买入在卖出之后，钱不够少买" in t
     assert "固定之后每天都调回 678 口" in t and "一直有效，直到点「恢复按规则」" in t
     # 10/15 还挂着的 1482.T 买单（等开盘后）：凑钱的 1545.T 卖单撤了、现金 192 円 → 「交易」写「不会下单（预计）」；确认框跟着写
     # （2026-10-15 复核：以前写成「今天还有执行器的单 … 照常」，与「交易」对不上）
     assert "今天还有执行器的单：" not in t and "照常" not in t
-    assert "今天的单里：今天开盘已排的 1482.T 买 678 口（资金来源的卖单已撤，预计不会下单：见「交易」→「今天的单」）" in t
+    assert "今天的单里：今天开盘已排的 1482 对冲版美国 7〜10 年国债 买 678 口（资金来源的卖单已撤，预计不会下单：见「交易」→「今天的单」）" in t
     assert t.splitlines()[-1].startswith("以上是预计")
     assert rec["confirm"]["danger"] is False
     assert MO.read_all("paper") == []
@@ -88,10 +88,10 @@ def test_clear_text_agrees_with_the_trade_tab_for_a_buy_that_will_not_be_placed(
     1482.T 买 678 口在「交易」写「不会下单（预计）」，这里不再写「照常」，写「预计不会下单」。凑钱的卖单还在 → 照常。"""
     b = _book1015()
     t = MO.corefix_clear_text(b, "1482.T", "paper", AT1012)
-    assert "照常" not in t and "今天开盘已排的 1482.T 买 678 口（资金来源的卖单已撤，预计不会下单" in t, t
+    assert "照常" not in t and "今天开盘已排的 1482 对冲版美国 7〜10 年国债 买 678 口（资金来源的卖单已撤，预计不会下单" in t, t
     b = _book1015(sell="SENT")
     t = MO.corefix_clear_text(b, "1482.T", "paper", AT1012)
-    assert "今天开盘已排的 1482.T 买 678 口" in t and "照常" in t and "预计不会下单" not in t, t
+    assert "今天开盘已排的 1482 对冲版美国 7〜10 年国债 买 678 口" in t and "照常" in t and "预计不会下单" not in t, t
     co = {"id": "M3-cancel_order", "kind": "cancel_order", "cid": "U2026-10-14-SELL-1545.T", "ticker": "1545.T", "status": "pending"}
     b = _book1015(sell="SENT", items={"M3-cancel_order": co})                 # 卖单在撤单中：买单也下不成；卖单写「撤单中」
     t = MO.corefix_clear_text(b, "1482.T", "paper", AT1012)
@@ -131,7 +131,7 @@ def test_confirm_writes_once_and_a_stale_token_asks_again():
     assert not ok and r2["need_confirm"] and r2["confirm"]["changed"] is True and r2["confirm"]["token"] == tok
     assert MO.read_all("paper") == []
     ok, msg, w = panel.submit(_fix(confirm=tok), AT1012, fetch=_nofetch)
-    assert ok and msg.startswith("已写：1482.T 固定 678 口 → 不是现在下单：10/16 07:40 的运行（下一次决策）读到 → 10/16 09:00 开盘下单")
+    assert ok and msg.startswith("已写：1482 对冲版美国 7〜10 年国债 固定 678 口 → 不是现在下单：10/16 07:40 的运行（下一次决策）读到 → 10/16 09:00 开盘下单")
     rs = MO.read_all("paper")
     assert len(rs) == 1 and rs[0]["kind"] == "corefix" and rs[0]["units"] == 678 and rs[0]["id"] == w["id"] and "confirm" not in rs[0]
 
@@ -155,7 +155,7 @@ def test_preview_when_selling_other_etf_still_leaves_a_shortfall():
     t = rec["confirm"]["text"]
     assert "现在 0 口 → 固定 248 口（买入 248 口）；现在手动固定 678 口" in t
     assert "约 1,500 口（约 ¥365,550；4,110 → 2,610 口）" in t
-    assert "现金约 ¥192：不够 → 执行器在那次决策里先卖上面的 1545.T 约 1,500 口 补足" in t
+    assert "现金约 ¥192：不够 → 执行器在那次决策里先卖上面的 1545 纳斯达克 100 约 1,500 口 补足" in t
     assert "★ 这样卖了也还差约 ¥" in t and "钱不够就少买（减口数）" in t
 
 
@@ -173,12 +173,12 @@ def test_clear_preview_and_write():
     ok, msg, rec = panel.submit(body, AT1012, fetch=_nofetch)
     assert not ok and rec["need_confirm"] and MO.read_all("paper") == []
     c = rec["confirm"]
-    assert c["title"] == "确认下单：1482.T 恢复按规则" and c["danger"] is False
+    assert c["title"] == "确认下单：1482 对冲版美国 7〜10 年国债 恢复按规则" and c["danger"] is False
     assert "取消手动固定 678 口 → 恢复按规则：预计 0 → 0 口（口数不变）" in c["text"]
     assert "下一次决策预计不用买卖核心 ETF" in c["text"] and "之后这只 ETF 每天照规则" in c["text"]
     assert "什么时候：现在是盘中，不会马上下单；10/16 07:40" in c["text"]
     ok, msg, w = panel.submit({**body, "confirm": c["token"]}, AT1012, fetch=_nofetch)
-    assert ok and msg.startswith("已写：1482.T 恢复按规则") and [r["clear"] for r in MO.read_all("paper")] == [True]
+    assert ok and msg.startswith("已写：1482 对冲版美国 7〜10 年国债 恢复按规则") and [r["clear"] for r in MO.read_all("paper")] == [True]
 
 
 def test_sell_on_a_fixed_etf_also_needs_confirm_and_says_so():
@@ -189,7 +189,7 @@ def test_sell_on_a_fixed_etf_also_needs_confirm_and_says_so():
     ok, _m, rec = panel.submit({"book": "paper", "kind": "sell", "ticker": "1482"}, AT1012, fetch=_nofetch)
     assert not ok and rec["need_confirm"] and MO.read_all("paper") == []
     c = rec["confirm"]
-    assert c["title"] == "确认下单：1482.T 固定 0 口" and c["danger"] is True
+    assert c["title"] == "确认下单：1482 对冲版美国 7〜10 年国债 固定 0 口" and c["danger"] is True
     assert "现在 678 口 → 固定 0 口（卖出 678 口）" in c["text"] and "只改它的固定口数" in c["text"]
 
 
@@ -202,7 +202,7 @@ def test_need_confirm_on_the_local_and_phone_ports_then_confirm_writes(servers, 
     body = {"book": "paper", "kind": "corefix", "ticker": "1545", "units": 50}
     code, j = _local_post(lp, tok, "/api/request", body)
     assert code == 200 and j["ok"] is False and j["need_confirm"] is True and "刷新" in j["msg"]
-    assert j["confirm"]["title"] == "确认下单：1545.T 固定 50 口" and not MO.read_all("paper")
+    assert j["confirm"]["title"] == "确认下单：1545 纳斯达克 100 固定 50 口" and not MO.read_all("paper")
     code, j2 = _local_post(lp, tok, "/api/request", {**body, "confirm": j["confirm"]["token"]})
     assert code == 200 and j2["ok"] and j2["id"] and len(MO.read_all("paper")) == 1
     # 手机（配对过的设备 + CSRF）

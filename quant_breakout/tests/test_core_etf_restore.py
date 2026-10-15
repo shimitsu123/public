@@ -177,8 +177,8 @@ def test_fixing_while_paused_is_not_a_buy_signal_and_the_card_shows_it():
     assert not [e for e in r.ux.book["events"] if "买入信号" in e["msg"]]
     h = panel.render(r.tag, "tok", now=_at(r, 10, 0))
     j = h.index("规则现在：")
-    assert "1482.T" not in h[j:j + 40]
-    assert "手动固定 1482.T 100 口（停买中也照买）" in h
+    assert "1482" not in h[j:h.index("</div>", j)]                         # 「规则现在：」那一行不提 1482（代码带名字之后也不提；2026-10-15）
+    assert "手动固定 1482 对冲版美国 7〜10 年国债：100 口（停买中也照买）" in h
 
 
 def test_signal_withdrawn_is_a_warning():
@@ -230,7 +230,7 @@ def test_clear_text_while_paused_and_with_todays_order():
     plan = r2.eng.st.core_plan.get("1545.T")
     assert plan and plan[0] == "SELL"
     txt = MO.corefix_clear_text(r2.ux.book, "1545.T", r2.tag, _at(r2, 8, 0))
-    assert f"今天开盘已排的 1545.T 卖 {plan[1]:,} 口照常（要不做：「今天的单」→ 撤单）；下一次决策起照规则，可能反向买卖" in txt
+    assert f"今天开盘已排的 1545 纳斯达克 100 卖 {plan[1]:,} 口照常（要不做：「今天的单」→ 撤单）；下一次决策起照规则，可能反向买卖" in txt
     assert "今天的单成交后约 1,000 口" in txt
 
 
@@ -252,7 +252,7 @@ def test_resume_when_the_rule_holds_nothing_or_already_traded_today():
     _morning(r2)                                                          # 07:40：决策 → 今天开盘卖 1545 全部
     ri = MO.resume_info(r2.ux.book, r2.tag, _at(r2, 10, 0))
     assert ri["late"] == ["1545.T"] and not ri["none"]
-    assert ri["text"].startswith(f"确认后{ri['late_when']}照规则买入（1545.T 今天已经有执行器的单：盘中不再调）")
+    assert ri["text"].startswith(f"确认后{ri['late_when']}照规则买入（1545 纳斯达克 100 今天已经有执行器的单：盘中不再调）")
     h = panel.render(r2.tag, "tok", now=_at(r2, 10, 0))
     assert "停买：开盘卖出（你停的）" in h and "规则在开盘卖出（熊市 / 换 ETF）" not in h
     assert ri["late_when"] in panel.render(r2.tag, "tok", now=_at(r2, 10, 0))
@@ -280,7 +280,7 @@ def test_panel_submit_texts_for_fixed_etf():
     assert ok and rec["kind"] == "corefix" and rec["units"] == 0 and "只改这只 ETF 的固定口数" in msg
     MO.requests_path(r.tag).unlink()
     ok, msg, rec = _submit_ok({"book": r.tag, "kind": "corefix", "ticker": "1482", "clear": True}, _at(r, 16, 0))
-    assert ok and msg.startswith("已写：1482.T 恢复按规则 → 下一次决策（交易日 07:40）起这只 ETF 又按规则")
+    assert ok and msg.startswith("已写：1482 对冲版美国 7〜10 年国债 恢复按规则 → 下一次决策（交易日 07:40）起这只 ETF 又按规则")
     assert "下一次决策全部卖出 100 口" in msg
 
 
@@ -294,7 +294,7 @@ def test_panel_pause_card_after_allin_shows_the_previous_settings():
     r.ux.manual.m.update(core_pct=0.0, core_pause=m["core_pause"])
     _save(r)
     h = panel.render(r.tag, "tok", now=_at(r, 16, 0))
-    assert "「全部换成 B.T」之前：比例 50%、1482.T 固定 100 口" in h
+    assert "「全部换成 B」之前：比例 50%、1482 对冲版美国 7〜10 年国债 固定 100 口" in h
     assert re.search(r"data-pct='50' data-plan='[^']*' data-act='core-restore'>恢复成 50%</button>", h)
     assert "固定口数不会自动恢复" in h
     assert not [x for x in MO.read_all(r.tag) if x.get("kind") == "core"]   # 只显示，什么都没写

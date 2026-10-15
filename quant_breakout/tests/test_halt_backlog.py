@@ -60,7 +60,7 @@ def test_halt_marks_waiting_items_then_first_run_after_removal_warns_once():
     r.day()                                                    # 解除后的第一次运行：列出积压、照原样下单
     ev = _backlog_events(r)
     assert len(ev) == 1 and ev[0]["level"] == "warn"
-    assert ev[0]["msg"].startswith(f"1 {BACKLOG}：{rec['id']} A.T 卖出全部 写于 {_md(rec)}")
+    assert ev[0]["msg"].startswith(f"1 {BACKLOG}：{rec['id']} A 卖出全部 写于 {_md(rec)}")   # 票写 label（假代码没名字：只写代码）
     assert "manual cancel" in ev[0]["msg"] and "halt_seen" not in r.ux.book["manual"]
     it = r.item(rec["id"])
     assert it["status"] == "placed"
@@ -100,7 +100,7 @@ def test_halt_removed_mid_session_now_phase_lists_the_backlog_before_selling():
     r.ux.blocked = None
     res = _now(r, 10, 30)
     ev = _backlog_events(r)
-    assert len(ev) == 1 and f"{rec['id']} A.T 卖出全部 写于 {_md(rec)}" in ev[0]["msg"]
+    assert len(ev) == 1 and f"{rec['id']} A 卖出全部 写于 {_md(rec)}" in ev[0]["msg"]
     assert res["placed"] == 1 and r.item(rec["id"])["status"] != "pending"
     assert BACKLOG in r.ux.summary()["manual"]["halt_backlog"]
     _now(r, 10, 40)
@@ -162,7 +162,7 @@ def test_cli_manual_list_under_halt_shows_the_backlog_with_dates(capsys, monkeyp
     paths.halt_file().write_text("stop", encoding="utf-8")
     assert run.main(["manual", "list", "--broker", "paper"]) == 0
     out = capsys.readouterr().out
-    assert (f"★ HALT 生效中：等着的买卖指令 1 条，解除后照原样执行：{it['id']} 卖出全部 7203.T" in out
+    assert (f"★ HALT 生效中：等着的买卖指令 1 条，解除后照原样执行：{it['id']} 卖出全部 7203 トヨタ自動車" in out
             and "（写于 10/05）（要不做：先 manual cancel <指令 id>）" in out)
     paths.halt_file().unlink()
     run.main(["manual", "list", "--broker", "paper"])

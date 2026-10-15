@@ -44,8 +44,8 @@ def test_normalize_and_describe_buy():
                      ({"unit": "pct", "value": 120}, "0〜100")]:
         with pytest.raises(ValueError, match=msg):
             n({"kind": "buy", "ticker": "6501", **bad})
-    assert MO.describe({"kind": "buy", "ticker": "6501.T", "unit": "rule"}) == "买入 6501.T（按规则的仓位）"
-    assert MO.describe({"kind": "buy", "ticker": "6501.T", "unit": "shares", "value": 300}) == "买入 6501.T → 300 股"
+    assert MO.describe({"kind": "buy", "ticker": "6501.T", "unit": "rule"}) == "买入 6501 日立製作所（按规则的仓位）"
+    assert MO.describe({"kind": "buy", "ticker": "6501.T", "unit": "shares", "value": 300}) == "买入 6501 日立製作所 → 300 股"
     assert MO.REASON_TEXT["manual_buy"] == "手动买入" and "buy" in MO.ORDER_KINDS and "buy" not in MO.POS_KINDS
 
 
@@ -118,7 +118,7 @@ def test_same_decision_retry_waits_for_the_open_then_buys_in_session():
     res = r.session(9, 30)
     it = r.item(rec["id"])
     assert res["placed"] == 1 and it["status"] == "placed" and it["now"] and it["fill"]["qty"] == 100
-    assert "先卖核心 ETF 1655.T" in it["msg"] and "没有买入信号" in it["msg"]
+    assert "先卖核心 ETF 1655 S&P500" in it["msg"] and "没有买入信号" in it["msg"]
     fund = [o for o in r.ux.orders if o.reason == "manual_fund"]
     assert len(fund) == 1 and fund[0].kind == "core" and fund[0].phase == "now" and fund[0].status == "FILLED"
     r.day()                                                              # 第二天早上：对账记进账本，持仓核对照常

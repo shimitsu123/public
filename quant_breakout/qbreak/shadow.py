@@ -50,6 +50,24 @@ def fee_of(t: str, side: str):
     return side_fee({"buy_fee_tiers": tiers, "sell_fee_tiers": tiers}, side)
 
 
+def unit(t: str) -> str:
+    """数量的单位：ETF 是「口」、个股是「股」（2026-10-15 起；以前 1655.T 也写成「股」）。"""
+    return "口" if t in ETFS else "股"
+
+
+def _lab(t: str) -> str:
+    """给人看的「7203 トヨタ自動車」「1655 S&P500」（2026-10-15 用户：只写代码不知道是哪只；查不到名字只写代码，
+    不是东证代码的输入〔写错的 ticker〕照原样）。决策 JSON / 成交 CSV 里的 ticker 字段不动。"""
+    from . import names as NM
+    return NM.label(t) if t else "—"
+
+
+def _name(t: str) -> str | None:
+    """只要名字（查不到 / 空 → None）：不在可选范围的回显用（原样的输入 + 「（名字）」）。"""
+    from . import names as NM
+    return NM.name(t) if t else None
+
+
 # ────────────────────────── 状态 ──────────────────────────
 @dataclass
 class SState:
@@ -124,37 +142,42 @@ def validate(dec: dict, st: SState, now: dt.datetime, universe: set[str], ref_px
             q = int(o.get("shares"))
         except (TypeError, ValueError):
             q = 0
+        # 2026-10-15：错误里的票写「代码 名字」、ETF 的数量写「口」（输入格式的说明〔ticker 写 1655.T、side 写 BUY / SELL〕照旧）
+        lab, u = _lab(t), unit(t)
         if t in seen:
-            err.append(f"{t} 出现两次")
+            err.append(f"{lab} 出现两次")
         seen.add(t)
         if t not in universe and t not in ETFS:
-            err.append(f"{t} 不在可选范围（日経225 成分股 + {' / '.join(ETFS)}）")
+            # 原样回显输入（问题可能就在格式：「7203」少了 .T），查得到名字再括号补上（2026-10-15 复核：以前「1545.T 不在可选范围」没有名字）
+            nm = _name(t)
+            err.append(f"{t or '—'}{f'（{nm}）' if nm else ' '}不在可选范围（日経225 成分股 + {' / '.join(_lab(x) for x in ETFS)}；"
+                       "ticker 写成 7203.T 这样）")
             continue
         if side not in ("BUY", "SELL"):
-            err.append(f"{t} 的方向 {side or '—'} 不是 BUY / SELL")
+            err.append(f"{lab} 的方向 {side or '—'} 不是 BUY / SELL")
             continue
         if not reason:
-            err.append(f"{t} 缺理由")
+            err.append(f"{lab} 缺理由")
         if q <= 0:
-            err.append(f"{t} 股数 {o.get('shares')} 不对")
+            err.append(f"{lab} 数量 {o.get('shares')} 不对")
             continue
         px = ref_px.get(t)
         if not px or not np.isfinite(px):
-            err.append(f"{t} 取不到参考价（最近收盘）")
+            err.append(f"{lab} 取不到参考价（最近收盘）")
             continue
         held = int((st.pos.get(t) or {}).get("shares") or 0)
         if side == "SELL":
             if q > held:
-                err.append(f"{t} 卖 {q} 股 > 持有 {held} 股")
+                err.append(f"{lab} 卖 {q:,} {u} > 持有 {held:,} {u}")
             sell_cash += q * px * (1 - slip_of(t)) - fee_of(t, "SELL")(q * px)
         else:
             if q % lot_of(t):
-                err.append(f"{t} 买 {q} 股不是 {lot_of(t)} 的倍数")
+                err.append(f"{lab} 买 {q:,} {u}不是 {lot_of(t)} 的倍数")
             if t not in ETFS:
                 if held == 0:
                     new_stocks += 1
                 if (q + held) * px > MAX_STOCK_W * eq:
-                    err.append(f"{t} 买后市值 ¥{(q + held) * px:,.0f} > 权益 ¥{eq:,.0f} × {MAX_STOCK_W:.0%}")
+                    err.append(f"{lab} 买后市值 ¥{(q + held) * px:,.0f} > 权益 ¥{eq:,.0f} × {MAX_STOCK_W:.0%}")
             buy_cost += q * px * (1 + slip_of(t)) + fee_of(t, "BUY")(q * px)
         orders.append({"ticker": t, "side": side, "shares": q, "reason": reason, "ref_px": round(float(px), 2)})
     full_sell = {o["ticker"] for o in orders if o["side"] == "SELL" and o["shares"] >= int((st.pos.get(o["ticker"]) or {}).get("shares") or 0)}
@@ -264,7 +287,7 @@ def process_day(st: SState, d: str, bars: dict[str, dict], corp=None) -> list[di
                 p["shares"] = tot
             else:
                 st.pos[t] = {"shares": q, "cost": (px * q + fee) / q, "entry_date": d, "last_close": op}
-            done(o, "BUY", q, px, fee, None, o["reason"] + ("" if q == int(o["shares"]) else f"（现金不够，只买 {q} 股）"))
+            done(o, "BUY", q, px, fee, None, o["reason"] + ("" if q == int(o["shares"]) else f"（现金不够，只买 {q} {unit(t)}）"))  # ETF 是「口」（2026-10-15）
     for t, p in st.pos.items():
         c = (bars.get(t) or {}).get("close")
         if c and np.isfinite(c):

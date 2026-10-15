@@ -891,6 +891,31 @@ def test_conn_reloads_on_new_version_or_finished_order_only_when_safe(tmp_path):
     assert idle == {"r0": 0, "r1": 1}
 
 
+def test_conn_reloads_pending_item_change_even_when_nothing_is_busy(tmp_path):
+    """2026-10-15 复核：busy 只数一会儿就会变的之后，晚上写的卖出（pending 1、busy 0）07:40 下了单、昨天的单早上对账结束（pending 1 → 0），
+    页面开着也只记 dirty、要切回来才刷新 →「交易」里还会做事的（pending）前后有一个 > 0 就在 30 秒的轮询里刷新；对话框开着照样等关掉。"""
+    night = run_conn(tmp_path, r"""
+  NET.pending = 1; await advance(31000); const r0 = R.reloads;           // 等 07:40：每 30 秒问一次，sig 没变不刷新
+  NET.sig = 'S1';                                                          // 07:40 的运行下了单（pending 还是 1）
+  await advance(31000);
+  return {r0, r1: R.reloads};
+""", cfg={"book": "paper", "v": "V1", "st": {"sig": "S0", "busy": 0, "pending": 1}}, gen_ago_min=1)
+    assert night == {"r0": 0, "r1": 1}
+    done = run_conn(tmp_path, r"""
+  NET.pending = 0; NET.sig = 'S1';                                         // 早上对账：昨天的单结束了（pending 1 → 0）
+  DOC.dlg = {}; await advance(31000); const r0 = R.reloads, b0 = banner();
+  DOC.dlg = null; dfire('close'); await advance(100);
+  return {r0, b0, r1: R.reloads};
+""", cfg={"book": "paper", "v": "V1", "st": {"sig": "S0", "busy": 0, "pending": 1}}, gen_ago_min=1)
+    assert done["r0"] == 0 and "关掉对话框后自动刷新" in done["b0"] and done["r1"] == 1, done
+    fresh = run_conn(tmp_path, r"""
+  NET.pending = 2; NET.sig = 'S1';                                         // 07:40 规则排了新单（pending 0 → 2）
+  await advance(31000);
+  return {r: R.reloads};
+""", gen_ago_min=1)
+    assert fresh == {"r": 1}
+
+
 def test_conn_cached_page_reloads_once_connected_with_loop_guard(tmp_path):
     o = run_conn(tmp_path, r"""
   await advance(100);

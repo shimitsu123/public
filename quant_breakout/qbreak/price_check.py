@@ -19,6 +19,8 @@ qbreak.data.adjust_prices），60 日箱体、MACD、周线量比与止损会被
   分红：yfinance 另做了分红调整，除息日前后比值变 1〜3%（低于 4% 的门槛，不算错位）；一次 > 5% 的特别分红会被报成复权错位 → 照实核对。
 没有 JQUANTS_API_KEY / 取不到：只写原因（日报「数据完整性」列出），不影响交易。
 输出只放比较的结果（日期、yfinance 自己的涨跌、差的大小），不放 J-Quants 的价格（J-Quants 规约禁止再分发；仓库是公开的）。
+告警文字里的票写「5401 日本製鉄」（2026-10-15 用户：只写代码不知道是哪只）：名字只从 qbreak/names.py 取（JPX 公开数据 / 仓库的 ETF 表，
+不用 J-Quants 的 CoName）；结果 JSON 的 ticker 字段照旧是「5401.T」。
 """
 from __future__ import annotations
 
@@ -30,6 +32,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pandas as pd
+
+from . import names as NM
 
 LOOKBACK_DAYS = 200
 RECENT = 20
@@ -227,8 +231,8 @@ def run(data: dict[str, pd.DataFrame], today: dt.date, client=None, fetch=None, 
 
 
 def describe(a: dict) -> str:
-    """一条告警 → 中文。"""
-    k, t = a.get("kind"), a.get("ticker", "")
+    """一条告警 → 中文（票写「代码 名字」，查不到名字只写代码；2026-10-15）。"""
+    k, t = a.get("kind"), NM.label(a.get("ticker", ""))
     if k in ("level", "other", "timing"):
         return (f"{t} {KIND_ZH[k]} {a['date']}（yfinance {a['yf_ret']:+.1f}%，与 J-Quants 同一天差 {a['gap_pp']:.1f} pp"
                 + (f"，之后的比值变了 {a['shift_pct']:+.1f}%" if k == "level" else "") + "）")
@@ -255,7 +259,7 @@ def summary_lines(pc: dict) -> list[str]:
     if pc.get("timeout"):
         out.append(f"行情交叉核对（J-Quants）：时间到，只核对了 {pc.get('checked')} / {pc.get('wanted')} 只 —— 只报警的检查，不影响交易")
     if pc.get("n_errors"):
-        out.append(f"行情交叉核对（J-Quants）：{pc['n_errors']} 只取不到（例 {'、'.join(list(pc.get('errors') or {})[:3])}）")
+        out.append(f"行情交叉核对（J-Quants）：{pc['n_errors']} 只取不到（例 {NM.labels(list(pc.get('errors') or {})[:3])}）")
     al = pc.get("alerts") or []
     for a in al[:8]:
         out.append(f"行情交叉核对（告警，不是缺数据）：{describe(a)} —— 只报警，行情与交易照旧；在买单 / 持仓里的票先核对哪边对")

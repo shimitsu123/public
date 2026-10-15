@@ -4,12 +4,15 @@
 两处用同一套渲染：
   日报（qbreak/report_unified.py，会入库、公开）—— 消息只放汇总（事件类别、条数、受影响的行业），不放第三方标题与链接；
   Mac 实时页面（run.py news --page → <数据目录>/out/dashboard.html，每 15 分钟重写、每 5 分钟自动刷新）—— 放完整标题、链接与链路。
+代码一律带名字「1545 纳斯达克 100」（2026-10-15 用户：只写代码不知道是哪只）：名字只从 qbreak/names.py 取（JPX 公开数据 + 仓库里的 ETF 表，
+日报也能用）；J-Quants 的 CoName 只在 jq_html（只在 Mac 页面上、不入库）里当后备，查不到 → 只写代码。
 """
 from __future__ import annotations
 
 import math
 from html import escape
 
+from . import names as NM
 from . import viz
 
 CSS = """
@@ -81,8 +84,9 @@ def exposure(d: dict) -> list[tuple[str, float, str]]:
     stocks = max(eq - cash - core, 0.0)
     if eq <= 0:
         return []
-    held = [t.replace(".T", "") for t, u in (d.get("core_units") or {}).items() if float(u or 0)]
-    return [("个股", stocks, "var(--accent)"), (f"核心 ETF（{'、'.join(held) or '无'}）", core, "var(--pos)"), ("现金", cash, "var(--muted)")]
+    held = [t for t, u in (d.get("core_units") or {}).items() if float(u or 0)]
+    # 图例窄 → 短名「核心 ETF（1545 纳斯达克 100）」（2026-10-15：只写代码不知道是哪只）
+    return [("个股", stocks, "var(--accent)"), (f"核心 ETF（{NM.labels(held, short=True) or '无'}）", core, "var(--pos)"), ("现金", cash, "var(--muted)")]
 
 
 def stance_html(d: dict) -> str:
@@ -90,13 +94,14 @@ def stance_html(d: dict) -> str:
     boxes = []
     icm = (d.get("idle_cash") or {}).get("mode")
     from .idle_cash import MODES, uses_market
+    sp = NM.label("1655.T", short=True)                                # 「1655 S&P500」（2026-10-15：代码带名字）
     if icm in (None, "K0"):
-        us_name = "美国（S&P500）· 只用于 1655 择时"
+        us_name = f"美国（S&P500）· 只用于 {sp} 择时"
     elif "US" in uses_market(icm):                                      # 闲置资金也跟美股分界（例：Q1 纳指 1545）
-        held = "、".join(t.replace(".T", "") for t in (MODES.get(icm) or {}).get("core", {}))
-        us_name = f"美国（S&P500）· 闲置资金 {held} 与基准账户的 1655 择时"
+        held = NM.labels((MODES.get(icm) or {}).get("core", {}), short=True)
+        us_name = f"美国（S&P500）· 闲置资金 {held} 与基准账户的 {sp} 择时"
     else:
-        us_name = "美国（S&P500）· 基准账户（原规则）的 1655 择时"
+        us_name = f"美国（S&P500）· 基准账户（原规则）的 {sp} 择时"
     for m, name in (("JP", "日本（日経225）· 个股的牛熊"), ("US", us_name)):
         bb = ((ex.get(m) or {}).get("regime") or {}).get("bullbear") or {}
         if not bb and m == "US":
@@ -296,7 +301,7 @@ def news_full_html(events: list[dict], limit: int = 10) -> str:
             lines.append(f"→ 行业（经验规则）：{rules}")
         for key, lab in (("tickers_down", "→ 受损方向的持仓 / 候补："), ("tickers_up", "→ 受益方向的持仓 / 候补：")):
             if c.get(key):
-                lines.append(lab + "、".join(escape(t) for t in c[key][:8]))
+                lines.append(lab + escape(NM.labels(c[key], limit=8, short=True)))   # 代码 + 短名，超过 8 只「等 N 只」（2026-10-15）
         badge = '<span class="badge b-bad">提醒</span> ' if e.get("alert") else ""
         out.append(f'<div class="ev">{badge}{title}'
                    f'<div class="muted">{escape(str(e.get("publisher") or ""))}｜{escape(str(e.get("time") or "")[:16].replace("T", " "))}｜'
@@ -364,7 +369,21 @@ def jq_html(j: dict | None) -> str:
         return '<p class="muted">还没有 J-Quants 数据（钥匙串里放好キー后运行 scripts/install_launchd_jquants.sh）</p>'
     es = j.get("earnings_soon") or []
     mine = [e for e in es if e.get("tag") != "股票池"]
-    rows = "".join(f"<tr><td>{escape(e['code'])} {escape(str(e.get('name') or ''))}</td><td>{escape(e['date'])}</td><td>{escape(str(e.get('fq') or ''))}</td>"
+    # 代码 + 名字（2026-10-15 用户：只写代码不知道是哪只）：qbreak/names.py → 这份整理结果里 J-Quants 的 CoName（这页只在 Mac 上、
+    # 不入库，CoName 只在这里用）→ 只写代码；一行里列很多只 → 短名、超过的写「等 N 只」
+    jn = {str(x.get("code")): str(x.get("name")) for x in es + [y for v in (j.get("listings") or {}).values() if isinstance(v, list) for y in v]
+          if isinstance(x, dict) and x.get("name")}
+
+    def lab(c, short=True) -> str:
+        c = NM.code(c)
+        if NM.name(c) or not jn.get(c):
+            return NM.label(c, short=short)
+        return f"{c} {NM.shorten(jn[c]) if short else jn[c]}"
+
+    def labs(cs, limit) -> str:
+        cs = list(cs)
+        return "、".join(lab(c) for c in cs[:limit]) + (f" 等 {len(cs)} 只" if len(cs) > limit else "")
+    rows = "".join(f"<tr><td>{escape(e['code'])} {escape(str(e.get('name') or NM.name(e['code']) or ''))}</td><td>{escape(e['date'])}</td><td>{escape(str(e.get('fq') or ''))}</td>"
                    f"<td>{escape(e.get('tag') or '')}</td><td class='{'neg' if e.get('mismatch') else 'muted'}'>"
                    f"{escape(str(e.get('yahoo') or '—'))}{' ★不一致' if e.get('mismatch') else ''}</td></tr>" for e in (mine + [e for e in es if e.get('mismatch') and e not in mine])[:15])
     parts = [f"<p>{escape(str(j.get('day')))} 的数据（{escape(str(j.get('phase') or ''))}，{escape(str(j.get('generated') or ''))} 取）："
@@ -374,17 +393,19 @@ def jq_html(j: dict | None) -> str:
                      f"{rows}</table></div>")
     rv = j.get("revisions") or []
     if rv:
-        txt = "、".join(f"{escape(r['code'])} {escape(str(r.get('main')))} {r['main_chg_pct']:+.1f}%（{escape(r['doc'])}）"
-                       if r.get("main_chg_pct") is not None else f"{escape(r['code'])}（{escape(r['doc'])}）" for r in rv[:12])
+        txt = "、".join(f"{escape(lab(r['code']))} {escape(str(r.get('main')))} {r['main_chg_pct']:+.1f}%（{escape(r['doc'])}）"
+                       if r.get("main_chg_pct") is not None else f"{escape(lab(r['code']))}（{escape(r['doc'])}）" for r in rv[:12])
+        txt += f" 等 {len(rv)} 只" if len(rv) > 12 else ""
         parts.append(f"<p>当天开示的会社予想（股票池）：{txt}</p>")
-    for k, lab in (("margin_alerts", "日々公表信用残（注意喚起・规制）"), ("short_reports", "空売り残高報告（≥ 0.5%）"), ("splits", "拆股 / 合并")):
+    for k, what in (("margin_alerts", "日々公表信用残（注意喚起・规制）"), ("short_reports", "空売り残高報告（≥ 0.5%）"), ("splits", "拆股 / 合并")):
         v = j.get(k) or []
         if v:
             u = list(dict.fromkeys(x["code"] for x in v))
-            parts.append(f"<p>{lab}：{len(u)} 只（{escape('、'.join(u[:15]))}{'…' if len(u) > 15 else ''}）</p>")
+            parts.append(f"<p>{what}：{len(u)} 只（{escape(labs(u, 8))}）</p>")
     lots = j.get("lots") or []
     if lots:
-        parts.append("<p>候补的真实一手：" + escape("、".join(f"{x['code']} ¥{x['lot_jpy']:,.0f}" for x in lots[:12])) + "</p>")
+        parts.append("<p>候补的真实一手：" + escape("、".join(f"{lab(x['code'])} ¥{x['lot_jpy']:,.0f}" for x in lots[:12])
+                                                     + (f" 等 {len(lots)} 只" if len(lots) > 12 else "")) + "</p>")
     ls = j.get("listings") or {}
     if ls.get("new") or ls.get("gone") or ls.get("moved"):
         parts.append(f"<p>上市一览：新上市 {len(ls.get('new') or [])} 只、退市 {len(ls.get('gone') or [])} 只、市场区分变更 {len(ls.get('moved') or [])} 只"

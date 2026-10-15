@@ -80,7 +80,7 @@ def test_submit_with_split_writes_sells_first_then_buy():
     assert fh["cash"] == 495_000 and {h["t"] for h in fh["hold"]} == {"7203.T", "1545.T"}
     ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "9984", "unit": "shares", "value": 300,
                                  "fund": {"mode": "split", "cost": 645_000}}, AT)            # 差 ¥150,000：1545 只有 ¥25,000 → 卖完，其余 7203 出（100 股）
-    assert ok and rec["fund"] == "split" and "凑钱先卖：7203.T 100 股" in msg and "核心 ETF 那份执行器按当时还缺多少卖" in msg
+    assert ok and rec["fund"] == "split" and "凑钱先卖：7203 トヨタ自動車：100 股" in msg and "核心 ETF 那份执行器按当时还缺多少卖" in msg
     reqs = MO.read_all("paper")
     assert [r["kind"] for r in reqs] == ["adjust", "buy"]
     assert reqs[0]["ticker"] == "7203.T" and reqs[0]["unit"] == "shares" and reqs[0]["value"] == 100 and reqs[0]["fund_for"] == "9984.T"
@@ -113,7 +113,7 @@ def test_alloc_card_shows_each_position_share():
     h = panel._alloc_card(book, {"holdings": [{"ticker": "7203.T", "name": "トヨタ"}], "core": [{"ticker": "1545.T", "name": "纳斯达克100（1545）"}]})
     assert "<b>仓位占比</b>" in h and "合计 ¥1,000,000" in h
     assert h.index("<b>1545</b>") < h.index("<b>7203</b>") < h.index("<b>现金</b>")           # 金额大的在前，现金最后
-    assert "60.0%" in h and "30.0%" in h and "10.0%" in h and "纳斯达克100 · ETF" in h and "width:60.00%" in h
+    assert "60.0%" in h and "30.0%" in h and "10.0%" in h and "纳斯达克 100 · ETF" in h and "トヨタ自動車" in h and "width:60.00%" in h
     assert panel._alloc_card({"state": {"cash_jpy": 5.0}}, {}) == ""
 
 

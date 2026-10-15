@@ -27,7 +27,7 @@ def test_lean_positions_and_text():
 
 def test_exposure_parts():
     parts = {k: v for k, v, _ in DB.exposure(_d())}
-    assert parts == {"个股": 500_000, "核心 ETF（1655）": 200_000, "现金": 300_000}                # 标签 = 现在拿着的核心 ETF
+    assert parts == {"个股": 500_000, "核心 ETF（1655 S&P500）": 200_000, "现金": 300_000}         # 标签 = 现在拿着的核心 ETF（代码 + 短名；2026-10-15）
     assert DB.exposure({"equity_jpy": 0}) == []
 
 
@@ -55,7 +55,7 @@ def test_public_render_has_no_headlines_but_mac_page_does():
     assert "追加関税" not in pub and "example.com" not in pub
     page = DB.page(_d(), {}, {"events": ev, "generated": "g", "sources": {"NHK 経済": 3, "FRB": "失败：TimeoutError"}}, "g")
     assert "追加関税を発動" in page and "https://example.com/a?b=1&amp;c=&lt;x&gt;" in page and 'http-equiv="refresh"' in page
-    assert "提醒 1 件" in page and "受损方向的持仓 / 候补：7203.T" in page and "FRB ✗" in page
+    assert "提醒 1 件" in page and "受损方向的持仓 / 候补：7203 トヨタ自動車" in page and "FRB ✗" in page   # 代码 + 名字（2026-10-15）
 
 
 def test_report_puts_dashboard_on_top_and_folds_threat_details(isolated_home):

@@ -139,8 +139,10 @@ def describe(fp: Path) -> str:
     st = (d or {}).get("state") or {}
     pos = st.get("pos") or {}
     core = {t: int(u) for t, u in (st.get("core_units") or {}).items() if int(u or 0)}
-    held = "、".join([f"{t} {int((v or {}).get('shares') or 0):,} 股" for t, v in pos.items()]
-                    + [f"{t} {u:,} 口" for t, u in core.items()]) or "无"
+    from . import names as NM                    # 「7203 トヨタ自動車：100 股」（2026-10-15 用户：只写代码不知道是哪只；一行里放得下 → 短名；
+    #                                              名字和数量之间隔「：」—— 名字可能以数字结尾：「1545 纳斯达克 100：4,110 口」）
+    held = "、".join([NM.qty(t, f"{int((v or {}).get('shares') or 0):,} 股", short=True) for t, v in pos.items()]
+                    + [NM.qty(t, f"{u:,} 口", short=True) for t, u in core.items()]) or "无"
     return (f"{fp.name}  备份于 {at} JST；决策日 {st.get('last_date') or '—'}；现金 ¥{float(st.get('cash_jpy') or 0):,.0f}；"
             f"持仓 {held}；单 {len(d.get('orders') or [])} 笔")
 

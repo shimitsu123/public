@@ -36,12 +36,13 @@ def test_normalize_check_and_ingest(tmp_path):
     with pytest.raises(ValueError):
         MO.normalize({"kind": "corefix", "ticker": "1655"})
     b = _cbook()
-    assert MO.check(MO.normalize({"kind": "corefix", "ticker": "7203", "units": 100}), b) .startswith("7203.T 不是核心 ETF")
+    assert MO.check(MO.normalize({"kind": "corefix", "ticker": "7203", "units": 100}), b) .startswith("7203 トヨタ自動車 不是核心 ETF")   # 代码带名字（2026-10-15）
     assert "倍数" in MO.check(MO.normalize({"kind": "corefix", "ticker": "1655", "units": 105}), b)
     assert "超过总权益" in MO.check(MO.normalize({"kind": "corefix", "ticker": "1655", "units": 5000}), b)
     assert MO.check(MO.normalize({"kind": "corefix", "ticker": "1655", "units": 500}), b) is None
     assert "本来就是按规则" in MO.check(MO.normalize({"kind": "corefix", "ticker": "1655", "clear": True}), b)
-    assert MO.describe({"kind": "corefix", "ticker": "1482.T", "units": 300}) == "固定 1482.T 300 口（不按规则自动调）"
+    assert MO.describe({"kind": "corefix", "ticker": "1482.T", "units": 300}) == "固定 1482 对冲版美国 7〜10 年国债：300 口（不按规则自动调）"   # 名字以数字结尾也分得开（2026-10-15 复核）
+    assert MO.describe({"kind": "corefix", "ticker": "1482.T", "units": 300}, lab=str) == "固定 1482.T 300 口（不按规则自动调）"   # 旧写法
 
 
 def test_panel_shows_buy_and_fix_buttons():

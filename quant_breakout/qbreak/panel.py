@@ -58,6 +58,7 @@ from . import core_exit as CX
 from . import dip_stats as DS
 from . import kline as KL
 from . import manual_orders as MO
+from . import names as NM
 from . import panel_phone as PP
 from . import paths
 from . import suggest as SG
@@ -476,7 +477,7 @@ def _unblock_confirm(book: dict, tag: str, ts: list[str], what: str, selling: li
     st, man = (book or {}).get("state") or {}, (book or {}).get("manual") or {}
     s = MO.slots(book, tag)
     many = len(ts) > 1
-    L = [f"只解除{what}的「不自动买回」" + (f"（{'、'.join(t.split('.')[0] for t in ts)}）" if many else "") + "。",
+    L = [f"只解除{what}的「不自动买回」" + (f"（{NM.labels(ts)}）" if many else "") + "。",       # 票写「代码 名字」（2026-10-15）
          f"不会把{'它们' if many else '它'}买回来，也不会马上买。",
          f"{MO.NEXT_DECISION}，规则重新判断：只有那次决策看的那根 K 线出买入信号（MACD 金叉）才可能买；已经判断过的信号不会再用。",
          f"买入还要有空名额（现在空 {s['free']} 个，上限 {s['max']} 只）、现金（账本现金 {_yen(float(st.get('cash_jpy') or 0))}）、"
@@ -484,7 +485,7 @@ def _unblock_confirm(book: dict, tag: str, ts: list[str], what: str, selling: li
     if MO.core_pct_now(tag, book) <= 0 or man.get("core_pause"):
         L.append("闲置资金 ETF 仍停买（0%，要另外点「确认买入」）；这批取消的固定口数不会恢复。")
     if selling:
-        L.append(f"还没成交的卖出（{'、'.join(t.split('.')[0] for t in selling)}）不会撤：要停就用「撤回」/「撤单」。")
+        L.append(f"还没成交的卖出（{NM.labels(selling)}）不会撤：要停就用「撤回」/「撤单」。")
     return "\n".join(L)
 
 
@@ -504,7 +505,7 @@ def _blocks_card(book: dict, tag: str, bl: dict, tlabel) -> str:
     rows = []
     for g in MO.batch_blocks(book):                          # 「全部换成 X」卖掉的：一批一次「恢复按规则」（2026-10-13 用户）
         mem = g["members"]
-        names = "、".join(tlabel(m["t"]) + ("（解除中）" if m["t"] in lift else "" if m["state"] == "sold" else f"（{m['state']}）") for m in mem)
+        who = "、".join(tlabel(m["t"]) + ("（解除中）" if m["t"] in lift else "" if m["state"] == "sold" else f"（{m['state']}）") for m in mem)
         until = MO.block_text({"until": g["until"]})
         todo = [m for m in mem if m["t"] not in lift]
         sell = [m["t"] for m in todo if m["state"] != "sold"]
@@ -515,7 +516,7 @@ def _blocks_card(book: dict, tag: str, bl: dict, tlabel) -> str:
         else:
             btn = "<span class='chip'>解除中（下一次决策起）</span>"
         rows.append(f"<div class='li'><div class='grow'><b>「全部换成 {escape(tlabel(g['x']))}」（{md(g['at'] or g['since'])}）卖出的</b> "
-                    f"<span class='muted'>{escape(names)}</span><div class='muted small'>{escape(until)}"
+                    f"<span class='muted'>{escape(who)}</span><div class='muted small'>{escape(until)}"
                     "；点「恢复按规则」= 只解除这一批（不买回、也不马上买）" + ("；闲置资金 ETF 不跟着恢复（仍停买）" if paused else "")
                     + "</div></div>" + btn + "</div>")
     for t, b in bl.items():
@@ -524,7 +525,7 @@ def _blocks_card(book: dict, tag: str, bl: dict, tlabel) -> str:
         else:
             msg = _unblock_confirm(book, tag, [t], f" {tlabel(t)} ", [t] if t in pos else [])
             btn = (f"<button class='btn sm' data-act='unblock' data-t='{escape(t)}' data-id='{escape(bid(b.get('id')))}'"
-                   f" data-msg='{escape(msg)}'>解除</button>")
+                   f" data-msg='{escape(msg)}' data-name='{escape(NM.name(t) or '')}'>解除</button>")   # 名字放最后（确认框标题用；2026-10-15）
         rows.append(f"<div class='li'><div class='grow'><b>{escape(tlabel(t))}</b> <span class='muted'>{escape(MO.block_text(b))}</span></div>"
                     + btn + "</div>")
     return ("<section class='card' id='blocks'><h2>手动卖出后不自动买回</h2><div class='muted small'>到期 / 解除之前规则和手动都不买这几只；"
@@ -783,6 +784,44 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
     return "".join(H)
 
 
+def _nm(t, n=None) -> str:
+    """页面上的名字（不带代码）：names.name 优先（唯一入口）；查不到 → 别处给的名字（去掉旧写法末尾的「（1545）」）；都没有 → ""。
+    以前按「（」截 → 「S&P500（MAXIS）」被截成「S&P500」（2026-10-15）。"""
+    v = NM.name(t)
+    if v:
+        return v
+    v = str(n or "").strip()
+    c = NM.code(t)
+    v = re.sub(r"\s*（" + re.escape(c) + r"(?:\.T)?）$", "", v) if c else v
+    return "" if v in ("", str(t), c) else v
+
+
+def _page_names(book: dict, waiting: list, sm: dict, man: dict) -> dict:
+    """页面脚本用的名字表 CFG.names = {ticker: 名字}（只放查得到的；2026-10-15 用户：只写代码不知道是哪只）：持仓、核心 ETF（拿着的 /
+    规则目标 / 固定的）、当前决策的单、手动指令（含凑钱的「为谁」）、不自动买回、凑钱用的持仓、K 线、建议的股票、停买的「你卖出 X / 全部换成 X」。
+    单独放（不进 cores：测试断言了 cores 的 JSON）。"""
+    st = (book or {}).get("state") or {}
+    cr = (book or {}).get("core_rule") or {}
+    ts: list = list(st.get("pos") or {}) + list(st.get("core_units") or {}) + list(cr.get("units100") or {}) + list(man.get("core_fix") or {})
+    d = st.get("last_date")
+    ts += [o.get("ticker") for o in (book or {}).get("orders") or [] if o.get("decided_on") == d]
+    for r in list(waiting or []) + list((man.get("items") or {}).values()):
+        if isinstance(r, dict):
+            ts += [r.get("ticker"), r.get("fund_for")]
+    ts += list(man.get("blocks") or {})
+    cp = man.get("core_pause") or {}
+    if isinstance(cp, dict):
+        ts += [cp.get("ticker"), cp.get("allin")]
+    ts += list(((sm or {}).get("kline") or {}).get("items") or {})
+    ts += [r.get("ticker") for r in ((sm or {}).get("suggest") or {}).get("rows") or [] if isinstance(r, dict)]
+    try:
+        for g in MO.batch_blocks(book):
+            ts += [g.get("x")] + [m.get("t") for m in g.get("members") or []]
+    except Exception:                                      # noqa: BLE001  只是名字表
+        pass
+    return NM.names_map([t for t in ts if isinstance(t, str) and t])
+
+
 ALLOC_COLORS = ("#4c7bf3", "#f0a030", "#9b6cf0", "#20a8a0", "#e5c53a", "#e870b0", "#a07850", "#6aa8e8")   # 不用红 / 绿（红涨绿跌另有含义）
 
 
@@ -791,8 +830,8 @@ def _alloc_card(book: dict | None, hv: dict | None) -> str:
     （颜色点、代码名称、占比、金额）；现金灰色放最后。按最近收盘估算（与「从持仓平摊凑」同一份数字）。没有持仓 → 空。"""
     st = (book or {}).get("state") or {}
     hold = MO.fund_holdings(book)["hold"]
-    names = {r.get("ticker"): r.get("name") for r in ((hv or {}).get("holdings") or []) + ((hv or {}).get("core") or [])}
-    items = [(h["t"], names.get(h["t"]) or "", h["cur"] * h["px"], h["kind"]) for h in hold if h["cur"] > 0 and h["px"] > 0]
+    hvn = {r.get("ticker"): r.get("name") for r in ((hv or {}).get("holdings") or []) + ((hv or {}).get("core") or [])}
+    items = [(h["t"], _nm(h["t"], hvn.get(h["t"])), h["cur"] * h["px"], h["kind"]) for h in hold if h["cur"] > 0 and h["px"] > 0]
     if not items:
         return ""
     items.sort(key=lambda x: -x[2])
@@ -803,11 +842,11 @@ def _alloc_card(book: dict | None, hv: dict | None) -> str:
     rows = [(t, n, v, k, ALLOC_COLORS[i % len(ALLOC_COLORS)]) for i, (t, n, v, k) in enumerate(items)]
     if cash > 0:
         rows.append(("现金", "", cash, "cash", "var(--muted)"))
-    bar = "".join(f"<i style='width:{v / total * 100:.2f}%;background:{c}' title='{escape(t)} {v / total * 100:.1f}%'></i>"
-                  for t, _n, v, _k, c in rows)
+    bar = "".join(f"<i style='width:{v / total * 100:.2f}%;background:{c}' title='{escape(f'{NM.code(t)} {n}'.strip() if k != 'cash' else t)} {v / total * 100:.1f}%'></i>"
+                  for t, n, v, k, c in rows)
     legend = "".join(
         f"<div class='alr'><span class='ald' style='background:{c}'></span>"
-        f"<span class='aln'><b>{escape(t.replace('.T', ''))}</b>{(' ' + escape(str(n).split('（')[0])) if n else ''}{' · ETF' if k == 'core' else ''}</span>"
+        f"<span class='aln'><b>{escape(NM.code(t))}</b>{(' ' + escape(n)) if n else ''}{' · ETF' if k == 'core' else ''}</span>"
         f"<span class='alp'>{v / total * 100:.1f}%</span><span class='aly muted'>{_yen(v)}</span></div>"
         for t, n, v, k, c in rows)
     return (f"<section class='card' id='alloc'><div class='head'><b>仓位占比</b><span class='muted small'>合计 {_yen(total)} · 按最近收盘</span></div>"
@@ -911,12 +950,12 @@ def _run_lines(tag: str, book: dict, now: dt.datetime, halt: str | None) -> list
     if rec:
         when, is_today = at(rec.get("at"))
         if rec.get("ok") is False:
-            out.append(("neg", f"★ 执行器 {escape(when)} 停下：{escape(str(rec.get('error') or '原因不明（看数据目录 logs/ 的 .err）'))}"))
+            out.append(("neg", f"★ 执行器 {escape(when)} 停下：{escape(NM.annotate(str(rec.get('error') or '原因不明（看数据目录 logs/ 的 .err）')))}"))
         else:
             out.append(("muted", f"执行器：{escape(when)} 跑完 ✓（{escape(RS.PHASE_TEXT.get(rec.get('phase'), str(rec.get('phase') or '')))}）"))
         if rec.get("blocked"):
             day = "今天" if is_today else f"{when[:5]} "
-            out.append(("neg", f"★ {escape(day)}的单没下：{escape(str(rec['blocked']))}"))
+            out.append(("neg", f"★ {escape(day)}的单没下：{escape(NM.annotate(str(rec['blocked'])))}"))   # 存下的文字只有代码 → 显示时补名字（2026-10-15）
     bad = RS.bad_orders(book.get("orders"), ld) if ld else []
     if rec and rec.get("decided_on") == ld:
         bad = RS.uncovered(bad, rec.get("blocked"))       # 「★ 今天的单没下」已经说了原因的，不再逐笔列
@@ -927,14 +966,14 @@ def _run_lines(tag: str, book: dict, now: dt.datetime, halt: str | None) -> list
         sending = [o for o in bad if o["status"] == "SENDING"]
         bad = [o for o in bad if o["status"] != "SENDING"]
         out.append(("muted", escape("发送中（执行器正在运行）：" + "、".join(
-            f"{o['ticker']} {'买' if o['side'] == 'BUY' else '卖'} {o['qty']:,} {'口' if o['kind'] == 'core' else '股'}"
+            f"{NM.label(o['ticker'])} {'买' if o['side'] == 'BUY' else '卖'} {o['qty']:,} {'口' if o['kind'] == 'core' else '股'}"
             for o in sending))))
     if bad:
         out.append(("neg", f"★ 有 {len(bad)} 笔被挡 / 被拒 / 状态不明（{escape(RS.bad_text(bad))}）："))
         for o in bad:
             unit = "口" if o["kind"] == "core" else "股"
-            out.append(("neg", escape(f"・{o['ticker']} {'买' if o['side'] == 'BUY' else '卖'} {o['qty']:,} {unit} "
-                                      f"{RS.STATUS_TEXT.get(o['status'], o['status'])}" + (f"：{o['note']}" if o["note"] else ""))))
+            out.append(("neg", escape(f"・{NM.label(o['ticker'])} {'买' if o['side'] == 'BUY' else '卖'} {o['qty']:,} {unit} "
+                                      f"{RS.STATUS_TEXT.get(o['status'], o['status'])}" + (f"：{NM.annotate(o['note'])}" if o["note"] else ""))))
         if not paper and any(o["status"] in ("ERROR", "SENDING") for o in bad):
             out.append(("neg", "状态不明的单：去立花网站的注文一覧核对（手机网站 "
                                f"<a href='{ESHITEN_SP}' target='_blank' rel='noopener noreferrer'>{ESHITEN_SP}</a>），再在 Mac 对话里登记"))
@@ -1045,22 +1084,23 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
                 hit = [b for b in orders if str(b.get("cid")) in after and str(b.get("cid")) not in base and str(b.get("cid")) not in dead]
                 if hit:
                     deps = ("撤掉之后，今天等这笔卖出的钱的买单预计下不成（开盘时现金不够一单元）："
-                            + "、".join(f"买 {b.get('ticker')} {int(b.get('qty') or 0):,} {'口' if b.get('kind') == 'core' else '股'}" for b in hit)
+                            + "、".join("买 " + NM.qty(b.get('ticker'), f"{int(b.get('qty') or 0):,} {'口' if b.get('kind') == 'core' else '股'}") for b in hit)
                             + "（已经成交的部分卖出的钱照样能用）")
             btn = (f"<button class='btn sm danger' data-act='cancel-order' data-cid='{escape(cid)}' "
                    f"data-t='{escape(str(o.get('ticker')))}' data-side='{escape(str(o.get('side')))}' data-qty='{n}' "
-                   f"data-core='{1 if core else 0}'" + (f" data-deps='{escape(deps)}'" if deps else "") + ">撤单</button>")
+                   f"data-core='{1 if core else 0}'" + (f" data-deps='{escape(deps)}'" if deps else "")
+                   + f" data-name='{escape(NM.name(o.get('ticker')) or '')}'>撤单</button>")      # 名字放最后（确认框标题；2026-10-15）
         else:
             btn = ""
         chip, why = dead.get(cid) or (LO.STATUS_TEXT.get(o.get("status"), str(o.get("status"))), "")
         if note and chip.startswith("不会下单"):              # 执行器排单时写的打算（「开盘后按始値检查、减股再下」）已经不会发生：标成原先的（2026-10-15 复核）
             note = "原先：" + note
-        rows.append(f"<div class='li'><div class='grow'><b>{'买' if o.get('side') == 'BUY' else '卖'} {escape(str(o.get('ticker')))} "
-                    f"{n:,} {unit}</b> <span class='chip'>{escape(chip)}</span>"
+        rows.append(f"<div class='li'><div class='grow'><b>{'买' if o.get('side') == 'BUY' else '卖'} {escape(NM.qty(o.get('ticker'), f'{n:,} {unit}'))}"
+                    f"</b> <span class='chip'>{escape(chip)}</span>"
                     + (f"<div class='neg small'>{escape(why)}</div>" if why else "")
                     + (f"<div class='small'>{escape(fixn[cid])}</div>" if cid in fixn else "")
                     + f"<div class='muted small'>{escape(LO.how_text(o) + lim + got)}"
-                    f"{(' · ' + escape(note[:140])) if note else ''}</div></div>{btn}</div>")
+                    f"{(' · ' + escape(NM.annotate(note)[:160])) if note else ''}</div></div>{btn}</div>")
     foot = (f"「撤单」：{LO.CANCEL_HINT}。{LO.CANCEL_HINT_CORE}。"
             + ("" if paper or stale else
                "立花 API / Mac 出故障那天：只照这张表里「被挡 / 不下 / 没下」的行在立花网站下单（「已下单 / 已成交 / 部分成交」的已经在交易所，"
@@ -1149,9 +1189,12 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
         HALT 中等着的照算（解除后照原样执行）。
     → {"orders": {cid: (标签, 说明) —— 不会做事的单怎么写}, "fix": {cid: 固定口数还有效的提醒}, "items": 不算的指令 id,
        "itxt": {指令 id: 状态后面加的说明（单在撤单中 / 预计下不成 / 已做完）},
-       "asked": 撤单中的 cid, "n": 数字, "busy": 还在处理的指令数（页面每 10 秒问一次要不要刷新）= 还会做事的手动指令
-       + 还在处理的撤单 / 撤回（单还挂着的撤单、执行器读了还在撤的、指着执行器读过的指令的撤回）；
-       都还没读的「指令 + 它的撤回」不算（2026-10-15 复核：撤回了唯一一条之后页面还一直每 10 秒问、状态一变就刷新）}。只读。"""
+       "asked": 撤单中的 cid, "n": 数字, "busy": 一会儿就会变的（页面每 10 秒问一次要不要刷新）= 面板马上会叫执行器处理的手动指令
+       （盘中的买卖 / 闲置资金比例 → --phase now；07:45〜08:55 的卖出 / 减仓 / 调仓 → --retry；盘中下的、还挂着的单可能随时成交）
+       + 执行器正在跑（运行锁）+ 还在处理的撤单 / 撤回（单还挂着的撤单、执行器读了还在撤的、指着执行器读过的指令的撤回）；
+       都还没读的「指令 + 它的撤回」不算（2026-10-15 复核：撤回了唯一一条之后页面还一直每 10 秒问、状态一变就刷新）；
+       等下一次决策（07:40）才读的固定口数 / 解除 / 收盘后写的买卖不算（2026-10-15：以前晚上固定了口数，页面整晚每 10 秒问一次；
+       「交易」的数字 n 照算）}。只读。"""
     from . import live_ops as LO
     st = book.get("state") or {}
     d = st.get("last_date")
@@ -1175,9 +1218,9 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     for o in cur:
         cid, s, t = str(o.get("cid")), o.get("status"), str(o.get("ticker"))
         if o.get("kind") == "core" and t in fixed and (s == "CANCELLED" or cid in asked or cid in unf):   # 撤了 / 下不成，固定口数却还在
-            fix[cid] = (f"{t} 手动固定 {int(fixed[t]):,} 口仍然有效：下一次决策（{_next_decision(now)}）还会再排同样的单；不想要 → 在「持仓」"
+            fix[cid] = (f"{NM.label(t)} 手动固定 {int(fixed[t]):,} 口仍然有效：下一次决策（{_next_decision(now)}）还会再排同样的单；不想要 → 在「持仓」"
                         + ("" if int((st.get("core_units") or {}).get(t) or 0) > 0 else "的「其他闲置资金 ETF（现在没拿）」")
-                        + f"里 {t} 下面点「恢复按规则」")
+                        + f"里 {NM.label(t)} 下面点「恢复按规则」")
         manual = o.get("reason") in LO.MANUAL_REASONS
         if s not in LO.LIVE:
             if manual and (s == "FILLED" or (o.get("side") == "BUY" and s in ("UNFILLED", "EXPIRED"))):
@@ -1198,8 +1241,8 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
         elif cid in unf:
             x = unf[cid]
             gone = [g for g in x["gone"] if g.get("status") == "CANCELLED" or str(g.get("cid")) in asked]
-            src = ("资金来源的卖单已撤（" + "、".join(f"卖 {g.get('ticker')} {int(g.get('sent_qty') or g.get('qty') or 0):,} "
-                                                  f"{'口' if g.get('kind') == 'core' else '股'}" for g in gone) + "）；") if gone else ""
+            src = ("资金来源的卖单已撤（" + "、".join("卖 " + NM.qty(g.get('ticker'), f"{int(g.get('sent_qty') or g.get('qty') or 0):,} "
+                                                                     f"{'口' if g.get('kind') == 'core' else '股'}") for g in gone) + "）；") if gone else ""
             rows[cid] = ("不会下单（预计）", f"{src}开盘时能用的钱最多约 {_yen(x['cash'] + x['sells'])}，按跌停价买 {x['lot']:,} {u}也要约 "
                          f"{_yen(x['need'])}：开盘后这笔下不成（执行器会放弃）")
             dead.add(cid)
@@ -1225,12 +1268,25 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     gone_it = set(itxt)
     dropped = MO.cancelled(wl)
     skip = set(gone_it)
-    act = 0                                                 # 还会做事的手动指令（busy 用）
+    act = soon = 0                                          # 还会做事的手动指令（数字）/ 其中一会儿就会变的（busy）
+    today = now.date().isoformat()
+    behind = halt or MO.morning_behind(book, now)           # HALT / 今天早上的运行没完成：面板不叫 --phase now / --retry（等运行先处理）
+    session = not behind and MO.timing(now)[0] == "now"
+    morning = not behind and is_trading_day(now.date()) and TRIGGER_FROM <= now.time() < TRIGGER_UNTIL
+
+    def quick(r: dict) -> bool:                             # 与 Trigger 的 now_due / due 同一口径（指令的种类与时段）
+        if r.get("hold") == today or MO.allin_member(r):
+            return False
+        if r.get("status") == "placed":
+            return session and bool(r.get("now"))           # 盘中下的单还挂着：随时可能成交
+        k = r.get("kind")
+        return (session and k in MO.ORDER_KINDS + ("core",)) or (morning and k in MO.POS_KINDS and not r.get("wait"))
     for r in wl:
         if r.get("kind") in CANCEL_KINDS or r["id"] in dropped:
             skip.add(r["id"])
         else:
             act += 1
+            soon += quick(r)
     for it in items.values():
         if it.get("status") not in MO.ACTIVE:
             continue
@@ -1238,13 +1294,17 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
             skip.add(it.get("id"))                          # 还没读的撤回指着的、执行器读了在撤回中的：不会再做事
         else:
             act += 1
+            soon += quick(it)
     n += act
+    if tag:                                                 # 执行器正在跑（07:40 的决策、面板叫的盘中运行…）：跑完状态就变
+        from .live_unified import lock_held
+        soon += lock_held(paths.state_dir() / f"live_unified_{tag}.lock")
     live_cids = {str(o.get("cid")) for o in cur if o.get("status") in LO.LIVE}
     flight = (len(asked & live_cids)                        # 撤单：单还挂着（执行器还没撤完）
               + sum(1 for it in items.values() if it.get("status") in MO.ACTIVE and it.get("cancel_req"))   # 撤回中（执行器读了、还在撤）
               + sum(1 for r in wl if r.get("kind") == "cancel" and (items.get(r.get("target")) or {}).get("status") in MO.ACTIVE
                     and not (items.get(r.get("target")) or {}).get("cancel_req")))   # 还没读的撤回、指着执行器已经读过的指令
-    return {"orders": rows, "fix": fix, "items": skip, "itxt": itxt, "asked": asked, "n": n, "busy": act + flight}
+    return {"orders": rows, "fix": fix, "items": skip, "itxt": itxt, "asked": asked, "n": n, "busy": int(soon) + flight}
 
 
 def _badges(book: dict, st: dict, sm: dict, waiting: list, now: dt.datetime, tag: str | None = None,
@@ -1307,7 +1367,8 @@ def _notify_log_card(now: dt.datetime | None = None) -> str:
         lv = str(h.get("level") or "info")
         rows.append(f"<details class='hv nw' id='l-{escape(str(h.get('id')))}'{' open' if k == 0 else ''}><summary>"
                     f"{'<b class=neg>★</b> ' if lv in ('warn', 'error') else ''}<span class='muted'>{escape(str(h.get('at') or '')[5:16].replace('-', '/'))} JST</span> "
-                    f"{escape(str(h.get('subject') or ''))}</summary><div style='white-space:pre-wrap'>{escape(str(h.get('text') or ''))}</div></details>")
+                    f"{escape(NM.annotate(str(h.get('subject') or '')))}</summary>"      # 以前记下的只有代码 → 显示时补名字（记录本身不改；2026-10-15）
+                    f"<div style='white-space:pre-wrap'>{escape(NM.annotate(str(h.get('text') or '')))}</div></details>")
     return (f"<section class='card' id='nlog'><h2>通知记录（最近 {NOTIFY_SHOW_H} 小时 {len(hs)} 条）</h2><div class='muted small'>时间都是日本时间（JST）。"
             f"只显示最近 {NOTIFY_SHOW_H} 小时的" + (f"（更早的 {n_old} 条不显示）" if n_old else "") + "；"
             "qbreak 发出的每一条通知都记在这里（只在这台 Mac）；打开了推送的设备同时会弹出来。</div>" + "".join(rows) + "</section>")
@@ -1354,9 +1415,9 @@ def _news_card(now: dt.datetime) -> str:
         if c.get("rules"):
             det.append("<div>经验规则：" + escape("、".join(f"{s}{'↑' if dd > 0 else '↓'}" for s, dd in c["rules"].items())) + "</div>")
         if c.get("tickers_down"):
-            det.append("<div class='down'>受损方向的持仓 / 候补：" + escape("、".join(c["tickers_down"][:10])) + "</div>")
+            det.append("<div class='down'>受损方向的持仓 / 候补：" + escape(NM.labels([str(t) for t in c["tickers_down"][:10]])) + "</div>")
         if c.get("tickers_up"):
-            det.append("<div class='up'>受益方向的持仓 / 候补：" + escape("、".join(c["tickers_up"][:10])) + "</div>")
+            det.append("<div class='up'>受益方向的持仓 / 候补：" + escape(NM.labels([str(t) for t in c["tickers_up"][:10]])) + "</div>")
         link = str(e.get("link") or "")
         if link.startswith("https://"):
             det.append(f"<div><a href='{escape(link)}' target='_blank' rel='noopener noreferrer'>原文</a></div>")
@@ -1437,7 +1498,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
          + "</nav></header><main><div id='top'></div><div id='stale' class='card warn small' role='status' hidden></div>"]
     warn = []
     if halt:
-        warn.append(f"HALT 生效中（{escape(halt)}）：不下单，解除之后才处理")
+        warn.append(f"HALT 生效中（{escape(NM.annotate(halt))}）：不下单，解除之后才处理")
     if not paper and arm == "bad":
         warn.append("ARM 文件在，但内容不是 ARMED（立花只认内容 ARMED）：单会被挡住，不会真的发出去")
     elif not paper and arm == "off":
@@ -1479,10 +1540,10 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     hv = sm.get("holding_view") or {}
     if not hv.get("holdings") and not hv.get("core") and st:               # 还没有算过（旧的汇总）：用账本里的数字
         hv = {"bar_date": st.get("last_date"),
-              "holdings": [{"ticker": t, "shares": int(p.get("shares") or 0), "entry_date": p.get("entry_date"),
+              "holdings": [{"ticker": t, "name": NM.name(t), "shares": int(p.get("shares") or 0), "entry_date": p.get("entry_date"),
                             "entry_px": p.get("entry_px"), "error": "持有理由 / 趋势在下一次执行器运行之后显示"}
                            for t, p in (st.get("pos") or {}).items()],
-              "core": [{"ticker": t, "name": t, "units": int(u), "why": "闲置资金规则（核心 ETF）"}
+              "core": [{"ticker": t, "name": NM.name(t), "units": int(u), "why": "闲置资金规则（核心 ETF）"}   # 名字（以前写成代码；2026-10-15）
                        for t, u in (st.get("core_units") or {}).items() if int(u)]}
     _ht = list((st.get("pos") or {}).keys()) + [t for t, u in (st.get("core_units") or {}).items() if int(u or 0) > 0]
     hmarks = _news_marks(_ht, now) if _ht else {}                     # 持仓（个股 + 拿着的核心 ETF）的消息影响
@@ -1493,7 +1554,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     def actions(r: dict, kind: str) -> str:
         t = str(r["ticker"])
         if kind == "core":
-            return (tchips(ktrend.get(t)) + _news_mark(hmarks.get(t)) + _core_actions(r, t) + _corefix(t, str(r.get("name") or t))
+            return (tchips(ktrend.get(t)) + _news_mark(hmarks.get(t)) + _core_actions(r, t) + _corefix(t, _nm(t, r.get("name")))
                     + _core_exit(t) + chart(t, "core"))
         qt = f"<div class='qt small' data-q='{escape(t)}'></div>" if t in (st.get("pos") or {}) else ""   # 现价（/api/quotes）
         return tchips(ktrend.get(t), stats=True) + qt + _actions(r, t)
@@ -1557,7 +1618,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                     "口数明天早上对账后更新</div>")
         c = MO.core_info(book, t)
         px = c["px"] if c else float((st.get("core_last") or {}).get(t) or 0)
-        sell = (f"<button class='btn sell' data-act='core-sell' data-t='{escape(t)}' data-name='{escape(str(r.get('name') or ''))}'"
+        sell = (f"<button class='btn sell' data-act='core-sell' data-t='{escape(t)}' data-name='{escape(_nm(t, r.get('name')))}'"
                 f" data-shares='{cur}'>卖出全部</button>")
         if c is None:                                       # 比例改过、执行器还没算过规则目标额：卖出全部照样可以，调仓等下一次运行
             return (qt + "<div class='act'>" + sell + "<button class='btn' disabled>调仓…</button></div>"
@@ -1569,7 +1630,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                         "<span class='muted'>；要恢复：下面「闲置资金」的「确认买入」</span></div>")
             return (qt + "<div class='act'>" + sell + "</div><div class='small'><b class='neg'>规则在开盘卖出（熊市 / 换 ETF）</b>"
                     "<span class='muted'>；点「卖出全部」= 卖出后停买（之后要你确认才买）</span></div>")
-        data = (f" data-t='{escape(t)}' data-name='{escape(str(r.get('name') or ''))}' data-shares='{c['cur']}' data-px='{round(c['px'], 4)}'"
+        data = (f" data-t='{escape(t)}' data-name='{escape(_nm(t, r.get('name')))}' data-shares='{c['cur']}' data-px='{round(c['px'], 4)}'"
                 f" data-core='1' data-lot='{c['lot']}' data-u100='{c['u100']}' data-cpct='{c['pct']:g}' data-approx='{1 if c.get('approx') else 0}'")
         share = f"{c['cur'] * c['px'] / eq * 100:.1f}" if eq and c["px"] > 0 else "—"
         return (qt + "<div class='act'>" + sell
@@ -1602,7 +1663,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         px = float(p.get("last_close") or p.get("entry_px") or 0)
         sh = int(p.get("shares") or 0)
         nmk = _news_mark(hmarks.get(t))                    # 拿着的票也标（横展开）
-        data = f" data-t='{escape(t)}' data-name='{escape(str(r.get('name') or ''))}' data-shares='{sh}'"
+        data = f" data-t='{escape(t)}' data-name='{escape(_nm(t, r.get('name')))}' data-shares='{sh}'"
         return (nmk + "<div class='act'>"
                 f"<button class='btn sell' data-act='sell'{data}>卖出全部</button>"
                 f"<button class='btn' data-act='adj'{data} data-px='{px:g}'{'' if px > 0 and eq else ' disabled'}>调仓…</button></div>"
@@ -1611,8 +1672,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     held_core = {str(r.get("ticker")) for r in hv.get("core") or []}
     other = [(t, c) for t, c in (kl.get("items") or {}).items() if c.get("kind") == "core" and t not in held_core]
     more = ("<details class='hv'><summary class='muted'>其他闲置资金 ETF（现在没拿）的 K 线</summary>"
-            + "".join(f"<div class='hv'><b>{escape(str(c.get('name') or t))}</b> <span class='muted'>现在 0 口</span>"
-                      f"{tchips(ktrend.get(t))}{_corefix(t, str(c.get('name') or t))}{chart(t, 'core')}</div>" for t, c in other)
+            + "".join(f"<div class='hv'><b>{escape(NM.code(t))} {escape(_nm(t, c.get('name')))}</b> <span class='muted'>现在 0 口</span>"
+                      f"{tchips(ktrend.get(t))}{_corefix(t, _nm(t, c.get('name')))}{chart(t, 'core')}</div>" for t, c in other)
             + "</details>") if other else ""
     held_any = bool(st.get("pos")) or any(int(u) > 0 for u in (st.get("core_units") or {}).values())
     H.append(PANE + "trade")
@@ -1636,32 +1697,32 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
               "<div class='act'><button class='btn primary' data-act='core'>保存</button></div>")
     if cpause:                                              # 卖出 ETF 后停买：规则不自动买；出现买入信号只提醒，你点「确认买入」才买
         want = [(t, int(n)) for t, n in (cr.get("units100") or {}).items() if int(n) > 0 and t not in bfix]   # 固定口数的不算（2026-10-13）
-        now_txt = ("想拿 " + "、".join(f"{t} 约 {n:,} 口" for t, n in want) if want else
+        now_txt = ("想拿 " + "、".join(f"{NM.label(t)} 约 {n:,} 口" for t, n in want) if want else
                    "不拿核心 ETF（熊市 / 没有闲置资金）") if cr.get("units100") is not None else "执行器下一次运行之后显示"
         ri = MO.resume_info(book, tag, now)                 # 确认之后什么时候买（规则不拿 / 今天已经有单 → 不是马上；2026-10-13）
         la_why = MO.allin_busy_text(MO.live_allin(tag, book))   # 「全部换成」已下单 / 在等：不给恢复按钮（点了也会被拒；2026-10-14）
         btn = ("<div class='act muted'>有一条闲置资金比例的指令在处理（见「手动指令」）</div>" if core_busy else
                f"<div class='act muted small'>{escape(la_why)}</div>" if la_why else
                f"<div class='act'><button class='btn primary' data-plan='{escape(ri['text'])}' data-act='core-resume'>确认买入（恢复照规则）</button></div>")
-        fixl = ("<div class='small'>手动固定 " + "、".join(f"{escape(t)} {n:,} 口" for t, n in sorted(bfix.items()))
+        fixl = ("<div class='small'>手动固定 " + "、".join(escape(NM.qty(t, f"{n:,} 口")) for t, n in sorted(bfix.items()))
                 + ("（停买中也照买）" if any(n > 0 for n in bfix.values()) else "（不跟比例）") + "</div>") if bfix else ""
         prev = ""
         if cpause.get("allin"):                             # 「全部换成 X」停的：之前的比例 / 固定口数（只显示；你点了才恢复；2026-10-13）
             pp, pf = cpause.get("prev_pct"), cpause.get("prev_fix") or {}
-            parts = ([f"比例 {float(pp):g}%"] if pp is not None else []) + [f"{t} 固定 {int(u):,} 口" for t, u in sorted(pf.items())]
+            parts = ([f"比例 {float(pp):g}%"] if pp is not None else []) + [f"{NM.label(t)} 固定 {int(u):,} 口" for t, u in sorted(pf.items())]
             if parts:
                 rb = ""
                 if pp is not None and 0 < float(pp) < 100 and not core_busy and not la_why:
                     rp = MO.resume_info(book, tag, now, pct=float(pp))   # 只买规则目标额的 N%（2026-10-14）
                     rb = (f"<div class='act'><button class='btn' data-pct='{float(pp):g}' data-plan='{escape(rp['text'])}' data-act='core-restore'>"
                           f"恢复成 {float(pp):g}%</button></div>")
-                prev = (f"<div class='small'>「全部换成 {escape(str(cpause['allin']))}」之前：{escape('、'.join(parts))}"
+                prev = (f"<div class='small'>「全部换成 {escape(NM.label(cpause['allin']))}」之前：{escape('、'.join(parts))}"
                         + ("<span class='muted'>（比例 100% = 「确认买入」）</span>" if pp is not None and float(pp) >= 100 else "") + "</div>" + rb
                         + ("<div class='muted small'>固定口数不会自动恢复：要的话在各 ETF 下面重新点「固定口数…」</div>" if pf else "")
                         + "<div class='muted small'>都不会自动恢复：你点了才改</div>")
         H.append(f"<section class='card{' warn' if csig else ''}' id='core'><h2>闲置资金（核心 ETF）</h2>"
                  f"<div><b>停买中</b>（{escape(str(cpause.get('since') or '—'))} 起"
-                 + (f"，你卖出 {escape(str(cpause['ticker']))}" if cpause.get("ticker") else "") + "）：闲置资金留现金，规则不自动买 ETF</div>"
+                 + (f"，你卖出 {escape(NM.label(cpause['ticker']))}" if cpause.get("ticker") else "") + "）：闲置资金留现金，规则不自动买 ETF</div>"
                  + (f"<div class='neg'><b>★ 买入信号（{escape(str(csig.get('date')))} 收盘）：{escape(MO.signal_text(csig))}</b></div>"
                     if csig else "<div class='muted small'>出现买入信号（规则从「不拿」变成「拿」）会提醒你（Mac 通知 + 这里）</div>")
                  + f"<div class='muted small'>规则现在：{escape(now_txt)}</div>" + fixl + btn
@@ -1674,19 +1735,12 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                  + f"<div class='muted small'>{escape(when)}照新比例调核心 ETF；之后每天按这个比例。个股照规则。</div></section>")
     items = sorted((man.get("items") or {}).values(), key=lambda x: x.get("at", ""), reverse=True)
 
-    nm = HV.names()                                        # 代码 → 公司名（2026-10-12 用户：只写代码不知道是哪只）
-    from .idle_cash import NAMES as IC_NAMES
     allrec = {**{x["id"]: x for x in waiting}, **(man.get("items") or {})}
     void = MO.voided(waiting)
+    _tlabel = NM.label                                     # 「代码 名字」（2026-10-12 用户：只写代码不知道是哪只；2026-10-15 起 names.py 唯一入口）
 
-    def _tlabel(tk: str) -> str:
-        code = str(tk).split(".")[0]
-        n = str(IC_NAMES.get(tk) or "").split("（")[0] or nm.get(code) or ""
-        return f"{code} {n}".strip()
-
-    def _named(r: dict) -> str:
-        s, tk = MO.describe(r), r.get("ticker")
-        return s.replace(tk, _tlabel(tk)) if tk else s
+    def _named(r: dict) -> str:                            # 以前 describe 之后 str.replace 代码 → 指令 id / cid 里的代码也被换掉（2026-10-15 修）
+        return MO.describe(r)
 
     def _what(r: dict) -> str:
         if r.get("kind") == "cancel":                       # 撤回指令：写它撤的是哪一条（带名字）
@@ -1698,7 +1752,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         if MO.allin_member(r) and r.get("kind") != "buy":
             b0 = MO.batch_buy(r, list(allrec.values()))
             if b0 is not None and (b0.get("status") in MO.ACTIVE or b0["id"] not in (man.get("items") or {})):
-                return f"<span class='chip'>随「全部换成 {escape(str(r.get('fund_for')))}」一起（撤回买入那条）</span>"
+                return f"<span class='chip'>随「全部换成 {escape(NM.label(r.get('fund_for')))}」一起（撤回买入那条）</span>"
         pl = MO.cancel_plan(tag, book, r["id"], now=now)
         if pl["why"]:
             return ""
@@ -1760,7 +1814,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         hw = sorted((x for x in [it for it in (man.get("items") or {}).values() if it.get("status") == "pending"] + list(waiting)
                      if x.get("kind") in MO.ORDER_KINDS and x.get("id") not in dropped), key=lambda x: str(x.get("at") or ""))
         hc = MO.halt_core((man.get("items") or {}).values(), waiting, dropped)
-        H.append(f"<section class='card warn' id='halt'><h2 class='neg'>HALT 生效中</h2><div>{escape(halt)}</div>"
+        H.append(f"<section class='card warn' id='halt'><h2 class='neg'>HALT 生效中</h2><div>{escape(NM.annotate(halt))}</div>"
                  + (f"<div class='neg small'>等着的手动买卖指令 {len(hw)} 条（最早写于 {escape(MO.mmdd(hw[0].get('at')))}）：解除后照原样执行；"
                     "不想做了先在「交易」撤回</div>" if hw else "")                  # 2026-10-13 resume-other-3
                  + (f"<div class='neg small'>HALT 期间改的闲置资金比例 / 固定口数 {len(hc)} 条：{escape(MO.halt_core_line(hc))}"
@@ -1819,10 +1873,11 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
            "when_all": MO.allin_when(now, book, tag),                                     # 「全部换成这只」整批什么时候做
            "halt_allin": MO.allin_halt_note(book),                                         # HALT 确认框：同批卖单已在交易所 → X 不会买
            "block_days": MO.BLOCK_DEFAULT,                                                # 卖出后不自动买回的天数（默认）
-           "alloc": {"names": {r.get("ticker"): str(r.get("name") or "").split("（")[0]
+           "alloc": {"names": {r.get("ticker"): _nm(r.get("ticker"), r.get("name"))      # 别名（旧页面脚本用）；新的看 CFG.names
                                for r in ((sm.get("holding_view") or {}).get("holdings") or []) + ((sm.get("holding_view") or {}).get("core") or [])
                                if r.get("ticker")},
-                     "colors": list(ALLOC_COLORS)},                                       # 买入框里「现在 / 买入后」的占比条（与持仓页同色）                                           # 买入钱不够 → 从持仓平摊凑（预览；提交时同一个算法再算）
+                     "colors": list(ALLOC_COLORS)},
+           "names": _page_names(book, waiting, sm, man),                                  # 这一页上出现的票 → 名字（core.js lab / nameify；2026-10-15）                                       # 买入框里「现在 / 买入后」的占比条（与持仓页同色）                                           # 买入钱不够 → 从持仓平摊凑（预览；提交时同一个算法再算）
            "est": ests, "fee": [[c if c != float("inf") else 1e18, f] for c, f in FEE_TIERS],
            "st": status_json(tag)[1], "v": ASSET_V,
            "gen": int(dt.datetime.now().timestamp() * 1000)}                                    # 页面生成时刻（离线时显示「几分钟前的数据」）                                                         # 〔77〕C UX-16：还在处理的指令 → 每 10 秒问一次   # 卖出的预计收益（按最近收盘；现价来了用现价的）
@@ -1895,7 +1950,9 @@ def status_json(tag: str) -> tuple[int, dict]:
     """〔77〕C UX-16：页面要不要刷新（只读）→ {sig, pending, busy, v, boot}。页面的连接检查也用它（2026-10-15：页面开着就每 10〜30 秒问一次，
     切回来 / 联网时马上问；连不上 → 页面顶上「连不上 Mac（N 秒后重试）」，不再卡在刷新里）。sig = 手动指令的状态 + 执行器这次运行 + 当前决策的单的状态
     + 「交易」的数字 的摘要；页面拿着加载时的 sig，每 10 秒问一次，变了就刷新。pending = 「交易」标签的数字（_trade_live：还会做事的单与指令，
-    2026-10-15）；busy = 还在处理的指令数（0 → 页面不轮询；以前的 pending）。
+    2026-10-15）；busy = 一会儿就会变的（盘中 / 开盘前马上处理的指令、执行器正在跑、撤单 / 撤回在处理；0 → 页面每 30 秒才问一次；
+    等明早决策的固定口数不算，2026-10-15）。sig 变了：busy 或 pending 前后有一个 > 0 → 刷新（对话框开着 / 正在输入时等关掉；晚上写的卖出
+    07:40 下了单、昨天的单早上对账结束都在这里 —— 2026-10-15 复核），都是 0 → 等切回来再刷新（conn.js）。
     算不成（账本里有读不了的东西）→ 照样 200（ok、sig 固定、数字 0、带 err）：页面的连接检查只看 Mac 连不连得上，
     不能因为账本里一个数显示「连不上 Mac」、页面也不能因为它打不开（2026-10-15 复核）。"""
     try:
@@ -1936,7 +1993,7 @@ def _after_tax_stat(m: dict, sy, cls) -> str:
     return (f"<div><div class='muted'>税后累计损益（估算）</div><div class='big {cls(a['after'])}'>{sy(a['after'])}</div>"
             f"<div class='muted small'>{pct} · 已代扣约 ¥{float(a.get('paid') or 0):,.0f}"
             + (f" · 现在全部卖出还要扣约 ¥{ex:,.0f}" if ex > 0 else f" · 现在全部卖出约退还 ¥{-ex:,.0f}" if ex < 0 else "")
-            + ("（" + escape("、".join(a["incomplete"])) + " 的成本对不上，没算进去）" if a.get("incomplete") else "") + "</div></div>")
+            + ("（" + escape(NM.labels(a["incomplete"])) + " 的成本对不上，没算进去）" if a.get("incomplete") else "") + "</div></div>")
 
 
 def _money_card(tag: str, book: dict, now: dt.datetime) -> str:
@@ -1969,7 +2026,7 @@ def _money_card(tag: str, book: dict, now: dt.datetime) -> str:
         H.append(f"<div class='small'>{y.get('year')} 年已实现 <b class='{cls(g)}'>{sy(g)}</b>（{int(y.get('n') or 0)} 笔：个股 {sy(y.get('stock_gain') or 0)}"
                  f" · 核心 ETF {sy(y.get('core_gain') or 0)}）· 预计已代扣 ¥{w:,.0f}"
                  + "</div>"
-                 + (f"<div class='neg small'>★ 不完整：{escape('、'.join(y['incomplete']))} 的买入记录对不上，它的卖出没算进去</div>"
+                 + (f"<div class='neg small'>★ 不完整：{escape(NM.labels(y['incomplete']))} 的买入记录对不上，它的卖出没算进去</div>"
                     if y.get("incomplete") else "")
                  + "<div class='muted small'>特定口座（源泉徴収あり）20.315% 的估算：每次卖出时按「今年 1/1 起已实现损益的合计」代扣或退还"
                    "（年内盈亏通算），到 12/31 为止、第二年从 0 重新算；按成交日分年。税后累计 = 累计损益 − 历年代扣 − 现在全部卖出还要扣的。"
@@ -1977,19 +2034,19 @@ def _money_card(tag: str, book: dict, now: dt.datetime) -> str:
     rz = m.get("realized") or []
     if rz:
         H.append("<details class='hv'><summary class='muted'>最近的已实现损益（" + str(len(rz)) + " 笔）</summary><div class='list'>" + "".join(
-            f"<div class='li'><div class='grow'>{escape(r['date'][5:].replace('-', '/'))} 卖 {escape(r['ticker'])} {int(r['shares']):,} "
-            f"{'口' if r['kind'] == 'core' else '股'} @ ¥{float(r['px']):,.1f}</div><b class='{cls(r['pnl'])}'>{sy(r['pnl'])}</b></div>"
+            f"<div class='li'><div class='grow'>{escape(r['date'][5:].replace('-', '/'))} 卖 "
+            + escape(NM.qty(r['ticker'], f"{int(r['shares']):,} {'口' if r['kind'] == 'core' else '股'}")) + f" @ ¥{float(r['px']):,.1f}</div><b class='{cls(r['pnl'])}'>{sy(r['pnl'])}</b></div>"
             for r in rz) + "</div></details>")
     fl = m.get("fills") or []
     if fl:
         H.append("<details class='hv'><summary class='muted'>最近成交（" + str(len(fl)) + " 笔）</summary><div class='list'>" + "".join(
             f"<div class='li'><div class='grow'>{escape(str(f['date'])[5:].replace('-', '/'))} {'买' if f['side'] == 'BUY' else '卖'} "
-            f"{escape(f['ticker'])} {int(f['qty']):,} {'口' if f['kind'] == 'core' else '股'}</div><span>¥{float(f['px']):,.1f}</span></div>"
+            + escape(NM.qty(f['ticker'], f"{int(f['qty']):,} {'口' if f['kind'] == 'core' else '股'}")) + f"</div><span>¥{float(f['px']):,.1f}</span></div>"
             for f in fl) + "</div></details>")
     jl = m.get("journal")
     if jl:
-        H.append(f"<details class='hv'><summary class='muted'>日志：{escape(jl[0])}</summary><ul class='small'>"
-                 + "".join(f"<li>{escape(x)}</li>" for x in jl[1][:30]) + "</ul></details>")
+        H.append(f"<details class='hv'><summary class='muted'>日志：{escape(NM.annotate(jl[0]))}</summary><ul class='small'>"   # 以前写的日志只有代码 → 显示时补名字（2026-10-15）
+                 + "".join(f"<li>{escape(NM.annotate(x))}</li>" for x in jl[1][:30]) + "</ul></details>")
     if not tag.startswith("paper") and tag not in READONLY:
         H.append("<details class='hv' id='flow'><summary class='muted'>登记入金 / 出金</summary>"
                  "<div class='small muted'>入金写正数、出金写负数；只影响收益的计算与「现金突然变化」的提醒，不下单。</div>"
@@ -2024,7 +2081,7 @@ def _broker_card(tag: str, now: dt.datetime) -> str:
     bad = [r for r in s.get("compare") or [] if r.get("diff")]
     q = s.get("quotes") or {}
     rows = "".join(
-        f"<div class='li'><div class='grow'><b>{escape(r['ticker'])}</b> 立花 {int(r['broker']):,} / 账本 {int(r['ledger']):,}"
+        f"<div class='li'><div class='grow'><b>{escape(NM.label(r['ticker']))}</b> 立花 {int(r['broker']):,} / 账本 {int(r['ledger']):,}"
         + (f" <b class='neg'>差 {int(r['diff']):+,}</b>" if r.get("diff") else " ✓")
         + (f"<div class='muted small'>立花现价 ¥{float(q[r['ticker']]):,.1f}（{escape(str(s.get('quotes_at') or '')[11:16])}）</div>"
            if r["ticker"] in q else "") + "</div></div>"
@@ -2036,7 +2093,7 @@ def _broker_card(tag: str, now: dt.datetime) -> str:
             + (f"<div class='neg small'>★ 账本和立花不一致 {len(bad)} 只：下一次早上的核对会停下 → Mac 对话里说「核对持仓」</div>" if bad else "")
             + f"<div class='list'>{rows or '<div class=li>立花那边没有持仓</div>'}</div>"
             + (f"<div class='small'><b>今天的成交</b>（{escape(str(s.get('fills_at') or '')[11:16])}）</div><ul class='small'>"
-               + "".join(f"<li>{escape(x[2:])}</li>" for x in fl) + "</ul>" if fl else "")
+               + "".join(f"<li>{escape(x[1:])}</li>" for x in fl) + "</ul>" if fl else "")   # 只去掉「・」（以前 x[2:] 连「买 / 卖」也切掉；2026-10-15）
             + f"<div class='muted small'>只读的快照，不是实时；正式记账在下一个交易日 07:40。{escape(how)}</div></section>")
 
 
@@ -2143,6 +2200,7 @@ def _req_reply(ok: bool, msg: str, rec: dict | None) -> tuple[int, dict]:
     """/api/request 的回应（本机与手机共用）：要先确认（固定口数 / 恢复按规则：submit 回 need_confirm）→ 200 + ok:false + 确认框的内容，
     什么都没写（2026-10-15 复核：以前 409，每次「固定口数…」浏览器控制台都记一条资源载入错误，其实没出错）；
     旧页面（没有确认框的 JS）看 ok:false 照旧显示 msg（= 没写 + 刷新）。没带确认的请求照样什么都不写。"""
+    msg = NM.annotate(msg)                                  # 兜底：别处来的说明（检查的理由…）里剩下的「7203.T」补名字（指令 id / cid / 命令行不动；2026-10-15）
     if not ok and isinstance(rec, dict) and rec.get("need_confirm"):
         return 200, {"ok": False, "need_confirm": True, "msg": msg, "confirm": rec.get("confirm")}
     return (200 if ok else 400), {"ok": ok, "msg": msg, "id": (rec or {}).get("id")}
@@ -2185,7 +2243,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
         if not recs:
             return False, "没写：" + "；".join(skip or ["没有要解除的"]), None
         out = MO.append_many(tag, recs, clock=(lambda: now) if now else None)
-        return True, (f"已写：恢复按规则 → 解除 {'、'.join(r['ticker'] for r in out)} 的不自动买回（不会买回，也不马上买；"
+        return True, (f"已写：恢复按规则 → 解除 {NM.labels([r['ticker'] for r in out])} 的不自动买回（不会买回，也不马上买；"
                       f"指令 {out[0]['id']} 等 {len(out)} 条" + (f"；没写：{'；'.join(skip)}" if skip else "") + f"）→ {MO.NEXT_DECISION}"), out[0]
     if str(body.get("kind") or "") in ("cancel", "uncancel"):   # 撤回 / 撤销撤回：与命令行同一个函数（同批指令一起；2026-10-13）
         fn = MO.cancel_request if body.get("kind") == "cancel" else MO.uncancel_request
@@ -2208,7 +2266,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
     if rec["kind"] == "buy" and isinstance(fund, dict) and fund.get("mode") == "all":   # 其他全部卖出，只拿这只（2026-10-13）
         la = MO.live_allin(tag, book)
         if la:
-            return False, f"没写：「全部换成 {la[0]['ticker']}」还在处理：同时只能有一个「全部换成」（要改就先撤回那条）", None
+            return False, f"没写：「全部换成 {NM.label(la[0]['ticker'])}」还在处理：同时只能有一个「全部换成」（要改就先撤回那条）", None
         allp = MO.fund_all(book, tag, rec["ticker"])
         if allp["blocked"]:
             return False, f"没写（其他全部卖出）：{allp['blocked']}", None
@@ -2241,7 +2299,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
                                "fund_for": rec["ticker"], "source": source, "dir": -1, "cur0": r.get("cur")})
             w = MO.check(sr, book, tag, sm=sm, now=now)
             if w:
-                return False, f"没写（凑钱要卖的 {r['t']}：{w}）", None
+                return False, f"没写（凑钱要卖的 {NM.label(r['t'])}：{w}）", None
             sells.append((sr, r))
         if plan:
             rec["fund"] = "split"
@@ -2251,14 +2309,14 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
                                "source": source})       # 卖出全部 + 不自动买回（2026-10-13 用户；整批执行时才设，「交易」里可一次「恢复按规则」）
             w = MO.check(sr, book, tag, sm=sm, now=now)
             if w:
-                return False, f"没写（要卖的 {t}：{w}）", None
+                return False, f"没写（要卖的 {NM.label(t)}：{w}）", None
             sells.append((sr, {"t": t, "sell": cur, "kind": "stock"}))
         for t in allp["core_clear"]:
             sr = MO.normalize({"kind": "corefix", "ticker": t, "clear": True, "fund_for": rec["ticker"], "batch": "all", "source": source,
                                "prev_units": ((book.get("manual") or {}).get("core_fix") or {}).get(t)})
             w = MO.check(sr, book, tag, sm=sm, now=now)
             if w:
-                return False, f"没写（取消 {t} 的固定口数：{w}）", None
+                return False, f"没写（取消 {NM.label(t)} 的固定口数：{w}）", None
             sells.append((sr, {"t": t, "sell": 0, "kind": "corefix"}))
         if float(allp["core_pct"]) > 0:
             sr = MO.normalize({"kind": "core", "pct": 0, "fund_for": rec["ticker"], "batch": "all", "source": source, "prev_pct": allp["core_pct"]})
@@ -2291,29 +2349,30 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
     else:
         rec = MO.append(tag, rec, clock=clock)
     if rec["kind"] == "unblock":                           # 解除不是单：不会买回、也不马上买，下一次决策起才不挡（2026-10-13）
-        return True, f"已写：解除 {rec['ticker']} 的不自动买回（不会买回，也不马上买；指令 {rec['id']}）→ {MO.NEXT_DECISION}", rec
+        return True, f"已写：解除 {NM.label(rec['ticker'])} 的不自动买回（不会买回，也不马上买；指令 {rec['id']}）→ {MO.NEXT_DECISION}", rec
     when = MO.when_for(now or now_jst(), book)              # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘 / 早上的运行没完成（G9）
     k, t = rec["kind"], rec.get("ticker")
-    msg = {"sell": f"已写：卖出 {t} 全部 → {when}卖出",
-           "trim": f"已写：{t} 减到约 {rec.get('pct', 0):g}% → {when}卖出",
+    tl = NM.label(t) if t else ""                           # 说明里的票都写「代码 名字」（2026-10-15 用户：只写代码不知道是哪只；指令 id / cid 原样）
+    msg = {"sell": f"已写：卖出 {tl} 全部 → {when}卖出",
+           "trim": f"已写：{tl} 减到约 {rec.get('pct', 0):g}% → {when}卖出",
            "core": f"已写：闲置资金比例 {rec.get('pct', 0):g}% → 核心 ETF {when}照新比例调",
-           "unblock": f"已写：解除 {t} 的不自动买回",
-           "cancel_order": f"已写：撤单 {rec.get('ticker')}（{rec.get('cid')}）→ 执行器马上撤（已经成交的部分撤不了）"}.get(k)
+           "unblock": f"已写：解除 {tl} 的不自动买回",
+           "cancel_order": f"已写：撤单 {tl}（{rec.get('cid')}）→ 执行器马上撤（已经成交的部分撤不了）"}.get(k)
     if k == "adjust":
         st = book.get("state") or {}
         a = MO.adjust_plan(rec, st, MO.MANUAL_CAP_PCT)
         if a["delta"] > 0:
-            msg = (f"已写：{t} 加 {a['delta']:,} 股（→ {a['target']:,} 股" + ("，截到总权益" if a["capped"] else "")
+            msg = (f"已写：{tl} 加 {a['delta']:,} 股（→ {a['target']:,} 股" + ("，截到总权益" if a["capped"] else "")
                    + f"）→ {when}买入")
         else:
-            msg = f"已写：{t} 卖 {-a['delta']:,} 股（→ {a['target']:,} 股）→ {when}卖出"
+            msg = f"已写：{tl} 卖 {-a['delta']:,} 股（→ {a['target']:,} 股）→ {when}卖出"
     if k == "corefix":                                                             # 2026-10-12 再发防止：这一种以前没有说明 → msg None → 拼接崩溃 → 手机 502
-        msg = (f"已写：{t} 恢复按规则 → " + MO.corefix_clear_text(book, t, tag, now or now_jst()) if rec.get("clear") else   # 2026-10-13：会怎样
-               f"已写：{t} 固定 {int(rec.get('units') or 0):,} 口 → 不是现在下单：{MO.corefix_fill(now or now_jst(), book, tag)['text']}")   # 2026-10-15：实际哪天
+        msg = (f"已写：{tl} 恢复按规则 → " + MO.corefix_clear_text(book, t, tag, now or now_jst()) if rec.get("clear") else   # 2026-10-13：会怎样
+               f"已写：{tl} 固定 {int(rec.get('units') or 0):,} 口 → 不是现在下单：{MO.corefix_fill(now or now_jst(), book, tag)['text']}")   # 2026-10-15：实际哪天
         if rec.get("from_kind"):                                                   # 固定口数的 ETF 上点的卖出 / 减仓 / 调仓（2026-10-13）
             msg += "（这只是手动固定的：只改这只 ETF 的固定口数，别的 ETF 与闲置资金比例不变；不是盘中马上下单）"
     if msg is None:                                                                # 新加的指令种类忘了写说明：也给一句（不让拼接崩溃）
-        msg = f"已写：{MO.LABEL.get(k, k)}" + (f" {t}" if t else "") + f" → {when}处理"
+        msg = f"已写：{MO.LABEL.get(k, k)}" + (f" {tl}" if t else "") + f" → {when}处理"
     if k == "core" and not t and pct0 <= 0 < float(rec["pct"]):                    # 停买后确认买入
         p1 = float(rec["pct"])
         ri = MO.resume_info(book, tag, now or now_jst(), pct=p1)   # 规则不拿 / 今天已经有单 → 不是马上（2026-10-13）
@@ -2323,42 +2382,50 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
                   if not ri["none"] and not ri["late"] else ri["text"]))
     if k == "core" and t and int(rec.get("target") or 0) <= 0:                     # 核心 ETF 卖出全部：之后停买
         fx = MO.core_effects(book, 0.0, skip=t, tag=tag)
-        msg = (f"已写：卖出全部 {t} → {when}卖出；之后停买闲置资金 ETF（出现买入信号会提醒，你确认才买）"
-               + ("；同一比例也用在：" + "、".join(f"{x} {a_:,} → {b_:,} 口" for x, a_, b_ in fx) if fx else ""))
+        msg = (f"已写：卖出全部 {tl} → {when}卖出；之后停买闲置资金 ETF（出现买入信号会提醒，你确认才买）"
+               + ("；同一比例也用在：" + "、".join(NM.qty(x, f"{a_:,} → {b_:,} 口") for x, a_, b_ in fx) if fx else ""))
     elif c0:
         n = int(rec["target"]) - c0["cur"]
         fx = MO.core_effects(book, rec["pct"], skip=t, tag=tag)  # 规则同时拿两只以上核心 ETF 时：同一比例别的也跟着变
-        msg = (f"已写：{'卖出全部 ' + t if int(rec['target']) <= 0 else t + (' 加 ' if n > 0 else ' 卖 ') + f'{abs(n):,} 口'}"
+        msg = (f"已写：{'卖出全部 ' + tl if int(rec['target']) <= 0 else tl + (' 加 ' if n > 0 else ' 卖 ') + f'{abs(n):,} 口'}"
                f"（闲置资金比例 {c0['pct']:g}% → {rec['pct']:g}%）→ {when}{'买入' if n > 0 else '卖出'}"
-               + ("；同一比例也用在：" + "、".join(f"{x} {a_:,} → {b_:,} 口" for x, a_, b_ in fx) if fx else ""))
+               + ("；同一比例也用在：" + "、".join(NM.qty(x, f"{a_:,} → {b_:,} 口") for x, a_, b_ in fx) if fx else ""))
     if k == "buy":
         row = next((r for r in (sm.get("suggest") or {}).get("rows") or [] if r.get("ticker") == t), None)
         est = MO.fmt_target(rec)
         if row and rec.get("unit") == "rule":
             est = f"约 {int((row.get('buy') or {}).get('rule_shares') or 0):,} 股"
-        msg = (f"已写：买入 {t}（{est}）→ {when}买入"
+        msg = (f"已写：买入 {tl}（{est}）→ {when}买入"
                + ("" if row and row.get("signal") else "；★ 还没有买入信号：是你自己的决定"))
     if rec.get("fund") == "all":
         fx = MO.core_effects(book, 0.0, keep_fixed=True)    # 固定口数同批取消 → 也按 0% 卖
-        etf = ("、".join(f"{x} {a_:,} → 0 口" for x, a_, _b in fx) or "、".join(f"{x} {u:,} → 0 口" for x, u in allp["cores"]))
-        parts = ["执行时拿着的 " + t + " 以外的个股和 ETF 全部卖出（包括写指令之后规则 / 别的指令买进的）；现在拿着的："
-                 + ("、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells if r["kind"] == "stock") or "（没有别的个股）")
-                 + (f"（之后 {MO.BLOCK_DEFAULT} 个交易日规则不自动买回；「交易」里可一次「恢复按规则」）" if any(r["kind"] == "stock" for _s, r in sells) else "")]
-        if any(r["kind"] == "corefix" for _s, r in sells):
-            parts.append("取消固定口数：" + "、".join(r["t"] for _s, r in sells if r["kind"] == "corefix") + (f"（{etf}：之后按比例 0% 卖出）" if etf else ""))
+        etf = ("、".join(NM.qty(x, f"{a_:,} → 0 口") for x, a_, _b in fx) or "、".join(NM.qty(x, f"{u:,} → 0 口") for x, u in allp["cores"]))
+        held = [r for _s, r in sells if r["kind"] == "stock"]
+        going_ = "、".join(f"{NM.label(x)}（{why_}）" for x, why_ in allp.get("skip") or [])   # 已有卖出全部的指令 / 已在卖出全部：不另外写
+        head = "执行时拿着的 " + tl + " 以外的个股和 ETF 全部卖出（包括写指令之后规则 / 别的指令买进的）；"
+        if held:                                            # 2026-10-15 复核：别的个股都已经有卖出指令时以前写「现在拿着的：（没有别的个股）」
+            head += ("现在拿着的：" + "、".join(NM.qty(r["t"], f"{r['sell']:,} 股") for r in held)
+                     + f"（之后 {MO.BLOCK_DEFAULT} 个交易日规则不自动买回；「交易」里可一次「恢复按规则」）"
+                     + (f"；已经在卖、不另外写的：{going_}" if going_ else ""))
+        else:
+            head += f"别的个股都已经在卖、不另外写：{going_}" if going_ else "现在没有别的个股"
+        parts = [head]
+        fixed_ = [r["t"] for _s, r in sells if r["kind"] == "corefix"]
+        if fixed_:                                          # ETF 的口数变化只在比例那一句写一次（以前两处各写一遍，没固定的 1545 也写在「取消固定口数」里）
+            parts.append("取消固定口数：" + NM.labels(fixed_) + "（之后按比例 0% 卖出）")
         if any(r["kind"] == "core" for _s, r in sells):
             parts.append(f"闲置资金比例 {allp['core_pct']:g}% → 0%（" + (etf + "；" if etf else "")
                          + "之后停买闲置资金 ETF，出现买入信号只提醒、你点「确认买入」才恢复）")
-        elif not any(r["kind"] == "corefix" for _s, r in sells) and etf:
+        elif etf:
             parts.append(f"闲置资金比例已经是 0%：{etf}（照旧卖出）")
         if allp.get("also"):
-            parts.append("另外规则 / 别的指令开盘还会买：" + "、".join(allp["also"]) + "（买进了的，执行时一起卖出）")
+            parts.append("另外规则 / 别的指令开盘还会买：" + NM.labels(allp["also"]) + "（买进了的，执行时一起卖出）")
         wa = MO.allin_when(now or now_jst(), book, tag)
-        msg = (f"已写：全部换成 {t} → {wa}整批先卖后买（那次决策先过闸门；股数由执行器按全卖之后的钱定）；" + "；".join(parts)
+        msg = (f"已写：全部换成 {tl} → {wa}整批先卖后买（那次决策先过闸门；股数由执行器按全卖之后的钱定）；" + "；".join(parts)
                + "；全卖也不够 1 个单元就不买、留现金；决策时买入被挡 → 整批不做、什么都不动；开盘跳空 / 没成交则其他已卖、留现金、不自动重买"
                "；规则对别的票仍可能用现金开新仓")
     elif sells:
-        msg += ("；凑钱先卖：" + "、".join(f"{r['t']} {r['sell']:,} 股" for _s, r in sells)
+        msg += ("；凑钱先卖：" + "、".join(NM.qty(r['t'], f"{r['sell']:,} 股") for _s, r in sells)
                 + ("（其余由别的核心 ETF 照规则减少：现金不够时执行器在那次决策里先卖它们补足，再平衡带以内也卖）" if k == "corefix" else "（核心 ETF 那份执行器按当时还缺多少卖）")
                 + ("；买入先过闸门，被挡则凑钱的卖出也不做；开盘跳空 / 价格更高没买到时，凑钱的卖出照样会卖" if k == "buy" else ""))
     if paths.halt_file().exists() and k in MO.ORDER_KINDS + ("core",):
@@ -2603,7 +2670,7 @@ class Trigger:
             self._save_pauses()
             name = BOOKS.get(tag, tag)
             self.outbox.append((tag, f"qbreak {name} ★ 面板自动下单今天暂停",
-                                f"今天剩下的盘中指令不会再自动下：执行器连续失败 {n} 次（{self.errs[tag]}）。"
+                                f"今天剩下的盘中指令不会再自动下：执行器连续失败 {n} 次（{NM.annotate(self.errs[tag])}）。"
                                 "修好后写一条新的指令，或在 Mac 对话里说「再试一次」；明天自动恢复", "warn"))
             log.warning("面板叫的执行器今天连续失败 %d 次（%s）：今天暂停自动叫（新的手动指令 / 再跑成一次 / 明天恢复）", n, tag)
         return False
@@ -2739,7 +2806,7 @@ class Trigger:
             box, self.outbox = self.outbox, []
         for tag, title, text, level in box:
             try:
-                if NS.first(tag, f"面板|{title}|{text}", now):
+                if NS.first(tag, NM.seen_key(f"面板|{title}|{text}"), now):   # 名字不算新的原因（加了名字 / 名字表更新那天不重复发；2026-10-15）
                     self.notify(tag, title, text, level)
             except Exception as e:                           # noqa: BLE001
                 log.warning("面板的提醒没发成（%s）：%s", tag, e)
@@ -2822,7 +2889,7 @@ def chart_json(tag: str, t: str, now: dt.datetime | None = None) -> tuple[int, d
         return 404, {"ok": False, "msg": "还没有 K 线（执行器下一次运行之后）"}
     pl = (data.get("tickers") or {}).get(t)
     if pl is None:
-        return 404, {"ok": False, "msg": f"没有 {t} 的 K 线"}
+        return 404, {"ok": False, "msg": f"没有 {NM.label(t)} 的 K 线"}
     lv = _live_bar(tag, t) if (_held(tag, t) or _suggested(tag, t)) else None
     if lv is not None:
         try:

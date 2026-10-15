@@ -43,7 +43,7 @@ def test_sell_all_pauses_and_a_rule_buy_signal_only_alerts_until_confirmed():
     assert sm["manual"]["core_signal"] == sg and sm["manual"]["core_pause"]["ticker"] == "1655.T"
     _, short, body = daily_text(sm, r.eng.st, None, True, 1_000_000)
     assert short.endswith("｜★ 闲置资金 ETF 买入信号：确认后才买")
-    assert "- 闲置资金买入 ETF：停着（" in body and f"- ★ 闲置资金 ETF 买入信号（{sg['date']} 收盘）：规则想买 1655.T 约 {u100:,} 口" in body
+    assert "- 闲置资金买入 ETF：停着（" in body and f"- ★ 闲置资金 ETF 买入信号（{sg['date']} 收盘）：规则想买 1655 S&P500 约 {u100:,} 口" in body
     _write(r.tag, "M-core-go", kind="core", pct=100.0)                      # 确认买入：盘中马上照规则买
     r.now["t"] = _at(r, 10, 0)
     assert MO.now_due(r.tag, r.ux.book, r.now["t"])
@@ -155,14 +155,14 @@ def test_now_due_check_and_lines_while_paused():
     b["state"]["core_units"] = {"1655.T": 0}
     assert not MO.now_due("pq", b, at(10, 0))                              # 没拿着
     b = _cbook(pct=0.0)
-    assert MO.check(_conv(b, kind="sell"), b) == "已经在停买闲置资金 ETF（比例 0%）：1655.T 在执行器下一次运行时卖出"
+    assert MO.check(_conv(b, kind="sell"), b) == "已经在停买闲置资金 ETF（比例 0%）：1655 S&P500 在执行器下一次运行时卖出"
     assert MO.check(MO.normalize({"kind": "core", "pct": 100}), b) is None
     assert MO.core_pct_now(None, b) == 0.0
     sm = {"core_pct": 0.0, "core_pause": {"since": "2026-10-06", "id": "x", "ticker": "1655.T"},
           "core_signal": {"date": "2026-10-08", "items": [{"ticker": "1545.T", "units": 110, "px": 20_700.0, "yen": 2_277_000}]}}
     assert MO.lines(sm)[:2] == [
-        "- 闲置资金买入 ETF：停着（2026-10-06 起，卖出 1655.T）：钱留现金；出现买入信号会提醒，你确认才买",
-        "- ★ 闲置资金 ETF 买入信号（2026-10-08 收盘）：规则想买 1545.T 约 110 口（约 ¥2,277,000）："
+        "- 闲置资金买入 ETF：停着（2026-10-06 起，卖出 1655 S&P500）：钱留现金；出现买入信号会提醒，你确认才买",
+        "- ★ 闲置资金 ETF 买入信号（2026-10-08 收盘）：规则想买 1545 纳斯达克 100 约 110 口（约 ¥2,277,000）："
         "确认后才买（面板「确认买入」，或 liveu.sh manual core --pct 100）"]
     assert MO.lines({"core_pct": 0.0, "core_pause": {"since": "2026-10-06"}}) == [
         "- 闲置资金买入 ETF：停着（2026-10-06 起）：钱留现金；出现买入信号会提醒，你确认才买"]
@@ -183,12 +183,12 @@ def _paused(sig: bool = False) -> dict:
 def test_panel_paused_card_signal_banner_and_confirm():
     _paused()
     h = panel.render("paper", "tok", now=AT)
-    assert "<section class='card' id='core'>" in h and "<b>停买中</b>（2026-10-06 起，你卖出 1655.T）" in h
-    assert "规则现在：想拿 1655.T 约 1,140 口" in h and "出现买入信号（规则从「不拿」变成「拿」）会提醒你" in h
+    assert "<section class='card' id='core'>" in h and "<b>停买中</b>（2026-10-06 起，你卖出 1655 S&amp;P500）" in h
+    assert "规则现在：想拿 1655 S&amp;P500 约 1,140 口" in h and "出现买入信号（规则从「不拿」变成「拿」）会提醒你" in h
     assert "data-act='core-resume'>确认买入（恢复照规则）</button>" in h and "★ 买入信号" not in h and "ETF 出现买入信号" not in h
     _paused(sig=True)
     h = panel.render("paper", "tok", now=AT)
-    assert ("<div class='neg small'>★ 闲置资金 ETF 出现买入信号（2026-10-05 收盘）：规则想买 1655.T 约 1,140 口（约 ¥798,000）"
+    assert ("<div class='neg small'>★ 闲置资金 ETF 出现买入信号（2026-10-05 收盘）：规则想买 1655 S&amp;P500 约 1,140 口（约 ¥798,000）"
             " → 确认后才买（见下面「闲置资金」）</div>") in h
     assert "<section class='card warn' id='core'>" in h and "★ 买入信号（2026-10-05 收盘）" in h
     ok, msg, rec = panel.submit({"book": "paper", "kind": "core", "pct": 100}, AT)
@@ -225,7 +225,7 @@ def test_cli_etf_sell_all_pauses_and_core_100_confirms(capsys, monkeypatch):
     monkeypatch.setattr(CJ, "now_jst", lambda: AT)
     assert run.main(["manual", "sell", "1655", "--broker", "paper"]) == 0
     out = capsys.readouterr().out
-    assert "卖出全部 1655.T（之后停买闲置资金 ETF）" in out and "按最近收盘" not in out
+    assert "卖出全部 1655 S&P500（之后停买闲置资金 ETF）" in out and "按最近收盘" not in out
     assert ("核心 ETF 马上（盘中）卖出；之后停买闲置资金 ETF（钱留现金；出现买入信号会提醒你，确认才买："
             "bash scripts/liveu.sh manual core --pct 100）") in out
     assert run.main(["manual", "core", "--pct", "100", "--broker", "paper"]) == 0
@@ -243,9 +243,9 @@ def test_cli_manual_list_shows_the_pause_and_what_the_rule_wants(capsys, monkeyp
     (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
     assert run.main(["manual", "list", "--broker", "paper"]) == 0
     out = capsys.readouterr().out
-    assert "闲置资金买入 ETF：停着（2026-10-06 起，卖出 1655.T）：钱留现金；出现买入信号会提醒，你确认才买" in out
-    assert "★ 闲置资金 ETF 买入信号（2026-10-05 收盘）：规则想买 1655.T 约 1,140 口（约 ¥798,000）" in out
-    assert "规则现在：想拿 1545.T 约 110 口（确认买入：bash scripts/liveu.sh manual core --pct 100）" in out
+    assert "闲置资金买入 ETF：停着（2026-10-06 起，卖出 1655 S&P500）：钱留现金；出现买入信号会提醒，你确认才买" in out
+    assert "★ 闲置资金 ETF 买入信号（2026-10-05 收盘）：规则想买 1655 S&P500 约 1,140 口（约 ¥798,000）" in out
+    assert "规则现在：想拿 1545 纳斯达克 100 约 110 口（确认买入：bash scripts/liveu.sh manual core --pct 100）" in out
     b["core_rule"]["units100"] = {"1655.T": 0}
     (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
     run.main(["manual", "list", "--broker", "paper"])

@@ -150,7 +150,8 @@ def main(argv=None) -> int:
     if not (a.codes or a.emerging or a.new_listings):
         ap.error("要 --codes（+ --name）、--emerging 或 --new-listings 之一")
     s33 = {f"{c}.T": v for c, v in json.loads((paths.home() / "industry_s33.json").read_text(encoding="utf-8"))["s33"].items()}
-    nm = JL.names()
+    from qbreak import names as NM
+    nm = NM.names_map()                          # 2026-10-15 起：与日报同一份名字（JPX 公开名单；names_map 每次给新的 dict，下面 update 不改缓存）
     base = sorted(set(s33) | {f"{c}.T" for c in TH.members()})
     extra: list[str] = []
     new_list, jdate = None, "—"

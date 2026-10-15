@@ -59,6 +59,19 @@ def _side(o) -> str:
     return "买" if _g(o, "side") == "BUY" else "卖"
 
 
+def _lab(t) -> str:
+    """给人看的票：「7203.T」→「7203 トヨタ自動車」（查不到名字只写代码；空 → 空。2026-10-15 用户：只写代码不知道是哪只）。
+    cid、注文番号、登记命令草稿（adopt / --resolve）照旧只写代码。"""
+    from .names import label
+    return label(t) if t else ""
+
+
+def _labq(t, s: str) -> str:
+    """票后面紧跟数量：「1545 纳斯达克 100：4,110 口」（名字可能以数字结尾，直接接数量读不出哪个是口数；names.qty，2026-10-15 复核）。"""
+    from .names import qty
+    return qty(t, s) if t else s
+
+
 def fill_day_of(book: dict | None) -> dt.date | None:
     """账本当前决策的成交日（决策日的下一个交易日）。"""
     d = ((book or {}).get("state") or {}).get("last_date")
@@ -212,7 +225,12 @@ def _withdraw_manual(book: dict, o, now: dt.datetime) -> str | None:
         return None
     it["cancel_req"] = f"撤单 {_g(o, 'cid')}"
     it["msg"] = f"{now:%m/%d %H:%M} 你撤了交易所的单：这条指令也撤回（之后不再下；已经成交的部分照记）"
-    return f"手动指令 {it.get('id')} 也撤回（之后不再下）"
+    try:                                                   # 指令写的是什么（「卖出全部 7203 トヨタ自動車」；2026-10-15）
+        from .manual_orders import describe
+        what = describe(it)
+    except Exception:                                      # noqa: BLE001  只是说明：取不到就只写 id
+        what = ""
+    return f"手动指令 {it.get('id')}" + (f"（{what}）" if what else "") + " 也撤回（之后不再下）"
 
 
 def _cancel_one(o, b, paper: bool, now: dt.datetime, source: str, polls: int) -> tuple[str, str]:
@@ -290,7 +308,8 @@ def cancel_core(orders: list, book: dict, get_broker, cids=None, *, paper: bool,
             why = "账本里没有这笔单（已经对账过了 / cid 写错？）" if o is None else cancel_why(o, book, now, paper)
             if why:
                 rec = {"cid": c, "ticker": _g(o, "ticker") if o else "", "side": _g(o, "side") if o else "",
-                       "qty": int(_g(o, "sent_qty") or _g(o, "qty") or 0) if o else 0, "why": why}
+                       "qty": int(_g(o, "sent_qty") or _g(o, "qty") or 0) if o else 0, "why": why,
+                       "kind": (_g(o, "kind") or "stock") if o else ""}
                 res["skipped"].append(rec)
                 res["by_cid"][c] = ("skipped", why)
                 continue
@@ -299,7 +318,7 @@ def cancel_core(orders: list, book: dict, get_broker, cids=None, *, paper: bool,
     for o in targets:
         kind, why = _cancel_one(o, b, paper, now, source, polls)
         n = int(o.sent_qty or o.qty)
-        rec = {"cid": o.cid, "ticker": o.ticker, "side": o.side, "qty": n, "why": why}
+        rec = {"cid": o.cid, "ticker": o.ticker, "side": o.side, "qty": n, "why": why, "kind": o.kind or "stock"}
         if kind in ("done", "pending"):
             w = _withdraw_manual(book, o, now)
             if w:
@@ -307,18 +326,20 @@ def cancel_core(orders: list, book: dict, get_broker, cids=None, *, paper: bool,
         res[kind].append(rec)
         res["by_cid"][o.cid] = (kind, rec["why"])
         lvl = "info" if kind in ("done", "pending") else "warn"
-        res["events"].append((lvl, f"撤单 {_side(o)} {o.ticker} {n:,} {_unit(o)}（{o.cid}）："
+        res["events"].append((lvl, f"撤单 {_side(o)} {_labq(o.ticker, f'{n:,} {_unit(o)}')}（{o.cid}）："
                                    + {"done": "撤掉了 —— ", "pending": "撤单已受理 —— "}.get(kind, "没撤 —— ") + rec["why"]))
     return res
 
 
 def cancel_text(res: dict) -> list[str]:
-    """撤单结果的几行（命令行 / 通知）。"""
+    """撤单结果的几行（命令行 / 通知）：「撤掉了：卖 1545 纳斯达克 100 4,110 口（U…）—— …」（代码 + 名字、口 / 股；2026-10-15）。"""
     out = []
     for k, head in (("done", "撤掉了"), ("pending", "撤单已受理（立花还在处理）"), ("failed", "★ 没撤成"), ("skipped", "没撤")):
         for r in res.get(k) or []:
-            out.append(f"{head}：{'买' if r.get('side') == 'BUY' else '卖' if r.get('side') else ''} {r.get('ticker') or ''} "
-                       f"{int(r.get('qty') or 0):,}（{r['cid']}）—— {r['why']}".replace("  ", " "))
+            q = int(r.get("qty") or 0)
+            what = " ".join(x for x in ({"BUY": "买", "SELL": "卖"}.get(r.get("side"), ""), _lab(r.get("ticker")),
+                                        f"{q:,} {'口' if r.get('kind') == 'core' else '股'}" if q else "") if x)
+            out.append(f"{head}：{what}（{r['cid']}）—— {r['why']}")
     if res.get("note"):
         out.append(res["note"])
     return out
@@ -471,7 +492,8 @@ def unknown_text(cands: list[dict] | None, broker_args: str = "tachibana", draft
             out.append(f"・注文一覧读不了：{u['error']}（去立花网站的注文一覧核对）")
             continue
         unit = "口" if u.get("kind") == "core" else "股"
-        out.append(f"・{u['cid']}：{'买' if u.get('side') == 'BUY' else '卖'} {u['ticker']} {int(u.get('qty') or 0):,} {unit}"
+        n_ = f"{int(u.get('qty') or 0):,} {unit}"
+        out.append(f"・{u['cid']}：{'买' if u.get('side') == 'BUY' else '卖'} {_labq(u['ticker'], n_)}"
                    + (f"（{u['note']}）" if u.get("note") else ""))
         cs = u.get("candidates") or []
         if u.get("stale"):
@@ -578,25 +600,26 @@ def reconcile_report(book: dict, held: dict, managed=(), now: dt.datetime | None
         cost_b = f"，成本 ¥{r['book_cost']:,.2f}" if r["book_cost"] else ""
         cost_h = f"，概算簿価 ¥{r['broker_cost']:,.2f}" if r["broker_cost"] else ""
         mark = "✓" if r["same"] else ("…" if r.get("pending") else "★")
-        lines.append(f"  {mark} {r['ticker']}：账本 {r['book_qty']:,} {u}{cost_b} ／ 券商 {r['broker_qty']:,} {u}{cost_h}")
+        lines.append(f"  {mark} {_lab(r['ticker'])}：账本 {r['book_qty']:,} {u}{cost_b} ／ 券商 {r['broker_qty']:,} {u}{cost_h}")
         for c in r["causes"]:
             lines.append(f"      可能原因：{c}")
         if r["draft"]:
             lines.append(f"      登记草稿（确认是人工交易之后；均价用立花「約定照会」的实际成交价）：{r['draft']}")
     if foreign:
-        lines.append("  执行器不管的持仓（不影响下单）：" + "、".join(f"{t} {q:,} 股" for t, q in foreign))
+        lines.append("  执行器不管的持仓（不影响下单）：" + "、".join(_labq(t, f"{q:,} 股") for t, q in foreign))
     mm = (book or {}).get("broker_mismatch") or {}
     if mm.get("text"):
         lines.append(f"  早上记下的不一致（{mm.get('date')}）：{mm['text']}")
     for s in splits[-5:]:
-        lines.append(f"  拆股登记：{s.get('ticker')} {s.get('date')} 1:{float(s.get('k') or 0):g}"
+        lines.append(f"  拆股登记：{_lab(s.get('ticker'))} {s.get('date')} 1:{float(s.get('k') or 0):g}"
                      + ("（成交日当天按拆股后下的单）" if s.get("pre") else ""))
     if orders:
         lines.append("  今天的单（当前决策）：")
         for o in orders:
             lim = f" 限价 ¥{float(o['limit']):,g}" if o.get("limit") and o.get("side") == "BUY" else ""
-            lines.append(f"    {'买' if o.get('side') == 'BUY' else '卖'} {o.get('ticker')} {int(o.get('sent_qty') or o.get('qty') or 0):,} "
-                         f"{'口' if o.get('kind') == 'core' else '股'}（{how_text(o)}{lim}）→ {STATUS_TEXT.get(o.get('status'), o.get('status'))}")
+            n_ = f"{int(o.get('sent_qty') or o.get('qty') or 0):,} {'口' if o.get('kind') == 'core' else '股'}"
+            lines.append(f"    {'买' if o.get('side') == 'BUY' else '卖'} {_labq(o.get('ticker'), n_)}"
+                         f"（{how_text(o)}{lim}）→ {STATUS_TEXT.get(o.get('status'), o.get('status'))}")
     if bad:
         lines.append("  ★ 有不一致：执行器的下一次运行会挡住全部下单。确认原因之后：人工交易 → adopt 登记（Claude 只在你确认之后运行）；"
                      "状态不明的单 → 先登记那笔（--resolve）；拆股 → 等公司行为数据反映（或在 Mac 对话里说明）")
@@ -643,9 +666,9 @@ def adopt(eng, book: dict, ticker: str, side: str, qty: int, px: float, day: str
     core = t in eng.core_set or t in st.core_units
     held = t in st.pos
     if not (core or held or (t.endswith(".T") and t in eng.col)):
-        raise ValueError(f"{t} 不在股票池、也不是核心 ETF：执行器不管的票不用登记（持仓核对也不看它）")
+        raise ValueError(f"{_lab(t)} 不在股票池、也不是核心 ETF：执行器不管的票不用登记（持仓核对也不看它）")
     if t not in eng.col:
-        raise ValueError(f"行情里没有 {t}：登记不了（先在 Mac 对话里说明）")
+        raise ValueError(f"行情里没有 {_lab(t)}：登记不了（先在 Mac 对话里说明）")
     mine = [o for o in (book or {}).get("orders") or [] if o.get("decided_on") == st.last_date and o.get("ticker") == t
             and o.get("side") == side]
     unk = [o for o in mine if o.get("status") in ("SENDING", "ERROR")]
@@ -679,29 +702,29 @@ def adopt(eng, book: dict, ticker: str, side: str, qty: int, px: float, day: str
     if core:
         have = int(st.core_units.get(t, 0) or 0)
         if side == "SELL" and qty > have:
-            raise ValueError(f"账本里 {t} 只有 {have:,} 口，卖不了 {qty:,} 口")
+            raise ValueError(f"账本里 {_lab(t)} 只有 {have:,} 口，卖不了 {qty:,} 口")
         eng._core_trade(t, side, qty, i, px=px)
         if eng.st.core_trades:
             r = list(eng.st.core_trades[-1])
             r[0] = d.isoformat()
             eng.st.core_trades[-1] = tuple(r)
-        what = f"核心 ETF {t} {'买' if side == 'BUY' else '卖'} {qty:,} 口 @ ¥{px:,g}（{have:,} → {int(st.core_units.get(t, 0)):,} 口）"
+        what = f"核心 ETF {_lab(t)} {'买' if side == 'BUY' else '卖'} {qty:,} 口 @ ¥{px:,g}（{have:,} → {int(st.core_units.get(t, 0)):,} 口）"
     elif side == "SELL":
         if not held:
-            raise ValueError(f"账本里没有 {t} 的持仓：卖出不用登记（执行器不管？）")
+            raise ValueError(f"账本里没有 {_lab(t)} 的持仓：卖出不用登记（执行器不管？）")
         ps = st.pos[t]
         if qty > int(ps.shares):
-            raise ValueError(f"账本里 {t} 只有 {int(ps.shares):,} 股，卖不了 {qty:,} 股")
+            raise ValueError(f"账本里 {_lab(t)} 只有 {int(ps.shares):,} 股，卖不了 {qty:,} 股")
         full = qty >= int(ps.shares)
         eng.sell_fill(t, qty, px, i, "adopted", part_note="（人工代下，部分）")
         if st.trades:
             st.trades[-1]["exit_date"] = d.isoformat()
         if full:
             st.pending_exit.pop(t, None)
-        what = f"卖 {t} {qty:,} 股 @ ¥{px:,g}（{'全部卖出' if full else f'剩 {int(st.pos[t].shares):,} 股'}）"
+        what = f"卖 {_labq(t, f'{qty:,} 股')} @ ¥{px:,g}（{'全部卖出' if full else f'剩 {int(st.pos[t].shares):,} 股'}）"
     elif held:
         eng.add_fill(t, qty, px, i)
-        what = f"买 {t} {qty:,} 股 @ ¥{px:,g}（并进原来的持仓：{before['shares']:,} → {int(st.pos[t].shares):,} 股，止损不变）"
+        what = f"买 {_labq(t, f'{qty:,} 股')} @ ¥{px:,g}（并进原来的持仓：{before['shares']:,} → {int(st.pos[t].shares):,} 股，止损不变）"
     else:
         n_pos = len(st.pos)
         if n_pos >= int(eng.cfg.max_positions):
@@ -710,7 +733,7 @@ def adopt(eng, book: dict, ticker: str, side: str, qty: int, px: float, day: str
         ps = st.pos[t]
         ps.entry_date, ps.peak, ps.last_close = d.isoformat(), float(px), float(px)
         st.plan.pop(t, None)
-        what = (f"买 {t} {qty:,} 股 @ ¥{px:,g}（新持仓：止损 ¥{float(ps.stop_px):,.2f}，按引擎的新仓算法；之后规则照常离场）")
+        what = (f"买 {_labq(t, f'{qty:,} 股')} @ ¥{px:,g}（新持仓：止损 ¥{float(ps.stop_px):,.2f}，按引擎的新仓算法；之后规则照常离场）")
     rec = {"at": now.isoformat(timespec="seconds"), "date": d.isoformat(), "ticker": t, "side": side, "qty": int(qty),
            "px": round(float(px), 4), "unit": unit, "note": " ".join(str(note or "").split())[:200], "text": what}
     if warn:

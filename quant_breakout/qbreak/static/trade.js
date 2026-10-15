@@ -1,11 +1,11 @@
 // qbreak 操作面板：trade.js（浏览器原生 ES 模块；由 qbreak/panel.py 以 /static/trade.js 提供；不要用构建工具）
-import { $, CFG, NOTE, api, closeAll, coreShow, done, estLine, fmt, nd, plBox, reloadPage, sheet, toast, yen } from './core.js';
+import { $, CFG, NOTE, api, closeAll, coreShow, done, estLine, fmt, nameify, nd, plBox, reloadPage, sheet, tlab, toast, tqty, yen } from './core.js';
 import { SUBS, TFS, drawK, setSUB, setTF, showK } from './kline.js';
 import { buyLive, estOf, loadSQ } from './quotes.js';
 
 let ASK=null, CUR=null;
 function ask(title, body, okText, opt){
-  opt=opt||{}; $('#ask-title').textContent=title; $('#ask-body').textContent=body; plBox($('#ask-pl'), opt.pl||null);
+  opt=opt||{}; $('#ask-title').textContent=nameify(title); $('#ask-body').textContent=nameify(body); plBox($('#ask-pl'), opt.pl||null);   // 代码带名字（2026-10-15 用户：「只有股票代号的话不知道是哪个股票」）
   const ok=$('#ask-ok'); ok.textContent=okText||'确定'; ok.className='btn '+(opt.danger?'danger':'primary');
   const no=$('#ask-no'); if(no) no.textContent=opt.cancel||'取消';         // 「取消下单」（确认下单框；2026-10-15）/ 平时「取消」
   const inp=$('#ask-input'); inp.hidden=!opt.input; inp.value=''; inp.placeholder=opt.input||'';
@@ -153,7 +153,7 @@ function coreFx(q, skip, lab){                                             // �
   for(const t of Object.keys(C)){
     if(t===skip) continue;
     const c=C[t], L=c.lot||1, tg=Math.floor(c.u100*q/100/L+1e-9)*L;
-    if(tg!==c.cur && (c.cur>0 || tg>0)) out.push(t+' '+fmt(c.cur)+' → '+fmt(tg)+' 口'+(lab ? (tg>c.cur ? '（买）' : '（卖）') : ''));
+    if(tg!==c.cur && (c.cur>0 || tg>0)) out.push(tqty(t, fmt(c.cur)+' → '+fmt(tg)+' 口')+(lab ? (tg>c.cur ? '（买）' : '（卖）') : ''));
   }
   return out.length ? '\n'+(lab||'★ 同一比例也用在：')+out.join('、') : '';
 }
@@ -196,7 +196,7 @@ function fundSplit(cost, skip){
   return {short:Math.round(short), rows:rows, got:Math.round(got), left:Math.round(Math.max(0, short-got))};
 }
 function allocViz(el, cost, skip, p){                                       // 买入前后的仓位占比（2026-10-12）：两条按金额分段的横条 + 每只「现在 → 买入后」
-  const F=CFG.fund||{}, A=CFG.alloc||{}, N=A.names||{}, C=A.colors||['#4c7bf3'];
+  const F=CFG.fund||{}, A=CFG.alloc||{}, N=Object.assign({}, CFG.names||{}, A.names||{}), C=A.colors||['#4c7bf3'];
   const now={}; for(const h of (F.hold||[])) if(h.cur>0 && h.px>0) now[h.t]=(now[h.t]||0)+h.cur*h.px;
   const order=Object.keys(now).sort((a,b)=>now[b]-now[a]); const col={}; order.forEach((t,i)=>col[t]=C[i%C.length]);
   if(skip && !(skip in col)) col[skip]=C[order.length%C.length];
@@ -261,17 +261,17 @@ function fundAllBox(el, skip, q, only){                                     // �
     nd('span', 'ft', r.t.replace('.T', '')+(r.kind==='core' ? ' ETF' : ''), row);
     const bar=nd('span', 'fbar', null, row); nd('i', null, null, bar).style.width='100%';
     nd('span', 'fv', '卖 '+fmt(r.sell)+' '+U+' ≈ '+yen(r.yen), row);
-    nd('div', 'muted small fsub', fmt(r.cur)+' → 0 '+U+'（'+(r.note || '全部卖出')+'）', row);
+    nd('div', 'muted small fsub', (fnm(r.t) ? fnm(r.t)+' · ' : '')+fmt(r.cur)+' → 0 '+U+'（'+(r.note || '全部卖出')+'）', row);
   }
   for(const r of q.keep){
     const row=nd('div', 'frow', null, box);
     nd('span', 'ft', r.t.replace('.T', ''), row); nd('span', 'fbar', null, row);
     nd('span', 'fv neg', '留着', row);
-    nd('div', 'muted small fsub', r.why+'（提交会被拦下）', row);
+    nd('div', 'muted small fsub', (fnm(r.t) ? fnm(r.t)+' · ' : '')+r.why+'（提交会被拦下）', row);
   }
   const cp=F.core_pct==null ? 100 : F.core_pct;
   if(cp>0) nd('div', 'small', '闲置资金比例 '+cp+'% → 0%：核心 ETF 卖出全部、之后停买（出现买入信号只提醒，你点「确认买入」才恢复）', box);
-  if((F.fix||[]).length) nd('div', 'small', '取消固定口数：'+F.fix.map(x=>x.replace('.T', '')).join('、')+'（之后按比例 0% 卖出）', box);
+  if((F.fix||[]).length) nd('div', 'small', '取消固定口数：'+F.fix.map(x=>tlab(x)).join('、')+'（之后按比例 0% 卖出）', box);
   nd('div', 'muted small', '卖出合计约 '+yen(q.got)+' + 现金约 '+yen(q.cash)+rsvTxt()+' → 可用约 '+yen(q.avail)
     +(q.n>0 ? '；买 '+fmt(q.n)+' 股 ≈ '+yen(q.buy)+'，剩现金约 '+yen(q.left) : '；不够 1 个单元：不买、留现金')
     +' · 按最近收盘估算（税和手续费另计）；执行器在早上的决策里按全卖之后的钱再算', box);
@@ -279,6 +279,8 @@ function fundAllBox(el, skip, q, only){                                     // �
     +'开盘跳空 / 没成交则其他已卖、留现金、不自动重买。卖出的个股 '+(CFG.block_days||20)+' 个交易日内规则不自动买回（「交易」里可一次「恢复按规则」）；规则对别的票仍可能用现金开新仓。'
     +(CFG.real ? '立花：卖出所得何时能用于买入未验证（买单等同批卖单成交到 09:20），买到的可能比预览少。' : ''), box);
 }
+function fnm(t){                                                          // 凑钱那几行的名字（.ft 窄格只放代码，名字写在下面的小字里；2026-10-15）
+  const h=((CFG.fund||{}).hold||[]).find(x=>x.t===t); return (CFG.names||{})[t] || (h && h.name) || ''; }
 function rsvTxt(){ const r=(CFG.fund||{}).reserve||0; return r>0 ? '（已扣出金预留 '+yen(r)+'）' : ''; }   // 立花：出金预留不拿来买（执行器同一口径；2026-10-14 G4）
 function fundBox(el, cost, skip, opt){                                     // 拖动 / 输入时实时更新：要卖哪几只、各卖多少（opt：买入框才有 → 可选「其他全部卖出」）
   if(!el) return; el.textContent='';
@@ -307,7 +309,7 @@ function fundBox(el, cost, skip, opt){                                     // �
     nd('span', 'ft', r.t.replace('.T', '')+(r.kind==='core' ? ' ETF' : ''), row);
     const bar=nd('span', 'fbar', null, row); nd('i', null, null, bar).style.width=(r.yen/mx*100).toFixed(0)+'%';
     nd('span', 'fv', '卖 '+fmt(r.sell)+' '+U+' ≈ '+yen(r.yen), row);
-    nd('div', 'muted small fsub', fmt(r.cur)+' → '+fmt(r.after)+' '+U+(r.after===0 ? '（全部卖出）' : ''), row);
+    nd('div', 'muted small fsub', (fnm(r.t) ? fnm(r.t)+' · ' : '')+fmt(r.cur)+' → '+fmt(r.after)+' '+U+(r.after===0 ? '（全部卖出）' : ''), row);
   }
   nd('div', 'muted small', '合计约 '+yen(p.got)+(p.left>0 ? '，还差 '+yen(p.left)+' → 执行器会少买' : '')
     +' · 按最近收盘估算，个股按 100 股取整', box);
@@ -404,7 +406,7 @@ document.addEventListener('click', async e=>{
   if(a==='ask-ok'){ const v=$('#ask-input').value, r=ASK; ASK=null; closeAll(); if(r) r({ok:true, value:v}); return; }
   if(a==='sell'){
     CUR={t:d.t, shares:+d.shares};
-    $('#sell-title').textContent='卖出 '+d.t+(d.name?' '+d.name:'');
+    $('#sell-title').textContent='卖出 '+tlab(d.t, d.name);                // 「7203 トヨタ自動車」（不带 .T；名字查不到只写代码）
     $('#sell-desc').textContent='全部 '+fmt(+d.shares)+' 股 · '+CFG.when+'卖出'+NOTE;
     plBox($('#sell-pl'), estOf(d.t));                                      // 买入成交价 → 现价 / 预计卖出 → 预计收益与收益率
     sheet('#dlg-sell'); return;
@@ -417,7 +419,7 @@ document.addEventListener('click', async e=>{
     if(FUND_MODE==='all') FUND_MODE='split';                                // 「其他全部卖出」只属于买入框
     const core=d.core==='1';
     ADJ={t:d.t, shares:+d.shares, px:+d.px, unit:'shares', core:core, lot:core ? (+d.lot||1) : LOT, u100:+d.u100||0, cpct:+d.cpct||0, approx:d.approx==='1'};
-    $('#adj-title').textContent='调仓 '+d.t+(d.name?' '+d.name:'');
+    $('#adj-title').textContent='调仓 '+tlab(d.t, d.name);
     $('#adj-cur').textContent='现在 '+fmt(ADJ.shares)+' '+UW()+' · 约 '+yen(ADJ.shares*ADJ.px)+' · 约占权益 '+pctOf(ADJ.shares)
       +(core ? ' · 闲置资金比例 '+ADJ.cpct+'%' : '');
     $('#adj-u-sh').textContent=UW()+'数';
@@ -430,7 +432,7 @@ document.addEventListener('click', async e=>{
     adjUnit('shares'); sheet('#dlg-adj'); return;
   }
   if(a==='core-sell'){
-    const q=await ask('卖出全部 '+d.t+(d.name?' '+d.name:''), '全部 '+fmt(+d.shares)+' 口：'+CFG.when+'卖出'+coreFx(0, d.t)
+    const q=await ask('卖出全部 '+tlab(d.t, d.name), '全部 '+fmt(+d.shares)+' 口：'+CFG.when+'卖出'+coreFx(0, d.t)
       +'\n卖出后停买闲置资金 ETF（钱留现金）；出现买入信号会提醒你，你点「确认买入」才买'+NOTE, '卖出', {danger:true, pl:estOf(d.t)});
     if(q.ok) done(await post({book:CFG.book, kind:'sell', ticker:d.t})); return;
   }
@@ -472,7 +474,8 @@ document.addEventListener('click', async e=>{
   if(a==='buy'){
     BUY={t:d.t, px:+d.px, lot:+d.lot||LOT, rule:+d.rule||0, limit:+d.limit||0, unit:'rule', autoAll:false, fullOnly:d.full==='1'};
     FUND_MODE=FUND_PREV='split';
-    $('#buy-title').textContent='买入 '+d.code+(d.name ? ' '+d.name : '');
+    if(d.name) (CFG.names=CFG.names||{})[d.t]=d.name;                    // 建议的股票可能不在页面的名字表里：凑钱 / 仓位占比那几行也带上名字
+    $('#buy-title').textContent='买入 '+tlab(d.code||d.t, d.name);
     $('#buy-sig').textContent=(d.sig==='1' ? '今天出了买入信号（'+d.rtext+'）' : '★ '+d.status+'：还没有买入信号，规则不会买 —— 是你自己的决定')
       +(d.warn ? '\n★ '+d.warn : '')+NOTE;
     $('#buy-cap').textContent=CFG.cap;
@@ -497,7 +500,7 @@ document.addEventListener('click', async e=>{
     if(q.ok) done(await post({book:CFG.book, kind:'core', pct:v})); return;
   }
   if(a==='cancel-order'){                                                 // 撤单：执行器今天已经发到交易所、还挂着的单（面板马上叫执行器撤）
-    const q=await ask('撤单 '+(d.side==='BUY'?'买 ':'卖 ')+d.t+' '+fmt(+d.qty)+(d.core==='1'?' 口':' 股'),
+    const q=await ask('撤单 '+(d.side==='BUY'?'买 ':'卖 ')+tqty(d.t, fmt(+d.qty)+(d.core==='1'?' 口':' 股'), d.name),
       (d.core==='1' ? '核心 ETF 的单：已经成交的部分撤不了；下一次决策照规则 / 闲置资金比例重新算目标，可能再买 / 再卖（要少拿用「闲置资金比例」）。'
                     : '已经成交的部分撤不了；撤掉的卖单如果规则明天还要卖会再下；撤掉的个股买单不再买。')+(CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天的单」的状态）')
       +(d.deps ? '\n★ '+d.deps : ''),                                   // 靠这笔卖出的钱的买单撤了就下不成（服务器算：data-deps；2026-10-15）
@@ -526,7 +529,7 @@ document.addEventListener('click', async e=>{
       done(await post({book:CFG.book, kind:'corefix', ticker:d.t, clear:true})); return;
     }
     ADJ={t:d.t, shares:cur, px:px, unit:'shares', core:true, fix:true, lot:lot, u100:0, cpct:0, approx:false, name:d.name};
-    $('#adj-title').textContent=(cur>0 ? '固定口数 ' : '买入 ')+d.t+(d.name?' '+d.name:'');
+    $('#adj-title').textContent=(cur>0 ? '固定口数 ' : '买入 ')+tlab(d.t, d.name);
     $('#adj-cur').textContent='现在 '+fmt(cur)+' 口 · 约 '+yen(cur*px)+' · 约占权益 '+pctOf(cur)+' · 收盘 ¥'+px+' · 一个单元 '+fmt(lot)+' 口';
     $('#adj-u-sh').textContent='口数';
     const ru=$('#adj-rule'); if(ru){ if(ADJ_RULE==null) ADJ_RULE=ru.innerHTML;
@@ -541,7 +544,7 @@ document.addEventListener('click', async e=>{
     if(q.ok) done(await post({book:CFG.book, kind:'unblock', ticker:ps[0].split(':')[0], tickers:ps})); return;
   }
   if(a==='unblock'){
-    const q=await ask('解除 '+d.t+' 的不自动买回', (d.msg||'')+NOTE, '解除');
+    const q=await ask('解除 '+tlab(d.t, d.name)+' 的不自动买回', (d.msg||'')+NOTE, '解除');
     if(q.ok) done(await post({book:CFG.book, kind:'unblock', ticker:d.t, block_id:d.id||undefined})); return;
   }
   if(a==='flow'){                                                         // 〔77〕C UX-14：登记入金 / 出金（只影响收益的计算）

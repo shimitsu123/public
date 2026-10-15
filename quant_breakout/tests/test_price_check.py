@@ -128,7 +128,7 @@ def test_run_with_injected_fetch_errors_budget_and_no_jq_prices():
     js = json.dumps(r, ensure_ascii=False)
     assert f"{float(J.iloc[-1]):.2f}" not in js and f"{float(J.iloc[-1]):.1f}" not in js   # 只有比较结果，没有 J-Quants 的价格
     lines = PC.summary_lines(r)
-    assert any("取不到" in x for x in lines) and any("复权错位" in x and "6758.T" in x for x in lines)
+    assert any("取不到" in x for x in lines) and any("复权错位" in x and "6758 ソニーグループ" in x for x in lines)   # 代码 + 名字（2026-10-15）
     t = [0.0]
 
     def clock():
@@ -146,15 +146,15 @@ def test_report_block_and_missing_items():
     assert "行情交叉核对" in h and "✓" in h and " open" not in h
     al = dict(ok, alerts=[{"ticker": "5401.T", "kind": "level", "date": "2025-09-29", "yf_ret": 8.5, "gap_pp": 10.3, "shift_pct": 10.5}])
     h2 = _price_check_html(al)
-    assert "⚠ 1 条" in h2 and "5401.T 复权错位 2025-09-29" in h2 and "<details open>" in h2
+    assert "⚠ 1 条" in h2 and "5401 日本製鉄 复权错位 2025-09-29" in h2 and "<details open>" in h2   # 代码 + 名字（2026-10-15）
     assert "今天没做" in _price_check_html({"skipped": "没有设置 JQUANTS_API_KEY"})
     miss = missing_items({"history": [["2026-09-25", 1, 1, 0, 150]], "price_check": al})
-    assert any(m.startswith("行情交叉核对（告警，不是缺数据）：5401.T") for m in miss)
+    assert any(m.startswith("行情交叉核对（告警，不是缺数据）：5401 日本製鉄 复权错位") for m in miss)
     assert not any("行情交叉核对" in m for m in missing_items({"history": [["2026-09-25", 1, 1, 0, 150]], "price_check": ok}))
     write_json(paths.home() / "sim.json", {"mode": "unified", "start": "2026-09-28", "capital_jpy": 1_000_000})
     write_json(paths.out_dir() / "unified_today.json", {"price_check": al, "todo": {}, "extras": {}, "config": {}, "positions": {}})
     hp = write_unified_report()
-    assert "5401.T 复权错位" in hp.read_text(encoding="utf-8")
+    assert "5401 日本製鉄 复权错位" in hp.read_text(encoding="utf-8")
     assert read_json(paths.out_dir() / "report_data.json")["price_check"]["alerts"][0]["ticker"] == "5401.T"
 
 

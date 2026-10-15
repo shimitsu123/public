@@ -976,8 +976,9 @@ def current_state(nk: pd.Series, dv: pd.Series, P: dict, s33: dict, best) -> dic
     qtd_a = (last.to_period("Q")).start_time
     qtd = group_scores(REL, groups, np.flatnonzero(days >= qtd_a))
     corr = assoc(REL, groups, ml, len(days))
-    from qbreak import jpx_list as JL
-    names = {f"{c}.T": n for c, n in JL.names().items()}                     # 公司名用 JPX 公开名单（var/jpx_names.json），不用 J-Quants 的
+    from qbreak import names as NM
+    # 公司名用 JPX 公开名单，不用 J-Quants 的；2026-10-15 起经 qbreak/names.py（数据目录 → 仓库 var/ → 本机全部上市品种，与日报同一份）
+    names = {f"{c}.T": n for c, n in NM.names_map().items()}
     mem = S["M"][-1]
     rank = [j for j in np.argsort(-np.nan_to_num(corr, nan=-9)) if mem[j] and np.isfinite(corr[j])]
     order, other = rank[:10], [j for j in rank if groups[j] not in ml][:5]

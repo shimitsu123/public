@@ -28,6 +28,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from . import names as NM
+
 FILE = "combo_c.json"
 SINCE = "2026-10-01"                                # 第一次作用的决策（10-01 收盘 → 10-02 成交）；前向复核只算这之后的信号
 VIX_MAX = 20.0
@@ -192,7 +194,8 @@ def text(b: dict) -> str:
         return f"- 关联搭配 C（{b.get('as_of')}）：{cell} → 不在「平静的牛市」，C 不动"
     sk = b.get("skipped") or []
     return (f"- 关联搭配 C（{b.get('as_of')}）：{cell} → 起作用；候选 {len(sk) + len(b.get('kept') or [])} 只，"
-            + (f"跳过 {len(sk)} 只：{'、'.join(sk[:8])}" if sk else "没有要跳过的"))
+            # 跳过的票写「代码 名字」、超过 8 只「等 N 只」（2026-10-15 用户：只写代码不知道是哪只）
+            + (f"跳过 {len(sk)} 只：{NM.labels(sk, limit=8)}" if sk else "没有要跳过的"))
 
 
 def summary(pl: dict | None, as_of: str | None, enabled: bool) -> dict:

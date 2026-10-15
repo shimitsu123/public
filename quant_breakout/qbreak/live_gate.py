@@ -42,6 +42,16 @@ REDO = {"demo": "bash scripts/liveu.sh probe --demo --order-test", "live": "bash
 ACCEPTED = ("SENT", "FILLED", "PARTIAL")
 
 
+def _order_txt(o: dict) -> str:
+    """一张单给人看的写法「买 7203 トヨタ自動車 100 股」「卖 1545 纳斯达克 100 120 口」（2026-10-15 用户：只写代码不知道是哪只；
+    以前「BUY 7203.T」）。ETF（kind=core）的单位是口；查不到名字只写代码；没有数量就不写。"""
+    from . import names as NM
+    side = {"BUY": "买", "SELL": "卖"}.get(str(o.get("side") or "").upper(), str(o.get("side") or "—"))
+    q = o.get("qty")
+    qty = f" {int(q):,} {'口' if o.get('kind') == 'core' else '股'}" if isinstance(q, (int, float)) and q else ""
+    return f"{side} {NM.label(o.get('ticker')) if o.get('ticker') else '—'}{qty}"
+
+
 def _cmd(run, args: list[str], env: dict | None = None) -> tuple[int | None, str]:
     """跑一个只读的系统命令（security / launchctl / pmset）→ (退出码, 标准输出)；命令不存在 → (None, "")。输出只用来判断，不打印。
     env：给这个命令的环境变量（None = 照这个进程的）。"""
@@ -432,7 +442,7 @@ def check(agents=None, run=subprocess.run, today: dt.date | None = None) -> list
     days = compare_days(paper, _journal("paper"))
     ok1, txt1 = _streak_item(days, today, _paper_stopped(agents, days))
     add("门槛", f"① Mac 模拟操盘与云端连续 ≥ {STREAK_NEED} 个交易日一致", ok1, txt1)
-    unk = [(br, f"{name} {o.get('cid')} {o.get('side')} {o.get('ticker')}")
+    unk = [(br, f"{name} {o.get('cid')}（{_order_txt(o)}）")                 # cid 照原样（--resolve 要填它）
            for name, br, b in (("模拟账户", "paper", paper), ("立花", "tachibana", live))
            for o in b.get("orders") or [] if o.get("status") in UNKNOWN]
     how = "；".join(f"bash scripts/liveu.sh --broker {br} --resolve <cid> --filled <股数> --px <均价>"   # 经 liveu.sh：数据目录 ~/.qbreak/home

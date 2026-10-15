@@ -1005,6 +1005,7 @@ class UnifiedEngine:
         credit_dividends=False（实盘）：分红只调整止损 / 峰值，现金以券商实际入账为准（执行器每天与券商核对现金）。
         on_action(票, 日期, 分红, 拆股, 税后比例)：每处理一次就回调一次（执行器用它把同一事件同步给模拟券商）。"""
         from .corpactions import DIV_NET, due, infer_split
+        from .names import label as lab                       # 日志 / 打印行写「7203 トヨタ自動車」（2026-10-15 用户：只写代码不知道是哪只）
         st = self.st
         after, upto = st.last_date, str(self.gidx[i].date())
         if not after or after >= upto:
@@ -1024,14 +1025,14 @@ class UnifiedEngine:
                     k = infer_split(float(stored), float(self.A.close[ia, j]))
                     if k:
                         acts = [{"date": upto, "dividend": 0.0, "split": k}]
-                out.append(f"{t} 公司行为数据取不到（{type(e).__name__}）" + (f"，按价格比推断拆股 1:{acts[0]['split']:g}"
+                out.append(f"{lab(t)} 公司行为数据取不到（{type(e).__name__}）" + (f"，按价格比推断拆股 1:{acts[0]['split']:g}"
                                                                          if acts else "，本次跳过"))
             for a in acts:
                 dv, sp = float(a.get("dividend") or 0), float(a.get("split") or 0)
                 net = DIV_NET.get(market_of(t), 1.0)
                 n = apply_corp_action(st, t, a["date"], dividend=dv, split=sp, div_net=net if credit_dividends else 0.0)
                 if n:
-                    out.append(f"{t} {a['date']}：{n}")
+                    out.append(f"{lab(t)} {a['date']}：{n}")
                     if on_action is not None:
                         on_action(t, a["date"], dv, sp, net)
         return out

@@ -136,14 +136,14 @@ def test_brief_summary_and_displays():
     assert sm["diff_jpy"] == 10_000 and sm["errors"] == {"B2 X2": "取不到"}
     sm_old = run._fj_summary(SimpleNamespace(fj_on=True, fj=pl, bar_date="2026-09-30"), {"error": "boom"}, 1_000_000)
     assert "生效" in sm_old["errors"]
-    assert "×0.5" in fj_text(ok) and "A.T" in fj_text(ok) and fj_text(old).startswith("- ★ 前向记录判断层没生效")
+    assert "×0.5" in fj_text(ok) and "个股减半 1 只：A" in fj_text(ok) and fj_text(old).startswith("- ★ 前向记录判断层没生效")
     title, short, body = daily_text({"decided_on": "2026-09-29", "orders": [], "fwd_judgment": old}, UState(cash_jpy=1e6), None, True, 1e6)
     assert "★ 判断层没生效" in short and "前向记录判断层没生效" in body
     _, short2, body2 = daily_text({"decided_on": "2026-09-29", "orders": [], "fwd_judgment": ok}, UState(cash_jpy=1e6), None, True, 1e6)
     assert "判断层" not in short2 and "市场 2 分" in body2
     d = {"fwdj": sm, "extras": {"JP": {"regime": {"final_mult": 0.5, "fwd_judgment": {"applied": True, "before": 0.75}}}}}
     html = _fwdj_html(d)
-    assert "前向记录判断层" in html and "A.T" in html and "×0.5" in html and "+¥10,000" in html and "0.75 倍" in html
+    assert "前向记录判断层" in html and "<td>A</td>" in html and "×0.5" in html and "+¥10,000" in html and "0.75 倍" in html
     assert _fwdj_html({"fwdj": {"enabled": False}}) == ""
     items = missing_items({"history": [1], "fwdj": sm_old, "survey_failed": {"fred:WALCL": "ConnectionError"}})
     assert any("「B2 X2」" in x for x in items) and any(x.startswith("前向记录判断层：判断层文件是") for x in items)

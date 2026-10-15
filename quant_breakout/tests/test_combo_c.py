@@ -130,7 +130,7 @@ def test_payload_apply_brief_and_text():
     assert CC.apply({}, {**pl, "enabled": False}, "2026-10-01") == ({}, None) and CC.apply({}, None, "2026-10-01") == ({}, None)
     b = CC.brief(pl, "2026-10-01", True)
     assert b["applied"] and b["skipped"] == ["B.T"] and b["kept"] == ["A.T"] and b["on"] is True
-    assert "跳过 1 只：B.T" in CC.text(b) and "起作用" in CC.text(b)
+    assert "跳过 1 只：B" in CC.text(b) and "B.T" not in CC.text(b) and "起作用" in CC.text(b)   # 名字表里没有的票只写代码（2026-10-15）
     off = CC.payload("2026-10-01", {"n225_ma200": -0.02, "vix": 16.0, "on": False}, {"B.T": bad})
     assert off["stocks"]["B.T"]["skip"] is False and "C 不动" in CC.text(CC.brief(off, "2026-10-01", True))
     stale = CC.brief(pl, "2026-10-02", True)
@@ -275,7 +275,7 @@ def test_report_card_and_executor_text():
     pl = CC.payload("2026-10-01", {"n225_ma200": 0.14, "vix": 16.3, "on": True},
                     {"A.T": {"vexp": 0.5, "upper": 0.95, "atrp": 0.03, "r12": 0.3, "us12": 0.9}, "B.T": {}})
     h = _combo_c_html({"combo_c": CC.summary(pl, "2026-10-01", True)})
-    assert "关联搭配 C" in h and "A.T" in h and "跳过" in h and "非投资建议" in h
+    assert "关联搭配 C" in h and "<td>A</td>" in h and "跳过" in h and "非投资建议" in h          # 候选写「代码 名字」、去 .T（2026-10-15）
     assert _combo_c_html({"combo_c": {"enabled": False}}) == ""
     assert "今天没生效" in _combo_c_html({"combo_c": CC.summary(pl, "2026-10-02", True)})
     st = SimpleNamespace(pos={}, core_units={}, cash_jpy=1_000_000.0, history=[])

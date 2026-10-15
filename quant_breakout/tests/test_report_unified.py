@@ -1,11 +1,18 @@
 """一个账户（楽天）日报：只做日本个股时不显示换汇 / 美股栏；核心 ETF 用到的指数显示牛熊分界；候补队列；模拟期结束只重出报表。"""
 import argparse
 import re
+from html import escape
 
+from qbreak import names as NM
 from qbreak import paths
 from qbreak.report_unified import write_unified_report
 from qbreak.unified import UnifiedConfig
 from qbreak.utils import read_json, write_json
+
+
+def _L(t: str) -> str:
+    """页面里的「代码 名字」（2026-10-15 起代码都带名字：「1655 S&amp;P500」「8801 三井不動産」；HTML 转义后的写法）。"""
+    return escape(NM.label(t))
 
 
 def _write(stock_markets, cash_usd=0.0, todo=None):
@@ -34,10 +41,10 @@ def test_jp_only_hides_fx_and_us_and_shows_core_index_and_watchlist():
     _write(["JP"])
     html = write_unified_report().read_text(encoding="utf-8")
     assert "日间 换汇" not in html and "美股开盘" not in html
-    assert "只用于核心 ETF 1655.T 的择时" in html and "转熊价位 6,891.6 pt" in html and "距翻转价位 +11.80%" in html
+    assert f"只用于核心 ETF {_L('1655.T')} 的择时" in html and "转熊价位 6,891.6 pt" in html and "距翻转价位 +11.80%" in html
     assert "转熊价位 55,673 円" in html and "明天新仓倍数 0.5 倍" in html and "98.0 分" in html          # 单位
-    assert "× 570 口" in html and "1655.T 50%" in html and "150.00 円/USD" in html
-    assert "8801.T" in html and "即将" in html
+    assert f"{_L('1655.T')} × 570 口" in html and escape(NM.qty('1655.T', '50%')) in html and "150.00 円/USD" in html
+    assert _L("8801.T") in html and "8801 " in _L("8801.T") and "即将" in html                     # 候补队列：代码 + 名字（仓库的 JPX 快照）
     assert "只做日本个股" in html and "JST" in html
     rd = read_json(paths.out_dir() / "report_data.json")
     assert rd["mode"] == "unified" and rd["markets"]["US"]["regime"]["bullbear"]["level"] == 6891.63   # 例行任务的旧路径
@@ -71,7 +78,7 @@ def test_report_before_first_run_says_when_it_starts():
                                                        "core_index": {"1655.T": "US"}, "core_mode": "split"}})
     html = write_unified_report().read_text(encoding="utf-8")
     assert "还没有运行过" in html and "2026-09-28" in html and "¥1,000,000" in html
-    assert "个股 4×25%（只做日本个股" in html and "1655.T 100%" in html and "None" not in html   # 规则取自 sim.json
+    assert "个股 4×25%（只做日本个股" in html and escape(NM.qty('1655.T', '100%')) in html and "None" not in html   # 规则取自 sim.json
     assert "数据完整性：缺" in html and "模拟盘还没有运行过" in html and "胜率 —（还没有平仓）" in html
 
 
@@ -236,7 +243,7 @@ def test_preview_fills_market_state_watchlist_cash_fx_with_units(monkeypatch, ca
     assert not (paths.state_dir() / "unified_state.json").exists()
     html = (paths.out_dir() / "report.html").read_text(encoding="utf-8")
     assert "开始前的预览" in html and "日本 2026-09-25 收盘、美股 2026-09-24 收盘（开始前的预览）" in html
-    assert "8801.T" in html and "91.5 分" in html and "是（一手 ¥150,100）" in html
+    assert _L("8801.T") in html and "91.5 分" in html and "是（一手 ¥150,100）" in html
     assert "一个账户（立花証券ｅ支店，日元，只做东证）" in html and "¥1,000,000" in html          # 默认券商：立花（只有日元）
     assert "USD/JPY（只影响核心 ETF 的日元价值）</span><b>149.25 円/USD</b>" in html and "Yahoo 2026-09-25" in html
     assert "美元现金" not in html and "$0.00" not in html and "個別コース" in html and "≤10 万 ¥77" in html
@@ -248,7 +255,7 @@ def test_preview_fills_market_state_watchlist_cash_fx_with_units(monkeypatch, ca
     rd = read_json(paths.out_dir() / "report_data.json")
     assert rd["preview"] and rd["markets"]["JP"]["watchlist"][0]["ticker"] == "8801.T"
     assert any("威胁指数" in x for x in rd["missing"]) and not any("USD/JPY" in x for x in rd["missing"])
-    assert "行情落后：^N225 最新 2026-09-18，应有 2026-09-25" in html and "行情落后：个股 1 只（例 7203.T" in html
+    assert f"行情落后：{_L('^N225')} 最新 2026-09-18，应有 2026-09-25" in html and f"行情落后：个股 1 只（例 {_L('7203.T')} 最新" in html
 
 
 def test_report_command_rebuilds_unified_report_in_unified_mode():
@@ -275,7 +282,7 @@ def test_sim_unify_tachibana_jp_only_and_refuses_us_stocks():
     ex = exec_configs(cfg["unified"]["stock_markets"], cfg["unified"])       # 美股只是推进器的结构：不报错、不收费
     assert ex["JP"].fee(250_000) == 187 and ex["US"].fee(10_000) == 0
     html = write_unified_report().read_text(encoding="utf-8")
-    assert "立花証券ｅ支店，日元，只做东证" in html and "無人" not in html and "1655.T 100%" in html
+    assert "立花証券ｅ支店，日元，只做东证" in html and "無人" not in html and escape(NM.qty('1655.T', '100%')) in html
 
 
 def test_report_shows_executor_rehearsal_and_flags_mismatch():
@@ -319,9 +326,10 @@ def test_fixed_items_listed_separately_from_missing():
          "price_check": {"info": [{"ticker": "3659.T", "kind": "dividend", "date": "2026-09-29", "shift_pct": 15.6, "yield_pct": 13.53}],
                          "info_counts": {"dividend": 1}}}
     fx = RU.fixed_items(d)
-    assert len(fx) == 3 and "5 分钟线合成" in fx[0] and "65,209.37" in fx[0] and "8766.T" in fx[1] and "1.52%" in fx[1] and "3659.T" in fx[2]
+    assert len(fx) == 3 and "5 分钟线合成" in fx[0] and "65,209.37" in fx[0] and NM.label("8766.T") in fx[1] and "1.52%" in fx[1]
+    assert NM.label("3659.T") in fx[2] and fx[0].startswith(NM.label("^N225"))                 # 代码 + 名字（2026-10-15 起）
     html = RU._missing_html([], fx)
-    assert "都取到了" in html and "自动修复 3 项" in html and "8766.T" in html
+    assert "都取到了" in html and "自动修复 3 项" in html and _L("8766.T") in html
     html2 = RU._missing_html(["行情落后：^GSPC …"], fx)
     assert "缺 1 项" in html2 and "自动修复 3 项" in html2
     assert RU._missing_html([], []) == '<div class="muted">数据完整性：日报需要的数据都取到了</div>'
@@ -358,7 +366,8 @@ def test_holdings_dashboard_is_on_top_with_meters_and_status():
     assert "距止损 -2.1%" in html and "st st-serious\">■ 距止损" in html and "卖出线 ¥2,790" in html and "止盈 ¥3,750" in html and "成本 ¥3,000" in html
     assert "7 / 60 天" in html and "还有 53 天" in html
     # ④ 资产构成：个股 285,000 + 1655 450,000 + 现金 100,000 → 环形图 + 图例百分比
-    assert 'class="donut"' in html and "S&amp;P500（1655）" in html and "<b>¥450,000</b>" in html and "现金 <b>¥100,000</b>" in html
+    assert 'class="donut"' in html and _L("1655.T") in html and "<b>¥450,000</b>" in html and "现金 <b>¥100,000</b>" in html
+    assert "S&amp;P500（1655）" not in html                                                   # 图例：代码在前「1655 S&P500」（2026-10-15 起）
     # ⑤ 市场：牛熊距翻转 +17.8% 安全；日経威胁 59.9 注意；美股 84.0 危险；新仓倍数 ×0 今天不开新仓；判断层 2 分 ×0.5
     assert "距翻转 +17.8%" in html and "st-good\">✓ 安全" in html
     assert "59.9 分" in html and "84.0 分" in html and "st st-crit\">✖ 危险" in html
@@ -381,10 +390,37 @@ def test_filled_gaps_and_data_fixes_reach_the_report_data():
     write_json(paths.out_dir() / "unified_today.json", td)
     html = write_unified_report().read_text(encoding="utf-8")
     rd = read_json(paths.out_dir() / "report_data.json")
-    assert any("^N225 2026-10-05" in x and "中间漏了" in x and "69,928.05" in x for x in rd["fixed"])
-    assert any("2501.T" in x and "0.22%" in x for x in rd["fixed"])
-    assert any(x.startswith("行情中间缺日：^GSPC 2026-10-02") for x in rd["missing"])
+    assert any(f"{NM.label('^N225')} 2026-10-05" in x and "中间漏了" in x and "69,928.05" in x for x in rd["fixed"])
+    assert any(NM.label("2501.T") in x and "0.22%" in x for x in rd["fixed"])
+    assert any(x.startswith(f"行情中间缺日：{NM.label('^GSPC')} 2026-10-02") for x in rd["missing"])
     assert "中间漏了" in html and "行情中间缺日" in html
     from qbreak import report_unified as RU
     tail = RU.fixed_items({"filled": {"^N225": {"dates": ["2026-10-05", "2026-10-06"], "gap_dates": ["2026-10-05"], "close": 70100.0}}})
     assert "2026-10-05 Yahoo 日线中间漏了" in tail[0] and "2026-10-06 Yahoo 没给收盘" in tail[0] and "2026-10-06 收盘 70,100.00" in tail[0]
+
+
+def test_codes_carry_names_shadow_units_and_safety_net():
+    """2026-10-15 用户：只写代码不知道是哪只 → 日报里的代码都带名字（「7203 トヨタ自動車」，不带 .T）；影子账户的 ETF 写「口」、
+    BUY / SELL 写成买 / 卖；各段漏掉的「NNNN.T」由最后的兜底补名字；report_data.json 的 ticker 字段、决策 JSON 不动。"""
+    _write(["JP"])
+    st = read_json(paths.state_dir() / "unified_state.json")
+    st["corp_log"] = [{"date": "2026-09-29", "ticker": "8766.T", "note": "拆股 1 拆 15（8801.T 不受影响）"}]
+    write_json(paths.state_dir() / "unified_state.json", st)
+    dec = {"for_date": "2026-09-28", "view": "看好 7203.T", "orders": [{"ticker": "1655.T", "side": "BUY", "shares": 130, "reason": "r"},
+                                                                       {"ticker": "7203.T", "side": "SELL", "shares": 100, "reason": "止盈"}]}
+    write_json(paths.out_dir() / "shadow_today.json", {"as_of": "2026-09-28", "equity_jpy": 1_000_000, "ret_pct": 0.0, "cash_jpy": 900_000,
+                                                       "positions": {"1655.T": {"shares": 130, "cost": 876, "close": 880, "value": 114_400, "pnl_pct": 0.4}},
+                                                       "last_decision": dec, "period": ["2026-09-28", "2026-12-24"]})
+    html = write_unified_report().read_text(encoding="utf-8")
+    sh = html[html.index("影子账户（判断型选股"):]
+    sh = sh[:sh.index("</section>")]
+    assert f"买 {_L('1655.T')} 130 口（r）" in sh and f"卖 {_L('7203.T')} 100 股（止盈）" in sh            # 不再是「BUY 1655.T 130 股」
+    assert f"<td>{_L('1655.T')}</td><td class='n'>130 口</td>" in sh and "BUY" not in sh and "130 股" not in sh
+    assert f"看好 {_L('7203.T')}" in sh                                                                # 判断的一句话：兜底补名字
+    assert f"{_L('8766.T')}：拆股 1 拆 15（{_L('8801.T')} 不受影响）" in html                            # 公司行动记录
+    text = re.sub(r"<script.*?</script>|<style.*?</style>", "", html, flags=re.S)
+    left = {m for m in re.findall(r"(?<![\w\-./'\"=])(\d{4})\.T(?![\w\-])", text) if NM.name(m)}
+    assert not left, left                                                                             # 查得到名字的代码都不再写成 NNNN.T
+    rd = read_json(paths.out_dir() / "report_data.json")
+    assert rd["shadow"]["last_decision"]["orders"][0]["ticker"] == "1655.T"                            # 数据里的 ticker 字段照旧
+    assert read_json(paths.out_dir() / "shadow_today.json")["positions"]["1655.T"]["shares"] == 130

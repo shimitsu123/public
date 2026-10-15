@@ -1,6 +1,7 @@
 """jpx_list.py — JPX「東証上場銘柄一覧」（data_j.xlsx，每月更新；公开数据）：公司名、市场区分、33 业种。
 用途：日报 / 关联对比里显示公司名；找「新出现的公司」（最新名单里有、基准快照 var/jpx_codes_base.json 里没有的内国株；
 scripts/theme_link_check.py --new-listings）。名称快照 var/jpx_names.json 只存 TOPIX 1000（industry_s33.json）+ 主题成员 + 日経225。
+给人看的「代码 名字」统一用 qbreak/names.py（2026-10-15；这里的 names() / label() 保留给研究脚本，names() 不给路径时也转调它）。
 """
 from __future__ import annotations
 
@@ -32,13 +33,20 @@ def fetch() -> pd.DataFrame:
 
 
 def names(path: Path | None = None) -> dict[str, str]:
-    """代码 → 公司名（名称快照；没有文件时空）。"""
-    fp = Path(path or paths.home() / NAMES_FILE)
+    """代码 → 公司名（名称快照；没有文件时空）。不给 path → 数据目录的快照，没有就用仓库 var/ 的（qbreak/names.py；
+    2026-10-15：Mac 的数据目录没有 jpx_names.json，以前这里返回空 → 日报 / 研究脚本在 Mac 上只剩代码）。"""
+    if not path:
+        from .names import jpx_snapshot
+        return jpx_snapshot()
+    fp = Path(path)
     return (json.loads(fp.read_text(encoding="utf-8")) or {}).get("names", {}) if fp.exists() else {}
 
 
-def label(ticker: str, nm: dict[str, str]) -> str:
-    """「5803.T」→「5803 フジクラ」（没有名字就只写代码）。"""
+def label(ticker: str, nm: dict[str, str] | None = None) -> str:
+    """「5803.T」→「5803 フジクラ」（没有名字就只写代码）。nm 不给 → qbreak/names.py 的 label（含 ETF 名字表）。"""
+    if nm is None:
+        from .names import label as _label
+        return _label(ticker)
     code = ticker.split(".")[0]
     return f"{code} {nm[code]}" if code in nm else code
 

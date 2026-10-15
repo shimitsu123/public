@@ -13,6 +13,8 @@
 价位的算法：在最后一根 K 线后面接假设的 K 线（开盘 = 前收，最高 / 最低 = 开盘与收盘之间，没有影线），用 qbreak/strategy 的
   compute_indicators 重算买点；卖出按引擎的离场判定（qbreak/unified.UnifiedEngine._check_exits，收盘判定 → 次日开盘卖）同样的顺序
   （tests/test_timeline.py 用真实引擎逐条核对）。
+代码都带名字（「8750 第一ライフグループ」「1545 纳斯达克 100」；2026-10-15 用户：只写代码不知道是哪只）：日历的文字在 build() 时写好，
+表格 / 列表在 html() 渲染时查 qbreak/names.py（日报与 Mac 页面共用，改一处两边都生效；以前存下的时间线 html() 也过一次 annotate）。
 非投资建议。
 """
 from __future__ import annotations
@@ -24,6 +26,7 @@ from html import escape
 import numpy as np
 import pandas as pd
 
+from . import names as NM
 from .strategy import OHLCV, atr, compute_indicators, ema
 
 TAIL = 500                                  # 用最近 500 根 K 线重算（EMA / ATR 的起点影响 < 1e-9）
@@ -459,14 +462,14 @@ def build(frames: dict, p_entry, p_exit, *, bar_date: dt.date, positions: dict, 
     for h in out["holdings"]:
         mh = h.get("max_hold") or {}
         if mh.get("close_day"):
-            add(mh["close_day"], f"{h['ticker']} 收盘满 {p_exit.max_hold_days} 个交易日 → {mh['sell_day']} 开盘卖")
+            add(mh["close_day"], f"{NM.label(h['ticker'])} 收盘满 {p_exit.max_hold_days} 个交易日 → {mh['sell_day']} 开盘卖")
         if h.get("earnings"):
-            add(h["earnings"], f"{h['ticker']} 决算（持仓；规则不因决算卖出）")
+            add(h["earnings"], f"{NM.label(h['ticker'])} 决算（持仓；规则不因决算卖出）")
     for c in out["candidates"]:
         if c.get("earnings"):
-            add(c["earnings"], f"{c['ticker']} 决算（前 {p_entry.earnings_blackout_days} 个交易日不进场）")
+            add(c["earnings"], f"{NM.label(c['ticker'])} 决算（前 {p_entry.earnings_blackout_days} 个交易日不进场）")
     for code, pdn in index_pend.items():
-        add(pdn.get("effective"), f"{code} 日経225 {'剔除' if pdn.get('action') == 'delete' else '纳入'}生效")
+        add(pdn.get("effective"), f"{NM.label(code)} 日経225 {'剔除' if pdn.get('action') == 'delete' else '纳入'}生效")
     wk = next((d for i, d in enumerate(days[:horizon]) if days[i + 1].isocalendar()[:2] != d.isocalendar()[:2]), None)
     if wk:                                                      # 只列最近一次（以后每周最后一个交易日同样）
         add(wk.isoformat(), "周线完成：这天收盘的判定起 W2 用这一周的成交量（→ 下一交易日开盘买；以后每周最后一个交易日同样）")
@@ -513,10 +516,20 @@ def _scen_txt(sc: dict | None, sell: bool = False) -> str:
     return "<br>".join(parts)
 
 
+def _lab(t) -> str:
+    """表格 / 列表里的「代码 名字」（已转义；查不到名字只写代码）。"""
+    return escape(NM.label(t))
+
+
 def html(tl: dict, state_tag=None) -> str:
-    """一个 section 的内容（h2 + 表），两边页面都用 card / scroll / muted / n / pos / neg 这些 class。"""
+    """一个 section 的内容（h2 + 表），两边页面都用 card / scroll / muted / n / pos / neg 这些 class。
+    代码带名字；最后整段过一次 names.annotate（html 模式）：以前存下的时间线（日历 / 挡住的理由里的「8697.T」）也带上名字。"""
     if not tl:
         return ""
+    return NM.annotate(_html(tl, state_tag), html=True)
+
+
+def _html(tl: dict, state_tag=None) -> str:
     if tl.get("error"):
         return f"<h2>买卖时间线</h2><div class='muted'>这次没算出来：{escape(str(tl['error']))}</div>"
     st = state_tag or (lambda s: escape(str((s or {}).get("label") or "—")))
@@ -526,7 +539,7 @@ def html(tl: dict, state_tag=None) -> str:
          "价位按「开盘 = 前收、没有影线」的假设 K 线算，情景推算不是预测。</div>"]
     od = tl.get("orders") or []
     H.append(f"<h3>① {escape(str(s1))} 开盘（今天早上已经决定）</h3>")
-    H.append("<ul>" + "".join(f"<li>{'卖' if o.get('side') == 'SELL' else '买'} {escape(str(o.get('ticker')))} "
+    H.append("<ul>" + "".join(f"<li>{'卖' if o.get('side') == 'SELL' else '买'} {_lab(o.get('ticker'))} "
                                f"{int(o.get('qty') or 0):,} {escape(str(o.get('unit') or '股'))}"
                                f"（{escape(str(o.get('type') or ''))}{('，' + escape(str(o.get('reason')))) if o.get('reason') else ''}）</li>"
                                for o in od) + "</ul>" if od else "<div class='muted'>没有单</div>")
@@ -542,7 +555,7 @@ def html(tl: dict, state_tag=None) -> str:
             est_t = (f"历史 {est['n']:,} 笔：再持有中位 {est['p50']:g} 天（25〜75%：{est['p25']:g}〜{est['p75']:g} 天）→ {_md(est['date'])} 前后"
                      if est else "—")
             q = h.get("queued")
-            rows.append(f"<tr><td>{escape(h['ticker'])}<br><span class='muted'>{st(h.get('state'))}</span></td>"
+            rows.append(f"<tr><td>{_lab(h['ticker'])}<br><span class='muted'>{st(h.get('state'))}</span></td>"
                         f"<td class='n'>{_px(h['close'])}<br><span class='{'up' if h['ret_pct'] >= 0 else 'down'}'>{h['ret_pct']:+.1f}%</span>"
                         f"<br><span class='muted'>第 {h['hold']} 天</span></td>"
                         f"<td>{('<b>已排定 ' + escape(q['sell_day']) + ' 开盘卖（' + escape(q['reason']) + '）</b><br>') if q else ''}{lv}</td>"
@@ -554,7 +567,7 @@ def html(tl: dict, state_tag=None) -> str:
     else:
         H.append("<div class='muted'>没有个股持仓</div>")
     for b in tl.get("buying") or []:
-        H.append(f"<div class='muted'>{escape(b['ticker'])}（{escape(str(s1))} 开盘买，{st(b.get('state'))}）：买入之后 —— 止损约 {_px(b.get('stop_est'))}"
+        H.append(f"<div class='muted'>{_lab(b['ticker'])}（{escape(str(s1))} 开盘买，{st(b.get('state'))}）：买入之后 —— 止损约 {_px(b.get('stop_est'))}"
                  f"（成交价 × 0.93）、止盈约 {_px(b.get('tp_est'))}（× 1.25）、吊灯 = 持有以来最高价 − 3 × ATR14、跟踪 = 峰值 × 0.88；"
                  f"最迟 {_md(b.get('max_hold_close'))} 收盘满 60 天 → {_md(b.get('max_hold_sell'))} 开盘卖</div>")
     sl = tl.get("slots") or {}
@@ -572,7 +585,7 @@ def html(tl: dict, state_tag=None) -> str:
             vn = c.get("v_need") or c.get("v_min")
             vol = (f"≥ {int(vn):,} 股" + ("<br><span class='muted'>（那天收盘这一周完成：含凑够周线量比所需）</span>" if c.get("v_w2") else "")
                    if vn and c.get("lo") else "—")
-            rows.append(f"<tr><td>{escape(c['ticker'])}<br><span class='muted'>{escape(str(c.get('sector') or ''))}</span>"
+            rows.append(f"<tr><td>{_lab(c['ticker'])}<br><span class='muted'>{escape(str(c.get('sector') or ''))}</span>"
                         f"<br><span class='muted'>{st(c.get('state'))}</span></td>"
                         f"<td class='n'>{_px(c['close'])}</td><td>{band}{('<br><span class=muted>' + escape(why) + '</span>') if why else ''}</td>"
                         f"<td class='n'>{vol}</td><td class='{'neg' if blk else 'muted'}'>{escape(blk) or '—'}</td>"
@@ -584,7 +597,7 @@ def html(tl: dict, state_tag=None) -> str:
     sw = tl.get("sweep") or []
     H.append(f"<h3>④ 横展开：股票池 {tl.get('sweep_n', '—')} 只里，未来 10 个交易日在情景下会出买点的票</h3>")
     if sw:
-        rows = "".join(f"<tr><td>{escape(r['ticker'])}<br><span class='muted'>{st(r.get('state'))}</span></td>"
+        rows = "".join(f"<tr><td>{_lab(r['ticker'])}<br><span class='muted'>{st(r.get('state'))}</span></td>"
                        f"<td>{_scen_txt(r.get('scen'))}</td></tr>" for r in sw[:40])
         H.append("<div class='scroll'><table><tr><th>代码 / 决算形态</th><th>最早出买点（那天收盘）→ 买入日（开盘）</th></tr>" + rows + "</table></div>"
                  + (f"<div class='muted'>只列前 40 只（共 {len(sw)} 只）</div>" if len(sw) > 40 else ""))

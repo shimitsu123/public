@@ -210,5 +210,6 @@ def test_displays_for_market_timed_idle_cash():
     d = {"extras": {"US": {"regime": {"bullbear": bb}}, "JP": {"regime": {"bullbear": bb}}}}
     q1 = DB.stance_html({**d, "idle_cash": {"mode": "Q1"}})
     k3 = DB.stance_html({**d, "idle_cash": {"mode": "K3"}})
-    assert "闲置资金 1545 与基准账户的 1655 择时" in q1 and "基准账户（原规则）的 1655 择时" in k3
+    # 代码带名字（2026-10-15 用户：只写代码不知道是哪只）
+    assert "闲置资金 1545 纳斯达克 100 与基准账户的 1655 S&amp;P500 择时" in q1 and "基准账户（原规则）的 1655 S&amp;P500 择时" in k3
     assert "1545.T" in RU._IC_NAMES() and "US" in RU._ic_markets("Q1")

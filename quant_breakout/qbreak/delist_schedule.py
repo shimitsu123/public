@@ -14,12 +14,15 @@
     把代码给别的公司）
 不自动做的事（CLAUDE.md）：补入的票（臨時入替的替补、ja.wikipedia 名单里多出的）要用户确认后改名单 → 只提醒；
 持仓不自动卖 → 只报警，写明最終売買日与剩余交易日；到了上場廃止日还拿着 → 规则卖不掉，要人工处理（先 HALT）。
+表的结构只有代码、类别、日期；提醒与摘要的文字（needs_user / text / lines）每只写「代码 名字」（2026-10-15 用户：只写代码不知道是哪只；
+名字 = qbreak/names.py 的 JPX 公开数据，已退市、名字表里没有了的票用这次快照里 JPX 页的銘柄名，再没有只写代码）。
 """
 from __future__ import annotations
 
 import datetime as dt
 import json
 
+from . import names as NM
 from . import paths
 from .utils import atomic_write_text, read_json, setup_logging
 
@@ -54,6 +57,34 @@ def _code(t) -> str:
     return str(t).split(".")[0]
 
 
+def _snap_names(snap: dict | None) -> dict:
+    """这次快照里 JPX 页的銘柄名 {代码: 名字}（eligibility 存的；已退市、jpx_names / 上場一覧里没有了的票靠它）。
+    只是显示用：结构不对就当成没有（不能让 build 出错 → applied 不前进、到了上場廃止日的票留在股票池；2026-10-15 复核）。"""
+    out: dict[str, str] = {}
+    try:
+        src = (snap or {}).get("sources") if isinstance(snap, dict) else None
+        for s in (src.values() if isinstance(src, dict) else ()):
+            its = s.get("items") if isinstance(s, dict) else None
+            for it in (its if isinstance(its, list) else ()):
+                if isinstance(it, dict) and it.get("code") and it.get("name"):
+                    out.setdefault(_code(it["code"]), str(it["name"]))
+    except Exception:                                             # noqa: BLE001
+        return {}
+    return out
+
+
+def label(code, extra: dict | None = None, short: bool = False) -> str:
+    """「7203 トヨタ自動車」：qbreak/names.py → extra（这次快照里 JPX 页的銘柄名）→ 只写代码。"""
+    c = _code(code)
+    try:
+        if NM.name(c) or not (extra or {}).get(c):
+            return NM.label(c, short=short)
+        n = str(extra[c])
+        return f"{c} {NM.shorten(n) if short else n}"
+    except Exception:                                             # noqa: BLE001  名字只是显示用：出了意外只写代码
+        return c
+
+
 def trading_days_left(today: dt.date, last_trade: dt.date) -> int:
     """从今天（含，若是交易日）到最終売買日（含）还有几个东证交易日；已过 → 0。"""
     from .calendar_jp import is_trading_day
@@ -73,7 +104,7 @@ def _status(date: str | None, today: str) -> str:
 def build(today: dt.date, snap: dict, pool=(), held=None, core=(), changes=None, prev: dict | None = None) -> dict:
     """今天的时间表。snap = 资格检查快照（eligibility.load / refresh 的结果）；pool = 今天的交易股票池（代码，可带 .T；
     传进来的应是上一次 applied 已去掉之后的池子）；held = {代码: [账户, …]}；core = 核心 ETF；changes = index_changes("JP")；
-    prev = 上一次的表（applied 从它延续）。只有代码、类别、日期（不存公司名、理由原文）。"""
+    prev = 上一次的表（applied 从它延续）。表的行只有代码、类别、日期（不存公司名、理由原文）；needs_user / text 的文字带名字。"""
     from .calendar_jp import prev_trading_day
     held = {_code(k): list(v) for k, v in (held or {}).items()}
     pool_c, core_c = {_code(t) for t in pool}, {_code(t) for t in core}
@@ -115,35 +146,39 @@ def build(today: dt.date, snap: dict, pool=(), held=None, core=(), changes=None,
     order = {K_DELIST: 0, K_DEL: 1, K_ADD: 2, K_SEIRI: 3}
     items.sort(key=lambda r: (r["date"] or "9999-99-99", order[r["kind"]], r["code"]))
     ours = [r for r in items if r["in_pool"] or r["held"] or r["core"] or r["removed"] or r["kind"] in (K_DEL, K_ADD)]
+    nm = _snap_names(snap)
+    lab = lambda c, short=False: label(c, nm, short)                                       # noqa: E731
     needs = []
     for r in ours:
         who = "、".join(r["held"])
         if r["kind"] == K_DELIST and r["held"]:
             if r["date"] > d0:
-                needs.append(f"持仓 {r['code']}（{who}）：{r['date']} 上場廃止（{r['why']}），最終売買日 {r['last_trade']}"
+                needs.append(f"持仓 {lab(r['code'])}（{who}）：{r['date']} 上場廃止（{r['why']}），最終売買日 {r['last_trade']}"
                              f"（剩 {r['days_left']} 个交易日）—— 规则不自动卖；要提前卖先 HALT 再人工处理")
             else:
-                needs.append(f"持仓 {r['code']}（{who}）：已在 {r['date']} 上場廃止 —— 规则卖不掉，需要你人工处理（先 HALT）")
+                needs.append(f"持仓 {lab(r['code'])}（{who}）：已在 {r['date']} 上場廃止 —— 规则卖不掉，需要你人工处理（先 HALT）")
         elif r["kind"] == K_SEIRI and (r["held"] or r["in_pool"] or r["core"]):
-            needs.append(f"{'持仓 ' + r['code'] + '（' + who + '）' if r['held'] else ('核心 ETF ' if r['core'] else '股票池里的 ') + r['code']}："
+            needs.append(f"{'持仓 ' + lab(r['code']) + '（' + who + '）' if r['held'] else ('核心 ETF ' if r['core'] else '股票池里的 ') + lab(r['code'])}："
                          f"JPX 整理銘柄（{r.get('designated') or '—'} 指定），上場廃止日还没公布 —— 等一览登出日期后自动进时间表"
                          + ("；规则不自动卖" if r["held"] else ""))
         elif r["kind"] == K_DELIST and r["core"]:
-            needs.append(f"核心 ETF {r['code']}：{r['date']} 上場廃止（{r['why']}）—— 执行器不下它的买单；持有的要你决定")
+            needs.append(f"核心 ETF {lab(r['code'])}：{r['date']} 上場廃止（{r['why']}）—— 执行器不下它的买单；持有的要你决定")
     recent = [a for a in applied.values() if str(a.get("applied_on") or "") >= lo]
     for a in sorted(recent, key=lambda a: a["date"]):
-        needs.append(f"{a['code']} 已于 {a['date']} 上場廃止、从股票池去掉（{a['why']}）—— 日経225 的补入銘柄要你确认后加进名单"
+        needs.append(f"{lab(a['code'])} 已于 {a['date']} 上場廃止、从股票池去掉（{a['why']}）—— 日経225 的补入銘柄要你确认后加进名单"
                      "（看「下单前资格检查」名单对照的「它有我们没有」）")
     n_pool = [r for r in items if r["kind"] == K_DELIST and r["in_pool"] and r["date"] >= d0]
     n_other = sum(1 for r in items if r["kind"] == K_DELIST and not (r["in_pool"] or r["held"] or r["core"] or r["removed"]))
     idx = [r for r in items if r["kind"] in (K_DEL, K_ADD) and r["date"] >= d0]
-    parts = [f"股票池里 {len(n_pool)} 只有上場廃止预定" + ("（" + "、".join(f"{r['code']} {r['date']}" for r in n_pool) + "；到日自动去掉）"
+    # 摘要一行（日报 / 日志）：一次列好几只 → 短名（名字可以截短，不丢）
+    parts = [f"股票池里 {len(n_pool)} 只有上場廃止预定" + ("（" + "、".join(f"{lab(r['code'], True)} {r['date']}" for r in n_pool) + "；到日自动去掉）"
                                                      if n_pool else "")]
     if idx:
         parts.append("定期入替 " + "、".join(sorted({r["date"] for r in idx})) + " 生效（+"
-                     + "/".join(r["code"] for r in idx if r["kind"] == K_ADD) + " −" + "/".join(r["code"] for r in idx if r["kind"] == K_DEL) + "）")
+                     + " / ".join(lab(r["code"], True) for r in idx if r["kind"] == K_ADD) + " −"
+                     + " / ".join(lab(r["code"], True) for r in idx if r["kind"] == K_DEL) + "）")
     if recent:
-        parts.append("最近 30 天已去掉 " + "、".join(a["code"] for a in recent))
+        parts.append("最近 30 天已去掉 " + "、".join(lab(a["code"], True) for a in recent))
     parts.append(f"JPX 一览另有 {n_other} 只不在股票池")
     stale = not (src.get("jpx_delisted") or {}).get("ok_at")
     return {"as_of": d0, "items": items, "ours": ours, "applied": sorted(applied.values(), key=lambda a: a["date"]),
@@ -173,20 +208,21 @@ def update(today: dt.date, held=None, core=(), fetch=None, fp=None, snap=None) -
 
 
 def lines(d: dict) -> list[str]:
-    """命令行 / 日志用的几行（每个日期带状态）。"""
+    """命令行 / 日志用的几行（每个日期带状态；代码带名字）。"""
     out = [d.get("text") or "股票池更新时间表：—"]
+    lab = label                                                    # 没有快照：names.py（数据目录 out/eligibility.json 的銘柄名也在里面）
     for r in d.get("ours") or []:
         rel = "；".join(x for x in (("股票池" if r.get("in_pool") else ""), ("持仓 " + "、".join(r["held"]) if r.get("held") else ""),
                                    ("核心 ETF" if r.get("core") else ""), ("已从股票池去掉" if r.get("removed") else "")) if x)
         if r["kind"] == K_DELIST:
-            out.append(f"  {r['date']} 上場廃止 {r['code']}（{r['why']}）：最終売買日 {r['last_trade']}，剩 {r['days_left']} 个交易日；"
+            out.append(f"  {r['date']} 上場廃止 {lab(r['code'])}（{r['why']}）：最終売買日 {r['last_trade']}，剩 {r['days_left']} 个交易日；"
                        f"{r['status']}；{rel or '—'}")
         elif r["kind"] == K_SEIRI:
-            out.append(f"  日期未定 整理銘柄 {r['code']}（{r.get('designated') or '—'} 指定）；{rel or '—'}")
+            out.append(f"  日期未定 整理銘柄 {lab(r['code'])}（{r.get('designated') or '—'} 指定）；{rel or '—'}")
         else:
-            out.append(f"  {r['date']} {r['kind']} {r['code']}（{r.get('announced') or '—'} 公布）：{r['status']}；{rel or '—'}")
+            out.append(f"  {r['date']} {r['kind']} {lab(r['code'])}（{r.get('announced') or '—'} 公布）：{r['status']}；{rel or '—'}")
     for a in d.get("applied") or []:
-        out.append(f"  已去掉 {a['code']}：{a['date']} 上場廃止（{a['why']}），{a.get('applied_on')} 起不在股票池")
+        out.append(f"  已去掉 {lab(a['code'])}：{a['date']} 上場廃止（{a['why']}），{a.get('applied_on')} 起不在股票池")
     for n in d.get("needs_user") or []:
         out.append(f"  ★ {n}")
     if d.get("error"):

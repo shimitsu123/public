@@ -142,4 +142,4 @@ def test_live_helpers_and_displays():
     assert "闲置资金" not in body0
     from qbreak import dashboard as DB
     parts = {k for k, _, _ in DB.exposure({"equity_jpy": 1e6, "cash_jpy": 1e5, "core_units": {"133A.T": 100}, "core_last": {"133A.T": 1000.0}})}
-    assert "核心 ETF（133A）" in parts
+    assert "核心 ETF（133A 美元短期国债）" in parts                                          # 代码 + 名字（2026-10-15）

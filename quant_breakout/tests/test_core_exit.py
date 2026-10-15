@@ -38,8 +38,8 @@ def test_nasdaq_etf_shows_distance_confirm_days_and_where_the_money_goes():
     assert full["text"] == "S&P500 连续 5 天收在转熊线下 → 下一个开盘全部卖（寄付成行）" and full["chips"] == []
     assert full["sub"] == "转熊线 6,928 = 250 日均价 7,142 × 0.97（线每天跟着均价动） · 牛市·稳固 · 2025-05-19 起牛市"
     assert after["text"] == "现在转熊的话：留现金"
-    assert after["sub"] == ("股债 63 天相关 +0.40（10/06），2026-03-13 起不是负相关；< 0 才换对冲版美债 1482。"
-                            "之后 S&P500 转回牛市 → 再买回 1545")
+    assert after["sub"] == ("股债 63 天相关 +0.40（10/06），2026-03-13 起不是负相关；< 0 才换 1482 对冲版美国 7〜10 年国债。"
+                            "之后 S&P500 转回牛市 → 再买回 1545 纳斯达克 100")              # 代码 + 名字（2026-10-15）
     assert part["units"] == 1060 and part["text"].endswith("（一只新仓约 ¥255,000：约卖 1,060 口）")   # (25% 权益 − 现金) × 1.03 ÷ ¥248.6 → 10 口一个单元
     assert part["sub"] == "现在新仓倍数 0（风险报告「避险」）：暂时不会"
     assert info["never"] == ("不会因为：它自己跌多少都不卖（核心 ETF 没有止损）；纳斯达克 100 单独跌（看的是 S&P500）；"
@@ -61,9 +61,9 @@ def test_confirming_near_and_negative_correlation_turn_red():
     t = info["tiles"]
     assert (t[0]["label"], t[0]["value"], t[0]["sub"], t[0]["tone"]) == ("已在转熊线下", "1.1%", "S&P500 6,850", "bad")
     assert (t[1]["value"], t[1]["sub"], t[1]["dots"], t[1]["tone"]) == ("2 / 5 天", "再 3 天就转熊", (2, 5), "bad")
-    assert (t[2]["label"], t[2]["value"], t[2]["sub"]) == ("转熊后", "换 1482", "股债相关 −0.21")
-    assert info["hot"] and info["rows"][1]["text"] == "现在转熊的话：换对冲版美债 1482"
-    assert info["rows"][1]["sub"].startswith("股债 63 天相关 −0.21（10/06） < 0：那天还是负相关就换 1482，变成 ≥ 0 就留现金")
+    assert (t[2]["label"], t[2]["value"], t[2]["sub"]) == ("转熊后", "换 1482 对冲美债", "股债相关 −0.21")   # 格子里用短名
+    assert info["hot"] and info["rows"][1]["text"] == "现在转熊的话：换 1482 对冲版美国 7〜10 年国债"
+    assert info["rows"][1]["sub"].startswith("股债 63 天相关 −0.21（10/06） < 0：那天还是负相关就换 1482 对冲美债，变成 ≥ 0 就留现金")
     t0 = CX.build("1545.T", {**SM, "market": {"US": {**BB_US, "to_flip_pct": -2.0, "phase": "bull_near"}}}, BOOK)["tiles"][0]
     assert (t0["value"], t0["tone"], t0["meter"]["hot"]) == ("↓ 2.0%", "bad", True)                       # 离转熊线不到 3%：标红
     ic0 = {**IC_Q1B, "bond_refuge": {"on": None}}                              # 股债相关算不了 → 按不拿 1482
@@ -91,7 +91,7 @@ def test_hedged_treasury_1482_sells_on_us_bull_or_when_correlation_turns():
     assert [(x["label"], x["value"]) for x in info["tiles"]] == [("离转牛线", "↑ 12.7%"), ("已确认", "0 / 5 天"), ("股债相关", "−0.25")]
     assert info["tiles"][2]["sub"] == "63 天；≥ 0 就卖" and info["tiles"][2]["tone"] is None and not info["hot"]
     full, alt = info["rows"][:2]
-    assert full["text"] == "S&P500 连续 5 天收在转牛线上 → 卖它、换回纳斯达克 100（1545）"
+    assert full["text"] == "S&P500 连续 5 天收在转牛线上 → 卖它、换回 1545 纳斯达克 100"
     assert full["sub"] == "转牛线 7,210 = 250 日均价 7,000 × 1.03（线每天跟着均价动） · 熊市·深 · 2026-11-02 起熊市"
     assert (alt["k"], alt["text"]) == ("或", "股债 63 天相关变成 ≥ 0 → 下一个开盘全部卖、留现金")
     assert "S&P500 第 5 天收在线上" in " ".join(info["notes"]) and "从低点起中位数约 98 个交易日才判牛" in " ".join(info["notes"])
@@ -107,7 +107,7 @@ def test_leftover_etf_original_rule_and_missing_readings():
     assert info["tiles"][0]["value"] == "全部卖" and info["rows"][0]["text"].startswith("已经不在现在的闲置资金方式里") and info["hot"]
     info = CX.build("1655.T", {**SM, "idle_cash": {"mode": "K0", "label": IC.LABELS["K0"]}}, book)   # 原规则：1655 + 美股牛熊
     assert [x["value"] for x in info["tiles"]] == ["↓ 11.4%", "0 / 5 天", "留现金"] and "单独跌" not in info["never"]
-    assert info["rows"][1]["sub"] == "之后 S&P500 转回牛市 → 再买回 1655"
+    assert info["rows"][1]["sub"] == "之后 S&P500 转回牛市 → 再买回 1655 S&P500"
     info = CX.build("1545.T", {**SM, "market": {}}, BOOK)                     # 旧的汇总：没有牛熊读数
     assert info["tiles"] == [] and info["rows"][0]["sub"] == "S&P500 的牛熊读数还没有（执行器下一次运行之后显示）"
     (paths.home() / "sim.json").write_text(json.dumps({"idle_cash": {"mode": "Q1B"}}), encoding="utf-8")
@@ -136,7 +136,7 @@ def test_partial_sell_for_new_stock_buys():
     assert _part(one, {"pos": full})["sub"] == "个股已满 4 只：不会为新仓再卖（卖掉一只之后才会）"
     assert _part(one, {"cash_jpy": 300_000.0})["sub"] == "现在现金 ¥300,000 够买一只：不用卖"
     r = _part(one, {"core_plan": {"1545.T": ["SELL", 1060]}, "plan": {"6501.T": [3500.0, 70, "2026-10-06"]}})
-    assert r["sub"] == "规则已排（给要买的个股腾钱：6501）" and r["chips"] == [{"text": "10/07 开盘卖 1,060 口", "tone": "hot"}] and r["fired"]
+    assert r["sub"] == "规则已排（给要买的个股腾钱：6501 日立製作所）" and r["chips"] == [{"text": "10/07 开盘卖 1,060 口", "tone": "hot"}] and r["fired"]
     assert _part({}, sm={"suggest": {}}) is None                                 # 不做个股的账户
     assert _part({}, sm={"suggest": {"position_pct": 0.25, "max_positions": 4}})["sub"] == "新仓倍数在执行器下一次运行之后显示"
 

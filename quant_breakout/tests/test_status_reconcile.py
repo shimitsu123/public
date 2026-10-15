@@ -103,18 +103,18 @@ def test_g7_g17_rejected_manual_buy_is_voided_with_a_warning_and_a_daily_line():
     assert it["status"] == "rejected" and it["void_on"] == bar and "unsent" not in it
     assert it["msg"].startswith(f"{bar} 开盘没下成（立花没受理：") and "只做一次" in it["msg"]
     assert "B.T" not in r.eng.st.pos and not r.ux.manual.m["buys"]
-    ev = [e for e in _ev(r) if e["msg"].startswith("★ 手动买入 B.T 作废")]
+    ev = [e for e in _ev(r) if e["msg"].startswith("★ 手动买入 B 作废")]
     assert len(ev) == 1 and ev[0]["level"] == "warn"
     sm, (_, short, body) = _texts(r)
     assert [x["id"] for x in voided_today(sm)] == [rec["id"]] and "｜★ 手动买入作废 1 条" in short
     ls = body.splitlines()
-    i_man = next(i for i, x in enumerate(ls) if x.startswith("- 手动 买入 B.T"))
+    i_man = next(i for i, x in enumerate(ls) if x.startswith("- 手动 买入 B"))
     i_pos = next(i for i, x in enumerate(ls) if x.startswith("- 持仓："))
     assert i_man < i_pos                                       # 手动指令的结果在持仓说明之前（600 字截断）
     r.day()
     sm, (_, short, _b) = _texts(r)
     assert not voided_today(sm) and "手动买入作废" not in short   # 第二天不再算
-    assert len([e for e in _ev(r) if e["msg"].startswith("★ 手动买入 B.T 作废")]) == 1
+    assert len([e for e in _ev(r) if e["msg"].startswith("★ 手动买入 B 作废")]) == 1
 
 
 def _wd_book(it: dict, **o_kw):
@@ -159,9 +159,9 @@ def test_g8_allin_buy_given_up_after_the_open_ends_the_same_day_with_a_warning()
     r.ux.open_phase()                                          # 09:05：开盘后补单放弃 B.T
     it = r.item("M-all-buy")
     assert xo.status == "SKIPPED" and it["status"] == "rejected" and it["void_on"] == d
-    assert it["msg"].startswith("「全部换成 B.T」卖单已发出，B.T 没买（测试：不下）：钱留现金，闲置资金 ETF 仍停买")
+    assert it["msg"].startswith("「全部换成 B」卖单已发出，B 没买（测试：不下）：钱留现金，闲置资金 ETF 仍停买")
     assert "B.T" not in r.ux.manual.m["buys"]
-    ev = [e for e in _ev(r) if e["msg"].startswith("★ 「全部换成 B.T」卖单")]
+    ev = [e for e in _ev(r) if e["msg"].startswith("★ 「全部换成 B」卖单")]
     assert len(ev) == 1 and ev[0]["level"] == "warn"
     sm = r.ux.summary()
     assert [x["id"] for x in voided_today(sm)] == ["M-all-buy"]
@@ -170,7 +170,7 @@ def test_g8_allin_buy_given_up_after_the_open_ends_the_same_day_with_a_warning()
     r.now["t"] = r.at(k)
     r.ux.morning([k])
     r.k += 1
-    assert len([e for e in _ev(r) if e["msg"].startswith("★ 「全部换成 B.T」卖单")]) == 1
+    assert len([e for e in _ev(r) if e["msg"].startswith("★ 「全部换成 B」卖单")]) == 1
     sm, (_, short, _b) = _texts(r)
     assert not voided_today(sm) and "B.T" not in r.eng.st.pos and r.ux.manual.core_pct == 0.0
 
@@ -184,8 +184,8 @@ def test_g8_allin_buy_missed_because_the_open_phase_did_not_run():
     it = r.item("M-all-buy")
     bar = str(r.eng.gidx[r.k - 1].date())
     assert it["status"] == "rejected" and it["void_on"] == bar
-    assert it["msg"].startswith("「全部换成 B.T」卖单已成交，B.T 没买（开盘后补单没有运行") and "钱留现金，闲置资金 ETF 仍停买" in it["msg"]
-    assert any(e["level"] == "warn" and e["msg"].startswith("★ 「全部换成 B.T」卖单已成交") for e in _ev(r))
+    assert it["msg"].startswith("「全部换成 B」卖单已成交，B 没买（开盘后补单没有运行") and "钱留现金，闲置资金 ETF 仍停买" in it["msg"]
+    assert any(e["level"] == "warn" and e["msg"].startswith("★ 「全部换成 B」卖单已成交") for e in _ev(r))
     sm, (_, short, _b) = _texts(r)
     assert "｜★ 手动买入作废 1 条" in short
 
@@ -206,7 +206,7 @@ def test_g8_paper_allin_buy_given_up_at_the_open_says_sold():
     _morning(r)                                                # 开盘撮合（卖单成交）→ 开盘后放弃 B.T → 当天结束
     it = r.ux.book["manual"]["items"]["M-all-buy"]
     assert it["status"] == "rejected" and it["void_on"] == r.eng.st.last_date
-    assert it["msg"].startswith("「全部换成 B.T」卖单已成交，B.T 没买（测试：不下）")
+    assert it["msg"].startswith("「全部换成 B」卖单已成交，B 没买（测试：不下）")
     sm = r.ux.summary()
     assert [x["id"] for x in voided_today(sm)] == ["M-all-buy"]
 
@@ -224,7 +224,7 @@ def test_g11_resolved_zero_is_treated_as_not_filled():
     it = r.item(rec["id"])
     bar = str(r.eng.gidx[16].date())
     assert it["status"] == "placed" and "不明" not in it["msg"] and r.eng.st.pending_exit.get("A.T") == "manual"
-    assert any(e["msg"] == "SELL A.T 状态不明的单登记为没成交 → 仍是待卖，今天再下" for e in _ev(r))
+    assert any(e["msg"] == "卖 A 状态不明的单登记为没成交 → 仍是待卖，今天再下" for e in _ev(r))
     hist = [x for h in r.ux.book["history"] for x in h["orders"] if x["cid"] == o.cid]
     assert hist and hist[0]["status"] == "RESOLVED"
     assert r.ux.book["unsold"]["A.T"]["why"] == "状态不明的单登记为没成交"
@@ -360,12 +360,12 @@ def test_g26_unsold_rule_sell_shows_in_the_daily_and_flags_two_days():
     sm, (_, short, body) = _texts(r)
     u = unsold_today(sm)["A.T"]
     assert u["n"] == 1 and not unsold_long(sm) and "没卖掉" not in short
-    assert "- ★ 卖 A.T 没卖掉（" in body and "→ 仍是待卖，今天再下" in body and "连续" not in body
+    assert "- ★ 卖 A 没卖掉（" in body and "→ 仍是待卖，今天再下" in body and "连续" not in body
     since = u["since"]
     r.day()                                                    # 第 17 根又没卖掉
     sm, (_, short, body) = _texts(r)
     assert unsold_today(sm)["A.T"]["n"] == 2 and unsold_long(sm) == ["A.T"]
-    assert "｜★ A.T 连续 2 天没卖掉" in short
+    assert "｜★ A 连续 2 天没卖掉" in short
     assert f"（连续 2 天没卖掉，{since[5:].replace('-', '/')} 起）" in body
     r.day()                                                    # 第 18 根卖掉 → 记录去掉
     sm, (_, short, body) = _texts(r)

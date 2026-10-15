@@ -20,6 +20,7 @@ from html import escape
 
 import pandas as pd
 
+from . import names as NM
 from . import paths
 
 TREND = {"up": "上涨中", "strong": "偏强", "weak": "偏弱", "down": "下跌中", "na": "数据不够"}
@@ -49,7 +50,8 @@ def _px(v) -> str:
 
 
 def _lookup() -> tuple[dict, dict, dict]:
-    """(代码 → 公司名, 代码 → 东证 33 业种, 代码 → 主题中文名)：数据目录里没有就用仓库里的快照（Mac 的数据目录不同步这两个文件）。"""
+    """(代码 → 公司名, 代码 → 东证 33 业种, 代码 → 主题中文名)：数据目录里没有就用仓库里的快照（Mac 的数据目录以前不同步这两个文件）。
+    名字交给 qbreak/names.py（2026-10-15：唯一入口，同样的兜底顺序 + ETF 名字表）；业种 / 主题仍在这里。"""
     def load(name: str, key: str) -> dict:
         for base in (paths.home(), paths.PROJECT_ROOT / "var"):
             fp = base / name
@@ -61,12 +63,23 @@ def _lookup() -> tuple[dict, dict, dict]:
         return {}
     from .themes import THEMES, members
     th = {c: THEMES[k][0] for c, k in members().items()}
-    return load("jpx_names.json", "names"), load("industry_s33.json", "s33"), th
+    return NM.names_map(), load("industry_s33.json", "s33"), th
 
 
 def names() -> dict:
-    """代码 → 公司名（JPX 上場一覧的名称快照；操作面板的「建议的股票」也用）。"""
-    return _lookup()[0]
+    """代码 → 公司名（不带 .T 的代码查；JPX 名称快照 + ETF 名字表，qbreak/names.py；操作面板的「建议的股票」也用）。"""
+    return NM.names_map()
+
+
+def label(r: dict, core: bool | None = None) -> str:
+    """一行持仓的「代码 名字」：「6758 ソニーグループ」「1545 纳斯达克 100」（代码在前、不带 .T；2026-10-15 用户：只写代码不知道是哪只）。
+    核心 ETF（core；不给 = 行里有 units）先用 qbreak/names.py 的表（以前的汇总里存的是「纳斯达克 100（1545）」），
+    个股先用行里存的名字；都没有 → 只写代码。"""
+    t = str(r.get("ticker") or "")
+    nm = NM.name(t) if (("units" in r) if core is None else core) else None
+    nm = nm or str(r.get("name") or "").split("（")[0].strip() or NM.name(t)
+    c = NM.code(t)
+    return f"{c} {nm}" if nm and nm not in (t, c) else c
 
 
 def _row_before(df: pd.DataFrame, day) -> tuple[pd.Timestamp | None, pd.Series | None]:
@@ -233,11 +246,10 @@ def build(ind: dict, positions: dict, p, *, bar_date=None, pending: dict | None 
         except Exception as e:                                # noqa: BLE001  展示用：一只算不出不影响别的
             row["error"] = f"{type(e).__name__}: {e}"[:160]
         out["holdings"].append(row)
-    from .idle_cash import NAMES as IC_NAMES
     for t, u in sorted((core_units or {}).items()):
         if not int(u or 0):
             continue
-        row = {"ticker": t, "name": IC_NAMES.get(t, t), "units": int(u),
+        row = {"ticker": t, "name": NM.name(t), "units": int(u),          # 只放名字（2026-10-15；以前是「纳斯达克 100（1545）」）
                "why": _core_why(t, ic or {}, bullbear_us or {})}
         df = ind.get(t)
         if df is not None and len(df):
@@ -287,7 +299,7 @@ def lines(hv: dict | None) -> list[str]:
     """日志 / 通知 / 云端日报的文字版（每只票两行：为什么持有、现在趋势）。"""
     out = []
     for r in (hv or {}).get("holdings") or []:
-        head = f"{r['ticker']}{(' ' + r['name']) if r.get('name') else ''}"
+        head = label(r, core=False)                           # 「6758 ソニーグループ」（2026-10-15：以前「6758.T ソニーグループ」）
         if r.get("error"):
             out.append(f"- {head}：{r['error']}")
             continue
@@ -297,7 +309,9 @@ def lines(hv: dict | None) -> list[str]:
         out.append(f"- {head} 现在：{TREND.get(tr.get('label'), '—')}（{trend_text(tr) or '—'}）")
     for r in (hv or {}).get("core") or []:
         tr = r.get("trend") or {}
-        out.append(f"- {r['name']} {r['units']:,} 口 为什么持有：{r['why']}；现在：{TREND.get(tr.get('label'), '—')}"
+        h = label(r, core=True)                               # 名字和口数之间隔「：」（名字可能以数字结尾：「1545 纳斯达克 100：4,110 口」；2026-10-15 复核）
+        sep = "：" if h != NM.code(r.get("ticker")) else " "
+        out.append(f"- {h}{sep}{r['units']:,} 口 为什么持有：{r['why']}；现在：{TREND.get(tr.get('label'), '—')}"
                    + (f"（{trend_text(tr)}）" if trend_text(tr) else ""))
     return out
 
@@ -312,7 +326,8 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
     if not hs and not cs:
         H.append("<div class='muted'>没有持仓</div>")
     for r in hs:
-        head = (f"<b>{escape(r['ticker'])}</b>{(' ' + escape(r['name'])) if r.get('name') else ''}"
+        c, hl = NM.code(r["ticker"]), label(r, core=False)
+        head = (f"<b>{escape(c)}</b>{escape(hl[len(c):])}"          # 「<b>6758</b> ソニーグループ」（2026-10-15：代码不带 .T）
                 f" <span class='muted'>{r.get('shares', 0):,} 股"
                 + (f" · 约占权益 {r['pct_equity']:.1f}%" if r.get("pct_equity") is not None else "")
                 + (f" · {escape(r['s33'])}" if r.get("s33") else "") + (f" · 主题 {escape(r['theme'])}" if r.get("theme") else "")
@@ -338,7 +353,7 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
         tr = r.get("trend") or {}
         lab = tr.get("label") or "na"
         cls = {"up": "up", "strong": "up", "weak": "down", "down": "down"}.get(lab, "muted")
-        H.append(f"<div class='hv'><b>{escape(r['name'])}</b> <span class='muted'>{r['units']:,} 口"
+        H.append(f"<div class='hv'><b>{escape(label(r, core=True))}</b> <span class='muted'>{r['units']:,} 口"
                  + (f" · 约占权益 {r['pct_equity']:.1f}%" if r.get("pct_equity") is not None else "") + " · 核心 ETF</span>"
                  f"<div><b>为什么持有</b>：{escape(r['why'])}</div>"
                  + (f"<div><b>现在</b>：<b class='{cls}'>{escape(TREND.get(lab, '—'))}</b> <span class='muted'>{escape(trend_text(tr))}</span></div>"
@@ -349,4 +364,4 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
 
 CSS = ".hv{border-top:1px solid var(--line);padding:8px 0}.hv:first-of-type{border-top:0}.hv ul{margin:4px 0 4px;padding-left:18px}"
 
-__all__ = ["build", "why_items", "trend", "trend_text", "why_line", "lines", "html", "names", "TREND", "TREND_NOTE", "EXIT_TEXT", "CSS"]
+__all__ = ["build", "why_items", "trend", "trend_text", "why_line", "lines", "html", "names", "label", "TREND", "TREND_NOTE", "EXIT_TEXT", "CSS"]

@@ -10,6 +10,7 @@ import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
+from qbreak import names as NM
 from qbreak import paths
 from qbreak.brokers.base import BrokerError
 from qbreak.brokers.tachibana import (Credentials, FakeTransport, TachibanaBroker,
@@ -435,7 +436,7 @@ def test_buy_checks_the_tachibana_issue_master_once_a_day_at_the_master_url():
 
 
 @pytest.mark.parametrize("stk,mkt,kisei,qty,why", [
-    ([], None, "", 100, "マスタに 7203 がない"),
+    ([], None, "", 100, "マスタに 7203 トヨタ自動車 がない"),                                   # 代码 + 名字（2026-10-15）
     ([{"sIssueCode": "7203", "sYusenSizyou": "02", "sBaibaiTani": "100", "sBaibaiTeisiC": " "}], None, "", 100, "優先市場が東証ではない"),
     ([{"sIssueCode": "7203", "sYusenSizyou": "00", "sBaibaiTani": "100", "sBaibaiTeisiC": "9"}], None, "", 100, "売買停止中"),
     (None, [{"sIssueCode": "7203", "sZyouzyouSizyou": "00", "sIssueKubunC": " ", "sZyouzyouKubun": "03",
@@ -476,7 +477,8 @@ def test_probe_tradable_check_uses_the_master_for_pool_core_and_lot():
     stk2 = [dict(r, sBaibaiTani="1") if r["sIssueCode"] == "1655" else r for r in stk if r["sIssueCode"] != pool[0]]
     b2, _ = _broker(responses=_master(stk2, mkt))
     out = run._tachibana_tradable_check(b2)
-    assert f"{pool[0]}.T 立花の株式銘柄マスタに" in out and "1655.T 売買単位 1 ≠ 我们以为的一手 10" in out
+    lab = NM.label(pool[0] + ".T")                                   # 「1332 ニッスイ」：代码带名字、只写一次（2026-10-15）
+    assert f"立花の株式銘柄マスタに {lab} がない" in out and out.count(lab) == 1 and "1655 S&P500 売買単位 1 ≠ 我们以为的一手 10" in out
 
 
 # ────────── T5：口座课税区分不是特定口座就不发 ──────────

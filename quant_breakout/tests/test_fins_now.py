@@ -41,6 +41,6 @@ def test_digest_counts_only_recent_revisions():
     master = pd.DataFrame({"Code": ["12340", "56780"], "CoName": ["甲", "乙"], "S33Nm": ["電気機器", "銀行業"], "ScaleCat": ["TOPIX Mid400", "-"]})
     T = FN.build(_fins(), master)
     s = FN.digest(T, 30, 5, pd.Timestamp("2026-09-27"))
-    assert "上修 1、下修 0" in s and "1234.T 甲 +20.0% 2026-09-20 電気機器" in s
+    assert "上修 1、下修 0" in s and "1234 甲 +20.0% 2026-09-20 電気機器" in s
     s2 = FN.digest(T, 3, 5, pd.Timestamp("2026-09-27"))
     assert "上修 0、下修 0" in s2

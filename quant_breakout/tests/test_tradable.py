@@ -19,7 +19,7 @@ def test_segment_reason_explains_each_kind():
     assert TR.segment_reason("7203", "プライム（内国株式）") is None and TR.segment_reason("1545", "ETF・ETN") is None
     assert "买不了" in TR.segment_reason("1234", "スタンダード（外国株式）") and "买不了" in TR.segment_reason("9999", "PRO Market")
     assert "不是本系统在立花买的种类" in TR.segment_reason("8951", "REIT・ベンチャーファンド・カントリーファンド・インフラファンド")
-    assert "里没有 4062" in TR.segment_reason("4062", None, "2026-08-31")
+    assert "里没有 4062 イビデン" in TR.segment_reason("4062", None, "2026-08-31")             # 代码 + 名字（2026-10-15）
     assert {"1545", "1482"} <= set(TR.CORE_VERIFIED) and set(TR.CORE_VERIFIED.values()) == {"ETF・ETN"}
 
 
@@ -39,7 +39,7 @@ def test_merge_master_takes_only_tse_rows():
 
 
 def test_broker_reason_blocks_every_case_tachibana_cannot_buy():
-    assert "マスタに 7203 がない" in TR.broker_reason("7203", None, TODAY)
+    assert "マスタに 7203 トヨタ自動車 がない" in TR.broker_reason("7203", None, TODAY)
     assert "優先市場" in TR.broker_reason("7203", _info(pref="02"), TODAY)
     assert "売買停止" in TR.broker_reason("7203", _info(halt="9"), TODAY)
     assert TR.broker_reason("7203", _info(halt="0"), TODAY) is None                         # 0 = 解除

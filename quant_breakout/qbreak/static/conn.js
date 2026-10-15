@@ -15,7 +15,7 @@ import { req } from './net.js';
 const PING_MS = 5000, IDLE_MS = 30000, BUSY_MS = 10000, BACKOFF = [3, 5, 10, 20, 30], STALE_MS = 10 * 60000;
 const st0 = CFG.st || {};
 const S = {up: true, fails: 0, timer: 0, tick: 0, next: 0, last: 0, flight: null, want: null, downAt: 0, downWhy: '', downKind: '',
-           sig: st0.sig || null, busy: +(st0.busy !== undefined ? st0.busy : st0.pending) || 0, hiddenAt: 0,
+           sig: st0.sig || null, busy: +(st0.busy !== undefined ? st0.busy : st0.pending) || 0, pending: +st0.pending || 0, hiddenAt: 0,
            cached: !!document.querySelector('meta[name="qb-cache"]')};
 function busyNow(){ return S.busy > 0; }
 function age(){ const g = +CFG.gen; return g > 0 ? Date.now() - g : 0; }
@@ -112,15 +112,15 @@ function onUp(x, why){
   if(back){ beacon('reconnect', S.downWhy + '，' + Math.round((Date.now() - S.downAt) / 1000) + ' 秒后连上'); S.downAt = 0;
             try{ window.dispatchEvent(new Event('qb-reconnect')); }catch(e){} }   // quotes.js 等：马上再取
   if(x.auth){ want('auth', why === 'reload' || why === 'button'); return; }   // 这台设备没被认出来：重新载入（会到登录 / 配对页；对话框开着 → 等关掉）
-  const j = x.j, was = S.busy;
-  S.busy = +(j.busy !== undefined ? j.busy : j.pending) || 0;
+  const j = x.j, was = S.busy, wasP = S.pending;
+  S.busy = +(j.busy !== undefined ? j.busy : j.pending) || 0; S.pending = +j.pending || 0;
   let r = S.want;
   if(!r && S.cached) r = 'cache';                                         // 打开的是存着的旧页面 → 连上了换成新的
   if(!r && j.v && CFG.v && j.v !== CFG.v) r = 'ver';                      // 面板换了新代码（页面的脚本是旧的）
-  if(!r && S.sig && j.sig !== S.sig){
-    if(was > 0 || S.busy > 0) r = 'sig';                                  // 在处理的指令状态变了（以前每 10 秒问一次的那个）
-    else S.dirty = true;                                                  // 别的变化：下次切回来时再刷新（不打断正在看的页面）
-  }
+  if(!r && S.sig && j.sig !== S.sig){                                     // 在处理的指令 / 「交易」里还会做事的单与指令（pending）状态变了 → 刷新
+    if(was > 0 || S.busy > 0 || wasP > 0 || S.pending > 0) r = 'sig';     // （对话框开着 / 正在输入时等关掉）。2026-10-15 复核：busy 只数一会儿就会变的之后，
+    else S.dirty = true;                                                  // 晚上写的卖出在 07:40 下了单、昨天的单早上对账结束，页面开着也不刷新 → pending 也算；
+  }                                                                       // 别的变化（都没有还会做事的）：下次切回来时再刷新（不打断正在看的页面）
   if(!r && (why === 'resume' || why === 'online') && (age() > STALE_MS || S.dirty)) r = 'old';
   if(r) want(r, why === 'reload' || why === 'button'); else if(!S.want) hide();
 }

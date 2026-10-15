@@ -55,14 +55,19 @@ def test_build_rows_statuses_relations_applied_and_text():
     assert dates == sorted(dates) and d["items"][-1]["kind"] == "整理銘柄"                             # 日期未定排最后
     assert {r["code"] for r in d["ours"]} == {"8035", "7203", "1655", "543A", "4902", "7004", "5016", "6525", "9697"} and d["n_other"] == 1
     n = d["needs_user"]
-    assert n[0].startswith("持仓 7203（执行器（模拟账户））：已在 2026-09-29 上場廃止") and "先 HALT" in n[0]
-    assert n[1].startswith("持仓 8035（模拟盘）：2026-10-19 上場廃止（TOB・MBO・株式併合），最終売買日 2026-10-16（剩 12 个交易日）") and "不自动卖" in n[1]
-    assert n[2].startswith("核心 ETF 1655：JPX 整理銘柄（2026-09-25 指定）")
-    assert n[3].startswith("7203 已于 2026-09-29 上場廃止、从股票池去掉") and "补入銘柄要你确认" in n[3] and len(n) == 4
-    assert d["text"] == ("股票池更新时间表：股票池里 1 只有上場廃止预定（8035 2026-10-19；到日自动去掉）；定期入替 2026-10-01 生效"
-                         "（+5016/6525/9697 −4902/543A/7004）；最近 30 天已去掉 7203；JPX 一览另有 1 只不在股票池")
+    # 要你确认的提醒写「代码 名字」（2026-10-15 用户：只写代码不知道是哪只；名字 = qbreak/names.py 的 JPX 公开名称）
+    assert n[0].startswith("持仓 7203 トヨタ自動車（执行器（模拟账户））：已在 2026-09-29 上場廃止") and "先 HALT" in n[0]
+    assert n[1].startswith("持仓 8035 東京エレクトロン（模拟盘）：2026-10-19 上場廃止（TOB・MBO・株式併合），最終売買日 2026-10-16（剩 12 个交易日）") \
+        and "不自动卖" in n[1]
+    assert n[2].startswith("核心 ETF 1655 S&P500：JPX 整理銘柄（2026-09-25 指定）")
+    assert n[3].startswith("7203 トヨタ自動車 已于 2026-09-29 上場廃止、从股票池去掉") and "补入銘柄要你确认" in n[3] and len(n) == 4
+    # 一行的汇总：短名（全角半角化、长名截短加「…」），入替两边用「 / 」隔开
+    assert d["text"] == ("股票池更新时间表：股票池里 1 只有上場廃止预定（8035 東京エレクトロン 2026-10-19；到日自动去掉）；定期入替 2026-10-01 生效"
+                         "（+5016 JX金属 / 6525 KOKUSAI E… / 9697 カプコン −4902 コニカミノルタ / 543A ARCHION / 7004 カナデビア）；"
+                         "最近 30 天已去掉 7203 トヨタ自動車；JPX 一览另有 1 只不在股票池")
     assert not d["stale"] and "上場廃止" not in json.dumps(d["applied"]).replace("上場廃止", "") or True
-    assert all(k not in json.dumps(d, ensure_ascii=False) for k in ("公開買付", "トヨタ"))                # 不存理由原文 / 公司名
+    assert "公開買付" not in json.dumps(d, ensure_ascii=False)                                          # 不存理由原文
+    assert "トヨタ" not in json.dumps({k: d[k] for k in ("items", "ours", "applied")}, ensure_ascii=False)   # 表本身只放代码（名字只在文字里）
     e = DS.build(TODAY, {"sources": {}}, POOL, {}, [], [])
     assert e["stale"] and e["items"] == [] and e["text"].startswith("股票池更新时间表：★ JPX 上場廃止一览从没取到")
 
@@ -83,6 +88,28 @@ def test_update_applies_removal_keeps_it_prunes_and_survives_fetch_failure(monke
     d4 = DS.update(dt.date(2027, 11, 11), held={}, core=[])
     assert d4["error"].startswith("ZeroDivisionError") and d4["as_of"] == "2027-11-10" and "error" not in DS.load()
     assert any("这次没更新" in ln for ln in DS.lines(d4))
+
+
+def test_broken_name_sources_never_stop_the_removal(monkeypatch):
+    """名字只是显示用（2026-10-15 复核）：名字来源坏了 / 名字表整个出错、快照里别的 JPX 页结构不对 → 文字只写代码，
+    applied 照常前进（到了上場廃止日的票照样从股票池去掉；以前 build 抛出 → update 留着旧表、applied 不前进）。"""
+    from qbreak import names as NM
+    (paths.home() / "out").mkdir(parents=True, exist_ok=True)
+    (paths.home() / "out" / "eligibility.json").write_text(json.dumps({"sources": [1]}), encoding="utf-8")
+    snap = _snap(delisted=[D("7203", "2026-09-29")])
+    snap["sources"]["jpx_list"] = {"items": 5}                                                       # 不读它的行，但 _snap_names 会看
+    monkeypatch.setattr(EL, "refresh_today", lambda fetch=None: snap)
+    d = DS.update(TODAY, held={"7203": ["模拟盘"]}, core=[])
+    assert "error" not in d and d["applied"][0]["code"] == "7203" and d["needs_user"][0].startswith("持仓 7203 トヨタ自動車（模拟盘）")
+
+    def boom():
+        raise RuntimeError("测试：名字表坏了")
+    monkeypatch.setattr(NM, "_table", boom)
+    DS.path().unlink()
+    d = DS.update(TODAY, held={"7203": ["模拟盘"]}, core=[])
+    assert "error" not in d and d["applied"][0]["code"] == "7203" and DS.applied_codes(TODAY) == {"7203"}
+    assert d["needs_user"][0].startswith("持仓 7203（模拟盘）：已在 2026-09-29 上場廃止")                  # 只写代码
+    assert any("7203" in ln for ln in DS.lines(d))
 
 
 def test_gate_ignores_delisted_code_in_wikipedia_diff_and_gate_for_reads_the_schedule():
@@ -110,13 +137,14 @@ def test_report_block_missing_items_journal_and_calendar():
     from qbreak.live_unified import daily_text
     from qbreak.unified import UState
     _, short, body = daily_text({"decided_on": "2026-09-29", "fill_day": "2026-09-30", "orders": [], "delist": d}, UState(cash_jpy=1e6), None, True, 1e6)
-    assert "★ 退市时间表要看" in short and "- ★ 持仓 8035（模拟盘）" in body
+    assert "★ 退市时间表要看" in short and "- ★ 持仓 8035 東京エレクトロン（模拟盘）" in body
     quiet = DS.build(TODAY, _snap(), POOL, {}, [], [])
     _, short2, body2 = daily_text({"decided_on": "2026-09-29", "orders": [], "delist": quiet}, UState(cash_jpy=1e6), None, True, 1e6)
     assert "退市时间表" not in short2 and "- 股票池更新时间表：股票池里 0 只有上場廃止预定" in body2
     from qbreak import check_calendar as CK
     it = [x for x in CK.items(TODAY, events=[], changes=[], delist=d["items"]) if x["what"].startswith("上場廃止")]
-    assert [(x["date"], x["what"][:15]) for x in it] == [("2026-10-16", "上場廃止 8035：最終売買日"), ("2026-10-19", "上場廃止 8035：上場廃止日")]
+    assert [(x["date"], x["what"][:24]) for x in it] == [("2026-10-16", "上場廃止 8035 東京エレクトロン：最終売買日"),
+                                                         ("2026-10-19", "上場廃止 8035 東京エレクトロン：上場廃止日")]   # 代码 + 名字（2026-10-15）
     assert "持仓 模拟盘" in it[0]["what"] and not any("5484" in x["what"] for x in it)                  # 不在股票池 / 持仓的不进日历
     assert not any(x["what"].startswith("上場廃止") for x in CK.items(TODAY, events=[], changes=[]))    # 没有文件：不列
     DS.path().write_text(json.dumps({"items": d["items"], "applied": []}), encoding="utf-8")
@@ -135,7 +163,7 @@ def test_cmd_delist_schedule_and_engine_hook(monkeypatch, capsys):
     (paths.out_dir() / EL.FILE).write_text(json.dumps(snap), encoding="utf-8")
     rc = run.cmd_delist_schedule(argparse.Namespace(offline=True))
     out = capsys.readouterr().out
-    assert rc == 1 and "8035" in out and "已去掉 7203" in out and "交易股票池 224 只（这次去掉 7203.T）" in out and DS.path().exists()
+    assert rc == 1 and "8035" in out and "已去掉 7203" in out and "交易股票池 224 只（这次去掉 7203 トヨタ自動車）" in out and DS.path().exists()
     (paths.state_dir() / "live_unified_paper.json").write_text(
         json.dumps({"state": {"pos": {"8035.T": {}}, "core_units": {"1655.T": 2}}}), encoding="utf-8")
     st = UState(cash_jpy=1e6)
@@ -145,6 +173,6 @@ def test_cmd_delist_schedule_and_engine_hook(monkeypatch, capsys):
     assert hc == {"8035": ["执行器（模拟账户）"], "1655": ["执行器（模拟账户）"], "9984": ["这次的账户"]}
     d = run._delist_update(today, st, None)
     assert {r["code"]: r["held"] for r in d["items"]}["8035"] == ["执行器（模拟账户）"]
-    assert any(n.startswith("持仓 8035（执行器（模拟账户））") for n in d["needs_user"])
+    assert any(n.startswith("持仓 8035 東京エレクトロン（执行器（模拟账户））") for n in d["needs_user"])
     monkeypatch.setattr(EL, "refresh_today", lambda fetch=None: 1 / 0)
     assert run._delist_update(today, st, None)["error"] and "7203.T" not in nikkei225()               # 失败：旧表照常生效

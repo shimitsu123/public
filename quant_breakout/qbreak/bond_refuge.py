@@ -158,11 +158,13 @@ def text(pl: dict | None) -> str:
         return "股债相关判定算不了 → 美股熊时现金"
     c = f"{pl['corr']:+.2f}" if pl.get("corr") is not None else "—"
     cond = f"股债 {pl.get('win', WIN)} 天相关 {c}（到 {pl.get('corr_date')}，{'< 0 → 可拿' if pl.get('on') else '≥ 0 → 不拿'}，{pl.get('since')} 起）"
+    from .names import label
+    b = label(BOND_T, short=True)                       # 「1482 对冲美债」：代码带名字（2026-10-15 用户：只写代码不知道是哪只）
     if pl.get("us_bear") is None:
-        head = "美股牛熊不知道 → 不拿 1482"
+        head = f"美股牛熊不知道 → 不拿 {b}"
     elif pl.get("us_bear"):
-        head = "美股熊 + 股债负相关 → 闲置资金拿对冲版美债 1482" if pl.get("on") else "美股熊 + 股债不是负相关 → 现金"
+        head = f"美股熊 + 股债负相关 → 闲置资金拿 {b}" if pl.get("on") else "美股熊 + 股债不是负相关 → 现金"
     else:
-        head = "美股牛 → 不拿 1482（美股熊时才看）"
+        head = f"美股牛 → 不拿 {b}（美股熊时才看）"
     lag = f"；国债收益率到 {pl.get('bond_date')}" if pl.get("bond_date") else ""
     return f"{head}：{cond}{lag}"

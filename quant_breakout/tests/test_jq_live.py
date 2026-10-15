@@ -107,7 +107,9 @@ def test_derive_and_text(isolated_home):
     assert d["lots"] == [{"code": "7203", "close": 3000.0, "lot_jpy": 300000.0}] and d["splits"] == [{"code": "8306", "factor": 0.5}]
     assert d["foreign"]["balance"] == 123456.0
     t = JL.as_text(d)
-    assert "10 个营业日内决算：股票池 1 只" in t and "空売り残高報告：1 只（8306）" in t and "7203 营业利润 +10.0%" in t
+    from qbreak import names as NM                                             # 代码带名字（2026-10-15 起；JPX 公开名单，短名）
+    assert "10 个营业日内决算：股票池 1 只" in t and f"空売り残高報告：1 只（{NM.label('8306', short=True)}）" in t
+    assert f"{NM.label('7203', short=True)} 营业利润 +10.0%" in t and NM.name("8306")         # 仓库的 JPX 快照里有名字
     json.dumps(d, ensure_ascii=False, default=float)
 
 

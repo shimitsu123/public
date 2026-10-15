@@ -37,9 +37,9 @@ def label_target(k: str) -> str:
 
 
 def build_links(study: dict, X3: pd.DataFrame, names: dict[str, str] | None = None, source: str = "") -> dict:
-    """energy_study.json（D1 / D2）+ 当时可知的 3 个月同比历史 → var/energy_links.json 的内容。"""
-    from . import jpx_list as JX
-    names = names or {}
+    """energy_study.json（D1 / D2）+ 当时可知的 3 个月同比历史 → var/energy_links.json 的内容。
+    names：{代码: 名字}；不给（None）→ qbreak/names.py（JPX 公开名单 + ETF 名字表；2026-10-15 起，以前不给就只剩代码）。"""
+    from . import jpx_list as JX                  # JX.label(t, None) = names.label；给了 dict 照旧只查它
     links: dict[str, list] = {}
     for r in study.get("D1") or []:
         if r.get("both"):
@@ -301,11 +301,12 @@ def forward_status(fp: Path) -> dict:
 def rebuild_links(out: Path | None = None) -> Path:
     """（一次性）从研究结果 var/out/energy_study.json + 全部历史数据（qbreak/energy_demand.load_all）重建 var/energy_links.json。"""
     import json
-    from . import jpx_list as JX
+    from . import names as NM
     study = json.loads((paths.out_dir() / "energy_study.json").read_text(encoding="utf-8"))
     months = pd.date_range("2006-10-31", "2026-08-31", freq="ME")
     X3 = E.signals(E.load_all(), months, windows=(W,))[W]
-    doc = build_links(study, X3, JX.names(), source=f"scripts/energy_study.py（登记 c8b697b，结果 0be6e76；代码 {study.get('code', '')}）")
+    # 名字 = names.names_map()（JPX 公开名单 + ETF / 指数名；2026-10-15 起，与日报同一份；不用 J-Quants 的 CoName —— 这个文件入库）
+    doc = build_links(study, X3, NM.names_map(), source=f"scripts/energy_study.py（登记 c8b697b，结果 0be6e76；代码 {study.get('code', '')}）")
     fp = Path(out or paths.home() / LINKS_FILE)
     fp.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
     return fp

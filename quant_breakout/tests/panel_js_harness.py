@@ -32,7 +32,7 @@ async function advance(ms){
   H_NOW = end; await flush();
 }
 function timers(){ return H_T.length; }
-const NET = {mode: 'up', page: null, sig: 'S0', busy: 0, v: 'V1', calls: 0, pages: 0, beacons: []};   // page：页面本身（null = 跟 mode）
+const NET = {mode: 'up', page: null, sig: 'S0', busy: 0, pending: null, v: 'V1', calls: 0, pages: 0, beacons: []};   // page：页面本身（null = 跟 mode）；pending null = 同 busy
 const H_HDR = {get: () => null};
 globalThis.fetch = (url, opt) => new Promise((res, rej) => {
   url = String(url);
@@ -47,7 +47,7 @@ globalThis.fetch = (url, opt) => new Promise((res, rej) => {
   }
   NET.calls++;
   const m = NET.mode;
-  if (m === 'up') return res({ok: true, status: 200, headers: H_HDR, json: async () => ({ok: true, sig: NET.sig, busy: NET.busy, pending: NET.busy, v: NET.v, boot: 'b1'})});
+  if (m === 'up') return res({ok: true, status: 200, headers: H_HDR, json: async () => ({ok: true, sig: NET.sig, busy: NET.busy, pending: NET.pending == null ? NET.busy : NET.pending, v: NET.v, boot: 'b1'})});
   if (m === '401') return res({ok: false, status: 401, headers: H_HDR, json: async () => ({ok: false})});
   if (m === '502') return res({ok: false, status: 502, headers: H_HDR, json: async () => { throw new SyntaxError('html'); }});
   if (m === '500') return res({ok: false, status: 500, headers: H_HDR, json: async () => ({ok: false, msg: '内部错误'})});   // 面板自己出错

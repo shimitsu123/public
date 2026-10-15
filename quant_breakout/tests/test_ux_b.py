@@ -188,7 +188,7 @@ def test_early_live_compare_is_expected_until_the_first_match():
     book = {}
     r = compare_with_sim(live, sim, live=True, book=book)
     assert r["comparable"] and r["same"] is False and r["early"] is True and not compare_bad(r)
-    assert r["text"].startswith(EARLY_TEXT) and "7203.T" in r["text"] and "1545.T 实盘第一笔明天开盘才成交" in r["text"]
+    assert r["text"].startswith(EARLY_TEXT) and "7203 トヨタ自動車" in r["text"] and "1545 纳斯达克 100 实盘第一笔明天开盘才成交" in r["text"]
     record_compare(book, r)
     assert book["compare_history"][-1]["early"] is True
     _, short, body = daily_text({"decided_on": "2026-11-02", "orders": []}, live, r, False, 300_000)
@@ -262,9 +262,9 @@ def test_daily_text_raises_data_problems_with_the_fix():
           "data_problem": data_problem(["连不上 Yahoo（query1.finance.yahoo.com）：这次用的是本机的行情缓存"]),
           "lag_exits": {"7203.T": "2026-10-08"}}
     _, short, body = daily_text(sm, st, None, False, 1_000_000)
-    assert "｜★ 判断层的输入 1 天没更新" in short and "｜★ 行情有问题（看修法）" in short and "7203.T 的离场判断今天跳过" in short
+    assert "｜★ 判断层的输入 1 天没更新" in short and "｜★ 行情有问题（看修法）" in short and "7203 トヨタ自動車 的离场判断今天跳过" in short
     assert "- ★ 行情：连不上 Yahoo" in body and "升级 yfinance" in body and "pip install -U yfinance" in body
-    assert "- ★ 7203.T 今天的离场判断被跳过（行情只到 2026-10-08）" in body
+    assert "- ★ 7203 トヨタ自動車 今天的离场判断被跳过（行情只到 2026-10-08）" in body     # 代码 + 名字（2026-10-15）
     assert data_problem([]) is None and data_problem(None) is None and lag_exit_lines({}) == []
     assert "mac_setup.sh --upgrade-yfinance" in YF_FIX
 
@@ -280,9 +280,9 @@ def test_panel_and_page_show_the_data_reminders():
     (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps(sm), encoding="utf-8")
     html = P.render("paper", "t" * 40, MON_0800.replace(hour=20))
     assert "★ 判断层的输入 1 天没更新：TBF" in html and "★ 行情：日本行情只到 2026-10-08" in html
-    assert "升级 yfinance" in html and "7203.T 今天的离场判断被跳过" in html and "card warn" in html
+    assert "升级 yfinance" in html and "7203 トヨタ自動車 今天的离场判断被跳过" in html and "card warn" in html
     page = DP.render("paper", 1_000_000)
-    assert "判断层的输入 1 天没更新" in page and "修法：" in page and "7203.T 今天的离场判断被跳过" in page
+    assert "判断层的输入 1 天没更新" in page and "修法：" in page and "7203 トヨタ自動車 今天的离场判断被跳过" in page
     sm["decided_on"] = "2026-10-08"                                                # 旧的汇总：不显示
     (paths.out_dir() / "live_unified_paper.json").write_text(json.dumps(sm), encoding="utf-8")
     assert "判断层的输入 1 天没更新" not in P.render("paper", "t" * 40, MON_0800.replace(hour=20))

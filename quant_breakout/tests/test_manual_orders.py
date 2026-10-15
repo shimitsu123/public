@@ -54,7 +54,7 @@ def test_check_against_the_book():
             "manual": {"items": {"M20261006-080000-sell-7203": {"status": "done", "kind": "sell"}}, "blocks": {}}}
     n = MO.normalize
     assert MO.check(n({"kind": "sell", "ticker": "7203"}), book) is None
-    assert "没有 6758.T" in MO.check(n({"kind": "sell", "ticker": "6758"}), book)
+    assert "没有 6758 ソニーグループ" in MO.check(n({"kind": "sell", "ticker": "6758"}), book)   # 代码带名字（2026-10-15）
     assert "只能减不能加" in MO.check(n({"kind": "trim", "ticker": "7203", "pct": 30}), book)   # 现在 30%
     assert MO.check(n({"kind": "trim", "ticker": "7203", "pct": 10}), book) is None
     assert "没有「不自动买回」" in MO.check(n({"kind": "unblock", "ticker": "7203"}), book)
@@ -315,6 +315,27 @@ def test_cancel_too_late_when_already_filled():
     assert it["status"] == "done" and "撤回来不及" in it["msg"] and "A.T" not in r.eng.st.pos
 
 
+def test_cancel_of_a_finished_instruction_says_what_it_was():
+    """撤回的那条已经处理完（例：执行器先读到、已成交）：拒绝的说明也写撤的是什么（只写 id 看不出是哪只；2026-10-15 复核）。"""
+    r = _Run([1000.0] * 30, entry=(10,), bear_all=True)
+    r.until(14)
+    b = _sell_req(r)
+    r.day()
+    r.day()
+    assert r.item(b["id"])["status"] == "done"
+    rec = {"kind": "cancel", "target": b["id"], "source": "test", "id": "M-cx-late", "at": r.at(r.k - 1, 6).isoformat()}
+    with open(MO.requests_path(TAG), "a", encoding="utf-8") as f:              # 写的时候还没完成（check 放行）、执行器读到时已经完成
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    rec2 = {**rec, "target": "M20990101-000000-sell-9999", "id": "M-cx-none"}
+    with open(MO.requests_path(TAG), "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec2, ensure_ascii=False) + "\n")
+    r.day()
+    it = r.item("M-cx-late")
+    assert it["status"] == "rejected" and it["msg"] == f"{b['id']}（{MO.describe(r.item(b['id']))}）不是还没完成的指令，撤不了"
+    assert "卖出" in it["msg"] and "A" in it["msg"].split("（", 1)[1]
+    assert r.item("M-cx-none")["msg"] == "M20990101-000000-sell-9999 不是还没完成的指令，撤不了"   # 找不到那条：只写 id
+
+
 def test_paper_account_trim_then_sell_keeps_broker_in_sync():
     """模拟账户（PaperBroker，第二天早上按 K 线开盘撮合）走同一条路：减仓 → 卖出全部，每天的持仓核对都通过。"""
     from qbreak.live_unified import _MemPaper
@@ -387,4 +408,4 @@ def test_summary_keeps_what_describe_needs_for_corefix_lines():
                     "status": "done", "done_on": "2026-10-15"}}
     ux = SimpleNamespace(m={"items": items, "blocks": {}, "trims": {}, "adds": {}, "buys": {}}, core_pct=100.0, halt_backlog=None)
     out = "\n".join(MO.lines(MO.Manual.summary(ux), today="2026-10-15"))
-    assert "固定 1482.T 678 口" in out and "1545.T 恢复按规则" in out and " 0 口" not in out
+    assert "固定 1482 对冲版美国 7〜10 年国债：678 口" in out and "1545 纳斯达克 100 恢复按规则" in out and " 0 口" not in out

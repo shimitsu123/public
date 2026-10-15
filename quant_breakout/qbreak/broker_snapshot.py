@@ -158,21 +158,30 @@ def refresh(broker, tag: str, ledger_book: dict | None, managed: set | None = No
 
 
 def fills_lines(snap: dict) -> list[str]:
-    """今天的成交（通知 / 命令行）：一笔一行。"""
+    """今天的成交（通知 / 命令行）：一笔一行 ——「・卖 7203 トヨタ自動車 成交 100/100 股 @ ¥3,001.0」「・卖 1545 纳斯达克 100：4,110 口：还没成交」
+    （代码 + 名字；2026-10-15 用户：只写代码不知道是哪只；名字后面紧跟数量时隔「：」—— 名字可能以数字结尾，names.qty）。"""
+    from .names import label, qty
     out = []
     for f in snap.get("fills") or []:
         unit = "口" if f.get("kind") == "core" else "股"
         side = "买" if f.get("side") == "BUY" else "卖"
+        lab = label(f.get("ticker")) if f.get("ticker") else ""
+        n = f"{f.get('qty'):,} {unit}"
+        nq = qty(f.get("ticker"), n) if f.get("ticker") else n
         if f.get("error"):
-            out.append(f"・{side} {f.get('ticker')} {f.get('qty'):,} {unit}：读不了约定（{f['error']}）→ 去立花网站看")
+            out.append(f"・{side} {nq}：读不了约定（{f['error']}）→ 去立花网站看")
         elif int(f.get("filled_qty") or 0) > 0:
-            out.append(f"・{side} {f.get('ticker')} 成交 {int(f['filled_qty']):,}/{f.get('qty'):,} {unit} @ ¥{float(f['avg_px']):,.1f}"
+            out.append(f"・{side} {lab} 成交 {int(f['filled_qty']):,}/{f.get('qty'):,} {unit} @ ¥{float(f['avg_px']):,.1f}"
                        + (f"（{f['status']}）" if f.get("status") else ""))
         else:
-            out.append(f"・{side} {f.get('ticker')} {f.get('qty'):,} {unit}：还没成交" + (f"（{f['status']}）" if f.get("status") else ""))
+            out.append(f"・{side} {nq}：还没成交" + (f"（{f['status']}）" if f.get("status") else ""))
     return out
 
 
 def diff_lines(snap: dict) -> list[str]:
+    """账本 vs 立花不一致的几行：「・7203 トヨタ自動車：账本 100 股 / 立花 200 股（差 +100）」（ETF 是口；2026-10-15）。"""
+    from .names import ETF_NAMES, label
     bad = [r for r in snap.get("compare") or [] if r.get("diff")]
-    return [f"・{r['ticker']}：账本 {r['ledger']:,} / 立花 {r['broker']:,}（差 {r['diff']:+,}）" for r in bad]
+    u = lambda t: "口" if t in ETF_NAMES else "股"                         # noqa: E731
+    return [f"・{label(r['ticker'])}：账本 {r['ledger']:,} {u(r['ticker'])} / 立花 {r['broker']:,} {u(r['ticker'])}（差 {r['diff']:+,}）"
+            for r in bad]

@@ -57,10 +57,10 @@ def test_prune_blocks_by_bar_not_clock():
     m = MO.Manual(_dict_book({"A.T": _blk(), "B.T": _blk(bid="M-b", lift_from="2026-10-14"), "C.T": _blk(None, "M-c")}), TAG)
     assert m.prune_blocks(None) == [] and m.prune_blocks("2026-10-09") == [] and set(m.m["blocks"]) == {"A.T", "B.T", "C.T"}
     ev = m.prune_blocks("2026-10-13")                                         # 下一根 K 线在 10/14 成交 → 解除生效
-    assert ev == [("info", "B.T 的不自动买回已解除（10/14 07:40 的决策起）：之后出买入信号规则可能买")] and "B.T" not in m.m["blocks"]
+    assert ev == [("info", "B 的不自动买回已解除（10/14 07:40 的决策起）：之后出买入信号规则可能买")]   # 文字写 label（假代码没名字：只写代码） and "B.T" not in m.m["blocks"]
     assert m.prune_blocks("2026-10-20") == [] and "A.T" in m.m["blocks"]       # until 那根还挡：不去掉
     ev = m.prune_blocks("2026-10-21")
-    assert ev == [("info", "A.T 的不自动买回到期（到 2026-10-20）：之后出买入信号规则可能买回")] and set(m.m["blocks"]) == {"C.T"}
+    assert ev == [("info", "A 的不自动买回到期（到 2026-10-20）：之后出买入信号规则可能买回")] and set(m.m["blocks"]) == {"C.T"}
 
 
 def test_ingest_records_lift_from_not_pop_and_refuses_duplicates_and_stale_ids():
@@ -96,7 +96,7 @@ def test_executor_unblock_waits_for_next_decision_then_prunes():
     assert r.ux.manual.block_reason("A.T", r.eng.gidx[k - 1]) is not None or "A.T" not in r.ux.book["manual"]["blocks"]
     r.day()
     assert "A.T" not in r.ux.book["manual"]["blocks"]
-    assert any("A.T 的不自动买回已解除" in str(e.get("msg")) for e in r.ux.book.get("events") or [])
+    assert any("A 的不自动买回已解除" in str(e.get("msg")) for e in r.ux.book.get("events") or [])
 
 
 # ────────── ③ 写之前的检查：重复 / 过时 / 撤回 ──────────
@@ -150,7 +150,7 @@ def test_panel_batch_submit_skips_stale_and_refuses_when_none_match():
     ok, msg, _ = panel.submit({"book": "paper", "kind": "unblock", "tickers": ["7203.T:M-old"]}, AT)
     assert not ok and "换成别的设定" in msg and not _reqs("unblock")
     ok, msg, _ = panel.submit({"book": "paper", "kind": "unblock", "tickers": ["6758.T:M-x-b", "7203.T:M-old", "6758.T:M-x-b"]}, AT)
-    assert ok and "解除 6758.T 的不自动买回（不会买回，也不马上买；指令" in msg and "没写：7203.T 的不自动买回已经换成别的设定" in msg
+    assert ok and "解除 6758 ソニーグループ 的不自动买回（不会买回，也不马上买；指令" in msg and "没写：7203 トヨタ自動車 的不自动买回已经换成别的设定" in msg
     assert msg.endswith("→ 下一次决策（交易日 07:40）起生效")
     assert [(r["ticker"], r.get("block_id")) for r in _reqs("unblock")] == [("6758.T", "M-x-b")]
     ok, msg, _ = panel.submit({"book": "paper", "kind": "unblock", "tickers": ["6758.T:M-x-b"]}, AT)
@@ -162,7 +162,7 @@ def test_panel_single_unblock_message_and_block_id():
     _sm()
     ok, msg, rec = panel.submit({"book": "paper", "kind": "unblock", "ticker": "7203", "block_id": "M20261005-060000-sell-7203"}, AT)
     assert ok and rec["block_id"] == "M20261005-060000-sell-7203"
-    assert msg == f"已写：解除 7203.T 的不自动买回（不会买回，也不马上买；指令 {rec['id']}）→ 下一次决策（交易日 07:40）起生效"
+    assert msg == f"已写：解除 7203 トヨタ自動車 的不自动买回（不会买回，也不马上买；指令 {rec['id']}）→ 下一次决策（交易日 07:40）起生效"
     ok, msg, _ = panel.submit({"book": "paper", "kind": "unblock", "ticker": "7203"}, AT)
     assert not ok and "已经在解除" in msg
 
@@ -186,9 +186,9 @@ def test_panel_blocks_card_confirm_and_waiting_rows():
     i = html.index("data-act='unblock-batch'")
     btn = html[i:html.index(">恢复按规则<", i)]
     assert "data-ids='7203.T:M-x-a,6758.T:M-x-b'" in btn or "data-ids='6758.T:M-x-b,7203.T:M-x-a'" in btn
-    for s in ("只解除「全部换成 6501", "（6758、7203）。", "不会把它们买回来，也不会马上买。", "下一次决策（交易日 07:40）起生效，规则重新判断",
+    for s in ("只解除「全部换成 6501", "（6758 ソニーグループ、7203 トヨタ自動車）。", "不会把它们买回来，也不会马上买。", "下一次决策（交易日 07:40）起生效，规则重新判断",
               "MACD 金叉", "已经判断过的信号不会再用", "现在空 ", "账本现金 ¥", "决算前",
-              "闲置资金 ETF 仍停买（0%，要另外点「确认买入」）", "这批取消的固定口数不会恢复", "还没成交的卖出（6758）不会撤"):
+              "闲置资金 ETF 仍停买（0%，要另外点「确认买入」）", "这批取消的固定口数不会恢复", "还没成交的卖出（6758 ソニーグループ）不会撤"):
         assert s in btn, s
     assert "data-act='unblock' data-t='8306.T' data-id='M-y'" in html and "不会把它买回来" in html
     assert "只解除这一批（不买回、也不马上买）；闲置资金 ETF 不跟着恢复（仍停买）" in html
@@ -219,7 +219,7 @@ def test_suggest_and_auto_buy_card_for_manual_block():
     h = panel._auto_buy_card({"asof": "2026-10-05", "rows": [row]}, book, "paper", 1_000_000)
     assert "6501" in h and "10/07 解除后" in h                                # 估计 10/08 金叉 > 到期 10/07：还列
     assert "6501" not in panel._auto_buy_card({"asof": "2026-10-05", "rows": [row2]}, book, "paper", 1_000_000)
-    assert MO.check(MO.normalize({"kind": "buy", "ticker": "6501"}), book, "paper", sm={"suggest": {"rows": [row]}}).startswith("6501.T 不能买")
+    assert MO.check(MO.normalize({"kind": "buy", "ticker": "6501"}), book, "paper", sm={"suggest": {"rows": [row]}}).startswith("6501 日立製作所 不能买")
     MO.append("paper", {"kind": "unblock", "ticker": "6501"}, clock=lambda: AT)
     why = MO.check(MO.normalize({"kind": "buy", "ticker": "6501"}), book, "paper", sm={"suggest": {"rows": [row]}})
     assert "不能买" not in str(why)                                           # 在解除：上一次决策的结果不再挡手动买入
@@ -252,4 +252,4 @@ def test_cli_list_and_unblock_note(capsys):
     assert run.main(["manual", "unblock", "7203", "--broker", "paper"]) == 2
     run.main(["manual", "list", "--broker", "paper"])
     out = capsys.readouterr().out
-    assert "解除不买回 7203.T → 等执行器读" in out and "→ 等下单" not in out          # 解除不是单（2026-10-13）
+    assert "解除不买回 7203 トヨタ自動車 → 等执行器读" in out and "→ 等下单" not in out          # 解除不是单（2026-10-13）

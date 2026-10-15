@@ -1,16 +1,18 @@
 """money_view.py — 账本的「钱」一栏（〔77〕C：UX-10 / T7 / UX-09 / UX-17；面板（Mac + 手机）与 Mac 账本页共用；只读、只展示）。
 
   summary(tag, book)   → 总权益、当日 / 累计损益（入金不算赚、出金不算亏）、迷你权益曲线、年内已实现损益与预计代扣、最近成交、日志最新一节
-  core_name(t, sm)     → 核心 ETF 的名字（执行器汇总 holding_view 里的；没有 → 已知的几只；再没有 → 代码）
+  core_name(t, sm)     → 核心 ETF 的名字（旧格式「名字（代码）」；执行器汇总 holding_view 里的；没有 → names.ETF_NAMES；再没有 → 代码）
 数字都来自执行器自己的文件（账本、汇总、日志），不连券商。税只是估算（特定口座、源泉徴収あり），以立花的取引報告書为准。
 """
 from __future__ import annotations
 
 from . import paths
+from .names import ETF_NAMES
 from .utils import read_json
 
-CORE_NAMES = {"1545.T": "纳斯达克 100（1545）", "1482.T": "美国 7〜10 年国债・对冲（1482）", "2845.T": "纳斯达克 100・对冲（2845）",
-              "1655.T": "S&P500（1655）", "1329.T": "日経225（1329）"}
+# 旧格式「名字（代码）」（过渡期：desktop_page / news 还在用；新代码用 qbreak/names.py 的 label →「1545 纳斯达克 100」）。
+# 名字从 names.ETF_NAMES 派生（2026-10-15：以前这里和 idle_cash.NAMES 各写一份、1482 / 2845 写法不一样）；键（哪几只）不变：news.py 按它取行情
+CORE_NAMES = {t: f"{ETF_NAMES[t]}（{t.split('.')[0]}）" for t in ("1545.T", "1482.T", "2845.T", "1655.T", "1329.T")}
 
 
 def sim_capital(default: float = 1_000_000.0) -> float:
@@ -23,10 +25,15 @@ def sim_capital(default: float = 1_000_000.0) -> float:
 
 
 def core_name(t: str, sm: dict | None = None) -> str:
+    """旧格式「纳斯达克 100（1545）」（过渡期保留；新代码用 names.label）。执行器汇总里的名字 2026-10-15 起只放名字 → 补上「（代码）」。"""
     for r in ((sm or {}).get("holding_view") or {}).get("core") or []:
-        if str(r.get("ticker")) == t and r.get("name"):
-            return str(r["name"])
-    return CORE_NAMES.get(t, t)
+        if str(r.get("ticker")) == t and r.get("name") and str(r["name"]) != t:
+            n = str(r["name"])
+            return n if "（" in n else f"{n}（{t.split('.')[0]}）"
+    if t in CORE_NAMES:
+        return CORE_NAMES[t]
+    n = ETF_NAMES.get(t)
+    return f"{n}（{t.split('.')[0]}）" if n else t
 
 
 def recent_fills(book: dict | None, n: int = 10) -> list[dict]:

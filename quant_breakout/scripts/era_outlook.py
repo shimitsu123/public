@@ -96,9 +96,9 @@ def main() -> int:
     RT = theme_returns_jq(A)
     th = m12_rank(RT)
     sm = stock_m12(A)
-    jn = json.loads((paths.home() / "jpx_names.json").read_text(encoding="utf-8"))                # JPX 公开的名称快照（不用 J-Quants 的原始数据）
-    jn = jn.get("names", jn)
-    name = {f"{c}.T": (v.get("name", "") if isinstance(v, dict) else str(v)) for c, v in jn.items()}
+    # JPX 公开的名称（不用 J-Quants 的原始数据）；2026-10-15 起经 qbreak/names.py：以前只读数据目录的 jpx_names.json，Mac 上没有 → 报错
+    from qbreak import names as NM
+    name = {f"{c}.T": v for c, v in NM.names_map().items()}
     s33 = json.loads((paths.home() / "industry_s33.json").read_text(encoding="utf-8"))["s33"]       # JPX 的 33 业种
     sec = {f"{c}.T": dot(v) for c, v in s33.items()}
     pool = set(universe("JP", "broad"))

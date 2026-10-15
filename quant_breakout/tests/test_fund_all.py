@@ -42,10 +42,12 @@ def test_submit_all_writes_sells_corefix_core_then_buy():
     assert rs[5]["clear"] is True and rs[5]["ticker"] == "1545.T" and rs[5]["prev_units"] == 100
     assert rs[6]["pct"] == 0 and "ticker" not in rs[6] and rs[6]["prev_pct"] == 100.0
     assert all(r["fund_for"] == "6501.T" for r in rs[1:]) and all(r["at"] == rec["at"] for r in rs)
-    assert "执行时拿着的 6501.T 以外的个股和 ETF 全部卖出（包括写指令之后规则 / 别的指令买进的）；现在拿着的：6758.T 100 股、7203.T 100 股、8306.T 100 股、9432.T 100 股" in msg
-    assert "取消固定口数：1545.T（1545.T 100 → 0 口：之后按比例 0% 卖出）" in msg and "闲置资金比例 100% → 0%（1545.T 100 → 0 口；之后停买" in msg
+    assert ("执行时拿着的 6501 日立製作所 以外的个股和 ETF 全部卖出（包括写指令之后规则 / 别的指令买进的）；现在拿着的：6758 ソニーグループ：100 股、"
+            "7203 トヨタ自動車：100 股、8306 三菱ＵＦＪフィナンシャル・グループ：100 股、9432 ＮＴＴ：100 股") in msg   # 名字和数量之间隔「：」（2026-10-15 复核）
+    assert "取消固定口数：1545 纳斯达克 100（之后按比例 0% 卖出）" in msg                  # ETF 的口数变化只写一次（在比例那句；2026-10-15 复核）
+    assert "闲置资金比例 100% → 0%（1545 纳斯达克 100：100 → 0 口；之后停买" in msg and msg.count("100 → 0 口") == 1
     assert "全卖也不够 1 个单元就不买、留现金" in msg and "之后 20 个交易日规则不自动买回；「交易」里可一次「恢复按规则」" in msg
-    assert msg.startswith("已写：全部换成 6501.T → 10/07 开盘整批先卖后买")                 # 10/06 08:00、今天的决策已做 → 下一个交易日
+    assert msg.startswith("已写：全部换成 6501 日立製作所 → 10/07 开盘整批先卖后买")       # 10/06 08:00、今天的决策已做 → 下一个交易日
     assert len(MO.fund_companions(rec, rs)) == 6
 
 
@@ -66,7 +68,30 @@ def test_submit_all_skips_core_when_pct_already_zero():
     _book4(core_pct=0.0)
     _sm()
     ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}}, AT)
-    assert ok and not _reqs("core") and "闲置资金比例已经是 0%：1545.T 100 → 0 口（照旧卖出）" in msg
+    assert ok and not _reqs("core") and "闲置资金比例已经是 0%：1545 纳斯达克 100：100 → 0 口（照旧卖出）" in msg
+
+
+def test_submit_all_message_when_other_stocks_are_already_being_sold():
+    """2026-10-15 复核：别的个股都已经有卖出全部的指令 / 在卖出全部时，以前写「现在拿着的：（没有别的个股）」；ETF 的口数变化在
+    「取消固定口数（…）」和「闲置资金比例（…）」里各写一遍，没固定的 1545 也写在「取消固定口数」下面。"""
+    b = _book4(core_pct=80.0, core_fix={"1482.T": 300})
+    del b["state"]["pos"]["9432.T"]                                          # 3 只个股（名额还有）
+    b["state"]["pending_exit"] = {"8306.T": "manual"}                       # 已在卖出全部
+    b["state"]["core_units"] = {"1545.T": 100, "1482.T": 300}
+    b["state"]["core_last"] = {"1545.T": 250.0, "1482.T": 900.0}
+    b["manual"]["items"] = {f"M-{t}": {"id": f"M-{t}", "kind": "sell", "ticker": t, "status": "pending", "at": "2026-10-05T20:00:00+09:00"}
+                            for t in ("7203.T", "6758.T")}                  # 已有卖出全部的指令
+    (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
+    _sm()
+    ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}}, AT)
+    assert ok and rec["fund"] == "all", msg
+    assert [r["kind"] for r in _reqs()] == ["buy", "corefix", "core"]       # 个股不另外写
+    assert "（没有别的个股）" not in msg and "现在拿着的：" not in msg
+    assert "别的个股都已经在卖、不另外写：6758 ソニーグループ（已有卖出全部的指令）、7203 トヨタ自動車（已有卖出全部的指令）、8306 三菱ＵＦＪフィナンシャル・グループ（已在卖出全部" in msg
+    assert "取消固定口数：1482 对冲版美国 7〜10 年国债（之后按比例 0% 卖出）" in msg       # 只写固定的那只
+    assert "闲置资金比例 80% → 0%（1482 对冲版美国 7〜10 年国债：300 → 0 口、1545 纳斯达克 100：100 → 0 口；之后停买" in msg
+    assert msg.count("300 → 0 口") == 1 and msg.count("100 → 0 口") == 1     # ETF 的口数变化只写一次
+    assert "指令 M" in msg and rec["id"] in msg                              # 指令 id 原样
 
 
 def test_fund_all_writes_exiting_and_blocks_on_unfinished_instruction():
@@ -76,7 +101,7 @@ def test_fund_all_writes_exiting_and_blocks_on_unfinished_instruction():
     (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
     _sm()
     plan = MO.fund_all(b, "paper", "6501.T")
-    assert plan["blocked"].startswith("6758.T 有没处理完的指令（M-trim）")
+    assert plan["blocked"].startswith("6758 ソニーグループ 有没处理完的指令（M-trim）")   # 代码带名字（2026-10-15）
     ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}}, AT)
     assert not ok and "先撤回它" in msg
     b["manual"]["items"] = {}
@@ -332,14 +357,14 @@ def test_submit_message_says_when_the_batch_runs():
     _sm()
     ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}},
                               AT.replace(hour=10))                             # 盘中：下一个交易日
-    assert ok and msg.startswith("已写：全部换成 6501.T → 10/07 开盘整批先卖后买") and "马上（盘中）买入" not in msg
+    assert ok and msg.startswith("已写：全部换成 6501 日立製作所 → 10/07 开盘整批先卖后买") and "马上（盘中）买入" not in msg
     MO.requests_path("paper").unlink()                                        # 上一条买入还在等 → 清掉再写
     b = _book4()
     b["state"]["last_date"] = "2026-10-02"                                    # 今天 08:00、今天的决策还没做 → 今天开盘
     (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
     ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501", "unit": "shares", "value": 300, "fund": {"mode": "all"}}, AT)
-    assert ok and msg.startswith("已写：全部换成 6501.T → 今天 09:00 开盘整批先卖后买")
-    assert MO.describe({"kind": "buy", "ticker": "6501.T", "unit": "shares", "value": 300, "fund": "all"}) == "全部换成这只 6501.T（其他全卖；股数由执行器按全卖之后的钱定）"
+    assert ok and msg.startswith("已写：全部换成 6501 日立製作所 → 今天 09:00 开盘整批先卖后买")
+    assert MO.describe({"kind": "buy", "ticker": "6501.T", "unit": "shares", "value": 300, "fund": "all"}) == "全部换成这只 6501 日立製作所（其他全卖；股数由执行器按全卖之后的钱定）"
 
 
 def test_add_room_and_manual_sizing_exclude_cash_hold():
@@ -439,7 +464,7 @@ def test_pending_batch_core_not_mistaken_for_rule_core_sell_at_exchange():
     html = panel.render("paper", "t" * 40, AT.replace(hour=20, minute=5))
     i = html.index(f"data-id='{buy['id']}'")
     assert "data-act='cancel'" in html[html.rindex("<button", 0, i):i]
-    assert "随「全部换成 6501.T」一起（撤回买入那条）" in html                     # 同批的单条不给撤单按钮
+    assert "随「全部换成 6501 日立製作所」一起（撤回买入那条）" in html                     # 同批的单条不给撤单按钮
 
 
 def test_second_allin_and_core_change_refused_while_batch_waits():
@@ -576,7 +601,7 @@ def test_panel_batch_unblock_button_and_submit():
     assert html.count("data-act='unblock' data-t=") == 3                        # 单只的「解除」照旧
     assert "a==='unblock-batch'" in panel._JS
     ok, msg, _ = panel.submit({"book": "paper", "kind": "unblock", "ticker": "6758.T", "tickers": ["6758.T", "7203.T"]}, AT)
-    assert ok and "恢复按规则 → 解除 6758.T、7203.T" in msg and msg.endswith("→ 下一次决策（交易日 07:40）起生效")
+    assert ok and "恢复按规则 → 解除 6758 ソニーグループ、7203 トヨタ自動車" in msg and msg.endswith("→ 下一次决策（交易日 07:40）起生效")
     assert [r["ticker"] for r in _reqs("unblock")] == ["6758.T", "7203.T"] and len({r["at"] for r in _reqs("unblock")}) == 1
     man = MO.Manual(b, "paper")
     man.ingest()                                                               # 读到不马上去掉：记下从哪一次决策起不挡（2026-10-13）

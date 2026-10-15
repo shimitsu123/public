@@ -2,6 +2,9 @@
 
 数据来自 var/state/unified_state.json（推进器状态）与 var/out/unified_today.json（今天的操作与市场状态）。
 写 var/out/report.html（例行任务发布到同一个 Artifact）与 var/out/report_data.json。
+代码一律写「代码 名字」（2026-10-15 用户：只写代码不知道是哪只）：名字只取 qbreak/names.py（JPX 公开的銘柄名 + 自己写的 ETF 中文名，
+可以入库；不用 J-Quants 的 CoName）；report_data.json 里的 ticker 字段、前向记录 CSV、影子账户的决策 JSON 都不动，名字只在生成文字时加；
+整页最后再过一次 names.annotate 兜底（别的模块给的文字、旧数据里的「7203.T」）。
 """
 from __future__ import annotations
 
@@ -10,11 +13,39 @@ import json
 from html import escape
 from pathlib import Path
 
+from . import names as NM
 from . import paths
 from .calendar_jp import now_jst
 from .fees import BROKERS, broker_of
 from .unified import config_from_sim
 from .utils import read_json
+
+
+def _lab(t, nm: dict | None = None, name: str | None = None, short: bool = False) -> str:
+    """「7203.T」/「7203」→「7203 トヨタ自動車」、「1545.T」→「1545 纳斯达克 100」、「^N225」→「^N225 日経平均」（qbreak/names.py）；
+    name（这一行自己带的 JPX 銘柄名）/ nm（{代码: 名字}：旧调用与测试传进来的）给了先用它；查不到名字只写代码；不是代码的字照原样。"""
+    c = NM.code(t)
+    n = name or (nm or {}).get(c)
+    if n:
+        n = NM.shorten(n) if short else str(n)
+        return c if n == c else f"{c} {n}"
+    return NM.label(t, short=short)
+
+
+def _labs(ts, nm: dict | None = None, sep: str = "、") -> str:
+    return sep.join(_lab(t, nm) for t in ts or [])
+
+
+def _bold_lab(t) -> str:
+    """HTML：代码加粗、名字不加粗（「<b>7203</b> トヨタ自動車」；查不到名字只有代码）。"""
+    n = NM.name(t)
+    return f"<b>{escape(NM.code(t))}</b>" + (f" {escape(n)}" if n else "")
+
+
+def _unit(t) -> str:
+    """数量单位：ETF「口」、个股「股」（2026-10-15 顺手修：影子账户的 1655.T 以前写成「130 股」）。"""
+    s = str(t or "")
+    return "口" if (NM.code(s) + ".T") in NM.ETF_NAMES or s.startswith(("1655", "1329", "2558")) else "股"
 
 
 def _us_open_jst(d: dt.date) -> str:
@@ -106,7 +137,7 @@ def build_unified_data() -> dict:
                      "仪表盘数据在 macro_now（health.tiles = 市场健康度、releases = 消费 / 零售等新公布的数据）与 news.summary"
                      "（经济威胁消息的汇总），都只作展示、不参与交易；能源消费在 energy（rows = 18 个来源的 3 个月同比 value %、"
                      "历史分位 pct、偏弱 / 偏强 state、同期一起动的行业 links；k4 = K4 前向观察的状态，forward = 前向记录的天数），只作展示 / 记录。")}
-    d["missing"] = missing_items(d)
+    d["missing"] = [NM.annotate(x) for x in missing_items(d)]    # 别的模块给的告警（资格检查 / 退市 / 行情核对）里的「7203.T」也带上名字
     d["fixed"] = fixed_items(d)
     return d
 
@@ -124,17 +155,18 @@ def fixed_items(d: dict) -> list[str]:
         why = "；".join(([f"{'、'.join(gd)} Yahoo 日线中间漏了（前后的日子都有）"] if gd else [])
                        + ([f"{'、'.join(tail)} Yahoo 没给收盘（只有开盘）或还没更新"] if tail else []))
         c = v.get("close")
+        k = _lab(k)                                                     # 「^N225 日経平均」「1545 纳斯达克 100」
         out.append(f"{k} {ds} 的日线：{why} → 用当天的 5 分钟线合成（{dates[-1]} 收盘 {c:,.2f}；与正式收盘可能差 0.1% 以内，"
                    "正式日线到了会自动换掉）—— 指数 / 核心 ETF 判断与判断层市场读数按合成的日线" if isinstance(c, (int, float)) and dates
                    else f"{k} {ds} 的日线用 5 分钟线合成")
     for f in d.get("data_fixes") or []:
-        out.append(f"{f.get('ticker')} {f.get('date')}：拆股 1 拆 {f.get('split'):g} 当天的分红 {f.get('div'):g} 円是拆股前每股的金额，Yahoo 当成 "
+        out.append(f"{_lab(f.get('ticker'))} {f.get('date')}：拆股 1 拆 {f.get('split'):g} 当天的分红 {f.get('div'):g} 円是拆股前每股的金额，Yahoo 当成 "
                    f"{f.get('yield_yahoo'):.1f}% 的分红把之前的价格整体调低 → 已改按拆股后口径 {f.get('yield_fixed'):.2f}% 调整（60 日箱体 / MACD / 止损参考按修正后的价格）")
     pc = d.get("price_check") or {}
     dv = [x for x in (pc.get("info") or []) if x.get("kind") == "dividend"]
     n_dv = (pc.get("info_counts") or {}).get("dividend", len(dv))
     if n_dv:
-        big = [f"{x['ticker']} {x['date']} {x['yield_pct']:.1f}%" for x in dv[:3]]
+        big = [f"{_lab(x['ticker'])} {x['date']} {x['yield_pct']:.1f}%" for x in dv[:3]]
         out.append(f"行情交叉核对：{n_dv} 只的比值变化能被当天的分红解释（例 {'、'.join(big)}）—— yfinance 按分红调整、J-Quants 不调，不是错位")
     return out
 
@@ -169,12 +201,12 @@ def missing_items(d: dict) -> list[str]:
     lag = d.get("lagging") or {}
     idx = {k: v for k, v in lag.items() if k.startswith("^") or k in ((cfg.get("core") or {}))}
     for k, v in idx.items():
-        out.append(f"行情落后：{k} 最新 {v['last']}，应有 {v['expected']}（已重新下载仍缺，指数 / 核心 ETF 相关判断按旧数据）")
+        out.append(f"行情落后：{_lab(k)} 最新 {v['last']}，应有 {v['expected']}（已重新下载仍缺，指数 / 核心 ETF 相关判断按旧数据）")
     for k, v in sorted((d.get("gaps") or {}).items()):
-        out.append(f"行情中间缺日：{k} {'、'.join(v.get('dates') or [])}（Yahoo 日线漏了，5 分钟线也补不上；用到这只指数的指标少算这几天）")
+        out.append(f"行情中间缺日：{_lab(k)} {'、'.join(v.get('dates') or [])}（Yahoo 日线漏了，5 分钟线也补不上；用到这只指数的指标少算这几天）")
     stocks = sorted(k for k in lag if k not in idx)
     if stocks:
-        out.append(f"行情落后：个股 {len(stocks)} 只（例 {'、'.join(stocks[:3])} 最新 {lag[stocks[0]]['last']}，"
+        out.append(f"行情落后：个股 {len(stocks)} 只（例 {_labs(stocks[:3])} 最新 {lag[stocks[0]]['last']}，"
                    f"应有 {lag[stocks[0]]['expected']}），候补队列里这些股票用的是旧收盘")
     t = d.get("threat") or {}
     if not t or t.get("error"):
@@ -245,7 +277,7 @@ def missing_items(d: dict) -> list[str]:
     hard = {k: v for k, v in (es.get("errors") or {}).items() if not str(v).startswith("用了缓存")}
     if started and hard:
         k0 = next(iter(hard))
-        out.append(f"最近一次决算的形态：{len(hard)} 项取不到（例 {k0}：{hard[k0]}）—— 那几只不标形态；只作展示，不影响交易")
+        out.append(f"最近一次决算的形态：{len(hard)} 项取不到（例 {_lab(k0)}：{hard[k0]}）—— 那几只不标形态；只作展示，不影响交易")
     el = d.get("eligibility") or {}
     if el.get("error") and not el.get("sources"):
         out.append(f"下单前资格检查的日报块：没算出（{el['error']}）—— 闸门本身在引擎里照常生效")
@@ -397,7 +429,7 @@ def _fee_rule(broker: str | None, cfg: dict) -> str:
     if broker == "tachibana":
         tiers = "、".join(f"≤{int(cap) // 10000} 万 ¥{int(fee)}" for cap, fee in (b["markets"]["JP"]["commission_tiers"])[:4])
         return (f"{b['label']} 個別コース：每笔按约定金额 {tiers}…（ETF 同表；新开户前 60 个营业日 0 円未计入；{b.get('checked')} 核对）；"
-                "只做东证（不做美股、不换汇），1655.T 用日元在东京开盘时买卖；API 可无人值守自动下单"
+                f"只做东证（不做美股、不换汇），{_lab('1655.T')} 用日元在东京开盘时买卖；API 可无人值守自动下单"
                 "（15:30～16:30 值洗い期间不受理，之后受理翌营业日的单）。")
     return (f"楽天：日本株 / 东证 ETF 0 円，美股 0.495%（上限 $22），换汇 片道 {round(float(cfg.get('fx_spread_yen', 0.25)) * 100):g} 銭/USD；"
             "美股卖出后的美元在下一个换汇窗口换回日元。")
@@ -430,11 +462,11 @@ def _executor_html(d: dict) -> str:
         return f'<div class="muted">实盘执行器演练账户：<b class="neg">运行失败</b>（{escape(str(x["error"]))}）</div>'
     ok = x.get("same_as_sim")
     diff = x.get("equity_diff_jpy")
-    txt = ("与模拟盘一致（持仓、1655、现金、权益）" if ok else
+    txt = ("与模拟盘一致（个股持仓、核心 ETF、现金、权益）" if ok else          # 以前写「1655」：比的是核心 ETF 的口数（现在是 1545 / 1482）
            f"<b class='neg'>与模拟盘不一致</b>（权益差 {_money(diff) if diff is not None else '—'}）")
     return (f'<div class="muted">实盘执行器演练账户（模拟券商，走「下单 → 券商回报 → 对账」这条实盘的路）：{txt}；'
             f'决策日 {escape(str(x.get("decided_on") or "—"))}，今天的单 {int(x.get("orders") or 0)} 笔'
-            + (f"；没下单：{escape(str(x['blocked']))}" if x.get("blocked") else "") + "</div>")
+            + (f"；没下单：{escape(NM.annotate(str(x['blocked'])))}" if x.get("blocked") else "") + "</div>")
 
 
 def _eligibility_html(d: dict, meta: tuple) -> str:
@@ -443,32 +475,33 @@ def _eligibility_html(d: dict, meta: tuple) -> str:
     if not e or not e.get("sources"):
         return ""
     nm = meta[2] if len(meta) > 2 else {}
-    lab = lambda c: f"{c} {nm[c]}" if c in nm else c                                  # noqa: E731
+    lab = lambda c, n=None: _lab(c, nm, n)                                            # noqa: E731  「4062 イビデン」（这一行带的 JPX 名 → nm → names.py）
+    labs = lambda cs: "、".join(lab(c) for c in cs) or "无"                            # noqa: E731
     srcs = "".join(f"<li>{escape(x['label'])}：{'有效' if x.get('fresh') else '<b class=neg>过期 / 取不到</b>'}"
                    f"（最后成功 {escape(str(x.get('ok_at') or '—'))}；{int(x.get('n') or 0)} 条"
                    + (f"；{escape(x['note'])}" if x.get("note") else "") + (f"；错误 {escape(x['error'])}" if x.get("error") else "")
                    + "）</li>" for x in (e.get("sources") or {}).values())
     needs = "".join(f"<li class='neg'>{escape(n)}</li>" for n in e.get("needs_user") or [])
-    blocked = "".join(f"<tr><td>{escape(lab(b['code']))}</td><td>{escape(b['why'])}</td></tr>" for b in e.get("blocked") or [])
+    blocked = "".join(f"<tr><td>{escape(lab(b['code'], b.get('name')))}</td><td>{escape(b['why'])}</td></tr>" for b in e.get("blocked") or [])
     today = "".join(f"<li>{escape(x['date'])} {escape(lab(str(x['ticker']).split('.')[0]))}：{escape(x['why'])}</li>"
                     for x in e.get("blocked_today") or [])
     held = "".join(f"<li class='{'neg' if h.get('level') == 'warn' else 'muted'}'>{escape(lab(str(h['ticker']).split('.')[0]))}"
                    f"（{escape(str(h.get('account') or '—'))}）：{escape(h['why'])}</li>" for h in e.get("held") or [])
     diff = "".join(f"<li>{'ja.wikipedia（主）' if k == 'ja_wiki' else 'en.wikipedia（参考，不挡）'}：我们有它没有 "
-                   f"{escape('、'.join(v.get('ours_only') or []) or '无')}；它有我们没有 {escape('、'.join(v.get('src_only') or []) or '无')}"
-                   + (f"；已记录的纳入它还没更新 {escape('、'.join(v['lag']))}" if v.get("lag") else "") + "</li>"
+                   f"{escape(labs(v.get('ours_only') or []))}；它有我们没有 {escape(labs(v.get('src_only') or []))}"
+                   + (f"；已记录的纳入它还没更新 {escape(labs(v['lag']))}" if v.get("lag") else "") + "</li>"
                    for k, v in (e.get("diff") or {}).items())
     tk = e.get("tachibana") or {}
     tk_bad = (tk.get("stock") or []) + (tk.get("core") or [])
     tk_html = ("<h3>立花 ｅ支店能不能买</h3><p>" + (f"JPX 東証上場銘柄一覧 {escape(str(tk.get('as_of') or '—'))} 版："
                f"股票池 + 核心 ETF {int(tk.get('checked') or 0)} 只" + ("都能买（内国株式 / ETF・ETN）" if not tk_bad and tk.get("fresh") else "")
-               ) + "</p>" + ("<ul>" + "".join(f"<li class='neg'>{escape(lab(x['code']))}：{escape(x['why'])}</li>" for x in tk_bad) + "</ul>"
+               ) + "</p>" + ("<ul>" + "".join(f"<li class='neg'>{escape(lab(x['code'], x.get('name')))}：{escape(x['why'])}</li>" for x in tk_bad) + "</ul>"
                              if tk_bad else "")) if tk else ""
     return ("<section class='card'><h2>下单前资格检查（被踢出 / 被指定 / 立花买不了的票不买）</h2>"
             f"<p><b>{escape(str(e.get('text') or ''))}</b></p>"
             + (f"<h3>要你确认的事</h3><ul>{needs}</ul>" if needs else "")
             + (f"<h3>今天被挡掉的信号</h3><ul>{today}</ul>" if today else "")
-            + (f"<h3>股票池里今天不开新仓的票</h3><div class='scroll'><table><tr><th>代码</th><th>理由</th></tr>{blocked}</table></div>"
+            + (f"<h3>股票池里今天不开新仓的票</h3><div class='scroll'><table><tr><th>代码 / 名称</th><th>理由</th></tr>{blocked}</table></div>"
                if blocked else "")
             + (f"<h3>持仓的标记（规则不自动卖）</h3><ul>{held}</ul>" if held else "")
             + tk_html
@@ -489,7 +522,7 @@ def _delist_html(d: dict, meta: tuple) -> str:
     if not x or (not x.get("items") and not x.get("error") and not x.get("applied")):
         return ""
     nm = meta[2] if len(meta) > 2 else {}
-    lab = lambda c: f"{c} {nm[c]}" if c in nm else c                                  # noqa: E731
+    lab = lambda r: _lab(r["code"], nm, r.get("name"))                                # noqa: E731  「8035 東京エレクトロン」（行里带的 JPX 名 → nm → names.py）
     badge = {"待生效": "▲", "今天生效": "■", "已生效": "✓", "日期未定": "…"}
 
     def rel(r):
@@ -503,21 +536,21 @@ def _delist_html(d: dict, meta: tuple) -> str:
             when, what = "未定", f"JPX 整理銘柄（{escape(str(r.get('designated') or '—'))} 指定；上場廃止日还没公布）"
         else:
             when, what = r["date"], f"日経225 {r['kind']}（{escape(str(r.get('announced') or '—'))} 公布）"
-        rows.append(f"<tr><td>{escape(str(when))}</td><td>{escape(lab(r['code']))}</td><td>{what}</td>"
+        rows.append(f"<tr><td>{escape(str(when))}</td><td>{escape(lab(r))}</td><td>{what}</td>"
                     f"<td>{badge.get(r['status'], '')} {escape(r['status'])}</td><td>{rel(r)}</td></tr>")
-    applied = "".join(f"<li>{escape(lab(a['code']))}：{escape(a['date'])} 上場廃止（{escape(a.get('why') or '—')}），{escape(str(a.get('applied_on') or '—'))} 起不在股票池</li>"
+    applied = "".join(f"<li>{escape(lab(a))}：{escape(a['date'])} 上場廃止（{escape(a.get('why') or '—')}），{escape(str(a.get('applied_on') or '—'))} 起不在股票池</li>"
                       for a in x.get("applied") or [])
     other = [r for r in x.get("items") or [] if r["kind"] == "上場廃止" and not (r.get("in_pool") or r.get("held") or r.get("core") or r.get("removed"))]
-    other_html = "、".join(f"{escape(r['code'])} {escape(r['date'])}" for r in other)
+    other_html = "、".join(f"{escape(lab(r))} {escape(r['date'])}" for r in other)        # 名字：JPX 上場廃止页的銘柄名（eligibility 存的）→ 名称快照；没有就只写代码
     needs = "".join(f"<li class='neg'>{escape(n)}</li>" for n in x.get("needs_user") or [])
     err = f"<p class='neg'>这次没更新：{escape(x['error'])} —— 上一次的表（{escape(str(x.get('as_of') or '—'))}）照常生效</p>" if x.get("error") else ""
     return ("<section class='card'><h2>股票池更新时间表（上場廃止 / 定期入替；到日自动去掉）</h2>"
             f"<p><b>{escape(str(x.get('text') or ''))}</b></p>{err}"
             + (f"<h3>要你看的事</h3><ul>{needs}</ul>" if needs else "")
-            + "<div class='scroll'><table><tr><th>日期</th><th>代码</th><th>事</th><th>状态</th><th>与我们的关系</th></tr>"
+            + "<div class='scroll'><table><tr><th>日期</th><th>代码 / 名称</th><th>事</th><th>状态</th><th>与我们的关系</th></tr>"
             + ("".join(rows) or "<tr><td colspan=5 class='muted'>股票池 / 持仓 / 核心 ETF 里没有有日期的事</td></tr>") + "</table></div>"
             + (f"<h3>已从股票池去掉（到了上場廃止日）</h3><ul>{applied}</ul>" if applied else "")
-            + (f"<details><summary class='muted'>JPX 一览里其他 {len(other)} 只（不在股票池；代码 上場廃止日）</summary><p class='muted'>{other_html}</p></details>"
+            + (f"<details><summary class='muted'>JPX 一览里其他 {len(other)} 只（不在股票池；代码 名称 上場廃止日）</summary><p class='muted'>{other_html}</p></details>"
                if other else "")
             + "<p class='muted'>规则（2026-09-30 用户要求「做一个实时股票退市时间表 check，到日期后就把对应股票池更新」）：每次决策前用资格检查的同一份 JPX 快照更新；"
             "上場廃止日 ≤ 今天 → 自动从交易股票池去掉（只减，记在 var/delist_schedule.json 的 applied，模拟盘 / 执行器 / 候补队列同一张表）；"
@@ -553,7 +586,7 @@ def _price_check_html(pc: dict) -> str:
         body = f"<p class='muted'>今天没做：{escape(str(why))}（只报警的检查，不影响交易）</p>"
     else:
         body = (f"<p>{escape(str(pc.get('from')))}〜{escape(str(pc.get('to')))}：核对 {int(pc.get('checked') or 0)} / {int(pc.get('wanted') or 0)} 只"
-                + (f"（J-Quants 没有 {len(pc['not_in_jq'])} 只：{escape('、'.join(pc['not_in_jq'][:5]))}）" if pc.get("not_in_jq") else "")
+                + (f"（J-Quants 没有 {len(pc['not_in_jq'])} 只：{escape(_labs(pc['not_in_jq'][:5]))}）" if pc.get("not_in_jq") else "")
                 + (f"；取不到 {int(pc['n_errors'])} 只" if pc.get("n_errors") else "")
                 + (f"；时间到没核对 {int(pc['timeout'])} 只" if pc.get("timeout") else "") + "。</p>")
         body += ("<ul>" + "".join(f"<li>⚠ {escape(describe(a))}</li>" for a in al) + "</ul>") if al else \
@@ -653,7 +686,7 @@ def _combo_c_html(d: dict) -> str:
         sk = c.get("skipped") or []
         head = (f"<p>判定日 {escape(str(c.get('as_of')))}（最新收盘）：{escape(cell)} → "
                 + ("<b>平静的牛市：C 起作用</b>" if on is True else "不在「平静的牛市」：C 不动" if on is False else "市场格算不了：C 不动")
-                + (f"；明天不开新仓（C 跳过）：<b>{escape('、'.join(sk))}</b>" if on is True and sk else
+                + (f"；明天不开新仓（C 跳过）：<b>{escape(_labs(sk))}</b>" if on is True and sk else
                    "；没有要跳过的候选" if on is True else "") + "</p>")
     rows = []
     for t, v in sorted((c.get("stocks") or {}).items(), key=lambda kv: (kv[1].get("score", 0), kv[0])):
@@ -666,7 +699,7 @@ def _combo_c_html(d: dict) -> str:
             txt = f"{float(x) * 100:+.1f}%" if k == "r12" else f"{float(x) * 100:.2f}%" if k == "atrp" else f"{float(x):.3f}"
             g = int(vt.get(k, 0))
             return f"<td class='n'>{txt} <span class='{'up' if g > 0 else 'down' if g < 0 else 'muted'}'>{'+1' if g > 0 else '−1' if g < 0 else '0'}</span></td>"
-        rows.append(f"<tr><td>{escape(t)}</td>" + "".join(cell(k) for k in FEATS)
+        rows.append(f"<tr><td>{escape(_lab(t))}</td>" + "".join(cell(k) for k in FEATS)
                     + f"<td class='n'>{int(v.get('score', 0)):+d}</td><td>{'<b>跳过</b>' if v.get('skip') else '不变'}</td></tr>")
     tbl = ("<div class='scroll'><table><tr><th>候选</th>" + "".join(f"<th class='n'>{escape(LABELS[k])}</th>" for k in FEATS)
            + "<th class='n'>分数</th><th>新仓</th></tr>" + "".join(rows) + "</table></div>") if rows else         "<p class='muted'>最新收盘没有日本个股的买入候选</p>"
@@ -698,7 +731,7 @@ def _tbf_html(d: dict) -> str:
     else:
         sk = c.get("skipped") or []
         head = (f"<p>判定日 {escape(str(c.get('as_of')))}（最新收盘）：股票池可打分 {int(c.get('n_ref') or 0)} 只，其中 {int(c.get('skip_all_n') or 0)} 只「像起跌点」；"
-                + (f"明天不开新仓（TBF 挡掉）：<b>{escape('、'.join(sk))}</b>" if sk else "候选里没有要挡的") + "</p>")
+                + (f"明天不开新仓（TBF 挡掉）：<b>{escape(_labs(sk))}</b>" if sk else "候选里没有要挡的") + "</p>")
     rows = []
     for t, v in sorted((c.get("stocks") or {}).items(), key=lambda kv: (not kv[1].get("skip"), kv[0])):
         p = v.get("pct") or {}
@@ -709,7 +742,7 @@ def _tbf_html(d: dict) -> str:
                 return "<td class='n muted'>—</td>"
             hot = float(x) > TOP
             return f"<td class='n{' neg' if hot else ''}'>{float(x) * 100:.0f}%{'（最像）' if hot else ''}</td>"
-        rows.append(f"<tr><td>{escape(t)}</td>" + "".join(cell(k) for k in SCALES)
+        rows.append(f"<tr><td>{escape(_lab(t))}</td>" + "".join(cell(k) for k in SCALES)
                     + f"<td>{'<b>不买</b>' if v.get('skip') else ('不变' if v.get('scored') else '不变（算不出特征）')}</td></tr>")
     tbl = ("<div class='scroll'><table><tr><th>候选</th>" + "".join(f"<th class='n'>{lab[k]}「像起跌点」百分位</th>" for k in SCALES)
            + "<th>新仓</th></tr>" + "".join(rows) + "</table></div>") if rows else "<p class='muted'>最新收盘没有日本个股的买入候选</p>"
@@ -761,14 +794,14 @@ def _fwdj_html(d: dict) -> str:
         fl = "、".join(f"{names[k]} {'+1' if x > 0 else '−1'}" for k, x in (v.get("flags") or {}).items() if x) or "全部 0"
         ind = (v.get("inputs") or {}).get("industry") or "—"
         f2 = "—" if v.get("F2") is None else f"{float(v['F2']):+.2f}"
-        st_rows.append(f"<tr><td>{escape(t)}</td><td class='muted'>{escape(str(ind))}</td><td>{escape(fl)}</td>"
+        st_rows.append(f"<tr><td>{escape(_lab(t))}</td><td class='muted'>{escape(str(ind))}</td><td>{escape(fl)}</td>"
                        f"<td class='n'>{int(v.get('score', 0)):+d}</td><td class='n'>{f2}</td>"
                        f"<td>{'<b>×0.5</b>' if float(v.get('mult', 1)) < 1 else '不变'}</td></tr>")
     stock = ("<div class='scroll'><table><tr><th>候选</th><th>業種</th><th>不为 0 的项</th><th class='n'>合计 s</th><th class='n'>F2</th>"
              "<th>新仓</th></tr>" + "".join(st_rows) + "</table></div>") if st_rows else "<p class='muted'>最新收盘没有日本个股的买入候选</p>"
     b = f.get("baseline") or {}
     diff = f.get("diff_jpy")
-    base = (f"<p>基准账户（原规则：同一套行情、不加这一层、离场用死叉、闲置资金 1655 + 美股牛熊分界，{escape(str(b.get('since') or '—'))} 起）：权益 {_money(b.get('equity_jpy'))}；"
+    base = (f"<p>基准账户（原规则：同一套行情、不加这一层、离场用死叉、闲置资金 {escape(_lab('1655.T'))} + 美股牛熊分界，{escape(str(b.get('since') or '—'))} 起）：权益 {_money(b.get('equity_jpy'))}；"
             f"模拟盘 {_money(f.get('equity_jpy'))}；差 <b class='{'up' if (diff or 0) > 0 else 'down' if (diff or 0) < 0 else ''}'>"
             f"{'—' if diff is None else ('+' if diff >= 0 else '−') + f'¥{abs(diff):,.0f}'}</b>"
             f"（持仓 基准 {len(b.get('positions') or [])} 只）</p>") if b and not b.get("error") else \
@@ -792,19 +825,21 @@ def _shadow_html(d: dict) -> str:
     diff = s.get("diff_pp")
     cls = "up" if (diff or 0) > 0 else "down" if (diff or 0) < 0 else ""
     dec = s.get("last_decision") or {}
-    orders = "；".join(f"{escape(o['side'])} {escape(o['ticker'])} {int(o['shares']):,} 股（{escape(o.get('reason') or '')}）"
+    # 2026-10-15：代码带名字、BUY / SELL 写成买 / 卖、ETF 的单位是「口」（以前 1655.T 写成「130 股」）；决策 JSON 的 ticker 字段不动，只改显示
+    orders = "；".join(f"{escape({'BUY': '买', 'SELL': '卖'}.get(str(o['side']), str(o['side'])))} {escape(_lab(o['ticker']))} "
+                      f"{int(o['shares']):,} {_unit(o['ticker'])}（{escape(NM.annotate(str(o.get('reason') or '')))}）"
                       for o in dec.get("orders") or []) or "不动"
-    rows = "".join(f"<tr><td>{escape(t)}</td><td class='n'>{int(p['shares']):,} 股</td><td class='n'>{_money(p.get('cost'))}</td>"
+    rows = "".join(f"<tr><td>{escape(_lab(t))}</td><td class='n'>{int(p['shares']):,} {_unit(t)}</td><td class='n'>{_money(p.get('cost'))}</td>"
                    f"<td class='n'>{_money(p.get('close'))}</td><td class='n'>{_money(p.get('value'))}</td>"
                    f"<td class='n'>{float(p.get('pnl_pct') or 0):+.2f}%</td></tr>" for t, p in (s.get("positions") or {}).items())
     return (f'<section class="card"><h2>影子账户（判断型选股，只记录，不影响模拟盘与交易）</h2>'
             f'<p>截至 {escape(str(s.get("as_of") or "—"))}：权益 <b>{_money(s.get("equity_jpy"))}</b>（{float(s.get("ret_pct") or 0):+.2f}%），'
             f'规则账户 {_money(s.get("rule_equity_jpy"))}，差 <b class="{cls}">{"—" if diff is None else f"{diff:+.2f} pp"}</b>；现金 {_money(s.get("cash_jpy"))}</p>'
-            f'<p class="muted">{escape(str(dec.get("for_date") or "—"))} 的判断：{escape(str(dec.get("view") or "—"))} → {orders}</p>'
-            + (f'<div class="scroll"><table><tr><th>代码</th><th class="n">股数</th><th class="n">成本</th><th class="n">收盘</th>'
+            f'<p class="muted">{escape(str(dec.get("for_date") or "—"))} 的判断：{escape(NM.annotate(str(dec.get("view") or "—")))} → {orders}</p>'
+            + (f'<div class="scroll"><table><tr><th>代码 / 名称</th><th class="n">数量</th><th class="n">成本</th><th class="n">收盘</th>'
                f'<th class="n">市值</th><th class="n">损益</th></tr>{rows}</table></div>' if rows else "")
             + f'<p class="muted">记录期间 {escape(" 〜 ".join(s.get("period") or []))}；评估标准事先登记在 scripts/shadow_account.py（3 个月后评估）。'
-            f'{escape(str(s.get("note") or ""))}</p></section>')
+            f'{escape(NM.annotate(str(s.get("note") or "")))}</p></section>')
 
 
 # ───────────────────────── 持仓仪表盘（日报最上面；重要度从高到低；每个参数带「现在在哪、危不危险」）─────────────────────────
@@ -964,7 +999,7 @@ def _positions_block(d: dict, closes: dict) -> str:
         zones = [(0, F(hard * 1.015), "crit"), (F(hard * 1.015), F(hard * 1.03), "serious"), (F(hard * 1.03), F(hard * 1.06), "warn"),
                  (F(hard * 1.06), 1, "good")]
         ticks = [(0, f"卖出线 {_money(hard, ccy)}"), (F(entry), f"成本 {_money(entry, ccy)}"), (1, f"止盈 {_money(tp, ccy)}")]
-        meter = _meter(frac, st, zones, ticks, label=f"{t} 现价在卖出线与止盈之间的位置")
+        meter = _meter(frac, st, zones, ticks, label=f"{_lab(t)} 现价在卖出线与止盈之间的位置")
         val = (f"现价 {_money(close, ccy)}<span class='{'up' if pnl >= 0 else 'down'}'>（{pnl:+.1f}%）</span>"
                f"<span class='muted'> 距止盈 {d_up:+.1f}%</span>" if close else "现价：今天没算出")
         chip = _chip(st, f"距{hard_rule} {d_down:+.1f}%" if d_down is not None else "位置未知")
@@ -973,10 +1008,10 @@ def _positions_block(d: dict, closes: dict) -> str:
         mh = h.get("max_hold") or {}
         left = max(0, hmax - hold)
         hst = "warn" if left <= 10 else "info"
-        hmeter = _meter(hold / hmax if hmax else None, hst, [], [(0, "买入"), (1, f"满 {hmax} 天")], label=f"{t} 持有天数")
+        hmeter = _meter(hold / hmax if hmax else None, hst, [], [(0, "买入"), (1, f"满 {hmax} 天")], label=f"{_lab(t)} 持有天数")
         q = h.get("queued") or {}
         qtxt = f"；<b>明天开盘卖</b>（{escape(str(q.get('reason') or ''))}）" if q else ""
-        head = (f"<b>{escape(t)}</b> <span class='muted'>{'美股' if ccy == 'USD' else '日本'} · {int(p['shares']):,} 股 · 买入 {escape(str(p.get('entry_date') or ''))}"
+        head = (f"{_bold_lab(t)} <span class='muted'>{'美股' if ccy == 'USD' else '日本'} · {int(p['shares']):,} 股 · 买入 {escape(str(p.get('entry_date') or ''))}"
                 f" · 止损 {_money(stop0, ccy)}</span> {_es_tag(es_map.get(t)) if (ccy == 'JPY' and es_map.get(t)) else ''}{qtxt}")
         rows.append(f'<div class="posrow"><div class="mlab">{head}</div><div class="mval">{val} {chip}</div><div class="mbar">{meter}</div>'
                     + _mrow("持有", f"最迟 {escape(str(mh.get('sell_day') or '—'))} 开盘卖", hmeter, f"{hold} / {hmax} 天",
@@ -1030,23 +1065,23 @@ def _allocation_block(d: dict, closes: dict, core_rows: str) -> str:
     for t, p in (d.get("positions") or {}).items():
         px = closes.get(t) or float(p["entry_px"])
         stock += float(p["shares"]) * px * (fx if p.get("market") == "US" else 1.0)
-    names = _IC_NAMES()
     core = []
     for i, (t, u) in enumerate((d.get("core_units") or {}).items()):
         v = int(u) * float((d.get("core_last") or {}).get(t) or 0)
-        core.append((names.get(t, t), v, _SLOT_FILL[1 + (i % 2)]))
+        core.append((_lab(t), v, _SLOT_FILL[1 + (i % 2)]))                 # 图例「1545 纳斯达克 100」（以前「纳斯达克 100（1545）」）
     cash = float(d.get("cash_jpy") or 0) + float(d.get("cash_usd") or 0) * fx
     slices = [("个股", stock, _SLOT_FILL[0])] + core + [("现金", cash, _SLOT_FILL[3])]
     tot = sum(v for _, v, _ in slices)
     leg = "".join(f'<li><span class="sw" style="background:{fill}"></span>{escape(n)} <b>{_money(v)}</b> <span class="muted">{(v / tot * 100 if tot else 0):.0f}%</span></li>'
                   for n, v, fill in slices if v > 0)
     from .holding_view import TREND, trend_text
-    why = "".join(f'<div class="small"><b>{escape(str(r.get("name") or r.get("ticker")))} 为什么持有</b>：{escape(str(r.get("why") or ""))}'
+    why = "".join(f'<div class="small"><b>{escape(_lab(r["ticker"]) if r.get("ticker") else str(r.get("name") or "—"))} 为什么持有</b>：'
+                  f'{escape(str(r.get("why") or ""))}'
                   + (f'；现在 {escape(TREND.get((r.get("trend") or {}).get("label"), "—"))}'
                      f'<span class="muted">（{escape(trend_text(r.get("trend")))}）</span>' if r.get("trend") else "")
                   + "</div>" for r in ((d.get("holding_view") or {}).get("core") or []))
     return (f'<section class="card top"><h2>④ 资产构成与核心 ETF（闲置资金）</h2><div class="alloc">{_donut(slices)}<ul class="legend">{leg}</ul></div>'
-            f'{why}<div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core_rows}</table></div></section>')
+            f'{why}<div class="scroll"><table><tr><th>代码 / 名称</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core_rows}</table></div></section>')
 
 
 def _market_block(d: dict) -> str:
@@ -1136,13 +1171,12 @@ def render_unified_html(d: dict) -> str:
                 continue
             ccy = "USD" if market == "US" else "JPY"
             lim = f"，指値 {_money(o['limit'], ccy)}" if o.get("limit") else ""
-            why = f"（{escape(str(o.get('reason')))}）" if o.get("reason") else ""
-            unit = "口" if (str(o.get("ticker", "")) in _IC_NAMES()
-                           or str(o.get("ticker", "")).startswith(("1655", "1329", "2558"))) else "股"
+            why = f"（{escape(NM.annotate(str(o.get('reason'))))}）" if o.get("reason") else ""
+            unit = _unit(o.get("ticker", ""))
             tag = f" {_bo_tag(o)}" if o.get("side") == "BUY" and "breakout" in o else ""
             if o.get("side") == "BUY":
                 tag += f" {_grp_tag(o.get('ticker', ''), d.get('themes') or {}, meta)}"
-            out.append(f"<li><b>{'买入' if o['side'] == 'BUY' else '卖出'}</b> {escape(o['ticker'])} × {o['qty']:,} {unit}"
+            out.append(f"<li><b>{'买入' if o['side'] == 'BUY' else '卖出'}</b> {escape(_lab(o['ticker']))} × {o['qty']:,} {unit}"
                        f" {escape(o.get('type', ''))}{lim}{why}{tag}</li>")
         return "".join(out) or (f'<li class="muted">首次运行（{escape(str(d.get("sim", {}).get("start")))} 07:00 JST 前后）后给出当天要下的单'
                                 '（现在是开始前的预览，不下单）</li>' if d.get("preview") else '<li class="muted">无</li>')
@@ -1165,16 +1199,16 @@ def render_unified_html(d: dict) -> str:
     pos_rows = []
     for t, p in (d.get("positions") or {}).items():
         ccy = "USD" if p["market"] == "US" else "JPY"
-        pos_rows.append(f"<tr><td>{escape(t)}</td><td>{'美股' if ccy == 'USD' else '日本'}</td><td class='n'>{p['shares']:,} 股</td>"
+        pos_rows.append(f"<tr><td>{escape(_lab(t))}</td><td>{'美股' if ccy == 'USD' else '日本'}</td><td class='n'>{p['shares']:,} 股</td>"
                         f"<td class='n'>{_money(p['entry_px'], ccy)}</td><td class='n'>{_money(p['stop_px'], ccy)}</td>"
                         f"<td>{escape(p['entry_date'])}</td><td>{_es_tag(es_map.get(t)) if ccy == 'JPY' else '—'}</td></tr>")
     core_rows = []
     for t, u in (d.get("core_units") or {}).items():
         px = float((d.get("core_last") or {}).get(t) or 0)
-        core_rows.append(f"<tr><td>{escape(t)}</td><td class='n'>{int(u):,} 口</td><td class='n'>{_money(px)}</td>"
+        core_rows.append(f"<tr><td>{escape(_lab(t))}</td><td class='n'>{int(u):,} 口</td><td class='n'>{_money(px)}</td>"
                          f"<td class='n'>{_money(int(u) * px)}</td></tr>")
     tr_rows = "".join(
-        f"<tr><td>{escape(t['exit_date'])}</td><td>{escape(t['ticker'])}</td><td>{'美股' if t['market'] == 'US' else '日本'}</td>"
+        f"<tr><td>{escape(t['exit_date'])}</td><td>{escape(_lab(t['ticker']))}</td><td>{'美股' if t['market'] == 'US' else '日本'}</td>"
         f"<td class='n'>{t['shares']:,} 股</td><td class='n {'up' if float(t['pnl_jpy']) > 0 else 'down'}'>{_money(t['pnl_jpy'])}</td>"
         f"<td>{escape(t['reason'])}</td></tr>" for t in reversed(d.get("trades") or []))
     fx_rows = "".join(f"<tr><td>{escape(x[0])}</td><td>{'日元→美元' if x[1] == 'JPY>USD' else '美元→日元'}</td>"
@@ -1200,12 +1234,13 @@ def render_unified_html(d: dict) -> str:
         if e.get("core_only"):
             icm = (d.get("idle_cash") or {}).get("mode")
             lab = escape(str((d.get("idle_cash") or {}).get("label") or icm))
+            b1655 = escape(_lab("1655.T"))                                  # 「1655 S&P500」（基准账户的那只）
             if icm and icm != "K0" and m in _ic_markets(icm):              # 闲置资金的方式也跟这条分界（例：Q1 纳指 1545）
-                use = f"用于核心 ETF 的择时：模拟盘的闲置资金「{lab}」与基准账户（原规则）的 1655（牛市持有、熊市那份留现金）"
+                use = f"用于核心 ETF 的择时：模拟盘的闲置资金「{lab}」与基准账户（原规则）的 {b1655}（牛市持有、熊市那份留现金）"
             elif icm and icm != "K0":
-                use = "只给基准账户（原规则）的 1655 择时；模拟盘的闲置资金现在按「" + lab + "」"
+                use = f"只给基准账户（原规则）的 {b1655} 择时；模拟盘的闲置资金现在按「" + lab + "」"
             else:
-                use = f"只用于核心 ETF {escape('、'.join(e['core_only']))} 的择时（牛市持有、熊市那份留现金）"
+                use = f"只用于核心 ETF {escape(_labs(e['core_only']))} 的择时（牛市持有、熊市那份留现金）"
             mk.append(f"<dt>{name}</dt><dd>{line}；{use}</dd>")
             continue
         fired = "；".join((e.get("macro") or {}).get("fired") or []) or "无"
@@ -1223,7 +1258,7 @@ def render_unified_html(d: dict) -> str:
         for i, w in enumerate((e.get("watchlist") or [])[:10], 1):
             tilt = w.get("tilt")
             lot = f"（一手 {_money(w.get('lot_cost'), ccy)}）" if w.get("lot_cost") else ""
-            watch.append(f"<tr><td>{i}</td><td>{escape(str(w.get('ticker')))}</td><td class='muted'>{escape(str(w.get('sector') or '—'))}</td>"
+            watch.append(f"<tr><td>{i}</td><td>{escape(_lab(w.get('ticker')))}</td><td class='muted'>{escape(str(w.get('sector') or '—'))}</td>"
                          f"<td>{_grp_tag(str(w.get('ticker')), d.get('themes') or {}, meta) if m == 'JP' else '—'}</td>"
                          f"<td>{_STATUS.get(w.get('status'), escape(str(w.get('status'))))}</td>"
                          f"<td>{_es_tag(es_map.get(str(w.get('ticker')))) if m == 'JP' else '—'}</td><td>{_bo_tag(w) or '—'}</td>"
@@ -1232,14 +1267,14 @@ def render_unified_html(d: dict) -> str:
                          f"<td class='muted'>{'—' if tilt is None or tilt >= 1 else f'{tilt:g} 倍'}</td>"
                          f"<td class='muted'>{escape(str(w.get('fit_tier') or '—'))}"
                          f"{('：' + escape(w['fit_why'])) if w.get('fit_why') else ''}</td></tr>")
-    core_desc = " / ".join(f"{t} {float(w) * 100:g}%" for t, w in (cfg.get("core") or {}).items())
+    core_desc = " / ".join(NM.qty(t, f"{float(w) * 100:g}%") for t, w in (cfg.get("core") or {}).items())   # 「1545 纳斯达克 100：100%」（名字以数字结尾：隔「：」，2026-10-15 复核）
     stocks = ("日本 + 美股合计、一起排名：日本 → 美元已够的美股 → 要换汇的美股" if with_us
               else "只做日本个股，美股敞口经由东证 ETF；事先登记的研究显示 ¥100 万规模下加美股个股会拉低收益")
     from .dashboard import render as _dash
     nw = d.get("news") or {}
     dash = _dash(d, d.get("macro_now") or {}, {"summary": nw.get("summary") or {}, "generated": nw.get("generated"), "error": nw.get("error")})
     closes = {h.get("ticker"): float(h["close"]) for h in ((d.get("timeline") or {}).get("holdings") or []) if h.get("close")}
-    return _PAGE.format(
+    page = _PAGE.format(
         generated=escape(d["generated"]), bar=escape(_bar_txt(d)), dash=dash,
         account=_account_block(d), positions_block=_positions_block(d, closes),
         allocation=_allocation_block(d, closes, "".join(core_rows) or "<tr><td colspan=4 class='muted'>无</td></tr>"),
@@ -1271,17 +1306,20 @@ def render_unified_html(d: dict) -> str:
         elig=_eligibility_html(d, meta), delist=_delist_html(d, meta), cost_sales=_cost_sales_html(d.get("cost_sales") or {}),
         invest_flow=_invest_flow_html(d.get("invest_flow") or {}),
         calendar=_calendar_html(d.get("calendar") or {}), pcheck=_price_check_html(d.get("price_check") or {}),
-        corp="".join(f"<li>{escape(c['date'])} {escape(c['ticker'])}：{escape(c['note'])}</li>"
+        corp="".join(f"<li>{escape(c['date'])} {escape(_lab(c['ticker']))}：{escape(NM.annotate(str(c['note'])))}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
         n_trades=d.get("n_trades", 0), win=_pct(d.get("win_rate")) if d.get("win_rate") is not None else "—（还没有平仓）",
         rules=escape(f"个股 {cfg.get('max_positions')}×{int(float(cfg.get('position_pct', 0)) * 100)}%（{stocks}）；"
                      + (f"个股离场：{(d.get('exit_mode') or {}).get('label')}；" if (d.get('exit_mode') or {}).get('JP') not in (None, 'DC') else "")
                      + (f"闲置资金：{(d.get('idle_cash') or {}).get('label')}（现在：{_ic_now(d.get('idle_cash') or {})}；"
-                        f"{escape(str((d.get('idle_cash') or {}).get('since') or ''))} 起；原规则 1655 + 牛熊分界只给基准账户）；"
+                        f"{escape(str((d.get('idle_cash') or {}).get('since') or ''))} 起；原规则 {_lab('1655.T')} + 牛熊分界只给基准账户）；"
                         if (d.get('idle_cash') or {}).get('mode') not in (None, 'K0') else
                         f"闲置资金 {core_desc}（{'熊市那份留现金' if cfg.get('core_mode') == 'split' else '熊市那份转给牛市的一只'}；"
                         "牛熊分界 = 指数收盘连续 5 天低于 250 日线 ×0.97 转熊、高于 ×1.03 转牛，2026-09-25 多因子研究后维持）；")
                      + _fee_rule(d.get("broker"), cfg)))
+    # 兜底（2026-10-15 用户：只写代码不知道是哪只）：各段漏掉的「NNNN.T」→「NNNN 名字」（查不到名字的照原样；
+    # 引号 / = 后面的值〔JSON、data-t〕、命令行、cid、链接不动；重复跑结果不变）
+    return NM.annotate(page, html=True)
 
 
 _EV = {"FOMC": "美联储议息", "BOJ": "日银议息", "CPI": "美国 CPI", "NFP": "美国非农就业", "ELECTION": "选举",
@@ -1306,13 +1344,15 @@ def _ic_now(ic: dict) -> str:
 
 
 def _groups_meta() -> tuple[dict, dict, dict]:
-    """(代码 → 東証业种, 代码 → 主题, 代码 → 公司名)。"""
-    from . import jpx_list as JL
+    """(代码 → 東証业种, 代码 → 主题, 代码 → 公司名)。
+
+    公司名（2026-10-15 起）= names.names_map()：JPX 公开名单 + 核心 ETF 中文名 + 指数名，与面板 / 通知同一份
+    （以前 jpx_list.names() 只读数据目录 / 仓库的 jpx_names.json；names_map 还会退回 jpx_names_all / eligibility 的名字）。"""
     from . import themes as TH
     from .universes import JP_READDED_S33
     s33 = dict(JP_READDED_S33)                   # 2026-09-30 起加回的航空 / 陆运（30 业种表不含，只作标签）
     s33.update((read_json(paths.home() / "industry_s33.json", {}) or {}).get("s33") or {})
-    return s33, TH.members(), JL.names()
+    return s33, TH.members(), NM.names_map()
 
 
 def _sg(v, nd: int = 1) -> str:
@@ -1371,7 +1411,7 @@ def _themes_html(th: dict, meta: tuple) -> str:
     i_rows = "".join(row(k, k) for k in ik[:5]) + ("<tr><td colspan=6 class='muted'>…</td></tr>" if len(ik) > 10 else "") \
         + "".join(row(k, k) for k in ik[-5:] if k not in ik[:5])
     e = th.get("emerging") or {}
-    lab = lambda t: escape(f"{t.split('.')[0]} {nm.get(t.split('.')[0], '')}".strip())            # noqa: E731
+    lab = lambda t: escape(_lab(t, nm))                                                             # noqa: E731  「7203 トヨタ自動車」
     gname = lambda k: escape(f"{k} {names[k]}" if k in names else str(k))                           # noqa: E731
     cl = "".join(
         f"<li><b>{escape(c['kind'])}</b> {c['n']} 只，群内平均相关 {c['corr_before']:.2f} → {c['corr_now']:.2f}；"
@@ -1493,7 +1533,8 @@ def _vct_html(v: dict) -> str:
         alloc = "VCT 的配置算不了（B3 的状态取不到）"
     else:
         u, b = float(v["vct_1545"]), float(v.get("vct_1482") or 0.0)
-        alloc = ("VCT：" + "、".join(x for x in (f"1545 {u * 100:.0f}%" if u > 0 else "", f"1482 {b * 100:.0f}%" if b > 0 else "",
+        alloc = ("VCT：" + "、".join(x for x in (escape(NM.qty("1545.T", f"{u * 100:.0f}%")) if u > 0 else "",      # 「1545 纳斯达克 100：67%」
+                                                    escape(NM.qty("1482.T", f"{b * 100:.0f}%")) if b > 0 else "",           # （名字以数字结尾：隔「：」，2026-10-15 复核）
                                                     f"现金 {(1 - u - b) * 100:.0f}%" if 1 - u - b > 1e-9 else "") if x)
                  + ("（与模拟盘 B3 不同）" if v.get("differ") else "（与模拟盘 B3 相同）"))
     return ("<section class='card'><h2>VCT 前向记录（急跌时 1/3 离开纳指；只记录，不改交易）</h2>"
@@ -1710,15 +1751,15 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 {pcheck}
 {calendar}
 <section class="card"><h2>市场状态（文字明细）</h2><dl>{markets}</dl></section>
-<section class="card"><h2>个股持仓（表）</h2><div class="scroll"><table><tr><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">成本</th><th class="n">止损</th><th>买入日</th><th>最近一次决算的形态</th></tr>{positions}</table></div></section>
-<section class="card"><h2>核心 ETF（闲置资金，表）</h2><div class="scroll"><table><tr><th>代码</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
+<section class="card"><h2>个股持仓（表）</h2><div class="scroll"><table><tr><th>代码 / 名称</th><th>市场</th><th class="n">股数</th><th class="n">成本</th><th class="n">止损</th><th>买入日</th><th>最近一次决算的形态</th></tr>{positions}</table></div></section>
+<section class="card"><h2>核心 ETF（闲置资金，表）</h2><div class="scroll"><table><tr><th>代码 / 名称</th><th class="n">份额</th><th class="n">收盘</th><th class="n">市值</th></tr>{core}</table></div></section>
 {fwdj}
 {combo_c}
 {tbf}
 {deepdip}
 {vct}
 <section class="card"><details><summary><h2 style="display:inline">大事件威胁指数的明细（只展示，不参与交易）</h2></summary>{threat}</details></section>
-<section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码</th><th>板块</th><th>主题 / 业种（近 3 月相对）</th><th>状态</th><th>最近一次决算的形态</th><th>突破</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
+<section class="card"><h2>候补队列（状态 → 宏观顺风度 → 就绪度，不是收益预测）</h2><div class="scroll"><table><tr><th>#</th><th>代码 / 名称</th><th>板块</th><th>主题 / 业种（近 3 月相对）</th><th>状态</th><th>最近一次决算的形态</th><th>突破</th><th class="n">就绪度（满分 100）</th><th class="n">收盘</th><th>买得起一个名额</th><th>宏观倾斜</th><th>宏观顺风度</th></tr>{watch}</table></div>
 <p class="muted">宏观顺风度 = 个股对日本 / 美国利率、油价、日元、信用利差，以及农产品、工业金属、黄金、天然气 ETF 的历史敏感度 × 近 60 个交易日的变化（当日横截面三分位：顺风 / 中性 / 逆风），只作参考：2026-09-25 事先登记研究显示它对之后 20 日的收益没有可靠的预测力（加商品后月末前 1/5 − 后 1/5 为 +0.35%，t 1.40；秩相关 0.006），交易排序不用它。</p>
 <p class="muted">突破：<b>真突破</b> = 信号当天收盘高于过去 60 个交易日的最高价（不含当天）；<b>未破箱顶</b> = 信号成立但收盘还在箱顶之下（括号里是还差的 %）；还没触发的票显示距箱顶 %（今天要做的事里的买单也标了）。只作参考，不改交易：2026-09-26 事先登记的研究（2006-10〜，日経225 股票池，现行出场规则，每笔扣来回手续费）全部信号 638 笔：胜率 42.5%、每笔平均 +0.70%、盈亏比 1.89；其中真突破 163 笔：胜率 49.7%、每笔 +0.83%、盈亏比 1.44；未破箱顶 475 笔：胜率 40.0%、每笔 +0.66%、盈亏比 2.08。只做真突破：胜率 +7.2 pp（95% 区间 +0.7〜+13.6 pp），每笔期望 +0.13 pp 但不显著（95% 区间 −0.78〜+0.96 pp），组合 20 年年化 11.2%（现行 12.8%）、最大回撤 −36.4%（现行 −35.1%）——现行策略靠盈亏比赚钱，不是靠命中率（var/out/signal_study.md）。</p></section>
 {timeline}
@@ -1728,7 +1769,7 @@ table{{width:100%;border-collapse:collapse;font-size:13px}} td,th{{border-bottom
 {policy}
 {commod}
 {shadow}
-<section class="card"><h2>最近平仓</h2><div class="scroll"><table><tr><th>日期</th><th>代码</th><th>市场</th><th class="n">股数</th><th class="n">损益（日元）</th><th>原因</th></tr>{trades}</table></div></section>
+<section class="card"><h2>最近平仓</h2><div class="scroll"><table><tr><th>日期</th><th>代码 / 名称</th><th>市场</th><th class="n">股数</th><th class="n">损益（日元）</th><th>原因</th></tr>{trades}</table></div></section>
 <section class="card"><h2>换汇记录</h2><div class="scroll"><table><tr><th>日期</th><th>方向</th><th class="n">美元</th><th class="n">汇率</th></tr>{fx}</table></div></section>
 <section class="card"><h2>规则</h2><p class="muted">{rules}</p></section>
 </main></body></html>"""

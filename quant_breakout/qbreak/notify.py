@@ -274,10 +274,50 @@ def history(n: int = 60) -> list[dict]:
     return out
 
 
+_CODE_SP = re.compile(r"(?<![A-Za-z0-9_\-./'\"=])([0-9][0-9A-Z]{3}) ")   # 「8306 」：后面可能跟着完整名（ASCII 边界：\w 包括中日文）
+
+
+def named(text):
+    """通知文字里没带名字的「7203.T」→「7203 トヨタ自動車」（兜底；cid / 指令 id / 命令行 / 链接不动：qbreak/names.annotate；2026-10-15
+    用户：只写代码不知道是哪只）。不是字符串 → 照原样。出错 → 照原文（名字只是展示，通知照发）。"""
+    try:
+        from . import names
+        return names.annotate(text)
+    except Exception:                                         # noqa: BLE001
+        return text
+
+
+def compact(text):
+    """窄处用（推送：标题 120 字 / 正文 600 字截断；Mac 通知中心 200 字左右）：「7203.T」带上短名，已经写着完整名的换成短名
+    （「8306 三菱ＵＦＪフィナンシャル・グループ」→「8306 三菱UFJ FG」；names.short_name：可以缩短，不丢名字）。
+    只换「代码 + 空格 + 正好是它的完整名」，cid（U…-SELL-8306.T）、日期、金额不动。出错 → 照原文。"""
+    try:
+        from . import names
+        s = names.annotate(text, short=True)
+        if not isinstance(s, str):
+            return s
+        out, i = [], 0
+        for m in _CODE_SP.finditer(s):
+            if m.start() < i:
+                continue
+            c = m.group(1)
+            full = names.name(c)
+            sn = names.short_name(c) if full else None
+            if full and sn and sn != full and s.startswith(full, m.end()):
+                out.append(s[i:m.end()] + sn)
+                i = m.end() + len(full)
+        return "".join(out) + s[i:]
+    except Exception:                                         # noqa: BLE001
+        return text
+
+
 def send(subject: str, text: str, level: str = "info", run=None, url: str = "", resend: bool = False) -> dict[str, bool | None]:
     """按设置了的通道发一条通知 → {webhook / email: True 发了 / False 失败 / None 没设置, push: …}。绝不抛（失败只记 warning）。
     每一条先记进通知记录（面板「消息 → 通知记录」）；推送点开 → url（没给 = 通知记录里的这一条）。
-    resend = 刚才那条都没发成、同一条再发一次（09:30 自检 60 秒后的重推）：不再记进通知记录，推送点开 → 通知记录。"""
+    resend = 刚才那条都没发成、同一条再发一次（09:30 自检 60 秒后的重推）：不再记进通知记录，推送点开 → 通知记录。
+    票的名字（2026-10-15）：所有通道发之前兜底给「7203.T」带上名字（named）；推送（标题 120 字 / 正文 600 字截断）用短名（compact）。
+    调用方的去重（notify_seen）按调用方自己的文字算，不受这里加名字影响。"""
+    subject, text = named(subject), named(text)
     rid = None if resend else record(subject, text, level, url)
     url = url or (f"/?tab=news&seg=log&l={rid}" if rid else "/?tab=news&seg=log")
     out: dict[str, bool | None] = {}
@@ -301,7 +341,7 @@ def send(subject: str, text: str, level: str = "info", run=None, url: str = "", 
             out[name] = False
     try:                                                      # 网页 App（主屏幕上的面板）的推送：有订阅才发（qbreak/webpush.py）
         from . import webpush
-        r = webpush.send(f"{'★ ' if level in ('warn', 'error') and not subject.startswith('★') else ''}{subject}", text, url=url)
+        r = webpush.send(f"{'★ ' if level in ('warn', 'error') and not subject.startswith('★') else ''}{compact(subject)}", compact(text), url=url)
         if r is not None:
             out["push"] = r
     except Exception as e:                                    # noqa: BLE001
@@ -471,5 +511,5 @@ def setup_email(host: str | None = None, port: int | None = None, *, run=None, a
     return 0
 
 
-__all__ = ["send", "heartbeat", "heartbeat_detail", "beat_addr_why", "channels", "configured", "get", "reset", "is_ntfy",
+__all__ = ["send", "named", "compact", "heartbeat", "heartbeat_detail", "beat_addr_why", "channels", "configured", "get", "reset", "is_ntfy",
            "KEYS", "parse_smtp", "split_addrs", "setup_email", "mask_addr", "SmtpFormatError"]

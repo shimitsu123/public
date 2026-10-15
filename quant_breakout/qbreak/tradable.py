@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import datetime as dt
 
+from . import names as NM
+
 ALLOWED_SEGMENTS = ("プライム（内国株式）", "スタンダード（内国株式）", "グロース（内国株式）", "ETF・ETN")
 # 只在 JPX 一覧取不到（或过期）时给核心 ETF 兜底：2026-10-04 用 JPX 一覧 2026-08-31 版逐只核对过的东证 ETF
 CORE_VERIFIED = {"1545": "ETF・ETN", "1482": "ETF・ETN", "1655": "ETF・ETN", "2845": "ETF・ETN", "2561": "ETF・ETN",
@@ -61,7 +63,7 @@ def split_segments(rows) -> dict:
 def segment_reason(code: str, seg: str | None, asof: str = "") -> str | None:
     """静态判定：None = 立花能买（本系统的可买种类）；否则理由。seg = None 表示一覧里没有这个代码。"""
     if seg is None:
-        return f"JPX 東証上場銘柄一覧（{asof or '—'}）里没有 {code} → 确认不了立花 ｅ支店能买，不买"
+        return f"JPX 東証上場銘柄一覧（{asof or '—'}）里没有 {NM.label(code)} → 确认不了立花 ｅ支店能买，不买"   # 代码 + 名字（2026-10-15 用户：只写代码不知道是哪只）
     if seg in ALLOWED_SEGMENTS:
         return None
     if any(k in seg for k in NOT_AT_TACHIBANA):
@@ -96,7 +98,7 @@ def merge_master(stk_rows, mkt_rows, kisei_rows) -> dict[str, dict]:
 def broker_reason(code: str, info: dict | None, today: dt.date, qty: int | None = None) -> str | None:
     """立花銘柄マスタ判定（买单）：None = 能下；否则理由。info = merge_master(...)[code]（没有 = None）。"""
     if not info or "pref" not in info:
-        return f"立花の株式銘柄マスタに {code} がない（ｅ支店で扱っていない）→ 不下买单"
+        return f"立花の株式銘柄マスタに {NM.label(code)} がない（ｅ支店で扱っていない）→ 不下买单"
     if info.get("pref") and info["pref"] != TSE:
         return f"立花の優先市場が東証ではない（{info['pref']}；ｅ支店は他市場優先の重複上場銘柄を扱わない）→ 不下买单"
     if info.get("halt") == HALTED:

@@ -92,7 +92,7 @@ def test_paper_trim_and_buy_fill_at_once_and_reconcile_next_morning():
     assert res["placed"] == 2 and res["rejected"] == 0 and res["retry"] == 0 and res["later"] == 0
     t_, b_ = _item(r, trim["id"]), _item(r, buy["id"])
     assert t_["status"] == "placed" and t_["now"] and t_["fill"]["qty"] == 100 and t_["side"] == "SELL"
-    assert b_["status"] == "placed" and b_["now"] and b_["fill"]["qty"] == 100 and "先卖核心 ETF 1655.T" in b_["msg"]
+    assert b_["status"] == "placed" and b_["now"] and b_["fill"]["qty"] == 100 and "先卖核心 ETF 1655 S&P500" in b_["msg"]
     assert "没有买入信号" in b_["msg"] and MO.status_text(b_) == "盘中已成交"
     now_orders = [o for o in r.ux.orders if o.phase == "now"]
     assert {o.reason for o in now_orders} == {"manual_trim", "manual_buy", "manual_fund"}

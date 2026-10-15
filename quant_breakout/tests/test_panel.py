@@ -102,7 +102,7 @@ def test_post_requires_token_origin_json_and_size(server):
     code, txt, _ = _req(port, "POST", "/api/request", body, ok_h)                           # 同一只票再点：挡住
     assert code == 400 and "没处理完" in json.loads(txt)["msg"]
     code, txt, _ = _req(port, "POST", "/api/request", {**body, "ticker": "6758"}, ok_h)
-    assert code == 400 and "没有 6758.T" in json.loads(txt)["msg"]
+    assert code == 400 and "没有 6758 ソニーグループ" in json.loads(txt)["msg"]          # 代码带名字（2026-10-15）
 
 
 def test_submit_messages_and_halt_note():
@@ -191,15 +191,15 @@ def test_submit_adjust_messages_and_due():
     _book(pos={"6758.T": {"shares": 200, "entry_px": 900.0, "entry_date": "2026-09-01", "stop_px": 850.0, "last_close": 1000.0},
                "7203.T": {"shares": 200, "entry_px": 2500.0, "entry_date": "2026-09-01", "stop_px": 2325.0, "last_close": 2600.0}})
     ok, msg, rec = panel.submit({"book": "paper", "kind": "adjust", "ticker": "6758", "unit": "yen", "value": 100_000}, AT)
-    assert ok and rec["unit"] == "yen" and "已写：6758.T 卖 100 股（→ 100 股）→ 今天 09:00 开盘卖出" in msg
+    assert ok and rec["unit"] == "yen" and "已写：6758 ソニーグループ 卖 100 股（→ 100 股）→ 今天 09:00 开盘卖出" in msg
     MO.append("paper", {"kind": "cancel", "target": rec["id"]})
     b = json.loads((paths.state_dir() / "live_unified_paper.json").read_text(encoding="utf-8"))
     b["manual"] = {"items": {rec["id"]: {**rec, "status": "cancelled"}}}
     (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b), encoding="utf-8")
     ok, msg, rec2 = panel.submit({"book": "paper", "kind": "adjust", "ticker": "6758", "unit": "pct", "value": 30}, AT)
-    assert ok and "已写：6758.T 加 100 股（→ 300 股）→ 今天 09:00 开盘买入" in msg   # 07:40 的决策已经做了 → 开盘后盘中买
+    assert ok and "已写：6758 ソニーグループ 加 100 股（→ 300 股）→ 今天 09:00 开盘买入" in msg   # 07:40 的决策已经做了 → 开盘后盘中买
     ok, msg, _ = panel.submit({"book": "paper", "kind": "adjust", "ticker": "7203", "unit": "shares", "value": 400}, AT)
-    assert ok and "已写：7203.T 加" in msg                     # 已经约占 52%：2026-10-12 起手动加仓不设单只上限（到总权益）
+    assert ok and "已写：7203 トヨタ自動車 加" in msg                     # 已经约占 52%：2026-10-12 起手动加仓不设单只上限（到总权益）
     b = json.loads((paths.state_dir() / "live_unified_paper.json").read_text(encoding="utf-8"))
     only_wait = {"state": b["state"], "manual": {"items": {rec2["id"]: {**rec2, "status": "pending", "wait": True}}}}
     (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(only_wait), encoding="utf-8")
@@ -220,7 +220,8 @@ def test_render_adjust_buttons_and_kline():
           manual={"cap_pct": 34.0, "items": {}})
     kl = {"asof": "2026-10-05", "file": "charts_paper.json", "trend": {"6758.T": TR, "1545.T": TR},
           "items": {"6758.T": {"kind": "stock"}, "1545.T": {"kind": "core", "name": "纳斯达克 100（1545）"},
-                    "1482.T": {"kind": "core", "name": "对冲版美国国债</script><b>x"}}}
+                    "1482.T": {"kind": "core", "name": "旧名字（1482）"},                      # 查得到名字的用 names.py 的（2026-10-15）
+                    "2559.T": {"kind": "core", "name": "对冲版美国国债</script><b>x"}}}        # 查不到的用这里给的（照样转义）
     hv = {"bar_date": "2026-10-05", "holdings": [{"ticker": "6758.T", "shares": 200, "error": "x"}],
           "core": [{"ticker": "1545.T", "name": "纳斯达克 100（1545）", "units": 100, "why": "闲置资金规则"}]}
     _kfile({"6758.T": {"kind": "stock", "tf": {}}})
@@ -233,6 +234,7 @@ def test_render_adjust_buttons_and_kline():
     assert "data-act='tf'" not in html and "data-act='sub'" not in html                # 没有整页一排的切换：每张图自己的（脚本画）
     assert "kBar(box, 'ktop', 'ktf', TFS" in panel._JS and "kBar(box, 'kbot', 'ksub', SUBS" in panel._JS     # 上边沿 日K / 周K / 月K、下边沿 量 / MACD / DMI
     assert "</script><b>x" not in html and "对冲版美国国债&lt;/script&gt;" in html
+    assert "<b>1482 对冲版美国 7〜10 年国债</b>" in html and "旧名字" not in html
     assert "日K <b class='up'>往上走</b> · 涨势整齐" in html and "周K <b class='muted'>横着走</b>" in html
     assert "月K <b class='down'>往下走</b> · 跌势整齐" in html and '"上升": "往上走"' in html     # 图下的说法也从 kline.py 来（CFG.kp）
     assert '"when": "今天 09:00 开盘"' in html and "addWhen" not in html
@@ -356,7 +358,7 @@ def test_submit_buy_writes_instruction_and_checks():
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T"]})
     _sm()
     ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501"}, AT)
-    assert ok and rec["unit"] == "rule" and "已写：买入 6501.T（约 200 股）→ 今天 09:00 开盘买入" in msg
+    assert ok and rec["unit"] == "rule" and "已写：买入 6501 日立製作所（约 200 股）→ 今天 09:00 开盘买入" in msg
     assert "没有买入信号" not in msg
     ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": "6501"}, AT)
     assert not ok and "没处理完" in msg
@@ -366,7 +368,7 @@ def test_submit_buy_writes_instruction_and_checks():
         ok, msg, _ = panel.submit({"book": "paper", "kind": "buy", "ticker": t}, AT)
         assert not ok and why in msg
     ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "9984", "unit": "shares", "value": 300}, AT)
-    assert ok and rec["value"] == 300 and "买入 9984.T（300 股）" in msg and "没有买入信号" in msg
+    assert ok and rec["value"] == 300 and "买入 9984 ソフトバンクグループ（300 股）" in msg and "没有买入信号" in msg
     html = panel.render("paper", "t" * 40, AT)
     assert html.count("data-act='cancel'") == 2 and "有一条买入指令在处理（见「手动指令」）" in _card(html, "suggest")
 
@@ -634,9 +636,9 @@ def test_trade_badge_gone_when_funding_sell_cancelled_and_buy_cannot_be_paid():
     assert "trade" not in panel._badges(b, b["state"], {}, [], AT15, "paper")
     lv = panel._trade_live(b, [], AT15, "paper", halt=False)
     chip, why = lv["orders"]["U2026-10-14-BUY-1482.T"]
-    assert chip == "不会下单（预计）" and "资金来源的卖单已撤（卖 1545.T 4,110 口）" in why and "¥192" in why and "¥1,174" in why
+    assert chip == "不会下单（预计）" and "资金来源的卖单已撤（卖 1545 纳斯达克 100：4,110 口）" in why and "¥192" in why and "¥1,174" in why
     assert "手动固定 678 口仍然有效" in lv["fix"]["U2026-10-14-BUY-1482.T"] and "10/16 07:40" in lv["fix"]["U2026-10-14-BUY-1482.T"]
-    assert "「其他闲置资金 ETF（现在没拿）」里 1482.T 下面点「恢复按规则」" in lv["fix"]["U2026-10-14-BUY-1482.T"]
+    assert "「其他闲置资金 ETF（现在没拿）」里 1482 对冲版美国 7〜10 年国债 下面点「恢复按规则」" in lv["fix"]["U2026-10-14-BUY-1482.T"]
     html = panel.render("paper", "t" * 40, AT15)
     assert "class='badge'" not in _tabbtn(html, "trade")
     card = _card(html, "today")
@@ -657,7 +659,7 @@ def test_trade_badge_keeps_fundable_deferred_buy_and_cancel_confirm_lists_it():
     assert "<i class='badge'>2</i>" in _tabbtn(html, "trade")
     card = _card(html, "today")
     assert "不会下单" not in card and "data-act='cancel-order' data-cid='U2026-10-14-SELL-1545.T'" in card
-    assert "data-deps='撤掉之后，今天等这笔卖出的钱的买单预计下不成（开盘时现金不够一单元）：买 1482.T 678 口" in card
+    assert "data-deps='撤掉之后，今天等这笔卖出的钱的买单预计下不成（开盘时现金不够一单元）：买 1482 对冲版美国 7〜10 年国债：678 口" in card
     J = (panel.STATIC_DIR / "trade.js").read_text(encoding="utf-8")
     assert "+(d.deps ? '\\n★ '+d.deps : '')" in J
     b = _book1015(sell="SENT", cash=2_000_000.0)                             # 现金本来就够：撤卖单也不影响买单 → 不写
@@ -674,7 +676,7 @@ def test_trade_badge_skips_orders_with_cancel_pending():
     assert "trade" not in panel._badges(b, b["state"], {}, [co], AT15, "paper")
     lv = panel._trade_live(b, [co], AT15, "paper", halt=False)
     assert lv["asked"] == {"U2026-10-14-SELL-1545.T"} and lv["busy"] == 1
-    assert "资金来源的卖单已撤（卖 1545.T 4,110 口）" in lv["orders"]["U2026-10-14-BUY-1482.T"][1]
+    assert "资金来源的卖单已撤（卖 1545 纳斯达克 100：4,110 口）" in lv["orders"]["U2026-10-14-BUY-1482.T"][1]
     b = _book1015(sell="SENT", items={"M3-cancel_order": {**co, "status": "pending"}})
     assert "trade" not in panel._badges(b, b["state"], {}, [], AT15, "paper")
     card = _card(panel.render("paper", "t" * 40, AT15), "today")

@@ -89,6 +89,16 @@ def test_payload_roundtrip_and_cover(tmp_path):
     assert "急升" in FH.text(back) and FH.text(None) == "日元走强判定算不了"
 
 
+def test_text_names_the_etf_it_would_hold():
+    """一句话里的 ETF 写「代码 名字」（2026-10-15 用户：只写代码不知道是哪只；以前「拿对冲版纳指 2845」「拿 1545」只有代码）。"""
+    base = {"since": "2026-10-01", "votes": 5, "votes_of": 9, "jp_bear": False, "yen_bull": True}
+    on, off = FH.text({**base, "on": True}), FH.text({**base, "on": False})
+    assert on.startswith("对冲中 → 美股牛时拿 2845 纳指 100 对冲（2026-10-01 起）：急升 5/9 组")
+    assert off.startswith("不对冲 → 美股牛时拿 1545 纳斯达克 100（2026-10-01 起）")
+    from qbreak import names as NM
+    assert NM.annotate(on) == on and NM.annotate(off) == off
+
+
 def test_since_reports_start_of_current_state():
     idx = pd.bdate_range("2024-01-01", periods=6)
     s = pd.Series([False, True, True, False, False, False], index=idx)

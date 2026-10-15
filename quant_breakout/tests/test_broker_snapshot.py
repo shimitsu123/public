@@ -64,7 +64,8 @@ def test_refresh_writes_snapshot_with_compare_fills_and_quotes():
     assert snap["quotes"]["7203.T"] == 3010.0
     lines = BS.fills_lines(snap)
     assert "成交 100/100 股 @ ¥3,001.0" in lines[0] and "读不了约定" in lines[1]
-    assert any("7203.T" in ln for ln in BS.diff_lines(snap))
+    assert lines[0].startswith("・买 7203 トヨタ自動車 成交")                   # 代码 + 名字（2026-10-15）
+    assert any("7203 トヨタ自動車：账本 100 股 / 立花 200 股" in ln for ln in BS.diff_lines(snap))
     assert "auth" not in json.dumps(on_disk).lower()                      # 不带认证类字段
 
 
@@ -162,7 +163,7 @@ def test_reserve_explains_missing_holdings_vs_sim():
     book = {"flows": [{"date": "2026-10-07", "jpy": -300000.0, "reserve": True}],
             "compare_history": [{"date": "2026-10-01", "comparable": True, "same": True}]}
     c = compare_with_sim(live, sim, live=True, book=book)
-    assert c["explained"] == "出金预留" and not compare_bad(c) and "6758.T" in c["text"]
+    assert c["explained"] == "出金预留" and not compare_bad(c) and "6758 ソニーグループ" in c["text"]   # 代码 + 名字（2026-10-15）
     c2 = compare_with_sim(st(["7203.T", "9984.T"], {}), sim, live=True, book=book)      # 实盘多了 9984 → 真的不同
     assert compare_bad(c2) and not c2.get("explained")
     book["flows"][0]["seen_after"] = "2026-10-01"                                       # 早就到账了 → 不再解释

@@ -169,7 +169,9 @@ def text(pl: dict | None) -> str:
         return "日元走强判定算不了"
     yb = "日元牛" if pl.get("yen_bull") else "日元不在牛市"
     jb = "日経熊" if pl.get("jp_bear") else "日経不在熊市"
-    head = "对冲中 → 美股牛时拿对冲版纳指 2845" if pl.get("on") else "不对冲 → 美股牛时拿 1545"
+    from .names import label                                     # 「2845 纳指 100 对冲」「1545 纳斯达克 100」：代码带名字（2026-10-15 用户：
+    head = (f"对冲中 → 美股牛时拿 {label('2845.T', short=True)}" if pl.get("on")    # 只写代码不知道是哪只；和 bond_refuge.text 一样用短名）
+            else f"不对冲 → 美股牛时拿 {label('1545.T', short=True)}")
     fx = (f"；USD/JPY {pl['usdjpy']:.2f}（{pl.get('usdjpy_date')}，10 天 {pl['chg10_pct']:+.2f}%）"
           if pl.get("usdjpy") is not None and pl.get("chg10_pct") is not None else "")
     return (f"{head}（{pl.get('since')} 起）：急升 {pl.get('votes')}/{pl.get('votes_of')} 组（≥ {MAJ} 才算）、{jb}、{yb}{fx}")

@@ -119,6 +119,7 @@ def test_export_writes_bom_csv(capsys):
     assert raw.startswith(b"\xef\xbb\xbf")
     rows = list(csv.reader(raw.decode("utf-8-sig").splitlines()))
     assert rows[1][:2] == ["2026-10-03", "7203.T"] and rows[1][-1] == "9000"
+    assert rows[0][2] == "名称" and rows[1][2] == "トヨタ自動車"                 # 代码后面一列名称（2026-10-15）
     assert (d / "tachibana_2026_fills.csv").exists() and "预计已代扣" in capsys.readouterr().out
 
 

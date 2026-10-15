@@ -129,7 +129,7 @@ def test_cancel_a_resting_opening_order_then_next_morning_counts_it_as_unfilled(
     assert _xo(r, o)["status"] == "7"                                       # 交易所那边：取消完了
     saved = json.loads(r.book.read_text(encoding="utf-8"))
     assert [x["status"] for x in saved["orders"] if x["cid"] == o.cid] == ["CANCELLED"]
-    assert any("撤单 买 7203.T" in e["msg"] for e in saved["events"])
+    assert any("撤单 买 7203 トヨタ自動車" in e["msg"] for e in saved["events"])     # 代码 + 名字（2026-10-15）
     assert list((paths.state_dir() / "backup").glob("live_unified_tachibana_*.json"))   # 改账本之前先备份
     assert r.ux.cancel_orders()["note"].startswith("今天没有还挂着的执行器单")              # 再撤一次：没有要撤的了
     r.day(11)                                                               # 第二天早上：撤掉的买单 = 没成交，不再买
@@ -306,7 +306,7 @@ def test_cancel_request_for_an_order_that_cannot_be_cancelled_is_rejected():
     assert not ok and "收盘" in msg
     with pytest.raises(ValueError, match="单号"):
         MO.normalize({"kind": "cancel_order", "cid": "not-a-cid"})
-    assert MO.describe(MO.normalize({"kind": "cancel_order", "cid": o.cid})).startswith("撤单 7203.T（U")
+    assert MO.describe(MO.normalize({"kind": "cancel_order", "cid": o.cid})) == f"撤单 7203 トヨタ自動車（{o.cid}）"   # 名字只加在票上，cid 原样（2026-10-15）
     assert not MO.cancel_due("tachibana", {}, _at(r.f, 15, 40))
 
 
@@ -598,7 +598,7 @@ def test_run_py_live_adopt_backs_up_and_saves(monkeypatch, capsys):
     assert run.main(["live-adopt", "--broker", "tachibana", "8306", "buy", "100", "801", "--date", r.f.isoformat(),
                      "--note", "API 故障日照单下"]) == 0
     out = capsys.readouterr().out
-    assert "已登记（人工代下）" in out and TC in out
+    assert "已登记（人工代下）" in out and f"买 {TC.split('.')[0]} 三菱" in out        # 代码 + 名字（2026-10-15）
     saved = json.loads(r.book.read_text(encoding="utf-8"))
     assert saved["state"]["pos"][TC]["shares"] == 100 and saved["adopted"][-1]["note"] == "API 故障日照单下"
     assert list((paths.state_dir() / "backup").glob("live_unified_tachibana_*.json"))

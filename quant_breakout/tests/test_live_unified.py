@@ -190,7 +190,7 @@ def test_holdings_mismatch_blocks_orders():
             seen["k"] = k
     r = rehearse(make, start, kind="tachibana-sim", before_bar=tamper)
     ux = r["ux"]
-    assert "持仓与券商不一致" in (ux.blocked or "") and "C.T" in ux.blocked
+    assert "持仓与券商不一致" in (ux.blocked or "") and "C 状态 0 股" in ux.blocked     # 名字表里没有的代码只写代码（2026-10-15）
     assert all(o.status == "BLOCKED" for o in ux.orders if o.decided_on == ux.eng.st.last_date and o.status != "DEFERRED")
 
 
@@ -231,7 +231,7 @@ def test_retry_before_open_rechecks_holdings_and_stays_blocked():
     ux2 = _retry(r, 8, 35)
     ux2.morning([])                                           # 不能因为是新进程就绕过持仓核对
     assert exch.calls.get(NEW, 0) == 0
-    assert "持仓与券商不一致" in (ux2.blocked or "") and "B.T 状态 0 股 / 券商 100 股" in ux2.blocked
+    assert "持仓与券商不一致" in (ux2.blocked or "") and "B 状态 0 股 / 券商 100 股" in ux2.blocked
     assert any(e["level"] == "error" and "持仓与券商不一致" in e["msg"] for e in ux2.book["events"])
     o = [x for x in ux2.orders if x.ticker == "A.T"][0]
     assert o.status == "BLOCKED" and "持仓与券商不一致" in o.note
@@ -486,7 +486,7 @@ def test_compare_with_sim_only_on_same_day_and_names_differences():
     a.pos["7203.T"] = UPos("7203.T", "JP", 100, 3000.0, "2026-09-29", 2800.0, 3000.0, 3000.0)
     a.history[-1][1] = 1300.0
     r = compare_with_sim(a, b)
-    assert r["same"] is False and "7203.T" in r["text"] and "权益差 +300 円" in r["text"]
+    assert r["same"] is False and "个股 7203 トヨタ自動車：100 股 vs 模拟盘 无" in r["text"] and "权益差 +300 円" in r["text"]
 
 
 def test_daily_text_has_units_and_flags():
@@ -500,7 +500,7 @@ def test_daily_text_has_units_and_flags():
                       "phase": "open", "status": "DEFERRED", "note": ""}]}
     title, short, body = daily_text(sm, st, {"comparable": True, "same": True, "text": "与云端模拟盘一致"}, True, 1_000_000)
     assert "模拟操盘" in title and "权益 ¥1,003,000（当日 +3,000 円，累计 +0.30%）" in short and "与云端一致" in short
-    assert "1655.T 1,100 口" in body and "@ ¥880.50" in body and "7203.T 100 股（开盘后指値 ≤ ¥3,090）" in body
+    assert "1655 S&P500：1,100 口" in body and "@ ¥880.50" in body and "下一开盘：买 7203 トヨタ自動車：100 股（开盘后指値 ≤ ¥3,090）" in body
 
 
 def test_demo_order_test_runs_the_whole_order_cycle(capsys):

@@ -320,7 +320,7 @@ def test_build_and_html():
     assert any("决算" in b for b in cs["C3.T"]["blocks"])                               # s2 当天决算 → 0 个交易日 ≤ 2
     assert tl["sweep_n"] == 3 and all(r["ticker"] != "P.T" for r in tl["sweep"])       # 持仓不进横展开
     items = [x for c in tl["calendar"] for x in c["items"]]
-    assert any("周线完成" in x for x in items) and any("C3.T 决算" in x for x in items)
+    assert any("周线完成" in x for x in items) and any("C3 决算" in x for x in items)       # 代码 + 名字、去 .T；查不到名字只写代码（2026-10-15）
     TL.attach_states(tl, {"P.T": {"state": "T2", "label": "扭亏为盈", "effect": "+", "disc": "2026-08-07"}})
     assert tl["holdings"][0]["state"]["label"] == "扭亏为盈"
     from qbreak.earn_state import tag_html

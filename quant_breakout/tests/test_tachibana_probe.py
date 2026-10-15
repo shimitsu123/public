@@ -58,13 +58,13 @@ class _Q:
 @pytest.mark.parametrize("now,rows,good,word", [
     (SESSION, {}, False, "★ 交易时间里取不到现价（字段名不对？）"),
     (SESSION, {"7203.T": {"prev_close": 2980.0}}, False, "★ 交易时间里取不到现价"),
-    (SESSION, {"7203.T": {"price": 3010.0, "prev_close": 2980.0}}, True, "现价 7203 3,010 円（1329、1655 没有现价"),
-    (EVENING, {"7203.T": {"prev_close": 2980.0}}, True, "盘外：现价为空是正常的（前日終値 7203 2,980 円）"),
-    (EVENING, {"7203.T": {"price": 3010.0, "prev_close": 2980.0}}, True, "盘外：现价 7203 3,010 円（前日終値"),
+    (SESSION, {"7203.T": {"price": 3010.0, "prev_close": 2980.0}}, True, "现价 7203 トヨタ自動車：3,010 円（1329 日経225、1655 S&P500 没有现价"),   # 代码 + 名字、和数量隔「：」（2026-10-15）
+    (EVENING, {"7203.T": {"prev_close": 2980.0}}, True, "盘外：现价为空是正常的（前日終値 7203 トヨタ自動車：2,980 円）"),
+    (EVENING, {"7203.T": {"price": 3010.0, "prev_close": 2980.0}}, True, "盘外：现价 7203 トヨタ自動車：3,010 円（前日終値"),
     (EVENING, {}, False, "★ 连前日終値都没有：字段名可能不对"),
     (EVENING, {"7203.T": {"price": 3010.0}}, False, "★ 连前日終値都没有"),
     (HOLIDAY, {}, False, "★ 连前日終値都没有"),
-    (HOLIDAY, {"1655.T": {"prev_close": 700.0}}, True, "盘外：现价为空是正常的（前日終値 1655 700 円）"),
+    (HOLIDAY, {"1655.T": {"prev_close": 700.0}}, True, "盘外：现价为空是正常的（前日終値 1655 S&P500：700 円）"),
 ])
 def test_probe_quote_step_judges_by_session(now, rows, good, word):
     import run

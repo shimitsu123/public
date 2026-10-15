@@ -48,7 +48,7 @@ def test_allin_uncancel_refused_when_x_already_held():
     b["state"]["pos"]["6501.T"] = {"shares": 100, "entry_px": 3500.0, "entry_date": "2026-10-05", "stop_px": 3200.0, "last_close": 3500.0}
     _save(b)
     ok, msg, _ = _un(cx)
-    assert not ok and "6501.T 现在已经持有" in msg and msg.endswith("请重新提交「全部换成」"), msg
+    assert not ok and "6501 日立製作所 现在已经持有" in msg and msg.endswith("请重新提交「全部换成」"), msg
     assert not _reqs("uncancel")
     assert f"data-act='uncancel' data-id='{cx['id']}'" not in _card(panel.render("paper", "t" * 40, AT))
 
@@ -61,7 +61,7 @@ def test_allin_uncancel_refused_when_a_later_allin_already_done():
     b["manual"]["items"]["M-later-all"] = later
     _save(b)
     ok, msg, _ = _un(cx)
-    assert not ok and "撤回之后已经有过「全部换成 9984.T」（M-later-all）" in msg and "请重新提交「全部换成」" in msg, msg
+    assert not ok and "撤回之后已经有过「全部换成 9984 ソフトバンクグループ」（M-later-all）" in msg and "请重新提交「全部换成」" in msg, msg
 
 
 def test_allin_uncancel_refused_when_unread_corefix_written_after_the_cancel():
@@ -80,7 +80,7 @@ def test_allin_uncancel_refused_when_a_new_holding_has_a_live_trim():
     _save(b)
     MO.append("paper", {"kind": "trim", "ticker": "4063.T", "pct": 5, "source": "test"}, clock=lambda: AT + dt.timedelta(minutes=1))
     ok, msg, _ = _un(cx, AT + dt.timedelta(minutes=2))
-    assert not ok and "4063.T" in msg and "请重新提交「全部换成」" in msg, msg
+    assert not ok and "4063 信越化学工業" in msg and "请重新提交「全部换成」" in msg, msg
 
 
 def test_allin_uncancel_after_holdings_changed_says_what_will_be_sold_and_when():
@@ -92,11 +92,11 @@ def test_allin_uncancel_after_holdings_changed_says_what_will_be_sold_and_when()
     html = _card(panel.render("paper", "t" * 40, AT))
     i = html.index(f"data-act='uncancel' data-id='{cx['id']}'")
     btn = html[i:html.index(">撤销撤回<", i)]
-    assert "data-when='10/07 开盘整批先卖后买（那次决策先过闸门）" in btn and "4063.T 100 股" in btn and "data-halt" not in btn
+    assert "data-when='10/07 开盘整批先卖后买（那次决策先过闸门）" in btn and "4063 信越化学工業：100 股" in btn and "data-halt" not in btn
     ok, msg, _ = _un(cx)
     assert ok and "同批的 5 条卖出 / 闲置资金指令一起恢复" in msg, msg
-    assert ("10/07 开盘整批先卖后买（那次决策先过闸门）：卖出那时拿着的 6501.T 以外的全部个股和 ETF（现在：4063.T 100 股、6758.T 100 股、"
-            "7203.T 100 股、8306.T 100 股、1545.T 100 口）、闲置资金比例 0%、取消全部固定口数") in msg
+    assert ("10/07 开盘整批先卖后买（那次决策先过闸门）：卖出那时拿着的 6501 日立製作所 以外的全部个股和 ETF（现在：4063 信越化学工業：100 股、6758 ソニーグループ：100 股、"
+            "7203 トヨタ自動車：100 股、8306 三菱ＵＦＪフィナンシャル・グループ：100 股、1545 纳斯达克 100：100 口）、闲置资金比例 0%、取消全部固定口数") in msg
     assert "★ HALT" not in msg
 
 
@@ -117,7 +117,7 @@ def test_allin_uncancel_then_execution_sells_holding_bought_while_cancelled():
     r.ux.save()
     book = json.loads((paths.state_dir() / "book.json").read_text())
     ok, msg, _ = MO.uncancel_request(TAG, book, "M-cx-buy", now=r.at(r.k - 1, 6, 30), source="cli")
-    assert ok and "A.T" in msg and "整批先卖后买" in msg, msg
+    assert ok and "现在：A 200 股" in msg and "整批先卖后买" in msg, msg
     r.day()
     assert r.item("M-all-buy")["status"] == "placed" and any(o.ticker == "A.T" and o.side == "SELL" for o in r.ux.orders)
     r.day()
@@ -144,7 +144,7 @@ def test_split_uncancel_success_says_how_much_is_sold():
     a = MO.adjust_plan(adj, _load()["state"], MO.MANUAL_CAP_PCT)
     assert 0 <= a["want"] < a["cur"] == 200
     ok, msg, _ = _un(cx)
-    assert ok and f"（凑钱的卖出一起恢复：7203.T 卖 {a['cur'] - a['want']:,} 股（200 → {a['want']:,} 股））" in msg, msg
+    assert ok and f"（凑钱的卖出一起恢复：7203 トヨタ自動車 卖 {a['cur'] - a['want']:,} 股（200 → {a['want']:,} 股））" in msg, msg
     assert "马上（盘中）下单" not in msg and "（凑钱的卖出同一时间先卖）" in msg
 
 
@@ -156,7 +156,7 @@ def test_split_uncancel_refused_when_shares_already_at_or_below_target():
         b["state"]["pos"]["7203.T"]["shares"] = want
         _save(b)
         ok, msg, _ = _un(cx)
-        assert not ok and f"7203.T 现在 {want:,} 股，已经不高于凑钱卖出的目标 {want:,} 股：恢复了也不会卖" in msg and "卖 " not in msg.split("（")[0], msg
+        assert not ok and f"7203 トヨタ自動車 现在 {want:,} 股，已经不高于凑钱卖出的目标 {want:,} 股：恢复了也不会卖" in msg and "卖 " not in msg.split("（")[0], msg
         BP().unlink()
         MO.requests_path("paper").unlink()
 
@@ -168,7 +168,7 @@ def test_split_uncancel_refused_when_stock_no_longer_held():
         del b["state"]["pos"]["7203.T"]
         _save(b)
         ok, msg, _ = _un(cx)
-        assert not ok and "7203.T 现在已经不持有：凑钱的卖出用不上" in msg, msg
+        assert not ok and "7203 トヨタ自動車 现在已经不持有：凑钱的卖出用不上" in msg, msg
         assert f"data-act='uncancel' data-id='{cx['id']}'" not in _card(panel.render("paper", "t" * 40, AT))
         BP().unlink()
         MO.requests_path("paper").unlink()
@@ -186,7 +186,7 @@ def test_uncancel_refused_when_same_ticker_had_a_later_instruction():
     _o, _m, _cxb = panel.submit({"book": "paper", "kind": "cancel", "target": trim["id"]}, t1)   # 之后那条也撤回了（不在处理）：照样算
     t2 = AT + dt.timedelta(minutes=2)
     ok, msg, _ = _un(cxa, t2)
-    assert not ok and f"撤回之后 7203.T 已经有过别的指令（{trim['id']}）：请重新下" in msg, msg
+    assert not ok and f"撤回之后 7203 トヨタ自動車 已经有过别的指令（{trim['id']}）：请重新下" in msg, msg
     assert f"data-act='uncancel' data-id='{cxa['id']}'" not in _card(panel.render("paper", "t" * 40, t2))
     assert MO.check({"kind": "uncancel", "target": _cxb["id"]}, _load(), "paper", now=t2) is None   # 之后那条自己的撤回能撤销
 
@@ -203,7 +203,7 @@ def test_uncancel_later_instruction_counted_even_after_executor_read_it():
     man.m["items"][adj["id"]]["status"] = "done"                              # 之后那条已经做完
     _save(b)
     ok, msg, _ = _un(cxa, AT + dt.timedelta(minutes=2))
-    assert not ok and f"撤回之后 7203.T 已经有过别的指令（{adj['id']}）" in msg, msg
+    assert not ok and f"撤回之后 7203 トヨタ自動車 已经有过别的指令（{adj['id']}）" in msg, msg
 
 
 # ────────── ④ 确认框 / 说明写实际的时间与价格；HALT ──────────

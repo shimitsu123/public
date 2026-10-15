@@ -82,7 +82,7 @@ def digest(T: pd.DataFrame, days: int, top: int, asof: pd.Timestamp) -> str:
     for lab, D in (("上修前列", up.sort_values("rev_pct", ascending=False)), ("下修前列", dn.sort_values("rev_pct"))):
         L.append(f"\n{lab}（{days} 天内；修正 % / 日期 / 业种 / 规模）：")
         for r in D.head(top).itertuples():
-            L.append(f"  {r.ticker} {r.name} {r.rev_pct:+.1f}% {r.rev_date} {r.s33} {r.scale}")
+            L.append(f"  {str(r.ticker).removesuffix('.T')} {r.name} {r.rev_pct:+.1f}% {r.rev_date} {r.s33} {r.scale}")   # 「7203 トヨタ自動車」（2026-10-15 统一写法：代码在前、不带 .T）
     return "\n".join(L)
 
 

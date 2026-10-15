@@ -61,10 +61,10 @@ def test_target_shares_plan_and_check():
     assert "不能再加" in MO.check(n({"kind": "adjust", "ticker": "7203", "unit": "shares", "value": 1200}), book)
     st["pos"]["7203.T"]["shares"] = 300
     assert MO.check(n({"kind": "adjust", "ticker": "7203", "unit": "shares", "value": 100}), book) is None
-    assert "没有 6758.T" in MO.check(n({"kind": "adjust", "ticker": "6758", "unit": "shares", "value": 100}), book)
+    assert "没有 6758 ソニーグループ" in MO.check(n({"kind": "adjust", "ticker": "6758", "unit": "shares", "value": 100}), book)
     MO.append(TAG, {"kind": "adjust", "ticker": "7203", "unit": "shares", "value": 100})
     assert "没处理完" in MO.check(n({"kind": "sell", "ticker": "7203"}), book, tag=TAG)
-    assert MO.describe({"kind": "adjust", "ticker": "7203.T", "unit": "yen", "value": 500000}) == "调仓 7203.T → ¥500,000"
+    assert MO.describe({"kind": "adjust", "ticker": "7203.T", "unit": "yen", "value": 500000}) == "调仓 7203 トヨタ自動車 → ¥500,000"
 
 
 # ────────── ② 执行器：加仓 / 减仓 ──────────

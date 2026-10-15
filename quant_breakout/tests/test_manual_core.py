@@ -91,8 +91,8 @@ def test_core_rec_converts_sell_trim_adjust_into_the_ratio():
     with pytest.raises(ValueError, match="减仓只能减不能加"):
         _conv(b, kind="trim", pct=90)
     assert MO.core_rec(MO.normalize({"kind": "sell", "ticker": "7203"}), b) is None    # 个股：照原来的指令
-    assert MO.describe(a) == "调仓 1655.T → 约 1,000 口（闲置资金比例 87.72%）"
-    assert MO.describe(_conv(b, kind="sell")) == "卖出全部 1655.T（之后停买闲置资金 ETF）"
+    assert MO.describe(a) == "调仓 1655 S&P500 → 约 1,000 口（闲置资金比例 87.72%）"        # 代码带名字（2026-10-15）
+    assert MO.describe(_conv(b, kind="sell")) == "卖出全部 1655 S&P500（之后停买闲置资金 ETF）"
     for bk in ({**_cbook(), "core_rule": {}}, _cbook(u100=0), _cbook(plan={"1655.T": ["SELL", 1130]}), _cbook(px=0)):
         assert _conv(bk, kind="sell")["pct"] == 0.0                       # 卖出全部 = 比例 0%：不用规则目标额（执行器还没算过 / 规则在卖也行）
     with pytest.raises(ValueError, match="现在没有"):
@@ -139,7 +139,7 @@ def test_core_target_estimate_before_the_first_rule_run():
 
 def test_check_and_now_due_for_the_ratio():
     b = _cbook()
-    assert MO.check(_conv(b, kind="adjust", unit="shares", value=1140), b) == "1655.T 换算成闲置资金比例还是 100%：不用调"
+    assert MO.check(_conv(b, kind="adjust", unit="shares", value=1140), b) == "1655 S&P500 换算成闲置资金比例还是 100%：不用调"
     assert MO.check(_conv(b, kind="adjust", unit="shares", value=1000), b) is None
     at = lambda h, m: dt.datetime(2026, 10, 6, h, m, tzinfo=JST)        # noqa: E731  2026-10-06（火）
     assert not MO.now_due("cd", b, at(10, 0))                             # 没改比例
@@ -169,7 +169,7 @@ def test_paper_etf_sell_all_at_once_and_the_rule_does_not_buy_back():
     assert o.side == "SELL" and o.qty == u0 and o.status == "FILLED" and o.phase == "now" and o.kind == "core"
     assert "1655.T" not in _held(r) and r.eng.st.core_units["1655.T"] == u0     # 券商当场成交；账本明天早上对账
     assert r.ux.book["core_rule"]["applied"] == 0.0 and res["items"][-1]["status"] == "盘中已调"
-    assert f"盘中卖出 1655.T {u0:,} 口" in _item(r, rq["id"])["msg"]
+    assert f"盘中卖出 1655 S&P500：{u0:,} 口" in _item(r, rq["id"])["msg"]
     assert not MO.now_due(r.tag, r.ux.book, _at(r, 10, 30))
     _morning(r)                                                            # 对账（持仓核对在 _morning 里）→ 决策：比例 0%
     st = r.eng.st
@@ -253,7 +253,7 @@ def test_ratio_waits_without_a_price_and_under_halt():
     r.now["t"] = _at(r, 10, 20)
     res = r.ux.now_phase(lambda ts: {})                                     # 取不到现价：10 分钟后再试
     assert not _core_orders(r) and res["retry"] == 1 and res["items"][-1]["status"] == "等"
-    assert "1655.T 取不到现价" in _item(r, "M-core-60")["msg"]
+    assert "1655 S&P500 取不到现价" in _item(r, "M-core-60")["msg"]
     assert not MO.now_due(r.tag, r.ux.book, _at(r, 10, 25)) and MO.now_due(r.tag, r.ux.book, _at(r, 10, 31))
     r.now["t"] = _at(r, 10, 31)
     r.ux.now_phase(_quote(PX))
@@ -429,12 +429,12 @@ def test_submit_etf_adjust_and_sell_become_the_ratio():
     _pbook()
     ok, msg, rec = panel.submit({"book": "paper", "kind": "adjust", "ticker": "1655", "unit": "shares", "value": 1000}, AT)
     assert ok and rec["kind"] == "core" and (rec["pct"], rec["ticker"], rec["target"]) == (87.72, "1655.T", 1000)
-    assert msg.startswith("已写：1655.T 卖 130 口（闲置资金比例 100% → 87.72%）→ 马上（盘中）卖出")
+    assert msg.startswith("已写：1655 S&P500 卖 130 口（闲置资金比例 100% → 87.72%）→ 马上（盘中）卖出")
     ok, msg, _ = panel.submit({"book": "paper", "kind": "adjust", "ticker": "1655", "unit": "shares", "value": 1000}, AT)
     assert not ok and "还是 87.72%：不用调" in msg                           # 执行器还没读的那条算「现在的比例」
     (MO.requests_path("paper")).unlink()
     ok, msg, rec = panel.submit({"book": "paper", "kind": "sell", "ticker": "1655.T"}, dt.datetime(2026, 10, 6, 8, 0, tzinfo=JST))
-    assert ok and rec["pct"] == 0.0 and msg.startswith("已写：卖出全部 1655.T → 今天 09:00 开盘卖出；之后停买闲置资金 ETF（出现买入信号会提醒，你确认才买）")
+    assert ok and rec["pct"] == 0.0 and msg.startswith("已写：卖出全部 1655 S&P500 → 今天 09:00 开盘卖出；之后停买闲置资金 ETF（出现买入信号会提醒，你确认才买）")
     (MO.requests_path("paper")).unlink()
     ok, msg, _ = panel.submit({"book": "paper", "kind": "adjust", "ticker": "1655", "unit": "shares", "value": 1140}, AT)
     assert not ok and "还是 100%：不用调" in msg
@@ -453,7 +453,7 @@ def test_ratio_effects_on_the_other_core_etf():
     assert MO.core_effects(b, 100.0) == [("1545.T", 100, 110), ("1655.T", 1130, 1140)]
     assert MO.core_effects(b, 0.0, skip="1545.T") == [("1655.T", 1130, 0)]
     ok, msg, _ = panel.submit({"book": "paper", "kind": "adjust", "ticker": "1655", "unit": "shares", "value": 1000}, AT)
-    assert ok and "；同一比例也用在：1545.T 100 → 96 口" in msg
+    assert ok and "；同一比例也用在：1545 纳斯达克 100：100 → 96 口" in msg
     h = panel.render("paper", "tok", now=AT)
     assert '"cores": {"1655.T": {"cur": 1130, "u100": 1140, "lot": 10}, "1545.T": {"cur": 100, "u100": 110, "lot": 1}}' in h
 
@@ -464,7 +464,7 @@ def test_adjust_dialog_in_core_mode_in_node(tmp_path):
     if not node:
         pytest.skip("没有 node")
     fns = "\n".join(_js_fn(panel._JS, n) for n in ("nd", "pxs", "pcs", "pctOf", "ALOT", "UW", "cpctOf", "adjCap", "adjTarget", "adjBar",
-                                                    "coreFx", "syen", "spc", "estOf", "jfee", "estPart", "estLine", "adjPrevCore"))
+                                                    "code", "tlab", "tqty", "coreFx", "syen", "spc", "estOf", "jfee", "estPart", "estLine", "adjPrevCore"))
     js = """
 class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[]; this._t=''; this.className=''; this.style={}; this.attrs={};
   this.value=''; this.disabled=false; const s=this; this.classList={add(c){ s.className=(s.className ? s.className+' ' : '')+c; }}; }
@@ -472,7 +472,8 @@ class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[
   set textContent(v){ this._t=String(v); this.children=[]; } get textContent(){ return this._t+this.children.map(c=>c.textContent).join(''); }
   setAttribute(k,v){ this.attrs[k]=String(v); } }
 const document={createElement:t=>new El(t), createTextNode:t=>{ const e=new El('#text'); e._t=String(t); return e; }};
-const CFG={eq:1000000, cap:34, when:'马上（盘中）', cores:{'1655.T':{cur:1130, u100:1140, lot:10}}}, LOT=100;
+const CFG={eq:1000000, cap:34, when:'马上（盘中）', cores:{'1655.T':{cur:1130, u100:1140, lot:10}}, names:{'1545.T':'纳斯达克 100'}}, LOT=100;
+const NAMES=CFG.names;
 const fmt=n=>Number(n).toLocaleString('ja-JP'), yen=n=>'¥'+Math.round(n).toLocaleString('ja-JP');
 let QD=null;
 const R={max:'1140', value:'1130', attrs:{}, setAttribute(k,v){ this.attrs[k]=String(v); }};
@@ -507,7 +508,7 @@ console.log(JSON.stringify(out));
     assert "闲置资金比例 50% → 100%" in u["text"] and "马上（盘中）买入" in u["text"]
     assert o["same"]["dis"] and o["same"]["text"] == "现在就是 1,130 口：不用调"     # 1135 → 按 10 口取整 = 1130 = 现在
     assert "同一比例" not in d["text"]                                       # 只拿一只：没有别的跟着变
-    assert "★ 同一比例也用在：1545.T 100 → 96 口" in o["fx"]["text"]          # 110 × 87.72% = 96.5 → 96 口
+    assert "★ 同一比例也用在：1545 纳斯达克 100：100 → 96 口" in o["fx"]["text"]   # 110 × 87.72% = 96.5 → 96 口；代码带名字、名字以数字结尾隔「：」（2026-10-15）
     assert o["zero"]["go"] == "确认卖出 1,130 口" and "→ 0%" in o["zero"]["text"]
     assert "一格 = 30 口（拖动按 10 口一步）" in o["note"] and "最右边 = 规则目标额（比例 100%）" in o["note"]   # 114 个单元 → 3 个并一格
     assert o["cells"] == 38
@@ -521,8 +522,8 @@ def test_cli_manual_adjust_on_an_etf_writes_the_ratio(capsys, monkeypatch):
     monkeypatch.setattr(CJ, "now_jst", lambda: AT)
     assert run.main(["manual", "adjust", "1655", "--shares", "1000", "--broker", "paper"]) == 0
     out = capsys.readouterr().out
-    assert "调仓 1655.T → 约 1,000 口（闲置资金比例 87.72%）" in out
-    assert "1655.T 1,130 → 1,000 口（闲置资金比例 100% → 87.72%" in out
+    assert "调仓 1655 S&P500 → 约 1,000 口（闲置资金比例 87.72%）" in out
+    assert "1655 S&P500：1,130 → 1,000 口（闲置资金比例 100% → 87.72%" in out
     (r,) = MO.read_all("paper")
     assert (r["kind"], r["pct"], r["target"]) == ("core", 87.72, 1000)
     assert run.main(["manual", "trim", "1655", "--pct", "95", "--broker", "paper"]) == 2

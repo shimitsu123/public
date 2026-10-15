@@ -1,5 +1,5 @@
 // qbreak 操作面板：kline.js（浏览器原生 ES 模块；由 qbreak/panel.py 以 /static/kline.js 提供；不要用构建工具）
-import { CFG, nd, pcs, pxs } from './core.js';
+import { CFG, nd, pcs, pxs, tlab } from './core.js';
 import { req } from './net.js';
 
 // ── K 线（同花顺式：红 = 涨（空心）、绿 = 跌（实心）；5 / 10 / 20 / 30 日均价；买入价 / 止损线）──
@@ -178,7 +178,7 @@ export function drawK(box){
   const ro=nd('div','ro',null,box); readout(ro, D, N-1, P, tf);             // 读数固定在图上面（不盖住 K 线）：默认最新一根，点 / 指到哪根就是哪根
   const tr=(P.trend||{})[tf], c0=D.c[s0], c1=D.c[N-1];
   const svg=sv('svg',{viewBox:'0 0 '+W+' '+H, width:W, height:H, role:'img',
-    'aria-label':t+' '+TFS[tf]+'（最近 '+k+' '+KU[tf]+'）：'+pxs(c0)+' → '+pxs(c1)+(tr ? '，'+((KPL.label||{})[tr.label] || tr.label) : '')}, box);
+    'aria-label':tlab(t)+' '+TFS[tf]+'（最近 '+k+' '+KU[tf]+'）：'+pxs(c0)+' → '+pxs(c1)+(tr ? '，'+((KPL.label||{})[tr.label] || tr.label) : '')}, box);
   for(const v of nice(lo, hi, 4)){
     const y=Math.round(Y(v))+0.5; sv('line',{x1:x0, x2:x1, y1:y, y2:y, 'class':'grid'}, svg);
     sv('text',{x:x1+6, y:y+4, 'class':'ax'}, svg).textContent=pxs(v);

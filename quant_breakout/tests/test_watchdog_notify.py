@@ -404,7 +404,7 @@ def test_watchdog_morning_not_done_notifies_and_fails_the_heartbeat(tmp_path):
     RS.write("tachibana", RS.build({}, phase="morning", ok=True, rc=0, blocked="持仓与券商不一致：7203.T",
                                    now=TUE.replace(hour=7, minute=41)))
     rc, r, out = _run(tmp_path)
-    assert rc == 1 and r.sent[0][1] == "- 今天的单没下：持仓与券商不一致：7203.T"   # 跑完了：不说「没有跑完」；原因说过的单不再逐笔列
+    assert rc == 1 and r.sent[0][1] == "- 今天的单没下：持仓与券商不一致：7203 トヨタ自動車"   # 跑完了：不说「没有跑完」；原因说过的单不再逐笔列（代码 + 名字，2026-10-15）
     assert "执行器停下" not in r.sent[0][1] and "没有跑完" not in r.sent[0][1]
     RS.write("tachibana", RS.build({}, phase="morning", ok=False, rc=1, error="昨天的",
                                    now=TUE - dt.timedelta(days=1)))
@@ -420,7 +420,7 @@ def test_watchdog_names_orders_that_were_not_placed_after_a_finished_run(tmp_pat
     RS.write("tachibana", RS.build({}, phase="morning", ok=True, rc=0, now=TUE.replace(hour=7, minute=41)))
     rc, r, out = _run(tmp_path)
     assert rc == 1 and "没有跑完" not in r.sent[0][1]
-    assert "- 决策 2026-10-05 处理了，但有 2 笔没下：7203.T 买 100 股 被挡：未 ARM；1655.T 卖 100 口 被拒：余力不足" in r.sent[0][1]
+    assert "- 决策 2026-10-05 处理了，但有 2 笔没下：7203 トヨタ自動車 买 100 股 被挡：未 ARM；1655 S&P500 卖 100 口 被拒：余力不足" in r.sent[0][1]
 
 
 def test_watchdog_paper_before_the_sim_start_is_not_a_failure(tmp_path):
@@ -606,7 +606,7 @@ def test_watchdog_command_refuses_a_data_dir_inside_the_repo(tmp_path, monkeypat
 def test_watchdog_unknown_orders_and_deferred_buys(tmp_path):
     _book(orders=[_o("a", "ERROR", d="2026-10-02", side="SELL"), _o("b", "DEFERRED")])
     rc, r, out = _run(tmp_path, now=TUE.replace(minute=20))                       # 09:20：开盘后的补单可能还在跑 → 不算 DEFERRED
-    assert rc == 1 and "有状态不明的单 1 笔（7203.T 卖 100）" in r.sent[0][1] and "kabuka.e-shiten.jp" in r.sent[0][1]
+    assert rc == 1 and "有状态不明的单 1 笔（7203 トヨタ自動車 卖 100 股）" in r.sent[0][1] and "kabuka.e-shiten.jp" in r.sent[0][1]
     assert "开盘后的买单" not in r.sent[0][1]
     rc, r, out = _run(tmp_path)
     assert "开盘后的买单还没下（1 笔：09:05 / 09:20 的补单没跑成）" in r.sent[0][1]
