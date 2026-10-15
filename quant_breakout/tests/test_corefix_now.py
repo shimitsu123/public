@@ -394,7 +394,7 @@ def test_same_day_round_trip_defers_and_a_new_value_tries_again():
 
 
 def test_halt_receipt_and_executor_wait_for_corefix():
-    """D7：HALT 中写的固定口数 → 说明写「HALT 中：解除后下一次决策照它买卖 ETF」；面板不叫、执行器不下（读到就生效）。"""
+    """D7：HALT 中写的固定口数 → 说明写 HALT_CORE_MSG（解除后照它买卖 ETF：盘中解除马上按现价下；复核 UI F1）；面板不叫、执行器不下（读到就生效）。"""
     from test_corefix_confirm import AT1012, _state
     r = _base("paper")
     _w(r.tag, "M-fix", kind="corefix", ticker="1482.T", units=100)
@@ -414,3 +414,42 @@ def test_halt_receipt_and_executor_wait_for_corefix():
     ok, msg, _w2 = panel.submit({**body, "confirm": rec["confirm"]["token"]}, AT1012, fetch=lambda ts: {})
     assert ok and msg.endswith(f"；★ {MO.HALT_CORE_MSG}（指令 {_w2['id']}）")
     paths.halt_file().unlink()
+
+
+# ══════════════════════════ 复核（2026-10-16） ══════════════════════════
+def test_corefix_without_core_rule_waits_for_the_first_decision():
+    """promise F4：执行器还没做过核心 ETF 的决策（没有 core_rule）→ 盘中的路不排（corefix_pending 是 {}）→ 面板不叫执行器、
+    文字写「第一次决策时照它排单」（以前说「马上」，实际要等第一次决策）；有了 core_rule → 照旧马上。"""
+    now = dt.datetime(2026, 10, 15, 10, 30, tzinfo=JST)                       # 星期四 盘中
+    book = {"state": {"last_date": "2026-10-14"}, "manual": {"items": {}}}
+    MO.append("paper", {"kind": "corefix", "ticker": "1482.T", "units": 100}, clock=lambda: now)
+    assert MO.corefix_pending(book, "paper", now) == {} and not MO.now_due("paper", book, now)
+    f = MO.corefix_fill(now, book, "paper")
+    assert f["mode"] == "decision" and f["day"] == dt.date(2026, 10, 16) and not f["intraday"]
+    assert f["text"] == "10/16 07:40 的决策 → 10/16 09:00 开盘（执行器还没做过核心 ETF 的决策：第一次决策时照它排单）"
+    assert MO.corefix_fill(dt.datetime(2026, 10, 15, 7, 0, tzinfo=JST), {}, "paper")["day"] == dt.date(2026, 10, 15)   # 还没跑过：今天 07:40
+    book["core_rule"] = {"lot": {"1482.T": 1}}
+    assert MO.now_due("paper", book, now) and MO.corefix_fill(now, book, "paper")["mode"] == "now"
+
+
+def test_cancel_hint_for_a_fixed_etf_not_yet_applied_says_when_it_is_ordered():
+    """UI F2：固定口数还没照它调（D1：今天开盘后 / 盘中就下）→ 撤单提示 / 交易页写「什么时候照它下单」，不是「下一次决策还会再排」。"""
+    from test_fund_src import _dict_book
+    from qbreak import live_ops as LO
+    from qbreak.live_unified import ExecOrder
+    book = _dict_book()
+    book["manual"]["core_fix"] = {"1482.T": 679}
+    book["core_rule"]["fix_applied"] = {"1482.T": 678}
+    o = ExecOrder.from_dict(book["orders"][1])
+    now = dt.datetime(2026, 10, 15, 10, 30, tzinfo=JST)
+    h = LO.cancel_hint(o, book, now, "tachibana")
+    assert "1482 对冲版美国 7〜10 年国债 手动固定 679 口还没照它调：马上（盘中）按现价下单照它下单（撤这笔单不会取消固定口数" in h
+    assert "下一次决策还会再排" not in h
+    pend, when = LO.fix_pending_when(book, now, "tachibana")
+    assert pend == {"1482.T": 679} and when == "马上（盘中）按现价下单"
+
+
+def test_next_decision_text_has_the_date():
+    """UI F5：「下一次决策（MM/DD 07:40）起生效」：周五收盘后 → 下周一；早上 07:40 之前 → 今天。"""
+    assert MO.next_decision(dt.datetime(2026, 10, 16, 16, 0, tzinfo=JST)) == "下一次决策（10/19 07:40）起生效"
+    assert MO.next_decision(dt.datetime(2026, 10, 15, 7, 0, tzinfo=JST)) == "下一次决策（10/15 07:40）起生效"

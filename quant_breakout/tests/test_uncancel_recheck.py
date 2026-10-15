@@ -243,9 +243,10 @@ def test_uncancel_under_halt_says_it_waits_for_release():
 
 def test_uncancel_when_texts_for_settings():
     b = _book()
+    b["core_rule"] = {"lot": {"1545.T": 1}}                   # 执行器做过核心 ETF 的决策（没有 → 等第一次决策；promise F4，2026-10-16）
     assert MO.uncancel_when({"kind": "core", "pct": 50}, AT, b, "paper").startswith("执行器读到就生效：核心 ETF 今天 09:00 开盘")
     assert MO.uncancel_when({"kind": "corefix", "ticker": "1545.T"}, AT, b, "paper") == "照它调：今天 09:00 开盘后马上（按现价限价，不是寄付）"   # D1
-    assert MO.uncancel_when({"kind": "unblock", "ticker": "7203.T"}, AT, b, "paper") == MO.NEXT_DECISION
+    assert MO.uncancel_when({"kind": "unblock", "ticker": "7203.T"}, AT, b, "paper") == MO.next_decision(AT)   # 带日期（复核 UI F5）
     up = MO.uncancel_when({"kind": "adjust", "ticker": "7203.T", "unit": "shares", "value": 400}, AT, b, "paper")
     assert up.startswith("今天 09:00 开盘买：寄付指値")                          # 调仓往上 = 买
     assert MO.uncancel_when({"kind": "adjust", "ticker": "7203.T", "unit": "shares", "value": 100}, AT, b, "paper") == "今天 09:00 开盘按开盘价卖（寄付成行）"

@@ -199,19 +199,20 @@ def test_core_written_during_halt_is_marked_listed_and_reported_on_lift(capsys, 
     card = h[h.index("id='halt'"):]
     card = card[:card.index("</section>")]
     assert "HALT 期间改的闲置资金比例 / 固定口数 2 条" in card and "M-core-0 卖出全部 1545 纳斯达克 100（之后停买闲置资金 ETF） 写于 01/05" in card
-    assert "解除后下一次决策照它买卖 ETF" in card
+    assert "解除后照它买卖 ETF（盘中解除会马上按现价下单" in card      # 复核 UI F1（2026-10-16）：以前写「解除后下一次决策照它买卖 ETF」
     from qbreak import calendar_jp as CJ
     import run
     monkeypatch.setattr(CJ, "now_jst", lambda: _at(r, 16, 0))
     assert run.main(["manual", "list", "--broker", r.tag]) == 0
     out = capsys.readouterr().out
-    assert "★ HALT 期间改的闲置资金比例 / 固定口数 2 条，解除后下一次决策照它买卖 ETF：M-core-0" in out
+    assert f"★ HALT 期间改的闲置资金比例 / 固定口数 2 条，解除后照它买卖 ETF（{MO.HALT_CORE_AFTER}）：M-core-0" in out
     paths.halt_file().unlink()
     r.ux.blocked = None
     _morning(r)
     ev = [e for e in r.ux.book["events"] if "HALT 期间改的闲置资金比例 / 固定口数" in e["msg"]]
     assert len(ev) == 1 and ev[0]["level"] == "warn"
-    assert ev[0]["msg"].startswith("HALT 期间改的闲置资金比例 / 固定口数 2 条，下一次决策照它买卖 ETF：M-core-0 卖出全部 1545 纳斯达克 100")
+    assert ev[0]["msg"].startswith(f"HALT 期间改的闲置资金比例 / 固定口数 2 条，照它买卖 ETF（{MO.HALT_CORE_AFTER}）："
+                                   "M-core-0 卖出全部 1545 纳斯达克 100")
     assert "要改回" in ev[0]["msg"] and "manual cancel" not in ev[0]["msg"]
     it = r.ux.book["manual"]["items"]
     assert not it["M-core-0"].get("halt") and MO.HALT_CORE_MSG not in it["M-core-0"]["msg"]

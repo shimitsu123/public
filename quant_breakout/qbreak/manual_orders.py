@@ -67,12 +67,15 @@ LABEL = {"sell": "卖出全部", "trim": "减仓", "adjust": "调仓", "buy": "�
          "cancel": "撤回指令", "cancel_order": "撤单", "uncancel": "撤销撤回"}
 CANCEL_UNTIL = dt.time(15, 30)          # 撤单：交易日这个时刻之前面板马上叫执行器（之后今天没成交的单都已失效）
 RUN_AT = dt.time(7, 40)                 # 早上决策的运行时刻（与 mac_login.RUN_AFTER / launchd 的 07:40 相同）：解除不买回从这之后第一次决策起生效
-NEXT_DECISION = "下一次决策（交易日 07:40）起生效"
+NEXT_DECISION = "下一次决策（交易日 07:40）起生效"   # 不知道现在几点时的写法；知道 → next_decision(now)「下一次决策（10/19 07:40）起生效」
 UNK_LATER = "先登记那笔状态不明的单（见通知），登记之后的下一次决策处理"   # 盘中前面有一笔下单结果不明 → 剩下的指令（执行器 now_phase；登记之前执行器一次都不跑，不是「明天开盘」；2026-10-14 复核）
 HALT_WAIT_MSG = "HALT 中：解除后照原样执行"   # HALT 期间等着的手动指令的说明（2026-10-13：以前一直写「等执行器下单」）
 HALT_DONE_MSG = "HALT 已解除 → 照原样执行"
-HALT_CORE_MSG = "HALT 中：解除后下一次决策照它买卖 ETF"   # HALT 期间读到的闲置资金比例 / 固定口数（读到就生效，ETF 等解除后的决策；2026-10-14）
-HALT_CORE_DONE = "HALT 已解除 → 下一次决策照它买卖 ETF"
+# HALT 期间读到的闲置资金比例 / 固定口数（读到就生效；2026-10-14）。D1 之后不只等下一次决策：解除时还没照它排过单的，盘中面板马上叫执行器
+# 按现价下（now_due / corefix_pending）—— 复核 UI F1（2026-10-16）：以前一律写「解除后下一次决策照它买卖 ETF」，盘中删 HALT 当场就下了单
+HALT_CORE_AFTER = "盘中解除会马上按现价下单；开盘前 / 午休解除 → 开盘后马上；HALT 中的决策已经为它排过单（被挡下）的 / 收盘后解除 → 下一次决策"
+HALT_CORE_MSG = f"HALT 中：解除后照它买卖 ETF（{HALT_CORE_AFTER}）"
+HALT_CORE_DONE = f"HALT 已解除 → 照它买卖 ETF（{HALT_CORE_AFTER}）"
 _CID = re.compile(r"^U(\d{4}-\d{2}-\d{2})-(BUY|SELL)-([0-9][0-9A-Z]{3}\.T)(-[0-9A-Za-z]{1,20})?$")
 STATUS = {"pending": "等下单", "placed": "已下单", "done": "完成", "rejected": "没执行", "cancelled": "已撤回", "voided": "已撤销",
           "superseded": "按规则的单卖"}
@@ -754,6 +757,13 @@ def lifting(tag: str | None, book: dict | None) -> set:
     return out | {t for t, b in blocks.items() if (b or {}).get("lift_from")}
 
 
+def next_decision(now: dt.datetime | None = None) -> str:
+    """「下一次决策（10/19 07:40）起生效」：带日期（复核 UI F5，2026-10-16：解除不买回的等待行 / manual list 以前写没有日期的
+    「下一次决策（交易日 07:40）起生效」，周五收盘后写的实际是下周一、祝日前后更晚）。"""
+    from .live_ops import next_decision_text
+    return f"下一次决策（{next_decision_text(now or now_jst())}）起生效"
+
+
 def unblock_why(t: str, book: dict | None, tag: str | None = None, block_id: str | None = None) -> str | None:
     """能不能写「解除不买回」（面板 / 命令行与 check 同一个口径）：没有设定 / 设定换了（页面过时）/ 已经在解除 / 有一条还没读的解除 → 理由。"""
     b = ((((book or {}).get("manual") or {}).get("blocks") or {}).get(t))
@@ -767,7 +777,7 @@ def unblock_why(t: str, book: dict | None, tag: str | None = None, block_id: str
     waiting = unseen(tag, book) if tag else []
     gone = cancelled(waiting)
     if any(r.get("kind") == "unblock" and r.get("ticker") == t and r["id"] not in gone for r in waiting):
-        return f"{lt} 已经在解除：等执行器读（{NEXT_DECISION}）"
+        return f"{lt} 已经在解除：等执行器读（{next_decision()}）"
     return None
 
 
@@ -915,7 +925,7 @@ def wait_text(r: dict | None, now: dt.datetime, book: dict | None, tag: str | No
     if k == "core":
         return f"{w}：读到就生效，核心 ETF {when_for(now, book)}照新比例调"
     if k == "unblock":
-        return f"{w}：{NEXT_DECISION}"
+        return f"{w}：{next_decision(now)}"
     return w
 
 
@@ -1327,6 +1337,14 @@ def corefix_fill(now: dt.datetime, book: dict | None, tag: str | None = None, lo
         if busy:
             text += "（执行器正在跑：这次没读到 → 今天 09:00 开盘后马上，按现价限价）"
         return {"mode": "decision", "day": today, "intraday": False, "behind": False, "busy": busy, "text": text}
+    if not (book or {}).get("core_rule"):                  # 执行器还没做过核心 ETF 的决策（新账本 / 从没决策过）：corefix_pending 是 {}，
+        day = next_trading_day(next_trading_day(last))     # 盘中的路不排 → 第一次决策时照它排单（审查 promise F4；2026-10-16：以前说「马上」）
+        if not ld and is_trading_day(today) and now.time() < CUTOFF:
+            day = today                                     # 还没跑过：今天 07:40 的第一次运行
+        while day < d:
+            day = next_trading_day(day)
+        return {"mode": "decision", "day": day, "intraday": False, "behind": False, "busy": False,
+                "text": f"{day:%m/%d} 07:40 的决策 → {day:%m/%d} 09:00 开盘（执行器还没做过核心 ETF 的决策：第一次决策时照它排单）"}
     if mode == "now":
         return {"mode": "now", "day": today, "intraday": True, "behind": False, "busy": False,
                 "text": "马上（盘中）按现价下单" + ("（模拟账户当场成交）" if paper else "")}
@@ -2199,7 +2217,7 @@ def uncancel_when(tg: dict | None, now: dt.datetime, book: dict | None, tag: str
     if k == "corefix":                                     # 与新写一条一样的时段口径（D1；2026-10-15：以前一律「下一次决策起」）
         return "照它调：" + corefix_fill(now, book, tag)["text"]
     if k == "unblock":
-        return NEXT_DECISION
+        return next_decision(now)
     return "执行器下一次运行时处理"
 
 
@@ -2248,11 +2266,12 @@ def now_due(tag: str, book: dict | None, now: dt.datetime | None = None) -> bool
     st = (book or {}).get("state") or {}
     if str(st.get("last_date") or "") < prev_trading_day(now.date()).isoformat():
         return False                                        # 今天早上的运行还没完成（它会先处理这些指令）
-    if any(r["kind"] in ORDER_KINDS + ("core", "uncancel") or (r["kind"] == "corefix" and not r.get("fund_for"))
+    cr = (book or {}).get("core_rule") or {}
+    if any(r["kind"] in ORDER_KINDS + ("core", "uncancel")
+           or (r["kind"] == "corefix" and not r.get("fund_for") and cr)   # 没有 core_rule → 执行器盘中不排（corefix_pending {}），等第一次决策
            for r in unseen(tag, book)):
         return True
     today = now.date().isoformat()
-    cr = (book or {}).get("core_rule") or {}
     if corefix_pending(book, tag, now):                     # 固定口数改了、还没照它调（与执行器 now_phase 的 fix_moves 同一个判断；D1）
         try:
             age = (now - dt.datetime.fromisoformat(str(cr["fix_tried"]))).total_seconds() if cr.get("fix_tried") else None
@@ -2619,7 +2638,7 @@ class Manual:
         head = (f"{len(todo)} 条手动指令在 HALT 期间等着，现在照原样执行："
                 + "；".join(f"{it['id']} {names.label(it.get('ticker'))} {LABEL.get(it.get('kind'), it.get('kind'))} 写于 {mmdd(it.get('at'))}"
                             for it in todo) if todo else "")
-        tail = (f"HALT 期间改的闲置资金比例 / 固定口数 {len(etf)} 条，下一次决策照它买卖 ETF：{halt_core_line(etf)}" if etf else "")
+        tail = (f"HALT 期间改的闲置资金比例 / 固定口数 {len(etf)} 条，照它买卖 ETF（{HALT_CORE_AFTER}）：{halt_core_line(etf)}" if etf else "")
         self.halt_backlog = ("。".join(x for x in (head, tail) if x)
                              + (f"（HALT 从 {mmdd(since)} 起）" if since else "")
                              + ("。要不做：面板「撤回」或 liveu.sh manual cancel <id>" if todo else "")
@@ -3738,7 +3757,7 @@ def lines(sm: dict | None, today: str | None = None, now: dt.datetime | None = N
 
 __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEFAULT", "CAP_PCT", "MAX_POS", "SESSION", "Manual",
            "append", "read_all", "read_known", "is_pruned", "KEEP_ITEMS", "PAPER_IDLE", "paper_refuse", "unseen", "cancelled", "normalize", "batch_blocks", "lifting", "unblock_why", "lift_day", "rebuy_day",
-           "block_text", "NEXT_DECISION", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "busy_today", "OPEN_ST",
+           "block_text", "NEXT_DECISION", "next_decision", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "HALT_CORE_AFTER", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "busy_today", "OPEN_ST",
            "corefix_clear_text", "resume_info", "wait_word", "wait_text", "fix_applied", "corefix_pending", "allin_busy_text", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text", "when_for", "morning_behind",
            "next_window", "due", "cancel_due", "CANCEL_UNTIL",
            "RULE_TEXT", "UNK_LATER", "NOW_NO_CANCEL", "NOW_FILLED_NO_CANCEL", "NOW_BUY_LAPSED", "NOW_SELL_WITHDRAWN", "now_sell_withdrawn", "now_lapsed", "now_expired", "now_cancel_why",

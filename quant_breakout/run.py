@@ -2935,10 +2935,10 @@ def _index_mult(market: str, tickers: list[str], today, base: dict | None = None
     return out
 
 
-def _corp_actions_provider():
-    """除息 / 拆股数据（yfinance Ticker.actions，12 小时缓存）。"""
+def _corp_actions_provider(ttl_hours: float = 12.0):
+    """除息 / 拆股数据（yfinance Ticker.actions，默认 12 小时缓存）。"""
     from qbreak.corpactions import YFinanceActions
-    return YFinanceActions()
+    return YFinanceActions(ttl_hours=ttl_hours)
 
 
 def _scan_market(uni, p, market, dcfg, budget, index_close=None, macro_info=None, fit: dict | None = None) -> list[dict]:
@@ -4235,7 +4235,8 @@ def _live_unified_run(a, opened: list) -> int:
         elif a.phase == "open":
             if paper:                                        # 模拟账户：成交日 09:25 前后按 1 分钟线的开盘价当天撮合（D3；2026-10-15）
                 from qbreak.data import intraday_open
-                res_open = ux.open_phase(feed=intraday_open, corp=_corp_actions_provider())
+                # 公司行为只用 1 小时内取的（复核 F5，2026-10-16：早上 07:40 存的 12 小时缓存可能还没有今天的除息）
+                res_open = ux.open_phase(feed=intraday_open, corp=_corp_actions_provider(ttl_hours=1.0))
             else:
                 ux.open_phase(final=bool(a.retry))           # 09:20 的重试是最后一次：还没有始値的票这时放弃（记入差异）
         else:
@@ -4618,7 +4619,7 @@ def cmd_manual(a) -> int:
                      + "（要不做：先 manual cancel <指令 id>）" if wait_ else "（没有）"))
             hc_ = MO.halt_core(sm["items"], un_, gone_)   # HALT 中改的闲置资金比例 / 固定口数：读到就生效、解除后照它买卖 ETF（2026-10-14）
             if hc_:
-                print(f"★ HALT 期间改的闲置资金比例 / 固定口数 {len(hc_)} 条，解除后下一次决策照它买卖 ETF：{_ann(MO.halt_core_line(hc_))}"
+                print(f"★ HALT 期间改的闲置资金比例 / 固定口数 {len(hc_)} 条，解除后照它买卖 ETF（{MO.HALT_CORE_AFTER}）：{_ann(MO.halt_core_line(hc_))}"
                       "（要改回：manual core --pct N / manual corefix <ETF> --clear）")
         print(f"现在写的买卖：{when}下单（{MO.RULE_TEXT}）")
         s_ = MO.slots(b_, tag)
@@ -4738,7 +4739,7 @@ def cmd_manual(a) -> int:
         for ln in (pv_ or {}).get("text", "").split("\n")[1:]:       # 与页面「确认下单」框同一份：预计的单（别的 ETF 卖多少）、哪天、按什么价（2026-10-15）
             print(f"  {ln}")
     elif rec["kind"] == "unblock":                           # 解除不是单（2026-10-13）
-        print(f"不会买回、也不马上买 → {MO.NEXT_DECISION}；之后那次决策看的 K 线出买入信号，规则才可能买")
+        print(f"不会买回、也不马上买 → {MO.next_decision(now)}；之后那次决策看的 K 线出买入信号，规则才可能买")
     elif rec["kind"] == "core":
         c_ = MO.core_info(b_, rec["ticker"]) if rec.get("ticker") else None
         stop_ = float(rec["pct"]) <= 0
@@ -4769,7 +4770,7 @@ def cmd_manual(a) -> int:
                       f"之后每天按 {p1_:g}% 调" + hint_)
         else:
             print(f"核心 ETF {when}照新比例调；之后每天按「规则目标额 × {rec['pct']:g}%」（改回 100% 就照规则）" + hint_)
-    if paths.halt_file().exists() and rec["kind"] in ("corefix", "core"):   # 比例 / 固定口数读到就生效，ETF 的单等解除后的决策（D7；2026-10-15）
+    if paths.halt_file().exists() and rec["kind"] in ("corefix", "core"):   # 比例 / 固定口数读到就生效，ETF 的单等解除（盘中解除马上下；D7 / 复核 UI F1）
         if MO.HALT_CORE_MSG not in str((pv_ or {}).get("text") or ""):
             print(f"★ HALT 生效中（{paths.halt_file()}）：{MO.HALT_CORE_MSG}")
     elif paths.halt_file().exists():

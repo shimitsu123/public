@@ -237,6 +237,15 @@ def _src_dead(s, cid: str, now, fill, dead) -> bool:
     return src_done(s, now, fill)
 
 
+def model_same(o, srcs) -> bool:
+    """凑钱的卖单没成交、买单因此不下 / 少买 —— 这是规则自己的结果（与模型相同，不是 ★ 交易 的问题）吗（复核 tests F2，2026-10-16：
+    规则的卖单开盘跌停没成交、规则的买单钱不够，以前写成「要撤 → 不会下」并推 ★ 交易、09:30 自检不通过）：
+    买单与这些卖单都是规则的单（不是手动指令 / 固定口数 / 为它凑钱 / 闲置资金比例），卖单是行情原因没成交（没成交 / 失效），不是你撤的、不是被拒。"""
+    srcs = list(srcs or [])
+    return bool(srcs) and all(_g(x, "reason") not in MANUAL_REASONS + ("manual_fund",) and str(_g(x, "src") or "rule") == "rule"
+                              for x in [o, *srcs]) and all(_g(x, "status") in ("UNFILLED", "EXPIRED") for x in srcs)
+
+
 def fund_srcs(o, orders) -> list:
     """买单 o 的凑钱卖单（账本里找得到的；旧账本没有 fund_src → []）。"""
     by = {str(_g(x, "cid")): x for x in orders}
@@ -361,7 +370,10 @@ def fund_cascade(orders, *, cash, now: dt.datetime | None, need=None, lot_of=Non
             if act == "keep":
                 q = n0
         when = "开盘后下" if _g(o, "status") == "DEFERRED" else "照常下"
-        if act == "skip":
+        same = model_same(o, srcs) and len(srcs) == len(gone)
+        if act == "skip" and same:                         # 规则的卖单行情原因没成交、规则的买单钱不够：与模型相同（不推 ★ 交易）
+            note = (f"{st} → 不下（现在能用的钱约 ¥{max(free, 0):,.0f}，买 {lot:,} {u}要约 ¥{need(o, lot):,.0f}）—— 与模型相同")
+        elif act == "skip":
             note = (f"{st} → 不会下（现在能用的钱约 ¥{max(free, 0):,.0f}，按参考价买 {lot:,} {u}要约 ¥{need(o, lot):,.0f}）")
         elif act == "reduce":
             note = f"{st} → 按现在能用的钱（约 ¥{max(free, 0):,.0f}）减到 {q:,} {u}（原计划 {n0:,} {u}；{when}）"
@@ -370,7 +382,7 @@ def fund_cascade(orders, *, cash, now: dt.datetime | None, need=None, lot_of=Non
         if act != "skip":
             pool -= need(o, q if act == "reduce" else n0)
         out.append({"o": o, "act": act, "qty": int(q if act != "skip" else 0), "was": n0, "srcs": srcs, "note": note[:300],
-                    "free": round(free, 2)})
+                    "free": round(free, 2), "model": same})
         if apply:
             if act == "skip":
                 _set(o, status="SKIPPED", note=note[:300], fund_src=[])
@@ -385,7 +397,7 @@ def cascade_events(res: list[dict]) -> list[tuple[str, str]]:
     for r in res:
         o = r["o"]
         what = f"买 {_labq(_g(o, 'ticker'), f'{int(r['was']):,} {_unit(o)}')}"
-        if r["act"] == "keep":
+        if r["act"] == "keep" or r.get("model"):          # 与模型相同的不下 / 照常：info（不推 ★ 交易）
             ev.append(("info", f"{what}：{r['note']}"))
         else:
             ev.append(("warn", f"★ 交易：{what}：{r['note']}"))
@@ -410,6 +422,17 @@ def next_decision_text(now: dt.datetime) -> str:
     d0 = now.date()
     d1 = d0 if is_trading_day(d0) and now.time() < dt.time(7, 40) else next_trading_day(d0)
     return f"{d1:%m/%d} 07:40"
+
+
+def fix_pending_when(book: dict | None, now: dt.datetime, tag: str | None = None) -> tuple[dict, str]:
+    """还没照它调的固定口数（manual_orders.corefix_pending：含执行器还没读的）与什么时候照它下单（corefix_fill 的一句话）→ ({票: 口数}, 文字)；
+    撤单提示 / 交易页「固定口数仍有效」用：没照它调过的今天开盘后 / 盘中就下，不是「下一次决策还会再排」（复核 UI F2，2026-10-16）。"""
+    try:
+        from . import manual_orders as MO
+        pend = MO.corefix_pending(book, tag, now)
+        return pend, (MO.corefix_fill(now, book, tag)["text"] if pend else "")
+    except Exception:                                      # noqa: BLE001  只是说明
+        return {}, ""
 
 
 def _core_fix_of(book: dict | None, tag: str | None = None) -> dict:
@@ -439,12 +462,19 @@ def cancel_hint(o, book: dict | None, now: dt.datetime, tag: str | None = None) 
         fx = _core_fix_of(book, tag)
         d = ((book or {}).get("state") or {}).get("last_date")
         mine = [x for x in (book or {}).get("orders") or [] if x.get("decided_on") == d]
+        pend, when = fix_pending_when(book, now, tag)       # 还没照它调的固定口数（D1）：今天开盘后 / 盘中就照它下，不等下一次决策（复核 UI F2）
         if t in fx:
+            if t in pend:
+                return (f"{head}；{_lab(t)} 手动固定 {int(fx[t]):,} 口还没照它调：{when}照它下单（撤这笔单不会取消固定口数；"
+                        f"不想要 → 「持仓」里 {_lab(t)} 下面点「恢复按规则」）")
             return (f"{head}；{_lab(t)} 手动固定 {int(fx[t]):,} 口仍有效 → {nd} 的决策还会再排同样的单"
                     f"（不想要 → 「持仓」里 {_lab(t)} 下面点「恢复按规则」）")
         drv = [x.get("ticker") for x in mine if x.get("kind") == "core" and x.get("side") == "BUY" and x.get("ticker") in fx]
         if side == "SELL" and drv:
             fl = "、".join(f"{_lab(x)} {int(fx[x]):,} 口" for x in dict.fromkeys(drv))
+            if any(x in pend for x in drv):
+                return (f"{head}；这笔卖出是为手动固定（{fl}）凑钱：固定口数还没照它调 → {when}照它下单（钱不够先卖不固定的核心 ETF；"
+                        f"不想要 → 「持仓」里那只 ETF 下面点「恢复按规则」）")
             return (f"{head}；这笔卖出是为手动固定（{fl}）凑钱：固定口数仍有效 → {nd} 的决策还会再排同样的换仓"
                     f"（不想要 → 「持仓」里那只 ETF 下面点「恢复按规则」）")
         if r == "manual_core":
@@ -560,7 +590,8 @@ def src_line(o) -> str:
 # /api/status、09:30 自检、执行器的汇总推送、撤单推送、面板的「今天该下但没有执行路径」与 15:25 之后的汇总都调它。
 OUT_WORD = {"will": "会下", "done": "结束", "wont": "今天不会下", "later": "之后才下"}
 WONT_NOTE = ("不会下", "钱没来", "与模型不同", "买不起")      # 「不下」（SKIPPED）的说明里有这些 → 今天不会下（不是规则自己的正常结果）
-OK_NOTE = ("与模型相同", "被新的固定口数取代", "手动指令已撤回", "一起撤", "不是错误", "已撤回", "分钟后再试")
+NOW_SUPERSEDED = "被盘中的新单取代"                  # 等开盘后的买单：盘中已经为同一只下了单（复核 R2，2026-10-16）
+OK_NOTE = ("与模型相同", "被新的固定口数取代", "手动指令已撤回", "一起撤", "不是错误", "已撤回", "分钟后再试", NOW_SUPERSEDED)
 OPEN_AT = {"tachibana": dt.time(9, 5), "paper": dt.time(9, 25)}   # 等开盘后的买单什么时候下（立花 09:05 / 09:20；模拟账户 09:25 前后的开盘撮合）
 PAPER_OPEN_END = dt.time(11, 30)                     # 模拟账户当天的开盘撮合到这之前（之后 → 下一次早上的运行照旧撮合）
 TRADE_HEAD = "★ 交易"                               # 交易问题的推送标题开头（level = warn；经济威胁提醒不用它）
@@ -639,7 +670,7 @@ def _instr_row(r: dict, book: dict | None, now: dt.datetime, tag: str | None, ha
     if halt and k in MO.ORDER_KINDS + ("core", "corefix"):
         return put("later", None, MO.halt_text(r), "halt")
     if k == "unblock":
-        return put("later", None, MO.NEXT_DECISION)
+        return put("later", None, MO.next_decision(now))
     if MO.allin_member(r):
         fd = MO.allin_fill(now, book, tag)
         return put("will", _at(fd, MO.SESSION[0][0]), f"{MO.allin_when(now, book, tag)}整批")
@@ -783,11 +814,18 @@ def outlook(book: dict | None, waiting=(), now: dt.datetime | None = None, *, ta
         except (TypeError, ValueError, KeyError):
             casc = {}
     rows, orders = [], {}
+    po = b.get("paper_open") or {}
+    stop = str(po.get("stop") or "") if paper and d and po.get("decided_on") == d and f is not None and now.date() == f else ""
     for o in cur:
         row = _order_row(o, now=now, paper=paper, tag=tag, halt=halt, asked=asked, casc=casc, unf=unf, f=f)
         if row["state"] == "will":
             row["act_at"] = _act_at(row, o, now, paper, f)
-            if row["act_at"] is not None and row["act_at"].date() > now.date():
+            if stop and (o.get("status") == "DEFERRED"
+                         or (o.get("status") == "SENT" and (o.get("phase") or "morning") == "morning")):
+                nd = next_trading_day(now.date())        # 今天的开盘撮合不做（公司行为 / 开盘价超出制限値幅）→ 明早的运行按日线撮合
+                row.update(state="later", act_at=_at(nd, dt.time(7, 40)),   # （复核 F3，2026-10-16：以前还写「今天 09:25」，面板误推「没有执行路径」）
+                           reason=f"今天不做开盘撮合（{stop}）：{nd:%m/%d} 07:40 的运行按今天的正式开盘价撮合")
+            elif row["act_at"] is not None and row["act_at"].date() > now.date():
                 row["state"] = "later"
                 if paper and o.get("status") == "DEFERRED":    # 今天的开盘撮合过了 11:30 还没下：不再写 07:40 存下的旧说明
                     row["reason"] = (f"今天的开盘撮合（09:25〜11:30）没下成 → {row['act_at']:%m/%d %H:%M} 的运行按那天的开盘价照旧撮合"
@@ -898,7 +936,10 @@ def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
     if f != now.date():
         return f"不是今天的单（成交日 {f}）"
     if unsent:
-        if not paper and now.time() >= CLOSE_T:
+        if now.time() >= CLOSE_T:                          # 两种账本同一个截止（面板 15:30 之后不再叫 --phase cancel：cancel_due）
+            if paper and st == "DEFERRED":                 # 模拟账户：明早的运行按今天的开盘价照旧撮合（复核 promise F1，2026-10-16：
+                return ("已经收盘（15:30）：模拟账户等开盘后的买单明早的运行按今天的开盘价照旧撮合（钱够才买），现在撤不了"   # 以前面板接受、
+                        "（明早对账之后不想拿着：写手动卖出）")                            # 却没有路去撤，第二天照样成交）
             return "已经收盘（15:30）：这笔今天不会再发了，不用撤"
         return None
     if paper:
@@ -1085,6 +1126,26 @@ def cancel_core(orders: list, book: dict, get_broker, cids=None, *, paper: bool,
                 res["done"].append(xr)
                 res["by_cid"][x.cid] = ("done", xr["why"])
                 res["events"].append(("info", f"撤单 买 {_labq(x.ticker, f'{int(x.qty):,} {_unit(x)}')}（{x.cid}）：撤掉了 —— {xr['why']}"))
+            for x in [y for y in orders if _g(y, "side") == "BUY" and _g(y, "status") in CANCELLABLE + ("FILLED",)
+                      and o.cid in [str(c) for c in (_g(y, "fund_src") or [])] and str(_g(y, "cid")) not in res["by_cid"]]:
+                # 已经发到交易所的（09:05 / 09:20 的开盘后补单在你点之前发出了；页面是旧的）：也撤（复核 R3，2026-10-16：以前只撤还没发出的，
+                # 发出的那笔留在交易所、推送也不提）；撤不了（已经成交 / 模拟账户已撮合）→ 写明
+                n_ = int(_g(x, "sent_qty") or _g(x, "qty") or 0)
+                what = f"买 {_labq(x.ticker, f'{n_:,} {_unit(x)}')}（{x.cid}）"
+                why_x = cancel_why(x, book, now, paper)
+                if why_x:
+                    res["skipped"].append({"cid": x.cid, "ticker": x.ticker, "side": x.side, "qty": n_, "kind": x.kind or "stock",
+                                           "why": f"已经发到交易所，没一起撤：{why_x}"})
+                    res["by_cid"][x.cid] = ("skipped", why_x)
+                    res["events"].append(("warn", f"{TRADE_HEAD}：{what}：已经发到交易所，没一起撤 —— {why_x}"))
+                    continue
+                h = cancel_hint(x, book, now, tag)
+                kx, wx = _cancel_one(x, broker(), paper, now, source, polls)
+                res[kx].append({"cid": x.cid, "ticker": x.ticker, "side": x.side, "qty": n_, "why": wx, "kind": x.kind or "stock", "hint": h})
+                res["by_cid"][x.cid] = (kx, wx)
+                res["events"].append(("info" if kx in ("done", "pending") else "warn",
+                                      f"撤单 {what}（和凑钱的卖单 {_lab(o.ticker)} 一起撤）："
+                                      + {"done": "撤掉了 —— ", "pending": "撤单已受理 —— "}.get(kx, "★ 没撤 —— ") + wx))
         for it in (((book or {}).get("manual") or {}).get("items") or {}).values():   # 盘中为手动买入凑钱的核心卖单（M16）
             if o.cid not in [str(c) for c in it.get("fund_wait") or []] or it.get("status") != "pending":
                 continue

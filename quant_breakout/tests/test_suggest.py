@@ -223,3 +223,16 @@ def test_order_key_without_and_with_probability():
     assert [r["ticker"] for r in sorted(rows, key=lambda r: SG.order_key(r, False))] == ["trig", "imm", "w_lo", "noprob", "w_hi", "blocked"]
     rows.append(row("far", p=0.3, days=8))
     assert [r["ticker"] for r in sorted(rows, key=lambda r: SG.order_key(r, True))][-3:] == ["far", "w_hi", "blocked"]
+
+
+def test_build_lists_the_earnings_block_of_held_stocks():
+    """UI F6（2026-10-16）：持仓不在候选行里 → 另给 held_block（决算前），交易室给持仓的「加仓」也挡（执行器 entry_why 同一个闸门）。"""
+    from qbreak.unified import UPos
+    ind, eng, i = _engine()
+    px = float(ind["E.T"]["Close"].iloc[-1])
+    eng.st.pos["E.T"] = UPos("E.T", "JP", 100, px, str(eng.gidx[i - 5].date()), px * 0.9, px, px)   # 拿着 E.T（不在候选行里）
+    eng.entry_block_fn = lambda t, i_: "决算前 2 天" if t == "E.T" else None
+    sg = SG.build(ind, eng, i, P)
+    assert sg["held_block"] == {"E.T": "决算前 2 天"} and "E.T" not in {r["ticker"] for r in sg["rows"]}
+    eng.entry_block_fn = None
+    assert SG.build(ind, eng, i, P)["held_block"] == {}

@@ -34,7 +34,7 @@ SAKIN_URL = "https://www.e-shiten.jp/TorihikiRule/rule/sakin_hibakari.html"   # 
 NOTE = "券商不限次数；限制来自差金決済与执行器规则"            # 卡片的说明（立花不限每天下单次数：MACOS.md §9，2026-09-26 核对）
 AM = (dt.time(9, 0), dt.time(11, 30))                          # 前場
 PM = (dt.time(12, 30), dt.time(15, 30))                        # 後場（15:25〜15:30 是收盘竞价：执行器盘中的路到 15:25 为止，MO.SESSION）
-PHASE_TEXT = {"holiday": "休市日", "pre": "开盘前", "am": "盘中（前場）", "lunch": "午休", "pm": "盘中（後場）",
+PHASE_TEXT = {"holiday": "休市日", "pre": "开盘前", "am": "盘中（前场）", "lunch": "午休", "pm": "盘中（后场）",
               "closing": "收盘竞价（15:25〜15:30）", "after": "收盘后"}
 UNKNOWN = ("SENDING", "ERROR")                                 # 状态不明的单（live_unified.UNKNOWN）
 GAP_PCT = 3.0                                                  # 个股买入：现价比收盘高这么多就不买（引擎 max_entry_gap_pct；汇总 new_pos.gap_pct 有就用它）
@@ -70,7 +70,7 @@ def market(now: dt.datetime, book: dict | None = None) -> dict:
         nt = "今天 09:00 开盘"
     elif ph == "lunch":
         nxt = dt.datetime.combine(d, PM[0], tzinfo=now.tzinfo)
-        nt = "今天 12:30 後場开盘"
+        nt = "今天 12:30 后场开盘"
     else:
         nd = next_trading_day(d)
         nxt = dt.datetime.combine(nd, AM[0], tzinfo=now.tzinfo)
@@ -153,30 +153,34 @@ def _broker_cash(book: dict | None, tag: str | None, now: dt.datetime) -> float:
 
 def cash_now(book: dict | None, tag: str | None, now: dt.datetime, cash: float | None = None) -> dict:
     """现在能用来买的钱（与执行器 now_phase 的 cash_now 同一个式子）：(券商的余力 − 今天开盘还没下 / 还没撮合的买单要占的 − 出金预留)
-    × (1 − 现金缓冲)。开盘时一定下不成的买单（LO.unfunded_buys）、孤儿（凑钱的卖单没了）不留钱（D4）。
-    cash：券商的余力（None = _broker_cash）→ {"base", "res"（留给还没下的买单的）, "reserve"（出金预留）, "buf_pct", "cash"}。"""
+    × (1 − 现金缓冲)。孤儿（凑钱的卖单没了）不留钱（D4）。开盘时一定下不成的买单（LO.unfunded_buys）执行器照样留钱 → 这里也留，
+    另外记在 "unf"（审查 UI F7，2026-10-16：以前这里不留，交易室比执行器多算了能用的钱）。
+    cash：券商的余力（None = _broker_cash）→ {"base", "res"（留给还没下的买单的）, "unf"（其中一定下不成的）, "reserve"（出金预留）,
+    "buf_pct", "cash"}。"""
     b = book or {}
     st = b.get("state") or {}
     paper = str(tag or "").startswith("paper") or str(b.get("broker") or "").startswith("Paper")
     base = _broker_cash(b, tag, now) if cash is None else float(cash)
     d = st.get("last_date")
     cur = [o for o in b.get("orders") or [] if isinstance(o, dict) and o.get("decided_on") == d]
-    res = 0.0
+    res = unf_v = 0.0
     if LO.fill_day_of(b) == now.date():
         try:
             unf = LO.unfunded_buys(b, cash=base)
         except (TypeError, ValueError, KeyError):
             unf = {}
         for o in cur:
-            if o.get("side") != "BUY" or str(o.get("cid")) in unf:
+            if o.get("side") != "BUY":
                 continue
             if (o.get("status") == "DEFERRED" and not LO.orphan(o, cur, now, now.date())) or \
                     (paper and o.get("phase") == "morning" and o.get("status") == "SENT"):
                 v = float(o.get("limit") or 0) * int(o.get("qty") or 0) or LO._need_est(o, int(o.get("qty") or 0))
                 res += v + MO.fee_jp(v)
+                if str(o.get("cid")) in unf:
+                    unf_v += v + MO.fee_jp(v)
     rsv = LO._reserve_of(b, paper)
     buf = MO.CASH_BUF_PCT
-    return {"base": round(base), "res": round(res), "reserve": round(rsv), "buf_pct": buf,
+    return {"base": round(base), "res": round(res), "unf": round(unf_v), "reserve": round(rsv), "buf_pct": buf,
             "cash": max(0.0, (base - res - rsv) * (1 - buf / 100))}
 
 
@@ -346,6 +350,7 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
     mult = ((npos.get("markets") or {}).get("JP") or {}).get("mult")
     gap = float(npos.get("gap_pct") or GAP_PCT)
     rows = {str(r.get("ticker")): r for r in ((sm.get("suggest") or {}).get("rows") or []) if isinstance(r, dict) and r.get("ticker")}
+    held_block = {str(k): str(v) for k, v in ((sm.get("suggest") or {}).get("held_block") or {}).items() if v}   # 持仓的「决算前」（UI F6）
     today_ok = mk["today"]
     intraday = ph in ("am", "pm")
     d = st.get("last_date")
@@ -369,6 +374,8 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
 
     money = cash_now(b, tag, now, cash)
     cash_ = money["cash"]
+    if money.get("unf"):                                   # UI F7（2026-10-16）：执行器照样给它留钱 → 说清楚为什么能用的钱少了
+        notes.append(f"今天开盘还没下的买单里约 ¥{money['unf']:,} 开盘时一定下不成，执行器照样给它们留着这笔钱（撤掉那些买单就能用）")
     skip_fix = set(fix_pend)                               # 正要照固定口数调的核心 ETF：不拿来凑（执行器 fund_src 的 fix_want）
     f_all, f_used = fundable(b, now, px_of, skip_fix)
 
@@ -447,6 +454,8 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
             _no(bb, allin, "全部换成在等")
         _stock_gates(bb, t, code_of(t), mult, el_block, tb_stock, blocks, lift, rows.get(t), px if intraday and _qpx(quotes, t) else 0,
                      close_of(t), gap)
+        if held_block.get(t) and not any("决算" in x or "決算" in x for x in bb["why"]):
+            _no(bb, f"{held_block[t]}：加仓也会被挡（执行器 entry_why 同一个闸门）", "决算前")   # 持仓不在候选行里（UI F6；2026-10-16）
         room_t = cash_ - (sk["sold_jpy"] if sk["buy"]["rule"] == 1 else 0)
         _money(bb, room_t, f_all, px, lot, eq, held0, "股")
         gate_all(bb)

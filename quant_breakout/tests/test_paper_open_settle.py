@@ -396,3 +396,161 @@ def test_run_precheck_for_paper_open(monkeypatch, capsys):
     assert not run._paper_open_work(bp)
     monkeypatch.setattr("qbreak.calendar_jp.now_jst", lambda: dt.datetime(2026, 10, 15, 9, 26, tzinfo=JST))
     assert run._paper_open_work(bp)
+
+
+# ══════════════════════════ 复核（2026-10-16）：重放现金 / 崩溃重跑 / 停下 / 之后排队 / 公司行为取不到 ══════════════════════════
+@pytest.mark.parametrize("mult", [{"1482.T": 0.999}, 0.98, {"1545.T": 1.01, "1482.T": 0.98}])
+def test_cash_bound_settle_is_replayed_at_the_official_open(mult):
+    """F1：现金卡着（凑钱卖 1545 → 买 1482）时 1 分钟线开盘与日线不同 → 撮合时的股数可能不同；第二天早上按正式开盘价重放现金、
+    改记股数 → 股数 / 现金 / 持仓与后备路径（第二天早上按日线撮合）相同，现金不为负（以前只改价格：现金变负、持仓对不上）。"""
+    r = _paper2()
+    _fixed_case(r)
+    r.now["t"] = _at(r, 9, 25)
+    assert r.ux.open_phase(feed=_feed(r, mult))["done"]
+    _morning(r)
+    r2 = _paper2("p2")
+    _fixed_case(r2)
+    _morning(r2)
+    a, b = _snap(r), _snap(r2)
+    assert a["bcash"] >= 0 and a["units"] == b["units"] and a["pos"] == b["pos"] and a["avg"] == b["avg"]
+    assert a["cash"] == pytest.approx(b["cash"], abs=0.01) and a["bcash"] == pytest.approx(b["bcash"], abs=0.01)
+
+
+def test_settle_crash_after_fills_rerun_takes_them_from_the_paper_broker():
+    """F2：模拟券商记下成交之后、账本存上之前进程被杀 → 重跑照模拟券商记下的成交（以前记成「队列里没有 → 没成交」，持仓与状态对不上）。"""
+    from qbreak.live_unified import UnifiedExecutor
+    r = _paper2()
+    sell, buy = _fixed_case(r)
+    r.now["t"] = _at(r, 9, 25)
+    real = r.ux.save
+
+    def killed(*a, **k):
+        if r.b.record(sell.cid + "-f"):
+            raise RuntimeError("killed")
+        return real(*a, **k)
+    r.ux.save = killed
+    with pytest.raises(RuntimeError):
+        r.ux.open_phase(feed=_feed(r))
+    assert r.b.record(sell.cid + "-f")["status"] == "FILLED" and not r.b.pending()
+    ux2 = UnifiedExecutor(r.eng, r.b, paths.state_dir() / "live_unified_paper.json", paper=True, check_clock=False,
+                          clock=lambda: r.now["t"], manual_tag="paper")
+    by = {o.cid: o for o in ux2._active()}
+    assert by[sell.cid].status == "SENT" and ux2.book["paper_open"].get("settling")   # 账本停在撮合之前
+    r.ux = ux2
+    r.now["t"] = _at(r, 9, 30)
+    res = ux2.open_phase(feed=_feed(r))
+    assert res["done"] and by[sell.cid].status == "FILLED" and by[sell.cid].filled_qty == 970
+    assert by[buy.cid].status == "FILLED" and by[buy.cid].filled_qty == 677
+    assert "settling" not in ux2.book["paper_open"]
+    _morning(r)
+    r2 = _paper2("p2")
+    _fixed_case(r2)
+    _morning(r2)
+    a, b = _snap(r), _snap(r2)
+    assert a["units"] == b["units"] and a["pos"] == b["pos"] and a["bcash"] == pytest.approx(b["bcash"], abs=0.01)
+
+
+def test_settle_stop_rewrites_the_notes_to_tomorrow_morning():
+    """F3：开盘价超出制限値幅 → 今天不做；排队的寄付单与等开盘后的买单的说明改成「明天 07:40 的运行按今天的正式开盘价撮合」。"""
+    r = _paper2()
+    sell, buy = _fixed_case(r)
+    r.now["t"] = _at(r, 9, 25)
+    res = r.ux.open_phase(feed=_feed(r, {"1545.T": 0.5}))
+    assert not res["done"] and r.ux.book["paper_open"]["stop"]
+    nd = (r.ux.fill_day() + dt.timedelta(days=1))
+    while nd.weekday() >= 5:
+        nd += dt.timedelta(days=1)
+    for o in (sell, buy):
+        assert o.note.startswith("今天不做开盘撮合（开盘价超出制限値幅") and f"{nd:%m/%d} 07:40 的运行按今天的正式开盘价撮合" in o.note
+    r.ux.save(force=True)
+    ol = LO.outlook(r.ux.book, [], _at(r, 10, 0), tag="paper")
+    row = next(x for x in ol["rows"] if x.get("ref") == buy.cid)
+    assert row["state"] == "later" and "今天不做开盘撮合" in row["reason"]
+
+
+def test_order_queued_after_the_settle_is_filled_next_morning():
+    """F4：撮合做完之后才排队的寄付单（例：之后又手动跑了一次 run）→ 第二天早上按正式开盘价撮合并记一条说明（以前被 expire_pending 悄悄作废）。"""
+    from qbreak.live_unified import ExecOrder
+    r = _paper2()
+    sell, buy = _fixed_case(r)
+    r.now["t"] = _at(r, 9, 25)
+    assert r.ux.open_phase(feed=_feed(r))["done"]
+    r.now["t"] = _at(r, 10, 0)
+    u0 = int(r.b.positions()["1545.T"].qty)
+    late = ExecOrder(cid=sell.cid + "-late", ticker="1545.T", side="SELL", kind="core", qty=10, decided_on=r.eng.st.last_date,
+                     ref_px=700.0, reason="rebalance", src="rule")
+    r.ux.orders.append(late)
+    r.ux._send(late, 10, bar=r.eng.st.last_date)
+    assert late.status == "SENT" and [x["client_id"] for x in r.b.pending()] == [late.cid]
+    _morning(r)
+    assert late.cid not in [x["client_id"] for x in r.b.pending()] and int(r.b.positions()["1545.T"].qty) == u0 - 10
+    hist = {o["cid"]: o for h in r.ux.book["history"] for o in h["orders"]}
+    assert hist[late.cid]["status"] == "FILLED" and hist[late.cid]["filled_qty"] == 10
+    assert any("开盘撮合之后才排队的" in e["msg"] for e in r.ux.book["events"])
+    assert {t: int(u) for t, u in r.eng.st.core_units.items() if u} == {t: int(p.qty) for t, p in r.b.positions().items() if t in r.eng.core_set}
+
+
+def test_corporate_action_lookup_failure_waits_instead_of_settling():
+    """F5：公司行为数据取不到 → 不知道今天有没有除息 → 这次不做、下一轮再试（以前当作没有，照样撮合）。"""
+    r = _paper2()
+    sell, buy = _fixed_case(r)
+    r.now["t"] = _at(r, 9, 25)
+
+    def boom(t):
+        raise OSError("yahoo down")
+    res = r.ux.open_phase(feed=_feed(r), corp=SimpleNamespace(actions=boom))
+    assert not res["done"] and res["wait"] and "公司行为（除息 / 拆股）数据没取到" in res["why"]
+    assert sell.status == "SENT" and buy.status == "DEFERRED" and r.b.pending() and not r.ux.book["paper_open"].get("stop")
+    assert paper_open_due(r.ux.book, _at(r, 9, 30))
+    r.now["t"] = _at(r, 9, 30)
+    assert r.ux.open_phase(feed=_feed(r), corp=SimpleNamespace(actions=lambda t: []))["done"]
+
+
+def test_paper_deferred_buy_after_the_close_cannot_be_cancelled():
+    """promise F1：模拟账户 15:30 之后撤「等开盘后」的买单 → 不接受（没有路去撤；明早的运行按今天的开盘价照旧撮合）；15:30 之前可以撤。"""
+    o = {"status": "DEFERRED", "phase": "morning", "side": "BUY", "decided_on": "2026-10-14", "ticker": "1482.T"}
+    bk = {"state": {"last_date": "2026-10-14"}}
+    why = LO.cancel_why(o, bk, dt.datetime(2026, 10, 15, 15, 40, tzinfo=JST), True)
+    assert why and "明早的运行按今天的开盘价照旧撮合" in why and "写手动卖出" in why
+    assert LO.cancel_why(o, bk, dt.datetime(2026, 10, 15, 15, 20, tzinfo=JST), True) is None
+    assert "不用撤" in LO.cancel_why({**o, "status": "PLANNED"}, bk, dt.datetime(2026, 10, 15, 15, 40, tzinfo=JST), True)
+
+
+def test_old_book_without_fund_src_next_morning_says_money_did_not_come_and_pushes():
+    """promise F3：旧账本（没有 fund_src）的「等开盘后」买单，凑钱的卖单已经撤了；第二天早上的后备撮合 → 「钱没来」+ ★ 交易
+    （以前送进模拟券商被拒，只有普通 warn、不推送）。"""
+    r = _paper2()
+    sell, buy = _fixed_case(r)
+    sell.status, sell.note = "CANCELLED", "你撤了单"
+    r.b.cancel_pending(sell.cid)
+    buy.fund_src = []
+    r.ux.save(force=True)
+    _morning(r)
+    hist = {o["cid"]: o for h in r.ux.book["history"] for o in h["orders"]}
+    assert hist[buy.cid]["status"] == "SKIPPED" and "钱没来" in hist[buy.cid]["note"]
+    assert any(w.startswith("★ 交易：") and "钱没来" in w for w in r.ux.trade_warns)
+    assert not any(o["client_id"] == buy.cid for o in r.b.state["orders"])         # 没有送进模拟券商被拒
+
+
+def test_deferred_buy_is_not_sent_again_when_an_intraday_order_already_bought_the_ticker():
+    """R2：等开盘后的买单（例：凑钱的卖单没了的孤儿，不算「今天已有单」）之前，盘中已经为同一只下了单（比例 / 固定口数照目标买了）
+    → 开盘后不再补发（以前余力够就照发，同一只一天买两次）；说明「被盘中的新单取代」不算「今天不会下」。"""
+    from qbreak.live_unified import ExecOrder
+    r = _paper2()
+    sell, buy = _fixed_case(r)
+    now_o = ExecOrder(cid="N-1482", ticker="1482.T", side="BUY", kind="core", qty=5, decided_on=r.eng.st.last_date, phase="now",
+                      status="FILLED", sent_qty=5, filled_qty=5, filled_px=1000.5, reason="manual_core", src="manual_core")
+    r.ux.orders.append(now_o)
+    r.now["t"] = _at(r, 9, 25)
+    res = r.ux.open_phase(feed=_feed(r))
+    assert res["done"] and sell.status == "FILLED"
+    assert buy.status == "SKIPPED" and buy.note.startswith(LO.NOW_SUPERSEDED) and "1482 对冲版美国" in buy.note
+    assert not LO.skip_wont(buy) and not any(o["client_id"] == buy.cid for o in r.b.state["orders"])
+
+
+def test_paper_open_uses_a_fresh_corporate_action_cache():
+    """F5：09:25 的开盘撮合用 1 小时内取的公司行为（早上存的 12 小时缓存可能还没有今天的除息）。"""
+    import inspect
+    import run
+    assert run._corp_actions_provider(ttl_hours=1.0).ttl == 3600.0 and run._corp_actions_provider().ttl == 12 * 3600.0
+    assert "ux.open_phase(feed=intraday_open, corp=_corp_actions_provider(ttl_hours=1.0))" in inspect.getsource(run)

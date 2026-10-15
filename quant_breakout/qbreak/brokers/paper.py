@@ -13,6 +13,8 @@ log = setup_logging("broker.paper")
 
 # 模拟盘的成交假设是「次日寄付（开盘）」，所以约定时刻就是各市场的开盘时间
 OPEN_TIME = {"JP": "09:00 JST", "US": "09:30 ET"}
+DUP_CID = "重复的 client_id（幂等拦截）"            # 同一个 client_id 再下一次：不成交、不落盘（执行器的开盘撮合重跑时据此找回上一次的成交）
+CASH_SHORT = "资金不足"                            # 现金不够、一单元也买不起（执行器第二天早上按正式开盘价重放现金时据此认出）
 
 
 def _now() -> str:
@@ -210,6 +212,76 @@ class PaperBroker(BaseBroker):
         log.info("改记 %s %s x%d：%.2f → %.2f（正式开盘价 %.2f）", side, t, q, old, new, new_open)
         return new
 
+    def record(self, client_id: str) -> dict | None:
+        """这个 client_id 最近一次记下的单（成交 / 被拒；没有 → None）。模拟账户开盘撮合中途崩溃后重跑：成交已经落盘、账本还没记 →
+        从这里找回（复核 F2，2026-10-16：以前重跑把它们记成「没成交」，第二天持仓核对不一致）。"""
+        return next((dict(o) for o in reversed(self.state["orders"]) if o.get("client_id") == client_id), None)
+
+    def open_buy(self, want: int, px_open: float, cash: float, lot: int = 0, cost: dict | None = None) -> tuple[int, float]:
+        """按开盘价 px_open、现金 cash 买 want 股 / 口会成交多少（与 _buy_now 同一个减法：lot > 0 → 按单元减到买得起）→ (股数, 花的钱)；
+        买不起 → (0, 0.0)。只算、不改状态（第二天早上按正式开盘价重放现金用；复核 F1，2026-10-16）。"""
+        slip, fee_f = self._cost("BUY", cost)
+        px, qty = float(px_open) * (1 + slip), int(want)
+        if lot > 0:
+            while qty > 0 and px * qty + fee_f(px * qty) > cash:
+                qty -= lot
+        total = px * qty + fee_f(px * qty)
+        if qty <= 0 or total > cash:
+            return 0, 0.0
+        return qty, total
+
+    def open_sell(self, qty: int, px_open: float, cost: dict | None = None) -> float:
+        """按开盘价 px_open 卖 qty 股 / 口拿到的钱（与 _sell_now 同一个式子；只算）。"""
+        slip, fee_f = self._cost("SELL", cost)
+        px = float(px_open) * (1 - slip)
+        return px * int(qty) - fee_f(px * int(qty)) if qty > 0 else 0.0
+
+    def restate(self, client_id: str, ticker: str, new_open: float, new_qty: int, cost: dict | None = None,
+                when: str = "", want: int | None = None) -> float | None:
+        """一笔开盘买入事后按另一个开盘价与股数改记（复核 F1，2026-10-16：当天 09:25 前后按 1 分钟线撮合时现金卡着、减了股，第二天的正式
+        日线开盘价不同 → 按正式开盘价重放的股数改记，与后备路径 / 云端模拟盘相同；以前只改价格，现金会变负）。
+        原来成交了 → 改股数与价格（new_qty = 0 → 记成被拒、持仓减回去）；原来被拒 / 没有记录 → 补一笔成交（client_id 照旧）。
+        现金按差额（含手续费）调整，持仓成本跟着改。→ 新的成交价（new_qty = 0 → 0.0）；new_open 不对 → None。"""
+        if not new_open or new_open <= 0:
+            return None
+        slip, fee_f = self._cost("BUY", cost)
+        new, nq = float(new_open) * (1 + slip), max(0, int(new_qty))
+        rec = next((o for o in reversed(self.state["orders"]) if o.get("client_id") == client_id), None)
+        oq = int(rec.get("filled_qty") or 0) if rec is not None and rec.get("status") == "FILLED" else 0
+        old = float(rec.get("filled_px") or 0) if oq else 0.0
+        diff = ((old * oq + fee_f(old * oq)) if oq else 0.0) - ((new * nq + fee_f(new * nq)) if nq else 0.0)
+        d = self.state["positions"].get(ticker)
+        if d is None and nq > 0:
+            d = self.state["positions"].setdefault(
+                ticker, {"qty": 0, "avg_px": 0.0, "peak": new, "stop_px": 0.0, "entry_date": when or _now()[:10],
+                         "hold_bars": 0, "last_bar": ""})
+        if d is not None:
+            held = int(d["qty"])
+            take = min(oq, held)                          # 之后盘中又卖掉了一部分：只减还在的
+            qty = held - take + nq
+            if qty <= 0:
+                self.state["positions"].pop(ticker, None)
+            else:
+                d["avg_px"] = (float(d["avg_px"]) * held - old * take + new * nq) / qty
+                d["qty"] = qty
+                if oq and abs(float(d.get("peak") or 0) - old) < 1e-9:
+                    d["peak"] = new                       # 与 reprice 相同：最高价是这笔成交价 → 跟着改
+                if nq:
+                    d["peak"] = max(float(d.get("peak") or 0), new)
+        self.state["cash"] = float(self.state["cash"]) + diff
+        info = {"from_qty": oq, "to_qty": nq, "from": round(old, 4), "to": round(new, 4), "open": float(new_open)}
+        if rec is None:
+            o = Order(ticker, "BUY", int(want or nq), new, _now(), "FILLED" if nq else "REJECTED", filled_qty=nq,
+                      filled_px=new if nq else 0.0, client_id=client_id, extra={"restated": info, "fill_date": when})
+            self.state["orders"].append(o.to_dict())
+            self._ids.add(client_id)
+        else:
+            rec.update(status="FILLED" if nq else "REJECTED", filled_qty=nq, filled_px=new if nq else 0.0, price=new)
+            rec.setdefault("extra", {})["restated"] = info
+        self._save()
+        log.info("改记 BUY %s %s：%d @ %.2f → %d @ %.2f（正式开盘价 %.2f）", ticker, client_id, oq, old, nq, new, new_open)
+        return new if nq else 0.0
+
     def cancel_pending(self, client_id: str) -> bool:
         """撤一笔还在排队（次日开盘才撮合）的单：从队列里去掉，返回有没有撤到。已经成交的不动；client_id 照旧算「下过」（幂等）。"""
         if not client_id:
@@ -286,7 +358,7 @@ class PaperBroker(BaseBroker):
         if self.defer and bar:
             if self.has_client_id(client_id):
                 return Order(ticker, "BUY", qty, limit or 0, _now(), "REJECTED",
-                             client_id=client_id, note="重复的 client_id（幂等拦截）")
+                             client_id=client_id, note=DUP_CID)
             return self.queue(ticker, "BUY", qty, ref_px or self.get_price(ticker),
                               bar, client_id, extra)
         x = extra or {}
@@ -298,7 +370,7 @@ class PaperBroker(BaseBroker):
         if self.defer and bar:
             if self.has_client_id(client_id):
                 return Order(ticker, "SELL", qty, limit or 0, _now(), "REJECTED",
-                             client_id=client_id, note="重复的 client_id（幂等拦截）")
+                             client_id=client_id, note=DUP_CID)
             return self.queue(ticker, "SELL", qty, ref_px or self.get_price(ticker),
                               bar, client_id, extra)
         x = extra or {}
@@ -309,7 +381,7 @@ class PaperBroker(BaseBroker):
                  cost: dict | None = None) -> Order:
         if self.has_client_id(client_id):
             return Order(ticker, "BUY", qty, limit or 0, _now(), "REJECTED",
-                         client_id=client_id, note="重复的 client_id（幂等拦截）")
+                         client_id=client_id, note=DUP_CID)
         if qty <= 0:
             return self._log(Order(ticker, "BUY", qty, 0, _now(), "REJECTED",
                                    client_id=client_id, note="数量为 0"))
@@ -326,7 +398,7 @@ class PaperBroker(BaseBroker):
             need = px * want + fee_f(px * want)
             return self._log(Order(ticker, "BUY", want, px, _now(), "REJECTED",
                                    client_id=client_id,
-                                   note=f"资金不足 需要{need:,.0f} 现有{self.cash():,.0f}"))
+                                   note=f"{CASH_SHORT} 需要{need:,.0f} 现有{self.cash():,.0f}"))
         self.state["cash"] -= total
         d = self.state["positions"].setdefault(
             ticker, {"qty": 0, "avg_px": 0.0, "peak": px, "stop_px": 0.0,
@@ -342,7 +414,7 @@ class PaperBroker(BaseBroker):
                   core: bool = False) -> Order:
         if self.has_client_id(client_id):
             return Order(ticker, "SELL", qty, limit or 0, _now(), "REJECTED",
-                         client_id=client_id, note="重复的 client_id（幂等拦截）")
+                         client_id=client_id, note=DUP_CID)
         d = self.state["positions"].get(ticker)
         if not d or d["qty"] < qty or qty <= 0:
             return self._log(Order(ticker, "SELL", qty, 0, _now(), "REJECTED",

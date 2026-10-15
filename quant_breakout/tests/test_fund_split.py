@@ -98,6 +98,7 @@ def test_corefix_buy_with_split_trims_stocks_only():
     b = _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "core": ["1545.T", "1482.T"]})
     b["state"]["core_last"] = {"1545.T": 250.0}
     b["state"]["cash_jpy"] = 0.0
+    b["core_rule"] = {"lot": {"1545.T": 1, "1482.T": 1}}      # 执行器做过核心 ETF 的决策（没有 → 等第一次决策；promise F4，2026-10-16）
     (panel.paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
     _sm()
     ok, msg, rec = _submit_ok({"book": "paper", "kind": "corefix", "ticker": "1482", "units": 100,

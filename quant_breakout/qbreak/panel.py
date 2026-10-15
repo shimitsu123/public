@@ -1329,6 +1329,7 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
              | {str(it.get("cid")) for it in items.values() if it.get("kind") == "cancel_order" and it.get("status") == "pending"})
     ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=asked, instr=False)   # 每笔单今天会不会下：只在 live_ops.outlook 判断（D5）
     fixed = MO.core_fixed(book, tag)
+    fpend, fwhen = LO.fix_pending_when(book, now, tag)       # 还没照它调的固定口数：今天开盘后 / 盘中就照它下（D1；复核 UI F2，2026-10-16）
     rows, fix, dead, n = {}, {}, set(), 0
     fin = {}                                                # 手动单已经做完了（全部成交 / 立花收盘后失效的买单）→ {cid: 指令后面加的说明}
     for o in cur:
@@ -1336,7 +1337,9 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
         r = ol["orders"].get(cid) or {}
         if o.get("kind") == "core" and t in fixed and (s == "CANCELLED" or cid in asked or r.get("cls") == "fund"   # 撤了 / 下不成，固定口数却还在
                                                        or (s == "SKIPPED" and "凑钱的卖单" in str(o.get("note") or ""))):   # 凑钱的卖单没了、执行器不下了（D2）
-            fix[cid] = (f"{NM.label(t)} 手动固定 {int(fixed[t]):,} 口仍然有效：下一次决策（{_next_decision(now)}）还会再排同样的单；不想要 → 在「持仓」"
+            fix[cid] = ((f"{NM.label(t)} 手动固定 {int(fixed[t]):,} 口还没照它调：{fwhen}照它下单（撤单不会取消固定口数）；不想要 → 在「持仓」"
+                         if t in fpend else
+                         f"{NM.label(t)} 手动固定 {int(fixed[t]):,} 口仍然有效：下一次决策（{_next_decision(now)}）还会再排同样的单；不想要 → 在「持仓」")
                         + ("" if int((st.get("core_units") or {}).get(t) or 0) > 0 else "的「其他闲置资金 ETF（现在没拿）」")
                         + f"里 {NM.label(t)} 下面点「恢复按规则」")
         manual = o.get("reason") in LO.MANUAL_REASONS
@@ -1931,7 +1934,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                  + (f"<div class='neg small'>等着的手动买卖指令 {len(hw)} 条（最早写于 {escape(MO.mmdd(hw[0].get('at')))}）：解除后照原样执行；"
                     "不想做了先在「交易」撤回</div>" if hw else "")                  # 2026-10-13 resume-other-3
                  + (f"<div class='neg small'>HALT 期间改的闲置资金比例 / 固定口数 {len(hc)} 条：{escape(MO.halt_core_line(hc))}"
-                    "→ 解除后下一次决策照它买卖 ETF；不想这样先在「闲置资金」改回</div>" if hc else "")   # 2026-10-14：读到就生效，以前 HALT 卡片不列
+                    f"→ 解除后照它买卖 ETF（{escape(MO.HALT_CORE_AFTER)}）；不想这样先在「闲置资金」改回</div>" if hc else "")   # 2026-10-14：读到就生效，以前 HALT 卡片不列
                  + "<div class='muted small'>不下任何单、持仓不动。恢复只在 Mac 上：在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」。</div></section>")
     else:
         H.append("<section class='card' id='halt'><h2>紧急停止</h2><div class='muted small'>全部账本（模拟和立花）从下一次运行起不下单、持仓不动；"
@@ -2360,7 +2363,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
             return False, "没写：" + "；".join(skip or ["没有要解除的"]), None
         out = MO.append_many(tag, recs, clock=(lambda: now) if now else None)
         return True, (f"已写：恢复按规则 → 解除 {NM.labels([r['ticker'] for r in out])} 的不自动买回（不会买回，也不马上买；"
-                      f"指令 {out[0]['id']} 等 {len(out)} 条" + (f"；没写：{'；'.join(skip)}" if skip else "") + f"）→ {MO.NEXT_DECISION}"), out[0]
+                      f"指令 {out[0]['id']} 等 {len(out)} 条" + (f"；没写：{'；'.join(skip)}" if skip else "") + f"）→ {MO.next_decision(now)}"), out[0]
     if str(body.get("kind") or "") in ("cancel", "uncancel"):   # 撤回 / 撤销撤回：与命令行同一个函数（同批指令一起；2026-10-13）
         fn = MO.cancel_request if body.get("kind") == "cancel" else MO.uncancel_request
         if body.get("kind") == "uncancel":
@@ -2465,7 +2468,7 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
     else:
         rec = MO.append(tag, rec, clock=clock)
     if rec["kind"] == "unblock":                           # 解除不是单：不会买回、也不马上买，下一次决策起才不挡（2026-10-13）
-        return True, f"已写：解除 {NM.label(rec['ticker'])} 的不自动买回（不会买回，也不马上买；指令 {rec['id']}）→ {MO.NEXT_DECISION}", rec
+        return True, f"已写：解除 {NM.label(rec['ticker'])} 的不自动买回（不会买回，也不马上买；指令 {rec['id']}）→ {MO.next_decision(now)}", rec
     when = MO.when_for(now or now_jst(), book,              # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘 / 早上的运行没完成（G9）
                        rec.get("ticker") if rec["kind"] in MO.ORDER_KINDS else None)   # 这只今天已经有执行器还活着的单 → 下一个交易日开盘（D4）
     k, t = rec["kind"], rec.get("ticker")

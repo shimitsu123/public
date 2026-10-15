@@ -276,7 +276,18 @@ def build(ind: dict, eng, i: int, params, pool: list[str] | None = None, names: 
             out[-1]["near_text"] = near_text(out[-1]["near"], params)
     tab = WP.load()                                            # 有比例表 → 快要出 + 观察中按历史比例排（研究判定 A）；没有 → 以前的顺序
     out = rank(out, tab or {})
-    return {"asof": asof, "fill_day": fill.isoformat(), "equity": round(eq), "rows": out, "counts": counts,
+    held_block = {}                                            # 持仓的加仓闸门「决算前」（交易室用；持仓不在候选行里。审查 UI F6，2026-10-16）
+    if eng.entry_block_fn is not None:
+        for t in sorted(held):
+            if market_of(t) != "JP" or t in eng.core_set:
+                continue
+            try:
+                w = eng.entry_block_fn(t, i)
+            except Exception:                                  # noqa: BLE001  展示用：取不到就不写
+                w = None
+            if w:
+                held_block[t] = str(w)
+    return {"asof": asof, "fill_day": fill.isoformat(), "equity": round(eq), "rows": out, "counts": counts, "held_block": held_block,
             "ranked": bool(tab), "prob_h": int((tab or {}).get("h") or WP.H), "prob_pct": bool((tab or {}).get("show_pct", True)),
             "max_positions": int(cfg.max_positions), "position_pct": float(cfg.position_pct),
             "cap_pct": round(float(cfg.max_position_pct) * 100, 2),

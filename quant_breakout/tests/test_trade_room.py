@@ -137,7 +137,7 @@ def test_session_counts_and_one_order_per_ticker():
     assert rm["headline"] == "今天还能：买 5 次 · 卖 2 次 · 共 5 次"
     assert "既能买又能卖的 2 只（同一只当天执行器只下一笔：只算一次）" in ov["trades_left"]["why"]
     assert "没有候选的价格" in ov["buy_left"]["why"] and "钱是共用的" in ov["buy_left"]["why"]
-    assert rm["market"]["line"] == "盘中（前場）：现在写的买卖 → 马上（盘中）下单"
+    assert rm["market"]["line"] == "盘中（前场）：现在写的买卖 → 马上（盘中）下单"
 
 
 def test_busy_ticker_waits_for_next_open():
@@ -187,8 +187,17 @@ def test_money_counts_cash_and_fundable_core_shared():
     assert rm["per_ticker"]["6501.T"]["buy"]["short"] == "钱不够" and rm["money"]["fundable"] == 0
 
 
+def test_held_stock_add_is_blocked_before_earnings():
+    """UI F6（2026-10-16）：拿着的票决算前 → 交易室的「加仓」也挡（以前 ✓，执行器的 entry_why 却挡掉）；卖照旧能卖。"""
+    rm = _room(_bk(), sm={"suggest": {"held_block": {"7203.T": "决算前 2 天"}}})
+    r = rm["per_ticker"]["7203.T"]
+    assert r["buy"]["n"] == 0 and r["buy"]["short"] == "决算前" and any("决算前 2 天：加仓也会被挡" in w for w in r["buy"]["why"])
+    assert r["sell"]["n"] == 1 and rm["overall"]["buy_left"]["adds"] == 1                  # 只剩 1545 能加
+
+
 def test_cash_now_same_formula_as_executor():
-    """cash_now：(余力 − 还没下的买单要占的（限价 × 股数 + 手续费）− 出金预留) × (1 − 1%)；开盘时一定下不成的买单不留钱。"""
+    """cash_now：(余力 − 还没下的买单要占的（限价 × 股数 + 手续费）− 出金预留) × (1 − 1%)；开盘时一定下不成的买单执行器照样留钱
+    → 这里也留（UI F7，2026-10-16：以前不留，比执行器多算），另记 unf。"""
     b = _bk(orders=[_o("6501.T", "BUY", status="DEFERRED", qty=100, px=3000.0, phase="open", filled=0)],
             flows=[{"date": "2026-10-14", "jpy": -100_000.0, "reserve": True}])
     m = TR.cash_now(b, "tachibana", AT)
@@ -196,7 +205,11 @@ def test_cash_now_same_formula_as_executor():
     assert m["cash"] == pytest.approx((500_000 - 300_000 - MO.fee_jp(300_000) - 100_000) * 0.99)
     assert TR.cash_now(b, "paper", AT)["reserve"] == 0                     # 模拟账户没有出金预留
     poor = _bk(cash=192.0, orders=[_o("1482.T", "BUY", status="DEFERRED", qty=678, px=1503.0, kind="core", phase="open", filled=0)])
-    assert TR.cash_now(poor, "paper", AT)["res"] == 0                       # 一定下不成（LO.unfunded_buys）：不留钱
+    m = TR.cash_now(poor, "paper", AT)                                      # 一定下不成（LO.unfunded_buys）：执行器照样留钱 → 能用 0
+    v = 678 * 1503.0
+    assert m["res"] == m["unf"] == round(v + MO.fee_jp(v)) and m["cash"] == 0
+    rm = _room(poor)
+    assert rm["money"]["cash"] == 0 and any("开盘时一定下不成，执行器照样给它们留着" in x for x in rm["notes"])
 
 
 @pytest.mark.parametrize("kw,short", [
@@ -291,7 +304,9 @@ def test_replay_1015_book(tag):
     a, f = rm["per_ticker"]["1545.T"], rm["per_ticker"]["1482.T"]
     assert a["sell"]["n"] == 1 and a["sell"]["max_qty"] == 4110 and a["buy"]["short"] == "钱不够"
     assert f["buy"]["n"] == 0 and any("同一只当天只下一笔 → 下一笔 10/16 开盘" in x for x in f["buy"]["why"])
-    assert f["label"] == "1482 对冲版美国 7〜10 年国债" and rm["money"]["cash"] == round(192 * 0.99)
+    assert f["label"] == "1482 对冲版美国 7〜10 年国债"
+    # 1482 的买单（旧账本，没有 fund_src → 不是孤儿）开盘时一定下不成，执行器的 cash_now 照样给它留钱 → 能用 0（UI F7，2026-10-16：以前 190 円）
+    assert rm["money"]["cash"] == 0 and rm["money"]["unf"] == rm["money"]["res"] > 0
     assert _room(b, _at(10, 12), tag=tag, waiting=w, sm=sm, arm="off" if tag == "tachibana" else "file")["overall"]["trades_left"]["n"] == (
         0 if tag == "tachibana" else 1)
     assert _room(b, _at(15, 40), tag=tag, waiting=w, sm=sm)["headline"] == "今天还能：买 0 次 · 卖 0 次 · 共 0 次"
@@ -314,7 +329,7 @@ def test_page_has_card_on_top_of_trade_tab_and_chips():
     h = panel.render("paper", "t" * 40, AT)
     i = h.index("<section class='card' id='room'>")
     card = h[i:h.index("</section>", i)]
-    assert "<b>今天还能：买 5 次 · 卖 2 次 · 共 5 次</b>" in card and "盘中（前場）：现在写的买卖 → 马上（盘中）下单" in card
+    assert "<b>今天还能：买 5 次 · 卖 2 次 · 共 5 次</b>" in card and "盘中（前场）：现在写的买卖 → 马上（盘中）下单" in card
     assert "<b>7203 トヨタ自動車</b> <span class='chip'>今天还能卖 ✓ / 买 ✓（二选一：同一只当天只下一笔）</span>" in card
     assert "卖：最多 200 股 · 用「卖出全部」/「调仓…」" in card and "1545 纳斯达克 100" in card
     assert "券商不限次数；限制来自差金決済与执行器规则" in card and TR.SAKIN_URL in card

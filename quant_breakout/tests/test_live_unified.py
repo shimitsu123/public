@@ -68,11 +68,25 @@ def _split_fees(r) -> float:
 
 # ────────── ① 与回测引擎逐笔一致 ──────────
 @pytest.mark.parametrize("seed", [7, 11, 23])
-def test_paper_account_equals_engine_exactly(seed):
+@pytest.mark.parametrize("kind,mult", [("paper", 1.0), ("paper-settle", 1.0), ("paper-settle", 0.999), ("paper-settle", 0.98)])
+def test_paper_account_equals_engine_exactly(seed, kind, mult):
+    """paper：开盘撮合走第二天早上的后备路径；paper-settle：每个成交日 09:25 先按 1 分钟线（= 日线开盘 × mult）当天撮合（D3 的主路径），
+    第二天早上按正式开盘价改记 / 重放现金 → 仍与引擎逐笔一致（复核 tests F3 / F1，2026-10-16）。"""
     make, start = _synth(seed)
-    r = rehearse(make, start, kind="paper")
+    r = rehearse(make, start, kind=kind, open_mult=mult)
     assert r["max_abs_diff"] == 0.0 and r["same_trades"] and r["same_core"] and not r["errors"]
     assert r["stats"]["deferred"] > 0                      # 两段式买入（开盘前余力不够 → 开盘后）确实走到了
+    if kind == "paper-settle":
+        assert len(r["settled"]) >= 10                     # 当天的开盘撮合确实做了（不是都落到后备）
+
+
+def test_settle_replay_changes_shares_and_still_equals_engine():
+    """1 分钟线开盘比日线低 2%：撮合时现金够买、按正式开盘价重放就不够 → 第二天早上改记股数（以前只改价格：现金变负、持仓对不上）。"""
+    make, start = _synth(11)
+    r = rehearse(make, start, kind="paper-settle", open_mult=0.98)
+    ev = [e["msg"] for e in r["ux"].book.get("events", [])]
+    assert any("按正式日线开盘价重放后股数不同" in m for m in ev)
+    assert r["max_abs_diff"] == 0.0 and r["same_trades"] and not r["errors"] and r["ux"].b.cash() >= 0
 
 
 @pytest.mark.parametrize("seed", [7, 23])
@@ -105,6 +119,27 @@ def test_unfilled_sell_on_limit_down_is_carried_and_replaced():
     assert [o["status"] for o in sells] == ["UNFILLED", "FILLED"]
     t = r["executor"].trades
     assert list(t[t["reason"] != "end"]["ticker"]) == ["A.T"]
+
+
+@pytest.mark.parametrize("kind", ["paper", "paper-settle"])
+def test_rule_sell_limit_down_then_its_funded_buy_is_model_same_not_a_trade_warning(kind):
+    """只有规则的单：A 死叉卖出、B 同一天出买入信号（钱要等卖 A）；A 第二天一整天ストップ安没成交 → B 不下 = 与模型相同
+    （复核 tests F2，2026-10-16：以前写「要撤 → 不会下」、推 ★ 交易、09:30 自检判没通过）。"""
+    from qbreak import live_ops as LO
+    n = 30
+    a = _frame([1000.0] * 20 + [700.0] * (n - 20), entry=(10,), dead=(19,), lock=(20,))
+    b = _frame([1500.0] * n, entry=(19,))
+    core = _frame([700.0] * n)
+    core["entry"] = False
+    make = _maker({"A.T": a, "B.T": b, "1655.T": core}, pd.Series(False, index=core.index))
+    r = rehearse(make, core.index[5], kind=kind)
+    assert r["max_abs_diff"] == 0.0 and r["same_trades"] and not r["errors"]
+    hist = [o for h in r["ux"].book["history"] for o in h["orders"]] + list(r["ux"].book["orders"])
+    bb = [o for o in hist if o["ticker"] == "B.T"]
+    assert [o["status"] for o in bb] == ["SKIPPED"]
+    assert "没成交 → 不下" in bb[0]["note"] and "与模型相同" in bb[0]["note"] and "要撤" not in bb[0]["note"]
+    assert not LO.skip_wont(bb[0])                                 # 不算「今天不会下」（outlook / 自检）
+    assert r["ux"].trade_warns == [] and not any("★" in e["msg"] for e in r["ux"].book["events"])
 
 
 def test_unfilled_opening_buy_is_dropped_not_retried():

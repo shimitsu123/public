@@ -601,7 +601,7 @@ def test_panel_batch_unblock_button_and_submit():
     assert html.count("data-act='unblock' data-t=") == 3                        # 单只的「解除」照旧
     assert "a==='unblock-batch'" in panel._JS
     ok, msg, _ = panel.submit({"book": "paper", "kind": "unblock", "ticker": "6758.T", "tickers": ["6758.T", "7203.T"]}, AT)
-    assert ok and "恢复按规则 → 解除 6758 ソニーグループ、7203 トヨタ自動車" in msg and msg.endswith("→ 下一次决策（交易日 07:40）起生效")
+    assert ok and "恢复按规则 → 解除 6758 ソニーグループ、7203 トヨタ自動車" in msg and msg.endswith(f"→ {MO.next_decision(AT)}")
     assert [r["ticker"] for r in _reqs("unblock")] == ["6758.T", "7203.T"] and len({r["at"] for r in _reqs("unblock")}) == 1
     man = MO.Manual(b, "paper")
     man.ingest()                                                               # 读到不马上去掉：记下从哪一次决策起不挡（2026-10-13）

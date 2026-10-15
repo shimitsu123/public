@@ -106,7 +106,7 @@ def test_check_refuses_duplicate_stale_and_lifting_unblock():
     assert MO.check(n({"kind": "unblock", "ticker": "7203"}), book, TAG) is None
     assert "页面过时" in MO.check(n({"kind": "unblock", "ticker": "7203", "block_id": "M-other"}), book, TAG)
     MO.append(TAG, {"kind": "unblock", "ticker": "7203"})
-    assert "已经在解除：等执行器读（下一次决策（交易日 07:40）起生效）" in MO.check(n({"kind": "unblock", "ticker": "7203"}), book, TAG)
+    assert f"已经在解除：等执行器读（{MO.next_decision()}）" in MO.check(n({"kind": "unblock", "ticker": "7203"}), book, TAG)   # 带日期（UI F5，2026-10-16）
     assert MO.lifting(TAG, book) == {"7203.T"}
     book2 = _dict_book({"7203.T": _blk(lift_from="2026-10-07")})
     assert "已经在解除（解除中（10/07 07:40" in MO.check(n({"kind": "unblock", "ticker": "7203"}), book2, TAG)
@@ -151,7 +151,7 @@ def test_panel_batch_submit_skips_stale_and_refuses_when_none_match():
     assert not ok and "换成别的设定" in msg and not _reqs("unblock")
     ok, msg, _ = panel.submit({"book": "paper", "kind": "unblock", "tickers": ["6758.T:M-x-b", "7203.T:M-old", "6758.T:M-x-b"]}, AT)
     assert ok and "解除 6758 ソニーグループ 的不自动买回（不会买回，也不马上买；指令" in msg and "没写：7203 トヨタ自動車 的不自动买回已经换成别的设定" in msg
-    assert msg.endswith("→ 下一次决策（交易日 07:40）起生效")
+    assert msg.endswith(f"→ {MO.next_decision(AT)}")
     assert [(r["ticker"], r.get("block_id")) for r in _reqs("unblock")] == [("6758.T", "M-x-b")]
     ok, msg, _ = panel.submit({"book": "paper", "kind": "unblock", "tickers": ["6758.T:M-x-b"]}, AT)
     assert not ok and "已经在解除" in msg                                      # 重复的不写
@@ -162,7 +162,7 @@ def test_panel_single_unblock_message_and_block_id():
     _sm()
     ok, msg, rec = panel.submit({"book": "paper", "kind": "unblock", "ticker": "7203", "block_id": "M20261005-060000-sell-7203"}, AT)
     assert ok and rec["block_id"] == "M20261005-060000-sell-7203"
-    assert msg == f"已写：解除 7203 トヨタ自動車 的不自动买回（不会买回，也不马上买；指令 {rec['id']}）→ 下一次决策（交易日 07:40）起生效"
+    assert msg == f"已写：解除 7203 トヨタ自動車 的不自动买回（不会买回，也不马上买；指令 {rec['id']}）→ {MO.next_decision(AT)}"
     ok, msg, _ = panel.submit({"book": "paper", "kind": "unblock", "ticker": "7203"}, AT)
     assert not ok and "已经在解除" in msg
 
@@ -248,7 +248,7 @@ def test_cli_list_and_unblock_note(capsys):
     _book(manual={"items": {}, "blocks": {"7203.T": _blk("2026-11-02", "M-z")}})
     assert run.main(["manual", "unblock", "7203", "--broker", "paper"]) == 0
     out = capsys.readouterr().out
-    assert "不会买回、也不马上买 → 下一次决策（交易日 07:40）起生效" in out
+    assert f"不会买回、也不马上买 → {MO.next_decision()}" in out
     assert run.main(["manual", "unblock", "7203", "--broker", "paper"]) == 2
     run.main(["manual", "list", "--broker", "paper"])
     out = capsys.readouterr().out

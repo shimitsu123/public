@@ -245,8 +245,28 @@ def test_u4_not_when_a_path_exists(monkeypatch):
     b.pop("paper_open")                                         # 开盘撮合还没做：面板会叫 → 有路
     (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
     sent = []
-    _trigger(monkeypatch, _t(10, 0), sent)._no_path("paper", b, _t(10, 0), "2026-10-15")
-    assert sent == [] and not panel.Trigger(run=lambda *a: None, clock=lambda: _t(10, 0)).outbox
+    tr = _trigger(monkeypatch, _t(10, 0), sent)                 # 同一个实例：_no_path 只往它的 outbox 里放（审查 tests F4，2026-10-16）
+    tr._no_path("paper", b, _t(10, 0), "2026-10-15")
+    assert tr.outbox == [] and sent == []
+    ctl = _paper_open_done()                                    # 对照：开盘撮合已经做过（没有路）→ 同一个调用真的会放进 outbox
+    tr = _trigger(monkeypatch, _t(10, 0), sent)
+    tr._no_path("paper", ctl, _t(10, 0), "2026-10-15")
+    assert len(tr.outbox) == 1 and "今天该下但没有执行路径" in tr.outbox[0][1]
+
+
+def test_u4_quiet_and_later_when_settle_stopped(monkeypatch):
+    """开盘撮合被停下（公司行为 / 开盘价超出制限値幅：paper_open.stop）→ 等开盘后的买单 = 明早 07:40 照旧撮合（later），
+    不推「今天该下但没有执行路径」（审查 paper F3 / promise F2，2026-10-16）。"""
+    b = _paper_open_done()
+    b["paper_open"]["stop"] = "7203 トヨタ自動車 今天有公司行为"
+    (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
+    ol = LO.outlook(b, [], _t(10, 0), tag="paper")
+    row = next(r for r in ol["rows"] if r.get("ref") == b["orders"][1]["cid"])
+    assert row["state"] == "later" and "今天不做开盘撮合" in row["reason"] and row["act_at"].date() == dt.date(2026, 10, 16)
+    sent = []
+    tr = _trigger(monkeypatch, _t(10, 30), sent)
+    tr._no_path("paper", b, _t(10, 30), "2026-10-15")
+    assert tr.outbox == []
 
 
 def test_after_1525_not_today_summary(monkeypatch):
