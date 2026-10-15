@@ -159,3 +159,5 @@
 - 执行器新加从仓库 `var/` 读的输入文件：加进 `quant_breakout/var/sync_inputs.txt`（`liveu.sh` 每次现读，07:40 那次 git pull 之后当天就同步）
 - shell 脚本：`$变量` 后面紧跟中文 / 全角字符时写成 `${变量}`（macOS 自带的 bash 3.2 在 UTF-8 下会把下一个字节算进变量名，
   `set -u` 时直接退出；`tests/test_shell_scripts.py` 会查）
+- Python：Mac 是 3.12、云端例行任务是 3.11 → 代码要能在 3.10 / 3.11 上 import：f-string 的 `{}` 里不用外层同种引号、反斜杠、注释、
+  单引号 f-string 里不跨行（先算好放进变量再插入）；`tests/test_py_compat.py` 会查（2026-10-16 云端后备的 sim-day 因此崩溃过）
