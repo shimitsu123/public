@@ -17,6 +17,7 @@
                                 K线解释换成通俗易懂的说法 横展开 / 现在持有的股票可以进行调仓 按照最小一次成交股数分割调仓线」）
   GET  /api/chart?book=…&t=…    一只票的 K 线（执行器写的 out/charts_<账本>.json；打开 / 滑到那只票时才取；手机端口要你本人）
   GET  /api/quotes?book=…       持有的个股与核心 ETF 的现价（Yahoo 1 分钟线，约晚 20 分钟；盘中 60 秒缓存；只展示；手机端口要你本人）
+  GET  /api/trade_room?book=…   今天还能买几次 / 卖几次（qbreak/trade_room.py：时段、差金決済、执行器规则、钱、闸门；不取价、只读；手机端口要你本人）
   POST /api/request             写一条手动指令（qbreak/manual_orders.py；与 run.py manual 相同的检查）
   POST /api/halt                建 HALT（只能建、不能解除；解除只在 Mac 上、用户明确说）
   本机才有：POST /api/pair/new（生成配对码）、/api/device/revoke（取消一台设备）；手机才有：/api/pair、/api/unpair（退出这台设备）
@@ -62,6 +63,7 @@ from . import names as NM
 from . import panel_phone as PP
 from . import paths
 from . import suggest as SG
+from . import trade_room as TR
 from . import watch_prob as WP
 from .calendar_jp import JST, is_trading_day, now_jst
 from .fees import BROKERS as _BROKERS, DEFAULT_BROKER as _DEFAULT_BROKER
@@ -87,7 +89,8 @@ TOKEN_FILE = "panel_token"
 WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "money_view.py", "broker_snapshot.py", "tax_ytd.py", "live_gate.py", "holding_view.py", "kline.py", "suggest.py", "watch_prob.py", "core_exit.py",
          "idle_cash.py", "dip_stats.py", "run_status.py", "precheck.py", "calendar_jp.py",
          "paths.py", "live_unified.py",         # 默认账本 / ARM 判定（paths）、数据依赖的提醒文字（live_unified）
-         "live_ops.py", "data.py")              # 「预计不会下单」与执行器同一个判断（live_ops）、盘中现价（data）：2026-10-15 复核补上
+         "live_ops.py", "data.py",              # 「预计不会下单」与执行器同一个判断（live_ops）、盘中现价（data）：2026-10-15 复核补上
+         "trade_room.py")                       # 今天还能买几次 / 卖几次（D6；2026-10-15）
 
 
 def token() -> str:
@@ -128,7 +131,7 @@ def _yen(v) -> str:
 # ───────────────────────── 页面（手机优先；Mac 上一样用） ─────────────────────────
 STATIC_DIR = Path(__file__).resolve().parent / "static"     # 页面的 JS（浏览器原生 ES 模块）与 CSS（2026-10-12 从 Python 字符串搬出来）
 STATIC_TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
-JS_MODULES = ("net", "core", "conn", "trade", "kline", "quotes", "app")   # main.js 按这个顺序引入；pair.js 是配对页的
+JS_MODULES = ("net", "core", "conn", "trade", "kline", "quotes", "room", "app")   # main.js 按这个顺序引入；pair.js 是配对页的
 
 
 def _static_files() -> dict[str, bytes]:
@@ -1046,6 +1049,86 @@ def _input_lines(sm: dict, st: dict) -> list[tuple[str, str]]:
     return out
 
 
+def _quote_peek(tag: str, now: dt.datetime) -> dict:
+    """现价缓存里这个账本今天取到的每只票最新的现价 → {票: 现价}（不联网：「今天还能买几次」只用页面已经取过的；没有 → 收盘估）。"""
+    with _QUOTE_LOCK:
+        items = list(_QUOTE_CACHE.items())
+    best: dict = {}
+    today = now.date().isoformat()
+    for (tg, _k), (at, q) in items:
+        if tg != tag or not isinstance(q, dict):
+            continue
+        for t, x in q.items():
+            if isinstance(x, dict) and x.get("px") and str(x.get("at") or "")[:10] == today and (t not in best or at > best[t][0]):
+                best[t] = (at, float(x["px"]))
+    return {t: v[1] for t, v in best.items()}
+
+
+def room_of(tag: str, book: dict, sm: dict, now: dt.datetime, trigger: "Trigger | None" = None, waiting: list | None = None) -> dict:
+    """「今天还能买几次 / 卖几次」（D6；qbreak/trade_room.room）：交易页的卡片、持仓的小标记、/api/trade_room 同一个数。
+    面板盘中自动下单今天暂停（Trigger.paused）→ 只写一句（写新的指令就恢复）。"""
+    pz = trigger.paused.get(tag) if trigger is not None else None
+    paused = (pz[1] or True) if pz and pz[0] == now.date().isoformat() else False
+    return TR.room(tag, book, now, quotes=_quote_peek(tag, now), waiting=waiting, sm=sm, paused=paused)
+
+
+def trade_room_json(tag: str, now: dt.datetime | None = None, trigger: "Trigger | None" = None) -> tuple[int, dict]:
+    """/api/trade_room?book=…（交易页的卡片每 1 分钟（盘中）/ 10 分钟刷新）。算不出 → 200 + ok=false（页面保留上一次的）。"""
+    now = now or now_jst()
+    try:
+        book, sm = _load(tag)
+        return 200, {"ok": True, **room_of(tag, book, sm, now, trigger)}
+    except Exception as e:                                  # noqa: BLE001  展示用：一个读不了的数不让页面报错
+        log.warning("/api/trade_room 没算成（%s：%s）", type(e).__name__, e)
+        return 200, {"ok": False, "msg": "今天还能买几次 / 卖几次：这次没算成（稍后自动再算）"}
+
+
+def _room_side(r: dict, side: str) -> str:
+    """每只一行里的一边：「卖：最多 4,110 口 · 用「卖出全部」/「调仓…」…」/「买 ✗：现在能用的现金 ¥190 不够买 1 个单元…」。"""
+    x = r[side]
+    w = "卖" if side == "sell" else "买"
+    u = "口" if r.get("kind") == "core" else "股"
+    if x["n"]:
+        return f"{w}：最多 {int(x['max_qty']):,} {u}" + (f" · 用{x['via']}" if x.get("via") else "")
+    why = (x.get("why") or ["不能"])[0]
+    return f"{w} ✗：{why}" + (f"（{x['next']}）" if x.get("next") and x["next"] not in why else "")
+
+
+def _room_card(rm: dict | None) -> str:
+    """交易页最上面的小卡（D6；2026-10-15 用户要求 3）：「今天还能：买 N 次 · 卖 M 次 · 共 K 次」+ 一行时段 + 展开看为什么、每只（代码带名字）。
+    页面脚本（static/room.js 的 roomShow）按 /api/trade_room 重画同一个样子。不是建议：候选只数「能不能」。"""
+    if not rm:
+        return "<section class='card' id='room' hidden></section>"
+    ov = rm["overall"]
+    H = [f"<section class='card' id='room'><div class='rm-hl'><b>{escape(rm['headline'])}</b></div>",
+         f"<div class='small'>{escape(rm['market']['line'])}</div>"]
+    H += [f"<div class='neg small'>★ {escape(w)}</div>" for w in rm.get("gates") or []]
+    H += [f"<div class='muted small'>· {escape(w)}</div>" for w in rm.get("notes") or []]
+    H.append("<details class='rm'><summary class='muted small'>为什么是这个数 · 每只</summary>")
+    H += [f"<div class='small'>{w} {int(ov[k]['n'])}：{escape(ov[k]['why'])}</div>"
+          for k, w in (("buy_left", "买"), ("sell_left", "卖"), ("trades_left", "共"))]
+    for r in rm["per_ticker"].values():
+        if r.get("cand"):
+            continue
+        H.append(f"<div class='li'><div class='grow'><b>{escape(r['label'])}</b> <span class='chip'>{escape(r['chip'])}</span>"
+                 f"<div class='muted small'>{escape(_room_side(r, 'sell'))}</div><div class='muted small'>{escape(_room_side(r, 'buy'))}</div></div></div>")
+    c = rm.get("cands") or {}
+    if c.get("n"):
+        g = "、".join(f"{k} {v} 只" for k, v in sorted((c.get("groups") or {}).items(), key=lambda kv: -kv[1]))
+        H.append(f"<div class='muted small'>选股页的候选 {int(c['n'])} 只：名额与钱都够的 {int(c['ok'])} 只" + (f"；不能：{escape(g)}" if g else "")
+                 + "（只是数，不是建议；买不买是你的决定）</div>")
+    H.append("</details>")
+    H.append(f"<div class='muted small'>{escape(rm['note'])}（差金決済：<a href='{escape(rm['sakin_url'])}' target='_blank' rel='noopener'>"
+             "立花 e支店的说明</a>，2026-10-15 核对）</div></section>")
+    return "".join(H)
+
+
+def _room_chip(rm: dict | None, t: str) -> str:
+    """持仓卡片每只的小标记「今天还能卖 ✓ / 买 ✗（原因）」（static/room.js 按 /api/trade_room 更新文字）。"""
+    r = ((rm or {}).get("per_ticker") or {}).get(t)
+    return f"<div class='room small muted' data-room='{escape(t)}'>{escape(r['chip']) if r else ''}</div>"
+
+
 def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live: dict | None = None, tag: str | None = None) -> str:
     """「今天的单」（Mac 与手机同一个）：账本当前决策里执行器的单（票、买卖、股数、下法、限价、状态）。还挂着的单（SENT / PARTIAL，
     今天的、立花有注文番号）给「撤单」按钮 → 写撤单指令（kind cancel_order），面板马上叫执行器撤（qbreak/live_ops.py）；
@@ -1567,6 +1650,11 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                        for t, u in (st.get("core_units") or {}).items() if int(u)]}
     _ht = list((st.get("pos") or {}).keys()) + [t for t, u in (st.get("core_units") or {}).items() if int(u or 0) > 0]
     hmarks = _news_marks(_ht, now) if _ht else {}                     # 持仓（个股 + 拿着的核心 ETF）的消息影响
+    try:                                                    # 今天还能买几次 / 卖几次（D6；交易页的卡片与持仓的小标记同一个数）
+        rm = room_of(tag, book, sm, now, trigger, waiting) if st else None
+    except Exception as e:                                  # noqa: BLE001  展示用：算不出不影响页面
+        log.warning("「今天还能买几次 / 卖几次」没算成：%s", e)
+        rm = None
 
     def chart(t: str, kind: str) -> str:
         return _chart_box(t, kind, has_k)
@@ -1574,10 +1662,10 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     def actions(r: dict, kind: str) -> str:
         t = str(r["ticker"])
         if kind == "core":
-            return (tchips(ktrend.get(t)) + _news_mark(hmarks.get(t)) + _core_actions(r, t) + _corefix(t, _nm(t, r.get("name")))
-                    + _core_exit(t) + chart(t, "core"))
+            return (tchips(ktrend.get(t)) + _news_mark(hmarks.get(t)) + _room_chip(rm, t) + _core_actions(r, t)
+                    + _corefix(t, _nm(t, r.get("name"))) + _core_exit(t) + chart(t, "core"))
         qt = f"<div class='qt small' data-q='{escape(t)}'></div>" if t in (st.get("pos") or {}) else ""   # 现价（/api/quotes）
-        return tchips(ktrend.get(t), stats=True) + qt + _actions(r, t)
+        return tchips(ktrend.get(t), stats=True) + qt + _room_chip(rm, t) + _actions(r, t)   # 今天还能卖 / 买（D6）
 
     def _corefix(t: str, name: str) -> str:
         """核心 ETF 固定口数（2026-10-11 用户：持仓里的纳指 ETF、对冲美债也要能买入）：没拿的 →「买入…」、拿着的 →「固定口数…」；
@@ -1698,6 +1786,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             + "</details>") if other else ""
     held_any = bool(st.get("pos")) or any(int(u) > 0 for u in (st.get("core_units") or {}).values())
     H.append(PANE + "trade")
+    H.append(_room_card(rm))                                # 最上面：今天还能买几次 / 卖几次（D6；2026-10-15 用户要求 3）
     H.append(_orders_card(book, now, paper, waiting, tlive, tag))   # 今天的单（执行器）：还挂着的给「撤单」；API / Mac 故障时照它在立花网站下
     H.append(PANE + "hold")
     H.append(_kline_help())                                 # 整页一份的「怎么看 K 线图」：持仓的 K 线上面（2026-10-15 用户：「选股中的怎么看K线图要放到持仓中的K线的上面」）
@@ -1889,6 +1978,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
            "real": real,                                                                   # 真钱（立花本番）：确认框写明
            "sq_max": SG_MAX,                                                               # 建议的股票的现价一次最多取几只（quotes.js）
            "when": when, "eq": eq or 0, "cap": cap, "lot": MO.LOT, "live": MO.timing(now)[0] == "now",   # 盘中：现价每 1 分钟刷新
+           "room": bool(rm),                                                               # 有「今天还能买几次」的卡片 → room.js 定时刷新（D6）
            "cores": {t: {"cur": int((st.get("core_units") or {}).get(t, 0)), "u100": int(u100s.get(t, 0)),
                          "lot": MO.core_lot(book, t)}                                            # 调一只核心 ETF 时别的跟着变多少
                      for t in dict.fromkeys(list(u100s) + [t for t, u in (st.get("core_units") or {}).items() if int(u) > 0])
@@ -3602,6 +3692,9 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
             if u.path == "/api/status":
                 self._json(*status_json(_book_of(u.query)))
                 return
+            if u.path == "/api/trade_room":                  # 今天还能买几次 / 卖几次（D6）
+                self._json(*trade_room_json(_book_of(u.query), (clock or now_jst)(), trigger))
+                return
             if u.path == "/api/clientlog":
                 client_log(u.query, "Mac")
                 self._send(204, b"", "text/plain")
@@ -3718,11 +3811,11 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
             u = urlparse(self._route())
             if self._static(u.path, u.query):
                 return
-            if u.path not in ("/", "/pair", "/api/chart", "/api/quotes", "/api/status", "/api/push/key", "/api/clientlog"):
+            if u.path not in ("/", "/pair", "/api/chart", "/api/quotes", "/api/status", "/api/trade_room", "/api/push/key", "/api/clientlog"):
                 self._text(404, "没有这个页面")
                 return
             dev = self._who()
-            if u.path in ("/api/chart", "/api/quotes", "/api/status", "/api/push/key", "/api/clientlog"):
+            if u.path in ("/api/chart", "/api/quotes", "/api/status", "/api/trade_room", "/api/push/key", "/api/clientlog"):
                 if dev is None:
                     self._json(401, {"ok": False, "msg": "这台设备还没配对（或已被取消）"})
                 elif u.path == "/api/clientlog":
@@ -3735,6 +3828,8 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
                     self._chart(u.query, (clock or now_jst)())
                 elif u.path == "/api/status":
                     self._json(*status_json(_book_of(u.query)))
+                elif u.path == "/api/trade_room":
+                    self._json(*trade_room_json(_book_of(u.query), (clock or now_jst)(), trigger))
                 else:
                     self._json(*quotes_json(_book_of(u.query), (clock or now_jst)(), extra=_extra_of(u.query)))
                 return

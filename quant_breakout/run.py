@@ -4623,6 +4623,13 @@ def cmd_manual(a) -> int:
         print(f"现在写的买卖：{when}下单（{MO.RULE_TEXT}）")
         s_ = MO.slots(b_, tag)
         print(f"个股名额：空 {s_['free']} 个（拿着 {s_['held']} + 排定买入 {s_['buys']}，上限 {s_['max']} 只）")
+        try:                                                  # 今天还能买几次 / 卖几次（D6；2026-10-15 用户要求 3：与面板交易页的卡片同一个数；不取价 → 按收盘估）
+            from qbreak import trade_room as TR
+            sm_ = read_json(paths.out_dir() / f"live_unified_{tag}.json", {}) or {}
+            for ln in TR.lines(TR.room(tag, b_, now, sm=sm_)):
+                print(ln)
+        except Exception as e_:                               # noqa: BLE001  展示用：算不出不影响 list
+            print(f"（今天还能买几次 / 卖几次：没算成 {type(e_).__name__}）")
         return 0
     if a.action != "cancel":                                  # 模拟账户的执行器没装、立花装了：写了也没人执行（2026-10-14 G13；撤回照旧能写）
         why_ = MO.paper_refuse(tag)

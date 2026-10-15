@@ -204,3 +204,6 @@ background:var(--accent);color:var(--accent-fg);font-size:14px;line-height:1.45;
 .top>.conn{position:static;max-width:720px;margin:0 auto 8px;padding:8px 12px;border-radius:10px;box-shadow:none}
 dialog>.conn{position:sticky;top:0;z-index:2;padding:10px 14px;border-radius:18px 18px 0 0;box-shadow:none}
 .toast{bottom:calc(env(safe-area-inset-bottom) + 72px)}dialog .toast{bottom:calc(env(safe-area-inset-bottom) + 16px)}
+/* 今天还能买几次 / 卖几次（D6；2026-10-15）：交易页最上面的小卡 + 持仓每只的小标记 */
+#room .rm-hl{font-size:17px;margin-bottom:4px} #room details.rm{margin:6px 0} #room details.rm>summary{color:var(--accent)}
+#room .li .chip{white-space:normal} .room[data-room]{margin:4px 0}
