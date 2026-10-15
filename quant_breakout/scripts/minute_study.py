@@ -2964,6 +2964,11 @@ def cell_counts(panels: dict) -> dict:
     return out
 
 
+def run_counts(books: dict) -> dict:
+    """--run 的笔数表，格式同 cell_counts（{格: {样本: {"n": 笔数}}}）：cell_mde 只读 "n"。"""
+    return {c: {s: {"n": int(len(b["rows"]))} for s, b in bk.items()} for c, bk in books.items()}
+
+
 def cell_mde(panels: dict, counts: dict, extra: dict | None = None) -> dict:
     """接线核对 6：每格的 MDE（判定样本合并）与「检验力不足」标记（MDE > 净门槛）。extra = {格: (每天的等权窗口收益表, 笔数)}。"""
     out = {}
@@ -3431,8 +3436,7 @@ def do_run() -> int:
             "7_session": desc_session(tab), "8_quality": desc_quality(tab, m5)}
     res["desc"] = desc
     say(f"- 描述（{time.time() - t0:.0f}s）")
-    counts = {c: {s: len(b["rows"]) for s, b in books[c].items()} for c in books}
-    res["mde"] = cell_mde(panels, counts, {"C3": (c3_market_days(tab), int(c3["rows"]["sess"].isin(["H1", "H2"]).sum()))})
+    res["mde"] = cell_mde(panels, run_counts(books), {"C3": (c3_market_days(tab), int(c3["rows"]["sess"].isin(["H1", "H2"]).sum()))})
     res["seconds"] = round(time.time() - t0, 1)
     write_json(res)                                                       # 先写 JSON（"ran": true）：后面出错也不能再跑第二次
     write_md(res)

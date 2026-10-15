@@ -492,13 +492,13 @@ def test_run_stage1_and_desc_paths_on_synthetic_data(tmp_path, monkeypatch):
     h60, m5, d1, acts = MS.synth_t2(n_names=12, n_days=60)
     tab = MS.t2_table(h60, d1, acts, list(h60))
     stocks = {t: x for t, x in tab.items() if t not in MS.ETFS}
-    cells, drt = {}, {}
+    cells, drt, all_books = {}, {}, {}
     for cell, ek in (("D1", "open1"), ("D2", "close1")):
         drt[cell] = MS.drt_gate(MS.fam_D_rt(stocks, ek), ek)
         assert set(drt[cell]) >= {"n_rt", "mean_rt", "n_off", "mean_off", "ok"}
     for cell in MS.CELL_SPEC:
         fam = MS.CELL_SPEC[cell][0]
-        books = {s: MS.cell_book(panels[s], cell) for s in list(MS.JUDGE[fam]) + list(MS.REFERENCE.get(fam, ()))}
+        books = all_books[cell] = {s: MS.cell_book(panels[s], cell) for s in list(MS.JUDGE[fam]) + list(MS.REFERENCE.get(fam, ()))}
         aff = {s: MS.cell_book(panels[s], cell, afford=True) for s in MS.JUDGE[fam]} if fam == "D" else None
         cells[cell] = MS.stage1_cell(cell, books, panels, aff, drt.get(cell))
         r = cells[cell]
@@ -530,7 +530,8 @@ def test_run_stage1_and_desc_paths_on_synthetic_data(tmp_path, monkeypatch):
     assert desc["2_realism_at"]["cut13|H1|price"]["days"] > 0 and desc["3_fill_calib"]["5m"]["ticker_days"] > 0
     assert set(desc["7_session"]) == {"H1", "H2"}
     res = {"ran": True, "git_head": "x", "cells": cells, "A2": a2, "A_report": MS.a_report(sigs), "stage2": {}, "desc": desc,
-           "mde": MS.cell_mde(panels, {c: {s: {"n": 100} for s in MS.SAMPLES} for c in MS.CELL_SPEC}),
+           "mde": MS.cell_mde(panels, MS.run_counts(all_books),                     # 与 do_run 同一个调用（10-15 第一次 --run 在这里崩溃）
+                              {"C3": (MS.c3_market_days(tab), int(c3["rows"]["sess"].isin(["H1", "H2"]).sum()))}),
            "align": {"ok": True}, "fingerprint": {"sha": "x"}, "seconds": 1.0}
     MS.out_path("md").parent.mkdir(parents=True, exist_ok=True)
     MS.write_md(res)
