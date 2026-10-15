@@ -1,11 +1,30 @@
 {
- "as_of": "2026-10-14",
+ "as_of": "2026-10-15",
  "enabled": true,
  "market": {
-  "n225_ma200": 0.1132,
-  "vix": 15.27,
+  "n225_ma200": 0.0565,
+  "vix": 16.87,
   "on": true
  },
- "stocks": {},
+ "stocks": {
+  "4507.T": {
+   "features": {
+    "vexp": 1.275767,
+    "upper": 0.45,
+    "atrp": 0.024238,
+    "r12": 0.099263,
+    "us12": 0.898
+   },
+   "votes": {
+    "vexp": 1,
+    "upper": 1,
+    "atrp": -1,
+    "r12": 0,
+    "us12": -1
+   },
+   "score": 0,
+   "skip": false
+  }
+ },
  "errors": {}
 }

@@ -1,5 +1,5 @@
 {
- "as_of": "2026-10-14",
+ "as_of": "2026-10-15",
  "enabled": true,
  "market": {
   "items": {
@@ -14,17 +14,41 @@
   "points": 1,
   "mult": 0.75,
   "readings": {
-   "C_rel": 43.1,
-   "crel_pct": 33.7,
-   "tv_pct": 52.8,
-   "wj_pct": 92.4,
-   "w_pct": 26.1
+   "C_rel": 46.7,
+   "crel_pct": 45.9,
+   "tv_pct": 70.5,
+   "wj_pct": 92.9,
+   "w_pct": 56.3
   },
   "t23_bear": false,
   "k4_on": true,
   "deepdip": false,
-  "date": "2026-10-14"
+  "date": "2026-10-15"
  },
- "stocks": {},
+ "stocks": {
+  "4507.T": {
+   "flags": {
+    "B1": 0,
+    "B2": 1,
+    "B3": 0,
+    "B4": 0,
+    "B5": 0,
+    "B6": 0,
+    "B7": 0
+   },
+   "score": 1,
+   "mult": 1.0,
+   "F2": -0.417261,
+   "inputs": {
+    "x2": 4.512343,
+    "k2": 0,
+    "usw": 0.0,
+    "era": false,
+    "s2": null,
+    "g1": 0,
+    "industry": "医薬品"
+   }
+  }
+ },
  "errors": {}
 }

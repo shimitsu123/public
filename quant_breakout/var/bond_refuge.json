@@ -1,18 +1,17 @@
 {
  "version": 1,
- "as_of": "2026-10-14",
+ "as_of": "2026-10-15",
  "on": false,
  "since": "2026-03-13",
  "win": 63,
- "corr": 0.365,
- "corr_date": "2026-10-14",
+ "corr": 0.33,
+ "corr_date": "2026-10-15",
  "us_bear": false,
  "hold": false,
- "bond_date": "2026-10-13",
- "spx_date": "2026-10-13",
+ "bond_date": "2026-10-14",
+ "spx_date": "2026-10-14",
  "lag_days": 1,
  "series": {
-  "2026-07-15": false,
   "2026-07-16": false,
   "2026-07-17": false,
   "2026-07-21": false,
@@ -71,7 +70,8 @@
   "2026-10-08": false,
   "2026-10-09": false,
   "2026-10-13": false,
-  "2026-10-14": false
+  "2026-10-14": false,
+  "2026-10-15": false
  },
  "errors": {}
 }
