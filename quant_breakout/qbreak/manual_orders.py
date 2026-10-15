@@ -1149,18 +1149,16 @@ def _order_word(o: dict) -> str:
             f"{'买' if o.get('side') == 'BUY' else '卖'} {n:,} 口")
 
 
-def today_dead(book: dict | None, tag: str | None = None) -> tuple[set, dict]:
+def today_dead(book: dict | None, tag: str | None = None, now: dt.datetime | None = None) -> tuple[set, dict]:
     """当前决策里不会再做事的执行器的单（面板「交易」的「撤单中」/「不会下单（预计）」同一个判断；2026-10-15 复核：
     「恢复按规则」的确认框、提交说明以前把凑钱的卖单撤了、一定买不起的 1482.T 买 678 口写成「照常」，「交易」却写「不会下单」）→
-    (撤单中的 cid, {一定下不成的买单的 cid: live_ops.unfunded_buys 的说明})。算不成 → 不下结论（空）。只读。"""
+    (撤单中的 cid, {一定下不成的买单的 cid: live_ops.outlook 的那一行（reason / gone）})。D5（2026-10-15）起只用 outlook 判断
+    （HALT 不算：这里说的是钱）。算不成 → 不下结论（空）。只读。"""
     from . import live_ops as LO
     try:
         waiting = unseen(tag, book) if tag else []
-        void = voided(waiting)
-        items = ((book or {}).get("manual") or {}).get("items") or {}
-        asked = ({str(r.get("cid")) for r in waiting if r.get("kind") == "cancel_order" and r.get("id") not in void}
-                 | {str(it.get("cid")) for it in items.values() if it.get("kind") == "cancel_order" and it.get("status") == "pending"})
-        return asked, LO.unfunded_buys(book, asked, cash=LO.cash_hi(book, tag))
+        ol = LO.outlook(book, waiting, now, tag=tag, halt=False, instr=False)
+        return ol["asked"], {c: r for c, r in ol["orders"].items() if r["cls"] == "fund"}
     except (TypeError, ValueError, KeyError, AttributeError):
         return set(), {}
 
@@ -1170,8 +1168,7 @@ def _dead_word(o: dict, asked: set, unf: dict) -> str:
     if str(o.get("cid")) in asked:
         return "（撤单中）"
     x = unf.get(str(o.get("cid"))) or {}
-    gone = [g for g in x.get("gone") or [] if g.get("status") == "CANCELLED" or str(g.get("cid")) in asked]
-    return "（" + ("资金来源的卖单已撤，" if gone else "开盘时现金不够一单元，") + "预计不会下单：见「交易」→「今天的单」）"
+    return "（" + ("资金来源的卖单已撤，" if x.get("gone") else "开盘时现金不够一单元，") + "预计不会下单：见「交易」→「今天的单」）"
 
 
 def corefix_clear_text(book: dict | None, t: str, tag: str | None = None, now: dt.datetime | None = None) -> str:
@@ -1191,7 +1188,7 @@ def corefix_clear_text(book: dict | None, t: str, tag: str | None = None, now: d
     fill = corefix_fill(now, book, tag)
     nowp = bool(fill["intraday"])
     mine = orders_today(book, now, t)
-    asked, unf = today_dead(book, tag)
+    asked, unf = today_dead(book, tag, now)
     dead = [o for o in mine if o.get("status") in OPEN_ST and (str(o.get("cid")) in asked or str(o.get("cid")) in unf)]
     dcid = {str(o.get("cid")) for o in dead}
     after = cur
@@ -1620,7 +1617,7 @@ def corefix_preview(book: dict | None, tag: str | None, rec: dict, now: dt.datet
         L.append(f"固定之后每天都调回 {int(rec.get('units') or 0):,} 口：不按规则（牛熊 / 股债相关）、不跟闲置资金比例自动调，"
                  "一直有效，直到点「恢复按规则」")
     live = [o for o in orders_today(book, now, open_only=True) if o.get("kind") == "core"]
-    asked, unf = today_dead(book, tag) if live else (set(), {})
+    asked, unf = today_dead(book, tag, now) if live else (set(), {})
     if nowp:                                               # 盘中那条路：同一只今天的核心单 —— 没发出的被取代、在交易所的先等（D1）
         uns = [o for o in live if o.get("ticker") == t and o.get("status") in ("PLANNED", "DEFERRED")]
         exch = [o for o in live if o.get("ticker") == t and o not in uns and str(o.get("cid")) not in asked]
@@ -2105,9 +2102,16 @@ def timing(now: dt.datetime) -> tuple[str, dt.date]:
     return "next", next_trading_day(d)
 
 
+OPEN_NOW_TXT = "今天 09:00 开盘后马上（按现价，不是寄付）"   # 寄付截止（08:55）〜09:00 写的：赶不上寄付，开盘后第一次盘中运行按现价下
+
+
 def when_text(now: dt.datetime) -> str:
-    """一句话：马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘。"""
+    """一句话：马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘。
+    08:55〜09:00（D7 / M19；2026-10-15）：寄付已经截止，开盘后由盘中的路按现价下 →「今天 09:00 开盘后马上（按现价，不是寄付）」
+    （以前写「今天 09:00 开盘」，读起来像寄付）。"""
     mode, d = timing(now)
+    if mode == "open" and now.time() >= CUTOFF:
+        return OPEN_NOW_TXT
     return {"now": "马上（盘中）", "open": "今天 09:00 开盘", "lunch": "12:30 后场开盘"}.get(mode) or f"{d:%m/%d} 开盘"
 
 
@@ -2125,9 +2129,13 @@ def when_for(now: dt.datetime, book: dict | None, ticker: str | None = None) -> 
     ticker：这只今天已经有执行器还活着的单（busy_today；D4，2026-10-15）→ 盘中不下第二笔：下一个交易日开盘。
     面板的「现在点买卖 → …」、确认框、提交后的提示、命令行同一句。"""
     mode, d = timing(now)
-    if mode in ("now", "lunch") and morning_behind(book, now):
+    late_open = mode == "open" and now.time() >= CUTOFF
+    if (mode in ("now", "lunch") or late_open) and morning_behind(book, now):
         return f"补跑早上的运行之后（今天早上的运行还没完成；没补跑 → {next_trading_day(d):%m/%d} 开盘）"
-    if ticker and mode in ("now", "lunch") and busy_today(book, ticker, now):
+    if mode == "open" and now.time() >= RUN_AT and morning_behind(book, now):   # 开盘前也看（M19；2026-10-15：以前照写「今天 09:00 开盘」）
+        return (f"今天早上的运行完成之后（{RUN_AT:%H:%M} 的运行还没完成：完成了 → 今天 09:00 开盘；"
+                f"08:55 之前没完成 → 补跑之后，没补跑 → {next_trading_day(d):%m/%d} 开盘）")
+    if ticker and (mode in ("now", "lunch") or late_open) and busy_today(book, ticker, now):
         return f"{next_trading_day(d):%m/%d} 开盘（{names.label(ticker)} 今天已经有执行器的单：同一只当天只下一笔）"
     return when_text(now)
 

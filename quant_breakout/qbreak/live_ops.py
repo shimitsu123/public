@@ -455,6 +455,434 @@ def cancel_hint(o, book: dict | None, now: dt.datetime, tag: str | None = None) 
     return f"{head}；撤掉的个股买单不再买（信号只在那天开盘有效）"
 
 
+# ══════════════════════════ 核心 ETF 单的来源（D7；2026-10-15）══════════════════════════
+# 2026-10-15 事故：07:41 的推送写「规则拿 1545、不拿 1482」，同时要全卖 1545 —— 那组换仓其实来自你 10/14 19:21 写的「固定 1482 678 口」，
+# 单的 reason 一律「核心 ETF 调整」，看不出来（很可能是 08:05 撤单的诱因）。执行器排单时在单上记来源（src）与一句话（src_txt：排单那一刻的
+# 固定口数 / 比例与你写的时刻），日志 / 推送、交易页、撤单确认框照它写。reason 不改（对账、盘中的路按它认单）；旧账本没有 src → 照旧显示。
+CORE_SRC = ("rule", "core_fix", "fix_fund", "manual_core")
+SRC_WORD_CORE = {"rule": "规则再平衡", "core_fix": "照你写的固定口数", "fix_fund": "为你写的固定口数凑钱",
+                 "manual_core": "照你写的闲置资金比例"}
+
+
+def src_of(o) -> str:
+    """核心单的来源：执行器记的 src；盘中的单（reason = core_fix / fix_fund / manual_core）照 reason；旧账本 / 个股 → ""。"""
+    s = str(_g(o, "src") or "")
+    if s in CORE_SRC:
+        return s
+    r = str(_g(o, "reason") or "")
+    return r if r in CORE_SRC else ""
+
+
+def _tsj(v) -> dt.datetime | None:
+    """ISO 时刻 → 带 JST 时区的 datetime（读不了 → None）。"""
+    from .calendar_jp import JST
+    try:
+        t = dt.datetime.fromisoformat(str(v))
+    except (TypeError, ValueError):
+        return None
+    return t.astimezone(JST) if t.tzinfo else t.replace(tzinfo=JST)
+
+
+def _at(d: dt.date, t: dt.time) -> dt.datetime:
+    from .calendar_jp import JST
+    return dt.datetime.combine(d, t, tzinfo=JST)
+
+
+def wrote(at) -> str:
+    """指令写的时刻 →「10/14 19:21 写」（读不了 → ""）。"""
+    t = _tsj(at)
+    return f"{t:%m/%d %H:%M} 写" if t else ""
+
+
+def _last_item(book: dict | None, kind: str, t: str | None = None) -> dict | None:
+    """账本里最近一条读到、生效了的固定口数 / 比例指令（撤回 / 作废 / 没执行的不算）。"""
+    items = ((book or {}).get("manual") or {}).get("items") or {}
+    c = [it for it in items.values() if isinstance(it, dict) and it.get("kind") == kind and not it.get("clear")
+         and (t is None or it.get("ticker") == t) and it.get("status") in ("done", "pending")]
+    return max(c, key=lambda x: str(x.get("at") or ""), default=None)
+
+
+def fix_name(t, u) -> str:
+    """「固定 1482 对冲版美国 7〜10 年国债 678 口」。"""
+    return f"固定 {_lab(t)} {int(u):,} 口"
+
+
+def _fix_quote(book: dict | None, t: str, u, tail: str = "") -> str:
+    """「『固定 1482 … 678 口』<tail>（10/14 19:21 写）」（tail：「凑钱」「调」这类动词放在写的时刻前面，与 D7 的例句同一个语序）。"""
+    it = _last_item(book, "corefix", t)
+    w = wrote(it.get("at")) if it else ""
+    return f"『{fix_name(t, u)}』{tail}" + (f"（{w}）" if w else "")
+
+
+def src_note(src: str, book: dict | None, t: str | None = None, fixed=None) -> str:
+    """来源 → 一句话（排单那一刻；存在单的 src_txt 上）：
+    rule →「规则再平衡」；core_fix →「照你的『固定 1482 … 678 口』调（10/14 19:21 写）」；
+    fix_fund →「为你的『固定 1482 … 678 口』凑钱（10/14 19:21 写）」（fixed：为哪几只固定的凑钱；没给 = 全部固定的；
+    几只 →「为你的『固定 A』（… 写）、『固定 B』（… 写）凑钱」）；
+    manual_core →「照你写的闲置资金比例 50%（10/14 19:21 写）」。"""
+    fx = {}
+    for x, u in ((((book or {}).get("manual") or {}).get("core_fix")) or {}).items():
+        try:
+            fx[str(x)] = int(u)
+        except (TypeError, ValueError):
+            continue
+    if src == "rule":
+        return SRC_WORD_CORE["rule"]
+    if src == "core_fix":
+        return f"照你的{_fix_quote(book, t, fx[t], '调')}" if t in fx else SRC_WORD_CORE["core_fix"]
+    if src == "fix_fund":
+        xs = [x for x in (fixed if fixed is not None else sorted(fx)) if x in fx]
+        if not xs:
+            return SRC_WORD_CORE["fix_fund"]
+        xs = list(dict.fromkeys(xs))
+        if len(xs) == 1:
+            return f"为你的{_fix_quote(book, xs[0], fx[xs[0]], '凑钱')}"
+        return "为你的" + "、".join(_fix_quote(book, x, fx[x]) for x in xs) + "凑钱"
+    if src == "manual_core":
+        try:
+            pct = float((((book or {}).get("manual") or {}).get("core_pct")) or 100.0)
+        except (TypeError, ValueError):
+            pct = 100.0
+        it = _last_item(book, "core")
+        w = wrote(it.get("at")) if it else ""
+        return f"照你写的闲置资金比例 {pct:g}%" + (f"（{w}）" if w else "")
+    return ""
+
+
+def src_line(o) -> str:
+    """单上记的来源的一句话（没有 → ""：旧账本照旧）。"""
+    return str(_g(o, "src_txt") or "") if src_of(o) else ""
+
+
+# ══════════════════════════ 今天会发生什么：一个判断（outlook；D5，2026-10-15）══════════════════════════
+# 2026-10-15 事故：面板写「不会下单（预计）」、09:30 自检推「✓ 通过 · 开盘后再下 1」、执行器的汇总照旧写 07:40 的「开盘后按始値检查、减股再下」，
+# 各算一套。现在「每笔单 / 每条等着的指令今天会不会下、什么时候、为什么」只在这里判断（纯函数，只读）：面板的交易页（角标、「不会下单」）、
+# /api/status、09:30 自检、执行器的汇总推送、撤单推送、面板的「今天该下但没有执行路径」与 15:25 之后的汇总都调它。
+OUT_WORD = {"will": "会下", "done": "结束", "wont": "今天不会下", "later": "之后才下"}
+WONT_NOTE = ("不会下", "钱没来", "与模型不同", "买不起")      # 「不下」（SKIPPED）的说明里有这些 → 今天不会下（不是规则自己的正常结果）
+OK_NOTE = ("与模型相同", "被新的固定口数取代", "手动指令已撤回", "一起撤", "不是错误", "已撤回", "分钟后再试")
+OPEN_AT = {"tachibana": dt.time(9, 5), "paper": dt.time(9, 25)}   # 等开盘后的买单什么时候下（立花 09:05 / 09:20；模拟账户 09:25 前后的开盘撮合）
+PAPER_OPEN_END = dt.time(11, 30)                     # 模拟账户当天的开盘撮合到这之前（之后 → 下一次早上的运行照旧撮合）
+TRADE_HEAD = "★ 交易"                               # 交易问题的推送标题开头（level = warn；经济威胁提醒不用它）
+NO_PATH_S = 600                                      # 过了该下的时刻这么久还没有执行路径 →「今天该下但没有执行路径」（U4）
+CHIP = {"fund": "不会下单（预计）", "halt": "不会下单（HALT）", "closed": "已收盘", "blocked": "不会再发", "open_missed": "不会下单",
+        "paused": "暂停中"}
+
+
+def skip_wont(o) -> bool:
+    """「不下」（SKIPPED）是「今天不会下」（凑钱的卖单没了 / 钱没来 / 余力不够 / 错过寄付与模型不同）吗；
+    与模型相同的不下（资格、跳空…）、被取代、撤回、一会儿再试 → 不是。"""
+    n = str(_g(o, "note") or "")
+    if any(x in n for x in OK_NOTE):
+        return False
+    return any(x in n for x in WONT_NOTE)
+
+
+def asked_cids(book: dict | None, waiting=()) -> set:
+    """已经写了撤单（还没处理完）的单的 cid：指令文件里还没读的（被撤销的撤回不算）+ 账本里 pending 的撤单指令。"""
+    from . import manual_orders as MO
+    waiting = [r for r in waiting or [] if isinstance(r, dict)]
+    void = MO.voided(waiting)
+    items = ((book or {}).get("manual") or {}).get("items") or {}
+    return ({str(r.get("cid")) for r in waiting if r.get("kind") == "cancel_order" and r.get("id") not in void}
+            | {str(it.get("cid")) for it in items.values() if isinstance(it, dict) and it.get("kind") == "cancel_order"
+               and it.get("status") == "pending"})
+
+
+def _fund_why(x: dict, asked: set, unit: str) -> tuple[str, list]:
+    """unfunded_buys 的说明 →（一句话, 没了的卖单）：旧账本（没有 fund_src）的「不会下单（预计）」。"""
+    gone = [g for g in x["gone"] if g.get("status") == "CANCELLED" or str(g.get("cid")) in asked]
+    src = ("资金来源的卖单已撤（" + "、".join("卖 " + _labq(g.get('ticker'), f"{int(g.get('sent_qty') or g.get('qty') or 0):,} "
+                                                          f"{_unit(g)}") for g in gone) + "）；") if gone else ""
+    return (f"{src}开盘时能用的钱最多约 ¥{x['cash'] + x['sells']:,.0f}，按跌停价买 {x['lot']:,} {unit}也要约 "
+            f"¥{x['need']:,.0f}：开盘后这笔下不成（执行器会放弃）"), gone
+
+
+def instr_due(at, today: dt.date) -> dt.datetime | None:
+    """一条手动指令今天最晚该在什么时刻下（09:30 自检 G24 与 outlook 共用）：写于开盘前 / 前几天 → 今天 09:00 开盘；盘中写的 → 写的时刻；
+    午休写的 → 12:30；收盘后 / 休市日写的 → 下一个交易日 09:00（在今天之后 → None）。读不了 → None。"""
+    from . import manual_orders as MO
+    w = _tsj(at)
+    if w is None:
+        return None
+    mode, d = MO.timing(w)
+    t = w if mode == "now" else _at(d, MO.SESSION[1][0] if mode == "lunch" else MO.SESSION[0][0])
+    if t.date() < today:
+        t = _at(today, MO.SESSION[0][0])
+    return t if t.date() == today else None
+
+
+def _instr_row(r: dict, book: dict | None, now: dt.datetime, tag: str | None, halt: bool, paused: bool, seen: bool) -> dict | None:
+    """一条等着的手动指令（seen：执行器读过、账本里 pending；否则指令文件里还没读）→ outlook 的一行；撤回 / 撤单 / 撤销撤回本身 → None。"""
+    from . import manual_orders as MO
+    k = r.get("kind")
+    if k in ("cancel", "cancel_order", "uncancel"):
+        return None
+    today = now.date()
+    paper = str(tag or "").startswith("paper")
+    mode, d = MO.timing(now)
+    nxt = d if mode == "next" else next_trading_day(today)
+    row = {"ref": str(r.get("id")), "kind": "instr", "ikind": k, "ticker": r.get("ticker"), "side": r.get("side"),
+           "qty": r.get("shares") or r.get("units"), "unit": "口" if k in ("core", "corefix") else "股", "state": "will",
+           "act_at": None, "reason": "", "chip": None, "cls": "", "what": MO.describe(r), "at": r.get("at"), "src": "", "src_txt": "",
+           "gone": [], "seen": seen}
+    try:
+        wt = (MO.msg_text(r, now) if seen and r.get("msg") else "") or MO.wait_text(r, now, book, tag)
+    except Exception:                                      # noqa: BLE001  只是说明
+        wt = ""
+
+    def put(state: str, at: dt.datetime | None, reason: str, cls: str = "") -> dict:
+        if state == "will" and at is not None and at.date() > today:
+            state = "later"
+        row.update(state=state, act_at=at, reason=reason or wt, cls=cls)
+        return row
+    if halt and k in MO.ORDER_KINDS + ("core", "corefix"):
+        return put("later", None, MO.halt_text(r), "halt")
+    if k == "unblock":
+        return put("later", None, MO.NEXT_DECISION)
+    if MO.allin_member(r):
+        fd = MO.allin_fill(now, book, tag)
+        return put("will", _at(fd, MO.SESSION[0][0]), f"{MO.allin_when(now, book, tag)}整批")
+    if k == "corefix":
+        cf = MO.corefix_fill(now, book, tag)
+        if cf["mode"] == "behind":
+            return put("will", None, wt) if paper else put("later", _at(nxt, MO.SESSION[0][0]), wt)
+        if cf["intraday"]:
+            due_ = instr_due(r.get("at"), today) or (now if cf["mode"] == "now" else
+                                                      _at(today, MO.SESSION[1][0] if cf["mode"] == "lunch" else MO.SESSION[0][0]))
+            return put("wont", due_, "面板自动下单今天暂停了：修好之后在 Mac 对话里说「再试一次」", "paused") if (
+                paused and cf["mode"] == "now") else put("will", due_, wt)
+        return put("will", _at(cf["day"], MO.SESSION[0][0]), wt)
+    if k not in MO.ORDER_KINDS + ("core",):
+        return put("later", None, wt)
+    if r.get("hold") == today.isoformat():
+        return put("later", _at(nxt, MO.SESSION[0][0]), wt)
+    if r.get("wait"):
+        return put("will", None, wt)                       # 等上一笔成交 / 等凑钱的卖单：路径是执行器自己（不判断时刻）
+    rd = MO.rolled_over(r, now) if seen else None
+    if rd is not None:
+        return put("later", _at(rd, MO.SESSION[0][0]), MO.rolled_text(r, now) or wt)
+    if mode == "next":                                     # 收盘后 / 休市日：下一个交易日开盘
+        return put("later", _at(d, MO.SESSION[0][0]), wt)
+    if MO.morning_behind(book, now):                       # 今天早上的运行还没完成：模拟账户面板补跑；立花 08:55 之后不自动补跑
+        if not paper and now.time() >= MO.CUTOFF:
+            return put("later", _at(nxt, MO.SESSION[0][0]), wt)
+        return put("will", None, wt)
+    late_open = mode == "open" and now.time() >= MO.CUTOFF   # 寄付截止之后：开盘后由盘中的路下（与 MO.when_for 同一个口径）
+    if (k in MO.ORDER_KINDS and r.get("ticker") and (mode in ("now", "lunch") or late_open)
+            and MO.busy_today(book, r.get("ticker"), now)):
+        return put("later", _at(nxt, MO.SESSION[0][0]), wt)
+    due_ = instr_due(r.get("at"), today) or (now if mode == "now" else
+                                              _at(today, MO.SESSION[1][0] if mode == "lunch" else MO.SESSION[0][0]))
+    if paused and mode == "now":
+        return put("wont", due_, "面板自动下单今天暂停了：修好之后在 Mac 对话里说「再试一次」", "paused")
+    return put("will", due_, wt)
+
+
+def _order_row(o: dict, *, now, paper, tag, halt, asked, casc, unf, f) -> dict:
+    """当前决策的一笔单 → outlook 的一行（判断顺序：结束了的 → 不下 / 被拒 / 错过 → 撤单中 → 立花收盘后 → HALT → 被挡不再试 →
+    凑钱的卖单没了 / 开盘时一定买不起 → 立花开盘后的补单没跑成 → 状态不明 → 会下）。"""
+    cid, s = str(o.get("cid")), o.get("status")
+    today = now.date()
+    row = {"ref": cid, "kind": "order", "ticker": o.get("ticker"), "side": o.get("side"), "okind": o.get("kind") or "stock",
+           "qty": int(o.get("sent_qty") or o.get("qty") or 0), "unit": _unit(o), "status": s, "state": "will", "act_at": None,
+           "reason": "", "chip": None, "cls": "", "src": src_of(o), "src_txt": src_line(o), "gone": [],
+           "manual": o.get("reason") in MANUAL_REASONS, "phase": o.get("phase") or "morning"}
+    ph = row["phase"]
+    day = (_tsj(o.get("sent_at")) or now).date() if ph == "now" else f
+    note = str(o.get("note") or "")
+
+    def put(state: str, reason: str = "", cls: str = "", chip: str | None = None, **kw) -> dict:
+        row.update(state=state, reason=reason, cls=cls, chip=chip if chip is not None else CHIP.get(cls) if state == "wont" else None, **kw)
+        return row
+    if s in ("FILLED", "RESOLVED", "CANCELLED", "UNFILLED", "EXPIRED"):
+        return put("done", note)
+    if s == "SKIPPED":
+        return put("wont", note, "skip", chip="") if skip_wont(o) else put("done", note)
+    if s in ("REJECTED", "MISSED"):
+        return put("wont", note or STATUS_TEXT.get(s, s), "reject" if s == "REJECTED" else "missed", chip="")
+    if cid in asked:
+        return put("done", "撤单中", "asked", chip="撤单中")
+    if not paper and tag and day is not None and (day < today or (day == today and now.time() >= CLOSE_T)):
+        unsent = s not in AT_EXCH
+        return put("wont" if unsent else "done", f"成交日 {day:%m/%d} 的交易所已经收盘：" + ("这笔没下" if unsent else "没成交的部分已失效")
+                   + "，明早对账记账（之后什么都不会再发生）", "closed", chip="已收盘")
+    from .live_unified import HALT_WAIT
+    if paper and s == "DEFERRED" and note.startswith(HALT_WAIT):     # 开盘撮合时被 HALT 挡下（D3）
+        return put("wont", "开盘撮合时 HALT 生效中：这笔没下（11:30 之前解除后可以再跑一次 bash scripts/liveu.sh run --broker paper "
+                           "--phase open，否则明早对账记为没买）", "halt")
+    if halt and s in ("PLANNED", "DEFERRED", "BLOCKED"):  # 模拟账户的「等开盘后」：09:25 前后的开盘撮合按同样的闸门（D3）
+        return put("wont", "HALT 生效中：还没发出的单不下" + ("（开盘撮合在 09:25 前后：那之前解除才会下）" if paper
+                                                     else "（开盘后的补单在 09:05 / 09:20：那之前解除才会下）"), "halt")
+    if s in ("PLANNED", "BLOCKED") and not blocked_retry(o, now, f) and not (s == "PLANNED" and ph == "now"):
+        return put("wont", (note + "：" if note else "") + "今天不会再发", "blocked")
+    if cid in casc and casc[cid]["act"] == "skip":       # 执行器记的凑钱卖单没了：按现在能用的钱重算（与撤单那一刻的级联同一个函数）
+        return put("wont", casc[cid]["note"], "fund", gone=list(casc[cid]["srcs"]))
+    if cid in unf:                                       # 旧账本（没有 fund_src）：开盘时一定买不起一单元
+        why, gone = _fund_why(unf[cid], asked, row["unit"])
+        return put("wont", why, "fund", gone=gone)
+    if not paper and s == "DEFERRED" and f is not None and (today > f or (today == f and now.time() >= LATE_UNTIL)):
+        return put("wont", "开盘后的补单（09:05 / 09:20）没跑成：今天不会再下", "open_missed")
+    if s in ("SENDING", "ERROR"):
+        return put("will", "状态不明：可能已被受理（去注文一覧核对；登记之前执行器不再发别的单）", "unknown")
+    return put("will", casc[cid]["note"] if cid in casc else note)
+
+
+def _act_at(row: dict, o: dict, now: dt.datetime, paper: bool, f: dt.date | None) -> dt.datetime | None:
+    """会下的单什么时候下：盘中的 = 发出的时刻；在交易所的 = 发出的时刻（没有 → 成交日 09:00）；等开盘后的 = 立花 09:05 / 模拟账户 09:25
+    （模拟账户 11:30 之后还没撮合 → 下一次早上的运行）；计划 / 被挡的早上的单 = 成交日 09:00。"""
+    s, today = o.get("status"), now.date()
+    if row["phase"] == "now" or s in AT_EXCH + ("ERROR",):
+        return _tsj(o.get("sent_at")) or (_at(f, OPEN_T) if f else None)
+    if f is None:
+        return None
+    if s == "DEFERRED":
+        if paper and (today > f or (today == f and now.time() >= PAPER_OPEN_END)):
+            nd = today if today > f and is_trading_day(today) and now.time() < dt.time(7, 40) else next_trading_day(today)
+            return _at(nd, dt.time(7, 40))
+        return _at(f, OPEN_AT["paper" if paper else "tachibana"])
+    return _at(f, OPEN_T)
+
+
+def outlook(book: dict | None, waiting=(), now: dt.datetime | None = None, *, tag: str | None = None, halt: bool | None = None,
+            paused: bool = False, cash: float | None = None, asked=None, instr: bool = True) -> dict:
+    """今天会发生什么（D5；纯函数、只读）：当前决策的每笔单 + 每条等着的手动指令 → 一行
+    {ref（cid / 指令 id）, kind（order / instr）, ticker, side, qty, unit, state, act_at（什么时候下）, reason, chip（交易页的状态；None = 照单的状态）, cls}：
+      state：will（会下 / 已下、在交易所）| done（结束：成交 / 撤了 / 撤单中 / 规则自己的不下…）| wont（今天不会下：凑钱的卖单没了、钱不够、
+             被拒、错过、HALT、立花收盘后 / 补单没跑成、面板自动下单暂停…）| later（之后某天：收盘后写的、明天开盘、HALT 解除后…）。
+    还没发出的买单：执行器记了凑钱的卖单（fund_src）→ 按 fund_cascade 的预览（资金按来源分组、按单的先后累计扣减）；旧账本 → unfunded_buys
+    的保守估计。被挡的单 08:55 之前还会再发（blocked_retry）→ 算「会下」；状态不明的单单独给理由（cls = unknown）。
+    waiting：指令文件里还没读的（MO.unseen）；halt：None = 看 HALT 文件；paused：面板自动下单今天暂停；cash：开盘时能用的钱
+    （None = cash_hi）；asked：当成「撤单中」的 cid（None = 从 waiting / 账本里的撤单指令算；() = 不算 —— 撤单推送「撤之前」那一次）；
+    instr=False：只看单。→ {"rows": [...], "orders": {cid: 行}, "items": {指令 id: 行}, "asked": set, "n": {state: 笔数}}。"""
+    from . import paths
+    now = now or now_jst()
+    b = book or {}
+    st = b.get("state") or {}
+    d = st.get("last_date")
+    cur = [o for o in b.get("orders") or [] if isinstance(o, dict) and o.get("decided_on") == d]
+    paper = str(tag or "").startswith("paper") or str(b.get("broker") or "").startswith("Paper")
+    halt = paths.halt_file().exists() if halt is None else bool(halt)
+    waiting = [r for r in waiting or [] if isinstance(r, dict)]
+    asked = asked_cids(b, waiting) if asked is None else {str(x) for x in asked}
+    f = fill_day_of(b)
+    try:
+        cash_ = cash_hi(b, tag) if cash is None else float(cash)
+    except (TypeError, ValueError):
+        cash_ = 0.0
+    try:                                                    # 旧账本（没有 fund_src）：开盘时一定买不起一单元的买单
+        unf = unfunded_buys(b, asked, cash=cash_)
+    except (TypeError, ValueError, KeyError):
+        unf = {}
+    unf = {c: x for c, x in unf.items() if not any(str(o.get("cid")) == c and o.get("fund_src") for o in cur)}
+    casc = {}
+    if any(o.get("side") == "BUY" and o.get("fund_src") and o.get("status") in DEP_OPEN for o in cur):
+        try:                                                # 执行器记的凑钱卖单：撤单那一刻 / 开盘时的重算的预览（同一个函数）
+            casc = {str(_g(r["o"], "cid")): r for r in fund_cascade(
+                cur, cash=cash_ - _reserve_of(b, paper), now=now, book=b, dead=asked, apply=False, fill=f, queued=paper)}
+        except (TypeError, ValueError, KeyError):
+            casc = {}
+    rows, orders = [], {}
+    for o in cur:
+        row = _order_row(o, now=now, paper=paper, tag=tag, halt=halt, asked=asked, casc=casc, unf=unf, f=f)
+        if row["state"] == "will":
+            row["act_at"] = _act_at(row, o, now, paper, f)
+            if row["act_at"] is not None and row["act_at"].date() > now.date():
+                row["state"] = "later"
+                if paper and o.get("status") == "DEFERRED":    # 今天的开盘撮合过了 11:30 还没下：不再写 07:40 存下的旧说明
+                    row["reason"] = (f"今天的开盘撮合（09:25〜11:30）没下成 → {row['act_at']:%m/%d %H:%M} 的运行按那天的开盘价照旧撮合"
+                                     "（钱够才买）")
+        rows.append(row)
+        orders[row["ref"]] = row
+    items = {}
+    if instr:
+        from . import manual_orders as MO
+        void = MO.voided(waiting)
+        gone_ids = MO.cancelled(waiting)
+        its = ((b.get("manual") or {}).get("items") or {})
+        recs = [(it, True) for it in its.values() if isinstance(it, dict) and it.get("status") == "pending" and not it.get("cancel_req")]
+        recs += [(r, False) for r in waiting if r.get("id") not in void]
+        for r, seen in recs:
+            if r.get("id") in gone_ids:
+                continue
+            try:
+                x = _instr_row(r, b, now, tag, halt, paused, seen)
+            except Exception:                              # noqa: BLE001  一条读不了的指令：不下结论
+                x = None
+            if x is not None:
+                rows.append(x)
+                items[x["ref"]] = x
+        unread_fix = {r.get("ticker") for r, seen in recs if not seen and r.get("kind") == "corefix"}
+        try:                                               # 读了、还没照它调的固定口数（corefix_pending；D1）：没有指令行 → 补一行
+            pend = MO.corefix_pending(b, None, now)
+        except Exception:                                  # noqa: BLE001
+            pend = {}
+        for t, u in pend.items():
+            if t in unread_fix:
+                continue
+            it = _last_item(b, "corefix", t) or {"id": f"fix:{t}", "kind": "corefix", "ticker": t, "units": u, "clear": u is None}
+            x = _instr_row({**it, "status": "pending", "msg": ""}, b, now, tag, halt, paused, True)
+            if x is not None:
+                x.update(ref=f"fix:{t}", what=(fix_name(t, u) if u is not None else f"{_lab(t)} 恢复按规则") + "（还没照它调）")
+                rows.append(x)
+                items[x["ref"]] = x
+    n = {k: sum(1 for x in rows if x["state"] == k) for k in OUT_WORD}
+    return {"rows": rows, "orders": orders, "items": items, "asked": asked, "n": n}
+
+
+def row_text(row: dict) -> str:
+    """outlook 的一行 →「买 1482 对冲版美国 7〜10 年国债：678 口：<原因>」/ 指令「固定 ETF 口数 …（M…）：<原因>」（代码带名字）。"""
+    from .names import annotate
+    if row.get("kind") == "order":
+        q_ = f"{int(row.get('qty') or 0):,} {row.get('unit') or '股'}"      # 嵌套 f-string 不用同一种引号（3.10 / 3.11 不认）
+        head = f"{'买' if row.get('side') == 'BUY' else '卖'} {_labq(row.get('ticker'), q_)}"
+        if row.get("src_txt"):
+            head += f"（{row['src_txt']}）"
+    else:
+        head = f"{row.get('what') or row.get('ref')}（{row.get('ref')}）"
+    r = str(row.get("reason") or "")
+    return head + (f"：{annotate(r)}" if r else "")
+
+
+def act_text(row: dict, now: dt.datetime) -> str:
+    """act_at →「今天 09:05」/「10/16 09:00」（没有 → ""）。"""
+    t = row.get("act_at")
+    if not isinstance(t, dt.datetime):
+        return ""
+    return f"今天 {t:%H:%M}" if t.date() == now.date() else f"{t:%m/%d %H:%M}"
+
+
+def trade_key(row: dict, now: dt.datetime, what: str = "") -> str:
+    """★ 交易 推送的去重键（notify_seen.first）：哪一类 + 哪一笔 + 哪天下 —— 不含金额 / 股数 / 名字 / 原因的文字
+    （同一笔的说明里的数字变了、名字补上了，不算新的原因）。"""
+    t = row.get("act_at")
+    day = t.date().isoformat() if isinstance(t, dt.datetime) else now.date().isoformat()
+    return f"{TRADE_HEAD}|{what}|{row.get('cls') or row.get('state')}|{row.get('ref')}|{day}"
+
+
+def new_wont(before: dict | None, after: dict, skip=()) -> list[dict]:
+    """撤单前后各算一次 outlook：之后新出现的「今天不会下」（skip 里的 —— 撤的那几笔自己、撤单推送已经写了的 —— 不算）。"""
+    old = {r["ref"] for r in (before or {}).get("rows") or [] if r["state"] == "wont"}
+    skip = {str(x) for x in skip or ()}
+    return [r for r in after.get("rows") or [] if r["state"] == "wont" and r["ref"] not in old and r["ref"] not in skip]
+
+
+def not_today(ol: dict, now: dt.datetime) -> list[dict]:
+    """15:25 之后的汇总（M3 / M18）：今天没下成 / 不会下的全部 —— 今天不会下的单与指令（HALT 的不算：解除后照原样）、
+    今天该下却还等着的指令（改到之后某天的）、还没发出的今天的单。"""
+    out = []
+    for r in ol.get("rows") or []:
+        if r["cls"] == "halt":
+            continue
+        if r["state"] == "wont":
+            out.append(r)
+        elif r["kind"] == "instr" and r["state"] in ("later", "will") and instr_due(r.get("at"), now.date()) is not None:
+            out.append(r)
+        elif r["kind"] == "order" and r["state"] in ("will", "later") and r.get("status") in ("PLANNED", "DEFERRED", "BLOCKED"):
+            out.append(r)
+    return out
+
+
 # ══════════════════════════ B1 撤单 ══════════════════════════
 def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
     """这笔单现在能不能撤：能 → None；不能 → 理由。面板（显示「撤单」按钮）、手动指令的检查、执行器共用。
@@ -1135,4 +1563,6 @@ def save_book(path, book: dict, st=None, now: dt.datetime | None = None) -> None
 __all__ = ["CANCELLABLE", "STATUS_TEXT", "CANCEL_HINT", "CANCEL_HINT_CORE", "RESOLVE_NOTE", "cancel_why", "cancel_core", "cancel_book", "cancel_text",
            "DEP_OPEN", "SRC_WORD", "blocked_retry", "src_done", "fund_srcs", "orphan", "busy", "src_text", "fund_cascade",
            "cascade_events", "cascade_rows", "deps_of", "next_decision_text", "cancel_hint",
+           "CORE_SRC", "src_of", "src_note", "src_line", "wrote", "fix_name", "OUT_WORD", "TRADE_HEAD", "NO_PATH_S", "skip_wont",
+           "asked_cids", "instr_due", "outlook", "row_text", "act_text", "trade_key", "new_wont", "not_today",
            "fill_day_of", "how_text", "unknown_candidates", "unknown_text", "resolve_draft", "reconcile_report", "adopt", "save_book"]

@@ -191,32 +191,18 @@ MANUAL_GRACE_S = 600                # 手动指令过了该下的时刻这么久
 
 
 def _due_at(at, today: dt.date) -> dt.datetime | None:
-    """一条手动指令今天最晚该在什么时刻下（G24）：写于开盘前 / 前几天 → 今天 09:00 开盘；盘中写的 → 写的时刻；午休写的 → 12:30；
-    收盘后 / 休市日写的 → 下一个交易日 09:00（在今天之后 → None）。读不了 → None。"""
-    from . import manual_orders as MO
-    try:
-        w = dt.datetime.fromisoformat(str(at))
-    except (TypeError, ValueError):
-        return None
-    w = w.astimezone(JST) if w.tzinfo else w.replace(tzinfo=JST)
-    mode, d = MO.timing(w)
-    if mode == "now":
-        t = w
-    elif mode == "lunch":
-        t = dt.datetime.combine(d, MO.SESSION[1][0], tzinfo=JST)
-    else:
-        t = dt.datetime.combine(d, MO.SESSION[0][0], tzinfo=JST)
-    if t.date() < today:
-        t = dt.datetime.combine(today, MO.SESSION[0][0], tzinfo=JST)
-    return t if t.date() == today else None
+    """一条手动指令今天最晚该在什么时刻下（G24）：live_ops.instr_due（outlook 同一个口径；2026-10-15）。"""
+    from .live_ops import instr_due
+    return instr_due(at, today)
 
 
 def _manual_waiting(tag: str, book: dict, now: dt.datetime, done: bool) -> list[str]:
     """该下了还没下的手动指令（G24；2026-10-14）：盘中 / 开盘该下的买卖（执行器读了还在等的，或面板叫的执行器根本没读到的；
-    闲置资金比例没读到的也算），过了该下的时刻 10 分钟以上 → 一条原因（面板没开 / 自动下单暂停 / 早上的运行没完成…）。
+    闲置资金比例、固定口数没读到的也算），过了该下的时刻 10 分钟以上 → 一条原因（面板没开 / 自动下单暂停 / 早上的运行没完成…）。
     「明天开盘」、等上一笔成交、「全部换成」整批、撤回中的不算；盘中正在一会儿再试（取不到现价等，面板上写着）的不算。"""
     from . import manual_orders as MO
     from . import run_status as RS
+    from .live_ops import wrote
     today = now.date()
     td = today.isoformat()
     items = (book.get("manual") or {}).get("items") or {}
@@ -234,14 +220,15 @@ def _manual_waiting(tag: str, book: dict, now: dt.datetime, done: bool) -> list[
     except Exception:                                         # noqa: BLE001  指令文件读不了：只看账本里的
         waiting = []
     gone = MO.cancelled(waiting)
-    for r in waiting:
-        if r.get("kind") in MO.ORDER_KINDS + ("core",) and not MO.allin_member(r) and r.get("id") not in gone:
+    for r in waiting:                                         # 固定口数也算（D1 起当天按时段下；D5，2026-10-15：以前 08:48 写的固定口数整天没人读也通过）
+        if r.get("kind") in MO.ORDER_KINDS + ("core", "corefix") and not MO.allin_member(r) and r.get("id") not in gone:
             rows.append((r, "执行器还没读到"))
     late = []
     for it, why in sorted(rows, key=lambda x: str(x[0].get("at") or "")):
         t = _due_at(it.get("at"), today)
         if t is not None and (now - t).total_seconds() >= MANUAL_GRACE_S:
-            late.append(f"{it.get('id')}（{MO.describe(it)}，写于 {MO.mmdd(it.get('at'))}）：{why}")
+            w_ = wrote(it.get("at")) or f"写于 {MO.mmdd(it.get('at'))}"   # 写的时刻、该下的时刻都写到分钟（D5；2026-10-15）
+            late.append(f"{it.get('id')}（{MO.describe(it)}，{w_}，该在 {t:%m/%d %H:%M} 下）：{why}")
     if not late:
         return []
     pz = RS.trigger_paused(tag, td)
@@ -255,18 +242,50 @@ def _manual_waiting(tag: str, book: dict, now: dt.datetime, done: bool) -> list[
 ORDER_WORDS = (("成交", ("FILLED", "RESOLVED")), ("部分成交", ("PARTIAL",)), ("挂着", ("SENT",)),
                ("开盘后再下", ("DEFERRED",)), ("没成交", ("UNFILLED", "MISSED", "EXPIRED")), ("已撤", ("CANCELLED",)),
                ("没下",("PLANNED", "BLOCKED", "REJECTED")), ("状态不明", ("SENDING", "ERROR")))
+WONT_WORDS = (("预计下不成", ("DEFERRED", "PLANNED", "BLOCKED")), ("不会下", ("SKIPPED",)))   # outlook 判「今天不会下」的单（D5）
 
 
-def orders_brief(book: dict, exp: str) -> str:
-    """决策 exp 的单（今天下的）→「今天没有单」/「今天的单 3 笔：成交 1、挂着 2」（只数笔数，不写价格；不下的 SKIPPED 不算）。"""
+def orders_brief(book: dict, exp: str, ol: dict | None = None) -> str:
+    """决策 exp 的单（今天下的）→「今天没有单」/「今天的单 3 笔：成交 1、挂着 2」（只数笔数，不写价格）。
+    规则自己的不下（SKIPPED：与模型相同的跳空 / 资格…）不算；ol（live_ops.outlook）给了 → 它判「今天不会下」的单按它的词数
+    （等开盘后的写「预计下不成」、钱没来 / 凑钱的卖单没了的不下写「不会下」；D5，2026-10-15：以前一律「开盘后再下」、不下的不计数）。"""
+    from .live_ops import skip_wont
+    wont = {c for c, r in ((ol or {}).get("orders") or {}).items() if r.get("state") == "wont"}
     os_ = [o for o in (book or {}).get("orders") or [] if isinstance(o, dict) and o.get("decided_on") == exp
-           and o.get("status") != "SKIPPED"]
+           and (o.get("status") != "SKIPPED" or skip_wont(o))]
     if not os_:
         return "今天没有单"
-    parts = [f"{w} {n}" for w, sts in ORDER_WORDS if (n := sum(1 for o in os_ if o.get("status") in sts))]
+    won = [o for o in os_ if str(o.get("cid")) in wont and any(o.get("status") in sts for _, sts in WONT_WORDS)
+           or (o.get("status") == "SKIPPED")]
+    rest = [o for o in os_ if o not in won]
+    parts = [f"{w} {n}" for w, sts in WONT_WORDS if (n := sum(1 for o in won if o.get("status") in sts))]
+    parts += [f"{w} {n}" for w, sts in ORDER_WORDS if (n := sum(1 for o in rest if o.get("status") in sts))]
     known = {s for _, sts in ORDER_WORDS for s in sts}
-    other = sum(1 for o in os_ if o.get("status") not in known)
+    other = sum(1 for o in rest if o.get("status") not in known)
     return f"今天的单 {len(os_)} 笔：" + "、".join(parts + ([f"其他 {other}"] if other else []))
+
+
+def _outlook(tag: str, book: dict, now: dt.datetime) -> dict:
+    """自检用的 outlook（指令文件里还没读的、HALT、面板自动下单今天暂停 都算上）；算不成 → 空（不下结论，记日志）。"""
+    from . import manual_orders as MO
+    from . import run_status as RS
+    from .live_ops import outlook
+    try:
+        try:
+            waiting = MO.unseen(tag, book)
+        except Exception:                                     # noqa: BLE001  指令文件读不了：只看账本里的
+            waiting = []
+        return outlook(book, waiting, now, tag=tag, halt=bool(_halt()), paused=bool(RS.trigger_paused(tag, now.date().isoformat())))
+    except Exception as e:                                    # noqa: BLE001
+        log.warning("今天会不会下单没算成（%s：%s）：自检只看别的", type(e).__name__, e)
+        return {"rows": [], "orders": {}, "items": {}, "asked": set(), "n": {}}
+
+
+def _orow(r: dict, now: dt.datetime | None = None) -> str:
+    """outlook 的一行 → 自检原因 / 推送里的一句（什么时候下写在前面；代码带名字）。"""
+    from .live_ops import act_text, row_text
+    w = act_text(r, now) if now is not None else ""
+    return (f"{w} " if w else "") + row_text(r)
 
 
 def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
@@ -310,17 +329,28 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
             reasons.append(f"执行器停下（{t_rs.astimezone(JST):%H:%M}）：{rs.get('error') or '原因不明（看数据目录 logs/ 的 .err）'}")
         if rs.get("blocked") and not done:
             reasons.append(f"今天的单没下：{rs['blocked']}")
-    if not done and str(ld or "") == exp:                     # 决策处理了，但有单没下（被挡 / 还没发 / 被拒）：逐笔说清
+    ol = _outlook(tag, book, now)                             # 每笔单 / 每条指令今天会不会下：live_ops.outlook（面板、执行器汇总同一个判断；D5）
+    if str(ld or "") == exp:                                  # 决策处理了，但有单没下（被挡 / 还没发 / 被拒）：逐笔说清
+        #                                                       D5（2026-10-15）：不再只在「早上没做完」时看 —— 跑完了、被拒的单以前一声不响
+        from .live_ops import MANUAL_REASONS
         stuck = [o for o in book.get("orders") or [] if isinstance(o, dict) and o.get("decided_on") == exp
-                 and o.get("status") in ("PLANNED", "BLOCKED", "REJECTED")]
+                 and o.get("status") in ("PLANNED", "BLOCKED", "REJECTED")
+                 and not (done and o.get("reason") in MANUAL_REASONS and o.get("phase") != "now")   # 手动指令的单：下面 _manual_unsent 列
+                 and not (o.get("status") != "REJECTED" and (ol["orders"].get(str(o.get("cid"))) or {}).get("state") == "will")]   # 08:55 之前还会再发
         stuck = RS.uncovered(stuck, rs.get("blocked") if rs_today else None)   # 「今天的单没下：…」已经说了原因的不再逐笔列
         if stuck:
             reasons.append(f"决策 {exp} 处理了，但有 {len(stuck)} 笔没下：" + "；".join(_otext(o) for o in stuck[:5])
                            + ("…" if len(stuck) > 5 else ""))
-    if str(ld or "") == exp:                                  # 手动指令的单没发出（被拒 / 连续几天被挡；G7）
-        reasons += _manual_unsent(book, exp, today, done)
+        reasons += _manual_unsent(book, exp, today, done)     # 手动指令的单没发出（被拒 / 连续几天被挡；G7）
+        wont = [r for r in ol["rows"] if r["kind"] == "order" and r["state"] == "wont"
+                and r["cls"] not in ("halt", "closed", "open_missed", "blocked") and r.get("status") not in ("PLANNED", "BLOCKED", "REJECTED")]
+        if wont:                                              # 今天不会下的单（凑钱的卖单撤了 / 钱不够 / 钱没来 / 错过…）：以前 09:30 照样「✓ 通过」（M2）
+            reasons.append(f"今天不会下的单 {len(wont)} 笔：" + "；".join(_orow(r) for r in wont[:5]) + ("…" if len(wont) > 5 else ""))
+            rec["trade"] = True
     if not _halt():                                           # 该下了还没下的手动指令（面板没开 / 暂停 / 早上没跑完；G24）
-        reasons += _manual_waiting(tag, book, now, done)
+        mw = _manual_waiting(tag, book, now, done)
+        reasons += mw
+        rec["trade"] = rec.get("trade") or bool(mw)           # 交易问题（单 / 指令今天不会下）→ 推送标题以「★ 交易」开头（D5）
     unk = [o for o in book.get("orders") or [] if isinstance(o, dict) and o.get("status") in UNKNOWN]
     if unk:
         what = "、".join(_olab(o) for o in unk[:5]) + (f" 等 {len(unk)} 笔" if len(unk) > 5 else "")
@@ -335,8 +365,10 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
         reasons.append(miss)
     from .names import annotate                               # 执行器 / 运行状态文件里只有代码的原因 → 补名字（命令行、cid 不动；2026-10-15）
     rec["reasons"] = [annotate(x) for x in reasons]
-    rec["decided"], rec["orders"] = exp, orders_brief(book, exp)
+    rec["decided"], rec["orders"] = exp, orders_brief(book, exp, ol)
     rec["halt"] = _halt()
+    rec["later"] = [_orow(r, now) for r in ol["rows"] if r["state"] == "later" and r["cls"] != "halt"]   # 之后才下的：写进当天推送、不算失败
+    rec["halt_wait"] = [_orow(r) for r in ol["rows"] if r["cls"] == "halt" and r["kind"] == "instr"]   # HALT 期间等着的指令（解除后照原样）
     rec["ok"] = bool(rec["halt"]) or not reasons                # HALT 生效中：不下单是预期的，不算失败
     return rec
 
@@ -604,6 +636,9 @@ def _check(tag: str, name: str, now: dt.datetime | None, send, beat, mac, seen, 
         return 0
     if r["halt"]:
         extra = ("\n另外：" + "；".join(r["reasons"])) if r["reasons"] else ""
+        hw = r.get("halt_wait") or []                         # HALT 期间等着的指令：解除后照原样执行（M18）
+        if hw:
+            extra += f"\n等着的指令 {len(hw)} 条（解除后照原样执行）：" + "；".join(hw[:5]) + ("…" if len(hw) > 5 else "")
         text = RS.local_paths_out(f"HALT 生效中（{r['halt']}）：执行器不下单、持仓不动；解除只在 Mac 上、你明确说之后{extra}")
         first, old = seen(tag, HALT_KEY, now), _carry(prev, r["at"])
         if first or old.get("state") in ("failed", "none"):  # 这一条就是今天的推送（不再另推「通过」）；没推到手机 → 再推
@@ -624,13 +659,16 @@ def _check(tag: str, name: str, now: dt.datetime | None, send, beat, mac, seen, 
         back = bool(prev) and prev.get("ok") is False         # 早些时候没通过、现在通过：照推（说一声好了）
         lead = f"现在通过了（{_hm(prev.get('at'))} 没通过）。\n" if back else ""
         title = f"qbreak {name} ✓ {hhmm} 自检通过"
-        text = f"{lead}决策 {r.get('decided') or '—'} 处理完；{r.get('orders') or '今天没有单'}。\n{DAILY_LINE}"
+        lat = r.get("later") or []                            # 之后才下的（不算失败；D5）
+        text = (f"{lead}决策 {r.get('decided') or '—'} 处理完；{r.get('orders') or '今天没有单'}。\n"
+                + (f"之后才下 {len(lat)} 条：" + "；".join(lat[:5]) + ("…" if len(lat) > 5 else "") + "\n" if lat else "") + DAILY_LINE)
         p, pushed = _daily(title, text, tag, now, send, seen, prev, r["at"], force=back, sleep=sleep, out=out)
         hb = _hb(beat(True, f"qbreak {name}：{when} 自检通过"))
         out(f"{name}（{when} JST）：自检通过（今天早上的运行跑完、没有状态不明的单）{_tail(p, pushed, hb)}")
         _finish(r, p, hb, tag, name, now, send, mac, seen, out)
         return 0
-    title = f"qbreak {name} ★ {hhmm} 自检没通过"               # 真的运行时刻（Mac 晚醒就写晚的；2026-10-14 复核：以前固定写 09:30）
+    title = (("★ 交易：" if r.get("trade") else "")         # 有单 / 指令今天不会下（D5；2026-10-15）：交易问题的推送都以「★ 交易」开头
+             + f"qbreak {name} ★ {hhmm} 自检没通过")           # 真的运行时刻（Mac 晚醒就写晚的；2026-10-14 复核：以前固定写 09:30）
     text = "\n".join(f"- {x}" for x in r["reasons"])
     res, p = _push(send, sleep, title, text, "warn", r["at"], out)
     mac(title, r["reasons"][0][:200])

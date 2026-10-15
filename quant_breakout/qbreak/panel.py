@@ -1055,7 +1055,8 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
     D2（2026-10-15）：执行器还没发出的单（计划 / 等开盘后）也给「撤单」（撤 = 执行器不再发）；撤之后会怎样按单的来源写（data-hint：LO.cancel_hint）；
     卖单有靠它的钱的买单（执行器记的 fund_src）→ 确认框给几个按钮（data-depn / data-keep / data-fix）：「一起撤买单」「只撤卖单（买 X 不会下 /
     减到 N 口 / 照常）」，买单是固定口数排的再加「撤单并恢复按规则」；会怎样用 LO.fund_cascade(apply=False) 预览（与撤单那一刻执行器的重算同一个函数）。
-    旧账本（没有 fund_src）照旧用 unfunded_buys 写说明。没有单 → ""。只展示 + 写指令，不改账本。"""
+    旧账本（没有 fund_src）：撤之前 / 之后各算一次 LO.outlook 写说明。核心单写来源（D7：src_txt「为你的『固定 …』凑钱（… 写）」，
+    确认框的 data-hint 也以它开头）；旧账本没有 → 照旧。没有单 → ""。只展示 + 写指令，不改账本。"""
     from . import live_ops as LO
     st = book.get("state") or {}
     d = st.get("last_date")
@@ -1106,13 +1107,14 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
                 alt = (f" data-depn='{len(dx)}' data-keep='{escape('只撤卖单（' + '；'.join(kw) + '）')}'"
                        + (f" data-fix='{escape(fx)}' data-fixname='{escape(NM.name(fx) or '')}'" if fx else ""))
             elif o.get("side") == "SELL":                   # 旧账本（没有 fund_src）：靠这笔卖出的钱的买单撤了就下不成（只是确认框里说明；2026-10-15）
-                try:
-                    cash = _cash_hi(book, tag)
-                    base = LO.unfunded_buys(book, asked, cash=cash) if base is None else base
-                    after = LO.unfunded_buys(book, asked, drop={cid}, cash=cash)
+                try:                                        # 撤之前 / 撤之后各算一次 outlook（D5：与交易页、自检、撤单推送同一个判断）
+                    base = (LO.outlook(book, waiting, now, tag=tag, halt=False, asked=asked, instr=False) if base is None else base)
+                    after = LO.outlook(book, waiting, now, tag=tag, halt=False, asked=set(asked) | {cid}, instr=False)
                 except (TypeError, ValueError, KeyError):  # 账本里的数读不了：不写（只是说明）
-                    base, after = base or {}, {}
-                hit = [b for b in orders if str(b.get("cid")) in after and str(b.get("cid")) not in base and str(b.get("cid")) not in dead]
+                    base, after = base or {"orders": {}}, {"orders": {}}
+                bad = {c for c, r in after["orders"].items() if r["cls"] == "fund"} - {
+                    c for c, r in base["orders"].items() if r["cls"] == "fund"}
+                hit = [b for b in orders if str(b.get("cid")) in bad and str(b.get("cid")) not in dead]
                 if hit:
                     deps = ("撤掉之后，今天等这笔卖出的钱的买单预计下不成（开盘时现金不够一单元）："
                             + "、".join("买 " + NM.qty(b.get('ticker'), f"{int(b.get('qty') or 0):,} {'口' if b.get('kind') == 'core' else '股'}") for b in hit)
@@ -1120,7 +1122,7 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
             btn = (f"<button class='btn sm danger' data-act='cancel-order' data-cid='{escape(cid)}' "
                    f"data-t='{escape(str(o.get('ticker')))}' data-side='{escape(str(o.get('side')))}' data-qty='{n}' "
                    f"data-core='{1 if core else 0}' data-unsent='{1 if o.get('status') in LO.UNSENT else 0}' "
-                   f"data-hint='{escape(LO.cancel_hint(o, book, now, tag))}'" + (f" data-deps='{escape(deps)}'" if deps else "") + alt
+                   f"data-hint='{escape((LO.src_line(o) + '。' if LO.src_line(o) else '') + LO.cancel_hint(o, book, now, tag))}'" + (f" data-deps='{escape(deps)}'" if deps else "") + alt
                    + f" data-name='{escape(NM.name(o.get('ticker')) or '')}'>撤单</button>")      # 名字放最后（确认框标题；2026-10-15）
         else:
             btn = ""
@@ -1131,6 +1133,7 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
                     f"</b> <span class='chip'>{escape(chip)}</span>"
                     + (f"<div class='neg small'>{escape(why)}</div>" if why else "")
                     + (f"<div class='small'>{escape(fixn[cid])}</div>" if cid in fixn else "")
+                    + (f"<div class='small'>{escape(LO.src_line(o))}</div>" if LO.src_line(o) else "")   # 核心单的来源（D7：固定口数 / 凑钱 / 比例 / 规则）
                     + f"<div class='muted small'>{escape(LO.how_text(o, paper) + lim + got)}"
                     f"{(' · ' + escape(NM.annotate(note)[:160])) if note else ''}</div></div>{btn}</div>")
     foot = (f"「撤单」：{LO.CANCEL_HINT}。{LO.CANCEL_HINT_CORE}。执行器还没发出的单（计划 / 等开盘后）也能撤：撤了执行器就不再发。"
@@ -1214,7 +1217,8 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
       执行器的单（当前决策）：已经结束的（成交 / 撤单 / 不下 / 被挡 / 失效 / 被拒…）、已经写了撤单的（撤单中）不算；
         还没发出的（PLANNED / DEFERRED）：HALT 生效中不发 → 不算（模拟账户的 DEFERRED 也一样：D3 起 09:25 前后的开盘撮合按立花 09:05 的
         闸门下，HALT 中不下；开盘撮合时被 HALT 挡下的「等开盘后」→ 不算，明早对账记为没买）；
-        买单开盘时一定买不起一单元（LO.unfunded_buys：凑钱的卖单撤了等）→ 不算；
+        买单开盘时一定买不起一单元（凑钱的卖单撤了等）→ 不算；被挡但 08:55 之前还会再发的 → 算（D5）；
+        每笔单的判断只在 live_ops.outlook（09:30 自检、执行器汇总、撤单推送、面板的提醒同一个；2026-10-15）；
         立花：成交日的交易所已经收盘（15:30 之后 / 成交日已过）→ 什么都不会再发生（明早对账），不算；模拟账户的单下一次运行按那天的开盘价撮合 → 照算。
       手动指令：撤回 / 撤单 / 撤销撤回本身不算，被撤回（还没读的撤回、撤回中）的不算，被撤单的单的指令、一定买不起的手动买入 / 加仓不算；
         单已经做完的（全部成交；立花收盘后已失效的买单 —— 没成交的部分不会再买）：指令还是「已下单」、明早对账才结束 → 不算
@@ -1229,7 +1233,6 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
        等下一次决策（07:40）才读的固定口数 / 解除 / 收盘后写的买卖不算（2026-10-15：以前晚上固定了口数，页面整晚每 10 秒问一次；
        「交易」的数字 n 照算）}。只读。"""
     from . import live_ops as LO
-    from .live_unified import HALT_WAIT as LU_HALT_WAIT
     st = book.get("state") or {}
     d = st.get("last_date")
     cur = [o for o in book.get("orders") or [] if o.get("decided_on") == d]
@@ -1241,52 +1244,30 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     wl = [r for r in waiting if r.get("kind") != "uncancel" and r.get("id") not in void]
     asked = ({str(r.get("cid")) for r in wl if r.get("kind") == "cancel_order"}
              | {str(it.get("cid")) for it in items.values() if it.get("kind") == "cancel_order" and it.get("status") == "pending"})
-    try:
-        unf = LO.unfunded_buys(book, asked, cash=_cash_hi(book, tag))
-    except (TypeError, ValueError, KeyError):              # 账本里的数读不了：不下结论（照算），页面不能因为它打不开
-        unf = {}
+    ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=asked, instr=False)   # 每笔单今天会不会下：只在 live_ops.outlook 判断（D5）
     fixed = MO.core_fixed(book, tag)
-    f = LO.fill_day_of(book)
     rows, fix, dead, n = {}, {}, set(), 0
     fin = {}                                                # 手动单已经做完了（全部成交 / 立花收盘后失效的买单）→ {cid: 指令后面加的说明}
     for o in cur:
         cid, s, t = str(o.get("cid")), o.get("status"), str(o.get("ticker"))
-        if o.get("kind") == "core" and t in fixed and (s == "CANCELLED" or cid in asked or cid in unf    # 撤了 / 下不成，固定口数却还在
+        r = ol["orders"].get(cid) or {}
+        if o.get("kind") == "core" and t in fixed and (s == "CANCELLED" or cid in asked or r.get("cls") == "fund"   # 撤了 / 下不成，固定口数却还在
                                                        or (s == "SKIPPED" and "凑钱的卖单" in str(o.get("note") or ""))):   # 凑钱的卖单没了、执行器不下了（D2）
             fix[cid] = (f"{NM.label(t)} 手动固定 {int(fixed[t]):,} 口仍然有效：下一次决策（{_next_decision(now)}）还会再排同样的单；不想要 → 在「持仓」"
                         + ("" if int((st.get("core_units") or {}).get(t) or 0) > 0 else "的「其他闲置资金 ETF（现在没拿）」")
                         + f"里 {NM.label(t)} 下面点「恢复按规则」")
         manual = o.get("reason") in LO.MANUAL_REASONS
-        if s not in LO.LIVE:
-            if manual and (s == "FILLED" or (o.get("side") == "BUY" and s in ("UNFILLED", "EXPIRED"))):
-                fin[cid] = ("（已成交：明早对账后这条指令结束）" if s == "FILLED"
-                            else "（单已失效：没成交的部分不会再买，明早对账后结束）")
-            continue
-        u = "口" if o.get("kind") == "core" else "股"
-        day = (_ts_jst(o.get("sent_at")) or now).date() if o.get("phase") == "now" else f
-        if cid in asked:
-            dead.add(cid)                                   # 「撤单中」（卡片上已经这样写）
-        elif not paper and tag and day is not None and (day < now.date() or (day == now.date() and now.time() >= LO.CLOSE_T)):
-            rows[cid] = ("已收盘", f"成交日 {day:%m/%d} 的交易所已经收盘：" + ("没成交的部分已失效" if s in LO.AT_EXCH else "这笔没下")
-                         + "，明早对账记账（之后什么都不会再发生）")
-            if manual and o.get("side") == "BUY" and s in LO.AT_EXCH:   # 手动买入 / 加仓只做一次：失效了指令也不会再做事（卖单没卖完的下一次开盘再卖 → 照算）
-                fin[cid] = "（单已失效：没成交的部分不会再买，明早对账后结束）"
-        elif paper and s == "DEFERRED" and str(o.get("note") or "").startswith(LU_HALT_WAIT):   # 开盘撮合时被 HALT 挡下（D3）
-            rows[cid] = ("不会下单（HALT）", "开盘撮合时 HALT 生效中：这笔没下（11:30 之前解除后可以再跑一次 "
-                         "bash scripts/liveu.sh run --broker paper --phase open，否则明早对账记为没买）")
-        elif halt and s in ("PLANNED", "DEFERRED"):         # 模拟账户的「等开盘后」：09:25 前后的开盘撮合按同样的闸门（D3，2026-10-15）
-            rows[cid] = ("不会下单（HALT）", "HALT 生效中：还没发出的单不下"
-                         + ("（开盘撮合在 09:25 前后：那之前解除才会下）" if paper else "（开盘后的补单在 09:05 / 09:20：那之前解除才会下）"))
-        elif cid in unf:
-            x = unf[cid]
-            gone = [g for g in x["gone"] if g.get("status") == "CANCELLED" or str(g.get("cid")) in asked]
-            src = ("资金来源的卖单已撤（" + "、".join("卖 " + NM.qty(g.get('ticker'), f"{int(g.get('sent_qty') or g.get('qty') or 0):,} "
-                                                                     f"{'口' if g.get('kind') == 'core' else '股'}") for g in gone) + "）；") if gone else ""
-            rows[cid] = ("不会下单（预计）", f"{src}开盘时能用的钱最多约 {_yen(x['cash'] + x['sells'])}，按跌停价买 {x['lot']:,} {u}也要约 "
-                         f"{_yen(x['need'])}：开盘后这笔下不成（执行器会放弃）")
-            dead.add(cid)
-        else:
-            n += 1
+        if manual and (s == "FILLED" or (o.get("side") == "BUY" and s in ("UNFILLED", "EXPIRED"))):
+            fin[cid] = ("（已成交：明早对账后这条指令结束）" if s == "FILLED"
+                        else "（单已失效：没成交的部分不会再买，明早对账后结束）")
+        if r.get("chip") and r.get("cls") != "asked":       # 不会再做事的单：交易页写「不会下单（预计 / HALT）」「已收盘」…和原因
+            rows[cid] = (r["chip"], r["reason"])
+        if r.get("cls") in ("asked", "fund"):
+            dead.add(cid)                                   # 撤单中 / 一定下不成：那条手动指令也不会再做事
+        if r.get("cls") == "closed" and manual and o.get("side") == "BUY" and s in LO.AT_EXCH:
+            fin[cid] = "（单已失效：没成交的部分不会再买，明早对账后结束）"   # 手动买入 / 加仓只做一次：失效了指令也不会再做事（卖单没卖完的下一次开盘再卖 → 照算）
+        if r.get("state") in ("will", "later") and s in LO.LIVE + ("BLOCKED",):
+            n += 1                                          # 今天（或之后）还会动的单；被挡但 08:55 之前还会再发的也算（D5）
     itxt, done_it, live_it = {}, {}, set()                  # 被撤单 / 一定买不起 / 已经做完的手动买卖：指令也不会再做事（「手动指令」那一行跟着写）
     for o in cur:
         if o.get("reason") not in LO.MANUAL_REASONS:
@@ -2492,6 +2473,21 @@ def _trigger_notify(tag: str, title: str, text: str, level: str = "warn") -> Non
     notify.send(title, text, level)
 
 
+def _retry_soon(book: dict | None, now: dt.datetime) -> bool:
+    """盘中没下成的指令 / 比例 / 固定口数（tried 在 MO.RETRY_S 之内）：过一会儿面板会再叫执行器 = 还有路（U4 不算「没有执行路径」）。"""
+    def young(v) -> bool:
+        try:
+            t = dt.datetime.fromisoformat(str(v))
+            return 0 <= (now - t).total_seconds() < MO.RETRY_S
+        except (TypeError, ValueError):
+            return False
+    cr = (book or {}).get("core_rule") or {}
+    if young(cr.get("tried")) or young(cr.get("fix_tried")):
+        return True
+    return any(it.get("status") == "pending" and young(it.get("tried"))
+               for it in (((book or {}).get("manual") or {}).get("items") or {}).values() if isinstance(it, dict))
+
+
 def _unknown_open(book: dict | None) -> bool:
     """账本的当前决策里有状态不明的单（SENDING / ERROR）：执行器登记之前不下单、每次运行都停下（撤单除外）。"""
     d = ((book or {}).get("state") or {}).get("last_date")
@@ -2851,19 +2847,73 @@ class Trigger:
         return ("muted", f"面板叫的执行器今天连续失败 {n} 次：最早 {nxt} 再自动叫（连续 {FAIL_PAUSE_N} 次失败当天暂停）")
 
     def _rollover(self, tag: str, now: dt.datetime) -> None:
-        """交易日 15:25 之后看一次（G18）：今天盘中试过、没下成、改到开盘的指令 → 提醒一次「盘中没下成、改到开盘：N 条」。"""
+        """交易日 15:25 之后看一次（G18）：今天盘中试过、没下成、改到开盘的指令 → 提醒一次「盘中没下成、改到开盘：N 条」。
+        同时（D5 / M3；2026-10-15）：今天没下成 / 不会下的全部（live_ops.not_today：不会下的单与指令、今天该下却改到之后的指令、
+        还没发出的今天的单；HALT 的不算、上面那条已经写了的不重复）→ 一条「★ 交易：… 今天没下成 / 不会下：N 笔」（warn）。"""
         today = now.date().isoformat()
         if self.rolled.get(tag) == today or not is_trading_day(now.date()) or now.time() < MO.SESSION[1][1]:
             return
         self.rolled[tag] = today
-        items = ((_load(tag)[0].get("manual") or {}).get("items") or {}).values()
+        book = _load(tag)[0]
+        items = ((book.get("manual") or {}).get("items") or {}).values()
         rows = [it for it in items if MO.rolled_over(it, now) and str(it.get("tried") or "")[:10] == today]
+        if rows:
+            nd = MO.rolled_over(rows[0], now)
+            body = "\n".join(f"- {MO.describe(it)}：{MO.msg_text(it, now) or '没下成'}" for it in rows[:10]) + ("\n…" if len(rows) > 10 else "")
+            self.outbox.append((tag, f"qbreak {BOOKS.get(tag, tag)} 盘中没下成、改到开盘：{len(rows)} 条",
+                                f"{body}\n→ {nd:%m/%d} 开盘（寄付）照常处理；不要了就在面板「交易」里撤回", "info"))
+        self._not_today(tag, book, now, {str(it.get("id")) for it in rows})
+
+    def _not_today(self, tag: str, book: dict, now: dt.datetime, told: set) -> None:
+        """15:25 之后：今天没下成 / 不会下的汇总（D5）。told：「盘中没下成、改到开盘」已经写了的指令 id。今天早上的运行都没完成 → 不写
+        （09:30 自检 / 补跑的提醒已经说了）。"""
+        from . import live_ops as LO
+        if not book or MO.morning_behind(book, now):
+            return
+        pz = self.paused.get(tag)
+        ol = LO.outlook(book, MO.unseen(tag, book), now, tag=tag, paused=bool(pz and pz[0] == now.date().isoformat()))
+        rows = [r for r in LO.not_today(ol, now) if r["ref"] not in told]
         if not rows:
             return
-        nd = MO.rolled_over(rows[0], now)
-        body = "\n".join(f"- {MO.describe(it)}：{MO.msg_text(it, now) or '没下成'}" for it in rows[:10]) + ("\n…" if len(rows) > 10 else "")
-        self.outbox.append((tag, f"qbreak {BOOKS.get(tag, tag)} 盘中没下成、改到开盘：{len(rows)} 条",
-                            f"{body}\n→ {nd:%m/%d} 开盘（寄付）照常处理；不要了就在面板「交易」里撤回", "info"))
+        from . import notify_seen as NS                    # 同一天同一批只推一次：去重键是哪几笔（不含金额 / 原因的文字；面板重启也不重推）
+        if not NS.first(tag, f"{LO.TRADE_HEAD}|not_today|{now.date()}|" + ",".join(sorted(r["ref"] for r in rows)), now):
+            return
+        body = "\n".join(f"- {LO.row_text(r)}" for r in rows[:12]) + ("\n…" if len(rows) > 12 else "")
+        self.outbox.append((tag, f"{LO.TRADE_HEAD}：qbreak {BOOKS.get(tag, tag)} 今天没下成 / 不会下：{len(rows)} 笔",
+                            f"{body}\n→ 写了「→ 某天」的到时候照常处理；不会下的要照原样下就写新的指令；不要了：面板「交易」里撤回", "warn"))
+
+    def _no_path(self, tag: str, book: dict, now: dt.datetime, today: str) -> None:
+        """U4（D5；2026-10-15）：盘中、outlook 判「会下」的单 / 指令过了该下的时刻 10 分钟（live_ops.NO_PATH_S），却没有一条路会下它
+        （面板叫执行器的几种都不成立：要马上下的指令 / 开盘前的重试 / 撤单 / 模拟账户开盘撮合 / 补跑；立花等开盘后的买单 09:30 之前
+        还有 09:20 的定时运行；盘中没下成的 10 分钟内会再试）→「★ 交易：… 今天该下但没有执行路径」（warn；同一笔同一天只推一次，
+        去重键不含金额）。执行器在跑 / 面板自动下单暂停 / 失败退避中 / 今天早上的运行还没完成 → 不判断（各有自己的提醒）。"""
+        from . import live_ops as LO
+        from . import notify_seen as NS
+        from . import run_status as RS
+        from .live_unified import lock_held, paper_open_due
+        if (tag in self.procs or self._nfail(tag, today) > 0 or MO.morning_behind(book, now) or _unknown_open(book)
+                or lock_held(paths.state_dir() / f"live_unified_{tag}.lock") or RS.runs_active(tag)):
+            return
+        if MO.due(tag, book, now) or MO.now_due(tag, book, now) or MO.cancel_due(tag, book, now) or paper_open_due(book, now):
+            return
+        if _retry_soon(book, now):
+            return
+        cut = now - dt.timedelta(seconds=LO.NO_PATH_S)
+        ol = LO.outlook(book, MO.unseen(tag, book), now, tag=tag)
+        late = []
+        for r in ol["rows"]:
+            t = r.get("act_at")
+            if r["state"] != "will" or not isinstance(t, dt.datetime) or t > cut:
+                continue
+            if r["kind"] == "order" and (r.get("status") != "DEFERRED"
+                                         or (tag != "paper" and now.time() < LO.LATE_UNTIL)):
+                continue                                     # 在交易所的 / 立花 09:20 的定时运行还会补
+            if NS.first(tag, LO.trade_key(r, now, "U4"), now):
+                late.append(r)
+        if late:
+            body = "\n".join(f"- {LO.row_text(r)}（该在 {LO.act_text(r, now)} 下）" for r in late)
+            self.outbox.append((tag, f"{LO.TRADE_HEAD}：qbreak {BOOKS.get(tag, tag)} 今天该下但没有执行路径",
+                                f"{body}\n→ 面板不会再自动叫执行器下它：在 Mac 对话里说「再试一次」，或在面板「交易」里撤回", "warn"))
 
     def _flush(self, now: dt.datetime) -> None:
         """锁外面发提醒：同一个账本、同一天、同一段文字只发一次（qbreak/notify_seen.py）。"""
@@ -2913,6 +2963,8 @@ class Trigger:
                     elif (morning or session) and self._due(tag, book, now, morning):
                         mode = "retry" if morning else "now"
                     else:
+                        if session:
+                            self._no_path(tag, book, now, today)   # 该下的时刻过了 10 分钟、没有路会下它 → ★ 交易（U4）
                         continue                             # 开盘前：早上的决策还没做（它自己会读到指令）/ 没有新指令
                     if self.mono() - self.last.get(tag, -1e9) < self._gap(tag, today, morning and mode not in ("cancel", "catchup")):
                         continue                             # 失败过：从看到失败起按连续失败次数加倍等

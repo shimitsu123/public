@@ -56,7 +56,11 @@ def test_when_for_says_after_the_catch_up_when_the_morning_run_is_behind():
     assert s.startswith("补跑早上的运行之后") and "10/07 开盘" in s
     assert MO.when_for(t.replace(hour=12), behind).startswith("补跑早上的运行之后")     # 午休也一样
     assert MO.when_for(t, ok) == MO.when_for(t, {}) == "马上（盘中）"                 # 完成了 / 没有账本：照常
-    assert MO.when_for(t.replace(hour=8), behind) == "今天 09:00 开盘"               # 开盘前：早上的运行自己会读到
+    s8 = MO.when_for(t.replace(hour=8), behind)                                    # 开盘前也说（M19；2026-10-15：以前「今天 09:00 开盘」）
+    assert s8.startswith("今天早上的运行完成之后（07:40 的运行还没完成：完成了 → 今天 09:00 开盘") and "10/07 开盘" in s8
+    assert MO.when_for(t.replace(hour=7, minute=30), behind) == "今天 09:00 开盘"     # 07:40 之前：早上的运行还没到点，照常
+    assert MO.when_for(t.replace(hour=8, minute=57), behind).startswith("补跑早上的运行之后")   # 寄付截止之后
+    assert MO.when_for(t.replace(hour=8, minute=57), ok) == "今天 09:00 开盘后马上（按现价，不是寄付）"
     assert MO.when_for(t.replace(hour=15, minute=40), behind) == "10/07 开盘"
     assert MO.morning_behind(behind, t) and not MO.morning_behind(ok, t) and not MO.morning_behind({}, t)
 

@@ -158,6 +158,9 @@ class ExecOrder:
     sent_at: str = ""          # 发出（记「发送中」）的时刻：状态不明时按它找注文一覧里的候选（qbreak/live_ops.unknown_candidates）
     fund_src: list = field(default_factory=list)   # 买单：凑钱的卖单 cid（开盘前余力不够、要等它们卖出的钱；2026-10-15 D2）。凑钱的卖单没成交 →
     #                            live_ops.fund_cascade 按实际现金重算这笔（照常 / 减股 / 不下）后清空；旧账本没有这个字段 → []
+    src: str = ""              # 核心 ETF 的单从哪来（D7；2026-10-15）：rule（规则再平衡）/ core_fix（固定口数）/ fix_fund（为固定口数凑钱）/
+    #                            manual_core（闲置资金比例）；个股 / 旧账本 → ""（照旧显示）。只是说明，reason 不变（对账、盘中的路按 reason 认单）
+    src_txt: str = ""          # 排单那一刻的一句话（live_ops.src_note：「为你的『固定 1482 … 678 口』凑钱（10/14 19:21 写）」）
 
     @classmethod
     def from_dict(cls, d: dict) -> "ExecOrder":
@@ -373,6 +376,25 @@ class UnifiedExecutor:
             return want
         return want if abs(want - float(cr.get("applied", cr.get("pct", want)))) > 1e-9 else None
 
+    def _src(self, o: ExecOrder, src: str | None = None, fixed=None) -> None:
+        """核心单写上来源（D7；2026-10-15 事故：「卖 1545 全部」其实是为你写的「固定 1482 678 口」凑钱，推送却看不出来）：
+        src 没给 → 这次决策引擎记的（eng.core_src；重试的运行从账本 core_rule.src 读）；为固定口数凑钱的卖单写为哪几只
+        （fixed 没给 = 这次决策要买的固定的 ETF）。只写说明，不改单（reason 不变）。个股 / 来源不明 → 不写（照旧显示）。"""
+        if o.kind != "core":
+            return
+        src = src or (getattr(self.eng, "core_src", None) or {}).get(o.ticker) or (
+            (self.book.get("core_rule") or {}).get("src") or {}).get(o.ticker) or ""
+        if src not in LO.CORE_SRC:
+            return
+        if src == "fix_fund" and fixed is None:
+            fx = (self.manual.m.get("core_fix") if self.manual is not None else None) or self.eng.core_fix or {}
+            fixed = [t for t, (sd, _u) in sorted((self.eng.st.core_plan or {}).items()) if sd == "BUY" and t in fx] or None
+        o.src = src
+        try:
+            o.src_txt = LO.src_note(src, self.book, o.ticker, fixed)[:200]
+        except Exception:                                   # noqa: BLE001  只是说明
+            o.src_txt = ""
+
     def _record_core(self, k: int, exact: bool = False) -> None:
         """决策之后：核心 ETF 的规则目标（闲置资金比例 100% 时的口数）、收盘、单元、这次用的比例（页面 / 盘中的 ETF 调仓换算用）。
         exact（这次照新比例直接调到目标）且有核心 ETF 的单 → 记下这些票：第二天对账时没全部成交（HALT / 没成交 / 没下）→ 下一次决策再照比例调。"""
@@ -389,6 +411,8 @@ class UnifiedExecutor:
         if exact and eng.st.core_plan:
             cr.update(exact_on=eng.st.last_date, exact_plan=sorted(eng.st.core_plan))
         cr["fix_applied"] = {str(t): int(u) for t, u in sorted((eng.core_fix or {}).items())}   # 这次决策照哪些固定口数排了单（D1：盘中 fix_moves 的起点）
+        if getattr(eng, "core_src", None):                  # 这次决策的核心单从哪来（D7：重试的运行建单时也按它写来源）
+            cr["src"] = {str(t): str(v) for t, v in sorted(eng.core_src.items())}
         prev = self.book.get("core_rule") or {}
         if self.manual is not None and float(self.manual.core_pct) <= 0 and prev.get("units100") is not None:
             own = lambda c: {t: int((c.get("rule100") or {}).get(t, n)) for t, n in (c.get("units100") or {}).items()}   # noqa: E731
@@ -901,6 +925,7 @@ class UnifiedExecutor:
                 ref = float(x["signal_close"]) if side == "BUY" and kind == "stock" else float(eng._px_close(t, k))
                 o = ExecOrder(cid, t, side, kind, int(x["qty"]), d, limit=x.get("limit") if side == "BUY" else None,
                               ref_px=ref, reason=x.get("reason") or ("entry" if side == "BUY" else ""))
+                self._src(o)                                # 核心单从哪来（D7：固定口数 / 为固定口数凑钱 / 比例 / 规则）
                 self.orders.append(o)
                 have[cid] = o
                 if t in splits:                             # LU-22：今天生效的拆股 → 按拆股后的股数 / 价格
@@ -956,7 +981,8 @@ class UnifiedExecutor:
                     rest = ExecOrder(cid + "-2", t, side, kind, o.qty - fit, d, limit=o.limit, ref_px=o.ref_px,
                                      reason=o.reason, phase="open", status="DEFERRED",
                                      note=f"开盘前余力只够 {fit} 口（限价 ×1.02 预留）→ 余下 {o.qty - fit} 口开盘后再下",
-                                     fund_src=self._fund_srcs_now(d))   # 余下的要等卖出的钱（D2）
+                                     fund_src=self._fund_srcs_now(d),   # 余下的要等卖出的钱（D2）
+                                     src=o.src, src_txt=o.src_txt)      # 来源与原单相同（D7）
                     o.qty, need = fit, self._reserve(o, fit)
                     self.orders.append(rest)
                     have[rest.cid] = rest
@@ -1938,9 +1964,10 @@ class UnifiedExecutor:
                 val += net - float(eng.c_fee[c]["SELL"](net))
             return ok, val, noq, bz
 
-        def fund(short: float, skip=None, reason: str = "manual_fund") -> tuple[list[str], dict, list[str], list[ExecOrder]]:
+        def fund(short: float, skip=None, reason: str = "manual_fund", fix_for: str | None = None
+                 ) -> tuple[list[str], dict, list[str], list[ExecOrder]]:
             """钱不够：卖核心 ETF 补 short 円（今天有单的、取不到现价的核心不动；按现价）。reason：manual_fund（手动买入）/
-            fix_fund（固定口数；D1）。→ (说明, {票: 卖出口数}, 没下成的说明, 受理了的卖单)。"""
+            fix_fund（固定口数；D1；fix_for = 为哪只固定的凑钱：单上写来源，D7）。→ (说明, {票: 卖出口数}, 没下成的说明, 受理了的卖单)。"""
             notes, sold, fails, fos = [], {}, [], []
             for c, u, pc in fund_src(skip)[0]:
                 if short <= 0 or self._unk_stop:             # 前面有一笔状态不明：不再发（G3）
@@ -1950,6 +1977,8 @@ class UnifiedExecutor:
                 if n <= 0:
                     continue
                 o = ExecOrder(f"U{d}-SELL-{c}-{tag}", c, "SELL", "core", n, d, ref_px=pc, reason=reason, phase="now")
+                if reason == "fix_fund":
+                    self._src(o, "fix_fund", [fix_for] if fix_for else None)
                 if self.paper:
                     b.set_prices({c: pc})
                 self.orders.append(o)
@@ -2209,6 +2238,7 @@ class UnifiedExecutor:
                         continue
                     pre = fix_supersede(info)
                     o = ExecOrder(f"U{d}-SELL-{t}-{tag}", t, "SELL", "core", n, d, ref_px=p, reason="core_fix", phase="now")
+                    self._src(o, "core_fix")
                     if self.paper:
                         b.set_prices({t: p})
                     self.orders.append(o)
@@ -2274,7 +2304,7 @@ class UnifiedExecutor:
                     return
                 pre = fix_supersede(info)
                 avail = cash_now()
-                fn, sold, fails, fos = fund(max(0.0, need(n) - avail) / max(1e-9, 1 - buf), fix_skip | {t}, "fix_fund")
+                fn, sold, fails, fos = fund(max(0.0, need(n) - avail) / max(1e-9, 1 - buf), fix_skip | {t}, "fix_fund", t)
                 notes += fn
                 if fos:
                     cr.setdefault("fix_fund", {})[t] = {"units": info["u"], "cids": [o_.cid for o_ in fos]}
@@ -2302,6 +2332,7 @@ class UnifiedExecutor:
                 notes.append(f"现金只够 {q:,} 口（还差 {n - q:,} 口：下一次决策照它调）")
             pre = pre or fix_supersede(info)
             o = ExecOrder(f"U{d}-BUY-{t}-{tag}", t, "BUY", "core", q, d, limit=lim, ref_px=p, reason="core_fix", phase="now")
+            self._src(o, "core_fix")
             o.fund_src = list(dict.fromkeys([o_.cid for o_ in comp] + [o_.cid for o_ in done_f + fos]))   # 这笔买入靠哪些卖单的钱（D2）
             if self.paper:
                 b.set_prices({t: p})
@@ -2355,6 +2386,7 @@ class UnifiedExecutor:
                         continue
                     o = ExecOrder(f"U{d}-BUY-{t}-{tag}", t, "BUY", "core", n, d, limit=lim, ref_px=p, reason="manual_core",
                                   phase="now")
+                self._src(o, "manual_core")
                 if self.paper:
                     b.set_prices({t: p})
                 self.orders.append(o)
@@ -3244,7 +3276,36 @@ class UnifiedExecutor:
                 "odd_lots": dict(self.book.get("odd_lots") or {}), "incomplete": self.incomplete,
                 "unsold": dict(self.book.get("unsold") or {}),   # 卖单没卖掉的（仍是待卖；G26）
                 "manual": self.manual.summary() if self.manual is not None else None,
+                "outlook": self._outlook_brief(), "fix_note": self._fix_note(),
                 "events": (self.book.get("events") or [])[-30:] + self.events}
+
+    def _outlook_brief(self) -> dict:
+        """这次决策的每笔单今天会不会下（live_ops.outlook；D5，2026-10-15）→ {cid: {state, reason, cls}}：汇总推送 / 日志的单那几行照它写
+        （以前直接写 07:40 存下的说明「开盘后按始値检查、减股再下」，撤了凑钱的卖单之后还这样写）。不连券商；算不成 → {}。"""
+        try:
+            tag = self.manual.tag if self.manual is not None else None
+            book = {**self.book, "state": self.eng.st.to_dict(), "orders": [asdict(o) for o in self.orders]}
+            if self.paper:
+                book["broker"] = "PaperBroker"
+            ol = LO.outlook(book, (), self.clock(), tag=tag or ("paper" if self.paper else "tachibana"), instr=False,
+                            cash=LO.cash_hi(book, tag), halt=bool(self.respect_halt and paths.halt_file().exists()))
+            return {c: {"state": r["state"], "reason": r["reason"], "cls": r["cls"]} for c, r in ol["orders"].items()}
+        except Exception as e:                              # noqa: BLE001  只是说明：不能让汇总出错
+            log.warning("这次决策的单今天会不会下没算成（%s：%s）：汇总照单的状态写", type(e).__name__, e)
+            return {}
+
+    def _fix_note(self) -> str:
+        """这次决策有照固定口数排的核心单（来源 core_fix / fix_fund）→「★ 固定 1482 … 678 口生效：今天的换仓来自你写的固定口数，
+        不是规则的判断」（D7；2026-10-15 事故：07:41 的推送只写规则视角，看不出那组换仓是你写的固定口数）。没有 → ""。"""
+        mine = [o for o in self._active() if o.kind == "core" and LO.src_of(o) in ("core_fix", "fix_fund")]
+        if not mine:
+            return ""
+        fx = (self.manual.m.get("core_fix") if self.manual is not None else None) or self.eng.core_fix or {}
+        ts = [t for t in sorted(fx) if any(o.ticker == t for o in mine)] or sorted(fx)
+        if not ts:
+            return ""
+        return ("★ " + "、".join(LO.fix_name(t, fx[t]) for t in ts) + " 生效：今天的换仓来自你写的固定口数，不是规则的判断"
+                "（不想要 → 面板「持仓」里那只 ETF 下面点「恢复按规则」）")
 
 
 def resolve_order(path, cid: str, filled: int, px: float) -> dict:
@@ -3564,6 +3625,22 @@ def lag_exit_lines(lag: dict | None) -> list[str]:
             for t, d in sorted((lag or {}).items())]
 
 
+def trade_wont(sm: dict | None) -> list[dict]:
+    """汇总里今天不会下的单（live_ops.outlook 判的；HALT 的不算：HALT 生效中不下是预期的）→ 推送升 warn、标题加「★ 交易」（D5；2026-10-15）。"""
+    ol = (sm or {}).get("outlook") or {}
+    return [o for o in (sm or {}).get("orders") or [] if (ol.get(str(o.get("cid"))) or {}).get("state") == "wont"
+            and (ol.get(str(o.get("cid"))) or {}).get("cls") != "halt"]
+
+
+def order_tail(o: dict, sm: dict | None) -> str:
+    """单那一行的结尾（汇总推送 / 日志 / 命令行）：outlook 判今天不会下 →「→ 不会下：<原因>」（不再写 07:40 存下的旧说明；D5）；
+    否则 →「→ 状态：说明」。"""
+    r = ((sm or {}).get("outlook") or {}).get(str(o.get("cid"))) or {}
+    if r.get("state") == "wont":
+        return f"→ 不会下：{r.get('reason') or o.get('note') or ''}".rstrip("：")
+    return f"→ {o['status']}" + (f"：{o['note']}" if o.get("note") else "")
+
+
 def model_diff_orders(orders) -> list[dict]:
     """没下的单里与模型不同的（早上错过寄付 / 到 09:20 还没寄り付き / 拆股当天判断不了行情…：note 里写着「与模型不同」）。
     实盘的通知升 warn、加 ★（不然只有第二天的「★ 与云端不一致」才看得出）。"""
@@ -3607,6 +3684,9 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
                   else "｜出金预留：持仓与云端不同（预期）" if cmp.get("explained") else "｜★ 与云端不一致")
     if sm.get("blocked"):
         short += "｜★ 没下单"
+    tw = trade_wont(sm)
+    if tw:                                                  # 今天不会下的单（凑钱的卖单撤了 / 钱不够…；D5）
+        short += f"｜{LO.TRADE_HEAD}：今天不会下 {len(tw)} 笔"
     from .run_status import actionable, bad_orders, bad_text, uncovered
     # 适配器挡下 / 立花拒绝 / 状态不明的单（不经过 ux.block）；HALT 挡下的不算（HALT 生效中不下单是预期的）
     bad = actionable(uncovered(bad_orders(sm.get("orders")), sm.get("blocked")))
@@ -3697,9 +3777,10 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
         how = ("盘中" if now_ else "寄付成行") if o["side"] == "SELL" else (
             f"{'盘中' if now_ else ('寄付' if o.get('phase') == 'morning' and o.get('status') != 'DEFERRED' else '开盘后')}"
             f"指値 ≤ ¥{float(o['limit']):,.0f}")
+        st_ = LO.src_line(o)                                # 核心单从哪来（D7：「为你的『固定 …』凑钱（… 写）」；旧账本没有 → 照旧）
         lines.append(f"- {'盘中' if now_ else '下一开盘'}：{'卖' if o['side'] == 'SELL' else '买'} {NM.qty(o['ticker'], _qty_txt(o))}（{how}"
-                     + (f"，{REASON_TEXT[o['reason']]}" if o.get("reason") in REASON_TEXT else "") + f"）→ {o['status']}"
-                     + (f"：{o['note']}" if o.get("note") else ""))
+                     + (f"，{REASON_TEXT[o['reason']]}" if o.get("reason") in REASON_TEXT else "") + "）"
+                     + (f"：{st_} " if st_ else "") + order_tail(o, sm))
     if not orders:
         lines.append("- 下一开盘：没有单")
     for m, bb in (sm.get("market") or {}).items():        # 牛熊：现在处于哪个阶段（只展示）
@@ -3717,8 +3798,11 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
         from .exit_rules import LABELS
         lines.append(f"- 个股离场：{LABELS.get(sm['exit_mode'], sm['exit_mode'])}（止损 / 跟踪 / 止盈 / 最长持有照旧）")
     ic = sm.get("idle_cash") or {}
+    fxn = sm.get("fix_note") or ""                          # ★ 固定口数生效：今天的换仓不是规则的判断（D7）
     if ic.get("mode") and ic["mode"] != "K0":                 # 闲置资金的方式（var/sim.json idle_cash）
-        lines.append(f"- 闲置资金：{ic.get('label') or ic['mode']}；现在：{ic_text(ic)}")
+        lines.append(f"- 闲置资金：{ic.get('label') or ic['mode']}；现在：{ic_text(ic)}" + (f"；{fxn}" if fxn else ""))
+    elif fxn:
+        lines.append(f"- 闲置资金：{fxn}")
     if cmp:
         lines.append(f"- {cmp['text']}")
     if sm.get("blocked"):

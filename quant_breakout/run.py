@@ -3467,6 +3467,7 @@ def _live_cancel(a, tag: str, book, paper: bool) -> int:
         if "b" not in holder:
             holder["b"] = _cancel_broker(a, paper)
         return holder["b"]
+    ol0 = _cancel_outlook(book, tag, asked=())                # 撤之前：今天会怎样（撤的那几笔当成还在；D5）
     try:
         res = LO.cancel_book(book, get_broker, None if req else (a.cancel or None), paper=paper, tag=tag, requests=req,
                              source="面板的撤单指令" if req else "命令行")
@@ -3491,6 +3492,16 @@ def _live_cancel(a, tag: str, book, paper: bool) -> int:
     if res["done"] or res.get("pending") or res["failed"] or res.get("items"):
         _refresh_after_book_change(tag)
     trade = [r for r in res.get("fund") or [] if r.get("act") != "keep"]   # 靠撤掉的卖单的钱的买单不下 / 减股（D2）→ ★ 交易 warn
+    nw = []                                                   # 撤之后新出现的「今天不会下」（级联已经写了的、撤的那几笔自己不算；D5）
+    if ol0 is not None and (res["done"] or res.get("pending")):
+        ol1 = _cancel_outlook(book, tag)
+        skip = [r.get("cid") for r in (res.get("done") or []) + (res.get("pending") or [])] + [r.get("cid") for r in trade]
+        nw = [r for r in LO.new_wont(ol0, ol1 or {}, skip) if r.get("cls") != "halt"]
+    for r in nw:
+        ln = f"★ {LO.row_text(r)}"
+        lines.append(ln)
+        print(ln)
+    trade = trade + nw
     if getattr(a, "notify", False) and (res["done"] or res.get("pending") or res["failed"] or res["skipped"]):
         from qbreak import notify
         from qbreak.live_unified import mac_notify
@@ -3500,6 +3511,18 @@ def _live_cancel(a, tag: str, book, paper: bool) -> int:
         mac_notify(title, "；".join(lines)[:200])
         notify.send(title, "\n".join(f"- {x}" for x in body), "warn" if res["failed"] or trade else "info")
     return 1 if res["failed"] else 0
+
+
+def _cancel_outlook(book, tag: str, asked=None) -> dict | None:
+    """撤单推送用：账本文件现在的样子 → live_ops.outlook（只看单）。读不了 / 算不成 → None（撤单照常，只是少一段说明）。"""
+    from qbreak import live_ops as LO
+    from qbreak import run_status as RS
+    try:
+        b_ = RS.peek_json(book) or {}
+        return LO.outlook(b_, (), tag=tag, asked=asked, instr=False) if b_ else None
+    except Exception as e:                                # noqa: BLE001
+        log.warning("撤单前后的「今天会怎样」没算成（%s）：撤单照常", type(e).__name__)
+        return None
 
 
 def _trade_warn_push(warns: list, paper: bool) -> None:
@@ -4343,8 +4366,9 @@ def _live_unified_run(a, opened: list) -> int:
         from qbreak import notify
         mn_ = sm.get("manual") or {}
         sig_ = bool(mn_.get("core_pause")) and (mn_.get("core_signal") or {}).get("date") == sm.get("decided_on")   # 停买中出现买入信号
-        from qbreak.live_unified import compare_bad, model_diff_orders, unsold_long, voided_today
-        bad = (bool(sm["blocked"]) or compare_bad(cmp)            # 上线初期拿的票不同（LU-12）不算
+        from qbreak.live_unified import compare_bad, model_diff_orders, trade_wont, unsold_long, voided_today
+        tw_ = trade_wont(sm)                                  # 今天不会下的单（live_ops.outlook；D5）→ warn、标题「★ 交易」
+        bad = (bool(sm["blocked"]) or compare_bad(cmp) or bool(tw_)   # 上线初期拿的票不同（LU-12）不算
                or bool(voided_today(sm)) or bool(unsold_long(sm))   # 手动买入作废（G17）/ 卖单连续 2 天以上没卖掉（G26）
                or any(str(n_).startswith("★") for n_ in sm.get("notices") or [])   # 立花的预告：只有 ★（要动手）的升 warn
                or (not paper and bool(model_diff_orders(sm["orders"])))   # 错过寄付 / 09:20 没寄り付き：与模型不同（EXE-4）
@@ -4353,17 +4377,21 @@ def _live_unified_run(a, opened: list) -> int:
                or bool(inc_) or bool(sm.get("odd_lots"))      # 没做完 / 有零股要在立花网站卖
                or bool(sm.get("stale_inputs")) or bool(sm.get("data_problem")) or bool(sm.get("lag_exits")))   # 判断层的输入没更新 / 行情有问题
         # ↑ 被挡 / 被拒 / 状态不明的单（适配器挡下的不经过 ux.block；HALT 挡下的不算）、这次运行的 error 事件 → warn
-        mac_notify(title, short)
-        notify.send(title, body, "warn" if bad else "info")
+        t_ = f"★ 交易：{title}" if tw_ else title    # 交易问题的推送标题以「★ 交易」开头（D5；经济威胁提醒不用它）
+        mac_notify(t_, short)
+        notify.send(t_, body, "warn" if bad else "info")
     print(f"\n决策日 {sm['decided_on']} → 成交日 {sm['fill_day']}；权益 ¥{sm['equity_jpy']:,.0f}，现金 ¥{sm['cash_jpy']:,.0f}")
+    from qbreak import live_ops as _LO
+    from qbreak.live_unified import order_tail
     from qbreak.live_unified import otag                 # 「卖 1545 纳斯达克 100 4,110 口」（以前「SELL 1545.T ×4,110」；2026-10-15 用户：只写代码不知道是哪只）
     for r in sm["reconciled"]:
         print(f"  已对账 {r['bar']} {otag(r['side'], r['ticker'], r['qty'], r.get('kind') or 'stock')} @ ¥{r['px']:,.2f}")
     for o in sm["orders"]:
         lim = f" 限价 ¥{o['limit']:,g}" if o.get("limit") else ""
+        src_ = _LO.src_line(o)                            # 核心单从哪来（D7）
         print(f"  {otag(o['side'], o['ticker'], o['qty'], o.get('kind') or 'stock')}{lim}"
-              f"（{ {'morning': '寄付', 'now': '盘中'}.get(o['phase'], '开盘后')}）"
-              f" → {o['status']} {o.get('note') or ''}".rstrip())
+              f"（{ {'morning': '寄付', 'now': '盘中'}.get(o['phase'], '开盘后')}）" + (f"：{src_}" if src_ else "")
+              + f" {order_tail(o, sm)}".rstrip())
     if sm["blocked"]:
         print(f"★ 没有下单：{sm['blocked']}")
     for n_ in (sm["eligibility"].get("needs_user") or []) + (sm["delist"].get("needs_user") or []):
@@ -4734,7 +4762,10 @@ def cmd_manual(a) -> int:
                       f"之后每天按 {p1_:g}% 调" + hint_)
         else:
             print(f"核心 ETF {when}照新比例调；之后每天按「规则目标额 × {rec['pct']:g}%」（改回 100% 就照规则）" + hint_)
-    if paths.halt_file().exists():
+    if paths.halt_file().exists() and rec["kind"] in ("corefix", "core"):   # 比例 / 固定口数读到就生效，ETF 的单等解除后的决策（D7；2026-10-15）
+        if MO.HALT_CORE_MSG not in str((pv_ or {}).get("text") or ""):
+            print(f"★ HALT 生效中（{paths.halt_file()}）：{MO.HALT_CORE_MSG}")
+    elif paths.halt_file().exists():
         print(f"★ HALT 生效中（{paths.halt_file()}）：解除之后才处理")
     if paper:
         print("提醒：模拟账户的手动操作会让它和云端模拟盘不一致（上线门槛「连续 10 个交易日一致」的天数会中断）")

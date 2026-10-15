@@ -293,6 +293,8 @@ class UnifiedEngine:
         self.core_exact = False                             # True：这次决策核心 ETF 直接调到目标（不看再平衡带；执行器在手动改了比例之后用一次）
         self.core_t100: dict[str, int] = {}                 # 最近一次决策里每只核心 ETF「比例 100% 时」的目标口数（执行器 / 页面：ETF 的调仓换算成比例）
         self.core_rule100: dict[str, int] = {}              # 同上，但固定口数的 ETF 是「不固定时规则自己的」目标（含牛熊；页面「恢复按规则」与停买中的买入信号用；2026-10-13）
+        self.core_src: dict[str, str] = {}                  # 最近一次决策里每只核心 ETF 的单从哪来（D7；2026-10-15）：rule / core_fix / fix_fund / manual_core
+        #                                                     （只是说明：执行器写在单上；不影响下单，回测 / 模拟盘照旧）
 
     # ── 工具 ──
     @staticmethod
@@ -807,7 +809,7 @@ class UnifiedEngine:
         只有一只 ETF、没有美股时，与 core.core_orders 完全相同（引擎差分测试保证）。"""
         st, A, cfg = self.st, self.A, self.cfg
         st.core_plan = {}
-        self.core_t100, self.core_rule100 = {}, {}
+        self.core_t100, self.core_rule100, self.core_src = {}, {}, {}
         if not cfg.core:
             return
         stock_after = us_exiting = 0.0
@@ -823,7 +825,7 @@ class UnifiedEngine:
         w0 = w = {t: float(v) for t, v in cfg.core.items()}
         bear = {t: self._core_bear(t, i) for t in w}
         fix = {t: int(u) for t, u in (self.core_fix or {}).items() if t in w and A.has[i, self.col[t]]}
-        raw_100 = tgt_100
+        raw_100, raw_total = tgt_100, tgt_total
         fval = {t: u * float(A.close[i, self.col[t]]) for t, u in fix.items()}
         if fix:                                                 # 固定口数的 ETF 先拿走它的金额，剩下的照规则分给其他 ETF
             fv = sum(fval.values())
@@ -842,8 +844,10 @@ class UnifiedEngine:
             tot = sum(wd.values()) or 1.0
             return {t: (0.0 if bear[t] else v / tot) for t, v in wd.items()}
         share = shares_of(w)
+        share0 = shares_of(w0) if fix else share
         band = 0.0 if self.core_exact else cfg.band_pct / 100 * eq
         orders, tgts = {}, {}
+        rule_sell, gap_sell = {}, {}                            # 来源标记用（D7）：没有固定口数时规则自己会卖多少 / 日元缺口卖多少（只记、不改单）
         for t in w:
             j = self.col[t]
             if not A.has[i, j]:
@@ -874,6 +878,9 @@ class UnifiedEngine:
                 self.gate_log.append((str(self.gidx[i].date()), t, gated[t]))
                 buy = 0
             orders[t] = [sell, buy]
+            if fix and t not in fix:                            # 没有固定口数时这只的规则目标（固定的拿走了金额 → 别的 ETF 多卖的部分 = 为固定凑钱）
+                t0 = 0 if bear[t] or share0[t] <= 0 else int(np.floor(max(0.0, raw_total * share0[t] * xp) / price / lot)) * lot
+                rule_sell[t] = units - t0 if t0 < units and (t0 == 0 or (units - t0) * price > bd) else 0
         # 日元缺口（明早日本买入 + 换汇 > 现金 + 日本卖出所得）→ 卖核心补足，按跳空上限多卖；
         # 固定口数的 ETF 排在最后卖、它要加的口数不取消（之后 _fund_fixed 再卖别的 ETF 给它凑钱；2026-10-14）
         short = reserve - cash_est
@@ -892,10 +899,12 @@ class UnifiedEngine:
                 while u < units and net(u) < need:
                     u += lot
                 orders[t] = [max(orders[t][0], u), 0]
+                gap_sell[t] = u
                 need -= net(orders[t][0])
             for t in orders:
                 if t not in fix or orders[t][0]:
                     orders[t][1] = 0
+        pre = {t: int(v[0]) for t, v in orders.items()}
         if fix:                                                 # 缺口之后再凑固定口数的钱：先补完明早的日本买入，再卖别的 ETF 给固定的买入（2026-10-14）
             self._fund_fixed(i, fix, orders, tgts, cash_est - reserve)
         for t, (sell, buy) in orders.items():
@@ -903,6 +912,10 @@ class UnifiedEngine:
                 st.core_plan[t] = ["SELL", int(sell)]
             elif buy:
                 st.core_plan[t] = ["BUY", int(buy)]
+            if sell or buy:                                     # 这笔从哪来（D7；只记、不改单）：固定的 / 为固定的多卖的 / 刚改的比例 / 规则
+                ff = fix and (sell > pre.get(t, 0) or sell > max(rule_sell.get(t, 0), gap_sell.get(t, 0)))
+                self.core_src[t] = ("core_fix" if t in fix else "fix_fund" if ff
+                                    else "manual_core" if self.core_exact else "rule")   # core_exact：执行器在改了比例之后照新比例调的那一次
 
     def _fund_fixed(self, i: int, fix: dict, orders: dict, tgts: dict, free: float) -> None:
         """固定口数要加口数、现金不够（现金 − 明早日本买入与换汇 + 核心卖出所得 − 别的核心买入 < 固定的买入）→ 别的（不固定的）核心 ETF

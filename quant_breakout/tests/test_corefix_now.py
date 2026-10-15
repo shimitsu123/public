@@ -263,6 +263,8 @@ def test_trigger_executor_and_text_agree(book, kind, when):
     b = _disk(r)
     txt = MO.wait_text(w, T, b, r.tag)
     want = WANT_TXT[kind][path] + ("（模拟账户当场成交）" if (kind, path, book) == ("corefix", "now", "paper") else "")
+    if when == "08:57" and kind != "corefix":             # 寄付截止之后：开盘后由盘中的路按现价下（D7 / M19；2026-10-15）
+        want = want.replace("今天 09:00 开盘", MO.OPEN_NOW_TXT)
     assert txt.split("：", 1)[1] == want, txt                            # ① 说明
     assert txt.startswith("等执行器读" if kind == "core" else "等下单")
     if path == "now":                                     # ② 面板马上叫 → ③ 执行器盘中按现价下
