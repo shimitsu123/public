@@ -46,3 +46,7 @@ var/*.pem
 var/out/watchdog_*
 var/out/notify_seen_*
 var/out/live_unified_*_run.json
+
+# 盘中观测（qbreak/intraday_watch.py；操作面板的线程写）的结果 / 运行锁、手机推送的开关：只在 Mac 的数据目录，不入库
+var/out/intraday_*
+var/intraday.json

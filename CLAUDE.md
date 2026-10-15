@@ -137,7 +137,8 @@
   市场仪表盘 / 经济威胁提醒（每 15 分钟）：`~/.qbreak/home/out/dashboard.html`、`~/.qbreak/home/logs/com.qbreak.news.out|err`（只展示与提醒，不下单）；
   J-Quants：`~/.qbreak/home/logs/com.qbreak.jquants.out|err`；登录 / 开机后的自动启动（补跑、打开页面）：
   `~/.qbreak/home/logs/com.qbreak.login.out|err`；操作面板 / 手动指令：`bash scripts/liveu.sh manual list [--broker tachibana]`、
-  `~/.qbreak/home/logs/com.qbreak.panel.{out,err,retry.log}`；手机：`bash scripts/liveu.sh phone status`（只读，不含配对码）；
+  `~/.qbreak/home/logs/com.qbreak.panel.{out,err,retry.log}`；盘中观测（面板的线程每 5 分钟算一次，只展示）：`bash scripts/liveu.sh intraday`（只读）、
+  `~/.qbreak/home/logs/com.qbreak.panel.intraday.log`；手机：`bash scripts/liveu.sh phone status`（只读，不含配对码）；
   执行器这次跑成没有：`~/.qbreak/home/out/live_unified_{paper,tachibana}_run.json`（面板顶部也显示）；09:30 自检：`~/.qbreak/home/out/watchdog_{paper,tachibana}.json`、
   `~/.qbreak/home/logs/com.qbreak.watchdog.out|err`；本地改代码 / 推不上去：`bash scripts/dev.sh check`（只读）；
   本机例行任务（今天跑了没有、是 Mac 还是云端后备做的）：`bash scripts/routines.sh check`（只读）、桌面版 Code → Routines → Review history；

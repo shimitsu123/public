@@ -138,6 +138,18 @@ def _charts_item(tag: str, now: dt.datetime) -> dict | None:
     return {"name": name, "level": "ok", "text": f"日线到 {s['have']}"}
 
 
+def _intraday_item(tag: str, now: dt.datetime) -> dict | None:
+    """盘中观测（qbreak/intraday_watch.py；操作面板的线程交易时段每 5 分钟算一次）：最后一次的时刻 / 出错。没有结果文件 → 不显示。"""
+    try:
+        from . import intraday_watch as IW
+        s = IW.status_line(tag, now)
+    except Exception as e:                                   # noqa: BLE001
+        return {"name": "盘中观测", "level": "info", "text": f"读不了（{type(e).__name__}）"}
+    if not s:
+        return None
+    return {"name": "盘中观测" + ("（立花）" if tag == "tachibana" else ""), "level": s["level"], "text": s["text"]}
+
+
 def _translate_item() -> dict | None:
     """消息标题的中文翻译（本机离线；qbreak/translate.py）：小工具没装 / 语言包没下载 → 提醒（通知照发、标题是原文）。"""
     from . import translate as TR
@@ -184,6 +196,9 @@ def build(now: dt.datetime | None = None, run=subprocess.run) -> dict:
         c = _charts_item(tag, now)
         if c:
             items.append(c)
+        ia = _intraday_item(tag, now)
+        if ia:
+            items.append(ia)
     items.append(_agents_item(run))
     tr = _translate_item()
     if tr:

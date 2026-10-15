@@ -18,6 +18,8 @@
   GET  /api/chart?book=…&t=…    一只票的 K 线（执行器写的 out/charts_<账本>.json；打开 / 滑到那只票时才取；手机端口要你本人）
   GET  /api/quotes?book=…       持有的个股与核心 ETF 的现价（Yahoo 1 分钟线，约晚 20 分钟；盘中 60 秒缓存；只展示；手机端口要你本人）
   GET  /api/trade_room?book=…   今天还能买几次 / 卖几次（qbreak/trade_room.py：时段、差金決済、执行器规则、钱、闸门；不取价、只读；手机端口要你本人）
+  GET  /api/intraday?book=…     盘中观测：规则的暂定买卖点（qbreak/intraday_watch.py 的结果文件；不取价、只读；手机端口要你本人）。
+                                面板里的一个线程（serve 的 intraday）交易日 08:55〜11:35、12:25〜16:30 每 5 分钟另起进程算一次（取价不在请求里做）
   POST /api/request             写一条手动指令（qbreak/manual_orders.py；与 run.py manual 相同的检查）
   POST /api/halt                建 HALT（只能建、不能解除；解除只在 Mac 上、用户明确说）
   本机才有：POST /api/pair/new（生成配对码）、/api/device/revoke（取消一台设备）；手机才有：/api/pair、/api/unpair（退出这台设备）
@@ -57,6 +59,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import core_exit as CX
 from . import dip_stats as DS
+from . import intraday_watch as IW
 from . import kline as KL
 from . import manual_orders as MO
 from . import names as NM
@@ -90,7 +93,8 @@ WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "money_view.py", "bro
          "idle_cash.py", "dip_stats.py", "run_status.py", "precheck.py", "calendar_jp.py",
          "paths.py", "live_unified.py",         # 默认账本 / ARM 判定（paths）、数据依赖的提醒文字（live_unified）
          "live_ops.py", "data.py",              # 「预计不会下单」与执行器同一个判断（live_ops）、盘中现价（data）：2026-10-15 复核补上
-         "trade_room.py")                       # 今天还能买几次 / 卖几次（D6；2026-10-15）
+         "trade_room.py",                       # 今天还能买几次 / 卖几次（D6；2026-10-15）
+         "intraday_watch.py")                   # 盘中观测的卡片 / 时段（2026-10-16）
 
 
 def token() -> str:
@@ -131,7 +135,7 @@ def _yen(v) -> str:
 # ───────────────────────── 页面（手机优先；Mac 上一样用） ─────────────────────────
 STATIC_DIR = Path(__file__).resolve().parent / "static"     # 页面的 JS（浏览器原生 ES 模块）与 CSS（2026-10-12 从 Python 字符串搬出来）
 STATIC_TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
-JS_MODULES = ("net", "core", "conn", "trade", "kline", "quotes", "room", "app")   # main.js 按这个顺序引入；pair.js 是配对页的
+JS_MODULES = ("net", "core", "conn", "trade", "kline", "quotes", "room", "intraday", "app")   # main.js 按这个顺序引入；pair.js 是配对页的
 
 
 def _static_files() -> dict[str, bytes]:
@@ -1129,6 +1133,122 @@ def _room_chip(rm: dict | None, t: str) -> str:
     return f"<div class='room small muted' data-room='{escape(t)}'>{escape(r['chip']) if r else ''}</div>"
 
 
+# ───────────────────────── 盘中观测（qbreak/intraday_watch.py；2026-10-16 用户要求；只展示）─────────────────────────
+INTRADAY_POLL_S = 30                    # 线程多久看一次（到 5 分钟才真的叫）
+INTRADAY_LOG = IW.LOG_NAME              # 数据目录 logs/com.qbreak.panel.intraday.log
+
+
+def intraday_json(tag: str, now: dt.datetime | None = None) -> tuple[int, dict]:
+    """/api/intraday?book=…（选股页的「今天盘中」卡片、持仓每只一行；页面每 1 分钟刷新）：只读 out/intraday_<账本>.json
+    （面板的线程另起进程写的），请求里不取价、不算区间。读不了 → 200 + ok=false（页面保留上一次的）。"""
+    try:
+        return 200, IW.view(IW.load(tag), now or now_jst())
+    except Exception as e:                                  # noqa: BLE001
+        log.warning("/api/intraday 读不了（%s：%s）", type(e).__name__, e)
+        return 200, {"ok": False, "msg": "盘中观测读不了"}
+
+
+def _intraday_card(v: dict | None) -> str:
+    """选股页最上面「今天盘中：规则的买点（暂定，约晚 20 分钟）」（static/intraday.js 的 intraShow 按 /api/intraday 重画同一个样子）。
+    每行：代码 + 名字、区间 ¥下沿〜¥上沿、离下沿 %、成交量到所需的 %、挡住的闸门、数据时刻；其余收起「今天不可能：N 只（理由）」。"""
+    if not v or not v.get("ok"):
+        return f"<section class='card' id='intraday'><div class='ia-hl'><b>{escape(IW.TITLE)}</b></div><div class='muted small'>盘中观测读不了</div></section>"
+    H = [f"<section class='card' id='intraday'><div class='ia-hl'><b>{escape(v['title'])}</b></div>",
+         f"<div class='muted small'>{escape(v['head'])}</div>"]
+    H += [f"<div class='neg small'>★ {escape(w)}</div>" for w in v.get("warn") or []]
+    if v.get("rows"):
+        H.append("<div class='list'>")
+        for r in v["rows"]:
+            ga = " · ".join(x for x in (r.get("gates"), r.get("at")) if x)    # 只这只自己的闸门 / 数据时刻（共同的在顶上 ★）
+            H.append(f"<div class='li'><div class='grow'><b>{escape(r['label'])}</b> <span class='chip{' hot' if r.get('kind') == 'ok' else ''}'>"
+                     f"{escape(r['status'])}</span><div class='small'>{escape(r['line'])}</div>"
+                     + (f"<div class='muted small'>{escape(ga)}</div>" if ga else "") + "</div></div>")
+        H.append("</div>")
+    if v.get("none"):
+        H.append(f"<div class='small'>{escape(v['none'])}</div>")
+    if v.get("impossible"):
+        H.append(f"<details class='ia'><summary class='muted small'>{escape(v['impossible'])}</summary>")
+        H += [f"<div class='muted small'>{escape(g['why'])}：{escape(g['names'])}</div>" for g in v.get("groups") or []]
+        H.append("</details>")
+    H.append(f"<div class='muted small'>{escape(v['foot'])}</div></section>")
+    return "".join(H)
+
+
+def _intraday_line(v: dict | None, t: str) -> str:
+    """持仓每只一行：收盘卖出线离现价多远（static/intraday.js 按 /api/intraday 更新文字）。"""
+    s = ((v or {}).get("hold") or {}).get(t) or ""
+    return f"<div class='ia small muted' data-intra='{escape(t)}'>{escape(s)}</div>"
+
+
+def _intraday_books() -> list[str]:
+    """盘中观测算哪几个账本：模拟账户；有立花本番的账本时也算立花。"""
+    return ["paper"] + (["tachibana"] if (paths.state_dir() / "live_unified_tachibana.json").exists() else [])
+
+
+def _intraday_run(tag: str, timeout: float = IW.TIMEOUT_S) -> int | None:
+    """另起进程算一次（python -m qbreak.intraday_watch --book …；同一个数据目录 / 环境）；最多等 timeout 秒，到时间就结束它。"""
+    cmd = [sys.executable, "-m", "qbreak.intraday_watch", "--book", tag]
+    with open(paths.log_dir() / INTRADAY_LOG, "a", encoding="utf-8") as lf:
+        lf.write(f"\n── {now_jst():%Y-%m-%d %H:%M:%S} JST 盘中观测 {tag}\n")
+        lf.flush()
+        pr = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, cwd=str(paths.PROJECT_ROOT), start_new_session=True,
+                              env=dict(os.environ))
+        try:
+            return pr.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            pr.kill()
+            try:
+                pr.wait(5)
+            except subprocess.TimeoutExpired:
+                pass
+            lf.write(f"── 超过 {timeout:.0f} 秒没算完：结束这一次\n")
+            return None
+
+
+def _intraday_due(tag: str, now: dt.datetime, last: dict) -> bool:
+    """这个账本该算了吗：这个进程里上一次叫过之后满 5 分钟；刚启动 / 平滑重启后 → 看结果文件的时刻（不在重启后马上重复算）。"""
+    if tag in last:
+        return time.monotonic() - last[tag] >= IW.EVERY_S - 5
+    try:
+        upd = dt.datetime.fromisoformat(str((IW.load(tag) or {}).get("updated")))
+        return (now - upd).total_seconds() >= IW.EVERY_S - 30
+    except (TypeError, ValueError):
+        return True
+
+
+def _intraday_tick(now: dt.datetime | None = None, last: dict | None = None, run=None) -> list[str]:
+    """一轮：交易时段里、到时间的账本一个接一个算（不重叠）；返回这次算了的账本。"""
+    now = now or now_jst()
+    last = {} if last is None else last
+    try:
+        from .calendar_jp import reload_extra_closed
+        reload_extra_closed()                               # 临时休市（run.py extra-closed）当天加的也算上
+    except Exception:                                       # noqa: BLE001
+        pass
+    if not IW.in_window(now):
+        return []
+    done = []
+    for tag in _intraday_books():
+        if not _intraday_due(tag, now, last):
+            continue
+        last[tag] = time.monotonic()
+        (run or _intraday_run)(tag)
+        done.append(tag)
+    return done
+
+
+def _intraday_loop(stop: threading.Event, every: float = INTRADAY_POLL_S, tick=None) -> None:
+    """面板里的线程：每 every 秒看一次（交易时段、到 5 分钟才真的另起进程算）；出错只记日志、不停。平滑重启后新进程照样再起一个。"""
+    last: dict = {}
+    while True:
+        try:
+            (tick or _intraday_tick)(None, last)
+        except Exception as e:                              # noqa: BLE001
+            log.warning("盘中观测的线程出错（继续）：%s", e)
+        if stop.wait(every):
+            return
+
+
 def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live: dict | None = None, tag: str | None = None) -> str:
     """「今天的单」（Mac 与手机同一个）：账本当前决策里执行器的单（票、买卖、股数、下法、限价、状态）。还挂着的单（SENT / PARTIAL，
     今天的、立花有注文番号）给「撤单」按钮 → 写撤单指令（kind cancel_order），面板马上叫执行器撤（qbreak/live_ops.py）；
@@ -1654,6 +1774,11 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                        for t, u in (st.get("core_units") or {}).items() if int(u)]}
     _ht = list((st.get("pos") or {}).keys()) + [t for t, u in (st.get("core_units") or {}).items() if int(u or 0) > 0]
     hmarks = _news_marks(_ht, now) if _ht else {}                     # 持仓（个股 + 拿着的核心 ETF）的消息影响
+    try:                                                    # 盘中观测（读结果文件；不取价）：选股页的卡片、持仓每只一行
+        iv = IW.view(IW.load(tag), now)
+    except Exception as e:                                  # noqa: BLE001  展示用：读不了不影响页面
+        log.warning("盘中观测读不了：%s", e)
+        iv = None
     try:                                                    # 今天还能买几次 / 卖几次（D6；交易页的卡片与持仓的小标记同一个数）
         rm = room_of(tag, book, sm, now, trigger, waiting) if st else None
     except Exception as e:                                  # noqa: BLE001  展示用：算不出不影响页面
@@ -1669,7 +1794,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             return (tchips(ktrend.get(t)) + _news_mark(hmarks.get(t)) + _room_chip(rm, t) + _core_actions(r, t)
                     + _corefix(t, _nm(t, r.get("name"))) + _core_exit(t) + chart(t, "core"))
         qt = f"<div class='qt small' data-q='{escape(t)}'></div>" if t in (st.get("pos") or {}) else ""   # 现价（/api/quotes）
-        return tchips(ktrend.get(t), stats=True) + qt + _room_chip(rm, t) + _actions(r, t)   # 今天还能卖 / 买（D6）
+        ia = _intraday_line(iv, t) if t in (st.get("pos") or {}) else ""   # 盘中：收盘卖出线离现价多远（/api/intraday；2026-10-16）
+        return tchips(ktrend.get(t), stats=True) + qt + ia + _room_chip(rm, t) + _actions(r, t)   # 今天还能卖 / 买（D6）
 
     def _corefix(t: str, name: str) -> str:
         """核心 ETF 固定口数（2026-10-11 用户：持仓里的纳指 ETF、对冲美债也要能买入）：没拿的 →「买入…」、拿着的 →「固定口数…」；
@@ -1797,6 +1923,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions) + more
              + ("<div id='qt-note' class='muted small'>现价：Yahoo 1 分钟线（约晚 20 分钟）</div>" if held_any else "") + "</section>")
     H.append(PANE + "pick")
+    H.append(_intraday_card(iv))                            # 最上面：今天盘中规则的暂定买点（约晚 20 分钟；2026-10-16）
     H.append("<div class='khgo small'>怎么看 K 线图：说明在「持仓」的 K 线上面 <a href='#khelp' data-khelpgo='1'>去看 ›</a></div>")   # 选股只留一行指过去（2026-10-15）
     sgd = sm.get("suggest") or {}
     sctx = _suggest_ctx(sgd, book, tag, marks=_news_marks([r["ticker"] for r in sgd.get("rows") or [] if r.get("ticker")], now))
@@ -1983,6 +2110,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
            "sq_max": SG_MAX,                                                               # 建议的股票的现价一次最多取几只（quotes.js）
            "when": when, "eq": eq or 0, "cap": cap, "lot": MO.LOT, "live": MO.timing(now)[0] == "now",   # 盘中：现价每 1 分钟刷新
            "room": bool(rm),                                                               # 有「今天还能买几次」的卡片 → room.js 定时刷新（D6）
+           "intra": True, "intra_live": bool((iv or {}).get("live")),                      # 盘中观测：intraday.js 交易时段每 1 分钟、其他 10 分钟刷新
            "cores": {t: {"cur": int((st.get("core_units") or {}).get(t, 0)), "u100": int(u100s.get(t, 0)),
                          "lot": MO.core_lot(book, t)}                                            # 调一只核心 ETF 时别的跟着变多少
                      for t in dict.fromkeys(list(u100s) + [t for t, u in (st.get("core_units") or {}).items() if int(u) > 0])
@@ -3361,7 +3489,7 @@ CSP = (f"default-src 'none'; script-src 'self' '{BOOT_SHA}'; style-src 'self' 'u
 #   页面：网络 6 秒没回 / 5xx / 连不上 → 给存着的页面（标上 qb-cache：页面顶上写「连不上 Mac」、连上后自动刷新）或离线页（每 5 秒自动重试 +
 #         大的「重新连接」）；网络晚到的照样存下（下一次用）。只存操作面板本身（X-Qbreak-Page: main），按账本存一份（不按 ?tab= 等存很多份）。
 #   /static/…?v=：版本不变内容就不变 → 缓存优先（不再新旧模块混用）；页面换了新版本后删掉别的版本。
-#   /api/quotes、/api/chart：网络 12 秒没回 / 5xx → 存着的（标上 X-Qbreak-Cache：页面知道连不上）；最多存 40 条。
+#   /api/quotes、/api/chart、/api/intraday：网络 12 秒没回 / 5xx → 存着的（标上 X-Qbreak-Cache：页面知道连不上）；最多存 40 条。
 #   /api/status、/api/clientlog 不经这里（连接检查要看真的网络）。缓存名换了 → 旧缓存在 activate 时删掉。
 SW_JS = r"""const C='qbreak-v4', NAV_MS=6000, NET_MS=25000, STATIC_MS=8000, API_MS=12000, API_MAX=40;
 self.addEventListener('install',e=>self.skipWaiting());
@@ -3428,7 +3556,7 @@ self.addEventListener('fetch',e=>{
   if(r.mode==='navigate'){ e.respondWith(page(e,r,u)); return; }
   if(u.pathname.indexOf('/static/')===0){ e.respondWith(asset(e,r,u)); return; }   // 页面的 JS / CSS 也缓存（离线时打开上次的页面要用）
   if(u.pathname==='/manifest.webmanifest' || u.pathname==='/apple-touch-icon.png'){ e.respondWith(asset(e,r,u)); return; }   // 连不上时用存着的（2026-10-15 复核：每次打开存着的页面都记「Manifest fetch failed」）
-  if(u.pathname==='/api/quotes' || u.pathname==='/api/chart') e.respondWith(api(e,r));
+  if(u.pathname==='/api/quotes' || u.pathname==='/api/chart' || u.pathname==='/api/intraday') e.respondWith(api(e,r));
 });
 self.addEventListener('push',e=>{
   let d={}; try{ d=e.data?e.data.json():{}; }catch(x){ d={title:'qbreak', body:e.data?e.data.text():''}; }
@@ -3699,6 +3827,9 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
             if u.path == "/api/trade_room":                  # 今天还能买几次 / 卖几次（D6）
                 self._json(*trade_room_json(_book_of(u.query), (clock or now_jst)(), trigger))
                 return
+            if u.path == "/api/intraday":                    # 盘中观测（只读结果文件；不取价）
+                self._json(*intraday_json(_book_of(u.query), (clock or now_jst)()))
+                return
             if u.path == "/api/clientlog":
                 client_log(u.query, "Mac")
                 self._send(204, b"", "text/plain")
@@ -3815,11 +3946,12 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
             u = urlparse(self._route())
             if self._static(u.path, u.query):
                 return
-            if u.path not in ("/", "/pair", "/api/chart", "/api/quotes", "/api/status", "/api/trade_room", "/api/push/key", "/api/clientlog"):
+            if u.path not in ("/", "/pair", "/api/chart", "/api/quotes", "/api/status", "/api/trade_room", "/api/intraday", "/api/push/key",
+                              "/api/clientlog"):
                 self._text(404, "没有这个页面")
                 return
             dev = self._who()
-            if u.path in ("/api/chart", "/api/quotes", "/api/status", "/api/trade_room", "/api/push/key", "/api/clientlog"):
+            if u.path in ("/api/chart", "/api/quotes", "/api/status", "/api/trade_room", "/api/intraday", "/api/push/key", "/api/clientlog"):
                 if dev is None:
                     self._json(401, {"ok": False, "msg": "这台设备还没配对（或已被取消）"})
                 elif u.path == "/api/clientlog":
@@ -3834,6 +3966,8 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
                     self._json(*status_json(_book_of(u.query)))
                 elif u.path == "/api/trade_room":
                     self._json(*trade_room_json(_book_of(u.query), (clock or now_jst)(), trigger))
+                elif u.path == "/api/intraday":
+                    self._json(*intraday_json(_book_of(u.query), (clock or now_jst)()))
                 else:
                     self._json(*quotes_json(_book_of(u.query), (clock or now_jst)(), extra=_extra_of(u.query)))
                 return
@@ -4111,9 +4245,11 @@ def _reexec(servers: list, trg: "Trigger | None") -> None:
         log.warning("平滑重启没成（%s）：退出，让 LaunchAgent 用新代码重启", e)
 
 
-def serve(port: int = 8765, open_browser: bool = False, trigger: bool = True, phone_port: int | None = PP.PHONE_PORT) -> int:
+def serve(port: int = 8765, open_browser: bool = False, trigger: bool = True, phone_port: int | None = PP.PHONE_PORT,
+          intraday: bool = True) -> int:
     """在 127.0.0.1:port（本机）与 127.0.0.1:phone_port（手机，Tailscale Serve 用；0 = 不开）上运行（前台；LaunchAgent 用 KeepAlive 守着）。
-    代码更新 → 平滑重启（_watch_code / _reexec）；SIGTERM → 等正在处理的请求做完再退出（launchd 重启）。"""
+    代码更新 → 平滑重启（_watch_code / _reexec）；SIGTERM → 等正在处理的请求做完再退出（launchd 重启）。
+    trigger 且 intraday → 盘中观测的线程（_intraday_loop：交易时段每 5 分钟另起进程算一次；请求里从不取价）；测试 / 无头时 intraday=False 关掉。"""
     fds, tstate = _handoff()
     for p_ in [x for x in fds if x not in (int(port), int(phone_port or 0))]:   # 交过来但这次不用的端口（参数改了）：关掉
         try:
@@ -4168,6 +4304,8 @@ def serve(port: int = 8765, open_browser: bool = False, trigger: bool = True, ph
         pass
     if trg is not None:
         threading.Thread(target=trg.loop, args=(stop,), daemon=True).start()
+        if intraday:                                         # 盘中观测（2026-10-16；没有单独的 LaunchAgent：面板在跑才算）
+            threading.Thread(target=_intraday_loop, args=(stop,), daemon=True).start()
     threading.Thread(target=_watch_code, args=(stop, srv), daemon=True).start()
     url = f"http://127.0.0.1:{port}/"
     print(f"操作面板：{url}（只在本机；Ctrl-C 结束）"

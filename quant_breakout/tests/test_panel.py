@@ -189,7 +189,8 @@ def test_render_shows_reasons_trend_and_hides_buttons_for_pending_exit():
     assert html.count("卖出全部</button>") == 1 and "已排定开盘卖（MACD 死叉）" in html
     assert "规则目标额的 <b>60%</b>" in html and "9984.T" in html and "解除" in html
     assert "模拟账户：手动操作后会和云端模拟盘不一致" in html and "现在点买卖 → <b>今天 09:00 开盘</b>下单" in html
-    assert html.count("非投资建议") == 1
+    from qbreak import intraday_watch as IW                                         # 页脚一次 + 选股页「今天盘中」卡片的固定说明一次（2026-10-16）
+    assert html.count("非投资建议") == 2 and html.count(IW.FOOT) == 1
 
 
 def test_submit_adjust_messages_and_due():

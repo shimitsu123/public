@@ -4906,6 +4906,26 @@ def cmd_live_precheck(a) -> int:
     return precheck.run(agents, force=bool(a.force))
 
 
+def cmd_intraday(a) -> int:
+    """盘中观测（qbreak/intraday_watch.py；2026-10-16 用户要求；只展示、不下单、不改规则）：规则的暂定买卖点（约晚 20 分钟）。
+    不带参数 = 读最近一次的结果（只读；操作面板交易日 08:55〜11:35、12:25〜16:30 每 5 分钟算一次）；--dry = 现在算一次、只打印
+    （不写结果、不推送）；--push on|off = 手机推送开 / 关（数据目录 intraday.json）。没给 --book：有结果的账本都列（模拟账户在前）。"""
+    from qbreak import intraday_watch as IW
+    if a.push:
+        s = IW.set_push(a.push == "on")
+        print(f"盘中观测的手机推送：{'开' if s['push'] else '关'}（数据目录 {IW.SETTINGS}；下一次计算起生效；只是提醒，不下单）")
+        return 0
+    if a.dry:
+        tags = [a.book] if a.book else ["paper"] + (["tachibana"] if (paths.state_dir() / "live_unified_tachibana.json").exists() else [])
+        rc = 0
+        for t in tags:
+            rc = max(rc, IW.main(["--book", t, "--dry"]))
+        return rc
+    tags = [a.book] if a.book else ([t for t in ("paper", "tachibana") if IW.load(t)] or ["paper"])
+    print("\n\n".join(IW.text(IW.load(t), None, t) for t in tags))
+    return 0
+
+
 def cmd_extra_closed(a) -> int:
     """临时休市（C-13）：数据目录的 extra_closed.json（{"dates": [...], "note": …}；qbreak/calendar_jp.py 读它）。
     list：看（只读）；add 日期 --note 原因 / rm 日期：只在你在对话里确认之后由 Claude 运行。只放数据目录（仓库里不放）。"""
@@ -5666,6 +5686,11 @@ def main(argv=None) -> int:
     ec.add_argument("date", nargs="?", default=None, metavar="YYYY-MM-DD")
     ec.add_argument("--note", default=None, metavar="TEXT", help="原因（例：东证全日停止）")
     ec.set_defaults(func=cmd_extra_closed)
+    iw = sub.add_parser("intraday", help="盘中观测：规则的暂定买卖点（约晚 20 分钟；只展示）：读最近一次的结果 / --dry 现在算一次 / --push on|off")
+    iw.add_argument("--book", default=None, choices=["paper", "tachibana"], help="账本（不给 = 有结果的都列）")
+    iw.add_argument("--dry", action="store_true", help="现在算一次、只打印（不写结果、不推送）")
+    iw.add_argument("--push", default=None, choices=["on", "off"], help="手机推送开 / 关（数据目录 intraday.json；默认开）")
+    iw.set_defaults(func=cmd_intraday)
     rh = sub.add_parser("remote-halt", help="云端对话里说「停」：写 var/HALT_REMOTE，提交推送后 Mac 的执行器下一次运行时建本地 HALT")
     rh.add_argument("--reason", default=None, metavar="TEXT")
     rh.set_defaults(func=cmd_remote_halt)

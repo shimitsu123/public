@@ -207,3 +207,6 @@ dialog>.conn{position:sticky;top:0;z-index:2;padding:10px 14px;border-radius:18p
 /* 今天还能买几次 / 卖几次（D6；2026-10-15）：交易页最上面的小卡 + 持仓每只的小标记 */
 #room .rm-hl{font-size:17px;margin-bottom:4px} #room details.rm{margin:6px 0} #room details.rm>summary{color:var(--accent)}
 #room .li .chip{white-space:normal} .room[data-room]{margin:4px 0}
+/* 盘中观测（2026-10-16）：选股页最上面「今天盘中：规则的买点（暂定）」+ 持仓每只一行（收盘卖出线离现价多远） */
+#intraday .ia-hl{font-size:17px;margin-bottom:4px} #intraday details.ia{margin:6px 0} #intraday details.ia>summary{color:var(--accent)}
+#intraday .li .chip{white-space:normal} .ia[data-intra]{margin:4px 0}

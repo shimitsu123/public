@@ -305,6 +305,45 @@ def sell_levels(df: pd.DataFrame, p, pos: dict, days: list[dt.date]) -> dict:
             "first_down": first, "first_down_pct": round((first["px"] / close - 1) * 100, 2) if first else None}
 
 
+def exit_reason_at(r, st: dict, p) -> str | None:
+    """一根已经收盘的 K 线上按引擎 _check_exits（收盘判定 → 次日开盘卖）的顺序判卖：返回理由的键（REASON 的键）或 None。
+    st：{"entry", "peak", "stop_px", "hold", "armed"}，就地更新（hold + 1、跟踪止损启动、峰值 = max(峰值, 这根的最高价)，与引擎相同）；
+    r：compute_indicators 的一行（High / Close / atr / climax / dead_cross / sar_flip）。情景推算（scenario_exit）与盘中观测共用。"""
+    st["hold"] += 1
+    entry = float(st["entry"])
+    h, c = float(r["High"]), float(r["Close"])
+    if p.trailing_arm_pct and not st["armed"] and h >= entry * (1 + p.trailing_arm_pct / 100):
+        st["armed"] = True
+    trail_on = p.trailing_stop_pct > 0 and (st["armed"] or not p.trailing_arm_pct)
+    st["peak"] = peak = max(float(st["peak"]), h)
+    trail = peak * (1 - p.trailing_stop_pct / 100) if trail_on else -np.inf
+    tp = entry * (1 + p.take_profit_pct / 100) if p.take_profit_pct else np.inf
+    stop_px = float(st["stop_px"])
+    if c <= max(stop_px, trail):
+        return "trail" if trail > stop_px else "stop"
+    if c >= tp:
+        return "take_profit"
+    a = float(r["atr"])
+    if p.exit_on_climax and bool(r["climax"]) and (c / entry - 1) * 100 >= p.climax_min_gain_pct:
+        return "climax"
+    if p.exit_on_macd_dead_cross and bool(r["dead_cross"]):
+        return "dead_cross"
+    if p.exit_chandelier_k > 0 and np.isfinite(a) and c < peak - p.exit_chandelier_k * a:
+        return "chandelier"
+    if p.exit_sar_flip and bool(r.get("sar_flip", False)):
+        return "sar_flip"
+    if p.max_hold_days and st["hold"] >= p.max_hold_days:
+        return "max_hold"
+    if p.time_stop_days and st["hold"] >= p.time_stop_days and (c / entry - 1) * 100 < p.time_stop_min_ret_pct:
+        return "time_stop"
+    return None
+
+
+def _pos_state(pos: dict) -> dict:
+    return {"entry": float(pos["entry_px"]), "peak": float(pos["peak"]), "stop_px": float(pos["stop_px"]),
+            "hold": int(pos.get("hold") or 0), "armed": bool(pos.get("armed"))}
+
+
 def scenario_exit(df: pd.DataFrame, p, pos: dict, days: list[dt.date], rate: float) -> dict | None:
     """情景：之后每天收盘按 rate 变动、成交量 = 20 日平均；按引擎 _check_exits（收盘判定）的顺序，最早哪天触发卖出。"""
     base = _tail(df)
@@ -313,40 +352,13 @@ def scenario_exit(df: pd.DataFrame, p, pos: dict, days: list[dt.date], rate: flo
     vol = float(base["Volume"].tail(int(p.vol_ma_n)).mean())
     closes = [c0 * (1 + rate) ** (k + 1) for k in range(n)]
     x = compute_indicators(with_bars(base, days[:n], closes, [vol] * n), p).iloc[-n:]
-    entry, peak, stop_px = float(pos["entry_px"]), float(pos["peak"]), float(pos["stop_px"])
-    hold, armed = int(pos.get("hold") or 0), bool(pos.get("armed"))
-    tp = entry * (1 + p.take_profit_pct / 100) if p.take_profit_pct else np.inf
+    st = _pos_state(pos)
     for k in range(n):
         r = x.iloc[k]
-        hold += 1
-        h, c = float(r["High"]), float(r["Close"])
-        if p.trailing_arm_pct and not armed and h >= entry * (1 + p.trailing_arm_pct / 100):
-            armed = True
-        trail_on = p.trailing_stop_pct > 0 and (armed or not p.trailing_arm_pct)
-        peak = max(peak, h)
-        trail = peak * (1 - p.trailing_stop_pct / 100) if trail_on else -np.inf
-        hard = max(stop_px, trail)
-        q = None
-        if c <= hard:
-            q = "trail" if trail > stop_px else "stop"
-        elif c >= tp:
-            q = "take_profit"
-        if q is None:
-            a = float(r["atr"])
-            if p.exit_on_climax and bool(r["climax"]) and (c / entry - 1) * 100 >= p.climax_min_gain_pct:
-                q = "climax"
-            elif p.exit_on_macd_dead_cross and bool(r["dead_cross"]):
-                q = "dead_cross"
-            elif p.exit_chandelier_k > 0 and np.isfinite(a) and c < peak - p.exit_chandelier_k * a:
-                q = "chandelier"
-            elif p.exit_sar_flip and bool(r.get("sar_flip", False)):
-                q = "sar_flip"
-            elif p.max_hold_days and hold >= p.max_hold_days:
-                q = "max_hold"
-            elif p.time_stop_days and hold >= p.time_stop_days and (c / entry - 1) * 100 < p.time_stop_min_ret_pct:
-                q = "time_stop"
+        q = exit_reason_at(r, st, p)
         if q:
-            return {"close_day": days[k].isoformat(), "sell_day": days[k + 1].isoformat(), "reason": REASON[q], "close": round(c, 2)}
+            return {"close_day": days[k].isoformat(), "sell_day": days[k + 1].isoformat(), "reason": REASON[q],
+                    "close": round(float(r["Close"]), 2)}
     return None
 
 
@@ -358,6 +370,92 @@ def hold_estimate(stats: dict | None, hold: int, days: list[dt.date]) -> dict | 
     med = int(round(rem["p50"]))
     d = days[min(max(med, 1), len(days) - 1)] if len(days) > 1 else None
     return {"n": rem["n"], "p25": rem["p25"], "p50": rem["p50"], "p75": rem["p75"], "date": d.isoformat() if d else None}
+
+
+# ───────────────────────── 盘中观测（qbreak/intraday_watch.py；2026-10-16 用户要求；只展示）─────────────────────────
+# 「如果今天就收在现价」：日线（今天之前）+ 今天到现在为止的一根，用同一个 compute_indicators / 同一个离场顺序判定。
+# 买点区间（buy_trigger）只用来挑出今天可能出买点的票、给出价位；成立与否以 provisional_entry（真实的开 / 高 / 低 / 量）为准。
+PRICE_EXITS = ("stop", "trail", "take_profit", "chandelier", "dead_cross")   # 价位线（盘中可以说「越过了哪条线」）
+
+
+def live_frame(df: pd.DataFrame, bar: dict, day: dt.date) -> pd.DataFrame:
+    """日线（day 之前的）+ day 这一根到现在为止：bar = {"o", "h", "l", "c", "v"}（qbreak/data.intraday_quotes 的 bar；
+    最高 / 最低至少包住开盘与现价）。成交量 = 1 分钟线的合计（可能缺开盘集合竞价的一部分 → 偏少，放量的判断偏保守）。"""
+    base = _tail(df.loc[df.index < pd.Timestamp(day)])
+    c = float(bar["c"])
+    o = float(bar.get("o") or c)
+    h = max(float(bar.get("h") or c), o, c)
+    lo = min(float(bar.get("l") or c), o, c)
+    add = pd.DataFrame([{"Open": o, "High": h, "Low": lo, "Close": c, "Volume": float(bar.get("v") or 0)}],
+                       index=pd.DatetimeIndex([pd.Timestamp(day)]), columns=OHLCV)
+    return pd.concat([base, add])
+
+
+def provisional_entry(df: pd.DataFrame, p, bar: dict, day: dt.date) -> dict:
+    """如果 day 收在 bar 的现价、成交量就是现在的累计量：规则的买入条件（compute_indicators 的 entry，与引擎同一列）成不成立；
+    不成立 → fails 列出没过的条件（_fails；都过了还不成立 → 「其他条件」）。"""
+    r = compute_indicators(live_frame(df, bar, day), p).iloc[-1]
+    ok = bool(r["entry"])
+    fails = [] if ok else (_fails(r, p, float(r["Close"])) or ["其他条件不成立"])
+    vr = r.get("vol_ratio")
+    return {"entry": ok, "fails": fails, "vol_ratio": round(float(vr), 2) if vr is not None and np.isfinite(vr) else None}
+
+
+def band_why(why: list[str] | None) -> str:
+    """buy_trigger 没有区间的理由 → 简短的一类（盘中观测「今天不可能」按它分组）。"""
+    w = (why or ["条件不全"])[0]
+    for head, short in (("横盘不成立", "横盘不成立"), ("MACD 已在信号线之上", "MACD 已在信号线之上（金叉已经过去）"),
+                        ("成交量历史不够", "成交量历史不够")):
+        if w.startswith(head):
+            return short
+    if "周线量比" in w:
+        return "周线量比（W2）够不到"
+    if "出货日" in w:
+        return "出货日太多"
+    return "涨多少都不会出买点"
+
+
+def buy_bands(frames: dict, p, s1: dt.date, pool=None) -> dict:
+    """整个股票池在 s1 收盘的买点区间（buy_trigger）：{"bands": {票: buy_trigger 的结果（有区间的）}, "no": {票: 简短理由}}。"""
+    bands, no = {}, {}
+    for t in (list(pool) if pool is not None else sorted(frames)):
+        if t not in frames:
+            no[t] = "没有日线"
+            continue
+        try:
+            bt = buy_trigger(frames[t], p, s1)
+        except Exception as e:                                  # noqa: BLE001  一只算不了不影响别的
+            no[t] = f"算不了（{type(e).__name__}）"
+            continue
+        if bt.get("lo") is None:
+            no[t] = band_why(bt.get("why"))
+        else:
+            bands[t] = bt
+    return {"bands": bands, "no": no}
+
+
+def exit_lines(df: pd.DataFrame, p, pos: dict, bar: dict, day: dt.date) -> dict:
+    """盘中的持仓：收盘卖出线（sell_levels；今天到现在为止的最高价算进峰值 / 跟踪止损启动）与现价的距离，
+    以及「如果今天收在现价」规则会不会判卖（exit_reason_at 在 live_frame 的最后一根上；与引擎 _check_exits 同一个顺序）。
+    dist_pct = 线 ÷ 现价 − 1（%）；hit = 现价已经越过这条线（收盘仍在这里 → 规则判卖）。"""
+    from .calendar_jp import next_trading_day
+    c = float(bar["c"])
+    h = max(float(bar.get("h") or c), c)
+    entry = float(pos["entry_px"])
+    armed = bool(pos.get("armed")) or bool(p.trailing_arm_pct and h >= entry * (1 + p.trailing_arm_pct / 100))
+    ps = {**pos, "peak": max(float(pos["peak"]), h), "armed": armed}
+    days = [day] + sessions_after(day, int(p.max_hold_days or 0) + 6)
+    sl = sell_levels(df.loc[df.index < pd.Timestamp(day)], p, ps, days)
+    lines = []
+    for lv in sl["levels"]:
+        px = float(lv["px"])
+        hit = c <= px if lv["op"] == "≤" else c < px if lv["op"] == "<" else c >= px
+        lines.append({**lv, "dist_pct": round((px / c - 1) * 100, 2), "hit": bool(hit)})
+    r = compute_indicators(live_frame(df, bar, day), p).iloc[-1]
+    q = exit_reason_at(r, _pos_state(pos), p)
+    return {"px": round(c, 2), "entry_px": round(entry, 2), "ret_pct": round((c / entry - 1) * 100, 2), "levels": lines,
+            "extra": sl["extra"], "max_hold": sl["max_hold"], "now": q, "now_text": REASON.get(q) if q else None,
+            "sell_day": next_trading_day(day).isoformat()}
 
 
 # ───────────────────────── 组装 ─────────────────────────
