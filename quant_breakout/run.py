@@ -3340,10 +3340,16 @@ def cmd_live_unified(a) -> int:
         if getattr(a, "halt_first", False):
             print("预览不建 HALT：去掉 --halt-first")
             return 2
+        if getattr(a, "solo", False):
+            print("预览只看整组撤单：去掉 --solo")
+            return 2
         return _cancel_preview(a, tag, book, paper)
     halt_ = _halt_first(a)                                    # 「停并撤单」：HALT 最先建（不等账本检查、不等运行锁）
     if getattr(a, "group", False) and not getattr(a, "cancel", None):   # 整组撤单要给一笔单（HALT 照样已经建了）
         print("--group 要和一笔单的 cid 一起用：liveu.sh cancel <cid> --group")
+        return 2
+    if getattr(a, "solo", False) and (getattr(a, "group", False) or not getattr(a, "cancel", None)):   # 只撤这笔卖单：要给 cid、不和 --group 一起
+        print("--solo 要和卖单的 cid 一起用、不和 --group 一起：liveu.sh cancel <cid> --solo（整组撤单用 --group）")
         return 2
     if not paper:                                             # 立花的账本读坏了 / 不见了（但有备份或 .corrupt）→ 停下，不悄悄从 ¥100 万重来
         from qbreak import book_backup
@@ -3482,7 +3488,8 @@ def _live_cancel(a, tag: str, book, paper: bool) -> int:
     grp_ = {str(c): None for c in a.cancel} if (not req and getattr(a, "group", False) and a.cancel) else None   # --group：各自所在的整组
     try:
         res = LO.cancel_book(book, get_broker, None if req else (a.cancel or None), paper=paper, tag=tag, requests=req,
-                             source="面板的撤单指令" if req else "命令行", groups=grp_)
+                             source="面板的撤单指令" if req else "命令行", groups=grp_,
+                             deps="keep" if (not req and getattr(a, "solo", False)) else None)
     finally:
         b_ = holder.get("b")
         if b_ is not None and hasattr(b_, "logout"):          # 立花：用完登出（失败不影响结果）
@@ -3520,7 +3527,7 @@ def _live_cancel(a, tag: str, book, paper: bool) -> int:
     if getattr(a, "notify", False) and (res["done"] or res.get("pending") or res["failed"] or res["skipped"]):
         from qbreak import notify
         from qbreak.live_unified import mac_notify
-        word = "整组撤单" if res.get("grp") else "撤单"
+        word = "整组撤单" if any(not g.get("legacy") for g in (res.get("grp") or {}).values()) else "撤单"   # 以前的「一起撤买单」等 / 不等了也记 grp（复核 2026-10-16）
         star = bool(trade or res.get("held")
                     or any(g.get("state") in ("part", "gaveup", "none") for g in (res.get("grp") or {}).values()))
         title = (("★ 交易：" if star else "") + "qbreak " + ("模拟操盘" if paper else "立花实盘") + " " + word
@@ -5624,6 +5631,9 @@ def main(argv=None) -> int:
     lu.add_argument("--group", action="store_true",
                     help="整组撤单：撤 --cancel 那几笔单各自所在的一组（一起下的买单和卖单）；先撤买单，确认没成交再撤卖单"
                          "（bash scripts/liveu.sh cancel <cid> --group；只在你明确说「撤单」时运行）")
+    lu.add_argument("--solo", action="store_true",
+                    help="只撤 --cancel 那几笔卖单本身（同一组的买单还挂着 / 已经成交时执行器默认不撤卖单：撤了买的钱不够）；"
+                         "= 面板确认框的「只撤这笔卖单」（bash scripts/liveu.sh cancel <cid> --solo；只在你明确说时运行）")
     lu.add_argument("--preview", action="store_true",
                     help="只看整组撤单会撤哪些（不连券商、不改账本、不拿锁；bash scripts/liveu.sh cancel-plan <cid>）")
     lu.add_argument("--halt-drill", action="store_true",

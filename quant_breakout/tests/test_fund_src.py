@@ -223,7 +223,9 @@ def test_tachibana_cid2_split_records_the_funding_sell_and_cancel_cascades():
     assert sell.status == "SENT" and first.status == "SENT" and rest.status == "DEFERRED" and rest.fund_src == [sell.cid]
     f = r.ux.fill_day()
     r.now["t"] = _t(f, 8, 5)
-    res = r.ux.cancel_orders([sell.cid])
+    res = r.ux.cancel_orders([sell.cid])                                      # 同一组的买 1482 还挂在交易所：单笔撤卖单默认不撤（复核 2026-10-16）
+    assert sell.status == "SENT" and res["held"] == [sell.cid] and "命令行加 --solo" in res["by_cid"][sell.cid][1]
+    res = r.ux.cancel_orders([sell.cid], deps="keep")                         # 你明确说只撤这笔卖单（--solo / 「只撤这笔卖单」）
     assert sell.status == "CANCELLED" and rest.status == "SKIPPED" and "凑钱的卖单 卖 1545 纳斯达克 100：970 口 已撤（08:05）" in rest.note
     assert res["fund"][0]["act"] == "skip" and r.ux.trade_warns
     r.exch.open(r.k)

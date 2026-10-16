@@ -539,10 +539,11 @@ document.addEventListener('click', async e=>{
       +(dep>0 ? '\n「一起撤买单」= 这几笔买单也撤（执行器不再发）；「只撤卖单」= 买单按现在的钱重算'+(d.fix ? '；「撤单并恢复按规则」= 一起撤、再取消固定口数（照规则调：什么时候见下一个确认框）' : '') : '')
       +gl
       +(dep===0 && d.fix ? '\n「撤单并恢复按规则」= 撤单、再取消固定口数（照规则调：什么时候见下一个确认框）' : ''),
-      dep>0 ? '一起撤买单' : '撤单', {danger:true, alt:alt});
+      dep>0 ? '一起撤买单' : (d.solok==='1' ? '只撤这笔卖单' : '撤单'), {danger:true, alt:alt});
     if(!q.ok) return;
     const body={book:CFG.book, kind:'cancel_order', cid:d.cid};
     if(dep>0) body.deps = q.alt==='keep' ? 'keep' : 'cancel';
+    else if(d.solok==='1') body.deps='keep';                              // 同一组的买单还可能花钱、你选了只撤这笔卖单（data-solok；复核 2026-10-16）
     const j=await post(body);
     if(q.alt!=='fix' || !j){ done(j); return; }
     const k=await post({book:CFG.book, kind:'corefix', ticker:d.fix, clear:true});   // 恢复按规则：服务器给「确认下单」框（取消 → 只撤了单）

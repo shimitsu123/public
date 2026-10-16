@@ -30,9 +30,11 @@
 #   bash scripts/liveu.sh restore --broker tachibana <备份文件名>  恢复账本（先备份现在的账本；只在你明确说时运行）
 #   bash scripts/liveu.sh cancel [<cid>…] --broker tachibana   撤单：撤执行器自己今天还挂着的单（不带 cid = 全部；已成交的部分撤不了；
 #                                                    只在你明确说「撤单」时运行）；halt-cancel --broker tachibana = 先建 HALT 再撤全部（「停并撤单」）
-#   bash scripts/liveu.sh cancel-plan <cid> --broker tachibana   整组撤单的预览（只读：不连券商、不改账本）：这笔单所在的一组（一起下的买单和卖单）每一笔会怎样
+#   bash scripts/liveu.sh cancel-plan <cid> --broker tachibana|paper   整组撤单的预览（--broker 要写）（只读：不连券商、不改账本）：这笔单所在的一组（一起下的买单和卖单）每一笔会怎样
 #   bash scripts/liveu.sh cancel <cid> --group --broker tachibana   整组撤单：先撤买单，确认没成交再撤卖单（买单已成交 / 撤不掉 → 卖单不撤；
 #                                                    只在你明确说「撤单」时运行）
+#   bash scripts/liveu.sh cancel <cid> --solo --broker tachibana   只撤这笔卖单（同一组的买单还挂着 / 已成交时默认不撤卖单；
+#                                                    = 面板的「只撤这笔卖单」；只在你明确说时运行）
 #   bash scripts/liveu.sh unknown --broker tachibana   状态不明的单在立花注文一覧里的候选 + 登记命令草稿（只读）
 #   bash scripts/liveu.sh reconcile --broker tachibana  持仓核对：账本 vs 立花（股数、成本、可能原因、登记草稿；只读）
 #   bash scripts/liveu.sh onboard                       立花开户 → 上实盘的步骤与「现在还没完成的」（只读；可以重复跑）
@@ -403,14 +405,16 @@ if [ "${1:-}" = "cancel-plan" ]; then              # 整组撤单的预览（只
   shift                                            # 用户说撤才跑 cancel <cid> --group
   cids=()
   rest=()
+  brk=0                                            # 账本要写明（复核 2026-10-16：不写 --broker = 看模拟账户的账本，立花的单会说「账本里没有」）
   for x in ${1+"$@"}; do
     case "$x" in
       U[0-9]*-*) cids+=("$x") ;;
+      --broker|--broker=*) brk=1; rest+=("$x") ;;
       *) rest+=("$x") ;;
     esac
   done
-  if [ ${#cids[@]} -eq 0 ]; then
-    echo "用法：bash scripts/liveu.sh cancel-plan <cid> [--broker tachibana]（只读：看整组撤单会撤哪些）"
+  if [ ${#cids[@]} -eq 0 ] || [ "$brk" -eq 0 ]; then
+    echo "用法：bash scripts/liveu.sh cancel-plan <cid> --broker tachibana|paper（只读：看整组撤单会撤哪些；账本要写明）"
     exit 2
   fi
   exec "$PY" run.py live-u ${rest[@]+"${rest[@]}"} --cancel ${cids[@]+"${cids[@]}"} --group --preview

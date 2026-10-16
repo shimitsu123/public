@@ -69,6 +69,7 @@ CANCEL_UNTIL = dt.time(15, 30)          # 撤单：交易日这个时刻之前�
 GROUP_MAX = 12                          # 整组撤单（2026-10-16 用户：一起下的买单和卖单一起撤）：一组最多几笔（超过 → 一笔笔撤）
 GROUP_RECHECK_S = 60                    # 整组撤单：买单的撤单立花还没确认 → 卖单先不撤，过这么多秒再查一次
 GROUP_WAIT_MAX_S = 600                  # 整组撤单：最多等这么久（按时间，不按次数）→ 之后卖单不撤、请你在立花网站看
+GROUP_LAST_S = 180                      # 整组撤单：收盘（15:30）前这么多秒起不再等（面板 15:30 之后不再叫撤单的运行：等到收盘之后就没人收尾；复核 2026-10-16）
 RUN_AT = dt.time(7, 40)                 # 早上决策的运行时刻（与 mac_login.RUN_AFTER / launchd 的 07:40 相同）：解除不买回从这之后第一次决策起生效
 NEXT_DECISION = "下一次决策（交易日 07:40）起生效"   # 不知道现在几点时的写法；知道 → next_decision(now)「下一次决策（10/19 07:40）起生效」
 UNK_LATER = "先登记那笔状态不明的单（见通知），登记之后的下一次决策处理"   # 盘中前面有一笔下单结果不明 → 剩下的指令（执行器 now_phase；登记之前执行器一次都不跑，不是「明天开盘」；2026-10-14 复核）
@@ -1934,8 +1935,14 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
         if any(x.get("kind") == "cancel_order" and x.get("cid") == rec["cid"]
                for x in list(items.values()) + waiting if x.get("status", "pending") == "pending"):
             return f"{lt} 的单 {rec['cid']} 已经在撤（等执行器）"
-        if rec.get("grp"):                                 # 整组撤单（2026-10-16）：同一组的每一笔都要在账本里、在服务器算出的这一组里、没在撤
-            from . import live_ops as LO
+        from . import live_ops as LO
+        asked = LO.asked_cids(book, waiting)               # 每一条撤单都查（复核 2026-10-16：以前只查整组撤单 —— 过期的页面 / 另一台设备上
+        for c in cancel_cids(rec):                         # 「只撤这一笔」撤整组撤单里的卖单，卖单的撤单比买单的先发，闸门被绕过）
+            if c in asked:
+                mg = _CID.match(str(c))
+                lc = names.label(mg.group(3)) if mg else ""
+                return f"{lc} 的单 {c} 已经在撤（等执行器）"
+        if rec.get("grp"):                                 # 整组撤单（2026-10-16）：同一组的每一笔都要在账本里、在服务器算出的这一组里
             orders = [x for x in (book or {}).get("orders") or [] if isinstance(x, dict)]
             by = {str(x.get("cid")): x for x in orders}
             mem = {str(x.get("cid")) for x in LO.group_of(o, orders, book)}
@@ -1946,12 +1953,6 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
                     return f"同一组的单 {lc} {c} 账本里没有（页面是旧的？刷新再点）"
                 if c not in mem:
                     return f"{lc} 的单 {c} 不在 {lt} 这一组里：没写"
-            asked = LO.asked_cids(book, waiting)
-            for c in cancel_cids(rec):
-                if c in asked:
-                    mg = _CID.match(str(c))
-                    lc = names.label(mg.group(3)) if mg else ""
-                    return f"{lc} 的单 {c} 已经在撤（等执行器）"
     if k == "unblock":                                     # 2026-10-13：同一只不重复写；页面过时（设定换了）不写
         return unblock_why(t, book, tag, rec.get("block_id"))
     if k == "uncancel":
@@ -1978,6 +1979,8 @@ def group_prune(r: dict, book: dict | None, now: dt.datetime | None, paper: bool
     now = now or now_jst()
     by = {str(x.get("cid")): x for x in (book or {}).get("orders") or [] if isinstance(x, dict)}
     asked = LO.asked_cids(book, waiting)
+    if str((r or {}).get("cid") or "") in asked:          # 点的这一笔自己已经在撤：不去掉同一组的，交给 check 说「已经在撤」
+        return r, []                                       # （复核 2026-10-16：以前说「刷新页面后点「撤单」」，刷新之后那一行是「撤单中」、没有按钮）
     keep, notes = [], []
     for c in g:
         o = by.get(str(c))
@@ -2362,6 +2365,20 @@ def _recheck_due(it: dict, now: dt.datetime) -> bool:
         return t <= n
     except (TypeError, ValueError):
         return True
+
+
+def grp_wait_stale(it: dict | None, now: dt.datetime) -> bool:
+    """还在等立花确认买单撤单的整组撤单（grp_wait）已经过了那天的收盘（15:30 之后 / 开始等的那天已过）→ True：今天没成交的单都已失效，
+    不再等（cancel_book 不吵地结束它、面板不再显示「撤单中」；复核 2026-10-16：以前等到第二天 00:00 才处理、还推一条 ★ 说买单还挂着）。"""
+    if not isinstance(it, dict) or not it.get("grp_wait"):
+        return False
+    try:
+        t = dt.datetime.fromisoformat(str(it.get("grp_wait0") or it.get("recheck_at") or ""))
+    except (TypeError, ValueError):
+        return False
+    t = t.astimezone(JST) if t.tzinfo else t.replace(tzinfo=JST)
+    n = now.astimezone(JST) if now.tzinfo else now.replace(tzinfo=JST)
+    return t.date() != n.date() or n.time() >= CANCEL_UNTIL
 
 
 def now_due(tag: str, book: dict | None, now: dt.datetime | None = None) -> bool:
@@ -3890,7 +3907,7 @@ __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEF
            "append", "read_all", "read_known", "is_pruned", "KEEP_ITEMS", "PAPER_IDLE", "paper_refuse", "unseen", "cancelled", "normalize", "batch_blocks", "lifting", "unblock_why", "lift_day", "rebuy_day",
            "block_text", "FIX_WAIT", "fix_status_text", "NEXT_DECISION", "next_decision", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "HALT_CORE_AFTER", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "busy_today", "OPEN_ST",
            "corefix_clear_text", "resume_info", "wait_word", "wait_text", "fix_applied", "corefix_pending", "allin_busy_text", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text", "when_for", "morning_behind",
-           "next_window", "due", "cancel_due", "CANCEL_UNTIL",
+           "next_window", "due", "cancel_due", "CANCEL_UNTIL", "grp_wait_stale", "cancel_cids", "group_prune",
            "RULE_TEXT", "UNK_LATER", "NOW_NO_CANCEL", "NOW_FILLED_NO_CANCEL", "NOW_BUY_LAPSED", "NOW_SELL_WITHDRAWN", "now_sell_withdrawn", "now_lapsed", "now_expired", "now_cancel_why",
            "now_due", "status_text", "rolled_over", "rolled_text", "msg_text", "entry_why", "buy_size", "requests_path", "position_pct", "target_shares", "adjust_plan",
            "cap_text", "fmt_target", "describe", "active", "lines", "signal_text", "core_pct_now",

@@ -1290,7 +1290,7 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
         if cid in asked:
             btn = "<span class='chip'>撤单中</span>"
         elif LO.cancel_why(o, book, now, paper) is None:
-            deps, alt, keep_txt = "", "", ""
+            deps, alt, keep_txt, afx = "", "", "", ""
             dx = LO.deps_of(o, orders) if o.get("side") == "SELL" else []
             if dx:                                          # 执行器记了靠这笔卖出的钱的买单（fund_src；D2）：预览撤掉之后它们会怎样
                 try:
@@ -1312,6 +1312,7 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
                 deps = "靠这笔卖出的钱、执行器还没发出的买单：" + "、".join(bits) + "（已经成交的部分卖出的钱照样能用）"
                 fx = next((str(b.get("ticker")) for b in dx if b.get("kind") == "core" and b.get("ticker") in fixed), "")
                 keep_txt = "只撤卖单（" + "；".join(kw) + "）"
+                afx = fx
                 alt = (f" data-depn='{len(dx)}' data-keep='{escape(keep_txt)}'"
                        + (f" data-fix='{escape(fx)}' data-fixname='{escape(NM.name(fx) or '')}'" if fx else ""))
             elif o.get("side") == "SELL":                   # 旧账本（没有 fund_src）：靠这笔卖出的钱的买单撤了就下不成（只是确认框里说明；2026-10-15）
@@ -1327,7 +1328,7 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
                     deps = ("撤掉之后，今天等这笔卖出的钱的买单预计下不成（开盘时现金不够一单元）："
                             + "、".join("买 " + NM.qty(b.get('ticker'), f"{int(b.get('qty') or 0):,} {'口' if b.get('kind') == 'core' else '股'}") for b in hit)
                             + "（已经成交的部分卖出的钱照样能用）")
-            grp = _grp_attrs(o, orders, byc, G, book, now, paper, tag, asked, cfix, alt, keep_txt)
+            grp = _grp_attrs(o, orders, byc, G, book, now, paper, tag, asked, cfix, alt, keep_txt, alt_fix=afx)
             btn = (f"<button class='btn sm danger' data-act='cancel-order' data-cid='{escape(cid)}' "
                    f"data-t='{escape(str(o.get('ticker')))}' data-side='{escape(str(o.get('side')))}' data-qty='{n}' "
                    f"data-core='{1 if core else 0}' data-unsent='{1 if o.get('status') in LO.UNSENT else 0}' "
@@ -1374,13 +1375,25 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
 
 
 def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.datetime, paper: bool, tag: str | None, asked,
-               cfix: dict, alt: str, keep_txt: str = "") -> str:
+               cfix: dict, alt: str, keep_txt: str = "", *, alt_fix: str = "") -> str:
     """「撤单」按钮上整组撤单的属性（2026-10-16；插在 data-name 之前，已有的属性不变）：
     data-grp（同一组里现在能撤、没在撤的其他单 cid，买单在前；超过 GROUP_MAX 不写）/ data-glist（确认框里一行行的说明）/
-    data-solo（「只撤这一笔」的按钮文字）；固定口数还有效 → data-fix / data-fixname（「整组撤单并恢复按规则」；已经写了的不重复）。"""
+    data-solo（「只撤这一笔」的按钮文字）；固定口数还有效 → data-fix / data-fixname（「整组撤单并恢复按规则」；已经写了的不重复）。
+    复核（2026-10-16）：没有 data-grp（同一组的其他单现在不能一起撤）→ 确认框只撤这一笔，data-glist 写「只撤这一笔」的说明（不写整组撤单）；
+    卖单、同一组的买单还可能花钱（LO.solo_holds）→ data-solok='1'（确认框的按钮写「只撤这笔卖单」、指令写 deps=keep：执行器的闸门不再挡）。
+    data-fix：点的这一行自己是固定口数的 ETF 买单 → 它；否则同一组第一笔固定口数的买单（alt_fix：data-deps 那边已经写了的）。"""
     from . import live_ops as LO
     cid = str(o.get("cid"))
     gm = G.get(cid) or []
+    fix, fx = "", ""                                       # 固定口数（data-fix）紧跟已有的 depn / keep 之后（属性顺序不变）
+    if "data-fix=" not in alt:
+        if o.get("side") == "BUY" and o.get("kind") == "core" and o.get("ticker") in cfix:
+            fx = str(o.get("ticker"))
+        elif gm:
+            fx = next((str(byc[c].get("ticker")) for c in gm if c in byc and byc[c].get("side") == "BUY"
+                       and byc[c].get("ticker") in cfix), "")
+        if fx:
+            fix = f" data-fix='{escape(fx)}' data-fixname='{escape(NM.name(fx) or '')}'"
     out = ""
     if gm:
         oth = [byc[c] for c in gm if c != cid and c in byc]
@@ -1390,7 +1403,7 @@ def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.da
             ok = []
         if ok:
             out += f" data-grp='{escape(','.join(ok))}'"
-        gl = LO.group_lines(o, orders, book, now, paper, tag, asked)
+        gl = LO.group_lines(o, orders, book, now, paper, tag, asked, solo=not ok, fix_t=(fx or alt_fix or None))
         if gl:
             out += f" data-glist='{escape(chr(10).join(gl))}'"
         if ok:
@@ -1400,16 +1413,8 @@ def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.da
             else:
                 solo = keep_txt or "只撤这笔卖单"                # 有靠它的钱的买单：与「只撤卖单（买 X 不会下）」同一句
             out += f" data-solo='{escape(solo)}'"
-    fix = ""                                               # 固定口数（data-fix）紧跟已有的 depn / keep 之后（属性顺序不变）
-    if "data-fix=" not in alt:
-        fx = ""
-        if gm:
-            fx = next((str(byc[c].get("ticker")) for c in gm if c in byc and byc[c].get("side") == "BUY"
-                       and byc[c].get("ticker") in cfix), "")
-        if not fx and o.get("side") == "BUY" and o.get("kind") == "core" and o.get("ticker") in cfix:
-            fx = str(o.get("ticker"))
-        if fx:
-            fix = f" data-fix='{escape(fx)}' data-fixname='{escape(NM.name(fx) or '')}'"
+        elif o.get("side") == "SELL" and LO.solo_holds(o, orders, book, now, G):
+            out += " data-solok='1'"
     return fix + out
 
 
@@ -1510,7 +1515,8 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     void = MO.voided(waiting)
     wl = [r for r in waiting if r.get("kind") != "uncancel" and r.get("id") not in void]
     asked = ({c for r in wl if r.get("kind") == "cancel_order" for c in MO.cancel_cids(r)}          # 整组撤单：同一组的每一笔（2026-10-16）
-             | {c for it in items.values() if it.get("kind") == "cancel_order" and it.get("status") == "pending" for c in MO.cancel_cids(it)})
+             | {c for it in items.values() if it.get("kind") == "cancel_order" and it.get("status") == "pending"
+                and not MO.grp_wait_stale(it, now) for c in MO.cancel_cids(it)})   # 过了收盘还在等的整组撤单：不算撤单中（复核 2026-10-16）
     ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=asked, instr=False)   # 每笔单今天会不会下：只在 live_ops.outlook 判断（D5）
     fixed = MO.core_fixed(book, tag)
     fpend, fwhen = LO.fix_pending_when(book, now, tag)       # 还没照它调的固定口数：今天开盘后 / 盘中就照它下（D1；复核 UI F2，2026-10-16）

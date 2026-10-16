@@ -518,3 +518,262 @@ def test_liveu_cancel_plan_passes_group_preview(tmp_path):
     env, log = _run_env(tmp_path, 0)
     _bash(env, "scripts/liveu.sh", "cancel", SELL, "--group", "--broker", "tachibana")
     assert f"run.py live-u --group --broker tachibana --cancel {SELL}" in _calls(log)
+
+
+# ══════════════════════════ 复核（2026-10-16）══════════════════════════
+class _SellPending(_Rec):
+    """立花：买单的撤单马上取消完了；卖单的撤单受理了、一直是「取消中」。"""
+    def order_status(self, bid, day):
+        if bid == "S1":
+            return {"final": "", "status": "取消中", "filled_qty": 0}
+        return {"final": "CANCELLED", "filled_qty": 0, "status": "取消完了"}
+
+
+class _AlreadyCancelling(_Rec):
+    """立花：不受理这次撤单（单已经在取消中：之前撤过 / 在立花网站撤的）。"""
+    def cancel_order(self, bid, day):
+        self.calls.append(bid)
+        return False
+
+    def order_status(self, bid, day):
+        return {"final": "", "status": "取消中", "filled_qty": 0}
+
+
+def test_review_check_refuses_a_single_cancel_inside_a_pending_or_unread_group():
+    b = _gbook()
+    b["manual"]["items"] = {"M1": {"id": "M1", "kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [BUY], "status": "pending"}}
+    one = MO.normalize({"kind": "cancel_order", "cid": BUY})                # 只撤这一笔（买）：整组撤单里已经有它
+    assert "1482 对冲版美国 7〜10 年国债 的单 " + BUY + " 已经在撤（等执行器）" == MO.check(one, b, "paper", now=AT15)
+    b = _gbook()
+    MO.append("paper", {"kind": "cancel_order", "cid": BUY, "deps": "cancel", "grp": [SELL]}, clock=lambda: T0)   # 还没读的整组撤单
+    keep = MO.normalize({"kind": "cancel_order", "cid": SELL, "deps": "keep"})
+    assert "已经在撤（等执行器）" in MO.check(keep, b, "paper", now=AT15)
+    rec = MO.normalize({"kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [BUY]})
+    assert MO.group_prune(rec, b, AT15, True, MO.unseen("paper", b)) == (rec, [])   # 点的这一笔自己在撤：交给 check 说「已经在撤」
+    assert "已经在撤" in MO.check(rec, b, "paper", now=AT15)
+
+
+def test_review_single_sell_target_is_folded_into_the_group_job_buy_first():
+    b = _gbook()
+    _at_exch(b, BUY, "B1")
+    orders = _xo(b)
+    br = _Rec()                                                              # 命令行 cancel <卖> <买>，只有买单写了 --group（或两条指令同一次运行）
+    res = LO.cancel_core(orders, b, lambda: br, [SELL, BUY], paper=False, now=T9, source="test", groups={BUY: [SELL]})
+    assert br.calls == ["B1", "S1"] and all(o.status == "CANCELLED" for o in orders)   # 以前：卖单的撤单先发
+    assert list(res["grp"]) == [BUY] and res["grp"][BUY]["state"] == "all"
+    b = _gbook()
+    _at_exch(b, BUY, "B1")
+    orders = _xo(b)
+    br = _Pending(10 ** 6)
+    res = LO.cancel_core(orders, b, lambda: br, [SELL, BUY], paper=False, now=T9, source="test", groups={BUY: [SELL]})
+    assert br.calls == ["B1"] and orders[0].status == "SENT" and res["grp"][BUY]["state"] == "wait"
+    assert res["by_cid"][SELL] == ("skipped", "同一组正在整组撤单：这一笔交给整组撤单（先撤买单、确认没成交再撤卖单）")
+
+
+def test_review_two_group_cids_merge_into_one_summary():
+    b = _gbook()
+    _at_exch(b, BUY, "B1")
+    orders = _xo(b)
+    br = _Rec()
+    res = LO.cancel_core(orders, b, lambda: br, [SELL, BUY], paper=False, now=T9, source="test", groups={SELL: None, BUY: None})
+    assert list(res["grp"]) == [SELL] and res["alias"] == {BUY: SELL} and br.calls == ["B1", "S1"]
+    assert [ln for ln in LO.cancel_text(res) if ln.startswith("整组撤单")] == ["整组撤单（2 笔：卖 1545 纳斯达克 100 这一组）：都撤了"]
+
+
+def test_review_requests_alias_items_both_finish():
+    b = _gbook()
+    _at_exch(b, BUY, "B1")
+    p = _tbook(b)
+    MO.append("tachibana", {"kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [BUY]}, clock=lambda: T9)
+    b2 = json.loads(p.read_text(encoding="utf-8"))
+    MO.Manual(b2, "tachibana", lambda: T9).ingest(only=("cancel_order",))
+    b2["manual"]["items"]["X2"] = {"id": "X2", "kind": "cancel_order", "cid": BUY, "deps": "cancel", "grp": [SELL], "status": "pending",
+                                   "at": T9.isoformat()}                     # 另一台设备几乎同时点的（check 之前已经写进来了）
+    p.write_text(json.dumps(b2, ensure_ascii=False), encoding="utf-8")
+    br = _Rec()
+    res = LO.cancel_book(p, lambda: br, paper=False, tag="tachibana", requests=True, clock=lambda: T9)
+    assert br.calls == ["B1", "S1"] and len(res["grp"]) == 1
+    assert {i["status"] for i in _items(p)} == {"done"} and all("都撤了" in i["msg"] for i in _items(p))
+
+
+def test_review_sell_cancel_accepted_but_still_cancelling_counts_as_all():
+    b = _gbook()
+    _at_exch(b, BUY, "B1")
+    orders = _xo(b)
+    res = LO.cancel_core(orders, b, lambda: _SellPending(), [SELL], paper=False, now=T9, source="test", groups={SELL: [BUY]})
+    g = res["grp"][SELL]
+    assert g["state"] == "all" and "卖单的撤单已受理、立花还在处理" in g["line"] and not g["line"].startswith("★")
+    assert not any(lv == "warn" for lv, _m in res["events"]) and [x["cid"] for x in res["pending"]] == [SELL]
+
+
+def test_review_recancel_of_an_order_already_cancelling_is_pending_not_failed():
+    b = _gbook()
+    _at_exch(b, BUY, "B1")
+    orders = _xo(b)
+    res = LO.cancel_core(orders, b, lambda: _AlreadyCancelling(), [BUY], paper=False, now=T9, source="test")
+    assert not res["failed"] and res["by_cid"][BUY][0] == "pending" and "之前已经撤过" in res["by_cid"][BUY][1]
+    assert LO.ACCEPTED in orders[1].note and orders[1].status == "SENT"
+    br = _Rec()                                                              # 之后整组撤单：买单只查状态（不再发撤单），取消完了 → 撤卖单
+    res = LO.cancel_core(orders, b, lambda: br, [SELL], paper=False, now=T9, source="test", groups={SELL: [BUY]})
+    assert br.calls == ["S1"] and res["grp"][SELL]["state"] == "all"
+
+
+def test_review_late_wait_gives_up_before_the_close_and_stale_waits_close_quietly():
+    b = _gbook()
+    _at_exch(b, BUY, "B1")
+    p = _tbook(b)
+    t1 = dt.datetime(2026, 10, 15, 15, 20, tzinfo=JST)
+    MO.append("tachibana", {"kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [BUY]}, clock=lambda: t1)
+    br = _Pending(10 ** 6)
+    res = LO.cancel_book(p, lambda: br, paper=False, tag="tachibana", requests=True, clock=lambda: t1)
+    assert res["grp"][SELL]["state"] == "wait"
+    t2 = dt.datetime(2026, 10, 15, 15, 27, tzinfo=JST)                     # 收盘前 3 分钟：不再等（15:30 之后面板不再叫撤单的运行）
+    res = LO.cancel_book(p, lambda: br, paper=False, tag="tachibana", requests=True, clock=lambda: t2)
+    g = res["grp"][SELL]
+    assert g["state"] == "gaveup" and "快收盘了（15:30）不再等" in g["line"] and "kabuka.e-shiten.jp" in g["line"]
+    assert br.calls == ["B1"] and _items(p)[0]["status"] == "done"
+
+
+def test_review_a_wait_left_past_the_close_ends_quietly_next_morning():
+    b = _gbook()
+    _at_exch(b, BUY, "B1")
+    p = _tbook(b)
+    t1 = dt.datetime(2026, 10, 15, 15, 20, tzinfo=JST)
+    MO.append("tachibana", {"kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [BUY]}, clock=lambda: t1)
+    res = LO.cancel_book(p, lambda: _Pending(10 ** 6), paper=False, tag="tachibana", requests=True, clock=lambda: t1)
+    assert res["grp"][SELL]["state"] == "wait"
+    it = _items(p)[0]
+    t3 = dt.datetime(2026, 10, 16, 8, 0, tzinfo=JST)                       # 等到收盘之后（第二天早上才轮到）：不吵地结束
+    assert MO.grp_wait_stale(it, t3) and MO.grp_wait_stale(it, t1.replace(hour=15, minute=31)) and not MO.grp_wait_stale(it, t1)
+    assert MO.cancel_due("tachibana", json.loads(p.read_text(encoding="utf-8")), t3)
+    res = LO.cancel_book(p, lambda: _NoBroker(), paper=False, tag="tachibana", requests=True, clock=lambda: t3)
+    assert not (res["done"] or res["pending"] or res["failed"] or res["skipped"] or res["events"])   # 不推送
+    it = _items(p)[0]
+    assert it["status"] == "done" and it["msg"].startswith("已收盘（15:30）：整组撤单停在等立花确认买单的撤单（10/15 15:20 起）")
+    assert "grp_wait" not in it and "recheck_at" not in it
+
+
+def test_review_legacy_deps_cancel_waits_like_the_group_cancel():
+    b = _gbook()
+    _at_exch(b, BUY, "B1")
+    p = _tbook(b)
+    MO.append("tachibana", {"kind": "cancel_order", "cid": SELL, "deps": "cancel"}, clock=lambda: T9)   # 以前的「一起撤买单」
+    br = _Pending(LO.GROUP_POLLS)
+    res = LO.cancel_book(p, lambda: br, paper=False, tag="tachibana", requests=True, clock=lambda: T9)
+    g = res["grp"][SELL]
+    assert g["state"] == "wait" and g["legacy"] and "和靠它的钱的买单一起撤：买单已发撤单" in g["line"]
+    assert br.calls == ["B1"] and SELL not in res["by_cid"]
+    it = _items(p)[0]
+    assert it["status"] == "pending" and it["grp_legacy"] and it["grp_wait"] == [BUY]
+    t2 = T9 + dt.timedelta(seconds=61)
+    res = LO.cancel_book(p, lambda: br, paper=False, tag="tachibana", requests=True, clock=lambda: t2)
+    assert br.calls == ["B1", "S1"] and res["by_cid"][SELL][0] == "done"
+    it = _items(p)[0]
+    assert it["status"] == "done" and "grp_legacy" not in it
+
+
+def test_review_single_sell_is_held_while_a_group_buy_can_still_spend_unless_keep():
+    b = _gbook(buy="FILLED")
+    b["orders"][1].update(broker_id="B1", order_date="20261015", sent_qty=678, filled_qty=678)
+    orders = _xo(b)
+    br = _Rec()
+    res = LO.cancel_core(orders, b, lambda: br, [SELL], paper=False, now=T9, source="test")
+    assert br.calls == [] and orders[0].status == "SENT" and res["held"] == [SELL]
+    assert "买 1482 对冲版美国 7〜10 年国债 已经成交 678 口" in res["by_cid"][SELL][1] and "只撤这笔卖单" in res["by_cid"][SELL][1]
+    assert any(lv == "warn" and m.startswith("★ 交易：") for lv, m in res["events"])
+    res = LO.cancel_core(orders, b, lambda: br, [SELL], paper=False, now=T9, source="test", deps={SELL: "keep"})
+    assert br.calls == ["S1"] and orders[0].status == "CANCELLED"
+    b = _gbook()                                                             # 买单还没发出（等开盘后）：发的时候按那时的钱重算 → 不挡
+    orders = _xo(b)
+    res = LO.cancel_core(orders, b, lambda: _Rec(), [SELL], paper=False, now=T0, source="test")
+    assert orders[0].status == "CANCELLED" and not res["held"]
+
+
+def test_review_busy_group_members_are_not_cancelled_alone():
+    b = _gbook()
+    _at_exch(b, BUY, "B1", status="SENT")
+    b["orders"][1]["note"] = "你撤了单（09:30）：撤单已受理，立花还在处理（取消中）"
+    b["manual"]["items"] = {"M1": {"id": "M1", "kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [BUY], "status": "pending",
+                                   "grp_wait": [BUY], "grp_wait0": T9.isoformat(), "grp_all": [BUY, SELL],
+                                   "recheck_at": (T9 + dt.timedelta(seconds=60)).isoformat(), "at": T9.isoformat()}}
+    p = _tbook(b)
+    t = T9 + dt.timedelta(seconds=20)
+    res = LO.cancel_book(p, lambda: _NoBroker(), [SELL], paper=False, tag="tachibana", clock=lambda: t, deps="keep")   # 命令行 --solo
+    assert res["by_cid"][SELL][0] == "skipped" and "同一组正在整组撤单" in res["by_cid"][SELL][1]
+    assert json.loads(p.read_text(encoding="utf-8"))["orders"][0]["status"] == "SENT"
+
+
+def test_review_panel_solo_dialog_text_and_solok():
+    b = _book1015("paper", sell="SENT", buy="FILLED")
+    b["orders"][0]["src"] = "fix_fund"
+    b["orders"][1].update(src="core_fix", fund_src=[SELL], sent_qty=678, filled_qty=678, filled_px=1474.0)
+    (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
+    card = _card(panel.render("paper", "t" * 40, AT15), "today")
+    sb = _btn(card, SELL)
+    assert "data-grp=" not in sb and "data-solok='1'" in sb and sb.endswith("data-name='纳斯达克 100'")
+    gl = re.search(r"data-glist='([^']*)'", sb).group(1)
+    assert gl.startswith("只撤这一笔：") and "整组撤单：" not in gl and "卖单因此不撤" not in gl
+    assert "· 已成交：买 1482 对冲版美国 7〜10 年国债：678 口 —— 不能撤" in gl and "· 撤（这一笔）：卖 1545 纳斯达克 100" in gl
+    assert "★ 同一组的买 1482 对冲版美国 7〜10 年国债 已经成交 678 口：只撤这笔卖单" in gl
+
+
+def test_review_panel_data_fix_prefers_the_clicked_fixed_etf():
+    b = _book1015("paper", sell="SENT", fix={"1482.T": 678, "2845.T": 10})
+    b["orders"][0]["src"] = "fix_fund"
+    b["orders"][1]["src"] = "core_fix"
+    b["orders"].append({**b["orders"][1], "cid": f"U{D}-BUY-2845.T", "ticker": "2845.T", "qty": 10})
+    (paths.state_dir() / "live_unified_paper.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
+    card = _card(panel.render("paper", "t" * 40, AT15), "today")
+    xb = _btn(card, f"U{D}-BUY-2845.T")
+    assert "data-fix='2845.T'" in xb and "data-fix='1482.T'" not in xb
+    gl = re.search(r"data-glist='([^']*)'", xb).group(1)
+    assert "固定口数 2845 纳斯达克 100 对冲版 10 口还有效" in gl and "不要再排 → 「整组撤单并恢复按规则」" in gl
+    assert "→ 「持仓」里 1482 对冲版美国 7〜10 年国债 下面点「恢复按规则」" in gl
+    assert "data-fix='1482.T'" in _btn(card, BUY)
+
+
+def test_review_group_row_css_beats_the_list_padding():
+    css = (panel.STATIC_DIR / "panel.css").read_text(encoding="utf-8")
+    assert ".list .li.og{border-left:3px solid var(--accent);padding-left:6px}" in css
+    assert css.index(".list .li{") < css.index(".list .li.og{")
+
+
+def test_review_panel_solo_sell_sends_keep_in_node():
+    from test_fund_src import _node_cancel
+    d = {"cid": SELL, "side": "SELL", "t": "1545.T", "qty": "4110", "core": "1", "name": "纳斯达克 100", "solok": "1",
+         "glist": "只撤这一笔：…"}
+    out = _node_cancel(d, None)
+    assert out["ASKED"] == [["撤单 卖 1545.T 4110 口", "只撤这笔卖单", []]]
+    assert out["SENT"] == [{"book": "paper", "kind": "cancel_order", "cid": SELL, "deps": "keep"}]
+    MO.normalize({k: v for k, v in out["SENT"][0].items() if k != "book"})
+    d.pop("solok")
+    assert _node_cancel(d, None)["SENT"] == [{"book": "paper", "kind": "cancel_order", "cid": SELL}]
+
+
+def test_review_cli_solo_flag(monkeypatch, capsys):
+    b = _gbook(buy="FILLED")
+    b["orders"][1].update(broker_id="B1", order_date="20261015", sent_qty=678, filled_qty=678)
+    run, p = _cli(monkeypatch, b)
+    br = _Rec()
+    monkeypatch.setattr(run, "_cancel_broker", lambda a, paper: br)
+    assert run.main(["live-u", "--broker", "tachibana", "--cancel", SELL, "--solo", "--group"]) == 2
+    assert run.main(["live-u", "--broker", "tachibana", "--cancel", "--solo"]) == 2
+    assert run.main(["live-u", "--broker", "tachibana", "--cancel", SELL, "--group", "--preview", "--solo"]) == 2
+    capsys.readouterr()
+    assert run.main(["live-u", "--broker", "tachibana", "--cancel", SELL]) == 0
+    assert "命令行加 --solo" in capsys.readouterr().out and br.calls == []
+    assert run.main(["live-u", "--broker", "tachibana", "--cancel", SELL, "--solo"]) == 0
+    assert br.calls == ["S1"] and json.loads(p.read_text(encoding="utf-8"))["orders"][0]["status"] == "CANCELLED"
+
+
+def test_review_liveu_cancel_plan_needs_the_broker(tmp_path):
+    import shutil
+    from test_shell_scripts import _bash, _calls, _run_env
+    if not shutil.which("bash"):
+        pytest.skip("需要 bash")
+    env, log = _run_env(tmp_path, 0)
+    out, _err = _bash(env, "scripts/liveu.sh", "cancel-plan", SELL)
+    assert "用法：bash scripts/liveu.sh cancel-plan <cid> --broker tachibana|paper" in out and "--preview" not in _calls(log)
+    env, log = _run_env(tmp_path, 0)
+    _bash(env, "scripts/liveu.sh", "cancel-plan", SELL, "--broker=paper")
+    assert f"run.py live-u --broker=paper --cancel {SELL} --group --preview" in _calls(log)
