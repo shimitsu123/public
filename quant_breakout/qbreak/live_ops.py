@@ -1716,7 +1716,8 @@ def skip_wont(o) -> bool:
 
 def asked_cids(book: dict | None, waiting=()) -> set:
     """已经写了撤单（还没处理完）的单的 cid：指令文件里还没读的（被撤销的撤回不算）+ 账本里 pending 的撤单指令（job_cids：整组撤单的
-    主单 + grp + 在等的；「一起撤买单」靠这笔卖出的钱、还没发出的买单）。执行器发单前的保护（_cancel_asked）与 outlook 用。"""
+    主单 + grp + 在等的；「一起撤买单」靠这笔卖出的钱、还没发出的买单）+ 成交日当天没处理到、第二天才被拒的撤单盖着的还没发出的单
+    （late_cids）。执行器发单前的保护（_cancel_asked）、对账（live_unified.asked_unsent）与 outlook 用。"""
     from . import manual_orders as MO
     waiting = [r for r in waiting or [] if isinstance(r, dict)]
     void = MO.voided(waiting)
@@ -1729,6 +1730,30 @@ def asked_cids(book: dict | None, waiting=()) -> set:
     for it in items.values():                              # 还在等立花确认的撤单（grp_wait）也算（MO.handling_cids）
         if isinstance(it, dict) and it.get("kind") == "cancel_order" and it.get("status") == "pending":
             out.update(job_cids(it, orders))
+    out.update(late_cids(items, orders))
+    return out
+
+
+def late_cids(items: dict, orders) -> set:
+    """撤单的运行在那笔单的成交日没处理到（面板暂停 / 失败 / 过了 15:30）、第二天才被拒（「不是今天的单」）的撤单指令盖着的、
+    执行器还没发出的单（live_unified.unsent_local）的 cid：和那天收盘时还写着撤单一样 = 你撤了（对账记为已撤）。
+    整合复核 3（2026-10-16）：以前靠单上的「你写了撤单（等撤单的运行处理）」说明认这种情况，撤单当天被拒 / 撤回 / 整组撤单留下卖单之后
+    说明还在，对账照样记成你撤了、手动卖出 / 买入跟着撤回。当天处理过的（撤了的单是 CANCELLED、留下 / 被拒 / 撤回的不算）不在这里。"""
+    by = {str(_g(x, "cid")): x for x in orders or []}
+    out = set()
+    for it in (items or {}).values():
+        if not (isinstance(it, dict) and it.get("kind") == "cancel_order" and it.get("status") == "rejected" and it.get("done_on")):
+            continue
+        for c in job_cids(it, orders):
+            x = by.get(c)
+            if x is None or _g(x, "broker_id") or _g(x, "status") not in ("PLANNED", "DEFERRED", "BLOCKED"):
+                continue
+            try:
+                late = str(it["done_on"]) > next_trading_day(dt.date.fromisoformat(str(_g(x, "decided_on")))).isoformat()
+            except (TypeError, ValueError):
+                late = False
+            if late:
+                out.add(c)
     return out
 
 
@@ -2546,7 +2571,7 @@ def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
             if it is not None and not it.get("cancel_req") and it.get("fund") != "all" and not _allin_item(it):
                 from .live_unified import requeue_next     # 系统原因没发出的手动买入 / 加仓：下一次决策重新处理（G21）→ 不想买要撤回指令（复核 8）
                 cur = [x for x in (book or {}).get("orders") or [] if isinstance(x, dict) and _in_current(x, book)]
-                if requeue_next(o, cur, now, f):
+                if requeue_next(o, cur, now, f, asked=asked_cids(book)):   # 账本里还写着撤单的 → 对账记为已撤（整合复核 3：不再看单上的说明）
                     why = ("已经收盘（15:30）：这笔今天不会再发了；它没发出是系统原因，手动" + ("加仓" if _g(o, "reason") == "manual_add" else "买入")
                            + f"会在下一次决策重新处理 → 不想买就在「交易」点开「另有 …」，在「手动指令」里撤回 {it.get('id')}")
             return why
@@ -3800,5 +3825,5 @@ __all__ = ["CANCELLABLE", "STATUS_TEXT", "CANCEL_HINT", "CANCEL_HINT_CORE", "RES
            "wait_end", "grp_why", "group_view", "group_lines", "ACCEPTED", "DEPK", "FAILED", "GONE", "is_gone", "SNAP_DONE", "NOTE_DONE", "CANCEL_FULL", "note_full", "snap_book", "gone_word", "still_sells", "legacy_plan", "cancel_scope", "cancel_jobs", "cancel_conflict",
            "solo_holds", "hold_pre", "cli_resume", "cli_plan", "CLI_SRC",
            "CORE_SRC", "src_of", "src_note", "src_line", "wrote", "fix_name", "OUT_WORD", "TRADE_HEAD", "NO_PATH_S", "skip_wont",
-           "asked_cids", "instr_due", "outlook", "row_text", "act_text", "trade_key", "new_wont", "not_today",
+           "asked_cids", "late_cids", "instr_due", "outlook", "row_text", "act_text", "trade_key", "new_wont", "not_today",
            "fill_day_of", "held_now", "hn_sp", "hn_head", "hn_pending_text", "snap_day", "broker_compare", "ledger_close_note", "how_text", "unknown_candidates", "unknown_text", "resolve_draft", "reconcile_report", "adopt", "save_book"]

@@ -83,6 +83,7 @@ PAPER_OPEN_WAIT = "开盘价（1 分钟线）还没到"          # 模拟账户�
 UNK_STOP = "这次运行前面有一笔下单结果不明（可能已被受理）→ 剩下的单不发"   # G3：同一次发单里有一笔变成 SENDING / ERROR 之后（2026-10-14）
 CANCEL_ASKED = "你写了撤单（等撤单的运行处理）：执行器不发"   # 整组撤单（2026-10-16）：写了撤单、撤单的运行还没处理的单不发（状态不改）
 ASKED_UNSENT = "你写了撤单（撤单的运行没处理到）：还没发到交易所，执行器没发 —— 记为已撤"   # 对账时（_reconcile、复核 8）
+CANCEL_LAPSED = "等撤单时没发，撤单最后没撤这笔（撤回 / 没做 / 留下）"   # 单上还写着 CANCEL_ASKED、撤单已经结束（整合复核 3，2026-10-16）
 
 
 def unsent_local(o) -> bool:
@@ -95,13 +96,16 @@ def unsent_local(o) -> bool:
 
 def asked_unsent(o, asked=()) -> bool:
     """执行器还没发出的单（计划 / 等开盘后）你写了撤单、撤单的运行却没处理到（面板暂停 / 撤单的运行失败 / 过了 15:30）：
-    发单前被 CANCEL_ASKED 挡下的，或对账那一刻还写着撤单（asked：live_ops.asked_cids）→ True = 当成你撤了
+    对账那一刻还写着撤单（asked：live_ops.asked_cids —— 还没读的 / pending 的，和成交日当天没处理到、第二天才被拒的）→ True = 当成你撤了
     （_reconcile 记 CANCELLED、手动指令撤回；不是系统原因，不留到下一次决策重新买 —— 复核 8，2026-10-16：以前对账记成
-    「开盘后补单没有运行」、手动买入第二天又买）。"""
+    「开盘后补单没有运行」、手动买入第二天又买）。
+    整合复核 3（2026-10-16）：不再看单上的 CANCEL_ASKED 说明 —— 撤单当天被拒（同一组正在撤单）/ 撤回 / 整组撤单留下卖单之后说明还在，
+    以前对账照样记成你撤了、手动卖出跟着撤回（你的卖出不见了）；现在这种照常（被挡的卖出下一次决策再卖、手动买入按 system_miss）。
+    撤单真的撤了的单状态已经是 CANCELLED（不在这里）。"""
     g = LO._g
     if not unsent_local(o) or int(g(o, "filled_qty") or 0) > 0:
         return False
-    return str(g(o, "note") or "").startswith(CANCEL_ASKED) or str(g(o, "cid")) in {str(x) for x in asked or ()}
+    return str(g(o, "cid")) in {str(x) for x in asked or ()}
 BLOCK_RETRY = ("立花の銘柄マスタ取不到", "登录失败，没发单", "没连上立花，没发单")   # 立花适配器 BLOCKED：请求根本没发出、过一会儿可能就好（G15）
 PRECLOSE_MAX_PCT = 3.0                             # LU-15：Yahoo 收盘 vs 立花前日終値 差超过这个 % → 那只的寄付买单不下（卖单只提醒）
 BREAKER_N, BREAKER_VALUE = 2, 2.2                  # C-11：规则单笔数 > (个股名额 + 核心 ETF 只数) × 2，或金额合计 > 权益 × 2.2 → 异常熔断
@@ -160,9 +164,9 @@ def system_miss(o) -> str | None:
         return "早上错过寄付（执行器跑晚了）" if n.startswith(LATE_BUY_NOTE) else None
     if s == "PLANNED":
         return "单建好了却没有发出（运行中断？）"
-    if s != "BLOCKED" or block_kind(n) == "no" or "立花前日終値" in n or n.startswith(("dry-run", "单笔金额", "数量为 0", CANCEL_ASKED)):
+    if s != "BLOCKED" or block_kind(n) == "no" or "立花前日終値" in n or n.startswith(("dry-run", "单笔金额", "数量为 0")):
         return None
-    return n or "被挡"
+    return CANCEL_LAPSED if n.startswith(CANCEL_ASKED) else (n or "被挡")   # 还写着撤单的由 asked_unsent 先认（整合复核 3：说明本身不再挡）
 
 
 def requeue_next(o, orders, now: dt.datetime | None, fill: dt.date | None = None, asked=()) -> bool:
@@ -1809,6 +1813,8 @@ class UnifiedExecutor:
             return "HALT 生效中"
         if o.status == "REJECTED":
             return f"{self.bname}没受理：{n or o.status}"[:120]
+        if n.startswith(CANCEL_ASKED):                      # 等撤单时没发、撤单最后没撤它（整合复核 3）
+            return CANCEL_LAPSED
         return (n or "被挡")[:120]
 
     def _all_odd(self, t: str, n: int) -> bool:
@@ -3065,6 +3071,7 @@ class UnifiedExecutor:
                 self.trade_warns.append(NM.annotate(f"★ 交易：{_otag(o)}：{o.note}"))
             elif o.status == "DEFERRED":                     # 开盘后的补单没有跑（09:05 的 --phase open）→ 这笔没买，与模型不同
                 why_ = (str(o.note) if str(o.note).startswith((QUOTE_FAIL, NO_OPEN_WAIT, ALLIN_WAIT, HALT_WAIT, FUND_WAIT))   # 跑了但没下成（取价失败 / 一直没寄り付き / 等同批卖单 / 等凑钱卖单 / HALT）
+                        else CANCEL_LAPSED if str(o.note).startswith(CANCEL_ASKED)   # 等撤单时没发、撤单最后没撤它（整合复核 3）
                         else "开盘后补单没有运行（--phase open）")
                 o.status, o.note = "MISSED", f"{why_}，没买 —— 与模拟盘出现差异"
                 self.stats["model_diff"] += not self.paper

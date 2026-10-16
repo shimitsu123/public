@@ -183,8 +183,8 @@ def test_asked_unsent_covers_blocked_orders_without_a_broker_id():
     o = {"cid": "c1", "status": "BLOCKED", "side": "BUY", "phase": "open", "note": "登录失败，没发单（X）：y", "filled_qty": 0}
     assert system_miss(o) and requeue_next(o, [o], None) is True               # 没写撤单：系统原因 → 照旧留到下一次决策
     assert asked_unsent(o, {"c1"}) and requeue_next(o, [o], None, asked={"c1"}) is False
-    o2 = {**o, "note": CANCEL_ASKED}
-    assert asked_unsent(o2) and system_miss(o2) is None
+    o2 = {**o, "note": CANCEL_ASKED}                                         # 整合复核 3：说明本身不算撤单（撤单已经结束 → 照常）
+    assert asked_unsent(o2, {"c1"}) and not asked_unsent(o2) and system_miss(o2) is not None
     assert not asked_unsent({**o, "broker_id": "B9"}, {"c1"})                 # 发到交易所了：照旧由撤单的运行撤
 
 
