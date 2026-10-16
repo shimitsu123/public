@@ -70,9 +70,13 @@ def _badge_ok(html: str, tag: str, now: dt.datetime) -> int:
     """标签上的数字 n == 上面的行（不含「撤单中」）+「另有」的行 —— 没有例外（复核 2，2026-10-16：以前状态不明的单、固定口数还没照它调
     的那一行在上面却不算，没买到的手动买入 / 加仓收在「已结束」却照算）。/api/status 的 pending 同一个数。"""
     b = json.loads((paths.state_dir() / f"live_unified_{tag}.json").read_text(encoding="utf-8"))
-    n = panel._trade_live(b, MO.unseen(tag, b), now, tag)["n"]
+    tl = panel._trade_live(b, MO.unseen(tag, b), now, tag)
+    n = tl["n"]
     top, later, _ = _parts(html)
     flight = top.count("<span class='chip'>撤单中</span>")
+    iflight = top.count("<div class='li'><div class='grow'><b>撤单")   # 跟着那笔单放在上面的撤单指令本身不算（复核 8）
+    assert iflight == len(tl["split"].get("iflight") or ())
+    flight += iflight
     assert n == len(ROW.findall(top)) - flight + len(ROW.findall(later))
     tb = _tabbtn(html, "trade")
     assert (f"<i class='badge'>{n}</i>" in tb) if n else ("class='badge'" not in tb)
@@ -149,7 +153,7 @@ def test_non_trading_day():
     html = panel.render("paper", "t" * 40, now)
     top, later, ended = _parts(html)
     assert "<div class='tempty'>今天休市，没有要成交的单</div>" in top and "今天没有要成交的单了" not in top
-    assert "执行器的单是上一次决策的单（成交日 10/16），不是今天的：今天休市" in top
+    assert "执行器的单是上一次决策的单" not in top and "今天休市" not in top.replace("今天休市，没有要成交的单", "")   # 只说一次（复核 8）
     assert "<summary>另有 1 条等 10/19（周一）开盘</summary>" in later and "<span class='chip'>已成交</span>" in ended
     assert _badge_ok(html, "paper", now) == 1
 
@@ -201,13 +205,15 @@ def test_cancel_in_flight_stays_on_top_unsent_cancel_goes_below():
     html = panel.render("paper", "t" * 40, AT15)
     top, _later, ended = _parts(html)
     assert "<span class='chip'>撤单中</span>" in _row(top, SELL_B)                   # 还挂在交易所：执行器确认之前还可能成交
-    assert f"data-cid='{BUY}'" in top and "撤单 1545 纳斯达克 100" in ended               # 撤单指令本身在下面
+    assert f"data-cid='{BUY}'" in top and "撤单 1545 纳斯达克 100" in top and "撤单 1545" not in ended   # 撤单指令跟着那笔单在上面、
+    #                                                                                 不算数字（复核 8：以前收进「已结束」，单还挂着）
     assert _badge_ok(html, "paper", AT15) == 1
     ok, msg, _ = panel.submit({"book": "paper", "kind": "cancel_order", "cid": BUY}, AT15)    # 还没发出的单写了撤单 = 不会再发 → 下面
     assert ok, msg
     html = panel.render("paper", "t" * 40, AT15)
     top, _later, ended = _parts(html)
     assert "<span class='chip'>撤单中</span>" in _row(ended, BUY_B) and BUY_B not in top
+    assert "撤单 1482 对冲版美国 7〜10 年国债" in ended and "撤单 1482" not in top       # 那笔单在下面 → 它的撤单指令也在下面
     assert _badge_ok(html, "paper", AT15) == 0
 
 

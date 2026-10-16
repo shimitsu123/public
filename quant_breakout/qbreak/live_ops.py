@@ -1230,6 +1230,8 @@ TRADE_HEAD = "★ 交易"                               # 交易问题的推送�
 NO_PATH_S = 600                                      # 过了该下的时刻这么久还没有执行路径 →「今天该下但没有执行路径」（U4）
 UNK_CLOSED = ("状态不明：可能已经成交（交易所已收盘，没成交的部分已失效）。先去立花的注文一覧核对，再在 Mac 对话里登记 —— "
               "登记之前执行器每次运行都停下、不下别的单")   # 立花收盘后的发送中 / 结果不明（复核 3，2026-10-16）
+ASKED_UNSENT_TXT = ("撤单中：这笔还没发到交易所，执行器不会再发（撤单的运行今天没处理到也一样：下一次早上的对账记为已撤，"
+                    "手动买卖指令跟着撤回）")                # 复核 8（2026-10-16）：live_unified.asked_unsent
 STUCK_CHIP = "挂着（撤单暂停中）"                     # 写了撤单、面板自动下单暂停：今天没有路去撤（outlook cls stuck；复核 7）
 CHIP = {"fund": "不会下单（预计）", "halt": "不会下单（HALT）", "closed": "已收盘", "blocked": "不会再发", "open_missed": "不会下单",
         "paused": "暂停中"}
@@ -1495,7 +1497,7 @@ def instr_due(at, today: dt.date) -> dt.datetime | None:
     return t if t.date() == today else None
 
 
-def panel_next(book: dict | None, now: dt.datetime, tag: str | None) -> bool:
+def panel_next(book: dict | None, now: dt.datetime, tag: str | None, cwin: bool = False) -> bool:
     """盘中那条路的手动指令（还没读的买卖、等开盘后马上下的买入 wait=True、盘中 / 开盘前 / 午休写的固定口数、还没照它调的比例）
     下一个来下它的是不是面板自动叫的执行器（panel.Trigger）—— 面板自动下单今天暂停了（outlook 的 paused）时只有这时算「今天不会下」
     （Trigger.check 暂停时什么都不叫；恢复要新的指令 / 执行器之后跑成一次 / 第二天：Trigger._still_paused）：
@@ -1506,10 +1508,16 @@ def panel_next(book: dict | None, now: dt.datetime, tag: str | None) -> bool:
         09:20 之前而且还有开盘后的买单 / 错过寄付的卖单（09:20 的重试只在这时跑：run.py 的 --retry 与 live_unified.open_pending /
         late_pending 同一个判断）；
       别的（模拟账户 / 立花デモ：没有定时的重试；立花 09:20 之后）：盘中、午休、今天早上的决策之后的开盘前 → True。
-    复核 2026-10-16：以前只在盘中看暂停，午休 / 开盘前同一条指令在「今天要成交的单」与「另有」之间来回跳，面板却什么都不叫。"""
+    复核 2026-10-16：以前只在盘中看暂停，午休 / 开盘前同一条指令在「今天要成交的单」与「另有」之间来回跳，面板却什么都不叫。
+    cwin=True（撤单 / 模拟账户的补跑，以及补跑那次决策才处理的固定口数 / 比例 /「全部换成」）：面板叫它们一直到交易日 15:30
+    （Trigger.check 的 cwin、cancel_due、_catchup_due），不是到 15:25（手动买卖指令 15:25 起算下一个交易日）→ 15:25〜15:30 也看暂停
+    （复核 8，2026-10-16：以前这 5 分钟里撤单写「撤单中」、模拟账户写「面板会自动补跑」，面板其实什么都不叫）。"""
     from . import manual_orders as MO
     from . import paths
-    if MO.timing(now)[0] == "next":
+    if cwin:
+        if not (is_trading_day(now.date()) and now.time() < MO.CANCEL_UNTIL):
+            return False
+    elif MO.timing(now)[0] == "next":
         return False
     if MO.morning_behind(book, now):
         return str(tag or "").startswith("paper") and now.time() >= PAPER_RUN_T
@@ -1524,14 +1532,18 @@ def panel_next(book: dict | None, now: dt.datetime, tag: str | None) -> bool:
     return True
 
 
-def _instr_row(r: dict, book: dict | None, now: dt.datetime, tag: str | None, halt: bool, paused: bool, seen: bool) -> dict | None:
+def _instr_row(r: dict, book: dict | None, now: dt.datetime, tag: str | None, halt: bool, paused: bool, seen: bool,
+               pc: bool | None = None) -> dict | None:
     """一条等着的手动指令（seen：执行器读过、账本里 pending；否则指令文件里还没读）→ outlook 的一行；撤回 / 撤单 / 撤销撤回本身 → None。
     paused：面板自动下单今天暂停、而且下一个来下它的就是面板（outlook 先用 panel_next 筛过）→ 盘中那条路的（还没读的买卖、
     等开盘后马上下的 wait=True、盘中 / 开盘前 / 午休的固定口数）今天不会下（cls paused）；等上一笔成交（wait=prev）的不看它。
     今天早上的运行没完成（模拟账户面板补跑）：买卖指令 → 补跑之后今天下（过了 08:55 补跑不把它们排进决策，盘中马上下）；闲置资金比例 /
-    固定口数 → 补跑那次决策照它排单，过了 11:30 今天不再撮合 → 下一个交易日 07:40 的运行（cls catchup：paper_late_catchup；复核 2026-10-16）。"""
+    固定口数 → 补跑那次决策照它排单，过了 11:30 今天不再撮合 → 下一个交易日 07:40 的运行（cls catchup：paper_late_catchup；复核 2026-10-16）。
+    pc：补跑那条路的暂停（panel_next cwin：到 15:30；None = 同 paused）—— 模拟账户早上没跑完、暂停了 → 补跑不来：「全部换成」的整批、
+    固定口数（08:55 之前也一样）今天不会做（cls paused；复核 8，2026-10-16：以前照写「今天 09:00 开盘」放在上面、算进数字）。"""
     from . import manual_orders as MO
     k = r.get("kind")
+    pc = paused if pc is None else bool(pc)
     if k in ("cancel", "cancel_order", "uncancel"):
         return None
     today = now.date()
@@ -1556,14 +1568,17 @@ def _instr_row(r: dict, book: dict | None, now: dt.datetime, tag: str | None, ha
         return put("later", None, MO.halt_text(r), "halt")
     if k == "unblock":
         return put("later", None, MO.next_decision(now))
+    behind_pz = pc and MO.morning_behind(book, now)       # 模拟账户早上没跑完、面板暂停：补跑（那次决策）今天不来（复核 8）
     if MO.allin_member(r):
+        if behind_pz:
+            return put("wont", None, PAUSED_TXT, "paused")
         fd = MO.allin_fill(now, book, tag)
         return put("will", _at(fd, MO.SESSION[0][0]), f"{MO.allin_when(now, book, tag)}整批")
     late = paper_late_catchup(book, now, paper, halt) if k in ("core", "corefix") else None
     if k == "corefix":
         cf = MO.corefix_fill(now, book, tag)
-        if cf["mode"] == "behind":
-            if paused:                                     # 模拟账户早上的运行没完成、面板自动下单暂停 = 今天不补跑（复核 7）
+        if cf["mode"] == "behind" or behind_pz:            # 08:55 之前早上没跑完、暂停了也一样：那次决策今天不来（复核 8）
+            if behind_pz:                                  # 模拟账户早上的运行没完成、面板自动下单暂停 = 今天不补跑（复核 7）
                 return put("wont", None, PAUSED_TXT, "paused")
             if late is not None:                           # 模拟账户过了 11:30 补跑：那次决策照它排的核心单今天不再撮合（复核 2026-10-16）
                 return put("later", late, "今天早上的运行还没完成：补跑那次决策时读到、照它排单（面板会自动补跑）；"
@@ -1850,19 +1865,22 @@ def outlook(book: dict | None, waiting=(), now: dt.datetime | None = None, *, ta
         except (TypeError, ValueError, KeyError):
             casc = {}
     pz = bool(paused) and panel_next(b, now, tag)          # 面板自动下单今天暂停、下一个来的就是面板（复核 7：单也看 —— 模拟账户的开盘撮合 /
-    rows, orders = [], {}                                  # 补跑、撤单都只有面板叫）
+    pzc = pz or (bool(paused) and panel_next(b, now, tag, cwin=True))   # 补跑、撤单都只有面板叫）；撤单 / 补跑面板叫到 15:30（复核 8）
+    rows, orders = [], {}
+    gwait = _grp_waits(b) if pzc else {}
     po = b.get("paper_open") or {}
     stop = str(po.get("stop") or "") if paper and d and po.get("decided_on") == d and f is not None and now.date() == f else ""
     for o in cur:
         row = _order_row(o, now=now, paper=paper, tag=tag, halt=halt, asked=asked, casc=casc, unf=unf, f=f)
-        if pz and row["cls"] == "asked" and o.get("status") in CANCELLABLE:   # 写了撤单、面板暂停 → 今天没有路去撤，单照样挂着（复核 7）
+        if pzc and row["cls"] == "asked" and o.get("status") in CANCELLABLE:   # 写了撤单、面板暂停 → 今天没有路去撤，单照样挂着（复核 7）
             r2 = _order_row(o, now=now, paper=paper, tag=tag, halt=halt, asked=(), casc=casc, unf=unf, f=f)
             if r2["state"] == "will":
                 row = r2
-                row.update(cls="stuck", chip=STUCK_CHIP, reason="撤单今天不会自动处理（面板自动下单今天暂停了）：单还挂着、可能成交 → 修好之后在 "
-                           "Mac 对话里说「再试一次」（跑成了面板就恢复、马上撤）" + ("" if paper else "，或在立花网站 / 手机网站撤单"))
+                row.update(cls="stuck", chip=STUCK_CHIP, reason=_stuck_text(o, cur, gwait, paper))
+        elif row["cls"] == "asked" and o.get("status") in UNSENT and (pzc or now.time() >= CLOSE_T or (f is not None and now.date() > f)):
+            row["reason"] = ASKED_UNSENT_TXT                # 撤单的运行今天不会来：执行器照样不发，对账时记为已撤（复核 8）
         if row["state"] == "will":
-            row["act_at"] = _act_at(row, o, now, paper, f, b, halt, pz)
+            row["act_at"] = _act_at(row, o, now, paper, f, b, halt, pzc)
             stale = paper and paper_queued(o) and f is not None and row["act_at"] is not None and (
                 now.date() > f or (now.date() == f and now.time() >= PAPER_OPEN_END))   # 开盘撮合的窗口过了：那次早上的运行撮合
             if stop and paper_queued(o):
@@ -1895,7 +1913,7 @@ def outlook(book: dict | None, waiting=(), now: dt.datetime | None = None, *, ta
             if r.get("id") in gone_ids:
                 continue
             try:
-                x = _instr_row(r, b, now, tag, halt, paused, seen)
+                x = _instr_row(r, b, now, tag, halt, paused, seen, pc=pzc)
             except Exception:                              # noqa: BLE001  一条读不了的指令：不下结论
                 x = None
             if x is not None:
@@ -1914,13 +1932,13 @@ def outlook(book: dict | None, waiting=(), now: dt.datetime | None = None, *, ta
                 continue
             last = _last_item(b, "corefix", t)
             it = last or {"id": f"fix:{t}", "kind": "corefix", "ticker": t, "units": u, "clear": u is None}
-            x = _instr_row({**it, "status": "pending", "msg": ""}, b, now, tag, halt, paused, True)
+            x = _instr_row({**it, "status": "pending", "msg": ""}, b, now, tag, halt, paused, True, pc=pzc)
             if x is not None:
                 x.update(ref=f"fix:{t}", iid=(last or {}).get("id"), what=(fix_name(t, u) if u is not None else f"{_lab(t)} 恢复按规则") + "（还没照它调）")
                 rows.append(x)
                 items[x["ref"]] = x
         try:                                               # 读了、还没照它调的闲置资金比例（复核 3，2026-10-16）：没读的比例指令在 → 那一行就是它
-            x = _core_row(b, now, tag, halt, paused, waiting)
+            x = _core_row(b, now, tag, halt, pzc, waiting)
         except Exception:                                  # noqa: BLE001  一条读不了：不下结论
             x = None
         if x is not None:
@@ -1928,6 +1946,43 @@ def outlook(book: dict | None, waiting=(), now: dt.datetime | None = None, *, ta
             items[x["ref"]] = x
     n = {k: sum(1 for x in rows if x["state"] == k) for k in OUT_WORD}
     return {"rows": rows, "orders": orders, "items": items, "asked": asked, "n": n}
+
+
+def _grp_waits(book: dict | None) -> dict:
+    """账本里 pending 的整组撤单（grp）→ {成员 cid: {"wait": 撤单已受理、等立花确认的 cid, "members": 同一组的 cid}}（outlook 的 stuck 说明用）。"""
+    from . import manual_orders as MO
+    out: dict = {}
+    for it in (((book or {}).get("manual") or {}).get("items") or {}).values():
+        if not (isinstance(it, dict) and it.get("kind") == "cancel_order" and it.get("status") == "pending"
+                and (it.get("grp") or it.get("grp_wait"))):
+            continue
+        mem = list(dict.fromkeys(MO.cancel_cids(it) + [str(x) for x in it.get("grp_all") or []]))
+        g = {"wait": [str(x) for x in it.get("grp_wait") or []], "members": mem}
+        for c in mem:
+            out.setdefault(c, g)
+    return out
+
+
+def _stuck_text(o: dict, cur: list, gwait: dict, paper: bool) -> str:
+    """写了撤单、面板自动下单今天暂停（outlook cls stuck）的说明。整组撤单（复核 8，2026-10-16）：撤单已经受理、等立花确认的买单 →
+    「撤单已受理、等立花确认」；同一组的卖单 → 先在立花的注文一覧确认买单已撤掉 / 没成交再撤（以前一律建议去立花网站撤，
+    卖单也一样，可能卖单撤了、买单却成交了）。"""
+    tail = "修好之后在 Mac 对话里说「再试一次」（跑成了面板就恢复、马上撤）"
+    head = "撤单今天不会自动处理（面板自动下单今天暂停了）"
+    cid = str(o.get("cid"))
+    g = gwait.get(cid)
+    if not paper and g is not None:
+        by = {str(x.get("cid")): x for x in cur}
+        if cid in g["wait"]:
+            return (f"撤单已受理、等立花确认（面板自动下单今天暂停了：今天不会自动再查）→ 在立花网站 / 手机网站的注文一覧确认撤掉了没有；{tail}")
+        if o.get("side") == "SELL":
+            buys = [by[c] for c in g["members"] if c in by and c != cid and by[c].get("side") == "BUY"
+                    and by[c].get("status") in CANCELLABLE + ("FILLED",)]
+            if buys:
+                lab = "、".join(f"买 {_lab(x.get('ticker'))}" for x in buys)
+                return (f"{head}：单还挂着、可能成交 → 整组撤单要先撤买单：先在立花的注文一覧确认买单（{lab}）已撤掉 / 没成交，"
+                        f"再撤这笔（买单已经成交 / 撤不掉 → 这笔不撤）；{tail}")
+    return f"{head}：单还挂着、可能成交 → {tail}" + ("" if paper else "，或在立花网站 / 手机网站撤单")
 
 
 def row_text(row: dict) -> str:
@@ -2011,7 +2066,15 @@ def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
             if paper and st == "DEFERRED":                 # 模拟账户：明早的运行按今天的开盘价照旧撮合（复核 promise F1，2026-10-16：
                 return ("已经收盘（15:30）：模拟账户等开盘后的买单明早的运行按今天的开盘价照旧撮合（钱够才买），现在撤不了"   # 以前面板接受、
                         "（明早对账之后不想拿着：写手动卖出）")                            # 却没有路去撤，第二天照样成交）
-            return "已经收盘（15:30）：这笔今天不会再发了，不用撤"
+            why = "已经收盘（15:30）：这笔今天不会再发了，不用撤"
+            it = _manual_item(book, o) if _g(o, "reason") in ("manual_buy", "manual_add") else None
+            if it is not None and not it.get("cancel_req") and it.get("fund") != "all" and not _allin_item(it):
+                from .live_unified import requeue_next     # 系统原因没发出的手动买入 / 加仓：下一次决策重新处理（G21）→ 不想买要撤回指令（复核 8）
+                cur = [x for x in (book or {}).get("orders") or [] if isinstance(x, dict) and _in_current(x, book)]
+                if requeue_next(o, cur, now, f):
+                    why = ("已经收盘（15:30）：这笔今天不会再发了；它没发出是系统原因，手动" + ("加仓" if _g(o, "reason") == "manual_add" else "买入")
+                           + f"会在下一次决策重新处理 → 不想买就在「交易」点开「另有 …」，在「手动指令」里撤回 {it.get('id')}")
+            return why
         return None
     if paper:
         if (_g(o, "phase") or "morning") != "morning":
@@ -2028,6 +2091,15 @@ def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
             why += f"；手动卖出没成交的部分明天开盘会再卖 → 不想再卖就在「交易」点开「另有 …」，在「手动指令」里撤回 {it.get('id')}"
         return why
     return None
+
+
+def _allin_item(it: dict) -> bool:
+    """「全部换成」的同批指令（manual_orders.allin_member；读不了 → False）。"""
+    try:
+        from .manual_orders import allin_member
+        return bool(allin_member(it))
+    except Exception:                                      # noqa: BLE001
+        return False
 
 
 def _manual_item(book: dict, o) -> dict | None:

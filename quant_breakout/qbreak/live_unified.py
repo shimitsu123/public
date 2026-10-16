@@ -82,6 +82,18 @@ PAPER_OPEN_FROM, PAPER_OPEN_UNTIL = dt.time(9, 25), dt.time(11, 30)   # 模拟�
 PAPER_OPEN_WAIT = "开盘价（1 分钟线）还没到"          # 模拟账户的开盘撮合这次不做（整批：有一只没有今天的分钟线 / 可能一整天张贴）
 UNK_STOP = "这次运行前面有一笔下单结果不明（可能已被受理）→ 剩下的单不发"   # G3：同一次发单里有一笔变成 SENDING / ERROR 之后（2026-10-14）
 CANCEL_ASKED = "你写了撤单（等撤单的运行处理）：执行器不发"   # 整组撤单（2026-10-16）：写了撤单、撤单的运行还没处理的单不发（状态不改）
+ASKED_UNSENT = "你写了撤单（撤单的运行没处理到）：还没发到交易所，执行器没发 —— 记为已撤"   # 对账时（_reconcile、复核 8）
+
+
+def asked_unsent(o, asked=()) -> bool:
+    """执行器还没发出的单（计划 / 等开盘后）你写了撤单、撤单的运行却没处理到（面板暂停 / 撤单的运行失败 / 过了 15:30）：
+    发单前被 CANCEL_ASKED 挡下的，或对账那一刻还写着撤单（asked：live_ops.asked_cids）→ True = 当成你撤了
+    （_reconcile 记 CANCELLED、手动指令撤回；不是系统原因，不留到下一次决策重新买 —— 复核 8，2026-10-16：以前对账记成
+    「开盘后补单没有运行」、手动买入第二天又买）。"""
+    g = LO._g
+    if g(o, "status") not in ("PLANNED", "DEFERRED") or g(o, "broker_id") or int(g(o, "filled_qty") or 0) > 0:
+        return False
+    return str(g(o, "note") or "").startswith(CANCEL_ASKED) or str(g(o, "cid")) in {str(x) for x in asked or ()}
 BLOCK_RETRY = ("立花の銘柄マスタ取不到", "登录失败，没发单", "没连上立花，没发单")   # 立花适配器 BLOCKED：请求根本没发出、过一会儿可能就好（G15）
 PRECLOSE_MAX_PCT = 3.0                             # LU-15：Yahoo 收盘 vs 立花前日終値 差超过这个 % → 那只的寄付买单不下（卖单只提醒）
 BREAKER_N, BREAKER_VALUE = 2, 2.2                  # C-11：规则单笔数 > (个股名额 + 核心 ETF 只数) × 2，或金额合计 > 权益 × 2.2 → 异常熔断
@@ -145,10 +157,13 @@ def system_miss(o) -> str | None:
     return n or "被挡"
 
 
-def requeue_next(o, orders, now: dt.datetime | None, fill: dt.date | None = None) -> bool:
+def requeue_next(o, orders, now: dt.datetime | None, fill: dt.date | None = None, asked=()) -> bool:
     """还没对账的手动买入 / 加仓的单（今天不会再发 / 已经结束）：下一次早上的对账会把那条指令留到那次决策重新处理（True）、
     还是当成没买到结束（False；只做一次）—— 与 _reconcile 同一个口径：等开盘后的（DEFERRED）对账时变成 MISSED（系统原因），
-    凑钱的卖单都没成交（LO.orphan）→ SKIPPED「钱没来」（不是系统原因）；其余按 system_miss。只读（面板「交易」的分块用）。"""
+    凑钱的卖单都没成交（LO.orphan）→ SKIPPED「钱没来」（不是系统原因）；写了撤单的没发出的单（asked_unsent）→ 你撤了、不再买；
+    其余按 system_miss。只读（面板「交易」的分块用）。"""
+    if asked_unsent(o, asked):
+        return False
     if LO._g(o, "status") == "DEFERRED":
         if LO.orphan(o, orders, now, fill):
             return False
@@ -845,6 +860,15 @@ class UnifiedExecutor:
             return o.cid in LO.asked_cids(self.book, MO.unseen(self.manual.tag, self.book))
         except Exception:                                   # noqa: BLE001  只是保护：读不了指令文件不影响下单
             return False
+
+    def _asked_now(self) -> set:
+        """现在写着撤单（还没处理完）的单的 cid（_cancel_asked 同一个来源；读不了 → 空）。"""
+        if self.manual is None:
+            return set()
+        try:
+            return LO.asked_cids(self.book, MO.unseen(self.manual.tag, self.book))
+        except Exception:                                   # noqa: BLE001  只是保护
+            return set()
 
     def _send(self, o: ExecOrder, qty: int, bar: str) -> None:
         """bar 非空 = 寄付（开盘集合竞价）；空 = 盘中当日限り。先把「发送中」写进账本再发（崩溃后不会重发）。
@@ -3013,6 +3037,7 @@ class UnifiedExecutor:
         eng.begin_day(k)
         act = self._active()
         gap = eng.ex["JP"].max_entry_gap_pct
+        asked = self._asked_now() if any(o.status in ("PLANNED", "DEFERRED") for o in act) else set()
         for n in sorted(range(len(act)), key=lambda n: (act[n].side == "BUY", act[n].kind == "core", n)):
             o = act[n]
             q, px = fills.get(o.cid, (0, 0.0))
@@ -3021,6 +3046,10 @@ class UnifiedExecutor:
                 o.status = "FILLED" if q >= (o.sent_qty or o.qty) else ("PARTIAL" if q > 0 else "UNFILLED")
             elif o.status in ("EXPIRED", "CANCELLED") and q >= (o.sent_qty or o.qty) > 0:   # 撤单之前已经全部成交
                 o.status = "FILLED"
+            elif q <= 0 and asked_unsent(o, asked):          # 你写了撤单、撤单的运行没处理到（面板暂停 / 失败 / 过了 15:30）→ 当成你撤了（复核 8）
+                o.status, o.note, o.fund_src = "CANCELLED", ASKED_UNSENT[:300], []
+                w = LO._withdraw_manual(self.book, o, self.clock()) if self.manual is not None else None
+                self._event("info", f"{_otag(o)}：{o.note}" + (f"；{w}" if w else ""))
             elif o.status == "DEFERRED" and LO.orphan(o, act, self.clock(), self.fill_day()):   # 凑钱的卖单都没成交：钱没来 → 不下（不是系统原因；D2）
                 o.status, o.note = "SKIPPED", f"{LO.src_text(LO.fund_srcs(o, act))} → 钱没来，没下"[:300]
                 o.fund_src = []

@@ -100,3 +100,21 @@ document.addEventListener('click', e=>{                                   // 选
 function showMseg(s){ document.querySelectorAll('[data-mseg]').forEach(b=>b.classList.toggle('on', b.dataset.mseg===s));
   document.querySelectorAll('.mseg').forEach(g=>{ g.hidden = g.dataset.s!==s; }); }
 document.addEventListener('click', e=>{ const b=e.target.closest('[data-mseg]'); if(!b) return; e.preventDefault(); showMseg(b.dataset.mseg); }, true);
+// 「交易」的「另有 …」/「已结束 / 不是今天的」：点开过的刷新之后照样开着（写完指令、撤单之后页面会刷新；复核 8，2026-10-16：以前每次刷新都收起来，
+// 刚在里面点过按钮的那一块要再点开）。只记这个标签页（sessionStorage）；读写不了 → 照旧收起。
+const FOLDK='qb-fold';
+function foldKey(d, path){ const s=d.closest('section'); return path+'|'+((s&&s.id)||'')+'|'+(d.classList.contains('later') ? 'later' : 'ended'); }
+function foldSave(d, store, path){
+  let m={}; try{ m=JSON.parse(store.getItem(FOLDK)||'{}')||{}; }catch(e){ m={}; }
+  if(d.open) m[foldKey(d, path)]=1; else delete m[foldKey(d, path)];
+  try{ store.setItem(FOLDK, JSON.stringify(m)); }catch(e){}
+}
+function foldRestore(doc, store, path){
+  let m={}; try{ m=JSON.parse(store.getItem(FOLDK)||'{}')||{}; }catch(e){ return; }
+  doc.querySelectorAll('details.later, details.ended').forEach(d=>{ if(m[foldKey(d, path)]) d.open=true; });
+}
+document.addEventListener('toggle', e=>{                                  // toggle 不冒泡：在捕获阶段接
+  const d=e.target; if(!d || !d.matches || !d.matches('details.later, details.ended')) return;
+  try{ foldSave(d, sessionStorage, location.pathname); }catch(err){}
+}, true);
+try{ foldRestore(document, sessionStorage, location.pathname); }catch(err){}

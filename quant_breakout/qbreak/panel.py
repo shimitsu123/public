@@ -1571,6 +1571,9 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=asked, instr=False, paused=paused)   # 每笔单今天会不会下：只在 live_ops.outlook 判断（D5）
     fixed = MO.core_fixed(book, tag)
     fpend, fwhen = LO.fix_pending_when(book, now, tag)       # 还没照它调的固定口数：今天开盘后 / 盘中就照它下（D1；复核 UI F2，2026-10-16）
+    if fpend and paused and MO.morning_behind(book, now) and LO.panel_next(book, now, tag, cwin=True):
+        fwhen = (f"面板自动下单今天暂停了、今天早上的运行不会自动补跑 → {LO.next_decision_text(now)} 的决策"   # 与 outlook 的 fix:<票>（cls paused）
+                 "（修好之后也可以在 Mac 对话里说「再试一次」）")                                     # 同一个结论（复核 8，2026-10-16）
     rows, fix, dead = {}, {}, set()
     fin = {}                                                # 手动单已经做完了（全部成交 / 立花收盘后失效的买单）→ {cid: 指令后面加的说明}
     rerun, f = {}, LO.fill_day_of(book)                     # 模拟账户开盘撮合的窗口过了的单：哪次运行按成交日的开盘价撮合（outlook 的说明）
@@ -1678,7 +1681,8 @@ def _fix_met(o: dict, cur: list, st: dict, fixed, asked) -> bool:
 def _split_n(sp: dict) -> int:
     """「交易」标签上的数字 = _trade_split 放在上面「今天要成交的单」的行（不含「撤单中」：还挂在交易所、执行器确认之前还可能成交，
     flight）+「另有 …」里的行（执行器的单、手动指令、没有指令行的「还没照它调」的固定口数）；「已结束 / 不是今天的」不算（复核 2，2026-10-16）。"""
-    zs = ([z for c, z in sp["orders"].items() if c not in sp["flight"]] + list(sp["items"].values())
+    zs = ([z for c, z in sp["orders"].items() if c not in sp["flight"]]
+          + [z for i, z in sp["items"].items() if i not in sp.get("iflight", ())]   # 撤单指令本身不算（那笔单算；复核 8）
           + [z for z, _x in sp["extra"]])
     return sum(1 for z in zs if z in ("today", "later"))
 
@@ -1757,10 +1761,12 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
     today = now.date()
     f = LO.fill_day_of(book)
     mode = MO.timing(now)[0]
-    out = {"orders": {}, "items": {}, "flight": set(), "when": {}, "extra": [], "notes": [], "itxt": {}, "core": None, "nocatch": False}
+    out = {"orders": {}, "items": {}, "flight": set(), "iflight": set(), "when": {}, "extra": [], "notes": [], "itxt": {}, "core": None,
+           "nocatch": False}
     paused = tl["paused"] if "paused" in tl else _trigger_paused(tag, waiting, now)   # outlook 再按时段筛（panel_next）
     pz = paused and LO.panel_next(book, now, tag)          # 暂停、下一个来的是面板（模拟账户早上没跑完 = 补跑也不来；复核 7）
-    out["nocatch"] = bool(pz and paper and MO.morning_behind(book, now))   # 「今天的单还没排出来」不写「跑完之后」（_trade_sections）
+    pzc = paused and LO.panel_next(book, now, tag, cwin=True)   # 补跑 / 撤单：面板叫到 15:30（复核 8，2026-10-16）
+    out["nocatch"] = bool(pzc and paper and MO.morning_behind(book, now))   # 「今天的单还没排出来」不写「跑完之后」（_trade_sections）
     try:                                                    # 与 _trade_live_calc 同一个判断（同样的 asked / halt）；指令也要（instr）
         ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=tl["asked"], paused=paused)
     except Exception as e:                                 # noqa: BLE001  只是分块：不能让页面打不开
@@ -1828,11 +1834,19 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
             out["notes"].append(tl["fix"][cid])            # 「手动固定 … 仍然有效：下一次决策还会再排」不跟着那笔单收起来
     oit = ol["items"] if ol else {}
     void, gone = MO.voided(waiting), MO.cancelled(waiting)
+
+    def cz(r: dict) -> str:                                # 撤单指令：它要撤的单还在上面（撤单中 / 挂着（撤单暂停中））→ 跟着放上面、不算数字
+        cs = MO.cancel_cids(r) + [str(x) for x in r.get("grp_all") or []]   # （复核 8，2026-10-16：以前「等执行器读」的撤单收进「已结束」）
+        if any(out["orders"].get(c) == "today" for c in cs):
+            out["iflight"].add(r.get("id"))
+            return "today"
+        return "ended"
     for r in waiting:
         rid = r.get("id")
         if r.get("kind") == "uncancel" or rid in void:
             continue
-        out["items"][rid] = "ended" if r.get("kind") in CANCEL_KINDS or rid in gone else zone(oit.get(rid), rid, r)
+        out["items"][rid] = (cz(r) if r.get("kind") == "cancel_order" and rid not in gone else
+                             "ended" if r.get("kind") in CANCEL_KINDS or rid in gone else zone(oit.get(rid), rid, r))
     items = [it for it in (((book.get("manual") or {}).get("items")) or {}).values() if isinstance(it, dict)]
     link: dict = {}                                         # 已下单的指令 → 它的单
     for o in cur:
@@ -1851,7 +1865,9 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
         if not iid or k == "uncancel" or s == "voided":
             continue
         if s in MO.ACTIVE:
-            if k in CANCEL_KINDS or it.get("cancel_req") or iid in gone or iid in tl["items"]:
+            if k == "cancel_order" and s == "pending" and iid not in gone:
+                z = cz(it)
+            elif k in CANCEL_KINDS or it.get("cancel_req") or iid in gone or iid in tl["items"]:
                 z = "ended"
             elif s == "pending":
                 z = zone(oit.get(iid), iid, it) if ol else "today"
@@ -1870,7 +1886,7 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
                 elif "later" in zs:
                     z = "later"
                     out["when"][iid] = next(out["when"][c] for c in link[iid] if out["orders"].get(c) == "later")
-                elif buy and os_ and (it.get("fund") == "all" or not any(requeue_next(o, cur, now, f) for o in os_)):
+                elif buy and os_ and (it.get("fund") == "all" or not any(requeue_next(o, cur, now, f, tl["asked"]) for o in os_)):
                     z = "ended"                             # 只做一次：没买到、不是系统原因 → 下一次早上的对账之后结束（不再买）
                     if (it.get("unsent") or {}).get("retry", True):   # 「没发出（只做一次）」已经写了的不重复
                         got = any(int(o.get("filled_qty") or 0) > 0 for o in os_)   # 撤单之前成交了一部分：记成交的部分
@@ -1881,7 +1897,7 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
                     out["when"][iid] = when(None, "halt")
                 else:                                       # 系统原因没下的买入 / 加仓、没卖完 / 没发出的卖出：下一次决策再下
                     day = nd_open()
-                    late = None if buy else LO.paper_late_catchup(book, now, paper, halt, pz)
+                    late = None if buy else LO.paper_late_catchup(book, now, paper, halt, pzc)
                     if late is not None:                    # 卖出：补跑那次决策排的卖单过了 11:30 今天不再撮合（买入补跑之后盘中马上下 = 今天；复核 2026-10-16）
                         z = "later"
                         out["when"][iid] = when(late)
@@ -1899,7 +1915,7 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
             if t in fixrows:
                 z = zone(fixrows[t], iid)
             else:                                           # outlook 没给那一行（今天说了下一次决策再调 / outlook 算不成）：自己看时刻
-                z = _fix_zone(it, book, now, tag, halt, zone, when, out["when"], paused=pz)
+                z = _fix_zone(it, book, now, tag, halt, zone, when, out["when"], paused=pz, pc=pzc)
         else:
             z = "ended"
             if (k == "corefix" and s == "done" and it.get("ticker") in newfix
@@ -1962,7 +1978,8 @@ def _trigger_paused(tag: str | None, waiting: list, now: dt.datetime) -> bool:
 UNK_WHEN = (3, "", "等登记状态不明的单")                    # 「另有 … 等登记状态不明的单」（_trade_split 的 when）
 
 
-def _fix_zone(it: dict, book: dict, now: dt.datetime, tag: str | None, halt: bool, zone, when, wmap: dict, paused: bool = False) -> str:
+def _fix_zone(it: dict, book: dict, now: dt.datetime, tag: str | None, halt: bool, zone, when, wmap: dict, paused: bool = False,
+              pc: bool | None = None) -> str:
     """还没照它调的固定口数（FIX_WAIT）、outlook 没给 fix:<票> 那一行时放哪一块（复核 4，2026-10-16：以前一律当成「今天说了下一次决策再调」
     → later「等下一次决策」，撤回了另一条还没读的固定口数时，今天开盘后 / 盘中就下的也这样写）：
       今天说了「下一次决策再调」（core_rule.fix_defer：corefix_pending(now) 不含这只）→ later「等下一次决策」；
@@ -1978,7 +1995,7 @@ def _fix_zone(it: dict, book: dict, now: dt.datetime, tag: str | None, halt: boo
     x = None
     if not defer:
         try:
-            x = LO._instr_row({**it, "status": "pending", "msg": ""}, book, now, tag, halt, paused, True)
+            x = LO._instr_row({**it, "status": "pending", "msg": ""}, book, now, tag, halt, paused, True, pc=pc)
         except Exception:                                  # noqa: BLE001
             x = None
     if x is None:
@@ -2062,9 +2079,9 @@ def _trade_sections(sp: dict, orows: list, irows: list, meta: dict, now: dt.date
     H = ["<section class='card' id='today'><h2>今天要成交的单</h2>"]
     if halt:
         H.append("<div class='neg small'>★ HALT 生效中：执行器今天不发新单（已经在交易所的单照样可能成交，可以撤；说明在「更多」）</div>")
-    if stale and orows:                                     # 下面的空行已经写了为什么 → 这里只说是上一次决策的单
+    if stale and orows and (trading or T["o"] or L["o"]):   # 下面的空行已经写了为什么 → 这里只说是上一次决策的单（休市日都收在「已结束」→ 不写；复核 8）
         H.append(f"<div class='muted small'>执行器的单是上一次决策的单{escape(fd)}，不是今天的"
-                 + ("" if empty and pending else "：" + ("今天休市" if not trading else run)) + "</div>")
+                 + ("" if empty and (pending or not trading) else "：" + ("今天休市" if not trading else run)) + "</div>")
     if T["o"]:
         H.append(f"<div class='tsub'>执行器的单{escape(fd)}</div><div class='list'>{''.join(T['o'])}</div>")
     if T["i"]:
@@ -2072,7 +2089,8 @@ def _trade_sections(sp: dict, orows: list, irows: list, meta: dict, now: dt.date
     if empty:
         H.append("<div class='tempty'>" + escape(
             "今天休市，没有要成交的单" if not trading else
-            (f"{run}：补跑了这里才有今天的单" if late else
+            (f"今天的单还没排出来：{run}；HALT 生效中，执行器不会排出要成交的单（解除之后的运行才会）" if halt else
+             f"{run}：补跑了这里才有今天的单" if late else
              f"今天的单还没排出来：{run}，面板自动下单今天暂停了、不会自动补跑（等 {_md_wd(next_trading_day(now.date()))}"
              f"{LO.PAPER_RUN_T:%H:%M} 的运行；修好之后也可以在 Mac 对话里说「再试一次」）" if sp.get("nocatch") else
              f"今天的单还没排出来：{run}（过了 {LO.PAPER_OPEN_END:%H:%M}：补跑之后排的单今天不再撮合，"

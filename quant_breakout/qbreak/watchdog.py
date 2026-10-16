@@ -347,6 +347,11 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
         if wont:                                              # 今天不会下的单（凑钱的卖单撤了 / 钱不够 / 钱没来 / 错过…）：以前 09:30 照样「✓ 通过」（M2）
             reasons.append(f"今天不会下的单 {len(wont)} 笔：" + "；".join(_orow(r) for r in wont[:5]) + ("…" if len(wont) > 5 else ""))
             rec["trade"] = True
+    stk = [r for r in ol["rows"] if r.get("kind") == "order" and r.get("cls") == "stuck"]
+    if stk:                                                   # 写了撤单、面板自动下单暂停：撤单今天没人处理、单还挂着（复核 8，2026-10-16：以前照样「通过」）
+        reasons.append(f"写了撤单、单还挂着 {len(stk)} 笔：" + "；".join(_orow(r) for r in stk[:5])
+                       + ("…" if len(stk) > 5 else ""))
+        rec["trade"] = True
     if not _halt():                                           # 该下了还没下的手动指令（面板没开 / 暂停 / 早上没跑完；G24）
         mw = _manual_waiting(tag, book, now, done)
         reasons += mw
