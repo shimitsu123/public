@@ -755,3 +755,139 @@ def test_paper_open_matching_orders_move_together_after_the_window(now, where):
         assert ol["orders"][SELL]["reason"] == ("成交日 10/15 的开盘撮合（09:25〜11:30）没做成 → 10/16 07:40 的运行按 10/15 的正式开盘价"
                                                 "照旧撮合")
     assert _badge_ok(html, "paper", now) == 2
+
+
+# ────────── 复核 4（2026-10-16）──────────
+@pytest.mark.parametrize("now,where,run", [
+    (_t(2026, 10, 16, 7, 30), "top", "今天 07:40 的运行"),                         # 07:40 之前：今天 07:40 的运行撮合
+    (_t(2026, 10, 16, 8, 0), "top", "今天早上的运行（还没完成：面板会自动补跑）"),     # 早上的运行没完成：面板补跑（07:45〜15:30）
+    (_t(2026, 10, 16, 10, 30), "top", "今天早上的运行（还没完成：面板会自动补跑）"),
+    (_t(2026, 10, 16, 14, 0), "top", "今天早上的运行（还没完成：面板会自动补跑）"),
+    (_t(2026, 10, 16, 16, 0), "later", "10/19 07:40 的运行"),                     # 15:30 之后不补跑：下一个交易日（周五 → 周一）
+])
+def test_paper_stale_morning_queued_orders_are_matched_by_todays_catch_up(monkeypatch, now, where, run):
+    """模拟账户成交日（10/15）的开盘撮合没做成、第二天（10/16）早上的运行也还没完成：排队的寄付单（SENT）与等开盘后的买单（DEFERRED）
+    由今天早上的运行（07:40 / 面板 07:45〜15:30 的补跑：run_bar 的 _paper_open）按成交日 10/15 的开盘价撮合 → 在「今天要成交的单」。
+    复核 4：以前 07:40 之后写「另有 2 条等 10/19（周一）07:40 的运行」（补跑却在今天撮合了），买单还写「今天的开盘撮合没下成」（是 10/15 的）。"""
+    from qbreak import live_ops as LO
+    b = _book1015("paper", sell="SENT", cash=2_000_000.0, fix={})
+    assert MO.morning_behind(b, now)
+    ol = LO.outlook(b, [], now, tag="paper", halt=False)
+    s, y = ol["orders"][SELL], ol["orders"][BUY]
+    html = panel.render("paper", "t" * 40, now)
+    top, later, ended = _parts(html)
+    if where == "top":
+        assert s["state"] == y["state"] == "will" and s["act_at"].date() == y["act_at"].date() == now.date()
+        assert s["act_at"] == (_t(2026, 10, 16, 7, 40) if now.hour < 8 else now) == y["act_at"]
+        assert SELL_B in top and BUY_B in top and later == ""
+    else:
+        assert s["state"] == y["state"] == "later" and s["act_at"] == y["act_at"] == _t(2026, 10, 19, 7, 40)
+        assert "<summary>另有 2 条等 10/19（周一）07:40 的运行</summary>" in later and SELL_B not in top
+    assert s["reason"] == f"成交日 10/15 的开盘撮合（09:25〜11:30）没做成 → {run}按 10/15 的正式开盘价照旧撮合"
+    assert y["reason"] == f"成交日 10/15 的开盘撮合（09:25〜11:30）没下成 → {run}按 10/15 的开盘价照旧撮合（钱够才买）"
+    part = top if where == "top" else later                                      # 行里写这句，不写 07:40 存下的「次日开盘成交」/「减股再下」
+    assert s["reason"] in _row(part, SELL_B) and y["reason"] in _row(part, BUY_B)
+    assert "已排队，次日开盘成交" not in part and "减股再下" not in part
+    assert _badge_ok(html, "paper", now) == 2
+    _named(html)
+    if now.hour in (10, 14):                                                     # 说的「面板会自动补跑」就是 Trigger 的那条路
+        ag = paths.launch_agents()
+        ag.mkdir(parents=True, exist_ok=True)
+        (ag / f"{paths.PAPER_AGENT}.plist").write_text("x", encoding="utf-8")
+        m = [1000.0]
+        trg = panel.Trigger(run=lambda tag, mode="retry": None, clock=lambda: now, mono=lambda: m[0], notify=lambda *a: None)
+        assert not trg._catchup_due("paper", b, now)                             # 第一次看到：先等 2 分钟
+        m[0] += panel.CATCHUP_GRACE_S
+        assert trg._catchup_due("paper", b, now)
+
+
+def test_paper_queued_orders_under_halt_or_on_the_fill_day_wait_for_the_next_run():
+    """HALT 中面板不补跑 → 下一个交易日 07:40（等开盘后的买单 HALT 时照旧「不会下单（HALT）」）；成交日当天 11:30 之后 → 明早 07:40，
+    买单的说明按成交日的开盘价（以前写「按那天的开盘价」= 那次运行那天的，撮合按的是成交日的）。"""
+    from qbreak import live_ops as LO
+    b = _book1015("paper", sell="SENT", cash=2_000_000.0, fix={})
+    now = _t(2026, 10, 16, 10, 30)
+    ol = LO.outlook(b, [], now, tag="paper", halt=True)
+    assert ol["orders"][SELL]["state"] == "later" and ol["orders"][SELL]["act_at"] == _t(2026, 10, 19, 7, 40)
+    assert ol["orders"][SELL]["reason"].startswith("成交日 10/15 的开盘撮合（09:25〜11:30）没做成 → 10/19 07:40 的运行")
+    assert ol["orders"][BUY]["state"] == "wont" and ol["orders"][BUY]["cls"] == "halt"
+    for hm in ((12, 0), (16, 0)):
+        now = _t(2026, 10, 15, *hm)
+        ol = LO.outlook(b, [], now, tag="paper", halt=False)
+        assert ol["orders"][SELL]["state"] == ol["orders"][BUY]["state"] == "later"
+        assert ol["orders"][BUY]["act_at"] == _t(2026, 10, 16, 7, 40)
+        assert ol["orders"][BUY]["reason"] == ("今天的开盘撮合（09:25〜11:30）没下成 → 10/16 07:40 的运行按 10/15 的开盘价照旧撮合"
+                                               "（钱够才买）")
+
+
+FIX500 = "M20261015-075500-corefix-1482"
+
+
+@pytest.mark.parametrize("tag", ["paper", "tachibana"])
+@pytest.mark.parametrize("now", [_t(2026, 10, 15, 8, 0), _t(2026, 10, 15, 10, 30)])
+def test_withdrawn_unread_corefix_does_not_hide_the_fix_still_to_apply(tag, now):
+    """读了、还没照它调的固定口数（1482 678 口）+ 又写了一条还没读的固定 500 口、马上撤回（都还在指令文件里）：撤回的那条不算
+    （与 MO.core_fixed / corefix_pending 同一个过滤）→ 678 口那一行照旧今天（09:00 开盘后 / 盘中马上），执行器也照它下（now_due）。
+    复核 4：以前撤回的那条把 fix:1482 那一行藏掉，678 口去了「另有 1 条等下一次决策」。"""
+    from qbreak import live_ops as LO
+    b, _, _ = _fixwait()
+    _save(b, tag)
+    _want({"id": FIX500, "kind": "corefix", "ticker": "1482.T", "units": 500, "at": "2026-10-15T07:55:00+09:00"}, tag)
+    _want({"id": "M20261015-075600-cancel", "kind": "cancel", "target": FIX500, "at": "2026-10-15T07:56:00+09:00"}, tag)
+    ol = LO.outlook(b, MO.unseen(tag, b), now, tag=tag, halt=False)
+    x = ol["items"]["fix:1482.T"]
+    assert x["state"] == "will" and x["act_at"].date() == now.date() and FIX500 not in ol["items"]
+    assert MO.now_due(tag, b, now) == (now.hour >= 9)                          # 盘中：面板马上叫执行器照 678 口下
+    html = panel.render(tag, "t" * 40, now)
+    top, later, ended = _parts(html)
+    head = "<b>固定 1482 对冲版美国 7〜10 年国债：678 口"
+    assert head in top and later == "" and head not in ended
+    assert f"<span class='chip'>{MO.FIX_WAIT}</span>" in _row(top, head)
+    assert "500 口" not in top + later                                          # 撤回了的那条：收在「已结束」
+    assert _badge_ok(html, tag, now) == 1
+    _named(html)
+
+
+def test_fix_wait_without_its_outlook_row_follows_the_fix_timing():
+    """还没照它调的固定口数、outlook 没给 fix:<票> 那一行（又写了一条还没读的同样口数）→ 照固定口数自己的时刻（盘中 = 今天），不是一律
+    「等下一次决策」；今天说了「下一次决策再调」（core_rule.fix_defer）→ 那才是「等下一次决策」（复核 4）。"""
+    now = _t(2026, 10, 15, 10, 30)
+    b, _, _ = _fixwait()
+    old, new = "M20261014-190000-corefix-1482", "M20261015-102500-corefix-1482"
+    _want({"id": new, "kind": "corefix", "ticker": "1482.T", "units": 678, "at": "2026-10-15T10:25:00+09:00"})
+    sp = panel._trade_split(b, MO.unseen("paper", b), now, "paper", False)
+    assert sp["items"][old] == sp["items"][new] == "today" and not sp["extra"]
+    MO.requests_path("paper").unlink()
+    b["core_rule"]["fix_defer"] = {"1482.T": {"day": "2026-10-15", "units": 678}}
+    _save(b)
+    sp = panel._trade_split(b, [], now, "paper", False)
+    assert sp["items"][old] == "later" and sp["when"][old][-1] == "等下一次决策（10/16 07:40）"
+    html = panel.render("paper", "t" * 40, now)
+    assert _badge_ok(html, "paper", now) == 1
+
+
+@pytest.mark.parametrize("now", [_t(2026, 10, 15, 16, 0), _t(2026, 10, 16, 10, 0)])
+def test_closed_unknown_order_holds_every_instruction_until_registered(now):
+    """立花收盘后状态不明的单（买 6758 结果不明）：登记之前执行器每次运行开头都停下（_raise_if_unknown）→ 不只靠它的那条买入，
+    旁边别的还没结束的指令（卖出全部 7203、还没读的固定口数）也都「等登记状态不明的单」，不是「等 MM/DD 开盘」；数字不变（复核 4）。
+    买入只做一次：登记 0 股 → 指令结束 → 写 MO.UNK_LATER_BUY（不是「登记之后的下一次决策处理」）；卖出照旧 MO.UNK_LATER。"""
+    tag = "tachibana"
+    b = _buy_book(tag, "ERROR", "发送超时", sent_at="2026-10-15T08:00:00+09:00")
+    b["manual"]["items"]["M5-sell"] = {"id": "M5-sell", "kind": "sell", "ticker": "7203.T", "status": "pending",
+                                       "at": "2026-10-15T08:30:00+09:00"}
+    b["core_rule"] = {"lot": {"1482.T": 1, "1545.T": 10}, "fix_applied": {}}
+    _save(b, tag)
+    _want({"id": "M20261015-160500-corefix-1482", "kind": "corefix", "ticker": "1482.T", "units": 678,
+           "at": "2026-10-15T16:05:00+09:00"}, tag)
+    html = panel.render(tag, "t" * 40, now)
+    top, later, ended = _parts(html)
+    order = "<b>买 6758 ソニーグループ：100 股</b>"
+    assert order in top and "<span class='chip'>状态不明</span>" in _row(top, order)
+    assert "<summary>另有 3 条等登记状态不明的单</summary>" in later and "开盘</summary>" not in later
+    buy, sell, fix = "<b>买入 6758 ソニーグループ", "<b>卖出全部 7203 トヨタ自動車", "<b>固定 1482 对冲版美国 7〜10 年国债：678 口"
+    assert MO.UNK_LATER_BUY in _row(later, buy) and MO.UNK_LATER not in _row(later, buy)
+    assert MO.UNK_LATER in _row(later, sell) and MO.UNK_LATER in _row(later, fix)
+    assert all(x not in top + ended for x in (buy, sell, fix))
+    assert "· 10/16 开盘" not in later and "· 10/19 开盘" not in later           # 还没读的那条不再写平常的「什么时候」
+    assert _badge_ok(html, tag, now) == 4                                       # 单 + 3 条指令：与收盘前一样都算
+    _named(html)

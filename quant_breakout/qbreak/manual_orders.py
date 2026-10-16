@@ -73,6 +73,8 @@ GROUP_LAST_S = 180                      # 整组撤单：收盘（15:30）前这
 RUN_AT = dt.time(7, 40)                 # 早上决策的运行时刻（与 mac_login.RUN_AFTER / launchd 的 07:40 相同）：解除不买回从这之后第一次决策起生效
 NEXT_DECISION = "下一次决策（交易日 07:40）起生效"   # 不知道现在几点时的写法；知道 → next_decision(now)「下一次决策（10/19 07:40）起生效」
 UNK_LATER = "先登记那笔状态不明的单（见通知），登记之后的下一次决策处理"   # 盘中前面有一笔下单结果不明 → 剩下的指令（执行器 now_phase；登记之前执行器一次都不跑，不是「明天开盘」；2026-10-14 复核）
+UNK_LATER_BUY = ("先登记那笔状态不明的单（见通知）；登记之后：买到的部分照记，没买到 → 这条指令结束（只做一次）")   # 已下单的手动买入 / 加仓，
+#                                         它的单状态不明：登记 0 股 → 对账时指令结束（只做一次），不是「下一次决策处理」（面板「交易」；复核 4，2026-10-16）
 HALT_WAIT_MSG = "HALT 中：解除后照原样执行"   # HALT 期间等着的手动指令的说明（2026-10-13：以前一直写「等执行器下单」）
 HALT_DONE_MSG = "HALT 已解除 → 照原样执行"
 # HALT 期间读到的闲置资金比例 / 固定口数（读到就生效；2026-10-14）。D1 之后不只等下一次决策：解除时还没照它排过单的，盘中面板马上叫执行器
@@ -3958,7 +3960,7 @@ __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEF
            "block_text", "FIX_WAIT", "fix_status_text", "core_pending", "core_wait", "NEXT_DECISION", "next_decision", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "HALT_CORE_AFTER", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "busy_today", "OPEN_ST",
            "corefix_clear_text", "resume_info", "wait_word", "wait_text", "fix_applied", "corefix_pending", "allin_busy_text", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text", "when_for", "morning_behind",
            "next_window", "due", "cancel_due", "CANCEL_UNTIL", "grp_wait_stale", "cancel_cids", "handling_cids", "group_prune",
-           "RULE_TEXT", "UNK_LATER", "NOW_NO_CANCEL", "NOW_FILLED_NO_CANCEL", "NOW_BUY_LAPSED", "NOW_SELL_WITHDRAWN", "now_sell_withdrawn", "now_lapsed", "now_expired", "now_cancel_why",
+           "RULE_TEXT", "UNK_LATER", "UNK_LATER_BUY", "NOW_NO_CANCEL", "NOW_FILLED_NO_CANCEL", "NOW_BUY_LAPSED", "NOW_SELL_WITHDRAWN", "now_sell_withdrawn", "now_lapsed", "now_expired", "now_cancel_why",
            "now_due", "status_text", "rolled_over", "rolled_text", "msg_text", "entry_why", "buy_size", "requests_path", "position_pct", "target_shares", "adjust_plan",
            "cap_text", "fmt_target", "describe", "active", "lines", "signal_text", "core_pct_now",
            "fee_jp", "core_cost", "sell_estimate", "sale_note", "est_lines", "yen_px", "TAX_PCT", "LABEL", "STATUS", "REASON_TEXT"]

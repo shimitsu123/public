@@ -1212,6 +1212,7 @@ NOW_SUPERSEDED = "被盘中的新单取代"                  # 等开盘后的�
 OK_NOTE = ("与模型相同", "被新的固定口数取代", "手动指令已撤回", "一起撤", "不是错误", "已撤回", "分钟后再试", NOW_SUPERSEDED)
 OPEN_AT = {"tachibana": dt.time(9, 5), "paper": dt.time(9, 25)}   # 等开盘后的买单什么时候下（立花 09:05 / 09:20；模拟账户 09:25 前后的开盘撮合）
 PAPER_OPEN_END = dt.time(11, 30)                     # 模拟账户当天的开盘撮合到这之前（之后 → 下一次早上的运行照旧撮合）
+PAPER_RUN_T = dt.time(7, 40)                         # 早上的运行（launchd；过了开盘撮合窗口的模拟账户单在这次照旧撮合）
 TRADE_HEAD = "★ 交易"                               # 交易问题的推送标题开头（level = warn；经济威胁提醒不用它）
 NO_PATH_S = 600                                      # 过了该下的时刻这么久还没有执行路径 →「今天该下但没有执行路径」（U4）
 UNK_CLOSED = ("状态不明：可能已经成交（交易所已收盘，没成交的部分已失效）。先去立花的注文一覧核对，再在 Mac 对话里登记 —— "
@@ -1661,16 +1662,44 @@ def paper_queued(o) -> bool:
     return s == "DEFERRED" or (s == "SENT" and (_g(o, "phase") or "morning") == "morning")
 
 
-def _act_at(row: dict, o: dict, now: dt.datetime, paper: bool, f: dt.date | None) -> dt.datetime | None:
+def _paper_rerun_at(now: dt.datetime, f: dt.date, book: dict | None, halt: bool) -> dt.datetime:
+    """模拟账户开盘撮合的单（paper_queued）成交日 11:30 之后还没撮合 → 哪次早上的运行按成交日的开盘价照旧撮合（run_bar 的 _paper_open）：
+      今天是成交日之后的交易日（今天早上的运行还没完成）：07:40 之前 → 今天 07:40 的运行；
+        07:40 之后、15:30 之前、没有 HALT → 面板补跑（Trigger._catchup_due，07:45〜15:30）的那次运行 = 现在（与 _instr_row / _core_row /
+        panel 的 nd_open「早上的运行没完成：模拟账户面板会自动补跑」同一个假定；复核 4，2026-10-16：以前 07:40 之后一律写「等下个交易日
+        07:40 的运行」，补跑却在今天把它们撮合了）；
+      别的（成交日当天 11:30 之后 / HALT 中 / 15:30 之后 / 休市日）→ 下一个交易日 07:40。"""
+    from . import manual_orders as MO
+    today = now.date()
+    if today > f and is_trading_day(today):
+        if now.time() < PAPER_RUN_T:
+            return _at(today, PAPER_RUN_T)
+        if not halt and now.time() < MO.CANCEL_UNTIL and MO.morning_behind(book, now):
+            return now
+    return _at(next_trading_day(today), PAPER_RUN_T)
+
+
+def _paper_rerun_text(o, at: dt.datetime, now: dt.datetime, f: dt.date) -> str:
+    """_paper_rerun_at 的说明：哪天的开盘撮合没做成 → 哪次运行按成交日的开盘价撮合（复核 4：成交日不是今天时写成交日，
+    以前写「今天的开盘撮合」「按那天的开盘价」—— 撮合按的是成交日的开盘价，不是那次运行那天的）。"""
+    buy = _g(o, "status") == "DEFERRED"                   # 等开盘后的买单：按撮合那一刻的钱（钱够才买）
+    head = ("今天的开盘撮合（09:25〜11:30）没下成" if buy and now.date() == f
+            else f"成交日 {f:%m/%d} 的开盘撮合（09:25〜11:30）没{'下' if buy else '做'}成")
+    run = (f"{at:%m/%d %H:%M} 的运行" if at.date() > now.date() else f"今天 {at:%H:%M} 的运行" if at > now
+           else "今天早上的运行（还没完成：面板会自动补跑）")
+    return f"{head} → {run}按 {f:%m/%d} 的" + ("开盘价照旧撮合（钱够才买）" if buy else "正式开盘价照旧撮合")
+
+
+def _act_at(row: dict, o: dict, now: dt.datetime, paper: bool, f: dt.date | None, book: dict | None = None,
+            halt: bool = False) -> dt.datetime | None:
     """会下的单什么时候下：盘中的 = 发出的时刻；在交易所的 = 发出的时刻（没有 → 成交日 09:00）；等开盘后的 = 立花 09:05 / 模拟账户 09:25；
-    模拟账户开盘撮合的单（排队的寄付单与等开盘后的买单：paper_queued）成交日 11:30 之后还没撮合 → 下一次早上的运行（复核 3，2026-10-16：
-    以前只有等开盘后的买单这样算，同一个窗口的寄付单还写在「今天要成交的单」里）；计划 / 被挡的早上的单 = 成交日 09:00。"""
+    模拟账户开盘撮合的单（排队的寄付单与等开盘后的买单：paper_queued）成交日 11:30 之后还没撮合 → 那次早上的运行（_paper_rerun_at；
+    复核 3，2026-10-16：以前只有等开盘后的买单这样算，同一个窗口的寄付单还写在「今天要成交的单」里）；计划 / 被挡的早上的单 = 成交日 09:00。"""
     s, today = o.get("status"), now.date()
     if row["phase"] == "now":
         return _tsj(o.get("sent_at")) or (_at(f, OPEN_T) if f else None)
     if paper and paper_queued(o) and f is not None and (today > f or (today == f and now.time() >= PAPER_OPEN_END)):
-        nd = today if today > f and is_trading_day(today) and now.time() < dt.time(7, 40) else next_trading_day(today)
-        return _at(nd, dt.time(7, 40))
+        return _paper_rerun_at(now, f, book, halt)
     if s in AT_EXCH + ("ERROR",):
         return _tsj(o.get("sent_at")) or (_at(f, OPEN_T) if f else None)
     if f is None:
@@ -1725,19 +1754,19 @@ def outlook(book: dict | None, waiting=(), now: dt.datetime | None = None, *, ta
     for o in cur:
         row = _order_row(o, now=now, paper=paper, tag=tag, halt=halt, asked=asked, casc=casc, unf=unf, f=f)
         if row["state"] == "will":
-            row["act_at"] = _act_at(row, o, now, paper, f)
+            row["act_at"] = _act_at(row, o, now, paper, f, b, halt)
+            stale = paper and paper_queued(o) and f is not None and row["act_at"] is not None and (
+                now.date() > f or (now.date() == f and now.time() >= PAPER_OPEN_END))   # 开盘撮合的窗口过了：那次早上的运行撮合
             if stop and paper_queued(o):
                 nd = next_trading_day(now.date())        # 今天的开盘撮合不做（公司行为 / 开盘价超出制限値幅）→ 明早的运行按日线撮合
-                row.update(state="later", act_at=_at(nd, dt.time(7, 40)),   # （复核 F3，2026-10-16：以前还写「今天 09:25」，面板误推「没有执行路径」）
+                row.update(state="later", act_at=_at(nd, PAPER_RUN_T),   # （复核 F3，2026-10-16：以前还写「今天 09:25」，面板误推「没有执行路径」）
                            reason=f"今天不做开盘撮合（{stop}）：{nd:%m/%d} 07:40 的运行按今天的正式开盘价撮合")
             elif row["act_at"] is not None and row["act_at"].date() > now.date():
                 row["state"] = "later"
-                if paper and o.get("status") == "DEFERRED":    # 今天的开盘撮合过了 11:30 还没下：不再写 07:40 存下的旧说明
-                    row["reason"] = (f"今天的开盘撮合（09:25〜11:30）没下成 → {row['act_at']:%m/%d %H:%M} 的运行按那天的开盘价照旧撮合"
-                                     "（钱够才买）")
-                elif paper and paper_queued(o):                # 排队的寄付单同一个窗口：没撮合成 → 那次运行按成交日的正式开盘价撮合（复核 3）
-                    row["reason"] = (f"成交日 {f:%m/%d} 的开盘撮合（09:25〜11:30）没做成 → {row['act_at']:%m/%d %H:%M} 的运行按 "
-                                     f"{f:%m/%d} 的正式开盘价照旧撮合")
+                if stale:                                  # 不再写 07:40 存下的旧说明；寄付单与等开盘后的买单同一个窗口（复核 3）
+                    row["reason"] = _paper_rerun_text(o, row["act_at"], now, f)
+            elif stale and now.date() > f:                 # 成交日之后的早上：今天 07:40 / 补跑的那次运行按成交日的开盘价撮合（复核 4）
+                row["reason"] = _paper_rerun_text(o, row["act_at"], now, f)
         rows.append(row)
         orders[row["ref"]] = row
     items = {}
@@ -1758,7 +1787,10 @@ def outlook(book: dict | None, waiting=(), now: dt.datetime | None = None, *, ta
             if x is not None:
                 rows.append(x)
                 items[x["ref"]] = x
-        unread_fix = {r.get("ticker") for r, seen in recs if not seen and r.get("kind") == "corefix"}
+        unread_fix = {r.get("ticker") for r, seen in recs                     # 还没读、会改这只固定口数的指令（那一行就是它）：已经点了撤回的、
+                      if not seen and r.get("kind") == "corefix" and r.get("id") not in gone_ids and not r.get("fund_for")}
+        #                                                   「全部换成」同批的不算（与 MO.core_fixed / corefix_pending 同一个过滤；复核 4，2026-10-16：
+        #                                                   以前撤回了的固定口数也把还没照它调的那一行藏掉，今天开盘后 / 盘中就下的写成「等下一次决策」）
         try:                                               # 读了、还没照它调的固定口数（corefix_pending；D1）：没有指令行 → 补一行
             pend = MO.corefix_pending(b, None, now)
         except Exception:                                  # noqa: BLE001
