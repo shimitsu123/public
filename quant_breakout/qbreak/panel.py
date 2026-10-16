@@ -1275,6 +1275,13 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
     byc = {str(x.get("cid")): x for x in orders}
     jobs = LO.cancel_jobs(book, waiting, now, G)            # 还在处理的撤单：盖着的单不给「撤单」（同一组同时只有一个撤单；简化 2026-10-16）
     cfix = MO.core_fixed(book, tag) if G or any(x.get("kind") == "core" and x.get("side") == "BUY" for x in orders) else {}
+    lkg: dict = {}                                          # 每一组：靠这一组卖单的钱、已经发出的买单（LO.fund_linked：整组撤单的范围里也有它们，
+    lk_of: dict = {}                                        #   「同一组 N 笔」与确认框、执行器的汇总同一个数；复核 8 2026-10-16）
+    for gl_ in {tuple(v) for v in G.values()}:
+        xs = [str(x.get("cid")) for x in LO.fund_linked([byc[c] for c in gl_ if c in byc], orders, book)]
+        lkg[gl_[0]] = xs
+        for c in xs:
+            lk_of.setdefault(c, gl_[0])
     rows = []
     for o in orders:
         core = o.get("kind") == "core"
@@ -1348,20 +1355,25 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
         if note and chip.startswith("不会下单"):              # 执行器排单时写的打算（「开盘后按始値检查、减股再下」）已经不会发生：标成原先的（2026-10-15 复核）
             note = "原先：" + note
         gm = G.get(cid) or []
+        lk = lkg.get(gm[0], []) if gm else []
         og = f" og' data-g='{escape(gm[0])}" if gm else ""  # 同一组的每一行：左边一条线 + 「同一组 N 笔」+ 还有哪几笔
-        gchip = f" <span class='chip'>同一组 {len(gm)} 笔</span>" if gm else ""
+        gchip = f" <span class='chip'>同一组 {len(gm) + len(lk)} 笔</span>" if gm else ""
         gline = ""
+
+        def _gtxt(x) -> str:
+            xn = int(x.get("sent_qty") or x.get("qty") or 0)
+            xq = f"{xn:,} {'口' if x.get('kind') == 'core' else '股'}"
+            return ("买" if x.get("side") == "BUY" else "卖") + " " + NM.qty(x.get("ticker"), xq) + "（" + LO._st_txt(x) + "）"
         if gm:
-            gl = []
-            for c in gm:
-                x = byc.get(c)
-                if x is None or c == cid:
-                    continue
-                xn = int(x.get("sent_qty") or x.get("qty") or 0)
-                xq = f"{xn:,} {'口' if x.get('kind') == 'core' else '股'}"
-                gl.append(("买" if x.get("side") == "BUY" else "卖") + " " + NM.qty(x.get("ticker"), xq)
-                          + "（" + LO._st_txt(x) + "）")
+            gl = [_gtxt(byc[c]) for c in gm if c in byc and c != cid]
+            gl += [_gtxt(byc[c])[:-1] + "，靠这一组卖单的钱买的、不是一起下的）" for c in lk if c in byc]
             gline = f"<div class='small'>{escape('同一组（一起下的）还有：' + '、'.join(gl))}</div>"
+        elif cid in lk_of:                                  # 靠一组卖单的钱、已经发出的买单：整组撤单把它算在那一组里
+            gchip = " <span class='chip'>算在同一组里</span>"
+            ss = [_gtxt(byc[c]) for c in G.get(lk_of[cid]) or [] if c in byc and byc[c].get("side") == "SELL"]
+            tail = ("那一组整组撤单会一起撤这一笔" if LO.grp_why(o, book, now, paper) is None
+                    else "这一笔撤不了：那一组整组撤单时卖单因此不撤")
+            gline = f"<div class='small'>{escape('靠这一组卖单的钱买的（不是一起下的）：' + '、'.join(ss) + '；' + tail)}</div>"
         rows.append(f"<div class='li{og}'><div class='grow'><b>{'买' if o.get('side') == 'BUY' else '卖'} {escape(NM.qty(o.get('ticker'), f'{n:,} {unit}'))}"
                     f"</b> <span class='chip'>{escape(chip)}</span>{gchip}"
                     + gline
@@ -1435,7 +1447,8 @@ def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.da
             solo = keep_txt or "只撤这笔卖单"                    # 有靠它的钱的买单：与「只撤卖单（买 X 不会下）」同一句
         out += f" data-solo='{escape(solo)}'"
         if o.get("side") == "SELL":                        # 「只撤这笔卖单」、同一组的买单还可能花钱：与单笔的确认框同一行 ★（复核 6 2026-10-16）
-            hs = [LO._hold_star(c, k, t, byc.get(c), book, now, paper, set(asked or ()), "只撤卖单" if keep_txt else "只撤这笔卖单")
+            hs = [LO._hold_star(c, k, t, byc.get(c), book, now, paper, set(asked or ()), "只撤卖单" if keep_txt else "只撤这笔卖单",
+                                pre="同一组的" if c in gm else "靠这一组卖单的钱的")   # 靠这一组卖单的钱、已经发出的买单也挡（复核 8）
                   for c, k, t in LO._solo_holds(o, orders, book, now, G)]
             if hs:
                 out += f" data-soloh='{escape(chr(10).join(hs))}'"

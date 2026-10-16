@@ -3546,10 +3546,11 @@ def _cancel_preview(a, tag: str, book, paper: bool) -> int:
     这笔单所在的一组每一笔会怎样（与面板确认框同一个 live_ops.group_lines）。账本读不了 → 3；cid 不在账本里 → 1。
     复核 3（2026-10-16）：照 cancel <cid> --group 实际做的写（group_lines cli：整组撤单、执行器 --group 的范围；以前按面板的「只撤这一笔」写、
     还提面板的按钮）；面板写的撤单还在处理 / 还没读、盖着这笔 → 写明这次什么都不撤（同一组同时只有一个撤单：live_ops.cancel_conflict，
-    与 cancel_book 命令行同一个判断；简化 2026-10-16）。"""
+    与 cancel_book 命令行同一个判断；简化 2026-10-16）。
+    复核 8（2026-10-16）：用 live_ops.cli_plan（与 cancel_book 命令行同一个）：命令行 --group 在等的那一条 → 写「再运行会接着查那一条」；
+    一条命令里点了几组、彼此有关 → 后面的写「这次什么都不撤」与理由；面板 / 手机写的、在等的 → 这次什么都不撤（命令行不接过来做）。"""
     import json
     from qbreak import live_ops as LO
-    from qbreak import manual_orders as MO
     from qbreak.calendar_jp import now_jst
     try:
         b_ = json.loads(Path(book).read_text(encoding="utf-8"))
@@ -3561,10 +3562,9 @@ def _cancel_preview(a, tag: str, book, paper: bool) -> int:
         return 3
     now = now_jst()
     orders = [x for x in b_.get("orders") or [] if isinstance(x, dict)]
-    try:                                                  # 与 cancel_book 命令行同一个判断：面板写的撤单还在处理 / 还没读、盖着这笔 → 这次不撤
-        jobs = LO.cancel_jobs(b_, MO.unseen(tag, b_), now)
-    except Exception:                                     # noqa: BLE001  只是说明
-        jobs = []
+    plan = LO.cli_plan(b_, a.cancel, now, tag, group=True)   # 与 cancel_book 命令行同一个判断（复核 8 2026-10-16）：还在处理的撤单盖着的 /
+    #   同一条命令里有关的 → 这次不撤；命令行在等的那一条 → 再跑同一条命令会接着查（以前这里写「这次什么都不撤」，再跑却接着撤了卖单）
+    its = {it.get("id"): it for it in plan["items"]}
     rc = 0
     for c in dict.fromkeys(str(x) for x in a.cancel):
         o = next((x for x in orders if str(x.get("cid")) == c), None)
@@ -3575,8 +3575,12 @@ def _cancel_preview(a, tag: str, book, paper: bool) -> int:
         side = "买" if o.get("side") == "BUY" else "卖"
         g0 = LO.group_of(o, orders, b_)
         xl = LO.fund_linked(g0, orders, b_) if len(g0) > 1 else []   # 靠这一组卖单的钱、已经发出的买单：--group 一起撤（复核 6）
-        why = LO.cancel_conflict({"cid": c}, b_, jobs) if jobs else None
-        if len(g0) < 2:                                   # 不在一组里：照 cancel <cid>（与 --group 做的一样）写，卖单写靠它的钱的买单会怎样（复核 6）
+        why = plan["skip"].get(c)
+        it = its.get(plan["part"].get(c))
+        if it is not None and str(it.get("cid") or "") != c:   # 是同一条命令里另一笔接着做的那一条的一部分
+            print(f"{side} {_lab_cancel(o.get('ticker'))}（{c}）：是 cancel {it.get('cid')} --group 那一条的一部分（见那一笔）")
+            continue
+        if len(g0) < 2 and it is None:                    # 不在一组里：照 cancel <cid>（与 --group 做的一样）写，卖单写靠它的钱的买单会怎样（复核 6）
             if why:
                 print(f"★ cancel {c} 这次什么都不撤：{why}")
                 continue
@@ -3590,7 +3594,13 @@ def _cancel_preview(a, tag: str, book, paper: bool) -> int:
         if why:
             print(f"★ cancel {c} --group 这次什么都不撤：{why}")
             continue
-        for ln in LO.group_lines(o, orders, b_, now, paper, tag, cli=True):
+        if c in plan["note"]:
+            print(plan["note"][c])
+        if it is not None:                                # 命令行在等立花确认买单撤单的那一条：同一条命令接着查
+            t0 = LO._tsj(it.get("grp_wait0")) or now
+            print(f"再运行 cancel {c} --group 会接着查那一条（在等的买单只查状态、不再发撤单；立花确认撤掉了（没成交）才撤卖单；"
+                  f"{t0:%H:%M} 开始等，最多到 {LO.wait_end(t0):%H:%M}，到了还没确认就给立花网站的链接、卖单不撤）")
+        for ln in LO.group_lines(o, orders, b_, now, paper, tag, cli=True, waiting=(it or {}).get("grp_wait") or ()):
             print(ln)
     return rc
 
