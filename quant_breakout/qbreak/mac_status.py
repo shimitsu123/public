@@ -80,7 +80,8 @@ def _book_item(tag: str, now: dt.datetime) -> dict:
         from .live_ops import held_now
         pj = held_now(book, tag, now=now)
         if eq and pj.get("has") and pj.get("equity") is not None:
-            eq += f"（{'含今天' if pj.get('day_word') == '今天' else '含 ' + str(pj.get('day_word'))}已成交约 ¥{float(pj['equity']):,.0f}）"
+            hd_ = pj.get("head") or ("含今天已成交" if pj.get("day_word") == "今天" else "含 " + str(pj.get("day_word")) + "已成交")
+            eq += f"（{hd_}约 ¥{float(pj['equity']):,.0f}）"
     except Exception:                                        # noqa: BLE001  展示用
         pass
     if cmp.get("comparable") and not cmp.get("same") and not cmp.get("early") and not cmp.get("explained"):

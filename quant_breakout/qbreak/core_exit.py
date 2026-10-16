@@ -246,10 +246,13 @@ def _row(k: str, text: str, sub: str = "", *, hot: bool = False, fired: bool = F
     return {"k": k, "text": text, "sub": sub, "chips": list(chips or []), "hot": hot, "fired": fired}
 
 
-def build(t: str, sm: dict | None, book: dict | None, *, px: float | None = None, lot: int = 1) -> dict | None:
+def build(t: str, sm: dict | None, book: dict | None, *, px: float | None = None, lot: int = 1,
+          fixed: int | None = None) -> dict | None:
     """一只拿着的核心 ETF → {"t", "name", "mode", "label", "key", "asof", "asof_md", "tiles": [...], "rows": [...], "never",
     "notes": [...], "hot"}；没拿着 → None。sm = 执行器的汇总（out/live_unified_<账本>.json）；book = 账本（state/live_unified_<账本>.json）。
-    tiles：{"label", "value", "sub", "tone", "dots"?}；rows：{"k", "text", "sub", "chips", "hot", "fired"}（格子里有的数不再放 chips）。"""
+    tiles：{"label", "value", "sub", "tone", "dots"?}；rows：{"k", "text", "sub", "chips", "hot", "fired"}（格子里有的数不再放 chips）。
+    fixed = 手动固定的口数（manual_orders.core_fixed；2026-10-16 复核：固定的 1482 以前也写「美股转牛 / 股债相关 ≥ 0 → 下个开盘全部卖」，
+    其实执行器把固定的 ETF 留在固定口数、不看牛熊 / 股债相关）→ 只一行「手动固定 N 口：规则不会自动卖」，没有格子、没有部分卖。"""
     sm, book = sm or {}, book or {}
     st = book.get("state") or {}
     cur = int((st.get("core_units") or {}).get(t, 0) or 0)
@@ -261,6 +264,18 @@ def build(t: str, sm: dict | None, book: dict | None, *, px: float | None = None
     spec = IC.MODES.get(mode, IC.MODES["K0"])
     label = ic.get("label") or IC.LABELS.get(mode, mode)
     key = spec["core_index"].get(t)
+    if fixed is not None:                                     # 手动固定：规则（牛熊 / 股债相关 / 换 ETF）不动它
+        n = int(fixed)
+        sub = "要卖用「固定口数…」（0 口）或「恢复按规则」"
+        if n != cur:
+            sub = f"现在 {cur:,} 口：执行器照固定口数调到 {n:,} 口；" + sub
+        rows = [_row("手动固定", f"手动固定 {n:,} 口：规则不会自动卖（不看美股牛熊 / 股债相关）", sub)]
+        asof = st.get("last_date")
+        return {"t": t, "name": _own(t), "mode": mode, "label": label, "key": key, "asof": asof, "asof_md": _md(asof),
+                "tiles": [], "rows": rows,
+                "never": "不会因为：美股牛熊、股债相关、它自己跌多少（手动固定；核心 ETF 没有止损）",
+                "never_tags": ["美股牛熊", "股债相关", "自己跌（没有止损）"],
+                "notes": ["你自己点「固定口数…」改口数、「恢复按规则」之后才照规则调；HALT 时什么单都不下"], "hot": False}
     mk = sm.get("market") or {}
     tiles, rows, notes = [], [], []
     np_ = sm.get("new_pos") or {}

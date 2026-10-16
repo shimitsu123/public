@@ -324,15 +324,16 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
     try:
         pjr = LO.held_now(b, tag, now=now)
     except Exception:                                      # noqa: BLE001  只是文字：算不了就当没有
-        pjr = {"by_ticker": {}, "new": [], "sold_out": []}
+        pjr = {"by_ticker": {}, "new": [], "sold_out": [], "day_word": "今天"}
     hn_by, hn_new, hn_gone = pjr.get("by_ticker") or {}, set(pjr.get("new") or []), set(pjr.get("sold_out") or [])
+    hn_dw = pjr.get("day_word") or "今天"                  # 周末 / 早上的运行之前：「10/16（周五）」（2026-10-16 复核）
 
     def hn_mark(s: dict, t: str, held: int) -> None:      # 卖这一边的第一个原因：今天买进（对账前不算持仓）/ 今天已卖出全部
         x = hn_by.get(t) or {}
         if held <= 0 and t in hn_new and x.get("text"):
-            _no(s, x["text"], "今天买进")
+            _no(s, x["text"], f"{hn_dw}买进")
         elif t in hn_gone and x.get("text"):
-            _no(s, x["text"], "今天已卖出")
+            _no(s, x["text"], f"{hn_dw}已卖出")
     pend = st.get("pending_exit") or {}
     hist = st.get("history") or []
     eq = float(hist[-1][1]) if hist else 0.0
@@ -352,7 +353,7 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
         fix_pend = {}
     fixed = MO.core_fixed(b, tag)
     plan_live = MO.live_plan(b)
-    sl = MO.slots(b, tag)
+    sl = MO.slots(b, tag, now=now)                        # 名额含今天已成交（2026-10-16 复核）
     el = sm.get("eligibility") or {}
     el_block = {str(x.get("code")): str(x.get("why") or "") for x in el.get("blocked") or [] if isinstance(x, dict)}
     el_core = {str(x.get("code")): str(x.get("why") or "") for x in el.get("core") or [] if isinstance(x, dict)}
@@ -589,7 +590,10 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
                  + f"）+ 拿着的还能加仓 {len(adds)} 只"
                  + _miss([r for r in held_rows if not r["buy"]["n"]], "buy")
                  + f"；钱：现在能用的现金 ¥{cash_:,.0f} + 能卖来凑钱的核心 ETF 约 ¥{f_all:,.0f}（钱是共用的：买了一只，别的就少了）")
-        why_s = f"拿着的 {len(held_rows)} 只里今天还能卖 {s_n} 只" + _miss([r for r in held_rows if not r["sell"]["n"]], "sell")
+        shown = ({r["t"] for r in held_rows} - hn_gone) | hn_new   # 拿着的只数含今天已成交（与「持仓」角标同一个数；2026-10-16 复核）；
+        #                                                             held0 / sakin 仍按开盘前的持仓（差金決済）
+        why_s = (f"拿着的 {len(shown)} 只" + ("（含今天已成交）" if shown != {r["t"] for r in held_rows} else "")
+                 + f"里今天还能卖 {s_n} 只" + _miss([r for r in out.values() if r["t"] in shown and not r["sell"]["n"]], "sell"))
     why_k = (f"买 {b_n} + 卖 {s_n}" + (f" − 既能买又能卖的 {one} 只（同一只当天执行器只下一笔：只算一次）" if one else "")
              + "；换别的股票不受差金決済限制（例 3）")
     headline = f"今天还能：买 {b_n} 次 · 卖 {s_n} 次 · 共 {k_n} 次"

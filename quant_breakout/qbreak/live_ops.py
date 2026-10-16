@@ -98,6 +98,34 @@ def _hn_md(d: dt.date) -> str:
     return f"{d.month}/{d.day}（周{wd}）"
 
 
+def hn_sp(word: str | None) -> str:
+    """时点后面接中文时的写法：以数字结尾（「明早 07:40」「下个交易日 10/19（周一）07:40」）后面留一个空格，否则不留
+    （「下一次执行器运行对账后正式记账」；2026-10-16 复核：以前一律加空格 →「下一次执行器运行 对账…」）。"""
+    w = str(word or "")
+    return w + (" " if w[-1:].isdigit() else "")
+
+
+def hn_head(day_word: str | None) -> str:
+    """「含今天已成交」/「含 10/16（周五）已成交」（成交日不是今天时；面板首页、桌面页、--status、mac_status、恢复按规则的说明同一句）。"""
+    dw = str(day_word or "今天")
+    return "含今天已成交" if dw == "今天" else f"含 {dw}已成交"
+
+
+def ledger_close_note(pj: dict | None, st: dict | None) -> str:
+    """「当日 / 累计损益按账本（10/15 收盘）；今天已成交的在 下个交易日 10/19（周一）07:40 对账之后才算进来（总权益那一格已经含）」
+    （面板的损益卡片、Mac 本机页面的 KPI 同一句；2026-10-16 复核：总权益含今天，当日 / 累计没说是账本的数）。"""
+    pj = pj or {}
+    ld = str((st or {}).get("last_date") or "")
+    try:
+        d = dt.date.fromisoformat(ld[:10])
+        lw = f"{d.month}/{d.day}"
+    except ValueError:
+        lw = ld or "—"
+    sw = pj.get("when_sp") or hn_sp(pj.get("when") or "下一次执行器运行")
+    return (f"当日 / 累计损益按账本（{lw} 收盘）；{pj.get('day_word') or '今天'}已成交的在{sw}对账之后才算进来"
+            "（总权益那一格已经含）")
+
+
 def _hn_yen(x: float) -> str:
     """「¥10,020」/「−¥18,535」（负号写在 ¥ 前面）。"""
     return ("−¥" if x < 0 else "¥") + f"{abs(x):,.0f}"
@@ -118,16 +146,18 @@ def _hn_base(st0: dict) -> dict:
             "state": st0, "pos": st0.get("pos") or {}, "core_units": st0.get("core_units") or {},
             "cash": cash, "cash_ledger": cash, "equity": eq, "equity_ledger": eq, "new": [], "sold_out": [],
             "realized": None, "realized_partial": False, "missed": False, "approx": False, "settle": "", "note": "",
-            "when": "下一次执行器运行", "day_word": "今天", "paper": True}
+            "when": "下一次执行器运行", "when_sp": "下一次执行器运行", "day_word": "今天", "head": hn_head("今天"), "paper": True}
 
 
 def held_now(book: dict | None, tag: str | None = None, *, now: dt.datetime | None = None,
              snap: dict | None = None) -> dict:
     """账本 + 当前决策里已知的成交 = 「现在拿着什么」的对账前预计（只读：只用于展示与写入前的预览；执行器、记账、规则一律不看它）。
     返回 {has, fill_day, settle_day, fills, by_ticker, pending, state, book, pos, core_units, cash, cash_ledger, equity,
-    equity_ledger, new, sold_out, realized, realized_partial, missed, approx, settle, note, when, day_word, paper}：
+    equity_ledger, new, sold_out, realized, realized_partial, missed, approx, settle, note, when, when_sp, day_word, head, paper}：
       settle =「明早 07:40」/「下个交易日 10/19（周一）07:40」/「今天 07:40」/ 对账时点已过（missed）的那句；when = 句子里用的时点
-      （missed 时「下一次执行器运行」）；day_word =「今天」/「10/16（周五）」（成交日不是今天时）；
+      （missed 时「下一次执行器运行」）；when_sp = hn_sp(when)（后面直接接「对账…」）；day_word =「今天」/「10/16（周五）」（成交日不是今天时）；
+      head = hn_head(day_word)（「含今天已成交」/「含 10/16（周五）已成交」）；fills 每笔带 at = 成交时刻的下界（快照来的 = 快照的 fills_at；
+      别的 = 成交日 09:00、发出时刻 sent_at、单号末尾 -N时分秒 里最晚的；立花对照卡判断快照是不是早于成交用）；
       fills 按对账的顺序（先卖后买、个股先于核心 ETF：live_unified._reconcile）；state 是投影后的 state（只换 pos / core_units /
       pending_exit / cash_jpy；history、trades、core_trades、plan 类不动 —— 不编造收盘点、不进 tax_ytd）；book = {**账本, state: 投影,
       _held_now: 本结果}，对它再调一次直接返回同一个结果（幂等，不再叠加）。
@@ -149,6 +179,37 @@ def held_now(book: dict | None, tag: str | None = None, *, now: dt.datetime | No
     return {**res, "state": state, "book": {**bk, "state": state, "_held_now": dict(res)}}
 
 
+def _hn_ts(v) -> dt.datetime | None:
+    """「2026-10-16T15:45:00+09:00」/「2026-10-16 15:45:00」→ 不带时区的 JST 时刻；读不了 → None。"""
+    try:
+        x = dt.datetime.fromisoformat(str(v).strip().replace(" ", "T"))
+    except (TypeError, ValueError):
+        return None
+    if x.tzinfo is not None:
+        from .calendar_jp import JST
+        x = x.astimezone(JST).replace(tzinfo=None)
+    return x
+
+
+def _hn_fill_at(o: dict, F: dt.date, snap_at: dt.datetime | None) -> str:
+    """这笔成交的时刻（下界）：快照来的 → 快照的 fills_at（那份快照里已经有它）；别的 → 成交日 09:00、发出时刻 sent_at、
+    单号末尾 -N时分秒（盘中的单）里最晚的（单上没记成交时刻：成交不会早于开盘、也不会早于发出）。"""
+    if snap_at is not None:
+        return snap_at.isoformat(sep=" ", timespec="seconds")
+    ts = [dt.datetime.combine(F, dt.time(9, 0))]
+    sa = _hn_ts(o.get("sent_at"))
+    if sa is not None and sa.date() == F:
+        ts.append(sa)
+    cid = str(o.get("cid") or "")
+    k = cid.rfind("-N")
+    if k >= 0 and len(cid) >= k + 8 and cid[k + 2:k + 8].isdigit():
+        try:
+            ts.append(dt.datetime.combine(F, dt.time(int(cid[k + 2:k + 4]), int(cid[k + 4:k + 6]), int(cid[k + 6:k + 8]))))
+        except ValueError:
+            pass
+    return max(ts).isoformat(sep=" ", timespec="seconds")
+
+
 def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict | None) -> dict:
     from . import manual_orders as MO
     from . import names as NM
@@ -162,13 +223,15 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
     if F is None:
         return out
     R = next_trading_day(F)
-    out.update(fill_day=F.isoformat(), settle_day=R.isoformat(), day_word="今天" if today == F else _hn_md(F))
+    dw = "今天" if today == F else _hn_md(F)
+    out.update(fill_day=F.isoformat(), settle_day=R.isoformat(), day_word=dw, head=hn_head(dw))
     if today < F:                                         # 成交日之前不可能有成交
         return out
     missed = today > R or (today == R and now.time() >= HN_SETTLE_T)
     settle = HN_MISSED if missed else ("今天 07:40" if today >= R else _at(next_word(today), "07:40"))
     sw = "下一次执行器运行" if missed else settle          # 句子里「… 对账后正式记账」前面的时点
-    out.update(missed=missed, settle=settle, when=sw)
+    out.update(missed=missed, settle=settle, when=sw, when_sp=hn_sp(sw))
+    sws = hn_sp(sw)
     ld = st0.get("last_date")
     orders = [o for o in bk.get("orders") or [] if isinstance(o, dict) and o.get("decided_on") == ld]
     srow: dict = {}
@@ -182,6 +245,7 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
         snap = snap if isinstance(snap, dict) else {}
         if str(snap.get("fills_at") or "")[:10] == F.isoformat():
             srow = {str(r.get("cid")): r for r in snap.get("fills") or [] if isinstance(r, dict) and r.get("cid")}
+    snap_at = _hn_ts(snap.get("fills_at")) if srow else None
     got, pending = [], []
     for idx, o in enumerate(orders):
         try:
@@ -289,7 +353,8 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
         any_approx = any_approx or approx
         fills.append({"cid": o.get("cid"), "ticker": t, "label": NM.label(t), "side": side, "kind": kind, "qty": int(q),
                       "px": float(px), "fee": float(fee), "reason": o.get("reason") or "", "phase": o.get("phase") or "",
-                      "status": o.get("status") or "", "src": src, "pnl": pnl, "approx": approx})
+                      "status": o.get("status") or "", "src": src, "pnl": pnl, "approx": approx,
+                      "at": _hn_fill_at(o, F, snap_at if src == "snapshot" else None)})
     order = list(dict.fromkeys(f["ticker"] for f in fills))
     new, sold = [], []
     for t in order:
@@ -320,19 +385,18 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
             sp = [f["pnl"] for f in fs if f["side"] == "SELL"]
             if t in sold:
                 rz = ("已实现约 " + _hn_yen(sum(sp)) + "；") if sp and None not in sp else ""
-                parts.append(f"{lab}：{dw}已卖出全部 {ns:,} {u} @ ¥{spx:,.2f}（{rz}{sw} 对账后正式记账）")
+                parts.append(f"{lab}：{dw}已卖出全部 {ns:,} {u} @ ¥{spx:,.2f}（{rz}{sws}对账后正式记账）")
             else:
                 parts.append(f"{lab}：{dw}卖出 {ns:,} {u}，现在 {cur:,} {u}（对账前）")
         if nb:
             bpx = sum(f["qty"] * f["px"] for f in fs if f["side"] == "BUY") / nb
             if t in new:
-                parts.append(f"{lab}：{dw}买进 {nb:,} {u} @ ¥{bpx:,.2f}（{sw} 对账之后才算持仓）")
+                parts.append(f"{lab}：{dw}买进 {nb:,} {u} @ ¥{bpx:,.2f}（{sws}对账之后才算持仓）")
             else:
-                parts.append(f"{lab}：{dw}买进 {nb:,} {u} @ ¥{bpx:,.2f}，现在 {cur:,} {u}（{sw} 对账后正式记账）")
+                parts.append(f"{lab}：{dw}买进 {nb:,} {u} @ ¥{bpx:,.2f}，现在 {cur:,} {u}（{sws}对账后正式记账）")
         led = led_core.get(t, 0) if kind == "core" else int((led_pos.get(t) or {}).get("shares") or 0)
         by[t] = {"kind": kind, "buy": nb, "sell": ns, "net": nb - ns, "now": cur, "ledger": led, "text": "；".join(parts)}
-    head = "含今天已成交" if today == F else f"含 {_hn_md(F)}已成交"
-    note = [head + (f"（{HN_MISSED}）" if missed else f"（{settle} 对账后正式记账）")]
+    note = [out["head"] + (f"（{HN_MISSED}）" if missed else f"（{hn_sp(settle)}对账后正式记账）")]
     if paper and any(f["phase"] != "now" for f in fills):
         note.append(HN_PAPER_OPEN)
     if not paper:
@@ -3589,4 +3653,4 @@ __all__ = ["CANCELLABLE", "STATUS_TEXT", "CANCEL_HINT", "CANCEL_HINT_CORE", "RES
            "solo_holds", "hold_pre", "cli_resume", "cli_plan", "CLI_SRC",
            "CORE_SRC", "src_of", "src_note", "src_line", "wrote", "fix_name", "OUT_WORD", "TRADE_HEAD", "NO_PATH_S", "skip_wont",
            "asked_cids", "instr_due", "outlook", "row_text", "act_text", "trade_key", "new_wont", "not_today",
-           "fill_day_of", "held_now", "how_text", "unknown_candidates", "unknown_text", "resolve_draft", "reconcile_report", "adopt", "save_book"]
+           "fill_day_of", "held_now", "hn_sp", "hn_head", "ledger_close_note", "how_text", "unknown_candidates", "unknown_text", "resolve_draft", "reconcile_report", "adopt", "save_book"]

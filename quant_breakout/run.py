@@ -4218,7 +4218,7 @@ def _live_unified_run(a, opened: list) -> int:
         from qbreak import live_ops as _LO
         pj_ = _LO.held_now(b_, tag, now=now_jst())        # 含今天已成交（对账前的预计，只展示；2026-10-16）
         st = pj_["state"]
-        cash_ = f"现金 ¥{float(pj_['cash']):,.0f}" + (f"（含今天已成交；账本 ¥{float(pj_['cash_ledger']):,.0f}）" if pj_["has"] else "")
+        cash_ = f"现金 ¥{float(pj_['cash']):,.0f}" + (f"（{pj_['head']}；账本 ¥{float(pj_['cash_ledger']):,.0f}）" if pj_["has"] else "")
         print(f"账本 {book}（更新 {b_.get('updated', '—')}）\n决策日 {st.get('last_date') or '—'}；{cash_}")
         if pj_["has"]:
             print(f"  （{pj_['note']}）")
@@ -4229,12 +4229,12 @@ def _live_unified_run(a, opened: list) -> int:
             stop_ = f"¥{float(p_['stop_px']):,.2f}" if p_.get("stop_px") is not None else "—"   # 今天买进的：止损价在对账之后的决策才有
             print(f"  持仓 {NM.qty(t, sh)}  成本 ¥{float(p_['entry_px']):,.2f}  止损 {stop_}  "
                   f"买入 {p_['entry_date']}" + ("  （待卖）" if t in (st.get("pending_exit") or {}) else "")
-                  + ("  （今天买进，对账前）" if p_.get("today") else ""))
+                  + (f"  （{pj_['day_word']}买进，对账前）" if p_.get("today") else ""))   # 周末：「10/16（周五）买进」（2026-10-16 复核）
         for t, u_ in (st.get("core_units") or {}).items():
             if int(u_):
                 print(f"  核心 {NM.qty(t, f'{int(u_):,} 口')}")
         for t, x_ in (pj_.get("by_ticker") or {}).items():
-            print(f"  今天已成交 {x_['text']}")
+            print(f"  已成交（对账前） {x_['text']}")
         for o in b_.get("orders", []):
             lim = f" 限价 ¥{o['limit']:,g}" if o.get("limit") else ""
             q_ = f"{int(o['qty'] or 0):,} {'口' if o.get('kind') == 'core' else '股'}"
@@ -4686,20 +4686,23 @@ def cmd_manual(a) -> int:
     now = now_jst()
     when = MO.when_for(now, b_)                               # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘 / 早上的运行没完成（G9）
     if a.action == "list":
-        pct = MO.position_pct(st)
         print(f"账本 {book}（{'模拟账户' if paper else '立花'}；决策日 {st.get('last_date') or '—'}）")
         from qbreak import live_ops as _LO
         pj_ = _LO.held_now(b_, tag, now=now)                # 今天已成交、还没对账的（2026-10-16）
         if pj_["has"]:
-            print(f"  今天已成交：{'；'.join(x_['text'] for x_ in pj_['by_ticker'].values())}（{pj_['note']}）")
-        for t, p_ in (st.get("pos") or {}).items():
-            q = (st.get("pending_exit") or {}).get(t)
+            print(f"  已成交（对账前）：{'；'.join(x_['text'] for x_ in pj_['by_ticker'].values())}（{pj_['note']}）")
+        pst_ = pj_["state"]                                   # 持仓行含今天已成交（与 --status / 面板同一个数；2026-10-16 复核：以前照列卖光的、没有买进的）
+        pct = MO.position_pct(pst_)
+        for t, p_ in (pst_.get("pos") or {}).items():
+            q = (pst_.get("pending_exit") or {}).get(t)
             sh_ = f"{int(p_['shares']):,} 股"
             print(f"  {_labq(t, sh_)}，约占权益 {pct.get(t) if pct.get(t) is not None else '—'}%"
-                  + (f"（在卖出：{MO.REASON_TEXT.get(q, q)}）" if q else ""))
-        for t, u_ in (st.get("core_units") or {}).items():
+                  + (f"（在卖出：{MO.REASON_TEXT.get(q, q)}）" if q else "")
+                  + (f"（{pj_['day_word']}买进，对账前）" if p_.get("today") else ""))
+        for t, u_ in (pj_.get("core_units") or {}).items():
             if int(u_):
-                print(f"  核心 {_labq(t, f'{int(u_):,} 口')}")
+                print(f"  核心 {_labq(t, f'{int(u_):,} 口')}"
+                      + (f"（{pj_['day_word']}买进，对账前）" if t in (pj_.get("new") or []) else ""))
         man = b_.get("manual") or {}
         sm = {**man, "items": sorted((man.get("items") or {}).values(), key=lambda x: x.get("at", ""), reverse=True)}
         print(f"  闲置资金比例：规则目标额的 {float(man.get('core_pct', 100.0)):g}%")
@@ -4735,8 +4738,9 @@ def cmd_manual(a) -> int:
                 print(f"★ HALT 期间改的闲置资金比例 / 固定口数 {len(hc_)} 条，解除后照它买卖 ETF（{MO.HALT_CORE_AFTER}）：{_ann(MO.halt_core_line(hc_))}"
                       "（要改回：manual core --pct N / manual corefix <ETF> --clear）")
         print(f"现在写的买卖：{when}下单（{MO.RULE_TEXT}）")
-        s_ = MO.slots(b_, tag)
-        print(f"个股名额：空 {s_['free']} 个（拿着 {s_['held']} + 排定买入 {s_['buys']}，上限 {s_['max']} 只）")
+        s_ = MO.slots(b_, tag, now=now, with_today=True)
+        print(f"个股名额：空 {s_['free']} 个（拿着 {s_['held']} + 排定买入 {s_['buys']}，上限 {s_['max']} 只）"
+              + ("（含今天已成交）" if s_.get("today") else ""))
         try:                                                  # 今天还能买几次 / 卖几次（D6；2026-10-15 用户要求 3：与面板交易页的卡片同一个数；不取价 → 按收盘估）
             from qbreak import trade_room as TR
             sm_ = read_json(paths.out_dir() / f"live_unified_{tag}.json", {}) or {}

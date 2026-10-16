@@ -121,7 +121,7 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
     title = page_title(tag)
     real = tag == "tachibana"                                # 真钱（立花本番）：醒目的标识
     now = now_jst()
-    from .live_ops import held_now
+    from .live_ops import held_now, ledger_close_note
     pj = held_now(book, tag, now=now)                        # 含今天已成交的持仓 / 现金（对账前的预计，只展示；2026-10-16）
     upd = now.strftime("%Y-%m-%d %H:%M JST")
     badge = "<span class='real'>真钱（立花本番）</span>" if real else ""
@@ -157,7 +157,7 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
         base_txt = f"起始 {_yen(capital)}" if abs(inv - float(capital)) < 1 else f"投入本金 {_yen(inv)}（起始 {_yen(capital)}）"
         hn_e = hn_c = ""
         if pj.get("has"):                                    # 主数字含今天已成交；当日 / 累计仍按收盘的权益序列（混进去会失真）
-            hd = "含今天已成交" if pj.get("day_word") == "今天" else f"含 {pj.get('day_word')}已成交"
+            hd = pj.get("head") or ("含今天已成交" if pj.get("day_word") == "今天" else f"含 {pj.get('day_word')}已成交")
             hn_e = f"<span class='muted'>{escape(hd)} · 账本 {_yen(eq)}</span>"
             hn_c = f"<span class='muted'>{escape(hd)} · 账本 {_yen(pj.get('cash_ledger'))}</span>"
         eq_show = pj.get("equity") if pj.get("has") and pj.get("equity") is not None else eq
@@ -173,7 +173,9 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
             f"<div><span class='muted'>决策日 → 下一成交日</span><b>{escape(str(st.get('last_date') or '—'))}</b>"
             f"<span class='muted'>→ {escape(str(sm.get('fill_day') or '—'))}</span></div>"
             f"<div><span class='muted'>对照</span><b style='font-size:15px' class='{'' if cmp.get('same') or cmp.get('early') or cmp.get('explained') or not cmp.get('comparable') else 'neg'}'>"
-            f"{escape(cmp_txt)}</b></div></div></section>")
+            f"{escape(cmp_txt)}</b></div></div>"
+            + (f"<div class='muted'>{escape(ledger_close_note(pj, st))}</div>" if pj.get("has") else "")   # 当日 / 累计是账本收盘的数（2026-10-16 复核）
+            + "</section>")
         if sm.get("blocked"):
             body.append(f"<section class='card warn'><b>★ 没有下单：</b>{escape(_ann(sm['blocked']))}</section>")
         for n_ in sm.get("notices") or []:                    # 立花的通知（例如 API 新版本的发布日）
@@ -229,17 +231,18 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
         pst = pj["state"]                                    # 含今天已成交（卖光的不列、今天买进的列出：止损价在对账之后的决策才有）
         pend = pst.get("pending_exit") or {}
         hnb = pj.get("by_ticker") or {}
+        hn_core = f"（{escape(pj.get('day_word') or '今天')}有成交，对账前）"   # 周末：「10/16（周五）有成交」（2026-10-16 复核）
 
         def _note(t: str) -> str:
             if t in pend:
                 return "待卖（" + escape(REASON_TEXT.get(pend[t]) or _RS.get(pend[t], str(pend[t]))) + "）"
-            return "今天有成交（对账前）" if t in hnb else ""
+            return f"{escape(pj.get('day_word') or '今天')}有成交（对账前）" if t in hnb else ""
         pos = "".join(f"<tr><td>{_tcell(t)}</td><td class='n'>{int(p['shares']):,} 股</td><td class='n'>{_yen(p.get('entry_px'))}</td>"
                       f"<td class='n'>{_yen(p.get('stop_px'))}</td><td>{escape(str(p.get('entry_date') or '—'))}</td>"
                       f"<td>{_note(t)}</td></tr>"
                       for t, p in (pst.get("pos") or {}).items())
         pos += "".join(f"<tr><td>{_tcell(t)}</td><td class='n'>{int(u):,} 口</td><td class='n'>—</td><td class='n'>—</td>"
-                       f"<td>—</td><td>闲置资金 ETF{'（今天有成交，对账前）' if t in hnb else ''}</td></tr>"   # 名字已在代码格（以前备注里再写一遍「纳斯达克 100（1545）」）
+                       f"<td>—</td><td>闲置资金 ETF{hn_core if t in hnb else ''}</td></tr>"   # 名字已在代码格（以前备注里再写一遍「纳斯达克 100（1545）」）
                        for t, u in (pst.get("core_units") or {}).items() if int(u))
         hn_txt = (f"<div class='muted'>{escape(pj['note'])}</div><ul>" + "".join(f"<li>{escape(x['text'])}</li>" for x in hnb.values())
                   + "</ul>") if pj.get("has") else ""

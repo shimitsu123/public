@@ -107,16 +107,19 @@ def test_submit_stock_new_and_trimmed():
 
 def test_fund_holdings_and_fund_all_use_the_projection():
     b = _book()
-    fh = MO.fund_holdings(b, "paper")
+    fh = MO.fund_holdings(b, "paper", now=AT)
     assert fh["cash"] == round(10020.1175 * 0.99)
     hold = {r["t"]: r for r in fh["hold"]}
     assert "1545.T" not in hold and hold["1482.T"]["cur"] == 650
-    assert {"1545.T", "1482.T"} <= set(fh["busy"])
+    assert not {"1545.T", "1482.T"} & set(fh["busy"])                        # 收盘后写的凑钱在对账之后的决策里执行：今天有成交的也能凑（复核）
+    fh10 = MO.fund_holdings(b, "paper", now=AT.replace(hour=10))              # 成交日盘中：当天动不了（busy_today）
+    assert {"1545.T", "1482.T"} <= set(fh10["busy"])
     fa = MO.fund_all(b, "paper", "9984.T")
     assert "1545.T" in [t for t, _w in fa["skip"]] and "1545.T" not in [t for t, _c, _p in fa["sells"]]
     b = _book_stocks()
-    fa = MO.fund_all(b, "paper", "9984.T")
-    assert fa["blocked"] and "7203" in fa["blocked"] and "对账之后才算持仓" in fa["blocked"] and NM.label("7203.T") in fa["blocked"]
+    fa = MO.fund_all(b, "paper", "9984.T")                                   # 今天买进的个股：不挡，执行时一起卖（复核：以前挡住）
+    assert fa["blocked"] is None and fa["bought"] == ["7203.T"] and "7203.T" not in [t for t, _c, _p in fa["sells"]]
+    assert "7203.T" in MO.fund_holdings(b, "paper", now=AT)["busy"]           # 今天买进的个股对账之前写不了卖出：不拿来凑
 
 
 def test_new_texts_carry_names():
@@ -152,4 +155,4 @@ def test_desktop_page_and_status_with_a_stock_bought_today(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "止损 —" in out and "（今天买进，对账前）" in out and "含今天已成交" in out
     assert f"持仓 {NM.qty('7203.T', '100 股')}" in out and f"持仓 {NM.qty('6758.T', '200 股')}" in out
-    assert "今天已成交 1545 纳斯达克 100：今天已卖出全部 4,110 口" in out and "核心 1545" not in out
+    assert "已成交（对账前） 1545 纳斯达克 100：今天已卖出全部 4,110 口" in out and "核心 1545" not in out

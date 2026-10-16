@@ -214,7 +214,8 @@ def test_calendar_words():
     assert "（今天 07:40 对账后正式记账）" in pj["note"] and not pj["missed"]
     pj = LO.held_now(b, "paper", now=dt.datetime(2026, 10, 19, 9, 0, tzinfo=JST))     # 早上的运行没做完
     assert pj["missed"] and "早上的运行还没完成" in pj["note"] and pj["has"]
-    assert "下一次执行器运行 对账后正式记账" in pj["by_ticker"]["1545.T"]["text"]
+    assert "下一次执行器运行对账后正式记账" in pj["by_ticker"]["1545.T"]["text"]           # 时点不以数字结尾 → 不加空格（复核）
+    assert "下一次执行器运行 对账" not in pj["by_ticker"]["1545.T"]["text"] and pj["when_sp"] == "下一次执行器运行"
     pj = LO.held_now(b, "paper", now=dt.datetime(2026, 10, 15, 16, 0, tzinfo=JST))   # 成交日之前：不可能有成交
     assert pj["has"] is False
     h = _b1016()                                                               # 祝日：10/30（周五）决策 → 11/2 成交 → 11/3 文化の日 → 11/4

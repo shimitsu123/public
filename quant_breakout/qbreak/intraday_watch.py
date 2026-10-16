@@ -426,7 +426,8 @@ def evaluate(tag: str, now: dt.datetime | None = None, fetch=None, prev: dict | 
         q = quotes.get(t)
         df, why = _daily(t)
         if ps.get("today") or ps.get("stop_px") is None:     # 今天买进（对账前）：止损价、离场线在对账之后的决策才有 → 不算、不推送
-            row.update(today=True, status=f"{pj.get('day_word') or '今天'}买进（对账前）：离场线在 {pj.get('when') or '下一次执行器运行'} 的决策之后才有")
+            w_ = pj.get("when_sp") or (pj.get("when") or "下一次执行器运行")   # 「在下个交易日 10/19（周一）07:40 的决策」/「在下一次执行器运行的决策」（复核：以前多空格）
+            row.update(today=True, status=f"{pj.get('day_word') or '今天'}买进（对账前）：离场线在{w_}的决策之后才有")
             if q:
                 row.update(px=q.get("px"), at=q.get("at"))
             doc["holdings"].append(row)

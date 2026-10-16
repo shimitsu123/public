@@ -529,7 +529,7 @@ def test_todays_fills_bought_has_no_exit_lines_and_sold_is_gone(monkeypatch):
     doc = IW.run_once("paper", AT, fetch=fetch, send=lambda s, t, level="info": sent.append((s, t)))
     hs = {h["ticker"]: h for h in doc["holdings"]}
     assert set(hs) == {"8306.T"} and hs["8306.T"]["today"] and not hs["8306.T"]["push_ok"] and hs["8306.T"].get("now") is None
-    assert "今天买进（对账前）：离场线在 下个交易日 10/19（周一）07:40 的决策之后才有" in hs["8306.T"]["status"]
+    assert "今天买进（对账前）：离场线在下个交易日 10/19（周一）07:40 的决策之后才有" in hs["8306.T"]["status"]   # 「在」后面不加空格（复核）
     assert not any("卖点" in s for s, _t in sent) and not any("8306" in s for s, _t in sent)
     v = IW.view(doc, AT)
     assert v["hold"]["8306.T"].startswith("盘中：今天买进（对账前）") and "6758.T" not in v["hold"]

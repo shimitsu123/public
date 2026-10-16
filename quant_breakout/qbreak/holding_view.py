@@ -311,7 +311,7 @@ def overlay(hv: dict | None, pj: dict | None) -> dict:
     bk = pj.get("book") or {}
     cpx = {**((bk.get("state") or {}).get("core_last") or {}), **((bk.get("core_rule") or {}).get("px") or {})}
     when = "下一次执行器运行" if pj.get("missed") else (pj.get("settle") or "下一次执行器运行")
-    later = f"止损价、趋势标签在 {when} 的决策之后才有"
+    later = f"止损价、趋势标签在{when}{' ' if when[-1:].isdigit() else ''}的决策之后才有"   # 「在明早 07:40 的决策」/「在下一次执行器运行的决策」（复核：以前多空格）
 
     def pct(n: int, px) -> float | None:
         px = _f(px)
