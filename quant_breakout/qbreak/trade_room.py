@@ -517,7 +517,9 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
             if not fwhy and (x is bb or fcur > 0):         # 固定口数照样能下（盘中马上，执行器按账本 + 今天的成交算口数）
                 if id(x) not in via_fix:
                     via_fix.add(id(x))
-                    x["via"] = "「固定口数…」" + ("（0 口 = 全部卖出）" if x is s else "")
+                    x["via"] = ("「固定口数…」（0 口 = 全部卖出）" if x is s
+                                else "「买入…」（= 固定口数）" if fcur <= 0 and t not in fixed   # 「持仓」那只下面的按钮这时叫「买入…」（整合复核 2）
+                                else "「固定口数…」")
                 _note(x, f"「卖出全部」/「调仓…」（换算成闲置资金比例）今天不行：{why}；「固定口数…」照样能下"
                          f"（按账本 + 今天的成交算：现在 {fcur:,} 口）")
                 return
@@ -591,7 +593,11 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
         r["chip"] = chip(r)
     # overall：卖 = 拿着的、今天还能卖的只数；买 = 还能买的新股只数（名额与钱都够）+ 拿着的还能加仓的只数；共 = 两者之和
     #（同一只既能买又能卖 → 只算一次：执行器同一只当天只下一笔）
-    held_rows = [r for r in out.values() if r["held"] > 0]
+    held0_set = {r["t"] for r in out.values() if r["held"] > 0}   # 开盘前（账本）拿着的
+    shown = (held0_set - hn_gone) | hn_new               # 拿着的只数含今天已成交（与「持仓」角标同一个数；2026-10-16 复核）；
+    #                                                      held0 / sakin 仍按开盘前的持仓（差金決済）
+    held_rows = [r for r in out.values() if r["t"] in shown]   # 卖 / 加仓 / 只算一次的总数也按这一份（整合复核 2：以前按开盘前的持仓数，
+    #                                                      今天买进、能用「固定口数…」卖的不算，今天已卖光的反而算「还能加仓」）
     sells = [r for r in held_rows if r["sell"]["n"]]
     adds = [r for r in held_rows if r["buy"]["n"]]
     ok_c = sorted((r for r in cand_rows if r["buy"]["n"]), key=lambda r: (lot_cost(r["px"] or 0, MO.LOT), r["t"]))
@@ -627,9 +633,7 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
                  + f"）+ 拿着的还能加仓 {len(adds)} 只"
                  + _miss([r for r in held_rows if not r["buy"]["n"]], "buy")
                  + f"；钱：现在能用的现金 ¥{cash_:,.0f} + 能卖来凑钱的核心 ETF 约 ¥{f_all:,.0f}（钱是共用的：买了一只，别的就少了）")
-        shown = ({r["t"] for r in held_rows} - hn_gone) | hn_new   # 拿着的只数含今天已成交（与「持仓」角标同一个数；2026-10-16 复核）；
-        #                                                             held0 / sakin 仍按开盘前的持仓（差金決済）
-        why_s = (f"拿着的 {len(shown)} 只" + (f"（{pjr.get('head') or LO.hn_head(hn_dw)}）" if proj or shown != {r["t"] for r in held_rows} else "")
+        why_s = (f"拿着的 {len(shown)} 只" + (f"（{pjr.get('head') or LO.hn_head(hn_dw)}）" if proj or shown != held0_set else "")
                  + f"里今天还能卖 {s_n} 只" + _miss([r for r in out.values() if r["t"] in shown and not r["sell"]["n"]], "sell"))
     why_k = (f"买 {b_n} + 卖 {s_n}" + (f" − 既能买又能卖的 {one} 只（同一只当天执行器只下一笔：只算一次）" if one else "")
              + "；换别的股票不受差金決済限制（例 3）")

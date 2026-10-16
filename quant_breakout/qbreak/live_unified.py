@@ -85,13 +85,21 @@ CANCEL_ASKED = "你写了撤单（等撤单的运行处理）：执行器不发"
 ASKED_UNSENT = "你写了撤单（撤单的运行没处理到）：还没发到交易所，执行器没发 —— 记为已撤"   # 对账时（_reconcile、复核 8）
 
 
+def unsent_local(o) -> bool:
+    """执行器还没发到交易所的单：计划 / 等开盘后，或适配器挡下、没有注文番号的（BLOCKED：登录失败 / 取不到现价… 会再试）——
+    整组撤单的 live_ops.grp_why 把后者当成计划撤（整合复核 2，2026-10-16：asked_unsent 以前只认 PLANNED / DEFERRED，
+    写了撤单的 BLOCKED 手动买入对账时又留到下一次决策重新买）。"""
+    g = LO._g
+    return not g(o, "broker_id") and g(o, "status") in ("PLANNED", "DEFERRED", "BLOCKED")
+
+
 def asked_unsent(o, asked=()) -> bool:
     """执行器还没发出的单（计划 / 等开盘后）你写了撤单、撤单的运行却没处理到（面板暂停 / 撤单的运行失败 / 过了 15:30）：
     发单前被 CANCEL_ASKED 挡下的，或对账那一刻还写着撤单（asked：live_ops.asked_cids）→ True = 当成你撤了
     （_reconcile 记 CANCELLED、手动指令撤回；不是系统原因，不留到下一次决策重新买 —— 复核 8，2026-10-16：以前对账记成
     「开盘后补单没有运行」、手动买入第二天又买）。"""
     g = LO._g
-    if g(o, "status") not in ("PLANNED", "DEFERRED") or g(o, "broker_id") or int(g(o, "filled_qty") or 0) > 0:
+    if not unsent_local(o) or int(g(o, "filled_qty") or 0) > 0:
         return False
     return str(g(o, "note") or "").startswith(CANCEL_ASKED) or str(g(o, "cid")) in {str(x) for x in asked or ()}
 BLOCK_RETRY = ("立花の銘柄マスタ取不到", "登录失败，没发单", "没连上立花，没发单")   # 立花适配器 BLOCKED：请求根本没发出、过一会儿可能就好（G15）
@@ -152,7 +160,7 @@ def system_miss(o) -> str | None:
         return "早上错过寄付（执行器跑晚了）" if n.startswith(LATE_BUY_NOTE) else None
     if s == "PLANNED":
         return "单建好了却没有发出（运行中断？）"
-    if s != "BLOCKED" or block_kind(n) == "no" or "立花前日終値" in n or n.startswith(("dry-run", "单笔金额", "数量为 0")):
+    if s != "BLOCKED" or block_kind(n) == "no" or "立花前日終値" in n or n.startswith(("dry-run", "单笔金额", "数量为 0", CANCEL_ASKED)):
         return None
     return n or "被挡"
 
@@ -3037,7 +3045,7 @@ class UnifiedExecutor:
         eng.begin_day(k)
         act = self._active()
         gap = eng.ex["JP"].max_entry_gap_pct
-        asked = self._asked_now() if any(o.status in ("PLANNED", "DEFERRED") for o in act) else set()
+        asked = self._asked_now() if any(unsent_local(o) for o in act) else set()
         for n in sorted(range(len(act)), key=lambda n: (act[n].side == "BUY", act[n].kind == "core", n)):
             o = act[n]
             q, px = fills.get(o.cid, (0, 0.0))

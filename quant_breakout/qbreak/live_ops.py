@@ -282,6 +282,8 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
             r = srow.get(str(o.get("cid")))
             if r is not None and not r.get("error") and int(r.get("filled_qty") or 0) > q:
                 q, px, src = int(r["filled_qty"]), float(r.get("avg_px") or px), "snapshot"
+            if note_full(o) and q < tgt:                  # 撤单时立花回已经全部成交（账本还是 SENT）：按发出数算（价格是约数；整合复核 2）
+                q, src = tgt, "cancel_check"
             if st_ in ("SENT", "PARTIAL") and q < tgt and not is_gone(o):   # 立花那边已经失效 / 被拒：不再等成交（成交过的照算）
                 pending.append({**pend, "left": tgt - q})
             if q <= 0:
@@ -1003,12 +1005,22 @@ def _ord_txt(o) -> str:
     return _side(o) + " " + _labq(_g(o, "ticker"), q_)
 
 
+CANCEL_FULL = "撤单时已经全部成交"                     # 撤单引擎查到单已经全部成交（_cancel_one 写进说明；账本状态照旧 SENT / PARTIAL，明早对账才记）
+NOTE_DONE = "已成交（撤单时查到，对账前的预计）"        # 这样的单在交易页 / 撤单按钮 / 持仓的说法（2026-10-16 整合复核 2）
+
+
+def note_full(x) -> bool:
+    """撤单时立花回「已经全部成交」、账本还是 SENT / PARTIAL 的单（说明里有 CANCEL_FULL）：持仓（held_now 按发出数算成交）、交易页（已结束）、
+    撤单按钮（不用撤）、手动指令的检查（pj_done）同一个判断（2026-10-16 整合复核 2：以前只看快照，撤单时查到的仍当成「等成交、能撤」）。"""
+    return _g(x, "status") in CANCELLABLE and CANCEL_FULL in str(_g(x, "note") or "")
+
+
 def _fq(x) -> tuple[int, int, bool]:
     """(已成交, 发出的, 全部成交了吗)：FILLED / 撤单时已经全部成交 / 成交数 ≥ 发出的 = 全部成交（复核 2 2026-10-16：部分成交不再算全部成交）。
     成交数含立花成交快照里的（snap_q：只在 snap_book 给面板 / 确认框的副本上有；执行器与撤单引擎的账本没有这个键）。"""
     n = int(_g(x, "sent_qty") or _g(x, "qty") or 0)
     q = max(int(_g(x, "filled_qty") or 0), int(_g(x, "snap_q") or 0))
-    full = _g(x, "status") == "FILLED" or "撤单时已经全部成交" in str(_g(x, "note") or "") or (n > 0 and q >= n)
+    full = _g(x, "status") == "FILLED" or CANCEL_FULL in str(_g(x, "note") or "") or (n > 0 and q >= n)
     return (max(q, n) if full else q), n, full
 
 
@@ -2168,8 +2180,8 @@ def _order_row(o: dict, *, now, paper, tag, halt, asked, casc, unf, f) -> dict:
         return put("wont", note or STATUS_TEXT.get(s, s), "reject" if s == "REJECTED" else "missed", chip="")
     if is_gone(o):                                        # 撤单时立花回已经失效 / 被拒：不在交易所了（成交过的部分已记；2026-10-16 整合复核）
         return put("done", note, "gone")
-    if s in CANCELLABLE and o.get("snap_q") and _fq(o)[2]:   # 立花成交快照：已经全部成交（账本明早对账才记；snap_book）
-        return put("done", "", "snapfill", chip=SNAP_DONE)
+    if s in CANCELLABLE and _fq(o)[2]:                    # 立花成交快照 / 撤单时查到：已经全部成交（账本明早对账才记；snap_book、note_full）
+        return put("done", "", "snapfill", chip=SNAP_DONE if o.get("snap_q") else NOTE_DONE)
     if cid in asked:
         return put("done", "撤单中", "asked", chip="撤单中")
     closed = not paper and bool(tag) and day is not None and (day < today or (day == today and now.time() >= CLOSE_T))
@@ -2337,7 +2349,8 @@ def outlook(book: dict | None, waiting=(), now: dt.datetime | None = None, *, ta
             if r2["state"] == "will":
                 row = r2
                 row.update(cls="stuck", chip=STUCK_CHIP, reason=_stuck_text(o, cur, gwait, paper))
-        elif row["cls"] == "asked" and o.get("status") in UNSENT and (pzc or now.time() >= CLOSE_T or (f is not None and now.date() > f)):
+        elif row["cls"] == "asked" and (o.get("status") in UNSENT or (o.get("status") == "BLOCKED" and not o.get("broker_id"))) and (
+                pzc or now.time() >= CLOSE_T or (f is not None and now.date() > f)):   # 被挡、没发出的（BLOCKED）同样（live_unified.unsent_local）
             row["reason"] = ASKED_UNSENT_TXT                # 撤单的运行今天不会来：执行器照样不发，对账时记为已撤（复核 8）
         if row["state"] == "will":
             row["act_at"] = _act_at(row, o, now, paper, f, b, halt, pzc)
@@ -2516,8 +2529,8 @@ def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
         return f"状态是「{STATUS_TEXT.get(st, st)}」：只撤还挂着的单（已下单 / 部分成交）或执行器还没发出的单（计划 / 等开盘后）"
     if not unsent and GONE in str(_g(o, "note") or ""):   # 撤单时立花回已经失效 / 被拒：单不在交易所了（不给「撤单」；简化 2026-10-16）
         return f"立花那边已经{gone_word(o)}（撤单时查到），不用撤"
-    if not unsent and _g(o, "snap_q") and _fq(o)[2]:      # 立花成交快照里已经全部成交（只在 snap_book 的副本上：面板 / 确认框）
-        return f"{SNAP_DONE}，不用撤"
+    if not unsent and _fq(o)[2]:                          # 立花成交快照里（只在 snap_book 的副本上：面板 / 确认框）/ 撤单时查到已经全部成交
+        return f"{SNAP_DONE if _g(o, 'snap_q') else NOTE_DONE}，不用撤"
     if not _in_current(o, book):
         return "不是当前决策的单（已经对账过了）"
     f = fill_day_of(book)
@@ -2647,7 +2660,9 @@ def _cancel_one(o, b, paper: bool, now: dt.datetime, source: str, polls: int, re
     code = str((r or {}).get("status_code") or "").strip()   # 应答里没有状态名称（只有 sOrderStatusCode）时按代码补（复核 3 2026-10-16）
     name = str((r or {}).get("status") or "") or {"6": "取消中", "8": "取消失敗"}.get(code, "") or fin
     if r is not None and (fin == "FILLED" or (q is not None and n > 0 and q >= n)):
-        o.note = f"{o.note}；撤单时已经全部成交（{q:,}/{n:,}），撤不了".lstrip("；")[:300]
+        if CANCEL_FULL not in str(o.note or ""):          # 再查一次也不重复写；原说明太长时截短，标记不被 [:300] 截掉（整合复核 2）
+            old = str(o.note or "")[:200]
+            o.note = (f"{old}；" if old else "") + f"{CANCEL_FULL}（{q:,}/{n:,}），撤不了"
         return "skipped", f"已经全部成交（{q:,}/{n:,} {_unit(o)}），撤不了（不用撤；明天早上照常对账）"   # 不算撤单失败
     if fin == "CANCELLED" or (ok and fin in ("EXPIRED", "REJECTED")):   # 撤单受理、单到了终态（成交的比发出的少）
         o.status = "CANCELLED"
@@ -3782,7 +3797,7 @@ __all__ = ["CANCELLABLE", "STATUS_TEXT", "CANCEL_HINT", "CANCEL_HINT_CORE", "RES
            "DEP_OPEN", "SRC_WORD", "blocked_retry", "src_done", "fund_srcs", "orphan", "busy", "src_text", "fund_cascade",
            "cascade_events", "cascade_rows", "deps_of", "next_decision_text", "cancel_hint",
            "GROUP_POLLS", "GROUP_NEUTRAL", "groups", "group_of", "fund_linked", "group_members", "lone_lines", "legacy_rec", "job_cids",
-           "wait_end", "grp_why", "group_view", "group_lines", "ACCEPTED", "DEPK", "FAILED", "GONE", "is_gone", "SNAP_DONE", "snap_book", "gone_word", "still_sells", "legacy_plan", "cancel_scope", "cancel_jobs", "cancel_conflict",
+           "wait_end", "grp_why", "group_view", "group_lines", "ACCEPTED", "DEPK", "FAILED", "GONE", "is_gone", "SNAP_DONE", "NOTE_DONE", "CANCEL_FULL", "note_full", "snap_book", "gone_word", "still_sells", "legacy_plan", "cancel_scope", "cancel_jobs", "cancel_conflict",
            "solo_holds", "hold_pre", "cli_resume", "cli_plan", "CLI_SRC",
            "CORE_SRC", "src_of", "src_note", "src_line", "wrote", "fix_name", "OUT_WORD", "TRADE_HEAD", "NO_PATH_S", "skip_wont",
            "asked_cids", "instr_due", "outlook", "row_text", "act_text", "trade_key", "new_wont", "not_today",
