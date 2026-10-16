@@ -18,6 +18,10 @@
   python -m qbreak.routines desktop <运行记录目录> <对话记录目录> <任务 id=名字（一行一个）>
                                                             → 「OK|NG|WARN|?<TAB>说明」一行一条：本机任务按时跑了没有、有没有卡住的运行
                                                               （桌面版的 scheduled-tasks.json / local_*.json / 对话记录；只读；现在 = QBREAK_ROUTINES_NOW 或真的现在）
+  python -m qbreak.routines allow-check                     → 「OK|NG|?|HINT<TAB>说明」：说明书要运行的 Bash 命令有没有对不上允许规则的（只打印对不上的命令）
+  python -m qbreak.routines allow-missing                   → 对不上的命令要加的规则（JSON 数组，「Bash(…)」；没有 → []）
+     （规则文件 QBREAK_SIM_SETTINGS，默认 <QBREAK_SIM 或 ~/qbreak-sim>/.claude/settings.local.json；任务自己允许过的从
+      QBREAK_DESKTOP_DIR / CLAUDE_CONFIG_DIR 读；2026-10-16 起）
 """
 from __future__ import annotations
 
@@ -372,6 +376,38 @@ def _load_desktop(root: Path) -> tuple[dict, dict, list, str]:
     return tasks, skips, sessions, ""
 
 
+def _stuck_runs(mine: list, projects, now: dt.datetime) -> list[tuple[dt.datetime, str]]:
+    """一个任务的会话里卡住的运行 → [(开始时刻, 停在哪里)]（旧的在前）：没归档、开始 2 小时以上，对话记录最后是还没有结果的工具调用
+    （也已经 2 小时没动），或没有对话记录、开始几秒之后就没有动静、一轮也没做完。"""
+    out = []
+    for s in mine:
+        if s.get("isArchived") is True:
+            continue
+        created = _parse_ts(s.get("createdAt"))
+        if created is None or now - created < STUCK_AFTER:
+            continue
+        tail = _transcript_tail(Path(projects), s.get("cliSessionId") or s.get("sessionId"))
+        if tail is not None:
+            pending, tool, at = tail
+            if not pending or now - (at or created) < STUCK_AFTER:
+                continue
+            where = f"停在工具调用（{tool}）上、没有结果" if tool else "停在工具调用上、没有结果"
+        else:
+            act = _parse_ts(s.get("lastActivityAt")) or created
+            if s.get("completedTurns") or (act - created).total_seconds() > IDLE_S:
+                continue
+            where = "开始几秒之后就没有动静"
+        out.append((created, where))
+    return out
+
+
+def _skips_after(t: dict, skips: dict, tid: str) -> list[tuple[dt.datetime, str]]:
+    """桌面版在最后一次运行之后记的「跳过」[(时刻, 原因)]。"""
+    floor = max([x for x in (_parse_ts(t.get("lastRunAt")), _parse_ts(t.get("lastScheduledFor"))) if x], default=None)
+    recent = [(_parse_ts(x.get("at")), str(x.get("reason") or "")) for x in skips.get(tid, []) if isinstance(x, dict)]
+    return [(a, r) for a, r in recent if a and (floor is None or a > floor)]
+
+
 def desktop_report(root, projects, want: dict, now: dt.datetime, tz=None) -> list[tuple[str, str]]:
     """本机任务（want：任务 id → 中文名）按时跑了没有、有没有卡住的运行 → [("OK"|"NG"|"WARN"|"?", 说明)]。只读；不打印路径、命令、内容。"""
     tasks, skips, sessions, why = _load_desktop(Path(root))
@@ -387,10 +423,7 @@ def desktop_report(root, projects, want: dict, now: dt.datetime, tz=None) -> lis
             continue
         mine = sorted((s for s in sessions if s.get("scheduledTaskId") == tid), key=lambda s: _parse_ts(s.get("createdAt")) or now)
         last_run = _parse_ts(t.get("lastRunAt"))
-        floor = max([x for x in (last_run, _parse_ts(t.get("lastScheduledFor"))) if x], default=None)
-        # 桌面版最近还在记的「跳过」（最后一次运行之后的）
-        recent = [(_parse_ts(x.get("at")), str(x.get("reason") or "")) for x in skips.get(tid, []) if isinstance(x, dict)]
-        recent = [(a, r) for a, r in recent if a and (floor is None or a > floor)]
+        recent = _skips_after(t, skips, tid)                  # 桌面版最近还在记的「跳过」（最后一次运行之后的）
         blocked = [a for a, r in recent if r == "per_task_limit"]
         blocked_now = bool(blocked) and max(blocked) >= now - SKIP_RECENT
         if t.get("enabled") is False:
@@ -414,23 +447,7 @@ def desktop_report(root, projects, want: dict, now: dt.datetime, tz=None) -> lis
             else:
                 out.append(("OK", f"本机任务「{label}」：{lr}（之后没有错过的）"))
         stuck = 0
-        for s in mine:
-            if s.get("isArchived") is True:
-                continue
-            created = _parse_ts(s.get("createdAt"))
-            if created is None or now - created < STUCK_AFTER:
-                continue
-            tail = _transcript_tail(Path(projects), s.get("cliSessionId") or s.get("sessionId"))
-            if tail is not None:
-                pending, tool, at = tail
-                if not pending or now - (at or created) < STUCK_AFTER:
-                    continue
-                where = f"停在工具调用（{tool}）上、没有结果" if tool else "停在工具调用上、没有结果"
-            else:
-                act = _parse_ts(s.get("lastActivityAt")) or created
-                if s.get("completedTurns") or (act - created).total_seconds() > IDLE_S:
-                    continue
-                where = "开始几秒之后就没有动静"
+        for created, where in _stuck_runs(mine, projects, now):
             stuck += 1
             extra = "；之后到点的运行桌面版都跳过了（上一次运行还没结束）" if blocked_now else ""
             out.append(("NG", f"本机任务「{label}」{_mdhm(created)} 那次一直没动（{where}：多半在等权限确认、没人点允许）{extra}"
@@ -451,6 +468,335 @@ def desktop_report(root, projects, want: dict, now: dt.datetime, tz=None) -> lis
                             "和允许规则对不上的第一条命令就会停下等确认、一直等着，之后到点的运行也被挡住 → "
                             "说明书里的命令都要一字不差地在允许规则里（见 routines/README.md）"))
     return out
+
+
+# ────────── 09:30 自检的推送：本机任务今天卡住 / 没跑 / 晚了（2026-10-16；只读，读不到就什么都不说）──────────
+# 用户今天把 ~/qbreak-sim 改回默认的逐项确认：和允许规则对不上的命令会停在权限确认、一直等着（10-12〜10-16 就这样）。
+# routines.sh check 只在有人问时才看 → 交易日 09:30 自检的那条推送里加一行（不改自检的结论：不影响下单，云端后备会做）。
+KINDS = (("sim_daily", "日报"), ("shadow", "影子账户"), ("quarterly", "季度复核"))
+DESKTOP_DEFAULT = "Library/Application Support/Claude/claude-code-sessions"   # 家目录下（routines.sh 同一个默认）
+LATE_AFTER = GRACE                        # 今天的运行比到点晚这么久才开始 = 晚了（Mac 睡着 / 桌面版没开）
+HISTORY_HINT = "在 Mac 对话里问「例行任务今天跑了吗」"
+
+
+def desktop_dir() -> Path | None:
+    """桌面版的运行记录目录：QBREAK_DESKTOP_DIR；没设 → 只在 macOS 上用默认的（别的系统 → None，不看）。"""
+    v = os.environ.get("QBREAK_DESKTOP_DIR", "").strip()
+    if v:
+        return Path(v).expanduser()
+    return Path.home() / DESKTOP_DEFAULT if sys.platform == "darwin" else None
+
+
+def config_dir() -> Path:
+    v = os.environ.get("CLAUDE_CONFIG_DIR", "").strip()
+    return Path(v).expanduser() if v else Path.home() / ".claude"
+
+
+def task_ids(cfg=None) -> dict:
+    """说明书名（sim_daily / shadow / quarterly）→ 本机任务 id：<配置目录>/scheduled-tasks/<id>/SKILL.md 里写着 routines/<名>.md 的
+    （routines.sh check 同一个找法：文件名排序的第一个）。只读、不打印内容；读不了 → 空。"""
+    root = Path(cfg) if cfg is not None else config_dir()
+    try:
+        files = sorted((root / "scheduled-tasks").glob("*/SKILL.md"))
+    except OSError:
+        return {}
+    out: dict = {}
+    for p in files:
+        try:
+            body = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for kind, _ in KINDS:
+            if kind not in out and f"routines/{kind}.md" in body:
+                out[kind] = p.parent.name
+    return out
+
+
+def _hm_jst(t: dt.datetime) -> str:
+    return f"{t.astimezone(JST):%H:%M}"
+
+
+def today_lines(now: dt.datetime, root=None, projects=None, cfg=None, tz=None) -> list[str]:
+    """交易日 09:30 自检推送里的「本机例行任务」行（一个任务最多一行；没问题 / 读不到 / 不是 Mac → []）：
+    卡住的运行（2 小时以上停在没有结果的工具调用上 = 多半在等权限确认）或桌面版一直在跳过它（上一次运行还没结束）；
+    今天到点 30 分钟以上还没跑；今天的运行比到点晚 30 分钟以上才开始。暂停（Paused）的不说（人自己停的；check 里报）。
+    只读；不写路径、命令、内容。"""
+    if root is None:
+        root = desktop_dir()
+        if root is None:
+            return []
+    cfg = Path(cfg) if cfg is not None else config_dir()
+    projects = Path(projects) if projects is not None else cfg / "projects"
+    ids = task_ids(cfg)
+    if not ids:
+        return []
+    tasks, skips, sessions, why = _load_desktop(Path(root))
+    if why:
+        return []
+    today = now.astimezone(JST).date()
+    out: list[str] = []
+    for kind, label in KINDS:
+        tid = ids.get(kind)
+        t = tasks.get(tid) if tid else None
+        if not isinstance(t, dict) or t.get("enabled") is False:
+            continue
+        mine = sorted((s for s in sessions if s.get("scheduledTaskId") == tid), key=lambda s: _parse_ts(s.get("createdAt")) or now)
+        stuck = _stuck_runs(mine, projects, now)
+        blocked = [a for a, r in _skips_after(t, skips, tid) if r == "per_task_limit"]
+        if stuck or (blocked and max(blocked) >= now - SKIP_RECENT):
+            since = stuck[0][0] if stuck else min(blocked)
+            if since.astimezone(JST).date() == today:
+                fix = "在桌面版 Code → Routines 打开那次运行点允许（或停止它）；今天的由云端后备做"
+            else:
+                fix = "在桌面版 Code → Routines 打开那次运行、停止它（不停止，之后到点也不会再跑）；今天的由云端后备做"
+            out.append(f"本机例行任务：{label}卡住了（多半在等权限确认；{_mdhm(since)} 起）→ {fix}；{HISTORY_HINT}")
+            continue
+        expr = t.get("cronExpression")
+        try:
+            fire = next(fires_back(expr, now, tz), None)
+            every_day = str(expr).split()[2:4] == ["*", "*"]
+        except (ValueError, IndexError):
+            continue
+        if fire is None or fire.astimezone(JST).date() != today or now - fire < GRACE:
+            continue                                          # 今天不该跑 / 还没到点 + 30 分钟
+        if every_day and not is_trading_day(today):
+            continue
+        last = _parse_ts(t.get("lastRunAt"))
+        sched = _parse_ts(t.get("lastScheduledFor"))
+        lo = fire - dt.timedelta(minutes=1)
+        ran = (last is not None and lo <= last <= now) or (sched is not None and lo <= sched <= now)
+        if not ran:
+            out.append(f"本机例行任务：{label}今天 {_hm_jst(fire)} 没跑（桌面版没开 / Mac 睡着？）→ 今天的由云端后备做；{HISTORY_HINT}")
+        elif last is not None and last <= now and last - fire >= LATE_AFTER:
+            out.append(f"本机例行任务：{label}今天 {_hm_jst(last)} 才开始（应在 {_hm_jst(fire)}：那时 Mac 睡着 / 桌面版没开 / 前一次运行还没结束？）"
+                       f"→ 那之前的由云端后备做；{HISTORY_HINT}")
+    return out
+
+
+# ────────── 允许规则够不够（2026-10-16；只读）──────────
+# 无人值守的本机任务只有和允许规则对得上的 Bash 命令才自动执行，否则停在权限确认、一直等着（10-12〜10-16）。这里把说明书
+# （sim_daily.md / shadow.md / quarterly.md 的命令、README.md 固定文字里的第 1 步）要运行的 Bash 命令逐条和
+# ~/qbreak-sim/.claude/settings.local.json 的 permissions.allow（+ 桌面版里那个任务自己的 approvedPermissions）对照。
+# 对照法（Claude Code 的规则，近似）：规则 = 一字不差，或以「:*」/「 *」结尾的前缀（* 也可以在中间 = 任意文字）；
+# 用 && / || / ; / | 连起来的命令 → 整条一字不差地在规则里，或拆开之后每一段都对得上（cd 进 ~/qbreak-sim 里的那段不用规则）；
+# 说明书里 <…> 占位的地方（提交信息里的日期）要规则在那里有 *。只打印对不上的命令（仓库里的文字），不打印规则文件的别的内容。
+MANUALS = ("sim_daily", "shadow", "quarterly")
+_CMD_HEAD = re.compile(r"^(cd ~/qbreak-sim|bash scripts/|git -C ~/qbreak-sim |git add |git commit |TZ=|echo ~/|until )")
+_PLACEHOLDER = re.compile(r"<[^<>`]+>")
+_SAMPLES = ("2026-10-16", "x y")
+_OPS = ("&&", "||", ";", "|")
+
+
+def _unquoted(s: str) -> str:
+    """去掉引号里的部分（判断 <…> 是不是在引号外 = 说明书里「<参数>」之类的写法，不是要照抄的命令）。"""
+    return re.sub(r"\"[^\"]*\"|'[^']*'", "", s)
+
+
+def manual_commands(rdir=None) -> dict:
+    """说明书名 → 它让本机任务运行的 Bash 命令（去重、按出现顺序）。说明书里 `…` 里以命令开头的（cd ~/qbreak-sim / bash scripts/ /
+    git -C ~/qbreak-sim / TZ= / echo ~/ / until；「&& git commit …」接在上一段后面的也算），引号外有 <…> 或以「 X」结尾的（写法说明）不算；
+    README.md 固定文字（``` 块）里「运行 …（」的命令算进每一个说明书。"""
+    rdir = Path(rdir) if rdir is not None else Path(__file__).resolve().parent.parent / "routines"
+    first: list[str] = []
+    try:
+        readme = (rdir / "README.md").read_text(encoding="utf-8")
+    except OSError:
+        readme = ""
+    for block in re.findall(r"```\n(.*?)```", readme, re.S):
+        for m in re.finditer(r"运行 (.+?)（", block):
+            c = m.group(1).strip()
+            if _CMD_HEAD.match(c) and c not in first:
+                first.append(c)
+    out: dict = {}
+    for name in MANUALS:
+        try:
+            text = (rdir / f"{name}.md").read_text(encoding="utf-8")
+        except OSError:
+            continue
+        cmds = list(first)
+        for m in re.finditer(r"`([^`\n]+)`", text):
+            c = m.group(1).strip()
+            if c.startswith("&& "):
+                c = c[3:].strip()
+            if not _CMD_HEAD.match(c) or _PLACEHOLDER.search(_unquoted(c)) or re.search(r"\s[A-Z]$", c):
+                continue
+            if c not in cmds:
+                cmds.append(c)
+        out[name] = cmds
+    return out
+
+
+def split_top(cmd: str, ops=_OPS) -> list[str]:
+    """在引号、$( … ) 之外的 && / || / ; / | 处拆开（2>&1 之类不拆）。"""
+    parts, cur, i, q, depth = [], [], 0, "", 0
+    while i < len(cmd):
+        ch = cmd[i]
+        if q:
+            cur.append(ch)
+            if ch == q:
+                q = ""
+            i += 1
+            continue
+        if ch in "\"'":
+            q = ch
+        elif cmd.startswith("$(", i):
+            depth += 1
+            cur.append("$(")
+            i += 2
+            continue
+        elif ch == ")" and depth:
+            depth -= 1
+        elif not depth:
+            op = next((o for o in sorted(ops, key=len, reverse=True) if cmd.startswith(o, i)), None)
+            if op:
+                parts.append("".join(cur).strip())
+                cur = []
+                i += len(op)
+                continue
+        cur.append(ch)
+        i += 1
+    parts.append("".join(cur).strip())
+    return [p for p in parts if p]
+
+
+def rule_matches(rule: str, cmd: str) -> bool:
+    """Claude Code 的 Bash 规则（括号里那部分）对不对得上这条命令：一字不差 / 「前缀:*」/ 带 * 的（* = 任意文字；结尾的「 *」也认没有参数的）。
+    带 && 之类的命令只认一字不差（前缀规则不放行连起来的命令）。"""
+    rule, cmd = rule.strip(), cmd.strip()
+    if rule == cmd:
+        return True
+    if len(split_top(cmd)) > 1:
+        return False
+    if rule.endswith(":*"):
+        p = rule[:-2]
+        return cmd == p or cmd.startswith(p + " ")
+    if "*" not in rule:
+        return False
+    if rule.endswith(" *") and cmd == rule[:-2]:
+        return True
+    rx = "".join(".*" if ch == "*" else re.escape(ch) for ch in rule)
+    return re.fullmatch(rx, cmd, re.S) is not None
+
+
+def _match_any(rules: list[str], cmd: str) -> bool:
+    if "*" in rules:                                          # 规则「Bash」（不带括号）= 全部 Bash
+        return True
+    if _PLACEHOLDER.search(cmd):                              # <…> 换成两种不同的文字都要对得上（规则在那里有 *）
+        return all(any(rule_matches(r, _PLACEHOLDER.sub(x, cmd)) for r in rules) for x in _SAMPLES)
+    return any(rule_matches(r, cmd) for r in rules)
+
+
+def _cd_ok(part: str) -> bool:
+    """cd 进 ~/qbreak-sim 里面（本机任务的工作文件夹）：Claude Code 不用规则。"""
+    return re.fullmatch(r"cd ~/qbreak-sim(/[\w./-]*)?", part.strip()) is not None
+
+
+def missing_parts(cmd: str, rules: list[str]) -> list[str]:
+    """一条说明书命令里对不上任何规则的那几段（整条对得上 / 每段都对得上 → []）。"""
+    if _match_any(rules, cmd):
+        return []
+    rest = cmd
+    while True:
+        m = re.match(r"cd ~/qbreak-sim(/[\w./-]*)?\s*&&\s*", rest)
+        if not m:
+            break
+        rest = rest[m.end():]
+    if rest != cmd and _match_any(rules, rest):
+        return []
+    out = []
+    for part in split_top(rest, ("&&",)):
+        if _cd_ok(part) or _match_any(rules, part):
+            continue
+        sub = split_top(part)
+        if len(sub) > 1 and all(_cd_ok(x) or _match_any(rules, x) for x in sub):
+            continue
+        out.append(part)
+    return out
+
+
+def settings_path() -> Path:
+    v = os.environ.get("QBREAK_SIM_SETTINGS", "").strip()
+    if v:
+        return Path(v).expanduser()
+    sim = os.environ.get("QBREAK_SIM", "").strip()
+    return (Path(sim).expanduser() if sim else Path.home() / "qbreak-sim") / ".claude" / "settings.local.json"
+
+
+def _bash_rule(r) -> str | None:
+    """「Bash(…)」→ 括号里的；「Bash」→ "*"（全部）；别的工具 → None。"""
+    if not isinstance(r, str):
+        return None
+    r = r.strip()
+    if r == "Bash":
+        return "*"
+    m = re.fullmatch(r"Bash\((.*)\)", r, re.S)
+    return m.group(1) if m else None
+
+
+def load_rules(path=None) -> tuple[list[str] | None, str]:
+    """settings.local.json 的 permissions.allow 里的 Bash 规则 → (规则, 问题说明)；没有文件 / 读不懂 → (None, 说明)。不打印内容。"""
+    p = Path(path) if path is not None else settings_path()
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None, "没有 ~/qbreak-sim/.claude/settings.local.json（允许规则）"
+    except (OSError, ValueError):
+        return None, "~/qbreak-sim/.claude/settings.local.json 读不懂（不是 JSON？）"
+    allow = ((data.get("permissions") or {}).get("allow") if isinstance(data, dict) and isinstance(data.get("permissions"), dict)
+             else None)
+    if not isinstance(allow, list):
+        return [], ""
+    return [x for x in (_bash_rule(r) for r in allow) if x is not None], ""
+
+
+def task_rules(root=None, cfg=None) -> dict:
+    """说明书名 → 桌面版里那个本机任务自己的 approvedPermissions（Bash 的）。读不到 → 空。"""
+    if root is None:
+        root = desktop_dir()
+    ids = task_ids(cfg)
+    if root is None or not ids:
+        return {}
+    tasks, _, _, why = _load_desktop(Path(root))
+    if why:
+        return {}
+    out: dict = {}
+    for kind, tid in ids.items():
+        ap = (tasks.get(tid) or {}).get("approvedPermissions")
+        rules = []
+        for x in ap if isinstance(ap, list) else []:
+            if isinstance(x, dict) and x.get("toolName") == "Bash":
+                c = x.get("ruleContent")
+                rules.append(c if isinstance(c, str) and c.strip() else "*")
+        out[kind] = rules
+    return out
+
+
+def allow_missing(rdir=None, path=None, root=None, cfg=None) -> tuple[list[tuple[str, list[str]]] | None, str]:
+    """说明书要运行、允许规则里却对不上的命令段 → ([(命令段, [哪几个说明书])], 问题说明)；没有规则文件 → (None, 说明)。"""
+    rules, why = load_rules(path)
+    if rules is None:
+        return None, why
+    per_task = task_rules(root, cfg)
+    miss: dict = {}
+    for name, cmds in manual_commands(rdir).items():
+        rs = rules + per_task.get(name, [])
+        for c in cmds:
+            for part in missing_parts(c, rs):
+                miss.setdefault(part, [])
+                if name not in miss[part]:
+                    miss[part].append(name)
+    return list(miss.items()), ""
+
+
+def suggest_rule(part: str) -> str:
+    """对不上的命令段 → 要加的规则（「Bash(…)」）：一字不差；有 <…> 占位的 → 占位前面到最后一个空格为止的前缀 + 「 *」。"""
+    m = _PLACEHOLDER.search(part)
+    if m:
+        head = part[:m.start()]
+        cut = head.rstrip().rfind(" ")
+        head = head[:cut] if cut > 0 else head.rstrip()
+        return f"Bash({head.rstrip()} *)"
+    return f"Bash({part})"
 
 
 def _now_arg() -> dt.datetime:
@@ -506,6 +852,26 @@ def main(argv: list[str] | None = None) -> int:
                 want[tid] = label or tid
         for mark, txt in desktop_report(a[0], a[1], want, _now_arg()):
             print(f"{mark}\t{txt}")
+        return 0
+    if cmd in ("allow-missing", "allow-check"):
+        miss, why = allow_missing()
+        if cmd == "allow-missing":                            # 要加进 ~/qbreak-sim/.claude/settings.local.json 的规则（用户同意后由 Claude 加）
+            print(json.dumps([] if miss is None else list(dict.fromkeys(suggest_rule(p) for p, _ in miss)), ensure_ascii=False, indent=1))
+            if miss is None:
+                print(why, file=sys.stderr)
+            return 0 if miss is not None else 1
+        if miss is None:
+            print(f"?\t允许规则：{why}：跳过「说明书的命令在不在允许规则里」（本机任务的权限模式要确认时，每条命令都会停下等）")
+        elif not miss:
+            n = sum(len(v) for v in manual_commands().values())
+            print(f"OK\t允许规则：说明书要运行的命令（{n} 条）都对得上（~/qbreak-sim/.claude/settings.local.json + 任务自己允许过的）")
+        else:
+            label = dict(KINDS)
+            for part, names in miss:
+                who_ = "、".join(label.get(x, x) for x in names)
+                print(f"NG\t允许规则里没有（{who_}；无人值守时会停在权限确认）：{part}")
+            print("HINT\t→ 加规则：在 Mac 对话里说「把例行任务缺的允许规则加上」（你同意后由 Claude 加进 ~/qbreak-sim/.claude/settings.local.json；"
+                  "要加的见 python -m qbreak.routines allow-missing）")
         return 0
     if cmd == "table" and a:
         print("\n".join(table(parse_log(sys.stdin.read()), _today(a[0]), int(a[1]) if len(a) > 1 else 5)))

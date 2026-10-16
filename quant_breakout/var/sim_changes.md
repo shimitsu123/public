@@ -12197,3 +12197,18 @@ deb8a46（对账之后的状态与说明：G7 / G8 / G11 / G16 / G17 / G22 / G26
   进程结束时删（scripts/live_rehearsal.py / `run.py live-u-rehearse` 也一样不再留；给了目录的照旧不动）；③ 菜单栏 Swift 的类型检查测试让 swiftc 的临时目录放在测试自己的 tmp_path 里；
   ④ 新加 quant_breakout/pytest.ini：`tmp_path_retention_policy = failed`（通过的测试的临时目录跑完就删，只留没通过的、方便排查）。
 - 结果：同样单独的 TMPDIR 再跑一次全部测试（4,574 项通过、8 项跳过），跑完只剩一个空的 `pytest-of-<用户>` 目录（0 个新东西）。以前留下的旧目录这次不删：清理命令只在对话里给用户（只删一天以前的 `qbreak_test_*` / `qbreak_rehearse_*`）。
+
+## 2026-10-16 工程（事后：用户今天把 ~/qbreak-sim 改回逐项确认；只读检查 + 推送多一行，不改规则 / 参数 / 例行任务说明书 / 自检结论）：本机例行任务卡住推到手机、允许规则对照
+
+- 背景：10-12〜10-16 本机任务停在权限确认上（见上面同日「例行任务检查发现本机任务卡住」），`routines.sh check` 能看出来，但只有有人问时才看；
+  用户今天把 `~/qbreak-sim` 的权限模式改回默认的逐项确认 → 说明书里和允许规则对不上的命令会再次停下、一直等着。
+- 09:30 自检（`qbreak/watchdog.py` + `qbreak/routines.py today_lines`）：交易日判定时读桌面版的运行记录（只读），本机任务卡住了（开始 2 小时以上停在没有结果的
+  工具调用上，或桌面版一直记「上一次运行还没结束」的跳过）/ 今天到点 30 分钟还没跑 / 今天晚 30 分钟以上才开始 → 当天那条推送加一行「★ 本机例行任务：…」
+  （通过的标题后面加「· ★ 本机例行任务」；没通过 / HALT 的推送附在后面），结果文件记 `routines`。**不改结论**：不算没通过（例行任务不下单、云端后备会做；
+  影响 07:40 执行器的「日报没入库」照旧算没通过），不另推、同一天只推一次的规矩不变；暂停（Paused）的不说；读不到 / 不是 Mac / 出错 → 什么都不说（自检照常）。
+- `routines.sh check` 加「说明书的命令在不在允许规则里」：三份说明书 + README 固定文字第 1 步要运行的 Bash 命令，逐条对 `~/qbreak-sim/.claude/settings.local.json`
+  的 permissions.allow 与桌面版里各任务自己的 approvedPermissions（对照法近似 Claude Code：一字不差 / `:*`、` *` 前缀 / 中间的 `*`；`&&` 拆段、`cd ~/qbreak-sim…` 不用规则；
+  `<…>` 占位要规则在那里有 `*`），对不上的逐条 [★]（只打印说明书里的命令）；`python -m qbreak.routines allow-missing` 打印要加的规则（JSON），用户同意后由 Claude 加。
+  环境变量 `QBREAK_SIM_SETTINGS`（测试用）。今天对真的规则文件跑：只缺 1 条 `echo ~/qbreak-sim/quant_breakout/var/out/report.html`（日报说明书「file_path 用绝对路径」那句；
+  Claude Code 对 echo 要不要确认没核实，加上无害；加不加等用户决定）。
+- tests/test_routines.py 加 8 项（假的桌面版运行记录 / 规则文件；QBREAK_DESKTOP_DIR、CLAUDE_CONFIG_DIR、QBREAK_SIM_SETTINGS）；conftest 让其余自检测试不看本机真的运行记录。

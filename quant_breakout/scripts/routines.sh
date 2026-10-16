@@ -14,6 +14,7 @@
 #        shadow：有今天的「shadow: <今天> 判断」或「shadow(mac): <今天> 判断」提交；quarterly：有今天的「季度复核：」或「季度复核(mac)：」提交
 #   bash scripts/routines.sh check         只读：~/qbreak-sim（分支、干净、推送权限、git 身份）、Claude 桌面版（≥ 1.1.5368）、三个本机任务建了没有、
 #                                           本机任务按时跑了没有 / 有没有卡住的运行（桌面版的运行记录；2026-10-16 起）、
+#                                           说明书要运行的命令在不在允许规则里（~/qbreak-sim/.claude/settings.local.json；只打印对不上的命令；2026-10-16 起）、
 #                                           钥匙串有没有 qbreak-jquants（只看有没有）、pmset 工作日 06:50 之前唤醒、
 #                                           最近 5 个工作日每天谁做的（三个克隆里远端记录最新的那个；不 fetch）
 #   bash scripts/routines.sh run <python 参数…>   在例行任务的克隆里、去掉 QBREAK_HOME 跑 Python（例：run run.py sim-day）：这些命令本来就写仓库的 var/；
@@ -28,7 +29,8 @@
 #   没有就 python3）、QBREAK_BRANCH；测试用：QBREAK_ROUTINES_TODAY（今天，YYYY-MM-DD）、QBREAK_ROUTINES_REPO（要看的 git 仓库，默认 = 本脚本所在的仓库）、
 #   QBREAK_ROUTINES_PULL=0（不 pull，只 fetch）、QBREAK_ROUTINES_SLEEP（push 重试等待的倍数，默认 1）、QBREAK_CLAUDE_APP（桌面版的 .app）、
 #   QBREAK_ROUTINES_HHMM（现在的 JST 时刻，例 0956）、QBREAK_ROUTINES_NOW（现在，ISO；check 的「按时跑了没有」用）、
-#   QBREAK_DESKTOP_DIR（桌面版的运行记录目录，默认 ~/Library/Application Support/Claude/claude-code-sessions）
+#   QBREAK_DESKTOP_DIR（桌面版的运行记录目录，默认 ~/Library/Application Support/Claude/claude-code-sessions）、
+#   QBREAK_SIM_SETTINGS（允许规则的文件，默认 $QBREAK_SIM/.claude/settings.local.json）
 set -uo pipefail
 
 PROJ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -473,6 +475,15 @@ cmd_check() {
       case "$mark" in OK) okl "$txt" ;; NG) ngl "$txt" ;; WARN) wrn "$txt" ;; *) skl "$txt" ;; esac
     done <<< "$out"
   fi
+  # 说明书要运行的命令在不在允许规则里（~/qbreak-sim/.claude/settings.local.json + 任务自己允许过的；只读，只打印对不上的命令）。
+  # 2026-10-16：~/qbreak-sim 改回逐项确认 → 对不上的命令会停在权限确认、整个任务卡住（10-12〜10-16 就这样）
+  out="$(cd "$PROJ" && QBREAK_SIM="$SIM" CLAUDE_CONFIG_DIR="$cfg" QBREAK_DESKTOP_DIR="$ddir" "$PY" -m qbreak.routines allow-check 2>/dev/null || true)"
+  [ -n "$out" ] || out="?	允许规则：读不出，跳过"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    mark="${line%%	*}"; txt="${line#*	}"
+    case "$mark" in OK) okl "$txt" ;; NG) ngl "$txt" ;; HINT) echo "     ${txt}" ;; *) skl "$txt" ;; esac
+  done <<< "$out"
   # J-Quants キー（季度复核 2i / 2j 要）：只看有没有，绝不读出值
   if command -v security >/dev/null 2>&1; then
     if security find-generic-password -s qbreak-jquants -a qbreak >/dev/null 2>&1; then
@@ -530,7 +541,7 @@ cmd_check() {
 usage() {
   echo "用法：bash scripts/routines.sh done-today sim|shadow|quarterly | check | run <python 参数…> | deps | push"
   echo "  done-today  今天做过了吗（0 = 做过 → 跳过；1 = 还没做；2 = 拉不下来 → 停下汇报）"
-  echo "  check       只读检查 Mac 上的本机例行任务（~/qbreak-sim、桌面版、本机任务按时跑了没有 / 卡住没有、钥匙串、唤醒、最近 5 个工作日谁做的）"
+  echo "  check       只读检查 Mac 上的本机例行任务（~/qbreak-sim、桌面版、本机任务按时跑了没有 / 卡住没有、允许规则、钥匙串、唤醒、最近 5 个工作日谁做的）"
   echo "  run         在 ~/qbreak-sim 里去掉 QBREAK_HOME 跑 Python（例：run run.py sim-day）"
   echo "  deps        按 requirements.lock 装依赖"
   echo "  push        git pull --rebase → git push（失败 2 / 4 / 8 / 16 秒后重试）"

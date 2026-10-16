@@ -539,6 +539,221 @@ def test_check_flags_stuck_local_tasks_and_reads_the_newest_clone(repos):
     assert _git(t / "sim", "rev-parse", f"origin/{BRANCH}", ident=False) != _git(t / "src", "rev-parse", f"origin/{BRANCH}", ident=False)   # 没 fetch
 
 
+# ────────── 09:30 自检的推送里的「本机例行任务」（2026-10-16）──────────
+_REAL_ROUTINE_LINES = watchdog._routine_lines          # 收集测试时（conftest 把它换成「没有」之前）
+TUE_1020 = "2026-10-20"                                 # 周二（交易日）
+
+
+def _today_tasks(t: Path, daily: dict, shadow: dict, sessions=(), transcripts=None, skips=None):
+    tasks = [{**DAILY_TASK, **daily}, {"id": "qbreak-shadow", "cronExpression": "45 7 * * 1-5", "enabled": True, **shadow},
+             {"id": "qbreak-quarterly", "cronExpression": "56 9 12 1,4,7,10 *", "enabled": True,
+              "lastRunAt": _utc_iso("2026-10-12 10:07:58")}]
+    root, _ = _desktop(t, tasks, sessions, transcripts, skips)
+    _skills(t)
+    return root
+
+
+def _lines(t: Path, root: Path, now: str) -> list[str]:
+    return routines.today_lines(_jst(now), root=root, cfg=t / "cfg", tz=JST)
+
+
+def test_today_lines_stuck_runs_say_where_and_what_to_do(tmp_path):
+    """10-16 的实况在下一个交易日 09:30：日报 10/12 起卡住、季度复核那次开始几秒就停 → 各一行（停止它）；影子账户正常 → 不说。"""
+    root, _ = _stuck_desktop(tmp_path)
+    _skills(tmp_path)
+    got = routines.today_lines(_jst("2026-10-16 09:30"), root=root, cfg=tmp_path / "cfg", tz=JST)
+    assert got == [
+        "本机例行任务：日报卡住了（多半在等权限确认；10/12 06:45 起）→ 在桌面版 Code → Routines 打开那次运行、停止它"
+        "（不停止，之后到点也不会再跑）；今天的由云端后备做；在 Mac 对话里问「例行任务今天跑了吗」",
+        "本机例行任务：季度复核卡住了（多半在等权限确认；10/12 10:07 起）→ 在桌面版 Code → Routines 打开那次运行、停止它"
+        "（不停止，之后到点也不会再跑）；今天的由云端后备做；在 Mac 对话里问「例行任务今天跑了吗」"], got
+    assert not any("SECRET-CMD" in x or str(tmp_path) in x for x in got)
+    # 今天开始的那次卡在工具调用上（2 小时以上）→ 点允许（或停止）
+    t2 = tmp_path / "today"
+    root = _today_tasks(t2, {"lastRunAt": _utc_iso(f"{TUE_1020} 06:33:10"), "lastScheduledFor": _utc_iso(f"{TUE_1020} 06:32")},
+                        {"lastRunAt": _utc_iso(f"{TUE_1020} 07:46:00"), "lastScheduledFor": _utc_iso(f"{TUE_1020} 07:45")},
+                        [_session("qbreak-sim-daily", f"{TUE_1020} 06:33:10", sid="dddddddd-4444")],
+                        {"dddddddd-4444": [_turn("user", f"{TUE_1020} 06:33:11"), _turn("assistant", f"{TUE_1020} 06:33:12", "Bash")]})
+    assert _lines(t2, root, f"{TUE_1020} 08:00") == []                                    # 还不到 2 小时：照常在跑
+    got = _lines(t2, root, f"{TUE_1020} 09:30")
+    assert got == ["本机例行任务：日报卡住了（多半在等权限确认；10/20 06:33 起）→ 在桌面版 Code → Routines 打开那次运行点允许（或停止它）"
+                   "；今天的由云端后备做；在 Mac 对话里问「例行任务今天跑了吗」"], got
+
+
+def test_today_lines_missed_and_late_runs_only_on_trading_days(tmp_path):
+    root = _today_tasks(tmp_path, {"lastRunAt": _utc_iso("2026-10-19 06:33"), "lastScheduledFor": _utc_iso("2026-10-19 06:32")},
+                        {"lastRunAt": _utc_iso(f"{TUE_1020} 08:20"), "lastScheduledFor": _utc_iso(f"{TUE_1020} 07:45")})
+    got = _lines(tmp_path, root, f"{TUE_1020} 09:30")
+    assert got == ["本机例行任务：日报今天 06:32 没跑（桌面版没开 / Mac 睡着？）→ 今天的由云端后备做；在 Mac 对话里问「例行任务今天跑了吗」",
+                   "本机例行任务：影子账户今天 08:20 才开始（应在 07:45：那时 Mac 睡着 / 桌面版没开 / 前一次运行还没结束？）"
+                   "→ 那之前的由云端后备做；在 Mac 对话里问「例行任务今天跑了吗」"], got
+    assert _lines(tmp_path, root, f"{TUE_1020} 06:55") == []                               # 到点 + 30 分钟还没过
+    assert len(_lines(tmp_path, root, f"{TUE_1020} 07:05")) == 1                            # 日报过了 30 分钟；影子账户还没到点
+    assert _lines(tmp_path, root, "2026-10-12 09:30") == []                                # 休市的工作日（スポーツの日）：不该跑
+    # 准时的 / 晚不到 30 分钟（Mac 06:50 才醒、补跑）→ 不说；暂停的不说（check 里报）
+    t2 = tmp_path / "ok"
+    root = _today_tasks(t2, {"lastRunAt": _utc_iso(f"{TUE_1020} 06:55"), "lastScheduledFor": _utc_iso(f"{TUE_1020} 06:32")},
+                        {"enabled": False, "lastRunAt": _utc_iso("2026-10-12 07:45")})
+    assert _lines(t2, root, f"{TUE_1020} 09:30") == []
+
+
+def test_today_lines_never_raise_and_stay_quiet_without_records(tmp_path, monkeypatch):
+    assert routines.today_lines(_jst(f"{TUE_1020} 09:30"), root=tmp_path / "none", cfg=tmp_path / "cfg") == []   # 没有任务目录
+    _skills(tmp_path)
+    assert routines.today_lines(_jst(f"{TUE_1020} 09:30"), root=tmp_path / "none", cfg=tmp_path / "cfg") == []   # 没有运行记录
+    bad = tmp_path / "bad" / "a" / "b"
+    bad.mkdir(parents=True)
+    (bad / "scheduled-tasks.json").write_text('{"scheduledTasks": [{"id": "qbreak-sim-daily", "cronExpression": 5}]}', encoding="utf-8")
+    assert routines.today_lines(_jst(f"{TUE_1020} 09:30"), root=tmp_path / "bad", cfg=tmp_path / "cfg") == []   # 读不懂的 cron
+    monkeypatch.delenv("QBREAK_DESKTOP_DIR", raising=False)
+    monkeypatch.setattr(routines.sys, "platform", "linux")
+    assert routines.desktop_dir() is None and routines.today_lines(_jst(f"{TUE_1020} 09:30")) == []   # 不是 Mac：不看
+    monkeypatch.setattr(routines, "today_lines", lambda now: 1 / 0)                         # 出错 → 自检照常（什么都不说）
+    assert _REAL_ROUTINE_LINES(_jst(f"{TUE_1020} 09:30")) == []
+    monkeypatch.setattr(routines, "today_lines", lambda now: ["本机例行任务：日报今天 06:32 没跑"])
+    assert _REAL_ROUTINE_LINES(_jst(f"{TUE_1020} 09:30")) == ["本机例行任务：日报今天 06:32 没跑"]
+
+
+def test_watchdog_push_carries_the_routine_line_without_failing_or_repushing(tmp_path, monkeypatch):
+    """通过：标题加「· ★ 本机例行任务」、正文加一行，结论照旧通过（rc 0）；同一天再自检不为它再推；没通过：附在原因后面。"""
+    line = "本机例行任务：日报卡住了（多半在等权限确认；10/05 06:32 起）→ 在桌面版 Code → Routines 打开那次运行点允许（或停止它）"
+    monkeypatch.setattr(watchdog, "_routine_lines", lambda now: [line])
+    _wd_env("2026-10-06")
+    agents = tmp_path / "ag"
+    agents.mkdir()
+    (agents / f"{watchdog.PAPER_PLIST}.plist").write_text("x", encoding="utf-8")
+    sent, out = [], []
+
+    def run(now):
+        sent.clear()
+        out.clear()
+        return watchdog.run(agents, now, send=lambda t, x, lv="info", resend=False: sent.append((t, x, lv)) or {"push": True},
+                            beat=lambda ok, m="": None, mac=lambda *a: True, out=out.append, sleep=lambda s: None)
+    assert run(TUE) == 0
+    assert sent == [("qbreak 模拟操盘 ✓ 09:30 自检通过 · ★ 本机例行任务",
+                     f"决策 2026-10-05 处理完；今天没有单。\n★ {line}\n{watchdog.DAILY_LINE}", "info")], sent
+    wd = json.loads(watchdog.path("paper").read_text(encoding="utf-8"))
+    assert wd["ok"] is True and wd["reasons"] == [] and wd["routines"] == [line]
+    assert run(TUE.replace(hour=10, minute=5)) == 0 and sent == [] and "今天已经推过" in out[0]   # 同一天只推一次
+    assert watchdog.run(agents, TUE, dry=True, out=out.append) == 0 and f"- ★ {line}（不算没通过）" in out[-1]
+    _wd_env("2026-10-05")                                                                  # 日报没入库：没通过（每次推）+ 附上那一行
+    assert run(TUE.replace(hour=10, minute=10)) == 1
+    assert sent[0][0] == "qbreak 模拟操盘 ★ 10:10 自检没通过" and sent[0][2] == "warn"
+    assert sent[0][1].startswith(f"- {watchdog.DAILY_REASON}") and sent[0][1].endswith(f"\n- ★ {line}")
+    monkeypatch.setattr(watchdog, "_routine_lines", lambda now: [])                        # 没问题：文件里也不写
+    _wd_env("2026-10-06")
+    run(TUE.replace(hour=10, minute=20))
+    assert "routines" not in json.loads(watchdog.path("paper").read_text(encoding="utf-8"))
+
+
+# ────────── 说明书的命令在不在允许规则里（2026-10-16）──────────
+def test_rule_matching_follows_claude_code_semantics():
+    m = routines.rule_matches
+    assert m("bash scripts/routines.sh push", "bash scripts/routines.sh push")
+    assert not m("bash scripts/routines.sh push", "bash scripts/routines.sh push; echo rc=$?")
+    assert m("bash scripts/routines.sh done-today:*", "bash scripts/routines.sh done-today sim")
+    assert m("bash scripts/routines.sh done-today:*", "bash scripts/routines.sh done-today")
+    assert not m("bash scripts/routines.sh done-today:*", "bash scripts/routines.sh done-todayx")
+    assert m("git commit -m *", 'git commit -m "sim(mac): 2026-10-16 日报"') and m("TZ=Asia/Tokyo date *", "TZ=Asia/Tokyo date")
+    assert m("git add quant_breakout/var/*", "git add quant_breakout/var/out/a.* quant_breakout/var/b.json")
+    assert not m("git add quant_breakout/var/*", "git add quant_breakout/var/x && git push")   # 前缀规则不放行连起来的命令
+    loop = 'until bash scripts/routines.sh done-today sim >/dev/null 2>&1 || [ "$(TZ=Asia/Tokyo date +%H%M)" -ge 0840 ]; do sleep 120; done'
+    assert m(loop, loop) and not m("until *", loop)
+    assert routines.split_top("cd ~/qbreak-sim && a 2>&1 | b || c; d") == ["cd ~/qbreak-sim", "a 2>&1", "b", "c", "d"]
+    assert routines.split_top('a "x && y" && b $(c; d)') == ['a "x && y"', "b $(c; d)"]
+    assert routines.missing_parts('cd ~/qbreak-sim && git add quant_breakout/var && git commit -m "sim(mac): <日期> 日报"',
+                                  ["git add quant_breakout/var", "git commit -m *"]) == []
+    assert routines.missing_parts('cd ~/qbreak-sim && git add quant_breakout/var && git commit -m "sim(mac): <日期> 日报"',
+                                  ["git add quant_breakout/var", 'git commit -m "sim(mac): 2026-10-16 日报"']) == [
+        'git commit -m "sim(mac): <日期> 日报"']                                       # 占位的地方规则里要有 *
+    assert routines.missing_parts(f"cd ~/qbreak-sim/quant_breakout && {loop}", [loop]) == []
+    assert routines.missing_parts("cd /tmp && bash x", ["bash x"]) == ["cd /tmp"]           # 只有 ~/qbreak-sim 里的 cd 不用规则
+    assert routines.missing_parts("anything at all", ["*"]) == []                            # 规则「Bash」= 全部
+    assert routines.suggest_rule('git commit -m "sim(mac): <最新 bar_date> 日报"') == "Bash(git commit -m *)"
+    assert routines.suggest_rule("bash scripts/routines.sh push") == "Bash(bash scripts/routines.sh push)"
+
+
+def test_manual_commands_are_the_ones_to_run_not_the_mentions():
+    cmds = routines.manual_commands()
+    assert set(cmds) == {"sim_daily", "shadow", "quarterly"}
+    first = f"git -C ~/qbreak-sim pull -q --ff-only origin {BRANCH}"                        # README 固定文字的第 1 步
+    assert all(c[0] == first for c in cmds.values())
+    assert "cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh done-today sim" in cmds["sim_daily"]
+    assert "bash scripts/routines.sh run run.py sim-day" in cmds["sim_daily"]
+    assert any(c.startswith("cd ~/qbreak-sim/quant_breakout && until bash scripts/routines.sh done-today sim") for c in cmds["shadow"])
+    assert any(c.startswith('git commit -m "季度复核(mac)：') for c in cmds["quarterly"])      # 「&& git commit …」另起的一段
+    assert "bash scripts/with_jquants.sh bash scripts/routines.sh run scripts/w2_forward_all.py --review" in cmds["quarterly"]
+    every = [c for v in cmds.values() for c in v]
+    for mention in ("bash scripts/routines.sh run <参数>", "bash scripts/routines.sh run X", "git reset", "git pull --ff-only",
+                    "git push --force", "bash scripts/with_jquants.sh bash scripts/routines.sh run X"):
+        assert mention not in every, mention
+
+
+def _settings(t: Path, rules: list) -> Path:
+    p = t / "sim" / ".claude" / "settings.local.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"permissions": {"allow": rules + ["Read(//SECRET-RULE/**)", "Edit(~/x)"]}, "env": {"K": "SECRET-VAL"}}),
+                 encoding="utf-8")
+    return p
+
+
+def test_allow_missing_round_trip_and_per_task_approvals(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("QBREAK_DESKTOP_DIR", str(tmp_path / "no-desktop"))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "no-cfg"))
+    monkeypatch.setenv("QBREAK_SIM_SETTINGS", str(tmp_path / "nope.json"))
+    assert routines.main(["allow-missing"]) == 1 and capsys.readouterr().out.strip() == "[]"        # 没有规则文件
+    assert routines.main(["allow-check"]) == 0 and capsys.readouterr().out.startswith("?\t允许规则：没有")
+    p = _settings(tmp_path, [])
+    monkeypatch.setenv("QBREAK_SIM_SETTINGS", str(p))
+    assert routines.main(["allow-missing"]) == 0
+    want = json.loads(capsys.readouterr().out)
+    assert "Bash(git commit -m *)" in want and "Bash(bash scripts/routines.sh done-today sim)" in want
+    assert not any(r.startswith("Bash(cd ") for r in want)                                  # cd 进 ~/qbreak-sim 不用规则
+    assert any(r.startswith("Bash(until bash scripts/routines.sh done-today sim") for r in want)   # 循环整条一个规则
+    _settings(tmp_path, want)                             # 照它加上 → 全都对得上
+    assert routines.main(["allow-missing"]) == 0 and json.loads(capsys.readouterr().out) == []
+    assert routines.main(["allow-check"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("OK\t允许规则：说明书要运行的命令（") and "SECRET" not in out
+    # 少两条：只打印少的命令（不打印规则文件的别的内容）；任务自己允许过的（桌面版 approvedPermissions）只算那个任务
+    echo = "Bash(echo ~/qbreak-sim/quant_breakout/var/out/report.html)"
+    _settings(tmp_path, [r for r in want if r not in (echo, "Bash(bash scripts/routines.sh push)")])
+    assert routines.main(["allow-check"]) == 0
+    out = capsys.readouterr().out
+    assert "NG\t允许规则里没有（日报；无人值守时会停在权限确认）：echo ~/qbreak-sim/quant_breakout/var/out/report.html" in out, out
+    assert "NG\t允许规则里没有（日报、影子账户、季度复核；无人值守时会停在权限确认）：bash scripts/routines.sh push" in out, out
+    assert out.count("NG\t") == 2 and "HINT\t→ 加规则" in out and "SECRET" not in out
+    tasks = [{**DAILY_TASK, "approvedPermissions": [{"toolName": "Bash", "ruleContent": "bash scripts/routines.sh push"},
+                                                    {"toolName": "Read", "ruleContent": "//x"}]}]
+    _desktop(tmp_path, tasks)
+    _skills(tmp_path)
+    monkeypatch.setenv("QBREAK_DESKTOP_DIR", str(tmp_path / "sessions"))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "cfg"))
+    assert routines.main(["allow-check"]) == 0
+    out = capsys.readouterr().out
+    assert "（影子账户、季度复核；无人值守时会停在权限确认）：bash scripts/routines.sh push" in out, out
+    assert routines.main(["allow-missing"]) == 0
+    assert json.loads(capsys.readouterr().out) == [echo, "Bash(bash scripts/routines.sh push)"]
+
+
+@need_git
+def test_check_reports_commands_missing_from_the_allow_rules(repos):
+    t = repos
+    _git(t / "sim", "pull", "-q", "--ff-only", "origin", BRANCH, ident=False)
+    allp = _settings(t / "x", [])
+    env = dict(today="2026-10-16", CLAUDE_CONFIG_DIR=str(t / "cfg"), QBREAK_DESKTOP_DIR=str(t / "nowhere"), QBREAK_SIM_SETTINGS=str(allp))
+    rc, out = _run(t, "check", **env)
+    assert rc == 1 and "[★] 允许规则里没有（日报、影子账户、季度复核；无人值守时会停在权限确认）：bash scripts/routines.sh push" in out, out
+    assert "     → 加规则：在 Mac 对话里说「把例行任务缺的允许规则加上」" in out and "SECRET" not in out
+    r = subprocess.run([sys.executable, "-m", "qbreak.routines", "allow-missing"], cwd=ROOT, capture_output=True, text=True,
+                       env={**os.environ, **env})
+    _settings(t / "x", json.loads(r.stdout))
+    rc, out = _run(t, "check", **env)
+    assert "[OK] 允许规则：说明书要运行的命令（" in out and "允许规则里没有" not in out, out
+    rc, out = _run(t, "check", **{**env, "QBREAK_SIM_SETTINGS": str(t / "none.json")})
+    assert "[—] 允许规则：没有 ~/qbreak-sim/.claude/settings.local.json（允许规则）" in out, out
+
+
 # ────────── 09:30 自检：今天的日报没入库 ──────────
 TUE = dt.datetime(2026, 10, 6, 9, 30, tzinfo=JST)
 

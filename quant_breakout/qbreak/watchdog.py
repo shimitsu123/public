@@ -18,6 +18,11 @@ LaunchAgent com.qbreak.watchdog（周一至五 09:30，scripts/install_launchd_w
 - 今天的模拟盘日报入库了吗（2026-10-09 起例行任务在 Mac 的 Claude 桌面版本机任务里跑，云端同名例行任务是后备）：交易日、
   仓库（~/qbreak-src，paths.PROJECT_ROOT）的 var/out/unified_today.json 的 date ≠ 今天 → 原因「今天的模拟盘日报没入库（…）」
   （07:40 的执行器用的是旧的判断层 / 宏观数值）；模拟期开始前 / 结束后、这个文件不在（不是仓库的克隆）→ 不报。两种账本都看。
+- 本机例行任务（2026-10-16 起；Claude 桌面版的本机任务，qbreak/routines.py today_lines）：交易日判定时看桌面版的运行记录，
+  卡住了（多半在等权限确认）/ 今天到点 30 分钟还没跑 / 今天晚 30 分钟以上才开始 → 当天那条推送里加「★ 本机例行任务：…」一行
+  （通过的标题后面加「· ★ 本机例行任务」）。**不改结论**（不算没通过）：例行任务不下单，云端后备会做；真影响执行器的
+  「今天的日报没入库」上面已经算没通过。不另推、不改同一天只推一次的规矩（那条已经推过 → 不为它再推）；结果文件记 routines。
+  读不到 / 不是 Mac / 出错 → 什么都不说（不影响自检）。
 - 执行器正在运行（拿着运行锁；例：Mac 睡着错过 07:40，醒来时 launchd 把错过的任务和自检一起拉起）→ 等它结束再判定（最多 10 分钟）；
   还在跑 → 这次不判定，推一条 warn「自检判定不了：执行器已经跑了 N 分钟」（同一天只一次；2026-10-14 起，以前一声不响；
   今天已经判定过 → 不推、不盖掉）。
@@ -69,6 +74,30 @@ LOCK_WAIT_S, LOCK_POLL_S = 600, 15                            # 执行器正在�
 DAILY_FILE = paths.PROJECT_ROOT / "var" / "out" / "unified_today.json"   # 例行任务入库的当天日报（执行器 07:40 git pull 之后读；测试换成临时文件）
 DAILY_REASON = "今天的模拟盘日报没入库（Mac 的本机例行任务没跑？桌面版开着吗？）"
 DAILY_UNPULLED = "今天的模拟盘日报已入库，但这台 Mac 的 ~/qbreak-src 没拉到"
+
+
+ROUTINE_TAG = " · ★ 本机例行任务"                              # 通过的推送标题后面加的（今天本机例行任务卡住 / 没跑 / 晚了）
+
+
+def _routine_lines(now: dt.datetime) -> list[str]:
+    """今天本机例行任务的问题（qbreak/routines.py today_lines；只读）。读不到 / 出错 → []（绝不让自检出错）。"""
+    try:
+        from .routines import today_lines
+        return [str(x) for x in today_lines(now)][:3]
+    except Exception as e:                                    # noqa: BLE001
+        log.warning("本机例行任务的状态没读成（不影响自检）：%s", type(e).__name__)
+        return []
+
+
+def _with_routines(text: str, r: dict, bullet: str = "★ ") -> str:
+    """推送正文的最后（DAILY_LINE 之前）加「★ 本机例行任务：…」几行。"""
+    rt = r.get("routines") or []
+    if not rt:
+        return text
+    extra = "\n".join(f"{bullet}{x}" for x in rt)
+    if text.endswith(DAILY_LINE):
+        return text[:-len(DAILY_LINE)] + extra + "\n" + DAILY_LINE
+    return text + "\n" + extra
 
 
 def installed(agents) -> str | None:
@@ -368,6 +397,7 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
     miss = _daily_missing(today)                              # 例行任务（Mac 的本机任务 / 云端后备）今天的日报
     if miss:
         reasons.append(miss)
+    rec["routines"] = _routine_lines(now)                     # 本机例行任务卡住 / 没跑 / 晚了：推送里加一行，不算没通过（2026-10-16）
     from .names import annotate                               # 执行器 / 运行状态文件里只有代码的原因 → 补名字（命令行、cid 不动；2026-10-15）
     rec["reasons"] = [annotate(x) for x in reasons]
     rec["decided"], rec["orders"] = exp, orders_brief(book, exp, ol)
@@ -381,7 +411,8 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
 def write(rec: dict) -> None:
     """out/watchdog_<账本>.json（面板 / 菜单栏读 at / ok / reasons / halt / note / push / heartbeat）。写不成只记 warning。
     ok = None：这次没判定（执行器一直在跑）。heartbeat 只在设了外部心跳时有。"""
-    keys = ("at", "ok", "reasons", "halt", "note") + tuple(k for k in ("push", "heartbeat") if k in rec)
+    keys = ("at", "ok", "reasons", "halt", "note") + tuple(k for k in ("push", "heartbeat") if k in rec) + (
+        ("routines",) if rec.get("routines") else ())
     try:
         atomic_write_text(path(rec["tag"]), json.dumps({k: rec.get(k) for k in keys}, ensure_ascii=False, indent=1))
     except Exception as e:                                    # noqa: BLE001
@@ -618,8 +649,11 @@ def _check(tag: str, name: str, now: dt.datetime | None, send, beat, mac, seen, 
         else:
             out(f"{name}（{when} JST，只看不发）：{'HALT 生效中（不算失败）；' if r['halt'] else '★ 没通过：'}\n"
                 + "\n".join(f"- {x}" for x in r["reasons"]) + busy)
+        for x in r.get("routines") or []:
+            out(f"- ★ {x}（不算没通过）")
         return 0 if r["ok"] else 1
     r["reasons"] = [RS.local_paths_out(x) for x in r["reasons"]]   # 手机通知 / 心跳的正文不带本机路径（Mac 的用户名）
+    r["routines"] = [RS.local_paths_out(x) for x in r.get("routines") or []]
     if not r["judged"]:
         out(f"{name}（{when} JST）：{r['note']}；不推送")
         return 0
@@ -644,7 +678,8 @@ def _check(tag: str, name: str, now: dt.datetime | None, send, beat, mac, seen, 
         hw = r.get("halt_wait") or []                         # HALT 期间等着的指令：解除后照原样执行（M18）
         if hw:
             extra += f"\n等着的指令 {len(hw)} 条（解除后照原样执行）：" + "；".join(hw[:5]) + ("…" if len(hw) > 5 else "")
-        text = RS.local_paths_out(f"HALT 生效中（{r['halt']}）：执行器不下单、持仓不动；解除只在 Mac 上、你明确说之后{extra}")
+        text = RS.local_paths_out(_with_routines(
+            f"HALT 生效中（{r['halt']}）：执行器不下单、持仓不动；解除只在 Mac 上、你明确说之后{extra}", r))
         first, old = seen(tag, HALT_KEY, now), _carry(prev, r["at"])
         if first or old.get("state") in ("failed", "none"):  # 这一条就是今天的推送（不再另推「通过」）；没推到手机 → 再推
             title = f"qbreak {name}：HALT 生效中"
@@ -663,18 +698,20 @@ def _check(tag: str, name: str, now: dt.datetime | None, send, beat, mac, seen, 
     if r["ok"]:
         back = bool(prev) and prev.get("ok") is False         # 早些时候没通过、现在通过：照推（说一声好了）
         lead = f"现在通过了（{_hm(prev.get('at'))} 没通过）。\n" if back else ""
-        title = f"qbreak {name} ✓ {hhmm} 自检通过"
+        title = f"qbreak {name} ✓ {hhmm} 自检通过" + (ROUTINE_TAG if r.get("routines") else "")
         lat = r.get("later") or []                            # 之后才下的（不算失败；D5）
-        text = (f"{lead}决策 {r.get('decided') or '—'} 处理完；{r.get('orders') or '今天没有单'}。\n"
-                + (f"之后才下 {len(lat)} 条：" + "；".join(lat[:5]) + ("…" if len(lat) > 5 else "") + "\n" if lat else "") + DAILY_LINE)
+        text = _with_routines(f"{lead}决策 {r.get('decided') or '—'} 处理完；{r.get('orders') or '今天没有单'}。\n"
+                              + (f"之后才下 {len(lat)} 条：" + "；".join(lat[:5]) + ("…" if len(lat) > 5 else "") + "\n" if lat else "")
+                              + DAILY_LINE, r)
         p, pushed = _daily(title, text, tag, now, send, seen, prev, r["at"], force=back, sleep=sleep, out=out)
         hb = _hb(beat(True, f"qbreak {name}：{when} 自检通过"))
-        out(f"{name}（{when} JST）：自检通过（今天早上的运行跑完、没有状态不明的单）{_tail(p, pushed, hb)}")
+        out(f"{name}（{when} JST）：自检通过（今天早上的运行跑完、没有状态不明的单）{_tail(p, pushed, hb)}"
+            + "".join(f"\n  ★ {x}" for x in r.get("routines") or []))
         _finish(r, p, hb, tag, name, now, send, mac, seen, out)
         return 0
     title = (("★ 交易：" if r.get("trade") else "")         # 有单 / 指令今天不会下（D5；2026-10-15）：交易问题的推送都以「★ 交易」开头
              + f"qbreak {name} ★ {hhmm} 自检没通过")           # 真的运行时刻（Mac 晚醒就写晚的；2026-10-14 复核：以前固定写 09:30）
-    text = "\n".join(f"- {x}" for x in r["reasons"])
+    text = _with_routines("\n".join(f"- {x}" for x in r["reasons"]), r, "- ★ ")   # 本机例行任务：附在后面（不是没通过的原因）
     res, p = _push(send, sleep, title, text, "warn", r["at"], out)
     mac(title, r["reasons"][0][:200])
     hb = _hb(beat(False, f"{title}\n{text}"))

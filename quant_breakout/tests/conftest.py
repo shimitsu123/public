@@ -41,6 +41,7 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setattr("qbreak.watch_prob.FILE", tmp_path / "watch_prob.json")   # 观察中的比例表：默认没有（要用的测试自己写）
     monkeypatch.setattr("qbreak.watchdog.DAILY_FILE", tmp_path / "repo_var" / "out" / "unified_today.json")   # 09:30 自检不看仓库里真的日报
     monkeypatch.setattr("qbreak.watchdog._remote_daily_date", lambda run=None: None)           # 也不看仓库远端的（要测的测试自己换）
+    monkeypatch.setattr("qbreak.watchdog._routine_lines", lambda now: [])   # 也不看本机真的桌面版运行记录（要测的测试自己换）
     monkeypatch.setattr("qbreak.data.LAGGING", {})          # 行情落后的记录是进程里的全局表：每个测试从空的开始（不被前面的测试带进来）
     monkeypatch.setenv("PATH", f"{_GUARD}{os.pathsep}{os.environ.get('PATH', '')}")   # 假 launchctl 放最前面（见 _GUARD）
     monkeypatch.setenv("QBREAK_NO_MENUBAR", "1")             # 测试里的 mac_setup.sh 不编译 / 不装菜单栏图标
