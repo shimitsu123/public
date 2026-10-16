@@ -13,7 +13,9 @@
 #             休市的工作日照常做（和云端以前一样：处理上一个交易日的收盘）
 #        shadow：有今天的「shadow: <今天> 判断」或「shadow(mac): <今天> 判断」提交；quarterly：有今天的「季度复核：」或「季度复核(mac)：」提交
 #   bash scripts/routines.sh check         只读：~/qbreak-sim（分支、干净、推送权限、git 身份）、Claude 桌面版（≥ 1.1.5368）、三个本机任务建了没有、
-#                                           钥匙串有没有 qbreak-jquants（只看有没有）、pmset 工作日 06:50 之前唤醒、最近 5 个工作日每天谁做的
+#                                           本机任务按时跑了没有 / 有没有卡住的运行（桌面版的运行记录；2026-10-16 起）、
+#                                           钥匙串有没有 qbreak-jquants（只看有没有）、pmset 工作日 06:50 之前唤醒、
+#                                           最近 5 个工作日每天谁做的（三个克隆里远端记录最新的那个；不 fetch）
 #   bash scripts/routines.sh run <python 参数…>   在例行任务的克隆里、去掉 QBREAK_HOME 跑 Python（例：run run.py sim-day）：这些命令本来就写仓库的 var/；
 #                                           Mac 上只在 ~/qbreak-sim 里跑（~/qbreak-src / ~/qbreak-dev 里拒绝：那里不改被跟踪的文件）
 #   bash scripts/routines.sh deps          按 requirements.lock 装依赖（scripts/install_deps.sh；没有 lock 才 requirements.txt）；
@@ -25,7 +27,8 @@
 # 环境变量：QBREAK_SIM（默认 ~/qbreak-sim）、QBREAK_SRC（~/qbreak-src）、QBREAK_DEV（~/qbreak-dev）、QBREAK_PYTHON（默认 ~/.qbreak/venv/bin/python，
 #   没有就 python3）、QBREAK_BRANCH；测试用：QBREAK_ROUTINES_TODAY（今天，YYYY-MM-DD）、QBREAK_ROUTINES_REPO（要看的 git 仓库，默认 = 本脚本所在的仓库）、
 #   QBREAK_ROUTINES_PULL=0（不 pull，只 fetch）、QBREAK_ROUTINES_SLEEP（push 重试等待的倍数，默认 1）、QBREAK_CLAUDE_APP（桌面版的 .app）、
-#   QBREAK_ROUTINES_HHMM（现在的 JST 时刻，例 0956）
+#   QBREAK_ROUTINES_HHMM（现在的 JST 时刻，例 0956）、QBREAK_ROUTINES_NOW（现在，ISO；check 的「按时跑了没有」用）、
+#   QBREAK_DESKTOP_DIR（桌面版的运行记录目录，默认 ~/Library/Application Support/Claude/claude-code-sessions）
 set -uo pipefail
 
 PROJ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -366,10 +369,22 @@ cmd_push() {
   return 1
 }
 
+hist_repo() {      # 三个克隆里 origin/<分支> 最新（提交时间）的那个（不 fetch：~/qbreak-src 每个交易日 07:40 拉，~/qbreak-sim 只在本机任务跑时拉）
+  local c t best="" bt=0
+  for c in "$SIM" "$SRC" "$DEV"; do
+    is_repo "$c" || continue
+    t="$(git -C "$c" log -1 --format=%ct "origin/$BRANCH" 2>/dev/null || true)"
+    [ -n "$t" ] || continue
+    if [ "$t" -gt "$bt" ] 2>/dev/null; then bt="$t"; best="$c"; fi
+  done
+  echo "$best"
+}
+
 cmd_check() {
-  local ok=0 bad=0 cur st un n out rc line mark txt app cfg tdir f kind found sched today log r mid
+  local ok=0 bad=0 warn=0 cur st un n out rc line mark txt app cfg tdir f kind found sched today log r mid tids="" ddir ref upd
   okl() { echo "[OK] $*"; ok=$((ok + 1)); }
   ngl() { echo "[★] $*"; bad=$((bad + 1)); }
+  wrn() { echo "[!] $*"; warn=$((warn + 1)); }
   skl() { echo "[—] $*"; }
   echo "── 本机例行任务检查（只读：不改文件、不推送）──"
   if ! is_repo "$SIM"; then
@@ -432,12 +447,32 @@ cmd_check() {
     done
     if [ -n "$found" ]; then
       okl "本机任务「${kind#*:}」：已建（${found}；是否暂停、时间在桌面版的 Routines 里看）"
+      tids="${tids}${found}=${kind#*:}
+"
     elif [ -d "$tdir" ] || is_mac; then
       ngl "本机任务「${kind#*:}」还没建：在 Mac 的 Claude 桌面版对话里说「装本机例行任务」（照 quant_breakout/routines/README.md）"
     else
       skl "本机任务「${kind#*:}」：这台机器没有桌面版的任务目录（不是 Mac？）"
     fi
   done
+  # 本机任务按时跑了没有 / 有没有卡住的运行（桌面版的运行记录：只读；读不到 / 格式不同就跳过）。
+  # 2026-10-16：10-12 的运行停在权限确认上、没人点允许，桌面版就不再启动同一个任务（10-13〜10-16 全靠云端后备），以前这里看不出来
+  ddir="${QBREAK_DESKTOP_DIR:-$HOME/Library/Application Support/Claude/claude-code-sessions}"
+  if [ -z "$tids" ]; then
+    :
+  elif [ -z "${QBREAK_DESKTOP_DIR:-}" ] && ! is_mac; then
+    skl "本机任务按时跑了没有：不是 macOS，跳过"
+  elif [ ! -d "$ddir" ]; then
+    skl "本机任务按时跑了没有：没有桌面版的运行记录目录 $(show "$ddir")，跳过（在桌面版 Code → Routines → Review history 看）"
+  else
+    out="$(pyq desktop "$ddir" "$cfg/projects" "$tids" 2>/dev/null || true)"
+    [ -n "$out" ] || out="?	本机任务按时跑了没有：桌面版的运行记录读不出，跳过（在桌面版 Code → Routines → Review history 看）"
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      mark="${line%%	*}"; txt="${line#*	}"
+      case "$mark" in OK) okl "$txt" ;; NG) ngl "$txt" ;; WARN) wrn "$txt" ;; *) skl "$txt" ;; esac
+    done <<< "$out"
+  fi
   # J-Quants キー（季度复核 2i / 2j 要）：只看有没有，绝不读出值
   if command -v security >/dev/null 2>&1; then
     if security find-generic-password -s qbreak-jquants -a qbreak >/dev/null 2>&1; then
@@ -457,28 +492,45 @@ cmd_check() {
   else
     skl "工作日自动唤醒：没有 pmset（不是 macOS），跳过"
   fi
-  # 最近 5 个工作日每天的日报 / 影子账户是谁做的（看远端的记录；只看提交信息与时间）
-  r="$SIM"; is_repo "$r" || r="$(repo_root)"
+  # 最近 5 个工作日每天的日报 / 影子账户是谁做的（看远端的记录；只看提交信息与时间）。
+  # 用三个克隆里远端记录最新的那个（2026-10-16：只看 ~/qbreak-sim 时，本机任务停了就没人 fetch 它，表里全是「—」）；不 fetch
+  r="$(hist_repo)"
+  if [ -n "$r" ]; then
+    ref="origin/$BRANCH"
+    upd="$(TZ=Asia/Tokyo git -C "$r" log -1 --date=format-local:'%m/%d %H:%M' --format=%cd "$ref" 2>/dev/null || true)"
+    upd="（三个克隆里最新的：远端最后一个提交 ${upd:-?} JST；这里不 fetch）"
+  else
+    r="$SIM"; is_repo "$r" || r="$(repo_root)"
+    ref="HEAD"; upd="（没有远端记录：看本机的 HEAD）"
+  fi
   if is_repo "$r"; then
     today="$(today_jst)"
-    log="$(git -C "$r" log --since='21 days ago' --format='%ct%x09%s' "origin/$BRANCH" 2>/dev/null || git -C "$r" log --since='21 days ago' --format='%ct%x09%s' HEAD 2>/dev/null)"
+    log="$(git -C "$r" log --since='21 days ago' --format='%ct%x09%s' "$ref" 2>/dev/null || true)"
     echo
-    echo "最近 5 个工作日（看 $(show "$(real "$r")") 上次拉到的远端记录；Mac = 本机任务、云端 = 后备；— = 没有）："
+    echo "最近 5 个工作日（看 $(show "$(real "$r")") 上次拉到的远端记录${upd}；Mac = 本机任务、云端 = 后备；— = 没有）："
     printf '%s\n' "$log" | pyq table "$today" 5 2>/dev/null | sed 's/^/  /' || echo "  （读不出）"
   fi
   echo
-  if [ "$bad" = "0" ]; then
+  if [ "$bad" = "0" ] && [ "$warn" = "0" ]; then
     echo "全部 [OK]（${ok} 项）：本机例行任务能跑（桌面版要开着、Mac 醒着；错过的由云端后备补上）"
     return 0
   fi
-  echo "★ ${bad} 项要处理（见上面 [★] 的行；${ok} 项 [OK]）"
+  if [ "$bad" = "0" ]; then
+    echo "[OK] ${ok} 项，另有 ${warn} 条 [!] 提醒（见上面）：本机例行任务能跑（桌面版要开着、Mac 醒着；错过的由云端后备补上）"
+    return 0
+  fi
+  if [ "$warn" = "0" ]; then
+    echo "★ ${bad} 项要处理（见上面 [★] 的行；${ok} 项 [OK]）"
+  else
+    echo "★ ${bad} 项要处理（见上面 [★] 的行；${ok} 项 [OK]、${warn} 条 [!] 提醒）"
+  fi
   return 1
 }
 
 usage() {
   echo "用法：bash scripts/routines.sh done-today sim|shadow|quarterly | check | run <python 参数…> | deps | push"
   echo "  done-today  今天做过了吗（0 = 做过 → 跳过；1 = 还没做；2 = 拉不下来 → 停下汇报）"
-  echo "  check       只读检查 Mac 上的本机例行任务（~/qbreak-sim、桌面版、本机任务、钥匙串、唤醒、最近 5 个工作日谁做的）"
+  echo "  check       只读检查 Mac 上的本机例行任务（~/qbreak-sim、桌面版、本机任务按时跑了没有 / 卡住没有、钥匙串、唤醒、最近 5 个工作日谁做的）"
   echo "  run         在 ~/qbreak-sim 里去掉 QBREAK_HOME 跑 Python（例：run run.py sim-day）"
   echo "  deps        按 requirements.lock 装依赖"
   echo "  push        git pull --rebase → git push（失败 2 / 4 / 8 / 16 秒后重试）"

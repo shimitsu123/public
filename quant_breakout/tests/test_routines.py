@@ -318,6 +318,227 @@ def test_check_without_the_clone_on_linux_skips_mac_only_items(tmp_path):
     assert "[—] 工作日自动唤醒：没有 pmset" in out
 
 
+# ────────── 本机任务按时跑了没有 / 有没有卡住的运行（桌面版的运行记录；2026-10-16）──────────
+def _jst(s: str) -> dt.datetime:
+    return dt.datetime.fromisoformat(s).replace(tzinfo=JST)
+
+
+def _utc_iso(s: str) -> str:
+    return _jst(s).astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _ms(s: str) -> int:
+    return int(_jst(s).timestamp() * 1000)
+
+
+DAILY_TASK = {"id": "qbreak-sim-daily", "cronExpression": "32 6 * * 1-5", "enabled": True}
+WANT = {"qbreak-sim-daily": "日报", "qbreak-shadow": "影子账户", "qbreak-quarterly": "季度复核"}
+SECRET_CMD = "git -C ~/qbreak-sim pull SECRET-CMD"
+
+
+def _hm(fires) -> list[str]:
+    return [x.astimezone(JST).strftime("%m-%d %H:%M") for x in fires]
+
+
+def test_cron_parse_and_fires():
+    mi, hr, dom, mon, dow, dom_star, dow_star = routines.parse_cron("*/15 9 * * 0,7")
+    assert mi == {0, 15, 30, 45} and hr == {9} and dow == {0} and dom_star and not dow_star
+    assert routines.parse_cron("5/20 * * * 1-5")[0] == {5, 25, 45}
+    for bad in ("", "1 2 3 4", "61 * * * *", "* * * * 1-9", "*/0 * * * *"):
+        with pytest.raises(ValueError):
+            routines.parse_cron(bad)
+    f = routines.fires_back("56 9 12 1,4,7,10 *", _jst("2026-10-16 10:00"), JST)
+    assert _hm([next(f), next(f)]) == ["10-12 09:56", "07-12 09:56"]
+    f = routines.fires_back("32 6 * * 1-5", _jst("2026-10-19 06:32"), JST)               # 到点那一分钟算；周末不算
+    assert _hm([next(f), next(f)]) == ["10-19 06:32", "10-16 06:32"]
+
+
+def test_missed_runs_follow_trading_days_and_the_grace():
+    t = {**DAILY_TASK, "lastRunAt": _utc_iso("2026-10-16 06:32:30"), "lastScheduledFor": _utc_iso("2026-10-16 06:32")}   # 周五
+    assert routines.missed_runs(t, _jst("2026-10-19 07:00"), JST) == []                  # 周一 07:00：06:32 + 30 分还没过
+    assert _hm(routines.missed_runs(t, _jst("2026-10-20 07:00"), JST)) == ["10-19 06:32"]   # 周二 07:00：周一的没跑
+    t = {**DAILY_TASK, "lastRunAt": _utc_iso("2026-10-09 06:45:56")}                       # 周五；10-12（周一）スポーツの日 休市
+    assert routines.missed_runs(t, _jst("2026-10-13 07:00"), JST) == []                  # 休市日不算、周二的还没到
+    assert _hm(routines.missed_runs(t, _jst("2026-10-13 07:05"), JST)) == ["10-13 06:32"]
+    t = {**DAILY_TASK, "lastRunAt": _utc_iso("2026-10-12 06:45:56"), "lastScheduledFor": _utc_iso("2026-10-12 06:32")}
+    assert _hm(routines.missed_runs(t, _jst("2026-10-16 10:46"), JST)) == ["10-13 06:32", "10-14 06:32", "10-15 06:32", "10-16 06:32"]
+    q = {"id": "q", "cronExpression": "56 9 12 1,4,7,10 *", "lastRunAt": _utc_iso("2026-10-12 10:07:58")}
+    assert routines.missed_runs(q, _jst("2026-10-16 10:46"), JST) == []
+    q["lastRunAt"] = _utc_iso("2026-07-12 10:00")
+    assert _hm(routines.missed_runs(q, _jst("2026-10-12 10:30"), JST)) == ["10-12 09:56"]   # 季度复核按 cron 原样（休市日也算）
+    assert routines.missed_runs({**DAILY_TASK, "createdAt": _ms("2026-10-15 12:00")}, _jst("2026-10-16 07:00"), JST) == []   # 还没跑过：从建好起算
+    assert len(routines.missed_runs({**DAILY_TASK, "createdAt": _ms("2026-10-14 12:00")}, _jst("2026-10-16 08:00"), JST)) == 2
+    assert routines.missed_runs({"cronExpression": "bad", "lastRunAt": _utc_iso("2026-10-12 06:45")}, _jst("2026-10-16 10:46"), JST) is None
+    assert routines.missed_runs(DAILY_TASK, _jst("2026-10-16 10:46"), JST) is None        # 没有任何时刻可比
+
+
+def _turn(role: str, ts: str, tool: str | None = None) -> dict:
+    content = [{"type": "tool_use", "name": tool, "input": {"command": SECRET_CMD}}] if tool else [{"type": "text", "text": "完了"}]
+    if role == "user":
+        content = "跑"
+    return {"type": role, "message": {"role": role, "content": content}, "timestamp": _utc_iso(ts)}
+
+
+def _desktop(t: Path, tasks: list, sessions: list = (), transcripts: dict | None = None, skips: dict | None = None) -> tuple[Path, Path]:
+    """假的桌面版运行记录：<t>/sessions/<账户>/<组织>/scheduled-tasks.json + local_*.json；对话记录 <t>/cfg/projects/<编码>/<id>.jsonl。"""
+    d = t / "sessions" / "acct" / "org"
+    d.mkdir(parents=True)
+    (d / "scheduled-tasks.json").write_text(json.dumps({"scheduledTasks": tasks, "recordedSkips": skips or {}}), encoding="utf-8")
+    for i, s in enumerate(sessions):
+        (d / f"local_{i:08d}-0000.json").write_text(json.dumps(s), encoding="utf-8")
+    proj = t / "cfg" / "projects" / "-x-qbreak-sim"
+    proj.mkdir(parents=True)
+    for sid, entries in (transcripts or {}).items():
+        (proj / f"{sid}.jsonl").write_text("\n".join(json.dumps(e) for e in entries) + "\n{坏行\n", encoding="utf-8")
+    return t / "sessions", t / "cfg" / "projects"
+
+
+def _session(task: str, created: str, last_s: int = 3, mode: str = "default", sid: str = "", **kw) -> dict:
+    return {"scheduledTaskId": task, "createdAt": _ms(created), "lastActivityAt": _ms(created) + last_s * 1000, "isArchived": False,
+            "permissionMode": mode, "cliSessionId": sid, "title": task, **kw}
+
+
+def _stuck_desktop(t: Path) -> tuple[Path, Path]:
+    """2026-10-16 的实况：10-12 日报那次停在 Bash 上（对话记录最后是没有结果的工具调用），桌面版之后每分钟记一条 per_task_limit 跳过。"""
+    tasks = [{**DAILY_TASK, "lastRunAt": _utc_iso("2026-10-12 06:45:56"), "lastScheduledFor": _utc_iso("2026-10-12 06:32")},
+             {"id": "qbreak-shadow", "cronExpression": "45 7 * * 1-5", "enabled": True, "lastRunAt": _utc_iso("2026-10-16 07:47:02")},
+             {"id": "qbreak-quarterly", "cronExpression": "56 9 12 1,4,7,10 *", "enabled": True, "lastRunAt": _utc_iso("2026-10-12 10:07:58")}]
+    sessions = [
+        _session("qbreak-sim-daily", "2026-10-09 06:40:00", sid="old-daily-0000", isArchived=True),   # 归档了的：不看
+        _session("qbreak-sim-daily", "2026-10-12 06:45:56", sid="aaaaaaaa-1111"),                    # 卡住（对话记录）
+        _session("qbreak-shadow", "2026-10-16 07:47:02", mode="bypassPermissions", sid="bbbbbbbb-2222"),   # 记录像卡住、对话记录已结束
+        _session("qbreak-quarterly", "2026-10-12 10:07:58", last_s=5, sid="cccccccc-3333"),          # 没有对话记录：几秒后就没动静
+        _session("qbreak-quarterly", "2026-10-10 14:15:53", last_s=80, mode="bypassPermissions", completedTurns=1),
+    ]
+    tr = {"aaaaaaaa-1111": [_turn("user", "2026-10-12 06:45:57"), _turn("assistant", "2026-10-12 06:45:58", "Bash"),
+                            _turn("assistant", "2026-10-12 06:45:59", "Read")],                # 同时发的两个调用各占一条
+          "bbbbbbbb-2222": [_turn("user", "2026-10-16 07:47:03"), _turn("assistant", "2026-10-16 07:47:04", "Bash"),
+                            _turn("assistant", "2026-10-16 07:58:00")]}
+    skips = {"qbreak-sim-daily": [{"at": _ms(f"2026-10-{d} 06:32"), "reason": "per_task_limit"} for d in (13, 14, 15, 16)]
+             + [{"at": _ms("2026-10-16 10:46"), "reason": "per_task_limit"}]}
+    return _desktop(t, tasks, sessions, tr, skips)
+
+
+def test_desktop_report_flags_the_stuck_run_missed_runs_and_prompting_mode(tmp_path):
+    root, proj = _stuck_desktop(tmp_path)
+    rows = routines.desktop_report(root, proj, WANT, _jst("2026-10-16 10:50"), JST)
+    text = "\n".join(f"{m}\t{x}" for m, x in rows)
+    assert ("NG", "本机任务「日报」最后一次运行 10/12 06:45；之后应该跑的 10/13〜10/16 没跑（4 次；"
+                  "错过的只能靠云端后备，见下面「最近 5 个工作日」）") in rows, text
+    stuck = [x for m, x in rows if m == "NG" and "那次一直没动" in x]
+    assert len(stuck) == 2, text
+    assert stuck[0].startswith("本机任务「日报」10/12 06:45 那次一直没动（停在工具调用（Bash、Read）上、没有结果：多半在等权限确认、没人点允许）"
+                               "；之后到点的运行桌面版都跳过了（上一次运行还没结束）"), stuck[0]
+    assert "Code → Routines 打开那次运行、停止它" in stuck[0] and "routines/README.md" in stuck[0]
+    assert stuck[1].startswith("本机任务「季度复核」10/12 10:07 那次一直没动（开始几秒之后就没有动静"), stuck[1]
+    assert ("OK", "本机任务「影子账户」：最后一次运行 10/16 07:47（之后没有错过的）") in rows             # 对话记录已结束：不算卡住
+    assert ("OK", "本机任务「季度复核」：最后一次运行 10/12 10:07（之后没有错过的）") in rows
+    warn = [x for m, x in rows if m == "WARN"]
+    assert len(warn) == 1 and "（日报 10/12 06:45、季度复核 10/12 10:07）" in warn[0] and "影子账户" not in warn[0], warn
+    assert "SECRET-CMD" not in text and str(tmp_path) not in text                          # 不打印命令、路径
+    # 还没到 2 小时：照常在跑，不算卡住；暂停的任务；只有跳过记录、找不到那次运行
+    rows = routines.desktop_report(root, proj, WANT, _jst("2026-10-12 08:00"), JST)
+    assert not any("那次一直没动" in x for _, x in rows), rows
+
+
+def test_desktop_report_paused_skips_only_and_unreadable_state(tmp_path):
+    t1 = tmp_path / "a"
+    root, proj = _desktop(t1, [{**DAILY_TASK, "enabled": False, "lastRunAt": _utc_iso("2026-10-12 06:45")}],
+                          skips={"qbreak-sim-daily": [{"at": _ms("2026-10-16 10:40"), "reason": "per_task_limit"},
+                                                      {"at": _ms("2026-10-13 06:32"), "reason": "per_task_limit"},
+                                                      {"at": _ms("2026-10-16 10:41"), "reason": "some_new reason!"}]})
+    rows = routines.desktop_report(root, proj, {"qbreak-sim-daily": "日报", "qbreak-shadow": "影子账户"}, _jst("2026-10-16 10:50"), JST)
+    assert rows[0][0] == "NG" and "暂停的（Paused）" in rows[0][1]
+    assert ("NG", "本机任务「日报」：桌面版从 10/13 06:32 起一直跳过它（上一次运行还没结束） → 在桌面版 Code → Routines 打开还没结束的那次运行、"
+                  "停止它；让它不再问：说明书里的命令都要一字不差地在允许规则里（见 routines/README.md）") in rows, rows
+    assert ("?", "本机任务「日报」最近被桌面版跳过（原因 some_newreason）：在桌面版 Code → Routines → Review history 看") in rows
+    assert rows[-1][0] == "?" and "「影子账户」：桌面版的运行记录里没有它" in rows[-1][1]
+    assert not any(m == "WARN" for m, _ in rows)
+    # 没有运行记录 / 格式不同 → 只是「?」（check 里是 [—]，不算要处理）
+    assert routines.desktop_report(tmp_path / "none", proj, WANT, _jst("2026-10-16 10:50"), JST) == [
+        ("?", "没有桌面版的运行记录（scheduled-tasks.json）：跳过「按时跑了没有」（在桌面版 Code → Routines → Review history 看）")]
+    bad = tmp_path / "b" / "x" / "y"
+    bad.mkdir(parents=True)
+    (bad / "scheduled-tasks.json").write_text("[1, 2]", encoding="utf-8")
+    rows = routines.desktop_report(tmp_path / "b", proj, WANT, _jst("2026-10-16 10:50"), JST)
+    assert len(rows) == 1 and rows[0][0] == "?" and "格式和预期不同" in rows[0][1]
+
+
+def test_transcript_tail_only_counts_a_call_still_without_its_result(tmp_path):
+    proj = tmp_path / "projects"
+    (proj / "x").mkdir(parents=True)
+    res = {"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "content": "ok"}]},
+           "timestamp": _utc_iso("2026-10-12 06:46:10")}
+    for sid, entries, want in (
+            ("s1-00000001", [_turn("assistant", "2026-10-12 06:46:00", "Bash"), res], False),             # 有结果了
+            ("s2-00000002", [_turn("assistant", "2026-10-12 06:46:00", "Bash"), res,
+                             _turn("assistant", "2026-10-12 06:46:20", "WebFetch")], True),                # 下一个还没有结果
+            ("s3-00000003", [{"type": "summary"}], None)):                                                 # 没有消息
+        (proj / "x" / f"{sid}.jsonl").write_text("\n".join(json.dumps(e) for e in entries), encoding="utf-8")
+        got = routines._transcript_tail(proj, sid)
+        assert (got if got is None else got[0]) is want, (sid, got)
+    assert routines._transcript_tail(proj, "s2-00000002")[1] == "WebFetch"
+    assert routines._transcript_tail(proj, "../../etc/passwd") is None and routines._transcript_tail(proj, "nope-0000") is None
+
+
+def test_desktop_cli_reads_now_from_the_env(tmp_path, monkeypatch, capsys):
+    import time
+    if not hasattr(time, "tzset"):
+        pytest.skip("cron 按本机时区算：这里改不了进程的时区")
+    root, proj = _stuck_desktop(tmp_path)
+    monkeypatch.setenv("QBREAK_ROUTINES_NOW", "2026-10-16T10:50:00+09:00")
+    old = os.environ.get("TZ")
+    os.environ["TZ"] = "Asia/Tokyo"                                                      # 桌面版的 cron 是 Mac 的本机时间（JST）
+    time.tzset()
+    try:
+        assert routines.main(["desktop", str(root), str(proj), "qbreak-sim-daily=日报\nqbreak-shadow=影子账户"]) == 0
+    finally:
+        if old is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old
+        time.tzset()
+    out = capsys.readouterr().out
+    assert "NG\t本机任务「日报」最后一次运行 10/12 06:45；之后应该跑的 10/13〜10/16 没跑" in out, out
+    assert "OK\t本机任务「影子账户」" in out and "季度复核" not in out
+
+
+def _skills(t: Path):
+    for name, md in (("qbreak-sim-daily", "sim_daily"), ("qbreak-shadow", "shadow"), ("qbreak-quarterly", "quarterly")):
+        (t / "cfg" / "scheduled-tasks" / name).mkdir(parents=True, exist_ok=True)
+        (t / "cfg" / "scheduled-tasks" / name / "SKILL.md").write_text(f"读 ~/qbreak-sim/quant_breakout/routines/{md}.md 照做",
+                                                                     encoding="utf-8")
+
+
+@need_git
+def test_check_flags_stuck_local_tasks_and_reads_the_newest_clone(repos):
+    """2026-10-16 的情形：本机任务卡在 10-12、~/qbreak-sim 没人 fetch → 以前「全部 [OK]」、表里全是「—」。"""
+    t = repos
+    _push_cloud(t, _daily("2026-10-16"), "sim: 2026-10-15 日报（无下单）", "2026-10-16T07:21:00+09:00")
+    _push_cloud(t, {"quant_breakout/var/out/shadow_today.json": "{}"}, "shadow: 2026-10-16 判断", "2026-10-16T08:06:00+09:00")
+    _git(t, "clone", "-q", "-b", BRANCH, str(t / "remote.git"), "src", ident=False)       # ~/qbreak-src：每天 07:40 拉，远端记录最新
+    _stuck_desktop(t)
+    _skills(t)
+    b = _bin(t, "Darwin", security=0, pmset="Repeating power events:\n  wakepoweron at 6:40AM weekdays only\n")
+    env = dict(path_extra=b, today="2026-10-16", CLAUDE_CONFIG_DIR=str(t / "cfg"), QBREAK_DESKTOP_DIR=str(t / "sessions"),
+               QBREAK_ROUTINES_NOW="2026-10-16T10:50:00+09:00", TZ="Asia/Tokyo", QBREAK_CLAUDE_APP=str(t / "nope.app"))
+    rc, out = _run(t, "check", **env)
+    assert rc == 1, out
+    for s in ("[★] 本机任务「日报」最后一次运行 10/12 06:45；之后应该跑的 10/13〜10/16 没跑（4 次",
+              "[★] 本机任务「日报」10/12 06:45 那次一直没动（停在工具调用（Bash、Read）上",
+              "[OK] 本机任务「影子账户」：最后一次运行 10/16 07:47",
+              "[!] 本机任务最近一次运行用的是要确认的权限模式",
+              "最近 5 个工作日（看 ~/src 上次拉到的远端记录（三个克隆里最新的：远端最后一个提交 10/16 08:06 JST",
+              "2026-10-16（周五）：日报 云端；影子账户 云端", "条 [!] 提醒）"):
+        assert s in out, (s, out)
+    assert "全部 [OK]" not in out and "SECRET-CMD" not in out and str(t) not in out
+    rc, out = _run(t, "check", **{**env, "QBREAK_DESKTOP_DIR": str(t / "nowhere")})        # 读不到运行记录：跳过、不算要处理
+    assert "[—] 本机任务按时跑了没有：没有桌面版的运行记录目录 ~/nowhere，跳过" in out, out
+    assert "那次一直没动" not in out
+    assert _git(t / "sim", "status", "--porcelain", ident=False) == ""                    # 只读
+    assert _git(t / "sim", "rev-parse", f"origin/{BRANCH}", ident=False) != _git(t / "src", "rev-parse", f"origin/{BRANCH}", ident=False)   # 没 fetch
+
+
 # ────────── 09:30 自检：今天的日报没入库 ──────────
 TUE = dt.datetime(2026, 10, 6, 9, 30, tzinfo=JST)
 
