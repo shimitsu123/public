@@ -717,6 +717,21 @@ def cancel_cids(r: dict | None) -> list[str]:
     return out
 
 
+def handling_cids(r: dict | None) -> list[str]:
+    """一条还在处理的撤单指令盖着的单（面板「撤单中」、live_ops.asked_cids / check、执行器的 busy 共用；复核 5 2026-10-16）
+    = cancel_cids + 以前的「一起撤买单」（grp_legacy）在等立花确认撤单的、靠这笔卖出的钱的买单（grp_wait 里不在 grp_xwait 的：执行器发的撤单）。
+    同一组、不靠它的钱、只查状态的买单（grp_xwait）不算：那一行照常能撤 / 整组撤（以前算进来：面板给按钮、执行器却以「整组撤单」为由整条拒掉）。"""
+    out = cancel_cids(r)
+    r = r or {}
+    if r.get("grp_legacy"):
+        xw = {str(c) for c in r.get("grp_xwait") or []}
+        for c in r.get("grp_wait") or []:
+            c = str(c or "").strip()
+            if c and c not in xw and c not in out:
+                out.append(c)
+    return out
+
+
 def _live(items: dict, waiting: list[dict], kinds) -> list[dict]:
     """还没处理完的指令（账本里 pending / placed 且没在撤回 + 指令文件里执行器还没读、也没被撤回的）。"""
     out = [it for it in items.values() if it.get("kind") in kinds and it.get("status") in ACTIVE and not it.get("cancel_req")]
@@ -3907,7 +3922,7 @@ __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEF
            "append", "read_all", "read_known", "is_pruned", "KEEP_ITEMS", "PAPER_IDLE", "paper_refuse", "unseen", "cancelled", "normalize", "batch_blocks", "lifting", "unblock_why", "lift_day", "rebuy_day",
            "block_text", "FIX_WAIT", "fix_status_text", "NEXT_DECISION", "next_decision", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "HALT_CORE_AFTER", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "busy_today", "OPEN_ST",
            "corefix_clear_text", "resume_info", "wait_word", "wait_text", "fix_applied", "corefix_pending", "allin_busy_text", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text", "when_for", "morning_behind",
-           "next_window", "due", "cancel_due", "CANCEL_UNTIL", "grp_wait_stale", "cancel_cids", "group_prune",
+           "next_window", "due", "cancel_due", "CANCEL_UNTIL", "grp_wait_stale", "cancel_cids", "handling_cids", "group_prune",
            "RULE_TEXT", "UNK_LATER", "NOW_NO_CANCEL", "NOW_FILLED_NO_CANCEL", "NOW_BUY_LAPSED", "NOW_SELL_WITHDRAWN", "now_sell_withdrawn", "now_lapsed", "now_expired", "now_cancel_why",
            "now_due", "status_text", "rolled_over", "rolled_text", "msg_text", "entry_why", "buy_size", "requests_path", "position_pct", "target_shares", "adjust_plan",
            "cap_text", "fmt_target", "describe", "active", "lines", "signal_text", "core_pct_now",

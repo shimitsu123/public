@@ -1534,7 +1534,8 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     wl = [r for r in waiting if r.get("kind") != "uncancel" and r.get("id") not in void]
     asked = ({c for r in wl if r.get("kind") == "cancel_order" for c in MO.cancel_cids(r)}          # 整组撤单：同一组的每一笔（2026-10-16）
              | {c for it in items.values() if it.get("kind") == "cancel_order" and it.get("status") == "pending"
-                and not MO.grp_wait_stale(it, now) for c in MO.cancel_cids(it)})   # 过了收盘还在等的整组撤单：不算撤单中（复核 2026-10-16）
+                and not MO.grp_wait_stale(it, now) for c in MO.handling_cids(it)})   # 过了收盘还在等的整组撤单：不算撤单中（复核 2026-10-16）；
+    #   以前的「一起撤买单」在等的、靠它的钱的买单也算（同一组、不靠它的钱的不算：照常能撤 / 整组撤；与执行器的 busy 同一个 MO.handling_cids）
     ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=asked, instr=False)   # 每笔单今天会不会下：只在 live_ops.outlook 判断（D5）
     fixed = MO.core_fixed(book, tag)
     fpend, fwhen = LO.fix_pending_when(book, now, tag)       # 还没照它调的固定口数：今天开盘后 / 盘中就照它下（D1；复核 UI F2，2026-10-16）
