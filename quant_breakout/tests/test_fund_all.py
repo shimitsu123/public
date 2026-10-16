@@ -318,7 +318,7 @@ def test_cancel_refused_once_batch_sells_are_at_the_exchange():
     assert not ok and "还挂在交易所" in msg and "全卖不买" in msg
     plan = MO.cancel_plan(TAG, book, "M-all-buy", now=r.at(r.k - 1, 8, 0))
     assert [c["id"] for c in plan["sent"]] == ["M-all-a", "M-all-core"] and not plan["todo"]      # 比例 0% 这次决策已生效、核心卖单挂着 → 也算
-    for o in book["orders"]:                                                    # 用户照提示在「今天的单」把卖单都撤了
+    for o in book["orders"]:                                                    # 用户照提示在「今天要成交的单」把卖单都撤了
         if o["side"] == "SELL":
             o["status"] = "CANCELLED"
     ok, msg, _ = MO.cancel_request(TAG, book, "M-all-buy", now=r.at(r.k - 1, 8, 5), source="cli")

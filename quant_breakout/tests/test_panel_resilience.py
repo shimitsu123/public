@@ -7,7 +7,7 @@ import pytest
 from qbreak import manual_orders as MO
 from qbreak import panel
 
-from test_panel import AT, _book, _req, _sm, _sm_nowarn, _submit_ok, server  # noqa: F401（pytest 夹具）
+from test_panel import AT, _book, _pane, _req, _sm, _sm_nowarn, _submit_ok, server  # noqa: F401（pytest 夹具）
 
 BODIES = {
     "sell": {"ticker": "7203"},
@@ -115,15 +115,14 @@ def test_trade_tab_shows_only_last_two_days_except_unfinished():
              "M-new-done": {"id": "M-new-done", "kind": "unblock", "ticker": "9984.T", "status": "done", "at": new}}
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": items})
     html = panel.render("paper", "t" * 40, AT)
-    i = html.index("<h2>手动指令</h2>")
-    card = html[i:html.index("</section>", i)]
+    card = _pane(html, "trade")                        # 2026-10-16：手动指令分在「今天要成交的单」/「另有…」/「已结束 / 不是今天的」里
     assert "M-old-pend" in card and "M-old-done" not in card and "10-05 20:00" in card
     assert "只显示最近 2 天的（没处理完的一直显示）；更早的 1 条不显示" in card
 
 
 def _orders_card(html: str) -> str:
-    i = html.index("<h2>手动指令</h2>")
-    return html[i:html.index("</section>", i)]
+    """交易页里手动指令的那几行（2026-10-16 起分在「今天要成交的单」/「另有…」/「已结束 / 不是今天的」里 → 整个交易页）。"""
+    return _pane(html, "trade")
 
 
 def test_uncancel_before_executor_reads_restores_and_hides_the_cancel():

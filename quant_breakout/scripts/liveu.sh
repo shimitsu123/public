@@ -43,7 +43,7 @@
 #   bash scripts/liveu.sh broker [--notify]             立花那边实际是什么（持仓 / 余力 / 注文一覧 / 今天的成交 / 现价）→ 面板的快照（只读）
 #   bash scripts/liveu.sh adopt --broker tachibana 7203 BUY 100 2500 [--date YYYY-MM-DD] [--note …]  人工代下登记：在立花网站上
 #                                                    实际成交的单 → 账本（先备份；只在你明确说时运行）
-#   bash scripts/liveu.sh run --broker tachibana --phase cancel   面板叫：处理面板「今天的单」写的撤单指令（不 pull、不等云端）
+#   bash scripts/liveu.sh run --broker tachibana --phase cancel   面板叫：处理面板「今天要成交的单」写的撤单指令（不 pull、不等云端）
 #   bash scripts/liveu.sh probe [--demo [--order-test]]  立花 API 检查（只读；--order-test 只在デモ发单），结果给上线门槛用
 #   bash scripts/liveu.sh precheck [--force]         前一晚预检（LaunchAgent com.qbreak.precheck，周日〜周四 20:00；立花本番只读：
 #                                                    登录 → 取余力 → 登出；交付書面 / API 版本的预告、上线门槛新出现的 ★ → 通知）

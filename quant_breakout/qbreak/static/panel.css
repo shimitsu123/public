@@ -36,6 +36,9 @@ color:var(--fg);cursor:pointer;touch-action:manipulation}
 color:#fff;font-size:13px;font-weight:700;white-space:nowrap}
 .list .li{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:10px 0}.list .li:first-child{border-top:0}
 .list .li.og{border-left:3px solid var(--accent);padding-left:6px}   /* 同一组（一起下的买单和卖单；整组撤单 2026-10-16） */
+/* 「交易」只显示今天要成交的（2026-10-16）：小标题（执行器的单 / 手动指令）、没有时的一句、「另有 N 条等 …」、最下面收起的「已结束 / 不是今天的」 */
+.tsub{font-size:13px;font-weight:600;color:var(--muted);margin:10px 0 0}.tempty{color:var(--muted);padding:6px 0}
+details.later{margin-top:8px;border-top:1px solid var(--line);padding-top:2px}details.later>summary,details.ended>summary{font-weight:600}
 .grow{flex:1;min-width:0}
 input[type=range]{width:100%;height:44px;accent-color:var(--accent)}
 input[type=text],input[type=number]{font:inherit;font-size:17px;width:100%;padding:12px;margin:4px 0 10px;border-radius:12px;

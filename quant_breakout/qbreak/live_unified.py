@@ -2332,7 +2332,7 @@ class UnifiedExecutor:
         def fix_keep(info: dict) -> str:                    # 这次不调（一会儿再试）：今天还没发出的单先照原计划
             if not info["unsent"]:
                 return ""
-            return "；今天还没发出的 " + "、".join(_otag(o, o.qty) for o in info["unsent"]) + " 先照原计划（不要就在「今天的单」撤单）"
+            return "；今天还没发出的 " + "、".join(_otag(o, o.qty) for o in info["unsent"]) + " 先照原计划（不要就在「今天要成交的单」撤单）"
 
         def fix_sent(t: str, o: ExecOrder, n: int, pre: str, notes: list[str]) -> None:
             what, q, tl = ("卖出" if o.side == "SELL" else "买入"), int(o.filled_qty or 0), _lab(t)
@@ -4239,7 +4239,7 @@ def parse_remote_halt(text: str | None) -> dict | None:
 def apply_remote_halt(text: str | None, home=None) -> str | None:
     """Mac 的执行器每次运行前看一眼远程停止：没处理过的 id → 建本地 HALT 文件（买卖都不下、持仓不动）并记下这个 id；
     同一个 id 不会再触发（所以在 Mac 上明确说「恢复下单，删除 HALT」之后不会被同一条远程停止又停住）。
-    返回给人看的一句话；没有新的远程停止 → None。已经发到交易所的单不会被撤（要撤：面板「今天的单」的「撤单」/
+    返回给人看的一句话；没有新的远程停止 → None。已经发到交易所的单不会被撤（要撤：面板「今天要成交的单」的「撤单」/
     bash scripts/liveu.sh cancel，或立花网站 / 手机网站）。"""
     from pathlib import Path
     r = parse_remote_halt(text)

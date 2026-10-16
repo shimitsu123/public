@@ -418,8 +418,11 @@ def test_panel_submit_group_cancel_marks_both_rows_and_calls_the_runner():
     _pbook()
     ok, msg, rec = panel.submit({"book": "paper", "kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [BUY]}, AT15)
     assert ok and "执行器马上撤" in msg and "同一组" in msg and rec["grp"] == [BUY]
-    card = _card(panel.render("paper", "t" * 40, AT15), "today")
-    assert card.count("<span class='chip'>撤单中</span>") == 2
+    html = panel.render("paper", "t" * 40, AT15)
+    card, ended = _card(html, "today"), _card(html, "orders")   # 2026-10-16：还在交易所的卖单（撤单中）留在上面；没发出的买单撤了 = 执行器不再发 → 已结束
+    assert card.count("<span class='chip'>撤单中</span>") == 1 == ended.count("<span class='chip'>撤单中</span>")
+    assert "<b>卖 1545 纳斯达克 100：4,110 口</b>" in card and "<b>买 1482 对冲版美国 7〜10 年国债：678 口</b>" in ended
+    assert "同一组（一起下的）还有：买 1482" in card and "同一组（一起下的）还有：卖 1545" in ended   # 分在两处也都写着同一组
     ok2, msg2, _ = panel.submit({"book": "paper", "kind": "cancel_order", "cid": BUY, "deps": "cancel", "grp": [SELL]}, AT15)
     assert not ok2 and "已经在撤" in msg2
     calls = []
@@ -846,8 +849,10 @@ def _attrs(btn):
 
 
 def _tcard(b, now=T9):
+    """交易页里执行器的单的每一行：「今天要成交的单」+「已结束 / 不是今天的」（2026-10-16 起分在两张卡片里，同一组的说明、按钮每行照旧）。"""
     _tbook(b)
-    return _card(panel.render("tachibana", "t" * 40, now), "today")
+    html = panel.render("tachibana", "t" * 40, now)
+    return "".join(_card(html, k) for k in ("today", "orders") if f"<section class='card' id='{k}'>" in html)
 
 
 def _node_ask(d: dict, alt=None) -> dict:

@@ -234,7 +234,7 @@ def test_clear_text_while_paused_and_with_todays_order():
     assert f"今天开盘已排的 1545 纳斯达克 100 卖 {plan[1]:,} 口 还挂着：先等它成交 / 撤掉，再按成交后的口数调" in txt
     assert "今天的单成交后约 1,000 口" in txt and "→ 买 420 口" in txt
     txt = MO.corefix_clear_text(r2.ux.book, "1545.T", r2.tag, _at(r2, 16, 0))  # 收盘后：下一次决策那条路（照旧）
-    assert f"今天开盘已排的 1545 纳斯达克 100 卖 {plan[1]:,} 口照常（要不做：「今天的单」→ 撤单）；下一次决策起照规则，可能反向买卖" in txt
+    assert f"今天开盘已排的 1545 纳斯达克 100 卖 {plan[1]:,} 口照常（要不做：「今天要成交的单」→ 撤单）；下一次决策起照规则，可能反向买卖" in txt
     assert "今天的单成交后约 1,000 口" in txt
 
 

@@ -647,9 +647,10 @@ def test_trade_badge_gone_when_funding_sell_cancelled_and_buy_cannot_be_paid():
     assert "「其他闲置资金 ETF（现在没拿）」里 1482 对冲版美国 7〜10 年国债 下面点「恢复按规则」" in lv["fix"]["U2026-10-14-BUY-1482.T"]
     html = panel.render("paper", "t" * 40, AT15)
     assert "class='badge'" not in _tabbtn(html, "trade")
-    card = _card(html, "today")
-    assert "<span class='chip'>不会下单（预计）</span>" in card and "资金来源的卖单已撤" in card and "手动固定 678 口仍然有效" in card
-    assert "<span class='chip'>已撤单</span>" in card
+    card, ended = _card(html, "today"), _card(html, "orders")   # 2026-10-16「交易里面只显示当天要成交的单」：不会下 / 已撤 → 下面「已结束 / 不是今天的」
+    assert "<span class='chip'>不会下单（预计）</span>" in ended and "资金来源的卖单已撤" in ended and "<span class='chip'>已撤单</span>" in ended
+    assert "今天没有要成交的单了" in card and "手动固定 678 口仍然有效" in card   # 固定口数的提醒留在上面看得见的地方
+    assert "不会下单" not in card and "已撤单" not in card
     assert panel.status_json("paper")[1]["pending"] == 0
     b = _book1015(fix={})                                                     # 没有固定口数：不写那条提醒
     assert not panel._trade_live(b, [], AT15, "paper", halt=False)["fix"]
@@ -685,8 +686,10 @@ def test_trade_badge_skips_orders_with_cancel_pending():
     assert "资金来源的卖单已撤（卖 1545 纳斯达克 100：4,110 口）" in lv["orders"]["U2026-10-14-BUY-1482.T"][1]
     b = _book1015(sell="SENT", items={"M3-cancel_order": {**co, "status": "pending"}})
     assert "trade" not in panel._badges(b, b["state"], {}, [], AT15, "paper")
-    card = _card(panel.render("paper", "t" * 40, AT15), "today")
-    assert "<span class='chip'>撤单中</span>" in card and "<span class='chip'>不会下单（预计）</span>" in card
+    html = panel.render("paper", "t" * 40, AT15)
+    card = _card(html, "today")                                  # 2026-10-16：还在交易所、正在撤的留在上面（撤单中）；下不成的买单 → 「已结束 / 不是今天的」
+    assert "<span class='chip'>撤单中</span>" in card and "<span class='chip'>不会下单（预计）</span>" in _card(html, "orders")
+    assert "不会下单" not in card
     mb = _book1015(sell="SENT", items={"M3-cancel_order": {**co, "status": "pending"},           # 手动卖出的单在撤单中：指令也不算、写出来
                                        "M4-sell": {"id": "M4-sell", "kind": "sell", "ticker": "1545.T", "status": "placed",
                                                    "at": "2026-10-14T20:00:00+09:00"}})
@@ -711,7 +714,9 @@ def test_trade_badge_under_halt():
         assert lv["orders"]["U2026-10-14-BUY-1482.T"][0] == "不会下单（HALT）" and "09:05 / 09:20" in lv["orders"]["U2026-10-14-BUY-1482.T"][1]
         assert lv["orders"]["U2026-10-14-BUY-2845.T"][0] == "不会下单（HALT）"
         html = panel.render("tachibana", "t" * 40, AT15)
-        assert "<i class='badge'>2</i>" in _tabbtn(html, "trade") and "不会下单（HALT）" in _card(html, "today")
+        assert "<i class='badge'>2</i>" in _tabbtn(html, "trade") and "不会下单（HALT）" in _card(html, "orders")   # 2026-10-16：在「已结束 / 不是今天的」
+        today = _card(html, "today")
+        assert "★ HALT 生效中" in today and "不会下单" not in today and "另有 1 条等 HALT 解除后" in today
         p = _book1015(sell="SENT", fix={})
         assert panel._badges(p, p["state"], {}, [], AT15, "paper").get("trade") == 1      # 模拟账户：排队的卖单照算，DEFERRED 不算（D3）
         lp = panel._trade_live(p, [], AT15, "paper")
@@ -777,7 +782,7 @@ def test_trade_badge_and_status_survive_unreadable_book_numbers(caplog, monkeypa
 def test_today_card_marks_the_old_note_of_a_buy_that_will_not_be_placed():
     """「不会下单（预计）」旁边执行器写的旧说明（「开盘后按始値检查、减股再下」）加上「原先：」（2026-10-15 复核：两句挨着像矛盾）。"""
     _book1015()
-    card = _card(panel.render("paper", "t" * 40, AT15), "today")
+    card = _card(panel.render("paper", "t" * 40, AT15), "orders")              # 2026-10-16：不会下的单在「已结束 / 不是今天的」
     assert "<span class='chip'>不会下单（预计）</span>" in card and "原先：开盘前余力 192 円" in card
     _book1015(sell="SENT")
     card = _card(panel.render("paper", "t" * 40, AT15), "today")

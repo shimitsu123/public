@@ -10,7 +10,7 @@ import subprocess
 from qbreak import manual_orders as MO
 from qbreak import panel, paths
 from qbreak.calendar_jp import JST
-from test_panel import AT, AT15, _book, _book1015, _card, _js_fn
+from test_panel import AT, AT15, _book, _book1015, _card, _js_fn, _pane
 
 AT_NIGHT = dt.datetime(2026, 10, 14, 19, 21, tzinfo=JST)                 # 2026-10-14（三）19:21：收盘后（下一次决策 = 10/15 07:40）
 AT_SESSION = dt.datetime(2026, 10, 15, 10, 12, tzinfo=JST)               # 盘中
@@ -33,7 +33,7 @@ def test_manual_card_labels_but_keeps_ids_and_cids():
     _req({"id": "M20261006-075000-cancel_order-7203", "kind": "cancel_order", "cid": "U2026-10-05-SELL-7203.T", "ticker": "7203.T",
           "at": "2026-10-06T07:50:00+09:00"})
     _req({"id": "M20261006-075100-sell-7203", "kind": "sell", "ticker": "7203.T", "block_days": 20, "at": "2026-10-06T07:51:00+09:00"})
-    card = _card(panel.render("paper", "t" * 40, AT), "orders")
+    card = _pane(panel.render("paper", "t" * 40, AT), "trade")         # 2026-10-16：今天的在上面、已结束的在下面 → 看整个交易页
     assert "撤单 7203 トヨタ自動車（U2026-10-05-SELL-7203.T）" in card
     assert "卖出全部 7203 トヨタ自動車" in card and "data-id='M20261006-075100-sell-7203'" in card
     assert "7203 トヨタ自動車-" not in card and "SELL-7203 トヨタ" not in card

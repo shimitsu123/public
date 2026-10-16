@@ -333,7 +333,7 @@ def test_page_has_card_on_top_of_trade_tab_and_chips():
     assert "<b>7203 トヨタ自動車</b> <span class='chip'>今天还能卖 ✓ / 买 ✓（二选一：同一只当天只下一笔）</span>" in card
     assert "卖：最多 200 股 · 用「卖出全部」/「调仓…」" in card and "1545 纳斯达克 100" in card
     assert "券商不限次数；限制来自差金決済与执行器规则" in card and TR.SAKIN_URL in card
-    assert i < h.index("<section class='card' id='orders'>")                  # 交易页：卡片在「手动指令」之前（最上面）
+    assert i < h.index("<section class='card' id='today'>")                   # 交易页：卡片在「今天要成交的单」之前（最上面；2026-10-16）
     assert "data-room='7203.T'>今天还能卖 ✓ / 买 ✓（二选一：同一只当天只下一笔）</div>" in h
     assert "data-room='1545.T'>今天还能卖 ✓" in h
     cfg = json.loads(re.search(r"<script type='application/json' id='qb-cfg'>(.*?)</script>", h, re.S).group(1))

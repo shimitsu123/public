@@ -21,7 +21,7 @@
   unblock  解除「不自动买回」（2026-10-13：读到时只记 lift_from = 写的时刻之后第一次 07:40 决策的成交日，那次决策起才不挡；
            不会买回、也不马上买；block_id = 页面看到的那个设定，设定换了 / 解除了就不动）
   cancel   撤回一条还没下的指令（target = 指令 id）；已经发到交易所的单用 cancel_order 撤
-  cancel_order  撤单：撤执行器今天已经发到交易所、还挂着的一笔单（cid = 执行器的单号；面板「今天的单」的「撤单」）→ 面板马上叫
+  cancel_order  撤单：撤执行器今天已经发到交易所、还挂着的一笔单（cid = 执行器的单号；面板「今天要成交的单」的「撤单」）→ 面板马上叫
            执行器（--phase cancel；qbreak/live_ops.py）；已经成交的部分撤不了；撤掉的卖单如果规则明天还要卖会再下
 「赢家加仓」研究没有通过、没触发信号的票没有回测验证：加仓 / 买入都是用户自己的决定，会让账户和云端模拟盘不一致。
 
@@ -933,7 +933,7 @@ def cancel_request(tag: str, book: dict | None, target: str, now: dt.datetime | 
     tg, todo, stuck, sent = plan["target"], plan["todo"], plan["stuck"], plan["sent"]
     if sent and tg.get("fund") == "all":
         return (False, f"没写：同批的 {len(sent)} 条（{'、'.join(describe(c) for c in sent)}）的单还挂在交易所，撤回指令撤不了；"
-                       "只撤买入会变成「全卖不买」→ 要撤：先用「今天的单」的「撤单」撤掉那几笔卖单（撤掉之后再撤回这条），或者不撤", None)
+                       "只撤买入会变成「全卖不买」→ 要撤：先用「今天要成交的单」的「撤单」撤掉那几笔卖单（撤掉之后再撤回这条），或者不撤", None)
     clock = (lambda: now) if now else None
     recs = append_many(tag, [{"kind": "cancel", "target": target, "source": source}]
                        + [{"kind": "cancel", "target": c["id"], "source": source} for c in todo], clock=clock)
@@ -951,7 +951,7 @@ def cancel_request(tag: str, book: dict | None, target: str, now: dt.datetime | 
         else:
             msg += f"；{describe(c)} 撤不了（{status_text(c) if c.get('status') else '已处理'}）"
     if sent:
-        msg += f"；凑钱的 {len(sent)} 条卖单已经挂在交易所，撤回指令撤不了：要撤用「今天的单」的「撤单」"
+        msg += f"；凑钱的 {len(sent)} 条卖单已经挂在交易所，撤回指令撤不了：要撤用「今天要成交的单」的「撤单」"
     return True, msg, rec
 
 
@@ -1235,7 +1235,7 @@ def _dead_word(o: dict, asked: set, unf: dict) -> str:
     if str(o.get("cid")) in asked:
         return "（撤单中）"
     x = unf.get(str(o.get("cid"))) or {}
-    return "（" + ("资金来源的卖单已撤，" if x.get("gone") else "开盘时现金不够一单元，") + "预计不会下单：见「交易」→「今天的单」）"
+    return "（" + ("资金来源的卖单已撤，" if x.get("gone") else "开盘时现金不够一单元，") + "预计不会下单：见「交易」→「已结束 / 不是今天的」）"
 
 
 def corefix_clear_text(book: dict | None, t: str, tag: str | None = None, now: dt.datetime | None = None) -> str:
@@ -1306,7 +1306,7 @@ def corefix_clear_text(book: dict | None, t: str, tag: str | None = None, now: d
             out += "；" + "、".join(_order_word(o) for o in exch) + " 还挂着：先等它成交 / 撤掉，再按成交后的口数调"
         dead = [o for o in dead if o not in uns]
     elif live:
-        out += ("；" + "、".join(_order_word(o) for o in live) + "照常（要不做：「今天的单」→ 撤单）；下一次决策起照规则，可能反向买卖")
+        out += ("；" + "、".join(_order_word(o) for o in live) + "照常（要不做：「今天要成交的单」→ 撤单）；下一次决策起照规则，可能反向买卖")
     if dead:
         out += "；" + "、".join(_order_word(o) + _dead_word(o, asked, unf) for o in dead)
     return out
@@ -1700,13 +1700,13 @@ def corefix_preview(book: dict | None, tag: str | None, rec: dict, now: dt.datet
             L.append("、".join(_order_word(o) for o in uns) + " 还没发出 → 被这条取代（执行器不再发）")
         if exch:
             L.append("、".join(_order_word(o) for o in exch)
-                     + " 已经在交易所 → 先等它成交 / 撤掉（「今天的单」→ 撤单），再按成交后的口数调（一会儿再试）")
+                     + " 已经在交易所 → 先等它成交 / 撤掉（「今天要成交的单」→ 撤单），再按成交后的口数调（一会儿再试）")
         live = [o for o in live if o.get("ticker") != t or str(o.get("cid")) in asked]
     dead = [o for o in live if str(o.get("cid")) in asked or str(o.get("cid")) in unf]   # 「交易」写「撤单中 / 不会下单（预计）」的：不写「照常」（2026-10-15 复核）
     live = [o for o in live if o not in dead]
     if live:
         L.append("今天还有执行器的单：" + "、".join(_order_word(o) + ("（开盘后钱够才下）" if o.get("status") == "DEFERRED" else "") for o in live)
-                 + " → 照常（要不做：「今天的单」→ 撤单）；成交的话" + ("执行器按成交后的口数算" if nowp else "下一次决策按成交后的口数再算"))
+                 + " → 照常（要不做：「今天要成交的单」→ 撤单）；成交的话" + ("执行器按成交后的口数算" if nowp else "下一次决策按成交后的口数再算"))
     if dead:
         L.append("今天的单里：" + "、".join(_order_word(o) + _dead_word(o, asked, unf) for o in dead))
     if halt:
@@ -2166,7 +2166,7 @@ def _uncancel_why_one(cid: str, items: dict, waiting: list[dict], batch_ids=(), 
     return None
 
 
-NOW_NO_CANCEL = ("盘中的单已经发到交易所，撤回指令撤不了：用面板「今天的单」的「撤单」撤（已经成交的部分撤不了），"
+NOW_NO_CANCEL = ("盘中的单已经发到交易所，撤回指令撤不了：用面板「今天要成交的单」的「撤单」撤（已经成交的部分撤不了），"
                  "或在立花网站 / 手机网站撤")
 NOW_FILLED_NO_CANCEL = "盘中的单已经全部成交（明天早上对账之后完成），撤不了"
 NOW_BUY_LAPSED = "盘中的买单已在 15:30 失效（没成交的部分不会再买）：下一次早上的对账之后这条指令结束，不用撤"
@@ -2731,7 +2731,7 @@ class Manual:
                     it.update(status="done", msg=f"撤回 {tt}：{now_sell_withdrawn(tg)}")
                 elif tg is not None and tg.get("status") == "placed" and not tg.get("cancel_req"):
                     tg["cancel_req"] = r["id"]
-                    it.update(status="done", msg=f"撤回 {tt}：之后不再下（已经发到交易所的单用「今天的单」的「撤单」撤）")
+                    it.update(status="done", msg=f"撤回 {tt}：之后不再下（已经发到交易所的单用「今天要成交的单」的「撤单」撤）")
                 else:
                     # 也写撤的是什么（2026-10-15 复核；找不到那条 → 只写 id，照旧「M… 不是…」）
                     it.update(status="rejected", msg=f"{tt}{'' if tt.endswith('）') else ' '}不是还没完成的指令，撤不了")

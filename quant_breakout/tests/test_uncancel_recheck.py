@@ -9,7 +9,7 @@ from qbreak import manual_orders as MO
 from qbreak import panel, paths
 
 from test_fund_all import _book4, _reqs
-from test_panel import AT, _book, _sm, _sm_nowarn, _submit_ok
+from test_panel import AT, _book, _pane, _sm, _sm_nowarn, _submit_ok
 
 BP = lambda: paths.state_dir() / "live_unified_paper.json"   # noqa: E731
 
@@ -37,8 +37,8 @@ def _un(cx, now=AT):
 
 
 def _card(html: str) -> str:
-    i = html.index("<h2>手动指令</h2>")
-    return html[i:html.index("</section>", i)]
+    """交易页里手动指令的那几行（2026-10-16 起分在「今天要成交的单」/「另有…」/「已结束 / 不是今天的」里 → 整个交易页）。"""
+    return _pane(html, "trade")
 
 
 # ────────── ①「全部换成 X」按现在的账本重查 ──────────

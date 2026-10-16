@@ -1,6 +1,6 @@
 """live_ops.py — 实盘执行器的人工操作（立花实盘缺口盘点 B 组：B1 撤单、B2 状态不明的单的候选、B3 持仓核对 / 人工代下登记）。
 
-B1 撤单（UnifiedExecutor.cancel_orders / cancel_book；命令 bash scripts/liveu.sh cancel | halt-cancel，面板「今天的单」的「撤单」）：
+B1 撤单（UnifiedExecutor.cancel_orders / cancel_book；命令 bash scripts/liveu.sh cancel | halt-cancel，面板「今天要成交的单」的「撤单」）：
    只撤执行器自己今天的、还挂着的单（SENT / PARTIAL；立花：有注文番号）。撤完用 order_status 再确认 → 记 CANCELLED（不算受理中、
    不算状态不明）+ 已经成交的股数；第二天早上的对账照立花的实际成交记账（再查一次 order_status）：
      撤掉的卖单 = 没成交 → 规则明天还要卖就照常再下（与「没成交」同一处理）；撤掉的买单不再买（信号只在那天开盘有效）；
@@ -9,7 +9,7 @@ B1 撤单（UnifiedExecutor.cancel_orders / cancel_book；命令 bash scripts/li
    盘中的手动单当场成交，撤不了。
 B2 状态不明的单的候选（unknown_candidates，只读）：注文一覧（CLMOrderList）里同代码、同买卖、股数相同或更少的单 →
    按受付时刻接近排序；附上可以照抄的登记命令草稿（bash scripts/liveu.sh --broker tachibana --resolve …）。登记仍要你确认。
-B3 持仓核对（reconcile_report，只读）与人工代下登记（adopt）：立花 API / Mac 出故障那天在立花网站照「今天的单」下了单 →
+B3 持仓核对（reconcile_report，只读）与人工代下登记（adopt）：立花 API / Mac 出故障那天在立花网站照面板「交易」里被挡 / 不下 / 没下的单下了单 →
    第二天早上之前登记进账本（止损按引擎的新仓算法；先备份账本），执行器之后照常。
 撤单（cancel / halt-cancel）、人工代下登记（adopt）只在你在对话里明确说时由 Claude 运行（与 --resolve 同级）。
 """
@@ -82,7 +82,7 @@ def fill_day_of(book: dict | None) -> dt.date | None:
 
 
 def how_text(o, paper: bool = False) -> str:
-    """这笔单的下法（面板「今天的单」/ 命令行）：寄付成行 / 寄付指値 / 开盘后 / 盘中 / 错过寄付后当日限价。
+    """这笔单的下法（面板「今天要成交的单」/ 命令行）：寄付成行 / 寄付指値 / 开盘后 / 盘中 / 错过寄付后当日限价。
     模拟账户（D3；2026-10-15）：开盘后的买单写「开盘后（09:25 前后按开盘价）」—— 不是立花的当日限り指値，是面板 09:25 前后按 1 分钟线的开盘价撮合。"""
     ph = _g(o, "phase") or "morning"
     if ph == "now":

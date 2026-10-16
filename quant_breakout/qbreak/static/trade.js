@@ -518,7 +518,7 @@ document.addEventListener('click', async e=>{
       const glab='整组撤单（'+(gn>n ? '能撤的 ' : '')+n+' 笔）';            // 同一组还有不能一起撤的（已成交 / 已撤 / 撤单中）：写「能撤的 N 笔」（data-gn；复核 2）
       if(d.fix) galt.push({text:'整组撤单并恢复按规则（'+tlab(d.fix, d.fixname)+'）', v:'fix', danger:true});
       const q=await ask(head+' · 同一组 '+gn+' 笔',
-        hint+'。'+(CFG.paper ? '' : d.gexch==='1' ? '\n马上发撤单到立花（之后看「今天的单」的状态）' : '\n这几笔都还没发到立花：撤了执行器就不再发')+gl   // data-gexch（复核 6）
+        hint+'。'+(CFG.paper ? '' : d.gexch==='1' ? '\n马上发撤单到立花（之后看「今天要成交的单」的状态）' : '\n这几笔都还没发到立花：撤了执行器就不再发')+gl   // data-gexch（复核 6）
         +'\n「'+glab+'」= 这一组能撤的一起撤：先撤买单，确认没成交再撤卖单；「'+solo+'」= 只撤这一笔'
         +(d.fix ? '；「整组撤单并恢复按规则」= 一起撤、再取消固定口数（照规则调：什么时候见下一个确认框）' : '')
         +(d.soloh ? '\n'+d.soloh : ''),                                // data-soloh：只撤卖单的 ★（放最后一行；复核 8：以前按钮说明接在 ★ 后面）
@@ -539,7 +539,7 @@ document.addEventListener('click', async e=>{
     if(dep>0){ alt.push({text:d.keep||'只撤卖单', v:'keep'}); if(d.fix) alt.push({text:fk+'（'+tlab(d.fix, d.fixname)+(d.depk ? '；卖单不撤' : '')+'）', v:'fix', danger:true}); }
     else if(d.fix) alt.push({text:'撤单并恢复按规则（'+tlab(d.fix, d.fixname)+'）', v:'fix', danger:true});   // 固定口数排的单（2026-10-16）
     const q=await ask(head,
-      hint+'。'+(d.unsent==='1' ? '' : (CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天的单」的状态）'))
+      hint+'。'+(d.unsent==='1' ? '' : (CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天要成交的单」的状态）'))
       +(d.deps ? '\n★ '+d.deps : '')                                    // 靠这笔卖出的钱的买单（服务器算：data-deps；2026-10-15）
       +(dep>0 ? '\n「'+dk+'」= 这几笔买单'+(d.depk ? '撤掉'+bx+'，这笔卖单不撤（见下面 ★）'
                 : '也撤'+bx+(d.depw==='1' ? '，买单撤掉了（没成交）才撤这笔卖单（见下面 ★）' : ''))   // data-depw：先撤买单、确认没成交再撤卖单（复核 3）
@@ -565,7 +565,7 @@ document.addEventListener('click', async e=>{
   }
   if(a==='cancel'){                                                       // 撤单前一定确认（2026-10-12 用户：防止误撤）：写清撤的是哪一条
     const q=await ask('确认撤单？', (d.desc||d.id)+'\n\n'+(d.placed==='2' ? (d.wtxt||'盘中的单已在 15:30 失效：撤回之后下一次开盘不再卖（下一次早上的对账之后结束；已经成交的部分照记）')+'。'   // G16（2026-10-14；复核：服务器按下单那天写 data-wtxt）
-      : d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天的单」的「撤单」撤。' : '还没下单：撤掉之后不会下。')
+      : d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天要成交的单」的「撤单」撤。' : '还没下单：撤掉之后不会下。')
       +(+d.fund>0 ? '\n为这笔买入写的 '+d.fund+' 条卖出 / 闲置资金指令也一起撤掉。' : '')+(+d.stuck>0 ? '\n另有 '+d.stuck+' 条已经生效 / 已在撤回中，撤不了（提交后会说明）。' : '')+'\n（指令 '+d.id+'）', '确认撤单', {danger:true});
     if(q.ok) done(await post({book:CFG.book, kind:'cancel', target:d.id})); return;
   }
@@ -609,7 +609,7 @@ document.addEventListener('click', async e=>{
     if(q.ok) done(await post({book:CFG.book, kind:'flow', jpy:n, date:$('#flow-date').value, note:$('#flow-note').value, reserve:rsv})); return;
   }
   if(a==='halt'){
-    const q=await ask('停止下单（HALT）', '全部账本（模拟和立花）从下一次运行起不下单、持仓不动。\n已经发到交易所的单不会被撤（要撤：「今天的单」的「撤单」，或立花网站 / 手机网站）。\n这里只能停：恢复只在 Mac 上（在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」）。'
+    const q=await ask('停止下单（HALT）', '全部账本（模拟和立花）从下一次运行起不下单、持仓不动。\n已经发到交易所的单不会被撤（要撤：「今天要成交的单」的「撤单」，或立花网站 / 手机网站）。\n这里只能停：恢复只在 Mac 上（在 Mac 的 Claude 对话里明确说「恢复下单，删除 HALT」）。'
       +(CFG.halt_allin ? '\n注意：'+CFG.halt_allin+'。' : ''), '停止下单', {danger:true, input:'原因（可不填）'});   // 2026-10-13：同批卖单已在交易所
     if(q.ok) done(await api('/api/halt',{reason:q.value})); return;
   }

@@ -372,7 +372,7 @@ def test_texts_cancel_why_how_text_and_order_card():
     r.now["t"] = _at(r, 9, 25)
     r.ux.open_phase(feed=_feed(r))
     r.ux.save(force=True)
-    html = panel._orders_card(r.ux.book, _at(r, 9, 26), True, [], tag="paper")
+    html = "".join(h for _cid, h in panel._order_rows(r.ux.book, _at(r, 9, 26), True, [], tag="paper")[0])   # 2026-10-16：行与卡片分开
     assert "成交 970 @ ¥699.79" in html and "成交 677/678 @ ¥1,000.50" in html and "次日开盘" not in html
 
 
