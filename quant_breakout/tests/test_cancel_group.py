@@ -200,7 +200,8 @@ def test_check_and_group_prune():
     r3 = MO.normalize({"kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [f"U{D}-BUY-7203.T"]})
     assert "账本里没有" in MO.check(r3, b, "paper", now=AT15) and "7203 トヨタ自動車" in MO.check(r3, b, "paper", now=AT15)
     b["manual"]["items"] = {"M9": {"id": "M9", "kind": "cancel_order", "cid": BUY, "status": "pending"}}
-    assert "已经在撤（等执行器）" in MO.check(rec, b, "paper", now=AT15)
+    assert MO.check(rec, b, "paper", now=AT15) == (f"1482 对冲版美国 7〜10 年国债 的单 {BUY} 已经在撤"
+                                                   "（买 1482 对冲版美国 7〜10 年国债 的撤单，等执行器）")   # 说是哪一条撤单、在做什么
     b = _gbook()                                                             # 页面过期：同一组里一笔已经成交了
     b["orders"].append({**b["orders"][1], "cid": BUY + "-2", "qty": 1, "status": "FILLED", "sent_qty": 1, "filled_qty": 1})
     r4 = MO.normalize({"kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [BUY, BUY + "-2"]})
@@ -544,17 +545,20 @@ def test_review_check_refuses_a_single_cancel_inside_a_pending_or_unread_group()
     b = _gbook()
     b["manual"]["items"] = {"M1": {"id": "M1", "kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [BUY], "status": "pending"}}
     one = MO.normalize({"kind": "cancel_order", "cid": BUY})                # 只撤这一笔（买）：整组撤单里已经有它
-    assert "1482 对冲版美国 7〜10 年国债 的单 " + BUY + " 已经在撤（等执行器）" == MO.check(one, b, "paper", now=AT15)
+    assert MO.check(one, b, "paper", now=AT15) == ("1482 对冲版美国 7〜10 年国债 的单 " + BUY + " 已经在撤"
+                                                   "（卖 1545 纳斯达克 100 这一组的整组撤单，等执行器）")   # 简化：说是哪一条
     b = _gbook()
     MO.append("paper", {"kind": "cancel_order", "cid": BUY, "deps": "cancel", "grp": [SELL]}, clock=lambda: T0)   # 还没读的整组撤单
     keep = MO.normalize({"kind": "cancel_order", "cid": SELL, "deps": "keep"})
-    assert "已经在撤（等执行器）" in MO.check(keep, b, "paper", now=AT15)
+    assert "已经在撤（买 1482 对冲版美国 7〜10 年国债 这一组的整组撤单，等执行器）" in MO.check(keep, b, "paper", now=AT15)
     rec = MO.normalize({"kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [BUY]})
-    assert MO.group_prune(rec, b, AT15, True, MO.unseen("paper", b)) == (rec, [])   # 点的这一笔自己在撤：交给 check 说「已经在撤」
+    assert MO.group_prune(rec, b, AT15, True, MO.unseen("paper", b)) == (rec, [])   # 同一组已经有撤单：不去掉什么，交给 check 说理由
     assert "已经在撤" in MO.check(rec, b, "paper", now=AT15)
 
 
-def test_review_single_sell_target_is_folded_into_the_group_job_buy_first():
+def test_review_single_sell_next_to_a_group_job_in_one_core_call_is_not_folded_buy_first():
+    # 简化（2026-10-16）：不再把单笔撤的卖单并进整组撤单（cancel_book / check 已经先拒绝同一组的第二条撤单）；直接调 cancel_core 时
+    # 照样先撤买单，买单的撤单还没确认 → 单笔的卖单被闸门留下（以前写「交给整组撤单」）
     b = _gbook()
     _at_exch(b, BUY, "B1")
     orders = _xo(b)
@@ -568,7 +572,7 @@ def test_review_single_sell_target_is_folded_into_the_group_job_buy_first():
     br = _Pending(10 ** 6)
     res = LO.cancel_core(orders, b, lambda: br, [SELL, BUY], paper=False, now=T9, source="test", groups={BUY: [SELL]})
     assert br.calls == ["B1"] and orders[0].status == "SENT" and res["grp"][BUY]["state"] == "wait"
-    assert res["by_cid"][SELL] == ("skipped", "同一组正在整组撤单：这一笔交给整组撤单（先撤买单、确认没成交再撤卖单）")
+    assert res["by_cid"][SELL][0] == "skipped" and res["held"] == [SELL] and "卖单不撤" in res["by_cid"][SELL][1]
 
 
 def test_review_two_group_cids_merge_into_one_summary():
@@ -577,11 +581,12 @@ def test_review_two_group_cids_merge_into_one_summary():
     orders = _xo(b)
     br = _Rec()
     res = LO.cancel_core(orders, b, lambda: br, [SELL, BUY], paper=False, now=T9, source="test", groups={SELL: None, BUY: None})
-    assert list(res["grp"]) == [SELL] and res["alias"] == {BUY: SELL} and br.calls == ["B1", "S1"]
+    assert list(res["grp"]) == [SELL] and "alias" not in res and br.calls == ["B1", "S1"]   # 命令行点了同一组的两笔：跑一次
     assert [ln for ln in LO.cancel_text(res) if ln.startswith("整组撤单")] == ["整组撤单（2 笔：卖 1545 纳斯达克 100 这一组）：都撤了"]
 
 
-def test_review_requests_alias_items_both_finish():
+def test_review_requests_second_item_for_the_same_group_is_refused_with_a_reason():
+    # 简化（2026-10-16）：以前两条都做（第二条当别名、记同一个结果）；现在同一组同时只有一个撤单 → 后来的那条不做、写明理由
     b = _gbook()
     _at_exch(b, BUY, "B1")
     p = _tbook(b)
@@ -594,7 +599,10 @@ def test_review_requests_alias_items_both_finish():
     br = _Rec()
     res = LO.cancel_book(p, lambda: br, paper=False, tag="tachibana", requests=True, clock=lambda: T9)
     assert br.calls == ["B1", "S1"] and len(res["grp"]) == 1
-    assert {i["status"] for i in _items(p)} == {"done"} and all("都撤了" in i["msg"] for i in _items(p))
+    st = {i["id"]: i for i in _items(p)}
+    assert st["X2"]["status"] == "rejected" and "都撤了" in next(i["msg"] for k, i in st.items() if k != "X2")
+    assert st["X2"]["msg"].endswith("没做：1482 对冲版美国 7〜10 年国债 的单 " + BUY + " 已经在撤（卖 1545 纳斯达克 100 这一组的整组撤单，执行器正在撤）")
+    assert any("撤单指令 X2（买 1482 对冲版美国 7〜10 年国债 这一组的整组撤单）没做" in ln for ln in LO.cancel_text(res))
 
 
 def test_review_sell_cancel_accepted_but_still_cancelling_counts_as_all():
@@ -700,7 +708,8 @@ def test_review_busy_group_members_are_not_cancelled_alone():
     p = _tbook(b)
     t = T9 + dt.timedelta(seconds=20)
     res = LO.cancel_book(p, lambda: _NoBroker(), [SELL], paper=False, tag="tachibana", clock=lambda: t, deps="keep")   # 命令行 --solo
-    assert res["by_cid"][SELL][0] == "skipped" and "同一组正在整组撤单" in res["by_cid"][SELL][1]
+    assert res["by_cid"][SELL] == ("skipped", "1545 纳斯达克 100 的单 " + SELL + " 已经在撤"
+                                   "（卖 1545 纳斯达克 100 这一组的整组撤单，等立花确认买单的撤单，最长到 09:40）")
     assert json.loads(p.read_text(encoding="utf-8"))["orders"][0]["status"] == "SENT"
 
 
@@ -862,7 +871,9 @@ def _node_ask(d: dict, alt=None) -> dict:
     return json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True, timeout=60).stdout.splitlines()[-1])
 
 
-# 1. 单笔撤单不交给不撤它的整组撤单；「都撤了」只说这次范围里的，范围外还开着的卖单写出来
+# 1. 单笔撤单不被整组撤单吞掉；「都撤了」只说这次范围里的，范围外还开着的卖单写出来
+#    简化（2026-10-16）：同一组同时只有一个撤单 —— 先写的单笔撤单照常做，同一次读到的整组撤单不做（写明理由，以前两条一起做、互相交接）；
+#    单笔撤完之后再整组撤
 @pytest.mark.parametrize("k", [0, LO.GROUP_POLLS])
 def test_r2_single_cancel_outside_the_group_scope_is_not_dropped(k):
     b = _three()
@@ -871,15 +882,22 @@ def test_r2_single_cancel_outside_the_group_scope_is_not_dropped(k):
     MO.append("tachibana", {"kind": "cancel_order", "cid": BUY, "deps": "cancel", "grp": [SELL]}, clock=lambda: T9)   # 整组撤单（买 + 卖 1545）
     br = _BPend(k)
     res = LO.cancel_book(p, lambda: br, paper=False, tag="tachibana", requests=True, clock=lambda: T9)
-    assert res["by_cid"][S2][0] == "done" and "S2X" in br.calls          # 以前：交给整组撤单，而整组撤单不撤它（不在范围里）→ 一直不撤
-    assert {i["cid"]: i["status"] for i in _items(p)}[S2] == "done"
+    assert res["by_cid"][S2][0] == "done" and br.calls == ["S2X"] and res["grp"] == {}
+    st = {i["cid"]: i for i in _items(p)}
+    assert st[S2]["status"] == "done" and st[BUY]["status"] == "rejected"
+    assert st[BUY]["msg"].endswith("没做：同一组正在撤单（卖 2845 纳斯达克 100 对冲版 的撤单，执行器正在撤）：等它结束再撤")
+    t1 = T9 + dt.timedelta(seconds=5)
+    rec = MO.normalize({"kind": "cancel_order", "cid": BUY, "deps": "cancel", "grp": [SELL]})
+    assert MO.check(rec, json.loads(p.read_text(encoding="utf-8")), "tachibana", now=t1) is None   # 单笔那条做完了：能整组撤
+    MO.append("tachibana", rec, clock=lambda: t1)
+    res = LO.cancel_book(p, lambda: br, paper=False, tag="tachibana", requests=True, clock=lambda: t1)
     if k:
         assert res["grp"][BUY]["state"] == "wait"
-        res = LO.cancel_book(p, lambda: br, paper=False, tag="tachibana", requests=True, clock=lambda: T9 + dt.timedelta(seconds=61))
+        res = LO.cancel_book(p, lambda: br, paper=False, tag="tachibana", requests=True, clock=lambda: t1 + dt.timedelta(seconds=61))
     assert res["grp"][BUY]["line"] == "整组撤单（同一组 3 笔里的 2 笔：买 1482 对冲版美国 7〜10 年国债 这一组）：都撤了"
     st = {o["cid"]: o["status"] for o in json.loads(p.read_text(encoding="utf-8"))["orders"]}
     assert st == {SELL: "CANCELLED", BUY: "CANCELLED", S2: "CANCELLED"}
-    assert {i["status"] for i in _items(p)} == {"done"}
+    assert sorted(i["status"] for i in _items(p)) == ["done", "done", "rejected"]
 
 
 def test_r2_group_summary_names_open_sells_outside_the_scope():
@@ -891,7 +909,9 @@ def test_r2_group_summary_names_open_sells_outside_the_scope():
                                        "同一组另有 卖 2845 纳斯达克 100 对冲版：5 口（已下单（等成交）） 不在这次整组撤单里")
 
 
-def test_r2_cli_single_cancel_of_a_member_the_waiting_group_does_not_cover_runs_now():
+def test_r2_cli_single_cancel_of_a_member_while_its_group_waits_is_refused_until_the_group_ends():
+    # 简化（2026-10-16）：以前这一笔不在整组撤单的范围里 → 命令行马上撤；现在同一组同时只有一个撤单 → 这次不撤、写明是哪一条在撤，
+    # 整组撤单结束之后再撤（以前的 test_r2_cli_single_cancel_of_a_member_the_waiting_group_does_not_cover_runs_now）
     b = _three()
     b["orders"][1]["note"] = "你撤了单（09:30）：撤单已受理，立花还在处理（取消中）"
     b["manual"]["items"] = {"M1": {"id": "M1", "kind": "cancel_order", "cid": BUY, "deps": "cancel", "grp": [SELL], "status": "pending",
@@ -900,9 +920,13 @@ def test_r2_cli_single_cancel_of_a_member_the_waiting_group_does_not_cover_runs_
     p = _tbook(b)
     br = _BPend(0)
     res = LO.cancel_book(p, lambda: br, [S2], paper=False, tag="tachibana", clock=lambda: T9 + dt.timedelta(seconds=20), deps="keep")
-    assert res["by_cid"][S2][0] == "done" and br.calls == ["S2X"]       # 以前：「交给整组撤单」，整组撤单不撤它
+    assert res["by_cid"][S2] == ("skipped", "同一组正在撤单（买 1482 对冲版美国 7〜10 年国债 这一组的整组撤单，"
+                                            "等立花确认买单的撤单，最长到 09:40）：等它结束再撤") and br.calls == []
+    assert any(ln.startswith("没撤：卖 2845 纳斯达克 100 对冲版 5 口") for ln in LO.cancel_text(res))
     res = LO.cancel_book(p, lambda: br, paper=False, tag="tachibana", requests=True, clock=lambda: T9 + dt.timedelta(seconds=61))
-    assert res["grp"][BUY]["state"] == "all" and br.calls == ["S2X", "S1"]
+    assert res["grp"][BUY]["state"] == "all" and br.calls == ["S1"]
+    res = LO.cancel_book(p, lambda: br, [S2], paper=False, tag="tachibana", clock=lambda: T9 + dt.timedelta(seconds=62), deps="keep")
+    assert res["by_cid"][S2][0] == "done" and br.calls == ["S1", "S2X"]
     st = {o["cid"]: o["status"] for o in json.loads(p.read_text(encoding="utf-8"))["orders"]}
     assert st == {SELL: "CANCELLED", BUY: "CANCELLED", S2: "CANCELLED"}
 
@@ -1195,19 +1219,25 @@ def test_r3_cli_preview_matches_the_group_run_when_a_filled_buy_keeps_the_sell(m
     assert br.calls == [] and _bst(p)[SELL] == "SENT"                       # 执行器：与预览一样，卖单不撤
 
 
-def test_r3_cli_preview_includes_what_the_group_run_cancels_even_if_asked(monkeypatch, capsys):
+def test_r3_cli_preview_and_group_run_wait_for_an_unread_single_cancel_in_the_group(monkeypatch, capsys):
+    # 简化（2026-10-16）：以前（..._includes_what_the_group_run_cancels_even_if_asked）预览照样列「撤」、--group 也照样撤，
+    # 和还没读的单笔撤单同时管买单；现在同一组同时只有一个撤单 → 预览与执行器都说这次不撤（同一句理由），那一条做完再撤
     b = _gbook()
     _at_exch(b, SELL, "S1")
     run, p = _cli(monkeypatch, b)
     MO.append("tachibana", {"kind": "cancel_order", "cid": BUY}, clock=lambda: T9)   # 买单那一行的「撤单」还没被读
     assert run.main(["live-u", "--broker", "tachibana", "--cancel", SELL, "--group", "--preview"]) == 0
     pv = capsys.readouterr().out
-    assert "· 撤：买 1482 对冲版美国 7〜10 年国债：678 口（等开盘后）" in pv and "· 撤：卖 1545 纳斯达克 100：4,110 口" in pv
-    assert "撤单中" not in pv and "不跟着撤" not in pv
-    orders = _xo(b)
+    why = "同一组正在撤单（买 1482 对冲版美国 7〜10 年国债 的撤单，等执行器）：等它结束再撤"
+    assert f"★ cancel {SELL} --group 这次什么都不撤：{why}" in pv and "· 撤" not in pv
     br = _Rec()
-    LO.cancel_core(orders, b, lambda: br, [SELL], paper=False, now=T9, source="test", groups={SELL: None})
-    assert {o.cid: o.status for o in orders} == {SELL: "CANCELLED", BUY: "CANCELLED"} and br.calls == ["S1"]
+    res = LO.cancel_book(p, lambda: br, [SELL], paper=False, tag="tachibana", clock=lambda: T9, groups={SELL: None})
+    assert br.calls == [] and res["by_cid"][SELL] == ("skipped", why) and _bst(p)[SELL] == "SENT"
+    assert _run_req(p, br)["by_cid"][BUY][0] == "done"                     # 买单那一条（还没发出：执行器不再发）
+    assert run.main(["live-u", "--broker", "tachibana", "--cancel", SELL, "--group", "--preview"]) == 0
+    assert "· 撤：卖 1545 纳斯达克 100：4,110 口" in capsys.readouterr().out
+    LO.cancel_book(p, lambda: br, [SELL], paper=False, tag="tachibana", clock=lambda: T9, groups={SELL: None})
+    assert _bst(p) == {SELL: "CANCELLED", BUY: "CANCELLED"} and br.calls == ["S1"]
 
 
 def test_r3_cli_preview_says_nothing_is_cancelled_while_a_panel_group_cancel_covers_it(monkeypatch, capsys):
@@ -1217,7 +1247,8 @@ def test_r3_cli_preview_says_nothing_is_cancelled_while_a_panel_group_cancel_cov
     MO.append("tachibana", {"kind": "cancel_order", "cid": BUY, "deps": "cancel", "grp": [SELL]}, clock=lambda: T9)
     assert run.main(["live-u", "--broker", "tachibana", "--cancel", SELL, "--group", "--preview"]) == 0
     pv = capsys.readouterr().out
-    assert f"★ cancel {SELL} --group 这次什么都不撤：同一组已经写了整组撤单（等执行器）" in pv and "· 撤" not in pv
+    assert (f"★ cancel {SELL} --group 这次什么都不撤：1545 纳斯达克 100 的单 {SELL} 已经在撤"
+            "（买 1482 对冲版美国 7〜10 年国债 这一组的整组撤单，等执行器）") in pv and "· 撤" not in pv
     br = _Rec()
     res = LO.cancel_book(p, lambda: br, [SELL], paper=False, tag="tachibana", clock=lambda: T9, groups={SELL: None})
     assert br.calls == [] and res["by_cid"][SELL][0] == "skipped" and _bst(p)[SELL] == "SENT"
@@ -1228,10 +1259,11 @@ def test_r3_accepted_then_cancel_failed_ends_the_waiting_group_with_the_site_lin
     b = _three()
     p = _tbook(b)
     MO.append("tachibana", {"kind": "cancel_order", "cid": BUY}, clock=lambda: T9)                       # 先单笔撤买单
-    MO.append("tachibana", {"kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [S2]}, clock=lambda: T9)
     br = _AcceptThenFail()
+    assert _run_req(p, br)["by_cid"][BUY][0] == "pending" and br.calls == ["B1"]   # 简化：同一组的整组撤单等这一条做完才写（以前同一次运行）
+    MO.append("tachibana", {"kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [S2]}, clock=lambda: T9)
     res = _run_req(p, br)
-    assert res["by_cid"][BUY][0] == "pending" and res["grp"][SELL]["state"] == "wait" and br.calls == ["B1"]
+    assert res["grp"][SELL]["state"] == "wait" and br.calls == ["B1"]
     br.phase = 1                                                              # 交易所那边撤单没成功：买单还挂着
     res = _run_req(p, br, T9 + dt.timedelta(seconds=61))
     g = res["grp"][SELL]
@@ -1334,25 +1366,36 @@ def test_r3_a_member_that_is_also_an_unsent_dep_is_listed_once():
 
 
 # F5：挡卖单的买单自己正在撤 / 在交易所、「一起撤买单」会先撤它 → 不写「卖单不撤」，写「买单撤掉了（没成交）才撤卖单」
-def test_r3_deps_while_the_blocking_buy_is_being_cancelled_says_conditional_not_kept():
-    b = _dep7203(_gbook())
+# 简化（2026-10-16）：买单那一行的「撤单」还没做完时，同一组的卖单那一行不给按钮（写明是哪一条在撤）；做完（立花已受理、还在取消中）之后
+# 卖单那一行给「整组撤单」，买单写「撤单已受理（取消中）」、照样在范围里；确认框与执行器一致：先撤买单、撤掉了（没成交）才撤卖单
+def _sell_after_buy_cancel_accepted(b):
     _at_exch(b, BUY, "B1")
     p = _tbook(b)
     MO.append("tachibana", {"kind": "cancel_order", "cid": BUY}, clock=lambda: T9)       # 买单那一行的「撤单」还没处理
-    a = _attrs(_btn(_tcard(json.loads(p.read_text(encoding="utf-8"))), SELL))
-    assert "depk" not in a and a["depw"] == "1" and "depx" not in a                    # 以前：data-depk（「撤买单（卖单不撤）」）
+    card = _tcard(json.loads(p.read_text(encoding="utf-8")))
+    assert f"data-cid='{SELL}'" not in card and f"data-cid='{BUY}'" not in card
+    assert "同一组正在撤单（买 1482 对冲版美国 7〜10 年国债 的撤单，等执行器）：等它结束再撤" in card
+    assert MO.check(MO.normalize({"kind": "cancel_order", "cid": SELL, "deps": "cancel"}), json.loads(p.read_text(encoding="utf-8")),
+                    "tachibana", now=T9) == "同一组正在撤单（买 1482 对冲版美国 7〜10 年国债 的撤单，等执行器）：等它结束再撤"
+    assert _run_req(p, _Pending(10 ** 6))["by_cid"][BUY][0] == "pending"   # 立花受理了、还在取消中：那一条结束
+    return p, _attrs(_btn(_tcard(json.loads(p.read_text(encoding="utf-8"))), SELL))
+
+
+def test_r3_deps_while_the_blocking_buy_is_being_cancelled_says_conditional_not_kept():
+    p, a = _sell_after_buy_cancel_accepted(_dep7203(_gbook()))
+    assert a["grp"] == BUY and "depk" not in a
     gl = a["glist"]
-    assert ("★ 「一起撤买单」：先撤买单（买 1482 对冲版美国 7〜10 年国债：678 口（撤单中）），确认买单撤掉了（没成交）才撤这笔卖单；"
-            "买单成交了 / 撤不掉 / 立花 10 分钟还没确认 → 这笔卖单不撤（会推送 ★）") in gl
-    assert "卖单不撤）」" not in gl and "—— 「一起撤买单」→ 买单撤掉了（没成交）才撤；「只撤卖单」→ 撤" in gl
+    assert gl.startswith("整组撤单：先撤买单，确认买单撤掉了（没成交）再撤卖单") and "卖单因此不撤" not in gl
+    assert "· 撤：买 1482 对冲版美国 7〜10 年国债：678 口（已下单（等成交），撤单已受理（取消中））" in gl
+    assert "· 不跟着撤：买 7203 トヨタ自動車：100 股 —— 凑钱的卖单 卖 1545 纳斯达克 100：4,110 口 已撤 → 不会下" in gl
     out = _sell_dlg(a)
-    q = out["ASKED"][0]
-    assert q["ok"] == "一起撤买单" and "这几笔买单也撤（执行器不再发），买单撤掉了（没成交）才撤这笔卖单（见下面 ★）" in q["body"]
-    assert out["SENT"] == [{"book": "tachibana", "kind": "cancel_order", "cid": SELL, "deps": "cancel"}]
+    assert out["ASKED"][0]["ok"] == "整组撤单（2 笔）"
+    assert out["SENT"] == [{"book": "tachibana", "kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [BUY]}]
     MO.append("tachibana", out["SENT"][0], clock=lambda: T9)
     br = _Rec()
-    _run_req(p, br)
-    assert br.calls == ["B1", "S1"] and set(_bst(p).values()) == {"CANCELLED"}      # 与确认框一样：买单撤掉了才撤卖单
+    res = _run_req(p, br)
+    assert br.calls == ["B1", "S1"] and _bst(p) == {SELL: "CANCELLED", BUY: "CANCELLED", R7: "SKIPPED"}   # 与确认框一样
+    assert res["grp"][SELL]["state"] == "all" and any(r["act"] == "skip" for r in res["fund"])
 
 
 def test_r3_deps_outside_a_group_with_an_exchange_buy_is_conditional_and_buy_first():
@@ -1397,15 +1440,13 @@ def test_r3_fix_button_follows_depk_and_the_engine_keeps_the_sell():
 
 
 def test_r3_fix_button_with_a_conditional_deps_cancel_says_so():
-    b = _dep7203(_gbook())
-    _at_exch(b, BUY, "B1")
-    p = _tbook(b)
-    MO.append("tachibana", {"kind": "cancel_order", "cid": BUY}, clock=lambda: T9)
-    a = _attrs(_btn(_tcard(json.loads(p.read_text(encoding="utf-8"))), SELL))
-    assert "不要再排 → 「撤单并恢复按规则」" in a["glist"]
-    q = _sell_dlg(a, alt="fix")["ASKED"][0]
-    assert q["alt"][1] == "撤单并恢复按规则（1482.T 对冲版美国 7〜10 年国债）"
-    assert "「撤单并恢复按规则」= 和「一起撤买单」一样（买单撤掉了才撤这笔卖单），再取消固定口数" in q["body"]
+    p, a = _sell_after_buy_cancel_accepted(_dep7203(_gbook()))
+    assert a["fix"] == "1482.T" and "不要再排 → 「整组撤单并恢复按规则」" in a["glist"]
+    q = _sell_dlg(a, alt="fix")
+    assert q["ASKED"][0]["alt"][1] == "整组撤单并恢复按规则（1482.T 对冲版美国 7〜10 年国债）"
+    assert "「整组撤单并恢复按规则」= 一起撤、再取消固定口数" in q["ASKED"][0]["body"]
+    assert q["SENT"] == [{"book": "tachibana", "kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [BUY]},
+                         {"book": "tachibana", "kind": "corefix", "ticker": "1482.T", "clear": True}]
 
 
 # F8：这次范围里的都撤了 → 「都撤了」（不推「只撤了一部分」）；范围里没有卖单时不写「卖单因此不撤」
@@ -1488,43 +1529,37 @@ def _extra_book(note=""):
     return b
 
 
-COND = ("★ 「一起撤买单」：先撤买单（买 1482 对冲版美国 7〜10 年国债：678 口（撤单中）），确认买单撤掉了（没成交）才撤这笔卖单；"
-        "买单成交了 / 撤不掉 / 立花 10 分钟还没确认 → 这笔卖单不撤（会推送 ★）")
-
-
-def test_r4_deps_cancel_waits_for_a_same_group_buy_cancelled_in_the_same_run():
-    b = _extra_book()
-    p = _tbook(b)
-    MO.append("tachibana", {"kind": "cancel_order", "cid": BUY}, clock=lambda: T9)       # 买 1482 那一行的「撤单」还没处理
-    a = _attrs(_btn(_tcard(json.loads(p.read_text(encoding="utf-8"))), SELL))
-    assert "depk" not in a and a["depw"] == "1" and COND in a["glist"]
-    out = _sell_dlg(a)
-    assert out["ASKED"][0]["ok"] == "一起撤买单" and out["SENT"][0]["deps"] == "cancel"
-    MO.append("tachibana", out["SENT"][0], clock=lambda: T9)
-    br = _Pending(LO.POLLS)                                                  # 立花：买单的撤单前 5 次查都是取消中，之后取消完了
-    res = _run_req(p, br)
-    assert res["by_cid"][BUY][0] == "pending" and SELL not in res["by_cid"] and _bst(p)[SELL] == "SENT"
-    g = res["grp"][SELL]
-    assert g["state"] == "wait" and g["wait"] == [BUY] and g["xwait"] == [BUY]    # 复核 5：只查状态的同一组买单单独记（xwait），
-    assert BUY not in g["members"]                                          # 不算这条指令要撤的单（那一行照常能撤 / 整组撤）
-    assert "买 1482 对冲版美国 7〜10 年国债 的撤单立花还没确认 → 卖单先不撤，约 1 分钟后再查" in g["line"]
-    it = next(i for i in _items(p) if i["cid"] == SELL)
-    assert it["status"] == "pending" and it["grp_wait"] == [BUY] and it["grp_legacy"] and it["grp_xwait"] == [BUY]
-    assert BUY not in it["grp_all"] and MO.handling_cids(it) == [SELL]
-    res = _run_req(p, br, T9 + dt.timedelta(seconds=61))                     # 复查：只查买单（不再发撤单），撤掉了 → 撤卖单
-    assert br.calls == ["B1", "S1"] and _bst(p)[BUY] == "CANCELLED" and _bst(p)[SELL] == "CANCELLED"
-    assert res["by_cid"][SELL][0] == "done"
-    it = next(i for i in _items(p) if i["cid"] == SELL)
-    assert it["status"] == "done" and "grp_wait" not in it and "grp_legacy" not in it and "grp_xwait" not in it
-
-
-def test_r4_deps_cancel_gives_up_on_a_same_group_buy_with_the_site_link():
+def test_r4_deps_cancel_read_in_the_same_run_as_a_same_group_buy_cancel_is_refused():
+    # 简化（2026-10-16）：以前（..._waits_for_a_same_group_buy_cancelled_in_the_same_run）同一次运行里「一起撤买单」等单笔撤的买单
+    # （只查状态的同一组买单另记 grp_xwait）；现在同一组同时只有一个撤单 → 后读到的「一起撤买单」不做、写明理由
+    # （面板上卖单那一行在买单那条做完之前不给按钮：_sell_after_buy_cancel_accepted）
     b = _extra_book()
     p = _tbook(b)
     MO.append("tachibana", {"kind": "cancel_order", "cid": BUY}, clock=lambda: T9)
     MO.append("tachibana", {"kind": "cancel_order", "cid": SELL, "deps": "cancel"}, clock=lambda: T9)
+    br = _Pending(LO.POLLS)
+    res = _run_req(p, br)
+    assert res["by_cid"][BUY][0] == "pending" and SELL not in res["by_cid"] and res["grp"] == {} and br.calls == ["B1"]
+    why = "同一组正在撤单（买 1482 对冲版美国 7〜10 年国债 的撤单，执行器正在撤）：等它结束再撤"
+    it = next(i for i in _items(p) if i["cid"] == SELL)
+    assert it["status"] == "rejected" and it["msg"].endswith("没做：" + why) and "grp_wait" not in it
+    assert res["refused"] == [f"撤单指令 {it['id']}（卖 1545 纳斯达克 100 的「一起撤买单」）没做 —— {why}"]
+    assert _bst(p)[SELL] == "SENT" and _bst(p)[R7] == "DEFERRED"
+
+
+def _legacy_after_buy(b, br, t=T9):
+    """买 1482 那一行的「撤单」先做完（立花受理、还在取消中 / 没成功），再读卖 1545 的「一起撤买单」（以前的页面写的）。"""
+    p = _tbook(b)
+    MO.append("tachibana", {"kind": "cancel_order", "cid": BUY}, clock=lambda: T9)
+    r1 = _run_req(p, br)
+    MO.append("tachibana", {"kind": "cancel_order", "cid": SELL, "deps": "cancel"}, clock=lambda: t)
+    return p, r1, _run_req(p, br, t)
+
+
+def test_r4_deps_cancel_gives_up_on_a_same_group_buy_with_the_site_link():
     br = _Pending(10 ** 6)
-    _run_req(p, br)
+    p, _r1, res = _legacy_after_buy(_extra_book(), br)
+    assert res["grp"][SELL]["state"] == "wait"
     res = _run_req(p, br, T9 + dt.timedelta(seconds=MO.GROUP_WAIT_MAX_S))
     assert res["grp"][SELL]["state"] == "gaveup" and br.calls == ["B1"] and _bst(p)[SELL] == "SENT"
     assert res["held"] == [SELL]
@@ -1537,23 +1572,12 @@ def test_r4_deps_cancel_gives_up_on_a_same_group_buy_with_the_site_link():
 
 @pytest.mark.parametrize("k", [LO.POLLS + LO.GROUP_POLLS, LO.POLLS])
 def test_r4_deps_cancel_waits_for_a_same_group_buy_cancelled_in_an_earlier_run(k):
-    b = _extra_book()
-    p = _tbook(b)
-    MO.append("tachibana", {"kind": "cancel_order", "cid": BUY}, clock=lambda: T9)       # 买 1482 那一行的「撤单」
-    a = _attrs(_btn(_tcard(json.loads(p.read_text(encoding="utf-8"))), SELL))          # 卖单的确认框（页面还没刷新）
-    assert "depk" not in a and a["depw"] == "1" and COND in a["glist"]
-    out = _sell_dlg(a)
-    assert out["ASKED"][0]["ok"] == "一起撤买单"
+    # 简化（2026-10-16）：卖单的确认框在买单那条做完之后才有（之前那一行不给按钮）；那时给的是「整组撤单」（test_r3_deps_while_…）。
+    # 这里是以前的页面写的「一起撤买单」（deps=cancel）：执行器照样等买单的撤单确认
     br = _Pending(k)                                                         # 立花：买单前 k 次查还在取消中
-    res = _run_req(p, br)                                                    # 面板马上叫的那次运行：只有买单的撤单 → 已受理、取消中
-    assert res["by_cid"][BUY][0] == "pending" and br.calls == ["B1"]
-    saved = json.loads(p.read_text(encoding="utf-8"))
-    o = next(x for x in saved["orders"] if x["cid"] == SELL)
-    lp = LO.legacy_plan(o, saved["orders"], saved, T9, False)               # 现在再看：仍是「等买单撤掉」，不是「卖单不撤」
-    assert lp["ask"] == [BUY] and lp["keep"] == []
     t1 = T9 + dt.timedelta(seconds=5)
-    MO.append("tachibana", out["SENT"][0], clock=lambda: t1)                 # 下一次运行才轮到卖单的「一起撤买单」
-    res = _run_req(p, br, t1)                                                # 以前：当成买单还挂着，马上留下卖单、指令结束
+    p, r1, res = _legacy_after_buy(_extra_book(), br, t1)
+    assert r1["by_cid"][BUY][0] == "pending"
     assert br.calls.count("B1") == 1                                         # 只查买单的状态，不再发撤单
     if k > LO.POLLS:
         assert res["grp"][SELL]["state"] == "wait" and _bst(p)[SELL] == "SENT" and br.calls == ["B1"]
@@ -1563,12 +1587,8 @@ def test_r4_deps_cancel_waits_for_a_same_group_buy_cancelled_in_an_earlier_run(k
 
 
 def test_r4_deps_cancel_keeps_the_sell_when_the_same_group_buy_cancel_failed():
-    b = _extra_book()
-    p = _tbook(b)
-    MO.append("tachibana", {"kind": "cancel_order", "cid": BUY}, clock=lambda: T9)
-    MO.append("tachibana", {"kind": "cancel_order", "cid": SELL, "deps": "cancel"}, clock=lambda: T9)
-    res = _run_req(p, _CancelFailed())                                       # 确认框：「撤不掉 → 这笔卖单不撤（会推送 ★）」
-    assert res["by_cid"][BUY][0] == "failed" and res["by_cid"][SELL][0] == "skipped" and _bst(p)[SELL] == "SENT"
+    p, r1, res = _legacy_after_buy(_extra_book(), _CancelFailed())        # 确认框：「撤不掉 → 这笔卖单不撤（会推送 ★）」
+    assert r1["by_cid"][BUY][0] == "failed" and res["by_cid"][SELL][0] == "skipped" and _bst(p)[SELL] == "SENT"
     ev = [m for lv, m in res["events"] if lv == "warn" and SELL in m]
     assert len(ev) == 1 and "同一组的买 1482 对冲版美国 7〜10 年国债 的撤单没成功" in ev[0] and "kabuka.e-shiten.jp" in ev[0]
 
@@ -1646,95 +1666,93 @@ def _xwait_book():
 
 
 def _legacy_waits_on_buy(b, br):
-    """买 1482 那一行的「撤单」+ 卖 1545 的「一起撤买单」同一次运行：买 1482 的撤单立花还没确认 → 「一起撤买单」等它（只查状态）。"""
+    """买 1482 那一行的「撤单」先做（立花受理、还在取消中），再读卖 1545 的「一起撤买单」：买 1482 的撤单立花还没确认 → 等它（只查状态）。
+    简化（2026-10-16）：同一组同时只有一个撤单 —— 两条分两次运行（同一次读到的话，后读到的那条不做）。"""
     p = _tbook(b)
     MO.append("tachibana", {"kind": "cancel_order", "cid": BUY}, clock=lambda: T9)
+    _run_req(p, br)
     MO.append("tachibana", {"kind": "cancel_order", "cid": SELL, "deps": "cancel"}, clock=lambda: T9)
     _run_req(p, br)
     it = next(i for i in _items(p) if i["cid"] == SELL)
-    assert it["status"] == "pending" and it["grp_legacy"] and it["grp_wait"] == [BUY] and it["grp_xwait"] == [BUY]
+    assert it["status"] == "pending" and it["grp_legacy"] and it["grp_wait"] == [BUY] and "grp_xwait" not in it
     return p
 
 
-# F1：「一起撤买单」只查状态的同一组买单（xwait）上点「整组撤单」（买 1482 + 卖 2845）→ 照确认框做：先撤买单，确认没成交才撤卖 2845
-#     （以前：整条被当成「同一组正在整组撤单」拒掉，卖 2845 一直没人撤，也没有推送说）
-@pytest.mark.parametrize("case", ["now", "later", "filled"])
-def test_r3_group_cancel_on_a_buy_the_legacy_wait_only_polls_runs(case):
-    k = {"now": LO.POLLS, "later": LO.POLLS + LO.GROUP_POLLS, "filled": LO.POLLS}[case]
+LEG = "卖 1545 纳斯达克 100 的「一起撤买单」，等立花确认买单的撤单，最长到 09:40"
+
+
+# F1（简化 2026-10-16）：「一起撤买单」在等同一组的买 1482 → 这一组都等它结束：以前买 1482 那一行照常给「整组撤单」、执行器另跑一组，
+#     两条撤单同时管买 1482（复核 6：命令行 cancel <买 1482> --group 还会撤「一起撤买单」的卖 1545，靠它的钱的买单的撤单还没确认）。
+#     现在面板那一组都不给按钮、写明是哪一条在撤；check / 命令行 / 执行器都拒绝（同一句理由）；「一起撤买单」结束之后才能撤卖 2845
+@pytest.mark.parametrize("case", ["now", "filled"])
+def test_r3_group_cancel_on_a_buy_the_legacy_wait_polls_is_refused_until_the_legacy_ends(case):
     last = {"final": "FILLED", "filled_qty": 678, "avg_px": 1490.0, "status": "全部約定"} if case == "filled" else None
-    br = _Seq(k, last)
+    br = _Seq(LO.POLLS + LO.GROUP_POLLS, last)
     p = _legacy_waits_on_buy(_xwait_book(), br)
     saved = json.loads(p.read_text(encoding="utf-8"))
-    assert LO.asked_cids(saved) == {SELL}                                     # 买 1482 不算「撤单中」：那一行照常能撤 / 整组撤
+    assert LO.asked_cids(saved) == {SELL, BUY}                                # 买 1482：「一起撤买单」在等它
     t1 = T9 + dt.timedelta(seconds=30)
-    a = _attrs(_btn(_tcard(saved, t1), BUY))
-    assert a["grp"] == S2 and a["gn"] == "3" and "· 撤：卖 2845 纳斯达克 100 对冲版：5 口（已下单（等成交））" in a["glist"]
-    rec = MO.normalize({"kind": "cancel_order", "cid": BUY, "deps": "cancel", "grp": a["grp"].split(",")})
-    assert MO.check(rec, saved, "tachibana", now=t1) is None
-    MO.append("tachibana", rec, clock=lambda: t1)
+    card = _tcard(saved, t1)
+    assert all(f"data-cid='{c}'" not in card for c in (BUY, SELL, S2))       # 这一组都不给「撤单」
+    why = f"同一组正在撤单（{LEG}）：等它结束再撤"
+    assert why in card and "同一组撤单中" in card
+    rec = MO.normalize({"kind": "cancel_order", "cid": BUY, "deps": "cancel", "grp": [S2]})
+    assert MO.check(rec, saved, "tachibana", now=t1) == f"1482 对冲版美国 7〜10 年国债 的单 {BUY} 已经在撤（{LEG}）"
+    assert MO.check(MO.normalize({"kind": "cancel_order", "cid": S2, "deps": "keep"}), saved, "tachibana", now=t1) == why
+    res = LO.cancel_book(p, lambda: br, [BUY], paper=False, tag="tachibana", clock=lambda: t1, groups={BUY: None})   # 命令行 --group
+    assert res["by_cid"][BUY] == ("skipped", f"1482 对冲版美国 7〜10 年国债 的单 {BUY} 已经在撤（{LEG}）") and res["grp"] == {}
+    MO.append("tachibana", rec, clock=lambda: t1)                          # 另一台设备上的旧页面（check 之前写进来的）
     res = _run_req(p, br, t1)
-    assert BUY not in [r["cid"] for r in res["skipped"] if "同一组正在整组撤单" in r["why"]]   # 以前：整条拒掉
-    g = res["grp"][BUY]
-    if case == "now":                                                       # 立花这次确认撤掉了（没成交）→ 卖 2845 也撤
-        assert g["state"] == "all" and _bst(p)[S2] == "CANCELLED" and br.calls.index("B1") < br.calls.index("S2X")
-        assert g["line"] == ("整组撤单（同一组 3 笔里的 2 笔：买 1482 对冲版美国 7〜10 年国债 这一组）：都撤了；"
-                             "同一组的 卖 1545 纳斯达克 100：4,110 口 在另一条撤单里（撤单中）")
-    elif case == "later":                                                   # 还没确认 → 卖 2845 先不撤，约 1 分钟后再查
-        assert g["state"] == "wait" and _bst(p)[S2] == "SENT" and "S2X" not in br.calls
-    else:                                                                   # 买单成交了 → 卖 2845 不撤，★ 推送
-        assert g["state"] == "none" and _bst(p)[S2] == "SENT" and "S2X" not in br.calls
-        assert g["line"].startswith("★ 整组撤单（同一组 3 笔里的 2 笔：买 1482 对冲版美国 7〜10 年国债 这一组）：一笔都没撤成 —— ")
-        assert "买 1482 对冲版美国 7〜10 年国债 已经成交 678 口：卖单不撤（撤了买的钱不够）" in g["line"]
-        assert any(lv == "warn" and m == g["line"] for lv, m in res["events"])
-    for sec in (61, 91):                                                    # 「一起撤买单」/ 整组撤单各自到了复查时刻
-        res = _run_req(p, br, T9 + dt.timedelta(seconds=sec))
-        if case == "filled" and sec == 61:
-            assert res["held"] == [SELL] and any(lv == "warn" and SELL in m and "已经成交 678 口" in m for lv, m in res["events"])
+    assert res["grp"] == {} and "S1" not in br.calls and "S2X" not in br.calls and _bst(p)[S2] == "SENT"
+    it = next(i for i in _items(p) if i["cid"] == BUY and i.get("grp"))
+    assert it["status"] == "rejected" and it["msg"].endswith(f"已经在撤（{LEG}）")
+    res = _run_req(p, br, T9 + dt.timedelta(seconds=61))                    # 「一起撤买单」到了复查时刻
     st = _bst(p)
-    if case == "filled":
-        assert st[SELL] == "SENT" and st[S2] == "SENT" and br.calls.count("S1") == 0 and br.calls.count("S2X") == 0
+    if case == "filled":                                                    # 买 1482 成交了 → 卖 1545 不撤（★ 推送）
+        assert res["held"] == [SELL] and any(lv == "warn" and SELL in m and "已经成交 678 口" in m for lv, m in res["events"])
+        assert st[SELL] == "SENT" and "S1" not in br.calls
     else:
-        assert st[BUY] == st[SELL] == st[S2] == "CANCELLED" and st[R7] == "CANCELLED"
-        assert br.calls.index("B1") < br.calls.index("S1") and br.calls.index("B1") < br.calls.index("S2X")
-    assert {i["status"] for i in _items(p)} <= {"done", "rejected"}
+        assert st[BUY] == st[SELL] == st[R7] == "CANCELLED" and br.calls.index("B1") < br.calls.index("S1")
+    assert st[S2] == "SENT" and {i["status"] for i in _items(p)} <= {"done", "rejected"}
+    saved = json.loads(p.read_text(encoding="utf-8"))                       # 「一起撤买单」结束了：卖 2845 那一行能撤了
+    t2 = T9 + dt.timedelta(seconds=70)
+    assert f"data-cid='{S2}'" in _tcard(saved, t2) and LO.cancel_jobs(saved, (), t2) == []
+    assert MO.check(MO.normalize({"kind": "cancel_order", "cid": S2, "deps": "keep"}), saved, "tachibana", now=t2) is None
 
 
-# F1 / F4：确认框（node）与执行器同一个说法：买 1482 那一行的「整组撤单（能撤的 2 笔）」撤的就是买 1482 + 卖 2845
-def test_r3_group_dialog_on_a_legacy_polled_buy_matches_the_engine():
-    br = _Seq(LO.POLLS)
+# F1 / F4：「一起撤买单」结束之后，卖 2845 那一行的确认框与执行器同一个说法（以前：买 1482 那一行在等的时候给「整组撤单（能撤的 2 笔）」）
+def test_r3_after_the_legacy_wait_the_rest_of_the_group_dialog_matches_the_engine():
+    br = _Seq(LO.POLLS + LO.GROUP_POLLS)
     p = _legacy_waits_on_buy(_xwait_book(), br)
-    t1 = T9 + dt.timedelta(seconds=30)
-    a = _attrs(_btn(_tcard(json.loads(p.read_text(encoding="utf-8")), t1), BUY))
-    q = _node_ask({"cid": BUY, "side": "BUY", "t": "1482.T", "qty": "678", "core": "1", "name": "对冲版美国 7〜10 年国债",
-                   "grp": a["grp"], "gn": a["gn"], "solo": a.get("solo", ""), "glist": a["glist"]})
-    assert q["ASKED"][0]["ok"] == "整组撤单（能撤的 2 笔）"
-    assert q["SENT"] == [{"book": "tachibana", "kind": "cancel_order", "cid": BUY, "deps": "cancel", "grp": [S2]}]
+    _run_req(p, br, T9 + dt.timedelta(seconds=61))
+    t1 = T9 + dt.timedelta(seconds=70)
+    a = _attrs(_btn(_tcard(json.loads(p.read_text(encoding="utf-8")), t1), S2))
+    assert "grp" not in a and "只撤这一笔" in a["glist"]                    # 同一组的其他单都已经撤了
+    q = _node_ask({"cid": S2, "side": "SELL", "t": "2845.T", "qty": "5", "core": "1", "name": "纳斯达克 100 对冲版",
+                   **{k: a[k] for k in ("glist", "solo", "solok", "gn", "hint", "fix", "fixname") if k in a}})
+    assert q["ASKED"][0]["ok"] == "撤单" and "马上发撤单到立花" in q["ASKED"][0]["body"]
     MO.append("tachibana", q["SENT"][0], clock=lambda: t1)
     res = _run_req(p, br, t1)
-    assert res["by_cid"][BUY][0] == "done" and res["by_cid"][S2][0] == "done" and res["grp"][BUY]["state"] == "all"
+    assert res["by_cid"][S2][0] == "done" and _bst(p)[S2] == "CANCELLED" and br.calls[-1] == "S2X"
 
 
-# F4：「一起撤买单」在等的买单那一行：只查状态的（同一组、不靠它的钱）→ 照常给「撤单」、执行器照确认框发撤单（以前以「整组撤单」为由拒掉）；
-#     它自己撤的（靠它的钱）→ 面板「撤单中」、check 拒绝、命令行单独撤 → 说是「一起撤买单」在等（不说「整组撤单」）——
-#     面板、check、执行器用同一个 MO.handling_cids
+# F4（简化 2026-10-16）：「一起撤买单」在等的买单那一行（同一组、不靠它的钱）：面板「撤单中」、check / 命令行 / 执行器都说是「一起撤买单」
+#     在等（以前给「只撤这笔买单（卖 1545 照常卖）」，执行器却照样撤卖 1545）
 def test_r3_buy_row_during_a_legacy_wait_dialog_check_and_engine_agree():
     br = _Pending(10 ** 6)
     p = _legacy_waits_on_buy(_extra_book(), br)
     t1 = T9 + dt.timedelta(seconds=20)
     saved = json.loads(p.read_text(encoding="utf-8"))
     card = _tcard(saved, t1)
-    a = _attrs(_btn(card, BUY))
-    assert "grp" not in a and "只撤这一笔" in a["glist"]
-    q = _node_ask({"cid": BUY, "side": "BUY", "t": "1482.T", "qty": "678", "core": "1", "name": "对冲版美国 7〜10 年国债",
-                   **{k: a[k] for k in ("glist", "solo", "gn", "hint", "fix", "fixname") if k in a}})
-    assert q["ASKED"][0]["ok"] == "撤单" and "马上发撤单到立花" in q["ASKED"][0]["body"]
-    assert q["SENT"][0]["cid"] == BUY and "grp" not in q["SENT"][0]
-    assert MO.check(MO.normalize(q["SENT"][0]), saved, "tachibana", now=t1) is None
-    MO.append("tachibana", q["SENT"][0], clock=lambda: t1)
-    n0 = br.calls.count("B1")
+    assert f"data-cid='{BUY}'" not in card and f"data-cid='{SELL}'" not in card and "照常卖" not in card
+    why = f"1482 对冲版美国 7〜10 年国债 的单 {BUY} 已经在撤（{LEG}）"
+    assert MO.check(MO.normalize({"kind": "cancel_order", "cid": BUY}), saved, "tachibana", now=t1) == why
+    res = LO.cancel_book(p, lambda: br, [BUY], paper=False, tag="tachibana", clock=lambda: t1)   # 命令行 cancel <买>
+    assert res["by_cid"][BUY] == ("skipped", why)
+    n0 = len(br.calls)
+    MO.append("tachibana", {"kind": "cancel_order", "cid": BUY}, clock=lambda: t1)   # 旧页面写的
     res = _run_req(p, br, t1)
-    assert res["by_cid"][BUY][0] == "pending" and "整组撤单" not in res["by_cid"][BUY][1]   # 以前：skipped「同一组正在整组撤单…」
-    assert br.calls.count("B1") == n0 + 1                                   # 确认框说的「马上发撤单到立花」
+    assert len(br.calls) == n0 and BUY not in res["by_cid"] and res["refused"][0].endswith("没做 —— " + why)
     it = next(i for i in _items(p) if i["cid"] == SELL)
     assert it["status"] == "pending" and it["grp_wait"] == [BUY]           # 「一起撤买单」照旧等它
 
@@ -1748,15 +1766,14 @@ def test_r3_funded_buy_row_during_a_legacy_wait_is_cancelling_everywhere():
     t1 = T9 + dt.timedelta(seconds=20)
     saved = json.loads(p.read_text(encoding="utf-8"))
     it = _items(p)[0]
-    assert it["grp_wait"] == [BUY] and not it.get("grp_xwait") and MO.handling_cids(it) == [SELL, BUY]
+    assert it["grp_wait"] == [BUY] and MO.handling_cids(it) == [SELL, BUY]
     assert LO.asked_cids(saved) == {SELL, BUY}
     card = _tcard(saved, t1)
     assert f"data-cid='{BUY}'" not in card and card.count("<span class='chip'>撤单中</span>") == 2
-    assert MO.check({"kind": "cancel_order", "cid": BUY}, saved, "tachibana", now=t1) == (
-        f"1482 对冲版美国 7〜10 年国债 的单 {BUY} 已经在撤（等执行器）")
+    why = f"1482 对冲版美国 7〜10 年国债 的单 {BUY} 已经在撤（{LEG}）"
+    assert MO.check({"kind": "cancel_order", "cid": BUY}, saved, "tachibana", now=t1) == why
     res = LO.cancel_book(p, lambda: _NoBroker(), [BUY], paper=False, tag="tachibana", clock=lambda: t1)   # 命令行 cancel <买>
-    assert res["by_cid"][BUY] == ("skipped", "卖 1545 纳斯达克 100 的「一起撤买单」在等立花确认买单的撤单（约 1 分钟后再查）："
-                                             "这一笔交给它（先撤买单、确认撤掉了（没成交）再撤卖单）")
+    assert res["by_cid"][BUY] == ("skipped", why)
 
 
 # F2：命令行 cancel <B2> <已成交 / 状态不明 / 没有注文番号的买单> --group：点名的那笔排第几个都一样 —— 写一行没撤、不说「都撤了」
@@ -1867,3 +1884,153 @@ def test_r3_legacy_deps_cancel_with_an_expired_buy_cancels_the_sell():
     assert not [m for lv, m in res["events"] if lv == "warn"]
     assert any(m.startswith(f"撤单 买 1482 对冲版美国 7〜10 年国债：678 口（{BUY}）（和凑钱的卖单 1545 纳斯达克 100 一起撤）：不用撤 —— 立花那边已经失效")
                for _lv, m in res["events"])
+
+
+# ══════════════════════════ 简化（2026-10-16）：同一组同时只有一个撤单；立花已经失效的买卖单一样处理 ══════════════════════════
+class _SellGone(_Rec):
+    """立花：卖 1545（S1）的撤单不受理、单已经失效（寄付没成交 → 全部失効；q = 失效前成交的口数）；别的撤单马上取消完了。"""
+    def __init__(self, q=0):
+        super().__init__()
+        self.q = q
+
+    def cancel_order(self, bid, day):
+        self.calls.append(bid)
+        return bid != "S1"
+
+    def order_status(self, bid, day):
+        if bid == "S1":
+            return {"final": "EXPIRED", "status": "全部失効", "filled_qty": self.q, "avg_px": 240.0 if self.q else 0}
+        return {"final": "CANCELLED", "filled_qty": 0, "status": "取消完了"}
+
+
+class _Br(_Rec):
+    """每个注文番号的撤单状态可以随时改：st[bid] = "pending"（取消中）/ 别的（取消完了）。"""
+    def __init__(self, st):
+        super().__init__()
+        self.st = st
+
+    def order_status(self, bid, day):
+        if self.st.get(bid) == "pending":
+            return {"final": "", "status": "取消中", "filled_qty": 0}
+        return {"final": "CANCELLED", "filled_qty": 0, "status": "取消完了"}
+
+
+def test_s_job_state_and_conflict_texts():
+    b = _three()
+    t0 = dt.datetime(2026, 10, 15, 15, 20, tzinfo=JST)                     # 收盘前 3 分钟为止：最长到 15:27（不是 15:30）
+    it = {"id": "M1", "kind": "cancel_order", "cid": SELL, "deps": "cancel", "status": "pending", "grp_wait": [BUY],
+          "grp_wait0": t0.isoformat(), "grp_legacy": True, "at": t0.isoformat()}
+    b["manual"]["items"] = {"M1": it}
+    jobs = LO.cancel_jobs(b, (), t0)
+    assert [j["state"] for j in jobs] == ["等立花确认买单的撤单，最长到 15:27"] and jobs[0]["targets"] == {SELL, BUY}
+    assert jobs[0]["who"] == "卖 1545 纳斯达克 100 的「一起撤买单」" and jobs[0]["scope"] == {SELL, BUY, S2}
+    assert LO.cancel_jobs(b, (), t0.replace(hour=15, minute=31)) == []       # 过了收盘还在等的不算（执行器不吵地结束它）
+    assert LO.cancel_conflict({"cid": S2}, b, jobs) == ("同一组正在撤单（卖 1545 纳斯达克 100 的「一起撤买单」，"
+                                                        "等立花确认买单的撤单，最长到 15:27）：等它结束再撤")
+    assert LO.cancel_conflict({"cid": BUY}, b, jobs).startswith(f"1482 对冲版美国 7〜10 年国债 的单 {BUY} 已经在撤")
+    assert LO.cancel_conflict(it, b, jobs) is None                           # 自己不算
+
+
+# 复核 6-1：命令行 cancel <「一起撤买单」只查状态的买单> --group → 以前范围里带上「一起撤买单」自己的卖单，靠它的钱的买 7203 的撤单
+#          还没确认就撤了卖 1545；现在这一组只有「一起撤买单」在撤 → 命令行这次不撤、写明理由，卖单照「一起撤买单」的闸门撤
+def test_s_cli_group_on_a_buy_the_legacy_polls_never_takes_the_legacy_sell():
+    b = _xwait_book()
+    next(o for o in b["orders"] if o["cid"] == R7).update(status="SENT", broker_id="R7X", order_date="20261015", sent_qty=100)
+    p = _tbook(b)
+    br = _Br({"B1": "pending", "R7X": "pending"})
+    MO.append("tachibana", {"kind": "cancel_order", "cid": BUY}, clock=lambda: T9)
+    _run_req(p, br)
+    MO.append("tachibana", {"kind": "cancel_order", "cid": SELL, "deps": "cancel"}, clock=lambda: T9)
+    _run_req(p, br)
+    it = next(i for i in _items(p) if i["cid"] == SELL)
+    assert it["status"] == "pending" and sorted(it["grp_wait"]) == sorted([BUY, R7])
+    br.st["B1"] = "cancelled"                                                # 30 秒后：买 1482 撤掉了，买 7203 还在取消中
+    t1 = T9 + dt.timedelta(seconds=30)
+    res = LO.cancel_book(p, lambda: br, [BUY], paper=False, tag="tachibana", clock=lambda: t1, groups={BUY: None})
+    assert res["by_cid"][BUY] == ("skipped", f"1482 对冲版美国 7〜10 年国债 的单 {BUY} 已经在撤（{LEG}）") and res["grp"] == {}
+    assert "S1" not in br.calls and "S2X" not in br.calls and _bst(p)[SELL] == "SENT"
+    res = _run_req(p, br, T9 + dt.timedelta(seconds=61))                    # 买 7203 还没确认：卖 1545 照样等
+    assert res["grp"][SELL]["state"] == "wait" and _bst(p)[SELL] == "SENT"
+    br.st["R7X"] = "cancelled"
+    _run_req(p, br, T9 + dt.timedelta(seconds=122))
+    assert _bst(p)[SELL] == "CANCELLED" and br.calls.index("R7X") < br.calls.index("S1") and _bst(p)[S2] == "SENT"
+    assert next(i for i in _items(p) if i["cid"] == SELL)["status"] == "done"
+
+
+# 复核 6-2：整组撤单里卖单在立花那边已经失效（没成交）→ 都撤了（写「不用撤」），不推「★ 只撤了一部分」；失效前成交过 → 按已经成交写
+@pytest.mark.parametrize("q", [0, 100])
+def test_s_group_cancel_with_a_sell_already_expired_is_not_a_partial_cancel(q):
+    b = _gbook()
+    _at_exch(b, BUY, "B1")
+    p = _tbook(b)
+    MO.append("tachibana", {"kind": "cancel_order", "cid": SELL, "deps": "cancel", "grp": [BUY]}, clock=lambda: T9)
+    res = _run_req(p, _SellGone(q))
+    g, it, txt = res["grp"][SELL], _items(p)[0], "\n".join(LO.cancel_text(res))
+    assert _bst(p) == {SELL: "SENT", BUY: "CANCELLED"}                      # 状态不改（明早对账照实际成交记）
+    if not q:
+        assert g["state"] == "all" and g["line"] == ("整组撤单（2 笔：卖 1545 纳斯达克 100 这一组）：都撤了"
+                                                     "（卖 1545 纳斯达克 100 立花那边已经失效（没成交），不用撤）")
+        assert not [m for lv, m in res["events"] if lv == "warn"] and it["status"] == "done"
+        assert f"不用撤：卖 1545 纳斯达克 100 4,110 口（{SELL}）—— 立花那边已经失效（全部失効）：没成交，不用撤" in txt
+    else:
+        assert g["line"].startswith("★ ") and "卖 1545 纳斯达克 100 已经成交 100 口（其余立花那边已经失效）" in g["line"]
+        assert "都撤了" not in g["line"] and any(lv == "warn" and m == g["line"] for lv, m in res["events"])
+
+
+def _solo_ok(card, b, now):
+    """确认框「只撤这笔买单（卖 X 照常卖）」列的卖单都真的还会卖：还开着、立花那边没失效、撤单没受理、不在还在处理的撤单里。"""
+    jobs = LO.cancel_jobs(b, MO.unseen("tachibana", b), now)
+    busy = set().union(*[j["scope"] for j in jobs]) if jobs else set()
+    out = {}
+    for o in b["orders"]:
+        c = o["cid"]
+        if f"data-cid='{c}'" not in card:
+            continue
+        assert c not in busy                                                 # 还在处理的撤单盖着的单不给按钮
+        solo = _attrs(_btn(card, c)).get("solo", "")
+        out[c] = solo
+        m = re.search(r"（卖 (.*) 照常卖", solo)
+        for lab in (m.group(1).split("、") if m else []):
+            x = next(y for y in b["orders"] if y["side"] == "SELL" and lab.startswith(y["ticker"].split(".")[0]))
+            assert LO.still_sells(x, now) and x["cid"] not in busy, (c, solo)
+    return out
+
+
+# 复核 6-3 / 6-4：「只撤这笔买单（卖 X 照常卖）」只列真的还会卖的卖单（不算立花那边已经失效 / 撤单已受理的；还在处理的撤单盖着的那一组不给按钮）
+def test_s_solo_label_lists_only_sells_that_will_really_still_sell():
+    b = _three()
+    p = _tbook(b)
+    assert _solo_ok(_tcard(b), b, T9)[BUY] == "只撤这笔买单（卖 1545 纳斯达克 100、2845 纳斯达克 100 对冲版 照常卖，钱留现金）"
+    MO.append("tachibana", {"kind": "cancel_order", "cid": SELL, "deps": "keep"}, clock=lambda: T9)   # 只撤这笔卖单 → 立花：已经失效
+    _run_req(p, _SellGone(0))
+    b = json.loads(p.read_text(encoding="utf-8"))
+    t1 = T9 + dt.timedelta(seconds=30)
+    card = _tcard(b, t1)
+    assert _solo_ok(card, b, t1)[BUY] == "只撤这笔买单（卖 2845 纳斯达克 100 对冲版 照常卖，钱留现金）"   # 以前也写卖 1545「照常卖」
+    MO.append("tachibana", {"kind": "cancel_order", "cid": S2, "deps": "keep"}, clock=lambda: t1)    # 卖 2845：撤单已受理、还在取消中
+    _run_req(p, _Br({"S2X": "pending"}), t1)
+    b = json.loads(p.read_text(encoding="utf-8"))
+    solo = _solo_ok(_tcard(b, t1), b, t1).get(BUY, "")
+    assert "照常卖" not in solo
+    b["manual"]["items"]["M9"] = {"id": "M9", "kind": "cancel_order", "cid": S2, "deps": "keep", "status": "pending", "at": t1.isoformat()}
+    card = _tcard(b, t1)                                                     # 同一组还有撤单在处理：这一组都不给按钮
+    assert _solo_ok(card, b, t1) == {} and "同一组正在撤单（卖 2845 纳斯达克 100 对冲版 的撤单，等执行器）：等它结束再撤" in card
+
+
+# 复核 6-5：撤单时立花回已经失效 / 被拒的单：那一行写「立花那边已经失效（撤单时查到）」、不给「撤单」；同一组的其他行也这么写
+@pytest.mark.parametrize("q", [0, 100])
+def test_s_gone_row_shows_gone_and_has_no_cancel_button(q):
+    b = _three()
+    p = _tbook(b)
+    MO.append("tachibana", {"kind": "cancel_order", "cid": BUY}, clock=lambda: T9)
+    res = _run_req(p, _Gone("EXPIRED", q))
+    assert res["by_cid"][BUY][0] == "skipped" and ("不用撤：买 1482" in "\n".join(LO.cancel_text(res)))
+    b = json.loads(p.read_text(encoding="utf-8"))
+    t1 = T9 + dt.timedelta(seconds=30)
+    card = _tcard(b, t1)
+    st = "立花那边已经失效（撤单时查到）" + (f"，已成交 {q}/678 口" if q else "")
+    assert f"data-cid='{BUY}'" not in card and f"<span class='chip'>{st}</span>" in card and "已下单（等成交）</span>" in card
+    assert f"买 1482 对冲版美国 7〜10 年国债：678 口（{st}）" in card       # 同一组（一起下的）还有：…
+    assert MO.check(MO.normalize({"kind": "cancel_order", "cid": BUY}), b, "tachibana", now=t1).endswith(
+        "撤不了：立花那边已经失效（撤单时查到），不用撤")
+    assert all(f"data-cid='{c}'" in card for c in (SELL, S2))

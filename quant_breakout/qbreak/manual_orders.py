@@ -718,17 +718,13 @@ def cancel_cids(r: dict | None) -> list[str]:
 
 
 def handling_cids(r: dict | None) -> list[str]:
-    """一条还在处理的撤单指令盖着的单（面板「撤单中」、live_ops.asked_cids / check、执行器的 busy 共用；复核 5 2026-10-16）
-    = cancel_cids + 以前的「一起撤买单」（grp_legacy）在等立花确认撤单的、靠这笔卖出的钱的买单（grp_wait 里不在 grp_xwait 的：执行器发的撤单）。
-    同一组、不靠它的钱、只查状态的买单（grp_xwait）不算：那一行照常能撤 / 整组撤（以前算进来：面板给按钮、执行器却以「整组撤单」为由整条拒掉）。"""
+    """一条还在处理的撤单指令要撤 / 在等的单（面板「撤单中」、live_ops.asked_cids / cancel_jobs 共用）= cancel_cids + 在等立花确认撤单的单（grp_wait）。
+    同一组的其余几笔由 live_ops.cancel_scope 盖着（同一组同时只有一个撤单；简化 2026-10-16）。"""
     out = cancel_cids(r)
-    r = r or {}
-    if r.get("grp_legacy"):
-        xw = {str(c) for c in r.get("grp_xwait") or []}
-        for c in r.get("grp_wait") or []:
-            c = str(c or "").strip()
-            if c and c not in xw and c not in out:
-                out.append(c)
+    for c in (r or {}).get("grp_wait") or []:
+        c = str(c or "").strip()
+        if c and c not in out:
+            out.append(c)
     return out
 
 
@@ -1947,16 +1943,10 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
         why = cancel_why(o, book, now or now_jst(), str(tag or "").startswith("paper"))
         if why:
             return f"{lt} 的单 {rec['cid']} 撤不了：{why}"
-        if any(x.get("kind") == "cancel_order" and x.get("cid") == rec["cid"]
-               for x in list(items.values()) + waiting if x.get("status", "pending") == "pending"):
-            return f"{lt} 的单 {rec['cid']} 已经在撤（等执行器）"
         from . import live_ops as LO
-        asked = LO.asked_cids(book, waiting)               # 每一条撤单都查（复核 2026-10-16：以前只查整组撤单 —— 过期的页面 / 另一台设备上
-        for c in cancel_cids(rec):                         # 「只撤这一笔」撤整组撤单里的卖单，卖单的撤单比买单的先发，闸门被绕过）
-            if c in asked:
-                mg = _CID.match(str(c))
-                lc = names.label(mg.group(3)) if mg else ""
-                return f"{lc} 的单 {c} 已经在撤（等执行器）"
+        why = LO.cancel_conflict(rec, book, LO.cancel_jobs(book, waiting, now or now_jst()))   # 同一组同时只有一个撤单（简化 2026-10-16）：
+        if why:                                            # 还在处理的撤单（账本里 pending / 还没读的）盖着这一组 → 先拒绝，等它结束再撤
+            return why
         if rec.get("grp"):                                 # 整组撤单（2026-10-16）：同一组的每一笔都要在账本里、在服务器算出的这一组里
             orders = [x for x in (book or {}).get("orders") or [] if isinstance(x, dict)]
             by = {str(x.get("cid")): x for x in orders}
@@ -1984,25 +1974,25 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
 
 
 def group_prune(r: dict, book: dict | None, now: dt.datetime | None, paper: bool, waiting=()) -> tuple[dict, list[str]]:
-    """整组撤单（grp；2026-10-16）写进去之前：去掉同一组里现在撤不了（live_ops.grp_why）或已经在撤的单 →（记录, 说明）。
+    """整组撤单（grp；2026-10-16）写进去之前：去掉同一组里现在撤不了（live_ops.grp_why）的单 →（记录, 说明）。
     只防页面过期（你点的时候能撤、现在不能了）；执行器撤的时候按重算的整组再判断一次（先撤买单、确认没成交再撤卖单）。
-    账本里找不到的不在这里去掉（check 会说「页面是旧的」）。全都去掉了 → ValueError（不写：只撤主单要你再点一次「撤单」）。"""
+    账本里找不到的不在这里去掉（check 会说「页面是旧的」）；同一组已经有撤单在处理 → 不去掉，交给 check 整条拒绝（同一组同时只有一个撤单）。
+    全都去掉了 → ValueError（不写：只撤主单要你再点一次「撤单」）。"""
     g = list((r or {}).get("grp") or [])
     if not g:
         return r, []
     from . import live_ops as LO
     now = now or now_jst()
     by = {str(x.get("cid")): x for x in (book or {}).get("orders") or [] if isinstance(x, dict)}
-    asked = LO.asked_cids(book, waiting)
-    if str((r or {}).get("cid") or "") in asked:          # 点的这一笔自己已经在撤：不去掉同一组的，交给 check 说「已经在撤」
-        return r, []                                       # （复核 2026-10-16：以前说「刷新页面后点「撤单」」，刷新之后那一行是「撤单中」、没有按钮）
+    if LO.cancel_conflict(r, book, LO.cancel_jobs(book, waiting, now)):   # 同一组已经有撤单在处理：不去掉什么，交给 check 说理由
+        return r, []
     keep, notes = [], []
     for c in g:
         o = by.get(str(c))
         if o is None:
             keep.append(c)
             continue
-        why = "已经在撤（等执行器）" if str(c) in asked else LO.grp_why(o, book, now, paper)
+        why = LO.grp_why(o, book, now, paper)
         if why is None:
             keep.append(c)
             continue
