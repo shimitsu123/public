@@ -420,7 +420,7 @@ def test_render_buttons_under_the_held_etf():
                     "decided_on": "2026-10-05", "reason": "manual_core", "phase": "now", "status": "FILLED",
                     "filled_qty": 130, "filled_px": 700.0}])
     h = panel.render("paper", "tok", now=AT)
-    assert "今天盘中已照比例卖出 130 口（已成交）：口数明天早上对账后更新" in h and "data-act='core-sell'" not in h
+    assert "今天盘中已照比例卖出 130 口（已成交）：上面的口数已含（对账前）；明天早上对账后正式记账" in h and "data-act='core-sell'" not in h
     _pbook()
     MO.append("paper", {"kind": "core", "pct": 80.0}, clock=lambda: AT)
     assert "有一条闲置资金比例的指令在处理" in panel.render("paper", "tok", now=AT)

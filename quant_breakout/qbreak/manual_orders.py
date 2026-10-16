@@ -1304,6 +1304,43 @@ def _order_word(o: dict) -> str:
             f"{'买' if o.get('side') == 'BUY' else '卖'} {n:,} 口")
 
 
+def pj_got(pj: dict | None) -> dict:
+    """held_now 的结果 → {单号: 已经算进投影的成交数}。"""
+    got: dict = {}
+    for f in (pj or {}).get("fills") or []:
+        got[str(f.get("cid"))] = got.get(str(f.get("cid")), 0) + int(f.get("qty") or 0)
+    return got
+
+
+def pj_done(o: dict, pj: dict | None, got: dict | None = None) -> bool:
+    """这张执行器的单已经全部成交了吗：账本里 FILLED 且成交数 ≥ 发出数，或 held_now（pj）里它不在等成交、已知的成交 ≥ 发出数
+    （立花的单对账前一直是 SENT，成交只有盘中确认 / 快照知道 —— 执行器 fix_prep 盘中查注文同一个判断；2026-10-16 三次复核）。部分成交 → False。"""
+    n = int(o.get("sent_qty") or o.get("qty") or 0)
+    if o.get("status") == "FILLED" and int(o.get("filled_qty") or 0) >= n:
+        return True
+    c = str(o.get("cid"))
+    got = pj_got(pj) if got is None else got
+    return c not in {str(p.get("cid")) for p in (pj or {}).get("pending") or []} and got.get(c, 0) >= n > 0
+
+
+def _exch_words(os_: list, pj: dict | None, got: dict | None = None) -> tuple[str, str]:
+    """盘中那条路：同一只今天已经在交易所的单 → (已经全部成交的那句, 还在等成交的单的说法)；空 = 没有。
+    已经全部成交的（pj_done）已经算进现在的口数，执行器不等它（fix_prep）；部分成交的只写还剩的口数。"""
+    got = pj_got(pj) if got is None else got
+    done = [o for o in os_ if pj_done(o, pj, got)]
+    snap = {str(f.get("cid")) for f in (pj or {}).get("fills") or [] if f.get("src") == "snapshot"}
+    dw = ("、".join(_order_word(o) for o in done) + " 已成交（" + ("快照，" if any(str(o.get("cid")) in snap for o in done) else "")
+          + "对账前的预计）→ 已算进现在的口数") if done else ""
+    ws = []
+    for o in os_:
+        if o in done:
+            continue
+        g = got.get(str(o.get("cid")), 0)
+        n = int(o.get("sent_qty") or o.get("qty") or 0)
+        ws.append(_order_word(o) + (f"（已成交 {g:,} 口，还剩 {n - g:,} 口）" if 0 < g < n else ""))
+    return dw, "、".join(ws)
+
+
 def today_dead(book: dict | None, tag: str | None = None, now: dt.datetime | None = None) -> tuple[set, dict]:
     """当前决策里不会再做事的执行器的单（面板「交易」的「撤单中」/「不会下单（预计）」同一个判断；2026-10-15 复核：
     「恢复按规则」的确认框、提交说明以前把凑钱的卖单撤了、一定买不起的 1482.T 买 678 口写成「照常」，「交易」却写「不会下单」）→
@@ -1332,7 +1369,7 @@ def corefix_clear_text(book: dict | None, t: str, tag: str | None = None, now: d
     差额在再平衡带（总权益的 10%）以内 → 规则可能不动；今天已经有这只的执行器的单 → 照常（要不做：撤单），下一次决策起照规则、可能反向买卖；
     撤单中 / 开盘时一定下不成的（today_dead：「交易」写「不会下单（预计）」的）不算进成交后的口数、写「预计不会下单」（2026-10-15 复核）。
     盘中 / 开盘后马上的那条路（corefix_fill 的 intraday；D1，2026-10-15）：执行器 now_phase 照规则目标 × 比例直接调（不看再平衡带）；
-    同一只今天还没发出的核心单被取代、已经在交易所的先等它成交 / 撤掉；口数 = 账本 + 今天已经成交的。
+    同一只今天还没发出的核心单被取代、已经在交易所的先等它成交 / 撤掉（已知全部成交的 = pj_done：已算进口数、不等）；口数 = 账本 + 今天已经成交的。
     按最近一次决策的收盘估算；执行器按当时的数算。
     现在的口数 = live_ops.held_now（账本 + 成交日已知的成交；周末 / 休市日 / 07:40 之前也算 —— 2026-10-16 复核：以前只在成交日当天
     看今天的单，周六说「规则现在不拿 → 不会买」，其实下一次决策要卖掉 10/16 买进的 650 口）+ 今天还活着的单还没成交的部分。"""
@@ -1343,9 +1380,7 @@ def corefix_clear_text(book: dict | None, t: str, tag: str | None = None, now: d
     cur = int((st.get("core_units") or {}).get(t, 0))
     pj = LO.held_now(book, tag, now=now)
     pjc = int((pj.get("core_units") or {}).get(t, 0) or 0)   # 含成交日已知的成交（对账前；2026-10-16）
-    got = {}                                               # 每笔单已经算进 held_now 的成交口数
-    for f in pj.get("fills") or []:
-        got[str(f.get("cid"))] = got.get(str(f.get("cid")), 0) + int(f.get("qty") or 0)
+    got = pj_got(pj)                                       # 每笔单已经算进 held_now 的成交口数
     lot = core_lot(book, t)
     pct = core_pct_now(tag, book)
     fill = corefix_fill(now, book, tag)
@@ -1400,11 +1435,13 @@ def corefix_clear_text(book: dict | None, t: str, tag: str | None = None, now: d
     live = [o for o in mine if o.get("status") in OPEN_ST and str(o.get("cid")) not in dcid]
     if nowp:                                               # 盘中那条路（D1）：没发出的被取代、在交易所的先等
         uns = [o for o in mine if o.get("status") in ("PLANNED", "DEFERRED")]
-        exch = [o for o in live if o not in uns]
+        dw, ws = _exch_words([o for o in live if o not in uns], pj, got)
         if uns:
             out += "；" + "、".join(_order_word(o) for o in uns) + " 还没发出：被这条取代（执行器不再发）"
-        if exch:
-            out += "；" + "、".join(_order_word(o) for o in exch) + " 还挂着：先等它成交 / 撤掉，再按成交后的口数调"
+        if dw:
+            out += "；" + dw
+        if ws:
+            out += "；" + ws + " 还挂着：先等它成交 / 撤掉，再按成交后的口数调"
         dead = [o for o in dead if o not in uns]
     elif live:
         out += ("；" + "、".join(_order_word(o) for o in live) + "照常（要不做：「今天要成交的单」→ 撤单）；下一次决策起照规则，可能反向买卖")
@@ -1726,10 +1763,11 @@ def corefix_preview(book: dict | None, tag: str | None, rec: dict, now: dt.datet
     这只现在 → 目标口数、买 / 卖多少、估算金额（现价约晚 20 分钟；估算、税前）、现金够不够 / 不够卖哪几只多少、什么时候（corefix_fill：
     盘中马上 / 开盘后马上 / 那次决策；D1）、按什么价、固定之后一直有效直到「恢复按规则」、今天还挂着的单、HALT。
     盘中那条路（fill["intraday"]）的预计的单 = 执行器 now_phase 的 fix_moves（只调这只；钱不够先卖别的不固定的核心 ETF），
-    同一只今天还没发出的核心单被这条取代、已经在交易所的先等它成交 / 撤掉；决策那条路 = 下一次决策预计排的单（照旧）。
+    同一只今天还没发出的核心单被这条取代、已经在交易所的先等它成交 / 撤掉（已知全部成交的不等：pj_done）；决策那条路 = 下一次决策预计排的单（照旧）。
     stock_sells：凑钱的个股 [(票, 股数, 价)]（写进去后按 when 卖出，不等那次决策）。quotes：{票: {"px", "at"}}（只影响金额的估算）。
     token：要写的东西（不含现价）→ 页面的「确认下单」带回来，服务器重算一样才写（账本 / 时间段变了 → 再确认一次）。"""
     import hashlib
+    from . import live_ops as LO
     fill = corefix_fill(now, book, tag)
     nowp = bool(fill["intraday"])                         # 盘中 / 开盘后马上按现价下（D1）
     plan = corefix_plan(book, tag, rec, sm, stock_sells, intraday=nowp, now=now)
@@ -1839,12 +1877,14 @@ def corefix_preview(book: dict | None, tag: str | None, rec: dict, now: dt.datet
     asked, unf = today_dead(book, tag, now) if live else (set(), {})
     if nowp:                                               # 盘中那条路：同一只今天的核心单 —— 没发出的被取代、在交易所的先等（D1）
         uns = [o for o in live if o.get("ticker") == t and o.get("status") in ("PLANNED", "DEFERRED")]
-        exch = [o for o in live if o.get("ticker") == t and o not in uns and str(o.get("cid")) not in asked]
+        dw, ws = _exch_words([o for o in live if o.get("ticker") == t and o not in uns and str(o.get("cid")) not in asked],
+                             LO.held_now(book, tag, now=now))
         if uns:
             L.append("、".join(_order_word(o) for o in uns) + " 还没发出 → 被这条取代（执行器不再发）")
-        if exch:
-            L.append("、".join(_order_word(o) for o in exch)
-                     + " 已经在交易所 → 先等它成交 / 撤掉（「今天要成交的单」→ 撤单），再按成交后的口数调（一会儿再试）")
+        if dw:
+            L.append(dw)
+        if ws:
+            L.append(ws + " 已经在交易所 → 先等它成交 / 撤掉（「今天要成交的单」→ 撤单），再按成交后的口数调（一会儿再试）")
         live = [o for o in live if o.get("ticker") != t or str(o.get("cid")) in asked]
     dead = [o for o in live if str(o.get("cid")) in asked or str(o.get("cid")) in unf]   # 「交易」写「撤单中 / 不会下单（预计）」的：不写「照常」（2026-10-15 复核）
     live = [o for o in live if o not in dead]
@@ -2025,16 +2065,18 @@ def core_pct_now(tag: str | None, book: dict | None) -> float:
     return float(late[-1]["pct"]) if late else float(((book or {}).get("manual") or {}).get("core_pct", 100.0))
 
 
-def _buy_filled(it: dict, book: dict | None) -> bool:
+def _buy_filled(it: dict, book: dict | None, pj: dict | None = None) -> bool:
     """已下单（placed）的手动买入、它在当前决策里的单（manual_buy）都已经全部成交 → 下一次对账时记成完成（Manual.settle），
-    对账之后执行的新指令不会被它挡（check 的「已经有一条没处理完的手动指令」不算它；2026-10-16 二次复核）。"""
+    对账之后执行的新指令不会被它挡（check 的「已经有一条没处理完的手动指令」不算它；2026-10-16 二次复核）。
+    全部成交 = pj_done（账本 FILLED，或 held_now 已知的成交 ≥ 发出数：立花的寄付单对账前整天是 SENT、成交只有快照知道；
+    2026-10-16 三次复核）。部分成交的仍算没处理完。"""
     if it.get("kind") != "buy" or it.get("status") != "placed":
         return False
     d = ((book or {}).get("state") or {}).get("last_date")
     os_ = [o for o in (book or {}).get("orders") or [] if o.get("decided_on") == d and o.get("ticker") == it.get("ticker")
            and o.get("reason") == "manual_buy"]
-    return bool(os_) and all(o.get("status") == "FILLED" and int(o.get("filled_qty") or 0) >= int(o.get("sent_qty") or o.get("qty") or 0)
-                             for o in os_)
+    got = pj_got(pj)
+    return bool(os_) and all(pj_done(o, pj, got) for o in os_)
 
 
 def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None, now: dt.datetime | None = None, going=None) -> str | None:
@@ -2072,7 +2114,7 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
                 return f"{lt} 已经在卖出全部（{_exit_text(why)}），不用再点"
         act = [r for r in _live(items, waiting, ORDER_KINDS) if r.get("ticker") == t]
         if act and k in POS_KINDS and not pre_reconcile(pj_, now or now_jst()):   # 今天已经全部成交的手动买入：对账时先记成完成，
-            act = [r for r in act if not _buy_filled(r, book)]                     # 之后才执行这条（二次复核 F2）
+            act = [r for r in act if not _buy_filled(r, book, pj_)]                 # 之后才执行这条（二次复核 F2）
         if act:
             return f"{lt} 已经有一条没处理完的手动指令（{act[-1].get('id')}）：先撤回它，或等它完成"
     if k == "buy":

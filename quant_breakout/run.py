@@ -3799,7 +3799,8 @@ def cmd_live_broker(a) -> int:
         print(f"★ 这次没读（没登录立花）：{e}")
         return 3
     try:
-        br = _cancel_broker(a, paper)
+        b_ = RS.peek_json(book) or {}                     # 拿到锁之后再读：执行器刚跑完（07:40 对过账）→ 用对账之后的账本算 compare / fills_day
+        br = _cancel_broker(a, paper)                     # （锁之前那次只给 --notify 的休市日 / 没有账本判断；2026-10-16 三次复核）
         try:
             snap = BS.refresh(br, tag, b_, _managed_tickers(b_))
         except Exception as e:                            # noqa: BLE001

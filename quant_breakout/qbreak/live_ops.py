@@ -167,7 +167,8 @@ def held_now(book: dict | None, tag: str | None = None, *, now: dt.datetime | No
       settle =「明早 07:40」/「下个交易日 10/19（周一）07:40」/「今天 07:40」/ 对账时点已过（missed）的那句；when = 句子里用的时点
       （missed 时「下一次执行器运行」）；when_sp = hn_sp(when)（后面直接接「对账…」）；day_word =「今天」/「10/16（周五）」（成交日不是今天时）；
       head = hn_head(day_word)（「含今天已成交」/「含 10/16（周五）已成交」）；fills 每笔带 at = 成交时刻的下界（快照来的 = 快照的 fills_at；
-      别的 = 成交日 09:00、发出时刻 sent_at、单号末尾 -N时分秒 里最晚的；立花对照卡判断快照是不是早于成交用）；
+      别的 = 成交日 09:00、发出时刻 sent_at、单号末尾 -N时分秒 里最晚的；立花对照卡判断快照是不是早于成交用）与 snap_q
+      （成交日的快照里这张单的成交数；快照里没有这张单 → None）；
       fills 按对账的顺序（先卖后买、个股先于核心 ETF：live_unified._reconcile）；state 是投影后的 state（只换 pos / core_units /
       pending_exit / cash_jpy；history、trades、core_trades、plan 类不动 —— 不编造收盘点、不进 tax_ytd）；book = {**账本, state: 投影,
       _held_now: 本结果}，对它再调一次直接返回同一个结果（幂等，不再叠加）。
@@ -288,7 +289,8 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
             approx = False
             if px <= 0:
                 px, approx = float(o.get("limit") or o.get("ref_px") or 0), True
-            got.append((side == "BUY", kind == "core", idx, o, t, side, kind, q, px, src, approx))
+            sq = int(r.get("filled_qty") or 0) if r is not None and not r.get("error") else None   # 快照里这张单的成交数（立花对照卡拆快照前 / 后）
+            got.append((side == "BUY", kind == "core", idx, o, t, side, kind, q, px, src, approx, sq))
         except (TypeError, ValueError, AttributeError, KeyError):
             continue
     out["pending"] = pending
@@ -305,7 +307,7 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
     core_last = st0.get("core_last") or {}
     ccost: dict = {}                                      # 核心 ETF 的移动平均成本 [口数, 成本（含买入手续费）]；对不上 → None
     delta, fills, any_approx = 0.0, [], False
-    for _b, _c, _i, o, t, side, kind, q, px, src, approx in got:
+    for _b, _c, _i, o, t, side, kind, q, px, src, approx, sq in got:
         pnl = None
         if kind == "core":
             u = core.get(t, 0)
@@ -370,7 +372,7 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
         any_approx = any_approx or approx
         fills.append({"cid": o.get("cid"), "ticker": t, "label": NM.label(t), "side": side, "kind": kind, "qty": int(q),
                       "px": float(px), "fee": float(fee), "reason": o.get("reason") or "", "phase": o.get("phase") or "",
-                      "status": o.get("status") or "", "src": src, "pnl": pnl, "approx": approx,
+                      "status": o.get("status") or "", "src": src, "pnl": pnl, "approx": approx, "snap_q": sq,
                       "at": _hn_fill_at(o, F, snap_at if src == "snapshot" else None)})
     order = list(dict.fromkeys(f["ticker"] for f in fills))
     new, sold = [], []
@@ -430,7 +432,8 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
 def broker_compare(snap: dict | None, pj: dict | None) -> dict:
     """立花快照的持仓 vs 账本 + 快照那一刻已经知道的成交（面板「立花那边」与 liveu.sh broker 的「账本 vs 立花」同一个判断；2026-10-16 复核）。
     pj = held_now 的结果。逐只：比的数 = 账本 + 这只的成交里时刻（下界）不晚于快照的（个股不低于 0）；快照之后才成交的不算（late，
-    下一次刷新才看得到）。差 ≠ 0：这只快照之前的成交说不准（约数 approx / 只知道发出数 sent_qty / 单上的成交离快照不到 HN_FILL_SLACK /
+    下一次刷新才看得到）；快照里有这张单（成交在持仓之后查的）→ 快照之前的最多算快照记的成交数，多出来的算 late（2026-10-16 三次复核：
+    11:35 快照记 0 股、13:00 成交 50 股之后撤单，撤单记下的 50 股不是快照之前的）。差 ≠ 0：这只快照之前的成交说不准（约数 approx / 只知道发出数 sent_qty / 单上的成交离快照不到 HN_FILL_SLACK /
     快照之前就可能成交、快照却不知道的单）→ soft（对账之后再看）；其余 → bad（真的不一致：早上的核对会停下）。没有已知的成交 → 快照里存的 compare。
     → {"rows": [{ticker, ledger（比的数）, broker, diff}], "bad", "soft", "seen"（比的数含成交的票）, "late", "head", "day_word"}。只读、不抛异常。"""
     from . import broker_snapshot as BS
@@ -449,6 +452,10 @@ def broker_compare(snap: dict | None, pj: dict | None) -> dict:
                 cnt[t] = cnt.get(t, 0) + int((p or {}).get("shares") or 0)
             for t, u in (ps.get("core_units") or {}).items():
                 cnt[t] = cnt.get(t, 0) + int(u or 0)
+            ok_rows = set()                                   # 快照里有、而且成交是在持仓之后（同时）查的单：快照那一刻成交了多少是知道的
+            fat = _hn_ts(s.get("fills_at"))
+            if fat is not None and sat is not None and fat >= sat and snap_day(s) == pj.get("fill_day"):
+                ok_rows = {str(r.get("cid")) for r in s.get("fills") or [] if isinstance(r, dict) and not r.get("error")}
             seen, late, unsure = set(), set(), set()
             for t in dict.fromkeys(str(f.get("ticker")) for f in fs):
                 n = int((by.get(t) or {}).get("ledger") or 0)
@@ -459,15 +466,19 @@ def broker_compare(snap: dict | None, pj: dict | None) -> dict:
                     if sat is None or at is None or at > sat:
                         late.add(t)
                         continue
+                    q = int(f.get("qty") or 0)
+                    known = str(f.get("cid")) in ok_rows and f.get("snap_q") is not None
+                    if known and q > int(f["snap_q"]):        # 快照说那一刻只成交了 snap_q：多出来的是快照之后成交的（例：撤单时记下的部分成交）
+                        late.add(t)
+                        q = max(0, int(f["snap_q"]))
+                    if q <= 0:
+                        continue
                     seen.add(t)
-                    n += int(f.get("qty") or 0) * (1 if f.get("side") == "BUY" else -1)
-                    if f.get("approx") or f.get("src") == "sent_qty" or (f.get("src") == "order" and sat - at < HN_FILL_SLACK):
+                    n += q * (1 if f.get("side") == "BUY" else -1)
+                    if f.get("approx") or (not known and (f.get("src") == "sent_qty"
+                                                          or (f.get("src") == "order" and sat - at < HN_FILL_SLACK))):
                         unsure.add(t)
                 cnt[t] = max(0, n)
-            ok_rows = set()
-            fat = _hn_ts(s.get("fills_at"))
-            if fat is not None and sat is not None and fat >= sat and snap_day(s) == pj.get("fill_day"):
-                ok_rows = {str(r.get("cid")) for r in s.get("fills") or [] if isinstance(r, dict) and not r.get("error")}
             for p in pj.get("pending") or []:                 # 快照之前就可能成交、快照却不知道它成交了多少的单
                 at = _hn_ts(p.get("at"))
                 if sat is not None and at is not None and at <= sat and (

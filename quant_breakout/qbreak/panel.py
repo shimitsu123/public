@@ -2519,8 +2519,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                    else "等成交" if o.get("status") in ("SENT", "PARTIAL") else "结果不明")
             sw = pj.get("settle") or ""
             sw = "明天早上" if not sw or sw.startswith("明早") else (pj.get("when_sp") or "")   # 周五 / 连休前：「下个交易日 10/19（周一）07:40」（2026-10-16）
-            return (qt + f"<div class='act muted'>今天盘中已照比例{'卖出' if o.get('side') == 'SELL' else '买入'} {n:,} 口（{got}）："
-                    f"口数{sw}对账后更新</div>")
+            tail = f"上面的口数已含（对账前）；{sw}对账后正式记账" if t in hnb else f"口数{sw}对账后更新"   # 周末 / 休市日：成交日不是今天（2026-10-16 三次复核）
+            return (qt + f"<div class='act muted'>{pj.get('day_word') or '今天'}盘中已照比例{'卖出' if o.get('side') == 'SELL' else '买入'}"
+                    f" {n:,} 口（{got}）：{tail}</div>")
         c = MO.core_info(book, t)
         if c is not None and t in hnb:                      # 今天有成交（还拿着）：显示的口数按投影
             c = {**c, "cur": cur}
