@@ -1,4 +1,5 @@
 """conftest.py — 所有测试都在临时 QBREAK_HOME 下运行，绝不碰你的真实状态文件。"""
+import atexit
 import os
 import sys
 import tempfile
@@ -15,6 +16,7 @@ if not _sh.which("node"):
         os.environ["PATH"] = f"{_nv[-1].parent}{os.pathsep}{os.environ.get('PATH', '')}"
 # 必须在 import qbreak 之前设置：日志/状态目录在首次 import 时就会被创建
 _TMP = tempfile.mkdtemp(prefix="qbreak_test_")
+atexit.register(lambda: _sh.rmtree(_TMP, ignore_errors=True))   # 跑完自己删（2026-10-16：以前每跑一次留一个，Mac 的临时目录积了上千个）
 os.environ["QBREAK_HOME"] = _TMP
 _GUARD = Path(_TMP) / "_guard_bin"     # 测试绝不调真的 launchctl：真的会按 plist 的 Label 卸掉 / 停用这台 Mac 上真的定时任务
 _GUARD.mkdir(exist_ok=True)            # （unload -w 写 disabled，2026-10 发生过）。自己带了假 launchctl 的测试放在更前面，照旧

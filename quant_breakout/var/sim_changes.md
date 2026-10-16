@@ -12189,3 +12189,11 @@ deb8a46（对账之后的状态与说明：G7 / G8 / G11 / G16 / G17 / G22 / G26
   （说明写「等撤单时没发，撤单最后没撤这笔」；`system_miss` 不再因为这句说明把真正的系统原因藏起来）。没有撤单指令的账本不受影响。
   tests/test_int_review3.py 加回归测试（「卖单不撤」/ 被拒 / 撤回 → 照常再卖；还在等 / 第二天才被拒 → 记为已撤；撤回之后的等开盘后买入重新处理；改动前 6 项失败），
   test_int_review2.py 改 1 项旧断言（只有说明、没有撤单 → 不算撤了）。
+
+## 2026-10-16 工程（事后：Mac 磁盘紧；只改测试的清理与演练的临时目录，不改规则 / 参数 / 仓位 / 记账 / 执行器下单）：测试不再在系统临时目录留东西
+- 起因：Mac 磁盘剩约 10 GiB，系统临时目录里积了测试留下的 `qbreak_test_*` 约 2,100 个（约 170 MB）、`qbreak_rehearse_*` 约 5,000 个（约 700 MB）、
+  `pytest-of-<用户>` 约 90 MB。用单独的 TMPDIR 跑一次全部测试量了一下：每跑一次留 33 个（`qbreak_test_*` 1、`qbreak_rehearse_*` 30、swiftc 的 `TemporaryDirectory.*` 1、pytest 的编号目录 1 = 约 55 MB）。
+- 改法：① tests/conftest.py 的 `qbreak_test_*`（测试进程的 QBREAK_HOME）进程结束时删；② `live_unified.rehearse` 没给目录时自己建的 `qbreak_rehearse_*`
+  进程结束时删（scripts/live_rehearsal.py / `run.py live-u-rehearse` 也一样不再留；给了目录的照旧不动）；③ 菜单栏 Swift 的类型检查测试让 swiftc 的临时目录放在测试自己的 tmp_path 里；
+  ④ 新加 quant_breakout/pytest.ini：`tmp_path_retention_policy = failed`（通过的测试的临时目录跑完就删，只留没通过的、方便排查）。
+- 结果：同样单独的 TMPDIR 再跑一次全部测试（4,574 项通过、8 项跳过），跑完只剩一个空的 `pytest-of-<用户>` 目录（0 个新东西）。以前留下的旧目录这次不删：清理命令只在对话里给用户（只删一天以前的 `qbreak_test_*` / `qbreak_rehearse_*`）。

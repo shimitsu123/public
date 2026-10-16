@@ -164,9 +164,10 @@ def test_menubar_installer_with_stub_compiler(tmp_path):
 
 
 @pytest.mark.skipif(not shutil.which("swiftc"), reason="没有 swiftc（不是装了 Xcode CLT 的 Mac）")
-def test_menubar_swift_typechecks():
+def test_menubar_swift_typechecks(tmp_path):
     r = subprocess.run(["swiftc", "-typecheck", str(ROOT / "scripts" / "menubar" / "QbreakBar.swift")],
-                       capture_output=True, text=True, timeout=300)
+                       capture_output=True, text=True, timeout=300,
+                       env={**os.environ, "TMPDIR": str(tmp_path)})      # swiftc 的 TemporaryDirectory.* 留在测试自己的目录里（不留在系统临时目录）
     assert r.returncode == 0, r.stderr[-800:]
 
 

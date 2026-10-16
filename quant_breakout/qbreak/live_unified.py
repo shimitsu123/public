@@ -3574,7 +3574,13 @@ def rehearse(make_engine, start, end=None, kind: str = "paper", workdir=None, ex
     eng = make_engine()
     lo = 0 if start is None else int(eng.gidx.searchsorted(pd.Timestamp(start), side="left"))
     hi = len(eng.gidx) if end is None else int(eng.gidx.searchsorted(pd.Timestamp(end), side="right"))
-    wd = Path(workdir or tempfile.mkdtemp(prefix="qbreak_rehearse_"))
+    if workdir:
+        wd = Path(workdir)
+    else:                                                           # 没给目录：自己建的临时目录，进程结束时删掉（以前一直留着）
+        import atexit
+        import shutil
+        wd = Path(tempfile.mkdtemp(prefix="qbreak_rehearse_"))
+        atexit.register(shutil.rmtree, str(wd), True)
     exch = None
     settle = kind == "paper-settle"
     if kind in ("paper", "paper-settle"):
