@@ -282,7 +282,7 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
             r = srow.get(str(o.get("cid")))
             if r is not None and not r.get("error") and int(r.get("filled_qty") or 0) > q:
                 q, px, src = int(r["filled_qty"]), float(r.get("avg_px") or px), "snapshot"
-            if st_ in ("SENT", "PARTIAL") and q < tgt:
+            if st_ in ("SENT", "PARTIAL") and q < tgt and not is_gone(o):   # 立花那边已经失效 / 被拒：不再等成交（成交过的照算）
                 pending.append({**pend, "left": tgt - q})
             if q <= 0:
                 continue
@@ -1004,9 +1004,10 @@ def _ord_txt(o) -> str:
 
 
 def _fq(x) -> tuple[int, int, bool]:
-    """(已成交, 发出的, 全部成交了吗)：FILLED / 撤单时已经全部成交 / 成交数 ≥ 发出的 = 全部成交（复核 2 2026-10-16：部分成交不再算全部成交）。"""
+    """(已成交, 发出的, 全部成交了吗)：FILLED / 撤单时已经全部成交 / 成交数 ≥ 发出的 = 全部成交（复核 2 2026-10-16：部分成交不再算全部成交）。
+    成交数含立花成交快照里的（snap_q：只在 snap_book 给面板 / 确认框的副本上有；执行器与撤单引擎的账本没有这个键）。"""
     n = int(_g(x, "sent_qty") or _g(x, "qty") or 0)
-    q = int(_g(x, "filled_qty") or 0)
+    q = max(int(_g(x, "filled_qty") or 0), int(_g(x, "snap_q") or 0))
     full = _g(x, "status") == "FILLED" or "撤单时已经全部成交" in str(_g(x, "note") or "") or (n > 0 and q >= n)
     return (max(q, n) if full else q), n, full
 
@@ -1025,7 +1026,7 @@ def _spends(x, scope: set, pend: set, now: dt.datetime | None, fill, pre: bool =
         return "unknown", f"买 {lab} 状态不明（发送中 / 结果不明）"
     c = str(_g(x, "cid"))
     inn = c in scope
-    if s in CANCELLABLE and GONE in str(_g(x, "note") or ""):   # 撤单时立花回已经失效 / 被拒、没成交：不再花钱（复核 5 2026-10-16）
+    if is_gone(x):                                        # 撤单时立花回已经失效 / 被拒、没成交：不再花钱（复核 5 2026-10-16）
         return None
     if s in CANCELLABLE:
         if c in pend or (not inn and ACCEPTED in str(_g(x, "note") or "")):
@@ -1050,6 +1051,33 @@ GONE = "立花那边已经结束"                              # 撤单时立花
 DEPK = "撤买单（卖单不撤）"                             # 确认框「一起撤买单」在同一组的买单还可能花钱时的按钮文字（data-depk；复核 2 2026-10-16）
 
 
+def is_gone(x) -> bool:
+    """撤单时立花回「已经失效 / 被拒」的单（还记成 SENT / PARTIAL、说明里有 GONE）：单不在交易所了，不会再成交（成交过的部分在 filled_qty）。
+    交易页（outlook 结束）、持仓（不算在等成交）、闸门（不再花钱）、撤单按钮同一个判断（2026-10-16 整合复核）。"""
+    return _g(x, "status") in CANCELLABLE and GONE in str(_g(x, "note") or "")
+
+
+SNAP_DONE = "已成交（快照，对账前的预计）"            # 立花成交快照（11:35 / 15:45）里已经全部成交、账本还是 SENT 的单（snap_book；2026-10-16 整合复核）
+
+
+def snap_book(book: dict | None, tag: str | None, now: dt.datetime) -> dict | None:
+    """立花：成交快照里已知的成交（held_now 的 src snapshot：与「持仓」同一个判断）写进当前决策还挂着的单的 snap_q → 账本的副本。
+    只给交易页 / 撤单按钮 / 整组撤单的确认框用（账本不动；执行器、撤单引擎不看 —— 它们自己查立花）。模拟账户 / 没有快照成交 → 原样。"""
+    b = book or {}
+    if str(tag or "").startswith("paper") or str(b.get("broker") or "").startswith("Paper") or "_snap" in b:
+        return book
+    try:
+        pj = held_now(b, tag or "tachibana", now=now)
+        got = {str(f.get("cid")): int(f.get("snap_q") or 0) for f in pj.get("fills") or [] if f.get("src") == "snapshot"}
+    except (TypeError, ValueError, AttributeError):
+        got = {}
+    d = (b.get("state") or {}).get("last_date")
+    os_ = [{**o, "snap_q": got[str(o.get("cid"))]} if (isinstance(o, dict) and o.get("decided_on") == d and o.get("status") in CANCELLABLE
+                                                         and got.get(str(o.get("cid")), 0) > 0) else o
+           for o in b.get("orders") or []]
+    return {**b, "orders": os_, "_snap": True}
+
+
 def _cancelling(r: dict | None) -> bool:
     """立花的注文状态是「取消中」（sOrderStatusCode 6 / 状态名称 取消中）。复核 2（2026-10-16）：以前只看名称里有没有「取消」，
     「取消失敗」（撤单没成功、单还挂着）也被当成已受理。"""
@@ -1066,7 +1094,7 @@ def _solo_spends(x, now: dt.datetime | None, fill) -> tuple[str, str] | None:
     q, _n, full = _fq(x)
     if q > 0 or full:
         return "filled", f"买 {lab} 已经成交 {q:,} {_unit(x)}"
-    if s in CANCELLABLE and GONE in str(_g(x, "note") or ""):   # 撤单时立花回已经失效 / 被拒、没成交：不再花钱
+    if is_gone(x):                                        # 撤单时立花回已经失效 / 被拒、没成交：不再花钱
         return None
     if s in CANCELLABLE:
         if ACCEPTED in str(_g(x, "note") or ""):
@@ -1233,7 +1261,7 @@ def _st_txt(x) -> str:
     """确认框里一笔单的状态：「已下单（等成交）」「部分成交，已成交 1,000/4,110 口」「已下单（等成交），撤单已受理（取消中）」。"""
     s = _g(x, "status")
     t = STATUS_TEXT.get(s, str(s))
-    gone = s in CANCELLABLE and GONE in str(_g(x, "note") or "")
+    gone = is_gone(x)
     if gone:                                               # 撤单时立花回已经失效 / 被拒：不写「已下单（等成交）」（复核 5）
         t = "立花那边已经" + gone_word(x) + "（撤单时查到）"
     q, n, _full = _fq(x)
@@ -1487,6 +1515,11 @@ def fix_pending_when(book: dict | None, now: dt.datetime, tag: str | None = None
         return {}, ""
 
 
+def fix_when_do(when: str) -> str:
+    """「{什么时候}照它下单」：什么时候那句已经说了下单 / 开盘（寄付）→ 不再接「照它下单」（整合复核 2026-10-16：以前「马上（盘中）按现价下单照它下单」）。"""
+    return when + ("" if when.endswith(("下单", "开盘（寄付）")) or "下单（" in when else "照它下单")
+
+
 def _core_fix_of(book: dict | None, tag: str | None = None) -> dict:
     """现在的固定口数（含还没读的 corefix：manual_orders.core_fixed；取不到 → 账本里的）。"""
     try:
@@ -1517,7 +1550,7 @@ def cancel_hint(o, book: dict | None, now: dt.datetime, tag: str | None = None) 
         pend, when = fix_pending_when(book, now, tag)       # 还没照它调的固定口数（D1）：今天开盘后 / 盘中就照它下，不等下一次决策（复核 UI F2）
         if t in fx:
             if t in pend:
-                return (f"{head}；{_lab(t)} 手动固定 {int(fx[t]):,} 口还没照它调：{when}照它下单（撤这笔单不会取消固定口数；"
+                return (f"{head}；{_lab(t)} 手动固定 {int(fx[t]):,} 口还没照它调：{fix_when_do(when)}（撤这笔单不会取消固定口数；"
                         f"不想要 → 「持仓」里 {_lab(t)} 下面点「恢复按规则」）")
             return (f"{head}；{_lab(t)} 手动固定 {int(fx[t]):,} 口仍有效 → {nd} 的决策还会再排同样的单"
                     f"（不想要 → 「持仓」里 {_lab(t)} 下面点「恢复按规则」）")
@@ -1525,7 +1558,7 @@ def cancel_hint(o, book: dict | None, now: dt.datetime, tag: str | None = None) 
         if side == "SELL" and drv:
             fl = "、".join(f"{_lab(x)} {int(fx[x]):,} 口" for x in dict.fromkeys(drv))
             if any(x in pend for x in drv):
-                return (f"{head}；这笔卖出是为手动固定（{fl}）凑钱：固定口数还没照它调 → {when}照它下单（钱不够先卖不固定的核心 ETF；"
+                return (f"{head}；这笔卖出是为手动固定（{fl}）凑钱：固定口数还没照它调 → {fix_when_do(when)}（钱不够先卖不固定的核心 ETF；"
                         f"不想要 → 「持仓」里那只 ETF 下面点「恢复按规则」）")
             return (f"{head}；这笔卖出是为手动固定（{fl}）凑钱：固定口数仍有效 → {nd} 的决策还会再排同样的换仓"
                     f"（不想要 → 「持仓」里那只 ETF 下面点「恢复按规则」）")
@@ -2133,6 +2166,10 @@ def _order_row(o: dict, *, now, paper, tag, halt, asked, casc, unf, f) -> dict:
         return put("wont", note, "skip", chip="") if skip_wont(o) else put("done", note)
     if s in ("REJECTED", "MISSED"):
         return put("wont", note or STATUS_TEXT.get(s, s), "reject" if s == "REJECTED" else "missed", chip="")
+    if is_gone(o):                                        # 撤单时立花回已经失效 / 被拒：不在交易所了（成交过的部分已记；2026-10-16 整合复核）
+        return put("done", note, "gone")
+    if s in CANCELLABLE and o.get("snap_q") and _fq(o)[2]:   # 立花成交快照：已经全部成交（账本明早对账才记；snap_book）
+        return put("done", "", "snapfill", chip=SNAP_DONE)
     if cid in asked:
         return put("done", "撤单中", "asked", chip="撤单中")
     closed = not paper and bool(tag) and day is not None and (day < today or (day == today and now.time() >= CLOSE_T))
@@ -2262,7 +2299,7 @@ def outlook(book: dict | None, waiting=(), now: dt.datetime | None = None, *, ta
     instr=False：只看单。→ {"rows": [...], "orders": {cid: 行}, "items": {指令 id: 行}, "asked": set, "n": {state: 笔数}}。"""
     from . import paths
     now = now or now_jst()
-    b = book or {}
+    b = snap_book(book, tag, now) or {}                    # 立花成交快照里已经成交的单：与「持仓」同一个判断（2026-10-16 整合复核）
     st = b.get("state") or {}
     d = st.get("last_date")
     cur = [o for o in b.get("orders") or [] if isinstance(o, dict) and o.get("decided_on") == d]
@@ -2479,6 +2516,8 @@ def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
         return f"状态是「{STATUS_TEXT.get(st, st)}」：只撤还挂着的单（已下单 / 部分成交）或执行器还没发出的单（计划 / 等开盘后）"
     if not unsent and GONE in str(_g(o, "note") or ""):   # 撤单时立花回已经失效 / 被拒：单不在交易所了（不给「撤单」；简化 2026-10-16）
         return f"立花那边已经{gone_word(o)}（撤单时查到），不用撤"
+    if not unsent and _g(o, "snap_q") and _fq(o)[2]:      # 立花成交快照里已经全部成交（只在 snap_book 的副本上：面板 / 确认框）
+        return f"{SNAP_DONE}，不用撤"
     if not _in_current(o, book):
         return "不是当前决策的单（已经对账过了）"
     f = fill_day_of(book)
@@ -3743,7 +3782,7 @@ __all__ = ["CANCELLABLE", "STATUS_TEXT", "CANCEL_HINT", "CANCEL_HINT_CORE", "RES
            "DEP_OPEN", "SRC_WORD", "blocked_retry", "src_done", "fund_srcs", "orphan", "busy", "src_text", "fund_cascade",
            "cascade_events", "cascade_rows", "deps_of", "next_decision_text", "cancel_hint",
            "GROUP_POLLS", "GROUP_NEUTRAL", "groups", "group_of", "fund_linked", "group_members", "lone_lines", "legacy_rec", "job_cids",
-           "wait_end", "grp_why", "group_view", "group_lines", "ACCEPTED", "DEPK", "FAILED", "GONE", "gone_word", "still_sells", "legacy_plan", "cancel_scope", "cancel_jobs", "cancel_conflict",
+           "wait_end", "grp_why", "group_view", "group_lines", "ACCEPTED", "DEPK", "FAILED", "GONE", "is_gone", "SNAP_DONE", "snap_book", "gone_word", "still_sells", "legacy_plan", "cancel_scope", "cancel_jobs", "cancel_conflict",
            "solo_holds", "hold_pre", "cli_resume", "cli_plan", "CLI_SRC",
            "CORE_SRC", "src_of", "src_note", "src_line", "wrote", "fix_name", "OUT_WORD", "TRADE_HEAD", "NO_PATH_S", "skip_wont",
            "asked_cids", "instr_due", "outlook", "row_text", "act_text", "trade_key", "new_wont", "not_today",

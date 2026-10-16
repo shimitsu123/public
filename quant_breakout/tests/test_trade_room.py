@@ -432,8 +432,12 @@ def test_todays_fills_change_only_the_text():
     cur = [o for o in b["orders"] if o.get("decided_on") == b["state"]["last_date"]]
     assert r82["sakin"] == TR.sakin([o for o in cur if o["ticker"] == "1482.T"], 0)
     assert r45["sakin"] == TR.sakin([o for o in cur if o["ticker"] == "1545.T"], 4110)
-    assert "今天还能卖 ✗（今天买进）" in r82["chip"] and "今天还能卖 ✗（今天已卖出）" in r45["chip"]
-    assert any("今天买进 650 口" in w for w in r82["sell"]["why"]) and not any(w == "没拿着" for w in r82["sell"]["why"])
+    # 今天买进的核心 ETF：「卖出全部」/「调仓…」（闲置资金比例）今天不行，「固定口数…」照样能下（执行器 fix_prep 按账本 + 今天的成交算口数；
+    # 整合复核 2026-10-16：以前写「今天还能卖 ✗（今天买进）」，确认框与执行器却照样马上下）
+    assert "今天还能卖 ✓" in r82["chip"] and r82["sell"]["max_qty"] == 650 and r82["sell"]["via"] == "「固定口数…」（0 口 = 全部卖出）"
+    assert "今天还能卖 ✗（今天已卖出）" in r45["chip"]
+    assert any("今天买进 650 口" in w and "「固定口数…」照样能下（按账本 + 今天的成交算：现在 650 口）" in w for w in r82["sell"]["why"])
+    assert not any(w == "没拿着" for w in r82["sell"]["why"])
     assert any("今天已卖出全部 4,110 口" in w for w in r45["sell"]["why"])
     assert r82["held_now"] == {"buy": 650, "sell": 0, "net": 650} and r45["held_now"] == {"buy": 0, "sell": 4110, "net": -4110}
     assert round(TR.cash_now(b, "paper", now, None)["cash"]) == rm["money"]["cash"] == 190   # 现金照旧（券商 / 账本口径，不叠加）

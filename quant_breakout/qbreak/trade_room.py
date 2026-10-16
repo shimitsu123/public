@@ -335,12 +335,13 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
     hn_by, hn_new, hn_gone = pjr.get("by_ticker") or {}, set(pjr.get("new") or []), set(pjr.get("sold_out") or [])
     hn_dw = pjr.get("day_word") or "今天"                  # 周末 / 早上的运行之前：「10/16（周五）」（2026-10-16 复核）
 
-    def hn_mark(s: dict, t: str, held: int) -> None:      # 卖这一边的第一个原因：今天买进（对账前不算持仓）/ 今天已卖出全部
+    def hn_mark(s: dict, t: str, held: int, no=None) -> None:   # 卖这一边的第一个原因：今天买进（对账前不算持仓）/ 今天已卖出全部
         x = hn_by.get(t) or {}
+        no = no or _no
         if held <= 0 and t in hn_new and x.get("text"):
-            _no(s, x["text"], f"{hn_dw}买进")
+            no(s, x["text"], f"{hn_dw}买进")
         elif t in hn_gone and x.get("text"):
-            _no(s, x["text"], f"{hn_dw}已卖出")
+            no(s, x["text"], f"{hn_dw}已卖出")
     pend = st.get("pending_exit") or {}
     hist = st.get("history") or []
     eq = float(hist[-1][1]) if hist else 0.0
@@ -485,6 +486,19 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
         room_t = cash_ - (sk["sold_jpy"] if sk["buy"]["rule"] == 1 else 0)
         _money(bb, room_t, f_all, px, lot, eq, held0, "股")
         gate_all(bb)
+    got_now = MO.pj_got(pjr)
+
+    def fix_route(t: str, held0: int) -> tuple[int, str]:
+        """核心 ETF 的「固定口数…」这条路（执行器 now_phase 的 fix_prep 同一个判断；整合复核 2026-10-16）→ (现在的口数 = 账本 + 今天的成交,
+        挡住的理由 / "")。不看「同一只当天只下一笔」/「今天买进」（那是「卖出全部」/「调仓…」= 闲置资金比例那条路的）；只挡还挂在交易所、
+        没成交完的单（不叠单）与今天已经买过也卖过（差金決済）。"""
+        os_ = [o for o in cur_orders if o.get("ticker") == t]
+        cur = max(0, held0 + int((hn_by.get(t) or {}).get("net") or 0)) if os_ else held0
+        if any(o.get("status") in LO.AT_EXCH + UNKNOWN and not MO.pj_done(o, pjr, got_now) for o in os_):
+            return cur, "今天还挂着的单成交 / 撤掉之前，「固定口数…」也先等（执行器不叠单）"
+        if {o.get("side") for o in os_ if max(got_now.get(str(o.get("cid")), 0), int(o.get("filled_qty") or 0)) > 0} == {"BUY", "SELL"}:
+            return cur, "今天已经买过也卖过（差金決済）：「固定口数…」也等下一次决策"
+        return cur, ""
     for t in core_t:
         held0 = cores_held.get(t, 0)
         r = add_row(t, "core", held0)
@@ -496,7 +510,21 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
         bb["via"] = "「固定口数…」/「买入…」（核心 ETF 不能用个股的「买入」：用固定口数或闲置资金比例）"
         for x in (s, bb):
             session(x)
-        hn_mark(s, t, held0)
+        fcur, fwhy = fix_route(t, held0)
+        via_fix: set = set()                               # 只有「固定口数…」还能下的那一边（id）
+
+        def ratio_no(x: dict, why: str, short: str, nxt: str = "") -> None:   # 只挡「卖出全部」/「调仓…」（闲置资金比例）的理由
+            if not fwhy and (x is bb or fcur > 0):         # 固定口数照样能下（盘中马上，执行器按账本 + 今天的成交算口数）
+                if id(x) not in via_fix:
+                    via_fix.add(id(x))
+                    x["via"] = "「固定口数…」" + ("（0 口 = 全部卖出）" if x is s else "")
+                _note(x, f"「卖出全部」/「调仓…」（换算成闲置资金比例）今天不行：{why}；「固定口数…」照样能下"
+                         f"（按账本 + 今天的成交算：现在 {fcur:,} 口）")
+                return
+            _no(x, why, short, nxt)
+            if fwhy and fwhy not in x["why"]:
+                _note(x, fwhy)
+        hn_mark(s, t, held0, ratio_no)
         if sk["sell"]["why"]:
             _note(s, sk["sell"]["why"].replace("股", "口"))
         if sk["buy"]["why"]:
@@ -511,7 +539,7 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
             elif t in instr:
                 _no(x, f"已经有一条没处理完的手动指令（{instr[t].get('id')}）：先撤回它，或等它完成", "有指令在处理")
             if busy(t):
-                _no(x, f"今天已经有执行器的单：同一只当天只下一笔 → {nd_txt}", "今天已有单", nd_txt)
+                ratio_no(x, f"今天已经有执行器的单：同一只当天只下一笔 → {nd_txt}", "今天已有单", nd_txt)
             if allin:
                 _no(x, allin, "全部换成在等")
         if t in fix_pend:
@@ -526,10 +554,10 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
         if intraday and q > 0 and c > 0 and q > c * MO.CORE_BUY_LIMIT:
             _note(bb, f"现价 ¥{q:,g} 比收盘 ¥{c:,g} 高 {q / c - 1:+.1%}：盘中核心 ETF 的买单限价 ≤ 收盘 ×{MO.CORE_BUY_LIMIT:g}，"
                       "这个价下不了（一会儿再试）")
-        s["max_qty"] = left if s["n"] else 0
+        s["max_qty"] = (fcur if id(s) in via_fix else left) if s["n"] else 0
         gate_all(s)
         f_c, _u = fundable(b, now, px_of, skip_fix | set(fixed) | {t})   # 给固定口数凑钱：固定的不卖（D1）
-        _money(bb, cash_, f_c, px, lot, eq, held0, "口", cap=FIX_ADD_MAX)
+        _money(bb, cash_, f_c, px, lot, eq, fcur, "口", cap=FIX_ADD_MAX)
         gate_all(bb)
     # 候选（没拿着的个股）：只数能不能（不是建议）
     cl = list(rows.values()) if cands is None else [rows.get(x, {"ticker": x}) if isinstance(x, str) else x for x in cands]

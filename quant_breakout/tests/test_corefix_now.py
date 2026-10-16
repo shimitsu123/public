@@ -443,7 +443,7 @@ def test_cancel_hint_for_a_fixed_etf_not_yet_applied_says_when_it_is_ordered():
     o = ExecOrder.from_dict(book["orders"][1])
     now = dt.datetime(2026, 10, 15, 10, 30, tzinfo=JST)
     h = LO.cancel_hint(o, book, now, "tachibana")
-    assert "1482 对冲版美国 7〜10 年国债 手动固定 679 口还没照它调：马上（盘中）按现价下单照它下单（撤这笔单不会取消固定口数" in h
+    assert "1482 对冲版美国 7〜10 年国债 手动固定 679 口还没照它调：马上（盘中）按现价下单（撤这笔单不会取消固定口数" in h
     assert "下一次决策还会再排" not in h
     pend, when = LO.fix_pending_when(book, now, "tachibana")
     assert pend == {"1482.T": 679} and when == "马上（盘中）按现价下单"

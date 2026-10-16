@@ -1299,6 +1299,7 @@ def _order_rows(book: dict, now: dt.datetime, paper: bool, waiting: list, live: 
     另有 … / 已结束）由 _trade_split 决定、_trade_sections 拼（同一组的说明、按钮照旧每行都有，分在不同块也一样）。
     → ([(cid, 一行的 HTML)]（账本里的顺序）, {"f": 成交日, "stale": 今天早上的运行还没跑, "grp": 有同一组})；没有单 → ([], …)。"""
     from . import live_ops as LO
+    book = LO.snap_book(book, tag, now) or {}               # 立花成交快照里已经成交的单：不给「撤单」、确认框算花了钱（与「持仓」同一个判断）
     st = book.get("state") or {}
     d = st.get("last_date")
     orders = [o for o in book.get("orders") or [] if o.get("decided_on") == d]
@@ -1329,7 +1330,9 @@ def _order_rows(book: dict, now: dt.datetime, paper: bool, waiting: list, live: 
         lim = f"，限价 ≤ ¥{float(o['limit']):,g}" if o.get("limit") and o.get("side") == "BUY" else ""
         q = int(o.get("filled_qty") or 0)
         px = float(o.get("filled_px") or 0)
-        got = (f"，成交 {q:,}/{n:,}" if q and o.get("status") in ("PARTIAL", "CANCELLED", "EXPIRED") else
+        sq = int(o.get("snap_q") or 0)                      # 立花成交快照里的成交（还没全部成交：照样挂着、能撤）
+        got = (f"，成交 {sq:,}/{n:,}（快照，对账前的预计）" if q < sq < n else
+               f"，成交 {q:,}/{n:,}" if q and o.get("status") in ("PARTIAL", "CANCELLED", "EXPIRED") else
                f"，成交 {q:,}{f'/{n:,}' if q < n else ''} @ ¥{px:,.2f}" if q and px > 0 and o.get("status") == "FILLED" else "")
         #   ↑ 已成交写成交价（模拟账户 09:25 前后的开盘撮合之后交易页马上看到；D3，2026-10-15）
         note = str(o.get("note") or "")
@@ -1423,8 +1426,13 @@ def _order_rows(book: dict, now: dt.datetime, paper: bool, waiting: list, live: 
                     + (f"<div class='small'>{escape(fixn[cid])}</div>" if cid in fixn and fixn[cid] not in shown else "")
                     + (f"<div class='small'>{escape(LO.src_line(o))}</div>" if LO.src_line(o) else "")   # 核心单的来源（D7：固定口数 / 凑钱 / 比例 / 规则）
                     + f"<div class='muted small'>{escape(LO.how_text(o, paper) + lim + got)}"
-                    f"{(' · ' + escape(NM.annotate(note)[:160])) if note else ''}</div></div>{btn}</div>"))
+                    f"{(' · ' + escape(NM.annotate(_pnl_txt(note))[:160])) if note else ''}</div></div>{btn}</div>"))
     return rows, {"f": f, "stale": stale, "grp": bool(G)}
+
+
+def _pnl_txt(note: str) -> str:
+    """模拟账户成交时写的「pnl=-18,535」→「已实现约 −¥18,535」（与「持仓」的写法一样；报告里是 report.py 换成「损益」）。"""
+    return re.sub(r"pnl=(-?)([\d,]+)", lambda m: "已实现约 " + ("−" if m.group(1) else "") + "¥" + m.group(2), note)
 
 
 def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.datetime, paper: bool, tag: str | None, asked,
@@ -1621,15 +1629,16 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
         if (o.get("kind") == "core" and t in fixed and (s == "CANCELLED" or cid in asked or r.get("cls") == "fund"   # 撤了 / 下不成，固定口数却还在
                                                         or (s == "SKIPPED" and "凑钱的卖单" in str(o.get("note") or "")))   # 凑钱的卖单没了、执行器不下了（D2）
                 and (t in fpend or not _fix_met(o, cur, st, fixed[t], asked))):   # 同一次决策别的单已经调到 / 还在调 → 不写（复核 7）
-            fix[cid] = ((f"{NM.label(t)} 手动固定 {int(fixed[t]):,} 口还没照它调：{fwhen}照它下单（撤单不会取消固定口数）；不想要 → 在「持仓」"
+            fix[cid] = ((f"{NM.label(t)} 手动固定 {int(fixed[t]):,} 口还没照它调：{LO.fix_when_do(fwhen)}（撤单不会取消固定口数）；不想要 → 在「持仓」"
                          if t in fpend else
                          f"{NM.label(t)} 手动固定 {int(fixed[t]):,} 口仍然有效：下一次决策（{LO.decision_text(book, now, tag, paused)}）"
                          "还会照它调（差多少补多少）；不想要 → 在「持仓」")
                         + ("" if int(cu_now.get(t) or 0) > 0 else "的「其他闲置资金 ETF（现在没拿）」")
                         + f"里 {NM.label(t)} 下面点「恢复按规则」")
         manual = o.get("reason") in LO.MANUAL_REASONS
-        if manual and (s == "FILLED" or (o.get("side") == "BUY" and s in ("UNFILLED", "EXPIRED"))):
-            fin[cid] = ("（已成交：明早对账后这条指令结束）" if s == "FILLED"
+        done = s == "FILLED" or r.get("cls") == "snapfill"   # 立花成交快照里已经全部成交的也算（outlook 同一个判断）
+        if manual and (done or (o.get("side") == "BUY" and (s in ("UNFILLED", "EXPIRED") or r.get("cls") == "gone"))):
+            fin[cid] = ("（已成交：明早对账后这条指令结束）" if done      # 撤单时立花回已经失效 / 被拒的买单 = 失效（2026-10-16 整合复核）
                         else "（单已失效：没成交的部分不会再买，明早对账后结束）")
         if r.get("chip") and r.get("cls") != "asked":       # 不会再做事的单：交易页写「不会下单（预计 / HALT）」「已收盘」…和原因
             rows[cid] = (r["chip"], r["reason"])
@@ -1864,8 +1873,6 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
         else:
             z = zone(r, cid)
         out["orders"][cid] = z
-        if z == "ended" and cid in tl["fix"] and tl["fix"][cid] not in out["notes"]:
-            out["notes"].append(tl["fix"][cid])            # 「手动固定 … 仍然有效：下一次决策还会再排」不跟着那笔单收起来
     oit = ol["items"] if ol else {}
     void, gone = MO.voided(waiting), MO.cancelled(waiting)
 
@@ -1959,6 +1966,11 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
     for t, x in fixrows.items():
         if t not in has_fix:
             out["extra"].append((zone(x, x["ref"]), x))
+    for cid, z in out["orders"].items():                    # 「手动固定 … 仍然有效：下一次决策还会再排」不跟着那笔单收起来；
+        t = byc[cid].get("ticker")                          # 这只的固定口数自己有一行（还没照它调 / 还没读）→ 不再写在最上面（整合复核 2026-10-16：
+        if (z == "ended" and cid in tl["fix"] and tl["fix"][cid] not in out["notes"]   # 以前周六「今天休市，没有要成交的单」下面又写一遍）
+                and t not in has_fix and t not in newfix and t not in fixrows):
+            out["notes"].append(tl["fix"][cid])
     if corerow is not None and out["core"] is None:         # 没有那条比例指令的行（整理账本时删掉了 / 旧账本）→ 补一行
         out["core"] = zone(corerow, corerow["ref"])
         out["extra"].append((out["core"], corerow))
