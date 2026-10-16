@@ -532,13 +532,19 @@ document.addEventListener('click', async e=>{
       return;
     }
     const dep=+d.depn||0, alt=[], dk=d.depk||'一起撤买单';                // 靠这笔卖出的钱、执行器还没发出的买单（fund_src；D2）：几个按钮
-                                                                          // （同一组的买单还可能花钱 → 执行器撤买单、卖单不撤：data-depk「撤买单（卖单不撤）」；复核 2）
-    if(dep>0){ alt.push({text:d.keep||'只撤卖单', v:'keep'}); if(d.fix) alt.push({text:'撤单并恢复按规则（'+tlab(d.fix, d.fixname)+'）', v:'fix', danger:true}); }
+                                                                          // （执行器撤完买单之后还有买单会花钱 → 卖单不撤：data-depk「撤买单（卖单不撤）」；复核 2）
+    const fk=d.depk ? '撤买单并恢复按规则' : '撤单并恢复按规则';            // 复核 3（2026-10-16）：卖单不撤时这个按钮也这么叫、这么写（以前写「一起撤」）
+    const bx=d.depx==='1' ? '（还没发出的执行器不再发，在交易所的发撤单）' : '（执行器不再发）';   // data-depx：「一起撤买单」也撤在交易所的买单
+    if(dep>0){ alt.push({text:d.keep||'只撤卖单', v:'keep'}); if(d.fix) alt.push({text:fk+'（'+tlab(d.fix, d.fixname)+(d.depk ? '；卖单不撤' : '')+'）', v:'fix', danger:true}); }
     else if(d.fix) alt.push({text:'撤单并恢复按规则（'+tlab(d.fix, d.fixname)+'）', v:'fix', danger:true});   // 固定口数排的单（2026-10-16）
     const q=await ask(head,
       hint+'。'+(d.unsent==='1' ? '' : (CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天的单」的状态）'))
       +(d.deps ? '\n★ '+d.deps : '')                                    // 靠这笔卖出的钱的买单（服务器算：data-deps；2026-10-15）
-      +(dep>0 ? '\n「'+dk+'」= 这几笔买单'+(d.depk ? '撤掉（执行器不再发），这笔卖单不撤（见下面 ★）' : '也撤（执行器不再发）')+'；「只撤卖单」= 买单按现在的钱重算'+(d.fix ? '；「撤单并恢复按规则」= 一起撤、再取消固定口数（照规则调：什么时候见下一个确认框）' : '') : '')
+      +(dep>0 ? '\n「'+dk+'」= 这几笔买单'+(d.depk ? '撤掉'+bx+'，这笔卖单不撤（见下面 ★）'
+                : '也撤'+bx+(d.depw==='1' ? '，买单撤掉了（没成交）才撤这笔卖单（见下面 ★）' : ''))   // data-depw：先撤买单、确认没成交再撤卖单（复核 3）
+        +'；「只撤卖单」= 买单按现在的钱重算'
+        +(d.fix ? '；「'+fk+'」= '+(d.depk ? '靠它的钱的买单撤掉、这笔卖单不撤' : d.depw==='1' ? '和「一起撤买单」一样（买单撤掉了才撤这笔卖单）' : '一起撤')
+          +'，再取消固定口数（照规则调：什么时候见下一个确认框）' : '') : '')
       +gl
       +(dep===0 && d.fix ? '\n「撤单并恢复按规则」= 撤单、再取消固定口数（照规则调：什么时候见下一个确认框）' : ''),
       dep>0 ? dk : (d.solok==='1' ? '只撤这笔卖单' : '撤单'), {danger:true, alt:alt});

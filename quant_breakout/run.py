@@ -3540,7 +3540,9 @@ def _live_cancel(a, tag: str, book, paper: bool) -> int:
 
 def _cancel_preview(a, tag: str, book, paper: bool) -> int:
     """整组撤单的预览（bash scripts/liveu.sh cancel-plan <cid> --broker tachibana|paper；只读：不连券商、不改账本、不拿锁；2026-10-16）：
-    这笔单所在的一组每一笔会怎样（与面板确认框同一个 live_ops.group_lines）。账本读不了 → 3；cid 不在账本里 → 1。"""
+    这笔单所在的一组每一笔会怎样（与面板确认框同一个 live_ops.group_lines）。账本读不了 → 3；cid 不在账本里 → 1。
+    复核 3（2026-10-16）：照 cancel <cid> --group 实际做的写（group_lines cli：整组撤单、执行器 --group 的范围；以前按面板的「只撤这一笔」写、
+    还提面板的按钮）；面板写的整组撤单还在处理 / 还没读、盖着这笔 → 写明 --group 这次不撤。"""
     import json
     from qbreak import live_ops as LO
     from qbreak import manual_orders as MO
@@ -3555,10 +3557,13 @@ def _cancel_preview(a, tag: str, book, paper: bool) -> int:
         return 3
     now = now_jst()
     orders = [x for x in b_.get("orders") or [] if isinstance(x, dict)]
-    try:
-        asked = LO.asked_cids(b_, MO.unseen(tag, b_))
+    try:                                                  # 与 cancel_book 命令行同一个判断：面板写的整组撤单还在处理 / 还没读 → 那几笔交给它
+        its = [it for it in (((b_.get("manual") or {}).get("items")) or {}).values()
+               if isinstance(it, dict) and it.get("kind") == "cancel_order" and it.get("status") == "pending"
+               and not MO.grp_wait_stale(it, now)]
+        busy = LO._busy_of(its, MO.unseen(tag, b_))
     except Exception:                                     # noqa: BLE001  只是说明
-        asked = set()
+        busy = {}
     rc = 0
     for c in dict.fromkeys(str(x) for x in a.cancel):
         o = next((x for x in orders if str(x.get("cid")) == c), None)
@@ -3572,7 +3577,10 @@ def _cancel_preview(a, tag: str, book, paper: bool) -> int:
             print(f"{side} {_lab_cancel(o.get('ticker'))}（{c}）：这笔单不在一组里：撤单就是撤这一笔")
             continue
         print(f"整组撤单预览（不连券商、不改账本）：{side} {_lab_cancel(o.get('ticker'))}（{c}）所在的一组 {len(mem)} 笔")
-        for ln in LO.group_lines(o, orders, b_, now, paper, tag, asked):
+        if c in busy:
+            print(f"★ cancel {c} --group 这次什么都不撤：{busy[c]}")
+            continue
+        for ln in LO.group_lines(o, orders, b_, now, paper, tag, cli=True):
             print(ln)
     return rc
 

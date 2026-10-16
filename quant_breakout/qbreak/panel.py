@@ -1384,7 +1384,10 @@ def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.da
     data-fix：点的这一行自己是固定口数的 ETF 买单 → 它；否则同一组第一笔固定口数的买单（alt_fix：data-deps 那边已经写了的）。
     复核 2（2026-10-16）：data-grp 照 LO.group_view（闸门预判：同一组有买单撤了也还会花钱 → 不给整组撤单）；能一起撤的比这一组少 →
     data-gn（这一组几笔：按钮写「整组撤单（能撤的 N 笔）」）；只撤这一笔、卖单有靠它的钱的买单（data-depn）、同一组的买单还可能花钱 →
-    data-depk（「一起撤买单」改写成「撤买单（卖单不撤）」：执行器就是这么做的）。"""
+    data-depk（「一起撤买单」改写成「撤买单（卖单不撤）」：执行器就是这么做的）。
+    复核 3（2026-10-16）：data-depk / data-depw / data-depx 照 LO.legacy_plan（与执行器的「一起撤买单」同一个范围）：撤完之后还有买单会花钱 →
+    data-depk；没有、但要先撤在交易所 / 已经在撤的买单 → data-depw（买单撤掉了（没成交）才撤卖单）；「一起撤买单」也发撤单撤在交易所的买单 →
+    data-depx。不在一组里、只有「一起撤买单」的卖单也写 data-glist。"""
     from . import live_ops as LO
     cid = str(o.get("cid"))
     gm = G.get(cid) or []
@@ -1398,6 +1401,8 @@ def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.da
         if fx:
             fix = f" data-fix='{escape(fx)}' data-fixname='{escape(NM.name(fx) or '')}'"
     out = ""
+    ok: list = []
+    deps = o.get("side") == "SELL" and "data-depn=" in alt
     if gm:
         oth = [byc[c] for c in gm if c != cid and c in byc]
         v = LO.group_view(o, orders, book, now, paper, asked)   # 与确认框、执行器同一个判断（复核 2 2026-10-16：买单已经成交 / 部分成交 /
@@ -1406,20 +1411,28 @@ def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.da
             out += f" data-grp='{escape(','.join(ok))}'"
             if len(ok) + 1 < len(gm):                      # 同一组还有不能一起撤的：按钮写「能撤的 N 笔」（与「同一组 N 笔」对得上）
                 out += f" data-gn='{len(gm)}'"
+    if gm or deps:                                         # 不在一组里、有靠它的钱的买单：「一起撤买单」也撤在交易所的 / 会留下卖单时也写（复核 3）
         gl = LO.group_lines(o, orders, book, now, paper, tag, asked, solo=not ok, fix_t=(fx or alt_fix or None))
         if gl:
             out += f" data-glist='{escape(chr(10).join(gl))}'"
-        if ok:
-            if o.get("side") == "BUY":
-                ss = [NM.label(x.get("ticker")) for x in oth if x.get("side") == "SELL" and x.get("status") in LO.GROUP_OPEN]
-                solo = ("只撤这笔买单（卖 " + "、".join(dict.fromkeys(ss)) + " 照常卖，钱留现金）") if ss else "只撤这笔买单"
-            else:
-                solo = keep_txt or "只撤这笔卖单"                # 有靠它的钱的买单：与「只撤卖单（买 X 不会下）」同一句
-            out += f" data-solo='{escape(solo)}'"
-        elif o.get("side") == "SELL" and LO.solo_holds(o, orders, book, now, G):
-            out += " data-solok='1'"
-            if "data-depn=" in alt:                         # 「一起撤买单」（deps=cancel）：同一组的买单还可能花钱 → 执行器撤靠它的钱的买单、
-                out += f" data-depk='{escape(LO.DEPK)}'"     # 这笔卖单不撤 → 按钮就这么写（复核 2 2026-10-16）
+    if ok:
+        if o.get("side") == "BUY":
+            ss = [NM.label(x.get("ticker")) for x in oth if x.get("side") == "SELL" and x.get("status") in LO.GROUP_OPEN]
+            solo = ("只撤这笔买单（卖 " + "、".join(dict.fromkeys(ss)) + " 照常卖，钱留现金）") if ss else "只撤这笔买单"
+        else:
+            solo = keep_txt or "只撤这笔卖单"                    # 有靠它的钱的买单：与「只撤卖单（买 X 不会下）」同一句
+        out += f" data-solo='{escape(solo)}'"
+        return fix + out
+    if gm and o.get("side") == "SELL" and LO.solo_holds(o, orders, book, now, G):
+        out += " data-solok='1'"
+    if deps:                                               # 「一起撤买单」（deps=cancel）执行器会怎么做（LO.legacy_plan；复核 3 2026-10-16）：
+        lp = LO.legacy_plan(o, orders, book, now, paper, asked, G)   # 撤完之后还有买单会花钱 → 卖单一定不撤：按钮叫「撤买单（卖单不撤）」；
+        if lp["keep"]:                                     # 没有、但要先撤在交易所 / 已经在撤的买单 → 买单撤掉了（没成交）才撤卖单（data-depw）
+            out += f" data-depk='{escape(LO.DEPK)}'"       # （以前同一组的买单还可能花钱就写「卖单不撤」，执行器却先撤了那笔买单、再撤卖单）
+        elif lp["exch"] or lp["ask"]:
+            out += " data-depw='1'"
+        if lp["exch"]:                                     # 「一起撤买单」也发撤单撤在交易所的买单
+            out += " data-depx='1'"
     return fix + out
 
 
