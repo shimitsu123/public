@@ -1711,6 +1711,15 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
         有这样的单时，别的还没结束的指令（还没读的、等着的、已下单的）与还没照它调的固定口数 / 比例也都 later「等登记状态不明的单」
         （执行器每次运行开头都停下：_raise_if_unknown；复核 4，2026-10-16：以前只有靠那笔单的指令这样写，别的照写「等 MM/DD 开盘」）。
         单本身留在上面（要你核对登记）。
+      立花收盘前有状态不明的单（当前决策的 SENDING / ERROR：执行器每次运行开头都停下、面板也不叫它）→ 上面别的还没结束的指令
+        照旧在上面、照算，状态后面写「等登记状态不明的单（〔代码 名字〕）之后才下」，不是「马上（盘中）」（复核 5，2026-10-16）。
+      面板自动叫执行器今天暂停了（_trigger_paused：与 Trigger._still_paused / 09:30 自检同一份记录；outlook 的 paused）→
+        later「等下一次决策（…；面板自动下单今天暂停了）」、状态后面写可以说「再试一次」（复核 5：以前照写「马上（盘中）」在上面）。
+      模拟账户今天早上的运行没完成、过了 11:30（LO.paper_late_catchup）：补跑那次决策排的单（比例 / 固定口数调的核心 ETF、
+        没卖完的手动卖出）今天不再撮合 → later「等 MM/DD（周X）07:40 的运行」（补跑之后那些单同一个结论；还没读的手动买卖照旧今天：
+        补跑过了 08:55 不排进那次决策、盘中马上下；复核 5）。
+      读了、还没照它调的固定口数，又写了同一只还没读的固定口数 / 恢复按规则 → 读了的那条 ended「已被新写的那条取代」（MO.fix_status_text
+        给了 tag 时 None；outlook 那一行就是新的那条），只算新的；读之前读之后数字一样（复核 5：以前口数相同时两条都算）。
     标签上的数字（_trade_live 的 n）就按这里数：today（不含 flight）+ later 的行数（_split_n），没有例外（复核 2，2026-10-16：
     以前 _trade_live 另数一遍 —— 状态不明（ERROR）的单、固定口数还没照它调的那一行在上面却不算，没买到的手动买入 / 加仓在 ended 却照算）。
     固定口数仍然有效的提醒（tlive["fix"]）：那笔单去了 ended → 收进 notes（上面的卡片写一次，不会被收起来）。
@@ -1731,8 +1740,9 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
     f = LO.fill_day_of(book)
     mode = MO.timing(now)[0]
     out = {"orders": {}, "items": {}, "flight": set(), "when": {}, "extra": [], "notes": [], "itxt": {}, "core": None}
+    paused = _trigger_paused(tag, waiting, now) if mode == "now" else False
     try:                                                    # 与 _trade_live_calc 同一个判断（同样的 asked / halt）；指令也要（instr）
-        ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=tl["asked"])
+        ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=tl["asked"], paused=paused)
     except Exception as e:                                 # noqa: BLE001  只是分块：不能让页面打不开
         log.warning("「交易」的分块没算成（%s：%s）：还没结束的都放在上面", type(e).__name__, e)
         ol = None
@@ -1762,6 +1772,13 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
         if x is None:                                       # outlook 没给（读不了的一条）：不下结论，留在上面
             return "today"
         s, at = x.get("state"), x.get("act_at")
+        if x.get("cls") == "paused":                       # 面板自动下单今天暂停了（盘中）：今天不会再叫执行器 → 下一次决策 / 你说「再试一次」
+            nd = LO.next_decision_text(now)                 # （还会做 → 在「另有」、算；复核 2026-10-16：以前照写「马上（盘中）」在上面）
+            out["when"][ref] = (1, "", f"等下一次决策（{nd}；面板自动下单今天暂停了）")
+            out["itxt"].setdefault(ref, f"（面板自动下单今天暂停了：等下一次决策（{nd}）；修好之后也可以在 Mac 对话里说「再试一次」）")
+            return "later"
+        if x.get("cls") == "catchup" and isinstance(at, dt.datetime):   # 模拟账户过了 11:30 补跑：那次决策排的单今天不再撮合
+            out["itxt"].setdefault(ref, f"（{LO.paper_late_text(at, now)}）")
         if s == "will" and at is None and x.get("kind") == "instr" and not soon(rec):
             out["when"][ref] = when(None)
             return "later"
@@ -1806,6 +1823,8 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
     fixrows = {str(k)[4:]: x for k, x in oit.items() if str(k).startswith("fix:")}
     has_fix = set()                                         # 有自己的指令行的固定口数（不再另写 extra）
     corerow = oit.get("core:")                              # 读了、还没照它调的闲置资金比例（复核 3）：跟它的那条指令（iid）
+    newfix = {r.get("ticker") for r in waiting if r.get("kind") == "corefix" and r.get("id") not in gone
+              and not r.get("fund_for")}                    # 还没读的固定口数 / 恢复按规则（与 MO.core_fixed 同一个过滤）：读到就取代同一只读了的那条
     unk = {c for c, r in ((ol or {}).get("orders") or {}).items() if r.get("cls") == "unknown" and r.get("closed")}   # 立花收盘后状态不明的单
     for it in items:
         iid, k, s = it.get("id"), it.get("kind"), it.get("status")
@@ -1842,8 +1861,14 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
                     out["when"][iid] = when(None, "halt")
                 else:                                       # 系统原因没下的买入 / 加仓、没卖完 / 没发出的卖出：下一次决策再下
                     day = nd_open()
-                    z = "today" if day == today else "later"
-                    if z == "later":
+                    late = None if buy else LO.paper_late_catchup(book, now, paper, halt)
+                    if late is not None:                    # 卖出：补跑那次决策排的卖单过了 11:30 今天不再撮合（买入补跑之后盘中马上下 = 今天；复核 2026-10-16）
+                        z = "later"
+                        out["when"][iid] = when(late)
+                        out["itxt"][iid] = f"（{LO.paper_late_text(late, now)}）"
+                    else:
+                        z = "today" if day == today else "later"
+                    if z == "later" and late is None:
                         out["when"][iid] = when(None) if buy else when(LO._at(day, MO.SESSION[0][0]))
         elif k == "core" and s == "done" and corerow is not None and corerow.get("iid") == iid:
             z = zone(corerow, iid)                          # 还没照它调的比例：照 outlook 的 core: 那一行（与固定口数的 FIX_WAIT 同一个处理）
@@ -1853,10 +1878,13 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
             has_fix.add(t)
             if t in fixrows:
                 z = zone(fixrows[t], iid)
-            else:                                           # outlook 没给那一行（还没读的同一只的固定口数 / outlook 算不成）：自己看时刻
+            else:                                           # outlook 没给那一行（今天说了下一次决策再调 / outlook 算不成）：自己看时刻
                 z = _fix_zone(it, book, now, tag, halt, zone, when, out["when"])
         else:
             z = "ended"
+            if (k == "corefix" and s == "done" and it.get("ticker") in newfix
+                    and MO.fix_status_text(it, items, book) == MO.FIX_WAIT):   # 不看还没读的：读之前它就是「还没照它调」的那一条
+                out["itxt"][iid] = "（已被新写的那条取代：执行器读到之后照新的调）"   # 复核 2026-10-16：以前两行都算，读了之后数字少 1
         out["items"][iid] = z
     for t, x in fixrows.items():
         if t not in has_fix:
@@ -1880,7 +1908,34 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
                 out["when"][x["ref"]] = UNK_WHEN
         if out["core"] in ("today", "later"):
             out["core"] = "later"
+    uo = [o for o in cur if o.get("status") in ("SENDING", "ERROR")]
+    if uo and not unk:                                      # 收盘前有状态不明的单（_unknown_open）：登记之前执行器每次运行开头都停下（_raise_if_unknown），
+        lab = "、".join(dict.fromkeys(f"{'买' if o.get('side') == 'BUY' else '卖'} {NM.label(o.get('ticker'))}" for o in uo))
+        txt = f"等登记状态不明的单（{lab}）之后才下"         # 面板也不叫（Trigger._due）→ 今天的那几条不写「马上（盘中）」；登记了今天还能下 → 位置不变、照算
+        recs = {r.get("id"): r for r in waiting}            # （复核 2026-10-16；收盘后的见上面：都等登记）
+        recs.update({it.get("id"): it for it in items})
+        for iid, z in out["items"].items():
+            if z == "today" and (recs.get(iid) or {}).get("status") != "placed":
+                out["itxt"][iid] = f"（{txt}）"
+        out["extra"] = [(z, {**x, "reason": f"{txt}；{x.get('reason') or ''}".rstrip("；")} if z == "today" else x)
+                        for z, x in out["extra"]]
     return out
+
+
+def _trigger_paused(tag: str | None, waiting: list, now: dt.datetime) -> bool:
+    """面板自动叫执行器今天暂停了吗（run_status.trigger_paused：Trigger 记的；09:30 自检同一个）—— 暂停之后又写了新的指令（叫那次
+    执行器时还没有的指令 id）→ 面板下一轮就恢复（Trigger._still_paused）→ 不算暂停。只给盘中用（outlook 只在盘中看它）。"""
+    if not tag:
+        return False
+    try:
+        from . import run_status as RS
+        pz = RS.trigger_paused(tag, now.date().isoformat())
+        if not pz:
+            return False
+        new = {r.get("id") for r in waiting if isinstance(r, dict)} - {str(x) for x in pz.get("ids") or ()}
+        return not new
+    except Exception:                                      # noqa: BLE001  只是分块：读不了 → 当没暂停
+        return False
 
 
 UNK_WHEN = (3, "", "等登记状态不明的单")                    # 「另有 … 等登记状态不明的单」（_trade_split 的 when）
@@ -1949,13 +2004,15 @@ def _trade_sections(sp: dict, orows: list, irows: list, meta: dict, now: dt.date
     """「交易」的两张卡片（Mac 与手机同一个；2026-10-16 用户：「交易里面只显示当天要成交的单」）：
       「今天要成交的单」（id today）：执行器的单 + 今天做事的手动指令（按 _trade_split）；什么都没有 →「今天没有要成交的单了」/
         休市日「今天休市，没有要成交的单」/ 交易日今天早上的运行还没跑完（成交日不是今天）→「今天的单还没排出来：今天早上 07:40 的运行
-        还没跑（跑完之后这里才有今天的单）」（立花 08:55 之后不自动补跑 →「…没跑成：补跑了这里才有今天的单」；收盘后照旧「…了」；
+        还没跑（跑完之后这里才有今天的单）」（立花 08:55 之后不自动补跑 →「…没跑成：补跑了这里才有今天的单」；模拟账户过了 11:30 →
+        补跑之后排的单今天不再撮合、等下一个交易日 07:40 的运行（LO.paper_late_catchup）；收盘后照旧「…了」；
         复核 2026-10-16：以前 07:40 之前也写「今天没有要成交的单了」，今天的单其实还没排）；HALT → 一行提醒；
         今天早上的运行还没跑 → 说执行器的单是上一次决策的；固定口数仍然有效的提醒（那笔单收起来了也写）；
         之后才做的收进「另有 N 条等 …」（点开 = 那几行与按钮；与上面一样分「执行器的单」/「手动指令」两小块，别处写的「见「手动指令」」照样找得到）。
       「已结束 / 不是今天的（N 条）」（id orders，默认收起）：结束了的单、最近 MANUAL_SHOW_DAYS 天的指令记录、卖出后不买回（id blocks）。
     orows / irows：[(cid / 指令 id, 一行)]（_order_rows / render 拼好的，按钮照旧）；blocks / nblk：卖出后不买回（_blocks_card）。"""
     from . import live_ops as LO
+    from .calendar_jp import next_trading_day
     Z = {z: {"o": [], "i": [], "w": []} for z in ("today", "later", "ended")}
     for cid, h in orows:
         z = sp["orders"].get(cid, "today")
@@ -1978,6 +2035,7 @@ def _trade_sections(sp: dict, orows: list, irows: list, meta: dict, now: dt.date
     run = ("今天早上 07:40 的运行还没跑" if now.time() < MO.RUN_AT else "今天早上的运行没跑成" if after
            else "今天早上的运行没跑成（立花 08:55 之后不自动补跑）" if late else "今天早上的运行还没跑完")
     pending = trading and stale and not after               # 今天的单还没排出来（成交日不是今天、今天还没收盘）
+    plate = paper and pending and not halt and now.time() >= LO.PAPER_OPEN_END   # 模拟账户过了 11:30：补跑排的单今天不再撮合（复核 2026-10-16）
     H = ["<section class='card' id='today'><h2>今天要成交的单</h2>"]
     if halt:
         H.append("<div class='neg small'>★ HALT 生效中：执行器今天不发新单（已经在交易所的单照样可能成交，可以撤；说明在「更多」）</div>")
@@ -1991,7 +2049,10 @@ def _trade_sections(sp: dict, orows: list, irows: list, meta: dict, now: dt.date
     if empty:
         H.append("<div class='tempty'>" + escape(
             "今天休市，没有要成交的单" if not trading else
-            (f"{run}：补跑了这里才有今天的单" if late else f"今天的单还没排出来：{run}（跑完之后这里才有今天的单）") if pending
+            (f"{run}：补跑了这里才有今天的单" if late else
+             f"今天的单还没排出来：{run}（过了 {LO.PAPER_OPEN_END:%H:%M}：补跑之后排的单今天不再撮合，"
+             f"等 {_md_wd(next_trading_day(now.date()))}{LO.PAPER_RUN_T:%H:%M} 的运行按今天的开盘价记）" if plate
+             else f"今天的单还没排出来：{run}（跑完之后这里才有今天的单）") if pending
             else "今天没有要成交的单了") + "</div>")
     H.extend(f"<div class='small'>{escape(n)}</div>" for n in sp["notes"])
     if L["o"] or L["i"]:

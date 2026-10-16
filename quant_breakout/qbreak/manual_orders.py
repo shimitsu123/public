@@ -2558,7 +2558,8 @@ FIX_WAIT = "生效中 · 还没照它调"
 def fix_status_text(it: dict, items, book: dict | None, tag: str | None = None) -> str | None:
     """固定口数指令（corefix）执行器已经读了（完成）、但还没照它排单（corefix_pending）→「生效中 · 还没照它调」；别的 → None。
     闲置资金比例（core）同样：最新生效的那条、比例还没照它调（core_wait）→「生效中 · 还没照它调」（复核 3，2026-10-16）。
-    只看这只最新的那条 corefix（含恢复按规则）；与 now_due / 执行器同一个判断（2026-10-16 复核：以前写「完成」，像是已经调好了）。"""
+    只看这只最新的那条 corefix（含恢复按规则）；与 now_due / 执行器同一个判断（2026-10-16 复核：以前写「完成」，像是已经调好了）。
+    给了 tag、这只还有执行器没读的 corefix（撤回了的、「全部换成」同批的不算）→ None：读到就换成它（与 core_wait 同一个处理）。"""
     if it.get("kind") == "core" and it.get("status") == "done":   # 闲置资金比例读了、还没照它调（core_wait；复核 3，2026-10-16）
         try:
             cw = core_wait(book, tag)
@@ -2572,6 +2573,11 @@ def fix_status_text(it: dict, items, book: dict | None, tag: str | None = None) 
     if not same or max(same, key=lambda x: str(x.get("at") or "")).get("id") != it.get("id"):
         return None
     try:
+        if tag:                                              # 这只还有执行器没读的固定口数 / 恢复按规则（读到就换成它，「交易」里是那一行；
+            w = unseen(tag, book)                            # 与 core_wait、outlook 的 unread_fix 同一个过滤）→ 这条不再是「还没照它调」的那一条
+            gone = cancelled(w) if w else set()              # （复核 2026-10-16：以前口数相同时两条都算，读了之后数字少 1）
+            if any(r.get("kind") == "corefix" and r.get("ticker") == t and r.get("id") not in gone and not r.get("fund_for") for r in w):
+                return None
         p = corefix_pending(book, tag)
     except Exception:                                        # noqa: BLE001  展示用：算不出就照旧写「完成」
         return None

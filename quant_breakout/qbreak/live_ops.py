@@ -1482,7 +1482,9 @@ def instr_due(at, today: dt.date) -> dt.datetime | None:
 
 
 def _instr_row(r: dict, book: dict | None, now: dt.datetime, tag: str | None, halt: bool, paused: bool, seen: bool) -> dict | None:
-    """一条等着的手动指令（seen：执行器读过、账本里 pending；否则指令文件里还没读）→ outlook 的一行；撤回 / 撤单 / 撤销撤回本身 → None。"""
+    """一条等着的手动指令（seen：执行器读过、账本里 pending；否则指令文件里还没读）→ outlook 的一行；撤回 / 撤单 / 撤销撤回本身 → None。
+    今天早上的运行没完成（模拟账户面板补跑）：买卖指令 → 补跑之后今天下（过了 08:55 补跑不把它们排进决策，盘中马上下）；闲置资金比例 /
+    固定口数 → 补跑那次决策照它排单，过了 11:30 今天不再撮合 → 下一个交易日 07:40 的运行（cls catchup：paper_late_catchup；复核 2026-10-16）。"""
     from . import manual_orders as MO
     k = r.get("kind")
     if k in ("cancel", "cancel_order", "uncancel"):
@@ -1512,9 +1514,13 @@ def _instr_row(r: dict, book: dict | None, now: dt.datetime, tag: str | None, ha
     if MO.allin_member(r):
         fd = MO.allin_fill(now, book, tag)
         return put("will", _at(fd, MO.SESSION[0][0]), f"{MO.allin_when(now, book, tag)}整批")
+    late = paper_late_catchup(book, now, paper, halt) if k in ("core", "corefix") else None
     if k == "corefix":
         cf = MO.corefix_fill(now, book, tag)
         if cf["mode"] == "behind":
+            if late is not None:                           # 模拟账户过了 11:30 补跑：那次决策照它排的核心单今天不再撮合（复核 2026-10-16）
+                return put("later", late, "今天早上的运行还没完成：补跑那次决策时读到、照它排单（面板会自动补跑）；"
+                                          + paper_late_text(late, now), "catchup")
             return put("will", None, wt) if paper else put("later", _at(nxt, MO.SESSION[0][0]), wt)
         if cf["intraday"]:
             due_ = instr_due(r.get("at"), today) or (now if cf["mode"] == "now" else
@@ -1536,6 +1542,9 @@ def _instr_row(r: dict, book: dict | None, now: dt.datetime, tag: str | None, ha
     if MO.morning_behind(book, now):                       # 今天早上的运行还没完成：模拟账户面板补跑；立花 08:55 之后不自动补跑
         if not paper and now.time() >= MO.CUTOFF:
             return put("later", _at(nxt, MO.SESSION[0][0]), wt)
+        if late is not None:                               # 闲置资金比例：补跑那次决策照新比例排单 → 过了 11:30 今天不再撮合（买卖指令不在这里：
+            return put("later", late, "今天早上的运行还没完成：补跑那次决策时照新比例调（面板会自动补跑）；"   # 补跑过了 08:55 留着、
+                       + paper_late_text(late, now), "catchup")                                          # 之后盘中马上下 = 今天）
         return put("will", None, wt)
     late_open = mode == "open" and now.time() >= MO.CUTOFF   # 寄付截止之后：开盘后由盘中的路下（与 MO.when_for 同一个口径）
     if (k in MO.ORDER_KINDS and r.get("ticker") and (mode in ("now", "lunch") or late_open)
@@ -1553,7 +1562,8 @@ def _core_row(book: dict | None, now: dt.datetime, tag: str | None, halt: bool, 
     （ref「core:」，iid = 那条比例指令；复核 3，2026-10-16：以前读了之后指令「完成」、没有行 ——「交易」的数字少 1、行收进「已结束」，
     HALT 解除后面板照样马上叫执行器卖；固定口数早就有 fix:<票> 这一行）。什么时候照它调（与执行器的路同一个口径）：
       HALT 中 → 解除后（later，cls halt）；今天早上的决策还没做 → 那次决策照新比例调：08:55 之前 → 今天 09:00 开盘；之后 → 模拟账户补跑
-        （面板会自动补跑）/ 立花 08:55 之后补跑的决策错过寄付、核心 ETF 的单今天不发（B13）→ 下一个交易日 09:00；
+        （面板会自动补跑；过了 11:30 补跑排的单今天不再撮合 → 下一个交易日 07:40 的运行，cls catchup：paper_late_catchup）/
+        立花 08:55 之后补跑的决策错过寄付、核心 ETF 的单今天不发（B13）→ 下一个交易日 09:00；
       盘中 / 开盘前 / 午休、盘中那条路会调（core_pending(now)：规则目标额是上一次决策算的、今天没说「下一次决策再调」）→ 马上 / 09:00 /
         12:30 开盘后马上（面板自动下单今天暂停 + 盘中 → 今天不会下）；盘中没调成、一会儿再试（tried）也是今天；
       别的（收盘后 / 休市日、今天说了「下一次决策再调」、规则目标额不是上一次决策算的）→ 下一次决策的那天 09:00 开盘。"""
@@ -1581,6 +1591,10 @@ def _core_row(book: dict | None, now: dt.datetime, tag: str | None, halt: bool, 
     if MO.morning_behind(book, now):                       # 今天早上的决策还没做：那次决策照新比例调（直接调到目标）
         if now.time() < MO.CUTOFF:
             return put("will", _at(today, MO.SESSION[0][0]), "今天早上的决策（07:40）照新比例调 → 今天 09:00 开盘（寄付）")
+        late = paper_late_catchup(book, now, paper, halt)
+        if late is not None:                               # 过了 11:30 补跑：那次决策排的核心单今天不再撮合 → 下一个交易日 07:40 的运行（复核 2026-10-16）
+            return put("later", late, "今天早上的运行还没完成：补跑那次决策时照新比例调（面板会自动补跑）；"
+                       + paper_late_text(late, now), "catchup")
         if paper:
             return put("will", None, "今天早上的运行还没完成：补跑那次决策时照新比例调（面板会自动补跑）")
         return put("later", _at(nxt, MO.SESSION[0][0]),
@@ -1688,6 +1702,33 @@ def _paper_rerun_text(o, at: dt.datetime, now: dt.datetime, f: dt.date) -> str:
     run = (f"{at:%m/%d %H:%M} 的运行" if at.date() > now.date() else f"今天 {at:%H:%M} 的运行" if at > now
            else "今天早上的运行（还没完成：面板会自动补跑）")
     return f"{head} → {run}按 {f:%m/%d} 的" + ("开盘价照旧撮合（钱够才买）" if buy else "正式开盘价照旧撮合")
+
+
+WD_ZH = "一二三四五六日"
+
+
+def md_wd(d: dt.date) -> str:
+    """「10/19（周一）」（周五 / 连休前写的那天是下周一 / 连休之后，不写「明天」）。"""
+    return f"{d:%m/%d}（周{WD_ZH[d.weekday()]}）"
+
+
+def paper_late_catchup(book: dict | None, now: dt.datetime, paper: bool, halt: bool = False) -> dt.datetime | None:
+    """模拟账户、今天早上的运行没完成、过了 11:30（PAPER_OPEN_END）、面板还会补跑（15:30 之前、没有 HALT：Trigger._catchup_due）→
+    补跑那次决策排的单（闲置资金比例 / 固定口数调的核心 ETF、没卖完 / 没发出的手动卖出 / 减仓、规则的单）都是开盘撮合的单（paper_queued），
+    今天的开盘撮合（paper_open_due：09:25〜11:30）已经过了 → 下一个交易日 07:40 的运行按今天的开盘价撮合（补跑之后 _paper_rerun_at
+    同一个结论）→ 返回那次运行的时刻；不是 → None（复核 2026-10-16：以前补跑之前写「今天」，补跑之后同一件事变成「等下个交易日 07:40」）。
+    手动买卖指令（还没读的 / 等着的 / 系统原因留到下一次决策的买入）不在这里：补跑过了 08:55 不把它们排进那次决策
+    （ManualBook.apply：寄付来不及 → 留着），补跑之后由盘中的路（now_due → --phase now）今天按现价下。"""
+    from . import manual_orders as MO
+    if not paper or halt or not (PAPER_OPEN_END <= now.time() < MO.CANCEL_UNTIL) or not MO.morning_behind(book, now):
+        return None
+    return _at(next_trading_day(now.date()), PAPER_RUN_T)
+
+
+def paper_late_text(at: dt.datetime, now: dt.datetime) -> str:
+    """paper_late_catchup 的一句话：「补跑之后等 10/19（周一）07:40 的运行（过了 11:30：补跑排的单今天不再撮合，按 10/16 的开盘价记）」。"""
+    return (f"补跑之后等 {md_wd(at.date())}{at:%H:%M} 的运行（过了 {PAPER_OPEN_END:%H:%M}：补跑排的单今天不再撮合，"
+            f"按 {now:%m/%d} 的开盘价记）")
 
 
 def _act_at(row: dict, o: dict, now: dt.datetime, paper: bool, f: dt.date | None, book: dict | None = None,
