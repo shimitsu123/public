@@ -563,19 +563,19 @@ def test_badge_does_not_count_a_one_time_buy_that_will_not_buy(monkeypatch):
     assert _badge_ok(html, "tachibana", now) == 4
 
 
-@pytest.mark.parametrize("now,where,n", [
-    (_t(2026, 10, 15, 10, 30), "top", 1),                                        # 立花收盘前：可能已被受理、还可能成交 → 算
-    (_t(2026, 10, 15, 16, 0), "ended", 0),                                       # 收盘后：「已收盘」→ 不算
-])
-def test_badge_counts_an_unknown_status_order_while_it_can_still_trade(now, where, n):
-    """状态不明（ERROR）的单：在上面就算（复核 2：以前在上面却不算，与发送中 SENDING 不一样）；收盘后去「已结束」、不算。"""
+@pytest.mark.parametrize("now", [_t(2026, 10, 15, 10, 30), _t(2026, 10, 15, 16, 0)])
+def test_badge_counts_an_unknown_status_order_until_it_is_registered(now):
+    """状态不明（ERROR）的单：在上面就算（复核 2：以前在上面却不算，与发送中 SENDING 不一样）。收盘后也一样（复核 3，有意改的期望：
+    以前收盘后当成「已收盘：这笔没下，明早对账记账」收进「已结束」、不算 —— 可它可能已经成交，执行器登记之前每次运行都停下）。"""
+    from qbreak import live_ops as LO
     _book1015("tachibana", sell="ERROR", cash=2_000_000.0, fix={})
     html = panel.render("tachibana", "t" * 40, now)
     top, later, ended = _parts(html)
-    assert SELL_B in (top if where == "top" else ended) and SELL_B not in (ended if where == "top" else top)
-    if where == "top":
-        assert "<span class='chip'>状态不明</span>" in _row(top, SELL_B)
-    assert _badge_ok(html, "tachibana", now) == n
+    assert SELL_B in top and SELL_B not in ended
+    assert "<span class='chip'>状态不明</span>" in _row(top, SELL_B)
+    if now.hour >= 16:
+        assert LO.UNK_CLOSED in _row(top, SELL_B) and "<span class='chip'>已收盘</span>" not in _row(top, SELL_B)
+    assert _badge_ok(html, "tachibana", now) == 1
 
 
 def test_badge_same_before_and_after_the_executor_reads_a_corefix():
@@ -593,3 +593,165 @@ def test_badge_same_before_and_after_the_executor_reads_a_corefix():
     html = panel.render("paper", "t" * 40, AT15)
     assert f"<span class='chip'>{MO.FIX_WAIT}</span>" in _parts(html)[0]
     assert _badge_ok(html, "paper", AT15) == before == 1
+
+
+# ────────── 复核 3（2026-10-16）──────────
+def _etf_book(tag: str) -> dict:
+    """10/15 的决策之后（成交日 10/16）：拿着 1545.T 4,010 口，规则目标额是 10/15 的决策算的、闲置资金比例 100% 已照它调过、没有固定口数。"""
+    b = _done_book("2026-10-15", tag)
+    b["core_rule"] = {"lot": {"1545.T": 10, "1482.T": 1}, "units100": {"1545.T": 4010}, "decided_on": "2026-10-15",
+                      "applied": 100.0, "pct": 100.0, "px": {"1545.T": 244.0}, "fix_applied": {}}
+    b["manual"]["core_pct"] = 100.0
+    return _save(b, tag)
+
+
+ETF_REC = {"core": ({"kind": "core", "ticker": "1545.T", "pct": 0.0, "target": 0}, "<b>卖出全部 1545 纳斯达克 100（之后停买闲置资金 ETF）</b>"),
+           "corefix": ({"kind": "corefix", "ticker": "1482.T", "units": 678}, "<b>固定 1482 对冲版美国 7〜10 年国债：678 口（不按规则自动调）</b>")}
+
+
+@pytest.mark.parametrize("kind", ["core", "corefix"])
+def test_etf_instruction_counts_the_same_before_and_after_the_read_and_after_halt(kind):
+    """HALT 中写的闲置资金比例 / 固定口数：执行器还没读（等 HALT 解除后）、09:05 的运行读了（读到就生效、HALT 中不下单）、HALT 解除之后
+    （面板马上叫执行器照它买卖：now_due）—— 都是之后要照它买卖 ETF 的同一件事 → 每次都在上面 /「另有」、数字一样（复核 3：
+    以前比例读了之后指令「完成」→「已结束」、数字 0，HALT 解除后面板照样马上卖 1545；固定口数早就有「生效中 · 还没照它调」那一行）。"""
+    tag = "tachibana"
+    paths.halt_file().write_text("测试", encoding="utf-8")
+    b = _etf_book(tag)
+    rid = f"M20261016-080000-{kind}"
+    rec, head = ETF_REC[kind]
+    _want({"id": rid, **rec, "at": "2026-10-16T08:00:00+09:00"}, tag)
+    now = _t(2026, 10, 16, 8, 30)
+    html = panel.render(tag, "t" * 40, now)
+    top, later, ended = _parts(html)
+    assert "<summary>另有 1 条等 HALT 解除后</summary>" in later and f"data-id='{rid}'" in later
+    before = _badge_ok(html, tag, now)
+    assert before == 1
+    run = _t(2026, 10, 16, 9, 5)                                               # 09:05 开盘后的运行：读指令（HALT 中读到就生效、不下单）
+    man = MO.Manual(b, tag, clock=lambda: run)
+    man.ingest()
+    man.halt_mark(True)
+    _save(b, tag)
+    assert b["manual"]["items"][rid]["status"] == "done" and b["manual"]["items"][rid]["halt"]
+    now = _t(2026, 10, 16, 10, 30)
+    assert not MO.now_due(tag, b, now)
+    html = panel.render(tag, "t" * 40, now)
+    top, later, ended = _parts(html)
+    assert "<summary>另有 1 条等 HALT 解除后</summary>" in later and head in later and head not in top + ended
+    assert f"<span class='chip'>{MO.FIX_WAIT}</span>" in _row(later, head)
+    assert _badge_ok(html, tag, now) == before
+    paths.halt_file().unlink()                                                 # 你在 Mac 上解除 HALT：盘中 → 面板马上叫执行器照它买卖
+    assert MO.now_due(tag, b, now)
+    html = panel.render(tag, "t" * 40, now)
+    top, later, ended = _parts(html)
+    assert head in top and later == "" and head not in ended
+    assert f"<span class='chip'>{MO.FIX_WAIT}</span>" in _row(top, head)
+    assert _badge_ok(html, tag, now) == before
+    _named(html)
+
+
+CORE50 = "<b>调仓 1545 纳斯达克 100 → 约 2,000 口（闲置资金比例 50%）</b>"
+
+
+@pytest.mark.parametrize("cr,now,where,summary", [
+    ({"tried": "2026-10-16T10:01:00+09:00"}, _t(2026, 10, 16, 10, 3), "top", None),       # 盘中没调成：10 分钟内面板再叫 → 今天
+    ({"defer": "2026-10-16"}, _t(2026, 10, 16, 10, 3), "later", "另有 1 条等 10/19（周一）开盘"),   # 执行器说了下一次决策再调
+    ({}, _t(2026, 10, 16, 16, 0), "later", "另有 1 条等 10/19（周一）开盘"),                    # 收盘后：下一次决策（周五 → 下周一）
+])
+def test_core_ratio_read_but_not_applied_follows_the_executor(cr, now, where, summary):
+    """闲置资金比例读了、还没照它调（manual.core_pct ≠ core_rule.applied：与执行器 _core_pending / now_due 同一个判断 MO.core_pending）
+    → 那条指令「生效中 · 还没照它调」、跟 outlook 的 core: 那一行放（一会儿再试 = 今天；今天说了下一次决策再调 / 收盘后 = 下一次决策那天开盘）、
+    算进数字；持仓 ETF 下面「还没照它调完，见 …」指着那一块。照它调完（applied = 50）→ 完成、收进「已结束」、不算。"""
+    from qbreak import live_ops as LO
+    tag = "paper"
+    b = _etf_book(tag)
+    rid = "M20261016-100000-core"
+    b["manual"]["core_pct"] = 50.0
+    b["manual"]["items"][rid] = {"id": rid, "kind": "core", "ticker": "1545.T", "pct": 50.0, "target": 2000, "status": "done",
+                                 "at": "2026-10-16T10:00:00+09:00", "msg": "闲置资金比例设为 50%（1545 纳斯达克 100 约 2,000 口）"}
+    b["core_rule"].update(cr)
+    _save(b, tag)
+    assert MO.core_pending(b) == 50.0                                          # 下一次决策会照新比例调
+    assert (MO.core_pending(b, now) is None) == ("defer" in cr)                # 盘中那条路（面板 now_due 同一个判断）：今天说了下一次决策再调 → 不调
+    x = LO.outlook(b, [], now, tag=tag, halt=False)["items"]["core:"]
+    assert x["iid"] == rid and x["state"] == ("will" if where == "top" else "later")
+    html = panel.render(tag, "t" * 40, now)
+    top, later, ended = _parts(html)
+    part = top if where == "top" else later
+    assert CORE50 in part and CORE50 not in ended and f"<span class='chip'>{MO.FIX_WAIT}</span>" in _row(part, CORE50)
+    if summary:
+        assert f"<summary>{summary}</summary>" in later
+    assert _badge_ok(html, tag, now) == 1
+    pane = ("「交易」→「今天要成交的单」的「手动指令」" if where == "top" else "「交易」→ 点开「另有 …」的「手动指令」")
+    assert f"闲置资金比例 50%（还没照它调完，见{pane}）" in html
+    _named(html)
+    b["core_rule"]["applied"] = 50.0                                           # 照它调完了
+    _save(b, tag)
+    html = panel.render(tag, "t" * 40, now)
+    top, later, ended = _parts(html)
+    assert CORE50 in ended and "<span class='chip'>完成</span>" in _row(ended, CORE50) and CORE50 not in top + later
+    assert "还没照它调完" not in html and _badge_ok(html, tag, now) == 0
+
+
+def test_core_ratio_without_its_instruction_row_gets_one_line():
+    """比例还没照它调、账本里却没有那条比例指令（整理账本时删掉了 / 旧账本）→ 补一行（没有按钮），照样算。"""
+    tag = "paper"
+    b = _etf_book(tag)
+    b["manual"]["core_pct"] = 50.0
+    _save(b, tag)
+    now = _t(2026, 10, 16, 10, 3)
+    html = panel.render(tag, "t" * 40, now)
+    top, _later, _ended = _parts(html)
+    assert "<b>闲置资金比例 50%（还没照它调）</b>" in top and f"<span class='chip'>{MO.FIX_WAIT}</span>" in top
+    assert _badge_ok(html, tag, now) == 1
+    assert "闲置资金比例 50%（还没照它调完，见「交易」→「今天要成交的单」的「手动指令」）" in html
+
+
+@pytest.mark.parametrize("status", ["ERROR", "SENDING"])
+def test_unknown_status_order_after_close_waits_for_registration_not_ended(status):
+    """立花状态不明（结果不明 ERROR / 发送中 SENDING）的单：收盘后不是「已收盘：这笔没下 / 已失效，明早对账记账（之后什么都不会再发生）」——
+    它可能已经成交，执行器每次运行（07:40 的决策、开盘后、盘中）登记之前都停下（_raise_if_unknown）。复核 3：单留在上面、写清要核对登记；
+    靠它的手动指令（卖出全部 7203）不是「等 MM/DD 开盘」，是「等登记状态不明的单」（MO.UNK_LATER）。收盘前照旧（还可能成交）。"""
+    from qbreak import live_ops as LO
+    tag = "tachibana"
+    it = {"id": "M1-sell", "kind": "sell", "ticker": "7203.T", "status": "placed", "decided_on": D, "fill_day": "2026-10-15",
+          "shares": 200, "side": "SELL", "msg": "10/15 开盘卖出全部 200 股", "at": "2026-10-14T19:00:00+09:00"}
+    _mbook(tag, D, [_morder(D, "SELL", "7203.T", "manual", status, "发送超时", qty=200, sent_qty=200,
+                            sent_at="2026-10-15T08:00:00+09:00")], {"M1-sell": it})
+    head, item = "<b>卖 7203 トヨタ自動車：200 股</b>", "<b>卖出全部 7203 トヨタ自動車</b>"
+    for now, closed in ((_t(2026, 10, 15, 10, 30), False), (_t(2026, 10, 15, 16, 0), True), (_t(2026, 10, 16, 7, 0), True),
+                        (_t(2026, 10, 16, 10, 0), True)):
+        html = panel.render(tag, "t" * 40, now)
+        top, later, ended = _parts(html)
+        assert head in top and head not in ended, now
+        row = _row(top, head)
+        assert "这笔没下" not in html and "明早对账记账" not in html and "<span class='chip'>已收盘</span>" not in row
+        assert "状态不明的单：去立花网站的注文一覧核对" in html                     # 最上面的提醒照旧
+        if closed:
+            assert "<span class='chip'>状态不明</span>" in row and LO.UNK_CLOSED in row
+            assert "<summary>另有 1 条等登记状态不明的单</summary>" in later and item in later and item not in top
+            assert MO.UNK_LATER in _row(later, item) and "开盘</summary>" not in later
+        else:
+            assert f"<span class='chip'>{LO.STATUS_TEXT[status]}</span>" in row and item in top and later == ""
+        assert _badge_ok(html, tag, now) == 2                                  # 单 + 靠它的指令：收盘前后一样
+        _named(html)
+
+
+@pytest.mark.parametrize("now,where", [(_t(2026, 10, 15, 10, 0), "top"), (_t(2026, 10, 15, 12, 0), "later"),
+                                       (_t(2026, 10, 15, 16, 0), "later")])
+def test_paper_open_matching_orders_move_together_after_the_window(now, where):
+    """模拟账户成交日 09:25〜11:30 的开盘撮合：排队的寄付单（SENT）与等开盘后的买单（DEFERRED）一起撮合；到 11:30 没做成 → 都是第二天早上
+    07:40 的运行按日线撮合（执行器 _paper_settle 的 queued + dfr）。复核 3：以前只有买单去「另有 … 07:40 的运行」，寄付单还写在「今天要成交的单」。"""
+    from qbreak import live_ops as LO
+    b = _book1015("paper", sell="SENT", cash=2_000_000.0, fix={})
+    html = panel.render("paper", "t" * 40, now)
+    top, later, ended = _parts(html)
+    part = top if where == "top" else later
+    assert SELL_B in part and BUY_B in part
+    ol = LO.outlook(b, [], now, tag="paper", halt=False)
+    if where == "later":
+        assert "<summary>另有 2 条等 10/16（周五）07:40 的运行</summary>" in later and SELL_B not in top
+        assert ol["orders"][SELL]["state"] == ol["orders"][BUY]["state"] == "later"
+        assert ol["orders"][SELL]["act_at"] == ol["orders"][BUY]["act_at"] == _t(2026, 10, 16, 7, 40)
+        assert ol["orders"][SELL]["reason"] == ("成交日 10/15 的开盘撮合（09:25〜11:30）没做成 → 10/16 07:40 的运行按 10/15 的正式开盘价"
+                                                "照旧撮合")
+    assert _badge_ok(html, "paper", now) == 2

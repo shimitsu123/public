@@ -2386,6 +2386,50 @@ def grp_wait_stale(it: dict | None, now: dt.datetime) -> bool:
     return t.date() != n.date() or n.time() >= CANCEL_UNTIL
 
 
+def core_pending(book: dict | None, now: dt.datetime | None = None) -> float | None:
+    """闲置资金比例改了（manual.core_pct）、核心 ETF 还没照它调（≠ core_rule.applied）→ 新比例（%）；否则 None。与执行器的 _core_pending
+    同一个判断（now_due 也用这一个；复核 3，2026-10-16 抽出来：「交易」的「还没照它调」那一行、持仓的「还没照它调完」照它写）：
+      now 没给 = 下一次决策会不会照新比例调（执行器还没算过规则目标额 units100 → 上一次决策的比例 = 100%）；
+      now 给了 = 盘中那条路（now_phase）会不会调：有 units100 → 规则目标额是上一次决策算的（decided_on = last_date）；没有 → 手上有核心 ETF
+        （或排着核心的单）才调（卖出全部照样卖）；今天已经说了「下一次决策再调」（core_rule.defer = 今天）→ 不算。
+    盘中照新比例的单没成交完、下一次决策再调（core_rule.redo）不在这里（那几笔单在「交易」照常显示）。只读。"""
+    b = book or {}
+    cr = b.get("core_rule") or {}
+    st = b.get("state") or {}
+    want = float((b.get("manual") or {}).get("core_pct", 100.0))
+    if cr.get("units100"):
+        if now is not None and cr.get("decided_on") != st.get("last_date"):
+            return None
+        pend = abs(want - float(cr.get("applied", cr.get("pct", want)))) > 1e-9
+    else:                                                   # 执行器还没算过规则目标额：卖出全部（比例 0%）照样卖；别的比例按估算的目标调（core_u100s）
+        pend = abs(want - float(cr.get("applied", 100.0))) > 1e-9
+        if pend and now is not None:
+            pend = any(int(u) > 0 for u in (st.get("core_units") or {}).values()) or bool(st.get("core_plan"))
+    if not pend or (now is not None and cr.get("defer") == now.date().isoformat()):
+        return None
+    return want
+
+
+def core_wait(book: dict | None, tag: str | None = None, waiting=None) -> dict | None:
+    """读了、还没照它调的闲置资金比例（core_pending）→ {"pct": 新比例, "item": 最新生效的那条比例指令（执行器 now_phase 写说明的那一条：
+    状态完成、按写入时刻最后的；没有 → None）}；没有 / 指令文件里还有没读的比例指令（读到就换成它，「交易」里是那一行）→ None。
+    waiting：没读的指令（None = 给了 tag 就读指令文件）。「交易」的 core: 那一行、那条指令的「生效中 · 还没照它调」用（复核 3，2026-10-16：
+    以前读了之后指令「完成」、收进「已结束」，数字少 1，HALT 解除后照样马上卖 —— 与固定口数的 FIX_WAIT 同一个处理）。只读。"""
+    pct = core_pending(book)
+    if pct is None:
+        return None
+    if waiting is None:
+        waiting = unseen(tag, book) if tag else []
+    gone = cancelled(waiting)
+    void = voided(waiting)
+    if any(isinstance(r, dict) and r.get("kind") == "core" and not r.get("fund_for") and r.get("id") not in gone
+           and r.get("id") not in void for r in waiting):
+        return None
+    done = sorted((it for it in ((((book or {}).get("manual") or {}).get("items")) or {}).values()
+                   if isinstance(it, dict) and it.get("kind") == "core" and it.get("status") == "done"), key=lambda x: x.get("at", ""))
+    return {"pct": pct, "item": done[-1] if done else None}
+
+
 def now_due(tag: str, book: dict | None, now: dt.datetime | None = None) -> bool:
     """盘中（timing = now）、今天早上的运行已经完成、有要马上下的手动指令（执行器还没读的买卖，或读了还在等的；
     「明天再处理」的、RETRY_S 秒内试过的不算；HALT 时不算）→ 面板叫执行器跑一次 --phase now。
@@ -2410,13 +2454,7 @@ def now_due(tag: str, book: dict | None, now: dt.datetime | None = None) -> bool
             age = None
         if age is None or age >= RETRY_S:
             return True
-    want = float(((book or {}).get("manual") or {}).get("core_pct", 100.0))
-    if cr.get("units100"):                                  # 改了闲置资金比例、还没照它调（与执行器的 _core_pending 同一个判断）
-        pend = cr.get("decided_on") == st.get("last_date") and abs(want - float(cr.get("applied", cr.get("pct", want)))) > 1e-9
-    else:                                                   # 执行器还没算过规则目标额：卖出全部（比例 0%）照样卖；别的比例按估算的目标调（core_u100s）
-        pend = (abs(want - float(cr.get("applied", 100.0))) > 1e-9
-                and (any(int(u) > 0 for u in (st.get("core_units") or {}).values()) or bool(st.get("core_plan"))))
-    if pend and cr.get("defer") != today:
+    if core_pending(book, now) is not None:                 # 改了闲置资金比例、还没照它调（与执行器的 _core_pending 同一个判断）
         try:
             age = (now - dt.datetime.fromisoformat(str(cr["tried"]))).total_seconds() if cr.get("tried") else None
         except (TypeError, ValueError):
@@ -2517,7 +2555,14 @@ FIX_WAIT = "生效中 · 还没照它调"
 
 def fix_status_text(it: dict, items, book: dict | None, tag: str | None = None) -> str | None:
     """固定口数指令（corefix）执行器已经读了（完成）、但还没照它排单（corefix_pending）→「生效中 · 还没照它调」；别的 → None。
+    闲置资金比例（core）同样：最新生效的那条、比例还没照它调（core_wait）→「生效中 · 还没照它调」（复核 3，2026-10-16）。
     只看这只最新的那条 corefix（含恢复按规则）；与 now_due / 执行器同一个判断（2026-10-16 复核：以前写「完成」，像是已经调好了）。"""
+    if it.get("kind") == "core" and it.get("status") == "done":   # 闲置资金比例读了、还没照它调（core_wait；复核 3，2026-10-16）
+        try:
+            cw = core_wait(book, tag)
+        except Exception:                                    # noqa: BLE001  展示用：算不出就照旧写「完成」
+            return None
+        return FIX_WAIT if cw and cw["item"] is not None and cw["item"].get("id") == it.get("id") else None
     if it.get("kind") != "corefix" or it.get("status") != "done" or it.get("clear"):
         return None
     t = it.get("ticker")
@@ -3910,7 +3955,7 @@ def lines(sm: dict | None, today: str | None = None, now: dt.datetime | None = N
 
 __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEFAULT", "CAP_PCT", "MAX_POS", "SESSION", "Manual",
            "append", "read_all", "read_known", "is_pruned", "KEEP_ITEMS", "PAPER_IDLE", "paper_refuse", "unseen", "cancelled", "normalize", "batch_blocks", "lifting", "unblock_why", "lift_day", "rebuy_day",
-           "block_text", "FIX_WAIT", "fix_status_text", "NEXT_DECISION", "next_decision", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "HALT_CORE_AFTER", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "busy_today", "OPEN_ST",
+           "block_text", "FIX_WAIT", "fix_status_text", "core_pending", "core_wait", "NEXT_DECISION", "next_decision", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "HALT_CORE_AFTER", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "busy_today", "OPEN_ST",
            "corefix_clear_text", "resume_info", "wait_word", "wait_text", "fix_applied", "corefix_pending", "allin_busy_text", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text", "when_for", "morning_behind",
            "next_window", "due", "cancel_due", "CANCEL_UNTIL", "grp_wait_stale", "cancel_cids", "handling_cids", "group_prune",
            "RULE_TEXT", "UNK_LATER", "NOW_NO_CANCEL", "NOW_FILLED_NO_CANCEL", "NOW_BUY_LAPSED", "NOW_SELL_WITHDRAWN", "now_sell_withdrawn", "now_lapsed", "now_expired", "now_cancel_why",

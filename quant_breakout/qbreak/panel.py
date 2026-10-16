@@ -1694,11 +1694,17 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
         完成了、还没照它调的固定口数（MO.FIX_WAIT）→ 跟 outlook 的 fix:<票> 那一行（没有那一行 = 今天说了「下一次决策再调」→ later）；
         别的（完成 / 已撤回 / 没执行…）→ ended。
       outlook 的 fix:<票>（读了、还没照它调的固定口数）没有对应的指令行（恢复按规则 / 更早的）→ extra（只写一行，没有按钮）。
+      闲置资金比例（复核 3，2026-10-16）：读了、还没照它调（outlook 的 core:，MO.core_wait）→ 最新生效的那条比例指令跟那一行（today / later：
+        HALT 中 = 等 HALT 解除后、今天说了下一次决策再调 / 收盘后 = 下一次决策那天开盘、盘中 / 一会儿再试 = 今天）；没有那条指令的行 → extra；
+        以前指令「完成」→ 已结束，数字少 1，HALT 解除后却马上照它卖（与固定口数「还没读 / 读了」数字一样同一个道理）。→ out["core"] = 那一块。
+      已下单的指令、它的单是立花收盘后状态不明的（outlook cls unknown + closed）→ later「等登记状态不明的单」、状态后面写 MO.UNK_LATER
+        （登记之前执行器每次运行都停下，不是「等 MM/DD 开盘」；复核 3）。单本身留在上面（要你核对登记）。
     标签上的数字（_trade_live 的 n）就按这里数：today（不含 flight）+ later 的行数（_split_n），没有例外（复核 2，2026-10-16：
     以前 _trade_live 另数一遍 —— 状态不明（ERROR）的单、固定口数还没照它调的那一行在上面却不算，没买到的手动买入 / 加仓在 ended 却照算）。
     固定口数仍然有效的提醒（tlive["fix"]）：那笔单去了 ended → 收进 notes（上面的卡片写一次，不会被收起来）。
     → {"orders": {cid: 块}, "items": {指令 id: 块}, "flight": {cid}, "when": {ref: (排序, 排序, 「等 10/19（周一）开盘」)},
-       "extra": [(块, outlook 的行)], "notes": [提醒], "itxt": {指令 id: 状态后面加的说明}}。只读；算不成（账本里读不了的数）→ 还没结束的都放 today。"""
+       "extra": [(块, outlook 的行)], "notes": [提醒], "itxt": {指令 id: 状态后面加的说明}, "core": 还没照它调的比例在哪一块（None = 没有）}。
+    只读；算不成（账本里读不了的数）→ 还没结束的都放 today。"""
     from . import live_ops as LO
     from .calendar_jp import next_trading_day
     from .live_unified import requeue_next
@@ -1712,7 +1718,7 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
     today = now.date()
     f = LO.fill_day_of(book)
     mode = MO.timing(now)[0]
-    out = {"orders": {}, "items": {}, "flight": set(), "when": {}, "extra": [], "notes": [], "itxt": {}}
+    out = {"orders": {}, "items": {}, "flight": set(), "when": {}, "extra": [], "notes": [], "itxt": {}, "core": None}
     try:                                                    # 与 _trade_live_calc 同一个判断（同样的 asked / halt）；指令也要（instr）
         ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=tl["asked"])
     except Exception as e:                                 # noqa: BLE001  只是分块：不能让页面打不开
@@ -1723,7 +1729,7 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
         if cls == "halt":
             return (2, "", "等 HALT 解除后")
         if isinstance(at, dt.datetime):
-            tail = f" {at:%H:%M} 的运行" if at.time() < MO.SESSION[0][0] else "开盘"   # 模拟账户的开盘撮合没下成 → 那天 07:40 的运行
+            tail = f"{at:%H:%M} 的运行" if at.time() < MO.SESSION[0][0] else "开盘"   # 模拟账户的开盘撮合没下成 → 那天 07:40 的运行
             return (0, at.isoformat(), f"等 {_md_wd(at.date())}{tail}")
         return (1, "", f"等下一次决策（{LO.next_decision_text(now)}）")
 
@@ -1787,6 +1793,8 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
                 link.setdefault(it["id"], []).append(str(o.get("cid")))
     fixrows = {str(k)[4:]: x for k, x in oit.items() if str(k).startswith("fix:")}
     has_fix = set()                                         # 有自己的指令行的固定口数（不再另写 extra）
+    corerow = oit.get("core:")                              # 读了、还没照它调的闲置资金比例（复核 3）：跟它的那条指令（iid）
+    unk = {c for c, r in ((ol or {}).get("orders") or {}).items() if r.get("cls") == "unknown" and r.get("closed")}   # 立花收盘后状态不明的单
     for it in items:
         iid, k, s = it.get("id"), it.get("kind"), it.get("status")
         if not iid or k == "uncancel" or s == "voided":
@@ -1802,7 +1810,11 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
                 zs = [out["orders"].get(c) for c in link.get(iid, [])]
                 os_ = [byc[c] for c in link.get(iid, []) if c in byc]
                 buy = k == "buy" or any(o.get("reason") in ("manual_buy", "manual_add") for o in os_)
-                if "today" in zs:
+                if any(c in unk for c in link.get(iid, [])):   # 单状态不明、交易所已收盘：登记之前执行器每次运行都停下（复核 3）
+                    z = "later"
+                    out["when"][iid] = (3, "", "等登记状态不明的单")
+                    out["itxt"][iid] = f"（{MO.UNK_LATER}）"
+                elif "today" in zs:
                     z = "today"
                 elif "later" in zs:
                     z = "later"
@@ -1821,6 +1833,9 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
                     z = "today" if day == today else "later"
                     if z == "later":
                         out["when"][iid] = when(None) if buy else when(LO._at(day, MO.SESSION[0][0]))
+        elif k == "core" and s == "done" and corerow is not None and corerow.get("iid") == iid:
+            z = zone(corerow, iid)                          # 还没照它调的比例：照 outlook 的 core: 那一行（与固定口数的 FIX_WAIT 同一个处理）
+            out["core"] = z
         elif k == "corefix" and MO.fix_status_text(it, items, book, tag) == MO.FIX_WAIT:
             t = it.get("ticker")
             has_fix.add(t)
@@ -1835,19 +1850,30 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
     for t, x in fixrows.items():
         if t not in has_fix:
             out["extra"].append((zone(x, x["ref"]), x))
+    if corerow is not None and out["core"] is None:         # 没有那条比例指令的行（整理账本时删掉了 / 旧账本）→ 补一行
+        out["core"] = zone(corerow, corerow["ref"])
+        out["extra"].append((out["core"], corerow))
     return out
+
+
+def _where_zone(z) -> str:
+    return ("「交易」→「今天要成交的单」的「手动指令」" if z == "today" else "「交易」→ 点开「另有 …」的「手动指令」" if z == "later"
+            else "「交易」→ 点开「已结束 / 不是今天的」的「手动指令」" if z == "ended" else "「交易」的「手动指令」")
 
 
 def _where_item(sp: dict, iid) -> str:
     """一条手动指令现在在「交易」的哪一块（别处的「要撤回在 …」用；复核 2026-10-16：「手动指令」卡片拆进了三块，
     以前写「「交易」→「手动指令」」，指令在收起的「另有 …」里时页面上找不到）。"""
-    z = ((sp or {}).get("items") or {}).get(iid)
-    return ("「交易」→「今天要成交的单」的「手动指令」" if z == "today" else "「交易」→ 点开「另有 …」的「手动指令」" if z == "later"
-            else "「交易」→ 点开「已结束 / 不是今天的」的「手动指令」" if z == "ended" else "「交易」的「手动指令」")
+    return _where_zone(((sp or {}).get("items") or {}).get(iid))
+
+
+def _where_core(sp: dict) -> str:
+    """还没照它调的闲置资金比例那一行在「交易」的哪一块（持仓 ETF 下面「还没照它调完，见 …」；复核 3，2026-10-16）。"""
+    return _where_zone((sp or {}).get("core"))
 
 
 def _fix_wait_row(x: dict) -> str:
-    """outlook 的 fix:<票>（读了、还没照它调的固定口数；没有对应的指令行）→ 一行（没有按钮：要改在「持仓」的 ETF 下面）。"""
+    """outlook 的 fix:<票> / core:（读了、还没照它调的固定口数 / 闲置资金比例；没有对应的指令行）→ 一行（没有按钮：要改在「持仓」的 ETF 下面）。"""
     why = str(x.get("reason") or "")
     return (f"<div class='li'><div class='grow'><b>{escape(str(x.get('what') or x.get('ref')))}</b> <span class='chip'>{escape(MO.FIX_WAIT)}</span>"
             + (f"<div class='muted small'>{escape(NM.annotate(why))}</div>" if why else "") + "</div></div>")
@@ -2119,7 +2145,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     core_busy = any(r.get("kind") == "core" and r["id"] not in dropped for r in waiting)   # 执行器还没读的闲置资金比例指令
     cr = book.get("core_rule") or {}
     bfix = MO.core_fixed(book, tag)                    # 固定口数的 ETF：不跟闲置资金比例（卖出 / 调仓只改它的固定口数；2026-10-13）；还没读的固定 / 恢复按规则也算（2026-10-14）
-    core_late = bool(cr) and abs(float(man.get("core_pct", 100.0)) - float(cr.get("applied", cr.get("pct", 100.0)))) > 1e-9
+    core_late = bool(cr) and MO.core_pending(book) is not None   # 与执行器 / 「交易」的 core: 那一行同一个判断（复核 3）
     core_now = {str(o.get("ticker")): o for o in book.get("orders") or []          # 今天盘中已经照比例调过的核心 ETF（口数明天早上对账后更新）
                 if o.get("reason") == "manual_core" and o.get("decided_on") == st.get("last_date")
                 and (o.get("status") in ("SENT", "FILLED", "PARTIAL", "SENDING", "ERROR")
@@ -2280,13 +2306,14 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                         "<span class='muted'>；要恢复：下面「闲置资金」的「确认买入」</span></div>")
             return (qt + "<div class='act'>" + sell + "</div><div class='small'><b class='neg'>规则在开盘卖出（熊市 / 换 ETF）</b>"
                     "<span class='muted'>；点「卖出全部」= 卖出后停买（之后要你确认才买）</span></div>")
+        late_txt = f"（还没照它调完，见{_where_core(sp)}）" if core_late else ""   # 指着那一行真正在的那一块（复核 3）
         data = (f" data-t='{escape(t)}' data-name='{escape(_nm(t, r.get('name')))}' data-shares='{c['cur']}' data-px='{round(c['px'], 4)}'"
                 f" data-core='1' data-lot='{c['lot']}' data-u100='{c['u100']}' data-cpct='{c['pct']:g}' data-approx='{1 if c.get('approx') else 0}'")
         share = f"{c['cur'] * c['px'] / eq * 100:.1f}" if eq and c["px"] > 0 else "—"
         return (qt + "<div class='act'>" + sell
                 + f"<button class='btn' data-act='adj'{data}{'' if c['px'] > 0 and eq else ' disabled'}>调仓…</button></div>"
                 f"<div class='muted small'>现在 {c['cur']:,} 口 · 约 {_yen(c['cur'] * c['px'])} · 约占权益 {share}% · "
-                f"闲置资金比例 {c['pct']:g}%{'（还没照它调完，见「交易」的「手动指令」）' if core_late else ''}"
+                f"闲置资金比例 {c['pct']:g}%{late_txt}"
                 + ("<br>规则目标额还没算过（执行器下一次决策才算）：100% 先按现在的口数估算" if c.get("approx") else "") + "</div>")
 
     def _core_exit(t: str) -> str:
