@@ -75,7 +75,7 @@ export async function api(path, body){                                  // 写�
   try{ return await post1(path, body); }finally{ busy(false); }
 }
 async function post1(path, body){
-  const halt = path==='/api/halt', where = path==='/api/request' ? '在「手动指令」里确认' : '再看一下';
+  const halt = path==='/api/halt', where = path==='/api/request' ? '在「交易」的「手动指令」里确认' : '再看一下';
   const fail = (t, sticky) => { toast(halt ? t+'\n'+HALT_TIP : t, true, halt || sticky); return null; };   // HALT 失败：每种都提示云端的「停」、不自动消失
   try{
     const h={'Content-Type':'application/json'}; h[CFG.auth.h]=CFG.auth.v;

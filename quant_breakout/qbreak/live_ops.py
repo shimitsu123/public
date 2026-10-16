@@ -1796,7 +1796,7 @@ def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
         why = "已经收盘（15:30）：今天没成交的单都已失效，不用撤"
         it = _manual_item(book, o) if _g(o, "side") == "SELL" and _g(o, "reason") in ("manual", "manual_trim") else None
         if it is not None and not it.get("cancel_req"):        # 手动卖出没卖完的部分明天开盘会再卖：要停就撤回指令（G16；2026-10-14）
-            why += f"；手动卖出没成交的部分明天开盘会再卖 → 不想再卖就在「手动指令」撤回 {it.get('id')}"
+            why += f"；手动卖出没成交的部分明天开盘会再卖 → 不想再卖就在「交易」点开「另有 …」，在「手动指令」里撤回 {it.get('id')}"
         return why
     return None
 

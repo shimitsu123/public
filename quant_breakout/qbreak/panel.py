@@ -767,7 +767,7 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
     elif b.get("block") and not lifted:
         why = f"不能买：{b['block']}"
     elif t in buying:
-        why = "有一条买入指令在处理（见「手动指令」）"
+        why = "有一条买入指令在处理（见「交易」的「手动指令」）"
     elif ru.get("state") in ("planned", "manual"):
         why = "已经排在开盘买入"
     elif not (px > 0 and eq):
@@ -1665,29 +1665,44 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
     不另做判断：每笔单 / 每条等着的指令按 live_ops.outlook（标签上的数字、09:30 自检、★ 交易 推送同一个；asked / halt 与 _trade_live 相同）：
       state will → today；later → act_at 是今天（盘中没下成、今天开盘寄付）→ today，否则 later（没有 act_at：HALT 解除后 / 下一次决策）；
       done / wont（成交、撤了、不下、被挡不再试、今天不会下、HALT 挡下的还没发出的单、立花已收盘）→ ended。
+      outlook 说「会」却没有时刻的指令（等上一笔成交 wait=prev / 等凑钱的卖单 / 早上的运行没完成）：收盘后 / 休市日 → later；
+        等上一笔成交的要等那笔第二天早上对账 → 下一次决策的单今天开盘（今天早上的运行还没跑完）才 today，否则 later
+        「等下一次决策（MM/DD 07:40）」（复核 2026-10-16：以前一律放上面，16:00 / 周六也写在「今天要成交的单」里）。
       撤单中（asked）：还挂在交易所（SENT / PARTIAL，outlook 不算撤单时是 will = 立花还没收盘）→ today（「撤单中」：执行器确认之前还可能成交，flight）；
         还没发出就写了撤单的 → ended。
       执行器读了的指令：_trade_live 不算的（tlive["items"]：撤回中、单在撤单中 / 预计下不成 / 已做完）、撤回 / 撤单本身 → ended；
-        已下单（placed）的看它的单（live_ops._manual_item）：有 today → today、有 later → later；单都结束了（卖单没卖完下一次开盘再卖、
-        没发出等再下）→ 下一次开盘（开盘前 = 今天 → today；HALT 中 = HALT 解除后）；完成了、还没照它调的固定口数（MO.FIX_WAIT）→ 跟
-        outlook 的 fix:<票> 那一行（没有那一行 = 今天说了「下一次决策再调」→ later）；别的（完成 / 已撤回 / 没执行…）→ ended。
+        已下单（placed）的看它的单（live_ops._manual_item）：有 today → today、有 later → later；单都结束了 →
+          手动买入 / 加仓（只做一次）：下一次早上的对账会不会把它留到那次决策（live_unified.requeue_next：与 _reconcile / _system_miss
+            同一个函数）—— 不会（被拒、这只买不了、跳空不下、钱没来…）→ ended，状态后面写「没买到：只做一次…对账后结束」（itxt）；
+            会（系统原因：开盘后补单没跑、整个运行被挡…）→ 下一次决策（HALT 中 = HALT 解除后）；
+          卖出 / 减仓 / 调仓往下（没卖完 / 没发出的下一次决策再下）→ 下一次决策的单哪天开盘（HALT 中 = HALT 解除后）；
+          「下一次决策的单哪天开盘」= 今天早上的运行还没跑完（模拟账户 / 立花 08:55 之前）→ 今天，否则下一个交易日
+          （与 live_ops._instr_row 的「早上的运行没完成」同一个口径；复核 2026-10-16：以前按 MO.timing 一律「下一次开盘」，
+          08:57 被挡的卖出写成今天、被拒的买入写「等 10/16 开盘」）。
+        完成了、还没照它调的固定口数（MO.FIX_WAIT）→ 跟 outlook 的 fix:<票> 那一行（没有那一行 = 今天说了「下一次决策再调」→ later）；
+        别的（完成 / 已撤回 / 没执行…）→ ended。
       outlook 的 fix:<票>（读了、还没照它调的固定口数）没有对应的指令行（恢复按规则 / 更早的）→ extra（只写一行，没有按钮）。
-    标签上的数字（_trade_live 的 n）= today（不含 flight）+ later 的行数；两个例外是数字的口径（不改）：状态不明（ERROR）的单在 today、
-    数字不算；固定口数还没照它调的那一行（FIX_WAIT 的指令 / extra）在 today / later、数字不算（指令已经「完成」）。
+    标签上的数字（_trade_live 的 n）= today（不含 flight）+ later 的行数；三个例外是数字的口径（不改）：状态不明（ERROR）的单在 today、
+    数字不算；固定口数还没照它调的那一行（FIX_WAIT 的指令 / extra）在 today / later、数字不算（指令已经「完成」）；
+    手动买入 / 加仓的单没买到（不是系统原因）、指令等下一次对账才结束 → ended、数字照算（_trade_live 只把「已成交 / 已失效」当成做完；
+    要不要也不算等用户决定）。
     固定口数仍然有效的提醒（tlive["fix"]）：那笔单去了 ended → 收进 notes（上面的卡片写一次，不会被收起来）。
     → {"orders": {cid: 块}, "items": {指令 id: 块}, "flight": {cid}, "when": {ref: (排序, 排序, 「等 10/19（周一）开盘」)},
-       "extra": [(块, outlook 的行)], "notes": [提醒]}。只读；算不成（账本里读不了的数）→ 还没结束的都放 today。"""
+       "extra": [(块, outlook 的行)], "notes": [提醒], "itxt": {指令 id: 状态后面加的说明}}。只读；算不成（账本里读不了的数）→ 还没结束的都放 today。"""
     from . import live_ops as LO
     from .calendar_jp import next_trading_day
+    from .live_unified import requeue_next
     book = book or {}
     halt = paths.halt_file().exists() if halt is None else bool(halt)
     tl = tlive if tlive is not None else _trade_live(book, waiting, now, tag, halt)
     st = book.get("state") or {}
     cur = [o for o in book.get("orders") or [] if isinstance(o, dict) and o.get("decided_on") == st.get("last_date")]
+    byc = {str(o.get("cid")): o for o in cur}
     paper = (tag or "").startswith("paper") or str(book.get("broker") or "").startswith("Paper")
     today = now.date()
     f = LO.fill_day_of(book)
-    out = {"orders": {}, "items": {}, "flight": set(), "when": {}, "extra": [], "notes": []}
+    mode = MO.timing(now)[0]
+    out = {"orders": {}, "items": {}, "flight": set(), "when": {}, "extra": [], "notes": [], "itxt": {}}
     try:                                                    # 与 _trade_live_calc 同一个判断（同样的 asked / halt）；指令也要（instr）
         ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=tl["asked"])
     except Exception as e:                                 # noqa: BLE001  只是分块：不能让页面打不开
@@ -1702,10 +1717,26 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
             return (0, at.isoformat(), f"等 {_md_wd(at.date())}{tail}")
         return (1, "", f"等下一次决策（{LO.next_decision_text(now)}）")
 
-    def zone(x: dict | None, ref: str) -> str:
+    def nd_open() -> dt.date:                              # 下一次决策的单哪天开盘：今天早上的运行还没跑完（立花 08:55 之后不自动补跑）→ 今天
+        if mode != "next" and f != today and (paper or now.time() < MO.CUTOFF):
+            return today
+        return next_trading_day(today)
+
+    def soon(rec: dict | None) -> bool:                    # outlook 说「会」却没有时刻的指令：今天还会做事吗
+        if mode == "next":
+            return False                                   # 收盘后 / 休市日：最早下一次决策
+        w = (rec or {}).get("wait")
+        if not w:
+            return True                                    # 早上的运行没完成：补跑之后今天下
+        return nd_open() == today or (w != "prev" and f == today)   # 等上一笔成交：那笔要等下一次早上的对账
+
+    def zone(x: dict | None, ref: str, rec: dict | None = None) -> str:
         if x is None:                                       # outlook 没给（读不了的一条）：不下结论，留在上面
             return "today"
         s, at = x.get("state"), x.get("act_at")
+        if s == "will" and at is None and x.get("kind") == "instr" and not soon(rec):
+            out["when"][ref] = when(None)
+            return "later"
         if s == "will" or (s == "later" and isinstance(at, dt.datetime) and at.date() <= today):
             return "today"
         if s == "later":
@@ -1736,7 +1767,7 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
         rid = r.get("id")
         if r.get("kind") == "uncancel" or rid in void:
             continue
-        out["items"][rid] = "ended" if r.get("kind") in CANCEL_KINDS or rid in gone else zone(oit.get(rid), rid)
+        out["items"][rid] = "ended" if r.get("kind") in CANCEL_KINDS or rid in gone else zone(oit.get(rid), rid, r)
     items = [it for it in (((book.get("manual") or {}).get("items")) or {}).values() if isinstance(it, dict)]
     link: dict = {}                                         # 已下单的指令 → 它的单
     for o in cur:
@@ -1754,25 +1785,32 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
             if k in CANCEL_KINDS or it.get("cancel_req") or iid in gone or iid in tl["items"]:
                 z = "ended"
             elif s == "pending":
-                z = zone(oit.get(iid), iid) if ol else "today"
+                z = zone(oit.get(iid), iid, it) if ol else "today"
                 if k == "corefix":
                     has_fix.add(it.get("ticker"))
             else:                                           # 已下单：看它的单
                 zs = [out["orders"].get(c) for c in link.get(iid, [])]
+                os_ = [byc[c] for c in link.get(iid, []) if c in byc]
+                buy = k == "buy" or any(o.get("reason") in ("manual_buy", "manual_add") for o in os_)
                 if "today" in zs:
                     z = "today"
                 elif "later" in zs:
                     z = "later"
                     out["when"][iid] = next(out["when"][c] for c in link[iid] if out["orders"].get(c) == "later")
+                elif buy and os_ and (it.get("fund") == "all" or not any(requeue_next(o, cur, now, f) for o in os_)):
+                    z = "ended"                             # 只做一次：没买到、不是系统原因 → 下一次早上的对账之后结束（不再买）
+                    if (it.get("unsent") or {}).get("retry", True):   # 「没发出（只做一次）」已经写了的不重复
+                        got = any(int(o.get("filled_qty") or 0) > 0 for o in os_)   # 撤单之前成交了一部分：记成交的部分
+                        out["itxt"][iid] = (("（单已结束：没成交的部分不会再买" if got else "（没买到：只做一次，不再买")
+                                            + f"；{LO.next_decision_text(now)} 的对账之后结束）")
                 elif halt:
                     z = "later"
                     out["when"][iid] = when(None, "halt")
-                else:                                       # 单都结束了、指令还在（卖单没卖完 / 没发出等再下）：下一次开盘
-                    mode, d = MO.timing(now)
-                    day = today if mode == "open" else d if mode == "next" else next_trading_day(today)
+                else:                                       # 系统原因没下的买入 / 加仓、没卖完 / 没发出的卖出：下一次决策再下
+                    day = nd_open()
                     z = "today" if day == today else "later"
                     if z == "later":
-                        out["when"][iid] = when(LO._at(day, MO.SESSION[0][0]))
+                        out["when"][iid] = when(None) if buy else when(LO._at(day, MO.SESSION[0][0]))
         elif k == "corefix" and MO.fix_status_text(it, items, book, tag) == MO.FIX_WAIT:
             t = it.get("ticker")
             has_fix.add(t)
@@ -1788,6 +1826,14 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
         if t not in has_fix:
             out["extra"].append((zone(x, x["ref"]), x))
     return out
+
+
+def _where_item(sp: dict, iid) -> str:
+    """一条手动指令现在在「交易」的哪一块（别处的「要撤回在 …」用；复核 2026-10-16：「手动指令」卡片拆进了三块，
+    以前写「「交易」→「手动指令」」，指令在收起的「另有 …」里时页面上找不到）。"""
+    z = ((sp or {}).get("items") or {}).get(iid)
+    return ("「交易」→「今天要成交的单」的「手动指令」" if z == "today" else "「交易」→ 点开「另有 …」的「手动指令」" if z == "later"
+            else "「交易」→ 点开「已结束 / 不是今天的」的「手动指令」" if z == "ended" else "「交易」的「手动指令」")
 
 
 def _fix_wait_row(x: dict) -> str:
@@ -1812,8 +1858,11 @@ def _trade_sections(sp: dict, orows: list, irows: list, meta: dict, now: dt.date
                     blocks: str = "", nblk: int = 0, old_n: int = 0) -> list[str]:
     """「交易」的两张卡片（Mac 与手机同一个；2026-10-16 用户：「交易里面只显示当天要成交的单」）：
       「今天要成交的单」（id today）：执行器的单 + 今天做事的手动指令（按 _trade_split）；什么都没有 →「今天没有要成交的单了」/
-        休市日「今天休市，没有要成交的单」；HALT → 一行提醒；今天早上的运行还没跑 → 说执行器的单是上一次决策的；
-        固定口数仍然有效的提醒（那笔单收起来了也写）；之后才做的收进「另有 N 条等 …」（点开 = 那几行与按钮）。
+        休市日「今天休市，没有要成交的单」/ 交易日今天早上的运行还没跑完（成交日不是今天）→「今天的单还没排出来：今天早上 07:40 的运行
+        还没跑（跑完之后这里才有今天的单）」（立花 08:55 之后不自动补跑 →「…没跑成：补跑了这里才有今天的单」；收盘后照旧「…了」；
+        复核 2026-10-16：以前 07:40 之前也写「今天没有要成交的单了」，今天的单其实还没排）；HALT → 一行提醒；
+        今天早上的运行还没跑 → 说执行器的单是上一次决策的；固定口数仍然有效的提醒（那笔单收起来了也写）；
+        之后才做的收进「另有 N 条等 …」（点开 = 那几行与按钮；与上面一样分「执行器的单」/「手动指令」两小块，别处写的「见「手动指令」」照样找得到）。
       「已结束 / 不是今天的（N 条）」（id orders，默认收起）：结束了的单、最近 MANUAL_SHOW_DAYS 天的指令记录、卖出后不买回（id blocks）。
     orows / irows：[(cid / 指令 id, 一行)]（_order_rows / render 拼好的，按钮照旧）；blocks / nblk：卖出后不买回（_blocks_card）。"""
     from . import live_ops as LO
@@ -1833,23 +1882,34 @@ def _trade_sections(sp: dict, orows: list, irows: list, meta: dict, now: dt.date
     trading = is_trading_day(now.date())
     fd = f"（成交日 {f:%m/%d}）" if f else ""
     T, L, E = Z["today"], Z["later"], Z["ended"]
+    empty = not T["o"] and not T["i"]
+    after = MO.timing(now)[0] == "next"                     # 收盘后（15:25 起）/ 休市日
+    late = not paper and now.time() >= MO.CUTOFF            # 立花 08:55 之后：早上的运行不自动补跑
+    run = ("今天早上 07:40 的运行还没跑" if now.time() < MO.RUN_AT else "今天早上的运行没跑成" if after
+           else "今天早上的运行没跑成（立花 08:55 之后不自动补跑）" if late else "今天早上的运行还没跑完")
+    pending = trading and stale and not after               # 今天的单还没排出来（成交日不是今天、今天还没收盘）
     H = ["<section class='card' id='today'><h2>今天要成交的单</h2>"]
     if halt:
         H.append("<div class='neg small'>★ HALT 生效中：执行器今天不发新单（已经在交易所的单照样可能成交，可以撤；说明在「更多」）</div>")
-    if stale and orows:
-        H.append(f"<div class='muted small'>执行器的单是上一次决策的单{escape(fd)}，不是今天的："
-                 + ("今天休市" if not trading else "今天早上的运行还没跑") + "</div>")
+    if stale and orows:                                     # 下面的空行已经写了为什么 → 这里只说是上一次决策的单
+        H.append(f"<div class='muted small'>执行器的单是上一次决策的单{escape(fd)}，不是今天的"
+                 + ("" if empty and pending else "：" + ("今天休市" if not trading else run)) + "</div>")
     if T["o"]:
         H.append(f"<div class='tsub'>执行器的单{escape(fd)}</div><div class='list'>{''.join(T['o'])}</div>")
     if T["i"]:
         H.append(f"<div class='tsub'>手动指令</div><div class='list'>{''.join(T['i'])}</div>")
-    if not T["o"] and not T["i"]:
-        H.append("<div class='tempty'>" + ("今天没有要成交的单了" if trading else "今天休市，没有要成交的单") + "</div>")
+    if empty:
+        H.append("<div class='tempty'>" + escape(
+            "今天休市，没有要成交的单" if not trading else
+            (f"{run}：补跑了这里才有今天的单" if late else f"今天的单还没排出来：{run}（跑完之后这里才有今天的单）") if pending
+            else "今天没有要成交的单了") + "</div>")
     H.extend(f"<div class='small'>{escape(n)}</div>" for n in sp["notes"])
     if L["o"] or L["i"]:
         ws = [w or (1, "", f"等下一次决策（{LO.next_decision_text(now)}）") for w in L["w"]]
         H.append(f"<details class='later'><summary>{escape(_later_line(ws))}</summary>"
-                 + (f"<div class='list'>{''.join(L['o'] + L['i'])}</div>") + "</details>")
+                 + (f"<div class='tsub'>执行器的单{escape(fd)}</div><div class='list'>{''.join(L['o'])}</div>" if L["o"] else "")
+                 + (f"<div class='tsub'>手动指令</div><div class='list'>{''.join(L['i'])}</div>" if L["i"] else "")
+                 + "</details>")
     if T["o"] or L["o"]:
         H.append("<div class='muted small'>" + escape(
             f"「撤单」：{LO.CANCEL_HINT}。{LO.CANCEL_HINT_CORE}。执行器还没发出的单（计划 / 等开盘后）也能撤：撤了执行器就不再发。"
@@ -2041,6 +2101,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     waiting = MO.unseen(tag, book)
     dropped = MO.cancelled(waiting)                                    # 执行器还没读、已经点了撤回的
     tlive = _trade_live(book, waiting, now, tag, halt=bool(halt))      # 「交易」里哪些行还会做事：数字、「今天要成交的单」/「手动指令」的写法同一个判断（2026-10-15）
+    sp = _trade_split(book, waiting, now, tag, bool(halt), tlive)   # 每一行放进哪一块（今天要成交 / 另有 … / 已结束；2026-10-16）
     busy = {r.get("ticker") for r in waiting if r.get("kind") in MO.POS_KINDS and r["id"] not in dropped}
     busy |= {it.get("ticker") for it in (man.get("items") or {}).values()
              if it.get("kind") in MO.POS_KINDS and it.get("status") in MO.ACTIVE and not it.get("cancel_req")}
@@ -2157,7 +2218,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         if last is not None:
             H_.append("<div class='small'><b>已登记：" + ("恢复按规则" if last.get("clear") else f"固定 {int(last.get('units') or 0):,} 口")
                       + "</b><span class='muted'>（执行器还没读；" + escape(MO.corefix_fill(now, book, tag)["text"])   # D1（2026-10-15）：以前一律「下一次决策起」
-                      + "；要撤回在「交易」→「手动指令」"
+                      + "；要撤回在" + _where_item(sp, last.get("id"))
                       + (f"；在那之前还是手动固定 {int(fixed):,} 口" if fixed is not None else "")
                       + "）</span></div>")
         elif fixed is not None:
@@ -2185,7 +2246,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             return (qt + f"<div class='muted small'>现在 {cur:,} 口" + (f" · 约 {_yen(cur * px_)}" if px_ > 0 else "")
                     + " · 手动固定：卖出 / 减仓 / 加仓用下面的「固定口数…」（只改这只的固定口数；别的 ETF 与闲置资金比例不变）</div>")
         if core_busy:
-            return qt + "<div class='act muted'>有一条闲置资金比例的指令在处理（见「手动指令」）</div>"
+            return qt + "<div class='act muted'>有一条闲置资金比例的指令在处理（见「交易」的「手动指令」）</div>"
         o = core_now.get(t)
         if o is not None:
             q, n = int(o.get("filled_qty") or 0), int(o.get("qty") or 0)
@@ -2214,7 +2275,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         return (qt + "<div class='act'>" + sell
                 + f"<button class='btn' data-act='adj'{data}{'' if c['px'] > 0 and eq else ' disabled'}>调仓…</button></div>"
                 f"<div class='muted small'>现在 {c['cur']:,} 口 · 约 {_yen(c['cur'] * c['px'])} · 约占权益 {share}% · "
-                f"闲置资金比例 {c['pct']:g}%{'（还没照它调完，见「手动指令」）' if core_late else ''}"
+                f"闲置资金比例 {c['pct']:g}%{'（还没照它调完，见「交易」的「手动指令」）' if core_late else ''}"
                 + ("<br>规则目标额还没算过（执行器下一次决策才算）：100% 先按现在的口数估算" if c.get("approx") else "") + "</div>")
 
     def _core_exit(t: str) -> str:
@@ -2236,7 +2297,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
             lab = "已在卖出（手动）" if pend[t] == "manual" else f"已排定开盘卖（{HV.EXIT_TEXT.get(pend[t], str(pend[t]))}）"
             return f"<div class='act'><b class='neg'>{escape(lab)}</b></div>" + chart(t, "stock")
         if t in busy:
-            return "<div class='act muted'>有一条手动指令在处理（见「手动指令」）</div>" + chart(t, "stock")
+            return "<div class='act muted'>有一条手动指令在处理（见「交易」的「手动指令」）</div>" + chart(t, "stock")
         cur = pct.get(t)
         px = float(p.get("last_close") or p.get("entry_px") or 0)
         sh = int(p.get("shares") or 0)
@@ -2280,7 +2341,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                    "不拿核心 ETF（熊市 / 没有闲置资金）") if cr.get("units100") is not None else "执行器下一次运行之后显示"
         ri = MO.resume_info(book, tag, now)                 # 确认之后什么时候买（规则不拿 / 今天已经有单 → 不是马上；2026-10-13）
         la_why = MO.allin_busy_text(MO.live_allin(tag, book))   # 「全部换成」已下单 / 在等：不给恢复按钮（点了也会被拒；2026-10-14）
-        btn = ("<div class='act muted'>有一条闲置资金比例的指令在处理（见「手动指令」）</div>" if core_busy else
+        btn = ("<div class='act muted'>有一条闲置资金比例的指令在处理（见「交易」的「手动指令」）</div>" if core_busy else
                f"<div class='act muted small'>{escape(la_why)}</div>" if la_why else
                f"<div class='act'><button class='btn primary' data-plan='{escape(ri['text'])}' data-act='core-resume'>确认买入（恢复照规则）</button></div>")
         fixl = ("<div class='small'>手动固定 " + "、".join(escape(NM.qty(t, f"{n:,} 口")) for t, n in sorted(bfix.items()))
@@ -2357,7 +2418,6 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                 f" data-st='{escape(MO.wait_word(tg))}'"         # 恢复成「等下单」/「等执行器读」（比例 / 固定口数 / 解除不是单；2026-10-14）
                 f" data-when='{escape(MO.uncancel_when(tg, now, book, tag))}'" + (" data-halt='1'" if hl else "") + ">撤销撤回</button>")
 
-    sp = _trade_split(book, waiting, now, tag, bool(halt), tlive)   # 每一行放进哪一块（今天要成交 / 另有 … / 已结束；2026-10-16）
     rows = []                                               # [(指令 id, 一行)]
     for r in waiting:
         if r.get("kind") == "uncancel" or r["id"] in void:  # 撤销撤回本身、已被撤销的撤回：不显示（去掉撤销记录）
@@ -2388,7 +2448,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                and not (now_it and MO.now_cancel_why(it, now)))   # 盘中的单还挂在交易所：页面上撤不了；15:30 失效的卖出能撤回（G16）
         btn = (_cbtn(it, 2 if now_it else (1 if it.get("status") == "placed" else 0)) if can else _unbtn(it))
         rows.append((it["id"], f"<div class='li'><div class='grow'><b>{_what(it)}</b> <span class='chip'>"
-                    f"{escape(MO.fix_status_text(it, items, book, tag) or MO.status_text(it, now))}{'（撤回中）' if it.get('cancel_req') else escape(tlive['itxt'].get(it.get('id'), ''))}</span>"   # 盘中没下成 → 开盘（G18）
+                    f"{escape(MO.fix_status_text(it, items, book, tag) or MO.status_text(it, now))}{'（撤回中）' if it.get('cancel_req') else escape(tlive['itxt'].get(it.get('id')) or sp['itxt'].get(it.get('id'), ''))}</span>"   # 盘中没下成 → 开盘（G18）
                     f"<div class='muted small'>{escape(str(it.get('at', ''))[5:16].replace('T', ' '))}"
                     f"{(' · ' + escape(MO.msg_text(it, now))) if it.get('msg') else ''}</div></div>{btn}</div>"))
     orows, ometa = _order_rows(book, now, paper, waiting, tlive, tag)   # 执行器的单（还挂着的给「撤单」；API / Mac 故障时照它在立花网站下）
@@ -3996,7 +4056,7 @@ class _Common(BaseHTTPRequestHandler):
             try:
                 if path.endswith("/api/request") or path.endswith("/api/halt"):
                     self._json(500, {"ok": False, "unsure": True,
-                                     "msg": "面板内部出错（已记日志）：这次可能已经写进去了 —— 刷新后在「手动指令」里确认，不要直接再点一次"})
+                                     "msg": "面板内部出错（已记日志）：这次可能已经写进去了 —— 刷新后在「交易」的「手动指令」里确认，不要直接再点一次"})
                 elif "/api/" in path:
                     self._json(500, {"ok": False, "msg": "面板内部出错（已记日志）：刷新后再试"})
                 else:

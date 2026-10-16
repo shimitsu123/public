@@ -28,6 +28,7 @@ from qbreak.live_unified import ExecutorError, UnifiedExecutor
 from qbreak.unified import UnifiedEngine
 
 from test_live_unified import CC, CFG, EX, NEW, _frame, _maker
+from test_panel import _card
 
 ROOT = Path(__file__).resolve().parent.parent
 BOOK_T = "live_unified_tachibana.json"
@@ -274,7 +275,8 @@ def test_panel_request_then_cancel_phase_cancels_without_building_an_engine(monk
     monkeypatch.setattr(LO, "now_jst", lambda: now)
     monkeypatch.setattr(MO, "now_jst", lambda: now)
     html = panel.render("tachibana", "tok", now)
-    assert "今天要成交的单" in html and "data-act='cancel-order'" in html          # 标题 2026-10-16 起「今天要成交的单」（以前「今天的单」） and f"data-cid='{o.cid}'" in html
+    assert "今天要成交的单" in html and "data-act='cancel-order'" in html and f"data-cid='{o.cid}'" in html   # 标题 2026-10-16 起「今天要成交的单」（以前「今天的单」）
+    assert f"data-cid='{o.cid}'" in _card(html, "today")                         # 09:10 还挂在交易所的单：在上面「今天要成交的单」里
     assert "核心 ETF 的单" in html and "可能再买 / 再卖" in html                        # 核心 ETF 撤了下一次决策会重新算（OPSCMD-6）
     assert "被挡 / 不下 / 没下" in html and "别再下" in html                          # 故障那天只照没下的行下单（OPSCMD-8）
     old_ = panel.render("tachibana", "tok", _at(next_trading_day(r.f), 8, 0))           # 第二天早上的运行还没跑：不是今天的单

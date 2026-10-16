@@ -126,6 +126,36 @@ def block_kind(note) -> str:
     return "later"
 
 
+def system_miss(o) -> str | None:
+    """UnifiedExecutor._system_miss 的判断（ExecOrder 或账本里的 dict 都行）：开盘（寄付 / 开盘后）的买单一股没买、而且是系统原因
+    （单根本没到交易所）→ 原因；不是 → None。对账时手动买入 / 加仓据此留到下一次决策（requeue）或结束（只做一次）；
+    面板「交易」的分块（panel._trade_split）用同一个函数判断那条指令之后还会不会再下（2026-10-16 复核：只有一处判断）。"""
+    g = LO._g
+    if g(o, "broker_id") or int(g(o, "filled_qty") or 0) > 0 or g(o, "phase") == "now" or g(o, "side") != "BUY":
+        return None
+    n, s = str(g(o, "note") or ""), g(o, "status")
+    if s == "MISSED":
+        return n.split("，没买")[0] or "开盘后补单没有运行"
+    if s == "SKIPPED":
+        return "早上错过寄付（执行器跑晚了）" if n.startswith(LATE_BUY_NOTE) else None
+    if s == "PLANNED":
+        return "单建好了却没有发出（运行中断？）"
+    if s != "BLOCKED" or block_kind(n) == "no" or "立花前日終値" in n or n.startswith(("dry-run", "单笔金额", "数量为 0")):
+        return None
+    return n or "被挡"
+
+
+def requeue_next(o, orders, now: dt.datetime | None, fill: dt.date | None = None) -> bool:
+    """还没对账的手动买入 / 加仓的单（今天不会再发 / 已经结束）：下一次早上的对账会把那条指令留到那次决策重新处理（True）、
+    还是当成没买到结束（False；只做一次）—— 与 _reconcile 同一个口径：等开盘后的（DEFERRED）对账时变成 MISSED（系统原因），
+    凑钱的卖单都没成交（LO.orphan）→ SKIPPED「钱没来」（不是系统原因）；其余按 system_miss。只读（面板「交易」的分块用）。"""
+    if LO._g(o, "status") == "DEFERRED":
+        if LO.orphan(o, orders, now, fill):
+            return False
+        o = {**{k: LO._g(o, k) for k in ("broker_id", "filled_qty", "phase", "side")}, "status": "MISSED", "note": ""}
+    return system_miss(o) is not None
+
+
 class ExecutorError(RuntimeError):
     """执行器不能安全地继续（例如有状态不明的单、查不到成交）：不改状态、不下单，交给人工。"""
 
@@ -1728,19 +1758,9 @@ class UnifiedExecutor:
         整个运行被挡（HALT / 异常熔断 / 持仓不一致 / 前面有一笔状态不明…）、请求没发出（登录失败 / 没连上 / 銘柄マスタ取不到 / 第二暗証…）。
         不算：行情（跳空 / ストップ高 / 没成交 / 到 09:20 还没有始値）、这只买不了（资格检查 / 立花能不能买 / 上場廃止）、
         账户设定（ARM / 课税区分）、LU-15 价格对不上、单笔上限、dry-run、券商拒绝 —— 这些照旧「没买到 → 只做一次」。
-        手动买入 / 加仓据此不当成没买到、留到下一次能下单的决策（与「这次运行不下单 → 等下一次能下单的决策」同一口径）。"""
-        if o.broker_id or int(o.filled_qty or 0) > 0 or o.phase == "now" or o.side != "BUY":
-            return None
-        n = str(o.note or "")
-        if o.status == "MISSED":
-            return n.split("，没买")[0] or "开盘后补单没有运行"
-        if o.status == "SKIPPED":
-            return "早上错过寄付（执行器跑晚了）" if n.startswith(LATE_BUY_NOTE) else None
-        if o.status == "PLANNED":
-            return "单建好了却没有发出（运行中断？）"
-        if o.status != "BLOCKED" or block_kind(n) == "no" or "立花前日終値" in n or n.startswith(("dry-run", "单笔金额", "数量为 0")):
-            return None
-        return n or "被挡"
+        手动买入 / 加仓据此不当成没买到、留到下一次能下单的决策（与「这次运行不下单 → 等下一次能下单的决策」同一口径）。
+        判断本身在模块级的 system_miss（面板「交易」分块也用它；2026-10-16 复核）。"""
+        return system_miss(o)
 
     @staticmethod
     def _halt_note(o: ExecOrder) -> bool:

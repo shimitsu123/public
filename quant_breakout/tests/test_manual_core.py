@@ -414,7 +414,7 @@ def test_render_buttons_under_the_held_etf():
     h = panel.render("paper", "tok", now=AT)
     assert "规则在开盘卖出（熊市 / 换 ETF）" in h and "data-act='core-sell'" in h and "data-act='adj' data-t='1655.T'" not in h
     _pbook(pct=50.0, applied=100.0)
-    assert "闲置资金比例 50%（还没照它调完，见「手动指令」）" in panel.render("paper", "tok", now=AT)
+    assert "闲置资金比例 50%（还没照它调完，见「交易」的「手动指令」）" in panel.render("paper", "tok", now=AT)
     _pbook(orders=[{"cid": "U2026-10-05-SELL-1655.T-N100000", "ticker": "1655.T", "side": "SELL", "kind": "core", "qty": 130,
                     "decided_on": "2026-10-05", "reason": "manual_core", "phase": "now", "status": "FILLED",
                     "filled_qty": 130, "filled_px": 700.0}])

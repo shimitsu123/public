@@ -376,7 +376,7 @@ def test_submit_buy_writes_instruction_and_checks():
     ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "9984", "unit": "shares", "value": 300}, AT)
     assert ok and rec["value"] == 300 and "买入 9984 ソフトバンクグループ（300 股）" in msg and "没有买入信号" in msg
     html = panel.render("paper", "t" * 40, AT)
-    assert html.count("data-act='cancel'") == 2 and "有一条买入指令在处理（见「手动指令」）" in _card(html, "suggest")
+    assert html.count("data-act='cancel'") == 2 and "有一条买入指令在处理（见「交易」的「手动指令」）" in _card(html, "suggest")
 
 
 def test_chart_endpoint_serves_one_ticker(server):
@@ -804,7 +804,7 @@ def test_corefix_card_shows_a_registered_change_and_the_buttons_after_it():
     assert "手动固定 678 口</b>" in html and _btn(html, "corefix-clear", "1482.T") and _btn(html, "corefix", "1482.T").endswith("固定口数…")
     rec = MO.append("paper", {"kind": "corefix", "ticker": "1482", "clear": True}, clock=lambda: AT15)
     html = panel.render("paper", "t" * 40, AT15)
-    assert "已登记：恢复按规则</b>" in html and "在那之前还是手动固定 678 口" in html and "要撤回在「交易」→「手动指令」" in html
+    assert "已登记：恢复按规则</b>" in html and "在那之前还是手动固定 678 口" in html and "要撤回在「交易」→「今天要成交的单」的「手动指令」" in html   # 2026-10-16：指它真正在的那一块
     assert "（执行器还没读；今天 09:00 开盘后马上（按现价限价，不是寄付）；" in html   # 什么时候下单（D1：与执行器同一个时段口径）
     assert not _btn(html, "corefix-clear", "1482.T") and _btn(html, "corefix", "1482.T").endswith("买入…")   # 恢复按规则之后没拿 → 买入…
     MO.append("paper", {"kind": "cancel", "target": rec["id"]}, clock=lambda: AT15 + dt.timedelta(minutes=1))

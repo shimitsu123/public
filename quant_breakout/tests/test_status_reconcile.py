@@ -283,7 +283,7 @@ def test_g16_expired_intraday_sell_can_be_withdrawn_and_is_not_sold_again():
     assert not ok and MO.NOW_NO_CANCEL in msg                      # 还挂着：用「撤单」
     o = next(x for x in r.ux.orders if x.ticker == "A.T" and x.side == "SELL" and x.phase == "now")
     why = live_ops.cancel_why(o, book, t1540, paper=False)
-    assert why.startswith("已经收盘（15:30）") and f"不想再卖就在「手动指令」撤回 {rec['id']}" in why
+    assert why.startswith("已经收盘（15:30）") and f"不想再卖就在「交易」点开「另有 …」，在「手动指令」里撤回 {rec['id']}" in why
     ok, msg, _ = MO.cancel_request(TAG, book, rec["id"], now=t1540)
     assert ok, msg
     k = r.k                                                        # 收盘 → 第二天 07:40：读撤回 → 对账 → 撤 → 不再卖
