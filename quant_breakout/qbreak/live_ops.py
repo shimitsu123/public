@@ -2181,6 +2181,106 @@ def _core_row(book: dict | None, now: dt.datetime, tag: str | None, halt: bool, 
     return put("will", _at(nxt, MO.SESSION[0][0]), f"{why}{nxt:%m/%d} 07:40 的决策照新比例调 → {nxt:%m/%d} 09:00 开盘")
 
 
+SHORT_NOTE = "那时的钱不够就只买得起的部分（不够一单元不买）；不想要 → 在「持仓」那只 ETF 下面点「恢复按规则」"
+
+
+def fix_short(book: dict | None, now: dt.datetime, tag: str | None = None, *, cur=None, cash: float | None = None,
+              skip=()) -> dict:
+    """固定口数已经照它排过单（fix_applied = 固定口数：不在 corefix_pending 里）、拿着的（含今天已成交：held_now）却还不够的核心 ETF →
+    {票: {"units": 固定口数, "held": 现在拿着, "short": 还差几口, "head": 「含今天已成交」}}（只读；2026-10-16 事后：整合复核 2 的已知限制）。
+    例：固定 1482 655 口，盘中现金只够买 650 口（执行器 fix_buy「还差 5 口：下一次决策照它调」）→ 下一次决策照固定口数补那 5 口
+    （unified._decide_core：固定口数的目标 = 那个口数、不看再平衡带；停买闲置资金 ETF 中也照买；钱不够先卖没固定的核心 ETF：_fund_fixed）。
+    只算执行器真的会去买的：
+      · 执行器还没决策过（没有 core_rule）/ 有没处理完的「全部换成」（那次决策取消全部固定口数）→ 没有；
+      · 这只还有还没读的固定口数 / 恢复按规则（skip；那一行就是它）、当前决策里这只还有没结束的单（还会成交 / 还会发：那笔单自己有一行）→ 不算；
+      · 现金（cash_hi 与含今天已成交的投影取大）+ 没固定的核心 ETF 现在的市值（_fund_fixed 会卖它们凑钱）连一单元（按收盘价 ×(1+0.5%)）
+        都不够 → 不算（下一次决策也买不了）。
+    HALT / 面板自动下单暂停 / 早上的运行没完成在 outlook 的那一行里说（_fix_short_row）。"""
+    from . import manual_orders as MO
+    b = book or {}
+    cr = b.get("core_rule") or {}
+    if not cr:
+        return {}
+    fixed, app = MO.core_fixed(b, tag), MO.fix_applied(b)
+    want = {t: int(u) for t, u in fixed.items() if int(u or 0) > 0 and app.get(t) == int(u) and t not in set(skip or ())}
+    if not want or MO.live_allin(tag, b):
+        return {}
+    pj = held_now(b, tag, now=now)
+    cu = {str(t): int(u or 0) for t, u in (pj.get("core_units") or {}).items()}
+    st = b.get("state") or {}
+    if cur is None:
+        cur = [o for o in b.get("orders") or [] if isinstance(o, dict) and o.get("decided_on") == st.get("last_date")]
+    busy = {str(o.get("ticker")) for o in cur if isinstance(o, dict) and o.get("status") in MO.OPEN_ST}
+
+    def px(t: str) -> float:                               # 决策日收盘（core_rule.px / core_last；没记 → 这只最近一笔单的参考价）
+        try:
+            v = float((cr.get("px") or {}).get(t) or (st.get("core_last") or {}).get(t) or 0)
+            if v <= 0:
+                v = next((float(o.get("ref_px") or o.get("limit") or 0) for o in reversed(cur)
+                          if isinstance(o, dict) and str(o.get("ticker")) == t and (o.get("ref_px") or o.get("limit"))), 0.0)
+            return v
+        except (TypeError, ValueError):
+            return 0.0
+    try:
+        money = max(float(cash_hi(b, tag) if cash is None else cash),
+                    float((pj.get("state") or {}).get("cash_jpy") or 0))   # 含今天已成交的卖出所得（held_now 的投影）
+    except (TypeError, ValueError):
+        money = 0.0
+    money += sum(u * px(t) for t, u in cu.items() if t not in fixed and u > 0)
+    out = {}
+    for t, u in sorted(want.items()):
+        h = cu.get(t, 0)
+        if h >= u or t in busy:
+            continue
+        p, lot = px(t), int((cr.get("lot") or {}).get(t) or 1)
+        if p > 0 and money < p * lot * (1 + BUY_PAD):
+            continue
+        out[t] = {"units": u, "held": h, "short": u - h, "head": pj.get("head") or "含今天已成交"}
+    return out
+
+
+def _fix_short_row(t: str, x: dict, book: dict | None, now: dt.datetime, tag: str | None, halt: bool, paused: bool,
+                   pc: bool) -> dict:
+    """fix_short 的一只 → outlook 的一行（ref fix:<票>：读了、还没照它调的固定口数不会同时有 —— 那种 fix_applied ≠ 固定口数）。
+    什么时候补（与 _core_row 的「下一次决策」同一个口径）：HALT 中 → 解除后（cls halt）；今天早上的决策还没做 → 那次决策（08:55 之前 → 今天 09:00
+    开盘；模拟账户补跑 / 过了 11:30 → 下一个交易日 07:40 的运行；面板自动下单暂停 = 不补跑；立花 08:55 之后补跑的决策错过寄付 → 下一个交易日）；
+    别的 → 下一次决策（交易日 07:40）那天 09:00 开盘（盘中的路不补：corefix_pending 里没有它）。"""
+    from . import manual_orders as MO
+    today = now.date()
+    paper = str(tag or "").startswith("paper")
+    head = f"{_lab(t)} 固定 {x['units']:,} 口：现在 {x['held']:,} 口（{x['head']}），还差 {x['short']:,} 口"
+    it = _last_item(book, "corefix", t)
+    row = {"ref": f"fix:{t}", "kind": "instr", "ikind": "corefix", "iid": None, "ticker": t, "side": "BUY", "qty": x["short"],
+           "unit": "口", "state": "will", "act_at": None, "reason": "", "chip": None, "cls": "", "what": head,
+           "at": (it or {}).get("at"), "src": "", "src_txt": "", "gone": [], "seen": True, "short": dict(x),
+           "fchip": f"还差 {x['short']:,} 口"}
+
+    def put(state: str, at: dt.datetime | None, tail: str, cls: str = "", reason: str = SHORT_NOTE) -> dict:
+        if state == "will" and at is not None and at.date() > today:
+            state = "later"
+        row.update(state=state, act_at=at, cls=cls, reason=reason, what=f"{head} → {tail}")
+        return row
+    if halt:
+        return put("later", None, "HALT 解除后的决策照它调（开盘买）", "halt")
+    if MO.morning_behind(book, now):
+        if pc:
+            return put("wont", None, f"{next_decision_text(now)} 的决策照它调（开盘买）", "paused", PAUSED_TXT)
+        if now.time() < MO.CUTOFF:
+            return put("will", _at(today, MO.SESSION[0][0]), "今天 07:40 的决策照它调（09:00 开盘买）")
+        late = paper_late_catchup(book, now, paper, halt)
+        if late is not None:
+            return put("later", late, f"今天补跑的那次决策照它调；{paper_late_text(late, now)}", "catchup")
+        if paper:
+            return put("will", None, "今天补跑的那次决策照它调（面板会自动补跑）")
+        nd = next_trading_day(today)
+        return put("later", _at(nd, MO.SESSION[0][0]), f"{md_wd(nd)}07:40 的决策照它调（开盘买；立花 08:55 之后补跑的决策错过寄付，"
+                                                       "核心 ETF 的单今天不发）")
+    nd = today if is_trading_day(today) and now.time() < dt.time(7, 40) else next_trading_day(today)
+    if nd == today:
+        return put("will", _at(today, MO.SESSION[0][0]), "今天 07:40 的决策照它调（09:00 开盘买）")
+    return put("later", _at(nd, MO.SESSION[0][0]), f"{md_wd(nd)}07:40 的决策照它调（开盘买）")
+
+
 def _order_row(o: dict, *, now, paper, tag, halt, asked, casc, unf, f) -> dict:
     """当前决策的一笔单 → outlook 的一行（判断顺序：结束了的 → 不下 / 被拒 / 错过 → 撤单中 → 立花收盘后（状态不明的单 → 照旧是「会」、
     cls unknown、closed：要你核对登记；别的 → 已收盘）→ HALT → 被挡不再试 → 凑钱的卖单没了 / 开盘时一定买不起 → 立花开盘后的补单没跑成 →
@@ -2436,6 +2536,16 @@ def outlook(book: dict | None, waiting=(), now: dt.datetime | None = None, *, ta
                 x.update(ref=f"fix:{t}", iid=(last or {}).get("id"), what=(fix_name(t, u) if u is not None else f"{_lab(t)} 恢复按规则") + "（还没照它调）")
                 rows.append(x)
                 items[x["ref"]] = x
+        try:                                               # 固定口数照它排过单、拿着的还不够（现金只够买一部分）：下一次决策补（2026-10-16 事后）
+            short = fix_short(b, now, tag, cur=cur, cash=cash_, skip=unread_fix | set(pend))
+        except Exception:                                  # noqa: BLE001  只是一行说明：算不成不写
+            short = {}
+        for t, sx in short.items():
+            if f"fix:{t}" in items:
+                continue
+            x = _fix_short_row(t, sx, b, now, tag, halt, pz, pzc)
+            rows.append(x)
+            items[x["ref"]] = x
         try:                                               # 读了、还没照它调的闲置资金比例（复核 3，2026-10-16）：没读的比例指令在 → 那一行就是它
             x = _core_row(b, now, tag, halt, pzc, waiting)
         except Exception:                                  # noqa: BLE001  一条读不了：不下结论

@@ -1366,13 +1366,21 @@ def test_fixed_units_note_dropped_when_the_same_decision_already_filled_it():
     note = lv["fix"].get(buy["cid"]) or ""
     assert "手动固定 655 口仍然有效：下一次决策（10/19 07:40）还会照它调（差多少补多少）" in note and "同样的单" not in note
     html = panel.render("paper", "t" * 40, now)
-    top, _, ended = _parts(html)
-    assert note in top and note not in ended                                   # 上面写了，那一行不重复
+    top, later, ended = _parts(html)
+    assert note not in top and note in _row(ended, BUY_B.replace("678", "679"))   # 2026-10-16 事后：固定口数还差几口有自己的一行（live_ops.fix_short）
+    #                                                                             → 提醒只留在那笔撤了的单的说明里
+    assert ("1482 对冲版美国 7〜10 年国债 固定 655 口：现在 0 口（含今天已成交），还差 655 口 → 10/19（周一）07:40 的决策照它调（开盘买）"
+            in later)                                                         # →「另有」里、算进数字；上面那句提醒不再重复
+    assert _badge_ok(html, "paper", now) == 1
     b["orders"].append({**buy, "cid": "U2026-10-15-BUY-1482.T-N094306", "qty": 650, "sent_qty": 650, "filled_qty": 650,
                         "status": "FILLED", "reason": "core_fix", "note": "成交"})
     _save(b)
     assert not panel._trade_live(b, [], now, "paper", halt=False)["fix"]
-    assert "仍然有效" not in panel.render("paper", "t" * 40, now)
+    html = panel.render("paper", "t" * 40, now)
+    assert "仍然有效" not in html
+    _top, later, _ = _parts(html)                                              # 真实数据 10/15：679 口撤了、650 口成交、固定 655 口 → 还差 5 口（事后）
+    assert "1482 对冲版美国 7〜10 年国债 固定 655 口：现在 650 口（含今天已成交），还差 5 口 → 10/19（周一）07:40 的决策照它调（开盘买）" in later
+    assert _badge_ok(html, "paper", now) == 1
 
 
 def test_hold_and_block_pointers_say_where_the_row_is():

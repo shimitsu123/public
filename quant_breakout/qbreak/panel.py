@@ -2071,7 +2071,8 @@ def _where_core(sp: dict) -> str:
 def _fix_wait_row(x: dict) -> str:
     """outlook 的 fix:<票> / core:（读了、还没照它调的固定口数 / 闲置资金比例；没有对应的指令行）→ 一行（没有按钮：要改在「持仓」的 ETF 下面）。"""
     why = str(x.get("reason") or "")
-    return (f"<div class='li'><div class='grow'><b>{escape(str(x.get('what') or x.get('ref')))}</b> <span class='chip'>{escape(MO.FIX_WAIT)}</span>"
+    return (f"<div class='li'><div class='grow'><b>{escape(str(x.get('what') or x.get('ref')))}</b>"
+            f" <span class='chip'>{escape(str(x.get('fchip') or MO.FIX_WAIT))}</span>"   # 固定口数还差几口（fix_short；2026-10-16 事后）
             + (f"<div class='muted small'>{escape(NM.annotate(why))}</div>" if why else "") + "</div></div>")
 
 
