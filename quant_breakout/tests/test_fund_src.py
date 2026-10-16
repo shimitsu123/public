@@ -437,7 +437,9 @@ def test_deps_cancel_also_cancels_a_dependent_buy_that_already_reached_the_excha
     """R3：「一起撤买单」点下去时，靠这笔卖出的钱的买单已经在 09:05 / 09:20 发到交易所（页面是旧的）→ 也去撤；
     已经成交撤不了 → 写明「已经发到交易所，没一起撤」并推 ★ 交易（以前只撤还没发出的，发出的那笔留在交易所、推送也不提）。
     2026-10-16 有意的改动（整组撤单，用户「一起下的买单和卖单要可以一起撤」）：先撤买单；买单已经成交 → 卖单不撤（撤了，买的钱不够）。
-    以前卖单照撤（FILLED 那一例以前断言卖单 CANCELLED）。"""
+    以前卖单照撤（FILLED 那一例以前断言卖单 CANCELLED）。
+    复核 4（2026-10-16，有意的改动）：已经成交的那笔不再另推「已经发到交易所，没一起撤」★（卖单那条 ★ 已经写了「靠它的钱的买 1482 已经成交」：
+    确认框把它列为卖单不撤的理由，推送不再说成「没一起撤」）；那一行改写「已经成交 678 口，撤不了」（info）。"""
     book = _dict_book()
     book["orders"][1].update(status=buy_status, sent_qty=678, broker_id="B1", order_date="20261015",
                              filled_qty=678 if buy_status == "FILLED" else 0)
@@ -451,8 +453,11 @@ def test_deps_cancel_also_cancels_a_dependent_buy_that_already_reached_the_excha
     else:
         assert orders[0].status == "SENT" and res["by_cid"][orders[0].cid][0] == "skipped"   # 买单已经成交：卖单不撤
         assert orders[1].status == "FILLED" and [x["cid"] for x in res["skipped"]] == [orders[1].cid, orders[0].cid]
-        assert "已经发到交易所，没一起撤" in res["skipped"][0]["why"]
-        assert any(lv == "warn" and m.startswith("★ 交易") and "没一起撤" in m for lv, m in res["events"])
+        assert res["skipped"][0]["why"] == "已经成交 678 口，撤不了（不用撤）"
+        assert not any("没一起撤" in m for _lv, m in res["events"])
+        assert [m for lv, m in res["events"] if lv == "warn" and m.startswith("★ 交易")] == [
+            f"★ 交易：卖 1545 纳斯达克 100：4,110 口（{orders[0].cid}）没撤 —— 靠它的钱的买 1482 对冲版美国 7〜10 年国债 已经成交 678 口："
+            "卖单不撤（撤了买的钱不够）"]
         assert "卖单不撤" in res["skipped"][1]["why"] and "买 1482 对冲版美国 7〜10 年国债 已经成交 678 口" in res["skipped"][1]["why"]
         assert any("卖单不撤" in x for x in LO.cancel_text(res)) and res["held"] == [orders[0].cid]
 
