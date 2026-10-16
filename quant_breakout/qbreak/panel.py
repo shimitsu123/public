@@ -3177,6 +3177,34 @@ def _req_reply(ok: bool, msg: str, rec: dict | None) -> tuple[int, dict]:
     return (200 if ok else 400), {"ok": ok, "msg": msg, "id": (rec or {}).get("id")}
 
 
+# 指令记录里只由面板 / 执行器自己算的字段（凑钱的同批、「全部换成」的预计日子、写入时的方向…）：页面提交的 body 里带了也不收
+# （2026-10-16 复核 C：body 里 fund 写成字符串 "all" → 只写了一条没有同批卖出的「全部换成」买入，之后拼说明崩溃 → 手机 502）
+CLIENT_DROP = ("fund_for", "batch", "prev_pct", "prev_units", "allin_fill", "x_close", "dir", "cur0", "from_kind",
+               "id", "at", "status", "grp_all", "grp_wait")
+
+
+def _client_body(body: dict) -> dict:
+    """页面提交的 body → 交给 MO.normalize 的字段：去掉 CLIENT_DROP；fund 只认对象（{"mode": "split" | "all", …}，submit 自己处理），
+    别的写法（字符串 "all" / "split"…）不收。"""
+    out = {k: v for k, v in body.items() if k not in CLIENT_DROP}
+    if not isinstance(out.get("fund"), dict):
+        out.pop("fund", None)
+    return out
+
+
+def _written(msg, rec: dict | None) -> str:
+    """写进去之后给页面的一句：说明 +「（指令 id）」。说明是空的 / 不是字符串（新加的指令种类忘了写、拼说明出错）→ 照实写写了什么
+    （2026-10-12 手机 502：corefix 没有说明 → None + str 崩溃；2026-10-16 复核 C：所有出口都过这里）。"""
+    rec = rec or {}
+    if not isinstance(msg, str) or not msg.strip():
+        try:
+            what = MO.describe(rec) if rec.get("kind") else "指令"
+        except Exception:                                  # noqa: BLE001
+            what = MO.LABEL.get(str(rec.get("kind")), "指令")
+        msg = f"已写：{what}（说明没生成：到「交易」里看这条指令的状态）"
+    return msg + (f"（指令 {rec['id']}）" if rec.get("id") else "")
+
+
 def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fetch=None) -> tuple[bool, str, dict | None]:
     """页面的一次提交 → (成功?, 说明, 写进去的指令)。与 run.py manual 相同的检查。source：panel（Mac）/ phone（手机）。
     固定口数 / 恢复按规则（kind corefix；固定的 ETF 上点的卖出 / 减仓 / 调仓换算成的也算）：body 没带 confirm（= 确认框给的 token）或
@@ -3224,9 +3252,11 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
             if why:
                 return False, f"撤销不了：{why}", None
         ok, msg, rec = fn(tag, book, str(body.get("target") or ""), now=now, source=source, sm=sm)
-        return ok, msg + (f"（指令 {rec['id']}）" if ok and rec else ""), rec
+        if not ok:
+            return False, msg if isinstance(msg, str) and msg else "没写", rec
+        return True, _written(msg, rec), rec
     try:
-        rec = MO.normalize({**body, "source": source})
+        rec = MO.normalize({**_client_body(body), "source": source})
         rec = MO.core_rec(rec, book, tag, now=now) or rec    # 持有的核心 ETF 的卖出 / 调仓 → 闲置资金比例（规则每天按它调核心）；固定口数的 → 改固定口数
     except ValueError as e:
         return False, f"没写：{e}", None
@@ -3328,110 +3358,119 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
         rec = MO.append(tag, rec, clock=clock)
     if rec["kind"] == "unblock":                           # 解除不是单：不会买回、也不马上买，下一次决策起才不挡（2026-10-13）
         return True, f"已写：解除 {NM.label(rec['ticker'])} 的不自动买回（不会买回，也不马上买；指令 {rec['id']}）→ {MO.next_decision(now)}", rec
-    when = MO.when_for(now or now_jst(), book,              # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘 / 早上的运行没完成（G9）
-                       rec.get("ticker") if rec["kind"] in MO.ORDER_KINDS else None)   # 这只今天已经有执行器还活着的单 → 下一个交易日开盘（D4）
-    k, t = rec["kind"], rec.get("ticker")
-    tl = NM.label(t) if t else ""                           # 说明里的票都写「代码 名字」（2026-10-15 用户：只写代码不知道是哪只；指令 id / cid 原样）
-    msg = {"sell": f"已写：卖出 {tl} 全部 → {when}卖出",
-           "trim": f"已写：{tl} 减到约 {rec.get('pct', 0):g}% → {when}卖出",
-           "core": f"已写：闲置资金比例 {rec.get('pct', 0):g}% → 核心 ETF {when}照新比例调",
-           "unblock": f"已写：解除 {tl} 的不自动买回",
-           "cancel_order": f"已写：撤单 {tl}（{rec.get('cid')}）→ 执行器马上撤（已经成交的部分撤不了）"}.get(k)
-    if k == "cancel_order" and rec.get("grp"):              # 整组撤单（2026-10-16）
-        gw_ = []
-        for c in rec["grp"]:
-            mg = MO._CID.match(str(c))
-            if mg:
-                gw_.append(("买" if mg.group(2) == "BUY" else "卖") + " " + NM.label(mg.group(3)))
-        msg = (f"已写：整组撤单 {len(rec['grp']) + 1} 笔（{tl}（{rec.get('cid')}）+ 同一组的 " + "、".join(gw_)
-               + "）→ 执行器马上撤：先撤买单，确认没成交再撤卖单（已经成交的部分撤不了）")
-        if gnotes:
-            msg += "（" + "；".join(gnotes) + "：没写进去）"
-    if k == "adjust":
-        st = LO.held_now(book, tag, now=now)["state"]      # 含今天已成交（与写入的方向同一个数；2026-10-16）
-        a = MO.adjust_plan(rec, st, MO.MANUAL_CAP_PCT)
-        if a["delta"] > 0:
-            msg = (f"已写：{tl} 加 {a['delta']:,} 股（→ {a['target']:,} 股" + ("，截到总权益" if a["capped"] else "")
-                   + f"）→ {when}买入")
-        else:
-            msg = f"已写：{tl} 卖 {-a['delta']:,} 股（→ {a['target']:,} 股）→ {when}卖出"
-    fill = MO.corefix_fill(now or now_jst(), book, tag) if k == "corefix" else None
-    if k == "corefix":                                                             # 2026-10-12 再发防止：这一种以前没有说明 → msg None → 拼接崩溃 → 手机 502
-        msg = (f"已写：{tl} 恢复按规则 → " + MO.corefix_clear_text(book, t, tag, now or now_jst()) if rec.get("clear") else   # 2026-10-13：会怎样
-               f"已写：{tl} 固定 {int(rec.get('units') or 0):,} 口 → {fill['text']}")   # D1（2026-10-15）：盘中 / 开盘前写的也马上按现价下，与卖出 / 买入同一个时段口径
-        if rec.get("from_kind"):                                                   # 固定口数的 ETF 上点的卖出 / 减仓 / 调仓（2026-10-13）
-            msg += "（这只是手动固定的：只改这只 ETF 的固定口数，别的 ETF 与闲置资金比例不变）"
-    if msg is None:                                                                # 新加的指令种类忘了写说明：也给一句（不让拼接崩溃）
-        msg = f"已写：{MO.LABEL.get(k, k)}" + (f" {tl}" if t else "") + f" → {when}处理"
-    if k == "core" and not t and pct0 <= 0 < float(rec["pct"]):                    # 停买后确认买入
-        p1 = float(rec["pct"])
-        ri = MO.resume_info(book, tag, now or now_jst(), pct=p1)   # 规则不拿 / 今天已经有单 → 不是马上（2026-10-13）
-        full = p1 >= 100 - 1e-9                                    # 「恢复成 N%」只买规则目标额的 N%：不说照规则（2026-10-14）
-        msg = (f"已写：{'确认买入' if full else f'恢复成 {p1:g}%'}（闲置资金比例 0% → {rec['pct']:g}%）→ "
-               + ((f"{when}照规则买入核心 ETF" if full else f"{when}按规则目标额的 {p1:g}% 买入核心 ETF，之后每天按 {p1:g}% 调")
-                  if not ri["none"] and not ri["late"] else ri["text"]))
-    if k == "core" and t and int(rec.get("target") or 0) <= 0:                     # 核心 ETF 卖出全部：之后停买
-        fx = MO.core_effects(book, 0.0, skip=t, tag=tag)
-        msg = (f"已写：卖出全部 {tl} → {when}卖出；之后停买闲置资金 ETF（出现买入信号会提醒，你确认才买）"
-               + ("；同一比例也用在：" + "、".join(NM.qty(x, f"{a_:,} → {b_:,} 口") for x, a_, b_ in fx) if fx else ""))
-    elif c0:
-        n = int(rec["target"]) - c0["cur"]
-        fx = MO.core_effects(book, rec["pct"], skip=t, tag=tag)  # 规则同时拿两只以上核心 ETF 时：同一比例别的也跟着变
-        msg = (f"已写：{'卖出全部 ' + tl if int(rec['target']) <= 0 else tl + (' 加 ' if n > 0 else ' 卖 ') + f'{abs(n):,} 口'}"
-               f"（闲置资金比例 {c0['pct']:g}% → {rec['pct']:g}%）→ {when}{'买入' if n > 0 else '卖出'}"
-               + ("；同一比例也用在：" + "、".join(NM.qty(x, f"{a_:,} → {b_:,} 口") for x, a_, b_ in fx) if fx else ""))
-    if k == "buy":
-        row = next((r for r in (sm.get("suggest") or {}).get("rows") or [] if r.get("ticker") == t), None)
-        est = MO.fmt_target(rec)
-        if row and rec.get("unit") == "rule":
-            est = f"约 {int((row.get('buy') or {}).get('rule_shares') or 0):,} 股"
-        msg = (f"已写：买入 {tl}（{est}）→ {when}买入"
-               + ("" if row and row.get("signal") else "；★ 还没有买入信号：是你自己的决定"))
-    if rec.get("fund") == "all":
-        fx = MO.core_effects(book, 0.0, keep_fixed=True)    # 固定口数同批取消 → 也按 0% 卖
-        etf = ("、".join(NM.qty(x, f"{a_:,} → 0 口") for x, a_, _b in fx) or "、".join(NM.qty(x, f"{u:,} → 0 口") for x, u in allp["cores"]))
-        held = [r for _s, r in sells if r["kind"] == "stock"]
-        ct_ = MO.core_tickers(book)
-        going_ = "、".join(f"{NM.label(x)}（{why_}）" for x, why_ in allp.get("skip") or [] if x not in ct_)   # 已有卖出全部的指令 / 已在卖出全部：不另外写
-        gone_c = "、".join(f"{NM.label(x)}（{why_}）" for x, why_ in allp.get("skip") or [] if x in ct_)     # 今天已卖光的核心 ETF（2026-10-16）
-        head = "执行时拿着的 " + tl + " 以外的个股和 ETF 全部卖出（包括写指令之后规则 / 别的指令买进的）；"
-        bt_ = ""                                            # 今天买进的个股（对账前，账本里还没有）：执行时一起卖（2026-10-16 复核：以前挡住不让写）
-        if allp.get("bought"):
-            bt_ = f"{allp.get('day_word') or '今天'}买进的：{NM.labels(allp['bought'])}（对账之后算持仓，执行时一起卖出）"
-        if held:                                            # 2026-10-15 复核：别的个股都已经有卖出指令时以前写「现在拿着的：（没有别的个股）」
-            head += ("现在拿着的：" + "、".join(NM.qty(r["t"], f"{r['sell']:,} 股") for r in held)
-                     + f"（之后 {MO.BLOCK_DEFAULT} 个交易日规则不自动买回；「交易」里可一次「恢复按规则」）"
-                     + (f"；已经在卖、不另外写的：{going_}" if going_ else "") + ("；" + bt_ if bt_ else ""))
-        elif going_:
-            head += f"别的个股都已经在卖、不另外写：{going_}" + ("；" + bt_ if bt_ else "")
-        else:
-            head += bt_ or "现在没有别的个股"
-        parts = [head] + ([f"不用再卖的 ETF：{gone_c}"] if gone_c else [])
-        fixed_ = [r["t"] for _s, r in sells if r["kind"] == "corefix"]
-        if fixed_:                                          # ETF 的口数变化只在比例那一句写一次（以前两处各写一遍，没固定的 1545 也写在「取消固定口数」里）
-            parts.append("取消固定口数：" + NM.labels(fixed_) + "（之后按比例 0% 卖出）")
-        if any(r["kind"] == "core" for _s, r in sells):
-            parts.append(f"闲置资金比例 {allp['core_pct']:g}% → 0%（" + (etf + "；" if etf else "")
-                         + "之后停买闲置资金 ETF，出现买入信号只提醒、你点「确认买入」才恢复）")
-        elif etf:
-            parts.append(f"闲置资金比例已经是 0%：{etf}（照旧卖出）")
-        if allp.get("also"):
-            parts.append("另外规则 / 别的指令开盘还会买：" + NM.labels(allp["also"]) + "（买进了的，执行时一起卖出）")
-        wa = MO.allin_when(now or now_jst(), book, tag)
-        msg = (f"已写：全部换成 {tl} → {wa}整批先卖后买（那次决策先过闸门；股数由执行器按全卖之后的钱定）；" + "；".join(parts)
-               + "；全卖也不够 1 个单元就不买、留现金；决策时买入被挡 → 整批不做、什么都不动；开盘跳空 / 没成交则其他已卖、留现金、不自动重买"
-               "；规则对别的票仍可能用现金开新仓")
-    elif sells:
-        msg += ("；凑钱先卖：" + "、".join(NM.qty(r['t'], f"{r['sell']:,} 股") for _s, r in sells)
-                + (("（其余由没固定的核心 ETF 补：现金不够时执行器盘中先卖它们补足，这几笔卖出先成交再买）" if fill["intraday"] else
-                     "（其余由别的核心 ETF 照规则减少：现金不够时执行器在那次决策里先卖它们补足，再平衡带以内也卖）") if k == "corefix"
-                   else "（核心 ETF 那份执行器按当时还缺多少卖）")
-                + ("；买入先过闸门，被挡则凑钱的卖出也不做；开盘跳空 / 价格更高没买到时，凑钱的卖出照样会卖" if k == "buy" else ""))
-    if paths.halt_file().exists() and k in MO.ORDER_KINDS + ("core",):
-        msg += "；★ HALT 生效中：解除之后才处理"
-    elif paths.halt_file().exists() and k == "corefix":                            # D7：固定口数读到就生效，ETF 的单等解除后的决策（与执行器写的同一句）
-        msg += f"；★ {MO.HALT_CORE_MSG}"
-    return True, msg + f"（指令 {rec['id']}）", rec
+
+    def _msg() -> str:                                     # 写进去之后的说明：出错也不能让提交崩溃（指令已经写了；2026-10-16 复核 C）
+        when = MO.when_for(now or now_jst(), book,              # 马上（盘中）/ 今天 09:00 开盘 / 12:30 后场开盘 / 10/08 开盘 / 早上的运行没完成（G9）
+                           rec.get("ticker") if rec["kind"] in MO.ORDER_KINDS else None)   # 这只今天已经有执行器还活着的单 → 下一个交易日开盘（D4）
+        k, t = rec["kind"], rec.get("ticker")
+        tl = NM.label(t) if t else ""                           # 说明里的票都写「代码 名字」（2026-10-15 用户：只写代码不知道是哪只；指令 id / cid 原样）
+        msg = {"sell": f"已写：卖出 {tl} 全部 → {when}卖出",
+               "trim": f"已写：{tl} 减到约 {rec.get('pct', 0):g}% → {when}卖出",
+               "core": f"已写：闲置资金比例 {rec.get('pct', 0):g}% → 核心 ETF {when}照新比例调",
+               "unblock": f"已写：解除 {tl} 的不自动买回",
+               "cancel_order": f"已写：撤单 {tl}（{rec.get('cid')}）→ 执行器马上撤（已经成交的部分撤不了）"}.get(k)
+        if k == "cancel_order" and rec.get("grp"):              # 整组撤单（2026-10-16）
+            gw_ = []
+            for c in rec["grp"]:
+                mg = MO._CID.match(str(c))
+                if mg:
+                    gw_.append(("买" if mg.group(2) == "BUY" else "卖") + " " + NM.label(mg.group(3)))
+            msg = (f"已写：整组撤单 {len(rec['grp']) + 1} 笔（{tl}（{rec.get('cid')}）+ 同一组的 " + "、".join(gw_)
+                   + "）→ 执行器马上撤：先撤买单，确认没成交再撤卖单（已经成交的部分撤不了）")
+            if gnotes:
+                msg += "（" + "；".join(gnotes) + "：没写进去）"
+        if k == "adjust":
+            st = LO.held_now(book, tag, now=now)["state"]      # 含今天已成交（与写入的方向同一个数；2026-10-16）
+            a = MO.adjust_plan(rec, st, MO.MANUAL_CAP_PCT)
+            if a["delta"] > 0:
+                msg = (f"已写：{tl} 加 {a['delta']:,} 股（→ {a['target']:,} 股" + ("，截到总权益" if a["capped"] else "")
+                       + f"）→ {when}买入")
+            else:
+                msg = f"已写：{tl} 卖 {-a['delta']:,} 股（→ {a['target']:,} 股）→ {when}卖出"
+        fill = MO.corefix_fill(now or now_jst(), book, tag) if k == "corefix" else None
+        if k == "corefix":                                                             # 2026-10-12 再发防止：这一种以前没有说明 → msg None → 拼接崩溃 → 手机 502
+            msg = (f"已写：{tl} 恢复按规则 → " + MO.corefix_clear_text(book, t, tag, now or now_jst()) if rec.get("clear") else   # 2026-10-13：会怎样
+                   f"已写：{tl} 固定 {int(rec.get('units') or 0):,} 口 → {fill['text']}")   # D1（2026-10-15）：盘中 / 开盘前写的也马上按现价下，与卖出 / 买入同一个时段口径
+            if rec.get("from_kind"):                                                   # 固定口数的 ETF 上点的卖出 / 减仓 / 调仓（2026-10-13）
+                msg += "（这只是手动固定的：只改这只 ETF 的固定口数，别的 ETF 与闲置资金比例不变）"
+        if msg is None:                                                                # 新加的指令种类忘了写说明：也给一句（不让拼接崩溃）
+            msg = f"已写：{MO.LABEL.get(k, k)}" + (f" {tl}" if t else "") + f" → {when}处理"
+        if k == "core" and not t and pct0 <= 0 < float(rec["pct"]):                    # 停买后确认买入
+            p1 = float(rec["pct"])
+            ri = MO.resume_info(book, tag, now or now_jst(), pct=p1)   # 规则不拿 / 今天已经有单 → 不是马上（2026-10-13）
+            full = p1 >= 100 - 1e-9                                    # 「恢复成 N%」只买规则目标额的 N%：不说照规则（2026-10-14）
+            msg = (f"已写：{'确认买入' if full else f'恢复成 {p1:g}%'}（闲置资金比例 0% → {rec['pct']:g}%）→ "
+                   + ((f"{when}照规则买入核心 ETF" if full else f"{when}按规则目标额的 {p1:g}% 买入核心 ETF，之后每天按 {p1:g}% 调")
+                      if not ri["none"] and not ri["late"] else ri["text"]))
+        if k == "core" and t and int(rec.get("target") or 0) <= 0:                     # 核心 ETF 卖出全部：之后停买
+            fx = MO.core_effects(book, 0.0, skip=t, tag=tag)
+            msg = (f"已写：卖出全部 {tl} → {when}卖出；之后停买闲置资金 ETF（出现买入信号会提醒，你确认才买）"
+                   + ("；同一比例也用在：" + "、".join(NM.qty(x, f"{a_:,} → {b_:,} 口") for x, a_, b_ in fx) if fx else ""))
+        elif c0:
+            n = int(rec["target"]) - c0["cur"]
+            fx = MO.core_effects(book, rec["pct"], skip=t, tag=tag)  # 规则同时拿两只以上核心 ETF 时：同一比例别的也跟着变
+            msg = (f"已写：{'卖出全部 ' + tl if int(rec['target']) <= 0 else tl + (' 加 ' if n > 0 else ' 卖 ') + f'{abs(n):,} 口'}"
+                   f"（闲置资金比例 {c0['pct']:g}% → {rec['pct']:g}%）→ {when}{'买入' if n > 0 else '卖出'}"
+                   + ("；同一比例也用在：" + "、".join(NM.qty(x, f"{a_:,} → {b_:,} 口") for x, a_, b_ in fx) if fx else ""))
+        if k == "buy":
+            row = next((r for r in (sm.get("suggest") or {}).get("rows") or [] if r.get("ticker") == t), None)
+            est = MO.fmt_target(rec)
+            if row and rec.get("unit") == "rule":
+                est = f"约 {int((row.get('buy') or {}).get('rule_shares') or 0):,} 股"
+            msg = (f"已写：买入 {tl}（{est}）→ {when}买入"
+                   + ("" if row and row.get("signal") else "；★ 还没有买入信号：是你自己的决定"))
+        if rec.get("fund") == "all":
+            fx = MO.core_effects(book, 0.0, keep_fixed=True)    # 固定口数同批取消 → 也按 0% 卖
+            etf = ("、".join(NM.qty(x, f"{a_:,} → 0 口") for x, a_, _b in fx) or "、".join(NM.qty(x, f"{u:,} → 0 口") for x, u in allp["cores"]))
+            held = [r for _s, r in sells if r["kind"] == "stock"]
+            ct_ = MO.core_tickers(book)
+            going_ = "、".join(f"{NM.label(x)}（{why_}）" for x, why_ in allp.get("skip") or [] if x not in ct_)   # 已有卖出全部的指令 / 已在卖出全部：不另外写
+            gone_c = "、".join(f"{NM.label(x)}（{why_}）" for x, why_ in allp.get("skip") or [] if x in ct_)     # 今天已卖光的核心 ETF（2026-10-16）
+            head = "执行时拿着的 " + tl + " 以外的个股和 ETF 全部卖出（包括写指令之后规则 / 别的指令买进的）；"
+            bt_ = ""                                            # 今天买进的个股（对账前，账本里还没有）：执行时一起卖（2026-10-16 复核：以前挡住不让写）
+            if allp.get("bought"):
+                bt_ = f"{allp.get('day_word') or '今天'}买进的：{NM.labels(allp['bought'])}（对账之后算持仓，执行时一起卖出）"
+            if held:                                            # 2026-10-15 复核：别的个股都已经有卖出指令时以前写「现在拿着的：（没有别的个股）」
+                head += ("现在拿着的：" + "、".join(NM.qty(r["t"], f"{r['sell']:,} 股") for r in held)
+                         + f"（之后 {MO.BLOCK_DEFAULT} 个交易日规则不自动买回；「交易」里可一次「恢复按规则」）"
+                         + (f"；已经在卖、不另外写的：{going_}" if going_ else "") + ("；" + bt_ if bt_ else ""))
+            elif going_:
+                head += f"别的个股都已经在卖、不另外写：{going_}" + ("；" + bt_ if bt_ else "")
+            else:
+                head += bt_ or "现在没有别的个股"
+            parts = [head] + ([f"不用再卖的 ETF：{gone_c}"] if gone_c else [])
+            fixed_ = [r["t"] for _s, r in sells if r["kind"] == "corefix"]
+            if fixed_:                                          # ETF 的口数变化只在比例那一句写一次（以前两处各写一遍，没固定的 1545 也写在「取消固定口数」里）
+                parts.append("取消固定口数：" + NM.labels(fixed_) + "（之后按比例 0% 卖出）")
+            if any(r["kind"] == "core" for _s, r in sells):
+                parts.append(f"闲置资金比例 {allp['core_pct']:g}% → 0%（" + (etf + "；" if etf else "")
+                             + "之后停买闲置资金 ETF，出现买入信号只提醒、你点「确认买入」才恢复）")
+            elif etf:
+                parts.append(f"闲置资金比例已经是 0%：{etf}（照旧卖出）")
+            if allp.get("also"):
+                parts.append("另外规则 / 别的指令开盘还会买：" + NM.labels(allp["also"]) + "（买进了的，执行时一起卖出）")
+            wa = MO.allin_when(now or now_jst(), book, tag)
+            msg = (f"已写：全部换成 {tl} → {wa}整批先卖后买（那次决策先过闸门；股数由执行器按全卖之后的钱定）；" + "；".join(parts)
+                   + "；全卖也不够 1 个单元就不买、留现金；决策时买入被挡 → 整批不做、什么都不动；开盘跳空 / 没成交则其他已卖、留现金、不自动重买"
+                   "；规则对别的票仍可能用现金开新仓")
+        elif sells:
+            msg += ("；凑钱先卖：" + "、".join(NM.qty(r['t'], f"{r['sell']:,} 股") for _s, r in sells)
+                    + (("（其余由没固定的核心 ETF 补：现金不够时执行器盘中先卖它们补足，这几笔卖出先成交再买）" if fill["intraday"] else
+                         "（其余由别的核心 ETF 照规则减少：现金不够时执行器在那次决策里先卖它们补足，再平衡带以内也卖）") if k == "corefix"
+                       else "（核心 ETF 那份执行器按当时还缺多少卖）")
+                    + ("；买入先过闸门，被挡则凑钱的卖出也不做；开盘跳空 / 价格更高没买到时，凑钱的卖出照样会卖" if k == "buy" else ""))
+        if paths.halt_file().exists() and k in MO.ORDER_KINDS + ("core",):
+            msg += "；★ HALT 生效中：解除之后才处理"
+        elif paths.halt_file().exists() and k == "corefix":                            # D7：固定口数读到就生效，ETF 的单等解除后的决策（与执行器写的同一句）
+            msg += f"；★ {MO.HALT_CORE_MSG}"
+        return msg
+
+    try:
+        msg = _msg()
+    except Exception:                                      # noqa: BLE001  说明拼不成（账本里读不了的数…）：指令已经写了，照实说
+        log.exception("面板写了指令 %s，说明没拼成", rec.get("id"))
+        msg = None
+    return True, _written(msg, rec), rec
 
 
 def _trigger_notify(tag: str, title: str, text: str, level: str = "warn") -> None:

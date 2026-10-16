@@ -12212,3 +12212,11 @@ deb8a46（对账之后的状态与说明：G7 / G8 / G11 / G16 / G17 / G22 / G26
   环境变量 `QBREAK_SIM_SETTINGS`（测试用）。今天对真的规则文件跑：只缺 1 条 `echo ~/qbreak-sim/quant_breakout/var/out/report.html`（日报说明书「file_path 用绝对路径」那句；
   Claude Code 对 echo 要不要确认没核实，加上无害；加不加等用户决定）。
 - tests/test_routines.py 加 8 项（假的桌面版运行记录 / 规则文件；QBREAK_DESKTOP_DIR、CLAUDE_CONFIG_DIR、QBREAK_SIM_SETTINGS）；conftest 让其余自检测试不看本机真的运行记录。
+
+- **面板写指令的说明（2026-10-16，事后；只改面板，不改规则 / 参数 / 执行器）**：面板日志 2026-10-12 14:53 手机「固定口数…」两次 500
+  （`panel.submit` 里说明的表没有 corefix → None + 字符串 TypeError；指令已经写进文件、手机只看到「出错」）。当天 38517c2 已补 corefix 的说明与兜底；
+  这次逐个种类复查（卖出 / 减仓 / 调仓 / 买入 / 比例 / 固定口数 / 解除 / 撤单 / 撤回 / 撤销撤回 / 入金出金 × 开盘前 / 盘中 / 收盘后 / 休市日 × HALT）：
+  现在已没有会得到 None 的种类，但还有一条能崩：请求里带内部字段（`fund:"all"` / `fund_for` / `batch` / `prev_pct`…，正常页面不会发）会原样写进去，
+  变成没有同批的「全部换成」买入，说明拼到一半 AttributeError（指令照样写进了文件）。现在面板写之前去掉这些内部字段（同批由面板自己算出来写）；
+  写进文件之后拼说明出错 → 记日志、照样回「已写：<指令>（说明没生成：到「交易」里看这条指令的状态）（指令 id）」，不再 500。
+  tests/test_panel_submit_kinds.py 加回归测试（每种指令 × 时段 × HALT 都回一句字符串；改动前 3 项失败）。
