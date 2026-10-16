@@ -3333,7 +3333,18 @@ def cmd_live_unified(a) -> int:
         if rc_ is not None:
             return rc_
     paper, tag, book = _liveu_tag(a)
+    if getattr(a, "preview", False):                          # 整组撤单的预览（只读：不连券商、不改账本、不拿锁；2026-10-16）
+        if not getattr(a, "group", False) or not getattr(a, "cancel", None):
+            print("--preview 只和 --cancel <cid> --group 一起用")
+            return 2
+        if getattr(a, "halt_first", False):
+            print("预览不建 HALT：去掉 --halt-first")
+            return 2
+        return _cancel_preview(a, tag, book, paper)
     halt_ = _halt_first(a)                                    # 「停并撤单」：HALT 最先建（不等账本检查、不等运行锁）
+    if getattr(a, "group", False) and not getattr(a, "cancel", None):   # 整组撤单要给一笔单（HALT 照样已经建了）
+        print("--group 要和一笔单的 cid 一起用：liveu.sh cancel <cid> --group")
+        return 2
     if not paper:                                             # 立花的账本读坏了 / 不见了（但有备份或 .corrupt）→ 停下，不悄悄从 ¥100 万重来
         from qbreak import book_backup
         why_ = book_backup.problem(book, _broker_args(a))
@@ -3468,9 +3479,10 @@ def _live_cancel(a, tag: str, book, paper: bool) -> int:
             holder["b"] = _cancel_broker(a, paper)
         return holder["b"]
     ol0 = _cancel_outlook(book, tag, asked=())                # 撤之前：今天会怎样（撤的那几笔当成还在；D5）
+    grp_ = {str(c): None for c in a.cancel} if (not req and getattr(a, "group", False) and a.cancel) else None   # --group：各自所在的整组
     try:
         res = LO.cancel_book(book, get_broker, None if req else (a.cancel or None), paper=paper, tag=tag, requests=req,
-                             source="面板的撤单指令" if req else "命令行")
+                             source="面板的撤单指令" if req else "命令行", groups=grp_)
     finally:
         b_ = holder.get("b")
         if b_ is not None and hasattr(b_, "logout"):          # 立花：用完登出（失败不影响结果）
@@ -3481,6 +3493,8 @@ def _live_cancel(a, tag: str, book, paper: bool) -> int:
     lines = LO.cancel_text(res)
     for ln in lines:
         print(ln)
+    if not req and any(g.get("state") == "wait" for g in (res.get("grp") or {}).values()):
+        print("过 1 分钟再运行同一条命令（买单的撤单立花确认了才撤卖单）")
     hints = []                                                # 撤之后会怎样：按每笔单的来源写（M5；2026-10-15：以前一律个股版的 CANCEL_HINT）
     for r in (res.get("done") or []) + (res.get("pending") or []):
         h = r.get("hint") or LO.CANCEL_HINT
@@ -3496,6 +3510,7 @@ def _live_cancel(a, tag: str, book, paper: bool) -> int:
     if ol0 is not None and (res["done"] or res.get("pending")):
         ol1 = _cancel_outlook(book, tag)
         skip = [r.get("cid") for r in (res.get("done") or []) + (res.get("pending") or [])] + [r.get("cid") for r in trade]
+        skip += [c for g in (res.get("grp") or {}).values() for c in g.get("members") or []]   # 整组撤单的成员：汇总行已经写了
         nw = [r for r in LO.new_wont(ol0, ol1 or {}, skip) if r.get("cls") != "halt"]
     for r in nw:
         ln = f"★ {LO.row_text(r)}"
@@ -3505,12 +3520,54 @@ def _live_cancel(a, tag: str, book, paper: bool) -> int:
     if getattr(a, "notify", False) and (res["done"] or res.get("pending") or res["failed"] or res["skipped"]):
         from qbreak import notify
         from qbreak.live_unified import mac_notify
-        title = (("★ 交易：" if trade else "") + f"qbreak {'模拟操盘' if paper else '立花实盘'} 撤单"
+        word = "整组撤单" if res.get("grp") else "撤单"
+        star = bool(trade or res.get("held")
+                    or any(g.get("state") in ("part", "gaveup", "none") for g in (res.get("grp") or {}).values()))
+        title = (("★ 交易：" if star else "") + "qbreak " + ("模拟操盘" if paper else "立花实盘") + " " + word
                  + (" ★ 有没撤成的" if res["failed"] else "") + ("（靠它的钱的买单不下 / 减股）" if trade else ""))
         body = lines + [f"撤掉的单 {x}" for x in dict.fromkeys(hints)]
         mac_notify(title, "；".join(lines)[:200])
-        notify.send(title, "\n".join(f"- {x}" for x in body), "warn" if res["failed"] or trade else "info")
+        notify.send(title, "\n".join(f"- {x}" for x in body), "warn" if res["failed"] or star else "info")
     return 1 if res["failed"] else 0
+
+
+def _cancel_preview(a, tag: str, book, paper: bool) -> int:
+    """整组撤单的预览（bash scripts/liveu.sh cancel-plan <cid>；只读：不连券商、不改账本、不拿锁；2026-10-16）：
+    这笔单所在的一组每一笔会怎样（与面板确认框同一个 live_ops.group_lines）。账本读不了 → 3；cid 不在账本里 → 1。"""
+    import json
+    from qbreak import live_ops as LO
+    from qbreak import manual_orders as MO
+    from qbreak.calendar_jp import now_jst
+    try:
+        b_ = json.loads(Path(book).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"★ 账本读不了（{type(e).__name__}）：预览不了")
+        return 3
+    if not isinstance(b_, dict):
+        print("★ 账本读不了：预览不了")
+        return 3
+    now = now_jst()
+    orders = [x for x in b_.get("orders") or [] if isinstance(x, dict)]
+    try:
+        asked = LO.asked_cids(b_, MO.unseen(tag, b_))
+    except Exception:                                     # noqa: BLE001  只是说明
+        asked = set()
+    rc = 0
+    for c in dict.fromkeys(str(x) for x in a.cancel):
+        o = next((x for x in orders if str(x.get("cid")) == c), None)
+        if o is None:
+            print(f"★ 账本里没有这笔单：{c}（已经对账过了 / cid 写错？）")
+            rc = 1
+            continue
+        side = "买" if o.get("side") == "BUY" else "卖"
+        mem = LO.group_of(o, orders, b_)
+        if len(mem) < 2:
+            print(f"{side} {_lab_cancel(o.get('ticker'))}（{c}）：这笔单不在一组里：撤单就是撤这一笔")
+            continue
+        print(f"整组撤单预览（不连券商、不改账本）：{side} {_lab_cancel(o.get('ticker'))}（{c}）所在的一组 {len(mem)} 笔")
+        for ln in LO.group_lines(o, orders, b_, now, paper, tag, asked):
+            print(ln)
+    return rc
 
 
 def _cancel_outlook(book, tag: str, asked=None) -> dict | None:
@@ -5564,6 +5621,11 @@ def main(argv=None) -> int:
                     help="撤单：撤执行器自己今天还挂着的单（SENT / PARTIAL）；不给 CID = 全部（bash scripts/liveu.sh cancel …；"
                          "只在你明确说「撤单」时运行）")
     lu.add_argument("--halt-first", action="store_true", help="--cancel 之前先建 HALT（「停并撤单」：bash scripts/liveu.sh halt-cancel）")
+    lu.add_argument("--group", action="store_true",
+                    help="整组撤单：撤 --cancel 那几笔单各自所在的一组（一起下的买单和卖单）；先撤买单，确认没成交再撤卖单"
+                         "（bash scripts/liveu.sh cancel <cid> --group；只在你明确说「撤单」时运行）")
+    lu.add_argument("--preview", action="store_true",
+                    help="只看整组撤单会撤哪些（不连券商、不改账本、不拿锁；bash scripts/liveu.sh cancel-plan <cid>）")
     lu.add_argument("--halt-drill", action="store_true",
                     help="HALT 演练（只用模拟账户、今天早上的运行完成之后）：建演练用的 HALT → 跑一次 → 删掉它（bash scripts/liveu.sh halt-drill）")
     lu.add_argument("--block-reason", default=None, metavar="TEXT",

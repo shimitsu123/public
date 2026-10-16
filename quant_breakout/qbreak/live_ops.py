@@ -418,6 +418,230 @@ def deps_of(o, orders) -> list:
             and c in [str(y) for y in (_g(x, "fund_src") or [])]]
 
 
+# ══════════════════════════ 同一组（一起下的买单和卖单）：整组撤单（2026-10-16）══════════════════════════
+# 2026-10-16 用户：「如果一起下的买单和卖单的话要可以一起进行撤单 而不是一个个撤单」—— 07:40 照固定口数排了「卖 1545（寄付，凑钱）+
+# 买 1482（等开盘后）」，08:04 先撤了买单、14 秒后又点卖单的撤单：两次。现在按单的用途认「同一组」（不加新字段，今天已有的账本也认得）：
+#   E1 拆成两笔的单（立花核心单的余数 cid + "-2"）；E2 早上的固定口数：core_fix 的买单 ↔ fix_fund 的卖单（phase 不是 now，两两相连）；
+#   E3 盘中的固定口数：core_fix 的买单 ↔ core_rule.fix_fund[票].cids 与 fund_src 里 fix_fund 的卖单；E4 盘中的手动买入 / 加仓 ↔ fund_src 里
+#   manual_fund 的卖单；E5 手动买入「从持仓平摊凑」/「全部换成」同一次写的个股卖出。
+# 不算成员：规则的单、照闲置资金比例调的核心单（含「全部换成」比例 0% 的 ETF 卖单）、单独下的手动卖出、早上覆盖整个决策的 fund_src、
+# 以前决策的单、没有 src 的旧账本。整组撤单：先撤买单，没有任何买单还可能花钱（成交过 / 还挂着 / 状态不明 / 你确认之后才出现）才撤卖单。
+GROUP_POLLS = 10                                     # 整组撤单里买单的撤单：立花最多查 10 次（每次 1 秒）
+GROUP_NEUTRAL = ("CANCELLED", "SKIPPED", "REJECTED", "EXPIRED", "UNFILLED", "MISSED", "RESOLVED")   # 这些状态 + 没成交 = 不再花钱
+GROUP_OPEN = ("PLANNED", "DEFERRED", "BLOCKED", "SENDING", "SENT", "PARTIAL", "ERROR")             # 还没结束的单
+
+
+def _grp_capable(o) -> bool:
+    """这笔单能不能是「同一组」的成员（规则的单、照比例调的核心单、旧账本的核心单不能）。"""
+    core = (_g(o, "kind") or "stock") == "core"
+    r = str(_g(o, "reason") or "")
+    if _g(o, "side") == "BUY":
+        return (core and src_of(o) == "core_fix") or r in ("manual_buy", "manual_add")
+    return (core and src_of(o) == "fix_fund") or r in ("manual_fund", "manual", "manual_trim")
+
+
+def _grp_key(o) -> tuple:
+    """成员的顺序：买单在前；同一方向里在交易所 / 已成交的在前；再按 cid。"""
+    return (0 if _g(o, "side") == "BUY" else 1, 0 if _g(o, "status") in AT_EXCH + ("FILLED",) else 1, str(_g(o, "cid")))
+
+
+def groups(orders, book: dict | None) -> dict[str, list[str]]:
+    """当前决策里一起下的单 → {cid: 同一组的成员 cid（买单在前）}（只放成员 ≥ 2 的；纯函数、只读；ExecOrder / dict 都行）。
+    面板（按钮与「同一组还有」）、手动指令的检查、撤单引擎、命令行的预览共用。"""
+    b = book or {}
+    by = {}
+    for o in orders or []:
+        if _in_current(o, b):
+            by[str(_g(o, "cid"))] = o
+    if len(by) < 2:
+        return {}
+    parent = {c: c for c in by}
+
+    def find(c: str) -> str:
+        while parent[c] != c:
+            parent[c] = parent[parent[c]]
+            c = parent[c]
+        return c
+
+    def link(x: str, y: str) -> None:
+        x, y = str(x), str(y)
+        if x in by and y in by and x != y:
+            parent[find(x)] = find(y)
+
+    def ph(o) -> str:
+        return _g(o, "phase") or "morning"
+
+    def core(o) -> bool:
+        return (_g(o, "kind") or "stock") == "core"
+    for c, o in by.items():                                # E1 拆成两笔的单
+        if c.endswith("-2") and c[:-2] in by and _grp_capable(o) and _grp_capable(by[c[:-2]]):
+            link(c, c[:-2])
+    eb = [c for c, o in by.items() if _g(o, "side") == "BUY" and core(o) and ph(o) != "now" and src_of(o) == "core_fix"]
+    es = [c for c, o in by.items() if _g(o, "side") == "SELL" and core(o) and ph(o) != "now" and src_of(o) == "fix_fund"]
+    for x in eb:                                           # E2 早上的固定口数：凑钱的卖单分不出为哪只 → 两两相连
+        for y in es:
+            link(x, y)
+    ff = (b.get("core_rule") or {}).get("fix_fund") or {}
+    for c, o in by.items():
+        if _g(o, "side") != "BUY" or ph(o) != "now":
+            continue
+        fs = [str(x) for x in (_g(o, "fund_src") or [])]
+        if core(o) and src_of(o) == "core_fix":            # E3 盘中的固定口数
+            f = ff.get(_g(o, "ticker")) if isinstance(ff, dict) else None
+            for s in ((f or {}).get("cids") or []) if isinstance(f, dict) else []:
+                if str(s) in by and _g(by[str(s)], "side") == "SELL":
+                    link(c, s)
+            for s in fs:
+                if s in by and _g(by[s], "side") == "SELL" and _g(by[s], "reason") == "fix_fund":
+                    link(c, s)
+        if _g(o, "reason") in ("manual_buy", "manual_add"):   # E4 盘中的手动买入 / 加仓
+            for s in fs:
+                if s in by and _g(by[s], "side") == "SELL" and _g(by[s], "reason") == "manual_fund":
+                    link(c, s)
+    items = [x for x in (((b.get("manual") or {}).get("items")) or {}).values() if isinstance(x, dict)]
+    if items:                                              # E5 手动买入「平摊凑」/「全部换成」同一次写的个股卖出
+        from .manual_orders import fund_companions
+        sells = None
+        for c, o in by.items():
+            if _g(o, "side") != "BUY" or _g(o, "reason") not in ("manual_buy", "manual_add"):
+                continue
+            it_b = _manual_item(b, o)
+            if not it_b or it_b.get("fund") not in ("split", "all"):
+                continue
+            ids = {r.get("id") for r in fund_companions(it_b, items)}
+            if sells is None:
+                sells = [(s, _manual_item(b, x)) for s, x in by.items()
+                         if _g(x, "side") == "SELL" and _g(x, "reason") in ("manual", "manual_trim")]
+            for s, it_s in sells:
+                if it_s and it_s.get("id") in ids:
+                    link(c, s)
+    comp: dict[str, list[str]] = {}
+    for c in by:
+        comp.setdefault(find(c), []).append(c)
+    out = {}
+    for cs in comp.values():
+        if len(cs) < 2:
+            continue
+        ms = sorted(cs, key=lambda c: _grp_key(by[c]))
+        for c in cs:
+            out[c] = list(ms)
+    return out
+
+
+_group_map = groups                                  # cancel_core 的参数也叫 groups
+
+
+def group_of(o, orders, book: dict | None) -> list:
+    """这笔单所在的一组（成员：ExecOrder / dict，买单在前）；不在一组里 → [o]。"""
+    g = groups(orders, book).get(str(_g(o, "cid")))
+    if not g:
+        return [o]
+    by = {str(_g(x, "cid")): x for x in orders}
+    return [by[c] for c in g if c in by]
+
+
+def grp_why(o, book: dict | None, now: dt.datetime, paper: bool) -> str | None:
+    """整组撤单里这笔现在能不能撤：= cancel_why；被挡、还没发到交易所（BLOCKED、没有注文番号）的当成计划（今天 15:30 之前在本地撤掉，
+    执行器不再重试）。面板的按钮、group_prune、check 与撤单引擎共用。"""
+    if _g(o, "status") == "BLOCKED" and not _g(o, "broker_id"):
+        d = dict(o) if isinstance(o, dict) else asdict(o)
+        d["status"] = "PLANNED"
+        return cancel_why(d, book, now, paper)
+    return cancel_why(o, book, now, paper)
+
+
+def _ord_txt(o) -> str:
+    """「买 1482 对冲版美国 7〜10 年国债：679 口」（代码带名字、口 / 股）。"""
+    n = int(_g(o, "sent_qty") or _g(o, "qty") or 0)
+    q_ = f"{n:,} {_unit(o)}"
+    return _side(o) + " " + _labq(_g(o, "ticker"), q_)
+
+
+def _spends(x, scope: set, pend: set, now: dt.datetime | None, fill) -> tuple[str, str] | None:
+    """整组撤单的闸门：这笔买单还可能花钱吗 →（代码, 理由）/ None。filled（成交过）/ new（你确认之后才出现 / 还会发）/
+    pending（撤单立花还没确认）/ live（没撤掉、还挂着）/ unknown（发送中 / 结果不明）。"""
+    s = _g(x, "status")
+    lab = _lab(_g(x, "ticker"))
+    q = int(_g(x, "filled_qty") or 0)
+    if q <= 0 and (s == "FILLED" or "撤单时已经全部成交" in str(_g(x, "note") or "")):
+        q = int(_g(x, "sent_qty") or _g(x, "qty") or 0)
+    if q > 0 or s == "FILLED":
+        return "filled", f"买 {lab} 已经成交 {q:,} {_unit(x)}"
+    neutral = s in GROUP_NEUTRAL
+    if str(_g(x, "cid")) not in scope and not neutral:
+        if s == "BLOCKED" and not blocked_retry(x, now, fill):
+            return None                                    # 被挡、今天不会再发：不花钱
+        return "new", f"买 {lab} 是你确认之后才出现的、没一起撤"
+    if s in CANCELLABLE:
+        if str(_g(x, "cid")) in pend:
+            return "pending", f"买 {lab} 的撤单立花还没确认（取消中）"
+        return "live", f"买 {lab} 没撤掉（还挂着）"
+    if s in ("SENDING", "ERROR"):
+        return "unknown", f"买 {lab} 状态不明（发送中 / 结果不明）"
+    if s in UNSENT:
+        return "new", f"买 {lab} 是你确认之后才出现的、没一起撤"
+    if s == "BLOCKED":
+        return ("new", f"买 {lab} 是你确认之后才出现的、没一起撤") if blocked_retry(x, now, fill) else None
+    return None
+
+
+def group_lines(o, orders, book: dict | None, now: dt.datetime, paper: bool, tag: str | None = None, asked=()) -> list[str]:
+    """整组撤单的确认框 / 命令行预览（只读）：怎么撤、每一笔会怎样、不是成员却受影响的买单、固定口数还有效、「全部换成」的说明。"""
+    import copy
+    import re
+    from .manual_orders import GROUP_MAX
+    asked = {str(c) for c in asked or ()}
+    mem = group_of(o, orders, book)
+    if len(mem) < 2:
+        return []
+    out = ["整组撤单：先撤买单，确认买单撤掉了（没成交）再撤卖单；买单已经成交 / 撤不掉 → 卖单不撤（不然钱不够）"]
+    if len(mem) > GROUP_MAX:
+        out.insert(0, f"这一组超过 {GROUP_MAX} 笔：请一笔笔撤，或在 Mac 对话里说「整组撤单」")
+    scope, dead = set(), set()
+    for x in mem:
+        c, s = str(_g(x, "cid")), _g(x, "status")
+        w = _ord_txt(x)
+        q = int(_g(x, "filled_qty") or 0)
+        if s == "CANCELLED":
+            m = re.search(r"你撤了单（(\d\d:\d\d)", str(_g(x, "note") or ""))
+            out.append(("· 已撤（" + m.group(1) + "）：" if m else "· 已撤：") + w)
+        elif q > 0 or s == "FILLED":
+            out.append("· 已成交：" + w + (" —— 不能撤；卖单因此不撤" if _g(x, "side") == "BUY" else ""))
+        elif c in asked:
+            out.append("· 撤单中：" + w)
+        else:
+            why = grp_why(x, book, now, paper)
+            if why is None:
+                out.append("· 撤：" + w + "（" + STATUS_TEXT.get(s, s) + "）")
+                scope.add(c)
+                if _g(x, "side") == "SELL":
+                    dead.add(c)
+            else:
+                out.append("· 撤不了：" + w + " —— " + why)
+    mids = {str(_g(x, "cid")) for x in mem}
+    try:                                                   # 不是成员、靠这组卖单的钱的买单：撤了之后会怎样（fund_cascade 预览）
+        cp = copy.deepcopy(list(orders))
+        cur = [x for x in cp if _in_current(x, book)]
+        for x in cur:
+            if str(_g(x, "cid")) in scope:
+                _set(x, status="CANCELLED")
+        cash = cash_hi(book, tag) - _reserve_of(book, paper)
+        for r in fund_cascade(cur, cash=cash, now=now, apply=False, dead=dead, fill=fill_day_of(book), queued=paper, book=book):
+            if str(_g(r["o"], "cid")) in mids or r["act"] == "keep":
+                continue
+            out.append("· 不跟着撤：买 " + _labq(_g(r["o"], "ticker"), f"{int(r['was']):,} {_unit(r['o'])}") + " —— " + str(r["note"]))
+    except Exception:                                      # noqa: BLE001  只是说明
+        pass
+    fx = _core_fix_of(book, tag)
+    for t in dict.fromkeys(_g(x, "ticker") for x in mem if _g(x, "side") == "BUY" and _g(x, "ticker") in fx):
+        out.append(f"固定口数 {_lab(t)} {int(fx[t]):,} 口还有效：撤了，下一次决策（{next_decision_text(now)}）还会再排；"
+                   "不要再排 → 「整组撤单并恢复按规则」")
+    if any(_g(x, "side") == "BUY" and (_manual_item(book or {}, x) or {}).get("fund") == "all" for x in mem
+           if _g(x, "reason") in ("manual_buy", "manual_add")):
+        out.append("「全部换成」的整批：核心 ETF 的卖单（闲置资金比例 0%）不在这一组里、不跟着撤；要恢复比例在 Mac 对话里说")
+    return out
+
+
 def next_decision_text(now: dt.datetime) -> str:
     """下一次决策（交易日 07:40）是哪天 →「MM/DD 07:40」（panel._next_decision 同一个算法）。"""
     d0 = now.date()
@@ -611,14 +835,19 @@ def skip_wont(o) -> bool:
 
 
 def asked_cids(book: dict | None, waiting=()) -> set:
-    """已经写了撤单（还没处理完）的单的 cid：指令文件里还没读的（被撤销的撤回不算）+ 账本里 pending 的撤单指令。"""
+    """已经写了撤单（还没处理完）的单的 cid：指令文件里还没读的（被撤销的撤回不算）+ 账本里 pending 的撤单指令（整组撤单：主单 + grp）。"""
     from . import manual_orders as MO
     waiting = [r for r in waiting or [] if isinstance(r, dict)]
     void = MO.voided(waiting)
     items = ((book or {}).get("manual") or {}).get("items") or {}
-    return ({str(r.get("cid")) for r in waiting if r.get("kind") == "cancel_order" and r.get("id") not in void}
-            | {str(it.get("cid")) for it in items.values() if isinstance(it, dict) and it.get("kind") == "cancel_order"
-               and it.get("status") == "pending"})
+    out = set()                                            # 整组撤单（grp；2026-10-16）：同一组的每一笔都算「撤单中」
+    for r in waiting:
+        if r.get("kind") == "cancel_order" and r.get("id") not in void:
+            out.update(MO.cancel_cids(r))
+    for it in items.values():
+        if isinstance(it, dict) and it.get("kind") == "cancel_order" and it.get("status") == "pending":
+            out.update(MO.cancel_cids(it))
+    return out
 
 
 def _fund_why(x: dict, asked: set, unit: str) -> tuple[str, list]:
@@ -923,6 +1152,11 @@ def not_today(ol: dict, now: dt.datetime) -> list[dict]:
 
 
 # ══════════════════════════ B1 撤单 ══════════════════════════
+def _in_current(o, book: dict | None) -> bool:
+    """这笔单是账本当前决策的吗（cancel_why 与「同一组」同一个判断）。"""
+    return _g(o, "decided_on") == ((book or {}).get("state") or {}).get("last_date")
+
+
 def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
     """这笔单现在能不能撤：能 → None；不能 → 理由。面板（显示「撤单」按钮）、手动指令的检查、执行器共用。
     执行器自己还没发到交易所的单（PLANNED / DEFERRED：计划 / 等开盘后）也能撤 = 执行器不再发（D2；2026-10-15：以前撤了凑钱的卖单，
@@ -931,7 +1165,7 @@ def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
     unsent = st in UNSENT
     if st not in CANCELLABLE and not unsent:
         return f"状态是「{STATUS_TEXT.get(st, st)}」：只撤还挂着的单（已下单 / 部分成交）或执行器还没发出的单（计划 / 等开盘后）"
-    if _g(o, "decided_on") != ((book or {}).get("state") or {}).get("last_date"):
+    if not _in_current(o, book):
         return "不是当前决策的单（已经对账过了）"
     f = fill_day_of(book)
     if f != now.date():
@@ -995,11 +1229,18 @@ def _withdraw_manual(book: dict, o, now: dt.datetime) -> str | None:
     return f"手动指令 {it.get('id')}" + (f"（{what}）" if what else "") + " 也撤回（之后不再下）"
 
 
-def _cancel_one(o, b, paper: bool, now: dt.datetime, source: str, polls: int) -> tuple[str, str]:
-    """撤一笔 → ("done" | "failed" | "skipped", 说明)。成功：o.status = CANCELLED（立花：filled_qty / filled_px 记撤单时的成交）。
-    执行器还没发出的单（PLANNED / DEFERRED）：不连券商，记 CANCELLED = 执行器不再发（D2；2026-10-15）。"""
+def _cancel_one(o, b, paper: bool, now: dt.datetime, source: str, polls: int, resend: bool = True,
+                blocked: bool = False) -> tuple[str, str]:
+    """撤一笔 → ("done" | "pending" | "failed" | "skipped", 说明)。成功：o.status = CANCELLED（立花：filled_qty / filled_px 记撤单时的成交）。
+    执行器还没发出的单（PLANNED / DEFERRED）：不连券商，记 CANCELLED = 执行器不再发（D2；2026-10-15）。
+    blocked（整组撤单；2026-10-16）：被挡、还没发到交易所（BLOCKED、没有注文番号）的也在本地撤（执行器不再重试）。
+    resend=False（立花，整组撤单的复查）：撤单已经受理过 → 不再发撤单、只查状态；还没到终态 → "pending"（说明不改）。"""
     n = int(_g(o, "sent_qty") or _g(o, "qty") or 0)
     who = f"，{source}" if source else ""
+    if blocked and _g(o, "status") == "BLOCKED" and not _g(o, "broker_id"):
+        _set(o, status="CANCELLED", fund_src=[],
+             note=f"你撤了单（{now:%H:%M}{who}）：被挡、还没发到交易所，执行器不再重试"[:300])
+        return "done", _g(o, "note")
     if _g(o, "status") in UNSENT:
         _set(o, status="CANCELLED", fund_src=[],
              note=f"你撤了单（{now:%H:%M}{who}）：还没发到交易所，执行器不再发"[:300])
@@ -1013,11 +1254,12 @@ def _cancel_one(o, b, paper: bool, now: dt.datetime, source: str, polls: int) ->
         return "done", o.note
     if getattr(b, "dry_run", False):
         return "skipped", "dry-run：不撤"
-    ok = False
-    try:
-        ok = bool(b.cancel_order(o.broker_id, o.order_date))
-    except Exception as e:                                 # noqa: BLE001  适配器本身不抛；抛了也当没撤成，下面再查一次状态
-        log.warning("撤单出错 %s：%s", o.cid, type(e).__name__)
+    ok = not resend                                        # 复查：撤单已经受理过（不再发）
+    if resend:
+        try:
+            ok = bool(b.cancel_order(o.broker_id, o.order_date))
+        except Exception as e:                             # noqa: BLE001  适配器本身不抛；抛了也当没撤成，下面再查一次状态
+            log.warning("撤单出错 %s：%s", o.cid, type(e).__name__)
     r, err = None, ""
     for i in range(max(1, int(polls))):
         try:
@@ -1047,6 +1289,8 @@ def _cancel_one(o, b, paper: bool, now: dt.datetime, source: str, polls: int) ->
     if ok and not fin:                                     # 撤单受理了、但单还没到终态（取消中 / 正在撮合）：状态不改成「已撤单」
         if q:                                              # （撤单可能失败：那时单还挂着；明天早上的对账按实际成交记）
             o.status, o.filled_qty, o.filled_px = "PARTIAL", int(q), float(px)
+        if not resend:                                     # 复查还没到终态：说明不改（第一次撤的时候已经写了）
+            return "pending", "撤单已受理，立花还在处理" + (f"（{name}）" if name else "")
         o.note = (f"你撤了单（{now:%H:%M}{who}）：撤单已受理，立花还在处理"
                   + (f"（{name}）" if name else "") + (f"，查状态失败：{err}" if err and r is None else "")
                   + "；过一会儿在面板 / 立花网站看是否撤掉（还挂着可以再撤）；明天早上的对账按实际成交记")[:300]
@@ -1059,18 +1303,38 @@ def _cancel_one(o, b, paper: bool, now: dt.datetime, source: str, polls: int) ->
 
 def cancel_core(orders: list, book: dict, get_broker, cids=None, *, paper: bool, now: dt.datetime, source: str = "",
                 polls: int = POLLS, deps=None, cash=None, need=None, lot_of=None, tag: str | None = None,
-                reserve: float = 0.0, queued: bool | None = None) -> dict:
+                reserve: float = 0.0, queued: bool | None = None, groups=None, waits=None) -> dict:
     """撤单的核心（执行器 / 不建引擎的 cancel_book 共用）。orders：ExecOrder 列表（原地改）；get_broker()：要撤交易所的单时才取券商
-    （没有要撤的 / 只撤执行器还没发出的单就不连券商）；cids=None → 今天全部还挂着的执行器单（只撤交易所里的：停并撤单的口径）。
-    撤了凑钱的卖单（D2；2026-10-15）：deps（{cid: "cancel" | "keep"} 或一个值）="cancel" → 靠它的钱、还没发出的买单一起撤
-    （CANCELLED，手动指令也撤回）；其余（"keep" / 没写）→ fund_cascade 按现在能用的钱重算（照常 / 减股 / 不下 + ★ 交易 提醒）。
-    盘中为手动买入凑钱的核心卖单（fund_wait）被撤 → 那条买入默认也撤回（M16；deps="keep" 时留着、按现金重新算）。
+    （没有要撤的 / 只撤执行器还没发出的单就不连券商）；cids=None → 今天全部还挂着的执行器单（只撤交易所里的：停并撤单的口径；买单在前，
+    不设闸门 —— 紧急「全撤」，立花现物的买单只按发出那一刻的余力下，不会透支）。
+    撤了凑钱的卖单（D2；2026-10-15）：deps（{cid: "cancel" | "keep"} 或一个值）="cancel" → 靠它的钱的买单一起撤
+    （2026-10-16 起与整组撤单同一个引擎：先撤买单，买单已经成交 / 撤不掉 → 卖单不撤）；其余（"keep" / 没写）→ fund_cascade 按现在能用的钱
+    重算（照常 / 减股 / 不下 + ★ 交易 提醒）。盘中为手动买入凑钱的核心卖单（fund_wait）被撤 → 那条买入默认也撤回（M16；deps="keep" 时留着、
+    按现金重新算）。
+    整组撤单（2026-10-16 用户：一起下的买单和卖单一起撤）：groups = {主单 cid: 你确认过的同一组其他单 | None（命令行 --group = 现在能撤的全部）}，
+    waits = {主单 cid: {"wait": [撤单还没确认的买单], "since": 开始等的时刻, "all": [成员]}}（还在等的指令）。成员在这次运行开头算一次
+    （本地撤单会清空 fund_src）。先撤买单（交易所里的在前），没有任何买单还可能花钱（_spends）才撤卖单；立花买单的撤单还没确认 →
+    卖单先不撤（wait：约 1 分钟后再查，最多 10 分钟 → gaveup）。
     cash：重算用的钱（数或函数；没给 → 模拟账户 = 模拟券商的现金 − 排队的寄付买单，立花 = 券商余力 − 出金预留 reserve，没连券商 → cash_hi）。
     返回 {"done", "pending", "failed", "skipped": [{cid, ticker, side, qty, why, kind, hint}], "events": [(级别, 文字)],
-    "by_cid": {cid: (结果, 说明)}, "fund": [cascade_rows]}。"""
-    res = {"done": [], "pending": [], "failed": [], "skipped": [], "events": [], "by_cid": {}, "fund": []}
+    "by_cid": {cid: (结果, 说明)}, "fund": [cascade_rows], "grp": {主单: {state, n, members, wait, since, kept, line}}, "held": [闸门留下的卖单]}。"""
+    from .manual_orders import GROUP_WAIT_MAX_S
+    res = {"done": [], "pending": [], "failed": [], "skipped": [], "events": [], "by_cid": {}, "fund": [], "grp": {}, "held": []}
     by = {o.cid: o for o in orders}
-    targets = []
+    gsel = dict(groups or {})
+    gw = dict(waits or {})
+    mode = deps if isinstance(deps, dict) else {}
+
+    def m_of(c):
+        return mode.get(c) if isinstance(deps, dict) else deps
+
+    def skip_rec(c, o, why):
+        rec = {"cid": c, "ticker": _g(o, "ticker") if o else "", "side": _g(o, "side") if o else "",
+               "qty": int(_g(o, "sent_qty") or _g(o, "qty") or 0) if o else 0, "why": why,
+               "kind": (_g(o, "kind") or "stock") if o else ""}
+        res["skipped"].append(rec)
+        res["by_cid"][c] = ("skipped", why)
+    targets, jobs = [], []
     if cids is None:
         targets = [o for o in orders if o.status in CANCELLABLE and cancel_why(o, book, now, paper) is None]
         if not targets:
@@ -1078,15 +1342,22 @@ def cancel_core(orders: list, book: dict, get_broker, cids=None, *, paper: bool,
     else:
         for c in dict.fromkeys(str(x) for x in cids):
             o = by.get(c)
+            if c in gsel or c in gw:                       # 整组撤单：主单本身不先查（复查时主单可能已经撤了），只要在账本里
+                if o is None:
+                    skip_rec(c, None, "账本里没有这笔单（已经对账过了 / cid 写错？）")
+                else:
+                    jobs.append((c, False))
+                continue
             why = "账本里没有这笔单（已经对账过了 / cid 写错？）" if o is None else cancel_why(o, book, now, paper)
             if why:
-                rec = {"cid": c, "ticker": _g(o, "ticker") if o else "", "side": _g(o, "side") if o else "",
-                       "qty": int(_g(o, "sent_qty") or _g(o, "qty") or 0) if o else 0, "why": why,
-                       "kind": (_g(o, "kind") or "stock") if o else ""}
-                res["skipped"].append(rec)
-                res["by_cid"][c] = ("skipped", why)
+                skip_rec(c, o, why)
+                continue
+            if o.side == "SELL" and m_of(c) == "cancel":    # 以前的「一起撤买单」：同一个引擎（先撤买单、闸门），保留以前的写法
+                jobs.append((c, True))
                 continue
             targets.append(o)
+    targets.sort(key=lambda o: 0 if o.side == "BUY" else 1)   # 买单在前（稳定排序）
+    G0 = _group_map(orders, book) if jobs else {}         # 成员只在运行开头算一次
     hints = {o.cid: cancel_hint(o, book, now, tag) for o in targets}       # 撤之前算（状态还没改）
     holder: dict = {}
 
@@ -1096,57 +1367,26 @@ def cancel_core(orders: list, book: dict, get_broker, cids=None, *, paper: bool,
         return holder["b"]
     if any(o.status in CANCELLABLE for o in targets):
         broker()
-    mode = deps if isinstance(deps, dict) else {}
     fill = fill_day_of(book)
-    for o in targets:
-        kind, why = _cancel_one(o, holder.get("b"), paper, now, source, polls)
-        n = int(o.sent_qty or o.qty)
-        rec = {"cid": o.cid, "ticker": o.ticker, "side": o.side, "qty": n, "why": why, "kind": o.kind or "stock", "hint": hints[o.cid]}
+    word = {"done": "撤掉了 —— ", "pending": "撤单已受理 —— "}
+
+    def record(kind, x, why, hint=None, ev=None, lvl=None):
+        n_ = int(_g(x, "sent_qty") or _g(x, "qty") or 0)
+        rec = {"cid": x.cid, "ticker": x.ticker, "side": x.side, "qty": n_, "why": why, "kind": x.kind or "stock"}
+        if hint is not None:
+            rec["hint"] = hint
         if kind in ("done", "pending"):
-            w = _withdraw_manual(book, o, now)
+            w = _withdraw_manual(book, x, now)
             if w:
                 rec["why"] = f"{why}；{w}"
         res[kind].append(rec)
-        res["by_cid"][o.cid] = (kind, rec["why"])
-        lvl = "info" if kind in ("done", "pending") else "warn"
-        res["events"].append((lvl, f"撤单 {_side(o)} {_labq(o.ticker, f'{n:,} {_unit(o)}')}（{o.cid}）："
-                                   + {"done": "撤掉了 —— ", "pending": "撤单已受理 —— "}.get(kind, "没撤 —— ") + rec["why"]))
-        if kind not in ("done", "pending") or o.side != "SELL":
-            continue
-        m = mode.get(o.cid) if isinstance(deps, dict) else deps
-        if m == "cancel":                                  # 你选了「一起撤买单」：靠它的钱、还没发出的买单一起撤（执行器不再发）
-            for x in deps_of(o, orders):
-                h = cancel_hint(x, book, now, tag)
-                x.status, x.fund_src = "CANCELLED", []
-                x.note = f"你撤了单（{now:%H:%M}{'，' + source if source else ''}）：和凑钱的卖单 {_lab(o.ticker)} 一起撤，执行器不再发"[:300]
-                xr = {"cid": x.cid, "ticker": x.ticker, "side": x.side, "qty": int(x.qty), "why": x.note, "kind": x.kind or "stock",
-                      "hint": h}
-                w = _withdraw_manual(book, x, now)
-                if w:
-                    xr["why"] = f"{x.note}；{w}"
-                res["done"].append(xr)
-                res["by_cid"][x.cid] = ("done", xr["why"])
-                res["events"].append(("info", f"撤单 买 {_labq(x.ticker, f'{int(x.qty):,} {_unit(x)}')}（{x.cid}）：撤掉了 —— {xr['why']}"))
-            for x in [y for y in orders if _g(y, "side") == "BUY" and _g(y, "status") in CANCELLABLE + ("FILLED",)
-                      and o.cid in [str(c) for c in (_g(y, "fund_src") or [])] and str(_g(y, "cid")) not in res["by_cid"]]:
-                # 已经发到交易所的（09:05 / 09:20 的开盘后补单在你点之前发出了；页面是旧的）：也撤（复核 R3，2026-10-16：以前只撤还没发出的，
-                # 发出的那笔留在交易所、推送也不提）；撤不了（已经成交 / 模拟账户已撮合）→ 写明
-                n_ = int(_g(x, "sent_qty") or _g(x, "qty") or 0)
-                what = f"买 {_labq(x.ticker, f'{n_:,} {_unit(x)}')}（{x.cid}）"
-                why_x = cancel_why(x, book, now, paper)
-                if why_x:
-                    res["skipped"].append({"cid": x.cid, "ticker": x.ticker, "side": x.side, "qty": n_, "kind": x.kind or "stock",
-                                           "why": f"已经发到交易所，没一起撤：{why_x}"})
-                    res["by_cid"][x.cid] = ("skipped", why_x)
-                    res["events"].append(("warn", f"{TRADE_HEAD}：{what}：已经发到交易所，没一起撤 —— {why_x}"))
-                    continue
-                h = cancel_hint(x, book, now, tag)
-                kx, wx = _cancel_one(x, broker(), paper, now, source, polls)
-                res[kx].append({"cid": x.cid, "ticker": x.ticker, "side": x.side, "qty": n_, "why": wx, "kind": x.kind or "stock", "hint": h})
-                res["by_cid"][x.cid] = (kx, wx)
-                res["events"].append(("info" if kx in ("done", "pending") else "warn",
-                                      f"撤单 {what}（和凑钱的卖单 {_lab(o.ticker)} 一起撤）："
-                                      + {"done": "撤掉了 —— ", "pending": "撤单已受理 —— "}.get(kx, "★ 没撤 —— ") + wx))
+        res["by_cid"][x.cid] = (kind, rec["why"])
+        if ev is None:
+            ev = f"撤单 {_ord_txt(x)}（{x.cid}）：" + word.get(kind, "没撤 —— ") + rec["why"]
+        res["events"].append((lvl or ("info" if kind in ("done", "pending") else "warn"), ev))
+        return rec
+
+    def m16(o, m):
         for it in (((book or {}).get("manual") or {}).get("items") or {}).values():   # 盘中为手动买入凑钱的核心卖单（M16）
             if o.cid not in [str(c) for c in it.get("fund_wait") or []] or it.get("status") != "pending":
                 continue
@@ -1158,6 +1398,18 @@ def cancel_core(orders: list, book: dict, get_broker, cids=None, *, paper: bool,
             for f in ("wait", "hold", "tried", "fund_wait"):
                 it.pop(f, None)
             res["events"].append(("info", f"手动指令 {it.get('id')}（买 {_lab(it.get('ticker'))}）：凑钱的卖单被撤 → 也撤回"))
+    for o in targets:
+        if o.cid in res["by_cid"] or o.status == "CANCELLED":
+            continue
+        kind, why = _cancel_one(o, holder.get("b"), paper, now, source, polls)
+        record(kind, o, why, hints[o.cid])
+        if kind in ("done", "pending") and o.side == "SELL":
+            m16(o, m_of(o.cid))
+    pend: set = set()                                      # 这次运行里撤单还没确认的买单
+    seen: set = set()
+    for a, legacy in jobs:
+        _group_job(a, legacy, orders, by, book, G0, gsel, gw, res, record, m16, broker, holder, pend, seen,
+                   paper=paper, now=now, source=source, polls=polls, tag=tag, fill=fill, wait_max=GROUP_WAIT_MAX_S)
     if res["done"] or res["pending"]:
         q = paper if queued is None else queued
 
@@ -1181,9 +1433,172 @@ def cancel_core(orders: list, book: dict, get_broker, cids=None, *, paper: bool,
     return res
 
 
+def _group_job(a, legacy, orders, by, book, G0, gsel, gw, res, record, m16, broker, holder, pend, seen, *, paper, now, source,
+               polls, tag, fill, wait_max) -> None:
+    """整组撤单的一组（cancel_core 用）：A 先撤买单 → B 闸门（_spends）→ C 没有买单还可能花钱才撤卖单 → D 不然卖单一笔都不撤。
+    legacy：以前的「一起撤买单」（卖单 + 靠它的钱的买单；说明照旧写）。"""
+    o0 = by[a]
+    w0 = gw.get(a) or {}
+    if legacy:
+        mem = [o0] + [y for y in orders if y.side == "BUY" and _in_current(y, book)
+                      and a in [str(c) for c in (y.fund_src or [])]]
+        dep = {x.cid for x in deps_of(o0, orders)}
+        scope = {x.cid for x in mem}
+    else:
+        cs = list(G0.get(a) or [a])
+        conf = gsel.get(a, [])
+        for c in list(w0.get("all") or []) + (list(conf) if conf else []):   # 还在等的成员 + 你确认过的（还在账本里的）
+            if str(c) in by and str(c) not in cs:
+                cs.append(str(c))
+        mem = sorted([by[c] for c in cs if c in by], key=_grp_key)
+        dep = set()
+        if conf is None:                                   # 命令行 --group：现在能撤的全部
+            scope = {x.cid for x in mem if grp_why(x, book, now, paper) is None} | {a}
+        else:
+            scope = ({str(c) for c in conf} | {a}) & {x.cid for x in mem}
+    wait_in = {str(c) for c in w0.get("wait") or []}
+    since = _tsj(w0.get("since")) or now
+    gp = max(int(polls), GROUP_POLLS)
+    miss: list[str] = []
+    bad = False                                            # 有单被拒（grp_why）/ 撤单失败（「一笔都没撤成」要有这个）
+    sl = _lab(o0.ticker)
+    for x in sorted([y for y in mem if y.side == "BUY"], key=lambda y: 0 if y.status in AT_EXCH else 1):   # A. 买单
+        if x.cid in res["by_cid"] or x.cid in seen or x.status == "CANCELLED":
+            continue
+        if legacy and x.cid in dep:                        # 以前的写法：还没发出的买单在本地撤
+            h = cancel_hint(x, book, now, tag)
+            x.status, x.fund_src = "CANCELLED", []
+            x.note = f"你撤了单（{now:%H:%M}{'，' + source if source else ''}）：和凑钱的卖单 {sl} 一起撤，执行器不再发"[:300]
+            seen.add(x.cid)
+            record("done", x, x.note, h, lvl="info")
+            continue
+        recheck = False
+        if x.cid in wait_in and x.status in CANCELLABLE and grp_why(x, book, now, paper) is None:   # 复查：撤单已经受理过
+            h = cancel_hint(x, book, now, tag)
+            kx, wx = _cancel_one(x, broker(), paper, now, source, gp, resend=False)
+            recheck = True
+        elif x.cid in scope and grp_why(x, book, now, paper) is None:
+            h = cancel_hint(x, book, now, tag)
+            kx, wx = _cancel_one(x, broker() if x.status in CANCELLABLE else holder.get("b"), paper, now, source, gp, blocked=True)
+        else:
+            if legacy and x.status in CANCELLABLE + ("FILLED",):   # 已经发到交易所、撤不了（以前的写法）
+                why_x = grp_why(x, book, now, paper) or "撤不了"
+                what = f"{_ord_txt(x)}（{x.cid}）"
+                seen.add(x.cid)
+                rec = {"cid": x.cid, "ticker": x.ticker, "side": x.side, "qty": int(x.sent_qty or x.qty), "kind": x.kind or "stock",
+                       "why": f"已经发到交易所，没一起撤：{why_x}"}
+                res["skipped"].append(rec)
+                res["by_cid"][x.cid] = ("skipped", why_x)
+                res["events"].append(("warn", f"{TRADE_HEAD}：{what}：已经发到交易所，没一起撤 —— {why_x}"))
+            elif not legacy and (x.cid in scope or x.cid in wait_in) and x.status in GROUP_OPEN and not int(x.filled_qty or 0):
+                why_x = grp_why(x, book, now, paper)       # 范围里的买单现在撤不了（不是今天的单 / 已经收盘…）：写出来
+                if why_x:
+                    seen.add(x.cid)
+                    record("skipped", x, why_x)
+                    miss.append(f"买 {_lab(x.ticker)} 撤不了：{why_x}")
+                    bad = True
+            continue
+        seen.add(x.cid)
+        if kx == "failed":
+            bad = True
+        if kx == "pending":
+            pend.add(x.cid)
+            if recheck:                                    # 复查还在等：只记在这一组的 wait 里（不推送）
+                continue
+        ev = None
+        if legacy:
+            ev = (f"撤单 {_ord_txt(x)}（{x.cid}）（和凑钱的卖单 {sl} 一起撤）："
+                  + {"done": "撤掉了 —— ", "pending": "撤单已受理 —— "}.get(kx, "★ 没撤 —— ") + wx)
+        record(kx, x, wx, h, ev=ev)
+    reasons = []                                           # B. 闸门：这一组里还可能花钱的买单
+    for x in mem:
+        if x.side == "BUY":
+            r = _spends(x, scope, pend, now, fill)
+            if r:
+                reasons.append(r)
+    sells = sorted([y for y in mem if y.side == "SELL" and y.cid in scope], key=lambda y: 0 if y.status in AT_EXCH else 1)
+    open_s = [y for y in sells if y.status in GROUP_OPEN and y.cid not in res["by_cid"] and y.cid not in seen]
+    state = None
+    kept: list[str] = []
+    rtxt = "；".join(t for _c, t in reasons)
+    if not reasons:                                        # C. 没有买单还可能花钱：撤卖单
+        for y in sells:
+            if y.cid in res["by_cid"] or y.cid in seen or y.status == "CANCELLED":
+                continue
+            if y.status not in GROUP_OPEN:
+                q = int(y.filled_qty or 0)
+                if y.status == "FILLED":
+                    q = max(q, int(y.sent_qty or y.qty or 0))
+                if q > 0:
+                    miss.append(f"卖 {_lab(y.ticker)} 已经成交 {q:,} {_unit(y)}")
+                continue
+            seen.add(y.cid)
+            why = grp_why(y, book, now, paper)
+            if why:
+                record("skipped", y, why)
+                miss.append(f"卖 {_lab(y.ticker)} 撤不了：{why}")
+                bad = True
+                continue
+            h = cancel_hint(y, book, now, tag)
+            ky, wy = _cancel_one(y, broker() if y.status in CANCELLABLE else holder.get("b"), paper, now, source, polls, blocked=True)
+            record(ky, y, wy, h)
+            if ky in ("done", "pending"):
+                m16(y, "cancel")
+            else:
+                miss.append(f"卖 {_lab(y.ticker)} 没撤：{wy}")
+                bad = bad or ky == "failed"
+    else:                                                  # D. 有买单还可能花钱：卖单一笔都不撤
+        codes = {c for c, _t in reasons}
+        if codes == {"pending"} and not legacy:
+            state = "gaveup" if since + dt.timedelta(seconds=wait_max) <= now else "wait"
+        held = "同一组的" + rtxt + "：卖单不撤（撤了买的钱不够）"
+        for y in open_s:
+            kept.append(y.cid)
+            if state == "wait":
+                continue
+            seen.add(y.cid)
+            n_ = int(y.sent_qty or y.qty)
+            res["skipped"].append({"cid": y.cid, "ticker": y.ticker, "side": y.side, "qty": n_, "why": held, "kind": y.kind or "stock"})
+            res["by_cid"][y.cid] = ("skipped", held)
+            res["held"].append(y.cid)
+            if legacy:
+                res["events"].append(("warn", f"{TRADE_HEAD}：{_ord_txt(y)}（{y.cid}）没撤 —— {held}"))
+    if legacy:
+        return
+    ncan = sum(1 for x in mem if x.cid in scope and (x.status == "CANCELLED" or x.cid in pend))
+    left = [x for x in mem if x.cid in scope and x.status in GROUP_OPEN and x.cid not in pend]
+    why_all = "；".join(miss + ([rtxt + "：卖单不撤（撤了买的钱不够）"] if reasons else []))
+    if state is None:
+        if not reasons and not miss and not left:
+            state = "all"
+        elif ncan == 0 and bad:
+            state = "none"
+        else:
+            state = "part"
+    n = len(mem)
+    head = "整组撤单（" + str(n) + " 笔：" + _side(o0) + " " + sl + " 这一组）"
+    if state == "all":
+        line = head + "：都撤了"
+    elif state == "wait":
+        line = (head + "：买单已发撤单、立花还没确认 → 卖单先不撤，约 1 分钟后再查（" + f"{since:%H:%M}" + " 起，最多等 "
+                + str(wait_max // 60) + " 分钟）")
+    elif state == "gaveup":
+        line = ("★ " + head + "：买单的撤单立花 " + str(wait_max // 60) + " 分钟还没确认 → 卖单没撤。请在立花网站 / 手机网站"
+                "（https://kabuka.e-shiten.jp/mfds_smp.php）看买单撤掉没有；撤掉了再点卖单的「撤单」")
+    elif state == "part":
+        line = "★ " + head + "：只撤了一部分 —— " + (why_all or "有单没撤")
+    else:
+        line = "★ " + head + "：一笔都没撤成 —— " + (why_all or "有单没撤")
+    if state in ("part", "gaveup", "none"):
+        res["events"].append(("warn", line))
+    res["grp"][a] = {"state": state, "n": n, "members": [x.cid for x in mem],
+                     "wait": [x.cid for x in mem if x.side == "BUY" and x.cid in pend] if state == "wait" else [],
+                     "since": since.isoformat(timespec="seconds"), "kept": kept, "line": line}
+
+
 def cancel_text(res: dict) -> list[str]:
     """撤单结果的几行（命令行 / 通知）：「撤掉了：卖 1545 纳斯达克 100 4,110 口（U…）—— …」（代码 + 名字、口 / 股；2026-10-15）。"""
-    out = []
+    out = [g.get("line") for g in (res.get("grp") or {}).values() if g.get("line")]   # 整组撤单的汇总行在最前面（2026-10-16）
     for k, head in (("done", "撤掉了"), ("pending", "撤单已受理（立花还在处理）"), ("failed", "★ 没撤成"), ("skipped", "没撤")):
         for r in res.get(k) or []:
             q = int(r.get("qty") or 0)
@@ -1211,9 +1626,11 @@ def _reserve_of(book: dict | None, paper: bool) -> float:
 
 
 def cancel_book(path, get_broker, cids=None, *, paper: bool, tag: str | None = None, requests: bool = False,
-                clock=None, source: str = "", polls: int = POLLS) -> dict:
+                clock=None, source: str = "", polls: int = POLLS, groups=None) -> dict:
     """不建引擎的撤单（run.py live-u --cancel / --phase cancel）：读账本 → 撤 → 存账本（存之前先备份）。
     requests=True（--phase cancel，面板叫）：读手动指令文件里的「撤单」指令（kind cancel_order），撤完把结果记进那条指令。
+    整组撤单（grp；2026-10-16）：买单的撤单立花还没确认 → 指令保持 pending、记 grp_wait / recheck_at（约 1 分钟后再查，最多 10 分钟）；
+    groups：命令行 --group（{cid: None}）。
     返回 cancel_core 的结果 + "items"（处理了的撤单指令 [(id, 状态, 说明)]）。"""
     from . import manual_orders as MO
     from .book_backup import backup
@@ -1223,22 +1640,41 @@ def cancel_book(path, get_broker, cids=None, *, paper: bool, tag: str | None = N
     book = read_json(path, {}) or {}
     msgs: list[tuple[str, str]] = []
     items: list[dict] = []
+    waits: dict = {}
     if requests and tag:
         man = MO.Manual(book, tag, clock)
         msgs = man.ingest(only=("cancel_order",))
-        items = man.pending(("cancel_order",))
+        items = [it for it in man.pending(("cancel_order",)) if MO._recheck_due(it, now)]   # 还没到复查时刻的整组撤单：原封不动
         cids = [str(it.get("cid") or "") for it in items]
+        groups = {str(it.get("cid") or ""): list(it.get("grp") or []) for it in items if it.get("grp")}
+        waits = {str(it.get("cid") or ""): {"wait": list(it.get("grp_wait") or []), "since": it.get("grp_wait0"),
+                                            "all": list(it.get("grp_all") or [])} for it in items if it.get("grp_wait")}
     orders = [ExecOrder.from_dict(o) for o in book.get("orders") or []]
     if requests and not items:
-        res = {"done": [], "pending": [], "failed": [], "skipped": [], "events": [], "by_cid": {}, "fund": [],
+        res = {"done": [], "pending": [], "failed": [], "skipped": [], "events": [], "by_cid": {}, "fund": [], "grp": {}, "held": [],
                "note": "没有要处理的撤单指令"}
     else:
         deps = {str(it.get("cid") or ""): it.get("deps") for it in items if it.get("deps")} if items else None
         res = cancel_core(orders, book, get_broker, cids, paper=paper, now=now, source=source, polls=polls, deps=deps, tag=tag,
-                          reserve=_reserve_of(book, paper))
+                          reserve=_reserve_of(book, paper), groups=groups or None, waits=waits or None)
     done_items = []
+    stamp0 = now.isoformat(timespec="seconds")
     for it in items:
-        kind, why = res["by_cid"].get(str(it.get("cid") or ""), ("skipped", "没处理"))
+        c = str(it.get("cid") or "")
+        g = (res.get("grp") or {}).get(c) if (it.get("grp") or it.get("grp_wait")) else None
+        if g is not None and g["state"] == "wait":         # 立花还没确认买单的撤单：保持 pending，约 1 分钟后再查
+            it.update(grp_wait=list(g["wait"]), grp_all=list(g["members"]), msg=g["line"][:300],
+                      recheck_at=(now + dt.timedelta(seconds=MO.GROUP_RECHECK_S)).isoformat(timespec="seconds"))
+            it.setdefault("grp_wait0", stamp0)
+            done_items.append((it["id"], "pending", it["msg"]))
+            continue
+        if g is not None:
+            for f in ("grp_wait", "grp_wait0", "recheck_at"):
+                it.pop(f, None)
+            it.update(status="rejected" if g["state"] == "none" else "done", done_on=now.date().isoformat(), msg=g["line"][:300])
+            done_items.append((it["id"], it["status"], it["msg"]))
+            continue
+        kind, why = res["by_cid"].get(c, ("skipped", "没处理"))
         it.update(status="done" if kind in ("done", "pending") else "rejected", done_on=now.date().isoformat(), msg=why[:300])
         done_items.append((it["id"], it["status"], it["msg"]))
     res["items"] = done_items
@@ -1626,6 +2062,7 @@ def save_book(path, book: dict, st=None, now: dt.datetime | None = None) -> None
 __all__ = ["CANCELLABLE", "STATUS_TEXT", "CANCEL_HINT", "CANCEL_HINT_CORE", "RESOLVE_NOTE", "cancel_why", "cancel_core", "cancel_book", "cancel_text",
            "DEP_OPEN", "SRC_WORD", "blocked_retry", "src_done", "fund_srcs", "orphan", "busy", "src_text", "fund_cascade",
            "cascade_events", "cascade_rows", "deps_of", "next_decision_text", "cancel_hint",
+           "GROUP_POLLS", "GROUP_NEUTRAL", "groups", "group_of", "grp_why", "group_lines",
            "CORE_SRC", "src_of", "src_note", "src_line", "wrote", "fix_name", "OUT_WORD", "TRADE_HEAD", "NO_PATH_S", "skip_wont",
            "asked_cids", "instr_due", "outlook", "row_text", "act_text", "trade_key", "new_wont", "not_today",
            "fill_day_of", "how_text", "unknown_candidates", "unknown_text", "resolve_draft", "reconcile_report", "adopt", "save_book"]

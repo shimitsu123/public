@@ -510,12 +510,35 @@ document.addEventListener('click', async e=>{
   if(a==='cancel-order'){                                                 // 撤单：执行器今天的单（还挂着的 / 还没发出的计划・等开盘后；面板马上叫执行器撤）
     const hint=d.hint || (d.core==='1' ? '核心 ETF 的单：已经成交的部分撤不了；下一次决策照规则 / 闲置资金比例重新算目标，可能再买 / 再卖（要少拿用「闲置资金比例」）'
                     : '已经成交的部分撤不了；撤掉的卖单如果规则明天还要卖会再下；撤掉的个股买单不再买');   // 撤之后会怎样：服务器按单的来源写（data-hint；M5，2026-10-15）
+    const head='撤单 '+(d.side==='BUY'?'买 ':'卖 ')+tqty(d.t, fmt(+d.qty)+(d.core==='1'?' 口':' 股'), d.name);
+    const gl=d.glist ? '\n'+d.glist : '';                                // 同一组每一笔会怎样（服务器算：data-glist；2026-10-16）
+    const g=(d.grp||'').split(',').filter(Boolean);                       // 同一组里现在能撤的其他单（data-grp）
+    if(g.length>0){                                                       // 整组撤单（2026-10-16 用户：一起下的买单和卖单要能一起撤）
+      const n=g.length+1, solo=d.solo||'只撤这一笔', galt=[{text:solo, v:'one'}];
+      if(d.fix) galt.push({text:'整组撤单并恢复按规则（'+tlab(d.fix, d.fixname)+'）', v:'fix', danger:true});
+      const q=await ask(head+' · 同一组 '+n+' 笔',
+        hint+'。'+(CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天的单」的状态）')+gl
+        +'\n「整组撤单（'+n+' 笔）」= 这一组一起撤：先撤买单，确认没成交再撤卖单；「'+solo+'」= 只撤这一笔'
+        +(d.fix ? '；「整组撤单并恢复按规则」= 一起撤、再取消固定口数（照规则调：什么时候见下一个确认框）' : ''),
+        '整组撤单（'+n+' 笔）', {danger:true, alt:galt});
+      if(!q.ok) return;
+      let body={book:CFG.book, kind:'cancel_order', cid:d.cid, deps:'cancel', grp:g};
+      if(q.alt==='one'){ body={book:CFG.book, kind:'cancel_order', cid:d.cid}; if(d.side==='SELL') body.deps='keep'; }
+      const j=await post(body);
+      if(q.alt!=='fix' || !j){ done(j); return; }
+      const k=await post({book:CFG.book, kind:'corefix', ticker:d.fix, clear:true});   // 恢复按规则：服务器给「确认下单」框（取消 → 只撤了单）
+      done(k ? {msg:(j.msg||'已写撤单')+'\n'+(k.msg||'已写恢复按规则')} : j);
+      return;
+    }
     const dep=+d.depn||0, alt=[];                                         // 靠这笔卖出的钱、执行器还没发出的买单（fund_src；D2）：几个按钮
     if(dep>0){ alt.push({text:d.keep||'只撤卖单', v:'keep'}); if(d.fix) alt.push({text:'撤单并恢复按规则（'+tlab(d.fix, d.fixname)+'）', v:'fix', danger:true}); }
-    const q=await ask('撤单 '+(d.side==='BUY'?'买 ':'卖 ')+tqty(d.t, fmt(+d.qty)+(d.core==='1'?' 口':' 股'), d.name),
+    else if(d.fix) alt.push({text:'撤单并恢复按规则（'+tlab(d.fix, d.fixname)+'）', v:'fix', danger:true});   // 固定口数排的单（2026-10-16）
+    const q=await ask(head,
       hint+'。'+(d.unsent==='1' ? '' : (CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天的单」的状态）'))
       +(d.deps ? '\n★ '+d.deps : '')                                    // 靠这笔卖出的钱的买单（服务器算：data-deps；2026-10-15）
-      +(dep>0 ? '\n「一起撤买单」= 这几笔买单也撤（执行器不再发）；「只撤卖单」= 买单按现在的钱重算'+(d.fix ? '；「撤单并恢复按规则」= 一起撤、再取消固定口数（照规则调：什么时候见下一个确认框）' : '') : ''),
+      +(dep>0 ? '\n「一起撤买单」= 这几笔买单也撤（执行器不再发）；「只撤卖单」= 买单按现在的钱重算'+(d.fix ? '；「撤单并恢复按规则」= 一起撤、再取消固定口数（照规则调：什么时候见下一个确认框）' : '') : '')
+      +gl
+      +(dep===0 && d.fix ? '\n「撤单并恢复按规则」= 撤单、再取消固定口数（照规则调：什么时候见下一个确认框）' : ''),
       dep>0 ? '一起撤买单' : '撤单', {danger:true, alt:alt});
     if(!q.ok) return;
     const body={book:CFG.book, kind:'cancel_order', cid:d.cid};

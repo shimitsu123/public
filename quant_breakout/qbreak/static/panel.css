@@ -35,6 +35,7 @@ color:var(--fg);cursor:pointer;touch-action:manipulation}
 .top.real{border-bottom:3px solid var(--neg)} .real-badge{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--neg);
 color:#fff;font-size:13px;font-weight:700;white-space:nowrap}
 .list .li{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:10px 0}.list .li:first-child{border-top:0}
+.og{border-left:3px solid var(--accent);padding-left:6px}   /* 同一组（一起下的买单和卖单；整组撤单 2026-10-16） */
 .grow{flex:1;min-width:0}
 input[type=range]{width:100%;height:44px;accent-color:var(--accent)}
 input[type=text],input[type=number]{font:inherit;font-size:17px;width:100%;padding:12px;margin:4px 0 10px;border-radius:12px;

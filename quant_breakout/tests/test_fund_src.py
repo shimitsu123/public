@@ -433,21 +433,26 @@ def test_pure_replay_of_the_real_book_cancel_skips_the_orphan_and_counts_nothing
 @pytest.mark.parametrize("buy_status", ["SENT", "FILLED"])
 def test_deps_cancel_also_cancels_a_dependent_buy_that_already_reached_the_exchange(buy_status):
     """R3：「一起撤买单」点下去时，靠这笔卖出的钱的买单已经在 09:05 / 09:20 发到交易所（页面是旧的）→ 也去撤；
-    已经成交撤不了 → 写明「已经发到交易所，没一起撤」并推 ★ 交易（以前只撤还没发出的，发出的那笔留在交易所、推送也不提）。"""
+    已经成交撤不了 → 写明「已经发到交易所，没一起撤」并推 ★ 交易（以前只撤还没发出的，发出的那笔留在交易所、推送也不提）。
+    2026-10-16 有意的改动（整组撤单，用户「一起下的买单和卖单要可以一起撤」）：先撤买单；买单已经成交 → 卖单不撤（撤了，买的钱不够）。
+    以前卖单照撤（FILLED 那一例以前断言卖单 CANCELLED）。"""
     book = _dict_book()
     book["orders"][1].update(status=buy_status, sent_qty=678, broker_id="B1", order_date="20261015",
                              filled_qty=678 if buy_status == "FILLED" else 0)
     orders = [ExecOrder.from_dict(o) for o in book["orders"]]
     now = dt.datetime(2026, 10, 15, 9, 30, tzinfo=JST)
     res = LO.cancel_core(orders, book, lambda: _CancelOK(), [orders[0].cid], paper=False, now=now, source="test", deps="cancel")
-    assert orders[0].status == "CANCELLED"
     if buy_status == "SENT":
+        assert orders[0].status == "CANCELLED"
         assert orders[1].status == "CANCELLED" and orders[1].cid in [x["cid"] for x in res["done"]]
         assert any("和凑钱的卖单 1545 纳斯达克 100 一起撤" in m for _lv, m in res["events"])
     else:
-        assert orders[1].status == "FILLED" and [x["cid"] for x in res["skipped"]] == [orders[1].cid]
+        assert orders[0].status == "SENT" and res["by_cid"][orders[0].cid][0] == "skipped"   # 买单已经成交：卖单不撤
+        assert orders[1].status == "FILLED" and [x["cid"] for x in res["skipped"]] == [orders[1].cid, orders[0].cid]
         assert "已经发到交易所，没一起撤" in res["skipped"][0]["why"]
         assert any(lv == "warn" and m.startswith("★ 交易") and "没一起撤" in m for lv, m in res["events"])
+        assert "卖单不撤" in res["skipped"][1]["why"] and "买 1482 对冲版美国 7〜10 年国债 已经成交 678 口" in res["skipped"][1]["why"]
+        assert any("卖单不撤" in x for x in LO.cancel_text(res)) and res["held"] == [orders[0].cid]
 
 
 def test_manual_fund_sell_cancel_withdraws_the_buy_by_default_or_keeps_it():
@@ -610,6 +615,75 @@ def test_panel_cancel_flow_requests_in_node(alt, first_ok, want):
     for b in out["SENT"]:                                         # 服务器认得这些参数（deps 只能是 cancel / keep）
         MO.normalize({k: v for k, v in b.items() if k != "book"})
     assert len(out["DONE"]) == 1
+
+
+def _node_cancel(d: dict, alt, first_ok: bool = True) -> dict:
+    """trade.js 点「撤单」那一段在 node 里跑（ask 回答 ALT；第一次 post 成不成 = first_ok）→ {SENT, DONE, ASKED}；没有 node → skip。"""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("没有 node")
+    blk = _cancel_block((panel.STATIC_DIR / "trade.js").read_text(encoding="utf-8"))
+    js = ("let SENT=[], DONE=[], ASKED=[];const CFG={book:'paper', paper:true};"
+          f"const ALT={json.dumps(alt)}, OK1={json.dumps(first_ok)};"
+          "const fmt=x=>String(x), tlab=(t,n)=>t+' '+(n||''), tqty=(t,q,n)=>t+' '+q;"
+          "const post=async b=>{SENT.push(b); return SENT.length===1 ? (OK1 ? {ok:true, msg:'已写撤单'} : null) : {ok:true, msg:'已写恢复按规则'};};"
+          "const ask=async (t,b,ok,o)=>{ASKED.push([t, ok, (o.alt||[]).map(x=>x.v)]); return {ok:true, alt:ALT||undefined};};"
+          "const done=j=>DONE.push(j);"
+          "async function H(a,d){ " + blk + " }\n"
+          f"const d={json.dumps(d, ensure_ascii=False)};"
+          "H('cancel-order', d).then(()=>console.log(JSON.stringify({SENT, DONE, ASKED})));")
+    return json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True, timeout=60).stdout.splitlines()[-1])
+
+
+GRP_D = {"cid": "U2026-10-14-SELL-1545.T", "side": "SELL", "t": "1545.T", "qty": "4110", "core": "1", "name": "纳斯达克 100",
+         "depn": "1", "keep": "只撤卖单（买 1482 不会下）", "grp": "U2026-10-14-BUY-1482.T",
+         "glist": "整组撤单：先撤买单，确认买单撤掉了（没成交）再撤卖单", "solo": "只撤卖单（买 1482 不会下）",
+         "fix": "1482.T", "fixname": "对冲版美国 7〜10 年国债"}
+
+
+@pytest.mark.parametrize("alt,first_ok,want", [
+    (None, True, [{"deps": "cancel", "grp": ["U2026-10-14-BUY-1482.T"]}]),                        # 整组撤单（2 笔）
+    ("one", True, [{"deps": "keep"}]),                                                           # 只撤这一笔（卖单）
+    ("fix", True, [{"deps": "cancel", "grp": ["U2026-10-14-BUY-1482.T"]},
+                   {"kind": "corefix", "ticker": "1482.T", "clear": True}]),                      # 整组撤单并恢复按规则
+    ("fix", False, [{"deps": "cancel", "grp": ["U2026-10-14-BUY-1482.T"]}]),                      # 整组撤单没写成 → 不再发恢复按规则
+])
+def test_panel_group_cancel_flow_in_node(alt, first_ok, want):
+    """整组撤单的确认框（2026-10-16）在 node 里实际跑：标题「· 同一组 2 笔」、主按钮「整组撤单（2 笔）」、两个选择；
+    发出的请求都能过服务器的 MO.normalize。"""
+    out = _node_cancel(GRP_D, alt, first_ok)
+    assert out["ASKED"] == [["撤单 卖 1545.T 4110 口 · 同一组 2 笔", "整组撤单（2 笔）", ["one", "fix"]]]
+    assert len(out["SENT"]) == len(want)
+    assert out["SENT"][0] == {"book": "paper", "kind": "cancel_order", "cid": "U2026-10-14-SELL-1545.T", **want[0]}
+    for b in out["SENT"][1:]:
+        assert b == {"book": "paper", **want[1]}
+    for b in out["SENT"]:
+        MO.normalize({k: v for k, v in b.items() if k != "book"})
+    assert len(out["DONE"]) == 1
+
+
+def test_panel_group_cancel_buy_row_one_has_no_deps_in_node():
+    """买单那一行选「只撤这笔买单」→ 只撤这一笔、不带 deps（买单没有靠它的钱的单）。"""
+    d = {**GRP_D, "cid": "U2026-10-14-BUY-1482.T", "side": "BUY", "t": "1482.T", "qty": "678", "grp": "U2026-10-14-SELL-1545.T",
+         "solo": "只撤这笔买单（卖 1545 纳斯达克 100 照常卖，钱留现金）"}
+    d.pop("depn")
+    d.pop("keep")
+    out = _node_cancel(d, "one")
+    assert out["SENT"] == [{"book": "paper", "kind": "cancel_order", "cid": "U2026-10-14-BUY-1482.T"}]
+    MO.normalize({"kind": "cancel_order", "cid": "U2026-10-14-BUY-1482.T"})
+
+
+def test_panel_cancel_without_dependents_offers_restore_rule_for_fixed_units_in_node():
+    """没有组、没有靠它的钱的买单、但这笔是固定口数排的（data-fix）：选择只有「撤单并恢复按规则」，主按钮「撤单」；
+    选它 → 先撤单（不带 deps），再恢复按规则。"""
+    d = {"cid": "U2026-10-14-BUY-1482.T", "side": "BUY", "t": "1482.T", "qty": "678", "core": "1", "name": "对冲版美国 7〜10 年国债",
+         "fix": "1482.T", "fixname": "对冲版美国 7〜10 年国债"}
+    out = _node_cancel(d, "fix")
+    assert out["ASKED"] == [["撤单 买 1482.T 678 口", "撤单", ["fix"]]]
+    assert out["SENT"] == [{"book": "paper", "kind": "cancel_order", "cid": "U2026-10-14-BUY-1482.T"},
+                           {"book": "paper", "kind": "corefix", "ticker": "1482.T", "clear": True}]
 
 
 def test_trade_warn_push_is_a_warn_titled_trade(monkeypatch):

@@ -81,6 +81,7 @@ PAPER_OPEN_FROM, PAPER_OPEN_UNTIL = dt.time(9, 25), dt.time(11, 30)   # 模拟�
 #                                                    09:25 之后 09:00 那几根才到；到 11:30 还没撮合成 → 第二天早上照旧按日线的开盘价撮合（后备）
 PAPER_OPEN_WAIT = "开盘价（1 分钟线）还没到"          # 模拟账户的开盘撮合这次不做（整批：有一只没有今天的分钟线 / 可能一整天张贴）
 UNK_STOP = "这次运行前面有一笔下单结果不明（可能已被受理）→ 剩下的单不发"   # G3：同一次发单里有一笔变成 SENDING / ERROR 之后（2026-10-14）
+CANCEL_ASKED = "你写了撤单（等撤单的运行处理）：执行器不发"   # 整组撤单（2026-10-16）：写了撤单、撤单的运行还没处理的单不发（状态不改）
 BLOCK_RETRY = ("立花の銘柄マスタ取不到", "登录失败，没发单", "没连上立花，没发单")   # 立花适配器 BLOCKED：请求根本没发出、过一会儿可能就好（G15）
 PRECLOSE_MAX_PCT = 3.0                             # LU-15：Yahoo 收盘 vs 立花前日終値 差超过这个 % → 那只的寄付买单不下（卖单只提醒）
 BREAKER_N, BREAKER_VALUE = 2, 2.2                  # C-11：规则单笔数 > (个股名额 + 核心 ETF 只数) × 2，或金额合计 > 权益 × 2.2 → 异常熔断
@@ -805,6 +806,16 @@ class UnifiedExecutor:
             return f"资格检查：{why}"
         return None
 
+    def _cancel_asked(self, o: ExecOrder) -> bool:
+        """这笔单你已经写了撤单（指令文件里还没读的 / 账本里还在等的撤单指令，整组撤单含同一组的每一笔）吗：09:05 / 09:20 的运行拿着锁时
+        你点了「整组撤单」→ 不能再发那组里还没发的买单 / 补发的卖单（2026-10-16）。每次发单前现读（文件很小）；读不了 → 不挡。"""
+        if self.manual is None:
+            return False
+        try:
+            return o.cid in LO.asked_cids(self.book, MO.unseen(self.manual.tag, self.book))
+        except Exception:                                   # noqa: BLE001  只是保护：读不了指令文件不影响下单
+            return False
+
     def _send(self, o: ExecOrder, qty: int, bar: str) -> None:
         """bar 非空 = 寄付（开盘集合竞价）；空 = 盘中当日限り。先把「发送中」写进账本再发（崩溃后不会重发）。
         立花的卖单里不足一手的部分（C-14：拆股 / 合并后的零股）不发：整数手照常下，零股记进 odd_lots 并提醒你在立花网站卖。"""
@@ -815,6 +826,11 @@ class UnifiedExecutor:
                 o.status = "BLOCKED"
                 self.stats["blocked"] += 1
             self._event("warn", f"{_otag(o, qty)} 不发：{o.note}")
+            self.save()
+            return
+        if self._cancel_asked(o):                           # 你写了撤单（整组撤单；2026-10-16）、撤单的运行还没处理：这笔不发（状态不改）
+            o.note = CANCEL_ASKED[:300]
+            self._event("info", _otag(o, qty) + " 不发：" + o.note)
             self.save()
             return
         odd = self._odd_lot(o, qty)
@@ -2861,7 +2877,7 @@ class UnifiedExecutor:
         return None, None
 
     # ── 撤单 / 状态不明的单的候选（qbreak/live_ops.py；缺口盘点 B1 / B2）──
-    def cancel_orders(self, cids: list[str] | None = None, source: str = "", deps=None) -> dict:
+    def cancel_orders(self, cids: list[str] | None = None, source: str = "", deps=None, groups=None) -> dict:
         """撤执行器自己今天的、还挂着的单（SENT / PARTIAL；立花：有注文番号）。cids=None → 全部这种单。撤完用 order_status 再确认 →
         CANCELLED + 撤单时的成交股数（第二天早上照实际成交对账）；已经全部成交的不改、说明。模拟账户：只撤还在排队、开盘之前的寄付单。
         HALT 时也可以撤（撤单只会减少风险）。改账本之前先备份。返回 qbreak/live_ops.cancel_core 的结果。
@@ -2873,7 +2889,7 @@ class UnifiedExecutor:
             backup(self.path, force=True)
         res = cancel_core(self.orders, self.book, lambda: self.b, cids, paper=self.paper, now=self.clock(), source=source,
                           deps=deps, cash=self._cash_free, lot_of=self._lot, tag=self.manual.tag if self.manual else None,
-                          queued=self.paper)
+                          queued=self.paper, groups=groups)
         for lvl, msg in res["events"]:
             self._event(lvl, msg)
             if lvl == "warn" and msg.startswith("★ 交易"):

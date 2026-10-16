@@ -66,6 +66,9 @@ RETRY_S = 600                           # 盘中没下成的指令（取不到�
 LABEL = {"sell": "卖出全部", "trim": "减仓", "adjust": "调仓", "buy": "买入", "core": "闲置资金比例", "corefix": "固定 ETF 口数", "unblock": "解除不买回",
          "cancel": "撤回指令", "cancel_order": "撤单", "uncancel": "撤销撤回"}
 CANCEL_UNTIL = dt.time(15, 30)          # 撤单：交易日这个时刻之前面板马上叫执行器（之后今天没成交的单都已失效）
+GROUP_MAX = 12                          # 整组撤单（2026-10-16 用户：一起下的买单和卖单一起撤）：一组最多几笔（超过 → 一笔笔撤）
+GROUP_RECHECK_S = 60                    # 整组撤单：买单的撤单立花还没确认 → 卖单先不撤，过这么多秒再查一次
+GROUP_WAIT_MAX_S = 600                  # 整组撤单：最多等这么久（按时间，不按次数）→ 之后卖单不撤、请你在立花网站看
 RUN_AT = dt.time(7, 40)                 # 早上决策的运行时刻（与 mac_login.RUN_AFTER / launchd 的 07:40 相同）：解除不买回从这之后第一次决策起生效
 NEXT_DECISION = "下一次决策（交易日 07:40）起生效"   # 不知道现在几点时的写法；知道 → next_decision(now)「下一次决策（10/19 07:40）起生效」
 UNK_LATER = "先登记那笔状态不明的单（见通知），登记之后的下一次决策处理"   # 盘中前面有一笔下单结果不明 → 剩下的指令（执行器 now_phase；登记之前执行器一次都不跑，不是「明天开盘」；2026-10-14 复核）
@@ -174,6 +177,26 @@ def normalize(req: dict) -> dict:
             if dp not in ("cancel", "keep"):
                 raise ValueError("deps 只能是 cancel（一起撤买单）或 keep（只撤卖单）")
             out["deps"] = dp
+        g = req.get("grp")                                  # 整组撤单（2026-10-16）：同一组里你确认过的其他单（cid 列表；一次点击一条记录）
+        if g is not None and g != "" and g != []:
+            if not isinstance(g, list):
+                raise ValueError("grp 要是 cid 的列表")
+            if out.get("deps") != "cancel":
+                raise ValueError("整组撤单（grp）要和 deps=cancel 一起写")
+            gl = []
+            for c in g:
+                c = str(c or "").strip()
+                mg = _CID.match(c)
+                if not mg:
+                    raise ValueError("同一组的单 " + c + " 不是执行器的单号")
+                if mg.group(1) != m.group(1):
+                    raise ValueError("同一组的单 " + c + " 不是同一天的决策")
+                if c != cid and c not in gl:
+                    gl.append(c)
+            if len(gl) > GROUP_MAX - 1:
+                raise ValueError("同一组最多 " + str(GROUP_MAX) + " 笔")
+            if gl:
+                out["grp"] = gl
     if kind == "unblock" and req.get("block_id"):           # 面板带上它看到的那个「不买回」设定的 id（2026-10-13）：设定换了 / 解除了 → 执行器不动新的
         bid = str(req.get("block_id") or "").strip()
         if not re.fullmatch(r"M[0-9A-Za-z_.\-]{1,80}", bid):
@@ -462,7 +485,18 @@ def describe(r: dict, lab=None) -> str:
     lab = lab or names.label
     k = r.get("kind")
     if k == "cancel_order":
-        return f"撤单 {lab(r['ticker']) if r.get('ticker') else ''}（{r.get('cid') or '—'}）".replace("撤单 （", "撤单（")
+        head = f"撤单 {lab(r['ticker']) if r.get('ticker') else ''}（{r.get('cid') or '—'}）".replace("撤单 （", "撤单（")
+        g = [str(c) for c in r.get("grp") or [] if c]
+        if not g:
+            return head
+        parts = []
+        for c in g:                                        # 整组撤单（2026-10-16）：同一组的其他单写成「买 1482 …」（代码带名字）
+            mg = _CID.match(c)
+            if mg:
+                parts.append(("买" if mg.group(2) == "BUY" else "卖") + " " + lab(mg.group(3)))
+            else:
+                parts.append(c)
+        return head + " + 同一组 " + str(len(g)) + " 笔（" + "、".join(parts) + "）"
     if k == "corefix":
         u = f"{int(r.get('units') or 0):,} 口"           # 名字可能以数字结尾（「1545 纳斯达克 100」）：默认写法隔一个「：」（names.qty；2026-10-15 复核）
         return (f"{lab(r['ticker'])} 恢复按规则" if r.get("clear")
@@ -669,6 +703,17 @@ def cancelled(waiting: list[dict]) -> set:
     """指令文件里执行器还没读的撤回指向的指令 id（页面：这些不再算「在处理」、不再给撤回按钮）；被撤销的撤回不算。"""
     void = voided(waiting)
     return {r.get("target") for r in waiting if r.get("kind") == "cancel" and r.get("id") not in void}
+
+
+def cancel_cids(r: dict | None) -> list[str]:
+    """一条撤单指令（cancel_order）要撤的单：主单 + 整组撤单的同一组（grp；2026-10-16）→ [cid]（去掉空的、重复的）。"""
+    r = r or {}
+    out = []
+    for c in [r.get("cid")] + list(r.get("grp") or []):
+        c = str(c or "").strip()
+        if c and c not in out:
+            out.append(c)
+    return out
 
 
 def _live(items: dict, waiting: list[dict], kinds) -> list[dict]:
@@ -1889,6 +1934,24 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
         if any(x.get("kind") == "cancel_order" and x.get("cid") == rec["cid"]
                for x in list(items.values()) + waiting if x.get("status", "pending") == "pending"):
             return f"{lt} 的单 {rec['cid']} 已经在撤（等执行器）"
+        if rec.get("grp"):                                 # 整组撤单（2026-10-16）：同一组的每一笔都要在账本里、在服务器算出的这一组里、没在撤
+            from . import live_ops as LO
+            orders = [x for x in (book or {}).get("orders") or [] if isinstance(x, dict)]
+            by = {str(x.get("cid")): x for x in orders}
+            mem = {str(x.get("cid")) for x in LO.group_of(o, orders, book)}
+            for c in rec["grp"]:
+                mg = _CID.match(str(c))
+                lc = names.label(mg.group(3)) if mg else ""
+                if c not in by:
+                    return f"同一组的单 {lc} {c} 账本里没有（页面是旧的？刷新再点）"
+                if c not in mem:
+                    return f"{lc} 的单 {c} 不在 {lt} 这一组里：没写"
+            asked = LO.asked_cids(book, waiting)
+            for c in cancel_cids(rec):
+                if c in asked:
+                    mg = _CID.match(str(c))
+                    lc = names.label(mg.group(3)) if mg else ""
+                    return f"{lc} 的单 {c} 已经在撤（等执行器）"
     if k == "unblock":                                     # 2026-10-13：同一只不重复写；页面过时（设定换了）不写
         return unblock_why(t, book, tag, rec.get("block_id"))
     if k == "uncancel":
@@ -1902,6 +1965,36 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
                 return f"这是「全部换成 {names.label(tg0['fund_for'])}」的同批指令：撤回买入那条（整批一起撤）"
         return _cancel_why(rec["target"], items, waiting, now=now)
     return None
+
+
+def group_prune(r: dict, book: dict | None, now: dt.datetime | None, paper: bool, waiting=()) -> tuple[dict, list[str]]:
+    """整组撤单（grp；2026-10-16）写进去之前：去掉同一组里现在撤不了（live_ops.grp_why）或已经在撤的单 →（记录, 说明）。
+    只防页面过期（你点的时候能撤、现在不能了）；执行器撤的时候按重算的整组再判断一次（先撤买单、确认没成交再撤卖单）。
+    账本里找不到的不在这里去掉（check 会说「页面是旧的」）。全都去掉了 → ValueError（不写：只撤主单要你再点一次「撤单」）。"""
+    g = list((r or {}).get("grp") or [])
+    if not g:
+        return r, []
+    from . import live_ops as LO
+    now = now or now_jst()
+    by = {str(x.get("cid")): x for x in (book or {}).get("orders") or [] if isinstance(x, dict)}
+    asked = LO.asked_cids(book, waiting)
+    keep, notes = [], []
+    for c in g:
+        o = by.get(str(c))
+        if o is None:
+            keep.append(c)
+            continue
+        why = "已经在撤（等执行器）" if str(c) in asked else LO.grp_why(o, book, now, paper)
+        if why is None:
+            keep.append(c)
+            continue
+        side = "买" if o.get("side") == "BUY" else "卖"
+        notes.append(f"{side} {names.label(o.get('ticker'))}（{c}）现在撤不了：{why}")
+    if not keep:
+        raise ValueError("同一组的其他单现在都撤不了（" + "；".join(notes) + "）：没写。只撤这一笔：刷新页面后点「撤单」")
+    out = dict(r)
+    out["grp"] = keep
+    return out, notes
 
 
 def _cancel_why(target: str, items: dict, waiting: list[dict], now: dt.datetime | None = None) -> str | None:
@@ -2251,8 +2344,24 @@ def cancel_due(tag: str, book: dict | None, now: dt.datetime | None = None) -> b
         return False
     if any(r["kind"] == "cancel_order" for r in unseen(tag, book)):
         return True
-    return any(it.get("kind") == "cancel_order" and it.get("status") == "pending"
+    return any(it.get("kind") == "cancel_order" and it.get("status") == "pending" and _recheck_due(it, now)
                for it in (((book or {}).get("manual") or {}).get("items") or {}).values())
+
+
+def _recheck_due(it: dict, now: dt.datetime) -> bool:
+    """整组撤单在等立花确认买单的撤单（recheck_at；2026-10-16）：到了这个时刻才再跑一次 --phase cancel（不每 30 秒抢着跑、把盘中 / 开盘后的运行饿着）；
+    没有 / 读不了 → 算到了。"""
+    v = it.get("recheck_at")
+    if not v:
+        return True
+    try:
+        t = dt.datetime.fromisoformat(str(v))
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=JST)
+        n = now if now.tzinfo else now.replace(tzinfo=JST)
+        return t <= n
+    except (TypeError, ValueError):
+        return True
 
 
 def now_due(tag: str, book: dict | None, now: dt.datetime | None = None) -> bool:
@@ -2605,7 +2714,7 @@ class Manual:
                     # 也写撤的是什么（2026-10-15 复核；找不到那条 → 只写 id，照旧「M… 不是…」）
                     it.update(status="rejected", msg=f"{tt}{'' if tt.endswith('）') else ' '}不是还没完成的指令，撤不了")
             elif k == "cancel_order":
-                it["msg"] = "等执行器撤单"
+                it["msg"] = (f"等执行器整组撤单（{len(cancel_cids(it))} 笔）" if it.get("grp") else "等执行器撤单")
             else:
                 it["msg"] = "等执行器下单"
             msgs.append(("info", f"手动指令 {r['id']}：{describe(r)} → {it['msg']}"))

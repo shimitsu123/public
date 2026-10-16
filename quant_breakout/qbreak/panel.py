@@ -1271,6 +1271,9 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
     base = None
     f = LO.fill_day_of(book)
     stale = f is not None and f != now.date()               # 今天早上的运行没跑：这还是上一次决策的单（不是今天要下的）
+    G = LO.groups(orders, book)                             # 一起下的单（整组撤单；2026-10-16 用户：一起下的买单和卖单要能一起撤）
+    byc = {str(x.get("cid")): x for x in orders}
+    cfix = MO.core_fixed(book, tag) if G or any(x.get("kind") == "core" and x.get("side") == "BUY" for x in orders) else {}
     rows = []
     for o in orders:
         core = o.get("kind") == "core"
@@ -1287,7 +1290,7 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
         if cid in asked:
             btn = "<span class='chip'>撤单中</span>"
         elif LO.cancel_why(o, book, now, paper) is None:
-            deps, alt = "", ""
+            deps, alt, keep_txt = "", "", ""
             dx = LO.deps_of(o, orders) if o.get("side") == "SELL" else []
             if dx:                                          # 执行器记了靠这笔卖出的钱的买单（fund_src；D2）：预览撤掉之后它们会怎样
                 try:
@@ -1308,7 +1311,8 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
                     kw.append(f"买 {NM.label(b.get('ticker'))} {w}")
                 deps = "靠这笔卖出的钱、执行器还没发出的买单：" + "、".join(bits) + "（已经成交的部分卖出的钱照样能用）"
                 fx = next((str(b.get("ticker")) for b in dx if b.get("kind") == "core" and b.get("ticker") in fixed), "")
-                alt = (f" data-depn='{len(dx)}' data-keep='{escape('只撤卖单（' + '；'.join(kw) + '）')}'"
+                keep_txt = "只撤卖单（" + "；".join(kw) + "）"
+                alt = (f" data-depn='{len(dx)}' data-keep='{escape(keep_txt)}'"
                        + (f" data-fix='{escape(fx)}' data-fixname='{escape(NM.name(fx) or '')}'" if fx else ""))
             elif o.get("side") == "SELL":                   # 旧账本（没有 fund_src）：靠这笔卖出的钱的买单撤了就下不成（只是确认框里说明；2026-10-15）
                 try:                                        # 撤之前 / 撤之后各算一次 outlook（D5：与交易页、自检、撤单推送同一个判断）
@@ -1323,24 +1327,43 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
                     deps = ("撤掉之后，今天等这笔卖出的钱的买单预计下不成（开盘时现金不够一单元）："
                             + "、".join("买 " + NM.qty(b.get('ticker'), f"{int(b.get('qty') or 0):,} {'口' if b.get('kind') == 'core' else '股'}") for b in hit)
                             + "（已经成交的部分卖出的钱照样能用）")
+            grp = _grp_attrs(o, orders, byc, G, book, now, paper, tag, asked, cfix, alt, keep_txt)
             btn = (f"<button class='btn sm danger' data-act='cancel-order' data-cid='{escape(cid)}' "
                    f"data-t='{escape(str(o.get('ticker')))}' data-side='{escape(str(o.get('side')))}' data-qty='{n}' "
                    f"data-core='{1 if core else 0}' data-unsent='{1 if o.get('status') in LO.UNSENT else 0}' "
                    f"data-hint='{escape((LO.src_line(o) + '。' if LO.src_line(o) else '') + LO.cancel_hint(o, book, now, tag))}'" + (f" data-deps='{escape(deps)}'" if deps else "") + alt
-                   + f" data-name='{escape(NM.name(o.get('ticker')) or '')}'>撤单</button>")      # 名字放最后（确认框标题；2026-10-15）
+                   + grp + f" data-name='{escape(NM.name(o.get('ticker')) or '')}'>撤单</button>")      # 名字放最后（确认框标题；2026-10-15）
         else:
             btn = ""
         chip, why = dead.get(cid) or (LO.STATUS_TEXT.get(o.get("status"), str(o.get("status"))), "")
         if note and chip.startswith("不会下单"):              # 执行器排单时写的打算（「开盘后按始値检查、减股再下」）已经不会发生：标成原先的（2026-10-15 复核）
             note = "原先：" + note
-        rows.append(f"<div class='li'><div class='grow'><b>{'买' if o.get('side') == 'BUY' else '卖'} {escape(NM.qty(o.get('ticker'), f'{n:,} {unit}'))}"
-                    f"</b> <span class='chip'>{escape(chip)}</span>"
+        gm = G.get(cid) or []
+        og = f" og' data-g='{escape(gm[0])}" if gm else ""  # 同一组的每一行：左边一条线 + 「同一组 N 笔」+ 还有哪几笔
+        gchip = f" <span class='chip'>同一组 {len(gm)} 笔</span>" if gm else ""
+        gline = ""
+        if gm:
+            gl = []
+            for c in gm:
+                x = byc.get(c)
+                if x is None or c == cid:
+                    continue
+                xn = int(x.get("sent_qty") or x.get("qty") or 0)
+                xq = f"{xn:,} {'口' if x.get('kind') == 'core' else '股'}"
+                gl.append(("买" if x.get("side") == "BUY" else "卖") + " " + NM.qty(x.get("ticker"), xq)
+                          + "（" + LO.STATUS_TEXT.get(x.get("status"), str(x.get("status"))) + "）")
+            gline = f"<div class='small'>{escape('同一组（一起下的）还有：' + '、'.join(gl))}</div>"
+        rows.append(f"<div class='li{og}'><div class='grow'><b>{'买' if o.get('side') == 'BUY' else '卖'} {escape(NM.qty(o.get('ticker'), f'{n:,} {unit}'))}"
+                    f"</b> <span class='chip'>{escape(chip)}</span>{gchip}"
+                    + gline
                     + (f"<div class='neg small'>{escape(why)}</div>" if why else "")
                     + (f"<div class='small'>{escape(fixn[cid])}</div>" if cid in fixn else "")
                     + (f"<div class='small'>{escape(LO.src_line(o))}</div>" if LO.src_line(o) else "")   # 核心单的来源（D7：固定口数 / 凑钱 / 比例 / 规则）
                     + f"<div class='muted small'>{escape(LO.how_text(o, paper) + lim + got)}"
                     f"{(' · ' + escape(NM.annotate(note)[:160])) if note else ''}</div></div>{btn}</div>")
     foot = (f"「撤单」：{LO.CANCEL_HINT}。{LO.CANCEL_HINT_CORE}。执行器还没发出的单（计划 / 等开盘后）也能撤：撤了执行器就不再发。"
+            + ("同一组（一起下的：固定口数的凑钱卖单和买单、手动买入和为它卖的、拆成两笔的单）可以「整组撤单」：先撤买单，确认没成交再撤卖单；"
+               "买单已经成交 / 撤不掉 → 卖单不撤。" if G else "")
             + ("" if paper or stale else
                "立花 API / Mac 出故障那天：只照这张表里「被挡 / 不下 / 没下」的行在立花网站下单（「已下单 / 已成交 / 部分成交」的已经在交易所，"
                "别再下），之后在 Mac 对话里说一声登记（人工代下）。"))
@@ -1348,6 +1371,46 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
             f"今天的单（执行器{'，成交日 ' + escape(str(f)) if f else ''}）")
     return (f"<section class='card' id='today'><h2>{head}</h2>"
             f"<div class='list'>{''.join(rows)}</div><div class='muted small'>{escape(foot)}</div></section>")
+
+
+def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.datetime, paper: bool, tag: str | None, asked,
+               cfix: dict, alt: str, keep_txt: str = "") -> str:
+    """「撤单」按钮上整组撤单的属性（2026-10-16；插在 data-name 之前，已有的属性不变）：
+    data-grp（同一组里现在能撤、没在撤的其他单 cid，买单在前；超过 GROUP_MAX 不写）/ data-glist（确认框里一行行的说明）/
+    data-solo（「只撤这一笔」的按钮文字）；固定口数还有效 → data-fix / data-fixname（「整组撤单并恢复按规则」；已经写了的不重复）。"""
+    from . import live_ops as LO
+    cid = str(o.get("cid"))
+    gm = G.get(cid) or []
+    out = ""
+    if gm:
+        oth = [byc[c] for c in gm if c != cid and c in byc]
+        ok = [str(x.get("cid")) for x in oth if LO.grp_why(x, book, now, paper) is None and str(x.get("cid")) not in asked
+              and MO._CID.match(str(x.get("cid")))]
+        if len(ok) > MO.GROUP_MAX - 1:
+            ok = []
+        if ok:
+            out += f" data-grp='{escape(','.join(ok))}'"
+        gl = LO.group_lines(o, orders, book, now, paper, tag, asked)
+        if gl:
+            out += f" data-glist='{escape(chr(10).join(gl))}'"
+        if ok:
+            if o.get("side") == "BUY":
+                ss = [NM.label(x.get("ticker")) for x in oth if x.get("side") == "SELL" and x.get("status") in LO.GROUP_OPEN]
+                solo = ("只撤这笔买单（卖 " + "、".join(dict.fromkeys(ss)) + " 照常卖，钱留现金）") if ss else "只撤这笔买单"
+            else:
+                solo = keep_txt or "只撤这笔卖单"                # 有靠它的钱的买单：与「只撤卖单（买 X 不会下）」同一句
+            out += f" data-solo='{escape(solo)}'"
+    fix = ""                                               # 固定口数（data-fix）紧跟已有的 depn / keep 之后（属性顺序不变）
+    if "data-fix=" not in alt:
+        fx = ""
+        if gm:
+            fx = next((str(byc[c].get("ticker")) for c in gm if c in byc and byc[c].get("side") == "BUY"
+                       and byc[c].get("ticker") in cfix), "")
+        if not fx and o.get("side") == "BUY" and o.get("kind") == "core" and o.get("ticker") in cfix:
+            fx = str(o.get("ticker"))
+        if fx:
+            fix = f" data-fix='{escape(fx)}' data-fixname='{escape(NM.name(fx) or '')}'"
+    return fix + out
 
 
 PANE = "\x00PANE:"                                         # render 里的分组标记（_panes 用；不会出现在页面上）
@@ -1409,7 +1472,7 @@ def _trade_live(book: dict, waiting: list, now: dt.datetime, tag: str | None = N
     try:
         items = ((book.get("manual") or {}).get("items") or {}).values()
         k = len(waiting) + sum(1 for it in items if isinstance(it, dict) and it.get("status") in MO.ACTIVE)
-        asked = {str(r.get("cid")) for r in waiting if isinstance(r, dict) and r.get("kind") == "cancel_order"}
+        asked = {c for r in waiting if isinstance(r, dict) and r.get("kind") == "cancel_order" for c in MO.cancel_cids(r)}   # 整组撤单：同一组的每一笔
     except Exception:                                      # noqa: BLE001
         k, asked = 0, set()
     return {"orders": {}, "fix": {}, "items": set(), "itxt": {}, "asked": asked, "n": k, "busy": k}
@@ -1446,8 +1509,8 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     paper = (tag or "").startswith("paper") or str(book.get("broker") or "").startswith("Paper")
     void = MO.voided(waiting)
     wl = [r for r in waiting if r.get("kind") != "uncancel" and r.get("id") not in void]
-    asked = ({str(r.get("cid")) for r in wl if r.get("kind") == "cancel_order"}
-             | {str(it.get("cid")) for it in items.values() if it.get("kind") == "cancel_order" and it.get("status") == "pending"})
+    asked = ({c for r in wl if r.get("kind") == "cancel_order" for c in MO.cancel_cids(r)}          # 整组撤单：同一组的每一笔（2026-10-16）
+             | {c for it in items.values() if it.get("kind") == "cancel_order" and it.get("status") == "pending" for c in MO.cancel_cids(it)})
     ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=asked, instr=False)   # 每笔单今天会不会下：只在 live_ops.outlook 判断（D5）
     fixed = MO.core_fixed(book, tag)
     fpend, fwhen = LO.fix_pending_when(book, now, tag)       # 还没照它调的固定口数：今天开盘后 / 盘中就照它下（D1；复核 UI F2，2026-10-16）
@@ -2507,6 +2570,12 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
         rec = MO.core_rec(rec, book, tag) or rec             # 持有的核心 ETF 的卖出 / 调仓 → 闲置资金比例（规则每天按它调核心）；固定口数的 → 改固定口数
     except ValueError as e:
         return False, f"没写：{e}", None
+    gnotes: list = []
+    if rec["kind"] == "cancel_order" and rec.get("grp"):  # 整组撤单（2026-10-16）：页面过期 → 去掉现在撤不了 / 已经在撤的同一组的单
+        try:
+            rec, gnotes = MO.group_prune(rec, book, now or now_jst(), tag.startswith("paper"), MO.unseen(tag, book))
+        except ValueError as e:
+            return False, str(e), None
     c0 = MO.core_info(book, rec["ticker"]) if rec["kind"] == "core" and rec.get("ticker") else None
     pct0 = MO.core_pct_now(tag, book)                      # 写之前的闲置资金比例（含还没读的指令；0 = 停买中）
     fund = body.get("fund") if rec["kind"] in ("buy", "adjust", "corefix") else None
@@ -2607,6 +2676,16 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
            "core": f"已写：闲置资金比例 {rec.get('pct', 0):g}% → 核心 ETF {when}照新比例调",
            "unblock": f"已写：解除 {tl} 的不自动买回",
            "cancel_order": f"已写：撤单 {tl}（{rec.get('cid')}）→ 执行器马上撤（已经成交的部分撤不了）"}.get(k)
+    if k == "cancel_order" and rec.get("grp"):              # 整组撤单（2026-10-16）
+        gw_ = []
+        for c in rec["grp"]:
+            mg = MO._CID.match(str(c))
+            if mg:
+                gw_.append(("买" if mg.group(2) == "BUY" else "卖") + " " + NM.label(mg.group(3)))
+        msg = (f"已写：整组撤单 {len(rec['grp']) + 1} 笔（{tl}（{rec.get('cid')}）+ 同一组的 " + "、".join(gw_)
+               + "）→ 执行器马上撤：先撤买单，确认没成交再撤卖单（已经成交的部分撤不了）")
+        if gnotes:
+            msg += "（" + "；".join(gnotes) + "：没写进去）"
     if k == "adjust":
         st = book.get("state") or {}
         a = MO.adjust_plan(rec, st, MO.MANUAL_CAP_PCT)
