@@ -81,6 +81,271 @@ def fill_day_of(book: dict | None) -> dt.date | None:
         return None
 
 
+# ───────────────────────── 今天已成交的买卖马上算进「现在拿着什么」（只读的对账前预计；2026-10-16）─────────────────────────
+# 用户 10/16 09:43 在模拟账户卖出 1545、买入 1482（都已成交），「持仓里没反应」：盘中 / 09:25 撮合 / 立花的成交只记在单上，
+# 账本的 state（持仓、口数、现金）到下个交易日 07:40 run_bar → _collect_fills → _reconcile 才变 —— 这是有意的设计（不改）。
+# 这里只给读状态的页面算一份「账本 + 当前决策里已知的成交」：对账把这批单删掉、推进 last_date 之后自然归零，不会重复计算。
+HN_SETTLE_T = dt.time(7, 40)                         # 下一次对账（执行器早上的运行）的时刻
+HN_MISSED = "还没记进账本：早上的运行还没完成，下一次执行器运行对账后正式记账"
+HN_PAPER_OPEN = "模拟账户 09:25 按 1 分钟线开盘价撮合的，记账时按正式开盘价改记"
+HN_TACHI = "只算已经知道的成交（盘中成交 / 11:35、15:45 的成交快照），以立花为准；现金是约数"
+HN_PENDING = "还在等成交的单不算在里面"
+
+
+def _hn_md(d: dt.date) -> str:
+    """「10/16（周五）」。"""
+    wd = "一二三四五六日"[d.weekday()]
+    return f"{d.month}/{d.day}（周{wd}）"
+
+
+def _hn_yen(x: float) -> str:
+    """「¥10,020」/「−¥18,535」（负号写在 ¥ 前面）。"""
+    return ("−¥" if x < 0 else "¥") + f"{abs(x):,.0f}"
+
+
+def _hn_base(st0: dict) -> dict:
+    """没有成交可算（或算不成）时的结果：一切等于账本。"""
+    try:
+        hist = st0.get("history") or []
+        eq = float(hist[-1][1]) if hist else None
+    except (TypeError, ValueError, IndexError, KeyError):
+        eq = None
+    try:
+        cash = float(st0.get("cash_jpy") or 0)
+    except (TypeError, ValueError):
+        cash = 0.0
+    return {"has": False, "fill_day": None, "settle_day": None, "fills": [], "by_ticker": {}, "pending": [],
+            "state": st0, "pos": st0.get("pos") or {}, "core_units": st0.get("core_units") or {},
+            "cash": cash, "cash_ledger": cash, "equity": eq, "equity_ledger": eq, "new": [], "sold_out": [],
+            "realized": None, "realized_partial": False, "missed": False, "approx": False, "settle": "", "note": "",
+            "when": "下一次执行器运行", "day_word": "今天", "paper": True}
+
+
+def held_now(book: dict | None, tag: str | None = None, *, now: dt.datetime | None = None,
+             snap: dict | None = None) -> dict:
+    """账本 + 当前决策里已知的成交 = 「现在拿着什么」的对账前预计（只读：只用于展示与写入前的预览；执行器、记账、规则一律不看它）。
+    返回 {has, fill_day, settle_day, fills, by_ticker, pending, state, book, pos, core_units, cash, cash_ledger, equity,
+    equity_ledger, new, sold_out, realized, realized_partial, missed, approx, settle, note, when, day_word, paper}：
+      settle =「明早 07:40」/「下个交易日 10/19（周一）07:40」/「今天 07:40」/ 对账时点已过（missed）的那句；when = 句子里用的时点
+      （missed 时「下一次执行器运行」）；day_word =「今天」/「10/16（周五）」（成交日不是今天时）；
+      fills 按对账的顺序（先卖后买、个股先于核心 ETF：live_unified._reconcile）；state 是投影后的 state（只换 pos / core_units /
+      pending_exit / cash_jpy；history、trades、core_trades、plan 类不动 —— 不编造收盘点、不进 tax_ytd）；book = {**账本, state: 投影,
+      _held_now: 本结果}，对它再调一次直接返回同一个结果（幂等，不再叠加）。
+    算哪些成交：只看 decided_on == state.last_date 的单（执行器的 _active() 同一口径）；SENDING / ERROR 结果不明 → 永远不算；
+      FILLED 但成交数 0 → 按发出数（fix_prep 同一口径）；立花只读本机的成交快照（out/broker_snapshot_<tag>.json，fills_at 是成交日的才用；
+      早上的寄付单整天是 SENT、只有快照知道成交了多少）；撤单前已部分成交的照算。不写文件、不登录、不联网、不改入参、不抛异常
+      （出错 → 按账本，has=False）。"""
+    bk = book if isinstance(book, dict) else {}
+    hn = bk.get("_held_now")
+    if isinstance(hn, dict):
+        return {**hn, "state": bk.get("state") or {}, "book": bk}
+    st0 = bk.get("state") if isinstance(bk.get("state"), dict) else {}
+    try:
+        res = _hn_calc(bk, st0, tag, now or now_jst(), snap)
+    except Exception as e:                                # noqa: BLE001  展示用：算不成就按账本，不让页面报错
+        log.warning("held_now 没算成（%s：%s）→ 按账本显示", type(e).__name__, e)
+        res = _hn_base(st0)
+    state = res.pop("state")
+    return {**res, "state": state, "book": {**bk, "state": state, "_held_now": dict(res)}}
+
+
+def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict | None) -> dict:
+    from . import manual_orders as MO
+    from . import names as NM
+    from .fees import DEFAULT_BROKER, etf_cost, side_fee
+    from .intraday_watch import _at, next_word
+    out = _hn_base(st0)
+    paper = tag.startswith("paper") if tag else "Paper" in str(bk.get("broker") or "")
+    out["paper"] = paper
+    today = now.date()
+    F = fill_day_of(bk)
+    if F is None:
+        return out
+    R = next_trading_day(F)
+    out.update(fill_day=F.isoformat(), settle_day=R.isoformat(), day_word="今天" if today == F else _hn_md(F))
+    if today < F:                                         # 成交日之前不可能有成交
+        return out
+    missed = today > R or (today == R and now.time() >= HN_SETTLE_T)
+    settle = HN_MISSED if missed else ("今天 07:40" if today >= R else _at(next_word(today), "07:40"))
+    sw = "下一次执行器运行" if missed else settle          # 句子里「… 对账后正式记账」前面的时点
+    out.update(missed=missed, settle=settle, when=sw)
+    ld = st0.get("last_date")
+    orders = [o for o in bk.get("orders") or [] if isinstance(o, dict) and o.get("decided_on") == ld]
+    srow: dict = {}
+    if not paper:
+        if snap is None:
+            try:
+                from . import broker_snapshot as BS
+                snap = BS.load(tag or "tachibana")
+            except Exception:                             # noqa: BLE001  快照读不了 = 不知道
+                snap = {}
+        snap = snap if isinstance(snap, dict) else {}
+        if str(snap.get("fills_at") or "")[:10] == F.isoformat():
+            srow = {str(r.get("cid")): r for r in snap.get("fills") or [] if isinstance(r, dict) and r.get("cid")}
+    got, pending = [], []
+    for idx, o in enumerate(orders):
+        try:
+            t, side, st_ = str(o.get("ticker") or ""), str(o.get("side") or ""), str(o.get("status") or "")
+            kind = "core" if o.get("kind") == "core" else "stock"
+            if not t or side not in ("BUY", "SELL"):
+                continue
+            tgt = int(o.get("sent_qty") or o.get("qty") or 0)
+            pend = {"cid": o.get("cid"), "ticker": t, "label": NM.label(t), "side": side, "kind": kind, "status": st_}
+            if st_ in ("SENDING", "ERROR"):               # 结果不明：可能成交了也可能没有 → 不算（对账 / 登记之后才知道）
+                pending.append({**pend, "left": tgt})
+                continue
+            q, px, src = int(o.get("filled_qty") or 0), float(o.get("filled_px") or 0), "order"
+            if st_ == "FILLED" and q <= 0:
+                q, src = tgt, "sent_qty"
+            r = srow.get(str(o.get("cid")))
+            if r is not None and not r.get("error") and int(r.get("filled_qty") or 0) > q:
+                q, px, src = int(r["filled_qty"]), float(r.get("avg_px") or px), "snapshot"
+            if st_ in ("SENT", "PARTIAL") and q < tgt:
+                pending.append({**pend, "left": tgt - q})
+            if q <= 0:
+                continue
+            approx = False
+            if px <= 0:
+                px, approx = float(o.get("limit") or o.get("ref_px") or 0), True
+            got.append((side == "BUY", kind == "core", idx, o, t, side, kind, q, px, src, approx))
+        except (TypeError, ValueError, AttributeError, KeyError):
+            continue
+    out["pending"] = pending
+    if not got:
+        return out
+    got.sort(key=lambda g: g[:3])
+    led_pos = {t: p for t, p in (st0.get("pos") or {}).items() if isinstance(p, dict)}
+    pos = {t: dict(p) for t, p in led_pos.items()}
+    led_core = {t: int(u or 0) for t, u in (st0.get("core_units") or {}).items()}
+    core = dict(led_core)
+    pex = dict(st0.get("pending_exit") or {})
+    cash = float(st0.get("cash_jpy") or 0)
+    rule_px = (bk.get("core_rule") or {}).get("px") or {}
+    core_last = st0.get("core_last") or {}
+    ccost: dict = {}                                      # 核心 ETF 的移动平均成本 [口数, 成本（含买入手续费）]；对不上 → None
+    delta, fills, any_approx = 0.0, [], False
+    for _b, _c, _i, o, t, side, kind, q, px, src, approx in got:
+        pnl = None
+        if kind == "core":
+            u = core.get(t, 0)
+            mark = float(rule_px.get(t) or core_last.get(t) or px)
+            if t not in ccost:
+                c = MO.core_cost(st0, t) if led_core.get(t, 0) > 0 else {"units": 0, "cost": 0.0}
+                ccost[t] = [int(c["units"]), float(c["cost"])] if c else None
+            cc = ccost[t]
+            fee = side_fee(etf_cost(DEFAULT_BROKER["JP"], t, "JP"), side)(q * px)
+            if side == "SELL":
+                if q > u:
+                    approx = True
+                core[t] = max(0, u - q)
+                cash += q * px - fee
+                delta += q * (px - mark) - fee
+                if cc is not None and 0 < q <= cc[0]:
+                    part = cc[1] * q / cc[0]
+                    pnl = q * px - fee - part
+                    cc[0], cc[1] = cc[0] - q, cc[1] - part
+                else:
+                    ccost[t] = None
+            else:
+                core[t] = u + q
+                cash -= q * px + fee
+                delta += q * (mark - px) - fee
+                if cc is not None:
+                    cc[0], cc[1] = cc[0] + q, cc[1] + q * px + fee
+        else:
+            p, lp = pos.get(t), led_pos.get(t)
+            mark = float((lp or {}).get("last_close") or 0) or px
+            if side == "SELL":
+                if p is None:                             # 账本里没有这只（今天买了又卖？）：只记现金
+                    approx = True
+                    fee = MO.fee_jp(q * px)
+                else:
+                    sh = int(p.get("shares") or 0)
+                    q = min(q, sh)
+                    fee = MO.fee_jp(q * px)
+                    ep = float(p.get("entry_px") or 0)
+                    pnl = (px - ep) * q - fee - MO.fee_jp(q * ep)        # = unified._close
+                    if q >= sh:
+                        pos.pop(t, None)
+                        pex.pop(t, None)
+                    else:
+                        p["shares"] = sh - q                              # 入场价不变（unified.sell_fill）
+                cash += q * px - fee
+                delta += q * (px - mark) - fee
+            else:
+                fee = MO.fee_jp(q * px)
+                if p is not None:                         # 加仓（unified.add_fill：入场价按股数加权）
+                    sh = int(p.get("shares") or 0)
+                    p["entry_px"] = (float(p.get("entry_px") or 0) * sh + px * q) / (sh + q)
+                    p["shares"] = sh + q
+                    if o.get("reason") != "manual_add":
+                        approx = True
+                else:                                     # 新仓（unified._open）：止损价、趋势在下一次决策之后才有
+                    pos[t] = {"ticker": t, "market": "JP", "shares": q, "entry_px": px, "entry_date": F.isoformat(),
+                              "stop_px": None, "peak": px, "last_close": px, "hold": 0, "armed": False, "entry_fx": 1.0,
+                              "today": True}
+                cash -= q * px + fee
+                delta += q * (mark - px) - fee
+        any_approx = any_approx or approx
+        fills.append({"cid": o.get("cid"), "ticker": t, "label": NM.label(t), "side": side, "kind": kind, "qty": int(q),
+                      "px": float(px), "fee": float(fee), "reason": o.get("reason") or "", "phase": o.get("phase") or "",
+                      "status": o.get("status") or "", "src": src, "pnl": pnl, "approx": approx})
+    order = list(dict.fromkeys(f["ticker"] for f in fills))
+    new, sold = [], []
+    for t in order:
+        if t in core or t in led_core:
+            a, b = led_core.get(t, 0), core.get(t, 0)
+        else:
+            a, b = int((led_pos.get(t) or {}).get("shares") or 0), int((pos.get(t) or {}).get("shares") or 0)
+        if a > 0 and b <= 0:
+            sold.append(t)
+        elif a <= 0 and b > 0:
+            new.append(t)
+    sells = [f for f in fills if f["side"] == "SELL"]
+    pn = [f["pnl"] for f in sells if f["pnl"] is not None]
+    eq_led = out["equity_ledger"]
+    state = {**st0, "pos": pos, "core_units": core, "pending_exit": pex, "cash_jpy": cash}
+    dw = out["day_word"]
+    by = {}
+    for t in order:
+        fs = [f for f in fills if f["ticker"] == t]
+        kind = fs[0]["kind"]
+        u = "口" if kind == "core" else "股"
+        nb, ns = sum(f["qty"] for f in fs if f["side"] == "BUY"), sum(f["qty"] for f in fs if f["side"] == "SELL")
+        cur = core.get(t, 0) if kind == "core" else int((pos.get(t) or {}).get("shares") or 0)
+        lab = NM.label(t)
+        parts = []
+        if ns:
+            spx = sum(f["qty"] * f["px"] for f in fs if f["side"] == "SELL") / ns
+            sp = [f["pnl"] for f in fs if f["side"] == "SELL"]
+            if t in sold:
+                rz = ("已实现约 " + _hn_yen(sum(sp)) + "；") if sp and None not in sp else ""
+                parts.append(f"{lab}：{dw}已卖出全部 {ns:,} {u} @ ¥{spx:,.2f}（{rz}{sw} 对账后正式记账）")
+            else:
+                parts.append(f"{lab}：{dw}卖出 {ns:,} {u}，现在 {cur:,} {u}（对账前）")
+        if nb:
+            bpx = sum(f["qty"] * f["px"] for f in fs if f["side"] == "BUY") / nb
+            if t in new:
+                parts.append(f"{lab}：{dw}买进 {nb:,} {u} @ ¥{bpx:,.2f}（{sw} 对账之后才算持仓）")
+            else:
+                parts.append(f"{lab}：{dw}买进 {nb:,} {u} @ ¥{bpx:,.2f}，现在 {cur:,} {u}（{sw} 对账后正式记账）")
+        led = led_core.get(t, 0) if kind == "core" else int((led_pos.get(t) or {}).get("shares") or 0)
+        by[t] = {"kind": kind, "buy": nb, "sell": ns, "net": nb - ns, "now": cur, "ledger": led, "text": "；".join(parts)}
+    head = "含今天已成交" if today == F else f"含 {_hn_md(F)}已成交"
+    note = [head + (f"（{HN_MISSED}）" if missed else f"（{settle} 对账后正式记账）")]
+    if paper and any(f["phase"] != "now" for f in fills):
+        note.append(HN_PAPER_OPEN)
+    if not paper:
+        note.append(HN_TACHI)
+    if pending:
+        note.append(HN_PENDING)
+    out.update(has=True, fills=fills, by_ticker=by, state=state, pos=pos, core_units=core, cash=cash,
+               equity=(eq_led + delta) if eq_led is not None else None, new=new, sold_out=sold,
+               realized=sum(pn) if pn else None, realized_partial=len(pn) < len(sells), approx=any_approx,
+               note="；".join(note))
+    return out
+
+
 def how_text(o, paper: bool = False) -> str:
     """这笔单的下法（面板「今天要成交的单」/ 命令行）：寄付成行 / 寄付指値 / 开盘后 / 盘中 / 错过寄付后当日限价。
     模拟账户（D3；2026-10-15）：开盘后的买单写「开盘后（09:25 前后按开盘价）」—— 不是立花的当日限り指値，是面板 09:25 前后按 1 分钟线的开盘价撮合。"""
@@ -3324,4 +3589,4 @@ __all__ = ["CANCELLABLE", "STATUS_TEXT", "CANCEL_HINT", "CANCEL_HINT_CORE", "RES
            "solo_holds", "hold_pre", "cli_resume", "cli_plan", "CLI_SRC",
            "CORE_SRC", "src_of", "src_note", "src_line", "wrote", "fix_name", "OUT_WORD", "TRADE_HEAD", "NO_PATH_S", "skip_wont",
            "asked_cids", "instr_due", "outlook", "row_text", "act_text", "trade_key", "new_wont", "not_today",
-           "fill_day_of", "how_text", "unknown_candidates", "unknown_text", "resolve_draft", "reconcile_report", "adopt", "save_book"]
+           "fill_day_of", "held_now", "how_text", "unknown_candidates", "unknown_text", "resolve_draft", "reconcile_report", "adopt", "save_book"]

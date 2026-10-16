@@ -76,6 +76,13 @@ def _book_item(tag: str, now: dt.datetime) -> dict:
     cmp = sm.get("compare") or {}
     hist = st.get("history") or []
     eq = f"总权益 ¥{float(hist[-1][1]):,.0f}" if hist else ""
+    try:                                                     # 今天已成交、还没对账的（只展示；2026-10-16）
+        from .live_ops import held_now
+        pj = held_now(book, tag, now=now)
+        if eq and pj.get("has") and pj.get("equity") is not None:
+            eq += f"（{'含今天' if pj.get('day_word') == '今天' else '含 ' + str(pj.get('day_word'))}已成交约 ¥{float(pj['equity']):,.0f}）"
+    except Exception:                                        # noqa: BLE001  展示用
+        pass
     if cmp.get("comparable") and not cmp.get("same") and not cmp.get("early") and not cmp.get("explained"):
         return {"name": name, "level": "warn", "text": f"★ 与云端模拟盘不一致（决策日 {ld}）{('；' + eq) if eq else ''}"}
     if sm.get("blocked") and sm.get("decided_on") == ld:

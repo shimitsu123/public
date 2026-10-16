@@ -4215,17 +4215,26 @@ def _live_unified_run(a, opened: list) -> int:
         return 0
     if a.status:
         b_ = read_json(book, {}) or {}
-        st = b_.get("state") or {}
-        print(f"账本 {book}（更新 {b_.get('updated', '—')}）\n决策日 {st.get('last_date') or '—'}；现金 ¥{float(st.get('cash_jpy') or 0):,.0f}")
+        from qbreak import live_ops as _LO
+        pj_ = _LO.held_now(b_, tag, now=now_jst())        # 含今天已成交（对账前的预计，只展示；2026-10-16）
+        st = pj_["state"]
+        cash_ = f"现金 ¥{float(pj_['cash']):,.0f}" + (f"（含今天已成交；账本 ¥{float(pj_['cash_ledger']):,.0f}）" if pj_["has"] else "")
+        print(f"账本 {book}（更新 {b_.get('updated', '—')}）\n决策日 {st.get('last_date') or '—'}；{cash_}")
+        if pj_["has"]:
+            print(f"  （{pj_['note']}）")
         from qbreak import names as NM                  # 代码 + 名字、买 / 卖、口 / 股（2026-10-15 用户：只写代码不知道是哪只；
         #                                                 名字和数量之间隔「：」—— 名字可能以数字结尾：「1545 纳斯达克 100：4,110 口」）
         for t, p_ in (st.get("pos") or {}).items():
             sh = f"{int(p_['shares']):,} 股"
-            print(f"  持仓 {NM.qty(t, sh)}  成本 ¥{float(p_['entry_px']):,.2f}  止损 ¥{float(p_['stop_px']):,.2f}  "
-                  f"买入 {p_['entry_date']}" + ("  （待卖）" if t in (st.get("pending_exit") or {}) else ""))
+            stop_ = f"¥{float(p_['stop_px']):,.2f}" if p_.get("stop_px") is not None else "—"   # 今天买进的：止损价在对账之后的决策才有
+            print(f"  持仓 {NM.qty(t, sh)}  成本 ¥{float(p_['entry_px']):,.2f}  止损 {stop_}  "
+                  f"买入 {p_['entry_date']}" + ("  （待卖）" if t in (st.get("pending_exit") or {}) else "")
+                  + ("  （今天买进，对账前）" if p_.get("today") else ""))
         for t, u_ in (st.get("core_units") or {}).items():
             if int(u_):
                 print(f"  核心 {NM.qty(t, f'{int(u_):,} 口')}")
+        for t, x_ in (pj_.get("by_ticker") or {}).items():
+            print(f"  今天已成交 {x_['text']}")
         for o in b_.get("orders", []):
             lim = f" 限价 ¥{o['limit']:,g}" if o.get("limit") else ""
             q_ = f"{int(o['qty'] or 0):,} {'口' if o.get('kind') == 'core' else '股'}"
@@ -4679,6 +4688,10 @@ def cmd_manual(a) -> int:
     if a.action == "list":
         pct = MO.position_pct(st)
         print(f"账本 {book}（{'模拟账户' if paper else '立花'}；决策日 {st.get('last_date') or '—'}）")
+        from qbreak import live_ops as _LO
+        pj_ = _LO.held_now(b_, tag, now=now)                # 今天已成交、还没对账的（2026-10-16）
+        if pj_["has"]:
+            print(f"  今天已成交：{'；'.join(x_['text'] for x_ in pj_['by_ticker'].values())}（{pj_['note']}）")
         for t, p_ in (st.get("pos") or {}).items():
             q = (st.get("pending_exit") or {}).get(t)
             sh_ = f"{int(p_['shares']):,} 股"
@@ -4775,18 +4788,20 @@ def cmd_manual(a) -> int:
         req["block_days"] = a.block_days
     try:
         rec = MO.normalize(req)
-        rec = MO.core_rec(rec, b_, tag) or rec                  # 持有的核心 ETF 的卖出 / 减仓 / 调仓 → 闲置资金比例；固定口数的 → 改固定口数（2026-10-13）
+        rec = MO.core_rec(rec, b_, tag, now=now) or rec         # 持有的核心 ETF 的卖出 / 减仓 / 调仓 → 闲置资金比例；固定口数的 → 改固定口数（2026-10-13）
     except ValueError as e:
         print(f"★ 没写：{e}")
         return 2
     sm_ = read_json(paths.out_dir() / f"live_unified_{tag}.json", {}) or {}
-    why = MO.check(rec, b_, tag, sm=sm_)
+    why = MO.check(rec, b_, tag, sm=sm_, now=now)
     if why:
         print(f"★ 没写：{_ann(why)}")
         return 2
     pct0_ = MO.core_pct_now(tag, b_)                          # 写之前的闲置资金比例（0 = 停买中）
+    from qbreak import live_ops as _LO
+    pst_ = _LO.held_now(b_, tag, now=now)["state"]            # 含今天已成交 = 对账之后执行时的持仓（方向 / 预览；2026-10-16）
     if rec["kind"] == "adjust":                               # 写入时预览的方向（+1 加 / −1 减）：执行时换算方向相反 → 不执行（2026-10-13）
-        a0_ = MO.adjust_plan(rec, st, MO.MANUAL_CAP_PCT)
+        a0_ = MO.adjust_plan(rec, pst_, MO.MANUAL_CAP_PCT)
         if a0_["delta"]:
             rec.update(dir=1 if a0_["delta"] > 0 else -1, cur0=int(a0_["cur"]))
     pv_ = None                                               # 固定口数：写之前算（写了之后会把这条当成「现在的固定」）；与页面「确认下单」框同一个内容
@@ -4803,7 +4818,7 @@ def cmd_manual(a) -> int:
             print("★ 这只票不在执行器最近一次的「建议的股票」里：执行器照样按规则的闸门检查，不过就不买")
         elif row.get("status") != "triggered":
             print("★ 这只票还没有买入信号（规则不会买）：是你自己的决定（没有回测验证）")
-    adj = MO.adjust_plan(rec, st, float((b_.get("manual") or {}).get("cap_pct") or MO.CAP_PCT)) if rec["kind"] == "adjust" else None
+    adj = MO.adjust_plan(rec, pst_, float((b_.get("manual") or {}).get("cap_pct") or MO.CAP_PCT)) if rec["kind"] == "adjust" else None
     if adj:
         print(f"按最近收盘 ¥{adj['px']:,.0f} 估算：{'加' if adj['delta'] > 0 else '卖'} {abs(adj['delta']):,} 股"
               f"（{adj['cur']:,} → {adj['target']:,} 股）" + ("；★ 超过单只上限，截到上限" if adj["capped"] else ""))
@@ -4811,7 +4826,7 @@ def cmd_manual(a) -> int:
     if rec["kind"] == "adjust":
         sold_ = -adj["delta"] if adj and adj["delta"] < 0 else 0
     elif rec["kind"] == "trim":                              # 减仓：按最近收盘换算的股数
-        a_ = MO.adjust_plan({**rec, "kind": "adjust", "unit": "pct", "value": rec.get("pct")}, st,
+        a_ = MO.adjust_plan({**rec, "kind": "adjust", "unit": "pct", "value": rec.get("pct")}, pst_,
                             float((b_.get("manual") or {}).get("cap_pct") or MO.CAP_PCT))
         sold_ = max(0, -a_["delta"]) if a_ else 0
     elif rec["kind"] == "core" and rec.get("ticker") and int(rec.get("target") or 0) > 0:

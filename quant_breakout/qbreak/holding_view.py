@@ -295,24 +295,118 @@ def why_line(row: dict) -> str:
     return s
 
 
+def overlay(hv: dict | None, pj: dict | None) -> dict:
+    """持仓卡加上今天已知的成交（live_ops.held_now 的对账前预计；2026-10-16 用户：卖出 1545、买入 1482 后「持仓里没反应」）：
+    卖光的移到 sold（页面上「今天已卖出」一节）；部分卖出 / 加仓的改股数、口数并带一句 today；今天买进的新加一行（止损价、趋势标签
+    在对账之后的决策才有：later）。只改被成交碰到的行（约占权益也只重算这些：预计权益 × mark 价）；note = held_now 的 note。
+    pj 没有成交 → 原样返回。纯函数（不改入参）。"""
+    hv = hv or {}
+    if not (pj or {}).get("has"):
+        return hv
+    by = pj.get("by_ticker") or {}
+    pos, cu = pj.get("pos") or {}, pj.get("core_units") or {}
+    eq = _f(pj.get("equity"))
+    fills = pj.get("fills") or []
+    sold_out, new = list(pj.get("sold_out") or []), list(pj.get("new") or [])
+    bk = pj.get("book") or {}
+    cpx = {**((bk.get("state") or {}).get("core_last") or {}), **((bk.get("core_rule") or {}).get("px") or {})}
+    when = "下一次执行器运行" if pj.get("missed") else (pj.get("settle") or "下一次执行器运行")
+    later = f"止损价、趋势标签在 {when} 的决策之后才有"
+
+    def pct(n: int, px) -> float | None:
+        px = _f(px)
+        return round(n * px / eq * 100, 2) if eq and px else None
+
+    def side(t: str, sd: str) -> tuple[int, float | None, list]:
+        fs = [f for f in fills if f.get("ticker") == t and f.get("side") == sd]
+        n = sum(int(f.get("qty") or 0) for f in fs)
+        return n, (sum(int(f.get("qty") or 0) * float(f.get("px") or 0) for f in fs) / n if n else None), fs
+
+    sold = []
+    for t in sold_out:
+        n, px, fs = side(t, "SELL")
+        pn = [f.get("pnl") for f in fs]
+        sold.append({"ticker": t, "name": NM.name(t), "kind": (by.get(t) or {}).get("kind", "stock"), "qty": n, "px": px,
+                     "pnl": sum(pn) if pn and None not in pn else None, "text": (by.get(t) or {}).get("text", "")})
+    hs = []
+    for r in hv.get("holdings") or []:
+        t = r.get("ticker")
+        if t not in by or t not in pos:
+            if t not in sold_out:
+                hs.append(r)
+            continue
+        sh = int(pos[t].get("shares") or 0)
+        mk = (r.get("trend") or {}).get("close") or pos[t].get("last_close") or pos[t].get("entry_px")
+        hs.append({**r, "shares": sh, "today": by[t].get("text", ""), "pct_equity": pct(sh, mk)})
+    try:
+        _nm, s33, th = _lookup()
+    except Exception:                                         # noqa: BLE001  业种 / 主题只是展示
+        s33, th = {}, {}
+    have = {r.get("ticker") for r in hs}
+    for t in new:
+        if (by.get(t) or {}).get("kind") == "core" or t in have or t not in pos:
+            continue
+        p, c = pos[t], NM.code(t)
+        sh, px = int(pos[t].get("shares") or 0), _f(p.get("entry_px"))
+        hs.append({"ticker": t, "name": NM.name(t), "s33": s33.get(c) or "", "theme": th.get(c) or "", "shares": sh,
+                   "entry_date": pj.get("fill_day"), "entry_px": px, "stop_px": None, "hold": 0, "why": [], "trend": None,
+                   "today": (by.get(t) or {}).get("text", ""), "later": later, "pct_equity": pct(sh, px)})
+    cs = []
+    for r in hv.get("core") or []:
+        t = r.get("ticker")
+        if t not in by:
+            cs.append(r)
+            continue
+        if t in sold_out:
+            continue
+        u = int(cu.get(t) or 0)
+        mk = (r.get("trend") or {}).get("close") or cpx.get(t) or side(t, "BUY")[1] or side(t, "SELL")[1]
+        cs.append({**r, "units": u, "today": by[t].get("text", ""), "pct_equity": pct(u, mk)})
+    have = {r.get("ticker") for r in cs}
+    for t in new:
+        if (by.get(t) or {}).get("kind") != "core" or t in have or int(cu.get(t) or 0) <= 0:
+            continue
+        u = int(cu.get(t) or 0)
+        cs.append({"ticker": t, "name": NM.name(t), "units": u, "why": [], "today": (by.get(t) or {}).get("text", ""),
+                   "pct_equity": pct(u, cpx.get(t) or side(t, "BUY")[1])})
+    dw = pj.get("day_word") or "今天"
+    return {**hv, "holdings": hs, "core": cs, "sold": sold, "sold_head": f"{dw}已卖出", "note": pj.get("note") or ""}
+
+
 def lines(hv: dict | None) -> list[str]:
     """日志 / 通知 / 云端日报的文字版（每只票两行：为什么持有、现在趋势）。"""
     out = []
+    if (hv or {}).get("note"):                                # 今天已成交、对账前的预计（overlay；2026-10-16）
+        out.append(f"- （{hv['note']}）")
     for r in (hv or {}).get("holdings") or []:
         head = label(r, core=False)                           # 「6758 ソニーグループ」（2026-10-15：以前「6758.T ソニーグループ」）
         if r.get("error"):
             out.append(f"- {head}：{r['error']}")
             continue
+        if isinstance(r.get("why"), list):                    # 今天买进的（对账前；overlay 新加的行 why = []）：还没有买入理由 / 趋势
+            out.append(f"- {r.get('today') or head}" + (f"；{r['later']}" if r.get("later") else ""))
+            continue
         tr = r.get("trend") or {}
         out.append(f"- {head} 为什么持有：{why_line(r)}" + (f"；{r['s33']}" if r.get("s33") else "")
                    + (f"；主题 {r['theme']}" if r.get("theme") else ""))
         out.append(f"- {head} 现在：{TREND.get(tr.get('label'), '—')}（{trend_text(tr) or '—'}）")
+        if r.get("today"):
+            out.append(f"- {r['today']}")
     for r in (hv or {}).get("core") or []:
         tr = r.get("trend") or {}
         h = label(r, core=True)                               # 名字和口数之间隔「：」（名字可能以数字结尾：「1545 纳斯达克 100：4,110 口」；2026-10-15 复核）
         sep = "：" if h != NM.code(r.get("ticker")) else " "
+        if isinstance(r.get("why"), list):                    # 今天买进的（对账前；overlay 新加的行）
+            td = str(r.get("today") or "")
+            td = td[len(h) + 1:] if td.startswith(h + "：") else td
+            out.append(f"- {h}{sep}{r['units']:,} 口" + (f"（{td}）" if td else ""))
+            continue
         out.append(f"- {h}{sep}{r['units']:,} 口 为什么持有：{r['why']}；现在：{TREND.get(tr.get('label'), '—')}"
                    + (f"（{trend_text(tr)}）" if trend_text(tr) else ""))
+        if r.get("today"):
+            out.append(f"- {r['today']}")
+    for r in (hv or {}).get("sold") or []:                    # 今天卖光的（对账前）
+        out.append(f"- {r.get('text') or label(r)}")
     return out
 
 
@@ -322,7 +416,8 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
     hv = hv or {}
     hs, cs = hv.get("holdings") or [], hv.get("core") or []
     H = [f"<h2>{escape(title)}</h2><div class='muted'>按 {escape(str(hv.get('bar_date') or '—'))} 收盘。"
-         "趋势标签只是按收盘价和均价线的位置分的类，不是预测；卖不卖只按规则。</div>" + toolbar]
+         "趋势标签只是按收盘价和均价线的位置分的类，不是预测；卖不卖只按规则。</div>"
+         + (f"<div class='small hn-note'><b>{escape(hv['note'])}</b></div>" if hv.get("note") else "") + toolbar]   # 今天已成交（overlay；2026-10-16）
     if not hs and not cs:
         H.append("<div class='muted'>没有持仓</div>")
     for r in hs:
@@ -332,8 +427,14 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
                 + (f" · 约占权益 {r['pct_equity']:.1f}%" if r.get("pct_equity") is not None else "")
                 + (f" · {escape(r['s33'])}" if r.get("s33") else "") + (f" · 主题 {escape(r['theme'])}" if r.get("theme") else "")
                 + "</span>" + (f" <b class='neg'>已排定开盘卖（{escape(r['queued'])}）</b>" if r.get("queued") else ""))
+        today = f"<div class='small hn'><b>{escape(r['today'])}</b></div>" if r.get("today") else ""   # 今天已成交（对账前；2026-10-16）
         if r.get("error"):
-            H.append(f"<div class='hv'>{head}<div class='muted'>{escape(r['error'])}</div>"
+            H.append(f"<div class='hv'>{head}<div class='muted'>{escape(r['error'])}</div>" + today
+                     + (actions(r, "stock") if actions else "") + "</div>")
+            continue
+        if isinstance(r.get("why"), list):                    # 今天买进的（overlay 新加的行）：对账之后的决策才有买入理由、止损价、趋势
+            H.append(f"<div class='hv'>{head}{today}"
+                     + (f"<div class='muted small'>{escape(r['later'])}</div>" if r.get("later") else "")
                      + (actions(r, "stock") if actions else "") + "</div>")
             continue
         w, tr = r.get("why") or {}, r.get("trend") or {}
@@ -347,7 +448,7 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
                  + (f"<details><summary class='muted'>买入那天的其他规则读数</summary><ul>{items}</ul></details>" if items else "")
                  + f"<div><b>现在</b>：<b class='{cls}'>{escape(TREND.get(lab, '—'))}</b>"
                  + (f" <span class='{'up' if ret >= 0 else 'down'}'>{'浮盈' if ret >= 0 else '浮亏'} {ret:+.1f}%</span>" if ret is not None else "")
-                 + f" <span class='muted'>{escape(trend_text(tr))}</span></div>"
+                 + f" <span class='muted'>{escape(trend_text(tr))}</span></div>" + today
                  + (actions(r, "stock") if actions else "") + "</div>")
     for r in cs:
         tr = r.get("trend") or {}
@@ -355,13 +456,18 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
         cls = {"up": "up", "strong": "up", "weak": "down", "down": "down"}.get(lab, "muted")
         H.append(f"<div class='hv'><b>{escape(label(r, core=True))}</b> <span class='muted'>{r['units']:,} 口"
                  + (f" · 约占权益 {r['pct_equity']:.1f}%" if r.get("pct_equity") is not None else "") + " · 核心 ETF</span>"
-                 f"<div><b>为什么持有</b>：{escape(r['why'])}</div>"
+                 + ("" if isinstance(r.get("why"), list) else f"<div><b>为什么持有</b>：{escape(r['why'])}</div>")   # 今天买进的：还没有
                  + (f"<div><b>现在</b>：<b class='{cls}'>{escape(TREND.get(lab, '—'))}</b> <span class='muted'>{escape(trend_text(tr))}</span></div>"
                     if tr else "")
+                 + (f"<div class='small hn'><b>{escape(r['today'])}</b></div>" if r.get("today") else "")
                  + (actions(r, "core") if actions else "") + "</div>")
+    sold = hv.get("sold") or []
+    if sold:                                                  # 今天卖光的（对账前；2026-10-16）：不再给按钮
+        H.append(f"<div class='hv hn-sold'><b>{escape(str(hv.get('sold_head') or '今天已卖出'))}</b>"
+                 + "".join(f"<div class='small'>{escape(r.get('text') or label(r))}</div>" for r in sold) + "</div>")
     return "".join(H)
 
 
 CSS = ".hv{border-top:1px solid var(--line);padding:8px 0}.hv:first-of-type{border-top:0}.hv ul{margin:4px 0 4px;padding-left:18px}"
 
-__all__ = ["build", "why_items", "trend", "trend_text", "why_line", "lines", "html", "names", "label", "TREND", "TREND_NOTE", "EXIT_TEXT", "CSS"]
+__all__ = ["build", "why_items", "trend", "trend_text", "why_line", "lines", "html", "overlay", "names", "label", "TREND", "TREND_NOTE", "EXIT_TEXT", "CSS"]

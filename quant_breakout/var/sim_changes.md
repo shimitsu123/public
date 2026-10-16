@@ -12102,3 +12102,9 @@ deb8a46（对账之后的状态与说明：G7 / G8 / G11 / G16 / G17 / G22 / G26
     CLAUDE.md 两处「今天的单」改成「交易」→「今天要成交的单」。
   - 测试：新增 `tests/test_trade_review8.py`（13 项，改之前都失败）；`test_trade_today.py` 的标签数字检查不算跟着单放在上面的撤单指令，
     `test_non_trading_day` 与 `test_cancel_in_flight_stays_on_top_unsent_cancel_goes_below` 改成新的期望（撤单指令跟着那笔单在上面；休市日只说一次）。
+## 2026-10-16 工程（事后：用户报告；只展示 + 写入前预览，不改规则 / 参数 / 记账）：今天已成交的持仓马上显示
+- 起因（事后）：用户 10/16 09:43 在模拟账户卖出 1545 纳斯达克 100 4,110 口、买入 1482 对冲版美国 7〜10 年国债 650 口（都已成交），持仓仍显示 4,110 口 / 0 口、现金 ¥192 —— 记账在下个交易日 07:40 对账时才进 state（设计如此，见 L10150、L11732）。
+- 改动：新增 `live_ops.held_now`（账本 + 当前决策已知成交的只读投影；对账删掉这批单、推进 last_date 后自然归零，不会重复）；面板 / 手机 / 桌面页 / `--status` / `manual list` / 盘中观测 / mac_status / 交易页文字 / 持仓卡（`holding_view.overlay`）改读它；`fund_holdings`、`corefix_plan`、adjust / trim 的预览与写入方向按投影；新增窄守卫 `MO.today_why`（今天卖光的不能再点卖出、今天买进的对账前不能买 / 卖）。
+- 不变：执行器（对账、核对、下单、模拟撮合、日报）、`cash_hi` / 交易所现金、差金決済、名额、存在性校验、税、规则与参数。
+- 已知限制：立花只算已知成交，现金约数；模拟账户 09:25 撮合的价格第二天按正式开盘价改记；预计权益按上一次收盘估。
+- 测试：新增 tests/test_held_now.py、tests/test_panel_held_now.py，扩充 trade_room / intraday_watch 的测试；全部测试通过。

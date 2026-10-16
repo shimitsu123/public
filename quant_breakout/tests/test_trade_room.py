@@ -419,3 +419,29 @@ def test_manual_list_prints_the_section(monkeypatch, capsys):
     assert "今天还能：买 5 次 · 卖 2 次 · 共 5 次（券商不限次数；限制来自差金決済与执行器规则）" in out
     assert "  - 7203 トヨタ自動車：今天还能卖 ✓ / 买 ✓（二选一：同一只当天只下一笔）" in out
     assert f"  差金決済：{TR.SAKIN_URL}（2026-10-15 核对）" in out
+
+
+# ───────────────────────── 今天已成交（对账前；只改文字：held0、sakin、现金照旧按账本；2026-10-16） ─────────────────────────
+def test_todays_fills_change_only_the_text():
+    from test_held_now import _b1016
+    b = _b1016()
+    now = dt.datetime(2026, 10, 16, 16, 0, tzinfo=JST)
+    rm = _room(b, now=now)
+    r82, r45 = rm["per_ticker"]["1482.T"], rm["per_ticker"]["1545.T"]
+    assert r82["held"] == 0 and r45["held"] == 4110                           # held0 = 账本（差金決済用开盘前的持仓）
+    cur = [o for o in b["orders"] if o.get("decided_on") == b["state"]["last_date"]]
+    assert r82["sakin"] == TR.sakin([o for o in cur if o["ticker"] == "1482.T"], 0)
+    assert r45["sakin"] == TR.sakin([o for o in cur if o["ticker"] == "1545.T"], 4110)
+    assert "今天还能卖 ✗（今天买进）" in r82["chip"] and "今天还能卖 ✗（今天已卖出）" in r45["chip"]
+    assert any("今天买进 650 口" in w for w in r82["sell"]["why"]) and not any(w == "没拿着" for w in r82["sell"]["why"])
+    assert any("今天已卖出全部 4,110 口" in w for w in r45["sell"]["why"])
+    assert r82["held_now"] == {"buy": 650, "sell": 0, "net": 650} and r45["held_now"] == {"buy": 0, "sell": 4110, "net": -4110}
+    assert round(TR.cash_now(b, "paper", now, None)["cash"]) == rm["money"]["cash"] == 190   # 现金照旧（券商 / 账本口径，不叠加）
+
+
+def test_stock_bought_today_intraday_says_so():
+    b = _bk(pos={}, orders=[_o("6758.T", "BUY", px=3000.0)])
+    r = _room(b)["per_ticker"]["6758.T"]
+    assert r["held"] == 0 and r["sell"]["short"] == "今天买进" and r["sell"]["n"] == 0
+    assert r["sell"]["why"][0].startswith("6758 ソニーグループ：今天买进 100 股 @ ¥3,000.00（明早 07:40 对账之后才算持仓）")
+    assert r["held_now"] == {"buy": 100, "sell": 0, "net": 100}

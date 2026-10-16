@@ -323,7 +323,9 @@ def evaluate(tag: str, now: dt.datetime | None = None, fetch=None, prev: dict | 
     day = target_day(now)
     sim = _sim()
     p_in, p_out = _params(sim)
-    bk = (peek_json(paths.state_dir() / f"live_unified_{tag}.json") or {}).get("state") or {}
+    from .live_ops import held_now                            # 函数里 import（live_ops 在函数里 import 本模块的 next_word；不循环）
+    pj = held_now(peek_json(paths.state_dir() / f"live_unified_{tag}.json") or {}, tag, now=now)
+    bk = pj["state"]                                          # 含今天已成交（对账前；卖光的不再出现、今天买进的个股没有离场线；2026-10-16）
     pool = _pool(sim)
     gates = load_gates(tag, day, bk)
     doc: dict = {"version": VERSION, "book": tag, "day": day.isoformat(), "updated": now.isoformat(timespec="seconds"),
@@ -423,6 +425,12 @@ def evaluate(tag: str, now: dt.datetime | None = None, fetch=None, prev: dict | 
                "queued": pend.get(t), "queued_text": TL.REASON.get(pend[t], str(pend[t])) if pend.get(t) else None, "push_ok": False}
         q = quotes.get(t)
         df, why = _daily(t)
+        if ps.get("today") or ps.get("stop_px") is None:     # 今天买进（对账前）：止损价、离场线在对账之后的决策才有 → 不算、不推送
+            row.update(today=True, status=f"{pj.get('day_word') or '今天'}买进（对账前）：离场线在 {pj.get('when') or '下一次执行器运行'} 的决策之后才有")
+            if q:
+                row.update(px=q.get("px"), at=q.get("at"))
+            doc["holdings"].append(row)
+            continue
         if not q:
             row["status"] = "还没有今天的数据"
         elif df is None:
@@ -529,6 +537,8 @@ def _hold_line(r: dict, nx: str = "明早") -> str:
     """持仓每只一行：每条收盘卖出线离现价多远；越过的写「若收盘仍在这里 → 规则明早开盘卖（理由）」（nx：next_word，周五 → 下个交易日）。"""
     if r.get("queued"):
         return f"已排定开盘卖（{r.get('queued_text') or r['queued']}）"
+    if r.get("today"):                                        # 今天买进（对账前）：没有离场线（2026-10-16）
+        return f"盘中：{r.get('status')}" + (f"（现价 {_px(r['px'])}，数据 {_hm(r.get('at'))}）" if r.get("px") is not None else "")
     if r.get("px") is None:
         return f"盘中：{r.get('status') or '还没有今天的数据'}"
     parts = [f"盘中（暂定，数据 {_hm(r.get('at'))}，{LAG}）：现价 {_px(r['px'])}（买价起 {_pct(r.get('ret_pct'))}）"]

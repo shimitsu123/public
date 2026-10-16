@@ -320,6 +320,19 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
                      + "：写新的指令会恢复自动叫执行器（或在 Mac 上说「再试一次」）")
     pos = st.get("pos") or {}
     cores_held = {t: int(u or 0) for t, u in (st.get("core_units") or {}).items() if int(u or 0) > 0}
+    # 今天已成交的买卖（对账前的投影，只改文字）：held0、sakin、现金仍按账本 / 券商（差金決済用开盘前的持仓；2026-10-16）
+    try:
+        pjr = LO.held_now(b, tag, now=now)
+    except Exception:                                      # noqa: BLE001  只是文字：算不了就当没有
+        pjr = {"by_ticker": {}, "new": [], "sold_out": []}
+    hn_by, hn_new, hn_gone = pjr.get("by_ticker") or {}, set(pjr.get("new") or []), set(pjr.get("sold_out") or [])
+
+    def hn_mark(s: dict, t: str, held: int) -> None:      # 卖这一边的第一个原因：今天买进（对账前不算持仓）/ 今天已卖出全部
+        x = hn_by.get(t) or {}
+        if held <= 0 and t in hn_new and x.get("text"):
+            _no(s, x["text"], "今天买进")
+        elif t in hn_gone and x.get("text"):
+            _no(s, x["text"], "今天已卖出")
     pend = st.get("pending_exit") or {}
     hist = st.get("history") or []
     eq = float(hist[-1][1]) if hist else 0.0
@@ -397,8 +410,10 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
     out: dict = {}
 
     def add_row(t: str, kind: str, held: int, cand: bool = False) -> dict:
+        x = hn_by.get(t) or {}
         r = {"t": t, "label": NM.label(t), "kind": kind, "held": held, "cand": cand, "px": round(px_of(t), 2) or None,
-             "buy": _side(), "sell": _side()}
+             "buy": _side(), "sell": _side(),
+             "held_now": {"buy": int(x.get("buy") or 0), "sell": int(x.get("sell") or 0), "net": int(x.get("net") or 0)}}
         out[t] = r
         return r
 
@@ -417,11 +432,12 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
         s["via"] = "「卖出全部」/「调仓…」" if held0 > 0 else ""
         bb["via"] = "「调仓…」（加仓）" if held0 > 0 else "「买入…」"
         # 卖
+        hn_mark(s, t, held0)
         session(s)
         if sk["sell"]["why"]:
             _note(s, sk["sell"]["why"])
         left = max(0, held0 - sk["sold"])                  # 不另付钱还能卖的（例 2：持股 ≥ 合计卖出股数）
-        if held0 <= 0:
+        if held0 <= 0 and t not in hn_new:
             _no(s, "没拿着（今天买进的第二天早上对账之后才算持仓）", "没拿着")
         elif t in pend:
             _no(s, ("已在卖出（手动）" if pend[t] == "manual" else f"已排定开盘卖（{MO._exit_text(pend[t])}）") + "：不用再卖", "已在卖")
@@ -468,6 +484,7 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
         s, bb = r["sell"], r["buy"]
         s["via"] = "「固定口数…」（0 口 = 全部卖出）" if t in fixed else "「卖出全部」/「调仓…」（换算成闲置资金比例）"
         bb["via"] = "「固定口数…」/「买入…」（核心 ETF 不能用个股的「买入」：用固定口数或闲置资金比例）"
+        hn_mark(s, t, held0)
         for x in (s, bb):
             session(x)
         if sk["sell"]["why"]:
@@ -475,7 +492,7 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
         if sk["buy"]["why"]:
             _note(bb, sk["buy"]["why"])
         left = max(0, held0 - sk["sold"])
-        if held0 <= 0:
+        if held0 <= 0 and t not in hn_new:
             _no(s, "没拿着", "没拿着")
         mine = [y for y in core_instr if y.get("kind") == "core" or y.get("ticker") == t]
         for x in (s, bb):

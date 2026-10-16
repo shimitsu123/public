@@ -570,12 +570,17 @@ def fund_holdings(book: dict | None, tag: str | None = None) -> dict:
     {"cash": 现在能用的现金（(账本现金 − 立花的出金预留) × (1 − 缓冲)）, "reserve": 扣掉的出金预留,
      "hold": [{"t", "kind": stock / core, "cur", "px", "lot", "name"}],
      "busy": [还有没处理完的指令 / 规则在卖的票：不拿来凑]}。价格 = 账本里的最近收盘（估算）。
-    name：名字（names.name；查不到 None）—— 买入 / 调仓框「从持仓凑钱」的预览行用（2026-10-15 用户：只写代码不知道是哪只）。"""
-    st = (book or {}).get("state") or {}
+    name：名字（names.name；查不到 None）—— 买入 / 调仓框「从持仓凑钱」的预览行用（2026-10-15 用户：只写代码不知道是哪只）。
+    持仓与现金按 live_ops.held_now（账本 + 今天已知的成交；2026-10-16）：凑钱的指令在下一次决策（对账之后）/ 盘中按交易所的现金执行，
+    那时现金已含今天的成交（10/16：账本 ¥192 对 ¥10,020）；今天有成交的票当天动不了（busy_today）→ 都放进 busy，不拿来凑。"""
+    from . import live_ops as LO
+    pj = LO.held_now(book, tag)
+    st = pj["state"]
     man = (book or {}).get("manual") or {}
     waiting = unseen(tag, book) if tag else []
     busy = {r.get("ticker") for r in _live(man.get("items") or {}, waiting, ORDER_KINDS) if r.get("ticker")}
     busy |= set(st.get("pending_exit") or {})
+    busy |= {f["ticker"] for f in pj.get("fills") or []}   # 今天有成交的（对账前；卖光的也在这里）
     hold = []
     for t, p in (st.get("pos") or {}).items():
         px = float(p.get("last_close") or p.get("entry_px") or 0)
@@ -605,17 +610,31 @@ def fund_all(book: dict | None, tag: str | None, ticker: str) -> dict:
     "cores": [(ETF, 口数)], "blocked": 不能做的原因 / None}。个股写成同批的卖出全部（设「不买回」）；规则已在卖的也写（执行时由规则卖、只设「不买回」，2026-10-13）；
     已有手动卖出全部的指令的不重复写；有别的没处理完的指令（减仓 / 加仓）的票 → blocked（先撤回它）；核心 ETF 用闲置资金比例 0%（卖出全部 + 停买），
     有固定口数的先取消；还没被执行器读的固定口数指令 → blocked；别的票还没下单的买入指令 → blocked（同一次决策买进、不会被卖；2026-10-14）。
-    写入之后才拿的个股 / ETF 执行时一起卖（Manual.apply）。"""
+    写入之后才拿的个股 / ETF 执行时一起卖（Manual.apply）。
+    今天已知的成交（live_ops.held_now；2026-10-16）：今天卖光的个股 / 核心 ETF → skip（不再写空的卖出）；今天买进的个股（账本里还没有，对账前写不进
+    同批的卖出全部）→ blocked（等对账之后再点）；核心 ETF 的口数按投影（只是说明）。"""
+    from . import live_ops as LO
     st = (book or {}).get("state") or {}
     man = (book or {}).get("manual") or {}
     waiting = unseen(tag, book) if tag else []
     live = _live(man.get("items") or {}, waiting, ORDER_KINDS)
     pend = st.get("pending_exit") or {}
+    pj = LO.held_now(book, tag)
     out = {"sells": [], "skip": [], "cores": [], "blocked": None,
            "core_pct": core_pct_now(tag, book) if tag else float(man.get("core_pct", 100.0)), "core_clear": sorted(man.get("core_fix") or {})}
+    nb = [x for x in pj.get("new") or [] if x != ticker and ((pj.get("by_ticker") or {}).get(x) or {}).get("kind") == "stock"]
+    if nb:
+        b0 = pj["by_ticker"][nb[0]]
+        out["blocked"] = (f"{names.label(nb[0])} {pj.get('day_word') or '今天'}刚买进 {int(b0.get('buy') or 0):,} 股，{pj.get('when')} 对账之后才算持仓："
+                          "「全部换成」等对账之后再点")
+        return out
     for t, p in sorted((st.get("pos") or {}).items()):
         cur = int(p.get("shares") or 0)
         if t == ticker or cur <= 0:
+            continue
+        if t in (pj.get("sold_out") or []):
+            b0 = (pj.get("by_ticker") or {}).get(t) or {}
+            out["skip"].append((t, f"{pj.get('day_word') or '今天'}已卖出全部 {int(b0.get('sell') or 0):,} 股（{pj.get('when')} 对账后正式记账）"))
             continue
         if pend.get(t) == "manual":
             out["skip"].append((t, f"已在卖出全部（{_exit_text(pend[t])}）"))
@@ -628,9 +647,13 @@ def fund_all(book: dict | None, tag: str | None, ticker: str) -> dict:
             out["blocked"] = f"{names.label(t)} 有没处理完的指令（{mine[-1].get('id')}）：先撤回它"
             return out
         out["sells"].append((t, cur, float(p.get("last_close") or p.get("entry_px") or 0)))
-    for t, u in sorted((st.get("core_units") or {}).items()):
+    for t, u in sorted((pj.get("core_units") or {}).items()):   # 口数按投影（今天卖光的不列；只是说明）
         if int(u or 0) > 0:
             out["cores"].append((t, int(u)))
+    for t in pj.get("sold_out") or []:                     # 今天卖光的核心 ETF：不用再卖（只是说明，比例 0% 那一句不再列它）
+        b0 = (pj.get("by_ticker") or {}).get(t) or {}
+        if t != ticker and b0.get("kind") == "core":
+            out["skip"].append((t, f"{pj.get('day_word') or '今天'}已卖出全部 {int(b0.get('sell') or 0):,} 口（{pj.get('when')} 对账后正式记账）"))
     buys = [r for r in live if r.get("kind") == "buy" and r.get("ticker") != ticker]
     later = [r for r in buys if r.get("status", "pending") != "placed"]   # 还没下单的买入：和整批同一次决策买进、执行时不会被卖（2026-10-14）
     if later:
@@ -1117,8 +1140,10 @@ def core_effects(book: dict | None, pct: float, skip: str | None = None, keep_fi
                  tag: str | None = None) -> list[tuple[str, int, int]]:
     """闲置资金比例改成 pct 时，各只核心 ETF（skip 以外）现在的口数 → 新比例下的目标口数（只列会变的）：[(票, 现在, 目标)]。
     比例对全部核心 ETF 一起生效（规则同时拿两只以上时，调一只另一只也跟着变）。固定口数的 ETF 不跟比例（2026-10-13）→ 不列；
-    keep_fixed：也列（「全部换成」：固定口数同批取消、之后按比例 0% 卖出）。tag：执行器还没读的固定口数 / 恢复按规则也算上（2026-10-14）。"""
-    st = (book or {}).get("state") or {}
+    keep_fixed：也列（「全部换成」：固定口数同批取消、之后按比例 0% 卖出）。tag：执行器还没读的固定口数 / 恢复按规则也算上（2026-10-14）。
+    现在的口数按 live_ops.held_now（含今天已成交；只是说明文字，2026-10-16）。"""
+    from . import live_ops as LO
+    st = LO.held_now(book, tag)["state"]
     fixed = set() if keep_fixed else set(core_fixed(book, tag))
     u100s = dict(core_u100s(book)[0])                        # 执行器还没算过 → 估算（比例还是 100% 时）
     if float(pct) <= 0:                                     # 比例 0%：拿着的都卖（执行器还没算过规则目标额的也一样）
@@ -1212,6 +1237,31 @@ def busy_today(book: dict | None, t: str, now: dt.datetime) -> bool:
     return bool(orders_today(book, now, t))
 
 
+def today_why(book: dict | None, t: str | None, kind: str | None, tag: str | None = None,
+              now: dt.datetime | None = None) -> str | None:
+    """今天已成交、还没对账的票，写手动指令前挡一下（窄的写入守卫；2026-10-16 用户卖出 1545、买入 1482 后「持仓里没反应」）→ 理由 / None：
+    今天已经卖光的（个股 / 核心 ETF）再点卖出 / 减仓 / 调仓 → 不用再点（旧页面上再点「卖出全部 1545」会变成闲置资金比例 0%、停买 ETF）；
+    今天买进的个股：再买 → 已经买进；卖出 / 减仓 / 调仓 → 对账之后才算持仓（执行器在对账之前按账本看手动指令，账本里还没有它）。
+    按 live_ops.held_now（与页面显示同一个数）；其余 → None（存在性、名额、执行器一侧照旧按账本）。"""
+    if not t or (kind not in POS_KINDS and kind != "buy"):
+        return None
+    from . import live_ops as LO
+    pj = LO.held_now(book, tag, now=now)
+    b = (pj.get("by_ticker") or {}).get(t) if pj.get("has") else None
+    if not b:
+        return None
+    lt, dw, sw = names.label(t), pj.get("day_word") or "今天", pj.get("when") or pj.get("settle") or "下一次执行器运行"
+    if kind in POS_KINDS and t in (pj.get("sold_out") or []):
+        u = "口" if b.get("kind") == "core" else "股"
+        return f"{lt} {dw}已经卖出全部 {int(b.get('sell') or 0):,} {u}（{sw} 对账后正式记账），不用再点"
+    if b.get("kind") != "stock" or t not in (pj.get("new") or []):
+        return None
+    n = int(b.get("buy") or 0)
+    if kind == "buy":
+        return f"{lt} {dw}已经买进 {n:,} 股（{sw} 对账之后才算持仓）：要加仓等对账之后用「调仓」"
+    return f"{lt} {dw}刚买进 {n:,} 股，{sw} 对账之后才算持仓；之后才能卖出 / 调仓"
+
+
 def _order_word(o: dict) -> str:
     """「今天开盘已排的 1545 纳斯达克 100 卖 1,130 口」（盘中的单：今天盘中已下的）。"""
     n = int(o.get("sent_qty") or o.get("qty") or 0)
@@ -1273,7 +1323,12 @@ def corefix_clear_text(book: dict | None, t: str, tag: str | None = None, now: d
     nd = "" if nowp else "下一次决策"
     head = (f"{fill['text']}调到规则现在的口数，之后每天照规则（美股牛熊 / 股债相关 × 闲置资金比例）自动买卖" if nowp else
             "下一次决策（交易日 07:40）起这只 ETF 又按规则（美股牛熊 / 股债相关 × 闲置资金比例）自动买卖")
-    now_u = f"现在 {cur:,} 口" + (f"，今天的单成交后约 {after:,} 口" if after != cur else "")
+    from . import live_ops as LO
+    pjc = int((LO.held_now(book, tag, now=now).get("core_units") or {}).get(t, 0) or 0)   # 含今天已成交（对账前；2026-10-16）
+    if pjc != cur:
+        now_u = f"现在 {pjc:,} 口（含今天已成交；账本 {cur:,} 口）" + (f"，今天的单成交后约 {after:,} 口" if after != cur else "")
+    else:
+        now_u = f"现在 {cur:,} 口" + (f"，今天的单成交后约 {after:,} 口" if after != cur else "")
     r100 = (cr.get("rule100") or {}).get(t)
     if pct <= 0:
         plan = (f"停买中（闲置资金比例 0%）→ {nd}全部卖出 {after:,} 口（{now_u}）" if after > 0 else
@@ -1468,8 +1523,11 @@ def corefix_plan(book: dict | None, tag: str | None, rec: dict, sm: dict | None 
        "cash", "short"（这样卖了也还差的 円）, "eq", "pct", "hold"}
     intraday（D1；2026-10-15）：盘中 / 开盘后马上下的那条路（执行器 now_phase 的 fix_moves）—— 只调这一只到目标；买入钱不够 → 先卖别的
     （不固定的）核心 ETF 补足（按缺多少卖，大的先卖；不调到它们的规则目标），别的 ETF 的再平衡留给下一次决策。
-    现在口数 = 账本 + 今天已经成交的（now 给了；执行器同一个口径）。"""
-    st = (book or {}).get("state") or {}
+    现在口数 / 个股 / 现金 / 权益 = 账本 + 今天已经成交的（live_ops.held_now；执行器的 fix_moves 同一个口径；下一次决策在对账之后，
+    那时账本就是这个数 —— 2026-10-16 起两条路都用它，以前下一次决策的那条用旧口数、现金）。"""
+    from . import live_ops as LO
+    pj = LO.held_now(book, tag, now=now)
+    st = pj["state"]
     cr = (book or {}).get("core_rule") or {}
     t, clear = str(rec.get("ticker")), bool(rec.get("clear"))
     fx0 = core_fixed(book, tag)
@@ -1478,13 +1536,7 @@ def corefix_plan(book: dict | None, tag: str | None, rec: dict, sm: dict | None 
         fx1.pop(t, None)
     else:
         fx1[t] = int(rec.get("units") or 0)
-    units = {u: int(n or 0) for u, n in (st.get("core_units") or {}).items()}
-    if intraday and now is not None:                       # 今天已经成交的（口数明天早上对账后才进账本）
-        for o in orders_today(book, now):
-            q = int(o.get("filled_qty") or 0)
-            if o.get("kind") == "core" and q > 0:
-                u = str(o.get("ticker"))
-                units[u] = max(0, units.get(u, 0) + (q if o.get("side") == "BUY" else -q))
+    units = {u: int(n or 0) for u, n in (st.get("core_units") or {}).items()}   # 已含今天已成交的（held_now）
     px = {}
     for u in sorted(set(units) | set(cr.get("units100") or {}) | set(fx1) | {t}):
         p = float((cr.get("px") or {}).get(u) or (st.get("core_last") or {}).get(u) or 0)
@@ -1501,8 +1553,9 @@ def corefix_plan(book: dict | None, tag: str | None, rec: dict, sm: dict | None 
         stock_after += (sh - go) * pp
         freed += go * pp
     hist = st.get("history") or []
-    cash = float(st.get("cash_jpy") or 0) + freed
-    eq = float(hist[-1][1]) if hist else cash + stock_after + sum(units.get(u, 0) * px[u] for u in px)
+    cash = float(st.get("cash_jpy") or 0) + freed          # 投影的现金（含今天已成交）
+    eq = (float(pj["equity"]) if pj.get("equity") is not None else
+          float(hist[-1][1]) if hist else cash + stock_after + sum(units.get(u, 0) * px[u] for u in px))
     pct = core_pct_now(tag, book)
     pool = max(0.0, max(0.0, eq - stock_after) * pct / 100 - sum(n * px[u] for u, n in fx1.items() if u in px))
     ic = ((sm or {}).get("idle_cash") or {}).get("hold")
@@ -1765,13 +1818,16 @@ def core_pct_for(tg: int, u100: int, lot: int) -> float:
     return p
 
 
-def core_rec(rec: dict, book: dict | None, tag: str | None = None) -> dict | None:
+def core_rec(rec: dict, book: dict | None, tag: str | None = None, now: dt.datetime | None = None) -> dict | None:
     """持有的核心 ETF 的卖出全部 / 减仓 / 调仓 → 「闲置资金比例」指令（规则每天把核心 ETF 调回「目标额 × 比例」，
     只改这一次的单留不住）。比例 = 目标口数 ÷ 规则目标（比例 100% 时的口数）；对全部核心 ETF 一起生效。
     固定口数的 ETF → 改它的固定口数（corefix；卖出全部 = 固定 0 口；2026-10-13）。不是核心 ETF → None；调不了 → ValueError（说明）。"""
     t, k = rec.get("ticker"), rec.get("kind")
     if k not in POS_KINDS or not t or t not in core_tickers(book or {}):
         return None
+    why = today_why(book, t, k, tag, now=now)              # 今天已经卖光的：不用再点（2026-10-16）
+    if why:
+        raise ValueError(why)
     held = int((((book or {}).get("state") or {}).get("core_units") or {}).get(t, 0))
     fixed = core_fixed(book, tag)
     if t in fixed:                                          # 固定口数的 ETF：只改它自己的固定口数（不换算成比例 → 别的 ETF 不跟着变；2026-10-13）
@@ -1867,6 +1923,9 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
     k = rec["kind"]
     t = rec.get("ticker")
     lt = names.label(t) if t else ""                       # 理由里写「代码 名字」（用户手输代码时回显名字，输错也看得出；2026-10-15）
+    why = today_why(book, t, k, tag, now=now)              # 今天已成交、还没对账的票（2026-10-16）
+    if why:
+        return why
     if k in ORDER_KINDS:
         if k == "buy":
             if t in pos:
@@ -1902,12 +1961,15 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
         if s["free"] <= 0:
             return (f"个股名额已满（拿着 {s['held']} 只 + 排定买入 {s['buys']} 只，上限 {s['max']} 只）：要买先卖出一只"
                     "（卖出先处理，再处理买入）")
+    if k in ("trim", "adjust"):                            # 差额按含今天已成交的持仓（执行器在对账之后按实际持仓执行；2026-10-16）
+        from . import live_ops as LO
+        pst = LO.held_now(book, tag, now=now)["state"]
     if k == "trim":
-        cur = position_pct(st).get(t)
+        cur = position_pct(pst).get(t)
         if cur is not None and rec["pct"] >= cur:
             return f"{lt} 现在约占权益 {cur:.1f}%，目标 {rec['pct']:g}% 不低于现在：减仓只能减不能加（要加用「调仓」）"
     if k == "adjust":
-        a = adjust_plan(rec, st, MANUAL_CAP_PCT)
+        a = adjust_plan(rec, pst, MANUAL_CAP_PCT)
         if a["px"] <= 0 or a["eq"] <= 0:
             return f"账本里没有 {lt} 的收盘价 / 总权益（执行器跑过一次之后再调）"
         if a["want"] == a["cur"]:
@@ -3988,7 +4050,7 @@ def lines(sm: dict | None, today: str | None = None, now: dt.datetime | None = N
 
 __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEFAULT", "CAP_PCT", "MAX_POS", "SESSION", "Manual",
            "append", "read_all", "read_known", "is_pruned", "KEEP_ITEMS", "PAPER_IDLE", "paper_refuse", "unseen", "cancelled", "normalize", "batch_blocks", "lifting", "unblock_why", "lift_day", "rebuy_day",
-           "block_text", "FIX_WAIT", "fix_status_text", "core_pending", "core_wait", "NEXT_DECISION", "next_decision", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "HALT_CORE_AFTER", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "busy_today", "OPEN_ST",
+           "block_text", "FIX_WAIT", "fix_status_text", "core_pending", "core_wait", "NEXT_DECISION", "next_decision", "RUN_AT", "HALT_WAIT_MSG", "HALT_DONE_MSG", "HALT_CORE_MSG", "HALT_CORE_AFTER", "halt_text", "halt_core", "halt_core_line", "mmdd", "check", "slots", "core_tickers", "core_info", "core_rec", "core_pct_for", "core_effects", "core_lot", "core_u100_est", "core_u100s", "core_fixed", "orders_today", "busy_today", "today_why", "OPEN_ST",
            "corefix_clear_text", "resume_info", "wait_word", "wait_text", "fix_applied", "corefix_pending", "allin_busy_text", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text", "when_for", "morning_behind",
            "next_window", "due", "cancel_due", "CANCEL_UNTIL", "grp_wait_stale", "cancel_cids", "handling_cids", "group_prune",
            "RULE_TEXT", "UNK_LATER", "UNK_LATER_BUY", "NOW_NO_CANCEL", "NOW_FILLED_NO_CANCEL", "NOW_BUY_LAPSED", "NOW_SELL_WITHDRAWN", "now_sell_withdrawn", "now_lapsed", "now_expired", "now_cancel_why",

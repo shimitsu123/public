@@ -121,6 +121,8 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
     title = page_title(tag)
     real = tag == "tachibana"                                # 真钱（立花本番）：醒目的标识
     now = now_jst()
+    from .live_ops import held_now
+    pj = held_now(book, tag, now=now)                        # 含今天已成交的持仓 / 现金（对账前的预计，只展示；2026-10-16）
     upd = now.strftime("%Y-%m-%d %H:%M JST")
     badge = "<span class='real'>真钱（立花本番）</span>" if real else ""
     body = [f"<h1>{escape(title)}{badge}</h1>"
@@ -153,14 +155,21 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
                    else "出金预留：持仓不同是预期的" if cmp.get("explained") else "★ 与云端模拟盘不一致") \
             if cmp.get("comparable") else ("今天没有比（日期不同）" if cmp else "—")
         base_txt = f"起始 {_yen(capital)}" if abs(inv - float(capital)) < 1 else f"投入本金 {_yen(inv)}（起始 {_yen(capital)}）"
+        hn_e = hn_c = ""
+        if pj.get("has"):                                    # 主数字含今天已成交；当日 / 累计仍按收盘的权益序列（混进去会失真）
+            hd = "含今天已成交" if pj.get("day_word") == "今天" else f"含 {pj.get('day_word')}已成交"
+            hn_e = f"<span class='muted'>{escape(hd)} · 账本 {_yen(eq)}</span>"
+            hn_c = f"<span class='muted'>{escape(hd)} · 账本 {_yen(pj.get('cash_ledger'))}</span>"
+        eq_show = pj.get("equity") if pj.get("has") and pj.get("equity") is not None else eq
+        cash_show = ("约" if pj.get("has") and not paper else "") + _yen(pj.get("cash") if pj.get("has") else st.get("cash_jpy"))
         body.append(
             "<section class='card'><div class='kpi'>"
-            f"<div><span class='muted'>总权益</span><b>{_yen(eq)}</b><span class='muted'>{base_txt}</span></div>"
+            f"<div><span class='muted'>总权益</span><b>{_yen(eq_show)}</b><span class='muted'>{base_txt}</span>{hn_e}</div>"
             f"<div><span class='muted'>当日损益</span><b class='{_cls(day)}'>{_yen(day, True)}</b>"
             f"<span class='muted'>{(day / (eq - day) * 100 if eq - day else 0):+.2f}%</span></div>"
             f"<div><span class='muted'>累计损益</span><b class='{_cls(tot)}'>{_yen(tot, True)}</b>"
             f"<span class='muted'>{(tot / inv * 100 if inv else 0):+.2f}%</span></div>"
-            f"<div><span class='muted'>现金</span><b>{_yen(st.get('cash_jpy'))}</b></div>"
+            f"<div><span class='muted'>现金</span><b>{cash_show}</b>{hn_c}</div>"
             f"<div><span class='muted'>决策日 → 下一成交日</span><b>{escape(str(st.get('last_date') or '—'))}</b>"
             f"<span class='muted'>→ {escape(str(sm.get('fill_day') or '—'))}</span></div>"
             f"<div><span class='muted'>对照</span><b style='font-size:15px' class='{'' if cmp.get('same') or cmp.get('early') or cmp.get('explained') or not cmp.get('comparable') else 'neg'}'>"
@@ -217,21 +226,30 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
     if st:
         from .manual_orders import REASON_TEXT
         from .timeline import REASON as _RS
-        pend = st.get("pending_exit") or {}
-        pos = "".join(f"<tr><td>{_tcell(t)}</td><td class='n'>{int(p['shares']):,} 股</td><td class='n'>{_yen(p['entry_px'])}</td>"
-                      f"<td class='n'>{_yen(p['stop_px'])}</td><td>{escape(str(p['entry_date']))}</td>"
-                      f"<td>{'待卖（' + escape(REASON_TEXT.get(pend[t]) or _RS.get(pend[t], str(pend[t]))) + '）' if t in pend else ''}</td></tr>"
-                      for t, p in (st.get("pos") or {}).items())
+        pst = pj["state"]                                    # 含今天已成交（卖光的不列、今天买进的列出：止损价在对账之后的决策才有）
+        pend = pst.get("pending_exit") or {}
+        hnb = pj.get("by_ticker") or {}
+
+        def _note(t: str) -> str:
+            if t in pend:
+                return "待卖（" + escape(REASON_TEXT.get(pend[t]) or _RS.get(pend[t], str(pend[t]))) + "）"
+            return "今天有成交（对账前）" if t in hnb else ""
+        pos = "".join(f"<tr><td>{_tcell(t)}</td><td class='n'>{int(p['shares']):,} 股</td><td class='n'>{_yen(p.get('entry_px'))}</td>"
+                      f"<td class='n'>{_yen(p.get('stop_px'))}</td><td>{escape(str(p.get('entry_date') or '—'))}</td>"
+                      f"<td>{_note(t)}</td></tr>"
+                      for t, p in (pst.get("pos") or {}).items())
         pos += "".join(f"<tr><td>{_tcell(t)}</td><td class='n'>{int(u):,} 口</td><td class='n'>—</td><td class='n'>—</td>"
-                       f"<td>—</td><td>闲置资金 ETF</td></tr>"                     # 名字已在代码格（以前备注里再写一遍「纳斯达克 100（1545）」）
-                       for t, u in (st.get("core_units") or {}).items() if int(u))
+                       f"<td>—</td><td>闲置资金 ETF{'（今天有成交，对账前）' if t in hnb else ''}</td></tr>"   # 名字已在代码格（以前备注里再写一遍「纳斯达克 100（1545）」）
+                       for t, u in (pst.get("core_units") or {}).items() if int(u))
+        hn_txt = (f"<div class='muted'>{escape(pj['note'])}</div><ul>" + "".join(f"<li>{escape(x['text'])}</li>" for x in hnb.values())
+                  + "</ul>") if pj.get("has") else ""
         body.append("<section class='card'><h2>持仓</h2><div class='scroll'><table><tr><th>代码 / 名字</th><th class='n'>数量</th>"
                     "<th class='n'>成本</th><th class='n'>止损</th><th>买入日</th><th>备注</th></tr>"
-                    + (pos or "<tr><td colspan=6 class='muted'>无（全部现金）</td></tr>") + "</table></div></section>")
+                    + (pos or "<tr><td colspan=6 class='muted'>无（全部现金）</td></tr>") + "</table></div>" + hn_txt + "</section>")
         hv = sm.get("holding_view") or {}
-        if hv.get("holdings") or hv.get("core"):                # 每只持仓：为什么持有 · 现在趋势如何（执行器每次运行时算）
-            from .holding_view import html as hv_html
-            body.append("<section class='card'>" + hv_html(hv) + "</section>")
+        if hv.get("holdings") or hv.get("core"):                # 每只持仓：为什么持有 · 现在趋势如何（执行器每次运行时算；今天已成交按 overlay）
+            from .holding_view import html as hv_html, overlay as hv_overlay
+            body.append("<section class='card'>" + hv_html(hv_overlay(hv, pj)) + "</section>")
         body.append(_manual_card(tag, book))
         from .broker_snapshot import STATUS_ZH as _ST       # 状态中文（UX-17）
         orders = []
@@ -250,7 +268,9 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
         body.append("<section class='card'><h2>这次的单（开盘 / 盘中）</h2><div class='scroll'><table><tr><th>方向</th><th>代码 / 名字</th>"
                     "<th class='n'>数量</th><th>方式</th><th>状态</th><th>说明</th></tr>"
                     + ("".join(orders) or "<tr><td colspan=6 class='muted'>没有</td></tr>") + "</table></div></section>")
-        fills = []
+        fills = [f"<tr><td>{escape(str(pj.get('day_word') or '今天'))}（对账前）</td><td>{'卖' if f['side'] == 'SELL' else '买'}</td>"
+                 f"<td>{_tcell(f['ticker'])}</td><td class='n'>{int(f['qty']):,} {'口' if f['kind'] == 'core' else '股'}</td>"
+                 f"<td class='n'>¥{float(f['px']):,.2f}</td></tr>" for f in (pj.get("fills") or [] if pj.get("has") else [])]
         for h in reversed(book.get("history") or []):
             for o in h.get("orders") or []:
                 if int(o.get("filled_qty") or 0) > 0:

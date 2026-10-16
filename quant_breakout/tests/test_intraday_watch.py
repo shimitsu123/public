@@ -508,3 +508,28 @@ def test_next_word_friday_and_midweek():
     assert IW.next_word(None) == "下一个交易日"
     assert IW._at("明早", "09:00") == "明早 09:00" and IW._at("下个交易日 10/19（周一）", "09:00") == "下个交易日 10/19（周一）09:00"
     assert "明早" not in IW.FOOT
+
+
+def test_todays_fills_bought_has_no_exit_lines_and_sold_is_gone(monkeypatch):
+    """今天已成交（对账前；live_ops.held_now，2026-10-16）：卖光的 6758 不再出现、不推卖点；今天买进的 8306 没有离场线、不推送。"""
+    frames, c0 = _setup(monkeypatch)
+    p = paths.state_dir() / "live_unified_paper.json"
+    b = json.loads(p.read_text(encoding="utf-8"))
+    b["state"]["last_date"] = "2026-10-15"
+    c8306 = float(frames["8306.T"]["Close"].iloc[-1])
+    b["orders"] = [{"cid": "U2026-10-15-SELL-6758.T-N100000", "ticker": "6758.T", "side": "SELL", "kind": "stock", "qty": 100,
+                    "sent_qty": 100, "filled_qty": 100, "filled_px": c0, "status": "FILLED", "reason": "manual_sell", "phase": "now",
+                    "decided_on": "2026-10-15"},
+                   {"cid": "U2026-10-15-BUY-8306.T-N100000", "ticker": "8306.T", "side": "BUY", "kind": "stock", "qty": 100,
+                    "sent_qty": 100, "filled_qty": 100, "filled_px": c8306, "status": "FILLED", "reason": "manual_buy", "phase": "now",
+                    "decided_on": "2026-10-15"}]
+    p.write_text(json.dumps(b), encoding="utf-8")
+    sent = []
+    fetch = _fetcher(frames, _bands(frames), sell_px=c0 * 0.92)               # 6758 跌破止损：卖光了 → 不推
+    doc = IW.run_once("paper", AT, fetch=fetch, send=lambda s, t, level="info": sent.append((s, t)))
+    hs = {h["ticker"]: h for h in doc["holdings"]}
+    assert set(hs) == {"8306.T"} and hs["8306.T"]["today"] and not hs["8306.T"]["push_ok"] and hs["8306.T"].get("now") is None
+    assert "今天买进（对账前）：离场线在 下个交易日 10/19（周一）07:40 的决策之后才有" in hs["8306.T"]["status"]
+    assert not any("卖点" in s for s, _t in sent) and not any("8306" in s for s, _t in sent)
+    v = IW.view(doc, AT)
+    assert v["hold"]["8306.T"].startswith("盘中：今天买进（对账前）") and "6758.T" not in v["hold"]
