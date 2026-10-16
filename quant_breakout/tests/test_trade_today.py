@@ -1057,3 +1057,182 @@ def test_unknown_order_before_close_holds_the_other_instructions_on_top():
     _save(b, tag)
     html = panel.render(tag, "t" * 40, now)
     assert "等登记状态不明的单" not in html
+
+
+# ────────── 复核 6（2026-10-16）──────────
+PAUSED_SUMMARY = "<summary>另有 1 条等下一次决策（10/19 07:40；面板自动下单今天暂停了）</summary>"
+PAUSED_ROW = "面板自动下单今天暂停了：等下一次决策（10/19 07:40）；修好之后也可以在 Mac 对话里说「再试一次」"
+
+
+def _pause(tag: str, ids, at: dt.datetime) -> None:
+    """面板自动叫执行器今天暂停了（连续 3 次没跑成；Trigger 记在状态目录 panel_trigger.json）。"""
+    from qbreak import run_status as RS
+    (paths.state_dir() / RS.TRIGGER_FILE).write_text(json.dumps({tag: {"day": at.date().isoformat(), "why": "连续 3 次没跑成",
+                                                                       "ids": list(ids), "at": at.isoformat()}}), encoding="utf-8")
+
+
+def test_remote_halt_push_points_to_the_renamed_section(monkeypatch):
+    """远程停止的推送、--phase cancel 的说明、撤单 / 人工代下登记的说明指向面板「今天要成交的单」（2026-10-16 起的标题；
+    以前「今天的单」—— 面板上已经没有这一块，手机上照着找不到撤单按钮）。"""
+    from pathlib import Path
+    import run
+    from qbreak import notify
+    sent = []
+    monkeypatch.setattr(notify, "send", lambda t, m, lvl="info", **k: sent.append((t, m, lvl)))
+    p = paths.home() / "HALT_REMOTE_test"
+    p.write_text("id=r6-1\nreason=测试\n", encoding="utf-8")
+    run._apply_remote_halt(p, paper=True, notify_=True)
+    assert len(sent) == 1 and sent[0][2] == "warn"
+    assert "面板「今天要成交的单」的「撤单」" in sent[0][1] and "「今天的单」" not in sent[0][1]
+    assert paths.halt_file().exists()
+    src = Path(run.__file__).read_text(encoding="utf-8")
+    assert "面板「今天的单」" not in src and "照「今天的单」" not in src
+    assert "面板「今天要成交的单」" in run._live_cancel.__doc__ and "照「今天要成交的单」" in run.cmd_live_adopt.__doc__
+
+
+@pytest.mark.parametrize("hh,mm", [(11, 20), (12, 0), (12, 40), (8, 30), (8, 57), (9, 1)])
+def test_paused_trigger_holds_at_lunch_and_before_the_open(hh, mm):
+    """面板自动叫执行器今天暂停了：盘中写的 / 开盘前写的卖出（模拟账户）在午休（11:30〜12:30）与今天早上的决策之后的开盘前
+    （07:45〜09:00）也一样「另有 … 等下一次决策（…；面板自动下单今天暂停了）」—— Trigger.check 暂停时什么都不叫
+    （下一个来下它的就是面板：live_ops.panel_next）。复核 6：以前只在盘中看暂停，11:20 / 12:40 在「另有」、12:00 跳回上面写
+    「12:30 后场开盘」；08:30 / 08:57 在上面写「09:00 开盘」、09:01 又去「另有」。数字不变（之后还会做 → 照算）。"""
+    from qbreak import live_ops as LO
+    lunch = hh >= 11
+    w = _t(2026, 10, 16, 11, 0) if lunch else _t(2026, 10, 16, 8, 0)
+    now = _t(2026, 10, 16, hh, mm)
+    rid = f"M{w:%Y%m%d-%H%M%S}-sell-7203"
+    _done_book("2026-10-15")
+    _want({**_sell_req(w), "id": rid})
+    html = panel.render("paper", "t" * 40, now)                                     # 对照：没暂停 → 今天（上面）
+    top, later, _ = _parts(html)
+    assert SELL_M in top and later == "" and _badge_ok(html, "paper", now) == 1
+    _pause("paper", [rid], w.replace(minute=5))
+    b = json.loads((paths.state_dir() / "live_unified_paper.json").read_text(encoding="utf-8"))
+    x = LO.outlook(b, MO.unseen("paper", b), now, tag="paper", halt=False, paused=True)["items"][rid]
+    assert x["state"] == "wont" and x["cls"] == "paused"                            # 09:30 自检 / ★ 交易 推送同一个判断
+    html = panel.render("paper", "t" * 40, now)
+    top, later, ended = _parts(html)
+    assert SELL_M in later and SELL_M not in top + ended and PAUSED_SUMMARY in later
+    assert PAUSED_ROW in _row(later, SELL_M) and "12:30 后场开盘" not in later and "09:00 开盘" not in later
+    assert _badge_ok(html, "paper", now) == 1
+    _named(html)
+    calls = []
+    trg = panel.Trigger(run=lambda tag, mode: calls.append((tag, mode)), clock=lambda: now, mono=lambda: 1e6,
+                        notify=lambda *a, **k: None)
+    assert trg.check() == [] and calls == []                                         # 暂停中：面板确实什么都不叫
+
+
+@pytest.mark.parametrize("kind,hh,mm,pend,agent,where", [
+    ("sell", 8, 0, False, True, "top"),      # 08:35 的重试（有要加进寄付单的卖出）/ 09:05 的开盘后运行还会跑：跑成了面板就恢复 → 照旧今天
+    ("buy", 8, 0, False, True, "top"),       # 只有买入：08:35 的重试什么都不跑，但 09:05 的开盘后运行每个交易日都跑 → 照旧今天
+    ("sell", 8, 40, False, True, "top"),     # 08:35 过了：09:05 的开盘后运行还会跑 → 照旧今天
+    ("sell", 9, 1, False, True, "top"),      # 盘中、09:05 之前：同上
+    ("sell", 9, 10, False, True, "later"),   # 09:05 过了、没有开盘后的买单：09:20 的重试什么都不跑 → 下一个来下它的是面板 → 暂停中今天不会下
+    ("sell", 9, 10, True, True, "top"),      # 还有开盘后的买单（DEFERRED）：09:20 的重试会跑 → 照旧今天
+    ("sell", 9, 25, True, True, "later"),    # 09:20 也过了 → 暂停中今天不会下
+    ("sell", 8, 0, False, False, "later"),   # 没装立花的定时任务（有模拟操盘的 plist）：没有定时运行 → 与模拟账户一样
+])
+def test_paused_trigger_tachibana_scheduled_runs(kind, hh, mm, pend, agent, where):
+    """立花本番：今天还有定时运行要来（08:35 的重试 / 09:05 的开盘后运行 / 有开盘后的买单时 09:20 的重试；跑成了一次面板就恢复：
+    Trigger._still_paused）→ 照旧在上面；之后（或没装定时任务）下一个来下它的就是面板 → 与模拟账户一样「另有 … 面板自动下单今天暂停了」。
+    数字一样（标签 = 上面 + 另有）。"""
+    tag = "tachibana"
+    w, now = _t(2026, 10, 16, 7, 50), _t(2026, 10, 16, hh, mm)
+    b = _done_book("2026-10-15", tag)
+    if pend:                                                                         # 早上的决策留到开盘后的买单（09:05 / 09:20 下）
+        b["orders"].append({"cid": "U2026-10-15-BUY-6758.T", "ticker": "6758.T", "side": "BUY", "kind": "stock", "qty": 100,
+                            "decided_on": "2026-10-15", "limit": 2678.0, "ref_px": 2600.0, "phase": "open", "status": "DEFERRED",
+                            "note": "开盘后再下"})
+        _save(b, tag)
+    if not agent:
+        ag = paths.launch_agents()
+        ag.mkdir(parents=True, exist_ok=True)
+        (ag / f"{paths.PAPER_AGENT}.plist").write_text("<plist/>", encoding="utf-8")
+    assert paths.live_installed() is agent
+    if kind == "sell":
+        rid, head = f"M{w:%Y%m%d-%H%M%S}-sell-7203", SELL_M
+        _want({**_sell_req(w), "id": rid}, tag)
+    else:
+        rid, head = f"M{w:%Y%m%d-%H%M%S}-buy-6758", "<b>买入 6758 ソニーグループ"
+        _want({"id": rid, "kind": "buy", "ticker": "6758.T", "unit": "rule", "at": w.isoformat(timespec="seconds")}, tag)
+    _pause(tag, [rid], w.replace(minute=55))
+    html = panel.render(tag, "t" * 40, now)
+    top, later, ended = _parts(html)
+    assert head in (top if where == "top" else later) and head not in ended
+    if where == "later":
+        assert PAUSED_SUMMARY in later and head not in top and PAUSED_ROW in _row(later, head)
+    else:
+        assert PAUSED_SUMMARY not in later and "暂停" not in top
+    assert _badge_ok(html, tag, now) == (2 if pend else 1)
+    _named(html)
+
+
+@pytest.mark.parametrize("paused", [True, False])
+def test_paused_trigger_waiting_buy_after_the_open_is_not_today(paused):
+    """执行器读了、等 09:00 开盘后马上下的买入（wait=True，「09:00 开盘后马上下单（盘中）」：面板叫的盘中运行下）：
+    面板自动下单今天暂停了 → 今天不会下 →「另有 … 面板自动下单今天暂停了」（复核 6：以前 outlook 在看暂停之前就返回「会」，
+    留在「今天要成交的单」）。等上一笔成交（wait=prev）的不受影响；没暂停 → 照旧在上面。数字一样。"""
+    from qbreak import live_ops as LO
+    now = _t(2026, 10, 16, 10, 30)
+    b = _done_book("2026-10-15")
+    it = {"id": "M20261016-080000-buy-6758", "kind": "buy", "ticker": "6758.T", "unit": "rule", "status": "pending", "wait": True,
+          "at": "2026-10-16T08:00:00+09:00", "msg": "09:00 开盘后马上下单（盘中）"}
+    b["manual"]["items"][it["id"]] = it
+    _save(b)
+    if paused:
+        _pause("paper", [], _t(2026, 10, 16, 10, 10))
+    x = LO.outlook(b, [], now, tag="paper", halt=False, paused=paused)["items"][it["id"]]
+    assert (x["state"], x["cls"]) == (("wont", "paused") if paused else ("will", ""))
+    html = panel.render("paper", "t" * 40, now)
+    top, later, ended = _parts(html)
+    head = "<b>买入 6758 ソニーグループ"
+    if paused:
+        assert head in later and head not in top + ended and PAUSED_SUMMARY in later and PAUSED_ROW in _row(later, head)
+    else:
+        assert head in top and later == ""
+    assert _badge_ok(html, "paper", now) == 1
+    _named(html)
+    it["wait"] = "prev"                                                              # 等上一笔成交：路径是下一次早上的对账，不看暂停
+    assert LO.outlook(b, [], now, tag="paper", halt=False, paused=True)["items"][it["id"]]["cls"] != "paused"
+
+
+@pytest.mark.parametrize("last,hold,now,where,chip,summary", [
+    ("2026-10-14", "2026-10-15", _t(2026, 10, 16, 7, 0), "top", "今天开盘", ""),         # 昨天 hold、今天早上的运行之前 → 今天开盘
+    ("2026-10-15", "2026-10-16", _t(2026, 10, 16, 16, 0), "later", "10/19（周一）开盘", "10/19（周一）开盘"),  # 周五 hold、周五收盘后 → 下周一
+    ("2026-10-15", "2026-10-16", _t(2026, 10, 17, 10, 0), "later", "10/19（周一）开盘", "10/19（周一）开盘"),  # 周六
+    ("2026-10-14", "2026-10-15", _t(2026, 10, 15, 16, 0), "later", "明天开盘", "10/16（周五）开盘"),       # 周四收盘后 → 明天（周五）开盘
+])
+def test_hold_chip_says_the_real_opening_day(last, hold, now, where, chip, summary):
+    """「这只今天已经有单：明天开盘再处理」（hold）的状态按日子写（MO.hold_text；与「另有 … 等 10/19（周一）开盘」同一个写法）：
+    复核 6：以前一律「明天开盘」—— 昨天 hold 的在今天 07:00 的「今天要成交的单」里写「明天开盘」，周五 hold 的在
+    「另有 1 条等 10/19（周一）开盘」里也写「明天开盘」。不给 now（执行器的事件 / 汇总）照旧「明天开盘」。"""
+    b = _done_book(last)
+    it = {"id": "M20261015-100000-sell-7203", "kind": "sell", "ticker": "7203.T", "status": "pending", "hold": hold,
+          "at": f"{hold}T10:00:00+09:00", "msg": "这只今天已经有单：明天开盘再处理"}
+    b["manual"]["items"][it["id"]] = it
+    _save(b)
+    assert MO.status_text(it, now) == chip and MO.status_text(it) == "明天开盘"
+    html = panel.render("paper", "t" * 40, now)
+    top, later, ended = _parts(html)
+    part = top if where == "top" else later
+    assert f"<span class='chip'>{chip}</span>" in _row(part, SELL_M) and SELL_M not in ended
+    if where == "later":
+        assert f"<summary>另有 1 条等 {summary}</summary>" in later and SELL_M not in top
+    else:
+        assert later == ""
+    assert _badge_ok(html, "paper", now) == 1
+    _named(html)
+
+
+@pytest.mark.parametrize("hold,now,want", [
+    ("2026-10-15", _t(2026, 10, 16, 8, 54), "今天开盘"),          # 今天早上的运行 / 08:35 的重试还会把它排进今天开盘的单
+    ("2026-10-15", _t(2026, 10, 16, 10, 0), "等下单"),            # 过了 08:55 还是昨天的 hold = 今天早上的运行没完成：分块与说明写什么时候
+    ("2026-10-14", _t(2026, 10, 14, 10, 0), "明天开盘"),          # 周三 hold → 周四
+    ("2026-11-02", _t(2026, 11, 2, 10, 0), "11/04（周三）开盘"),  # 周一 hold、11/03 文化の日 → 不是明天
+])
+def test_hold_text_dates_and_halt(hold, now, want):
+    """MO.hold_text：「明天开盘」只在下一个交易日正好是明天时写；HALT 中 →「等下单」（解除后照原样执行，行的说明写着）。"""
+    it = {"id": "M1", "kind": "sell", "ticker": "7203.T", "status": "pending", "hold": hold, "msg": "这只今天已经有单：明天开盘再处理"}
+    assert MO.status_text(it, now) == want and MO.status_text(it) == "明天开盘"
+    paths.halt_file().write_text("test", encoding="utf-8")
+    assert MO.status_text(it, now) == "等下单"

@@ -1715,6 +1715,9 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
         照旧在上面、照算，状态后面写「等登记状态不明的单（〔代码 名字〕）之后才下」，不是「马上（盘中）」（复核 5，2026-10-16）。
       面板自动叫执行器今天暂停了（_trigger_paused：与 Trigger._still_paused / 09:30 自检同一份记录；outlook 的 paused）→
         later「等下一次决策（…；面板自动下单今天暂停了）」、状态后面写可以说「再试一次」（复核 5：以前照写「马上（盘中）」在上面）。
+        盘中、午休、今天早上的决策之后的开盘前都这样（下一个来下它的是面板：live_ops.panel_next；立花今天还有定时运行要来、跑成了面板就恢复
+        〔09:05 之前；09:20 之前而且还有开盘后的买单 / 错过寄付的卖单〕→ 照旧今天；等开盘后马上下的买入 wait=True 也算；
+        复核 2026-10-16：以前只在盘中，11:30〜12:30 / 08:30 同一条指令跳回上面写「12:30 后场开盘」）。
       模拟账户今天早上的运行没完成、过了 11:30（LO.paper_late_catchup）：补跑那次决策排的单（比例 / 固定口数调的核心 ETF、
         没卖完的手动卖出）今天不再撮合 → later「等 MM/DD（周X）07:40 的运行」（补跑之后那些单同一个结论；还没读的手动买卖照旧今天：
         补跑过了 08:55 不排进那次决策、盘中马上下；复核 5）。
@@ -1740,7 +1743,7 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
     f = LO.fill_day_of(book)
     mode = MO.timing(now)[0]
     out = {"orders": {}, "items": {}, "flight": set(), "when": {}, "extra": [], "notes": [], "itxt": {}, "core": None}
-    paused = _trigger_paused(tag, waiting, now) if mode == "now" else False
+    paused = _trigger_paused(tag, waiting, now) if mode != "next" else False   # outlook 再按时段筛（panel_next）
     try:                                                    # 与 _trade_live_calc 同一个判断（同样的 asked / halt）；指令也要（instr）
         ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=tl["asked"], paused=paused)
     except Exception as e:                                 # noqa: BLE001  只是分块：不能让页面打不开
@@ -1772,7 +1775,7 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
         if x is None:                                       # outlook 没给（读不了的一条）：不下结论，留在上面
             return "today"
         s, at = x.get("state"), x.get("act_at")
-        if x.get("cls") == "paused":                       # 面板自动下单今天暂停了（盘中）：今天不会再叫执行器 → 下一次决策 / 你说「再试一次」
+        if x.get("cls") == "paused":                       # 面板自动下单今天暂停了（盘中 / 午休 / 决策之后的开盘前：live_ops.panel_next）→ 下一次决策 / 你说「再试一次」
             nd = LO.next_decision_text(now)                 # （还会做 → 在「另有」、算；复核 2026-10-16：以前照写「马上（盘中）」在上面）
             out["when"][ref] = (1, "", f"等下一次决策（{nd}；面板自动下单今天暂停了）")
             out["itxt"].setdefault(ref, f"（面板自动下单今天暂停了：等下一次决策（{nd}）；修好之后也可以在 Mac 对话里说「再试一次」）")
@@ -1879,7 +1882,8 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
             if t in fixrows:
                 z = zone(fixrows[t], iid)
             else:                                           # outlook 没给那一行（今天说了下一次决策再调 / outlook 算不成）：自己看时刻
-                z = _fix_zone(it, book, now, tag, halt, zone, when, out["when"])
+                z = _fix_zone(it, book, now, tag, halt, zone, when, out["when"],
+                              paused=paused and LO.panel_next(book, now, tag))
         else:
             z = "ended"
             if (k == "corefix" and s == "done" and it.get("ticker") in newfix
@@ -1924,7 +1928,8 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
 
 def _trigger_paused(tag: str | None, waiting: list, now: dt.datetime) -> bool:
     """面板自动叫执行器今天暂停了吗（run_status.trigger_paused：Trigger 记的；09:30 自检同一个）—— 暂停之后又写了新的指令（叫那次
-    执行器时还没有的指令 id）→ 面板下一轮就恢复（Trigger._still_paused）→ 不算暂停。只给盘中用（outlook 只在盘中看它）。"""
+    执行器时还没有的指令 id）→ 面板下一轮就恢复（Trigger._still_paused）→ 不算暂停。交易日（盘中 / 午休 / 开盘前）用；
+    outlook 只在面板是下一个会来下的时段看它（live_ops.panel_next）。"""
     if not tag:
         return False
     try:
@@ -1941,12 +1946,13 @@ def _trigger_paused(tag: str | None, waiting: list, now: dt.datetime) -> bool:
 UNK_WHEN = (3, "", "等登记状态不明的单")                    # 「另有 … 等登记状态不明的单」（_trade_split 的 when）
 
 
-def _fix_zone(it: dict, book: dict, now: dt.datetime, tag: str | None, halt: bool, zone, when, wmap: dict) -> str:
+def _fix_zone(it: dict, book: dict, now: dt.datetime, tag: str | None, halt: bool, zone, when, wmap: dict, paused: bool = False) -> str:
     """还没照它调的固定口数（FIX_WAIT）、outlook 没给 fix:<票> 那一行时放哪一块（复核 4，2026-10-16：以前一律当成「今天说了下一次决策再调」
     → later「等下一次决策」，撤回了另一条还没读的固定口数时，今天开盘后 / 盘中就下的也这样写）：
       今天说了「下一次决策再调」（core_rule.fix_defer：corefix_pending(now) 不含这只）→ later「等下一次决策」；
       别的 → 与 outlook 的 fix:<票> 同一个时刻（live_ops._instr_row 的 corefix：corefix_fill —— 盘中 / 开盘前 / 午休 = 今天，
-        早上的运行没完成：模拟账户补跑 = 今天、立花 08:55 之后 = 下一个交易日，HALT = 解除后）。"""
+        早上的运行没完成：模拟账户补跑 = 今天、立花 08:55 之后 = 下一个交易日，HALT = 解除后）。
+    paused：面板自动下单今天暂停、下一个来下它的是面板（已经按 live_ops.panel_next 筛过；与 outlook 的 fix:<票> 同一个结论）。"""
     from . import live_ops as LO
     t = it.get("ticker")
     try:
@@ -1956,7 +1962,7 @@ def _fix_zone(it: dict, book: dict, now: dt.datetime, tag: str | None, halt: boo
     x = None
     if not defer:
         try:
-            x = LO._instr_row({**it, "status": "pending", "msg": ""}, book, now, tag, halt, False, True)
+            x = LO._instr_row({**it, "status": "pending", "msg": ""}, book, now, tag, halt, paused, True)
         except Exception:                                  # noqa: BLE001
             x = None
     if x is None:

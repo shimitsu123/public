@@ -2527,9 +2527,31 @@ def msg_text(it: dict, now: dt.datetime | None = None) -> str:
     return _RETRY_TAIL.sub("", m) if now is not None and rolled_over(it, now) else m
 
 
+def hold_text(it: dict, now: dt.datetime) -> str:
+    """「明天再处理」（hold = 那天：这只那天已经有执行器的单）的指令哪天开盘处理（页面的状态；复核 2026-10-16：以前不看日子一律「明天开盘」——
+    前一天 hold 的在今天 07:00 的「今天要成交的单」里写「明天开盘」，周五 hold 的在「另有 1 条等 10/19（周一）开盘」里也写「明天开盘」）：
+      HALT 中 → 「等下单」（解除后照原样执行：行的说明写着）；
+      hold 在今天之前、今天是交易日：08:55 之前 →「今天开盘」（今天早上的运行 / 08:35 的重试把它排进今天开盘的单：hold 只管那一天）；
+        过了 08:55 还是 hold（今天早上的运行没完成）→「等下单」（模拟账户补跑之后盘中下 / 立花下一个交易日：行的说明与分块写着）；
+      别的 → 下一个交易日：明天 →「明天开盘」，不是明天 →「10/19（周一）开盘」（与「另有 … 等 10/19（周一）开盘」同一个写法：live_ops.md_wd）。"""
+    from .live_ops import md_wd
+    if paths.halt_file().exists():
+        return STATUS["pending"]
+    d = now.date()
+    try:
+        h = dt.date.fromisoformat(str(it.get("hold"))[:10])
+    except ValueError:
+        h = d
+    if h < d and is_trading_day(d):
+        return "今天开盘" if now.time() < CUTOFF else STATUS["pending"]
+    nd = next_trading_day(d)
+    return "明天开盘" if nd == d + dt.timedelta(days=1) else f"{md_wd(nd)}开盘"
+
+
 def status_text(it: dict, now: dt.datetime | None = None) -> str:
     """指令的状态（页面 / 日志）：盘中的单分「盘中已成交 / 盘中已下单」（now 给了、单已在 15:30 失效 →「盘中的单已失效」；G16 复核）；
-    明天再处理的写「明天开盘」（前面有一笔状态不明 →「等登记状态不明的单」；G3 复核）；
+    明天再处理的写「明天开盘」（前面有一笔状态不明 →「等登记状态不明的单」；G3 复核；now 给了 → 按日子写「今天开盘」/「明天开盘」/
+    「10/19（周一）开盘」：hold_text，复核 2026-10-16）；
     now（页面 / 命令行）：盘中没下成、盘中已经结束的写「今天盘中没下成 → MM/DD 开盘（寄付）」（G18）；等上一笔成交的写「等上一笔成交」（G10）。"""
     s = it.get("status")
     if s == "placed" and it.get("now"):
@@ -2542,7 +2564,9 @@ def status_text(it: dict, now: dt.datetime | None = None) -> str:
     if s == "pending" and allin_member(it):
         return "等下一次决策（整批）"
     if s == "pending" and it.get("hold"):
-        return "等登记状态不明的单" if UNK_LATER in str(it.get("msg") or "") else "明天开盘"
+        if UNK_LATER in str(it.get("msg") or ""):
+            return "等登记状态不明的单"
+        return "明天开盘" if now is None else hold_text(it, now)   # now 没给（执行器的事件 / 汇总）→ 照旧
     if s == "pending" and it.get("wait") == "prev":
         return "等上一笔成交"
     if s == "pending" and now is not None:
@@ -3967,6 +3991,6 @@ __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEF
            "corefix_clear_text", "resume_info", "wait_word", "wait_text", "fix_applied", "corefix_pending", "allin_busy_text", "order_basis", "delay_range", "DELAY_MIN", "timing", "when_text", "when_for", "morning_behind",
            "next_window", "due", "cancel_due", "CANCEL_UNTIL", "grp_wait_stale", "cancel_cids", "handling_cids", "group_prune",
            "RULE_TEXT", "UNK_LATER", "UNK_LATER_BUY", "NOW_NO_CANCEL", "NOW_FILLED_NO_CANCEL", "NOW_BUY_LAPSED", "NOW_SELL_WITHDRAWN", "now_sell_withdrawn", "now_lapsed", "now_expired", "now_cancel_why",
-           "now_due", "status_text", "rolled_over", "rolled_text", "msg_text", "entry_why", "buy_size", "requests_path", "position_pct", "target_shares", "adjust_plan",
+           "now_due", "status_text", "hold_text", "rolled_over", "rolled_text", "msg_text", "entry_why", "buy_size", "requests_path", "position_pct", "target_shares", "adjust_plan",
            "cap_text", "fmt_target", "describe", "active", "lines", "signal_text", "core_pct_now",
            "fee_jp", "core_cost", "sell_estimate", "sale_note", "est_lines", "yen_px", "TAX_PCT", "LABEL", "STATUS", "REASON_TEXT"]

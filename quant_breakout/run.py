@@ -3474,7 +3474,7 @@ def _refresh_after_book_change(tag: str) -> None:
 def _live_cancel(a, tag: str, book, paper: bool) -> int:
     """撤单（立花实盘缺口 B1；qbreak/live_ops.py）。拿着运行锁调用。
     --cancel [cid …]：Claude 在你明确说「撤单」时运行（bash scripts/liveu.sh cancel …）；不带 cid = 今天全部还挂着的执行器单；
-    --phase cancel：面板「今天的单」的「撤单」写的撤单指令（面板马上叫）；--halt-first：先建 HALT 再撤全部（「停并撤单」）。
+    --phase cancel：面板「今天要成交的单」的「撤单」写的撤单指令（面板马上叫）；--halt-first：先建 HALT 再撤全部（「停并撤单」）。
     只撤执行器自己今天的单；不建引擎、不取行情；有要撤的单时才连券商，结束时登出立花。没撤成的 → 退出码 1。"""
     from qbreak import live_ops as LO
     req = getattr(a, "cancel", None) is None
@@ -3934,7 +3934,7 @@ def cmd_live_onboard(a) -> int:
 
 
 def cmd_live_adopt(a) -> int:
-    """人工代下登记（立花实盘缺口 B3 / C-06）：你在立花网站上实际成交的单 → 执行器账本（立花 API / Mac 故障那天照「今天的单」
+    """人工代下登记（立花实盘缺口 B3 / C-06）：你在立花网站上实际成交的单 → 执行器账本（立花 API / Mac 故障那天照「今天要成交的单」
     人工下了单 → 第二天早上之前登记，执行器之后照常）。只在你在对话里明确说时由 Claude 运行（与 --resolve 同级）。
     先拿运行锁、备份账本；按账本状态建引擎（取行情：新仓的止损按引擎的新仓算法）→ 登记 → 存账本 → 页面。不连立花、不下单。
     bash scripts/liveu.sh adopt --broker tachibana <代码> <BUY|SELL> <股数> <均价> [--date YYYY-MM-DD] [--note …]。"""
@@ -4515,7 +4515,7 @@ def _apply_remote_halt(path, paper: bool, notify_: bool) -> None:
         from qbreak import notify
         t_ = f"qbreak {'模拟操盘' if paper else '立花实盘'} ★ 远程停止"
         mac_notify(t_, msg[:200])
-        notify.send(t_, msg + "\n已建 HALT：之后买卖都不下、持仓不动。已经发到交易所的单不会被撤（要撤：面板「今天的单」的「撤单」，"
+        notify.send(t_, msg + "\n已建 HALT：之后买卖都不下、持仓不动。已经发到交易所的单不会被撤（要撤：面板「今天要成交的单」的「撤单」，"
                     "或立花网站 / 手机网站）。"
                     "恢复：在 Mac 对话里明确说「恢复下单，删除 HALT」", "warn")
 
@@ -5620,7 +5620,7 @@ def main(argv=None) -> int:
     lu.add_argument("--phase", default="morning", choices=["morning", "open", "now", "cancel"],
                     help="morning：成交日 08:55 前（Mac 定时任务 07:40）；open：成交日 09:05 前后（开盘前余力不够的买单）；"
                          "now：盘中（09:00〜11:30、12:30〜15:25）马上下等着的手动指令（面板叫）；"
-                         "cancel：面板「今天的单」写的撤单指令（面板叫；不建引擎）")
+                         "cancel：面板「今天要成交的单」写的撤单指令（面板叫；不建引擎）")
     lu.add_argument("--demo", action="store_true", help="立花デモ環境（账本与本番分开）")
     lu.add_argument("--dry-run", action="store_true", help="立花：登录与读取照常，发单只打印（账本单独一份）")
     lu.add_argument("--max-order-value", type=float, default=None, help="单笔上限（默认 权益 ×1.05）")

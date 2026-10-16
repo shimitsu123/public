@@ -1213,6 +1213,8 @@ OK_NOTE = ("与模型相同", "被新的固定口数取代", "手动指令已撤
 OPEN_AT = {"tachibana": dt.time(9, 5), "paper": dt.time(9, 25)}   # 等开盘后的买单什么时候下（立花 09:05 / 09:20；模拟账户 09:25 前后的开盘撮合）
 PAPER_OPEN_END = dt.time(11, 30)                     # 模拟账户当天的开盘撮合到这之前（之后 → 下一次早上的运行照旧撮合）
 PAPER_RUN_T = dt.time(7, 40)                         # 早上的运行（launchd；过了开盘撮合窗口的模拟账户单在这次照旧撮合）
+OPEN2_AT = dt.time(9, 20)                            # 立花 09:20 的开盘后重试（com.qbreak.liveu.open2：还有开盘后的买单 / 错过寄付的卖单才跑）
+PAUSED_TXT = "面板自动下单今天暂停了：修好之后在 Mac 对话里说「再试一次」"   # outlook 的 cls paused（盘中 / 午休 / 决策之后的开盘前）
 TRADE_HEAD = "★ 交易"                               # 交易问题的推送标题开头（level = warn；经济威胁提醒不用它）
 NO_PATH_S = 600                                      # 过了该下的时刻这么久还没有执行路径 →「今天该下但没有执行路径」（U4）
 UNK_CLOSED = ("状态不明：可能已经成交（交易所已收盘，没成交的部分已失效）。先去立花的注文一覧核对，再在 Mac 对话里登记 —— "
@@ -1481,8 +1483,36 @@ def instr_due(at, today: dt.date) -> dt.datetime | None:
     return t if t.date() == today else None
 
 
+def panel_next(book: dict | None, now: dt.datetime, tag: str | None) -> bool:
+    """盘中那条路的手动指令（还没读的买卖、等开盘后马上下的买入 wait=True、盘中 / 开盘前 / 午休写的固定口数、还没照它调的比例）
+    下一个来下它的是不是面板自动叫的执行器（panel.Trigger）—— 面板自动下单今天暂停了（outlook 的 paused）时只有这时算「今天不会下」
+    （Trigger.check 暂停时什么都不叫；恢复要新的指令 / 执行器之后跑成一次 / 第二天：Trigger._still_paused）：
+      收盘后 / 休市日（下一次决策）、今天早上的运行还没完成（07:40 的运行 / 补跑先处理）→ False（各有各的说法）；
+      立花本番（装了定时任务：paths.live_installed）今天还有定时运行要来、它跑成了面板就恢复 → False（照旧今天）：
+        09:05 之前（08:35 的重试有要加进寄付单的指令才跑；09:05 的开盘后运行每个交易日都跑）、
+        09:20 之前而且还有开盘后的买单 / 错过寄付的卖单（09:20 的重试只在这时跑：run.py 的 --retry 与 live_unified.open_pending /
+        late_pending 同一个判断）；
+      别的（模拟账户 / 立花デモ：没有定时的重试；立花 09:20 之后）：盘中、午休、今天早上的决策之后的开盘前 → True。
+    复核 2026-10-16：以前只在盘中看暂停，午休 / 开盘前同一条指令在「今天要成交的单」与「另有」之间来回跳，面板却什么都不叫。"""
+    from . import manual_orders as MO
+    from . import paths
+    if MO.timing(now)[0] == "next" or MO.morning_behind(book, now):
+        return False
+    if tag == "tachibana" and paths.live_installed():
+        t = now.time()
+        if t < OPEN_AT["tachibana"]:
+            return False
+        if t < OPEN2_AT:
+            from .live_unified import late_pending, open_pending
+            if open_pending(book or {}) or late_pending(book or {}):
+                return False
+    return True
+
+
 def _instr_row(r: dict, book: dict | None, now: dt.datetime, tag: str | None, halt: bool, paused: bool, seen: bool) -> dict | None:
     """一条等着的手动指令（seen：执行器读过、账本里 pending；否则指令文件里还没读）→ outlook 的一行；撤回 / 撤单 / 撤销撤回本身 → None。
+    paused：面板自动下单今天暂停、而且下一个来下它的就是面板（outlook 先用 panel_next 筛过）→ 盘中那条路的（还没读的买卖、
+    等开盘后马上下的 wait=True、盘中 / 开盘前 / 午休的固定口数）今天不会下（cls paused）；等上一笔成交（wait=prev）的不看它。
     今天早上的运行没完成（模拟账户面板补跑）：买卖指令 → 补跑之后今天下（过了 08:55 补跑不把它们排进决策，盘中马上下）；闲置资金比例 /
     固定口数 → 补跑那次决策照它排单，过了 11:30 今天不再撮合 → 下一个交易日 07:40 的运行（cls catchup：paper_late_catchup；复核 2026-10-16）。"""
     from . import manual_orders as MO
@@ -1525,13 +1555,18 @@ def _instr_row(r: dict, book: dict | None, now: dt.datetime, tag: str | None, ha
         if cf["intraday"]:
             due_ = instr_due(r.get("at"), today) or (now if cf["mode"] == "now" else
                                                       _at(today, MO.SESSION[1][0] if cf["mode"] == "lunch" else MO.SESSION[0][0]))
-            return put("wont", due_, "面板自动下单今天暂停了：修好之后在 Mac 对话里说「再试一次」", "paused") if (
-                paused and cf["mode"] == "now") else put("will", due_, wt)
+            return put("wont", due_, PAUSED_TXT, "paused") if paused else put("will", due_, wt)   # 盘中 / 开盘前 / 午休都是面板叫（复核 2026-10-16）
         return put("will", _at(cf["day"], MO.SESSION[0][0]), wt)
     if k not in MO.ORDER_KINDS + ("core",):
         return put("later", None, wt)
     if r.get("hold") == today.isoformat():
         return put("later", _at(nxt, MO.SESSION[0][0]), wt)
+
+    def due_now() -> dt.datetime:                          # 今天该下的时刻：写于开盘前 / 前几天 → 09:00；午休 → 12:30；盘中 → 写的时刻
+        return instr_due(r.get("at"), today) or (now if mode == "now" else
+                                                  _at(today, MO.SESSION[1][0] if mode == "lunch" else MO.SESSION[0][0]))
+    if r.get("wait") and r.get("wait") != "prev" and paused:   # 等开盘后马上下（09:00 开盘后的盘中运行，面板叫）：暂停了今天不会下
+        return put("wont", due_now(), PAUSED_TXT, "paused")    # （复核 2026-10-16：以前在暂停之前就返回「会」，留在「今天要成交的单」）
     if r.get("wait"):
         return put("will", None, wt)                       # 等上一笔成交 / 等凑钱的卖单：路径是执行器自己（不判断时刻）
     rd = MO.rolled_over(r, now) if seen else None
@@ -1550,10 +1585,9 @@ def _instr_row(r: dict, book: dict | None, now: dt.datetime, tag: str | None, ha
     if (k in MO.ORDER_KINDS and r.get("ticker") and (mode in ("now", "lunch") or late_open)
             and MO.busy_today(book, r.get("ticker"), now)):
         return put("later", _at(nxt, MO.SESSION[0][0]), wt)
-    due_ = instr_due(r.get("at"), today) or (now if mode == "now" else
-                                              _at(today, MO.SESSION[1][0] if mode == "lunch" else MO.SESSION[0][0]))
-    if paused and mode == "now":
-        return put("wont", due_, "面板自动下单今天暂停了：修好之后在 Mac 对话里说「再试一次」", "paused")
+    due_ = due_now()
+    if paused:                                             # 盘中 / 午休 / 决策之后的开盘前（panel_next；复核 2026-10-16：以前只看盘中）
+        return put("wont", due_, PAUSED_TXT, "paused")
     return put("will", due_, wt)
 
 
@@ -1565,7 +1599,8 @@ def _core_row(book: dict | None, now: dt.datetime, tag: str | None, halt: bool, 
         （面板会自动补跑；过了 11:30 补跑排的单今天不再撮合 → 下一个交易日 07:40 的运行，cls catchup：paper_late_catchup）/
         立花 08:55 之后补跑的决策错过寄付、核心 ETF 的单今天不发（B13）→ 下一个交易日 09:00；
       盘中 / 开盘前 / 午休、盘中那条路会调（core_pending(now)：规则目标额是上一次决策算的、今天没说「下一次决策再调」）→ 马上 / 09:00 /
-        12:30 开盘后马上（面板自动下单今天暂停 + 盘中 → 今天不会下）；盘中没调成、一会儿再试（tried）也是今天；
+        12:30 开盘后马上（面板自动下单今天暂停 → 今天不会下：paused 由 outlook 用 panel_next 筛过，盘中 / 午休 / 决策之后的开盘前；
+        复核 2026-10-16：以前只看盘中）；盘中没调成、一会儿再试（tried）也是今天；
       别的（收盘后 / 休市日、今天说了「下一次决策再调」、规则目标额不是上一次决策算的）→ 下一次决策的那天 09:00 开盘。"""
     from . import manual_orders as MO
     cw = MO.core_wait(book, tag, waiting)
@@ -1603,8 +1638,8 @@ def _core_row(book: dict | None, now: dt.datetime, tag: str | None, halt: bool, 
     if mode != "next" and MO.core_pending(book, now) is not None:   # 盘中那条路（面板 now_due → --phase now）
         due = instr_due(row["at"], today) or (now if mode == "now" else      # 该下的时刻：与固定口数那一行同一个算法
                                               _at(today, MO.SESSION[1][0] if mode == "lunch" else MO.SESSION[0][0]))
-        if paused and mode == "now":
-            return put("wont", due, "面板自动下单今天暂停了：修好之后在 Mac 对话里说「再试一次」", "paused")
+        if paused:
+            return put("wont", due, PAUSED_TXT, "paused")
         txt = ("马上（盘中）按现价调" + ("（模拟账户当场成交）" if paper else "") if mode == "now"
                else ("12:30 后场开盘后" if mode == "lunch" else "今天 09:00 开盘后") + "马上（按现价限价，不是寄付）")
         tried = _tsj(((book or {}).get("core_rule") or {}).get("tried"))
@@ -1758,7 +1793,8 @@ def outlook(book: dict | None, waiting=(), now: dt.datetime | None = None, *, ta
              被拒、错过、HALT、立花收盘后 / 补单没跑成、面板自动下单暂停…）| later（之后某天：收盘后写的、明天开盘、HALT 解除后…）。
     还没发出的买单：执行器记了凑钱的卖单（fund_src）→ 按 fund_cascade 的预览（资金按来源分组、按单的先后累计扣减）；旧账本 → unfunded_buys
     的保守估计。被挡的单 08:55 之前还会再发（blocked_retry）→ 算「会下」；状态不明的单单独给理由（cls = unknown）。
-    waiting：指令文件里还没读的（MO.unseen）；halt：None = 看 HALT 文件；paused：面板自动下单今天暂停；cash：开盘时能用的钱
+    waiting：指令文件里还没读的（MO.unseen）；halt：None = 看 HALT 文件；paused：面板自动下单今天暂停（只在面板是下一个会来下的时段
+    算：panel_next —— 盘中 / 午休 / 今天早上的决策之后的开盘前；立花今天还有会让面板恢复的定时运行〔09:05 之前 / 09:20 的重试〕时除外）；cash：开盘时能用的钱
     （None = cash_hi）；asked：当成「撤单中」的 cid（None = 从 waiting / 账本里的撤单指令算；() = 不算 —— 撤单推送「撤之前」那一次）；
     读了、还没照它调的固定口数 / 闲置资金比例：没有指令行 → 另补一行（ref fix:<票> / core:；core: 的 iid = 那条比例指令）。
     instr=False：只看单。→ {"rows": [...], "orders": {cid: 行}, "items": {指令 id: 行}, "asked": set, "n": {state: 笔数}}。"""
@@ -1813,6 +1849,7 @@ def outlook(book: dict | None, waiting=(), now: dt.datetime | None = None, *, ta
     items = {}
     if instr:
         from . import manual_orders as MO
+        paused = bool(paused) and panel_next(b, now, tag)   # 暂停只管面板叫的那条路（复核 2026-10-16：以前只在盘中算）
         void = MO.voided(waiting)
         gone_ids = MO.cancelled(waiting)
         its = ((b.get("manual") or {}).get("items") or {})
