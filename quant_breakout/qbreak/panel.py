@@ -1288,12 +1288,15 @@ def _orders_card(book: dict, now: dt.datetime, paper: bool, waiting: list, live:
         #   ↑ 已成交写成交价（模拟账户 09:25 前后的开盘撮合之后交易页马上看到；D3，2026-10-15）
         note = str(o.get("note") or "")
         cid = str(o.get("cid"))
-        busy = None if cid in asked else LO.cancel_conflict({"cid": cid}, book, jobs, G)
+        cw = LO.cancel_why(o, book, now, paper)
+        busy = None if cid in asked or cw is not None else LO.cancel_conflict({"cid": cid}, book, jobs, G)
+        #   ↑ 本来就撤不了的行（已成交 / 已撤…）不写「等它结束再撤」（复核 6 2026-10-16）
         if cid in asked:
             btn = "<span class='chip'>撤单中</span>"
         elif busy:                                          # 同一组 / 有关的单正在撤单：这一行等它结束（与 check、执行器同一个判断）
-            btn = "<span class='chip'>同一组撤单中</span>"
-        elif LO.cancel_why(o, book, now, paper) is None:
+            btn = "<span class='chip'>" + ("同一组撤单中" if busy.startswith("同一组") else "撤单中" if "已经在撤" in busy
+                                           else "有关的单撤单中") + "</span>"
+        elif cw is None:
             deps, alt, keep_txt, afx = "", "", "", ""
             dx = LO.deps_of(o, orders) if o.get("side") == "SELL" else []
             if dx:                                          # 执行器记了靠这笔卖出的钱的买单（fund_src；D2）：预览撤掉之后它们会怎样
@@ -1415,8 +1418,10 @@ def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.da
         ok = v["ok"]                                           # 状态不明 → 整组撤单一笔卖单都不会撤 → 不给「整组撤单」，只撤这一笔）
         if ok:
             out += f" data-grp='{escape(','.join(ok))}'"
-            if len(ok) + 1 < len(gm):                      # 同一组还有不能一起撤的：按钮写「能撤的 N 笔」（与「同一组 N 笔」对得上）
-                out += f" data-gn='{len(gm)}'"
+            if len(ok) + 1 < len(v["mem"]):                # 同一组还有不能一起撤的：按钮写「能撤的 N 笔」（与「同一组 N 笔」对得上；
+                out += f" data-gn='{len(v['mem'])}'"       #   靠这一组卖单的钱、已经发出的买单也算：与执行器的汇总一样；复核 6）
+            if any(byc[c].get("status") in LO.CANCELLABLE for c in [cid] + list(ok) if c in byc):
+                out += " data-gexch='1'"                   # 范围里有在交易所的单：确认框才写「马上发撤单到立花」（复核 6）
     if gm or deps:                                         # 不在一组里、有靠它的钱的买单：「一起撤买单」也撤在交易所的 / 会留下卖单时也写（复核 3）
         gl = LO.group_lines(o, orders, book, now, paper, tag, asked, solo=not ok, fix_t=(fx or alt_fix or None))
         if gl:
@@ -1429,6 +1434,11 @@ def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.da
         else:
             solo = keep_txt or "只撤这笔卖单"                    # 有靠它的钱的买单：与「只撤卖单（买 X 不会下）」同一句
         out += f" data-solo='{escape(solo)}'"
+        if o.get("side") == "SELL":                        # 「只撤这笔卖单」、同一组的买单还可能花钱：与单笔的确认框同一行 ★（复核 6 2026-10-16）
+            hs = [LO._hold_star(c, k, t, byc.get(c), book, now, paper, set(asked or ()), "只撤卖单" if keep_txt else "只撤这笔卖单")
+                  for c, k, t in LO._solo_holds(o, orders, book, now, G)]
+            if hs:
+                out += f" data-soloh='{escape(chr(10).join(hs))}'"
         return fix + out
     if gm and o.get("side") == "SELL" and LO.solo_holds(o, orders, book, now, G):
         out += " data-solok='1'"
@@ -1539,10 +1549,11 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     paper = (tag or "").startswith("paper") or str(book.get("broker") or "").startswith("Paper")
     void = MO.voided(waiting)
     wl = [r for r in waiting if r.get("kind") != "uncancel" and r.get("id") not in void]
-    asked = ({c for r in wl if r.get("kind") == "cancel_order" for c in MO.cancel_cids(r)}          # 整组撤单：同一组的每一笔（2026-10-16）
+    asked = ({c for r in wl if r.get("kind") == "cancel_order" for c in LO.job_cids(r, cur)}          # 整组撤单：同一组的每一笔（2026-10-16）
              | {c for it in items.values() if it.get("kind") == "cancel_order" and it.get("status") == "pending"
-                and not MO.grp_wait_stale(it, now) for c in MO.handling_cids(it)})   # 过了收盘还在等的整组撤单：不算撤单中（复核 2026-10-16）；
-    #   还在等立花确认撤单的单（grp_wait）也算（MO.handling_cids）；同一组的其他几笔在「今天的单」里写「同一组撤单中」（LO.cancel_conflict）
+                and not MO.grp_wait_stale(it, now) for c in LO.job_cids(it, cur)})   # 过了收盘还在等的整组撤单：不算撤单中（复核 2026-10-16）；
+    #   还在等立花确认撤单的单（grp_wait）、「一起撤买单」会在本地一起撤的买单也算（LO.job_cids：与执行器发单前的保护同一个；复核 6）；
+    #   同一组的其他几笔在「今天的单」里写「同一组撤单中」（LO.cancel_conflict）
     ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=asked, instr=False)   # 每笔单今天会不会下：只在 live_ops.outlook 判断（D5）
     fixed = MO.core_fixed(book, tag)
     fpend, fwhen = LO.fix_pending_when(book, now, tag)       # 还没照它调的固定口数：今天开盘后 / 盘中就照它下（D1；复核 UI F2，2026-10-16）

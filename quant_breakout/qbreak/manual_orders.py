@@ -1950,7 +1950,7 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
         if rec.get("grp"):                                 # 整组撤单（2026-10-16）：同一组的每一笔都要在账本里、在服务器算出的这一组里
             orders = [x for x in (book or {}).get("orders") or [] if isinstance(x, dict)]
             by = {str(x.get("cid")): x for x in orders}
-            mem = {str(x.get("cid")) for x in LO.group_of(o, orders, book)}
+            mem = {str(x.get("cid")) for x in LO.group_members(o, orders, book)}   # 含靠这一组卖单的钱、已经发出的买单（复核 6）
             for c in rec["grp"]:
                 mg = _CID.match(str(c))
                 lc = names.label(mg.group(3)) if mg else ""

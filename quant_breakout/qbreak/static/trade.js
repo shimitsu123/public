@@ -518,8 +518,8 @@ document.addEventListener('click', async e=>{
       const glab='整组撤单（'+(gn>n ? '能撤的 ' : '')+n+' 笔）';            // 同一组还有不能一起撤的（已成交 / 已撤 / 撤单中）：写「能撤的 N 笔」（data-gn；复核 2）
       if(d.fix) galt.push({text:'整组撤单并恢复按规则（'+tlab(d.fix, d.fixname)+'）', v:'fix', danger:true});
       const q=await ask(head+' · 同一组 '+gn+' 笔',
-        hint+'。'+(CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天的单」的状态）')+gl
-        +'\n「'+glab+'」= 这一组能撤的一起撤：先撤买单，确认没成交再撤卖单；「'+solo+'」= 只撤这一笔'
+        hint+'。'+(CFG.paper ? '' : d.gexch==='1' ? '\n马上发撤单到立花（之后看「今天的单」的状态）' : '\n这几笔都还没发到立花：撤了执行器就不再发')+gl   // data-gexch（复核 6）
+        +'\n「'+glab+'」= 这一组能撤的一起撤：先撤买单，确认没成交再撤卖单；「'+solo+'」= 只撤这一笔'+(d.soloh ? '\n'+d.soloh : '')   // data-soloh：只撤卖单的 ★
         +(d.fix ? '；「整组撤单并恢复按规则」= 一起撤、再取消固定口数（照规则调：什么时候见下一个确认框）' : ''),
         glab, {danger:true, alt:galt});
       if(!q.ok) return;

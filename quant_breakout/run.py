@@ -3500,8 +3500,11 @@ def _live_cancel(a, tag: str, book, paper: bool) -> int:
     lines = LO.cancel_text(res)
     for ln in lines:
         print(ln)
-    if not req and any(g.get("state") == "wait" for g in (res.get("grp") or {}).values()):
-        print("过 1 分钟再运行同一条命令（买单的撤单立花确认了才撤卖单）")
+    for g in (res.get("grp") or {}).values() if not req else ():
+        t0 = LO._tsj(g.get("since"))
+        if g.get("state") == "wait" and t0 is not None:     # 等的开始时刻记在账本里（复核 6 2026-10-16：以前每次重跑都从头算、永远不超时）
+            print(f"过 1 分钟再运行同一条命令接着查（只查状态、不再发撤单；{t0:%H:%M} 开始等，最多到 {LO.wait_end(t0):%H:%M}，"
+                  "到了还没确认就给立花网站的链接、卖单不撤）；Mac 上的面板也会约 1 分钟后自动再查")
     hints = []                                                # 撤之后会怎样：按每笔单的来源写（M5；2026-10-15：以前一律个股版的 CANCEL_HINT）
     for r in (res.get("done") or []) + (res.get("pending") or []):
         h = r.get("hint") or LO.CANCEL_HINT
@@ -3570,13 +3573,20 @@ def _cancel_preview(a, tag: str, book, paper: bool) -> int:
             rc = 1
             continue
         side = "买" if o.get("side") == "BUY" else "卖"
-        mem = LO.group_of(o, orders, b_)
+        g0 = LO.group_of(o, orders, b_)
+        xl = LO.fund_linked(g0, orders, b_) if len(g0) > 1 else []   # 靠这一组卖单的钱、已经发出的买单：--group 一起撤（复核 6）
         why = LO.cancel_conflict({"cid": c}, b_, jobs) if jobs else None
-        if len(mem) < 2:
-            print(f"★ cancel {c} 这次什么都不撤：{why}" if why else
-                  f"{side} {_lab_cancel(o.get('ticker'))}（{c}）：这笔单不在一组里：撤单就是撤这一笔")
+        if len(g0) < 2:                                   # 不在一组里：照 cancel <cid>（与 --group 做的一样）写，卖单写靠它的钱的买单会怎样（复核 6）
+            if why:
+                print(f"★ cancel {c} 这次什么都不撤：{why}")
+                continue
+            ls = LO.lone_lines(o, orders, b_, now, paper, tag)
+            print(f"{side} {_lab_cancel(o.get('ticker'))}（{c}）：{ls[0]}")
+            for ln in ls[1:]:
+                print(ln)
             continue
-        print(f"整组撤单预览（不连券商、不改账本）：{side} {_lab_cancel(o.get('ticker'))}（{c}）所在的一组 {len(mem)} 笔")
+        print(f"整组撤单预览（不连券商、不改账本）：{side} {_lab_cancel(o.get('ticker'))}（{c}）所在的一组 {len(g0)} 笔"
+              + (f"，另有靠这一组卖单的钱、已经发出的买单 {len(xl)} 笔（也在范围里）" if xl else ""))
         if why:
             print(f"★ cancel {c} --group 这次什么都不撤：{why}")
             continue
