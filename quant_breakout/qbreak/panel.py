@@ -1381,7 +1381,10 @@ def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.da
     data-solo（「只撤这一笔」的按钮文字）；固定口数还有效 → data-fix / data-fixname（「整组撤单并恢复按规则」；已经写了的不重复）。
     复核（2026-10-16）：没有 data-grp（同一组的其他单现在不能一起撤）→ 确认框只撤这一笔，data-glist 写「只撤这一笔」的说明（不写整组撤单）；
     卖单、同一组的买单还可能花钱（LO.solo_holds）→ data-solok='1'（确认框的按钮写「只撤这笔卖单」、指令写 deps=keep：执行器的闸门不再挡）。
-    data-fix：点的这一行自己是固定口数的 ETF 买单 → 它；否则同一组第一笔固定口数的买单（alt_fix：data-deps 那边已经写了的）。"""
+    data-fix：点的这一行自己是固定口数的 ETF 买单 → 它；否则同一组第一笔固定口数的买单（alt_fix：data-deps 那边已经写了的）。
+    复核 2（2026-10-16）：data-grp 照 LO.group_view（闸门预判：同一组有买单撤了也还会花钱 → 不给整组撤单）；能一起撤的比这一组少 →
+    data-gn（这一组几笔：按钮写「整组撤单（能撤的 N 笔）」）；只撤这一笔、卖单有靠它的钱的买单（data-depn）、同一组的买单还可能花钱 →
+    data-depk（「一起撤买单」改写成「撤买单（卖单不撤）」：执行器就是这么做的）。"""
     from . import live_ops as LO
     cid = str(o.get("cid"))
     gm = G.get(cid) or []
@@ -1397,12 +1400,12 @@ def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.da
     out = ""
     if gm:
         oth = [byc[c] for c in gm if c != cid and c in byc]
-        ok = [str(x.get("cid")) for x in oth if LO.grp_why(x, book, now, paper) is None and str(x.get("cid")) not in asked
-              and MO._CID.match(str(x.get("cid")))]
-        if len(ok) > MO.GROUP_MAX - 1:
-            ok = []
+        v = LO.group_view(o, orders, book, now, paper, asked)   # 与确认框、执行器同一个判断（复核 2 2026-10-16：买单已经成交 / 部分成交 /
+        ok = v["ok"]                                           # 状态不明 → 整组撤单一笔卖单都不会撤 → 不给「整组撤单」，只撤这一笔）
         if ok:
             out += f" data-grp='{escape(','.join(ok))}'"
+            if len(ok) + 1 < len(gm):                      # 同一组还有不能一起撤的：按钮写「能撤的 N 笔」（与「同一组 N 笔」对得上）
+                out += f" data-gn='{len(gm)}'"
         gl = LO.group_lines(o, orders, book, now, paper, tag, asked, solo=not ok, fix_t=(fx or alt_fix or None))
         if gl:
             out += f" data-glist='{escape(chr(10).join(gl))}'"
@@ -1415,6 +1418,8 @@ def _grp_attrs(o: dict, orders: list, byc: dict, G: dict, book: dict, now: dt.da
             out += f" data-solo='{escape(solo)}'"
         elif o.get("side") == "SELL" and LO.solo_holds(o, orders, book, now, G):
             out += " data-solok='1'"
+            if "data-depn=" in alt:                         # 「一起撤买单」（deps=cancel）：同一组的买单还可能花钱 → 执行器撤靠它的钱的买单、
+                out += f" data-depk='{escape(LO.DEPK)}'"     # 这笔卖单不撤 → 按钮就这么写（复核 2 2026-10-16）
     return fix + out
 
 

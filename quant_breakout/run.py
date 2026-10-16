@@ -3335,7 +3335,7 @@ def cmd_live_unified(a) -> int:
     paper, tag, book = _liveu_tag(a)
     if getattr(a, "preview", False):                          # 整组撤单的预览（只读：不连券商、不改账本、不拿锁；2026-10-16）
         if not getattr(a, "group", False) or not getattr(a, "cancel", None):
-            print("--preview 只和 --cancel <cid> --group 一起用")
+            print(f"--preview 只和 --cancel <cid> --group 一起用：bash scripts/liveu.sh cancel-plan <cid> --broker {_broker_args(a)}")
             return 2
         if getattr(a, "halt_first", False):
             print("预览不建 HALT：去掉 --halt-first")
@@ -3346,10 +3346,10 @@ def cmd_live_unified(a) -> int:
         return _cancel_preview(a, tag, book, paper)
     halt_ = _halt_first(a)                                    # 「停并撤单」：HALT 最先建（不等账本检查、不等运行锁）
     if getattr(a, "group", False) and not getattr(a, "cancel", None):   # 整组撤单要给一笔单（HALT 照样已经建了）
-        print("--group 要和一笔单的 cid 一起用：liveu.sh cancel <cid> --group")
+        print(f"--group 要和一笔单的 cid 一起用：bash scripts/liveu.sh cancel <cid> --group --broker {_broker_args(a)}")
         return 2
     if getattr(a, "solo", False) and (getattr(a, "group", False) or not getattr(a, "cancel", None)):   # 只撤这笔卖单：要给 cid、不和 --group 一起
-        print("--solo 要和卖单的 cid 一起用、不和 --group 一起：liveu.sh cancel <cid> --solo（整组撤单用 --group）")
+        print(f"--solo 要和卖单的 cid 一起用、不和 --group 一起：bash scripts/liveu.sh cancel <cid> --solo --broker {_broker_args(a)}（整组撤单用 --group）")
         return 2
     if not paper:                                             # 立花的账本读坏了 / 不见了（但有备份或 .corrupt）→ 停下，不悄悄从 ¥100 万重来
         from qbreak import book_backup
@@ -3539,7 +3539,7 @@ def _live_cancel(a, tag: str, book, paper: bool) -> int:
 
 
 def _cancel_preview(a, tag: str, book, paper: bool) -> int:
-    """整组撤单的预览（bash scripts/liveu.sh cancel-plan <cid>；只读：不连券商、不改账本、不拿锁；2026-10-16）：
+    """整组撤单的预览（bash scripts/liveu.sh cancel-plan <cid> --broker tachibana|paper；只读：不连券商、不改账本、不拿锁；2026-10-16）：
     这笔单所在的一组每一笔会怎样（与面板确认框同一个 live_ops.group_lines）。账本读不了 → 3；cid 不在账本里 → 1。"""
     import json
     from qbreak import live_ops as LO
@@ -5630,12 +5630,12 @@ def main(argv=None) -> int:
     lu.add_argument("--halt-first", action="store_true", help="--cancel 之前先建 HALT（「停并撤单」：bash scripts/liveu.sh halt-cancel）")
     lu.add_argument("--group", action="store_true",
                     help="整组撤单：撤 --cancel 那几笔单各自所在的一组（一起下的买单和卖单）；先撤买单，确认没成交再撤卖单"
-                         "（bash scripts/liveu.sh cancel <cid> --group；只在你明确说「撤单」时运行）")
+                         "（bash scripts/liveu.sh cancel <cid> --group --broker tachibana|paper；只在你明确说「撤单」时运行）")
     lu.add_argument("--solo", action="store_true",
                     help="只撤 --cancel 那几笔卖单本身（同一组的买单还挂着 / 已经成交时执行器默认不撤卖单：撤了买的钱不够）；"
-                         "= 面板确认框的「只撤这笔卖单」（bash scripts/liveu.sh cancel <cid> --solo；只在你明确说时运行）")
+                         "= 面板确认框的「只撤这笔卖单」（bash scripts/liveu.sh cancel <cid> --solo --broker tachibana|paper；只在你明确说时运行）")
     lu.add_argument("--preview", action="store_true",
-                    help="只看整组撤单会撤哪些（不连券商、不改账本、不拿锁；bash scripts/liveu.sh cancel-plan <cid>）")
+                    help="只看整组撤单会撤哪些（不连券商、不改账本、不拿锁；bash scripts/liveu.sh cancel-plan <cid> --broker tachibana|paper）")
     lu.add_argument("--halt-drill", action="store_true",
                     help="HALT 演练（只用模拟账户、今天早上的运行完成之后）：建演练用的 HALT → 跑一次 → 删掉它（bash scripts/liveu.sh halt-drill）")
     lu.add_argument("--block-reason", default=None, metavar="TEXT",

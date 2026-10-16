@@ -514,13 +514,14 @@ document.addEventListener('click', async e=>{
     const gl=d.glist ? '\n'+d.glist : '';                                // 同一组每一笔会怎样（服务器算：data-glist；2026-10-16）
     const g=(d.grp||'').split(',').filter(Boolean);                       // 同一组里现在能撤的其他单（data-grp）
     if(g.length>0){                                                       // 整组撤单（2026-10-16 用户：一起下的买单和卖单要能一起撤）
-      const n=g.length+1, solo=d.solo||'只撤这一笔', galt=[{text:solo, v:'one'}];
+      const n=g.length+1, gn=Math.max(+d.gn||0, n), solo=d.solo||'只撤这一笔', galt=[{text:solo, v:'one'}];
+      const glab='整组撤单（'+(gn>n ? '能撤的 ' : '')+n+' 笔）';            // 同一组还有不能一起撤的（已成交 / 已撤 / 撤单中）：写「能撤的 N 笔」（data-gn；复核 2）
       if(d.fix) galt.push({text:'整组撤单并恢复按规则（'+tlab(d.fix, d.fixname)+'）', v:'fix', danger:true});
-      const q=await ask(head+' · 同一组 '+n+' 笔',
+      const q=await ask(head+' · 同一组 '+gn+' 笔',
         hint+'。'+(CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天的单」的状态）')+gl
-        +'\n「整组撤单（'+n+' 笔）」= 这一组一起撤：先撤买单，确认没成交再撤卖单；「'+solo+'」= 只撤这一笔'
+        +'\n「'+glab+'」= 这一组能撤的一起撤：先撤买单，确认没成交再撤卖单；「'+solo+'」= 只撤这一笔'
         +(d.fix ? '；「整组撤单并恢复按规则」= 一起撤、再取消固定口数（照规则调：什么时候见下一个确认框）' : ''),
-        '整组撤单（'+n+' 笔）', {danger:true, alt:galt});
+        glab, {danger:true, alt:galt});
       if(!q.ok) return;
       let body={book:CFG.book, kind:'cancel_order', cid:d.cid, deps:'cancel', grp:g};
       if(q.alt==='one'){ body={book:CFG.book, kind:'cancel_order', cid:d.cid}; if(d.side==='SELL') body.deps='keep'; }
@@ -530,16 +531,17 @@ document.addEventListener('click', async e=>{
       done(k ? {msg:(j.msg||'已写撤单')+'\n'+(k.msg||'已写恢复按规则')} : j);
       return;
     }
-    const dep=+d.depn||0, alt=[];                                         // 靠这笔卖出的钱、执行器还没发出的买单（fund_src；D2）：几个按钮
+    const dep=+d.depn||0, alt=[], dk=d.depk||'一起撤买单';                // 靠这笔卖出的钱、执行器还没发出的买单（fund_src；D2）：几个按钮
+                                                                          // （同一组的买单还可能花钱 → 执行器撤买单、卖单不撤：data-depk「撤买单（卖单不撤）」；复核 2）
     if(dep>0){ alt.push({text:d.keep||'只撤卖单', v:'keep'}); if(d.fix) alt.push({text:'撤单并恢复按规则（'+tlab(d.fix, d.fixname)+'）', v:'fix', danger:true}); }
     else if(d.fix) alt.push({text:'撤单并恢复按规则（'+tlab(d.fix, d.fixname)+'）', v:'fix', danger:true});   // 固定口数排的单（2026-10-16）
     const q=await ask(head,
       hint+'。'+(d.unsent==='1' ? '' : (CFG.paper ? '' : '\n马上发撤单到立花（之后看「今天的单」的状态）'))
       +(d.deps ? '\n★ '+d.deps : '')                                    // 靠这笔卖出的钱的买单（服务器算：data-deps；2026-10-15）
-      +(dep>0 ? '\n「一起撤买单」= 这几笔买单也撤（执行器不再发）；「只撤卖单」= 买单按现在的钱重算'+(d.fix ? '；「撤单并恢复按规则」= 一起撤、再取消固定口数（照规则调：什么时候见下一个确认框）' : '') : '')
+      +(dep>0 ? '\n「'+dk+'」= 这几笔买单'+(d.depk ? '撤掉（执行器不再发），这笔卖单不撤（见下面 ★）' : '也撤（执行器不再发）')+'；「只撤卖单」= 买单按现在的钱重算'+(d.fix ? '；「撤单并恢复按规则」= 一起撤、再取消固定口数（照规则调：什么时候见下一个确认框）' : '') : '')
       +gl
       +(dep===0 && d.fix ? '\n「撤单并恢复按规则」= 撤单、再取消固定口数（照规则调：什么时候见下一个确认框）' : ''),
-      dep>0 ? '一起撤买单' : (d.solok==='1' ? '只撤这笔卖单' : '撤单'), {danger:true, alt:alt});
+      dep>0 ? dk : (d.solok==='1' ? '只撤这笔卖单' : '撤单'), {danger:true, alt:alt});
     if(!q.ok) return;
     const body={book:CFG.book, kind:'cancel_order', cid:d.cid};
     if(dep>0) body.deps = q.alt==='keep' ? 'keep' : 'cancel';
