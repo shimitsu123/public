@@ -97,8 +97,9 @@ def test_submit_stock_new_and_trimmed():
     _book_stocks()
     ok, msg, _r = panel.submit({"book": "paper", "kind": "buy", "ticker": "7203.T", "unit": "rule"}, now=AT)
     assert not ok and "今天已经买进 100 股" in msg and NM.label("7203.T") in msg
-    ok, msg, _r = panel.submit({"book": "paper", "kind": "sell", "ticker": "7203.T"}, now=AT)
-    assert not ok and "才算持仓" in msg and NM.label("7203.T") in msg
+    fri10 = AT.replace(hour=10)                                                  # 当天盘中：执行器今天不动它（同一只当天只下一笔）→ 挡、说收盘后再写
+    ok, msg, _r = panel.submit({"book": "paper", "kind": "sell", "ticker": "7203.T"}, now=fri10)
+    assert not ok and "今天盘中执行器不再动它" in msg and "收盘后（15:25 起）再写" in msg and NM.label("7203.T") in msg
     assert not MO.requests_path("paper").exists()
     ok, msg, rec = panel.submit({"book": "paper", "kind": "adjust", "ticker": "6758.T", "unit": "shares", "value": 300}, now=AT)
     assert ok, msg                                                               # 账本 400 股、今天减到 200 股 → 调到 300 股 = 加（按账本会是减）
@@ -119,7 +120,8 @@ def test_fund_holdings_and_fund_all_use_the_projection():
     b = _book_stocks()
     fa = MO.fund_all(b, "paper", "9984.T")                                   # 今天买进的个股：不挡，执行时一起卖（复核：以前挡住）
     assert fa["blocked"] is None and fa["bought"] == ["7203.T"] and "7203.T" not in [t for t, _c, _p in fa["sells"]]
-    assert "7203.T" in MO.fund_holdings(b, "paper", now=AT)["busy"]           # 今天买进的个股对账之前写不了卖出：不拿来凑
+    assert "7203.T" in MO.fund_holdings(b, "paper", now=AT.replace(hour=10))["busy"]   # 今天买进的个股：当天盘中写不了卖出 → 不拿来凑
+    assert "7203.T" not in MO.fund_holdings(b, "paper", now=AT)["busy"]       # 收盘后写的在对账之后执行 → 能凑（2026-10-16 二次复核 F2）
 
 
 def test_new_texts_carry_names():

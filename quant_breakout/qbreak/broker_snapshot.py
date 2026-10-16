@@ -2,7 +2,8 @@
 
 数据目录 out/broker_snapshot_<账本>.json（~/.qbreak/home，不入库；不含账户号、认证 ID、密钥、虚拟 URL）：
   {"at", "book", "source", "positions": [{ticker, qty, avg_px}], "buying_power", "quotes": {ticker: px}, "quotes_at",
-   "orders": [注文一覧的今天的行], "fills": [账本里今天的单在立花的成交], "compare": [账本 vs 立花 逐只]}
+   "orders": [注文一覧的今天的行], "fills": [账本当前决策的单在立花的成交], "fills_day": 那些单的成交日（YYYY-MM-DD）,
+   "compare": [账本 vs 立花 逐只]}
 两个来源：
   ① 执行器每次核对券商（check_broker）→ 持仓 + 余力（record_check；不多调 API）
   ② bash scripts/liveu.sh broker（只读，拿账本运行锁 + 立花本番会话锁）→ ① + 注文一覧 + 今天每笔单的约定（order_status）+ 立花现价；
@@ -72,7 +73,7 @@ def record_check(tag: str, held: dict, buying_power: float, ledger_book: dict | 
     """执行器核对券商时顺便记一份（只有持仓 + 余力；不另外调 API）。保留上一次 liveu.sh broker 记的注文 / 成交 / 现价（标上它们的时刻）。"""
     old = load(tag)
     pos = _positions(held)
-    snap = {k: old[k] for k in ("orders", "orders_at", "fills", "fills_at", "quotes", "quotes_at") if k in old}
+    snap = {k: old[k] for k in ("orders", "orders_at", "fills", "fills_at", "fills_day", "quotes", "quotes_at") if k in old}
     snap.update({"at": _now().strftime("%Y-%m-%d %H:%M:%S"), "book": tag, "source": "执行器核对",
                  "positions": pos, "buying_power": round(float(buying_power), 0), "compare": compare(ledger_book, pos)})
     write_json(path(tag), snap)
@@ -117,7 +118,7 @@ def today_orders(ledger_book: dict | None, day: dt.date) -> list[dict]:
 
 
 def fills_today(broker, ledger_book: dict | None, day: dt.date) -> list[dict]:
-    """账本里今天的每笔单 → 立花的约定（order_status；只读）。读不了的那笔写 error，不猜。"""
+    """账本里 day（fills_day：当前决策的成交日）的每笔单 → 立花的约定（order_status；只读）。读不了的那笔写 error，不猜。"""
     out = []
     for o in today_orders(ledger_book, day):
         row = {"cid": o.get("cid"), "ticker": o.get("ticker"), "side": o.get("side"), "kind": o.get("kind") or "stock",
@@ -126,21 +127,49 @@ def fills_today(broker, ledger_book: dict | None, day: dt.date) -> list[dict]:
             r = broker.order_status(o["broker_id"], o.get("order_date") or "")
             row.update({"filled_qty": int(r.get("filled_qty") or 0), "avg_px": float(r.get("avg_px") or 0),
                         "status": str(r.get("status") or ""), "final": str(r.get("final") or "")})
+            lq = int(o.get("filled_qty") or 0)            # 单上已经记着的成交（盘中确认到的）比约定照会读到的多（过了日子查不全）→ 照单上的
+            if lq > row["filled_qty"]:
+                row.update(filled_qty=lq, avg_px=float(o.get("filled_px") or row["avg_px"] or 0))
         except Exception as e:                            # noqa: BLE001
             row["error"] = type(e).__name__
         out.append(row)
     return out
 
 
+def fills_day(ledger_book: dict | None, today: dt.date) -> dt.date:
+    """快照要读哪一天的单的约定：账本当前决策的成交日（还没对账的那批单；周末 / 休市日 / 早上的运行没完成时是之前的交易日），
+    不晚于今天；没有账本 → 今天（2026-10-16 复核：以前一律读今天的单 → 周六 / 漏跑的周一刷新一次就把周五寄付单的成交清掉了）。"""
+    from .live_ops import fill_day_of
+    F = fill_day_of(ledger_book)
+    return F if F is not None and F <= today else today
+
+
+def _merge_fills(old: dict, fills: list[dict], day: dt.date) -> list[dict]:
+    """同一个成交日的上一份快照里读到的成交不丢：这次那笔读不了（error）或读到的成交数更少（休市日 / 过了日子查不到）→ 留上一次的那行。"""
+    if str(old.get("fills_day") or str(old.get("fills_at") or "")[:10]) != day.isoformat():
+        return fills
+    prev = {str(r.get("cid")): r for r in old.get("fills") or [] if isinstance(r, dict) and r.get("cid") and not r.get("error")}
+    out = []
+    for r in fills:
+        p = prev.get(str(r.get("cid")))
+        if p is not None and (r.get("error") or int(r.get("filled_qty") or 0) < int(p.get("filled_qty") or 0)):
+            r = {k: v for k, v in r.items() if k != "error"}               # 这笔单本身（票 / 口数）照这次的账本，成交照上一次读到的
+            r.update({k: p[k] for k in ("filled_qty", "avg_px", "status", "final") if k in p})
+            r["kept_from"] = str(old.get("fills_at") or "")
+        out.append(r)
+    return out
+
+
 def refresh(broker, tag: str, ledger_book: dict | None, managed: set | None = None) -> dict:
-    """liveu.sh broker：持仓 + 余力 + 注文一覧 + 今天的约定 + 立花现价（持仓与今天的单的票）→ 写快照并返回。"""
+    """liveu.sh broker：持仓 + 余力 + 注文一覧 + 账本当前决策的单（fills_day 那天发出的）的约定 + 立花现价（持仓与那些单的票）→ 写快照并返回。"""
     now = _now()
     held = broker.positions()
     bp = float(broker.cash())
     pos = _positions(held)
     spec = getattr(broker, "spec", None)
     orders = parse_orders(broker.open_orders() or [], spec) if spec is not None else []
-    fills = fills_today(broker, ledger_book, now.date())
+    day = fills_day(ledger_book, now.date())
+    fills = _merge_fills(load(tag), fills_today(broker, ledger_book, day), day)
     want = sorted({r["ticker"] for r in pos} | {f["ticker"] for f in fills if f.get("ticker")})
     quotes = {}
     if want and hasattr(broker, "quotes"):
@@ -150,7 +179,8 @@ def refresh(broker, tag: str, ledger_book: dict | None, managed: set | None = No
             quotes = {}
     stamp = now.strftime("%Y-%m-%d %H:%M:%S")
     snap = {"at": stamp, "book": tag, "source": "liveu.sh broker", "positions": pos, "buying_power": round(bp, 0),
-            "orders": orders, "orders_at": stamp, "fills": fills, "fills_at": stamp, "quotes": quotes, "quotes_at": stamp,
+            "orders": orders, "orders_at": stamp, "fills": fills, "fills_at": stamp, "fills_day": day.isoformat(),
+            "quotes": quotes, "quotes_at": stamp,
             "compare": compare(ledger_book, pos),
             "foreign": sorted(r["ticker"] for r in pos if managed is not None and r["ticker"] not in managed)}
     write_json(path(tag), snap)
@@ -166,22 +196,24 @@ def fills_lines(snap: dict) -> list[str]:
         unit = "口" if f.get("kind") == "core" else "股"
         side = "买" if f.get("side") == "BUY" else "卖"
         lab = label(f.get("ticker")) if f.get("ticker") else ""
-        n = f"{f.get('qty'):,} {unit}"
+        n = f"{int(f.get('qty') or 0):,} {unit}"
         nq = qty(f.get("ticker"), n) if f.get("ticker") else n
         if f.get("error"):
             out.append(f"・{side} {nq}：读不了约定（{f['error']}）→ 去立花网站看")
         elif int(f.get("filled_qty") or 0) > 0:
-            out.append(f"・{side} {lab} 成交 {int(f['filled_qty']):,}/{f.get('qty'):,} {unit} @ ¥{float(f['avg_px']):,.1f}"
+            out.append(f"・{side} {lab} 成交 {int(f['filled_qty']):,}/{int(f.get('qty') or 0):,} {unit} @ ¥{float(f.get('avg_px') or 0):,.1f}"
                        + (f"（{f['status']}）" if f.get("status") else ""))
         else:
             out.append(f"・{side} {nq}：还没成交" + (f"（{f['status']}）" if f.get("status") else ""))
     return out
 
 
-def diff_lines(snap: dict) -> list[str]:
-    """账本 vs 立花不一致的几行：「・7203 トヨタ自動車：账本 100 股 / 立花 200 股（差 +100）」（ETF 是口；2026-10-15）。"""
+def diff_lines(snap: dict, rows: list[dict] | None = None, led: str = "账本") -> list[str]:
+    """账本 vs 立花不一致的几行：「・7203 トヨタ自動車：账本 100 股 / 立花 200 股（差 +100）」（ETF 是口；2026-10-15）。
+    rows 给了 → 只列这些（live_ops.broker_compare 的 bad / soft：账本 + 快照之前已知的成交 vs 立花）；led = 「账本」那一格的叫法
+    （含成交时「账本（含今天已成交）」）。"""
     from .names import ETF_NAMES, label
-    bad = [r for r in snap.get("compare") or [] if r.get("diff")]
+    bad = [r for r in (snap.get("compare") if rows is None else rows) or [] if r.get("diff")]
     u = lambda t: "口" if t in ETF_NAMES else "股"                         # noqa: E731
-    return [f"・{label(r['ticker'])}：账本 {r['ledger']:,} {u(r['ticker'])} / 立花 {r['broker']:,} {u(r['ticker'])}（差 {r['diff']:+,}）"
+    return [f"・{label(r['ticker'])}：{led} {r['ledger']:,} {u(r['ticker'])} / 立花 {r['broker']:,} {u(r['ticker'])}（差 {r['diff']:+,}）"
             for r in bad]

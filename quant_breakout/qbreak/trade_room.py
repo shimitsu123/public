@@ -592,7 +592,7 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
                  + f"；钱：现在能用的现金 ¥{cash_:,.0f} + 能卖来凑钱的核心 ETF 约 ¥{f_all:,.0f}（钱是共用的：买了一只，别的就少了）")
         shown = ({r["t"] for r in held_rows} - hn_gone) | hn_new   # 拿着的只数含今天已成交（与「持仓」角标同一个数；2026-10-16 复核）；
         #                                                             held0 / sakin 仍按开盘前的持仓（差金決済）
-        why_s = (f"拿着的 {len(shown)} 只" + ("（含今天已成交）" if shown != {r["t"] for r in held_rows} else "")
+        why_s = (f"拿着的 {len(shown)} 只" + (f"（{pjr.get('head') or LO.hn_head(hn_dw)}）" if shown != {r["t"] for r in held_rows} else "")
                  + f"里今天还能卖 {s_n} 只" + _miss([r for r in out.values() if r["t"] in shown and not r["sell"]["n"]], "sell"))
     why_k = (f"买 {b_n} + 卖 {s_n}" + (f" − 既能买又能卖的 {one} 只（同一只当天执行器只下一笔：只算一次）" if one else "")
              + "；换别的股票不受差金決済限制（例 3）")

@@ -78,7 +78,8 @@ def test_fund_holdings_busy_depends_on_when_it_runs():
     assert "1482.T" not in MO.fund_holdings(b, "paper", now=FRI1540)["busy"]
     b = _book_stocks()
     fh = MO.fund_holdings(b, "paper", now=AT)
-    assert "7203.T" in fh["busy"] and "6758.T" not in fh["busy"]              # 今天买进的个股：对账之前写不了它的卖出
+    assert "7203.T" not in fh["busy"] and "6758.T" not in fh["busy"]          # 收盘后写的在对账之后执行：今天买进的也能凑（二次复核 F2）
+    assert {"7203.T", "6758.T"} <= set(MO.fund_holdings(b, "paper", now=FRI10)["busy"])   # 当天盘中：今天有成交的不拿
 
 
 # ────────── F4 / F8：今天买进的个股，「比昨收」= 决策那天的收盘 ──────────
@@ -129,9 +130,11 @@ def test_broker_card_snapshot_after_the_fill_uses_the_projection():
     h = _tb_card("2026-10-16 11:35:00", [])
     t = _text(h)
     assert "card warn" not in h and "不一致" not in t and "快照之后" not in t and "（账本含今天已成交）" in t
-    h = _tb_card("2026-10-16 11:35:00", [{"ticker": "6758.T", "qty": 200}])   # 预计和立花差：只是对账前的预计 → 不标红
+    # 10:00 盘中成交（单上记的、确定的）、11:35 的快照立花还是 200：账本 + 成交 = 0 对 200 → 真的不一致（早上的核对也会停）→ 标红
+    # （2026-10-16 二次复核 F11：以前凡是今天成交过的票一律降成「对账之后再看」，把真的不一致藏起来了）
+    h = _tb_card("2026-10-16 11:35:00", [{"ticker": "6758.T", "qty": 200}])
     t = _text(h)
-    assert "card warn" not in h and "下一次早上的核对会停下" not in t and "含今天已成交的预计" in t
+    assert "card warn" in h and "下一次早上的核对会停下" in t and "（账本按含今天已成交算）" in t
 
 
 def test_broker_card_ledger_mismatch_still_warns():
@@ -238,7 +241,11 @@ def test_holdings_card_says_bought_today_once():
     card = _text(h[i:h.index("</section>", i)])
     assert card.count("7203 トヨタ自動車：今天买进 100 股 @ ¥2,500.00") == 1, card
     assert card.count("1655 S&P500：今天买进 10 口") == 1, card
-    assert SETTLE + " 对账之后才能卖出 / 调仓" in card
+    assert "对账之后才能卖出 / 调仓" not in card and "data-act='sell' data-t='7203.T'" in h   # 收盘后：对账之后执行 → 按钮照常（二次复核 F2）
+    h = panel.render("paper", "c" * 40, FRI1310, mode="remote", device={"name": "iPhone", "created": "2026-10-06T08:00:00+09:00"})
+    i = h.index("id='holdings'")
+    card = _text(h[i:h.index("</section>", i)])
+    assert "今天盘中执行器不再动它" in card and "data-act='sell' data-t='7203.T'" not in h   # 当天盘中：执行器今天不动它
 
 
 # ────────── F15：周末的「今天」写成成交那天 ──────────
@@ -277,8 +284,9 @@ def test_settle_words_have_no_stray_spaces():
     assert later == ["止损价、趋势标签在下一次执行器运行的决策之后才有"]
     hv = HV.overlay({"holdings": [], "core": []}, LO.held_now(b, "paper", now=AT))
     assert [r.get("later") for r in hv["holdings"] if r.get("later")] == ["止损价、趋势标签在" + SETTLE + " 的决策之后才有"]
-    why = MO.today_why(b, "7203.T", "sell", "paper", now=MON9)
+    why = MO.today_why(b, "7203.T", "buy", "paper", now=MON9)
     assert "下一次执行器运行对账之后才算持仓" in why and "运行 对账" not in why
+    assert MO.today_why(b, "7203.T", "sell", "paper", now=MON9) is None       # 对账之后执行：卖出不挡（二次复核 F2）
     fa = MO.fund_all(_book(), "paper", "9984.T", now=MON9)
     assert any("（下一次执行器运行对账后正式记账）" in w for _t, w in fa["skip"])
 

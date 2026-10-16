@@ -90,6 +90,16 @@ HN_MISSED = "还没记进账本：早上的运行还没完成，下一次执行�
 HN_PAPER_OPEN = "模拟账户 09:25 按 1 分钟线开盘价撮合的，记账时按正式开盘价改记"
 HN_TACHI = "只算已经知道的成交（盘中成交 / 11:35、15:45 的成交快照），以立花为准；现金是约数"
 HN_PENDING = "还在等成交的单不算在里面"
+HN_CLOSE_T = dt.time(15, 30)                        # 收盘：之后「还在等成交」不再成立（寄付 / 当日限り已经结束）
+HN_FILL_SLACK = dt.timedelta(minutes=5)             # 单上记的成交（盘中确认窗口里的）时刻只知道下界：离快照不到这么久 → 快照里有没有它说不准
+
+
+def hn_pending_text(day_word: str | None, today_open: bool) -> str:
+    """还没确认成交的单那一句（2026-10-16 复核：周末 / 收盘后以前也写「还在等成交」）：成交日当天收盘前 → HN_PENDING；
+    之后 →「10/16（周五）还没确认成交的部分不算在里面（已经收盘：对账时按实际成交记账）」。"""
+    if today_open:
+        return HN_PENDING
+    return f"{day_word or '今天'}还没确认成交的部分不算在里面（已经收盘：对账时按实际成交记账）"
 
 
 def _hn_md(d: dt.date) -> str:
@@ -191,6 +201,12 @@ def _hn_ts(v) -> dt.datetime | None:
     return x
 
 
+def snap_day(snap: dict | None) -> str:
+    """立花快照里的成交是哪个成交日的单的（broker_snapshot.refresh 写的 fills_day；旧快照没有 → fills_at 的日子）。"""
+    s = snap if isinstance(snap, dict) else {}
+    return str(s.get("fills_day") or str(s.get("fills_at") or "")[:10])
+
+
 def _hn_fill_at(o: dict, F: dt.date, snap_at: dt.datetime | None) -> str:
     """这笔成交的时刻（下界）：快照来的 → 快照的 fills_at（那份快照里已经有它）；别的 → 成交日 09:00、发出时刻 sent_at、
     单号末尾 -N时分秒（盘中的单）里最晚的（单上没记成交时刻：成交不会早于开盘、也不会早于发出）。"""
@@ -243,7 +259,7 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
             except Exception:                             # noqa: BLE001  快照读不了 = 不知道
                 snap = {}
         snap = snap if isinstance(snap, dict) else {}
-        if str(snap.get("fills_at") or "")[:10] == F.isoformat():
+        if snap_day(snap) == F.isoformat():              # 快照里的成交是这个成交日的（fills_day；旧快照按 fills_at 的日子）
             srow = {str(r.get("cid")): r for r in snap.get("fills") or [] if isinstance(r, dict) and r.get("cid")}
     snap_at = _hn_ts(snap.get("fills_at")) if srow else None
     got, pending = [], []
@@ -254,7 +270,8 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
             if not t or side not in ("BUY", "SELL"):
                 continue
             tgt = int(o.get("sent_qty") or o.get("qty") or 0)
-            pend = {"cid": o.get("cid"), "ticker": t, "label": NM.label(t), "side": side, "kind": kind, "status": st_}
+            pend = {"cid": o.get("cid"), "ticker": t, "label": NM.label(t), "side": side, "kind": kind, "status": st_,
+                    "at": _hn_fill_at(o, F, None)}       # 最早可能成交的时刻（立花对照卡：快照早于它 → 快照里不可能有它的成交）
             if st_ in ("SENDING", "ERROR"):               # 结果不明：可能成交了也可能没有 → 不算（对账 / 登记之后才知道）
                 pending.append({**pend, "left": tgt})
                 continue
@@ -402,11 +419,68 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
     if not paper:
         note.append(HN_TACHI)
     if pending:
-        note.append(HN_PENDING)
+        note.append(hn_pending_text(dw, today == F and now.time() < HN_CLOSE_T))
     out.update(has=True, fills=fills, by_ticker=by, state=state, pos=pos, core_units=core, cash=cash,
                equity=(eq_led + delta) if eq_led is not None else None, new=new, sold_out=sold,
                realized=sum(pn) if pn else None, realized_partial=len(pn) < len(sells), approx=any_approx,
                note="；".join(note))
+    return out
+
+
+def broker_compare(snap: dict | None, pj: dict | None) -> dict:
+    """立花快照的持仓 vs 账本 + 快照那一刻已经知道的成交（面板「立花那边」与 liveu.sh broker 的「账本 vs 立花」同一个判断；2026-10-16 复核）。
+    pj = held_now 的结果。逐只：比的数 = 账本 + 这只的成交里时刻（下界）不晚于快照的（个股不低于 0）；快照之后才成交的不算（late，
+    下一次刷新才看得到）。差 ≠ 0：这只快照之前的成交说不准（约数 approx / 只知道发出数 sent_qty / 单上的成交离快照不到 HN_FILL_SLACK /
+    快照之前就可能成交、快照却不知道的单）→ soft（对账之后再看）；其余 → bad（真的不一致：早上的核对会停下）。没有已知的成交 → 快照里存的 compare。
+    → {"rows": [{ticker, ledger（比的数）, broker, diff}], "bad", "soft", "seen"（比的数含成交的票）, "late", "head", "day_word"}。只读、不抛异常。"""
+    from . import broker_snapshot as BS
+    s = snap if isinstance(snap, dict) else {}
+    pj = pj if isinstance(pj, dict) else {}
+    out = {"rows": [dict(r) for r in s.get("compare") or [] if isinstance(r, dict)], "seen": set(), "late": set(),
+           "head": pj.get("head") or hn_head(pj.get("day_word")), "day_word": pj.get("day_word") or "今天"}
+    if pj.get("has"):
+        try:
+            sat = _hn_ts(s.get("at"))
+            fs = [f for f in pj.get("fills") or [] if isinstance(f, dict)]
+            by = pj.get("by_ticker") or {}
+            ps = pj.get("state") or {}
+            cnt: dict = {}
+            for t, p in (ps.get("pos") or {}).items():
+                cnt[t] = cnt.get(t, 0) + int((p or {}).get("shares") or 0)
+            for t, u in (ps.get("core_units") or {}).items():
+                cnt[t] = cnt.get(t, 0) + int(u or 0)
+            seen, late, unsure = set(), set(), set()
+            for t in dict.fromkeys(str(f.get("ticker")) for f in fs):
+                n = int((by.get(t) or {}).get("ledger") or 0)
+                for f in fs:
+                    if str(f.get("ticker")) != t:
+                        continue
+                    at = _hn_ts(f.get("at"))
+                    if sat is None or at is None or at > sat:
+                        late.add(t)
+                        continue
+                    seen.add(t)
+                    n += int(f.get("qty") or 0) * (1 if f.get("side") == "BUY" else -1)
+                    if f.get("approx") or f.get("src") == "sent_qty" or (f.get("src") == "order" and sat - at < HN_FILL_SLACK):
+                        unsure.add(t)
+                cnt[t] = max(0, n)
+            ok_rows = set()
+            fat = _hn_ts(s.get("fills_at"))
+            if fat is not None and sat is not None and fat >= sat and snap_day(s) == pj.get("fill_day"):
+                ok_rows = {str(r.get("cid")) for r in s.get("fills") or [] if isinstance(r, dict) and not r.get("error")}
+            for p in pj.get("pending") or []:                 # 快照之前就可能成交、快照却不知道它成交了多少的单
+                at = _hn_ts(p.get("at"))
+                if sat is not None and at is not None and at <= sat and (
+                        p.get("status") in ("SENDING", "ERROR") or str(p.get("cid")) not in ok_rows):
+                    unsure.add(str(p.get("ticker")))
+            out["rows"] = BS.compare({"state": {"pos": {t: {"shares": n} for t, n in cnt.items()}}}, s.get("positions") or [])
+            out["seen"], out["late"], out["unsure"] = seen, late, unsure
+        except Exception as e:                            # noqa: BLE001  展示用：比不了就照快照里存的
+            log.warning("立花快照没按今天的成交比成（%s）→ 照快照里存的", e)
+            out["seen"], out["late"] = set(), set()
+    uns = out.pop("unsure", set())
+    out["bad"] = [r for r in out["rows"] if r.get("diff") and r.get("ticker") not in uns]
+    out["soft"] = [r for r in out["rows"] if r.get("diff") and r.get("ticker") in uns]
     return out
 
 
@@ -3653,4 +3727,4 @@ __all__ = ["CANCELLABLE", "STATUS_TEXT", "CANCEL_HINT", "CANCEL_HINT_CORE", "RES
            "solo_holds", "hold_pre", "cli_resume", "cli_plan", "CLI_SRC",
            "CORE_SRC", "src_of", "src_note", "src_line", "wrote", "fix_name", "OUT_WORD", "TRADE_HEAD", "NO_PATH_S", "skip_wont",
            "asked_cids", "instr_due", "outlook", "row_text", "act_text", "trade_key", "new_wont", "not_today",
-           "fill_day_of", "held_now", "hn_sp", "hn_head", "ledger_close_note", "how_text", "unknown_candidates", "unknown_text", "resolve_draft", "reconcile_report", "adopt", "save_book"]
+           "fill_day_of", "held_now", "hn_sp", "hn_head", "hn_pending_text", "snap_day", "broker_compare", "ledger_close_note", "how_text", "unknown_candidates", "unknown_text", "resolve_draft", "reconcile_report", "adopt", "save_book"]

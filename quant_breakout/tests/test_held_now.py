@@ -135,7 +135,8 @@ def test_tachibana_sent_morning_order_counts_snapshot_fills():
     pj = LO.held_now(b, "tachibana", now=AT_TB, snap=snap)
     assert pj["has"] and [(f["qty"], f["px"], f["src"]) for f in pj["fills"]] == [(100, 2490.0, "snapshot")]
     assert pj["pending"][0]["left"] == 200 and pj["pos"]["7203.T"]["shares"] == 100
-    assert "以立花为准" in pj["note"] and "现金是约数" in pj["note"] and "还在等成交的单不算在里面" in pj["note"]
+    assert "以立花为准" in pj["note"] and "现金是约数" in pj["note"]
+    assert "今天还没确认成交的部分不算在里面（已经收盘" in pj["note"] and "还在等成交" not in pj["note"]   # 15:50：已经收盘
     assert not pj["paper"]
     old = {**snap, "fills_at": "2026-10-15T15:45:00+09:00"}                   # 前一天的快照：不算
     pj = LO.held_now(b, "tachibana", now=AT_TB, snap=old)

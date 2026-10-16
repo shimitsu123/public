@@ -3821,18 +3821,37 @@ def cmd_live_broker(a) -> int:
               + (f"，现价 ¥{q:,.1f}" if q else "") + "）")
     if not snap["positions"]:
         print("  没有持仓")
-    dl = BS.diff_lines(snap)
-    print("账本 vs 立花：" + ("一致" if not dl else "不一致 ↓（第二天早上的核对会停下；先看 bash scripts/liveu.sh reconcile）"))
-    for ln in dl:
+    from qbreak import live_ops as LO
+    try:                                                  # 账本 + 快照之前已知的成交 vs 立花（面板「立花那边」同一个判断；2026-10-16 复核：
+        pj_ = LO.held_now(b_, tag, snap=snap)             # 以前比的是成交之前的账本 → 每个正常的成交日都报「不一致」）
+    except Exception:                                     # noqa: BLE001  算不成 → 照快照里存的（成交之前的账本）
+        pj_ = None
+    cm = LO.broker_compare(snap, pj_)
+    led = f"账本（{cm['head']}，对账前的预计）" if cm["seen"] else "账本"
+    dl = BS.diff_lines(snap, cm["bad"], led)
+    sl = BS.diff_lines(snap, cm["soft"], led)
+    print("账本 vs 立花：" + ("一致" if not dl and not sl else "不一致 ↓（第二天早上的核对会停下；先看 bash scripts/liveu.sh reconcile）"
+                              if dl else f"{cm['head']}的预计说不准的 {len(sl)} 只 ↓（快照前后的成交：对账之后再看，不是错误）")
+          + (f"（账本{cm['head']}：对账前的预计）" if cm["seen"] and not dl and not sl else ""))
+    for ln in dl + sl:
         print(ln)
+    if cm["late"]:
+        print("快照之后又成交了（下一次刷新才看得到）：" + "、".join(NM.label(t) for t in sorted(cm["late"])))
     fl = BS.fills_lines(snap)
-    print(f"今天的单 {len(fl)} 笔" + ("：" if fl else "（执行器今天没发单）"))
+    fd = LO.snap_day(snap)
+    try:
+        fdw = "今天" if fd == snap["at"][:10] else LO._hn_md(dt.date.fromisoformat(fd))
+    except ValueError:
+        fdw = "今天"
+    print(f"{fdw}的单 {len(fl)} 笔" + ("：" if fl else "（执行器没发单）"))
     for ln in fl:
         print(ln)
     print(f"注文一覧（今天）{len(snap.get('orders') or [])} 件；正式记账仍在下一个交易日 07:40 的对账")
     if a.notify and fl:
         from qbreak import notify
-        notify.send(f"qbreak 立花：今天的成交（{snap['at'][11:16]}）", "\n".join(fl + (["账本 vs 立花不一致："] + dl if dl else [])),
+        notify.send(f"qbreak 立花：{fdw}的成交（{snap['at'][11:16]}）",
+                    "\n".join(fl + (["账本 vs 立花不一致（第二天早上的核对会停下）："] + dl if dl else [])
+                              + ([f"{cm['head']}的预计和立花差（快照前后的成交说不准：对账之后再看）："] + sl if sl else [])),
                     level="warn" if dl else "info", url="/?tab=trade")
     return 1 if dl else 0
 
@@ -4740,7 +4759,7 @@ def cmd_manual(a) -> int:
         print(f"现在写的买卖：{when}下单（{MO.RULE_TEXT}）")
         s_ = MO.slots(b_, tag, now=now, with_today=True)
         print(f"个股名额：空 {s_['free']} 个（拿着 {s_['held']} + 排定买入 {s_['buys']}，上限 {s_['max']} 只）"
-              + ("（含今天已成交）" if s_.get("today") else ""))
+              + (f"（{s_.get('head') or '含今天已成交'}）" if s_.get("today") else ""))
         try:                                                  # 今天还能买几次 / 卖几次（D6；2026-10-15 用户要求 3：与面板交易页的卡片同一个数；不取价 → 按收盘估）
             from qbreak import trade_room as TR
             sm_ = read_json(paths.out_dir() / f"live_unified_{tag}.json", {}) or {}
@@ -4860,7 +4879,8 @@ def cmd_manual(a) -> int:
     elif rec["kind"] == "unblock":                           # 解除不是单（2026-10-13）
         print(f"不会买回、也不马上买 → {MO.next_decision(now)}；之后那次决策看的 K 线出买入信号，规则才可能买")
     elif rec["kind"] == "core":
-        c_ = MO.core_info(b_, rec["ticker"]) if rec.get("ticker") else None
+        from qbreak import live_ops as LO_
+        c_ = MO.core_info(b_, rec["ticker"], LO_.held_now(b_, tag, now=now)) if rec.get("ticker") else None   # 含今天已成交（core_rec 同一个数）
         stop_ = float(rec["pct"]) <= 0
         if c_ and not stop_:
             mv_ = f"{c_['cur']:,} → {int(rec['target']):,} 口"
