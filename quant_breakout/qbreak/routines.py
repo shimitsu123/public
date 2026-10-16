@@ -722,6 +722,32 @@ def settings_path() -> Path:
     return (Path(sim).expanduser() if sim else Path.home() / "qbreak-sim") / ".claude" / "settings.local.json"
 
 
+def sim_folder_mode() -> str | None:
+    """桌面版给 ~/qbreak-sim 文件夹记的权限模式（claude_desktop_config.json 的 epitaxy-folder-permission-mode；只读、不打印路径）：
+    "bypassPermissions" / "default" / "auto" …；读不到 → None。文件：QBREAK_DESKTOP_CONFIG，没设 → 运行记录目录的上一层
+    （测试设了 QBREAK_DESKTOP_DIR 就不会读到本机真的设置）。用户 2026-10-17 决定本机任务保持「跳过全部确认」。"""
+    v = os.environ.get("QBREAK_DESKTOP_CONFIG", "").strip()
+    if v:
+        f = Path(v).expanduser()
+    else:
+        d = desktop_dir()
+        if d is None:
+            return None
+        f = d.parent / "claude_desktop_config.json"
+    sim = os.environ.get("QBREAK_SIM", "").strip()
+    want = str(Path(sim).expanduser() if sim else Path.home() / "qbreak-sim").rstrip("/")
+    try:
+        prefs = (json.loads(f.read_text(encoding="utf-8")).get("preferences") or {}).get("epitaxyPrefs") or {}
+        for k, m in prefs.items():
+            if str(k).startswith("epitaxy-folder-permission-mode") and isinstance(m, dict):
+                for folder, mode in m.items():
+                    if str(folder).rstrip("/") == want and isinstance(mode, str):
+                        return mode
+    except Exception:
+        return None
+    return None
+
+
 def _bash_rule(r) -> str | None:
     """「Bash(…)」→ 括号里的；「Bash」→ "*"（全部）；别的工具 → None。"""
     if not isinstance(r, str):
@@ -865,6 +891,9 @@ def main(argv: list[str] | None = None) -> int:
         elif not miss:
             n = sum(len(v) for v in manual_commands().values())
             print(f"OK\t允许规则：说明书要运行的命令（{n} 条）都对得上（~/qbreak-sim/.claude/settings.local.json + 任务自己允许过的）")
+        elif sim_folder_mode() == "bypassPermissions":     # 跳过全部确认（用户 2026-10-17 决定）：不会停在权限确认，缺的只是改回逐项确认前要补的
+            print(f"OK\t允许规则：本机任务的文件夹是「跳过全部确认」（2026-10-17 用户决定），不会停在权限确认；"
+                  f"规则里缺 {len(miss)} 条（只在改回逐项确认之前要补：python -m qbreak.routines allow-missing）")
         else:
             label = dict(KINDS)
             for part, names in miss:

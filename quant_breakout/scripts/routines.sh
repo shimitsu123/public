@@ -30,7 +30,8 @@
 #   QBREAK_ROUTINES_PULL=0（不 pull，只 fetch）、QBREAK_ROUTINES_SLEEP（push 重试等待的倍数，默认 1）、QBREAK_CLAUDE_APP（桌面版的 .app）、
 #   QBREAK_ROUTINES_HHMM（现在的 JST 时刻，例 0956）、QBREAK_ROUTINES_NOW（现在，ISO；check 的「按时跑了没有」用）、
 #   QBREAK_DESKTOP_DIR（桌面版的运行记录目录，默认 ~/Library/Application Support/Claude/claude-code-sessions）、
-#   QBREAK_SIM_SETTINGS（允许规则的文件，默认 $QBREAK_SIM/.claude/settings.local.json）
+#   QBREAK_SIM_SETTINGS（允许规则的文件，默认 $QBREAK_SIM/.claude/settings.local.json）、
+#   QBREAK_DESKTOP_CONFIG（桌面版的设置，默认运行记录目录上一层的 claude_desktop_config.json；只读 ~/qbreak-sim 的权限模式）
 set -uo pipefail
 
 PROJ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

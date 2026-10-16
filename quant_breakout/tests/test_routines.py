@@ -754,6 +754,31 @@ def test_check_reports_commands_missing_from_the_allow_rules(repos):
     assert "[—] 允许规则：没有 ~/qbreak-sim/.claude/settings.local.json（允许规则）" in out, out
 
 
+def test_allow_gaps_are_ok_when_the_sim_folder_skips_all_prompts(repos):
+    """用户 2026-10-17 决定本机任务保持「跳过全部确认」：规则缺的不再报 [★]（不会停在权限确认），只说改回逐项确认前要补。"""
+    t = repos
+    _git(t / "sim", "pull", "-q", "--ff-only", "origin", BRANCH, ident=False)
+    allp = _settings(t / "x", [])
+    conf = t / "desk.json"
+
+    def mode(m):
+        conf.write_text(json.dumps({"preferences": {"epitaxyPrefs": {"epitaxy-folder-permission-mode.acct": {
+            str(t / "other"): "default", str(t / "sim"): m}}}}), encoding="utf-8")
+
+    env = dict(today="2026-10-16", CLAUDE_CONFIG_DIR=str(t / "cfg"), QBREAK_DESKTOP_DIR=str(t / "nowhere"),
+               QBREAK_SIM_SETTINGS=str(allp), QBREAK_DESKTOP_CONFIG=str(conf))
+    mode("bypassPermissions")
+    rc, out = _run(t, "check", **env)
+    assert "允许规则里没有" not in out and "[OK] 允许规则：本机任务的文件夹是「跳过全部确认」" in out and "SECRET" not in out, out
+    assert str(t) not in out.split("允许规则：", 1)[1].splitlines()[0]                  # 不打印文件夹路径
+    mode("default")
+    rc, out = _run(t, "check", **env)
+    assert "[★] 允许规则里没有" in out, out
+    conf.write_text("{broken", encoding="utf-8")                                         # 读不懂 → 当成要确认（照旧报）
+    rc, out = _run(t, "check", **env)
+    assert "[★] 允许规则里没有" in out, out
+
+
 # ────────── 09:30 自检：今天的日报没入库 ──────────
 TUE = dt.datetime(2026, 10, 6, 9, 30, tzinfo=JST)
 

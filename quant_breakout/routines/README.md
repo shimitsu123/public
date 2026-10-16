@@ -53,7 +53,7 @@ Claude 有 Claude_Code_Remote 的 `get_trigger` 就**只读**取上表三个云�
 - **Instructions**：下面的固定文字（只是指向仓库里的说明书：说明书改了，下一次运行自动用新的）。
   其中「市场风险报告 URL」（日报、影子账户用）**只写在本机任务里、不入库**（公开仓库不写私人链接）：从云端例行任务「模拟盘日报」
   （trig_01MMZVeTtxexr6y4sDhy4rxX）的第 2 步抄（Claude 有 Claude_Code_Remote 的 get_trigger 就只读取它；没有就请用户在 claude.ai/code 的 Routines 页面打开那个例行任务复制给你）。
-- 权限模式：默认的逐项确认（不要选跳过全部确认的模式）；模型：默认。
+- 权限模式：**现在是「跳过全部确认」**（用户 2026-10-17 决定：`~/qbreak-sim` 文件夹在桌面版记的是 bypassPermissions；10-16 Claude 改设置文件想改回逐项确认，桌面版开着时又写回去了，用户随后决定保持跳过）——不会再停在权限确认上，代价是任务里的 Claude 运行任何命令都不问；要改回逐项确认 = 用户在桌面版 Code 里打开 `~/qbreak-sim` 自己切换（Claude 不改），改之前先把 `python -m qbreak.routines allow-missing` 列的规则补进允许规则；模型：默认。
 - 工作文件夹：`~/qbreak-sim`（第一次会问要不要信任这个文件夹 → 信任）；**独立 worktree 关掉**（要在 `~/qbreak-sim` 本身提交、推送）。
 - **Schedule**：日报 Weekdays 06:45；影子账户 Weekdays 07:45；季度复核：在桌面版对话里请 Claude 设成「每年 1 / 4 / 7 / 10 月 12 日 09:56」
   （选择器里没有每季；能设就设），不能就选 Daily 09:56（说明书第 0 步：今天不是 1 / 4 / 7 / 10 月 12 日就跳过）。
