@@ -1557,7 +1557,9 @@ def _trade_live(book: dict, waiting: list, now: dt.datetime, tag: str | None = N
     try:
         items = ((book.get("manual") or {}).get("items") or {}).values()
         k = len(waiting) + sum(1 for it in items if isinstance(it, dict) and it.get("status") in MO.ACTIVE)
-        asked = {c for r in waiting if isinstance(r, dict) and r.get("kind") == "cancel_order" for c in MO.cancel_cids(r)}   # 整组撤单：同一组的每一笔
+        wd = MO.withdrawn_orders([r for r in waiting if isinstance(r, dict)])   # 撤回了的撤单不算（2026-10-16 事后）
+        asked = {c for r in waiting if isinstance(r, dict) and r.get("kind") == "cancel_order" and r.get("id") not in wd
+                 for c in MO.cancel_cids(r)}   # 整组撤单：同一组的每一笔
     except Exception:                                      # noqa: BLE001
         k, asked = 0, set()
     return {"orders": {}, "fix": {}, "items": set(), "itxt": {}, "asked": asked, "n": k, "busy": k}
@@ -1602,10 +1604,10 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     cu_now = LO.held_now(book, tag, now=now).get("core_units") or {}   # 含今天已成交：今天买进的 ETF 已经在「持仓」里（2026-10-16）
     halt = paths.halt_file().exists() if halt is None else halt
     paper = (tag or "").startswith("paper") or str(book.get("broker") or "").startswith("Paper")
-    void = MO.voided(waiting)
+    void = MO.voided(waiting) | MO.withdrawn_orders(waiting, items)   # 撤单的运行做之前撤回了的撤单：不算撤单中（2026-10-16 事后）
     wl = [r for r in waiting if r.get("kind") != "uncancel" and r.get("id") not in void]
     asked = ({c for r in wl if r.get("kind") == "cancel_order" for c in LO.job_cids(r, cur)}          # 整组撤单：同一组的每一笔（2026-10-16）
-             | {c for it in items.values() if it.get("kind") == "cancel_order" and it.get("status") == "pending"
+             | {c for it in items.values() if it.get("kind") == "cancel_order" and it.get("status") == "pending" and it.get("id") not in void
                 and not MO.grp_wait_stale(it, now) for c in LO.job_cids(it, cur)})   # 过了收盘还在等的整组撤单：不算撤单中（复核 2026-10-16）；
     #   还在等立花确认撤单的单（grp_wait）、「一起撤买单」会在本地一起撤的买单也算（LO.job_cids：与执行器发单前的保护同一个；复核 6）；
     #   同一组的其他几笔在「今天要成交的单」里写「同一组撤单中」（LO.cancel_conflict）
@@ -2693,6 +2695,12 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         return (f"<button class='btn sm danger' data-act='cancel' data-kind='unblock' data-id='{escape(r['id'])}' data-placed='0'"
                 f" data-desc='{_what(r)}' data-fund='0' data-stuck='0'>撤回</button>")
 
+    def _cobtn(r: dict) -> str:                             # 还没读的撤单：撤回（读到之前撤回 → 不撤这笔单；与提交同一个检查；2026-10-16 事后）
+        if MO.check({"kind": "cancel", "target": r["id"]}, book, tag, now=now):
+            return ""
+        return (f"<button class='btn sm' data-act='cancel' data-kind='cancel_order' data-id='{escape(r['id'])}' data-placed='0'"
+                f" data-desc='{_what(r)}' data-fund='0' data-stuck='0'>撤回</button>")
+
     def _unbtn(r: dict) -> str:                             # 撤回指令的「撤销撤回」（能撤销才给；与提交同一个检查）
         if r.get("kind") != "cancel" or MO.check({"kind": "uncancel", "target": r["id"]}, book, tag, sm=sm, now=now) \
                 or _uncancel_warn0(allrec, r["id"], sm):
@@ -2708,7 +2716,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         if r.get("kind") == "uncancel" or r["id"] in void:  # 撤销撤回本身、已被撤销的撤回：不显示（去掉撤销记录）
             continue
         btn = (_cbtn(r, 0) if r["kind"] in MO.ORDER_KINDS + ("core", "corefix") and r["id"] not in dropped
-               else _ubbtn(r) if r["kind"] == "unblock" and r["id"] not in dropped else _unbtn(r))
+               else _ubbtn(r) if r["kind"] == "unblock" and r["id"] not in dropped
+               else _cobtn(r) if r["kind"] == "cancel_order" and r["id"] not in dropped else _unbtn(r))
         wt = MO.wait_word(r)                               # 比例 / 解除 / 撤回不是单（2026-10-13）
         wx = "" if r["id"] in dropped or r["kind"] in CANCEL_KINDS else MO.wait_text(r, now, book, tag)
         wx = wx[len(wt) + 1:] if wx.startswith(wt + "：") else ""   # 什么时候（D1 / D5，2026-10-15：与 now_due / 执行器同一个时段口径；固定口数写具体日子）
@@ -2734,9 +2743,10 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         now_it = it.get("status") == "placed" and it.get("now")
         can = (it.get("status") in MO.ACTIVE and it.get("kind") in MO.ORDER_KINDS and not it.get("cancel_req")
                and not (now_it and MO.now_cancel_why(it, now)))   # 盘中的单还挂在交易所：页面上撤不了；15:30 失效的卖出能撤回（G16）
-        btn = (_cbtn(it, 2 if now_it else (1 if it.get("status") == "placed" else 0)) if can else _unbtn(it))
+        btn = (_cbtn(it, 2 if now_it else (1 if it.get("status") == "placed" else 0)) if can
+               else _cobtn(it) if it.get("kind") == "cancel_order" and it.get("status") == "pending" else _unbtn(it))
         rows.append((it["id"], f"<div class='li'><div class='grow'><b>{_what(it)}</b> <span class='chip'>"
-                    f"{escape(MO.fix_status_text(it, items, book, tag) or MO.status_text(it, now))}{'（撤回中）' if it.get('cancel_req') else escape(tlive['itxt'].get(it.get('id')) or sp['itxt'].get(it.get('id'), ''))}</span>"   # 盘中没下成 → 开盘（G18）
+                    f"{escape(MO.fix_status_text(it, items, book, tag) or MO.status_text(it, now))}{'（撤回中）' if it.get('cancel_req') or (it.get('kind') == 'cancel_order' and it.get('id') in dropped) else escape(tlive['itxt'].get(it.get('id')) or sp['itxt'].get(it.get('id'), ''))}</span>"   # 盘中没下成 → 开盘（G18）
                     f"<div class='muted small'>{escape(str(it.get('at', ''))[5:16].replace('T', ' '))}"
                     f"{(' · ' + escape(MO.msg_text(it, now))) if it.get('msg') else ''}</div></div>{btn}</div>"))
     orows, ometa = _order_rows(book, now, paper, waiting, tlive, tag)   # 执行器的单（还挂着的给「撤单」；API / Mac 故障时照它在立花网站下）

@@ -563,6 +563,11 @@ document.addEventListener('click', async e=>{
     const q=await ask('撤回这条解除？', (d.desc||d.id)+'\n\n执行器还没读：撤回之后不解除，「不自动买回」照旧。\n（指令 '+d.id+'）', '撤回', {danger:true});
     if(q.ok) done(await post({book:CFG.book, kind:'cancel', target:d.id})); return;
   }
+  if(a==='cancel' && d.kind==='cancel_order'){                            // 还没读的撤单：撤回（2026-10-16 事后）
+    const q=await ask('撤回这条撤单？', (d.desc||d.id)+'\n\n撤单的运行还没做它：撤回之后不撤这笔单（还挂着的照常挂着、还没发出的照常发；HALT 中不发）。'
+      +'\n已经在撤 / 执行器正在运行时撤回不了（提交后会说明）。\n（指令 '+d.id+'）', '撤回撤单');
+    if(q.ok) done(await post({book:CFG.book, kind:'cancel', target:d.id})); return;
+  }
   if(a==='cancel'){                                                       // 撤单前一定确认（2026-10-12 用户：防止误撤）：写清撤的是哪一条
     const q=await ask('确认撤单？', (d.desc||d.id)+'\n\n'+(d.placed==='2' ? (d.wtxt||'盘中的单已在 15:30 失效：撤回之后下一次开盘不再卖（下一次早上的对账之后结束；已经成交的部分照记）')+'。'   // G16（2026-10-14；复核：服务器按下单那天写 data-wtxt）
       : d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天要成交的单」的「撤单」撤。' : '还没下单：撤掉之后不会下。')

@@ -1720,15 +1720,15 @@ def asked_cids(book: dict | None, waiting=()) -> set:
     （late_cids）。执行器发单前的保护（_cancel_asked）、对账（live_unified.asked_unsent）与 outlook 用。"""
     from . import manual_orders as MO
     waiting = [r for r in waiting or [] if isinstance(r, dict)]
-    void = MO.voided(waiting)
     items = ((book or {}).get("manual") or {}).get("items") or {}
+    void = MO.voided(waiting) | MO.withdrawn_orders(waiting, items)   # 撤单的运行做之前撤回了的撤单（2026-10-16 事后）：那笔单照常发 / 照常挂着
     orders = [x for x in (book or {}).get("orders") or [] if isinstance(x, dict)]
     out = set()                                            # 整组撤单（grp；2026-10-16）：同一组的每一笔都算「撤单中」
     for r in waiting:
         if r.get("kind") == "cancel_order" and r.get("id") not in void:
             out.update(job_cids(r, orders))
     for it in items.values():                              # 还在等立花确认的撤单（grp_wait）也算（MO.handling_cids）
-        if isinstance(it, dict) and it.get("kind") == "cancel_order" and it.get("status") == "pending":
+        if isinstance(it, dict) and it.get("kind") == "cancel_order" and it.get("status") == "pending" and it.get("id") not in void:
             out.update(job_cids(it, orders))
     out.update(late_cids(items, orders))
     return out
@@ -1833,11 +1833,12 @@ def cancel_jobs(book: dict | None, waiting=(), now: dt.datetime | None = None, G
     b = book or {}
     orders = [x for x in b.get("orders") or [] if isinstance(x, dict)]
     G = groups(orders, b) if G is None else G
-    recs = [it for it in ((b.get("manual") or {}).get("items") or {}).values()
-            if isinstance(it, dict) and it.get("kind") == "cancel_order" and it.get("status") == "pending"
-            and not (now is not None and MO.grp_wait_stale(it, now))]
     w = [r for r in waiting or [] if isinstance(r, dict)]
-    void = MO.voided(w)
+    its = (b.get("manual") or {}).get("items") or {}
+    void = MO.voided(w) | MO.withdrawn_orders(w, its)      # 撤单的运行做之前撤回了的撤单不算（2026-10-16 事后）
+    recs = [it for it in its.values()
+            if isinstance(it, dict) and it.get("kind") == "cancel_order" and it.get("status") == "pending"
+            and not (now is not None and MO.grp_wait_stale(it, now)) and it.get("id") not in void]
     have = {it.get("id") for it in recs}
     recs += [r for r in w if r.get("kind") == "cancel_order" and r.get("id") not in void and r.get("id") not in have]
     return sorted((_job(r, orders, b, G) for r in recs), key=lambda j: j["at"])
