@@ -245,16 +245,16 @@ def test_evaluate_candidates_holdings_gates_and_names(monkeypatch):
     assert "7203 トヨタ自動車" in v["rows"][0]["label"] and "离下沿" in v["rows"][0]["line"] and "成交量 100%" in v["rows"][0]["line"]
     assert v["hold"]["6758.T"].startswith("盘中（暂定，数据 14:20，约晚 20 分钟）：现价") and "收盘仍在这里：规则不卖" in v["hold"]["6758.T"]
     assert "8306 三菱ＵＦＪフィナンシャル・グループ" in v["groups"][0]["names"] and v["impossible"] == "今天不可能：1 只（横盘不成立 1）"
-    assert v["foot"] == "暂定：以明早 07:40 执行器为准；规则的候选，不是建议；非投资建议" and v["live"] is True
+    assert v["foot"] == IW.FOOT and v["live"] is True
 
 
 def test_gates_global_and_unknown(monkeypatch):
     frames, _ = _setup(monkeypatch, mult=0.0)
     doc = IW.evaluate("paper", AT, fetch=_fetcher(frames, _bands(frames)), frames=frames)
-    assert doc["gates"]["global"] == ["新仓倍数 0（风险报告「避险」）→ 明早不开新仓"]
-    assert all("新仓倍数 0（风险报告「避险」）→ 明早不开新仓" in r["blocks"] for r in doc["candidates"])
+    assert doc["gates"]["global"] == ["新仓倍数 0（风险报告「避险」）→ 下个交易日 10/19（周一）不开新仓"]
+    assert all("新仓倍数 0（风险报告「避险」）→ 下个交易日 10/19（周一）不开新仓" in r["blocks"] for r in doc["candidates"])
     v = IW.view(doc, AT)                                     # 所有票都挡的：卡片顶上 ★ 一次，每行不重复
-    assert "新仓倍数 0（风险报告「避险」）→ 明早不开新仓" in v["warn"]
+    assert "新仓倍数 0（风险报告「避险」）→ 下个交易日 10/19（周一）不开新仓" in v["warn"]
     assert v["rows"] and not any("新仓倍数" in r["gates"] for r in v["rows"])
     frames, _ = _setup(monkeypatch, decided="2026-10-14")
     doc = IW.evaluate("paper", AT, fetch=_fetcher(frames, _bands(frames)), frames=frames)
@@ -273,17 +273,17 @@ def test_push_buy_and_sell_text_dedupe(monkeypatch):
     assert [s for s, _ in sent] == ["盘中暂定买点：7203 トヨタ自動車", "盘中暂定卖点：6758 ソニーグループ"]
     for s, t in sent:
         assert "暂定" in t and "执行器" in t and "建议" not in t and "建议" not in s
-        assert "现在不需要操作" in t and "盘中手动买卖没有研究支持" in t and t.endswith("（HALT 中：明早不会下单）")
+        assert "现在不需要操作" in t and "盘中手动买卖没有研究支持" in t and t.endswith("（HALT 中：下个交易日 10/19（周一）不会下单）")
         assert ".T" not in t
-    assert "如果收在这里，规则明早 09:00 开盘会买（执行器照常处理，现在不需要操作）" in sent[0][1]
-    assert "如果收在这里，规则明早 09:00 开盘会卖（执行器照常处理，现在不需要操作）" in sent[1][1]
+    assert "如果收在这里，规则下个交易日 10/19（周一）09:00 开盘会买（执行器照常处理，现在不需要操作）" in sent[0][1]
+    assert "如果收在这里，规则下个交易日 10/19（周一）09:00 开盘会卖（执行器照常处理，现在不需要操作）" in sent[1][1]
     assert f"已越过收盘卖出线 「止损（买价 −7%）」{IW._px(round(c0 * 0.93, 2))}。" in sent[1][1]
     keys = [x["key"] for x in json.loads(IW.out_path("paper").read_text(encoding="utf-8"))["pushes"]["sent"]]
     assert keys == ["盘中|7203|buy", "盘中|6758|sell"]                                 # 键不含价格
     IW.run_once("paper", AT + dt.timedelta(minutes=5), fetch=fetch, send=lambda s, t, level="info": sent.append((s, t)))
     assert len(sent) == 2                                                              # 同一只同一边一天一次
     v = IW.view(IW.load("paper"), AT)
-    assert "HALT 中：明早不会下单" in v["warn"] and "若收盘仍在这里 → 规则明早开盘卖（止损（买价 −7%））" in v["hold"]["6758.T"]
+    assert "HALT 中：下个交易日 10/19（周一）不会下单" in v["warn"] and "若收盘仍在这里 → 规则下个交易日 10/19（周一）开盘卖（止损（买价 −7%））" in v["hold"]["6758.T"]
 
 
 def test_sell_push_only_after_1410_and_blocked_buy_says_so(monkeypatch):
@@ -293,7 +293,7 @@ def test_sell_push_only_after_1410_and_blocked_buy_says_so(monkeypatch):
     fetch = _fetcher(frames, _bands(frames), at="2026-10-16T13:10+09:00", sell_px=c0 * 0.92)
     IW.run_once("paper", early, fetch=fetch, send=lambda s, t, level="info": sent.append((s, t)))
     assert [s for s, _ in sent] == ["盘中暂定买点：7203 トヨタ自動車"]                     # 卖点：数据 13:10 < 14:10 → 不推
-    assert "但现在被挡（新仓倍数 0（风险报告「避险」）→ 明早不开新仓）→ 明早不会买（执行器照常处理，现在不需要操作）" in sent[0][1]
+    assert "但现在被挡（新仓倍数 0（风险报告「避险」）→ 下个交易日 10/19（周一）不开新仓）→ 下个交易日 10/19（周一）不会买（执行器照常处理，现在不需要操作）" in sent[0][1]
     assert "HALT" not in sent[0][1]
 
 
@@ -498,3 +498,13 @@ def test_js_modules_concatenate_without_name_clashes(tmp_path):
     f.write_text(panel._JS, encoding="utf-8")
     p = subprocess.run([node, "--check", str(f)], capture_output=True, text=True, timeout=60)
     assert p.returncode == 0, p.stderr[-800:]
+
+
+def test_next_word_friday_and_midweek():
+    """2026-10-16（周五）实测：卡片 / 推送写「明早」，下一次决策其实是 10/19（周一）→ 按交易日历写。"""
+    assert IW.next_word(dt.date(2026, 10, 15)) == "明早"                                   # 周四 → 周五
+    assert IW.next_word(dt.date(2026, 10, 16)) == "下个交易日 10/19（周一）"               # 周五 → 周一
+    assert IW.next_word("2026-10-16") == "下个交易日 10/19（周一）"
+    assert IW.next_word(None) == "下一个交易日"
+    assert IW._at("明早", "09:00") == "明早 09:00" and IW._at("下个交易日 10/19（周一）", "09:00") == "下个交易日 10/19（周一）09:00"
+    assert "明早" not in IW.FOOT

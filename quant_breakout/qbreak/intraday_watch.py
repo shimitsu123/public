@@ -37,7 +37,7 @@ from pathlib import Path
 
 from . import names as NM
 from . import paths
-from .calendar_jp import JST, is_trading_day, now_jst, prev_trading_day
+from .calendar_jp import JST, is_trading_day, next_trading_day, now_jst, prev_trading_day
 from .run_status import peek_json
 from .utils import atomic_write_text, setup_logging
 
@@ -57,7 +57,7 @@ AM_END, PM_START, CLOSE = dt.time(11, 30), dt.time(12, 30), dt.time(15, 30)
 SETTINGS = "intraday.json"
 LOG_NAME = "com.qbreak.panel.intraday.log"
 TITLE = "今天盘中：规则的买点（暂定，约晚 20 分钟）"
-FOOT = "暂定：以明早 07:40 执行器为准；规则的候选，不是建议；非投资建议"
+FOOT = "暂定：以下一次执行器的决策（交易日 07:40）为准；规则的候选，不是建议；非投资建议"
 NO_RESEARCH = "盘中手动买卖没有研究支持（分钟 K 线研究 2026-10-15：日内规则扣成本后都亏）"
 _TAG = re.compile(r"[a-z][a-z0-9_]{0,31}")
 KIND_ORDER = {"ok": 0, "shape": 1, "vol": 2, "near": 3, "out": 4, "nodata": 5}
@@ -95,6 +95,24 @@ def _expected_at(now: dt.datetime, day: dt.date) -> dt.datetime:
     if AM_END <= now.time() < PM_START:
         return dt.datetime.combine(day, AM_END, tzinfo=JST)
     return now
+
+
+def next_word(day: dt.date | str | None) -> str:
+    """看的这天收盘之后，执行器下一次决策 / 开盘是哪天：明天 →「明早」；周五 / 连休前 →「下个交易日 10/19（周一）」
+    （2026-10-16 周五实测写成「明早」：下一次决策其实是周一）。"""
+    try:
+        d = dt.date.fromisoformat(day) if isinstance(day, str) else day
+        nd = next_trading_day(d)
+    except (TypeError, ValueError):
+        return "下一个交易日"
+    if nd == d + dt.timedelta(days=1):
+        return "明早"
+    return f"下个交易日 {nd.month}/{nd.day}（周{'一二三四五六日'[nd.weekday()]}）"
+
+
+def _at(word: str, hm: str) -> str:
+    """「明早 09:00」/「下个交易日 10/19（周一）09:00」。"""
+    return f"{word}{'' if word.endswith('）') else ' '}{hm}"
 
 
 def _hm(iso: str | None) -> str:
@@ -214,7 +232,7 @@ def load_gates(tag: str, day: dt.date, book_state: dict, live: dict | None = Non
         g["mult"] = None
     if g["mult"] is not None and g["mult"] <= 0:
         why = "、".join(str(w[0]) for w in jp.get("why") or [] if isinstance(w, (list, tuple)) and w)
-        g["global"].append(f"新仓倍数 0（{why or '宏观 / 板块 / 判断层'}）→ 明早不开新仓")
+        g["global"].append(f"新仓倍数 0（{why or '宏观 / 板块 / 判断层'}）→ {next_word(day)}不开新仓")
     sg = j.get("suggest") or {}
     g["equity"] = j.get("equity_jpy")
     g["position_pct"] = npos.get("position_pct") or sg.get("position_pct")
@@ -436,28 +454,28 @@ def evaluate(tag: str, now: dt.datetime | None = None, fetch=None, prev: dict | 
 
 # ───────────────────────── 推送 ─────────────────────────
 def _buy_text(r: dict, doc: dict) -> tuple[str, str]:
-    lab = r["label"]
+    lab, nx = r["label"], next_word(doc.get("day"))
     head = f"暂定（{SRC}，数据 {_hm(r.get('at'))}）：{lab} 现价 {_px(r.get('px'))} 在规则的买点区间 {_px(r['lo'])}〜{_px(r['hi'])} 里，" \
            f"累计成交量 {int(r.get('v') or 0):,} 股 = 所需 {int(r.get('v_need') or 0):,} 股的 {float(r.get('v_pct') or 0):.0f}%。"
     if not (doc.get("gates") or {}).get("known"):
-        mid = f"如果收在这里，规则明早 09:00 开盘会买（{(doc.get('gates') or {}).get('note') or '闸门未知'}；执行器照常处理，现在不需要操作）。"
+        mid = f"如果收在这里，规则{_at(nx, '09:00')} 开盘会买（{(doc.get('gates') or {}).get('note') or '闸门未知'}；执行器照常处理，现在不需要操作）。"
     elif r.get("blocks"):
-        mid = f"如果收在这里，规则会出买点，但现在被挡（{'；'.join(r['blocks'])}）→ 明早不会买（执行器照常处理，现在不需要操作）。"
+        mid = f"如果收在这里，规则会出买点，但现在被挡（{'；'.join(r['blocks'])}）→ {nx}不会买（执行器照常处理，现在不需要操作）。"
     else:
-        mid = "如果收在这里，规则明早 09:00 开盘会买（执行器照常处理，现在不需要操作）。"
-    text = head + mid + NO_RESEARCH + "。" + ("（HALT 中：明早不会下单）" if doc.get("halt") else "")
+        mid = f"如果收在这里，规则{_at(nx, '09:00')} 开盘会买（执行器照常处理，现在不需要操作）。"
+    text = head + mid + NO_RESEARCH + "。" + (f"（HALT 中：{nx}不会下单）" if doc.get("halt") else "")
     return f"盘中暂定买点：{lab}", text
 
 
 def _sell_text(r: dict, doc: dict) -> tuple[str, str]:
-    lab = r["label"]
+    lab, nx = r["label"], next_word(doc.get("day"))
     why = r.get("now_text") or str(r.get("now"))
     lv = next((x for x in r.get("levels") or [] if x.get("hit") and str(x.get("rule", "")).startswith(why)), None)
     line = f"「{why}」{_px(lv['px'])}" if lv else f"「{why}」"
     text = (f"暂定（{SRC}，数据 {_hm(r.get('at'))}）：持仓 {lab}（{int(r.get('shares') or 0):,} 股）现价 {_px(r.get('px'))}"
             f"（买价 {_px(r.get('entry_px'))}，{_pct(r.get('ret_pct'))}）已越过收盘卖出线 {line}。"
-            "如果收在这里，规则明早 09:00 开盘会卖（执行器照常处理，现在不需要操作）。" + NO_RESEARCH + "。"
-            + ("（HALT 中：明早不会下单）" if doc.get("halt") else ""))
+            f"如果收在这里，规则{_at(nx, '09:00')} 开盘会卖（执行器照常处理，现在不需要操作）。" + NO_RESEARCH + "。"
+            + (f"（HALT 中：{nx}不会下单）" if doc.get("halt") else ""))
     return f"盘中暂定卖点：{lab}", text
 
 
@@ -507,8 +525,8 @@ def _gate_line(r: dict, doc: dict) -> str:
     return "" if glob else "闸门：目前没有挡住的"
 
 
-def _hold_line(r: dict) -> str:
-    """持仓每只一行：每条收盘卖出线离现价多远；越过的写「若收盘仍在这里 → 规则明早开盘卖（理由）」。"""
+def _hold_line(r: dict, nx: str = "明早") -> str:
+    """持仓每只一行：每条收盘卖出线离现价多远；越过的写「若收盘仍在这里 → 规则明早开盘卖（理由）」（nx：next_word，周五 → 下个交易日）。"""
     if r.get("queued"):
         return f"已排定开盘卖（{r.get('queued_text') or r['queued']}）"
     if r.get("px") is None:
@@ -519,12 +537,12 @@ def _hold_line(r: dict) -> str:
         rule = str(lv.get("rule") or "").split("（持有以来")[0]
         if lv.get("hit"):
             hit = True
-            parts.append(f"{rule} {_px(lv['px'])}：若收盘仍在这里 → 规则明早开盘卖（{rule}）")
+            parts.append(f"{rule} {_px(lv['px'])}：若收盘仍在这里 → 规则{nx}开盘卖（{rule}）")
         else:
             parts.append(f"{rule} {_px(lv['px'])}（{_pct(lv.get('dist_pct'))}）")
     q = r.get("now")
     if q and not hit:
-        parts.append(f"若收盘仍在这里 → 规则明早开盘卖（{r.get('now_text') or q}）")
+        parts.append(f"若收盘仍在这里 → 规则{nx}开盘卖（{r.get('now_text') or q}）")
     elif not q and not hit:
         parts.append("收盘仍在这里：规则不卖")
     return " · ".join(parts)
@@ -551,7 +569,7 @@ def view(doc: dict | None, now: dt.datetime | None = None) -> dict:
         h += " · 手机推送：关"
     v["head"] = h
     if doc.get("halt"):
-        v["warn"].append("HALT 中：明早不会下单")
+        v["warn"].append(f"HALT 中：{next_word(day)}不会下单")
     g = doc.get("gates") or {}
     if not g.get("known"):
         v["warn"].append(g.get("note") or "闸门未知")
@@ -580,7 +598,7 @@ def view(doc: dict | None, now: dt.datetime | None = None) -> dict:
         s += f" · 拿着 {int(r['units']):,} 口" if r.get("units") else " · 没拿"
         v["core"].append(s)
     for r in doc.get("holdings") or []:
-        v["hold"][r["ticker"]] = _hold_line(r)
+        v["hold"][r["ticker"]] = _hold_line(r, next_word(day))
     return v
 
 
