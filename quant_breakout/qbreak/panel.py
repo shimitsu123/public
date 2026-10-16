@@ -1529,7 +1529,14 @@ def _trade_live(book: dict, waiting: list, now: dt.datetime, tag: str | None = N
 
 def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | None = None, halt: bool | None = None) -> dict:
     """「交易」标签里哪些行还会做事（2026-10-15 用户：「撤单后 / 没有执行下单等等的话交易处的数字不显示」）—— 标签上的数字、
-    /api/status 的 pending、「今天要成交的单」/「手动指令」每一行怎么写都按这一个判断（数字 = 还会做事的行数）：
+    /api/status 的 pending、「今天要成交的单」/「手动指令」每一行怎么写都按这一个判断：
+    数字 n = _trade_split 放在上面「今天要成交的单」（不含还挂在交易所、正在撤的「撤单中」）+「另有 …」里的行数（_split_n）——
+    页面上看到的就是数到的，没有例外（复核 2，2026-10-16；以前单与指令在这里另数一遍，与分块有三处不一样）：
+      没买到、不是系统原因的手动买入 / 加仓（_trade_split 按 live_unified.requeue_next：被拒 / 买不了 / 跳空 / 钱没来 / 在立花网站撤了）
+        →「已结束」、不算（以前指令还是「已下单」、等明早对账才结束 → 照算）；
+      状态不明（ERROR）的单：立花收盘前可能已被受理、还可能成交（与发送中 SENDING 一样）→ 在上面、算（以前不算）；收盘后「已收盘」→ 不算；
+      固定口数「生效中 · 还没照它调」那一行（读了、还没照它排单）：执行器之后照它买卖 → 在上面 /「另有」、算（以前不算；
+        还没读的同一条固定口数指令本来就算，读了之后数字不该什么都没成交就少 1）。
       执行器的单（当前决策）：已经结束的（成交 / 撤单 / 不下 / 被挡 / 失效 / 被拒…）、已经写了撤单的（撤单中）不算；
         还没发出的（PLANNED / DEFERRED）：HALT 生效中不发 → 不算（模拟账户的 DEFERRED 也一样：D3 起 09:25 前后的开盘撮合按立花 09:05 的
         闸门下，HALT 中不下；开盘撮合时被 HALT 挡下的「等开盘后」→ 不算，明早对账记为没买）；
@@ -1566,7 +1573,7 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     ol = LO.outlook(book, waiting, now, tag=tag, halt=halt, asked=asked, instr=False)   # 每笔单今天会不会下：只在 live_ops.outlook 判断（D5）
     fixed = MO.core_fixed(book, tag)
     fpend, fwhen = LO.fix_pending_when(book, now, tag)       # 还没照它调的固定口数：今天开盘后 / 盘中就照它下（D1；复核 UI F2，2026-10-16）
-    rows, fix, dead, n = {}, {}, set(), 0
+    rows, fix, dead = {}, {}, set()
     fin = {}                                                # 手动单已经做完了（全部成交 / 立花收盘后失效的买单）→ {cid: 指令后面加的说明}
     for o in cur:
         cid, s, t = str(o.get("cid")), o.get("status"), str(o.get("ticker"))
@@ -1588,8 +1595,6 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
             dead.add(cid)                                   # 撤单中 / 一定下不成：那条手动指令也不会再做事
         if r.get("cls") == "closed" and manual and o.get("side") == "BUY" and s in LO.AT_EXCH:
             fin[cid] = "（单已失效：没成交的部分不会再买，明早对账后结束）"   # 手动买入 / 加仓只做一次：失效了指令也不会再做事（卖单没卖完的下一次开盘再卖 → 照算）
-        if r.get("state") in ("will", "later") and s in LO.LIVE + ("BLOCKED",):
-            n += 1                                          # 今天（或之后）还会动的单；被挡但 08:55 之前还会再发的也算（D5）
     itxt, done_it, live_it = {}, {}, set()                  # 被撤单 / 一定买不起 / 已经做完的手动买卖：指令也不会再做事（「手动指令」那一行跟着写）
     for o in cur:
         if o.get("reason") not in LO.MANUAL_REASONS:
@@ -1610,7 +1615,7 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     gone_it = set(itxt)
     dropped = MO.cancelled(wl)
     skip = set(gone_it)
-    act = soon = 0                                          # 还会做事的手动指令（数字）/ 其中一会儿就会变的（busy）
+    soon = 0                                                # 还会做事的手动指令里一会儿就会变的（busy）
     today = now.date().isoformat()
     behind = halt or MO.morning_behind(book, now)           # HALT / 今天早上的运行没完成：面板不叫 --phase now / --retry（等运行先处理）
     session = not behind and MO.timing(now)[0] == "now"
@@ -1627,7 +1632,6 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
         if r.get("kind") in CANCEL_KINDS or r["id"] in dropped:
             skip.add(r["id"])
         else:
-            act += 1
             soon += quick(r)
     for it in items.values():
         if it.get("status") not in MO.ACTIVE:
@@ -1635,9 +1639,7 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
         if it.get("kind") in CANCEL_KINDS or it.get("cancel_req") or it.get("id") in gone_it or it.get("id") in dropped:
             skip.add(it.get("id"))                          # 还没读的撤回指着的、执行器读了在撤回中的：不会再做事
         else:
-            act += 1
             soon += quick(it)
-    n += act
     if tag:                                                 # 执行器正在跑（07:40 的决策、面板叫的盘中运行…）：跑完状态就变
         from .live_unified import lock_held
         soon += lock_held(paths.state_dir() / f"live_unified_{tag}.lock")
@@ -1646,7 +1648,17 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
               + sum(1 for it in items.values() if it.get("status") in MO.ACTIVE and it.get("cancel_req"))   # 撤回中（执行器读了、还在撤）
               + sum(1 for r in wl if r.get("kind") == "cancel" and (items.get(r.get("target")) or {}).get("status") in MO.ACTIVE
                     and not (items.get(r.get("target")) or {}).get("cancel_req")))   # 还没读的撤回、指着执行器已经读过的指令
-    return {"orders": rows, "fix": fix, "items": skip, "itxt": itxt, "asked": asked, "n": n, "busy": int(soon) + flight}
+    tl = {"orders": rows, "fix": fix, "items": skip, "itxt": itxt, "asked": asked}
+    sp = _trade_split(book, waiting, now, tag, halt, tl)    # 每一行放进哪一块（render 照用这一份）；数字按它数（复核 2，2026-10-16）
+    return {**tl, "n": _split_n(sp), "busy": int(soon) + flight, "split": sp}
+
+
+def _split_n(sp: dict) -> int:
+    """「交易」标签上的数字 = _trade_split 放在上面「今天要成交的单」的行（不含「撤单中」：还挂在交易所、执行器确认之前还可能成交，
+    flight）+「另有 …」里的行（执行器的单、手动指令、没有指令行的「还没照它调」的固定口数）；「已结束 / 不是今天的」不算（复核 2，2026-10-16）。"""
+    zs = ([z for c, z in sp["orders"].items() if c not in sp["flight"]] + list(sp["items"].values())
+          + [z for z, _x in sp["extra"]])
+    return sum(1 for z in zs if z in ("today", "later"))
 
 
 WD_ZH = "一二三四五六日"
@@ -1682,10 +1694,8 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
         完成了、还没照它调的固定口数（MO.FIX_WAIT）→ 跟 outlook 的 fix:<票> 那一行（没有那一行 = 今天说了「下一次决策再调」→ later）；
         别的（完成 / 已撤回 / 没执行…）→ ended。
       outlook 的 fix:<票>（读了、还没照它调的固定口数）没有对应的指令行（恢复按规则 / 更早的）→ extra（只写一行，没有按钮）。
-    标签上的数字（_trade_live 的 n）= today（不含 flight）+ later 的行数；三个例外是数字的口径（不改）：状态不明（ERROR）的单在 today、
-    数字不算；固定口数还没照它调的那一行（FIX_WAIT 的指令 / extra）在 today / later、数字不算（指令已经「完成」）；
-    手动买入 / 加仓的单没买到（不是系统原因）、指令等下一次对账才结束 → ended、数字照算（_trade_live 只把「已成交 / 已失效」当成做完；
-    要不要也不算等用户决定）。
+    标签上的数字（_trade_live 的 n）就按这里数：today（不含 flight）+ later 的行数（_split_n），没有例外（复核 2，2026-10-16：
+    以前 _trade_live 另数一遍 —— 状态不明（ERROR）的单、固定口数还没照它调的那一行在上面却不算，没买到的手动买入 / 加仓在 ended 却照算）。
     固定口数仍然有效的提醒（tlive["fix"]）：那笔单去了 ended → 收进 notes（上面的卡片写一次，不会被收起来）。
     → {"orders": {cid: 块}, "items": {指令 id: 块}, "flight": {cid}, "when": {ref: (排序, 排序, 「等 10/19（周一）开盘」)},
        "extra": [(块, outlook 的行)], "notes": [提醒], "itxt": {指令 id: 状态后面加的说明}}。只读；算不成（账本里读不了的数）→ 还没结束的都放 today。"""
@@ -2101,7 +2111,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     waiting = MO.unseen(tag, book)
     dropped = MO.cancelled(waiting)                                    # 执行器还没读、已经点了撤回的
     tlive = _trade_live(book, waiting, now, tag, halt=bool(halt))      # 「交易」里哪些行还会做事：数字、「今天要成交的单」/「手动指令」的写法同一个判断（2026-10-15）
-    sp = _trade_split(book, waiting, now, tag, bool(halt), tlive)   # 每一行放进哪一块（今天要成交 / 另有 … / 已结束；2026-10-16）
+    sp = tlive.get("split") or _trade_split(book, waiting, now, tag, bool(halt), tlive)   # 每一行放进哪一块（今天要成交 / 另有 … / 已结束；
+    #   2026-10-16）：数字就是按这一份数的（_trade_live 算不成时按以前的数法 → 这里另分一次）
     busy = {r.get("ticker") for r in waiting if r.get("kind") in MO.POS_KINDS and r["id"] not in dropped}
     busy |= {it.get("ticker") for it in (man.get("items") or {}).values()
              if it.get("kind") in MO.POS_KINDS and it.get("status") in MO.ACTIVE and not it.get("cancel_req")}

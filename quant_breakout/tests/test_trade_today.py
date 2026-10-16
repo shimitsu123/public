@@ -1,7 +1,8 @@
 """「交易」只显示今天要成交的单（2026-10-16 用户：「交易里面只显示当天要成交的单」）：
 上面「今天要成交的单」（id today）= 今天还会做事的执行器的单 + 今天做事的手动指令；之后才做的收进同一张卡片的「另有 N 条等 10/19（周一）开盘」；
 结束了的 / 不是今天的收进最下面「已结束 / 不是今天的（N 条）」（id orders，默认收起）。分块只按 live_ops.outlook + panel._trade_live
-（panel._trade_split）；Mac 与手机同一份 HTML；标签上的数字口径不变 = 上面的行（不含撤单中）+「另有」的行。"""
+（panel._trade_split）；Mac 与手机同一份 HTML；标签上的数字 = 上面的行（不含撤单中）+「另有」的行，按同一份分块数（panel._split_n），
+没有例外（复核 2，2026-10-16）。"""
 import datetime as dt
 import json
 import logging
@@ -65,14 +66,14 @@ def _parts(html: str) -> tuple[str, str, str]:
     return top, later, ended
 
 
-def _badge_ok(html: str, tag: str, now: dt.datetime, unpaid: int = 0, hidden: int = 0) -> int:
-    """标签上的数字 n == 上面的行（不含「撤单中」）+「另有」的行 − unpaid（数字口径不算、但照样显示的行）+ hidden（数字口径照算、
-    但收在「已结束 / 不是今天的」里的行：没买到、等下一次对账结束的手动买入 / 加仓）—— 例外都写在 panel._trade_split 的说明里。"""
+def _badge_ok(html: str, tag: str, now: dt.datetime) -> int:
+    """标签上的数字 n == 上面的行（不含「撤单中」）+「另有」的行 —— 没有例外（复核 2，2026-10-16：以前状态不明的单、固定口数还没照它调
+    的那一行在上面却不算，没买到的手动买入 / 加仓收在「已结束」却照算）。/api/status 的 pending 同一个数。"""
     b = json.loads((paths.state_dir() / f"live_unified_{tag}.json").read_text(encoding="utf-8"))
     n = panel._trade_live(b, MO.unseen(tag, b), now, tag)["n"]
     top, later, _ = _parts(html)
     flight = top.count("<span class='chip'>撤单中</span>")
-    assert n == len(ROW.findall(top)) - flight + len(ROW.findall(later)) - unpaid + hidden
+    assert n == len(ROW.findall(top)) - flight + len(ROW.findall(later))
     tb = _tabbtn(html, "trade")
     assert (f"<i class='badge'>{n}</i>" in tb) if n else ("class='badge'" not in tb)
     return n
@@ -240,13 +241,13 @@ def test_corefix_waiting_to_be_applied_follows_outlook(now, where):
     assert "固定 1482 对冲版美国 7〜10 年国债：678 口" in part and f"<span class='chip'>{MO.FIX_WAIT}</span>" in part
     if where == "later":
         assert "<summary>另有 1 条等 10/16（周五）开盘</summary>" in later
-    assert _badge_ok(html, "paper", now, unpaid=1) == 0                       # 例外：指令已经「完成」→ 数字不算（口径不变）
+    assert _badge_ok(html, "paper", now) == 1                                 # 执行器之后照它调 → 算（复核 2：以前「指令已经完成」不算）
     _fixwait(clear=True)                                                       # 恢复按规则（还没照它调）：没有自己的指令行 → 补一行、没有按钮
     html = panel.render("paper", "t" * 40, now)
     top, later, ended = _parts(html)
     part = top if where == "top" else later
     assert "1482 对冲版美国 7〜10 年国债 恢复按规则（还没照它调）" in part and "恢复按规则（不按固定口数）" not in part
-    assert _badge_ok(html, "paper", now, unpaid=1) == 0
+    assert _badge_ok(html, "paper", now) == 1
 
 
 # ────────── 7. 同一组分在两处 ──────────
@@ -284,15 +285,15 @@ def _after_close():
     return None, "paper", now
 
 
-@pytest.mark.parametrize("make,unpaid", [(_morning, 0), (_after_close, 0), (_fixwait, 1), (_halt, 0),
-                                         (lambda: (_save(_book1015("tachibana", sell="SENT", fix={})), "tachibana", _t(2026, 10, 16, 8, 0)), 0)])
-def test_badge_equals_today_rows_plus_later_rows(make, unpaid):
-    """普通的早上 / 收盘后写的（下一个交易日开盘）/ 固定口数还没照它调（fix:<票>）/ HALT / 今天早上的运行还没跑。
-    固定口数那一行：数字口径不算（指令已经「完成」；panel._trade_split 的说明）→ unpaid = 1。"""
+@pytest.mark.parametrize("make", [_morning, _after_close, _fixwait, _halt,
+                                  lambda: (_save(_book1015("tachibana", sell="SENT", fix={})), "tachibana", _t(2026, 10, 16, 8, 0))])
+def test_badge_equals_today_rows_plus_later_rows(make):
+    """普通的早上 / 收盘后写的（下一个交易日开盘）/ 固定口数还没照它调（fix:<票>）/ HALT / 今天早上的运行还没跑：
+    数字 = 上面（不含撤单中）+「另有」，没有例外（复核 2，2026-10-16：固定口数那一行以前不算）。"""
     try:
         _b, tag, now = make()
         html = panel.render(tag, "t" * 40, now)
-        _badge_ok(html, tag, now, unpaid)
+        _badge_ok(html, tag, now)
         sp = panel._trade_split(json.loads((paths.state_dir() / f"live_unified_{tag}.json").read_text(encoding="utf-8")),
                                 MO.unseen(tag, None), now, tag)
         assert set(sp["orders"].values()) | set(sp["items"].values()) <= {"today", "later", "ended"}
@@ -367,7 +368,7 @@ def test_one_time_buy_that_did_not_buy_is_ended_not_next_opening(tag, status, no
     else:
         assert "（没买到：只做一次，不再买；10/16 07:40 的对账之后结束）</span>" in row
     assert "今天没有要成交的单了" in top
-    _badge_ok(html, tag, now, hidden=1)                                          # 例外：数字照算（_trade_live 的口径不变）
+    assert _badge_ok(html, tag, now) == 0                                        # 不会再买 → 不算（复核 2：以前等明早对账结束、照算）
     _named(html)
 
 
@@ -378,7 +379,7 @@ def test_one_time_buy_cancelled_after_a_partial_fill_says_the_rest_is_not_bought
     _top, later, ended = _parts(html)
     assert "（单已结束：没成交的部分不会再买；10/16 07:40 的对账之后结束）</span>" in _row(ended, "<b>买入 6758 ソニーグループ")
     assert later == "" and "没买到" not in ended
-    _badge_ok(html, "tachibana", now, hidden=1)
+    assert _badge_ok(html, "tachibana", now) == 0
 
 
 def test_one_time_buy_rejected_under_halt_is_not_waiting_for_halt():
@@ -389,7 +390,7 @@ def test_one_time_buy_rejected_under_halt_is_not_waiting_for_halt():
         html = panel.render("tachibana", "t" * 40, now)
         top, later, ended = _parts(html)
         assert "等 HALT 解除后" not in html and "买入 6758 ソニーグループ" in ended and later == ""
-        _badge_ok(html, "tachibana", now, hidden=1)
+        assert _badge_ok(html, "tachibana", now) == 0
     finally:
         paths.halt_file().unlink()
 
@@ -411,7 +412,7 @@ def test_system_missed_buy_waits_for_the_next_decision(tag, status, note, now, w
     assert "买入 6758 ソニーグループ" in part and "买入 6758 ソニーグループ" not in ended
     if when:
         assert f"<summary>另有 1 条{when}</summary>" in later
-    _badge_ok(html, tag, now)
+    assert _badge_ok(html, tag, now) == 1                                        # 系统原因：之后还会买 → 算
 
 
 @pytest.mark.parametrize("now,where,when", [
@@ -530,3 +531,65 @@ def test_system_miss_is_one_function_for_orders_and_book_rows():
     assert requeue_next(buy, [sell, buy], now, f)                                 # 开盘后补单没跑 → MISSED（系统原因）
     assert not requeue_next({**buy, "fund_src": ["S"]}, [sell, buy], now, f)      # 凑钱的卖单撤了 → 钱没来（不是系统原因）
     assert not requeue_next({**buy, "status": "REJECTED"}, [buy], now, f)
+
+
+# ────────── 复核 2（2026-10-16）：标签上的数字没有例外 ──────────
+def test_badge_does_not_count_a_one_time_buy_that_will_not_buy(monkeypatch):
+    """用户 2026-10-15「撤单后 / 没有执行下单等等的话交易处的数字不显示」：手动买入只做一次，单被拒（不是系统原因）→ 不会再买 →
+    收在「已结束」、数字也不算（以前指令还是「已下单」、等明早对账才结束 → 数字照算）。判断就是 _trade_split 的那一个
+    （live_unified.requeue_next）：系统原因没下（开盘后补单没跑）→ 之后还会买 → 在「另有」、算。
+    数字 = 上面（不含撤单中）+「另有」：/api/status 的 pending 同一个数。"""
+    now = _t(2026, 10, 15, 10, 30)
+    b = _prev_book()                                                             # 减仓 7203（卖单挂着）+ 等它成交的调仓 7203
+    b["orders"].append(_morder(D, "BUY", "6758.T", "manual_buy", "REJECTED", "立花：余力不足（sOrderStatusCode=7）"))
+    b["manual"]["items"][BUY_ID] = _buy_book("tachibana", "REJECTED")["manual"]["items"][BUY_ID]
+    b["manual"]["buys"] = {"6758.T": {"id": BUY_ID}}
+    _save(b, "tachibana")
+    html = panel.render("tachibana", "t" * 40, now)
+    top, later, ended = _parts(html)
+    assert "<b>买入 6758 ソニーグループ" in ended and "买入 6758" not in top + later
+    assert "<b>卖 7203 トヨタ自動車：100 股</b>" in top and "<b>减仓 7203 トヨタ自動車" in top and "<b>调仓 7203 トヨタ自動車" in later
+    assert _badge_ok(html, "tachibana", now) == 3                                # 卖单 + 减仓指令 + 调仓（另有）；买入不算
+    lv = panel._trade_live(b, [], now, "tachibana", halt=False)
+    assert lv["n"] == 3 and lv["split"]["items"][BUY_ID] == "ended"
+    monkeypatch.setattr(panel, "now_jst", lambda: now)
+    assert panel.status_json("tachibana")[1]["pending"] == 3
+    _named(html)
+    b["orders"][-1].update(status="MISSED", note="开盘后补单没有运行（--phase open），没买 —— 与模拟盘出现差异")   # 系统原因
+    _save(b, "tachibana")
+    html = panel.render("tachibana", "t" * 40, now)
+    top, later, ended = _parts(html)
+    assert "<b>买入 6758 ソニーグループ" in later and "<summary>另有 2 条等下一次决策（10/16 07:40）</summary>" in later
+    assert _badge_ok(html, "tachibana", now) == 4
+
+
+@pytest.mark.parametrize("now,where,n", [
+    (_t(2026, 10, 15, 10, 30), "top", 1),                                        # 立花收盘前：可能已被受理、还可能成交 → 算
+    (_t(2026, 10, 15, 16, 0), "ended", 0),                                       # 收盘后：「已收盘」→ 不算
+])
+def test_badge_counts_an_unknown_status_order_while_it_can_still_trade(now, where, n):
+    """状态不明（ERROR）的单：在上面就算（复核 2：以前在上面却不算，与发送中 SENDING 不一样）；收盘后去「已结束」、不算。"""
+    _book1015("tachibana", sell="ERROR", cash=2_000_000.0, fix={})
+    html = panel.render("tachibana", "t" * 40, now)
+    top, later, ended = _parts(html)
+    assert SELL_B in (top if where == "top" else ended) and SELL_B not in (ended if where == "top" else top)
+    if where == "top":
+        assert "<span class='chip'>状态不明</span>" in _row(top, SELL_B)
+    assert _badge_ok(html, "tachibana", now) == n
+
+
+def test_badge_same_before_and_after_the_executor_reads_a_corefix():
+    """固定口数：执行器还没读（指令文件里）与读了、还没照它调（「生效中 · 还没照它调」）都是之后要照它买卖的同一件事 → 数字一样
+    （复核 2：以前读了之后数字少 1，什么都没成交）。"""
+    b = _book1015(fix={})
+    b["orders"] = []
+    _save(b)
+    _want({"id": "M20261014-190000-corefix-1482", "kind": "corefix", "ticker": "1482.T", "units": 678, "at": "2026-10-14T19:00:00+09:00"})
+    html = panel.render("paper", "t" * 40, AT15)
+    assert "固定 1482 对冲版美国 7〜10 年国债：678 口" in _parts(html)[0]
+    before = _badge_ok(html, "paper", AT15)
+    MO.requests_path("paper").unlink()
+    _fixwait()
+    html = panel.render("paper", "t" * 40, AT15)
+    assert f"<span class='chip'>{MO.FIX_WAIT}</span>" in _parts(html)[0]
+    assert _badge_ok(html, "paper", AT15) == before == 1
