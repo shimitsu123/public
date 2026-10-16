@@ -376,7 +376,7 @@ def test_submit_buy_writes_instruction_and_checks():
     ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "9984", "unit": "shares", "value": 300}, AT)
     assert ok and rec["value"] == 300 and "买入 9984 ソフトバンクグループ（300 股）" in msg and "没有买入信号" in msg
     html = panel.render("paper", "t" * 40, AT)
-    assert html.count("data-act='cancel'") == 2 and "有一条买入指令在处理（见「交易」的「手动指令」）" in _card(html, "suggest")
+    assert html.count("data-act='cancel'") == 2 and "有一条买入指令在处理（见「交易」→「今天要成交的单」的「手动指令」）" in _card(html, "suggest")
 
 
 def test_chart_endpoint_serves_one_ticker(server):

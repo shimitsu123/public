@@ -1236,3 +1236,153 @@ def test_hold_text_dates_and_halt(hold, now, want):
     assert MO.status_text(it, now) == want and MO.status_text(it) == "明天开盘"
     paths.halt_file().write_text("test", encoding="utf-8")
     assert MO.status_text(it, now) == "等下单"
+
+
+# ────────── 复核 7（2026-10-16）──────────
+def _trg_calls(now: dt.datetime) -> list:
+    calls = []
+    trg = panel.Trigger(run=lambda tag, mode: calls.append((tag, mode)), clock=lambda: now, mono=lambda: 1e6, notify=lambda *a, **k: None)
+    trg.check()
+    return calls
+
+
+def test_paper_paused_open_matching_waits_for_the_next_morning_run():
+    """模拟账户成交日 09:40、面板自动下单今天暂停：开盘撮合只有面板叫（Trigger._open_due 在暂停之后）→ 今天不做 →
+    排队的寄付卖单与等开盘后的买单不在「今天要成交的单」，在「另有 … 等 10/16（周五）07:40 的运行」、照算（复核 7：以前写「09:25 前后按开盘价」）。"""
+    from qbreak import live_ops as LO
+    now = _t(2026, 10, 15, 9, 40)
+    b = _book1015("paper", sell="SENT", cash=2_000_000.0, fix={})
+    assert _trg_calls(now) == [("paper", "open")]                               # 没暂停：面板叫开盘撮合 → 今天
+    html = panel.render("paper", "t" * 40, now)
+    top, later, _ = _parts(html)
+    assert SELL_B in top and BUY_B in top and later == ""
+    _pause("paper", [], _t(2026, 10, 15, 8, 50))
+    assert _trg_calls(now) == []
+    html = panel.render("paper", "t" * 40, now)
+    top, later, _ = _parts(html)
+    assert SELL_B not in top and BUY_B not in top and SELL_B in later and BUY_B in later
+    assert "<summary>另有 2 条等 10/16（周五）07:40 的运行</summary>" in later
+    assert "面板自动下单今天暂停了：今天的开盘撮合不会做 → 10/16（周五）07:40 的运行按今天的正式开盘价撮合" in _row(later, SELL_B)
+    assert _badge_ok(html, "paper", now) == 2
+    rows = LO.outlook(b, [], now, tag="paper", halt=False, paused=True)["orders"]
+    assert {r["state"] for r in rows.values()} == {"later"}
+    assert all(r["act_at"] == _t(2026, 10, 16, 7, 40) for r in rows.values())
+
+
+def test_tachibana_cancel_not_processed_while_paused_stays_counted():
+    """立花：写了撤单、面板自动下单今天暂停（撤单只有面板叫）→ 单还挂着、可能成交：照旧在上面、照算，写「挂着（撤单暂停中）」，
+    不写「撤单中」（复核 7：以前「撤单中」、不算，标签 0、单却没人去撤）。没暂停 → 照旧「撤单中」、不算。"""
+    from qbreak import live_ops as LO
+    tag, last = "tachibana", "2026-10-15"
+    now = _t(2026, 10, 16, 10, 30)
+    o = _morder(last, "SELL", "7203.T", "rule", "SENT", "已下单", broker_id="B1", sent_at="2026-10-16T08:30:00+09:00")
+    b = _mbook(tag, last, [o], {})
+    rid = "M20261016-101500-cancel_order"
+    _want({"id": rid, "kind": "cancel_order", "cid": o["cid"], "at": "2026-10-16T10:15:00+09:00"}, tag)
+    head = "<b>卖 7203 トヨタ自動車：100 股</b>"
+    assert _trg_calls(now) == [(tag, "cancel")]
+    html = panel.render(tag, "t" * 40, now)
+    top, _, _ = _parts(html)
+    assert "<span class='chip'>撤单中</span>" in _row(top, head) and _badge_ok(html, tag, now) == 0
+    _pause(tag, [rid], _t(2026, 10, 16, 10, 20))
+    assert _trg_calls(now) == []
+    html = panel.render(tag, "t" * 40, now)
+    top, later, _ = _parts(html)
+    row = _row(top, head)
+    assert f"<span class='chip'>{LO.STUCK_CHIP}</span>" in row and "撤单中" not in row and "撤单今天不会自动处理" in row
+    assert _badge_ok(html, tag, now) == 1
+    r = LO.outlook(b, MO.unseen(tag, b), now, tag=tag, halt=False, paused=True)["orders"][o["cid"]]
+    assert r["state"] == "will" and r["cls"] == "stuck"
+
+
+def test_paper_morning_not_done_and_paused_does_not_promise_a_catchup():
+    """模拟账户今天早上的运行没完成、面板自动下单今天暂停（补跑也是面板叫的）→ 盘中写的卖出不写「补跑早上的运行之后」在上面，
+    在「另有 … 等下一次决策（10/19 07:40；面板自动下单今天暂停了）」；空的上面写不会自动补跑（复核 7）。没暂停 → 照旧补跑之后今天。"""
+    now = _t(2026, 10, 16, 10, 30)
+    _done_book("2026-10-14")
+    ag = paths.launch_agents()
+    ag.mkdir(parents=True, exist_ok=True)
+    (ag / f"{paths.PAPER_AGENT}.plist").write_text("<plist/>", encoding="utf-8")
+    rid = "M20261016-100000-sell-7203"
+    _want({**_sell_req(_t(2026, 10, 16, 10, 0)), "id": rid})
+    head = "<b>卖出全部 7203 トヨタ自動車"
+    html = panel.render("paper", "t" * 40, now)
+    top, later, _ = _parts(html)
+    assert head in top and "补跑早上的运行之后" in top
+    _pause("paper", [rid], _t(2026, 10, 16, 10, 5))
+    html = panel.render("paper", "t" * 40, now)
+    top, later, _ = _parts(html)
+    assert head not in top and head in later and "补跑早上的运行之后" not in top
+    assert "<summary>另有 1 条等下一次决策（10/19 07:40；面板自动下单今天暂停了）</summary>" in later
+    assert "面板自动下单今天暂停了、不会自动补跑（等 10/19（周一）07:40 的运行" in top
+    assert _badge_ok(html, "paper", now) == 1
+
+
+def test_waiting_core_and_fix_rows_do_not_leak_internal_keys_into_pushes():
+    """「还没照它调」的比例 / 固定口数那一行进 09:30 自检 / HALT 推送（watchdog._orow → live_ops.row_text）：括号里写那条指令的 id，
+    没有就不写 —— 不写内部键「core:」「fix:<票>」（复核 7）。"""
+    from qbreak import live_ops as LO
+    from qbreak import watchdog
+    assert LO.row_text({"kind": "instr", "ref": "core:", "what": "闲置资金比例 50%（还没照它调）", "reason": "x"}) == "闲置资金比例 50%（还没照它调）：x"
+    assert LO.row_text({"kind": "instr", "ref": "core:", "iid": "M1-core", "what": "闲置资金比例 50%（还没照它调）"}) == "闲置资金比例 50%（还没照它调）（M1-core）"
+    tag = "paper"
+    b = _etf_book(tag)
+    b["manual"]["core_pct"] = 50.0                                             # 没有那条比例指令的行
+    _save(b, tag)
+    paths.halt_file().write_text("HALT 2026-10-16 测试\n", encoding="utf-8")
+    now = _t(2026, 10, 16, 10, 3)
+    ol = LO.outlook(b, [], now, tag=tag)
+    txt = "\n".join(watchdog._orow(r, now) for r in ol["rows"])
+    assert "闲置资金比例 50%（还没照它调）" in txt and "core:" not in txt
+    rec = watchdog.evaluate(tag, now)
+    assert "闲置资金比例 50%（还没照它调）" in "\n".join(rec.get("halt_wait") or []) and "core:" not in json.dumps(rec, ensure_ascii=False)
+    b, tag, now = _fixwait()                                                   # 固定口数（读了、还没照它调）：括号里是那条指令的 id
+    txt = "\n".join(watchdog._orow(r, now) for r in LO.outlook(b, [], now, tag=tag, halt=True)["rows"])
+    assert "678 口（还没照它调）（M20261014-190000-corefix-1482）：HALT 中" in txt and "fix:" not in txt
+    b, tag, now = _fixwait(clear=True)                                         # 恢复按规则：没有可写的 id → 不写括号
+    txt = "\n".join(watchdog._orow(r, now) for r in LO.outlook(b, [], now, tag=tag, halt=True)["rows"])
+    assert "1482 对冲版美国 7〜10 年国债 恢复按规则（还没照它调）：HALT 中" in txt and "fix:" not in txt
+
+
+def test_fixed_units_note_dropped_when_the_same_decision_already_filled_it():
+    """固定口数排的核心单撤了、同一次决策同一只的另一笔已经成交（真实数据 10/15：679 口撤了、650 口成交）→ 不再写「仍然有效：
+    下一次决策还会再排同样的单」（复核 7）；没有别的单时照写、说「照它调（差多少补多少）」，不说「同样的单」；那一行不重复写（上面已经写了）。"""
+    b = _book1015(fix={"1482.T": 655})
+    now = _t(2026, 10, 16, 10, 30)
+    b["state"]["last_date"] = "2026-10-15"
+    for o in b["orders"]:
+        o["decided_on"] = "2026-10-15"
+    buy = b["orders"][1]
+    buy.update(cid="U2026-10-15-BUY-1482.T", status="CANCELLED", qty=679, sent_qty=679, note="你撤了单")
+    b["orders"][0].update(cid="U2026-10-15-SELL-1545.T", status="FILLED", filled_qty=4110, note="成交")
+    _save(b)
+    lv = panel._trade_live(b, [], now, "paper", halt=False)
+    note = lv["fix"].get(buy["cid"]) or ""
+    assert "手动固定 655 口仍然有效：下一次决策（10/19 07:40）还会照它调（差多少补多少）" in note and "同样的单" not in note
+    html = panel.render("paper", "t" * 40, now)
+    top, _, ended = _parts(html)
+    assert note in top and note not in ended                                   # 上面写了，那一行不重复
+    b["orders"].append({**buy, "cid": "U2026-10-15-BUY-1482.T-N094306", "qty": 650, "sent_qty": 650, "filled_qty": 650,
+                        "status": "FILLED", "reason": "core_fix", "note": "成交"})
+    _save(b)
+    assert not panel._trade_live(b, [], now, "paper", halt=False)["fix"]
+    assert "仍然有效" not in panel.render("paper", "t" * 40, now)
+
+
+def test_hold_and_block_pointers_say_where_the_row_is():
+    """持仓的「有一条手动指令在处理（见 …）」指着那条指令真正在的那一块（收盘后写的在收起的「另有 …」里）；
+    「手动卖出后不买回」的「解除」在最下面收起的「已结束 / 不是今天的」里 —— 说明写清、那一块的标题写「含手动卖出后不自动买回 N 条」（复核 7）。"""
+    now = _t(2026, 10, 16, 16, 5)
+    _done_book("2026-10-16")
+    _want(_sell_req(now))
+    html = panel.render("paper", "t" * 40, now)
+    assert "有一条手动指令在处理（见「交易」→ 点开「另有 …」的「手动指令」）" in html
+    assert "见「交易」的「手动指令」" not in html
+    assert MO.BLOCK_WHERE.startswith("「交易」→ 点开最下面的「已结束 / 不是今天的」")
+    b = _done_book("2026-10-16")
+    MO.requests_path("paper").unlink()
+    b["manual"]["blocks"] = {"7203.T": {"until": "2026-11-12", "id": "M20261016-100000-sell-7203"}}
+    _save(b)
+    html = panel.render("paper", "t" * 40, _t(2026, 10, 16, 10, 30))
+    _, _, ended = _parts(html)
+    assert "；含手动卖出后不自动买回 1 条）</summary>" in ended

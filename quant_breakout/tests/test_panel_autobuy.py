@@ -99,7 +99,7 @@ def test_near_and_triggered_rows_expand_to_the_suggest_row_and_are_not_repeated(
     assert "规则的买价：出信号那天的收盘 ×1.03" in one and "⚠ 消息：受损 大（1 条，估算 -1.2%）" in one
     blk = _abx(ab, "6501.T")
     assert "10/07 解除后" in blk[:blk.index("</summary>")]
-    assert "手动卖出后不买回（可在「交易」解除）：到 2026-10-07" in blk and "data-act='buy'" not in blk   # 不能买：同样的理由、没有按钮
+    assert "手动卖出后不买回（可在「交易」→ 点开最下面的「已结束 / 不是今天的」→「手动卖出后不自动买回」解除）：到 2026-10-07" in blk and "data-act='buy'" not in blk   # 不能买：同样的理由、没有按钮
     tr = _abx(ab, "8306.T")
     assert "信号成立但规则不买：新仓倍数 0" in tr[:tr.index("</summary>")] and "data-act='buy' data-t='8306.T'" in tr
     assert "规则的买价：" in tr and "开盘、最高 <b>¥2,060</b>" in tr

@@ -180,7 +180,8 @@ def _why_not(eng, t: str, i: int, em: float, gate: str | None, earn: str | None,
     """信号成立、规则却没排买入的理由（与统一决策的检查同一个顺序）。gate_kind = manual：挡的是「手动卖出后不买回」（不是资格检查；2026-10-13）。"""
     st, cfg = eng.st, eng.cfg
     if gate and gate_kind == "manual":
-        return f"手动卖出后不买回（可在「交易」解除）：{'一直，直到解除' if until is None else f'到 {until}'}"
+        from .manual_orders import BLOCK_WHERE
+        return f"手动卖出后不买回（可在{BLOCK_WHERE}解除）：{'一直，直到解除' if until is None else f'到 {until}'}"
     if gate:
         return f"资格检查：{gate}"
     if em <= 0:

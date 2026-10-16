@@ -210,11 +210,11 @@ def test_suggest_and_auto_buy_card_for_manual_block():
     row2 = {**row, "near": {"where": "below_up", "days": 1}}
     _sm([row2])                                                             # 估计 10/06 金叉 ≤ 到期 10/07：自动买那张卡不列 → 在建议的股票里
     html = panel.render("paper", "t" * 40, AT)
-    assert "手动卖出后不买回（可在「交易」解除）：到 2026-10-07" in _card(html, "suggest") and "资格检查：手动" not in html
+    assert "手动卖出后不买回（可在「交易」→ 点开最下面的「已结束 / 不是今天的」→「手动卖出后不自动买回」解除）：到 2026-10-07" in _card(html, "suggest") and "资格检查：手动" not in html
     assert "6501" not in _card(html, "autobuy")
     _sm([row])                                                              # 估计 10/08 金叉 > 到期 10/07：自动买那张卡列（建议的股票不重复列）
     html = panel.render("paper", "t" * 40, AT)
-    assert "手动卖出后不买回（可在「交易」解除）：到 2026-10-07" in _card(html, "autobuy") and "6501" not in _card(html, "suggest")
+    assert "手动卖出后不买回（可在「交易」→ 点开最下面的「已结束 / 不是今天的」→「手动卖出后不自动买回」解除）：到 2026-10-07" in _card(html, "autobuy") and "6501" not in _card(html, "suggest")
     book = json.loads((panel.paths.state_dir() / "live_unified_paper.json").read_text())
     h = panel._auto_buy_card({"asof": "2026-10-05", "rows": [row]}, book, "paper", 1_000_000)
     assert "6501" in h and "10/07 解除后" in h                                # 估计 10/08 金叉 > 到期 10/07：还列
@@ -226,7 +226,7 @@ def test_suggest_and_auto_buy_card_for_manual_block():
     html = panel.render("paper", "t" * 40, AT)                              # 在解除：自动买那张卡列（「解除中」），点开的一行写着
     assert "「不自动买回」在解除：下一次决策（交易日 07:40）起生效（规则出买入信号才买；手动买入可以写）" in _card(html, "autobuy")
     assert "解除中" in panel._auto_buy_card({"asof": "2026-10-05", "rows": [row2]}, book, "paper", 1_000_000)
-    assert suggest._why_not(SimpleNamespace(st=None, cfg=None), "6501.T", 0, 1.0, "x", None, gate_kind="manual", until=None) == "手动卖出后不买回（可在「交易」解除）：一直，直到解除"
+    assert suggest._why_not(SimpleNamespace(st=None, cfg=None), "6501.T", 0, 1.0, "x", None, gate_kind="manual", until=None) == "手动卖出后不买回（可在「交易」→ 点开最下面的「已结束 / 不是今天的」→「手动卖出后不自动买回」解除）：一直，直到解除"
 
 
 def test_entry_why_uses_manual_wording_and_lifted_block():
@@ -236,7 +236,7 @@ def test_entry_why_uses_manual_wording_and_lifted_block():
                           manual_gate_fn=lambda t, i, manual=False: m.block_reason(t, gidx[i], manual=manual))
     eng.entry_gate_fn = lambda t, i: eng.manual_gate_fn(t, i)
     w = MO.entry_why(eng, "A.T", 0)
-    assert "规则和手动都不买" in w and "先在「交易」点「解除」" in w
+    assert "规则和手动都不买" in w and "先在「交易」→ 点开最下面的「已结束 / 不是今天的」→「手动卖出后不自动买回」点「解除」" in w
     m.m["blocks"]["A.T"]["lift_from"] = "2026-10-14"
     assert eng.entry_gate_fn("A.T", 0) is not None and MO.entry_why(eng, "A.T", 0) is None   # 规则这根还挡；手动已经可以买
     eng.entry_gate_fn = lambda t, i: "资格检查不过"

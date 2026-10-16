@@ -601,7 +601,7 @@ def _stock_gates(s: dict, t: str, code: str, mult, el_block: dict, tb_stock: dic
     bl = blocks.get(t)
     if bl and t not in lift:
         r = MO.rebuy_day(bl.get("until"))
-        _no(s, f"手动卖出后不买回：{MO.block_text(bl)}（要提前买：先在「交易」里「恢复按规则」解除）",
+        _no(s, f"手动卖出后不买回：{MO.block_text(bl)}（要提前买：先在{MO.BLOCK_WHERE}点「解除」/「恢复按规则」）",
             "不买回" + (f"到 {r:%m/%d}" if r else ""), f"{r:%m/%d} 开盘" if r else "")
     elif hard:
         _no(s, f"不能买：{hard}", "资格检查")

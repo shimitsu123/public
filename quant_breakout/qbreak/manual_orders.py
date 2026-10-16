@@ -55,6 +55,7 @@ ORDER_KINDS = POS_KINDS + ("buy",)      # 会变成单的指令（同一只票�
 UNITS = {"shares": "股", "yen": "円", "pct": "%"}
 BUY_UNITS = {"rule": "按规则的仓位", **UNITS}
 BLOCK_DEFAULT = 20                      # 手动卖出后多少个交易日不自动买回（默认）
+BLOCK_WHERE = "「交易」→ 点开最下面的「已结束 / 不是今天的」→「手动卖出后不自动买回」"   # 「解除」/「恢复按规则」在哪（复核 7，2026-10-16：收起来了）
 BLOCK_MAX = 250
 MANUAL_CAP_PCT = 100.0                  # 手动买入 / 加仓的上限（2026-10-12 用户：「不要设上限」→ 最多到总权益；钱不够从持仓平摊凑）。规则的新仓仍按 max_position_pct
 CAP_PCT = 34.0                          # 加仓上限：单只个股占总权益 %（执行器写进账本的 manual.cap_pct = 引擎的 max_position_pct；没有就用这个）
@@ -2688,7 +2689,7 @@ class Manual:
         if until is None or str(d) <= str(until):
             per = "一直，直到解除" if until is None else f"到 {until}"
             if manual:
-                return f"手动卖出后不买回（{per}；规则和手动都不买）：要买先在「交易」点「解除」/「恢复按规则」"
+                return f"手动卖出后不买回（{per}；规则和手动都不买）：要买先在{BLOCK_WHERE}点「解除」/「恢复按规则」"
             return f"手动卖出后不自动买回（{per}）"
         return None
 

@@ -270,6 +270,7 @@ def test_rule_gates_mult0_block_gap_and_core_limit():
     rm = _room(_bk(manual=man), sm={"suggest": {"rows": [_row("6758.T", 3000.0)]}})
     b = rm["per_ticker"]["6758.T"]["buy"]
     assert b["n"] == 0 and b["short"] == "不买回到 10/22" and b["next"] == "10/22 开盘" and "手动卖出后不买回" in b["why"][0]
+    assert f"先在{MO.BLOCK_WHERE}点「解除」" in b["why"][0]                       # 「解除」收在「已结束 / 不是今天的」里（复核 7）
     sm = {"suggest": {"rows": [_row("6758.T", 3000.0)]}}
     rm = _room(_bk(), sm=sm, quotes={"6758.T": 3100.0, "1545.T": {"px": 2460.0}})
     assert rm["per_ticker"]["6758.T"]["buy"]["short"] == "涨太多" and "超过 3%" in rm["per_ticker"]["6758.T"]["buy"]["why"][0]
