@@ -290,7 +290,8 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
             if px <= 0:
                 px, approx = float(o.get("limit") or o.get("ref_px") or 0), True
             sq = int(r.get("filled_qty") or 0) if r is not None and not r.get("error") else None   # 快照里这张单的成交数（立花对照卡拆快照前 / 后）
-            got.append((side == "BUY", kind == "core", idx, o, t, side, kind, q, px, src, approx, sq))
+            kat = _hn_ts(r.get("kept_from")) if r is not None and r.get("kept_from") else None   # 上一份快照留下来的行：成交是那时读到的
+            got.append((side == "BUY", kind == "core", idx, o, t, side, kind, q, px, src, approx, sq, kat))
         except (TypeError, ValueError, AttributeError, KeyError):
             continue
     out["pending"] = pending
@@ -307,7 +308,7 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
     core_last = st0.get("core_last") or {}
     ccost: dict = {}                                      # 核心 ETF 的移动平均成本 [口数, 成本（含买入手续费）]；对不上 → None
     delta, fills, any_approx = 0.0, [], False
-    for _b, _c, _i, o, t, side, kind, q, px, src, approx, sq in got:
+    for _b, _c, _i, o, t, side, kind, q, px, src, approx, sq, kat in got:
         pnl = None
         if kind == "core":
             u = core.get(t, 0)
@@ -373,7 +374,7 @@ def _hn_calc(bk: dict, st0: dict, tag: str | None, now: dt.datetime, snap: dict 
         fills.append({"cid": o.get("cid"), "ticker": t, "label": NM.label(t), "side": side, "kind": kind, "qty": int(q),
                       "px": float(px), "fee": float(fee), "reason": o.get("reason") or "", "phase": o.get("phase") or "",
                       "status": o.get("status") or "", "src": src, "pnl": pnl, "approx": approx, "snap_q": sq,
-                      "at": _hn_fill_at(o, F, snap_at if src == "snapshot" else None)})
+                      "at": _hn_fill_at(o, F, (kat or snap_at) if src == "snapshot" else None)})
     order = list(dict.fromkeys(f["ticker"] for f in fills))
     new, sold = [], []
     for t in order:
@@ -434,16 +435,33 @@ def broker_compare(snap: dict | None, pj: dict | None) -> dict:
     pj = held_now 的结果。逐只：比的数 = 账本 + 这只的成交里时刻（下界）不晚于快照的（个股不低于 0）；快照之后才成交的不算（late，
     下一次刷新才看得到）；快照里有这张单（成交在持仓之后查的）→ 快照之前的最多算快照记的成交数，多出来的算 late（2026-10-16 三次复核：
     11:35 快照记 0 股、13:00 成交 50 股之后撤单，撤单记下的 50 股不是快照之前的）。差 ≠ 0：这只快照之前的成交说不准（约数 approx / 只知道发出数 sent_qty / 单上的成交离快照不到 HN_FILL_SLACK /
-    快照之前就可能成交、快照却不知道的单）→ soft（对账之后再看）；其余 → bad（真的不一致：早上的核对会停下）。没有已知的成交 → 快照里存的 compare。
+    快照之前就可能成交、快照却不知道的单）→ soft（对账之后再看）；其余 → bad（真的不一致：早上的核对会停下）。没有已知的成交 → 快照里存的 compare
+    （在途单的 soft 判断照样做；四次复核）。上一份快照留下来的行（kept_from：这次读不了）只知道到那一刻 → 不算「快照那一刻知道的」。
     → {"rows": [{ticker, ledger（比的数）, broker, diff}], "bad", "soft", "seen"（比的数含成交的票）, "late", "head", "day_word"}。只读、不抛异常。"""
     from . import broker_snapshot as BS
     s = snap if isinstance(snap, dict) else {}
     pj = pj if isinstance(pj, dict) else {}
     out = {"rows": [dict(r) for r in s.get("compare") or [] if isinstance(r, dict)], "seen": set(), "late": set(),
            "head": pj.get("head") or hn_head(pj.get("day_word")), "day_word": pj.get("day_word") or "今天"}
+    try:
+        sat = _hn_ts(s.get("at"))
+        fat = _hn_ts(s.get("fills_at"))
+        ok_rows = set()                                   # 快照里有、而且成交是在持仓之后（同时）查的单：快照那一刻成交了多少是知道的
+        if fat is not None and sat is not None and fat >= sat and snap_day(s) == pj.get("fill_day"):
+            ok_rows = {str(r.get("cid")) for r in s.get("fills") or [] if isinstance(r, dict) and not r.get("error")
+                       and not r.get("kept_from")}        # 上一份快照留下来的行（这次读不了）：成交只知道到那一刻（四次复核）
+        unsure = set()
+        for p in pj.get("pending") or []:                 # 快照之前就可能成交、快照却不知道它成交了多少的单（没有已知的成交时也看；四次复核）
+            at = _hn_ts(p.get("at"))
+            if sat is not None and at is not None and at <= sat and (
+                    p.get("status") in ("SENDING", "ERROR") or str(p.get("cid")) not in ok_rows):
+                unsure.add(str(p.get("ticker")))
+        out["unsure"] = unsure
+    except Exception as e:                                # noqa: BLE001  展示用
+        log.warning("立花快照的在途单没看成（%s）", e)
+        sat, ok_rows = None, set()
     if pj.get("has"):
         try:
-            sat = _hn_ts(s.get("at"))
             fs = [f for f in pj.get("fills") or [] if isinstance(f, dict)]
             by = pj.get("by_ticker") or {}
             ps = pj.get("state") or {}
@@ -452,11 +470,7 @@ def broker_compare(snap: dict | None, pj: dict | None) -> dict:
                 cnt[t] = cnt.get(t, 0) + int((p or {}).get("shares") or 0)
             for t, u in (ps.get("core_units") or {}).items():
                 cnt[t] = cnt.get(t, 0) + int(u or 0)
-            ok_rows = set()                                   # 快照里有、而且成交是在持仓之后（同时）查的单：快照那一刻成交了多少是知道的
-            fat = _hn_ts(s.get("fills_at"))
-            if fat is not None and sat is not None and fat >= sat and snap_day(s) == pj.get("fill_day"):
-                ok_rows = {str(r.get("cid")) for r in s.get("fills") or [] if isinstance(r, dict) and not r.get("error")}
-            seen, late, unsure = set(), set(), set()
+            seen, late, unsure = set(), set(), set(out.get("unsure") or ())
             for t in dict.fromkeys(str(f.get("ticker")) for f in fs):
                 n = int((by.get(t) or {}).get("ledger") or 0)
                 for f in fs:
@@ -479,11 +493,6 @@ def broker_compare(snap: dict | None, pj: dict | None) -> dict:
                                                           or (f.get("src") == "order" and sat - at < HN_FILL_SLACK))):
                         unsure.add(t)
                 cnt[t] = max(0, n)
-            for p in pj.get("pending") or []:                 # 快照之前就可能成交、快照却不知道它成交了多少的单
-                at = _hn_ts(p.get("at"))
-                if sat is not None and at is not None and at <= sat and (
-                        p.get("status") in ("SENDING", "ERROR") or str(p.get("cid")) not in ok_rows):
-                    unsure.add(str(p.get("ticker")))
             out["rows"] = BS.compare({"state": {"pos": {t: {"shares": n} for t, n in cnt.items()}}}, s.get("positions") or [])
             out["seen"], out["late"], out["unsure"] = seen, late, unsure
         except Exception as e:                            # noqa: BLE001  展示用：比不了就照快照里存的

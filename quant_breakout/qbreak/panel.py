@@ -2779,7 +2779,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     ests = {}                                               # 拿着的票卖出全部的预计收益（按账本里的最近收盘；页面取到现价后换成现价的）
     ytdg = MO.ytd_gain(book, now.date())                 # T7：卖出的预计代扣按今年已实现的损益通算
     for t in list(pst.get("pos") or {}) + [t for t, u in (pj.get("core_units") or {}).items() if int(u or 0) > 0]:
-        if t in hnb:                                        # 今天有成交的：成本 / 股数在对账之后才对（不给预计）
+        if MO.est_skip(pj, t):                              # 今天有成交的：成本 / 股数在对账之后才对（不给预计；命令行同一个判断）
             continue
         e = MO.sell_estimate(book, t, sm=sm)
         if e:
@@ -4217,7 +4217,8 @@ def quotes_json(tag: str, now: dt.datetime | None = None, fetch=None, extra: lis
                    round_to_tick(px * (1 + MO.NOW_BUY_BUF), t, "BUY"))
             out[t]["buy"] = {"cap": top or None, "lim": lim, "over": bool(top > 0 and px > top), "close": r["prev"] or None}
             continue
-        est = None if t in hnb else MO.sell_estimate(book, t, px=px, at=x.get("at"), sm=sm)   # 卖出全部的预计收益（按这个现价）
+        est = None if MO.est_skip(pj, t) else MO.sell_estimate(book, t, px=px, at=x.get("at"), sm=sm)   # 卖出全部的预计收益（按这个现价；
+        #                                                             今天有成交的不估：命令行同一个判断 MO.est_skip）
         if est:
             out[t]["est"] = {**est, "lines": MO.est_lines(est, MO.sale_note(tag, now), MO.ytd_gain(book, now.date()))}
     return 200, {**head, "rows": out}

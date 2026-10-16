@@ -4853,12 +4853,16 @@ def cmd_manual(a) -> int:
         a_ = MO.adjust_plan({**rec, "kind": "adjust", "unit": "pct", "value": rec.get("pct")}, pst_,
                             float((b_.get("manual") or {}).get("cap_pct") or MO.CAP_PCT))
         sold_ = max(0, -a_["delta"]) if a_ else 0
-    elif rec["kind"] == "core" and rec.get("ticker") and int(rec.get("target") or 0) > 0:
-        sold_ = max(0, int((st.get("core_units") or {}).get(rec["ticker"], 0)) - int(rec["target"]))
+    elif rec["kind"] == "core" and rec.get("ticker") and int(rec.get("target") or 0) > 0:   # 口数按含今天已成交（target 也是；四次复核）
+        sold_ = max(0, int((pst_.get("core_units") or {}).get(rec["ticker"], 0)) - int(rec["target"]))
     if rec.get("ticker") and rec["kind"] in ("sell", "trim", "adjust", "core") and sold_ != 0:
-        e_ = MO.sell_estimate(b_, rec["ticker"], sm=sm_, shares=sold_)
-        for ln in MO.est_lines(e_, MO.sale_note(tag, now), MO.ytd_gain(b_, now.date())):
-            print(f"  {ln}")
+        sk_ = MO.est_skip(_LO.held_now(b_, tag, now=now), rec["ticker"])   # 今天有成交：成本 / 股数对账之后才准（面板同一个判断）
+        if sk_:
+            print(f"  {sk_}")
+        else:
+            e_ = MO.sell_estimate(b_, rec["ticker"], sm=sm_, shares=sold_)
+            for ln in MO.est_lines(e_, MO.sale_note(tag, now), MO.ytd_gain(b_, now.date())):
+                print(f"  {ln}")
     if rec["kind"] in MO.ORDER_KINDS:
         mode = MO.timing(now)[0]
         when = MO.when_for(now, b_, rec.get("ticker"))       # 这只今天已经有执行器还活着的单 → 下一个交易日开盘（D4；2026-10-15）

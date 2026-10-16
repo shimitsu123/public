@@ -256,9 +256,9 @@ def test_saturday_labels_use_the_fill_day(capsys, monkeypatch):
     from qbreak import calendar_jp as CJ
     from qbreak import desktop_page as DP
     rm = TR.room("paper", _b1016(), SAT, sm={}, halt=False, arm="file", waiting=[])
-    r82, r45 = rm["per_ticker"]["1482.T"], rm["per_ticker"]["1545.T"]
-    assert r82["sell"]["short"] == "10/16（周五）买进" and "今天买进" not in r82["chip"]
-    assert "今天已卖出" not in r45["chip"]
+    r82 = rm["per_ticker"]["1482.T"]                                        # 周末写的在对账之后执行 → 按投影（四次复核）：
+    assert r82["held"] == 650 and r82["sell"]["short"] == "休市日" and "今天买进" not in r82["chip"]   # 1482 拿着、1545 已经没了
+    assert "1545.T" not in rm["per_ticker"]
     _book_stocks()
     shutil.copy(paths.PROJECT_ROOT / "var" / "sim.json", paths.home() / "sim.json")
     monkeypatch.setattr(CJ, "now_jst", lambda: SAT)

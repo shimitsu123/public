@@ -589,7 +589,8 @@ def fund_holdings(book: dict | None, tag: str | None = None, now: dt.datetime | 
     st = pj["state"]
     man = (book or {}).get("manual") or {}
     waiting = unseen(tag, book) if tag else []
-    busy = {r.get("ticker") for r in _live(man.get("items") or {}, waiting, ORDER_KINDS) if r.get("ticker")}
+    live = _settled_later(_live(man.get("items") or {}, waiting, ORDER_KINDS), book, pj, now)   # 今天已全部成交、对账时完成的不算（四次复核）
+    busy = {r.get("ticker") for r in live if r.get("ticker")}
     busy |= set(st.get("pending_exit") or {})
     if pre_reconcile(pj, now):                             # 成交日当天、对账之前执行：今天有成交的（卖光的也在这里）当天动不了
         busy |= {f["ticker"] for f in pj.get("fills") or []}
@@ -609,7 +610,7 @@ def fund_holdings(book: dict | None, tag: str | None = None, now: dt.datetime | 
         from .live_unified import reserve_jpy
         rsv = float(reserve_jpy(book))
     cash = max(0.0, float(st.get("cash_jpy") or 0) - rsv) * (1 - CASH_BUF_PCT / 100)
-    selling = {r.get("ticker") for r in _live(man.get("items") or {}, waiting, ORDER_KINDS) if _to_zero(r)}
+    selling = {r.get("ticker") for r in live if _to_zero(r)}
     return {"cash": round(cash), "reserve": round(rsv), "hold": hold, "busy": sorted(busy), "exiting": sorted(st.get("pending_exit") or {}),
             "selling": sorted(selling - set(st.get("pending_exit") or {})),               # 已有卖出全部指令的（会卖、所得能用）
             "core_pct": core_pct_now(tag, book) if tag else float(man.get("core_pct", 100.0)),   # 「其他全部卖出」的预览用（2026-10-13）
@@ -630,9 +631,12 @@ def fund_all(book: dict | None, tag: str | None, ticker: str, now: dt.datetime |
     st = (book or {}).get("state") or {}
     man = (book or {}).get("manual") or {}
     waiting = unseen(tag, book) if tag else []
-    live = _live(man.get("items") or {}, waiting, ORDER_KINDS)
-    pend = st.get("pending_exit") or {}
     pj = LO.held_now(book, tag, now=now)
+    now = now or now_jst()
+    pre = pre_reconcile(pj, now)
+    live = _settled_later(_live(man.get("items") or {}, waiting, ORDER_KINDS), book, pj, now)   # 今天已全部成交、对账时完成的不挡（四次复核）
+    pend = st.get("pending_exit") or {}
+    ppos = ((pj.get("state") or {}).get("pos") or {}) if pj.get("has") and not pre else None   # 对账之后执行：股数按含今天已成交的持仓
     out = {"sells": [], "skip": [], "cores": [], "blocked": None,
            "core_pct": core_pct_now(tag, book) if tag else float(man.get("core_pct", 100.0)), "core_clear": sorted(man.get("core_fix") or {})}
     out["day_word"] = pj.get("day_word") or "今天"
@@ -657,6 +661,8 @@ def fund_all(book: dict | None, tag: str | None, ticker: str, now: dt.datetime |
         if mine:
             out["blocked"] = f"{names.label(t)} 有没处理完的指令（{mine[-1].get('id')}）：先撤回它"
             return out
+        if ppos is not None and t in ppos:                 # 今天减过的（对账之后执行时拿着的是剩下的）
+            cur = int((ppos.get(t) or {}).get("shares") or cur)
         out["sells"].append((t, cur, float(p.get("last_close") or p.get("entry_px") or 0)))
     for t, u in sorted((pj.get("core_units") or {}).items()):   # 口数按投影（今天卖光的不列；只是说明）
         if int(u or 0) > 0:
@@ -2065,18 +2071,53 @@ def core_pct_now(tag: str | None, book: dict | None) -> float:
     return float(late[-1]["pct"]) if late else float(((book or {}).get("manual") or {}).get("core_pct", 100.0))
 
 
-def _buy_filled(it: dict, book: dict | None, pj: dict | None = None) -> bool:
-    """已下单（placed）的手动买入、它在当前决策里的单（manual_buy）都已经全部成交 → 下一次对账时记成完成（Manual.settle），
-    对账之后执行的新指令不会被它挡（check 的「已经有一条没处理完的手动指令」不算它；2026-10-16 二次复核）。
-    全部成交 = pj_done（账本 FILLED，或 held_now 已知的成交 ≥ 发出数：立花的寄付单对账前整天是 SENT、成交只有快照知道；
-    2026-10-16 三次复核）。部分成交的仍算没处理完。"""
-    if it.get("kind") != "buy" or it.get("status") != "placed":
+LEG_REASONS = {"buy": ("manual_buy",), "sell": ("manual",), "add": ("manual_add",), "trim": ("manual_trim",)}
+
+
+def _placed_filled(it: dict, book: dict | None, pj: dict | None = None) -> bool:
+    """已下单（placed）的手动买卖指令今天已经全部成交 → 下一次对账时执行器把它记成完成（Manual.on_fill / settle），
+    对账之后执行的新指令不会被它挡（check 的「已经有一条没处理完的手动指令」、fund_all 的「有没处理完的指令」、fund_holdings 的 busy
+    都不算它；只在 not pre_reconcile 时用；2026-10-16 二次复核 F2 的买入 → 四次复核推广到卖出 / 减仓 / 调仓）。
+    全部成交 = pj_done（账本 FILLED，或 held_now 已知的成交 ≥ 发出数：立花的寄付单对账前整天是 SENT、成交只有快照知道）：
+      卖出 / 减仓 / 调到 0：含今天已成交的持仓里这只已经没了（settle：持仓没了 → 完成），而且这只没有还在等成交 / 结果不明的单；
+      减仓 / 调仓往下（manual.trims）：当前决策里它的 manual_trim 单都全部成交、合计 ≥ 计划要卖的股数（只成交了一段不算）；
+      买入 / 调仓往上（manual.buys / adds）：当前决策里它的 manual_buy / manual_add 单都全部成交（on_fill：有成交就完成）。
+    部分成交 / SENDING / ERROR / 算不成 → False（照旧算没处理完）。"""
+    k = it.get("kind")
+    if k not in ORDER_KINDS or it.get("status") != "placed" or it.get("cancel_req") or not (pj or {}).get("has"):
         return False
-    d = ((book or {}).get("state") or {}).get("last_date")
-    os_ = [o for o in (book or {}).get("orders") or [] if o.get("decided_on") == d and o.get("ticker") == it.get("ticker")
-           and o.get("reason") == "manual_buy"]
+    t = it.get("ticker")
+    if not t or t in {p.get("ticker") for p in (pj or {}).get("pending") or []}:
+        return False
+    st = (book or {}).get("state") or {}
+    man = (book or {}).get("manual") or {}
+    led = st.get("pos") or {}
+    if k in POS_KINDS and t in led and t not in (((pj or {}).get("state") or {}).get("pos") or {}):
+        return True                                        # 今天已经卖光（settle：持仓没了 → 完成）
+    mine = lambda key: ((man.get(key) or {}).get(t) or {}).get("id") == it.get("id")   # noqa: E731
+    if k == "buy":
+        leg, need = "buy", 0
+    elif k in ("trim", "adjust") and mine("trims"):
+        leg, need = "trim", int(((man.get("trims") or {}).get(t) or {}).get("shares") or 0)
+    elif k == "adjust" and mine("adds"):
+        leg, need = "add", 0
+    else:                                                  # 卖出全部还拿着一部分 / 找不到它的那一段 → 没处理完
+        return False
+    d = st.get("last_date")
+    os_ = [o for o in (book or {}).get("orders") or [] if o.get("decided_on") == d and o.get("ticker") == t
+           and o.get("reason") in LEG_REASONS[leg]]
     got = pj_got(pj)
-    return bool(os_) and all(pj_done(o, pj, got) for o in os_)
+    if not os_ or not all(pj_done(o, pj, got) for o in os_):
+        return False
+    return sum(int(o.get("sent_qty") or o.get("qty") or 0) for o in os_) >= need
+
+
+def _settled_later(items: list[dict], book: dict | None, pj: dict | None, now: dt.datetime) -> list[dict]:
+    """去掉今天已经全部成交、对账时就完成的指令（_placed_filled）—— 只在现在写的会在对账之后执行时（not pre_reconcile）；
+    成交日当天对账之前执行的照旧都算（执行器当天按账本看、同一只不再下第二笔）。"""
+    if pre_reconcile(pj, now):
+        return list(items)
+    return [r for r in items if not _placed_filled(r, book, pj)]
 
 
 def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None, now: dt.datetime | None = None, going=None) -> str | None:
@@ -2113,8 +2154,8 @@ def check(rec: dict, book: dict, tag: str | None = None, sm: dict | None = None,
             if why and not (rec.get("batch") == "all" and k == "sell" and why != "manual"):   # 「全部换成」同批：规则在卖的也写（执行时只设不买回，2026-10-13）
                 return f"{lt} 已经在卖出全部（{_exit_text(why)}），不用再点"
         act = [r for r in _live(items, waiting, ORDER_KINDS) if r.get("ticker") == t]
-        if act and k in POS_KINDS and not pre_reconcile(pj_, now or now_jst()):   # 今天已经全部成交的手动买入：对账时先记成完成，
-            act = [r for r in act if not _buy_filled(r, book, pj_)]                 # 之后才执行这条（二次复核 F2）
+        act = _settled_later(act, book, pj_, now or now_jst())   # 今天已经全部成交的手动指令：对账时先记成完成，之后才执行这条
+        #                                                          （二次复核 F2 的买入；四次复核：卖出 / 减仓 / 调仓、写买入也一样）
         if act:
             return f"{lt} 已经有一条没处理完的手动指令（{act[-1].get('id')}）：先撤回它，或等它完成"
     if k == "buy":
@@ -2407,7 +2448,8 @@ def _uncancel_why_one(cid: str, items: dict, waiting: list[dict], batch_ids=(), 
 
 NOW_NO_CANCEL = ("盘中的单已经发到交易所，撤回指令撤不了：用面板「今天要成交的单」的「撤单」撤（已经成交的部分撤不了），"
                  "或在立花网站 / 手机网站撤")
-NOW_FILLED_NO_CANCEL = "盘中的单已经全部成交（明天早上对账之后完成），撤不了"
+NOW_FILLED_NO_CANCEL = ("盘中的单已经全部成交，撤不了（下一次早上的对账之后这条完成；收盘后〔15:25 起〕写这只的新指令不用等它，"
+                        "对账之后执行）")                   # 四次复核：以前写「明天早上」（周五 / 连休前不对），也没说之后能直接写
 NOW_BUY_LAPSED = "盘中的买单已在 15:30 失效（没成交的部分不会再买）：下一次早上的对账之后这条指令结束，不用撤"
 NOW_SELL_WITHDRAWN = "盘中的单已在 15:30 失效 → 下一次开盘不再卖（下一次早上的对账之后结束；已经成交的部分照记）"
 
@@ -4027,6 +4069,21 @@ def core_cost(st: dict | None, t: str) -> dict | None:
     return {"units": units, "avg_px": pcost / units, "cost": cost, "since": since}
 
 
+def est_skip(pj: dict | None, t: str | None) -> str | None:
+    """t 今天已有成交、还没对账（live_ops.held_now 的 by_ticker）→ 不给卖出的预计收益（sell_estimate 按账本的成本 / 股数算，
+    对账之前对不上：10/16 的 1655 早上卖了 210 口，命令行按账本 1,130 口写「卖 1,060 口约 ¥742,000」，执行器对账后只卖 850 口）→ 那句话；
+    没有成交 → None。面板 /api/quotes 与 liveu.sh manual 同一个判断（2026-10-16 四次复核）。"""
+    pj = pj or {}
+    b = (pj.get("by_ticker") or {}).get(t) if t and pj.get("has") else None
+    if not b:
+        return None
+    from .live_ops import hn_sp
+    sw = pj.get("when_sp") or hn_sp(pj.get("when") or "下一次执行器运行")
+    u = "口" if b.get("kind") == "core" else "股"
+    return (f"{names.label(t)} {pj.get('day_word') or '今天'}已有成交（对账前）：成本 / {u}数{sw}对账之后才准"
+            " → 预计收益对账之后再看（现在不估）")
+
+
 def sell_estimate(book: dict | None, t: str, px: float | None = None, at: str | None = None, sm: dict | None = None,
                   shares: int | None = None) -> dict | None:
     """卖出的预计收益（2026-10-07 用户：「点击卖出全部的时候要显示预计收益 和买的时候股价和成交股价 收益率等等」；只展示、估算）。
@@ -4230,4 +4287,4 @@ __all__ = ["KINDS", "POS_KINDS", "ORDER_KINDS", "UNITS", "BUY_UNITS", "BLOCK_DEF
            "RULE_TEXT", "UNK_LATER", "UNK_LATER_BUY", "NOW_NO_CANCEL", "NOW_FILLED_NO_CANCEL", "NOW_BUY_LAPSED", "NOW_SELL_WITHDRAWN", "now_sell_withdrawn", "now_lapsed", "now_expired", "now_cancel_why",
            "now_due", "status_text", "hold_text", "rolled_over", "rolled_text", "msg_text", "entry_why", "buy_size", "requests_path", "position_pct", "target_shares", "adjust_plan",
            "cap_text", "fmt_target", "describe", "active", "lines", "signal_text", "core_pct_now",
-           "fee_jp", "core_cost", "sell_estimate", "sale_note", "est_lines", "yen_px", "TAX_PCT", "LABEL", "STATUS", "REASON_TEXT"]
+           "fee_jp", "core_cost", "est_skip", "sell_estimate", "sale_note", "est_lines", "yen_px", "TAX_PCT", "LABEL", "STATUS", "REASON_TEXT"]

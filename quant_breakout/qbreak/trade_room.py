@@ -318,13 +318,20 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
     if paused:
         notes.append("面板盘中自动下单今天暂停" + (f"（{paused}）" if isinstance(paused, str) and paused else "")
                      + "：写新的指令会恢复自动叫执行器（或在 Mac 上说「再试一次」）")
-    pos = st.get("pos") or {}
-    cores_held = {t: int(u or 0) for t, u in (st.get("core_units") or {}).items() if int(u or 0) > 0}
-    # 今天已成交的买卖（对账前的投影，只改文字）：held0、sakin、现金仍按账本 / 券商（差金決済用开盘前的持仓；2026-10-16）
+    # 今天已成交的买卖（对账前的投影）：现在写的在成交日当天对账之前执行（pre_reconcile）→ held0、sakin、现金仍按账本 / 券商
+    #（执行器当天按账本、差金決済用开盘前的持仓；只改文字）；对账之后才执行（收盘后 / 周末 / 下一个交易日 07:40 之前）→ 持仓、现金、
+    # 能凑钱的核心 ETF 按投影（= 执行器那时对过账的账本），当天的单不再算差金決済（四次复核：周一 07:00 以前说周五买进的 1482 今天不能卖）
     try:
         pjr = LO.held_now(b, tag, now=now)
     except Exception:                                      # noqa: BLE001  只是文字：算不了就当没有
         pjr = {"by_ticker": {}, "new": [], "sold_out": [], "day_word": "今天"}
+    proj = bool(pjr.get("has")) and isinstance(pjr.get("book"), dict) and not MO.pre_reconcile(pjr, now)
+    led_b = b                                              # 账本本身（_placed_filled 比账本与投影）
+    if proj:
+        b = pjr["book"]
+        st = b.get("state") or {}
+    pos = st.get("pos") or {}
+    cores_held = {t: int(u or 0) for t, u in (st.get("core_units") or {}).items() if int(u or 0) > 0}
     hn_by, hn_new, hn_gone = pjr.get("by_ticker") or {}, set(pjr.get("new") or []), set(pjr.get("sold_out") or [])
     hn_dw = pjr.get("day_word") or "今天"                  # 周末 / 早上的运行之前：「10/16（周五）」（2026-10-16 复核）
 
@@ -340,6 +347,8 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
     cr = b.get("core_rule") or {}
     gone = MO.cancelled(waiting)
     live_items = MO._live(man.get("items") or {}, waiting, MO.ORDER_KINDS)
+    if proj:                                               # 今天已全部成交、对账时就完成的指令不再算「在处理」（MO.check 同一个判断；四次复核）
+        live_items = MO._settled_later(live_items, led_b, pjr, now)
     instr = {}
     for r in live_items:
         instr.setdefault(r.get("ticker"), r)
@@ -369,7 +378,7 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
     intraday = ph in ("am", "pm")
     d = st.get("last_date")
     cur_orders = [o for o in b.get("orders") or [] if isinstance(o, dict) and o.get("decided_on") == d] \
-        if LO.fill_day_of(b) == now.date() else []
+        if LO.fill_day_of(b) == now.date() and not proj else []   # 按投影时当天的成交已经在持仓里（不重复算）
 
     def close_of(t: str) -> float:
         if t in pos:
@@ -433,8 +442,8 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
         s["via"] = "「卖出全部」/「调仓…」" if held0 > 0 else ""
         bb["via"] = "「调仓…」（加仓）" if held0 > 0 else "「买入…」"
         # 卖
+        session(s)                                         # 时段先（休市 / 已收盘），再「今天买进 / 已卖出」
         hn_mark(s, t, held0)
-        session(s)
         if sk["sell"]["why"]:
             _note(s, sk["sell"]["why"])
         left = max(0, held0 - sk["sold"])                  # 不另付钱还能卖的（例 2：持股 ≥ 合计卖出股数）
@@ -485,9 +494,9 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
         s, bb = r["sell"], r["buy"]
         s["via"] = "「固定口数…」（0 口 = 全部卖出）" if t in fixed else "「卖出全部」/「调仓…」（换算成闲置资金比例）"
         bb["via"] = "「固定口数…」/「买入…」（核心 ETF 不能用个股的「买入」：用固定口数或闲置资金比例）"
-        hn_mark(s, t, held0)
         for x in (s, bb):
             session(x)
+        hn_mark(s, t, held0)
         if sk["sell"]["why"]:
             _note(s, sk["sell"]["why"].replace("股", "口"))
         if sk["buy"]["why"]:
@@ -592,7 +601,7 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
                  + f"；钱：现在能用的现金 ¥{cash_:,.0f} + 能卖来凑钱的核心 ETF 约 ¥{f_all:,.0f}（钱是共用的：买了一只，别的就少了）")
         shown = ({r["t"] for r in held_rows} - hn_gone) | hn_new   # 拿着的只数含今天已成交（与「持仓」角标同一个数；2026-10-16 复核）；
         #                                                             held0 / sakin 仍按开盘前的持仓（差金決済）
-        why_s = (f"拿着的 {len(shown)} 只" + (f"（{pjr.get('head') or LO.hn_head(hn_dw)}）" if shown != {r["t"] for r in held_rows} else "")
+        why_s = (f"拿着的 {len(shown)} 只" + (f"（{pjr.get('head') or LO.hn_head(hn_dw)}）" if proj or shown != {r["t"] for r in held_rows} else "")
                  + f"里今天还能卖 {s_n} 只" + _miss([r for r in out.values() if r["t"] in shown and not r["sell"]["n"]], "sell"))
     why_k = (f"买 {b_n} + 卖 {s_n}" + (f" − 既能买又能卖的 {one} 只（同一只当天执行器只下一笔：只算一次）" if one else "")
              + "；换别的股票不受差金決済限制（例 3）")

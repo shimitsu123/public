@@ -425,7 +425,7 @@ def test_manual_list_prints_the_section(monkeypatch, capsys):
 def test_todays_fills_change_only_the_text():
     from test_held_now import _b1016
     b = _b1016()
-    now = dt.datetime(2026, 10, 16, 16, 0, tzinfo=JST)
+    now = dt.datetime(2026, 10, 16, 13, 0, tzinfo=JST)                         # 盘中（对账之前执行）：只改文字（16:00 起按投影：四次复核）
     rm = _room(b, now=now)
     r82, r45 = rm["per_ticker"]["1482.T"], rm["per_ticker"]["1545.T"]
     assert r82["held"] == 0 and r45["held"] == 4110                           # held0 = 账本（差金決済用开盘前的持仓）
