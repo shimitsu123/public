@@ -214,3 +214,5 @@ dialog>.conn{position:sticky;top:0;z-index:2;padding:10px 14px;border-radius:18p
 /* 盘中观测（2026-10-16）：选股页最上面「今天盘中：规则的买点（暂定）」+ 持仓每只一行（收盘卖出线离现价多远） */
 #intraday .ia-hl{font-size:17px;margin-bottom:4px} #intraday details.ia{margin:6px 0} #intraday details.ia>summary{color:var(--accent)}
 #intraday .li .chip{white-space:normal} .ia[data-intra]{margin:4px 0}
+/* 盘中等成交的单（2026-10-17）：票名闪烁 + 状态里转圈；成交 / 撤掉 / 收盘后不再有这个 class */
+.list .li.wfill .grow>b:first-child{animation:qbblink 1.2s ease-in-out infinite}.spin{display:inline-block;width:11px;height:11px;margin-right:6px;vertical-align:-1px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:qbspin .8s linear infinite}@keyframes qbblink{50%{opacity:.3}}@media (prefers-reduced-motion:reduce){.list .li.wfill .grow>b:first-child{animation:none;text-decoration:underline dotted}.spin{animation:none}}

@@ -1283,6 +1283,18 @@ def _intraday_loop(stop: threading.Event, every: float = INTRADAY_POLL_S, tick=N
             return
 
 
+WAIT_FILL = ("SENT", "PARTIAL")                    # 发送中 / 结果不明（SENDING / ERROR）= 状态不明：不转圈，照旧写「去立花核对」
+
+
+def _wait_fill(o: dict, now: dt.datetime, fday) -> bool:
+    """盘中（前場 / 後場，含 15:25〜15:30 的引け；午休、开盘前、收盘后、休市日不算）已经发出、还没成交完的成交日的单 → 「交易」那一行
+    转圈 + 票名闪烁，成交 / 撤掉 / 收盘就停（已下单 / 部分成交；2026-10-17 用户：「盘中下单后没有成交的话要一直显示加载等等的提示 … 盘后的话不用」）。只展示。"""
+    from .calendar_jp import is_open
+    n = int(o.get("sent_qty") or o.get("qty") or 0)
+    got = max(int(o.get("filled_qty") or 0), int(o.get("snap_q") or 0))
+    return fday == now.date() and o.get("status") in WAIT_FILL and got < n and is_open(now)
+
+
 def _order_rows(book: dict, now: dt.datetime, paper: bool, waiting: list, live: dict | None = None,
                 tag: str | None = None) -> tuple[list[tuple[str, str]], dict]:
     """执行器的单每笔一行（Mac 与手机同一个）：账本当前决策里执行器的单（票、买卖、股数、下法、限价、状态）。还挂着的单（SENT / PARTIAL，
@@ -1404,6 +1416,12 @@ def _order_rows(book: dict, now: dt.datetime, paper: bool, waiting: list, live: 
             note = "原先：" + note
         elif cid in (live.get("rerun") or {}):              # 模拟账户开盘撮合的窗口过了：哪次运行按成交日的开盘价撮合（复核 4）
             note = live["rerun"][cid]
+        wf = cid not in asked and cid not in dead and LO.GONE not in note and _wait_fill(o, now, f)   # 盘中等成交：转圈 + 票名闪烁（2026-10-17）
+        wline = ""
+        if wf:
+            wline = ("<div class='small'>" + escape(
+                "盘中还没成交：成交后这里自动更新（页面每 10 秒查一次）" if paper else
+                "盘中还没成交：立花的成交在执行器下一次查立花时记进来（面板不频繁去问立花）；不想等 → 「撤单」") + "</div>")
         gm = G.get(cid) or []
         lk = lkg.get(gm[0], []) if gm else []
         og = f" og' data-g='{escape(gm[0])}" if gm else ""  # 同一组的每一行：左边一条线 + 「同一组 N 笔」+ 还有哪几笔
@@ -1424,9 +1442,10 @@ def _order_rows(book: dict, now: dt.datetime, paper: bool, waiting: list, live: 
             tail = ("那一组整组撤单会一起撤这一笔" if LO.grp_why(o, book, now, paper) is None
                     else "这一笔撤不了：那一组整组撤单时卖单因此不撤")
             gline = f"<div class='small'>{escape('靠这一组卖单的钱买的（不是一起下的）：' + '、'.join(ss) + '；' + tail)}</div>"
-        rows.append((cid, f"<div class='li{og}'><div class='grow'><b>{'买' if o.get('side') == 'BUY' else '卖'} {escape(NM.qty(o.get('ticker'), f'{n:,} {unit}'))}"
-                    f"</b> <span class='chip'>{escape(chip)}</span>{gchip}"
-                    + gline
+        wcls, spin = (" wfill", "<span class='spin' aria-hidden='true'></span>") if wf else ("", "")
+        rows.append((cid, f"<div class='li{og}{wcls}'><div class='grow'><b>{'买' if o.get('side') == 'BUY' else '卖'} {escape(NM.qty(o.get('ticker'), f'{n:,} {unit}'))}"
+                    f"</b> <span class='chip'>{spin}{escape(chip)}</span>{gchip}"
+                    + wline + gline
                     + (f"<div class='neg small'>{escape(why)}</div>" if why else "")
                     + (f"<div class='small'>{escape(busy)}</div>" if busy else "")
                     + (f"<div class='small'>{escape(fixn[cid])}</div>" if cid in fixn and fixn[cid] not in shown else "")
@@ -1710,7 +1729,10 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
     tl = {"orders": rows, "fix": fix, "items": skip, "itxt": itxt, "asked": asked, "rerun": rerun, "paused": paused,
           "stuck": {c for c, r in ol["orders"].items() if r.get("cls") == "stuck"}}
     sp = _trade_split(book, waiting, now, tag, halt, tl)    # 每一行放进哪一块（render 照用这一份）；数字按它数（复核 2，2026-10-16）
-    return {**tl, "n": _split_n(sp), "busy": int(soon) + flight, "split": sp}
+    fday = LO.fill_day_of(book)
+    wfill = sum(1 for o in cur if str(o.get("cid")) not in asked and str(o.get("cid")) not in rows and _wait_fill(o, now, fday))
+    #   ↑ 盘中等成交的单（交易页在转圈）：页面每 10 秒问一次，成交了马上换掉（2026-10-17）
+    return {**tl, "n": _split_n(sp), "busy": int(soon) + flight + wfill, "split": sp}
 
 
 def _fix_met(o: dict, cur: list, st: dict, fixed, asked) -> bool:
