@@ -1761,6 +1761,8 @@ def _qpx(t: str, px: float, quotes: dict | None, now: dt.datetime, close_day) ->
     if p > 0:
         at = str(q.get("at") or "")
         hm = (at[11:16] if at[:10] == now.date().isoformat() else f"{at[5:7]}/{at[8:10]} {at[11:16]}") if len(at) >= 16 else ""
+        if q.get("src") == "rt":                            # 确认框取的立花实时价（panel.rt_quotes；2026-10-17）
+            return p, f"立花实时 {hm + ' ' if hm else ''}的价"
         return p, f"Yahoo {hm + ' ' if hm else ''}的价，约晚 {DELAY_MIN} 分钟"
     return px, f"{str(close_day or '')[5:].replace('-', '/') or '最近'} 收盘"
 

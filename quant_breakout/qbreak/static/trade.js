@@ -1,11 +1,11 @@
 // qbreak 操作面板：trade.js（浏览器原生 ES 模块；由 qbreak/panel.py 以 /static/trade.js 提供；不要用构建工具）
 import { $, CFG, NOTE, api, closeAll, coreShow, done, estLine, fmt, nameify, nd, plBox, reloadPage, sheet, tlab, toast, tqty, yen } from './core.js';
 import { SUBS, TFS, drawK, setSUB, setTF, showK } from './kline.js';
-import { buyLive, estOf, loadSQ } from './quotes.js';
+import { buyLive, estOf, loadSQ, rtQ } from './quotes.js';
 
 let ASK=null, CUR=null;
 function ask(title, body, okText, opt){
-  opt=opt||{}; $('#ask-title').textContent=nameify(title); $('#ask-body').textContent=nameify(body); plBox($('#ask-pl'), opt.pl||null);   // 代码带名字（2026-10-15 用户：「只有股票代号的话不知道是哪个股票」）
+  opt=opt||{}; { const r=$('#ask-rt'); if(r && !opt.rt) r.hidden=true; } $('#ask-title').textContent=nameify(title); $('#ask-body').textContent=nameify(body); plBox($('#ask-pl'), opt.pl||null);   // 代码带名字（2026-10-15 用户：「只有股票代号的话不知道是哪个股票」）
   const ok=$('#ask-ok'); ok.textContent=okText||'确定'; ok.className='btn '+(opt.danger?'danger':'primary');
   const no=$('#ask-no'); if(no) no.textContent=opt.cancel||'取消';         // 「取消下单」（确认下单框；2026-10-15）/ 平时「取消」
   const inp=$('#ask-input'); inp.hidden=!opt.input; inp.value=''; inp.placeholder=opt.input||'';
@@ -93,6 +93,12 @@ function adjBar(){                                                         // �
   note.textContent='一格 = '+fmt(G*LOT)+' '+U+(G>1 ? '（拖动按 '+fmt(LOT)+' '+U+'一步）' : '')
     +' · 半透明 留着 · 实心 要加 · 红框 要卖 · 斜线 超过上限 · '+capTxt;
   r.setAttribute('aria-valuetext', '目标 '+fmt(tgt*LOT)+' '+U+'（'+tgt+' 个单元）；现在 '+fmt(ADJ.shares)+' '+U);
+}
+function adjRt(q){                                                        // 调仓 / 固定口数框：立花实时价到了 → 按它重算（框还开着、还是这只票）
+  if(!ADJ || !q || !(q.px>0) || !$('#dlg-adj').open) return;
+  ADJ.px=q.px; const c=$('#adj-cur');
+  if(c) c.textContent=c.textContent.replace(/约 ¥[\d,]+/, '约 '+yen(ADJ.shares*ADJ.px)).replace(/约占权益 [\d.]+%|约占权益 —/, '约占权益 '+pctOf(ADJ.shares));
+  adjPrev();
 }
 function adjPrev(){
   const go=$('#adj-go'), out=$('#adj-prev'), c=ADJ, cap=adjCap(), n=adjTarget();
@@ -417,7 +423,7 @@ document.addEventListener('click', async e=>{
     $('#sell-title').textContent='卖出 '+tlab(d.t, d.name);                // 「7203 トヨタ自動車」（不带 .T；名字查不到只写代码）
     $('#sell-desc').textContent='全部 '+fmt(+d.shares)+' 股 · '+CFG.when+'卖出'+NOTE;
     plBox($('#sell-pl'), estOf(d.t));                                      // 买入成交价 → 现价 / 预计卖出 → 预计收益与收益率
-    sheet('#dlg-sell'); return;
+    sheet('#dlg-sell'); rtQ(d.t, '#sell-rt', false, ()=>{ if(CUR && CUR.t===d.t) plBox($('#sell-pl'), estOf(d.t)); }); return;
   }
   if(a==='sell-go'){
     const bd=document.querySelector('input[name=bd]:checked').value; closeAll();
@@ -437,9 +443,10 @@ document.addEventListener('click', async e=>{
       else { ru.innerHTML=ADJ_RULE; $('#adj-cap').textContent=CFG.cap; } }
     $('#adj-val').value='';                                                // 从这只票现在的股数开始（不带上一只票输过的数）
     const L=ALOT(), r=$('#adj-range'); r.max=Math.max(1, Math.ceil(Math.max(adjCap(), ADJ.shares, L)/L))*L; r.step=L; r.value=ADJ.shares;   // 整数个单元
-    adjUnit('shares'); sheet('#dlg-adj'); return;
+    adjUnit('shares'); sheet('#dlg-adj'); rtQ(d.t, '#adj-rt', false, adjRt); return;
   }
   if(a==='core-sell'){
+    const t0=d.t; setTimeout(()=>rtQ(t0, '#ask-rt', false, ()=>{ if($('#dlg-ask').open) plBox($('#ask-pl'), estOf(t0)); }), 0);
     const q=await ask('卖出全部 '+tlab(d.t, d.name), '全部 '+fmt(+d.shares)+' 口：'+CFG.when+'卖出'+coreFx(0, d.t)
       +'\n卖出后停买闲置资金 ETF（钱留现金）；出现买入信号会提醒你，你点「确认买入」才买'+NOTE, '卖出', {danger:true, pl:estOf(d.t)});
     if(q.ok) done(await post({book:CFG.book, kind:'sell', ticker:d.t})); return;
@@ -490,7 +497,7 @@ document.addEventListener('click', async e=>{
     { const r=$('#buy-range'), L=BUY.lot; r.min=L; r.step=L; r.max=Math.max(L, buyCap()); }
     { const lock=BUY.fullOnly; $('#buy-range').disabled=lock; $('#buy-seg').hidden=lock; }   // 名额已满：只能「其他全部卖出」，股数由执行器定
     if(BUY.fullOnly){ FUND_MODE='all'; buyUnit('shares'); } else buyUnit('rule');
-    sheet('#dlg-buy'); buyLive(); loadSQ(); return;            // 现价 + 现在买按什么价（Yahoo，约晚 20 分钟）
+    sheet('#dlg-buy'); buyLive(); loadSQ(); rtQ(d.t, '#buy-rt', true); return;            // 现价 + 现在买按什么价（Yahoo，约晚 20 分钟）
   }
   if(a==='buy-unit'){ buyUnit(d.u); return; }
   if(a==='buy-step'){ if(FUND_MODE==='all') return; if(BUY.unit!=='rule'){ const n=buyTarget(); buyShow(Math.max(BUY.lot, (n==null||n<=0 ? BUY.lot : n)+(+d.d)*BUY.lot)); } buyPrev(); return; }
@@ -606,8 +613,9 @@ document.addEventListener('click', async e=>{
       ru.textContent='拖动滑条或输入目标（口数 / 金额 / 占总权益 %），按单元（'+fmt(lot)+' 口）取整；最右边 = 总权益全部。'+NOTE.trim(); }
     $('#adj-val').value='';
     const r=$('#adj-range'); r.max=Math.max(1, Math.ceil(Math.max(adjCap(), cur, lot)/lot))*lot; r.step=lot; r.value=cur;
-    adjUnit('shares'); sheet('#dlg-adj'); return;
+    adjUnit('shares'); sheet('#dlg-adj'); rtQ(d.t, '#adj-rt', false, adjRt); return;
   }
+  if(a==='restore'){ done(await post({book:CFG.book, kind:'restore'})); return; }   // 恢复自动交易规则（「更多」；服务器先给确认框，2026-10-17）
   if(a==='unblock-batch'){                                                // 「全部换成」卖掉的票：只解除这一批的不自动买回（2026-10-13；说明由页面按账本写好）
     const ps=(d.ids||'').split(',').filter(Boolean);                      // 「代码:设定 id」：设定换了 / 已经解除的服务器跳过
     const q=await ask('恢复按规则：「全部换成 '+d.x+'」卖出的 '+ps.length+' 只', (d.msg||'')+NOTE, '恢复按规则');

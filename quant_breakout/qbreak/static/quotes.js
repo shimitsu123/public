@@ -5,7 +5,42 @@ import { req } from './net.js';
 import { BUY } from './trade.js';
         // 预计收益的百分比（负号与金额一样用 −）
 let QD = null;                                                             // 最近一次取到的现价（/api/quotes）：卖出的预计收益优先用它
-export function estOf(t){ return (QD && QD.rows && QD.rows[t] && QD.rows[t].est) || (CFG.est||{})[t] || null; }
+export function estOf(t){ const r=rtOf(t); return (r && r.q.est) || (QD && QD.rows && QD.rows[t] && QD.rows[t].est) || (CFG.est||{})[t] || null; }
+// ── 确认框的立花实时价（2026-10-17 用户「想定时取得的话用yahoo，下单的时候在确认页面的时候用立花能看到实时价格 k线也可以更新到那时候」）──
+// 定时的现价照旧 Yahoo；打开卖出 / 调仓 / 买入框时（盘中）才要一次 /api/quotes?rt=票（服务器登录立花只读取一次，60 秒内用缓存）→
+// 框里的价 / 预计收益 / 限价按它算，K 线今天这一根更新到那个时刻；取不到 → 框里写原因、照旧 Yahoo。盘外不取（框里不显示这一行）。
+const RT = {};                                                            // 票 → {q, j, ms}
+export function rtOf(t){ const r=RT[t]; return r && Date.now()-r.ms<90000 ? r : null; }
+let RTN = 0;
+function rtShow(el, cls, text){
+  el.hidden=false; el.className='rtl small'+(cls ? ' '+cls : ''); el.textContent='';
+  if(cls==='ld') nd('span', 'spin', null, el);
+  nd('span', null, text, el);
+}
+function rtText(q){ return '立花实时 '+String(q.at||'').slice(11,16)+' · '+pxs(q.px)+(q.chg_pct!=null ? ' · '+pcs(q.chg_pct) : ''); }
+export async function rtQ(t, box, sg, onq){                               // box：框里那一行的 id；sg：建议的股票（没拿着）；onq(q)：取到之后框里重算
+  const el=$(box); if(!el) return;
+  el.hidden=true; const n=++RTN;
+  if(!CFG.rt || !t) return;
+  const hit=rtOf(t); if(hit){ rtShow(el, 'ok', rtText(hit.q)); if(onq) onq(hit.q); return; }
+  rtShow(el, 'ld', '取立花实时价…');
+  for(let i=0; i<3; i++){
+    let x=null;
+    try{ x=await req('/api/quotes?book='+encodeURIComponent(CFG.book)+'&rt='+encodeURIComponent(t)+(sg ? '&t='+encodeURIComponent(t) : ''),
+                     {credentials:'same-origin', cache:'no-store', tmo:11000}); }catch(e){}
+    if(n!==RTN) return;                                                    // 已经换了一个框
+    const j=x && x.r.ok ? x.j : null, q=j && j.rows ? j.rows[t] : null, r=(j && j.rt) || {};
+    if(j && !j.live){ el.hidden=true; return; }                            // 盘外：不取（下单按开盘价）
+    if(q && q.src==='rt'){
+      RT[t]={q:q, j:j, ms:Date.now()};
+      if(sg) SQ={...j, rows:{...((SQ && SQ.rows) || {}), [t]:q}};
+      rtShow(el, 'ok', rtText(q)); liveK({[t]:q}, j.live); if(onq) onq(q); if(sg) buyLive(); return;
+    }
+    if(r.pending){ await new Promise(res=>setTimeout(res, 3000)); continue; }
+    rtShow(el, 'off', (r.why || (j ? '立花没回这只的现在值' : 'Mac 连不上'))+' → 按 Yahoo（约晚 20 分钟）'); return;
+  }
+  rtShow(el, 'off', '立花还没回 → 按 Yahoo（约晚 20 分钟）');
+}
 // ── 现价（/api/quotes：Yahoo 1 分钟线，约晚 20 分钟；盘中每 1 分钟刷新，其他时间每 10 分钟）──
 // 持仓：现价 + 卖的话按什么价（下单时立花用实时现价，见 MO.order_basis）+ 晚了几分钟的大概范围 + 预计收益；
 // 建议的股票（2026-10-07 用户「建议的股票中也要能看到当天实时的K线 点击买入的时候也可以看到当前的价格」）：打开的 K 线 / 买入框里的才取（一次最多 12 只）
@@ -44,7 +79,7 @@ function showQ(j){
 }
 let SQ = null;                                                            // 建议的股票最近一次取到的现价
 let SQERR = false;                                                        // 最近一次取现价失败了（买入框写「取不到」，不一直「载入中」）
-function priceHead(q){ return '现价 '+pxs(q.px)+'（'+hmOf(q)+(q.today ? '，约晚 20 分钟' : '')+'）'+(q.chg_pct!=null ? ' · 比收盘 '+pcs(q.chg_pct) : ''); }
+function priceHead(q){ return '现价 '+pxs(q.px)+'（'+(q.src==='rt' ? '立花实时 ' : '')+hmOf(q)+(q.today && q.src!=='rt' ? '，约晚 20 分钟' : '')+'）'+(q.chg_pct!=null ? ' · 比收盘 '+pcs(q.chg_pct) : ''); }
 function buyLines(q, j, full){                                             // 建议的股票：现在买按什么价（规则同一条：≤ 收盘 ×1.03）；full = 买入框（多写一行下单依据）
   const live=!!(j && j.live), b=q.buy||{}, B=(j && j.basis && j.basis.BUY) || '', out=[];
   if(b.over) out.push('★ 现价已超过收盘 ×1.03（'+pxs(b.cap)+'）：现在不买（规则和手动买入都一样）');

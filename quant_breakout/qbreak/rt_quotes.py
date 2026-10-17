@@ -3,6 +3,8 @@
 只在「一次运行取一次」的地方用（每天几次）：
   - 盘中的手动指令（--phase now）：成交价 = 立花的現在値（以前 = Yahoo 最新的 1 分钟线，约晚 20 分钟）
   - 成交日的开盘撮合（--phase open）：开盘价 = 立花的始値 / 高値 / 安値（以前 = Yahoo 1 分钟线今天第一根，和正式开盘价常不一样）
+  - 面板的确认框（2026-10-17 用户「想定时取得的话用yahoo，下单的时候在确认页面的时候用立花能看到实时价格 k线也可以更新到那时候」）：
+    打开卖出 / 调仓 / 买入 / 固定口数的框时取一次（qbreak/panel.rt_quotes；同一只 60 秒内不再登录，没取成 60 秒内不再试）
 面板每分钟的报价、盘中观测每 5 分钟不用它：立花 2026-03-10「APIご利用に関するお願い」请用户盘中避免频繁取价（负荷大可能停用 API），
 而且同一账户只能一个会话（登录会把执行器踢掉）→ 那几处要另做（EVENT I/F 推送 + 一个进程拿会话），这里不做。
 
@@ -22,6 +24,7 @@ WAIT_S = 20.0
 SRC_RT = "立花实时"
 SRC_YH = "Yahoo 1 分钟线（约晚 20 分钟）"
 PURPOSE = ("模拟账户取实时价（只读）", "取现价 / 始値 → 马上登出（不发单）→ 模拟账户按这个价成交")
+PANEL_PURPOSE = ("面板确认框取实时价（只读）", "取现价 → 马上登出（不发单）→ 确认框与 K 线按这个价显示")
 
 
 def enabled() -> bool:
@@ -33,7 +36,7 @@ def _default_make():
     return TachibanaBroker(demo=False, dry_run=True, require_arm=True)
 
 
-def tachibana_detail(tickers, make=None, wait_s: float = WAIT_S) -> tuple[dict, str | None]:
+def tachibana_detail(tickers, make=None, wait_s: float = WAIT_S, purpose: tuple | None = None) -> tuple[dict, str | None]:
     """登录立花本番（只读）→ quote_detail → 登出。→ ({票: {price, open, high, low, prev_close}}, 没取到的原因 或 None)。"""
     tickers = sorted(set(tickers))
     if not tickers:
@@ -46,7 +49,7 @@ def tachibana_detail(tickers, make=None, wait_s: float = WAIT_S) -> tuple[dict, 
     os.environ["QBREAK_TACHIBANA_SESSION_WAIT_S"] = str(wait_s)       # 执行器拿着会话：只等一会儿，不拖住面板 / 这次运行
     try:
         b = (make or _default_make)()
-        b.purpose = PURPOSE                                            # 登录推送写这个（qbreak/brokers/tachibana.push_login）
+        b.purpose = purpose or PURPOSE                                 # 登录推送写这个（qbreak/brokers/tachibana.push_login）
         b.login()
         return b.quote_detail(list(tickers)), None
     except Exception as e:                                             # noqa: BLE001  没有凭证 / 会话被占 / 登录失败 → 照旧 Yahoo

@@ -197,13 +197,13 @@ def _head(title: str) -> str:
 def _dialogs(paper: bool, cap: float = MO.CAP_PCT) -> str:
     bd = [("20", "20 个交易日（默认）"), ("5", "5 个交易日"), ("60", "60 个交易日"), ("-1", "一直（直到解除）"), ("0", "不限制")]
     sim = "模拟账户：手动操作后会和云端模拟盘不一致。" if paper else ""
-    return ("<dialog id='dlg-sell'><div class='sheet'><h3 id='sell-title'></h3><div id='sell-desc'></div><div id='sell-pl' class='pl' hidden></div>"
+    return ("<dialog id='dlg-sell'><div class='sheet'><h3 id='sell-title'></h3><div id='sell-rt' class='rtl small' role='status' hidden></div><div id='sell-desc'></div><div id='sell-pl' class='pl' hidden></div>"
             "<fieldset><legend class='muted'>之后不自动买回</legend>"
             + "".join(f"<label><input type='radio' name='bd' value='{v}'{' checked' if v == '20' else ''}> {t}</label>" for v, t in bd)
             + "</fieldset><div class='muted small'>卖出的钱按规则：有新信号就买新票，没有就进闲置资金 ETF。</div>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn danger' data-act='sell-go'>确认卖出</button></div>"
             "</div></dialog>"
-            "<dialog id='dlg-adj'><div class='sheet'><h3 id='adj-title'></h3><div id='adj-cur' class='muted'></div>"
+            "<dialog id='dlg-adj'><div class='sheet'><h3 id='adj-title'></h3><div id='adj-rt' class='rtl small' role='status' hidden></div><div id='adj-cur' class='muted'></div>"
             "<div style='margin-top:10px'><div class='seg' id='adj-seg' role='group' aria-label='目标的单位'>"
             "<button data-act='adj-unit' data-u='shares' aria-pressed='true' id='adj-u-sh'>股数</button>"
             "<button data-act='adj-unit' data-u='yen' aria-pressed='false'>金额 ¥</button>"
@@ -218,7 +218,7 @@ def _dialogs(paper: bool, cap: float = MO.CAP_PCT) -> str:
             "加仓是你自己的决定（「赢家加仓」研究没有通过）；加仓后成本按股数平均，止损不变。" + sim + "</div>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn primary' id='adj-go' data-act='adj-go'>确认</button></div>"
             "</div></dialog>"
-            "<dialog id='dlg-buy'><div class='sheet'><h3 id='buy-title'></h3><div id='buy-sig'></div><div id='buy-live' class='small pl'></div>"
+            "<dialog id='dlg-buy'><div class='sheet'><h3 id='buy-title'></h3><div id='buy-rt' class='rtl small' role='status' hidden></div><div id='buy-sig'></div><div id='buy-live' class='small pl'></div>"
             "<div style='margin-top:10px'><div class='seg' id='buy-seg' role='group' aria-label='买多少'>"
             "<button data-act='buy-unit' data-u='rule' aria-pressed='true'>按规则</button>"
             "<button data-act='buy-unit' data-u='shares' aria-pressed='false'>股数</button>"
@@ -233,7 +233,7 @@ def _dialogs(paper: bool, cap: float = MO.CAP_PCT) -> str:
             "下单前执行器再查资格、名额、决算前；买入后按规则止损、离场。</div>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn primary' id='buy-go' data-act='buy-go'>确认买入</button></div>"
             "</div></dialog>"
-            "<dialog id='dlg-ask'><div class='sheet'><h3 id='ask-title'></h3><div id='ask-pl' class='pl' hidden></div><div id='ask-body'></div>"
+            "<dialog id='dlg-ask'><div class='sheet'><h3 id='ask-title'></h3><div id='ask-rt' class='rtl small' role='status' hidden></div><div id='ask-pl' class='pl' hidden></div><div id='ask-body'></div>"
             "<input type='text' id='ask-input' maxlength='120' hidden>"
             # 另外的选择（撤凑钱的卖单：「只撤卖单」「撤单并恢复按规则」；D2，2026-10-15）：平时不显示
             "<div class='row' id='ask-alts' hidden><button class='btn' id='ask-alt' data-act='ask-alt' hidden></button>"
@@ -2306,7 +2306,8 @@ def _trade_sections(sp: dict, orows: list, irows: list, meta: dict, now: dt.date
 
 def _badges(book: dict, st: dict, sm: dict, waiting: list, now: dt.datetime, tag: str | None = None,
             live: dict | None = None) -> dict:
-    """标签上的数字：持仓 = 拿着的只数；交易 = 还会做事的单与指令（_trade_live：撤了 / 不会下单的不算；2026-10-15）；消息 = 24 小时内的提醒。"""
+    """标签上的数字：持仓 = 拿着的只数；交易 = 还会做事的单与指令（_trade_live：撤了 / 不会下单的不算；2026-10-15）；消息 = 24 小时内的提醒；
+    更多 = 没按自动交易规则的设定几样。"""
     out = {}
     n = len(st.get("pos") or {}) + sum(1 for u in (st.get("core_units") or {}).values() if int(u or 0) > 0)
     if n:
@@ -2323,6 +2324,13 @@ def _badges(book: dict, st: dict, sm: dict, waiting: list, now: dt.datetime, tag
             out["news"] = k
     except Exception:                                      # noqa: BLE001
         pass
+    if tag and tag not in READONLY:                        # 更多 = 没按自动交易规则的设定几样（「恢复自动交易规则」；2026-10-17）
+        try:
+            k = len(restore_plan(tag, book, sm, now)["chips"])
+            if k:
+                out["more"] = k
+        except Exception:                                  # noqa: BLE001  只是标签上的数
+            pass
     return out
 
 
@@ -2919,6 +2927,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                     _fix_undo(book, tag, now, rf[4:], str(x_.get("what") or ""), str(x_.get("reason") or "")) if rf.startswith("fix:") else "")
     H.extend(_trade_sections(sp, orows, rows, ometa, now, paper, bool(halt), bhtml, bn, old_n, xbtn))
     H.append(PANE + "more")
+    H.append(_restore_card(tag, book, sm, now))             # 没按自动交易规则时才有（2026-10-17）
     if halt:
         hw = sorted((x for x in [it for it in (man.get("items") or {}).values() if it.get("status") == "pending"] + list(waiting)
                      if x.get("kind") in MO.ORDER_KINDS and x.get("id") not in dropped), key=lambda x: str(x.get("at") or ""))
@@ -2976,6 +2985,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
            "real": real,                                                                   # 真钱（立花本番）：确认框写明
            "sq_max": SG_MAX,                                                               # 建议的股票的现价一次最多取几只（quotes.js）
            "when": when, "eq": eq or 0, "cap": cap, "lot": MO.LOT, "live": MO.timing(now)[0] == "now",   # 盘中：现价每 1 分钟刷新
+           "rt": tag not in READONLY and _rt_enabled(),      # 确认框取立花实时价（盘中才真的去取；2026-10-17）
            "room": bool(rm),                                                               # 有「今天还能买几次」的卡片 → room.js 定时刷新（D6）
            "intra": True, "intra_live": bool((iv or {}).get("live")),                      # 盘中观测：intraday.js 交易时段每 1 分钟、其他 10 分钟刷新
            "cores": {t: {"cur": int((pj.get("core_units") or {}).get(t, 0)), "u100": int(u100s.get(t, 0)),   # 含今天已成交（2026-10-16）
@@ -3341,6 +3351,12 @@ def _fix_quotes(tag: str, tickers, now: dt.datetime, fetch=None, wait: float = 3
     return out
 
 
+def _fix_rt(tickers, now: dt.datetime, q: dict) -> dict:
+    """确认下单框：盘中先用立花实时价（rt_quotes；打开调仓框时多半已经取过 → 缓存，不再登录），没有的照旧 Yahoo / 收盘（2026-10-17）。"""
+    rq, _why, _p = rt_quotes(list(tickers), now, wait=5.0)
+    return {**(q or {}), **rq} if rq else (q or {})
+
+
 def _req_reply(ok: bool, msg: str, rec: dict | None) -> tuple[int, dict]:
     """/api/request 的回应（本机与手机共用）：要先确认（固定口数 / 恢复按规则：submit 回 need_confirm）→ 200 + ok:false + 确认框的内容，
     什么都没写（2026-10-15 复核：以前 409，每次「固定口数…」浏览器控制台都记一条资源载入错误，其实没出错）；
@@ -3379,6 +3395,103 @@ def _written(msg, rec: dict | None) -> str:
     return msg + (f"（指令 {rec['id']}）" if rec.get("id") else "")
 
 
+# ─────────── 恢复自动交易规则（2026-10-17 用户：「更多里面加一个如果现在没有遵循自动交易规则的话要出现一个恢复自动交易规则的button」）───────────
+# 没按规则 = 一直有效的手动设定：核心 ETF 固定口数、闲置资金比例 ≠ 100%（含停买 0%）、手动卖出后的「不自动买回」。
+# 一次恢复 = 每样写一条平常的指令（固定口数「恢复按规则」/ 比例 100% / 解除不买回），先给「确认」框（会怎样、什么时候），点了才写；
+# 还在等的手动买卖指令不动（要不做 →「交易」里撤回）；「全部换成」还在处理 → 不做（等它做完 / 先撤回那一批）。
+def restore_plan(tag: str, book: dict | None, sm: dict | None = None, now: dt.datetime | None = None, source: str = "panel") -> dict:
+    """→ {"items": [(指令, 一句话)], "skip": [写不了的理由], "busy": 「全部换成」还在处理的理由 或 None, "chips": [(样式, 文字)]}。"""
+    now = now or now_jst()
+    man = (book or {}).get("manual") or {}
+    cand, chips = [], []
+    fixed = MO.core_fixed(book, tag)
+    for t in sorted(fixed):
+        cand.append(({"kind": "corefix", "ticker": t, "clear": True},
+                     f"{NM.label(t)}：取消固定 {int(fixed[t]):,} 口 → {MO.corefix_clear_text(book, t, tag, now)}"))
+        chips.append(("warn", f"{NM.label(t)} 固定 {int(fixed[t]):,} 口"))
+    pct = MO.core_pct_now(tag, book)
+    if abs(pct - 100.0) > 0.005:
+        info = MO.resume_info(book, tag, now, 100.0) if pct <= 0 else None
+        cand.append(({"kind": "core", "pct": 100},
+                     f"闲置资金比例 {pct:g}% → 100%（照规则）" + (f"：{info['text']}" if info and info.get("text") else "")))
+        chips.append(("bad" if pct <= 0 else "warn", "停买闲置资金 ETF" if pct <= 0 else f"闲置资金比例 {pct:g}%"))
+    lift = MO.lifting(tag, book)
+    for t, b in sorted((man.get("blocks") or {}).items()):
+        if t in lift:
+            continue
+        cand.append(({"kind": "unblock", "ticker": t, **({"block_id": b["id"]} if (b or {}).get("id") else {})},
+                     f"{NM.label(t)}：解除不自动买回（{MO.block_text(b)}）→ {MO.next_decision(now)}；不会马上买回，规则出买入信号才买"))
+        chips.append(("warn", f"{NM.label(t)} 不买回"))
+    la = MO.live_allin(tag, book)
+    busy = MO.allin_busy_text(la) if la else None
+    items, skip = [], []
+    for r, txt in cand:
+        try:
+            rec = MO.normalize({**r, "source": source})
+        except ValueError as e:
+            skip.append(f"{txt.split('：')[0]}：{e}")
+            continue
+        w = MO.check(rec, book, tag, sm=sm, now=now)
+        if w:
+            skip.append(f"{txt.split('：')[0]}：{w}")
+            continue
+        items.append((rec, txt))
+    return {"items": items, "skip": skip, "busy": busy, "chips": chips}
+
+
+def _restore_token(plan: dict) -> str:
+    import hashlib
+    key = [[r.get(k) for k in ("kind", "ticker", "pct", "clear", "block_id")] for r, _t in plan["items"]] + [plan["skip"]]
+    return hashlib.sha256(json.dumps(key, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:20]
+
+
+def _submit_restore(tag: str, book: dict, sm: dict, body: dict, now: dt.datetime | None, source: str) -> tuple[bool, str, dict | None]:
+    pv = restore_plan(tag, book, sm, now, source)
+    if pv["busy"]:
+        return False, f"没写：{pv['busy']}", None
+    if not pv["items"]:
+        return False, "没写：" + ("；".join(pv["skip"]) if pv["skip"] else "现在已经全部按自动交易规则（没有固定口数 / 改过的比例 / 不买回）"), None
+    tok = _restore_token(pv)
+    got = str(body.get("confirm") or "")
+    if got != tok:
+        n0 = now or now_jst()
+        text = ("\n".join(f"・{t}" for _r, t in pv["items"])
+                + ("\n\n写不了（不动）：\n" + "\n".join(f"・{x}" for x in pv["skip"]) if pv["skip"] else "")
+                + f"\n\n什么时候：{MO.when_text(n0)}（固定口数 / 比例照它们平常的时段；解除不买回 = {MO.next_decision(n0)}）"
+                + "\n还在等的手动买卖指令不动（要不做：「交易」里撤回）；HALT 不动。")
+        return False, FIX_CONFIRM_MSG, {"need_confirm": True, "confirm": {
+            "title": "恢复自动交易规则", "text": text, "token": tok, "danger": True, "changed": bool(got)}}
+    out = MO.append_many(tag, [r for r, _t in pv["items"]], clock=(lambda: now) if now else None)
+    return True, (f"已写：恢复自动交易规则（{len(out)} 条：{'、'.join(MO.LABEL.get(r['kind'], r['kind']) for r in out)}；"
+                  f"指令 {out[0]['id']} 起）" + (f"；没写：{'；'.join(pv['skip'])}" if pv["skip"] else "")), out[0]
+
+
+def _restore_card(tag: str, book: dict | None, sm: dict | None, now: dt.datetime) -> str:
+    """「更多」：没按自动交易规则时才出现（一直有效的手动设定 → 每样一个标签 + 「恢复自动交易规则」按钮）。"""
+    if tag in READONLY:
+        return ""
+    pv = restore_plan(tag, book, sm, now)
+    if not pv["chips"]:
+        return ""
+    ch = "".join(f"<span class='chip {c}'>{escape(x)}</span>" for c, x in pv["chips"])
+    if pv["busy"]:
+        act = f"<button class='btn' disabled>恢复自动交易规则</button><div class='muted small'>{escape(NM.annotate(pv['busy']))}</div>"
+    elif not pv["items"]:
+        act = "<button class='btn' disabled>恢复自动交易规则</button>" + _tip("<br>".join(escape(NM.annotate(x)) for x in pv["skip"]))
+    else:
+        act = "<button class='btn primary' data-act='restore'>恢复自动交易规则</button>" + _tip(
+            "点了先列出会怎样（买 / 卖什么、什么时候），再点「确认」才写；还在等的手动买卖指令、HALT 不动。")
+    return (f"<section class='card' id='restore'><h2>没按自动交易规则 <span class='chip warn'>{len(pv['chips'])}</span></h2>"
+            f"<div class='chips'>{ch}</div><div class='row' style='margin-top:8px'>{act}</div></section>")
+
+
+def _tip(html: str, label: str = "说明") -> str:
+    """说明收进「ⓘ」（2026-10-17 用户：解释太多影响重点 → 平时只看数字 / 颜色 / 标签，点 ⓘ 才展开）：点一下展开、再点收起（手机也能用）。"""
+    if not html:
+        return ""
+    return f"<details class='ii'><summary aria-label='{escape(label)}' title='{escape(label)}'>ⓘ</summary><div class='iib small'>{html}</div></details>"
+
+
 def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fetch=None) -> tuple[bool, str, dict | None]:
     """页面的一次提交 → (成功?, 说明, 写进去的指令)。与 run.py manual 相同的检查。source：panel（Mac）/ phone（手机）。
     固定口数 / 恢复按规则（kind corefix；固定的 ETF 上点的卖出 / 减仓 / 调仓换算成的也算）：body 没带 confirm（= 确认框给的 token）或
@@ -3396,6 +3509,8 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
         if why:
             return False, why, None
     book, sm = _load(tag)
+    if str(body.get("kind") or "") == "restore":            # 恢复自动交易规则（「更多」；先确认）
+        return _submit_restore(tag, book, sm, body, now, source)
     if str(body.get("kind") or "") == "unblock" and isinstance(body.get("tickers"), list) and body["tickers"]:   # 一次解除一批（「恢复按规则」）
         recs, skip, seen = [], [], set()                    # 「代码:设定 id」：页面看到之后设定换了 / 已经解除的跳过（2026-10-13）；全都不行才拒绝
         for x in body["tickers"][:20]:
@@ -3519,7 +3634,8 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
         pv = MO.corefix_preview(book, tag, rec, n0, sm=sm, stock_sells=ss, halt=halt)
         got = str(body.get("confirm") or "")
         if got != pv["token"]:
-            q = _fix_quotes(tag, [rec["ticker"]] + [m["t"] for m in pv["plan"]["moves"]], n0, fetch)
+            tks = [rec["ticker"]] + [m["t"] for m in pv["plan"]["moves"]]
+            q = _fix_rt(tks, n0, _fix_quotes(tag, tks, n0, fetch))
             if q:
                 pv = MO.corefix_preview(book, tag, rec, n0, sm=sm, stock_sells=ss, quotes=q, halt=halt)
             return False, FIX_CONFIRM_MSG, {"need_confirm": True, "confirm": {
@@ -4276,12 +4392,124 @@ def _held(tag: str, t: str) -> bool:
 
 
 def _live_bar(tag: str, t: str) -> dict | None:
-    """现价缓存里这只票最新的一条（{"px", "at", "bar"}）；没取过 → None。"""
+    """现价缓存里这只票最新的一条（{"px", "at", "bar"}）；没取过 → None。确认框取过立花实时价、比 Yahoo 那条新（at 晚）→ 用立花的
+    （K 线今天这一根更新到那个时刻；量用 Yahoo 那根的，立花不给量；2026-10-17）。"""
     with _QUOTE_LOCK:
         hits = [c for k, c in _QUOTE_CACHE.items() if k[0] == tag and (c[1] or {}).get(t)]
-    if not hits:
-        return None
-    return max(hits, key=lambda c: c[0])[1][t]
+    yh = max(hits, key=lambda c: c[0])[1][t] if hits else None
+    rt = _rt_row(t)
+    if rt is not None and (yh is None or _at_of(rt.get("at")) > _at_of(yh.get("at"))):
+        yb = (yh or {}).get("bar") or {}
+        if yb.get("d") == (rt.get("bar") or {}).get("d"):
+            rt = {**rt, "bar": {**rt["bar"], "v": int(yb.get("v") or 0)}}
+        return rt
+    return yh
+
+
+def _at_of(at) -> dt.datetime:
+    try:
+        a = dt.datetime.fromisoformat(str(at))
+    except (TypeError, ValueError):
+        return dt.datetime.min.replace(tzinfo=JST)
+    return a if a.tzinfo else a.replace(tzinfo=JST)
+
+
+# ─────────── 确认框的立花实时价（2026-10-17 用户：「想定时取得的话用yahoo，下单的时候在确认页面的时候用立花能看到实时价格
+#             k线也可以更新到那时候」）───────────
+# 定时的现价（每 1 / 10 分钟）照旧 Yahoo（约晚 20 分钟）；打开卖出 / 调仓 / 买入 / 固定口数的框时（/api/quotes?rt=票）才登录立花本番
+# 只读取一次（rt_quotes.tachibana_detail：不发单、取完登出、登录推一条「面板确认框取实时价」）。立花 2026-03-10 请盘中避免频繁取价 →
+# 同一只 RT_TTL_S 秒内用缓存、没取成 RT_FAIL_GAP_S 秒内不再试、同一时间只登录一次；盘外不取（现价就是最近的成交，下单按开盘价）。
+RT_TTL_S = 60.0
+RT_FAIL_GAP_S = 60.0
+RT_WAIT_S = 8.0                                             # 请求最多等这么久（页面 12 秒放弃）；没等到 → 先回 Yahoo，取到的放进缓存（页面再要一次）
+RT_LOCK_WAIT_S = 4.0                                        # 执行器 / 别的进程拿着立花本番的会话锁：只等这么久（执行器优先）
+_RT: dict = {"rows": {}, "fail": -1e9, "why": None, "flight": None}   # rows：票 → (单调时刻, {"px","at","bar","src"})
+_RT_LOCK = threading.Lock()
+_RT_MAKE = None                                             # 测试换成假的券商（默认 rt_quotes 的只读 TachibanaBroker）
+
+
+def _rt_enabled() -> bool:
+    from . import rt_quotes as RTQ
+    return RTQ.enabled()
+
+
+def _rt_row(t: str) -> dict | None:
+    with _RT_LOCK:
+        x = _RT["rows"].get(t)
+    return x[1] if x else None
+
+
+def _rt_off(now: dt.datetime) -> str | None:
+    from . import rt_quotes as RTQ
+    if MO.timing(now)[0] != "now":
+        return "盘外：不取立花实时价（现价就是最近的成交；下单按开盘价）"
+    if not RTQ.enabled():
+        return f"立花实时价没开（{RTQ.ENV}=0）"
+    return None
+
+
+def _rt_fetch(tickers: list, now: dt.datetime, ev: threading.Event) -> None:
+    from . import rt_quotes as RTQ
+    try:
+        d, why = RTQ.tachibana_detail(tickers, make=_RT_MAKE, wait_s=RT_LOCK_WAIT_S, purpose=RTQ.PANEL_PURPOSE)
+    except Exception as e:                                  # noqa: BLE001
+        d, why = {}, type(e).__name__
+    at = now.isoformat(timespec="seconds")                  # 请求那一刻（取价在几秒之内）
+    rows = {}
+    for t, v in (d or {}).items():
+        try:
+            px = float(v.get("price") or 0)
+            if px <= 0:
+                continue
+            o = float(v.get("open") or px)
+            rows[t] = {"px": px, "at": at, "src": "rt",
+                       "bar": {"d": at[:10], "o": o, "h": max(float(v.get("high") or px), px, o),
+                               "l": min(float(v.get("low") or px), px, o), "c": px, "v": 0}}
+        except (TypeError, ValueError):
+            continue
+    m = time.monotonic()
+    with _RT_LOCK:
+        for t, r in rows.items():
+            _RT["rows"][t] = (m, r)
+        if not rows:
+            _RT["fail"], _RT["why"] = m, (why or "立花没回现在值")
+        else:
+            _RT["why"] = None
+        _RT["flight"] = None
+    ev.set()
+
+
+def rt_quotes(tickers, now: dt.datetime, wait: float = RT_WAIT_S) -> tuple[dict, str | None, bool]:
+    """立花实时价（确认框用）→ ({票: {"px","at","bar","src":"rt"}}, 没取到的原因 或 None, 还在取)。"""
+    want = sorted(set(tickers))
+    if not want:
+        return {}, None, False
+    off = _rt_off(now)
+    if off:
+        return {}, off, False
+
+    def fresh():
+        m = time.monotonic()
+        return {t: r for t, (at, r) in _RT["rows"].items() if t in want and m - at <= RT_TTL_S}
+    with _RT_LOCK:
+        got = fresh()
+        miss = [t for t in want if t not in got]
+        if not miss:
+            return got, None, False
+        ev = _RT["flight"]
+        if ev is None:
+            if time.monotonic() - _RT["fail"] < RT_FAIL_GAP_S:
+                return got, _RT["why"], False
+            ev = threading.Event()
+            _RT["flight"] = ev
+            threading.Thread(target=_rt_fetch, args=(miss, now, ev), daemon=True, name="qbreak-rt").start()
+    ev.wait(wait)
+    with _RT_LOCK:
+        got = fresh()
+        pend = _RT["flight"] is not None
+        why = (None if len(got) == len(want) else "立花还在应答：取到之后再显示" if pend
+               else _RT["why"] or "立花没回这只的现在值")
+    return got, why, pend
 
 
 # ───────────────────────── 持仓的现价（按需取） ─────────────────────────
@@ -4388,13 +4616,16 @@ def _delay_min(at, now: dt.datetime) -> float | None:
     return max(0.0, (now - a).total_seconds() / 60)
 
 
-def quotes_json(tag: str, now: dt.datetime | None = None, fetch=None, extra: list | None = None) -> tuple[int, dict]:
+def quotes_json(tag: str, now: dt.datetime | None = None, fetch=None, extra: list | None = None,
+                rt: list | None = None) -> tuple[int, dict]:
     """持有的个股与核心 ETF 的现价（Yahoo 1 分钟线，约晚 20 分钟；只展示，不下单）→ (HTTP 状态, JSON)。
     extra（页面的 t=…）：选股里的票（「规则接下来会自动买」/「建议的股票」打开的 K 线 / 买入框；只接受执行器汇总里列着的候选、
     没拿着的，一次最多 SG_MAX 只）→ 只回这些。
     同一组票盘中 60 秒内、其他时间 10 分钟内只取一次（Mac 与手机共用）；票由账本 / 汇总决定（不接受随便的代码）。
     每只附：rng = 晚了这几分钟里价格通常（约 95%）在 ±几 % 以内（日波动按 K 线文件算；只是估算）；
-    头上附 basis = 现在点卖 / 买，下单按什么价（MO.order_basis）。"""
+    头上附 basis = 现在点卖 / 买，下单按什么价（MO.order_basis）。
+    rt（页面的 rt=…；打开确认框时）：这几只（要在这次的票里）先用立花实时价（rt_quotes；盘中才取），那几行带 src="rt"、
+    头上 rt = {want, got, why, pending}（取不到 → 照旧 Yahoo、写原因）。"""
     now = now or now_jst()
     book, sm = _load(tag)
     pj = LO.held_now(book, tag, now=now)                   # 拿着的 = 含今天已成交（卖光的不列、今天买进的列出；2026-10-16）
@@ -4425,6 +4656,15 @@ def quotes_json(tag: str, now: dt.datetime | None = None, fetch=None, extra: lis
         return 200, {**head, "rows": {}}
     key = (tag, ("sg",) + tuple(sorted(rows)) if extra is not None else tuple(sorted(rows)))
     q = _quotes_cached(key, sorted(rows), fetch, live)       # 下载在锁外、同一组只下载一次、最多等几秒（2026-10-15）
+    if rt is not None and tag not in READONLY:
+        want = [t for t in rt if t in rows]
+        rq, why, pend = rt_quotes(want, now) if want else ({}, "不是这个账本的票", False)
+        if rq:
+            q = dict(q)
+            for t, r in rq.items():
+                yb = (q.get(t) or {}).get("bar") or {}
+                q[t] = {**r, "bar": {**r["bar"], "v": int(yb.get("v") or 0)}} if yb.get("d") == r["bar"]["d"] else r
+        head["rt"] = {"want": want, "got": sorted(rq), "why": why, "pending": pend}
     out = {}
     for t, r in rows.items():
         x = q.get(t)
@@ -4437,7 +4677,9 @@ def quotes_json(tag: str, now: dt.datetime | None = None, fetch=None, extra: lis
                   "pl_pct": round((px / r["cost"] - 1) * 100, 2) if r["cost"] > 0 else None}
         if r["kind"] != "suggest" and t in hnb:             # 今天有成交（对账前）：那句话；卖出全部的预计收益不给（成本 / 股数对账之后才对）
             out[t]["today_text"] = hnb[t]["text"]
-        dm = _delay_min(x.get("at"), now)
+        if x.get("src") == "rt":
+            out[t]["src"] = "rt"
+        dm = _delay_min(x.get("at"), now) if x.get("src") != "rt" else None   # 立花实时：不晚
         rg = MO.delay_range(_dvol(tag, t), dm) if dm is not None else None
         if rg is not None:                                   # 晚了几分钟 → 现在的价通常在 ±几 % 以内（估算）
             out[t].update(delay=round(dm), rng=rg)
@@ -4458,9 +4700,9 @@ def quotes_json(tag: str, now: dt.datetime | None = None, fetch=None, extra: lis
     return 200, {**head, "rows": out}
 
 
-def _extra_of(query: str) -> list | None:
-    """/api/quotes?…&t=7203.T,6758.T → 建议的股票的代码（格式不对的丢掉；没有 t → None = 持仓）。"""
-    v = parse_qs(query).get("t")
+def _extra_of(query: str, key: str = "t") -> list | None:
+    """/api/quotes?…&t=7203.T,6758.T → 建议的股票的代码（格式不对的丢掉；没有 t → None = 持仓）。key="rt"：要立花实时价的票。"""
+    v = parse_qs(query).get(key)
     if not v:
         return None
     out = []
@@ -4812,7 +5054,7 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
                 self._chart(u.query, (clock or now_jst)())
                 return
             if u.path == "/api/quotes":
-                self._json(*quotes_json(_book_of(u.query), (clock or now_jst)(), extra=_extra_of(u.query)))
+                self._json(*quotes_json(_book_of(u.query), (clock or now_jst)(), extra=_extra_of(u.query), rt=_extra_of(u.query, "rt")))
                 return
             if u.path == "/api/status":
                 self._json(*status_json(_book_of(u.query)))
@@ -4962,7 +5204,7 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
                 elif u.path == "/api/intraday":
                     self._json(*intraday_json(_book_of(u.query), (clock or now_jst)()))
                 else:
-                    self._json(*quotes_json(_book_of(u.query), (clock or now_jst)(), extra=_extra_of(u.query)))
+                    self._json(*quotes_json(_book_of(u.query), (clock or now_jst)(), extra=_extra_of(u.query), rt=_extra_of(u.query, "rt")))
                 return
             if dev is None:
                 code = (parse_qs(u.query).get("c") or [""])[0] if u.path == "/pair" else ""
