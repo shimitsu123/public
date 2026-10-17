@@ -838,3 +838,13 @@ def test_status_signature_changes_with_trade_count():
     A = (panel.STATIC_DIR / "conn.js").read_text(encoding="utf-8")         # 2026-10-15 起状态轮询在 conn.js（连接检查一起做）
     assert "+(st0.busy !== undefined ? st0.busy : st0.pending)" in A        # 轮询看还在处理的指令（busy），不是「交易」的数字
     assert "+(j.busy !== undefined ? j.busy : j.pending)" in A
+
+
+def test_info_tip_is_a_popover_that_does_not_move_the_layout():
+    """ⓘ 点开 = 浮在上面的小框（2026-10-17 用户「点击ⓘ要出现弹窗的形式 不要影响周围ui布局」）：固定定位、不撑开 details；app.js 按 ⓘ 放、只开一个、点别处收起。"""
+    css = (panel.STATIC_DIR / "panel.css").read_text(encoding="utf-8")
+    js = (panel.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    assert "details.ii .iib{position:fixed;" in css and "details.ii[open]{display:block" not in css and "flex-basis:100%" not in css
+    assert "function tipPlace(d)" in js and "tipsClose(d); tipPlace(d)" in js and "e.key==='Escape'" in js
+    assert "<details class='ii'><summary" in panel._tip("x") and "<details class='ii lab'><summary>撤单 ⓘ</summary>" in panel._tipl("撤单", "y")
+

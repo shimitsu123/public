@@ -91,7 +91,10 @@ def test_panel_default_book_and_real_money_banner(monkeypatch):
     _plist(paths.LIVE_AGENT)                                                       # 装了立花本番（账本还没有也一样）
     assert P._book_of("") == "tachibana" and P._book_of("book=paper") == "paper"
     assert P.books() == ["paper", "tachibana"]
+    (paths.state_dir() / "live_unified_tachibana_dryrun.json").write_text("{}", encoding="utf-8")   # dry-run 的账本在也不列（2026-10-17 用户「删除面板上的立花 dry-run」）
+    assert P.books() == ["paper", "tachibana"] and P._book_of("book=tachibana_dryrun") == "tachibana"
     html = P.render("tachibana", "t" * 40, now)
+    assert "立花 dry-run（只读）" not in html
     assert "class='top real'" in html and "真钱（立花本番）" in html and '"real": true' in html
     assert "立花还没解锁（没有 ARM）" in html
     (paths.home() / "ARM").write_text("armed?", encoding="utf-8")

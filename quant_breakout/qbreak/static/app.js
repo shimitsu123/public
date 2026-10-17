@@ -118,3 +118,23 @@ document.addEventListener('toggle', e=>{                                  // tog
   try{ foldSave(d, sessionStorage, location.pathname); }catch(err){}
 }, true);
 try{ foldRestore(document, sessionStorage, location.pathname); }catch(err){}
+
+// ⓘ = 浮在上面的小框（2026-10-17 用户：「点击ⓘ要出现弹窗的形式 不要影响周围ui布局」）：放在 ⓘ 下面（下面放不下 → 上面），
+// 左右不出屏幕；同时只开一个；点别处 / Esc / 滚动 / 改窗口大小 → 收起
+function tipPlace(d){
+  const b=d.querySelector(':scope>.iib'), s=d.querySelector(':scope>summary'); if(!b || !s) return;
+  const vw=document.documentElement.clientWidth, vh=window.innerHeight, r=s.getBoundingClientRect(), M=12, w=b.offsetWidth, h=b.offsetHeight;
+  const x=Math.max(M, Math.min(r.left+r.width/2-w/2, vw-w-M));
+  let y=r.bottom+6;
+  if(y+h>vh-M) y=r.top-6-h>=M ? r.top-6-h : Math.max(M, vh-h-M);
+  b.style.left=x+'px'; b.style.top=y+'px'; d.classList.add('on');
+}
+function tipsClose(keep){ document.querySelectorAll('details.ii[open]').forEach(o=>{ if(o!==keep){ o.open=false; o.classList.remove('on'); } }); }
+document.addEventListener('toggle', e=>{                                  // toggle 不冒泡：在捕获阶段接
+  const d=e.target; if(!d || !d.matches || !d.matches('details.ii')) return;
+  if(d.open){ tipsClose(d); tipPlace(d); } else d.classList.remove('on');
+}, true);
+document.addEventListener('click', e=>{ if(!(e.target.closest && e.target.closest('details.ii'))) tipsClose(null); }, true);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') tipsClose(null); });
+window.addEventListener('scroll', e=>{ if(!(e.target && e.target.closest && e.target.closest('.iib'))) tipsClose(null); }, true);
+window.addEventListener('resize', ()=>tipsClose(null));

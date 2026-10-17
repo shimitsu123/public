@@ -116,9 +116,10 @@ def token() -> str:
 
 
 def books() -> list[str]:
-    """有账本的执行器（模拟账户总列出来；装了立花本番时立花也总列出来，账本还没有也一样）。"""
+    """有账本的执行器（模拟账户总列出来；装了立花本番时立花也总列出来，账本还没有也一样）。
+    dry-run 的账本不列（2026-10-17 用户「删除面板上的立花 dry-run（只读）」：上线门槛 ⑤ 已经过了，本番没有 ARM 时本来就只算不发单）。"""
     dft = paths.default_book()
-    return [t for t in BOOKS if t in ("paper", dft) or (paths.state_dir() / f"live_unified_{t}.json").exists()]
+    return [t for t in BOOKS if t not in READONLY and (t in ("paper", dft) or (paths.state_dir() / f"live_unified_{t}.json").exists())]
 
 
 def _load(tag: str) -> tuple[dict, dict]:
@@ -1566,7 +1567,7 @@ def _panes(H: list, on: str | None = "home") -> str:
             cur = h[len(PANE):] or None
             if cur:
                 ic, lab, desc = TABS[cur]
-                head = "" if cur in seen else f"<div class='panehead'><b>{ic} {escape(lab)}</b>{_tip(escape(desc), '这一页有什么')}</div>"   # 说明收进 ⓘ（2026-10-17）
+                head = "" if cur in seen else f"<div class='panehead'><b>{ic} {escape(lab)}{_tip(escape(desc), '这一页有什么')}</b></div>"   # 说明收进 ⓘ（2026-10-17）
                 seen.add(cur)
                 out.append(f"<div class='pane{' on' if cur == on else ''}' data-tab='{cur}'>{head}")
             continue
@@ -5058,7 +5059,7 @@ class _Common(BaseHTTPRequestHandler):
 def _book_of(query: str) -> str:
     """?book=… 的账本；没给 / 不认识 → 默认账本（B12：装了立花本番 → 立花；否则模拟账户；qbreak/paths.default_book）。"""
     tag = (parse_qs(query).get("book") or [""])[0]
-    return tag if tag in BOOKS else paths.default_book()
+    return tag if tag in BOOKS and tag not in READONLY else paths.default_book()      # ?book=tachibana_dryrun → 默认账本（面板不再显示 dry-run）
 
 
 def _halt_allin(msg: str) -> str:
