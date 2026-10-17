@@ -99,6 +99,7 @@ def test_panel_shows_the_line_for_stocks_not_for_core_etfs():
                                                              encoding="utf-8")
     for mode in ("local", "remote"):
         h = panel.render("paper", "t" * 40, AT, mode=mode)
-        assert h.count("class='dipst small'") == 2                              # 持仓的 7203 + 建议的 6501；核心 ETF 1545 不显示
+        assert h.count("class='chips dipst'") == 2                              # 持仓的 7203 + 建议的 6501；核心 ETF 1545 不显示（标签 + ⓘ，2026-10-17）
+        assert "<span class='chip mut'>历史同类：略差于大盘，但不够确定</span>" in h
         assert "<b>月K 往上走 + 日K、周K 都往下走</b>：历史上（2001〜2026，9,509 次）" in h
         assert "<b>月K 往上走 + 只有周K 往下走</b>：" in h and "略差于大盘，但不够确定；不是预测" in h

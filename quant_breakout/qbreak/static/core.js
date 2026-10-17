@@ -129,6 +129,12 @@ export function plBox(el, e){                                                   
 }
 export const NOTE = CFG.paper ? '\n\n模拟账户：手动操作后会和云端模拟盘不一致。' : CFG.real ? '\n\n★ 真钱（立花本番）：执行器会在立花真的下单。' : '';
 export function coreShow(){ const r=$('#core-pct'); if(r) $('#core-val').textContent=r.value+'%'; }
+export function tipEl(par, lines){                                       // 「ⓘ」（与 panel._tip 同一个样子；点开 = 浮在上面的小框，app.js 放位置）
+  const d=nd('details', 'ii', null, par), s=nd('summary', null, 'ⓘ', d), b=nd('div', 'iib small', null, d);
+  s.setAttribute('aria-label', '说明'); s.title='说明';
+  [].concat(lines).filter(Boolean).forEach((x, i)=>{ if(i) nd('br', null, null, b); b.appendChild(document.createTextNode(x)); });
+  return d;
+}
 export function nd(tag, cls, text, par){ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; if(par) par.appendChild(e); return e; }
 export function pxs(v){ if(v==null) return '—'; return '¥'+(v<1000 ? v.toLocaleString('ja-JP',{minimumFractionDigits:1, maximumFractionDigits:1}) : Math.round(v).toLocaleString('ja-JP')); }
 export function pcs(v){ return (v>=0?'+':'')+v.toFixed(2)+'%'; }

@@ -316,7 +316,7 @@ def test_render_watch_rows_show_how_far_from_a_buy_signal():
     rows[2]["near_text"] = "离买入信号：MACD 约 8 天后金叉（按最近一天的变化估）；金叉那天量要 > 1.5 倍（今天 0.8 倍）"
     _sm(rows)
     html = panel.render("paper", "t" * 40, AT)
-    assert ("<div class='small near'>离买入信号：MACD 约 8 天后金叉（按最近一天的变化估）；金叉那天量要 &gt; 1.5 倍（今天 0.8 倍）</div>"
+    assert ("离买入信号：MACD 约 8 天后金叉（按最近一天的变化估）；金叉那天量要 &gt; 1.5 倍（今天 0.8 倍）</div></details>"   # 收进 ⓘ（2026-10-17）
             in _card(html, "suggest")) and "9984" not in _card(html, "autobuy")
     assert html.count("按离 MACD 金叉的天数排（越上面越快金叉；只是估算）") == 1   # 只有带 near 的组（旧的汇总没有 → 不写）
 
@@ -344,7 +344,7 @@ def test_render_ranks_watch_rows_by_the_registered_probability(monkeypatch, tmp_
     sgc, ab = _card(html, "suggest"), _card(html, "autobuy")
     # 6501（出了信号）与 8035（约 1 天金叉）在上面「规则接下来会自动买」里，建议的股票不重复列（2026-10-15）
     assert "今天出了买入信号" not in sgc and "data-sgg" not in sgc            # 只剩一组：没有分段按钮
-    assert "<h3 class='sgh'>观察中 · 2 只（按离 MACD 金叉的天数排）</h3>" in sgc and "快要出买入信号（1 只）" not in html
+    assert "<h3 class='sgh'>观察中 · 2 只（按离 MACD 金叉的天数排）<details class='ii'>" in sgc and "快要出买入信号（1 只）" not in html
     i1, i2, i3 = html.index("<b>9984</b>"), html.index("<b>8035</b>"), html.index("<b>6758</b>")
     assert i2 < i1 < i3                                                    # 2026-10-11 起按离金叉：8035（约 1 天）→ 9984（往下走）→ 6758（已在线上）
     assert "<b>8035</b>" not in sgc and "<b>8035</b>" in ab
@@ -848,3 +848,15 @@ def test_info_tip_is_a_popover_that_does_not_move_the_layout():
     assert "function tipPlace(d)" in js and "tipsClose(d); tipPlace(d)" in js and "e.key==='Escape'" in js
     assert "<details class='ii'><summary" in panel._tip("x") and "<details class='ii lab'><summary>撤单 ⓘ</summary>" in panel._tipl("撤单", "y")
 
+
+
+def test_holding_short_keeps_the_point_and_drops_the_note():
+    """持仓里「今天已成交」的标签 = 去掉「名字：」和末尾的括号说明（整句在 ⓘ；2026-10-17 用户「持仓和选股里面的画面说明也太乱了」）。"""
+    from qbreak import holding_view as HV
+    s = "1482 对冲版美国 7〜10 年国债：10/16（周五）买进 650 口 @ ¥1,485.74（下个交易日 10/19（周一）07:40 对账之后才算持仓）"
+    assert HV.short(s, "1482 对冲版美国 7〜10 年国债") == "10/16（周五）买进 650 口 @ ¥1,485.74"
+    assert HV.short("没有括号") == "没有括号" and HV.short("（只有括号）") == "（只有括号）"
+    hv = {"bar_date": "2026-10-15", "note": "含 10/16（周五）已成交（下个交易日 10/19（周一）07:40 对账后正式记账）", "holdings": [], "core": []}
+    plain, tipped = HV.html(hv), HV.html(hv, tip=panel._tip)
+    assert "<div class='small hn-note'>" in plain and "details class='ii'" not in plain          # 别的页面（不给 tip）照旧整句
+    assert "<span class='chip warn hn-note'>含对账前的成交</span>" in tipped and "对账后正式记账" in tipped

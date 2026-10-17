@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from html import escape
 
 import pandas as pd
@@ -410,14 +411,43 @@ def lines(hv: dict | None) -> list[str]:
     return out
 
 
-def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 · 现在趋势如何", toolbar: str = "") -> str:
+def short(s: str, lab: str = "") -> str:
+    """一句话的要点（标签用）：去掉开头的「名字：」和末尾的括号说明（「10/16（周五）买进 650 口 @ ¥1,485.74（… 对账之后才算持仓）」→ 括号前）。"""
+    s = str(s or "").strip()
+    if lab and s.startswith(lab + "："):
+        s = s[len(lab) + 1:]
+    if s.endswith("）"):
+        d = 0
+        for i in range(len(s) - 1, -1, -1):
+            d += {"）": 1, "（": -1}.get(s[i], 0)
+            if d == 0:
+                return s[:i].rstrip() or s
+    return s
+
+
+def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 · 现在趋势如何", toolbar: str = "", tip=None) -> str:
     """一个 section 的内容（h2 + 每只票一块）。actions(row, kind) → 额外的 HTML（操作面板的按钮 / 走势图）；kind = stock / core。
-    toolbar：放在说明下面、所有票上面的一行（操作面板的走势图期间切换）。两边页面都用 card / muted / scroll / pos / neg 这些 class。"""
+    toolbar：放在说明下面、所有票上面的一行（操作面板的走势图期间切换）。两边页面都用 card / muted / scroll / pos / neg 这些 class。
+    tip(html) → 「ⓘ」（操作面板给；2026-10-17 用户「持仓和选股里面的画面说明也太乱了 优化为ⓘ的形式」）：说明收进 ⓘ、只留标签；不给 = 照旧整句。"""
     hv = hv or {}
     hs, cs = hv.get("holdings") or [], hv.get("core") or []
-    H = [f"<h2>{escape(title)}</h2><div class='muted'>按 {escape(str(hv.get('bar_date') or '—'))} 收盘。"
-         "趋势标签只是按收盘价和均价线的位置分的类，不是预测；卖不卖只按规则。</div>"
-         + (f"<div class='small hn-note'><b>{escape(hv['note'])}</b></div>" if hv.get("note") else "") + toolbar]   # 今天已成交（overlay；2026-10-16）
+    bd = escape(str(hv.get('bar_date') or '—'))
+    if tip:
+        H = [f"<h2>{escape(title)}</h2><div class='chips'><span class='chip mut'>按 {bd} 收盘</span>"
+             + ("<span class='chip warn hn-note'>含对账前的成交</span>" if hv.get("note") else "")
+             + tip(f"按 {bd} 收盘。趋势标签只是按收盘价和均价线的位置分的类，不是预测；卖不卖只按规则。"
+                   + (f"<br><b>{escape(hv['note'])}</b>" if hv.get("note") else "")) + "</div>" + toolbar]
+    else:
+        H = [f"<h2>{escape(title)}</h2><div class='muted'>按 {bd} 收盘。"
+             "趋势标签只是按收盘价和均价线的位置分的类，不是预测；卖不卖只按规则。</div>"
+             + (f"<div class='small hn-note'><b>{escape(hv['note'])}</b></div>" if hv.get("note") else "") + toolbar]   # 今天已成交（overlay；2026-10-16）
+
+    def tday(r: dict, lab: str) -> str:                       # 今天已成交（对账前）的一行：标签 + ⓘ（tip 给了）/ 整句
+        if not r.get("today"):
+            return ""
+        if tip:
+            return f"<div class='chips hn'><span class='chip warn'>{escape(short(r['today'], lab))}</span>{tip(escape(r['today']))}</div>"
+        return f"<div class='small hn'><b>{escape(r['today'])}</b></div>"
     if not hs and not cs:
         H.append("<div class='muted'>没有持仓</div>")
     for r in hs:
@@ -427,7 +457,7 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
                 + (f" · 约占权益 {r['pct_equity']:.1f}%" if r.get("pct_equity") is not None else "")
                 + (f" · {escape(r['s33'])}" if r.get("s33") else "") + (f" · 主题 {escape(r['theme'])}" if r.get("theme") else "")
                 + "</span>" + (f" <b class='neg'>已排定开盘卖（{escape(r['queued'])}）</b>" if r.get("queued") else ""))
-        today = f"<div class='small hn'><b>{escape(r['today'])}</b></div>" if r.get("today") else ""   # 今天已成交（对账前；2026-10-16）
+        today = tday(r, hl)                                    # 今天已成交（对账前；2026-10-16）
         if r.get("error"):
             H.append(f"<div class='hv'>{head}<div class='muted'>{escape(r['error'])}</div>" + today
                      + (actions(r, "stock") if actions else "") + "</div>")
@@ -459,12 +489,21 @@ def html(hv: dict | None, actions=None, title: str = "持仓：为什么持有 �
                  + ("" if isinstance(r.get("why"), list) else f"<div><b>为什么持有</b>：{escape(r['why'])}</div>")   # 今天买进的：还没有
                  + (f"<div><b>现在</b>：<b class='{cls}'>{escape(TREND.get(lab, '—'))}</b> <span class='muted'>{escape(trend_text(tr))}</span></div>"
                     if tr else "")
-                 + (f"<div class='small hn'><b>{escape(r['today'])}</b></div>" if r.get("today") else "")
+                 + tday(r, label(r, core=True))
                  + (actions(r, "core") if actions else "") + "</div>")
     sold = hv.get("sold") or []
     if sold:                                                  # 今天卖光的（对账前；2026-10-16）：不再给按钮
+        def srow(r: dict) -> str:
+            t = str(r.get("text") or label(r))
+            if not tip:
+                return f"<div class='small'>{escape(t)}</div>"
+            lb = label(r, core=r.get("kind") == "core") if r.get("ticker") else ""
+            m = re.search(r"已实现约 ([−+-]?¥[\d,]+)", t)
+            pl = (f"<span class='chip {'down' if m.group(1)[0] in '−-' else 'up'}'>已实现 {escape(m.group(1))}</span>" if m else "")
+            return (f"<div class='small'><b>{escape(lb)}</b> {escape(short(t, lb))}</div>"
+                    f"<div class='chips'>{pl}{tip(escape(t))}</div>")
         H.append(f"<div class='hv hn-sold'><b>{escape(str(hv.get('sold_head') or '今天已卖出'))}</b>"
-                 + "".join(f"<div class='small'>{escape(r.get('text') or label(r))}</div>" for r in sold) + "</div>")
+                 + "".join(srow(r) for r in sold) + "</div>")
     return "".join(H)
 
 

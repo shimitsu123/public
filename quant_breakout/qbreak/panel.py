@@ -294,7 +294,8 @@ def tchips(tr: dict | None, stats: bool = False) -> str:
         return ""
     ds = DS.line(tr) if stats else None
     return (f"<div class='tchips' aria-label='趋势'>{''.join(out)}</div>"
-            + (f"<div class='dipst small'><b>{escape(ds['name'])}</b>：{escape(ds['text'])}</div>" if ds else ""))
+            + (f"<div class='chips dipst'><span class='chip mut'>历史同类：{escape(ds.get('say') or '—')}</span>"
+               f"{_tip('<b>' + escape(ds['name']) + '</b>：' + escape(ds['text']))}</div>" if ds else ""))
 
 
 GROUPS = (("imminent", "快要出买入信号"), ("watch", "观察中"))       # 「建议的股票」的分组；出了信号的全在「规则接下来会自动买」（_auto_pick 的 trig，2026-10-15）
@@ -465,7 +466,7 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
                               f"{name(r)}<span class='abs small'>{escape(bw)}</span>", r))
                 continue
             H.append(item(f"<span class='abd{' on' if ok else ''}'>{'下个开盘' if ok else '不买'}</span>",
-                          f"{name(r)}<span class='abs small{'' if ok else ' muted'}'>{escape(str(ru.get('text') or ''))}</span>", r))
+                          f"{name(r)}<span class='abs small{'' if ok else ' muted'}'>{escape(str(ru.get('text') or '').split(' —— ')[0])}</span>", r))   # 整句在点开的那一行里（2026-10-17）
         H.append("</div>")
     if near:
         sh_all = {r["ticker"]: est_shares(r) for r in near if str(r["ticker"]) not in bought}   # 今天已经买进的不算进「买不起」
@@ -639,10 +640,10 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, ca
     for n, (g, title, grp) in enumerate(groups):
         H.append(f"<div class='sgg' data-g='{g}'{'' if n == 0 else ' hidden'}>")
         if g == "rest":                                     # 快要出 + 观察中一组：按离金叉的天数排
-            H.append(f"<h3 class='sgh'>观察中 · {len(grp)} 只（按离 MACD 金叉的天数排）</h3>"
+            H.append(f"<h3 class='sgh'>观察中 · {len(grp)} 只（按离 MACD 金叉的天数排）"
                      + _tip("越上面越快出现金叉（按最近一天的变化估算的天数；同样天数时快要出的、历史比例高的在前；"
                             "已经在信号线上 / 还在往下走的排在后面，闸门挡的最后）。金叉之外还要横盘、量等条件凑齐才出买入信号，"
-                            "出了信号还要过闸门 / 名额才会买。", "怎么排的"))
+                            "出了信号还要过闸门 / 名额才会买。", "怎么排的") + "</h3>")
         else:
             H.append(f"<h3 class='sgh'>{escape(title)}（{len(grp)} 只）</h3>")
             if any(r.get("near") for r in grp):
@@ -698,7 +699,7 @@ def _news_mark(m: dict | None) -> str:
         me = dt.date.fromisoformat(mn["end"]) if mn.get("end") else e
         win = (f"<div class='small nwin'>影响期（经验估计）：{_md(s)} {'起（已开始）' if s <= now_d else '开盘起'} → 主要那条约 {_md(me)} 前后结束"
                f"（还有约 {_tdays(max(now_d, s), me)} 个交易日）" + (f"；全部最晚约 {_md(e)}" if e > me else "") + "</div>")
-    return (f"<details class='nmk'><summary><span class='chip {tone}'>{escape(head)}</span>{win}</summary>"
+    return (f"<details class='nmk'><summary><span class='chip {tone}'>{escape(head)}</span></summary>{win}"   # 影响期点开才看（2026-10-17）
             f"<div class='muted small'>行业：{escape(str(m.get('sector') or ''))}。每条消息对这个行业的估算冲击 × 可信度（★ 达到提醒线的 ×1.5），最大的一条为主、其余递减加总；"
             "≥ 1% 大、≥ 0.4% 中、其余小。只是粗估，不参与交易；点标题看「消息」页的详细。</div><ul class='small nml'>" + "".join(li)
             + (f"<li class='muted'>另外 {more} 条影响较小</li>" if more > 0 else "") + "</ul></details>")
@@ -732,12 +733,20 @@ def _prob_line(pr: dict | None) -> str:
     """之后 h 个交易日内出买入信号的历史比例（watch_prob.for_row）一行；研究判定「只排序」（show = False）→ 不写数。"""
     if not pr or pr.get("p") is None:
         return ""
-    h = int(pr.get("h") or WP.H)
+    h = int(pr.get("h") or WP.H)                           # → 标签（只排序时）或 (标签, ⓘ 里的整句)
     if not pr.get("show", True):
-        return f"<div class='small prob'>按之后 {h} 个交易日内出买入信号的历史比例排</div>"
+        return f"<span class='chip mut prob' title='按之后 {h} 个交易日内出买入信号的历史比例排'>按历史比例排</span>"
     n = int(pr.get("n") or 0)
-    return (f"<div class='small prob'>之后 {h} 个交易日内出买入信号：历史上约 <b>{float(pr['p']) * 100:.1f}%</b>"
-            + (f"（同样情况 {n:,} 次）" if n else "（相近情况估算）") + "</div>")
+    return (f"<span class='chip mut prob'>{h} 天内出信号 <b>{float(pr['p']) * 100:.1f}%</b></span>",
+            f"之后 {h} 个交易日内出买入信号：历史上约 <b>{float(pr['p']) * 100:.1f}%</b>"
+            + (f"（同样情况 {n:,} 次）" if n else "（相近情况估算）"))
+
+
+def _sg_chips(pr, near) -> str:
+    """建议的股票一行的标签：历史比例（_prob_line）+ ⓘ（整句 + 离买入信号还差什么）。"""
+    chip, full = (pr if isinstance(pr, tuple) else (pr or "", ""))
+    body = "<br>".join(x for x in (full, escape(str(near or ""))) if x)
+    return f"<div class='chips'>{chip}{_tip(body)}</div>" if chip or body else ""
 
 
 OLD_EM0 = "新仓倍数 0（宏观 / 判断层 / 关联搭配 C / TBF 里有一层说现在不开这只的新仓）"
@@ -794,9 +803,8 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
          + f"<b>{escape(str(r.get('code') or t))}</b>{nm}"
          + (f"<span class='chip'>{escape(str(r['sector']))}</span>" if r.get("sector") else "") + tag_ + "</div>"
          + _news_mark(mark)                                 # 消息的影响（2026-10-11 用户）
-         + _prob_line(r.get("prob") if rk_on else None)
+         + _sg_chips(_prob_line(r.get("prob") if rk_on else None), r.get("near_text"))   # 历史比例 + 离买入信号还差什么：标签 + ⓘ（2026-10-17）
          + f"<div class='meta'>{' · '.join(x for x in meta if x)}</div>"
-         + (f"<div class='small near'>{escape(str(r['near_text']))}</div>" if r.get("near_text") else "")   # 离买入信号还差什么（排序依据）
          + (f"<div>{escape(_fill_mult_why(str(ru.get('text') or '')))}</div>" if ru.get("state") not in (None, "none") else "")
          + tchips(r.get("trend"), stats=True)
          + (f"<div class='small neg'>★ 顶部风险：{escape(str(r['top_risk']))}</div>" if r.get("top_risk") else "")]
@@ -831,8 +839,12 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
         H.append(f"<div class='act'><button class='btn {'' if full else 'primary'}' data-act='buy'{data}>{'全部换成这只…' if full else '买入…'}</button>"
                  + (f"<span class='muted small'>个股名额已满（{s['used']} / {s['max']} 只）：只能把其他持仓全部卖出来换这只</span></div>" if full else
                     f"<span class='muted small'>按规则约 {n:,} 股 · 约 {_yen(n * px)}" + (f" · 约占权益 {n * px / eq * 100:.1f}%" if eq else "") + "</span></div>")
-                 + (f"<div class='small neg'>★ {escape(warn)}</div>" if warn else ""))
-    H.append(_buy_price_line(r, fill))                       # 规则的买价（2026-10-07 用户「建议的股票要给出合适的买价」）
+                 )
+    wc = (f"<span class='chip bad'>★ {'新仓倍数 0：会被挡' if '新仓倍数 0' in warn else '会被挡'}</span>{_tip('★ ' + escape(warn))}"
+          if warn and not why else "")
+    bp = _buy_price_line(r, fill, inline=True)
+    if wc or bp:                                             # 会被挡 + 规则的买价：一行标签（2026-10-17）
+        H.append(f"<div class='chips'>{wc}{bp}</div>")                       # 规则的买价（2026-10-07 用户「建议的股票要给出合适的买价」）
     planned = " data-planned='1'" if ru.get("state") in ("planned", "manual") or b.get("planned") else ""   # 已排在开盘买：只写现价
     op = r.get("status") == "imminent" if kl_open is None else kl_open   # 出了信号的只在自动买那张卡（kl_open=True）
     H.append(f"<details class='kl'{' open' if op else ''}>"
@@ -907,8 +919,9 @@ def _alloc_card(book: dict | None, hv: dict | None, pj: dict | None = None) -> s
         f"<span class='alp'>{v / total * 100:.1f}%</span><span class='aly muted'>{_yen(v)}</span></div>"
         for t, n, v, k, c in rows)
     hn = str((pj or {}).get("note") or "").split("；")[0] if (pj or {}).get("has") else ""   # 「含今天已成交（下个交易日 10/19（周一）07:40 对账后正式记账）」
-    return (f"<section class='card' id='alloc'><div class='head'><b>仓位占比</b><span class='muted small'>合计 {_yen(total)} · 按最近收盘"
-            + (f" · {escape(hn)}" if hn else "") + "</span></div>"
+    return (f"<section class='card' id='alloc'><div class='head'><b>仓位占比</b><span class='muted small'>合计 {_yen(total)}</span>"
+            + ("<span class='chip warn'>含对账前的成交</span>" if hn else "")
+            + _tip("按最近收盘估算" + (f"；{escape(hn)}" if hn else "")) + "</div>"
             f"<div class='alb' role='img' aria-label='仓位占比'>{bar}</div><div class='all'>{legend}</div></section>")
 
 
@@ -941,8 +954,7 @@ def _exit_html(info: dict | None) -> str:
         return f"<div class='axf'>{steps}</div>{state}"
     rows = "".join(
         f"<div class='axr'><div class='axk'>{escape(str(r['k']))}</div><div class='axv'>"
-        + (flow(r) if r.get("flow") else f"<div>{escape(str(r['text']))}</div>"
-           + (f"<div class='muted small'>{escape(str(r['sub']))}</div>" if r.get("sub") else ""))
+        + (flow(r) if r.get("flow") else f"<div>{escape(str(r['text']))}{_tip(escape(str(r['sub']))) if r.get('sub') else ''}</div>")
         + (f"<div class='axm'>{''.join(chip(c) for c in r['chips'])}</div>" if r.get("chips") else "") + "</div></div>"
         for r in info.get("rows") or [])
     detail = [f"{r['k']}：{r['text']}" + (f"（{r['sub']}）" if r.get("sub") else "") for r in info.get("rows") or [] if r.get("flow")]
@@ -960,7 +972,7 @@ def _exit_html(info: dict | None) -> str:
             + "</div>")
 
 
-def _buy_price_line(r: dict, fill: str | None = None) -> str:
+def _buy_price_line(r: dict, fill: str | None = None, inline: bool = False) -> str:
     """规则的买价一行：出了信号 → 下一个交易日（fill）开盘最高 收盘 ×1.03（寄付指値；开盘价更高就不买）；还没出 → 出信号那天收盘 ×1.03
     （按今天收盘的参考）。盘中现价来了以后，K 线上面那行写「现在买：…」（/api/quotes 的 buy）。只是规则的上限，不是建议。"""
     b = r.get("buy") or {}
@@ -969,9 +981,12 @@ def _buy_price_line(r: dict, fill: str | None = None) -> str:
         return ""
     if r.get("status") == "triggered":
         when = f"{str(fill)[5:7]}/{str(fill)[8:10]} 开盘" if fill and len(str(fill)) >= 10 else "下一个交易日开盘"
-        return (f"<div class='small'>规则的买价：{when}、最高 <b>¥{float(lim):,.0f}</b>（= 收盘 ¥{float(close):,.0f} ×1.03；"
-                "开盘价更高就不买）</div>")
-    return (f"<div class='small muted'>规则的买价：出信号那天的收盘 ×1.03 是第二天开盘的最高价（按今天收盘 ≈ ¥{float(lim):,.0f}）</div>")
+        x = (f"<span class='chip hot'>{when} 最高 ¥{float(lim):,.0f}</span>"
+             + _tip(f"规则的买价：{when}、最高 <b>¥{float(lim):,.0f}</b>（= 收盘 ¥{float(close):,.0f} ×1.03；开盘价更高就不买）"))
+    else:
+        x = (f"<span class='chip mut'>买价上限 ≈ ¥{float(lim):,.0f}</span>"
+             + _tip(f"规则的买价：出信号那天的收盘 ×1.03 是第二天开盘的最高价（按今天收盘 ≈ ¥{float(lim):,.0f}）"))
+    return x if inline else f"<div class='chips'>{x}</div>"
 
 
 ESHITEN_SP = "https://kabuka.e-shiten.jp/mfds_smp.php"      # 立花 e支店的手机网站（注文一覧在这里看）
@@ -1201,13 +1216,17 @@ def _intraday_card(v: dict | None) -> str:
     每行：代码 + 名字、区间 ¥下沿〜¥上沿、离下沿 %、成交量到所需的 %、挡住的闸门、数据时刻；其余收起「今天不可能：N 只（理由）」。"""
     if not v or not v.get("ok"):
         return f"<section class='card' id='intraday'><div class='ia-hl'><b>{escape(IW.TITLE)}</b></div><div class='muted small'>盘中观测读不了</div></section>"
-    H = [f"<section class='card' id='intraday'><div class='ia-hl'><b>{escape(v['title'])}</b></div>",
+    H = [f"<section class='card' id='intraday'><div class='ia-hl'><b>{escape(v['title'])}</b>{_tip(escape(v['foot']))}</div>",   # 页脚收进 ⓘ（2026-10-17）
          f"<div class='muted small'>{escape(v['head'])}</div>"]
-    H += [f"<div class='neg small'>★ {escape(w)}</div>" for w in v.get("warn") or []]
+    if v.get("warn"):
+        H.append("<div class='chips'>" + "".join(f"<span class='chip bad'>★ {escape(IW.warn_short(w))}</span>" for w in v["warn"])
+                 + _tip("<br>".join("★ " + escape(w) for w in v["warn"])) + "</div>")
     if v.get("rows"):
         H.append("<div class='list'>")
+        ats = [r.get("at") for r in v["rows"]]
+        mode = max(set(ats), key=ats.count)                       # 多数行的数据时刻 → 不每行重复，只写和它不一样的（2026-10-17）
         for r in v["rows"]:
-            ga = " · ".join(x for x in (r.get("gates"), r.get("at")) if x)    # 只这只自己的闸门 / 数据时刻（共同的在顶上 ★）
+            ga = " · ".join(x for x in (r.get("gates"), None if r.get("at") == mode else r.get("at")) if x)    # 只这只自己的闸门 / 数据时刻（共同的在顶上 ★）
             H.append(f"<div class='li'><div class='grow'><b>{escape(r['label'])}</b> <span class='chip{' hot' if r.get('kind') == 'ok' else ''}'>"
                      f"{escape(r['status'])}</span><div class='small'>{escape(r['line'])}</div>"
                      + (f"<div class='muted small'>{escape(ga)}</div>" if ga else "") + "</div></div>")
@@ -1218,7 +1237,7 @@ def _intraday_card(v: dict | None) -> str:
         H.append(f"<details class='ia'><summary class='muted small'>{escape(v['impossible'])}</summary>")
         H += [f"<div class='muted small'>{escape(g['why'])}：{escape(g['names'])}</div>" for g in v.get("groups") or []]
         H.append("</details>")
-    H.append(f"<div class='muted small'>{escape(v['foot'])}</div></section>")
+    H.append("</section>")
     return "".join(H)
 
 
@@ -2674,14 +2693,15 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         H_ = []
         plan = ""
         if last is not None:
-            H_.append("<div class='small'><b>已登记：" + ("恢复按规则" if last.get("clear") else f"固定 {int(last.get('units') or 0):,} 口")
-                      + "</b><span class='muted'>（执行器还没读；" + escape(MO.corefix_fill(now, book, tag)["text"])   # D1（2026-10-15）：以前一律「下一次决策起」
-                      + "；要撤回在" + _where_item(sp, last.get("id"))
-                      + (f"；在那之前还是手动固定 {int(fixed):,} 口" if fixed is not None else "")
-                      + "）</span></div>")
+            reg = "已登记：" + ("恢复按规则" if last.get("clear") else f"固定 {int(last.get('units') or 0):,} 口")
+            H_.append(f"<div class='chips'><span class='chip warn'>{reg}（还没读）</span>"
+                      + _tip(f"<b>{reg}</b>（执行器还没读；" + escape(MO.corefix_fill(now, book, tag)["text"])   # D1（2026-10-15）：以前一律「下一次决策起」
+                             + "；要撤回在" + _where_item(sp, last.get("id"))
+                             + (f"；在那之前还是手动固定 {int(fixed):,} 口" if fixed is not None else "") + "）") + "</div>")
         elif fixed is not None:
-            H_.append(f"<div class='small'><b>手动固定 {int(fixed):,} 口</b>（不按规则自动调、不跟闲置资金比例；其余闲置资金照规则）"
-                      "<span class='muted'>；卖出 / 减仓 / 加仓：「固定口数…」（0 口 = 全部卖出）</span></div>")
+            H_.append(f"<div class='chips'><span class='chip hot'>手动固定 {int(fixed):,} 口</span>"
+                      + _tip(f"<b>手动固定 {int(fixed):,} 口</b>（不按规则自动调、不跟闲置资金比例；其余闲置资金照规则）"
+                             "；卖出 / 减仓 / 加仓：「固定口数…」（0 口 = 全部卖出）") + "</div>")
         can_clear = fixed is not None and eff is not None   # 恢复按规则：账本里固定着、也没登记过恢复（只固定在还没读的指令里的 → 撤回那条）
         if can_clear:
             plan = f" data-plan='{escape(MO.corefix_clear_text(book, t, tag, now))}'"   # 「恢复按规则」之后会怎样（2026-10-13）
@@ -2706,7 +2726,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         if t in bfix:                                       # 固定口数：不换算成闲置资金比例（否则别的 ETF 跟着变、固定的这只卖了又买回；2026-10-13）
             px_ = float((cr.get("px") or {}).get(t) or (st.get("core_last") or {}).get(t) or 0)
             return (qt + f"<div class='muted small'>现在 {cur:,} 口" + (f" · 约 {_yen(cur * px_)}" if px_ > 0 else "")
-                    + " · 手动固定：卖出 / 减仓 / 加仓用下面的「固定口数…」（只改这只的固定口数；别的 ETF 与闲置资金比例不变）</div>")
+                    + _tip("手动固定：卖出 / 减仓 / 加仓用下面的「固定口数…」（只改这只的固定口数；别的 ETF 与闲置资金比例不变）") + "</div>")
         if core_busy:
             return qt + f"<div class='act muted'>有一条闲置资金比例的指令在处理（见{escape(core_busy)}）</div>"
         o = core_now.get(t)
@@ -2790,7 +2810,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     H.append(_room_card(rm))                                # 最上面：今天还能买几次 / 卖几次（D6；2026-10-15 用户要求 3）；下面的两张卡片在后面拼（要先拼好指令的每一行）
     H.append(PANE + "hold")
     H.append(_kline_help())                                 # 整页一份的「怎么看 K 线图」：持仓的 K 线上面（2026-10-15 用户：「选股中的怎么看K线图要放到持仓中的K线的上面」）
-    H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions) + more
+    H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions, tip=_tip) + more
              + ("<div id='qt-note' class='muted small'>现价：Yahoo 1 分钟线（约晚 20 分钟）</div>" if held_any else "") + "</section>")
     H.append(PANE + "pick")
     H.append(_intraday_card(iv))                            # 最上面：今天盘中规则的暂定买点（约晚 20 分钟；2026-10-16）

@@ -204,9 +204,9 @@ def test_ranked_rows_have_no_badge_above_and_ranks_without_gaps_below(monkeypatc
     full = _sg_undeduped(monkeypatch)
     for tk in ("1925.T", "6501.T"):
         a = _row(ab, tk, "autobuy")
-        assert "<div class='small prob'>" in a, tk                          # 历史比例那一行照样在
+        assert "<span class='chip mut prob'>" in a, tk                      # 历史比例的标签照样在（2026-10-17 起是标签 + ⓘ）
         assert _norm(a) == _norm(_row(full, tk, "suggest")), tk             # 其余与建议的股票会有的那一行一样
-    assert "<span class='chip hot'>快要出</span>" in _abx(ab, "1925.T") and "<div class='small prob'>" not in _abx(ab, "8306.T")
+    assert "<span class='chip hot'>快要出</span>" in _abx(ab, "1925.T") and "<span class='chip mut prob'>" not in _abx(ab, "8306.T")
     ranks = [(int(n), c) for n, c in re.findall(r"<span class='rk'>(\d+)</span><b>(\d+)</b>", sg)]
     assert [n for n, _ in ranks] == [1, 2, 3] and {c for _, c in ranks} == {"9008", "7203", "6758"}   # 不跳号（去重前 1925 / 6501 也占名次）
     before = [int(n) for n in re.findall(r"<span class='rk'>(\d+)</span>", full)]

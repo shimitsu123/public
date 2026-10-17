@@ -57,6 +57,12 @@ AM_END, PM_START, CLOSE = dt.time(11, 30), dt.time(12, 30), dt.time(15, 30)
 SETTINGS = "intraday.json"
 LOG_NAME = "com.qbreak.panel.intraday.log"
 TITLE = "今天盘中：规则的买点（暂定，约晚 20 分钟）"
+def warn_short(w: str) -> str:
+    """顶上 ★ 的标签（面板；整句在 ⓘ 里）：「… → 下个交易日 10/19（周一）不开新仓」→「下个交易日 10/19（周一）不开新仓」。"""
+    w = str(w or "")
+    return w.rsplit("→", 1)[-1].strip() if "→" in w else w
+
+
 FOOT = "暂定：以下一次执行器的决策（交易日 07:40）为准；规则的候选，不是建议；非投资建议"
 NO_RESEARCH = "盘中手动买卖没有研究支持（分钟 K 线研究 2026-10-15：日内规则扣成本后都亏）"
 _TAG = re.compile(r"[a-z][a-z0-9_]{0,31}")

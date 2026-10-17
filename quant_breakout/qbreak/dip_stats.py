@@ -99,7 +99,7 @@ def line(tr: dict | None, table: dict | None = None) -> dict | None:
     s = tab[k]
     text = (f"历史上（{SPAN}，{s['n']:,} 次）刚变成这样之后 20 个交易日：赚钱的比例 {s['win']:.0f}%、平均 {s['net']:+.1f}%、"
             f"比大盘 {s['x']:+.1f} pp → {say(s)}；不是预测").replace("+-", "−").replace(" -", " −")
-    return {"state": k, "name": NAME[k], "text": text}
+    return {"state": k, "name": NAME[k], "text": text, "say": say(s).split("（")[0]}
 
 
 __all__ = ["FILE", "STATES", "NAME", "state_of", "load", "say", "line"]

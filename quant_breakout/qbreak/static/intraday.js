@@ -3,25 +3,31 @@
 // 数 = /api/intraday（qbreak/intraday_watch.view：只读面板线程每 5 分钟另起进程写的结果文件，请求里不取价）；服务器先画好一份
 // （panel._intraday_card / _intraday_line），这里定时重画同一个样子（交易时段每 1 分钟，其他时间每 10 分钟；回到页面 / 重新连上也再取）；
 // 对话框开着 / 正在输入 / 页面在后台 → 这一次不重画（等下一次）。代码一律带名字（服务器给 label；文字里的「7203.T」用 nameify 兜底）。
-import { $, CFG, nameify, nd } from './core.js';
+import { $, CFG, nameify, nd, tipEl } from './core.js';
 import { req } from './net.js';
 
 export function intraShow(v){                                             // 重画卡片 + 持仓每只一行；v.ok=false / 没有 → 不动（保留上一次的）
   if(!v || !v.ok) return;
   const el=$('#intraday');
   if(el){
-    const old=el.querySelector('details'), open=!!(old && old.open);       // 展开着的保持展开
+    const old=el.querySelector('details.ia'), open=!!(old && old.open);       // 展开着的保持展开
     el.textContent='';
-    const hl=nd('div', 'ia-hl', null, el); nd('b', null, v.title, hl);
+    const hl=nd('div', 'ia-hl', null, el); nd('b', null, v.title, hl); tipEl(hl, v.foot);   // 页脚收进 ⓘ（2026-10-17）
     nd('div', 'muted small', nameify(v.head), el);
-    for(const w of v.warn||[]) nd('div', 'neg small', '★ '+nameify(w), el);
+    if((v.warn||[]).length){                                              // ★ = 标签（箭头后面的结论），整句在 ⓘ 里
+      const c=nd('div', 'chips', null, el);
+      for(const w of v.warn) nd('span', 'chip bad', '★ '+nameify(w.includes('→') ? w.split('→').pop().trim() : w), c);
+      tipEl(c, v.warn.map(w=>'★ '+nameify(w)));
+    }
     if((v.rows||[]).length){
-      const ls=nd('div', 'list', null, el);
+      const ls=nd('div', 'list', null, el), cnt={};             // 多数行的数据时刻 → 不每行重复，只写和它不一样的
+      v.rows.forEach(r=>{ cnt[r.at]=(cnt[r.at]||0)+1; });
+      const mode=Object.keys(cnt).sort((a, b)=>cnt[b]-cnt[a])[0];
       for(const r of v.rows){
         const li=nd('div', 'li', null, ls), g=nd('div', 'grow', null, li);
         nd('b', null, r.label, g); g.appendChild(document.createTextNode(' ')); nd('span', r.kind==='ok' ? 'chip hot' : 'chip', r.status, g);
         nd('div', 'small', nameify(r.line), g);
-        const ga=[r.gates, r.at].filter(Boolean).join(' · ');              // 只这只自己的闸门 / 数据时刻（共同的在顶上 ★）
+        const ga=[r.gates, String(r.at)===mode ? null : r.at].filter(Boolean).join(' · ');              // 只这只自己的闸门 / 数据时刻（共同的在顶上 ★）
         if(ga) nd('div', 'muted small', nameify(ga), g);
       }
     }
@@ -31,7 +37,6 @@ export function intraShow(v){                                             // 重
       nd('summary', 'muted small', v.impossible, d);
       for(const x of v.groups||[]) nd('div', 'muted small', x.why+'：'+x.names, d);
     }
-    nd('div', 'muted small', v.foot, el);
   }
   document.querySelectorAll('[data-intra]').forEach(e=>{                   // 持仓每只一行：没有这只（卖完了 / 还没算）→ 空
     const s=(v.hold||{})[e.dataset.intra]; e.textContent=s ? nameify(s) : '';

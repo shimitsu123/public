@@ -405,11 +405,12 @@ def test_panel_card_text_equals_js_rendering(monkeypatch, tmp_path):
     doc = IW.run_once("paper", AT, fetch=_fetcher(frames, _bands(frames)), send=lambda *a, **k: None)
     v = IW.view(doc, AT)
     want = _text(panel._intraday_card(v))
-    fns = "\n".join(_js_fn(panel._JS, n) for n in ("nd", "intraShow"))
+    fns = "\n".join(_js_fn(panel._JS, n) for n in ("nd", "tipEl", "intraShow"))
     js = """
 class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[]; this._t=''; this.className=''; this.dataset={}; this.open=false; }
-  appendChild(c){ this.children.push(c); return c; }
-  querySelector(s){ for(const c of this.children){ if(c.tagName===String(s).toUpperCase()) return c; const x=c.querySelector && c.querySelector(s); if(x) return x; } return null; }
+  appendChild(c){ this.children.push(c); return c; } setAttribute(k, v){ this[k]=v; }
+  querySelector(s){ const [tg, cl]=String(s).split('.');
+    for(const c of this.children){ if(c.tagName===tg.toUpperCase() && (!cl || String(c.className).split(' ').includes(cl))) return c; const x=c.querySelector && c.querySelector(s); if(x) return x; } return null; }
   set textContent(v){ this._t=String(v); this.children=[]; } get textContent(){ return this._t+this.children.map(c=>c.textContent).join(''); } }
 const CARD=new El('section'), HOLD=new El('div'), GONE=new El('div'); HOLD.dataset.intra='6758.T'; GONE.dataset.intra='9999.T'; GONE.textContent='old';
 const document={createElement:t=>new El(t), createTextNode:t=>({textContent:String(t)}), querySelectorAll:s=>[HOLD, GONE]};
@@ -419,7 +420,7 @@ __FNS__
 const V=__V__;
 intraShow(V);
 const out={card:CARD.textContent, hold:HOLD.textContent, gone:GONE.textContent};
-CARD.querySelector('details').open=true; intraShow(V); out.keep=CARD.querySelector('details').open;
+CARD.querySelector('details.ia').open=true; intraShow(V); out.keep=CARD.querySelector('details.ia').open;   // 「今天不可能」展开着的保持展开（ⓘ 不算）
 intraShow({ok:false}); out.same=CARD.textContent===out.card;
 console.log(JSON.stringify(out));
 """.replace("__FNS__", fns).replace("__V__", json.dumps(v, ensure_ascii=False))
