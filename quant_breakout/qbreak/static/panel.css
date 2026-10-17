@@ -1,11 +1,11 @@
 /* qbreak 操作面板的样式（由 qbreak/panel.py 以 /static/panel.css 提供） */
 :root{--bg:#f2f2f7;--card:#fff;--fg:#1c1c1e;--muted:#6e6e73;--line:#e3e3e8;--pos:#1a7f37;--neg:#c62828;--accent:#2f5bd3;
---accent-fg:#fff;--chip:#eef0f6;--shadow:0 1px 2px rgba(0,0,0,.06);--up:#e0373a;--down:#0e8f50;--ma10:#8e4bb3;--ma20:#c26a00;--ma30:#2a5db0;--warn:#a85d00;--warn-bg:#fff1dc;--neg-bg:#fde7e7}
+--accent-fg:#fff;--chip:#eef0f6;--shadow:0 1px 2px rgba(0,0,0,.06);--up:#e0373a;--down:#0e8f50;--ma10:#8e4bb3;--ma20:#c26a00;--ma30:#2a5db0;--warn:#a85d00;--warn-bg:#fff1dc;--neg-bg:#fde7e7;--ul:#0e8a8a}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0f0f11;--card:#1c1c1f;--fg:#ececf0;--muted:#a1a1a8;
 --line:#2e2e33;--pos:#4cc36b;--neg:#ff6b6b;--accent:#8aa8ff;--accent-fg:#0f0f11;--chip:#2a2a30;--shadow:none;
---up:#e8484d;--down:#17905a;--ma10:#a66fd0;--ma20:#c47f2c;--ma30:#5b8be0;--warn:#f0a840;--warn-bg:#3a2a12;--neg-bg:#3d1a1c}}
+--up:#e8484d;--down:#17905a;--ma10:#a66fd0;--ma20:#c47f2c;--ma30:#5b8be0;--warn:#f0a840;--warn-bg:#3a2a12;--neg-bg:#3d1a1c;--ul:#3cc7c7}}
 :root[data-theme="dark"]{--bg:#0f0f11;--card:#1c1c1f;--fg:#ececf0;--muted:#a1a1a8;--line:#2e2e33;--pos:#4cc36b;--neg:#ff6b6b;
---accent:#8aa8ff;--accent-fg:#0f0f11;--chip:#2a2a30;--shadow:none;--up:#e8484d;--down:#17905a;--ma10:#a66fd0;--ma20:#c47f2c;--ma30:#5b8be0;--warn:#f0a840;--warn-bg:#3a2a12;--neg-bg:#3d1a1c}
+--accent:#8aa8ff;--accent-fg:#0f0f11;--chip:#2a2a30;--shadow:none;--up:#e8484d;--down:#17905a;--ma10:#a66fd0;--ma20:#c47f2c;--ma30:#5b8be0;--warn:#f0a840;--warn-bg:#3a2a12;--neg-bg:#3d1a1c;--ul:#3cc7c7}
 *{box-sizing:border-box} [hidden]{display:none!important} html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Hiragino Sans","PingFang SC",sans-serif;
 -webkit-tap-highlight-color:transparent;overflow-wrap:break-word}
@@ -247,3 +247,25 @@ details.ii.on .iib{visibility:visible}
 .tol{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .tor{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
 .tor .tob{width:22px;text-align:center;font-size:18px;color:var(--muted)}.tor .sp{flex:1}.tor .btn.sm{min-width:44px}
+/* K 线：看更早 / 放大缩小 / 对数 / 自己画线、今天要成交的单、趋势线的容差带；调仓框的快捷档（2026-10-17） */
+.kzg{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+.chart .kz{font:inherit;font-size:14px;min-width:38px;min-height:38px;padding:4px 10px;border:1px solid var(--line);border-radius:10px;
+background:var(--card);color:var(--fg);cursor:pointer;touch-action:manipulation}
+.chart .kz[aria-pressed=true]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+.chart .kz:disabled{opacity:.4;cursor:default}
+.kdraw{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap;padding:4px 0 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.kdraw .hint{font-size:12px;color:var(--muted)}
+.seg.sm button{min-height:32px;padding:3px 10px;font-size:13px}
+.ktl{display:flex;align-items:center;gap:4px 8px;flex-wrap:wrap}
+.chart .tlb{fill:var(--fg);opacity:.08;stroke:none}
+.chart .ul{fill:none;stroke:var(--ul);stroke-width:1.5}.chart .ula{fill:var(--card);stroke:var(--ul);stroke-width:1.6}.chart .ula.on{fill:var(--ul)}
+.chart .ult{fill:var(--ul)}
+.chart .ob{stroke:var(--accent);stroke-width:1.2;stroke-dasharray:6 3;shape-rendering:crispEdges}.chart .obt{fill:var(--accent);font-weight:600}
+.chart .os{stroke:var(--warn);stroke-width:1.2;stroke-dasharray:6 3;shape-rendering:crispEdges}.chart .ost{fill:var(--warn);font-weight:600}
+.key.tlb{background:var(--fg);opacity:.25}.key.dash.ob{border-top-color:var(--accent)}.key.dash.os{border-top-color:var(--warn)}
+.qk{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:6px;margin-top:10px}
+.qkb{display:flex;flex-direction:column;align-items:center;gap:0;line-height:1.3;padding:6px 4px}
+.qkb[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.qkb .up{color:var(--up)}.qkb .down{color:var(--down)}
+.ksv{position:relative}.chart .klast{position:absolute;min-height:32px;padding:2px 10px;font-size:13px;box-shadow:var(--shadow);opacity:.95}
+@media (max-width:430px){.kbar.ktop .hint{display:none}}   /* 手机：上边沿只留 日K / 周K / 月K 和 − ＋（不多占一行） */

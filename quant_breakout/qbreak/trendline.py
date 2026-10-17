@@ -186,7 +186,7 @@ def summary(b: pd.DataFrame, tf: str, n_show: int) -> dict | None:
     off = n - min(n, int(n_show))                                       # 窗口第一根在全部 K 线里的位置
     c = float(b["Close"].iloc[-1])
     proj = PROJ[tf]
-    out: dict = {"proj": proj, "eps": EPS[tf]}
+    out: dict = {"proj": proj, "eps": EPS[tf], "tol": _rd(s["tol"][t])}   # tol：碰到 / 跌破的容差（円，面板画成线两边的淡色带；2026-10-17）
     for side in SIDES:
         v = s[side][t]
         if not math.isfinite(v):

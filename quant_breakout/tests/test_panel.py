@@ -458,7 +458,7 @@ def test_kline_plain_text_and_lot_bar_in_node(tmp_path):
                                             "capLab", "adjCap", "adjBar"))
     kp = json.dumps({"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN}, ensure_ascii=False)
     js = """
-class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[]; this._t=''; this.className=''; this.style={}; this.attrs={};
+class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[]; this._t=''; this.className=''; this.style={}; this.attrs={}; this.dataset={};
   const s=this; this.classList={add(c){ s.className=(s.className ? s.className+' ' : '')+c; }}; }
   appendChild(c){ this.children.push(c); return c; }
   set textContent(v){ this._t=String(v); this.children=[]; } get textContent(){ return this._t+this.children.map(c=>c.textContent).join(''); }
@@ -470,6 +470,7 @@ const R={max:'800', value:'600', attrs:{}, setAttribute(k,v){ this.attrs[k]=Stri
 const ELS={'#adj-range':R, '#adj-bar':new El('div'), '#adj-lab':new El('div'), '#adj-note':new El('div')};
 const $=s=>ELS[s];
 let ADJ=null;
+const TIPS=[]; function tipEl(par, lines){ TIPS.push(lines); }
 __FNS__
 const out={};
 const bar=(shares, px, value)=>{ ADJ={shares:shares, px:px}; R.max=String(Math.max(1, Math.ceil(Math.max(adjCap(), shares, LOT)/LOT))*LOT); R.value=String(value);
@@ -478,6 +479,8 @@ const bar=(shares, px, value)=>{ ADJ={shares:shares, px:px}; R.max=String(Math.m
 out.add=bar(600, 1931, 800); out.cut=bar(600, 1931, 0); out.keep=bar(600, 1931, 600); out.over=bar(1000, 1931, 800);
 out.many=bar(200, 10, 200); out.none=bar(100, 5000000, 100);
 const t=(f)=>{ const e=new El('div'); f(e); return e.textContent; };
+const tl=(f)=>{ const e=new El('div'); f(e); const r=e.children[0]; return [r.children[0].children.map(b=>b.textContent+(b.attrs['aria-pressed']==='true' ? '*' : '')).join('|'), r.children[1].textContent]; };
+const DT={d:['2026-03-12','2026-05-20','2026-10-16']};
 const DM={d:['2026-09-29','2026-09-30','2026-10-01'], dif:[-0.5,-0.2,0.3], dea:[0.1,0.0,0.1], mh:[-0.6,-0.2,0.2],
           pdi:[20,30,31], mdi:[25,12,11], adx:[26,28,27], v:[100,100,100]};
 out.macd_last=t(e=>kSubNow(e, DM, 2, {kind:'stock'}, 'D', 'macd')); out.macd_mid=t(e=>kSubNow(e, DM, 1, {kind:'stock'}, 'D', 'macd'));
@@ -488,13 +491,16 @@ const DV={d:Array.from({length:21}, (_, i)=>'2026-09-'+String(i+1).padStart(2,'0
 out.vol=t(e=>kSubNow(e, DV, 20, {kind:'stock'}, 'D', 'v')); out.c_vol=cls(e=>kSubNow(e, DV, 20, {kind:'stock'}, 'D', 'v')); out.vol_w=t(e=>kSubNow(e, DV, 20, {kind:'core'}, 'W', 'v'));
 out.trend_w=t(e=>kTrend(e, {label:'上升', align:'多头排列', above20:true, slope20_pct:0.52}, 'W'));
 out.trend_flat=t(e=>kTrend(e, {label:'震荡', align:'', above20:false, slope20_pct:0}, 'D'));
-out.tl=t(e=>kTL(e, {sup:{now:950, dist_pct:-5, slope_pct:0.12, touch:3}, res:{now:1100, dist_pct:10, slope_pct:0.01, touch:2},
-                    chan:'对称三角', pos:33, eps:0.02}, 'D'));
-out.tl_broken=t(e=>kTL(e, {sup:{now:1020, dist_pct:2, slope_pct:-0.5, touch:2}, res:{now:990, dist_pct:-1, slope_pct:0.3, touch:4},
-                           chan:'扩散', pos:120, eps:0.4}, 'M'));
+out.tl=tl(e=>kTL(e, {sup:{now:950, dist_pct:-5, slope_pct:0.12, touch:3, i1:0, i2:1}, res:{now:1100, dist_pct:10, slope_pct:0.01, touch:2, i1:-5, i2:2},
+                    chan:'对称三角', pos:33, eps:0.02, tol:12.5}, 'D', DT, 'w'));
+out.tl_tip=TIPS[TIPS.length-1];
+out.tl_broken=tl(e=>kTL(e, {sup:{now:1020, dist_pct:2, slope_pct:-0.5, touch:2}, res:{now:990, dist_pct:-1, slope_pct:0.3, touch:4},
+                           chan:'扩散', pos:120, eps:0.4}, 'M', DT, 'c'));
+out.tlc_tip=TIPS[TIPS.length-1];
 out.c_tl=cls(e=>kTL(e, {sup:{now:1020, dist_pct:2, slope_pct:-0.5, touch:2}, res:{now:990, dist_pct:-1, slope_pct:0.3, touch:4},
-                           chan:'扩散', pos:120, eps:0.4}, 'M'));
-out.tl_one=t(e=>kTL(e, {res:{now:1100, dist_pct:10, slope_pct:0.2, touch:2}, eps:0.02}, 'W'));
+                           chan:'扩散', pos:120, eps:0.4}, 'M', DT, 'w'));
+out.tl_one=tl(e=>kTL(e, {res:{now:1100, dist_pct:10, slope_pct:0.2, touch:2}, eps:0.02}, 'W', DT, 'w'));
+out.tl_none=tl(e=>kTL(e, null, 'D', DT, 'c'));
 console.log(JSON.stringify(out));
 """.replace("__KP__", kp).replace("__FNS__", fns)
     f = tmp_path / "k.js"
@@ -524,9 +530,15 @@ console.log(JSON.stringify(out));
     assert o["trend_w"] == "现在的趋势：往上走（收盘在 20 周均价上面，20 周均价往上） · 涨势整齐"
     assert o["trend_flat"] == "现在的趋势：横着走（收盘在 20 日均价下面，20 日均价走平）"
     # 趋势线：一行（通道的说法 · 支撑 / 压力 离收盘多远，跌破 / 冲过）
-    assert o["tl"] == "趋势线：下面的线往上、上面的线往下：越收越窄，快要选方向 · 支撑 ¥950.0（比收盘低 5%） · 压力 ¥1,100（比收盘高 10%）"
-    assert o["tl_broken"] == "趋势线：两条线越张越开：上下波动越来越大 · 支撑 ¥1,020（已跌破） · 压力 ¥990.0（已冲过）"
-    assert o["tl_one"] == "趋势线：只找到上面的一条 · 压力 ¥1,100（比收盘高 10%）"
+    assert o["tl"] == ["按影线*|按收盘", "趋势线：下面的线往上、上面的线往下：越收越窄，快要选方向 · 支撑 ¥950.0（比收盘低 5%） · 压力 ¥1,100（比收盘高 10%）"]
+    assert o["tl_broken"] == ["按影线|按收盘*", "趋势线：两条线越张越开：上下波动越来越大 · 支撑 ¥1,020（已跌破） · 压力 ¥990.0（已冲过）"]
+    assert o["tl_one"][1] == "趋势线：只找到上面的一条 · 压力 ¥1,100（比收盘高 10%）"
+    assert o["tl_none"] == ["按影线|按收盘*", "趋势线：按收盘找不到（没有碰过两次以上、还没被破的线）"]
+    # ⓘ（2026-10-17「精确趋势线」）：连的是哪两根（带年份；图外的写「图外更早」）、碰过几次、容差、连法
+    assert o["tl_tip"][0] == "支撑线：连 2026/03/12 和 2026/05/20 的两个低点，碰过 3 次；每根 +0.12%"
+    assert o["tl_tip"][1] == "压力线：连 图外更早 和 2026/10/16 的两个高点，碰过 2 次；每根 +0.01%"
+    assert o["tl_tip"][2].startswith("容差 ¥12.5（图上线两边的淡色带）") and o["tl_tip"][3].startswith("按影线：")
+    assert "两个收盘" in o["tlc_tip"][0] and o["tlc_tip"][-1].startswith("按收盘：")
     assert "没有预测力" not in J and "没有预测力" in panel._kline_help()     # 研究结论在整页一份的「怎么看 K 线图」里说一次（2026-10-15）
 
 
@@ -570,8 +582,8 @@ def test_one_kline_help_for_the_whole_page_and_no_number_table():
     J = (panel.STATIC_DIR / "kline.js").read_text(encoding="utf-8")
     for x in ("kHelp", "khelp", "怎么看这张图", "的数字（表）", "'table'", "'thead'", "'tbody'", "dataset.tbl", "dataset.help"):
         assert x not in J, x                                                # 每张图的说明 / 数字表（与它们的状态）都去掉
-    assert "kTrend(nd('div','kexp',null,box), tr, tf)" in J and "kTL(nd('div','kexp',null,box), TL, tf)" in J   # 图下各自的一句话照旧
-    assert "kSubKey(nd('div','kexp',null,box), P, tf, sub)" in J and "kSubNow(sn, D, N-1, P, tf, sub)" in J
+    assert "kTrend(nd('div','kexp',null,box), tr, tf)" in J and "kTL(nd('div','kexp',null,box), TL, tf, D, tlm)" in J   # 图下各自的一句话照旧
+    assert "kSubKey(nd('div','kexp',null,box), P, tf, sub)" in J and "kSubNow(sn, D, E-1, P, tf, sub)" in J
     css = (panel.STATIC_DIR / "panel.css").read_text(encoding="utf-8")
     assert ".chart table" not in css and ".chart td" not in css and ".abxb .rk" not in css and ".kexp ul" not in css
     assert "details.khelp>summary" in css and ".khgo a{" in css
@@ -867,10 +879,14 @@ def test_kline_period_and_sub_buttons_keep_the_scroll_position():
     """点 K 线的日 / 周 / 月、量 / MACD / DMI：整张图重画时页面不跳（2026-10-17 用户「点击K线的日月周 量macd dmi等等的时候scroll滚动了」；
     WebKit〔iPhone 的 Safari〕实测旧代码跳 20〜440px）：先撑住高度、画完把刚按的按钮放回原来的屏幕位置、浏览器不自己挪。"""
     js = (panel.STATIC_DIR / "trade.js").read_text(encoding="utf-8")
+    kj = (panel.STATIC_DIR / "kline.js").read_text(encoding="utf-8")
     css = (panel.STATIC_DIR / "panel.css").read_text(encoding="utf-8")
     i = js.index("if(a==='ktf' || a==='ksub'){")
     blk = js[i:js.index("if(a==='buy')", i)]
-    assert "const y0=b.getBoundingClientRect().top;" in blk and "bx.style.minHeight=bx.offsetHeight+'px';" in blk
+    assert "kRedraw(bx, b);" in blk                                          # 2026-10-17：缩放 / 对数 / 画线也走同一个 kRedraw（kline.js）
+    i = kj.index("export function kRedraw(bx, btn){")
+    blk = kj[i:kj.index("\n}\n", i)]
+    assert "btn.getBoundingClientRect().top" in blk and "bx.style.minHeight=bx.offsetHeight+'px';" in blk
     assert blk.index("minHeight=bx.offsetHeight") < blk.index("drawK(bx);") < blk.index("window.scrollBy(0, dy)")
     assert "nb.focus({preventScroll:true})" in blk and ".chart{overflow-anchor:none}" in css
 
@@ -894,3 +910,40 @@ def test_bottom_tab_order_follows_the_device_cookie():
     assert list(panel.TABS) == dflt                                           # 不改默认
     js = (Path(panel.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
     assert "qb_tabs=" in js and "[data-tabmv]" in js and "SameSite=Lax" in js and "tabOrderShow(tabOrderNow())" in js
+
+
+def test_chart_orders_lists_todays_orders_for_the_kline():
+    """K 线上画今天要成交的单（2026-10-17 用户「简化成交操作」）：只取 _trade_split 放在「今天要成交的单」的那几笔；
+    还没成交的股数、限价（寄付 / 开盘价的单没有限价 → 页面写在图下面）、撤单中。"""
+    book = {"state": {"last_date": "2026-10-16"}, "orders": [
+        {"cid": "a", "decided_on": "2026-10-16", "ticker": "7203.T", "side": "BUY", "qty": 200, "filled_qty": 100, "limit": 2963.0},
+        {"cid": "b", "decided_on": "2026-10-16", "ticker": "7203.T", "side": "SELL", "qty": 100, "limit": None},
+        {"cid": "c", "decided_on": "2026-10-16", "ticker": "1545.T", "side": "SELL", "qty": 5, "kind": "core", "limit": 30000},
+        {"cid": "d", "decided_on": "2026-10-16", "ticker": "6758.T", "side": "BUY", "qty": 100, "limit": 3000},     # 已结束
+        {"cid": "e", "decided_on": "2026-10-15", "ticker": "6758.T", "side": "BUY", "qty": 100, "limit": 3000},     # 上一次决策的
+        {"cid": "f", "decided_on": "2026-10-16", "ticker": "9984.T", "side": "BUY", "qty": "x", "limit": 1}]}     # 读不了的数：不画
+    sp = {"orders": {"a": "today", "b": "today", "c": "today", "d": "ended", "e": "today", "f": "today"}}
+    got = panel._chart_orders(book, sp, {"c"})
+    assert got == {"7203.T": [{"s": "B", "n": 100, "u": "股", "lim": 2963.0, "c": ""}, {"s": "S", "n": 100, "u": "股", "lim": None, "c": ""}],
+                   "1545.T": [{"s": "S", "n": 5, "u": "口", "lim": 30000.0, "c": "撤单中"}]}
+    assert panel._chart_orders({}, {}, set()) == {}
+
+
+def test_kline_pan_zoom_log_draw_and_quick_presets_are_wired():
+    """2026-10-17 用户「简化成交操作的 精确趋势线的等等」做 1〜4：调仓框快捷档、K 线上的单、拖动 / 捏合看更早与放大缩小、
+    趋势线（容差带、锚点、按影线 / 按收盘、对数、自己画线）。页面逻辑在浏览器里实测（Chromium / WebKit）；这里查接线与存法。"""
+    html = panel._dialogs(True)
+    assert "id='adj-qk'" in html and html.index("id='adj-cur'") < html.index("id='adj-qk'") < html.index("id='adj-seg'")
+    js = (panel.STATIC_DIR / "trade.js").read_text(encoding="utf-8")
+    assert "function adjQk(n){" in js and "adjBar(); adjQk(n);" in js and "if(a==='adj-qk')" in js
+    assert "['减 1/4', fl(c.shares*0.75)], ['减一半', fl(c.shares/2)]" in js and "if(!c || c.fix || !(c.shares>L))" in js   # 买入 / 固定口数框不给
+    kj = (panel.STATIC_DIR / "kline.js").read_text(encoding="utf-8")
+    for k in ("box.onpointerdown=", "box.onwheel=", "mode:'pinch'", "z.mode='scrub'", "z.mode='pan'", "touch-action", "qbreak.lines", "qbreak.log",
+              "qbreak.tlm", "D.tlc", "TL.tol", "'tlb'", "CFG.ords", "tf==='D' ? ((CFG.ords||{})[t]||[])", "kRedraw(bx, b);", "logTicks("):
+        assert k in kj or k == "touch-action", k
+    css = (panel.STATIC_DIR / "panel.css").read_text(encoding="utf-8")
+    assert "touch-action:pan-y" in css and ".chart .tlb{" in css and ".chart .ob{" in css and ".qk{" in css
+    assert css.count("--ul:") == 3                                          # 浅色 + 两份深色
+    h = panel._kline_help()
+    assert "容差" in h and "按收盘" in h and "今天要成交的单" in h and "双指捏合" in h and "对数" in h and "自己画线" in h
+

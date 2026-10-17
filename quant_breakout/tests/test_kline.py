@@ -101,3 +101,10 @@ def test_payload_carries_trendlines_and_indicator_params():
     for side in ("sup", "res"):
         if side in tl:
             assert tl[side]["i2"] < K.BARS["D"] and tl[side]["touch"] >= 2
+    assert tl["tol"] > 0                                                    # 容差（円）：面板画成线两边的淡色带（2026-10-17）
+    tlc = p["tf"]["D"].get("tlc")                                           # 按收盘连的另一套（面板「按收盘」）
+    assert tlc and tlc["tol"] > 0 and tlc != tl
+    closes = np.round(c[-K.BARS["D"]:], 2)
+    for side in ("sup", "res"):
+        if side in tlc and 0 <= tlc[side]["i1"] < K.BARS["D"]:
+            assert any(abs(tlc[side]["y1"] - x) < 0.02 for x in closes)    # 锚点在收盘价上

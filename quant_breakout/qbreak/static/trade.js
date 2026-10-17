@@ -1,6 +1,6 @@
 // qbreak 操作面板：trade.js（浏览器原生 ES 模块；由 qbreak/panel.py 以 /static/trade.js 提供；不要用构建工具）
-import { $, CFG, NOTE, api, closeAll, coreShow, done, estLine, fmt, nameify, nd, plBox, reloadPage, sheet, tlab, toast, tqty, yen } from './core.js';
-import { SUBS, TFS, drawK, setSUB, setTF, showK } from './kline.js';
+import { $, CFG, NOTE, api, closeAll, coreShow, done, estLine, estPart, fmt, nameify, nd, plBox, reloadPage, sheet, tlab, toast, tqty, yen } from './core.js';
+import { SUBS, TFS, kRedraw, setSUB, setTF, showK } from './kline.js';
 import { buyLive, estOf, loadSQ, rtQ } from './quotes.js';
 
 let ASK=null, CUR=null;
@@ -100,11 +100,33 @@ function adjRt(q){                                                        // 调
   if(c) c.textContent=c.textContent.replace(/约 ¥[\d,]+/, '约 '+yen(ADJ.shares*ADJ.px)).replace(/约占权益 [\d.]+%|约占权益 —/, '约占权益 '+pctOf(ADJ.shares));
   adjPrev();
 }
+function man(v){ v=Math.round(v); return v>=1e4 ? '¥'+(v/1e4).toFixed(v>=1e6 ? 0 : 1).replace(/\.0$/,'')+' 万' : '¥'+fmt(v); }   // 快捷档上的短写法（¥58.7 万）
+function adjQk(n){                                                         // 快捷档（2026-10-17 用户「简化成交操作」）：减 1/4 / 减一半 / 只留 1 个单元 / 全部，各写预计收益；点一下 = 填进目标
+  const box=$('#adj-qk'); if(!box) return;
+  const c=ADJ, L=ALOT(), U=UW();
+  if(!c || c.fix || !(c.shares>L)){ box.hidden=true; box.textContent=''; return; }        // 买入 / 固定口数框、只有 1 个单元：不给
+  const fl=x=> Math.max(0, Math.floor(x/L+1e-9)*L), seen={}, opts=[];
+  for(const [lab, t] of [['减 1/4', fl(c.shares*0.75)], ['减一半', fl(c.shares/2)], ['留 '+fmt(L)+' '+U, L], ['全部', 0]]){
+    if(t>=c.shares || seen[t]) continue; seen[t]=1; opts.push([lab, t]);
+  }
+  box.hidden=!opts.length; box.textContent='';
+  const e=estOf(c.t);
+  for(const [lab, t] of opts){
+    const k=c.shares-t, p=estPart(e, k), b=nd('button', 'btn sm qkb', null, box);
+    b.type='button'; b.dataset.act='adj-qk'; b.dataset.n=t;
+    b.setAttribute('aria-pressed', n===t ? 'true' : 'false');
+    nd('b', null, lab, b);
+    nd('span', 'small muted', '卖 '+fmt(k)+' '+U, b);
+    if(p) nd('span', 'small '+(p.pnl>=0 ? 'up' : 'down'), (p.pnl>=0 ? '+' : '−')+man(Math.abs(p.pnl)), b);   // 预计收益（税前；准确的数在下面的预览里）
+    else nd('span', 'small muted', man(k*c.px), b);                         // 没有成本数据（核心 ETF 等）：卖出金额
+    b.setAttribute('aria-label', lab+'：卖 '+fmt(k)+' '+U+(p ? '，预计收益 '+(p.pnl>=0 ? '+' : '−')+'¥'+fmt(Math.abs(Math.round(p.pnl)))+'（税前）' : ''));
+  }
+}
 function adjPrev(){
   const go=$('#adj-go'), out=$('#adj-prev'), c=ADJ, cap=adjCap(), n=adjTarget();
   go.className='btn primary'; ADJ.cost=0; fundBox($('#adj-fund'), 0, c.t);
   const r=$('#adj-range'); if(n!=null) r.value=Math.min(+r.max, n);
-  adjBar();
+  adjBar(); adjQk(n);
   if(n==null){ out.textContent='输入目标（'+UW()+'数 / 金额 / 占总权益 %）'; go.textContent='确认'; go.disabled=true; return; }
   if(c.fix){ adjPrevFix(n); return; }
   if(c.core){ adjPrevCore(n); return; }
@@ -470,6 +492,7 @@ document.addEventListener('click', async e=>{
     if(inBuy && FUND_MODE==='all' && BUY.unit!=='shares'){ buyUnit('shares'); return; }   // 金额 / % 单位下手选：先换成股数（输入框显示的是股数）
     if(inBuy) buyPrev(); else adjPrev(); return;
   }
+  if(a==='adj-qk'){ if(!ADJ) return; adjUnit('shares'); adjShow(+d.n); adjPrev(); return; }   // 快捷档：目标 = 那一档（单位换成股 / 口，看得清）
   if(a==='adj-step'){ const n=adjTarget(); adjShow(Math.max(0, (n==null ? ADJ.shares : n)+(+d.d)*ALOT())); adjPrev(); return; }
   if(a==='adj-go'){
     if(ADJ && ADJ.fix){ const n=adjTarget(); if(n==null) return; const u=Math.min(n, adjCap());
@@ -482,15 +505,7 @@ document.addEventListener('click', async e=>{
     const bx=b.closest('.chart[data-t]'); if(!bx || !(a==='ktf' ? TFS : SUBS)[d.v]) return;
     if(a==='ktf'){ setTF(d.v); bx.dataset.tf=d.v; try{ localStorage.setItem('qbreak.tf', d.v); }catch(x){} }   // 模块之间不能直接给别的模块的变量赋值 → setTF
     else { setSUB(d.v); bx.dataset.sub=d.v; try{ localStorage.setItem('qbreak.sub', d.v); }catch(x){} }
-    const y0=b.getBoundingClientRect().top;                               // 重画（整张图清空再画）会让页面跳：画完把刚按的按钮放回原来的位置
-    bx.style.minHeight=bx.offsetHeight+'px';                              // 画的时候先撑住高度，下面的内容不往上缩（2026-10-17 用户：点日 / 周 / 月、量 / MACD / DMI 页面滚动了）
-    drawK(bx);
-    bx.style.minHeight='';
-    const nb=bx.querySelector('[data-act="'+a+'"][data-v="'+d.v+'"]');
-    if(nb){
-      const dy=nb.getBoundingClientRect().top-y0; if(Math.abs(dy)>0.5) window.scrollBy(0, dy);
-      nb.focus({preventScroll:true});                                     // 重画后焦点留在刚按的按钮上（键盘用）
-    }
+    kRedraw(bx, b);                                                       // 重画不让页面跳（kline.js；2026-10-17 用户：点日 / 周 / 月、量 / MACD / DMI 页面滚动了）
     return;
   }
   if(a==='buy'){

@@ -204,7 +204,7 @@ def _dialogs(paper: bool, cap: float = MO.CAP_PCT) -> str:
             + "</fieldset><div class='muted small'>卖出的钱按规则：有新信号就买新票，没有就进闲置资金 ETF。</div>"
             "<div class='row'><button class='btn' data-act='close'>取消</button><button class='btn danger' data-act='sell-go'>确认卖出</button></div>"
             "</div></dialog>"
-            "<dialog id='dlg-adj'><div class='sheet'><h3 id='adj-title'></h3><div id='adj-rt' class='rtl small' role='status' hidden></div><div id='adj-cur' class='muted'></div>"
+            "<dialog id='dlg-adj'><div class='sheet'><h3 id='adj-title'></h3><div id='adj-rt' class='rtl small' role='status' hidden></div><div id='adj-cur' class='muted'></div><div class='qk' id='adj-qk' role='group' aria-label='快捷：减多少' hidden></div>"
             "<div style='margin-top:10px'><div class='seg' id='adj-seg' role='group' aria-label='目标的单位'>"
             "<button data-act='adj-unit' data-u='shares' aria-pressed='true' id='adj-u-sh'>股数</button>"
             "<button data-act='adj-unit' data-u='yen' aria-pressed='false'>金额 ¥</button>"
@@ -331,7 +331,13 @@ def _kline_help() -> str:
           f"{k('dash tl')}趋势线：下面连低点（支撑）、上面连高点（压力），点线 = 往后延长；▲ 冲过压力线、▼ 跌破支撑线。"
           "研究（2026-10-06）：对之后的涨跌没有预测力，只用来看",
           "下面的小图：量 = 成交多少；MACD = 涨跌的力量（快线在 0 附近往上穿过慢线 = 金叉，是规则买入的条件之一）；DMI = 买卖哪边强、趋势强不强（规则不用）",
+          f"{k('box tlb')}趋势线两边的淡色带 = 容差（离线这么近算碰到、收盘出了带子才算破）；圆点 = 连的两个点；"
+          "图下面「按影线 / 按收盘」换连法（影线 = 最高 / 最低价，收盘 = 只看收盘价）",
+          f"{k('dash ob')}{k('dash os')}今天要成交的单：买 / 卖的限价（寄付 / 开盘价的单没有价位线，写在图下面）",
           "看以前的某一根：点一下或按住左右滑；键盘 ← → 一根一根看，Home / End 到最早 / 最新，Esc 回到最新",
+          "看更早 / 放大缩小：左右拖动图（Mac：触控板左右滑或按住拖）、双指捏合（Mac：触控板捏合），或图上边沿的 − ＋；「最新」回到最近",
+          "对数：涨跌幅一样的距离一样高（10 年的月K 不会被压扁）；默认月K 用对数，可以每个周期自己切换",
+          "✎ 自己画线（存在这台设备）：水平线 = 点一下（靠近 K 线的最高 / 最低 / 开盘 / 收盘会吸过去）；斜线 = 点两个点；「撤销」「清除」",
           "图上都是过去的价格，不是预测")
     return ("<section class='card' id='khelp'><details class='khelp'><summary>怎么看 K 线图</summary><ul>"
             + "".join(f"<li>{x}</li>" for x in li) + "</ul></details></section>")
@@ -1572,6 +1578,30 @@ TABS = {"home": ("⌂", "总览", "账户现在怎样：总权益、今天的运
         "pick": ("☆", "选股", "规则的候选：出信号的、快要出的、观察中的，买入前看价格与 K 线"),
         "news": ("⚠", "消息", "qbreak 发出的通知的记录，和经济威胁消息（内容、时间、可信度、影响的行业和持仓）；推送点开到这里"),
         "more": ("⋯", "更多", "通知设置、手机、上线准备、紧急停止（HALT）")}
+
+
+def _chart_orders(book: dict, sp: dict, asked) -> dict:
+    """K 线上画的「今天要成交的单」（2026-10-17 用户：把挂着的单画在 K 线上）：_trade_split 放在「今天要成交的单」的那几笔，
+    每只票 → [{"s": "B" | "S", "n": 还没成交的股 / 口数, "u": 股 | 口, "lim": 限价 或 None（寄付 / 开盘价）, "c": 撤单中}]。只展示。"""
+    st = book.get("state") or {}
+    d = st.get("last_date")
+    where = (sp or {}).get("orders") or {}
+    out: dict = {}
+    for o in book.get("orders") or []:
+        cid = str(o.get("cid"))
+        if o.get("decided_on") != d or where.get(cid) != "today":
+            continue
+        try:
+            n = int(o.get("sent_qty") or o.get("qty") or 0) - int(o.get("filled_qty") or 0)
+            lim = float(o["limit"]) if o.get("limit") else None
+        except (TypeError, ValueError):                     # 账本里读不了的数：这一笔不画
+            continue
+        if n <= 0 or o.get("side") not in ("BUY", "SELL"):
+            continue
+        out.setdefault(str(o.get("ticker")), []).append({
+            "s": "B" if o.get("side") == "BUY" else "S", "n": n, "u": "口" if o.get("kind") == "core" else "股",
+            "lim": lim if lim and lim > 0 else None, "c": "撤单中" if cid in (asked or ()) else ""})
+    return out
 
 
 TAB_COOKIE = "qb_tabs"                                      # 底部标签从左到右的顺序（这台设备的 cookie；app.js 写）
@@ -3101,6 +3131,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                      for t in dict.fromkeys(list(u100s) + [t for t, u in (pj.get("core_units") or {}).items() if int(u) > 0])
                      if t not in bfix},                                                  # 固定口数的不跟比例（2026-10-13）
            "kp": {"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN},     # K 线的通俗说法（qbreak/kline.py）
+           "ords": _chart_orders(book, sp, tlive.get("asked")),                       # K 线上画今天要成交的单（2026-10-17）
            "fund": MO.fund_holdings(book, tag, now=now),                                  # 收盘后 / 周末：今天有成交的也能拿来凑（对账之后执行）
            "when_all": MO.allin_when(now, book, tag),                                     # 「全部换成这只」整批什么时候做
            "when_fix": fx_fill["text"], "fix_now": fx_fill["intraday"],                   # 固定口数什么时候下单 / 盘中按现价（D1；与执行器同一个时段口径）

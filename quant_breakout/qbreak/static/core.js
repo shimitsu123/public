@@ -110,7 +110,7 @@ function jfee(x){                                                          // �
   for(const [cap, f] of (CFG.fee||[])) if(x<=cap) return +f;
   return 0;
 }
-function estPart(e, k){                                                    // 卖出一部分（k 股 / 口）的预计收益：与 manual_orders.sell_estimate 同一个算法
+export function estPart(e, k){                                                    // 卖出一部分（k 股 / 口）的预计收益：与 manual_orders.sell_estimate 同一个算法
   if(!e || !(k>0) || e.entry_px==null || !(e.n>0)) return null;
   const proceeds=e.px*k, base=((e.cost||0)+(e.buy_fee||0))*k/e.n, pnl=proceeds-jfee(proceeds)-base;
   return {k:k, proceeds:proceeds, pnl:pnl, pct: base>0 ? pnl/base*100 : null};

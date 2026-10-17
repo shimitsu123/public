@@ -103,6 +103,11 @@ def test_with_live_moves_the_trendline_reading_to_the_new_bar():
     assert L2["now"] == round(L["y1"] + L["b"] * (n1 - L["i1"]), 2)
     assert L2["dist_pct"] == round((L2["now"] / (c0 * 1.005) - 1) * 100, 2)
     assert pl["tf"]["D"]["tl"][side] == L                                  # 原来的不动
+    tc = pl["tf"]["D"].get("tlc") or {}                                     # 按收盘的那套也跟着更新（2026-10-17）
+    for sd in ("sup", "res"):
+        if tc.get(sd):
+            M = lv["tf"]["D"]["tlc"][sd]
+            assert M["now"] == round(tc[sd]["y1"] + tc[sd]["b"] * (n1 - tc[sd]["i1"]), 2)
 
 
 def test_intraday_quotes_aggregates_only_the_last_session(monkeypatch):

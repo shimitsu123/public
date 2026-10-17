@@ -9,7 +9,8 @@ MA 用全部历史算（窗口开头不缺）。趋势标签是均线位置的�
 副图（2026-10-06 用户「加 MACD（规则用的就是它）或 DMI 副图」）：MACD = 规则同一组参数（StrategyParams 12 / 26 / 9，EMA；
   柱 = DIF − DEA，同花顺的柱是它的 2 倍、形状一样）；DMI = 同花顺 / 通达信的写法（N 14、M 6：+DI / −DI 用 N 根的简单合计，
   ADX = |+DI − −DI| ÷ (+DI + −DI) × 100 的 M 根平均，ADXR = (ADX + M 根前的 ADX) ÷ 2）；都在那个周期的 K 线上、用全部历史算。
-趋势线（qbreak/trendline.py：连波谷的支撑线、连波峰的压力线、往后延长的虚线、破线点）也在每个周期上算（tl）。
+趋势线（qbreak/trendline.py：连波谷的支撑线、连波峰的压力线、往后延长的虚线、破线点）也在每个周期上算（tl = 按影线〔最高 / 最低〕连；
+tlc = 按收盘连，2026-10-17）。
   上升 = 收盘在 MA20 上、MA20 比 3 根前高、MA5 在 MA20 上；下降 = 三个条件都反过来；其余 = 震荡。
   多头排列 = MA5 > MA10 > MA20 > MA30；空头排列 = 反过来（MA30 还没有时只看前三条）。
 页面上的说法（2026-10-07 用户：「K线解释换成通俗易懂的说法 横展开」）：数据里的标签不变，显示时换成 PLAIN / ALIGN_PLAIN / CHAN_PLAIN
@@ -174,6 +175,9 @@ def payload(df: pd.DataFrame, bar_date=None, info: dict | None = None) -> dict |
         tl = _trendline(b, tf)
         if tl is not None:
             out["tf"][tf]["tl"] = tl
+        tlc = _trendline(b.assign(High=b["Close"], Low=b["Close"]), tf)   # 按收盘连的（面板「按收盘」；2026-10-17 用户「精确趋势线」）
+        if tlc is not None:
+            out["tf"][tf]["tlc"] = tlc
         tr = trend(b)
         if tr is not None:
             if tf == "M":
@@ -240,7 +244,15 @@ def _live_tf(tf: str, sr: dict, d: pd.Timestamp, o: float, h: float, lo: float, 
     for k in LIST_KEYS:
         old = list(sr.get(k) or [])
         s2[k] = (old[:-1] if same else old) + [new[k][-1]]
-    tl = sr.get("tl")
+    for key in ("tl", "tlc"):                                            # 按影线 / 按收盘的两套线
+        tl = _live_tl(sr.get(key), s2, c)
+        if tl:
+            s2[key] = tl
+    return s2
+
+
+def _live_tl(tl: dict | None, s2: dict, c: float) -> dict | None:
+    """with_live 的趋势线：现在的位置（最后一根）、离收盘多远跟着「今天这一根」更新。"""
     if tl:                                                               # 趋势线：现在的位置（最后一根）、离收盘多远
         tl = {**tl}
         n1 = len(s2["d"]) - 1
@@ -252,8 +264,7 @@ def _live_tf(tf: str, sr: dict, d: pd.Timestamp, o: float, h: float, lo: float, 
         if tl.get("sup") and tl.get("res"):
             w = tl["res"]["now"] - tl["sup"]["now"]
             tl["pos"] = _r((c - tl["sup"]["now"]) / w * 100, 0) if w and w > 0 else None
-        s2["tl"] = tl
-    return s2
+    return tl
 
 
 def _trendline(b: pd.DataFrame, tf: str) -> dict | None:
