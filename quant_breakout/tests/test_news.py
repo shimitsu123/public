@@ -161,3 +161,69 @@ def test_sector_tables_complete():
 def test_holdings_map_falls_back_to_repo_copy(isolated_home):
     m = NW.holdings_map(["8306.T", "7203.T", "9999.T"])
     assert m == {"8306.T": "银行", "7203.T": "汽车·运输机"}
+
+
+# ── 同一件事只推第一次（2026-10-17 用户：「消息里面的重复的消息不要一直推送 只推送出现的第一次」）──
+def _ev(i, title, events=("tariff",), sev=2, zh=None, others=()):
+    e = {"id": i, "title": title, "events": list(events), "severity": sev, "cred": 100, "alert": True,
+         "others": [{"title": t} for t in others]}
+    if zh:
+        e["title_zh"] = zh
+    return e
+
+
+def _ids(evs, fp, h=0.0):
+    return [e["id"] for e in NW.new_alerts(evs, fp, now=NOW + dt.timedelta(hours=h))]
+
+
+def test_same_story_reworded_by_other_outlets_is_pushed_once(tmp_path):
+    fp = tmp_path / "alerted.json"
+    assert _ids([_ev("a", "Zorin puts new Ruritania sanctions passed by parliament on hold, saying waiver is in national interest")], fp) == ["a"]
+    assert _ids([_ev("b", "Zorin signs order waiving new Ruritania sanctions and tariffs")], fp, 0.5) == []
+    assert _ids([_ev("c", "Zorin waives Ruritania sanctions passed by parliament - Wire Service")], fp, 1) == []
+    assert _ids([_ev("d", "Central bank of Freedonia raises tariffs on steel imports")], fp, 1.5) == ["d"]     # 同类别、别的事：照推
+    assert _ids([_ev("e", "Zorin puts new Ruritania sanctions passed by parliament on hold", events=("war",))], fp, 2) == []   # 几乎一样的标题
+
+
+def test_japanese_title_with_outlet_suffix_or_rewording_is_pushed_once(tmp_path):
+    fp = tmp_path / "alerted.json"
+    assert _ids([_ev("a", "架空県で震度７の緊急速報を取り消し 気象台が原因を調査（架空テレビ）", events=("disaster",))], fp) == ["a"]
+    assert _ids([_ev("b", "架空県で震度７の緊急速報を取り消し 気象台が原因を調査（架空新聞）", events=("disaster",))], fp, 0.2) == []
+    assert _ids([_ev("c", "気象台、緊急速報を取り消し 震度７と過大推定", events=("disaster",))], fp, 0.4) == []
+    assert _ids([_ev("d", "架空市の工場で大規模火災 操業停止へ", events=("disaster",))], fp, 0.6) == ["d"]
+
+
+def test_chinese_translation_also_matches(tmp_path):
+    fp = tmp_path / "alerted.json"
+    assert _ids([_ev("a", "Freedonia stocks plunge 11% as index provider set to drop the country", events=("crash",),
+                     zh="自由国股票暴跌11%，因为指数公司将把该国剔除")], fp) == ["a"]
+    assert _ids([_ev("b", "Freedonian equities suffer worst day since 1998 on downgrade warning", events=("crash",),
+                     zh="自由国股票暴跌，指数公司警告将把该国剔除")], fp, 3) == []
+
+
+def test_only_compared_with_what_was_pushed_no_snowball(tmp_path):
+    """压下的说法不拿来比：不然一件事越滚越大（过去一周的推送重放过：几天里的「制裁」都成了一件事）。"""
+    fp = tmp_path / "alerted.json"
+    assert _ids([_ev("a", "Ruritania sanctions Freedonia ministers over border dispute")], fp) == ["a"]
+    assert _ids([_ev("b", "Freedonia condemns Ruritania over sanctions on ministers")], fp, 1) == []
+    assert _ids([_ev("c", "Freedonia condemns Ruritania over new export ban on grain")], fp, 2) == ["c"]   # 像 b、不像 a：照推
+
+
+def test_escalation_and_expiry_push_again(tmp_path):
+    fp = tmp_path / "alerted.json"
+    t = "Ruritania tanker attacks escalate in the strait"
+    assert _ids([_ev("a", t, events=("war",))], fp) == ["a"]
+    assert _ids([_ev("b", t + " as navy deploys", events=("war",))], fp, 1) == []
+    assert _ids([_ev("c", t + " as navy deploys", events=("war",), sev=3)], fp, 2) == ["c"]   # 严重度升级：照推
+    assert _ids([_ev("d", t + " again", events=("war",), sev=3)], fp, 3) == []
+    assert _ids([_ev("e", t + " once more", events=("war",), sev=3)], fp, 49) == ["e"]       # 第一次推之后 48 小时：照推
+    st = json.loads(fp.read_text(encoding="utf-8"))
+    assert st["v"] == 2 and set(st["ids"]) == {"a", "b", "c", "d", "e"} and len(st["stories"]) == 1
+
+
+def test_reads_the_old_state_format(tmp_path):
+    fp = tmp_path / "alerted.json"
+    fp.write_text(json.dumps({"a": NOW.isoformat(timespec="minutes")}), encoding="utf-8")
+    old = _ev("a", "Zorin halts Ruritania sanctions citing national interest")
+    assert _ids([old, _ev("b", "Brand new story about Freedonia tariffs")], fp, 1) == ["b"]
+    assert _ids([_ev("c", "Zorin halts sweeping Ruritania sanctions days before they take effect")], fp, 2) == []   # 以前推过的那件事也认得

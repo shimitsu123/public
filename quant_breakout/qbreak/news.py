@@ -11,7 +11,8 @@
 影响链路：事件 → 因子冲击（按这类消息常见的幅度：日本 / 美国 10Y ±0.10 pp、美元日元 ±2%、原油 ±5%、信用利差 +0.20 pp）
   → TOPIX-17 行业（行业 ETF 对各因子的周敏感度 × 冲击，控制大盘，最近 104 周；qbreak/sensitivity.py pair_beta）
   → 持仓 / 候补队列里属于这些行业的票。关税、半导体规制、灾害、疫情等没有对应因子的，用经验规则只标方向（写明「经验规则」）。
-提醒：负面事件、严重度 ≥ 2 且可信度 ≥ 70（或严重度 3 且可信度 ≥ 55）→ 提醒一次（同一件事不重复）。
+提醒：负面事件、严重度 ≥ 2 且可信度 ≥ 70（或严重度 3 且可信度 ≥ 55）→ 提醒一次（同一件事不重复：换了媒体 / 换了说法的同一件事
+  48 小时内也不再推，只推第一次；严重度升级才再推 —— new_alerts，2026-10-17）。
 公开仓库：标题与链接只写到 var/cache/news/（不入库）与本机页面；日报（会入库）只放汇总（事件类别、条数、影响的行业）。
 """
 from __future__ import annotations
@@ -608,22 +609,111 @@ def load() -> dict:
     return read_json(cache_dir() / "news.json", {}) or {}
 
 
+# ── 同一件事只推第一次（2026-10-17 用户：「消息里面的重复的消息不要一直推送 只推送出现的第一次」）──
+# 以前只按这一组标题的 id（最新那条标题的哈希）判断：同一件事换一家媒体 / 换个说法（「特朗普暂停对俄制裁」一中午 5 种标题）、
+# 标题后面多了媒体名（「…（テレビ岩手ニュース）」）、组里来了更新的标题 → id 变了，又推一次。现在另记「推过的事」（标题们 + 事件类别），
+# 新的提醒和第一次推出去之后 STORY_H 小时内、推出去的那条（标题 + 中文译文 + 同组的其他标题）是同一件事 → 不推
+# （只和推出去的比、不和压下的比：不然一件事越滚越大，几天里所有「制裁」都成了一件事 —— 用过去一周的推送重放过）。同一件事 =
+#   日文 / 中文：去掉末尾媒体名后 2-gram 相似度 ≥ SIM_MIN，或事件类别有重合且 ≥ STORY_SIM；
+#   英文：相似度 ≥ EN_SIM，或事件类别有重合且共有 ≥ STORY_WORDS 个实词（不算停用词与类别词 sanctions / oil / rate…；占少的那边 ≥ 40%）。
+# 严重度比那件事推过的高（升级，例：震度 5 强 → 6 强）→ 照推。只影响推送 / Mac 通知，面板「消息」照旧每条都列。
+STORY_H = 48
+STORY_SIM = 0.25
+EN_SIM = 0.5
+STORY_WORDS = 3
+_TAIL = re.compile(r"(\s*[（(][^（）()]{1,40}[）)]|\s+[-–—|｜]\s+[^-–—|｜]{1,40})\s*$")   # 「…（媒体名）」「… - Reuters」
+_STOP = frozenset("""the and for with from that this after before over into onto says said say new will could would should has have had are was
+were its his her they their them amid than more most since about what why how who may might can not but out off all been being also just
+still says while near upon under amid against amidst stock stocks share shares market markets price prices index report week year years day
+days percent""".split())
+_KINDW = frozenset("""sanc tari oil pric rate rate hike infl fed cut cuts plun tumb fall rise rose surg jump drop sink sank slid slip decl rout
+sell yiel trea cpi earn crud bren gold yen dollar doll bond bank fear odds lead lowe high war atta stri bomb miss quak eart tsun
+recess rece slum cras""".split())   # 事件类别本身的词（类别重合时它们本来就一样）：不算「共有的实词」
+
+
+def _bare(t: str) -> str:
+    t = str(t or "")
+    for _ in range(2):
+        t = _TAIL.sub("", t)
+    return t
+
+
+def _words(t: str) -> set[str]:
+    ws = re.findall(r"[a-z][a-z']+", unicodedata.normalize("NFKC", str(t or "")).lower())
+    return {w[:4] for w in ws if len(w) >= 3 and w not in _STOP and w[:4] not in _KINDW}
+
+
+def _cjk(t: str) -> bool:
+    n = sum(1 for c in t if "\u3040" <= c <= "\u30ff" or "\u4e00" <= c <= "\u9fff")
+    return n >= max(4, len(t) * 0.3)
+
+
+def _titles(e: dict) -> list[str]:
+    ts = [e.get("title"), e.get("title_zh")] + [z.get("title") for z in e.get("others") or [] if isinstance(z, dict)]
+    return [_bare(t) for t in ts if t and _bare(t)]
+
+
+def same_story(e: dict, story: dict) -> bool:
+    """这条提醒和推过的那件事（{"titles", "events"}）是不是同一件事（规则见上面）。"""
+    kin = bool(set(e.get("events") or ()) & set(story.get("events") or ()))
+    for a in _titles(e):
+        wa, ca = _words(a), _cjk(a)
+        for b in story.get("titles") or ():
+            if ca != _cjk(b):                                # 中文译文 vs 英文原文：没法比
+                continue
+            sim = similar(a, b)
+            if ca:                                           # 日文 / 中文：字符 2-gram 本来就像词，类别重合时放宽一点
+                if sim >= SIM_MIN or (kin and sim >= STORY_SIM):
+                    return True
+                continue
+            if sim >= EN_SIM:                                # 英文：不相干的标题字符相似度也常有 0.3〜0.4 → 要更像，或看共有的实词
+                return True
+            wb = _words(b)
+            both = wa & wb
+            if kin and len(both) >= STORY_WORDS and len(both) >= 0.4 * min(len(wa), len(wb)):
+                return True
+    return False
+
+
+def _age_h(v, now: dt.datetime) -> float:
+    try:
+        return (now - dt.datetime.fromisoformat(str(v))).total_seconds() / 3600
+    except (TypeError, ValueError):
+        return float("inf")
+
+
 def new_alerts(events: list[dict], state_path=None, keep_h: float = 7 * 24, now: dt.datetime | None = None) -> list[dict]:
-    """还没提醒过的提醒事件（同一件事只提醒一次；记录保留 7 天）。"""
+    """还没提醒过的提醒事件（同一件事只提醒一次：id 记录保留 7 天；换了媒体 / 说法的同一件事第一次推之后 STORY_H 小时内不再推，严重度升级才再推）。
+    记录 var/cache/news/alerted.json（不入库）：{"v": 2, "ids": {id: 时刻}, "stories": [{"at", "last", "n", "titles", "events", "sev"}]}；
+    旧格式（{id: 时刻}）照读。"""
     now = now or now_jst()
     fp = state_path or (cache_dir() / "alerted.json")
-    seen = read_json(fp, {}) or {}
-    keep = {}
-    for k, v in seen.items():
-        try:
-            if (now - dt.datetime.fromisoformat(v)).total_seconds() < keep_h * 3600:
-                keep[k] = v
-        except (TypeError, ValueError):
+    raw = read_json(fp, {}) or {}
+    old_ids = raw.get("ids") if raw.get("v") == 2 else raw
+    ids = {k: v for k, v in (old_ids or {}).items() if isinstance(v, str) and _age_h(v, now) < keep_h}
+    stories = [s for s in (raw.get("stories") or [] if raw.get("v") == 2 else []) if isinstance(s, dict)
+               and _age_h(s.get("at"), now) < STORY_H]
+    stamp = now.isoformat(timespec="minutes")
+    if raw.get("v") != 2:                                     # 旧格式（只有 id）：这次列表里已经推过的，记成推过的事（换代码后正在发酵的事不再推一次）
+        stories = [{"at": ids[e["id"]], "last": ids[e["id"]], "n": 1, "titles": _titles(e)[:30], "events": list(e.get("events") or ()),
+                    "sev": int(e.get("severity") or 0)} for e in events if e.get("id") in ids and _age_h(ids[e["id"]], now) < STORY_H]
+    out = []
+    for e in events:
+        if not pushable(e) or e["id"] in ids:
             continue
-    out = [e for e in events if pushable(e) and e["id"] not in keep]
-    for e in out:
-        keep[e["id"]] = now.isoformat(timespec="minutes")
-    write_json(fp, keep)
+        ids[e["id"]] = stamp
+        sev = int(e.get("severity") or 0)
+        hit = next((s for s in stories if same_story(e, s)), None)
+        if hit is None:
+            stories.append({"at": stamp, "last": stamp, "n": 1, "titles": _titles(e)[:30], "events": list(e.get("events") or ()), "sev": sev})
+            out.append(e)
+            continue
+        hit["last"], hit["n"] = stamp, int(hit.get("n") or 1) + 1   # 同一件事：不推（只数一下）
+        if sev > int(hit.get("sev") or 0):                   # 升级（严重度变高）：照推，这条的标题也算推出去的
+            hit["sev"] = sev
+            hit["titles"] = list(dict.fromkeys((hit.get("titles") or []) + _titles(e)))[:30]
+            out.append(e)
+    write_json(fp, {"v": 2, "ids": ids, "stories": stories})
     return out
 
 
