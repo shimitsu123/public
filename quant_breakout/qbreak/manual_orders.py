@@ -1006,10 +1006,32 @@ def target_text(target, tg: dict | None) -> str:
     return f"{target}（{describe(tg)}）" if tg and tg.get("kind") else str(target)
 
 
-def wait_word(r: dict | None) -> str:
-    """指令还没处理时的状态词：会变成单的（卖出 / 减仓 / 调仓 / 买入）= 等下单；比例 / 解除不是单 = 等执行器读（2026-10-14）。
-    固定口数 / 恢复按规则（不是「全部换成」的同批）当天按时段下单（D1；2026-10-15）→ 等下单；什么时候见 corefix_fill。"""
+NOOP_WORD = "不下单"
+
+
+def corefix_noop(r: dict | None, book: dict | None, tag: str | None = None, now: dt.datetime | None = None) -> tuple[int, str] | None:
+    """固定 N 口、现在已经拿着 N 口（live_ops.held_now：含已成交、对账前）→ (N, 「含 … 已成交」)：读到之后口数一样、不买也不卖；
+    别的 / 算不成 → None（2026-10-17 用户：已经买了 650 口、点「不补了」写的「固定 650 口」显示「等下单」，以为又要下 650 口）。只是展示。"""
     r = r or {}
+    if r.get("kind") != "corefix" or r.get("clear") or r.get("fund_for") or r.get("units") is None or book is None:
+        return None
+    try:
+        from . import live_ops as LO
+        pj = LO.held_now(book, tag, now=now)
+        n = int(r["units"])
+        held = int((pj.get("core_units") or {}).get(r.get("ticker")) or 0)
+        return (n, str(pj.get("head") or "")) if n == held else None
+    except Exception:                                      # noqa: BLE001  只是展示：算不成照旧「等下单」
+        return None
+
+
+def wait_word(r: dict | None, book: dict | None = None, tag: str | None = None, now: dt.datetime | None = None) -> str:
+    """指令还没处理时的状态词：会变成单的（卖出 / 减仓 / 调仓 / 买入）= 等下单；比例 / 解除不是单 = 等执行器读（2026-10-14）。
+    固定口数 / 恢复按规则（不是「全部换成」的同批）当天按时段下单（D1；2026-10-15）→ 等下单；什么时候见 corefix_fill；
+    给了 book 且固定的口数 = 现在拿着的（corefix_noop）→ 不下单（2026-10-17）。"""
+    r = r or {}
+    if book is not None and corefix_noop(r, book, tag, now):
+        return NOOP_WORD
     return "等下单" if r.get("kind") in ORDER_KINDS or (r.get("kind") == "corefix" and not r.get("fund_for")) else "等执行器读"
 
 
@@ -1018,6 +1040,11 @@ def wait_text(r: dict | None, now: dt.datetime, book: dict | None, tag: str | No
     固定口数没有日期）。面板的等待行、run.py --status / manual list 共用；时段口径与 now_due / due / 执行器一致。"""
     r = r or {}
     k, w = r.get("kind"), wait_word(r)
+    nop = corefix_noop(r, book, tag, now)
+    if nop:                                                # 已经拿着这么多：不买也不卖，之后每天保持（2026-10-17）
+        n, head = nop
+        return (f"{NOOP_WORD}：已经拿着 {n:,} 口" + (f"（{head}）" if head else "")
+                + f" = 固定的口数 → 读到之后（{corefix_fill(now, book, tag)['text']}）不买也不卖；之后保持 {n:,} 口、不按规则调，直到「恢复按规则」")
     if k == "corefix" and not r.get("fund_for"):
         return f"{w}：{corefix_fill(now, book, tag)['text']}"
     if allin_member(r):
@@ -1793,7 +1820,8 @@ def corefix_preview(book: dict | None, tag: str | None, rec: dict, now: dt.datet
         L.append(f"{names.label(t)}：取消手动固定" + (f" {int(plan['old_fix']):,} 口" if plan["old_fix"] is not None else "")
                  + (f" → 恢复按规则：预计 {cur:,} → {tg:,} 口（{act}）" if tg is not None else " → 恢复按规则（规则的目标执行器下一次决策才算）"))
     else:
-        title = f"确认下单：{names.label(t)} 固定 {int(rec.get('units') or 0):,} 口"
+        title = (f"确认下单：{names.label(t)} 固定 {int(rec.get('units') or 0):,} 口" if k or plan["moves"] or stock_sells else   # 口数一样：不是下单（2026-10-17）
+                 f"确认：{names.label(t)} 固定 {int(rec.get('units') or 0):,} 口（已经拿着这么多，不下单）")
         L.append(f"{names.label(t)}：现在 {cur:,} 口 → 固定 {int(rec.get('units') or 0):,} 口（{act}）"
                  + (f"；现在手动固定 {int(plan['old_fix']):,} 口" if plan["old_fix"] is not None else ""))
         if rec.get("from_kind"):
@@ -1912,7 +1940,8 @@ def corefix_preview(book: dict | None, tag: str | None, rec: dict, now: dt.datet
            "moves": [(m["t"], m["side"], m["qty"]) for m in plan["moves"]], "stocks": [(s, int(n)) for s, n, _p in stock_sells],
            "day": fill["day"].isoformat(), "behind": fill["behind"], "mode": fill["mode"], "halt": bool(halt)}
     token = hashlib.sha1(json.dumps(key, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
-    return {"title": title, "text": "\n".join(L), "token": token, "danger": k < 0, "plan": plan, "fill": fill}
+    return {"title": title, "text": "\n".join(L), "token": token, "danger": k < 0, "plan": plan, "fill": fill,
+            "noop": not plan["clear"] and k == 0 and not plan["moves"] and not stock_sells}   # 口数一样、也不卖别的：按钮写「确认（不下单）」（2026-10-17）
 
 
 def _fix_rec(rec: dict, book: dict | None, t: str, held: int, fixed: int, eq: float | None = None, hd: str = "") -> dict:

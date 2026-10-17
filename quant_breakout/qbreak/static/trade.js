@@ -25,7 +25,7 @@ async function post(body){
     const c=j.confirm||{};
     if(n>=3 || !c.token){ toast((j.msg||'没写')+'\n（情况一直在变：刷新页面后再试）', true, true); return null; }
     const q=await ask(c.title||'确认下单', (c.changed ? '★ 刚才看到的内容变了（账本更新 / 过了时间段），这是最新的：\n\n' : '')+(c.text||'')+NOTE,
-                      '确认下单', {cancel:'取消下单', danger:!!c.danger});
+                      c.noop ? '确认（不下单）' : '确认下单', {cancel:c.noop ? '取消' : '取消下单', danger:!!c.danger});   // 固定成拿着的口数：不是下单（2026-10-17）
     if(!q.ok){ toast('已取消：什么都没写，不会下单'); return null; }
     j=await api('/api/request', Object.assign({}, body, {confirm:c.token}));
   }

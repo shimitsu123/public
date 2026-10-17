@@ -239,7 +239,8 @@ def test_need_confirm_on_the_local_and_phone_ports_then_confirm_writes(servers, 
     body = {"book": "paper", "kind": "corefix", "ticker": "1545", "units": 50}
     code, j = _local_post(lp, tok, "/api/request", body)
     assert code == 200 and j["ok"] is False and j["need_confirm"] is True and "刷新" in j["msg"]
-    assert j["confirm"]["title"] == "确认下单：1545 纳斯达克 100 固定 50 口" and not MO.read_all("paper")
+    assert j["confirm"]["title"] == "确认：1545 纳斯达克 100 固定 50 口（已经拿着这么多，不下单）" and not MO.read_all("paper")   # 已经拿着 50 口（2026-10-17）
+    assert j["confirm"]["noop"] is True
     code, j2 = _local_post(lp, tok, "/api/request", {**body, "confirm": j["confirm"]["token"]})
     assert code == 200 and j2["ok"] and j2["id"] and len(MO.read_all("paper")) == 1
     # 手机（配对过的设备 + CSRF）

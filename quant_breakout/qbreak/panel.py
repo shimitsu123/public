@@ -3016,7 +3016,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         btn = (_cbtn(r, 0) if r["kind"] in MO.ORDER_KINDS + ("core", "corefix") and r["id"] not in dropped
                else _ubbtn(r) if r["kind"] == "unblock" and r["id"] not in dropped
                else _cobtn(r) if r["kind"] == "cancel_order" and r["id"] not in dropped else _unbtn(r))
-        wt = MO.wait_word(r)                               # 比例 / 解除 / 撤回不是单（2026-10-13）
+        wt = MO.wait_word(r, book, tag, now) if r["id"] not in dropped else MO.wait_word(r)   # 比例 / 解除 / 撤回不是单（2026-10-13）；固定成拿着的口数 = 不下单（2026-10-17）
         wx = "" if r["id"] in dropped or r["kind"] in CANCEL_KINDS else MO.wait_text(r, now, book, tag)
         wx = wx[len(wt) + 1:] if wx.startswith(wt + "：") else ""   # 什么时候（D1 / D5，2026-10-15：与 now_due / 执行器同一个时段口径；固定口数写具体日子）
         if sp["itxt"].get(r["id"]) and r["id"] not in dropped:   # 分块另有说法（收盘后状态不明的单：等登记；复核 4）→ 代替平常的「什么时候」
@@ -3789,7 +3789,8 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
             if q:
                 pv = MO.corefix_preview(book, tag, rec, n0, sm=sm, stock_sells=ss, quotes=q, halt=halt)
             return False, FIX_CONFIRM_MSG, {"need_confirm": True, "confirm": {
-                "title": pv["title"], "text": pv["text"], "token": pv["token"], "danger": pv["danger"], "changed": bool(got)}}
+                "title": pv["title"], "text": pv["text"], "token": pv["token"], "danger": pv["danger"], "changed": bool(got),
+                "noop": bool(pv.get("noop"))}}
     clock = (lambda: now) if now else None
     if rec["kind"] == "adjust" and not rec.get("fund_for"):   # 写入时预览的方向（+1 加 / −1 减）：执行时换算方向相反 → 不执行（2026-10-13）
         a0 = MO.adjust_plan(rec, LO.held_now(book, tag, now=now)["state"], MO.MANUAL_CAP_PCT)   # 含今天已成交 = 对账之后执行时的持仓（2026-10-16）

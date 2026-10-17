@@ -326,7 +326,7 @@ def test_trade_js_restore_dialogs_and_fixed_funding_note():
     assert "(d.plan || CFG.when+'买入；之后每天照规则调')" in src
     # 「恢复按规则」（2026-10-15 起）：不再先弹本地确认框，直接交给服务器 → 服务器回「确认下单」框（列出要下的单）→ 点了才写
     assert "done(await post({book:CFG.book, kind:'corefix', ticker:d.t, clear:true}))" in src
-    assert "async function post(" in src and "'确认下单'" in src and "cancel:'取消下单'" in src
+    assert "async function post(" in src and "'确认下单'" in src and "cancel:c.noop ? '取消' : '取消下单'" in src
     node = _node()
     if not node:
         return
