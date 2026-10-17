@@ -132,6 +132,7 @@ function kTL(el, TL, tf, D, mode){                                         // �
   const g=nd('div','seg sm',null,row); g.setAttribute('role','group'); g.setAttribute('aria-label','趋势线怎么连');   // 2026-10-17 用户「精确趋势线」：按影线 / 按收盘
   for(const [k, lab] of [['w','按影线'],['c','按收盘']]){ const b=nd('button',null,lab,g); b.type='button'; b.dataset.act='ktlm'; b.dataset.v=k; b.setAttribute('aria-pressed', k===mode ? 'true' : 'false'); }
   const tx=nd('span',null,null,row);
+  if(mode==='c' && !('tlc' in D) && D.tl){ kPut(tx, [['趋势线：按收盘的线在执行器下一次运行之后显示（旧的 K 线数据里没有）']]); return; }   // 2026-10-17 之前写的 charts_*.json
   if(!TL || !(TL.sup || TL.res)){ kPut(tx, [['趋势线：'+(mode==='c' ? '按收盘' : '按影线')+'找不到（没有碰过两次以上、还没被破的线）']]); return; }
   kPut(tx, [['趋势线：'+(TL.chan ? (C[TL.chan] || TL.chan) : '只找到'+(TL.sup ? '下面' : '上面')+'的一条')]]
     .concat(TL.sup ? one(TL.sup, true) : [], TL.res ? one(TL.res, false) : []));

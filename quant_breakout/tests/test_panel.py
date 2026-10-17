@@ -501,6 +501,7 @@ out.c_tl=cls(e=>kTL(e, {sup:{now:1020, dist_pct:2, slope_pct:-0.5, touch:2}, res
                            chan:'扩散', pos:120, eps:0.4}, 'M', DT, 'w'));
 out.tl_one=tl(e=>kTL(e, {res:{now:1100, dist_pct:10, slope_pct:0.2, touch:2}, eps:0.02}, 'W', DT, 'w'));
 out.tl_none=tl(e=>kTL(e, null, 'D', DT, 'c'));
+out.tl_old=tl(e=>kTL(e, null, 'D', {d:DT.d, tl:{sup:{}}}, 'c'));
 console.log(JSON.stringify(out));
 """.replace("__KP__", kp).replace("__FNS__", fns)
     f = tmp_path / "k.js"
@@ -534,6 +535,7 @@ console.log(JSON.stringify(out));
     assert o["tl_broken"] == ["按影线|按收盘*", "趋势线：两条线越张越开：上下波动越来越大 · 支撑 ¥1,020（已跌破） · 压力 ¥990.0（已冲过）"]
     assert o["tl_one"][1] == "趋势线：只找到上面的一条 · 压力 ¥1,100（比收盘高 10%）"
     assert o["tl_none"] == ["按影线|按收盘*", "趋势线：按收盘找不到（没有碰过两次以上、还没被破的线）"]
+    assert o["tl_old"][1] == "趋势线：按收盘的线在执行器下一次运行之后显示（旧的 K 线数据里没有）"   # 2026-10-17 之前的 K 线数据
     # ⓘ（2026-10-17「精确趋势线」）：连的是哪两根（带年份；图外的写「图外更早」）、碰过几次、容差、连法
     assert o["tl_tip"][0] == "支撑线：连 2026/03/12 和 2026/05/20 的两个低点，碰过 3 次；每根 +0.12%"
     assert o["tl_tip"][1] == "压力线：连 图外更早 和 2026/10/16 的两个高点，碰过 2 次；每根 +0.01%"
