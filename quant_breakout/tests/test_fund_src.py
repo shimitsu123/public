@@ -565,7 +565,7 @@ def test_panel_cancel_button_offers_the_dependent_choices():
     assert btn.endswith("data-name='纳斯达克 100'")                            # 名字放最后（确认框标题）
     j = card.index("data-cid='U2026-10-14-BUY-1482.T'")                       # 还没发出的买单也能撤
     assert "data-unsent='1'" in card[j:card.index(">撤单</button>", j)]
-    assert "执行器还没发出的单（计划 / 等开盘后）也能撤" in card
+    assert "执行器还没发出的单（计划 / 等开盘后 / 被挡、今天还会再发的）也能撤" in card
     J = (panel.STATIC_DIR / "trade.js").read_text(encoding="utf-8")
     assert "alt.push({text:d.keep||'只撤卖单', v:'keep'})" in J and "body.deps = q.alt==='keep' ? 'keep' : 'cancel'" in J
     assert "kind:'corefix', ticker:d.fix, clear:true" in J and "if(a==='ask-alt')" in J

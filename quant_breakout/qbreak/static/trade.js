@@ -559,6 +559,19 @@ document.addEventListener('click', async e=>{
     done(k ? {msg:(j.msg||'已写撤单')+'\n'+(k.msg||'已写恢复按规则')} : j);
     return;
   }
+  if(a==='fix-undo'){                                                     // 还没照它调的固定口数 / 还差几口：不补了・撤回（2026-10-17；选择与说明由服务器按账本写好：data-opts / data-body）
+    let o=[]; try{ o=JSON.parse(d.opts||'[]'); }catch(_){ o=[]; }
+    if(!o.length) return;
+    const q=await ask(d.title||'撤回？', (d.body||'')+NOTE, o[0].l, {alt:o.slice(1,3).map((x,i)=>({text:x.l, v:String(i+1), danger:!!x.c}))});
+    if(!q.ok) return;
+    const x=o[q.alt ? +q.alt : 0]; if(!x) return;                         // 下一步：服务器的「确认下单」框（那次预计下的单；点了才写）
+    done(await post(x.c ? {book:CFG.book, kind:'corefix', ticker:d.t, clear:true} : {book:CFG.book, kind:'corefix', ticker:d.t, units:+x.u}));
+    return;
+  }
+  if(a==='core-undo'){                                                    // 还没照它调的闲置资金比例：改回上一次照它调的（2026-10-17）
+    const q=await ask(d.title||'撤回？', (d.body||'')+NOTE, d.ok||'改回');
+    if(q.ok) done(await post({book:CFG.book, kind:'core', pct:+d.pct})); return;
+  }
   if(a==='cancel' && d.kind==='unblock'){                                 // 还没读的「解除不买回」：撤回（2026-10-13）
     const q=await ask('撤回这条解除？', (d.desc||d.id)+'\n\n执行器还没读：撤回之后不解除，「不自动买回」照旧。\n（指令 '+d.id+'）', '撤回', {danger:true});
     if(q.ok) done(await post({book:CFG.book, kind:'cancel', target:d.id})); return;

@@ -2745,6 +2745,21 @@ def core_pending(book: dict | None, now: dt.datetime | None = None) -> float | N
     return want
 
 
+def core_applied(book: dict | None) -> float:
+    """核心 ETF 上一次照它调的闲置资金比例（%）= core_pending 拿来比的那个数（core_rule.applied；有 units100 → 没记就是 pct；
+    执行器还没算过规则目标额 → 100%）。「交易」里「还没照它调」的比例那一行的「撤回：比例改回 X%」用（2026-10-17：改回它 = core_pending 不再成立，
+    下一次运行不照新比例调）。只读。"""
+    b = book or {}
+    cr = b.get("core_rule") or {}
+    want = float((b.get("manual") or {}).get("core_pct", 100.0))
+    try:
+        if cr.get("units100"):
+            return float(cr.get("applied", cr.get("pct", want)))
+        return float(cr.get("applied", 100.0))
+    except (TypeError, ValueError):
+        return 100.0
+
+
 def core_wait(book: dict | None, tag: str | None = None, waiting=None) -> dict | None:
     """读了、还没照它调的闲置资金比例（core_pending）→ {"pct": 新比例, "item": 最新生效的那条比例指令（执行器 now_phase 写说明的那一条：
     状态完成、按写入时刻最后的；没有 → None）}；没有 / 指令文件里还有没读的比例指令（读到就换成它，「交易」里是那一行）→ None。

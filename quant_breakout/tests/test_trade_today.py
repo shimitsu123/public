@@ -701,7 +701,7 @@ def test_core_ratio_read_but_not_applied_follows_the_executor(cr, now, where, su
 
 
 def test_core_ratio_without_its_instruction_row_gets_one_line():
-    """比例还没照它调、账本里却没有那条比例指令（整理账本时删掉了 / 旧账本）→ 补一行（没有按钮），照样算。"""
+    """比例还没照它调、账本里却没有那条比例指令（整理账本时删掉了 / 旧账本）→ 补一行（2026-10-17 起带「撤回…」：test_future_undo），照样算。"""
     tag = "paper"
     b = _etf_book(tag)
     b["manual"]["core_pct"] = 50.0

@@ -1338,6 +1338,7 @@ def _order_rows(book: dict, now: dt.datetime, paper: bool, waiting: list, live: 
         note = str(o.get("note") or "")
         cid = str(o.get("cid"))
         cw = LO.cancel_why(o, book, now, paper)
+        unsent = o.get("status") in LO.UNSENT or (o.get("status") == "BLOCKED" and not o.get("broker_id"))   # 被挡、还没发出（今天还会再发的能撤；2026-10-17）
         busy = None if cid in asked or cw is not None else LO.cancel_conflict({"cid": cid}, book, jobs, G)
         #   ↑ 本来就撤不了的行（已成交 / 已撤…）不写「等它结束再撤」（复核 6 2026-10-16）
         if cid in asked:                                    # 撤单暂停中（outlook cls stuck）：状态那里已经写了，不再写「撤单中」（复核 7）
@@ -1387,9 +1388,14 @@ def _order_rows(book: dict, now: dt.datetime, paper: bool, waiting: list, live: 
             grp = _grp_attrs(o, orders, byc, G, book, now, paper, tag, asked, cfix, alt, keep_txt, alt_fix=afx)
             btn = (f"<button class='btn sm danger' data-act='cancel-order' data-cid='{escape(cid)}' "
                    f"data-t='{escape(str(o.get('ticker')))}' data-side='{escape(str(o.get('side')))}' data-qty='{n}' "
-                   f"data-core='{1 if core else 0}' data-unsent='{1 if o.get('status') in LO.UNSENT else 0}' "
+                   f"data-core='{1 if core else 0}' data-unsent='{1 if unsent else 0}' "
                    f"data-hint='{escape((LO.src_line(o) + '。' if LO.src_line(o) else '') + LO.cancel_hint(o, book, now, tag))}'" + (f" data-deps='{escape(deps)}'" if deps else "") + alt
                    + grp + f" data-name='{escape(NM.name(o.get('ticker')) or '')}'>撤单</button>")      # 名字放最后（确认框标题；2026-10-15）
+        elif (live.get("split") or {}).get("orders", {}).get(cid) in ("today", "later") and unsent:
+            if paper and cw.startswith("不是今天的单") and f is not None:   # 模拟账户开盘撮合的窗口过了：之后的运行按成交日的开盘价照旧撮合（只是说法）
+                cw = (f"成交日 {f:%m/%d} 已过：之后的运行按那天的开盘价照旧撮合（钱够才买），现在撤不了"
+                      "（对账之后不想拿着：写手动卖出）")
+            btn = f"<span class='muted small'>{escape('撤不了：' + cw)}</span>"   # 还没发出、还会做事的单却撤不了：写为什么（2026-10-17：以前什么都不写）
         else:
             btn = ""
         chip, why = dead.get(cid) or (LO._st_txt(o) if LO.GONE in note else LO.STATUS_TEXT.get(o.get("status"), str(o.get("status"))), "")
@@ -1766,7 +1772,7 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
         完成了、还没照它调的固定口数（MO.FIX_WAIT）→ 跟 outlook 的 fix:<票> 那一行（没有那一行 → _fix_zone：今天说了「下一次决策再调」→ later，
           别的照 outlook 那一行的时刻自己算；复核 4）；
         别的（完成 / 已撤回 / 没执行…）→ ended。
-      outlook 的 fix:<票>（读了、还没照它调的固定口数）没有对应的指令行（恢复按规则 / 更早的）→ extra（只写一行，没有按钮）。
+      outlook 的 fix:<票>（读了、还没照它调的固定口数）没有对应的指令行（恢复按规则 / 更早的）→ extra（一行 +「不补了… / 撤回…」：render 的 xbtn；2026-10-17）。
       闲置资金比例（复核 3，2026-10-16）：读了、还没照它调（outlook 的 core:，MO.core_wait）→ 最新生效的那条比例指令跟那一行（today / later：
         HALT 中 = 等 HALT 解除后、今天说了下一次决策再调 / 收盘后 = 下一次决策那天开盘、盘中 / 一会儿再试 = 今天）；没有那条指令的行 → extra；
         以前指令「完成」→ 已结束，数字少 1，HALT 解除后却马上照它卖（与固定口数「还没读 / 读了」数字一样同一个道理）。→ out["core"] = 那一块。
@@ -1965,6 +1971,7 @@ def _trade_split(book: dict, waiting: list, now: dt.datetime, tag: str | None = 
                     and MO.fix_status_text(it, items, book) == MO.FIX_WAIT):   # 不看还没读的：读之前它就是「还没照它调」的那一条
                 out["itxt"][iid] = "（已被新写的那条取代：执行器读到之后照新的调）"   # 复核 2026-10-16：以前两行都算，读了之后数字少 1
         out["items"][iid] = z
+    out["fixrows"] = fixrows                                # 那一行的说明（render 的「不补了 / 撤回」确认框用；2026-10-17）
     for t, x in fixrows.items():
         if t not in has_fix:
             out["extra"].append((zone(x, x["ref"]), x))
@@ -2068,12 +2075,106 @@ def _where_core(sp: dict) -> str:
     return _where_zone((sp or {}).get("core"))
 
 
-def _fix_wait_row(x: dict) -> str:
-    """outlook 的 fix:<票> / core:（读了、还没照它调的固定口数 / 闲置资金比例；没有对应的指令行）→ 一行（没有按钮：要改在「持仓」的 ETF 下面）。"""
+def _fix_wait_row(x: dict, btn: str = "") -> str:
+    """outlook 的 fix:<票> / core:（读了、还没照它调的固定口数 / 闲置资金比例；没有对应的指令行）→ 一行；
+    btn：「不补了… / 撤回…」（_fix_undo / _core_undo；2026-10-17 用户：还没下的都能在那一行撤）。"""
     why = str(x.get("reason") or "")
     return (f"<div class='li'><div class='grow'><b>{escape(str(x.get('what') or x.get('ref')))}</b>"
             f" <span class='chip'>{escape(str(x.get('fchip') or MO.FIX_WAIT))}</span>"   # 固定口数还差几口（fix_short；2026-10-16 事后）
-            + (f"<div class='muted small'>{escape(NM.annotate(why))}</div>" if why else "") + "</div></div>")
+            + (f"<div class='muted small'>{escape(NM.annotate(why))}</div>" if why else "") + f"</div>{btn}</div>")
+
+
+def _undo_ok(rec: dict, book: dict, tag: str | None, now: dt.datetime) -> str | None:
+    """「不补了 / 撤回」的一个选择写得进去吗（与提交同一个 normalize + check）：行 → None；不行 → 理由。"""
+    try:
+        return MO.check(MO.normalize(rec), book, tag, now=now)
+    except (ValueError, TypeError, KeyError) as e:
+        return str(e) or "写不了"
+
+
+def _fix_undo(book: dict, tag: str | None, now: dt.datetime, t: str, what: str, why: str = "") -> str:
+    """还没照它调的固定口数（读了的 FIX_WAIT / outlook 的 fix:<票>，含「恢复按规则（还没照它调）」）、固定口数照它排过单却还差几口（fix_short）
+    →「不补了… / 撤回…」按钮（2026-10-17 用户：「周一要下单的还没下的单都可以撤销」）。只用现有的写法（kind corefix），每个选择先过 check：
+      「不补了 / 这次不调：固定成现在 N 口」= 固定口数写成现在拿着的（held_now：含今天已成交）→ 读到那次照它调时口数一样、预计不买也不卖；
+        之后每天都调回 N 口，直到「恢复按规则」；
+      「改回固定 A 口（上一次照它调的）」（fix_applied 有、和现在写着的 / 拿着的不一样）；
+      「恢复按规则」（现在有固定口数）= corefix_clear_text 的那句。
+    点了之后照旧有服务器的「确认下单」框（corefix_preview：那次预计下的单、什么时候）。都写不了 → 一行理由；算不成 → 不给（只是按钮）。"""
+    from . import live_ops as LO
+    try:
+        pj = LO.held_now(book, tag, now=now)
+        held = int((pj.get("core_units") or {}).get(t) or 0)
+        cur = MO.core_fixed(book, tag).get(t)
+        app = MO.fix_applied(book).get(t)
+        fill = MO.corefix_fill(now, book, tag)["text"]
+        head = str(pj.get("head") or "含今天已成交")
+    except Exception as e:                                 # noqa: BLE001  只是按钮：算不成不给
+        log.warning("「不补了 / 撤回」没算成（%s）", type(e).__name__)
+        return ""
+    short = cur is not None and app is not None and int(app) == int(cur)   # 照它排过单、还差几口（fix_short）
+    opts, lines, errs = [], [], []
+    if cur is None or int(cur) != held:
+        lab = (f"不补了：固定成现在 {held:,} 口" if short else f"这次不调：固定成现在 {held:,} 口")
+        w = _undo_ok({"kind": "corefix", "ticker": t, "units": held}, book, tag, now)
+        if w is None:
+            opts.append({"l": lab, "u": held})
+            lines.append(f"「{lab}」= 固定口数写成 {held:,} 口（现在拿着的，{head}）"
+                         + (f"，取代固定 {int(cur):,} 口" if cur is not None else "，取代「恢复按规则」")
+                         + f"：读到之后（{fill}）口数一样 → 预计不买也不卖；之后每天都调回 {held:,} 口"
+                           "（不按规则、不跟闲置资金比例），直到点「恢复按规则」")
+        else:
+            errs.append(w)
+    if app is not None and (cur is None or int(app) != int(cur)) and int(app) != held:
+        lab = f"改回固定 {int(app):,} 口（上一次照它调的）"
+        w = _undo_ok({"kind": "corefix", "ticker": t, "units": int(app)}, book, tag, now)
+        if w is None:
+            d = int(app) - held
+            opts.append({"l": lab, "u": int(app)})
+            lines.append(f"「{lab}」= 固定口数写回 {int(app):,} 口：读到之后（{fill}）照它调（现在 {held:,} 口 → "
+                         f"{'买' if d > 0 else '卖'} {abs(d):,} 口；钱不够只买得起的部分）")
+        else:
+            errs.append(w)
+    if cur is not None:
+        w = _undo_ok({"kind": "corefix", "ticker": t, "clear": True}, book, tag, now)
+        if w is None:
+            opts.append({"l": "恢复按规则", "c": 1})
+            lines.append("「恢复按规则」= 取消固定口数：" + MO.corefix_clear_text(book, t, tag, now))
+        else:
+            errs.append(w)
+    if not opts:
+        return f"<span class='muted small'>{escape('撤不了：' + (errs[0] if errs else '没有可以改回的'))}</span>" if errs else ""
+    body = (what + ("\n" + why if why else "") + "\n\n" + "\n".join(lines)
+            + "\n点了之后还有一个「确认下单」框：按账本再算一次那次预计要下的单，点「确认下单」才写")
+    title = (f"不补了？{NM.label(t)}" if short else f"撤回？{NM.label(t)} 的固定口数")
+    return (f"<button class='btn sm' data-act='fix-undo' data-t='{escape(t)}' data-title='{escape(title)}'"
+            f" data-body='{escape(NM.annotate(body))}' data-opts='{escape(json.dumps(opts[:3], ensure_ascii=False))}'>"
+            f"{'不补了…' if short else '撤回…'}</button>")
+
+
+def _core_undo(book: dict, tag: str | None, now: dt.datetime) -> str:
+    """读了、还没照它调的闲置资金比例（core_wait；outlook 的 core:）→「撤回…」= 比例改回上一次照它调的（core_applied；只用现有的 kind core）：
+    读到就生效 → core_pending 不再成立，那次运行不照新比例买卖（2026-10-17）。写不了（check）→ 一行理由。"""
+    try:
+        cw = MO.core_wait(book, tag)
+        if cw is None:
+            return ""
+        pct, app = float(cw["pct"]), MO.core_applied(book)
+        when = MO.when_for(now, book)
+    except Exception as e:                                 # noqa: BLE001  只是按钮
+        log.warning("比例的「撤回」没算成（%s）", type(e).__name__)
+        return ""
+    w = _undo_ok({"kind": "core", "pct": app}, book, tag, now)
+    if w:
+        return f"<span class='muted small'>{escape('撤不了：' + w)}</span>"
+    now_w = "停买闲置资金 ETF（比例 0%）" if pct <= 0 else f"闲置资金比例 {pct:g}%"
+    body = (f"{now_w}还没照它调（核心 ETF 还没为它买卖）。\n"
+            f"「改回 {app:g}%」= 写闲置资金比例 {app:g}%（上一次照它调的比例）：执行器读到就生效，核心 ETF {when}按 {app:g}% 算，"
+            f"不照 {pct:g}% 买卖"
+            + ("（不卖、不停买）" if pct <= 0 < app else "（照旧停买闲置资金 ETF，钱留现金）" if app <= 0 else "") + "。\n"
+            f"之后每天仍照规则（美股牛熊 / 股债相关）× {app:g}% 自动调：规则目标额按那次决策的收盘重算，差额在再平衡带以内不动，"
+            "规则自己变了照样会买卖；要某只 ETF 不动 →「持仓」那只 ETF 下面「固定口数…」")
+    return (f"<button class='btn sm' data-act='core-undo' data-pct='{app:g}' data-title='{escape(f'撤回？闲置资金比例 {pct:g}% → 改回 {app:g}%')}'"
+            f" data-ok='{escape(f'改回 {app:g}%')}' data-body='{escape(body)}'>撤回…</button>")
 
 
 def _later_line(ws: list) -> str:
@@ -2088,7 +2189,7 @@ def _later_line(ws: list) -> str:
 
 
 def _trade_sections(sp: dict, orows: list, irows: list, meta: dict, now: dt.datetime, paper: bool, halt: bool,
-                    blocks: str = "", nblk: int = 0, old_n: int = 0) -> list[str]:
+                    blocks: str = "", nblk: int = 0, old_n: int = 0, xbtn: dict | None = None) -> list[str]:
     """「交易」的两张卡片（Mac 与手机同一个；2026-10-16 用户：「交易里面只显示当天要成交的单」）：
       「今天要成交的单」（id today）：执行器的单 + 今天做事的手动指令（按 _trade_split）；什么都没有 →「今天没有要成交的单了」/
         休市日「今天休市，没有要成交的单」/ 交易日今天早上的运行还没跑完（成交日不是今天）→「今天的单还没排出来：今天早上 07:40 的运行
@@ -2112,7 +2213,7 @@ def _trade_sections(sp: dict, orows: list, irows: list, meta: dict, now: dt.date
         Z[z]["i"].append(h)
         Z[z]["w"].append(sp["when"].get(iid))
     for z, x in sp["extra"]:
-        Z[z]["i"].append(_fix_wait_row(x))
+        Z[z]["i"].append(_fix_wait_row(x, (xbtn or {}).get(x["ref"], "") if z in ("today", "later") else ""))
         Z[z]["w"].append(sp["when"].get(x["ref"]))
     f, stale = meta.get("f"), meta.get("stale")
     trading = is_trading_day(now.date())
@@ -2153,9 +2254,13 @@ def _trade_sections(sp: dict, orows: list, irows: list, meta: dict, now: dt.date
                  + (f"<div class='tsub'>执行器的单{escape(fd)}</div><div class='list'>{''.join(L['o'])}</div>" if L["o"] else "")
                  + (f"<div class='tsub'>手动指令</div><div class='list'>{''.join(L['i'])}</div>" if L["i"] else "")
                  + "</details>")
+    if not halt and (after or (pending and now.time() < MO.RUN_AT)):   # 下一次决策规则自己排的单现在还没有（没有假按钮；2026-10-17 用户：还没下的都要能撤）
+        H.append("<div class='muted small'>" + escape(
+            f"下一次决策（{LO.next_decision_text(now)}）规则自己也可能买卖（那时才排出单，现在还没有，撤不了）：不想让它下 →「更多」里"
+            "「停止下单（HALT）」（只能停，恢复只在 Mac 上）；或等 07:40 排出单之后、09:00 开盘之前，在这里点那笔单的「撤单」") + "</div>")
     if T["o"] or L["o"]:
         H.append("<div class='muted small'>" + escape(
-            f"「撤单」：{LO.CANCEL_HINT}。{LO.CANCEL_HINT_CORE}。执行器还没发出的单（计划 / 等开盘后）也能撤：撤了执行器就不再发。"
+            f"「撤单」：{LO.CANCEL_HINT}。{LO.CANCEL_HINT_CORE}。执行器还没发出的单（计划 / 等开盘后 / 被挡、今天还会再发的）也能撤：撤了执行器就不再发。"
             + ("同一组（一起下的：固定口数的凑钱卖单和买单、手动买入和为它卖的、拆成两笔的单）可以「整组撤单」：先撤买单，确认没成交再撤卖单；"
                "买单已经成交 / 撤不掉 → 卖单不撤。" if meta.get("grp") else "")) + "</div>")
     if orows and not paper and not stale:
@@ -2744,7 +2849,15 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         now_it = it.get("status") == "placed" and it.get("now")
         can = (it.get("status") in MO.ACTIVE and it.get("kind") in MO.ORDER_KINDS and not it.get("cancel_req")
                and not (now_it and MO.now_cancel_why(it, now)))   # 盘中的单还挂在交易所：页面上撤不了；15:30 失效的卖出能撤回（G16）
+        zi = sp["items"].get(it.get("id"))
+        fw = (zi in ("today", "later") and it.get("kind") in ("core", "corefix") and it.get("status") == "done"
+              and MO.fix_status_text(it, items, book, tag) == MO.FIX_WAIT)   # 读了、还没照它调：「撤回…」/「不补了…」（2026-10-17）
         btn = (_cbtn(it, 2 if now_it else (1 if it.get("status") == "placed" else 0)) if can
+               else _cbtn(it, 0) if (MO.allin_member(it) and it.get("status") == "pending" and not it.get("cancel_req")
+                                     and zi in ("today", "later"))   # 「全部换成」同批的比例 / 固定口数：随买入那条一起（撤回买入那条）
+               else (_core_undo(book, tag, now) if it.get("kind") == "core"
+                     else _fix_undo(book, tag, now, str(it.get("ticker")), _named(it) + "（" + MO.FIX_WAIT + "）",
+                                    str(((sp.get("fixrows") or {}).get(str(it.get("ticker"))) or {}).get("reason") or ""))) if fw
                else _cobtn(it) if it.get("kind") == "cancel_order" and it.get("status") == "pending" else _unbtn(it))
         rows.append((it["id"], f"<div class='li'><div class='grow'><b>{_what(it)}</b> <span class='chip'>"
                     f"{escape(MO.fix_status_text(it, items, book, tag) or MO.status_text(it, now))}{'（撤回中）' if it.get('cancel_req') or (it.get('kind') == 'cancel_order' and it.get('id') in dropped) else escape(tlive['itxt'].get(it.get('id')) or sp['itxt'].get(it.get('id'), ''))}</span>"   # 盘中没下成 → 开盘（G18）
@@ -2754,7 +2867,14 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     bl = man.get("blocks") or {}
     bhtml, bn = _blocks_card(book, tag, bl, _tlabel, now=now) if bl else ("", 0)
     H.append(PANE + "trade")                                # 今天要成交的单（+「另有 …」）/ 最下面收起的「已结束 / 不是今天的」（2026-10-16）
-    H.extend(_trade_sections(sp, orows, rows, ometa, now, paper, bool(halt), bhtml, bn, old_n))
+    xbtn = {}                                               # 没有指令行的「还没照它调」/「还差几口」：那一行的按钮（2026-10-17）
+    for z_, x_ in sp["extra"]:
+        if z_ not in ("today", "later"):
+            continue
+        rf = str(x_.get("ref") or "")
+        xbtn[rf] = (_core_undo(book, tag, now) if rf == "core:" else
+                    _fix_undo(book, tag, now, rf[4:], str(x_.get("what") or ""), str(x_.get("reason") or "")) if rf.startswith("fix:") else "")
+    H.extend(_trade_sections(sp, orows, rows, ometa, now, paper, bool(halt), bhtml, bn, old_n, xbtn))
     H.append(PANE + "more")
     if halt:
         hw = sorted((x for x in [it for it in (man.get("items") or {}).values() if it.get("status") == "pending"] + list(waiting)
@@ -3280,6 +3400,11 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
     c0 = (MO.core_info(book, rec["ticker"], LO.held_now(book, tag, now=now))   # 现在的口数含今天已成交（与 core_rec 同一个数；2026-10-16 二次复核）
           if rec["kind"] == "core" and rec.get("ticker") else None)
     pct0 = MO.core_pct_now(tag, book)                      # 写之前的闲置资金比例（含还没读的指令；0 = 停买中）
+    try:                                                    # 改回上一次照它调的比例（「交易」的「撤回」；写之前算：写了之后 core_wait 就看见这条没读的；2026-10-17）
+        rv0 = (rec["kind"] == "core" and not rec.get("ticker") and MO.core_wait(book, tag) is not None
+               and abs(float(rec["pct"]) - MO.core_applied(book)) < 0.005)
+    except Exception:                                      # noqa: BLE001  只是说明的写法
+        rv0 = False
     fund = body.get("fund") if rec["kind"] in ("buy", "adjust", "corefix") else None
     allp, going = None, None
     if rec["kind"] == "buy" and isinstance(fund, dict) and fund.get("mode") == "all":   # 其他全部卖出，只拿这只（2026-10-13）
@@ -3413,6 +3538,10 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
             msg = (f"已写：{'确认买入' if full else f'恢复成 {p1:g}%'}（闲置资金比例 0% → {rec['pct']:g}%）→ "
                    + ((f"{when}照规则买入核心 ETF" if full else f"{when}按规则目标额的 {p1:g}% 买入核心 ETF，之后每天按 {p1:g}% 调")
                       if not ri["none"] and not ri["late"] else ri["text"]))
+        if rv0:                                                                        # 「交易」里还没照它调的比例点了「撤回：改回 X%」（2026-10-17）
+            p1 = float(rec["pct"])
+            msg = (f"已写：闲置资金比例改回 {p1:g}%（上一次照它调的；{pct0:g}% 还没照它调）→ 执行器读到就生效："
+                   f"核心 ETF {when}按 {p1:g}% 算，不照 {pct0:g}% 买卖" + ("（照旧停买闲置资金 ETF）" if p1 <= 0 else ""))
         if k == "core" and t and int(rec.get("target") or 0) <= 0:                     # 核心 ETF 卖出全部：之后停买
             fx = MO.core_effects(book, 0.0, skip=t, tag=tag)
             msg = (f"已写：卖出全部 {tl} → {when}卖出；之后停买闲置资金 ETF（出现买入信号会提醒，你确认才买）"

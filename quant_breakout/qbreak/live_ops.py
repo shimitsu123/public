@@ -2181,7 +2181,8 @@ def _core_row(book: dict | None, now: dt.datetime, tag: str | None, halt: bool, 
     return put("will", _at(nxt, MO.SESSION[0][0]), f"{why}{nxt:%m/%d} 07:40 的决策照新比例调 → {nxt:%m/%d} 09:00 开盘")
 
 
-SHORT_NOTE = "那时的钱不够就只买得起的部分（不够一单元不买）；不想要 → 在「持仓」那只 ETF 下面点「恢复按规则」"
+SHORT_NOTE = ("那时的钱不够就只买得起的部分（不够一单元不买）；不想补 →「交易」里这一行点「不补了…」（固定成现在的口数）"
+              "或「恢复按规则」（2026-10-17）")
 
 
 def fix_short(book: dict | None, now: dt.datetime, tag: str | None = None, *, cur=None, cash: float | None = None,
@@ -2658,9 +2659,14 @@ def _in_current(o, book: dict | None) -> bool:
 def cancel_why(o, book: dict, now: dt.datetime, paper: bool) -> str | None:
     """这笔单现在能不能撤：能 → None；不能 → 理由。面板（显示「撤单」按钮）、手动指令的检查、执行器共用。
     执行器自己还没发到交易所的单（PLANNED / DEFERRED：计划 / 等开盘后）也能撤 = 执行器不再发（D2；2026-10-15：以前撤了凑钱的卖单，
-    等开盘后的买单撤不了）：成交日当天、立花在收盘（15:30）之前。"""
+    等开盘后的买单撤不了）：成交日当天、立花在收盘（15:30）之前。被挡、没有注文番号、今天还会再发的（blocked_retry）同样能撤
+    = 执行器不再重试（2026-10-17：以前这种单算在「今天要成交的单」里却没有「撤单」）。"""
     st = _g(o, "status")
     unsent = st in UNSENT
+    if st == "BLOCKED" and not _g(o, "broker_id"):          # 被挡、还没发到交易所：今天还会再发（08:55 之前的重试 / 立花开盘后补成限价）→ 能撤
+        if not blocked_retry(o, now, fill_day_of(book)):   # = 执行器不再重试（2026-10-17 用户：还没下的单都能撤）；今天不会再发 → 不用撤
+            return "被挡、今天不会再发了（不在交易所）：不用撤"
+        unsent = True
     if st not in CANCELLABLE and not unsent:
         return f"状态是「{STATUS_TEXT.get(st, st)}」：只撤还挂着的单（已下单 / 部分成交）或执行器还没发出的单（计划 / 等开盘后）"
     if not unsent and GONE in str(_g(o, "note") or ""):   # 撤单时立花回已经失效 / 被拒：单不在交易所了（不给「撤单」；简化 2026-10-16）
@@ -2752,11 +2758,11 @@ def _cancel_one(o, b, paper: bool, now: dt.datetime, source: str, polls: int, re
                 blocked: bool = False) -> tuple[str, str]:
     """撤一笔 → ("done" | "pending" | "failed" | "skipped", 说明)。成功：o.status = CANCELLED（立花：filled_qty / filled_px 记撤单时的成交）。
     执行器还没发出的单（PLANNED / DEFERRED）：不连券商，记 CANCELLED = 执行器不再发（D2；2026-10-15）。
-    blocked（整组撤单；2026-10-16）：被挡、还没发到交易所（BLOCKED、没有注文番号）的也在本地撤（执行器不再重试）。
+    blocked（整组撤单；2026-10-16）：被挡、还没发到交易所（BLOCKED、没有注文番号）的也在本地撤（执行器不再重试）；2026-10-17 起单笔撤单也一样（cancel_why 只放今天还会再发的），参数留着不用。
     resend=False（立花，整组撤单的复查）：撤单已经受理过 → 不再发撤单、只查状态；还没到终态 → "pending"（说明不改）。"""
     n = int(_g(o, "sent_qty") or _g(o, "qty") or 0)
     who = f"，{source}" if source else ""
-    if blocked and _g(o, "status") == "BLOCKED" and not _g(o, "broker_id"):
+    if _g(o, "status") == "BLOCKED" and not _g(o, "broker_id"):   # 单笔撤单也一样（cancel_why 只放今天还会再发的；2026-10-17）
         _set(o, status="CANCELLED", fund_src=[],
              note=f"你撤了单（{now:%H:%M}{who}）：被挡、还没发到交易所，执行器不再重试"[:300])
         return "done", _g(o, "note")
