@@ -446,11 +446,13 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
         if not (px > 0 and eq and em > 0):
             return 0
         return int(eq * CX.POS_PCT * min(1.0, em) / (px * 1.03) / lot) * lot
-    H = ["<section class='card' id='autobuy'><h2>规则接下来会自动买</h2>",
-         f"<div class='muted small'>按 {escape(str(sg.get('asof') or '—'))} 收盘。个股名额空 {s['free']} 个（上限 {s['max']} 只）{_slots_today(s)}。"
-         "只是规则的展示与估算，不是建议。</div>"]
-    if trig or near:
-        H.append("<div class='muted small'>点一行展开：K 线 · 现价、买入…（这几只不在下面「建议的股票」里重复）</div>")
+    H = ["<section class='card' id='autobuy'><h2>规则接下来会自动买</h2>",   # 说明收进 ⓘ、名额 = 标签（2026-10-17）
+         f"<div class='chips'><span class='chip mut'>按 {escape(str(sg.get('asof') or '—'))} 收盘</span>{_slot_chip(s)}"
+         + _tip(f"按 {escape(str(sg.get('asof') or '—'))} 收盘。个股名额空 {s['free']} 个（上限 {s['max']} 只）{_slots_today(s)}。"
+                "只是规则的展示与估算，不是建议。"
+                + ("<br>点一行展开：K 线 · 现价、买入…（这几只不在下面「建议的股票」里重复）" if trig or near else "")
+                + f"<br>天数与日期是按最近一天的变化估的；金叉之外还要量等条件凑齐才出买入信号（历史比例大多很低）；出了信号下一个交易日开盘买。")
+         + "</div>"]
     if trig:
         H.append("<h3 class='sgh'>已经出了买入信号</h3><div class='list'>")
         for r in trig:
@@ -469,10 +471,11 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
         cant = sum(1 for v in sh_all.values() if v <= 0)
         H.append(f"<h3 class='sgh'>估计 {AUTO_NEAR_DAYS} 个交易日内可能出信号（{len(near)} 只）</h3>")
         if s["free"] <= 0:
-            H.append("<div class='neg small'>名额满：出了信号也不会买（先卖出一只）</div>")
+            H.append("<div class='chips'><span class='chip bad'>名额满：出了信号也不会买</span>" + _tip("名额满：出了信号也不会买（先卖出一只）") + "</div>")
         elif cant:
-            H.append(f"<div class='small'>★ 其中 {cant} 只出了信号也买不起：现在一只新仓约 {_yen(eq * CX.POS_PCT * min(1.0, max(float((r.get('buy') or {}).get('em') or 0) for r in near)))}"
-                     "（总权益 × 25% × 新仓倍数），不够 100 股</div>")
+            H.append(f"<div class='chips'><span class='chip warn'>{cant} 只买不起</span>"
+                     + _tip(f"★ 其中 {cant} 只出了信号也买不起：现在一只新仓约 {_yen(eq * CX.POS_PCT * min(1.0, max(float((r.get('buy') or {}).get('em') or 0) for r in near)))}"
+                            "（总权益 × 25% × 新仓倍数），不够 100 股") + "</div>")
         H.append("<div class='list'>")
         for r in near:
             n = int(r["near"]["days"])
@@ -482,7 +485,7 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
             miss = (r.get("near") or {}).get("miss") or []
             bw = bought.get(str(r["ticker"]))
             tag_ = (f"<span class='chip'>{escape(bw)}</span>" if bw else
-                    "<span class='chip'>名额满</span>" if s["free"] <= 0 else "<span class='chip'>买不起</span>" if sh <= 0
+                    "<span class='chip bad'>名额满</span>" if s["free"] <= 0 else "<span class='chip warn'>买不起</span>" if sh <= 0
                     else f"<span class='chip hot'>约 {sh:,} 股</span>")
             mw = a["wait"].get(str(r["ticker"]))
             if mw:                                          # 现在还在「不买回」里：到期 / 解除之后才可能买
@@ -493,9 +496,14 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
         H.append("</div>")
     if not trig and not near:
         H.append(f"<div class='muted'>今天没有出信号的票，估计 {AUTO_NEAR_DAYS} 个交易日内金叉的也没有：规则近几天大概不会自动买个股</div>")
-    H.append("<div class='muted small'>天数与日期是按最近一天的变化估的；金叉之外还要量等条件凑齐才出买入信号（历史比例大多很低）；"
-             "出了信号下一个交易日开盘买。</div></section>")
+    H.append("</section>")
     return "".join(H)
+
+
+def _slot_chip(s: dict) -> str:
+    """个股名额的标签：空 0 = 红、空 1 = 琥珀、其他 = 绿框（2026-10-17：以前是一句话）。"""
+    f, m = int(s.get("free") or 0), int(s.get("max") or 0)
+    return f"<span class='chip {'bad' if f <= 0 else 'warn' if f == 1 else 'ok'}'>名额 空 {f}/{m}</span>"
 
 
 def _man_block(b: dict | None) -> bool:
@@ -599,10 +607,13 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, ca
         H.append(f"<div class='muted'>候选 {n_skip} 只都在上面「规则接下来会自动买」里（点开一行看 K 线、买入…），这里不重复</div>"
                  + (f"<div class='neg small'>★ 这次没算成：{escape(str(sg['error']))}</div>" if sg.get("error") else "") + "</section>")
         return "".join(H)
-    H += [f"<div class='muted small'>按 {escape(str(sg.get('asof') or '—'))} 收盘。不是收益预测，也不是建议；点「买入…」→ {escape(when)}下单。</div>",
-          f"<div class='small'>个股名额：空 {s['free']} 个（拿着 {s['held']} + 排定买入 {s['buys']}，上限 {s['max']} 只）{_slots_today(s)}</div>"]
-    if n_skip:
-        H.append(f"<div class='muted small'>上面「规则接下来会自动买」已列的 {n_skip} 只不在这里重复</div>")
+    H.append(f"<div class='chips'><span class='chip mut'>按 {escape(str(sg.get('asof') or '—'))} 收盘</span>{_slot_chip(s)}"
+             f"<span class='chip hot'>点买入 → {escape(when)}</span>"
+             + (f"<a class='chip mut' href='#autobuy'>+{n_skip} 只在上面 ↑</a>" if n_skip else "")
+             + _tip(f"按 {escape(str(sg.get('asof') or '—'))} 收盘。不是收益预测，也不是建议；点「买入…」→ {escape(when)}下单。"
+                    f"<br>个股名额：空 {s['free']} 个（拿着 {s['held']} + 排定买入 {s['buys']}，上限 {s['max']} 只）{_slots_today(s)}"
+                    + (f"<br>上面「规则接下来会自动买」已列的 {n_skip} 只不在这里重复" if n_skip else ""))
+             + "</div>")
     if sg.get("error"):
         H.append(f"<div class='neg small'>★ 这次没算成：{escape(str(sg['error']))}</div>")
     if not rows:
@@ -616,8 +627,10 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, ca
             groups.append((g, title, grp))
     if marks:
         n_big = sum(1 for m in marks.values() if m["dir"] == "down" and m["level"] == "大")
-        H.append(f"<div class='small'>最近 72 小时的消息影响到其中 {len(marks)} 只" + (f"（受损 大 {n_big} 只）" if n_big else "")
-                 + "：见每只名字下面的「消息」标记，点开看是哪几条</div>")
+        H.append(f"<div class='chips'><span class='chip {'bad' if n_big else 'warn'}'>⚠ 消息影响 {len(marks)} 只"
+                 + (f"（受损 大 {n_big}）" if n_big else "") + "</span>"
+                 + _tip(f"最近 72 小时的消息影响到其中 {len(marks)} 只" + (f"（受损 大 {n_big} 只）" if n_big else "")
+                        + "：见每只名字下面的「消息」标记，点开看是哪几条") + "</div>")
     if len(groups) > 1:                                      # 分段：一次只看一组（2026-10-11 用户：不要页面很长）
         H.append("<div class='seg sgseg' role='tablist'>" + "".join(
             f"<button type='button' data-sgg='{g}'{' class=on' if n == 0 else ''}>"
@@ -626,13 +639,13 @@ def _suggest_card(sg: dict, book: dict, tag: str, buying: set, when: str, eq, ca
         H.append(f"<div class='sgg' data-g='{g}'{'' if n == 0 else ' hidden'}>")
         if g == "rest":                                     # 快要出 + 观察中一组：按离金叉的天数排
             H.append(f"<h3 class='sgh'>观察中 · {len(grp)} 只（按离 MACD 金叉的天数排）</h3>"
-                     f"<div class='muted small'>越上面越快出现金叉（按最近一天的变化估算的天数；同样天数时快要出的、历史比例高的在前；"
-                     "已经在信号线上 / 还在往下走的排在后面，闸门挡的最后）。金叉之外还要横盘、量等条件凑齐才出买入信号，"
-                     "出了信号还要过闸门 / 名额才会买。</div>")
+                     + _tip("越上面越快出现金叉（按最近一天的变化估算的天数；同样天数时快要出的、历史比例高的在前；"
+                            "已经在信号线上 / 还在往下走的排在后面，闸门挡的最后）。金叉之外还要横盘、量等条件凑齐才出买入信号，"
+                            "出了信号还要过闸门 / 名额才会买。", "怎么排的"))
         else:
             H.append(f"<h3 class='sgh'>{escape(title)}（{len(grp)} 只）</h3>")
             if any(r.get("near") for r in grp):
-                H.append("<div class='muted small'>按离 MACD 金叉的天数排（越上面越快金叉；只是估算）</div>")
+                H.append("<div>" + _tip("按离 MACD 金叉的天数排（越上面越快金叉；只是估算）", "怎么排的") + "</div>")
         for k, r in enumerate(grp, 1):
             row = _suggest_row(r, s, buying, eq, chart, rank=k if g == "rest" else None, fill=sg.get("fill_day"),
                                mark=marks.get(str(r["ticker"])), freed=freed, bought=c.get("bought"))
@@ -1553,7 +1566,7 @@ def _panes(H: list, on: str | None = "home") -> str:
             cur = h[len(PANE):] or None
             if cur:
                 ic, lab, desc = TABS[cur]
-                head = "" if cur in seen else f"<div class='panehead'><b>{ic} {escape(lab)}</b><span>{escape(desc)}</span></div>"
+                head = "" if cur in seen else f"<div class='panehead'><b>{ic} {escape(lab)}</b>{_tip(escape(desc), '这一页有什么')}</div>"   # 说明收进 ⓘ（2026-10-17）
                 seen.add(cur)
                 out.append(f"<div class='pane{' on' if cur == on else ''}' data-tab='{cur}'>{head}")
             continue
@@ -2250,7 +2263,8 @@ def _trade_sections(sp: dict, orows: list, irows: list, meta: dict, now: dt.date
     plate = paper and pending and not halt and now.time() >= LO.PAPER_OPEN_END   # 模拟账户过了 11:30：补跑排的单今天不再撮合（复核 2026-10-16）
     H = ["<section class='card' id='today'><h2>今天要成交的单</h2>"]
     if halt:
-        H.append("<div class='neg small'>★ HALT 生效中：执行器今天不发新单（已经在交易所的单照样可能成交，可以撤；说明在「更多」）</div>")
+        H.append("<div class='chips'><span class='chip bad'>HALT：不发新单</span>"
+                 + _tip("★ HALT 生效中：执行器今天不发新单（已经在交易所的单照样可能成交，可以撤；说明在「更多」）") + "</div>")
     if stale and orows and (trading or T["o"] or L["o"]):   # 下面的空行已经写了为什么 → 这里只说是上一次决策的单（休市日都收在「已结束」→ 不写；复核 8）
         H.append(f"<div class='muted small'>执行器的单是上一次决策的单{escape(fd)}，不是今天的"
                  + ("" if empty and (pending or not trading) else "：" + ("今天休市" if not trading else run)) + "</div>")
@@ -2276,18 +2290,21 @@ def _trade_sections(sp: dict, orows: list, irows: list, meta: dict, now: dt.date
                  + (f"<div class='tsub'>执行器的单{escape(fd)}</div><div class='list'>{''.join(L['o'])}</div>" if L["o"] else "")
                  + (f"<div class='tsub'>手动指令</div><div class='list'>{''.join(L['i'])}</div>" if L["i"] else "")
                  + "</details>")
+    tips = []                                               # 下面三段说明收进带字的 ⓘ（2026-10-17 用户：解释太多影响重点）
     if not halt and (after or (pending and now.time() < MO.RUN_AT)):   # 下一次决策规则自己排的单现在还没有（没有假按钮；2026-10-17 用户：还没下的都要能撤）
-        H.append("<div class='muted small'>" + escape(
+        tips.append(_tipl("规则下一次也会下单", escape(
             f"下一次决策（{LO.next_decision_text(now)}）规则自己也可能买卖（那时才排出单，现在还没有，撤不了）：不想让它下 →「更多」里"
-            "「停止下单（HALT）」（只能停，恢复只在 Mac 上）；或等 07:40 排出单之后、09:00 开盘之前，在这里点那笔单的「撤单」") + "</div>")
+            "「停止下单（HALT）」（只能停，恢复只在 Mac 上）；或等 07:40 排出单之后、09:00 开盘之前，在这里点那笔单的「撤单」")))
     if T["o"] or L["o"]:
-        H.append("<div class='muted small'>" + escape(
+        tips.append(_tipl("撤单怎么用", escape(
             f"「撤单」：{LO.CANCEL_HINT}。{LO.CANCEL_HINT_CORE}。执行器还没发出的单（计划 / 等开盘后 / 被挡、今天还会再发的）也能撤：撤了执行器就不再发。"
             + ("同一组（一起下的：固定口数的凑钱卖单和买单、手动买入和为它卖的、拆成两笔的单）可以「整组撤单」：先撤买单，确认没成交再撤卖单；"
-               "买单已经成交 / 撤不掉 → 卖单不撤。" if meta.get("grp") else "")) + "</div>")
+               "买单已经成交 / 撤不掉 → 卖单不撤。" if meta.get("grp") else ""))))
     if orows and not paper and not stale:
-        H.append("<div class='muted small'>立花 API / Mac 出故障那天：只照「被挡 / 不下 / 没下」的行（今天不会再发的收在下面「已结束 / 不是今天的」里）在立花网站下单"
-                 "（「已下单 / 已成交 / 部分成交」的已经在交易所，别再下），之后在 Mac 对话里说一声登记（人工代下）。</div>")
+        tips.append(_tipl("出故障那天", "立花 API / Mac 出故障那天：只照「被挡 / 不下 / 没下」的行（今天不会再发的收在下面「已结束 / 不是今天的」里）在立花网站下单"
+                          "（「已下单 / 已成交 / 部分成交」的已经在交易所，别再下），之后在 Mac 对话里说一声登记（人工代下）。"))
+    if tips:
+        H.append("<div class='tips'>" + "".join(tips) + "</div>")
     H.append("</section>")
     ne = len(E["o"]) + len(E["i"]) + nblk
     if not ne:
@@ -2446,6 +2463,29 @@ def _news_card(now: dt.datetime) -> str:
             + ("".join(rows) or f"<div class='muted'>最近 {NEWS_SHOW_H} 小时没有程度中以上的消息</div>") + "</section>")
 
 
+def _warn_chips(warn: list) -> list:
+    """首页的警告句 → 标签（样式, 短字）：HALT / 模拟已停 = 红；没解锁 / ETF 买入信号 = 琥珀；模拟 / 只看 = 灰（整句在 ⓘ 里）。"""
+    out = []
+    for w in warn:
+        if "HALT" in w:
+            out.append(("bad", "HALT：不下单"))
+        elif "买入信号" in w:
+            out.append(("warn", "ETF 买入信号：等你确认"))
+        elif "ARM 文件在" in w:
+            out.append(("warn", "ARM 内容不对：不发单"))
+        elif "没有 ARM" in w:
+            out.append(("warn", "没解锁：不发单"))
+        elif "dry-run" in w:
+            out.append(("mut", "只看"))
+        elif "已停" in w:
+            out.append(("bad", "模拟账户已停"))
+        elif "模拟账户" in w:
+            out.append(("mut", "模拟账户"))
+        else:
+            out.append(("warn", "注意"))
+    return out
+
+
 def _home_stats(pj: dict, st: dict, paper: bool) -> str:
     """首页的总权益 / 现金：含今天已成交（live_ops.held_now 的对账前预计；2026-10-16 用户：卖出 1545、买入 1482 后数字没变）。
     有成交 → 主数字用预计、下面写「含今天已成交 · 账本 ¥…」；立花的现金是约数（只算已经知道的成交）。"""
@@ -2459,8 +2499,9 @@ def _home_stats(pj: dict, st: dict, paper: bool) -> str:
             lw = f"{d.month}/{d.day}"
         except ValueError:
             lw = ld or "—"
-        sub_e = f"<div class='muted small'>{escape(hd)} · 持仓按 {escape(lw)} 收盘估 · 账本 {_yen(pj.get('equity_ledger'))}</div>"
-        sub_c = f"<div class='muted small'>{escape(hd)} · 账本 {_yen(pj.get('cash_ledger'))}</div>"
+        sub_e = (f"<span class='chip warn'>预计</span>"
+                 + _tip(f"{escape(hd)} · 持仓按 {escape(lw)} 收盘估 · 账本 {_yen(pj.get('equity_ledger'))}", "为什么是预计"))
+        sub_c = f"<span class='chip warn'>预计</span>" + _tip(f"{escape(hd)} · 账本 {_yen(pj.get('cash_ledger'))}", "为什么是预计")
     ca = ("约" if pj.get("has") and not paper else "") + _yen(cash)
     return (f"<div class='stats'><div><div class='muted'>总权益</div><div class='big'>{_yen(eq)}</div>{sub_e}</div>"
             f"<div><div class='muted'>现金</div><div class='big'>{ca}</div>{sub_c}</div></div>"
@@ -2557,13 +2598,19 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         runl.insert(0, (tz[0], escape(tz[1])))
     bad_run = any(c == "neg" for c, _ in runl)
     H.append(PANE + "home")                               # ── 下面按标签页分组（_panes 把它们包成 <div class='pane'>）──
+    # 状态 → 标签（颜色 = 轻重），整句收进 ⓘ；出问题的执行器行照旧整句显示（2026-10-17 用户：解释太多影响重点）
+    wchips = "".join(f"<span class='chip {c}'>{escape(x)}</span>" for c, x in _warn_chips(warn))
+    okl = [h for c, h in runl if c != "neg"]
+    badl = [h for c, h in runl if c == "neg"]
+    run_chip = ("" if not okl or badl else f"<span class='chip ok'>执行器 ✓</span>")
     H.append(f"<section class='card{' warn' if halt or bad_run else ''}'><div class='head'><b>{escape(BOOKS.get(tag, tag))}</b>"
              f"<span class='chip'>决策日 {escape(str(st.get('last_date') or '—'))} → 成交日 {escape(str(sm.get('fill_day') or '—'))}</span></div>"
+             + (f"<div class='chips'>{wchips}{run_chip}"
+                + _tip("".join(f"<div>★ {w}</div>" for w in warn) + "".join(f"<div>{h}</div>" for h in okl), "这些标签是什么")
+                + "</div>" if wchips or run_chip else "")
              + _home_stats(pj, st, paper)
-             + f"<div>现在点买卖 → <b>{escape(when)}</b>下单</div><div class='muted small'>{escape(MO.RULE_TEXT)}</div>"
-             + "".join(f"<div class='{'neg' if 'HALT' in w or 'ARM' in w or '买入信号' in w or '已停' in w else 'muted'} small'>★ {w}</div>"
-                       for w in warn)
-             + "".join(f"<div class='{c} small'>{h}</div>" for c, h in runl)
+             + f"<div>现在点买卖 → <b>{escape(when)}</b>下单{_tip(escape(MO.RULE_TEXT), '什么时候下单')}</div>"
+             + "".join(f"<div class='neg small'>{h}</div>" for h in badl)
              + "</section>")
     if not st:
         H.append("<section class='card'>执行器还没有账本（第一次运行之后才有持仓）。</section>")
@@ -3147,7 +3194,7 @@ def _money_card(tag: str, book: dict, now: dt.datetime, pj: dict | None = None) 
          + _after_tax_stat(m, sy, cls) + "</div>"
          + MV.sparkline(m["spark"])]
     if pj and pj.get("has"):                                # 当日 / 累计是账本收盘的数：今天的成交对账之后才算进来（2026-10-16 复核：首页总权益含今天，这里没说）
-        H.append(f"<div class='muted small'>{escape(LO.ledger_close_note(pj, (book or {}).get('state') or {}))}</div>")
+        H.append(f"<div class='chips'><span class='chip mut'>未含今天的成交</span>{_tip(escape(LO.ledger_close_note(pj, (book or {}).get('state') or {})))}</div>")
     if pj and pj.get("has") and pj.get("realized") is not None:   # 今天已实现（预计；正式数在对账之后进年内已实现，2026-10-16）
         rz0 = float(pj["realized"])
         H.append(f"<div class='small'>{escape(pj.get('day_word') or '今天')}已实现（预计，{escape(str(pj.get('when_sp') or ''))}对账后正式记账）："
@@ -3159,9 +3206,9 @@ def _money_card(tag: str, book: dict, now: dt.datetime, pj: dict | None = None) 
                  + "</div>"
                  + (f"<div class='neg small'>★ 不完整：{escape(NM.labels(y['incomplete']))} 的买入记录对不上，它的卖出没算进去</div>"
                     if y.get("incomplete") else "")
-                 + "<div class='muted small'>特定口座（源泉徴収あり）20.315% 的估算：每次卖出时按「今年 1/1 起已实现损益的合计」代扣或退还"
+                 + "<div>" + _tip("特定口座（源泉徴収あり）20.315% 的估算：每次卖出时按「今年 1/1 起已实现损益的合计」代扣或退还"
                    "（年内盈亏通算），到 12/31 为止、第二年从 0 重新算；按成交日分年。税后累计 = 累计损益 − 历年代扣 − 现在全部卖出还要扣的。"
-                   "以立花的取引報告書 / 年間取引報告書为准</div>")
+                   "以立花的取引報告書 / 年間取引報告書为准", "税怎么算") + "</div>")
     rz = m.get("realized") or []
     if rz:
         H.append("<details class='hv'><summary class='muted'>最近的已实现损益（" + str(len(rz)) + " 笔）</summary><div class='list'>" + "".join(
@@ -3191,9 +3238,9 @@ def _money_card(tag: str, book: dict, now: dt.datetime, pj: dict | None = None) 
                  "<input id='flow-note' maxlength='120' placeholder='备注（可不写）' aria-label='备注'>"
                  "<button class='btn primary' data-act='flow'>登记</button></div>"
                  "<label class='small'><input type='checkbox' id='flow-reserve'> 出金：到账前先留现金（预留）</label>"
-                 "<div class='muted small'>预留 = 到账之前每次决策都当作这笔钱已经出金：个股仓位按扣掉它的权益算（变小）、闲置资金 ETF 不买回、"
+                 + _tip("预留 = 到账之前每次决策都当作这笔钱已经出金：个股仓位按扣掉它的权益算（变小）、闲置资金 ETF 不买回、"
                  "现金不够照规则先卖核心 ETF；到账（早上的现金核对对上）后自动解除，14 天还没对上也解除并提醒。"
-                 "不预留的话，出金前卖出的钱会被规则当成闲置资金买回 ETF。</div></details>")
+                 "不预留的话，出金前卖出的钱会被规则当成闲置资金买回 ETF。", "预留是什么") + "</details>")
     from .live_unified import reserves
     rv = reserves(book)
     if rv:
@@ -3490,6 +3537,13 @@ def _tip(html: str, label: str = "说明") -> str:
     if not html:
         return ""
     return f"<details class='ii'><summary aria-label='{escape(label)}' title='{escape(label)}'>ⓘ</summary><div class='iib small'>{html}</div></details>"
+
+
+def _tipl(label: str, html: str) -> str:
+    """带字的「ⓘ」：一行里并排几条说明时用（「撤单怎么用 ⓘ」之类），点开才看全文。"""
+    if not html:
+        return ""
+    return f"<details class='ii lab'><summary>{escape(label)} ⓘ</summary><div class='iib small'>{html}</div></details>"
 
 
 def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fetch=None) -> tuple[bool, str, dict | None]:

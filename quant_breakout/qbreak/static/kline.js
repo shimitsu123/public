@@ -84,48 +84,53 @@ function kSubKey(el, P, tf, sub){                                          // �
   else if(sub==='dmi'){ k('pdi','+DI 买方'); k('mdi','−DI 卖方'); k('adx','ADX 趋势强度'); k('adxr','ADXR'); nd('span',null,'DMI '+((P.ind||{}).dmi||[14,6]).join(','),row); }
   else { k('box cu','涨'); k('box cd','跌'); nd('span',null,'成交量（'+(P.kind==='core' ? '口' : '股')+'）',row); }
 }
-function kSubNow(el, D, i, P, tf, sub){                                    // 小图「这一根」一句话（跟着十字线走）
-  let s='';
+function kPut(el, parts){ for(const [t, c] of parts) if(t) (c ? nd('b', c, t, el) : el.appendChild(document.createTextNode(t))); }   // 要点上色、补充是灰字（2026-10-17：一句话太长 → 颜色看重点）
+function kSubNow(el, D, i, P, tf, sub){                                    // 小图「这一根」（跟着十字线走）：要点上色（金叉 / 买方强 = 红〔涨〕、死叉 / 卖方强 = 绿、量比 ≥ 2 = 加粗）
+  const ps=[];
   if(sub==='macd'){
     const a=D.dif && D.dif[i], b=D.dea && D.dea[i], h=D.mh && D.mh[i], h0=i>0 && D.mh ? D.mh[i-1] : null;
-    if(a==null || b==null) s='K 线还不够多，算不出来';
+    if(a==null || b==null) ps.push(['K 线还不够多，算不出来']);
     else {
-      if(h!=null && h0!=null && h0<0 && h>=0) s='金叉（快线刚往上穿过慢线）';
-      else if(h!=null && h0!=null && h0>0 && h<=0) s='死叉（快线刚往下穿过慢线）';
-      else s=(a>=b ? '快线在慢线上面（涨的力量强）' : '快线在慢线下面（跌的力量强）')
-             +(h!=null && h0!=null ? (Math.abs(h)>Math.abs(h0) ? '，在变强' : '，在变弱') : '');
-      s+='；在 0 线'+(a>=0 ? '上面（偏涨）' : '下面（偏跌）');
+      if(h!=null && h0!=null && h0<0 && h>=0) ps.push(['金叉','up'],['（快线刚往上穿过慢线）']);
+      else if(h!=null && h0!=null && h0>0 && h<=0) ps.push(['死叉','down'],['（快线刚往下穿过慢线）']);
+      else ps.push(a>=b ? ['快线在慢线上面','up'] : ['快线在慢线下面','down'], [(a>=b ? '（涨的力量强）' : '（跌的力量强）')
+             +(h!=null && h0!=null ? (Math.abs(h)>Math.abs(h0) ? '，在变强' : '，在变弱') : '')]);
+      ps.push(['；在 0 线'+(a>=0 ? '上面（偏涨）' : '下面（偏跌）')]);
     }
   } else if(sub==='dmi'){
     const p=D.pdi && D.pdi[i], m=D.mdi && D.mdi[i], x=D.adx && D.adx[i], x0=i>0 && D.adx ? D.adx[i-1] : null;
-    if(p==null || m==null) s='K 线还不够多，算不出来';
+    if(p==null || m==null) ps.push(['K 线还不够多，算不出来']);
     else {
-      s=p>=m ? '买方强' : '卖方强';
-      if(x!=null) s+='；ADX '+x.toFixed(1)+(x>=25 ? '（趋势明显）' : x<20 ? '（没什么趋势）' : '（趋势一般）')+(x0!=null ? (x>x0 ? '，在变强' : '，在变弱') : '');
+      ps.push(p>=m ? ['买方强','up'] : ['卖方强','down']);
+      if(x!=null) ps.push(['；ADX '+x.toFixed(1)+(x>=25 ? '（趋势明显）' : x<20 ? '（没什么趋势）' : '（趋势一般）')+(x0!=null ? (x>x0 ? '，在变强' : '，在变弱') : '')]);
     }
   } else {
     const v=D.v[i]||0; let sm=0, n=0;
     for(let j=Math.max(0, i-20); j<i; j++){ if(D.v[j]!=null){ sm+=D.v[j]; n++; } }
-    s='成交 '+vfmt(v)+(P.kind==='core' ? ' 口' : ' 股')+(n>=5 && sm>0 ? '，是前 '+n+' '+KU[tf]+'平均的 '+(v/(sm/n)).toFixed(2)+' 倍' : '');
+    ps.push(['成交 '+vfmt(v)+(P.kind==='core' ? ' 口' : ' 股')]);
+    if(n>=5 && sm>0){ const r=v/(sm/n); ps.push(['，是前 '+n+' '+KU[tf]+'平均的 '], [r.toFixed(2)+' 倍', r>=2 ? 'hi' : null]); }
   }
   const lv=isLive(P, D, i, tf);
-  el.textContent=(lv ? (P.live.open ? '今天这一根（到 '+liveAt(P)+'，还没收盘）' : '暂定的一根（1 分钟线到 '+liveAt(P)+'；正式日线在执行器下一次运行后换上）')
-    : i===D.d.length-1 ? '最新一根' : sdate(D.d[i], tf))+'：'+s;
+  el.textContent='';
+  kPut(el, [[(lv ? (P.live.open ? '今天这一根（到 '+liveAt(P)+'，还没收盘）' : '暂定的一根（1 分钟线到 '+liveAt(P)+'；正式日线在执行器下一次运行后换上）')
+    : i===D.d.length-1 ? '最新一根' : sdate(D.d[i], tf))+'：']].concat(ps));
 }
-function kTrend(el, tr, tf){                                               // 现在的趋势（一句话；kline.py 的标签换成日常的话）
+function kTrend(el, tr, tf){                                               // 现在的趋势（kline.py 的标签换成日常的话；趋势上色、括号里的是灰字）
   const L=KPL.label||{}, A=KPL.align||{}, m=KMA[tf], sl=+tr.slope20_pct||0;
   nd('span',null,'现在的趋势：',el);
   nd('b', tr.label==='上升' ? 'up' : tr.label==='下降' ? 'down' : null, L[tr.label] || tr.label || '—', el);
   el.appendChild(document.createTextNode('（收盘在 20 '+m+'均价'+(tr.above20 ? '上面' : '下面')+'，20 '+m+'均价'
-    +(Math.abs(sl)<0.005 ? '走平' : sl>0 ? '往上' : '往下')+'）'+(tr.align ? ' · '+(A[tr.align] || tr.align) : '')));
+    +(Math.abs(sl)<0.005 ? '走平' : sl>0 ? '往上' : '往下')+'）'));
+  if(tr.align){ el.appendChild(document.createTextNode(' · ')); nd('b', null, A[tr.align] || tr.align, el); }
 }
-function kTL(el, TL, tf){                                                  // 现在的趋势线（一句话；图上的记号在「持仓」K 线上面的「怎么看 K 线图」里）
+function kTL(el, TL, tf){                                                  // 现在的趋势线（图上的记号在「持仓」K 线上面的「怎么看 K 线图」里）：价位加粗、跌破 / 冲过上色
   const C=KPL.chan||{};
   const one=(L, sup)=>{ const d=L.dist_pct;
-    return (sup ? '支撑 ' : '压力 ')+pxs(L.now)+(d==null ? '' : sup ? (d<=0 ? '（比收盘低 '+Math.abs(d)+'%）' : '（已跌破）')
-                                                                : (d>=0 ? '（比收盘高 '+d+'%）' : '（已冲过）')); };
-  const parts=[]; if(TL.sup) parts.push(one(TL.sup, true)); if(TL.res) parts.push(one(TL.res, false));
-  nd('div',null,'趋势线：'+(TL.chan ? (C[TL.chan] || TL.chan) : '只找到'+(TL.sup ? '下面' : '上面')+'的一条')+(parts.length ? ' · '+parts.join(' · ') : ''),el);
+    return [[sup ? ' · 支撑 ' : ' · 压力 '], [pxs(L.now), 'px'], d==null ? [''] : sup ? (d<=0 ? ['（比收盘低 '+Math.abs(d)+'%）'] : ['（已跌破）','down'])
+                                                                    : (d>=0 ? ['（比收盘高 '+d+'%）'] : ['（已冲过）','up'])]; };
+  const row=nd('div',null,null,el);
+  kPut(row, [['趋势线：'+(TL.chan ? (C[TL.chan] || TL.chan) : '只找到'+(TL.sup ? '下面' : '上面')+'的一条')]]
+    .concat(TL.sup ? one(TL.sup, true) : [], TL.res ? one(TL.res, false) : []));
 }
 function kBar(box, pos, act, opts, cur, label, hint){                      // 图的上边沿（周期）/ 下边沿（小图）的按钮
   const bar=nd('div','kbar '+pos,null,box), g=nd('div','seg',null,bar);

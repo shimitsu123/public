@@ -188,8 +188,9 @@ def test_panel_paused_card_signal_banner_and_confirm():
     assert "data-act='core-resume'>确认买入（恢复照规则）</button>" in h and "★ 买入信号" not in h and "ETF 出现买入信号" not in h
     _paused(sig=True)
     h = panel.render("paper", "tok", now=AT)
-    assert ("<div class='neg small'>★ 闲置资金 ETF 出现买入信号（2026-10-05 收盘）：规则想买 1655 S&amp;P500 约 1,140 口（约 ¥798,000）"
-            " → 确认后才买（见下面「闲置资金」）</div>") in h
+    assert "<span class='chip warn'>ETF 买入信号：等你确认</span>" in h                    # 首页是标签，全文在 ⓘ 里（2026-10-17）
+    assert ("★ 闲置资金 ETF 出现买入信号（2026-10-05 收盘）：规则想买 1655 S&amp;P500 约 1,140 口（约 ¥798,000）"
+            " → 确认后才买（见下面「闲置资金」）") in h
     assert "<section class='card warn' id='core'>" in h and "★ 买入信号（2026-10-05 收盘）" in h
     ok, msg, rec = panel.submit({"book": "paper", "kind": "core", "pct": 100}, AT)
     assert ok and rec["pct"] == 100.0 and msg.startswith("已写：确认买入（闲置资金比例 0% → 100%）→ 马上（盘中）照规则买入核心 ETF")

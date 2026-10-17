@@ -1,4 +1,5 @@
 """本机操作面板（qbreak/panel.py）：只接受本机、要令牌、只写手动指令；交易日 07:45〜08:55 早上的决策做了之后叫执行器重试。"""
+import re
 import datetime as dt
 import http.client
 import json
@@ -452,7 +453,7 @@ def test_kline_plain_text_and_lot_bar_in_node(tmp_path):
     if not node:
         pytest.skip("没有 node")
     J = panel._JS
-    fns = "\n".join(_js_fn(J, n) for n in ("nd", "pxs", "pcs", "vfmt", "sdate", "isLive", "liveAt", "kSubNow", "kTrend", "kTL", "ALOT", "UW",
+    fns = "\n".join(_js_fn(J, n) for n in ("nd", "pxs", "pcs", "vfmt", "sdate", "isLive", "liveAt", "kPut", "kSubNow", "kTrend", "kTL", "ALOT", "UW",
                                             "capLab", "adjCap", "adjBar"))
     kp = json.dumps({"label": KL.PLAIN, "align": KL.ALIGN_PLAIN, "chan": KL.CHAN_PLAIN}, ensure_ascii=False)
     js = """
@@ -480,13 +481,17 @@ const DM={d:['2026-09-29','2026-09-30','2026-10-01'], dif:[-0.5,-0.2,0.3], dea:[
           pdi:[20,30,31], mdi:[25,12,11], adx:[26,28,27], v:[100,100,100]};
 out.macd_last=t(e=>kSubNow(e, DM, 2, {kind:'stock'}, 'D', 'macd')); out.macd_mid=t(e=>kSubNow(e, DM, 1, {kind:'stock'}, 'D', 'macd'));
 out.dmi=t(e=>kSubNow(e, DM, 1, {kind:'stock'}, 'D', 'dmi'));
+const cls=(f)=>{ const e=new El('div'); f(e); const w=x=>[x].concat(...x.children.map(w)); return w(e).filter(c=>c.tagName==='B').map(c=>c.className+':'+c.textContent); };
+out.c_macd=cls(e=>kSubNow(e, DM, 2, {kind:'stock'}, 'D', 'macd')); out.c_dmi=cls(e=>kSubNow(e, DM, 1, {kind:'stock'}, 'D', 'dmi'));
 const DV={d:Array.from({length:21}, (_, i)=>'2026-09-'+String(i+1).padStart(2,'0')), v:Array(20).fill(100).concat([250])};
-out.vol=t(e=>kSubNow(e, DV, 20, {kind:'stock'}, 'D', 'v')); out.vol_w=t(e=>kSubNow(e, DV, 20, {kind:'core'}, 'W', 'v'));
+out.vol=t(e=>kSubNow(e, DV, 20, {kind:'stock'}, 'D', 'v')); out.c_vol=cls(e=>kSubNow(e, DV, 20, {kind:'stock'}, 'D', 'v')); out.vol_w=t(e=>kSubNow(e, DV, 20, {kind:'core'}, 'W', 'v'));
 out.trend_w=t(e=>kTrend(e, {label:'上升', align:'多头排列', above20:true, slope20_pct:0.52}, 'W'));
 out.trend_flat=t(e=>kTrend(e, {label:'震荡', align:'', above20:false, slope20_pct:0}, 'D'));
 out.tl=t(e=>kTL(e, {sup:{now:950, dist_pct:-5, slope_pct:0.12, touch:3}, res:{now:1100, dist_pct:10, slope_pct:0.01, touch:2},
                     chan:'对称三角', pos:33, eps:0.02}, 'D'));
 out.tl_broken=t(e=>kTL(e, {sup:{now:1020, dist_pct:2, slope_pct:-0.5, touch:2}, res:{now:990, dist_pct:-1, slope_pct:0.3, touch:4},
+                           chan:'扩散', pos:120, eps:0.4}, 'M'));
+out.c_tl=cls(e=>kTL(e, {sup:{now:1020, dist_pct:2, slope_pct:-0.5, touch:2}, res:{now:990, dist_pct:-1, slope_pct:0.3, touch:4},
                            chan:'扩散', pos:120, eps:0.4}, 'M'));
 out.tl_one=t(e=>kTL(e, {res:{now:1100, dist_pct:10, slope_pct:0.2, touch:2}, eps:0.02}, 'W'));
 console.log(JSON.stringify(out));
@@ -511,6 +516,9 @@ console.log(JSON.stringify(out));
     assert o["macd_mid"] == "09/30：快线在慢线下面（跌的力量强），在变弱；在 0 线下面（偏跌）"
     assert o["dmi"] == "09/30：买方强；ADX 28.0（趋势明显），在变强"
     assert o["vol"] == "最新一根：成交 250 股，是前 20 天平均的 2.50 倍" and o["vol_w"] == "最新一根：成交 250 口，是前 20 周平均的 2.50 倍"
+    # 要点上色（2026-10-17 用户：解释太多影响重点）：金叉 / 买方强 = 涨色、量比 ≥ 2 = 琥珀、跌破 / 冲过上色、价位加粗；文字不变
+    assert o["c_macd"] == ["up:金叉"] and o["c_dmi"] == ["up:买方强"] and o["c_vol"] == ["hi:2.50 倍"]
+    assert o["c_tl"] == ["px:¥1,020", "down:（已跌破）", "px:¥990.0", "up:（已冲过）"]
     # 现在的趋势（kline.py 的说法）
     assert o["trend_w"] == "现在的趋势：往上走（收盘在 20 周均价上面，20 周均价往上） · 涨势整齐"
     assert o["trend_flat"] == "现在的趋势：横着走（收盘在 20 日均价下面，20 日均价走平）"
@@ -551,7 +559,7 @@ def test_one_kline_help_for_the_whole_page_and_no_number_table():
         assert "id='khelp'" in hold and "id='khelp'" not in pick
         assert hold.index("id='khelp'") < hold.index("id='holdings'") < hold.index("data-t='6758.T' data-kind='stock'")   # 持仓的 K 线上面
         assert "data-kind=" not in hold[:hold.index("id='khelp'")]                     # 上面没有别的 K 线
-        assert pick.count("怎么看 K 线图") == 1 and "data-khelpgo='1'" in pick and "<details" not in pick[:pick.index("data-khelpgo")]   # 选股：只一行指过去
+        assert pick.count("怎么看 K 线图") == 1 and "data-khelpgo='1'" in pick and "<details" not in re.sub(r"<details class='ii'>.*?</details>", "", pick[:pick.index("data-khelpgo")])   # 选股：只一行指过去（ⓘ 说明不算）
         assert pick.index("data-khelpgo") < pick.index("id='autobuy'") < pick.index("id='suggest'")
         for x in ("红色空心 = 涨", "绿色实心 = 跌", "<i class='key m5'></i>5", "<i class='key m30'></i>30 日（周 / 个月）均价",
                   "▲买入 = 买入那一根", "▲信号 = 出买入信号那一根", "<i class='key dash stop'></i>止损线", "<i class='key dash tl'></i>趋势线",

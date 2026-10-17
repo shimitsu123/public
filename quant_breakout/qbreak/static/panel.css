@@ -53,7 +53,7 @@ color:var(--fg);cursor:pointer;touch-action:manipulation}.seg button:first-child
 .adjrow .unit{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
 .kbar{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap}.kbar .seg button{min-height:38px;padding:4px 16px;font-size:15px}
 .kbar.ktop{padding:0 0 6px;border-bottom:1px solid var(--line);margin-bottom:4px}.kbar.kbot{padding:6px 0 2px;border-top:1px solid var(--line);margin-top:2px}.kbar .hint{font-size:12px;color:var(--muted)}
-.kexp{font-size:13px;line-height:1.55;color:var(--muted);margin:4px 0}.kexp b{color:var(--fg)}.kexp b.up{color:var(--up)}.kexp b.down{color:var(--down)}
+.kexp{font-size:13px;line-height:1.55;color:var(--muted);margin:4px 0}.kexp b{color:var(--fg)}.kexp b.up{color:var(--up)}.kexp b.down{color:var(--down)}.kexp b.hi{color:var(--warn)}
 .kexp.now{color:var(--fg)}.kexp .legend{margin:0 0 2px}
 /* 整页一份的「怎么看 K 线图」（「持仓」的 K 线上面；选股只有一行 .khgo 指过去；2026-10-15：每张图不再各带一份） */
 details.khelp>summary{font-weight:600;color:var(--accent)}.khgo{margin:8px 2px 0;color:var(--muted)}.khgo a{color:var(--accent);white-space:nowrap}
@@ -235,4 +235,8 @@ details.ii>summary{list-style:none;cursor:pointer;display:inline-flex;width:18px
 details.ii>summary::-webkit-details-marker{display:none}
 details.ii[open]>summary{color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 details.ii[open]{display:block;margin:4px 0}
+details.ii.lab>summary{width:auto;height:auto;padding:2px 8px;border-radius:10px;font-size:12px}
+.tips{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;margin-top:8px}
+.tips details.ii{margin-left:0}
+.tips details.ii[open]{flex-basis:100%}
 details.ii .iib{margin-top:4px;padding:8px 10px;border-radius:8px;background:var(--chip);color:var(--fg);font-weight:400;line-height:1.5}
