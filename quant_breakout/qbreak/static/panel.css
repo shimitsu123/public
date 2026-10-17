@@ -1,11 +1,11 @@
 /* qbreak 操作面板的样式（由 qbreak/panel.py 以 /static/panel.css 提供） */
 :root{--bg:#f2f2f7;--card:#fff;--fg:#1c1c1e;--muted:#6e6e73;--line:#e3e3e8;--pos:#1a7f37;--neg:#c62828;--accent:#2f5bd3;
---accent-fg:#fff;--chip:#eef0f6;--shadow:0 1px 2px rgba(0,0,0,.06);--up:#e0373a;--down:#0e8f50;--ma10:#8e4bb3;--ma20:#c26a00;--ma30:#2a5db0;--warn:#a85d00;--warn-bg:#fff1dc}
+--accent-fg:#fff;--chip:#eef0f6;--shadow:0 1px 2px rgba(0,0,0,.06);--up:#e0373a;--down:#0e8f50;--ma10:#8e4bb3;--ma20:#c26a00;--ma30:#2a5db0;--warn:#a85d00;--warn-bg:#fff1dc;--neg-bg:#fde7e7}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0f0f11;--card:#1c1c1f;--fg:#ececf0;--muted:#a1a1a8;
 --line:#2e2e33;--pos:#4cc36b;--neg:#ff6b6b;--accent:#8aa8ff;--accent-fg:#0f0f11;--chip:#2a2a30;--shadow:none;
---up:#e8484d;--down:#17905a;--ma10:#a66fd0;--ma20:#c47f2c;--ma30:#5b8be0;--warn:#f0a840;--warn-bg:#3a2a12}}
+--up:#e8484d;--down:#17905a;--ma10:#a66fd0;--ma20:#c47f2c;--ma30:#5b8be0;--warn:#f0a840;--warn-bg:#3a2a12;--neg-bg:#3d1a1c}}
 :root[data-theme="dark"]{--bg:#0f0f11;--card:#1c1c1f;--fg:#ececf0;--muted:#a1a1a8;--line:#2e2e33;--pos:#4cc36b;--neg:#ff6b6b;
---accent:#8aa8ff;--accent-fg:#0f0f11;--chip:#2a2a30;--shadow:none;--up:#e8484d;--down:#17905a;--ma10:#a66fd0;--ma20:#c47f2c;--ma30:#5b8be0;--warn:#f0a840;--warn-bg:#3a2a12}
+--accent:#8aa8ff;--accent-fg:#0f0f11;--chip:#2a2a30;--shadow:none;--up:#e8484d;--down:#17905a;--ma10:#a66fd0;--ma20:#c47f2c;--ma30:#5b8be0;--warn:#f0a840;--warn-bg:#3a2a12;--neg-bg:#3d1a1c}
 *{box-sizing:border-box} [hidden]{display:none!important} html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Hiragino Sans","PingFang SC",sans-serif;
 -webkit-tap-highlight-color:transparent;overflow-wrap:break-word}
@@ -15,7 +15,9 @@ padding:calc(env(safe-area-inset-top) + 8px) max(16px,env(safe-area-inset-right)
 .tabs{display:flex;gap:8px;overflow-x:auto;max-width:720px;margin:8px auto 0;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
 .tabs a{flex:0 0 auto;padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--fg);
 text-decoration:none;font-size:14px}.tabs a.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
-.tabs a.real{background:var(--neg);border-color:var(--neg);color:#fff;font-weight:600}.tabs a.real.on{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--neg)}   /* 立花本番 = 真钱：红底；选着的再加一圈（2026-10-17） */
+.tabs a.real{background:var(--neg-bg);border-color:var(--neg);color:var(--neg);font-weight:600}
+.tabs a.real.on{background:var(--neg);color:#fff;font-weight:700;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--neg)}
+/* 立花本番 = 真钱：没选 = 淡红底红字，选着 = 实心红底白字 + 一圈（2026-10-17 用户「点击本番的时候和没点击的时候感觉差别不大」） */
 main{max-width:720px;margin:0 auto;padding:4px max(16px,env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 40px) max(16px,env(safe-area-inset-left))}
 h1{font-size:20px;margin:0 0 8px} h2{font-size:17px;margin:0 0 8px} h3{font-size:17px;margin:0 0 8px}
 .muted{color:var(--muted);font-size:14px} .small{font-size:13px} .pos{color:var(--pos)} .neg{color:var(--neg)}
