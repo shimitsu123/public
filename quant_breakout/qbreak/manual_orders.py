@@ -1044,7 +1044,7 @@ def wait_text(r: dict | None, now: dt.datetime, book: dict | None, tag: str | No
     if nop:                                                # 已经拿着这么多：不买也不卖，之后每天保持（2026-10-17）
         n, head = nop
         return (f"{NOOP_WORD}：已经拿着 {n:,} 口" + (f"（{head}）" if head else "")
-                + f" = 固定的口数 → 读到之后（{corefix_fill(now, book, tag)['text']}）不买也不卖；之后保持 {n:,} 口、不按规则调，直到「恢复按规则」")
+                + f" = 固定的口数，不买也不卖；之后保持 {n:,} 口、不按规则调，直到「恢复按规则」")
     if k == "corefix" and not r.get("fund_for"):
         return f"{w}：{corefix_fill(now, book, tag)['text']}"
     if allin_member(r):

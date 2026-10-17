@@ -57,8 +57,8 @@ def test_waiting_corefix_can_be_cancelled_with_clear_confirm():
     html = panel.render("paper", "t" * 40, AT)
     i = html.index(f"data-id='{rec['id']}'")
     btn = html[html.rindex("<button", 0, i):html.index("</button>", i)]
-    assert "data-act='cancel'" in btn and ">撤单" in btn and "data-desc='" in btn and "1482 对冲版" in btn
-    assert "ask('确认撤单？'" in panel._JS and "'确认撤单', {danger:true}" in panel._JS             # 一定先确认
+    assert "data-act='cancel'" in btn and ">撤回" in btn and "data-desc='" in btn and "1482 对冲版" in btn   # 固定口数不是单：撤回（2026-10-17）
+    assert "'确认撤回？' : '确认撤单？'" in panel._JS and "'确认撤回' : '确认撤单', {danger:true}" in panel._JS             # 一定先确认
     ok, msg, _ = panel.submit({"book": "paper", "kind": "cancel", "target": rec["id"]}, AT)
     assert ok and "撤回" in msg
     b = json.loads((panel.paths.state_dir() / "live_unified_paper.json").read_text())

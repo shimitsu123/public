@@ -611,9 +611,9 @@ document.addEventListener('click', async e=>{
     if(q.ok) done(await post({book:CFG.book, kind:'cancel', target:d.id})); return;
   }
   if(a==='cancel'){                                                       // 撤单前一定确认（2026-10-12 用户：防止误撤）：写清撤的是哪一条
-    const q=await ask('确认撤单？', (d.desc||d.id)+'\n\n'+(d.placed==='2' ? (d.wtxt||'盘中的单已在 15:30 失效：撤回之后下一次开盘不再卖（下一次早上的对账之后结束；已经成交的部分照记）')+'。'   // G16（2026-10-14；复核：服务器按下单那天写 data-wtxt）
+    const q=await ask(d.ctx ? '确认撤回？' : '确认撤单？', (d.desc||d.id)+'\n\n'+(d.placed==='2' ? (d.wtxt||'盘中的单已在 15:30 失效：撤回之后下一次开盘不再卖（下一次早上的对账之后结束；已经成交的部分照记）')+'。'   // G16（2026-10-14；复核：服务器按下单那天写 data-wtxt）
       : d.placed==='1' ? '之后不再下。已经发到交易所的单用「今天要成交的单」的「撤单」撤。' : (d.ctx ? d.ctx+'。' : '还没下单：撤掉之后不会下。'))   // data-ctx：比例 / 固定口数撤回之后照旧什么（2026-10-17）
-      +(+d.fund>0 ? '\n为这笔买入写的 '+d.fund+' 条卖出 / 闲置资金指令也一起撤掉。' : '')+(+d.stuck>0 ? '\n另有 '+d.stuck+' 条已经生效 / 已在撤回中，撤不了（提交后会说明）。' : '')+'\n（指令 '+d.id+'）', '确认撤单', {danger:true});
+      +(+d.fund>0 ? '\n为这笔买入写的 '+d.fund+' 条卖出 / 闲置资金指令也一起撤掉。' : '')+(+d.stuck>0 ? '\n另有 '+d.stuck+' 条已经生效 / 已在撤回中，撤不了（提交后会说明）。' : '')+'\n（指令 '+d.id+'）', d.ctx ? '确认撤回' : '确认撤单', {danger:true});
     if(q.ok) done(await post({book:CFG.book, kind:'cancel', target:d.id})); return;
   }
   if(a==='uncancel'){                                                     // 撤销一条撤回（2026-10-12）：原来的指令恢复「等下单」/「等执行器读」（data-st；2026-10-14）、撤回记录不再显示

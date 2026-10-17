@@ -2058,6 +2058,8 @@ def _instr_row(r: dict, book: dict | None, now: dt.datetime, tag: str | None, ha
             state = "later"
         row.update(state=state, act_at=at, reason=reason or wt, cls=cls)
         return row
+    if k == "corefix" and MO.corefix_noop(r, book, tag, now):   # 固定的口数 = 已经拿着的：不买也不卖 → 结束（交易页收进「已结束」、
+        return put("done", None, wt, "noop")                      # 不算数字、自检不当成该下的单；2026-10-17 用户「不下单的话没必要在交易里面标记下单了」）
     if halt and k in MO.ORDER_KINDS + ("core", "corefix"):
         return put("later", None, MO.halt_text(r), "halt")
     if k == "unblock":

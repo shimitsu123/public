@@ -129,10 +129,13 @@ def test_weekend_shortfall_row_gets_dont_top_up_and_monday_does_not_buy():
     html = panel.render(r.tag, "t" * 40, sat)
     top, later, _ended = _parts(html)
     assert "还差" not in top + later and _btn(later, "fix-undo") is None       # 那一行没了：换成刚写的那条（还没读，能撤回）
-    row = _row(later, f"<b>固定 {LAB}：{q:,} 口（不按规则自动调）</b>")
+    row = _row(_ended, f"<b>固定 {LAB}：{q:,} 口（不按规则自动调）</b>")       # 口数一样 = 不下单：收进「已结束」、不算数字（2026-10-17）
+    assert "<span class='chip'>不下单</span>" in row
     c = _btn(row, "cancel")
-    assert c is not None and c["ctx"] == f"执行器还没读：撤回之后这条不生效，{LAB} 照旧固定 {u:,} 口"   # 不是「撤掉之后不会下」
-    assert _badge_ok(html, r.tag, sat) == 1
+    assert c is not None and c["_text"] == "撤回" and c["ctx"] == (f"执行器还没读：撤回之后这条不生效，{LAB} 照旧固定 {u:,} 口"   # 不是「撤掉之后不会下」
+                                                               f"（现在 {q:,} 口 → 买 {u - q:,} 口：{mon:%m/%d} 07:40 的决策 → "
+                                                               f"{mon:%m/%d} 09:00 开盘；钱不够只买得起的部分）")
+    assert _badge_ok(html, r.tag, sat) == 0
     js = _node("cancel", c, {"ok": True})                                      # 想了想又要补：撤回刚写的那条 → 那一行回来
     assert js["SENT"] == [{"book": "paper", "kind": "cancel", "target": c["id"]}] and c["ctx"] in js["ASKED"][0][1]
     ok, msg = _submit(js["SENT"][0], sat)
@@ -264,7 +267,7 @@ def test_pending_restore_rule_row_offers_fixing_again():
     assert json.loads(x["opts"]) == [{"l": "这次不调：固定成现在 650 口", "u": 650}] and "取代「恢复按规则」" in x["body"]
     ok, msg = _submit({"book": tag, "kind": "corefix", "ticker": "1482.T", "units": 650}, now)
     assert ok and "下一次决策预计不用买卖核心 ETF" in msg, msg
-    assert _badge_ok(panel.render(tag, "t" * 40, now), tag, now) == 1
+    assert _badge_ok(panel.render(tag, "t" * 40, now), tag, now) == 0          # 固定成拿着的口数 = 不下单：不算（2026-10-17）
 
 
 # ────────── 读了、还没照它调的闲置资金比例 ──────────

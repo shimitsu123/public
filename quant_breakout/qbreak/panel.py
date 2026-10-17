@@ -1760,7 +1760,8 @@ def _trade_live_calc(book: dict, waiting: list, now: dt.datetime, tag: str | Non
             rerun[cid] = r["reason"]                        # 复核 4（2026-10-16）：以前照写 07:40 存下的「已排队，次日开盘成交」/「开盘后按始値检查…」
         if (o.get("kind") == "core" and t in fixed and (s == "CANCELLED" or cid in asked or r.get("cls") == "fund"   # 撤了 / 下不成，固定口数却还在
                                                         or (s == "SKIPPED" and "凑钱的卖单" in str(o.get("note") or "")))   # 凑钱的卖单没了、执行器不下了（D2）
-                and (t in fpend or not _fix_met(o, cur, st, fixed[t], asked))):   # 同一次决策别的单已经调到 / 还在调 → 不写（复核 7）
+                and (t in fpend or not _fix_met(o, cur, st, fixed[t], asked))   # 同一次决策别的单已经调到 / 还在调 → 不写（复核 7）
+                and int(fixed[t]) != int(cu_now.get(t) or 0)):     # 固定的口数 = 已经拿着的：不会再下单，不写（2026-10-17）
             fix[cid] = ((f"{NM.label(t)} 手动固定 {int(fixed[t]):,} 口还没照它调：{LO.fix_when_do(fwhen)}（撤单不会取消固定口数）；不想要 → 在「持仓」"
                          if t in fpend else
                          f"{NM.label(t)} 手动固定 {int(fixed[t]):,} 口仍然有效：下一次决策（{LO.decision_text(book, now, tag, paused)}）"
@@ -2963,10 +2964,11 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         if pl["sent"] and (pl["target"] or {}).get("fund") == "all":
             return "<span class='chip'>同批卖单还挂在交易所：要撤先用「今天要成交的单」撤那几笔卖单</span>"
         wt = f" data-wtxt='{escape(MO.now_sell_withdrawn(r))}'" if placed == 2 else ""   # 15:30 失效的盘中卖出：按下单那天写（G16 复核）
-        if placed == 0 and r.get("kind") in ("core", "corefix") and not r.get("fund_for"):   # 比例 / 固定口数不是单：撤回之后照旧什么（2026-10-17）
+        nb = placed == 0 and r.get("kind") in ("core", "corefix") and not r.get("fund_for")
+        if nb:                                              # 比例 / 固定口数不是单：撤回之后照旧什么（2026-10-17）
             wt += f" data-ctx='{escape(_keep_txt(r))}'"
         return (f"<button class='btn sm danger' data-act='cancel' data-id='{escape(r['id'])}' data-placed='{placed}' data-desc='{_what(r)}'"
-                f" data-fund='{len(pl['todo'])}' data-stuck='{len(pl['stuck'])}'{wt}>撤单</button>")
+                f" data-fund='{len(pl['todo'])}' data-stuck='{len(pl['stuck'])}'{wt}>{'撤回' if nb else '撤单'}</button>")   # 不是单 → 「撤回」（2026-10-17）
 
     def _keep_txt(r: dict) -> str:                          # 还没读的比例 / 固定口数撤回之后照旧什么：账本里读了的 + 比它早写、还没读的（与 MO.core_fixed 同一个过滤）
         t = r.get("ticker")
@@ -2984,7 +2986,17 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                 pc = float(w.get("pct") or 0)
         if r.get("kind") == "corefix":
             old = f"固定 {fx[t]:,} 口" if t in fx else "按规则"
-            return f"执行器还没读：撤回之后这条不生效，{NM.label(t)} 照旧{old}"
+            tail = ""
+            if t in fx:                                     # 照旧的固定口数和拿着的不一样 → 撤回之后会照它买 / 卖差额（2026-10-17）
+                try:
+                    from . import live_ops as LO
+                    held = int((LO.held_now(book, tag, now=now).get("core_units") or {}).get(t) or 0)
+                    d = fx[t] - held
+                    tail = (f"（现在 {held:,} 口 → {'买' if d > 0 else '卖'} {abs(d):,} 口：{MO.corefix_fill(now, book, tag)['text']}；钱不够只买得起的部分）"
+                            if d else f"（现在也是 {held:,} 口：不下单）")
+                except Exception:                           # noqa: BLE001  只是说明
+                    tail = ""
+            return f"执行器还没读：撤回之后这条不生效，{NM.label(t)} 照旧{old}{tail}"
         return f"执行器还没读：撤回之后这条不生效，闲置资金比例照旧 {pc:g}%"
 
     def _ubbtn(r: dict) -> str:                             # 还没读的「解除不买回」：撤回（读到之前撤回 → 不解除；2026-10-13）
@@ -3016,7 +3028,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         btn = (_cbtn(r, 0) if r["kind"] in MO.ORDER_KINDS + ("core", "corefix") and r["id"] not in dropped
                else _ubbtn(r) if r["kind"] == "unblock" and r["id"] not in dropped
                else _cobtn(r) if r["kind"] == "cancel_order" and r["id"] not in dropped else _unbtn(r))
-        wt = MO.wait_word(r, book, tag, now) if r["id"] not in dropped else MO.wait_word(r)   # 比例 / 解除 / 撤回不是单（2026-10-13）；固定成拿着的口数 = 不下单（2026-10-17）
+        wt = MO.wait_word(r, book, tag, now)               # 比例 / 解除 / 撤回不是单（2026-10-13）；固定成拿着的口数 = 不下单（2026-10-17）
         wx = "" if r["id"] in dropped or r["kind"] in CANCEL_KINDS else MO.wait_text(r, now, book, tag)
         wx = wx[len(wt) + 1:] if wx.startswith(wt + "：") else ""   # 什么时候（D1 / D5，2026-10-15：与 now_due / 执行器同一个时段口径；固定口数写具体日子）
         if sp["itxt"].get(r["id"]) and r["id"] not in dropped:   # 分块另有说法（收盘后状态不明的单：等登记；复核 4）→ 代替平常的「什么时候」

@@ -58,3 +58,25 @@ def test_panel_uses_the_book_for_the_status_word_and_the_button():
     assert "MO.wait_word(r, book, tag, now)" in src and '"noop": bool(pv.get("noop"))' in src
     js = (Path(panel.__file__).parent / "static" / "trade.js").read_text(encoding="utf-8")
     assert "c.noop ? '确认（不下单）' : '确认下单'" in js
+
+
+def test_outlook_row_for_a_noop_fix_is_done_not_an_order(monkeypatch):
+    """交易页（2026-10-17 用户「不下单的话没必要在交易里面标记下单了」）：outlook 的那一行 = done（收进「已结束」、不算标签上的数字、
+    自检不当成该下的单）；HALT 中也一样（不下单就没有「等 HALT 解除」）。"""
+    _held(monkeypatch)
+    r = {"id": "M1", "kind": "corefix", "ticker": "1482.T", "units": 650, "at": "2026-10-17T22:24:56+09:00"}
+    for halt in (False, True):
+        x = LO._instr_row(r, BOOK, NOW, "paper", halt, False, False)
+        assert x["state"] == "done" and x["cls"] == "noop" and x["reason"].startswith("不下单：")
+    x2 = LO._instr_row({**r, "units": 655}, BOOK, NOW, "paper", False, False, False)
+    assert x2["state"] != "done" and x2["cls"] != "noop"
+
+
+def test_withdraw_button_for_fix_and_ratio_is_not_called_an_order():
+    from pathlib import Path
+    from qbreak import panel
+    src = Path(panel.__file__).read_text(encoding="utf-8")
+    assert "{'撤回' if nb else '撤单'}</button>" in src and "（现在也是 {held:,} 口：不下单）" in src
+    assert "and int(fixed[t]) != int(cu_now.get(t) or 0)" in src           # 撤了的单下面不再写「还没照它调：… 照它下单」
+    js = (Path(panel.__file__).parent / "static" / "trade.js").read_text(encoding="utf-8")
+    assert "d.ctx ? '确认撤回？' : '确认撤单？'" in js and "d.ctx ? '确认撤回' : '确认撤单'" in js
