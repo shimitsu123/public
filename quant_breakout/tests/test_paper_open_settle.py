@@ -553,4 +553,4 @@ def test_paper_open_uses_a_fresh_corporate_action_cache():
     import inspect
     import run
     assert run._corp_actions_provider(ttl_hours=1.0).ttl == 3600.0 and run._corp_actions_provider().ttl == 12 * 3600.0
-    assert "ux.open_phase(feed=intraday_open, corp=_corp_actions_provider(ttl_hours=1.0))" in inspect.getsource(run)
+    assert "ux.open_phase(feed=rt_quotes.OpenFeed(intraday_open), corp=_corp_actions_provider(ttl_hours=1.0))" in inspect.getsource(run)

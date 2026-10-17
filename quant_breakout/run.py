@@ -4354,10 +4354,12 @@ def _live_unified_run(a, opened: list) -> int:
         if a.phase == "now":                                 # 盘中：等着的手动指令马上下单（面板叫；先卖后买）
             res_now = ux.now_phase(_now_quote(broker, paper))
         elif a.phase == "open":
-            if paper:                                        # 模拟账户：成交日 09:25 前后按 1 分钟线的开盘价当天撮合（D3；2026-10-15）
+            if paper:                                        # 模拟账户：成交日 09:25 前后按开盘价当天撮合（D3；2026-10-15）
+                from qbreak import rt_quotes
                 from qbreak.data import intraday_open
+                # 开盘价：立花本番的始値（只读登录一次；2026-10-17），取不到 → 照旧 Yahoo 1 分钟线今天第一根
                 # 公司行为只用 1 小时内取的（复核 F5，2026-10-16：早上 07:40 存的 12 小时缓存可能还没有今天的除息）
-                res_open = ux.open_phase(feed=intraday_open, corp=_corp_actions_provider(ttl_hours=1.0))
+                res_open = ux.open_phase(feed=rt_quotes.OpenFeed(intraday_open), corp=_corp_actions_provider(ttl_hours=1.0))
             else:
                 ux.open_phase(final=bool(a.retry))           # 09:20 的重试是最后一次：还没有始値的票这时放弃（记入差异）
         else:
@@ -4581,11 +4583,13 @@ def _paper_open_work(book_path) -> bool:
 
 
 def _now_quote(broker, paper: bool):
-    """盘中的现在价：立花 = 現在値（quote_detail 的 price）；模拟账户 = Yahoo 最新的 1 分钟线（约晚 20 分钟；qbreak/data.intraday_last）。"""
+    """盘中的现在价：立花 = 現在値（quote_detail 的 price）；模拟账户 = 立花本番的現在値（只读登录一次；2026-10-17 用户要求），
+    取不到的票照旧 Yahoo 最新的 1 分钟线（约晚 20 分钟；qbreak/data.intraday_last）。src 写这次用的来源（qbreak/rt_quotes.py）。"""
     if not paper:
         return lambda ts: {t: d["price"] for t, d in broker.quote_detail(list(ts)).items() if d.get("price")}
+    from qbreak import rt_quotes
     from qbreak.data import intraday_last
-    return intraday_last
+    return rt_quotes.NowQuote(intraday_last)
 
 
 def _now_report(a, ux, res: dict, paper: bool, tag: str, since: str | None = None, new=()) -> int:
@@ -5192,7 +5196,17 @@ def _tachibana_order_test(b, spec, rec: dict | None = None) -> bool:
     if s_.broker_id:
         c = b.cancel_order(s_.broker_id, s_.extra.get("order_date", ""))
         ot["cancel"] = bool(c)
-        print(f"[{'OK' if c else 'NG'}] 按注文番号撤单 : {'已撤' if c else '失败（见日志）'}")
+        filled = False
+        if not c:                                         # デモ当场成交了（約定済み；2026-10-17 周六 11:15 / 11:31 都这样）：撤单没验证到（不是撤单坏了）
+            try:
+                filled = int((b.order_status(s_.broker_id, s_.extra.get("order_date", "")) or {}).get("filled_qty") or 0) >= qty
+            except Exception:                             # noqa: BLE001
+                filled = False
+        if filled:
+            print("[NG] 按注文番号撤单 : デモ当场就成交了（約定済み），撤单没验证到"
+                  "（デモ的价格是假的、单马上成交）→ 工作日 8:30〜8:59（デモ约定开始之前）再跑一次")
+        else:
+            print(f"[{'OK' if c else 'NG'}] 按注文番号撤单 : {'已撤' if c else '失败（见日志）'}")
     accepted = _order_test_opening_limit_buy(b, t, qty, float(ref), ot)
     ot["ok"] = bool(o.status in ("FILLED", "PARTIAL", "SENT") and not ot["fields_missing"] and ot["cash_or_pos_changed"]
                     and ot["cancel"] and accepted and ot["opening_cancel"] is not False)

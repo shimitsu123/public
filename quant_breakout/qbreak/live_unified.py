@@ -48,6 +48,7 @@ from . import live_ops as LO
 from . import manual_orders as MO
 from . import names as NM
 from . import paths
+from . import rt_quotes as RTQ
 from . import run_status as RS
 from .brokers.base import state_tag
 from .brokers.paper import CASH_SHORT, DUP_CID, PaperBroker
@@ -118,6 +119,14 @@ def _np(x):
 
 # ── 给人看的文字里的票：代码 + 名字（2026-10-15 用户：只写代码不知道是哪只）——「7203 トヨタ自動車」「1545 纳斯达克 100」；
 #    cid（U2026-10-14-SELL-1545.T）、JSON 的 ticker 字段、要复制粘贴的命令照旧只写代码 ──
+def _px_src(fn, default: str) -> str:
+    """模拟账户这次的价从哪里来：fn 是 rt_quotes.NowQuote / OpenFeed（调用之后 .src = 立花实时 / Yahoo …）；别的（测试注入的函数）→ default。"""
+    src = getattr(fn, "src", None)
+    if not src:
+        return default
+    return src if src != RTQ.SRC_YH else default
+
+
 def _lab(t, short: bool = False) -> str:
     """「7203.T」→「7203 トヨタ自動車」（查不到名字只写代码；qbreak/names.py）。"""
     return NM.label(t, short=short)
@@ -1576,6 +1585,8 @@ class UnifiedExecutor:
             po["why"] = f"{_labs(lk, limit=3, short=True)} 开在涨跌停附近、到现在没打开（可能一整天张贴）"
             return out(f"{po['why']}（下一轮再看；到 {PAPER_OPEN_UNTIL:%H:%M} 还这样 → 明天早上按日线撮合）", wait=True)
         opens = {t: float(q[t]["open"]) for t in tick}
+        fsrc = _px_src(feed, "1 分钟线")
+        fsrc_short = "立花始値" if fsrc == RTQ.SRC_RT else "1 分钟线"
         by = {o.cid: o for o in act}
         fills, seen, out_ = {}, set(), {}
         po.setdefault("cash0", round(float(b.cash()), 6))   # 撮合之前的现金（第二天早上按正式开盘价重放用；中途崩溃重跑 → 用第一次的）
@@ -1610,7 +1621,7 @@ class UnifiedExecutor:
             st_, q_, px_, note_, bid = out_[o.cid]
             if st_ == "FILLED" and q_ > 0:
                 o.status, o.filled_qty, o.filled_px = "FILLED", q_, px_   # 现金不足减了股：照记成交的股数（明早对账与后备路径相同 → PARTIAL）
-                o.note = (f"{f:%m/%d} 开盘撮合 {q_:,} {u} @ ¥{px_:,.2f}（开盘 ¥{op:,g}，1 分钟线）"
+                o.note = (f"{f:%m/%d} 开盘撮合 {q_:,} {u} @ ¥{px_:,.2f}（开盘 ¥{op:,g}，{fsrc_short}）"
                           + (f"；{note_}" if note_ else ""))[:300]
                 fills[o.cid] = {"b": bid, "open": op, "q": q_, "px": round(px_, 4)}
                 res["fills"].append(o)
@@ -1619,13 +1630,13 @@ class UnifiedExecutor:
                 res["unfilled"].append(o)
             if (st_ == "FILLED" and q_ > 0) or (o.side == "BUY" and note_.startswith(CASH_SHORT)):
                 seq.append(self._seq_row(o, bid, op, q_ if st_ == "FILLED" else 0, "q"))
-        po.update(at=now.isoformat(timespec="seconds"), fill=f.isoformat(), src="1m", opens=opens, fills=fills,
+        po.update(at=now.isoformat(timespec="seconds"), fill=f.isoformat(), src="rt" if fsrc == RTQ.SRC_RT else "1m", opens=opens, fills=fills,
                   first={t: q[t].get("first") for t in tick if q[t].get("first")}, seq=seq)
         po.pop("why", None)
         po.pop("settling", None)
         self.book["paper_open"] = po
         self.stats["fills"] += len(res["fills"])
-        self._event("info", f"模拟账户开盘撮合（{now:%H:%M}，1 分钟线的开盘价）：成交 {len(res['fills'])} 笔"
+        self._event("info", f"模拟账户开盘撮合（{now:%H:%M}，{fsrc_short}的开盘价）：成交 {len(res['fills'])} 笔"
                             + (f"、没成交 {len(res['unfilled'])} 笔" if res["unfilled"] else "")
                             + ("".join(f"；{_otag(o, o.filled_qty)} @ ¥{o.filled_px:,.2f}" for o in res["fills"][:8])))
         for o in res["unfilled"]:
@@ -2062,6 +2073,7 @@ class UnifiedExecutor:
         except Exception as e:                                # noqa: BLE001
             px = {}
             self._event("warn", f"取不到现价（{type(e).__name__}: {e}）")
+        qsrc = _px_src(quote, "约 20 分钟前的价")              # 模拟账户的成交说明：这次的现价来自哪里（qbreak/rt_quotes.py）
         held = None if self.paper else {t: int(p.qty) for t, p in b.positions().items()}
         tag = f"N{now:%H%M%S}"
 
@@ -2096,7 +2108,7 @@ class UnifiedExecutor:
                 elif o.status == "EXPIRED":                 # 成交了一部分、其余在交易所那边失效了
                     m = f"盘中{what}：成交 {q:,} / {n:,} 股 @ ¥{float(o.filled_px):,.2f}，其余已失效（{o.note}）"
                 elif q >= n:
-                    m = f"盘中{what} {n:,} 股 @ ¥{float(o.filled_px):,.2f}" + ("（模拟：约 20 分钟前的价）" if self.paper else "")
+                    m = f"盘中{what} {n:,} 股 @ ¥{float(o.filled_px):,.2f}" + (f"（模拟：{qsrc}）" if self.paper else "")
                 elif q > 0:
                     m = f"盘中{what}：成交 {q:,} / {n:,} 股 @ ¥{float(o.filled_px):,.2f}，其余挂着（今天有效）"
                 else:
