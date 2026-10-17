@@ -860,3 +860,15 @@ def test_holding_short_keeps_the_point_and_drops_the_note():
     plain, tipped = HV.html(hv), HV.html(hv, tip=panel._tip)
     assert "<div class='small hn-note'>" in plain and "details class='ii'" not in plain          # 别的页面（不给 tip）照旧整句
     assert "<span class='chip warn hn-note'>含对账前的成交</span>" in tipped and "对账后正式记账" in tipped
+
+
+def test_kline_period_and_sub_buttons_keep_the_scroll_position():
+    """点 K 线的日 / 周 / 月、量 / MACD / DMI：整张图重画时页面不跳（2026-10-17 用户「点击K线的日月周 量macd dmi等等的时候scroll滚动了」；
+    WebKit〔iPhone 的 Safari〕实测旧代码跳 20〜440px）：先撑住高度、画完把刚按的按钮放回原来的屏幕位置、浏览器不自己挪。"""
+    js = (panel.STATIC_DIR / "trade.js").read_text(encoding="utf-8")
+    css = (panel.STATIC_DIR / "panel.css").read_text(encoding="utf-8")
+    i = js.index("if(a==='ktf' || a==='ksub'){")
+    blk = js[i:js.index("if(a==='buy')", i)]
+    assert "const y0=b.getBoundingClientRect().top;" in blk and "bx.style.minHeight=bx.offsetHeight+'px';" in blk
+    assert blk.index("minHeight=bx.offsetHeight") < blk.index("drawK(bx);") < blk.index("window.scrollBy(0, dy)")
+    assert "nb.focus({preventScroll:true})" in blk and ".chart{overflow-anchor:none}" in css

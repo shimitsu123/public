@@ -482,8 +482,15 @@ document.addEventListener('click', async e=>{
     const bx=b.closest('.chart[data-t]'); if(!bx || !(a==='ktf' ? TFS : SUBS)[d.v]) return;
     if(a==='ktf'){ setTF(d.v); bx.dataset.tf=d.v; try{ localStorage.setItem('qbreak.tf', d.v); }catch(x){} }   // 模块之间不能直接给别的模块的变量赋值 → setTF
     else { setSUB(d.v); bx.dataset.sub=d.v; try{ localStorage.setItem('qbreak.sub', d.v); }catch(x){} }
+    const y0=b.getBoundingClientRect().top;                               // 重画（整张图清空再画）会让页面跳：画完把刚按的按钮放回原来的位置
+    bx.style.minHeight=bx.offsetHeight+'px';                              // 画的时候先撑住高度，下面的内容不往上缩（2026-10-17 用户：点日 / 周 / 月、量 / MACD / DMI 页面滚动了）
     drawK(bx);
-    const nb=bx.querySelector('[data-act="'+a+'"][data-v="'+d.v+'"]'); if(nb) nb.focus({preventScroll:true});   // 重画后焦点留在刚按的按钮上（键盘用）
+    bx.style.minHeight='';
+    const nb=bx.querySelector('[data-act="'+a+'"][data-v="'+d.v+'"]');
+    if(nb){
+      const dy=nb.getBoundingClientRect().top-y0; if(Math.abs(dy)>0.5) window.scrollBy(0, dy);
+      nb.focus({preventScroll:true});                                     // 重画后焦点留在刚按的按钮上（键盘用）
+    }
     return;
   }
   if(a==='buy'){
