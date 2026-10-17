@@ -55,7 +55,7 @@ import time
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from . import core_exit as CX
 from . import dip_stats as DS
@@ -1574,6 +1574,44 @@ TABS = {"home": ("⌂", "总览", "账户现在怎样：总权益、今天的运
         "more": ("⋯", "更多", "通知设置、手机、上线准备、紧急停止（HALT）")}
 
 
+TAB_COOKIE = "qb_tabs"                                      # 底部标签从左到右的顺序（这台设备的 cookie；app.js 写）
+
+
+def _tab_order(cookie: str | None) -> list[str]:
+    """Cookie 头 → 底部标签的顺序（2026-10-17 用户「下面的总览 持仓什么的做一个可以自定义从左到右的顺序的设置」）：
+    只认 TABS 里的、去重，没写到的按默认顺序接在后面；没有 / 读坏 → 默认顺序。"""
+    got: list[str] = []
+    try:
+        from http.cookies import SimpleCookie
+        c = SimpleCookie()
+        c.load(cookie or "")
+        if TAB_COOKIE in c:
+            got = [k for k in unquote(c[TAB_COOKIE].value).split(",") if k in TABS]
+    except Exception:                                      # noqa: BLE001  读坏 → 默认
+        got = []
+    out = list(dict.fromkeys(got))
+    return out + [k for k in TABS if k not in out]
+
+
+def _tab_order_card(order: list[str]) -> str:
+    """「更多」里「底部标签的顺序」：每个标签一行 ↑ / ↓（上 = 最左；点了底栏马上跟着变、存在这台设备上）+「恢复默认」。"""
+    rows = "".join(
+        f"<div class='tor' data-tabk='{k}'><span class='tob'>{TABS[k][0]}</span><b>{escape(TABS[k][1])}</b><span class='sp'></span>"
+        f"<button type='button' class='btn sm' data-tabmv='-1' aria-label='{escape(TABS[k][1])} 往左（上移）'>↑</button>"
+        f"<button type='button' class='btn sm' data-tabmv='1' aria-label='{escape(TABS[k][1])} 往右（下移）'>↓</button></div>"
+        for k in order)
+    return ("<section class='card' id='taborder'><h2>底部标签的顺序"
+            + _tip("从上到下 = 底部从左到右。点 ↑ / ↓ 马上生效，存在这台设备上（手机和 Mac 各自设）；打开页面时先显示哪个标签不变。", "怎么用")
+            + f"</h2><div class='tol' id='taborder-list'>{rows}</div>"
+            "<div class='act'><button type='button' class='btn' data-tabmv='reset'>恢复默认顺序</button></div></section>")
+
+
+def _tab_order_list(order) -> list[str]:
+    """render 的 order → 全部标签的顺序（只认 TABS 里的；缺的按默认接上）。"""
+    o = list(dict.fromkeys(k for k in (order or []) if k in TABS))
+    return o + [k for k in TABS if k not in o]
+
+
 def _panes(H: list, on: str | None = "home") -> str:
     """把 render 的片段按 PANE 标记包成 <div class='pane' data-tab=…>（同一个标签可以有几段，顺序照旧）；每个标签第一段前加一行说明。
     on：服务器先显示的标签（class 'pane on'；2026-10-15「网页app经常卡住」：以前全靠脚本加 on，一个模块没载入整页空白、按钮都点不动）。"""
@@ -2529,10 +2567,11 @@ def _home_stats(pj: dict, st: dict, paper: bool) -> str:
 
 
 def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "local", device: dict | None = None,
-           phone: dict | None = None, trigger: "Trigger | None" = None, tab: str | None = None) -> str:
+           phone: dict | None = None, trigger: "Trigger | None" = None, tab: str | None = None, order: list | None = None) -> str:
     """操作面板页面（一个账本）。mode = local（Mac 本机：tok = 面板令牌）/ remote（手机：tok = 这台设备的 CSRF 令牌）。
     trigger：面板自动叫执行器的那个对象（顶部显示「盘中自动下单暂停」/ 失败后最早什么时候再叫）。
-    tab：?tab=…（服务器先把这个标签显示出来，脚本没跑起来也看得到内容；默认总览）。"""
+    tab：?tab=…（服务器先把这个标签显示出来，脚本没跑起来也看得到内容；默认总览）。
+    order：底部标签从左到右的顺序（_tab_order(Cookie 头)；不给 = 默认）。"""
     from . import holding_view as HV
     now = now or now_jst()
     remote = mode == "remote"
@@ -2996,6 +3035,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     H.extend(_trade_sections(sp, orows, rows, ometa, now, paper, bool(halt), bhtml, bn, old_n, xbtn))
     H.append(PANE + "more")
     H.append(_restore_card(tag, book, sm, now))             # 没按自动交易规则时才有（2026-10-17）
+    H.append(_tab_order_card(_tab_order_list(order)))       # 底部标签的顺序（2026-10-17）
     if halt:
         hw = sorted((x for x in [it for it in (man.get("items") or {}).values() if it.get("status") == "pending"] + list(waiting)
                      if x.get("kind") in MO.ORDER_KINDS and x.get("id") not in dropped), key=lambda x: str(x.get("at") or ""))
@@ -3036,7 +3076,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
              + "".join(f"<button type='button' role='tab' data-tabgo='{k}' aria-label='{escape(lab)}'"
                        + (" class='on' aria-selected='true'" if k == (tab if tab in TABS else "home") else "") + f"><b>{ic}</b>{escape(lab)}"
                        + (f"<i class='badge'>{badges[k]}</i>" if badges.get(k) else "") + "</button>"
-                       for k, (ic, lab, _) in TABS.items())
+                       for k, (ic, lab, _) in ((k, TABS[k]) for k in _tab_order_list(order)))
              + "</nav><div id='toast' class='toast' role='status' hidden></div>")
     note = MO.sale_note(tag, now)
     ests = {}                                               # 拿着的票卖出全部的预计收益（按账本里的最近收盘；页面取到现价后换成现价的）
@@ -5153,7 +5193,7 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
                 return
             phone = {"port": phone_port() if callable(phone_port) else phone_port, "url": PP.phone_url(), "devices": PP.devices(), "identity": PP.identity_state()}
             self._page(lambda: render(_book_of(u.query), tok, (clock or now_jst)(), mode="local", phone=phone, trigger=trigger,
-                                      tab=(parse_qs(u.query).get("tab") or [None])[0]))
+                                      tab=(parse_qs(u.query).get("tab") or [None])[0], order=_tab_order(self.headers.get("Cookie"))))
 
         def do_POST(self):                                   # noqa: N802
             if not self._host_ok():
@@ -5292,7 +5332,8 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
                 paired = PP.device_for(self.headers.get("Cookie"))
                 dev = dict(dev, paired=paired["name"]) if paired else dev
             self._page(lambda: render(_book_of(u.query), PP.csrf(dev["id"]), (clock or now_jst)(), mode="remote", device=dev,
-                                      trigger=trigger, tab=(parse_qs(u.query).get("tab") or [None])[0]))
+                                      trigger=trigger, tab=(parse_qs(u.query).get("tab") or [None])[0],
+                                      order=_tab_order(self.headers.get("Cookie"))))
 
         def do_POST(self):                                   # noqa: N802
             if not self._host_ok():

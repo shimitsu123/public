@@ -52,6 +52,42 @@ function showTab(k, keep){
   if(location.hash!=='#tab='+k){ try{ history.replaceState(null, '', location.pathname+location.search+'#tab='+k); }catch(e){} }
   if(!keep) window.scrollTo(0,0);
 }
+// 底部标签从左到右的顺序（2026-10-17 用户：可以自定义）：存在这台设备的 cookie qb_tabs（服务器按它画底栏；这里点了马上排、也按它再排一次：页面是缓存的也对）
+const TABC='qb_tabs';
+function tabOrderNow(){                                                   // cookie → 顺序（只认 TABK 里的、去重，缺的按默认接上）
+  let got=[]; try{ const m=document.cookie.match(/(?:^|;\s*)qb_tabs=([^;]*)/); if(m) got=decodeURIComponent(m[1]).split(','); }catch(e){}
+  const o=got.filter((k, i)=>TABK.indexOf(k)>=0 && got.indexOf(k)===i);
+  return o.concat(TABK.filter(k=>o.indexOf(k)<0));
+}
+function tabOrderShow(o){                                                 // 底栏 + 「更多」里的列表按 o 排；最上一个不能再上、最下一个不能再下
+  const bar=document.querySelector('.tabbar'), ls=document.getElementById('taborder-list');
+  o.forEach(k=>{
+    const b=bar && bar.querySelector('[data-tabgo="'+k+'"]'); if(b) bar.appendChild(b);
+    const r=ls && ls.querySelector('[data-tabk="'+k+'"]'); if(r) ls.appendChild(r);
+  });
+  if(ls) ls.querySelectorAll('[data-tabk]').forEach((r, i, all)=>{
+    const up=r.querySelector('[data-tabmv="-1"]'), dn=r.querySelector('[data-tabmv="1"]');
+    if(up) up.disabled=i===0; if(dn) dn.disabled=i===all.length-1;
+  });
+}
+function tabOrderSave(o){
+  try{ document.cookie=TABC+'='+encodeURIComponent(o.join(','))+'; path=/; max-age=157680000; SameSite=Lax'; }catch(e){}
+}
+tabOrderShow(tabOrderNow());
+document.addEventListener('click', e=>{
+  const b=e.target.closest('[data-tabmv]'); if(!b) return;
+  e.preventDefault();
+  let o=tabOrderNow();
+  if(b.dataset.tabmv==='reset'){ o=TABK.slice(); try{ document.cookie=TABC+'=; path=/; max-age=0; SameSite=Lax'; }catch(x){} }
+  else {
+    const r=b.closest('[data-tabk]'), k=r && r.dataset.tabk, i=o.indexOf(k), j=i+(+b.dataset.tabmv);
+    if(i<0 || j<0 || j>=o.length) return;
+    o.splice(i, 1); o.splice(j, 0, k); tabOrderSave(o);
+  }
+  tabOrderShow(o);
+  const nb=b.dataset.tabmv==='reset' ? null : document.querySelector('[data-tabk="'+b.closest('[data-tabk]').dataset.tabk+'"] [data-tabmv="'+b.dataset.tabmv+'"]');
+  if(nb && !nb.disabled) nb.focus({preventScroll:true});                  // 连着点同一个箭头（键盘也行）
+}, true);
 document.addEventListener('click', e=>{ const b=e.target.closest('[data-tabgo]'); if(!b) return; e.preventDefault(); showTab(b.dataset.tabgo); }, true);
 (function(){
   const q=new URLSearchParams(location.search), h=location.hash.replace(/^#/,'');

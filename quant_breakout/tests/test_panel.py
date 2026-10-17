@@ -1,5 +1,6 @@
 """本机操作面板（qbreak/panel.py）：只接受本机、要令牌、只写手动指令；交易日 07:45〜08:55 早上的决策做了之后叫执行器重试。"""
 import re
+from pathlib import Path
 import datetime as dt
 import http.client
 import json
@@ -872,3 +873,24 @@ def test_kline_period_and_sub_buttons_keep_the_scroll_position():
     assert "const y0=b.getBoundingClientRect().top;" in blk and "bx.style.minHeight=bx.offsetHeight+'px';" in blk
     assert blk.index("minHeight=bx.offsetHeight") < blk.index("drawK(bx);") < blk.index("window.scrollBy(0, dy)")
     assert "nb.focus({preventScroll:true})" in blk and ".chart{overflow-anchor:none}" in css
+
+
+def test_bottom_tab_order_follows_the_device_cookie():
+    """底部标签从左到右的顺序（2026-10-17 用户「下面的总览 持仓什么的做一个可以自定义从左到右的顺序的设置」）：
+    存在这台设备的 cookie qb_tabs；服务器按它画底栏（不闪）；坏的 / 不认识的键丢掉，缺的按默认接上。"""
+    dflt = list(panel.TABS)
+    assert panel._tab_order(None) == dflt and panel._tab_order("") == dflt
+    assert panel._tab_order("qb_tabs=hold%2Cpick") == ["hold", "pick", "home", "trade", "news", "more"]
+    assert panel._tab_order("a=1; qb_tabs=more,zzz,more,home") == ["more", "home", "hold", "trade", "pick", "news"]
+    assert panel._tab_order("qb_tabs=%ZZ;;;=") == dflt and panel._tab_order("qb_tabs=<script>") == dflt
+    _book()
+    html = panel.render("paper", "t" * 40, AT, order=["news", "trade"])
+    bar = html[html.index("class='tabbar'"):]
+    pos = [bar.index(f"data-tabgo='{k}'") for k in ["news", "trade", "home", "hold", "pick", "more"]]
+    assert pos == sorted(pos)
+    card = _card(html, "taborder")
+    assert card.count("data-tabk=") == 6 and card.index("data-tabk='news'") < card.index("data-tabk='home'")
+    assert "data-tabmv='reset'" in card and "data-tabmv='-1'" in card and "data-tabmv='1'" in card
+    assert list(panel.TABS) == dflt                                           # 不改默认
+    js = (Path(panel.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+    assert "qb_tabs=" in js and "[data-tabmv]" in js and "SameSite=Lax" in js and "tabOrderShow(tabOrderNow())" in js
