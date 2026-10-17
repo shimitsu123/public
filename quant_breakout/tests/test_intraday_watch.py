@@ -411,6 +411,9 @@ class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[
   appendChild(c){ this.children.push(c); return c; } setAttribute(k, v){ this[k]=v; }
   querySelector(s){ const [tg, cl]=String(s).split('.');
     for(const c of this.children){ if(c.tagName===tg.toUpperCase() && (!cl || String(c.className).split(' ').includes(cl))) return c; const x=c.querySelector && c.querySelector(s); if(x) return x; } return null; }
+  querySelectorAll(s){ const [tg, cl]=String(s).split('.'), out=[];
+    const walk=e=>{ for(const c of e.children||[]){ if(c.tagName===tg.toUpperCase() && (!cl || String(c.className).split(' ').includes(cl))) out.push(c); walk(c); } };
+    walk(this); return out; }
   set textContent(v){ this._t=String(v); this.children=[]; } get textContent(){ return this._t+this.children.map(c=>c.textContent).join(''); } }
 const CARD=new El('section'), HOLD=new El('div'), GONE=new El('div'); HOLD.dataset.intra='6758.T'; GONE.dataset.intra='9999.T'; GONE.textContent='old';
 const document={createElement:t=>new El(t), createTextNode:t=>({textContent:String(t)}), querySelectorAll:s=>[HOLD, GONE]};
@@ -534,3 +537,24 @@ def test_todays_fills_bought_has_no_exit_lines_and_sold_is_gone(monkeypatch):
     assert not any("卖点" in s for s, _t in sent) and not any("8306" in s for s, _t in sent)
     v = IW.view(doc, AT)
     assert v["hold"]["8306.T"].startswith("盘中：今天买进（对账前）") and "6758.T" not in v["hold"]
+
+
+def test_only_satisfied_rows_on_top_the_rest_folded():
+    """2026-10-17 用户「那些股票我看都不满足条件 是不是也没有推荐显示的必要」：上面只列满足的（ok）；盘中「接近」的（量还差 / 离下沿 ≤ 1% /
+    形态没过）收起在「接近、盘中还可能满足」；不在区间的、收盘之后没满足的都收起在「没满足」。"""
+    day = dt.date(2026, 10, 16)
+    def c(t, kind):
+        return {"ticker": t, "label": t, "kind": kind, "status": kind, "lo": 100.0, "hi": 110.0, "px": 101.0, "dist_lo_pct": 1.0,
+                "v_pct": 50.0, "v_need": 1000, "at": f"{day}T10:00:00+09:00", "blocks": []}
+    doc = {"day": day.isoformat(), "data_at": f"{day}T10:00:00+09:00", "updated": f"{day}T10:20:00+09:00", "pool_n": 225,
+           "gates": {"known": True}, "candidates": [c("A.T", "ok"), c("B.T", "vol"), c("C.T", "near"), c("D.T", "out"), c("E.T", "out")]}
+    v = IW.view(doc, dt.datetime(2026, 10, 16, 10, 20, tzinfo=JST))
+    assert [r["t"] for r in v["rows"]] == ["A.T"] and not v["none"]
+    assert [(m["key"], [r["t"] for r in m["rows"]]) for m in v["more"]] == [("soon", ["B.T", "C.T"]), ("miss", ["D.T", "E.T"])]
+    assert v["more"][1]["sum"] == "现在没满足：2 只（不在区间 2）"
+    doc["candidates"] = doc["candidates"][1:]
+    v2 = IW.view(doc, dt.datetime(2026, 10, 17, 12, 0, tzinfo=JST))                     # 收盘之后：量还差的今天不会再满足
+    assert v2["rows"] == [] and v2["none"] == "今天收盘满足买点条件的：0 只（股票池 225 只）"
+    assert [m["key"] for m in v2["more"]] == ["miss"] and v2["more"][0]["sum"] == "今天没满足：4 只（量不够 1 · 没到区间 1 · 不在区间 2）"
+    card = panel._intraday_card(v2)
+    assert "<details class='ia' data-k='miss'>" in card and card.index("今天收盘满足买点条件的：0 只") < card.index("data-k='miss'")

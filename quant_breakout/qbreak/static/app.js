@@ -44,10 +44,31 @@ document.addEventListener('click', async e=>{
   pushState();
 }, true);
 const TABK=['home','hold','trade','pick','news','more'];                  // 标签页（总览 / 持仓 / 交易 / 选股 / 消息 / 更多）
-function showTab(k, keep){
+// 切换标签的动画（2026-10-17 用户「底部的标签切换的时候也要有动画效果」）：新的一页从切换的方向滑进来（往右边的标签 = 从右边），
+// 底栏的选中底色滑过去、图标弹一下；系统「减弱动态效果」打开时只淡入（CSS）
+const EASE='cubic-bezier(.2,.8,.2,1)';
+let IND=null;
+function tabInd(now){                                                     // 底栏选中的底色移到选中的标签下面（now = 不要动画：刚打开 / 排序之后 / 转屏）
+  const bar=document.querySelector('.tabbar'); if(!bar) return;
+  if(!IND){ IND=document.createElement('i'); IND.className='tabind'; IND.setAttribute('aria-hidden', 'true'); bar.prepend(IND); }
+  const b=bar.querySelector('[data-tabgo].on'); if(!b){ IND.style.opacity='0'; return; }
+  if(now) IND.style.transition='none';
+  IND.style.transform='translateX('+(b.offsetLeft+b.offsetWidth/2-IND.offsetWidth/2)+'px)'; IND.style.opacity='1';
+  if(now){ void IND.offsetWidth; IND.style.transition=''; }
+}
+window.addEventListener('resize', ()=>tabInd(true));
+function showTab(k, keep, init){
   if(TABK.indexOf(k)<0) k='home';
-  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on', p.dataset.tab===k));
-  document.querySelectorAll('[data-tabgo]').forEach(b=>{ const on=b.dataset.tabgo===k; b.classList.toggle('on', on); b.setAttribute('aria-selected', on?'true':'false'); });
+  const ob=document.querySelector('.tabbar [data-tabgo].on'), was=ob && ob.dataset.tabgo;
+  const order=Array.from(document.querySelectorAll('.tabbar [data-tabgo]')).map(b=>b.dataset.tabgo);
+  const dir=(!init && was && was!==k) ? (order.indexOf(k)>order.indexOf(was) ? 'in-r' : 'in-l') : '';
+  document.querySelectorAll('.pane').forEach(p=>{
+    const on=p.dataset.tab===k; p.classList.toggle('on', on); p.classList.remove('in-r', 'in-l');
+    if(on && dir){ void p.offsetWidth; p.classList.add(dir); p.addEventListener('animationend', ()=>p.classList.remove(dir), {once:true}); }
+  });
+  document.querySelectorAll('[data-tabgo]').forEach(b=>{ const on=b.dataset.tabgo===k; b.classList.toggle('on', on); b.setAttribute('aria-selected', on?'true':'false');
+    b.classList.remove('pop'); if(on && dir){ void b.offsetWidth; b.classList.add('pop'); } });
+  tabInd(!dir);
   try{ sessionStorage.setItem('qb-tab', k); }catch(e){}
   if(location.hash!=='#tab='+k){ try{ history.replaceState(null, '', location.pathname+location.search+'#tab='+k); }catch(e){} }
   if(!keep) window.scrollTo(0,0);
@@ -70,6 +91,37 @@ function tabOrderSave(o){
   try{ document.cookie=TABC+'='+encodeURIComponent(o.join(','))+'; path=/; max-age=157680000; SameSite=Lax'; }catch(e){}
 }
 tabOrderShow(tabOrderNow());
+// 「恢复默认顺序」（2026-10-17 用户：改了之后恢复到上一个状态；改了之后一段时间没再改，现在的状态就是默认）：
+// 第一次改的时候记下改之前的顺序（base）；UNDO_MS 里再改不换 base、只把时间往后推；过了 UNDO_MS 没再改 → 现在的就是默认（按钮变灰）。存在这台设备
+const UNDO_MS=5*60*1000, UK='qb-tabs-undo';
+let UMEM=null, UT=0;
+function undoGet(){
+  let u=UMEM; try{ const x=localStorage.getItem(UK); if(x) u=JSON.parse(x); }catch(e){}
+  return (u && Array.isArray(u.base) && Date.now()-(+u.at||0)<UNDO_MS) ? u : null;
+}
+function undoSet(u){ UMEM=u; try{ if(u) localStorage.setItem(UK, JSON.stringify(u)); else localStorage.removeItem(UK); }catch(e){} }
+function undoShow(){
+  const b=document.querySelector('[data-tabmv="reset"]'), n=document.getElementById('taborder-undo'), u=undoGet();
+  const on=!!u && u.base.join(',')!==tabOrderNow().join(',');
+  if(b) b.disabled=!on;
+  if(n) n.textContent=on ? '改了之后 '+Math.max(1, Math.ceil((UNDO_MS-(Date.now()-u.at))/60000))+' 分钟内可以恢复到改之前的顺序；之后现在的顺序就成为默认'
+                         : '现在的顺序就是默认（改了之后 '+(UNDO_MS/60000)+' 分钟内可以恢复）';
+  clearTimeout(UT); if(on) UT=setTimeout(undoShow, Math.min(30000, UNDO_MS-(Date.now()-u.at)+50));
+}
+undoShow();
+function flip(els, mutate){                                               // 排序之后各自从原来的位置滑到新的位置（FLIP）
+  const R=new Map(els.map(e=>[e, e.getBoundingClientRect()]));
+  mutate();
+  const mv=[];
+  els.forEach(e=>{ const a=R.get(e), b=e.getBoundingClientRect(), dx=a.left-b.left, dy=a.top-b.top;
+    if(!a.width || (Math.abs(dx)<0.5 && Math.abs(dy)<0.5)) return;
+    e.style.transition='none'; e.style.transform='translate('+dx+'px,'+dy+'px)'; mv.push(e); });
+  if(!mv.length) return;
+  void document.body.offsetWidth;
+  mv.forEach(e=>{ e.style.transition='transform .26s '+EASE; e.style.transform='';
+    e.addEventListener('transitionend', ()=>{ e.style.transition=''; }, {once:true}); });
+}
+const sortEls=()=>Array.from(document.querySelectorAll('.tabbar [data-tabgo], #taborder-list [data-tabk]'));
 // 震一下（2026-10-17 用户「排序要用拖动的方法来做 有震动的感觉」）：Android = navigator.vibrate；iPhone 的 Safari 没有 vibrate →
 // 点一下藏起来的系统开关（<input type=checkbox switch>，iOS 18 起切换时有触感）；别的（Mac）什么都不做
 let HSW=null;
@@ -116,12 +168,15 @@ function sortable(box, sel, axis, done){
   function end(ok){
     clearTimeout(st && st.t);
     const s=st; st=null; if(!s || !s.on) return;
-    box.classList.remove('sorting'); s.it.classList.remove('lift');
-    s.its.forEach(el=>{ el.classList.remove('shift'); el.style.transform=''; });
     NOCLICK=Date.now()+400;
-    if(!ok || s.j===s.i) return;
-    const o=s.its.slice(); o.splice(s.i, 1); o.splice(s.j, 0, s.it);
-    haptic('drop'); done(o);
+    const o=s.its.slice(); if(ok && s.j!==s.i){ o.splice(s.i, 1); o.splice(s.j, 0, s.it); }
+    flip(sortEls(), ()=>{                                                 // 放下：拿着的那个滑进它的位置，别的停在让出来的位置（不跳）
+      box.classList.remove('sorting');
+      s.its.forEach(el=>{ el.classList.remove('shift'); el.style.transform=''; });
+      if(ok && s.j!==s.i) done(o);
+    });
+    setTimeout(()=>s.it.classList.remove('lift'), 120);
+    if(ok && s.j!==s.i) haptic('drop');
   }
   box.addEventListener('pointerdown', e=>{
     if(st || (e.pointerType==='mouse' && e.button!==0)) return;
@@ -144,7 +199,13 @@ function sortable(box, sel, axis, done){
   box.addEventListener('touchmove', e=>{ if(st && st.on) e.preventDefault(); }, {passive:false});   // 拖着的时候页面不跟着滚
   box.addEventListener('contextmenu', e=>{ if(st) e.preventDefault(); });                            // 长按不出菜单
 }
-function tabOrderSet(o){ tabOrderSave(o); tabOrderShow(o); }
+function tabOrderSet(o, anim){                                           // anim：自己排（键盘 / 恢复）→ 用 flip；拖的已经在 flip 里
+  const before=tabOrderNow();
+  if(before.join(',')!==o.join(',')){ const u=undoGet(); undoSet({base:u ? u.base : before, at:Date.now()}); }
+  const go=()=>{ tabOrderSave(o); tabOrderShow(o); };
+  if(anim) flip(sortEls(), go); else go();
+  undoShow(); tabInd(true);
+}
 sortable(document.getElementById('taborder-list'), '[data-tabk]', 'y', els=>tabOrderSet(els.map(r=>r.dataset.tabk)));
 sortable(document.querySelector('.tabbar'), '[data-tabgo]', 'x', els=>tabOrderSet(els.map(b=>b.dataset.tabgo)));
 document.addEventListener('keydown', e=>{                                  // 键盘：≡ 上按 ↑ / ↓ 挪一格（焦点跟着）
@@ -152,14 +213,15 @@ document.addEventListener('keydown', e=>{                                  // �
   e.preventDefault();
   const k=g.closest('[data-tabk]').dataset.tabk, o=tabOrderNow(), i=o.indexOf(k), j=i+(e.key==='ArrowUp' ? -1 : 1);
   if(i<0 || j<0 || j>=o.length) return;
-  o.splice(i, 1); o.splice(j, 0, k); tabOrderSet(o);
+  o.splice(i, 1); o.splice(j, 0, k); tabOrderSet(o, true);
   g.focus({preventScroll:true});
 });
 document.addEventListener('click', e=>{
   const b=e.target.closest('[data-tabmv="reset"]'); if(!b) return;
   e.preventDefault();
-  try{ document.cookie=TABC+'=; path=/; max-age=0; SameSite=Lax'; }catch(x){}
-  tabOrderShow(TABK.slice()); haptic('drop');
+  const u=undoGet(); if(!u) { undoShow(); return; }
+  flip(sortEls(), ()=>{ tabOrderSave(u.base); tabOrderShow(u.base); });
+  undoSet(null); undoShow(); tabInd(true); haptic('drop');
 }, true);
 document.addEventListener('click', e=>{ const b=e.target.closest('[data-tabgo]'); if(!b) return; e.preventDefault(); showTab(b.dataset.tabgo); }, true);
 (function(){
@@ -168,7 +230,7 @@ document.addEventListener('click', e=>{ const b=e.target.closest('[data-tabgo]')
   let target=null;
   if(!k && h){ target=document.getElementById(h); const p=target && target.closest('.pane'); if(p) k=p.dataset.tab; }   // 旧的锚点（#holdings 等）
   if(!k){ try{ k=sessionStorage.getItem('qb-tab')||''; }catch(e){} }
-  showTab(k||'home', true);
+  showTab(k||'home', true, true);                                       // 打开页面：不要动画
   const seg=q.get('seg') || (q.get('l') ? 'log' : '');                   // 消息：经济威胁（默认）/ 通知记录
   if(seg) showMseg(seg);
   const l=q.get('l');                                                     // 推送点开：?tab=news&seg=log&l=<id> → 通知记录里那一条

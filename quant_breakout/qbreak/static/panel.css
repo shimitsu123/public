@@ -194,7 +194,9 @@ padding:4px 0;cursor:pointer;min-width:0}.tabbar button b{display:block;font-siz
 .tabbar button.on,.tabbar button.on b{color:var(--accent)}
 .tabbar .badge{position:absolute;top:0;left:50%;margin-left:6px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--neg);
 color:#fff;font-size:10px;font-style:normal;line-height:16px;text-align:center}
-.pane{display:none}.pane.on{display:block}
+.pane{display:none}.pane.on{display:block}main{overflow-x:clip}
+.pane.in-r{animation:qbinr .26s cubic-bezier(.2,.8,.2,1)}.pane.in-l{animation:qbinl .26s cubic-bezier(.2,.8,.2,1)}@keyframes qbinr{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}@keyframes qbinl{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}@keyframes qbfade{from{opacity:0}to{opacity:1}}
+.tabind{position:absolute;left:0;top:7px;width:56px;height:30px;border-radius:15px;background:var(--chip);background:color-mix(in srgb,var(--accent) 16%,transparent);pointer-events:none;opacity:0;transition:transform .3s cubic-bezier(.2,.8,.2,1),opacity .15s}.tabbar.sorting .tabind{opacity:0!important}.tabbar button.pop b{animation:qbpop .32s cubic-bezier(.2,.8,.2,1)}@keyframes qbpop{0%{transform:scale(.82)}60%{transform:scale(1.14)}100%{transform:scale(1)}}
 .sgseg{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.sgseg button{flex:1;min-width:0;padding:8px 6px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit;font-size:14px}.sgseg button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
 .panehead{display:flex;flex-direction:column;gap:2px;margin:10px 2px 0}.panehead b{font-size:20px}.panehead span{color:var(--muted);font-size:13px}
 details.nw summary{line-height:1.5}details.nw.hl{outline:2px solid var(--accent);border-radius:8px;padding:4px}details.nw>div{margin:4px 0;font-size:14px} body{padding-bottom:calc(env(safe-area-inset-bottom) + 64px)}
@@ -217,7 +219,7 @@ dialog>.conn{position:sticky;top:0;z-index:2;padding:10px 14px;border-radius:18p
 #intraday .ia-hl{font-size:17px;margin-bottom:4px} #intraday details.ia{margin:6px 0} #intraday details.ia>summary{color:var(--accent)}
 #intraday .li .chip{white-space:normal} .ia[data-intra]{margin:4px 0}
 /* 盘中等成交的单（2026-10-17）：票名闪烁 + 状态里转圈；成交 / 撤掉 / 收盘后不再有这个 class */
-.list .li.wfill .grow>b:first-child{animation:qbblink 1.2s ease-in-out infinite}.spin{display:inline-block;width:11px;height:11px;margin-right:6px;vertical-align:-1px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:qbspin .8s linear infinite}@keyframes qbblink{50%{opacity:.3}}@media (prefers-reduced-motion:reduce){.list .li.wfill .grow>b:first-child{animation:none;text-decoration:underline dotted}body .sorting .shift{transition:none}.spin{animation:none}}
+.list .li.wfill .grow>b:first-child{animation:qbblink 1.2s ease-in-out infinite}.spin{display:inline-block;width:11px;height:11px;margin-right:6px;vertical-align:-1px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:qbspin .8s linear infinite}@keyframes qbblink{50%{opacity:.3}}@media (prefers-reduced-motion:reduce){.list .li.wfill .grow>b:first-child{animation:none;text-decoration:underline dotted}.pane.in-r,.pane.in-l{animation:qbfade .16s ease}.tabbar button.pop b{animation:none}.tabind{transition:opacity .15s}.spin{animation:none}}
 /* 确认框的立花实时价那一行（2026-10-17）：● 实时 / 转圈 取价中 / 灰 取不到（按 Yahoo） */
 .rtl{margin:4px 0 6px;display:flex;gap:6px;align-items:center}
 .rtl.ok{color:var(--accent);font-weight:600}
@@ -250,7 +252,7 @@ details.ii.on .iib{visibility:visible}
 .tgr{width:44px;height:36px;margin:-4px -6px -4px 0;border:0;background:none;color:var(--muted);font-size:22px;line-height:1;cursor:grab;touch-action:none;border-radius:8px}
 .tgr:focus-visible{outline:2px solid var(--accent);outline-offset:1px}.sorting,.sorting *{cursor:grabbing}
 .tabbar{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-.sorting .shift{transition:transform .15s ease}.lift{position:relative;z-index:3;box-shadow:0 6px 18px rgba(0,0,0,.22)}.tor.lift{border-color:var(--accent)}
+.sorting .shift{transition:transform .22s cubic-bezier(.2,.8,.2,1)}.lift{position:relative;z-index:3;box-shadow:0 8px 22px rgba(0,0,0,.24);scale:1.03;transition:scale .15s,box-shadow .15s}.tor.lift{border-color:var(--accent)}
 .tabbar button.lift{background:var(--bg);border-radius:10px}
 .hsw{position:fixed;top:0;left:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
 /* K 线：看更早 / 放大缩小 / 对数 / 自己画线、今天要成交的单、趋势线的容差带；调仓框的快捷档（2026-10-17） */

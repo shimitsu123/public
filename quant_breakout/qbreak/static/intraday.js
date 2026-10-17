@@ -10,7 +10,7 @@ export function intraShow(v){                                             // 重
   if(!v || !v.ok) return;
   const el=$('#intraday');
   if(el){
-    const old=el.querySelector('details.ia'), open=!!(old && old.open);       // 展开着的保持展开
+    const open={}; el.querySelectorAll('details.ia').forEach(d=>{ open[d.dataset.k]=d.open; });   // 展开着的保持展开
     el.textContent='';
     const hl=nd('div', 'ia-hl', null, el); nd('b', null, v.title, hl); tipEl(hl, v.foot);   // 页脚收进 ⓘ（2026-10-17）
     nd('div', 'muted small', nameify(v.head), el);
@@ -19,22 +19,24 @@ export function intraShow(v){                                             // 重
       for(const w of v.warn) nd('span', 'chip bad', '★ '+nameify(w.includes('→') ? w.split('→').pop().trim() : w), c);
       tipEl(c, v.warn.map(w=>'★ '+nameify(w)));
     }
-    if((v.rows||[]).length){
-      const ls=nd('div', 'list', null, el), cnt={};             // 多数行的数据时刻 → 不每行重复，只写和它不一样的
-      v.rows.forEach(r=>{ cnt[r.at]=(cnt[r.at]||0)+1; });
+    const rows=(rs, box)=>{
+      const ls=nd('div', 'list', null, box), cnt={};             // 多数行的数据时刻 → 不每行重复，只写和它不一样的
+      rs.forEach(r=>{ cnt[r.at]=(cnt[r.at]||0)+1; });
       const mode=Object.keys(cnt).sort((a, b)=>cnt[b]-cnt[a])[0];
-      for(const r of v.rows){
+      for(const r of rs){
         const li=nd('div', 'li', null, ls), g=nd('div', 'grow', null, li);
         nd('b', null, r.label, g); g.appendChild(document.createTextNode(' ')); nd('span', r.kind==='ok' ? 'chip hot' : 'chip', r.status, g);
         nd('div', 'small', nameify(r.line), g);
         const ga=[r.gates, String(r.at)===mode ? null : r.at].filter(Boolean).join(' · ');              // 只这只自己的闸门 / 数据时刻（共同的在顶上 ★）
         if(ga) nd('div', 'muted small', nameify(ga), g);
       }
-    }
+    };
+    if((v.rows||[]).length) rows(v.rows, el);                             // 只列满足的（2026-10-17）
     if(v.none) nd('div', 'small', v.none, el);
+    const fold=(k, sum)=>{ const d=nd('details', 'ia', null, el); d.dataset.k=k; if(open[k]) d.open=true; nd('summary', 'muted small', sum, d); return d; };
+    for(const m of v.more||[]) rows(m.rows, fold(m.key, m.sum));         // 接近的 / 没满足的：收起
     if(v.impossible){
-      const d=nd('details', 'ia', null, el); if(open) d.open=true;
-      nd('summary', 'muted small', v.impossible, d);
+      const d=fold('imp', v.impossible);
       for(const x of v.groups||[]) nd('div', 'muted small', x.why+'：'+x.names, d);
     }
   }

@@ -916,9 +916,16 @@ def test_bottom_tab_order_follows_the_device_cookie():
     assert "sortable(document.getElementById('taborder-list'), '[data-tabk]', 'y'" in js
     assert "sortable(document.querySelector('.tabbar'), '[data-tabgo]', 'x'" in js
     assert "navigator.vibrate" in js and "<input type='checkbox' switch" in js and "NOCLICK" in js
-    assert js.count("haptic('pick')") == 1 and js.count("haptic('tick')") == 1 and "haptic('drop'); done(o);" in js
+    assert js.count("haptic('pick')") == 1 and js.count("haptic('tick')") == 1 and "if(ok && s.j!==s.i) haptic('drop');" in js
     css = (Path(panel.__file__).parent / "static" / "panel.css").read_text(encoding="utf-8")
     assert ".tgr{" in css and "touch-action:none" in css[css.index(".tgr{"):css.index(".tgr{") + 300]
+    # 「恢复默认顺序」= 回到改之前的顺序（5 分钟内；之后现在的就是默认）；拖动 / 放下 / 切换标签都有动画（2026-10-17）
+    assert "data-tabmv='reset' disabled" in card and "id='taborder-undo'" in card
+    assert "UNDO_MS=5*60*1000" in js and "undoSet({base:u ? u.base : before, at:Date.now()})" in js
+    assert "flip(sortEls(), ()=>{ tabOrderSave(u.base); tabOrderShow(u.base); });" in js
+    assert "function flip(els, mutate)" in js and "p.classList.add(dir)" in js and "showTab(k||'home', true, true);" in js
+    assert "@keyframes qbinr" in css and ".tabind{" in css and "@keyframes qbpop" in css and "main{overflow-x:clip}" in css
+    assert ".sorting .shift{transition:transform .22s" in css
 
 
 def test_chart_orders_lists_todays_orders_for_the_kline():

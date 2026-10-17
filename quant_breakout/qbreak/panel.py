@@ -1227,20 +1227,26 @@ def _intraday_card(v: dict | None) -> str:
     if v.get("warn"):
         H.append("<div class='chips'>" + "".join(f"<span class='chip bad'>★ {escape(IW.warn_short(w))}</span>" for w in v["warn"])
                  + _tip("<br>".join("★ " + escape(w) for w in v["warn"])) + "</div>")
-    if v.get("rows"):
+    def rows(rs: list) -> None:
         H.append("<div class='list'>")
-        ats = [r.get("at") for r in v["rows"]]
+        ats = [r.get("at") for r in rs]
         mode = max(set(ats), key=ats.count)                       # 多数行的数据时刻 → 不每行重复，只写和它不一样的（2026-10-17）
-        for r in v["rows"]:
+        for r in rs:
             ga = " · ".join(x for x in (r.get("gates"), None if r.get("at") == mode else r.get("at")) if x)    # 只这只自己的闸门 / 数据时刻（共同的在顶上 ★）
             H.append(f"<div class='li'><div class='grow'><b>{escape(r['label'])}</b> <span class='chip{' hot' if r.get('kind') == 'ok' else ''}'>"
                      f"{escape(r['status'])}</span><div class='small'>{escape(r['line'])}</div>"
                      + (f"<div class='muted small'>{escape(ga)}</div>" if ga else "") + "</div></div>")
         H.append("</div>")
+    if v.get("rows"):
+        rows(v["rows"])                                           # 只列满足的（2026-10-17）
     if v.get("none"):
         H.append(f"<div class='small'>{escape(v['none'])}</div>")
+    for m in v.get("more") or []:                               # 接近的 / 没满足的：收起（2026-10-17 用户：都不满足条件的没必要显示）
+        H.append(f"<details class='ia' data-k='{escape(m['key'])}'><summary class='muted small'>{escape(m['sum'])}</summary>")
+        rows(m["rows"])
+        H.append("</details>")
     if v.get("impossible"):
-        H.append(f"<details class='ia'><summary class='muted small'>{escape(v['impossible'])}</summary>")
+        H.append(f"<details class='ia' data-k='imp'><summary class='muted small'>{escape(v['impossible'])}</summary>")
         H += [f"<div class='muted small'>{escape(g['why'])}：{escape(g['names'])}</div>" for g in v.get("groups") or []]
         H.append("</details>")
     H.append("</section>")
@@ -1634,10 +1640,12 @@ def _tab_order_card(order: list[str]) -> str:
     return ("<section class='card' id='taborder'><h2>底部标签的顺序"
             + _tip("从上到下 = 底部从左到右。按住右边的 ≡ 上下拖（整行按住一会儿也行）；底栏上按住一个标签不放、左右拖也能排。"
                    "拿起、换位、放下时手机会轻轻震一下（Android；iPhone 要 iOS 18 以上）。马上生效，存在这台设备上（手机和 Mac 各自设）；"
-                   "打开页面时先显示哪个标签不变。", "怎么用")
+                   "打开页面时先显示哪个标签不变。「恢复默认顺序」= 回到改之前的顺序：改了之后 5 分钟内能点；"
+                   "5 分钟没再改，现在的顺序就成为默认（按钮变灰）。", "怎么用")
             + "</h2><p class='muted small' id='taborder-how'>按住 ≡ 上下拖；底栏上按住标签左右拖也行。</p>"
             f"<div class='tol' id='taborder-list'>{rows}</div>"
-            "<div class='act'><button type='button' class='btn' data-tabmv='reset'>恢复默认顺序</button></div></section>")
+            "<div class='act'><button type='button' class='btn' data-tabmv='reset' disabled>恢复默认顺序</button></div>"
+            "<p class='muted small' id='taborder-undo'>现在的顺序就是默认（改了之后 5 分钟内可以恢复）</p></section>")   # app.js 的 undoShow 更新
 
 
 def _tab_order_list(order) -> list[str]:

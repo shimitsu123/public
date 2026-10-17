@@ -569,7 +569,7 @@ def view(doc: dict | None, now: dt.datetime | None = None) -> dict:
     """面板的卡片 / 持仓的一行（服务器先画一份，static/intraday.js 按 /api/intraday 重画同一个样子）。只读、不取价。"""
     now = _jst(now)
     v = {"ok": True, "title": TITLE, "foot": FOOT, "head": "", "warn": [], "rows": [], "none": "", "impossible": "",
-         "groups": [], "core": [], "hold": {}, "live": in_window(now)}
+         "groups": [], "core": [], "hold": {}, "live": in_window(now), "more": []}
     day = target_day(now)
     if not doc:
         v["head"] = "还没有盘中观测：交易日 08:55〜11:35、12:25〜16:30 操作面板每 5 分钟算一次（Mac 睡着时暂停）"
@@ -593,6 +593,8 @@ def view(doc: dict | None, now: dt.datetime | None = None) -> dict:
     v["warn"] += [str(x) for x in g.get("global") or []]
     if doc.get("daily_note"):
         v["warn"].append(doc["daily_note"])
+    final = _expected_at(now, day) >= dt.datetime.combine(day, CLOSE, tzinfo=JST)   # 收盘了：没满足的今天不会再满足
+    soon, miss = [], []
     for r in doc.get("candidates") or []:
         line = f"区间 {_px(r['lo'])}〜{_px(r['hi'])}" + ("（涨停也在区间里）" if r.get("hi_open") else "")
         if r.get("px") is not None:
@@ -600,13 +602,26 @@ def view(doc: dict | None, now: dt.datetime | None = None) -> dict:
             line += f" · 成交量 {float(r['v_pct']):.0f}%（所需 {int(r.get('v_need') or 0):,} 股）" if r.get("v_pct") is not None else ""
         if r.get("kind") == "shape" and r.get("fails"):
             line += " · 没过：" + "；".join(r["fails"])
-        v["rows"].append({"t": r["ticker"], "label": r["label"], "kind": r.get("kind"), "status": r.get("status"), "line": line,
-                          "gates": _gate_line(r, doc),
-                          "at": f"数据 {_hm(r.get('at'))}" if r.get("at") and _hm(r.get("at")) != _hm(doc.get("data_at")) else ""})   # 与顶上的数据时刻一样 → 不重复
+        row = {"t": r["ticker"], "label": r["label"], "kind": r.get("kind"), "status": r.get("status"), "line": line,
+               "gates": _gate_line(r, doc),
+               "at": f"数据 {_hm(r.get('at'))}" if r.get("at") and _hm(r.get("at")) != _hm(doc.get("data_at")) else ""}   # 与顶上的数据时刻一样 → 不重复
+        k = r.get("kind")                                  # 上面只列满足的（2026-10-17 用户：都不满足条件的没必要显示）；
+        (v["rows"] if k == "ok" else soon if k in ("shape", "vol", "near") and not final else miss).append(row)   # 盘中还可能满足的 / 没满足的收起
+    pool = int(doc.get("pool_n") or 0)
+    if not v["rows"]:
+        v["none"] = (f"今天收盘满足买点条件的：0 只（股票池 {pool} 只）" if final else
+                     f"现在满足买点条件的：0 只（暂定；股票池 {pool} 只）")
+    if soon:
+        v["more"].append({"key": "soon", "sum": f"接近、盘中还可能满足：{len(soon)} 只", "rows": soon})
+    if miss:
+        cnt: dict[str, int] = {}
+        for x in miss:
+            w = {"out": "不在区间", "nodata": "没有数据", "shape": "形态不成立", "vol": "量不够", "near": "没到区间"}.get(x["kind"], "没满足")
+            cnt[w] = cnt.get(w, 0) + 1
+        v["more"].append({"key": "miss", "sum": f"{'今天' if final else '现在'}没满足：{len(miss)} 只（"
+                          + " · ".join(f"{w} {n}" for w, n in cnt.items()) + "）", "rows": miss})
     imp = doc.get("impossible") or []
     n_imp = sum(len(x["tickers"]) for x in imp)
-    if not v["rows"]:
-        v["none"] = f"今天收盘可能出买点的：0 只（股票池 {int(doc.get('pool_n') or 0)} 只）"
     if n_imp:
         v["impossible"] = f"今天不可能：{n_imp} 只（" + " · ".join(f"{x['why']} {len(x['tickers'])}" for x in imp) + "）"
         v["groups"] = [{"why": x["why"], "names": NM.labels(x["tickers"], limit=40)} for x in imp]
@@ -631,6 +646,8 @@ def text(doc: dict | None, now: dt.datetime | None = None, tag: str = "paper") -
             out.append("      " + " · ".join(x for x in (r["gates"], r.get("at")) if x))
     if v["none"]:
         out.append(f"  {v['none']}")
+    for m in v["more"]:
+        out.append(f"  {m['sum']}：" + "、".join(r["label"] for r in m["rows"]))
     if v["impossible"]:
         out.append(f"  {v['impossible']}")
     if doc and doc.get("holdings"):
