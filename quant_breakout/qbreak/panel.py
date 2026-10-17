@@ -2587,11 +2587,11 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                      or (o.get("status") in ("EXPIRED", "CANCELLED") and int(o.get("filled_qty") or 0) > 0))}   # 已失效 / 撤掉但成交过一部分：口数也变了
     buying = {it.get("ticker"): _where_item(sp, it.get("id")) for it in acts if it.get("kind") == "buy"}   # 票 →「见 …」（同上）
     buying.update({r.get("ticker"): _where_item(sp, r["id"]) for r in waiting if r.get("kind") == "buy" and r["id"] not in dropped})
-    H = [f"<header class='top{' real' if real else ''}'><div class='bar'><b>qbreak 操作面板</b>"
-         + ("<span class='real-badge'>真钱（立花本番）</span>" if real else "") + "<span class='sp'></span>"
+    H = [f"<header class='top{' real' if real else ''}'><div class='bar'><b>qbreak 操作面板</b>"   # 真钱 = 下面「立花（本番）」标签是红底（2026-10-17 用户：顶上的「真钱」去掉）
+         "<span class='sp'></span>"
          f"<span class='muted small'>{escape(now.strftime('%m/%d %H:%M JST'))}</span>"
          "<button class='btn sm' data-act='reload'>刷新</button></div>"
-         "<nav class='tabs'>" + "".join(f"<a href='/?book={t}' class='{'on' if t == tag else ''}'>{escape(BOOKS[t])}</a>"
+         "<nav class='tabs'>" + "".join(f"<a href='/?book={t}' class='{' '.join(x for x in ('on' if t == tag else '', 'real' if t == 'tachibana' else '') if x)}'>{escape(BOOKS[t])}</a>"
                                        for t in BOOKS if t in books() or t == tag)        # 正在看的账本总在标签里
          + "</nav></header><main><div id='top'></div><div id='stale' class='card warn small' role='status' hidden></div>"]
     warn = []

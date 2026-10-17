@@ -95,7 +95,8 @@ def test_panel_default_book_and_real_money_banner(monkeypatch):
     assert P.books() == ["paper", "tachibana"] and P._book_of("book=tachibana_dryrun") == "tachibana"
     html = P.render("tachibana", "t" * 40, now)
     assert "立花 dry-run（只读）" not in html
-    assert "class='top real'" in html and "真钱（立花本番）" in html and '"real": true' in html
+    assert "class='top real'" in html and '"real": true' in html
+    assert "real-badge" not in html and "<a href='/?book=tachibana' class='on real'>立花（本番）</a>" in html   # 顶上不写「真钱」，标签红底（2026-10-17）
     assert "立花还没解锁（没有 ARM）" in html
     (paths.home() / "ARM").write_text("armed?", encoding="utf-8")
     html = P.render("tachibana", "t" * 40, now)
