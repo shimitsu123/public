@@ -5159,10 +5159,12 @@ def _tachibana_order_test(b, spec, rec: dict | None = None) -> bool:
     """デモ環境专用的一天发单检查（官方：デモ的价格不是真的，指値按指値成交、成行一律 100 円成交，第二天数据重置 →
     只能检查 API 的字段与流程，不能做多日演练）：当日指値买 1655.T 1 单元 → 約定照会（打印明细应答的字段名）→
     余力与持仓的变化 → 寄付卖单 → 按注文番号撤单 → 寄付指値买（执行器每天最常用的单型）→ 按注文番号撤单。
+    寄付卖单：1655 没成交（デモ 09:00 才撮合）→ 卖デモ账户里已有的持仓一个单元；被拒 11481（口座区分不一致）/ 没持仓 →
+    卖单记「验证不了」（sell_untestable，不算没通过），按注文番号撤单改由寄付指値买那一笔验证（2026-10-18）。
     rec：上线门槛的几点（约定字段、余力 / 持仓变化、撤单、寄付指値买受理）记在这里（不含金额）。"""
     rec = rec if rec is not None else {}
     rec["order_test"] = ot = {"ok": False, "buy": None, "fields_missing": None, "cash_or_pos_changed": None, "cancel": None,
-                              "opening_limit_buy": None, "opening_cancel": None}
+                              "sell": None, "opening_limit_buy": None, "opening_cancel": None}
     from qbreak.tick import round_to_tick
     b.dry_run, b.require_arm, b.max_order_value = False, False, 10_000_000
     t, qty = "1655.T", 10
@@ -5190,10 +5192,22 @@ def _tachibana_order_test(b, spec, rec: dict | None = None) -> bool:
     ot["cash_or_pos_changed"] = bool(abs(cash1 - cash0) >= 1 or (pos1.qty if pos1 else 0) != (pos0.qty if pos0 else 0))
     print(f"[{'OK' if ot['cash_or_pos_changed'] else 'NG'}] 约定与余力    : order_status {st}；买付可能額 {cash0:,.0f} → {cash1:,.0f} 円；"
           f"{_tlab(t)} 持仓 {pos0.qty if pos0 else 0} → {pos1.qty if pos1 else 0} 口")
-    s_ = b.sell(t, qty, client_id=f"probe-s-{int(time.time())}", bar="next")      # 寄付成行：等下一个寄付，先撤掉
-    print(f"[{'OK' if s_.status == 'SENT' else 'NG'}] 寄付卖单      : → {s_.status}（注文番号 {s_.broker_id or '—'}）{s_.note}")
-    ot["cancel"] = False
-    if s_.broker_id:
+    st_, sq = _order_test_sell_pick(b, t, qty, pos1)
+    ot["cancel"], s_ = False, None
+    if st_ is None:                                       # デモ约定开始之前（08:30〜08:59）第一笔买单不会成交、デモ账户里也没别的持仓
+        ot["sell"], ot["sell_untestable"] = "SKIPPED", True
+        print(f"[--] 寄付卖单      : 跳过（デモ账户里没有能卖的持仓：{_tlab(t)} 的买单还没成交）→ 按注文番号撤单由下面的寄付指値买验证")
+    else:
+        su = "口" if st_ == t else "股"                    # 1655 S&P500 = 口；デモ预置的持仓是个股
+        s_ = b.sell(st_, sq, client_id=f"probe-s-{int(time.time())}", bar="next")   # 寄付成行：等下一个寄付，先撤掉
+        ot["sell"] = s_.status
+        if s_.status != "SENT" and SELL_TAX_MISMATCH in (s_.note or ""):
+            ot["sell_untestable"] = True                  # 2026-10-18 08:35：卖 1655（买单还没成交、没持仓）→ 11481
+            print(f"[--] 寄付卖单      : {_tqty(st_, f'{sq:,} {su}')} → {s_.status}（{SELL_TAX_MISMATCH} 口座区分与お預かり不一致）：デモ的预置持仓 / 没成交的票"
+                  "不在这个口座区分，卖单在デモ验证不了（本番执行器只卖它自己在特定口座买的票）→ 按注文番号撤单由下面的寄付指値买验证")
+        else:
+            print(f"[{'OK' if s_.status == 'SENT' else 'NG'}] 寄付卖单      : {_tqty(st_, f'{sq:,} {su}')} → {s_.status}（注文番号 {s_.broker_id or '—'}）{s_.note}")
+    if s_ is not None and s_.broker_id:
         c = b.cancel_order(s_.broker_id, s_.extra.get("order_date", ""))
         ot["cancel"] = bool(c)
         filled = False
@@ -5208,9 +5222,32 @@ def _tachibana_order_test(b, spec, rec: dict | None = None) -> bool:
         else:
             print(f"[{'OK' if c else 'NG'}] 按注文番号撤单 : {'已撤' if c else '失败（见日志）'}")
     accepted = _order_test_opening_limit_buy(b, t, qty, float(ref), ot)
+    if ot.get("sell_untestable"):                         # 卖单没法验证：按注文番号撤单看寄付指値买那一笔（撤掉了才算）
+        ot["cancel"] = ot["opening_cancel"] is True
+    sell_ok = ot["sell"] == "SENT" or bool(ot.get("sell_untestable"))
     ot["ok"] = bool(o.status in ("FILLED", "PARTIAL", "SENT") and not ot["fields_missing"] and ot["cash_or_pos_changed"]
-                    and ot["cancel"] and accepted and ot["opening_cancel"] is not False)
+                    and ot["cancel"] and sell_ok and accepted and ot["opening_cancel"] is not False)
     return o.status in ("FILLED", "PARTIAL", "SENT")
+
+
+SELL_TAX_MISMATCH = "11481"          # 立花：選択した口座区分がお預かり銘柄と不一致（デモ里卖没持仓的票也是这个）
+
+
+def _order_test_sell_pick(b, t: str, qty: int, pos1) -> tuple[str | None, int]:
+    """发单检查的寄付卖单卖哪只：刚买的 1655 已经有 qty 口 → 卖它；没成交（デモ 09:00 才开始撮合）→ デモ账户里已有的持仓里
+    代码最小、够一个单元的那只卖一个单元（马上撤掉）；都没有 → (None, 0) 跳过。"""
+    from qbreak.tick import lot_size
+    if (pos1.qty if pos1 else 0) >= qty:
+        return t, qty
+    try:
+        held = b.positions()
+    except Exception:                                     # noqa: BLE001
+        held = {}
+    for c in sorted(held):
+        lot = int(lot_size(c, "JP"))
+        if c != t and held[c].qty >= lot:
+            return c, lot
+    return None, 0
 
 
 def _order_test_opening_limit_buy(b, t: str, qty: int, ref: float, ot: dict) -> bool:

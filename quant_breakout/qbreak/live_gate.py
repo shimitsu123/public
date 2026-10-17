@@ -469,7 +469,8 @@ def check(agents=None, run=subprocess.run, today: dt.date | None = None) -> list
             olb_txt = f"★ 没受理（{olb or '—'}）"
         txt = (f"{demo.get('at', '—')}{_age(demo.get('at'), today)}：约定字段 {'齐' if not miss else '★ 缺 ' + '、'.join(miss)}；"
                f"余力 / 持仓变化 {'有' if ot.get('cash_or_pos_changed') else '★ 没看到'}；"
-               f"按注文番号撤单 {'成功' if ot.get('cancel') else '★ 没成功'}；寄付指値买 {olb_txt}")
+               f"按注文番号撤单 {'成功' if ot.get('cancel') else '★ 没成功'}；寄付指値买 {olb_txt}"
+               + ("；寄付卖单 デモ验证不了（没持仓 / 口座区分不一致；撤单看寄付指値买那一笔）" if ot.get("sell_untestable") else ""))
         st = _stale("demo", demo)
         add("门槛", "④ デモ发单检查（约定字段、余力变化、按注文番号撤单）",
             bool(ot.get("ok")) and olb in ACCEPTED and oc is not False and not st, f"{st}（上次 {txt}）" if st else txt)

@@ -224,6 +224,8 @@ def _write(env, rec):
      ["2026-10-07 10:00 JST（2 天前做的）", "寄付指値买 受理、撤单成功"]),
     ({"at": "2026-10-09 10:00 JST", "ok": True, "api": V_DEMO, "order_test": {**OT_NEW, "opening_cancel": None}}, True,
      ["（今天做的）", "寄付指値买 受理、已成交（不用撤）"]),
+    ({"at": "2026-10-09 08:35 JST", "ok": True, "api": V_DEMO, "order_test": {**OT_NEW, "sell": "REJECTED", "sell_untestable": True}},
+     True, ["按注文番号撤单 成功", "寄付卖单 デモ验证不了"]),
 ])
 def test_gate_demo_order_test_needs_current_api_and_the_opening_limit_buy(tmp_path, rec, ok, words):
     _write("demo", rec)
@@ -267,3 +269,71 @@ def test_gate_follows_the_spec_override_in_the_data_dir(tmp_path):
     (paths.home() / "tachibana_spec.json").write_text("{broken", encoding="utf-8")
     items = _gate(tmp_path)
     assert items[G4]["ok"] is False and "tachibana_spec.json 读不了" in items[G4]["text"]
+
+
+# ────────── 寄付卖单：デモ 09:00 之前买单不成交、没有 1655 可卖（2026-10-18 08:35 那次 11481）──────────
+def _pre_open(cash=1_000_000, pos=None, sell_err=None):
+    """デモ约定开始之前（08:30〜08:59）：受理但不撮合 → 第一笔当日指値买不成交、1655 S&P500 没持仓。
+    sell_err = (代码, 文字)：卖单一律按这个业务错误拒（立花的 11481 = 口座区分与お預かり不一致）。"""
+    from qbreak.brokers.tachibana import TachibanaBroker
+    from qbreak.brokers.tachibana_sim import SimExchange
+    from test_live_unified import _scenario
+    make, _ = _scenario([1000.0] * 30)
+    exch = SimExchange(make(), cash=cash)
+    for t, q in (pos or {}).items():
+        exch.pos[t], exch.book_value[t] = q, 1000.0 * q
+    if sell_err:
+        new = exch._new_order
+        exch._new_order = lambda p: (exch._err(*sell_err) if p.get(exch.spec.f_side) != exch.spec.side_buy else new(p))
+    b = TachibanaBroker(transport=exch, spec=exch.spec, creds=exch.creds(), dry_run=True, require_arm=True,
+                        confirm_timeout_s=0.0)
+    exch.set_day(10)
+    return exch, b
+
+
+def test_order_test_skips_the_sell_when_nothing_is_held_and_checks_cancel_on_the_opening_buy(capsys):
+    import run
+    exch, b = _pre_open()
+    rec = {}
+    assert run._tachibana_order_test(b, exch.spec, rec) is True
+    ot = rec["order_test"]
+    assert ot["sell"] == "SKIPPED" and ot["sell_untestable"] is True
+    assert ot["opening_cancel"] is True and ot["cancel"] is True and ot["ok"] is True       # 按注文番号撤单由寄付指値买那一笔验证
+    out = capsys.readouterr().out
+    assert "[--] 寄付卖单      : 跳过" in out and "1655 S&P500" in out and "[NG]" not in out
+    assert not any(o["side"] == "SELL" for o in exch.orders.values())
+
+
+def test_order_test_sells_one_unit_of_a_held_demo_stock_when_1655_did_not_fill(capsys):
+    import run
+    exch, b = _pre_open(pos={"A.T": 300})
+    rec = {}
+    assert run._tachibana_order_test(b, exch.spec, rec) is True
+    ot = rec["order_test"]
+    assert ot["sell"] == "SENT" and not ot.get("sell_untestable") and ot["cancel"] is True and ot["ok"] is True
+    (s,) = [o for o in exch.orders.values() if o["side"] == "SELL"]
+    assert s["ticker"] == "A.T" and s["qty"] == int(exch.eng.lots[exch.eng.col["A.T"]]) and s["status"] == "7"   # 一个单元、撤掉了
+    assert exch.pos["A.T"] == 300
+    out = capsys.readouterr().out
+    assert "[OK] 寄付卖单" in out and "[OK] 按注文番号撤单 : 已撤" in out
+
+
+def test_order_test_treats_11481_as_untestable_not_failed(capsys):
+    import run
+    exch, b = _pre_open(pos={"A.T": 300}, sell_err=("11481", "選択した口座区分がお預かり銘柄と不一致のため、このご注文はお受けできません。"))
+    rec = {}
+    run._tachibana_order_test(b, exch.spec, rec)
+    ot = rec["order_test"]
+    assert ot["sell"] == "REJECTED" and ot["sell_untestable"] is True and ot["cancel"] is True and ot["ok"] is True
+    out = capsys.readouterr().out
+    assert "[--] 寄付卖单" in out and "11481" in out and "[NG] 寄付卖单" not in out
+
+
+def test_order_test_other_sell_rejections_still_fail(capsys):
+    import run
+    exch, b = _pre_open(pos={"A.T": 300}, sell_err=("991099", "なにか別のエラー"))
+    rec = {}
+    run._tachibana_order_test(b, exch.spec, rec)
+    ot = rec["order_test"]
+    assert ot["sell"] == "REJECTED" and not ot.get("sell_untestable") and ot["ok"] is False
+    assert "[NG] 寄付卖单" in capsys.readouterr().out
