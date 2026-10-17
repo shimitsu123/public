@@ -130,8 +130,18 @@ def test_weekend_shortfall_row_gets_dont_top_up_and_monday_does_not_buy():
     top, later, _ended = _parts(html)
     assert "还差" not in top + later and _btn(later, "fix-undo") is None       # 那一行没了：换成刚写的那条（还没读，能撤回）
     row = _row(later, f"<b>固定 {LAB}：{q:,} 口（不按规则自动调）</b>")
-    assert _btn(row, "cancel") is not None
+    c = _btn(row, "cancel")
+    assert c is not None and c["ctx"] == f"执行器还没读：撤回之后这条不生效，{LAB} 照旧固定 {u:,} 口"   # 不是「撤掉之后不会下」
     assert _badge_ok(html, r.tag, sat) == 1
+    js = _node("cancel", c, {"ok": True})                                      # 想了想又要补：撤回刚写的那条 → 那一行回来
+    assert js["SENT"] == [{"book": "paper", "kind": "cancel", "target": c["id"]}] and c["ctx"] in js["ASKED"][0][1]
+    ok, msg = _submit(js["SENT"][0], sat)
+    assert ok, msg
+    html = panel.render(r.tag, "t" * 40, sat)
+    _top, later, _ended = _parts(html)
+    assert _btn(_row(later, f"<b>{LAB} 固定 {u:,} 口"), "fix-undo") is not None and _badge_ok(html, r.tag, sat) == 1
+    ok, msg = _submit({"book": "paper", "kind": "corefix", "ticker": "1482.T", "units": q}, sat)   # 再点一次「不补了」
+    assert ok, msg
     _morning(r)                                                                # 周一 07:40 的决策：口数一样，不买
     d = r.ux.book["state"]["last_date"]
     assert not [o for o in r.ux.orders if o.decided_on == d and o.ticker == "1482.T"]

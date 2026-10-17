@@ -2792,8 +2792,29 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         if pl["sent"] and (pl["target"] or {}).get("fund") == "all":
             return "<span class='chip'>同批卖单还挂在交易所：要撤先用「今天要成交的单」撤那几笔卖单</span>"
         wt = f" data-wtxt='{escape(MO.now_sell_withdrawn(r))}'" if placed == 2 else ""   # 15:30 失效的盘中卖出：按下单那天写（G16 复核）
+        if placed == 0 and r.get("kind") in ("core", "corefix") and not r.get("fund_for"):   # 比例 / 固定口数不是单：撤回之后照旧什么（2026-10-17）
+            wt += f" data-ctx='{escape(_keep_txt(r))}'"
         return (f"<button class='btn sm danger' data-act='cancel' data-id='{escape(r['id'])}' data-placed='{placed}' data-desc='{_what(r)}'"
                 f" data-fund='{len(pl['todo'])}' data-stuck='{len(pl['stuck'])}'{wt}>撤单</button>")
+
+    def _keep_txt(r: dict) -> str:                          # 还没读的比例 / 固定口数撤回之后照旧什么：账本里读了的 + 比它早写、还没读的（与 MO.core_fixed 同一个过滤）
+        t = r.get("ticker")
+        fx = {str(k): int(v) for k, v in (man.get("core_fix") or {}).items()}
+        pc = float(man.get("core_pct", 100.0))
+        for w in waiting:
+            if w.get("id") == r.get("id") or w.get("id") in dropped or w.get("fund_for") or str(w.get("at") or "") > str(r.get("at") or ""):
+                continue
+            if w.get("kind") == "corefix":
+                if w.get("clear"):
+                    fx.pop(str(w.get("ticker")), None)
+                else:
+                    fx[str(w.get("ticker"))] = int(w.get("units") or 0)
+            elif w.get("kind") == "core":
+                pc = float(w.get("pct") or 0)
+        if r.get("kind") == "corefix":
+            old = f"固定 {fx[t]:,} 口" if t in fx else "按规则"
+            return f"执行器还没读：撤回之后这条不生效，{NM.label(t)} 照旧{old}"
+        return f"执行器还没读：撤回之后这条不生效，闲置资金比例照旧 {pc:g}%"
 
     def _ubbtn(r: dict) -> str:                             # 还没读的「解除不买回」：撤回（读到之前撤回 → 不解除；2026-10-13）
         if MO.check({"kind": "cancel", "target": r["id"]}, book, tag, now=now):

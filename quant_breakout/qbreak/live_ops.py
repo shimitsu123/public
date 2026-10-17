@@ -2182,7 +2182,7 @@ def _core_row(book: dict | None, now: dt.datetime, tag: str | None, halt: bool, 
 
 
 SHORT_NOTE = ("那时的钱不够就只买得起的部分（不够一单元不买）；不想补 →「交易」里这一行点「不补了…」（固定成现在的口数）"
-              "或「恢复按规则」（2026-10-17）")
+              "或「恢复按规则」")                                   # 2026-10-17：指着这一行的按钮
 
 
 def fix_short(book: dict | None, now: dt.datetime, tag: str | None = None, *, cur=None, cash: float | None = None,
