@@ -209,3 +209,46 @@ def test_dev_check_reports_the_lock(tmp_path):
     out, _ = _bash(env, "scripts/dev.sh", "check")
     assert ("[OK] 虚拟环境的依赖版本与 requirements.lock 一致" in out
             or "[提醒] 虚拟环境有" in out), out
+
+
+# ────────── 立花 + 模拟同时跑（install_launchd_live_u.sh both，2026-10-17 用户「现在装、模拟同时跑」）──────────
+TACHI = ("morning", "retry", "open", "open2", "fills1", "fills2")
+
+
+def test_both_mode_installs_paper_and_tachibana_and_switching_removes_the_other(tmp_path):
+    env, _ = _run_env(tmp_path, 0, QBREAK_SKIP_VENV="1")
+    agents = tmp_path / "agents"
+    _stub(tmp_path, "launchctl", "#!/bin/sh\nexit 0\n")
+    _stub(tmp_path, "git", '#!/bin/sh\ncase "$*" in *rev-parse*) echo origin/x; exit 0 ;; esac\nexit 1\n')
+    paper = agents / "com.qbreak.liveu.paper.plist"
+    out, err = _bash(env, "scripts/install_launchd_live_u.sh", "both")
+    assert paper.exists(), (out, err)
+    assert "<string>paper</string>" in paper.read_text(encoding="utf-8")
+    for k in TACHI:
+        assert (agents / f"com.qbreak.liveu.{k}.plist").exists(), (k, out, err)
+        assert "<string>tachibana</string>" in (agents / f"com.qbreak.liveu.{k}.plist").read_text(encoding="utf-8")
+    assert (agents / "com.qbreak.precheck.plist").exists() and (agents / "com.qbreak.wakehold.plist").exists()
+    from qbreak import watchdog
+    assert watchdog.installed_all(agents) == ["tachibana", "paper"] and watchdog.installed(agents) == "tachibana"
+    _bash(env, "scripts/install_launchd_live_u.sh", "tachibana")                      # 只立花：模拟卸掉
+    assert not paper.exists() and (agents / "com.qbreak.liveu.morning.plist").exists()
+    assert watchdog.installed_all(agents) == ["tachibana"]
+    _bash(env, "scripts/install_launchd_live_u.sh", "paper")                          # 只模拟：立花全卸
+    assert paper.exists() and not any((agents / f"com.qbreak.liveu.{k}.plist").exists() for k in TACHI)
+    assert watchdog.installed_all(agents) == ["paper"]
+
+
+def test_mac_setup_reinstall_keeps_paper_when_both_were_installed(tmp_path):
+    """mac_setup 补装立花缺的重试时：模拟也装着 → 用 both 重装（不把模拟卸掉）。"""
+    agents = tmp_path / "agents"
+    agents.mkdir()
+    for k in ("paper", "morning"):                                                    # 旧的立花安装缺 retry / open2
+        (agents / f"com.qbreak.liveu.{k}.plist").write_text("x", encoding="utf-8")
+    (tmp_path / "m").mkdir()
+    env, _ = _run_env(tmp_path / "m", 0, QBREAK_SKIP_VENV="1", QBREAK_DEV=str(tmp_path / "nodev"), QBREAK_LAUNCH_AGENTS=str(agents))
+    _stub(tmp_path / "m", "launchctl", "#!/bin/sh\nexit 0\n")
+    _stub(tmp_path / "m", "git", '#!/bin/sh\ncase "$*" in *rev-parse*) echo origin/x; exit 0 ;; esac\nexit 1\n')
+    out, err = _bash(env, "scripts/mac_setup.sh")
+    assert "重装（both" in out, (out, err)
+    assert (agents / "com.qbreak.liveu.paper.plist").exists() and (agents / "com.qbreak.liveu.retry.plist").exists()
+    assert (agents / "com.qbreak.liveu.open2.plist").exists()

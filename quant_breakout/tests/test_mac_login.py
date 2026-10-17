@@ -57,10 +57,17 @@ def test_no_catch_up_cases(tmp_path):
 
 
 def test_never_catch_up_with_live_broker_or_without_paper_agent(tmp_path):
-    live = ML.plan(MON_0800, *_setup(tmp_path / "a", live=True), {ML.NEWS}, running=False)
-    assert "RUN_PAPER" not in _acts(live) and "立花本番" in " ".join(live["notes"])
+    live = ML.plan(MON_0800, *_setup(tmp_path / "a", paper=False, live=True), {ML.NEWS}, running=False)
+    assert "RUN_PAPER" not in _acts(live) and "没装模拟操盘" in " ".join(live["notes"])   # 只装立花：不补跑（真钱永远不补跑）
     none = ML.plan(MON_0800, *_setup(tmp_path / "b", paper=False), {ML.NEWS}, running=False)
     assert "RUN_PAPER" not in _acts(none)
+
+
+def test_both_installed_catches_up_only_the_paper_book(tmp_path):
+    """install_launchd_live_u.sh both（2026-10-17：立花 + 模拟同时跑）：登录时补跑的只有模拟账户（liveu.sh run --broker paper）。"""
+    home, agents = _setup(tmp_path, live=True, summary_at=MON_0800 - dt.timedelta(days=3))
+    p = ML.plan(MON_0800, home, agents, {ML.NEWS, ML.PAPER, ML.LIVE}, running=False)
+    assert "RUN_PAPER" in _acts(p) and set(_acts(p)) <= {"RUN_PAPER", "OPEN", "MAC_ALERT"}   # 没有补跑立花的动作
 
 
 def test_news_agent_load_or_install_and_no_open(tmp_path):

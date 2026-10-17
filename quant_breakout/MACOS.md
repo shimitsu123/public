@@ -164,6 +164,7 @@ bash scripts/liveu.sh --broker tachibana --resolve U2026-10-01-BUY-7203.T --fill
    跑通过一次 = gate「准备」的「⑤ 本番 dry-run」OK）；`bash scripts/liveu.sh doctor`（环境自检，结果给 gate 的「⑥ doctor」看）
 4. 本番：`bash scripts/liveu.sh probe`（本番只读检查）→ 入金 → `bash scripts/install_launchd_live_u.sh tachibana`
    （07:40 早上的单 + 08:35 重试 + 09:05 开盘后补单 + 09:20 重试）→ 终端里 `sudo pmset repeat wakeorpoweron MTWRF 06:40:00`（一次；2026-10-09 起 06:40，§1.13）
+   （tachibana 换成 both = 模拟操盘同时照跑：立花的全部任务 + 模拟 07:40；两个账本各有 09:30 自检推送、登录时只补跑模拟；2026-10-17 起）
    → iPhone 打开 qbreak 推送（主屏幕的 qbreak 图标 →「更多 → 通知（推送）」；09:30 自检每个工作日推一条到这里；邮件 / webhook 可选；`bash scripts/liveu.sh notify-test` 试发）
    → `bash scripts/liveu.sh gate` 全部 OK（含 Mac 的时区是日本 +0900：定时任务按本地时间触发）→ 你明确说之后 `echo ARMED > ~/.qbreak/home/ARM`
    （Mac 上执行器的数据目录是 `~/.qbreak/home`，ARM / HALT 都放这里）

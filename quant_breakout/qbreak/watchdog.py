@@ -1,8 +1,8 @@
 """watchdog.py — 09:30 自检：死人开关的本机一半 + 每个工作日推一条到手机（只看、只提醒；不下单、不改账本）。
 
 LaunchAgent com.qbreak.watchdog（周一至五 09:30，scripts/install_launchd_watchdog.sh）→ scripts/liveu.sh watchdog → run.py live-watchdog。
-- 看装的是哪种：<LaunchAgents>/com.qbreak.liveu.morning.plist 在 → 立花本番的账本（tachibana）；否则 com.qbreak.liveu.paper.plist 在 →
-  模拟账户（paper）；都不在 → 只打印、不发。
+- 看装的是哪种：<LaunchAgents>/com.qbreak.liveu.morning.plist 在 → 立花本番的账本（tachibana）；com.qbreak.liveu.paper.plist 在 →
+  模拟账户（paper）；两个都在（install_launchd_live_u.sh both，2026-10-17）→ 两个账本各查一次、各推一条；都不在 → 只打印、不发。
 - 每个工作日推一条（2026-10-14 用户「不用做 healthchecks.io 心跳 check，改为每天用 qbreak 进行推送就可以」：代替外部心跳）：
   通过 →「✓ HH:MM 自检通过」（info；决策日、今天的单几笔成交 / 挂着）；平日休市 →「今天休市（系统正常）」；模拟期开始前 → 说明；
   同一个账本同一天只推一次（qbreak/notify_seen.py：「再自检一次」/ 补跑不再推）；早些时候没通过、现在通过 → 再推一次；
@@ -101,13 +101,15 @@ def _with_routines(text: str, r: dict, bullet: str = "★ ") -> str:
 
 
 def installed(agents) -> str | None:
-    """装的是哪种执行器：立花本番 → "tachibana"；模拟操盘 → "paper"；都没装 → None。"""
+    """装的是哪种执行器：立花本番 → "tachibana"；模拟操盘 → "paper"；都没装 → None（两个都装 → 立花；全部见 installed_all）。"""
+    tags = installed_all(agents)
+    return tags[0] if tags else None
+
+
+def installed_all(agents) -> list[str]:
+    """装了的执行器（立花在前）：两个都装（install_launchd_live_u.sh both）→ ["tachibana", "paper"]。"""
     agents = Path(agents)
-    if (agents / f"{LIVE_PLIST}.plist").exists():
-        return "tachibana"
-    if (agents / f"{PAPER_PLIST}.plist").exists():
-        return "paper"
-    return None
+    return [t for t, f in (("tachibana", LIVE_PLIST), ("paper", PAPER_PLIST)) if (agents / f"{f}.plist").exists()]
 
 
 def path(tag: str) -> Path:
@@ -612,17 +614,21 @@ def run(agents, now: dt.datetime | None = None, *, send=None, beat=None, mac=Non
     sleep = sleep or time.sleep
     if mac is None:
         from .live_unified import mac_notify as mac
-    tag = installed(agents)
-    if tag is None:
+    tags = installed_all(agents)
+    if not tags:
         out(f"没装执行器的定时任务（{agents} 里 {LIVE_PLIST} / {PAPER_PLIST} 都没有）：只打印，不推送")
         return 0
-    name = "立花实盘" if tag == "tachibana" else "模拟操盘"
-    if dry:
-        return _check(tag, name, now, send, beat, mac, seen, out, sleep, dry=True)
-    try:
-        return _check(tag, name, now, send, beat, mac, seen, out, sleep)
-    except Exception as e:                                    # noqa: BLE001  自检程序出错：推一条（不然当天没有推送，像 Mac 关机）
-        return _crashed(tag, name, e, now, send, mac, seen, out, sleep)
+    rc = 0
+    for tag in tags:                                          # 立花 + 模拟一起装（both）：各查一次、各推一条（标题写是哪个账本）
+        name = "立花实盘" if tag == "tachibana" else "模拟操盘"
+        if dry:
+            rc = max(rc, _check(tag, name, now, send, beat, mac, seen, out, sleep, dry=True))
+            continue
+        try:
+            rc = max(rc, _check(tag, name, now, send, beat, mac, seen, out, sleep))
+        except Exception as e:                                # noqa: BLE001  自检程序出错：推一条（不然当天没有推送，像 Mac 关机）
+            rc = max(rc, _crashed(tag, name, e, now, send, mac, seen, out, sleep))
+    return rc
 
 
 def _check(tag: str, name: str, now: dt.datetime | None, send, beat, mac, seen, out, sleep, dry: bool = False) -> int:

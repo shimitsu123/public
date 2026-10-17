@@ -5,7 +5,7 @@
 #   git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh --phone node
 # ① Python 依赖（~/.qbreak/venv；按 requirements.lock 装 = 云端测试通过的那一套，装不上退回 requirements.txt：scripts/install_deps.sh）
 #   --upgrade-yfinance：装完之后把 yfinance 单独升到最新（Yahoo 改接口、行情取不到时；执行器的通知会写这个修法）
-#   + ② 模拟操盘 com.qbreak.liveu.paper（周一至五 07:40；没装就装，已装立花本番时不动，缺前一晚预检 com.qbreak.precheck 就补上）
+#   + ② 模拟操盘 com.qbreak.liveu.paper（周一至五 07:40；没装就装，已装立花本番时不动〔立花 + 模拟一起装的 both 也不动〕，缺前一晚预检 com.qbreak.precheck 就补上）
 # ③ 市场仪表盘 + 经济威胁提醒 com.qbreak.news（每 15 分钟）
 # ④ J-Quants 定时取数 com.qbreak.jquants（钥匙串里有 qbreak-jquants 才装；只检查有没有，绝不读出值）
 # ④b 登录 / 开机后自动启动 com.qbreak.login（RunAtLoad：仪表盘没加载就加载、交易日已过 07:40 而今天没跑 → 补跑模拟操盘、打开页面）
@@ -45,10 +45,15 @@ echo "── qbreak：Mac 一条命令安装 / 更新 ──"
 
 # ① ② 依赖 + 模拟操盘
 if [ -f "$AGENTS/com.qbreak.liveu.morning.plist" ] && { [ ! -f "$AGENTS/com.qbreak.liveu.retry.plist" ] || [ ! -f "$AGENTS/com.qbreak.liveu.open2.plist" ]; }; then
-  echo "② 立花本番的定时任务缺 08:35 / 09:20 的重试：重装立花模式（不动账本、ARM / HALT）……"
-  bash "$PROJ/scripts/install_launchd_live_u.sh" tachibana
+  livemode=tachibana; [ -f "$AGENTS/com.qbreak.liveu.paper.plist" ] && livemode=both   # 模拟同时跑（2026-10-17）：重装时照样留着
+  echo "② 立花本番的定时任务缺 08:35 / 09:20 的重试：重装（${livemode}；不动账本、ARM / HALT）……"
+  bash "$PROJ/scripts/install_launchd_live_u.sh" "$livemode"
 elif [ -f "$AGENTS/com.qbreak.liveu.morning.plist" ]; then
-  echo "② 立花本番的定时任务已安装：不动（要重装：bash \"$PROJ/scripts/install_launchd_live_u.sh\" tachibana）"
+  if [ -f "$AGENTS/com.qbreak.liveu.paper.plist" ]; then
+    echo "② 立花本番 + 模拟操盘的定时任务已安装：不动（要重装：bash \"$PROJ/scripts/install_launchd_live_u.sh\" both）"
+  else
+    echo "② 立花本番的定时任务已安装：不动（要重装：bash \"$PROJ/scripts/install_launchd_live_u.sh\" tachibana）"
+  fi
   if [ -x "$VENV/bin/python" ]; then bash "$PROJ/scripts/install_deps.sh" "$VENV/bin/python" || echo "★ ① 依赖没更新（见上）"; fi
   if [ ! -f "$AGENTS/com.qbreak.precheck.plist" ]; then        # 2026-10-09 加的前一晚预检（以前装的立花模式没有）
     echo "② 立花本番缺前一晚预检（com.qbreak.precheck，周日〜周四 20:00）：装上"

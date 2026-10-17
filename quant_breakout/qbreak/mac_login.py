@@ -3,7 +3,8 @@
 这里只决定要做什么（打印「动作<TAB>参数」，liveu.sh 照着执行）：
 - 市场仪表盘 com.qbreak.news 没加载 → 加载（plist 不在 → 安装）
 - 模拟操盘补跑（RUN_PAPER）：今天是日本交易日、已过 07:40 JST、今天还没跑成（<数据目录>/out/live_unified_paper.json 的修改日期不是今天）、
-  装的是模拟操盘（com.qbreak.liveu.paper）且没装立花本番（com.qbreak.liveu.morning）、现在没有执行器在跑 → liveu.sh run --broker paper。
+  装着模拟操盘（com.qbreak.liveu.paper；立花本番一起装着也补跑模拟账户：install_launchd_live_u.sh both，2026-10-17）、
+  现在没有执行器在跑 → liveu.sh run --broker paper。
   模拟账户同一决策日重复运行不会重复下单；立花本番（真钱）永远不在登录时补跑。
 - 打开账本页面与市场仪表盘 dashboard.html（数据目录里有 NO_OPEN 就不打开；补跑本身会打开账本页面，不重复打开）：
   装了立花本番 → page_tachibana.html（B12：模拟操盘的定时任务已卸载，page_paper.html 不再更新）；否则 page_paper.html。
@@ -85,8 +86,6 @@ def plan(now: dt.datetime, home: Path, agents: Path, loaded: set[str], running: 
     why = None
     if not (agents / f"{PAPER}.plist").exists():
         why = "没装模拟操盘的定时任务"
-    elif (agents / f"{LIVE}.plist").exists():
-        why = "装的是立花本番：登录时不补跑（真钱只按定时任务）"
     elif not is_trading_day(today):
         why = f"{today} 不是交易日"
     elif now.time() < RUN_AFTER:

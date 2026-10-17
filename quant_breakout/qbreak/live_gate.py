@@ -519,7 +519,7 @@ def check(agents=None, run=subprocess.run, today: dt.date | None = None) -> list
         txt = "已装" + ("" if rc_list == 0 else "（没有 launchctl：只看了文件）")
     else:
         txt = ("★ " + "；".join(x for x in ("没装 " + "、".join(miss) if miss else "", "没加载 " + "、".join(unloaded) if unloaded else "") if x)
-               + "：开户、过了门槛之后 bash scripts/install_launchd_live_u.sh tachibana")
+               + "：开户、过了门槛之后 bash scripts/install_launchd_live_u.sh tachibana（模拟同时跑：both）")
     add("准备", "⑦ 立花的定时任务（07:40 / 08:35 / 09:05 / 09:20 + 前一晚 20:00 的预检）", not miss and not unloaded, txt)
     rc, sched = _cmd(run, ["pmset", "-g", "sched"])
     if rc is None:

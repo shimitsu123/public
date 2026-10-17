@@ -595,8 +595,8 @@ if [ "${1:-}" = "run" ]; then
       if [ "${QBREAK_LIVEU_PULL:-1}" = "1" ]; then
         if git pull -q --ff-only >/dev/null 2>&1; then
           pullmsg=""
-        elif [ "$retry" = "1" ] && sleep 15 && git pull -q --ff-only >/dev/null 2>&1; then
-          pullmsg=""                               # 重试和早上的运行可能同时 pull（.git 的锁）：等一下再试一次
+        elif sleep 15 && git pull -q --ff-only >/dev/null 2>&1; then
+          pullmsg=""                               # 重试和早上的运行、立花和模拟账户的 07:40（install both）可能同时 pull（.git 的锁）：等一下再试一次
         else                                       # 多半是仓库里有本地改动 / 本地提交：拉不下来就一直用旧代码旧数据 → 页面上标红
           pullmsg="git pull 失败（仓库里有本地改动或网络问题）：今天用的是本机现有的代码和数据；终端里运行 git -C $PROJ status 查看"
           echo "（${pullmsg}）"
@@ -634,7 +634,7 @@ if [ "${1:-}" = "run" ]; then
       if [ -n "$SMOKE_REASON" ]; then blockarg=(--block-reason "$SMOKE_REASON"); fi
     fi ;;
   esac
-  stamp="$QBREAK_HOME/logs/.run_started"
+  stamp="$QBREAK_HOME/logs/.run_started.${runkind}"   # 按账本分开：立花和模拟账户同时跑（install both）时不互相盖掉
   : > "$stamp"
   sleep 1                                          # 页面的修改时间一定晚于这个标记（下面据此判断运行有没有走完）
   if [ "$openphase" = "1" ]; then
@@ -649,7 +649,7 @@ if [ "${1:-}" = "run" ]; then
   rc=$?
   rm -f "$runmark" 2>/dev/null || true             # 执行器跑完了：之后（标红 / 通知 / 让 Mac 醒着到 09:35）不算在跑
   updated=0
-  find "$QBREAK_HOME/out" -name 'page_*.html' -newer "$stamp" 2>/dev/null | grep -q . && updated=1
+  find "$QBREAK_HOME/out" -name "page_${runkind}*.html" -newer "$stamp" 2>/dev/null | grep -q . && updated=1   # 只看这个账本的页面
   if { [ "$retry" = "1" ] || [ "$nowphase" = "1" ]; } && [ "$rc" = "0" ] && [ "$updated" = "0" ]; then
     exit 0                                         # 重试 / 盘中没事可做：不写页面，也不是「运行没完成」
   fi

@@ -5,7 +5,9 @@
 #                                                        （开户、过了上线门槛之后；重试 = 前一次没跑完才跑，跑完了什么都不做）
 #                                                        + 前一晚预检 com.qbreak.precheck（周日〜周四 20:00；scripts/install_launchd_precheck.sh）
 #                                                        + 今天的成交 11:35 / 15:45（liveu.sh broker --notify；只读）
-#   两种模式都装 com.qbreak.wakehold（周一至五 06:40 唤醒后 caffeinate 70 分钟：一直醒到 07:40 的执行器；scripts/install_launchd_wakehold.sh）
+#   bash scripts/install_launchd_live_u.sh both         立花本番（上面那一套）+ 模拟操盘 07:40 照常（2026-10-17 用户「现在装、模拟同时跑」：
+#                                                        还没入金 / 没 ARM 时先装好立花、模拟账户照样每天推进；两个账本、两把运行锁，互不影响）
+#   几种模式都装 com.qbreak.wakehold（周一至五 06:40 唤醒后 caffeinate 70 分钟：一直醒到 07:40 的执行器；scripts/install_launchd_wakehold.sh）
 #   bash scripts/install_launchd_live_u.sh uninstall    全部卸载
 # 执行器的状态、日志、ARM / HALT 都在 ~/.qbreak/home（QBREAK_LIVEU_HOME 可改），不在仓库里。
 set -euo pipefail
@@ -27,7 +29,7 @@ if [ "$MODE" = "uninstall" ]; then
   bash "$PROJ/scripts/install_launchd_wakehold.sh" uninstall      # 唤醒后保持清醒一起卸
   exit 0
 fi
-case "$MODE" in paper|tachibana) ;; *) echo "用法：$0 [paper|tachibana|uninstall]"; exit 2;; esac
+case "$MODE" in paper|tachibana|both) ;; *) echo "用法：$0 [paper|tachibana|both|uninstall]"; exit 2;; esac
 
 # ① Python ≥ 3.10 的虚拟环境（macOS 自带的 /usr/bin/python3 是 3.9，不够）
 find_python() {
@@ -101,6 +103,7 @@ if [ "$MODE" = "paper" ]; then
   plist com.qbreak.liveu.paper 7 40 run --broker paper
   QBREAK_PYTHON="$PYX" bash "$PROJ/scripts/install_launchd_precheck.sh" uninstall   # 模拟模式不做立花的前一晚预检
 else
+  if [ "$MODE" = "both" ]; then plist com.qbreak.liveu.paper 7 40 run --broker paper; fi   # 模拟操盘照常（两个账本各有运行锁）
   plist com.qbreak.liveu.morning 7 40 run --broker tachibana
   plist com.qbreak.liveu.retry 8 35 run --broker tachibana --retry
   plist com.qbreak.liveu.open 9 5 run --broker tachibana --phase open
@@ -114,20 +117,21 @@ fi
 # 工作日 06:40 唤醒之后一直醒到 07:40 的执行器（不靠 Claude 桌面版的 Keep computer awake；两种模式都要）
 QBREAK_LIVEU_HOME="$LHOME" QBREAK_LAUNCH_AGENTS="$AGENTS" bash "$PROJ/scripts/install_launchd_wakehold.sh"
 
+BOOK="$MODE"; [ "$MODE" = "both" ] && BOOK=tachibana     # 下面的桌面链接 / 说明按立花本番写（模拟账户的照旧在 page_paper.html）
 # ③ 环境自检（Python 版本、依赖、行情连通性）
 QBREAK_HOME="$LHOME" "$PYX" "$PROJ/run.py" doctor || echo "★ doctor 有失败项（见上），修好再等明天早上的运行"
 # ④ 桌面链接 → 每天重写的页面（账本 + 日志）。只在 macOS、只在这里（终端里）建一次：定时任务不碰受隐私保护的桌面文件夹
 if [ "$(uname)" = "Darwin" ]; then
-  (QBREAK_LIVEU_HOME="$LHOME" QBREAK_PYTHON="$PYX" bash "$PROJ/scripts/liveu.sh" --broker "$MODE" --status --desktop 2>&1 \
+  (QBREAK_LIVEU_HOME="$LHOME" QBREAK_PYTHON="$PYX" bash "$PROJ/scripts/liveu.sh" --broker "$BOOK" --status --desktop 2>&1 \
      | grep -E "桌面链接|★") \
-    || echo "（桌面链接没建成：之后在终端里运行 bash \"$PROJ/scripts/liveu.sh\" desktop --broker ${MODE}）"
+    || echo "（桌面链接没建成：之后在终端里运行 bash \"$PROJ/scripts/liveu.sh\" desktop --broker ${BOOK}）"
 fi
 echo
-echo "数据目录 ${LHOME}（账本 state/、日志 logs/、每天的日志 out/live_unified_${MODE}_journal.md、页面 out/page_${MODE}.html）"
+echo "数据目录 ${LHOME}（账本 state/、日志 logs/、每天的日志 out/live_unified_${BOOK}_journal.md、页面 out/page_${BOOK}.html）"
 echo "页面：每次运行后重写，定时任务跑完自动打开（不想弹出：touch \"$LHOME/NO_OPEN\"）；桌面上的 qbreak*.html 指向它"
-echo "看账本：  bash \"$PROJ/scripts/liveu.sh\" --broker $MODE --status"
-echo "手动跑一次（和定时任务相同）：bash \"$PROJ/scripts/liveu.sh\" run --broker $MODE"
-if [ "$MODE" = "tachibana" ]; then
+echo "看账本：  bash \"$PROJ/scripts/liveu.sh\" --broker $BOOK --status"
+echo "手动跑一次（和定时任务相同）：bash \"$PROJ/scripts/liveu.sh\" run --broker $BOOK"
+if [ "$BOOK" = "tachibana" ]; then
   echo "解锁发单：echo ARMED > \"$LHOME/ARM\"；紧急停止：echo 停 > \"$LHOME/HALT\""
   # Mac 睡着 / 关机时定时任务不跑：工作日 06:40 自动唤醒（2026-10-09 起；本机例行任务的日报 06:45，执行器只要 07:40 之前；
   # 要 sudo，脚本不替你做）；06:40〜07:40 由 com.qbreak.wakehold（caffeinate）保持清醒；运行期间 liveu.sh 用 caffeinate 防止再睡
