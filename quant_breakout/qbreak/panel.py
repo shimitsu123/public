@@ -1624,15 +1624,19 @@ def _tab_order(cookie: str | None) -> list[str]:
 
 
 def _tab_order_card(order: list[str]) -> str:
-    """「更多」里「底部标签的顺序」：每个标签一行 ↑ / ↓（上 = 最左；点了底栏马上跟着变、存在这台设备上）+「恢复默认」。"""
+    """「更多」里「底部标签的顺序」：每个标签一行，按住 ≡ 上下拖（2026-10-17 用户「要用拖动的方法来做 有震动的感觉」；
+    拿起 / 换位 / 放下各震一下，app.js 的 sortable + haptic）；底栏上按住一个标签左右拖也行；键盘：≡ 上按 ↑ / ↓。上 = 最左；「恢复默认」。"""
     rows = "".join(
         f"<div class='tor' data-tabk='{k}'><span class='tob'>{TABS[k][0]}</span><b>{escape(TABS[k][1])}</b><span class='sp'></span>"
-        f"<button type='button' class='btn sm' data-tabmv='-1' aria-label='{escape(TABS[k][1])} 往左（上移）'>↑</button>"
-        f"<button type='button' class='btn sm' data-tabmv='1' aria-label='{escape(TABS[k][1])} 往右（下移）'>↓</button></div>"
+        f"<button type='button' class='tgr' aria-label='{escape(TABS[k][1])}：拖动排序（键盘 ↑ / ↓）' "
+        f"aria-describedby='taborder-how'>≡</button></div>"
         for k in order)
     return ("<section class='card' id='taborder'><h2>底部标签的顺序"
-            + _tip("从上到下 = 底部从左到右。点 ↑ / ↓ 马上生效，存在这台设备上（手机和 Mac 各自设）；打开页面时先显示哪个标签不变。", "怎么用")
-            + f"</h2><div class='tol' id='taborder-list'>{rows}</div>"
+            + _tip("从上到下 = 底部从左到右。按住右边的 ≡ 上下拖（整行按住一会儿也行）；底栏上按住一个标签不放、左右拖也能排。"
+                   "拿起、换位、放下时手机会轻轻震一下（Android；iPhone 要 iOS 18 以上）。马上生效，存在这台设备上（手机和 Mac 各自设）；"
+                   "打开页面时先显示哪个标签不变。", "怎么用")
+            + "</h2><p class='muted small' id='taborder-how'>按住 ≡ 上下拖；底栏上按住标签左右拖也行。</p>"
+            f"<div class='tol' id='taborder-list'>{rows}</div>"
             "<div class='act'><button type='button' class='btn' data-tabmv='reset'>恢复默认顺序</button></div></section>")
 
 

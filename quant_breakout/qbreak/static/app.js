@@ -59,34 +59,107 @@ function tabOrderNow(){                                                   // coo
   const o=got.filter((k, i)=>TABK.indexOf(k)>=0 && got.indexOf(k)===i);
   return o.concat(TABK.filter(k=>o.indexOf(k)<0));
 }
-function tabOrderShow(o){                                                 // 底栏 + 「更多」里的列表按 o 排；最上一个不能再上、最下一个不能再下
+function tabOrderShow(o){                                                 // 底栏 + 「更多」里的列表按 o 排
   const bar=document.querySelector('.tabbar'), ls=document.getElementById('taborder-list');
   o.forEach(k=>{
     const b=bar && bar.querySelector('[data-tabgo="'+k+'"]'); if(b) bar.appendChild(b);
     const r=ls && ls.querySelector('[data-tabk="'+k+'"]'); if(r) ls.appendChild(r);
-  });
-  if(ls) ls.querySelectorAll('[data-tabk]').forEach((r, i, all)=>{
-    const up=r.querySelector('[data-tabmv="-1"]'), dn=r.querySelector('[data-tabmv="1"]');
-    if(up) up.disabled=i===0; if(dn) dn.disabled=i===all.length-1;
   });
 }
 function tabOrderSave(o){
   try{ document.cookie=TABC+'='+encodeURIComponent(o.join(','))+'; path=/; max-age=157680000; SameSite=Lax'; }catch(e){}
 }
 tabOrderShow(tabOrderNow());
-document.addEventListener('click', e=>{
-  const b=e.target.closest('[data-tabmv]'); if(!b) return;
-  e.preventDefault();
-  let o=tabOrderNow();
-  if(b.dataset.tabmv==='reset'){ o=TABK.slice(); try{ document.cookie=TABC+'=; path=/; max-age=0; SameSite=Lax'; }catch(x){} }
-  else {
-    const r=b.closest('[data-tabk]'), k=r && r.dataset.tabk, i=o.indexOf(k), j=i+(+b.dataset.tabmv);
-    if(i<0 || j<0 || j>=o.length) return;
-    o.splice(i, 1); o.splice(j, 0, k); tabOrderSave(o);
+// 震一下（2026-10-17 用户「排序要用拖动的方法来做 有震动的感觉」）：Android = navigator.vibrate；iPhone 的 Safari 没有 vibrate →
+// 点一下藏起来的系统开关（<input type=checkbox switch>，iOS 18 起切换时有触感）；别的（Mac）什么都不做
+let HSW=null;
+function haptic(k){
+  try{ if(typeof navigator.vibrate==='function'){ navigator.vibrate(k==='tick' ? 8 : k==='drop' ? [6, 50, 12] : 14); return; } }catch(e){}
+  try{
+    if(!HSW){ HSW=document.createElement('label'); HSW.className='hsw'; HSW.setAttribute('aria-hidden', 'true');
+              HSW.innerHTML="<input type='checkbox' switch tabindex='-1'>"; HSW.addEventListener('click', e=>e.stopPropagation()); document.body.appendChild(HSW); }
+    HSW.click();
+  }catch(e){}
+}
+// 按住拖动排序：box 里的 sel 一个个是能拖的；axis 'y' = 上下（「更多」里的列表）/ 'x' = 左右（底栏）。
+// 鼠标：按下移一点就拖；触摸：按住 ≡（.tgr）马上拖，按住别处 0.28 秒不动才拖（先动了 = 滚页面 / 点一下照旧）。
+// 拿起 / 每换一个位置 / 放下各震一下；done(新顺序的元素) 存起来。拖过之后的那一下 click 不算（不会顺手切到那个标签）。
+const HOLD=280, SLOP=8;
+let NOCLICK=0;
+window.addEventListener('click', e=>{ if(Date.now()<NOCLICK && !(e.target.closest && e.target.closest('.hsw'))){ e.preventDefault(); e.stopPropagation(); NOCLICK=0; } }, true);
+function sortable(box, sel, axis, done){
+  if(!box || box._sort) return; box._sort=1;
+  let st=null;
+  const P=e=>axis==='y' ? e.clientY : e.clientX;
+  const items=()=>Array.from(box.querySelectorAll(sel));
+  function lift(){
+    const its=items(), i=its.indexOf(st.it); if(i<0){ st=null; return; }
+    const R=its.map(el=>el.getBoundingClientRect()), a=axis==='y' ? 'top' : 'left', z=axis==='y' ? 'height' : 'width';
+    st.its=its; st.i=st.j=i; st.mid=R.map(r=>r[a]+r[z]/2);
+    st.step=its.length>1 ? Math.abs((i>0 ? R[i][a]-R[i-1][a] : R[i+1][a]-R[i][a])) : R[i][z];
+    st.on=true; box.classList.add('sorting'); st.it.classList.add('lift');
+    its.forEach(el=>{ if(el!==st.it) el.classList.add('shift'); });
+    try{ box.setPointerCapture(st.id); }catch(e){}
+    haptic('pick');
   }
-  tabOrderShow(o);
-  const nb=b.dataset.tabmv==='reset' ? null : document.querySelector('[data-tabk="'+b.closest('[data-tabk]').dataset.tabk+'"] [data-tabmv="'+b.dataset.tabmv+'"]');
-  if(nb && !nb.disabled) nb.focus({preventScroll:true});                  // 连着点同一个箭头（键盘也行）
+  function move(e){
+    const d=P(e)-st.p0, c=st.mid[st.i]+d, n=st.its.length;
+    let j=0; for(let k=0;k<n;k++){ if(k!==st.i && st.mid[k]<c) j++; }
+    st.it.style.transform=(axis==='y' ? 'translateY(' : 'translateX(')+d+'px)';
+    if(j!==st.j){
+      st.j=j; haptic('tick');
+      st.its.forEach((el, k)=>{ if(k===st.i) return;
+        const s=(k>st.i && k<=j) ? -st.step : (k<st.i && k>=j) ? st.step : 0;
+        el.style.transform=s ? (axis==='y' ? 'translateY(' : 'translateX(')+s+'px)' : ''; });
+    }
+  }
+  function end(ok){
+    clearTimeout(st && st.t);
+    const s=st; st=null; if(!s || !s.on) return;
+    box.classList.remove('sorting'); s.it.classList.remove('lift');
+    s.its.forEach(el=>{ el.classList.remove('shift'); el.style.transform=''; });
+    NOCLICK=Date.now()+400;
+    if(!ok || s.j===s.i) return;
+    const o=s.its.slice(); o.splice(s.i, 1); o.splice(s.j, 0, s.it);
+    haptic('drop'); done(o);
+  }
+  box.addEventListener('pointerdown', e=>{
+    if(st || (e.pointerType==='mouse' && e.button!==0)) return;
+    const it=e.target.closest(sel); if(!it || !box.contains(it)) return;
+    st={it, id:e.pointerId, x0:e.clientX, y0:e.clientY, p0:P(e), on:false, mouse:e.pointerType==='mouse', t:0};
+    if(!st.mouse && e.target.closest('.tgr')){ e.preventDefault(); lift(); return; }
+    if(!st.mouse) st.t=setTimeout(()=>{ if(st && !st.on) lift(); }, HOLD);
+  });
+  box.addEventListener('pointermove', e=>{
+    if(!st || e.pointerId!==st.id) return;
+    if(!st.on){
+      const far=Math.hypot(e.clientX-st.x0, e.clientY-st.y0)>SLOP;
+      if(far && st.mouse) lift(); else if(far){ clearTimeout(st.t); st=null; return; }   // 触摸先动了：照旧滚页面
+      if(!st || !st.on) return;
+    }
+    e.preventDefault(); move(e);
+  });
+  box.addEventListener('pointerup', e=>{ if(st && e.pointerId===st.id) end(true); });
+  box.addEventListener('pointercancel', e=>{ if(st && e.pointerId===st.id) end(false); });
+  box.addEventListener('touchmove', e=>{ if(st && st.on) e.preventDefault(); }, {passive:false});   // 拖着的时候页面不跟着滚
+  box.addEventListener('contextmenu', e=>{ if(st) e.preventDefault(); });                            // 长按不出菜单
+}
+function tabOrderSet(o){ tabOrderSave(o); tabOrderShow(o); }
+sortable(document.getElementById('taborder-list'), '[data-tabk]', 'y', els=>tabOrderSet(els.map(r=>r.dataset.tabk)));
+sortable(document.querySelector('.tabbar'), '[data-tabgo]', 'x', els=>tabOrderSet(els.map(b=>b.dataset.tabgo)));
+document.addEventListener('keydown', e=>{                                  // 键盘：≡ 上按 ↑ / ↓ 挪一格（焦点跟着）
+  const g=e.target.closest && e.target.closest('#taborder-list .tgr'); if(!g || (e.key!=='ArrowUp' && e.key!=='ArrowDown')) return;
+  e.preventDefault();
+  const k=g.closest('[data-tabk]').dataset.tabk, o=tabOrderNow(), i=o.indexOf(k), j=i+(e.key==='ArrowUp' ? -1 : 1);
+  if(i<0 || j<0 || j>=o.length) return;
+  o.splice(i, 1); o.splice(j, 0, k); tabOrderSet(o);
+  g.focus({preventScroll:true});
+});
+document.addEventListener('click', e=>{
+  const b=e.target.closest('[data-tabmv="reset"]'); if(!b) return;
+  e.preventDefault();
+  try{ document.cookie=TABC+'=; path=/; max-age=0; SameSite=Lax'; }catch(x){}
+  tabOrderShow(TABK.slice()); haptic('drop');
 }, true);
 document.addEventListener('click', e=>{ const b=e.target.closest('[data-tabgo]'); if(!b) return; e.preventDefault(); showTab(b.dataset.tabgo); }, true);
 (function(){

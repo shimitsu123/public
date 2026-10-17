@@ -217,7 +217,7 @@ dialog>.conn{position:sticky;top:0;z-index:2;padding:10px 14px;border-radius:18p
 #intraday .ia-hl{font-size:17px;margin-bottom:4px} #intraday details.ia{margin:6px 0} #intraday details.ia>summary{color:var(--accent)}
 #intraday .li .chip{white-space:normal} .ia[data-intra]{margin:4px 0}
 /* 盘中等成交的单（2026-10-17）：票名闪烁 + 状态里转圈；成交 / 撤掉 / 收盘后不再有这个 class */
-.list .li.wfill .grow>b:first-child{animation:qbblink 1.2s ease-in-out infinite}.spin{display:inline-block;width:11px;height:11px;margin-right:6px;vertical-align:-1px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:qbspin .8s linear infinite}@keyframes qbblink{50%{opacity:.3}}@media (prefers-reduced-motion:reduce){.list .li.wfill .grow>b:first-child{animation:none;text-decoration:underline dotted}.spin{animation:none}}
+.list .li.wfill .grow>b:first-child{animation:qbblink 1.2s ease-in-out infinite}.spin{display:inline-block;width:11px;height:11px;margin-right:6px;vertical-align:-1px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:qbspin .8s linear infinite}@keyframes qbblink{50%{opacity:.3}}@media (prefers-reduced-motion:reduce){.list .li.wfill .grow>b:first-child{animation:none;text-decoration:underline dotted}body .sorting .shift{transition:none}.spin{animation:none}}
 /* 确认框的立花实时价那一行（2026-10-17）：● 实时 / 转圈 取价中 / 灰 取不到（按 Yahoo） */
 .rtl{margin:4px 0 6px;display:flex;gap:6px;align-items:center}
 .rtl.ok{color:var(--accent);font-weight:600}
@@ -246,7 +246,13 @@ details.ii.on .iib{visibility:visible}
 /* 「更多」里底部标签的顺序（2026-10-17） */
 .tol{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .tor{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
-.tor .tob{width:22px;text-align:center;font-size:18px;color:var(--muted)}.tor .sp{flex:1}.tor .btn.sm{min-width:44px}
+.tor{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}.tor .tob{width:22px;text-align:center;font-size:18px;color:var(--muted)}.tor .sp{flex:1}
+.tgr{width:44px;height:36px;margin:-4px -6px -4px 0;border:0;background:none;color:var(--muted);font-size:22px;line-height:1;cursor:grab;touch-action:none;border-radius:8px}
+.tgr:focus-visible{outline:2px solid var(--accent);outline-offset:1px}.sorting,.sorting *{cursor:grabbing}
+.tabbar{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.sorting .shift{transition:transform .15s ease}.lift{position:relative;z-index:3;box-shadow:0 6px 18px rgba(0,0,0,.22)}.tor.lift{border-color:var(--accent)}
+.tabbar button.lift{background:var(--bg);border-radius:10px}
+.hsw{position:fixed;top:0;left:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
 /* K 线：看更早 / 放大缩小 / 对数 / 自己画线、今天要成交的单、趋势线的容差带；调仓框的快捷档（2026-10-17） */
 .kzg{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
 .chart .kz{font:inherit;font-size:14px;min-width:38px;min-height:38px;padding:4px 10px;border:1px solid var(--line);border-radius:10px;

@@ -908,10 +908,17 @@ def test_bottom_tab_order_follows_the_device_cookie():
     assert pos == sorted(pos)
     card = _card(html, "taborder")
     assert card.count("data-tabk=") == 6 and card.index("data-tabk='news'") < card.index("data-tabk='home'")
-    assert "data-tabmv='reset'" in card and "data-tabmv='-1'" in card and "data-tabmv='1'" in card
+    assert "data-tabmv='reset'" in card and card.count("class='tgr'") == 6 and "data-tabmv='-1'" not in card   # 拖 ≡ 排（2026-10-17）
     assert list(panel.TABS) == dflt                                           # 不改默认
     js = (Path(panel.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
-    assert "qb_tabs=" in js and "[data-tabmv]" in js and "SameSite=Lax" in js and "tabOrderShow(tabOrderNow())" in js
+    assert "qb_tabs=" in js and "[data-tabmv=\"reset\"]" in js and "SameSite=Lax" in js and "tabOrderShow(tabOrderNow())" in js
+    # 拖动排序（「更多」里上下拖、底栏左右拖）+ 震一下（Android vibrate / iPhone 系统开关）；拖过之后那一下 click 不切标签
+    assert "sortable(document.getElementById('taborder-list'), '[data-tabk]', 'y'" in js
+    assert "sortable(document.querySelector('.tabbar'), '[data-tabgo]', 'x'" in js
+    assert "navigator.vibrate" in js and "<input type='checkbox' switch" in js and "NOCLICK" in js
+    assert js.count("haptic('pick')") == 1 and js.count("haptic('tick')") == 1 and "haptic('drop'); done(o);" in js
+    css = (Path(panel.__file__).parent / "static" / "panel.css").read_text(encoding="utf-8")
+    assert ".tgr{" in css and "touch-action:none" in css[css.index(".tgr{"):css.index(".tgr{") + 300]
 
 
 def test_chart_orders_lists_todays_orders_for_the_kline():
