@@ -542,6 +542,60 @@ def arm_block_text(demo: bool = False) -> str:
 
 
 # ══════════════════════════ 券商实现 ══════════════════════════
+# ────────── 登录本番时推一条到手机（2026-10-17 用户：「每次登录立花本番的时候要在 qbreak 里面也要进行推送通过 api 登陆之类的消息
+# 然后要简单说明接下来做什么」）：qbreak 推送 + 通知记录（qbreak/notify.send）；デモ / 模拟交易所不推。关掉：QBREAK_LOGIN_PUSH=0（测试）──────────
+LOGIN_PUSH_ENV = "QBREAK_LOGIN_PUSH"
+NOT_ME = "不是你或 qbreak 做的 → 在 Mac 上说「停」；Mac 联系不上 → 立花网站把「ｅ支店・API 利用設定」改成無効化"
+
+
+def login_purpose(argv=None) -> tuple[str, str]:
+    """这次登录本番是哪个命令 → (做什么, 接下来做什么)。按 run.py 的子命令与参数判断（liveu.sh / 定时任务 / 面板都经 run.py）。"""
+    import sys
+    av = [str(x) for x in (sys.argv if argv is None else argv)]
+    sub = next((x for x in av[1:] if not x.startswith("-")), "")
+    has = set(av)
+
+    def opt(k: str) -> str:
+        return av[av.index(k) + 1] if k in av and av.index(k) + 1 < len(av) else ""
+    if sub == "live-u":
+        ph = opt("--phase") or "morning"
+        if "--dry-run" in has:
+            return "本番 dry-run（只算不发单）", "读持仓与余力 → 决策 → 打印会下的单（不发）→ 登出"
+        if "--cancel" in has or ph == "cancel":
+            return "撤单", "按注文番号撤执行器今天还挂着的单 → 确认撤掉了没有 → 登出"
+        if ph == "now":
+            return "盘中的手动指令", "取实时现价 → 下等着的手动指令的单（先卖后买）→ 登出"
+        if ph == "open":
+            return (("开盘后补单（09:20 最后一次）", "取始値 → 补下还没下的等开盘后的买单（还没始値的放弃）→ 登出") if "--retry" in has
+                    else ("开盘后补单（09:05）", "取始値 → 下等开盘后的买单 → 登出"))
+        if "--retry" in has:
+            return "早上运行的重试（08:35 / 面板）", "对账 → 补下没下成的寄付单 → 登出"
+        return "早上的运行", "对账（昨天的成交 / 持仓 / 余力）→ 决策 → 下今天的寄付单 → 登出"
+    known = {"tachibana-probe": ("连通检查（只读）", "取价 / 持仓 / 余力 / 注文一覧 / 銘柄マスタ → 登出（不发单）"),
+             "live-precheck": ("前一晚预检（只读）", "取余力、看交付書面 / API 版本的预告 → 登出（不发单）"),
+             "live-unknown": ("查状态不明的单（只读）", "读注文一覧、找候选 → 登出（不发单、不改账本）"),
+             "live-reconcile": ("持仓核对（只读）", "读持仓 → 和账本对照 → 登出（不发单）"),
+             "live-broker": ("看立花那边的持仓与今天的成交（只读）", "读持仓 / 注文一覧 → 登出（不发单）")}
+    if sub in known:
+        return known[sub]
+    return f"run.py {sub or '?'}", "登录之后照这个命令做 → 登出"
+
+
+def push_login(b, when=None, send=None) -> None:
+    """登录本番成功之后推一条（绝不抛、不影响交易；不写认证 ID / URL / 金额）。b.purpose = (做什么, 接下来) 优先，没有 → login_purpose()。"""
+    if os.environ.get(LOGIN_PUSH_ENV, "1").strip().lower() in ("0", "off", "no", "false"):
+        return
+    try:
+        what, nxt = getattr(b, "purpose", None) or login_purpose()
+        t = (when or dt.datetime.now(JST)).strftime("%H:%M")
+        if send is None:
+            from .. import notify
+            send = notify.send
+        send(f"立花本番 API 登录 {t}：{what}", f"接下来：{nxt}\n{NOT_ME}", "info")
+    except Exception as e:                        # noqa: BLE001
+        log.warning("登录推送没发成：%s", type(e).__name__)
+
+
 # ────────── TA-14：立花本番会话锁（同一账户只能一个会话：另一个进程登录会把这边踢掉）──────────
 _SESSION: dict = {"f": None, "owners": set()}
 
@@ -808,6 +862,8 @@ class TachibanaBroker(BaseBroker):
         self.doc_update = str(res.get(s.key_doc_update) or "").strip()
         self._logged_in = True
         log.info("已登录立花 e支店 API %s（%s）", api_version(base) or "?", "デモ環境" if self.demo else "本番環境")
+        if self._real_session():               # 本番：推一条到手机（做什么 + 接下来做什么；2026-10-17）
+            push_login(self)
         today = dt.datetime.now(JST).strftime("%Y%m%d")
         if self.next_release:                  # TA-09：发布日之后也记（旧版本停用之前要更新；提醒的持续在 qbreak/precheck.py）
             log.warning("立花通知：API 新版本的发布日 %s（%s）—— 代码现在用 %s；请查看仕様变更，必要时更新代码 / tachibana_spec.json",

@@ -21,6 +21,7 @@ ENV = "QBREAK_PAPER_RT"
 WAIT_S = 20.0
 SRC_RT = "立花实时"
 SRC_YH = "Yahoo 1 分钟线（约晚 20 分钟）"
+PURPOSE = ("模拟账户取实时价（只读）", "取现价 / 始値 → 马上登出（不发单）→ 模拟账户按这个价成交")
 
 
 def enabled() -> bool:
@@ -45,6 +46,7 @@ def tachibana_detail(tickers, make=None, wait_s: float = WAIT_S) -> tuple[dict, 
     os.environ["QBREAK_TACHIBANA_SESSION_WAIT_S"] = str(wait_s)       # 执行器拿着会话：只等一会儿，不拖住面板 / 这次运行
     try:
         b = (make or _default_make)()
+        b.purpose = PURPOSE                                            # 登录推送写这个（qbreak/brokers/tachibana.push_login）
         b.login()
         return b.quote_detail(list(tickers)), None
     except Exception as e:                                             # noqa: BLE001  没有凭证 / 会话被占 / 登录失败 → 照旧 Yahoo
