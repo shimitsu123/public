@@ -1,0 +1,249 @@
+// qbreak 操作面板：app.js（浏览器原生 ES 模块；由 qbreak/panel.py 以 /static/app.js 提供；不要用构建工具）
+import { $, api, toast } from './core.js';
+import { beacon } from './conn.js';
+import { req } from './net.js';
+// 切回来时页面旧了就刷新、在处理的指令状态变了就刷新、页面顶上「这是 N 分钟前的页面」：2026-10-15 起都在 conn.js（先确认连得上 Mac 再刷新、
+// 对话框开着不刷新；以前这里直接 location.reload()，连不上时停在「刷新中…」）。
+(function(){                                                              // 网页 App：service worker（连不上时看上次的页面 + 推送）
+  if('serviceWorker' in navigator){                                      // updateViaCache: 'none' → sw.js 本身不走 HTTP 缓存（面板换了新代码马上用新的）
+    navigator.serviceWorker.register('/sw.js',{scope:'/', updateViaCache:'none'}).catch(err=>beacon('sw-register', String(err)));
+  }
+})();
+function b64key(s){ s=s.replace(/-/g,'+').replace(/_/g,'/'); s+='='.repeat((4-s.length%4)%4); const r=atob(s), o=new Uint8Array(r.length); for(let i=0;i<r.length;i++) o[i]=r.charCodeAt(i); return o; }
+function standalone(){ return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone===true; }
+async function pushReg(){                                                // service worker 3 秒还没准备好 → 当作没有（以前一直等 → 推送那一行与按钮没反应）
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  return Promise.race([navigator.serviceWorker.ready, new Promise(res=>setTimeout(()=>res(null), 3000))]);
+}
+async function pushState(){
+  const el=$('#push-st'); if(!el) return;
+  const reg=await pushReg().catch(()=>null);
+  if(!reg){ el.textContent=(/iPhone|iPad/.test(navigator.userAgent) && !standalone()) ? '要先在 Safari「共享 → 添加到主屏幕」，再从主屏幕的 qbreak 图标打开，才能打开推送（iOS 16.4 以上）' : '这个浏览器不支持推送'; return; }
+  const s=await reg.pushManager.getSubscription().catch(()=>null);
+  el.textContent = s ? '这台设备：推送已打开 ✓' : ('这台设备：推送没打开'+(typeof Notification!=='undefined' && Notification.permission==='denied' ? '（通知被拒绝了：在 iPhone 设置 → 通知 → qbreak 里打开）' : ''));
+}
+document.addEventListener('DOMContentLoaded', ()=>{ pushState(); });
+document.addEventListener('click', async e=>{
+  const b=e.target.closest('[data-act^="push-"]'); if(!b) return;
+  e.stopPropagation();
+  const a=b.dataset.act, reg=await pushReg().catch(()=>null);
+  if(!reg){ toast('这里打不开推送：iPhone 要从主屏幕的 qbreak 图标打开（Safari 的标签页里不行）', true); return; }
+  if(a==='push-on'){
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){ toast('没有允许通知：iPhone 设置 → 通知 → qbreak 里打开', true); return; }
+    let key=null; try{ const x=await req('/api/push/key',{credentials:'same-origin',cache:'no-store'}); key=x.j && x.j.key; }catch(err){}
+    if(!key){ toast('取不到推送的公钥（连不上 Mac？）', true); return; }
+    let s=null; try{ s=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64key(key)}); }catch(err){ toast('打开推送失败：'+err, true); return; }
+    const j=await api('/api/push/subscribe',{sub:s.toJSON()}); if(j) toast(j.msg||'已打开');
+  }else{
+    const s=await reg.pushManager.getSubscription();
+    if(!s){ toast('这台设备还没打开推送', true); return; }
+    if(a==='push-test'){ const j=await api('/api/push/test',{endpoint:s.endpoint}); if(j) toast(j.msg); }
+    else { await s.unsubscribe().catch(()=>{}); const j=await api('/api/push/unsubscribe',{endpoint:s.endpoint}); if(j) toast(j.msg); }
+  }
+  pushState();
+}, true);
+const TABK=['home','hold','trade','pick','news','more'];                  // 标签页（总览 / 持仓 / 交易 / 选股 / 消息 / 更多）
+function showTab(k, keep){
+  if(TABK.indexOf(k)<0) k='home';
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on', p.dataset.tab===k));
+  document.querySelectorAll('[data-tabgo]').forEach(b=>{ const on=b.dataset.tabgo===k; b.classList.toggle('on', on); b.setAttribute('aria-selected', on?'true':'false'); });
+  try{ sessionStorage.setItem('qb-tab', k); }catch(e){}
+  if(location.hash!=='#tab='+k){ try{ history.replaceState(null, '', location.pathname+location.search+'#tab='+k); }catch(e){} }
+  if(!keep) window.scrollTo(0,0);
+}
+// 底部标签从左到右的顺序（2026-10-17 用户：可以自定义）：存在这台设备的 cookie qb_tabs（服务器按它画底栏；这里点了马上排、也按它再排一次：页面是缓存的也对）
+const TABC='qb_tabs';
+function tabOrderNow(){                                                   // cookie → 顺序（只认 TABK 里的、去重，缺的按默认接上）
+  let got=[]; try{ const m=document.cookie.match(/(?:^|;\s*)qb_tabs=([^;]*)/); if(m) got=decodeURIComponent(m[1]).split(','); }catch(e){}
+  const o=got.filter((k, i)=>TABK.indexOf(k)>=0 && got.indexOf(k)===i);
+  return o.concat(TABK.filter(k=>o.indexOf(k)<0));
+}
+function tabOrderShow(o){                                                 // 底栏 + 「更多」里的列表按 o 排
+  const bar=document.querySelector('.tabbar'), ls=document.getElementById('taborder-list');
+  o.forEach(k=>{
+    const b=bar && bar.querySelector('[data-tabgo="'+k+'"]'); if(b) bar.appendChild(b);
+    const r=ls && ls.querySelector('[data-tabk="'+k+'"]'); if(r) ls.appendChild(r);
+  });
+}
+function tabOrderSave(o){
+  try{ document.cookie=TABC+'='+encodeURIComponent(o.join(','))+'; path=/; max-age=157680000; SameSite=Lax'; }catch(e){}
+}
+tabOrderShow(tabOrderNow());
+// 震一下（2026-10-17 用户「排序要用拖动的方法来做 有震动的感觉」）：Android = navigator.vibrate；iPhone 的 Safari 没有 vibrate →
+// 点一下藏起来的系统开关（<input type=checkbox switch>，iOS 18 起切换时有触感）；别的（Mac）什么都不做
+let HSW=null;
+function haptic(k){
+  try{ if(typeof navigator.vibrate==='function'){ navigator.vibrate(k==='tick' ? 8 : k==='drop' ? [6, 50, 12] : 14); return; } }catch(e){}
+  try{
+    if(!HSW){ HSW=document.createElement('label'); HSW.className='hsw'; HSW.setAttribute('aria-hidden', 'true');
+              HSW.innerHTML="<input type='checkbox' switch tabindex='-1'>"; HSW.addEventListener('click', e=>e.stopPropagation()); document.body.appendChild(HSW); }
+    HSW.click();
+  }catch(e){}
+}
+// 按住拖动排序：box 里的 sel 一个个是能拖的；axis 'y' = 上下（「更多」里的列表）/ 'x' = 左右（底栏）。
+// 鼠标：按下移一点就拖；触摸：按住 ≡（.tgr）马上拖，按住别处 0.28 秒不动才拖（先动了 = 滚页面 / 点一下照旧）。
+// 拿起 / 每换一个位置 / 放下各震一下；done(新顺序的元素) 存起来。拖过之后的那一下 click 不算（不会顺手切到那个标签）。
+const HOLD=280, SLOP=8;
+let NOCLICK=0;
+window.addEventListener('click', e=>{ if(Date.now()<NOCLICK && !(e.target.closest && e.target.closest('.hsw'))){ e.preventDefault(); e.stopPropagation(); NOCLICK=0; } }, true);
+function sortable(box, sel, axis, done){
+  if(!box || box._sort) return; box._sort=1;
+  let st=null;
+  const P=e=>axis==='y' ? e.clientY : e.clientX;
+  const items=()=>Array.from(box.querySelectorAll(sel));
+  function lift(){
+    const its=items(), i=its.indexOf(st.it); if(i<0){ st=null; return; }
+    const R=its.map(el=>el.getBoundingClientRect()), a=axis==='y' ? 'top' : 'left', z=axis==='y' ? 'height' : 'width';
+    st.its=its; st.i=st.j=i; st.mid=R.map(r=>r[a]+r[z]/2);
+    st.step=its.length>1 ? Math.abs((i>0 ? R[i][a]-R[i-1][a] : R[i+1][a]-R[i][a])) : R[i][z];
+    st.on=true; box.classList.add('sorting'); st.it.classList.add('lift');
+    its.forEach(el=>{ if(el!==st.it) el.classList.add('shift'); });
+    try{ box.setPointerCapture(st.id); }catch(e){}
+    haptic('pick');
+  }
+  function move(e){
+    const d=P(e)-st.p0, c=st.mid[st.i]+d, n=st.its.length;
+    let j=0; for(let k=0;k<n;k++){ if(k!==st.i && st.mid[k]<c) j++; }
+    st.it.style.transform=(axis==='y' ? 'translateY(' : 'translateX(')+d+'px)';
+    if(j!==st.j){
+      st.j=j; haptic('tick');
+      st.its.forEach((el, k)=>{ if(k===st.i) return;
+        const s=(k>st.i && k<=j) ? -st.step : (k<st.i && k>=j) ? st.step : 0;
+        el.style.transform=s ? (axis==='y' ? 'translateY(' : 'translateX(')+s+'px)' : ''; });
+    }
+  }
+  function end(ok){
+    clearTimeout(st && st.t);
+    const s=st; st=null; if(!s || !s.on) return;
+    box.classList.remove('sorting'); s.it.classList.remove('lift');
+    s.its.forEach(el=>{ el.classList.remove('shift'); el.style.transform=''; });
+    NOCLICK=Date.now()+400;
+    if(!ok || s.j===s.i) return;
+    const o=s.its.slice(); o.splice(s.i, 1); o.splice(s.j, 0, s.it);
+    haptic('drop'); done(o);
+  }
+  box.addEventListener('pointerdown', e=>{
+    if(st || (e.pointerType==='mouse' && e.button!==0)) return;
+    const it=e.target.closest(sel); if(!it || !box.contains(it)) return;
+    st={it, id:e.pointerId, x0:e.clientX, y0:e.clientY, p0:P(e), on:false, mouse:e.pointerType==='mouse', t:0};
+    if(!st.mouse && e.target.closest('.tgr')){ e.preventDefault(); lift(); return; }
+    if(!st.mouse) st.t=setTimeout(()=>{ if(st && !st.on) lift(); }, HOLD);
+  });
+  box.addEventListener('pointermove', e=>{
+    if(!st || e.pointerId!==st.id) return;
+    if(!st.on){
+      const far=Math.hypot(e.clientX-st.x0, e.clientY-st.y0)>SLOP;
+      if(far && st.mouse) lift(); else if(far){ clearTimeout(st.t); st=null; return; }   // 触摸先动了：照旧滚页面
+      if(!st || !st.on) return;
+    }
+    e.preventDefault(); move(e);
+  });
+  box.addEventListener('pointerup', e=>{ if(st && e.pointerId===st.id) end(true); });
+  box.addEventListener('pointercancel', e=>{ if(st && e.pointerId===st.id) end(false); });
+  box.addEventListener('touchmove', e=>{ if(st && st.on) e.preventDefault(); }, {passive:false});   // 拖着的时候页面不跟着滚
+  box.addEventListener('contextmenu', e=>{ if(st) e.preventDefault(); });                            // 长按不出菜单
+}
+function tabOrderSet(o){ tabOrderSave(o); tabOrderShow(o); }
+sortable(document.getElementById('taborder-list'), '[data-tabk]', 'y', els=>tabOrderSet(els.map(r=>r.dataset.tabk)));
+sortable(document.querySelector('.tabbar'), '[data-tabgo]', 'x', els=>tabOrderSet(els.map(b=>b.dataset.tabgo)));
+document.addEventListener('keydown', e=>{                                  // 键盘：≡ 上按 ↑ / ↓ 挪一格（焦点跟着）
+  const g=e.target.closest && e.target.closest('#taborder-list .tgr'); if(!g || (e.key!=='ArrowUp' && e.key!=='ArrowDown')) return;
+  e.preventDefault();
+  const k=g.closest('[data-tabk]').dataset.tabk, o=tabOrderNow(), i=o.indexOf(k), j=i+(e.key==='ArrowUp' ? -1 : 1);
+  if(i<0 || j<0 || j>=o.length) return;
+  o.splice(i, 1); o.splice(j, 0, k); tabOrderSet(o);
+  g.focus({preventScroll:true});
+});
+document.addEventListener('click', e=>{
+  const b=e.target.closest('[data-tabmv="reset"]'); if(!b) return;
+  e.preventDefault();
+  try{ document.cookie=TABC+'=; path=/; max-age=0; SameSite=Lax'; }catch(x){}
+  tabOrderShow(TABK.slice()); haptic('drop');
+}, true);
+document.addEventListener('click', e=>{ const b=e.target.closest('[data-tabgo]'); if(!b) return; e.preventDefault(); showTab(b.dataset.tabgo); }, true);
+(function(){
+  const q=new URLSearchParams(location.search), h=location.hash.replace(/^#/,'');
+  let k=q.get('tab') || (h.indexOf('tab=')===0 ? h.slice(4) : '');
+  let target=null;
+  if(!k && h){ target=document.getElementById(h); const p=target && target.closest('.pane'); if(p) k=p.dataset.tab; }   // 旧的锚点（#holdings 等）
+  if(!k){ try{ k=sessionStorage.getItem('qb-tab')||''; }catch(e){} }
+  showTab(k||'home', true);
+  const seg=q.get('seg') || (q.get('l') ? 'log' : '');                   // 消息：经济威胁（默认）/ 通知记录
+  if(seg) showMseg(seg);
+  const l=q.get('l');                                                     // 推送点开：?tab=news&seg=log&l=<id> → 通知记录里那一条
+  if(l){ const d=document.getElementById('l-'+l); if(d){ d.open=true; target=d; d.classList.add('hl'); } }
+  const n=q.get('n');                                                     // 推送点开：?tab=news&n=<id> → 展开那一条
+  if(n){ const d=document.getElementById('n-'+n); if(d){ d.open=true; const pd=d.parentElement && d.parentElement.closest('details'); if(pd) pd.open=true; target=d; d.classList.add('hl'); } }
+  if(target) setTimeout(()=>{ const top=document.querySelector('.top'); window.scrollTo(0, target.getBoundingClientRect().top+window.scrollY-((top&&top.offsetHeight)||0)-8); }, 50);
+})();
+document.addEventListener('click', e=>{                                   // 选股：分段（出信号 / 快要出 / 观察中）与「再显示」
+  const s=e.target.closest('[data-sgg]');
+  if(s){ e.preventDefault(); document.querySelectorAll('[data-sgg]').forEach(b=>b.classList.toggle('on', b===s));
+         document.querySelectorAll('.sgg').forEach(g=>{ g.hidden = g.dataset.g!==s.dataset.sgg; }); return; }
+  const m=e.target.closest('[data-sgmore]');
+  if(m){ e.preventDefault(); const g=document.querySelector('.sgg[data-g="'+m.dataset.sgmore+'"]');
+         if(g) g.querySelectorAll('.sgmore').forEach(x=>x.hidden=false); m.closest('.act').remove(); }
+}, true);
+document.addEventListener('click', e=>{                                   // 选股 / 持仓的消息标记：点标题 → 「消息」页那一条
+  const a=e.target.closest('[data-nlink]'); if(!a) return;
+  const d=document.getElementById('n-'+a.dataset.nlink); if(!d) return;
+  e.preventDefault(); showTab('news', true); showMseg('news');
+  d.open=true; const pd=d.parentElement && d.parentElement.closest('details'); if(pd) pd.open=true; d.classList.add('hl');
+  setTimeout(()=>{ const top=document.querySelector('.top'); window.scrollTo(0, d.getBoundingClientRect().top+window.scrollY-((top&&top.offsetHeight)||0)-8); }, 50);
+}, true);
+document.addEventListener('click', e=>{                                   // 「规则接下来会自动买」点开的一行底下的「收起」：收起并回到那一行的摘要（点开的一行很长；2026-10-14）
+  const b=e.target.closest('[data-abxclose]'); if(!b) return;
+  const d=b.closest('details.abx'); if(!d) return;
+  e.preventDefault(); d.open=false;
+  const sm=d.querySelector('summary'), top=document.querySelector('.top'), h=(top&&top.offsetHeight)||0, y=sm.getBoundingClientRect().top;
+  if(y<h || y>window.innerHeight-40) window.scrollTo(0, y+window.scrollY-h-8);   // 摘要在页头下面 / 屏幕外 → 滚到页头下面
+  sm.focus({preventScroll:true});
+}, true);
+document.addEventListener('click', e=>{                                   // 选股的「怎么看 K 线图 去看 ›」→「持仓」里那一份（打开、滚到它；2026-10-15）
+  const a=e.target.closest('[data-khelpgo]'); if(!a) return;
+  const d=document.querySelector('#khelp details'); if(!d) return;
+  e.preventDefault(); showTab('hold', true); d.open=true;
+  setTimeout(()=>{ const top=document.querySelector('.top'); window.scrollTo(0, d.getBoundingClientRect().top+window.scrollY-((top&&top.offsetHeight)||0)-8); }, 50);
+}, true);
+function showMseg(s){ document.querySelectorAll('[data-mseg]').forEach(b=>b.classList.toggle('on', b.dataset.mseg===s));
+  document.querySelectorAll('.mseg').forEach(g=>{ g.hidden = g.dataset.s!==s; }); }
+document.addEventListener('click', e=>{ const b=e.target.closest('[data-mseg]'); if(!b) return; e.preventDefault(); showMseg(b.dataset.mseg); }, true);
+// 「交易」的「另有 …」/「已结束 / 不是今天的」：点开过的刷新之后照样开着（写完指令、撤单之后页面会刷新；复核 8，2026-10-16：以前每次刷新都收起来，
+// 刚在里面点过按钮的那一块要再点开）。只记这个标签页（sessionStorage）；读写不了 → 照旧收起。
+const FOLDK='qb-fold';
+function foldKey(d, path){ const s=d.closest('section'); return path+'|'+((s&&s.id)||'')+'|'+(d.classList.contains('later') ? 'later' : 'ended'); }
+function foldSave(d, store, path){
+  let m={}; try{ m=JSON.parse(store.getItem(FOLDK)||'{}')||{}; }catch(e){ m={}; }
+  if(d.open) m[foldKey(d, path)]=1; else delete m[foldKey(d, path)];
+  try{ store.setItem(FOLDK, JSON.stringify(m)); }catch(e){}
+}
+function foldRestore(doc, store, path){
+  let m={}; try{ m=JSON.parse(store.getItem(FOLDK)||'{}')||{}; }catch(e){ return; }
+  doc.querySelectorAll('details.later, details.ended').forEach(d=>{ if(m[foldKey(d, path)]) d.open=true; });
+}
+document.addEventListener('toggle', e=>{                                  // toggle 不冒泡：在捕获阶段接
+  const d=e.target; if(!d || !d.matches || !d.matches('details.later, details.ended')) return;
+  try{ foldSave(d, sessionStorage, location.pathname); }catch(err){}
+}, true);
+try{ foldRestore(document, sessionStorage, location.pathname); }catch(err){}
+
+// ⓘ = 浮在上面的小框（2026-10-17 用户：「点击ⓘ要出现弹窗的形式 不要影响周围ui布局」）：放在 ⓘ 下面（下面放不下 → 上面），
+// 左右不出屏幕；同时只开一个；点别处 / Esc / 滚动 / 改窗口大小 → 收起
+function tipPlace(d){
+  const b=d.querySelector(':scope>.iib'), s=d.querySelector(':scope>summary'); if(!b || !s) return;
+  const vw=document.documentElement.clientWidth, vh=window.innerHeight, r=s.getBoundingClientRect(), M=12, w=b.offsetWidth, h=b.offsetHeight;
+  const x=Math.max(M, Math.min(r.left+r.width/2-w/2, vw-w-M));
+  let y=r.bottom+6;
+  if(y+h>vh-M) y=r.top-6-h>=M ? r.top-6-h : Math.max(M, vh-h-M);
+  b.style.left=x+'px'; b.style.top=y+'px'; d.classList.add('on');
+}
+function tipsClose(keep){ document.querySelectorAll('details.ii[open]').forEach(o=>{ if(o!==keep){ o.open=false; o.classList.remove('on'); } }); }
+document.addEventListener('toggle', e=>{                                  // toggle 不冒泡：在捕获阶段接
+  const d=e.target; if(!d || !d.matches || !d.matches('details.ii')) return;
+  if(d.open){ tipsClose(d); tipPlace(d); } else d.classList.remove('on');
+}, true);
+document.addEventListener('click', e=>{ if(!(e.target.closest && e.target.closest('details.ii'))) tipsClose(null); }, true);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') tipsClose(null); });
+window.addEventListener('scroll', e=>{ if(!(e.target && e.target.closest && e.target.closest('.iib'))) tipsClose(null); }, true);
+window.addEventListener('resize', ()=>tipsClose(null));

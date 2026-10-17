@@ -1,0 +1,163 @@
+# CLAUDE.md（仓库根目录：Claude Code 在这个仓库里启动时自动读取）
+
+主体是 `quant_breakout/`：个人用的日本股票量化交易系统（研究 → 云端模拟盘 → Mac 上的执行器）。命令都在 `quant_breakout/` 下运行。
+现状、每天的流程、决定与理由、已知限制、路线图（先读它）：@quant_breakout/HANDOFF.md
+全部研究按层与时间串起来的检查时间线（每天 / 每周 / 每月 / 每季 / 每年、事件驱动、判定日历）：`quant_breakout/CHECK_TIMELINE.md`
+
+## 和用户沟通
+- 用中文；结论先行 → 要点（≤ 7 条）→ 详解 / 来源 / 下一步
+- 每个数字带单位（¥ / 円、股、口、%、pp、円/USD、pt、JST）；专业术语第一次出现附英文或日文原词
+- 涉及交易、行情、个股的回答最后写「非投资建议」；不给买卖指令、不承诺收益
+- 需要联网的事实（价格、手续费、制度、版本、日程）写日期与来源，并注明「仅对本次检索时点有效」
+- 信息稍缺但不影响结论时先答，再列「待补参数」；少反问
+- 命令每条单独一个代码块
+
+## 安全（必须遵守）
+- 绝不打印、回显、记录、提交任何密钥的值（`JQUANTS_API_KEY`、立花的认证 ID / 私钥 / 第二暗証番号、webhook URL 等）；只检查「是否已设置」
+- 绝不让用户把密钥、令牌、密码贴进聊天：放 Mac 的钥匙串（Keychain）/ `~/.zshrc` / launchd 的 plist，或云端环境设置
+- 立花私钥 `~/.qbreak/e_api_private_key.pem` 保持 `chmod 600`，不读出内容
+- J-Quants 原始数据不能入库（公开仓库 + 个人自用条款）：缓存只在 `quant_breakout/var/cache/jquants/`（已 gitignore）
+- 消息监控（`qbreak/news.py`）取来的第三方标题 / 链接不能入库：只放 `var/cache/news/`（已 gitignore）与 Mac 本机页面；日报（会入库）只放汇总
+- 不抓取、不自动操作楽天証券网站或 iSPEED（総合証券取引約款 第35条第12項）
+- 这是**公开仓库**：CLAUDE.md、HANDOFF.md、代码、提交信息里不写个人信息（姓名、邮箱、账户号、住址、Mac 用户名、私人链接）
+- 云端例行任务（Routines）与 Mac 桌面版的本机例行任务：没有用户在这次对话里确认，不新建、不修改、不删除
+  （用户说「装本机例行任务」= 确认照 `quant_breakout/routines/README.md` 建那三个本机任务）
+
+## 方法论（不改规则去迎合结果）
+- 研究先登记规则（commit）再运行；看到结果之后不改规则；前向记录 `quant_breakout/var/out/*_forward.csv` 只追加，不改、不补写
+- 配置变更与研究结论记在 `quant_breakout/var/sim_changes.md`（事后的改动写明是事后）
+- 不改策略参数、仓位、股票池、宏观阈值、牛熊分界参数，除非用户明确要求并记进 sim_changes.md
+- 新出现的行业 / 主题 / 公司（日报「新出现的联动」、新上市、用户提的新主题）：先用 `quant_breakout/scripts/theme_link_check.py`
+  和现有东证业种 + 主题做关联对比，结果写进 sim_changes.md；改主题表 `quant_breakout/qbreak/themes.py` 要用户同意；
+  影响度历年值 `var/theme_influence.json` 每年 1 月用 `scripts/theme_influence.py` 加上刚结束的一年
+
+## 在用户的 Mac 上（2026-09-26 起：用户只在 Mac 的 Claude 对话里提问与执行）
+**2026-10-09 起：问、答、改代码、做研究、提交、推送（上传）都在 Mac 本地的 Claude 里做，不需要云端会话**
+（例行任务也在 Mac 上：Claude 桌面版的本机任务 + 云端后备，见下面「例行任务」一条）。用户的问法与对应的命令见 HANDOFF.md「在 Mac 对话里怎么问」。
+- **直接执行，不要只列命令**：用户问到的事凡是要运行命令才能回答或完成（看账本 / 页面 / 日志、拉代码、装或更新定时任务、取数、做研究），
+  Claude 自己运行并把结果告诉用户；遇到权限确认就请用户点允许。只有下面「实盘相关」的几件事、改模拟盘规则、密钥，要用户在这次对话里明确说
+- **拉代码后一条命令装好 / 更新全部**（依赖、模拟操盘、市场仪表盘 + 经济威胁提醒、J-Quants 定时取数、研究用克隆）：
+  `git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（可重复运行，不动账本、不下单）
+  连手机上操作一起（用户说「拉代码，手机操作全部执行」）：同一条命令后面加 `--phone node`（拉代码 → 全部更新 → 打开 Tailscale Serve → 在 Mac 上打开面板的「手机」；之后照常的更新会确认手机访问还在）
+- **研究一口气做完**：在 `~/qbreak-dev` 里走完「登记（提交推送）→ 运行 → 记进 sim_changes → 推送 → 汇报」，中途不停下来问
+  （推送都用下面的 `bash scripts/dev.sh push`）；只有推不上去（没配 GitHub 登录）或结果需要用户决定（要不要改模拟盘）时才停
+- 三个克隆：`~/qbreak-src` = 每个交易日 07:40 定时任务用的仓库，**只 `git pull`，不改、不提交被跟踪的文件**（本地改动或本地提交会让
+  定时任务拉不下来，模拟 / 实盘就用旧代码、旧数据）；`~/qbreak-dev` = 改代码、做研究用的第二个克隆（同一分支；第一次需要时建：
+  `git clone -b claude/rakuten-auto-trading-review-ka7lf0 https://github.com/shimitsu123/public.git ~/qbreak-dev`）；
+  `~/qbreak-sim` = 本机例行任务专用的第三个克隆（`mac_setup.sh` 建；只有例行任务在这里改 `var/`、提交、推送，对话里不在那里改东西）
+- 在 `~/qbreak-dev` 里改代码 / 做研究（规则同「在云端」一节：先登记后运行、全部测试通过才提交、不写模型名、只推开发分支、不开 PR），
+  流程（命令在 `quant_breakout/` 下运行，用哪个克隆里的 `scripts/dev.sh` 都行）：
+  `bash scripts/dev.sh check`（第一次 / 出问题时；只读：分支与上游、远端、推送权限、git 身份有没有设、Python ≥ 3.10 + pytest、`~/qbreak-src` 有没有本地改动）
+  → 在 `~/qbreak-dev` 改 → `bash scripts/dev.sh test`（全部通过才提交）→ `git commit`（不写模型名）
+  → `bash scripts/dev.sh push`（有未提交的改动 → 停下；先 `git pull --rebase`，冲突 → 停下、不自动解决；推送；再让 `~/qbreak-src` 快进
+  ——它有本地改动不动、交易日 07:30〜09:35 JST 不换代码（执行器早上的几次运行用同一份代码），不拉也行，下一个交易日 07:40 会自动拉）；
+  推不上去（没登录 GitHub）→ 停下，请用户自己在终端 `gh auth login`（或配 SSH 钥匙；令牌 / 密码不在对话里贴）；
+  git 的 user.name / user.email 没设 → 请用户自己设（公开仓库：用不暴露个人信息的名字与 GitHub 的 noreply 邮箱），Claude 不替用户填
+- 例行任务（2026-10-09 起）：模拟盘日报（周一至五 06:45）、影子账户判断（07:45）、季度复核（1 / 4 / 7 / 10 月 12 日 09:56）在 Mac 的
+  Claude 桌面版本机任务里跑（工作文件夹 `~/qbreak-sim`，说明书 `quant_breakout/routines/`）；云端同名例行任务是后备（Mac 当天做过就跳过：
+  `bash scripts/routines.sh done-today …`）；改 / 停要用户在对话里另外确认。前提：桌面版开着（登录项）、Keep computer awake 打开、
+  Mac 工作日 06:40 自动唤醒（用户自己在终端 `sudo pmset repeat wakeorpoweron MTWRF 06:40:00`）。它们（本机或云端）每天推 `var/`，
+  所以 dev 克隆推之前一定先 `git pull --rebase`（`dev.sh push` 自己先做）；Mac 的执行器仍在每个交易日 07:40 `git pull` 读它们推的文件；
+  用户问「例行任务今天跑了吗」→ `bash scripts/routines.sh check`（只读）
+- 停下单：在 Mac 上直接说「停 / 今天不要下单」→ 建本地 `~/.qbreak/home/HALT`（见下面「实盘相关」）；人不在 Mac 旁边时才用云端对话的远程停止（「在云端」一节）
+- `run.py sim-day` / `sim-*` / `report` / `optimize` 等对仓库 `var/` 的命令（会改被跟踪的文件）只由例行任务在 `~/qbreak-sim` 里运行
+  （`bash scripts/routines.sh run …`）；`~/qbreak-src` / `~/qbreak-dev` 里不跑
+- 执行器只经 `scripts/liveu.sh`（它把数据目录设成 `~/.qbreak/home`）；直接跑 `run.py` 时先 `export QBREAK_HOME=~/.qbreak/home`
+  （只读命令也一样；数据目录在仓库里时立花的入口会拒绝运行——公开仓库）；Python 用 `~/.qbreak/venv/bin/python`（macOS 自带的 3.9 不够）
+- 手机通知（2026-10-11 起：用户「不用 Gmail，直接在 qbreak 里通知并记录」）：qbreak 推送（网页 App，`qbreak/webpush.py`）+ 通知记录（数据目录 out/notifications.jsonl，面板「消息 → 通知记录」）；
+  邮件 / webhook 改为可选（不再推荐 email-setup）。外部心跳（healthchecks.io 之类）2026-10-14 起不用（用户「不用做 healthchecks.io 心跳 check，改为每天用 qbreak 进行推送就可以」）：
+  09:30 自检每个工作日推一条到手机（通过 / 休市 / 没通过 / 自检出错；同一天的「通过」只推一次，早些时候没通过或那条没推到手机 → 再推；2026-10-15 起有今天不会下的单 / 该下没下的指令（含没读的固定口数）/ 写了撤单而面板自动下单暂停、单还挂着（2026-10-16 起）→ 没通过、标题以「★ 交易：」开头，与交易页 / 执行器汇总同一个判断 `live_ops.outlook`），哪天没收到 = Mac 多半关机 / 睡着 / 断网；每次登录立花本番（デモ不算）都推一条「立花本番 API 登录 HH:MM：做什么」+ 接下来做什么（2026-10-17 起，`brokers/tachibana.push_login`；不认识的登录 → 说「停」/ API 無効化）；不再建议设 `qbreak-heartbeat`（设了照样 ping，没设是正常）。
+  通道的地址是密钥，放钥匙串（`qbreak-webhook`：Discord / Slack / ntfy；`qbreak-smtp`），
+  用户自己在终端 `security add-generic-password -s qbreak-webhook -a qbreak -w`（回车后输入，不贴进聊天）；邮件（2026-10-09 起用这个）：用户自己在「终端」App
+  运行 `bash ~/qbreak-src/quant_breakout/scripts/liveu.sh email-setup`（交互输入 Gmail 应用专用密码，先发一封测试邮件、发成了才存进钥匙串 `qbreak-smtp`；Claude 不运行它）；Claude 只说有 / 没有；
+  试发 `bash scripts/liveu.sh notify-test`；09:30 自检（LaunchAgent `com.qbreak.watchdog`）：问「今天的自检过了吗」→ 看
+  `~/.qbreak/home/out/watchdog_{paper,tachibana}.json` 或跑 `bash scripts/liveu.sh watchdog --dry`（只判定、打印，不写、不发）；
+  不带 `--dry` = 重新自检一次（会重写结果文件；没通过会再推一条手机通知，通过且今天已经推过就不再推）→ 只在用户要「再自检一次」时跑
+- J-Quants（Standard，研究用）：密钥放钥匙串（服务名 `qbreak-jquants`，用户自己用 `security add-generic-password -s qbreak-jquants -a qbreak -w` 存），
+  命令需要キー时用 `bash scripts/with_jquants.sh <命令>`（从钥匙串读进那个进程的环境变量、绝不回显）；每天的新数据由
+  LaunchAgent `com.qbreak.jquants`（周一至五 19:30 + 07:05）取，整理结果 `~/.qbreak/home/out/jq_today.json`（只展示 / 研究）
+- 实盘相关（立花）：不创建 `~/.qbreak/home/ARM`、不删除 `HALT`、不加 `--no-arm`、不用 `--resolve` 登记成交，除非用户在这次对话里明确要求；
+  2026-10-09 起同级（用户这次明确说才运行）：撤单 `bash scripts/liveu.sh cancel [<cid>…] --broker tachibana` / 停并撤单 `bash scripts/liveu.sh halt-cancel --broker tachibana`（不写 `--broker` = 有账本的都撤；用户说「撤单」；只撤执行器自己今天还挂着的单；一起下的买单和卖单整组撤 `bash scripts/liveu.sh cancel <cid> --group --broker …`（先跑只读的 `liveu.sh cancel-plan <cid> --broker …` 告诉用户会撤哪些；先撤买单、确认没成交再撤卖单，靠这一组卖单的钱、已经发到交易所的买单也一起先撤，买单已成交 / 撤不掉 → 卖单不撤；立花还没确认 → 过 1 分钟再跑同一条命令接着查（最多 10 分钟；这时 cancel-plan 写「会接着查那一条」；面板约 1 分钟后也自动再查，由面板做完的推一条）；命令行只打印、不推送；2026-10-16 起；单笔撤一组里的卖单、同一组的买单（含靠这一组卖单的钱、已经发出的买单）还挂着 / 已成交 → 默认不撤，用户明确说只撤这笔卖单才加 `--solo`；同一组同时只有一个撤单在处理，别的撤单写明理由不做、等它结束再撤（面板 / 手机写的在等，命令行不接过来；一条命令点了彼此有关的几组 → 先写的那组做、其余写理由）；立花那边已经失效 / 被拒的单 = 「不用撤」））、
+  人工代下登记 `liveu.sh adopt --broker tachibana <代码> <BUY|SELL> <股数> <均价>`（用户给出在立花网站上的实际成交）、恢复账本 `liveu.sh restore --broker tachibana <备份文件名>`、
+  换 Mac `liveu.sh adopt-host --broker tachibana`（用户说「换 Mac，账本归这台」，旧 Mac 已停）、临时休市 `liveu.sh closed add|rm`（先核对 JPX 官方公告）；
+  只读的可以直接跑：`liveu.sh unknown|reconcile|broker --broker tachibana`（会登录立花一次；执行器在跑时自己等它结束再登录，最多 5 分钟；所有登录本番的进程共用一把会话锁）、`liveu.sh quality|export|onboard`（只读账本 / 上线检查，不登录）、`liveu.sh restore --broker tachibana --list`、`liveu.sh closed list`；前一晚预检 `liveu.sh precheck` 会登录立花一次 → 用户要「再预检一次」才跑；`liveu.sh precheck --ack-api <日子>`（API 新版本的预告核对过、不用更新 → 只清这个提醒，不登录）用户确认后才跑；
+  Mac 失控 / 联系不上时的最后停止手段：告诉用户自己在立花网页把「ｅ支店・API 利用設定」改成「無効化」（MACOS.md §8；Claude 不登录、不操作立花网站）；
+  上线头几天 / 退出实盘 / 换 Mac 照 MACOS.md §1.6 / §1.14；
+  用户说「停 / 今天不要下单」→ 立刻建 `~/.qbreak/home/HALT`（停下单不用再确认）；不在执行器之外向立花发任何单（不写临时脚本调 API 下单）；
+  用户要删 HALT（恢复下单）→ 删之前先跑 `bash scripts/liveu.sh manual list --broker <账本>`（有账本的都看），把 HALT 期间等着的手动指令和写于哪天告诉用户
+  （解除后照原样执行；不要的先 `manual cancel`；2026-10-13 起）；
+  「做一次 HALT 演练」→ `bash scripts/liveu.sh halt-drill`（只删它自己建的演练 HALT；真的 HALT 存在时不演练）；「能上实盘了吗」→ `bash scripts/liveu.sh gate`（只读）；
+  用户说入金 / 出金 → `bash scripts/liveu.sh flow <金额>`（出金写负数；只影响收益的计算与提醒，不下单；面板的「登记入金 / 出金」同一个函数）；
+  出金预留 `--flow-reserve`（到账前决策按扣掉它算 = 动仓位：个股仓位变小、ETF 不买回、现金不够先卖核心 ETF；到账后自动解除）只在用户明确说「先留着 / 预留」时加；
+  口座课税区分不是特定口座时执行器不发单（〔77〕C T5）：一般口座（3）只有用户在对话里明确同意才建 `~/.qbreak/home/TAX_GENERAL_OK`，NISA（5 / 6）不放行；
+  交易时段保持清醒 `bash scripts/install_launchd_awake.sh`（耗电）只在用户同意时装；
+  手动卖出 / 减仓 / 调整持仓 / 买入 / 闲置资金比例（2026-10-06 起）：只经 `bash scripts/liveu.sh manual …` 或本机操作面板 http://127.0.0.1:8765/ 写「手动指令」，
+  下单由执行器做（2026-10-07 起）：盘中（09:00〜11:30、12:30〜15:25）写的马上下（面板叫 `liveu.sh run --phase now`）、开盘前 / 午休写的等开盘、
+  收盘后 / 休市日写的等下一个交易日开盘（闸门、对账照常，持仓核对不会停；07:40 跑完之后写的卖出 / 减仓：面板 07:45〜08:55 叫 `--retry` 加进寄付单；
+  今天早上的运行没完成时盘中写的 = 补跑之后才下：模拟账户面板自动补跑，立花不自动补跑；2026-10-14 起）；
+  模拟账户的寄付单 / 等开盘后的买单在成交日 09:25 前后按开盘价当天撮合（2026-10-17 起开盘价 = 立花本番的始値〔只读登录一次、取完登出，`qbreak/rt_quotes.py`〕，取不到 → Yahoo 1 分钟线；面板叫 `liveu.sh run --broker paper --phase open`；第二天早上按正式开盘价改记，
+  当天没撮合成的照旧第二天早上撮合；2026-10-15 起）；
+  用户说「再试一次」（面板自动下单暂停 / 盘中没下成）→ 先跑 `bash scripts/liveu.sh manual list --broker <账本>` 告诉用户会下什么，
+  再跑 `bash scripts/liveu.sh run --broker <账本> --phase now`（盘中；开盘前用 `--retry`）；用户在这次对话里明确说要卖 / 减 / 加 / 买 / 改比例才写，没说账本就用模拟账户
+  （`--broker paper`），立花本番要用户说「立花」；写之前告诉用户：什么时候下单（`manual list` 显示）、卖 / 减的预计收益（面板确认框或 `/api/quotes` 的 est：估算，现价约晚 20 分钟、税前，不是承诺；今天已有成交、还没对账的票不给，对账之后才准）、按什么价下单（`/api/quotes` 的 basis：立花盘中按下单那一刻的实时现价挂限价 卖 −0.5% / 买 +0.5% 且 ≤ 收盘 ×1.03（2026-10-09 起夹在当天的制限値幅里；取不到现价不发成行），模拟账户盘中按立花本番的実時現在値（2026-10-17 起；取不到 → Yahoo 现价，成交说明写来源），盘外按开盘价）、盘中的单发出后可以撤（面板「交易」→「今天要成交的单」的「撤单」〔之后才发的在点开的「另有 …」里、今天不会再发的还没发出的单在「已结束 / 不是今天的」里〕或 `liveu.sh cancel`，用户说「撤单」才做；已经成交的部分撤不了；立花网站 / 手机网站也能撤；2026-10-15 起执行器还没发出的单〔计划 / 等开盘后；2026-10-17 起还有被挡、今天还会再发的〕也能撤 = 执行器不再发；2026-10-17 起「交易」里还没照它调的固定口数 / 还差几口的那一行有「不补了… / 撤回…」〔固定成现在的口数 / 改回上一次照它调的 / 恢复按规则，照旧再给「确认下单」框〕、还没照它调的闲置资金比例有「撤回…」〔改回上一次照它调的比例〕，下一次决策规则自己排的单那时才有：要停 = HALT 或 07:40 之后、09:00 之前撤单；撤凑钱的卖单 → 靠它的钱的买单一起撤或按现在的钱重算〔照常 / 减股 / 不下 + ★ 交易 推送〕，撤之前告诉用户会影响哪几笔买单）、
+  卖出后默认 20 个交易日不自动买回、模拟账户的手动操作会中断上线门槛「连续一致」的天数；
+  调整持仓（`manual adjust <代码> --shares N | --yen 金额 | --pct %`，可加可减）的加仓只加**已经持有**的个股；
+  拿着的核心 ETF（2026-10-07 起）也能卖出 / 调整（面板 ETF 下面的按钮或 `manual sell|adjust|trim <ETF 代码>`）：换算成「闲置资金比例」、之后每天按它，
+  比例对全部核心 ETF 一起生效（同时拿两只时另一只也跟着变 → 写之前告诉用户）；ETF 卖出全部 / 比例 0% = 停买闲置资金 ETF（钱留现金）：
+  停着时规则从「不拿」变成「拿」= 买入信号，只提醒（通知 / 日志 / 面板）、不自动买 → 用户在这次对话里说「确认买入 / 恢复买 ETF」才写
+  `manual core --pct 100`（Claude 不主动建议恢复）；
+  核心 ETF 固定口数（2026-10-11 起）：`manual corefix <ETF 代码> --units N | --yen 金额 | --clear` 或面板 ETF 下面「买入… / 固定口数… / 恢复按规则」
+  = 这只 ETF 正好调到 N 口、不再按规则（牛熊 / 股债相关）自动调（2026-10-15 起与买卖同一个时段口径：盘中写的马上按现价、决策之后的开盘前 / 午休写的开盘后马上按现价限价、
+  决策之前写的进那次决策、收盘后 / 休市日写的进下一次决策；盘中核心 ETF 买入限价 ≤ 收盘 ×1.02；钱不够先卖没固定的核心 ETF）；其余闲置资金照规则分（规则不拿别的时留现金）；用户在这次对话里明确说才写，写之前说清楚这些；
+  买入新股（`manual buy <代码>`，默认按规则的仓位，或 `--shares / --yen / --pct`；面板「建议的股票」的「买入…」）= 与规则的新仓同一条路：占名额（个股最多 4 只，
+  满了只能「全部换成这只」）、不能买核心 ETF、手动卖出后不买回期内的票要先解除；加仓与买入：开盘前写的进新收盘的决策（寄付指値 = 收盘 ×1.03）、
+  已经决策过 / 盘中写的开盘后盘中马上买（限价 = min(现价 +0.5%, 收盘 ×1.03)，现价超过收盘 ×1.03 不买）、今天已经有执行器单的票明天开盘再处理、今天已成交、还没对账的票（2026-10-16 起，`MO.today_why`）：今天买进的个股成交日开盘前 / 盘中 / 午休不能卖 / 减 / 调（收盘后 15:25 起 / 周末写的照常，对账之后执行），今天已卖光的不用再点卖出、再买要等对账之后（收盘后 15:25 起写）→ 写之前告诉用户、
+  钱不够先卖核心 ETF（面板默认「各持仓平摊卖」：个股写成调仓往下先卖，2026-10-12 起）、手动买入 / 加仓不设单只上限（最多到总权益；规则自己的新仓仍 ≤ 34%）、资格检查 / 立花能不能买 / 新仓倍数 0 / 决算前的票不买、只做一次；
+  买入拖到最大 / 名额满 / 手选「其他全部卖出」（2026-10-13 起）= 整批（其他个股「卖出全部」〔默认 20 个交易日不自动买回；「交易」里「恢复按规则」一次解除这一批〕、取消固定口数、闲置资金比例 0%〔停买 ETF，恢复要用户在对话里确认〕、这只按全卖之后的钱买〔不留 1% 现金缓冲〕）
+  只在早上的决策里一起做（哪天开盘做 = `manual_orders.allin_when`：上一次决策的 K 线之后那根的决策，过了 08:55 / 执行器正在跑就再晚一天，祝日前后也对），那次决策先过闸门、被挡 / 那次运行不下单则整批不做什么都不动；
+  全卖也不够一手就不买留现金、开盘跳空 / 没成交则其他已卖留现金不重买、规则对别的票仍可能用现金开新仓 —— 写之前把这些告诉用户；撤回 / 撤销撤回同批一起（面板与 `manual cancel` 同一个函数；
+  同批卖单还挂在交易所〔立花 07:40 之后〕→ 撤回被拒，要先用「撤单」撤卖单；同批的单条不能单独撤回 / 撤销；同时只能有一个「全部换成」，等着时不能另改比例 / 固定口数）；
+  加仓与买入都是用户自己的决定（「赢家加仓」研究没通过；面板列的是规则的候选，不是 Claude 的建议；观察中的排序 = 出买入信号的历史比例（都很低，只是排序与展示）；没触发信号的票没有回测验证）→ Claude 不主动建议加仓或买哪只；
+  用户要在立花网站 / 手机网站（立花没有原生 App）上直接买卖执行器管的股票（股票池 + 核心 ETF）→ 先说明这会让第二天的持仓核对停下，建议先 HALT 再商量；
+  已经买卖了 → 第二天早上之前用 `adopt` 登记（用户给实际成交数与均价）；
+  下单前资格检查（`qbreak/eligibility.py`）与「立花能不能买」检查（`qbreak/tradable.py`：JPX 市場区分 + 立花銘柄マスタ）挡掉的票不要绕过；手上的票被标记（被踢出日経225 / JPX 指定 / 上場廃止预定）时规则不自动卖 →
+  告诉用户、由用户决定（要卖就写手动卖出指令 `liveu.sh manual sell <代码>`）；名单差异（`run.py eligibility`）要改 `qbreak/universes.py` 须用户确认并记 sim_changes.md；
+  退市时间表（`run.py delist-schedule`，`var/delist_schedule.json`）到了上場廃止日自动从股票池去掉（只减），补入仍要用户确认
+- **给用户的面板链接（2026-10-11 再发防止：用户在 iPhone 上点了 127.0.0.1 打不开）**：对话、通知、页面里给「手机用」的链接一律写手机地址
+  （`bash scripts/liveu.sh phone status` 显示的 https://<机器名>.<tailnet>.ts.net/），`http://127.0.0.1:8765/` 只在说 Mac 本机时写、并注明「只在这台 Mac 上能打开」；
+  手机推荐从主屏幕的 qbreak 图标打开（网页 App，推送也要它）；手机连不上 → 先 `python -m qbreak.mac_status --print`（只读）看「手机访问」那一行
+- 手机上操作（2026-10-06 起）：只用 Tailscale **Serve**（`bash scripts/liveu.sh phone on|off|status|forget`；只在用户自己的 tailnet 里），
+  **绝不用 Tailscale Funnel**、不把面板绑到 127.0.0.1 以外、不用别的公开转发；第一次打开会显示机器名（会写进公开的证书透明度日志）→
+  用户 2026-10-06 已确认机器名 `node`（`mac_setup.sh --phone node` 只在机器名正好是 node 时才打开）；名字不一样就告诉用户、用户同意才换名字再运行；
+  2026-10-07 起手机默认按 Tailscale 账户登录（不用配对）：只认这台 Mac 登录的 Tailscale 账户，只信任 127.0.0.1 上、路径带着 Serve 路径密钥（`phone on` 生成，Serve 的目标 = `http://127.0.0.1:8766/<路径密钥>`）的请求里的 Tailscale-User-Login 头，经 Funnel 来的请求一律拒绝；配对码留作备用；改登录方式（`bash scripts/liveu.sh phone identity on|off`）要用户在这次对话里明确说（`phone forget` 也会关掉按账户登录；手机丢了 → 先请用户在 Tailscale 管理页删掉那台手机，再打开）；账户名只显示打码后的、不写进仓库 / 对话 / 日志；路径密钥不显示、不读出 `~/.qbreak/home/panel_phone.json`，排查用 `bash scripts/liveu.sh phone status`、不把 `tailscale serve status` 的原文贴进对话；配对码只显示在 Mac 的本机操作面板上：Claude 不调 `/api/pair/new`、不读 `~/.qbreak/home/panel_devices.json`、
+  不在对话 / 终端 / 日志里写配对码或设备令牌（请用户自己在 Mac 屏幕上点「生成配对码」）；手机页面的 HALT 只能建、不能解除（解除照旧只在 Mac 上、
+  用户明确说）；手机上点的卖出 / 减仓 / 比例和本机面板一样只是「手动指令」（规则同上一条）
+- 排查先看：`~/.qbreak/home/logs/com.qbreak.liveu.*.out|err`、`~/.qbreak/home/out/live_unified_paper_journal.md`、
+  页面 `~/.qbreak/home/out/page_paper.html`、`bash scripts/liveu.sh --broker paper --status`、`launchctl list | grep qbreak`；
+  市场仪表盘 / 经济威胁提醒（每 15 分钟）：`~/.qbreak/home/out/dashboard.html`、`~/.qbreak/home/logs/com.qbreak.news.out|err`（只展示与提醒，不下单）；
+  J-Quants：`~/.qbreak/home/logs/com.qbreak.jquants.out|err`；登录 / 开机后的自动启动（补跑、打开页面）：
+  `~/.qbreak/home/logs/com.qbreak.login.out|err`；操作面板 / 手动指令：`bash scripts/liveu.sh manual list [--broker tachibana]`、
+  `~/.qbreak/home/logs/com.qbreak.panel.{out,err,retry.log}`；盘中观测（面板的线程每 5 分钟算一次，只展示）：`bash scripts/liveu.sh intraday`（只读）、
+  `~/.qbreak/home/logs/com.qbreak.panel.intraday.log`；手机：`bash scripts/liveu.sh phone status`（只读，不含配对码）；
+  执行器这次跑成没有：`~/.qbreak/home/out/live_unified_{paper,tachibana}_run.json`（面板顶部也显示）；09:30 自检：`~/.qbreak/home/out/watchdog_{paper,tachibana}.json`、
+  `~/.qbreak/home/logs/com.qbreak.watchdog.out|err`；本地改代码 / 推不上去：`bash scripts/dev.sh check`（只读）；
+  本机例行任务（今天跑了没有、是 Mac 还是云端后备做的）：`bash scripts/routines.sh check`（只读）、桌面版 Code → Routines → Review history；
+  立花（2026-10-09 起）：前一晚预检 `~/.qbreak/home/out/precheck_tachibana.json`、状态不明的单的候选 `bash scripts/liveu.sh unknown --broker tachibana`、
+  持仓核对 `bash scripts/liveu.sh reconcile --broker tachibana`、账本备份 `bash scripts/liveu.sh restore --broker tachibana --list`（都只读）、
+  新代码的冒烟测试 `~/.qbreak/home/logs/smoke_test.log`
+
+## 在云端（可选：例行任务的后备；人不在 Mac 旁边时也能用）
+- claude.ai/code 会话 / 例行任务（模拟盘日报、影子账户判断、每季复核）。2026-10-09 起改代码 / 推送在 Mac 本地做（上一节），不需要云端会话；
+  例行任务主要在 Mac 的本机任务里跑，云端同名例行任务是后备（Mac 当天做过就跳过）；改 / 停要用户在对话里另外确认
+- 开发分支 `claude/rakuten-auto-trading-review-ka7lf0`：只推这个分支，不开 PR（除非用户要求）
+- 提交前在 `quant_breakout/` 跑 `set -o pipefail; python -m pytest -q`（必须全部通过）；推之前 `git pull --rebase`（例行任务每天也推 `var/`）
+- 代码、注释、提交信息里不写模型名
+- 用户在云端对话里说「停 / 今天不要下单」（人不在 Mac 旁边）→ 立刻在 `quant_breakout/` 跑 `python run.py remote-halt --reason "<用户原话>"`，
+  提交并推送 `var/HALT_REMOTE`（不用再确认；`git pull --rebase` 后推）→ Mac 的执行器下一次运行（07:40 / 08:35 / 09:05 / 09:20）建本地 HALT；
+  只能停、不能恢复（恢复只在 Mac 上、用户明确说）；告诉用户：已经发到交易所的单不会被撤（要撤：手机面板「交易」→「今天要成交的单」的「撤单」、
+  在 Mac 对话里说「撤单」，或立花网站 / 手机网站 https://kabuka.e-shiten.jp/mfds_smp.php）；Mac 失控 / 联系不上 → 最后停止手段（MACOS.md §8：用户自己在立花网页把 API「無効化」）
+- 执行器新加从仓库 `var/` 读的输入文件：加进 `quant_breakout/var/sync_inputs.txt`（`liveu.sh` 每次现读，07:40 那次 git pull 之后当天就同步）
+- shell 脚本：`$变量` 后面紧跟中文 / 全角字符时写成 `${变量}`（macOS 自带的 bash 3.2 在 UTF-8 下会把下一个字节算进变量名，
+  `set -u` 时直接退出；`tests/test_shell_scripts.py` 会查）
+- Python：Mac 是 3.12、云端例行任务是 3.11 → 代码要能在 3.10 / 3.11 上 import：f-string 的 `{}` 里不用外层同种引号、反斜杠、注释、
+  单引号 f-string 里不跨行（先算好放进变量再插入）；`tests/test_py_compat.py` 会查（2026-10-16 云端后备的 sim-day 因此崩溃过）

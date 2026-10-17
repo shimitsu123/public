@@ -1,0 +1,1918 @@
+{
+ "stage": "explore",
+ "git": {
+  "rev": "605ef84",
+  "dirty": false
+ },
+ "windows": {
+  "X": [
+   "2017-01-04",
+   "2021-12-30"
+  ]
+ },
+ "seeds": 30,
+ "confirm_ids": [],
+ "n_features": 6716,
+ "n_pool": 2880,
+ "base_full": {
+  "X": {
+   "n": 2880,
+   "win": 33.19,
+   "mean": 0.146,
+   "sd": 6.04,
+   "hold": 9.8
+  }
+ },
+ "cands": {
+  "N1": {
+   "desc": "信用買い残 4 周 ≤ −10%（资格池：可用 ≤ 15 日、相隔 26〜36 天、L_4 ≥ 1 万株、无拆股、IssType 1/2）",
+   "n_keep": 640,
+   "n_elig": 2155,
+   "windows": {
+    "X": {
+     "cand": {
+      "n": 640,
+      "win": 33.12,
+      "mean": -0.115,
+      "sd": 6.03,
+      "hold": 9.7
+     },
+     "base_elig": {
+      "n": 2153,
+      "win": 34.93,
+      "mean": 0.321,
+      "sd": 6.44,
+      "hold": 10.1
+     },
+     "excluded": {
+      "n": 1513,
+      "win": 35.69,
+      "mean": 0.505,
+      "sd": 6.6,
+      "hold": 10.3
+     },
+     "base_full": {
+      "n": 2877,
+      "win": 33.23,
+      "mean": 0.15,
+      "sd": 6.04,
+      "hold": 9.8
+     },
+     "keep_minus_excl": -0.62,
+     "boot": {
+      "mean_lo": -0.609,
+      "mean_hi": 0.42,
+      "win_lo": 28.87,
+      "win_hi": 37.54
+     },
+     "diff_lower": -1.085,
+     "controls": {
+      "PLW": {
+       "win": 37.04,
+       "mean": 0.603,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      },
+      "PLW0": {
+       "win": 37.5,
+       "mean": 0.578,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      },
+      "PS": {
+       "win": 38.26,
+       "mean": 0.729,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      }
+     },
+     "need": {
+      "std_keep": {
+       "n": 761,
+       "win": 33.77,
+       "mean": -0.1,
+       "sd": 5.43,
+       "hold": 9.8
+      },
+      "std_drop": {
+       "n": 1392,
+       "win": 35.56,
+       "mean": 0.55,
+       "sd": 6.92,
+       "hold": 10.3
+      },
+      "neg_keep": {
+       "n": 506,
+       "win": 32.81,
+       "mean": -0.073,
+       "sd": 6.06,
+       "hold": 9.5
+      },
+      "neg_drop": {
+       "n": 1647,
+       "win": 35.58,
+       "mean": 0.441,
+       "sd": 6.55,
+       "hold": 10.3
+      },
+      "reverse": {
+       "n": 545,
+       "win": 38.17,
+       "mean": 0.651,
+       "sd": 6.37,
+       "hold": 10.8
+      }
+     },
+     "eff_range": [
+      "2017-01-04",
+      "2021-12-29"
+     ],
+     "segments": {
+      "band0": {
+       "n": 243,
+       "win": 37.04,
+       "mean": 0.231,
+       "sd": 6.0,
+       "hold": 9.4
+      },
+      "band1": {
+       "n": 306,
+       "win": 30.07,
+       "mean": -0.171,
+       "sd": 6.38,
+       "hold": 9.8
+      },
+      "band2": {
+       "n": 91,
+       "win": 32.97,
+       "mean": -0.853,
+       "sd": 4.62,
+       "hold": 10.1
+      },
+      "lturn0": {
+       "n": 151,
+       "win": 36.42,
+       "mean": 0.619,
+       "sd": 6.52,
+       "hold": 9.8
+      },
+      "lturn2": {
+       "n": 262,
+       "win": 30.92,
+       "mean": -0.602,
+       "sd": 5.07,
+       "hold": 9.9
+      },
+      "u1": {
+       "n": 82,
+       "win": 35.37,
+       "mean": -0.768,
+       "sd": 4.66,
+       "hold": 10.2
+      },
+      "lot25": {
+       "n": 518,
+       "win": 33.01,
+       "mean": -0.088,
+       "sd": 6.31,
+       "hold": 9.6
+      },
+      "va5000": {
+       "n": 211,
+       "win": 30.81,
+       "mean": -0.619,
+       "sd": 5.0,
+       "hold": 10.0
+      },
+      "short": {
+       "n": 54,
+       "win": 29.63,
+       "mean": -1.203,
+       "sd": 4.97,
+       "hold": 9.6
+      },
+      "frgn_pos": {
+       "n": 284,
+       "win": 33.8,
+       "mean": -0.223,
+       "sd": 5.03,
+       "hold": 9.9
+      },
+      "pbr1": {
+       "n": 340,
+       "win": 33.82,
+       "mean": 0.304,
+       "sd": 7.0,
+       "hold": 10.1
+      },
+      "roe_eqar": {
+       "n": 130,
+       "win": 36.15,
+       "mean": -0.294,
+       "sd": 4.8,
+       "hold": 10.5
+      },
+      "net_cash": {
+       "n": 33,
+       "win": 33.33,
+       "mean": 0.007,
+       "sd": 3.08,
+       "hold": 10.6
+      },
+      "disc7": {
+       "n": 101,
+       "win": 39.6,
+       "mean": 0.182,
+       "sd": 5.24,
+       "hold": 11.8
+      }
+     },
+     "by_year": {
+      "2017": {
+       "n": 216,
+       "win": 46.3,
+       "mean": 0.847,
+       "sd": 5.31,
+       "hold": 11.3
+      },
+      "2018": {
+       "n": 109,
+       "win": 18.35,
+       "mean": -1.397,
+       "sd": 4.14,
+       "hold": 7.0
+      },
+      "2019": {
+       "n": 99,
+       "win": 36.36,
+       "mean": -0.036,
+       "sd": 4.72,
+       "hold": 11.3
+      },
+      "2020": {
+       "n": 72,
+       "win": 22.22,
+       "mean": -0.049,
+       "sd": 10.25,
+       "hold": 7.9
+      },
+      "2021": {
+       "n": 144,
+       "win": 27.78,
+       "mean": -0.676,
+       "sd": 5.94,
+       "hold": 9.2
+      }
+     },
+     "excl_by_band": {
+      "0": {
+       "n": 676,
+       "win": 36.54,
+       "mean": 0.939,
+       "sd": 7.43,
+       "hold": 9.6
+      },
+      "1": {
+       "n": 696,
+       "win": 34.91,
+       "mean": 0.191,
+       "sd": 5.89,
+       "hold": 10.8
+      },
+      "2": {
+       "n": 141,
+       "win": 35.46,
+       "mean": -0.025,
+       "sd": 5.52,
+       "hold": 11.5
+      }
+     },
+     "r20q_keep_vs_excl": {
+      "0": {
+       "keep": {
+        "n": 92,
+        "win": 31.52,
+        "mean": 0.188,
+        "sd": 7.03,
+        "hold": 9.9
+       },
+       "excl": {
+        "n": 311,
+        "win": 31.83,
+        "mean": 0.328,
+        "sd": 6.75,
+        "hold": 10.5
+       }
+      },
+      "1": {
+       "keep": {
+        "n": 117,
+        "win": 32.48,
+        "mean": -0.055,
+        "sd": 4.74,
+        "hold": 10.3
+       },
+       "excl": {
+        "n": 268,
+        "win": 41.42,
+        "mean": 0.514,
+        "sd": 4.87,
+        "hold": 11.0
+       }
+      },
+      "2": {
+       "keep": {
+        "n": 118,
+        "win": 35.59,
+        "mean": 0.08,
+        "sd": 4.66,
+        "hold": 9.6
+       },
+       "excl": {
+        "n": 297,
+        "win": 32.32,
+        "mean": 0.461,
+        "sd": 5.72,
+        "hold": 10.0
+       }
+      },
+      "3": {
+       "keep": {
+        "n": 164,
+        "win": 33.54,
+        "mean": -0.01,
+        "sd": 5.23,
+        "hold": 9.2
+       },
+       "excl": {
+        "n": 323,
+        "win": 38.39,
+        "mean": 1.144,
+        "sd": 7.62,
+        "hold": 10.3
+       }
+      },
+      "4": {
+       "keep": {
+        "n": 149,
+        "win": 32.21,
+        "mean": -0.62,
+        "sd": 7.76,
+        "hold": 9.7
+       },
+       "excl": {
+        "n": 314,
+        "win": 35.03,
+        "mean": 0.057,
+        "sd": 7.31,
+        "hold": 9.9
+       }
+      }
+     },
+     "gate_x": false,
+     "gate_fails": [
+      "每笔 -0.12% < B_c +0.32% + 0.5",
+      "胜率 < B_c",
+      "每笔 ≤ PLW 95 分位",
+      "每笔 ≤ PS 95 分位"
+     ],
+     "sign_x": -1.0
+    }
+   }
+  },
+  "N2": {
+   "desc": "自社株 b ∈ [0.25%, 20%]（最近 FS 行 ≤ 140 天）",
+   "n_keep": 159,
+   "n_elig": 2627,
+   "windows": {
+    "X": {
+     "cand": {
+      "n": 159,
+      "win": 30.82,
+      "mean": -0.613,
+      "sd": 4.85,
+      "hold": 9.6
+     },
+     "base_elig": {
+      "n": 2482,
+      "win": 33.04,
+      "mean": 0.107,
+      "sd": 6.01,
+      "hold": 9.7
+     },
+     "excluded": {
+      "n": 2323,
+      "win": 33.19,
+      "mean": 0.156,
+      "sd": 6.08,
+      "hold": 9.7
+     },
+     "base_full": {
+      "n": 2698,
+      "win": 33.1,
+      "mean": 0.151,
+      "sd": 6.09,
+      "hold": 9.8
+     },
+     "keep_minus_excl": -0.769,
+     "boot": {
+      "mean_lo": -1.424,
+      "mean_hi": 0.291,
+      "win_lo": 23.03,
+      "win_hi": 39.31
+     },
+     "diff_lower": -1.603,
+     "controls": {
+      "PLW": {
+       "win": 38.65,
+       "mean": 1.306,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      },
+      "PLW0": {
+       "win": 37.7,
+       "mean": 0.758,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      },
+      "PLS": {
+       "win": 37.83,
+       "mean": 0.882,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      },
+      "PM": {
+       "win": 36.04,
+       "mean": 0.854,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      }
+     },
+     "need": {
+      "reverse": {
+       "n": 57,
+       "win": 35.09,
+       "mean": 0.116,
+       "sd": 4.15,
+       "hold": 9.1
+      },
+      "b05": {
+       "n": 126,
+       "win": 31.75,
+       "mean": -0.528,
+       "sd": 5.18,
+       "hold": 9.2
+      },
+      "pmatch": {
+       "mean": 0.23756666666666665,
+       "win": 31.514666666666667,
+       "miss_pct": 13.800000000000004
+      }
+     },
+     "eff_range": [
+      "2017-02-22",
+      "2021-11-12"
+     ],
+     "segments": {
+      "band0": {
+       "n": 50,
+       "win": 34.0,
+       "mean": 0.139,
+       "sd": 5.21,
+       "hold": 9.4
+      },
+      "band1": {
+       "n": 67,
+       "win": 22.39,
+       "mean": -1.319,
+       "sd": 5.16,
+       "hold": 8.3
+      },
+      "band2": {
+       "n": 42,
+       "win": 40.48,
+       "mean": -0.38,
+       "sd": 3.59,
+       "hold": 12.1
+      },
+      "lturn0": {
+       "n": 35,
+       "win": 25.71,
+       "mean": -0.568,
+       "sd": 3.74,
+       "hold": 9.3
+      },
+      "lturn2": {
+       "n": 82,
+       "win": 32.93,
+       "mean": -0.968,
+       "sd": 4.35,
+       "hold": 10.4
+      },
+      "u1": {
+       "n": 38,
+       "win": 39.47,
+       "mean": -0.334,
+       "sd": 3.55,
+       "hold": 12.1
+      },
+      "lot25": {
+       "n": 120,
+       "win": 27.5,
+       "mean": -0.604,
+       "sd": 5.15,
+       "hold": 9.1
+      },
+      "va5000": {
+       "n": 70,
+       "win": 34.29,
+       "mean": -0.837,
+       "sd": 4.17,
+       "hold": 10.7
+      },
+      "short": {
+       "n": 22,
+       "win": 22.73,
+       "mean": -2.088,
+       "sd": 3.18,
+       "hold": 9.6
+      },
+      "frgn_pos": {
+       "n": 71,
+       "win": 38.03,
+       "mean": -0.373,
+       "sd": 4.9,
+       "hold": 10.2
+      },
+      "pbr1": {
+       "n": 90,
+       "win": 28.89,
+       "mean": -0.22,
+       "sd": 5.17,
+       "hold": 10.0
+      },
+      "roe_eqar": {
+       "n": 39,
+       "win": 33.33,
+       "mean": 0.01,
+       "sd": 6.6,
+       "hold": 10.4
+      },
+      "net_cash": {
+       "n": 10,
+       "win": 10.0,
+       "mean": -2.636,
+       "sd": 3.73,
+       "hold": 6.3
+      },
+      "disc7": {
+       "n": 27,
+       "win": 33.33,
+       "mean": -0.538,
+       "sd": 5.95,
+       "hold": 10.3
+      }
+     },
+     "by_year": {
+      "2017": {
+       "n": 44,
+       "win": 36.36,
+       "mean": -0.472,
+       "sd": 4.3,
+       "hold": 11.1
+      },
+      "2018": {
+       "n": 20,
+       "win": 15.0,
+       "mean": -1.21,
+       "sd": 2.49,
+       "hold": 7.0
+      },
+      "2019": {
+       "n": 30,
+       "win": 33.33,
+       "mean": -0.026,
+       "sd": 5.78,
+       "hold": 10.1
+      },
+      "2020": {
+       "n": 33,
+       "win": 24.24,
+       "mean": -0.687,
+       "sd": 6.83,
+       "hold": 9.6
+      },
+      "2021": {
+       "n": 32,
+       "win": 37.5,
+       "mean": -0.906,
+       "sd": 2.77,
+       "hold": 8.9
+      }
+     },
+     "excl_by_band": {
+      "0": {
+       "n": 1086,
+       "win": 34.9,
+       "mean": 0.398,
+       "sd": 6.35,
+       "hold": 9.0
+      },
+      "1": {
+       "n": 1052,
+       "win": 31.37,
+       "mean": -0.01,
+       "sd": 5.87,
+       "hold": 10.3
+      },
+      "2": {
+       "n": 185,
+       "win": 33.51,
+       "mean": -0.322,
+       "sd": 5.5,
+       "hold": 10.7
+      }
+     },
+     "r20q_keep_vs_excl": {},
+     "gate_x": false,
+     "gate_fails": [
+      "每笔 ≤ B_c",
+      "每笔 ≤ P-match 均值"
+     ],
+     "sign_x": -1.0
+    }
+   }
+  },
+  "N3": {
+   "desc": "決算日程：since ≥ 10 ∧ 10 ≤ to_exp ≤ 40",
+   "n_keep": 1152,
+   "n_elig": 2779,
+   "windows": {
+    "X": {
+     "cand": {
+      "n": 1152,
+      "win": 31.25,
+      "mean": -0.044,
+      "sd": 5.44,
+      "hold": 9.4
+     },
+     "base_elig": {
+      "n": 2373,
+      "win": 31.9,
+      "mean": 0.057,
+      "sd": 6.17,
+      "hold": 9.7
+     },
+     "excluded": {
+      "n": 1221,
+      "win": 32.51,
+      "mean": 0.152,
+      "sd": 6.79,
+      "hold": 9.9
+     },
+     "base_full": {
+      "n": 2452,
+      "win": 31.89,
+      "mean": 0.061,
+      "sd": 6.16,
+      "hold": 9.7
+     },
+     "keep_minus_excl": -0.196,
+     "boot": {
+      "mean_lo": -0.464,
+      "mean_hi": 0.379,
+      "win_lo": 27.5,
+      "win_hi": 35.01
+     },
+     "diff_lower": -0.701,
+     "controls": {
+      "PLW": {
+       "win": 31.71,
+       "mean": 0.111,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      },
+      "PLW0": {
+       "win": 33.23,
+       "mean": 0.232,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      },
+      "PS": {
+       "win": 32.71,
+       "mean": 0.079,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      }
+     },
+     "need": {
+      "pcal": {
+       "n": 489,
+       "win": 36.4,
+       "mean": 0.247,
+       "sd": 5.95,
+       "hold": 10.2
+      },
+      "post": {
+       "n": 514,
+       "win": 31.32,
+       "mean": 0.168,
+       "sd": 7.05,
+       "hold": 10.3
+      },
+      "post_fs": -0.201,
+      "post_rev": -0.166,
+      "pcal_actual_disc_pct": null
+     },
+     "eff_range": [
+      "2017-08-16",
+      "2021-12-30"
+     ],
+     "segments": {
+      "band0": {
+       "n": 584,
+       "win": 32.36,
+       "mean": 0.179,
+       "sd": 6.15,
+       "hold": 8.5
+      },
+      "band1": {
+       "n": 499,
+       "win": 29.46,
+       "mean": -0.266,
+       "sd": 4.56,
+       "hold": 10.2
+      },
+      "band2": {
+       "n": 69,
+       "win": 34.78,
+       "mean": -0.329,
+       "sd": 4.76,
+       "hold": 11.1
+      },
+      "lturn0": {
+       "n": 435,
+       "win": 31.95,
+       "mean": 0.142,
+       "sd": 6.18,
+       "hold": 8.4
+      },
+      "lturn2": {
+       "n": 294,
+       "win": 31.29,
+       "mean": -0.286,
+       "sd": 4.85,
+       "hold": 10.5
+      },
+      "u1": {
+       "n": 60,
+       "win": 36.67,
+       "mean": -0.132,
+       "sd": 4.98,
+       "hold": 11.2
+      },
+      "lot25": {
+       "n": 911,
+       "win": 32.05,
+       "mean": 0.035,
+       "sd": 5.71,
+       "hold": 9.5
+      },
+      "va5000": {
+       "n": 213,
+       "win": 31.46,
+       "mean": -0.331,
+       "sd": 4.79,
+       "hold": 10.7
+      },
+      "short": {
+       "n": 68,
+       "win": 35.29,
+       "mean": -0.274,
+       "sd": 4.2,
+       "hold": 9.9
+      },
+      "frgn_pos": {
+       "n": 400,
+       "win": 29.0,
+       "mean": -0.303,
+       "sd": 4.82,
+       "hold": 8.7
+      },
+      "pbr1": {
+       "n": 715,
+       "win": 32.03,
+       "mean": 0.041,
+       "sd": 5.62,
+       "hold": 9.4
+      },
+      "roe_eqar": {
+       "n": 236,
+       "win": 33.9,
+       "mean": 0.337,
+       "sd": 5.6,
+       "hold": 9.9
+      },
+      "net_cash": {
+       "n": 78,
+       "win": 25.64,
+       "mean": 0.066,
+       "sd": 4.91,
+       "hold": 9.0
+      },
+      "disc7": {
+       "n": 0,
+       "win": null,
+       "mean": null,
+       "sd": null,
+       "hold": null
+      }
+     },
+     "by_year": {
+      "2017": {
+       "n": 202,
+       "win": 49.5,
+       "mean": 1.697,
+       "sd": 5.71,
+       "hold": 13.5
+      },
+      "2018": {
+       "n": 222,
+       "win": 18.92,
+       "mean": -1.471,
+       "sd": 3.78,
+       "hold": 6.8
+      },
+      "2019": {
+       "n": 250,
+       "win": 28.4,
+       "mean": -0.286,
+       "sd": 4.49,
+       "hold": 9.2
+      },
+      "2020": {
+       "n": 148,
+       "win": 36.49,
+       "mean": 1.133,
+       "sd": 8.7,
+       "hold": 8.9
+      },
+      "2021": {
+       "n": 330,
+       "win": 28.18,
+       "mean": -0.495,
+       "sd": 4.54,
+       "hold": 8.9
+      }
+     },
+     "excl_by_band": {
+      "0": {
+       "n": 558,
+       "win": 32.8,
+       "mean": 0.528,
+       "sd": 7.09,
+       "hold": 9.6
+      },
+      "1": {
+       "n": 539,
+       "win": 31.35,
+       "mean": -0.127,
+       "sd": 6.7,
+       "hold": 10.1
+      },
+      "2": {
+       "n": 124,
+       "win": 36.29,
+       "mean": -0.333,
+       "sd": 5.59,
+       "hold": 10.7
+      }
+     },
+     "r20q_keep_vs_excl": {},
+     "gate_x": false,
+     "gate_fails": [
+      "每笔 ≤ B_c",
+      "每笔 ≤ P-cal 均值",
+      "每笔 ≤ PL-W 95 分位"
+     ],
+     "sign_x": -1.0
+    }
+   }
+  },
+  "N4": {
+   "desc": "低应计 (NP − CFO) ÷ TA ≤ −0.05 ∧ CFO > 0（FY 行、非金融）",
+   "n_keep": 641,
+   "n_elig": 2480,
+   "windows": {
+    "X": {
+     "cand": {
+      "n": 641,
+      "win": 31.98,
+      "mean": 0.285,
+      "sd": 6.86,
+      "hold": 9.9
+     },
+     "base_elig": {
+      "n": 2477,
+      "win": 33.47,
+      "mean": 0.177,
+      "sd": 6.18,
+      "hold": 9.9
+     },
+     "excluded": {
+      "n": 1836,
+      "win": 33.99,
+      "mean": 0.139,
+      "sd": 5.92,
+      "hold": 9.9
+     },
+     "base_full": {
+      "n": 2862,
+      "win": 33.16,
+      "mean": 0.148,
+      "sd": 6.05,
+      "hold": 9.8
+     },
+     "keep_minus_excl": 0.146,
+     "boot": {
+      "mean_lo": -0.296,
+      "mean_hi": 0.898,
+      "win_lo": 27.45,
+      "win_hi": 36.73
+     },
+     "diff_lower": -0.589,
+     "controls": {
+      "PLW": {
+       "win": 36.25,
+       "mean": 0.523,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      },
+      "PLW0": {
+       "win": 36.09,
+       "mean": 0.434,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      },
+      "PLS": {
+       "win": 34.86,
+       "mean": 0.5,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      },
+      "PS": {
+       "win": 36.29,
+       "mean": 0.59,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      }
+     },
+     "need": {
+      "opp": {
+       "n": 103,
+       "win": 32.04,
+       "mean": 0.598,
+       "sd": 7.65,
+       "hold": 10.4
+      }
+     },
+     "eff_range": [
+      "2017-01-17",
+      "2021-12-29"
+     ],
+     "segments": {
+      "band0": {
+       "n": 307,
+       "win": 33.88,
+       "mean": 0.747,
+       "sd": 8.02,
+       "hold": 9.1
+      },
+      "band1": {
+       "n": 285,
+       "win": 30.18,
+       "mean": -0.158,
+       "sd": 5.43,
+       "hold": 10.6
+      },
+      "band2": {
+       "n": 49,
+       "win": 30.61,
+       "mean": -0.03,
+       "sd": 6.27,
+       "hold": 11.5
+      },
+      "lturn0": {
+       "n": 218,
+       "win": 33.94,
+       "mean": 0.789,
+       "sd": 7.75,
+       "hold": 9.6
+      },
+      "lturn2": {
+       "n": 178,
+       "win": 34.27,
+       "mean": 0.106,
+       "sd": 5.93,
+       "hold": 10.8
+      },
+      "u1": {
+       "n": 46,
+       "win": 30.43,
+       "mean": 0.018,
+       "sd": 6.39,
+       "hold": 11.6
+      },
+      "lot25": {
+       "n": 499,
+       "win": 32.26,
+       "mean": 0.379,
+       "sd": 7.4,
+       "hold": 10.0
+      },
+      "va5000": {
+       "n": 132,
+       "win": 31.06,
+       "mean": -0.147,
+       "sd": 5.61,
+       "hold": 11.0
+      },
+      "short": {
+       "n": 45,
+       "win": 31.11,
+       "mean": -0.727,
+       "sd": 4.32,
+       "hold": 9.6
+      },
+      "frgn_pos": {
+       "n": 298,
+       "win": 31.21,
+       "mean": 0.238,
+       "sd": 6.54,
+       "hold": 9.7
+      },
+      "pbr1": {
+       "n": 331,
+       "win": 31.72,
+       "mean": 0.633,
+       "sd": 7.55,
+       "hold": 9.9
+      },
+      "roe_eqar": {
+       "n": 109,
+       "win": 30.28,
+       "mean": -0.198,
+       "sd": 5.43,
+       "hold": 10.0
+      },
+      "net_cash": {
+       "n": 33,
+       "win": 45.45,
+       "mean": 1.252,
+       "sd": 5.62,
+       "hold": 10.9
+      },
+      "disc7": {
+       "n": 124,
+       "win": 30.65,
+       "mean": 0.254,
+       "sd": 7.24,
+       "hold": 10.3
+      }
+     },
+     "by_year": {
+      "2017": {
+       "n": 153,
+       "win": 41.83,
+       "mean": 1.833,
+       "sd": 7.32,
+       "hold": 11.8
+      },
+      "2018": {
+       "n": 113,
+       "win": 25.66,
+       "mean": -1.383,
+       "sd": 3.49,
+       "hold": 7.6
+      },
+      "2019": {
+       "n": 111,
+       "win": 28.83,
+       "mean": -0.193,
+       "sd": 5.11,
+       "hold": 10.2
+      },
+      "2020": {
+       "n": 81,
+       "win": 41.98,
+       "mean": 2.466,
+       "sd": 12.06,
+       "hold": 9.9
+      },
+      "2021": {
+       "n": 183,
+       "win": 25.14,
+       "mean": -0.655,
+       "sd": 5.06,
+       "hold": 9.7
+      }
+     },
+     "excl_by_band": {
+      "0": {
+       "n": 904,
+       "win": 33.85,
+       "mean": 0.308,
+       "sd": 5.96,
+       "hold": 9.2
+      },
+      "1": {
+       "n": 774,
+       "win": 32.82,
+       "mean": -0.001,
+       "sd": 6.02,
+       "hold": 10.3
+      },
+      "2": {
+       "n": 158,
+       "win": 40.51,
+       "mean": -0.141,
+       "sd": 5.06,
+       "hold": 11.2
+      }
+     },
+     "r20q_keep_vs_excl": {},
+     "gate_x": false,
+     "gate_fails": [
+      "每笔 +0.28% < B_c +0.18% + 0.5",
+      "胜率 < B_c",
+      "每笔 ≤ PLW 95 分位",
+      "每笔 ≤ PLS 95 分位",
+      "每笔 ≤ PS 95 分位"
+     ],
+     "sign_x": 1.0
+    }
+   }
+  },
+  "N5": {
+   "desc": "N1 ∧ vr1 ≥ 2.0",
+   "n_keep": 399,
+   "n_elig": 2155,
+   "windows": {
+    "X": {
+     "cand": {
+      "n": 399,
+      "win": 32.58,
+      "mean": -0.316,
+      "sd": 6.05,
+      "hold": 9.4
+     },
+     "base_elig": {
+      "n": 2153,
+      "win": 34.93,
+      "mean": 0.321,
+      "sd": 6.44,
+      "hold": 10.1
+     },
+     "excluded": {
+      "n": 1754,
+      "win": 35.46,
+      "mean": 0.465,
+      "sd": 6.52,
+      "hold": 10.3
+     },
+     "base_full": {
+      "n": 2877,
+      "win": 33.23,
+      "mean": 0.15,
+      "sd": 6.04,
+      "hold": 9.8
+     },
+     "keep_minus_excl": -0.781,
+     "boot": {
+      "mean_lo": -0.888,
+      "mean_hi": 0.331,
+      "win_lo": 28.31,
+      "win_hi": 37.23
+     },
+     "diff_lower": -1.315,
+     "controls": {
+      "PLW": {
+       "win": 37.16,
+       "mean": 0.707,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      },
+      "PLW0": {
+       "win": 38.11,
+       "mean": 0.708,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      },
+      "PS": {
+       "win": 37.42,
+       "mean": 0.711,
+       "seeds": 30,
+       "q": 95.0,
+       "kind": "pct"
+      }
+     },
+     "need": {
+      "pvol": {
+       "n": 1394,
+       "win": 33.93,
+       "mean": 0.273,
+       "sd": 6.91,
+       "hold": 9.8
+      },
+      "rev_vol": {
+       "n": 325,
+       "win": 36.62,
+       "mean": 0.748,
+       "sd": 7.14,
+       "hold": 10.4
+      }
+     },
+     "eff_range": [
+      "2017-01-04",
+      "2021-12-29"
+     ],
+     "segments": {
+      "band0": {
+       "n": 172,
+       "win": 36.63,
+       "mean": 0.033,
+       "sd": 5.24,
+       "hold": 9.0
+      },
+      "band1": {
+       "n": 186,
+       "win": 27.96,
+       "mean": -0.522,
+       "sd": 6.89,
+       "hold": 9.7
+      },
+      "band2": {
+       "n": 41,
+       "win": 36.59,
+       "mean": -0.842,
+       "sd": 4.99,
+       "hold": 9.6
+      },
+      "lturn0": {
+       "n": 100,
+       "win": 37.0,
+       "mean": 0.392,
+       "sd": 5.4,
+       "hold": 9.4
+      },
+      "lturn2": {
+       "n": 150,
+       "win": 30.0,
+       "mean": -0.988,
+       "sd": 4.5,
+       "hold": 9.4
+      },
+      "u1": {
+       "n": 39,
+       "win": 38.46,
+       "mean": -0.681,
+       "sd": 5.06,
+       "hold": 9.8
+      },
+      "lot25": {
+       "n": 340,
+       "win": 31.76,
+       "mean": -0.326,
+       "sd": 6.29,
+       "hold": 9.4
+      },
+      "va5000": {
+       "n": 116,
+       "win": 31.03,
+       "mean": -0.904,
+       "sd": 4.62,
+       "hold": 9.6
+      },
+      "short": {
+       "n": 31,
+       "win": 25.81,
+       "mean": -1.775,
+       "sd": 3.78,
+       "hold": 9.4
+      },
+      "frgn_pos": {
+       "n": 175,
+       "win": 32.0,
+       "mean": -0.755,
+       "sd": 4.68,
+       "hold": 9.2
+      },
+      "pbr1": {
+       "n": 225,
+       "win": 34.67,
+       "mean": 0.289,
+       "sd": 7.19,
+       "hold": 9.9
+      },
+      "roe_eqar": {
+       "n": 75,
+       "win": 33.33,
+       "mean": -0.908,
+       "sd": 4.03,
+       "hold": 10.1
+      },
+      "net_cash": {
+       "n": 17,
+       "win": 41.18,
+       "mean": 0.3,
+       "sd": 3.47,
+       "hold": 11.9
+      },
+      "disc7": {
+       "n": 68,
+       "win": 39.71,
+       "mean": -0.111,
+       "sd": 5.3,
+       "hold": 12.0
+      }
+     },
+     "by_year": {
+      "2017": {
+       "n": 140,
+       "win": 46.43,
+       "mean": 0.608,
+       "sd": 5.12,
+       "hold": 11.4
+      },
+      "2018": {
+       "n": 73,
+       "win": 17.81,
+       "mean": -1.467,
+       "sd": 4.62,
+       "hold": 6.8
+      },
+      "2019": {
+       "n": 54,
+       "win": 33.33,
+       "mean": -0.156,
+       "sd": 4.73,
+       "hold": 10.4
+      },
+      "2020": {
+       "n": 41,
+       "win": 21.95,
+       "mean": -0.123,
+       "sd": 12.48,
+       "hold": 7.0
+      },
+      "2021": {
+       "n": 91,
+       "win": 27.47,
+       "mean": -0.995,
+       "sd": 4.11,
+       "hold": 8.9
+      }
+     },
+     "excl_by_band": {
+      "0": {
+       "n": 747,
+       "win": 36.68,
+       "mean": 0.917,
+       "sd": 7.44,
+       "hold": 9.7
+      },
+      "1": {
+       "n": 816,
+       "win": 34.68,
+       "mean": 0.218,
+       "sd": 5.83,
+       "hold": 10.7
+      },
+      "2": {
+       "n": 191,
+       "win": 34.03,
+       "mean": -0.244,
+       "sd": 5.24,
+       "hold": 11.2
+      }
+     },
+     "r20q_keep_vs_excl": {
+      "0": {
+       "keep": {
+        "n": 52,
+        "win": 28.85,
+        "mean": -0.816,
+        "sd": 3.65,
+        "hold": 8.5
+       },
+       "excl": {
+        "n": 351,
+        "win": 32.19,
+        "mean": 0.461,
+        "sd": 7.15,
+        "hold": 10.6
+       }
+      },
+      "1": {
+       "keep": {
+        "n": 71,
+        "win": 32.39,
+        "mean": -0.371,
+        "sd": 4.27,
+        "hold": 10.0
+       },
+       "excl": {
+        "n": 314,
+        "win": 40.13,
+        "mean": 0.502,
+        "sd": 4.94,
+        "hold": 11.0
+       }
+      },
+      "2": {
+       "keep": {
+        "n": 70,
+        "win": 37.14,
+        "mean": 0.279,
+        "sd": 4.77,
+        "hold": 9.8
+       },
+       "excl": {
+        "n": 345,
+        "win": 32.46,
+        "mean": 0.367,
+        "sd": 5.57,
+        "hold": 9.9
+       }
+      },
+      "3": {
+       "keep": {
+        "n": 100,
+        "win": 33.0,
+        "mean": -0.204,
+        "sd": 5.21,
+        "hold": 9.1
+       },
+       "excl": {
+        "n": 387,
+        "win": 37.73,
+        "mean": 1.004,
+        "sd": 7.29,
+        "hold": 10.2
+       }
+      },
+      "4": {
+       "keep": {
+        "n": 106,
+        "win": 31.13,
+        "mean": -0.531,
+        "sd": 8.84,
+        "hold": 9.4
+       },
+       "excl": {
+        "n": 357,
+        "win": 35.01,
+        "mean": -0.05,
+        "sd": 7.0,
+        "hold": 9.9
+       }
+      }
+     },
+     "gate_x": false,
+     "gate_fails": [
+      "每笔 -0.32% < B_c +0.32% + 0.5",
+      "胜率 < B_c",
+      "每笔 ≤ PLW 95 分位",
+      "每笔 ≤ PS 95 分位",
+      "每笔 ≤ P-vol"
+     ],
+     "sign_x": -1.0
+    }
+   }
+  }
+ },
+ "counts": {
+  "X": {
+   "P": 2880,
+   "N1": {
+    "eligible": 2155,
+    "eligible_pct": 74.8,
+    "keep": 640,
+    "keep_pct_pool": 22.2,
+    "keep_pct_elig": 29.7,
+    "by_band": {
+     "0": {
+      "eligible": 920,
+      "keep": 243,
+      "pool": 1377
+     },
+     "1": {
+      "eligible": 1003,
+      "keep": 306,
+      "pool": 1256
+     },
+     "2": {
+      "eligible": 232,
+      "keep": 91,
+      "pool": 247
+     }
+    }
+   },
+   "N2": {
+    "eligible": 2627,
+    "eligible_pct": 91.2,
+    "keep": 159,
+    "keep_pct_pool": 5.5,
+    "keep_pct_elig": 6.1,
+    "by_band": {
+     "0": {
+      "eligible": 1218,
+      "keep": 50,
+      "pool": 1377
+     },
+     "1": {
+      "eligible": 1173,
+      "keep": 67,
+      "pool": 1256
+     },
+     "2": {
+      "eligible": 236,
+      "keep": 42,
+      "pool": 247
+     }
+    }
+   },
+   "N3": {
+    "eligible": 2779,
+    "eligible_pct": 96.5,
+    "keep": 1152,
+    "keep_pct_pool": 40.0,
+    "keep_pct_elig": 41.5,
+    "by_band": {
+     "0": {
+      "eligible": 1311,
+      "keep": 584,
+      "pool": 1377
+     },
+     "1": {
+      "eligible": 1221,
+      "keep": 499,
+      "pool": 1256
+     },
+     "2": {
+      "eligible": 247,
+      "keep": 69,
+      "pool": 247
+     }
+    }
+   },
+   "N4": {
+    "eligible": 2480,
+    "eligible_pct": 86.1,
+    "keep": 641,
+    "keep_pct_pool": 22.3,
+    "keep_pct_elig": 25.8,
+    "by_band": {
+     "0": {
+      "eligible": 1213,
+      "keep": 307,
+      "pool": 1377
+     },
+     "1": {
+      "eligible": 1060,
+      "keep": 285,
+      "pool": 1256
+     },
+     "2": {
+      "eligible": 207,
+      "keep": 49,
+      "pool": 247
+     }
+    }
+   },
+   "N5": {
+    "eligible": 2155,
+    "eligible_pct": 74.8,
+    "keep": 399,
+    "keep_pct_pool": 13.9,
+    "keep_pct_elig": 18.5,
+    "by_band": {
+     "0": {
+      "eligible": 920,
+      "keep": 172,
+      "pool": 1377
+     },
+     "1": {
+      "eligible": 1003,
+      "keep": 186,
+      "pool": 1256
+     },
+     "2": {
+      "eligible": 232,
+      "keep": 41,
+      "pool": 247
+     }
+    }
+   }
+  },
+  "rank_corr_dL": {
+   "w5v": 0.046,
+   "vr1": -0.023,
+   "vexp": 0.071,
+   "dist": 0.063,
+   "rng": -0.005,
+   "brk": -0.069,
+   "r20": -0.071,
+   "r60": -0.047,
+   "r120": 0.014,
+   "hi52": 0.02,
+   "atrp": -0.008,
+   "vol60": -0.001,
+   "clv": -0.022,
+   "ush": 0.012,
+   "gap": 0.049,
+   "lturn": 0.02,
+   "mkt200": 0.068,
+   "mkt20": 0.01
+  }
+ },
+ "bulk_sha": {
+  "fins/summary/historical/2016/fins_summary_201609.csv.gz": "87b81c0086638d21",
+  "fins/summary/historical/2016/fins_summary_201610.csv.gz": "f76977c4fea518e0",
+  "fins/summary/historical/2016/fins_summary_201611.csv.gz": "2b2c26bbc44acace",
+  "fins/summary/historical/2016/fins_summary_201612.csv.gz": "b88bb585fc897ace",
+  "fins/summary/historical/2017/fins_summary_201701.csv.gz": "b7289d351068b35b",
+  "fins/summary/historical/2017/fins_summary_201702.csv.gz": "401decf5363f7dfa",
+  "fins/summary/historical/2017/fins_summary_201703.csv.gz": "6b4f04e0fcc44f84",
+  "fins/summary/historical/2017/fins_summary_201704.csv.gz": "c3a4f16c6ead6369",
+  "fins/summary/historical/2017/fins_summary_201705.csv.gz": "0a02442583154317",
+  "fins/summary/historical/2017/fins_summary_201706.csv.gz": "9d3fc594f05252b6",
+  "fins/summary/historical/2017/fins_summary_201707.csv.gz": "c41cf99a10af0854",
+  "fins/summary/historical/2017/fins_summary_201708.csv.gz": "001438bb1c04baa5",
+  "fins/summary/historical/2017/fins_summary_201709.csv.gz": "9f42feda03bdd6cb",
+  "fins/summary/historical/2017/fins_summary_201710.csv.gz": "20d4f8ee3dce5e5a",
+  "fins/summary/historical/2017/fins_summary_201711.csv.gz": "dd03a526d7fded2a",
+  "fins/summary/historical/2017/fins_summary_201712.csv.gz": "a0b4e189abe42e22",
+  "fins/summary/historical/2018/fins_summary_201801.csv.gz": "1af80aa4b8f4e841",
+  "fins/summary/historical/2018/fins_summary_201802.csv.gz": "abb365e2098e2dda",
+  "fins/summary/historical/2018/fins_summary_201803.csv.gz": "dea39c7e232565e0",
+  "fins/summary/historical/2018/fins_summary_201804.csv.gz": "2f6f345b473fbf75",
+  "fins/summary/historical/2018/fins_summary_201805.csv.gz": "50d25619a2919ad4",
+  "fins/summary/historical/2018/fins_summary_201806.csv.gz": "bb2416acc22c2e90",
+  "fins/summary/historical/2018/fins_summary_201807.csv.gz": "bc28e33a51ef80f3",
+  "fins/summary/historical/2018/fins_summary_201808.csv.gz": "06ee1fedb07b7195",
+  "fins/summary/historical/2018/fins_summary_201809.csv.gz": "11951b5e50559041",
+  "fins/summary/historical/2018/fins_summary_201810.csv.gz": "c09f5a0315b049a2",
+  "fins/summary/historical/2018/fins_summary_201811.csv.gz": "93eeb16820a70644",
+  "fins/summary/historical/2018/fins_summary_201812.csv.gz": "231f50c542e63b44",
+  "fins/summary/historical/2019/fins_summary_201901.csv.gz": "05be01e98808a5d1",
+  "fins/summary/historical/2019/fins_summary_201902.csv.gz": "e84becb05673fe1a",
+  "fins/summary/historical/2019/fins_summary_201903.csv.gz": "c0e8d143b1201999",
+  "fins/summary/historical/2019/fins_summary_201904.csv.gz": "8c7e5d0b23ab642e",
+  "fins/summary/historical/2019/fins_summary_201905.csv.gz": "7a501cc2f7411dd1",
+  "fins/summary/historical/2019/fins_summary_201906.csv.gz": "3869fc8be700785b",
+  "fins/summary/historical/2019/fins_summary_201907.csv.gz": "477163b6bb61f55e",
+  "fins/summary/historical/2019/fins_summary_201908.csv.gz": "60ba994fa6adaf5c",
+  "fins/summary/historical/2019/fins_summary_201909.csv.gz": "b8363dcf6e732b9b",
+  "fins/summary/historical/2019/fins_summary_201910.csv.gz": "fe6ab4ff3f8939ac",
+  "fins/summary/historical/2019/fins_summary_201911.csv.gz": "74bbb5db37ad5046",
+  "fins/summary/historical/2019/fins_summary_201912.csv.gz": "f85c5a6681c7c71c",
+  "fins/summary/historical/2020/fins_summary_202001.csv.gz": "abaefb6237529b69",
+  "fins/summary/historical/2020/fins_summary_202002.csv.gz": "c33dea6f6ddf22db",
+  "fins/summary/historical/2020/fins_summary_202003.csv.gz": "6f8f730a9331fa55",
+  "fins/summary/historical/2020/fins_summary_202004.csv.gz": "c58d2fd46bf65bec",
+  "fins/summary/historical/2020/fins_summary_202005.csv.gz": "2f7515b5c087f102",
+  "fins/summary/historical/2020/fins_summary_202006.csv.gz": "555fc37943896d23",
+  "fins/summary/historical/2020/fins_summary_202007.csv.gz": "1e73ed23d09d3835",
+  "fins/summary/historical/2020/fins_summary_202008.csv.gz": "7d8a0a99ce967e49",
+  "fins/summary/historical/2020/fins_summary_202009.csv.gz": "b57903059aa5e604",
+  "fins/summary/historical/2020/fins_summary_202010.csv.gz": "9b93dcbe01197aaf",
+  "fins/summary/historical/2020/fins_summary_202011.csv.gz": "9b37aba516104189",
+  "fins/summary/historical/2020/fins_summary_202012.csv.gz": "552296fbeee895ac",
+  "fins/summary/historical/2021/fins_summary_202101.csv.gz": "8f3c941e5f95e8a5",
+  "fins/summary/historical/2021/fins_summary_202102.csv.gz": "d09c88691fd04212",
+  "fins/summary/historical/2021/fins_summary_202103.csv.gz": "c01d8abc34ee22e7",
+  "fins/summary/historical/2021/fins_summary_202104.csv.gz": "71a108f021386069",
+  "fins/summary/historical/2021/fins_summary_202105.csv.gz": "275c1107a29fbce3",
+  "fins/summary/historical/2021/fins_summary_202106.csv.gz": "10eacc3847f5f639",
+  "fins/summary/historical/2021/fins_summary_202107.csv.gz": "2ba148312eea854a",
+  "fins/summary/historical/2021/fins_summary_202108.csv.gz": "0bedcff8bec2b614",
+  "fins/summary/historical/2021/fins_summary_202109.csv.gz": "c2db6839dbbd4fef",
+  "fins/summary/historical/2021/fins_summary_202110.csv.gz": "06ea59cc6cf19a71",
+  "fins/summary/historical/2021/fins_summary_202111.csv.gz": "a4d006abfd55d03b",
+  "fins/summary/historical/2021/fins_summary_202112.csv.gz": "7c345432422f2453",
+  "fins/summary/historical/2022/fins_summary_202201.csv.gz": "13814a81698d43b4",
+  "fins/summary/historical/2022/fins_summary_202202.csv.gz": "276cc5aae277c297",
+  "fins/summary/historical/2022/fins_summary_202203.csv.gz": "9ac56739ff281482",
+  "fins/summary/historical/2022/fins_summary_202204.csv.gz": "50f56fd927a2eb3c",
+  "fins/summary/historical/2022/fins_summary_202205.csv.gz": "a4bdf7a4dc8f338e",
+  "fins/summary/historical/2022/fins_summary_202206.csv.gz": "d91acfb8ec780758",
+  "fins/summary/historical/2022/fins_summary_202207.csv.gz": "6d51d889ba7655ae",
+  "fins/summary/historical/2022/fins_summary_202208.csv.gz": "fd5c179be07312f7",
+  "fins/summary/historical/2022/fins_summary_202209.csv.gz": "c9d6533c11e3191d",
+  "fins/summary/historical/2022/fins_summary_202210.csv.gz": "03e81861997c315c",
+  "fins/summary/historical/2022/fins_summary_202211.csv.gz": "c9e8dcaa7ad184eb",
+  "fins/summary/historical/2022/fins_summary_202212.csv.gz": "447544db4860e4b4",
+  "fins/summary/historical/2023/fins_summary_202301.csv.gz": "1cf689ed9d5b811b",
+  "fins/summary/historical/2023/fins_summary_202302.csv.gz": "8299f022c9585840",
+  "fins/summary/historical/2023/fins_summary_202303.csv.gz": "9086cf30f7de7c39",
+  "fins/summary/historical/2023/fins_summary_202304.csv.gz": "b14b7a2e263a7d7c",
+  "fins/summary/historical/2023/fins_summary_202305.csv.gz": "1cf3326f921a96cb",
+  "fins/summary/historical/2023/fins_summary_202306.csv.gz": "208c69a6aa0fece8",
+  "fins/summary/historical/2023/fins_summary_202307.csv.gz": "411ce9cc131c309e",
+  "fins/summary/historical/2023/fins_summary_202308.csv.gz": "2c6353e1b4a65c07",
+  "fins/summary/historical/2023/fins_summary_202309.csv.gz": "4defb957aebaea73",
+  "fins/summary/historical/2023/fins_summary_202310.csv.gz": "ea47114eea03e8e6",
+  "fins/summary/historical/2023/fins_summary_202311.csv.gz": "a54dfdd0c5f9eabd",
+  "fins/summary/historical/2023/fins_summary_202312.csv.gz": "2060cd1b8ce80c99",
+  "fins/summary/historical/2024/fins_summary_202401.csv.gz": "8dcfa6774c95a20c",
+  "fins/summary/historical/2024/fins_summary_202402.csv.gz": "b037196bd9234449",
+  "fins/summary/historical/2024/fins_summary_202403.csv.gz": "b2237b3dad41dbe2",
+  "fins/summary/historical/2024/fins_summary_202404.csv.gz": "d7f945217f34b6d9",
+  "fins/summary/historical/2024/fins_summary_202405.csv.gz": "f25a23d32d30cdce",
+  "fins/summary/historical/2024/fins_summary_202406.csv.gz": "68fed85121b80e21",
+  "fins/summary/historical/2024/fins_summary_202407.csv.gz": "2399c4141ea23ee0",
+  "fins/summary/historical/2024/fins_summary_202408.csv.gz": "0613c3f06fbbd9d0",
+  "fins/summary/historical/2024/fins_summary_202409.csv.gz": "b64c8c7fa0386d2a",
+  "fins/summary/historical/2024/fins_summary_202410.csv.gz": "cc66ebddb44dcc36",
+  "fins/summary/historical/2024/fins_summary_202411.csv.gz": "f548195fc62d3b34",
+  "fins/summary/historical/2024/fins_summary_202412.csv.gz": "3f506835d6681915",
+  "fins/summary/historical/2025/fins_summary_202501.csv.gz": "37019dfef725d5af",
+  "fins/summary/historical/2025/fins_summary_202502.csv.gz": "67181b5b62f8dc42",
+  "fins/summary/historical/2025/fins_summary_202503.csv.gz": "02484f31c6e89fe4",
+  "fins/summary/historical/2025/fins_summary_202504.csv.gz": "438b3a030d86f221",
+  "fins/summary/historical/2025/fins_summary_202505.csv.gz": "6fafd65cf142fb36",
+  "fins/summary/historical/2025/fins_summary_202506.csv.gz": "5cda1cae5d8ac252",
+  "fins/summary/historical/2025/fins_summary_202507.csv.gz": "e2d2d7d30bc595b7",
+  "fins/summary/historical/2025/fins_summary_202508.csv.gz": "ebbb32f9cabb3ffa",
+  "fins/summary/historical/2025/fins_summary_202509.csv.gz": "6fd99461d10f9da4",
+  "fins/summary/historical/2025/fins_summary_202510.csv.gz": "2290a0d3d22fc88a",
+  "fins/summary/historical/2025/fins_summary_202511.csv.gz": "da33b0053d0ad731",
+  "fins/summary/historical/2025/fins_summary_202512.csv.gz": "4f1ea5ff79986ad3",
+  "fins/summary/historical/2026/fins_summary_202601.csv.gz": "a15cc1fd68a18c1d",
+  "fins/summary/historical/2026/fins_summary_202602.csv.gz": "e5219656c384dda1",
+  "fins/summary/historical/2026/fins_summary_202603.csv.gz": "38ac693eccac3fbd",
+  "fins/summary/historical/2026/fins_summary_202604.csv.gz": "d6b4e11adada1483",
+  "fins/summary/historical/2026/fins_summary_202605.csv.gz": "9a12f1a03c866c96",
+  "fins/summary/historical/2026/fins_summary_202606.csv.gz": "60dd311ea6e40a9e",
+  "fins/summary/historical/2026/fins_summary_202607.csv.gz": "3766cd1e03676ea9",
+  "fins/summary/historical/2026/fins_summary_202608.csv.gz": "f084d1c803b2f578",
+  "fins/summary/live/fins_summary_20260901.csv.gz": "a2f1881ea3acd9a1",
+  "fins/summary/live/fins_summary_20260902.csv.gz": "ca856db881ab0bf1",
+  "fins/summary/live/fins_summary_20260903.csv.gz": "f7fe2fec34a8869f",
+  "fins/summary/live/fins_summary_20260904.csv.gz": "70d857ffc460d150",
+  "fins/summary/live/fins_summary_20260907.csv.gz": "decefb1cd495df4e",
+  "fins/summary/live/fins_summary_20260908.csv.gz": "7cb4cc5844dcc81b",
+  "fins/summary/live/fins_summary_20260909.csv.gz": "104728309a26e133",
+  "fins/summary/live/fins_summary_20260910.csv.gz": "33e4596fedc10baf",
+  "fins/summary/live/fins_summary_20260911.csv.gz": "4d65562f4393adec",
+  "fins/summary/live/fins_summary_20260914.csv.gz": "bc22c9ebfb710807",
+  "fins/summary/live/fins_summary_20260915.csv.gz": "e995344a1b456915",
+  "fins/summary/live/fins_summary_20260916.csv.gz": "53456a4ab3b5a320",
+  "fins/summary/live/fins_summary_20260917.csv.gz": "d7b0affe28cca0d5",
+  "fins/summary/live/fins_summary_20260918.csv.gz": "ffd79556758c46fa",
+  "fins/summary/live/fins_summary_20260924.csv.gz": "0eb952c31de18756",
+  "fins/summary/live/fins_summary_20260925.csv.gz": "583021cb73b4f0ae",
+  "markets/margin-interest/historical/2016/markets_margin-interest_201609.csv.gz": "82e0319830a7a0dd",
+  "markets/margin-interest/historical/2016/markets_margin-interest_201610.csv.gz": "0bb66a24a309436c",
+  "markets/margin-interest/historical/2016/markets_margin-interest_201611.csv.gz": "d004d2e32fc08c7e",
+  "markets/margin-interest/historical/2016/markets_margin-interest_201612.csv.gz": "eb1cf5eee76300cd",
+  "markets/margin-interest/historical/2017/markets_margin-interest_201701.csv.gz": "0cf4e8152248146b",
+  "markets/margin-interest/historical/2017/markets_margin-interest_201702.csv.gz": "fd3dc7dc122a91ed",
+  "markets/margin-interest/historical/2017/markets_margin-interest_201703.csv.gz": "427752c99e8cfbde",
+  "markets/margin-interest/historical/2017/markets_margin-interest_201704.csv.gz": "8e009191a1a2e38a",
+  "markets/margin-interest/historical/2017/markets_margin-interest_201705.csv.gz": "665cb2d8f4e64ffc",
+  "markets/margin-interest/historical/2017/markets_margin-interest_201706.csv.gz": "74e3576f102f789e",
+  "markets/margin-interest/historical/2017/markets_margin-interest_201707.csv.gz": "50826dcb94ac0c0f",
+  "markets/margin-interest/historical/2017/markets_margin-interest_201708.csv.gz": "9adb0384c584506d",
+  "markets/margin-interest/historical/2017/markets_margin-interest_201709.csv.gz": "d4282dde2d95c0f8",
+  "markets/margin-interest/historical/2017/markets_margin-interest_201710.csv.gz": "d6127d2ae1b29b3b",
+  "markets/margin-interest/historical/2017/markets_margin-interest_201711.csv.gz": "e70ec3e02b2acf5a",
+  "markets/margin-interest/historical/2017/markets_margin-interest_201712.csv.gz": "b34105b044db00ec",
+  "markets/margin-interest/historical/2018/markets_margin-interest_201801.csv.gz": "52c5f0a226981c31",
+  "markets/margin-interest/historical/2018/markets_margin-interest_201802.csv.gz": "dd9dbbe491bd0584",
+  "markets/margin-interest/historical/2018/markets_margin-interest_201803.csv.gz": "83beccc89e4688d6",
+  "markets/margin-interest/historical/2018/markets_margin-interest_201804.csv.gz": "863ebf88d13196cf",
+  "markets/margin-interest/historical/2018/markets_margin-interest_201805.csv.gz": "c9fabfd6ccaecef0",
+  "markets/margin-interest/historical/2018/markets_margin-interest_201806.csv.gz": "f0aded13428e1805",
+  "markets/margin-interest/historical/2018/markets_margin-interest_201807.csv.gz": "d03b2f0477ceb6ce",
+  "markets/margin-interest/historical/2018/markets_margin-interest_201808.csv.gz": "257f83a4dafd91ef",
+  "markets/margin-interest/historical/2018/markets_margin-interest_201809.csv.gz": "885093f9872e3827",
+  "markets/margin-interest/historical/2018/markets_margin-interest_201810.csv.gz": "da2a68e024c71f95",
+  "markets/margin-interest/historical/2018/markets_margin-interest_201811.csv.gz": "ddc45173f59fbb6a",
+  "markets/margin-interest/historical/2018/markets_margin-interest_201812.csv.gz": "7513d775a1b77d34",
+  "markets/margin-interest/historical/2019/markets_margin-interest_201901.csv.gz": "8541cd93c5c9c4d8",
+  "markets/margin-interest/historical/2019/markets_margin-interest_201902.csv.gz": "0a7105a4203ba515",
+  "markets/margin-interest/historical/2019/markets_margin-interest_201903.csv.gz": "b3864577c8b50f3a",
+  "markets/margin-interest/historical/2019/markets_margin-interest_201904.csv.gz": "ef81e7ede4920d65",
+  "markets/margin-interest/historical/2019/markets_margin-interest_201905.csv.gz": "88d2fb9217ddff8c",
+  "markets/margin-interest/historical/2019/markets_margin-interest_201906.csv.gz": "bb6f3c358a2ebf64",
+  "markets/margin-interest/historical/2019/markets_margin-interest_201907.csv.gz": "6f70f1048efd77c7",
+  "markets/margin-interest/historical/2019/markets_margin-interest_201908.csv.gz": "c48a2020146d25c3",
+  "markets/margin-interest/historical/2019/markets_margin-interest_201909.csv.gz": "00eb788b0c058a4e",
+  "markets/margin-interest/historical/2019/markets_margin-interest_201910.csv.gz": "589e11254ef6bcb5",
+  "markets/margin-interest/historical/2019/markets_margin-interest_201911.csv.gz": "7658d61ba62e8456",
+  "markets/margin-interest/historical/2019/markets_margin-interest_201912.csv.gz": "7b6ff20c4d9111db",
+  "markets/margin-interest/historical/2020/markets_margin-interest_202001.csv.gz": "53c4f0ecb9da7326",
+  "markets/margin-interest/historical/2020/markets_margin-interest_202002.csv.gz": "6e10fae7d78f1ba2",
+  "markets/margin-interest/historical/2020/markets_margin-interest_202003.csv.gz": "28a8c687d380c551",
+  "markets/margin-interest/historical/2020/markets_margin-interest_202004.csv.gz": "fe51e8313d3a65f1",
+  "markets/margin-interest/historical/2020/markets_margin-interest_202005.csv.gz": "c2120d42f03465dd",
+  "markets/margin-interest/historical/2020/markets_margin-interest_202006.csv.gz": "4ca5e4294f681677",
+  "markets/margin-interest/historical/2020/markets_margin-interest_202007.csv.gz": "22b36db5b7a67296",
+  "markets/margin-interest/historical/2020/markets_margin-interest_202008.csv.gz": "dd00754def787d41",
+  "markets/margin-interest/historical/2020/markets_margin-interest_202009.csv.gz": "73485ebd83f8ddd6",
+  "markets/margin-interest/historical/2020/markets_margin-interest_202010.csv.gz": "909ea39f9b9b9ced",
+  "markets/margin-interest/historical/2020/markets_margin-interest_202011.csv.gz": "2932485bdb95ba34",
+  "markets/margin-interest/historical/2020/markets_margin-interest_202012.csv.gz": "c11481d0d0e57401",
+  "markets/margin-interest/historical/2021/markets_margin-interest_202101.csv.gz": "9d38e22dab86cbb8",
+  "markets/margin-interest/historical/2021/markets_margin-interest_202102.csv.gz": "99e69f1a3670c409",
+  "markets/margin-interest/historical/2021/markets_margin-interest_202103.csv.gz": "918e133b2a052d35",
+  "markets/margin-interest/historical/2021/markets_margin-interest_202104.csv.gz": "1f3789148a15fed5",
+  "markets/margin-interest/historical/2021/markets_margin-interest_202105.csv.gz": "84fdad837d6e4b69",
+  "markets/margin-interest/historical/2021/markets_margin-interest_202106.csv.gz": "5d36245832e0a522",
+  "markets/margin-interest/historical/2021/markets_margin-interest_202107.csv.gz": "3017a972d4e0721c",
+  "markets/margin-interest/historical/2021/markets_margin-interest_202108.csv.gz": "eab9e2ca1b8deb4b",
+  "markets/margin-interest/historical/2021/markets_margin-interest_202109.csv.gz": "8907951a922d1617",
+  "markets/margin-interest/historical/2021/markets_margin-interest_202110.csv.gz": "49664b257b88fff7",
+  "markets/margin-interest/historical/2021/markets_margin-interest_202111.csv.gz": "45cbabb36a43edba",
+  "markets/margin-interest/historical/2021/markets_margin-interest_202112.csv.gz": "bad8ed36c6bced19",
+  "markets/margin-interest/historical/2022/markets_margin-interest_202201.csv.gz": "57c9f1decd786c6e",
+  "markets/margin-interest/historical/2022/markets_margin-interest_202202.csv.gz": "5f2f2c063906e04f",
+  "markets/margin-interest/historical/2022/markets_margin-interest_202203.csv.gz": "39a9647b54cc4a1b",
+  "markets/margin-interest/historical/2022/markets_margin-interest_202204.csv.gz": "31ce1360f56ba5cb",
+  "markets/margin-interest/historical/2022/markets_margin-interest_202205.csv.gz": "871b074acbc7b683",
+  "markets/margin-interest/historical/2022/markets_margin-interest_202206.csv.gz": "714759e7340abe9a",
+  "markets/margin-interest/historical/2022/markets_margin-interest_202207.csv.gz": "1f2f2c43d724615e",
+  "markets/margin-interest/historical/2022/markets_margin-interest_202208.csv.gz": "dc742b80f327d74a",
+  "markets/margin-interest/historical/2022/markets_margin-interest_202209.csv.gz": "2e1226db8c975ebd",
+  "markets/margin-interest/historical/2022/markets_margin-interest_202210.csv.gz": "9f3cc3c54fdbc47d",
+  "markets/margin-interest/historical/2022/markets_margin-interest_202211.csv.gz": "14f137cac4f3e682",
+  "markets/margin-interest/historical/2022/markets_margin-interest_202212.csv.gz": "17dfeb81a10c64d7",
+  "markets/margin-interest/historical/2023/markets_margin-interest_202301.csv.gz": "37bfa1f6ab29ce05",
+  "markets/margin-interest/historical/2023/markets_margin-interest_202302.csv.gz": "c7890e1d4f9dc3bf",
+  "markets/margin-interest/historical/2023/markets_margin-interest_202303.csv.gz": "9085b918a4442faf",
+  "markets/margin-interest/historical/2023/markets_margin-interest_202304.csv.gz": "e9140c01aba1a1c6",
+  "markets/margin-interest/historical/2023/markets_margin-interest_202305.csv.gz": "608b88c545f9a8da",
+  "markets/margin-interest/historical/2023/markets_margin-interest_202306.csv.gz": "f1373f3e1f3d679f",
+  "markets/margin-interest/historical/2023/markets_margin-interest_202307.csv.gz": "bb53d39c20298c61",
+  "markets/margin-interest/historical/2023/markets_margin-interest_202308.csv.gz": "e58e41b6087ac3ef",
+  "markets/margin-interest/historical/2023/markets_margin-interest_202309.csv.gz": "297119387d73b09b",
+  "markets/margin-interest/historical/2023/markets_margin-interest_202310.csv.gz": "03fb813aedd59ca9",
+  "markets/margin-interest/historical/2023/markets_margin-interest_202311.csv.gz": "5cda697a85c083d9",
+  "markets/margin-interest/historical/2023/markets_margin-interest_202312.csv.gz": "98ceac719674a633",
+  "markets/margin-interest/historical/2024/markets_margin-interest_202401.csv.gz": "dfa6647b45e73b4d",
+  "markets/margin-interest/historical/2024/markets_margin-interest_202402.csv.gz": "e60d4f9fb68f2d79",
+  "markets/margin-interest/historical/2024/markets_margin-interest_202403.csv.gz": "b6c81d284272ee4e",
+  "markets/margin-interest/historical/2024/markets_margin-interest_202404.csv.gz": "890724cd9fba2404",
+  "markets/margin-interest/historical/2024/markets_margin-interest_202405.csv.gz": "4d9d287be8c1d819",
+  "markets/margin-interest/historical/2024/markets_margin-interest_202406.csv.gz": "e30b8f0f6c1d9c81",
+  "markets/margin-interest/historical/2024/markets_margin-interest_202407.csv.gz": "9e6406c3a1a1715a",
+  "markets/margin-interest/historical/2024/markets_margin-interest_202408.csv.gz": "8d0c48942e82c8a7",
+  "markets/margin-interest/historical/2024/markets_margin-interest_202409.csv.gz": "b0600ce094781c2c",
+  "markets/margin-interest/historical/2024/markets_margin-interest_202410.csv.gz": "21d772238cc22c03",
+  "markets/margin-interest/historical/2024/markets_margin-interest_202411.csv.gz": "e838c300b5cf8d99",
+  "markets/margin-interest/historical/2024/markets_margin-interest_202412.csv.gz": "dfe5a501df6a86d2",
+  "markets/margin-interest/historical/2025/markets_margin-interest_202501.csv.gz": "0dfb310d913347a1",
+  "markets/margin-interest/historical/2025/markets_margin-interest_202502.csv.gz": "f2b20317200763f1",
+  "markets/margin-interest/historical/2025/markets_margin-interest_202503.csv.gz": "7e722e985ca22443",
+  "markets/margin-interest/historical/2025/markets_margin-interest_202504.csv.gz": "d089aa4d2fc1d82d",
+  "markets/margin-interest/historical/2025/markets_margin-interest_202505.csv.gz": "1aa7b92e122f2e5a",
+  "markets/margin-interest/historical/2025/markets_margin-interest_202506.csv.gz": "df3102caae260dee",
+  "markets/margin-interest/historical/2025/markets_margin-interest_202507.csv.gz": "3d9e47f89db1809d",
+  "markets/margin-interest/historical/2025/markets_margin-interest_202508.csv.gz": "acc44f9dcc5bd6cb",
+  "markets/margin-interest/historical/2025/markets_margin-interest_202509.csv.gz": "86af6228a5c0a689",
+  "markets/margin-interest/historical/2025/markets_margin-interest_202510.csv.gz": "28b2c1cc1b3b2040",
+  "markets/margin-interest/historical/2025/markets_margin-interest_202511.csv.gz": "134ccda52184e87b",
+  "markets/margin-interest/historical/2025/markets_margin-interest_202512.csv.gz": "4b63bb41d71779c3",
+  "markets/margin-interest/historical/2026/markets_margin-interest_202601.csv.gz": "b0302e7073177eaf",
+  "markets/margin-interest/historical/2026/markets_margin-interest_202602.csv.gz": "d5affce57b4bbffc",
+  "markets/margin-interest/historical/2026/markets_margin-interest_202603.csv.gz": "31380006a33190d9",
+  "markets/margin-interest/historical/2026/markets_margin-interest_202604.csv.gz": "2ad6231592b1e095",
+  "markets/margin-interest/historical/2026/markets_margin-interest_202605.csv.gz": "b6c074985ee4f7a2",
+  "markets/margin-interest/historical/2026/markets_margin-interest_202606.csv.gz": "1468365d793e50b8",
+  "markets/margin-interest/historical/2026/markets_margin-interest_202607.csv.gz": "4c3d8c17d2d8bdc6",
+  "markets/margin-interest/historical/2026/markets_margin-interest_202608.csv.gz": "a514dc2629a24df9",
+  "markets/margin-interest/live/markets_margin-interest_20260904.csv.gz": "64d6b95514e443fa",
+  "markets/margin-interest/live/markets_margin-interest_20260911.csv.gz": "d53028e6f7e3ce77",
+  "markets/margin-interest/live/markets_margin-interest_20260918.csv.gz": "2fe447378f1c81ed"
+ },
+ "entered_X": [],
+ "elapsed_s": 2137
+}

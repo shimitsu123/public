@@ -1,0 +1,473 @@
+{
+ "run": "2026-10-12",
+ "data_through": "2026-10-09",
+ "refresh": {
+  "bar_files": 127,
+  "new_snapshots": [
+   "2026-09-30"
+  ]
+ },
+ "n_all": 37,
+ "main": {
+  "n": 17,
+  "keep": {
+   "n": 6,
+   "win": 33.33,
+   "mean": -0.576,
+   "pf": 0.471
+  },
+  "drop": {
+   "n": 11,
+   "win": 36.36,
+   "mean": 0.382,
+   "pf": 1.419
+  },
+  "diff": -0.958,
+  "months": 2,
+  "lo95": -10.774,
+  "hi95": 1.131,
+  "lo99": -10.774,
+  "hi99": 1.131
+ },
+ "decision": {
+  "year": null,
+  "alarm": null,
+  "confirmed": null
+ },
+ "side": {
+  "全部（不限成交额）": {
+   "n": 37,
+   "keep": {
+    "n": 9,
+    "win": 22.22,
+    "mean": -1.15,
+    "pf": 0.229
+   },
+   "drop": {
+    "n": 28,
+    "win": 25.0,
+    "mean": -0.202,
+    "pf": 0.807
+   },
+   "diff": -0.948,
+   "months": 2
+  },
+  "主对象里的日経225 股票池": {
+   "n": 0,
+   "keep": {
+    "n": 0
+   },
+   "drop": {
+    "n": 0
+   },
+   "diff": null,
+   "months": 0
+  },
+  "主对象里的其他股票": {
+   "n": 17,
+   "keep": {
+    "n": 6,
+    "win": 33.33,
+    "mean": -0.576,
+    "pf": 0.471
+   },
+   "drop": {
+    "n": 11,
+    "win": 36.36,
+    "mean": 0.382,
+    "pf": 1.419
+   },
+   "diff": -0.958,
+   "months": 2
+  }
+ },
+ "by_year": {
+  "2026": {
+   "keep": {
+    "n": 6,
+    "win": 33.33,
+    "mean": -0.576,
+    "pf": 0.471
+   },
+   "drop": {
+    "n": 11,
+    "win": 36.36,
+    "mean": 0.382,
+    "pf": 1.419
+   }
+  }
+ },
+ "idio": {
+  "K2": {
+   "eval": {
+    "n": 17,
+    "keep": {
+     "n": 10,
+     "win": 40.0,
+     "mean": 0.658,
+     "pf": 1.785
+    },
+    "drop": {
+     "n": 7,
+     "win": 28.57,
+     "mean": -0.832,
+     "pf": 0.288
+    },
+    "diff": 1.49,
+    "months": 2,
+    "lo95": 0.056,
+    "hi95": 12.304,
+    "lo99": 0.056,
+    "hi99": 12.304
+   },
+   "year": null,
+   "alarm": null,
+   "confirmed": null,
+   "segments": {}
+  },
+  "USW": {
+   "eval": {
+    "n": 4,
+    "keep": {
+     "n": 2,
+     "win": 0.0,
+     "mean": -2.533,
+     "pf": 0.0
+    },
+    "drop": {
+     "n": 2,
+     "win": 100.0,
+     "mean": 1.537,
+     "pf": null
+    },
+    "diff": -4.07,
+    "months": 2,
+    "lo95": -4.069,
+    "hi95": -1.887,
+    "lo99": -4.069,
+    "hi99": -1.887
+   },
+   "year": null,
+   "alarm": null,
+   "confirmed": null,
+   "segments": {}
+  }
+ },
+ "idio_note": [],
+ "x6": {
+  "eval": {
+   "n": 0,
+   "counts": {
+    "signals": 6,
+    "no_data": 0,
+    "no_fill": 0,
+    "open": 4,
+    "immature": 2
+   },
+   "cur": {
+    "n": 0
+   },
+   "x6": {
+    "n": 0
+   }
+  },
+  "year": null,
+  "secondary": {
+   "n": 0,
+   "counts": {
+    "signals": 17,
+    "no_data": 0,
+    "no_fill": 0,
+    "open": 11,
+    "immature": 6
+   },
+   "cur": {
+    "n": 0
+   },
+   "x6": {
+    "n": 0
+   }
+  },
+  "sec_ok": null,
+  "side": {
+   "不限成交额（W2 保留）": {
+    "n": 0,
+    "counts": {
+     "signals": 10,
+     "no_data": 0,
+     "no_fill": 1,
+     "open": 6,
+     "immature": 3
+    },
+    "cur": {
+     "n": 0
+    },
+    "x6": {
+     "n": 0
+    }
+   },
+   "主对象里的日経225 股票池（W2 保留）": {
+    "n": 0,
+    "counts": {
+     "signals": 0,
+     "no_data": 0,
+     "no_fill": 0,
+     "open": 0,
+     "immature": 0
+    },
+    "cur": {
+     "n": 0
+    },
+    "x6": {
+     "n": 0
+    }
+   }
+  },
+  "r4": {
+   "eval": {
+    "n": 0,
+    "cur": {
+     "n": 0
+    },
+    "r4": {
+     "n": 0
+    }
+   },
+   "year": null,
+   "secondary": {
+    "n": 0,
+    "cur": {
+     "n": 0
+    },
+    "r4": {
+     "n": 0
+    }
+   },
+   "side": {
+    "不限成交额（W2 保留）": {
+     "n": 0,
+     "cur": {
+      "n": 0
+     },
+     "r4": {
+      "n": 0
+     }
+    },
+    "主对象里的日経225 股票池（W2 保留）": {
+     "n": 0,
+     "cur": {
+      "n": 0
+     },
+     "r4": {
+      "n": 0
+     }
+    }
+   }
+  }
+ },
+ "x6_note": [],
+ "g10": {
+  "main": {
+   "HWN": {
+    "eval": {
+     "n": 0,
+     "keep": {
+      "n": 0
+     },
+     "block": {
+      "n": 0
+     },
+     "enough": false
+    },
+    "year": null,
+    "verdict": null
+   },
+   "X2G": {
+    "eval": {
+     "n": 0,
+     "keep": {
+      "n": 0
+     },
+     "block": {
+      "n": 0
+     },
+     "enough": false
+    },
+    "year": null,
+    "verdict": null
+   },
+   "JRM": {
+    "eval": {
+     "n": 0,
+     "keep": {
+      "n": 0
+     },
+     "block": {
+      "n": 0
+     },
+     "enough": false
+    },
+    "year": null,
+    "verdict": null
+   }
+  },
+  "side": {
+   "主对象里的日経225 股票池（W2 保留）": {
+    "HWN": {
+     "n": 0,
+     "keep": {
+      "n": 0
+     },
+     "block": {
+      "n": 0
+     },
+     "enough": false
+    },
+    "X2G": {
+     "n": 0,
+     "keep": {
+      "n": 0
+     },
+     "block": {
+      "n": 0
+     },
+     "enough": false
+    },
+    "JRM": {
+     "n": 0,
+     "keep": {
+      "n": 0
+     },
+     "block": {
+      "n": 0
+     },
+     "enough": false
+    }
+   },
+   "不限成交额（W2 保留）": {
+    "HWN": {
+     "n": 0,
+     "keep": {
+      "n": 0
+     },
+     "block": {
+      "n": 0
+     },
+     "enough": false
+    },
+    "X2G": {
+     "n": 0,
+     "keep": {
+      "n": 0
+     },
+     "block": {
+      "n": 0
+     },
+     "enough": false
+    },
+    "JRM": {
+     "n": 0,
+     "keep": {
+      "n": 0
+     },
+     "block": {
+      "n": 0
+     },
+     "enough": false
+    }
+   },
+   "主对象里不管 W2 的全部": {
+    "HWN": {
+     "n": 0,
+     "keep": {
+      "n": 0
+     },
+     "block": {
+      "n": 0
+     },
+     "enough": false
+    },
+    "X2G": {
+     "n": 0,
+     "keep": {
+      "n": 0
+     },
+     "block": {
+      "n": 0
+     },
+     "enough": false
+    },
+    "JRM": {
+     "n": 0,
+     "keep": {
+      "n": 0
+     },
+     "block": {
+      "n": 0
+     },
+     "enough": false
+    }
+   }
+  },
+  "hwn_month": {},
+  "jrm_on": null,
+  "x2_missing": 0,
+  "n_usable": 0
+ },
+ "g10_note": [],
+ "tq08": {
+  "main": {
+   "eval": {
+    "n": 0,
+    "keep": {
+     "n": 0
+    },
+    "block": {
+     "n": 0
+    },
+    "enough": false
+   },
+   "year": null,
+   "verdict": null
+  },
+  "side": {
+   "主对象里的日経225 股票池（W2 保留）": {
+    "n": 0,
+    "keep": {
+     "n": 0
+    },
+    "block": {
+     "n": 0
+    },
+    "enough": false
+   },
+   "不限成交额（W2 保留）": {
+    "n": 0,
+    "keep": {
+     "n": 0
+    },
+    "block": {
+     "n": 0
+    },
+    "enough": false
+   },
+   "主对象里不管 W2 的全部": {
+    "n": 0,
+    "keep": {
+     "n": 0
+    },
+    "block": {
+     "n": 0
+    },
+    "enough": false
+   }
+  },
+  "n_usable": 0,
+  "n_main": 0,
+  "blocked_pct": null,
+  "no_line": 0,
+  "no_row": 0
+ },
+ "tq08_note": [],
+ "code": "6a0e5ee"
+}

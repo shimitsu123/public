@@ -1,0 +1,103 @@
+{
+ "start": "2026-09-28",
+ "end": "2026-12-24",
+ "capital_jpy": 1000000.0,
+ "markets": [
+  "JP",
+  "US"
+ ],
+ "jp": {
+  "initial_cash": 1000000,
+  "universe": "broad",
+  "position_pct": 0.25,
+  "max_positions": 4,
+  "use_macro": true,
+  "use_sector_tilt": true,
+  "use_event_window": false,
+  "breakout": true,
+  "core": {
+   "enabled": true,
+   "ticker": "1329.T",
+   "timing": true,
+   "band_pct": 10.0
+  },
+  "halt_dd_pct": 45.0,
+  "tier": "aggressive",
+  "broker": "tachibana"
+ },
+ "us": {
+  "universe": "broad",
+  "position_pct": 0.2,
+  "max_positions": 5,
+  "use_macro": true,
+  "use_sector_tilt": true,
+  "use_event_window": false,
+  "breakout": false,
+  "core": {
+   "enabled": true,
+   "ticker": "1655.T",
+   "timing": true,
+   "band_pct": 10.0
+  },
+  "halt_dd_pct": 45.0,
+  "tier": "aggressive",
+  "broker": "tachibana",
+  "venue": "JP",
+  "initial_cash": 1000000.0
+ },
+ "note": "券商（2026-09-25 深夜起）：立花証券ｅ支店 個別コース（一个账户，只有日元，只做东证）。用户改用立花：不做美股个股后，楽天的美元 / 换汇逻辑用不到；立花 API 能在 Mac / 云端无人值守自动下单（楽天的 MARKETSPEED II RSS 只能在 Windows + Excel、每天要人登录）。方案 S0C2：日本个股 4×25%（日経225，按偏好剔除）+ 闲置资金全部 1655.T（东证 S&P500，按 S&P500 牛熊分界择时，熊市那份留现金）；宏观 / 板块倾斜开、事件窗口关，状态层 quant；回撤 HALT 45%。按立花手续费重算（scripts/broker_s0c2_study.py）：20 年与 5 年年化都比楽天 0 円少约 0.46 pp（手续费约 ¥1.3～1.9 万 / 年）。一手放宽（按名额买不到一手时、一手 ≤ 权益 50% 且现金够 → 买一手；scripts/capital_study.py 事先登记 115c662 通过的 U2）：2026-09-26 用户确认启用，2026-09-27 生效前用户确认撤回（J-Quants 口径事后诊断更差、效果不稳健，var/out/ml_posthoc.md）→ unified.one_lot_cap_pct = 0（关）：按名额买不到一手就跳过，单只 ≤ 34%。",
+ "use_market_regime": true,
+ "use_macro": true,
+ "use_sector_tilt": true,
+ "use_event_window": false,
+ "regime_mode": "quant",
+ "mode": "unified",
+ "unified": {
+  "broker": "tachibana",
+  "position_pct": 0.25,
+  "max_positions": 4,
+  "max_position_pct": 0.34,
+  "one_lot_cap_pct": 0.0,
+  "stock_markets": [
+   "JP"
+  ],
+  "core": {
+   "1655.T": 1.0
+  },
+  "core_index": {
+   "1655.T": "US"
+  },
+  "core_mode": "split",
+  "universe": {
+   "JP": "broad",
+   "US": "broad"
+  }
+ },
+ "fwd_judgment": {
+  "enabled": true,
+  "since": "2026-09-30",
+  "note": "前向记录判断层（qbreak/fwd_judgment.py，登记 c5ef50d；2026-09-29 用户要求把「威胁高 + 压力已释放」与全部前向记录加进选股判断）：市场层 n = 0 / 1 / ≥2 → 日本个股新仓 ×1 / ×0.75 / ×0.5（与原有各层取 min），个股层 s < 0 → 那只 ×0.5；基准账户（原规则：不加这一层、离场用死叉、闲置资金 1655 + 牛熊分界）每天对照。enabled = false 即回到原规则。 2026-09-30 用户决定：A5（K4 日本成品油需求走弱）从 2026-10-01 的决策起不计分（qbreak/fwd_judgment.POINTS[A5] = 0；仍算、仍显示）—— K4 横向到 24 个市场不成立（var/out/k4_horizontal_study.md）。",
+  "a5_k4_points": 0,
+  "a5_k4_since": "2026-10-01"
+ },
+ "exits": {
+  "JP": "X6",
+  "since": "2026-09-30",
+  "note": "个股离场（qbreak/exit_rules.py；2026-09-29 用户要求「把卖法 X6 / R4 也加进离场」）：按登记 17f2dc4 的规则在 DC / X6 / R4 / X6R4 / ALL 里选中 X6（吊灯止损：收盘 < 持有以来最高价 − 3 × ATR14 代替 MACD 死叉；止损 / 跟踪 / 止盈 / 放量阴线 / 最长 60 天不变）；var/out/exit_mode_check.md。改回 \"DC\" = 原规则。var/best_params*.json 不改（研究与前向记录的现行仍是死叉）。"
+ },
+ "idle_cash": {
+  "mode": "Q1B",
+  "since": "2026-10-05",
+  "note": "闲置资金 = 美股牛 → 纳斯达克 100 1545（不对冲；不再在日元走强时换 2845）；美股熊时：S&P500 与对冲版美国 7〜10 年国债最近 63 天日收益负相关 → 拿对冲版美债 1482，不是负相关 → 现金（BCU 照旧；qbreak/idle_cash.py 的 Q1B，判定在 qbreak/bond_refuge.py）。2026-10-03 用户 ㊼ ①「重新检验，不过就撤」：事后审计（scripts/fx_timing_audit.py）发现研究合成价的汇率比信号旧约 17 小时 → 研究口径改成修正口径（scripts/equity_idle_study.fx_on，提交 749398a）后按当初同一套两关重新检验 FJE（scripts/fje_recheck.py，登记 749398a、只运行一次）：Calmar Z 1.005 → 1.064（+0.059）、E 0.578 → 0.616（+0.038）、J 0.674 → 0.640（−0.034），合计 +0.063；J < −0.02 → 第一关不过 →「撤掉」（用户事先同意）。2026-10-02 收盘的决策（10-05 06:57 JST 的 sim-day / 07:40 的执行器）起；那时拿着的是 1545、2845 是 0 口（FJE 自 9-21 起不在对冲中）→ 换方式本身不产生买卖。改回 \"Q1HB\" = FJE + BCU、\"Q1H\" = 只有 FJE、\"Q1\" = 只拿 1545、\"K0\" = 原规则（1655 + 美股牛熊分界）。基准账户照旧按原规则。 之前（Q1HB，定为 2026-10-05 起，还没运行就换成 Q1B）：闲置资金 = 纳斯达克 100（日元走强时拿对冲版 2845、其余拿 1545；FJE）；美股熊时：S&P500 与对冲版美国 7〜10 年国债最近 63 天日收益负相关 → 拿对冲版美债 1482，不是负相关 → 现金（BCU；qbreak/idle_cash.py 的 Q1HB，判定在 qbreak/fx_hedge.py 与 qbreak/bond_refuge.py）。2026-10-03 用户「采用」第六个研究循环第 1 轮的「更好候选」BCU（scripts/loop6_r01_bondcorr.py，登记 42376b0、第二关登记 41b24b6、结果 526910a；账户 Calmar Z 0.979 → 1.162、E 0.749 → 0.808、J 0.741 → 0.749，合计 +0.250；最大回撤 Z −14.71% → −14.76%、E −19.70% → −19.61%、J −26.97% → −26.96%；400 次债券收益循环平移最大 +0.219 < +0.250；没看过的 1987〜2000 只有核心 Calmar 0.454 → 0.464）。相关条件与研究同一个合成价（FRED DGS7 / DGS10 平均收益率的 8.5 年平价债 + 对冲成本 − 年 0.754%）与 S&P500（Yahoo ^GSPC），东证 d 日 = d 之前最近的美国收盘；FRED 晚 1〜3 个美国交易日公布 → 只算到两边都有的最后一天、之后沿用（研究口径晚 1 / 2 / 3 天：2006〜2026 美股熊的日子一致 99.5% / 99.1% / 98.9%）；国债收益率落后 > 14 天 → 算不了、按不拿（现金）。2026-10-02 收盘的决策（10-05 06:57 JST 的 sim-day / 07:40 的执行器）起；云端决策前算 → var/bond_refuge.json，Mac 执行器经 scripts/liveu.sh 同步同一个文件。1482：一手 1 口、滑点 0.05%（qbreak/fees.py）。保留：事后设计（看过第二 / 三个循环熊市国债的结果）、J 的改善很小（+0.008）、2022 年那种股债一起跌时不拿（相关为正）、前向要等下一次美股熊市才看得到。改回 \"Q1H\" = 只有 FJE（2026-10-02〜10-03 的规则，美股熊 → 现金）、\"Q1\" = 只拿 1545、\"K0\" = 原规则（1655 + 美股牛熊分界）。基准账户照旧按原规则。 之前（Q1H，2026-10-02 起）：闲置资金 = 纳斯达克 100：日元走强时拿对冲版 2845、其余拿 1545；美股熊 → 现金（qbreak/idle_cash.py 的 Q1H，判定在 qbreak/fx_hedge.py）。2026-10-02 用户「采用」研究循环第 15 轮的「更好候选」FJE（scripts/loop_r15_fxeunion.py，登记 80e7649、第二关 f1c205c；账户 Calmar Z 0.949 → 0.997、E 0.566 → 0.759、J 0.660 → 0.748，三个年代回撤都更浅；400 次随机平移最大 +0.263 < +0.329）。日元走强 = FXE（USD/JPY 9 组相邻参数 5 / 10 / 20 天 × −2% / −3% / −4% 的急升状态里 ≥ 5 组在急升中，收在 20 日线之上结束） 或 JBH（日経225 熊 且 USD/JPY 熊 = 日元牛；现行牛熊检测器）。实盘汇率用 Yahoo JPY=X（研究用 FRED DEXJPUS，2017〜2026 判定一致 95.4%）。2026-10-01 收盘的决策（10-02 06:57 JST 的 sim-day / 07:40 的执行器）起；云端决策前算 → var/fx_hedge.json，Mac 执行器经 scripts/liveu.sh 同步同一个文件。2845：一手 1 口、滑点 0.10%（qbreak/fees.py）。保留：事后设计的组合、前向确认核心层约 11 年 / 账户层约 44 年、2026 年到 9 月比 Q1 少 7.0 pp（sim_changes 2026-10-01 第 15 轮）。改回 \"Q1\" = 只拿 1545（2026-09-30〜10-01 的规则）、\"K0\" = 原规则（1655 + 美股牛熊分界）。基准账户照旧按原规则。 之前（Q1，2026-09-30 起）：没有个股可买时闲置资金拿什么（qbreak/idle_cash.py）。2026-09-29 用户要求「闲置资金改为比1655收益更高的股票类别进行研究 / 预计会下跌的时候要选择反向型的股票进行研究」：按登记 c4ce05e（运行前补正 fad20f7）的规则在股票类 Q1〜Q6 里选中 Q1 纳斯达克 100 ETF 1545（不对冲，一手 10 口）+ 美股牛熊分界（熊 → 现金），「预计下跌 → 反向 ETF」P1〜P4 都更差、不采用；var/out/equity_idle_study.md。账户历史：年化 E 8.88% → 13.12%、J 14.09% → 16.35%，最大回撤 E −28.60% → −23.35%、J −34.98% → −29.75%；只有核心的 1987〜2026 最大回撤 −44.72%（1655 −36.89%）。代替 2026-09-29 定的 K3（133A 美元趋势，一次也没执行）。改回 \"K0\" = 原规则（1655 + 美股牛熊分界）、\"K3\" = 美元趋势。基准账户照旧按原规则。"
+ },
+ "combo_c": {
+  "enabled": true,
+  "since": "2026-10-01",
+  "note": "关联搭配 C「市场状态 × 个股特征」（qbreak/combo_c.py；研究 scripts/combo_all_study.py 登记 7f2ca59、结果 729c4ee、事后核对 63fa4d2；2026-10-01 用户「加进模拟盘并记录」）：2026-10-01 收盘的决策（10-02 06:57 JST 的 sim-day / 07:40 的执行器）起，只在「日経225 收盘在 200 日线上且 VIX < 20」时，日本个股候选按 5 个特征投票（vexp+、upper−、atrp−、r12−、us12−，三个年代一起学、冻结在 qbreak/combo_c.RULE），不利比有利多 2 票以上 → 这只不开新仓（×0），其余不变；其他市场格不动。云端 sim-day 决策前算 → var/combo_c.json，Mac 执行器经 scripts/liveu.sh 同步同一个文件。基准账户（原规则）不加。前向记录：scripts/score_forward.py 第十二节。enabled = false 即回到原规则。"
+ },
+ "tbf": {
+  "enabled": true,
+  "since": "2026-10-05",
+  "note": "TBF「像起跌点就不买」（qbreak/tbf.py；研究 scripts/turn_shape_combo.py 登记 23e248a、结果 b36c893；2026-10-06 用户「把 TBF 加进现在的选股判断」）：2026-10-05 收盘的决策（10-06 06:57 JST 的 sim-day / 07:40 的执行器）起，每天收盘时今天的股票池（日経225）里 45 个特征都算得出的票，用冻结的三个「起跌点」评分模型（日线 = turn_shape_wide U2、周 / 月线 = turn_shape_mtf；参数 var/tbf_model.json）各打分、在股票池里排百分位，三个尺度里至少两个 > 90% → 这只明天不开新仓（×0），其余不变。云端 sim-day 决策前算 → var/tbf.json，Mac 执行器经 scripts/liveu.sh 同步同一个文件。基准账户（原规则）不加。前向记录 var/out/tbf_forward.csv（只追加）。研究里第一关没过（2022 年以后账户 Calmar −0.026，容许 −0.02），用户看过结果后要求加进来。enabled = false 即回到原规则。"
+ }
+}
