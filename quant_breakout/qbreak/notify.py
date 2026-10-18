@@ -14,6 +14,8 @@
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import json
 import os
 import re
@@ -234,9 +236,52 @@ def _email(conf: str, subject: str, text: str) -> int:
 LOG_FILE = "notifications.jsonl"         # 通知记录（数据目录 out/；面板「消息 → 通知记录」读；只在本机，不入库）
 LOG_KEEP = 500
 
+# 通知属于哪个账本（2026-10-19 用户：「模拟盘的操作记录的通知记录不要放到本番的通知记录里面 本番的操作记录通知记录才放到本番通知记录
+# 登录本番账号的时候要可以放到本番的通知记录里面」）：记录里带 book（paper / tachibana / tachibana_demo …；None = 共通：经济威胁、
+# 手机连不上、测试通知…）；面板的通知记录只显示这个账本的 + 共通的。定哪个账本：调用方明写 book= → 标题（book_of_subject：
+# 「模拟操盘」= 模拟、「立花本番 / 立花实盘 / qbreak 立花」= 本番；模拟账户取开盘价时登录立花本番的那条也按标题 = 本番）→ 这个进程 / 线程的账本（set_book：
+# 执行器的命令按 --broker 设）→ 共通。
+_BOOK: contextvars.ContextVar = contextvars.ContextVar("qbreak_notify_book", default=None)
 
-def record(subject: str, text: str, level: str = "info", url: str = "") -> str:
-    """记一条通知 → id（面板「消息 → 通知记录」；推送点开定位到它）。时刻按日本时间。最多留 LOG_KEEP 条。绝不抛。"""
+
+def set_book(tag: str | None) -> None:
+    """这个进程（之后的这个上下文）发的通知默认算哪个账本（run.py 的执行器命令按 --broker 设）。"""
+    _BOOK.set(tag or None)
+
+
+@contextlib.contextmanager
+def book_scope(tag: str | None):
+    """with book_scope("paper"): …… 里发的通知默认算这个账本（面板的线程：盘中观测、自动叫执行器）。"""
+    tok = _BOOK.set(tag or None)
+    try:
+        yield
+    finally:
+        _BOOK.reset(tok)
+
+
+def book_of_subject(subject: str) -> str | None:
+    """按标题认账本（旧记录没有 book 时也用它）：模拟 → 模拟账户；立花本番・实盘・デモ（デモ发单检查 = 本番上线前的检查）→ 立花本番；
+    认不出 → None（共通：经济威胁、磁盘、测试通知…）。"""
+    s = str(subject or "")
+    if "模拟" in s:
+        return "paper"
+    if "立花" in s or "本番" in s or "实盘" in s or "デモ" in s:
+        return "tachibana"
+    return None
+
+
+def book_of(rec: dict) -> str | None:
+    """一条记录属于哪个账本（有 book 键 = 记的时候定的，None = 共通；旧记录没有键 → 按标题）。"""
+    return rec.get("book") if "book" in rec else book_of_subject(str(rec.get("subject") or ""))
+
+
+def _pick_book(subject: str, book: str | None) -> str | None:
+    return book or book_of_subject(subject) or _BOOK.get()
+
+
+def record(subject: str, text: str, level: str = "info", url: str = "", book: str | None = None) -> str:
+    """记一条通知 → id（面板「消息 → 通知记录」；推送点开定位到它）。时刻按日本时间。最多留 LOG_KEEP 条。绝不抛。
+    book = 属于哪个账本（None = 共通；send 定好再给）。"""
     import os
     import secrets
     from .calendar_jp import now_jst
@@ -244,7 +289,7 @@ def record(subject: str, text: str, level: str = "info", url: str = "") -> str:
     try:
         p = paths.out_dir() / LOG_FILE
         rec = {"id": rid, "at": now_jst().strftime("%Y-%m-%d %H:%M:%S"), "level": level, "subject": str(subject)[:200],
-               "text": str(text)[:2000], "url": url}
+               "text": str(text)[:2000], "url": url, "book": book or None}
         lines = p.read_text(encoding="utf-8").splitlines() if p.exists() else []
         lines = (lines + [json.dumps(rec, ensure_ascii=False)])[-LOG_KEEP:]
         tmp = p.with_name(p.name + f".tmp{os.getpid()}")
@@ -257,16 +302,19 @@ def record(subject: str, text: str, level: str = "info", url: str = "") -> str:
     return rid
 
 
-def history(n: int = 60) -> list[dict]:
-    """最近 n 条通知（新的在前）。"""
+def history(n: int = 60, book: str | None = None) -> list[dict]:
+    """最近 n 条通知（新的在前）。book 给了 → 只要这个账本的 + 共通的（别的账本的不要）。"""
     p = paths.out_dir() / LOG_FILE
     out = []
     try:
         for ln in reversed(p.read_text(encoding="utf-8").splitlines()):
             try:
-                out.append(json.loads(ln))
+                rec = json.loads(ln)
             except ValueError:
                 continue
+            if book and book_of(rec) not in (None, book):
+                continue
+            out.append(rec)
             if len(out) >= n:
                 break
     except OSError:
@@ -311,15 +359,19 @@ def compact(text):
         return text
 
 
-def send(subject: str, text: str, level: str = "info", run=None, url: str = "", resend: bool = False) -> dict[str, bool | None]:
+def send(subject: str, text: str, level: str = "info", run=None, url: str = "", resend: bool = False,
+         book: str | None = None) -> dict[str, bool | None]:
     """按设置了的通道发一条通知 → {webhook / email: True 发了 / False 失败 / None 没设置, push: …}。绝不抛（失败只记 warning）。
     每一条先记进通知记录（面板「消息 → 通知记录」）；推送点开 → url（没给 = 通知记录里的这一条）。
     resend = 刚才那条都没发成、同一条再发一次（09:30 自检 60 秒后的重推）：不再记进通知记录，推送点开 → 通知记录。
+    book = 属于哪个账本（不给 → 按标题 / 这个进程的账本 / 共通：_pick_book；2026-10-19）。
     票的名字（2026-10-15）：所有通道发之前兜底给「7203.T」带上名字（named）；推送（标题 120 字 / 正文 600 字截断）用短名（compact）。
     调用方的去重（notify_seen）按调用方自己的文字算，不受这里加名字影响。"""
     subject, text = named(subject), named(text)
-    rid = None if resend else record(subject, text, level, url)
-    url = url or (f"/?tab=news&seg=log&l={rid}" if rid else "/?tab=news&seg=log")
+    bk = _pick_book(subject, book)                            # 属于哪个账本（通知记录分开显示；2026-10-19）
+    rid = None if resend else record(subject, text, level, url, book=bk)
+    q = f"&book={urllib.parse.quote(bk)}" if bk else ""      # 推送点开 → 那个账本的通知记录
+    url = url or (f"/?tab=news&seg=log&l={rid}{q}" if rid else f"/?tab=news&seg=log{q}")
     out: dict[str, bool | None] = {}
     for name in ("webhook", "email"):
         try:

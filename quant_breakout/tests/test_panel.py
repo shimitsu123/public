@@ -303,6 +303,9 @@ def test_render_pick_with_buy_buttons_and_gates():
     assert "data-act='buy'" in html and "data-full='1'" in html and ">全部换成这只…<" in html     # 2026-10-13：名额满也给按钮，只能「其他全部卖出」
     assert "个股名额已满（4 / 4 只）：只能把其他持仓全部卖出来换这只" in html
     _sm([])
+    assert "以前出过买入信号（1 只）" in _card(panel.render("paper", "t" * 40, AT), "autobuy")   # 出过信号的留着，直到点删除（2026-10-19）
+    from qbreak import signal_keep as SK
+    SK.path("paper").unlink()
     assert "今天没有出信号 / 快要出信号的票" in panel.render("paper", "t" * 40, AT)
 
 

@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import base64
 import datetime as dt
+import functools
 import errno
 import http.client
 import json
@@ -588,9 +589,9 @@ def push_login(b, when=None, send=None) -> None:
     try:
         what, nxt = getattr(b, "purpose", None) or login_purpose()
         t = (when or dt.datetime.now(JST)).strftime("%H:%M")
-        if send is None:
+        if send is None:                          # 本番的通知记录（模拟账户取开盘价时的登录也算本番：标题「立花本番」；2026-10-19）
             from .. import notify
-            send = notify.send
+            send = functools.partial(notify.send, book="tachibana")
         send(f"立花本番 API 登录 {t}：{what}", f"接下来：{nxt}\n{NOT_ME}", "info")
     except Exception as e:                        # noqa: BLE001
         log.warning("登录推送没发成：%s", type(e).__name__)

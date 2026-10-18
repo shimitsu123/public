@@ -3306,6 +3306,11 @@ def _liveu_tag(a):
     """(paper?, 账本标签, 账本路径)：模拟账户 / 立花本番 / デモ / dry-run 各一份账本，互不干扰。"""
     paper = a.broker == "paper"
     tag = "paper" if paper else "tachibana" + ("_demo" if a.demo else "") + ("_dryrun" if a.dry_run else "")
+    try:                                                    # 这个命令发的通知默认算这个账本（通知记录按账本分开；2026-10-19）
+        from qbreak import notify as _nt
+        _nt.set_book(tag)
+    except Exception:                                       # noqa: BLE001
+        pass
     return paper, tag, paths.state_dir() / f"live_unified_{tag}.json"
 
 
@@ -4518,6 +4523,11 @@ def _live_unified_run(a, opened: list) -> int:
             _SP.run(tag, sm, dict(eng.st.pending_exit), {t: int(getattr(p_, "shares", 0) or 0) for t, p_ in eng.st.pos.items()}, paper)
         except Exception as e:                              # noqa: BLE001  只是通知
             print(f"（买卖点的推送没做成：{type(e).__name__}: {e}）")
+    try:                                                    # 出了买入信号的记下来：选股里一直显示到点「删除」（qbreak/signal_keep.py，2026-10-19）
+        from qbreak import signal_keep as _SK
+        _SK.note(tag, sm.get("suggest") or {})
+    except Exception as e:                                  # noqa: BLE001  只是展示
+        print(f"（出过买入信号的记录没写成：{type(e).__name__}: {e}）")
     print(f"\n决策日 {sm['decided_on']} → 成交日 {sm['fill_day']}；权益 ¥{sm['equity_jpy']:,.0f}，现金 ¥{sm['cash_jpy']:,.0f}")
     from qbreak import live_ops as _LO
     from qbreak.live_unified import order_tail

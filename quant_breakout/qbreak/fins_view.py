@@ -156,7 +156,8 @@ def series(rows: list[dict], today: dt.date) -> dict | None:
 
 
 def scope(books=("paper", "tachibana")) -> list[str]:
-    """要取的票：各账本拿着的个股（不含核心 ETF）+ 执行器汇总的候选里出了买入信号的、估计 NEAR_DAYS 个交易日内金叉的。"""
+    """要取的票：各账本拿着的个股（不含核心 ETF）+ 执行器汇总的候选里出了买入信号的、估计 NEAR_DAYS 个交易日内金叉的
+    + 选股里留着的以前出过买入信号的（qbreak/signal_keep.py）。"""
     want: set[str] = set()
     for b in books:
         st = (read_json(paths.state_dir() / f"live_unified_{b}.json", {}) or {}).get("state") or {}
@@ -168,6 +169,11 @@ def scope(books=("paper", "tachibana")) -> list[str]:
             if r.get("status") == "triggered" or (nr.get("where") == "below_up" and int(nr.get("days") or 99) <= NEAR_DAYS):
                 if str(r.get("ticker") or "").endswith(".T"):
                     want.add(str(r["ticker"]))
+    try:                                                    # 选股里留着的「以前出过买入信号」（signal_keep；2026-10-19）
+        from . import signal_keep as SK
+        want |= {t for t in SK.tickers(books) if t.endswith(".T")}
+    except Exception:                                       # noqa: BLE001
+        pass
     return sorted(want)
 
 

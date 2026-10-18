@@ -438,6 +438,12 @@ document.addEventListener('click', async e=>{
   const a=b.dataset.act, d=b.dataset;
   if(a==='reload'){ reloadPage(b, '刷新中…'); return; }
   if(a==='close'){ closeAll(); return; }
+  if(a==='sigdel'){                                                       // 选股里出过买入信号的「删除」：先确认（2026-10-19 用户）；按钮在摘要行里 → 不展开
+    e.preventDefault(); e.stopPropagation();
+    const q=await ask('从选股里删除 '+tlab(d.t, d.name)+'？', '这次买入信号（'+d.since+' 收盘）不再在「选股」里显示。\n'
+      +(d.live ? '★ 这只的信号还在：'+d.live+'。\n' : '')+'只是不显示：不下单、不撤单，规则照样按自己的判断买 / 不买；之后再出新的买入信号会再显示。', '删除', {danger:true});
+    if(q.ok) done(await post({book:CFG.book, kind:'sigdel', ticker:d.t, since:d.since})); return;
+  }
   if(a==='ask-ok'){ const v=$('#ask-input').value, r=ASK; ASK=null; closeAll(); if(r) r({ok:true, value:v}); return; }
   if(a==='ask-alt'){ const r=ASK; ASK=null; closeAll(); if(r) r({ok:true, alt:d.v}); return; }
   if(a==='sell'){

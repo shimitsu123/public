@@ -328,7 +328,9 @@ def push(doc: dict, tag: str, now: dt.datetime | None = None, prev: dict | None 
             continue
         subject, text = fn(r, doc)
         try:
-            send(subject, text, level="info")
+            from .notify import book_scope
+            with book_scope(tag):                             # 这个账本的通知记录（2026-10-19）
+                send(subject, text, level="info")
         except Exception as e:                                # noqa: BLE001  notify.send 不抛；兜底
             log.warning("盘中观测的推送失败：%s", type(e).__name__)
         rec = {"key": key, "ticker": r["ticker"], "side": side, "at": now.isoformat(timespec="seconds")}

@@ -67,6 +67,7 @@ from . import manual_orders as MO
 from . import names as NM
 from . import panel_phone as PP
 from . import paths
+from . import signal_keep as SK
 from . import suggest as SG
 from . import trade_room as TR
 from . import watch_prob as WP
@@ -358,8 +359,14 @@ def _suggest_ctx(sg: dict, book: dict, tag: str, marks: dict | None = None, now:
     bt, dw = pj.get("by_ticker") or {}, pj.get("day_word") or "今天"
     bought = {t: f"{dw}已买进 {int((bt.get(t) or {}).get('buy') or 0):,} 股（对账前）"
               for t in pj.get("new") or [] if (bt.get(t) or {}).get("kind") == "stock"}
+    kept, gone = [], set()
+    try:                                                    # 出过买入信号的留着、直到点「删除」（2026-10-19；SK.note 在 render 里先记）
+        kept, gone = SK.kept(tag, sg), SK.deleted_now(tag)
+    except Exception as e:                                  # noqa: BLE001  记录读不了：只是少显示，不影响选股
+        log.warning("出过买入信号的记录读不了（%s）：%s", tag, type(e).__name__)
     return {"tab": tab, "rows": rows, "blocks": blocks, "lifting": lifting, "freed": freed, "marks": marks or {},
-            "slots": MO.slots(book, tag, now=now, with_today=True), "auto": _auto_pick(sg, rows, blocks, lifting), "bought": bought}
+            "slots": MO.slots(book, tag, now=now, with_today=True), "auto": _auto_pick(sg, rows, blocks, lifting), "bought": bought,
+            "kept": kept, "gone": gone, "held": set(((pj.get("state") or {}).get("pos") or {}))}
 
 
 def _slots_today(s: dict) -> str:
@@ -424,15 +431,19 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
     s = c["slots"]
     a = c["auto"]
     bought = c.get("bought") or {}                          # 今天已经买进的（对账前）：不再当候选买（2026-10-16 复核）
-    trig, near = a["trig"], a["near"]
+    gone = c.get("gone") or set()                           # 点了「删除」的这一次信号（2026-10-19）
+    kept = [k for k in c.get("kept") or [] if str(k["ticker"]) not in bought]
+    trig, near = [r for r in a["trig"] if str(r["ticker"]) not in gone], a["near"]
     chart = chart or _chart_box
     ranked = bool(c["tab"])
+    since = {str(k["ticker"]): str(k.get("since")) for k in kept}
+    since.update({t: str(it.get("since")) for t, it in (SK._load(tag)["items"] if trig else {}).items()})
 
-    def item(badge: str, main: str, r: dict) -> str:        # 一行：收起时 = 一行摘要；点开 = _suggest_row（K 线默认打开）
+    def item(badge: str, main: str, r: dict, dele: str = "") -> str:   # 一行：收起时 = 一行摘要；点开 = _suggest_row（K 线默认打开）
         t = str(r["ticker"])
         body = _suggest_row(r, s, buying or set(), eq, chart, fill=sg.get("fill_day"), mark=c["marks"].get(t), freed=c["freed"],
                             ckind="autobuy", kl_open=True, ranked=ranked and r.get("status") != "triggered", bought=bought)
-        return (f"<details class='abx' data-t='{escape(t)}'><summary>{badge}<span class='grow'>{main}</span></summary>"
+        return (f"<details class='abx' data-t='{escape(t)}'><summary>{badge}<span class='grow'>{main}</span>{dele}</summary>"
                 f"<div class='abxb'>{body}<div class='abxe'><button type='button' class='btn' data-abxclose='1'>收起</button></div>"
                 "</div></details>")                          # 底下也能收起（点开的一行很长：不用滚回摘要；2026-10-14 复核）
 
@@ -454,7 +465,14 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
          + "</div>"]
     if sg.get("error"):
         H.append(f"<div class='neg small'>★ 这次没算成：{escape(str(sg['error']))}</div>")
-    if not rows:                                            # 还没有候选（例：立花本番的执行器还没跑过）
+    def dele(r: dict, live: str = "") -> str:              # 「删除」（点了先出确认框；只从选股里拿掉这一次信号，2026-10-19）
+        t = str(r["ticker"])
+        if t not in since or t in bought:
+            return ""
+        return (f"<button type='button' class='btn sm abdel' data-act='sigdel' data-t='{escape(t)}' data-since='{escape(since[t])}'"
+                f" data-name='{escape(_nm(t, r.get('name')))}' data-live='{escape(live)}'>删除</button>")
+
+    if not rows and not kept:                               # 还没有候选（例：立花本番的执行器还没跑过）
         H.append("<div class='muted'>" + ("候选在执行器下一次运行之后显示" if not sg else "今天没有出信号 / 快要出信号的票") + "</div></section>")
         return "".join(H)
     if trig:
@@ -467,8 +485,33 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
                 H.append(item(f"<span class='abd on'>{escape(bw.split(' ')[0])}</span>",
                               f"{name(r)}<span class='abs small'>{escape(bw)}</span>", r))
                 continue
+            live = (f"规则照样会在 {SK.md(sg.get('fill_day'))} 开盘买（要不买：在「交易」撤单或 HALT）" if ok and sg.get("fill_day")
+                    else "规则照样会在下一个开盘买（要不买：在「交易」撤单或 HALT）" if ok else "规则这次本来就不买")
             H.append(item(f"<span class='abd{' on' if ok else ''}'>{'下个开盘' if ok else '不买'}</span>",
-                          f"{name(r)}<span class='abs small{'' if ok else ' muted'}'>{escape(str(ru.get('text') or '').split(' —— ')[0])}</span>", r))   # 整句在点开的那一行里（2026-10-17）
+                          f"{name(r)}<span class='abs small{'' if ok else ' muted'}'>{escape(str(ru.get('text') or '').split(' —— ')[0])}</span>", r,
+                          dele(r, live)))                   # 整句在点开的那一行里（2026-10-17）
+        H.append("</div>")
+    if kept:                                                # 以前出过买入信号、已经过了那次买入时机的：留着，直到点「删除」（2026-10-19 用户）
+        cur = {str(r["ticker"]): r for r in rows}
+        held = c.get("held") or set()
+        H.append(f"<h3 class='sgh'>以前出过买入信号（{len(kept)} 只）</h3>"
+                 + "<div class='chips'>" + _tip("出过买入信号、已经过了那次买入时机的票：一直留在这里，直到点「删除」（只是不再显示，规则照样按自己的判断买 / 不买）。"
+                                                "<br>「当时」= 出信号那次规则怎么处理；现在的价格、条件与「买入…」在点开的那一行里（按最新的收盘）。"
+                                                "<br>同一只之后再出新的信号会到上面「已经出了买入信号」。") + "</div><div class='list'>")
+        for k in kept:
+            t = str(k["ticker"])
+            r0 = k.get("row") or {"ticker": t}
+            r = cur.get(t) or {**r0, "status": "watch", "rule": {}, "near": {}}   # 没有新的行（不在这份候选里）→ 出信号那次的行（规则那句去掉）
+            ru0 = r0.get("rule") or {}
+            then = str(ru0.get("text") or "").split(" —— ")[0]
+            c0, c1 = k.get("close"), (cur.get(t) or {}).get("close")
+            chg = (f"信号收盘 ¥{float(c0):,.0f} → 现在 ¥{float(c1):,.0f}（{(float(c1) / float(c0) - 1) * 100:+.1f}%）"
+                   if c0 and c1 else f"信号收盘 ¥{float(c0):,.0f}" if c0 else "")
+            span = SK.md(k.get("since")) + ("" if k.get("last") == k.get("since") else f"〜{SK.md(k.get('last'))}")
+            st = ("<span class='chip ok'>在持仓</span>" if t in held else "<span class='chip'>过了买入时机</span>")
+            sub = " · ".join(x for x in (f"{span} 出信号", f"当时：{then}" if then else "", chg) if x)
+            H.append(item(f"<span class='abd'>{escape(SK.md(k.get('since')).split('（')[0])}</span>",
+                          f"{name(r)} {st}<span class='abs muted small'>{escape(sub)}</span>", r, dele(r)))
         H.append("</div>")
     if near:
         sh_all = {r["ticker"]: est_shares(r) for r in near if str(r["ticker"]) not in bought}   # 今天已经买进的不算进「买不起」
@@ -498,7 +541,7 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
                                          f"还差 {len(miss)} 个条件" if miss else "") if x)
             H.append(item(f"<span class='abd'>约 {n} 天</span>", f"{name(r)} {tag_}<span class='abs muted small'>{escape(sub)}</span>", r))
         H.append("</div>")
-    if not trig and not near:
+    if not trig and not near and not kept:
         H.append(f"<div class='muted'>今天没有出信号的票，估计 {AUTO_NEAR_DAYS} 个交易日内金叉的也没有：规则近几天大概不会自动买个股</div>")
     H.append("</section>")
     return "".join(H)
@@ -2404,41 +2447,46 @@ def _ts_jst(v):
     return t.astimezone(JST) if t.tzinfo else t.replace(tzinfo=JST)
 
 
-def _msg_seg(now: dt.datetime | None = None) -> str:
-    n = len(_recent_notices(now)[0])                       # 按钮上的数字 = 最近 24 小时的条数（与卡片一致）
+def _msg_seg(now: dt.datetime | None = None, tag: str | None = None) -> str:
+    n = len(_recent_notices(now, tag)[0])                       # 按钮上的数字 = 最近 24 小时的条数（与卡片一致）
     return ("<div class='seg sgseg' role='tablist'><button type='button' data-mseg='news' class='on'>经济威胁消息</button>"   # 默认（2026-10-11 用户）
             "<button type='button' data-mseg='log'>通知记录 " + str(n) + "</button></div>")
 
 
-def _recent_notices(now: dt.datetime | None = None) -> tuple[list[dict], int]:
+def _recent_notices(now: dt.datetime | None = None, tag: str | None = None) -> tuple[list[dict], int]:
     """最近 NOTIFY_SHOW_H 小时内发出的通知（新的在前）与更早的条数（2026-10-12 用户：「通知记录里面只显示 24 小时以内的记录」）。
-    记的时刻读不出的也不显示。"""
+    记的时刻读不出的也不显示。tag = 这个账本的 + 共通的（别的账本的不显示；notify.book_of，2026-10-19）。"""
     from . import notify as NT
     now = now or now_jst()
     cut = (now if now.tzinfo else now.replace(tzinfo=JST)) - dt.timedelta(hours=NOTIFY_SHOW_H)
-    hs = NT.history(60)
+    hs = NT.history(60, book=tag)
     keep = [h for h in hs if _ts_jst(h.get("at")) and _ts_jst(h.get("at")) >= cut]
     return keep, len(hs) - len(keep)
 
 
-def _notify_log_card(now: dt.datetime | None = None) -> str:
+def _notify_log_card(now: dt.datetime | None = None, tag: str | None = None) -> str:
     """qbreak 发出的每一条通知（notify.send 记的；数据目录 out/notifications.jsonl，只在本机）：时刻（JST）、标题、内容；只显示最近 24 小时的。
     推送点开 ?tab=news&seg=log&l=<id> → 展开这一条。2026-10-11 用户：不用 Gmail，直接在 qbreak 里通知并记录。"""
-    hs, n_old = _recent_notices(now)
+    from . import notify as NT
+    hs, n_old = _recent_notices(now, tag)
+    who = f"{BOOKS.get(tag, tag)}的 + 共通的（别的账本的在那个账本的页面上）" if tag else ""
     if not hs:
-        return ("<section class='card' id='nlog'><h2>通知记录</h2><div class='muted small'>"
+        return ("<section class='card' id='nlog'><h2>通知记录</h2><div class='muted small'>" + (f"这里是{who}。" if who else "")
                 + (f"最近 {NOTIFY_SHOW_H} 小时没有通知（更早的 {n_old} 条不显示）。" if n_old else "还没有。")
                 + "qbreak 发出的通知（成交、09:30 自检、买入信号、HALT、经济威胁、手机连不上…）都会记在这里；打开了推送的设备同时会弹出来。</div></section>")
     rows = []
     for k, h in enumerate(hs):
         lv = str(h.get("level") or "info")
         rows.append(f"<details class='hv nw' id='l-{escape(str(h.get('id')))}'{' open' if k == 0 else ''}><summary>"
-                    f"{'<b class=neg>★</b> ' if lv in ('warn', 'error') else ''}<span class='muted'>{escape(str(h.get('at') or '')[5:16].replace('-', '/'))} JST</span> "
+                    f"{'<b class=neg>★</b> ' if lv in ('warn', 'error') else ''}"
+                    + ("<span class='chip'>共通</span> " if tag and NT.book_of(h) is None else "")
+                    + f"<span class='muted'>{escape(str(h.get('at') or '')[5:16].replace('-', '/'))} JST</span> "
                     f"{escape(NM.annotate(str(h.get('subject') or '')))}</summary>"      # 以前记下的只有代码 → 显示时补名字（记录本身不改；2026-10-15）
                     f"<div style='white-space:pre-wrap'>{escape(NM.annotate(str(h.get('text') or '')))}</div></details>")
     return (f"<section class='card' id='nlog'><h2>通知记录（最近 {NOTIFY_SHOW_H} 小时 {len(hs)} 条）</h2><div class='muted small'>时间都是日本时间（JST）。"
             f"只显示最近 {NOTIFY_SHOW_H} 小时的" + (f"（更早的 {n_old} 条不显示）" if n_old else "") + "；"
-            "qbreak 发出的每一条通知都记在这里（只在这台 Mac）；打开了推送的设备同时会弹出来。</div>" + "".join(rows) + "</section>")
+            + (f"这里是{who}；" if who else "")
+            + "qbreak 发出的每一条通知都记在这里（只在这台 Mac）；打开了推送的设备同时会弹出来。</div>" + "".join(rows) + "</section>")
 
 
 def _news_card(now: dt.datetime) -> str:
@@ -2851,7 +2899,13 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     H.append(PANE + "pick")
     H.append("<div class='khgo small'>怎么看 K 线图：说明在「持仓」的 K 线上面 <a href='#khelp' data-khelpgo='1'>去看 ›</a></div>")   # 选股只留一行指过去（2026-10-15）
     sgd = sm.get("suggest") or {}
-    sctx = _suggest_ctx(sgd, book, tag, marks=_news_marks([r["ticker"] for r in sgd.get("rows") or [] if r.get("ticker")], now), now=now)
+    if tag not in READONLY:
+        try:
+            SK.note(tag, sgd)                               # 出了买入信号的记下来（执行器早上也记；没变不写；2026-10-19）
+        except Exception as e:                              # noqa: BLE001
+            log.warning("出过买入信号没记成（%s）：%s", tag, type(e).__name__)
+    sctx = _suggest_ctx(sgd, book, tag, marks=_news_marks([r["ticker"] for r in sgd.get("rows") or [] if r.get("ticker")]
+                                                          + [x["ticker"] for x in SK.kept(tag, sgd)], now), now=now)
     H.append(_auto_buy_card(sgd, book, tag, eq, buying=buying, chart=chart, ctx=sctx))   # 规则接下来会自动买的（2026-10-12；每行点开 = K 线、买入…，2026-10-14）
     # 「建议的股票」（其余的候选：观察中…）2026-10-18 删掉（用户：只留已经出了买入信号的和估计 5 个交易日内可能出信号的）
     H.append(PANE + "hold")
@@ -3073,9 +3127,9 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     if remote:
         H.append(_notify_card())                             # 推送（网页 App）
     H.append(PANE + "news")
-    H.append(_msg_seg(now))                                  # 通知记录 / 经济威胁 两段
+    H.append(_msg_seg(now, tag))                                  # 通知记录 / 经济威胁 两段
     H.append("<div class='mseg' data-s='news'>" + _news_card(now) + "</div>")
-    H.append("<div class='mseg' data-s='log' hidden>" + _notify_log_card(now) + "</div>")
+    H.append("<div class='mseg' data-s='log' hidden>" + _notify_log_card(now, tag) + "</div>")
     H.append(PANE + "")                                      # 分组结束
     badges = _badges(book, pst, sm, waiting, now, tag, tlive)   # 持仓的只数含今天已成交（2026-10-16）
     H.append("</main><nav class='tabbar' role='tablist' aria-label='分类'>"
@@ -3634,6 +3688,12 @@ def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fe
         return False, "dry-run 的账本只能看：面板不写指令", None
     if str(body.get("kind") or "") == "flow":
         return submit_flow(tag, body, now)
+    if str(body.get("kind") or "") == "sigdel":             # 选股里「以前出过买入信号」的删除（只是不再显示；2026-10-19）
+        t = str(body.get("ticker") or "")
+        ok, msg = SK.delete(tag, t, str(body.get("since") or ""))
+        if ok:
+            log.info("选股：删掉了 %s 的买入信号（%s，%s）", NM.label(t), body.get("since"), tag)
+        return ok, (f"{NM.label(t)}：{msg}" if t else msg), {"id": "sigdel", "kind": "sigdel"}
     if str(body.get("kind") or "") != "cancel":            # 模拟账户的执行器没装、立花装了：写了也没人执行（2026-10-14 G13；撤回照旧能写）
         why = MO.paper_refuse(tag)
         if why:
@@ -3908,7 +3968,7 @@ def _trigger_notify(tag: str, title: str, text: str, level: str = "warn") -> Non
     from . import notify
     from .live_unified import mac_notify
     mac_notify(title, text[:200])
-    notify.send(title, text, level)
+    notify.send(title, text, level, book=tag)               # 这个账本的通知记录（2026-10-19）
 
 
 def _retry_soon(book: dict | None, now: dt.datetime) -> bool:
