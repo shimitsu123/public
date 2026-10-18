@@ -18,7 +18,7 @@
   GET  /api/chart?book=…&t=…    一只票的 K 线（执行器写的 out/charts_<账本>.json；打开 / 滑到那只票时才取；手机端口要你本人）
   GET  /api/quotes?book=…       持有的个股与核心 ETF 的现价（Yahoo 1 分钟线，约晚 20 分钟；盘中 60 秒缓存；只展示；手机端口要你本人）
   GET  /api/trade_room?book=…   今天还能买几次 / 卖几次（qbreak/trade_room.py：时段、差金決済、执行器规则、钱、闸门；不取价、只读；手机端口要你本人）
-  GET  /api/intraday?book=…     盘中观测：规则的暂定买卖点（qbreak/intraday_watch.py 的结果文件；不取价、只读；手机端口要你本人）。
+  GET  /api/intraday?book=…     盘中观测：持仓的收盘卖出线（qbreak/intraday_watch.py 的结果文件；不取价、只读；手机端口要你本人）。
                                 面板里的一个线程（serve 的 intraday）交易日 08:55〜11:35、12:25〜16:30 每 5 分钟另起进程算一次（取价不在请求里做）
   POST /api/request             写一条手动指令（qbreak/manual_orders.py；与 run.py manual 相同的检查）
   POST /api/halt                建 HALT（只能建、不能解除；解除只在 Mac 上、用户明确说）
@@ -95,7 +95,7 @@ WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "money_view.py", "bro
          "paths.py", "live_unified.py",         # 默认账本 / ARM 判定（paths）、数据依赖的提醒文字（live_unified）
          "live_ops.py", "data.py",              # 「预计不会下单」与执行器同一个判断（live_ops）、盘中现价（data）：2026-10-15 复核补上
          "trade_room.py",                       # 今天还能买几次 / 卖几次（D6；2026-10-15）
-         "intraday_watch.py")                   # 盘中观测的卡片 / 时段（2026-10-16）
+         "intraday_watch.py")                   # 盘中观测的持仓一行 / 时段（2026-10-16）
 
 
 def token() -> str:
@@ -1208,49 +1208,13 @@ INTRADAY_LOG = IW.LOG_NAME              # 数据目录 logs/com.qbreak.panel.int
 
 
 def intraday_json(tag: str, now: dt.datetime | None = None) -> tuple[int, dict]:
-    """/api/intraday?book=…（选股页的「今天盘中」卡片、持仓每只一行；页面每 1 分钟刷新）：只读 out/intraday_<账本>.json
-    （面板的线程另起进程写的），请求里不取价、不算区间。读不了 → 200 + ok=false（页面保留上一次的）。"""
+    """/api/intraday?book=…（持仓每只一行；页面每 1 分钟刷新）：只读 out/intraday_<账本>.json
+    （面板的线程另起进程写的），请求里不取价。读不了 → 200 + ok=false（页面保留上一次的）。"""
     try:
         return 200, IW.view(IW.load(tag), now or now_jst())
     except Exception as e:                                  # noqa: BLE001
         log.warning("/api/intraday 读不了（%s：%s）", type(e).__name__, e)
         return 200, {"ok": False, "msg": "盘中观测读不了"}
-
-
-def _intraday_card(v: dict | None) -> str:
-    """选股页最上面「今天盘中：规则的买点（暂定，约晚 20 分钟）」（static/intraday.js 的 intraShow 按 /api/intraday 重画同一个样子）。
-    每行：代码 + 名字、区间 ¥下沿〜¥上沿、离下沿 %、成交量到所需的 %、挡住的闸门、数据时刻；其余收起「今天不可能：N 只（理由）」。"""
-    if not v or not v.get("ok"):
-        return f"<section class='card' id='intraday'><div class='ia-hl'><b>{escape(IW.TITLE)}</b></div><div class='muted small'>盘中观测读不了</div></section>"
-    H = [f"<section class='card' id='intraday'><div class='ia-hl'><b>{escape(v['title'])}</b>{_tip(escape(v['foot']))}</div>",   # 页脚收进 ⓘ（2026-10-17）
-         f"<div class='muted small'>{escape(v['head'])}</div>"]
-    if v.get("warn"):
-        H.append("<div class='chips'>" + "".join(f"<span class='chip bad'>★ {escape(IW.warn_short(w))}</span>" for w in v["warn"])
-                 + _tip("<br>".join("★ " + escape(w) for w in v["warn"])) + "</div>")
-    def rows(rs: list) -> None:
-        H.append("<div class='list'>")
-        ats = [r.get("at") for r in rs]
-        mode = max(set(ats), key=ats.count)                       # 多数行的数据时刻 → 不每行重复，只写和它不一样的（2026-10-17）
-        for r in rs:
-            ga = " · ".join(x for x in (r.get("gates"), None if r.get("at") == mode else r.get("at")) if x)    # 只这只自己的闸门 / 数据时刻（共同的在顶上 ★）
-            H.append(f"<div class='li'><div class='grow'><b>{escape(r['label'])}</b> <span class='chip{' hot' if r.get('kind') == 'ok' else ''}'>"
-                     f"{escape(r['status'])}</span><div class='small'>{escape(r['line'])}</div>"
-                     + (f"<div class='muted small'>{escape(ga)}</div>" if ga else "") + "</div></div>")
-        H.append("</div>")
-    if v.get("rows"):
-        rows(v["rows"])                                           # 只列满足的（2026-10-17）
-    if v.get("none"):
-        H.append(f"<div class='small'>{escape(v['none'])}</div>")
-    for m in v.get("more") or []:                               # 接近的 / 没满足的：收起（2026-10-17 用户：都不满足条件的没必要显示）
-        H.append(f"<details class='ia' data-k='{escape(m['key'])}'><summary class='muted small'>{escape(m['sum'])}</summary>")
-        rows(m["rows"])
-        H.append("</details>")
-    if v.get("impossible"):
-        H.append(f"<details class='ia' data-k='imp'><summary class='muted small'>{escape(v['impossible'])}</summary>")
-        H += [f"<div class='muted small'>{escape(g['why'])}：{escape(g['names'])}</div>" for g in v.get("groups") or []]
-        H.append("</details>")
-    H.append("</section>")
-    return "".join(H)
 
 
 def _intraday_line(v: dict | None, t: str) -> str:
@@ -2733,7 +2697,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     hv = HV.overlay(hv, pj)                                 # 今天已成交：卖光的移到「今天已卖出」、今天买进的加一行（对账前；2026-10-16）
     _ht = list((pst.get("pos") or {}).keys()) + [t for t, u in (pj.get("core_units") or {}).items() if int(u or 0) > 0]
     hmarks = _news_marks(_ht, now) if _ht else {}                     # 持仓（个股 + 拿着的核心 ETF）的消息影响
-    try:                                                    # 盘中观测（读结果文件；不取价）：选股页的卡片、持仓每只一行
+    try:                                                    # 盘中观测（读结果文件；不取价）：持仓每只一行
         iv = IW.view(IW.load(tag), now)
     except Exception as e:                                  # noqa: BLE001  展示用：读不了不影响页面
         log.warning("盘中观测读不了：%s", e)
@@ -2895,7 +2859,6 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     H.append("<section class='card' id='holdings'>" + HV.html(hv, actions=actions, tip=_tip) + more
              + ("<div id='qt-note' class='muted small'>现价：Yahoo 1 分钟线（约晚 20 分钟）</div>" if held_any else "") + "</section>")
     H.append(PANE + "pick")
-    H.append(_intraday_card(iv))                            # 最上面：今天盘中规则的暂定买点（约晚 20 分钟；2026-10-16）
     H.append("<div class='khgo small'>怎么看 K 线图：说明在「持仓」的 K 线上面 <a href='#khelp' data-khelpgo='1'>去看 ›</a></div>")   # 选股只留一行指过去（2026-10-15）
     sgd = sm.get("suggest") or {}
     sctx = _suggest_ctx(sgd, book, tag, marks=_news_marks([r["ticker"] for r in sgd.get("rows") or [] if r.get("ticker")], now), now=now)
@@ -3149,7 +3112,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
            "when": when, "eq": eq or 0, "cap": cap, "lot": MO.LOT, "live": MO.timing(now)[0] == "now",   # 盘中：现价每 1 分钟刷新
            "rt": tag not in READONLY and _rt_enabled(),      # 确认框取立花实时价（盘中才真的去取；2026-10-17）
            "room": bool(rm),                                                               # 有「今天还能买几次」的卡片 → room.js 定时刷新（D6）
-           "intra": True, "intra_live": bool((iv or {}).get("live")),                      # 盘中观测：intraday.js 交易时段每 1 分钟、其他 10 分钟刷新
+           "intra": True, "intra_live": bool((iv or {}).get("live")),                      # 盘中观测（持仓每只一行）：intraday.js 交易时段每 1 分钟、其他 10 分钟刷新
            "cores": {t: {"cur": int((pj.get("core_units") or {}).get(t, 0)), "u100": int(u100s.get(t, 0)),   # 含今天已成交（2026-10-16）
                          "lot": MO.core_lot(book, t)}                                            # 调一只核心 ETF 时别的跟着变多少
                      for t in dict.fromkeys(list(u100s) + [t for t, u in (pj.get("core_units") or {}).items() if int(u) > 0])

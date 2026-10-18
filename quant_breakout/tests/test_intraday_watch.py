@@ -1,7 +1,7 @@
 """盘中观测（qbreak/intraday_watch.py + timeline 的盘中小函数 + 面板的线程 / 接口；2026-10-16 用户要求；只展示）：
-暂定买点 = 引擎同一个 compute_indicators 的 entry（真引擎逐日走、次日开盘买不买与暂定一致）；暂定卖点 = 引擎的离场顺序；
-时段（午休、休市日、临时休市）；数据过期 / 取不到 → 不推送；同一只同一边一天一次、每天最多 5 条；推送文字（暂定、执行器、
-没有「建议」、HALT）；代码都带名字；面板接口只读结果文件（请求里不取价）、线程可以关掉。不连网（取价用注入的函数）。"""
+暂定卖点 = 引擎的离场顺序；时段（午休、休市日、临时休市）；数据过期 / 取不到 → 不推送；同一只一天一次、每天最多 5 条；
+推送文字（暂定、执行器、没有「建议」、HALT）；代码都带名字；面板接口只读结果文件（请求里不取价）、线程可以关掉。不连网（取价用注入的函数）。
+2026-10-18 用户「今天盘中规则的买点 感觉没什么用 … 删了吧」：买点那一半（选股页卡片、股票池的买点区间、暂定买点的推送）删掉 → 这里查它不再出现。"""
 import datetime as dt
 import json
 import shutil
@@ -34,37 +34,6 @@ AT = dt.datetime(2026, 10, 16, 14, 40, tzinfo=JST)
 
 
 # ───────────────────────── 暂定 = 引擎 ─────────────────────────
-def _engine_buys(frame, p, s1) -> bool:
-    """真引擎逐日走：只留 s1 那天自己算出来的 entry（之前的信号清掉，免得别的持仓占着），s2 开盘有没有买进。"""
-    ind = compute_indicators(frame, p)
-    ind.loc[ind.index != pd.Timestamp(s1), "entry"] = False
-    e = UnifiedEngine({"A.T": ind, "1655.T": _core(frame.index)}, CFG, {"JP": p, "US": p}, EX, CC,
-                      bear={"US": pd.Series(False, index=frame.index)})
-    e.prime(5)
-    for i in range(5, len(frame.index)):
-        e.step(i)
-    return "A.T" in e.st.pos
-
-
-@pytest.mark.parametrize("seed", [5, 6])
-def test_provisional_entry_equals_engine(seed):
-    p = StrategyParams()
-    base = _walk(seed, n=300, drift=0.0, vol=0.007)
-    s1, s2 = _days(base, 2)
-    bt = TL.buy_trigger(base, p, s1)
-    lo, hi, v = bt["lo"], bt["hi"], bt["v_need"]
-    prev = float(base["Close"].iloc[-1])
-    seen = set()
-    for x, vol in (((lo + hi) / 2, v), (lo * (1 + 1e-4), v), (lo * (1 - 1e-3), v), ((lo + hi) / 2, v - 1)):
-        bar = {"o": prev, "h": max(prev, x), "l": min(prev, x), "c": x, "v": vol}          # 与 with_bars 同样的假设 K 线
-        mine = TL.provisional_entry(base, p, bar, s1)
-        full = TL.with_bars(base, [s1, s2], [x, x], [vol, vol])
-        assert mine["entry"] == bool(compute_indicators(full.iloc[:-1], p)["entry"].iloc[-1]) == _engine_buys(full, p, s1)
-        assert mine["entry"] or mine["fails"]
-        seen.add(mine["entry"])
-    assert seen == {True, False}                                                      # 区间里成立、区间外 / 少一股不成立
-
-
 def test_live_frame_with_shadows_is_the_same_bar_the_engine_sees():
     """有影线、开盘不等于前收的真实一根：live_frame = 日线 + 那一根（同一个 compute_indicators 的每一列都一样）。"""
     p = StrategyParams()
@@ -78,7 +47,7 @@ def test_live_frame_with_shadows_is_the_same_bar_the_engine_sees():
     a, b = compute_indicators(fr, p).iloc[-1], compute_indicators(full, p).iloc[-1]
     for k in ("entry", "is_range", "golden_cross", "near_zero", "vol_surge", "upper_shadow_ratio", "macd", "macd_sig"):
         assert (a[k] == b[k]) or (pd.isna(a[k]) and pd.isna(b[k])), k
-    assert TL.provisional_entry(base, p, bar, s1)["entry"] == bool(b["entry"])
+    assert not hasattr(TL, "provisional_entry") and not hasattr(TL, "buy_bands")       # 盘中买点删掉（2026-10-18）
 
 
 @pytest.mark.parametrize("mode,seed,off", [("DC", 7, 8), ("X6", 3, 15), ("DC", 3, 8)])
@@ -154,7 +123,7 @@ def test_panel_tick_runs_only_in_window_and_every_5_minutes(monkeypatch):
     assert panel._intraday_due("paper", dt.datetime(2026, 10, 16, 10, 9, tzinfo=JST), {})
 
 
-# ───────────────────────── 一次：候补、持仓、推送 ─────────────────────────
+# ───────────────────────── 一次：持仓、推送 ─────────────────────────
 def _tse_index(n, end=dt.date(2026, 10, 15)):
     out = [end]
     while len(out) < n:
@@ -168,15 +137,11 @@ def _frame(seed, p0=1000.0):
     return b
 
 
-POOL = ["7203.T", "9984.T", "8306.T"]
-
-
 def _setup(monkeypatch, halt=False, mult=1.0, decided="2026-10-15"):
-    """股票池 3 只（7203 / 9984 有区间、8306 横盘不成立）、持仓 6758（买价 = 昨收、止损 −7%）、核心 1545（拿着）+ 1655（规则的）；
+    """持仓 6758（买价 = 昨收、止损 −7%）、核心 1545（拿着）+ 1655（规则的）；7203 / 9984 / 8306 是股票池里的（不再盯）；
     执行器的汇总是今天早上的。"""
     frames = {"7203.T": _frame(5), "9984.T": _frame(6), "8306.T": _frame(2), "6758.T": _frame(7), "1545.T": _frame(8, p0=250.0),
               "1655.T": _frame(9, p0=700.0)}
-    monkeypatch.setattr(IW, "_pool", lambda sim: list(POOL))
     monkeypatch.setattr(IW, "daily", lambda t, day: ((frames[t].loc[frames[t].index < pd.Timestamp(day)], None) if t in frames
                                                      else (None, "没有日线缓存")))     # 数据目录的日线缓存 → 这里的假日线
     c6758 = float(frames["6758.T"]["Close"].iloc[-1])
@@ -214,109 +179,80 @@ def _fetcher(frames, bands, at="2026-10-16T14:20+09:00", sell_px=None, calls=Non
     return f
 
 
-def _bands(frames):
-    p = StrategyParams()
-    return {t: TL.buy_trigger(frames[t].loc[frames[t].index < pd.Timestamp(DAY)], p, DAY) for t in ("7203.T", "9984.T")}
-
-
-def test_evaluate_candidates_holdings_gates_and_names(monkeypatch):
+def test_evaluate_holdings_core_and_names(monkeypatch):
     frames, c0 = _setup(monkeypatch)
     calls = []
-    doc = IW.evaluate("paper", AT, fetch=_fetcher(frames, _bands(frames), calls=calls), frames=frames)
-    assert calls == [["1545.T", "1655.T", "6758.T", "7203.T", "9984.T"]]                       # 盯的票 = 可能出买点的 + 持仓 + 核心 ETF（不扫全部）
-    c = {r["ticker"]: r for r in doc["candidates"]}
-    assert set(c) == {"7203.T", "9984.T"} and c["7203.T"]["kind"] == "ok" and c["7203.T"]["push_ok"]
-    assert c["9984.T"]["kind"] == "vol" and c["9984.T"]["status"] == "价在区间、量还差 50%" and not c["9984.T"]["push_ok"]
-    assert c["9984.T"]["blocks"] == ["资格检查：测试挡住"] and c["7203.T"]["blocks"] == []
-    assert doc["impossible"] == [{"why": "横盘不成立", "tickers": ["8306.T"]}]
+    doc = IW.evaluate("paper", AT, fetch=_fetcher(frames, {}, calls=calls), frames=frames)
+    assert calls == [["1545.T", "1655.T", "6758.T"]]                                   # 盯的票 = 持仓 + 核心 ETF（股票池的买点不再算）
+    assert not {"candidates", "bands", "gates", "impossible", "pool_n"} & set(doc)
     assert not doc["stale"] and doc["age_min"] == 20 and doc["data_at"] == "2026-10-16T14:20+09:00"
     h = doc["holdings"][0]
     assert h["ticker"] == "6758.T" and h["now"] is None and not h["push_ok"] and h["px"] == round(c0, 2)
     assert doc["core"][0]["ticker"] == "1545.T" and doc["core"][0]["chg_pct"] == 1.0
-    # 代码一律带名字：卡片（显示出来的字）、持仓一行、终端（"t" / hold 的键是给页面找元素用的，不显示）
-    from test_trade_room import _text
+    # 代码一律带名字：持仓一行、终端（hold 的键是给页面找元素用的，不显示）
     v = IW.view(doc, AT)
     txt = IW.text(doc, AT, "paper")
-    blob = _text(panel._intraday_card(v)) + "".join(v["hold"].values()) + txt
-    for t in ("7203.T", "9984.T", "8306.T", "6758.T", "1545.T"):
+    blob = "".join(v["hold"].values()) + txt
+    for t in ("6758.T", "1545.T"):
         assert t not in blob
-    for lab in ("7203 トヨタ自動車", "9984 ソフトバンクグループ", "6758 ソニーグループ", "1545 纳斯达克 100", "1655 "):
+    for lab in ("6758 ソニーグループ", "1545 纳斯达克 100", "1655 "):
         assert lab in txt
-    assert "7203 トヨタ自動車" in v["rows"][0]["label"] and "离下沿" in v["rows"][0]["line"] and "成交量 100%" in v["rows"][0]["line"]
+    assert "买点" not in txt and "7203" not in txt
     assert v["hold"]["6758.T"].startswith("盘中（暂定，数据 14:20，约晚 20 分钟）：现价") and "收盘仍在这里：规则不卖" in v["hold"]["6758.T"]
-    assert "8306 三菱ＵＦＪフィナンシャル・グループ" in v["groups"][0]["names"] and v["impossible"] == "今天不可能：1 只（横盘不成立 1）"
-    assert v["foot"] == IW.FOOT and v["live"] is True
+    assert set(v) == {"ok", "head", "warn", "core", "hold", "live"} and v["live"] is True
 
 
-def test_gates_global_and_unknown(monkeypatch):
-    frames, _ = _setup(monkeypatch, mult=0.0)
-    doc = IW.evaluate("paper", AT, fetch=_fetcher(frames, _bands(frames)), frames=frames)
-    assert doc["gates"]["global"] == ["新仓倍数 0（风险报告「避险」）→ 下个交易日 10/19（周一）不开新仓"]
-    assert all("新仓倍数 0（风险报告「避险」）→ 下个交易日 10/19（周一）不开新仓" in r["blocks"] for r in doc["candidates"])
-    v = IW.view(doc, AT)                                     # 所有票都挡的：卡片顶上 ★ 一次，每行不重复
-    assert "新仓倍数 0（风险报告「避险」）→ 下个交易日 10/19（周一）不开新仓" in v["warn"]
-    assert v["rows"] and not any("新仓倍数" in r["gates"] for r in v["rows"])
-    frames, _ = _setup(monkeypatch, decided="2026-10-14")
-    doc = IW.evaluate("paper", AT, fetch=_fetcher(frames, _bands(frames)), frames=frames)
-    assert not doc["gates"]["known"] and doc["gates"]["note"] == "闸门未知（执行器的汇总是 2026-10-14 收盘的，应有 2026-10-15）"
-    v = IW.view(doc, AT)
-    assert any("闸门未知" in w for w in v["warn"]) and v["rows"][0]["gates"] == ""   # 卡片顶上写一次，每行不重复
-    (paths.out_dir() / "live_unified_paper.json").write_text("{坏的", encoding="utf-8")
-    assert IW.load_gates("paper", DAY, {})["note"] == "闸门未知（执行器早上的汇总读不到）"
-
-
-def test_push_buy_and_sell_text_dedupe(monkeypatch):
+def test_push_sell_text_dedupe_and_no_buy(monkeypatch):
     frames, c0 = _setup(monkeypatch, halt=True)
     sent = []
-    fetch = _fetcher(frames, _bands(frames), sell_px=c0 * 0.92)                       # 6758 跌破止损（−7%）
-    doc = IW.run_once("paper", AT, fetch=fetch, send=lambda s, t, level="info": sent.append((s, t)))
-    assert [s for s, _ in sent] == ["盘中暂定买点：7203 トヨタ自動車", "盘中暂定卖点：6758 ソニーグループ"]
+    fetch = _fetcher(frames, {}, sell_px=c0 * 0.92)                                    # 6758 跌破止损（−7%）
+    IW.run_once("paper", AT, fetch=fetch, send=lambda s, t, level="info": sent.append((s, t)))
+    assert [s for s, _ in sent] == ["盘中暂定卖点：6758 ソニーグループ"]                  # 买点不再推（2026-10-18）
     for s, t in sent:
         assert "暂定" in t and "执行器" in t and "建议" not in t and "建议" not in s
         assert "现在不需要操作" in t and "盘中手动买卖没有研究支持" in t and t.endswith("（HALT 中：下个交易日 10/19（周一）不会下单）")
         assert ".T" not in t
-    assert "如果收在这里，规则下个交易日 10/19（周一）09:00 开盘会买（执行器照常处理，现在不需要操作）" in sent[0][1]
-    assert "如果收在这里，规则下个交易日 10/19（周一）09:00 开盘会卖（执行器照常处理，现在不需要操作）" in sent[1][1]
-    assert f"已越过收盘卖出线 「止损（买价 −7%）」{IW._px(round(c0 * 0.93, 2))}。" in sent[1][1]
+    assert "如果收在这里，规则下个交易日 10/19（周一）09:00 开盘会卖（执行器照常处理，现在不需要操作）" in sent[0][1]
+    assert f"已越过收盘卖出线 「止损（买价 −7%）」{IW._px(round(c0 * 0.93, 2))}。" in sent[0][1]
     keys = [x["key"] for x in json.loads(IW.out_path("paper").read_text(encoding="utf-8"))["pushes"]["sent"]]
-    assert keys == ["盘中|7203|buy", "盘中|6758|sell"]                                 # 键不含价格
+    assert keys == ["盘中|6758|sell"]                                                  # 键不含价格
     IW.run_once("paper", AT + dt.timedelta(minutes=5), fetch=fetch, send=lambda s, t, level="info": sent.append((s, t)))
-    assert len(sent) == 2                                                              # 同一只同一边一天一次
+    assert len(sent) == 1                                                              # 同一只一天一次
     v = IW.view(IW.load("paper"), AT)
     assert "HALT 中：下个交易日 10/19（周一）不会下单" in v["warn"] and "若收盘仍在这里 → 规则下个交易日 10/19（周一）开盘卖（止损（买价 −7%））" in v["hold"]["6758.T"]
 
 
-def test_sell_push_only_after_1410_and_blocked_buy_says_so(monkeypatch):
-    frames, c0 = _setup(monkeypatch, mult=0.0)
+def test_sell_push_only_after_1410(monkeypatch):
+    frames, c0 = _setup(monkeypatch)
     sent = []
     early = dt.datetime(2026, 10, 16, 13, 30, tzinfo=JST)
-    fetch = _fetcher(frames, _bands(frames), at="2026-10-16T13:10+09:00", sell_px=c0 * 0.92)
+    fetch = _fetcher(frames, {}, at="2026-10-16T13:10+09:00", sell_px=c0 * 0.92)
     IW.run_once("paper", early, fetch=fetch, send=lambda s, t, level="info": sent.append((s, t)))
-    assert [s for s, _ in sent] == ["盘中暂定买点：7203 トヨタ自動車"]                     # 卖点：数据 13:10 < 14:10 → 不推
-    assert "但现在被挡（新仓倍数 0（风险报告「避险」）→ 下个交易日 10/19（周一）不开新仓）→ 下个交易日 10/19（周一）不会买（执行器照常处理，现在不需要操作）" in sent[0][1]
-    assert "HALT" not in sent[0][1]
+    assert sent == []                                                                  # 数据 13:10 < 14:10 → 不推
 
 
 def test_daily_cap_5(monkeypatch):
-    doc = {"day": DAY.isoformat(), "stale": False, "error": "", "halt": False, "gates": {"known": True},
-           "candidates": [{"ticker": t, "label": f"{t[:4]} 名", "lo": 100, "hi": 110, "px": 105, "v": 10, "v_need": 10, "v_pct": 100,
-                           "at": "2026-10-16T10:00+09:00", "blocks": [], "push_ok": True}
-                          for t in ("7203.T", "6758.T", "9984.T", "8306.T", "6501.T", "8035.T", "4063.T")], "holdings": []}
+    doc = {"day": DAY.isoformat(), "stale": False, "error": "", "halt": False, "candidates": [],
+           "holdings": [{"ticker": t, "label": f"{t[:4]} 名", "shares": 100, "px": 95, "entry_px": 100, "ret_pct": -5.0, "now": "stop",
+                         "now_text": "止损", "levels": [], "at": "2026-10-16T14:15+09:00", "push_ok": True}
+                        for t in ("7203.T", "6758.T", "9984.T", "8306.T", "6501.T", "8035.T", "4063.T")]}
     sent = []
-    now = dt.datetime(2026, 10, 16, 10, 20, tzinfo=JST)
+    now = dt.datetime(2026, 10, 16, 14, 20, tzinfo=JST)
     out = IW.push(doc, "paper", now, send=lambda s, t, level="info": sent.append(s))
-    assert len(out) == len(sent) == IW.CAP == 5
+    assert len(out) == len(sent) == IW.CAP == 5 and all(s.startswith("盘中暂定卖点：") for s in sent)
     doc2 = json.loads(json.dumps({**doc, "pushes": None}))
     assert IW.push(doc2, "paper", now + dt.timedelta(minutes=5), prev=doc, send=lambda s, t, level="info": sent.append(s)) == []
     assert len(sent) == 5                                                              # 今天已经 5 条：后面两只不再推
     assert IW.push(json.loads(json.dumps(doc)), "paper", now + dt.timedelta(days=3), prev=doc, send=lambda *a, **k: None) == []   # 周一：不在今天 → 不推
+    doc3 = {**json.loads(json.dumps(doc)), "holdings": [], "candidates": [{"ticker": "7203.T", "push_ok": True}]}   # 旧格式的买点候补：不推
+    assert IW.push(doc3, "paper", now, send=lambda *a, **k: None) == []
 
 
 def test_stale_or_failed_fetch_never_pushes(monkeypatch):
     frames, _ = _setup(monkeypatch)
     sent = []
     snd = lambda s, t, level="info": sent.append(s)                                    # noqa: E731
-    old = _fetcher(frames, _bands(frames), at="2026-10-16T13:50+09:00")                # 14:40 时只有 13:50 的 → 过期 50 分钟
+    old = _fetcher(frames, {}, at="2026-10-16T13:50+09:00")                            # 14:40 时只有 13:50 的 → 过期 50 分钟
     doc = IW.run_once("paper", AT, fetch=old, send=snd)
     assert doc["stale"] and doc["age_min"] == 50 and sent == []
     assert "数据过期 50 分钟（不推送）" in IW.view(doc, AT)["head"]
@@ -325,12 +261,12 @@ def test_stale_or_failed_fetch_never_pushes(monkeypatch):
         raise TimeoutError("yahoo")
     doc2 = IW.run_once("paper", AT + dt.timedelta(minutes=5), fetch=boom, send=snd)
     assert doc2["error"].startswith("Yahoo 取不到（TimeoutError）") and sent == []
-    assert all(r.get("old") for r in doc2["candidates"] if r.get("px") is not None)    # 留着上一次的、标上
-    assert not any(r["push_ok"] for r in doc2["candidates"])
+    assert all(r.get("old") for r in doc2["holdings"] if r.get("px") is not None)      # 留着上一次的、标上
+    assert not any(r["push_ok"] for r in doc2["holdings"])
     doc3 = IW.run_once("paper", AT + dt.timedelta(minutes=10), fetch=lambda ts: {}, send=snd)
     assert doc3["error"].startswith("Yahoo 取不到（没有数据）") and sent == []
     IW.set_push(False)                                                                 # 设置关 → 新鲜的数据也不推
-    IW.run_once("paper", AT + dt.timedelta(minutes=15), fetch=_fetcher(frames, _bands(frames), at="2026-10-16T14:35+09:00"), send=snd)
+    IW.run_once("paper", AT + dt.timedelta(minutes=15), fetch=_fetcher(frames, {}, at="2026-10-16T14:35+09:00"), send=snd)
     assert sent == [] and IW.settings()["push"] is False
     (paths.home() / IW.SETTINGS).write_text("{坏的", encoding="utf-8")
     assert IW.settings()["push"] is True                                               # 读坏 → 默认开
@@ -339,8 +275,8 @@ def test_stale_or_failed_fetch_never_pushes(monkeypatch):
 def test_dry_does_not_write_or_push(monkeypatch):
     frames, _ = _setup(monkeypatch)
     sent = []
-    doc = IW.run_once("paper", AT, dry=True, fetch=_fetcher(frames, _bands(frames)), send=lambda *a, **k: sent.append(a))
-    assert doc["candidates"] and sent == [] and not IW.out_path("paper").exists()
+    doc = IW.run_once("paper", AT, dry=True, fetch=_fetcher(frames, {}), send=lambda *a, **k: sent.append(a))
+    assert doc["holdings"] and sent == [] and not IW.out_path("paper").exists()
 
 
 def test_cli_push_toggle_and_read(monkeypatch, capsys):
@@ -375,66 +311,50 @@ def test_panel_api_reads_the_file_and_never_fetches(monkeypatch, servers):
     from test_panel_phone import _phone, _req
     from qbreak import data as D
     frames, _ = _setup(monkeypatch)
-    IW.run_once("paper", AT, fetch=_fetcher(frames, _bands(frames)), send=lambda *a, **k: None)
+    IW.run_once("paper", AT, fetch=_fetcher(frames, {}), send=lambda *a, **k: None)
 
     def boom(*a, **k):
         raise AssertionError("请求里不该取价 / 算区间")
-    for mod, fn in ((D, "intraday_quotes"), (IW, "_fetch_default"), (IW, "evaluate"), (IW, "bands_for"), (TL, "buy_trigger")):
+    for mod, fn in ((D, "intraday_quotes"), (IW, "_fetch_default"), (IW, "evaluate"), (TL, "buy_trigger")):
         monkeypatch.setattr(mod, fn, boom)
     lp, pp = servers
     st, raw, hd = _req(lp, "GET", "/api/intraday?book=paper")
     j = json.loads(raw.decode("utf-8"))
-    assert st == 200 and j["ok"] and j["title"] == IW.TITLE and j["rows"][0]["label"] == "7203 トヨタ自動車"
+    assert st == 200 and j["ok"] and j["hold"]["6758.T"].startswith("盘中（暂定") and "rows" not in j and "title" not in j
     st, raw, _ = _req(lp, "GET", "/?book=paper")
     html = raw.decode("utf-8")
-    assert st == 200 and "<section class='card' id='intraday'>" in html and "data-intra='6758.T'" in html
-    assert html.index("id='intraday'") < html.index("class='khgo small'")              # 选股页最上面
+    assert st == 200 and "id='intraday'" not in html and "规则的买点" not in html and "data-intra='6758.T'" in html   # 选股页的卡片删掉（2026-10-18）
     assert "<link rel='modulepreload' href='/static/intraday.js?v=" in html
     code, body, _ = _phone(pp, "GET", "/api/intraday?book=paper")                     # 手机：没配对 → 401（与 /api/quotes 一样）
     assert code == 401 and "7203" not in body
 
 
-def test_panel_card_text_equals_js_rendering(monkeypatch, tmp_path):
-    """页面脚本 intraday.js 的 intraShow 按 /api/intraday 重画的卡片与服务器画的（panel._intraday_card）字一样；持仓一行跟着变；ok=false → 不动。"""
+def test_js_updates_the_holding_lines(monkeypatch, tmp_path):
+    """页面脚本 intraday.js 的 intraShow 按 /api/intraday 更新持仓每只一行（没有这只 → 空）；ok=false → 不动。"""
     node = shutil.which("node")
     if not node:
         pytest.skip("没有 node")
     from test_panel import _js_fn
-    from test_trade_room import _text
     frames, _ = _setup(monkeypatch)
-    doc = IW.run_once("paper", AT, fetch=_fetcher(frames, _bands(frames)), send=lambda *a, **k: None)
+    doc = IW.run_once("paper", AT, fetch=_fetcher(frames, {}), send=lambda *a, **k: None)
     v = IW.view(doc, AT)
-    want = _text(panel._intraday_card(v))
-    fns = "\n".join(_js_fn(panel._JS, n) for n in ("nd", "tipEl", "intraShow"))
     js = """
-class El { constructor(t){ this.tagName=String(t).toUpperCase(); this.children=[]; this._t=''; this.className=''; this.dataset={}; this.open=false; }
-  appendChild(c){ this.children.push(c); return c; } setAttribute(k, v){ this[k]=v; }
-  querySelector(s){ const [tg, cl]=String(s).split('.');
-    for(const c of this.children){ if(c.tagName===tg.toUpperCase() && (!cl || String(c.className).split(' ').includes(cl))) return c; const x=c.querySelector && c.querySelector(s); if(x) return x; } return null; }
-  querySelectorAll(s){ const [tg, cl]=String(s).split('.'), out=[];
-    const walk=e=>{ for(const c of e.children||[]){ if(c.tagName===tg.toUpperCase() && (!cl || String(c.className).split(' ').includes(cl))) out.push(c); walk(c); } };
-    walk(this); return out; }
-  set textContent(v){ this._t=String(v); this.children=[]; } get textContent(){ return this._t+this.children.map(c=>c.textContent).join(''); } }
-const CARD=new El('section'), HOLD=new El('div'), GONE=new El('div'); HOLD.dataset.intra='6758.T'; GONE.dataset.intra='9999.T'; GONE.textContent='old';
-const document={createElement:t=>new El(t), createTextNode:t=>({textContent:String(t)}), querySelectorAll:s=>[HOLD, GONE]};
-const $=s=>s==='#intraday' ? CARD : null;
+const HOLD={dataset:{intra:'6758.T'}, textContent:''}, GONE={dataset:{intra:'9999.T'}, textContent:'old'};
+const document={querySelectorAll:s=>[HOLD, GONE]};
 const nameify=s=>s;
-__FNS__
+__FN__
 const V=__V__;
 intraShow(V);
-const out={card:CARD.textContent, hold:HOLD.textContent, gone:GONE.textContent};
-CARD.querySelector('details.ia').open=true; intraShow(V); out.keep=CARD.querySelector('details.ia').open;   // 「今天不可能」展开着的保持展开（ⓘ 不算）
-intraShow({ok:false}); out.same=CARD.textContent===out.card;
+const out={hold:HOLD.textContent, gone:GONE.textContent};
+intraShow({ok:false}); out.same=HOLD.textContent===out.hold;
 console.log(JSON.stringify(out));
-""".replace("__FNS__", fns).replace("__V__", json.dumps(v, ensure_ascii=False))
+""".replace("__FN__", _js_fn(panel._JS, "intraShow")).replace("__V__", json.dumps(v, ensure_ascii=False))
     f = tmp_path / "intra.js"
     f.write_text(js, encoding="utf-8")
     p = subprocess.run([node, str(f)], capture_output=True, text=True, timeout=60)
     assert p.returncode == 0, p.stderr[-800:]
     o = json.loads(p.stdout)
-    assert o["card"] == want and o["same"] and o["keep"] is True
-    assert o["hold"] == v["hold"]["6758.T"] and o["gone"] == ""
-    assert "7203 トヨタ自動車" in o["card"] and "今天不可能：1 只" in o["card"] and IW.FOOT in o["card"]
+    assert o["hold"] == v["hold"]["6758.T"] and o["gone"] == "" and o["same"]
 
 
 class _FakeSrv:
@@ -529,7 +449,7 @@ def test_todays_fills_bought_has_no_exit_lines_and_sold_is_gone(monkeypatch):
                     "decided_on": "2026-10-15"}]
     p.write_text(json.dumps(b), encoding="utf-8")
     sent = []
-    fetch = _fetcher(frames, _bands(frames), sell_px=c0 * 0.92)               # 6758 跌破止损：卖光了 → 不推
+    fetch = _fetcher(frames, {}, sell_px=c0 * 0.92)               # 6758 跌破止损：卖光了 → 不推
     doc = IW.run_once("paper", AT, fetch=fetch, send=lambda s, t, level="info": sent.append((s, t)))
     hs = {h["ticker"]: h for h in doc["holdings"]}
     assert set(hs) == {"8306.T"} and hs["8306.T"]["today"] and not hs["8306.T"]["push_ok"] and hs["8306.T"].get("now") is None
@@ -537,24 +457,3 @@ def test_todays_fills_bought_has_no_exit_lines_and_sold_is_gone(monkeypatch):
     assert not any("卖点" in s for s, _t in sent) and not any("8306" in s for s, _t in sent)
     v = IW.view(doc, AT)
     assert v["hold"]["8306.T"].startswith("盘中：今天买进（对账前）") and "6758.T" not in v["hold"]
-
-
-def test_only_satisfied_rows_on_top_the_rest_folded():
-    """2026-10-17 用户「那些股票我看都不满足条件 是不是也没有推荐显示的必要」：上面只列满足的（ok）；盘中「接近」的（量还差 / 离下沿 ≤ 1% /
-    形态没过）收起在「接近、盘中还可能满足」；不在区间的、收盘之后没满足的都收起在「没满足」。"""
-    day = dt.date(2026, 10, 16)
-    def c(t, kind):
-        return {"ticker": t, "label": t, "kind": kind, "status": kind, "lo": 100.0, "hi": 110.0, "px": 101.0, "dist_lo_pct": 1.0,
-                "v_pct": 50.0, "v_need": 1000, "at": f"{day}T10:00:00+09:00", "blocks": []}
-    doc = {"day": day.isoformat(), "data_at": f"{day}T10:00:00+09:00", "updated": f"{day}T10:20:00+09:00", "pool_n": 225,
-           "gates": {"known": True}, "candidates": [c("A.T", "ok"), c("B.T", "vol"), c("C.T", "near"), c("D.T", "out"), c("E.T", "out")]}
-    v = IW.view(doc, dt.datetime(2026, 10, 16, 10, 20, tzinfo=JST))
-    assert [r["t"] for r in v["rows"]] == ["A.T"] and not v["none"]
-    assert [(m["key"], [r["t"] for r in m["rows"]]) for m in v["more"]] == [("soon", ["B.T", "C.T"]), ("miss", ["D.T", "E.T"])]
-    assert v["more"][1]["sum"] == "现在没满足：2 只（不在区间 2）"
-    doc["candidates"] = doc["candidates"][1:]
-    v2 = IW.view(doc, dt.datetime(2026, 10, 17, 12, 0, tzinfo=JST))                     # 收盘之后：量还差的今天不会再满足
-    assert v2["rows"] == [] and v2["none"] == "今天收盘满足买点条件的：0 只（股票池 225 只）"
-    assert [m["key"] for m in v2["more"]] == ["miss"] and v2["more"][0]["sum"] == "今天没满足：4 只（量不够 1 · 没到区间 1 · 不在区间 2）"
-    card = panel._intraday_card(v2)
-    assert "<details class='ia' data-k='miss'>" in card and card.index("今天收盘满足买点条件的：0 只") < card.index("data-k='miss'")

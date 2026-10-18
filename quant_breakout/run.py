@@ -5047,7 +5047,7 @@ def cmd_live_precheck(a) -> int:
 
 
 def cmd_intraday(a) -> int:
-    """盘中观测（qbreak/intraday_watch.py；2026-10-16 用户要求；只展示、不下单、不改规则）：规则的暂定买卖点（约晚 20 分钟）。
+    """盘中观测（qbreak/intraday_watch.py；2026-10-16 用户要求；只展示、不下单、不改规则）：持仓的收盘卖出线（约晚 20 分钟；买点 2026-10-18 删掉）。
     不带参数 = 读最近一次的结果（只读；操作面板交易日 08:55〜11:35、12:25〜16:30 每 5 分钟算一次）；--dry = 现在算一次、只打印
     （不写结果、不推送）；--push on|off = 手机推送开 / 关（数据目录 intraday.json）。没给 --book：有结果的账本都列（模拟账户在前）。"""
     from qbreak import intraday_watch as IW
@@ -5881,7 +5881,7 @@ def main(argv=None) -> int:
     ec.add_argument("date", nargs="?", default=None, metavar="YYYY-MM-DD")
     ec.add_argument("--note", default=None, metavar="TEXT", help="原因（例：东证全日停止）")
     ec.set_defaults(func=cmd_extra_closed)
-    iw = sub.add_parser("intraday", help="盘中观测：规则的暂定买卖点（约晚 20 分钟；只展示）：读最近一次的结果 / --dry 现在算一次 / --push on|off")
+    iw = sub.add_parser("intraday", help="盘中观测：持仓的收盘卖出线（约晚 20 分钟；只展示）：读最近一次的结果 / --dry 现在算一次 / --push on|off")
     iw.add_argument("--book", default=None, choices=["paper", "tachibana"], help="账本（不给 = 有结果的都列）")
     iw.add_argument("--dry", action="store_true", help="现在算一次、只打印（不写结果、不推送）")
     iw.add_argument("--push", default=None, choices=["on", "off"], help="手机推送开 / 关（数据目录 intraday.json；默认开）")

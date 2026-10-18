@@ -50,7 +50,7 @@
 #   bash scripts/liveu.sh precheck --ack-api YYYY-MM-DD   API 新版本的预告核对过、不用更新：这个发布日的提醒不再出现（只在你确认后运行；不登录）
 #   bash scripts/liveu.sh adopt-host                 换 Mac：立花本番账本的机器标识改成这台（先备份；只在你明确说「换 Mac，账本归这台」时运行）
 #   bash scripts/liveu.sh closed list|add YYYY-MM-DD --note …|rm YYYY-MM-DD   临时休市（数据目录 extra_closed.json；add / rm 只在你确认后运行）
-#   bash scripts/liveu.sh intraday [--book paper|tachibana] [--dry]   盘中观测：规则的暂定买卖点（约晚 20 分钟；只读最近一次的结果，
+#   bash scripts/liveu.sh intraday [--book paper|tachibana] [--dry]   盘中观测：持仓的收盘卖出线（约晚 20 分钟；只读最近一次的结果，
 #                                                    操作面板交易日 08:55〜11:35、12:25〜16:30 每 5 分钟算一次）；--dry = 现在算一次、只打印（不写、不推送）
 #   bash scripts/liveu.sh intraday push on|off       盘中观测的手机推送开 / 关（数据目录 intraday.json；默认开；不下单）
 #   bash scripts/liveu.sh manual list|sell 7203|trim 7203 --pct 10|adjust 7203 --shares 300 (--yen / --pct)|buy 7203 [--shares / --yen / --pct]|core --pct 50|unblock 7203|cancel <id> [--broker tachibana]
@@ -534,7 +534,7 @@ if [ "${1:-}" = "closed" ]; then                   # 临时休市（数据目录
   exec "$PY" run.py extra-closed ${1+"$@"}
 fi
 
-if [ "${1:-}" = "intraday" ]; then                 # 盘中观测（规则的暂定买卖点，约晚 20 分钟；只展示、不下单）：读最近一次的结果 / --dry 现在算一次
+if [ "${1:-}" = "intraday" ]; then                 # 盘中观测（持仓的收盘卖出线，约晚 20 分钟；只展示、不下单）：读最近一次的结果 / --dry 现在算一次
   shift
   if [ "${1:-}" = "push" ]; then                   # 手机推送开 / 关：bash scripts/liveu.sh intraday push on|off
     shift

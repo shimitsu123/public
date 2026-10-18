@@ -373,8 +373,8 @@ def hold_estimate(stats: dict | None, hold: int, days: list[dt.date]) -> dict | 
 
 
 # ───────────────────────── 盘中观测（qbreak/intraday_watch.py；2026-10-16 用户要求；只展示）─────────────────────────
-# 「如果今天就收在现价」：日线（今天之前）+ 今天到现在为止的一根，用同一个 compute_indicators / 同一个离场顺序判定。
-# 买点区间（buy_trigger）只用来挑出今天可能出买点的票、给出价位；成立与否以 provisional_entry（真实的开 / 高 / 低 / 量）为准。
+# 「如果今天就收在现价」：日线（今天之前）+ 今天到现在为止的一根，用同一个 compute_indicators / 同一个离场顺序判定（持仓的收盘卖出线）。
+# 盘中的买点（provisional_entry / buy_bands）2026-10-18 用户「没什么用 删了吧」→ 删掉。
 PRICE_EXITS = ("stop", "trail", "take_profit", "chandelier", "dead_cross")   # 价位线（盘中可以说「越过了哪条线」）
 
 
@@ -389,49 +389,6 @@ def live_frame(df: pd.DataFrame, bar: dict, day: dt.date) -> pd.DataFrame:
     add = pd.DataFrame([{"Open": o, "High": h, "Low": lo, "Close": c, "Volume": float(bar.get("v") or 0)}],
                        index=pd.DatetimeIndex([pd.Timestamp(day)]), columns=OHLCV)
     return pd.concat([base, add])
-
-
-def provisional_entry(df: pd.DataFrame, p, bar: dict, day: dt.date) -> dict:
-    """如果 day 收在 bar 的现价、成交量就是现在的累计量：规则的买入条件（compute_indicators 的 entry，与引擎同一列）成不成立；
-    不成立 → fails 列出没过的条件（_fails；都过了还不成立 → 「其他条件」）。"""
-    r = compute_indicators(live_frame(df, bar, day), p).iloc[-1]
-    ok = bool(r["entry"])
-    fails = [] if ok else (_fails(r, p, float(r["Close"])) or ["其他条件不成立"])
-    vr = r.get("vol_ratio")
-    return {"entry": ok, "fails": fails, "vol_ratio": round(float(vr), 2) if vr is not None and np.isfinite(vr) else None}
-
-
-def band_why(why: list[str] | None) -> str:
-    """buy_trigger 没有区间的理由 → 简短的一类（盘中观测「今天不可能」按它分组）。"""
-    w = (why or ["条件不全"])[0]
-    for head, short in (("横盘不成立", "横盘不成立"), ("MACD 已在信号线之上", "MACD 已在信号线之上（金叉已经过去）"),
-                        ("成交量历史不够", "成交量历史不够")):
-        if w.startswith(head):
-            return short
-    if "周线量比" in w:
-        return "周线量比（W2）够不到"
-    if "出货日" in w:
-        return "出货日太多"
-    return "涨多少都不会出买点"
-
-
-def buy_bands(frames: dict, p, s1: dt.date, pool=None) -> dict:
-    """整个股票池在 s1 收盘的买点区间（buy_trigger）：{"bands": {票: buy_trigger 的结果（有区间的）}, "no": {票: 简短理由}}。"""
-    bands, no = {}, {}
-    for t in (list(pool) if pool is not None else sorted(frames)):
-        if t not in frames:
-            no[t] = "没有日线"
-            continue
-        try:
-            bt = buy_trigger(frames[t], p, s1)
-        except Exception as e:                                  # noqa: BLE001  一只算不了不影响别的
-            no[t] = f"算不了（{type(e).__name__}）"
-            continue
-        if bt.get("lo") is None:
-            no[t] = band_why(bt.get("why"))
-        else:
-            bands[t] = bt
-    return {"bands": bands, "no": no}
 
 
 def exit_lines(df: pd.DataFrame, p, pos: dict, bar: dict, day: dt.date) -> dict:
