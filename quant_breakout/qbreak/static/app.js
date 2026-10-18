@@ -224,6 +224,63 @@ document.addEventListener('click', e=>{
   undoSet(null); undoShow(); tabInd(true); haptic('drop');
 }, true);
 document.addEventListener('click', e=>{ const b=e.target.closest('[data-tabgo]'); if(!b) return; e.preventDefault(); showTab(b.dataset.tabgo); }, true);
+// 左右滑整个页面 = 切到底栏上相邻的标签（2026-10-18 用户「滑动整体页面的话底部的标签也可以切换到相邻的标签」）：页面跟着手指走，
+// 滑过 1/4 屏宽（或快速一甩）→ 切过去并震一下，不够 → 弹回；最左 / 最右的标签再往外滑只拉动一点、不切。
+// 不接：K 线（拖动 = 看更早 / 更新）、能左右滚的表格与小标签、底栏与「更多」里的排序、对话框、输入框、屏幕左右边缘（留给浏览器的返回）；
+// 先上下动了 = 照旧滚页面
+const SW_SKIP='.chart,.tabbar,#taborder-list,dialog,input,textarea,select,[contenteditable],.hsw,.iib';
+const SW_EDGE=20, SW_LOCK=8;
+let SW=null;
+function swScrollsX(el){                                                  // 手指下面有能左右滚的东西 → 让它自己滚
+  for(; el && el!==document.body; el=el.parentElement){
+    if(el.scrollWidth>el.clientWidth+1){ const ox=getComputedStyle(el).overflowX; if(ox==='auto' || ox==='scroll') return true; }
+  }
+  return false;
+}
+function swNext(d){                                                       // 底栏上现在这个标签的左（-1）/ 右（+1）边那个；没有 → null
+  const o=Array.from(document.querySelectorAll('.tabbar [data-tabgo]')).map(b=>b.dataset.tabgo);
+  const ob=document.querySelector('.tabbar [data-tabgo].on'), i=ob ? o.indexOf(ob.dataset.tabgo) : -1;
+  return (i>=0 && o[i+d]) ? o[i+d] : null;
+}
+function swPaint(panes, v, anim){
+  panes.forEach(p=>{ p.style.transition=anim ? 'transform .2s '+EASE+', opacity .2s '+EASE : 'none';
+    p.style.transform=v ? 'translateX('+v+'px)' : ''; p.style.opacity=v ? String(1-Math.min(0.3, Math.abs(v)/innerWidth*0.5)) : ''; });
+}
+function swEnd(ok){
+  const s=SW; SW=null; if(!s || !s.lock) return;
+  const h=s.hist, a=h[0], z=h[h.length-1], v=(a && z && z[0]>a[0]) ? (z[1]-a[1])/(z[0]-a[0]) : 0;
+  const fast=Math.abs(s.dx)>40 && Math.abs(v)>0.5 && (v<0)===(s.dx<0);    // 快速一甩：最后 0.12 秒 > 0.5 px/ms、方向一致
+  if(ok && s.nb && (Math.abs(s.dx)>innerWidth*0.25 || fast)){
+    swPaint(s.panes, 0, false); s.panes.forEach(p=>{ p.style.transition=''; });
+    showTab(s.nb); haptic('tick'); return;                                // 新的一页照旧从滑的方向滑进来
+  }
+  swPaint(s.panes, 0, true);                                              // 不够 → 弹回
+  s.panes.forEach(p=>p.addEventListener('transitionend', ()=>{ p.style.transition=''; }, {once:true}));
+}
+document.addEventListener('touchstart', e=>{
+  SW=null;
+  if(e.touches.length!==1 || document.querySelector('dialog[open]')) return;
+  const t=e.touches[0], tg=e.target;
+  if(!tg || !tg.closest || !tg.closest('main') || tg.closest(SW_SKIP) || swScrollsX(tg)) return;
+  if(t.clientX<SW_EDGE || t.clientX>innerWidth-SW_EDGE) return;
+  SW={x0:t.clientX, y0:t.clientY, lock:false, dx:0, nb:null, panes:[], hist:[]};
+}, {passive:true});
+document.addEventListener('touchmove', e=>{
+  if(!SW) return;
+  if(e.touches.length!==1){ swEnd(false); return; }
+  const t=e.touches[0], dx=t.clientX-SW.x0, dy=t.clientY-SW.y0;
+  if(!SW.lock){
+    if(Math.hypot(dx, dy)<SW_LOCK) return;
+    if(Math.abs(dx)<Math.abs(dy)*1.3 || !e.cancelable || (window.getSelection && String(getSelection()))){ SW=null; return; }   // 上下滚 / 已经在滚 / 在选字
+    SW.lock=true; SW.panes=Array.from(document.querySelectorAll('.pane.on'));
+  }
+  e.preventDefault();
+  SW.dx=dx; SW.nb=swNext(dx<0 ? 1 : -1);
+  const now=Date.now(); SW.hist.push([now, dx]); while(SW.hist.length>2 && now-SW.hist[0][0]>120) SW.hist.shift();
+  swPaint(SW.panes, SW.nb ? dx : dx*0.25, false);                     // 两头没有标签：只拉动一点
+}, {passive:false});
+document.addEventListener('touchend', ()=>swEnd(true));
+document.addEventListener('touchcancel', ()=>swEnd(false));
 (function(){
   const q=new URLSearchParams(location.search), h=location.hash.replace(/^#/,'');
   let k=q.get('tab') || (h.indexOf('tab=')===0 ? h.slice(4) : '');

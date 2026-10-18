@@ -1642,7 +1642,7 @@ def _tab_order_card(order: list[str]) -> str:
                    "拿起、换位、放下时手机会轻轻震一下（Android；iPhone 要 iOS 18 以上）。马上生效，存在这台设备上（手机和 Mac 各自设）；"
                    "打开页面时先显示哪个标签不变。「恢复默认顺序」= 回到改之前的顺序：改了之后 5 分钟内能点；"
                    "5 分钟没再改，现在的顺序就成为默认（按钮变灰）。", "怎么用")
-            + "</h2><p class='muted small' id='taborder-how'>按住 ≡ 上下拖；底栏上按住标签左右拖也行。</p>"
+            + "</h2><p class='muted small' id='taborder-how'>按住 ≡ 上下拖；底栏上按住标签左右拖也行。手机上左右滑页面 = 切到这个顺序里相邻的标签。</p>"
             f"<div class='tol' id='taborder-list'>{rows}</div>"
             "<div class='act'><button type='button' class='btn' data-tabmv='reset' disabled>恢复默认顺序</button></div>"
             "<p class='muted small' id='taborder-undo'>现在的顺序就是默认（改了之后 5 分钟内可以恢复）</p></section>")   # app.js 的 undoShow 更新
