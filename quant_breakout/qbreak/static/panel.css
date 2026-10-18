@@ -281,3 +281,5 @@ background:var(--card);color:var(--fg);cursor:pointer;touch-action:manipulation}
 .qkb .up{color:var(--up)}.qkb .down{color:var(--down)}
 .ksv{position:relative}.chart .klast{position:absolute;min-height:32px;padding:2px 10px;font-size:13px;box-shadow:var(--shadow);opacity:.95}
 @media (max-width:430px){.kbar.ktop .hint{display:none}}   /* 手机：上边沿只留 日K / 周K / 月K 和 − ＋（不多占一行） */
+/* 持仓最上面「出了卖出信号」（2026-10-18）：一只一行；盘中暂定用琥珀 */
+#sellsig .ss{padding:4px 0;border-top:1px solid var(--line)} #sellsig .ss:first-child{border-top:0} .wtx{color:var(--warn)}

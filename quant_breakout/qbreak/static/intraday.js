@@ -11,6 +11,8 @@ export function intraShow(v){                                             // 持
   document.querySelectorAll('[data-intra]').forEach(e=>{                   // 没有这只（卖完了 / 还没算）→ 空
     const s=(v.hold||{})[e.dataset.intra]; e.textContent=s ? nameify(s) : '';
   });
+  const box=document.getElementById('sellsig-list');                      // 持仓最上面「出了卖出信号」（服务器转义好的几行；2026-10-18）
+  if(box && Array.isArray(v.sell)){ box.innerHTML=v.sell.join(''); box.closest('#sellsig').hidden=!v.sell.length; }
 }
 function intraBusy(){                                                     // 对话框开着 / 正在输入 / 页面在后台：不重画
   const a=document.activeElement;

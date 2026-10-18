@@ -69,7 +69,7 @@ from . import paths
 from . import suggest as SG
 from . import trade_room as TR
 from . import watch_prob as WP
-from .calendar_jp import JST, is_trading_day, now_jst
+from .calendar_jp import JST, is_trading_day, next_trading_day, now_jst
 from .fees import BROKERS as _BROKERS, DEFAULT_BROKER as _DEFAULT_BROKER
 from .tick import round_to_tick
 from .utils import read_json, setup_logging
@@ -1133,12 +1133,77 @@ INTRADAY_LOG = IW.LOG_NAME              # 数据目录 logs/com.qbreak.panel.int
 
 def intraday_json(tag: str, now: dt.datetime | None = None) -> tuple[int, dict]:
     """/api/intraday?book=…（持仓每只一行；页面每 1 分钟刷新）：只读 out/intraday_<账本>.json
-    （面板的线程另起进程写的），请求里不取价。读不了 → 200 + ok=false（页面保留上一次的）。"""
+    （面板的线程另起进程写的），请求里不取价。读不了 → 200 + ok=false（页面保留上一次的）。
+    sell = 持仓「出了卖出信号」卡里的行（_sell_signals；算不成 → 不给，页面保留上一次的）。"""
+    now = now or now_jst()
     try:
-        return 200, IW.view(IW.load(tag), now or now_jst())
+        doc = IW.load(tag)
+        v = IW.view(doc, now)
     except Exception as e:                                  # noqa: BLE001
         log.warning("/api/intraday 读不了（%s：%s）", type(e).__name__, e)
         return 200, {"ok": False, "msg": "盘中观测读不了"}
+    try:
+        book = _load(tag)[0]
+        v["sell"] = _sell_signals(book, LO.held_now(book, tag, now=now)["state"], doc, now)
+    except Exception as e:                                  # noqa: BLE001  只是展示
+        log.warning("持仓的卖出信号没算成：%s", e)
+    return 200, v
+
+
+SELF_EXITS = ("manual", "manual_trim")   # 你自己写的卖出 / 减仓：不是规则的卖出信号（在「交易」里）
+
+
+def _sell_signals(book: dict, pst: dict, doc: dict | None, now: dt.datetime) -> list[str]:
+    """持仓里出了卖出信号的个股（2026-10-18 用户：「持仓里面还要做一个现在如果有持仓股票出了卖出信号的话也要进行提示」）：一只一行（HTML）。
+    ① 规则已经判卖（state.pending_exit，按上一次决策的那根收盘）→ 哪天开盘卖 + 那笔单现在怎样；
+    ② 盘中 / 收盘后暂定（盘中观测 out/intraday_<账本>.json：若收在现价规则会卖）—— 那根 K 线执行器已经决策过（last_date ≥ 那天）→
+       以决策为准、不再写暂定（例：收盘后最后一次观测越过了止损线，第二天 07:40 决策按正式收盘没判卖）。
+    只展示：不下单、不改规则；pst = held_now 的投影（今天卖光的不列）。"""
+    from . import holding_view as HV
+    pos = pst.get("pos") or {}
+    pend = {t: str(r) for t, r in (pst.get("pending_exit") or {}).items() if t in pos and str(r) not in SELF_EXITS}
+    last = str(pst.get("last_date") or "")
+    sells = [o for o in book.get("orders") or [] if o.get("side") == "SELL" and o.get("decided_on") == last]
+    out = []
+    for t, why in sorted(pend.items()):
+        sh = int((pos[t] or {}).get("shares") or 0)
+        o = next((x for x in reversed(sells) if x.get("ticker") == t), None)
+        try:
+            when = f"{_md(next_trading_day(dt.date.fromisoformat(last)))} 09:00 开盘卖"
+            bar = f"，按 {_md(dt.date.fromisoformat(last))}收盘"
+        except ValueError:
+            when, bar = "下一次开盘卖", ""
+        stx = f" · {LO.STATUS_TEXT.get(str(o.get('status')), str(o.get('status')))}" if o else ""
+        out.append(f"<div class='ss'><b>{escape(NM.label(t))}</b> {sh:,} 股：<b class='neg'>规则出了卖出信号</b>"
+                   f"（{escape(HV.EXIT_TEXT.get(why, why))}{escape(bar)}）→ {escape(when + stx)}</div>")
+    day = str((doc or {}).get("day") or "")
+    if not doc or day != IW.target_day(now).isoformat() or last >= day:
+        return out
+    nx = IW.next_word(day)
+    for r in doc.get("holdings") or []:
+        t = r.get("ticker")
+        if t not in pos or t in pend or r.get("queued") or r.get("today") or r.get("px") is None:
+            continue
+        hits = [lv for lv in r.get("levels") or [] if lv.get("hit")]
+        why = r.get("now_text") or r.get("now")
+        if not hits and not why:
+            continue
+        crossed = "、".join(f"{str(lv.get('rule') or '').split('（持有以来')[0]} {IW._px(lv.get('px'))}" for lv in hits)
+        why = why or str(hits[0].get("rule") or "").split("（持有以来")[0]
+        old = "，★ 数据过期" if doc.get("stale") or r.get("old") else ""
+        sh = int((pos[t] or {}).get("shares") or 0)
+        out.append(f"<div class='ss'><b>{escape(NM.label(t))}</b> {sh:,} 股：<b class='wtx'>盘中暂定</b>"
+                   f"（数据 {escape(IW._hm(r.get('at')))}，{IW.LAG}{old}）现价 {escape(IW._px(r.get('px')))}"
+                   + (f" 已越过 {escape(crossed)}" if crossed else "")
+                   + f" → 若收盘仍在这里，规则{escape(nx)}开盘卖（{escape(str(why))}）</div>")
+    return out
+
+
+def _sell_card(items: list[str]) -> str:
+    """持仓最上面：出了卖出信号的个股（没有 → 藏起来；intraday.js 按 /api/intraday 的 sell 更新、有了就显示）。"""
+    return (f"<section class='card warn' id='sellsig'{'' if items else ' hidden'}><h2>★ 持仓出了卖出信号</h2>"
+            f"<div id='sellsig-list'>{''.join(items)}</div>"
+            "<div class='muted small'>执行器照常在开盘卖出，不需要操作；「盘中暂定」收盘前还会变，以下一次决策（交易日 07:40）为准</div></section>")
 
 
 def _intraday_line(v: dict | None, t: str) -> str:
@@ -2587,6 +2652,15 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         H.append("<section class='card'>执行器还没有账本（第一次运行之后才有持仓）。</section>")
     H.append(_money_card(tag, book, now, pj))             # 〔77〕C：损益 / 年内已实现与预计代扣 / 最近成交 / 日志 / 入出金
     H.append(PANE + "hold")
+    try:                                                    # 盘中观测的结果文件（不取价）：卖出信号卡 + 持仓每只一行
+        idoc = IW.load(tag)
+    except Exception as e:                                  # noqa: BLE001  展示用：读不了不影响页面
+        log.warning("盘中观测读不了：%s", e)
+        idoc = None
+    try:
+        H.append(_sell_card(_sell_signals(book, pst, idoc, now)))   # 最上面：出了卖出信号的持仓（2026-10-18）
+    except Exception as e:                                  # noqa: BLE001
+        log.warning("持仓的卖出信号没算成：%s", e)
     H.append(_alloc_card(pj["book"], HV.overlay(sm.get("holding_view") or {}, pj), pj))  # 最上面：每个仓位占多少（2026-10-12；含今天已成交，2026-10-16）
     H.append(_broker_card(tag, now, pj))                  # 〔77〕C：立花那边实际是什么（快照）
     H.append(PANE + "more")
@@ -2603,7 +2677,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     _ht = list((pst.get("pos") or {}).keys()) + [t for t, u in (pj.get("core_units") or {}).items() if int(u or 0) > 0]
     hmarks = _news_marks(_ht, now) if _ht else {}                     # 持仓（个股 + 拿着的核心 ETF）的消息影响
     try:                                                    # 盘中观测（读结果文件；不取价）：持仓每只一行
-        iv = IW.view(IW.load(tag), now)
+        iv = IW.view(idoc, now)
     except Exception as e:                                  # noqa: BLE001  展示用：读不了不影响页面
         log.warning("盘中观测读不了：%s", e)
         iv = None

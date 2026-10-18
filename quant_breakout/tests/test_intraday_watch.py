@@ -340,7 +340,7 @@ def test_js_updates_the_holding_lines(monkeypatch, tmp_path):
     v = IW.view(doc, AT)
     js = """
 const HOLD={dataset:{intra:'6758.T'}, textContent:''}, GONE={dataset:{intra:'9999.T'}, textContent:'old'};
-const document={querySelectorAll:s=>[HOLD, GONE]};
+const document={querySelectorAll:s=>[HOLD, GONE], getElementById:()=>null};
 const nameify=s=>s;
 __FN__
 const V=__V__;
