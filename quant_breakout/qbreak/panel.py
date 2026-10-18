@@ -1593,25 +1593,6 @@ def _tab_order(cookie: str | None) -> list[str]:
     return out + [k for k in TABS if k not in out]
 
 
-def _tab_order_card(order: list[str]) -> str:
-    """「更多」里「底部标签的顺序」：每个标签一行，按住 ≡ 上下拖（2026-10-17 用户「要用拖动的方法来做 有震动的感觉」；
-    拿起 / 换位 / 放下各震一下，app.js 的 sortable + haptic）；底栏上按住一个标签左右拖也行；键盘：≡ 上按 ↑ / ↓。上 = 最左；「恢复默认」。"""
-    rows = "".join(
-        f"<div class='tor' data-tabk='{k}'><span class='tob'>{TABS[k][0]}</span><b>{escape(TABS[k][1])}</b><span class='sp'></span>"
-        f"<button type='button' class='tgr' aria-label='{escape(TABS[k][1])}：拖动排序（键盘 ↑ / ↓）' "
-        f"aria-describedby='taborder-how'>≡</button></div>"
-        for k in order)
-    return ("<section class='card' id='taborder'><h2>底部标签的顺序"
-            + _tip("从上到下 = 底部从左到右。按住右边的 ≡ 上下拖（整行按住一会儿也行）；底栏上按住一个标签不放、左右拖也能排。"
-                   "拿起、换位、放下时手机会轻轻震一下（Android；iPhone 要 iOS 18 以上）。马上生效，存在这台设备上（手机和 Mac 各自设）；"
-                   "打开页面时先显示哪个标签不变。「恢复默认顺序」= 回到改之前的顺序：改了之后 5 分钟内能点；"
-                   "5 分钟没再改，现在的顺序就成为默认（按钮变灰）。", "怎么用")
-            + "</h2><p class='muted small' id='taborder-how'>按住 ≡ 上下拖；底栏上按住标签左右拖也行。手机上左右滑页面 = 切到这个顺序里相邻的标签。</p>"
-            f"<div class='tol' id='taborder-list'>{rows}</div>"
-            "<div class='act'><button type='button' class='btn' data-tabmv='reset' disabled>恢复默认顺序</button></div>"
-            "<p class='muted small' id='taborder-undo'>现在的顺序就是默认（改了之后 5 分钟内可以恢复）</p></section>")   # app.js 的 undoShow 更新
-
-
 def _tab_order_list(order) -> list[str]:
     """render 的 order → 全部标签的顺序（只认 TABS 里的；缺的按默认接上）。"""
     o = list(dict.fromkeys(k for k in (order or []) if k in TABS))
@@ -3052,7 +3033,6 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     H.extend(_trade_sections(sp, orows, rows, ometa, now, paper, bool(halt), bhtml, bn, old_n, xbtn))
     H.append(PANE + "more")
     H.append(_restore_card(tag, book, sm, now))             # 没按自动交易规则时才有（2026-10-17）
-    H.append(_tab_order_card(_tab_order_list(order)))       # 底部标签的顺序（2026-10-17）
     if halt:
         hw = sorted((x for x in [it for it in (man.get("items") or {}).values() if it.get("status") == "pending"] + list(waiting)
                      if x.get("kind") in MO.ORDER_KINDS and x.get("id") not in dropped), key=lambda x: str(x.get("at") or ""))

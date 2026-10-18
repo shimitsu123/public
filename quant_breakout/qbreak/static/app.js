@@ -80,35 +80,15 @@ function tabOrderNow(){                                                   // coo
   const o=got.filter((k, i)=>TABK.indexOf(k)>=0 && got.indexOf(k)===i);
   return o.concat(TABK.filter(k=>o.indexOf(k)<0));
 }
-function tabOrderShow(o){                                                 // 底栏 + 「更多」里的列表按 o 排
-  const bar=document.querySelector('.tabbar'), ls=document.getElementById('taborder-list');
-  o.forEach(k=>{
-    const b=bar && bar.querySelector('[data-tabgo="'+k+'"]'); if(b) bar.appendChild(b);
-    const r=ls && ls.querySelector('[data-tabk="'+k+'"]'); if(r) ls.appendChild(r);
-  });
+function tabOrderShow(o){                                                 // 底栏按 o 排
+  const bar=document.querySelector('.tabbar');
+  o.forEach(k=>{ const b=bar && bar.querySelector('[data-tabgo="'+k+'"]'); if(b) bar.appendChild(b); });
 }
 function tabOrderSave(o){
   try{ document.cookie=TABC+'='+encodeURIComponent(o.join(','))+'; path=/; max-age=157680000; SameSite=Lax'; }catch(e){}
 }
 tabOrderShow(tabOrderNow());
-// 「恢复默认顺序」（2026-10-17 用户：改了之后恢复到上一个状态；改了之后一段时间没再改，现在的状态就是默认）：
-// 第一次改的时候记下改之前的顺序（base）；UNDO_MS 里再改不换 base、只把时间往后推；过了 UNDO_MS 没再改 → 现在的就是默认（按钮变灰）。存在这台设备
-const UNDO_MS=5*60*1000, UK='qb-tabs-undo';
-let UMEM=null, UT=0;
-function undoGet(){
-  let u=UMEM; try{ const x=localStorage.getItem(UK); if(x) u=JSON.parse(x); }catch(e){}
-  return (u && Array.isArray(u.base) && Date.now()-(+u.at||0)<UNDO_MS) ? u : null;
-}
-function undoSet(u){ UMEM=u; try{ if(u) localStorage.setItem(UK, JSON.stringify(u)); else localStorage.removeItem(UK); }catch(e){} }
-function undoShow(){
-  const b=document.querySelector('[data-tabmv="reset"]'), n=document.getElementById('taborder-undo'), u=undoGet();
-  const on=!!u && u.base.join(',')!==tabOrderNow().join(',');
-  if(b) b.disabled=!on;
-  if(n) n.textContent=on ? '改了之后 '+Math.max(1, Math.ceil((UNDO_MS-(Date.now()-u.at))/60000))+' 分钟内可以恢复到改之前的顺序；之后现在的顺序就成为默认'
-                         : '现在的顺序就是默认（改了之后 '+(UNDO_MS/60000)+' 分钟内可以恢复）';
-  clearTimeout(UT); if(on) UT=setTimeout(undoShow, Math.min(30000, UNDO_MS-(Date.now()-u.at)+50));
-}
-undoShow();
+// 「更多」里的「底部标签的顺序」（列表、恢复默认顺序）2026-10-18 用户「长摁可以给底部排序就不需要…那一块」→ 删掉；只在底栏上按住拖
 function flip(els, mutate){                                               // 排序之后各自从原来的位置滑到新的位置（FLIP）
   const R=new Map(els.map(e=>[e, e.getBoundingClientRect()]));
   mutate();
@@ -121,7 +101,7 @@ function flip(els, mutate){                                               // 排
   mv.forEach(e=>{ e.style.transition='transform .26s '+EASE; e.style.transform='';
     e.addEventListener('transitionend', ()=>{ e.style.transition=''; }, {once:true}); });
 }
-const sortEls=()=>Array.from(document.querySelectorAll('.tabbar [data-tabgo], #taborder-list [data-tabk]'));
+const sortEls=()=>Array.from(document.querySelectorAll('.tabbar [data-tabgo]'));
 // 震一下（2026-10-17 用户「排序要用拖动的方法来做 有震动的感觉」）：Android = navigator.vibrate；iPhone 的 Safari 没有 vibrate →
 // 点一下藏起来的系统开关（<input type=checkbox switch>，iOS 18 起切换时有触感）；别的（Mac）什么都不做
 let HSW=null;
@@ -133,8 +113,8 @@ function haptic(k){
     HSW.click();
   }catch(e){}
 }
-// 按住拖动排序：box 里的 sel 一个个是能拖的；axis 'y' = 上下（「更多」里的列表）/ 'x' = 左右（底栏）。
-// 鼠标：按下移一点就拖；触摸：按住 ≡（.tgr）马上拖，按住别处 0.28 秒不动才拖（先动了 = 滚页面 / 点一下照旧）。
+// 按住拖动排序：box 里的 sel 一个个是能拖的；axis 'y' = 上下 / 'x' = 左右（底栏）。
+// 鼠标：按下移一点就拖；触摸：按住 ≡（.tgr，有的话）马上拖，按住别处 0.28 秒不动才拖（先动了 = 滚页面 / 点一下照旧）。
 // 拿起 / 每换一个位置 / 放下各震一下；done(新顺序的元素) 存起来。拖过之后的那一下 click 不算（不会顺手切到那个标签）。
 const HOLD=280, SLOP=8;
 let NOCLICK=0;
@@ -199,36 +179,16 @@ function sortable(box, sel, axis, done){
   box.addEventListener('touchmove', e=>{ if(st && st.on) e.preventDefault(); }, {passive:false});   // 拖着的时候页面不跟着滚
   box.addEventListener('contextmenu', e=>{ if(st) e.preventDefault(); });                            // 长按不出菜单
 }
-function tabOrderSet(o, anim){                                           // anim：自己排（键盘 / 恢复）→ 用 flip；拖的已经在 flip 里
-  const before=tabOrderNow();
-  if(before.join(',')!==o.join(',')){ const u=undoGet(); undoSet({base:u ? u.base : before, at:Date.now()}); }
-  const go=()=>{ tabOrderSave(o); tabOrderShow(o); };
-  if(anim) flip(sortEls(), go); else go();
-  undoShow(); tabInd(true);
+function tabOrderSet(o){                                                  // 拖完：存起来（拖的已经在 flip 里）
+  tabOrderSave(o); tabOrderShow(o); tabInd(true);
 }
-sortable(document.getElementById('taborder-list'), '[data-tabk]', 'y', els=>tabOrderSet(els.map(r=>r.dataset.tabk)));
 sortable(document.querySelector('.tabbar'), '[data-tabgo]', 'x', els=>tabOrderSet(els.map(b=>b.dataset.tabgo)));
-document.addEventListener('keydown', e=>{                                  // 键盘：≡ 上按 ↑ / ↓ 挪一格（焦点跟着）
-  const g=e.target.closest && e.target.closest('#taborder-list .tgr'); if(!g || (e.key!=='ArrowUp' && e.key!=='ArrowDown')) return;
-  e.preventDefault();
-  const k=g.closest('[data-tabk]').dataset.tabk, o=tabOrderNow(), i=o.indexOf(k), j=i+(e.key==='ArrowUp' ? -1 : 1);
-  if(i<0 || j<0 || j>=o.length) return;
-  o.splice(i, 1); o.splice(j, 0, k); tabOrderSet(o, true);
-  g.focus({preventScroll:true});
-});
-document.addEventListener('click', e=>{
-  const b=e.target.closest('[data-tabmv="reset"]'); if(!b) return;
-  e.preventDefault();
-  const u=undoGet(); if(!u) { undoShow(); return; }
-  flip(sortEls(), ()=>{ tabOrderSave(u.base); tabOrderShow(u.base); });
-  undoSet(null); undoShow(); tabInd(true); haptic('drop');
-}, true);
 document.addEventListener('click', e=>{ const b=e.target.closest('[data-tabgo]'); if(!b) return; e.preventDefault(); showTab(b.dataset.tabgo); }, true);
 // 左右滑整个页面 = 切到底栏上相邻的标签（2026-10-18 用户「滑动整体页面的话底部的标签也可以切换到相邻的标签」）：页面跟着手指走，
 // 滑过 1/4 屏宽（或快速一甩）→ 切过去并震一下，不够 → 弹回；最左 / 最右的标签再往外滑只拉动一点、不切。
-// 不接：K 线（拖动 = 看更早 / 更新）、能左右滚的表格与小标签、底栏与「更多」里的排序、对话框、输入框、屏幕左右边缘（留给浏览器的返回）；
+// 不接：K 线（拖动 = 看更早 / 更新）、能左右滚的表格与小标签、底栏（按住拖 = 排序）、对话框、输入框、屏幕左右边缘（留给浏览器的返回）；
 // 先上下动了 = 照旧滚页面
-const SW_SKIP='.chart,.tabbar,#taborder-list,dialog,input,textarea,select,[contenteditable],.hsw,.iib';
+const SW_SKIP='.chart,.tabbar,dialog,input,textarea,select,[contenteditable],.hsw,.iib';
 const SW_EDGE=20, SW_LOCK=8;
 let SW=null;
 function swScrollsX(el){                                                  // 手指下面有能左右滚的东西 → 让它自己滚

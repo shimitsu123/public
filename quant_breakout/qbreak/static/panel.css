@@ -244,14 +244,10 @@ details.ii.lab>summary{width:auto;height:auto;padding:2px 8px;border-radius:10px
 details.ii .iib{position:fixed;z-index:40;left:12px;top:12px;width:max-content;max-width:min(340px,calc(100vw - 24px));max-height:60vh;overflow:auto;padding:10px 12px;border-radius:10px;background:var(--card);color:var(--fg);border:1px solid var(--line);box-shadow:0 6px 24px rgba(0,0,0,.18);font-weight:400;font-size:13px;line-height:1.55;text-align:left;white-space:normal;visibility:hidden}
 details.ii.on .iib{visibility:visible}
 .chart{overflow-anchor:none}   /* 重画 K 线时浏览器不自己挪滚动位置（位置由 trade.js 放回；2026-10-17） */
-/* 「更多」里底部标签的顺序（2026-10-17） */
-.tol{display:flex;flex-direction:column;gap:6px;margin-top:8px}
-.tor{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
-.tor{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}.tor .tob{width:22px;text-align:center;font-size:18px;color:var(--muted)}.tor .sp{flex:1}
-.tgr{width:44px;height:36px;margin:-4px -6px -4px 0;border:0;background:none;color:var(--muted);font-size:22px;line-height:1;cursor:grab;touch-action:none;border-radius:8px}
-.tgr:focus-visible{outline:2px solid var(--accent);outline-offset:1px}.sorting,.sorting *{cursor:grabbing}
+/* 底栏按住拖 = 排序（2026-10-17；「更多」里的列表 2026-10-18 删掉） */
+.sorting,.sorting *{cursor:grabbing}
 .tabbar{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-.sorting .shift{transition:transform .22s cubic-bezier(.2,.8,.2,1)}.lift{position:relative;z-index:3;box-shadow:0 8px 22px rgba(0,0,0,.24);scale:1.03;transition:scale .15s,box-shadow .15s}.tor.lift{border-color:var(--accent)}
+.sorting .shift{transition:transform .22s cubic-bezier(.2,.8,.2,1)}.lift{position:relative;z-index:3;box-shadow:0 8px 22px rgba(0,0,0,.24);scale:1.03;transition:scale .15s,box-shadow .15s}
 .tabbar button.lift{background:var(--bg);border-radius:10px}
 .hsw{position:fixed;top:0;left:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
 /* K 线：看更早 / 放大缩小 / 对数 / 自己画线、今天要成交的单、趋势线的容差带；调仓框的快捷档（2026-10-17） */

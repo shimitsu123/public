@@ -906,31 +906,25 @@ def test_bottom_tab_order_follows_the_device_cookie():
     bar = html[html.index("class='tabbar'"):]
     pos = [bar.index(f"data-tabgo='{k}'") for k in ["news", "trade", "home", "hold", "pick", "more"]]
     assert pos == sorted(pos)
-    card = _card(html, "taborder")
-    assert card.count("data-tabk=") == 6 and card.index("data-tabk='news'") < card.index("data-tabk='home'")
-    assert "data-tabmv='reset'" in card and card.count("class='tgr'") == 6 and "data-tabmv='-1'" not in card   # 拖 ≡ 排（2026-10-17）
+    assert "id='taborder'" not in html and "data-tabk=" not in html and "恢复默认顺序" not in html   # 「更多」里的列表 2026-10-18 删掉（底栏上按住拖）
     assert list(panel.TABS) == dflt                                           # 不改默认
     js = (Path(panel.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
-    assert "qb_tabs=" in js and "[data-tabmv=\"reset\"]" in js and "SameSite=Lax" in js and "tabOrderShow(tabOrderNow())" in js
-    # 拖动排序（「更多」里上下拖、底栏左右拖）+ 震一下（Android vibrate / iPhone 系统开关）；拖过之后那一下 click 不切标签
-    assert "sortable(document.getElementById('taborder-list'), '[data-tabk]', 'y'" in js
-    assert "sortable(document.querySelector('.tabbar'), '[data-tabgo]', 'x'" in js
+    assert "qb_tabs=" in js and "SameSite=Lax" in js and "tabOrderShow(tabOrderNow())" in js
+    assert "taborder" not in js and "UNDO_MS" not in js and "data-tabmv" not in js
+    # 底栏上按住左右拖 + 震一下（Android vibrate / iPhone 系统开关）；拖过之后那一下 click 不切标签
+    assert "sortable(document.querySelector('.tabbar'), '[data-tabgo]', 'x'" in js and js.count("sortable(document") == 1
     assert "navigator.vibrate" in js and "<input type='checkbox' switch" in js and "NOCLICK" in js
     assert js.count("haptic('pick')") == 1 and js.count("haptic('tick')") == 2 and "if(ok && s.j!==s.i) haptic('drop');" in js
     css = (Path(panel.__file__).parent / "static" / "panel.css").read_text(encoding="utf-8")
-    assert ".tgr{" in css and "touch-action:none" in css[css.index(".tgr{"):css.index(".tgr{") + 300]
-    # 「恢复默认顺序」= 回到改之前的顺序（5 分钟内；之后现在的就是默认）；拖动 / 放下 / 切换标签都有动画（2026-10-17）
-    assert "data-tabmv='reset' disabled" in card and "id='taborder-undo'" in card
-    assert "UNDO_MS=5*60*1000" in js and "undoSet({base:u ? u.base : before, at:Date.now()})" in js
-    assert "flip(sortEls(), ()=>{ tabOrderSave(u.base); tabOrderShow(u.base); });" in js
+    assert ".tgr{" not in css and ".tor{" not in css
+    # 拖动 / 放下 / 切换标签都有动画（2026-10-17）
     assert "function flip(els, mutate)" in js and "p.classList.add(dir)" in js and "showTab(k||'home', true, true);" in js
     assert "@keyframes qbinr" in css and ".tabind{" in css and "@keyframes qbpop" in css and "main{overflow-x:clip}" in css
     assert ".sorting .shift{transition:transform .22s" in css
-    # 左右滑整个页面 = 切到底栏上相邻的标签（2026-10-18）：K 线 / 底栏 / 排序列表 / 对话框 / 输入框 / 能左右滚的 / 屏幕边缘不接；先上下动 = 照旧滚
+    # 左右滑整个页面 = 切到底栏上相邻的标签（2026-10-18）：K 线 / 底栏 / 对话框 / 输入框 / 能左右滚的 / 屏幕边缘不接；先上下动 = 照旧滚
     assert "showTab(s.nb); haptic('tick');" in js and "function swNext(d)" in js and "function swScrollsX(el)" in js
-    assert all(k in js[js.index("const SW_SKIP="):js.index("const SW_SKIP=") + 120] for k in (".chart", ".tabbar", "#taborder-list", "dialog", "input"))
+    assert all(k in js[js.index("const SW_SKIP="):js.index("const SW_SKIP=") + 120] for k in (".chart", ".tabbar", "dialog", "input"))
     assert "document.addEventListener('touchmove'" in js and "{passive:false}" in js and "Math.abs(dx)<Math.abs(dy)*1.3" in js
-    assert "左右滑页面 = 切到这个顺序里相邻的标签" in card
 
 
 def test_chart_orders_lists_todays_orders_for_the_kline():
