@@ -18,6 +18,7 @@ var/out/trial_page.html
 var/out/dashboard.html
 var/out/jq_today.json
 var/out/fins_view.json
+var/out/signal_push_*.json
 
 # 调试运行（--only / --reps）的输出，不入库
 var/out/*_partial.md

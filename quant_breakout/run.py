@@ -4512,6 +4512,12 @@ def _live_unified_run(a, opened: list) -> int:
         t_ = f"★ 交易：{title}" if tw_ else title    # 交易问题的推送标题以「★ 交易」开头（D5；经济威胁提醒不用它）
         mac_notify(t_, short)
         notify.send(t_, body, "warn" if bad else "info")
+    if a.notify:                                            # 新出现的买点 / 卖点另推一条（同一只只推一次；qbreak/signal_push.py，2026-10-18）
+        try:
+            from qbreak import signal_push as _SP
+            _SP.run(tag, sm, dict(eng.st.pending_exit), {t: int(getattr(p_, "shares", 0) or 0) for t, p_ in eng.st.pos.items()}, paper)
+        except Exception as e:                              # noqa: BLE001  只是通知
+            print(f"（买卖点的推送没做成：{type(e).__name__}: {e}）")
     print(f"\n决策日 {sm['decided_on']} → 成交日 {sm['fill_day']}；权益 ¥{sm['equity_jpy']:,.0f}，现金 ¥{sm['cash_jpy']:,.0f}")
     from qbreak import live_ops as _LO
     from qbreak.live_unified import order_tail
