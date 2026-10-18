@@ -283,3 +283,11 @@ background:var(--card);color:var(--fg);cursor:pointer;touch-action:manipulation}
 @media (max-width:430px){.kbar.ktop .hint{display:none}}   /* 手机：上边沿只留 日K / 周K / 月K 和 − ＋（不多占一行） */
 /* 持仓最上面「出了卖出信号」（2026-10-18）：一只一行；盘中暂定用琥珀 */
 #sellsig .ss{padding:4px 0;border-top:1px solid var(--line)} #sellsig .ss:first-child{border-top:0} .wtx{color:var(--warn)}
+/* 最近几季决算的小图（qbreak/fins_view.py；2026-10-18）：实线 = 单季利润、圆点红 = 同比增 / 绿 = 同比减、虚线空心点 = 按会社予想摊算、竖虚线 = 下次决算日、浅底 = 这一期 */
+.fvbox{margin:4px 0 2px}.fv{width:100%;max-width:420px;height:auto;display:block}
+.fv .fvb{fill:var(--chip);opacity:.7}.fv .fvl{fill:none;stroke:var(--fg);stroke-width:1.6;opacity:.75}
+.fv .fvf{stroke:var(--muted);stroke-width:1.4;stroke-dasharray:4 3}.fv .fvz{stroke:var(--muted);stroke-width:.8;opacity:.6}
+.fv .fvn{stroke:var(--warn);stroke-width:1.2;stroke-dasharray:3 3}.fv .fvnt{fill:var(--warn);font-size:10px;font-weight:600;text-anchor:end}
+.fv .fvd.up{fill:var(--up)}.fv .fvd.down{fill:var(--down)}.fv .fvd.na{fill:var(--muted)}
+.fv .fvp{fill:var(--card);stroke-width:1.8}.fv .fvp.up{stroke:var(--up)}.fv .fvp.down{stroke:var(--down)}.fv .fvp.na{stroke:var(--muted)}
+.fv text{font-size:9px;fill:var(--muted)}.fv .fvx{text-anchor:middle}.fv .fvv{fill:var(--fg);font-size:10px;text-anchor:middle}

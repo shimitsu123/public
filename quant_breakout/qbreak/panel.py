@@ -59,6 +59,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from . import core_exit as CX
 from . import dip_stats as DS
+from . import fins_view as FV
 from . import intraday_watch as IW
 from . import kline as KL
 from . import live_ops as LO
@@ -706,6 +707,15 @@ def _fill_mult_why(w: str) -> str:
     return w.replace("（新仓倍数 0）：会被挡", f"（新仓倍数 0）—— {txt}：会被挡").replace(OLD_EM0, f"新仓倍数 0 —— {txt}")
 
 
+def _fins_box(t: str) -> str:
+    """最近几季决算的小图（qbreak/fins_view.py：J-Quants 定时取数顺便画的那几只；没有 → 不显示）。只展示。"""
+    try:
+        return FV.html(((FV.load() or {}).get("rows") or {}).get(t), tip=_tip)
+    except Exception as e:                                  # noqa: BLE001  展示用：画不了不影响页面
+        log.warning("%s 的决算小图画不了：%s", t, e)
+        return ""
+
+
 def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = None, fill: str | None = None,
                  mark: dict | None = None, freed: dict | None = None, ckind: str = "suggest", kl_open: bool | None = None,
                  ranked: bool | None = None, bought: dict | None = None) -> str:
@@ -736,7 +746,7 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
          + _sg_chips(_prob_line(r.get("prob") if rk_on else None), r.get("near_text"))   # 历史比例 + 离买入信号还差什么：标签 + ⓘ（2026-10-17）
          + f"<div class='meta'>{' · '.join(x for x in meta if x)}</div>"
          + (f"<div>{escape(_fill_mult_why(str(ru.get('text') or '')))}</div>" if ru.get("state") not in (None, "none") else "")
-         + tchips(r.get("trend"), stats=True)
+         + tchips(r.get("trend"), stats=True) + _fins_box(t)          # 最近几季决算的小图（2026-10-18）
          + (f"<div class='small neg'>★ 顶部风险：{escape(str(r['top_risk']))}</div>" if r.get("top_risk") else "")]
     n, px, lot = int(b.get("rule_shares") or 0), float(b.get("px") or 0), int(b.get("lot") or MO.LOT)
     why = None
@@ -2697,7 +2707,8 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
                     + _corefix(t, _nm(t, r.get("name"))) + _core_exit(t) + chart(t, "core"))
         qt = f"<div class='qt small' data-q='{escape(t)}'></div>" if t in (pst.get("pos") or {}) else ""   # 现价（/api/quotes）
         ia = _intraday_line(iv, t) if t in (pst.get("pos") or {}) else ""   # 盘中：收盘卖出线离现价多远（/api/intraday；2026-10-16）
-        return tchips(ktrend.get(t), stats=True) + qt + ia + _room_chip(rm, t) + _actions(r, t)   # 今天还能卖 / 买（D6）
+        return (tchips(ktrend.get(t), stats=True) + _fins_box(t) + qt + ia + _room_chip(rm, t)   # 最近几季决算的小图（2026-10-18）
+                + _actions(r, t))                                                                  # 今天还能卖 / 买（D6）
 
     def _corefix(t: str, name: str) -> str:
         """核心 ETF 固定口数（2026-10-11 用户：持仓里的纳指 ETF、对冲美债也要能买入）：没拿的 →「买入…」、拿着的 →「固定口数…」；

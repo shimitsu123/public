@@ -2435,8 +2435,16 @@ def cmd_jq_live(a) -> int:
             from qbreak.calendar_jp import next_trading_day
             now = _dt.datetime.combine(next_trading_day(d), _dt.time(7, 5), JST)
     uni, tags, watch = _jq_scope()
-    d = JL.run_now(JQuants(), now, uni, tags, watch)
+    cl = JQuants()
+    d = JL.run_now(cl, now, uni, tags, watch)
     print(JL.as_text(d))
+    try:                                                         # 持仓 / 选股那几只的最近几季决算（面板的小图；qbreak/fins_view.py，2026-10-18）
+        from qbreak import fins_view as FV
+        fv = FV.build(FV.scope(), now.date(), client=cl)
+        FV.write(fv)
+        print(f"  决算小图：{len(fv['rows'])} 只" + (f"（没画成 {len(fv['errors'])} 只：{'、'.join(sorted(fv['errors']))[:200]}）" if fv["errors"] else ""))
+    except Exception as e:                                       # noqa: BLE001  只是展示：不影响上面的
+        print(f"  ★ 决算小图没做成：{type(e).__name__}: {e}")
     bad = {k: v for k, v in (d.get("fetch") or {}).items() if isinstance(v, str) and not v.startswith("已有")}
     if bad:
         print("  没取到（下次自动补）：" + "；".join(f"{k} {v}" for k, v in bad.items()))
