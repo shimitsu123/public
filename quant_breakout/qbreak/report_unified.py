@@ -576,12 +576,15 @@ def _calendar_html(c: dict) -> str:
 
 
 def _price_check_html(pc: dict) -> str:
-    """行情交叉核对（qbreak/price_check.py，㉚-1）：yfinance × J-Quants 调整后收盘；只报警（有告警时默认展开）。"""
+    """行情交叉核对（qbreak/price_check.py，㉚-1）：yfinance × J-Quants 调整后收盘；只报警（有告警时默认展开）。
+    全部核对了、没有告警 → 不显示（满足的不显示，2026-10-18 用户「上线准备如果满足的话就不用显示了 横展开一下」）。"""
     if not pc:
         return ""
     from .price_check import KIND_ZH, describe
     why = pc.get("error") or pc.get("skipped")
     al = pc.get("alerts") or []
+    if not why and not al and not pc.get("not_in_jq") and not pc.get("n_errors") and not pc.get("timeout"):
+        return ""
     if why:
         body = f"<p class='muted'>今天没做：{escape(str(why))}（只报警的检查，不影响交易）</p>"
     else:

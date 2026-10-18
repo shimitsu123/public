@@ -42,7 +42,7 @@ def test_render_has_money_broker_gate_and_flow_cards():
         (paths.state_dir() / "live_unified_tachibana.json").read_text(encoding="utf-8")))
     LG.save([{"group": "门槛", "name": "① 连续一致", "ok": False, "text": "★ 6/10"}])
     h = panel.render("tachibana", "t" * 40, AT)
-    for k in ("id='money'", "id='broker'", "id='gate'", "id='flow'", "2026 年已实现", "账本和立花不一致 1 只", "还没全部满足"):
+    for k in ("id='money'", "id='broker'", "id='gate'", "id='flow'", "2026 年已实现", "账本和立花不一致 1 只", "还没满足 1 项"):
         assert k in h, k
     _book("paper")
     hp = panel.render("paper", "t" * 40, AT)
@@ -163,3 +163,20 @@ def test_flow_reserve_from_panel_and_card():
     assert not panel.submit({"book": "tachibana", "kind": "flow", "jpy": 5000, "reserve": True}, AT)[0]   # 入金不能预留
     h = panel.render("tachibana", "t" * 40, AT)
     assert "出金预留中" in h and "id='flow-reserve'" in h
+
+
+def test_gate_card_lists_only_unmet_and_hides_when_all_met():
+    """上线准备：只列没满足的（✗ / 判定不了）与满足了但带 ★ 提醒的；全部满足 → 没有这张卡片（2026-10-18）。"""
+    _book()
+    LG.save([{"group": "门槛", "name": "① 连续一致", "ok": True, "text": "14 天"},
+             {"group": "门槛", "name": "④ デモ发单检查", "ok": False, "text": "★ 撤单没成功"},
+             {"group": "准备", "name": "⑤ 本番只读检查", "ok": True, "text": "全部通过；★ 现价字段还没在交易时间里确认过"},
+             {"group": "准备", "name": "⑥ 私钥文件", "ok": True, "text": "权限 600"}])
+    h = panel._gate_card("tachibana")
+    assert "还没满足 1 项" in h and "④ デモ发单检查" in h and "⑤ 本番只读检查" in h
+    assert "① 连续一致" not in h and "⑥ 私钥文件" not in h and "已满足的 2 项不显示" in h
+    LG.save([{"group": "门槛", "name": "① 连续一致", "ok": True, "text": "14 天"},
+             {"group": "准备", "name": "⑤ 本番只读检查", "ok": True, "text": "全部通过；★ 现价字段还没在交易时间里确认过"}])
+    assert panel._gate_card("tachibana") == ""
+    assert "id='gate'" not in panel.render("tachibana", "t" * 40, AT)
+    assert "执行器 ✓" not in panel.render("tachibana", "t" * 40, AT)        # 执行器跑成了也不给标签（满足的不显示）

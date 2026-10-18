@@ -1547,7 +1547,7 @@ TABS = {"home": ("⌂", "总览", "账户现在怎样：总权益、今天的运
         "trade": ("⇄", "交易", "今天要成交的单（执行器下的，可撤）与今天做的手动指令；之后才下的、已结束的、卖出后不买回的票收在下面"),
         "pick": ("☆", "选股", "规则的候选：出信号的、快要出的、观察中的，买入前看价格与 K 线"),
         "news": ("⚠", "消息", "qbreak 发出的通知的记录，和经济威胁消息（内容、时间、可信度、影响的行业和持仓）；推送点开到这里"),
-        "more": ("⋯", "更多", "通知设置、手机、上线准备、紧急停止（HALT）")}
+        "more": ("⋯", "更多", "通知设置、手机、上线准备（没满足时）、紧急停止（HALT）")}
 
 
 def _chart_orders(book: dict, sp: dict, asked) -> dict:
@@ -2646,15 +2646,15 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     bad_run = any(c == "neg" for c, _ in runl)
     H.append(PANE + "home")                               # ── 下面按标签页分组（_panes 把它们包成 <div class='pane'>）──
     # 状态 → 标签（颜色 = 轻重），整句收进 ⓘ；出问题的执行器行照旧整句显示（2026-10-17 用户：解释太多影响重点）
+    # 执行器跑成了不再给「执行器 ✓」标签（满足的不显示，2026-10-18）：跑完 / 自检通过的那几行只在 ⓘ 里
     wchips = "".join(f"<span class='chip {c}'>{escape(x)}</span>" for c, x in _warn_chips(warn))
     okl = [h for c, h in runl if c != "neg"]
     badl = [h for c, h in runl if c == "neg"]
-    run_chip = ("" if not okl or badl else f"<span class='chip ok'>执行器 ✓</span>")
     H.append(f"<section class='card{' warn' if halt or bad_run else ''}'><div class='head'><b>{escape(BOOKS.get(tag, tag))}</b>"
              f"<span class='chip'>决策日 {escape(str(st.get('last_date') or '—'))} → 成交日 {escape(str(sm.get('fill_day') or '—'))}</span></div>"
-             + (f"<div class='chips'>{wchips}{run_chip}"
+             + (f"<div class='chips'>{wchips}"
                 + _tip("".join(f"<div>★ {w}</div>" for w in warn) + "".join(f"<div>{h}</div>" for h in okl), "这些标签是什么")
-                + "</div>" if wchips or run_chip else "")
+                + "</div>" if wchips else "")
              + _home_stats(pj, st, paper)
              + f"<div>现在点买卖 → <b>{escape(when)}</b>下单{_tip(escape(MO.RULE_TEXT), '什么时候下单')}</div>"
              + "".join(f"<div class='neg small'>{h}</div>" for h in badl)
@@ -3371,7 +3371,9 @@ def _notify_card() -> str:
 
 
 def _gate_card(tag: str) -> str:
-    """〔77〕C UX-15：上线准备（最近一次「能上实盘了吗」/ 前一晚预检的结果：数据目录 out/gate.json；只读）。门槛与准备逐项 ✓ / ✗。"""
+    """〔77〕C UX-15：上线准备（最近一次「能上实盘了吗」/ 前一晚预检的结果：数据目录 out/gate.json；只读）。
+    只列没满足的项（✗ / 判定不了）和满足了但带 ★ 提醒的；全部满足 → 不显示这张卡片（2026-10-18 用户：「上线准备如果满足的话就不用显示了」）。
+    全部的项照旧在「能上实盘了吗」（bash scripts/liveu.sh gate）里看。"""
     from . import live_gate as LG
     if tag in READONLY or tag.endswith("_demo"):
         return ""
@@ -3380,14 +3382,20 @@ def _gate_card(tag: str) -> str:
         return ("<section class='card' id='gate'><h2>上线准备</h2><div class='muted small'>还没检查过：在 Mac 对话里问「能上实盘了吗」"
                 "（bash scripts/liveu.sh gate；只读）</div></section>")
     its = [it for it in g.get("items") or [] if it.get("group") in ("门槛", "准备")]
+    todo = [it for it in its if it.get("ok") is not True or "★" in str(it.get("text") or "")]
+    if g.get("ok") and not any(it.get("ok") is not True for it in its):
+        return ""
+    n_ok = sum(1 for it in its if it.get("ok") is True and it not in todo)
+    n_ng = sum(1 for it in its if it.get("ok") is not True)
     mark = {True: "✓", False: "✗", None: "—"}
-    return (f"<section class='card' id='gate'><details{' open' if tag == 'tachibana' and not g.get('ok') else ''}>"
-            f"<summary><b>上线准备</b> {'全部满足 ✓' if g.get('ok') else '还没全部满足'}"
+    return (f"<section class='card' id='gate'><details{' open' if tag == 'tachibana' else ''}>"
+            f"<summary><b>上线准备</b> 还没满足 {n_ng} 项"
             f" <span class='muted small'>（{escape(str(g.get('at') or ''))} 的检查）</span></summary><div class='list'>"
             + "".join(f"<div class='li'><div class='grow'><span class='{'neg' if it.get('ok') is False else ''}'>{mark.get(it.get('ok'), '—')}</span> "
                       f"<b>{escape(str(it.get('name')))}</b><div class='muted small'>{escape(str(it.get('text'))[:200])}</div></div></div>"
-                      for it in its)
-            + "</div><div class='muted small'>重新检查：在 Mac 对话里问「能上实盘了吗」（只读）</div></details></section>")
+                      for it in todo)
+            + "</div><div class='muted small'>" + (f"已满足的 {n_ok} 项不显示；" if n_ok else "")
+            + "全部的项与重新检查：在 Mac 对话里问「能上实盘了吗」（只读）</div></details></section>")
 
 
 def _buy_warn0(sm: dict | None, t: str) -> list[str]:

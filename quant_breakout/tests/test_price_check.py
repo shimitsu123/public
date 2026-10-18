@@ -142,8 +142,9 @@ def test_report_block_and_missing_items():
     from qbreak.report_unified import _price_check_html, missing_items, write_unified_report
     ok = {"asof": "2026-09-29", "from": "2026-03-13", "to": "2026-09-28", "wanted": 214, "checked": 214, "alerts": [], "info_counts": {},
           "n_errors": 0, "not_in_jq": [], "timeout": 0}
-    h = _price_check_html(ok)
-    assert "行情交叉核对" in h and "✓" in h and " open" not in h
+    assert _price_check_html(ok) == ""                                  # 全部核对了、没告警 → 不显示（2026-10-18）
+    h = _price_check_html(dict(ok, n_errors=2))
+    assert "行情交叉核对" in h and "取不到 2 只" in h and " open" not in h
     al = dict(ok, alerts=[{"ticker": "5401.T", "kind": "level", "date": "2025-09-29", "yf_ret": 8.5, "gap_pp": 10.3, "shift_pct": 10.5}])
     h2 = _price_check_html(al)
     assert "⚠ 1 条" in h2 and "5401 日本製鉄 复权错位 2025-09-29" in h2 and "<details open>" in h2   # 代码 + 名字（2026-10-15）
