@@ -186,7 +186,7 @@ sortable(document.querySelector('.tabbar'), '[data-tabgo]', 'x', els=>tabOrderSe
 document.addEventListener('click', e=>{ const b=e.target.closest('[data-tabgo]'); if(!b) return; e.preventDefault(); showTab(b.dataset.tabgo); }, true);
 // 左右滑整个页面 = 切到底栏上相邻的标签（2026-10-18 用户「滑动整体页面的话底部的标签也可以切换到相邻的标签」）：页面跟着手指走，
 // 滑过 1/4 屏宽（或快速一甩）→ 切过去并震一下，不够 → 弹回；最左 / 最右的标签再往外滑只拉动一点、不切。
-// 不接：K 线（拖动 = 看更早 / 更新）、能左右滚的表格与小标签、底栏（按住拖 = 排序）、对话框、输入框、屏幕左右边缘（留给浏览器的返回）；
+// 接：内容区与它下面的空白（页面短的时候）；不接：顶栏、K 线（拖动 = 看更早 / 更新）、能左右滚的表格与小标签、底栏（按住拖 = 排序）、对话框、输入框、屏幕左右边缘（留给浏览器的返回）；
 // 先上下动了 = 照旧滚页面
 const SW_SKIP='.chart,.tabbar,dialog,input,textarea,select,[contenteditable],.hsw,.iib';
 const SW_EDGE=20, SW_LOCK=8;
@@ -221,7 +221,8 @@ document.addEventListener('touchstart', e=>{
   SW=null;
   if(e.touches.length!==1 || document.querySelector('dialog[open]')) return;
   const t=e.touches[0], tg=e.target;
-  if(!tg || !tg.closest || !tg.closest('main') || tg.closest(SW_SKIP) || swScrollsX(tg)) return;
+  const blank=tg===document.body || tg===document.documentElement;      // 内容短的页（例：立花本番还没有持仓）下面的空白也接（2026-10-18）
+  if(!tg || !tg.closest || !(blank || tg.closest('main')) || tg.closest(SW_SKIP) || swScrollsX(tg)) return;
   if(t.clientX<SW_EDGE || t.clientX>innerWidth-SW_EDGE) return;
   SW={x0:t.clientX, y0:t.clientY, lock:false, dx:0, nb:null, panes:[], hist:[]};
 }, {passive:true});

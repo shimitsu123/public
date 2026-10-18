@@ -924,6 +924,7 @@ def test_bottom_tab_order_follows_the_device_cookie():
     # 左右滑整个页面 = 切到底栏上相邻的标签（2026-10-18）：K 线 / 底栏 / 对话框 / 输入框 / 能左右滚的 / 屏幕边缘不接；先上下动 = 照旧滚
     assert "showTab(s.nb); haptic('tick');" in js and "function swNext(d)" in js and "function swScrollsX(el)" in js
     assert all(k in js[js.index("const SW_SKIP="):js.index("const SW_SKIP=") + 120] for k in (".chart", ".tabbar", "dialog", "input"))
+    assert "const blank=tg===document.body || tg===document.documentElement;" in js and "!(blank || tg.closest('main'))" in js   # 短页面下面的空白也接
     assert "document.addEventListener('touchmove'" in js and "{passive:false}" in js and "Math.abs(dx)<Math.abs(dy)*1.3" in js
 
 
