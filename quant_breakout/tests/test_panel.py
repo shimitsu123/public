@@ -917,6 +917,11 @@ def test_bottom_tab_order_follows_the_device_cookie():
     assert js.count("haptic('pick')") == 1 and js.count("haptic('tick')") == 2 and "if(ok && s.j!==s.i) haptic('drop');" in js
     css = (Path(panel.__file__).parent / "static" / "panel.css").read_text(encoding="utf-8")
     assert ".tgr{" not in css and ".tor{" not in css
+    # 每个标签一个颜色（2026-10-18）：浅色 / 深色都定义、底栏图标与页面标题用它、滑动底色跟着选中的标签
+    for k in panel.TABS:
+        assert f"[data-tabgo={k}],[data-tab={k}]{{--tc:var(--t-{k})}}" in css and css.count(f"--t-{k}:") == 3, k
+    assert ".tabbar button b{color:var(--tc,var(--muted))}" in css and ".pane>.panehead{border-left:4px solid var(--tc" in css
+    assert "IND.style.setProperty('--tc', 'var(--t-'+b.dataset.tabgo+')');" in js
     # 拖动 / 放下 / 切换标签都有动画（2026-10-17）
     assert "function flip(els, mutate)" in js and "p.classList.add(dir)" in js and "showTab(k||'home', true, true);" in js
     assert "@keyframes qbinr" in css and ".tabind{" in css and "@keyframes qbpop" in css and "main{overflow-x:clip}" in css

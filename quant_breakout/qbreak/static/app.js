@@ -52,6 +52,7 @@ function tabInd(now){                                                     // 底
   const bar=document.querySelector('.tabbar'); if(!bar) return;
   if(!IND){ IND=document.createElement('i'); IND.className='tabind'; IND.setAttribute('aria-hidden', 'true'); bar.prepend(IND); }
   const b=bar.querySelector('[data-tabgo].on'); if(!b){ IND.style.opacity='0'; return; }
+  IND.style.setProperty('--tc', 'var(--t-'+b.dataset.tabgo+')');           // 底色 = 这个标签的颜色（panel.css 的 --t-*）
   if(now) IND.style.transition='none';
   IND.style.transform='translateX('+(b.offsetLeft+b.offsetWidth/2-IND.offsetWidth/2)+'px)'; IND.style.opacity='1';
   if(now){ void IND.offsetWidth; IND.style.transition=''; }
