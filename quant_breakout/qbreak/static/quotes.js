@@ -105,7 +105,7 @@ const SQMAX = CFG.sq_max || 12;                                            // �
 let RECENT = [];                                                          // 最近点开的票（新的在前）：打开的超过 SQMAX 只时先取它们
 function sqAll(){                                                         // 要取现价的建议股票：买入框里的 → 最近点开的 → 其余打开的（页面顺序）
   const open=[];
-  document.querySelectorAll('#autobuy details.abx[open] details.kl[open] .chart[data-t], #suggest details.kl[open] .chart[data-t]')
+  document.querySelectorAll('#autobuy details.abx[open] details.kl[open] .chart[data-t]')
     .forEach(b=>{ if(open.indexOf(b.dataset.t)<0) open.push(b.dataset.t); });
   const s=[];
   const d=$('#dlg-buy'); if(BUY && d && d.open) s.push(BUY.t);
@@ -168,8 +168,8 @@ async function loadQ(){
   clearTimeout(QTID);
   QTID=setTimeout(loadQ, QLIVE ? 60000 : 600000);                         // 盘中 1 分钟，其他时间 10 分钟（开盘后自动变快）
 }
-document.addEventListener('toggle', e=>{                                   // 打开一只建议股票的 K 线（或「规则接下来会自动买」的一行）→ 取它的现价（并进今天这一根）
-  const d=e.target; if(d.tagName!=='DETAILS' || !d.closest('#suggest, #autobuy')) return;
+document.addEventListener('toggle', e=>{                                   // 打开选股「规则接下来会自动买」的一行 / 它的 K 线 → 取它的现价（并进今天这一根）
+  const d=e.target; if(d.tagName!=='DETAILS' || !d.closest('#autobuy')) return;
   if(d.open){ const c=d.querySelector('.chart[data-t]'), t=d.matches('details.abx, details.kl') && c ? c.dataset.t : null;
               if(t) RECENT=[t].concat(RECENT.filter(x=>x!==t)).slice(0, 50); }   // 最近点开的排前面
   if(d.open || document.querySelector('.qt[data-sq][data-over]')){ clearTimeout(SQT); SQT=setTimeout(loadSQ, 300); }   // 收起了几行：超过的那些现在取

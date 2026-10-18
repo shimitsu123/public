@@ -104,7 +104,7 @@ def test_auto_buy_card_lists_planned_and_near_with_days():
     assert "约 1 天" in h and "约 10/13 金叉" in h and "约 3 天" in h and "约 10/15 金叉" in h
     assert "约 400 股" in h and "买不起" in h and "其中 1 只出了信号也买不起" in h
     assert "9007" not in h and "9008" not in h                                 # 超过 5 天 / 闸门挡的不列
-    assert panel._auto_buy_card({}, book, "paper", 1_000_000) == ""
+    assert "候选在执行器下一次运行之后显示" in panel._auto_buy_card({}, book, "paper", 1_000_000)   # 选股页只有这一张：空着也写一行（2026-10-18）
 
 
 def test_trade_tab_shows_only_last_two_days_except_unfinished():

@@ -91,7 +91,7 @@ def test_panel_shows_the_line_for_stocks_not_for_core_etfs():
     hv = {"bar_date": "2026-10-07", "holdings": [{"ticker": "7203.T", "shares": 100, "error": "x"}],
           "core": [{"ticker": "1545.T", "name": "纳斯达克 100（1545）", "units": 100, "why": "闲置资金规则"}]}
     kl = {"file": "charts_paper.json", "trend": {"7203.T": dip, "1545.T": dip}, "items": {}}
-    sg = {"asof": "2026-10-07", "rows": [{"ticker": "6501.T", "code": "6501", "name": "日立", "status": "watch", "signal": False,
+    sg = {"asof": "2026-10-07", "rows": [{"ticker": "6501.T", "code": "6501", "name": "日立", "status": "triggered", "signal": True,
                                           "close": 3500.0, "trend": _tr("上升", "下降", "上升"),
                                           "rule": {"state": "none", "text": "还没出买入信号：规则不会买"},
                                           "buy": {"block": None, "warn": [], "lot": 100, "px": 3500.0, "rule_shares": 0}}]}
@@ -99,7 +99,7 @@ def test_panel_shows_the_line_for_stocks_not_for_core_etfs():
                                                              encoding="utf-8")
     for mode in ("local", "remote"):
         h = panel.render("paper", "t" * 40, AT, mode=mode)
-        assert h.count("class='chips dipst'") == 2                              # 持仓的 7203 + 建议的 6501；核心 ETF 1545 不显示（标签 + ⓘ，2026-10-17）
+        assert h.count("class='chips dipst'") == 2                              # 持仓的 7203 + 选股的 6501；核心 ETF 1545 不显示（标签 + ⓘ，2026-10-17）
         assert "<span class='chip mut'>历史同类：略差于大盘，但不够确定</span>" in h
         assert "<b>月K 往上走 + 日K、周K 都往下走</b>：历史上（2001〜2026，9,509 次）" in h
         assert "<b>月K 往上走 + 只有周K 往下走</b>：" in h and "略差于大盘，但不够确定；不是预测" in h

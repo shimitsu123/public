@@ -284,21 +284,17 @@ def _sm_nowarn():
     _sm([dict(r, buy={**r["buy"], "warn": []}) for r in SG_ROWS])
 
 
-def test_render_suggestions_with_buy_buttons_and_gates():
+def test_render_pick_with_buy_buttons_and_gates():
+    """选股只有「规则接下来会自动买」（2026-10-18：「建议的股票」不显示）：出了信号的 6501 有买入按钮；
+    被硬闸门挡的 8035、观察中的 9984 不显示。"""
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
     _sm()
     html = panel.render("paper", "t" * 40, AT)
-    sgc, ab = _card(html, "suggest"), _card(html, "autobuy")
-    # 出了信号的 6501 在上面「规则接下来会自动买」里（2026-10-15 起建议的股票不重复列）：只数 = 这里列的
-    assert "建议的股票（规则的候选，2 只）" in sgc and "上面「规则接下来会自动买」已列的 1 只不在这里重复" in sgc
-    assert "个股名额：空 3 个（拿着 1 + 排定买入 0，上限 4 只）" in sgc
-    assert "<b>6501</b>" not in sgc and "今天出了买入信号" not in sgc            # 空了的组（与它的分段按钮）不出现
-    assert "<h3 class='sgh'>快要出买入信号（1 只）</h3>" in sgc and "<h3 class='sgh'>观察中（1 只）</h3>" in sgc
-    assert sgc.count("data-act='buy'") == 1                                 # 8035 被硬闸门挡：没有按钮
+    ab, pick = _card(html, "autobuy"), _pane(html, "pick")
+    assert "id='suggest'" not in html and "建议的股票" not in pick
+    assert "<b>8035</b>" not in pick and "<b>9984</b>" not in pick
     assert "data-t='6501.T'" in ab and "data-sig='1'" in ab and "data-rule='200'" in ab and "data-limit='3605'" in ab
-    assert "不能买：JPX 市場区分「プロ」：不买" in sgc and "顶部风险：RSI72" in ab
-    assert "★ 规则现在不开这只的新仓（新仓倍数 0）：执行器会挡" in sgc and "真突破" in ab
-    assert sgc.count("<details class='kl' open>") == 1 and "<details class='kl'><summary>" in sgc     # 观察中的 K 线默认收起
+    assert "顶部风险：RSI72" in ab and "真突破" in ab
     assert "按规则约 200 股 · 约 ¥700,000 · 约占权益 70.0%" in ab
     full = {t: {"shares": 100, "entry_px": 1000.0, "entry_date": "2026-09-01", "stop_px": 900.0, "last_close": 1000.0}
             for t in ("7203.T", "6758.T", "6861.T", "6098.T")}
@@ -307,23 +303,25 @@ def test_render_suggestions_with_buy_buttons_and_gates():
     assert "data-act='buy'" in html and "data-full='1'" in html and ">全部换成这只…<" in html     # 2026-10-13：名额满也给按钮，只能「其他全部卖出」
     assert "个股名额已满（4 / 4 只）：只能把其他持仓全部卖出来换这只" in html
     _sm([])
-    assert "今天没有出信号 / 快要出信号 / 观察中的票" in panel.render("paper", "t" * 40, AT)
+    assert "今天没有出信号 / 快要出信号的票" in panel.render("paper", "t" * 40, AT)
 
 
-def test_render_watch_rows_show_how_far_from_a_buy_signal():
+def test_render_near_rows_show_how_far_from_a_buy_signal():
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
     rows = [dict(r) for r in SG_ROWS]
-    rows[2]["near"] = {"where": "below_up", "days": 8, "miss": [], "vol": 0.8}   # 8 天：不在「规则接下来会自动买」（5 天以内）里
-    rows[2]["near_text"] = "离买入信号：MACD 约 8 天后金叉（按最近一天的变化估）；金叉那天量要 > 1.5 倍（今天 0.8 倍）"
+    rows[2]["buy"] = {**rows[2]["buy"], "warn": []}
+    rows[2]["near"] = {"where": "below_up", "days": 3, "miss": [], "vol": 0.8}   # 3 天：在「规则接下来会自动买」（5 天以内）里
+    rows[2]["near_text"] = "离买入信号：MACD 约 3 天后金叉（按最近一天的变化估）；金叉那天量要 > 1.5 倍（今天 0.8 倍）"
     _sm(rows)
-    html = panel.render("paper", "t" * 40, AT)
-    assert ("离买入信号：MACD 约 8 天后金叉（按最近一天的变化估）；金叉那天量要 &gt; 1.5 倍（今天 0.8 倍）</div></details>"   # 收进 ⓘ（2026-10-17）
-            in _card(html, "suggest")) and "9984" not in _card(html, "autobuy")
-    assert html.count("按离 MACD 金叉的天数排（越上面越快金叉；只是估算）") == 1   # 只有带 near 的组（旧的汇总没有 → 不写）
+    ab = _card(panel.render("paper", "t" * 40, AT), "autobuy")
+    assert "离买入信号：MACD 约 3 天后金叉（按最近一天的变化估）；金叉那天量要 &gt; 1.5 倍（今天 0.8 倍）</div></details>" in ab   # 收进 ⓘ（2026-10-17）
+    rows[2]["near"] = {"where": "below_up", "days": 8, "miss": [], "vol": 0.8}   # 8 天：选股页不显示（2026-10-18）
+    _sm(rows)
+    assert "<b>9984</b>" not in _pane(panel.render("paper", "t" * 40, AT), "pick")
 
 
-def test_render_ranks_watch_rows_by_the_registered_probability(monkeypatch, tmp_path):
-    """有比例表（研究判定 A）：快要出 + 观察中合成一组，按 闸门 → 历史比例 → near_key 排，每只写第几 + 历史比例（旧汇总也在渲染时补）。"""
+def test_render_near_rows_show_the_registered_probability(monkeypatch, tmp_path):
+    """有比例表（研究判定 A）：5 天内的行写历史比例 + 快要出；判定 B（只排序）不写百分比。观察中的不显示（2026-10-18）。"""
     from qbreak import watch_prob as WP
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
     rows = [dict(r) for r in SG_ROWS]
@@ -331,31 +329,17 @@ def test_render_ranks_watch_rows_by_the_registered_probability(monkeypatch, tmp_
                "near": {"where": "below_up", "days": 1, "miss": ["周线量比（0.8，要 ≥ 1）"], "vol": 1.2}}
     rows[2] = {**rows[2], "buy": {**rows[2]["buy"], "warn": []}, "macd_gap_pct": -0.3, "vol_ratio": 0.8,
                "near": {"where": "below_down", "days": None, "miss": [], "vol": 0.8}}
-    extra = {"ticker": "6758.T", "code": "6758", "name": "ソニーG", "status": "watch", "signal": False, "score": 40.0, "close": 3000.0,
-             "rule": {"state": "none", "text": ""}, "macd_gap_pct": 0.5, "vol_ratio": 0.5,
-             "near": {"where": "above", "days": None, "miss": [], "vol": 0.5},
-             "buy": {"block": None, "warn": [], "lot": 100, "px": 3000.0, "limit": 3090, "rule_shares": 100}}
-    _sm(rows + [extra])
+    _sm(rows)
     t = WP.fit([("down_far", "m0", "v_lo", int(k < 9)) for k in range(100)] + [("up_d1", "m1", "v_hi", int(k < 4)) for k in range(100)]
                + [("above_far", "m0", "v_lo", 0) for _ in range(300)], extra={"show_pct": True})
     fp = tmp_path / "wp.json"
     fp.write_text(json.dumps(t), encoding="utf-8")
     monkeypatch.setattr(WP, "FILE", fp)
     html = panel.render("paper", "t" * 40, AT)
-    sgc, ab = _card(html, "suggest"), _card(html, "autobuy")
-    # 6501（出了信号）与 8035（约 1 天金叉）在上面「规则接下来会自动买」里，建议的股票不重复列（2026-10-15）
-    assert "今天出了买入信号" not in sgc and "data-sgg" not in sgc            # 只剩一组：没有分段按钮
-    assert "<h3 class='sgh'>观察中 · 2 只（按离 MACD 金叉的天数排）<details class='ii'>" in sgc and "快要出买入信号（1 只）" not in html
-    i1, i2, i3 = html.index("<b>9984</b>"), html.index("<b>8035</b>"), html.index("<b>6758</b>")
-    assert i2 < i1 < i3                                                    # 2026-10-11 起按离金叉：8035（约 1 天）→ 9984（往下走）→ 6758（已在线上）
-    assert "<b>8035</b>" not in sgc and "<b>8035</b>" in ab
-    assert "<span class='rk'>1</span><b>9984</b>" in sgc and "<span class='rk'>2</span><b>6758</b>" in sgc   # 名次按这里列的从 1 数（不跳号）
-    assert "<span class='rk'" not in ab                                     # 自动买那张卡不带名次徽章
-    assert "金叉约 1 天" in ab and "要先拐头" in sgc and "已在线上" in sgc
-    assert "<span class='chip hot'>快要出</span>" in ab                       # 快要出的照样标出来（在自动买那张卡点开的一行里）
-    p1 = WP.prob(t, "down_far", "m0", "v_lo")
-    assert f"之后 10 个交易日内出买入信号：历史上约 <b>{p1['p'] * 100:.1f}%</b>（同样情况 100 次）" in html
-    assert "越上面越快出现金叉（按最近一天的变化估算的天数" in html
+    ab = _card(html, "autobuy")
+    assert "<b>8035</b>" in ab and "金叉约 1 天" in ab and "<span class='chip hot'>快要出</span>" in ab
+    assert "<b>9984</b>" not in _pane(html, "pick") and "<span class='rk'" not in html
+    assert "之后 10 个交易日内出买入信号：历史上约 <b>" in ab
     monkeypatch.setattr(WP, "FILE", tmp_path / "wp2.json")                 # 研究判定 B（只排序）：不写百分比
     (tmp_path / "wp2.json").write_text(json.dumps({**t, "show_pct": False}), encoding="utf-8")
     html = panel.render("paper", "t" * 40, AT)
@@ -378,7 +362,7 @@ def test_submit_buy_writes_instruction_and_checks():
     ok, msg, rec = panel.submit({"book": "paper", "kind": "buy", "ticker": "9984", "unit": "shares", "value": 300}, AT)
     assert ok and rec["value"] == 300 and "买入 9984 ソフトバンクグループ（300 股）" in msg and "没有买入信号" in msg
     html = panel.render("paper", "t" * 40, AT)
-    assert html.count("data-act='cancel'") == 2 and "有一条买入指令在处理（见「交易」→「今天要成交的单」的「手动指令」）" in _card(html, "suggest")
+    assert html.count("data-act='cancel'") == 2 and "有一条买入指令在处理（见「交易」→「今天要成交的单」的「手动指令」）" in _card(html, "autobuy")
 
 
 def test_chart_endpoint_serves_one_ticker(server):
@@ -575,7 +559,7 @@ def test_one_kline_help_for_the_whole_page_and_no_number_table():
         assert hold.index("id='khelp'") < hold.index("id='holdings'") < hold.index("data-t='6758.T' data-kind='stock'")   # 持仓的 K 线上面
         assert "data-kind=" not in hold[:hold.index("id='khelp'")]                     # 上面没有别的 K 线
         assert pick.count("怎么看 K 线图") == 1 and "data-khelpgo='1'" in pick and "<details" not in re.sub(r"<details class='ii'>.*?</details>", "", pick[:pick.index("data-khelpgo")])   # 选股：只一行指过去（ⓘ 说明不算）
-        assert pick.index("data-khelpgo") < pick.index("id='autobuy'") < pick.index("id='suggest'")
+        assert pick.index("data-khelpgo") < pick.index("id='autobuy'") and "id='suggest'" not in pick
         for x in ("红色空心 = 涨", "绿色实心 = 跌", "<i class='key m5'></i>5", "<i class='key m30'></i>30 日（周 / 个月）均价",
                   "▲买入 = 买入那一根", "▲信号 = 出买入信号那一根", "<i class='key dash stop'></i>止损线", "<i class='key dash tl'></i>趋势线",
                   "研究（2026-10-06）：对之后的涨跌没有预测力", "金叉，是规则买入的条件之一", "DMI = 买卖哪边强、趋势强不强（规则不用）",

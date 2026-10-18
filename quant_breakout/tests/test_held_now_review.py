@@ -199,7 +199,7 @@ def _sg() -> dict:
          "buy": {"rule_shares": 100, "px": 3100.0, "lot": 100, "em": 1.0, "limit": 3193}, "rule": {}}]}
 
 
-def test_suggest_cards_mark_a_stock_bought_today():
+def test_auto_buy_card_marks_a_stock_bought_today():
     b = _book_stocks()
     c = panel._suggest_ctx(_sg(), b, "paper", marks={}, now=AT)
     assert c["bought"] == {"7203.T": "今天已买进 100 股（对账前）"}
@@ -207,8 +207,6 @@ def test_suggest_cards_mark_a_stock_bought_today():
     h = panel._auto_buy_card(_sg(), b, "paper", 1_000_000.0, chart=lambda t, k: "", ctx=c)
     assert "data-act='buy' data-t='7203.T'" not in h and "今天已买进 100 股（对账前）" in _text(h)
     assert "个股名额空 2 个（上限 4 只）（含今天已成交）" in _text(h)
-    h = panel._suggest_card(_sg(), b, "paper", set(), "马上", 1_000_000.0, 100.0, lambda t, k: "", ctx=c)
-    assert "data-act='buy' data-t='6501.T'" in h and "（含今天已成交）" in _text(h)
 
 
 # ────────── F10：解除「不买回」的确认框：今天已经卖光的不算「还没成交的卖出」 ──────────

@@ -129,7 +129,7 @@ def _part(np_=None, st=None, sm=None):
 
 def test_partial_sell_for_new_stock_buys():
     one = {**NEWPOS, "markets": {"JP": {"mult": 1.0, "why": []}}}
-    assert _part(one)["sub"] == "现在新仓倍数 ×1：出了买入信号就会（候选见「选股」的「规则接下来会自动买」与「建议的股票」）"
+    assert _part(one)["sub"] == "现在新仓倍数 ×1：出了买入信号就会（候选见「选股」的「规则接下来会自动买」）"
     r = _part({**NEWPOS, "markets": {"JP": {"mult": 0.5, "why": [["宏观", 0.5]]}}})
     assert r["sub"] == "现在新仓倍数 ×0.5（宏观 ×0.5）：出了买入信号就会，按倍数卖得少一些" and r["units"] == 530
     full = {f"{c}.T": {"shares": 100} for c in (7203, 6758, 8035, 9984)}

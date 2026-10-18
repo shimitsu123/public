@@ -221,7 +221,7 @@ def partial_row(t: str, sm: dict, st: dict, *, px: float | None, lot: int, cur: 
     elif mult is not None and mult < 1:
         out.update(sub=f"现在新仓倍数 ×{mult:g}（{why or '—'}）：出了买入信号就会，按倍数卖得少一些", hint=f"有买入信号就会（×{mult:g}）")
     elif mult is not None:
-        out.update(sub="现在新仓倍数 ×1：出了买入信号就会（候选见「选股」的「规则接下来会自动买」与「建议的股票」）", hint="有买入信号就会")
+        out.update(sub="现在新仓倍数 ×1：出了买入信号就会（候选见「选股」的「规则接下来会自动买」）", hint="有买入信号就会")
     else:
         out["sub"] = "新仓倍数在执行器下一次运行之后显示"
     return out

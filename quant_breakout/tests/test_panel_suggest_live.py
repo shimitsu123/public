@@ -23,6 +23,7 @@ SG = [{"ticker": "6501.T", "code": "6501", "name": "日立", "status": "triggere
        "rule": {"state": "planned", "text": "规则已安排"}, "buy": {"block": None, "warn": [], "lot": 100, "px": 3500.0, "limit": 3605,
                                                                    "rule_shares": 200}},
       {"ticker": "9984.T", "code": "9984", "name": "ソフトバンクG", "status": "watch", "signal": False, "close": 9000.0, "score": 50.0,
+       "near": {"where": "below_up", "days": 3, "miss": []},           # 估计 3 个交易日内金叉 → 选股页列（2026-10-18 起只列这些）
        "rule": {"state": "none", "text": ""}, "buy": {"block": None, "warn": [], "lot": 100, "px": 9000.0, "limit": 9270,
                                                       "rule_shares": 100}}]
 
@@ -111,11 +112,11 @@ def test_suggestion_quotes_endpoint_and_live_candle(servers, monkeypatch):  # no
     code, body, _ = _req(lp, "GET", "/api/quotes?book=paper&t=9984.T,1111.T")
     js = json.loads(body)
     assert code == 200 and set(js["rows"]) == {"9984.T"} and calls == [["9984.T"]]
-    code, cj = panel.chart_json("paper", "9984.T", AT)                     # 建议的股票：现价取过 → K 线并进今天这一根
+    code, cj = panel.chart_json("paper", "9984.T", AT)                     # 选股的票：现价取过 → K 线并进今天这一根
     assert code == 200 and cj["data"]["tf"]["D"]["d"][-1] == "2026-10-06" and cj["data"]["live"]["open"] is True
     panel._QUOTE_CACHE[("paper", ("1111.T",))] = (1e12, {"1111.T": {"px": 500.0, "at": "2026-10-06T09:40+09:00",
                                                                    "bar": {"d": "2026-10-06", "o": 1, "h": 1, "l": 1, "c": 1, "v": 1}}})
-    code, cj = panel.chart_json("paper", "1111.T", AT)                     # 不在建议里、也没拿着 → 不并
+    code, cj = panel.chart_json("paper", "1111.T", AT)                     # 不在选股里、也没拿着 → 不并
     assert code == 200 and "live" not in cj["data"]
 
 
@@ -128,7 +129,7 @@ def test_page_rule_buy_price_live_slot_and_buy_dialog():
     assert "规则的买价：出信号那天的收盘 ×1.03 是第二天开盘的最高价（按今天收盘 ≈ ¥9,270）" in h
     assert "<summary>K 线 · 现价</summary><div class='qt small' data-sq='9984.T'></div>" in h
     assert "<div id='buy-live' class='small pl'></div>" in h
-    for s in ("&t=", "loadSQ", "buyLive()", "#suggest details.kl[open]", "priceHead(q)",
+    for s in ("&t=", "loadSQ", "buyLive()", "#autobuy details.abx[open] details.kl[open]", "priceHead(q)",
               "KP[t].then(()=>{ if(KD[t] && typeof KD[t]==='object') reloadK(t); })"):   # 图比现价先到：取完再要一次（并进今天这一根）
         assert s in panel._JS
 

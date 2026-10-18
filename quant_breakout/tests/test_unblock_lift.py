@@ -201,20 +201,19 @@ def test_panel_blocks_card_confirm_and_waiting_rows():
     assert "a==='cancel' && d.kind==='unblock'" in panel._JS and "撤回之后不解除" in panel._JS and "block_id:d.id" in panel._JS
 
 
-def test_suggest_and_auto_buy_card_for_manual_block():
+def test_auto_buy_card_for_manual_block():
     _book(pos={}, manual={"cap_pct": 34.0, "max_positions": 4, "items": {}, "blocks": {"6501.T": _blk("2026-10-07", "M-h")}})
     row = {"ticker": "6501.T", "code": "6501", "name": "日立", "status": "watch", "signal": False, "close": 3500.0,
            "near": {"where": "below_up", "days": 3}, "rule": {"state": "none"},
            "buy": {"block": "手动卖出后不自动买回（到 2026-10-07）", "block_kind": "manual", "warn": [], "lot": 100, "px": 3500.0,
                    "em": 1.0, "rule_shares": 100}}
     row2 = {**row, "near": {"where": "below_up", "days": 1}}
-    _sm([row2])                                                             # 估计 10/06 金叉 ≤ 到期 10/07：自动买那张卡不列 → 在建议的股票里
+    _sm([row2])                                                             # 估计 10/06 金叉 ≤ 到期 10/07：规则不会自动买 → 选股页不列（「建议的股票」2026-10-18 删掉）
     html = panel.render("paper", "t" * 40, AT)
-    assert "手动卖出后不买回（可在「交易」→ 点开最下面的「已结束 / 不是今天的」→「手动卖出后不自动买回」解除）：到 2026-10-07" in _card(html, "suggest") and "资格检查：手动" not in html
-    assert "6501" not in _card(html, "autobuy")
-    _sm([row])                                                              # 估计 10/08 金叉 > 到期 10/07：自动买那张卡列（建议的股票不重复列）
+    assert "6501" not in _card(html, "autobuy") and "id='suggest'" not in html and "资格检查：手动" not in html
+    _sm([row])                                                              # 估计 10/08 金叉 > 到期 10/07：自动买那张卡列
     html = panel.render("paper", "t" * 40, AT)
-    assert "手动卖出后不买回（可在「交易」→ 点开最下面的「已结束 / 不是今天的」→「手动卖出后不自动买回」解除）：到 2026-10-07" in _card(html, "autobuy") and "6501" not in _card(html, "suggest")
+    assert "手动卖出后不买回（可在「交易」→ 点开最下面的「已结束 / 不是今天的」→「手动卖出后不自动买回」解除）：到 2026-10-07" in _card(html, "autobuy")
     book = json.loads((panel.paths.state_dir() / "live_unified_paper.json").read_text())
     h = panel._auto_buy_card({"asof": "2026-10-05", "rows": [row]}, book, "paper", 1_000_000)
     assert "6501" in h and "10/07 解除后" in h                                # 估计 10/08 金叉 > 到期 10/07：还列

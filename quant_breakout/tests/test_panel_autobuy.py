@@ -1,8 +1,7 @@
 """「规则接下来会自动买」每一行可以点开（2026-10-14 用户：「选股中的估计 5 个交易日内可能出现信号的股票也要可以能看到 K 线，
-也可以有买入的 button 等等」）：收起时 = 原来的一行摘要；点开 = 这只在「建议的股票」里会有的那一行（_suggest_row：买入… / 不能买的理由、
-规则的买价、K 线 · 现价；不带名次徽章），默认收起。
-2026-10-15 用户：「去掉估计五个交易日内和建议的股票中重复的股票」→ 自动买那张卡列的（_auto_pick，只算一次）建议的股票不再列：
-选股页每只票只出现一次；建议的股票的只数 = 它列的，另写跳过了几只；名次从 1 数起不跳号。"""
+也可以有买入的 button 等等」）：收起时 = 一行摘要；点开 = _suggest_row（买入… / 不能买的理由、规则的买价、K 线 · 现价；不带名次徽章），默认收起。
+2026-10-18 用户：「选股中建议的股票也不用显示 只留下上面的已经出了买入信号和估计五个交易日之内可以出信号的就行」→ 选股页只有这一张卡
+（列哪几只 = _auto_pick，只算一次）；资格检查挡的、观察中的不显示。"""
 import json
 import re
 import shutil
@@ -14,7 +13,7 @@ import pytest
 from qbreak import panel
 from qbreak import watch_prob as WP
 
-from test_panel import AT, _book, _card, _js_fn, _sm
+from test_panel import AT, _book, _card, _js_fn, _pane, _sm
 
 NEAR = {"ticker": "1925.T", "code": "1925", "name": "大和ハウス", "sector": "建設業", "status": "imminent", "signal": False,
         "score": 70.0, "close": 4000.0, "near": {"where": "below_up", "days": 2, "miss": ["量"]}, "prob": {"p": 0.09},
@@ -56,44 +55,24 @@ def _abx(card: str, t: str) -> str:
     return card[i:j if j > 0 else len(card)]
 
 
-def _sg_undeduped(monkeypatch) -> str:
-    """不去重时的建议的股票（测试用：把自动买那张卡列的代码清空，补回 2026-10-15 前「今天出了买入信号」那一组）——
-    对比点开的一行与建议的股票里会有的那一行一样。"""
-    orig = panel._auto_pick
-    with monkeypatch.context() as m:
-        m.setattr(panel, "_auto_pick", lambda *a, **k: {**orig(*a, **k), "tickers": set()})
-        m.setattr(panel, "GROUPS", (("triggered", "今天出了买入信号"),) + panel.GROUPS)
-        return _card(panel.render("paper", "t" * 40, AT), "suggest")
-
-
-def _norm(row: str) -> str:
-    return RK.sub("", row).replace("<details class='kl' open>", "<details class='kl'>")
-
-
-def test_near_and_triggered_rows_expand_to_the_suggest_row_and_are_not_repeated(monkeypatch):
+def test_near_and_triggered_rows_expand_and_nothing_else_is_listed(monkeypatch):
     _setup(monkeypatch=monkeypatch)
     html = panel.render("paper", "t" * 40, AT)
-    ab, sg = _card(html, "autobuy"), _card(html, "suggest")
-    assert "点一行展开：K 线 · 现价、买入…" in ab
-    for t in ("1925.T", "6501.T", "8306.T"):                                # 建议的股票不再列（2026-10-15）
-        assert f"data-t='{t}'" not in sg and f"data-sq='{t}'" not in sg, t
-    assert "建议的股票（规则的候选，1 只）" in sg and "上面「规则接下来会自动买」已列的 3 只不在这里重复" in sg
-    assert "<b>9008</b>" in sg                                              # 资格检查挡的：自动买那张卡不列 → 留在建议的股票
+    ab, pick = _card(html, "autobuy"), _pane(html, "pick")
+    assert "点一行展开：K 线 · 现价、买入…" in ab and "建议的股票" not in ab
+    assert "id='suggest'" not in html and "建议的股票（" not in html          # 「建议的股票」不显示（2026-10-18）
     for t in ("1925.T", "6501.T", "8306.T"):                                # 默认收起：一行摘要在 summary 里
         assert f"<details class='abx' data-t='{t}'><summary>" in ab
-    assert "<details class='abx' open" not in ab and "9008" not in ab        # 资格检查挡的不列（与以前一样）
+    assert "<details class='abx' open" not in ab and "9008" not in pick      # 资格检查挡的：选股页不列
     one = _abx(ab, "1925.T")
     s = one[:one.index("</summary>")]
     assert "约 2 天" in s and "<b>1925</b> 大和ハウス" in s and "<span class='chip" in s
     assert "历史出信号 9%" in s and "还差 1 个条件" in s and "data-act='buy'" not in s   # 摘要里没有按钮（点开才有）
-    # 点开的内容 = 去重之前建议的股票里同一只（只差 K 线默认打开）
-    full = _sg_undeduped(monkeypatch)
     for t in ("1925.T", "6501.T", "8306.T"):
-        a, b = _row(ab, t, "autobuy"), _row(full, t, "suggest")
-        assert _norm(a) == _norm(b), t
+        a = _row(ab, t, "autobuy")
         assert a.endswith(f"<details class='kl' open><summary>K 线 · 现价</summary><div class='qt small' data-sq='{t}'></div>")
     btn = re.search(r"<button class='btn primary' data-act='buy' data-t='1925\.T'[^>]*>买入…</button>", one)
-    assert btn and btn.group(0) in full                                     # 按钮与数据属性一模一样（同一个买入框）
+    assert btn
     for k in ("data-code='1925'", "data-px='4000'", "data-lot='100'", "data-rule='100'", "data-limit='4120'", "data-sig='0'"):
         assert k in btn.group(0), k
     assert "规则的买价：出信号那天的收盘 ×1.03" in one and "⚠ 消息：受损 大（1 条，估算 -1.2%）" in one
@@ -114,7 +93,6 @@ def test_full_slots_and_planned_rows_use_the_same_logic(monkeypatch):
     one = _abx(ab, "1925.T")
     assert "名额满" in one[:one.index("</summary>")]
     assert "data-full='1'" in one and ">全部换成这只…<" in one and "个股名额已满（4 / 4 只）" in one
-    assert _norm(_row(ab, "1925.T", "autobuy")) == _norm(_row(_sg_undeduped(monkeypatch), "1925.T", "suggest"))
     _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
     _sm([{**TRIG, "rule": {"state": "planned", "text": "规则已安排：10/07 开盘买 200 股"}}])
     ab = _card(panel.render("paper", "t" * 40, AT), "autobuy")
@@ -130,47 +108,47 @@ def test_no_duplicate_ids_and_chart_kinds(monkeypatch):
     ab = _card(html, "autobuy")
     assert " id=" not in ab.replace("<section class='card' id='autobuy'>", "")
     assert ab.count("data-kind='autobuy'") == 3 and "data-kind='suggest'" not in ab
-    for t in ("1925.T", "6501.T", "8306.T", "9008.T"):                    # 选股页每只票只出现一次（2026-10-15）
+    for t in ("1925.T", "6501.T", "8306.T"):                              # 选股页每只票只出现一次（2026-10-15）
         assert html.count(f"<div class='chart' data-t='{t}'") == 1, t
+    assert "<div class='chart' data-t='9008.T'" not in html                  # 资格检查挡的不显示（2026-10-18）
     assert html.count("data-sq='1925.T'") == 1 and html.count("<details class='abx' data-t='1925.T'>") == 1
 
 
-def test_no_ticker_in_both_cards_and_the_set_is_computed_once(monkeypatch):
-    """两张卡用同一份代码集（_auto_pick 只算一次）：自动买那张卡列的 = 建议的股票跳过的，加起来 = 全部候选。"""
+def test_pick_lists_only_the_auto_pick_set_computed_once(monkeypatch):
+    """选股页列的 = _auto_pick 算的那一份（只算一次）；其余候选不显示（2026-10-18）。"""
     _setup(monkeypatch=monkeypatch)
     calls = []
     orig = panel._auto_pick
     monkeypatch.setattr(panel, "_auto_pick", lambda *a, **k: calls.append(1) or orig(*a, **k))
     html = panel.render("paper", "t" * 40, AT)
     assert len(calls) == 1
-    ab, sg = _card(html, "autobuy"), _card(html, "suggest")
-    in_ab = set(re.findall(r"<details class='abx' data-t='([^']+)'>", ab))
-    in_sg = set(re.findall(r"<div class='chart' data-t='([^']+)' data-kind='suggest'>", sg))
-    assert in_ab == {"1925.T", "6501.T", "8306.T"} and in_sg == {"9008.T"} and not in_ab & in_sg
-    assert in_ab | in_sg == {"1925.T", "6501.T", "8306.T", "9008.T"}
+    pick = _pane(html, "pick")
+    assert set(re.findall(r"<details class='abx' data-t='([^']+)'>", pick)) == {"1925.T", "6501.T", "8306.T"}
+    assert set(re.findall(r"<div class='chart' data-t='([^']+)'", pick)) == {"1925.T", "6501.T", "8306.T"}
 
 
-def test_suggest_card_empty_after_dedupe_shows_one_line(monkeypatch):
+def test_pick_without_candidates_shows_one_line(monkeypatch):
     _setup(monkeypatch=monkeypatch)
-    _sm([TRIG, NEAR])                                                       # 两只都在自动买那张卡里
-    html = panel.render("paper", "t" * 40, AT)
-    sg = _card(html, "suggest")
-    assert "建议的股票（规则的候选，0 只）" in sg
-    assert "候选 2 只都在上面「规则接下来会自动买」里（点开一行看 K 线、买入…），这里不重复" in sg
-    assert "<div class='hv sg'>" not in sg and "data-sgg" not in sg and "已列的" not in sg and "data-act='buy'" not in sg
-    _sm([GATED])                                                            # 自动买那张卡一只也没列：不写跳过的那一行
-    sg = _card(panel.render("paper", "t" * 40, AT), "suggest")
-    assert "建议的股票（规则的候选，1 只）" in sg and "已列的" not in sg and "<b>9008</b>" in sg
+    _sm([GATED])                                                            # 有候选，但没有出信号 / 5 天内的
+    ab = _card(panel.render("paper", "t" * 40, AT), "autobuy")
+    assert "今天没有出信号的票，估计 5 个交易日内金叉的也没有" in ab and "9008" not in ab
+    _sm([])
+    ab = _card(panel.render("paper", "t" * 40, AT), "autobuy")
+    assert "今天没有出信号 / 快要出信号的票" in ab and "<details class='abx'" not in ab
+    (panel.paths.out_dir() / "live_unified_paper.json").write_text("{}", encoding="utf-8")   # 执行器还没跑过（例：立花本番）
+    ab = _card(panel.render("paper", "t" * 40, AT), "autobuy")
+    assert "候选在执行器下一次运行之后显示" in ab
 
 
-def test_quotes_and_kline_scripts_cover_both_cards():
+def test_quotes_and_kline_scripts_cover_the_autobuy_rows():
     js = panel._JS
-    assert "#autobuy details.abx[open] details.kl[open] .chart[data-t], #suggest details.kl[open] .chart[data-t]" in js   # 点开的行也取现价
-    assert "if(d.tagName!=='DETAILS' || !d.closest('#suggest, #autobuy')) return;" in js   # 点开就取（不用等下一次刷新）
+    assert "document.querySelectorAll('#autobuy details.abx[open] details.kl[open] .chart[data-t]')" in js   # 点开的行也取现价
+    assert "if(d.tagName!=='DETAILS' || !d.closest('#autobuy')) return;" in js   # 点开就取（不用等下一次刷新）
+    assert "#suggest" not in js and "data-sgmore" not in js and "data-sgg" not in js     # 「建议的股票」删掉（2026-10-18）
     assert "document.querySelectorAll('.qt[data-sq]')" in js                  # 现价写进同一只的每一处（不是只写第一处）
     assert "document.addEventListener('toggle', e=>{ if(e.target.tagName==='DETAILS' && e.target.open) e.target.querySelectorAll('.chart[data-t]')" in js
     assert "else if(!KD[b.dataset.t] && !b.closest('details:not([open])')){ if(IO) IO.unobserve(b); showK(b); }" in js   # 点开就取 K 线
-    assert "if(a==='buy'){" in js and "BUY={t:d.t, px:+d.px" in js           # 买入框只读按钮自己的 data-*（两处一样）
+    assert "if(a==='buy'){" in js and "BUY={t:d.t, px:+d.px" in js           # 买入框只读按钮自己的 data-*
 
 
 def test_card_without_chart_or_ctx_still_renders():
@@ -181,16 +159,15 @@ def test_card_without_chart_or_ctx_still_renders():
     assert "<details class='abx' data-t='1925.T'>" in h and "data-kind='autobuy'" in h and "data-act='buy'" in h
 
 
-RK = re.compile(r"<span class='rk'[^>]*>[^<]*</span>")
 FAR = {"ticker": "7203.T", "code": "7203", "name": "トヨタ", "status": "watch", "signal": False, "close": 3000.0,
        "near": {"where": "below_up", "days": 9, "miss": []}, "rule": {"state": "none"},
        "buy": {"block": None, "warn": [], "lot": 100, "px": 3000.0, "limit": 3090, "rule_shares": 100, "em": 1.0}}
 ABOVE = {**FAR, "ticker": "6758.T", "code": "6758", "name": "ソニーG", "near": {"where": "above", "days": None, "miss": []}}
 
 
-def test_ranked_rows_have_no_badge_above_and_ranks_without_gaps_below(monkeypatch, tmp_path):
-    """有比例表（生产里有 var/watch_prob.json）：自动买那张卡点开的行有历史比例 / 快要出，但不带名次徽章（那几只不在建议的股票里，
-    名次指不到那边；2026-10-15）；建议的股票的名次按它列的从 1 数起、不跳号。"""
+def test_ranked_rows_have_prob_chips_but_no_rank_badge(monkeypatch, tmp_path):
+    """有比例表（生产里有 var/watch_prob.json）：点开的行有历史比例 / 快要出，不带名次徽章；
+    5 天以外 / 已在线上的（FAR / ABOVE）不显示（2026-10-18）。"""
     _setup(monkeypatch=monkeypatch)
     _sm([TRIG, NEAR, BLOCKED, GATED, FAR, ABOVE])
     t = WP.fit([("down_far", "m0", "v_lo", int(k < 9)) for k in range(100)] + [("up_d1", "m1", "v_hi", int(k < 4)) for k in range(100)]
@@ -199,19 +176,13 @@ def test_ranked_rows_have_no_badge_above_and_ranks_without_gaps_below(monkeypatc
     fp.write_text(json.dumps(t), encoding="utf-8")
     monkeypatch.setattr(WP, "FILE", fp)
     html = panel.render("paper", "t" * 40, AT)
-    ab, sg = _card(html, "autobuy"), _card(html, "suggest")
-    assert "<span class='rk'" not in ab and "观察中第" not in html          # 自动买那张卡：没有名次徽章
-    full = _sg_undeduped(monkeypatch)
+    ab, pick = _card(html, "autobuy"), _pane(html, "pick")
+    assert "<span class='rk'" not in html and "观察中第" not in html
     for tk in ("1925.T", "6501.T"):
-        a = _row(ab, tk, "autobuy")
-        assert "<span class='chip mut prob'>" in a, tk                      # 历史比例的标签照样在（2026-10-17 起是标签 + ⓘ）
-        assert _norm(a) == _norm(_row(full, tk, "suggest")), tk             # 其余与建议的股票会有的那一行一样
+        assert "<span class='chip mut prob'>" in _row(ab, tk, "autobuy"), tk   # 历史比例的标签照样在（2026-10-17 起是标签 + ⓘ）
     assert "<span class='chip hot'>快要出</span>" in _abx(ab, "1925.T") and "<span class='chip mut prob'>" not in _abx(ab, "8306.T")
-    ranks = [(int(n), c) for n, c in re.findall(r"<span class='rk'>(\d+)</span><b>(\d+)</b>", sg)]
-    assert [n for n, _ in ranks] == [1, 2, 3] and {c for _, c in ranks} == {"9008", "7203", "6758"}   # 不跳号（去重前 1925 / 6501 也占名次）
-    before = [int(n) for n in re.findall(r"<span class='rk'>(\d+)</span>", full)]
-    assert before == [1, 2, 3, 4, 5, 6]                                     # 测试用的不去重渲染：每只都占名次
-    assert "建议的股票（规则的候选，3 只）" in sg and "已列的 3 只不在这里重复" in sg and "<h3 class='sgh'>观察中 · 3 只" in sg
+    for c in ("7203", "6758", "9008"):
+        assert f"<b>{c}</b>" not in pick, c
 
 
 def test_expanded_row_has_a_close_button_at_the_bottom(monkeypatch):
@@ -271,17 +242,15 @@ console.log(JSON.stringify({all, want, qt: QT.map(e=>({t:e.dataset.sq, over:e.da
     assert over["2432.T"]["over"] is None and over["2432.T"]["n"] == 0        # 没打开的不动
 
 
-def test_triggered_rows_only_in_the_autobuy_card(monkeypatch):
-    """出了信号的全部在「规则接下来会自动买」（_auto_pick 的 trig 不挑）：资格检查挡的出了信号的也在那里；建议的股票没有
-    「今天出了买入信号」那一组（分组表里也没有了；2026-10-15 复核）。"""
-    assert "triggered" not in dict(panel.GROUPS) and "triggered" not in dict(panel.RANK_GROUPS)
+def test_triggered_rows_all_listed_and_others_not(monkeypatch):
+    """出了信号的全部在「规则接下来会自动买」（_auto_pick 的 trig 不挑）：资格检查挡的出了信号的也在那里（写不能买的理由）；
+    观察中的不显示（2026-10-18）。"""
+    assert not hasattr(panel, "GROUPS") and not hasattr(panel, "_suggest_card")
     _setup(monkeypatch=monkeypatch)
     trg = {**TRIG, "ticker": "9009.T", "code": "9009", "buy": {**TRIG["buy"], "block": "JPX 指定"}}
     _sm([TRIG, trg, GATED, FAR])
     html = panel.render("paper", "t" * 40, AT)
-    ab, sg = _card(html, "autobuy"), _card(html, "suggest")
+    ab, pick = _card(html, "autobuy"), _pane(html, "pick")
     assert "<details class='abx' data-t='8306.T'>" in ab and "<details class='abx' data-t='9009.T'>" in ab
     assert "不能买：JPX 指定" in _abx(ab, "9009.T")
-    assert "8306" not in sg and "9009" not in sg and "今天出了买入信号" not in sg and "data-sgg='triggered'" not in sg
-    assert "建议的股票（规则的候选，2 只）" in sg and "已列的 2 只不在这里重复" in sg
-    assert "<details class='kl' open>" not in sg                            # 观察中的 K 线默认收起（出了信号的只在上面，点开就开着）
+    assert "9008" not in pick and "7203" not in pick
