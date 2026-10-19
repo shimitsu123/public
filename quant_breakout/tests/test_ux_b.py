@@ -208,7 +208,8 @@ def test_early_live_compare_is_expected_until_the_first_match():
     sim3 = _st("2026-11-04", pos=["7203.T", "6758.T"], core={"1545.T": 4000},
                entry={"7203.T": "2026-10-20", "6758.T": "2026-11-04"})
     r3 = compare_with_sim(live2, sim3, live=True, book=book)
-    assert not r3.get("early") and compare_bad(r3) and r3["text"].startswith("★ 与云端模拟盘拿的票不同")
+    assert not r3.get("early") and not compare_bad(r3) and r3["explained"] == "以本地为准"   # 2026-10-19 起以本地为准：只供参考
+    assert r3["text"].startswith("与云端模拟盘拿的票不同") and r3["text"].endswith("以本地为准，不算问题）")
     # 实盘多出来的票 → 真的不同
     assert not compare_with_sim(_st("2026-11-04", first="2026-11-02", pos=["8035.T"], core={"1545.T": 1}), sim2,
                                 live=True, book=book).get("early")
@@ -220,7 +221,7 @@ def test_early_live_compare_is_expected_until_the_first_match():
     later = compare_with_sim(_st("2026-11-06", first="2026-11-02", core={"1545.T": 1}),
                              _st("2026-11-06", pos=["7203.T"], core={"1545.T": 9}, entry={"7203.T": "2026-10-20"}),
                              live=True, book=book)
-    assert not later.get("early") and compare_bad(later)
+    assert not later.get("early") and not compare_bad(later) and later["explained"] == "以本地为准"   # 2026-10-19 起只供参考
 
 
 def test_early_needs_a_live_book():

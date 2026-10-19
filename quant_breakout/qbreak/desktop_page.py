@@ -152,7 +152,8 @@ def render(tag: str, capital: float, start: str | None = None, alert: str | None
         cmp = sm.get("compare") or {}
         same_txt = "与云端模拟盘同样的票" if cmp.get("mode") == "holdings" else "与云端模拟盘一致"
         cmp_txt = (same_txt if cmp.get("same") else "上线初期：持仓不同是预期的" if cmp.get("early")
-                   else "出金预留：持仓不同是预期的" if cmp.get("explained") else "★ 与云端模拟盘不一致") \
+                   else "出金预留：持仓不同是预期的" if cmp.get("explained") == "出金预留"
+                   else "与云端模拟盘不同（只供参考，以本地为准）" if cmp.get("explained") else "★ 与云端模拟盘不一致") \
             if cmp.get("comparable") else ("今天没有比（日期不同）" if cmp else "—")
         base_txt = f"起始 {_yen(capital)}" if abs(inv - float(capital)) < 1 else f"投入本金 {_yen(inv)}（起始 {_yen(capital)}）"
         hn_e = hn_c = ""

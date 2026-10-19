@@ -3,9 +3,9 @@
 只读：不下单、不改任何文件、不打印任何密钥的值（钥匙串只看「有没有」，私钥只看「在不在、权限是不是 600」，不读内容）。
 用法：bash scripts/liveu.sh gate（= run.py live-gate；Mac 对话里问「能上实盘了吗」）。
 
-门槛（四项都满足才上本番，先用较小金额跑 1〜2 周）：
- ① Mac 模拟操盘与云端模拟盘连续 ≥ 10 个交易日一致（或差异都能解释 → 由用户确认）；最近一次比较要在 10 个交易日以内（过期 ★；
-   装了立花本番、模拟操盘的定时任务有意卸掉之后，只量到模拟操盘最后一次运行的那天）
+门槛（②〜④ 都满足才上本番，先用较小金额跑 1〜2 周）：
+ ①（2026-10-19 起不算门槛，只在【参考】里写比较的情况；用户：云端定时任务已删除、以本地为准）Mac 模拟操盘与云端模拟盘连续 ≥ 10 个交易日一致；
+   最近一次比较要在 10 个交易日以内（装了立花本番、模拟操盘的定时任务有意卸掉之后，只量到模拟操盘最后一次运行的那天）
  ②没有状态不明的单
  ③ HALT 演练过一次（执行器在 HALT 存在时运行过：账本的 halt_seen；bash scripts/liveu.sh halt-drill）
  ④ デモ发单检查的几点确认（约定字段、余力 / 持仓变化、按注文番号撤单、寄付指値买受理：tachibana-probe --demo --order-test 的结果文件）
@@ -16,7 +16,7 @@
  ⑦ 立花的定时任务已装（含前一晚预检 com.qbreak.precheck）、Mac 每个交易日早上自动唤醒（pmset）、Mac 的时区是日本（date +%z）
  ⑧ 人不在 Mac 前也知道出事：手机通知通道（qbreak 推送；钥匙串 qbreak-webhook / qbreak-smtp 可选）、每个工作日 09:30 自检推一条到手机
    （2026-10-14 起代替外部心跳：推得到手机 + 最近一次推送没失败）、09:30 自检任务（com.qbreak.watchdog）
-参考（不算门槛）：口座课税区分、ARM / HALT 现在的状态、登记过的入出金。
+参考（不算门槛）：原门槛 ① 的比较情况、口座课税区分、ARM / HALT 现在的状态、登记过的入出金。
 """
 from __future__ import annotations
 
@@ -104,6 +104,17 @@ def tdays_since(day: str, today: dt.date) -> int | None:
         x += dt.timedelta(days=1)
         n += is_trading_day(x)
     return n
+
+
+REF1_NAME = "Mac 模拟操盘与云端的比较（原门槛 ①，2026-10-19 起不算门槛）"
+REF1_WHY = "用户 2026-10-19：云端定时任务已删除、以本地为准 → 不再要求连续 ≥ 10 个交易日一致"
+
+
+def streak_status(agents, today: dt.date, paper: dict | None = None) -> tuple[bool, str]:
+    """原门槛 ① 的判定与说明（2026-10-19 起只作参考）。"""
+    paper = _book("paper") if paper is None else paper
+    days = compare_days(paper, _journal("paper"))
+    return _streak_item(days, today, _paper_stopped(Path(agents), days))
 
 
 def _streak_item(days: dict[str, bool], today: dt.date, paper_stopped: dt.date | None = None) -> tuple[bool, str]:
@@ -439,9 +450,7 @@ def check(agents=None, run=subprocess.run, today: dt.date | None = None) -> list
 
     agents = Path(agents or os.environ.get("QBREAK_LAUNCH_AGENTS") or Path.home() / "Library" / "LaunchAgents")
     paper, live = _book("paper"), _book("tachibana")
-    days = compare_days(paper, _journal("paper"))
-    ok1, txt1 = _streak_item(days, today, _paper_stopped(agents, days))
-    add("门槛", f"① Mac 模拟操盘与云端连续 ≥ {STREAK_NEED} 个交易日一致", ok1, txt1)
+    _ok1, txt1 = streak_status(agents, today, paper)         # ① 2026-10-19 起不算门槛（以本地为准）：放进【参考】，只写比较的情况
     unk = [(br, f"{name} {o.get('cid')}（{_order_txt(o)}）")                 # cid 照原样（--resolve 要填它）
            for name, br, b in (("模拟账户", "paper", paper), ("立花", "tachibana", live))
            for o in b.get("orders") or [] if o.get("status") in UNKNOWN]
@@ -536,6 +545,7 @@ def check(agents=None, run=subprocess.run, today: dt.date | None = None) -> list
     tax_ok = None if tax == "" else (tax == "1" or (tax == "3" and _general_ok()))   # 〔77〕C 审查：区分不对时执行器不发单 → 门槛不能算过
     add("准备" if tax_ok is False else "参考", "口座课税区分", tax_ok, _tax_text(tax))
     arm = paths.arm_state()                           # 和立花适配器同一个判断（UX-12）：内容是 ARMED 才算
+    add("参考", REF1_NAME, None, f"{REF1_WHY}；比较的情况：" + (txt1[2:] if txt1.startswith("★ ") else txt1))
     add("参考", "ARM（解锁发单）", None, {
         "file": "已解锁（ARM 文件内容 ARMED；要停用 = 删掉它或建 HALT）",
         "env": "已解锁（环境变量 QBREAK_ARM=ARMED；只对这个终端有效，定时任务看的是 ARM 文件）",
@@ -575,7 +585,7 @@ def report(items: list[dict]) -> tuple[str, bool]:
     for it in items:
         if it["group"] != cur:
             cur = it["group"]
-            lines.append({"门槛": "【上线门槛】（2026-09-26 采用；全部满足才上本番）", "准备": "【本番运行的准备】",
+            lines.append({"门槛": "【上线门槛】（2026-09-26 采用；① 2026-10-19 起不算门槛（以本地为准）；全部满足才上本番）", "准备": "【本番运行的准备】",
                           "参考": "【参考】"}[cur])
         txt = it["text"][2:] if it["ok"] is False and it["text"].startswith("★ ") else it["text"]
         lines.append(f"  [{mark[it['ok']]}] {it['name']}：{txt}")

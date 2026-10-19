@@ -143,7 +143,7 @@ def test_live_compare_checks_the_same_holdings_not_amounts():
     r = compare_with_sim(st(300, 12_345.0, 3_100_000.0), other, live=True)
     assert r["same"] is False and "个股 7203 トヨタ自動車 vs 模拟盘 6758 ソニーグループ" in r["text"]
     _, short, _ = daily_text({"decided_on": "2026-10-06", "orders": []}, st(300, 1.0, 3.0), r, False, 1_000_000)
-    assert "★ 与云端不一致" in short
+    assert "与云端不同（只供参考，以本地为准）" in short and "★" not in short      # 2026-10-19 起以本地为准：不一致只供参考
 
 
 def test_compare_history_keeps_the_last_result_per_day():
@@ -299,7 +299,9 @@ def test_live_gate_reports_each_item_without_reading_secrets(tmp_path, monkeypat
     agents.mkdir()
     run_, calls = _fake_run(security=44)
     items = {it["name"]: it for it in G.check(agents=agents, run=run_)}
-    assert items["① Mac 模拟操盘与云端连续 ≥ 10 个交易日一致"]["ok"] is False
+    assert "① Mac 模拟操盘与云端连续 ≥ 10 个交易日一致" not in items                     # 2026-10-19 起不算门槛（以本地为准）
+    r1 = items[G.REF1_NAME]
+    assert r1["group"] == "参考" and r1["ok"] is None and "以本地为准" in r1["text"] and "最近连续一致 0 个决策日" in r1["text"]
     assert items["② 没有状态不明的单"]["ok"] is True and items["③ HALT 演练过一次"]["ok"] is False
     assert "probe --demo --order-test" in items["④ デモ发单检查（约定字段、余力变化、按注文番号撤单）"]["text"]
     assert items["⑥ 认证 ID 在钥匙串"]["ok"] is False and "-w（回车后输入，不要贴进聊天）" in items["⑥ 认证 ID 在钥匙串"]["text"]

@@ -3654,6 +3654,13 @@ def rehearse(make_engine, start, end=None, kind: str = "paper", workdir=None, ex
 EARLY_TEXT = "上线初期：实盘从空仓开始，持仓和模拟盘不同是预期的"
 
 
+# 以本地为准（2026-10-19 用户：「Mac 模拟操盘与云端连续 ≥ 10 个交易日一致这个不需要了 云端的现在定时任务删除了 以本地为准」）：
+# 与模拟盘（仓库 var/ 的 sim-day）的比较照旧做、照旧写出来，但不同不再算「不对」（explained = LOCAL_FIRST → 通知不升 warn、不加 ★；
+# 上线门槛 ① 改成参考，qbreak/live_gate.py）。
+LOCAL_FIRST = "以本地为准"
+LOCAL_FIRST_TEXT = "（只供参考：2026-10-19 起以本地为准，不算问题）"
+
+
 def compare_with_sim(st: UState, sim: UState | None, live: bool = False, manual: dict | None = None,
                      book: dict | None = None) -> dict:
     """执行器账户 vs 模拟盘账户：同一决策日时逐项比较（个股股数、1655 口数、现金、权益）；不是同一天就不比（例如云端当天还没入库）。
@@ -3674,6 +3681,10 @@ def compare_with_sim(st: UState, sim: UState | None, live: bool = False, manual:
             if rw is not None:                              # 出金预留：实盘少拿的票是钱少了造成的（预期的差异，不算不一致）
                 out["explained"] = "出金预留"
                 out["text"] = f"与云端模拟盘拿的票不同，是出金预留造成的（预期）：{rw}"
+    if out.get("comparable") and not out.get("same") and not out.get("early") and not out.get("explained"):
+        out["explained"] = LOCAL_FIRST                      # 2026-10-19 起以本地为准：与云端不同只供参考（不升 warn、不加 ★）
+        t_ = str(out.get("text") or "")
+        out["text"] = (t_[2:] if t_.startswith("★ ") else t_) + LOCAL_FIRST_TEXT
     from .manual_orders import active as manual_active
     if manual_active(manual) and out.get("comparable") and not out.get("same"):
         out["manual"] = True                                # 有手动操作：与云端不同是预期的（上线门槛的「连续一致」照常中断）
@@ -3946,7 +3957,8 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     if cmp and cmp.get("comparable"):
         short += (("｜与云端一致" if cmp.get("mode") != "holdings" else "｜与云端同样的票") if cmp.get("same")
                   else "｜上线初期：持仓与云端不同（预期）" if cmp.get("early")
-                  else "｜出金预留：持仓与云端不同（预期）" if cmp.get("explained") else "｜★ 与云端不一致")
+                  else "｜出金预留：持仓与云端不同（预期）" if cmp.get("explained") == "出金预留"
+                  else "｜与云端不同（只供参考，以本地为准）" if cmp.get("explained") else "｜★ 与云端不一致")
     if sm.get("blocked"):
         short += "｜★ 没下单"
     tw = trade_wont(sm)

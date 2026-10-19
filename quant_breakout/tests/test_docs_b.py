@@ -43,9 +43,9 @@ def _paper(days: list[str], same: bool = True) -> None:
 
 
 def _gate1(tmp_path, today: dt.date) -> dict:
-    from qbreak import live_gate as G
-    return {it["name"]: it for it in G.check(agents=tmp_path / "agents", run=_no_cmd, today=today)}[
-        f"① Mac 模拟操盘与云端连续 ≥ {G.STREAK_NEED} 个交易日一致"]
+    from qbreak import live_gate as G                     # 2026-10-19 起 ① 不算门槛（参考）：判定照旧由 streak_status 算
+    ok, text = G.streak_status(tmp_path / "agents", today)
+    return {"group": "门槛", "name": "①", "ok": ok, "text": text}
 
 
 def test_gate_streak_is_ok_only_while_recent(tmp_path):

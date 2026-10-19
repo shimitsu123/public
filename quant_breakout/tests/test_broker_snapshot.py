@@ -165,6 +165,6 @@ def test_reserve_explains_missing_holdings_vs_sim():
     c = compare_with_sim(live, sim, live=True, book=book)
     assert c["explained"] == "出金预留" and not compare_bad(c) and "6758 ソニーグループ" in c["text"]   # 代码 + 名字（2026-10-15）
     c2 = compare_with_sim(st(["7203.T", "9984.T"], {}), sim, live=True, book=book)      # 实盘多了 9984 → 真的不同
-    assert compare_bad(c2) and not c2.get("explained")
-    book["flows"][0]["seen_after"] = "2026-10-01"                                       # 早就到账了 → 不再解释
-    assert compare_bad(compare_with_sim(live, sim, live=True, book=book))
+    assert not compare_bad(c2) and c2.get("explained") == "以本地为准"                  # 2026-10-19 起以本地为准：不同只供参考
+    book["flows"][0]["seen_after"] = "2026-10-01"                                       # 早就到账了 → 不再按出金预留解释
+    assert compare_with_sim(live, sim, live=True, book=book).get("explained") == "以本地为准"
