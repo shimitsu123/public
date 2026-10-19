@@ -2493,6 +2493,7 @@ def _news_card(now: dt.datetime) -> str:
     """经济威胁消息（Mac 每 15 分钟取一次；数据目录 cache/news/news.json —— 第三方标题只在本机 / 手机页面上，不入库）。
     达到提醒线的在前；每条点开：发布时间、提醒时间、来源与可信度、冲击与影响链路（因子 → 行业 → 持仓 / 候补）、原文链接。只展示，不参与交易。"""
     from . import news as NW
+    from . import news_country as NC
     try:
         d = NW.load() or {}
         seen = read_json(NW.cache_dir() / "alerted.json", {}) or {}
@@ -2515,12 +2516,17 @@ def _news_card(now: dt.datetime) -> str:
     for e in ev:
         c = e.get("chain") or {}
         lab = "、".join(e.get("event_labels") or []) or "其他"
+        cty, ctys = NC.of_event(e), NC.countries(e)                  # 来源只写国家（2026-10-19 用户）；旧缓存没有 country → 按出版方现算
+        n_src = int(e.get("n_sources") or 1)
         det = [f"<div>发布：<b>{escape(when(e.get('time')))} JST</b>"
                + (f" · 提醒：{escape(when(seen.get(e.get('id'))))} JST" if seen.get(e.get("id")) else "") + "</div>",
-               f"<div>来源：{escape(str(e.get('publisher') or '—'))}（{int(e.get('n_sources') or 1)} 个来源）· 可信度 {escape(str(e.get('cred')))}"
+               f"<div>来源：{escape(cty)}（{n_src} 个来源" + (f"：{escape('、'.join(ctys))}" if len(ctys) > 1 else "") + "）"
+               f" · 可信度 {escape(str(e.get('cred')))}"
                f"（{escape(str(e.get('cred_label') or ''))}）· 严重度 {escape(str(e.get('severity')))} · 威胁 {float(e.get('threat') or 0):.2f}</div>"]
         if e.get("why"):
-            det.append("<div class='muted small'>为什么可信：" + escape("；".join(str(x) for x in e["why"])) + "</div>")
+            why = [str(x) if "country" in e else re.sub(r"^来源：(.+?)（", lambda m: f"来源：{NC.country(m.group(1))}（", str(x))
+                   for x in e["why"]]
+            det.append("<div class='muted small'>为什么可信：" + escape("；".join(why)) + "</div>")
         if c.get("shock_txt"):
             det.append(f"<div>冲击：{escape(str(c['shock_txt']))}</div>")
         if c.get("down"):
@@ -2544,7 +2550,8 @@ def _news_card(now: dt.datetime) -> str:
         rows.append(f"<details class='hv nw lv-{'hi' if lv == '高' else 'mid'}' id='n-{escape(str(e.get('id')))}'><summary>"
                     f"<span class='chip {'lvh' if lv == '高' else 'lvm'}'>{lv}</span> "
                     f"{'<b class=neg>★ 已推送</b> ' if NW.pushable(e) else ''}<span class='muted'>{escape(when(e.get('time')))} JST</span> "
-                    f"<span class='chip'>{escape(lab)}</span><br>{escape(str(e.get('title_zh') or e.get('title') or '')[:140])}"
+                    f"<span class='chip'>{escape(lab)}</span> <span class='chip' title='来源国家'>{escape(cty)}</span>"
+                    f"<br>{escape(str(e.get('title_zh') or e.get('title') or '')[:140])}"
                     + (f"<br><span class='muted small'>原文：{escape(str(e.get('title') or '')[:140])}</span>"
                        if e.get("title_zh") and str(e.get("title_zh")).strip() != str(e.get("title") or "").strip() else "")
                     + f"</summary>{''.join(det)}</details>")

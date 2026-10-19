@@ -22,15 +22,15 @@ def test_levels_direction_and_rule_fallback():
           _ev("b", [["自動車・輸送機", -0.2]]),                        # -0.16
           _ev("c", [["銀行", 0.6]]),                                   # +0.48 → 中
           _ev("d", [], rules={"情報通信・サービスその他": -1}, cred=30)]  # 规则 -0.5 × 0.3 = -0.15 → 小
-    m = NW.ticker_impacts(ev, list(SEC), SEC)
+    m = NW.ticker_impacts(ev, list(SEC), SEC, now=NOW)
     assert m["7203.T"]["level"] == "大" and m["7203.T"]["dir"] == "down" and [i["id"] for i in m["7203.T"]["items"]] == ["a", "b"]
     assert m["8306.T"]["level"] == "中" and m["8306.T"]["dir"] == "up"
     assert m["9984.T"]["level"] == "小"
-    assert NW.ticker_impacts([_ev("e", [["銀行", 0.05]])], ["8306.T"], SEC) == {}     # 太小不标
+    assert NW.ticker_impacts([_ev("e", [["銀行", 0.05]])], ["8306.T"], SEC, now=NOW) == {}     # 太小不标
 
 
 def test_panel_mark_html_links_to_news_item():
-    m = NW.ticker_impacts([_ev("a1", [["自動車・輸送機", -2.0]], alert=True)], ["7203.T"], SEC)["7203.T"]
+    m = NW.ticker_impacts([_ev("a1", [["自動車・輸送機", -2.0]], alert=True)], ["7203.T"], SEC, now=NOW)["7203.T"]
     h = panel._news_mark(m)
     assert "受损 大" in h and "chip dnb" in h and "data-nlink='a1'" in h and "n=a1" in h and "JST" in h
     assert panel._news_mark(None) == ""

@@ -13,6 +13,7 @@ import math
 from html import escape
 
 from . import names as NM
+from . import news_country as NC
 from . import viz
 
 CSS = """
@@ -304,7 +305,7 @@ def news_full_html(events: list[dict], limit: int = 10) -> str:
                 lines.append(lab + escape(NM.labels(c[key], limit=8, short=True)))   # 代码 + 短名，超过 8 只「等 N 只」（2026-10-15）
         badge = '<span class="badge b-bad">提醒</span> ' if e.get("alert") else ""
         out.append(f'<div class="ev">{badge}{title}'
-                   f'<div class="muted">{escape(str(e.get("publisher") or ""))}｜{escape(str(e.get("time") or "")[:16].replace("T", " "))}｜'
+                   f'<div class="muted">来源：{escape(NC.of_event(e))}｜{escape(str(e.get("time") or "")[:16].replace("T", " "))}｜'
                    f'<span class="badge {cred_cls}">可信度 {e["cred"]}（{escape(e["cred_label"])}）</span> '
                    f'{escape("；".join(e.get("why") or []))}｜{escape("、".join(e.get("event_labels") or []))}（严重度 {e.get("severity")}）</div>'
                    f'<div class="chain">{"<br>".join(lines) or "（没有可估算的影响）"}</div></div>')

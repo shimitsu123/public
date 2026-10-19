@@ -27,6 +27,7 @@ import unicodedata
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
+from . import news_country as NC
 from . import paths
 from .calendar_jp import JST, is_trading_day, next_trading_day, now_jst
 from .utils import read_json, write_json
@@ -178,7 +179,8 @@ def _when(s: str) -> dt.datetime | None:
 
 
 def parse_feed(raw: bytes | str, name: str, kind: str) -> list[dict]:
-    """RSS 2.0 / RSS 1.0（RDF）/ Atom → [{title, link, time, source, publisher, kind}]。Google ニュース取 <source> 的出版方。"""
+    """RSS 2.0 / RSS 1.0（RDF）/ Atom → [{title, link, time, source, publisher, country, kind}]。Google ニュース取 <source> 的出版方
+    （与它的网址 <source url>）；country = 来源国家（qbreak/news_country.py）。"""
     try:
         root = ET.fromstring(raw)
     except ET.ParseError as e:
@@ -196,12 +198,13 @@ def parse_feed(raw: bytes | str, name: str, kind: str) -> list[dict]:
                     link = c.get("href")
                     break
         pub = _txt(el, "source") if kind == "aggregator" else ""
+        pub_url = next((c.get("url") for c in el if c.tag.split("}")[-1] == "source" and c.get("url")), "") if pub else ""
         if pub and title.endswith(" - " + pub):
             title = title[: -len(pub) - 3].strip()
         t = _when(_txt(el, "pubDate", "date", "updated", "published"))
         if title:
             out.append({"title": title, "link": link, "time": t.isoformat(timespec="minutes") if t else None, "source": name,
-                        "publisher": pub or name, "kind": kind})
+                        "publisher": pub or name, "country": NC.country(pub or name, pub_url), "kind": kind})
     return out
 
 
@@ -221,7 +224,7 @@ def parse_jma(raw: bytes | str, min_int: str = "5-") -> list[dict]:
         t = _when(r.get("at") or "")
         jp = mx.replace("-", "弱").replace("+", "強")
         out.append({"title": f"地震 最大震度{jp}（{r.get('anm') or '震源不明'}、M{r.get('mag') or '?'}）", "link": "https://www.jma.go.jp/bosai/map.html#contents=earthquake_map",
-                    "time": t.isoformat(timespec="minutes") if t else None, "source": "気象庁", "publisher": "気象庁", "kind": "official",
+                    "time": t.isoformat(timespec="minutes") if t else None, "source": "気象庁", "publisher": "気象庁", "country": "日本", "kind": "official",
                     "quake": mx})
     return out
 
@@ -312,7 +315,7 @@ def credibility(g: list[dict]) -> tuple[int, list[str]]:
     """一件事（一组相似标题）的可信度与理由。"""
     best = max(g, key=lambda z: source_score(z)[0])
     base, tier = source_score(best)
-    why = [f"来源：{best.get('publisher')}（{tier}）"]
+    why = [f"来源：{NC.of_event(best)}（{tier}）"]                      # 只写国家（2026-10-19 用户）
     pubs = {(z.get("publisher") or z.get("source")) for z in g}
     n = len(pubs)
     score = base + (20 if n >= 3 else 10 if n == 2 else 0)
@@ -391,8 +394,9 @@ def analyze(items: list[dict], betas: dict | None = None, holdings: dict[str, st
         alert = neg and ((sev >= 2 and cred >= ALERT_CRED) or (sev >= 3 and cred >= ALERT_CRED_SEVERE))
         head = g[0]
         out.append({"id": hashlib.sha1(_norm(head["title"]).encode()).hexdigest()[:12], "title": head["title"], "link": head.get("link"),
-                    "time": head.get("time"), "publisher": head.get("publisher"), "n_sources": len({z.get("publisher") for z in g}),
-                    "others": [{"title": z["title"], "publisher": z.get("publisher"), "link": z.get("link")} for z in g[1:4]],
+                    "time": head.get("time"), "publisher": head.get("publisher"), "country": NC.of_event(head), "n_sources": len({z.get("publisher") for z in g}),
+                    "others": [{"title": z["title"], "publisher": z.get("publisher"), "country": NC.of_event(z), "link": z.get("link")}
+                               for z in g[1:4]],
                     "events": evs, "event_labels": [EVENTS[e][0] for e in evs], "severity": sev, "negative": neg,
                     "cred": cred, "cred_label": cred_label(cred), "why": why, "alert": alert,
                     "threat": round(sev * cred / 100, 2) if neg else 0.0, "chain": chain(evs, betas or {}, holdings)})

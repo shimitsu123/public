@@ -2345,6 +2345,7 @@ def cmd_news(a) -> int:
     from qbreak import dashboard as DB
     from qbreak import macro_now as MN
     from qbreak import news as NW
+    from qbreak import news_country as NC
     from qbreak.calendar_jp import now_jst
     from qbreak.utils import atomic_write_text, read_json
     now = now_jst()
@@ -2361,7 +2362,7 @@ def cmd_news(a) -> int:
           + (f"；取不到：{'、'.join(bad)}" if bad else ""))
     for e in events[:8]:
         print(f"  {'★' if e['alert'] else ' '} 威胁 {e['threat']:.2f}｜可信度 {e['cred']}｜{'、'.join(e['event_labels'])}｜"
-              f"{e['publisher']}｜{TR.show(e)[:60]}")
+              f"{NC.of_event(e)}｜{TR.show(e)[:60]}")
     if a.notify:
         for e in fresh[:3]:
             NW.notify_mac(f"qbreak 经济威胁提醒：{'、'.join(e['event_labels'])}", f"{TR.show(e)}｜{NW.alert_text(e)}")

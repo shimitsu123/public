@@ -1344,7 +1344,7 @@
 | 出过买入信号的票 / 删除 | 「选股里以前出过信号的票怎么删」「过了买点的票为什么还在」 | 选股「规则接下来会自动买」的「以前出过买入信号」：出过 triggered 的票一直留着，直到点那一行的「删除」（先出确认框；`qbreak/signal_keep.py`，记录 `~/.qbreak/home/out/signal_keep_<账本>.json`，2026-10-19）；删除只是不显示这一次信号，之后再出新的信号会再显示 | 只是展示；规则照旧买 / 不买 |
 | 通知记录分账本 | 「本番的通知记录里怎么有模拟的」「立花登录的推送在哪里」 | 面板「消息 → 通知记录」只显示这个账本的 + 共通的（经济威胁等，带「共通」标签）；模拟的在模拟账户页、立花本番的（含每次本番登录）在立花页（`notify.book_of`，2026-10-19） | 通知照发，只是分开显示 |
 | 看今天的情况 | 「今天模拟操盘怎么样？」「现在持仓和下一开盘的单是什么？」 | `bash scripts/liveu.sh --broker paper --status`（立花上线后 `--broker tachibana`），读页面与日志 | 只读 |
-| 市场偏向 / 威胁消息 | 「现在偏向哪边？」「有什么经济威胁消息？」 | `bash scripts/liveu.sh news --open`（仪表盘重写并打开），读 `~/.qbreak/home/cache/news/news.json` | 只读 |
+| 市场偏向 / 威胁消息 | 「现在偏向哪边？」「有什么经济威胁消息？」 | `bash scripts/liveu.sh news --open`（仪表盘重写并打开），读 `~/.qbreak/home/cache/news/news.json` | 只读；每条的来源只写国家（`qbreak/news_country.py`，认不出 = 不明；2026-10-19） |
 | J-Quants 今天的新数据 | 「持仓 / 候补最近有决算吗？」「今天有哪些予想修正？」 | 读 `~/.qbreak/home/out/jq_today.json`；要马上取：`bash scripts/liveu.sh jq` | 只读；キー不回显 |
 | 和云端对账 | 「今天和云端一致吗？不一致为什么？」 | 读日志的比较行（两边持仓、现金、权益差） | 只读 |
 | 每年交易多少笔 / 都买哪些股票 | 「现在每年大概交易多少笔？」「都买哪些股票？」 | `git -C ~/qbreak-src pull --ff-only` 后读 `var/out/b3_trades_summary.md`（现行规则 B3 在三个年代回测里的每年笔数、常买的股票与业种；2026-10-04 起）；现在离买点近的票看日报的候补队列 | 只读 / 只描述；回测不是预测；重算 `python scripts/b3_trades_summary.py` 在云端做（约 5 分钟）；换本金看：`--capital 2000000` → `var/out/b3_trades_summary_cap2000000.md`（2026-10-04 起） |
