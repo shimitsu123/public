@@ -17,8 +17,7 @@
 - 给 Artifact 工具的 `file_path` 用绝对路径（`echo ~/qbreak-sim/quant_breakout/var/out/report.html` 的结果）；汇报里只写 `~/qbreak-sim/…`
   （不写出 Mac 的用户名）。
 - 市场风险报告的 URL 写在这个本机任务的说明（Instructions）里（不入库：公开仓库不写私人链接）；那里没有 → 用 Artifact 工具 `list`
-  找标题含「市场风险报告」的那个；都找不到 → 按第 2 步「读不到」处理。日报 artifact：https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ
-  （README.md「日报」那一行的同一个链接）。
+  找标题含「市场风险报告」的那个；都找不到 → 按第 2 步「读不到」处理。日报 artifact（https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ）2026-10-20 起不再更新（第 6 步）。
 
 ## 步骤
 例行唤醒：现在约 06:45 JST。按下面步骤执行今天的模拟盘运行（代码在 `~/qbreak-sim/quant_breakout`，分支 `claude/rakuten-auto-trading-review-ka7lf0`）。
@@ -46,18 +45,12 @@
    （optimize、variant_study、bullbear_study、regime_strategy_study 都不要在例行任务里跑）
 5. 入库（必须成功）：`cd ~/qbreak-sim && git add quant_breakout/var && git commit -m "sim(mac): <最新 bar_date> 日报"`（署名行见上面「Mac 上和云端版不同的」）
    → `cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh push`（它自己 `git pull --rebase`、失败重试 2s/4s/8s/16s）；仍失败则汇报里醒目写「★ 状态未能入库」。
-6. 发布日报：Artifact read https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ ，然后 publish `file_path=<~/qbreak-sim/quant_breakout/var/out/report.html 的绝对路径>`
-   并传 `url=https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ`（原地更新，不要新建）。
-7. 中文汇报 ≤16 行。**每一项数字都必须带单位**：金额 ¥ / $（美元同时写折合日元 ¥）、股数「股」、ETF「口」、汇率「円/USD」、日経点位「円」、S&P500 点位「pt」、涨跌与比例「%」、倍数「倍」、就绪度「分」、威胁指数「分」、百分位「分位」、时间「JST」；没有值写「—（原因）」，不要只写数字，也不要写「—%」。依次写：
-   ① 数据完整性（读 var/out/report_data.json 的 missing：为空写「数据完整性：全部取到」；不为空时整份汇报第一行写「★ 日报缺数据 N 项」，并逐项列出项目与原因）；
-   ② 数据源（yfinance / csv）与被拦截域名；
-   ③ 牛熊分界（日経 / S&P500 各自：牛或熊、自何日、翻转价位 x 円 / x pt、距现价 ±x.xx%；数值取自 report_data.json 的 markets.<市场>.regime.bullbear；当天发生翻转要醒目写出）；
-   ④ 市场状态（量化层 + 判断层 + 汇率层 + 宏观层触发规则 → 各市场最终新仓倍数 x 倍）；
-   ⑤ 账户：总权益 ¥、当日损益 ¥（±x.xx%）、累计损益 ¥（±x.xx%）、最大回撤 x.x%、日元现金 ¥、美元现金 $（折合 ¥）、USD/JPY x 円/USD；持仓（代码、x 股、成本 ¥ 或 $、止损 ¥ 或 $）；核心 ETF（代码、x 口、市值 ¥）；
-   ⑥ 当日除息 / 拆股 / ストップ安顺延（日志里「配当落ち」「株式分割」「顺延」字样）；
-   ⑦ 今日成交（hh:mm JST、代码、买或卖、x 股、成交价 ¥ 或 $）；排队待成交的买单（代码 / x 股 / 参考价 ¥ / 止损位 ¥）；
-   ⑧ 候补队列前 5 名（代码、板块、状态、就绪度 x 分、收盘 ¥、宏观倾斜 x 倍）。
-   若 last_run.json 的 ok 为 false，写明原因与用户需要做的事（网络策略见 quant_breakout/network_allowlist.txt；或在 Mac 上运行 scripts/fetch_and_push.sh 提供 CSV）。
+6. 不发布日报（2026-10-20 用户：「云端没有的日报本地也不需要生成了 因为本地 qbreak 已经可以看到了」）：不 read / publish 日报 artifact、不写长汇报。
+   这个任务照旧要做的是第 2〜5 步（07:40 执行器用的判断层 / 宏观输入：market_regime.json、macro.json、前向判断层、关联搭配 C、TBF 等）。
+7. 汇报只写 1〜3 行（数字带单位）：第一行「模拟盘输入：<最新 bar_date> 已入库」（入库失败写「★ 状态未能入库」）；
+   有问题才另起一行写：report_data.json 的 missing 不为空 →「★ 日报缺数据 N 项：<项目与原因>」；last_run.json 的 ok 为 false → 原因与用户要做的事
+   （网络策略见 quant_breakout/network_allowlist.txt；或在 Mac 上运行 scripts/fetch_and_push.sh 提供 CSV）；第 2 步读不到市场风险报告 → 写明；
+   当天牛熊翻转 →「★ 牛熊翻转：日経 / S&P500 <牛或熊>（翻转价位 x 円 / x pt）」。
 8. 若 var/sim.json 的 end 已过：生成最终总结（累计收益 ¥ 与 %、最大回撤 %、交易笔数 笔、胜率 %、美股折日元后与日经对比、与买入持有对比，数字都带单位），第一行写「模拟已结束，请删除例行任务」。
 
 禁止：修改策略参数、仓位、股票池名单、宏观阈值与开关、状态层模式与牛熊分界参数；使用合成数据；对失败或缺数据静默；新建第二个 artifact。

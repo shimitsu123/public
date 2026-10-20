@@ -204,7 +204,7 @@ cmd_done_today() {
       return 0
     fi
     if [ "$tr" = "0" ]; then
-      echo "今天 ${today} 休市：日报照常做（和云端以前一样：处理上一个交易日的收盘、发布日报）；最新入库的是 ${d_up:-${d_local:-—}}"
+      echo "今天 ${today} 休市：日报照常做（和云端以前一样：处理上一个交易日的收盘、算执行器的输入）；最新入库的是 ${d_up:-${d_local:-—}}"
     else
       echo "今天 ${today} 的模拟盘日报还没入库（最新 ${d_up:-${d_local:-—}}）：照常做"
     fi

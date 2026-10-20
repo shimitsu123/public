@@ -11,7 +11,7 @@
 - 推送：`bash scripts/routines.sh push`（`git pull --rebase` → `git push`，失败 2 / 4 / 8 / 16 秒后重试；只推这个分支、不 force）；它停下 → 照实汇报。
 - 不 `git reset` / `git stash` / 丢弃任何改动；给 Artifact 工具的 `file_path` 用绝对路径，汇报里只写 `~/qbreak-sim/…`。
 - 市场风险报告的 URL 写在这个本机任务的说明（Instructions）里（不入库）；那里没有 → 用 Artifact 工具 `list` 找标题含「市场风险报告」的那个。
-  日报 artifact：https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ
+  日报 artifact 2026-10-20 起不再更新（第 6 步）。
 
 ## 步骤
 例行唤醒：影子账户（判断型选股，只前向记录，不影响模拟盘与交易）。用户 2026-09-26 在另一个对话里要求并确认；规则与评估标准见
@@ -36,8 +36,7 @@
 5. 入库：`cd ~/qbreak-sim && git add quant_breakout/var/state/shadow_state.json quant_breakout/var/out/shadow_* quant_breakout/var/out/report.html quant_breakout/var/out/report_data.json && git commit -m "shadow(mac): <今天 YYYY-MM-DD> 判断"`
    （署名行见上）→ `cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh push`（先 `git pull --rebase` 再 push 到 claude/rakuten-auto-trading-review-ka7lf0；失败按 2s/4s/8s/16s 重试）；
    仍失败醒目写「★ 影子账户未能入库」。
-6. 发布日报（含「影子账户」一栏）：Artifact read https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ ，然后 publish `file_path=<~/qbreak-sim/quant_breakout/var/out/report.html 的绝对路径>`
-   并传 `url=https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ`（原地更新，不要新建）。
+6. 不发布日报（2026-10-20 用户：日报在本地 qbreak 看，不再 publish 日报 artifact）：这一步什么都不做。
 7. 2026-12-25 起的第一次运行（代码已由第 0a 步拉好）：`cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh run scripts/shadow_account.py step && bash scripts/routines.sh run scripts/shadow_account.py evaluate`
    （3 个月评估，标准见该文件开头第四节；结论只是记录，不改模拟盘），把 var/out/shadow_eval.md、var/out/shadow_eval.json 与影子账户的文件按第 5 步入库；
    汇报第一行写「影子账户评估：<结论>；记录已结束，可以删除这个例行任务」，再写累计收益差 ±x.xx pp、日超额收益平均 ±x.xx 基点 / 天与 95% 区间、两个账户的最大回撤 %、判断覆盖率 %。

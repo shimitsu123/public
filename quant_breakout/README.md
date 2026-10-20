@@ -201,7 +201,7 @@ python run.py sim-day                          # 每个交易日跑一次：两�
 python run.py report                           # 只重新生成 var/out/report.html
 ```
 
-- 日报：<https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ>（每个交易日 07:00 JST 由例行任务更新，同一个 URL）
+- 日报：2026-10-20 起不再发布（用户：在本地 qbreak 面板看）；以前的链接 <https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ> 停在 10/16 那期
 - 券商：2026-09-25 深夜起模拟盘按**立花 e支店 個別コース**计费（`sim-unify --broker tachibana`；只有日元、只做东证，1655.T 在东京开盘时买卖）。
   一个账户的**实盘执行器** `run.py live-u`（07:40 对账 → 决策 → 寄付单；09:05 开盘后补单）已完成并用模拟账户演练过：
   历史回放与回测引擎逐笔一致（5 年 23.02% / 20 年 12.87%，差 ¥0），走真实立花适配器 + 模拟交易所时 5 年 22.99%（`var/out/live_rehearsal.md`）；
