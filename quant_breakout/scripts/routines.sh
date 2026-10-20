@@ -5,7 +5,7 @@
 # 云端同名例行任务是后备（Mac 当天做过就跳过）。Mac 与云端的 Linux 容器都能跑（macOS 自带的 bash 3.2 兼容）。
 #   bash scripts/routines.sh done-today sim|shadow|quarterly
 #        今天做过了吗（先 git pull --ff-only）：0 = 做过（打印是 Mac 还是云端做的）→ 跳过；1 = 还没做 → 照常做；
-#        2 = 这个克隆拉不下来（本地改动 / 没推上去的提交 / 网络）或 git 身份没设 → Mac 的本机任务：停下汇报（云端后备会做）
+#        2 = 这个克隆拉不下来（本地改动 / 没推上去的提交 / 网络）或 git 身份没设 → Mac 的本机任务：停下汇报（没有云端后备）
 #        只看远端（入库了才算做过；只在本机的提交不算）。例行任务的克隆有没推上去的提交时：都是 Mac 例行任务的结果、云端后备那天已经入库了
 #        同一种 → 留在本地备份分支 backup/routines-<日期>-<提交>、克隆回到远端；都是还没入库的例行任务结果 → 先推上去（push 同样的检查）；
 #        有别的提交 / 推不上去 → 2
@@ -519,16 +519,16 @@ cmd_check() {
     today="$(today_jst)"
     log="$(git -C "$r" log --since='21 days ago' --format='%ct%x09%s' "$ref" 2>/dev/null || true)"
     echo
-    echo "最近 5 个工作日（看 $(show "$(real "$r")") 上次拉到的远端记录${upd}；Mac = 本机任务、云端 = 后备；— = 没有）："
+    echo "最近 5 个工作日（看 $(show "$(real "$r")") 上次拉到的远端记录${upd}；Mac = 本机任务、云端 = 以前的云端例行任务（2026-10-19 删了）；— = 没有）："
     printf '%s\n' "$log" | pyq table "$today" 5 2>/dev/null | sed 's/^/  /' || echo "  （读不出）"
   fi
   echo
   if [ "$bad" = "0" ] && [ "$warn" = "0" ]; then
-    echo "全部 [OK]（${ok} 项）：本机例行任务能跑（桌面版要开着、Mac 醒着；错过的由云端后备补上）"
+    echo "全部 [OK]（${ok} 项）：本机例行任务能跑（桌面版要开着、Mac 醒着；错过的没有云端后备，要补在 Mac 对话里说「补跑」）"
     return 0
   fi
   if [ "$bad" = "0" ]; then
-    echo "[OK] ${ok} 项，另有 ${warn} 条 [!] 提醒（见上面）：本机例行任务能跑（桌面版要开着、Mac 醒着；错过的由云端后备补上）"
+    echo "[OK] ${ok} 项，另有 ${warn} 条 [!] 提醒（见上面）：本机例行任务能跑（桌面版要开着、Mac 醒着；错过的没有云端后备，要补在 Mac 对话里说「补跑」）"
     return 0
   fi
   if [ "$warn" = "0" ]; then

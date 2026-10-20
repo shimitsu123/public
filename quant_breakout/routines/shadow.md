@@ -7,7 +7,7 @@
 - 工作目录：`~/qbreak-sim`（例行任务专用的克隆）；命令都在 `~/qbreak-sim/quant_breakout` 下运行。`~/qbreak-src`、`~/qbreak-dev` 里什么都不做。
 - Python：一律 `bash scripts/routines.sh run <参数>`（= 在 `~/qbreak-sim` 里、去掉 `QBREAK_HOME` 的 `~/.qbreak/venv/bin/python`）；
   每次 Bash 调用的环境变量不会留到下一次，所以不要只 `unset QBREAK_HOME` 一次。它在 `~/qbreak-sim` 以外拒绝运行 → 照实汇报、停下。
-- 提交信息开头写 `shadow(mac):`（云端后备写 `shadow:`）；提交信息不写模型名（桌面版要加署名行的话只能用不含模型名的那种；不确定就不加）。
+- 提交信息开头写 `shadow(mac):`（以前的云端例行任务写 `shadow:`）；提交信息不写模型名（桌面版要加署名行的话只能用不含模型名的那种；不确定就不加）。
 - 推送：`bash scripts/routines.sh push`（`git pull --rebase` → `git push`，失败 2 / 4 / 8 / 16 秒后重试；只推这个分支、不 force）；它停下 → 照实汇报。
 - 不 `git reset` / `git stash` / 丢弃任何改动；给 Artifact 工具的 `file_path` 用绝对路径，汇报里只写 `~/qbreak-sim/…`。
 - 市场风险报告的 URL 写在这个本机任务的说明（Instructions）里（不入库）；那里没有 → 用 Artifact 工具 `list` 找标题含「市场风险报告」的那个。
@@ -19,7 +19,7 @@
 
 0a. 做过就跳过：`cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh done-today shadow`（它先 `git pull --ff-only`）。
    退出码 0（今天的判断已经由 Mac 或云端入库）→ 只回复一行「影子账户：<它打印的那一行>：跳过」并结束；
-   退出码 2（`~/qbreak-sim` 拉不下来 / git 身份没设）→ 只回复「★ 影子账户（Mac）今天没做：<它打印的原因>（云端后备会做）」并结束；退出码 1 → 继续。
+   退出码 2（`~/qbreak-sim` 拉不下来 / git 身份没设）→ 只回复「★ 影子账户（Mac）今天没做：<它打印的原因>（没有云端后备：要补在 Mac 对话里说「补跑」）」并结束；退出码 1 → 继续。
 0. 用 bash 运行 `TZ=Asia/Tokyo date '+%F %H:%M %a'`。今天不是日本交易日，或不在 2026-09-28〜2026-12-24 之间（2026-12-25 起见第 7 步）→ 只回复一行「影子账户：今天不做（原因）」并结束。
 1. 代码已由第 0a 步拉好；确认今天的模拟盘日报已入库：`cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh done-today sim` 打印「今天已经做过」（退出码 0）。
    还不是：用 Bash 的 run_in_background 跑一个「每 2 分钟看一次，直到日报入库或到 08:40 JST 为止」的 until 循环，等它结束：
@@ -40,7 +40,7 @@
 7. 2026-12-25 起的第一次运行（代码已由第 0a 步拉好）：`cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh run scripts/shadow_account.py step && bash scripts/routines.sh run scripts/shadow_account.py evaluate`
    （3 个月评估，标准见该文件开头第四节；结论只是记录，不改模拟盘），把 var/out/shadow_eval.md、var/out/shadow_eval.json 与影子账户的文件按第 5 步入库；
    汇报第一行写「影子账户评估：<结论>；记录已结束，可以删除这个例行任务」，再写累计收益差 ±x.xx pp、日超额收益平均 ±x.xx 基点 / 天与 95% 区间、两个账户的最大回撤 %、判断覆盖率 %。
-   之后每次只回复一行「影子账户：记录已结束，可以删除这个例行任务」（本机任务在桌面版的 Routines 里删；云端后备由用户在对话里确认后删）。
+   之后每次只回复一行「影子账户：记录已结束，可以删除这个例行任务」（本机任务在桌面版的 Routines 里删）。
 8. 中文汇报 ≤8 行，数字都带单位（¥、%、pp、股、口、JST）：影子账户权益 ¥（累计 ±x.xx%）、规则账户 ¥、差 ±x.xx pp；昨天的成交 / 取消（代码、买卖、x 股、成交价 ¥）；
    今天的判断一句话与单子（代码 / 买卖 / x 股 / 理由），或没有记录的原因。
 

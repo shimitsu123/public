@@ -33,7 +33,7 @@
 
 ## 在用户的 Mac 上（2026-09-26 起：用户只在 Mac 的 Claude 对话里提问与执行）
 **2026-10-09 起：问、答、改代码、做研究、提交、推送（上传）都在 Mac 本地的 Claude 里做，不需要云端会话**
-（例行任务也在 Mac 上：Claude 桌面版的本机任务 + 云端后备，见下面「例行任务」一条）。用户的问法与对应的命令见 HANDOFF.md「在 Mac 对话里怎么问」。
+（例行任务也在 Mac 上：Claude 桌面版的本机任务，见下面「例行任务」一条；云端后备 2026-10-19 已删）。用户的问法与对应的命令见 HANDOFF.md「在 Mac 对话里怎么问」。
 - **直接执行，不要只列命令**：用户问到的事凡是要运行命令才能回答或完成（看账本 / 页面 / 日志、拉代码、装或更新定时任务、取数、做研究），
   Claude 自己运行并把结果告诉用户；遇到权限确认就请用户点允许。只有下面「实盘相关」的几件事、改模拟盘规则、密钥，要用户在这次对话里明确说
 - **拉代码后一条命令装好 / 更新全部**（依赖、模拟操盘、市场仪表盘 + 经济威胁提醒、J-Quants 定时取数、研究用克隆）：
@@ -54,8 +54,8 @@
   推不上去（没登录 GitHub）→ 停下，请用户自己在终端 `gh auth login`（或配 SSH 钥匙；令牌 / 密码不在对话里贴）；
   git 的 user.name / user.email 没设 → 请用户自己设（公开仓库：用不暴露个人信息的名字与 GitHub 的 noreply 邮箱），Claude 不替用户填
 - 例行任务（2026-10-09 起）：模拟盘日报（周一至五 06:45）、影子账户判断（07:45）、季度复核（1 / 4 / 7 / 10 月 12 日 09:56）在 Mac 的
-  Claude 桌面版本机任务里跑（工作文件夹 `~/qbreak-sim`，说明书 `quant_breakout/routines/`）；云端同名例行任务是后备（2026-10-19 用户：云端定时任务已删除、以本地为准；Mac 当天做过就跳过：
-  `bash scripts/routines.sh done-today …`）；改 / 停要用户在对话里另外确认。前提：桌面版开着（登录项）、Keep computer awake 打开、
+  Claude 桌面版本机任务里跑（工作文件夹 `~/qbreak-sim`，说明书 `quant_breakout/routines/`）；2026-10-19 起没有云端后备（用户：云端定时任务已删除、以本地为准）；Mac 没做的那天用户说「补跑」→ Claude 照说明书在 `~/qbreak-sim` 里补做（`bash scripts/routines.sh run …` → `routines.sh push`）；
+  2026-10-20 起日报任务不发布日报 artifact（用户在本地 qbreak 看），只算 07:40 执行器的判断层 / 宏观输入并入库（`bash scripts/routines.sh done-today …`）；改 / 停要用户在对话里另外确认。前提：桌面版开着（登录项）、Keep computer awake 打开、
   Mac 工作日 06:40 自动唤醒（用户自己在终端 `sudo pmset repeat wakeorpoweron MTWRF 06:40:00`）。它们（本机或云端）每天推 `var/`，
   所以 dev 克隆推之前一定先 `git pull --rebase`（`dev.sh push` 自己先做）；Mac 的执行器仍在每个交易日 07:40 `git pull` 读它们推的文件；
   用户问「例行任务今天跑了吗」→ `bash scripts/routines.sh check`（只读）
@@ -141,14 +141,14 @@
   `~/.qbreak/home/logs/com.qbreak.panel.intraday.log`；手机：`bash scripts/liveu.sh phone status`（只读，不含配对码）；
   执行器这次跑成没有：`~/.qbreak/home/out/live_unified_{paper,tachibana}_run.json`（面板顶部也显示）；09:30 自检：`~/.qbreak/home/out/watchdog_{paper,tachibana}.json`、
   `~/.qbreak/home/logs/com.qbreak.watchdog.out|err`；本地改代码 / 推不上去：`bash scripts/dev.sh check`（只读）；
-  本机例行任务（今天跑了没有、是 Mac 还是云端后备做的）：`bash scripts/routines.sh check`（只读）、桌面版 Code → Routines → Review history；
+  本机例行任务（今天跑了没有）：`bash scripts/routines.sh check`（只读）、桌面版 Code → Routines → Review history；
   立花（2026-10-09 起）：前一晚预检 `~/.qbreak/home/out/precheck_tachibana.json`、状态不明的单的候选 `bash scripts/liveu.sh unknown --broker tachibana`、
   持仓核对 `bash scripts/liveu.sh reconcile --broker tachibana`、账本备份 `bash scripts/liveu.sh restore --broker tachibana --list`（都只读）、
   新代码的冒烟测试 `~/.qbreak/home/logs/smoke_test.log`
 
 ## 在云端（可选：例行任务的后备；人不在 Mac 旁边时也能用）
 - claude.ai/code 会话 / 例行任务（模拟盘日报、影子账户判断、每季复核）。2026-10-09 起改代码 / 推送在 Mac 本地做（上一节），不需要云端会话；
-  例行任务主要在 Mac 的本机任务里跑，云端同名例行任务是后备（Mac 当天做过就跳过）；改 / 停要用户在对话里另外确认
+  例行任务在 Mac 的本机任务里跑（云端同名例行任务 2026-10-19 已删）；改 / 停要用户在对话里另外确认
 - 开发分支 `claude/rakuten-auto-trading-review-ka7lf0`：只推这个分支，不开 PR（除非用户要求）
 - 提交前在 `quant_breakout/` 跑 `set -o pipefail; python -m pytest -q`（必须全部通过）；推之前 `git pull --rebase`（例行任务每天也推 `var/`）
 - 代码、注释、提交信息里不写模型名

@@ -9,11 +9,11 @@
   这些命令本来就写仓库的 `var/`）。每次 Bash 调用的环境变量不会留到下一次，所以不要只 `unset QBREAK_HOME` 一次，一律经 `routines.sh run`；
   它在 `~/qbreak-sim` 以外拒绝运行 → 照实汇报、停下。
 - 依赖：`bash scripts/routines.sh deps`（按 `requirements.lock` 装，没有 lock 才 `requirements.txt`），不另外 `pip install`。
-- 提交信息开头写 `sim(mac):`（云端后备写 `sim:`；`routines.sh` 据此分辨是谁做的）。提交信息不写模型名：桌面版要加署名行的话，
+- 提交信息开头写 `sim(mac):`（以前的云端例行任务写 `sim:`；`routines.sh` 据此分辨是谁做的）。提交信息不写模型名：桌面版要加署名行的话，
   只能用不含模型名的那种；不确定就不加署名行。
 - 推送：`bash scripts/routines.sh push`（`git pull --rebase` → `git push`，失败 2 / 4 / 8 / 16 秒后重试；只推这个分支、不 force、
   不改用别的分支）。它停下（冲突、没提交的改动、提交信息带模型名、作者不是设好的 git 身份）→ 不要自己绕过，照实汇报。
-- 不 `git reset` / `git stash` / `git checkout -- <文件>` / 丢弃任何改动；拉不下来就停下汇报（云端后备会做）。
+- 不 `git reset` / `git stash` / `git checkout -- <文件>` / 丢弃任何改动；拉不下来就停下汇报（没有云端后备）。
 - 给 Artifact 工具的 `file_path` 用绝对路径（`echo ~/qbreak-sim/quant_breakout/var/out/report.html` 的结果）；汇报里只写 `~/qbreak-sim/…`
   （不写出 Mac 的用户名）。
 - 市场风险报告的 URL 写在这个本机任务的说明（Instructions）里（不入库：公开仓库不写私人链接）；那里没有 → 用 Artifact 工具 `list`
@@ -25,7 +25,7 @@
 
 0. 做过就跳过：`cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh done-today sim`（它先 `git pull --ff-only`）。
    - 退出码 0（今天的日报已经由 Mac 或云端入库，或今天是周末）→ 只回复一行「模拟盘日报：<它打印的那一行>：跳过」并结束。
-   - 退出码 2（`~/qbreak-sim` 拉不下来 / git 身份没设）→ 只回复「★ 模拟盘日报（Mac）今天没做：<它打印的原因>（云端后备会做；在 Mac 对话里问「例行任务今天跑了吗」）」并结束。
+   - 退出码 2（`~/qbreak-sim` 拉不下来 / git 身份没设）→ 只回复「★ 模拟盘日报（Mac）今天没做：<它打印的原因>（没有云端后备：要补在 Mac 对话里说「补跑」；在 Mac 对话里问「例行任务今天跑了吗」）」并结束。
    - 退出码 1 → 继续。
 1. 取最新代码与状态（代码已由第 0 步拉好）：`git -C ~/qbreak-sim status -sb` 确认在 `claude/rakuten-auto-trading-review-ka7lf0` 上，然后
    `cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh deps && bash scripts/routines.sh run run.py doctor`

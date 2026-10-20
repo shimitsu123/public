@@ -11,7 +11,7 @@
 - 要 J-Quants キー的步骤（2i、2j、3b）：`bash scripts/with_jquants.sh bash scripts/routines.sh run X`（从钥匙串 `qbreak-jquants` 读进那个进程的环境变量，
   绝不打印；钥匙串里没有 → 它说明怎么放并退出 3）。云端版这三步用的是环境变量里的キー。
 - 依赖：`bash scripts/routines.sh deps`（按 `requirements.lock` 装），不另外 `pip install`。
-- 提交信息开头写 `季度复核(mac)：`（云端后备写 `季度复核：`）；提交信息不写模型名（桌面版要加署名行的话只能用不含模型名的那种；不确定就不加）。
+- 提交信息开头写 `季度复核(mac)：`（以前的云端例行任务写 `季度复核：`）；提交信息不写模型名（桌面版要加署名行的话只能用不含模型名的那种；不确定就不加）。
 - 推送：`bash scripts/routines.sh push`（`git pull --rebase` → `git push`，失败 2 / 4 / 8 / 16 秒后重试；只推这个分支、不 force）；它停下 → 照实汇报。
 - 不 `git reset` / `git stash` / 丢弃任何改动；汇报里路径只写 `~/qbreak-sim/…`（不写出 Mac 的用户名）。
 
@@ -21,7 +21,7 @@
 0. 用 bash 运行 `TZ=Asia/Tokyo date '+%F %H:%M %a'`。今天不是 1 / 4 / 7 / 10 月的 12 日 → 只回复一行「季度复核：今天不是复核日（下一次 YYYY-MM-12）」并结束。
 0b. 做过就跳过：`cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh done-today quarterly`（它先 `git pull --ff-only`）。
    退出码 0（今天的季度复核已经由 Mac 或云端入库）→ 只回复一行「季度复核：<它打印的那一行>：跳过」并结束；
-   退出码 2（`~/qbreak-sim` 拉不下来 / git 身份没设）→ 只回复「★ 季度复核（Mac）今天没做：<它打印的原因>（云端后备会做）」并结束；退出码 1 → 继续。
+   退出码 2（`~/qbreak-sim` 拉不下来 / git 身份没设）→ 只回复「★ 季度复核（Mac）今天没做：<它打印的原因>（没有云端后备：要补在 Mac 对话里说「补跑」）」并结束；退出码 1 → 继续。
 1. 代码已由第 0b 步拉好：`git -C ~/qbreak-sim status -sb` 确认在 claude/rakuten-auto-trading-review-ka7lf0 上，然后 `cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh deps`
 2. `bash scripts/routines.sh run scripts/timing_study.py --only T0,T2,T3 --review`（约 3 分钟，需要 yfinance 与 FRED；失败就如实报告原因，绝不用合成数据）
 2b. `bash scripts/routines.sh run scripts/regime_fit_study.py && bash scripts/routines.sh run scripts/commodity_fit_study.py`（约 7 分钟；只刷新描述性的敏感度表、日报「商品 × 行业」表和候补队列说明；规则不变。若任一研究的交易排序判定变为「通过」，汇报第一行写「★ 判定改变：宏观 / 商品顺风度达到交易门槛，需要用户确认」，不要改代码或配置）

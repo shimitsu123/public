@@ -427,7 +427,7 @@ def desktop_report(root, projects, want: dict, now: dt.datetime, tz=None) -> lis
         blocked = [a for a, r in recent if r == "per_task_limit"]
         blocked_now = bool(blocked) and max(blocked) >= now - SKIP_RECENT
         if t.get("enabled") is False:
-            out.append(("NG", f"本机任务「{label}」在桌面版里是暂停的（Paused）：不会按时跑（云端后备会做）；"
+            out.append(("NG", f"本机任务「{label}」在桌面版里是暂停的（Paused）：不会按时跑（没有云端后备）；"
                               "要恢复：桌面版 Code → Routines → 这个任务切到 Active"))
         else:
             miss = missed_runs(t, now, tz)
@@ -443,7 +443,7 @@ def desktop_report(root, projects, want: dict, now: dt.datetime, tz=None) -> lis
                 else:
                     span = f"{_mdhm(miss[0])}〜{_mdhm(miss[-1])}"
                 out.append(("NG", f"本机任务「{label}」{lr}；之后应该跑的 {span} 没跑（{len(miss)} 次；"
-                                  "错过的只能靠云端后备，见下面「最近 5 个工作日」）"))
+                                  "错过的没有云端后备：要补在 Mac 对话里说「补跑」）"))
             else:
                 out.append(("OK", f"本机任务「{label}」：{lr}（之后没有错过的）"))
         stuck = 0
@@ -472,7 +472,7 @@ def desktop_report(root, projects, want: dict, now: dt.datetime, tz=None) -> lis
 
 # ────────── 09:30 自检的推送：本机任务今天卡住 / 没跑 / 晚了（2026-10-16；只读，读不到就什么都不说）──────────
 # 用户今天把 ~/qbreak-sim 改回默认的逐项确认：和允许规则对不上的命令会停在权限确认、一直等着（10-12〜10-16 就这样）。
-# routines.sh check 只在有人问时才看 → 交易日 09:30 自检的那条推送里加一行（不改自检的结论：不影响下单，云端后备会做）。
+# routines.sh check 只在有人问时才看 → 交易日 09:30 自检的那条推送里加一行（不改自检的结论：不影响下单）。
 KINDS = (("sim_daily", "日报"), ("shadow", "影子账户"), ("quarterly", "季度复核"))
 DESKTOP_DEFAULT = "Library/Application Support/Claude/claude-code-sessions"   # 家目录下（routines.sh 同一个默认）
 LATE_AFTER = GRACE                        # 今天的运行比到点晚这么久才开始 = 晚了（Mac 睡着 / 桌面版没开）
@@ -546,9 +546,9 @@ def today_lines(now: dt.datetime, root=None, projects=None, cfg=None, tz=None) -
         if stuck or (blocked and max(blocked) >= now - SKIP_RECENT):
             since = stuck[0][0] if stuck else min(blocked)
             if since.astimezone(JST).date() == today:
-                fix = "在桌面版 Code → Routines 打开那次运行点允许（或停止它）；今天的由云端后备做"
+                fix = "在桌面版 Code → Routines 打开那次运行点允许（或停止它）；今天的要补：在 Mac 对话里说「补跑」"
             else:
-                fix = "在桌面版 Code → Routines 打开那次运行、停止它（不停止，之后到点也不会再跑）；今天的由云端后备做"
+                fix = "在桌面版 Code → Routines 打开那次运行、停止它（不停止，之后到点也不会再跑）；今天的要补：在 Mac 对话里说「补跑」"
             out.append(f"本机例行任务：{label}卡住了（多半在等权限确认；{_mdhm(since)} 起）→ {fix}；{HISTORY_HINT}")
             continue
         expr = t.get("cronExpression")
@@ -566,10 +566,10 @@ def today_lines(now: dt.datetime, root=None, projects=None, cfg=None, tz=None) -
         lo = fire - dt.timedelta(minutes=1)
         ran = (last is not None and lo <= last <= now) or (sched is not None and lo <= sched <= now)
         if not ran:
-            out.append(f"本机例行任务：{label}今天 {_hm_jst(fire)} 没跑（桌面版没开 / Mac 睡着？）→ 今天的由云端后备做；{HISTORY_HINT}")
+            out.append(f"本机例行任务：{label}今天 {_hm_jst(fire)} 没跑（桌面版没开 / Mac 睡着？）→ 今天的要补：在 Mac 对话里说「补跑」；{HISTORY_HINT}")
         elif last is not None and last <= now and last - fire >= LATE_AFTER:
             out.append(f"本机例行任务：{label}今天 {_hm_jst(last)} 才开始（应在 {_hm_jst(fire)}：那时 Mac 睡着 / 桌面版没开 / 前一次运行还没结束？）"
-                       f"→ 那之前的由云端后备做；{HISTORY_HINT}")
+                       f"→ 那之前执行器用的是旧的输入；{HISTORY_HINT}")
     return out
 
 

@@ -1170,8 +1170,8 @@
 
 ## 每天的流程（周一至五，JST）
 1. 前一晚 22:00：用户的另一个例行任务更新「市场风险报告」artifact（判断层与宏观数值的来源）
-2. 06:45 Mac 的本机例行任务（2026-10-09 起；Claude 桌面版，`~/qbreak-sim`，`routines/sim_daily.md`；Mac 没做 → 07:20 云端后备）：拉代码 → 从风险报告写 `var/market_regime.json`、`var/macro.json` → `sim-day`（其中先取资格数据：日経225 名单 + JPX 指定 → 行情对 J-Quants 交叉核对（只报警）→ 决策）→ 入库 → 发布日报；
-   07:45 影子账户判断（同样 Mac 本机任务 / 08:05 云端后备）
+2. 06:45 Mac 的本机例行任务（2026-10-09 起；Claude 桌面版，`~/qbreak-sim`，`routines/sim_daily.md`；没做 → 说「补跑」，云端后备 2026-10-19 已删）：拉代码 → 从风险报告写 `var/market_regime.json`、`var/macro.json` → `sim-day`（其中先取资格数据：日経225 名单 + JPX 指定 → 行情对 J-Quants 交叉核对（只报警）→ 决策）→ 入库 → 发布日报；
+   07:45 影子账户判断（同样 Mac 本机任务）
    （云端容器是 UTC：`run.py` 启动时把进程时区固定为 JST（2026-09-27 起），「今天」、预计成交日、前向记录的日期与 Mac 一致）
 3. 07:40 Mac（`scripts/liveu.sh run --broker paper`）：`git pull`，等当天的 `var/out/unified_today.json`（例行任务入库的；最多 50 分钟）
    → 把配置与输入拷到 `~/.qbreak/home` → 执行器：昨天的单按真实开盘价撮合（2026-10-15 起模拟账户成交日 09:25 前后已经撮合过的 → 这里只按正式日线开盘价改记；

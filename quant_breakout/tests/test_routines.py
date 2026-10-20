@@ -424,7 +424,7 @@ def test_desktop_report_flags_the_stuck_run_missed_runs_and_prompting_mode(tmp_p
     rows = routines.desktop_report(root, proj, WANT, _jst("2026-10-16 10:50"), JST)
     text = "\n".join(f"{m}\t{x}" for m, x in rows)
     assert ("NG", "本机任务「日报」最后一次运行 10/12 06:45；之后应该跑的 10/13〜10/16 没跑（4 次；"
-                  "错过的只能靠云端后备，见下面「最近 5 个工作日」）") in rows, text
+                  "错过的没有云端后备：要补在 Mac 对话里说「补跑」）") in rows, text
     stuck = [x for m, x in rows if m == "NG" and "那次一直没动" in x]
     assert len(stuck) == 2, text
     assert stuck[0].startswith("本机任务「日报」10/12 06:45 那次一直没动（停在工具调用（Bash、Read）上、没有结果：多半在等权限确认、没人点允许）"
@@ -564,9 +564,9 @@ def test_today_lines_stuck_runs_say_where_and_what_to_do(tmp_path):
     got = routines.today_lines(_jst("2026-10-16 09:30"), root=root, cfg=tmp_path / "cfg", tz=JST)
     assert got == [
         "本机例行任务：日报卡住了（多半在等权限确认；10/12 06:45 起）→ 在桌面版 Code → Routines 打开那次运行、停止它"
-        "（不停止，之后到点也不会再跑）；今天的由云端后备做；在 Mac 对话里问「例行任务今天跑了吗」",
+        "（不停止，之后到点也不会再跑）；今天的要补：在 Mac 对话里说「补跑」；在 Mac 对话里问「例行任务今天跑了吗」",
         "本机例行任务：季度复核卡住了（多半在等权限确认；10/12 10:07 起）→ 在桌面版 Code → Routines 打开那次运行、停止它"
-        "（不停止，之后到点也不会再跑）；今天的由云端后备做；在 Mac 对话里问「例行任务今天跑了吗」"], got
+        "（不停止，之后到点也不会再跑）；今天的要补：在 Mac 对话里说「补跑」；在 Mac 对话里问「例行任务今天跑了吗」"], got
     assert not any("SECRET-CMD" in x or str(tmp_path) in x for x in got)
     # 今天开始的那次卡在工具调用上（2 小时以上）→ 点允许（或停止）
     t2 = tmp_path / "today"
@@ -577,16 +577,16 @@ def test_today_lines_stuck_runs_say_where_and_what_to_do(tmp_path):
     assert _lines(t2, root, f"{TUE_1020} 08:00") == []                                    # 还不到 2 小时：照常在跑
     got = _lines(t2, root, f"{TUE_1020} 09:30")
     assert got == ["本机例行任务：日报卡住了（多半在等权限确认；10/20 06:33 起）→ 在桌面版 Code → Routines 打开那次运行点允许（或停止它）"
-                   "；今天的由云端后备做；在 Mac 对话里问「例行任务今天跑了吗」"], got
+                   "；今天的要补：在 Mac 对话里说「补跑」；在 Mac 对话里问「例行任务今天跑了吗」"], got
 
 
 def test_today_lines_missed_and_late_runs_only_on_trading_days(tmp_path):
     root = _today_tasks(tmp_path, {"lastRunAt": _utc_iso("2026-10-19 06:33"), "lastScheduledFor": _utc_iso("2026-10-19 06:32")},
                         {"lastRunAt": _utc_iso(f"{TUE_1020} 08:20"), "lastScheduledFor": _utc_iso(f"{TUE_1020} 07:45")})
     got = _lines(tmp_path, root, f"{TUE_1020} 09:30")
-    assert got == ["本机例行任务：日报今天 06:32 没跑（桌面版没开 / Mac 睡着？）→ 今天的由云端后备做；在 Mac 对话里问「例行任务今天跑了吗」",
+    assert got == ["本机例行任务：日报今天 06:32 没跑（桌面版没开 / Mac 睡着？）→ 今天的要补：在 Mac 对话里说「补跑」；在 Mac 对话里问「例行任务今天跑了吗」",
                    "本机例行任务：影子账户今天 08:20 才开始（应在 07:45：那时 Mac 睡着 / 桌面版没开 / 前一次运行还没结束？）"
-                   "→ 那之前的由云端后备做；在 Mac 对话里问「例行任务今天跑了吗」"], got
+                   "→ 那之前执行器用的是旧的输入；在 Mac 对话里问「例行任务今天跑了吗」"], got
     assert _lines(tmp_path, root, f"{TUE_1020} 06:55") == []                               # 到点 + 30 分钟还没过
     assert len(_lines(tmp_path, root, f"{TUE_1020} 07:05")) == 1                            # 日报过了 30 分钟；影子账户还没到点
     assert _lines(tmp_path, root, "2026-10-12 09:30") == []                                # 休市的工作日（スポーツの日）：不该跑

@@ -591,7 +591,7 @@ if [ "${1:-}" = "run" ]; then
   if [ "$openphase" = "0" ] && [ "$nopull" = "0" ]; then
     today="$(TZ=Asia/Tokyo date +%F)"
     waited=0
-    while :; do                                    # 例行任务的日报（2026-10-09 起 Mac 的本机任务 06:45，通常 07:10 前；没做 → 云端后备 07:20）推上来
+    while :; do                                    # 例行任务的日报（2026-10-09 起 Mac 的本机任务 06:45，通常 07:10 前；没做 → 没有云端后备，用手上最新的）推上来
       if [ "${QBREAK_LIVEU_PULL:-1}" = "1" ]; then
         if git pull -q --ff-only >/dev/null 2>&1; then
           pullmsg=""
@@ -606,11 +606,11 @@ if [ "${1:-}" = "run" ]; then
       d="$("$PY" -c 'import json;print(json.load(open("var/out/unified_today.json",encoding="utf-8")).get("date",""))' 2>/dev/null)"
       [ "$d" = "$today" ] && break
       if [ "$waited" -ge "${QBREAK_LIVEU_WAIT_MIN:-50}" ]; then
-        echo "★ 等了 ${waited} 分钟，今天（${today}）的模拟盘日报还没入库（Mac 的本机例行任务 / 云端后备；最新 ${d:-无}）：用手上最新的判断层 / 宏观数值继续"
+        echo "★ 等了 ${waited} 分钟，今天（${today}）的模拟盘日报还没入库（Mac 的本机例行任务；最新 ${d:-无}）：用手上最新的判断层 / 宏观数值继续"
         break
       fi
       if [ "$live" = "1" ] && [ "$(TZ=Asia/Tokyo date +%H%M)" -ge "${QBREAK_LIVEU_WAIT_UNTIL:-0830}" ]; then
-        echo "★ 已到 $(TZ=Asia/Tokyo date +%H:%M) JST，今天（${today}）的模拟盘日报还没入库（Mac 的本机例行任务 / 云端后备；最新 ${d:-无}）：寄付注文 08:55 截止，用手上最新的输入继续"
+        echo "★ 已到 $(TZ=Asia/Tokyo date +%H:%M) JST，今天（${today}）的模拟盘日报还没入库（Mac 的本机例行任务；最新 ${d:-无}）：寄付注文 08:55 截止，用手上最新的输入继续"
         break
       fi
       sleep 300
