@@ -1,5 +1,5 @@
 {
- "as_of": "2026-10-19",
+ "as_of": "2026-10-21",
  "items": [
   {
    "kind": "上場廃止",
@@ -399,7 +399,7 @@
    "kind": "上場廃止",
    "code": "5484",
    "date": "2026-10-19",
-   "status": "今天生效",
+   "status": "已生效",
    "in_pool": false,
    "held": [],
    "core": false,
@@ -420,7 +420,21 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "TOB・MBO・株式併合",
    "last_trade": "2026-10-28",
-   "days_left": 8,
+   "days_left": 6,
+   "removed": false
+  },
+  {
+   "kind": "上場廃止",
+   "code": "7523",
+   "date": "2026-11-11",
+   "status": "待生效",
+   "in_pool": false,
+   "held": [],
+   "core": false,
+   "src": "JPX 上場廃止銘柄一覧",
+   "why": "TOB・MBO・株式併合",
+   "last_trade": "2026-11-10",
+   "days_left": 14,
    "removed": false
   },
   {
@@ -434,7 +448,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "上場維持基準不適合",
    "last_trade": "2026-12-30",
-   "days_left": 51,
+   "days_left": 49,
    "removed": false
   },
   {
@@ -448,7 +462,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "上場維持基準不適合",
    "last_trade": "2027-02-26",
-   "days_left": 88,
+   "days_left": 86,
    "removed": false
   },
   {
@@ -462,7 +476,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "上場維持基準不適合",
    "last_trade": "2027-02-26",
-   "days_left": 88,
+   "days_left": 86,
    "removed": false
   },
   {
@@ -476,7 +490,19 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "上場維持基準不適合",
    "last_trade": "2027-03-31",
-   "days_left": 110,
+   "days_left": 108,
+   "removed": false
+  },
+  {
+   "kind": "整理銘柄",
+   "code": "2851",
+   "date": null,
+   "status": "日期未定",
+   "in_pool": false,
+   "held": [],
+   "core": false,
+   "src": "JPX 監理・整理銘柄",
+   "designated": "2026-10-20",
    "removed": false
   }
  ],
@@ -556,13 +582,13 @@
  ],
  "applied": [],
  "needs_user": [],
- "n_other": 29,
+ "n_other": 30,
  "stale": false,
  "source_ok_at": {
-  "jpx_delisted": "2026-10-19T07:27+09:00",
-  "jpx_supervision": "2026-10-19T07:27+09:00",
-  "jpx_supervision_etf": "2026-10-19T07:27+09:00"
+  "jpx_delisted": "2026-10-21T09:41+09:00",
+  "jpx_supervision": "2026-10-21T09:41+09:00",
+  "jpx_supervision_etf": "2026-10-21T09:41+09:00"
  },
- "text": "股票池更新时间表：股票池里 0 只有上場廃止预定；JPX 一览另有 29 只不在股票池",
- "updated": "2026-10-19T07:27+09:00"
+ "text": "股票池更新时间表：股票池里 0 只有上場廃止预定；JPX 一览另有 30 只不在股票池",
+ "updated": "2026-10-21T09:41+09:00"
 }
