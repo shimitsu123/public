@@ -728,11 +728,11 @@ def test_allow_missing_round_trip_and_per_task_approvals(tmp_path, monkeypatch, 
     out = capsys.readouterr().out
     assert out.startswith("OK\t允许规则：说明书要运行的命令（") and "SECRET" not in out
     # 少两条：只打印少的命令（不打印规则文件的别的内容）；任务自己允许过的（桌面版 approvedPermissions）只算那个任务
-    echo = "Bash(echo ~/qbreak-sim/quant_breakout/var/out/report.html)"
+    echo = "Bash(bash scripts/routines.sh run run.py sim-day)"     # 只有日报用的一条
     _settings(tmp_path, [r for r in want if r not in (echo, "Bash(bash scripts/routines.sh push)")])
     assert routines.main(["allow-check"]) == 0
     out = capsys.readouterr().out
-    assert "NG\t允许规则里没有（日报；无人值守时会停在权限确认）：echo ~/qbreak-sim/quant_breakout/var/out/report.html" in out, out
+    assert "NG\t允许规则里没有（日报；无人值守时会停在权限确认）：bash scripts/routines.sh run run.py sim-day" in out, out
     assert "NG\t允许规则里没有（日报、影子账户、季度复核；无人值守时会停在权限确认）：bash scripts/routines.sh push" in out, out
     assert out.count("NG\t") == 2 and "HINT\t→ 加规则" in out and "SECRET" not in out
     tasks = [{**DAILY_TASK, "approvedPermissions": [{"toolName": "Bash", "ruleContent": "bash scripts/routines.sh push"},
@@ -766,8 +766,9 @@ def test_check_reports_commands_missing_from_the_allow_rules(repos):
     assert "[—] 允许规则：没有 ~/qbreak-sim/.claude/settings.local.json（允许规则）" in out, out
 
 
-def test_allow_gaps_are_ok_when_the_sim_folder_skips_all_prompts(repos):
-    """用户 2026-10-17 决定本机任务保持「跳过全部确认」：规则缺的不再报 [★]（不会停在权限确认），只说改回逐项确认前要补。"""
+def test_allow_gaps_are_flagged_even_when_the_sim_folder_skips_all_prompts(repos):
+    """2026-10-17 起文件夹记的是「跳过全部确认」，但 2026-10-21 查到桌面版启动本机任务时用的是 --permission-mode=default（文件夹的设置管不到）
+    → 规则缺的照旧报 [★]（以前这里报 [OK]「不会停在权限确认」，10/19〜10/21 照样停住了）。"""
     t = repos
     _git(t / "sim", "pull", "-q", "--ff-only", "origin", BRANCH, ident=False)
     allp = _settings(t / "x", [])
@@ -781,8 +782,7 @@ def test_allow_gaps_are_ok_when_the_sim_folder_skips_all_prompts(repos):
                QBREAK_SIM_SETTINGS=str(allp), QBREAK_DESKTOP_CONFIG=str(conf))
     mode("bypassPermissions")
     rc, out = _run(t, "check", **env)
-    assert "允许规则里没有" not in out and "[OK] 允许规则：本机任务的文件夹是「跳过全部确认」" in out and "SECRET" not in out, out
-    assert str(t) not in out.split("允许规则：", 1)[1].splitlines()[0]                  # 不打印文件夹路径
+    assert "[★] 允许规则里没有" in out and "跳过全部确认" not in out and "SECRET" not in out, out
     mode("default")
     rc, out = _run(t, "check", **env)
     assert "[★] 允许规则里没有" in out, out
@@ -1059,3 +1059,104 @@ def test_deps_leaves_the_shared_venv_alone_during_trading_hours(tmp_path):
                            capture_output=True, text=True, timeout=120)
         assert "pip install" in log.read_text(encoding="utf-8"), r.stdout + r.stderr
         log.unlink()
+
+
+# ────────── 卡住的运行自动停止（2026-10-21 用户「现在 qbreak 好像停了，再发防止对策」）──────────
+SIM_CWD = "/x/qbreak-sim"
+
+
+def _reap_desktop(t: Path, started: str, last: str, **kw) -> tuple[Path, Path]:
+    """日报 <started> 开始、<last> 起停在没有结果的 Bash 上（10/21 09:37 的实况：停在 git diff 的权限确认上）。"""
+    sess = [_session("qbreak-sim-daily", "2026-10-20 06:45:00", sid="eeee-old", cwd=SIM_CWD),
+            _session("qbreak-sim-daily", started, sid="ffff-new", cwd=SIM_CWD, **kw)]
+    tr = {"ffff-new": [_turn("user", started), _turn("assistant", last, "Bash")]}
+    root, proj = _desktop(t, [{**DAILY_TASK, "lastRunAt": _utc_iso(started)}], sess, tr)
+    _skills(t)
+    return root, proj
+
+
+def _proc(started: str, pid: int = 4242, cwd: str = SIM_CWD, kids: int = 0) -> dict:
+    return {"pid": pid, "start": _jst(started) + dt.timedelta(seconds=1), "cwd": cwd, "kids": kids}
+
+
+def test_reap_stops_a_run_waiting_for_permission_and_says_so(tmp_path):
+    root, proj = _reap_desktop(tmp_path, "2026-10-21 09:37:31", "2026-10-21 09:37:54")
+    killed, sent, log = [], [], tmp_path / "reap.json"
+
+    def go(now, procs, **kw):
+        return routines.reap(_jst(now), root=root, cfg=tmp_path / "cfg", procs=procs, log_path=log,
+                             kill=lambda pid: killed.append(pid) or True, send=lambda *a, **k: sent.append((a, k)), **kw)
+
+    assert go("2026-10-21 10:00", [_proc("2026-10-21 09:37:31")]) == []                  # 停了不到 30 分钟：照常在等
+    assert go("2026-10-21 10:30", [_proc("2026-10-21 09:37:31", kids=1)]) == []          # 有子进程 = 真的在跑命令
+    assert go("2026-10-21 10:30", [_proc("2026-10-21 08:00:00")]) == []                  # 开始时刻对不上：不是这次的进程
+    assert go("2026-10-21 10:30", [_proc("2026-10-21 09:37:31", cwd="/x/other")]) == []  # 别的文件夹的对话：不碰
+    assert go("2026-10-21 10:30", []) == [] and killed == [] and sent == []              # 进程已经不在
+    dry = go("2026-10-21 10:30", [_proc("2026-10-21 09:37:31")], dry=True)
+    assert len(dry) == 1 and "--dry" in dry[0] and killed == [] and sent == [] and not log.exists()
+    got = go("2026-10-21 22:28", [_proc("2026-10-21 09:37:31")])
+    assert killed == [4242] and len(got) == 1, got
+    (subject, text), kw = sent[0]
+    assert subject == "qbreak 本机例行任务「日报」卡住了：已自动停止" and kw == {"level": "warn"}
+    assert text.startswith("本机例行任务「日报」10/21 09:37 开始的那次停在工具调用（Bash）上、没有结果，已经 12 小时 50 分钟"), text
+    assert "Bypass permissions" in text and "SECRET-CMD" not in text and str(tmp_path) not in text
+    rec = json.loads(log.read_text(encoding="utf-8"))
+    assert [(x["day"], x["kind"], x["ok"]) for x in rec] == [("2026-10-21", "sim_daily", True)]
+    go("2026-10-21 22:43", [_proc("2026-10-21 09:37:31")])
+    assert go("2026-10-21 22:58", [_proc("2026-10-21 09:37:31")]) == [] and killed == [4242, 4242]   # 一天最多 2 次
+    killed.clear()
+    assert go("2026-10-22 07:30", [_proc("2026-10-21 09:37:31")]) and killed == [4242]   # 第二天重新算
+
+
+def test_reap_failure_says_stop_it_by_hand_and_never_raises(tmp_path):
+    root, _ = _reap_desktop(tmp_path, "2026-10-21 06:45:00", "2026-10-21 06:46:00")
+    sent = []
+    got = routines.reap(_jst("2026-10-21 08:00"), root=root, cfg=tmp_path / "cfg", procs=[_proc("2026-10-21 06:45:00")],
+                        log_path=tmp_path / "r.json", kill=lambda pid: False, send=lambda *a, **k: sent.append(a) or 1 / 0)
+    assert len(got) == 1 and "自动停止没成功" in sent[0][0] and "打开那次运行、停止它" in sent[0][1]
+    assert routines.reap(_jst("2026-10-21 08:00"), root=tmp_path / "none", cfg=tmp_path / "cfg", procs=[]) == []
+
+
+def test_a_stuck_looking_run_whose_process_is_gone_is_not_reported(tmp_path):
+    """10/21 的影子账户：对话记录停在工具调用上，但进程已经不在了（被停掉）→ 不再报「一直没动」（进程列不出时照旧按对话记录）。"""
+    root, proj = _reap_desktop(tmp_path, "2026-10-21 07:46:00", "2026-10-21 07:47:00")
+    now = _jst("2026-10-21 22:00")
+    stuck = lambda rows: [x for m, x in rows if "那次一直没动" in x]                    # noqa: E731
+    assert stuck(routines.desktop_report(root, proj, WANT, now, JST))
+    assert not stuck(routines.desktop_report(root, proj, WANT, now, JST, procs=[]))
+    assert stuck(routines.desktop_report(root, proj, WANT, now, JST, procs=[_proc("2026-10-21 07:46:00")]))
+    assert not any("卡住" in x for x in routines.today_lines(now, root=root, cfg=tmp_path / "cfg", tz=JST, procs=[]))
+    assert any("卡住" in x for x in routines.today_lines(now, root=root, cfg=tmp_path / "cfg", tz=JST))
+
+
+def test_claude_procs_reads_ps_and_lsof():
+    ps = ("  101     1   12:51:02 /Applications/Claude.app/Contents/Helpers/disclaimer --pgroup -- /A B/MacOS/claude --output-format stream-json\n"
+          "  102   101   12:51:02 /A B/MacOS/claude --output-format stream-json --permission-mode=default\n"
+          "  103   102      00:05 /bin/zsh -c sleep 1\n"
+          "  104     1 1-02:00:00 /A B/MacOS/claude --output-format stream-json\n"
+          "  105     1      01:00 /usr/bin/vim claude\n")
+
+    class R:
+        def __init__(self, out, rc=0):
+            self.stdout, self.returncode = out, rc
+
+    def run(cmd, **kw):
+        if cmd[0].endswith("ps"):
+            return R(ps)
+        return R(f"p{cmd[3]}\nfcwd\nn/x/qbreak-sim\n" if cmd[3] == "102" else "")
+
+    now = _jst("2026-10-21 22:28:33")
+    got = routines.claude_procs(now, run=run)
+    assert [(p["pid"], p["cwd"], p["kids"]) for p in got] == [(102, "/x/qbreak-sim", 1), (104, None, 0)]
+    assert got[0]["start"] == _jst("2026-10-21 09:37:31") and got[1]["start"] == _jst("2026-10-20 20:28:33")
+    assert routines.claude_procs(now, run=lambda cmd, **kw: R("", 1)) is None
+    assert routines._etime_s("bad") is None and routines._etime_s("05") is None
+
+
+def test_news_job_runs_the_reaper_and_manuals_forbid_ad_hoc_commands():
+    sh = (ROOT / "scripts" / "liveu.sh").read_text(encoding="utf-8")
+    i = sh.index('if [ "${1:-}" = "news" ]; then')
+    assert '"$PY" -m qbreak.routines reap >/dev/null 2>&1 || true' in sh[i:sh.index("exec ", i)]
+    for name in routines.MANUALS:
+        md = (ROOT / "routines" / f"{name}.md").read_text(encoding="utf-8")
+        assert "只运行本说明书里写出的命令（一字不差）。要看文件内容用 Read 工具" in md, name

@@ -14,8 +14,8 @@
 - 推送：`bash scripts/routines.sh push`（`git pull --rebase` → `git push`，失败 2 / 4 / 8 / 16 秒后重试；只推这个分支、不 force、
   不改用别的分支）。它停下（冲突、没提交的改动、提交信息带模型名、作者不是设好的 git 身份）→ 不要自己绕过，照实汇报。
 - 不 `git reset` / `git stash` / `git checkout -- <文件>` / 丢弃任何改动；拉不下来就停下汇报（没有云端后备）。
-- 给 Artifact 工具的 `file_path` 用绝对路径（`echo ~/qbreak-sim/quant_breakout/var/out/report.html` 的结果）；汇报里只写 `~/qbreak-sim/…`
-  （不写出 Mac 的用户名）。
+- 只运行本说明书里写出的命令（一字不差）。要看文件内容用 Read 工具；不用 cat / head / python -c / git diff / git log 之类去看（它们不在允许规则里：无人值守时会停在权限确认、一直等着，之后到点的运行也都被挡住；2026-10-19、10-21 两次这样卡住，之后每 15 分钟的检查会把卡住 30 分钟以上的运行自动停止）。有没提交的改动（上一次运行被停掉时留下的 var/）→ 照常往下做（后面的步骤会重新生成、一起入库），不去看改了什么。
+- 汇报里路径只写 `~/qbreak-sim/…`（不写出 Mac 的用户名）。
 - 市场风险报告的 URL 写在这个本机任务的说明（Instructions）里（不入库：公开仓库不写私人链接）；那里没有 → 用 Artifact 工具 `list`
   找标题含「市场风险报告」的那个；都找不到 → 按第 2 步「读不到」处理。日报 artifact（https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ）2026-10-20 起不再更新（第 6 步）。
 

@@ -31,7 +31,7 @@
 #   QBREAK_ROUTINES_HHMM（现在的 JST 时刻，例 0956）、QBREAK_ROUTINES_NOW（现在，ISO；check 的「按时跑了没有」用）、
 #   QBREAK_DESKTOP_DIR（桌面版的运行记录目录，默认 ~/Library/Application Support/Claude/claude-code-sessions）、
 #   QBREAK_SIM_SETTINGS（允许规则的文件，默认 $QBREAK_SIM/.claude/settings.local.json）、
-#   QBREAK_DESKTOP_CONFIG（桌面版的设置，默认运行记录目录上一层的 claude_desktop_config.json；只读 ~/qbreak-sim 的权限模式）
+#   （QBREAK_DESKTOP_CONFIG：2026-10-21 起不用——文件夹的权限模式管不到本机任务）
 set -uo pipefail
 
 PROJ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

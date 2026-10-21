@@ -22,6 +22,8 @@
   python -m qbreak.routines allow-missing                   → 对不上的命令要加的规则（JSON 数组，「Bash(…)」；没有 → []）
      （规则文件 QBREAK_SIM_SETTINGS，默认 <QBREAK_SIM 或 ~/qbreak-sim>/.claude/settings.local.json；任务自己允许过的从
       QBREAK_DESKTOP_DIR / CLAUDE_CONFIG_DIR 读；2026-10-16 起）
+  python -m qbreak.routines reap [--dry]                     → 本机任务卡在权限确认 30 分钟以上（进程还在、没在跑命令）→ 停止它、推一条通知
+                                                              （liveu.sh news 每 15 分钟调用；一个任务一天最多 2 次；2026-10-21 起）
 """
 from __future__ import annotations
 
@@ -30,7 +32,11 @@ import json
 import os
 import plistlib
 import re
+import shutil
+import signal
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 from .calendar_jp import JST, is_trading_day, now_jst
@@ -376,16 +382,19 @@ def _load_desktop(root: Path) -> tuple[dict, dict, list, str]:
     return tasks, skips, sessions, ""
 
 
-def _stuck_runs(mine: list, projects, now: dt.datetime) -> list[tuple[dt.datetime, str]]:
+def _stuck_runs(mine: list, projects, now: dt.datetime, procs: list | None = None) -> list[tuple[dt.datetime, str]]:
     """一个任务的会话里卡住的运行 → [(开始时刻, 停在哪里)]（旧的在前）：没归档、开始 2 小时以上，对话记录最后是还没有结果的工具调用
     （也已经 2 小时没动），或没有对话记录、开始几秒之后就没有动静、一轮也没做完。
-    之后同一个任务又开始了运行的 → 不算（那次已经被停掉 / 结束了：桌面版只在上一次结束之后才启动下一次；2026-10-21 起）。"""
+    之后同一个任务又开始了运行的 → 不算（那次已经被停掉 / 结束了：桌面版只在上一次结束之后才启动下一次；2026-10-21 起）。
+    procs（claude_procs 的结果；None = 不看进程）：那次运行的进程已经不在了 → 不算（被停掉 / 自动停止了；2026-10-21 起）。"""
     out = []
     last = max((_parse_ts(s.get("createdAt")) for s in mine if _parse_ts(s.get("createdAt"))), default=None)
     for s in mine:
         if s.get("isArchived") is True:
             continue
         if last is not None and (_parse_ts(s.get("createdAt")) or last) < last:
+            continue
+        if procs is not None and _proc_of(s, procs) is None:
             continue
         created = _parse_ts(s.get("createdAt"))
         if created is None or now - created < STUCK_AFTER:
@@ -412,8 +421,9 @@ def _skips_after(t: dict, skips: dict, tid: str) -> list[tuple[dt.datetime, str]
     return [(a, r) for a, r in recent if a and (floor is None or a > floor)]
 
 
-def desktop_report(root, projects, want: dict, now: dt.datetime, tz=None) -> list[tuple[str, str]]:
-    """本机任务（want：任务 id → 中文名）按时跑了没有、有没有卡住的运行 → [("OK"|"NG"|"WARN"|"?", 说明)]。只读；不打印路径、命令、内容。"""
+def desktop_report(root, projects, want: dict, now: dt.datetime, tz=None, procs: list | None = None) -> list[tuple[str, str]]:
+    """本机任务（want：任务 id → 中文名）按时跑了没有、有没有卡住的运行 → [("OK"|"NG"|"WARN"|"?", 说明)]。只读；不打印路径、命令、内容。
+    procs = claude_procs 的结果（None = 不看进程：进程已经不在的那次也照对话记录算）。"""
     tasks, skips, sessions, why = _load_desktop(Path(root))
     if why:
         return [("?", f"{why}：跳过「按时跑了没有」（在桌面版 Code → Routines → Review history 看）")]
@@ -451,7 +461,7 @@ def desktop_report(root, projects, want: dict, now: dt.datetime, tz=None) -> lis
             else:
                 out.append(("OK", f"本机任务「{label}」：{lr}（之后没有错过的）"))
         stuck = 0
-        for created, where in _stuck_runs(mine, projects, now):
+        for created, where in _stuck_runs(mine, projects, now, procs):
             stuck += 1
             extra = "；之后到点的运行桌面版都跳过了（上一次运行还没结束）" if blocked_now else ""
             out.append(("NG", f"本机任务「{label}」{_mdhm(created)} 那次一直没动（{where}：多半在等权限确认、没人点允许）{extra}"
@@ -520,7 +530,7 @@ def _hm_jst(t: dt.datetime) -> str:
     return f"{t.astimezone(JST):%H:%M}"
 
 
-def today_lines(now: dt.datetime, root=None, projects=None, cfg=None, tz=None) -> list[str]:
+def today_lines(now: dt.datetime, root=None, projects=None, cfg=None, tz=None, procs: list | None = None) -> list[str]:
     """交易日 09:30 自检推送里的「本机例行任务」行（一个任务最多一行；没问题 / 读不到 / 不是 Mac → []）：
     卡住的运行（2 小时以上停在没有结果的工具调用上 = 多半在等权限确认）或桌面版一直在跳过它（上一次运行还没结束）；
     今天到点 30 分钟以上还没跑；今天的运行比到点晚 30 分钟以上才开始。暂停（Paused）的不说（人自己停的；check 里报）。
@@ -529,6 +539,8 @@ def today_lines(now: dt.datetime, root=None, projects=None, cfg=None, tz=None) -
         root = desktop_dir()
         if root is None:
             return []
+        if procs is None:
+            procs = claude_procs(now)                         # 真的 Mac 上：进程已经不在的那次不算卡住
     cfg = Path(cfg) if cfg is not None else config_dir()
     projects = Path(projects) if projects is not None else cfg / "projects"
     ids = task_ids(cfg)
@@ -545,7 +557,7 @@ def today_lines(now: dt.datetime, root=None, projects=None, cfg=None, tz=None) -
         if not isinstance(t, dict) or t.get("enabled") is False:
             continue
         mine = sorted((s for s in sessions if s.get("scheduledTaskId") == tid), key=lambda s: _parse_ts(s.get("createdAt")) or now)
-        stuck = _stuck_runs(mine, projects, now)
+        stuck = _stuck_runs(mine, projects, now, procs)
         blocked = [a for a, r in _skips_after(t, skips, tid) if r == "per_task_limit"]
         if stuck or (blocked and max(blocked) >= now - SKIP_RECENT):
             since = stuck[0][0] if stuck else min(blocked)
@@ -574,6 +586,208 @@ def today_lines(now: dt.datetime, root=None, projects=None, cfg=None, tz=None) -
         elif last is not None and last <= now and last - fire >= LATE_AFTER:
             out.append(f"本机例行任务：{label}今天 {_hm_jst(last)} 才开始（应在 {_hm_jst(fire)}：那时 Mac 睡着 / 桌面版没开 / 前一次运行还没结束？）"
                        f"→ 那之前执行器用的是旧的输入；{HISTORY_HINT}")
+    return out
+
+
+# ────────── 卡住的运行自动停止（2026-10-21 用户「现在 qbreak 好像停了，再发防止对策」）──────────
+# 10/19 06:45 的日报停在一条说明书以外的命令（python -c）的权限确认上、没人点允许 → 这次运行一直不结束，桌面版之后到点都跳过它，
+# 07:40 的执行器连着 3 天用旧的判断层 / 宏观输入、09:30 自检连着 3 天没通过；10/21 09:37 补跑的那次又停在 git diff 上 13 小时。
+# → 每 15 分钟（liveu.sh news）查一次：本机任务最近一次运行停在没有结果的工具调用上 30 分钟以上、它的进程还在、而且进程没有子进程
+#   （真的在跑命令时有子进程；等权限确认时没有）→ 停止那个进程（桌面版随后会再启动错过的 / 下次到点照常跑），推一条手机通知。
+#   一个任务一天最多停 2 次（补跑又卡住也不来回停：之后照旧由 09:30 自检 / routines.sh check 报）；只停这三个本机任务的会话
+#   （工作文件夹对得上的那个进程），不碰别的对话。记录：数据目录 out/routines_reap.json（只在本机）。
+REAP_AFTER = dt.timedelta(minutes=30)
+REAP_MAX_PER_DAY = 2
+PROC_SLACK_S = 120                         # 进程开始时刻和会话 createdAt 差多少秒以内算同一个
+_ETIME = re.compile(r"^(?:(?:(\d+)-)?(\d+):)?(\d+):(\d+)$")
+
+
+def _etime_s(v: str) -> int | None:
+    """ps 的 etime（[[天-]时:]分:秒）→ 秒；读不懂 → None。"""
+    m = _ETIME.match(str(v).strip())
+    if not m:
+        return None
+    d, h, mi, sec = (int(x or 0) for x in m.groups())
+    return ((d * 24 + h) * 60 + mi) * 60 + sec
+
+
+def _tool(name: str, default: str) -> str:
+    return shutil.which(name) or default
+
+
+def claude_procs(now: dt.datetime | None = None, run=None) -> list[dict] | None:
+    """在跑的 Claude Code 会话进程（桌面版启动的，stream-json）→ [{pid, start, cwd, kids}]；列不出（ps 失败）→ None。只读。
+    kids = 它的子进程数（在跑 Bash 命令时 ≥ 1；等权限确认时 0）。"""
+    run = run or subprocess.run
+    now = now or now_jst()
+    try:
+        p = run([_tool("ps", "/bin/ps"), "-axo", "pid=,ppid=,etime=,command="], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if p.returncode != 0:
+        return None
+    rows = []
+    for ln in str(p.stdout or "").splitlines():
+        parts = ln.split(None, 3)
+        if len(parts) == 4 and parts[0].isdigit() and parts[1].isdigit():
+            rows.append((int(parts[0]), int(parts[1]), parts[2], parts[3]))
+    out = []
+    for pid, _, et, cmd in rows:
+        exe = cmd.split(" --", 1)[0]                          # 可执行文件（路径里可能有空格）；外面包的 disclaimer 不算
+        secs = _etime_s(et)
+        if not (exe.endswith("/claude") and "stream-json" in cmd) or secs is None:
+            continue
+        cwd = None
+        try:
+            q = run([_tool("lsof", "/usr/sbin/lsof"), "-a", "-p", str(pid), "-d", "cwd", "-Fn"], capture_output=True, text=True, timeout=20)
+            cwd = next((x[1:] for x in str(q.stdout or "").splitlines() if x.startswith("n")), None)
+        except (OSError, subprocess.SubprocessError):
+            pass
+        out.append({"pid": pid, "start": now - dt.timedelta(seconds=secs), "cwd": cwd, "kids": sum(1 for r in rows if r[1] == pid)})
+    return out
+
+
+def _same_dir(a, b) -> bool:
+    try:
+        return os.path.realpath(str(a)) == os.path.realpath(str(b))
+    except (OSError, ValueError):
+        return False
+
+
+def _proc_of(s: dict, procs: list) -> dict | None:
+    """这次运行（会话）的进程：开始时刻差 2 分钟以内、工作文件夹一样（两边都知道时）。没有 → None。"""
+    created = _parse_ts(s.get("createdAt"))
+    if created is None:
+        return None
+    cwd = s.get("cwd")
+    for p in procs:
+        st = p.get("start")
+        if not isinstance(st, dt.datetime) or abs((st - created).total_seconds()) > PROC_SLACK_S:
+            continue
+        if cwd and p.get("cwd") and not _same_dir(cwd, p["cwd"]):
+            continue
+        return p
+    return None
+
+
+def _terminate(pid: int, wait_s: float = 10) -> bool:
+    """停止一个进程（先 SIGTERM，等不到再 SIGKILL）→ 停了没有。"""
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False
+    for _ in range(max(1, int(wait_s * 10))):
+        time.sleep(0.1)
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        except OSError:
+            break
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def reap_path() -> Path:
+    from . import paths
+    return paths.out_dir() / "routines_reap.json"
+
+
+def _reap_log(path: Path) -> list:
+    try:
+        d = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [x for x in d if isinstance(x, dict)] if isinstance(d, list) else []
+
+
+def reap(now: dt.datetime | None = None, root=None, projects=None, cfg=None, procs: list | None = None,
+         dry: bool = False, kill=None, send=None, log_path=None) -> list[str]:
+    """停止卡住的本机任务运行（见上面的说明）→ 做了什么（一条一行；没有 → []）。dry = 只说会停哪个（不停、不推、不记）。
+    kill / send / procs / log_path：测试注入（默认 _terminate / qbreak.notify.send / claude_procs() / reap_path()）。只在 Mac 上做事。"""
+    now = now or now_jst()
+    if root is None:
+        root = desktop_dir()
+        if root is None:
+            return []
+    cfg = Path(cfg) if cfg is not None else config_dir()
+    projects = Path(projects) if projects is not None else cfg / "projects"
+    ids = task_ids(cfg)
+    if not ids:
+        return []
+    tasks, _, sessions, why = _load_desktop(Path(root))
+    if why:
+        return []
+    if procs is None:
+        procs = claude_procs(now)
+        if procs is None:
+            return []
+    log_path = Path(log_path) if log_path is not None else reap_path()
+    hist = _reap_log(log_path)
+    day = now.astimezone(JST).date().isoformat()
+    out: list[str] = []
+    for kind, label in KINDS:
+        tid = ids.get(kind)
+        mine = sorted((s for s in sessions if tid and s.get("scheduledTaskId") == tid), key=lambda s: _parse_ts(s.get("createdAt")) or now)
+        if not mine or mine[-1].get("isArchived") is True:
+            continue
+        s = mine[-1]                                          # 最近一次运行（更早的那些桌面版已经结束了）
+        created = _parse_ts(s.get("createdAt"))
+        if created is None or now - created < REAP_AFTER:
+            continue
+        tail = _transcript_tail(projects, s.get("cliSessionId") or s.get("sessionId"))
+        if tail is not None:
+            pending, tool, at = tail
+            since = at or created
+            if not pending or now - since < REAP_AFTER:
+                continue
+            where = f"停在工具调用（{tool}）上、没有结果" if tool else "停在工具调用上、没有结果"
+        else:
+            act = _parse_ts(s.get("lastActivityAt")) or created
+            if s.get("completedTurns") or (act - created).total_seconds() > IDLE_S:
+                continue
+            since, where = created, "开始几秒之后就没有动静"
+        p = _proc_of(s, procs)
+        if p is None or not p.get("cwd") or not s.get("cwd") or p.get("kids"):
+            continue                                          # 进程不在 / 对不上工作文件夹 / 正在跑命令 → 不碰
+        if sum(1 for x in hist if x.get("day") == day and x.get("kind") == kind) >= REAP_MAX_PER_DAY:
+            continue
+        mins = int((now - since).total_seconds() // 60)
+        dur = f"{mins // 60} 小时 {mins % 60} 分钟" if mins >= 120 else f"{mins} 分钟"
+        head = f"本机例行任务「{label}」{_mdhm(created)} 开始的那次{where}，已经 {dur}（多半在等权限确认、没人点允许）"
+        if dry:
+            out.append(f"{head} → 会自动停止（--dry：没停）")
+            continue
+        ok = bool((kill or _terminate)(int(p["pid"])))
+        hist.append({"at": now.isoformat(timespec="seconds"), "day": day, "kind": kind, "started": created.isoformat(timespec="seconds"),
+                     "where": where, "minutes": mins, "ok": ok})
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text(json.dumps(hist[-60:], ensure_ascii=False, indent=1), encoding="utf-8")
+        except OSError:
+            pass
+        if ok:
+            subject = f"qbreak 本机例行任务「{label}」卡住了：已自动停止"
+            text = (f"{head} → 已自动停止（不停的话，之后到点的运行桌面版都会跳过）。桌面版随后会再启动错过的那次 / 下次到点照常跑。"
+                    f"根治：桌面版 Code → Routines → 这个任务的权限改成跳过确认（Bypass permissions）；{HISTORY_HINT}")
+        else:
+            subject = f"qbreak 本机例行任务「{label}」卡住了：自动停止没成功"
+            text = f"{head} → 自动停止没成功：在桌面版 Code → Routines 打开那次运行、停止它；{HISTORY_HINT}"
+        out.append(f"{subject}：{text}")
+        try:
+            if send is None:
+                from . import notify
+                send = notify.send
+            send(subject, text, level="warn")
+        except Exception:                                     # noqa: BLE001 —— 推送失败不影响别的
+            pass
     return out
 
 
@@ -726,32 +940,6 @@ def settings_path() -> Path:
     return (Path(sim).expanduser() if sim else Path.home() / "qbreak-sim") / ".claude" / "settings.local.json"
 
 
-def sim_folder_mode() -> str | None:
-    """桌面版给 ~/qbreak-sim 文件夹记的权限模式（claude_desktop_config.json 的 epitaxy-folder-permission-mode；只读、不打印路径）：
-    "bypassPermissions" / "default" / "auto" …；读不到 → None。文件：QBREAK_DESKTOP_CONFIG，没设 → 运行记录目录的上一层
-    （测试设了 QBREAK_DESKTOP_DIR 就不会读到本机真的设置）。用户 2026-10-17 决定本机任务保持「跳过全部确认」。"""
-    v = os.environ.get("QBREAK_DESKTOP_CONFIG", "").strip()
-    if v:
-        f = Path(v).expanduser()
-    else:
-        d = desktop_dir()
-        if d is None:
-            return None
-        f = d.parent / "claude_desktop_config.json"
-    sim = os.environ.get("QBREAK_SIM", "").strip()
-    want = str(Path(sim).expanduser() if sim else Path.home() / "qbreak-sim").rstrip("/")
-    try:
-        prefs = (json.loads(f.read_text(encoding="utf-8")).get("preferences") or {}).get("epitaxyPrefs") or {}
-        for k, m in prefs.items():
-            if str(k).startswith("epitaxy-folder-permission-mode") and isinstance(m, dict):
-                for folder, mode in m.items():
-                    if str(folder).rstrip("/") == want and isinstance(mode, str):
-                        return mode
-    except Exception:
-        return None
-    return None
-
-
 def _bash_rule(r) -> str | None:
     """「Bash(…)」→ 括号里的；「Bash」→ "*"（全部）；别的工具 → None。"""
     if not isinstance(r, str):
@@ -880,7 +1068,8 @@ def main(argv: list[str] | None = None) -> int:
             tid, _, label = spec.strip().partition("=")
             if tid:
                 want[tid] = label or tid
-        for mark, txt in desktop_report(a[0], a[1], want, _now_arg()):
+        now = _now_arg()
+        for mark, txt in desktop_report(a[0], a[1], want, now, procs=None if os.environ.get("QBREAK_ROUTINES_NOW") else claude_procs(now)):
             print(f"{mark}\t{txt}")
         return 0
     if cmd in ("allow-missing", "allow-check"):
@@ -895,16 +1084,17 @@ def main(argv: list[str] | None = None) -> int:
         elif not miss:
             n = sum(len(v) for v in manual_commands().values())
             print(f"OK\t允许规则：说明书要运行的命令（{n} 条）都对得上（~/qbreak-sim/.claude/settings.local.json + 任务自己允许过的）")
-        elif sim_folder_mode() == "bypassPermissions":     # 跳过全部确认（用户 2026-10-17 决定）：不会停在权限确认，缺的只是改回逐项确认前要补的
-            print(f"OK\t允许规则：本机任务的文件夹是「跳过全部确认」（2026-10-17 用户决定），不会停在权限确认；"
-                  f"规则里缺 {len(miss)} 条（只在改回逐项确认之前要补：python -m qbreak.routines allow-missing）")
-        else:
+        else:                                                 # 文件夹记的「跳过全部确认」管不到本机任务（2026-10-21 查到：运行用 --permission-mode=default）
             label = dict(KINDS)
             for part, names in miss:
                 who_ = "、".join(label.get(x, x) for x in names)
                 print(f"NG\t允许规则里没有（{who_}；无人值守时会停在权限确认）：{part}")
             print("HINT\t→ 加规则：在 Mac 对话里说「把例行任务缺的允许规则加上」（你同意后由 Claude 加进 ~/qbreak-sim/.claude/settings.local.json；"
                   "要加的见 python -m qbreak.routines allow-missing）")
+        return 0
+    if cmd == "reap":                                        # liveu.sh news（每 15 分钟）调用；--dry = 只说会停哪个
+        for x in reap(dry="--dry" in a):
+            print(x)
         return 0
     if cmd == "table" and a:
         print("\n".join(table(parse_log(sys.stdin.read()), _today(a[0]), int(a[1]) if len(a) > 1 else 5)))
