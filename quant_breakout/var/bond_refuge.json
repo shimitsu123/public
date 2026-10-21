@@ -1,6 +1,6 @@
 {
  "version": 1,
- "as_of": "2026-10-20",
+ "as_of": "2026-10-21",
  "on": false,
  "since": "2026-03-13",
  "win": 63,
@@ -9,8 +9,8 @@
  "us_bear": false,
  "hold": false,
  "bond_date": "2026-10-19",
- "spx_date": "2026-10-19",
- "lag_days": 1,
+ "spx_date": "2026-10-20",
+ "lag_days": 2,
  "series": {
   "2026-07-22": false,
   "2026-07-23": false,
