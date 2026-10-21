@@ -378,10 +378,14 @@ def _load_desktop(root: Path) -> tuple[dict, dict, list, str]:
 
 def _stuck_runs(mine: list, projects, now: dt.datetime) -> list[tuple[dt.datetime, str]]:
     """一个任务的会话里卡住的运行 → [(开始时刻, 停在哪里)]（旧的在前）：没归档、开始 2 小时以上，对话记录最后是还没有结果的工具调用
-    （也已经 2 小时没动），或没有对话记录、开始几秒之后就没有动静、一轮也没做完。"""
+    （也已经 2 小时没动），或没有对话记录、开始几秒之后就没有动静、一轮也没做完。
+    之后同一个任务又开始了运行的 → 不算（那次已经被停掉 / 结束了：桌面版只在上一次结束之后才启动下一次；2026-10-21 起）。"""
     out = []
+    last = max((_parse_ts(s.get("createdAt")) for s in mine if _parse_ts(s.get("createdAt"))), default=None)
     for s in mine:
         if s.get("isArchived") is True:
+            continue
+        if last is not None and (_parse_ts(s.get("createdAt")) or last) < last:
             continue
         created = _parse_ts(s.get("createdAt"))
         if created is None or now - created < STUCK_AFTER:

@@ -441,6 +441,18 @@ def test_desktop_report_flags_the_stuck_run_missed_runs_and_prompting_mode(tmp_p
     assert not any("那次一直没动" in x for _, x in rows), rows
 
 
+def test_a_run_followed_by_a_later_run_is_not_stuck(tmp_path):
+    """2026-10-21：10/19 那次在对话里被停掉（对话记录最后照旧是没有结果的工具调用）、10/20 又开始了新的一次 → 旧的那次不再报「一直没动」。"""
+    root, proj = _stuck_desktop(tmp_path)
+    d = root / "acct" / "org"
+    (d / "local_99999999-0000.json").write_text(json.dumps(_session("qbreak-sim-daily", "2026-10-16 10:48:00", sid="dddd-new")), encoding="utf-8")
+    (proj / "-x-qbreak-sim" / "dddd-new.jsonl").write_text(json.dumps(_turn("user", "2026-10-16 10:48:01")) + "\n"
+                                         + json.dumps(_turn("assistant", "2026-10-16 10:49:00")) + "\n", encoding="utf-8")
+    rows = routines.desktop_report(root, proj, WANT, _jst("2026-10-16 13:00"), JST)
+    stuck = [x for m, x in rows if m == "NG" and "那次一直没动" in x]
+    assert not any("日报" in x for x in stuck) and any("季度复核" in x for x in stuck), stuck
+
+
 def test_desktop_report_paused_skips_only_and_unreadable_state(tmp_path):
     t1 = tmp_path / "a"
     root, proj = _desktop(t1, [{**DAILY_TASK, "enabled": False, "lastRunAt": _utc_iso("2026-10-12 06:45")}],
