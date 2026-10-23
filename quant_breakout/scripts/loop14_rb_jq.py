@@ -86,6 +86,7 @@ def main(argv=None) -> int:
         r = L14.wiring(W, G)
         print(json.dumps(r, ensure_ascii=False))
         return 0 if r["same_as_b4"] else 1
+    G.pop("ISS")                                                             # 接线核对：J 一个都不挡 → 作废（a113821），不运行
     L14.run(W, G, "# 第十四个研究循环 B 轮：资产增长 / 股数增加 / 予想配当性向 AGR / ISS / PAY", "loop14_rb_jq")
     return 0
 
