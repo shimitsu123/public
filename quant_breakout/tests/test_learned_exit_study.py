@@ -138,3 +138,11 @@ def test_hook_restored():
     with S.entry_hook():
         assert CP.MixEngine._tick_exit is S._tick_exit_entry
     assert CP.MixEngine._tick_exit is old
+
+
+def test_stock_reasons():
+    tr = [{"ticker": "1.T", "entry_date": "2010-01-05", "reason": S.REASON}, {"ticker": "2.T", "entry_date": "2010-01-06", "reason": "chandelier"},
+          {"ticker": "1545.T", "entry_date": "2010-01-06", "reason": S.REASON}, {"ticker": "3.T", "entry_date": "2009-12-30", "reason": S.REASON},
+          {"ticker": "4.T", "entry_date": "2010-01-07", "reason": "end"}, {"ticker": "AAPL", "entry_date": "2010-01-07", "reason": S.REASON}]
+    assert S.stock_reasons(tr, "2010-01-01", "2011-01-01") == {S.REASON: 1, "chandelier": 1}
+    assert S.stock_reasons([], "2010-01-01", "2011-01-01") == {}

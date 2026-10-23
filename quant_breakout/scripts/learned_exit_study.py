@@ -28,7 +28,7 @@ HWT / X2T / JRT、SZS / TAG / N52）、按局势每月切换卖法、ER60 切换
    LXR0 门槛 0 %（预计再拿下去少赚就卖）；LXR1 门槛 −1 %（预计少赚 1% 以上才卖）。
 六 账户：B4（C10.load + TS.tbf_gates + KS.prereq，B4 = 登记值 B4_PREP 才运行）；每个年代用 N 池子里那个年代的单笔的预测，
    {(票, 成交日): {要卖的收盘日}} 经 make_runner.run(exit_tick=…) 进引擎（这次运行期间把 MixEngine._tick_exit 换成按（票, 成交日）查的版本，
-   理由记 learned_exit；运行完换回）。接线核对：空字典 = B4（八个键完全相同）；正向对照：每一笔都在成交日收盘标记 → 每个年代 learned_exit ≥ 成交笔数的一半；
+   理由记 learned_exit；运行完换回；离场理由从刚跑完的引擎的成交表数：窗口内买入、已平仓的日本个股）。接线核对：空字典 = B4（八个键完全相同）；正向对照：每一笔都在成交日收盘标记 → 每个年代 learned_exit ≥ 成交笔数的一半；
    单笔层核对：改了卖点的单笔，引擎净收益 = 公式（第一个标记日 t* 的明天开盘卖）的 ≥ 99%（|差| < 0.001 pp，引擎价格取整），不过就停。
 七 判定（research_loop2.stage1，基准 B4）：S1〜S4 账户（逐年前推）；S5 W / Jx 池子每笔胜率差与平均差都 ≥ 0（逐年前推）；
    S6 留一年代与逐年前推两个账户各自 S1〜S3；S7（事后）= 诊断没看过的 Zx 池子（Z 年代扩展池）每笔平均差 > 0。
@@ -75,6 +75,7 @@ YEARS = range(2001, 2027)
 A1_RHO = 0.05
 REASON = "learned_exit"
 POSTHOC = True
+STOCK_SKIP = ("1545.T", "1482.T", "1655.T", "2845.T")
 CHECK_TOL = 1e-3                                                            # pp；引擎的成交价取整（登记前机制核对：最大差 0.0005 pp）
 CHECK_MIN = 0.99
 
@@ -319,6 +320,17 @@ def verdict(s1: dict) -> str:
 
 
 # ───────────────────────── 账户钩子 ─────────────────────────
+def stock_reasons(trades, a, b) -> dict:
+    """账户里窗口内（买入日 a〜b）、已平仓的日本个股交易按离场理由的笔数（L6.run 的返回里没有理由 → 从刚跑完的引擎的成交表数）。"""
+    tr = pd.DataFrame(trades)
+    if not len(tr):
+        return {}
+    ed = pd.to_datetime(tr["entry_date"])
+    m = (tr["ticker"].astype(str).str.endswith(".T") & ~tr["ticker"].isin(STOCK_SKIP) & (tr["reason"] != "end")
+         & (ed >= pd.Timestamp(a)) & (ed < pd.Timestamp(b)))
+    return {str(k): int(v) for k, v in tr.loc[m.to_numpy(), "reason"].value_counts().items()}
+
+
 def _tick_exit_entry(self, i: int, xt: dict) -> None:
     """第 i 天收盘：日本个股（票, 成交日）的标记日里有今天、没排队离场 → 第二天开盘卖（reason = learned_exit）。"""
     d = pd.Timestamp(self.gidx[i]).normalize()
@@ -356,6 +368,7 @@ def git_info() -> dict:
 
 
 def run(say=print) -> dict:
+    import jq_study as JS
     import kshape_link_study as KS
     import loop6_common as L6
     import loop9_common as C9
@@ -374,13 +387,15 @@ def run(say=print) -> dict:
         raise SystemExit("先决条件不满足 → 停")
     ticks = {e: C9.tick_of(C9.signals(W, e)["ticker"], C9.signals(W, e)["date"], tbf[e]) for e in ERAS}
 
+    win = {e: TS._win(*W["ctx"][e]["windows"][e]) for e in ERAS}
+
     def acct(e: str, flags: dict | None) -> dict:
         kw = {"em_tick": ticks[e]} if ticks[e] else {}
         if flags:
             kw["exit_tick"] = flags
         with entry_hook():
             r = L6.run(W, e, **kw)
-        return {**{k: r.get(k) for k in C9.KEYS}, "reasons": r.get("reasons"), "hold": r.get("hold"), "years": r.get("years")}
+        return {**{k: r.get(k) for k in C9.KEYS}, "reasons": stock_reasons(JS.RealLotEngine.LAST[-1].st.trades, *win[e]), "years": r.get("years")}
 
     base = {e: acct(e, None) for e in ERAS}
     same = {e: KS.same_prep(base[e], KS.B4_PREP[e]) for e in ERAS}
@@ -423,7 +438,6 @@ def run(say=print) -> dict:
     for s in POOLS:
         PF[s] = pf[off:off + len(TR[s])]
         off += len(TR[s])
-    win = {e: TS._win(*W["ctx"][e]["windows"][e]) for e in ERAS}
     Nn = {e: [i for i, T in enumerate(TR["N"]) if T["sm"] == e] for e in ERAS}
     PL = {e: loeo_preds(pool_all, [TR["N"][i] for i in Nn[e]], win[e]) for e in ERAS}
     say(f"学完（{time.time() - t0:.0f}s）")
