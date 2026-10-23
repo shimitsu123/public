@@ -12494,3 +12494,13 @@ deb8a46（对账之后的状态与说明：G7 / G8 / G11 / G16 / G17 / G22 / G26
   一个任务一天最多 2 次；只停这三个本机任务的会话进程。② 说明书（sim_daily / shadow / quarterly）：只运行写出的命令、看文件用 Read 工具、有上一次留下的改动照常往下做；
   日报说明书去掉已经不用的 `echo …report.html`（允许规则缺的变成 0 条）。③ `routines.sh check` / 09:30 自检：进程已经不在的那次不再报「一直没动」；
   文件夹是「跳过全部确认」时规则缺的照旧报 [★]（以前报 [OK]）。根治（用户做）：桌面版 Code → Routines → 每个任务的权限改成跳过确认。
+
+## 2026-10-23 本机例行任务：入库 / 等日报改成一条命令（再发防止第 2 步；工程，不改交易 / 规则 / 参数）
+- 10/21〜10/23 每天还是停（自动停止 10/21 22:40、10/22 08:29、10/23 07:26、10/23 08:26 共 4 次把它们停下）。查对话记录：停住的都是
+  `cd ~/qbreak-sim && git add … && git commit …`（入库）与带 `$(TZ=Asia/Tokyo date +%H%M)` 的 until 循环（影子账户等日报）——Claude Code 对
+  「cd … && git …」复合命令与 `$(…)` 一律要人确认，允许规则也放不过。10/23 日报 08:29 才入库，07:40 的执行器等了 50 分钟差约 1 分钟没等到。
+- 对策：`routines.sh save sim|shadow|quarterly`（git add 该入库的文件 → 提交〔sim(mac): <bar_date> 日报 / shadow(mac): <今天> 判断 / 季度复核(mac)：…〕→ 同 push）、
+  `routines.sh wait-sim`（每 2 分钟看一次今天的日报，入库 → 0、到 08:40 JST → 1）；三份说明书只用这两条，并写明不写复合命令 / `$(…)`。
+  新命令要在 `~/qbreak-sim/.claude/settings.local.json` 加 4 条允许规则（`routines.sh allow-missing` 列出；用户同意后加）。
+- `done-today sim`：今天 05:00 JST 之前入库的那次 = 前一天的补跑（日本的日线还没出）→ 不算今天做过（10/22 00:10 的补跑让 06:45 那次跳过的再发防止）。
+- 云端影子账户例行任务（trig_01WndiH4mZSiFkeExpsukNm4）：用户要删 → API 只能停用，已停用；删除由用户在 claude.ai/code 的 Routines 页面做。

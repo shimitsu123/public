@@ -93,8 +93,8 @@ qbreak 顶底择时季度复核（Mac 本机例行任务）。
 逐条和 `~/qbreak-sim/.claude/settings.local.json` 的 permissions.allow（加上桌面版里那个任务自己「always allow」过的）对照，对不上的逐条报 [★]
 （只打印说明书里的命令，不打印规则文件的别的内容）；要加的规则：`python -m qbreak.routines allow-missing`（JSON 数组，在 `quant_breakout/` 下运行、只读）——
 **用户同意后**由 Claude 加进 `~/qbreak-sim/.claude/settings.local.json`。对照法近似 Claude Code：一字不差，或以 `:*` / ` *` 结尾的前缀（`*` 也可以在中间）；
-用 `&&` 连起来的命令拆开后每段都要对得上（`cd ~/qbreak-sim…` 那段不用规则）；`until … done` 这种整条一个规则；提交信息里的 `<…>` 要规则在那里有 `*`
-（`Bash(git commit -m *)`）。说明书改了、加了命令 → 先跑一次 check，缺的规则加好再让本机任务跑。
+用 `&&` 连起来的命令拆开后每段都要对得上（`cd ~/qbreak-sim…` 那段不用规则）；提交信息里的 `<…>` 要规则在那里有 `*`。
+**2026-10-23 起**说明书不再写「cd … && git …」与带 `$(…)` 的 until 循环（Claude Code 对它们一律要人确认、允许规则也放不过：10/21〜10/23 每天停在入库与等日报那一步）→ 入库 `routines.sh save sim|shadow|quarterly`、等日报 `routines.sh wait-sim`，各一条规则。说明书改了、加了命令 → 先跑一次 check，缺的规则加好再让本机任务跑。
 2026-10-12 实际遇到：本机任务每天准时启动，但执行任务的 Claude 在第 1 步的命令后面自己加了 `; echo rc=$?` → 和允许规则对不上 → 停在权限确认、什么都没做（全靠云端后备）。所以上面三段固定文字都有「命令规矩」那一行；说明书里带重定向 / 循环的命令（日报的两条 `backtest … > var/out/backtest_*.txt`、影子账户等日报的 `until …; done`）也要照原文一字不差写进允许规则。
 
 ## 限制

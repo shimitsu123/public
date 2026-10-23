@@ -14,6 +14,7 @@
 - 推送：`bash scripts/routines.sh push`（`git pull --rebase` → `git push`，失败 2 / 4 / 8 / 16 秒后重试；只推这个分支、不 force、
   不改用别的分支）。它停下（冲突、没提交的改动、提交信息带模型名、作者不是设好的 git 身份）→ 不要自己绕过，照实汇报。
 - 不 `git reset` / `git stash` / `git checkout -- <文件>` / 丢弃任何改动；拉不下来就停下汇报（没有云端后备）。
+- 不写「cd … && git …」这种复合命令、不写带 `$(…)` 的命令（Claude Code 对它们一律要人确认，允许规则也放不过；2026-10-21〜10-23 每天停在这里）：入库只用 `routines.sh save …`，等日报只用 `routines.sh wait-sim`。
 - 只运行本说明书里写出的命令（一字不差）。要看文件内容用 Read 工具；不用 cat / head / python -c / git diff / git log 之类去看（它们不在允许规则里：无人值守时会停在权限确认、一直等着，之后到点的运行也都被挡住；2026-10-19、10-21 两次这样卡住，之后每 15 分钟的检查会把卡住 30 分钟以上的运行自动停止）。有没提交的改动（上一次运行被停掉时留下的 var/）→ 照常往下做（后面的步骤会重新生成、一起入库），不去看改了什么。
 - 汇报里路径只写 `~/qbreak-sim/…`（不写出 Mac 的用户名）。
 - 市场风险报告的 URL 写在这个本机任务的说明（Instructions）里（不入库：公开仓库不写私人链接）；那里没有 → 用 Artifact 工具 `list`
@@ -43,8 +44,8 @@
    `bash scripts/routines.sh run run.py backtest JP --universe broad --position-pct 0.34 --max-positions 3 --macro sim > var/out/backtest_JP.txt`
    `bash scripts/routines.sh run run.py backtest US --universe broad --position-pct 0.2 --max-positions 5 --macro sim > var/out/backtest_US.txt`
    （optimize、variant_study、bullbear_study、regime_strategy_study 都不要在例行任务里跑）
-5. 入库（必须成功）：`cd ~/qbreak-sim && git add quant_breakout/var && git commit -m "sim(mac): <最新 bar_date> 日报"`（署名行见上面「Mac 上和云端版不同的」）
-   → `cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh push`（它自己 `git pull --rebase`、失败重试 2s/4s/8s/16s）；仍失败则汇报里醒目写「★ 状态未能入库」。
+5. 入库（必须成功）：`cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh save sim`（一条命令：`git add quant_breakout/var` → 提交「sim(mac): <最新 bar_date> 日报」
+   → push〔它自己 `git pull --rebase`、失败重试 2s/4s/8s/16s〕；不要自己另写 git 命令）；失败则汇报里醒目写「★ 状态未能入库」。
 6. 不发布日报（2026-10-20 用户：「云端没有的日报本地也不需要生成了 因为本地 qbreak 已经可以看到了」）：不 read / publish 日报 artifact、不写长汇报。
    这个任务照旧要做的是第 2〜5 步（07:40 执行器用的判断层 / 宏观输入：market_regime.json、macro.json、前向判断层、关联搭配 C、TBF 等）。
 7. 汇报只写 1〜3 行（数字带单位）：第一行「模拟盘输入：<最新 bar_date> 已入库」（入库失败写「★ 状态未能入库」）；

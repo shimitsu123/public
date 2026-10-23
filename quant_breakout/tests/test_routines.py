@@ -692,8 +692,9 @@ def test_manual_commands_are_the_ones_to_run_not_the_mentions():
     assert all(c[0] == first for c in cmds.values())
     assert "cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh done-today sim" in cmds["sim_daily"]
     assert "bash scripts/routines.sh run run.py sim-day" in cmds["sim_daily"]
-    assert any(c.startswith("cd ~/qbreak-sim/quant_breakout && until bash scripts/routines.sh done-today sim") for c in cmds["shadow"])
-    assert any(c.startswith('git commit -m "季度复核(mac)：') for c in cmds["quarterly"])      # 「&& git commit …」另起的一段
+    assert "cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh wait-sim" in cmds["shadow"]
+    assert "cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh save sim" in cmds["sim_daily"]
+    assert "cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh save quarterly" in cmds["quarterly"]
     assert "bash scripts/with_jquants.sh bash scripts/routines.sh run scripts/w2_forward_all.py --review" in cmds["quarterly"]
     every = [c for v in cmds.values() for c in v]
     for mention in ("bash scripts/routines.sh run <参数>", "bash scripts/routines.sh run X", "git reset", "git pull --ff-only",
@@ -719,9 +720,9 @@ def test_allow_missing_round_trip_and_per_task_approvals(tmp_path, monkeypatch, 
     monkeypatch.setenv("QBREAK_SIM_SETTINGS", str(p))
     assert routines.main(["allow-missing"]) == 0
     want = json.loads(capsys.readouterr().out)
-    assert "Bash(git commit -m *)" in want and "Bash(bash scripts/routines.sh done-today sim)" in want
+    assert "Bash(bash scripts/routines.sh save sim)" in want and "Bash(bash scripts/routines.sh done-today sim)" in want
     assert not any(r.startswith("Bash(cd ") for r in want)                                  # cd 进 ~/qbreak-sim 不用规则
-    assert any(r.startswith("Bash(until bash scripts/routines.sh done-today sim") for r in want)   # 循环整条一个规则
+    assert "Bash(bash scripts/routines.sh wait-sim)" in want and "Bash(bash scripts/routines.sh save shadow)" in want   # 2026-10-23 起一条命令一条规则
     _settings(tmp_path, want)                             # 照它加上 → 全都对得上
     assert routines.main(["allow-missing"]) == 0 and json.loads(capsys.readouterr().out) == []
     assert routines.main(["allow-check"]) == 0
@@ -870,7 +871,7 @@ def _md(name: str) -> str:
 
 
 def test_routine_docs_reference_existing_scripts_and_valid_subcommands():
-    subs = {"done-today", "check", "run", "deps", "push"}
+    subs = {"done-today", "check", "run", "deps", "push", "save", "wait-sim"}
     for name in MDS:
         text = _md(name)
         for rel in set(re.findall(r"\b(scripts/[\w./-]+\.(?:py|sh)|tests/[\w./-]+\.py|run\.py)", text)):
@@ -886,8 +887,8 @@ def test_routine_docs_reference_existing_scripts_and_valid_subcommands():
         text = _md(name)
         assert f"bash scripts/routines.sh done-today {kind}" in text and "bash scripts/routines.sh push" in text
         assert f"routines/{name}" in _md("README.md")                                  # 固定说明文字指向它（routines.sh check 据此找本机任务）
-    assert 'git commit -m "sim(mac): ' in _md("sim_daily.md") and 'git commit -m "shadow(mac): ' in _md("shadow.md")
-    assert 'git commit -m "季度复核(mac)：' in _md("quarterly.md")
+    for name, kind in (("sim_daily.md", "sim"), ("shadow.md", "shadow"), ("quarterly.md", "quarterly")):
+        assert f"bash scripts/routines.sh save {kind}" in _md(name) and "git commit" not in _md(name), name
     q = _md("quarterly.md")
     for step in ("w2_forward_all.py --review", "era_outlook.py", "data_audit.py --warm"):     # 要 J-Quants キー的步骤经 with_jquants.sh
         assert f"bash scripts/with_jquants.sh bash scripts/routines.sh run scripts/{step}" in q, step
@@ -1160,3 +1161,59 @@ def test_news_job_runs_the_reaper_and_manuals_forbid_ad_hoc_commands():
     for name in routines.MANUALS:
         md = (ROOT / "routines" / f"{name}.md").read_text(encoding="utf-8")
         assert "只运行本说明书里写出的命令（一字不差）。要看文件内容用 Read 工具" in md, name
+
+
+# ────────── 2026-10-23：入库 / 等日报改成一条命令；凌晨的补跑不算今天的日报 ──────────
+@need_git
+def test_done_today_sim_does_not_count_an_early_morning_catch_up(repos):
+    """10/22 00:10 的补跑（日本 10/21 的日线还没出）让 06:45 那次「今天已经做过」跳过了 → 05:00 JST 之前入库的算前一天。"""
+    t = repos
+    _push_cloud(t, _daily("2026-10-22"), "sim(mac): 2026-10-20 日报（补跑）", "2026-10-22T00:11:00+09:00")
+    rc, out = _run(t, "done-today", "sim", today="2026-10-22")
+    assert rc == 1 and "凌晨 00:11 入库的是前一天的补跑" in out, out
+    _push_cloud(t, {DAILY: json.dumps({"date": "2026-10-22", "bar_date": "2026-10-21"})}, "sim(mac): 2026-10-21 日报", "2026-10-22T06:52:00+09:00")
+    rc, out = _run(t, "done-today", "sim", today="2026-10-22")
+    assert rc == 0 and "今天已经做过（Mac）" in out, out
+
+
+@need_git
+def test_save_commits_the_right_files_with_the_right_message_and_pushes(repos):
+    t = repos
+    sim = t / "sim" / "quant_breakout" / "var"
+    (sim / "out").mkdir(parents=True, exist_ok=True)
+    (sim / "out" / "report_data.json").write_text(json.dumps({"bar_date": "2026-10-22"}), encoding="utf-8")
+    (sim / "out" / "unified_today.json").write_text(json.dumps({"date": "2026-10-23"}), encoding="utf-8")
+    rc, out = _run(t, "save", "sim", today="2026-10-23")
+    assert rc == 0 and "已提交：sim(mac): 2026-10-22 日报" in out and "[OK] 已推送 1 个提交" in out, out
+    assert _git(t / "remote.git", "log", "-1", "--format=%s", BRANCH, ident=False).strip() == "sim(mac): 2026-10-22 日报"
+    (sim / "out" / "shadow_today.json").write_text("{}", encoding="utf-8")
+    (sim / "state").mkdir(exist_ok=True)
+    (sim / "state" / "shadow_state.json").write_text("{}", encoding="utf-8")
+    rc, out = _run(t, "save", "shadow", today="2026-10-23")
+    assert rc == 0 and "已提交：shadow(mac): 2026-10-23 判断" in out, out
+    files = _git(t / "remote.git", "show", "--name-only", "--format=", BRANCH, ident=False).split()
+    assert sorted(files) == ["quant_breakout/var/out/shadow_today.json", "quant_breakout/var/state/shadow_state.json"], files
+    rc, out = _run(t, "save", "shadow", today="2026-10-23")                              # 没有新的改动：只检查推送
+    assert rc == 0 and "没有新的改动要提交" in out, out
+    (sim / "out" / "report_data.json").write_text("{", encoding="utf-8")
+    rc, out = _run(t, "save", "sim", today="2026-10-23")
+    assert rc == 1 and "读不到 var/out/report_data.json 的 bar_date" in out, out
+    rc, out = _run(t, "save", "nope")
+    assert rc == 2 and "用法" in out
+
+
+@need_git
+def test_wait_sim_returns_when_the_daily_is_in_or_at_0840(repos):
+    t = repos
+    rc, out = _run(t, "wait-sim", today="2026-10-23", QBREAK_ROUTINES_HHMM="0841", QBREAK_ROUTINES_WAIT_S="0")
+    assert rc == 1 and "到 08:40 JST 今天的模拟盘日报还没入库" in out, out
+    _push_cloud(t, _daily("2026-10-23"), "sim(mac): 2026-10-22 日报", "2026-10-23T06:52:00+09:00")
+    rc, out = _run(t, "wait-sim", today="2026-10-23", QBREAK_ROUTINES_HHMM="0750", QBREAK_ROUTINES_WAIT_S="0")
+    assert rc == 0 and "今天的模拟盘日报已入库" in out, out
+
+
+def test_manuals_never_ask_for_prompting_commands():
+    """Claude Code 对「cd … && git …」与带 $(…) 的命令一律要人确认（10/21〜10/23 每天停在这里）→ 说明书里要照抄的命令不能有。"""
+    for name, cmds in routines.manual_commands().items():
+        for c in cmds:
+            assert not re.search(r"\bcd\b[^`]*&&\s*git\b", c) and "$(" not in c and not c.startswith("until "), (name, c)

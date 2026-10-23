@@ -24,6 +24,10 @@
 #   bash scripts/routines.sh push          git pull --rebase → git push（失败 2 / 4 / 8 / 16 秒后重试；只推这个分支、不 force；
 #                                           有没提交的改动 / 冲突 / 提交信息带模型名 / 作者不是设好的 git 身份 → 停下、不推；
 #                                           冲突是因为云端后备那天已经入库了同一份结果 → 留备份分支、回到远端，退出 0）
+#   bash scripts/routines.sh save sim|shadow|quarterly   入库（2026-10-23）：git add（日报 = var/；影子账户 / 季度复核 = 各自的文件，不存在的不加）
+#                                           → git commit（「sim(mac): <bar_date> 日报」「shadow(mac): <今天> 判断」「季度复核(mac)：… <今天>」）→ push
+#   bash scripts/routines.sh wait-sim      等今天的日报入库（每 2 分钟 done-today sim；入库 → 0，到 08:40 JST 还没有 → 1）
+#   （说明书不再写「cd … && git …」与带 $(…) 的循环：Claude Code 对它们一律要人确认，无人值守的本机任务会停住；2026-10-23）
 # 本脚本不打印令牌、密码、git 的用户名 / 邮箱；git 报错里 URL 带的账户 / 令牌先抹掉再显示。
 # 环境变量：QBREAK_SIM（默认 ~/qbreak-sim）、QBREAK_SRC（~/qbreak-src）、QBREAK_DEV（~/qbreak-dev）、QBREAK_PYTHON（默认 ~/.qbreak/venv/bin/python，
 #   没有就 python3）、QBREAK_BRANCH；测试用：QBREAK_ROUTINES_TODAY（今天，YYYY-MM-DD）、QBREAK_ROUTINES_REPO（要看的 git 仓库，默认 = 本脚本所在的仓库）、
@@ -172,7 +176,7 @@ sync_repo() {     # 例行任务的克隆：git pull --ff-only；别的克隆（
 }
 
 cmd_done_today() {
-  local kind="${1:-}" r today wd tr d_local="" d_up w ref log rc
+  local kind="${1:-}" r today wd tr d_local="" d_up w ref log rc ts
   case "$kind" in sim|shadow|quarterly) ;; *) echo "用法：bash scripts/routines.sh done-today sim|shadow|quarterly"; return 2 ;; esac
   r="$(repo_root)"
   is_repo "$r" || { echo "★ ${r} 不是 git 仓库"; return 2; }
@@ -193,6 +197,12 @@ cmd_done_today() {
     fi
     if [ "$d_up" = "$today" ] || [ "$d_local" = "$today" ]; then
       ref="origin/$BRANCH"; [ "$d_up" = "$today" ] || ref="HEAD"
+      # 凌晨（05:00 JST 之前）入库的是前一天的补跑（日本的日线还没出、风险报告是前一天的晚报）→ 不算今天的（2026-10-23：10/22 00:10 的补跑让 06:45 那次跳过了）
+      ts="$(TZ=Asia/Tokyo git -C "$r" log -1 --date=format-local:%F%H%M --format=%ad "$ref" -- "$DAILY" 2>/dev/null || true)"
+      if [ "${ts:0:10}" = "$today" ] && [ -n "${ts:10:4}" ] && [ "${ts:10:4}" \< "0500" ]; then
+        echo "今天 ${today} 凌晨 ${ts:10:2}:${ts:12:2} 入库的是前一天的补跑（日本的日线还没出）：照常做"
+        return 1
+      fi
       w="$(git -C "$r" log -1 --format=%s "$ref" -- "$DAILY" 2>/dev/null | pyq who 2>/dev/null || echo 云端)"
       echo "今天已经做过（${w}）：${today} 的模拟盘日报已入库"
       return 0
@@ -539,13 +549,84 @@ cmd_check() {
   return 1
 }
 
+# ────────── 入库与等日报：一条命令（2026-10-23）──────────
+# 说明书以前写「cd ~/qbreak-sim && git add … && git commit …」与「until …「$(date …)」…; do sleep 120; done」：Claude Code 对
+# 「cd 之后接 git」的复合命令和带 $(…) 的命令一律要人确认（允许规则也放不过）→ 无人值守的本机任务停在权限确认上（10/21〜10/23 每天）。
+# → 改成 routines.sh 的一条命令（允许规则一字不差：Bash(bash scripts/routines.sh save sim) 等）。
+SAVE_SHADOW="quant_breakout/var/state/shadow_state.json quant_breakout/var/out/shadow_* quant_breakout/var/out/report.html quant_breakout/var/out/report_data.json"
+SAVE_QUARTERLY="quant_breakout/var/out/timing_review_* quant_breakout/var/out/regime_fit_study.* quant_breakout/var/out/commodity_fit_study.* quant_breakout/var/out/us_watch_review.* quant_breakout/var/out/jp_watch_review.* quant_breakout/var/out/threat_forward_review.* quant_breakout/var/out/threat_weight_study.* quant_breakout/var/out/score_forward_review.* quant_breakout/var/out/score_forward_review_history.csv quant_breakout/var/out/theme_link_* quant_breakout/var/out/energy_forward_review.* quant_breakout/var/out/w2_forward_all_review.* quant_breakout/var/out/w2_forward_all_history.csv quant_breakout/var/out/era_outlook.* quant_breakout/var/out/era_forward_review.* quant_breakout/var/out/era_forward_review_history.csv quant_breakout/var/out/policy_forward_review.* quant_breakout/var/out/policy_forward_review_history.csv quant_breakout/var/out/cost_sales_forward_review.* quant_breakout/var/out/cost_sales_forward_review_history.csv quant_breakout/var/out/vct_forward_review.* quant_breakout/var/out/data_audit.md quant_breakout/var/out/data_audit.json quant_breakout/var/macro_events.json quant_breakout/var/threat_weights.json quant_breakout/var/theme_influence.json"
+MSG_QUARTERLY="季度复核(mac)：顶底择时 T0/T2/T3、敏感度表、前瞻检验、配比最优化、买点质量分、W2 与卖法 X6 / R4 前向记录、新行业关联对比、K4 前向记录进度、时代主线、政策事件前向记录、成本 × 销售 S2 前向记录、VCT 前向记录、数据体检与大事件日程"
+
+existing() {      # 仓库里存在的路径（通配展开；不存在的不列：git add 遇到不存在的路径整条失败）
+  (cd "$1" && shopt -s nullglob && for p in $2; do [ -e "$p" ] && echo "$p"; done)
+}
+
+cmd_save() {      # bash scripts/routines.sh save sim|shadow|quarterly：git add（各自的文件）→ git commit（提交信息自动）→ push
+  local kind="${1:-}" r msg bar today files
+  case "$kind" in sim|shadow|quarterly) ;; *) echo "用法：bash scripts/routines.sh save sim|shadow|quarterly"; return 2 ;; esac
+  r="$(repo_root)"
+  is_repo "$r" || { echo "★ ${r} 不是 git 仓库：没入库"; return 1; }
+  if ! routine_clone_ok "$r"; then
+    echo "★ 这里（$(show "$(real "$r")")）不是例行任务的克隆 $(show "$SIM")：不入库"
+    return 1
+  fi
+  if is_mac && ! has_ident "$r"; then
+    echo "★ git 的 user.name / user.email 没设：没入库（请你自己在终端设）"
+    return 1
+  fi
+  today="$(today_jst)"
+  case "$kind" in
+    sim)
+      bar="$("$PY" -c 'import json,sys
+try:
+    print(json.load(open(sys.argv[1], encoding="utf-8")).get("bar_date") or "")
+except Exception:
+    print("")' "$r/quant_breakout/var/out/report_data.json" 2>/dev/null || true)"
+      [ -n "$bar" ] || { echo "★ 读不到 var/out/report_data.json 的 bar_date（sim-day 没跑成？）：没入库"; return 1; }
+      msg="sim(mac): ${bar} 日报"; files="quant_breakout/var" ;;
+    shadow) msg="shadow(mac): ${today} 判断"; files="$(existing "$r" "$SAVE_SHADOW")" ;;
+    quarterly) msg="${MSG_QUARTERLY} ${today}"; files="$(existing "$r" "$SAVE_QUARTERLY")" ;;
+  esac
+  [ -n "$files" ] || { echo "★ 没有要入库的文件（${kind}）：没入库"; return 1; }
+  # shellcheck disable=SC2086
+  if ! git -C "$r" add -- $files 2>/dev/null; then
+    echo "★ git add 失败（${kind}）：没入库"
+    return 1
+  fi
+  if git -C "$r" diff --cached --quiet 2>/dev/null; then
+    echo "没有新的改动要提交（${kind}）：只检查推送"
+  else
+    git -C "$r" commit -q -m "$msg" >/dev/null 2>&1 || { echo "★ git commit 失败（${kind}）：没入库"; return 1; }
+    echo "已提交：${msg}"
+  fi
+  cmd_push
+}
+
+cmd_wait_sim() {  # bash scripts/routines.sh wait-sim：每 2 分钟看一次今天的日报入库了没有（done-today sim），入库 → 0；到 08:40 JST 还没有 → 1
+  local hhmm step="${QBREAK_ROUTINES_WAIT_S:-120}"
+  while :; do
+    if cmd_done_today sim >/dev/null 2>&1; then
+      echo "今天的模拟盘日报已入库"
+      return 0
+    fi
+    hhmm="${QBREAK_ROUTINES_HHMM:-$(TZ=Asia/Tokyo date +%H%M)}"
+    if [ "$((10#$hhmm))" -ge 840 ]; then
+      echo "到 08:40 JST 今天的模拟盘日报还没入库"
+      return 1
+    fi
+    sleep "$step"
+  done
+}
+
 usage() {
-  echo "用法：bash scripts/routines.sh done-today sim|shadow|quarterly | check | run <python 参数…> | deps | push"
+  echo "用法：bash scripts/routines.sh done-today sim|shadow|quarterly | check | run <python 参数…> | deps | push | save sim|shadow|quarterly | wait-sim"
   echo "  done-today  今天做过了吗（0 = 做过 → 跳过；1 = 还没做；2 = 拉不下来 → 停下汇报）"
   echo "  check       只读检查 Mac 上的本机例行任务（~/qbreak-sim、桌面版、本机任务按时跑了没有 / 卡住没有、允许规则、钥匙串、唤醒、最近 5 个工作日谁做的）"
   echo "  run         在 ~/qbreak-sim 里去掉 QBREAK_HOME 跑 Python（例：run run.py sim-day）"
   echo "  deps        按 requirements.lock 装依赖"
   echo "  push        git pull --rebase → git push（失败 2 / 4 / 8 / 16 秒后重试）"
+  echo "  save        入库：git add（各自的文件）→ git commit（提交信息自动）→ push"
+  echo "  wait-sim    等今天的模拟盘日报入库（每 2 分钟看一次，最晚 08:40 JST）"
 }
 
 main() {
@@ -557,6 +638,8 @@ main() {
     run) cmd_run ${1+"$@"} ;;
     deps) cmd_deps ;;
     push) cmd_push ;;
+    save) cmd_save ${1+"$@"} ;;
+    wait-sim) cmd_wait_sim ;;
     *) usage; return 2 ;;
   esac
 }
