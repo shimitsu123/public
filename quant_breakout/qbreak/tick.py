@@ -53,11 +53,32 @@ def _str_tick(price: float, cls: str) -> float:
     return float(_STR_TICKS[cls][-1])
 
 
+_KNOWN_LOTS: dict[str, int] | None = None
+
+
+def known_lot(code: str | None) -> int | None:
+    """代码里写定的 ETF 交易单位（qbreak/fees.py 立花 ETF 表 + LOT_OVERRIDE；一手 1 口 / 10 口）→ 一手；不是写定的 ETF → None。
+    立花銘柄マスタ取不到（lot=None）时用：一手 1 口的核心 ETF（1482 对冲美债、1321 日经 225 …）2027-03 起要用 O 表，
+    以前一律掉到股票的 C 表（2026-10-24 复核）。"""
+    global _KNOWN_LOTS
+    if _KNOWN_LOTS is None:
+        from .fees import BROKERS                    # 函数里 import：fees 不 import 这里，只是不让 tick 一 import 就拉进费用表
+        m = {t.split(".")[0]: int(v.get("lot") or 0) for t, v in (BROKERS.get("tachibana", {}).get("etf") or {}).items()
+             if t.endswith(".T")}
+        m.update({t.split(".")[0]: int(u) for t, u in LOT_OVERRIDE.items()})
+        _KNOWN_LOTS = {c: u for c, u in m.items() if u > 0}
+    c = code.split(".")[0] if code else ""
+    return _KNOWN_LOTS.get(c)
+
+
 def tick_size(price: float, code: str | None = None, on: dt.date | None = None, lot: int | None = None) -> float:
-    """on：下单日期（默认今天）；lot：交易单位（1 → 2027-03 起用 O 表）。"""
+    """on：下单日期（默认今天）；lot：交易单位（1 → 2027-03 起用 O 表）。
+    lot = None（立花銘柄マスタ取不到）且是写定的 ETF → 用写定的一手（known_lot；2026-10-24 复核）；别的照旧按股票（C 表兜底）。"""
     on = on or dt.date.today()
     c = code.split(".")[0] if code else None
     if on >= STR_TICK_START:
+        if lot is None:
+            lot = known_lot(code)
         cls = STR_CLASS.get(c or "") or ("O" if lot == 1 else "C")
         return _str_tick(price, cls)
     table = TICK_TOPIX500 if c and c in TOPIX500_CODES else TICK_OTHERS

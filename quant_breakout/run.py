@@ -4491,6 +4491,8 @@ def _live_unified_run(a, opened: list) -> int:
     hist_ = eng.st.history or []
     last_, prev_ = (str(hist_[-1][0]) if hist_ else None), (str(hist_[-2][0]) if len(hist_) > 1 else None)
     cap_ = start_capital(ux.book, ucfg.capital_jpy)      # 立花：第一次核对时的买付可能額（B11）；模拟账户：sim.json 的本金
+    if getattr(a, "alert", None):                           # 07:40 git pull 失败（liveu.sh --alert）：汇总推送里写 ★（开盘前就知道；2026-10-24 复核）
+        sm["alert"] = RS.local_paths_out(str(a.alert))      # 手机上不带本机路径（Mac 的用户名）
     title, short, body = daily_text(sm, eng.st, cmp, paper, cap_,
                                     invested=invested_jpy(cap_, ux.book, last_),
                                     flows_day=flows_in_change(ux.book, prev_, last_) if prev_ else 0.0)
@@ -4513,9 +4515,11 @@ def _live_unified_run(a, opened: list) -> int:
                or sig_ or bool(mn_.get("halt_backlog"))             # HALT 解除后照原样执行积压的手动指令（2026-10-13）
                or bool(RS.actionable(RS.bad_orders(sm["orders"]))) or bool(RS.run_errors(ux.book.get("events"), t0))
                or bool(inc_) or bool(sm.get("odd_lots"))      # 没做完 / 有零股要在立花网站卖
-               or bool(sm.get("stale_inputs")) or bool(sm.get("data_problem")) or bool(sm.get("lag_exits")))   # 判断层的输入没更新 / 行情有问题
+               or bool(sm.get("stale_inputs")) or bool(sm.get("data_problem")) or bool(sm.get("lag_exits"))   # 判断层的输入没更新 / 行情有问题
+               or bool(sm.get("alert")) or bool(sm.get("run_warns")))   # git pull 失败 / 公司行为数据取不到 / LU-15 卖单照下（2026-10-24 复核）
         # ↑ 被挡 / 被拒 / 状态不明的单（适配器挡下的不经过 ux.block；HALT 挡下的不算）、这次运行的 error 事件 → warn
-        t_ = f"★ 交易：{title}" if tw_ else title    # 交易问题的推送标题以「★ 交易」开头（D5；经济威胁提醒不用它）
+        t_ = (f"★ 交易：{title}" if tw_    # 交易问题的推送标题以「★ 交易」开头（D5；经济威胁提醒不用它）
+              else f"★ {title}" if sm.get("alert") or sm.get("run_warns") else title)
         mac_notify(t_, short)
         notify.send(t_, body, "warn" if bad else "info")
     if a.notify:                                            # 新出现的买点 / 卖点另推一条（同一只只推一次；qbreak/signal_push.py，2026-10-18）

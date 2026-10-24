@@ -341,10 +341,12 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
         rec["note"] = f"模拟期开始日 {start} 之前（模拟账户还不推进）"
         return rec
     reasons: list[str] = []
+    hard: list[str] = []                                      # HALT 也不能当作「预期」的问题（账本读坏 / 状态不明的单 / 写了撤单、单还挂着；2026-10-24 复核）
     bp = paths.state_dir() / f"live_unified_{tag}.json"
     book = RS.peek_json(bp)
     if book is None and bp.exists():
-        reasons.append("账本文件读不了（可能损坏）：在 Mac 对话里说「看一下执行器日志」")
+        hard.append("账本文件读不了（可能损坏）：在 Mac 对话里说「看一下执行器日志」")
+        reasons.append(hard[-1])
     book = book or {}
     st = book.get("state") or {}
     ld = st.get("last_date")
@@ -382,6 +384,7 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
     if stk:                                                   # 写了撤单、面板自动下单暂停：撤单今天没人处理、单还挂着（复核 8，2026-10-16：以前照样「通过」）
         reasons.append(f"写了撤单、单还挂着 {len(stk)} 笔：" + "；".join(_orow(r) for r in stk[:5])
                        + ("…" if len(stk) > 5 else ""))
+        hard.append(reasons[-1])
         rec["trade"] = True
     if not _halt():                                           # 该下了还没下的手动指令（面板没开 / 暂停 / 早上没跑完；G24）
         mw = _manual_waiting(tag, book, now, done)
@@ -393,6 +396,7 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
         reasons.append(f"有状态不明的单 {len(unk)} 笔（{what}）：" + (
             "在 Mac 对话里看一下" if tag.startswith("paper")
             else f"去立花的注文一覧核对（手机网站 {ESHITEN_SP}），再在 Mac 对话里登记"))
+        hard.append(reasons[-1])
     if tag.startswith("tachibana") and now.time() >= OPEN_DONE and open_pending(book):
         n = sum(1 for o in book.get("orders") or [] if o.get("decided_on") == ld and o.get("status") == "DEFERRED")
         reasons.append(f"开盘后的买单还没下（{n} 笔：09:05 / 09:20 的补单没跑成）")
@@ -402,11 +406,13 @@ def evaluate(tag: str, now: dt.datetime | None = None) -> dict:
     rec["routines"] = _routine_lines(now)                     # 本机例行任务卡住 / 没跑 / 晚了：推送里加一行，不算没通过（2026-10-16）
     from .names import annotate                               # 执行器 / 运行状态文件里只有代码的原因 → 补名字（命令行、cid 不动；2026-10-15）
     rec["reasons"] = [annotate(x) for x in reasons]
+    rec["hard"] = [annotate(x) for x in hard]                 # HALT 中也算没通过的那几条（不写进结果文件：reasons 里已有）
     rec["decided"], rec["orders"] = exp, orders_brief(book, exp, ol)
     rec["halt"] = _halt()
     rec["later"] = [_orow(r, now) for r in ol["rows"] if r["state"] == "later" and r["cls"] != "halt"]   # 之后才下的：写进当天推送、不算失败
     rec["halt_wait"] = [_orow(r) for r in ol["rows"] if r["cls"] == "halt" and r["kind"] == "instr"]   # HALT 期间等着的指令（解除后照原样）
-    rec["ok"] = bool(rec["halt"]) or not reasons                # HALT 生效中：不下单是预期的，不算失败
+    rec["ok"] = (bool(rec["halt"]) and not hard) or not reasons   # HALT 生效中：不下单是预期的，不算失败；
+    #                                                           但账本读坏 / 状态不明的单 / 写了撤单、单还挂着与 HALT 无关 → 没通过（2026-10-24 复核：以前只写进「另外：…」）
     return rec
 
 
@@ -603,7 +609,8 @@ def run(agents, now: dt.datetime | None = None, *, send=None, beat=None, mac=Non
     """自检一次：（执行器正在运行 → 等它结束）判定 → 写结果文件 → 推送 /（设了的话）外部心跳。0 = 通过（含休市、HALT、还早、没装、
     模拟期开始前、执行器一直在跑），1 = 没通过 / 自检程序出错。dry：只判定、打印（不写、不发、不等；出错照常抛）。
     推送（2026-10-14 起每个工作日一条，代替外部心跳）：通过 / 平日休市 / 模拟期开始前 → info，同一个账本同一天只一次（_daily）；
-    HALT →「HALT 生效中」一天一次（就是当天那条；没推到手机 → 再自检时再推）；没通过 → warn，每次；执行器一直在跑 →「判定不了」
+    HALT →「HALT 生效中」一天一次（就是当天那条；没推到手机 → 再自检时再推；HALT 中有账本读坏 / 状态不明的单 / 写了撤单、单还挂着
+    → 按没通过推，标题以 ★ 开头；2026-10-24 复核）；没通过 → warn，每次；执行器一直在跑 →「判定不了」
     warn 一天一次（_stuck）；自检程序自己出错 →「自检出错」warn 一天一次（_crashed）。设置了的通道都没发成 → 60 秒后重推一次（_push）。
     send / beat / mac / seen / sleep：测试注入（默认 qbreak.notify.send / heartbeat_detail、Mac 通知、qbreak.notify_seen.first、time.sleep；
     send 重推时带 resend=True；beat 返回 (状态, 原因) 或只返回状态都行，None = 没设外部心跳）。"""
@@ -653,12 +660,13 @@ def _check(tag: str, name: str, now: dt.datetime | None, send, beat, mac, seen, 
         if not r["judged"] or not r["trading"] or not r["reasons"]:
             out(f"{name}（{when} JST，只看不发）：{r['note'] or '自检通过（今天早上的运行跑完、没有状态不明的单）'}{busy}")
         else:
-            out(f"{name}（{when} JST，只看不发）：{'HALT 生效中（不算失败）；' if r['halt'] else '★ 没通过：'}\n"
+            out(f"{name}（{when} JST，只看不发）：{'HALT 生效中（不算失败）；' if r['halt'] and r['ok'] else '★ 没通过：'}\n"
                 + "\n".join(f"- {x}" for x in r["reasons"]) + busy)
         for x in r.get("routines") or []:
             out(f"- ★ {x}（不算没通过）")
         return 0 if r["ok"] else 1
     r["reasons"] = [RS.local_paths_out(x) for x in r["reasons"]]   # 手机通知 / 心跳的正文不带本机路径（Mac 的用户名）
+    r["hard"] = [RS.local_paths_out(x) for x in r.get("hard") or []]
     r["routines"] = [RS.local_paths_out(x) for x in r.get("routines") or []]
     if not r["judged"]:
         out(f"{name}（{when} JST）：{r['note']}；不推送")
@@ -679,7 +687,7 @@ def _check(tag: str, name: str, now: dt.datetime | None, send, beat, mac, seen, 
         out(f"{name}（{when} JST）：{r['note']}{_tail(p, pushed, hb)}")
         _finish(r, p, hb, tag, name, now, send, mac, seen, out)
         return 0
-    if r["halt"]:
+    if r["halt"] and r["ok"]:                                 # HALT 中、没有与 HALT 无关的问题 → 当天那条「HALT 生效中」
         extra = ("\n另外：" + "；".join(r["reasons"])) if r["reasons"] else ""
         hw = r.get("halt_wait") or []                         # HALT 期间等着的指令：解除后照原样执行（M18）
         if hw:
@@ -717,9 +725,15 @@ def _check(tag: str, name: str, now: dt.datetime | None, send, beat, mac, seen, 
         return 0
     title = (("★ 交易：" if r.get("trade") else "")         # 有单 / 指令今天不会下（D5；2026-10-15）：交易问题的推送都以「★ 交易」开头
              + f"qbreak {name} ★ {hhmm} 自检没通过")           # 真的运行时刻（Mac 晚醒就写晚的；2026-10-14 复核：以前固定写 09:30）
-    text = _with_routines("\n".join(f"- {x}" for x in r["reasons"]), r, "- ★ ")   # 本机例行任务：附在后面（不是没通过的原因）
+    if r["halt"]:                                             # HALT 中但有与 HALT 无关的问题：标题以 ★ 开头（2026-10-24 复核）
+        title = (("★ 交易：" if r.get("trade") else "★ ") + f"qbreak {name} {hhmm} 自检没通过（HALT 生效中，另有问题要处理）")
+    rs_ = r["reasons"]
+    if r["halt"]:                                             # HALT 中但有与 HALT 无关的问题：那几条放前面，再说一句 HALT（2026-10-24 复核）
+        hd = [x for x in rs_ if x in (r.get("hard") or [])]
+        rs_ = hd + [x for x in rs_ if x not in hd] + [f"HALT 生效中（{r['halt']}）：不下单是预期的；上面的问题与 HALT 无关、要处理"]
+    text = _with_routines("\n".join(f"- {x}" for x in rs_), r, "- ★ ")   # 本机例行任务：附在后面（不是没通过的原因）
     res, p = _push(send, sleep, title, text, "warn", r["at"], out)
-    mac(title, r["reasons"][0][:200])
+    mac(title, rs_[0][:200])
     hb = _hb(beat(False, f"{title}\n{text}"))
     out(f"{title}（{when} JST）：\n{text}\n  通知：{_sent(res)}" + (f"；外部心跳（失败）{_beat(hb)}" if hb[0] is not None else ""))
     _finish(r, p, hb, tag, name, now, send, mac, seen, out)

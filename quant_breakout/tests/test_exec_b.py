@@ -417,6 +417,29 @@ def test_no_corp_data_means_orders_as_before():
     assert "split_pre" not in r.ux.book and _orders(r.ux, "A.T", "BUY")[0].status in ("SENT", "DEFERRED")
 
 
+class _BrokenActions:
+    def actions(self, ticker):
+        raise TimeoutError("timed out")
+
+
+def test_corp_action_fetch_failure_warns_on_the_phone_and_orders_go_as_before():
+    """公司行为数据取不到（2026-10-24 复核：以前只记 info）→ warn 事件 + 汇总推送的 ★ 一行（同一只一次运行只一次）；单照旧下。"""
+    r = _setup(entry=(10,), bear_all=True)
+    r.ux.corp_provider = _BrokenActions()
+    _days(r, 11)
+    assert _orders(r.ux, "A.T", "BUY")[0].status in ("SENT", "DEFERRED") and "split_pre" not in r.ux.book
+    ev = [e for e in r.ux.book["events"] if "公司行为（拆股 / 合并）数据取不到" in e["msg"]]
+    assert ev and all(e["level"] == "warn" for e in ev)
+    sm = r.ux.summary()
+    w = [x for x in sm["run_warns"] if "数据取不到" in x]
+    assert len([x for x in w if x.startswith("★ A")]) == 1 and "按调整前的股数算" in w[0] and "TimeoutError" in w[0]
+    _, short, body = daily_text(sm, r.eng.st, None, False, 1_000_000)
+    assert "｜★ 要核对" in short and "\n- ★ A" in body and "数据取不到" in body.split("\n- 持仓")[0]   # 在持仓说明之前（推送 600 字截断）
+    r.ux._corp_warn("B.T", "ConnectionError")                    # 几只都取不到：推送合成一行（不挤掉别的内容）
+    w = [x for x in r.ux.summary()["run_warns"] if "数据取不到" in x]
+    assert len(w) == 1 and "A" in w[0] and "B" in w[0] and "TimeoutError、ConnectionError" in w[0]
+
+
 # ────────── ⑤ LU-15 立花的前日終値 vs 决策用的收盘 ──────────
 class _BadPrev(SimExchange):
     """立花那边的前日終値和行情不一样（例如 Yahoo 还没反映拆股）。"""
@@ -451,6 +474,10 @@ def test_prev_close_gap_blocks_the_buy_but_only_warns_on_a_sell():
     _days(r2, 16)
     s = _orders(r2.ux, "A.T", "SELL")[0]
     assert s.status == "SENT" and any("卖单照下" in e["msg"] for e in r2.ux.book["events"])
+    w = [x for x in r2.ux.summary()["run_warns"] if "卖单照下" in x]     # 卖单照下（成行）：推送 ★ 写两个价格（2026-10-24 复核）
+    assert len(w) == 1 and w[0].startswith("★ 卖 A") and "Yahoo 收盘 ¥" in w[0] and "立花前日終値 ¥" in w[0] and "差 50.0%" in w[0]
+    _, short, body = daily_text(r2.ux.summary(), r2.eng.st, None, False, 1_000_000)
+    assert "★ 要核对" in short and f"- {w[0]}" in body
 
 
 def test_prev_close_is_not_compared_on_the_demo():
@@ -574,6 +601,23 @@ def test_deposit_registered_before_the_first_run_is_part_of_the_starting_capital
     _days(r, r.k + 1)
     assert flows(r.ux.book) == [] and invested_jpy(start_capital(r.ux.book, 1e6), r.ux.book) == 300_000.0
     assert any("算进起始本金" in e["msg"] for e in r.ux.book["events"])
+
+
+def test_unfunded_live_account_says_no_deposit_instead_of_minus_100_pct():
+    """立花还没入金（权益 0、没有持仓、现金 0、没登记入出金）→「还没入金（权益 ¥0）」，不写「累计 -100.00%」（2026-10-24 复核）；
+    有真实权益 / 模拟账户 → 照旧算收益。"""
+    sm = {"decided_on": "2026-10-08", "fill_day": "2026-10-09", "orders": [], "equity_jpy": 0}
+    st0 = SimpleNamespace(history=[["2026-10-07", 0.0], ["2026-10-08", 0.0]], cash_jpy=0.0, pos={}, core_units={})
+    _, short, body = daily_text(sm, st0, None, False, 1_000_000, invested=1_000_000)
+    assert short.startswith("还没入金（权益 ¥0）｜") and "-100" not in short and "累计" not in body.splitlines()[0]
+    assert "还没入金（权益 ¥0）" in body.splitlines()[0]
+    _, short, _ = daily_text(sm, st0, None, False, 1_000_000, invested=1_300_000)   # 登记过入金还是 0：照旧（会是真的问题）
+    assert "累计 -100.00%" in short
+    _, short, _ = daily_text(sm, st0, None, True, 1_000_000)                          # 模拟账户：照旧
+    assert "累计" in short
+    st1 = SimpleNamespace(history=[["2026-10-07", 990_000.0], ["2026-10-08", 1_010_000.0]], cash_jpy=1_010_000.0, pos={}, core_units={})
+    _, short, _ = daily_text({**sm, "equity_jpy": 1_010_000}, st1, None, False, 1_000_000, invested=1_000_000)
+    assert short.startswith("权益 ¥1,010,000（当日 +20,000 円，累计 +1.00%）")
 
 
 def test_paper_account_keeps_the_sim_json_capital():

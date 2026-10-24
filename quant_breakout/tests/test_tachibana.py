@@ -369,6 +369,27 @@ def test_opening_sell_without_limit_is_market_order():
     assert (p["sCondition"], p["sOrderPrice"]) == (SPEC.cond_opening, SPEC.price_market) and o.status == "SENT"
 
 
+def test_opening_market_sell_still_checks_the_order_cap(caplog):
+    """开盘前的寄付成行卖单（指値 / 现价都没有）：单笔上限按前日終値 → 执行器给的参考价算（2026-10-24 复核：以前金额 = 0、上限不起作用）；
+    什么价都没有 → 照旧发（记 warning）。"""
+    blank = {"p_errno": "0", SPEC.r_price_list: [{"sIssueCode": "7203", "pDPP": "", "pPRP": "3000"}]}
+    b, tr = _broker(max_order_value=10_000, responses={SPEC.clm_price: blank})
+    _arm()
+    o = b.sell("7203.T", 100, client_id="c1", bar="2026-09-25")             # 前日終値 3,000 × 100 = 30 万 > 1 万
+    assert o.status == "BLOCKED" and "单笔金额 300,000 > 上限 10,000" in o.note and not _orders(tr)
+    none = {"p_errno": "0", SPEC.r_price_list: [{"sIssueCode": "7203", "pDPP": "", "pPRP": ""}]}
+    b, tr = _broker(max_order_value=10_000, responses={SPEC.clm_price: none})
+    o = b.sell("7203.T", 100, client_id="c2", bar="2026-09-25", ref_px=2500.0)   # 前日終値也没有 → 参考价（决策用的收盘）
+    assert o.status == "BLOCKED" and "单笔金额 250,000" in o.note and not _orders(tr)
+    b, tr = _broker(max_order_value=10_000, responses={SPEC.clm_price: none})
+    with caplog.at_level("WARNING"):
+        o = b.sell("7203.T", 100, client_id="c3", bar="2026-09-25")         # 什么价都没有：照旧发（不改行为），记 warning
+    assert o.status == "SENT" and "单笔上限检查不了" in caplog.text
+    b, tr = _broker(responses={SPEC.clm_price: blank})                        # 上限之内：照常发成行
+    o = b.sell("7203.T", 100, client_id="c4", bar="2026-09-25", ref_px=2500.0)
+    assert o.status == "SENT" and _orders(tr)[0]["sOrderPrice"] == SPEC.price_market
+
+
 def test_market_buy_without_any_price_is_blocked():
     """取不到现在值时的成行买单：单笔上限没法检查 → 拒绝（原来会以金额 0 通过闸门）。"""
     b, tr = _broker(responses={SPEC.clm_price: {"p_errno": "0", SPEC.r_price_list: [{"sIssueCode": "7203", "pDPP": ""}]}})

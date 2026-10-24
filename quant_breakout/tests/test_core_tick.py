@@ -76,3 +76,16 @@ def test_str_tick_tables_switch_on_2027_03_01():
     assert round_to_tick(1001.3, "X", "BUY", after) == 1000.0 and round_to_tick(1001.3, "X", "SELL", after) == 1002.0
     for a, b, c in zip(_STR_TICKS["A"], _STR_TICKS["B"], _STR_TICKS["C"]):   # C 表价格在 A/B 表也合法
         assert abs(c / a - round(c / a)) < 1e-9 and abs(c / b - round(c / b)) < 1e-9
+
+
+def test_unknown_lot_uses_the_written_etf_unit():
+    """立花銘柄マスタ取不到（lot=None）：写定的一手 1 口 ETF（1482 / 1321 / 1329）2027-03 起用 O 表，一手 10 口的（1545 / 1655）
+    与股票照旧用 C 表兜底（2026-10-24 复核：以前 None 一律 C 表）。"""
+    from qbreak.tick import known_lot
+    after = dt.date(2027, 3, 1)
+    assert known_lot("1482.T") == 1 and known_lot("1321") == 1 and known_lot("1545.T") == 10 and known_lot("7203.T") is None
+    assert tick_size(1500, "1482.T", after) == 1.0 == tick_size(1500, "1482.T", after, lot=1)   # O 表（以前 C 表 2 円）
+    assert tick_size(1500, "1321.T", after) == 1.0 and round_to_tick(1501.0, "1482.T", "BUY", after) == 1501.0
+    assert tick_size(1500, "1545.T", after) == 2.0 and tick_size(1500, "7203.T", after) == 2.0   # 一手 10 口 / 股票：C 表
+    assert tick_size(1500, "1482.T", after, lot=10) == 2.0                                        # 给了一手（マスタ取得）照旧按它
+    assert tick_size(1500, "1482.T", dt.date(2027, 2, 26)) == 1.0                                 # 2027-03 之前不变

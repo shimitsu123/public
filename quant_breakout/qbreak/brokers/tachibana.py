@@ -1092,7 +1092,7 @@ class TachibanaBroker(BaseBroker):
     # ── 发单 ──
     def _place(self, ticker: str, side: str, qty: int, limit: float | None,
                client_id: str, condition: str | None = None,
-               stop_trigger: float | None = None) -> Order:
+               stop_trigger: float | None = None, ref_px: float | None = None) -> Order:
         s = self.spec
         auction = (condition or s.cond_normal) in (s.cond_opening, s.cond_closing)
         on, lot = _order_day(auction), self.unit(ticker)      # 呼値表按执行日（2027-03-01 起分表）与売買単位（一手 1 口的 ETF 用 O 表）
@@ -1116,7 +1116,11 @@ class TachibanaBroker(BaseBroker):
         if px and not auction and not stop_trigger and prev > 0:
             px = self._clamp(px, prev, ticker, side, on, lot, ref)    # B9：盘中指値夹在値幅里（前日終値取不到 / 现价在値幅外 → 不夹）
         trig = round_to_tick(stop_trigger, ticker, side, on, lot) if stop_trigger else 0.0
-        notional = (px or ref or trig) * qty
+        # 单笔上限用的金额：指値 / 现价 / 逆指値；都没有（开盘前的寄付成行卖单）→ 前日終値 → 执行器给的参考价（决策用的收盘）
+        # （2026-10-24 复核：以前这时金额 = 0、上限检查等于没做）；什么价都没有 → 照旧 0（记 warning）
+        notional = (px or ref or trig or prev or float(ref_px or 0)) * qty
+        if not notional and qty > 0:
+            log.warning("%s %s ×%d：取不到任何价格（指値 / 现价 / 前日終値 / 参考价），单笔上限检查不了", side, ticker, qty)
         odd_txt = (f"{ticker} 有 {odd} 股不足一手（売買単位 {lot}）：单元未满株不能用 API 的普通注文卖 → 在立花网站卖"
                    f"（端株手续费 0.55%），卖完在 Mac 对话里说一声登记") if odd else ""
 
@@ -1275,11 +1279,11 @@ class TachibanaBroker(BaseBroker):
     def buy(self, ticker, qty, limit=None, client_id="", ref_px=None, bar=""):
         # bar 非空 = 收盘后下单 → 寄付（次日开盘）成交，与回测的 T+1 开盘一致；16:30 起受理翌営業日分
         cond = self.spec.cond_opening if bar else self.spec.cond_normal
-        return self._place(ticker, "BUY", qty, limit, client_id, condition=cond)
+        return self._place(ticker, "BUY", qty, limit, client_id, condition=cond, ref_px=ref_px)
 
     def sell(self, ticker, qty, limit=None, client_id="", ref_px=None, bar=""):
         cond = self.spec.cond_opening if bar else self.spec.cond_normal
-        return self._place(ticker, "SELL", qty, limit, client_id, condition=cond)
+        return self._place(ticker, "SELL", qty, limit, client_id, condition=cond, ref_px=ref_px)
 
     def place_protective_stop(self, ticker: str, qty: int, trigger: float,
                               client_id: str = "") -> Order:

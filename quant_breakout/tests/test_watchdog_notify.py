@@ -632,6 +632,28 @@ def test_watchdog_halt_is_not_a_failure_and_reminds_once_a_day(tmp_path):
     assert len(r.sent) == 1
 
 
+def test_watchdog_halt_with_a_real_anomaly_is_not_passed(tmp_path):
+    """HALT 中有与 HALT 无关的问题（状态不明的单 / 账本读坏）→ 没通过（warn、标题以 ★ 开头），不再只写进「另外：…」（2026-10-24 复核）；
+    只有「早上没跑完」这类 HALT 预期之内的 → 照旧 HALT 那一条（info）。"""
+    paths.halt_file().write_text("HALT 2026-10-05 用户说停\n", encoding="utf-8")
+    _book(orders=[_o("a", "SENT"), _o("b", "ERROR", d="2026-10-02", side="SELL")])
+    rc, r, out = _run(tmp_path)
+    assert rc == 1 and len(r.sent) == 1 and r.sent[0][2] == "warn"
+    assert r.sent[0][0] == "★ qbreak 立花实盘 09:30 自检没通过（HALT 生效中，另有问题要处理）"
+    body = r.sent[0][1].splitlines()
+    assert body[0].startswith("- 有状态不明的单 1 笔（7203 トヨタ自動車 卖 100 股）") and "HALT 生效中（HALT 2026-10-05" in r.sent[0][1]
+    assert "另外：" not in r.sent[0][1] and r.macs[0][1].startswith("有状态不明的单")
+    assert _wd()["ok"] is False and _wd()["halt"].startswith("HALT 2026-10-05") and "hard" not in _wd()
+    rc, r, out = _run(tmp_path, now=TUE.replace(minute=45))                        # 没通过：和平时一样每次都推
+    assert rc == 1 and len(r.sent) == 1 and r.sent[0][0].startswith("★ ")
+    (paths.state_dir() / "live_unified_tachibana.json").write_text("{坏", encoding="utf-8")   # 账本读坏
+    rc, r, out = _run(tmp_path, now=TUE.replace(minute=50))
+    assert rc == 1 and "账本文件读不了" in r.sent[0][1] and r.sent[0][0].startswith("★ ")
+    lines = []
+    assert watchdog.run(_agents(tmp_path), TUE.replace(minute=55), send=r.send, beat=r.beat, mac=r.mac, out=lines.append, dry=True) == 1
+    assert "★ 没通过" in lines[-1]
+
+
 def test_watchdog_halt_push_that_did_not_reach_the_phone_is_pushed_again(tmp_path):
     """HALT 当天那条没推到手机（2026-10-14 复核：以前同一天再自检不再推，和面板「再自检一次会再推」不一致）→ 再自检时再推；
     推到了之后不再推；Mac 通知只在第一次。"""

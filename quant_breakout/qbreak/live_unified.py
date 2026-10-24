@@ -127,6 +127,9 @@ def _px_src(fn, default: str) -> str:
     return src if src != RTQ.SRC_YH else default
 
 
+CORP_FAIL_TEXT = "公司行为（拆股 / 合并）数据取不到"   # 2026-10-24 复核：取不到 → 汇总推送 ★（单照旧下）
+
+
 def _lab(t, short: bool = False) -> str:
     """「7203.T」→「7203 トヨタ自動車」（查不到名字只写代码；qbreak/names.py）。"""
     return NM.label(t, short=short)
@@ -278,6 +281,8 @@ class UnifiedExecutor:
         self.incomplete: str | None = None                  # 这次运行没做完（例如开盘后补单取价失败，单都保留）→ 运行状态 ok=False
         self._unk_stop: str | None = None                   # 这次运行里变成状态不明的第一笔单（cid）：之后 _send 一笔都不发（G3；2026-10-14）
         self.trade_warns: list[str] = []                    # 这次运行里「★ 交易」的提醒（凑钱的卖单没了 → 买单不下 / 减股…）：run.py 推送（D2；2026-10-15）
+        self.run_warns: list[str] = []                      # 这次运行里要进汇总推送的 ★ 提醒（公司行为数据取不到 / LU-15 前日終値对不上但卖单照下；2026-10-24 复核）
+        self._corp_fail: dict[str, str] = {}                # 这次运行里公司行为数据取不到的票 → 异常类型（同一只只提醒一次；推送合成一行）
         self._fund_filled: dict[str, int] = {}              # 盘中凑钱的核心卖单向立花查到的成交口数（M16：「已卖」只算成交了的）
         self._cash_skip: set[str] = set()                   # 开盘后补单时执行器先算出「买不起 1 单元」的买单（模拟账户第二天早上重放现金用；复核 F1）
         self.corp_provider = None                           # 公司行为数据（run.py 给立花）：成交日当天生效的拆股 → 寄付单按拆股后下（LU-22）
@@ -619,13 +624,30 @@ class UnifiedExecutor:
             try:
                 acts = due(prov, t, d, f.isoformat())
             except Exception as e:                          # noqa: BLE001
-                log.info("公司行为数据取不到（%s %s）：今天的单照旧", t, type(e).__name__)
+                self._corp_warn(t, type(e).__name__)
                 continue
             sp = [(str(a["date"]), float(a.get("split") or 0)) for a in acts
                   if float(a.get("split") or 0) > 0 and abs(float(a.get("split") or 0) - 1) > 1e-9]
             if sp:
                 out[t] = sp
         return out
+
+    def _corp_warn(self, t: str, why: str) -> None:
+        """公司行为（拆股 / 合并）数据取不到 → warn 事件 + 汇总推送的 ★ 一行（corp_warn_line；2026-10-24 复核：以前只记 info，手机上看不到）。
+        单照旧下（不改行为）：如果今天正好是这只的拆股生效日，单是按拆股前的股数 / 价格算的 → 请在立花网站核对。同一只一次运行只提醒一次。"""
+        if t in self._corp_fail:
+            return
+        self._corp_fail[t] = why
+        self._event("warn", f"★ {_lab(t)}：{CORP_FAIL_TEXT}（{why}）→ 今天的单照旧下")
+
+    def corp_warn_line(self) -> str | None:
+        """这次运行公司行为数据取不到的票 → 推送的一行（几只合成一行，免得挤掉别的内容）；没有 → None。"""
+        if not self._corp_fail:
+            return None
+        ts = list(self._corp_fail)
+        why = "、".join(dict.fromkeys(self._corp_fail.values()))
+        return (f"★ {_labs(ts, limit=3)}：{CORP_FAIL_TEXT}（{why}）→ 今天的单照旧下；"
+                "如果今天正好是拆股 / 合并生效日，单是按调整前的股数算的 → 请在立花网站核对（要停：HALT / 撤单）")
 
     def _remember_closes(self, k: int) -> None:
         """记下这次决策用的收盘（每个决策第一次运行时记一次，留最近 3 个决策日）：下一次决策遇到成交日当天生效的拆股时，
@@ -1062,6 +1084,8 @@ class UnifiedExecutor:
                     self._event("warn", f"买 {_lab(t)} 不下：{w}")
                     continue
                 self._event("warn", f"卖 {_lab(t)}：{w} → 卖单照下")
+                self.run_warns.append(NM.annotate(        # 卖单照下（成行）：推送 ★ 写清两个价格，要停自己 HALT / 撤单（2026-10-24 复核）
+                    f"★ 卖 {_lab(t)}：{w} → 卖单照下（寄付成行）；不对 → HALT / 在交易页撤单"))
             if side == "SELL":
                 self._send(o, o.qty, bar=d)
                 continue
@@ -3512,6 +3536,7 @@ class UnifiedExecutor:
                 "unsold": dict(self.book.get("unsold") or {}),   # 卖单没卖掉的（仍是待卖；G26）
                 "manual": self.manual.summary() if self.manual is not None else None,
                 "outlook": self._outlook_brief(), "fix_note": self._fix_note(),
+                "run_warns": list(dict.fromkeys([x for x in [self.corp_warn_line()] if x] + self.run_warns)),   # 这次运行的 ★ 提醒（汇总推送；2026-10-24 复核）
                 "events": (self.book.get("events") or [])[-30:] + self.events}
 
     def _outlook_brief(self) -> dict:
@@ -3942,6 +3967,16 @@ def unsold_long(sm: dict | None, days: int = 2) -> list[str]:
     return sorted(t for t, v in unsold_today(sm).items() if int(v.get("n") or 0) >= days)
 
 
+def unfunded(sm: dict | None, st: UState, paper: bool, capital: float, invested: float | None = None) -> bool:
+    """立花账户还没入金：权益 ≈ 0、没有持仓、现金 ≈ 0、没登记过入出金 → True（通知写「还没入金（权益 ¥0）」，不写「累计 -100.00%」；
+    2026-10-24 复核）。模拟账户 / 有真实权益 → False（收益照旧算）。"""
+    hist = st.history or []
+    eq = float(hist[-1][1]) if hist else float((sm or {}).get("equity_jpy") or 0)
+    if paper or abs(eq) >= 1 or abs(float(st.cash_jpy or 0)) >= 1 or st.pos or any(int(u) for u in st.core_units.values()):
+        return False
+    return invested is None or abs(float(invested) - float(capital)) < 1
+
+
 def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: float,
                invested: float | None = None, flows_day: float = 0.0) -> tuple[str, str, str]:
     """(标题, 通知用的一行, 日志正文)。每个数字带单位。invested = 起始本金 + 登记过的入出金（累计收益按它算）；
@@ -3953,7 +3988,14 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
     ret = (eq / base - 1) * 100 if base else 0.0
     title = f"qbreak {'模拟操盘' if paper else '立花实盘'} {sm.get('decided_on') or ''}"
     orders = [o for o in sm.get("orders") or [] if o.get("status") not in ("SKIPPED",) and o.get("phase") != "now"]
-    short = f"权益 ¥{eq:,.0f}（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）｜下一开盘的单 {len(orders)} 笔"
+    eq_txt = ("还没入金（权益 ¥0）" if unfunded(sm, st, paper, capital, invested)   # 立花还没入金：不写「累计 -100.00%」（2026-10-24 复核）
+              else f"权益 ¥{eq:,.0f}（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）")
+    short = f"{eq_txt}｜下一开盘的单 {len(orders)} 笔"
+    alert, rw = str(sm.get("alert") or ""), list(sm.get("run_warns") or [])
+    if alert:                                               # 07:40 git pull 失败（liveu.sh --alert）：开盘前就推到手机（2026-10-24 复核；以前 09:30 自检才看得到）
+        short = f"★ {alert[:60]}｜{short}"
+    if rw:                                                  # 公司行为数据取不到 / LU-15 前日終値对不上但卖单照下
+        short += f"｜★ 要核对 {len(rw)} 条"
     if cmp and cmp.get("comparable"):
         short += (("｜与云端一致" if cmp.get("mode") != "holdings" else "｜与云端同样的票") if cmp.get("same")
                   else "｜上线初期：持仓与云端不同（预期）" if cmp.get("early")
@@ -4014,8 +4056,11 @@ def daily_text(sm: dict, st: UState, cmp: dict | None, paper: bool, capital: flo
         short += f"｜手动指令 {int(mn['active'])} 条在处理"
     if mn.get("core_pause") and (mn.get("core_signal") or {}).get("date") == sm.get("decided_on"):
         short += "｜★ 闲置资金 ETF 买入信号：确认后才买"         # 你卖出 ETF 后停着：规则从「不拿」变成「拿」（只提醒）
-    lines = [f"- 决策日 {sm.get('decided_on') or '—'} → 成交日 {sm.get('fill_day') or '—'}；权益 ¥{eq:,.0f}"
-             f"（当日 {chg:+,.0f} 円，累计 {ret:+.2f}%）；现金 ¥{float(st.cash_jpy):,.0f}"]
+    lines = [f"- 决策日 {sm.get('decided_on') or '—'} → 成交日 {sm.get('fill_day') or '—'}；{eq_txt}"
+             f"；现金 ¥{float(st.cash_jpy):,.0f}"]
+    if alert:                                               # ★ 放在最前面：推送正文 600 字截断
+        lines.append(f"- ★ {alert}")
+    lines += [f"- {w}" if str(w).startswith("★") else f"- ★ {w}" for w in rw]
     if invested is not None and abs(float(invested) - float(capital)) >= 1.0:
         lines.append(f"- 投入本金 ¥{float(invested):,.0f}（起始 ¥{float(capital):,.0f}，登记的入出金 {float(invested) - float(capital):+,.0f} 円）"
                      + (f"；当日损益已扣掉入出金 {float(flows_day):+,.0f} 円" if flows_day else ""))

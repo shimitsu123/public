@@ -452,6 +452,20 @@ def test_stale_inputs_and_yahoo_problems_raise_the_notice_to_warn(monkeypatch):
     assert send[3] == "warn" and "连不上 Yahoo（query1.finance.yahoo.com）" in send[2] and "升级 yfinance" in send[2]
 
 
+def test_git_pull_alert_goes_into_the_morning_push(monkeypatch):
+    """07:40 git pull 失败（liveu.sh --alert）→ 汇总推送 warn、标题以 ★ 开头、正文第一条 ★ 写原因（不带本机路径；2026-10-24 复核：
+    以前只在页面上，09:30 自检才看得到）。"""
+    import run
+    from test_run_status import _book_dict, _fake_run
+    sent = _fake_run(monkeypatch, _book_dict([]))
+    msg = f"git pull 失败（仓库里有本地改动或网络问题）：今天用的是本机现有的代码和数据；终端里运行 git -C {paths.home()}/repo status 查看"
+    assert run.main(["live-u", "--broker", "paper", "--force", "--notify", "--alert", msg]) == 0
+    send = [x for x in sent if x[0] == "send"][0]
+    assert send[3] == "warn" and send[1].startswith("★ qbreak 模拟操盘") and "- ★ git pull 失败" in send[2]
+    assert str(paths.home()) not in send[2] and "数据目录/repo" in send[2]
+    assert [x for x in sent if x[0] == "mac"][0][2].startswith("★ git pull 失败")
+
+
 def test_paper_lagging_market_data_names_the_yfinance_fix(monkeypatch):
     """模拟账户：Yahoo 连得上、但 yfinance 逐只失败只好用旧缓存（行情没到应有的交易日）→ 不挡，但通知升 warn、写原因 + 修法（UX-R3）；
     收盘后（post）跑不算落后。"""
