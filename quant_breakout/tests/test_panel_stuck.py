@@ -129,12 +129,13 @@ def test_mac_login_decided_reads_the_book(tmp_path):
     assert ML.decided(home, "tachibana", d) is False
 
 
-def _liveu_env(tmp_path, pull: str, show_halt: bool = True):
+def _liveu_env(tmp_path, pull: str, show_halt: bool = True, pull_fail: bool = False):
     b = tmp_path / "bin"
     b.mkdir(exist_ok=True)
     log = tmp_path / "calls.log"
     stubs = {
         "git": ('#!/bin/sh\necho "git $*" >> "$CALLS"\n'
+                + ('case "$*" in pull*) exit 1 ;; esac\n' if pull_fail else "")
                 + ('case "$*" in show*) echo "云端：停" ; exit 0 ;; esac\n' if show_halt else 'case "$*" in show*) exit 128 ;; esac\n')
                 + "exit 0\n"),
         "fakepy": ('#!/bin/sh\necho "py $*" >> "$CALLS"\n'
@@ -171,6 +172,17 @@ def test_liveu_fetch_mode_looks_at_remote_halt_without_pulling(tmp_path):
     subprocess.run(["bash", "scripts/liveu.sh", "run", "--broker", "paper", "--retry"], cwd=ROOT, env=env, capture_output=True, timeout=120)
     c = log.read_text(encoding="utf-8")
     assert "git pull -q --ff-only" in c and f"--remote-halt {ROOT / 'var' / 'HALT_REMOTE'}" in c
+
+
+@pytest.mark.skipif(not shutil.which("bash"), reason="需要 bash")
+def test_liveu_morning_pull_failure_still_sees_remote_halt(tmp_path):
+    """07:40 git pull 失败（本地改动等）→ 工作区的 HALT_REMOTE 是旧的：照样 fetch 远端那份传给执行器（2026-10-24 复核）。"""
+    env, log = _liveu_env(tmp_path, "1", pull_fail=True)
+    r = subprocess.run(["bash", "scripts/liveu.sh", "run", "--broker", "paper"], cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
+    c = log.read_text(encoding="utf-8")
+    fetched = tmp_path / "lh" / ".halt_remote_fetched"
+    assert "git pull 失败" in r.stdout and "git fetch -q" in c and "git show @{u}:./var/HALT_REMOTE" in c
+    assert f"--remote-halt {fetched}" in c and fetched.read_text(encoding="utf-8").strip() == "云端：停"
 
 
 @pytest.mark.skipif(not shutil.which("bash"), reason="需要 bash")

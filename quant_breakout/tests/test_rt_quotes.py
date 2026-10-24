@@ -19,7 +19,10 @@ class _FakeB:
         self.dry_run, self.require_arm = True, True
 
     def login(self):
-        self.log.append(("login", os.environ.get("QBREAK_TACHIBANA_SESSION_WAIT_S")))
+        from qbreak.brokers import tachibana as T
+        w = getattr(T.WAIT_TLS, "wait_s", None)
+        self.log.append(("login", None if w is None else str(w)))
+        assert "QBREAK_TACHIBANA_SESSION_WAIT_S" not in os.environ       # 不改环境变量（同时起的子进程不继承；2026-10-24 复核）
         if self.fail:
             raise RuntimeError(self.fail)
 
@@ -55,7 +58,31 @@ def test_now_quote_uses_tachibana_then_logs_out_and_restores_the_wait(on):
     assert q(["B.T", "A.T"]) == {"A.T": 101.0, "B.T": 55.5}
     assert q.src == RT.SRC_RT and q.why is None and yh == []
     assert log == [("login", str(RT.WAIT_S)), ("quote", ["A.T", "B.T"]), ("logout", None)]   # 会话锁只等 20 秒、取完马上登出
-    assert "QBREAK_TACHIBANA_SESSION_WAIT_S" not in os.environ                  # 环境变量还原（执行器自己的 300 秒不受影响）
+    assert "QBREAK_TACHIBANA_SESSION_WAIT_S" not in os.environ                  # 环境变量没动（执行器自己的 300 秒不受影响）
+    from qbreak.brokers import tachibana as T
+    assert getattr(T.WAIT_TLS, "wait_s", None) is None                         # 取完还原
+
+
+def test_short_wait_is_only_for_the_quote_thread(on):
+    """面板取实时价时，别的线程（撤单 / 下单的子进程是从别的线程起的）照旧等默认的 300 秒（2026-10-24 复核）。"""
+    import threading
+    from qbreak.brokers import tachibana as T
+    seen, gate, go = {}, threading.Event(), threading.Event()
+
+    class _Slow(_FakeB):
+        def login(self):
+            super().login()
+            gate.set()
+            go.wait(5)
+
+    th = threading.Thread(target=lambda: RT.NowQuote(lambda ts: {}, make=lambda: _Slow({"A.T": {"price": 1.0}}))(["A.T"]))
+    th.start()
+    assert gate.wait(5)
+    seen["other"] = getattr(T.WAIT_TLS, "wait_s", None)
+    seen["env"] = os.environ.get("QBREAK_TACHIBANA_SESSION_WAIT_S")
+    go.set()
+    th.join(5)
+    assert seen == {"other": None, "env": None}
 
 
 def test_now_quote_fills_missing_tickers_from_yahoo_and_says_so(on):

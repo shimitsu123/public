@@ -618,6 +618,13 @@ if [ "${1:-}" = "run" ]; then
       waited=$((waited + 5))
     done
     halt_remote="$PROJ/var/HALT_REMOTE"
+    if [ -n "$pullmsg" ] && [ ! -f "$halt_remote" ]; then   # pull 失败：工作区是旧的 → 远端的远程停止照样看（git fetch，不动工作区；2026-10-24 复核）
+      hrf="$QBREAK_HOME/.halt_remote_fetched"
+      rm -f "$hrf"
+      if git fetch -q >/dev/null 2>&1 || { sleep 2 && git fetch -q >/dev/null 2>&1; }; then
+        if git show "@{u}:./var/HALT_REMOTE" > "$hrf" 2>/dev/null; then halt_remote="$hrf"; else rm -f "$hrf"; fi
+      fi
+    fi
   else                                             # 开盘后 / 面板叫的不 pull（不换代码），只看一眼远程停止（git fetch 只更新远端分支的记录，不动工作区）
     halt_remote="$QBREAK_HOME/.halt_remote_fetched"
     rm -f "$halt_remote"

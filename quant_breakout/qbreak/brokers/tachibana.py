@@ -599,6 +599,8 @@ def push_login(b, when=None, send=None) -> None:
 
 # ────────── TA-14：立花本番会话锁（同一账户只能一个会话：另一个进程登录会把这边踢掉）──────────
 _SESSION: dict = {"f": None, "owners": set()}
+WAIT_TLS = threading.local()                              # 只对这个线程生效的等待秒数（面板取实时价：只等一会儿；2026-10-24 复核：
+                                                          # 以前改整个进程的环境变量，同时起的撤单 / 下单子进程会继承「只等 4 秒」）
 
 
 def session_lock_file() -> Path:
@@ -616,6 +618,8 @@ def acquire_live_session(owner: int, wait_s: float | None = None, poll_s: float 
         import fcntl
     except ImportError:                                   # Windows：不加锁
         return
+    if wait_s is None:
+        wait_s = getattr(WAIT_TLS, "wait_s", None)
     if wait_s is None:
         try:
             wait_s = float(os.environ.get("QBREAK_TACHIBANA_SESSION_WAIT_S", "300"))

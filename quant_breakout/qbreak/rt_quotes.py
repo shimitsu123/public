@@ -45,8 +45,8 @@ def tachibana_detail(tickers, make=None, wait_s: float = WAIT_S, purpose: tuple 
         return {}, f"没开（{ENV}=0）"
     from .brokers import tachibana as T
     b = None
-    old = os.environ.get("QBREAK_TACHIBANA_SESSION_WAIT_S")
-    os.environ["QBREAK_TACHIBANA_SESSION_WAIT_S"] = str(wait_s)       # 执行器拿着会话：只等一会儿，不拖住面板 / 这次运行
+    old = getattr(T.WAIT_TLS, "wait_s", None)
+    T.WAIT_TLS.wait_s = float(wait_s)                                  # 执行器拿着会话：只等一会儿，不拖住面板 / 这次运行（只这个线程；不改环境变量 → 子进程照旧等 300 秒）
     try:
         b = (make or _default_make)()
         b.purpose = purpose or PURPOSE                                 # 登录推送写这个（qbreak/brokers/tachibana.push_login）
@@ -57,10 +57,7 @@ def tachibana_detail(tickers, make=None, wait_s: float = WAIT_S, purpose: tuple 
         log.info("立花实时价没取到（照旧 Yahoo）：%s", why)
         return {}, why
     finally:
-        if old is None:
-            os.environ.pop("QBREAK_TACHIBANA_SESSION_WAIT_S", None)
-        else:
-            os.environ["QBREAK_TACHIBANA_SESSION_WAIT_S"] = old
+        T.WAIT_TLS.wait_s = old
         if b is not None:
             try:
                 b.logout()
