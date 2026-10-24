@@ -455,6 +455,8 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
         px, em, lot = float(b.get("px") or r.get("close") or 0), float(b.get("em") or 0), int(b.get("lot") or 100)
         if not (px > 0 and eq and em > 0):
             return 0
+        if b.get("rule_shares") is not None:              # 执行器同一个算法（含滑点、单只上限；2026-10-24 复核：以前这里另算 ×1.03，边上的票会对不上）
+            return int(b["rule_shares"])
         return int(eq * CX.POS_PCT * min(1.0, em) / (px * 1.03) / lot) * lot
     H = ["<section class='card' id='autobuy'><h2>规则接下来会自动买</h2>",   # 说明收进 ⓘ、名额 = 标签（2026-10-17）
          f"<div class='chips'><span class='chip mut'>按 {escape(str(sg.get('asof') or '—'))} 收盘</span>{_slot_chip(s)}"
@@ -526,7 +528,7 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
             H.append("<div class='chips'>"
                      + (f"<span class='chip warn'>{len(stop)} 只：规则现在不开新仓</span>"
                         + _tip(f"★ 其中 {len(stop)} 只出了信号规则现在也不买：新仓倍数 0（不是钱的问题）"
-                               + (f"<br>{escape(_fill_mult_why(w0))}" if w0 else "") + "<br>手动买入不受这个限制（是你自己的决定）") if stop else "")
+                               + (f"<br>{escape(_fill_mult_why(w0))}" if w0 else "") + "<br>手动买入 / 加仓也一样会被挡（执行器同一道闸门），新仓倍数恢复之后才买") if stop else "")
                      + (f"<span class='chip warn'>{len(dear)} 只：一手超过一只新仓</span>"
                         + _tip(f"★ 其中 {len(dear)} 只的一手（100 股）超过现在一只新仓的上限（总权益 {_yen(eq)} × 25% × 新仓倍数，约 {_yen(eq * CX.POS_PCT)} 起往下）："
                                "规则不会自动买（2026-10-24「一手放宽」检验没通过）；手动买入不受这个限制（最多到总权益，是你自己的决定）") if dear else "")
@@ -822,6 +824,7 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
          + tchips(r.get("trend"), stats=True) + _fins_box(t)          # 最近几季决算的小图（2026-10-18）
          + (f"<div class='small neg'>★ 顶部风险：{escape(str(r['top_risk']))}</div>" if r.get("top_risk") else "")]
     n, px, lot = int(b.get("rule_shares") or 0), float(b.get("px") or 0), int(b.get("lot") or MO.LOT)
+    em_ = float(b.get("em") if b.get("em") is not None else 1.0)   # 旧汇总没有 em → 当作 1（照以前写「按规则约 N 股」）
     why = None
     lifted = _man_block(b) and t in (freed or {})           # 不买回在解除 / 已经没了：手动买入不挡（执行器下单前按最新的再查；2026-10-13）
     if t in (bought or {}):                                 # 今天已经买进（对账前）：要加仓等对账之后用「调仓」
@@ -852,9 +855,12 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
         H.append(f"<div class='act'><button class='btn {'' if full else 'primary'}' data-act='buy'{data}>{'全部换成这只…' if full else '买入…'}</button>"
                  + (f"<span class='muted small'>个股名额已满（{s['used']} / {s['max']} 只）：只能把其他持仓全部卖出来换这只</span></div>" if full else
                     (f"<span class='muted small'>按规则约 {n:,} 股 · 约 {_yen(n * px)}" + (f" · 约占权益 {n * px / eq * 100:.1f}%" if eq else "") + "</span></div>"
-                     if n > 0 else
+                     if n > 0 and em_ > 0 else
+                     f"<span class='muted small'>规则现在不开新仓（新仓倍数 0）：手动买入也会被挡" + (f"；恢复之后按规则约 {n:,} 股 · 约 {_yen(n * px)}" if n > 0 else "")
+                     + "</span></div>" if em_ <= 0 else
                      f"<span class='muted small'>一手 {lot:,} 股 ≈ {_yen(lot * px)}" + (f" · 约占权益 {lot * px / eq * 100:.1f}%" if eq else "")
-                     + "：超过一只新仓的上限（总权益 × 25%），规则不会自动买；手动买入按股数写（不受这个限制）</span></div>"))
+                     + (f"：超过一只新仓的上限（总权益 × 25% × 新仓倍数 {em_:g} ≈ {_yen(eq * CX.POS_PCT * min(1.0, em_))}）" if eq else "：超过一只新仓的上限")
+                     + "，规则不会自动买；手动买入按股数写（不受这个限制）</span></div>"))
                  )
     wc = (f"<span class='chip bad'>★ {'新仓倍数 0：会被挡' if '新仓倍数 0' in warn else '会被挡'}</span>{_tip('★ ' + escape(warn))}"
           if warn and not why else "")

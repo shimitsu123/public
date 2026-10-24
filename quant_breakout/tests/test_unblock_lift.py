@@ -252,3 +252,14 @@ def test_cli_list_and_unblock_note(capsys):
     run.main(["manual", "list", "--broker", "paper"])
     out = capsys.readouterr().out
     assert "解除不买回 7203 トヨタ自動車 → 等执行器读" in out and "→ 等下单" not in out          # 解除不是单（2026-10-13）
+
+
+def test_why_not_lot_over_slot_is_not_called_no_money():
+    """信号成立、一手超过一只新仓的上限 → 不写「钱不够」（2026-10-24 复核）。"""
+    import numpy as np
+    eng = SimpleNamespace(st=SimpleNamespace(pos={}, pending_exit=set(), plan={}), cfg=SimpleNamespace(max_positions=4, position_pct=0.25, max_position_pct=0.34),
+                          equity=lambda i: 1_000_000.0, _px_close=lambda t, i: 5000.0, slip={"JP": 0.001}, lots=np.array([100]), col={"9999.T": 0})
+    w = suggest._why_not(eng, "9999.T", 0, 1.0, None, None)
+    assert w.startswith("一手（100 股 ≈ 500,000 円）超过一只新仓的上限") and "250,000 円" in w and "钱不够" not in w
+    eng.equity = lambda i: 3_000_000.0
+    assert suggest._why_not(eng, "9999.T", 0, 1.0, None, None).startswith("钱不够")

@@ -191,6 +191,11 @@ def _why_not(eng, t: str, i: int, em: float, gate: str | None, earn: str | None,
     n_after = len(st.pos) - sum(1 for x in st.pending_exit if x in st.pos)
     if n_after + len([x for x in st.plan if x != t]) >= cfg.max_positions or len(st.pos) >= cfg.max_positions:
         return f"个股名额已满（上限 {cfg.max_positions} 只）"
+    if rule_shares(eng, t, i, em) <= 0:                         # 一手超过一只新仓的上限（引擎的 lot，2026-10-24 复核：以前也写成「钱不够」）
+        lot = int(eng.lots[eng.col[t]])
+        cap = float(eng.equity(i)) * float(cfg.position_pct) * min(1.0, float(em))
+        return (f"一手（{lot:,} 股 ≈ {float(eng._px_close(t, i)) * lot:,.0f} 円）超过一只新仓的上限（总权益 × {float(cfg.position_pct) * 100:g}% × 新仓倍数 ≈ {cap:,.0f} 円）"
+                "：规则不买；手动买入可以写（不受这个上限）")
     return "钱不够买 1 个单元（按仓位 / 现金 + 核心 ETF 算）"
 
 

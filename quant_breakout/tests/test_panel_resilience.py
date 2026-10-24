@@ -105,6 +105,7 @@ def test_auto_buy_card_lists_planned_and_near_with_days():
     assert "约 1 天" in h and "约 10/13 金叉" in h and "约 3 天" in h and "约 10/15 金叉" in h
     assert "约 400 股" in h and "一手超过一只新仓" in h and "其中 1 只的一手（100 股）超过" in h and "买不起" not in h
     assert f"一手 {panel._yen(500_000)} · 约占 50%" in h and f"一手 {panel._yen(50_000)} · 约占 5%" in h   # 每只都写一手金额（2026-10-24）
+    assert f"新仓倍数 0.5 ≈ {panel._yen(125_000)}" in h                              # 上限按新仓倍数写（不是一律 25%）
     assert "9007" not in h and "9008" not in h                                 # 超过 5 天 / 闸门挡的不列
     assert "候选在执行器下一次运行之后显示" in panel._auto_buy_card({}, book, "paper", 1_000_000)   # 选股页只有这一张：空着也写一行（2026-10-18）
 
@@ -122,6 +123,8 @@ def test_auto_buy_card_em0_is_not_called_unaffordable():
     h = panel._auto_buy_card(sg, book, "paper", 1_000_000)
     assert "买不起" not in h and "新仓约" not in h and h.count("规则不开新仓") == 2 and "2 只：规则现在不开新仓" in h
     assert "不是钱的问题" in h and "risk_off" in h and f"一手 {panel._yen(481_000)} · 约占 48%" in h
+    assert "手动买入 / 加仓也一样会被挡" in h and "手动买入不受这个限制" not in h       # 执行器 MO.entry_why 同一道闸门（复核 2026-10-24）
+    assert "规则现在不开新仓（新仓倍数 0）：手动买入也会被挡" in h and "按规则约" not in h
     js = (Path(panel.__file__).parent / "static" / "trade.js").read_text(encoding="utf-8")
     assert "buyUnit(BUY.rule>0 ? 'rule' : 'shares')" in js                        # 按规则 0 股 → 买入框默认一手
 
