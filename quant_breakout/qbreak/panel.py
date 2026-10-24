@@ -1298,6 +1298,16 @@ def _sell_card(items: list[str]) -> str:
             "<div class='muted small'>执行器照常在开盘卖出，不需要操作；「盘中暂定」收盘前还会变，以下一次决策（交易日 07:40）为准</div></section>")
 
 
+SELL_CARD_ERR = "卖出信号这次没算出来（详情在日志）：不等于没有卖出信号"
+
+
+def _sell_card_err() -> str:
+    """卖出信号没算成：照样放 id=sellsig 的卡（2026-10-24 复核：以前整张卡不出 → 看起来像没有卖出信号，intraday.js 之后也填不进来）。"""
+    return (f"<section class='card warn' id='sellsig'><h2>★ 持仓的卖出信号</h2>"
+            f"<div id='sellsig-list'><div class='neg small'>{escape(SELL_CARD_ERR)}</div></div>"
+            "<div class='muted small'>执行器照常按规则在开盘卖出；要确认 → 在 Mac 的 Claude 对话里说一声</div></section>")
+
+
 def _intraday_line(v: dict | None, t: str) -> str:
     """持仓每只一行：收盘卖出线离现价多远（static/intraday.js 按 /api/intraday 更新文字）。"""
     s = ((v or {}).get("hold") or {}).get(t) or ""
@@ -2765,6 +2775,7 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
         H.append(_sell_card(_sell_signals(book, pst, idoc, now)))   # 最上面：出了卖出信号的持仓（2026-10-18）
     except Exception as e:                                  # noqa: BLE001
         log.warning("持仓的卖出信号没算成：%s", e)
+        H.append(_sell_card_err())
     H.append(_alloc_card(pj["book"], HV.overlay(sm.get("holding_view") or {}, pj), pj))  # 最上面：每个仓位占多少（2026-10-12；含今天已成交，2026-10-16）
     H.append(_broker_card(tag, now, pj))                  # 〔77〕C：立花那边实际是什么（快照）
     H.append(PANE + "more")
@@ -3593,7 +3604,7 @@ def _req_reply(ok: bool, msg: str, rec: dict | None) -> tuple[int, dict]:
 # 指令记录里只由面板 / 执行器自己算的字段（凑钱的同批、「全部换成」的预计日子、写入时的方向…）：页面提交的 body 里带了也不收
 # （2026-10-16 复核 C：body 里 fund 写成字符串 "all" → 只写了一条没有同批卖出的「全部换成」买入，之后拼说明崩溃 → 手机 502）
 CLIENT_DROP = ("fund_for", "batch", "prev_pct", "prev_units", "allin_fill", "x_close", "dir", "cur0", "from_kind",
-               "id", "at", "status", "grp_all", "grp_wait")
+               "id", "at", "status", "grp_all", "grp_wait", "rid")
 
 
 def _client_body(body: dict) -> dict:
@@ -3722,7 +3733,57 @@ def _tipl(label: str, html: str) -> str:
     return f"<details class='ii lab'><summary>{escape(label)} ⓘ</summary><div class='iib small'>{html}</div></details>"
 
 
+# 同一笔再送一次不重复写（2026-10-24 复核）：页面的 /api/request 带 rid（请求 id；core.js：结果不确定的那笔再点时用同一个）。
+# rid + 内容（去掉 rid / confirm）写成了的结果在内存里记 10 分钟：同一个再来 → 回原来的结果、不再写（入出金登记 / 手动指令 / 撤单都过 submit）。
+# 只记写成了的（没写成的再来照常检查、照常写）；同一个 rid 同时只处理一个（第二个等第一个做完）。面板重启就忘（重启前写的照旧在「交易」里）。
+RID_TTL_S = 600.0
+RID_DUP_MSG = "这一笔刚才已经写进去了（同一个请求又送到了一次，没有再写）："
+_RID_MU = threading.Lock()
+_RID_DONE: dict = {}                                       # key → (monotonic, (ok, msg, rec))
+_RID_BUSY: dict = {}                                       # key → [threading.Lock, monotonic]
+
+
+def _rid_key(body) -> str | None:
+    if not isinstance(body, dict):
+        return None
+    rid = str(body.get("rid") or "").strip()
+    if not rid or len(rid) > 64 or not re.fullmatch(r"[A-Za-z0-9_-]+", rid):
+        return None
+    rest = {k: v for k, v in body.items() if k not in ("rid", "confirm")}
+    h = hashlib.sha256(json.dumps(rest, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()[:24]
+    return f"{rid}:{h}"
+
+
 def submit(body: dict, now: dt.datetime | None = None, source: str = "panel", fetch=None) -> tuple[bool, str, dict | None]:
+    """页面的一次提交（带 rid → 同一笔只写一次，见上）。写的内容与检查见 _submit_once。重复的回原来的结果，rec 带 dup=True（不再叫执行器）。"""
+    key = _rid_key(body)
+    if isinstance(body, dict) and "rid" in body:
+        body = {k: v for k, v in body.items() if k != "rid"}
+    if key is None:
+        return _submit_once(body, now, source, fetch)
+    t = time.monotonic()
+    with _RID_MU:
+        for k in [k for k, (t0, _r) in _RID_DONE.items() if t - t0 > RID_TTL_S]:
+            del _RID_DONE[k]
+        for k in [k for k, (lk, t0) in _RID_BUSY.items() if t - t0 > RID_TTL_S and not lk.locked() and k != key]:
+            del _RID_BUSY[k]
+        slot = _RID_BUSY.setdefault(key, [threading.Lock(), t])
+        slot[1] = t
+    with slot[0]:
+        with _RID_MU:
+            hit = _RID_DONE.get(key)
+        if hit:
+            ok, msg, rec = hit[1]
+            log.info("面板：同一个请求又送到一次（%s），回原来的结果、没有再写", (rec or {}).get("id") or "?")
+            return ok, RID_DUP_MSG + str(msg or ""), ({**rec, "dup": True} if isinstance(rec, dict) else rec)
+        res = _submit_once(body, now, source, fetch)
+        if res[0]:
+            with _RID_MU:
+                _RID_DONE[key] = (time.monotonic(), res)
+        return res
+
+
+def _submit_once(body: dict, now: dt.datetime | None = None, source: str = "panel", fetch=None) -> tuple[bool, str, dict | None]:
     """页面的一次提交 → (成功?, 说明, 写进去的指令)。与 run.py manual 相同的检查。source：panel（Mac）/ phone（手机）。
     固定口数 / 恢复按规则（kind corefix；固定的 ETF 上点的卖出 / 减仓 / 调仓换算成的也算）：body 没带 confirm（= 确认框给的 token）或
     token 对不上（账本 / 时间段变了）→ 不写，回 (False, FIX_CONFIRM_MSG, {"need_confirm": True, "confirm": 确认框})（2026-10-15）。
@@ -5260,8 +5321,9 @@ def _halt_allin(msg: str) -> str:
 
 
 def _after_submit(trigger, rec: dict | None) -> None:
-    """写了买卖 / 撤回 / 闲置资金比例 → 马上看一次要不要叫执行器（盘中 → 马上下单；开盘前 → 重试加进今天的寄付单）。"""
-    if trigger is not None and rec and rec.get("kind") in MO.ORDER_KINDS + ("cancel", "core", "cancel_order", "uncancel"):
+    """写了买卖 / 撤回 / 闲置资金比例 → 马上看一次要不要叫执行器（盘中 → 马上下单；开盘前 → 重试加进今天的寄付单）。
+    同一个请求又送到的（rec.dup：没有再写）不再叫。"""
+    if trigger is not None and rec and not rec.get("dup") and rec.get("kind") in MO.ORDER_KINDS + ("cancel", "core", "cancel_order", "uncancel"):
         threading.Thread(target=trigger.check, daemon=True).start()
 
 
@@ -5337,7 +5399,7 @@ def make_handler(port: int, tok: str, trigger: Trigger | None = None, clock=None
             now = (clock or now_jst)()
             if path == "/api/request":
                 ok, msg, rec = submit(body, now, source="panel")
-                if ok:
+                if ok and not (rec or {}).get("dup"):              # 同一个请求又送到的：没有再写（submit 记了日志）
                     log.info("面板写了手动指令 %s（%s）", rec["id"], body.get("book"))
                     _after_submit(trigger, rec)
                 self._json(*_req_reply(ok, msg, rec))
@@ -5487,7 +5549,7 @@ def make_phone_handler(port: int, trigger: Trigger | None = None, clock=None):
             now = (clock or now_jst)()
             if path == "/api/request":
                 ok, msg, rec = submit(body, now, source="phone")
-                if ok:
+                if ok and not (rec or {}).get("dup"):              # 同一个请求又送到的：没有再写（submit 记了日志）
                     log.info("手机（%s）写了手动指令 %s（%s）", dev["name"], rec["id"], body.get("book"))
                     _after_submit(trigger, rec)
                 self._json(*_req_reply(ok, msg, rec))

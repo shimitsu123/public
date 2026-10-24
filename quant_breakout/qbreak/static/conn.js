@@ -101,9 +101,11 @@ function onDown(why, kind){
   if(S.up){ S.downAt = Date.now(); S.downWhy = why; }
   S.lastWhy = why; S.downKind = kind || '';
   S.up = false; S.fails++;
-  loading(false);                                                         // 刷新到一半连不上：进度条与按钮放开（不卡在「刷新中…」）
-  document.querySelectorAll('[data-act=reload].loading').forEach(b=>{ b.classList.remove('loading'); b.disabled = false; b.setAttribute('aria-busy', 'false');
-    if(b.dataset.label0) b.textContent = b.dataset.label0; });
+  freeBtn();                                                                  // 刷新到一半连不上：进度条与按钮放开（不卡在「刷新中…」）
+}
+function freeBtn(){                                                          // 进度条与「刷新」按钮放开（core.js 的 freeReload；没换成页面的每条路都叫，2026-10-24 复核）
+  loading(false);
+  try{ if(typeof window.qbFreeReload === 'function') window.qbFreeReload(); }catch(e){}
 }
 
 function onUp(x, why){
@@ -126,12 +128,14 @@ function onUp(x, why){
 }
 
 function editing(){ const a = document.activeElement; return !!a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable); }
-function safe(){ return !document.hidden && !document.querySelector('dialog[open]') && !editing(); }
+function wrHold(){ try{ return typeof window.qbWriting === 'function' && !!window.qbWriting(); }catch(e){ return false; } }
+// 写操作在路上 / 结果提示刚出来（core.js）也不自动刷新（2026-10-24 复核：以前 closeAll() 之后 0.35 秒就刷新，结果提示与「确认下单」框没了）
+function safe(){ return !document.hidden && !document.querySelector('dialog[open]') && !editing() && !wrHold(); }
 const WHY = {ver: '面板更新了：', user: '连上了：', cache: '连上了：', old: '页面放久了：', auth: '这台设备要重新登录：', sig: '状态更新了：'};
 function want(r, now){                                                    // 要刷新：安全时马上刷新；对话框开着 / 正在输入 → 等关掉
   S.want = r;                                                             // now：用户刚点的「刷新」/ 刚写完（连不上时等着的，连上后照样等对话框关掉）
   if(now || safe()){ go(r); return; }
-  show((WHY[r] || '状态更新了：') + (document.querySelector('dialog[open]') ? '关掉对话框后自动刷新' : '输入完后自动刷新'), '现在刷新');
+  show((WHY[r] || '状态更新了：') + (document.querySelector('dialog[open]') ? '关掉对话框后自动刷新' : editing() ? '输入完后自动刷新' : '看完写的结果后自动刷新'), '现在刷新');
   clearTimeout(S.pend); S.pend = setTimeout(retryWant, 2000);             // 没有 close 事件的旧浏览器也会再看
 }
 function retryWant(){ clearTimeout(S.pend); if(S.want && S.up){ if(safe()) go(S.want); else S.pend = setTimeout(retryWant, 2000); } }
@@ -155,33 +159,34 @@ function patient(){                                                       // 告
   });
 }
 function go(r){                                                           // 真的重新载入（自动的：1 分钟内最多 3 次；同时只走一次）
-  if(S.going) return;
+  if(S.going) return;                                                     // 已经在刷新：那一次会换成页面或放开按钮
   const auto = r !== 'user' && r !== 'button';
   if(auto){
     const a = recent(Date.now());
     if(a.length >= 3){                                                    // 1 分钟内已经 3 次：先停，等到能再刷新时再试（不会刷新个没完，也不会一直停着）
-      S.want = null; show('自动刷新太频繁，先停一下（这页可能不是最新的）', '现在刷新', true); beacon('reload-loop', r);
+      S.want = null; freeBtn(); show('自动刷新太频繁，先停一下（这页可能不是最新的）', '现在刷新', true); beacon('reload-loop', r);
       clearTimeout(S.pend); S.pend = setTimeout(()=>{ if(!S.want) want(r); }, Math.max(1000, a[0] + 60000 - Date.now() + 500)); return;
     }
   }
   S.going = true; S.want = null; clearTimeout(S.pend); hide(); loading(true);
   pageOk().then(bad=>{
     if(bad){                                                              // 页面打不开：留在存着的页面上，倒数再试（不刷新）
-      S.going = false; loading(false); S.pageFails = (S.pageFails || 0) + 1;
+      S.going = false; freeBtn(); S.pageFails = (S.pageFails || 0) + 1;
       const s = BACKOFF[Math.min(S.pageFails - 1, BACKOFF.length - 1)];
       show('连得上 Mac，但页面还打不开（' + bad + '，面板可能正在启动）：' + s + ' 秒后再试', '重试', true);
       S.pend = setTimeout(()=>{ if(!S.going) want(S.want || r); }, s * 1000); return;     // 这期间又要刷新的（按钮 / 新版本）也在这时一起
     }
-    if(auto && r !== 'auth' && !safe()){ S.going = false; loading(false); want(r); return; }   // 确认的时候开了对话框 / 开始输入 → 等关掉
+    if(auto && r !== 'auth' && !safe()){ S.going = false; freeBtn(); want(r); return; }   // 确认的时候开了对话框 / 开始输入 → 等关掉
     S.pageFails = 0;
     if(auto){ const a = recent(Date.now()); a.push(Date.now()); try{ sessionStorage.setItem(RL_KEY, JSON.stringify(a)); }catch(e){} }
-    return patient().then(()=>{ location.reload(); setTimeout(()=>{ S.going = false; loading(false); }, 40000); });   // 40 秒后还在这页 = 没换成（不一直挡着）
-  });
+    return patient().then(()=>{ location.reload(); setTimeout(()=>{ S.going = false; freeBtn(); }, 40000); });   // 40 秒后还在这页 = 没换成（不一直挡着）
+  }).catch(e=>{ S.going = false; freeBtn(); beacon('reload-err', String(e)); });   // 万一出错：按钮也放开（2026-10-24 复核）
 }
 
 window.qbReload = function(r){                                            // core.js：写完之后 / 点「刷新」→ 先确认连得上再刷新
   S.want = r || 'user';
-  return check('reload').then(x=>{ if(x && !x.up) toast('连不上 Mac：连上之后自动刷新（页面顶上可以点「重试」）', true); });
+  return check('reload').then(x=>{ if(!x) freeBtn(); else if(!x.up) toast('连不上 Mac：连上之后自动刷新（页面顶上可以点「重试」）', true); },
+                              e=>{ freeBtn(); beacon('reload-err', String(e)); });   // 没问成 / 出错：按钮放开（2026-10-24 复核）
 };
 window.qbNetFail = function(url, kind){                                   // net.js：别的请求超时 / 连不上 / 拿到存着的 → 马上查一次（3 秒内只查一次）
   if(S.up && Date.now() - S.last > 3000 && !S.flight) check('fail');

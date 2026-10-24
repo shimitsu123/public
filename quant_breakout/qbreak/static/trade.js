@@ -1,5 +1,5 @@
 // qbreak 操作面板：trade.js（浏览器原生 ES 模块；由 qbreak/panel.py 以 /static/trade.js 提供；不要用构建工具）
-import { $, CFG, NOTE, api, closeAll, coreShow, done, estLine, estPart, fmt, nameify, nd, plBox, reloadPage, sheet, tlab, toast, tqty, yen } from './core.js';
+import { $, CFG, NOTE, api, closeAll, coreShow, done, estLine, estPart, fmt, lastFail, nameify, nd, plBox, reloadPage, sheet, tlab, toast, tqty, yen } from './core.js';
 import { SUBS, TFS, kRedraw, setSUB, setTF, showK } from './kline.js';
 import { buyLive, estOf, loadSQ, rtQ } from './quotes.js';
 
@@ -19,17 +19,25 @@ function ask(title, body, okText, opt){
 // 写一条手动指令（2026-10-15 用户：「盘中固定口数点击确定的话要出现确认下单和取消下单的确认，不要直接下单」）：服务器说要先确认
 // （固定口数 / 恢复按规则：need_confirm + 服务器算好的「要下什么单、什么时候、按什么价、钱够不够卖哪几只」）→ 弹框，
 // 点「确认下单」才带上 token 再发一次（服务器重算一样才写；账本 / 时间段变了 → 再给一次新的确认框）；「取消下单」什么都不写。
+let PWHY='';                                                               // post() 回 null 的原因（取消了 / 没写成的提示；两步的第二步没成时用）
 async function post(body){
+  PWHY='';
   let j=await api('/api/request', body);
+  if(!j) PWHY=lastFail();
   for(let n=0; j && j.need_confirm; n++){
     const c=j.confirm||{};
-    if(n>=3 || !c.token){ toast((j.msg||'没写')+'\n（情况一直在变：刷新页面后再试）', true, true); return null; }
+    if(n>=3 || !c.token){ PWHY=(j.msg||'没写')+'（情况一直在变：刷新页面后再试）'; toast((j.msg||'没写')+'\n（情况一直在变：刷新页面后再试）', true, true); return null; }
     const q=await ask(c.title||'确认下单', (c.changed ? '★ 刚才看到的内容变了（账本更新 / 过了时间段），这是最新的：\n\n' : '')+(c.text||'')+NOTE,
                       c.noop ? '确认（不下单）' : '确认下单', {cancel:c.noop ? '取消' : '取消下单', danger:!!c.danger});   // 固定成拿着的口数：不是下单（2026-10-17）
-    if(!q.ok){ toast('已取消：什么都没写，不会下单'); return null; }
+    if(!q.ok){ PWHY='确认框里点了取消（这一步什么都没写）'; toast('已取消：什么都没写，不会下单'); return null; }
     j=await api('/api/request', Object.assign({}, body, {confirm:c.token}));
+    if(!j) PWHY=lastFail();
   }
   return j;
+}
+// 两步（撤单 → 恢复按规则）：第一步写成了才走第二步；第二步没写成 / 取消了 → 两个结果都写出来（2026-10-24 复核：以前 done(j) 把第二步的失败提示盖掉）
+function half2(j, what){
+  toast((j.msg||'已写撤单')+'\n★ '+what+'没写：'+(PWHY||'没写成')+'\n（撤单照上面写的做；要'+what+'：刷新后再点一次）', true, true);
 }
 // ── 调仓（股数 / 金额 / 占权益 %）：按最近收盘估算；执行器下单时按当时的价格再算一次；调仓条按单元（LOT 股）分格 ──
 const LOT = CFG.lot || 100;
@@ -564,7 +572,7 @@ document.addEventListener('click', async e=>{
       const j=await post(body);
       if(q.alt!=='fix' || !j){ done(j); return; }
       const k=await post({book:CFG.book, kind:'corefix', ticker:d.fix, clear:true});   // 恢复按规则：服务器给「确认下单」框（取消 → 只撤了单）
-      done(k ? {msg:(j.msg||'已写撤单')+'\n'+(k.msg||'已写恢复按规则')} : j);
+      if(k) done({msg:(j.msg||'已写撤单')+'\n'+(k.msg||'已写恢复按规则')}); else half2(j, '恢复按规则');
       return;
     }
     const dep=+d.depn||0, alt=[], dk=d.depk||'一起撤买单';                // 靠这笔卖出的钱、执行器还没发出的买单（fund_src；D2）：几个按钮
@@ -591,7 +599,7 @@ document.addEventListener('click', async e=>{
     const j=await post(body);
     if(q.alt!=='fix' || !j){ done(j); return; }
     const k=await post({book:CFG.book, kind:'corefix', ticker:d.fix, clear:true});   // 恢复按规则：服务器给「确认下单」框（取消 → 只撤了单）
-    done(k ? {msg:(j.msg||'已写撤单')+'\n'+(k.msg||'已写恢复按规则')} : j);
+    if(k) done({msg:(j.msg||'已写撤单')+'\n'+(k.msg||'已写恢复按规则')}); else half2(j, '恢复按规则');
     return;
   }
   if(a==='fix-undo'){                                                     // 还没照它调的固定口数 / 还差几口：不补了・撤回（2026-10-17；选择与说明由服务器按账本写好：data-opts / data-body）

@@ -45,16 +45,19 @@ export function roomShow(j){                                               // �
     const r=(j.per_ticker||{})[e.dataset.room]; e.textContent=r ? r.chip : '';
   });
 }
-let RTID=null;
-async function loadRoom(){
-  clearTimeout(RTID);
-  if(!$('#room')) return;
-  let live=!!CFG.live;
+let RTID=null, RFLY=false;
+async function loadRoom(){                                                 // 同时只取一次（2026-10-24 复核：取的途中切回来 / 重新连上又叫一次 → 两条定时器叠在一起）
+  if(RFLY) return;
+  RFLY=true; clearTimeout(RTID); RTID=null;
   try{
-    const x=await req('/api/trade_room?book='+encodeURIComponent(CFG.book), {credentials:'same-origin', cache:'no-store'});
-    if(x.r.ok && x.j){ roomShow(x.j); live=!!(x.j.market && ['am','pm'].indexOf(x.j.market.phase)>=0); }
-  }catch(e){}                                                              // 取不到（Mac 睡眠 / 没网）：保留上一次的
-  RTID=setTimeout(loadRoom, live ? 60000 : 600000);                       // 盘中 1 分钟，其他时间 10 分钟（现价缓存更新了数也会变）
+    if(!$('#room')) return;
+    let live=!!CFG.live;
+    try{
+      const x=await req('/api/trade_room?book='+encodeURIComponent(CFG.book), {credentials:'same-origin', cache:'no-store'});
+      if(x.r.ok && x.j){ roomShow(x.j); live=!!(x.j.market && ['am','pm'].indexOf(x.j.market.phase)>=0); }
+    }catch(e){}                                                            // 取不到（Mac 睡眠 / 没网）：保留上一次的
+    clearTimeout(RTID); RTID=setTimeout(loadRoom, live ? 60000 : 600000);   // 盘中 1 分钟，其他时间 10 分钟（现价缓存更新了数也会变）
+  }finally{ RFLY=false; }
 }
 if(CFG.room) RTID=setTimeout(loadRoom, CFG.live ? 60000 : 600000);       // 页面本身是刚画的：先不取，到时间再取
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && CFG.room) loadRoom(); });

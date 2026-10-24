@@ -12,23 +12,27 @@ export function intraShow(v){                                             // 持
     const s=(v.hold||{})[e.dataset.intra]; e.textContent=s ? nameify(s) : '';
   });
   const box=document.getElementById('sellsig-list');                      // 持仓最上面「出了卖出信号」（服务器转义好的几行；2026-10-18）
-  if(box && Array.isArray(v.sell)){ box.innerHTML=v.sell.join(''); box.closest('#sellsig').hidden=!v.sell.length; }
+  if(box && Array.isArray(v.sell)){ const c=box.closest('#sellsig'), h=c && c.querySelector ? c.querySelector('h2') : null;
+    box.innerHTML=v.sell.join(''); if(c) c.hidden=!v.sell.length; if(h) h.textContent='★ 持仓出了卖出信号'; }   // 页面上是「没算出来」的卡：这次算出来了 → 换成平常的标题
 }
 function intraBusy(){                                                     // 对话框开着 / 正在输入 / 页面在后台：不重画
   const a=document.activeElement;
   return document.hidden || !!document.querySelector('dialog[open]') || (!!a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable));
 }
-let ITID=null, ILIVE=!!CFG.intra_live;
-async function loadIntra(){
-  clearTimeout(ITID);
-  if(!document.querySelector('[data-intra]')) return;
-  if(!intraBusy()){
-    try{
-      const x=await req('/api/intraday?book='+encodeURIComponent(CFG.book), {credentials:'same-origin', cache:'no-store'});
-      if(x.r.ok && x.j && x.j.ok){ intraShow(x.j); ILIVE=!!x.j.live; }
-    }catch(e){}                                                           // 取不到（Mac 睡眠 / 没网）：保留上一次的
-  }
-  ITID=setTimeout(loadIntra, ILIVE ? 60000 : 600000);                     // 交易时段 1 分钟，其他时间 10 分钟
+let ITID=null, ILIVE=!!CFG.intra_live, IFLY=false;
+async function loadIntra(){                                               // 同时只取一次（2026-10-24 复核：取的途中切回来 / 重新连上又叫一次 → 两条定时器叠在一起）
+  if(IFLY) return;
+  IFLY=true; clearTimeout(ITID); ITID=null;
+  try{
+    if(!document.querySelector('[data-intra]')) return;
+    if(!intraBusy()){
+      try{
+        const x=await req('/api/intraday?book='+encodeURIComponent(CFG.book), {credentials:'same-origin', cache:'no-store'});
+        if(x.r.ok && x.j && x.j.ok){ intraShow(x.j); ILIVE=!!x.j.live; }
+      }catch(e){}                                                         // 取不到（Mac 睡眠 / 没网）：保留上一次的
+    }
+    clearTimeout(ITID); ITID=setTimeout(loadIntra, ILIVE ? 60000 : 600000);   // 交易时段 1 分钟，其他时间 10 分钟
+  }finally{ IFLY=false; }
 }
 if(CFG.intra) ITID=setTimeout(loadIntra, ILIVE ? 60000 : 600000);        // 页面本身是刚画的：先不取，到时间再取
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && CFG.intra) loadIntra(); });

@@ -792,7 +792,8 @@ let reloads = 0; globalThis.location = {reload: () => { reloads++; }};
 let DIALOG = false; globalThis.document = {querySelector: (s) => (s === 'dialog[open]' && DIALOG) ? {} : null};
 const toasts = []; function toast(t, bad, sticky){ toasts.push({t, bad: !!bad, sticky: !!sticky}); }
 function busy(){}
-const calls = {};
+const calls = {}, RIDS = [];
+const H_SS = {}; globalThis.sessionStorage = {getItem: k => (k in H_SS ? H_SS[k] : null), setItem: (k, v) => { H_SS[k] = String(v); }};
 let SCEN = '';                                                     // api() 的情形（路径照真的写）
 globalThis.fetch = (url, opt) => new Promise((res, rej) => {
   const t = (url.match(/[?&]t=([^&]+)/) || [])[1] || url;
@@ -806,6 +807,8 @@ globalThis.fetch = (url, opt) => new Promise((res, rej) => {
   if (m === 'ERR' || m === '/api/halt:502') return res({ok: false, status: 502, json: async () => { throw new SyntaxError('html'); }});
   if (m === 'SLOW') return setTimeout(() => res({ok: true, status: 200, json: body({ok: true, data: {kind: 'core'}})}), 20);
   if (m === '/api/halt:net') return rej(new TypeError('Failed to fetch'));
+  if (m === '/api/request:net') { RIDS.push(JSON.parse(opt.body).rid); return rej(new TypeError('Failed to fetch')); }
+  if (m === '/api/request:ok') { RIDS.push(JSON.parse(opt.body).rid); return res({ok: true, status: 200, json: body({ok: true, msg: '已写'})}); }
   opt.signal.addEventListener('abort', () => rej(Object.assign(new Error('aborted'), {name: 'AbortError'})));   // HANG / *:hang
 });
 """ + loadk + api + r"""
@@ -844,6 +847,17 @@ const eq = (a, b, m) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new
   if (!(x.r === null && x.t.sticky && x.t.t.includes('回应读不出来'))) throw new Error('bad body ' + JSON.stringify(x));
   const before = reloads; x = await T('/api/request:401'); await sleep(30);
   if (!(x.r === null && reloads === before + 1)) throw new Error('401 reload');
+  // 连不上（2026-10-24 复核）：「不确定有没有写进去」+ 一直留着；同一笔再点 → 同一个 rid（面板写过的不再写）；有了结果之后再点 → 新的 rid
+  const TB = async (pc, b) => { const [path, sc] = pc.split(':'); SCEN = sc; toasts.length = 0; const r = await api(path, b); return {r, t: toasts[0]}; };
+  const B = {book: 'tachibana', kind: 'flow', jpy: 300000};
+  x = await TB('/api/request:net', B);
+  if (!(x.r === null && x.t.sticky && x.t.t.includes('不确定有没有写进去') && x.t.t.includes('先刷新看「交易」'))) throw new Error('request net ' + JSON.stringify(x));
+  x = await TB('/api/request:ok', Object.assign({}, B, {confirm: 'tok'}));
+  if (!(x.r && x.r.ok && RIDS[1] === RIDS[0] && /^[0-9a-f]{24}$/.test(RIDS[0]))) throw new Error('same rid after unsure ' + JSON.stringify(RIDS));
+  x = await TB('/api/request:ok', B);
+  if (!(RIDS[2] && RIDS[2] !== RIDS[1])) throw new Error('new rid after a result ' + JSON.stringify(RIDS));
+  x = await TB('/api/request:ok', {book: 'tachibana', kind: 'flow', jpy: 1});
+  if (RIDS[3] === RIDS[2]) throw new Error('other body new rid');
   console.log('OK');
 })().catch(e => { console.error(e.message); process.exit(1); });
 """

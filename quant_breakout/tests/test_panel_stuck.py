@@ -1026,7 +1026,7 @@ def test_conn_auth_reload_waits_for_the_dialog_and_happens_once(tmp_path):
 def test_write_busy_is_released_and_never_locks_navigation():
     J = panel.js_plain("core")
     api = J[J.index("async function api(path, body){"):J.index("async function post1(")]
-    assert "try{ return await post1(path, body); }finally{ busy(false); }" in api
+    assert "try{ return await post1(path, body); }finally{ busy(false); WHOLD=Date.now()+WHOLD_MS; }" in api   # 结果提示至少显示一会儿再自动刷新（2026-10-24）
     assert "busy(false)" not in J[J.index("async function post1("):J.index("function done(j){")]
     assert ".tabbar button, [data-act=reload], [data-act=halt], #conn button" in J and "BUSYN" in J
     assert "setTimeout(reloadNow, 2200)" in J and "window.qbReload('user')" in J

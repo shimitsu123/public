@@ -1,5 +1,5 @@
 // qbreak 操作面板：app.js（浏览器原生 ES 模块；由 qbreak/panel.py 以 /static/app.js 提供；不要用构建工具）
-import { $, api, toast } from './core.js';
+import { $, api, lastFail, toast } from './core.js';
 import { beacon } from './conn.js';
 import { req } from './net.js';
 // 切回来时页面旧了就刷新、在处理的指令状态变了就刷新、页面顶上「这是 N 分钟前的页面」：2026-10-15 起都在 conn.js（先确认连得上 Mac 再刷新、
@@ -15,12 +15,19 @@ async function pushReg(){                                                // serv
   if(!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
   return Promise.race([navigator.serviceWorker.ready, new Promise(res=>setTimeout(()=>res(null), 3000))]);
 }
+// Mac 没收下这台设备的订阅（/api/push/subscribe 失败 / 连不上）→ 记下推送地址：浏览器里有订阅也不写「已打开 ✓」（2026-10-24 复核：
+// 以前只看浏览器有没有订阅，Mac 那边没登记上也显示「推送已打开 ✓」、其实收不到）。再点「打开推送」成功 / 关掉 → 忘掉
+const PUSHBAD='qb-push-bad';
+function pushBad(ep){ try{ if(ep===undefined) return localStorage.getItem(PUSHBAD) || ''; if(ep) localStorage.setItem(PUSHBAD, ep); else localStorage.removeItem(PUSHBAD); }catch(e){} return ''; }
 async function pushState(){
   const el=$('#push-st'); if(!el) return;
+  const on=document.querySelector('[data-act=push-on]');
   const reg=await pushReg().catch(()=>null);
   if(!reg){ el.textContent=(/iPhone|iPad/.test(navigator.userAgent) && !standalone()) ? '要先在 Safari「共享 → 添加到主屏幕」，再从主屏幕的 qbreak 图标打开，才能打开推送（iOS 16.4 以上）' : '这个浏览器不支持推送'; return; }
   const s=await reg.pushManager.getSubscription().catch(()=>null);
-  el.textContent = s ? '这台设备：推送已打开 ✓' : ('这台设备：推送没打开'+(typeof Notification!=='undefined' && Notification.permission==='denied' ? '（通知被拒绝了：在 iPhone 设置 → 通知 → qbreak 里打开）' : ''));
+  const bad=!!(s && pushBad() && pushBad()===s.endpoint);
+  if(on) on.textContent = bad ? '重试：在这台设备打开推送' : '在这台设备打开推送';
+  el.textContent = bad ? '这台设备：推送没打开好 ✗（Mac 那边没登记上，收不到）→ 点「重试：在这台设备打开推送」' : s ? '这台设备：推送已打开 ✓' : ('这台设备：推送没打开'+(typeof Notification!=='undefined' && Notification.permission==='denied' ? '（通知被拒绝了：在 iPhone 设置 → 通知 → qbreak 里打开）' : ''));
 }
 document.addEventListener('DOMContentLoaded', ()=>{ pushState(); });
 document.addEventListener('click', async e=>{
@@ -34,12 +41,14 @@ document.addEventListener('click', async e=>{
     let key=null; try{ const x=await req('/api/push/key',{credentials:'same-origin',cache:'no-store'}); key=x.j && x.j.key; }catch(err){}
     if(!key){ toast('取不到推送的公钥（连不上 Mac？）', true); return; }
     let s=null; try{ s=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64key(key)}); }catch(err){ toast('打开推送失败：'+err, true); return; }
-    const j=await api('/api/push/subscribe',{sub:s.toJSON()}); if(j) toast(j.msg||'已打开');
+    const j=await api('/api/push/subscribe',{sub:s.toJSON()});
+    if(j){ pushBad(''); toast(j.msg||'已打开'); }
+    else { pushBad(s.endpoint); toast('推送没打开：Mac 那边没登记上（'+(lastFail() || '没回应')+'）\n→ 连得上 Mac 后点「重试：在这台设备打开推送」', true); }
   }else{
     const s=await reg.pushManager.getSubscription();
     if(!s){ toast('这台设备还没打开推送', true); return; }
     if(a==='push-test'){ const j=await api('/api/push/test',{endpoint:s.endpoint}); if(j) toast(j.msg); }
-    else { await s.unsubscribe().catch(()=>{}); const j=await api('/api/push/unsubscribe',{endpoint:s.endpoint}); if(j) toast(j.msg); }
+    else { await s.unsubscribe().catch(()=>{}); pushBad(''); const j=await api('/api/push/unsubscribe',{endpoint:s.endpoint}); if(j) toast(j.msg); }
   }
   pushState();
 }, true);

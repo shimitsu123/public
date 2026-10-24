@@ -17,7 +17,11 @@ function rtShow(el, cls, text){
   if(cls==='ld') nd('span', 'spin', null, el);
   nd('span', null, text, el);
 }
-function rtText(q){ return '立花实时 '+String(q.at||'').slice(11,16)+' · '+pxs(q.px)+(q.chg_pct!=null ? ' · '+pcs(q.chg_pct) : ''); }
+function jstDay(){ return new Date(Date.now()+9*3600000).toISOString().slice(0, 10); }   // 这台设备现在的日本日期
+// 不是今天的（没网时 service worker 给的存着的回应 / 页面放久了）：时刻前面写日期（2026-10-24 复核：以前只写时刻，昨天的价看起来像现在的）
+function rtText(q, old){ const at=String(q.at||''), d=at.slice(0, 10);
+  return '立花实时 '+(d && d!==jstDay() ? d.slice(5).replace('-', '/')+' ' : '')+at.slice(11,16)+' · '+pxs(q.px)+(q.chg_pct!=null ? ' · '+pcs(q.chg_pct) : '')
+    +(old ? '（存着的旧数据：现在连不上 Mac，不是现在的价）' : ''); }
 export async function rtQ(t, box, sg, onq){                               // box：框里那一行的 id；sg：建议的股票（没拿着）；onq(q)：取到之后框里重算
   const el=$(box); if(!el) return;
   el.hidden=true; const n=++RTN;
@@ -30,6 +34,8 @@ export async function rtQ(t, box, sg, onq){                               // box
                      {credentials:'same-origin', cache:'no-store', tmo:11000}); }catch(e){}
     if(n!==RTN) return;                                                    // 已经换了一个框
     const j=x && x.r.ok ? x.j : null, q=j && j.rows ? j.rows[t] : null, r=(j && j.rt) || {};
+    const old=!!(x && x.r.headers && x.r.headers.get && x.r.headers.get('X-Qbreak-Cache'));   // service worker 给的存着的回应（没网）
+    if(old && q && q.src==='rt'){ rtShow(el, 'off', rtText(q, true)); return; }   // 不当成现在的价（不记进 RT、框里不按它算）
     if(j && !j.live){ el.hidden=true; return; }                            // 盘外：不取（下单按开盘价）
     if(q && q.src==='rt'){
       RT[t]={q:q, j:j, ms:Date.now()};

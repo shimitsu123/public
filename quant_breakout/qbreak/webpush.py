@@ -9,9 +9,12 @@ iPhone 要 iOS 16.4 以上、面板要从「添加到主屏幕」的图标打开
 from __future__ import annotations
 
 import base64
+import contextlib
+import fcntl
 import json
 import os
 import struct
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -23,6 +26,8 @@ from .utils import read_json, setup_logging
 log = setup_logging("webpush")
 
 VAPID_FILE, SUBS_FILE = "webpush_vapid.json", "webpush_subs.json"
+SUBS_LOCK = "webpush_subs.lock"
+_TLOCK = threading.Lock()
 MAX_SUBS = 5
 TTL_S = 24 * 3600
 
@@ -66,6 +71,23 @@ def public_key() -> str:
     return _vapid()[1]
 
 
+@contextlib.contextmanager
+def _subs_locked():
+    """改订阅文件（读 → 改 → 写）时拿的锁：同一进程的线程（threading）+ 别的进程（flock；面板 / 执行器 / 自检都会发推送）。
+    2026-10-24 复核：以前 send() 先读、发完（每台最多 15 秒）再整个写回 → 这期间新打开的推送被覆盖掉。"""
+    with _TLOCK:
+        p = paths.home() / SUBS_LOCK
+        fd = os.open(p, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            finally:
+                os.close(fd)
+
+
 def subs() -> dict:
     d = read_json(paths.home() / SUBS_FILE, {}) or {}
     return d if isinstance(d, dict) else {}
@@ -93,21 +115,23 @@ def subscribe(device: str | None, sub: dict, name: str = "") -> tuple[bool, str]
         return False, "订阅的格式不对"
     if not _valid_endpoint(ep) or len(p256) != 65 or p256[0] != 4 or len(auth) != 16:
         return False, "订阅的格式不对"
-    d = subs()
-    d[sub_id(ep)] = {"endpoint": ep, "keys": {"p256dh": b64u(p256), "auth": b64u(auth)}, "at": int(time.time()),
-                      "name": str(name or "")[:40]}
-    if len(d) > MAX_SUBS:
-        for k in sorted(d, key=lambda k: d[k].get("at", 0))[:len(d) - MAX_SUBS]:
-            d.pop(k, None)
-    _write_private(SUBS_FILE, d)
+    with _subs_locked():
+        d = subs()
+        d[sub_id(ep)] = {"endpoint": ep, "keys": {"p256dh": b64u(p256), "auth": b64u(auth)}, "at": int(time.time()),
+                          "name": str(name or "")[:40]}
+        if len(d) > MAX_SUBS:
+            for k in sorted(d, key=lambda k: d[k].get("at", 0))[:len(d) - MAX_SUBS]:
+                d.pop(k, None)
+        _write_private(SUBS_FILE, d)
     return True, "这台设备的推送已打开"
 
 
 def unsubscribe(endpoint: str) -> bool:
-    d = subs()
-    if d.pop(sub_id(endpoint), None) is None:
-        return False
-    _write_private(SUBS_FILE, d)
+    with _subs_locked():
+        d = subs()
+        if d.pop(sub_id(endpoint), None) is None:
+            return False
+        _write_private(SUBS_FILE, d)
     return True
 
 
@@ -183,11 +207,18 @@ def send(title: str, body: str, url: str = "/", opener=None) -> bool | None:
         if code in (200, 201, 202):
             ok = True
         elif code in (404, 410):
-            gone.append(dev)
+            gone.append((dev, sub.get("endpoint")))
         else:
             log.warning("推送失败：HTTP %s", code)
-    if gone:
-        for dev in gone:
-            d.pop(dev, None)
-        _write_private(SUBS_FILE, d)
+    if gone:                                               # 只删失效的那几个：拿锁、重新读（发的途中新打开 / 重新打开的不丢；2026-10-24 复核）
+        try:
+            with _subs_locked():
+                cur = subs()
+                hit = [dev for dev, ep in gone if dev in cur and cur[dev].get("endpoint") == ep]
+                for dev in hit:
+                    cur.pop(dev, None)
+                if hit:
+                    _write_private(SUBS_FILE, cur)
+        except OSError as e:
+            log.warning("删失效的推送订阅没成：%s", type(e).__name__)
     return ok

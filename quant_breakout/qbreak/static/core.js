@@ -40,6 +40,7 @@ export function nameify(text){                                           // 兜�
 }
 export const yen = v => '¥' + fmt(Math.round(v));
 export function toast(t, bad, sticky){const m=$('#toast');m.textContent=nameify(String(t==null ? '' : t))+(sticky?'\n（点一下关闭）':'');m.className='toast'+(bad?' bad':'');m.hidden=false;
+  m.dataset.sticky=sticky ? '1' : '';                                    // 不自动消失的提示开着：自动刷新等它关掉（writing()；2026-10-24 复核）
   const d=document.querySelector('dialog[open]'), host=d || document.body;  // 对话框开着：提示放进对话框里（以前在对话框底下被盖住 → 点了「确定」像没反应；2026-10-15）
   if(m.parentNode!==host) host.appendChild(m);
   clearTimeout(toast.h); if(!sticky) toast.h=setTimeout(()=>{m.hidden=true;}, bad?9000:6000);}
@@ -63,41 +64,82 @@ function busy(on){
   else document.querySelectorAll('button.loading').forEach(b=>{ b.classList.remove('loading'); b.setAttribute('aria-busy','false'); });
 }
 function reloadNow(){ if(typeof window.qbReload==='function') window.qbReload('user'); else location.reload(); }   // conn.js：先确认连得上 Mac 再刷新
+export function freeReload(){                                                 // 「刷新」按钮放开（不转圈、能再点；conn.js 每条没换成页面的路也叫它）
+  loading(false);
+  document.querySelectorAll('[data-act=reload].loading').forEach(b=>{ b.classList.remove('loading'); b.disabled=false; b.setAttribute('aria-busy', 'false');
+    if(b.dataset.label0) b.textContent=b.dataset.label0; });
+}
+window.qbFreeReload = freeReload;
 export function reloadPage(b, label){                                          // 刷新：按钮转圈 + 顶部进度条，然后重新载入（连不上 → 连接条倒数重试，按钮放开）
   if(b){ b.classList.add('loading'); b.setAttribute('aria-busy','true'); if(label){ if(!b.dataset.label0) b.dataset.label0=b.textContent; b.textContent=label; } b.disabled=true; }
-  loading(true); setTimeout(reloadNow, 30); }
+  loading(true); setTimeout(reloadNow, 30);
+  clearTimeout(reloadPage.h); reloadPage.h=setTimeout(freeReload, 45000); }     // 兜底：45 秒后还在这页 = 没换成 → 按钮一定放开（2026-10-24 复核：以前有几条路一直转圈）
 window.addEventListener('beforeunload', ()=>loading(true));
 window.addEventListener('pageshow', e=>{ if(e.persisted){ loading(false); document.querySelectorAll('button.loading').forEach(b=>{b.classList.remove('loading'); b.disabled=false;}); } });
 const HALT_TIP = CFG.remote ? '人不在 Mac 旁边时：在 claude.ai 的云端对话里说「停 / 今天不要下单」（Mac 的执行器下一次运行会停）'
                             : '在 Mac 的 Claude 对话里说「停 / 今天不要下单」';
+// 写操作在路上 / 结果刚显示（2026-10-24 复核）：conn.js 的自动刷新等它（window.qbWriting）。以前 closeAll() 关了对话框、0.35 秒后状态一变
+// 就自动刷新 → 写的结果（成功 / 失败 / 不确定）提示和固定口数的「确认下单」框都没了。等：请求在路上、结束后 WHOLD_MS、不自动消失的提示还开着
+const WHOLD_MS = 4000;
+let WHOLD = 0;
+function writeHold(){
+  if(BUSYN>0 || Date.now()<WHOLD) return true;
+  const m=$('#toast'); return !!(m && !m.hidden && m.dataset && m.dataset.sticky==='1');
+}
+window.qbWriting = writeHold;
 export async function api(path, body){                                  // 写操作（POST）：busy 一定在 finally 里放开（超时 / 出错也是）
   busy(true);
-  try{ return await post1(path, body); }finally{ busy(false); }
+  try{ return await post1(path, body); }finally{ busy(false); WHOLD=Date.now()+WHOLD_MS; }
 }
+// 同一笔再送一次不重复写（2026-10-24 复核）：/api/request 带 rid（请求 id），面板 10 分钟内记着写成了的 rid + 内容 → 同一个再来回原来的结果。
+// 结果不确定（超时 / 连不上 / 回应读不出来）时这笔的 rid 记在 sessionStorage（刷新后也在）：刷新看过「交易」再点同一笔 → 同一个 rid，写过的不会再写；
+// 有了确定的结果（写成 / 明确没写成）就忘掉 → 之后再点同样的一笔是新的一笔
+const RIDK = 'qb-rid', RID_MS = 10 * 60000;
+function ridKey(body){ const o={}; Object.keys(body||{}).sort().forEach(k=>{ if(k!=='rid' && k!=='confirm') o[k]=body[k]; }); return JSON.stringify(o); }
+function ridMap(){ try{ const m=JSON.parse(sessionStorage.getItem(RIDK) || '{}'), now=Date.now(), o={};
+  for(const k in m) if(m[k] && now-m[k].t<RID_MS) o[k]=m[k]; return o; }catch(e){ return {}; } }
+function ridSave(m){ try{ sessionStorage.setItem(RIDK, JSON.stringify(m)); }catch(e){} }
+function newRid(){ let s=''; try{ const a=new Uint8Array(12); crypto.getRandomValues(a); a.forEach(x=>{ s+=('0'+x.toString(16)).slice(-2); }); }catch(e){}
+  return s || (Date.now().toString(36)+Math.random().toString(36).slice(2, 12)); }
+function ridFor(body){ const k=ridKey(body), m=ridMap(); return (m[k] && m[k].rid) || newRid(); }
+function ridDone(body, rid, unsure){ const k=ridKey(body), m=ridMap(); if(unsure) m[k]={rid:rid, t:Date.now()}; else delete m[k]; ridSave(m); }
+let LASTFAIL = '';
+export function lastFail(){ return LASTFAIL; }                              // 最近一次写失败的提示（trade.js：两步的第二步没成时一起写出来）
 async function post1(path, body){
-  const halt = path==='/api/halt', where = path==='/api/request' ? '在「交易」的「手动指令」里确认' : '再看一下';
-  const fail = (t, sticky) => { toast(halt ? t+'\n'+HALT_TIP : t, true, halt || sticky); return null; };   // HALT 失败：每种都提示云端的「停」、不自动消失
+  const wr = path==='/api/request', rid = wr ? ridFor(body) : '', st = {unsure: false};   // st.unsure：这次的结果不确定（可能已经写进去了）
+  try{ return await post2(path, wr ? Object.assign({}, body||{}, {rid:rid}) : (body||{}), st); }finally{ if(wr) ridDone(body, rid, st.unsure); }
+}
+async function post2(path, body, st){
+  const halt = path==='/api/halt', wr = path==='/api/request', where = wr ? '在「交易」的「手动指令」里确认' : '再看一下';
+  const fail = (t, sticky) => { LASTFAIL=t; toast(halt ? t+'\n'+HALT_TIP : t, true, halt || sticky); return null; };   // HALT 失败：每种都提示云端的「停」、不自动消失
   try{
     const h={'Content-Type':'application/json'}; h[CFG.auth.h]=CFG.auth.v;
-    const x=await req(path,{method:'POST',headers:h,body:JSON.stringify(body||{}),credentials:'same-origin',cache:'no-store'});
+    const x=await req(path,{method:'POST',headers:h,body:JSON.stringify(body),credentials:'same-origin',cache:'no-store'});
     const r=x.r, j=x.j;
     if(j && j.need_confirm && !j.ok) return j;                             // 要先确认（固定口数 / 恢复按规则；200 + ok:false）：什么都没写 → 调用方弹「确认下单」框（trade.js post；2026-10-15）
-    if(r.ok && !j) return fail(halt ? 'HALT 可能已经建好，但回应读不出来：刷新后看有没有「HALT 生效中」'
-                                    : '回应读不出来：不确定有没有生效 —— 刷新后'+where+'，不要直接再点一次', true);
+    if(r.ok && !j){ st.unsure=true; return fail(halt ? 'HALT 可能已经建好，但回应读不出来：刷新后看有没有「HALT 生效中」'
+                                    : '回应读不出来：不确定有没有生效 —— 刷新后'+where+'，不要直接再点一次', true); }
     if(!r.ok || !j.ok){
       if(r.status===401){ toast((j && j.msg) || '这台设备没被认出来：正在刷新…', true); setTimeout(()=>location.reload(),1500); return null; }
-      if((j && j.unsure) || (!j && r.status>=500))                         // 面板内部出错 / 中途断了：可能已经写进去了（2026-10-12 再发防止）
-        return fail((j && j.msg) || ('面板没正常回应（HTTP '+r.status+'）：不确定有没有'+(path==='/api/request' ? '写进去' : '生效')+' —— 刷新后'+where+'，不要直接再点一次'), true);
+      if((j && j.unsure) || (!j && r.status>=500)){                        // 面板内部出错 / 中途断了：可能已经写进去了（2026-10-12 再发防止）
+        st.unsure=true;
+        return fail((j && j.msg) || ('面板没正常回应（HTTP '+r.status+'）：不确定有没有'+(wr ? '写进去' : '生效')+' —— 刷新后'+where+'，不要直接再点一次'), true);
+      }
       return fail((j && j.msg) || ('没写成（HTTP '+r.status+'）'));
     }
     return j;
   }catch(e){
+    st.unsure=true;
     if(e && e.name==='Timeout'){                                           // 请求可能已经到了 Mac：不确定有没有写进去
       if(halt) return fail(CFG.remote ? 'HALT 可能没送到：超过 15 秒没有回应（Mac 可能在睡眠）' : 'HALT 可能没写成：面板超过 15 秒没有回应');
-      return fail(CFG.remote ? '超过 15 秒没有回应（Mac 可能在睡眠）：不确定有没有'+(path==='/api/request' ? '写进去' : '生效')+' —— Mac 醒来后刷新，'+where+'，不要直接再点一次'
-                             : '面板超过 15 秒没有回应：不确定有没有'+(path==='/api/request' ? '写进去' : '生效')+' —— 刷新后'+where+'，不要直接再点一次');
+      return fail(CFG.remote ? '超过 15 秒没有回应（Mac 可能在睡眠）：不确定有没有'+(wr ? '写进去' : '生效')+' —— Mac 醒来后刷新，'+where+'，不要直接再点一次'
+                             : '面板超过 15 秒没有回应：不确定有没有'+(wr ? '写进去' : '生效')+' —— 刷新后'+where+'，不要直接再点一次', true);
     }
-    return fail((halt ? 'HALT 没送到：' : '')+'连不上面板：'+e+'\n（Mac 睡着了、面板没运行，或手机的 Tailscale 没连上）');
+    // 连不上（没网 / iPhone 锁屏 / Tailscale 断了）：请求可能已经送到了、只是回应没回来 → 不确定，提示一直留着到点掉
+    // （2026-10-24 复核：以前写「连不上面板」、9 秒就消失，读起来像「肯定没写」）
+    if(halt) return fail('HALT 没送到：连不上面板：'+e+'\n（Mac 睡着了、面板没运行，或手机的 Tailscale 没连上）');   // HALT 再点一次不会多出什么：照旧
+    return fail('不确定有没有'+(wr ? '写进去：先刷新看「交易」/ 通知记录再决定要不要再点' : '生效：先刷新再看一下')
+                +'\n（连不上面板：'+e+'；Mac 睡着了、面板没运行，或手机的 Tailscale 没连上）', true);
   }
 }
 export function done(j){ if(!j) return; toast(j.msg || '已写'); loading(true); setTimeout(reloadNow, 2200); }
