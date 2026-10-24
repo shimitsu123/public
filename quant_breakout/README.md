@@ -222,7 +222,7 @@ python run.py report                           # 只重新生成 var/out/report.
 - 状态（`var/sim.json`、`var/state/`、`var/out/`）随代码入库，例行任务靠它跨天续命
 - 日本株用 `affordable` 股票池、单笔 34%/最多 3 只：¥100 万下多数东证大盘股 1 単元就超预算，默认池几乎买不了
 - 以前的云端例行任务 id `trig_01MMZVeTtxexr6y4sDhy4rxX`（2026-09-25 重建：每周一至五 06:57 JST）2026-10-19 已删（以本地为准）
-- 2026-10-09 起例行任务（模拟盘日报 / 影子账户判断 / 季度复核）在 Mac 的 Claude 桌面版本机任务里跑（`~/qbreak-sim`，说明书 [`routines/`](routines/README.md)），
+- 2026-10-09 起例行任务（模拟盘日报 / 影子账户判断〔2026-10-24 用户停用〕 / 季度复核）在 Mac 的 Claude 桌面版本机任务里跑（`~/qbreak-sim`，说明书 [`routines/`](routines/README.md)），
   云端同名例行任务 2026-10-19 已删（以本地为准、没有后备；Mac 没做的那天在 Mac 对话里说「补跑」）；检查：`bash scripts/routines.sh check`
 - 前提：运行环境的网络策略必须放行 [`network_allowlist.txt`](network_allowlist.txt) 里的域名；
   **改动只对新启动的会话生效**（这也是例行任务每次新开会话的原因）。`run.py doctor` 会逐个检查
@@ -763,7 +763,7 @@ Mac 上 LaunchAgent `com.qbreak.jquants`（`scripts/install_launchd_jquants.sh`�
 **拉代码后一条命令装好 / 更新 Mac 上的全部**：`git -C ~/qbreak-src pull --ff-only && bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`（MACOS.md §1.10）。
 Mac 登录 / 开机后自动启动（`com.qbreak.login`，RunAtLoad）：仪表盘没加载就加载、交易日已过 07:40 而今天的模拟操盘没跑 → 补跑、打开页面（MACOS.md §1.11；立花本番不补跑）。
 
-**影子账户（判断型选股，只前向记录）**（2026-09-26，用户要求；事先登记 `scripts/shadow_account.py`，`qbreak/shadow.py`）：例行任务「影子账户判断」（每个交易日 07:45 JST）按当天的日报 / 市场风险报告做「规则以外」的判断（09:00 JST 之前，日経225 + 1655 / 1329，个股 ≤ 4 只、单只 ≤ 35%、不加杠杆），单独记一个 ¥100 万的模拟账户，和规则账户逐日对比（`var/out/shadow_equity.csv`）；2026-12-24 收盘后按事先写定的四条评估（累计收益差 > 0、日超额收益 95% 区间下限 > 0、回撤不深 2 pp、判断覆盖率 ≥ 90%）。不影响模拟盘与交易。
+**影子账户（判断型选股，只前向记录）**（2026-09-26，用户要求；事先登记 `scripts/shadow_account.py`，`qbreak/shadow.py`）：例行任务「影子账户判断」（每个交易日 07:45 JST）按当天的日报 / 市场风险报告做「规则以外」的判断（09:00 JST 之前，日経225 + 1655 / 1329，个股 ≤ 4 只、单只 ≤ 35%、不加杠杆），单独记一个 ¥100 万的模拟账户，和规则账户逐日对比（`var/out/shadow_equity.csv`）；2026-12-24 收盘后按事先写定的四条评估（累计收益差 > 0、日超额收益 95% 区间下限 > 0、回撤不深 2 pp、判断覆盖率 ≥ 90%）。不影响模拟盘与交易。**2026-10-24 用户停用**（「不要影子账户任务」）：例行任务不再跑，记录停在最后一条（原样保留），3 个月评估不做（`scripts/shadow_account.py` 第六节）。
 
 **宏观顺风度**（`qbreak/sensitivity.py`；事先登记 `scripts/regime_fit_study.py` → `var/out/regime_fit_study.md`）：
 每只日経225 成分股近 2 年对 日本 10Y / 美国 10Y / 油价 / 美元日元 / 信用利差 的敏感度 × 这些因素近 60 日的趋势 = 「趋势延续时每周多赚 / 少赚多少」。

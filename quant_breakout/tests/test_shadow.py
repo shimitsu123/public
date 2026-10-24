@@ -176,6 +176,7 @@ def test_cmd_step_and_interim_evaluate(isolated_home, monkeypatch, capsys):
     (isolated_home / "state").mkdir(exist_ok=True)
     (isolated_home / "state" / "unified_state.json").write_text(json.dumps(
         {"history": [["2026-09-28", 1_000_500.0], ["2026-09-29", 1_001_000.0]]}), encoding="utf-8")
+    monkeypatch.setenv("QBREAK_NOW", "2026-09-29T20:00:00")                   # 停用（2026-10-24）之前
     assert SA.main(["step"]) == 0
     out = capsys.readouterr().out
     assert "推进了 2 个交易日" in out and "BUY 7203.T 100 股" in out
@@ -190,13 +191,26 @@ def test_cmd_step_and_interim_evaluate(isolated_home, monkeypatch, capsys):
     assert "中间统计（还没到评估时点，不判定）" in capsys.readouterr().out
 
 
-def test_final_evaluation_runs_after_end_even_if_rule_stopped_earlier(isolated_home, monkeypatch, capsys):
-    rows = [f"2026-12-{d:02d},{1_000_000 + d * 1000},{1_000_000 + d * 500},0,0,0" for d in (21, 22, 23)]
+def test_retired_on_2026_10_24_no_more_records_and_no_verdict(isolated_home, monkeypatch, capsys, tmp_path):
+    """2026-10-24 用户「不要影子账户任务」：step / decide 不再推进 / 记录（记录停在最后一条）；evaluate 不做事先登记的判定，
+    --interim 只给到最后一条为止的描述统计。"""
+    assert not SH.retired("2026-10-23") and SH.retired("2026-10-24") and SH.retired(dt.date(2026, 12, 25))
+    rows = [f"2026-10-{d:02d},{1_000_000 + d * 1000},{1_000_000 + d * 500},0,0,0" for d in (21, 22, 23)]
     (isolated_home / "out").mkdir(exist_ok=True)
-    (isolated_home / "out" / SH.EQUITY).write_text(",".join(SH.EQUITY_COLS) + "\n" + "\n".join(rows) + "\n", encoding="utf-8")
-    monkeypatch.setenv("QBREAK_NOW", "2026-12-24T20:00:00")
-    assert SA.main(["evaluate"]) == 0 and "还没到评估时点" in capsys.readouterr().out
-    monkeypatch.setenv("QBREAK_NOW", "2026-12-25T07:30:00")                  # 模拟盘最后一天是 12-23 也要能正式评估
+    eq = isolated_home / "out" / SH.EQUITY
+    eq.write_text(",".join(SH.EQUITY_COLS) + "\n" + "\n".join(rows) + "\n", encoding="utf-8")
+    before = eq.read_text(encoding="utf-8")
+    monkeypatch.setattr(SA, "_load", lambda tickers, years=1: 1 / 0)          # 停用后不取行情
+    monkeypatch.setenv("QBREAK_NOW", "2026-10-26T07:45:00")
+    assert SA.main(["step"]) == 0 and "影子账户已停用" in capsys.readouterr().out
+    f = tmp_path / "d.json"
+    f.write_text(json.dumps(_dec([])), encoding="utf-8")
+    assert SA.main(["decide", "--file", str(f)]) == 2 and "判断不再记录" in capsys.readouterr().out
+    assert eq.read_text(encoding="utf-8") == before and not (isolated_home / "out" / SH.DECISIONS).exists()
+    monkeypatch.setenv("QBREAK_NOW", "2026-12-25T07:30:00")                  # 原来的评估日：也不判定
     assert SA.main(["evaluate"]) == 0
     out = capsys.readouterr().out
-    assert "中间统计" not in out and "期间 2026-09-28〜2026-12-23" in out and (isolated_home / "out" / "shadow_eval.md").exists()
+    assert "事先登记的 3 个月评估不做" in out and "记录停在 2026-10-23" in out and not (isolated_home / "out" / "shadow_eval.md").exists()
+    assert SA.main(["evaluate", "--interim"]) == 0
+    out = capsys.readouterr().out
+    assert "期间 2026-09-28〜2026-10-23" in out and "描述统计（2026-10-24 用户停用" in out and "不判定" in out

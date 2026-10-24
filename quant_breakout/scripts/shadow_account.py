@@ -28,6 +28,9 @@
 登记前做过的检查：tests/test_shadow.py（09:00 之后拒绝、只能决定今天、范围 / 单位 / 4 只 / 35% / 不加杠杆、只追加、先卖后买、
   现金不够减单位、拆股 / 分红、与规则账户对比的行、评估的四条与区块自助法）。
 输出：var/out/shadow_today.json（日报「影子账户」一栏）、var/out/shadow_eval.md / .json（评估）
+六、停用（2026-10-24，用户「不要影子账户任务」；事后的决定，上面一〜五的标准没改）：例行任务不再建、不再跑；记录停在最后一条（只追加，不补、不改）。
+  那天起 step / decide 只打印停用、不推进、不记录；evaluate 不做事先登记的判定（期间没记满、覆盖率④必然不成立；不按看过的结果另定标准），
+  evaluate --interim 只给到最后一条为止的描述统计（不判定）。
 """
 from __future__ import annotations
 
@@ -65,7 +68,18 @@ def _refresh_report() -> None:
         print(f"（日报重写失败，不影响记录：{type(e).__name__}: {e}）")
 
 
+def _retired_msg(what: str) -> int | None:
+    """停用之后（2026-10-24 起）→ 打印说明、返回退出码；还没停用 → None。"""
+    if SH.retired(_now().date()):
+        print(f"影子账户已停用：{SH.RETIRED_WHY}：{what}（已有记录原样保留，只追加的记录停在最后一条）")
+        return 0
+    return None
+
+
 def cmd_step(_a) -> int:
+    rc = _retired_msg("不再推进")
+    if rc is not None:
+        return rc
     import pandas as pd
     from qbreak.corpactions import YFinanceActions, due
     st = SH.load_state()
@@ -103,6 +117,8 @@ def cmd_step(_a) -> int:
 
 
 def cmd_decide(a) -> int:
+    if _retired_msg("判断不再记录") is not None:
+        return 2
     from qbreak.config import universe
     st = SH.load_state()
     dec = json.loads(Path(a.file).read_text(encoding="utf-8"))
@@ -137,13 +153,20 @@ def cmd_evaluate(a) -> int:
     rows = list(csv.DictReader(fp.open(encoding="utf-8"))) if fp.exists() else []
     rows.sort(key=lambda r: r["date"])
     last = rows[-1]["date"] if rows else None
-    final = _now().date() > dt.date.fromisoformat(SH.END)        # 期间结束之后（模拟盘在 end 之后不再推进，最后一天可能早于 end）
+    stopped = SH.retired(_now().date())                          # 2026-10-24 用户停用：事先登记的判定不做（第六节）
+    final = _now().date() > dt.date.fromisoformat(SH.END) and not stopped   # 期间结束之后（模拟盘在 end 之后不再推进，最后一天可能早于 end）
+    if stopped and not a.interim:
+        print(f"影子账户已停用：{SH.RETIRED_WHY}：事先登记的 3 个月评估不做（记录停在 {last or '—'}、期间没记满）。"
+              "看到最后一条为止的描述统计：--interim（不判定）")
+        return 0
     if not final and not a.interim:
         print(f"还没到评估时点（{SH.END} 收盘之后；现在最新 {last or '—'}）。看中间统计：--interim（不判定）")
         return 0
     days = [str(d.date()) for d in pd.date_range(SH.START, min(SH.END, last or SH.START)) if is_trading_day(d.date())]
     ev = SH.evaluate(rows, SH.decided_dates(), days)
-    if not final:
+    if stopped:
+        ev["verdict"] = f"描述统计（{SH.RETIRED_WHY}，不判定）"
+    elif not final:
         ev["verdict"] = "中间统计（还没到评估时点，不判定）"
     lines = [f"# 影子账户（判断型）评估 {'（中间统计）' if not final else ''}（{dt.date.today()}）",
              f"标准见 scripts/shadow_account.py 第四节（2026-09-26 事先登记）。期间 {SH.START}〜{last}，两个账户都有值的交易日 {ev.get('n')} 天。", ""]

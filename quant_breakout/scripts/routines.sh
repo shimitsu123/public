@@ -3,6 +3,8 @@
 # 「本机任务」（Local routine）里跑，工作文件夹 ~/qbreak-sim（专用克隆：只有例行任务在这里改 var/、提交、推送；~/qbreak-src 照旧只 pull，
 # ~/qbreak-dev 照旧给人改代码），说明书 quant_breakout/routines/（README.md、sim_daily.md、shadow.md、quarterly.md）；
 # 云端同名例行任务是后备（Mac 当天做过就跳过）。Mac 与云端的 Linux 容器都能跑（macOS 自带的 bash 3.2 兼容）。
+# 影子账户判断 2026-10-24 起停用（用户「不要影子账户任务」）：done-today shadow 打印停用、退出 0（跳过），save shadow 不入库（退出 1），
+# check 不再要求它建着 / 按时跑（还在桌面版排程里 → [!] 提醒删掉）；以前的 shadow: / shadow(mac): 提交照旧读。
 #   bash scripts/routines.sh done-today sim|shadow|quarterly
 #        今天做过了吗（先 git pull --ff-only）：0 = 做过（打印是 Mac 还是云端做的）→ 跳过；1 = 还没做 → 照常做；
 #        2 = 这个克隆拉不下来（本地改动 / 没推上去的提交 / 网络）或 git 身份没设 → Mac 的本机任务：停下汇报（没有云端后备）
@@ -11,7 +13,8 @@
 #        有别的提交 / 推不上去 → 2
 #        sim：远端的 var/out/unified_today.json 的 date = 今天（JST）就是做过（07:40 的执行器等的就是它）；周末 → 0（例行任务只在周一至五跑）；
 #             休市的工作日照常做（和云端以前一样：处理上一个交易日的收盘）
-#        shadow：有今天的「shadow: <今天> 判断」或「shadow(mac): <今天> 判断」提交；quarterly：有今天的「季度复核：」或「季度复核(mac)：」提交
+#        shadow：有今天的「shadow: <今天> 判断」或「shadow(mac): <今天> 判断」提交（2026-10-24 起停用 → 打印停用、0）；
+#        quarterly：有今天的「季度复核：」或「季度复核(mac)：」提交
 #   bash scripts/routines.sh check         只读：~/qbreak-sim（分支、干净、推送权限、git 身份）、Claude 桌面版（≥ 1.1.5368）、三个本机任务建了没有、
 #                                           本机任务按时跑了没有 / 有没有卡住的运行（桌面版的运行记录；2026-10-16 起）、
 #                                           说明书要运行的命令在不在允许规则里（~/qbreak-sim/.claude/settings.local.json；只打印对不上的命令；2026-10-16 起）、
@@ -176,11 +179,15 @@ sync_repo() {     # 例行任务的克隆：git pull --ff-only；别的克隆（
 }
 
 cmd_done_today() {
-  local kind="${1:-}" r today wd tr d_local="" d_up w ref log rc ts
+  local kind="${1:-}" r today wd tr d_local="" d_up w ref log rc ts why
   case "$kind" in sim|shadow|quarterly) ;; *) echo "用法：bash scripts/routines.sh done-today sim|shadow|quarterly"; return 2 ;; esac
+  today="$(today_jst)"
+  if why="$(pyq retired "$kind" "$today" 2>/dev/null)"; then   # 停用的例行任务（影子账户 2026-10-24 起）：不做、也不补
+    echo "已停用：${why}：今天 ${today} 不做（补跑也不做）"
+    return 0
+  fi
   r="$(repo_root)"
   is_repo "$r" || { echo "★ ${r} 不是 git 仓库"; return 2; }
-  today="$(today_jst)"
   if is_mac && routine_clone_ok "$r" && ! has_ident "$r"; then
     # 没设时 git 会用本机的用户名 / 主机名凑一个身份写进提交（公开仓库，推上去撤不回）→ 先设好
     echo "★ git 的 user.name / user.email 没设：今天不做（请你自己在终端设：公开仓库用不暴露个人信息的名字与 GitHub 的 noreply 邮箱）"
@@ -394,7 +401,7 @@ hist_repo() {      # 三个克隆里 origin/<分支> 最新（提交时间）的
 }
 
 cmd_check() {
-  local ok=0 bad=0 warn=0 cur st un n out rc line mark txt app cfg tdir f kind found listed sched today log r mid tids="" ddir ref upd
+  local ok=0 bad=0 warn=0 cur st un n out rc line mark txt app cfg tdir f kind found listed sched today log r mid tids="" ddir ref upd why
   okl() { echo "[OK] $*"; ok=$((ok + 1)); }
   ngl() { echo "[★] $*"; bad=$((bad + 1)); }
   wrn() { echo "[!] $*"; warn=$((warn + 1)); }
@@ -452,12 +459,26 @@ cmd_check() {
   # 三个本机任务（桌面版存在 ~/.claude/scheduled-tasks/<名字>/SKILL.md；只看有没有指向说明书，不打印内容）
   cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
   tdir="$cfg/scheduled-tasks"
+  today="$(today_jst)"
   for kind in sim_daily:日报 shadow:影子账户 quarterly:季度复核; do
     found=""
     for f in "$tdir"/*/SKILL.md; do
       [ -f "$f" ] || continue
       if grep -q "routines/${kind%%:*}.md" "$f" 2>/dev/null; then found="$(basename "$(dirname "$f")")"; break; fi
     done
+    # 停用的例行任务（影子账户 2026-10-24 起）：不要求建着 / 按时跑；桌面版的排程里还有它 → 提醒删掉（不算要处理）
+    if why="$(pyq retired "${kind%%:*}" "$today" 2>/dev/null)"; then
+      listed="?"
+      if [ -n "$found" ] && { [ -n "${QBREAK_DESKTOP_DIR:-}" ] || is_mac; }; then
+        listed="$(pyq listed "${QBREAK_DESKTOP_DIR:-$HOME/Library/Application Support/Claude/claude-code-sessions}" "$found" 2>/dev/null || echo "?")"
+      fi
+      if [ "$listed" = "1" ]; then
+        wrn "${kind#*:}：${why}，但桌面版的排程里还有本机任务（${found}）：在桌面版 Code → Routines 里删掉它（不再跑）"
+      else
+        okl "${kind#*:}：${why}：不再建、不再跑（补跑也不做；以前的记录照旧保留）"
+      fi
+      continue
+    fi
     # 说明书在、桌面版的排程（最新的 scheduled-tasks.json）里却没有这个 id → 不会再跑（2026-10-24 复核：qbreak-shadow 就是这样，以前写「已建」）
     listed="?"
     if [ -n "$found" ] && { [ -n "${QBREAK_DESKTOP_DIR:-}" ] || is_mac; }; then
@@ -569,8 +590,12 @@ existing() {      # 仓库里存在的路径（通配展开；不存在的不列
 }
 
 cmd_save() {      # bash scripts/routines.sh save sim|shadow|quarterly：git add（各自的文件）→ git commit（提交信息自动）→ push
-  local kind="${1:-}" r msg bar today files
+  local kind="${1:-}" r msg bar today files why
   case "$kind" in sim|shadow|quarterly) ;; *) echo "用法：bash scripts/routines.sh save sim|shadow|quarterly"; return 2 ;; esac
+  if why="$(pyq retired "$kind" "$(today_jst)" 2>/dev/null)"; then   # 停用的例行任务：不再入库（只追加的记录停在最后一条）
+    echo "★ 已停用：${why}：不入库"
+    return 1
+  fi
   r="$(repo_root)"
   is_repo "$r" || { echo "★ ${r} 不是 git 仓库：没入库"; return 1; }
   if ! routine_clone_ok "$r"; then

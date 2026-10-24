@@ -721,12 +721,11 @@ def test_rule_matching_follows_claude_code_semantics():
 
 def test_manual_commands_are_the_ones_to_run_not_the_mentions():
     cmds = routines.manual_commands()
-    assert set(cmds) == {"sim_daily", "shadow", "quarterly"}
+    assert set(cmds) == {"sim_daily", "quarterly"}                                         # shadow.md：2026-10-24 停用，不再对照
     first = f"git -C ~/qbreak-sim pull -q --ff-only origin {BRANCH}"                        # README 固定文字的第 1 步
     assert all(c[0] == first for c in cmds.values())
     assert "cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh done-today sim" in cmds["sim_daily"]
     assert "bash scripts/routines.sh run run.py sim-day" in cmds["sim_daily"]
-    assert "cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh wait-sim" in cmds["shadow"]
     assert "cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh save sim" in cmds["sim_daily"]
     assert "cd ~/qbreak-sim/quant_breakout && bash scripts/routines.sh save quarterly" in cmds["quarterly"]
     assert "bash scripts/with_jquants.sh bash scripts/routines.sh run scripts/w2_forward_all.py --review" in cmds["quarterly"]
@@ -756,7 +755,8 @@ def test_allow_missing_round_trip_and_per_task_approvals(tmp_path, monkeypatch, 
     want = json.loads(capsys.readouterr().out)
     assert "Bash(bash scripts/routines.sh save sim)" in want and "Bash(bash scripts/routines.sh done-today sim)" in want
     assert not any(r.startswith("Bash(cd ") for r in want)                                  # cd 进 ~/qbreak-sim 不用规则
-    assert "Bash(bash scripts/routines.sh wait-sim)" in want and "Bash(bash scripts/routines.sh save shadow)" in want   # 2026-10-23 起一条命令一条规则
+    assert "Bash(bash scripts/routines.sh save quarterly)" in want                          # 2026-10-23 起一条命令一条规则
+    assert not any("shadow" in r for r in want)                                             # 影子账户 2026-10-24 停用：不要它的规则
     _settings(tmp_path, want)                             # 照它加上 → 全都对得上
     assert routines.main(["allow-missing"]) == 0 and json.loads(capsys.readouterr().out) == []
     assert routines.main(["allow-check"]) == 0
@@ -768,7 +768,7 @@ def test_allow_missing_round_trip_and_per_task_approvals(tmp_path, monkeypatch, 
     assert routines.main(["allow-check"]) == 0
     out = capsys.readouterr().out
     assert "NG\t允许规则里没有（日报；无人值守时会停在权限确认）：bash scripts/routines.sh run run.py sim-day" in out, out
-    assert "NG\t允许规则里没有（日报、影子账户、季度复核；无人值守时会停在权限确认）：bash scripts/routines.sh push" in out, out
+    assert "NG\t允许规则里没有（日报、季度复核；无人值守时会停在权限确认）：bash scripts/routines.sh push" in out, out
     assert out.count("NG\t") == 2 and "HINT\t→ 加规则" in out and "SECRET" not in out
     tasks = [{**DAILY_TASK, "approvedPermissions": [{"toolName": "Bash", "ruleContent": "bash scripts/routines.sh push"},
                                                     {"toolName": "Read", "ruleContent": "//x"}]}]
@@ -778,7 +778,7 @@ def test_allow_missing_round_trip_and_per_task_approvals(tmp_path, monkeypatch, 
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "cfg"))
     assert routines.main(["allow-check"]) == 0
     out = capsys.readouterr().out
-    assert "（影子账户、季度复核；无人值守时会停在权限确认）：bash scripts/routines.sh push" in out, out
+    assert "（季度复核；无人值守时会停在权限确认）：bash scripts/routines.sh push" in out, out
     assert routines.main(["allow-missing"]) == 0
     assert json.loads(capsys.readouterr().out) == [echo, "Bash(bash scripts/routines.sh push)"]
 
@@ -790,7 +790,7 @@ def test_check_reports_commands_missing_from_the_allow_rules(repos):
     allp = _settings(t / "x", [])
     env = dict(today="2026-10-16", CLAUDE_CONFIG_DIR=str(t / "cfg"), QBREAK_DESKTOP_DIR=str(t / "nowhere"), QBREAK_SIM_SETTINGS=str(allp))
     rc, out = _run(t, "check", **env)
-    assert rc == 1 and "[★] 允许规则里没有（日报、影子账户、季度复核；无人值守时会停在权限确认）：bash scripts/routines.sh push" in out, out
+    assert rc == 1 and "[★] 允许规则里没有（日报、季度复核；无人值守时会停在权限确认）：bash scripts/routines.sh push" in out, out
     assert "     → 加规则：在 Mac 对话里说「把例行任务缺的允许规则加上」" in out and "SECRET" not in out
     r = subprocess.run([sys.executable, "-m", "qbreak.routines", "allow-missing"], cwd=ROOT, capture_output=True, text=True,
                        env={**os.environ, **env})
@@ -1251,3 +1251,73 @@ def test_manuals_never_ask_for_prompting_commands():
     for name, cmds in routines.manual_commands().items():
         for c in cmds:
             assert not re.search(r"\bcd\b[^`]*&&\s*git\b", c) and "$(" not in c and not c.startswith("until "), (name, c)
+
+
+# ────────── 影子账户判断停用（2026-10-24 用户「不要影子账户任务」）──────────
+RETIRED_WHY = "2026-10-24 用户停用（「不要影子账户任务」）"
+
+
+def test_shadow_retired_from_2026_10_24_in_pure_functions(capsys):
+    assert routines.retired("shadow", dt.date(2026, 10, 23)) is None and routines.retired("shadow", dt.date(2026, 10, 24)) == RETIRED_WHY
+    assert routines.retired("sim", dt.date(2026, 10, 26)) is None and routines.retired("quarterly", dt.date(2027, 1, 12)) is None
+    assert [k for k, _ in routines.active_kinds(dt.date(2026, 10, 23))] == ["sim_daily", "shadow", "quarterly"]
+    assert [k for k, _ in routines.active_kinds(dt.date(2026, 10, 26))] == ["sim_daily", "quarterly"]
+    assert routines.main(["retired", "shadow", "2026-10-23"]) == 1 and capsys.readouterr().out == ""
+    assert routines.main(["retired", "shadow", "2026-10-24"]) == 0 and capsys.readouterr().out == RETIRED_WHY + "\n"
+    assert routines.main(["retired", "sim", "2026-10-26"]) == 1
+    # 最近 5 个工作日的表：停用之后的日子不写影子账户一栏，之前的照旧读 shadow(mac): 提交
+    e = routines.parse_log(f"{_ts('2026-10-23', '07:50')}\tshadow(mac): 2026-10-23 判断\n{_ts('2026-10-27', '06:58')}\tsim(mac): 2026-10-26 日报")
+    rows = routines.table(e, dt.date(2026, 10, 27), 3)
+    assert rows == ["2026-10-27（周二）：日报 Mac", "2026-10-26（周一）：日报 —", "2026-10-23（周五）：日报 —；影子账户 Mac"], rows
+    assert routines.find("shadow", e, dt.date(2026, 10, 23)) == "Mac"                       # 历史照旧能读
+
+
+def test_today_lines_ignore_the_retired_shadow_task(tmp_path):
+    day = "2026-10-27"                                                                    # 周二（交易日），停用之后
+    root = _today_tasks(tmp_path, {"lastRunAt": _utc_iso(f"{day} 06:33"), "lastScheduledFor": _utc_iso(f"{day} 06:32")},
+                        {"lastRunAt": _utc_iso("2026-10-23 07:46"), "lastScheduledFor": _utc_iso("2026-10-23 07:45")})
+    assert _lines(tmp_path, root, f"{day} 09:30") == []                                   # 影子账户今天没跑：不说（停用了）
+    assert _lines(tmp_path, root, f"{TUE_1020} 09:30") != []                               # 停用之前同样的情形照旧说
+
+
+@need_git
+def test_done_today_and_save_shadow_say_retired(repos):
+    t = repos
+    rc, out = _run(t, "done-today", "shadow", today="2026-10-26")
+    assert rc == 0 and f"已停用：{RETIRED_WHY}：今天 2026-10-26 不做（补跑也不做）" in out, out
+    head = _git(t / "remote.git", "rev-parse", BRANCH, ident=False)
+    sim = t / "sim" / "quant_breakout" / "var"
+    (sim / "out").mkdir(parents=True, exist_ok=True)
+    (sim / "out" / "shadow_today.json").write_text("{}", encoding="utf-8")
+    rc, out = _run(t, "save", "shadow", today="2026-10-26")
+    assert rc == 1 and f"★ 已停用：{RETIRED_WHY}：不入库" in out, out
+    assert _git(t / "remote.git", "rev-parse", BRANCH, ident=False) == head                  # 什么都没提交、没推
+    assert _git(t / "sim", "log", "-1", "--format=%s", ident=False).strip() == "init"
+
+
+@need_git
+def test_check_shows_the_retired_shadow_task_as_ok_or_reminds_to_delete_it(repos):
+    t = repos
+    _skills(t)
+    sessions, _ = _desktop(t, [{**DAILY_TASK, "lastRunAt": _utc_iso("2026-10-26 06:45")},
+                               {"id": "qbreak-shadow", "cronExpression": "45 7 * * 1-5", "enabled": True,
+                                "lastRunAt": _utc_iso("2026-10-23 07:47")},
+                               {"id": "qbreak-quarterly", "cronExpression": "56 9 12 1,4,7,10 *", "enabled": True,
+                                "lastRunAt": _utc_iso("2026-10-12 10:07:58")}])
+    env = dict(today="2026-10-26", CLAUDE_CONFIG_DIR=str(t / "cfg"), QBREAK_DESKTOP_DIR=str(sessions),
+               QBREAK_ROUTINES_NOW="2026-10-26T10:50:00+09:00", TZ="Asia/Tokyo")
+    rc, out = _run(t, "check", **env)
+    assert f"[!] 影子账户：{RETIRED_WHY}，但桌面版的排程里还有本机任务（qbreak-shadow）：在桌面版 Code → Routines 里删掉它" in out, out
+    assert "本机任务「影子账户」" not in out and "[★] 本机任务「影子账户」" not in out
+    assert "[OK] 本机任务「日报」：已建（qbreak-sim-daily" in out
+    f = sessions / "acct" / "org" / "scheduled-tasks.json"                                   # 桌面版里删掉了（10-24 的实况）
+    d = json.loads(f.read_text(encoding="utf-8"))
+    d["scheduledTasks"] = [x for x in d["scheduledTasks"] if x["id"] != "qbreak-shadow"]
+    f.write_text(json.dumps(d), encoding="utf-8")
+    rc, out = _run(t, "check", **env)
+    assert f"[OK] 影子账户：{RETIRED_WHY}：不再建、不再跑（补跑也不做；以前的记录照旧保留）" in out, out
+    assert "[★] 本机任务「影子账户」" not in out and "影子账户」（qbreak-shadow）" not in out
+    shutil.rmtree(t / "cfg" / "scheduled-tasks" / "qbreak-shadow")                         # SKILL.md 也删了：一样是 [OK]
+    rc, out = _run(t, "check", **env)
+    assert f"[OK] 影子账户：{RETIRED_WHY}：不再建、不再跑" in out, out
+    assert "[★] 本机任务「影子账户」还没建" not in out

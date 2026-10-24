@@ -15,7 +15,7 @@
 #    + 有几台设备打开了 qbreak 推送（只数台数，不读推送地址）
 # ⑤ 研究用的第二个克隆 ~/qbreak-dev（没有就建；没有本地改动就快进到最新）
 # ⑤b 本地改代码 / 推送（2026-10-09 起不需要云端会话）：只打印怎么检查（scripts/dev.sh check；不在这里跑推送检查，免得慢）
-# ⑤c 例行任务用的第三个克隆 ~/qbreak-sim（2026-10-09 起模拟盘日报 / 影子账户 / 季度复核在 Claude 桌面版的本机任务里跑，
+# ⑤c 例行任务用的第三个克隆 ~/qbreak-sim（2026-10-09 起模拟盘日报 / 季度复核在 Claude 桌面版的本机任务里跑（影子账户 2026-10-24 停用），
 #    说明书 quant_breakout/routines/；没有就建；干净就快进；有本地改动不动；工作日 06:40〜09:05 JST 是例行任务的时段 → 不动，它们自己会拉）
 # ⑥ 自检：已注册的定时任务、页面在哪里
 set -euo pipefail
@@ -183,7 +183,7 @@ elif git clone -q -b "$BRANCH" "$REPO" "$SIM" 2>/dev/null; then
 else
   echo "⑤c ★ 没能建 ${SIM}（网络或权限）：之后再运行本脚本"
 fi
-echo "   本机例行任务（模拟盘日报 / 影子账户 / 季度复核，Claude 桌面版）：在桌面版对话里说「装本机例行任务」（照 quant_breakout/routines/README.md）；"
+echo "   本机例行任务（模拟盘日报 / 季度复核，Claude 桌面版；影子账户 2026-10-24 停用）：在桌面版对话里说「装本机例行任务」（照 quant_breakout/routines/README.md）；"
 echo "   检查（只读）：bash \"$PROJ/scripts/routines.sh\" check"
 
 # ⑥ 自检

@@ -821,10 +821,13 @@ def _fwdj_html(d: dict) -> str:
 
 
 def _shadow_html(d: dict) -> str:
-    """影子账户（判断型选股，scripts/shadow_account.py；只前向记录，不影响模拟盘与交易）。"""
+    """影子账户（判断型选股，scripts/shadow_account.py；只前向记录，不影响模拟盘与交易）。
+    2026-10-24 用户停用（「不要影子账户任务」）：标题写停用、只显示最后的状态；不再提「3 个月后评估」。"""
     s = d.get("shadow") or {}
     if not s:
         return ""
+    from .shadow import RETIRED_WHY, retired
+    stopped = retired(now_jst().date())
     diff = s.get("diff_pp")
     cls = "up" if (diff or 0) > 0 else "down" if (diff or 0) < 0 else ""
     dec = s.get("last_decision") or {}
@@ -835,14 +838,22 @@ def _shadow_html(d: dict) -> str:
     rows = "".join(f"<tr><td>{escape(_lab(t))}</td><td class='n'>{int(p['shares']):,} {_unit(t)}</td><td class='n'>{_money(p.get('cost'))}</td>"
                    f"<td class='n'>{_money(p.get('close'))}</td><td class='n'>{_money(p.get('value'))}</td>"
                    f"<td class='n'>{float(p.get('pnl_pct') or 0):+.2f}%</td></tr>" for t, p in (s.get("positions") or {}).items())
-    return (f'<section class="card"><h2>影子账户（判断型选股，只记录，不影响模拟盘与交易）</h2>'
+    as_of = escape(str(s.get("as_of") or "—"))
+    title = (f"影子账户（判断型选股，已停用：记录停在 {as_of}）" if stopped else "影子账户（判断型选股，只记录，不影响模拟盘与交易）")
+    if stopped:
+        tail = (f"{escape(RETIRED_WHY)}：不再判断、不再推进，已有记录原样保留（只追加，不补）；事先登记的 3 个月评估不做"
+                f"（期间 {escape(' 〜 '.join(s.get('period') or []))} 没记满）"
+                + ("；停用时还没撮合的单不再成交" if s.get("pending") else "") + "。")
+    else:
+        tail = (f"记录期间 {escape(' 〜 '.join(s.get('period') or []))}；评估标准事先登记在 scripts/shadow_account.py（3 个月后评估）。"
+                f"{escape(NM.annotate(str(s.get('note') or '')))}")
+    return (f'<section class="card"><h2>{title}</h2>'
             f'<p>截至 {escape(str(s.get("as_of") or "—"))}：权益 <b>{_money(s.get("equity_jpy"))}</b>（{float(s.get("ret_pct") or 0):+.2f}%），'
             f'规则账户 {_money(s.get("rule_equity_jpy"))}，差 <b class="{cls}">{"—" if diff is None else f"{diff:+.2f} pp"}</b>；现金 {_money(s.get("cash_jpy"))}</p>'
             f'<p class="muted">{escape(str(dec.get("for_date") or "—"))} 的判断：{escape(NM.annotate(str(dec.get("view") or "—")))} → {orders}</p>'
             + (f'<div class="scroll"><table><tr><th>代码 / 名称</th><th class="n">数量</th><th class="n">成本</th><th class="n">收盘</th>'
                f'<th class="n">市值</th><th class="n">损益</th></tr>{rows}</table></div>' if rows else "")
-            + f'<p class="muted">记录期间 {escape(" 〜 ".join(s.get("period") or []))}；评估标准事先登记在 scripts/shadow_account.py（3 个月后评估）。'
-            f'{escape(NM.annotate(str(s.get("note") or "")))}</p></section>')
+            + f'<p class="muted">{tail}</p></section>')
 
 
 # ───────────────────────── 持仓仪表盘（日报最上面；重要度从高到低；每个参数带「现在在哪、危不危险」）─────────────────────────

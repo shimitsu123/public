@@ -1,3 +1,8 @@
+> **停用（2026-10-24 用户「不要影子账户任务」）：不再建、不再跑；补跑也不做。**
+> 前向记录（2026-09-28 起，事先登记 673dad6）停在最后一条（`var/out/shadow_*`、`var/state/shadow_state.json` 原样保留，只追加、不补、不改）；
+> 事先登记的 3 个月评估不做（`scripts/shadow_account.py` 第六节）。`routines.sh done-today shadow` 只打印「已停用」、`save shadow` 不入库。
+> 下面是停用前的原文，只留作历史。
+
 # 影子账户判断（Mac 本机例行任务；周一至五 07:45 JST）
 
 云端例行任务「影子账户判断（判断型选股，只记录）」（trig_01WndiH4mZSiFkeExpsukNm4）的 Mac 版（2026-10-09 用户「连云端例行任务也搬到 Mac」）。

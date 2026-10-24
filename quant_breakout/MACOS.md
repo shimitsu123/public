@@ -415,12 +415,12 @@ bash scripts/liveu.sh policy add --category BOJ_CHANGE --subtype tighten --date 
 
 用户 2026-10-09「连云端例行任务也搬到 Mac」。云端例行任务不能指派到个人 Mac（官方文档，2026-10-09 检索，仅对本次检索时点有效），
 所以改用 **Claude 桌面版的「本机任务」**（Local routine，要 Claude Desktop ≥ 1.1.5368）；云端同名例行任务原是后备，**2026-10-19 已删**（用户：以本地为准）→ 没有后备，Mac 没做的那天在 Mac 对话里说「补跑」。
-全部细节与建法：`routines/README.md`；说明书（云端 prompt 的 Mac 版，其余步骤原文照抄）：`routines/sim_daily.md`、`routines/shadow.md`、`routines/quarterly.md`。
+全部细节与建法：`routines/README.md`；说明书（云端 prompt 的 Mac 版，其余步骤原文照抄）：`routines/sim_daily.md`、`routines/quarterly.md`（`routines/shadow.md` 2026-10-24 停用，只留作历史）。
 
 | 本机任务 | 时间（JST） | 做什么 | 云端后备 |
 |---|---|---|---|
 | 模拟盘日报 | 周一至五 06:45 | 读市场风险报告 → `sim-day` → 入库（`sim(mac):`）（2026-10-20 起不发布日报） | 2026-10-19 已删 |
-| 影子账户判断 | 周一至五 07:45 | 等日报入库 → step → 判断（09:00 之前）→ 入库（`shadow(mac):`）（不发布日报） | 已删 |
+| ~~影子账户判断~~ | ~~周一至五 07:45~~ | **2026-10-24 用户停用**（「不要影子账户任务」）：不再建、不再跑、不补跑 | 已删 |
 | 顶底择时季度复核 | 1 / 4 / 7 / 10 月 12 日 09:56 | 2〜2m、3、3b 的复核 → 入库（`季度复核(mac)：`） | 已删 |
 
 - 工作文件夹：例行任务专用的第三个克隆 `~/qbreak-sim`（`mac_setup.sh` 建 / 快进；只有例行任务在这里改 `var/`、提交、推送）。
@@ -428,7 +428,7 @@ bash scripts/liveu.sh policy add --category BOJ_CHANGE --subtype tighten --date 
 - 命令：`bash scripts/routines.sh done-today sim|shadow|quarterly`（做过就跳过：0 跳过 / 1 照常做 / 2 拉不下来 → 停下）、
   `run <python 参数…>`（在 `~/qbreak-sim` 里、去掉 `QBREAK_HOME` 跑：这些命令本来就写仓库的 `var/`）、`deps`（按 requirements.lock 装）、
   `push`（`git pull --rebase` → `git push`，失败 2 / 4 / 8 / 16 秒后重试；不 force、不改分支；提交信息带模型名 / 作者不是设好的 git 身份 → 不推）、
-  `check`（只读：克隆、推送权限、git 身份、桌面版版本、三个本机任务、钥匙串 qbreak-jquants、pmset 唤醒、最近 5 个工作日每天是 Mac 还是云端做的）。
+  `check`（只读：克隆、推送权限、git 身份、桌面版版本、本机任务（影子账户 2026-10-24 起显示「停用」）、钥匙串 qbreak-jquants、pmset 唤醒、最近 5 个工作日每天是 Mac 还是云端做的）。
 - 你要做的（一次）：桌面版开机自动打开（登录项）、Settings → This computer → System → **Keep computer awake** 打开、
   终端里 `sudo pmset repeat wakeorpoweron MTWRF 06:40:00`（或每天 06:30 之类，只要工作日 06:45 之前醒着就行；取代原来的 07:30；`pmset repeat` 只能有一个重复唤醒；立花执行器只要 07:40 之前）、
   然后在 Mac 的 Claude 对话里说「装本机例行任务」（Claude 照 `routines/README.md` 建三个任务、先 Run now 一次，权限选 always allow）。

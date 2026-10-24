@@ -33,7 +33,7 @@ def test_items_pick_checks_from_events_changes_rules_and_milestones():
 
 def test_milestones_and_report_block():
     near = CK.items(dt.date(2026, 12, 1), events=[], changes=[])
-    assert any(x["date"] == "2026-12-24" for x in near) and any(x["date"] == "2026-12-25" for x in near)
+    assert any(x["date"] == "2026-12-24" for x in near) and not any(x["date"] == "2026-12-25" for x in near)   # 影子账户评估 2026-10-24 停用
     far = CK.upcoming_milestones(dt.date(2026, 12, 26), 2)
     assert [x["date"] for x in far] == ["2027-09-28", "2028-09-28"]
     from qbreak.report_unified import _calendar_html
@@ -41,3 +41,10 @@ def test_milestones_and_report_block():
                         "milestones": CK.upcoming_milestones(dt.date(2026, 9, 28))})
     assert "检查日历" in h and "2026-10-01（四）" in h and "CHECK_TIMELINE.md" in h and "2026-12-24" in h
     assert _calendar_html({"error": "x"}) == ""
+
+
+def test_shadow_evaluation_is_not_listed_after_the_user_retired_it():
+    """2026-10-24 用户「不要影子账户任务」：原 2026-12-25 的影子账户 3 个月评估不再列。"""
+    assert not any("影子账户" in what for _, what, _, _, _ in CK.MILESTONES)
+    rows = CK.items(dt.date(2026, 12, 1), events=[], changes=[], delist=[])
+    assert not any("影子账户" in r["what"] for r in rows) and any(r["date"] == "2026-12-24" for r in rows)

@@ -6,6 +6,10 @@
 （与模拟盘 qbreak/unified.apply_corp_action 同一口径）。只做多、不加杠杆；日経225 成分股最多 4 只、单只买入 ≤ 权益 35%；ETF 只有 1655.T / 1329.T。
 文件：状态 <数据目录>/state/shadow_state.json；只追加的记录 out/shadow_decisions.jsonl（每天的判断）、out/shadow_trades.csv（成交）、
 out/shadow_equity.csv（每个交易日收盘：影子 vs 规则账户）；当天摘要 out/shadow_today.json（日报用）。
+
+2026-10-24 停用（用户「不要影子账户任务」；RETIRED）：例行任务不再建、不再跑，前向记录停在最后一条（只追加，不补、不改）；
+那天起 scripts/shadow_account.py 的 step / decide 不再推进 / 记录，事先登记的 3 个月评估不做（期间没记满；不按看过的结果另定标准），
+evaluate --interim 只给到最后一条为止的描述统计（不判定）。日报「影子账户」一栏写停用、显示最后的状态。
 """
 from __future__ import annotations
 
@@ -20,6 +24,16 @@ import numpy as np
 from . import paths
 
 START, END = "2026-09-28", "2026-12-24"
+RETIRED = "2026-10-24"                       # 用户停用的日子（这天起不再推进 / 记录 / 评估）
+RETIRED_WHY = "2026-10-24 用户停用（「不要影子账户任务」）"
+
+
+def retired(day: dt.date | str | None = None) -> bool:
+    """day（默认今天 JST）影子账户已经停用了吗。"""
+    if day is None:
+        from .calendar_jp import now_jst
+        day = now_jst().date()
+    return str(day)[:10] >= RETIRED
 CAPITAL = 1_000_000.0
 ETFS = ("1655.T", "1329.T")
 MAX_STOCKS, MAX_STOCK_W, STOCK_LOT = 4, 0.35, 100

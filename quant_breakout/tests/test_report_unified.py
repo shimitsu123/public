@@ -424,3 +424,21 @@ def test_codes_carry_names_shadow_units_and_safety_net():
     rd = read_json(paths.out_dir() / "report_data.json")
     assert rd["shadow"]["last_decision"]["orders"][0]["ticker"] == "1655.T"                            # 数据里的 ticker 字段照旧
     assert read_json(paths.out_dir() / "shadow_today.json")["positions"]["1655.T"]["shares"] == 130
+
+
+def test_shadow_card_says_retired_after_2026_10_24(monkeypatch):
+    """2026-10-24 用户「不要影子账户任务」：日报的影子账户一栏写停用、记录停在哪天，不再写「3 个月后评估」。"""
+    import datetime as dt
+    from qbreak import report_unified as RU
+    from qbreak.calendar_jp import JST
+    s = {"as_of": "2026-10-22", "equity_jpy": 993_899, "ret_pct": -0.61, "cash_jpy": 698_089, "rule_equity_jpy": 956_178, "diff_pp": 3.77,
+         "positions": {}, "pending": [{"for_date": "2026-10-23", "ticker": "8750.T", "side": "SELL", "shares": 100}],
+         "last_decision": {"for_date": "2026-10-23", "view": "v", "orders": []}, "period": ["2026-09-28", "2026-12-24"], "note": "n"}
+    monkeypatch.setattr(RU, "now_jst", lambda: dt.datetime(2026, 10, 26, 7, 0, tzinfo=JST))
+    html = RU._shadow_html({"shadow": s})
+    assert "影子账户（判断型选股，已停用：记录停在 2026-10-22）" in html and "2026-10-24 用户停用（「不要影子账户任务」）" in html
+    assert "事先登记的 3 个月评估不做" in html and "停用时还没撮合的单不再成交" in html and "3 个月后评估" not in html
+    monkeypatch.setattr(RU, "now_jst", lambda: dt.datetime(2026, 10, 1, 7, 0, tzinfo=JST))
+    html = RU._shadow_html({"shadow": s})
+    assert "影子账户（判断型选股，只记录，不影响模拟盘与交易）" in html and "3 个月后评估" in html and "停用" not in html
+    assert RU._shadow_html({}) == ""

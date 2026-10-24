@@ -3,12 +3,15 @@
 模拟盘日报 / 影子账户判断 / 季度复核在 Mac 的 Claude 桌面版「本机任务」里跑（工作文件夹 ~/qbreak-sim，说明书 routines/*.md）；
 云端同名例行任务是后备（Mac 当天做过就跳过）。谁做的看提交信息的开头：Mac 写「sim(mac): / shadow(mac): / 季度复核(mac)：」，
 云端照旧「sim: / shadow: / 季度复核：」（仓库里没有别的代码解析这些前缀，2026-10-09 查过）。
+影子账户判断 2026-10-24 起停用（用户「不要影子账户任务」；RETIRED）：那天起 check / 09:30 自检 / 自动停止 / 允许规则都不再看它、
+done-today / save 不做；以前的 shadow: / shadow(mac): 提交照旧读（最近几天的表、本地提交的分类）。
 只看提交信息与提交时间，不看、不打印提交者的名字 / 邮箱。
 
 命令（routines.sh 调用；输入输出都是纯文本；提交 = 每行「提交时间戳（秒）<TAB>标题」，git log --format='%ct%x09%s'）：
   python -m qbreak.routines day [YYYY-MM-DD]               → 「星期（1〜7） 交易日（1 / 0）」；不给日期 = 今天（JST）
   python -m qbreak.routines done <shadow|quarterly> <日期>  < 提交 → 找到那天的 → 打印「Mac / 云端」、退出 0；没有 → 退出 1
   python -m qbreak.routines who                             < 一行标题 → 「Mac / 云端」
+  python -m qbreak.routines retired <sim|shadow|quarterly> [日期] → 那天停用了 → 打印说明、退出 0；没停用 → 退出 1（影子账户 2026-10-24 起）
   python -m qbreak.routines wake [HH:MM]                    < pmset -g sched 的输出 → 「OK|NG|?<TAB>说明」（默认 06:50 之前）
   python -m qbreak.routines app <Info.plist> [最低版本]       → 「OK|NG|?<TAB>说明」（Claude 桌面版的版本）
   python -m qbreak.routines table <日期> [n]                 < 提交 → 最近 n 个工作日（周一至五）每天的日报 / 影子账户是谁做的
@@ -51,6 +54,18 @@ _PREFIX = {
     "quarterly": re.compile(r"^季度复核(\(mac\))?："),
 }
 WEEK = "一二三四五六日"
+# 停用的例行任务：说明书名 / done-today 的种类 → (停用日, 说明)。那天起不再建、不再跑、不再检查（以前的提交照旧读）。
+RETIRED = {"shadow": (dt.date(2026, 10, 24), "2026-10-24 用户停用（「不要影子账户任务」）")}
+_KIND_ALIAS = {"sim": "sim_daily"}
+
+
+def retired(kind: str, day: dt.date | None = None) -> str | None:
+    """这种例行任务（sim / sim_daily / shadow / quarterly）在 day（默认今天 JST）停用了吗 → 说明；没停用 → None。"""
+    r = RETIRED.get(_KIND_ALIAS.get(kind, kind)) or RETIRED.get(kind)
+    if not r:
+        return None
+    day = day or now_jst().date()
+    return r[1] if day >= r[0] else None
 
 
 def who(subject: str) -> str:
@@ -127,7 +142,9 @@ def table(entries: list[tuple[dt.date, str]], today: dt.date, n: int = 5) -> lis
         closed = not is_trading_day(d)
         sim = find("sim", entries, d) or "—"
         sh = find("shadow", entries, d) or ("—（休市不做）" if closed else "—")
-        rows.append(f"{d}（周{WEEK[d.weekday()]}{'，休市' if closed else ''}）：日报 {sim}；影子账户 {sh}")
+        if retired("shadow", d):                              # 2026-10-24 起停用：那天以后不写这一栏（以前的照旧）
+            sh = ""
+        rows.append(f"{d}（周{WEEK[d.weekday()]}{'，休市' if closed else ''}）：日报 {sim}" + (f"；影子账户 {sh}" if sh else ""))
     return rows
 
 
@@ -514,7 +531,12 @@ def desktop_report(root, projects, want: dict, now: dt.datetime, tz=None, procs:
 # ────────── 09:30 自检的推送：本机任务今天卡住 / 没跑 / 晚了（2026-10-16；只读，读不到就什么都不说）──────────
 # 用户今天把 ~/qbreak-sim 改回默认的逐项确认：和允许规则对不上的命令会停在权限确认、一直等着（10-12〜10-16 就这样）。
 # routines.sh check 只在有人问时才看 → 交易日 09:30 自检的那条推送里加一行（不改自检的结论：不影响下单）。
-KINDS = (("sim_daily", "日报"), ("shadow", "影子账户"), ("quarterly", "季度复核"))
+KINDS = (("sim_daily", "日报"), ("shadow", "影子账户"), ("quarterly", "季度复核"))   # shadow：2026-10-24 停用（active_kinds 去掉）
+
+
+def active_kinds(day: dt.date | None = None) -> tuple:
+    """day（默认今天 JST）还在跑的本机任务（KINDS 去掉停用的）。"""
+    return tuple((k, lab) for k, lab in KINDS if not retired(k, day))
 DESKTOP_DEFAULT = "Library/Application Support/Claude/claude-code-sessions"   # 家目录下（routines.sh 同一个默认）
 LATE_AFTER = GRACE                        # 今天的运行比到点晚这么久才开始 = 晚了（Mac 睡着 / 桌面版没开）
 HISTORY_HINT = "在 Mac 对话里问「例行任务今天跑了吗」"
@@ -578,7 +600,7 @@ def today_lines(now: dt.datetime, root=None, projects=None, cfg=None, tz=None, p
         return []
     today = now.astimezone(JST).date()
     out: list[str] = []
-    for kind, label in KINDS:
+    for kind, label in active_kinds(today):                   # 停用的（影子账户 2026-10-24 起）不说
         tid = ids.get(kind)
         t = tasks.get(tid) if tid else None
         if not isinstance(t, dict) or t.get("enabled") is False:
@@ -621,7 +643,7 @@ def today_lines(now: dt.datetime, root=None, projects=None, cfg=None, tz=None, p
 # 07:40 的执行器连着 3 天用旧的判断层 / 宏观输入、09:30 自检连着 3 天没通过；10/21 09:37 补跑的那次又停在 git diff 上 13 小时。
 # → 每 15 分钟（liveu.sh news）查一次：本机任务最近一次运行停在没有结果的工具调用上 30 分钟以上、它的进程还在、而且进程没有子进程
 #   （真的在跑命令时有子进程；等权限确认时没有）→ 停止那个进程（桌面版随后会再启动错过的 / 下次到点照常跑），推一条手机通知。
-#   一个任务一天最多停 2 次（补跑又卡住也不来回停：之后照旧由 09:30 自检 / routines.sh check 报）；只停这三个本机任务的会话
+#   一个任务一天最多停 2 次（补跑又卡住也不来回停：之后照旧由 09:30 自检 / routines.sh check 报）；只停这几个本机任务的会话
 #   （工作文件夹对得上的那个进程），不碰别的对话。记录：数据目录 out/routines_reap.json（只在本机）。
 REAP_AFTER = dt.timedelta(minutes=30)
 REAP_MAX_PER_DAY = 2
@@ -760,7 +782,7 @@ def reap(now: dt.datetime | None = None, root=None, projects=None, cfg=None, pro
     hist = _reap_log(log_path)
     day = now.astimezone(JST).date().isoformat()
     out: list[str] = []
-    for kind, label in KINDS:
+    for kind, label in active_kinds(now.astimezone(JST).date()):   # 停用的不碰（影子账户 2026-10-24 起）
         tid = ids.get(kind)
         mine = sorted((s for s in sessions if tid and s.get("scheduledTaskId") == tid), key=lambda s: _parse_ts(s.get("createdAt")) or now)
         if not mine or mine[-1].get("isArchived") is True:
@@ -820,12 +842,12 @@ def reap(now: dt.datetime | None = None, root=None, projects=None, cfg=None, pro
 
 # ────────── 允许规则够不够（2026-10-16；只读）──────────
 # 无人值守的本机任务只有和允许规则对得上的 Bash 命令才自动执行，否则停在权限确认、一直等着（10-12〜10-16）。这里把说明书
-# （sim_daily.md / shadow.md / quarterly.md 的命令、README.md 固定文字里的第 1 步）要运行的 Bash 命令逐条和
+# （sim_daily.md / quarterly.md 的命令、README.md 固定文字里的第 1 步；shadow.md 2026-10-24 停用、不再对照）要运行的 Bash 命令逐条和
 # ~/qbreak-sim/.claude/settings.local.json 的 permissions.allow（+ 桌面版里那个任务自己的 approvedPermissions）对照。
 # 对照法（Claude Code 的规则，近似）：规则 = 一字不差，或以「:*」/「 *」结尾的前缀（* 也可以在中间 = 任意文字）；
 # 用 && / || / ; / | 连起来的命令 → 整条一字不差地在规则里，或拆开之后每一段都对得上（cd 进 ~/qbreak-sim 里的那段不用规则）；
 # 说明书里 <…> 占位的地方（提交信息里的日期）要规则在那里有 *。只打印对不上的命令（仓库里的文字），不打印规则文件的别的内容。
-MANUALS = ("sim_daily", "shadow", "quarterly")
+MANUALS = ("sim_daily", "quarterly")                       # shadow.md：2026-10-24 停用（RETIRED），不再跑 → 不要求它的命令在允许规则里
 _CMD_HEAD = re.compile(r"^(cd ~/qbreak-sim|bash scripts/|git -C ~/qbreak-sim |git add |git commit |TZ=|echo ~/|until )")
 _PLACEHOLDER = re.compile(r"<[^<>`]+>")
 _SAMPLES = ("2026-10-16", "x y")
@@ -1073,6 +1095,12 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "who":
         print(who(sys.stdin.readline().strip()))
         return 0
+    if cmd == "retired" and a:                              # routines.sh：这种例行任务那天停用了吗 → 打印说明、退出 0；没停用 → 退出 1
+        why = retired(a[0], _today(a[1] if len(a) > 1 else None))
+        if why:
+            print(why)
+            return 0
+        return 1
     if cmd == "wake":
         by = WAKE_BY
         if a:
