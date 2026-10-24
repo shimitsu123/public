@@ -15,6 +15,7 @@
   python -m qbreak.routines local                           < 没推上去的提交、一行「--origin--」、远端的提交
                                                             → redundant（都是 Mac 例行任务的结果，远端那天已经有同一种的）/
                                                               pushable（都是 Mac 例行任务的结果，远端还没有）/ other（有别的提交）
+  python -m qbreak.routines listed <运行记录目录> <任务 id>   → 「1|0|?」：最新的 scheduled-tasks.json 里有没有这个任务（读不到 → ?；2026-10-24 复核）
   python -m qbreak.routines desktop <运行记录目录> <对话记录目录> <任务 id=名字（一行一个）>
                                                             → 「OK|NG|WARN|?<TAB>说明」一行一条：本机任务按时跑了没有、有没有卡住的运行
                                                               （桌面版的 scheduled-tasks.json / local_*.json / 对话记录；只读；现在 = QBREAK_ROUTINES_NOW 或真的现在）
@@ -382,6 +383,28 @@ def _load_desktop(root: Path) -> tuple[dict, dict, list, str]:
     return tasks, skips, sessions, ""
 
 
+NOT_LISTED = "桌面版的排程里没有这个任务（被删了 / 没建好）：在桌面版 Code → Routines 里看；要重建在对话里说"
+
+
+def listed_ids(root) -> set | None:
+    """最新的 scheduled-tasks.json（按修改时间）里的任务 id；读不到 / 格式不同 → None（不下结论）。
+    2026-10-24 复核：~/.claude/scheduled-tasks/<id>/SKILL.md 还在、但桌面版的排程里已经没有这个任务（qbreak-shadow 就是这样）
+    → 以前 check 照样写「已建」、这里只记「?」跳过；其实它再也不会跑。只读，只看 id。"""
+    try:
+        files = sorted(Path(root).glob("*/*/scheduled-tasks.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    except OSError:
+        return None
+    for p in files:
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        items = data.get("scheduledTasks") if isinstance(data, dict) else None
+        if isinstance(items, list):
+            return {t["id"] for t in items if isinstance(t, dict) and isinstance(t.get("id"), str)}
+    return None
+
+
 def _stuck_runs(mine: list, projects, now: dt.datetime, procs: list | None = None) -> list[tuple[dt.datetime, str]]:
     """一个任务的会话里卡住的运行 → [(开始时刻, 停在哪里)]（旧的在前）：没归档、开始 2 小时以上，对话记录最后是还没有结果的工具调用
     （也已经 2 小时没动），或没有对话记录、开始几秒之后就没有动静、一轮也没做完。
@@ -430,8 +453,12 @@ def desktop_report(root, projects, want: dict, now: dt.datetime, tz=None, procs:
     out: list[tuple[str, str]] = []
     prompt_mode: list[str] = []
     fix = "让它不再问：说明书里的命令都要一字不差地在允许规则里（见 routines/README.md）"
+    listed = listed_ids(root)
     for tid, label in want.items():
         t = tasks.get(tid)
+        if listed is not None and tid not in listed:          # 排程文件读到了、里面没有它（2026-10-24 复核）
+            out.append(("NG", f"本机任务「{label}」：{NOT_LISTED}"))
+            continue
         if t is None:
             out.append(("?", f"本机任务「{label}」：桌面版的运行记录里没有它（刚建 / 记录格式变了？）：跳过「按时跑了没有」"))
             continue
@@ -1061,6 +1088,10 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "local":
         mine, _, theirs = sys.stdin.read().partition("--origin--")
         print(classify_local(parse_log(mine), parse_log(theirs)))
+        return 0
+    if cmd == "listed" and len(a) >= 2:                     # routines.sh check：这个任务 id 在桌面版的排程里吗 → 1 / 0 / ?
+        ids = listed_ids(a[0])
+        print("?" if ids is None else ("1" if a[1] in ids else "0"))
         return 0
     if cmd == "desktop" and len(a) >= 3:
         want = {}

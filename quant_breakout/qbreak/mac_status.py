@@ -228,7 +228,20 @@ def path() -> Path:
     return paths.out_dir() / "mac_status.json"
 
 
+def _pick_home() -> str | None:
+    """没设 QBREAK_HOME、而 ~/.qbreak/home 在 → 返回它（2026-10-24 复核）。
+    对话里直接跑 `python -m qbreak.mac_status --print` 时常常没设 QBREAK_HOME，paths 就落到仓库的 var/，
+    报出「立花还没有账本」「手机访问没打开」之类的错状态。只在这个入口改本进程的环境变量，不动 paths 的默认值（别的模块照旧）。"""
+    if os.environ.get("QBREAK_HOME"):
+        return None
+    d = Path.home() / ".qbreak" / "home"
+    return str(d) if d.is_dir() else None
+
+
 def main(argv=None) -> int:
+    picked = _pick_home()
+    if picked:
+        os.environ["QBREAK_HOME"] = picked
     ap = argparse.ArgumentParser(prog="python -m qbreak.mac_status")
     ap.add_argument("--write", action="store_true", help="写数据目录 out/mac_status.json（菜单栏 App 读）")
     ap.add_argument("--ensure-phone", action="store_true", help="手机访问断了就自动重新打开；修不好通知一次")
@@ -253,6 +266,8 @@ def main(argv=None) -> int:
     if a.write:
         write_json(path(), s)
     if a.print or not (a.write or a.ensure_phone):
+        src = "（没设 QBREAK_HOME，自动用这个）" if picked else ""
+        print(f"数据目录：{paths.home()}{src}")
         print(f"{s['title']}（{s['at']} JST）")
         for it in s["items"]:
             print(f"  [{ {'ok': '✓', 'info': '·', 'warn': '!', 'bad': '✕'}.get(it['level'], '?') }] {it['name']}：{it['text']}")

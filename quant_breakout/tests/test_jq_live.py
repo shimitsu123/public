@@ -86,6 +86,31 @@ def test_revisions_change_vs_previous_forecast():
     assert JL.revisions(new, {"7203"}, None)[0]["FOP_chg_pct"] is None          # 没有旧值 → 不算 %
 
 
+def _wide(rows: list[dict], n: int = 120) -> pd.DataFrame:
+    """像 _load 那样经 CSV 读回来的宽表（pandas 3 的 read_csv：每列一个块、没合并 → 插列会报 PerformanceWarning）。"""
+    import io
+    df = pd.DataFrame([{**r, **{f"X{i}": float(i) for i in range(n)}} for r in rows])
+    return pd.read_csv(io.StringIO(df.to_csv(index=False)), dtype={"Code": str})
+
+
+def test_c4_column_without_fragmentation_warning():
+    """2026-10-24 复核：jquants 日志里一天 27 条 PerformanceWarning（assign 插列）→ pd.concat 一次接上；结果和以前的 assign 一样。"""
+    import warnings
+    hist = _wide([{"Code": "72030", "CurFYEn": "2027-03-31", "FOP": 5000, "FNP": 4000}])
+    new = _wide([{"Code": "72030", "DocType": "EarnForecastRevision", "CurFYEn": "2027-03-31", "FOP": 5500, "FNP": 3600},
+                 {"Code": "11110", "DocType": "x", "CurFYEn": "2027-03-31", "FOP": 1, "FNP": 1}])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", pd.errors.PerformanceWarning)
+        got = JL._with_c4(hist)
+        r = JL.revisions(new, {"7203"}, hist)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
+        want = hist.assign(c4=hist["Code"].map(JL._code4))
+    pd.testing.assert_frame_equal(got, want)
+    assert list(got.columns)[-1] == "c4" and got["c4"].tolist() == ["7203"]
+    assert len(r) == 1 and r[0]["FOP_chg_pct"] == 10.0 and r[0]["FNP_chg_pct"] == -10.0
+
+
 def test_listing_changes():
     prev = pd.DataFrame([{"Code": "72030", "CoName": "A", "MktNm": "プライム"}, {"Code": "11110", "CoName": "Old", "MktNm": "スタンダード"}])
     nxt = pd.DataFrame([{"Code": "72030", "CoName": "A", "MktNm": "スタンダード"}, {"Code": "99990", "CoName": "New", "MktNm": "グロース"}])

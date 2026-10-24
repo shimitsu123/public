@@ -464,7 +464,7 @@ def test_desktop_report_paused_skips_only_and_unreadable_state(tmp_path):
     assert ("NG", "本机任务「日报」：桌面版从 10/13 06:32 起一直跳过它（上一次运行还没结束） → 在桌面版 Code → Routines 打开还没结束的那次运行、"
                   "停止它；让它不再问：说明书里的命令都要一字不差地在允许规则里（见 routines/README.md）") in rows, rows
     assert ("?", "本机任务「日报」最近被桌面版跳过（原因 some_newreason）：在桌面版 Code → Routines → Review history 看") in rows
-    assert rows[-1][0] == "?" and "「影子账户」：桌面版的运行记录里没有它" in rows[-1][1]
+    assert rows[-1] == ("NG", "本机任务「影子账户」：" + routines.NOT_LISTED)        # 排程里没有它：不会再跑（2026-10-24 复核；以前只记「?」）
     assert not any(m == "WARN" for m, _ in rows)
     # 没有运行记录 / 格式不同 → 只是「?」（check 里是 [—]，不算要处理）
     assert routines.desktop_report(tmp_path / "none", proj, WANT, _jst("2026-10-16 10:50"), JST) == [
@@ -474,6 +474,40 @@ def test_desktop_report_paused_skips_only_and_unreadable_state(tmp_path):
     (bad / "scheduled-tasks.json").write_text("[1, 2]", encoding="utf-8")
     rows = routines.desktop_report(tmp_path / "b", proj, WANT, _jst("2026-10-16 10:50"), JST)
     assert len(rows) == 1 and rows[0][0] == "?" and "格式和预期不同" in rows[0][1]
+
+
+def test_task_missing_from_the_newest_schedule_is_ng(tmp_path, capsys):
+    """2026-10-24 复核：SKILL.md 还在、桌面版最新的 scheduled-tasks.json 里没有 qbreak-shadow → NG（以前「?」跳过、check 写「已建」）。"""
+    root, proj = _desktop(tmp_path, [{**DAILY_TASK, "lastRunAt": _utc_iso("2026-10-16 06:45")}])
+    old = root / "acct" / "old-org"                                     # 旧的文件里还有它：以最新的为准
+    old.mkdir(parents=True)
+    (old / "scheduled-tasks.json").write_text(json.dumps({"scheduledTasks": [{"id": "qbreak-shadow", "cronExpression": "45 7 * * 1-5"}]}),
+                                              encoding="utf-8")
+    os.utime(old / "scheduled-tasks.json", (1_000_000_000, 1_000_000_000))
+    assert routines.listed_ids(root) == {"qbreak-sim-daily"}
+    rows = routines.desktop_report(root, proj, {"qbreak-sim-daily": "日报", "qbreak-shadow": "影子账户"}, _jst("2026-10-16 10:50"), JST)
+    assert ("NG", "本机任务「影子账户」：桌面版的排程里没有这个任务（被删了 / 没建好）：在桌面版 Code → Routines 里看；要重建在对话里说") in rows, rows
+    assert routines.main(["listed", str(root), "qbreak-shadow"]) == 0 and capsys.readouterr().out == "0\n"
+    assert routines.main(["listed", str(root), "qbreak-sim-daily"]) == 0 and capsys.readouterr().out == "1\n"
+    assert routines.main(["listed", str(tmp_path / "none"), "qbreak-shadow"]) == 0 and capsys.readouterr().out == "?\n"
+    assert routines.listed_ids(tmp_path / "none") is None
+
+
+@need_git
+def test_check_says_ng_when_the_desktop_schedule_lost_the_task(repos):
+    t = repos
+    _skills(t)
+    _desktop(t, [{**DAILY_TASK, "lastRunAt": _utc_iso("2026-10-16 06:45")},
+                 {"id": "qbreak-quarterly", "cronExpression": "56 9 12 1,4,7,10 *", "enabled": True,
+                  "lastRunAt": _utc_iso("2026-10-12 10:07:58")}])
+    env = dict(today="2026-10-16", CLAUDE_CONFIG_DIR=str(t / "cfg"), QBREAK_DESKTOP_DIR=str(t / "sessions"),
+               QBREAK_ROUTINES_NOW="2026-10-16T10:50:00+09:00", TZ="Asia/Tokyo")
+    rc, out = _run(t, "check", **env)
+    assert rc == 1, out
+    assert ("[★] 本机任务「影子账户」（qbreak-shadow）：桌面版的排程里没有这个任务（被删了 / 没建好）：在桌面版 Code → Routines 里看；"
+            "要重建在对话里说") in out, out
+    assert "[OK] 本机任务「日报」：已建（qbreak-sim-daily" in out and "「影子账户」：已建" not in out
+    assert out.count("影子账户」（qbreak-shadow）") == 1 and "影子账户」：桌面版的排程里没有" not in out    # 只报一次
 
 
 def test_transcript_tail_only_counts_a_call_still_without_its_result(tmp_path):

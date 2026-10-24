@@ -153,6 +153,50 @@ def test_low_disk_notifies_once_a_day(tmp_path):
     assert "Mac 的磁盘只剩" in out and "磁盘快满了" not in _calls(log)                 # 同一天：只打印，不再通知
 
 
+def test_rotation_covers_dot_log_files_but_not_qbreak_log(tmp_path):
+    """2026-10-24 复核：面板追加写的 *.log（盘中观测 / 重试记录 / demotest）以前不轮换；qbreak.log 由 Python 自己轮换，不动。"""
+    env, log = _run_env(tmp_path, 0, QBREAK_LOG_MAX_BYTES="100")
+    logs = tmp_path / "lh" / "logs"
+    logs.mkdir(parents=True)
+    for n in ("com.qbreak.panel.intraday.log", "com.qbreak.panel.retry.log", "demotest.log", "qbreak.log"):
+        (logs / n).write_text("y" * 500, encoding="utf-8")
+    (logs / "com.qbreak.panel.intraday.log.1").write_text("old1", encoding="utf-8")
+    out, _ = _bash(env, "scripts/liveu.sh", "run", "--broker", "paper", "--retry")
+    for n in ("com.qbreak.panel.intraday.log", "com.qbreak.panel.retry.log", "demotest.log"):
+        assert f"日志轮换：{n}" in out and (logs / f"{n}.1").read_text(encoding="utf-8") == "y" * 500, (n, out)
+    assert (logs / "com.qbreak.panel.intraday.log.2").read_text(encoding="utf-8") == "old1"
+    assert (logs / "qbreak.log").read_text(encoding="utf-8") == "y" * 500 and not (logs / "qbreak.log.1").exists()
+    assert "日志轮换：qbreak.log" not in out
+
+
+def test_news_job_rotates_once_a_day_and_warns_low_disk_once_a_day(tmp_path):
+    """2026-10-24 复核：每 15 分钟的 news 也轮换日志（同一天一次）、看磁盘（< 10 GB；同一天一次推送，和执行器共用 .disk_warned）。"""
+    env, log = _run_env(tmp_path, 0, QBREAK_LOG_MAX_BYTES="100", QBREAK_DISK_MIN_KB="999999999999")
+    logs = tmp_path / "lh" / "logs"
+    logs.mkdir(parents=True)
+    (logs / "com.qbreak.news.out").write_text("x" * 500, encoding="utf-8")
+    out, err = _bash(env, "scripts/liveu.sh", "news")
+    c = _calls(log)
+    assert (logs / "com.qbreak.news.out.1").read_text(encoding="utf-8") == "x" * 500, (out, err)
+    assert c.count("notify --subject qbreak ★ Mac 的磁盘快满了") == 1 and "osascript" in c
+    assert "Mac 的磁盘只剩" not in out                                              # 每 15 分钟：不往日志里写
+    assert "run.py news --page --notify" in c                                     # 仪表盘照常
+    (logs / "com.qbreak.news.out").write_text("z" * 500, encoding="utf-8")
+    env, log = _run_env(tmp_path, 0, QBREAK_LOG_MAX_BYTES="100", QBREAK_DISK_MIN_KB="999999999999")
+    out, _ = _bash(env, "scripts/liveu.sh", "news")                                # 同一天第二次：不再轮换、不再推送
+    assert (logs / "com.qbreak.news.out.1").read_text(encoding="utf-8") == "x" * 500
+    assert "磁盘快满了" not in _calls(log) and "osascript" not in _calls(log)
+    env, log = _run_env(tmp_path, 0, QBREAK_LOG_MAX_BYTES="100", QBREAK_DISK_MIN_KB="999999999999")
+    out, _ = _bash(env, "scripts/liveu.sh", "run", "--broker", "paper", "--retry")  # 执行器照旧每次轮换、只打印（今天已推过）
+    assert (logs / "com.qbreak.news.out.1").read_text(encoding="utf-8") == "z" * 500
+    assert "Mac 的磁盘只剩" in out and "磁盘快满了" not in _calls(log)
+
+
+def test_disk_warning_threshold_is_10_gb():
+    sh = (ROOT / "scripts" / "liveu.sh").read_text(encoding="utf-8")
+    assert '"${QBREAK_DISK_MIN_KB:-10485760}"' in sh and "QBREAK_DISK_MIN_KB:-1048576}" not in sh
+
+
 # ────────── 登录时：Python 环境坏了 ──────────
 def test_login_warns_when_the_venv_python_is_broken(tmp_path):
     env, log = _run_env(tmp_path, 0, QBREAK_LOGIN_DELAY="0")

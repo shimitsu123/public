@@ -65,7 +65,8 @@
 # 远程停止：云端对话里你说「停」→ 仓库的 var/HALT_REMOTE（run.py remote-halt）→ 这里每次运行前看一眼，新的 id → 建本地 HALT。
 # 页面（账本 + 日志）：~/.qbreak/home/out/page_paper.html（立花：page_tachibana.html），每次运行都重写；
 #   定时任务跑完自动用浏览器打开（不想弹出：touch ~/.qbreak/home/NO_OPEN）；运行没走完 → 页面顶上标红 + 通知。
-# 每次 run 开头：logs/ 下超过 5 MB 的 .out / .err 轮换（留 .1〜.3）、数据目录所在磁盘剩余 < 1 GB → 通知（同一天一次）；
+# 每次 run 开头：logs/ 下超过 5 MB 的 .out / .err / .log 轮换（留 .1〜.3；qbreak.log 由 Python 自己轮换、不算）、
+#   数据目录所在磁盘剩余 < 10 GB → 通知（同一天一次）；每 15 分钟的 news 也看磁盘、每天轮换一次日志（2026-10-24 复核）；
 # 立花本番（不含 --demo / --dry-run / 撤单）用的代码和上一次验证过的不同 → 先跑冒烟测试（3 个测试文件，最多 10 分钟）：
 #   没过 → 这次执行器加 --block-reason（对账 / 决策照常、单都不下）+ 通知；过了 → 数据目录 .smoke_ok 记下这个标识
 #   （只看代码：qbreak / run.py / scripts / tests / requirements.*；云端每天推的 var/ 提交不算新代码）。
@@ -127,11 +128,14 @@ active_run() {    # liveu.sh run 还在跑吗（运行标记 logs/.running.<账�
   return 1
 }
 
-rotate_logs() {   # OPS-15：logs/ 下超过 5 MB 的 .out / .err → 轮换（.1 → .2 → .3，只留 3 份）。没有进程开着的 → 改名；
+rotate_logs() {   # OPS-15：logs/ 下超过 5 MB 的 .out / .err / .log → 轮换（.1 → .2 → .3，只留 3 份）。没有进程开着的 → 改名；
   # 有进程开着的（常驻的面板、这次运行自己的日志）→ 复制成 .1 再清空原文件（launchd 按追加方式写，清空后接着从头写）
+  # 2026-10-24 复核：面板追加写的 com.qbreak.panel.intraday.log / panel.retry.log、demotest.log 以前从来不轮换；
+  # qbreak.log 由 Python 的 RotatingFileHandler 自己轮换（qbreak/utils.py），这里不动
   local f n sz max="${QBREAK_LOG_MAX_BYTES:-5242880}"
-  for f in "$QBREAK_HOME"/logs/*.out "$QBREAK_HOME"/logs/*.err; do
+  for f in "$QBREAK_HOME"/logs/*.out "$QBREAK_HOME"/logs/*.err "$QBREAK_HOME"/logs/*.log; do
     [ -f "$f" ] || continue
+    case "$(basename "$f")" in qbreak.log) continue ;; esac
     sz="$(wc -c < "$f" 2>/dev/null | tr -d ' ')"
     [ "${sz:-0}" -gt "$max" ] 2>/dev/null || continue
     for n in 2 1; do
@@ -147,11 +151,21 @@ rotate_logs() {   # OPS-15：logs/ 下超过 5 MB 的 .out / .err → 轮换（.
   return 0
 }
 
-disk_check() {    # OPS-15：数据目录所在的磁盘剩余 < 1 GB → Mac / 手机通知（同一天一次；数据目录的 .disk_warned 记日期）
+rotate_logs_daily() {   # 每 15 分钟的 news 用：同一天只轮换一次（数据目录的 .logs_rotated 记日期；2026-10-24 复核）
+  local today
+  today="$(TZ=Asia/Tokyo date +%F)"
+  [ "$(cat "$QBREAK_HOME/.logs_rotated" 2>/dev/null)" = "$today" ] && return 0
+  rotate_logs
+  printf '%s\n' "$today" > "$QBREAK_HOME/.logs_rotated" 2>/dev/null || true
+  return 0
+}
+
+disk_check() {    # OPS-15：数据目录所在的磁盘剩余 < 10 GB → Mac / 手机通知（同一天一次；数据目录的 .disk_warned 记日期）
+  # 2026-10-24 复核：以前 < 1 GB 才提醒、只在执行器运行时看（这台 Mac 剩约 12 GB、用了 95%）→ 10 GB，每 15 分钟的 news 也看
   local kb msg today
   kb="$(df -Pk "$QBREAK_HOME" 2>/dev/null | awk 'NR==2 {print $4}')"
-  [ -n "$kb" ] && [ "$kb" -lt "${QBREAK_DISK_MIN_KB:-1048576}" ] 2>/dev/null || return 0
-  msg="Mac 的磁盘只剩 $((kb / 1024)) MB（数据目录所在的磁盘）：不到 1 GB 时行情缓存 / 账本可能写不进去 → 清理一下（废纸篓、下载、不用的大文件）"
+  [ -n "$kb" ] && [ "$kb" -lt "${QBREAK_DISK_MIN_KB:-10485760}" ] 2>/dev/null || return 0
+  msg="Mac 的磁盘只剩 $((kb / 1024)) MB（数据目录所在的磁盘）：不到 10 GB，再少下去行情缓存 / 账本 / 日志可能写不进去 → 清理一下（废纸篓、下载、不用的大文件）"
   echo "★ ${msg}"
   today="$(TZ=Asia/Tokyo date +%F)"
   [ "$(cat "$QBREAK_HOME/.disk_warned" 2>/dev/null)" = "$today" ] && return 0
@@ -331,6 +345,8 @@ if [ "${1:-}" = "news" ]; then                     # 定时任务用（每 15 �
   "$PY" run.py charts-refresh --if-stale >/dev/null 2>&1 || true   # 收盘后把正式日线补进面板的 K 线（周五 / 连休也不缺最后一根；不动账本）
   "$PY" -m qbreak.mac_status --ensure-phone --write >/dev/null 2>&1 || true   # 手机访问断了自动修复 + 菜单栏的状态（不影响仪表盘）
   "$PY" -m qbreak.routines reap >/dev/null 2>&1 || true   # 本机例行任务卡在权限确认 30 分钟以上 → 自动停止 + 推送（2026-10-21；不影响仪表盘）
+  rotate_logs_daily || true                         # 日志每天轮换一次（周末 / 休市日执行器不跑也轮换；2026-10-24 复核）
+  disk_check >/dev/null 2>&1 || true                # 磁盘 < 10 GB → 通知（同一天一次，和执行器共用 .disk_warned；不每 15 分钟往日志里写）
   exec "$PY" run.py news --page --notify "$@"
 fi
 

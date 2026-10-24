@@ -5,6 +5,9 @@
 脚本都开了 set -u，直接退出（一行安装命令在终端里跑、定时任务 plist 的 LANG=en_US.UTF-8 都会触发）。写成「${DEST}（」就没事。
 Linux 的 bash 在 UTF-8 下复现不了，所以 ① 静态扫描所有脚本（主要的防线）；② 有 localedef 时，在 ISO-8859-1 locale 下真的跑一遍
 几条会打印「变量 + 中文」的路径（glibc 的 isalnum 在这里和 macOS 一样把 0xEF 当字母 → 能复现），在 en_US.UTF-8 下也跑一遍。
+③ macOS 上（2026-10-24 复核）：直接用系统的 /bin/bash（就是 3.2）+ 系统自带的 en_US.UTF-8 / en_US.ISO8859-1 跑同几条路径
+（以前在 Mac 上整组跳过）。脚本里再叫的 bash 也换成 /bin/bash；uname 假装 Linux、osascript / open / security / pmset / tailscale /
+caffeinate 换成假的，不弹通知、不开浏览器、不碰钥匙串和定时任务（断言和 Linux 那一组相同）。
 """
 import os
 import re
@@ -51,19 +54,40 @@ def test_scan_pattern_catches_the_known_bad_form():
 
 
 # ────────── 真的跑一遍（只在 Linux：靠 glibc 的 locale 模拟 macOS 的 isalnum）──────────
+MAC_BASH = "/bin/bash"
+MAC_LOCALES = {"en_US.ISO-8859-1": "en_US.ISO8859-1", "en_US.UTF-8": "en_US.UTF-8"}   # macOS 上的名字
+
+
 @pytest.fixture(scope="module")
 def locales(tmp_path_factory):
+    if sys.platform == "darwin":                              # macOS：系统的 /bin/bash 就是 3.2，不用 localedef（返回 None）
+        if not Path(MAC_BASH).exists():
+            pytest.skip("没有 /bin/bash")
+        return None
     if not sys.platform.startswith("linux") or not shutil.which("localedef") or not shutil.which("bash"):
-        pytest.skip("需要 Linux + localedef + bash")
+        pytest.skip("需要 Linux + localedef + bash（或 macOS 的 /bin/bash）")
     loc = tmp_path_factory.mktemp("loc")
     for name, charmap in (("en_US.ISO-8859-1", "ISO-8859-1"), ("en_US.UTF-8", "UTF-8")):
         subprocess.run(["localedef", "-i", "en_US", "-f", charmap, str(loc / name)], capture_output=True)   # 有警告也会生成
     return loc
 
 
+def _mac_locale(name: str) -> str:
+    want = MAC_LOCALES[name]
+    have = subprocess.run(["locale", "-a"], capture_output=True, text=True).stdout.split()
+    if want not in have:
+        pytest.skip(f"这台 Mac 没有 {want} locale")
+    return want
+
+
 def _env(tmp_path, locales, name: str) -> dict:
-    if not (locales / name).is_dir():
-        pytest.skip(f"{name} 编不出来（缺 /usr/share/i18n 的源文件）")
+    mac = locales is None
+    if mac:
+        lc = _mac_locale(name)
+    else:
+        lc = name
+        if not (locales / name).is_dir():
+            pytest.skip(f"{name} 编不出来（缺 /usr/share/i18n 的源文件）")
     b = tmp_path / "bin"
     b.mkdir(exist_ok=True)
     stubs = {
@@ -71,11 +95,19 @@ def _env(tmp_path, locales, name: str) -> dict:
         "launchctl": "#!/bin/sh\nexit 0\n",                                                      # 不注册任何定时任务
         "fakepy": f'#!/bin/sh\ncase " $* " in *" --status "*) exec "{sys.executable}" "$@" ;; esac\nexit 1\n',  # 其余一律「出错」
     }
+    if mac:                                                   # 和 Linux 那一组走同一条路；不碰这台 Mac 的通知 / 浏览器 / 钥匙串
+        stubs.update({"uname": '#!/bin/sh\ncase "$1" in -m) echo x86_64 ;; *) echo Linux ;; esac\n',
+                      "osascript": "#!/bin/sh\nexit 0\n", "open": "#!/bin/sh\nexit 0\n", "caffeinate": "#!/bin/sh\nexit 0\n",
+                      "security": "#!/bin/sh\nexit 1\n", "pmset": "#!/bin/sh\nexit 1\n", "tailscale": "#!/bin/sh\nexit 1\n",
+                      "swiftc": "#!/bin/sh\nexit 1\n"})
     for n, body in stubs.items():
         (b / n).write_text(body, encoding="utf-8")
         (b / n).chmod(0o755)
+    if mac and not (b / "bash").exists():
+        (b / "bash").symlink_to(MAC_BASH)                     # 脚本里再叫的 bash 也是 3.2
     (tmp_path / "home").mkdir(exist_ok=True)
-    return {**os.environ, "PATH": f"{b}{os.pathsep}{os.environ['PATH']}", "LOCPATH": str(locales), "LC_ALL": name,
+    extra = {"TEST_BASH": MAC_BASH, "QBREAK_CAFFEINATED": "1"} if mac else {"LOCPATH": str(locales)}
+    return {**os.environ, "PATH": f"{b}{os.pathsep}{os.environ['PATH']}", **extra, "LC_ALL": lc,
             # Python 按 UTF-8 解参数（ISO-8859-1 只是为了让 bash 复现 macOS 的行为；Mac 上本来就是 UTF-8）
             "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8",
             "HOME": str(tmp_path / "home"), "PYTHONUSERBASE": site.getuserbase(), "TZ": "UTC",
@@ -84,7 +116,7 @@ def _env(tmp_path, locales, name: str) -> dict:
 
 
 def _bash(env, *args) -> tuple[str, str]:
-    r = subprocess.run(["bash", *args], cwd=ROOT, env=env, capture_output=True, timeout=120)
+    r = subprocess.run([env.get("TEST_BASH") or "bash", *args], cwd=ROOT, env=env, capture_output=True, timeout=120)
     return r.stdout.decode("utf-8", "replace"), r.stderr.decode("utf-8", "replace")
 
 

@@ -96,7 +96,10 @@ def yearly_table(eq: pd.Series, trades: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
     yr = eq.resample("YE").last()
     first = pd.Series([eq.iloc[0]], index=[eq.index[0]])
-    base = pd.concat([first, yr]).drop_duplicates()
+    base = pd.concat([first, yr])
+    # 2026-10-24 复核：以前 .drop_duplicates() 按「值」去重 —— 某年末的权益正好等于更早的某个值（例如 100 → 125 → 100）就被丢掉，
+    # 下一年拿更早的年末当起点算错（只影响 format_report 的分年度表；compute_metrics / Calmar 不受影响）→ 按日期去重
+    base = base[~base.index.duplicated(keep="last")]
     rows = []
     for y, g in eq.groupby(eq.index.year):
         prev = base[base.index < g.index[0]]

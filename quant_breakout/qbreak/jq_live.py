@@ -107,7 +107,7 @@ def fetch(client, day: dt.date, phase: str, want=None, universe: set[str] | None
         stat[name] = err or len(rows)
     fins = _load("fins", day)
     if universe and not fins.empty and (not want or "fins" in want):
-        f = fins.assign(c4=fins["Code"].map(_code4))
+        f = _with_c4(fins)
         codes = sorted(set(f.loc[f["c4"].isin(universe) & (_num(f.get("FOP")).notna() | _num(f.get("FNP")).notna()), "Code"].astype(str)))
         have = _load("fins_hist", day)
         done = set(have["Code"].astype(str)) if not have.empty else set()
@@ -141,6 +141,13 @@ def _code4(c) -> str:
     return s[:4] if len(s) == 5 and s.endswith("0") else s
 
 
+def _with_c4(df: pd.DataFrame) -> pd.DataFrame:
+    """加一列 c4（4 位代码）。用 pd.concat 一次接上，不用 assign（2026-10-24 复核）：pandas 3 的 read_csv 读出来的表每列一个块、
+    没合并，J-Quants 的决算表有 100 多个数值列 → assign / 插列每次都报 PerformanceWarning（DataFrame is highly fragmented；
+    jquants 日志一天 27 条）。结果和 assign(c4=...) 完全一样。"""
+    return pd.concat([df, df["Code"].map(_code4).rename("c4")], axis=1)
+
+
 def _num(s):
     return pd.to_numeric(s, errors="coerce")
 
@@ -170,7 +177,7 @@ def revisions(fins: pd.DataFrame, universe: set[str], history: pd.DataFrame | No
     f = f[f["c4"].isin(universe)]
     hist = history if history is not None and not history.empty else pd.DataFrame(columns=f.columns)
     if not hist.empty:
-        hist = hist.assign(c4=hist["Code"].map(_code4))
+        hist = _with_c4(hist)
     out = []
     for r in f.itertuples():
         doc = str(getattr(r, "DocType", ""))

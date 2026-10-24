@@ -394,7 +394,7 @@ hist_repo() {      # 三个克隆里 origin/<分支> 最新（提交时间）的
 }
 
 cmd_check() {
-  local ok=0 bad=0 warn=0 cur st un n out rc line mark txt app cfg tdir f kind found sched today log r mid tids="" ddir ref upd
+  local ok=0 bad=0 warn=0 cur st un n out rc line mark txt app cfg tdir f kind found listed sched today log r mid tids="" ddir ref upd
   okl() { echo "[OK] $*"; ok=$((ok + 1)); }
   ngl() { echo "[★] $*"; bad=$((bad + 1)); }
   wrn() { echo "[!] $*"; warn=$((warn + 1)); }
@@ -458,7 +458,14 @@ cmd_check() {
       [ -f "$f" ] || continue
       if grep -q "routines/${kind%%:*}.md" "$f" 2>/dev/null; then found="$(basename "$(dirname "$f")")"; break; fi
     done
-    if [ -n "$found" ]; then
+    # 说明书在、桌面版的排程（最新的 scheduled-tasks.json）里却没有这个 id → 不会再跑（2026-10-24 复核：qbreak-shadow 就是这样，以前写「已建」）
+    listed="?"
+    if [ -n "$found" ] && { [ -n "${QBREAK_DESKTOP_DIR:-}" ] || is_mac; }; then
+      listed="$(pyq listed "${QBREAK_DESKTOP_DIR:-$HOME/Library/Application Support/Claude/claude-code-sessions}" "$found" 2>/dev/null || echo "?")"
+    fi
+    if [ -n "$found" ] && [ "$listed" = "0" ]; then
+      ngl "本机任务「${kind#*:}」（${found}）：桌面版的排程里没有这个任务（被删了 / 没建好）：在桌面版 Code → Routines 里看；要重建在对话里说"
+    elif [ -n "$found" ]; then
       okl "本机任务「${kind#*:}」：已建（${found}；是否暂停、时间在桌面版的 Routines 里看）"
       tids="${tids}${found}=${kind#*:}
 "
