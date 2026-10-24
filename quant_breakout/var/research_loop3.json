@@ -1,0 +1,539 @@
+{
+ "title": "第三个研究循环：直到找到比现在更好的模型才停",
+ "start": "2026-10-02",
+ "registered": "本提交（登记）",
+ "user_request": "开第三个研究循环（回应第二个循环结束时的下一步 ③：换题目范围或换第二关设计，例如熊市换资产类改用资产置换的随机对照）",
+ "rules": "scripts/research_loop3.py 开头（判定、第二关的三种形状、上限、家族、ID 不重用、停下的情况）；基准 B1 = scripts/loop2_common.py 开头",
+ "status": "exhausted",
+ "cap": 20,
+ "family_cap": 3,
+ "banned_families": [
+  "汇率对冲"
+ ],
+ "kinds": [
+  "signal",
+  "asset",
+  "stock"
+ ],
+ "criteria": {
+  "sum_min": 0.03,
+  "era_tol": 0.02,
+  "dd_tol_pp": 2.0,
+  "placebo_n": 400,
+  "stage1": "与第二个循环相同（S1〜S6 + S7 事后组合）",
+  "stage2": {
+   "signal": "候选自己新加的信号整体循环平移（k ∈ [250, N − 250]）",
+   "asset": "换进来的资产的日收益序列整体循环平移 k 个交易日（k ∈ [250, N − 250]，种子 numpy.random.default_rng([20261003, s])），B1 的状态不动",
+   "stock": "该轮第二关登记时写定"
+  },
+  "rule": "候选的 Calmar 差合计严格大于 400 次里的最大值（有算不出的 = 不过）"
+ },
+ "baseline_def": "B1 = 第二个循环的同一个 B1（W2 + C 留一年代 + X6 + 闲置资金 Q1H + 判断层市场层，个股 4 × 25%、立花费用）；J 到 2026-09-30",
+ "baseline": {
+  "Z": {
+   "cagr": 14.4,
+   "dd": -14.71,
+   "calmar": 0.979,
+   "n": 35,
+   "mean": 6.094,
+   "win": 68.6,
+   "h1": 0.721,
+   "h2": 1.683
+  },
+  "E": {
+   "cagr": 14.74,
+   "dd": -19.7,
+   "calmar": 0.749,
+   "n": 43,
+   "mean": 1.283,
+   "win": 41.9,
+   "h1": 0.278,
+   "h2": 1.551
+  },
+  "J": {
+   "cagr": 19.98,
+   "dd": -26.97,
+   "calmar": 0.741,
+   "n": 63,
+   "mean": 3.077,
+   "win": 49.2,
+   "h1": 0.8,
+   "h2": 0.747
+  }
+ },
+ "prereq_ok": true,
+ "fingerprint": "e73f7f6c0149fe10",
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-02",
+   "title": "美股熊市的闲置资金无条件拿高信用国债（资产置换类）",
+   "registration": "7ff27f2",
+   "script": "scripts/loop3_r01_bondswap.py",
+   "approaches": [
+    {
+     "id": "BAJ",
+     "verdict": "第一关不过",
+     "sum": 0.248,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "kind": "asset",
+     "passed": 6,
+     "d": {
+      "Z": 0.182,
+      "E": 0.09,
+      "J": -0.024
+     },
+     "unseen": 0.092,
+     "note": "只差 S2（J −0.024）；拿 2561；J 2022 −3.8 pp"
+    },
+    {
+     "id": "BAU",
+     "verdict": "第一关不过",
+     "sum": 0.241,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "kind": "asset",
+     "passed": 6,
+     "d": {
+      "Z": 0.194,
+      "E": 0.059,
+      "J": -0.012
+     },
+     "unseen": 0.068,
+     "note": "只差 S4（后一半 −0.060）；拿 1482；E 2009 −11.2、J 2022 −6.4 pp"
+    },
+    {
+     "id": "BAB",
+     "verdict": "第一关不过",
+     "sum": 0.252,
+     "family": "核心·熊市避险资产",
+     "posthoc": true,
+     "kind": "asset",
+     "passed": 6,
+     "d": {
+      "Z": 0.191,
+      "E": 0.077,
+      "J": -0.016
+     },
+     "unseen": 0.082,
+     "note": "只差 S4（后一半 −0.023）；1482 / 2561 各一半"
+    }
+   ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-02",
+   "title": "日元走强状态（FJE 对冲中）里一半拿对冲版美债（资产置换类）",
+   "registration": "713e09c",
+   "script": "scripts/loop3_r02_fjeust.py",
+   "approaches": [
+    {
+     "id": "FHU",
+     "verdict": "第一关不过",
+     "sum": 0.007,
+     "family": "核心·日元走强状态资产",
+     "posthoc": true,
+     "kind": "asset",
+     "passed": 3,
+     "d": {
+      "Z": -0.016,
+      "E": -0.099,
+      "J": 0.122
+     },
+     "unseen": -0.12,
+     "note": "S1 / S2 / S4 / S7 不过；只有 J 好（对冲中纳指 −11.3%、美债 +10.8%），Z / E / 1987〜2000 对冲中美股照涨"
+    }
+   ]
+  },
+  {
+   "round": 3,
+   "date": "2026-10-02",
+   "title": "日元急升一开始就卖出日本个股（个股层·离场）",
+   "registration": "7474aaa",
+   "script": "scripts/loop3_r03_yenexit.py",
+   "approaches": [
+    {
+     "id": "FXX",
+     "verdict": "第一关不过",
+     "sum": -0.245,
+     "family": "个股层·日元急升离场",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 2,
+     "d": {
+      "Z": -0.119,
+      "E": -0.004,
+      "J": -0.122
+     },
+     "unseen": null,
+     "note": "S1〜S5 不过；J 回撤 −26.97% → −29.40%；卖掉的多半是之后还在涨的突破（J 2025 −8.9 pp）；与 YSG 同一结论"
+    }
+   ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-02",
+   "title": "S&P 跌破 250 日线（还没到熊）的警戒区里核心换成 S&P500（核心·指数选择）",
+   "registration": "dcc14b9（第一关）/ a185eda（第二关）",
+   "script": "scripts/loop3_r04_zonespx.py",
+   "approaches": [
+    {
+     "id": "ZSP",
+     "verdict": "第二关不过",
+     "sum": 0.141,
+     "family": "核心·指数选择",
+     "posthoc": true,
+     "kind": "signal",
+     "passed": 7,
+     "d": {
+      "Z": 0.145,
+      "E": 0.005,
+      "J": -0.009
+     },
+     "unseen": 0.029,
+     "stage2": {
+      "stat": 0.141,
+      "max": 0.331,
+      "ge_stat": 13,
+      "q": {
+       "50": -0.042,
+       "95": 0.072,
+       "99": 0.224
+      }
+     },
+     "note": "第一关全过（几乎全部来自 Z 2006-06〜07：回撤 −14.71% → −12.62%）；第二关 400 次里最大 +0.331（≥ 候选 13 次，约第 96.8 百分位）；随机 19.8% 比 B1 好（中位 −0.042）"
+    }
+   ]
+  },
+  {
+   "round": 5,
+   "date": "2026-10-02",
+   "title": "美股牛市里的月末月初把一半核心换成 2 倍纳指（核心·日历杠杆）",
+   "registration": "fb073a5",
+   "script": "scripts/loop3_r05_tomlever.py",
+   "approaches": [
+    {
+     "id": "TOML",
+     "verdict": "第一关不过",
+     "sum": -0.26,
+     "family": "核心·日历杠杆",
+     "posthoc": true,
+     "kind": "signal",
+     "passed": 3,
+     "d": {
+      "Z": -0.143,
+      "E": -0.207,
+      "J": 0.09
+     },
+     "unseen": 0.009,
+     "note": "S1〜S4 不过；E 回撤 −19.70% → −23.65%；核心换仓 3〜4 倍；只有 2020 / 2026 / 2003 大赚"
+    }
+   ]
+  },
+  {
+   "round": 6,
+   "date": "2026-10-02",
+   "title": "借款利率上升、利润越来越盖不住利息 → 不开日本个股新仓（按行业 IBS / 全产业 IBA；用户的题）",
+   "registration": "d509c36",
+   "script": "scripts/loop3_r06_interest.py",
+   "approaches": [
+    {
+     "id": "IBS",
+     "verdict": "第一关不过",
+     "sum": 0.019,
+     "family": "个股层·企业利息负担",
+     "posthoc": false,
+     "kind": "signal",
+     "passed": 5,
+     "d": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.019
+     },
+     "unseen": null,
+     "note": "S1 / S5 不过；只挡到十来个信号（J 63 → 58 笔、+0.019）；W 被挡的很差（−4.20%）、Jx 被挡的不差（+1.01%）"
+    },
+    {
+     "id": "IBA",
+     "verdict": "第一关不过",
+     "sum": -0.016,
+     "family": "个股层·企业利息负担",
+     "posthoc": false,
+     "kind": "signal",
+     "passed": 5,
+     "d": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": -0.016
+     },
+     "unseen": null,
+     "note": "S1 / S4 不过；J 个股胜率 49.2% → 54.8%、每笔 +3.08% → +3.99%（S5 明显过），但 2025 −10.8 / 2026 −6.1 pp → 后一半 −0.123"
+    }
+   ]
+  },
+  {
+   "round": 7,
+   "date": "2026-10-02",
+   "title": "Jason Perl（DeMark 指标 TD Sequential）的观点 → 日本个股的离场与买点（DMX 卖 13 卖出 / DMT 收盘在卖 setup 的 TDST 之下卖出 / DMN 刚出现卖 13 不开新仓；用户的题）",
+   "registration": "26967f6",
+   "script": "scripts/loop3_r07_demark.py",
+   "approaches": [
+    {
+     "id": "DMX",
+     "verdict": "第一关不过",
+     "sum": -0.091,
+     "family": "个股层·DeMark 离场",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 2,
+     "d": {
+      "Z": 0.07,
+      "E": -0.169,
+      "J": 0.008
+     },
+     "unseen": null,
+     "note": "S1〜S5 不过；胜率 W +2.28 / Jx +2.90 pp、J 账户 49.2% → 56.5%，但每笔 −0.33 / −0.00 pp（W 被改变的 70 笔 +7.87% → +5.83%：砍掉大赢家）；E −0.169（回撤 −19.70% → −24.07%）"
+    },
+    {
+     "id": "DMT",
+     "verdict": "第一关不过",
+     "sum": -0.004,
+     "family": "个股层·DeMark 离场",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 4,
+     "d": {
+      "Z": -0.002,
+      "E": 0.001,
+      "J": -0.003
+     },
+     "unseen": null,
+     "note": "S1 / S4 / S5 不过；另一种追踪止损，比 X6 差（W 被改变的 124 笔 +1.16% → −1.32%）"
+    },
+    {
+     "id": "DMN",
+     "verdict": "第一关不过",
+     "sum": -0.011,
+     "family": "个股层·DeMark 买点",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 5,
+     "d": {
+      "Z": 0.0,
+      "E": 0.009,
+      "J": -0.02
+     },
+     "unseen": null,
+     "note": "S1 / S4 不过；只挡 Z 1 / E 3 / J 9 个信号；S5 小幅过（Jx 被挡 32 个 −0.77%）；J 2025 −6.9 pp"
+    }
+   ]
+  },
+  {
+   "round": 8,
+   "date": "2026-10-02",
+   "title": "纳指 / S&P500 比值转熊时核心换成 S&P500（RTX 只看比值 / NZS ZSP 的警戒区 ∩ 比值转熊；另一个只读检查提的剩下的题）",
+   "registration": "aa4cae6",
+   "script": "scripts/loop3_r08_ratiospx.py",
+   "approaches": [
+    {
+     "id": "RTX",
+     "verdict": "第一关不过",
+     "sum": -0.137,
+     "family": "核心·指数选择",
+     "posthoc": true,
+     "kind": "signal",
+     "passed": 3,
+     "d": {
+      "Z": -0.038,
+      "E": -0.085,
+      "J": -0.014
+     },
+     "unseen": -0.128,
+     "note": "S1 / S2 / S4 / S7 不过；8 段里 6 段的那段期间纳指照样比 S&P 好（2004〜2005、2013、2021）→ 切换慢半拍；E −0.085、1987〜2000 −0.128"
+    },
+    {
+     "id": "NZS",
+     "verdict": "第一关不过",
+     "sum": 0.14,
+     "family": "核心·指数选择",
+     "posthoc": true,
+     "kind": "signal",
+     "passed": 6,
+     "d": {
+      "Z": 0.145,
+      "E": 0.0,
+      "J": -0.005
+     },
+     "unseen": -0.015,
+     "note": "只差 S7：+0.140 几乎全部来自 Z 2006-06〜07 的 9 天（回撤 −14.71% → −12.62%，同 ZSP）；E 0 天、J 11 天；1987〜2000 −0.015（方向相反）"
+    }
+   ]
+  },
+  {
+   "round": 9,
+   "date": "2026-10-02",
+   "title": "日本个股新仓的开仓节奏（成交日至少隔 5 个交易日、同一天最多一笔；另一个只读检查提的剩下的题）",
+   "registration": "cdcf737",
+   "script": "scripts/loop3_r09_entrygap.py",
+   "approaches": [
+    {
+     "id": "ECL",
+     "verdict": "第一关不过",
+     "sum": -0.195,
+     "family": "个股层·开仓节奏",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 2,
+     "d": {
+      "Z": -0.027,
+      "E": -0.168,
+      "J": 0.0
+     },
+     "unseen": null,
+     "note": "S1〜S5 不过；E −0.168（回撤 −19.70% → −23.58%）；J 笔数 63 → 44 但 Calmar 不变；W 里被去掉的扎堆信号反而更好（47.0%、+1.89%）"
+    }
+   ]
+  },
+  {
+   "round": 10,
+   "date": "2026-10-03",
+   "title": "选股：残差动量 RMO / 路径连续性 FIP（横截面一半，挡掉的不开新仓）",
+   "registration": "b557ee7",
+   "script": "scripts/loop3_r10_resmom.py",
+   "approaches": [
+    {
+     "id": "RMO",
+     "verdict": "第一关不过",
+     "sum": -0.622,
+     "family": "选股·动量质量",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 2,
+     "d": {
+      "Z": -0.462,
+      "E": -0.165,
+      "J": 0.005
+     },
+     "unseen": null,
+     "note": "S1〜S5 不过；方向反了：被挡的低残差动量突破更好（W 47.2%、+2.47%）；Z −0.462（2005 −26.6 pp）"
+    },
+    {
+     "id": "FIP",
+     "verdict": "第一关不过",
+     "sum": -0.406,
+     "family": "选股·动量质量",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 3,
+     "d": {
+      "Z": -0.389,
+      "E": -0.067,
+      "J": 0.05
+     },
+     "unseen": null,
+     "note": "S1〜S4 不过、S5 过（W +1.06 / +0.15、Jx +2.16 / +0.46 pp：跳涨型突破确实更差）；挡掉一半成交 → Z −0.389（2005 −20.2 pp）、J +0.050"
+    }
+   ]
+  },
+  {
+   "round": 11,
+   "date": "2026-10-03",
+   "title": "选股：同业种不重复持有 SEC（同一个東証业种已经持有 / 今天已排 → 不开新仓）；MXR / IVH 规模核对后不登记",
+   "registration": "5cf1792",
+   "script": "scripts/loop3_r11_sector.py",
+   "approaches": [
+    {
+     "id": "SEC",
+     "verdict": "第一关不过",
+     "sum": -0.087,
+     "family": "选股·组合分散",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 3,
+     "d": {
+      "Z": -0.011,
+      "E": -0.027,
+      "J": -0.049
+     },
+     "unseen": null,
+     "note": "S1、S2、S4、S5 不过（S3 过）；账户里只挡 Z 4 / E 1 / J 6 个候选，但后面的名额跟着变（J −0.049）；W 被去掉的 147 个反而更好（+2.29%）"
+    }
+   ],
+   "dropped_before_registration": [
+    "MXR",
+    "IVH"
+   ],
+   "dropped_note": "规模核对：B1 的 W2 信号只有约 2% 落在被挡的月份、B1 成交只碰到 0〜1 笔 → 不登记、不占名额（同 EBG 的先例）"
+  },
+  {
+   "round": 12,
+   "date": "2026-10-03",
+   "title": "选股：与核心（纳指 × 日元）高相关的不买 CRC / 分红刚减少或停发的不买 DVC（第三个循环最后 2 个做法）",
+   "registration": "2a5767f",
+   "script": "scripts/loop3_r12_corediv.py",
+   "approaches": [
+    {
+     "id": "CRC",
+     "verdict": "第一关不过",
+     "sum": 0.0,
+     "family": "选股·组合分散",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 3,
+     "d": {
+      "Z": -0.037,
+      "E": 0.039,
+      "J": -0.002
+     },
+     "unseen": null,
+     "note": "S1、S2、S4、S5 不过（S3 过）；合计 +0.000（Z −0.037：2005 −3.4 pp；E +0.039：回撤 −19.70% → −18.97%；J −0.002）；W 被挡的 112 个每笔 +2.05%（和保留的差不多）"
+    },
+    {
+     "id": "DVC",
+     "verdict": "第一关不过",
+     "sum": -0.033,
+     "family": "选股·分红变化",
+     "posthoc": false,
+     "kind": "stock",
+     "passed": 3,
+     "d": {
+      "Z": -0.006,
+      "E": -0.024,
+      "J": -0.003
+     },
+     "unseen": null,
+     "note": "S1、S2、S4、S5 不过（S3 过）；合计 −0.033；W 被挡的 29 个胜率只有 24.1%（S5 W 过），Jx 被挡的 41 个与保留的差不多（每笔差 −0.00）"
+    }
+   ]
+  }
+ ],
+ "status_was": "stopped:要用户决定（2026-10-02）—— 第 6 轮（用户的题：企业利息负担）IBS / IBA 两个都第一关不过；同一会话另一个只读检查：按现在的规则剩下的题「两关都过」的机会最好的约 1%（NZS）、其余 ≤ 0.5%，剩下 11 个全用上期望约 0.1 个 → 结束（没找到）/ 继续 / 先等前向记录由用户决定；用户说「继续第三个研究循环」→ 改回 running（规则 507dd68 不变）",
+ "resumed": "2026-10-02 用户「jason perl的观点也要进行详细分析加到现在的研究中 继续现在的研究 然后再继续现在提出的观点」→ 恢复（规则 507dd68 不变；9 / 20，剩 11）；下一轮 = Jason Perl（DeMark 指标）的观点",
+ "status_was_2": "stopped:要用户决定（2026-10-02）—— 第 7〜9 轮（用户的题 Jason Perl → DMX / DMT / DMN；另一个只读检查提的 RTX / NZS / ECL）6 个做法都第一关不过（最接近 NZS：只差 S7）；用户说的「现在提出的观点」已经做完；剩下 5 个做法没有事先列好的题 → 结束（没找到）/ 先做新的选题扫描再继续 由用户决定；用户说「继续第三个研究循环」→ 改回 running（规则 507dd68 不变）",
+ "resumed_2": "2026-10-02 23:40 JST 用户「继续研究循环 6个小时之内不停 直到找到比现在好的选股算法」→ 恢复（规则 507dd68 不变；15 / 20，剩 5）；这 6 小时（到 2026-10-03 05:40 JST）不停下来问；题目集中在选股（日本个股的买点 / 挑选）；20 个用完而时间还有 → 另行登记第四个循环（同一套规则）再继续；找到「更好候选」（两关都过）→ 停下汇报",
+ "ended": "2026-10-03 第 12 轮之后 20 / 20 用完、没找到（两关都过的 0 个）",
+ "closest3": [
+  {
+   "round": 4,
+   "id": "ZSP",
+   "verdict": "第二关不过",
+   "sum": 0.141,
+   "passed": 7
+  },
+  {
+   "round": 1,
+   "id": "BAB",
+   "verdict": "第一关不过",
+   "sum": 0.252,
+   "passed": 6
+  },
+  {
+   "round": 1,
+   "id": "BAJ",
+   "verdict": "第一关不过",
+   "sum": 0.248,
+   "passed": 6
+  }
+ ]
+}

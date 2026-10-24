@@ -1,0 +1,80 @@
+{
+ "detector": {
+  "kind": "ma_band",
+  "params": {
+   "L": 250,
+   "b": 0.03,
+   "k": 5
+  }
+ },
+ "hmm": {},
+ "selected_on": "train 1951/1966–2005, objective mean balanced accuracy, constraints switches≤1/yr & timing Calmar≥B&H",
+ "test_2006_on": {
+  "US": {
+   "n_days": 5212.0,
+   "acc": 0.8218,
+   "bull_recall": 0.8349,
+   "bear_recall": 0.709,
+   "bal_acc": 0.7719,
+   "switches_per_yr": 0.772,
+   "bear_phases": 4.0,
+   "bear_lag_med": 39.5,
+   "bear_lag_mean": 39.5,
+   "bull_lag_med": 98.0,
+   "missed_bears": 0.0,
+   "false_alarms": 5.0,
+   "bh_cagr": 9.18,
+   "bh_dd": -56.78,
+   "bh_calmar": 0.162,
+   "sw_cagr": 7.73,
+   "sw_dd": -26.74,
+   "sw_calmar": 0.289,
+   "inv_cagr": 4.06,
+   "inv_dd": -53.17,
+   "inv_calmar": 0.076
+  },
+  "JP": {
+   "n_days": 5069.0,
+   "acc": 0.7197,
+   "bull_recall": 0.7287,
+   "bear_recall": 0.6859,
+   "bal_acc": 0.7073,
+   "switches_per_yr": 1.062,
+   "bear_phases": 11.0,
+   "bear_lag_med": 30.0,
+   "bear_lag_mean": 29.9,
+   "bull_lag_med": 62.0,
+   "missed_bears": 2.0,
+   "false_alarms": 3.0,
+   "bh_cagr": 7.0,
+   "bh_dd": -61.37,
+   "bh_calmar": 0.114,
+   "sw_cagr": 5.6,
+   "sw_dd": -36.32,
+   "sw_calmar": 0.154,
+   "inv_cagr": 1.25,
+   "inv_dd": -66.32,
+   "inv_calmar": 0.019
+  }
+ },
+ "bear_sleeve_index_study": {
+  "selected": "BA2",
+  "eligible": [
+   "BA2"
+  ]
+ },
+ "mode": "quant",
+ "strategy_study_20y": {
+  "window": "2006-10-01..2026-09-24",
+  "pick": {
+   "JP": "R1",
+   "US": "R1"
+  },
+  "note": "突破策略上叠加牛熊分界停开仓 / 清仓，Calmar 无实质改善（JP R4 0.20 vs R1 0.16，US R0 0.14 vs R1 0.08，均未达 +0.1 门槛）；维持现行量化状态层（quant）。分界算法用于日报显示与指数持仓择时参考。"
+ },
+ "bear_sleeve_decision": {
+  "deployed": "BA0 (cash)",
+  "rule_pick": "BA2",
+  "reason": "规则按字面选 BA2（反向+10%止损），但训练期优势仅 +0.16/+0.47%/年、Calmar 0.004/0.016，样本外两市场均亏（−1.21%/−2.35% 年化，回撤 −31.8%/−43.3%）→ 不部署，熊市持现金"
+ }
+}

@@ -1,0 +1,52 @@
+{
+ "rule": "T1/T2 取 20 年手续费合计更低者；相差 <5% 取 T1",
+ "windows": {
+  "20 年": {
+   "start": "2006-10-01",
+   "years": 20.0,
+   "fills": 1196,
+   "fill_days": 593,
+   "R": {
+    "cagr_pct": 8.78,
+    "max_dd_pct": -32.19,
+    "calmar": 0.27
+   },
+   "T1": {
+    "cagr_pct": 8.07,
+    "max_dd_pct": -33.37,
+    "calmar": 0.24,
+    "fees": 256608
+   },
+   "T2": {
+    "cagr_pct": 8.02,
+    "max_dd_pct": -33.35,
+    "calmar": 0.24,
+    "fees": 298485
+   }
+  },
+  "5 年": {
+   "start": "2021-09-24",
+   "years": 5.0,
+   "fills": 323,
+   "fill_days": 165,
+   "R": {
+    "cagr_pct": 17.38,
+    "max_dd_pct": -25.7,
+    "calmar": 0.68
+   },
+   "T1": {
+    "cagr_pct": 15.65,
+    "max_dd_pct": -25.64,
+    "calmar": 0.61,
+    "fees": 50853
+   },
+   "T2": {
+    "cagr_pct": 15.59,
+    "max_dd_pct": -25.7,
+    "calmar": 0.61,
+    "fees": 55792
+   }
+  }
+ },
+ "pick": "T1"
+}

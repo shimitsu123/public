@@ -1,0 +1,1024 @@
+{
+ "title": "研究循环：直到找到比现在更好的模型才停",
+ "start": "2026-10-01",
+ "registered": "3e643be",
+ "user_request": "开始研究循环，直到找到比现在更好的模型才停（用户 2026-10-01 的原文与 0)〜4) 全文见 var/sim_changes.md 同日「研究循环登记」一节）",
+ "rules": "scripts/research_loop.py 开头（判定、上限、停下的情况）；基准 B0 = scripts/loop_common.py 开头",
+ "status": "found",
+ "cap": 20,
+ "criteria": {
+  "sum_min": 0.03,
+  "era_tol": 0.02,
+  "dd_tol_pp": 2.0,
+  "placebo_n": 400,
+  "halves": "三个年代前一半的 Calmar 差合计 ≥ 0 且后一半的差合计 ≥ 0",
+  "other_stocks": "改变个股交易的做法：W、Jx 的逐笔胜率差、每笔差都 ≥ 0；不改个股交易 = 不适用",
+  "lenses": "要从数据学参数的做法：留一年代与逐年前推两种检验各自 S1〜S3 都过；参数事先写定 = 不适用",
+  "stage2": "第一关全过后另行登记、只运行一次：候选的 Calmar 差合计严格大于 400 次「同样多、同样形状的随机改动」里的最大值（有算不出的 = 不过）"
+ },
+ "baseline_def": "W2 + C（留一年代）+ X6 + 闲置资金 Q1 纳指 1545 + 美股牛熊分界 + 前向记录判断层的市场层（个股 4 × 25%、宏观 / 板块 / 量化状态层、立花费用）；J 到 2026-09-30",
+ "baseline": {
+  "Z": {
+   "cagr": 14.04,
+   "dd": -14.8,
+   "calmar": 0.949,
+   "n": 35,
+   "mean": 6.092,
+   "win": 68.6,
+   "h1": 0.672,
+   "h2": 1.627
+  },
+  "E": {
+   "cagr": 13.06,
+   "dd": -23.09,
+   "calmar": 0.566,
+   "n": 42,
+   "mean": 1.321,
+   "win": 42.9,
+   "h1": 0.149,
+   "h2": 1.147
+  },
+  "J": {
+   "cagr": 19.13,
+   "dd": -29.0,
+   "calmar": 0.66,
+   "n": 62,
+   "mean": 3.054,
+   "win": 48.4,
+   "h1": 0.666,
+   "h2": 0.85
+  }
+ },
+ "baseline_parts": {
+  "Z": {
+   "W2_1655": 1.732,
+   "W2C_1655": 1.849,
+   "W2C_Q1": 0.96,
+   "B0": 0.949
+  },
+  "E": {
+   "W2_1655": 0.32,
+   "W2C_1655": 0.312,
+   "W2C_Q1": 0.575,
+   "B0": 0.566
+  },
+  "J": {
+   "W2_1655": 0.402,
+   "W2C_1655": 0.437,
+   "W2C_Q1": 0.65,
+   "B0": 0.66
+  }
+ },
+ "repro": {
+  "Z": {
+   "calmar": 1.849,
+   "ref": 1.849,
+   "same": 1.0
+  },
+  "E": {
+   "calmar": 0.312,
+   "ref": 0.312,
+   "same": 1.0
+  },
+  "J": {
+   "calmar": 0.437,
+   "ref": 0.44,
+   "same": 0.0
+  },
+  "J_open": {
+   "calmar": 0.442,
+   "last_day": "2026-09-25"
+  }
+ },
+ "fingerprint": "053ecdfdcdc562bc",
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-01",
+   "title": "闲置资金（纳指 1545）按波动率调节仓位",
+   "domain": "核心/配置",
+   "script": "scripts/loop_r01_voltarget.py",
+   "registration": "b5955f3",
+   "output": "var/out/loop_r01_voltarget.md",
+   "approaches": [
+    {
+     "id": "VT20",
+     "rule": "σ20（日元计纳指 20 日波动）vs 自己的扩展中位数：比例 = min(1, 目标 / σ20)，差 ≥ 0.10 才换、σ20 ≤ 目标回到 1；只在不是熊市时乘到核心",
+     "verdict": "第一关不过",
+     "sum": 0.203,
+     "d": {
+      "Z": -0.019,
+      "E": -0.053,
+      "J": 0.275
+     },
+     "checks": {
+      "S1": true,
+      "S2": false,
+      "S3": true,
+      "S4": true,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.18,
+     "h2": 0.13,
+     "cand": {
+      "Z": {
+       "calmar": 0.93,
+       "dd": -14.79,
+       "cagr": 13.76
+      },
+      "E": {
+       "calmar": 0.513,
+       "dd": -22.03,
+       "cagr": 11.3
+      },
+      "J": {
+       "calmar": 0.935,
+       "dd": -20.99,
+       "cagr": 19.63
+      }
+     },
+     "why": "S2 不过：E Calmar 0.566 → 0.513（−0.053）、Z −0.019；J 0.660 → 0.935（+0.275，回撤 −29.00% → −20.99%）"
+    }
+   ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-01",
+   "title": "牛熊状态的两处用法",
+   "domain": "牛熊/择时",
+   "script": "scripts/loop_r02_bearstate.py",
+   "registration": "8e7d4d3（运行前修正 5cfe605，只改实现）",
+   "output": "var/out/loop_r02_bearstate.md",
+   "approaches": [
+    {
+     "id": "HBOR",
+     "rule": "闲置资金的熊 = S&P 500 熊或日元计纳指熊（同一检测器）",
+     "verdict": "第一关不过",
+     "sum": -0.669,
+     "d": {
+      "Z": -0.469,
+      "E": -0.149,
+      "J": -0.051
+     },
+     "checks": {
+      "S1": false,
+      "S2": false,
+      "S3": false,
+      "S4": false,
+      "S5": true,
+      "S6": true
+     },
+     "h1": -0.093,
+     "h2": -0.873,
+     "cand": {
+      "Z": {
+       "calmar": 0.48,
+       "dd": -17.57,
+       "cagr": 8.43
+      },
+      "E": {
+       "calmar": 0.417,
+       "dd": -28.04,
+       "cagr": 11.69
+      },
+      "J": {
+       "calmar": 0.609,
+       "dd": -29.0,
+       "cagr": 17.67
+      }
+     },
+     "why": "三个年代都变差：Z −0.469、E −0.149、J −0.051（多出来的熊大多来回换）"
+    },
+    {
+     "id": "UBG",
+     "rule": "美股牛熊分界 = 熊时日本个股不开新仓",
+     "verdict": "第一关不过",
+     "sum": 0.003,
+     "d": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.003
+     },
+     "checks": {
+      "S1": false,
+      "S2": true,
+      "S3": true,
+      "S4": true,
+      "S5": false,
+      "S6": true
+     },
+     "h1": 0.0,
+     "h2": 0.006,
+     "cand": {
+      "Z": {
+       "calmar": 0.949,
+       "dd": -14.8,
+       "cagr": 14.04
+      },
+      "E": {
+       "calmar": 0.566,
+       "dd": -23.09,
+       "cagr": 13.06
+      },
+      "J": {
+       "calmar": 0.663,
+       "dd": -29.0,
+       "cagr": 19.21
+      }
+     },
+     "why": "S1 合计 +0.003 不够 +0.03、S5 不过（Jx 被挡的信号每笔 +1.50%，保留 − 全部 −0.22 pp）"
+    }
+   ]
+  },
+  {
+   "round": 3,
+   "date": "2026-10-01",
+   "title": "平静的牛市里加一点杠杆",
+   "domain": "核心/配置",
+   "script": "scripts/loop_r03_calmlever.py",
+   "registration": "4f1f860",
+   "output": "var/out/loop_r03_calmlever.md",
+   "approaches": [
+    {
+     "id": "LV25",
+     "rule": "日元计纳指 σ20 < 扩展中位数且美股牛市 → 1545 0.75 + 2 倍纳指 2869 0.25（有效 1.25）；其余 = B0",
+     "verdict": "第一关不过",
+     "sum": -0.054,
+     "d": {
+      "Z": -0.062,
+      "E": -0.001,
+      "J": 0.009
+     },
+     "checks": {
+      "S1": false,
+      "S2": false,
+      "S3": true,
+      "S4": false,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.13,
+     "h2": -0.232,
+     "cand": {
+      "Z": {
+       "calmar": 0.887,
+       "dd": -16.31,
+       "cagr": 14.46
+      },
+      "E": {
+       "calmar": 0.565,
+       "dd": -23.67,
+       "cagr": 13.37
+      },
+      "J": {
+       "calmar": 0.669,
+       "dd": -30.18,
+       "cagr": 20.19
+      }
+     },
+     "why": "S1 合计 −0.054、S2 Z −0.062、S4 后一半合计 −0.232；年化只多 0.3〜1.1 pp，核心换仓约翻倍、2 倍的损耗与费用吃掉多数"
+    }
+   ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-01",
+   "title": "日元急升时的闲置资金",
+   "domain": "核心/配置",
+   "script": "scripts/loop_r04_yensurge.py",
+   "registration": "667693c（第二关 264b395）",
+   "output": "var/out/loop_r04_yensurge.md",
+   "approaches": [
+    {
+     "id": "FXH",
+     "rule": "USD/JPY 10 日 ≤ −3% 起、收在 20 日线上止 = 急升中 → 闲置资金换对冲版纳指 2845",
+     "verdict": "第二关不过",
+     "sum": 0.201,
+     "d": {
+      "Z": 0.099,
+      "E": 0.012,
+      "J": 0.09
+     },
+     "checks": {
+      "S1": true,
+      "S2": true,
+      "S3": true,
+      "S4": true,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.108,
+     "h2": 0.684,
+     "cand": {
+      "Z": {
+       "calmar": 1.048,
+       "dd": -14.34,
+       "cagr": 15.03
+      },
+      "E": {
+       "calmar": 0.578,
+       "dd": -22.93,
+       "cagr": 13.25
+      },
+      "J": {
+       "calmar": 0.75,
+       "dd": -27.41,
+       "cagr": 20.56
+      }
+     },
+     "why": "第一关全过（合计 +0.201，三个年代都更好、回撤都更浅）；第二关 +0.201 在 400 次循环平移里排约 98%（8 次 ≥ 它，最大 +0.366）→ 不过",
+     "stage2": {
+      "stat": 0.201,
+      "max": 0.366,
+      "ge_stat": 8,
+      "n": 400,
+      "valid": 400,
+      "q95": 0.1271,
+      "q99": 0.26,
+      "registration": "264b395"
+     }
+    },
+    {
+     "id": "FXC",
+     "rule": "同一急升状态 → 闲置资金转现金",
+     "verdict": "第一关不过",
+     "sum": 0.233,
+     "d": {
+      "Z": -0.028,
+      "E": -0.123,
+      "J": 0.384
+     },
+     "checks": {
+      "S1": true,
+      "S2": false,
+      "S3": true,
+      "S4": true,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.312,
+     "h2": 0.377,
+     "cand": {
+      "Z": {
+       "calmar": 0.921,
+       "dd": -13.75,
+       "cagr": 12.66
+      },
+      "E": {
+       "calmar": 0.443,
+       "dd": -24.75,
+       "cagr": 10.97
+      },
+      "J": {
+       "calmar": 1.044,
+       "dd": -21.04,
+       "cagr": 21.97
+      }
+     },
+     "why": "E −0.123（S2 不过）；J +0.384"
+    }
+   ]
+  },
+  {
+   "round": 5,
+   "date": "2026-10-01",
+   "title": "利差收窄时对冲 / 美股熊时日本个股清仓",
+   "domain": "核心/配置",
+   "script": "scripts/loop_r05_ratediff.py",
+   "registration": "5984400",
+   "output": "var/out/loop_r05_ratediff.md",
+   "approaches": [
+    {
+     "id": "RDH",
+     "rule": "美日 2 年利差 63 日变化 ≤ −0.50 pp 起、≥ −0.25 pp 止 → 闲置资金换对冲版纳指 2845",
+     "verdict": "第一关不过",
+     "sum": 0.002,
+     "d": {
+      "Z": -0.019,
+      "E": 0.004,
+      "J": 0.017
+     },
+     "checks": {
+      "S1": false,
+      "S2": true,
+      "S3": true,
+      "S4": false,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.057,
+     "h2": -0.135,
+     "cand": {
+      "Z": {
+       "calmar": 0.93,
+       "dd": -14.78,
+       "cagr": 13.75
+      },
+      "E": {
+       "calmar": 0.57,
+       "dd": -23.24,
+       "cagr": 13.25
+      },
+      "J": {
+       "calmar": 0.677,
+       "dd": -26.97,
+       "cagr": 18.26
+      }
+     },
+     "why": "合计 +0.002（Z −0.019、E +0.004、J +0.017）、S4 后一半合计 −0.135 → 第一关不过"
+    },
+    {
+     "id": "SEX",
+     "rule": "美股熊的日子里日本个股清仓、不开新仓",
+     "verdict": "第一关不过",
+     "sum": 0.003,
+     "d": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.003
+     },
+     "checks": {
+      "S1": false,
+      "S2": true,
+      "S3": true,
+      "S4": true,
+      "S5": false,
+      "S6": true
+     },
+     "h1": 0.0,
+     "h2": 0.006,
+     "cand": {
+      "Z": {
+       "calmar": 0.949,
+       "dd": -14.8,
+       "cagr": 14.04
+      },
+      "E": {
+       "calmar": 0.566,
+       "dd": -23.09,
+       "cagr": 13.06
+      },
+      "J": {
+       "calmar": 0.663,
+       "dd": -29.0,
+       "cagr": 19.21
+      }
+     },
+     "why": "与第 2 轮 UBG 完全相同（+0.003、S5 不过）：B0 里没有一笔日本个股在美股翻熊时还拿着（J 9 笔与美股熊重叠的都是熊市里新开的）"
+    }
+   ]
+  },
+  {
+   "round": 6,
+   "date": "2026-10-01",
+   "title": "美股熊市时闲置资金的币种",
+   "domain": "核心/配置",
+   "script": "scripts/loop_r06_bearcash.py",
+   "registration": "06d87ae",
+   "output": "var/out/loop_r06_bearcash.md",
+   "approaches": [
+    {
+     "id": "BXU",
+     "rule": "美股熊 且 美元（DEXJPUS）在 200 日线之上 → 闲置资金拿 133A 美元短期国债；熊且不上升 → 日元现金；牛 → 1545",
+     "verdict": "第一关不过",
+     "sum": -0.13,
+     "d": {
+      "Z": 0.013,
+      "E": -0.157,
+      "J": 0.014
+     },
+     "checks": {
+      "S1": false,
+      "S2": false,
+      "S3": false,
+      "S4": false,
+      "S5": true,
+      "S6": true
+     },
+     "h1": -0.399,
+     "h2": 0.124,
+     "cand": {
+      "Z": {
+       "calmar": 0.962,
+       "dd": -14.9,
+       "cagr": 14.33
+      },
+      "E": {
+       "calmar": 0.409,
+       "dd": -28.49,
+       "cagr": 11.64
+      },
+      "J": {
+       "calmar": 0.674,
+       "dd": -29.0,
+       "cagr": 19.54
+      }
+     },
+     "why": "合计 −0.130（Z +0.013、E −0.157、J +0.014）；E 回撤 −23.09% → −28.49%（S2 / S3 不过）；前一半合计 −0.399（S4 不过）；熊市里美元常在 200 日线附近来回（2003、2009、2018-12〜2019-01）、只有 2001 与 2022 赚"
+    }
+   ]
+  },
+  {
+   "round": 7,
+   "date": "2026-10-01",
+   "title": "纳指自己还是牛就不转现金",
+   "domain": "牛熊/择时",
+   "script": "scripts/loop_r07_ndxboth.py",
+   "registration": "751a106",
+   "output": "var/out/loop_r07_ndxboth.md",
+   "approaches": [
+    {
+     "id": "NDA",
+     "rule": "闲置资金 1545 的熊 = S&P 熊 且 纳斯达克 100（美元）同一检测器也熊",
+     "verdict": "第一关不过",
+     "sum": -0.175,
+     "d": {
+      "Z": 0.019,
+      "E": -0.186,
+      "J": -0.008
+     },
+     "checks": {
+      "S1": false,
+      "S2": false,
+      "S3": false,
+      "S4": false,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.063,
+     "h2": -0.312,
+     "cand": {
+      "Z": {
+       "calmar": 0.968,
+       "dd": -14.87,
+       "cagr": 14.39
+      },
+      "E": {
+       "calmar": 0.38,
+       "dd": -34.02,
+       "cagr": 12.91
+      },
+      "J": {
+       "calmar": 0.652,
+       "dd": -31.48,
+       "cagr": 20.53
+      }
+     },
+     "why": "合计 −0.175（Z +0.019、E −0.186、J −0.008）；E 回撤 −23.09% → −34.02%、J −29.00% → −31.48%；后一半合计 −0.312；S&P 先翻熊而纳指还撑着的晚走几段（2008-01、2015-08〜2016-01、2020-03）最伤"
+    }
+   ]
+  },
+  {
+   "round": 8,
+   "date": "2026-10-01",
+   "title": "S&P 熊市里纳指先回到牛就早一点拿回闲置资金",
+   "domain": "牛熊/择时",
+   "script": "scripts/loop_r08_ndxreentry.py",
+   "registration": "3d657f4",
+   "output": "var/out/loop_r08_ndxreentry.md",
+   "approaches": [
+    {
+     "id": "NDR",
+     "rule": "离场照 B0；同一段 S&P 熊市里纳指（美元）翻过熊又回到牛 → 提前拿回 1545",
+     "verdict": "第一关不过",
+     "sum": 0.055,
+     "d": {
+      "Z": 0.019,
+      "E": -0.041,
+      "J": 0.077
+     },
+     "checks": {
+      "S1": true,
+      "S2": false,
+      "S3": false,
+      "S4": true,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.197,
+     "h2": 0.083,
+     "cand": {
+      "Z": {
+       "calmar": 0.968,
+       "dd": -14.87,
+       "cagr": 14.39
+      },
+      "E": {
+       "calmar": 0.525,
+       "dd": -26.11,
+       "cagr": 13.71
+      },
+      "J": {
+       "calmar": 0.737,
+       "dd": -28.99,
+       "cagr": 21.38
+      }
+     },
+     "why": "合计 +0.055（Z +0.019、E −0.041、J +0.077），S1 / S4 过；E 低 0.041、回撤 −23.09% → −26.11%（S2 / S3 不过）：2009-06-11 提前买回后一个月纳指 −7%、日元 +6%；看了 NDA 之后设计的"
+    }
+   ]
+  },
+  {
+   "round": 9,
+   "date": "2026-10-01",
+   "title": "美股急跌熔断",
+   "domain": "牛熊/择时",
+   "script": "scripts/loop_r09_crashbreak.py",
+   "registration": "d73ee8f",
+   "output": "var/out/loop_r09_crashbreak.md",
+   "approaches": [
+    {
+     "id": "CPX",
+     "rule": "S&P 收盘 ≤ 10 日最高 × 0.90 → 闲置资金转现金，站回 20 日线才结束（之后照 B0）",
+     "verdict": "第一关不过",
+     "sum": -0.018,
+     "d": {
+      "Z": 0.0,
+      "E": -0.089,
+      "J": 0.071
+     },
+     "checks": {
+      "S1": false,
+      "S2": false,
+      "S3": false,
+      "S4": false,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.594,
+     "h2": -0.563,
+     "cand": {
+      "Z": {
+       "calmar": 0.949,
+       "dd": -14.8,
+       "cagr": 14.04
+      },
+      "E": {
+       "calmar": 0.477,
+       "dd": -27.0,
+       "cagr": 12.89
+      },
+      "J": {
+       "calmar": 0.731,
+       "dd": -25.33,
+       "cagr": 18.52
+      }
+     },
+     "why": "合计 −0.018（Z 0、E −0.089、J +0.071）；E 回撤 −23.09% → −27.00%；后一半合计 −0.563；急跌时卖多卖在最低的几天（2015-08-26、2018-02、2025-04）"
+    }
+   ]
+  },
+  {
+   "round": 10,
+   "date": "2026-10-01",
+   "title": "日元走强且美股走弱时换对冲版纳指",
+   "domain": "核心/配置",
+   "script": "scripts/loop_r10_riskoffhedge.py",
+   "registration": "5e4d351",
+   "output": "var/out/loop_r10_riskoffhedge.md",
+   "approaches": [
+    {
+     "id": "RFH",
+     "rule": "USD/JPY 与 S&P 都在各自 50 日线下且美股牛 → 闲置资金换对冲版纳指 2845",
+     "verdict": "第一关不过",
+     "sum": -0.172,
+     "d": {
+      "Z": -0.32,
+      "E": 0.029,
+      "J": 0.119
+     },
+     "checks": {
+      "S1": false,
+      "S2": false,
+      "S3": false,
+      "S4": false,
+      "S5": true,
+      "S6": true
+     },
+     "h1": -0.025,
+     "h2": -0.166,
+     "cand": {
+      "Z": {
+       "calmar": 0.629,
+       "dd": -18.92,
+       "cagr": 11.91
+      },
+      "E": {
+       "calmar": 0.595,
+       "dd": -22.6,
+       "cagr": 13.46
+      },
+      "J": {
+       "calmar": 0.779,
+       "dd": -25.64,
+       "cagr": 19.98
+      }
+     },
+     "why": "合计 −0.172（Z −0.320、E +0.029、J +0.119）；Z 回撤 −14.80% → −18.92%；核心换仓约 2〜3 倍；看了 FXH / FXC 之后设计的"
+    }
+   ]
+  },
+  {
+   "round": 11,
+   "date": "2026-10-01",
+   "title": "日元急升对冲的参数多数决版",
+   "domain": "核心/配置",
+   "script": "scripts/loop_r11_fxensemble.py",
+   "registration": "4b8fbb7（第二关 b5ccbab）",
+   "output": "var/out/loop_r11_fxensemble.md",
+   "approaches": [
+    {
+     "id": "FXE",
+     "rule": "9 组参数（5 / 10 / 20 天 × −2% / −3% / −4%，收在 20 日线上止）里 ≥ 5 组在日元急升中且美股牛 → 闲置资金换对冲版纳指 2845",
+     "verdict": "第二关不过",
+     "sum": 0.124,
+     "d": {
+      "Z": 0.046,
+      "E": -0.009,
+      "J": 0.087
+     },
+     "checks": {
+      "S1": true,
+      "S2": true,
+      "S3": true,
+      "S4": true,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.145,
+     "h2": 0.414,
+     "cand": {
+      "Z": {
+       "calmar": 0.995,
+       "dd": -14.6,
+       "cagr": 14.52
+      },
+      "E": {
+       "calmar": 0.557,
+       "dd": -24.02,
+       "cagr": 13.37
+      },
+      "J": {
+       "calmar": 0.747,
+       "dd": -26.9,
+       "cagr": 20.1
+      }
+     },
+     "why": "第一关全过（合计 +0.124；Z +0.046、E −0.009、J +0.087）；第二关 +0.124 在 400 次循环平移里约第 94 百分位（24 次 ≥ 它，最大 +0.317）→ 不过；FXH 家族、看了 FXH 之后设计的",
+     "stage2": {
+      "stat": 0.124,
+      "max": 0.317,
+      "ge_stat": 24,
+      "n": 400,
+      "valid": 400,
+      "q95": 0.141,
+      "q99": 0.2222,
+      "registration": "b5ccbab"
+     }
+    }
+   ]
+  },
+  {
+   "round": 12,
+   "date": "2026-10-01",
+   "title": "日経在来回震荡时不开新仓",
+   "domain": "牛熊/择时",
+   "script": "scripts/loop_r12_trendgate.py",
+   "registration": "0fa493b",
+   "output": "var/out/loop_r12_trendgate.md",
+   "approaches": [
+    {
+     "id": "ERG",
+     "rule": "日経225 的 ER60 < 过去 1250 天 1/3 分位（来回震荡）→ 日本个股新仓 ×0",
+     "verdict": "第一关不过",
+     "sum": -0.246,
+     "d": {
+      "Z": -0.119,
+      "E": -0.102,
+      "J": -0.025
+     },
+     "checks": {
+      "S1": false,
+      "S2": false,
+      "S3": false,
+      "S4": false,
+      "S5": false,
+      "S6": true
+     },
+     "h1": -0.089,
+     "h2": -0.334,
+     "cand": {
+      "Z": {
+       "calmar": 0.83,
+       "dd": -15.55,
+       "cagr": 12.91
+      },
+      "E": {
+       "calmar": 0.464,
+       "dd": -26.9,
+       "cagr": 12.5
+      },
+      "J": {
+       "calmar": 0.635,
+       "dd": -28.99,
+       "cagr": 18.42
+      }
+     },
+     "why": "三个年代都更差（Z −0.119、E −0.102、J −0.025，合计 −0.246）；W 挡掉的信号每笔 +2.91%（比保留的好）、Jx 挡掉的 −0.46% → 时代依赖"
+    }
+   ]
+  },
+  {
+   "round": 13,
+   "date": "2026-10-01",
+   "title": "日経熊 + 日元牛时闲置资金换对冲版纳指",
+   "domain": "核心/配置",
+   "script": "scripts/loop_r13_jpbearhedge.py",
+   "registration": "76b1a39",
+   "output": "var/out/loop_r13_jpbearhedge.md",
+   "approaches": [
+    {
+     "id": "JBH",
+     "rule": "日経熊且日元牛（USD/JPY 同一检测器为熊）且美股牛 → 闲置资金换对冲版纳指 2845",
+     "verdict": "第一关不过",
+     "sum": 0.245,
+     "d": {
+      "Z": -0.032,
+      "E": 0.21,
+      "J": 0.067
+     },
+     "checks": {
+      "S1": true,
+      "S2": false,
+      "S3": true,
+      "S4": true,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.178,
+     "h2": 0.351,
+     "cand": {
+      "Z": {
+       "calmar": 0.917,
+       "dd": -14.78,
+       "cagr": 13.56
+      },
+      "E": {
+       "calmar": 0.776,
+       "dd": -19.07,
+       "cagr": 14.8
+      },
+      "J": {
+       "calmar": 0.727,
+       "dd": -26.91,
+       "cagr": 19.57
+      }
+     },
+     "why": "只差 S2：Z −0.032（唯一一段 2003-05〜07 日元小幅走弱）；E +0.210、J +0.067，合计 +0.245；回撤 E −23.09% → −19.07%、J −29.00% → −26.91%"
+    }
+   ]
+  },
+  {
+   "round": 14,
+   "date": "2026-10-01",
+   "title": "日元急升 或 日元强势期都对冲（FXH ∪ JBH）",
+   "domain": "核心/配置",
+   "script": "scripts/loop_r14_fxunion.py",
+   "registration": "9c4e0ee（第二关 1c7a4d3）",
+   "output": "var/out/loop_r14_fxunion.md",
+   "approaches": [
+    {
+     "id": "FJH",
+     "rule": "FXH 的日元急升中 或 JBH 的日経熊且日元牛，且美股牛 → 闲置资金换对冲版纳指 2845",
+     "verdict": "第二关不过",
+     "sum": 0.308,
+     "d": {
+      "Z": 0.101,
+      "E": 0.111,
+      "J": 0.096
+     },
+     "checks": {
+      "S1": true,
+      "S2": true,
+      "S3": true,
+      "S4": true,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.235,
+     "h2": 0.675,
+     "cand": {
+      "Z": {
+       "calmar": 1.05,
+       "dd": -14.35,
+       "cagr": 15.07
+      },
+      "E": {
+       "calmar": 0.677,
+       "dd": -21.05,
+       "cagr": 14.26
+      },
+      "J": {
+       "calmar": 0.756,
+       "dd": -27.41,
+       "cagr": 20.71
+      }
+     },
+     "why": "第一关全过（Z +0.101、E +0.111、J +0.096，合计 +0.308，回撤都更浅）；第二关 +0.308 在 400 次循环平移里约第 99 百分位（5 次 ≥ 它，最大 +0.462）→ 不过；看过 FXH / JBH 之后的事后组合",
+     "stage2": {
+      "stat": 0.308,
+      "max": 0.462,
+      "ge_stat": 5,
+      "n": 400,
+      "valid": 400,
+      "q95": 0.1581,
+      "q99": 0.3201,
+      "registration": "1c7a4d3"
+     }
+    }
+   ]
+  },
+  {
+   "round": 15,
+   "date": "2026-10-01",
+   "title": "参数多数决版的合并对冲（FXE ∪ JBH）",
+   "domain": "核心/配置",
+   "script": "scripts/loop_r15_fxeunion.py",
+   "registration": "80e7649（第二关 f1c205c）",
+   "output": "var/out/loop_r15_fxeunion.md",
+   "approaches": [
+    {
+     "id": "FJE",
+     "rule": "FXE 的多数决急升中 或 JBH 的日経熊且日元牛，且美股牛 → 闲置资金换对冲版纳指 2845",
+     "verdict": "更好候选",
+     "sum": 0.329,
+     "d": {
+      "Z": 0.048,
+      "E": 0.193,
+      "J": 0.088
+     },
+     "checks": {
+      "S1": true,
+      "S2": true,
+      "S3": true,
+      "S4": true,
+      "S5": true,
+      "S6": true
+     },
+     "h1": 0.339,
+     "h2": 0.397,
+     "cand": {
+      "Z": {
+       "calmar": 0.997,
+       "dd": -14.6,
+       "cagr": 14.56
+      },
+      "E": {
+       "calmar": 0.759,
+       "dd": -19.49,
+       "cagr": 14.79
+      },
+      "J": {
+       "calmar": 0.748,
+       "dd": -26.9,
+       "cagr": 20.13
+      }
+     },
+     "why": "第一关全过（Z +0.048、E +0.193、J +0.088，合计 +0.329，回撤都更浅）；第二关 +0.329 > 400 次循环平移的最大 +0.263（0 次 ≥ 它）→ 更好候选；事后设计的组合（看过 FXH / FXE / JBH / FJH），同样设计的 FJH 第二关没过",
+     "stage2": {
+      "stat": 0.329,
+      "max": 0.263,
+      "ge_stat": 0,
+      "n": 400,
+      "valid": 400,
+      "q95": 0.1543,
+      "q99": 0.2253,
+      "registration": "f1c205c"
+     },
+     "recheck": {
+      "date": "2026-10-03",
+      "script": "scripts/fje_recheck.py",
+      "registration": "749398a",
+      "why": "事后审计（scripts/fx_timing_audit.py）：研究合成价的汇率比信号旧约 17 小时 → 用户 ㊼ ① 研究口径改成修正口径后按同一套两关重新检验",
+      "d": {
+       "Z": 0.059,
+       "E": 0.038,
+       "J": -0.034
+      },
+      "sum": 0.063,
+      "verdict": "第一关不过",
+      "action": "撤掉模拟盘与执行器的 FJE（idle_cash Q1HB → Q1B，2026-10-02 收盘的决策起）"
+     }
+    }
+   ]
+  }
+ ],
+ "adopted": {
+  "date": "2026-10-02",
+  "candidate": "FJE（第 15 轮）",
+  "change": "闲置资金 Q1 → Q1H（日元走强时对冲版纳指 2845、其余 1545；var/sim.json idle_cash.mode、qbreak/fx_hedge.py），2026-10-01 收盘的决策起（10-02 06:57 / 07:40 起）",
+  "fingerprint_after": "e73f7f6c0149fe10",
+  "record": "var/sim_changes.md 2026-10-02「配置变更（用户决定：「采用」…FJE）」"
+ }
+}

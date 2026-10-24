@@ -1,0 +1,5 @@
+{
+ "max_distribution_days": 6,
+ "max_upper_shadow_ratio": 3.0,
+ "min_weekly_vol_ratio": 1.0
+}

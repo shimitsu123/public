@@ -1,0 +1,42 @@
+{
+ "study": "breadth_ndx_study",
+ "verdict": {
+  "ic_train": -0.2442,
+  "ic_test": -0.0446,
+  "ic_test_q": -0.131,
+  "n_train": 178,
+  "n_test": 190,
+  "n_q": 63,
+  "p": 0.8464,
+  "info": false
+ },
+ "desc": {
+  "train": {
+   "partial_ic": -0.2417,
+   "narrow": {
+    "n": 24,
+    "fwd_pct": 13.1
+   },
+   "broad": {
+    "n": 154,
+    "fwd_pct": 3.56
+   }
+  },
+  "test": {
+   "partial_ic": -0.0099,
+   "narrow": {
+    "n": 14,
+    "fwd_pct": 7.56
+   },
+   "broad": {
+    "n": 176,
+    "fwd_pct": 3.7
+   }
+  }
+ },
+ "latest": {
+  "date": "2026-08-31",
+  "breadth": 0.776
+ },
+ "seconds": 5
+}

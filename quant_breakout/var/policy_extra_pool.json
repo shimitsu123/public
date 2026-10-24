@@ -1,0 +1,283 @@
+{
+ "source": "J-Quants 上市一览 2026-09-25 的 S33 分类（TOPIX 成分；只补长历史池缺的业种）",
+ "as_of": "2026-09-25",
+ "quality": "low（今天的成员与分类，幸存者偏差）",
+ "tickers": {
+  "5121.T": {
+   "s33": "ゴム製品",
+   "scale": "TOPIX Small 2"
+  },
+  "5122.T": {
+   "s33": "ゴム製品",
+   "scale": "TOPIX Small 2"
+  },
+  "5185.T": {
+   "s33": "ゴム製品",
+   "scale": "TOPIX Small 2"
+  },
+  "5186.T": {
+   "s33": "ゴム製品",
+   "scale": "TOPIX Small 2"
+  },
+  "5195.T": {
+   "s33": "ゴム製品",
+   "scale": "TOPIX Small 2"
+  },
+  "7388.T": {
+   "s33": "保険業",
+   "scale": "TOPIX Small 2"
+  },
+  "8798.T": {
+   "s33": "保険業",
+   "scale": "TOPIX Small 2"
+  },
+  "9301.T": {
+   "s33": "倉庫・運輸関連業",
+   "scale": "TOPIX Mid400"
+  },
+  "9302.T": {
+   "s33": "倉庫・運輸関連業",
+   "scale": "TOPIX Mid400"
+  },
+  "9303.T": {
+   "s33": "倉庫・運輸関連業",
+   "scale": "TOPIX Small 1"
+  },
+  "9304.T": {
+   "s33": "倉庫・運輸関連業",
+   "scale": "TOPIX Small 2"
+  },
+  "9310.T": {
+   "s33": "倉庫・運輸関連業",
+   "scale": "TOPIX Small 2"
+  },
+  "9319.T": {
+   "s33": "倉庫・運輸関連業",
+   "scale": "TOPIX Small 2"
+  },
+  "9324.T": {
+   "s33": "倉庫・運輸関連業",
+   "scale": "TOPIX Small 2"
+  },
+  "9364.T": {
+   "s33": "倉庫・運輸関連業",
+   "scale": "TOPIX Mid400"
+  },
+  "9369.T": {
+   "s33": "倉庫・運輸関連業",
+   "scale": "TOPIX Small 2"
+  },
+  "9381.T": {
+   "s33": "倉庫・運輸関連業",
+   "scale": "TOPIX Small 2"
+  },
+  "9308.T": {
+   "s33": "海運業",
+   "scale": "TOPIX Small 2"
+  },
+  "3315.T": {
+   "s33": "石油・石炭製品",
+   "scale": "TOPIX Small 2"
+  },
+  "5011.T": {
+   "s33": "石油・石炭製品",
+   "scale": "TOPIX Small 2"
+  },
+  "5013.T": {
+   "s33": "石油・石炭製品",
+   "scale": "TOPIX Small 2"
+  },
+  "9201.T": {
+   "s33": "空運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9202.T": {
+   "s33": "空運業",
+   "scale": "TOPIX Large70"
+  },
+  "3001.T": {
+   "s33": "繊維製品",
+   "scale": "TOPIX Small 2"
+  },
+  "3103.T": {
+   "s33": "繊維製品",
+   "scale": "TOPIX Small 2"
+  },
+  "3104.T": {
+   "s33": "繊維製品",
+   "scale": "TOPIX Small 2"
+  },
+  "3109.T": {
+   "s33": "繊維製品",
+   "scale": "TOPIX Small 2"
+  },
+  "3302.T": {
+   "s33": "繊維製品",
+   "scale": "TOPIX Small 2"
+  },
+  "3580.T": {
+   "s33": "繊維製品",
+   "scale": "TOPIX Small 2"
+  },
+  "8011.T": {
+   "s33": "繊維製品",
+   "scale": "TOPIX Small 2"
+  },
+  "8029.T": {
+   "s33": "繊維製品",
+   "scale": "TOPIX Small 2"
+  },
+  "1514.T": {
+   "s33": "鉱業",
+   "scale": "TOPIX Small 2"
+  },
+  "2384.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Small 1"
+  },
+  "9001.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9003.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9005.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9006.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9007.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9008.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9009.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9010.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Small 1"
+  },
+  "9020.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Large70"
+  },
+  "9021.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Large70"
+  },
+  "9022.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Large70"
+  },
+  "9023.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9024.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9025.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Small 1"
+  },
+  "9031.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9037.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Small 1"
+  },
+  "9039.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Small 1"
+  },
+  "9041.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9042.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9044.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9045.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9046.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Small 2"
+  },
+  "9048.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9052.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Small 2"
+  },
+  "9064.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9065.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9068.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Small 1"
+  },
+  "9069.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9072.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9075.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Small 1"
+  },
+  "9076.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9081.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Small 2"
+  },
+  "9090.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Small 1"
+  },
+  "9142.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9143.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  },
+  "9147.T": {
+   "s33": "陸運業",
+   "scale": "TOPIX Mid400"
+  }
+ }
+}
