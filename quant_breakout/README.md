@@ -193,7 +193,7 @@ python run.py status                  # 看持仓/权益/风控状态
 - 状态在 `var/state/`，日志在 `var/logs/`，每日流水在 `var/out/journal.csv`
 - 跑满 3 个月后，把 `journal.csv` 的胜率/平均单笔和回测对比；**对不上先查数据和成交假设，不要先改策略**
 
-### 三个月模拟盘（云端每日自动运行 + 可点击日报）
+### 三个月模拟盘（每日自动运行；2026-10-09 起在 Mac 本机例行任务里）
 
 ```bash
 python run.py sim-init --start 2026-09-24      # 清空状态，每个市场 ¥1,000,000（美股按当日汇率折美元）
@@ -202,14 +202,14 @@ python run.py report                           # 只重新生成 var/out/report.
 ```
 
 - 日报：2026-10-20 起不再发布（用户：在本地 qbreak 面板看）；以前的链接 <https://claude.ai/artifact/1RuryVLyrXpD9a2aS4tAZQ> 停在 10/16 那期
-- 券商：2026-09-25 深夜起模拟盘按**立花 e支店 個別コース**计费（`sim-unify --broker tachibana`；只有日元、只做东证，1655.T 在东京开盘时买卖）。
+- 券商：2026-09-25 深夜起模拟盘按**立花 e支店 個別コース**计费（`sim-unify --broker tachibana`；只有日元、只做东证，1655.T 在东京开盘时买卖；2026-10 起核心 ETF 是 1545 / 1482）。
   一个账户的**实盘执行器** `run.py live-u`（07:40 对账 → 决策 → 寄付单；09:05 开盘后补单）已完成并用模拟账户演练过：
   历史回放与回测引擎逐笔一致（5 年 23.02% / 20 年 12.87%，差 ¥0），走真实立花适配器 + 模拟交易所时 5 年 22.99%（`var/out/live_rehearsal.md`）；
   9/28 起 `sim-day` 每天用模拟券商把执行器走一遍、与模拟盘比较（日报顶部）。上线步骤见 MACOS.md §1.6
-- **Mac 上的模拟操盘（立花开户前，现在就做）**：终端里粘贴一行
+- **Mac 上的模拟操盘（立花已开户；ARM 之前照旧只跑模拟）**：终端里粘贴一行
   `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/shimitsu123/public/claude/rakuten-auto-trading-review-ka7lf0/quant_breakout/scripts/mac_bootstrap.sh)"`
   （= 取代码 + `bash scripts/install_launchd_live_u.sh`（默认 paper）+ 试跑）→ 周一至五 07:40 在 Mac 上用
-  同一个执行器跑模拟账户、与云端模拟盘逐日比较、发通知、写日志；状态在 `~/.qbreak/home`（不在仓库里）。
+  同一个执行器跑模拟账户、与仓库里的模拟盘逐日比较（2026-10-19 起只作参考）、发通知、写日志；状态在 `~/.qbreak/home`（不在仓库里）。
   每次运行后重写「账本 + 日志」页面并自动打开（桌面上的 `qbreak模拟操盘.html` 指向它；含牛熊现在处于哪个阶段）。见 MACOS.md §1.7
 - 牛熊分界除了「牛 / 熊」的结果，再给**现在处于哪个阶段**（只展示，不改交易规则）：牛市·稳固 / 走弱 / 临界 / 牛→熊确认中、
   熊市·深 / 回升 / 临界 / 熊→牛确认中（翻转后 20 个交易日内标「刚转」），附离 250 日均线的百分比、它 20 个交易日的变化（百分点）、
@@ -221,10 +221,9 @@ python run.py report                           # 只重新生成 var/out/report.
 - 模拟盘所有成交都在**次日寄付**（JP 09:00 JST / US 09:30 ET），这是回测同款的成交假设
 - 状态（`var/sim.json`、`var/state/`、`var/out/`）随代码入库，例行任务靠它跨天续命
 - 日本株用 `affordable` 股票池、单笔 34%/最多 3 只：¥100 万下多数东证大盘股 1 単元就超预算，默认池几乎买不了
-- 例行任务 id `trig_01MMZVeTtxexr6y4sDhy4rxX`（2026-09-25 重建：每周一至五 06:57 JST，汇报逐项带单位、先报「数据完整性」；发到固定的模拟盘对话里）；
-  想停：让 Claude 删除它，或在 claude.ai 的 Routines 里禁用
+- 以前的云端例行任务 id `trig_01MMZVeTtxexr6y4sDhy4rxX`（2026-09-25 重建：每周一至五 06:57 JST）2026-10-19 已删（以本地为准）
 - 2026-10-09 起例行任务（模拟盘日报 / 影子账户判断 / 季度复核）在 Mac 的 Claude 桌面版本机任务里跑（`~/qbreak-sim`，说明书 [`routines/`](routines/README.md)），
-  云端同名例行任务是后备（Mac 当天做过就跳过）；检查：`bash scripts/routines.sh check`
+  云端同名例行任务 2026-10-19 已删（以本地为准、没有后备；Mac 没做的那天在 Mac 对话里说「补跑」）；检查：`bash scripts/routines.sh check`
 - 前提：运行环境的网络策略必须放行 [`network_allowlist.txt`](network_allowlist.txt) 里的域名；
   **改动只对新启动的会话生效**（这也是例行任务每次新开会话的原因）。`run.py doctor` 会逐个检查
 - 美股在日报里同时显示美元与折合日元（每日 USD/JPY 记录在 `var/out/fx.csv`），汇率贡献单列
