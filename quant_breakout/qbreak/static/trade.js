@@ -524,7 +524,7 @@ document.addEventListener('click', async e=>{
     $('#buy-cap').textContent=CFG.cap;
     { const r=$('#buy-range'), L=BUY.lot; r.min=L; r.step=L; r.max=Math.max(L, buyCap()); }
     { const lock=BUY.fullOnly; $('#buy-range').disabled=lock; $('#buy-seg').hidden=lock; }   // 名额已满：只能「其他全部卖出」，股数由执行器定
-    if(BUY.fullOnly){ FUND_MODE='all'; buyUnit('shares'); } else buyUnit('rule');
+    if(BUY.fullOnly){ FUND_MODE='all'; buyUnit('shares'); } else buyUnit(BUY.rule>0 ? 'rule' : 'shares');      // 按规则 0 股（新仓倍数 0 / 一手超过一只新仓）→ 默认一手（2026-10-24）
     sheet('#dlg-buy'); buyLive(); loadSQ(); rtQ(d.t, '#buy-rt', true); return;            // 现价 + 现在买按什么价（Yahoo，约晚 20 分钟）
   }
   if(a==='buy-unit'){ buyUnit(d.u); return; }

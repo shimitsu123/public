@@ -515,14 +515,22 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
         H.append("</div>")
     if near:
         sh_all = {r["ticker"]: est_shares(r) for r in near if str(r["ticker"]) not in bought}   # 今天已经买进的不算进「买不起」
-        cant = sum(1 for v in sh_all.values() if v <= 0)
+        why_all = {t: _near_why(r, eq) for r in near if (t := r["ticker"]) in sh_all and sh_all[t] <= 0}   # 买不了的分两种（2026-10-24）
+        stop = [t for t, w in why_all.items() if w == "em0"]
+        dear = [t for t, w in why_all.items() if w == "lot"]
         H.append(f"<h3 class='sgh'>估计 {AUTO_NEAR_DAYS} 个交易日内可能出信号（{len(near)} 只）</h3>")
         if s["free"] <= 0:
             H.append("<div class='chips'><span class='chip bad'>名额满：出了信号也不会买</span>" + _tip("名额满：出了信号也不会买（先卖出一只）") + "</div>")
-        elif cant:
-            H.append(f"<div class='chips'><span class='chip warn'>{cant} 只买不起</span>"
-                     + _tip(f"★ 其中 {cant} 只出了信号也买不起：现在一只新仓约 {_yen(eq * CX.POS_PCT * min(1.0, max(float((r.get('buy') or {}).get('em') or 0) for r in near)))}"
-                            "（总权益 × 25% × 新仓倍数），不够 100 股") + "</div>")
+        elif stop or dear:
+            w0 = next((str(w) for r in near if r["ticker"] in stop for w in (r.get("buy") or {}).get("warn") or []), "")
+            H.append("<div class='chips'>"
+                     + (f"<span class='chip warn'>{len(stop)} 只：规则现在不开新仓</span>"
+                        + _tip(f"★ 其中 {len(stop)} 只出了信号规则现在也不买：新仓倍数 0（不是钱的问题）"
+                               + (f"<br>{escape(_fill_mult_why(w0))}" if w0 else "") + "<br>手动买入不受这个限制（是你自己的决定）") if stop else "")
+                     + (f"<span class='chip warn'>{len(dear)} 只：一手超过一只新仓</span>"
+                        + _tip(f"★ 其中 {len(dear)} 只的一手（100 股）超过现在一只新仓的上限（总权益 {_yen(eq)} × 25% × 新仓倍数，约 {_yen(eq * CX.POS_PCT)} 起往下）："
+                               "规则不会自动买（2026-10-24「一手放宽」检验没通过）；手动买入不受这个限制（最多到总权益，是你自己的决定）") if dear else "")
+                     + "</div>")
         H.append("<div class='list'>")
         for r in near:
             n = int(r["near"]["days"])
@@ -531,9 +539,14 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
             sh = sh_all.get(r["ticker"], 0)
             miss = (r.get("near") or {}).get("miss") or []
             bw = bought.get(str(r["ticker"]))
+            nw = why_all.get(r["ticker"])
             tag_ = (f"<span class='chip'>{escape(bw)}</span>" if bw else
-                    "<span class='chip bad'>名额满</span>" if s["free"] <= 0 else "<span class='chip warn'>买不起</span>" if sh <= 0
+                    "<span class='chip bad'>名额满</span>" if s["free"] <= 0 else "<span class='chip warn'>规则不开新仓</span>" if nw == "em0"
+                    else "<span class='chip warn'>一手超过一只新仓</span>" if nw == "lot" else "<span class='chip warn'>估不出股数</span>" if sh <= 0
                     else f"<span class='chip hot'>约 {sh:,} 股</span>")
+            lc = _lot_cost(r)
+            if lc and not bw:                                   # 每只都写一手多少钱、约占权益（2026-10-24 用户：不要 25 万的限制，符合条件的都显示）
+                tag_ += f"<span class='chip mut'>一手 {_yen(lc)}" + (f" · 约占 {lc / eq * 100:.0f}%" if eq else "") + "</span>"
             mw = a["wait"].get(str(r["ticker"]))
             if mw:                                          # 现在还在「不买回」里：到期 / 解除之后才可能买
                 tag_ += f"<span class='chip'>{escape(mw)}</span>"
@@ -545,6 +558,23 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
         H.append(f"<div class='muted'>今天没有出信号的票，估计 {AUTO_NEAR_DAYS} 个交易日内金叉的也没有：规则近几天大概不会自动买个股</div>")
     H.append("</section>")
     return "".join(H)
+
+
+def _lot_cost(r: dict) -> float:
+    """一手（单元股数）按收盘的金额；没有价格 → 0。"""
+    b = r.get("buy") or {}
+    px, lot = float(b.get("px") or r.get("close") or 0), int(b.get("lot") or 100)
+    return px * lot if px > 0 else 0.0
+
+
+def _near_why(r: dict, eq) -> str:
+    """「快要出」的一只为什么按规则买不了（只在估算的股数 ≤ 0 时问）：em0 = 新仓倍数 0（规则现在不开新仓，不是钱的问题）、
+    lot = 一手 ×1.03 超过一只新仓（总权益 × 25% × 新仓倍数）、"" = 没有价格 / 总权益（2026-10-24：以前都写「买不起」，
+    risk_off 时连 ¥20 万的票也写成买不起、「新仓约 ¥0」）。"""
+    b = r.get("buy") or {}
+    if float(b.get("em") or 0) <= 0:
+        return "em0"
+    return "lot" if _lot_cost(r) > 0 and eq else ""
 
 
 def _slot_chip(s: dict) -> str:
@@ -821,7 +851,10 @@ def _suggest_row(r: dict, s: dict, buying: set, eq, chart, rank: int | None = No
                 f" data-rtext='{escape(str(ru.get('text') or ''))}' data-warn='{escape(warn)}'" + (" data-full='1'" if full else ""))
         H.append(f"<div class='act'><button class='btn {'' if full else 'primary'}' data-act='buy'{data}>{'全部换成这只…' if full else '买入…'}</button>"
                  + (f"<span class='muted small'>个股名额已满（{s['used']} / {s['max']} 只）：只能把其他持仓全部卖出来换这只</span></div>" if full else
-                    f"<span class='muted small'>按规则约 {n:,} 股 · 约 {_yen(n * px)}" + (f" · 约占权益 {n * px / eq * 100:.1f}%" if eq else "") + "</span></div>")
+                    (f"<span class='muted small'>按规则约 {n:,} 股 · 约 {_yen(n * px)}" + (f" · 约占权益 {n * px / eq * 100:.1f}%" if eq else "") + "</span></div>"
+                     if n > 0 else
+                     f"<span class='muted small'>一手 {lot:,} 股 ≈ {_yen(lot * px)}" + (f" · 约占权益 {lot * px / eq * 100:.1f}%" if eq else "")
+                     + "：超过一只新仓的上限（总权益 × 25%），规则不会自动买；手动买入按股数写（不受这个限制）</span></div>"))
                  )
     wc = (f"<span class='chip bad'>★ {'新仓倍数 0：会被挡' if '新仓倍数 0' in warn else '会被挡'}</span>{_tip('★ ' + escape(warn))}"
           if warn and not why else "")

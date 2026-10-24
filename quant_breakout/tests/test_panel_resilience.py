@@ -1,6 +1,7 @@
 """面板的再发防止（2026-10-12：手机上点「买入 1482」→ 固定口数这种指令没有说明文字 → 拼接崩溃 → 连接断开 → Tailscale 回 HTTP 502、
 页面写「没写成」，其实已经写进去了，用户又点了一次）：每种指令都有说明；处理中出异常 → 回能读的 JSON（可能已写 → 先确认）。"""
 import json
+from pathlib import Path
 
 import pytest
 
@@ -102,9 +103,27 @@ def test_auto_buy_card_lists_planned_and_near_with_days():
     assert "<h2>规则接下来会自动买</h2>" in h and "已经出了买入信号" in h and "规则已安排：10/13 开盘买 100 股" in h
     assert h.index("2002") < h.index("1925")                                   # 近的在前
     assert "约 1 天" in h and "约 10/13 金叉" in h and "约 3 天" in h and "约 10/15 金叉" in h
-    assert "约 400 股" in h and "买不起" in h and "其中 1 只出了信号也买不起" in h
+    assert "约 400 股" in h and "一手超过一只新仓" in h and "其中 1 只的一手（100 股）超过" in h and "买不起" not in h
+    assert f"一手 {panel._yen(500_000)} · 约占 50%" in h and f"一手 {panel._yen(50_000)} · 约占 5%" in h   # 每只都写一手金额（2026-10-24）
     assert "9007" not in h and "9008" not in h                                 # 超过 5 天 / 闸门挡的不列
     assert "候选在执行器下一次运行之后显示" in panel._auto_buy_card({}, book, "paper", 1_000_000)   # 选股页只有这一张：空着也写一行（2026-10-18）
+
+
+def test_auto_buy_card_em0_is_not_called_unaffordable():
+    """2026-10-24 用户：「不要 25 万限制，符合选股条件的都显示」—— risk_off（新仓倍数 0）时以前每只都写「买不起」、「新仓约 ¥0」。"""
+    _book(manual={"cap_pct": 34.0, "max_positions": 4, "items": {}})
+    w = "规则现在不开这只的新仓（新仓倍数 0）—— 市场状态层：risk_off → 会被挡"
+    sg = {"asof": "2026-10-23", "fill_day": "2026-10-26", "rows": [
+        {"ticker": "1925.T", "code": "1925", "name": "大和ハウス", "status": "watch", "near": {"where": "below_up", "days": 2, "miss": []},
+         "buy": {"px": 2000.0, "em": 0.0, "lot": 100, "warn": [w]}},
+        {"ticker": "8795.T", "code": "8795", "name": "Ｔ＆Ｄ", "status": "watch", "near": {"where": "below_up", "days": 3, "miss": []},
+         "buy": {"px": 4810.0, "em": 0.0, "lot": 100, "warn": [w]}}]}
+    book = json.loads((panel.paths.state_dir() / "live_unified_paper.json").read_text())
+    h = panel._auto_buy_card(sg, book, "paper", 1_000_000)
+    assert "买不起" not in h and "新仓约" not in h and h.count("规则不开新仓") == 2 and "2 只：规则现在不开新仓" in h
+    assert "不是钱的问题" in h and "risk_off" in h and f"一手 {panel._yen(481_000)} · 约占 48%" in h
+    js = (Path(panel.__file__).parent / "static" / "trade.js").read_text(encoding="utf-8")
+    assert "buyUnit(BUY.rule>0 ? 'rule' : 'shares')" in js                        # 按规则 0 股 → 买入框默认一手
 
 
 def test_trade_tab_shows_only_last_two_days_except_unfinished():
