@@ -44,11 +44,24 @@ def market_of(ticker: str) -> str:
     return "JP" if ticker.endswith(".T") else "US"
 
 
+NO_CAP = 999                              # 个股名额「不设上限」（2026-10-24 用户「个股名额空 4 个的上限去掉」：sim.json unified.max_positions = null）
+
+
+def capped(n) -> bool:
+    """个股名额有上限吗（max_positions < NO_CAP）。"""
+    return int(n) < NO_CAP
+
+
+def cap_text(n) -> str:
+    """「上限 4 只」/「不设上限」（显示用）。"""
+    return f"上限 {int(n)} 只" if capped(n) else "不设上限"
+
+
 @dataclass
 class UnifiedConfig:
     capital_jpy: float = 1_000_000
     position_pct: float = 0.25            # 单只个股占总权益（日元计）
-    max_positions: int = 4                # 日本 + 美股合计的个股名额
+    max_positions: int = 4                # 日本 + 美股合计的个股名额（NO_CAP = 不设上限：只受现金与每只 position_pct 限制）
     max_position_pct: float = 0.34
     cash_buffer_pct: float = 1.0
     stock_markets: tuple = ("JP", "US")   # 个股参与统一排名的市场
@@ -152,6 +165,8 @@ def config_from_sim(sim: dict) -> UnifiedConfig:
     kw = {k: u[k] for k in ("position_pct", "max_positions", "max_position_pct", "cash_buffer_pct", "core_mode",
                            "core_buffer_pct", "band_pct", "margin_pct", "fx_spread_yen", "fx_on_jp_holidays",
                            "usd_keep", "usd_keep_imminent", "us_same_open_reuse", "one_lot_cap_pct") if k in u}
+    if "max_positions" in kw and kw["max_positions"] is None:    # null = 不设上限
+        kw["max_positions"] = NO_CAP
     return UnifiedConfig(capital_jpy=float(sim.get("capital_jpy") or d.capital_jpy),
                          stock_markets=tuple(u.get("stock_markets", d.stock_markets)),
                          core=dict(u.get("core", d.core)), core_index=dict(u.get("core_index", d.core_index)), **kw)

@@ -460,7 +460,7 @@ def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None
         return int(eq * CX.POS_PCT * min(1.0, em) / (px * 1.03) / lot) * lot
     H = ["<section class='card' id='autobuy'><h2>规则接下来会自动买</h2>",   # 说明收进 ⓘ、名额 = 标签（2026-10-17）
          f"<div class='chips'><span class='chip mut'>按 {escape(str(sg.get('asof') or '—'))} 收盘</span>{_slot_chip(s)}"
-         + _tip(f"按 {escape(str(sg.get('asof') or '—'))} 收盘。个股名额空 {s['free']} 个（上限 {s['max']} 只）{_slots_today(s)}。"
+         + _tip(f"按 {escape(str(sg.get('asof') or '—'))} 收盘。{_slots_text(s)}{_slots_today(s)}。"
                 "只是规则的展示与估算，不是建议。"
                 + ("<br>点一行展开：K 线 · 现价、买入…" if trig or near else "")
                 + f"<br>天数与日期是按最近一天的变化估的；金叉之外还要量等条件凑齐才出买入信号（历史比例大多很低）；出了信号下一个交易日开盘买。")
@@ -579,9 +579,20 @@ def _near_why(r: dict, eq) -> str:
     return "lot" if _lot_cost(r) > 0 and eq else ""
 
 
+def _slots_text(s: dict) -> str:
+    """「个股名额空 N 个（上限 M 只）」；不设上限（2026-10-24 起）→「个股名额不设上限（现在 N 只…）」。"""
+    from .unified import capped
+    if not capped(int(s.get("max") or 0) or 4):
+        return f"个股名额不设上限（现在 {int(s.get('used') or 0)} 只；只受现金与每只约占权益 25% 限制）"
+    return f"个股名额空 {s['free']} 个（上限 {s['max']} 只）"
+
+
 def _slot_chip(s: dict) -> str:
-    """个股名额的标签：空 0 = 红、空 1 = 琥珀、其他 = 绿框（2026-10-17：以前是一句话）。"""
+    """个股名额的标签：空 0 = 红、空 1 = 琥珀、其他 = 绿框（2026-10-17：以前是一句话）；不设上限 →「个股 N 只 · 不设上限」。"""
+    from .unified import capped
     f, m = int(s.get("free") or 0), int(s.get("max") or 0)
+    if not capped(m or 4):
+        return f"<span class='chip ok'>个股 {int(s.get('used') or 0)} 只 · 名额不设上限</span>"
     return f"<span class='chip {'bad' if f <= 0 else 'warn' if f == 1 else 'ok'}'>名额 空 {f}/{m}</span>"
 
 
@@ -599,10 +610,13 @@ def _unblock_confirm(book: dict, tag: str, ts: list[str], what: str, selling: li
     s = MO.slots(book, tag, now=now, with_today=True)
     pj = LO.held_now(book, tag, now=now)                   # 含今天已成交的现金（对账前；2026-10-16）
     many = len(ts) > 1
+    from .unified import capped
+    need_slot = (f"有空名额（现在空 {s['free']} 个，上限 {s['max']} 只" if capped(int(s.get("max") or 0) or 4)
+                 else f"在现金里放得下（{_slots_text(s)}")
     L = [f"只解除{what}的「不自动买回」" + (f"（{NM.labels(ts)}）" if many else "") + "。",       # 票写「代码 名字」（2026-10-15）
          f"不会把{'它们' if many else '它'}买回来，也不会马上买。",
          f"{MO.NEXT_DECISION}，规则重新判断：只有那次决策看的那根 K 线出买入信号（MACD 金叉）才可能买；已经判断过的信号不会再用。",
-         f"买入还要有空名额（现在空 {s['free']} 个，上限 {s['max']} 只{_slots_today(s)}）、现金（账本现金 {_yen(float(st.get('cash_jpy') or 0))}"
+         f"买入还要{need_slot}{_slots_today(s)}）、现金（账本现金 {_yen(float(st.get('cash_jpy') or 0))}"
          + (f"（{pj.get('head') or LO.hn_head(pj.get('day_word'))}约 {_yen(pj['cash'])}）" if pj.get("has") else "") + "）、"
          "过资格检查 / 决算前 / 宏观。"]
     if MO.core_pct_now(tag, book) <= 0 or man.get("core_pause"):

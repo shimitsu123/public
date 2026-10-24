@@ -959,8 +959,11 @@ def _account_block(d: dict) -> str:
     held = int(sl.get("held") if sl.get("held") is not None else len(d.get("positions") or {}))
     selling, buying = int(sl.get("selling") or 0), int(sl.get("buying") or 0)
     free = int(sl.get("free")) if sl.get("free") is not None else max(0, nmax - held - buying)
+    from .unified import capped
+    lim = capped(nmax)                                     # 2026-10-24 起不设上限（NO_CAP）→ 不画「空」格
     cells = ([("var(--s1)", "持")] * max(0, held - selling) + [("var(--st-warn)", "卖")] * selling
-             + [("var(--s2)", "买")] * buying + [("var(--line)", "空")] * free)[:nmax]
+             + [("var(--s2)", "买")] * buying + ([("var(--line)", "空")] * free if lim else []))[:nmax]
+    slot_t = (f"个股名额 {held} / {nmax} 在用", f" · 空 {free}") if lim else (f"个股 {held} 只（名额不设上限）", "")
     n_tr = int(d.get("n_trades") or 0)
     win = _pct(d.get("win_rate")) if d.get("win_rate") is not None else "—（还没有平仓）"
     fx = d.get("usdjpy") or 0
@@ -972,8 +975,17 @@ def _account_block(d: dict) -> str:
             f'<span class="{"up" if (ret or 0) >= 0 else "down"} big2">{ret_txt}</span><span class="muted">起始 {_money(cap)}</span></div>'
             + _mrow("离峰值的回撤", f"峰值 {_money(peak)}；模拟期最大回撤 {escape(str(mdd))}%", meter, dd_txt, _chip(st))
             + f'<div class="kpi"><div><span class="muted">日元现金</span><b>{_money(d.get("cash_jpy"))}</b></div>{usd}'
-            f'<div><span class="muted">个股名额 {held} / {nmax} 在用</span>{_segments(cells)}<span class="muted">持 {held} · 明天卖 {selling} · 明天买 {buying} · 空 {free}</span></div>'
+            f'<div><span class="muted">{slot_t[0]}</span>{_segments(cells)}<span class="muted">持 {held} · 明天卖 {selling} · 明天买 {buying}{slot_t[1]}</span></div>'
             f'<div><span class="muted">已平仓</span><b>{n_tr} 笔</b><span class="muted">胜率 {win}</span></div></div></section>')
+
+
+def _maxpos_txt(n) -> str:
+    """规则摘要里的个股只数：4 → 「4」；不设上限（NO_CAP，2026-10-24 起）→「不设上限」。"""
+    from .unified import capped
+    try:
+        return str(int(n)) if capped(int(n)) else "不设上限"
+    except (TypeError, ValueError):
+        return str(n)
 
 
 def _positions_block(d: dict, closes: dict) -> str:
@@ -987,7 +999,9 @@ def _positions_block(d: dict, closes: dict) -> str:
     cfg = d.get("config") or {}
     nmax = int((tl.get("slots") or {}).get("max") or cfg.get("max_positions") or 4)
     if not pos:
-        return (f'<section class="card top"><h2>② 个股持仓</h2><p class="muted">无：{nmax} 个名额全空（明天开盘要不要买，看下面「今天要做的事」与候补队列）。</p></section>')
+        from .unified import capped
+        empty = f"{nmax} 个名额全空" if capped(nmax) else "没有个股（名额不设上限）"
+        return (f'<section class="card top"><h2>② 个股持仓</h2><p class="muted">无：{empty}（明天开盘要不要买，看下面「今天要做的事」与候补队列）。</p></section>')
     rows = []
     for t, p in pos.items():
         h = hs.get(t) or {}
@@ -1324,7 +1338,7 @@ def render_unified_html(d: dict) -> str:
         corp="".join(f"<li>{escape(c['date'])} {escape(_lab(c['ticker']))}：{escape(NM.annotate(str(c['note'])))}</li>"
                      for c in reversed(d.get("corp_log") or [])) or '<li class="muted">无</li>',
         n_trades=d.get("n_trades", 0), win=_pct(d.get("win_rate")) if d.get("win_rate") is not None else "—（还没有平仓）",
-        rules=escape(f"个股 {cfg.get('max_positions')}×{int(float(cfg.get('position_pct', 0)) * 100)}%（{stocks}）；"
+        rules=escape(f"个股 {_maxpos_txt(cfg.get('max_positions'))}×{int(float(cfg.get('position_pct', 0)) * 100)}%（{stocks}）；"
                      + (f"个股离场：{(d.get('exit_mode') or {}).get('label')}；" if (d.get('exit_mode') or {}).get('JP') not in (None, 'DC') else "")
                      + (f"闲置资金：{(d.get('idle_cash') or {}).get('label')}（现在：{_ic_now(d.get('idle_cash') or {})}；"
                         f"{escape(str((d.get('idle_cash') or {}).get('since') or ''))} 起；原规则 {_lab('1655.T')} + 牛熊分界只给基准账户）；"

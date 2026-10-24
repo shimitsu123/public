@@ -110,6 +110,7 @@ def asked_unsent(o, asked=()) -> bool:
 BLOCK_RETRY = ("立花の銘柄マスタ取不到", "登录失败，没发单", "没连上立花，没发单")   # 立花适配器 BLOCKED：请求根本没发出、过一会儿可能就好（G15）
 PRECLOSE_MAX_PCT = 3.0                             # LU-15：Yahoo 收盘 vs 立花前日終値 差超过这个 % → 那只的寄付买单不下（卖单只提醒）
 BREAKER_N, BREAKER_VALUE = 2, 2.2                  # C-11：规则单笔数 > (个股名额 + 核心 ETF 只数) × 2，或金额合计 > 权益 × 2.2 → 异常熔断
+BREAKER_POS = 8                                    # 个股名额不设上限时（2026-10-24 起）熔断按 max(8, 持仓 + 4) 只算（金额那一条照旧）
 
 
 def _np(x):
@@ -730,16 +731,17 @@ class UnifiedExecutor:
     # ── C-11：单次运行的异常熔断 ──
     def _breaker(self, k: int, todo: list[dict]) -> str | None:
         """这次决策的规则单（不含手动指令）笔数 > (个股名额 + 核心 ETF 只数) × 2，或买卖金额合计（卖 = 收盘、买 = 限价）> 权益 × 2.2
-        → 原因（这次全部不下）。规则本身：个股最多 4 只、每只每天最多一买一卖，所以正常运行不会出现；出现了多半是程序的错。"""
+        → 原因（这次全部不下）。规则本身：个股最多 max_positions 只（2026-10-24 起不设上限 → 按 max(8, 持仓 + 4) 只算）、每只每天最多一买一卖，所以正常运行不会出现；出现了多半是程序的错。"""
         eng, d = self.eng, self.eng.st.last_date
         rule = [x for x in todo if not (x.get("reason") in MANUAL_REASONS
                                         or (x["side"] == "BUY" and x["ticker"] not in eng.core_set and not x.get("reason")
                                             and self._manual_buy(x["ticker"], d)))]
-        cap = (int(eng.cfg.max_positions) + len(eng.core_set)) * BREAKER_N
+        npos = min(int(eng.cfg.max_positions), max(BREAKER_POS, len(eng.st.pos) + 4))
+        cap = (npos + len(eng.core_set)) * BREAKER_N
         eq = float(eng.equity(k))
         val = sum(int(x["qty"]) * float(x.get("limit") or eng._px_close(x["ticker"], k) or 0) for x in rule)
         if len(rule) > cap:
-            return (f"异常熔断：这次决策的规则单 {len(rule)} 笔，超过上限 {cap} 笔（(个股名额 {int(eng.cfg.max_positions)} + "
+            return (f"异常熔断：这次决策的规则单 {len(rule)} 笔，超过上限 {cap} 笔（(个股 {npos} + "
                     f"核心 ETF {len(eng.core_set)}) × {BREAKER_N}）（正常运行不会出现，请看日志）")
         if math.isfinite(eq) and eq > 0 and val > eq * BREAKER_VALUE:
             return (f"异常熔断：这次决策的规则单金额合计 ¥{val:,.0f}，超过权益 ¥{eq:,.0f} × {BREAKER_VALUE:g}"

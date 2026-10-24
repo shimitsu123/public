@@ -627,7 +627,10 @@ def room(tag: str, book: dict | None, now: dt.datetime | None = None, quotes: di
     elif gate_txt:
         why_b = why_s = gate_txt
     else:
-        why_b = (f"新股 {new} 只（个股名额空 {sl['free']} 个 / 上限 {sl['max']} 只；"
+        from .unified import capped
+        slot_w = (f"个股名额空 {sl['free']} 个 / 上限 {sl['max']} 只" if capped(int(sl.get("max") or 0) or 4)
+                  else f"个股名额不设上限，现在 {sl['used']} 只")
+        why_b = (f"新股 {new} 只（{slot_w}；"
                  + (f"候选 {len(cand_rows)} 只里名额与钱都够的 {new} 只" + (f"，其余：{g_txt}" if g_txt else "") if cand_rows
                     else "没有候选的价格：只数名额，钱够几只要看买哪只" if new else "新仓倍数 0：规则现在不开新仓" if stop else "钱不够")
                  + f"）+ 拿着的还能加仓 {len(adds)} 只"

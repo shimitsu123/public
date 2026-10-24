@@ -80,7 +80,8 @@ def test_repo_sim_one_lot_relaxation_reverted_to_off():
     from qbreak.unified import config_from_sim
     sim = json.loads((ROOT / "var" / "sim.json").read_text(encoding="utf-8"))
     cfg = config_from_sim(sim)
-    assert cfg.one_lot_cap_pct == 0.0 and (cfg.position_pct, cfg.max_positions, cfg.max_position_pct) == (0.25, 4, 0.34)
+    from qbreak.unified import NO_CAP                                          # 2026-10-24 用户：个股名额不设上限（以前 4）
+    assert cfg.one_lot_cap_pct == 0.0 and (cfg.position_pct, cfg.max_positions, cfg.max_position_pct) == (0.25, NO_CAP, 0.34)
     cur = _run(cfg.one_lot_cap_pct, px=4800.0)                                 # 一手 ¥480,000 > 名额 ¥250,000 → 跳过
     assert not cur.st.trades and not cur.st.pos and cur.skipped["lot"] == 1
     on = _run(0.5, px=4800.0)                                                  # 一手 ¥480,000 ≈ 权益 48%

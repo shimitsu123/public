@@ -501,6 +501,11 @@ def test_breaker_blocks_every_order_when_the_rule_orders_are_impossible(monkeypa
     assert "× 2.2" in r.ux._breaker(k, big)
     manual = [{"side": "SELL", "ticker": "A.T", "qty": 100, "reason": "manual_trim"}] * 11
     assert r.ux._breaker(k, manual) is None                   # 手动指令另外算
+    from qbreak.unified import NO_CAP
+    eng.cfg.max_positions = NO_CAP                            # 2026-10-24 起不设上限：按 max(8, 持仓 + 4) 只算 → (8 + 1) × 2 = 18 笔
+    assert r.ux._breaker(k, many) is None
+    assert "超过上限 18 笔" in r.ux._breaker(k, many * 2)
+    eng.cfg.max_positions = 4
     monkeypatch.setattr(eng, "todo", lambda i: {"JP": [{"side": "SELL", "ticker": t, "qty": 100} for t in ("A.T", "B.T")] * 6})
     ux = _new(r, 7, 40, check_clock=False)
     ux.morning([])

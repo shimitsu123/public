@@ -57,7 +57,8 @@
  "unified": {
   "broker": "tachibana",
   "position_pct": 0.25,
-  "max_positions": 4,
+  "max_positions": null,
+  "max_positions_note": "2026-10-24 用户「个股名额空 4 个的上限去掉」：null = 不设上限（以前 4 只）；每只仍按总权益 25%、单只 ≤ 34%，只受现金（含能卖来凑钱的核心 ETF）限制。改回 4 = 恢复。",
   "max_position_pct": 0.34,
   "one_lot_cap_pct": 0.0,
   "stock_markets": [
