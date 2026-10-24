@@ -401,7 +401,7 @@ function renderRegime(){
   const tag = eff <= 0 ? "不开新仓" : eff < 1 ? `新仓 ×${eff}` : "正常开仓";
   box.innerHTML = `<h2>市场状态 · ${tag}</h2><dl class="kv">
     <dt>量化层</dt><dd>${R.quant_label}（${R.above_ma200 ? "指数在 200 日线上方" : "指数在 200 日线下方"}，20 日波动 ${R.vol20_pct ?? "—"}%，距 252 日高点 ${R.dd252_pct ?? "—"}%）</dd>
-    <dt>判断层</dt><dd>${R.overlay_action ? `市场风险报告「${R.overlay_action}」（${R.overlay_as_of}）` + (R.crash_prob != null ? `，24h 崩盘概率 ${R.crash_prob}%` : "") : "未接入或已过期（>2 天）"}</dd>
+    <dt>判断层</dt><dd>${R.overlay_action ? `市场风险报告「${R.overlay_action}」（${R.overlay_as_of}）` + (R.overlay_off ? "（判断层停用：只显示、不乘倍数）" : "") + (R.crash_prob != null ? `，24h 崩盘概率 ${R.crash_prob}%` : "") : "未接入或已过期（>2 天）"}</dd>
     ${R.fx && R.fx.usdjpy ? `<dt>汇率层</dt><dd>USD/JPY ${R.fx.usdjpy}（${R.fx.date}），警戒 ${R.fx.watch_level}±${R.fx.band_pct}% → 美股新仓 ×${R.fx.scale}</dd>` : ""}
     ${R.final_mult != null ? `<dt>最终倍数</dt><dd>×${R.final_mult}</dd>` : ""}
     ${R.params_overlay ? `<dt>参数覆盖</dt><dd>${R.params_overlay}（该市场单独参数）</dd>` : ""}

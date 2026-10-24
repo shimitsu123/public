@@ -11,6 +11,8 @@
 
 注意：这一层**不在回测里**。开启后模拟盘的结果会与回测系统性地不同，
 这是有意为之——用户明确要求结合当前市场情况。日报里会标明当日采用的倍数与依据。
+2026-10-24 用户「83③ 停用」：放进 B4 账户检验让账户变差（scripts/judgment_layer_study.py）→ sim.json
+use_report_overlay = false：报告的行动照旧读、照旧显示（overlay_off = True），倍数不再乘（overlay_mult = 1）。
 """
 from __future__ import annotations
 
@@ -38,6 +40,7 @@ class Regime:
     overlay_mult: float = 1.0
     overlay_as_of: str = ""
     crash_prob: float | None = None
+    overlay_off: bool = False                          # 判断层停用：行动只显示，不乘倍数
 
     @property
     def mult(self) -> float:
@@ -45,7 +48,8 @@ class Regime:
 
     @property
     def label(self) -> str:
-        return f"{self.quant_label}" + (f"｜报告:{self.overlay_action}" if self.overlay_action else "")
+        return f"{self.quant_label}" + (f"｜报告:{self.overlay_action}" + ("（判断层停用）" if self.overlay_off else "")
+                                         if self.overlay_action else "")
 
     def to_dict(self) -> dict:
         return {**self.__dict__, "mult": self.mult, "label": self.label}
@@ -85,8 +89,9 @@ def quant_regime_series(index_df: pd.DataFrame) -> pd.Series:
     return out
 
 
-def apply_overlay(r: Regime, max_age_days: int = 2) -> Regime:
-    """读取 var/market_regime.json（worker 从「市场风险报告」提取）。过期则忽略。"""
+def apply_overlay(r: Regime, max_age_days: int = 2, use: bool = True) -> Regime:
+    """读取 var/market_regime.json（worker 从「市场风险报告」提取）。过期则忽略。
+    use = False（sim.json use_report_overlay = false）：行动照旧记下来显示，倍数保持 1。"""
     d = read_json(paths.home() / "market_regime.json", {}) or {}
     m = d.get(r.market) or {}
     as_of = str(d.get("as_of") or m.get("as_of") or "")
@@ -100,7 +105,9 @@ def apply_overlay(r: Regime, max_age_days: int = 2) -> Regime:
         return r
     action = str(m.get("action") or "").strip()
     if action in ACTION_MULT:
-        r.overlay_action, r.overlay_mult, r.overlay_as_of = action, ACTION_MULT[action], as_of
+        r.overlay_action, r.overlay_as_of = action, as_of
+        r.overlay_mult = ACTION_MULT[action] if use else 1.0
+        r.overlay_off = not use
     cp = m.get("crash_prob")
     if cp is not None:
         try:

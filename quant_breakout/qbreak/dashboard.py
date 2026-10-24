@@ -118,7 +118,8 @@ def stance_html(d: dict) -> str:
     boxes.append('<div class="box"><h3>进攻 / 防守（明天的新仓倍数）</h3>'
                  + (f'<div class="big">{mult:g} 倍</div>{viz.meter(mult)}' if mult is not None else '<div class="muted">—</div>')
                  + f'<div class="muted">量化层 {escape(str(r.get("quant_label") or "—"))}（{_fmt(r.get("quant_mult"), 2)} 倍）'
-                 + (f'；判断层 {escape(str(r.get("overlay_action")))}（{_fmt(r.get("overlay_mult"), 2)} 倍）' if r.get("overlay_action") else "")
+                 + (f'；判断层 {escape(str(r.get("overlay_action")))}（' + ("停用，不乘" if r.get("overlay_off") else f'{_fmt(r.get("overlay_mult"), 2)} 倍') + '）'
+                    if r.get("overlay_action") else "")
                  + (f"；宏观触发 {len(fired)} 项：" + "、".join(escape(str(x).split("→")[0].strip()) for x in fired[:4]) if fired else "；宏观没有触发")
                  + "</div><h3 style='margin-top:8px'>现在的仓位构成</h3>" + viz.stacked(parts) + "</div>")
     return f'<div class="row3">{"".join(boxes)}</div>'

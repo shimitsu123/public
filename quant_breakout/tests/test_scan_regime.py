@@ -97,6 +97,23 @@ def test_overlay_from_market_report_caps_multiplier_and_expires():
     assert apply_overlay(Regime("JP", "risk_on", 1.0)).mult == 1.0     # 过期即忽略
 
 
+def test_overlay_off_keeps_action_for_display_but_not_multiplier():
+    """2026-10-24 用户「83③ 停用」：sim.json use_report_overlay = false → 行动照旧显示、倍数 1；量化层照旧。"""
+    write_json(paths.home() / "market_regime.json",
+               {"as_of": dt.date.today().isoformat(), "JP": {"action": "避险", "crash_prob": 20}})
+    jp = apply_overlay(Regime("JP", "neutral", 0.75), use=False)
+    assert jp.overlay_action == "避险" and jp.overlay_off and jp.overlay_mult == 1.0 and jp.mult == 0.75
+    assert "判断层停用" in jp.label and jp.to_dict()["overlay_off"] is True
+    assert apply_overlay(Regime("JP", "risk_on", 1.0)).mult == 0.0               # 缺省（没写开关）照旧生效
+
+
+def test_repo_sim_json_has_report_overlay_off():
+    import json
+    from pathlib import Path
+    sim = json.loads((Path(__file__).resolve().parents[1] / "var" / "sim.json").read_text(encoding="utf-8"))
+    assert sim.get("use_report_overlay") is False
+
+
 # ────────── entry_scale ──────────
 T = "9999.T"
 
@@ -139,3 +156,14 @@ def test_dump_csv_roundtrip_including_index_symbols():
     assert (paths.sub("csv") / f"{csv_name('^N225')}.csv").exists()
     got = load_universe(["^N225"], DataConfig(provider="csv", years=2, min_bars=100))
     assert len(got["^N225"]) == 300
+
+
+def test_market_regime_reads_sim_switch():
+    import run as R
+    write_json(paths.home() / "market_regime.json", {"as_of": dt.date.today().isoformat(), "JP": {"action": "避险"}})
+    dcfg = DataConfig(provider="csv", years=2, min_bars=100)
+    write_json(paths.home() / R.SIM_FILE, {"use_report_overlay": False})
+    reg, _ = R._market_regime("JP", dcfg)
+    assert reg.overlay_action == "避险" and reg.overlay_off and reg.mult == 1.0
+    write_json(paths.home() / R.SIM_FILE, {})
+    assert R._market_regime("JP", dcfg)[0].mult == 0.0

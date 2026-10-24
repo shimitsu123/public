@@ -36,3 +36,10 @@ def test_audit_additions_2026_10_and_idemitsu():
     assert H.member_then("543A.T", 2026) is None
     assert H.member_then("5019.T", 2012) is False and H.member_then("5019.T", 2019) is None and H.member_then("5019.T", 2020) is True
     assert not set(H.CONTINUITY) & (set(H.ADD_YEAR) | set(H.REMOVED))                  # 连续成员不另登记进出
+
+
+def test_jal_joined_2023_not_since_2001():
+    """2026-10-24 用户「9201 日本航空在股票池历史里加入年份」：2023-04-03 定期入替才选进（2012-09 再上市）。"""
+    from qbreak.n225_history import member_then
+    assert member_then("9201.T", 2013) is False and member_then("9201.T", 2022) is False
+    assert member_then("9201.T", 2023) is None and member_then("9201.T", 2024) is True

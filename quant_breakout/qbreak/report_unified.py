@@ -1117,7 +1117,7 @@ def _market_block(d: dict) -> str:
             fj = r.get("fwd_judgment") or {}
             why = [f"量化层 {escape(_QLAB.get(r.get('quant_label') or '', str(r.get('quant_label') or '')).split('（')[0])} ×{r.get('quant_mult', '—')}"]
             if r.get("overlay_action"):
-                why.append(f"市场风险报告「{escape(str(r['overlay_action']))}」×{r.get('overlay_mult')}")
+                why.append(f"市场风险报告「{escape(str(r['overlay_action']))}」" + ("（判断层停用，不乘）" if r.get("overlay_off") else f"×{r.get('overlay_mult')}"))
             if fj.get("applied"):
                 why.append(f"前向记录判断层 {fj.get('points')} 分 ×{fj.get('mult')}")
             fired = (e.get("macro") or {}).get("fired") or []
@@ -1251,7 +1251,8 @@ def render_unified_html(d: dict) -> str:
         qd = (f"（{'站上' if r.get('above_ma200') else '跌破'} 200 日线，20 日波动 {_pct(r.get('vol20_pct'))}（年化），"
               f"离一年高点 {_pct(r.get('dd252_pct'), 1, True)}）") if r.get("vol20_pct") is not None else ""
         ov = (f"；判断层（市场风险报告 {escape(str(r.get('overlay_as_of') or '—'))}）：{escape(str(r.get('overlay_action')))}"
-              f"（24 小时崩盘概率 {_pct(r.get('crash_prob'), 0)}，倍数 {r.get('overlay_mult')} 倍）") if r.get("overlay_action") else "；判断层：没取到"
+              f"（24 小时崩盘概率 {_pct(r.get('crash_prob'), 0)}，" + ("判断层 2026-10-24 起停用：只显示、不乘倍数）" if r.get("overlay_off") else f"倍数 {r.get('overlay_mult')} 倍）")
+              ) if r.get("overlay_action") else "；判断层：没取到"
         fjr = r.get("fwd_judgment") or {}
         fjt = ((f"（含前向记录判断层 {fjr.get('points')} 分 ×{fjr.get('mult')}，原有各层 {fjr.get('before')} 倍，取小）" if fjr.get("applied")
                 else "（前向记录判断层今天没生效）") if fjr else "")

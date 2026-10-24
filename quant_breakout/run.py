@@ -655,7 +655,7 @@ def _plan_inputs(m: str, mc: dict, cfg: dict, dcfg, today, p):
     mode = mc.get("regime_mode", cfg.get("regime_mode", "quant"))
     use_q, use_bb, bb_exit = REGIME_MODES.get(mode, REGIME_MODES["quant"])
     if cfg.get("use_market_regime", True):
-        scale = reg.mult if use_q else reg.overlay_mult      # 判断层（风险报告）始终生效
+        scale = reg.mult if use_q else reg.overlay_mult      # 判断层（风险报告）：sim.json use_report_overlay = false 时倍数 1
     else:
         scale = 1.0
     bb = _bullbear(m, dcfg)                           # 始终计算，日报显示；是否参与交易看模式
@@ -2838,7 +2838,7 @@ def _market_regime(market: str, dcfg):
             idx = drop_partial_bar(idx, market)                # 盘中运行时丢掉未收盘的当日 K 线
     except Exception as e:                                    # noqa: BLE001
         log.warning("[%s] 指数数据不可用，量化层按 unknown 处理: %s", market, e)
-    reg = apply_overlay(quant_regime(idx, market))
+    reg = apply_overlay(quant_regime(idx, market), use=bool(_sim_cfg().get("use_report_overlay", True)))
     log.info("[%s] 市场状态 %s → 新仓规模 ×%.2f", market, reg.label, reg.mult)
     return reg, (idx["Close"] if idx is not None else None)
 
