@@ -21,7 +21,7 @@
 - 不抓取、不自动操作楽天証券网站或 iSPEED（総合証券取引約款 第35条第12項）
 - 这是**公开仓库**：CLAUDE.md、HANDOFF.md、代码、提交信息里不写个人信息（姓名、邮箱、账户号、住址、Mac 用户名、私人链接）
 - 云端例行任务（Routines）与 Mac 桌面版的本机例行任务：没有用户在这次对话里确认，不新建、不修改、不删除
-  （用户说「装本机例行任务」= 确认照 `quant_breakout/routines/README.md` 建那三个本机任务）
+  （用户说「装本机例行任务」= 确认照 `quant_breakout/routines/README.md` 建那两个本机任务：日报、季度复核；影子账户 2026-10-24 用户停用）
 
 ## 方法论（不改规则去迎合结果）
 - 研究先登记规则（commit）再运行；看到结果之后不改规则；前向记录 `quant_breakout/var/out/*_forward.csv` 只追加，不改、不补写
@@ -53,8 +53,8 @@
   ——它有本地改动不动、交易日 07:30〜09:35 JST 不换代码（执行器早上的几次运行用同一份代码），不拉也行，下一个交易日 07:40 会自动拉）；
   推不上去（没登录 GitHub）→ 停下，请用户自己在终端 `gh auth login`（或配 SSH 钥匙；令牌 / 密码不在对话里贴）；
   git 的 user.name / user.email 没设 → 请用户自己设（公开仓库：用不暴露个人信息的名字与 GitHub 的 noreply 邮箱），Claude 不替用户填
-- 例行任务（2026-10-09 起）：模拟盘日报（周一至五 06:45）、影子账户判断（07:45）、季度复核（1 / 4 / 7 / 10 月 12 日 09:56）在 Mac 的
-  Claude 桌面版本机任务里跑（工作文件夹 `~/qbreak-sim`，说明书 `quant_breakout/routines/`）；2026-10-19 起没有云端后备（用户：云端定时任务已删除、以本地为准）；Mac 没做的那天用户说「补跑」→ Claude 照说明书在 `~/qbreak-sim` 里补做（`bash scripts/routines.sh run …` → `routines.sh push`）；
+- 例行任务（2026-10-09 起）：模拟盘日报（周一至五 06:45）、季度复核（1 / 4 / 7 / 10 月 12 日 09:56）在 Mac 的
+  Claude 桌面版本机任务里跑（工作文件夹 `~/qbreak-sim`，说明书 `quant_breakout/routines/`；影子账户判断 07:45 2026-10-24 用户「不要影子账户任务」停用、不重建）；2026-10-19 起没有云端后备（用户：云端定时任务已删除、以本地为准）；Mac 没做的那天用户说「补跑」→ Claude 照说明书在 `~/qbreak-sim` 里补做（`bash scripts/routines.sh run …` → `routines.sh push`）；
   2026-10-20 起日报任务不发布日报 artifact（用户在本地 qbreak 看），只算 07:40 执行器的判断层 / 宏观输入并入库（`bash scripts/routines.sh done-today …`）；改 / 停要用户在对话里另外确认。前提：桌面版开着（登录项）、Keep computer awake 打开、
   Mac 工作日 06:40 自动唤醒（用户自己在终端 `sudo pmset repeat wakeorpoweron MTWRF 06:40:00`）。它们（本机或云端）每天推 `var/`，
   所以 dev 克隆推之前一定先 `git pull --rebase`（`dev.sh push` 自己先做）；Mac 的执行器仍在每个交易日 07:40 `git pull` 读它们推的文件；
@@ -147,7 +147,7 @@
   新代码的冒烟测试 `~/.qbreak/home/logs/smoke_test.log`
 
 ## 在云端（可选：例行任务的后备；人不在 Mac 旁边时也能用）
-- claude.ai/code 会话 / 例行任务（模拟盘日报、影子账户判断、每季复核）。2026-10-09 起改代码 / 推送在 Mac 本地做（上一节），不需要云端会话；
+- claude.ai/code 会话 / 例行任务（模拟盘日报、每季复核；影子账户判断 2026-10-24 停用）。2026-10-09 起改代码 / 推送在 Mac 本地做（上一节），不需要云端会话；
   例行任务在 Mac 的本机任务里跑（云端同名例行任务 2026-10-19 已删）；改 / 停要用户在对话里另外确认
 - 开发分支 `claude/rakuten-auto-trading-review-ka7lf0`：只推这个分支，不开 PR（除非用户要求）
 - 提交前在 `quant_breakout/` 跑 `set -o pipefail; python -m pytest -q`（必须全部通过）；推之前 `git pull --rebase`（例行任务每天也推 `var/`）
