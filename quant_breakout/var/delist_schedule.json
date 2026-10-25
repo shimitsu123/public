@@ -1,20 +1,6 @@
 {
- "as_of": "2026-10-23",
+ "as_of": "2026-10-26",
  "items": [
-  {
-   "kind": "上場廃止",
-   "code": "1948",
-   "date": "2026-09-25",
-   "status": "已生效",
-   "in_pool": false,
-   "held": [],
-   "core": false,
-   "src": "JPX 上場廃止銘柄一覧",
-   "why": "TOB・MBO・株式併合",
-   "last_trade": "2026-09-24",
-   "days_left": 0,
-   "removed": false
-  },
   {
    "kind": "上場廃止",
    "code": "3856",
@@ -406,7 +392,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "TOB・MBO・株式併合",
    "last_trade": "2026-10-28",
-   "days_left": 4,
+   "days_left": 3,
    "removed": false
   },
   {
@@ -420,7 +406,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "TOB・MBO・株式併合",
    "last_trade": "2026-11-10",
-   "days_left": 12,
+   "days_left": 11,
    "removed": false
   },
   {
@@ -434,7 +420,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "上場維持基準不適合",
    "last_trade": "2026-12-30",
-   "days_left": 47,
+   "days_left": 46,
    "removed": false
   },
   {
@@ -448,7 +434,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "上場維持基準不適合",
    "last_trade": "2027-02-26",
-   "days_left": 84,
+   "days_left": 83,
    "removed": false
   },
   {
@@ -462,7 +448,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "上場維持基準不適合",
    "last_trade": "2027-02-26",
-   "days_left": 84,
+   "days_left": 83,
    "removed": false
   },
   {
@@ -476,7 +462,7 @@
    "src": "JPX 上場廃止銘柄一覧",
    "why": "上場維持基準不適合",
    "last_trade": "2027-03-31",
-   "days_left": 106,
+   "days_left": 105,
    "removed": false
   },
   {
@@ -568,13 +554,13 @@
  ],
  "applied": [],
  "needs_user": [],
- "n_other": 29,
+ "n_other": 28,
  "stale": false,
  "source_ok_at": {
-  "jpx_delisted": "2026-10-23T06:49+09:00",
-  "jpx_supervision": "2026-10-23T06:49+09:00",
-  "jpx_supervision_etf": "2026-10-23T06:49+09:00"
+  "jpx_delisted": "2026-10-26T06:49+09:00",
+  "jpx_supervision": "2026-10-26T06:49+09:00",
+  "jpx_supervision_etf": "2026-10-26T06:49+09:00"
  },
- "text": "股票池更新时间表：股票池里 0 只有上場廃止预定；JPX 一览另有 29 只不在股票池",
- "updated": "2026-10-23T06:49+09:00"
+ "text": "股票池更新时间表：股票池里 0 只有上場廃止预定；JPX 一览另有 28 只不在股票池",
+ "updated": "2026-10-26T06:49+09:00"
 }
