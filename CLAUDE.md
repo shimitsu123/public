@@ -58,7 +58,7 @@
   2026-10-20 起日报任务不发布日报 artifact（用户在本地 qbreak 看），只算 07:40 执行器的判断层 / 宏观输入并入库（`bash scripts/routines.sh done-today …`）；改 / 停要用户在对话里另外确认。前提：桌面版开着（登录项）、Keep computer awake 打开、
   Mac 工作日 06:40 自动唤醒（用户自己在终端 `sudo pmset repeat wakeorpoweron MTWRF 06:40:00`）。它们（本机或云端）每天推 `var/`，
   所以 dev 克隆推之前一定先 `git pull --rebase`（`dev.sh push` 自己先做）；Mac 的执行器仍在每个交易日 07:40 `git pull` 读它们推的文件；
-  用户问「例行任务今天跑了吗」→ `bash scripts/routines.sh check`（只读）；卡在权限确认 30 分钟以上的运行由每 15 分钟的 `liveu.sh news` 自动停止 + 推送（`python -m qbreak.routines reap`，一个任务一天最多 2 次；2026-10-21 起，用户「再发防止对策」）
+  用户问「例行任务今天跑了吗」→ `bash scripts/routines.sh check`（只读）；卡在权限确认 30 分钟以上的运行由每 15 分钟的 `liveu.sh news` 自动停止 + 推送（`python -m qbreak.routines reap`，一个任务一天最多 2 次；2026-10-21 起，用户「再发防止对策」；2026-10-25 起停掉的日报里 sim-day 已经跑成 → 它自己 `routines.sh save sim` 入库推送，07:00〜07:40 JST 卡住的日报只等 10 分钟）
 - 停下单：在 Mac 上直接说「停 / 今天不要下单」→ 建本地 `~/.qbreak/home/HALT`（见下面「实盘相关」）；人不在 Mac 旁边时才用云端对话的远程停止（「在云端」一节）
 - `run.py sim-day` / `sim-*` / `report` / `optimize` 等对仓库 `var/` 的命令（会改被跟踪的文件）只由例行任务在 `~/qbreak-sim` 里运行
   （`bash scripts/routines.sh run …`）；`~/qbreak-src` / `~/qbreak-dev` 里不跑

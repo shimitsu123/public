@@ -20,6 +20,7 @@ atexit.register(lambda: _sh.rmtree(_TMP, ignore_errors=True))   # 跑完自己�
 os.environ["QBREAK_HOME"] = _TMP
 os.environ["QBREAK_PAPER_RT"] = "0"                      # 模拟账户的立花实时价（qbreak/rt_quotes.py）：测试里绝不登录真的立花
 os.environ["QBREAK_LOGIN_PUSH"] = "0"                    # 登录立花本番的推送（brokers/tachibana.push_login）：测试里的假本番不推
+os.environ.setdefault("QBREAK_DISK_MIN_KB", "0")         # liveu.sh 的磁盘不足提醒：测试与本机磁盘剩多少无关（要测它的测试自己设；2026-10-25 本机剩 < 10 GB 时多弹一次）
 _GUARD = Path(_TMP) / "_guard_bin"     # 测试绝不调真的 launchctl：真的会按 plist 的 Label 卸掉 / 停用这台 Mac 上真的定时任务
 _GUARD.mkdir(exist_ok=True)            # （unload -w 写 disabled，2026-10 发生过）。自己带了假 launchctl 的测试放在更前面，照旧
 (_GUARD / "launchctl").write_text("#!/bin/sh\nexit 0\n")

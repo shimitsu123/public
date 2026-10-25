@@ -245,7 +245,7 @@ def _run_env(tmp_path, rc: int, **extra) -> tuple[dict, Path]:
     for n, body in stubs.items():
         (b / n).write_text(body, encoding="utf-8")
         (b / n).chmod(0o755)
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("QBREAK_", "XPC_"))}
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("QBREAK_", "XPC_")) or k == "QBREAK_DISK_MIN_KB"}   # 磁盘提醒：conftest 设 0
     env.update({"PATH": f"{b}{os.pathsep}{os.environ['PATH']}", "HOME": str(tmp_path / "home"), "CALLS": str(log),
                 "FAKE_RC": str(rc), "QBREAK_PYTHON": str(b / "fakepy"), "QBREAK_LIVEU_HOME": str(tmp_path / "lh"),
                 "QBREAK_LIVEU_WAIT_MIN": "0", "QBREAK_LIVEU_PULL": "0", "QBREAK_CAFFEINATED": "1",

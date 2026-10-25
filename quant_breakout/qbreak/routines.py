@@ -645,8 +645,16 @@ def today_lines(now: dt.datetime, root=None, projects=None, cfg=None, tz=None, p
 #   （真的在跑命令时有子进程；等权限确认时没有）→ 停止那个进程（桌面版随后会再启动错过的 / 下次到点照常跑），推一条手机通知。
 #   一个任务一天最多停 2 次（补跑又卡住也不来回停：之后照旧由 09:30 自检 / routines.sh check 报）；只停这几个本机任务的会话
 #   （工作文件夹对得上的那个进程），不碰别的对话。记录：数据目录 out/routines_reap.json（只在本机）。
+#   2026-10-25 追加（10/23 的日报 06:52 sim-day 跑完、停在 git commit 的确认上，07:26 被停掉却没入库，桌面版 08:29 重开才推上来
+#   → 07:40 的执行器用了 10/21 的判断层输入；用户「永久解决图中的问题 再发防止对策」）：
+#   ① 停掉的是日报、而且这次运行里 sim-day 已经跑成（var/out/last_run.json 是这次开始之后写的、ok）→ 自己运行
+#     `bash scripts/routines.sh save sim`（不用权限确认的脚本）把结果入库推送，赶在执行器 07:40 的 git pull 之前；
+#   ② 07:00〜07:40 JST（执行器决策之前）卡住的日报只等 10 分钟就停（平时 30 分钟）。
 REAP_AFTER = dt.timedelta(minutes=30)
+REAP_AFTER_EARLY = dt.timedelta(minutes=10)
+EARLY_WINDOW = (dt.time(7, 0), dt.time(7, 40))             # 执行器 07:40 决策之前
 REAP_MAX_PER_DAY = 2
+SALVAGE_TIMEOUT_S = 300
 PROC_SLACK_S = 120                         # 进程开始时刻和会话 createdAt 差多少秒以内算同一个
 _ETIME = re.compile(r"^(?:(?:(\d+)-)?(\d+):)?(\d+):(\d+)$")
 
@@ -744,6 +752,41 @@ def _terminate(pid: int, wait_s: float = 10) -> bool:
     return True
 
 
+def reap_after(kind: str, now: dt.datetime) -> dt.timedelta:
+    """停多久算卡住：日报在 07:00〜07:40 JST（执行器决策之前）→ 10 分钟；其余 30 分钟。"""
+    t = now.astimezone(JST).time()
+    if kind == "sim_daily" and EARLY_WINDOW[0] <= t < EARLY_WINDOW[1]:
+        return REAP_AFTER_EARLY
+    return REAP_AFTER
+
+
+def sim_done_since(clone, since: dt.datetime) -> bool:
+    """这次运行里 sim-day 已经跑成：<克隆>/quant_breakout/var/out/last_run.json 是 since 之后写的、ok 为 true，
+    report_data.json 有 bar_date（routines.sh save sim 要它）。"""
+    out = Path(clone) / "quant_breakout" / "var" / "out"
+    try:
+        lr = out / "last_run.json"
+        if dt.datetime.fromtimestamp(lr.stat().st_mtime, tz=dt.timezone.utc) < since:
+            return False
+        if json.loads(lr.read_text(encoding="utf-8")).get("ok") is not True:
+            return False
+        return bool(json.loads((out / "report_data.json").read_text(encoding="utf-8")).get("bar_date"))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def _salvage_sim(clone) -> tuple[bool, str]:
+    """在例行任务的克隆里运行 routines.sh save sim → (成功没有, 最后一行输出)。"""
+    qb = Path(clone) / "quant_breakout"
+    try:
+        r = subprocess.run(["bash", "scripts/routines.sh", "save", "sim"], cwd=str(qb), capture_output=True, text=True,
+                           timeout=SALVAGE_TIMEOUT_S)
+    except (OSError, subprocess.SubprocessError) as e:
+        return False, type(e).__name__
+    lines = [x for x in str(r.stdout or "").splitlines() if x.strip()]
+    return r.returncode == 0, (lines[-1] if lines else "")
+
+
 def reap_path() -> Path:
     from . import paths
     return paths.out_dir() / "routines_reap.json"
@@ -758,9 +801,10 @@ def _reap_log(path: Path) -> list:
 
 
 def reap(now: dt.datetime | None = None, root=None, projects=None, cfg=None, procs: list | None = None,
-         dry: bool = False, kill=None, send=None, log_path=None) -> list[str]:
+         dry: bool = False, kill=None, send=None, log_path=None, salvage=None) -> list[str]:
     """停止卡住的本机任务运行（见上面的说明）→ 做了什么（一条一行；没有 → []）。dry = 只说会停哪个（不停、不推、不记）。
-    kill / send / procs / log_path：测试注入（默认 _terminate / qbreak.notify.send / claude_procs() / reap_path()）。只在 Mac 上做事。"""
+    kill / send / procs / log_path / salvage：测试注入（默认 _terminate / qbreak.notify.send / claude_procs() / reap_path() /
+    _salvage_sim）。只在 Mac 上做事。"""
     now = now or now_jst()
     if root is None:
         root = desktop_dir()
@@ -789,13 +833,14 @@ def reap(now: dt.datetime | None = None, root=None, projects=None, cfg=None, pro
             continue
         s = mine[-1]                                          # 最近一次运行（更早的那些桌面版已经结束了）
         created = _parse_ts(s.get("createdAt"))
-        if created is None or now - created < REAP_AFTER:
+        wait = reap_after(kind, now)
+        if created is None or now - created < wait:
             continue
         tail = _transcript_tail(projects, s.get("cliSessionId") or s.get("sessionId"))
         if tail is not None:
             pending, tool, at = tail
             since = at or created
-            if not pending or now - since < REAP_AFTER:
+            if not pending or now - since < wait:
                 continue
             where = f"停在工具调用（{tool}）上、没有结果" if tool else "停在工具调用上、没有结果"
         else:
@@ -811,12 +856,16 @@ def reap(now: dt.datetime | None = None, root=None, projects=None, cfg=None, pro
         mins = int((now - since).total_seconds() // 60)
         dur = f"{mins // 60} 小时 {mins % 60} 分钟" if mins >= 120 else f"{mins} 分钟"
         head = f"本机例行任务「{label}」{_mdhm(created)} 开始的那次{where}，已经 {dur}（多半在等权限确认、没人点允许）"
+        done = kind == "sim_daily" and sim_done_since(s["cwd"], created)
         if dry:
-            out.append(f"{head} → 会自动停止（--dry：没停）")
+            out.append(f"{head} → 会自动停止" + ("、把已经跑成的日报入库" if done else "") + "（--dry：没停）")
             continue
         ok = bool((kill or _terminate)(int(p["pid"])))
+        saved = None
+        if ok and done:
+            saved = (salvage or _salvage_sim)(s["cwd"])
         hist.append({"at": now.isoformat(timespec="seconds"), "day": day, "kind": kind, "started": created.isoformat(timespec="seconds"),
-                     "where": where, "minutes": mins, "ok": ok})
+                     "where": where, "minutes": mins, "ok": ok, **({"saved": bool(saved[0])} if saved else {})})
         try:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             log_path.write_text(json.dumps(hist[-60:], ensure_ascii=False, indent=1), encoding="utf-8")
@@ -824,7 +873,15 @@ def reap(now: dt.datetime | None = None, root=None, projects=None, cfg=None, pro
             pass
         if ok:
             subject = f"qbreak 本机例行任务「{label}」卡住了：已自动停止"
-            text = (f"{head} → 已自动停止（不停的话，之后到点的运行桌面版都会跳过）。桌面版随后会再启动错过的那次 / 下次到点照常跑。"
+            if saved and saved[0]:
+                got = "这次已经跑成的日报已自动入库推送（执行器下一次 git pull 读到）。"
+            elif saved:
+                got = f"★ 已经跑成的日报自动入库没成功（{saved[1] or '没有输出'}）→ 在 Mac 对话里说「补跑」。"
+            elif kind == "sim_daily":
+                got = "这次的日报还没跑完、没入库（执行器照旧用上一次的判断层输入）→ 在 Mac 对话里说「补跑」。"
+            else:
+                got = ""
+            text = (f"{head} → 已自动停止（不停的话，之后到点的运行桌面版都会跳过）。{got}桌面版随后会再启动错过的那次 / 下次到点照常跑。"
                     f"根治：桌面版 Code → Routines → 这个任务的权限改成跳过确认（Bypass permissions）；{HISTORY_HINT}")
         else:
             subject = f"qbreak 本机例行任务「{label}」卡住了：自动停止没成功"

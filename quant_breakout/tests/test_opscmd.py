@@ -654,7 +654,7 @@ def test_liveu_subcommands_pass_the_right_arguments(tmp_path):
     (b / "fakepy").chmod(0o755)
     (b / "git").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
     (b / "git").chmod(0o755)
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("QBREAK_", "XPC_"))}
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("QBREAK_", "XPC_")) or k == "QBREAK_DISK_MIN_KB"}   # 磁盘提醒：conftest 设 0
     env.update({"PATH": f"{b}{os.pathsep}{os.environ['PATH']}", "HOME": str(tmp_path / "home"), "CALLS": str(log),
                 "QBREAK_PYTHON": str(b / "fakepy"), "QBREAK_LIVEU_HOME": str(tmp_path / "lh"), "QBREAK_LIVEU_PULL": "0",
                 "QBREAK_CAFFEINATED": "1", "QBREAK_LAUNCH_AGENTS": str(tmp_path / "agents"), "LC_ALL": "C.UTF-8"})

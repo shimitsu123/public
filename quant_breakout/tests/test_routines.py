@@ -1321,3 +1321,82 @@ def test_check_shows_the_retired_shadow_task_as_ok_or_reminds_to_delete_it(repos
     rc, out = _run(t, "check", **env)
     assert f"[OK] 影子账户：{RETIRED_WHY}：不再建、不再跑" in out, out
     assert "[★] 本机任务「影子账户」还没建" not in out
+
+
+# ────────── 2026-10-25：停掉日报时把已经跑成的结果入库；执行器 07:40 之前只等 10 分钟 ──────────
+# 10/23 的实况：06:45 开始、06:52 sim-day 跑完、停在 git commit 的确认上；07:26 被停掉却没入库，桌面版 08:29 重开才推上来
+# → 07:40 的执行器用了 10/21 的判断层输入（首页「★ 判断层的输入 … 天没更新」）。
+def _reap_clone(t: Path, started: str, last: str, sim_at: str | None, ok: bool = True) -> tuple[Path, Path, Path]:
+    clone = t / "qbreak-sim"
+    out = clone / "quant_breakout" / "var" / "out"
+    out.mkdir(parents=True)
+    if sim_at:
+        (out / "last_run.json").write_text(json.dumps({"ok": ok}), encoding="utf-8")
+        (out / "report_data.json").write_text(json.dumps({"bar_date": "2026-10-22"}), encoding="utf-8")
+        ts = _jst(sim_at).timestamp()
+        os.utime(out / "last_run.json", (ts, ts))
+    sess = [_session("qbreak-sim-daily", started, sid="ffff-new", cwd=str(clone))]
+    tr = {"ffff-new": [_turn("user", started), _turn("assistant", last, "Bash")]}
+    root, proj = _desktop(t, [{**DAILY_TASK, "lastRunAt": _utc_iso(started)}], sess, tr)
+    _skills(t)
+    return root, proj, clone
+
+
+def _go_reap(t, root, clone, now, started, saved=(True, "")):
+    killed, sent, calls = [], [], []
+    got = routines.reap(_jst(now), root=root, cfg=t / "cfg", log_path=t / "reap.json",
+                        procs=[_proc(started, cwd=str(clone))], kill=lambda pid: killed.append(pid) or True,
+                        send=lambda *a, **k: sent.append(a), salvage=lambda c: calls.append(str(c)) or saved)
+    return got, killed, sent, calls
+
+
+def test_reaping_the_daily_saves_a_finished_sim_day_before_the_executor(tmp_path):
+    root, _, clone = _reap_clone(tmp_path, "2026-10-23 06:45:12", "2026-10-23 06:52:51", sim_at="2026-10-23 06:52:46")
+    got, killed, sent, calls = _go_reap(tmp_path, root, clone, "2026-10-23 07:05", "2026-10-23 06:45:12")
+    assert killed == [4242] and calls == [str(clone)], got                  # 07:00〜07:40：停了 12 分钟就收尾 + 入库
+    assert "已自动入库推送" in sent[0][1]
+    rec = json.loads((tmp_path / "reap.json").read_text(encoding="utf-8"))
+    assert rec[-1]["saved"] is True
+
+
+def test_early_threshold_only_for_the_daily_before_0740(tmp_path):
+    assert routines.reap_after("sim_daily", _jst("2026-10-23 07:10")) == dt.timedelta(minutes=10)
+    assert routines.reap_after("sim_daily", _jst("2026-10-23 07:40")) == dt.timedelta(minutes=30)
+    assert routines.reap_after("sim_daily", _jst("2026-10-23 06:59")) == dt.timedelta(minutes=30)
+    assert routines.reap_after("quarterly", _jst("2026-10-23 07:10")) == dt.timedelta(minutes=30)
+    root, _, clone = _reap_clone(tmp_path, "2026-10-23 06:45:12", "2026-10-23 06:52:51", sim_at="2026-10-23 06:52:46")
+    got, killed, _, _ = _go_reap(tmp_path, root, clone, "2026-10-23 06:59", "2026-10-23 06:45:12")
+    assert got == [] and killed == []                                       # 07:00 之前照旧等 30 分钟
+
+
+def test_reap_does_not_save_a_sim_day_that_did_not_finish_in_this_run(tmp_path):
+    for i, (sim_at, ok) in enumerate([(None, True), ("2026-10-22 06:52:00", True), ("2026-10-23 06:52:46", False)]):
+        t = tmp_path / str(i)
+        t.mkdir()
+        root, _, clone = _reap_clone(t, "2026-10-23 06:45:12", "2026-10-23 06:52:51", sim_at=sim_at, ok=ok)
+        got, killed, sent, calls = _go_reap(t, root, clone, "2026-10-23 07:20", "2026-10-23 06:45:12")
+        assert killed == [4242] and calls == [], (i, got)                  # 停照停，但不拿旧的 / 没跑成的结果入库
+        assert "还没跑完、没入库" in sent[0][1] and "补跑" in sent[0][1]
+
+
+def test_reap_says_when_saving_failed(tmp_path):
+    root, _, clone = _reap_clone(tmp_path, "2026-10-23 06:45:12", "2026-10-23 06:52:51", sim_at="2026-10-23 06:52:46")
+    _, _, sent, calls = _go_reap(tmp_path, root, clone, "2026-10-23 07:20", "2026-10-23 06:45:12", saved=(False, "★ git commit 失败"))
+    assert calls and "自动入库没成功（★ git commit 失败）" in sent[0][1]
+    dry = routines.reap(_jst("2026-10-23 07:21"), root=root, cfg=tmp_path / "cfg", dry=True,
+                        procs=[_proc("2026-10-23 06:45:12", cwd=str(clone))], log_path=tmp_path / "x.json")
+    assert len(dry) == 1 and "把已经跑成的日报入库" in dry[0]
+
+
+def test_salvage_runs_only_the_save_script(tmp_path, monkeypatch):
+    seen = {}
+
+    class R:
+        returncode, stdout = 0, "已提交：sim(mac): 2026-10-22 日报\n已推送\n"
+
+    def fake(cmd, **kw):
+        seen.update(cmd=cmd, cwd=kw.get("cwd"))
+        return R()
+    monkeypatch.setattr(routines.subprocess, "run", fake)
+    assert routines._salvage_sim(tmp_path) == (True, "已推送")
+    assert seen == {"cmd": ["bash", "scripts/routines.sh", "save", "sim"], "cwd": str(tmp_path / "quant_breakout")}
