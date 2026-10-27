@@ -1,5 +1,5 @@
 {
- "as_of": "2026-10-26",
+ "as_of": "2026-10-27",
  "enabled": true,
  "market": {
   "items": {
@@ -14,16 +14,16 @@
   "points": 2,
   "mult": 0.5,
   "readings": {
-   "C_rel": 52.0,
-   "crel_pct": 65.1,
-   "tv_pct": 86.5,
-   "wj_pct": 90.3,
-   "w_pct": 52.8
+   "C_rel": 50.4,
+   "crel_pct": 58.6,
+   "tv_pct": 81.7,
+   "wj_pct": 93.1,
+   "w_pct": 41.8
   },
   "t23_bear": false,
   "k4_on": true,
   "deepdip": false,
-  "date": "2026-10-26"
+  "date": "2026-10-27"
  },
  "stocks": {},
  "errors": {}
