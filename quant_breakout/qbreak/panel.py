@@ -70,6 +70,7 @@ from . import paths
 from . import signal_keep as SK
 from . import suggest as SG
 from . import trade_room as TR
+from . import us_picks as UP
 from . import watch_prob as WP
 from .calendar_jp import JST, is_trading_day, next_trading_day, now_jst
 from .fees import BROKERS as _BROKERS, DEFAULT_BROKER as _DEFAULT_BROKER
@@ -97,7 +98,8 @@ WATCH = ("panel.py", "panel_phone.py", "manual_orders.py", "money_view.py", "bro
          "paths.py", "live_unified.py",         # 默认账本 / ARM 判定（paths）、数据依赖的提醒文字（live_unified）
          "live_ops.py", "data.py",              # 「预计不会下单」与执行器同一个判断（live_ops）、盘中现价（data）：2026-10-15 复核补上
          "trade_room.py",                       # 今天还能买几次 / 卖几次（D6；2026-10-15）
-         "intraday_watch.py")                   # 盘中观测的持仓一行 / 时段（2026-10-16）
+         "intraday_watch.py",                   # 盘中观测的持仓一行 / 时段（2026-10-16）
+         "us_picks.py", "names.py")             # 选股页的美股（只看，2026-10-28）
 
 
 def token() -> str:
@@ -415,6 +417,60 @@ def _auto_pick(sg: dict, rows: list, blocks: dict, lifting) -> dict:
     near.sort(key=lambda r: (int(r["near"]["days"]), -float((r.get("prob") or {}).get("p") or 0)))
     return {"trig": trig, "near": near, "gc": {str(r["ticker"]): gc_day(r) for r in near}, "wait": wait,
             "tickers": {str(r["ticker"]) for r in trig + near}}
+
+
+def _us_picks_card(d: dict | None = None, today: dt.date | None = None) -> str:
+    """选股页的「美股（只看，不会自动买）」（2026-10-28 用户「选股里面的也要加上美股被选出来的股票」）：数据目录 out/us_picks.json
+    （run.py us-picks；模拟账户早上的运行之后在后台算）。只展示：没有买入 / 删除按钮、不写手动指令（手动买入只认东证代码）。
+    d = None → 读文件；as_of 之后又过了 STALE_DAYS 个以上美股交易日 → 写「旧了」。"""
+    d = UP.load() if d is None else d
+    H = ["<section class='card' id='uspicks'><h2>美股（只看，不会自动买）</h2>",
+         f"<div class='muted small'>{escape(UP.NOTE)}</div>"]
+    if not d:
+        H.append("<div class='muted'>还没算过：模拟账户早上的运行之后在后台算（也可以在 Mac 上运行 bash scripts/liveu.sh us-picks）</div></section>")
+        return "".join(H)
+    asof = str(d.get("as_of") or "—")
+    lag = UP.lag_days(d.get("as_of"), today)
+    rg = d.get("regime") or {}
+    bb = {"bull": "S&P500 牛市", "bear": "S&P500 熊市"}.get(str(rg.get("bullbear") or ""), "")
+    sc = d.get("scale")
+    chips = [f"<span class='chip mut'>按美股 {escape(asof)} 收盘</span>"]
+    if bb:
+        chips.append(f"<span class='chip{' bad' if rg.get('bullbear') == 'bear' else ' mut'}'>{escape(bb)}</span>")
+    if sc is not None:
+        chips.append(f"<span class='chip{' warn' if float(sc) <= 0 else ' mut'}'>新仓倍数 ×{float(sc):g}</span>")
+    gen = str(d.get("generated_at") or "")[:16].replace("T", " ")
+    tip = (f"规则（参数 best_params + best_params_US、股票池 NASDAQ-100 + Dow 30）在美股上选出来的：已出买入信号的、"
+           f"估计 {UP.NEAR_DAYS} 个交易日内可能出信号的（判定与上面日本那张卡相同）。算于 {escape(gen or '—')} JST。"
+           "新仓倍数 = 美股的牛熊分界 / 市场状态 / 汇率 / 宏观，0 时按规则也不开新仓（这里照样列出）。")
+    H.append("<div class='chips'>" + "".join(chips) + _tip(tip) + "</div>")
+    if lag is None or lag > UP.STALE_DAYS:
+        lag_s = "—" if lag is None else str(lag)
+        H.append(f"<div class='muted small'>★ 旧了：按 {escape(asof)} 收盘算的（之后又过了 {lag_s} 个美股交易日），"
+                 "模拟账户早上的运行之后会重算</div>")
+    rows = d.get("rows") or []
+    if not rows:
+        H.append(f"<div class='muted'>美股今天没有出信号的票，估计 {UP.NEAR_DAYS} 个交易日内金叉的也没有</div></section>")
+        return "".join(H)
+    for st, head in (("signal", "已经出了买入信号"), ("near", f"估计 {UP.NEAR_DAYS} 个交易日内可能出信号")):
+        rs = [r for r in rows if r.get("state") == st]
+        if not rs:
+            continue
+        H.append(f"<h3 class='sgh'>{escape(head)}（{len(rs)} 只）</h3><div class='list'>")
+        for r in rs:
+            code = escape(str(r.get("code") or r.get("ticker") or ""))
+            nm = escape(str(r.get("name") or NM.name(r.get("ticker")) or ""))
+            px = f"${float(r['close']):,.2f}" if r.get("close") is not None else "—"
+            badge = "信号" if st == "signal" else f"约 {int(r.get('near_days') or 0)} 天"
+            on = " on" if st == "signal" else ""
+            sub = escape(str(r.get("reason") or ""))
+            nt = (f"<br><span class='muted small'>{escape(str(r.get('near_text')))}</span>" if r.get("near_text") else "")
+            H.append(f"<div class='li'><span class='abd{on}'>{escape(badge)}</span>"
+                     f"<span class='grow'><b>{code}</b> {nm} <span class='chip mut'>收盘 {escape(px)}</span>"
+                     f"<br><span class='small'>{sub}</span>{nt}</span></div>")
+        H.append("</div>")
+    H.append("</section>")
+    return "".join(H)
 
 
 def _auto_buy_card(sg: dict, book: dict, tag: str, eq, buying: set | None = None, chart=None, ctx: dict | None = None) -> str:
@@ -2978,6 +3034,10 @@ def render(tag: str, tok: str, now: dt.datetime | None = None, mode: str = "loca
     sctx = _suggest_ctx(sgd, book, tag, marks=_news_marks([r["ticker"] for r in sgd.get("rows") or [] if r.get("ticker")]
                                                           + [x["ticker"] for x in SK.kept(tag, sgd)], now), now=now)
     H.append(_auto_buy_card(sgd, book, tag, eq, buying=buying, chart=chart, ctx=sctx))   # 规则接下来会自动买的（2026-10-12；每行点开 = K 线、买入…，2026-10-14）
+    try:
+        H.append(_us_picks_card())                      # 美股（只看，不会自动买；2026-10-28）
+    except Exception as e:                              # noqa: BLE001  展示用：坏了不影响页面
+        log.warning("美股选股卡片没画成：%s", type(e).__name__)
     # 「建议的股票」（其余的候选：观察中…）2026-10-18 删掉（用户：只留已经出了买入信号的和估计 5 个交易日内可能出信号的）
     H.append(PANE + "hold")
     cp = float(man.get("core_pct", 100.0))

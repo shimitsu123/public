@@ -52,6 +52,33 @@ INDEX_NAMES: dict[str, str] = {
     "^VIX3M": "VIX 3 个月", "^SKEW": "SKEW 指数", "^MOVE": "MOVE 美债波动指数", "^TNX": "美国 10 年国债收益率",
     "^SP500TR": "S&P500 全收益指数", "JPY=X": "美元 / 日元", "USDJPY=X": "美元 / 日元",
 }
+# 美股（universes.US_BROAD = NASDAQ-100 + Dow 30）的英文短名（2026-10-28：选股页的「美股（只看，不会自动买）」也要代码带名字；
+# 只是显示用，按公司的通用英文名写；不在表里的美股只写代码）
+US_NAMES: dict[str, str] = {
+    "AAPL": "Apple", "MSFT": "Microsoft", "NVDA": "NVIDIA", "AMZN": "Amazon", "META": "Meta Platforms", "GOOGL": "Alphabet A",
+    "GOOG": "Alphabet C", "AVGO": "Broadcom", "TSLA": "Tesla", "COST": "Costco", "NFLX": "Netflix", "AMD": "AMD", "ADBE": "Adobe",
+    "LIN": "Linde", "CSCO": "Cisco", "TMUS": "T-Mobile US", "QCOM": "Qualcomm", "INTU": "Intuit", "AMAT": "Applied Materials",
+    "TXN": "Texas Instruments", "ISRG": "Intuitive Surgical", "CMCSA": "Comcast", "AMGN": "Amgen", "HON": "Honeywell",
+    "BKNG": "Booking Holdings", "PANW": "Palo Alto Networks", "VRTX": "Vertex Pharmaceuticals", "ADP": "ADP", "GILD": "Gilead Sciences",
+    "ADI": "Analog Devices", "MU": "Micron", "LRCX": "Lam Research", "MELI": "MercadoLibre", "INTC": "Intel", "KLAC": "KLA",
+    "REGN": "Regeneron", "CTAS": "Cintas", "PYPL": "PayPal", "SNPS": "Synopsys", "CDNS": "Cadence Design", "MAR": "Marriott",
+    "CRWD": "CrowdStrike", "ORLY": "O'Reilly Automotive", "CEG": "Constellation Energy", "FTNT": "Fortinet", "ABNB": "Airbnb",
+    "DASH": "DoorDash", "ROP": "Roper Technologies", "MRVL": "Marvell", "ADSK": "Autodesk", "NXPI": "NXP Semiconductors",
+    "PCAR": "PACCAR", "WDAY": "Workday", "CPRT": "Copart", "AEP": "American Electric Power", "PAYX": "Paychex", "FAST": "Fastenal",
+    "GEHC": "GE HealthCare", "EXC": "Exelon", "DDOG": "Datadog", "XEL": "Xcel Energy", "BKR": "Baker Hughes", "IDXX": "IDEXX Labs",
+    "FANG": "Diamondback Energy", "TTWO": "Take-Two Interactive", "DXCM": "DexCom", "WBD": "Warner Bros. Discovery",
+    "MCHP": "Microchip", "AXON": "Axon", "PLTR": "Palantir", "APP": "AppLovin", "MSTR": "Strategy", "ARM": "Arm Holdings",
+    "ASML": "ASML", "SBUX": "Starbucks", "ALNY": "Alnylam", "ALAB": "Astera Labs", "CRWV": "CoreWeave", "HONA": "Honeywell Aerospace",
+    "LITE": "Lumentum", "MPWR": "Monolithic Power", "NBIS": "Nebius", "RKLB": "Rocket Lab", "SNDK": "SanDisk", "SPCX": "SpaceX",
+    "STX": "Seagate", "SHOP": "Shopify", "TER": "Teradyne", "TRI": "Thomson Reuters", "WDC": "Western Digital",
+    "AXP": "American Express", "BA": "Boeing", "CAT": "Caterpillar", "CRM": "Salesforce", "CVX": "Chevron", "DIS": "Disney",
+    "GS": "Goldman Sachs", "HD": "Home Depot", "IBM": "IBM", "JNJ": "Johnson & Johnson", "JPM": "JPMorgan Chase", "MMM": "3M",
+    "MRK": "Merck", "PG": "Procter & Gamble", "SHW": "Sherwin-Williams", "TRV": "Travelers", "UNH": "UnitedHealth", "V": "Visa",
+    "VZ": "Verizon", "CSX": "CSX", "ODFL": "Old Dominion Freight", "FER": "Ferrovial", "WMT": "Walmart", "NKE": "Nike",
+    "LULU": "Lululemon", "ROST": "Ross Stores", "PEP": "PepsiCo", "MDLZ": "Mondelez", "KDP": "Keurig Dr Pepper", "KHC": "Kraft Heinz",
+    "MNST": "Monster Beverage", "CCEP": "Coca-Cola Europacific", "KO": "Coca-Cola", "MCD": "McDonald's",
+    "ORCL": "Oracle", "LLY": "Eli Lilly", "XOM": "Exxon Mobil", "DE": "Deere", "UPS": "UPS",
+}
 SNAPSHOT_FILE, ALL_FILE = "jpx_names.json", "jpx_names_all.json"
 SHORT_LEN = 10                                                  # short=True：超过这么多个字 → 截短加「…」
 _JP = re.compile(r"[0-9][0-9A-Z]{3}")                            # 东证代码（含 285A 这类新代码）
@@ -160,8 +187,8 @@ def _name(s: str, tbl: dict | None = None) -> str | None:
     if s in INDEX_NAMES:
         return INDEX_NAMES[s]
     c = code(s)
-    if not _JP.fullmatch(c):                                       # 美股等：没有名字表（这次不做）
-        return ETF_NAMES.get(s)
+    if not _JP.fullmatch(c):                                       # 美股等：ETF 表 → 美股短名表（US_NAMES；2026-10-28）
+        return ETF_NAMES.get(s) or US_NAMES.get(s.upper())
     return ETF_NAMES.get(c + ".T") or (_table() if tbl is None else tbl).get(c) or None
 
 

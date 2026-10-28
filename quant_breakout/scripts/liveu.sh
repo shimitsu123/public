@@ -53,6 +53,9 @@
 #   bash scripts/liveu.sh intraday [--book paper|tachibana] [--dry]   盘中观测：持仓的收盘卖出线（约晚 20 分钟；只读最近一次的结果，
 #                                                    操作面板交易日 08:55〜11:35、12:25〜16:30 每 5 分钟算一次）；--dry = 现在算一次、只打印（不写、不推送）
 #   bash scripts/liveu.sh intraday push on|off       盘中观测的手机推送开 / 关（数据目录 intraday.json；默认开；不下单）
+#   bash scripts/liveu.sh us-picks                   选股页的美股（只看，不会自动买）：规则选出的美股 → 数据目录 out/us_picks.json
+#                                                    （只读：不下单、不动账本、不登录券商；模拟账户早上的运行之后自动在后台跑，
+#                                                    日志 logs/com.qbreak.uspicks.log；QBREAK_USPICKS=0 = 不自动跑）
 #   bash scripts/liveu.sh manual list|sell 7203|trim 7203 --pct 10|adjust 7203 --shares 300 (--yen / --pct)|buy 7203 [--shares / --yen / --pct]|core --pct 50|unblock 7203|cancel <id> [--broker tachibana]
 #                                                    手动指令：只写指令（数据目录 manual/）；下单由执行器做（盘中马上；开盘前等开盘；收盘后等下一个交易日开盘）
 #   bash scripts/liveu.sh panel [--open]             本机操作面板 http://127.0.0.1:8765/（LaunchAgent com.qbreak.panel 常驻）：
@@ -560,6 +563,12 @@ if [ "${1:-}" = "intraday" ]; then                 # 盘中观测（持仓的收
   exec "$PY" run.py intraday ${1+"$@"}
 fi
 
+if [ "${1:-}" = "us-picks" ]; then                 # 选股页的美股（只看，不会自动买；2026-10-28）：只读，不下单、不登录券商
+  shift
+  sync_inputs
+  exec "$PY" run.py us-picks ${1+"$@"}
+fi
+
 if [ "${1:-}" = "desktop" ]; then                  # 在终端里做一次（第一次可能会问「终端」能否访问桌面文件夹：允许）
   shift
   sync_inputs
@@ -674,6 +683,12 @@ if [ "${1:-}" = "run" ]; then
   rm -f "$runmark" 2>/dev/null || true             # 执行器跑完了：之后（标红 / 通知 / 让 Mac 醒着到 09:35）不算在跑
   updated=0
   find "$QBREAK_HOME/out" -name "page_${runkind}*.html" -newer "$stamp" 2>/dev/null | grep -q . && updated=1   # 只看这个账本的页面
+  # 选股页的美股（只看，不会自动买；2026-10-28）：模拟账户早上的运行（含补跑；重试没事可做的不算）之后在后台算一次 →
+  # 数据目录 out/us_picks.json。放到后台、输出进 logs/com.qbreak.uspicks.log：不拖慢、不改变这次运行的退出码
+  if [ "$runkind" = "paper" ] && [ "$openphase" = "0" ] && [ "${QBREAK_USPICKS:-1}" != "0" ] \
+    && { [ "$retry" = "0" ] || [ "$updated" = "1" ]; }; then
+    nohup "$PY" run.py us-picks >> "$QBREAK_HOME/logs/com.qbreak.uspicks.log" 2>&1 < /dev/null &
+  fi
   if { [ "$retry" = "1" ] || [ "$nowphase" = "1" ]; } && [ "$rc" = "0" ] && [ "$updated" = "0" ]; then
     exit 0                                         # 重试 / 盘中没事可做：不写页面，也不是「运行没完成」
   fi

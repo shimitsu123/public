@@ -5075,6 +5075,49 @@ def cmd_live_precheck(a) -> int:
     return precheck.run(agents, force=bool(a.force))
 
 
+def cmd_us_picks(a) -> int:
+    """选股页的「美股（只看，不会自动买）」（qbreak/us_picks.py；2026-10-28 用户「选股里面的也要加上美股被选出来的股票」）：
+    规则在美股（universes.us_broad()：NASDAQ-100 + Dow 30）上选出来的票 → 数据目录 out/us_picks.json。
+    参数 = best_params.json + best_params_US.json（load_params(market="US")）；新仓倍数 = _plan_inputs("US", …)（S&P500 牛熊分界、
+    市场状态、汇率、宏观、板块倾斜 / 指数剔除）只写进说明。行情 Yahoo（数据层的缓存）。只读：不下单、不动账本、不登录券商。"""
+    import datetime as _dt
+    from qbreak import us_picks as UP
+    from qbreak.data import load_universe
+    from qbreak.strategy import compute_indicators
+    from qbreak.trader import drop_partial_bar, load_params
+    cfg = _sim_cfg()
+    p = load_params(getattr(a, "params", None), "US")
+    mc = dict(cfg.get("us") or {})
+    mc["universe"] = ((cfg.get("unified") or {}).get("universe") or {}).get("US", "broad")
+    dcfg = DataConfig(provider="yfinance", years=2, allow_synthetic=False).validate()
+    today = _dt.date.today()
+    scale, tmult, regime, idx_close = None, {}, {}, None
+    try:
+        P = _plan_inputs("US", mc, cfg, dcfg, today, p)
+        uni, scale, tmult, idx_close = list(P.uni), float(P.scale), dict(P.tmult or {}), P.idx_close
+        bb = P.bb or {}
+        regime = {"bullbear": bb.get("state"), "since": bb.get("since"), "gating": bb.get("gating"), "index": bb.get("index"),
+                  "label": getattr(P.reg, "label", None), "mult": round(float(P.scale), 3)}
+    except Exception as e:                                   # noqa: BLE001  倍数只是说明：算不出照样列
+        log.warning("美股的新仓倍数没算成（照样列出）：%s", e)
+        uni = universe("US", mc["universe"])
+    data = load_universe(uni, dcfg)
+    ind = {}
+    for t, df in data.items():
+        df = drop_partial_bar(df, "US")
+        if df is None or len(df) < 60:
+            continue
+        ind[t] = compute_indicators(df, p, idx_close if p.min_rs_pct > -900 else None)
+    out = UP.build(ind, p, scale=scale, tmult=tmult, regime=regime)
+    fp = UP.write(out)
+    c = out["counts"]
+    print(f"美股（只看，不会自动买）：按 {out['as_of'] or '—'} 收盘，{out['n_universe']} 只里 已出买入信号 {c['signal']} 只、"
+          f"估计 {UP.NEAR_DAYS} 个交易日内可能出信号 {c['near']} 只；新仓倍数 {out['scale'] if out['scale'] is not None else '—'} → {fp}")
+    for ln in UP.lines(out):
+        print(ln)
+    return 0
+
+
 def cmd_intraday(a) -> int:
     """盘中观测（qbreak/intraday_watch.py；2026-10-16 用户要求；只展示、不下单、不改规则）：持仓的收盘卖出线（约晚 20 分钟；买点 2026-10-18 删掉）。
     不带参数 = 读最近一次的结果（只读；操作面板交易日 08:55〜11:35、12:25〜16:30 每 5 分钟算一次）；--dry = 现在算一次、只打印
@@ -5915,6 +5958,9 @@ def main(argv=None) -> int:
     iw.add_argument("--dry", action="store_true", help="现在算一次、只打印（不写结果、不推送）")
     iw.add_argument("--push", default=None, choices=["on", "off"], help="手机推送开 / 关（数据目录 intraday.json；默认开）")
     iw.set_defaults(func=cmd_intraday)
+    up = sub.add_parser("us-picks", help="选股页的美股（只看，不会自动买）：规则选出的美股 → 数据目录 out/us_picks.json（只读：不下单、不登录券商）")
+    up.add_argument("--params", default=None, help="参数文件（默认 var/best_params.json + best_params_US.json）")
+    up.set_defaults(func=cmd_us_picks)
     rh = sub.add_parser("remote-halt", help="云端对话里说「停」：写 var/HALT_REMOTE，提交推送后 Mac 的执行器下一次运行时建本地 HALT")
     rh.add_argument("--reason", default=None, metavar="TEXT")
     rh.set_defaults(func=cmd_remote_halt)
