@@ -1,0 +1,1479 @@
+{
+ "stage": "explore",
+ "git": {
+  "rev": "8834f8e",
+  "dirty": false
+ },
+ "windows": {
+  "X": [
+   "2017-01-04",
+   "2021-12-30"
+  ]
+ },
+ "seeds": 30,
+ "confirm_ids": [],
+ "base_full": {
+  "X": {
+   "B": {
+    "n": 2880,
+    "win": 33.19,
+    "mean": 0.146,
+    "sd": 6.04,
+    "hold": 9.8
+   },
+   "B20": {
+    "n": 2745,
+    "win": 43.75,
+    "mean": 0.125,
+    "sd": 8.73,
+    "hold": 18.5
+   }
+  }
+ },
+ "pool_n": 70727,
+ "cands": {
+  "C1": {
+   "desc": "上修 +10% ≤ rev ≤ +300% → t0 开盘买、现行卖法",
+   "n_events": 5302,
+   "range": {
+    "X": [
+     "2017-02-28",
+     "2021-12-28"
+    ]
+   },
+   "stats": {
+    "X": {
+     "n": 3024,
+     "win": 35.22,
+     "mean": -0.652,
+     "sd": 8.03,
+     "hold": 10.9
+    }
+   },
+   "stats20": {
+    "X": {
+     "n": 3025,
+     "win": 40.23,
+     "mean": -0.461,
+     "sd": 9.66,
+     "hold": 15.5
+    }
+   },
+   "base": {
+    "X": {
+     "n": 2795,
+     "win": 32.77,
+     "mean": 0.108,
+     "sd": 6.03,
+     "hold": 9.7
+    }
+   },
+   "boot": {
+    "X": {
+     "mean_lo": -1.135,
+     "mean_hi": -0.174,
+     "win_lo": 32.02,
+     "win_hi": 38.36
+    }
+   },
+   "boot20": {
+    "X": {
+     "mean_lo": -1.183,
+     "mean_hi": 0.164,
+     "win_lo": 36.38,
+     "win_hi": 43.66
+    }
+   },
+   "diff_lo": {
+    "X": -1.379
+   },
+   "p3": {
+    "X": {
+     "n": 4454,
+     "win": 35.77,
+     "mean": -0.793,
+     "sd": 6.68,
+     "hold": 12.4
+    }
+   },
+   "ctrl_X": {
+    "P0": {
+     "win": 37.92,
+     "mean": 0.259,
+     "seeds": 30,
+     "q": 95.0,
+     "kind": "pct"
+    }
+   },
+   "p1_mean": {
+    "X": 0.949
+   },
+   "entered": false,
+   "p1_fails_X": [
+    "P1 20 日卖法每笔 -0.46% − 事前安慰剂 +0.95% < 1.0 pp",
+    "P1 20 日卖法每笔区间下限 -1.18% ≤ 事前安慰剂 +0.95%"
+   ],
+   "gap_abandon_pct": 42.4,
+   "events_per_day": {
+    "count": 844.0,
+    "mean": 6.3,
+    "std": 9.3,
+    "min": 1.0,
+    "50%": 3.0,
+    "90%": 16.0,
+    "max": 67.0
+   },
+   "top4_share": 41.9,
+   "top4_stats": {
+    "X": {
+     "n": 1037,
+     "win": 34.52,
+     "mean": -0.662,
+     "sd": 8.56,
+     "hold": 10.3
+    }
+   },
+   "segments": {
+    "X": {
+     "一手 ≤ ¥25 万": {
+      "n": 2175,
+      "win": 34.48,
+      "mean": -0.698,
+      "sd": 7.87,
+      "hold": 11.1
+     },
+     "一手 ≤ ¥34 万": {
+      "n": 2528,
+      "win": 34.89,
+      "mean": -0.62,
+      "sd": 8.02,
+      "hold": 11.0
+     },
+     "一手 > ¥34 万": {
+      "n": 496,
+      "win": 36.9,
+      "mean": -0.82,
+      "sd": 8.1,
+      "hold": 10.4
+     },
+     "20 日成交额 ≥ ¥500 万": {
+      "n": 2626,
+      "win": 35.26,
+      "mean": -0.732,
+      "sd": 8.15,
+      "hold": 10.7
+     },
+     "20 日成交额 ≥ ¥5,000 万": {
+      "n": 1685,
+      "win": 35.37,
+      "mean": -0.858,
+      "sd": 8.34,
+      "hold": 10.3
+     },
+     "20 日成交额 < ¥5,000 万": {
+      "n": 1328,
+      "win": 34.94,
+      "mean": -0.389,
+      "sd": 7.64,
+      "hold": 11.6
+     },
+     "可行子集（一手 ≤ ¥34 万 ∧ 成交额 ≥ ¥500 万）": {
+      "n": 2168,
+      "win": 34.87,
+      "mean": -0.72,
+      "sd": 8.11,
+      "hold": 10.8
+     },
+     "盘后开示": {
+      "n": 2081,
+      "win": 34.26,
+      "mean": -0.91,
+      "sd": 7.66,
+      "hold": 10.6
+     },
+     "盘中开示": {
+      "n": 943,
+      "win": 37.33,
+      "mean": -0.084,
+      "sd": 8.77,
+      "hold": 11.6
+     },
+     "修正文档": {
+      "n": 1553,
+      "win": 35.54,
+      "mean": -0.405,
+      "sd": 8.31,
+      "hold": 11.2
+     },
+     "決算短信内": {
+      "n": 1471,
+      "win": 34.87,
+      "mean": -0.913,
+      "sd": 7.72,
+      "hold": 10.7
+     },
+     "时点 TOPIX 500 内": {
+      "n": 458,
+      "win": 43.23,
+      "mean": 0.285,
+      "sd": 7.55,
+      "hold": 12.5
+     },
+     "时点 TOPIX 500 外": {
+      "n": 2566,
+      "win": 33.79,
+      "mean": -0.82,
+      "sd": 8.11,
+      "hold": 10.6
+     },
+     "年 2017": {
+      "n": 499,
+      "win": 44.69,
+      "mean": 0.762,
+      "sd": 8.75,
+      "hold": 12.0
+     },
+     "年 2018": {
+      "n": 419,
+      "win": 32.22,
+      "mean": -1.647,
+      "sd": 7.87,
+      "hold": 9.6
+     },
+     "年 2019": {
+      "n": 335,
+      "win": 37.91,
+      "mean": -0.616,
+      "sd": 7.38,
+      "hold": 11.1
+     },
+     "年 2020": {
+      "n": 526,
+      "win": 38.97,
+      "mean": -0.253,
+      "sd": 9.36,
+      "hold": 10.9
+     },
+     "年 2021": {
+      "n": 1245,
+      "win": 30.12,
+      "mean": -1.063,
+      "sd": 7.22,
+      "hold": 10.9
+     }
+    }
+   },
+   "reasons": {
+    "X": {
+     "dead_cross": 2108,
+     "stop": 581,
+     "trail": 153,
+     "climax": 91,
+     "take_profit": 89,
+     "end": 1,
+     "max_hold": 1
+    }
+   },
+   "pl_b_miss": []
+  },
+  "C2": {
+   "desc": "C1 ∧ 同一決算短信 yoy ≥ +10% ∧ rev_np ≥ 0",
+   "n_events": 1389,
+   "range": {
+    "X": [
+     "2017-09-04",
+     "2021-12-10"
+    ]
+   },
+   "stats": {
+    "X": {
+     "n": 756,
+     "win": 30.29,
+     "mean": -1.741,
+     "sd": 7.51,
+     "hold": 10.1
+    }
+   },
+   "stats20": {
+    "X": {
+     "n": 756,
+     "win": 36.64,
+     "mean": -1.529,
+     "sd": 9.32,
+     "hold": 14.4
+    }
+   },
+   "base": {
+    "X": {
+     "n": 2359,
+     "win": 32.13,
+     "mean": 0.086,
+     "sd": 6.22,
+     "hold": 9.7
+    }
+   },
+   "boot": {
+    "X": {
+     "mean_lo": -2.343,
+     "mean_hi": -1.149,
+     "win_lo": 26.52,
+     "win_hi": 34.46
+    }
+   },
+   "boot20": {
+    "X": {
+     "mean_lo": -2.477,
+     "mean_hi": -0.566,
+     "win_lo": 31.02,
+     "win_hi": 42.09
+    }
+   },
+   "diff_lo": {
+    "X": -2.603
+   },
+   "p3": {
+    "X": {
+     "n": 4444,
+     "win": 35.76,
+     "mean": -0.792,
+     "sd": 6.68,
+     "hold": 12.4
+    }
+   },
+   "ctrl_X": {
+    "P0": {
+     "win": 37.15,
+     "mean": 0.134,
+     "seeds": 30,
+     "q": 95.0,
+     "kind": "pct"
+    }
+   },
+   "p1_mean": {
+    "X": 1.508
+   },
+   "entered": false,
+   "p1_fails_X": [
+    "P1 20 日卖法每笔 -1.53% − 事前安慰剂 +1.51% < 1.0 pp",
+    "P1 20 日卖法每笔区间下限 -2.48% ≤ 事前安慰剂 +1.51%"
+   ],
+   "gap_abandon_pct": 45.5,
+   "events_per_day": {
+    "count": 310.0,
+    "mean": 4.5,
+    "std": 5.6,
+    "min": 1.0,
+    "50%": 2.0,
+    "90%": 11.0,
+    "max": 30.0
+   },
+   "top4_share": 53.1,
+   "top4_stats": {
+    "X": {
+     "n": 339,
+     "win": 33.92,
+     "mean": -1.927,
+     "sd": 8.1,
+     "hold": 9.4
+    }
+   },
+   "segments": {
+    "X": {
+     "一手 ≤ ¥25 万": {
+      "n": 472,
+      "win": 29.66,
+      "mean": -2.017,
+      "sd": 6.78,
+      "hold": 10.1
+     },
+     "一手 ≤ ¥34 万": {
+      "n": 578,
+      "win": 30.45,
+      "mean": -1.708,
+      "sd": 7.31,
+      "hold": 10.1
+     },
+     "一手 > ¥34 万": {
+      "n": 178,
+      "win": 29.78,
+      "mean": -1.849,
+      "sd": 8.12,
+      "hold": 10.4
+     },
+     "20 日成交额 ≥ ¥500 万": {
+      "n": 689,
+      "win": 30.19,
+      "mean": -1.832,
+      "sd": 7.67,
+      "hold": 10.0
+     },
+     "20 日成交额 ≥ ¥5,000 万": {
+      "n": 499,
+      "win": 29.06,
+      "mean": -2.048,
+      "sd": 7.86,
+      "hold": 9.2
+     },
+     "20 日成交额 < ¥5,000 万": {
+      "n": 253,
+      "win": 32.41,
+      "mean": -1.144,
+      "sd": 6.77,
+      "hold": 11.9
+     },
+     "可行子集（一手 ≤ ¥34 万 ∧ 成交额 ≥ ¥500 万）": {
+      "n": 520,
+      "win": 30.38,
+      "mean": -1.809,
+      "sd": 7.5,
+      "hold": 9.9
+     },
+     "盘后开示": {
+      "n": 510,
+      "win": 29.02,
+      "mean": -2.103,
+      "sd": 7.23,
+      "hold": 9.7
+     },
+     "盘中开示": {
+      "n": 246,
+      "win": 32.93,
+      "mean": -0.992,
+      "sd": 8.02,
+      "hold": 11.0
+     },
+     "修正文档": {
+      "n": 0,
+      "win": null,
+      "mean": null,
+      "sd": null,
+      "hold": null
+     },
+     "決算短信内": {
+      "n": 756,
+      "win": 30.29,
+      "mean": -1.741,
+      "sd": 7.51,
+      "hold": 10.1
+     },
+     "时点 TOPIX 500 内": {
+      "n": 149,
+      "win": 31.54,
+      "mean": -1.685,
+      "sd": 6.47,
+      "hold": 10.8
+     },
+     "时点 TOPIX 500 外": {
+      "n": 607,
+      "win": 29.98,
+      "mean": -1.755,
+      "sd": 7.74,
+      "hold": 10.0
+     },
+     "年 2017": {
+      "n": 102,
+      "win": 34.31,
+      "mean": -1.591,
+      "sd": 6.42,
+      "hold": 10.5
+     },
+     "年 2018": {
+      "n": 112,
+      "win": 28.57,
+      "mean": -2.743,
+      "sd": 8.0,
+      "hold": 8.4
+     },
+     "年 2019": {
+      "n": 85,
+      "win": 42.35,
+      "mean": -0.119,
+      "sd": 8.72,
+      "hold": 9.9
+     },
+     "年 2020": {
+      "n": 98,
+      "win": 31.63,
+      "mean": -1.622,
+      "sd": 9.26,
+      "hold": 10.2
+     },
+     "年 2021": {
+      "n": 359,
+      "win": 26.46,
+      "mean": -1.888,
+      "sd": 6.69,
+      "hold": 10.6
+     }
+    }
+   },
+   "reasons": {
+    "X": {
+     "dead_cross": 501,
+     "stop": 188,
+     "trail": 38,
+     "take_profit": 15,
+     "climax": 13,
+     "max_hold": 1
+    }
+   },
+   "pl_b_miss": []
+  },
+  "C3": {
+   "desc": "C1 ∧ 反应日 r：对前一日 ≥ +2% ∧ 量比 ≥ 2 ∧ 收阳 → r+1 开盘买",
+   "n_events": 1676,
+   "range": {
+    "X": [
+     "2017-03-14",
+     "2021-12-28"
+    ]
+   },
+   "stats": {
+    "X": {
+     "n": 1540,
+     "win": 37.4,
+     "mean": -0.079,
+     "sd": 9.39,
+     "hold": 10.7
+    }
+   },
+   "stats20": {
+    "X": {
+     "n": 1540,
+     "win": 43.31,
+     "mean": 0.4,
+     "sd": 11.47,
+     "hold": 15.3
+    }
+   },
+   "base": {
+    "X": {
+     "n": 2749,
+     "win": 32.92,
+     "mean": 0.13,
+     "sd": 6.07,
+     "hold": 9.7
+    }
+   },
+   "boot": {
+    "X": {
+     "mean_lo": -0.789,
+     "mean_hi": 0.658,
+     "win_lo": 33.08,
+     "win_hi": 41.72
+    }
+   },
+   "boot20": {
+    "X": {
+     "mean_lo": -0.421,
+     "mean_hi": 1.245,
+     "win_lo": 39.11,
+     "win_hi": 47.4
+    }
+   },
+   "diff_lo": {
+    "X": -1.045
+   },
+   "p3": {
+    "X": {
+     "n": 621,
+     "win": 34.46,
+     "mean": -0.761,
+     "sd": 7.04,
+     "hold": 12.0
+    }
+   },
+   "ctrl_X": {
+    "P0": {
+     "win": 37.82,
+     "mean": 0.428,
+     "seeds": 30,
+     "q": 95.0,
+     "kind": "pct"
+    },
+    "PL-B": {
+     "win": 39.3,
+     "mean": 0.715,
+     "seeds": 30,
+     "q": 95.0,
+     "kind": "pct"
+    }
+   },
+   "p1_mean": {
+    "X": 0.702
+   },
+   "entered": false,
+   "p1_fails_X": [
+    "P1 20 日卖法每笔 +0.40% − 事前安慰剂 +0.70% < 1.0 pp",
+    "P1 20 日卖法每笔区间下限 -0.42% ≤ 事前安慰剂 +0.70%"
+   ],
+   "gap_abandon_pct": 52.0,
+   "events_per_day": {
+    "count": 545.0,
+    "mean": 3.1,
+    "std": 3.3,
+    "min": 1.0,
+    "50%": 2.0,
+    "90%": 7.0,
+    "max": 22.0
+   },
+   "top4_share": 70.9,
+   "top4_stats": {
+    "X": {
+     "n": 1077,
+     "win": 37.05,
+     "mean": -0.267,
+     "sd": 9.32,
+     "hold": 10.6
+    }
+   },
+   "segments": {
+    "X": {
+     "一手 ≤ ¥25 万": {
+      "n": 1141,
+      "win": 36.63,
+      "mean": -0.155,
+      "sd": 9.61,
+      "hold": 10.7
+     },
+     "一手 ≤ ¥34 万": {
+      "n": 1313,
+      "win": 36.1,
+      "mean": -0.195,
+      "sd": 9.54,
+      "hold": 10.7
+     },
+     "一手 > ¥34 万": {
+      "n": 227,
+      "win": 44.93,
+      "mean": 0.594,
+      "sd": 8.47,
+      "hold": 11.1
+     },
+     "20 日成交额 ≥ ¥500 万": {
+      "n": 1403,
+      "win": 38.2,
+      "mean": 0.068,
+      "sd": 9.54,
+      "hold": 10.8
+     },
+     "20 日成交额 ≥ ¥5,000 万": {
+      "n": 943,
+      "win": 37.22,
+      "mean": -0.409,
+      "sd": 8.78,
+      "hold": 10.5
+     },
+     "20 日成交额 < ¥5,000 万": {
+      "n": 597,
+      "win": 37.69,
+      "mean": 0.443,
+      "sd": 10.27,
+      "hold": 11.1
+     },
+     "可行子集（一手 ≤ ¥34 万 ∧ 成交额 ≥ ¥500 万）": {
+      "n": 1186,
+      "win": 36.85,
+      "mean": -0.054,
+      "sd": 9.7,
+      "hold": 10.7
+     },
+     "盘后开示": {
+      "n": 1117,
+      "win": 37.6,
+      "mean": -0.159,
+      "sd": 9.39,
+      "hold": 10.7
+     },
+     "盘中开示": {
+      "n": 423,
+      "win": 36.88,
+      "mean": 0.133,
+      "sd": 9.39,
+      "hold": 10.9
+     },
+     "修正文档": {
+      "n": 756,
+      "win": 34.92,
+      "mean": -0.298,
+      "sd": 9.78,
+      "hold": 10.5
+     },
+     "決算短信内": {
+      "n": 784,
+      "win": 39.8,
+      "mean": 0.133,
+      "sd": 8.99,
+      "hold": 11.0
+     },
+     "时点 TOPIX 500 内": {
+      "n": 202,
+      "win": 45.05,
+      "mean": 0.764,
+      "sd": 6.89,
+      "hold": 12.7
+     },
+     "时点 TOPIX 500 外": {
+      "n": 1338,
+      "win": 36.25,
+      "mean": -0.206,
+      "sd": 9.71,
+      "hold": 10.4
+     },
+     "年 2017": {
+      "n": 314,
+      "win": 49.68,
+      "mean": 1.994,
+      "sd": 10.0,
+      "hold": 11.3
+     },
+     "年 2018": {
+      "n": 218,
+      "win": 27.06,
+      "mean": -2.289,
+      "sd": 8.05,
+      "hold": 9.9
+     },
+     "年 2019": {
+      "n": 193,
+      "win": 44.04,
+      "mean": 1.196,
+      "sd": 10.36,
+      "hold": 10.6
+     },
+     "年 2020": {
+      "n": 269,
+      "win": 41.26,
+      "mean": 0.775,
+      "sd": 10.67,
+      "hold": 11.1
+     },
+     "年 2021": {
+      "n": 546,
+      "win": 30.22,
+      "mean": -1.259,
+      "sd": 8.05,
+      "hold": 10.6
+     }
+    }
+   },
+   "reasons": {
+    "X": {
+     "dead_cross": 999,
+     "stop": 320,
+     "trail": 110,
+     "take_profit": 70,
+     "climax": 41
+    }
+   },
+   "pl_b_miss": [
+    449,
+    449,
+    449
+   ]
+  },
+  "C4": {
+   "desc": "C1 的事件 + 事件专用卖法（20 日固定、只有 7% 止损）",
+   "n_events": 5302,
+   "range": {
+    "X": [
+     "2017-02-28",
+     "2021-12-28"
+    ]
+   },
+   "stats": {
+    "X": {
+     "n": 3025,
+     "win": 40.23,
+     "mean": -0.461,
+     "sd": 9.66,
+     "hold": 15.5
+    }
+   },
+   "stats20": {
+    "X": {
+     "n": 3025,
+     "win": 40.23,
+     "mean": -0.461,
+     "sd": 9.66,
+     "hold": 15.5
+    }
+   },
+   "base": {
+    "X": {
+     "n": 2663,
+     "win": 43.18,
+     "mean": -0.009,
+     "sd": 7.91,
+     "hold": 18.5
+    }
+   },
+   "boot": {
+    "X": {
+     "mean_lo": -1.183,
+     "mean_hi": 0.164,
+     "win_lo": 36.38,
+     "win_hi": 43.66
+    }
+   },
+   "boot20": {
+    "X": {
+     "mean_lo": -1.183,
+     "mean_hi": 0.164,
+     "win_lo": 36.38,
+     "win_hi": 43.66
+    }
+   },
+   "diff_lo": {
+    "X": -1.403
+   },
+   "p3": {
+    "X": {
+     "n": 4457,
+     "win": 41.49,
+     "mean": -1.027,
+     "sd": 8.04,
+     "hold": 16.5
+    }
+   },
+   "ctrl_X": {
+    "P0": {
+     "win": 44.12,
+     "mean": 0.427,
+     "seeds": 30,
+     "q": 95.0,
+     "kind": "pct"
+    }
+   },
+   "p1_mean": {
+    "X": 0.949
+   },
+   "entered": false,
+   "p1_fails_X": [
+    "P1 20 日卖法每笔 -0.46% − 事前安慰剂 +0.95% < 1.0 pp",
+    "P1 20 日卖法每笔区间下限 -1.18% ≤ 事前安慰剂 +0.95%"
+   ],
+   "gap_abandon_pct": 42.4,
+   "events_per_day": {
+    "count": 844.0,
+    "mean": 6.3,
+    "std": 9.3,
+    "min": 1.0,
+    "50%": 3.0,
+    "90%": 16.0,
+    "max": 67.0
+   },
+   "top4_share": 41.9,
+   "top4_stats": {
+    "X": {
+     "n": 1037,
+     "win": 37.99,
+     "mean": -0.716,
+     "sd": 10.06,
+     "hold": 14.9
+    }
+   },
+   "segments": {
+    "X": {
+     "一手 ≤ ¥25 万": {
+      "n": 2176,
+      "win": 40.72,
+      "mean": -0.489,
+      "sd": 9.33,
+      "hold": 15.6
+     },
+     "一手 ≤ ¥34 万": {
+      "n": 2529,
+      "win": 40.53,
+      "mean": -0.42,
+      "sd": 9.65,
+      "hold": 15.6
+     },
+     "一手 > ¥34 万": {
+      "n": 496,
+      "win": 38.71,
+      "mean": -0.672,
+      "sd": 9.7,
+      "hold": 15.1
+     },
+     "20 日成交额 ≥ ¥500 万": {
+      "n": 2627,
+      "win": 39.97,
+      "mean": -0.474,
+      "sd": 9.96,
+      "hold": 15.1
+     },
+     "20 日成交额 ≥ ¥5,000 万": {
+      "n": 1686,
+      "win": 38.97,
+      "mean": -0.638,
+      "sd": 10.28,
+      "hold": 14.6
+     },
+     "20 日成交额 < ¥5,000 万": {
+      "n": 1328,
+      "win": 41.72,
+      "mean": -0.233,
+      "sd": 8.83,
+      "hold": 16.6
+     },
+     "可行子集（一手 ≤ ¥34 万 ∧ 成交额 ≥ ¥500 万）": {
+      "n": 2169,
+      "win": 40.34,
+      "mean": -0.432,
+      "sd": 9.96,
+      "hold": 15.2
+     },
+     "盘后开示": {
+      "n": 2082,
+      "win": 38.76,
+      "mean": -0.837,
+      "sd": 9.43,
+      "hold": 15.3
+     },
+     "盘中开示": {
+      "n": 943,
+      "win": 43.48,
+      "mean": 0.369,
+      "sd": 10.09,
+      "hold": 15.9
+     },
+     "修正文档": {
+      "n": 1553,
+      "win": 39.79,
+      "mean": -0.432,
+      "sd": 9.41,
+      "hold": 15.7
+     },
+     "決算短信内": {
+      "n": 1472,
+      "win": 40.69,
+      "mean": -0.492,
+      "sd": 9.9,
+      "hold": 15.2
+     },
+     "时点 TOPIX 500 内": {
+      "n": 459,
+      "win": 45.53,
+      "mean": 0.509,
+      "sd": 8.79,
+      "hold": 16.7
+     },
+     "时点 TOPIX 500 外": {
+      "n": 2566,
+      "win": 39.28,
+      "mean": -0.635,
+      "sd": 9.79,
+      "hold": 15.3
+     },
+     "年 2017": {
+      "n": 499,
+      "win": 50.7,
+      "mean": 1.508,
+      "sd": 10.42,
+      "hold": 16.2
+     },
+     "年 2018": {
+      "n": 419,
+      "win": 30.79,
+      "mean": -1.884,
+      "sd": 9.95,
+      "hold": 14.3
+     },
+     "年 2019": {
+      "n": 335,
+      "win": 41.49,
+      "mean": -0.405,
+      "sd": 8.73,
+      "hold": 15.9
+     },
+     "年 2020": {
+      "n": 526,
+      "win": 41.63,
+      "mean": -0.081,
+      "sd": 11.12,
+      "hold": 14.8
+     },
+     "年 2021": {
+      "n": 1246,
+      "win": 38.28,
+      "mean": -0.948,
+      "sd": 8.62,
+      "hold": 15.8
+     }
+    }
+   },
+   "reasons": {
+    "X": {
+     "max_hold": 1901,
+     "stop": 1124
+    }
+   },
+   "pl_b_miss": []
+  },
+  "C5": {
+   "desc": "FY 決算短信：g_next ≥ +10% ∧ beat ≥ 0 ∧ FY yoy ≥ 0 → t0 开盘买",
+   "n_events": 887,
+   "range": {
+    "X": [
+     "2017-05-10",
+     "2021-12-14"
+    ]
+   },
+   "stats": {
+    "X": {
+     "n": 482,
+     "win": 34.44,
+     "mean": -0.61,
+     "sd": 8.43,
+     "hold": 10.5
+    }
+   },
+   "stats20": {
+    "X": {
+     "n": 482,
+     "win": 39.21,
+     "mean": -0.634,
+     "sd": 9.26,
+     "hold": 15.0
+    }
+   },
+   "base": {
+    "X": {
+     "n": 2609,
+     "win": 32.85,
+     "mean": 0.109,
+     "sd": 6.11,
+     "hold": 9.8
+    }
+   },
+   "boot": {
+    "X": {
+     "mean_lo": -1.7,
+     "mean_hi": 0.415,
+     "win_lo": 28.95,
+     "win_hi": 39.03
+    }
+   },
+   "boot20": {
+    "X": {
+     "mean_lo": -2.048,
+     "mean_hi": 0.366,
+     "win_lo": 32.84,
+     "win_hi": 44.34
+    }
+   },
+   "diff_lo": {
+    "X": -1.868
+   },
+   "p3": {
+    "X": {
+     "n": 450,
+     "win": 35.33,
+     "mean": -0.689,
+     "sd": 6.56,
+     "hold": 12.7
+    }
+   },
+   "ctrl_X": {
+    "P0": {
+     "win": 39.94,
+     "mean": 0.457,
+     "seeds": 30,
+     "q": 95.0,
+     "kind": "pct"
+    }
+   },
+   "p1_mean": {
+    "X": -0.231
+   },
+   "entered": false,
+   "p1_fails_X": [
+    "P1 20 日卖法每笔 -0.63% − 事前安慰剂 -0.23% < 1.0 pp",
+    "P1 20 日卖法每笔区间下限 -2.05% ≤ 事前安慰剂 -0.23%"
+   ],
+   "gap_abandon_pct": 44.8,
+   "events_per_day": {
+    "count": 246.0,
+    "mean": 3.6,
+    "std": 6.4,
+    "min": 1.0,
+    "50%": 1.0,
+    "90%": 7.5,
+    "max": 51.0
+   },
+   "top4_share": 55.5,
+   "top4_stats": {
+    "X": {
+     "n": 238,
+     "win": 31.51,
+     "mean": -1.176,
+     "sd": 8.39,
+     "hold": 9.3
+    }
+   },
+   "segments": {
+    "X": {
+     "一手 ≤ ¥25 万": {
+      "n": 322,
+      "win": 29.19,
+      "mean": -1.377,
+      "sd": 7.85,
+      "hold": 9.9
+     },
+     "一手 ≤ ¥34 万": {
+      "n": 394,
+      "win": 34.01,
+      "mean": -0.633,
+      "sd": 8.33,
+      "hold": 10.5
+     },
+     "一手 > ¥34 万": {
+      "n": 88,
+      "win": 36.36,
+      "mean": -0.51,
+      "sd": 8.87,
+      "hold": 10.6
+     },
+     "20 日成交额 ≥ ¥500 万": {
+      "n": 414,
+      "win": 33.33,
+      "mean": -0.992,
+      "sd": 8.4,
+      "hold": 9.9
+     },
+     "20 日成交额 ≥ ¥5,000 万": {
+      "n": 289,
+      "win": 34.95,
+      "mean": -0.523,
+      "sd": 9.43,
+      "hold": 9.3
+     },
+     "20 日成交额 < ¥5,000 万": {
+      "n": 192,
+      "win": 33.85,
+      "mean": -0.743,
+      "sd": 6.68,
+      "hold": 12.4
+     },
+     "可行子集（一手 ≤ ¥34 万 ∧ 成交额 ≥ ¥500 万）": {
+      "n": 328,
+      "win": 32.32,
+      "mean": -1.13,
+      "sd": 8.24,
+      "hold": 9.7
+     },
+     "盘后开示": {
+      "n": 369,
+      "win": 34.96,
+      "mean": -0.479,
+      "sd": 8.85,
+      "hold": 10.4
+     },
+     "盘中开示": {
+      "n": 113,
+      "win": 32.74,
+      "mean": -1.04,
+      "sd": 6.84,
+      "hold": 10.9
+     },
+     "修正文档": {
+      "n": 0,
+      "win": null,
+      "mean": null,
+      "sd": null,
+      "hold": null
+     },
+     "決算短信内": {
+      "n": 482,
+      "win": 34.44,
+      "mean": -0.61,
+      "sd": 8.43,
+      "hold": 10.5
+     },
+     "时点 TOPIX 500 内": {
+      "n": 61,
+      "win": 36.07,
+      "mean": -2.039,
+      "sd": 6.17,
+      "hold": 10.8
+     },
+     "时点 TOPIX 500 外": {
+      "n": 421,
+      "win": 34.2,
+      "mean": -0.403,
+      "sd": 8.69,
+      "hold": 10.5
+     },
+     "年 2017": {
+      "n": 15,
+      "win": 46.67,
+      "mean": 1.234,
+      "sd": 8.52,
+      "hold": 10.7
+     },
+     "年 2018": {
+      "n": 149,
+      "win": 36.91,
+      "mean": 0.428,
+      "sd": 9.53,
+      "hold": 9.5
+     },
+     "年 2019": {
+      "n": 116,
+      "win": 36.21,
+      "mean": -0.983,
+      "sd": 7.06,
+      "hold": 10.8
+     },
+     "年 2020": {
+      "n": 45,
+      "win": 17.78,
+      "mean": -4.508,
+      "sd": 6.44,
+      "hold": 6.7
+     },
+     "年 2021": {
+      "n": 157,
+      "win": 34.39,
+      "mean": -0.379,
+      "sd": 8.39,
+      "hold": 12.4
+     }
+    }
+   },
+   "reasons": {
+    "X": {
+     "dead_cross": 317,
+     "stop": 99,
+     "trail": 36,
+     "take_profit": 15,
+     "climax": 15
+    }
+   },
+   "pl_b_miss": []
+  }
+ },
+ "controls": {
+  "P3": {
+   "X": {
+    "n": 4454,
+    "win": 35.77,
+    "mean": -0.793,
+    "sd": 6.68,
+    "hold": 12.4
+   },
+   "n_events": 4991
+  },
+  "P3_C4": {
+   "X": {
+    "n": 4457,
+    "win": 41.49,
+    "mean": -1.027,
+    "sd": 8.04,
+    "hold": 16.5
+   },
+   "n_events": 4991
+  },
+  "P3_C3": {
+   "X": {
+    "n": 621,
+    "win": 34.46,
+    "mean": -0.761,
+    "sd": 7.04,
+    "hold": 12.0
+   },
+   "n_events": 635
+  },
+  "P3_C5": {
+   "X": {
+    "n": 450,
+    "win": 35.33,
+    "mean": -0.689,
+    "sd": 6.56,
+    "hold": 12.7
+   },
+   "n_events": 494
+  },
+  "down": {
+   "X": {
+    "n": 3298,
+    "win": 38.11,
+    "mean": -0.27,
+    "sd": 8.13,
+    "hold": 11.8
+   },
+   "n_events": 3489
+  },
+  "C1_r": {
+   "X": {
+    "n": 4923,
+    "win": 34.76,
+    "mean": -0.385,
+    "sd": 9.01,
+    "hold": 11.2
+   },
+   "n_events": 0
+  },
+  "C1_gap8": {
+   "X": {
+    "n": 4212,
+    "win": 35.68,
+    "mean": -0.603,
+    "sd": 8.52,
+    "hold": 10.9
+   },
+   "n_events": 0
+  }
+ },
+ "last_modified": {
+  "files": 136,
+  "utc_time_counts": {
+   "01:00": 118,
+   "15:30": 16,
+   "00:45": 1,
+   "00:00": 1
+  },
+  "max": "2026-09-25T15:30:24+00:00"
+ },
+ "entered": [],
+ "elapsed_s": 3898,
+ "bulk_sha256_16": {
+  "historical/2016/fins_summary_201609.csv.gz": "87b81c0086638d21",
+  "historical/2016/fins_summary_201610.csv.gz": "f76977c4fea518e0",
+  "historical/2016/fins_summary_201611.csv.gz": "2b2c26bbc44acace",
+  "historical/2016/fins_summary_201612.csv.gz": "b88bb585fc897ace",
+  "historical/2017/fins_summary_201701.csv.gz": "b7289d351068b35b",
+  "historical/2017/fins_summary_201702.csv.gz": "401decf5363f7dfa",
+  "historical/2017/fins_summary_201703.csv.gz": "6b4f04e0fcc44f84",
+  "historical/2017/fins_summary_201704.csv.gz": "c3a4f16c6ead6369",
+  "historical/2017/fins_summary_201705.csv.gz": "0a02442583154317",
+  "historical/2017/fins_summary_201706.csv.gz": "9d3fc594f05252b6",
+  "historical/2017/fins_summary_201707.csv.gz": "c41cf99a10af0854",
+  "historical/2017/fins_summary_201708.csv.gz": "001438bb1c04baa5",
+  "historical/2017/fins_summary_201709.csv.gz": "9f42feda03bdd6cb",
+  "historical/2017/fins_summary_201710.csv.gz": "20d4f8ee3dce5e5a",
+  "historical/2017/fins_summary_201711.csv.gz": "dd03a526d7fded2a",
+  "historical/2017/fins_summary_201712.csv.gz": "a0b4e189abe42e22",
+  "historical/2018/fins_summary_201801.csv.gz": "1af80aa4b8f4e841",
+  "historical/2018/fins_summary_201802.csv.gz": "abb365e2098e2dda",
+  "historical/2018/fins_summary_201803.csv.gz": "dea39c7e232565e0",
+  "historical/2018/fins_summary_201804.csv.gz": "2f6f345b473fbf75",
+  "historical/2018/fins_summary_201805.csv.gz": "50d25619a2919ad4",
+  "historical/2018/fins_summary_201806.csv.gz": "bb2416acc22c2e90",
+  "historical/2018/fins_summary_201807.csv.gz": "bc28e33a51ef80f3",
+  "historical/2018/fins_summary_201808.csv.gz": "06ee1fedb07b7195",
+  "historical/2018/fins_summary_201809.csv.gz": "11951b5e50559041",
+  "historical/2018/fins_summary_201810.csv.gz": "c09f5a0315b049a2",
+  "historical/2018/fins_summary_201811.csv.gz": "93eeb16820a70644",
+  "historical/2018/fins_summary_201812.csv.gz": "231f50c542e63b44",
+  "historical/2019/fins_summary_201901.csv.gz": "05be01e98808a5d1",
+  "historical/2019/fins_summary_201902.csv.gz": "e84becb05673fe1a",
+  "historical/2019/fins_summary_201903.csv.gz": "c0e8d143b1201999",
+  "historical/2019/fins_summary_201904.csv.gz": "8c7e5d0b23ab642e",
+  "historical/2019/fins_summary_201905.csv.gz": "7a501cc2f7411dd1",
+  "historical/2019/fins_summary_201906.csv.gz": "3869fc8be700785b",
+  "historical/2019/fins_summary_201907.csv.gz": "477163b6bb61f55e",
+  "historical/2019/fins_summary_201908.csv.gz": "60ba994fa6adaf5c",
+  "historical/2019/fins_summary_201909.csv.gz": "b8363dcf6e732b9b",
+  "historical/2019/fins_summary_201910.csv.gz": "fe6ab4ff3f8939ac",
+  "historical/2019/fins_summary_201911.csv.gz": "74bbb5db37ad5046",
+  "historical/2019/fins_summary_201912.csv.gz": "f85c5a6681c7c71c",
+  "historical/2020/fins_summary_202001.csv.gz": "abaefb6237529b69",
+  "historical/2020/fins_summary_202002.csv.gz": "c33dea6f6ddf22db",
+  "historical/2020/fins_summary_202003.csv.gz": "6f8f730a9331fa55",
+  "historical/2020/fins_summary_202004.csv.gz": "c58d2fd46bf65bec",
+  "historical/2020/fins_summary_202005.csv.gz": "2f7515b5c087f102",
+  "historical/2020/fins_summary_202006.csv.gz": "555fc37943896d23",
+  "historical/2020/fins_summary_202007.csv.gz": "1e73ed23d09d3835",
+  "historical/2020/fins_summary_202008.csv.gz": "7d8a0a99ce967e49",
+  "historical/2020/fins_summary_202009.csv.gz": "b57903059aa5e604",
+  "historical/2020/fins_summary_202010.csv.gz": "9b93dcbe01197aaf",
+  "historical/2020/fins_summary_202011.csv.gz": "9b37aba516104189",
+  "historical/2020/fins_summary_202012.csv.gz": "552296fbeee895ac",
+  "historical/2021/fins_summary_202101.csv.gz": "8f3c941e5f95e8a5",
+  "historical/2021/fins_summary_202102.csv.gz": "d09c88691fd04212",
+  "historical/2021/fins_summary_202103.csv.gz": "c01d8abc34ee22e7",
+  "historical/2021/fins_summary_202104.csv.gz": "71a108f021386069",
+  "historical/2021/fins_summary_202105.csv.gz": "275c1107a29fbce3",
+  "historical/2021/fins_summary_202106.csv.gz": "10eacc3847f5f639",
+  "historical/2021/fins_summary_202107.csv.gz": "2ba148312eea854a",
+  "historical/2021/fins_summary_202108.csv.gz": "0bedcff8bec2b614",
+  "historical/2021/fins_summary_202109.csv.gz": "c2db6839dbbd4fef",
+  "historical/2021/fins_summary_202110.csv.gz": "06ea59cc6cf19a71",
+  "historical/2021/fins_summary_202111.csv.gz": "a4d006abfd55d03b",
+  "historical/2021/fins_summary_202112.csv.gz": "7c345432422f2453",
+  "historical/2022/fins_summary_202201.csv.gz": "13814a81698d43b4",
+  "historical/2022/fins_summary_202202.csv.gz": "276cc5aae277c297",
+  "historical/2022/fins_summary_202203.csv.gz": "9ac56739ff281482",
+  "historical/2022/fins_summary_202204.csv.gz": "50f56fd927a2eb3c",
+  "historical/2022/fins_summary_202205.csv.gz": "a4bdf7a4dc8f338e",
+  "historical/2022/fins_summary_202206.csv.gz": "d91acfb8ec780758",
+  "historical/2022/fins_summary_202207.csv.gz": "6d51d889ba7655ae",
+  "historical/2022/fins_summary_202208.csv.gz": "fd5c179be07312f7",
+  "historical/2022/fins_summary_202209.csv.gz": "c9d6533c11e3191d",
+  "historical/2022/fins_summary_202210.csv.gz": "03e81861997c315c",
+  "historical/2022/fins_summary_202211.csv.gz": "c9e8dcaa7ad184eb",
+  "historical/2022/fins_summary_202212.csv.gz": "447544db4860e4b4",
+  "historical/2023/fins_summary_202301.csv.gz": "1cf689ed9d5b811b",
+  "historical/2023/fins_summary_202302.csv.gz": "8299f022c9585840",
+  "historical/2023/fins_summary_202303.csv.gz": "9086cf30f7de7c39",
+  "historical/2023/fins_summary_202304.csv.gz": "b14b7a2e263a7d7c",
+  "historical/2023/fins_summary_202305.csv.gz": "1cf3326f921a96cb",
+  "historical/2023/fins_summary_202306.csv.gz": "208c69a6aa0fece8",
+  "historical/2023/fins_summary_202307.csv.gz": "411ce9cc131c309e",
+  "historical/2023/fins_summary_202308.csv.gz": "2c6353e1b4a65c07",
+  "historical/2023/fins_summary_202309.csv.gz": "4defb957aebaea73",
+  "historical/2023/fins_summary_202310.csv.gz": "ea47114eea03e8e6",
+  "historical/2023/fins_summary_202311.csv.gz": "a54dfdd0c5f9eabd",
+  "historical/2023/fins_summary_202312.csv.gz": "2060cd1b8ce80c99",
+  "historical/2024/fins_summary_202401.csv.gz": "8dcfa6774c95a20c",
+  "historical/2024/fins_summary_202402.csv.gz": "b037196bd9234449",
+  "historical/2024/fins_summary_202403.csv.gz": "b2237b3dad41dbe2",
+  "historical/2024/fins_summary_202404.csv.gz": "d7f945217f34b6d9",
+  "historical/2024/fins_summary_202405.csv.gz": "f25a23d32d30cdce",
+  "historical/2024/fins_summary_202406.csv.gz": "68fed85121b80e21",
+  "historical/2024/fins_summary_202407.csv.gz": "2399c4141ea23ee0",
+  "historical/2024/fins_summary_202408.csv.gz": "0613c3f06fbbd9d0",
+  "historical/2024/fins_summary_202409.csv.gz": "b64c8c7fa0386d2a",
+  "historical/2024/fins_summary_202410.csv.gz": "cc66ebddb44dcc36",
+  "historical/2024/fins_summary_202411.csv.gz": "f548195fc62d3b34",
+  "historical/2024/fins_summary_202412.csv.gz": "3f506835d6681915",
+  "historical/2025/fins_summary_202501.csv.gz": "37019dfef725d5af",
+  "historical/2025/fins_summary_202502.csv.gz": "67181b5b62f8dc42",
+  "historical/2025/fins_summary_202503.csv.gz": "02484f31c6e89fe4",
+  "historical/2025/fins_summary_202504.csv.gz": "438b3a030d86f221",
+  "historical/2025/fins_summary_202505.csv.gz": "6fafd65cf142fb36",
+  "historical/2025/fins_summary_202506.csv.gz": "5cda1cae5d8ac252",
+  "historical/2025/fins_summary_202507.csv.gz": "e2d2d7d30bc595b7",
+  "historical/2025/fins_summary_202508.csv.gz": "ebbb32f9cabb3ffa",
+  "historical/2025/fins_summary_202509.csv.gz": "6fd99461d10f9da4",
+  "historical/2025/fins_summary_202510.csv.gz": "2290a0d3d22fc88a",
+  "historical/2025/fins_summary_202511.csv.gz": "da33b0053d0ad731",
+  "historical/2025/fins_summary_202512.csv.gz": "4f1ea5ff79986ad3",
+  "historical/2026/fins_summary_202601.csv.gz": "a15cc1fd68a18c1d",
+  "historical/2026/fins_summary_202602.csv.gz": "e5219656c384dda1",
+  "historical/2026/fins_summary_202603.csv.gz": "38ac693eccac3fbd",
+  "historical/2026/fins_summary_202604.csv.gz": "d6b4e11adada1483",
+  "historical/2026/fins_summary_202605.csv.gz": "9a12f1a03c866c96",
+  "historical/2026/fins_summary_202606.csv.gz": "60dd311ea6e40a9e",
+  "historical/2026/fins_summary_202607.csv.gz": "3766cd1e03676ea9",
+  "historical/2026/fins_summary_202608.csv.gz": "f084d1c803b2f578",
+  "live/fins_summary_20260901.csv.gz": "a2f1881ea3acd9a1",
+  "live/fins_summary_20260902.csv.gz": "ca856db881ab0bf1",
+  "live/fins_summary_20260903.csv.gz": "f7fe2fec34a8869f",
+  "live/fins_summary_20260904.csv.gz": "70d857ffc460d150",
+  "live/fins_summary_20260907.csv.gz": "decefb1cd495df4e",
+  "live/fins_summary_20260908.csv.gz": "7cb4cc5844dcc81b",
+  "live/fins_summary_20260909.csv.gz": "104728309a26e133",
+  "live/fins_summary_20260910.csv.gz": "33e4596fedc10baf",
+  "live/fins_summary_20260911.csv.gz": "4d65562f4393adec",
+  "live/fins_summary_20260914.csv.gz": "bc22c9ebfb710807",
+  "live/fins_summary_20260915.csv.gz": "e995344a1b456915",
+  "live/fins_summary_20260916.csv.gz": "53456a4ab3b5a320",
+  "live/fins_summary_20260917.csv.gz": "d7b0affe28cca0d5",
+  "live/fins_summary_20260918.csv.gz": "ffd79556758c46fa",
+  "live/fins_summary_20260924.csv.gz": "0eb952c31de18756",
+  "live/fins_summary_20260925.csv.gz": "583021cb73b4f0ae"
+ }
+}

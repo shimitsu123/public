@@ -1,0 +1,45 @@
+{
+ "plan": "standard",
+ "universe": "topix500",
+ "window": [
+  "2016-10-06",
+  "2026-09-25"
+ ],
+ "trade_start": "2017-01-18",
+ "members_final": 461,
+ "members_union": 581,
+ "dropped": 120,
+ "delisted_with_data": 54,
+ "missing": 0,
+ "requests": 701,
+ "results": {
+  "4x25_A": {
+   "cagr_pct": 1.31,
+   "max_dd_pct": -26.56,
+   "calmar": 0.05,
+   "trades": 378,
+   "win_rate": 39.9
+  },
+  "4x25_B": {
+   "cagr_pct": 1.26,
+   "max_dd_pct": -23.9,
+   "calmar": 0.05,
+   "trades": 381,
+   "win_rate": 39.6
+  },
+  "10x10_A": {
+   "cagr_pct": 1.02,
+   "max_dd_pct": -19.31,
+   "calmar": 0.05,
+   "trades": 759,
+   "win_rate": 40.6
+  },
+  "10x10_B": {
+   "cagr_pct": 0.92,
+   "max_dd_pct": -21.19,
+   "calmar": 0.04,
+   "trades": 809,
+   "win_rate": 39.3
+  }
+ }
+}

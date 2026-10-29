@@ -1,0 +1,68 @@
+{
+ "loop": 13,
+ "registered": "2026-10-12",
+ "plan": [
+  {
+   "id": "SQW",
+   "family": "选股·日历",
+   "route": "AB",
+   "verdict": "第一关不过"
+  },
+  {
+   "id": "YRE",
+   "family": "选股·日历",
+   "route": "AB",
+   "verdict": "第一关不过"
+  },
+  {
+   "id": "MON",
+   "family": "选股·日历",
+   "route": "AB",
+   "verdict": "第一关不过"
+  },
+  {
+   "id": "IDX",
+   "family": "选股·指数入替",
+   "route": "AB",
+   "verdict": "第一关不过",
+   "note": "分红修正后重跑：B3 不过（Calmar 合计 −0.003）；第二关 +4.08 pp < 随机最大 +5.35 pp。修正前的「更好候选」作废"
+  },
+  {
+   "id": "VCP",
+   "family": "选股·波动收缩",
+   "route": "AB",
+   "verdict": null
+  },
+  {
+   "id": "DDS",
+   "family": "选股·深跌",
+   "route": "AB",
+   "verdict": null
+  },
+  {
+   "id": "CSE",
+   "family": "选股·信用利差",
+   "route": "AB",
+   "verdict": null
+  },
+  {
+   "id": "FYB",
+   "family": "选股·业绩意外",
+   "route": "J",
+   "verdict": null
+  },
+  {
+   "id": "SRN",
+   "family": "选股·空売り",
+   "route": "J",
+   "verdict": null
+  },
+  {
+   "id": "CHR",
+   "family": "选股·现金",
+   "route": "J",
+   "verdict": null
+  }
+ ],
+ "status": "paused:IDX 修正后不是更好候选；VCP / DDS / CSE / FYB / SRN / CHR 没运行（等用户说继续）"
+}

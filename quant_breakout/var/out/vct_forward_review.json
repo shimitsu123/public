@@ -1,0 +1,30 @@
+{
+ "rows": 6,
+ "b3": {
+  "ret": -0.24,
+  "cagr": -19.99,
+  "dd": -1.64,
+  "calmar": -12.163
+ },
+ "vct": {
+  "ret": -0.24,
+  "cagr": -19.99,
+  "dd": -1.64,
+  "calmar": -12.163
+ },
+ "segments": [],
+ "judge": {
+  "days": 10,
+  "differ_days": 0,
+  "segments_5d": 0,
+  "b3_dd_min": -1.64,
+  "need": {
+   "days": false,
+   "differ": false,
+   "segments": false,
+   "dd": false
+  },
+  "eligible": false,
+  "label": "未定（还不能判定）"
+ }
+}

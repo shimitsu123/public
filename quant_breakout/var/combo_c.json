@@ -1,0 +1,11 @@
+{
+ "as_of": "2026-10-29",
+ "enabled": true,
+ "market": {
+  "n225_ma200": 0.0463,
+  "vix": 16.91,
+  "on": true
+ },
+ "stocks": {},
+ "errors": {}
+}

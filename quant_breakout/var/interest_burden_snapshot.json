@@ -1,0 +1,302 @@
+{
+ "asof": "2026-10-03",
+ "source": "財務省 法人企業統計調査 季報（資本金 10 億円以上、金融保険以外；e-Stat 0003060191）、FRED（Fed Z.1 / BEA NIPA / Moody's Baa）、BIS Debt service ratios",
+ "note": "研究（第三个研究循环第 6 轮 IBS / IBA，登记 d509c36，var/out/loop3_r06_interest.md）：「利息负担在加重就不开日本个股新仓」两个做法都第一关不过 → 只作背景、不进交易规则",
+ "jp": {
+  "quarter": "2026Q2",
+  "period": "2026 年 4〜6 月期",
+  "avail": "2026-09-30",
+  "icr": 11.8,
+  "icr_1y": 13.6,
+  "burden_pct": 8.5,
+  "r": 1.56,
+  "r_1y": 1.31,
+  "squeeze": true,
+  "since": "2023Q1",
+  "sectors": [
+   {
+    "sector": "電気・ガス業",
+    "icr": 3.9,
+    "icr_1y": 6.0,
+    "r": 1.29,
+    "r_1y": 1.05,
+    "state": true
+   },
+   {
+    "sector": "鉄鋼",
+    "icr": 6.7,
+    "icr_1y": 11.2,
+    "r": 1.53,
+    "r_1y": 1.08,
+    "state": true
+   },
+   {
+    "sector": "陸運業",
+    "icr": 6.7,
+    "icr_1y": 7.1,
+    "r": 1.44,
+    "r_1y": 1.31,
+    "state": true
+   },
+   {
+    "sector": "鉱業",
+    "icr": 6.8,
+    "icr_1y": 10.6,
+    "r": 4.66,
+    "r_1y": 5.42,
+    "state": false
+   },
+   {
+    "sector": "不動産業",
+    "icr": 7.3,
+    "icr_1y": 8.9,
+    "r": 1.22,
+    "r_1y": 0.99,
+    "state": true
+   },
+   {
+    "sector": "サービス業",
+    "icr": 7.6,
+    "icr_1y": 7.7,
+    "r": 1.73,
+    "r_1y": 1.57,
+    "state": true
+   },
+   {
+    "sector": "その他金融業",
+    "icr": 8.6,
+    "icr_1y": 8.9,
+    "r": 0.39,
+    "r_1y": 0.28,
+    "state": true
+   },
+   {
+    "sector": "倉庫・運輸関連業",
+    "icr": 9.5,
+    "icr_1y": 9.9,
+    "r": 0.75,
+    "r_1y": 0.68,
+    "state": true
+   },
+   {
+    "sector": "海運業",
+    "icr": 10.1,
+    "icr_1y": 27.8,
+    "r": 1.92,
+    "r_1y": 1.99,
+    "state": false
+   },
+   {
+    "sector": "化学",
+    "icr": 10.5,
+    "icr_1y": 16.4,
+    "r": 2.78,
+    "r_1y": 1.63,
+    "state": true
+   },
+   {
+    "sector": "パルプ・紙",
+    "icr": 12.4,
+    "icr_1y": 14.8,
+    "r": 1.12,
+    "r_1y": 0.89,
+    "state": false
+   },
+   {
+    "sector": "卸売業",
+    "icr": 12.8,
+    "icr_1y": 11.7,
+    "r": 1.47,
+    "r_1y": 1.48,
+    "state": false
+   },
+   {
+    "sector": "ガラス・土石製品",
+    "icr": 13.4,
+    "icr_1y": 12.6,
+    "r": 1.72,
+    "r_1y": 1.51,
+    "state": false
+   },
+   {
+    "sector": "情報・通信業",
+    "icr": 15.6,
+    "icr_1y": 18.2,
+    "r": 1.64,
+    "r_1y": 1.58,
+    "state": false
+   },
+   {
+    "sector": "非鉄金属",
+    "icr": 17.3,
+    "icr_1y": 9.4,
+    "r": 1.62,
+    "r_1y": 1.53,
+    "state": false
+   },
+   {
+    "sector": "食料品",
+    "icr": 18.3,
+    "icr_1y": 32.7,
+    "r": 1.8,
+    "r_1y": 1.27,
+    "state": false
+   },
+   {
+    "sector": "輸送用機器",
+    "icr": 18.3,
+    "icr_1y": 35.4,
+    "r": 2.59,
+    "r_1y": 2.03,
+    "state": false
+   },
+   {
+    "sector": "金属製品",
+    "icr": 18.9,
+    "icr_1y": 25.3,
+    "r": 1.53,
+    "r_1y": 1.24,
+    "state": false
+   },
+   {
+    "sector": "石油・石炭製品",
+    "icr": 21.2,
+    "icr_1y": -7.5,
+    "r": 1.28,
+    "r_1y": 1.24,
+    "state": false
+   },
+   {
+    "sector": "精密機器",
+    "icr": 23.9,
+    "icr_1y": 36.9,
+    "r": 1.46,
+    "r_1y": 1.26,
+    "state": false
+   },
+   {
+    "sector": "水産・農林業",
+    "icr": 24.3,
+    "icr_1y": 25.6,
+    "r": 1.16,
+    "r_1y": 0.84,
+    "state": false
+   },
+   {
+    "sector": "繊維製品",
+    "icr": 24.8,
+    "icr_1y": 18.6,
+    "r": 0.96,
+    "r_1y": 0.94,
+    "state": false
+   },
+   {
+    "sector": "電気機器",
+    "icr": 26.9,
+    "icr_1y": 22.4,
+    "r": 2.27,
+    "r_1y": 1.7,
+    "state": false
+   },
+   {
+    "sector": "建設業",
+    "icr": 30.8,
+    "icr_1y": 33.4,
+    "r": 1.44,
+    "r_1y": 1.17,
+    "state": false
+   },
+   {
+    "sector": "機械",
+    "icr": 36.8,
+    "icr_1y": 28.7,
+    "r": 1.53,
+    "r_1y": 1.83,
+    "state": false
+   },
+   {
+    "sector": "その他製品",
+    "icr": 37.2,
+    "icr_1y": 42.5,
+    "r": 1.39,
+    "r_1y": 1.11,
+    "state": false
+   },
+   {
+    "sector": "小売業",
+    "icr": 43.0,
+    "icr_1y": 52.1,
+    "r": 1.54,
+    "r_1y": 1.18,
+    "state": false
+   }
+  ],
+  "n_state": 8
+ },
+ "us": {
+  "quarter": "2026Q2",
+  "avail": "2026-09-30",
+  "icr": 5.8,
+  "icr_1y": 5.4,
+  "burden_pct": 17.1,
+  "r": 4.16,
+  "r_1y": 4.35,
+  "baa_q": 6.04,
+  "baa_last": 6.47,
+  "baa_last_month": "2026-09",
+  "refi_gap": 1.88,
+  "squeeze": false,
+  "since": null
+ },
+ "bis": {
+  "quarter": "2026Q1",
+  "rows": [
+   {
+    "cty": "JP",
+    "dsr": 32.5,
+    "chg_1y": 1.2
+   },
+   {
+    "cty": "US",
+    "dsr": 36.9,
+    "chg_1y": -0.9
+   },
+   {
+    "cty": "DE",
+    "dsr": 32.1,
+    "chg_1y": 0.0
+   },
+   {
+    "cty": "FR",
+    "dsr": 58.2,
+    "chg_1y": 1.5
+   },
+   {
+    "cty": "GB",
+    "dsr": 27.3,
+    "chg_1y": 0.3
+   },
+   {
+    "cty": "KR",
+    "dsr": 35.4,
+    "chg_1y": -2.5
+   },
+   {
+    "cty": "CA",
+    "dsr": 57.3,
+    "chg_1y": -0.2
+   },
+   {
+    "cty": "AU",
+    "dsr": 40.2,
+    "chg_1y": 1.9
+   }
+  ]
+ },
+ "checked": "2026-10-03",
+ "want": {
+  "jp": "2026Q2",
+  "us": "2026Q2",
+  "bis": "2026Q1"
+ }
+}

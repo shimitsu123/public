@@ -1,0 +1,1330 @@
+{
+ "title": "第十一个研究循环：卖法（按股票种类 / 周期区分）—— 直到找到「更好」的卖法才停",
+ "start": "2026-10-05",
+ "registered": "见 sim_changes 同日「第十一个研究循环登记」",
+ "user_request": "换方向研究卖法，有可能每个股票种类周期都不一样？（2026-10-05，待办〔58〕③）",
+ "rules": "scripts/research_loop11.py 开头（基准 B3、题目只限按种类区分的卖法、第一关两条路线 + V4〜V6、第二关种类标签随机打乱、上限、家族、ID 不重用、停下的情况）",
+ "status": "exhausted",
+ "cap": 20,
+ "family_cap": 3,
+ "family_prefix": "卖法",
+ "kinds": [
+  "label"
+ ],
+ "criteria": {
+  "win_min_pp": 2.0,
+  "era_win_tol_pp": 2.0,
+  "era_tol": 0.02,
+  "dd_tol_pp": 2.0,
+  "half_tol": 0.02,
+  "sum_min_a": 0.03,
+  "win_tol_a_pp": 2.0,
+  "placebo_n": 400,
+  "placebo_n_both": 800,
+  "other_pools": [
+   "W",
+   "Jx"
+  ],
+  "unseen_pool": "Zx",
+  "stage1": "路线 B：合起来胜率差 ≥ +2.0 pp 且每笔差 ≥ 0、每个年代胜率差 ≥ −2.0 pp、账户不变差（同第十个循环 V3）；路线 A：Calmar 差合计 ≥ +0.03、每个年代 ≥ −0.02、回撤不深 2 pp 以上、两半合计 ≥ −0.02、合起来胜率差 ≥ −2.0 pp；V4 W / Jx 配对假想单笔同方向（B：胜率差 > 0 且每笔差 ≥ 0；A：每笔差 > 0）；V5 学参数的两种检验；V6 事后的在 Zx 同方向",
+  "stage2": "每个年代把全部 W2 信号的种类标签随机重排（种子 numpy.random.default_rng([20261005, 11, s])）；过一条路线 400 次、两条 800 次；过的路线上候选严格大于随机里的最大值"
+ },
+ "baseline_def": "B3 = 模拟盘 / 执行器现在的规则（同第九、十个循环；scripts/loop6_common.load3）；J 到 2026-09-30",
+ "baseline": {
+  "Z": {
+   "cagr": 17.07,
+   "dd": -14.29,
+   "calmar": 1.194,
+   "n": 35,
+   "mean": 5.999,
+   "win": 65.7,
+   "h1": 1.422,
+   "h2": 1.722
+  },
+  "E": {
+   "cagr": 14.53,
+   "dd": -23.19,
+   "calmar": 0.627,
+   "n": 43,
+   "mean": 1.286,
+   "win": 41.9,
+   "h1": 0.215,
+   "h2": 1.479
+  },
+  "J": {
+   "cagr": 20.02,
+   "dd": -29.61,
+   "calmar": 0.676,
+   "n": 62,
+   "mean": 3.057,
+   "win": 48.4,
+   "h1": 0.722,
+   "h2": 0.79
+  }
+ },
+ "success": {
+  "n": 140,
+  "win": 50.72857142857143,
+  "mean": 3.24855
+ },
+ "prereq_ok": true,
+ "fingerprint": "3b2e8757be7b4a74",
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-05",
+   "title": "个股上涨段长度 ULC / 个股走势顺滑度 ERK / 波动分档（学参数）VOK",
+   "registered": "cdfaff0",
+   "script": "scripts/loop11_r01_cycle.py",
+   "output": "var/out/loop11_r01_cycle.md",
+   "vok_full_map": {
+    "low": "base",
+    "mid": "base",
+    "high": "wide"
+   },
+   "approaches": [
+    {
+     "id": "ULC",
+     "family": "卖法·个股上涨段长度",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": 1.34,
+     "dmean": -1.318,
+     "sum": -0.167,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.052,
+      "E": -0.151,
+      "J": 0.036
+     },
+     "era_dwin": {
+      "Z": -7.8,
+      "E": -1.4,
+      "J": 7.8
+     },
+     "pools": {
+      "W": {
+       "dwin": -0.228,
+       "dmean": -0.0673,
+       "changed": 272
+      },
+      "Jx": {
+       "dwin": -0.631,
+       "dmean": -0.1332,
+       "changed": 353
+      },
+      "Zx": {
+       "dwin": -1.312,
+       "dmean": -0.3638,
+       "changed": 202
+      }
+     }
+    },
+    {
+     "id": "ERK",
+     "family": "卖法·个股趋势顺滑度",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -1.44,
+     "dmean": -0.759,
+     "sum": 0.012,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": 0.186,
+      "E": -0.199,
+      "J": 0.025
+     },
+     "era_dwin": {
+      "Z": -4.6,
+      "E": -4.7,
+      "J": 2.4
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.913,
+       "dmean": 0.0446,
+       "changed": 294
+      },
+      "Jx": {
+       "dwin": 0.0,
+       "dmean": -0.2072,
+       "changed": 476
+      },
+      "Zx": {
+       "dwin": 0.525,
+       "dmean": 0.0245,
+       "changed": 233
+      }
+     }
+    },
+    {
+     "id": "VOK",
+     "family": "卖法·波动分档（学参数）",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": 2.21,
+     "dmean": 0.16,
+     "sum": -0.042,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": true,
+       "B2": true,
+       "B3": false,
+       "V4": false,
+       "V5": false,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": false,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": 0.009,
+      "E": -0.024,
+      "J": -0.027
+     },
+     "era_dwin": {
+      "Z": -1.0,
+      "E": 5.6,
+      "J": 1.6
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.0,
+       "dmean": 0.3006,
+       "changed": 133
+      },
+      "Jx": {
+       "dwin": 0.379,
+       "dmean": -0.0182,
+       "changed": 264
+      },
+      "Zx": {
+       "dwin": -1.05,
+       "dmean": 0.0321,
+       "changed": 94
+      }
+     }
+    }
+   ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-05",
+   "title": "业种景气循环（学参数）SCY / 规模流动性 SZK / 个股方差比 VRK",
+   "registered": "a96ccb0",
+   "script": "scripts/loop11_r02_sector.py",
+   "output": "var/out/loop11_r02_sector.md",
+   "scy_full_map": {
+    "cyc": "base",
+    "def": "base",
+    "fin": "base"
+   },
+   "approaches": [
+    {
+     "id": "SCY",
+     "family": "卖法·业种景气循环（学参数）",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": 0.0,
+     "dmean": 0.0,
+     "sum": 0.0,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": true,
+       "B3": true,
+       "V4": false,
+       "V5": false,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": true,
+       "A3": true,
+       "V4": false,
+       "V5": false,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.0
+     },
+     "era_dwin": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.0
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.0,
+       "dmean": 0.0,
+       "changed": 0
+      },
+      "Jx": {
+       "dwin": 0.0,
+       "dmean": 0.0,
+       "changed": 0
+      },
+      "Zx": {
+       "dwin": 0.0,
+       "dmean": 0.0,
+       "changed": 0
+      }
+     }
+    },
+    {
+     "id": "SZK",
+     "family": "卖法·规模流动性",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": 0.38,
+     "dmean": -0.846,
+     "sum": -0.361,
+     "passed": 4,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": true,
+       "B3": false,
+       "V4": true,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": true,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.288,
+      "E": -0.048,
+      "J": -0.025
+     },
+     "era_dwin": {
+      "Z": -1.2,
+      "E": 2.0,
+      "J": 0.8
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.685,
+       "dmean": 0.6909,
+       "changed": 438
+      },
+      "Jx": {
+       "dwin": 0.638,
+       "dmean": 0.249,
+       "changed": 734
+      },
+      "Zx": {
+       "dwin": 5.249,
+       "dmean": 1.0679,
+       "changed": 380
+      }
+     }
+    },
+    {
+     "id": "VRK",
+     "family": "卖法·个股自相关（方差比）",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -0.75,
+     "dmean": -0.709,
+     "sum": -0.195,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": 0.0,
+      "E": -0.186,
+      "J": -0.009
+     },
+     "era_dwin": {
+      "Z": -6.9,
+      "E": 4.6,
+      "J": -0.8
+     },
+     "pools": {
+      "W": {
+       "dwin": -0.685,
+       "dmean": -0.2182,
+       "changed": 308
+      },
+      "Jx": {
+       "dwin": 0.253,
+       "dmean": 0.0299,
+       "changed": 471
+      },
+      "Zx": {
+       "dwin": -0.525,
+       "dmean": -0.1871,
+       "changed": 260
+      }
+     }
+    }
+   ]
+  },
+  {
+   "round": 3,
+   "date": "2026-10-05",
+   "title": "信息离散度 FRG / 对日経 β（学参数）BTK / 业种动量 SMK",
+   "registered": "8798b70",
+   "script": "scripts/loop11_r03_info.py",
+   "output": "var/out/loop11_r03_info.md",
+   "btk_full_map": {
+    "low": "base",
+    "mid": "base",
+    "high": "base"
+   },
+   "approaches": [
+    {
+     "id": "FRG",
+     "family": "卖法·信息离散度",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -1.76,
+     "dmean": -0.732,
+     "sum": -0.274,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.195,
+      "E": -0.101,
+      "J": 0.022
+     },
+     "era_dwin": {
+      "Z": -10.4,
+      "E": -3.8,
+      "J": 4.0
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.228,
+       "dmean": 0.3416,
+       "changed": 301
+      },
+      "Jx": {
+       "dwin": 0.0,
+       "dmean": -0.2142,
+       "changed": 501
+      },
+      "Zx": {
+       "dwin": 0.0,
+       "dmean": -0.1597,
+       "changed": 255
+      }
+     }
+    },
+    {
+     "id": "BTK",
+     "family": "卖法·对日経 β（学参数）",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": 0.0,
+     "dmean": 0.0,
+     "sum": 0.0,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": true,
+       "B3": true,
+       "V4": false,
+       "V5": false,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": true,
+       "A3": true,
+       "V4": false,
+       "V5": false,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.0
+     },
+     "era_dwin": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.0
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.0,
+       "dmean": 0.0,
+       "changed": 0
+      },
+      "Jx": {
+       "dwin": 0.0,
+       "dmean": 0.0,
+       "changed": 0
+      },
+      "Zx": {
+       "dwin": 0.0,
+       "dmean": 0.0,
+       "changed": 0
+      }
+     }
+    },
+    {
+     "id": "SMK",
+     "family": "卖法·业种动量",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -2.84,
+     "dmean": -1.712,
+     "sum": -0.326,
+     "passed": 2,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.268,
+      "E": 0.015,
+      "J": -0.073
+     },
+     "era_dwin": {
+      "Z": -5.2,
+      "E": 5.8,
+      "J": -8.1
+     },
+     "pools": {
+      "W": {
+       "dwin": -0.228,
+       "dmean": -0.0011,
+       "changed": 278
+      },
+      "Jx": {
+       "dwin": 0.761,
+       "dmean": 0.017,
+       "changed": 373
+      },
+      "Zx": {
+       "dwin": 0.262,
+       "dmean": 0.2223,
+       "changed": 242
+      }
+     }
+    }
+   ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-05",
+   "title": "业种自己的周期 ICY / 个别行情程度 RSD / 价值成长 DVY",
+   "registered": "c4b8937",
+   "script": "scripts/loop11_r04_industry.py",
+   "output": "var/out/loop11_r04_industry.md",
+   "approaches": [
+    {
+     "id": "ICY",
+     "family": "卖法·业种自己的周期",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -1.09,
+     "dmean": -0.444,
+     "sum": 0.116,
+     "passed": 4,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": true,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": 0.197,
+      "E": -0.04,
+      "J": -0.041
+     },
+     "era_dwin": {
+      "Z": -8.9,
+      "E": 4.4,
+      "J": -0.8
+     },
+     "pools": {
+      "W": {
+       "dwin": -1.37,
+       "dmean": -0.1997,
+       "changed": 316
+      },
+      "Jx": {
+       "dwin": -0.253,
+       "dmean": -0.0303,
+       "changed": 336
+      },
+      "Zx": {
+       "dwin": -0.262,
+       "dmean": -0.0502,
+       "changed": 256
+      }
+     }
+    },
+    {
+     "id": "RSD",
+     "family": "卖法·个别行情程度",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -1.43,
+     "dmean": -1.086,
+     "sum": -0.206,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.023,
+      "E": -0.15,
+      "J": -0.033
+     },
+     "era_dwin": {
+      "Z": -7.8,
+      "E": 2.3,
+      "J": -0.8
+     },
+     "pools": {
+      "W": {
+       "dwin": -2.055,
+       "dmean": -0.0525,
+       "changed": 312
+      },
+      "Jx": {
+       "dwin": -0.892,
+       "dmean": 0.0003,
+       "changed": 565
+      },
+      "Zx": {
+       "dwin": 3.412,
+       "dmean": 0.5208,
+       "changed": 290
+      }
+     }
+    },
+    {
+     "id": "DVY",
+     "family": "卖法·价值成长",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -1.11,
+     "dmean": -1.005,
+     "sum": -0.173,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.189,
+      "E": 0.028,
+      "J": -0.012
+     },
+     "era_dwin": {
+      "Z": -2.4,
+      "E": 4.6,
+      "J": -3.1
+     },
+     "pools": {
+      "W": {
+       "dwin": -1.598,
+       "dmean": -0.7579,
+       "changed": 246
+      },
+      "Jx": {
+       "dwin": -1.01,
+       "dmean": -0.3045,
+       "changed": 431
+      },
+      "Zx": {
+       "dwin": 0.262,
+       "dmean": 0.2439,
+       "changed": 221
+      }
+     }
+    }
+   ]
+  },
+  {
+   "round": 5,
+   "date": "2026-10-05",
+   "title": "选股闸门改收紧：HWT 5〜10 月 / X2T x2 ≤ 0 / JRT 日経落后核心（事后）",
+   "registered": "d7df49e",
+   "script": "scripts/loop11_r05_gates.py",
+   "output": "var/out/loop11_r05_gates.md",
+   "approaches": [
+    {
+     "id": "HWT",
+     "family": "卖法·选股闸门改收紧",
+     "kind": "label",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -0.06,
+     "dmean": -0.673,
+     "sum": -0.197,
+     "passed": 2,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      }
+     },
+     "d": {
+      "Z": -0.233,
+      "E": -0.018,
+      "J": 0.054
+     },
+     "era_dwin": {
+      "Z": -5.2,
+      "E": 2.3,
+      "J": 0.0
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.457,
+       "dmean": -0.2677,
+       "changed": 234
+      },
+      "Jx": {
+       "dwin": 1.01,
+       "dmean": 0.0677,
+       "changed": 365
+      },
+      "Zx": {
+       "dwin": -1.05,
+       "dmean": -0.6659,
+       "changed": 227
+      }
+     }
+    },
+    {
+     "id": "X2T",
+     "family": "卖法·选股闸门改收紧",
+     "kind": "label",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 2.03,
+     "dmean": 0.015,
+     "sum": 0.028,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": true,
+       "B2": true,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      }
+     },
+     "d": {
+      "Z": -0.025,
+      "E": 0.033,
+      "J": 0.02
+     },
+     "era_dwin": {
+      "Z": -0.7,
+      "E": 0.0,
+      "J": 4.0
+     },
+     "pools": {
+      "W": {
+       "dwin": -0.457,
+       "dmean": -0.4368,
+       "changed": 134
+      },
+      "Jx": {
+       "dwin": 0.126,
+       "dmean": 0.0709,
+       "changed": 186
+      },
+      "Zx": {
+       "dwin": -1.312,
+       "dmean": -0.2601,
+       "changed": 142
+      }
+     }
+    },
+    {
+     "id": "JRT",
+     "family": "卖法·选股闸门改收紧",
+     "kind": "label",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -0.36,
+     "dmean": -0.057,
+     "sum": 0.004,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": true,
+       "B3": true,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      },
+      "A": {
+       "A1": false,
+       "A2": true,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      }
+     },
+     "d": {
+      "Z": -0.01,
+      "E": 0.005,
+      "J": 0.009
+     },
+     "era_dwin": {
+      "Z": -1.8,
+      "E": 2.3,
+      "J": -1.6
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.228,
+       "dmean": -0.1151,
+       "changed": 35
+      },
+      "Jx": {
+       "dwin": 0.253,
+       "dmean": 0.0772,
+       "changed": 108
+      },
+      "Zx": {
+       "dwin": -1.575,
+       "dmean": -0.3569,
+       "changed": 60
+      }
+     }
+    }
+   ]
+  },
+  {
+   "round": 6,
+   "date": "2026-10-05",
+   "title": "小票放宽（单边）SZS / 趋势阶段 TAG / 52 周高点 N52（事后）",
+   "registered": "6936508",
+   "script": "scripts/loop11_r06_stage.py",
+   "output": "var/out/loop11_r06_stage.md",
+   "approaches": [
+    {
+     "id": "SZS",
+     "family": "卖法·小票放宽（单边）",
+     "kind": "label",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 1.89,
+     "dmean": -0.512,
+     "sum": -0.406,
+     "passed": 4,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": true,
+       "B3": false,
+       "V4": true,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": true,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.346,
+      "E": -0.057,
+      "J": -0.003
+     },
+     "era_dwin": {
+      "Z": -1.2,
+      "E": 0.6,
+      "J": 4.8
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.685,
+       "dmean": 0.6837,
+       "changed": 437
+      },
+      "Jx": {
+       "dwin": 0.51,
+       "dmean": 0.2447,
+       "changed": 720
+      },
+      "Zx": {
+       "dwin": 5.249,
+       "dmean": 1.0679,
+       "changed": 380
+      }
+     }
+    },
+    {
+     "id": "TAG",
+     "family": "卖法·趋势阶段",
+     "kind": "label",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 0.75,
+     "dmean": -0.665,
+     "sum": -0.026,
+     "passed": 4,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": true,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": true,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": 0.063,
+      "E": -0.022,
+      "J": -0.067
+     },
+     "era_dwin": {
+      "Z": 0.0,
+      "E": 1.7,
+      "J": 0.0
+     },
+     "pools": {
+      "W": {
+       "dwin": 0.0,
+       "dmean": 0.1724,
+       "changed": 280
+      },
+      "Jx": {
+       "dwin": -1.014,
+       "dmean": 0.0268,
+       "changed": 493
+      },
+      "Zx": {
+       "dwin": 1.05,
+       "dmean": 0.3026,
+       "changed": 234
+      }
+     }
+    },
+    {
+     "id": "N52",
+     "family": "卖法·52 周高点",
+     "kind": "label",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.5,
+     "dmean": -0.252,
+     "sum": 0.115,
+     "passed": 4,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": true,
+       "B3": true,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      },
+      "A": {
+       "A1": true,
+       "A2": true,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      }
+     },
+     "d": {
+      "Z": 0.087,
+      "E": 0.007,
+      "J": 0.021
+     },
+     "era_dwin": {
+      "Z": 4.6,
+      "E": 5.7,
+      "J": 0.8
+     },
+     "pools": {
+      "W": {
+       "dwin": -0.913,
+       "dmean": -0.5683,
+       "changed": 304
+      },
+      "Jx": {
+       "dwin": -1.142,
+       "dmean": -0.1627,
+       "changed": 551
+      },
+      "Zx": {
+       "dwin": 1.05,
+       "dmean": -0.3073,
+       "changed": 242
+      }
+     }
+    }
+   ]
+  },
+  {
+   "round": 7,
+   "date": "2026-10-05",
+   "title": "个股上涨周期定最长持有 TCY / 突破量能 VBK",
+   "registered": "1714945",
+   "script": "scripts/loop11_r07_last.py",
+   "output": "var/out/loop11_r07_last.md",
+   "approaches": [
+    {
+     "id": "TCY",
+     "family": "卖法·个股上涨段长度",
+     "kind": "label",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.84,
+     "dmean": -0.586,
+     "sum": -0.154,
+     "passed": 2,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": true,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": false
+      }
+     },
+     "d": {
+      "Z": -0.195,
+      "E": -0.005,
+      "J": 0.046
+     },
+     "era_dwin": {
+      "Z": 1.9,
+      "E": 2.3,
+      "J": 5.6
+     },
+     "pools": {
+      "W": {
+       "dwin": 1.598,
+       "dmean": -0.6844,
+       "changed": 373
+      },
+      "Jx": {
+       "dwin": 2.02,
+       "dmean": -0.0559,
+       "changed": 579
+      },
+      "Zx": {
+       "dwin": 0.525,
+       "dmean": -0.3662,
+       "changed": 255
+      }
+     }
+    },
+    {
+     "id": "VBK",
+     "family": "卖法·突破量能",
+     "kind": "label",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": 1.16,
+     "dmean": -1.639,
+     "sum": -0.543,
+     "passed": 3,
+     "ok_routes": [],
+     "checks": {
+      "B": {
+       "B1": false,
+       "B2": false,
+       "B3": false,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      },
+      "A": {
+       "A1": false,
+       "A2": false,
+       "A3": true,
+       "V4": false,
+       "V5": true,
+       "V6": true
+      }
+     },
+     "d": {
+      "Z": -0.354,
+      "E": -0.129,
+      "J": -0.06
+     },
+     "era_dwin": {
+      "Z": -2.1,
+      "E": 0.6,
+      "J": 3.3
+     },
+     "pools": {
+      "W": {
+       "dwin": -1.37,
+       "dmean": -0.272,
+       "changed": 276
+      },
+      "Jx": {
+       "dwin": -0.38,
+       "dmean": 0.0476,
+       "changed": 538
+      },
+      "Zx": {
+       "dwin": 2.887,
+       "dmean": 0.3004,
+       "changed": 270
+      }
+     }
+    }
+   ]
+  }
+ ],
+ "exhausted": {
+  "date": "2026-10-05",
+  "used": 20,
+  "closest": [
+   {
+    "round": 6,
+    "id": "N52",
+    "verdict": "第一关不过",
+    "dwin": 3.5,
+    "sum": 0.115,
+    "passed": 4
+   },
+   {
+    "round": 6,
+    "id": "SZS",
+    "verdict": "第一关不过",
+    "dwin": 1.89,
+    "sum": -0.406,
+    "passed": 4
+   },
+   {
+    "round": 6,
+    "id": "TAG",
+    "verdict": "第一关不过",
+    "dwin": 0.75,
+    "sum": -0.026,
+    "passed": 4
+   }
+  ],
+  "summary": "20 个做法：第一关 0 个通过；路线 A 三条全过的只有 N52（扩大池每笔都变差）、B1 只过 VOK / X2T；最接近 N52 / SZS / TAG（过 4 / 6）；只描述：种类之间周期差得不多，最好的卖法跟着年代变 → 待办〔59〕"
+ }
+}

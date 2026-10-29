@@ -1,0 +1,110 @@
+{
+ "fetch_date": "2026-10-15",
+ "fetched_at": "2026-10-15T21:02:56+09:00",
+ "yfinance": "1.7.0",
+ "pandas": "3.0.6",
+ "tickers": 227,
+ "files": {
+  "60m": {
+   "file": "yf_60m_2026-10-15.parquet",
+   "sha256": "499a4e2df2eb1064f06be1e1457a08f4f3d8a40683cc59c9e6d87ebae937c221",
+   "rows": 1144126,
+   "tickers": 226,
+   "first": "2023-10-17 09:00:00+09:00",
+   "last": "2026-10-15 15:00:00+09:00"
+  },
+  "15m": {
+   "file": "yf_15m_2026-10-15.parquet",
+   "sha256": "700834a1c48fc424989e9ed127d570d8e0f6b1a02070ac3cb1708ba59927aa55",
+   "rows": 312910,
+   "tickers": 227,
+   "first": "2026-07-16 09:00:00+09:00",
+   "last": "2026-10-15 15:15:00+09:00"
+  },
+  "5m": {
+   "file": "yf_5m_2026-10-15.parquet",
+   "sha256": "fb3c6736c957985003be488e32769a2a38b14cf2897095dcd2c1ea9a8fa81ed9",
+   "rows": 888132,
+   "tickers": 227,
+   "first": "2026-07-16 09:00:00+09:00",
+   "last": "2026-10-15 15:25:00+09:00"
+  },
+  "2m": {
+   "file": "yf_2m_2026-10-15.parquet",
+   "sha256": "672ee6d2bf16f15ee0596cb0046d501f18981811cc104ed0d194a5697cee1587",
+   "rows": 1139843,
+   "tickers": 227,
+   "first": "2026-08-28 09:02:00+09:00",
+   "last": "2026-10-15 15:24:00+09:00"
+  },
+  "1m": {
+   "file": "yf_1m_2026-10-15.parquet",
+   "sha256": "2fa5657354958adcee443ddb160ee5a7f9f5e075d969bfc3e9b578cd471496bc",
+   "rows": 1296713,
+   "tickers": 227,
+   "first": "2026-09-16 09:04:00+09:00",
+   "last": "2026-10-15 15:25:00+09:00"
+  },
+  "1d_raw": {
+   "file": "yf_1d_raw_2026-10-15.parquet",
+   "sha256": "a042eb03c00b80a13e55fc22734e8558692eddf2bf99e59ba1711d8ea4467d9d",
+   "rows": 274524,
+   "tickers": 227,
+   "first": "2021-10-15 00:00:00",
+   "last": "2026-10-15 00:00:00"
+  },
+  "actions": {
+   "file": "yf_actions_2026-10-15.parquet",
+   "sha256": "18fd1773cd5a93d04e2db9e5eac545a0eb2fd709a6108af635187bf3ff65643d",
+   "rows": 2112,
+   "tickers": 225,
+   "first": "2021-12-29 00:00:00",
+   "last": "2026-10-05 00:00:00"
+  }
+ },
+ "missing": {
+  "60m": [
+   "6525.T"
+  ],
+  "15m": [],
+  "5m": [],
+  "2m": [],
+  "1m": [],
+  "1d_raw": []
+ },
+ "daily_fingerprint": {
+  "sha": "f68fbefd5409f20c",
+  "samples": {
+   "Z": {
+    "tickers": 201,
+    "days": 1845,
+    "cells": 340315,
+    "eligible": 265742
+   },
+   "E": {
+    "tickers": 217,
+    "days": 2775,
+    "cells": 575846,
+    "eligible": 509017
+   },
+   "W": {
+    "tickers": 669,
+    "days": 2811,
+    "cells": 1731444,
+    "eligible": 433648
+   },
+   "J": {
+    "tickers": 213,
+    "days": 2436,
+    "cells": 509173,
+    "eligible": 496580
+   },
+   "Jx": {
+    "tickers": 1165,
+    "days": 2436,
+    "cells": 2594353,
+    "eligible": 867468
+   }
+  }
+ }
+}

@@ -1,0 +1,4311 @@
+{
+"source": "JPX 東証上場銘柄一覧（https://www.jpx.co.jp/markets/statistics-equities/misc/01.html，data_j.xlsx）",
+"as_of": "20260831",
+"excluded_33": [
+"倉庫・運輸関連業",
+"空運業",
+"陸運業"
+],
+"segments": {
+"T500x": [
+{
+"code": "1333",
+"s33": "水産・農林業",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "1414",
+"s33": "建設業",
+"size": "TOPIX Mid400",
+"group": "construction"
+},
+{
+"code": "1417",
+"s33": "建設業",
+"size": "TOPIX Mid400",
+"group": "construction"
+},
+{
+"code": "1719",
+"s33": "建設業",
+"size": "TOPIX Mid400",
+"group": "construction"
+},
+{
+"code": "1820",
+"s33": "建設業",
+"size": "TOPIX Mid400",
+"group": "construction"
+},
+{
+"code": "1860",
+"s33": "建設業",
+"size": "TOPIX Mid400",
+"group": "construction"
+},
+{
+"code": "1878",
+"s33": "不動産業",
+"size": "TOPIX Mid400",
+"group": "realestate"
+},
+{
+"code": "1893",
+"s33": "建設業",
+"size": "TOPIX Mid400",
+"group": "construction"
+},
+{
+"code": "1911",
+"s33": "建設業",
+"size": "TOPIX Mid400",
+"group": "construction"
+},
+{
+"code": "1942",
+"s33": "建設業",
+"size": "TOPIX Mid400",
+"group": "construction"
+},
+{
+"code": "1944",
+"s33": "建設業",
+"size": "TOPIX Mid400",
+"group": "construction"
+},
+{
+"code": "1951",
+"s33": "建設業",
+"size": "TOPIX Mid400",
+"group": "construction"
+},
+{
+"code": "1959",
+"s33": "建設業",
+"size": "TOPIX Mid400",
+"group": "construction"
+},
+{
+"code": "1969",
+"s33": "建設業",
+"size": "TOPIX Mid400",
+"group": "construction"
+},
+{
+"code": "2127",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "2181",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "2201",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2206",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2212",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2222",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2229",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2264",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2267",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2327",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "2331",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "2371",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "2433",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "2531",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2579",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2587",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2593",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2607",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2670",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "2784",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "2809",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2810",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2811",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2875",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "2897",
+"s33": "食料品",
+"size": "TOPIX Mid400",
+"group": "food"
+},
+{
+"code": "3003",
+"s33": "不動産業",
+"size": "TOPIX Mid400",
+"group": "realestate"
+},
+{
+"code": "3038",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "3048",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "3064",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "3088",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "3105",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "3107",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "3116",
+"s33": "輸送用機器",
+"size": "TOPIX Mid400",
+"group": "auto"
+},
+{
+"code": "3132",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "3197",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "3231",
+"s33": "不動産業",
+"size": "TOPIX Mid400",
+"group": "realestate"
+},
+{
+"code": "3288",
+"s33": "不動産業",
+"size": "TOPIX Mid400",
+"group": "realestate"
+},
+{
+"code": "3291",
+"s33": "不動産業",
+"size": "TOPIX Mid400",
+"group": "realestate"
+},
+{
+"code": "3349",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "3360",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "3391",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "3397",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "3563",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "3591",
+"s33": "繊維製品",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "3626",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "3635",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "3769",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "3774",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "3923",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "3941",
+"s33": "パルプ・紙",
+"size": "TOPIX Mid400",
+"group": "paper"
+},
+{
+"code": "3994",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "4045",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4062",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "4091",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4114",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4118",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "417A",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "4182",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4186",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4194",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "4202",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4203",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4204",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4205",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4206",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4272",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4401",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4403",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4516",
+"s33": "医薬品",
+"size": "TOPIX Mid400",
+"group": "pharma"
+},
+{
+"code": "4527",
+"s33": "医薬品",
+"size": "TOPIX Mid400",
+"group": "pharma"
+},
+{
+"code": "4528",
+"s33": "医薬品",
+"size": "TOPIX Mid400",
+"group": "pharma"
+},
+{
+"code": "4536",
+"s33": "医薬品",
+"size": "TOPIX Mid400",
+"group": "pharma"
+},
+{
+"code": "4540",
+"s33": "医薬品",
+"size": "TOPIX Mid400",
+"group": "pharma"
+},
+{
+"code": "4544",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "4587",
+"s33": "医薬品",
+"size": "TOPIX Mid400",
+"group": "pharma"
+},
+{
+"code": "4612",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4613",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4626",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4631",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4665",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "4666",
+"s33": "不動産業",
+"size": "TOPIX Mid400",
+"group": "realestate"
+},
+{
+"code": "4676",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "4680",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "4681",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "4684",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "4732",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "4733",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "4768",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "4887",
+"s33": "医薬品",
+"size": "TOPIX Mid400",
+"group": "pharma"
+},
+{
+"code": "4912",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4922",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4927",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4967",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "4980",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "5016",
+"s33": "非鉄金属",
+"size": "TOPIX Mid400",
+"group": "steel_metal"
+},
+{
+"code": "5021",
+"s33": "石油・石炭製品",
+"size": "TOPIX Mid400",
+"group": "energy"
+},
+{
+"code": "5076",
+"s33": "建設業",
+"size": "TOPIX Mid400",
+"group": "construction"
+},
+{
+"code": "5105",
+"s33": "ゴム製品",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "5110",
+"s33": "ゴム製品",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "5232",
+"s33": "ガラス・土石製品",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "5334",
+"s33": "ガラス・土石製品",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "5344",
+"s33": "ガラス・土石製品",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "5393",
+"s33": "ガラス・土石製品",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "5444",
+"s33": "鉄鋼",
+"size": "TOPIX Mid400",
+"group": "steel_metal"
+},
+{
+"code": "5463",
+"s33": "鉄鋼",
+"size": "TOPIX Mid400",
+"group": "steel_metal"
+},
+{
+"code": "5471",
+"s33": "鉄鋼",
+"size": "TOPIX Mid400",
+"group": "steel_metal"
+},
+{
+"code": "5830",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "5832",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "5838",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "5844",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "5901",
+"s33": "金属製品",
+"size": "TOPIX Mid400",
+"group": "steel_metal"
+},
+{
+"code": "5929",
+"s33": "金属製品",
+"size": "TOPIX Mid400",
+"group": "steel_metal"
+},
+{
+"code": "5938",
+"s33": "金属製品",
+"size": "TOPIX Mid400",
+"group": "steel_metal"
+},
+{
+"code": "5947",
+"s33": "金属製品",
+"size": "TOPIX Mid400",
+"group": "steel_metal"
+},
+{
+"code": "5991",
+"s33": "金属製品",
+"size": "TOPIX Mid400",
+"group": "steel_metal"
+},
+{
+"code": "6005",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6134",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6136",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6141",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6268",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6269",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6323",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6368",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6370",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6383",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6417",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6436",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6448",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6457",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6460",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6465",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6481",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6525",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6544",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "6586",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "6592",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6632",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6674",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6707",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6728",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6754",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6806",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6845",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6849",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6856",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6869",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6923",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6925",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6951",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6952",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "6965",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "7003",
+"s33": "機械",
+"size": "TOPIX Mid400",
+"group": "machinery"
+},
+{
+"code": "7164",
+"s33": "その他金融業",
+"size": "TOPIX Mid400",
+"group": "finance"
+},
+{
+"code": "7167",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "7180",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "7181",
+"s33": "保険業",
+"size": "TOPIX Mid400",
+"group": "insurance"
+},
+{
+"code": "7182",
+"s33": "銀行業",
+"size": "TOPIX Large70",
+"group": "bank"
+},
+{
+"code": "7189",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "7240",
+"s33": "輸送用機器",
+"size": "TOPIX Mid400",
+"group": "auto"
+},
+{
+"code": "7259",
+"s33": "輸送用機器",
+"size": "TOPIX Mid400",
+"group": "auto"
+},
+{
+"code": "7276",
+"s33": "電気機器",
+"size": "TOPIX Mid400",
+"group": "hardware"
+},
+{
+"code": "7282",
+"s33": "輸送用機器",
+"size": "TOPIX Mid400",
+"group": "auto"
+},
+{
+"code": "7309",
+"s33": "輸送用機器",
+"size": "TOPIX Large70",
+"group": "auto"
+},
+{
+"code": "7313",
+"s33": "輸送用機器",
+"size": "TOPIX Mid400",
+"group": "auto"
+},
+{
+"code": "7337",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "7458",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "7459",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "7476",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "7550",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "7616",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "7649",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "7701",
+"s33": "精密機器",
+"size": "TOPIX Mid400",
+"group": "precision"
+},
+{
+"code": "7729",
+"s33": "精密機器",
+"size": "TOPIX Mid400",
+"group": "precision"
+},
+{
+"code": "7747",
+"s33": "精密機器",
+"size": "TOPIX Mid400",
+"group": "precision"
+},
+{
+"code": "7846",
+"s33": "その他製品",
+"size": "TOPIX Mid400",
+"group": "consumer"
+},
+{
+"code": "7867",
+"s33": "その他製品",
+"size": "TOPIX Mid400",
+"group": "consumer"
+},
+{
+"code": "7936",
+"s33": "その他製品",
+"size": "TOPIX Large70",
+"group": "consumer"
+},
+{
+"code": "7956",
+"s33": "その他製品",
+"size": "TOPIX Mid400",
+"group": "consumer"
+},
+{
+"code": "7984",
+"s33": "その他製品",
+"size": "TOPIX Mid400",
+"group": "consumer"
+},
+{
+"code": "7988",
+"s33": "化学",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "8012",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "8020",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "8056",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "8060",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "8086",
+"s33": "精密機器",
+"size": "TOPIX Mid400",
+"group": "precision"
+},
+{
+"code": "8088",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "8111",
+"s33": "繊維製品",
+"size": "TOPIX Mid400",
+"group": "chemical"
+},
+{
+"code": "8113",
+"s33": "化学",
+"size": "TOPIX Large70",
+"group": "chemical"
+},
+{
+"code": "8129",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "8136",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "8174",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "8227",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "8242",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "8282",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "8303",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "8334",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "8341",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "8359",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "8377",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "8410",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "8418",
+"s33": "銀行業",
+"size": "TOPIX Mid400",
+"group": "bank"
+},
+{
+"code": "8424",
+"s33": "その他金融業",
+"size": "TOPIX Mid400",
+"group": "finance"
+},
+{
+"code": "8439",
+"s33": "その他金融業",
+"size": "TOPIX Mid400",
+"group": "finance"
+},
+{
+"code": "8473",
+"s33": "証券、商品先物取引業",
+"size": "TOPIX Mid400",
+"group": "finance"
+},
+{
+"code": "8570",
+"s33": "その他金融業",
+"size": "TOPIX Mid400",
+"group": "finance"
+},
+{
+"code": "8593",
+"s33": "その他金融業",
+"size": "TOPIX Mid400",
+"group": "finance"
+},
+{
+"code": "8595",
+"s33": "証券、商品先物取引業",
+"size": "TOPIX Mid400",
+"group": "finance"
+},
+{
+"code": "8729",
+"s33": "保険業",
+"size": "TOPIX Core30",
+"group": "insurance"
+},
+{
+"code": "8876",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "9401",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "9404",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "9435",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "9449",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "9468",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "9504",
+"s33": "電気・ガス業",
+"size": "TOPIX Mid400",
+"group": "utility"
+},
+{
+"code": "9505",
+"s33": "電気・ガス業",
+"size": "TOPIX Mid400",
+"group": "utility"
+},
+{
+"code": "9506",
+"s33": "電気・ガス業",
+"size": "TOPIX Mid400",
+"group": "utility"
+},
+{
+"code": "9507",
+"s33": "電気・ガス業",
+"size": "TOPIX Mid400",
+"group": "utility"
+},
+{
+"code": "9508",
+"s33": "電気・ガス業",
+"size": "TOPIX Mid400",
+"group": "utility"
+},
+{
+"code": "9509",
+"s33": "電気・ガス業",
+"size": "TOPIX Mid400",
+"group": "utility"
+},
+{
+"code": "9513",
+"s33": "電気・ガス業",
+"size": "TOPIX Mid400",
+"group": "utility"
+},
+{
+"code": "9533",
+"s33": "電気・ガス業",
+"size": "TOPIX Mid400",
+"group": "utility"
+},
+{
+"code": "9616",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "9627",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "9684",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "9697",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "9706",
+"s33": "不動産業",
+"size": "TOPIX Mid400",
+"group": "realestate"
+},
+{
+"code": "9744",
+"s33": "サービス業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "9759",
+"s33": "情報・通信業",
+"size": "TOPIX Mid400",
+"group": "software_internet"
+},
+{
+"code": "9831",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "9861",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+},
+{
+"code": "9934",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "9962",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "9987",
+"s33": "卸売業",
+"size": "TOPIX Mid400",
+"group": "trading"
+},
+{
+"code": "9989",
+"s33": "小売業",
+"size": "TOPIX Mid400",
+"group": "retail"
+}
+],
+"S1x": [
+{
+"code": "1301",
+"s33": "水産・農林業",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "1377",
+"s33": "水産・農林業",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "1419",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1515",
+"s33": "鉱業",
+"size": "TOPIX Small 1",
+"group": "energy"
+},
+{
+"code": "1518",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "1662",
+"s33": "鉱業",
+"size": "TOPIX Small 1",
+"group": "energy"
+},
+{
+"code": "1663",
+"s33": "鉱業",
+"size": "TOPIX Small 1",
+"group": "energy"
+},
+{
+"code": "167A",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "1720",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1766",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1833",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1835",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1852",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1861",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1870",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1882",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1885",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1898",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1926",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1934",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1941",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1950",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1952",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1961",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1968",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1975",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1979",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "1980",
+"s33": "建設業",
+"size": "TOPIX Small 1",
+"group": "construction"
+},
+{
+"code": "2001",
+"s33": "食料品",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "2109",
+"s33": "食料品",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "2121",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "2124",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "2146",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "2154",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "2157",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "2168",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "2175",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "2220",
+"s33": "食料品",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "2270",
+"s33": "食料品",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "2281",
+"s33": "食料品",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "2292",
+"s33": "食料品",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "2296",
+"s33": "食料品",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "2317",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "2326",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "2337",
+"s33": "不動産業",
+"size": "TOPIX Small 1",
+"group": "realestate"
+},
+{
+"code": "2353",
+"s33": "不動産業",
+"size": "TOPIX Small 1",
+"group": "realestate"
+},
+{
+"code": "2379",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "2492",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "2585",
+"s33": "食料品",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "2590",
+"s33": "食料品",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "2602",
+"s33": "食料品",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "2659",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "2664",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "2678",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "2681",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "2685",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "268A",
+"s33": "精密機器",
+"size": "TOPIX Small 1",
+"group": "precision"
+},
+{
+"code": "2695",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "2726",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "2730",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "2733",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "2749",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "2752",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "2760",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "2767",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "2791",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "2815",
+"s33": "食料品",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "2874",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "2918",
+"s33": "食料品",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "2931",
+"s33": "食料品",
+"size": "TOPIX Small 1",
+"group": "food"
+},
+{
+"code": "3002",
+"s33": "繊維製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "3028",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "3034",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "3036",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "3046",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "3050",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "3076",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "3087",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "3091",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "3097",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "3101",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "3106",
+"s33": "繊維製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "3110",
+"s33": "ガラス・土石製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "3148",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "3167",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "3182",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "3186",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "3191",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "3201",
+"s33": "繊維製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "3387",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "3395",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "3431",
+"s33": "金属製品",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "3433",
+"s33": "金属製品",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "3445",
+"s33": "金属製品",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "3465",
+"s33": "不動産業",
+"size": "TOPIX Small 1",
+"group": "realestate"
+},
+{
+"code": "3498",
+"s33": "不動産業",
+"size": "TOPIX Small 1",
+"group": "realestate"
+},
+{
+"code": "3543",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "3569",
+"s33": "繊維製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "3608",
+"s33": "繊維製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "3612",
+"s33": "繊維製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "3636",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "3660",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "3661",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "3668",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "3673",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "3762",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "3765",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "3778",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "3844",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "3863",
+"s33": "パルプ・紙",
+"size": "TOPIX Small 1",
+"group": "paper"
+},
+{
+"code": "3865",
+"s33": "パルプ・紙",
+"size": "TOPIX Small 1",
+"group": "paper"
+},
+{
+"code": "3880",
+"s33": "パルプ・紙",
+"size": "TOPIX Small 1",
+"group": "paper"
+},
+{
+"code": "3962",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "3993",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4008",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4023",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4028",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4041",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4044",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4046",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4047",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4071",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4078",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4095",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4109",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4180",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4187",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4189",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4212",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4216",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4290",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4368",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4369",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4373",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4432",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4443",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4471",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4480",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4483",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4521",
+"s33": "医薬品",
+"size": "TOPIX Small 1",
+"group": "pharma"
+},
+{
+"code": "4547",
+"s33": "医薬品",
+"size": "TOPIX Small 1",
+"group": "pharma"
+},
+{
+"code": "4549",
+"s33": "医薬品",
+"size": "TOPIX Small 1",
+"group": "pharma"
+},
+{
+"code": "4552",
+"s33": "医薬品",
+"size": "TOPIX Small 1",
+"group": "pharma"
+},
+{
+"code": "4553",
+"s33": "医薬品",
+"size": "TOPIX Small 1",
+"group": "pharma"
+},
+{
+"code": "4559",
+"s33": "医薬品",
+"size": "TOPIX Small 1",
+"group": "pharma"
+},
+{
+"code": "4565",
+"s33": "医薬品",
+"size": "TOPIX Small 1",
+"group": "pharma"
+},
+{
+"code": "4569",
+"s33": "医薬品",
+"size": "TOPIX Small 1",
+"group": "pharma"
+},
+{
+"code": "4617",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4633",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4634",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4686",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4694",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4722",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4776",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4812",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4819",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4825",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4849",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "4914",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4919",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4928",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4958",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4971",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4975",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4985",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "4996",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "5032",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "5192",
+"s33": "ゴム製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "5202",
+"s33": "ガラス・土石製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "5208",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "5262",
+"s33": "ガラス・土石製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "5302",
+"s33": "ガラス・土石製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "5310",
+"s33": "ガラス・土石製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "5331",
+"s33": "ガラス・土石製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "5351",
+"s33": "ガラス・土石製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "5384",
+"s33": "ガラス・土石製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "5410",
+"s33": "鉄鋼",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5423",
+"s33": "鉄鋼",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5440",
+"s33": "鉄鋼",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5445",
+"s33": "鉄鋼",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5451",
+"s33": "鉄鋼",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5461",
+"s33": "鉄鋼",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "547A",
+"s33": "その他金融業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "5480",
+"s33": "鉄鋼",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5482",
+"s33": "鉄鋼",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5563",
+"s33": "鉄鋼",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5602",
+"s33": "鉄鋼",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5702",
+"s33": "非鉄金属",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5703",
+"s33": "非鉄金属",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5715",
+"s33": "非鉄金属",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5726",
+"s33": "非鉄金属",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5741",
+"s33": "非鉄金属",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5805",
+"s33": "非鉄金属",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5851",
+"s33": "非鉄金属",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5857",
+"s33": "非鉄金属",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5911",
+"s33": "金属製品",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5930",
+"s33": "金属製品",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5943",
+"s33": "金属製品",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5949",
+"s33": "輸送用機器",
+"size": "TOPIX Small 1",
+"group": "auto"
+},
+{
+"code": "5970",
+"s33": "金属製品",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5975",
+"s33": "金属製品",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "5988",
+"s33": "金属製品",
+"size": "TOPIX Small 1",
+"group": "steel_metal"
+},
+{
+"code": "6013",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6036",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "6055",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "6080",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "6088",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "6101",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6104",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6118",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6135",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6140",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6143",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6196",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "6200",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "6209",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6222",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6235",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6250",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6254",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6258",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6277",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6278",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6282",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6284",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6287",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6315",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6331",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6332",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6349",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6363",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6371",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6376",
+"s33": "精密機器",
+"size": "TOPIX Small 1",
+"group": "precision"
+},
+{
+"code": "6395",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6407",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6412",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6419",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6420",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6432",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6454",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6458",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6463",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6474",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6486",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6490",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6498",
+"s33": "機械",
+"size": "TOPIX Small 1",
+"group": "machinery"
+},
+{
+"code": "6507",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6508",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6516",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6523",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6588",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6590",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6622",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6630",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6651",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6652",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6703",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6727",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6737",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6744",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6750",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6768",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6787",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6804",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6807",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6810",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6814",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6859",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6866",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6871",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6875",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6908",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6914",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6929",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6941",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6947",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6966",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6995",
+"s33": "輸送用機器",
+"size": "TOPIX Small 1",
+"group": "auto"
+},
+{
+"code": "6996",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "6999",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "7085",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "7128",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "7130",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "7148",
+"s33": "証券、商品先物取引業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "7157",
+"s33": "保険業",
+"size": "TOPIX Small 1",
+"group": "insurance"
+},
+{
+"code": "7172",
+"s33": "証券、商品先物取引業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "7173",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "7184",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "7199",
+"s33": "その他金融業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "7220",
+"s33": "輸送用機器",
+"size": "TOPIX Small 1",
+"group": "auto"
+},
+{
+"code": "7224",
+"s33": "輸送用機器",
+"size": "TOPIX Small 1",
+"group": "auto"
+},
+{
+"code": "7226",
+"s33": "輸送用機器",
+"size": "TOPIX Small 1",
+"group": "auto"
+},
+{
+"code": "7239",
+"s33": "輸送用機器",
+"size": "TOPIX Small 1",
+"group": "auto"
+},
+{
+"code": "7241",
+"s33": "輸送用機器",
+"size": "TOPIX Small 1",
+"group": "auto"
+},
+{
+"code": "7242",
+"s33": "輸送用機器",
+"size": "TOPIX Small 1",
+"group": "auto"
+},
+{
+"code": "7246",
+"s33": "輸送用機器",
+"size": "TOPIX Small 1",
+"group": "auto"
+},
+{
+"code": "7278",
+"s33": "輸送用機器",
+"size": "TOPIX Small 1",
+"group": "auto"
+},
+{
+"code": "7280",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "7283",
+"s33": "輸送用機器",
+"size": "TOPIX Small 1",
+"group": "auto"
+},
+{
+"code": "7296",
+"s33": "輸送用機器",
+"size": "TOPIX Small 1",
+"group": "auto"
+},
+{
+"code": "7327",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "7350",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "7380",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "7381",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "7383",
+"s33": "その他金融業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "7389",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "7419",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "7421",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "7433",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "7456",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "7513",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "7516",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "7545",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "7552",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "7575",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "7581",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "7593",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "7595",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "7599",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "7606",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "7611",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "7613",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "7630",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "7721",
+"s33": "精密機器",
+"size": "TOPIX Small 1",
+"group": "precision"
+},
+{
+"code": "7730",
+"s33": "精密機器",
+"size": "TOPIX Small 1",
+"group": "precision"
+},
+{
+"code": "7734",
+"s33": "精密機器",
+"size": "TOPIX Small 1",
+"group": "precision"
+},
+{
+"code": "7740",
+"s33": "精密機器",
+"size": "TOPIX Small 1",
+"group": "precision"
+},
+{
+"code": "7744",
+"s33": "精密機器",
+"size": "TOPIX Small 1",
+"group": "precision"
+},
+{
+"code": "7745",
+"s33": "精密機器",
+"size": "TOPIX Small 1",
+"group": "precision"
+},
+{
+"code": "7762",
+"s33": "精密機器",
+"size": "TOPIX Small 1",
+"group": "precision"
+},
+{
+"code": "7780",
+"s33": "精密機器",
+"size": "TOPIX Small 1",
+"group": "precision"
+},
+{
+"code": "7821",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "7826",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "7839",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "7860",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "7864",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "7915",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "7943",
+"s33": "ガラス・土石製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "7944",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "7947",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "7965",
+"s33": "電気機器",
+"size": "TOPIX Small 1",
+"group": "hardware"
+},
+{
+"code": "7966",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "7970",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "7972",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "7976",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "7981",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "7990",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "7994",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "7995",
+"s33": "化学",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "8008",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8016",
+"s33": "繊維製品",
+"size": "TOPIX Small 1",
+"group": "chemical"
+},
+{
+"code": "8022",
+"s33": "その他製品",
+"size": "TOPIX Small 1",
+"group": "consumer"
+},
+{
+"code": "8050",
+"s33": "精密機器",
+"size": "TOPIX Small 1",
+"group": "precision"
+},
+{
+"code": "8051",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "8057",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "8061",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "8074",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "8078",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "8079",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "8097",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "8098",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "8125",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "8130",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "8133",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "8153",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "8154",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "8160",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8173",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8179",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8194",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8200",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8214",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8218",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8219",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8237",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8273",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8276",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8278",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8281",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "8336",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8337",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8346",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8358",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8360",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8361",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8366",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8367",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8368",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8370",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8381",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8386",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8388",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8399",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8425",
+"s33": "その他金融業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "8511",
+"s33": "その他金融業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "8522",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8524",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8544",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8566",
+"s33": "その他金融業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "8584",
+"s33": "その他金融業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "8585",
+"s33": "その他金融業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "8600",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8609",
+"s33": "証券、商品先物取引業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "8613",
+"s33": "証券、商品先物取引業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "8616",
+"s33": "証券、商品先物取引業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "8628",
+"s33": "証券、商品先物取引業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "8698",
+"s33": "証券、商品先物取引業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "8706",
+"s33": "証券、商品先物取引業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "8707",
+"s33": "証券、商品先物取引業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "8714",
+"s33": "銀行業",
+"size": "TOPIX Small 1",
+"group": "bank"
+},
+{
+"code": "8715",
+"s33": "保険業",
+"size": "TOPIX Small 1",
+"group": "insurance"
+},
+{
+"code": "8771",
+"s33": "その他金融業",
+"size": "TOPIX Small 1",
+"group": "finance"
+},
+{
+"code": "8803",
+"s33": "不動産業",
+"size": "TOPIX Small 1",
+"group": "realestate"
+},
+{
+"code": "8848",
+"s33": "不動産業",
+"size": "TOPIX Small 1",
+"group": "realestate"
+},
+{
+"code": "8850",
+"s33": "不動産業",
+"size": "TOPIX Small 1",
+"group": "realestate"
+},
+{
+"code": "8892",
+"s33": "不動産業",
+"size": "TOPIX Small 1",
+"group": "realestate"
+},
+{
+"code": "8897",
+"s33": "不動産業",
+"size": "TOPIX Small 1",
+"group": "realestate"
+},
+{
+"code": "8919",
+"s33": "不動産業",
+"size": "TOPIX Small 1",
+"group": "realestate"
+},
+{
+"code": "8923",
+"s33": "不動産業",
+"size": "TOPIX Small 1",
+"group": "realestate"
+},
+{
+"code": "8934",
+"s33": "不動産業",
+"size": "TOPIX Small 1",
+"group": "realestate"
+},
+{
+"code": "9110",
+"s33": "海運業",
+"size": "TOPIX Small 1",
+"group": "shipping"
+},
+{
+"code": "9119",
+"s33": "海運業",
+"size": "TOPIX Small 1",
+"group": "shipping"
+},
+{
+"code": "9247",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9267",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "9274",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "9336",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9409",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9412",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9413",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9416",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9418",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9511",
+"s33": "電気・ガス業",
+"size": "TOPIX Small 1",
+"group": "utility"
+},
+{
+"code": "9519",
+"s33": "電気・ガス業",
+"size": "TOPIX Small 1",
+"group": "utility"
+},
+{
+"code": "9543",
+"s33": "電気・ガス業",
+"size": "TOPIX Small 1",
+"group": "utility"
+},
+{
+"code": "9551",
+"s33": "電気・ガス業",
+"size": "TOPIX Small 1",
+"group": "utility"
+},
+{
+"code": "9552",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9601",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9603",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9605",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9621",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9672",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9678",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9682",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9692",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9699",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9715",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9716",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9722",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9743",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9746",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9757",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9793",
+"s33": "サービス業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9824",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "9830",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "9832",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "9842",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "9869",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "9882",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "9887",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "9889",
+"s33": "情報・通信業",
+"size": "TOPIX Small 1",
+"group": "software_internet"
+},
+{
+"code": "9900",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "9936",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "9948",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "9956",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "9960",
+"s33": "卸売業",
+"size": "TOPIX Small 1",
+"group": "trading"
+},
+{
+"code": "9974",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+},
+{
+"code": "9997",
+"s33": "小売業",
+"size": "TOPIX Small 1",
+"group": "retail"
+}
+]
+}
+}

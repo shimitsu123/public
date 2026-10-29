@@ -1,0 +1,3 @@
+logged_on,entered_on,event_id,category,subtype,sign,market_dir,event_date,time_jst,time_known,home,known_on,covert,r,t0,anchor,rule_version,benef,victim,late,flags
+2026-10-28,,PENDING-FOMC-2026-10-28,PENDING,FOMC,0,0,2026-10-28,,0,US,,0,2026-10-29,,,69e1cbfd,,,0,pending
+2026-10-30,,PENDING-BOJ-2026-10-30,PENDING,BOJ,0,0,2026-10-30,,0,JP,,0,2026-10-30,,,69e1cbfd,,,0,pending

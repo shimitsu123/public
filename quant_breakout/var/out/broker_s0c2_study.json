@@ -1,0 +1,42 @@
+{
+ "rakuten_20 年": {
+  "cagr": 13.33,
+  "dd": -34.83,
+  "calmar": 0.38,
+  "stock_trades": 359,
+  "core_trades": 551,
+  "fees": 0.0,
+  "fees_per_year": 0.0,
+  "years": 20.0
+ },
+ "rakuten_5 年": {
+  "cagr": 23.48,
+  "dd": -21.78,
+  "calmar": 1.08,
+  "stock_trades": 106,
+  "core_trades": 144,
+  "fees": 0.0,
+  "fees_per_year": 0.0,
+  "years": 5.0
+ },
+ "tachibana_20 年": {
+  "cagr": 12.87,
+  "dd": -35.1,
+  "calmar": 0.37,
+  "stock_trades": 357,
+  "core_trades": 548,
+  "fees": 382899.0,
+  "fees_per_year": 19163.31320224719,
+  "years": 20.0
+ },
+ "tachibana_5 年": {
+  "cagr": 23.02,
+  "dd": -20.94,
+  "calmar": 1.1,
+  "stock_trades": 104,
+  "core_trades": 143,
+  "fees": 64273.0,
+  "fees_per_year": 12849.323070607554,
+  "years": 5.0
+ }
+}

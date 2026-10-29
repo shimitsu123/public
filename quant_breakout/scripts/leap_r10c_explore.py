@@ -1,0 +1,114 @@
+"""leap_r10c_explore.py — 第 10 轮补充探索（只描述、不登记；E / J）：趋势仓位 + 相对动量（双重动量，Antonacci 2014）。
+
+第 10 轮补充（var/out/leap_r10b_explore.md）：黄金 + 纳指 趋势仓位 E 全期 / J 都好，但 E 后半 2011〜2016 所有变体都不如现行
+（核心在安倍经济学里暴涨时，名额被黄金占着；2013 年 4 月金价崩跌）。文献里的标准做法：只在「自己比核心强」时才换 ——
+  R1 月末：趋势向上（10 个月均线）∧ 12 个月涨幅（日元计）> 核心（S&P500 × USD/JPY）的 12 个月涨幅 → 候选；否则那个月末卖；
+  R2 = R1 再加 12 个月绝对动量 > 0；R3 = R1 用 6 个月涨幅比较；都做 黄金 与 黄金 + 纳指 两组。
+输出：var/out/leap_r10c_explore.md / .json（只有统计）
+"""
+from __future__ import annotations
+
+import json
+import sys
+import time
+import warnings
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+warnings.filterwarnings("ignore")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import leap_confirm as LF                                                    # noqa: E402
+import leap_r10_explore as R10                                               # noqa: E402
+from leap_r1b_portfolio import cell                                          # noqa: E402
+from leap_r2c_sleeve import month_end_flags                                  # noqa: E402
+from qbreak import paths                                                     # noqa: E402
+
+LINES: list[str] = []
+
+
+def say(s: str = "") -> None:
+    print(s, flush=True)
+    LINES.append(s)
+
+
+def rel_trend_frame(df: pd.DataFrame, core: pd.Series, lookback: int = 12, absmom: bool = False, months: int = 10) -> pd.DataFrame:
+    """月末：收盘 > months 个月均线 ∧ lookback 个月涨幅 > 核心同期涨幅（∧ 可选：> 0）→ 候选；否则月末卖。只用月末为止的数据。"""
+    c = df["Close"].astype(float)
+    me = pd.Series(month_end_flags(df.index), index=df.index)
+    mc = c[me.to_numpy()]
+    cc = core.reindex(df.index.union(core.index)).ffill().reindex(mc.index)
+    r = mc / mc.shift(lookback) - 1
+    rc = cc / cc.shift(lookback) - 1
+    up_m = (mc > mc.rolling(months, min_periods=months).mean()) & (r > rc)
+    if absmom:
+        up_m = up_m & (r > 0)
+    up_d = up_m.reindex(df.index).ffill().fillna(False).astype(bool)
+    out = df.copy()
+    out["entry"], out["dead_cross"], out["climax"], out["atr"] = up_d.to_numpy(), me.to_numpy() & ~up_d.to_numpy(), False, np.nan
+    return out
+
+
+def setting(era: str) -> dict:
+    from bullbear_study import SYM, load
+    from qbreak import tick
+    from qbreak.trader import load_params
+    from unified_study import spx_jpy_on_jp_days
+    t0 = time.time()
+    ctx = LF.context(era)
+    p = load_params(market="JP")
+    fr = LF.frames(ctx, p)
+    jp_days = load(*SYM["JP"]).index
+    jp_days = jp_days[jp_days >= pd.Timestamp("2000-01-01")]
+    fx = load("JPY=X", "1996-01-01")["Close"]
+    fx = fx[(fx > 60) & (fx < 250)]
+    core = spx_jpy_on_jp_days(load(*SYM["US"]), fx, jp_days)["Close"]
+    base = R10.etf_trend_frames(jp_days, ["G1540.T", "N1545.T"])
+    raw = {k: v[["Open", "High", "Low", "Close", "Volume"]] for k, v in base.items()}
+    for t in raw:
+        tick.LOT_OVERRIDE[t] = 1
+    run_fn = LF.runner({**ctx, "days": ctx["days"].union(jp_days)}, {**fr, **base})
+    off = {t: df.assign(entry=False) for t, df in base.items()}
+    pt = R10.trend_params(p)
+    res = {"现行（W2 突破）": LF.run(ctx, run_fn, {**fr, **off}, p), "只有核心": LF.run(ctx, run_fn, {**LF.no_entries(fr), **off}, p)}
+    for vk, lb, am in (("R1 趋势 ∧ 12 个月比核心强", 12, False), ("R2 R1 ∧ 12 个月涨", 12, True), ("R3 趋势 ∧ 6 个月比核心强", 6, False)):
+        tf = {k: rel_trend_frame(raw[k], core, lb, am) for k in raw}
+        for ks, lab in ((["G1540.T"], "黄金"), (["G1540.T", "N1545.T"], "黄金 + 纳指")):
+            f2 = {**fr, **{k: (tf[k] if k in ks else off[k]) for k in raw}}
+            pb = {k: set(tf[k].index[tf[k]["entry"].to_numpy(bool)]) for k in ks}
+            prio = {(k, d): 1e6 for k in ks for d in pb[k]}
+            res[f"{vk} · {lab}"] = LF.run(ctx, run_fn, f2, p, pb=pb, hold_pb=10 ** 6, pb_use_dead=True, pb_free=True, priority=prio,
+                                          params_t={k: pt for k in ks})
+    return {"res": res, "secs": round(time.time() - t0)}
+
+
+def main() -> int:
+    t0 = time.time()
+    say(f"# 第 10 轮补充探索：趋势仓位 + 相对动量（只描述，{pd.Timestamp.today().date()}）")
+    say("规则见 scripts/leap_r10c_explore.py 开头。各格 = 年化 / 最大回撤 / Calmar · 个股 + ETF 笔数 每笔净收益 / 胜率。")
+    out = {}
+    for era in ("E", "J"):
+        s = setting(era)
+        out[era] = {k: {w: v for w, v in r.items()} for k, r in s["res"].items()}
+        say(f"\n## {era}（{s['secs']}s）")
+        say(f"| 方案 | {era} 全期 | {era} 前半 | {era} 后半 |")
+        say("|---|---|---|---|")
+        for k, r in s["res"].items():
+            say(f"| {k} | {cell(r[era])} | {cell(r[era + '1'])} | {cell(r[era + '2'])} |")
+        yrs = sorted({y for r in s["res"].values() for y in (r.get("_years") or {})})
+        say("\n| 方案 | " + " | ".join(yrs) + " |")
+        say("|---|" + "---|" * len(yrs))
+        for k, r in s["res"].items():
+            yv = r.get("_years") or {}
+            say(f"| {k} | " + " | ".join(f"{yv[y]:+.1f}" if y in yv else "—" for y in yrs) + " |")
+    say(f"\n用时 {time.time() - t0:.0f}s")
+    fp = paths.out_dir() / "leap_r10c_explore"
+    Path(f"{fp}.md").write_text("\n".join(LINES) + "\n", encoding="utf-8")
+    Path(f"{fp}.json").write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
