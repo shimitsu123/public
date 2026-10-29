@@ -2578,7 +2578,8 @@ def _recent_notices(now: dt.datetime | None = None, tag: str | None = None) -> t
     from . import notify as NT
     now = now or now_jst()
     cut = (now if now.tzinfo else now.replace(tzinfo=JST)) - dt.timedelta(hours=NOTIFY_SHOW_H)
-    hs = NT.history(60, book=tag)
+    from . import news as NW
+    hs = [h for h in NT.history(60, book=tag) if not NW.muted_notice(h)]   # 自然灾害的旧推送也不列（2026-10-29 用户）
     keep = [h for h in hs if _ts_jst(h.get("at")) and _ts_jst(h.get("at")) >= cut]
     return keep, len(hs) - len(keep)
 

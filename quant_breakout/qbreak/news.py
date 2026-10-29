@@ -2,7 +2,9 @@
 只作展示与提醒，不参与交易（交易规则只按事先登记、检验过的信号）。
 
 来源（公开 RSS / JSON，每 15 分钟取一次也不算频繁）：NHK（経済 / 国際 / 主要）、Yahoo!ニュース（経済 / 国際）、
-日本銀行、財務省、FRB 的新着，Google ニュース的关键词检索（日英各一），気象庁的地震情報（震度 5 弱以上）。
+日本銀行、財務省、FRB 的新着，Google ニュース的关键词检索（日英各一）。
+2026-10-29 用户「关于地震之类的消息不要推送 / 放到消息里」：自然灾害（地震 / 津波 / 台风 / 喷火…，事件 disaster）不再取、不再显示、不再推送
+（MUTED_EVENTS；気象庁的地震情報不再取，Google ニュース的检索词去掉「地震」；同一条里还有别的事件的照常按别的事件算）。
 可信度（0〜100 分，只是经验打分，不是事实核查）：
   来源档位 —— 官方（日銀 / 財務省 / FRB / 気象庁）95、大媒体（NHK、日経、ロイター、Bloomberg、共同、時事…）80、
   编辑精选（Yahoo!ニュース トピックス）70、其他已知媒体 65、不认识的 50；
@@ -36,9 +38,10 @@ log = logging.getLogger(__name__)
 
 MAX_AGE_H = 72
 ALERT_CRED, ALERT_CRED_SEVERE = 70, 55
+MUTED_EVENTS = frozenset({"disaster"})        # 不取、不显示、不推送的事件（2026-10-29 用户：地震之类的消息不要）
 SIM_MIN = 0.35                                   # 标题相似度（字符 2-gram 的 Jaccard）≥ 这个 → 同一件事
 
-_GN_JA = ("(日銀 OR 利上げ OR 利下げ OR 円安 OR 円高 OR 為替介入 OR 関税 OR 原油 OR 景気後退 OR 経営破綻 OR 地震 OR ミサイル OR 株価急落)"
+_GN_JA = ("(日銀 OR 利上げ OR 利下げ OR 円安 OR 円高 OR 為替介入 OR 関税 OR 原油 OR 景気後退 OR 経営破綻 OR ミサイル OR 株価急落)"
           " when:1d")
 _GN_EN = ('(tariffs OR recession OR "rate hike" OR "rate cut" OR "oil prices" OR "sovereign default" OR "bank failure" '
           'OR sanctions OR "invasion of" OR "stocks plunge" OR "yen intervention") when:1d')
@@ -242,12 +245,13 @@ def fetch_all(get=None, timeout: int = 20) -> tuple[list[dict], dict]:
             stat[name] = len(got)
         except Exception as e:                                               # noqa: BLE001
             stat[name] = f"失败：{type(e).__name__}"
-    try:
-        got = parse_jma(get(JMA_QUAKE))
-        items += got
-        stat["気象庁 地震"] = len(got)
-    except Exception as e:                                                   # noqa: BLE001
-        stat["気象庁 地震"] = f"失败：{type(e).__name__}"
+    if "disaster" not in MUTED_EVENTS:                                       # 2026-10-29 起不取（用户：地震之类的消息不要）
+        try:
+            got = parse_jma(get(JMA_QUAKE))
+            items += got
+            stat["気象庁 地震"] = len(got)
+        except Exception as e:                                               # noqa: BLE001
+            stat["気象庁 地震"] = f"失败：{type(e).__name__}"
     return items, stat
 
 
@@ -286,7 +290,7 @@ def classify(text: str) -> list[str]:
     for keep, drop in CONFLICT:
         if keep in evs and drop in evs:
             evs.remove(drop)
-    return evs
+    return [e for e in evs if e not in MUTED_EVENTS]
 
 
 def severity(evs: list[str], text: str) -> int:
@@ -374,6 +378,8 @@ def analyze(items: list[dict], betas: dict | None = None, holdings: dict[str, st
     for it in items:
         t = _when(it.get("time") or "")
         if t is None or (now - t).total_seconds() / 3600 > max_age_h or (t - now).total_seconds() > 3600:
+            continue
+        if it.get("quake") and "disaster" in MUTED_EVENTS:                     # 以前缓存下来的気象庁地震情報：不显示、不推送
             continue
         fresh.append(it)
     out = []
@@ -610,7 +616,26 @@ def save(events: list[dict], stat: dict, generated: str) -> None:
 
 
 def load() -> dict:
-    return read_json(cache_dir() / "news.json", {}) or {}
+    """数据目录 cache/news/news.json；不显示的事件（MUTED_EVENTS，2026-10-29 起的自然灾害）在这里去掉 —— 以前存下来的也不再显示。"""
+    d = read_json(cache_dir() / "news.json", {}) or {}
+    if isinstance(d.get("events"), list):
+        d["events"] = [e for e in d["events"] if not muted(e)]
+    return d
+
+
+def muted(e: dict) -> bool:
+    """这条事件只属于不显示的类别（2026-10-29 用户：地震之类的消息不要推送 / 放到消息里）。"""
+    evs = [str(x) for x in (e or {}).get("events") or []]
+    return bool(evs) and all(x in MUTED_EVENTS for x in evs)
+
+
+def muted_notice(h: dict) -> bool:
+    """以前推出去的经济威胁通知里属于不显示类别的（内容里写着「｜自然灾害｜」）→ 通知记录里也不再列。"""
+    if not str((h or {}).get("subject") or "").startswith("经济威胁"):
+        return False
+    labels = {EVENTS[k][0] for k in MUTED_EVENTS if k in EVENTS}
+    parts = str(h.get("text") or "").split("｜")
+    return any(lb in parts for lb in labels) and not any(EVENTS[k][0] in parts for k in EVENTS if k not in MUTED_EVENTS)
 
 
 # ── 同一件事只推第一次（2026-10-17 用户：「消息里面的重复的消息不要一直推送 只推送出现的第一次」）──

@@ -124,10 +124,29 @@ def test_analyze_freshness_alerts_order_and_public_summary():
     assert s["n_events"] == 2 and s["n_alerts"] == 1 and s["by_type"]["tariff"]["alerts"] == 1
 
 
-def test_jma_quake_becomes_severe_official_event():
+def test_jma_quake_no_longer_shown_or_pushed():
+    """2026-10-29 用户「地震之类的消息不要推送 / 放到消息里」：以前缓存下来的気象庁地震情報也不成事件。"""
     q = NW.parse_jma(json.dumps([{"eid": "9", "at": (NOW - dt.timedelta(hours=1)).isoformat(), "anm": "東京湾", "mag": "7.1", "maxi": "6+"}]))
-    ev = NW.analyze(q, {}, {}, now=NOW)
-    assert ev[0]["events"][0] == "disaster" and ev[0]["severity"] == 3 and ev[0]["cred"] == 95 and ev[0]["alert"]
+    assert NW.analyze(q, {}, {}, now=NOW) == []
+
+
+def test_disaster_muted_everywhere(tmp_path, monkeypatch):
+    assert "disaster" in NW.MUTED_EVENTS and "地震" not in NW._GN_JA
+    assert NW.classify("大地震で津波警報、甚大な被害") == []                        # 归类：自然灾害不再出现
+    got = []
+    NW.fetch_all(get=lambda u: got.append(u) or b"<rss/>")
+    assert NW.JMA_QUAKE not in got                                                # 不再取気象庁地震情報
+    monkeypatch.setattr(NW, "cache_dir", lambda: tmp_path)
+    (tmp_path / "news.json").write_text(json.dumps({"events": [
+        {"id": "a", "events": ["disaster"]}, {"id": "b", "events": ["tariff"]}, {"id": "c", "events": []}]}), encoding="utf-8")
+    assert [e["id"] for e in NW.load()["events"]] == ["b", "c"]                   # 以前存下来的也不显示
+
+
+def test_muted_notice_hides_old_disaster_pushes():
+    mk = lambda t: {"subject": "经济威胁 高（10/13 15:44 JST 发布）", "text": t}      # noqa: E731
+    assert NW.muted_notice(mk("15:44 JST 訓練｜自然灾害｜威胁度 高｜可信度 80"))
+    assert not NW.muted_notice(mk("09:00 JST 追加関税｜关税·贸易｜威胁度 高"))
+    assert not NW.muted_notice({"subject": "自检通过", "text": "｜自然灾害｜"})
 
 
 def test_new_alerts_only_once_and_expire(tmp_path):
@@ -146,7 +165,7 @@ def test_fetch_all_records_failures():
             return b"[]"
         raise TimeoutError("x")
     items, stat = NW.fetch_all(get)
-    assert stat["NHK 経済"] == 2 and stat["気象庁 地震"] == 0 and str(stat["FRB"]).startswith("失败")
+    assert stat["NHK 経済"] == 2 and "気象庁 地震" not in stat and str(stat["FRB"]).startswith("失败")
     assert len(items) == 6                                                           # NHK 三个频道各 2 条
 
 
