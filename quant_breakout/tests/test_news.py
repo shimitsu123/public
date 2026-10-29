@@ -142,11 +142,14 @@ def test_disaster_muted_everywhere(tmp_path, monkeypatch):
     assert [e["id"] for e in NW.load()["events"]] == ["b", "c"]                   # 以前存下来的也不显示
 
 
-def test_muted_notice_hides_old_disaster_pushes():
-    mk = lambda t: {"subject": "经济威胁 高（10/13 15:44 JST 发布）", "text": t}      # noqa: E731
-    assert NW.muted_notice(mk("15:44 JST 訓練｜自然灾害｜威胁度 高｜可信度 80"))
-    assert not NW.muted_notice(mk("09:00 JST 追加関税｜关税·贸易｜威胁度 高"))
-    assert not NW.muted_notice({"subject": "自检通过", "text": "｜自然灾害｜"})
+def test_clean_notice_hides_old_disaster_pushes():
+    sub = "经济威胁 高（10/29 00:11 JST 发布）"
+    assert NW.clean_notice({"subject": sub, "text": "15:44 JST 訓練｜自然灾害｜威胁度 高｜可信度 80"}) is None
+    mixed = {"subject": sub, "text": "00:11 JST 地震速報｜自然灾害｜威胁度 高\n23:59 JST 制裁｜关税 / 贸易摩擦 / 制裁｜威胁度 高\n（原文：x）"}
+    assert NW.clean_notice(mixed)["text"] == "23:59 JST 制裁｜关税 / 贸易摩擦 / 制裁｜威胁度 高\n（原文：x）"
+    other = {"subject": sub, "text": "地震速報（原文：y）\n09:00 JST 追加関税｜关税 / 贸易摩擦 / 制裁｜威胁度 高"}
+    assert NW.clean_notice(other) is other
+    assert NW.clean_notice({"subject": "自检通过", "text": "｜自然灾害｜"})["text"] == "｜自然灾害｜"
 
 
 def test_new_alerts_only_once_and_expire(tmp_path):

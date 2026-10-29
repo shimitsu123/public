@@ -629,13 +629,24 @@ def muted(e: dict) -> bool:
     return bool(evs) and all(x in MUTED_EVENTS for x in evs)
 
 
-def muted_notice(h: dict) -> bool:
-    """以前推出去的经济威胁通知里属于不显示类别的（内容里写着「｜自然灾害｜」）→ 通知记录里也不再列。"""
+def clean_notice(h: dict) -> dict | None:
+    """以前推出去的经济威胁通知：去掉属于不显示类别的那几条（「｜自然灾害｜」那一行与它下面的「（原文：…）」）；
+    全是这种 → None（通知记录里不再列）；别的通知原样返回。"""
     if not str((h or {}).get("subject") or "").startswith("经济威胁"):
-        return False
+        return h
     labels = {EVENTS[k][0] for k in MUTED_EVENTS if k in EVENTS}
-    parts = str(h.get("text") or "").split("｜")
-    return any(lb in parts for lb in labels) and not any(EVENTS[k][0] in parts for k in EVENTS if k not in MUTED_EVENTS)
+    out, drop, removed = [], False, False
+    for ln in str(h.get("text") or "").split("\n"):
+        if "｜" in ln:
+            drop = any(lb in ln.split("｜") for lb in labels)
+            removed |= drop
+        if not drop:
+            out.append(ln)
+    if not removed:
+        return h
+    if not any("｜" in ln for ln in out):
+        return None
+    return {**h, "text": "\n".join(out)}
 
 
 # ── 同一件事只推第一次（2026-10-17 用户：「消息里面的重复的消息不要一直推送 只推送出现的第一次」）──
