@@ -1,0 +1,297 @@
+/* qbreak 操作面板的样式（由 qbreak/panel.py 以 /static/panel.css 提供） */
+:root{--bg:#f2f2f7;--card:#fff;--fg:#1c1c1e;--muted:#6e6e73;--line:#e3e3e8;--pos:#1a7f37;--neg:#c62828;--accent:#2f5bd3;
+--accent-fg:#fff;--chip:#eef0f6;--shadow:0 1px 2px rgba(0,0,0,.06);--up:#e0373a;--down:#0e8f50;--ma10:#8e4bb3;--ma20:#c26a00;--ma30:#2a5db0;--warn:#a85d00;--warn-bg:#fff1dc;--neg-bg:#fde7e7;--ul:#0e8a8a}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0f0f11;--card:#1c1c1f;--fg:#ececf0;--muted:#a1a1a8;
+--line:#2e2e33;--pos:#4cc36b;--neg:#ff6b6b;--accent:#8aa8ff;--accent-fg:#0f0f11;--chip:#2a2a30;--shadow:none;
+--up:#e8484d;--down:#17905a;--ma10:#a66fd0;--ma20:#c47f2c;--ma30:#5b8be0;--warn:#f0a840;--warn-bg:#3a2a12;--neg-bg:#3d1a1c;--ul:#3cc7c7}}
+:root[data-theme="dark"]{--bg:#0f0f11;--card:#1c1c1f;--fg:#ececf0;--muted:#a1a1a8;--line:#2e2e33;--pos:#4cc36b;--neg:#ff6b6b;
+--accent:#8aa8ff;--accent-fg:#0f0f11;--chip:#2a2a30;--shadow:none;--up:#e8484d;--down:#17905a;--ma10:#a66fd0;--ma20:#c47f2c;--ma30:#5b8be0;--warn:#f0a840;--warn-bg:#3a2a12;--neg-bg:#3d1a1c;--ul:#3cc7c7}
+*{box-sizing:border-box} [hidden]{display:none!important} html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Hiragino Sans","PingFang SC",sans-serif;
+-webkit-tap-highlight-color:transparent;overflow-wrap:break-word}
+.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);
+padding:calc(env(safe-area-inset-top) + 8px) max(16px,env(safe-area-inset-right)) 8px max(16px,env(safe-area-inset-left))}
+.bar{display:flex;align-items:center;gap:8px;max-width:720px;margin:0 auto}.bar .sp{flex:1}.bar b{font-size:17px}
+.tabs{display:flex;gap:8px;overflow-x:auto;max-width:720px;margin:8px auto 0;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
+.tabs a{flex:0 0 auto;padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--fg);
+text-decoration:none;font-size:14px}.tabs a.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.tabs a.real{background:var(--neg-bg);border-color:var(--neg);color:var(--neg);font-weight:600}
+.tabs a.real.on{background:var(--neg);color:#fff;font-weight:700;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--neg)}
+/* 立花本番 = 真钱：没选 = 淡红底红字，选着 = 实心红底白字 + 一圈（2026-10-17 用户「点击本番的时候和没点击的时候感觉差别不大」） */
+main{max-width:720px;margin:0 auto;padding:4px max(16px,env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 40px) max(16px,env(safe-area-inset-left))}
+h1{font-size:20px;margin:0 0 8px} h2{font-size:17px;margin:0 0 8px} h3{font-size:17px;margin:0 0 8px}
+.muted{color:var(--muted);font-size:14px} .small{font-size:13px} .pos{color:var(--pos)} .neg{color:var(--neg)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:12px 0;box-shadow:var(--shadow)}
+.card.warn{border-color:var(--neg)} a{color:var(--accent)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+.big{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.25}
+.chip{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--chip);font-size:13px;color:var(--fg);white-space:nowrap}
+.head{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}.head b{white-space:nowrap}
+.hv{border-top:1px solid var(--line);padding:12px 0}.hv ul{margin:4px 0;padding-left:18px} details summary{cursor:pointer;padding:4px 0}
+#pbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:99;overflow:hidden;display:none;pointer-events:none}#pbar::after{content:'';position:absolute;top:0;bottom:0;left:-40%;width:40%;background:var(--accent);animation:qbbar 1s ease-in-out infinite}body.loading #pbar{display:block}body.loading .pane{opacity:.55;transition:opacity .15s}@keyframes qbbar{0%{left:-40%}100%{left:100%}}@keyframes qbspin{to{transform:rotate(360deg)}}.btn.loading,button.loading{opacity:.85;pointer-events:none}.btn.loading::before,button.loading::before{content:'';display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:qbspin .7s linear infinite}@media (prefers-reduced-motion:reduce){#pbar::after{animation:none;left:0;width:100%;opacity:.6}.btn.loading::before,button.loading::before{animation:none}}.act{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}.act .btn{flex:1 1 140px}
+.btn{font:inherit;font-size:16px;min-height:44px;padding:10px 16px;border-radius:12px;border:1px solid var(--line);background:var(--card);
+color:var(--fg);cursor:pointer;touch-action:manipulation}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
+.btn.sell{border-color:var(--neg);color:var(--neg);font-weight:600}
+.btn.danger{background:var(--neg);border-color:var(--neg);color:#fff;font-weight:600}
+.btn.sm{min-height:36px;padding:6px 12px;font-size:14px;flex:0 0 auto} .btn:disabled{opacity:.45;cursor:default}
+
+.list .li{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:10px 0}.list .li:first-child{border-top:0}
+.list .li.og{border-left:3px solid var(--accent);padding-left:6px}   /* 同一组（一起下的买单和卖单；整组撤单 2026-10-16） */
+/* 「交易」只显示今天要成交的（2026-10-16）：小标题（执行器的单 / 手动指令）、没有时的一句、「另有 N 条等 …」、最下面收起的「已结束 / 不是今天的」 */
+.tsub{font-size:13px;font-weight:600;color:var(--muted);margin:10px 0 0}.tempty{color:var(--muted);padding:6px 0}
+details.later{margin-top:8px;border-top:1px solid var(--line);padding-top:2px}details.later>summary,details.ended>summary{font-weight:600}
+.grow{flex:1;min-width:0}
+input[type=range]{width:100%;height:44px;accent-color:var(--accent)}
+input[type=text],input[type=number]{font:inherit;font-size:17px;width:100%;padding:12px;margin:4px 0 10px;border-radius:12px;
+border:1px solid var(--line);background:var(--card);color:var(--fg)}
+input[type=number]{font-variant-numeric:tabular-nums;text-align:center;margin:0;-moz-appearance:textfield;appearance:textfield}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+/* 放不下（375 px 宽的手机上「各持仓平摊卖 / 只卖核心 ETF / 其他全部卖出」）→ 按钮缩窄、字换行，不被切掉（2026-10-24 复核：以前 nowrap + overflow:hidden 切掉「其他全部卖出」） */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;max-width:100%}
+.seg button{font:inherit;font-size:14px;min-height:36px;padding:6px 12px;border:0;border-left:1px solid var(--line);background:var(--card);
+color:var(--fg);cursor:pointer;touch-action:manipulation;flex:0 1 auto;min-width:0;white-space:normal;line-height:1.25}.seg button:first-child{border-left:0}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-fg);font-weight:600}
+.adjrow{display:flex;align-items:center;gap:10px;margin:10px 0 4px}.adjrow .grow{position:relative}
+.adjrow .unit{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.kbar{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap}.kbar .seg button{min-height:38px;padding:4px 16px;font-size:15px}
+.kbar.ktop{padding:0 0 6px;border-bottom:1px solid var(--line);margin-bottom:4px}.kbar.kbot{padding:6px 0 2px;border-top:1px solid var(--line);margin-top:2px}.kbar .hint{font-size:12px;color:var(--muted)}
+.kexp{font-size:13px;line-height:1.55;color:var(--muted);margin:4px 0}.kexp b{color:var(--fg)}.kexp b.up{color:var(--up)}.kexp b.down{color:var(--down)}.kexp b.hi{color:var(--warn)}
+.kexp.now{color:var(--fg)}.kexp .legend{margin:0 0 2px}
+/* 整页一份的「怎么看 K 线图」（「持仓」的 K 线上面；选股只有一行 .khgo 指过去；2026-10-15：每张图不再各带一份） */
+details.khelp>summary{font-weight:600;color:var(--accent)}.khgo{margin:8px 2px 0;color:var(--muted)}.khgo a{color:var(--accent);white-space:nowrap}
+details.khelp ul{margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--muted)}details.khelp li{margin:3px 0}
+.lots{position:relative;height:44px;margin:8px 0 0}
+.lots-bar{position:absolute;left:14px;right:14px;top:15px;height:14px;display:flex;gap:2px;pointer-events:none}
+.lots-bar i{flex:1 1 0;min-width:1px;border-radius:3px;background:var(--line)}.lots-bar i.keep{background:var(--accent);opacity:.45}
+.lots-bar i.add{background:var(--accent)}.lots-bar i.cut{background:transparent;box-shadow:inset 0 0 0 2px var(--neg)}
+.lots-bar i.over{background:repeating-linear-gradient(135deg,var(--line) 0 3px,transparent 3px 6px)}
+.lots input[type=range]{position:absolute;left:0;top:0;width:100%;height:44px;margin:0;background:transparent;-webkit-appearance:none;appearance:none}
+.lots input[type=range]::-webkit-slider-runnable-track{height:44px;background:transparent;border:0}
+.lots input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:28px;height:28px;margin-top:8px;border-radius:50%;background:var(--card);border:2px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.lots input[type=range]::-moz-range-track{height:44px;background:transparent;border:0}
+.lots input[type=range]::-moz-range-thumb{box-sizing:border-box;width:28px;height:28px;border-radius:50%;background:var(--card);border:2px solid var(--accent)}
+.lots input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+.lots-lab{position:relative;height:34px;margin:2px 14px 0;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.lots-lab span{position:absolute;white-space:nowrap;transform:translateX(-50%)}.lots-lab span.t{top:0}.lots-lab span.k{top:16px;color:var(--fg);font-weight:600}.lots-lab span.l{transform:none}.lots-lab span.r{transform:translateX(-100%)}
+.chart{position:relative;margin-top:10px;outline:none}.chart:focus-visible{box-shadow:0 0 0 2px var(--accent);border-radius:8px}
+.chart:not(.empty){border:1px solid var(--line);border-radius:12px;padding:6px 10px 4px}
+.chart.empty{padding:6px 0}.chart[data-retry]{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+.chart svg{display:block;width:100%;touch-action:pan-y;-webkit-user-select:none;user-select:none}
+.chart .grid{stroke:var(--line);stroke-width:1;shape-rendering:crispEdges}
+.chart .ax{fill:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.chart .wk,.chart .bd,.chart .vl{stroke-width:1;shape-rendering:crispEdges}.chart .vl{opacity:.8}
+.chart .cu{stroke:var(--up);fill:var(--card)}.chart .cd{stroke:var(--down);fill:var(--down)}
+.chart .ma{fill:none;stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
+.chart .m5{stroke:var(--fg)}.chart .m10{stroke:var(--ma10)}.chart .m20{stroke:var(--ma20)}.chart .m30{stroke:var(--ma30)}
+.chart .ref{stroke:var(--muted);stroke-width:1;stroke-dasharray:4 3;shape-rendering:crispEdges}
+.chart .stop{stroke:var(--neg);stroke-width:1;stroke-dasharray:4 3;shape-rendering:crispEdges}
+.chart .rl{font-size:11px;fill:var(--fg);paint-order:stroke;stroke:var(--card);stroke-width:3px;stroke-linejoin:round}
+.chart .xh{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 2;shape-rendering:crispEdges}.chart .mk{fill:var(--accent)}
+.chart .tl{fill:none;stroke:var(--fg);stroke-width:1.6;stroke-dasharray:7 3;stroke-linecap:round}
+.chart .tlp{fill:none;stroke:var(--fg);stroke-width:1.4;stroke-dasharray:1.5 3;stroke-linecap:round;opacity:.85}
+.chart .tla{fill:var(--card);stroke:var(--fg);stroke-width:1.4}.chart .tbu{fill:var(--up)}.chart .tbd{fill:var(--down)}
+.chart .zl{stroke:var(--muted);stroke-width:1;shape-rendering:crispEdges}.chart .s1{fill:none;stroke-width:1.3;stroke-linejoin:round}
+.chart .dif{stroke:var(--fg)}.chart .dea{stroke:var(--ma20)}.chart .mhu{fill:var(--up)}.chart .mhd{fill:var(--down)}
+.chart .pdi{stroke:var(--up)}.chart .mdi{stroke:var(--down);stroke-dasharray:4 2}.chart .adx{stroke:var(--ma10)}
+.chart .adxr{stroke:var(--ma30);stroke-dasharray:1.5 2}.chart .sl{font-size:10.5px;fill:var(--muted);font-variant-numeric:tabular-nums}
+.chart .ro{font-size:13px;line-height:1.45;color:var(--muted);font-variant-numeric:tabular-nums;min-height:2.9em;margin:2px 0 0}
+.chart .ro b{font-size:14px}.chart .ro .m{color:var(--fg)}
+.key{display:inline-block;width:14px;height:2px;border-radius:1px;vertical-align:middle;margin-right:6px}
+.key.m5{background:var(--fg)}.key.m10{background:var(--ma10)}.key.m20{background:var(--ma20)}.key.m30{background:var(--ma30)}
+.key.dif{background:var(--fg)}.key.dea{background:var(--ma20)}.key.pdi{background:var(--up)}.key.mdi{background:var(--down)}.key.adx{background:var(--ma10)}.key.adxr{background:var(--ma30)}
+.key.box{width:9px;height:9px;border-radius:2px}.key.cu{background:transparent;box-shadow:inset 0 0 0 1.5px var(--up)}.key.cd,.key.mhd{background:var(--down)}.key.mhu{background:var(--up)}
+.key.dash{height:0;background:none;border-top:2px dashed var(--muted);border-radius:0}.key.dash.stop{border-top-color:var(--neg)}.key.dash.tl{border-top-color:var(--fg)}
+.up{color:var(--up)}.down{color:var(--down)}
+.tchips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.tchip{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--chip);font-size:13px;white-space:nowrap}
+.chip.hot{background:var(--accent);color:var(--accent-fg);font-weight:600}
+.meta{font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.sgh{font-size:15px;margin:14px 0 0;padding-top:10px;border-top:1px solid var(--line)}
+.near{line-height:1.5;margin:2px 0}
+.rk{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 6px;border-radius:999px;background:var(--chip);font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+.prob{margin:2px 0}.prob b{font-variant-numeric:tabular-nums}
+.qt .sellx{margin-top:2px}.qt[data-sq]{margin:4px 0}
+.dipst{color:var(--muted);line-height:1.5;margin:-2px 0 6px}.dipst b{color:var(--fg);font-weight:600}
+.axb{margin:10px 0 0;padding:8px 12px 4px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}.axb.hot{border-color:var(--neg)}
+.axh{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 10px;padding-bottom:4px}
+.axr{display:grid;grid-template-columns:4.4em minmax(0,1fr);gap:0 10px;padding:6px 0;border-top:1px solid var(--line)}
+.axk{font-size:13px;color:var(--muted);line-height:1.75}.axv{min-width:0;font-size:15px;line-height:1.5}
+.axm{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px}.axm .chip{font-variant-numeric:tabular-nums}
+.chip.bad{background:transparent;box-shadow:inset 0 0 0 1px var(--neg);color:var(--neg);font-weight:600}
+.chip.mid{color:var(--neg)}.chip.gc{box-shadow:inset 0 0 0 1px var(--accent);background:transparent}
+.chip.upb{background:transparent;box-shadow:inset 0 0 0 1px var(--up);color:var(--up)}.chip.dnb{background:transparent;box-shadow:inset 0 0 0 1px var(--down);color:var(--down);font-weight:600}.chip.dnm{color:var(--down)}
+.nmk{margin:4px 0}.nmk>summary{list-style:none;cursor:pointer}.nmk>summary::-webkit-details-marker{display:none}
+.nml{margin:4px 0 0;padding-left:18px}.nml li{margin:4px 0}.nwin{margin:3px 0 0}
+details.nw.lv-hi{border-left:4px solid var(--neg);padding-left:8px}details.nw.lv-mid{border-left:4px solid #e08a00;padding-left:8px}
+.chip.lvh{background:var(--neg);color:#fff;font-weight:600}.chip.lvm{background:#e08a00;color:#fff;font-weight:600}
+.dots{display:inline-flex;gap:3px;margin-right:6px;vertical-align:1px}
+.dots i{width:8px;height:8px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--muted)}.dots i.on{background:var(--neg);box-shadow:none}
+.axn{padding:6px 0 2px;border-top:1px solid var(--line)}
+.axd>summary{font-size:13px}.axd ul{margin:2px 0 6px;padding-left:18px;font-size:13px;line-height:1.55;color:var(--muted)}
+.axt{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px;margin:2px 0 8px}
+.axt>div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 8px 5px;min-width:0}
+.axt .l{font-size:12px;color:var(--muted);line-height:1.4}.axt .s{font-size:12px;color:var(--muted);line-height:1.4;overflow-wrap:anywhere}
+.axt .v{font-size:clamp(15px,4.4vw,19px);font-weight:700;line-height:1.3;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.axt .mt{height:6px;border-radius:3px;background:var(--line);margin:3px 0 2px;overflow:hidden}.axt .mt i{display:block;height:100%;border-radius:3px;background:var(--muted)}
+.axt .mt.hot i{background:var(--neg)}
+.buyr{width:100%;margin:8px 0 2px}
+.abd{flex:none;min-width:4.6em;text-align:center;font-size:12px;font-weight:700;border:1px solid var(--line);border-radius:999px;padding:2px 8px;margin-right:8px;font-variant-numeric:tabular-nums}
+.abd.on{border-color:var(--up);color:var(--up)}
+.abx .abdel{flex:none;min-height:32px;padding:4px 10px;font-size:13px;color:var(--muted)}
+/* 规则接下来会自动买：每一行点开 = 建议的股票里同一只（2026-10-14；默认收起） */
+.abx{border-top:1px solid var(--line)}.list>.abx:first-child{border-top:0}
+.abx>summary{display:flex;gap:10px;align-items:center;padding:10px 0;list-style:none}.abx>summary::-webkit-details-marker{display:none}
+.abx>summary::after{content:'';flex:none;width:7px;height:7px;margin:0 6px 0 0;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
+.abx[open]>summary::after{transform:rotate(45deg)}.abx .abs{display:block}.abx .grow{overflow-wrap:anywhere}
+.abxb>.hv{border-top:1px dashed var(--line);padding:8px 0 12px}
+.abxe{display:flex;justify-content:flex-end;padding:0 0 12px}.abxe .btn::after{content:' ▲'}
+.avr{display:grid;grid-template-columns:3.6em minmax(0,1fr);align-items:center;gap:8px}.avr .alb{margin:3px 0}
+.alb i.new{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.35) 0 4px,transparent 4px 8px)}
+.avg{grid-template-columns:12px minmax(0,1fr) auto}.alp.up{color:var(--up)}.alp.down{color:var(--down)}
+.alb{display:flex;height:16px;border-radius:8px;overflow:hidden;background:var(--line);margin:6px 0 8px}.alb i{display:block;height:100%;min-width:2px}
+.alb i+i{box-shadow:inset 1px 0 0 var(--card)}
+.all{display:grid;gap:2px}.alr{display:grid;grid-template-columns:12px minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:2px 0}
+.ald{width:10px;height:10px;border-radius:3px}.aln{overflow-wrap:anywhere}.alp{font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+.aly{font-size:12px;font-variant-numeric:tabular-nums;text-align:right;min-width:6.5em}
+.fund{margin:8px 0 4px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}.fund .fh{font-weight:600;margin-bottom:6px}
+.fseg{margin:0 0 6px}.frow{display:grid;grid-template-columns:5.2em minmax(0,1fr) auto;align-items:center;gap:2px 8px;padding:3px 0}
+.frow .ft{font-variant-numeric:tabular-nums}.frow .fv{font-size:13px;font-variant-numeric:tabular-nums;text-align:right}
+.fbar{height:6px;border-radius:3px;background:var(--line);overflow:hidden}.fbar i{display:block;height:100%;background:var(--neg);border-radius:3px}
+.frow .fsub{grid-column:2 / 4}
+.axf{display:flex;flex-wrap:wrap;align-items:center;gap:4px 2px}.axa{color:var(--muted);padding:0 3px}
+.axs{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:13px;line-height:1.5}
+.axs.bad{border-color:var(--neg);color:var(--neg)}.axs.hot{border-color:var(--neg)}
+.axst{display:inline-block;margin-top:3px;font-size:12px;color:var(--muted)}
+.axn{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}.axx{font-size:12px;color:var(--muted);border:1px dashed var(--line);border-radius:999px;padding:1px 8px}
+.axt .bad{border-color:var(--neg)}.axt .bad .v{color:var(--neg)}
+.pl{margin:10px 0;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:14px;line-height:1.55;
+white-space:normal;font-variant-numeric:tabular-nums}.pl .up{color:var(--up)}.pl .down{color:var(--down)}.pl .muted{font-size:13px}
+.chart .live{stroke-dasharray:3 2}.chart .lv{font-size:10px;fill:var(--fg);paint-order:stroke;stroke:var(--card);stroke-width:3px;stroke-linejoin:round}
+details.kl>summary{color:var(--accent);font-size:14px}
+.legend{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:13px;color:var(--muted);margin:2px 0}
+.stepper{display:flex;align-items:center;gap:12px;margin:8px 0}.stepper output{flex:1;text-align:center}
+dialog{border:0;padding:0;background:var(--card);color:var(--fg);width:100%;max-width:min(720px,100%);max-height:88vh;
+margin:auto auto 0;border-radius:18px 18px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.sheet{padding:18px max(16px,env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 18px) max(16px,env(safe-area-inset-left));
+overflow:auto;white-space:pre-line}
+@media (min-width:760px){dialog{margin:auto;border-radius:18px;max-width:520px}}
+/* 确认框（2026-10-15「确认下单 / 取消下单」）：标题与两个按钮一直看得到，中间的说明自己滚动（长的框在 iPhone 上不再一打开就停在最下面、看不到标题） */
+#dlg-ask .sheet{max-height:88vh;display:flex;flex-direction:column}#dlg-ask .sheet>*{flex:none}#dlg-ask #ask-body{flex:1 1 auto;min-height:0;overflow:auto}
+fieldset{border:0;margin:8px 0;padding:0;white-space:normal}
+fieldset label{display:flex;align-items:center;gap:10px;min-height:44px;border-top:1px solid var(--line)}fieldset label:first-of-type{border-top:0}
+input[type=radio]{width:20px;height:20px;accent-color:var(--accent)}
+.row{display:flex;gap:10px;margin-top:14px;white-space:normal}.row .btn{flex:1}
+.toast{position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom) + 16px);z-index:20;max-width:688px;margin:0 auto;
+background:var(--fg);color:var(--bg);padding:12px 16px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.25);white-space:pre-line}
+.toast.bad{background:var(--neg);color:#fff}
+.code{font:700 34px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:3px;text-align:center;margin:8px 0}
+.qr{display:flex;justify-content:center;margin:8px 0}.qr img{width:220px;height:220px;background:#fff;padding:10px;border-radius:12px}
+footer{margin:16px 0;color:var(--muted);font-size:13px}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;justify-content:space-around;background:var(--card);
+border-top:1px solid var(--line);padding:6px max(8px,env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 6px) max(8px,env(safe-area-inset-left))}
+.tabbar button{flex:1;position:relative;background:none;border:0;color:var(--muted);font:inherit;font-size:11px;line-height:1.3;
+padding:4px 0;cursor:pointer;min-width:0}.tabbar button b{display:block;font-size:19px;color:var(--muted);font-weight:400}
+.tabbar button.on,.tabbar button.on b{color:var(--accent)}
+/* 每个标签一个颜色（2026-10-18 用户：「下面的标签每个要用颜色区分开让视觉更明显知道是对应的什么标签」）：图标一直是这个颜色、
+   选中的标签文字与滑动底色也是它，页面顶上的标题左边一条同色。红 = 涨 / 坏、琥珀 = 警戒 → 不用作标签色（消息用橙棕，与警戒的琥珀错开） */
+:root{--t-home:#2f5bd3;--t-hold:#0b8578;--t-trade:#7a45c2;--t-pick:#c0367f;--t-news:#b8611a;--t-more:#5d6779}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--t-home:#8aa8ff;--t-hold:#3ccbb8;--t-trade:#b88cf0;--t-pick:#f07cb8;--t-news:#f0a070;--t-more:#a3abba}}
+:root[data-theme="dark"]{--t-home:#8aa8ff;--t-hold:#3ccbb8;--t-trade:#b88cf0;--t-pick:#f07cb8;--t-news:#f0a070;--t-more:#a3abba}
+[data-tabgo=home],[data-tab=home]{--tc:var(--t-home)}[data-tabgo=hold],[data-tab=hold]{--tc:var(--t-hold)}[data-tabgo=trade],[data-tab=trade]{--tc:var(--t-trade)}
+[data-tabgo=pick],[data-tab=pick]{--tc:var(--t-pick)}[data-tabgo=news],[data-tab=news]{--tc:var(--t-news)}[data-tabgo=more],[data-tab=more]{--tc:var(--t-more)}
+.tabbar button b{color:var(--tc,var(--muted))}.tabbar button.on,.tabbar button.on b{color:var(--tc,var(--accent))}.tabbar button.on{font-weight:600}
+.pane>.panehead{border-left:4px solid var(--tc,var(--accent));padding-left:8px}.pane>.panehead>b{color:var(--tc,var(--fg))}
+.tabbar .badge{position:absolute;top:0;left:50%;margin-left:6px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--neg);
+color:#fff;font-size:10px;font-style:normal;line-height:16px;text-align:center}
+.pane{display:none}.pane.on{display:block}main{overflow-x:clip}
+.pane.in-r{animation:qbinr .26s cubic-bezier(.2,.8,.2,1)}.pane.in-l{animation:qbinl .26s cubic-bezier(.2,.8,.2,1)}@keyframes qbinr{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}@keyframes qbinl{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}@keyframes qbfade{from{opacity:0}to{opacity:1}}
+.tabind{position:absolute;left:0;top:7px;width:56px;height:30px;border-radius:15px;background:var(--chip);background:color-mix(in srgb,var(--tc,var(--accent)) 18%,transparent);pointer-events:none;opacity:0;transition:transform .3s cubic-bezier(.2,.8,.2,1),opacity .15s,background-color .3s}.tabbar.sorting .tabind{opacity:0!important}.tabbar button.pop b{animation:qbpop .32s cubic-bezier(.2,.8,.2,1)}@keyframes qbpop{0%{transform:scale(.82)}60%{transform:scale(1.14)}100%{transform:scale(1)}}
+.sgseg{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.sgseg button{flex:1;min-width:0;padding:8px 6px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit;font-size:14px}.sgseg button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.panehead{display:flex;flex-direction:column;gap:2px;margin:10px 2px 0}.panehead b{font-size:20px}.panehead span{color:var(--muted);font-size:13px}
+details.nw summary{line-height:1.5}details.nw.hl{outline:2px solid var(--accent);border-radius:8px;padding:4px}details.nw>div{margin:4px 0;font-size:14px} body{padding-bottom:calc(env(safe-area-inset-bottom) + 64px)}
+.spark{color:var(--accent);display:block;margin:4px 0 8px}
+/* 连接条（conn.js；2026-10-15「qbreak网页app经常卡住 永久解决这个问题」）：连不上 Mac → 顶上「连不上 Mac（N 秒后重试）」+「重试」；
+   状态变了但对话框开着 →「关掉对话框后自动刷新」。提示（toast）放在标签栏上面（以前盖住标签栏）。 */
+.conn{position:fixed;left:0;right:0;top:0;z-index:30;display:flex;gap:10px;align-items:center;
+padding:calc(env(safe-area-inset-top) + 8px) max(14px,env(safe-area-inset-right)) 8px max(14px,env(safe-area-inset-left));
+background:var(--accent);color:var(--accent-fg);font-size:14px;line-height:1.45;box-shadow:0 4px 16px rgba(0,0,0,.2)}
+.conn.warn{background:var(--neg);color:#fff}.conn[hidden]{display:none}
+.conn .conn-t{flex:1;min-width:0}.conn button{flex:none;min-height:40px;padding:8px 14px;border:0;border-radius:10px;background:rgba(0,0,0,.25);color:inherit;font:inherit;font-weight:600}
+/* 2026-10-15 复核：连接条在页头里（跟着页头吸顶，不盖住「刷新」/ 时刻 / 账本切换）；对话框开着时在对话框最上面（遮罩上面，点得到「现在刷新」） */
+.top>.conn{position:static;max-width:720px;margin:0 auto 8px;padding:8px 12px;border-radius:10px;box-shadow:none}
+dialog>.conn{position:sticky;top:0;z-index:2;padding:10px 14px;border-radius:18px 18px 0 0;box-shadow:none}
+.toast{bottom:calc(env(safe-area-inset-bottom) + 72px)}dialog .toast{bottom:calc(env(safe-area-inset-bottom) + 16px)}
+/* 今天还能买几次 / 卖几次（D6；2026-10-15）：交易页最上面的小卡 + 持仓每只的小标记 */
+#room .rm-hl{font-size:17px;margin-bottom:4px} #room details.rm{margin:6px 0} #room details.rm>summary{color:var(--accent)}
+#room .li .chip{white-space:normal} .room[data-room]{margin:4px 0}
+/* 盘中观测（2026-10-16）：持仓每只一行（收盘卖出线离现价多远）；选股页的买点卡片 2026-10-18 删掉 */
+.ia[data-intra]{margin:4px 0}
+/* 盘中等成交的单（2026-10-17）：票名闪烁 + 状态里转圈；成交 / 撤掉 / 收盘后不再有这个 class */
+.list .li.wfill .grow>b:first-child{animation:qbblink 1.2s ease-in-out infinite}.spin{display:inline-block;width:11px;height:11px;margin-right:6px;vertical-align:-1px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:qbspin .8s linear infinite}@keyframes qbblink{50%{opacity:.3}}@media (prefers-reduced-motion:reduce){.list .li.wfill .grow>b:first-child{animation:none;text-decoration:underline dotted}.pane.in-r,.pane.in-l{animation:qbfade .16s ease}.tabbar button.pop b{animation:none}.tabind{transition:opacity .15s}.spin{animation:none}}
+/* 确认框的立花实时价那一行（2026-10-17）：● 实时 / 转圈 取价中 / 灰 取不到（按 Yahoo） */
+.rtl{margin:4px 0 6px;display:flex;gap:6px;align-items:center}
+.rtl.ok{color:var(--accent);font-weight:600}
+.rtl.ok::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block}
+.rtl.off{color:var(--muted)}
+/* 状态用颜色 / 标签表示、说明收进 ⓘ（2026-10-17 用户「把各式各样的解说文字尽量反应到对应的数字 button 等等上面 … 解释太多影响重点」）
+   红 = 涨（--up）也 = 坏（--neg）→ 警戒用琥珀色（--warn），不和涨混 */
+.wn{color:var(--warn);font-weight:600}
+.chip.warn{background:var(--warn-bg);color:var(--warn);font-weight:600}
+.chip.ok{background:transparent;box-shadow:inset 0 0 0 1px var(--pos);color:var(--pos)}
+.chip.mut{background:transparent;box-shadow:inset 0 0 0 1px var(--line);color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.num.wn,.big.wn{color:var(--warn)} .num.bad,.big.bad{color:var(--neg)}
+details.ii{display:inline-block;vertical-align:middle;margin-left:4px}
+details.ii>summary{list-style:none;cursor:pointer;display:inline-flex;width:18px;height:18px;border-radius:50%;align-items:center;justify-content:center;
+  font-size:12px;color:var(--muted);box-shadow:inset 0 0 0 1px var(--line);user-select:none;position:relative}
+/* 点的范围至少 32×32（看起来照旧 18×18；2026-10-24 复核：以前手指不好点中） */
+details.ii>summary::before{content:'';position:absolute;left:50%;top:50%;width:max(32px,100%);height:max(32px,100%);transform:translate(-50%,-50%);border-radius:50%}
+details.ii>summary::-webkit-details-marker{display:none}
+details.ii[open]>summary{color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+details.ii.lab>summary{width:auto;height:auto;padding:2px 8px;border-radius:10px;font-size:12px}
+.tips{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;margin-top:8px}
+.tips details.ii{margin-left:0}
+/* ⓘ 点开 = 浮在上面的小框（固定定位，不挤开周围的布局；位置由 app.js 按 ⓘ 算，同时只开一个；2026-10-17） */
+details.ii .iib{position:fixed;z-index:40;left:12px;top:12px;width:max-content;max-width:min(340px,calc(100vw - 24px));max-height:60vh;overflow:auto;padding:10px 12px;border-radius:10px;background:var(--card);color:var(--fg);border:1px solid var(--line);box-shadow:0 6px 24px rgba(0,0,0,.18);font-weight:400;font-size:13px;line-height:1.55;text-align:left;white-space:normal;visibility:hidden}
+details.ii.on .iib{visibility:visible}
+.chart{overflow-anchor:none}   /* 重画 K 线时浏览器不自己挪滚动位置（位置由 trade.js 放回；2026-10-17） */
+/* 底栏按住拖 = 排序（2026-10-17；「更多」里的列表 2026-10-18 删掉） */
+.sorting,.sorting *{cursor:grabbing}
+.tabbar{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.sorting .shift{transition:transform .22s cubic-bezier(.2,.8,.2,1)}.lift{position:relative;z-index:3;box-shadow:0 8px 22px rgba(0,0,0,.24);scale:1.03;transition:scale .15s,box-shadow .15s}
+.tabbar button.lift{background:var(--bg);border-radius:10px}
+.hsw{position:fixed;top:0;left:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
+/* K 线：看更早 / 放大缩小 / 对数 / 自己画线、今天要成交的单、趋势线的容差带；调仓框的快捷档（2026-10-17） */
+.kzg{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+.chart .kz{font:inherit;font-size:14px;min-width:38px;min-height:38px;padding:4px 10px;border:1px solid var(--line);border-radius:10px;
+background:var(--card);color:var(--fg);cursor:pointer;touch-action:manipulation}
+.chart .kz[aria-pressed=true]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+.chart .kz:disabled{opacity:.4;cursor:default}
+.kdraw{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap;padding:4px 0 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.kdraw .hint{font-size:12px;color:var(--muted)}
+.seg.sm button{min-height:32px;padding:3px 10px;font-size:13px}
+.ktl{display:flex;align-items:center;gap:4px 8px;flex-wrap:wrap}
+.chart .tlb{fill:var(--fg);opacity:.08;stroke:none}
+.chart .ul{fill:none;stroke:var(--ul);stroke-width:1.5}.chart .ula{fill:var(--card);stroke:var(--ul);stroke-width:1.6}.chart .ula.on{fill:var(--ul)}
+.chart .ult{fill:var(--ul)}
+.chart .ob{stroke:var(--accent);stroke-width:1.2;stroke-dasharray:6 3;shape-rendering:crispEdges}.chart .obt{fill:var(--accent);font-weight:600}
+.chart .os{stroke:var(--warn);stroke-width:1.2;stroke-dasharray:6 3;shape-rendering:crispEdges}.chart .ost{fill:var(--warn);font-weight:600}
+.key.tlb{background:var(--fg);opacity:.25}.key.dash.ob{border-top-color:var(--accent)}.key.dash.os{border-top-color:var(--warn)}
+.qk{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:6px;margin-top:10px}
+.qkb{display:flex;flex-direction:column;align-items:center;gap:0;line-height:1.3;padding:6px 4px}
+.qkb[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.qkb .up{color:var(--up)}.qkb .down{color:var(--down)}
+.ksv{position:relative}.chart .klast{position:absolute;min-height:32px;padding:2px 10px;font-size:13px;box-shadow:var(--shadow);opacity:.95}
+@media (max-width:430px){.kbar.ktop .hint{display:none}}   /* 手机：上边沿只留 日K / 周K / 月K 和 − ＋（不多占一行） */
+/* 持仓最上面「出了卖出信号」（2026-10-18）：一只一行；盘中暂定用琥珀 */
+#sellsig .ss{padding:4px 0;border-top:1px solid var(--line)} #sellsig .ss:first-child{border-top:0} .wtx{color:var(--warn)}
+/* 最近几季决算的小图（qbreak/fins_view.py；2026-10-18）：实线 = 单季利润、圆点红 = 同比增 / 绿 = 同比减、虚线空心点 = 按会社予想摊算、竖虚线 = 下次决算日、浅底 = 这一期 */
+.fvbox{margin:4px 0 2px}.fv{width:100%;max-width:420px;height:auto;display:block}
+.fv .fvb{fill:var(--chip);opacity:.7}.fv .fvl{fill:none;stroke:var(--fg);stroke-width:1.6;opacity:.75}
+.fv .fvf{stroke:var(--muted);stroke-width:1.4;stroke-dasharray:4 3}.fv .fvz{stroke:var(--muted);stroke-width:.8;opacity:.6}
+.fv .fvn{stroke:var(--warn);stroke-width:1.2;stroke-dasharray:3 3}.fv .fvnt{fill:var(--warn);font-size:10px;font-weight:600;text-anchor:end}
+.fv .fvd.up{fill:var(--up)}.fv .fvd.down{fill:var(--down)}.fv .fvd.na{fill:var(--muted)}
+.fv .fvp{fill:var(--card);stroke-width:1.8}.fv .fvp.up{stroke:var(--up)}.fv .fvp.down{stroke:var(--down)}.fv .fvp.na{stroke:var(--muted)}
+.fv text{font-size:9px;fill:var(--muted)}.fv .fvx{text-anchor:middle}.fv .fvv{fill:var(--fg);font-size:10px;text-anchor:middle}

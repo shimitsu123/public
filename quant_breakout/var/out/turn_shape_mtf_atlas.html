@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>起涨起跌·三种尺度</title>
+<style>
+:root { color-scheme: light; --surface-1: #fcfcfb; --surface-2: #f4f3f0; --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #6f6e68;
+  --grid: #e7e6e2; --axis: #a5a49e; --shade: #f2f1ee; --series-1: #2a78d6; --series-2: #eb6834; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { color-scheme: dark; --surface-1: #1a1a19; --surface-2: #232322; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+    --text-muted: #9a998f; --grid: #2f2f2d; --axis: #6b6a64; --shade: #232322; --series-1: #3987e5; --series-2: #d95926; }
+}
+:root[data-theme="dark"] { color-scheme: dark; --surface-1: #1a1a19; --surface-2: #232322; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+  --text-muted: #9a998f; --grid: #2f2f2d; --axis: #6b6a64; --shade: #232322; --series-1: #3987e5; --series-2: #d95926; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface-1); color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Hiragino Sans", "PingFang SC", "Noto Sans CJK SC", "WenQuanYi Zen Hei", sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 20px 16px 40px; }
+h1 { font-size: 20px; margin: 0 0 6px; } h2 { font-size: 16px; margin: 30px 0 6px; } h3 { font-size: 14px; margin: 18px 0 4px; }
+.note { font-size: 13px; color: var(--text-secondary); line-height: 1.65; margin: 4px 0; }
+.key { background: var(--surface-2); border-radius: 8px; padding: 10px 14px 10px 30px; margin: 12px 0 4px; font-size: 14px; line-height: 1.7; }
+.key li { margin: 2px 0; }
+.legend { display: flex; gap: 18px; font-size: 13px; color: var(--text-secondary); margin: 12px 0 8px; flex-wrap: wrap; align-items: center; }
+.sw { display: inline-block; width: 16px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: middle; margin-right: 6px; }
+.ring { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: middle; margin-right: 6px; border: 2px solid var(--text-muted); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
+figure { margin: 0; } figcaption { font-size: 14px; font-weight: 600; margin: 0 0 2px; } .sub { font-size: 12px; color: var(--text-muted); margin: 0 0 4px; line-height: 1.5; }
+svg { width: 100%; height: auto; display: block; }
+svg text { fill: var(--text-secondary); font-size: 11px; }
+svg text.muted { fill: var(--text-muted); }
+.seg { display: inline-flex; border: 1px solid var(--grid); border-radius: 6px; overflow: hidden; margin: 8px 0; }
+.seg button { font: inherit; font-size: 13px; padding: 4px 14px; border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--text-primary); font-weight: 600; }
+.tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--grid);
+  border-radius: 6px; padding: 6px 9px; font-size: 12px; line-height: 1.5; box-shadow: 0 2px 10px rgba(0,0,0,.18); display: none; z-index: 9; max-width: 320px; }
+details { margin-top: 26px; font-size: 13px; color: var(--text-secondary); } summary { cursor: pointer; }
+.tbl { overflow-x: auto; } table { border-collapse: collapse; font-size: 12px; margin: 8px 0 14px; }
+th, td { padding: 3px 8px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; } th:first-child, td:first-child { text-align: left; }
+</style>
+</head>
+<body>
+<main>
+<h1>起涨点 / 起跌点：日线 / 周线 / 月线三种尺度一起看</h1>
+<p class="note">东证全部上市品种（同 U2：不设流动性下限，含 ETF / REIT 等）。确认期：日线尺度 2022-01〜2026-07 每 5 个交易日、周线尺度每周（约 4,074 个 / 周、220 周）、月线尺度每月末（约 3,930 个 / 月、44 个月）。起点按三种尺度分别定义（事后标注）：<span id="sdefs"></span></p>
+<ul class="key"><li><b>三种尺度都「事前用不了」</b>：分数最像起涨 / 起跌点的一组之后的超额 —— 日线尺度上涨 −0.05 pp（20 日）, 日线尺度下跌 −0.17 pp（20 日）, 周线尺度上涨 −1.02 pp（65 日）, 周线尺度下跌 −0.32 pp（65 日）, 月线尺度上涨 −2.33 pp（126 日）, 月线尺度下跌 +0.55 pp（126 日）。<b>周 / 月线尺度的上涨模型方向还相反</b>：最像起涨点的一组之后反而跑输（周线尺度 −1.02 pp / 65 日，区间 −2.01〜−0.07、月线尺度 −2.33 pp / 126 日，区间 −4.85〜−0.14）—— 跌得多的继续跌（中期动量），只用波动 / 规模 / 动量的基础模型已抓到大部分。</li><li><b>同样是认得出新低 / 新高、认不出会不会转</b>：AUC 0.82〜0.89，只在「近期新低 / 新高」里比就掉到 0.49〜0.58。</li><li><b>形状：每个尺度都是「本尺度的最后一段急跌 / 急涨」</b>：起涨点前 —— 日线尺度最后 10 个交易日多跌 9.5%；周线尺度最后 4 周多跌 9.5%（26 周合计 10.7%）；月线尺度最后 3 个月多跌 13.8%（12 个月合计 18.9%）（都已减同期全部样本；月线尺度的底部前几天跌势已放缓）。</li><li><b>最集中的特征随尺度变</b>：日线尺度起涨点 = 日 连跌最多的 1/5 ×4.5、日 5 日涨跌 最低 1/5 ×3.8；周线尺度 = 周 连跌最多的 1/5 ×4.3、日 RSI(14) 最低 1/5 ×4.3；月线尺度 = 月 连跌最多的 1/5 ×4.1、周 RSI(14) 最低 1/5 ×3.5。</li><li><b>分品种也没有「有信息」的组</b>（周线门槛 3.25 pp / 65 日、月线 6.3 pp / 126 日，与日线 1 pp / 20 日是同一个每天的门槛）。</li></ul>
+
+<h2>① 三种尺度的起点，前后的日 / 周 / 月线平均形状</h2>
+<p class="note">每一行是一种尺度的起点，每一列是看它的 K 线周期。纵轴 = 那一天（周 / 月）的价格比起点高多少（log × 100 ≈ %），已减去同一天全部样本的平均。
+<b>只看 0 的左边</b>：右边是按定义一定会涨 / 跌的部分（周 / 月线的图只画到起点之后 8 周 / 3 个月）。</p>
+<div class="seg" role="group" aria-label="起点尺度"><button data-sc="D" aria-pressed="true">日线尺度的起点</button><button data-sc="W" aria-pressed="false">周线尺度</button><button data-sc="M" aria-pressed="false">月线尺度</button></div>
+<div class="legend"><span><span class="sw" style="background:var(--series-1)"></span>起涨点</span><span><span class="sw" style="background:var(--series-2)"></span>起跌点</span></div>
+<div class="grid3" id="shapes"></div>
+
+<h2>② 各尺度的起点前，哪些日 / 周 / 月线特征最集中</h2>
+<p class="note">倍数 = 落在这个五分位（最低或最高 1/5）的样本里是起点的比例 ÷ 平均比例；标签前的「日 / 周 / 月」是特征所在的 K 线周期。</p>
+<div class="seg" role="group" aria-label="起涨或起跌"><button data-lab="RS" aria-pressed="true">起涨点</button><button data-lab="FS" aria-pressed="false">起跌点</button></div>
+<div class="grid3" id="lifts"></div>
+
+<h2>③ 「像起涨点 / 像起跌点」的分数能不能提前用？</h2>
+<p class="note">每个样本日按分数分十组：最像的一组（实心点 + 95% 区间）与最不像的一组（空心圈）之后的超额。三种尺度的持有期不同（20 / 65 / 126 个交易日），
+这里都<b>折算成每 20 个交易日</b>（悬停看原值）；门槛也按同样比例放大，所以在这张图上三种尺度用同一把尺。</p>
+<div class="legend"><span><span class="dot" style="background:var(--series-1)"></span>上涨模型</span><span><span class="dot" style="background:var(--series-2)"></span>下跌模型</span><span><span class="ring"></span>最不像的一组</span></div>
+<div class="grid" id="models"></div>
+
+<details><summary>数字表（模型、分组、形状）</summary><div class="tbl" id="tables"></div></details>
+<p class="note" style="margin-top:18px">来源：scripts/turn_shape_mtf.py（登记 de4b60c，只运行一次；结果 git de4b60c）→ var/out/turn_shape_mtf.json；日线尺度 = scripts/turn_shape_wide.py 的 U2
+（登记 2757571）→ var/out/turn_shape_wide.json；本页 scripts/turn_shape_mtf_atlas.py。只有汇总统计。非投资建议。</p>
+</main>
+<div class="tip" id="tip"></div>
+<script>
+const D = {"shapes": {"D": {"n_rs": 6601, "n_fs": 2659, "tf": {"d": {"x": [-60, -59, -58, -57, -56, -55, -54, -53, -52, -51, -50, -49, -48, -47, -46, -45, -44, -43, -42, -41, -40, -39, -38, -37, -36, -35, -34, -33, -32, -31, -30, -29, -28, -27, -26, -25, -24, -23, -22, -21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40], "RS": [9.2, 9.17, 9.22, 8.9, 8.69, 8.46, 8.81, 8.68, 8.66, 8.64, 8.63, 8.73, 8.88, 8.74, 8.71, 9.0, 8.92, 9.0, 8.78, 8.96, 9.17, 9.4, 9.27, 9.2, 9.33, 9.51, 9.28, 9.33, 9.29, 9.36, 9.34, 9.37, 9.52, 9.65, 9.59, 9.6, 9.59, 9.6, 9.71, 9.73, 9.7, 9.6, 9.33, 9.27, 9.44, 9.74, 9.84, 9.86, 9.61, 9.74, 9.52, 9.51, 9.17, 8.67, 8.28, 8.21, 7.61, 7.19, 6.04, 4.09, 0.0, 3.69, 5.53, 6.64, 7.81, 8.99, 9.95, 10.8, 11.51, 12.08, 13.01, 13.38, 14.27, 14.69, 15.46, 16.14, 16.78, 17.04, 17.62, 17.98, 18.69, 18.45, 18.7, 18.91, 19.23, 19.53, 19.58, 20.34, 20.56, 20.82, 21.37, 21.74, 22.05, 22.51, 22.79, 23.16, 23.46, 23.44, 23.74, 23.73, 23.86], "FS": [-9.18, -9.17, -9.12, -9.24, -9.04, -8.89, -9.07, -9.08, -9.19, -9.18, -9.25, -9.35, -9.3, -9.5, -9.51, -9.3, -9.34, -9.24, -9.39, -9.42, -9.32, -9.28, -9.04, -9.19, -9.16, -9.22, -9.14, -9.15, -9.19, -9.07, -8.97, -8.74, -8.51, -8.62, -8.72, -8.61, -8.53, -8.54, -8.76, -8.9, -8.91, -8.55, -8.58, -8.47, -8.42, -8.29, -7.94, -7.9, -7.84, -7.96, -7.83, -7.73, -7.41, -7.16, -6.7, -6.22, -5.61, -4.96, -3.95, -2.63, 0.0, -3.2, -5.14, -6.45, -7.33, -8.88, -10.22, -12.01, -11.56, -12.53, -12.29, -13.04, -13.72, -13.82, -14.7, -15.33, -15.09, -15.24, -15.6, -15.81, -16.46, -16.46, -16.5, -16.66, -17.19, -18.0, -18.0, -18.08, -18.33, -18.4, -18.8, -19.27, -20.03, -20.05, -20.62, -20.97, -21.16, -21.54, -21.52, -21.76, -21.68]}, "w": {"x": [-26, -25, -24, -23, -22, -21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8], "RS": [4.05, 4.2, 4.42, 4.74, 4.75, 4.73, 4.29, 4.75, 4.94, 4.33, 4.49, 3.93, 3.92, 4.26, 4.26, 4.02, 3.98, 4.1, 4.24, 4.57, 4.56, 4.91, 4.89, 4.71, 4.92, 3.63, 0.0, 1.49, 6.57, 9.23, 11.97, 13.6, 15.05, 16.89, 18.3], "FS": [-5.92, -5.3, -5.12, -5.48, -5.55, -6.43, -6.17, -5.94, -5.92, -6.06, -6.43, -6.21, -6.01, -6.31, -6.24, -5.95, -6.39, -6.59, -6.73, -6.05, -5.8, -5.81, -5.86, -5.59, -5.01, -3.98, 0.0, -2.81, -8.26, -11.09, -12.38, -13.73, -14.99, -16.78, -18.32]}, "m": {"x": [-24, -23, -22, -21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3], "RS": [2.5, 3.06, 1.91, 2.54, 3.57, 2.69, 2.51, 2.84, 2.38, 1.9, 1.38, 1.79, 0.98, 1.17, 0.96, -0.03, 0.26, 0.0, 0.74, 1.06, 1.38, 0.48, 0.15, 1.25, 0.0, 4.27, 12.66, 14.94], "FS": [0.22, 0.01, -0.24, -1.77, -0.57, 0.38, -0.6, -0.83, -1.79, -1.76, -1.51, -0.52, 1.41, 1.96, 1.54, 0.96, -0.05, 0.26, -0.74, -1.15, -1.85, -1.95, -1.58, -1.82, 0.0, -3.7, -12.07, -13.88]}}}, "W": {"n_rs": 8515, "n_fs": 717, "tf": {"d": {"x": [-60, -59, -58, -57, -56, -55, -54, -53, -52, -51, -50, -49, -48, -47, -46, -45, -44, -43, -42, -41, -40, -39, -38, -37, -36, -35, -34, -33, -32, -31, -30, -29, -28, -27, -26, -25, -24, -23, -22, -21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40], "RS": [11.36, 11.3, 11.24, 11.09, 11.03, 10.64, 10.61, 10.69, 10.77, 10.82, 10.98, 11.05, 11.17, 11.26, 11.22, 11.31, 11.27, 11.33, 11.45, 11.47, 11.53, 11.57, 11.55, 11.65, 11.71, 11.69, 11.54, 11.43, 11.38, 11.25, 11.15, 10.85, 10.83, 10.55, 10.34, 10.33, 10.23, 10.18, 9.86, 9.77, 9.71, 9.54, 9.33, 9.03, 8.83, 8.61, 8.44, 8.21, 7.93, 7.48, 7.12, 6.63, 6.37, 5.93, 5.38, 4.39, 2.69, 2.3, 1.55, 1.03, 0.0, 0.61, 2.04, 2.81, 3.93, 4.99, 5.75, 6.29, 6.88, 7.42, 8.18, 8.87, 9.26, 9.76, 10.24, 10.9, 11.28, 11.62, 12.11, 12.52, 12.96, 13.1, 13.48, 13.93, 14.23, 14.48, 14.76, 15.16, 15.47, 15.9, 16.13, 16.37, 16.66, 16.93, 17.36, 17.61, 17.95, 18.24, 18.51, 18.67, 18.98], "FS": [-14.15, -14.03, -13.92, -14.1, -14.04, -13.89, -13.88, -14.11, -14.12, -14.27, -14.35, -14.36, -14.34, -14.39, -14.26, -14.23, -14.34, -14.32, -14.36, -14.38, -14.34, -14.38, -14.38, -14.36, -14.21, -14.11, -13.86, -13.78, -13.7, -13.52, -13.52, -13.25, -13.08, -13.1, -13.0, -12.82, -12.57, -12.37, -12.04, -11.88, -11.65, -11.37, -11.12, -10.69, -10.4, -10.65, -10.36, -10.2, -9.7, -9.14, -8.61, -8.2, -7.65, -7.11, -6.47, -5.66, -4.33, -3.23, -2.26, -1.25, 0.0, -1.33, -2.93, -4.68, -5.84, -7.05, -8.16, -9.09, -9.72, -10.32, -11.01, -11.73, -11.89, -12.52, -13.35, -14.46, -14.78, -15.03, -15.65, -16.13, -16.96, -17.21, -17.46, -17.93, -18.58, -19.25, -19.51, -19.9, -20.23, -20.66, -21.27, -21.46, -21.64, -21.79, -22.09, -22.82, -23.64, -24.31, -24.44, -24.7, -25.21]}, "w": {"x": [-26, -25, -24, -23, -22, -21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8], "RS": [10.73, 10.57, 10.53, 10.39, 10.65, 10.83, 10.91, 11.12, 10.89, 11.15, 11.0, 10.88, 11.25, 11.3, 10.96, 10.79, 11.18, 11.36, 11.76, 11.41, 10.79, 10.13, 9.49, 8.53, 6.98, 4.3, 0.0, 4.72, 7.65, 10.23, 12.11, 13.86, 15.35, 16.76, 18.25], "FS": [-14.11, -14.25, -13.86, -13.98, -14.27, -14.44, -14.59, -14.76, -14.57, -14.47, -14.46, -14.42, -14.55, -14.13, -13.97, -14.22, -14.37, -14.36, -14.3, -13.76, -13.43, -12.52, -11.33, -10.48, -8.52, -5.6, 0.0, -6.78, -10.78, -13.55, -15.86, -18.25, -20.44, -21.89, -24.3]}, "m": {"x": [-24, -23, -22, -21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3], "RS": [8.17, 7.64, 7.05, 8.37, 8.28, 8.06, 8.11, 7.13, 7.48, 7.27, 7.34, 7.0, 6.54, 5.74, 5.44, 5.52, 5.5, 4.62, 4.4, 4.28, 4.61, 4.8, 5.12, 4.47, 0.0, 1.81, 9.9, 15.2], "FS": [1.55, 1.53, 0.74, -0.52, -1.32, -2.78, -4.0, -4.73, -6.16, -6.41, -6.87, -6.9, -6.03, -6.38, -7.56, -8.02, -8.64, -8.23, -7.17, -7.0, -7.7, -7.14, -7.26, -6.29, 0.0, -4.26, -14.0, -23.7]}}}, "M": {"n_rs": 3078, "n_fs": 104, "tf": {"d": {"x": [-60, -59, -58, -57, -56, -55, -54, -53, -52, -51, -50, -49, -48, -47, -46, -45, -44, -43, -42, -41, -40, -39, -38, -37, -36, -35, -34, -33, -32, -31, -30, -29, -28, -27, -26, -25, -24, -23, -22, -21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40], "RS": [13.27, 12.67, 12.48, 12.44, 12.37, 12.36, 12.19, 12.05, 11.93, 11.87, 11.72, 11.69, 11.64, 11.59, 11.39, 11.31, 11.15, 11.02, 10.98, 10.69, 10.64, 10.33, 9.92, 9.23, 8.88, 8.88, 8.72, 8.63, 8.59, 8.48, 8.55, 8.49, 8.43, 8.29, 8.12, 8.14, 8.05, 7.9, 7.48, 7.1, 6.76, 6.38, 5.83, 5.2, 4.03, 4.25, 3.55, 3.93, 3.43, 3.15, 2.82, 2.4, 2.03, 1.81, 1.36, 1.15, 0.92, 0.83, 0.63, 0.46, 0.0, 0.52, 1.21, 1.79, 1.98, 2.32, 2.8, 3.18, 3.65, 4.1, 4.78, 5.19, 5.61, 6.01, 6.35, 6.71, 7.11, 7.5, 7.73, 8.24, 8.56, 8.95, 9.22, 9.65, 9.88, 10.33, 10.67, 10.86, 11.38, 11.65, 11.82, 12.23, 12.6, 12.76, 12.92, 13.04, 13.2, 13.4, 13.61, 13.95, 14.33], "FS": [-10.68, -10.32, -10.49, -10.23, -9.82, -10.01, -9.79, -10.07, -9.91, -9.55, -9.64, -9.59, -9.69, -9.76, -9.52, -9.56, -9.55, -9.54, -9.56, -9.24, -9.44, -9.45, -9.54, -8.56, -8.42, -8.51, -8.58, -8.68, -8.67, -8.63, -8.98, -8.88, -8.97, -8.3, -8.04, -7.64, -7.42, -7.36, -6.99, -6.99, -6.09, -6.05, -5.29, -5.07, -4.58, -4.05, -3.74, -3.63, -3.2, -2.96, -2.3, -2.36, -2.28, -2.5, -2.27, -2.06, -1.73, -1.41, -1.13, -1.02, 0.0, -1.31, -3.0, -4.1, -3.4, -2.65, -3.67, -3.9, -5.17, -5.38, -6.14, -6.57, -6.74, -7.38, -7.67, -7.8, -7.81, -8.93, -9.45, -10.39, -11.1, -11.63, -11.49, -11.91, -12.41, -12.79, -13.26, -13.06, -13.93, -14.59, -14.64, -15.06, -15.17, -14.9, -15.12, -14.96, -15.44, -15.97, -16.2, -16.62, -18.06]}, "w": {"x": [-26, -25, -24, -23, -22, -21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8], "RS": [18.1, 17.53, 17.59, 16.93, 16.8, 16.63, 16.31, 16.01, 15.46, 15.53, 15.16, 14.36, 13.96, 13.54, 12.62, 11.53, 11.16, 10.69, 9.66, 8.49, 8.09, 7.69, 6.59, 4.26, 2.44, 1.22, 0.0, 1.11, 2.76, 5.48, 7.14, 8.96, 10.31, 11.79, 12.81], "FS": [-14.1, -13.18, -13.59, -13.92, -13.38, -13.18, -13.91, -12.56, -12.05, -11.78, -11.43, -10.64, -10.45, -10.17, -9.52, -9.16, -8.84, -8.68, -8.32, -7.89, -8.13, -6.94, -5.36, -4.01, -2.12, -1.19, 0.0, -2.03, -3.99, -6.58, -8.63, -10.9, -12.41, -14.06, -14.58]}, "m": {"x": [-24, -23, -22, -21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3], "RS": [17.98, 16.96, 18.09, 18.71, 18.71, 18.67, 18.08, 18.34, 18.37, 19.28, 19.44, 19.29, 18.9, 18.7, 18.6, 18.89, 18.37, 18.33, 18.68, 17.23, 16.36, 13.78, 10.64, 6.94, 0.0, 8.69, 14.43, 18.54], "FS": [-1.15, -1.08, -4.43, -6.7, -7.58, -8.16, -8.31, -8.22, -9.93, -11.2, -12.41, -12.2, -12.05, -12.73, -13.95, -14.67, -14.31, -14.8, -14.59, -14.55, -12.98, -11.39, -9.75, -6.52, 0.0, -11.08, -18.12, -23.44]}}}}, "models": [{"sc": "D", "mk": "rise", "auc": 0.8871, "auc_base": 0.733, "auc_ext": 0.5829, "h": 20, "factor": 1.0, "top": -0.047, "bottom": -0.243, "ci": [-0.353, 0.23], "tier": "没有用", "gates": "✓✓✗✗✗✗", "top_n": -0.047, "bottom_n": -0.243, "ci_n": [-0.353, 0.23]}, {"sc": "D", "mk": "fall", "auc": 0.8737, "auc_base": 0.7458, "auc_ext": 0.5731, "h": 20, "factor": 1.0, "top": -0.173, "bottom": -0.196, "ci": [-0.436, 0.09], "tier": "没有用", "gates": "✓✓✗✗✓✗", "top_n": -0.173, "bottom_n": -0.196, "ci_n": [-0.436, 0.09]}, {"sc": "W", "mk": "rise", "auc": 0.8689, "auc_base": 0.8401, "auc_ext": 0.4893, "h": 65, "factor": 3.25, "top": -1.022, "bottom": 0.141, "ci": [-2.006, -0.067], "tier": "没有用", "gates": "✓✓✗✗✗✗", "top_n": -0.314, "bottom_n": 0.043, "ci_n": [-0.617, -0.021]}, {"sc": "W", "mk": "fall", "auc": 0.8238, "auc_base": 0.7287, "auc_ext": 0.5203, "h": 65, "factor": 3.25, "top": -0.321, "bottom": -1.127, "ci": [-1.162, 0.414], "tier": "没有用", "gates": "✓✓✗✗✓✓", "top_n": -0.099, "bottom_n": -0.347, "ci_n": [-0.358, 0.127]}, {"sc": "M", "mk": "rise", "auc": 0.8758, "auc_base": 0.7981, "auc_ext": 0.5008, "h": 126, "factor": 6.3, "top": -2.327, "bottom": 0.204, "ci": [-4.85, -0.143], "tier": "没有用", "gates": "✓✓✗✗✗✗", "top_n": -0.369, "bottom_n": 0.032, "ci_n": [-0.77, -0.023]}, {"sc": "M", "mk": "fall", "auc": 0.8463, "auc_base": 0.6616, "auc_ext": 0.5795, "h": 126, "factor": 6.3, "top": 0.549, "bottom": -2.084, "ci": [-0.676, 1.91], "tier": "没有用", "gates": "✓✓✗✗✗✗", "top_n": 0.087, "bottom_n": -0.331, "ci_n": [-0.107, 0.303]}], "lifts": {"D": {"RS": [{"name": "日 连跌最多的 1/5", "tf": "d", "lift": 4.55, "other": 0.0}, {"name": "日 5 日涨跌 最低 1/5", "tf": "d", "lift": 3.78, "other": 0.0}, {"name": "日 25 日线乖离 最低 1/5", "tf": "d", "lift": 3.42, "other": 0.02}, {"name": "日 RSI(14) 最低 1/5", "tf": "d", "lift": 3.39, "other": 0.02}, {"name": "日 20 日涨跌 最低 1/5", "tf": "d", "lift": 2.78, "other": 0.05}, {"name": "日 75 日线乖离 最低 1/5", "tf": "d", "lift": 2.61, "other": 0.22}, {"name": "日 离 60 日低点 最低 1/5", "tf": "d", "lift": 2.6, "other": 0.15}, {"name": "日 离 60 日高点 最低 1/5", "tf": "d", "lift": 2.47, "other": 0.32}], "FS": [{"name": "日 RSI(14) 最高 1/5", "tf": "d", "lift": 3.2, "other": 0.02}, {"name": "日 连涨最多的 1/5", "tf": "d", "lift": 3.08, "other": 0.0}, {"name": "日 25 日线乖离 最高 1/5", "tf": "d", "lift": 2.87, "other": 0.03}, {"name": "日 5 日涨跌 最高 1/5", "tf": "d", "lift": 2.78, "other": 0.0}, {"name": "日 离 60 日高点 最高 1/5", "tf": "d", "lift": 2.66, "other": 0.1}, {"name": "日 实体（阴阳） 最高 1/5", "tf": "d", "lift": 2.59, "other": 0.09}, {"name": "日 量比 最高 1/5", "tf": "d", "lift": 2.38, "other": 1.92}, {"name": "日 20 日涨跌 最高 1/5", "tf": "d", "lift": 2.37, "other": 0.2}]}, "W": {"RS": [{"name": "周 连跌最多的 1/5", "tf": "w", "lift": 4.33, "other": 0.0}, {"name": "日 RSI(14) 最低 1/5", "tf": "d", "lift": 4.28, "other": 0.0}, {"name": "日 25 日线乖离 最低 1/5", "tf": "d", "lift": 3.99, "other": 0.0}, {"name": "周 4 周涨跌 最低 1/5", "tf": "w", "lift": 3.48, "other": 0.0}, {"name": "日 20 日涨跌 最低 1/5", "tf": "d", "lift": 3.47, "other": 0.0}, {"name": "周 13 周线乖离 最低 1/5", "tf": "w", "lift": 3.38, "other": 0.01}, {"name": "日 离 60 日低点 最低 1/5", "tf": "d", "lift": 3.27, "other": 0.16}, {"name": "日 75 日线乖离 最低 1/5", "tf": "d", "lift": 3.1, "other": 0.04}], "FS": [{"name": "日 RSI(14) 最高 1/5", "tf": "d", "lift": 3.46, "other": 0.01}, {"name": "日 25 日线乖离 最高 1/5", "tf": "d", "lift": 3.03, "other": 0.0}, {"name": "日 离 60 日高点 最高 1/5", "tf": "d", "lift": 2.94, "other": 0.02}, {"name": "周 连涨最多的 1/5", "tf": "w", "lift": 2.79, "other": 0.0}, {"name": "周 4 周涨跌 最高 1/5", "tf": "w", "lift": 2.75, "other": 0.0}, {"name": "日 20 日涨跌 最高 1/5", "tf": "d", "lift": 2.7, "other": 0.0}, {"name": "周 13 周线乖离 最高 1/5", "tf": "w", "lift": 2.64, "other": 0.0}, {"name": "日 5 日涨跌 最高 1/5", "tf": "d", "lift": 2.51, "other": 0.01}]}, "M": {"RS": [{"name": "月 连跌最多的 1/5", "tf": "m", "lift": 4.11, "other": 0.0}, {"name": "周 RSI(14) 最低 1/5", "tf": "w", "lift": 3.49, "other": 0.0}, {"name": "月 RSI(6) 最低 1/5", "tf": "m", "lift": 3.46, "other": 0.0}, {"name": "周 26 周线乖离 最低 1/5", "tf": "w", "lift": 3.15, "other": 0.0}, {"name": "日 75 日线乖离 最低 1/5", "tf": "d", "lift": 3.07, "other": 0.0}, {"name": "周 52 周区间位置 最低 1/5", "tf": "w", "lift": 3.05, "other": 0.0}, {"name": "周 13 周线乖离 最低 1/5", "tf": "w", "lift": 3.04, "other": 0.0}, {"name": "月 3 个月涨跌 最低 1/5", "tf": "m", "lift": 3.0, "other": 0.0}], "FS": [{"name": "月 连涨最多的 1/5", "tf": "m", "lift": 2.9, "other": 0.0}, {"name": "月 离 12 个月高点 最高 1/5", "tf": "m", "lift": 2.84, "other": 0.01}, {"name": "日 75 日线乖离 最高 1/5", "tf": "d", "lift": 2.56, "other": 0.0}, {"name": "日 25 日线乖离 最高 1/5", "tf": "d", "lift": 2.54, "other": 0.08}, {"name": "周 RSI(14) 最高 1/5", "tf": "w", "lift": 2.52, "other": 0.01}, {"name": "月 实体 最高 1/5", "tf": "m", "lift": 2.48, "other": 0.01}, {"name": "日 RSI(14) 最高 1/5", "tf": "d", "lift": 2.46, "other": 0.02}, {"name": "周 26 周线乖离 最高 1/5", "tf": "w", "lift": 2.39, "other": 0.0}]}}, "groups": [{"sc": "D", "k": "A", "name": "A 原样本", "rows": 618688, "per_day": 2786.9, "rs": 0.76, "fs": 0.3, "bins": 10, "info_pp": 1.0, "rise": {"auc": 0.8966, "auc_ext": 0.5881, "spread": 0.202, "top": -0.051, "ci": [-0.407, 0.276], "info": false}, "fall": {"auc": 0.8851, "auc_ext": 0.5869, "spread": -0.162, "top": -0.109, "ci": [-0.394, 0.176], "info": false}}, {"sc": "D", "k": "B", "name": "B 成交少的普通股", "rows": 194097, "per_day": 874.3, "rs": 0.71, "fs": 0.31, "bins": 10, "info_pp": 1.0, "rise": {"auc": 0.8535, "auc_ext": 0.5463, "spread": 0.34, "top": 0.084, "ci": [-0.118, 0.302], "info": false}, "fall": {"auc": 0.8633, "auc_ext": 0.569, "spread": 0.614, "top": -0.223, "ci": [-0.44, -0.003], "info": false}}, {"sc": "D", "k": "C", "name": "C 上市未满约 1 年", "rows": 17070, "per_day": 76.9, "rs": 1.15, "fs": 0.3, "bins": 10, "info_pp": 1.0, "rise": {"auc": 0.8862, "auc_ext": 0.6183, "spread": -0.676, "top": -0.761, "ci": [-1.571, 0.025], "info": false}, "fall": {"auc": 0.8599, "auc_ext": 0.5666, "spread": -2.203, "top": 0.793, "ci": [-0.067, 1.648], "info": false}}, {"sc": "D", "k": "D", "name": "D ETF / ETN", "rows": 70506, "per_day": 317.6, "rs": 0.38, "fs": 0.18, "bins": 10, "info_pp": 1.0, "rise": {"auc": 0.8571, "auc_ext": 0.5374, "spread": -0.238, "top": -0.519, "ci": [-1.196, 0.142], "info": false}, "fall": {"auc": 0.8394, "auc_ext": 0.5019, "spread": -0.263, "top": -0.413, "ci": [-0.939, 0.136], "info": false}}, {"sc": "D", "k": "E", "name": "E REIT / インフラ", "rows": 14245, "per_day": 64.2, "rs": 0.24, "fs": 0.14, "bins": 10, "info_pp": 1.0, "rise": {"auc": 0.867, "auc_ext": 0.5641, "spread": -0.12, "top": -0.104, "ci": [-0.427, 0.184], "info": false}, "fall": {"auc": 0.854, "auc_ext": 0.4035, "spread": 0.094, "top": -0.088, "ci": [-0.344, 0.187], "info": false}}, {"sc": "D", "k": "F", "name": "F 其他", "rows": 2131, "per_day": 9.6, "rs": 0.99, "fs": 0.66, "bins": 0, "info_pp": 1.0, "rise": {"auc": 0.8682, "auc_ext": 0.6324, "spread": null, "top": null, "ci": null, "info": null}, "fall": {"auc": 0.4593, "auc_ext": 0.2047, "spread": null, "top": null, "ci": null, "info": null}}, {"sc": "W", "k": "A", "name": "A 原样本", "rows": 613115, "per_day": 2786.9, "rs": 0.95, "fs": 0.07, "bins": 10, "info_pp": 3.25, "rise": {"auc": 0.8856, "auc_ext": 0.4863, "spread": -1.312, "top": -1.082, "ci": [-2.119, -0.089], "info": false}, "fall": {"auc": 0.8269, "auc_ext": 0.5062, "spread": -1.439, "top": 0.03, "ci": [-0.95, 0.916], "info": false}}, {"sc": "W", "k": "B", "name": "B 成交少的普通股", "rows": 200493, "per_day": 911.3, "rs": 1.04, "fs": 0.1, "bins": 10, "info_pp": 3.25, "rise": {"auc": 0.8214, "auc_ext": 0.5007, "spread": -0.007, "top": -0.328, "ci": [-1.024, 0.501], "info": false}, "fall": {"auc": 0.8387, "auc_ext": 0.5943, "spread": 0.848, "top": -0.65, "ci": [-1.271, -0.047], "info": false}}, {"sc": "W", "k": "C", "name": "C 上市未满约 1 年", "rows": 765, "per_day": 3.8, "rs": 1.31, "fs": 0.13, "bins": 0, "info_pp": 3.25, "rise": {"auc": 0.8645, "auc_ext": 0.6013, "spread": null, "top": null, "ci": null, "info": null}, "fall": {"auc": 0.9267, "auc_ext": 0.6038, "spread": null, "top": null, "ci": null, "info": null}}, {"sc": "W", "k": "D", "name": "D ETF / ETN", "rows": 65785, "per_day": 299.0, "rs": 0.71, "fs": 0.06, "bins": 10, "info_pp": 3.25, "rise": {"auc": 0.8419, "auc_ext": 0.4201, "spread": -4.521, "top": -4.093, "ci": [-6.597, -1.68], "info": false}, "fall": {"auc": 0.7137, "auc_ext": 0.4035, "spread": -1.921, "top": -1.203, "ci": [-2.305, -0.16], "info": false}}, {"sc": "W", "k": "E", "name": "E REIT / インフラ", "rows": 14103, "per_day": 64.1, "rs": 0.27, "fs": 0.16, "bins": 10, "info_pp": 3.25, "rise": {"auc": 0.8695, "auc_ext": 0.4907, "spread": 0.037, "top": -0.026, "ci": [-1.162, 0.951], "info": false}, "fall": {"auc": 0.886, "auc_ext": 0.4903, "spread": -0.249, "top": 0.076, "ci": [-0.534, 0.704], "info": false}}, {"sc": "W", "k": "F", "name": "F 其他", "rows": 2041, "per_day": 9.3, "rs": 1.67, "fs": 0.2, "bins": 0, "info_pp": 3.25, "rise": {"auc": 0.7295, "auc_ext": 0.476, "spread": null, "top": null, "ci": null, "info": null}, "fall": {"auc": 0.7277, "auc_ext": 0.4687, "spread": null, "top": null, "ci": null, "info": null}}, {"sc": "M", "k": "A", "name": "A 原样本", "rows": 118207, "per_day": 2686.5, "rs": 1.72, "fs": 0.05, "bins": 10, "info_pp": 6.3, "rise": {"auc": 0.8844, "auc_ext": 0.4927, "spread": -2.226, "top": -2.271, "ci": [-5.135, 0.266], "info": false}, "fall": {"auc": 0.8398, "auc_ext": 0.5962, "spread": -3.433, "top": 0.937, "ci": [-0.396, 2.353], "info": false}}, {"sc": "M", "k": "B", "name": "B 成交少的普通股", "rows": 39959, "per_day": 908.2, "rs": 2.09, "fs": 0.07, "bins": 10, "info_pp": 6.3, "rise": {"auc": 0.8602, "auc_ext": 0.5284, "spread": -1.296, "top": -0.868, "ci": [-1.698, 0.063], "info": false}, "fall": {"auc": 0.9061, "auc_ext": 0.6326, "spread": 0.356, "top": -0.153, "ci": [-1.244, 1.108], "info": false}}, {"sc": "M", "k": "C", "name": "C 上市未满约 1 年", "rows": 45, "per_day": 1.5, "rs": 4.44, "fs": 0.0, "bins": 0, "info_pp": 6.3, "rise": {"auc": 0.7209, "auc_ext": 0.5, "spread": null, "top": null, "ci": null, "info": null}, "fall": {"auc": null, "auc_ext": null, "spread": null, "top": null, "ci": null, "info": null}}, {"sc": "M", "k": "D", "name": "D ETF / ETN", "rows": 11499, "per_day": 261.3, "rs": 1.51, "fs": 0.1, "bins": 10, "info_pp": 6.3, "rise": {"auc": 0.854, "auc_ext": 0.4437, "spread": -9.448, "top": -9.903, "ci": [-15.763, -4.93], "info": false}, "fall": {"auc": 0.6736, "auc_ext": 0.268, "spread": -8.648, "top": 1.113, "ci": [-0.436, 2.793], "info": false}}, {"sc": "M", "k": "E", "name": "E REIT / インフラ", "rows": 2823, "per_day": 64.2, "rs": 0.89, "fs": 0.11, "bins": 10, "info_pp": 6.3, "rise": {"auc": 0.8855, "auc_ext": 0.6497, "spread": 1.16, "top": 0.726, "ci": [-1.564, 2.76], "info": false}, "fall": {"auc": 0.8957, "auc_ext": 0.505, "spread": 0.508, "top": -0.824, "ci": [-2.225, 0.411], "info": false}}, {"sc": "M", "k": "F", "name": "F 其他", "rows": 390, "per_day": 8.9, "rs": 1.79, "fs": 0.0, "bins": 0, "info_pp": 6.3, "rise": {"auc": 0.8672, "auc_ext": 0.5923, "spread": null, "top": null, "ci": null, "info": null}, "fall": {"auc": null, "auc_ext": null, "spread": null, "top": null, "ci": null, "info": null}}], "tf": [["d", "日线", "交易日"], ["w", "周线", "周"], ["m", "月线", "个月"]], "sname": {"D": "日线尺度", "W": "周线尺度", "M": "月线尺度"}, "sdef": {"D": "前后 10 个交易日最低 / 最高、40 个交易日内先到 M（10〜40%）；之后 20 日超额", "W": "前后 8 周最低 / 最高、26 周内先到 M（18〜72%）；之后 65 日超额", "M": "前后 6 个月最低 / 最高、12 个月内先到 M（25〜100%）；之后 126 日超额"}};
+const NS = "http://www.w3.org/2000/svg";
+const tip = document.getElementById("tip");
+const C1 = "var(--series-1)", C2 = "var(--series-2)";
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function txt(parent, x, y, s, attrs) { const t = el("text", Object.assign({ x, y }, attrs || {}), parent); t.textContent = s; return t; }
+function niceTicks(lo, hi, n) { const span = hi - lo, raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw))); const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
+  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(6)); return out; }
+function showTip(ev, h) { tip.innerHTML = h; tip.style.display = "block"; const x = Math.min(ev.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+  const y = Math.min(ev.clientY + 14, window.innerHeight - tip.offsetHeight - 8); tip.style.left = Math.max(4, x) + "px"; tip.style.top = Math.max(4, y) + "px"; }
+function hideTip() { tip.style.display = "none"; }
+function fmt(v, d) { if (v === null || v === undefined) return "—"; return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(d === undefined ? 1 : d); }
+function off(v) { return v > 0 ? "+" + v : v < 0 ? "−" + Math.abs(v) : "0"; }
+function figure(host, title, subtxt) { const fig = document.createElement("figure"); host.appendChild(fig);
+  const cap = document.createElement("figcaption"); cap.textContent = title; fig.appendChild(cap);
+  const sub = document.createElement("div"); sub.className = "sub"; sub.textContent = subtxt; fig.appendChild(sub); return fig; }
+function widthOf(fig) { return Math.max(280, Math.round(fig.getBoundingClientRect().width)); }
+const mname = mk => mk === "rise" ? "上涨模型" : "下跌模型";
+
+function lineChart(fig, title, unit, xs, ys) {
+  const W = widthOf(fig), H = 210, m = { l: 36, r: 54, t: 10, b: 30 };
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": title }, fig);
+  const vals = ys.flatMap(s => s.v).filter(v => v !== null);
+  let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals); const pad = (hi - lo) * 0.08 || 1; lo -= pad; hi += pad;
+  const x0 = xs[0], x1 = xs[xs.length - 1];
+  const X = x => m.l + (x - x0) / (x1 - x0) * (W - m.l - m.r), Y = y => m.t + (hi - y) / (hi - lo) * (H - m.t - m.b);
+  el("rect", { x: X(0), y: m.t, width: X(x1) - X(0), height: H - m.t - m.b, fill: "var(--shade)" }, svg);
+  for (const v of niceTicks(lo, hi, 4)) { el("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: v === 0 ? "var(--axis)" : "var(--grid)", "stroke-width": 1 }, svg);
+    txt(svg, m.l - 6, Y(v) + 4, off(v), { "text-anchor": "end" }); }
+  for (const v of niceTicks(x0, x1, 5)) txt(svg, X(v), H - m.b + 15, off(v), { "text-anchor": "middle" });
+  el("line", { x1: X(0), x2: X(0), y1: m.t, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1, "stroke-dasharray": "3 3" }, svg);
+  const ends = [];
+  ys.forEach(s => { let d = ""; s.v.forEach((v, k) => { if (v === null) return; d += (d ? "L" : "M") + X(xs[k]).toFixed(1) + " " + Y(v).toFixed(1); });
+    el("path", { d, fill: "none", stroke: s.c, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+    let k = s.v.length - 1; while (k > 0 && s.v[k] === null) k--; ends.push({ y: Y(s.v[k]), name: s.n, c: s.c }); });
+  ends.sort((a, b) => a.y - b.y); for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
+  for (const e of ends) { el("circle", { cx: W - m.r + 6, cy: e.y, r: 3, fill: e.c }, svg); txt(svg, W - m.r + 12, e.y + 4, e.name); }
+  const cross = el("line", { y1: m.t, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1, opacity: 0 }, svg);
+  const dots = ys.map(s => el("circle", { r: 4, fill: s.c, stroke: "var(--surface-1)", "stroke-width": 2, opacity: 0 }, svg));
+  const hit = el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent" }, svg);
+  hit.addEventListener("mousemove", ev => { const r = svg.getBoundingClientRect(); const px = (ev.clientX - r.left) / r.width * W;
+    let k = Math.round((px - m.l) / (W - m.l - m.r) * (x1 - x0)); k = Math.max(0, Math.min(xs.length - 1, k));
+    cross.setAttribute("x1", X(xs[k])); cross.setAttribute("x2", X(xs[k])); cross.setAttribute("opacity", 1);
+    let h = `<b>${title}　${off(xs[k])} ${unit}</b>`;
+    ys.forEach((s, i) => { const v = s.v[k]; if (v === null) { dots[i].setAttribute("opacity", 0); return; }
+      dots[i].setAttribute("cx", X(xs[k])); dots[i].setAttribute("cy", Y(v)); dots[i].setAttribute("opacity", 1);
+      h += `<br><span style="color:${s.c}">●</span> ${s.n} ${fmt(v)}`; });
+    showTip(ev, h); });
+  hit.addEventListener("mouseleave", () => { cross.setAttribute("opacity", 0); dots.forEach(d => d.setAttribute("opacity", 0)); hideTip(); });
+}
+
+function hbar(fig, title, rows, color, base) {
+  const rowH = 24, W = widthOf(fig), m = { l: 170, r: 52, t: 6, b: 24 }, H = m.t + rows.length * rowH + m.b;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": title }, fig);
+  const vmax = Math.max(...rows.map(r => r.lift)), span = W - m.l - m.r;
+  const X = v => m.l + v / vmax * span;
+  el("line", { x1: X(1), x2: X(1), y1: m.t, y2: H - m.b + 4, stroke: "var(--axis)", "stroke-width": 1, "stroke-dasharray": "3 3" }, svg);
+  txt(svg, X(1), H - 6, "×1 = 平均", { "text-anchor": "middle", class: "muted" });
+  rows.forEach((r, i) => { const y = m.t + i * rowH, bh = 13, by = y + (rowH - bh) / 2;
+    txt(svg, m.l - 8, by + 10, r.name, { "text-anchor": "end" });
+    el("rect", { x: m.l, y: by, width: Math.max(1, X(r.lift) - m.l), height: bh, rx: 2, fill: color }, svg);
+    txt(svg, X(r.lift) + 5, by + 10, "×" + r.lift.toFixed(2));
+    const hitr = el("rect", { x: 0, y, width: W, height: rowH, fill: "transparent" }, svg);
+    hitr.addEventListener("mousemove", ev => showTip(ev, `<b>${r.name}</b><br>是${base}的倍数 ×${r.lift.toFixed(2)}<br>同一格是${base === "起涨点" ? "起跌点" : "起涨点"}的倍数 ×${r.other.toFixed(2)}`));
+    hitr.addEventListener("mouseleave", hideTip); });
+}
+
+function forest(fig, title, rows, xr) {
+  const W = widthOf(fig), rowH = 26, m = { l: 92, r: 14, t: 8, b: 30 }, H = m.t + rows.length * rowH + m.b;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": title }, fig);
+  const X = v => m.l + (v - xr[0]) / (xr[1] - xr[0]) * (W - m.l - m.r);
+  for (const v of niceTicks(xr[0], xr[1], 5)) { el("line", { x1: X(v), x2: X(v), y1: m.t, y2: H - m.b, stroke: v === 0 ? "var(--axis)" : "var(--grid)", "stroke-width": 1 }, svg);
+    txt(svg, X(v), H - m.b + 15, fmt(v, Math.abs(v) < 1 && v !== 0 ? 1 : 0), { "text-anchor": "middle" }); }
+  txt(svg, m.l + (W - m.l - m.r) / 2, H - 3, "之后超额，折算成每 20 个交易日（pp）", { "text-anchor": "middle", class: "muted" });
+  rows.forEach((r, i) => { const y = m.t + i * rowH, cy = y + rowH / 2;
+    txt(svg, m.l - 8, cy + 4, r.lab, { "text-anchor": "end" });
+    if (r.lo !== null && r.hi !== null) el("line", { x1: X(r.lo), x2: X(r.hi), y1: cy, y2: cy, stroke: r.c, "stroke-width": 2, "stroke-linecap": "round" }, svg);
+    el("circle", { cx: X(r.b), cy, r: 4, fill: "var(--surface-1)", stroke: "var(--text-muted)", "stroke-width": 2 }, svg);
+    el("circle", { cx: X(r.v), cy, r: 5, fill: r.c, stroke: "var(--surface-1)", "stroke-width": 2 }, svg);
+    const hit = el("rect", { x: 0, y, width: W, height: rowH, fill: "transparent" }, svg);
+    hit.addEventListener("mousemove", ev => showTip(ev, r.tipHtml)); hit.addEventListener("mouseleave", hideTip); });
+}
+
+let SC = "D", LAB = "RS";
+function render() {
+  const Sh = document.getElementById("shapes"), Lf = document.getElementById("lifts"), Md = document.getElementById("models");
+  for (const h of [Sh, Lf, Md]) h.replaceChildren();
+  const jobs = [], add = (host, t, s, f) => jobs.push([figure(host, t, s), f]);
+  const sp = D.shapes[SC];
+  for (const [tf, tname, unit] of D.tf) { const s = sp.tf[tf];
+    add(Sh, `${D.sname[SC]}的起点 × ${tname}`, `起涨点 ${sp.n_rs.toLocaleString()} 个、起跌点 ${sp.n_fs.toLocaleString()} 个（确认期）` + (sp.n_fs < 300 ? "；起跌点少、形状不稳" : ""),
+      f => lineChart(f, `${D.sname[SC]}・${tname}`, unit, s.x, [{ n: "起涨点", v: s.RS, c: C1 }, { n: "起跌点", v: s.FS, c: C2 }])); }
+  const tfn = { d: "日", w: "周", m: "月", b: "" };
+  for (const sc of ["D", "W", "M"]) { const rows = D.lifts[sc][LAB].map(r => ({ ...r, name: (tfn[r.tf] ? tfn[r.tf] + "｜" : "") + r.name.replace(/^[日周月] /, "") }));
+    add(Lf, `${D.sname[sc]}的${LAB === "RS" ? "起涨点" : "起跌点"}`, D.sdef[sc], f => hbar(f, D.sname[sc], rows, LAB === "RS" ? C1 : C2, LAB === "RS" ? "起涨点" : "起跌点")); }
+  const all = D.models.flatMap(r => [r.top_n, r.bottom_n, ...r.ci_n]).filter(v => v !== null);
+  const a = Math.max(0.6, ...all.map(Math.abs)) * 1.1;
+  for (const mk of ["rise", "fall"]) { const rows = D.models.filter(r => r.mk === mk).map(r => ({ lab: D.sname[r.sc], v: r.top_n, lo: r.ci_n[0], hi: r.ci_n[1], b: r.bottom_n,
+      c: mk === "rise" ? C1 : C2, tipHtml: `<b>${D.sname[r.sc]}・${mname(mk)}</b><br>AUC ${r.auc}（基础 ${r.auc_base}）；近期新${mk === "rise" ? "低" : "高"}里 ${r.auc_ext}`
+        + `<br>最像一组之后 ${r.h} 日超额 ${fmt(r.top, 2)} pp（区间 ${fmt(r.ci[0], 2)}〜${fmt(r.ci[1], 2)}）；最不像 ${fmt(r.bottom, 2)} pp`
+        + `<br>折算每 20 日：${fmt(r.top_n, 2)} pp<br>G1〜G6 ${r.gates} → ${r.tier}` }));
+    add(Md, mname(mk) === "上涨模型" ? "上涨模型（像起涨点）" : "下跌模型（像起跌点）", "最像一组（含 95% 区间）与最不像一组", f => forest(f, mname(mk), rows, [-a, a])); }
+  for (const [fig, draw] of jobs) draw(fig);
+}
+document.getElementById("sdefs").textContent = ["D", "W", "M"].map(s => `${D.sname[s]} = ${D.sdef[s]}`).join("；") + "。";
+document.querySelectorAll(".seg button[data-sc]").forEach(b => b.addEventListener("click", () => { SC = b.dataset.sc;
+  document.querySelectorAll(".seg button[data-sc]").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false")); render(); }));
+document.querySelectorAll(".seg button[data-lab]").forEach(b => b.addEventListener("click", () => { LAB = b.dataset.lab;
+  document.querySelectorAll(".seg button[data-lab]").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false")); render(); }));
+render();
+let lastW = window.innerWidth, timer = null;
+window.addEventListener("resize", () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; clearTimeout(timer); timer = setTimeout(() => { hideTip(); render(); }, 150); });
+let h = `<table><tr><th>尺度・模型</th><th>持有期</th><th>AUC</th><th>基础</th><th>近期新低 / 新高里</th><th>最像一组（pp）</th><th>区间</th><th>最不像</th><th>折算 / 20 日</th><th>G1〜G6</th><th>判定</th></tr>`
+  + D.models.map(r => `<tr><td>${D.sname[r.sc]}・${mname(r.mk)}</td><td>${r.h} 日</td><td>${r.auc}</td><td>${r.auc_base}</td><td>${r.auc_ext}</td><td>${fmt(r.top, 2)}</td>`
+    + `<td>${fmt(r.ci[0], 2)}〜${fmt(r.ci[1], 2)}</td><td>${fmt(r.bottom, 2)}</td><td>${fmt(r.top_n, 2)}</td><td>${r.gates}</td><td>${r.tier}</td></tr>`).join("") + "</table>";
+h += `<table><tr><th>尺度・组</th><th>行数</th><th>每个样本日</th><th>起涨 / 起跌点</th><th>门槛</th>` + ["上涨", "下跌"].map(n => `<th>${n} AUC</th><th>新低 / 新高里</th><th>差</th><th>最像（区间）</th>`).join("") + "<th>有信息</th></tr>"
+  + D.groups.map(g => `<tr><td>${D.sname[g.sc]}・${g.name}</td><td>${g.rows.toLocaleString()}</td><td>${g.per_day ?? "—"}</td><td>${g.rs ?? "—"}% / ${g.fs ?? "—"}%</td><td>${g.info_pp.toFixed(2)} pp</td>`
+    + ["rise", "fall"].map(mk => { const x = g[mk]; return `<td>${x.auc ?? "—"}</td><td>${x.auc_ext ?? "—"}</td><td>${fmt(x.spread, 2)}</td><td>${fmt(x.top, 2)}${x.ci ? "（" + fmt(x.ci[0], 2) + "〜" + fmt(x.ci[1], 2) + "）" : ""}</td>`; }).join("")
+    + `<td>${g.bins ? ["rise", "fall"].map(mk => (mk === "rise" ? "上涨" : "下跌") + (g[mk].info ? "✓" : "✗")).join(" ") : "只报 AUC"}</td></tr>`).join("") + "</table>";
+for (const sc of ["D", "W", "M"]) for (const [tf, tname, unit] of D.tf) { const s = D.shapes[sc].tf[tf];
+  h += `<table><tr><th>${D.sname[sc]}・${tname}（${unit}）</th>` + s.x.map(x => `<th>${off(x)}</th>`).join("") + "</tr>"
+    + `<tr><td>起涨点</td>` + s.RS.map(v => `<td>${fmt(v)}</td>`).join("") + "</tr>" + `<tr><td>起跌点</td>` + s.FS.map(v => `<td>${fmt(v)}</td>`).join("") + "</tr></table>"; }
+document.getElementById("tables").innerHTML = h;
+</script>
+</body>
+</html>

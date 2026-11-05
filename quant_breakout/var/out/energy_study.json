@@ -1,0 +1,10768 @@
+{
+ "code": "c8b697b（与提交的版本相同）",
+ "coverage": [
+  {
+   "key": "us_total",
+   "name": "美国成品油消费（周）",
+   "kind": "eia_w",
+   "n": 1871,
+   "first": "1990-11-09",
+   "last": "2026-09-18"
+  },
+  {
+   "key": "us_gasoline",
+   "name": "美国汽油消费（周）",
+   "kind": "eia_w",
+   "n": 1858,
+   "first": "1991-02-08",
+   "last": "2026-09-18"
+  },
+  {
+   "key": "us_distillate",
+   "name": "美国柴油・取暖油消费（周）",
+   "kind": "eia_w",
+   "n": 1853,
+   "first": "1991-02-08",
+   "last": "2026-09-18"
+  },
+  {
+   "key": "us_jet",
+   "name": "美国航空燃料消费（周）",
+   "kind": "eia_w",
+   "n": 1742,
+   "first": "1991-02-08",
+   "last": "2026-09-18"
+  },
+  {
+   "key": "world",
+   "name": "世界石油消费（STEO 当时版）",
+   "kind": "steo",
+   "n": 228,
+   "first": "2007-10-01",
+   "last": "2026-09-01"
+  },
+  {
+   "key": "china",
+   "name": "中国石油消费（STEO 当时版）",
+   "kind": "steo",
+   "n": 228,
+   "first": "2007-10-01",
+   "last": "2026-09-01"
+  },
+  {
+   "key": "in_total",
+   "name": "印度成品油需求（JODI）",
+   "kind": "jodi",
+   "n": 291,
+   "first": "2002-01-01",
+   "last": "2026-03-01"
+  },
+  {
+   "key": "jp_total",
+   "name": "日本成品油需求（JODI）",
+   "kind": "jodi",
+   "n": 295,
+   "first": "2002-01-01",
+   "last": "2026-07-01"
+  },
+  {
+   "key": "jp_gasoline",
+   "name": "日本汽油需求（JODI）",
+   "kind": "jodi",
+   "n": 295,
+   "first": "2002-01-01",
+   "last": "2026-07-01"
+  },
+  {
+   "key": "jp_naphtha",
+   "name": "日本石脑油需求（JODI）",
+   "kind": "jodi",
+   "n": 211,
+   "first": "2009-01-01",
+   "last": "2026-07-01"
+  },
+  {
+   "key": "jp_jet",
+   "name": "日本航空燃料需求（JODI）",
+   "kind": "jodi",
+   "n": 211,
+   "first": "2009-01-01",
+   "last": "2026-07-01"
+  },
+  {
+   "key": "jp_diesel",
+   "name": "日本柴油需求（JODI）",
+   "kind": "jodi",
+   "n": 295,
+   "first": "2002-01-01",
+   "last": "2026-07-01"
+  },
+  {
+   "key": "jp_fueloil",
+   "name": "日本重油需求（JODI）",
+   "kind": "jodi",
+   "n": 295,
+   "first": "2002-01-01",
+   "last": "2026-07-01"
+  },
+  {
+   "key": "us_natgas",
+   "name": "美国天然气消费",
+   "kind": "eia_m",
+   "n": 306,
+   "first": "2001-01-15",
+   "last": "2026-06-15"
+  },
+  {
+   "key": "us_power",
+   "name": "美国电力・燃气产出",
+   "kind": "fred",
+   "n": 1052,
+   "first": "1939-01-01",
+   "last": "2026-08-01"
+  },
+  {
+   "key": "us_vmt",
+   "name": "美国车辆行驶里程",
+   "kind": "fred",
+   "n": 679,
+   "first": "1970-01-01",
+   "last": "2026-07-01"
+  },
+  {
+   "key": "jp_crude_imp",
+   "name": "日本原油进口量",
+   "kind": "customs",
+   "n": 463,
+   "first": "1988-01-01",
+   "last": "2026-07-01"
+  },
+  {
+   "key": "jp_lng_imp",
+   "name": "日本 LNG 进口量",
+   "kind": "customs",
+   "n": 463,
+   "first": "1988-01-01",
+   "last": "2026-07-01"
+  }
+ ],
+ "D1": [
+  {
+   "src": "us_total",
+   "target": "その他製品",
+   "slope": 0.1214,
+   "t": 2.7648,
+   "n": 239,
+   "t_H1": 1.6763,
+   "t_H2": 2.2549,
+   "both": true
+  },
+  {
+   "src": "us_total",
+   "target": "その他金融業",
+   "slope": 0.0779,
+   "t": 0.6544,
+   "n": 239,
+   "t_H1": -0.0123,
+   "t_H2": 2.1164,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "ガラス・土石製品",
+   "slope": 0.0433,
+   "t": 0.6983,
+   "n": 239,
+   "t_H1": 0.6321,
+   "t_H2": 0.1148,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "ゴム製品",
+   "slope": 0.0281,
+   "t": 0.2149,
+   "n": 239,
+   "t_H1": -0.3642,
+   "t_H2": 0.5568,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "サービス業",
+   "slope": -0.0601,
+   "t": -0.698,
+   "n": 239,
+   "t_H1": 0.5362,
+   "t_H2": -0.883,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "パルプ・紙",
+   "slope": 0.1499,
+   "t": 0.878,
+   "n": 239,
+   "t_H1": 0.3299,
+   "t_H2": 1.1139,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "不動産業",
+   "slope": 0.1759,
+   "t": 1.513,
+   "n": 239,
+   "t_H1": 0.2947,
+   "t_H2": 2.929,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "保険業",
+   "slope": 0.1247,
+   "t": 1.1106,
+   "n": 239,
+   "t_H1": 1.3358,
+   "t_H2": 0.0728,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "化学",
+   "slope": -0.0416,
+   "t": -1.3306,
+   "n": 239,
+   "t_H1": -0.4614,
+   "t_H2": -1.3975,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "医薬品",
+   "slope": -0.0236,
+   "t": -0.1676,
+   "n": 239,
+   "t_H1": -0.5645,
+   "t_H2": 0.4433,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "卸売業",
+   "slope": 0.0311,
+   "t": 0.7508,
+   "n": 239,
+   "t_H1": 0.1218,
+   "t_H2": 0.96,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "小売業",
+   "slope": -0.1318,
+   "t": -1.4363,
+   "n": 239,
+   "t_H1": -0.9044,
+   "t_H2": -1.0154,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "建設業",
+   "slope": 0.0857,
+   "t": 0.9737,
+   "n": 239,
+   "t_H1": 0.0416,
+   "t_H2": 1.5359,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "情報・通信業",
+   "slope": -0.1969,
+   "t": -1.8661,
+   "n": 239,
+   "t_H1": 0.814,
+   "t_H2": -2.7473,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "機械",
+   "slope": -0.0334,
+   "t": -0.3997,
+   "n": 239,
+   "t_H1": 0.5181,
+   "t_H2": -1.3546,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "水産・農林業",
+   "slope": 0.1337,
+   "t": 1.177,
+   "n": 239,
+   "t_H1": -0.1124,
+   "t_H2": 2.1954,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "海運業",
+   "slope": 0.732,
+   "t": 2.2631,
+   "n": 239,
+   "t_H1": 1.7732,
+   "t_H2": 1.8973,
+   "both": true
+  },
+  {
+   "src": "us_total",
+   "target": "石油・石炭製品",
+   "slope": 0.3185,
+   "t": 1.9016,
+   "n": 239,
+   "t_H1": 1.1858,
+   "t_H2": 1.2316,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "精密機器",
+   "slope": 0.0714,
+   "t": 0.9558,
+   "n": 239,
+   "t_H1": 0.1369,
+   "t_H2": 1.465,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "繊維製品",
+   "slope": 0.1966,
+   "t": 1.817,
+   "n": 239,
+   "t_H1": -0.4786,
+   "t_H2": 2.303,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "証券、商品先物取引業",
+   "slope": -0.0786,
+   "t": -0.5021,
+   "n": 239,
+   "t_H1": -0.4967,
+   "t_H2": -0.2191,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "輸送用機器",
+   "slope": 0.0751,
+   "t": 0.5236,
+   "n": 239,
+   "t_H1": 0.0648,
+   "t_H2": 1.3349,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "金属製品",
+   "slope": -0.0889,
+   "t": -1.1424,
+   "n": 239,
+   "t_H1": -1.9575,
+   "t_H2": -0.2097,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "鉄鋼",
+   "slope": 0.0358,
+   "t": 0.2648,
+   "n": 239,
+   "t_H1": 0.0172,
+   "t_H2": 0.2777,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "鉱業",
+   "slope": 0.268,
+   "t": 1.5859,
+   "n": 239,
+   "t_H1": -0.5161,
+   "t_H2": 2.0789,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "銀行業",
+   "slope": 0.224,
+   "t": 1.7057,
+   "n": 239,
+   "t_H1": 0.1209,
+   "t_H2": 1.8181,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "電気・ガス業",
+   "slope": 0.0679,
+   "t": 0.3397,
+   "n": 239,
+   "t_H1": -0.146,
+   "t_H2": 0.8736,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "電気機器",
+   "slope": -0.0769,
+   "t": -0.7747,
+   "n": 239,
+   "t_H1": -0.1049,
+   "t_H2": -1.1111,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "非鉄金属",
+   "slope": 0.1441,
+   "t": 1.0749,
+   "n": 239,
+   "t_H1": 0.4902,
+   "t_H2": 0.9196,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "食料品",
+   "slope": 0.0145,
+   "t": 0.1185,
+   "n": 239,
+   "t_H1": 0.0394,
+   "t_H2": 0.7205,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "T1",
+   "slope": 0.2086,
+   "t": 0.8966,
+   "n": 239,
+   "t_H1": 0.0001,
+   "t_H2": 1.5733,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "T2",
+   "slope": -0.1442,
+   "t": -0.6582,
+   "n": 239,
+   "t_H1": -0.3426,
+   "t_H2": -0.4387,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "T3",
+   "slope": 0.0353,
+   "t": 0.2279,
+   "n": 239,
+   "t_H1": -0.137,
+   "t_H2": 0.0652,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "T4",
+   "slope": 0.0163,
+   "t": 0.1637,
+   "n": 239,
+   "t_H1": 0.1352,
+   "t_H2": -0.0402,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "T5",
+   "slope": 0.1114,
+   "t": 0.9599,
+   "n": 239,
+   "t_H1": 0.0843,
+   "t_H2": 0.9691,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "T6",
+   "slope": 0.1092,
+   "t": 0.7759,
+   "n": 239,
+   "t_H1": 0.3953,
+   "t_H2": 0.4903,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "T7",
+   "slope": -0.1513,
+   "t": -0.5555,
+   "n": 239,
+   "t_H1": 0.5664,
+   "t_H2": -1.2235,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "T8",
+   "slope": -0.0249,
+   "t": -0.1825,
+   "n": 239,
+   "t_H1": 0.6471,
+   "t_H2": -0.4549,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "T9",
+   "slope": -0.1646,
+   "t": -0.576,
+   "n": 239,
+   "t_H1": -0.0308,
+   "t_H2": -1.1631,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "T10",
+   "slope": -0.0342,
+   "t": -0.2132,
+   "n": 239,
+   "t_H1": 0.0506,
+   "t_H2": -0.6242,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "T11",
+   "slope": -0.1017,
+   "t": -0.7938,
+   "n": 239,
+   "t_H1": 0.2379,
+   "t_H2": -0.9803,
+   "both": false
+  },
+  {
+   "src": "us_total",
+   "target": "T13",
+   "slope": 0.0821,
+   "t": 0.4034,
+   "n": 239,
+   "t_H1": -0.7261,
+   "t_H2": 0.8468,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "その他製品",
+   "slope": 0.1185,
+   "t": 2.4963,
+   "n": 239,
+   "t_H1": 1.6429,
+   "t_H2": 2.402,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "その他金融業",
+   "slope": 0.035,
+   "t": 0.4229,
+   "n": 239,
+   "t_H1": -0.77,
+   "t_H2": 2.1636,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "ガラス・土石製品",
+   "slope": 0.0818,
+   "t": 1.2968,
+   "n": 239,
+   "t_H1": 1.6958,
+   "t_H2": 1.0081,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "ゴム製品",
+   "slope": -0.0113,
+   "t": -0.0809,
+   "n": 239,
+   "t_H1": -1.0517,
+   "t_H2": 0.7767,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "サービス業",
+   "slope": -0.033,
+   "t": -0.3831,
+   "n": 239,
+   "t_H1": -0.3645,
+   "t_H2": -0.6223,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "パルプ・紙",
+   "slope": 0.1298,
+   "t": 0.7689,
+   "n": 239,
+   "t_H1": 0.5551,
+   "t_H2": 0.5756,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "不動産業",
+   "slope": 0.1671,
+   "t": 1.7385,
+   "n": 239,
+   "t_H1": 0.0691,
+   "t_H2": 2.9949,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "保険業",
+   "slope": -0.0735,
+   "t": -0.888,
+   "n": 239,
+   "t_H1": 0.4596,
+   "t_H2": -1.2312,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "化学",
+   "slope": 0.0043,
+   "t": 0.1112,
+   "n": 239,
+   "t_H1": 1.4503,
+   "t_H2": -1.4299,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "医薬品",
+   "slope": -0.0478,
+   "t": -0.3741,
+   "n": 239,
+   "t_H1": -0.7653,
+   "t_H2": -0.5024,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "卸売業",
+   "slope": -0.0054,
+   "t": -0.123,
+   "n": 239,
+   "t_H1": -0.8257,
+   "t_H2": 0.5173,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "小売業",
+   "slope": -0.106,
+   "t": -1.2202,
+   "n": 239,
+   "t_H1": -1.1072,
+   "t_H2": -1.3012,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "建設業",
+   "slope": 0.0828,
+   "t": 1.0677,
+   "n": 239,
+   "t_H1": -0.2705,
+   "t_H2": 1.5706,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "情報・通信業",
+   "slope": -0.1797,
+   "t": -1.4794,
+   "n": 239,
+   "t_H1": -0.1555,
+   "t_H2": -1.8291,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "機械",
+   "slope": -0.0242,
+   "t": -0.3244,
+   "n": 239,
+   "t_H1": 0.7997,
+   "t_H2": -0.8772,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "水産・農林業",
+   "slope": 0.092,
+   "t": 0.8877,
+   "n": 239,
+   "t_H1": 0.3546,
+   "t_H2": 0.6283,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "海運業",
+   "slope": 0.6862,
+   "t": 2.0702,
+   "n": 239,
+   "t_H1": 1.7474,
+   "t_H2": 2.3839,
+   "both": true
+  },
+  {
+   "src": "us_gasoline",
+   "target": "石油・石炭製品",
+   "slope": 0.1485,
+   "t": 0.7705,
+   "n": 239,
+   "t_H1": 0.8901,
+   "t_H2": 0.5927,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "精密機器",
+   "slope": 0.0574,
+   "t": 0.9792,
+   "n": 239,
+   "t_H1": 0.3648,
+   "t_H2": 1.6268,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "繊維製品",
+   "slope": 0.1998,
+   "t": 1.6909,
+   "n": 239,
+   "t_H1": -0.362,
+   "t_H2": 2.3786,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "証券、商品先物取引業",
+   "slope": -0.0805,
+   "t": -0.503,
+   "n": 239,
+   "t_H1": -0.8904,
+   "t_H2": 0.2056,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "輸送用機器",
+   "slope": 0.1646,
+   "t": 1.4598,
+   "n": 239,
+   "t_H1": 0.2842,
+   "t_H2": 2.2421,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "金属製品",
+   "slope": -0.0493,
+   "t": -0.5696,
+   "n": 239,
+   "t_H1": -1.7019,
+   "t_H2": 0.3201,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "鉄鋼",
+   "slope": 0.1383,
+   "t": 1.1201,
+   "n": 239,
+   "t_H1": 1.0062,
+   "t_H2": 1.1566,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "鉱業",
+   "slope": 0.1539,
+   "t": 0.7981,
+   "n": 239,
+   "t_H1": -0.0619,
+   "t_H2": 0.9831,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "銀行業",
+   "slope": 0.0478,
+   "t": 0.3273,
+   "n": 239,
+   "t_H1": -1.2439,
+   "t_H2": 0.7796,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "電気・ガス業",
+   "slope": -0.0591,
+   "t": -0.4001,
+   "n": 239,
+   "t_H1": -0.3806,
+   "t_H2": -0.2272,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "電気機器",
+   "slope": -0.0462,
+   "t": -0.4829,
+   "n": 239,
+   "t_H1": 0.3874,
+   "t_H2": -0.4614,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "非鉄金属",
+   "slope": 0.0285,
+   "t": 0.237,
+   "n": 239,
+   "t_H1": 1.3197,
+   "t_H2": -0.054,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "食料品",
+   "slope": 0.0272,
+   "t": 0.2597,
+   "n": 239,
+   "t_H1": -0.1362,
+   "t_H2": 0.044,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "T1",
+   "slope": 0.0966,
+   "t": 0.4895,
+   "n": 239,
+   "t_H1": -0.1175,
+   "t_H2": 0.6455,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "T2",
+   "slope": -0.2447,
+   "t": -1.2641,
+   "n": 239,
+   "t_H1": -1.1185,
+   "t_H2": -1.1253,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "T3",
+   "slope": -0.0664,
+   "t": -0.4418,
+   "n": 239,
+   "t_H1": 0.6866,
+   "t_H2": -0.3467,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "T4",
+   "slope": -0.0013,
+   "t": -0.0123,
+   "n": 239,
+   "t_H1": 0.1153,
+   "t_H2": 0.4533,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "T5",
+   "slope": 0.0481,
+   "t": 0.4064,
+   "n": 239,
+   "t_H1": 0.064,
+   "t_H2": 0.4083,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "T6",
+   "slope": 0.052,
+   "t": 0.4797,
+   "n": 239,
+   "t_H1": 0.688,
+   "t_H2": -0.2423,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "T7",
+   "slope": -0.0182,
+   "t": -0.0659,
+   "n": 239,
+   "t_H1": 0.6174,
+   "t_H2": -0.5865,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "T8",
+   "slope": 0.0439,
+   "t": 0.2486,
+   "n": 239,
+   "t_H1": 0.2047,
+   "t_H2": 0.0049,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "T9",
+   "slope": -0.0524,
+   "t": -0.1884,
+   "n": 239,
+   "t_H1": 0.9525,
+   "t_H2": -0.6545,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "T10",
+   "slope": 0.02,
+   "t": 0.1266,
+   "n": 239,
+   "t_H1": 1.5154,
+   "t_H2": -0.4092,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "T11",
+   "slope": -0.1192,
+   "t": -0.8958,
+   "n": 239,
+   "t_H1": 0.8401,
+   "t_H2": -1.3583,
+   "both": false
+  },
+  {
+   "src": "us_gasoline",
+   "target": "T13",
+   "slope": 0.0653,
+   "t": 0.2565,
+   "n": 239,
+   "t_H1": -0.872,
+   "t_H2": 0.6857,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "その他製品",
+   "slope": 0.0811,
+   "t": 2.0294,
+   "n": 239,
+   "t_H1": 2.302,
+   "t_H2": 0.6636,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "その他金融業",
+   "slope": -0.071,
+   "t": -0.6042,
+   "n": 239,
+   "t_H1": -0.8076,
+   "t_H2": 0.707,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "ガラス・土石製品",
+   "slope": 0.0581,
+   "t": 1.027,
+   "n": 239,
+   "t_H1": 0.8156,
+   "t_H2": 0.2707,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "ゴム製品",
+   "slope": 0.1323,
+   "t": 1.5134,
+   "n": 239,
+   "t_H1": 1.4184,
+   "t_H2": 0.8233,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "サービス業",
+   "slope": 0.0361,
+   "t": 0.5188,
+   "n": 239,
+   "t_H1": 0.1372,
+   "t_H2": 0.9755,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "パルプ・紙",
+   "slope": 0.1442,
+   "t": 1.2434,
+   "n": 239,
+   "t_H1": 0.5913,
+   "t_H2": 1.4235,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "不動産業",
+   "slope": -0.0753,
+   "t": -0.7163,
+   "n": 239,
+   "t_H1": -1.4458,
+   "t_H2": 1.0163,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "保険業",
+   "slope": 0.0574,
+   "t": 0.5654,
+   "n": 239,
+   "t_H1": 1.8898,
+   "t_H2": -1.7716,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "化学",
+   "slope": -0.0067,
+   "t": -0.2012,
+   "n": 239,
+   "t_H1": -0.1138,
+   "t_H2": -0.1622,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "医薬品",
+   "slope": -0.0979,
+   "t": -1.0065,
+   "n": 239,
+   "t_H1": -0.751,
+   "t_H2": -0.4394,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "卸売業",
+   "slope": 0.0288,
+   "t": 0.7209,
+   "n": 239,
+   "t_H1": 0.443,
+   "t_H2": 0.4956,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "小売業",
+   "slope": -0.1046,
+   "t": -1.6267,
+   "n": 239,
+   "t_H1": -1.2449,
+   "t_H2": -0.8243,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "建設業",
+   "slope": 0.0801,
+   "t": 1.011,
+   "n": 239,
+   "t_H1": 1.005,
+   "t_H2": 0.3682,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "情報・通信業",
+   "slope": -0.1062,
+   "t": -1.3413,
+   "n": 239,
+   "t_H1": -0.6751,
+   "t_H2": -1.1336,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "機械",
+   "slope": -0.0285,
+   "t": -0.4821,
+   "n": 239,
+   "t_H1": -0.2147,
+   "t_H2": -0.7496,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "水産・農林業",
+   "slope": 0.09,
+   "t": 0.8165,
+   "n": 239,
+   "t_H1": 0.1338,
+   "t_H2": 1.7103,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "海運業",
+   "slope": 0.5731,
+   "t": 2.8375,
+   "n": 239,
+   "t_H1": 2.0726,
+   "t_H2": 2.1587,
+   "both": true
+  },
+  {
+   "src": "us_distillate",
+   "target": "石油・石炭製品",
+   "slope": 0.2899,
+   "t": 1.9828,
+   "n": 239,
+   "t_H1": 2.212,
+   "t_H2": 0.4344,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "精密機器",
+   "slope": 0.002,
+   "t": 0.0316,
+   "n": 239,
+   "t_H1": -0.0037,
+   "t_H2": 0.06,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "繊維製品",
+   "slope": 0.1306,
+   "t": 1.8104,
+   "n": 239,
+   "t_H1": 0.8018,
+   "t_H2": 1.561,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "証券、商品先物取引業",
+   "slope": -0.1791,
+   "t": -1.2998,
+   "n": 239,
+   "t_H1": -1.7478,
+   "t_H2": 0.2915,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "輸送用機器",
+   "slope": 0.0697,
+   "t": 0.6062,
+   "n": 239,
+   "t_H1": 0.2897,
+   "t_H2": 1.1269,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "金属製品",
+   "slope": -0.032,
+   "t": -0.6504,
+   "n": 239,
+   "t_H1": -1.1179,
+   "t_H2": 0.5367,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "鉄鋼",
+   "slope": 0.0497,
+   "t": 0.4187,
+   "n": 239,
+   "t_H1": 0.7748,
+   "t_H2": -0.3382,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "鉱業",
+   "slope": 0.1263,
+   "t": 1.001,
+   "n": 239,
+   "t_H1": 0.5061,
+   "t_H2": 0.5792,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "銀行業",
+   "slope": 0.1233,
+   "t": 1.0008,
+   "n": 239,
+   "t_H1": 1.6701,
+   "t_H2": -0.2029,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "電気・ガス業",
+   "slope": -0.0563,
+   "t": -0.355,
+   "n": 239,
+   "t_H1": 0.1831,
+   "t_H2": -1.318,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "電気機器",
+   "slope": -0.0014,
+   "t": -0.0211,
+   "n": 239,
+   "t_H1": -0.1044,
+   "t_H2": 0.0829,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "非鉄金属",
+   "slope": 0.1233,
+   "t": 1.2275,
+   "n": 239,
+   "t_H1": 0.8268,
+   "t_H2": 0.6459,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "食料品",
+   "slope": -0.0221,
+   "t": -0.2227,
+   "n": 239,
+   "t_H1": 0.126,
+   "t_H2": -0.0947,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "T1",
+   "slope": 0.0033,
+   "t": 0.0189,
+   "n": 239,
+   "t_H1": 0.3498,
+   "t_H2": -0.5358,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "T2",
+   "slope": -0.1254,
+   "t": -0.7402,
+   "n": 239,
+   "t_H1": 0.3208,
+   "t_H2": -1.8237,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "T3",
+   "slope": -0.0718,
+   "t": -0.5999,
+   "n": 239,
+   "t_H1": -0.6273,
+   "t_H2": -0.707,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "T4",
+   "slope": 0.0445,
+   "t": 0.5403,
+   "n": 239,
+   "t_H1": 0.6472,
+   "t_H2": -0.386,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "T5",
+   "slope": 0.0349,
+   "t": 0.399,
+   "n": 239,
+   "t_H1": 1.136,
+   "t_H2": -0.6374,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "T6",
+   "slope": 0.1329,
+   "t": 1.1958,
+   "n": 239,
+   "t_H1": 1.3557,
+   "t_H2": -0.1632,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "T7",
+   "slope": -0.7202,
+   "t": -3.2442,
+   "n": 239,
+   "t_H1": -2.2971,
+   "t_H2": -2.7443,
+   "both": true
+  },
+  {
+   "src": "us_distillate",
+   "target": "T8",
+   "slope": 0.0315,
+   "t": 0.3732,
+   "n": 239,
+   "t_H1": 0.985,
+   "t_H2": -0.08,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "T9",
+   "slope": -0.3051,
+   "t": -1.6244,
+   "n": 239,
+   "t_H1": -1.3911,
+   "t_H2": -1.2098,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "T10",
+   "slope": -0.0978,
+   "t": -0.8654,
+   "n": 239,
+   "t_H1": -1.1077,
+   "t_H2": -0.3952,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "T11",
+   "slope": 0.0445,
+   "t": 0.3926,
+   "n": 239,
+   "t_H1": 0.7346,
+   "t_H2": -0.189,
+   "both": false
+  },
+  {
+   "src": "us_distillate",
+   "target": "T13",
+   "slope": 0.0938,
+   "t": 0.7078,
+   "n": 239,
+   "t_H1": 0.7804,
+   "t_H2": 0.2496,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "その他製品",
+   "slope": 0.0261,
+   "t": 2.0918,
+   "n": 239,
+   "t_H1": 1.2235,
+   "t_H2": 1.8843,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "その他金融業",
+   "slope": 0.0364,
+   "t": 1.6339,
+   "n": 239,
+   "t_H1": 0.9408,
+   "t_H2": 1.6756,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "ガラス・土石製品",
+   "slope": -0.0001,
+   "t": -0.0039,
+   "n": 239,
+   "t_H1": -0.0472,
+   "t_H2": -0.2116,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "ゴム製品",
+   "slope": 0.0395,
+   "t": 1.1374,
+   "n": 239,
+   "t_H1": 0.3506,
+   "t_H2": 1.1361,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "サービス業",
+   "slope": -0.0211,
+   "t": -0.9721,
+   "n": 239,
+   "t_H1": 0.7771,
+   "t_H2": -1.0263,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "パルプ・紙",
+   "slope": 0.0177,
+   "t": 0.3478,
+   "n": 239,
+   "t_H1": -0.1413,
+   "t_H2": 0.5911,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "不動産業",
+   "slope": 0.0522,
+   "t": 2.267,
+   "n": 239,
+   "t_H1": 0.719,
+   "t_H2": 2.5941,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "保険業",
+   "slope": 0.0198,
+   "t": 0.6864,
+   "n": 239,
+   "t_H1": 2.1422,
+   "t_H2": -0.0788,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "化学",
+   "slope": -0.0183,
+   "t": -2.054,
+   "n": 239,
+   "t_H1": -0.7169,
+   "t_H2": -2.1001,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "医薬品",
+   "slope": 0.0031,
+   "t": 0.0759,
+   "n": 239,
+   "t_H1": -0.8046,
+   "t_H2": 0.5103,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "卸売業",
+   "slope": 0.0195,
+   "t": 1.8352,
+   "n": 239,
+   "t_H1": -0.4718,
+   "t_H2": 2.2682,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "小売業",
+   "slope": -0.0274,
+   "t": -1.129,
+   "n": 239,
+   "t_H1": -0.8218,
+   "t_H2": -0.8555,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "建設業",
+   "slope": 0.0345,
+   "t": 1.6659,
+   "n": 239,
+   "t_H1": -0.1311,
+   "t_H2": 2.0002,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "情報・通信業",
+   "slope": -0.0573,
+   "t": -1.7799,
+   "n": 239,
+   "t_H1": 0.2928,
+   "t_H2": -1.9633,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "機械",
+   "slope": -0.015,
+   "t": -0.78,
+   "n": 239,
+   "t_H1": 0.4248,
+   "t_H2": -1.1077,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "水産・農林業",
+   "slope": 0.0503,
+   "t": 1.8261,
+   "n": 239,
+   "t_H1": 0.3533,
+   "t_H2": 2.0438,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "海運業",
+   "slope": 0.127,
+   "t": 1.1881,
+   "n": 239,
+   "t_H1": 0.8657,
+   "t_H2": 1.3017,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "石油・石炭製品",
+   "slope": 0.0712,
+   "t": 1.293,
+   "n": 239,
+   "t_H1": -0.2463,
+   "t_H2": 1.4204,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "精密機器",
+   "slope": 0.0199,
+   "t": 1.2218,
+   "n": 239,
+   "t_H1": 0.0429,
+   "t_H2": 1.5723,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "繊維製品",
+   "slope": 0.0928,
+   "t": 3.208,
+   "n": 239,
+   "t_H1": -0.2604,
+   "t_H2": 3.4676,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "証券、商品先物取引業",
+   "slope": -0.0427,
+   "t": -1.0793,
+   "n": 239,
+   "t_H1": -0.1869,
+   "t_H2": -1.1645,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "輸送用機器",
+   "slope": 0.0287,
+   "t": 0.9122,
+   "n": 239,
+   "t_H1": 0.2883,
+   "t_H2": 1.1425,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "金属製品",
+   "slope": -0.0225,
+   "t": -0.8496,
+   "n": 239,
+   "t_H1": -2.0244,
+   "t_H2": -0.4164,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "鉄鋼",
+   "slope": 0.0202,
+   "t": 0.6451,
+   "n": 239,
+   "t_H1": 0.0102,
+   "t_H2": 0.6485,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "鉱業",
+   "slope": 0.0972,
+   "t": 2.1523,
+   "n": 239,
+   "t_H1": -1.4526,
+   "t_H2": 2.4715,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "銀行業",
+   "slope": 0.0711,
+   "t": 2.2583,
+   "n": 239,
+   "t_H1": 0.0473,
+   "t_H2": 1.9692,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "電気・ガス業",
+   "slope": 0.0115,
+   "t": 0.2868,
+   "n": 239,
+   "t_H1": -0.2408,
+   "t_H2": 0.5229,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "電気機器",
+   "slope": -0.0337,
+   "t": -1.3345,
+   "n": 239,
+   "t_H1": 0.0709,
+   "t_H2": -1.5883,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "非鉄金属",
+   "slope": 0.0117,
+   "t": 0.3539,
+   "n": 239,
+   "t_H1": 0.3977,
+   "t_H2": 0.0939,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "食料品",
+   "slope": 0.0207,
+   "t": 0.7939,
+   "n": 239,
+   "t_H1": 0.3164,
+   "t_H2": 1.1534,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "T1",
+   "slope": 0.0582,
+   "t": 1.1541,
+   "n": 239,
+   "t_H1": -0.2245,
+   "t_H2": 1.4307,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "T2",
+   "slope": -0.0359,
+   "t": -0.6419,
+   "n": 239,
+   "t_H1": -0.0726,
+   "t_H2": -0.6052,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "T3",
+   "slope": 0.0126,
+   "t": 0.294,
+   "n": 239,
+   "t_H1": 0.2595,
+   "t_H2": 0.0307,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "T4",
+   "slope": -0.0064,
+   "t": -0.243,
+   "n": 239,
+   "t_H1": -0.037,
+   "t_H2": -0.2157,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "T5",
+   "slope": 0.0525,
+   "t": 1.5592,
+   "n": 239,
+   "t_H1": 1.0108,
+   "t_H2": 1.3135,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "T6",
+   "slope": 0.0126,
+   "t": 0.3708,
+   "n": 239,
+   "t_H1": -0.214,
+   "t_H2": 0.419,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "T7",
+   "slope": -0.0761,
+   "t": -0.8684,
+   "n": 239,
+   "t_H1": 0.1382,
+   "t_H2": -0.9418,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "T8",
+   "slope": 0.0148,
+   "t": 0.3032,
+   "n": 239,
+   "t_H1": 0.2836,
+   "t_H2": 0.1936,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "T9",
+   "slope": -0.0802,
+   "t": -1.1119,
+   "n": 239,
+   "t_H1": 0.1924,
+   "t_H2": -1.5217,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "T10",
+   "slope": -0.0551,
+   "t": -1.4425,
+   "n": 239,
+   "t_H1": -0.1837,
+   "t_H2": -1.6962,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "T11",
+   "slope": -0.0679,
+   "t": -2.1916,
+   "n": 239,
+   "t_H1": 0.0281,
+   "t_H2": -2.6043,
+   "both": false
+  },
+  {
+   "src": "us_jet",
+   "target": "T13",
+   "slope": 0.0408,
+   "t": 0.5807,
+   "n": 239,
+   "t_H1": -0.4973,
+   "t_H2": 0.6043,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "その他製品",
+   "slope": 0.1669,
+   "t": 2.1754,
+   "n": 238,
+   "t_H1": 1.6298,
+   "t_H2": 1.834,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "その他金融業",
+   "slope": 0.3116,
+   "t": 1.8688,
+   "n": 238,
+   "t_H1": 1.0741,
+   "t_H2": 2.3764,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "ガラス・土石製品",
+   "slope": 0.006,
+   "t": 0.0558,
+   "n": 238,
+   "t_H1": -0.5757,
+   "t_H2": 0.5817,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "ゴム製品",
+   "slope": 0.3432,
+   "t": 1.7884,
+   "n": 238,
+   "t_H1": 0.5202,
+   "t_H2": 1.7211,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "サービス業",
+   "slope": 0.007,
+   "t": 0.0473,
+   "n": 238,
+   "t_H1": 1.3562,
+   "t_H2": -0.7143,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "パルプ・紙",
+   "slope": 0.0403,
+   "t": 0.1267,
+   "n": 238,
+   "t_H1": -0.4489,
+   "t_H2": 0.5629,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "不動産業",
+   "slope": 0.4543,
+   "t": 2.6354,
+   "n": 238,
+   "t_H1": 0.7947,
+   "t_H2": 3.369,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "保険業",
+   "slope": 0.0077,
+   "t": 0.0534,
+   "n": 238,
+   "t_H1": 2.305,
+   "t_H2": -1.3128,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "化学",
+   "slope": -0.1539,
+   "t": -2.9976,
+   "n": 238,
+   "t_H1": -1.8991,
+   "t_H2": -2.8494,
+   "both": true
+  },
+  {
+   "src": "world",
+   "target": "医薬品",
+   "slope": -0.0593,
+   "t": -0.2308,
+   "n": 238,
+   "t_H1": -0.7125,
+   "t_H2": -0.0657,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "卸売業",
+   "slope": 0.1151,
+   "t": 1.568,
+   "n": 238,
+   "t_H1": 0.1003,
+   "t_H2": 1.9019,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "小売業",
+   "slope": -0.1925,
+   "t": -1.3739,
+   "n": 238,
+   "t_H1": -0.7646,
+   "t_H2": -1.4214,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "建設業",
+   "slope": 0.1914,
+   "t": 1.3555,
+   "n": 238,
+   "t_H1": -0.5209,
+   "t_H2": 2.1118,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "情報・通信業",
+   "slope": -0.3562,
+   "t": -2.0834,
+   "n": 238,
+   "t_H1": 0.8174,
+   "t_H2": -3.0959,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "機械",
+   "slope": -0.0074,
+   "t": -0.0565,
+   "n": 238,
+   "t_H1": 0.5743,
+   "t_H2": -0.5382,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "水産・農林業",
+   "slope": 0.1875,
+   "t": 1.0468,
+   "n": 238,
+   "t_H1": -0.4435,
+   "t_H2": 1.5707,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "海運業",
+   "slope": 1.0755,
+   "t": 2.012,
+   "n": 238,
+   "t_H1": 1.7481,
+   "t_H2": 2.101,
+   "both": true
+  },
+  {
+   "src": "world",
+   "target": "石油・石炭製品",
+   "slope": 0.5901,
+   "t": 2.0422,
+   "n": 238,
+   "t_H1": 0.313,
+   "t_H2": 2.4051,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "精密機器",
+   "slope": 0.0778,
+   "t": 0.6751,
+   "n": 238,
+   "t_H1": 0.2104,
+   "t_H2": 1.2114,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "繊維製品",
+   "slope": 0.5486,
+   "t": 4.2016,
+   "n": 238,
+   "t_H1": 0.6787,
+   "t_H2": 4.6057,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "証券、商品先物取引業",
+   "slope": -0.0073,
+   "t": -0.0284,
+   "n": 238,
+   "t_H1": -0.1317,
+   "t_H2": 0.1789,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "輸送用機器",
+   "slope": 0.3994,
+   "t": 1.8405,
+   "n": 238,
+   "t_H1": 0.4348,
+   "t_H2": 2.683,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "金属製品",
+   "slope": -0.1284,
+   "t": -0.8477,
+   "n": 238,
+   "t_H1": -2.299,
+   "t_H2": -0.1622,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "鉄鋼",
+   "slope": 0.2208,
+   "t": 1.1639,
+   "n": 238,
+   "t_H1": -0.4512,
+   "t_H2": 2.1321,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "鉱業",
+   "slope": 0.5247,
+   "t": 1.9365,
+   "n": 238,
+   "t_H1": -1.0245,
+   "t_H2": 2.8001,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "銀行業",
+   "slope": 0.2062,
+   "t": 1.0021,
+   "n": 238,
+   "t_H1": -0.2316,
+   "t_H2": 1.3693,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "電気・ガス業",
+   "slope": 0.0198,
+   "t": 0.0629,
+   "n": 238,
+   "t_H1": -0.2006,
+   "t_H2": 0.2761,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "電気機器",
+   "slope": -0.2107,
+   "t": -1.2551,
+   "n": 238,
+   "t_H1": -0.0677,
+   "t_H2": -1.2737,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "非鉄金属",
+   "slope": 0.1265,
+   "t": 0.6186,
+   "n": 238,
+   "t_H1": 0.278,
+   "t_H2": 0.6911,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "食料品",
+   "slope": -0.0242,
+   "t": -0.1198,
+   "n": 238,
+   "t_H1": -0.1099,
+   "t_H2": -0.0761,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "T1",
+   "slope": 0.3185,
+   "t": 0.9038,
+   "n": 238,
+   "t_H1": -0.0927,
+   "t_H2": 1.3778,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "T2",
+   "slope": -0.3109,
+   "t": -0.7935,
+   "n": 238,
+   "t_H1": -0.2731,
+   "t_H2": -0.8018,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "T3",
+   "slope": -0.0138,
+   "t": -0.0501,
+   "n": 238,
+   "t_H1": -0.0212,
+   "t_H2": 0.1457,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "T4",
+   "slope": 0.0272,
+   "t": 0.1721,
+   "n": 238,
+   "t_H1": 0.9199,
+   "t_H2": -0.182,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "T5",
+   "slope": 0.0884,
+   "t": 0.3992,
+   "n": 238,
+   "t_H1": -0.2036,
+   "t_H2": 0.54,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "T6",
+   "slope": -0.0145,
+   "t": -0.0662,
+   "n": 238,
+   "t_H1": -0.5579,
+   "t_H2": 0.3096,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "T7",
+   "slope": -0.4063,
+   "t": -0.9041,
+   "n": 238,
+   "t_H1": 0.4897,
+   "t_H2": -1.4537,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "T8",
+   "slope": -0.1233,
+   "t": -0.4474,
+   "n": 238,
+   "t_H1": -0.0668,
+   "t_H2": -0.5465,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "T9",
+   "slope": -0.4599,
+   "t": -1.0788,
+   "n": 238,
+   "t_H1": -0.0906,
+   "t_H2": -1.3454,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "T10",
+   "slope": -0.4171,
+   "t": -1.7464,
+   "n": 238,
+   "t_H1": -0.3085,
+   "t_H2": -1.7256,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "T11",
+   "slope": -0.5114,
+   "t": -1.9717,
+   "n": 238,
+   "t_H1": -0.3299,
+   "t_H2": -1.7613,
+   "both": false
+  },
+  {
+   "src": "world",
+   "target": "T13",
+   "slope": 0.4095,
+   "t": 1.0602,
+   "n": 238,
+   "t_H1": -0.3742,
+   "t_H2": 1.3212,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "その他製品",
+   "slope": -0.013,
+   "t": -0.1836,
+   "n": 238,
+   "t_H1": 0.1485,
+   "t_H2": -0.5244,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "その他金融業",
+   "slope": 0.4308,
+   "t": 2.4922,
+   "n": 238,
+   "t_H1": 2.6847,
+   "t_H2": 1.5113,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "ガラス・土石製品",
+   "slope": 0.0343,
+   "t": 0.2846,
+   "n": 238,
+   "t_H1": 0.5073,
+   "t_H2": 1.3791,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "ゴム製品",
+   "slope": 0.1461,
+   "t": 0.7977,
+   "n": 238,
+   "t_H1": 0.1562,
+   "t_H2": 0.9217,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "サービス業",
+   "slope": 0.1454,
+   "t": 1.2122,
+   "n": 238,
+   "t_H1": -0.0588,
+   "t_H2": 0.6566,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "パルプ・紙",
+   "slope": -0.2044,
+   "t": -0.8881,
+   "n": 238,
+   "t_H1": -2.3135,
+   "t_H2": 1.126,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "不動産業",
+   "slope": 0.2644,
+   "t": 1.477,
+   "n": 238,
+   "t_H1": 0.7534,
+   "t_H2": 2.4047,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "保険業",
+   "slope": -0.2232,
+   "t": -1.3829,
+   "n": 238,
+   "t_H1": 0.9165,
+   "t_H2": -2.3046,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "化学",
+   "slope": -0.0604,
+   "t": -1.0813,
+   "n": 238,
+   "t_H1": -1.3295,
+   "t_H2": -0.8125,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "医薬品",
+   "slope": -0.1447,
+   "t": -0.7632,
+   "n": 238,
+   "t_H1": -1.8703,
+   "t_H2": -0.8364,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "卸売業",
+   "slope": -0.111,
+   "t": -1.5564,
+   "n": 238,
+   "t_H1": -1.9788,
+   "t_H2": -0.4614,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "小売業",
+   "slope": -0.1614,
+   "t": -1.3195,
+   "n": 238,
+   "t_H1": -1.2858,
+   "t_H2": -2.4567,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "建設業",
+   "slope": -0.1849,
+   "t": -1.1686,
+   "n": 238,
+   "t_H1": -2.4662,
+   "t_H2": 0.6725,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "情報・通信業",
+   "slope": -0.1421,
+   "t": -1.0879,
+   "n": 238,
+   "t_H1": -0.3979,
+   "t_H2": -1.5901,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "機械",
+   "slope": 0.3025,
+   "t": 2.9645,
+   "n": 238,
+   "t_H1": 2.8084,
+   "t_H2": 1.7203,
+   "both": true
+  },
+  {
+   "src": "china",
+   "target": "水産・農林業",
+   "slope": -0.2894,
+   "t": -1.6486,
+   "n": 238,
+   "t_H1": -2.2151,
+   "t_H2": -0.715,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "海運業",
+   "slope": 0.6205,
+   "t": 2.0601,
+   "n": 238,
+   "t_H1": 1.7412,
+   "t_H2": 3.0936,
+   "both": true
+  },
+  {
+   "src": "china",
+   "target": "石油・石炭製品",
+   "slope": 0.2568,
+   "t": 0.8376,
+   "n": 238,
+   "t_H1": 0.4104,
+   "t_H2": 2.1205,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "精密機器",
+   "slope": -0.0105,
+   "t": -0.0869,
+   "n": 238,
+   "t_H1": 0.3114,
+   "t_H2": 1.0378,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "繊維製品",
+   "slope": -0.0053,
+   "t": -0.0389,
+   "n": 238,
+   "t_H1": -0.997,
+   "t_H2": 0.8975,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "証券、商品先物取引業",
+   "slope": 0.2815,
+   "t": 1.2815,
+   "n": 238,
+   "t_H1": 0.99,
+   "t_H2": 1.7734,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "輸送用機器",
+   "slope": 0.6578,
+   "t": 4.1726,
+   "n": 238,
+   "t_H1": 1.9087,
+   "t_H2": 4.7318,
+   "both": true
+  },
+  {
+   "src": "china",
+   "target": "金属製品",
+   "slope": -0.0086,
+   "t": -0.0797,
+   "n": 238,
+   "t_H1": -1.0775,
+   "t_H2": 1.1541,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "鉄鋼",
+   "slope": 0.2259,
+   "t": 1.463,
+   "n": 238,
+   "t_H1": 0.88,
+   "t_H2": 2.8331,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "鉱業",
+   "slope": -0.0082,
+   "t": -0.0311,
+   "n": 238,
+   "t_H1": -0.0191,
+   "t_H2": 1.4992,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "銀行業",
+   "slope": -0.49,
+   "t": -3.1945,
+   "n": 238,
+   "t_H1": -1.4331,
+   "t_H2": -1.7207,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "電気・ガス業",
+   "slope": -0.1151,
+   "t": -0.4478,
+   "n": 238,
+   "t_H1": -0.3481,
+   "t_H2": -0.4469,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "電気機器",
+   "slope": 0.0787,
+   "t": 0.5788,
+   "n": 238,
+   "t_H1": 0.9137,
+   "t_H2": 0.5757,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "非鉄金属",
+   "slope": 0.0386,
+   "t": 0.2068,
+   "n": 238,
+   "t_H1": 1.6006,
+   "t_H2": 0.0545,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "食料品",
+   "slope": -0.1804,
+   "t": -1.1382,
+   "n": 238,
+   "t_H1": -1.4423,
+   "t_H2": -1.6758,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "T1",
+   "slope": -0.0149,
+   "t": -0.0523,
+   "n": 238,
+   "t_H1": -0.0823,
+   "t_H2": 0.1104,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "T2",
+   "slope": -0.3688,
+   "t": -1.2562,
+   "n": 238,
+   "t_H1": -0.9791,
+   "t_H2": -1.2388,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "T3",
+   "slope": -0.2554,
+   "t": -0.9332,
+   "n": 238,
+   "t_H1": 0.53,
+   "t_H2": -0.2225,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "T4",
+   "slope": 0.2575,
+   "t": 1.5671,
+   "n": 238,
+   "t_H1": 2.834,
+   "t_H2": 0.6196,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "T5",
+   "slope": -0.2339,
+   "t": -1.5187,
+   "n": 238,
+   "t_H1": -1.0596,
+   "t_H2": -1.062,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "T6",
+   "slope": -0.4673,
+   "t": -2.5511,
+   "n": 238,
+   "t_H1": -3.0859,
+   "t_H2": -0.7187,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "T7",
+   "slope": 0.1999,
+   "t": 0.3695,
+   "n": 238,
+   "t_H1": 0.9839,
+   "t_H2": -1.1323,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "T8",
+   "slope": -0.1736,
+   "t": -0.941,
+   "n": 238,
+   "t_H1": -1.5696,
+   "t_H2": -0.5725,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "T9",
+   "slope": 0.4127,
+   "t": 1.1522,
+   "n": 238,
+   "t_H1": 0.8752,
+   "t_H2": 1.7325,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "T10",
+   "slope": -0.0163,
+   "t": -0.0694,
+   "n": 238,
+   "t_H1": 0.8782,
+   "t_H2": 0.4962,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "T11",
+   "slope": 0.0241,
+   "t": 0.0953,
+   "n": 238,
+   "t_H1": 0.929,
+   "t_H2": -0.7412,
+   "both": false
+  },
+  {
+   "src": "china",
+   "target": "T13",
+   "slope": 0.3091,
+   "t": 1.0964,
+   "n": 238,
+   "t_H1": 1.8059,
+   "t_H2": 0.8395,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "その他製品",
+   "slope": 0.0359,
+   "t": 0.8634,
+   "n": 234,
+   "t_H1": -0.4443,
+   "t_H2": 3.3758,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "その他金融業",
+   "slope": 0.0297,
+   "t": 0.2647,
+   "n": 234,
+   "t_H1": -0.0484,
+   "t_H2": 4.1034,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "ガラス・土石製品",
+   "slope": 0.0035,
+   "t": 0.0663,
+   "n": 234,
+   "t_H1": 0.577,
+   "t_H2": 1.0754,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "ゴム製品",
+   "slope": -0.088,
+   "t": -1.1033,
+   "n": 234,
+   "t_H1": -3.281,
+   "t_H2": 1.8708,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "サービス業",
+   "slope": -0.0486,
+   "t": -0.8481,
+   "n": 234,
+   "t_H1": -1.7908,
+   "t_H2": -0.6618,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "パルプ・紙",
+   "slope": -0.0965,
+   "t": -0.8547,
+   "n": 234,
+   "t_H1": -1.726,
+   "t_H2": 0.3362,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "不動産業",
+   "slope": 0.0153,
+   "t": 0.1446,
+   "n": 234,
+   "t_H1": -0.2394,
+   "t_H2": 2.6551,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "保険業",
+   "slope": -0.1561,
+   "t": -2.4227,
+   "n": 234,
+   "t_H1": -1.4981,
+   "t_H2": 0.4464,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "化学",
+   "slope": 0.0246,
+   "t": 0.9701,
+   "n": 234,
+   "t_H1": 2.2051,
+   "t_H2": -2.9095,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "医薬品",
+   "slope": 0.0481,
+   "t": 0.5673,
+   "n": 234,
+   "t_H1": -0.2193,
+   "t_H2": -0.5785,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "卸売業",
+   "slope": -0.0269,
+   "t": -0.8049,
+   "n": 234,
+   "t_H1": -0.607,
+   "t_H2": 0.339,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "小売業",
+   "slope": -0.02,
+   "t": -0.3004,
+   "n": 234,
+   "t_H1": -0.5742,
+   "t_H2": -2.3095,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "建設業",
+   "slope": -0.1269,
+   "t": -2.0221,
+   "n": 234,
+   "t_H1": -3.255,
+   "t_H2": 0.6476,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "情報・通信業",
+   "slope": -0.0849,
+   "t": -1.3322,
+   "n": 234,
+   "t_H1": -0.4532,
+   "t_H2": -2.8809,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "機械",
+   "slope": 0.0536,
+   "t": 1.1577,
+   "n": 234,
+   "t_H1": 2.0435,
+   "t_H2": -0.1216,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "水産・農林業",
+   "slope": -0.0034,
+   "t": -0.0375,
+   "n": 234,
+   "t_H1": -0.7164,
+   "t_H2": 0.9839,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "海運業",
+   "slope": -0.132,
+   "t": -0.8232,
+   "n": 234,
+   "t_H1": -1.1809,
+   "t_H2": 1.5101,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "石油・石炭製品",
+   "slope": -0.0371,
+   "t": -0.2074,
+   "n": 234,
+   "t_H1": -0.3436,
+   "t_H2": 2.1238,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "精密機器",
+   "slope": 0.0888,
+   "t": 1.8418,
+   "n": 234,
+   "t_H1": 1.7872,
+   "t_H2": 2.6834,
+   "both": true
+  },
+  {
+   "src": "in_total",
+   "target": "繊維製品",
+   "slope": 0.0691,
+   "t": 0.9528,
+   "n": 234,
+   "t_H1": -1.06,
+   "t_H2": 5.2217,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "証券、商品先物取引業",
+   "slope": 0.0879,
+   "t": 0.6929,
+   "n": 234,
+   "t_H1": 0.6139,
+   "t_H2": 1.3451,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "輸送用機器",
+   "slope": 0.2468,
+   "t": 3.8022,
+   "n": 234,
+   "t_H1": 2.5945,
+   "t_H2": 4.2079,
+   "both": true
+  },
+  {
+   "src": "in_total",
+   "target": "金属製品",
+   "slope": 0.0326,
+   "t": 0.7701,
+   "n": 234,
+   "t_H1": 0.5483,
+   "t_H2": 0.479,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "鉄鋼",
+   "slope": 0.0754,
+   "t": 0.7876,
+   "n": 234,
+   "t_H1": 0.5228,
+   "t_H2": 3.702,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "鉱業",
+   "slope": 0.0281,
+   "t": 0.3249,
+   "n": 234,
+   "t_H1": 1.3938,
+   "t_H2": 1.2646,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "銀行業",
+   "slope": -0.1292,
+   "t": -1.5089,
+   "n": 234,
+   "t_H1": -2.2684,
+   "t_H2": 1.4195,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "電気・ガス業",
+   "slope": -0.0935,
+   "t": -0.6409,
+   "n": 234,
+   "t_H1": -0.9476,
+   "t_H2": 0.4867,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "電気機器",
+   "slope": 0.0273,
+   "t": 0.4503,
+   "n": 234,
+   "t_H1": 1.7916,
+   "t_H2": -0.9531,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "非鉄金属",
+   "slope": -0.0207,
+   "t": -0.2093,
+   "n": 234,
+   "t_H1": 0.5879,
+   "t_H2": 0.5077,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "食料品",
+   "slope": -0.0308,
+   "t": -0.3378,
+   "n": 234,
+   "t_H1": -1.0602,
+   "t_H2": -0.9845,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "T1",
+   "slope": -0.1007,
+   "t": -0.6319,
+   "n": 234,
+   "t_H1": -1.0666,
+   "t_H2": 0.9474,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "T2",
+   "slope": -0.1299,
+   "t": -0.8506,
+   "n": 234,
+   "t_H1": -0.8178,
+   "t_H2": -0.9359,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "T3",
+   "slope": 0.0252,
+   "t": 0.2433,
+   "n": 234,
+   "t_H1": 1.3566,
+   "t_H2": 1.0182,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "T4",
+   "slope": -0.0266,
+   "t": -0.3986,
+   "n": 234,
+   "t_H1": 0.1716,
+   "t_H2": 0.2559,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "T5",
+   "slope": -0.0467,
+   "t": -0.6294,
+   "n": 234,
+   "t_H1": -0.9586,
+   "t_H2": 0.507,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "T6",
+   "slope": -0.1557,
+   "t": -1.8627,
+   "n": 234,
+   "t_H1": -1.9734,
+   "t_H2": -0.4558,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "T7",
+   "slope": 0.0956,
+   "t": 0.6018,
+   "n": 234,
+   "t_H1": 1.7762,
+   "t_H2": -1.6606,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "T8",
+   "slope": -0.0585,
+   "t": -0.7429,
+   "n": 234,
+   "t_H1": -0.2469,
+   "t_H2": -1.4629,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "T9",
+   "slope": 0.1376,
+   "t": 0.7523,
+   "n": 234,
+   "t_H1": 3.7068,
+   "t_H2": -2.0548,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "T10",
+   "slope": 0.0235,
+   "t": 0.2099,
+   "n": 234,
+   "t_H1": 2.6432,
+   "t_H2": -1.9775,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "T11",
+   "slope": 0.0597,
+   "t": 0.6138,
+   "n": 234,
+   "t_H1": 1.5362,
+   "t_H2": -1.1638,
+   "both": false
+  },
+  {
+   "src": "in_total",
+   "target": "T13",
+   "slope": 0.0671,
+   "t": 0.5653,
+   "n": 234,
+   "t_H1": 0.4136,
+   "t_H2": 1.4177,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "その他製品",
+   "slope": 0.1382,
+   "t": 2.9154,
+   "n": 238,
+   "t_H1": 2.6059,
+   "t_H2": 1.2613,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "その他金融業",
+   "slope": 0.3939,
+   "t": 2.2639,
+   "n": 238,
+   "t_H1": 1.8691,
+   "t_H2": 1.7845,
+   "both": true
+  },
+  {
+   "src": "jp_total",
+   "target": "ガラス・土石製品",
+   "slope": -0.0881,
+   "t": -0.8663,
+   "n": 238,
+   "t_H1": -1.5408,
+   "t_H2": 0.7567,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "ゴム製品",
+   "slope": 0.2707,
+   "t": 1.9661,
+   "n": 238,
+   "t_H1": 0.7008,
+   "t_H2": 2.3013,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "サービス業",
+   "slope": 0.0267,
+   "t": 0.2424,
+   "n": 238,
+   "t_H1": 1.2123,
+   "t_H2": -1.0749,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "パルプ・紙",
+   "slope": 0.0596,
+   "t": 0.2605,
+   "n": 238,
+   "t_H1": -0.1021,
+   "t_H2": 0.8548,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "不動産業",
+   "slope": 0.2764,
+   "t": 1.5886,
+   "n": 238,
+   "t_H1": 0.8928,
+   "t_H2": 2.5595,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "保険業",
+   "slope": 0.1281,
+   "t": 0.9637,
+   "n": 238,
+   "t_H1": 1.9489,
+   "t_H2": -1.391,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "化学",
+   "slope": -0.1852,
+   "t": -4.8822,
+   "n": 238,
+   "t_H1": -4.1242,
+   "t_H2": -2.6103,
+   "both": true
+  },
+  {
+   "src": "jp_total",
+   "target": "医薬品",
+   "slope": -0.0917,
+   "t": -0.5246,
+   "n": 238,
+   "t_H1": -0.3784,
+   "t_H2": -0.5133,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "卸売業",
+   "slope": 0.1273,
+   "t": 2.2461,
+   "n": 238,
+   "t_H1": 1.3808,
+   "t_H2": 2.2094,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "小売業",
+   "slope": -0.0461,
+   "t": -0.3742,
+   "n": 238,
+   "t_H1": 0.0765,
+   "t_H2": -1.7009,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "建設業",
+   "slope": 0.0613,
+   "t": 0.5548,
+   "n": 238,
+   "t_H1": -0.3649,
+   "t_H2": 1.7953,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "情報・通信業",
+   "slope": -0.0966,
+   "t": -0.7722,
+   "n": 238,
+   "t_H1": 1.6036,
+   "t_H2": -3.862,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "機械",
+   "slope": -0.0391,
+   "t": -0.3711,
+   "n": 238,
+   "t_H1": -0.4309,
+   "t_H2": 0.1238,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "水産・農林業",
+   "slope": -0.002,
+   "t": -0.0135,
+   "n": 238,
+   "t_H1": -0.6918,
+   "t_H2": 1.6303,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "海運業",
+   "slope": 0.3998,
+   "t": 1.4117,
+   "n": 238,
+   "t_H1": 0.153,
+   "t_H2": 2.3995,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "石油・石炭製品",
+   "slope": 0.318,
+   "t": 1.2339,
+   "n": 238,
+   "t_H1": 0.1901,
+   "t_H2": 3.0742,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "精密機器",
+   "slope": -0.005,
+   "t": -0.0506,
+   "n": 238,
+   "t_H1": -0.1086,
+   "t_H2": 0.8123,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "繊維製品",
+   "slope": 0.2882,
+   "t": 3.0256,
+   "n": 238,
+   "t_H1": 1.6821,
+   "t_H2": 3.7937,
+   "both": true
+  },
+  {
+   "src": "jp_total",
+   "target": "証券、商品先物取引業",
+   "slope": 0.0576,
+   "t": 0.256,
+   "n": 238,
+   "t_H1": 0.0981,
+   "t_H2": 0.4369,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "輸送用機器",
+   "slope": 0.2266,
+   "t": 1.1253,
+   "n": 238,
+   "t_H1": 0.3115,
+   "t_H2": 3.5227,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "金属製品",
+   "slope": -0.0426,
+   "t": -0.4882,
+   "n": 238,
+   "t_H1": -0.4172,
+   "t_H2": -0.2717,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "鉄鋼",
+   "slope": -0.0383,
+   "t": -0.2234,
+   "n": 238,
+   "t_H1": -1.362,
+   "t_H2": 2.4022,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "鉱業",
+   "slope": 0.3106,
+   "t": 1.4848,
+   "n": 238,
+   "t_H1": -0.3378,
+   "t_H2": 3.709,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "銀行業",
+   "slope": 0.2206,
+   "t": 1.4884,
+   "n": 238,
+   "t_H1": 0.9234,
+   "t_H2": 1.5547,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "電気・ガス業",
+   "slope": -0.0796,
+   "t": -0.2915,
+   "n": 238,
+   "t_H1": -0.4217,
+   "t_H2": 0.3142,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "電気機器",
+   "slope": -0.1494,
+   "t": -1.2587,
+   "n": 238,
+   "t_H1": -0.9951,
+   "t_H2": -0.8108,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "非鉄金属",
+   "slope": 0.0574,
+   "t": 0.3217,
+   "n": 238,
+   "t_H1": -0.4076,
+   "t_H2": 1.7695,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "食料品",
+   "slope": -0.0043,
+   "t": -0.0262,
+   "n": 238,
+   "t_H1": 0.2686,
+   "t_H2": -0.527,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "T1",
+   "slope": -0.0184,
+   "t": -0.0581,
+   "n": 238,
+   "t_H1": -0.5717,
+   "t_H2": 1.4122,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "T2",
+   "slope": -0.0586,
+   "t": -0.2199,
+   "n": 238,
+   "t_H1": 0.3439,
+   "t_H2": -0.956,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "T3",
+   "slope": -0.0213,
+   "t": -0.1063,
+   "n": 238,
+   "t_H1": -0.5233,
+   "t_H2": 0.4985,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "T4",
+   "slope": -0.0182,
+   "t": -0.1406,
+   "n": 238,
+   "t_H1": -0.3341,
+   "t_H2": 0.3261,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "T5",
+   "slope": 0.013,
+   "t": 0.0957,
+   "n": 238,
+   "t_H1": 0.0098,
+   "t_H2": 0.0877,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "T6",
+   "slope": -0.1011,
+   "t": -0.5272,
+   "n": 238,
+   "t_H1": -0.688,
+   "t_H2": 0.1807,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "T7",
+   "slope": -0.3081,
+   "t": -0.8971,
+   "n": 238,
+   "t_H1": 0.3315,
+   "t_H2": -3.0846,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "T8",
+   "slope": -0.0357,
+   "t": -0.258,
+   "n": 238,
+   "t_H1": 1.4272,
+   "t_H2": -1.3943,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "T9",
+   "slope": -0.3939,
+   "t": -1.2016,
+   "n": 238,
+   "t_H1": -0.8847,
+   "t_H2": -0.9399,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "T10",
+   "slope": -0.4077,
+   "t": -2.2263,
+   "n": 238,
+   "t_H1": -1.6813,
+   "t_H2": -1.2762,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "T11",
+   "slope": -0.4048,
+   "t": -2.2761,
+   "n": 238,
+   "t_H1": -1.628,
+   "t_H2": -1.5467,
+   "both": false
+  },
+  {
+   "src": "jp_total",
+   "target": "T13",
+   "slope": 0.1367,
+   "t": 0.6561,
+   "n": 238,
+   "t_H1": -0.5548,
+   "t_H2": 1.8672,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "その他製品",
+   "slope": 0.0272,
+   "t": 0.2714,
+   "n": 238,
+   "t_H1": -0.6791,
+   "t_H2": 1.8404,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "その他金融業",
+   "slope": 0.1209,
+   "t": 0.6179,
+   "n": 238,
+   "t_H1": -0.0927,
+   "t_H2": 3.2213,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "ガラス・土石製品",
+   "slope": 0.1143,
+   "t": 1.0082,
+   "n": 238,
+   "t_H1": 0.6477,
+   "t_H2": 1.2062,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "ゴム製品",
+   "slope": -0.0705,
+   "t": -0.2844,
+   "n": 238,
+   "t_H1": -2.0003,
+   "t_H2": 1.7672,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "サービス業",
+   "slope": -0.0583,
+   "t": -0.4511,
+   "n": 238,
+   "t_H1": 0.3538,
+   "t_H2": -1.2084,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "パルプ・紙",
+   "slope": -0.128,
+   "t": -0.406,
+   "n": 238,
+   "t_H1": -1.205,
+   "t_H2": 1.0782,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "不動産業",
+   "slope": 0.4779,
+   "t": 2.1406,
+   "n": 238,
+   "t_H1": 1.1255,
+   "t_H2": 3.0623,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "保険業",
+   "slope": -0.2613,
+   "t": -1.9394,
+   "n": 238,
+   "t_H1": -1.0524,
+   "t_H2": -1.3683,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "化学",
+   "slope": -0.0682,
+   "t": -1.0249,
+   "n": 238,
+   "t_H1": -0.1555,
+   "t_H2": -2.4003,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "医薬品",
+   "slope": -0.2682,
+   "t": -1.2946,
+   "n": 238,
+   "t_H1": -1.7494,
+   "t_H2": -0.8207,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "卸売業",
+   "slope": 0.1462,
+   "t": 2.5506,
+   "n": 238,
+   "t_H1": 3.3035,
+   "t_H2": 0.5719,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "小売業",
+   "slope": -0.1444,
+   "t": -0.8757,
+   "n": 238,
+   "t_H1": -0.7472,
+   "t_H2": -1.3855,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "建設業",
+   "slope": -0.1364,
+   "t": -0.8641,
+   "n": 238,
+   "t_H1": -2.9233,
+   "t_H2": 1.9009,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "情報・通信業",
+   "slope": -0.302,
+   "t": -2.0663,
+   "n": 238,
+   "t_H1": 0.4632,
+   "t_H2": -3.4562,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "機械",
+   "slope": 0.2086,
+   "t": 1.319,
+   "n": 238,
+   "t_H1": 1.4367,
+   "t_H2": 0.504,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "水産・農林業",
+   "slope": -0.0792,
+   "t": -0.4946,
+   "n": 238,
+   "t_H1": -0.4539,
+   "t_H2": -0.2401,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "海運業",
+   "slope": 0.2055,
+   "t": 0.4709,
+   "n": 238,
+   "t_H1": 0.3189,
+   "t_H2": 0.9591,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "石油・石炭製品",
+   "slope": 0.462,
+   "t": 1.5058,
+   "n": 238,
+   "t_H1": 1.5137,
+   "t_H2": 1.0995,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "精密機器",
+   "slope": 0.0972,
+   "t": 1.0673,
+   "n": 238,
+   "t_H1": 1.244,
+   "t_H2": 0.6896,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "繊維製品",
+   "slope": 0.3408,
+   "t": 2.2401,
+   "n": 238,
+   "t_H1": 0.3042,
+   "t_H2": 4.2392,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "証券、商品先物取引業",
+   "slope": 0.0054,
+   "t": 0.0227,
+   "n": 238,
+   "t_H1": -0.8704,
+   "t_H2": 1.4873,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "輸送用機器",
+   "slope": 0.6118,
+   "t": 3.813,
+   "n": 238,
+   "t_H1": 2.0427,
+   "t_H2": 3.8384,
+   "both": true
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "金属製品",
+   "slope": 0.0596,
+   "t": 0.7152,
+   "n": 238,
+   "t_H1": 0.2447,
+   "t_H2": 1.0447,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "鉄鋼",
+   "slope": 0.1909,
+   "t": 0.9444,
+   "n": 238,
+   "t_H1": -0.2389,
+   "t_H2": 2.9886,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "鉱業",
+   "slope": 0.4309,
+   "t": 1.6729,
+   "n": 238,
+   "t_H1": 1.5338,
+   "t_H2": 1.3783,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "銀行業",
+   "slope": -0.0411,
+   "t": -0.2277,
+   "n": 238,
+   "t_H1": -1.404,
+   "t_H2": 1.1343,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "電気・ガス業",
+   "slope": -0.177,
+   "t": -0.5511,
+   "n": 238,
+   "t_H1": -0.703,
+   "t_H2": 0.2125,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "電気機器",
+   "slope": -0.0162,
+   "t": -0.1201,
+   "n": 238,
+   "t_H1": 0.5508,
+   "t_H2": -0.6272,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "非鉄金属",
+   "slope": 0.2663,
+   "t": 1.3432,
+   "n": 238,
+   "t_H1": 1.0446,
+   "t_H2": 1.3029,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "食料品",
+   "slope": -0.3631,
+   "t": -1.5465,
+   "n": 238,
+   "t_H1": -1.4323,
+   "t_H2": -1.3514,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "T1",
+   "slope": -0.1699,
+   "t": -0.4593,
+   "n": 238,
+   "t_H1": -0.6304,
+   "t_H2": 0.373,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "T2",
+   "slope": -0.3715,
+   "t": -1.1228,
+   "n": 238,
+   "t_H1": -1.0816,
+   "t_H2": -0.5641,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "T3",
+   "slope": -0.0783,
+   "t": -0.3217,
+   "n": 238,
+   "t_H1": -1.6852,
+   "t_H2": 1.0222,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "T4",
+   "slope": 0.1756,
+   "t": 1.0559,
+   "n": 238,
+   "t_H1": 1.0798,
+   "t_H2": 0.8576,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "T5",
+   "slope": -0.2856,
+   "t": -1.5966,
+   "n": 238,
+   "t_H1": -3.2615,
+   "t_H2": 0.3141,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "T6",
+   "slope": -0.1285,
+   "t": -0.6788,
+   "n": 238,
+   "t_H1": -1.5298,
+   "t_H2": 0.7135,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "T7",
+   "slope": -0.2593,
+   "t": -0.564,
+   "n": 238,
+   "t_H1": 0.8597,
+   "t_H2": -3.0347,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "T8",
+   "slope": -0.3444,
+   "t": -1.7831,
+   "n": 238,
+   "t_H1": -0.2764,
+   "t_H2": -2.2166,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "T9",
+   "slope": 0.0096,
+   "t": 0.0211,
+   "n": 238,
+   "t_H1": 1.1205,
+   "t_H2": -1.7641,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "T10",
+   "slope": 0.0701,
+   "t": 0.2732,
+   "n": 238,
+   "t_H1": 1.2349,
+   "t_H2": -1.0376,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "T11",
+   "slope": -0.1041,
+   "t": -0.5797,
+   "n": 238,
+   "t_H1": 0.7129,
+   "t_H2": -1.3146,
+   "both": false
+  },
+  {
+   "src": "jp_gasoline",
+   "target": "T13",
+   "slope": 0.5287,
+   "t": 1.8691,
+   "n": 238,
+   "t_H1": 0.4385,
+   "t_H2": 2.4196,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "その他製品",
+   "slope": 0.0048,
+   "t": 0.148,
+   "n": 197,
+   "t_H1": 1.1922,
+   "t_H2": -0.4668,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "その他金融業",
+   "slope": 0.0577,
+   "t": 0.9695,
+   "n": 197,
+   "t_H1": 0.4206,
+   "t_H2": 0.8062,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "ガラス・土石製品",
+   "slope": -0.0016,
+   "t": -0.0236,
+   "n": 197,
+   "t_H1": 0.7086,
+   "t_H2": 0.123,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "ゴム製品",
+   "slope": 0.0855,
+   "t": 1.0048,
+   "n": 197,
+   "t_H1": -0.2672,
+   "t_H2": 1.2814,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "サービス業",
+   "slope": 0.1385,
+   "t": 2.3965,
+   "n": 197,
+   "t_H1": 1.2007,
+   "t_H2": 1.1916,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "パルプ・紙",
+   "slope": 0.1644,
+   "t": 1.792,
+   "n": 197,
+   "t_H1": 1.9869,
+   "t_H2": 0.5577,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "不動産業",
+   "slope": 0.1121,
+   "t": 1.4209,
+   "n": 197,
+   "t_H1": -0.0686,
+   "t_H2": 1.9023,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "保険業",
+   "slope": -0.2162,
+   "t": -2.7593,
+   "n": 197,
+   "t_H1": -0.5213,
+   "t_H2": -2.5362,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "化学",
+   "slope": -0.0247,
+   "t": -0.7274,
+   "n": 197,
+   "t_H1": -1.0269,
+   "t_H2": -0.2598,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "医薬品",
+   "slope": 0.0333,
+   "t": 0.4108,
+   "n": 197,
+   "t_H1": -1.0914,
+   "t_H2": 0.577,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "卸売業",
+   "slope": 0.0132,
+   "t": 0.3584,
+   "n": 197,
+   "t_H1": -0.3798,
+   "t_H2": 0.7315,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "小売業",
+   "slope": -0.0155,
+   "t": -0.2729,
+   "n": 197,
+   "t_H1": -0.1866,
+   "t_H2": -1.0229,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "建設業",
+   "slope": 0.1019,
+   "t": 1.6162,
+   "n": 197,
+   "t_H1": 0.301,
+   "t_H2": 2.085,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "情報・通信業",
+   "slope": 0.0206,
+   "t": 0.3093,
+   "n": 197,
+   "t_H1": 1.7056,
+   "t_H2": -0.5175,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "機械",
+   "slope": -0.0291,
+   "t": -0.5425,
+   "n": 197,
+   "t_H1": -0.7254,
+   "t_H2": 0.2251,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "水産・農林業",
+   "slope": 0.0286,
+   "t": 0.3438,
+   "n": 197,
+   "t_H1": -0.0721,
+   "t_H2": 0.408,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "海運業",
+   "slope": 0.0999,
+   "t": 0.5933,
+   "n": 197,
+   "t_H1": 0.9269,
+   "t_H2": 0.9897,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "石油・石炭製品",
+   "slope": -0.0915,
+   "t": -0.591,
+   "n": 197,
+   "t_H1": -0.2293,
+   "t_H2": -0.0805,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "精密機器",
+   "slope": 0.0263,
+   "t": 0.4194,
+   "n": 197,
+   "t_H1": 1.4117,
+   "t_H2": 0.2743,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "繊維製品",
+   "slope": 0.0666,
+   "t": 1.1923,
+   "n": 197,
+   "t_H1": 1.0014,
+   "t_H2": 1.1399,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "証券、商品先物取引業",
+   "slope": 0.0434,
+   "t": 0.4036,
+   "n": 197,
+   "t_H1": 1.0742,
+   "t_H2": -0.4585,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "輸送用機器",
+   "slope": 0.0713,
+   "t": 1.1007,
+   "n": 197,
+   "t_H1": -1.0757,
+   "t_H2": 2.092,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "金属製品",
+   "slope": -0.0223,
+   "t": -0.3823,
+   "n": 197,
+   "t_H1": -0.0601,
+   "t_H2": -0.4266,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "鉄鋼",
+   "slope": -0.0983,
+   "t": -1.0359,
+   "n": 197,
+   "t_H1": -0.948,
+   "t_H2": -0.1797,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "鉱業",
+   "slope": -0.048,
+   "t": -0.3391,
+   "n": 197,
+   "t_H1": -1.9656,
+   "t_H2": 1.2161,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "銀行業",
+   "slope": -0.237,
+   "t": -3.1692,
+   "n": 197,
+   "t_H1": -1.1802,
+   "t_H2": -2.3162,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "電気・ガス業",
+   "slope": 0.0281,
+   "t": 0.2715,
+   "n": 197,
+   "t_H1": 1.6305,
+   "t_H2": -0.5247,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "電気機器",
+   "slope": -0.0059,
+   "t": -0.0711,
+   "n": 197,
+   "t_H1": -0.3088,
+   "t_H2": 0.09,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "非鉄金属",
+   "slope": -0.0131,
+   "t": -0.1373,
+   "n": 197,
+   "t_H1": 0.9201,
+   "t_H2": 0.0624,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "食料品",
+   "slope": 0.0074,
+   "t": 0.126,
+   "n": 197,
+   "t_H1": -0.8223,
+   "t_H2": -0.0649,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "T1",
+   "slope": 0.1691,
+   "t": 1.3856,
+   "n": 197,
+   "t_H1": 2.1507,
+   "t_H2": 0.4445,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "T2",
+   "slope": -0.1491,
+   "t": -1.3008,
+   "n": 197,
+   "t_H1": -1.7895,
+   "t_H2": -0.8001,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "T3",
+   "slope": -0.1276,
+   "t": -0.8943,
+   "n": 197,
+   "t_H1": 1.0576,
+   "t_H2": -0.6619,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "T4",
+   "slope": 0.0034,
+   "t": 0.0352,
+   "n": 197,
+   "t_H1": 0.3476,
+   "t_H2": 0.2161,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "T5",
+   "slope": -0.0533,
+   "t": -0.8517,
+   "n": 197,
+   "t_H1": -1.1888,
+   "t_H2": 0.1134,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "T6",
+   "slope": 0.0312,
+   "t": 0.383,
+   "n": 197,
+   "t_H1": 0.5588,
+   "t_H2": 0.2669,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "T7",
+   "slope": 0.018,
+   "t": 0.0821,
+   "n": 197,
+   "t_H1": 2.0342,
+   "t_H2": -3.5269,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "T8",
+   "slope": 0.1428,
+   "t": 1.5588,
+   "n": 197,
+   "t_H1": 2.4261,
+   "t_H2": 0.5296,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "T9",
+   "slope": 0.0003,
+   "t": 0.0015,
+   "n": 197,
+   "t_H1": -0.5509,
+   "t_H2": 0.8287,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "T10",
+   "slope": -0.1803,
+   "t": -1.329,
+   "n": 197,
+   "t_H1": -2.4613,
+   "t_H2": -0.2501,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "T11",
+   "slope": -0.1443,
+   "t": -0.8972,
+   "n": 197,
+   "t_H1": 0.3523,
+   "t_H2": -1.2288,
+   "both": false
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "T13",
+   "slope": -0.1548,
+   "t": -0.9424,
+   "n": 197,
+   "t_H1": -1.8323,
+   "t_H2": 0.0117,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "その他製品",
+   "slope": 0.0095,
+   "t": 1.1807,
+   "n": 197,
+   "t_H1": 1.4742,
+   "t_H2": 0.9071,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "その他金融業",
+   "slope": 0.0119,
+   "t": 0.8851,
+   "n": 197,
+   "t_H1": 0.4992,
+   "t_H2": 0.696,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "ガラス・土石製品",
+   "slope": 0.0008,
+   "t": 0.0808,
+   "n": 197,
+   "t_H1": 0.1537,
+   "t_H2": 0.2687,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "ゴム製品",
+   "slope": 0.0195,
+   "t": 0.8571,
+   "n": 197,
+   "t_H1": -1.4749,
+   "t_H2": 1.2521,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "サービス業",
+   "slope": -0.0288,
+   "t": -1.8663,
+   "n": 197,
+   "t_H1": 1.503,
+   "t_H2": -2.6499,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "パルプ・紙",
+   "slope": 0.0165,
+   "t": 0.4715,
+   "n": 197,
+   "t_H1": -0.0502,
+   "t_H2": 0.5651,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "不動産業",
+   "slope": 0.0338,
+   "t": 2.0824,
+   "n": 197,
+   "t_H1": 1.8382,
+   "t_H2": 1.589,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "保険業",
+   "slope": -0.0099,
+   "t": -0.6095,
+   "n": 197,
+   "t_H1": -1.9105,
+   "t_H2": 0.1796,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "化学",
+   "slope": -0.0152,
+   "t": -2.2467,
+   "n": 197,
+   "t_H1": 0.1696,
+   "t_H2": -2.4181,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "医薬品",
+   "slope": 0.0053,
+   "t": 0.1787,
+   "n": 197,
+   "t_H1": -1.5238,
+   "t_H2": 0.2731,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "卸売業",
+   "slope": 0.016,
+   "t": 2.0045,
+   "n": 197,
+   "t_H1": -1.4195,
+   "t_H2": 2.4262,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "小売業",
+   "slope": -0.0146,
+   "t": -0.8102,
+   "n": 197,
+   "t_H1": -3.9762,
+   "t_H2": -0.4182,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "建設業",
+   "slope": 0.0415,
+   "t": 3.7504,
+   "n": 197,
+   "t_H1": 0.4475,
+   "t_H2": 3.9285,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "情報・通信業",
+   "slope": -0.0394,
+   "t": -1.5912,
+   "n": 197,
+   "t_H1": 0.3009,
+   "t_H2": -1.7405,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "機械",
+   "slope": -0.0068,
+   "t": -0.4792,
+   "n": 197,
+   "t_H1": 1.5689,
+   "t_H2": -0.6969,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "水産・農林業",
+   "slope": 0.022,
+   "t": 1.0555,
+   "n": 197,
+   "t_H1": -0.6228,
+   "t_H2": 1.3484,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "海運業",
+   "slope": 0.0337,
+   "t": 0.5311,
+   "n": 197,
+   "t_H1": 1.7388,
+   "t_H2": 0.4707,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "石油・石炭製品",
+   "slope": 0.0383,
+   "t": 0.9125,
+   "n": 197,
+   "t_H1": -0.155,
+   "t_H2": 1.0619,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "精密機器",
+   "slope": 0.0088,
+   "t": 0.7707,
+   "n": 197,
+   "t_H1": -1.2175,
+   "t_H2": 1.1979,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "繊維製品",
+   "slope": 0.0681,
+   "t": 3.3326,
+   "n": 197,
+   "t_H1": -2.8778,
+   "t_H2": 4.2403,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "証券、商品先物取引業",
+   "slope": -0.0125,
+   "t": -0.3735,
+   "n": 197,
+   "t_H1": 0.9985,
+   "t_H2": -0.6383,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "輸送用機器",
+   "slope": 0.0317,
+   "t": 1.5163,
+   "n": 197,
+   "t_H1": 0.5186,
+   "t_H2": 1.4572,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "金属製品",
+   "slope": -0.0079,
+   "t": -0.3938,
+   "n": 197,
+   "t_H1": 0.923,
+   "t_H2": -0.5262,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "鉄鋼",
+   "slope": 0.0328,
+   "t": 1.1422,
+   "n": 197,
+   "t_H1": 1.297,
+   "t_H2": 1.1471,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "鉱業",
+   "slope": 0.063,
+   "t": 1.9424,
+   "n": 197,
+   "t_H1": -0.9976,
+   "t_H2": 2.529,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "銀行業",
+   "slope": 0.0392,
+   "t": 1.6558,
+   "n": 197,
+   "t_H1": -1.9398,
+   "t_H2": 2.0563,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "電気・ガス業",
+   "slope": 0.027,
+   "t": 1.3429,
+   "n": 197,
+   "t_H1": 0.2073,
+   "t_H2": 1.5059,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "電気機器",
+   "slope": -0.0306,
+   "t": -1.7152,
+   "n": 197,
+   "t_H1": 1.4048,
+   "t_H2": -1.9642,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "非鉄金属",
+   "slope": -0.0041,
+   "t": -0.1692,
+   "n": 197,
+   "t_H1": 2.1669,
+   "t_H2": -0.3197,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "食料品",
+   "slope": 0.0244,
+   "t": 1.5011,
+   "n": 197,
+   "t_H1": -1.4001,
+   "t_H2": 1.7359,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "T1",
+   "slope": 0.074,
+   "t": 2.5856,
+   "n": 197,
+   "t_H1": 0.4749,
+   "t_H2": 2.7161,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "T2",
+   "slope": -0.0066,
+   "t": -0.2069,
+   "n": 197,
+   "t_H1": -1.474,
+   "t_H2": -0.0021,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "T3",
+   "slope": -0.0055,
+   "t": -0.1652,
+   "n": 197,
+   "t_H1": 0.8571,
+   "t_H2": -0.0629,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "T4",
+   "slope": -0.0057,
+   "t": -0.27,
+   "n": 197,
+   "t_H1": 1.2227,
+   "t_H2": -0.3721,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "T5",
+   "slope": 0.0444,
+   "t": 2.1928,
+   "n": 197,
+   "t_H1": 1.5126,
+   "t_H2": 2.0558,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "T6",
+   "slope": 0.0286,
+   "t": 1.4854,
+   "n": 197,
+   "t_H1": 0.0872,
+   "t_H2": 1.5109,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "T7",
+   "slope": -0.0238,
+   "t": -0.3254,
+   "n": 197,
+   "t_H1": -0.9611,
+   "t_H2": -0.2012,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "T8",
+   "slope": 0.014,
+   "t": 0.3791,
+   "n": 197,
+   "t_H1": 0.5862,
+   "t_H2": 0.2784,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "T9",
+   "slope": -0.0321,
+   "t": -0.5674,
+   "n": 197,
+   "t_H1": 1.2871,
+   "t_H2": -0.7712,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "T10",
+   "slope": -0.042,
+   "t": -1.5502,
+   "n": 197,
+   "t_H1": -1.4108,
+   "t_H2": -1.3078,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "T11",
+   "slope": -0.0685,
+   "t": -2.8119,
+   "n": 197,
+   "t_H1": 0.3018,
+   "t_H2": -2.7634,
+   "both": false
+  },
+  {
+   "src": "jp_jet",
+   "target": "T13",
+   "slope": 0.0091,
+   "t": 0.1704,
+   "n": 197,
+   "t_H1": -0.2544,
+   "t_H2": 0.2358,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "その他製品",
+   "slope": 0.0963,
+   "t": 1.2156,
+   "n": 238,
+   "t_H1": 0.7846,
+   "t_H2": 2.0045,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "その他金融業",
+   "slope": 0.5423,
+   "t": 1.9998,
+   "n": 238,
+   "t_H1": 1.7074,
+   "t_H2": 2.5854,
+   "both": true
+  },
+  {
+   "src": "jp_diesel",
+   "target": "ガラス・土石製品",
+   "slope": -0.0357,
+   "t": -0.2917,
+   "n": 238,
+   "t_H1": -1.0166,
+   "t_H2": -0.002,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "ゴム製品",
+   "slope": 0.0414,
+   "t": 0.1821,
+   "n": 238,
+   "t_H1": -0.4433,
+   "t_H2": 1.7057,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "サービス業",
+   "slope": 0.1244,
+   "t": 0.9975,
+   "n": 238,
+   "t_H1": 1.969,
+   "t_H2": 0.0432,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "パルプ・紙",
+   "slope": -0.1521,
+   "t": -0.4585,
+   "n": 238,
+   "t_H1": -0.5614,
+   "t_H2": 0.5934,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "不動産業",
+   "slope": 0.5321,
+   "t": 2.0369,
+   "n": 238,
+   "t_H1": 1.6422,
+   "t_H2": 2.2445,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "保険業",
+   "slope": 0.2262,
+   "t": 1.485,
+   "n": 238,
+   "t_H1": 0.695,
+   "t_H2": 0.1318,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "化学",
+   "slope": -0.1379,
+   "t": -2.9726,
+   "n": 238,
+   "t_H1": -2.6766,
+   "t_H2": -1.1625,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "医薬品",
+   "slope": -0.3835,
+   "t": -1.6647,
+   "n": 238,
+   "t_H1": -1.1005,
+   "t_H2": -0.3639,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "卸売業",
+   "slope": 0.0668,
+   "t": 0.9655,
+   "n": 238,
+   "t_H1": 0.3247,
+   "t_H2": 1.4752,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "小売業",
+   "slope": -0.2058,
+   "t": -1.0956,
+   "n": 238,
+   "t_H1": -0.6441,
+   "t_H2": -0.7405,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "建設業",
+   "slope": -0.0278,
+   "t": -0.1943,
+   "n": 238,
+   "t_H1": -0.2461,
+   "t_H2": -0.074,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "情報・通信業",
+   "slope": -0.0175,
+   "t": -0.1346,
+   "n": 238,
+   "t_H1": 1.7777,
+   "t_H2": -2.4628,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "機械",
+   "slope": 0.0743,
+   "t": 0.41,
+   "n": 238,
+   "t_H1": 0.4189,
+   "t_H2": -0.4534,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "水産・農林業",
+   "slope": -0.0434,
+   "t": -0.2237,
+   "n": 238,
+   "t_H1": -0.5452,
+   "t_H2": 1.9206,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "海運業",
+   "slope": 0.4461,
+   "t": 1.1428,
+   "n": 238,
+   "t_H1": 0.0483,
+   "t_H2": 1.8072,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "石油・石炭製品",
+   "slope": 0.4345,
+   "t": 1.4322,
+   "n": 238,
+   "t_H1": 0.1971,
+   "t_H2": 2.5972,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "精密機器",
+   "slope": 0.1052,
+   "t": 0.7003,
+   "n": 238,
+   "t_H1": 0.3978,
+   "t_H2": 0.5751,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "繊維製品",
+   "slope": 0.2041,
+   "t": 1.7977,
+   "n": 238,
+   "t_H1": -0.0287,
+   "t_H2": 4.0047,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "証券、商品先物取引業",
+   "slope": 0.1451,
+   "t": 0.5299,
+   "n": 238,
+   "t_H1": 0.1907,
+   "t_H2": 0.7099,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "輸送用機器",
+   "slope": 0.1181,
+   "t": 0.4101,
+   "n": 238,
+   "t_H1": 0.2816,
+   "t_H2": 1.7008,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "金属製品",
+   "slope": -0.0536,
+   "t": -0.5871,
+   "n": 238,
+   "t_H1": -0.5757,
+   "t_H2": 0.0293,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "鉄鋼",
+   "slope": -0.0671,
+   "t": -0.2871,
+   "n": 238,
+   "t_H1": -1.0397,
+   "t_H2": 1.3829,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "鉱業",
+   "slope": 0.2735,
+   "t": 1.2031,
+   "n": 238,
+   "t_H1": -0.7526,
+   "t_H2": 3.5627,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "銀行業",
+   "slope": 0.1367,
+   "t": 0.6963,
+   "n": 238,
+   "t_H1": -0.1225,
+   "t_H2": 1.0541,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "電気・ガス業",
+   "slope": -0.345,
+   "t": -0.7981,
+   "n": 238,
+   "t_H1": -0.8656,
+   "t_H2": 0.0425,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "電気機器",
+   "slope": 0.0196,
+   "t": 0.1088,
+   "n": 238,
+   "t_H1": 0.1097,
+   "t_H2": -0.9859,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "非鉄金属",
+   "slope": 0.3219,
+   "t": 1.2415,
+   "n": 238,
+   "t_H1": 0.2561,
+   "t_H2": 2.5535,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "食料品",
+   "slope": -0.3267,
+   "t": -1.1999,
+   "n": 238,
+   "t_H1": -0.5033,
+   "t_H2": -0.9555,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "T1",
+   "slope": -0.3514,
+   "t": -0.7339,
+   "n": 238,
+   "t_H1": -0.9435,
+   "t_H2": 0.571,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "T2",
+   "slope": -0.4398,
+   "t": -1.0863,
+   "n": 238,
+   "t_H1": -0.5822,
+   "t_H2": -1.2846,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "T3",
+   "slope": 0.1741,
+   "t": 0.6457,
+   "n": 238,
+   "t_H1": -0.4459,
+   "t_H2": 0.5037,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "T4",
+   "slope": 0.1583,
+   "t": 0.882,
+   "n": 238,
+   "t_H1": 0.5783,
+   "t_H2": -0.2514,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "T5",
+   "slope": -0.0984,
+   "t": -0.5752,
+   "n": 238,
+   "t_H1": -0.6089,
+   "t_H2": -0.6434,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "T6",
+   "slope": -0.1944,
+   "t": -0.7292,
+   "n": 238,
+   "t_H1": -0.6645,
+   "t_H2": -0.9953,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "T7",
+   "slope": 0.0882,
+   "t": 0.1945,
+   "n": 238,
+   "t_H1": 1.2845,
+   "t_H2": -2.9571,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "T8",
+   "slope": -0.1038,
+   "t": -0.6967,
+   "n": 238,
+   "t_H1": 0.2887,
+   "t_H2": -1.2982,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "T9",
+   "slope": 0.0069,
+   "t": 0.0125,
+   "n": 238,
+   "t_H1": 0.2913,
+   "t_H2": -2.0547,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "T10",
+   "slope": -0.1541,
+   "t": -0.528,
+   "n": 238,
+   "t_H1": -0.3684,
+   "t_H2": -2.1641,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "T11",
+   "slope": -0.1589,
+   "t": -0.6926,
+   "n": 238,
+   "t_H1": -0.4931,
+   "t_H2": -1.0075,
+   "both": false
+  },
+  {
+   "src": "jp_diesel",
+   "target": "T13",
+   "slope": 0.1326,
+   "t": 0.4701,
+   "n": 238,
+   "t_H1": -0.6304,
+   "t_H2": 1.9119,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "その他製品",
+   "slope": 0.0275,
+   "t": 1.5956,
+   "n": 238,
+   "t_H1": 1.4802,
+   "t_H2": 0.8068,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "その他金融業",
+   "slope": 0.0944,
+   "t": 2.7129,
+   "n": 238,
+   "t_H1": 2.2967,
+   "t_H2": 1.6835,
+   "both": true
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "ガラス・土石製品",
+   "slope": -0.0457,
+   "t": -1.7567,
+   "n": 238,
+   "t_H1": -2.3207,
+   "t_H2": 0.0843,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "ゴム製品",
+   "slope": 0.0717,
+   "t": 1.9117,
+   "n": 238,
+   "t_H1": 1.4498,
+   "t_H2": 1.2488,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "サービス業",
+   "slope": -0.0019,
+   "t": -0.0635,
+   "n": 238,
+   "t_H1": 0.779,
+   "t_H2": -1.0642,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "パルプ・紙",
+   "slope": 0.0119,
+   "t": 0.24,
+   "n": 238,
+   "t_H1": -0.0807,
+   "t_H2": 0.6279,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "不動産業",
+   "slope": 0.0147,
+   "t": 0.3309,
+   "n": 238,
+   "t_H1": 0.4922,
+   "t_H2": -0.6699,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "保険業",
+   "slope": 0.0527,
+   "t": 1.3093,
+   "n": 238,
+   "t_H1": 1.9783,
+   "t_H2": -0.4759,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "化学",
+   "slope": -0.0411,
+   "t": -3.7232,
+   "n": 238,
+   "t_H1": -5.1715,
+   "t_H2": -0.6418,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "医薬品",
+   "slope": 0.0234,
+   "t": 0.6353,
+   "n": 238,
+   "t_H1": 0.896,
+   "t_H2": -0.3781,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "卸売業",
+   "slope": 0.0428,
+   "t": 3.2335,
+   "n": 238,
+   "t_H1": 2.5287,
+   "t_H2": 2.2869,
+   "both": true
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "小売業",
+   "slope": 0.0249,
+   "t": 0.9968,
+   "n": 238,
+   "t_H1": 1.2839,
+   "t_H2": -0.4739,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "建設業",
+   "slope": 0.0007,
+   "t": 0.0232,
+   "n": 238,
+   "t_H1": 0.2751,
+   "t_H2": -1.1132,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "情報・通信業",
+   "slope": -0.001,
+   "t": -0.0343,
+   "n": 238,
+   "t_H1": 1.4741,
+   "t_H2": -1.6247,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "機械",
+   "slope": -0.0463,
+   "t": -2.0571,
+   "n": 238,
+   "t_H1": -2.1219,
+   "t_H2": -0.3975,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "水産・農林業",
+   "slope": -0.0066,
+   "t": -0.1888,
+   "n": 238,
+   "t_H1": -0.6465,
+   "t_H2": 0.9414,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "海運業",
+   "slope": 0.0343,
+   "t": 0.427,
+   "n": 238,
+   "t_H1": -1.0447,
+   "t_H2": 2.376,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "石油・石炭製品",
+   "slope": 0.0387,
+   "t": 0.5882,
+   "n": 238,
+   "t_H1": 0.4002,
+   "t_H2": 0.5384,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "精密機器",
+   "slope": -0.0313,
+   "t": -1.297,
+   "n": 238,
+   "t_H1": -1.1579,
+   "t_H2": -0.3471,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "繊維製品",
+   "slope": 0.0363,
+   "t": 1.8487,
+   "n": 238,
+   "t_H1": 2.3709,
+   "t_H2": 0.0245,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "証券、商品先物取引業",
+   "slope": 0.0008,
+   "t": 0.013,
+   "n": 238,
+   "t_H1": 0.0814,
+   "t_H2": -0.1332,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "輸送用機器",
+   "slope": -0.0001,
+   "t": -0.0032,
+   "n": 238,
+   "t_H1": -0.3937,
+   "t_H2": 0.9335,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "金属製品",
+   "slope": -0.0146,
+   "t": -0.65,
+   "n": 238,
+   "t_H1": -0.5281,
+   "t_H2": -0.4102,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "鉄鋼",
+   "slope": -0.0208,
+   "t": -0.4913,
+   "n": 238,
+   "t_H1": -1.281,
+   "t_H2": 1.426,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "鉱業",
+   "slope": 0.0838,
+   "t": 1.6975,
+   "n": 238,
+   "t_H1": 0.7678,
+   "t_H2": 2.218,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "銀行業",
+   "slope": 0.1051,
+   "t": 2.5816,
+   "n": 238,
+   "t_H1": 2.3276,
+   "t_H2": 1.541,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "電気・ガス業",
+   "slope": -0.012,
+   "t": -0.2268,
+   "n": 238,
+   "t_H1": -0.4729,
+   "t_H2": 0.6699,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "電気機器",
+   "slope": -0.043,
+   "t": -1.8799,
+   "n": 238,
+   "t_H1": -2.2286,
+   "t_H2": 0.3341,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "非鉄金属",
+   "slope": -0.0231,
+   "t": -0.5928,
+   "n": 238,
+   "t_H1": -1.9622,
+   "t_H2": 1.5261,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "食料品",
+   "slope": 0.0243,
+   "t": 0.7355,
+   "n": 238,
+   "t_H1": 1.1843,
+   "t_H2": -0.7963,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "T1",
+   "slope": -0.0358,
+   "t": -0.5292,
+   "n": 238,
+   "t_H1": -0.8361,
+   "t_H2": 0.7039,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "T2",
+   "slope": 0.0261,
+   "t": 0.5434,
+   "n": 238,
+   "t_H1": 1.2057,
+   "t_H2": -1.1041,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "T3",
+   "slope": -0.0516,
+   "t": -0.9963,
+   "n": 238,
+   "t_H1": -1.3381,
+   "t_H2": -0.2398,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "T4",
+   "slope": -0.0551,
+   "t": -1.6502,
+   "n": 238,
+   "t_H1": -2.0649,
+   "t_H2": -0.0787,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "T5",
+   "slope": -0.0169,
+   "t": -0.4562,
+   "n": 238,
+   "t_H1": 0.167,
+   "t_H2": -0.9847,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "T6",
+   "slope": -0.0237,
+   "t": -0.5804,
+   "n": 238,
+   "t_H1": -0.0854,
+   "t_H2": -1.4462,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "T7",
+   "slope": -0.128,
+   "t": -1.5509,
+   "n": 238,
+   "t_H1": -1.1335,
+   "t_H2": -1.1317,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "T8",
+   "slope": -0.0388,
+   "t": -1.0963,
+   "n": 238,
+   "t_H1": 0.5298,
+   "t_H2": -1.9419,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "T9",
+   "slope": -0.1538,
+   "t": -2.0043,
+   "n": 238,
+   "t_H1": -2.2456,
+   "t_H2": -0.4817,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "T10",
+   "slope": -0.0933,
+   "t": -2.2055,
+   "n": 238,
+   "t_H1": -2.7625,
+   "t_H2": -0.0543,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "T11",
+   "slope": -0.0819,
+   "t": -1.8907,
+   "n": 238,
+   "t_H1": -2.6332,
+   "t_H2": 0.9679,
+   "both": false
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "T13",
+   "slope": -0.0223,
+   "t": -0.4424,
+   "n": 238,
+   "t_H1": -0.378,
+   "t_H2": -0.1655,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "その他製品",
+   "slope": 0.0822,
+   "t": 1.2803,
+   "n": 237,
+   "t_H1": 1.1167,
+   "t_H2": 0.6652,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "その他金融業",
+   "slope": 0.2809,
+   "t": 1.8274,
+   "n": 237,
+   "t_H1": 1.3745,
+   "t_H2": 2.2077,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "ガラス・土石製品",
+   "slope": -0.2006,
+   "t": -1.86,
+   "n": 237,
+   "t_H1": -0.9864,
+   "t_H2": -1.6447,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "ゴム製品",
+   "slope": -0.0529,
+   "t": -0.3083,
+   "n": 237,
+   "t_H1": -0.3251,
+   "t_H2": -0.2967,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "サービス業",
+   "slope": 0.0903,
+   "t": 0.8474,
+   "n": 237,
+   "t_H1": -0.0236,
+   "t_H2": 1.3214,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "パルプ・紙",
+   "slope": 0.0114,
+   "t": 0.0588,
+   "n": 237,
+   "t_H1": -0.6329,
+   "t_H2": 1.3737,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "不動産業",
+   "slope": 0.1733,
+   "t": 0.9583,
+   "n": 237,
+   "t_H1": 0.4699,
+   "t_H2": 1.4717,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "保険業",
+   "slope": 0.2144,
+   "t": 1.6936,
+   "n": 237,
+   "t_H1": 1.1813,
+   "t_H2": 1.616,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "化学",
+   "slope": -0.1566,
+   "t": -3.483,
+   "n": 237,
+   "t_H1": -2.1466,
+   "t_H2": -2.799,
+   "both": true
+  },
+  {
+   "src": "us_natgas",
+   "target": "医薬品",
+   "slope": 0.358,
+   "t": 2.444,
+   "n": 237,
+   "t_H1": 0.9317,
+   "t_H2": 3.5259,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "卸売業",
+   "slope": 0.0843,
+   "t": 1.6084,
+   "n": 237,
+   "t_H1": 1.7239,
+   "t_H2": 0.4821,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "小売業",
+   "slope": 0.1291,
+   "t": 1.1586,
+   "n": 237,
+   "t_H1": -0.1498,
+   "t_H2": 2.6852,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "建設業",
+   "slope": -0.1202,
+   "t": -1.3608,
+   "n": 237,
+   "t_H1": -1.1376,
+   "t_H2": -0.7721,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "情報・通信業",
+   "slope": 0.2408,
+   "t": 2.3543,
+   "n": 237,
+   "t_H1": 1.3715,
+   "t_H2": 2.0795,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "機械",
+   "slope": -0.2294,
+   "t": -1.975,
+   "n": 237,
+   "t_H1": -0.5149,
+   "t_H2": -2.9329,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "水産・農林業",
+   "slope": 0.0414,
+   "t": 0.2676,
+   "n": 237,
+   "t_H1": -1.0576,
+   "t_H2": 2.4851,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "海運業",
+   "slope": -0.2419,
+   "t": -0.8433,
+   "n": 237,
+   "t_H1": 0.1657,
+   "t_H2": -1.6515,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "石油・石炭製品",
+   "slope": 0.0945,
+   "t": 0.3851,
+   "n": 237,
+   "t_H1": 0.2153,
+   "t_H2": 0.3603,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "精密機器",
+   "slope": 0.0018,
+   "t": 0.0209,
+   "n": 237,
+   "t_H1": -0.2477,
+   "t_H2": 0.7032,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "繊維製品",
+   "slope": 0.1524,
+   "t": 1.7104,
+   "n": 237,
+   "t_H1": 1.0105,
+   "t_H2": 1.4407,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "証券、商品先物取引業",
+   "slope": 0.0363,
+   "t": 0.2033,
+   "n": 237,
+   "t_H1": 0.0763,
+   "t_H2": 0.5198,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "輸送用機器",
+   "slope": 0.0347,
+   "t": 0.2242,
+   "n": 237,
+   "t_H1": 0.0934,
+   "t_H2": 0.2172,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "金属製品",
+   "slope": -0.2177,
+   "t": -2.8159,
+   "n": 237,
+   "t_H1": -1.422,
+   "t_H2": -3.1079,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "鉄鋼",
+   "slope": -0.224,
+   "t": -1.4299,
+   "n": 237,
+   "t_H1": -1.5635,
+   "t_H2": 0.055,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "鉱業",
+   "slope": -0.0324,
+   "t": -0.1748,
+   "n": 237,
+   "t_H1": 0.2069,
+   "t_H2": -0.4229,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "銀行業",
+   "slope": 0.1699,
+   "t": 1.1548,
+   "n": 237,
+   "t_H1": 2.0749,
+   "t_H2": -0.3736,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "電気・ガス業",
+   "slope": 0.1818,
+   "t": 0.7129,
+   "n": 237,
+   "t_H1": -0.1278,
+   "t_H2": 1.7454,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "電気機器",
+   "slope": -0.2838,
+   "t": -2.4988,
+   "n": 237,
+   "t_H1": -1.0246,
+   "t_H2": -3.7913,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "非鉄金属",
+   "slope": -0.4613,
+   "t": -2.7627,
+   "n": 237,
+   "t_H1": -0.619,
+   "t_H2": -3.4994,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "食料品",
+   "slope": 0.1834,
+   "t": 1.109,
+   "n": 237,
+   "t_H1": 0.6874,
+   "t_H2": 1.0518,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "T1",
+   "slope": 0.1018,
+   "t": 0.3407,
+   "n": 237,
+   "t_H1": -0.2824,
+   "t_H2": 1.4237,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "T2",
+   "slope": 0.2107,
+   "t": 0.9682,
+   "n": 237,
+   "t_H1": 0.6174,
+   "t_H2": 0.8291,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "T3",
+   "slope": -0.7404,
+   "t": -3.9469,
+   "n": 237,
+   "t_H1": -1.1662,
+   "t_H2": -4.4192,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "T4",
+   "slope": -0.3832,
+   "t": -2.7725,
+   "n": 237,
+   "t_H1": -0.5357,
+   "t_H2": -5.2037,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "T5",
+   "slope": -0.1459,
+   "t": -1.1811,
+   "n": 237,
+   "t_H1": -0.3528,
+   "t_H2": -1.2741,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "T6",
+   "slope": -0.186,
+   "t": -1.2172,
+   "n": 237,
+   "t_H1": -0.6232,
+   "t_H2": -1.1595,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "T7",
+   "slope": 0.0825,
+   "t": 0.2418,
+   "n": 237,
+   "t_H1": 0.0331,
+   "t_H2": 0.494,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "T8",
+   "slope": 0.1886,
+   "t": 1.4627,
+   "n": 237,
+   "t_H1": 0.4158,
+   "t_H2": 1.6158,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "T9",
+   "slope": -0.5558,
+   "t": -1.7343,
+   "n": 237,
+   "t_H1": -0.4391,
+   "t_H2": -2.9295,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "T10",
+   "slope": -0.5367,
+   "t": -2.914,
+   "n": 237,
+   "t_H1": -0.943,
+   "t_H2": -4.1608,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "T11",
+   "slope": -0.3352,
+   "t": -1.7666,
+   "n": 237,
+   "t_H1": -0.9127,
+   "t_H2": -1.7132,
+   "both": false
+  },
+  {
+   "src": "us_natgas",
+   "target": "T13",
+   "slope": -0.0835,
+   "t": -0.3583,
+   "n": 237,
+   "t_H1": 0.1322,
+   "t_H2": -0.5589,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "その他製品",
+   "slope": 0.1903,
+   "t": 2.4582,
+   "n": 239,
+   "t_H1": 1.2071,
+   "t_H2": 2.4363,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "その他金融業",
+   "slope": 0.1419,
+   "t": 0.6878,
+   "n": 239,
+   "t_H1": 0.0739,
+   "t_H2": 2.0885,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "ガラス・土石製品",
+   "slope": -0.0417,
+   "t": -0.2676,
+   "n": 239,
+   "t_H1": 0.1518,
+   "t_H2": -0.9776,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "ゴム製品",
+   "slope": 0.229,
+   "t": 0.9713,
+   "n": 239,
+   "t_H1": 0.5488,
+   "t_H2": 0.8008,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "サービス業",
+   "slope": -0.0597,
+   "t": -0.3998,
+   "n": 239,
+   "t_H1": -0.3878,
+   "t_H2": 0.3292,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "パルプ・紙",
+   "slope": 0.2281,
+   "t": 0.8377,
+   "n": 239,
+   "t_H1": 0.5308,
+   "t_H2": 0.9735,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "不動産業",
+   "slope": -0.092,
+   "t": -0.383,
+   "n": 239,
+   "t_H1": -1.1322,
+   "t_H2": 1.4241,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "保険業",
+   "slope": 0.3213,
+   "t": 1.6159,
+   "n": 239,
+   "t_H1": -0.0634,
+   "t_H2": 2.3098,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "化学",
+   "slope": -0.1564,
+   "t": -1.9658,
+   "n": 239,
+   "t_H1": -0.1199,
+   "t_H2": -3.8363,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "医薬品",
+   "slope": -0.0835,
+   "t": -0.3845,
+   "n": 239,
+   "t_H1": -0.6062,
+   "t_H2": 0.506,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "卸売業",
+   "slope": 0.0198,
+   "t": 0.277,
+   "n": 239,
+   "t_H1": 0.7311,
+   "t_H2": -0.8966,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "小売業",
+   "slope": -0.0922,
+   "t": -0.7156,
+   "n": 239,
+   "t_H1": -1.4289,
+   "t_H2": 1.1768,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "建設業",
+   "slope": -0.007,
+   "t": -0.048,
+   "n": 239,
+   "t_H1": 0.1584,
+   "t_H2": -0.3666,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "情報・通信業",
+   "slope": -0.1136,
+   "t": -0.7126,
+   "n": 239,
+   "t_H1": -0.1875,
+   "t_H2": -0.7319,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "機械",
+   "slope": -0.2104,
+   "t": -1.6394,
+   "n": 239,
+   "t_H1": -0.5884,
+   "t_H2": -1.9804,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "水産・農林業",
+   "slope": 0.2625,
+   "t": 1.0184,
+   "n": 239,
+   "t_H1": -0.2749,
+   "t_H2": 2.9471,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "海運業",
+   "slope": 0.9909,
+   "t": 2.5029,
+   "n": 239,
+   "t_H1": 2.1667,
+   "t_H2": 0.9694,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "石油・石炭製品",
+   "slope": 0.8946,
+   "t": 2.789,
+   "n": 239,
+   "t_H1": 1.2311,
+   "t_H2": 2.5341,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "精密機器",
+   "slope": 0.0307,
+   "t": 0.2585,
+   "n": 239,
+   "t_H1": 0.5256,
+   "t_H2": -0.529,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "繊維製品",
+   "slope": 0.2979,
+   "t": 2.264,
+   "n": 239,
+   "t_H1": 0.9411,
+   "t_H2": 1.9912,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "証券、商品先物取引業",
+   "slope": 0.2807,
+   "t": 0.8696,
+   "n": 239,
+   "t_H1": -0.251,
+   "t_H2": 2.9157,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "輸送用機器",
+   "slope": 0.1107,
+   "t": 0.4963,
+   "n": 239,
+   "t_H1": 0.3327,
+   "t_H2": 0.6241,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "金属製品",
+   "slope": -0.211,
+   "t": -1.6837,
+   "n": 239,
+   "t_H1": -0.9667,
+   "t_H2": -1.3391,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "鉄鋼",
+   "slope": 0.0583,
+   "t": 0.2657,
+   "n": 239,
+   "t_H1": -0.3831,
+   "t_H2": 0.6956,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "鉱業",
+   "slope": 0.2396,
+   "t": 0.8686,
+   "n": 239,
+   "t_H1": -0.1521,
+   "t_H2": 1.2073,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "銀行業",
+   "slope": 0.6953,
+   "t": 3.3395,
+   "n": 239,
+   "t_H1": 2.2176,
+   "t_H2": 2.5237,
+   "both": true
+  },
+  {
+   "src": "us_power",
+   "target": "電気・ガス業",
+   "slope": 0.3893,
+   "t": 1.2931,
+   "n": 239,
+   "t_H1": 1.0182,
+   "t_H2": 0.7994,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "電気機器",
+   "slope": -0.1955,
+   "t": -1.4093,
+   "n": 239,
+   "t_H1": -0.0659,
+   "t_H2": -2.7183,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "非鉄金属",
+   "slope": 0.0641,
+   "t": 0.2961,
+   "n": 239,
+   "t_H1": 0.7264,
+   "t_H2": -0.7853,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "食料品",
+   "slope": -0.107,
+   "t": -0.5036,
+   "n": 239,
+   "t_H1": -0.0604,
+   "t_H2": 0.0472,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "T1",
+   "slope": 0.5377,
+   "t": 1.6317,
+   "n": 239,
+   "t_H1": 1.4067,
+   "t_H2": 1.0258,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "T2",
+   "slope": 0.0408,
+   "t": 0.1287,
+   "n": 239,
+   "t_H1": 0.566,
+   "t_H2": -0.2039,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "T3",
+   "slope": -0.3311,
+   "t": -1.4219,
+   "n": 239,
+   "t_H1": -1.3083,
+   "t_H2": -1.3539,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "T4",
+   "slope": -0.101,
+   "t": -0.5789,
+   "n": 239,
+   "t_H1": 1.3284,
+   "t_H2": -3.1947,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "T5",
+   "slope": -0.1735,
+   "t": -0.9547,
+   "n": 239,
+   "t_H1": -0.2196,
+   "t_H2": -1.4488,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "T6",
+   "slope": 0.0885,
+   "t": 0.4146,
+   "n": 239,
+   "t_H1": 0.6911,
+   "t_H2": -0.5345,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "T7",
+   "slope": -0.7368,
+   "t": -1.3245,
+   "n": 239,
+   "t_H1": -0.5279,
+   "t_H2": -2.0159,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "T8",
+   "slope": -0.1083,
+   "t": -0.5732,
+   "n": 239,
+   "t_H1": -0.2607,
+   "t_H2": -0.3784,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "T9",
+   "slope": -1.0598,
+   "t": -2.737,
+   "n": 239,
+   "t_H1": -1.2284,
+   "t_H2": -3.7649,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "T10",
+   "slope": -0.5271,
+   "t": -2.2619,
+   "n": 239,
+   "t_H1": -0.7502,
+   "t_H2": -3.9367,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "T11",
+   "slope": 0.0441,
+   "t": 0.1837,
+   "n": 239,
+   "t_H1": 1.0208,
+   "t_H2": -0.7569,
+   "both": false
+  },
+  {
+   "src": "us_power",
+   "target": "T13",
+   "slope": 0.473,
+   "t": 1.5866,
+   "n": 239,
+   "t_H1": 0.1467,
+   "t_H2": 2.1138,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "その他製品",
+   "slope": 0.126,
+   "t": 2.3354,
+   "n": 238,
+   "t_H1": 0.3275,
+   "t_H2": 2.9611,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "その他金融業",
+   "slope": 0.0858,
+   "t": 0.9141,
+   "n": 238,
+   "t_H1": -0.2889,
+   "t_H2": 2.1258,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "ガラス・土石製品",
+   "slope": 0.0596,
+   "t": 0.8954,
+   "n": 238,
+   "t_H1": -0.0334,
+   "t_H2": 1.0227,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "ゴム製品",
+   "slope": 0.1165,
+   "t": 0.7968,
+   "n": 238,
+   "t_H1": -0.9905,
+   "t_H2": 1.5932,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "サービス業",
+   "slope": -0.0792,
+   "t": -0.8775,
+   "n": 238,
+   "t_H1": 0.7165,
+   "t_H2": -1.0632,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "パルプ・紙",
+   "slope": -0.1378,
+   "t": -0.5732,
+   "n": 238,
+   "t_H1": -1.5769,
+   "t_H2": 0.0781,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "不動産業",
+   "slope": 0.3292,
+   "t": 3.1266,
+   "n": 238,
+   "t_H1": 2.2825,
+   "t_H2": 2.9723,
+   "both": true
+  },
+  {
+   "src": "us_vmt",
+   "target": "保険業",
+   "slope": 0.0305,
+   "t": 0.3458,
+   "n": 238,
+   "t_H1": 1.4291,
+   "t_H2": -0.8204,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "化学",
+   "slope": -0.0467,
+   "t": -1.5378,
+   "n": 238,
+   "t_H1": 0.5216,
+   "t_H2": -2.6513,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "医薬品",
+   "slope": -0.1375,
+   "t": -0.8997,
+   "n": 238,
+   "t_H1": -0.7944,
+   "t_H2": -0.7525,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "卸売業",
+   "slope": 0.0675,
+   "t": 1.6295,
+   "n": 238,
+   "t_H1": -0.0305,
+   "t_H2": 1.7244,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "小売業",
+   "slope": -0.178,
+   "t": -1.927,
+   "n": 238,
+   "t_H1": -1.106,
+   "t_H2": -1.8531,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "建設業",
+   "slope": 0.0805,
+   "t": 0.9434,
+   "n": 238,
+   "t_H1": -1.1958,
+   "t_H2": 1.6242,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "情報・通信業",
+   "slope": -0.3138,
+   "t": -2.4326,
+   "n": 238,
+   "t_H1": 0.3182,
+   "t_H2": -2.7643,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "機械",
+   "slope": 0.0321,
+   "t": 0.3718,
+   "n": 238,
+   "t_H1": 1.3129,
+   "t_H2": -0.3398,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "水産・農林業",
+   "slope": 0.0305,
+   "t": 0.2314,
+   "n": 238,
+   "t_H1": -0.6544,
+   "t_H2": 0.5663,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "海運業",
+   "slope": 0.7988,
+   "t": 2.0066,
+   "n": 238,
+   "t_H1": 1.3538,
+   "t_H2": 2.42,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "石油・石炭製品",
+   "slope": 0.132,
+   "t": 0.5553,
+   "n": 238,
+   "t_H1": -0.4918,
+   "t_H2": 0.6205,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "精密機器",
+   "slope": 0.1113,
+   "t": 1.7496,
+   "n": 238,
+   "t_H1": 1.0255,
+   "t_H2": 1.8715,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "繊維製品",
+   "slope": 0.3822,
+   "t": 3.6616,
+   "n": 238,
+   "t_H1": -0.291,
+   "t_H2": 3.9219,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "証券、商品先物取引業",
+   "slope": -0.0037,
+   "t": -0.0188,
+   "n": 238,
+   "t_H1": -0.2098,
+   "t_H2": 0.1639,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "輸送用機器",
+   "slope": 0.2809,
+   "t": 2.2849,
+   "n": 238,
+   "t_H1": 0.7693,
+   "t_H2": 2.8693,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "金属製品",
+   "slope": -0.0155,
+   "t": -0.163,
+   "n": 238,
+   "t_H1": -1.1359,
+   "t_H2": 0.4101,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "鉄鋼",
+   "slope": 0.2521,
+   "t": 2.1356,
+   "n": 238,
+   "t_H1": 0.5828,
+   "t_H2": 2.4074,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "鉱業",
+   "slope": 0.3948,
+   "t": 1.8946,
+   "n": 238,
+   "t_H1": 0.404,
+   "t_H2": 1.4458,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "銀行業",
+   "slope": 0.1643,
+   "t": 1.1152,
+   "n": 238,
+   "t_H1": -2.335,
+   "t_H2": 1.203,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "電気・ガス業",
+   "slope": -0.1277,
+   "t": -0.6749,
+   "n": 238,
+   "t_H1": -1.2674,
+   "t_H2": -0.1751,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "電気機器",
+   "slope": -0.0517,
+   "t": -0.5046,
+   "n": 238,
+   "t_H1": 0.5602,
+   "t_H2": -0.5981,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "非鉄金属",
+   "slope": 0.1418,
+   "t": 0.9823,
+   "n": 238,
+   "t_H1": 0.6968,
+   "t_H2": 0.6747,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "食料品",
+   "slope": -0.0778,
+   "t": -0.5857,
+   "n": 238,
+   "t_H1": -0.6582,
+   "t_H2": -0.2911,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "T1",
+   "slope": 0.055,
+   "t": 0.2338,
+   "n": 238,
+   "t_H1": -1.2533,
+   "t_H2": 0.7058,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "T2",
+   "slope": -0.3351,
+   "t": -1.3212,
+   "n": 238,
+   "t_H1": -1.6368,
+   "t_H2": -1.0986,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "T3",
+   "slope": 0.1475,
+   "t": 0.8599,
+   "n": 238,
+   "t_H1": 0.6053,
+   "t_H2": 0.459,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "T4",
+   "slope": 0.0273,
+   "t": 0.2425,
+   "n": 238,
+   "t_H1": -0.1719,
+   "t_H2": 0.7142,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "T5",
+   "slope": 0.0616,
+   "t": 0.4067,
+   "n": 238,
+   "t_H1": -1.3417,
+   "t_H2": 0.6663,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "T6",
+   "slope": -0.013,
+   "t": -0.1149,
+   "n": 238,
+   "t_H1": -0.5555,
+   "t_H2": -0.1117,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "T7",
+   "slope": -0.1944,
+   "t": -0.5728,
+   "n": 238,
+   "t_H1": 0.3637,
+   "t_H2": -1.0306,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "T8",
+   "slope": -0.131,
+   "t": -0.6338,
+   "n": 238,
+   "t_H1": 0.6556,
+   "t_H2": -0.8174,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "T9",
+   "slope": -0.1157,
+   "t": -0.381,
+   "n": 238,
+   "t_H1": 2.0929,
+   "t_H2": -1.5962,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "T10",
+   "slope": -0.0594,
+   "t": -0.3769,
+   "n": 238,
+   "t_H1": 1.2223,
+   "t_H2": -1.3296,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "T11",
+   "slope": -0.1823,
+   "t": -1.2119,
+   "n": 238,
+   "t_H1": 0.4486,
+   "t_H2": -1.3473,
+   "both": false
+  },
+  {
+   "src": "us_vmt",
+   "target": "T13",
+   "slope": 0.1682,
+   "t": 0.5063,
+   "n": 238,
+   "t_H1": -0.5261,
+   "t_H2": 0.6631,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "その他製品",
+   "slope": 0.0279,
+   "t": 0.9169,
+   "n": 238,
+   "t_H1": 2.7235,
+   "t_H2": -0.8257,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "その他金融業",
+   "slope": 0.0658,
+   "t": 1.0758,
+   "n": 238,
+   "t_H1": 0.797,
+   "t_H2": 1.14,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "ガラス・土石製品",
+   "slope": -0.1134,
+   "t": -2.4602,
+   "n": 238,
+   "t_H1": -2.4092,
+   "t_H2": -1.4736,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "ゴム製品",
+   "slope": 0.0422,
+   "t": 0.5287,
+   "n": 238,
+   "t_H1": -0.3463,
+   "t_H2": 1.3104,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "サービス業",
+   "slope": 0.0234,
+   "t": 0.4275,
+   "n": 238,
+   "t_H1": 2.0002,
+   "t_H2": -0.9797,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "パルプ・紙",
+   "slope": 0.1304,
+   "t": 1.3659,
+   "n": 238,
+   "t_H1": 1.5834,
+   "t_H2": 0.4652,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "不動産業",
+   "slope": 0.0554,
+   "t": 0.7108,
+   "n": 238,
+   "t_H1": -0.6062,
+   "t_H2": 3.2134,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "保険業",
+   "slope": 0.078,
+   "t": 1.1452,
+   "n": 238,
+   "t_H1": 1.7445,
+   "t_H2": 1.4387,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "化学",
+   "slope": -0.0736,
+   "t": -3.2042,
+   "n": 238,
+   "t_H1": -3.2075,
+   "t_H2": -2.5705,
+   "both": true
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "医薬品",
+   "slope": 0.1616,
+   "t": 2.2328,
+   "n": 238,
+   "t_H1": 1.0969,
+   "t_H2": 2.2041,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "卸売業",
+   "slope": 0.088,
+   "t": 3.2917,
+   "n": 238,
+   "t_H1": 1.6736,
+   "t_H2": 3.6799,
+   "both": true
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "小売業",
+   "slope": 0.0344,
+   "t": 0.6852,
+   "n": 238,
+   "t_H1": 1.0016,
+   "t_H2": 0.0253,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "建設業",
+   "slope": 0.1509,
+   "t": 2.7882,
+   "n": 238,
+   "t_H1": 1.4154,
+   "t_H2": 2.9965,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "情報・通信業",
+   "slope": 0.0058,
+   "t": 0.082,
+   "n": 238,
+   "t_H1": 4.2541,
+   "t_H2": -1.2303,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "機械",
+   "slope": -0.0842,
+   "t": -1.9083,
+   "n": 238,
+   "t_H1": -2.4382,
+   "t_H2": -0.7167,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "水産・農林業",
+   "slope": 0.1658,
+   "t": 2.3782,
+   "n": 238,
+   "t_H1": 0.7108,
+   "t_H2": 3.4363,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "海運業",
+   "slope": -0.0332,
+   "t": -0.2017,
+   "n": 238,
+   "t_H1": -1.3312,
+   "t_H2": 1.1875,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "石油・石炭製品",
+   "slope": 0.1921,
+   "t": 1.5023,
+   "n": 238,
+   "t_H1": 0.0086,
+   "t_H2": 2.9733,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "精密機器",
+   "slope": -0.0578,
+   "t": -1.1086,
+   "n": 238,
+   "t_H1": -1.2777,
+   "t_H2": -0.4206,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "繊維製品",
+   "slope": 0.183,
+   "t": 3.3665,
+   "n": 238,
+   "t_H1": 2.1409,
+   "t_H2": 2.7063,
+   "both": true
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "証券、商品先物取引業",
+   "slope": -0.1545,
+   "t": -1.9212,
+   "n": 238,
+   "t_H1": -0.5659,
+   "t_H2": -1.5676,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "輸送用機器",
+   "slope": -0.0669,
+   "t": -0.9507,
+   "n": 238,
+   "t_H1": -2.0222,
+   "t_H2": 0.9499,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "金属製品",
+   "slope": -0.0877,
+   "t": -1.8296,
+   "n": 238,
+   "t_H1": -0.4567,
+   "t_H2": -2.6077,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "鉄鋼",
+   "slope": -0.0936,
+   "t": -1.1135,
+   "n": 238,
+   "t_H1": -2.5811,
+   "t_H2": 1.2416,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "鉱業",
+   "slope": 0.2664,
+   "t": 2.3821,
+   "n": 238,
+   "t_H1": -1.7786,
+   "t_H2": 5.5106,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "銀行業",
+   "slope": 0.1506,
+   "t": 1.6971,
+   "n": 238,
+   "t_H1": 1.068,
+   "t_H2": 1.1504,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "電気・ガス業",
+   "slope": 0.114,
+   "t": 1.1556,
+   "n": 238,
+   "t_H1": 0.4075,
+   "t_H2": 2.1412,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "電気機器",
+   "slope": -0.1595,
+   "t": -2.836,
+   "n": 238,
+   "t_H1": -1.5416,
+   "t_H2": -2.6891,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "非鉄金属",
+   "slope": -0.0029,
+   "t": -0.0325,
+   "n": 238,
+   "t_H1": -1.8161,
+   "t_H2": 1.1471,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "食料品",
+   "slope": 0.1408,
+   "t": 2.4871,
+   "n": 238,
+   "t_H1": 1.935,
+   "t_H2": 1.5283,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "T1",
+   "slope": 0.1552,
+   "t": 1.3199,
+   "n": 238,
+   "t_H1": 0.1711,
+   "t_H2": 2.9666,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "T2",
+   "slope": 0.1799,
+   "t": 1.7739,
+   "n": 238,
+   "t_H1": 1.4252,
+   "t_H2": 1.4423,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "T3",
+   "slope": -0.0028,
+   "t": -0.0232,
+   "n": 238,
+   "t_H1": -0.1271,
+   "t_H2": 0.0907,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "T4",
+   "slope": -0.0822,
+   "t": -1.0869,
+   "n": 238,
+   "t_H1": -0.9284,
+   "t_H2": -0.9186,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "T5",
+   "slope": 0.0752,
+   "t": 1.0528,
+   "n": 238,
+   "t_H1": 0.8975,
+   "t_H2": 0.5486,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "T6",
+   "slope": 0.0928,
+   "t": 1.1978,
+   "n": 238,
+   "t_H1": 0.9289,
+   "t_H2": 0.7984,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "T7",
+   "slope": -0.1923,
+   "t": -1.1391,
+   "n": 238,
+   "t_H1": 0.6644,
+   "t_H2": -2.3707,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "T8",
+   "slope": -0.0413,
+   "t": -0.5042,
+   "n": 238,
+   "t_H1": 0.6405,
+   "t_H2": -0.8976,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "T9",
+   "slope": -0.3076,
+   "t": -1.9217,
+   "n": 238,
+   "t_H1": -1.3854,
+   "t_H2": -1.5946,
+   "both": false
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "T10",
+   "slope": -0.3045,
+   "t": -3.0833,
+   "n": 238,
+   "t_H1": -3.5398,
+   "t_H2": -1.9101,
+   "both": true
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "T11",
+   "slope": -0.3371,
+   "t": -3.3857,
+   "n": 238,
+   "t_H1": -3.0677,
+   "t_H2": -2.3086,
+   "both": true
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "T13",
+   "slope": 0.1227,
+   "t": 0.8547,
+   "n": 238,
+   "t_H1": -1.3417,
+   "t_H2": 2.2883,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "その他製品",
+   "slope": 0.0619,
+   "t": 1.7534,
+   "n": 238,
+   "t_H1": 0.4046,
+   "t_H2": 2.5578,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "その他金融業",
+   "slope": 0.042,
+   "t": 0.6256,
+   "n": 238,
+   "t_H1": 0.3274,
+   "t_H2": 1.4713,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "ガラス・土石製品",
+   "slope": -0.0861,
+   "t": -1.6158,
+   "n": 238,
+   "t_H1": -0.0135,
+   "t_H2": -1.5635,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "ゴム製品",
+   "slope": 0.2254,
+   "t": 3.0622,
+   "n": 238,
+   "t_H1": 2.9193,
+   "t_H2": 1.0968,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "サービス業",
+   "slope": 0.0543,
+   "t": 0.8738,
+   "n": 238,
+   "t_H1": -0.4697,
+   "t_H2": 0.7504,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "パルプ・紙",
+   "slope": 0.0429,
+   "t": 0.4257,
+   "n": 238,
+   "t_H1": -0.1895,
+   "t_H2": 0.5049,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "不動産業",
+   "slope": -0.0386,
+   "t": -0.4641,
+   "n": 238,
+   "t_H1": -0.4914,
+   "t_H2": 0.2944,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "保険業",
+   "slope": -0.0053,
+   "t": -0.0623,
+   "n": 238,
+   "t_H1": 0.7177,
+   "t_H2": 0.9317,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "化学",
+   "slope": -0.0452,
+   "t": -1.6673,
+   "n": 238,
+   "t_H1": -2.3915,
+   "t_H2": -0.212,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "医薬品",
+   "slope": 0.1367,
+   "t": 1.997,
+   "n": 238,
+   "t_H1": -0.1392,
+   "t_H2": 1.4048,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "卸売業",
+   "slope": 0.027,
+   "t": 0.8249,
+   "n": 238,
+   "t_H1": 1.7022,
+   "t_H2": -0.8445,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "小売業",
+   "slope": 0.0603,
+   "t": 1.1061,
+   "n": 238,
+   "t_H1": -0.13,
+   "t_H2": 0.4646,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "建設業",
+   "slope": -0.0218,
+   "t": -0.3914,
+   "n": 238,
+   "t_H1": -0.1606,
+   "t_H2": -0.5646,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "情報・通信業",
+   "slope": -0.0274,
+   "t": -0.4294,
+   "n": 238,
+   "t_H1": -0.3241,
+   "t_H2": -0.5744,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "機械",
+   "slope": -0.0327,
+   "t": -0.6189,
+   "n": 238,
+   "t_H1": 0.0045,
+   "t_H2": -0.7461,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "水産・農林業",
+   "slope": 0.0722,
+   "t": 0.9041,
+   "n": 238,
+   "t_H1": -0.3805,
+   "t_H2": 2.2616,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "海運業",
+   "slope": 0.1597,
+   "t": 0.9042,
+   "n": 238,
+   "t_H1": 2.0533,
+   "t_H2": 0.956,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "石油・石炭製品",
+   "slope": 0.1911,
+   "t": 1.4665,
+   "n": 238,
+   "t_H1": 1.4437,
+   "t_H2": 1.9336,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "精密機器",
+   "slope": -0.0434,
+   "t": -0.8637,
+   "n": 238,
+   "t_H1": -0.2371,
+   "t_H2": 0.6167,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "繊維製品",
+   "slope": 0.0699,
+   "t": 1.56,
+   "n": 238,
+   "t_H1": 0.5768,
+   "t_H2": 2.3277,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "証券、商品先物取引業",
+   "slope": -0.0468,
+   "t": -0.3882,
+   "n": 238,
+   "t_H1": -0.5272,
+   "t_H2": 0.6485,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "輸送用機器",
+   "slope": 0.0334,
+   "t": 0.4346,
+   "n": 238,
+   "t_H1": 0.2832,
+   "t_H2": -0.4233,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "金属製品",
+   "slope": 0.0315,
+   "t": 0.7265,
+   "n": 238,
+   "t_H1": 0.2092,
+   "t_H2": 0.9819,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "鉄鋼",
+   "slope": -0.0354,
+   "t": -0.3735,
+   "n": 238,
+   "t_H1": 0.34,
+   "t_H2": -0.3773,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "鉱業",
+   "slope": -0.1099,
+   "t": -0.9962,
+   "n": 238,
+   "t_H1": 0.5492,
+   "t_H2": -0.5716,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "銀行業",
+   "slope": 0.0075,
+   "t": 0.0853,
+   "n": 238,
+   "t_H1": 1.9692,
+   "t_H2": -0.5583,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "電気・ガス業",
+   "slope": 0.0105,
+   "t": 0.0948,
+   "n": 238,
+   "t_H1": -0.1075,
+   "t_H2": 0.3419,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "電気機器",
+   "slope": -0.085,
+   "t": -1.5388,
+   "n": 238,
+   "t_H1": -0.3949,
+   "t_H2": -0.8341,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "非鉄金属",
+   "slope": -0.0888,
+   "t": -1.1192,
+   "n": 238,
+   "t_H1": -0.6127,
+   "t_H2": 1.178,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "食料品",
+   "slope": 0.0804,
+   "t": 1.2293,
+   "n": 238,
+   "t_H1": 0.2455,
+   "t_H2": -0.5645,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "T1",
+   "slope": -0.0696,
+   "t": -0.5021,
+   "n": 238,
+   "t_H1": -0.3321,
+   "t_H2": -0.6105,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "T2",
+   "slope": 0.1405,
+   "t": 1.3482,
+   "n": 238,
+   "t_H1": 1.2312,
+   "t_H2": 0.1241,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "T3",
+   "slope": -0.1478,
+   "t": -1.5368,
+   "n": 238,
+   "t_H1": -1.4424,
+   "t_H2": 2.1131,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "T4",
+   "slope": -0.074,
+   "t": -1.1799,
+   "n": 238,
+   "t_H1": -0.0983,
+   "t_H2": -0.6147,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "T5",
+   "slope": 0.0049,
+   "t": 0.0717,
+   "n": 238,
+   "t_H1": 0.458,
+   "t_H2": 0.1818,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "T6",
+   "slope": -0.0237,
+   "t": -0.2777,
+   "n": 238,
+   "t_H1": -0.3905,
+   "t_H2": 0.6601,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "T7",
+   "slope": -0.379,
+   "t": -1.9935,
+   "n": 238,
+   "t_H1": -1.5478,
+   "t_H2": -1.7828,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "T8",
+   "slope": -0.0273,
+   "t": -0.3664,
+   "n": 238,
+   "t_H1": 0.1605,
+   "t_H2": -0.7198,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "T9",
+   "slope": -0.5668,
+   "t": -3.8593,
+   "n": 238,
+   "t_H1": -1.6257,
+   "t_H2": -2.814,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "T10",
+   "slope": -0.2727,
+   "t": -3.392,
+   "n": 238,
+   "t_H1": -0.6966,
+   "t_H2": -2.2346,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "T11",
+   "slope": -0.0653,
+   "t": -0.6594,
+   "n": 238,
+   "t_H1": -0.576,
+   "t_H2": -0.3616,
+   "both": false
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "T13",
+   "slope": 0.107,
+   "t": 0.9379,
+   "n": 238,
+   "t_H1": 1.2239,
+   "t_H2": 0.6408,
+   "both": false
+  }
+ ],
+ "D2": {
+  "us_total": {
+   "top": [
+    {
+     "target": "8309.T",
+     "t": 3.9454824984774928,
+     "both": true
+    },
+    {
+     "target": "1605.T",
+     "t": 3.7836063916328255,
+     "both": false
+    },
+    {
+     "target": "8725.T",
+     "t": 3.6177316066567893,
+     "both": false
+    },
+    {
+     "target": "8766.T",
+     "t": 3.362362629451077,
+     "both": false
+    },
+    {
+     "target": "4188.T",
+     "t": 3.041657231703924,
+     "both": true
+    },
+    {
+     "target": "8630.T",
+     "t": 2.9390432783398004,
+     "both": false
+    },
+    {
+     "target": "1332.T",
+     "t": 2.8065511402443906,
+     "both": false
+    },
+    {
+     "target": "8306.T",
+     "t": 2.7719734176216657,
+     "both": false
+    },
+    {
+     "target": "5019.T",
+     "t": 2.747487921794156,
+     "both": false
+    },
+    {
+     "target": "2768.T",
+     "t": 2.692020821872223,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "9983.T",
+     "t": -3.544630509679045,
+     "both": false
+    },
+    {
+     "target": "9984.T",
+     "t": -3.0189672248110533,
+     "both": false
+    },
+    {
+     "target": "6326.T",
+     "t": -2.8639360678579484,
+     "both": false
+    },
+    {
+     "target": "2413.T",
+     "t": -2.7885088565574807,
+     "both": false
+    },
+    {
+     "target": "3659.T",
+     "t": -2.6154073799730764,
+     "both": false
+    },
+    {
+     "target": "4755.T",
+     "t": -2.6018478001716048,
+     "both": false
+    },
+    {
+     "target": "6594.T",
+     "t": -2.4434119857567187,
+     "both": false
+    },
+    {
+     "target": "6954.T",
+     "t": -2.299338958859666,
+     "both": false
+    },
+    {
+     "target": "4385.T",
+     "t": -2.141723378253544,
+     "both": false
+    },
+    {
+     "target": "8267.T",
+     "t": -1.9983508071666038,
+     "both": false
+    }
+   ],
+   "n_both": 2,
+   "n": 210
+  },
+  "us_gasoline": {
+   "top": [
+    {
+     "target": "7912.T",
+     "t": 4.430905025601696,
+     "both": false
+    },
+    {
+     "target": "8252.T",
+     "t": 3.4256049894003007,
+     "both": false
+    },
+    {
+     "target": "8725.T",
+     "t": 3.1960703756025013,
+     "both": false
+    },
+    {
+     "target": "2768.T",
+     "t": 3.080142048154099,
+     "both": false
+    },
+    {
+     "target": "7911.T",
+     "t": 2.848972356739963,
+     "both": false
+    },
+    {
+     "target": "1332.T",
+     "t": 2.551885399392552,
+     "both": true
+    },
+    {
+     "target": "1605.T",
+     "t": 2.5487877494547457,
+     "both": false
+    },
+    {
+     "target": "8058.T",
+     "t": 2.5413742489024056,
+     "both": false
+    },
+    {
+     "target": "7203.T",
+     "t": 2.3789213212166453,
+     "both": false
+    },
+    {
+     "target": "8766.T",
+     "t": 2.2870594834436786,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "9983.T",
+     "t": -4.319666178550288,
+     "both": true
+    },
+    {
+     "target": "9984.T",
+     "t": -3.8685250599335785,
+     "both": false
+    },
+    {
+     "target": "3659.T",
+     "t": -2.6922870241726886,
+     "both": false
+    },
+    {
+     "target": "2413.T",
+     "t": -2.4938377036249633,
+     "both": false
+    },
+    {
+     "target": "8267.T",
+     "t": -2.3625539950973704,
+     "both": false
+    },
+    {
+     "target": "6954.T",
+     "t": -2.1156504454164007,
+     "both": false
+    },
+    {
+     "target": "4385.T",
+     "t": -1.8249657194889253,
+     "both": false
+    },
+    {
+     "target": "6326.T",
+     "t": -1.7380365769836776,
+     "both": false
+    },
+    {
+     "target": "7532.T",
+     "t": -1.679462110604328,
+     "both": false
+    },
+    {
+     "target": "5706.T",
+     "t": -1.6393753955488473,
+     "both": false
+    }
+   ],
+   "n_both": 6,
+   "n": 210
+  },
+  "us_distillate": {
+   "top": [
+    {
+     "target": "4188.T",
+     "t": 3.2929660168048636,
+     "both": true
+    },
+    {
+     "target": "9101.T",
+     "t": 3.2796712075165173,
+     "both": true
+    },
+    {
+     "target": "9104.T",
+     "t": 2.8427339671132916,
+     "both": true
+    },
+    {
+     "target": "4005.T",
+     "t": 2.7021631120719554,
+     "both": false
+    },
+    {
+     "target": "1605.T",
+     "t": 2.700536269368298,
+     "both": false
+    },
+    {
+     "target": "4042.T",
+     "t": 2.404943734108125,
+     "both": false
+    },
+    {
+     "target": "6501.T",
+     "t": 2.3840989345132817,
+     "both": false
+    },
+    {
+     "target": "8795.T",
+     "t": 2.3579020642102884,
+     "both": false
+    },
+    {
+     "target": "8053.T",
+     "t": 2.3431863608746335,
+     "both": false
+    },
+    {
+     "target": "5108.T",
+     "t": 2.201756165600725,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "6857.T",
+     "t": -3.3985974608039307,
+     "both": true
+    },
+    {
+     "target": "6146.T",
+     "t": -2.398014494037899,
+     "both": false
+    },
+    {
+     "target": "9983.T",
+     "t": -2.1973864763724484,
+     "both": false
+    },
+    {
+     "target": "6367.T",
+     "t": -2.0966801187049646,
+     "both": false
+    },
+    {
+     "target": "4021.T",
+     "t": -2.092359900366587,
+     "both": false
+    },
+    {
+     "target": "4578.T",
+     "t": -1.8808291285764795,
+     "both": false
+    },
+    {
+     "target": "6326.T",
+     "t": -1.7280290371688645,
+     "both": false
+    },
+    {
+     "target": "7733.T",
+     "t": -1.6276480380854994,
+     "both": false
+    },
+    {
+     "target": "9984.T",
+     "t": -1.6129695091155523,
+     "both": false
+    },
+    {
+     "target": "8697.T",
+     "t": -1.6105492760069369,
+     "both": false
+    }
+   ],
+   "n_both": 4,
+   "n": 210
+  },
+  "us_jet": {
+   "top": [
+    {
+     "target": "8725.T",
+     "t": 4.437516612004716,
+     "both": false
+    },
+    {
+     "target": "7912.T",
+     "t": 3.838507688103117,
+     "both": false
+    },
+    {
+     "target": "2914.T",
+     "t": 3.292823800302212,
+     "both": true
+    },
+    {
+     "target": "2768.T",
+     "t": 3.2596893457035083,
+     "both": false
+    },
+    {
+     "target": "8766.T",
+     "t": 3.182547421666103,
+     "both": false
+    },
+    {
+     "target": "1605.T",
+     "t": 3.050509066252037,
+     "both": false
+    },
+    {
+     "target": "1332.T",
+     "t": 3.026152861288399,
+     "both": false
+    },
+    {
+     "target": "8630.T",
+     "t": 2.968777074328297,
+     "both": false
+    },
+    {
+     "target": "8253.T",
+     "t": 2.880730326122216,
+     "both": false
+    },
+    {
+     "target": "8309.T",
+     "t": 2.6125357082950487,
+     "both": true
+    }
+   ],
+   "bottom": [
+    {
+     "target": "2413.T",
+     "t": -4.488505193893091,
+     "both": false
+    },
+    {
+     "target": "9984.T",
+     "t": -3.8975430830948867,
+     "both": false
+    },
+    {
+     "target": "9983.T",
+     "t": -3.7537112876662913,
+     "both": false
+    },
+    {
+     "target": "6594.T",
+     "t": -3.699229614357327,
+     "both": false
+    },
+    {
+     "target": "5332.T",
+     "t": -3.0369572275754537,
+     "both": false
+    },
+    {
+     "target": "4061.T",
+     "t": -2.9934920029380603,
+     "both": false
+    },
+    {
+     "target": "6326.T",
+     "t": -2.731645443977155,
+     "both": true
+    },
+    {
+     "target": "8267.T",
+     "t": -2.7105957584632754,
+     "both": false
+    },
+    {
+     "target": "4755.T",
+     "t": -2.5530087930115086,
+     "both": false
+    },
+    {
+     "target": "6954.T",
+     "t": -2.504325860919553,
+     "both": false
+    }
+   ],
+   "n_both": 4,
+   "n": 210
+  },
+  "world": {
+   "top": [
+    {
+     "target": "2768.T",
+     "t": 4.090352736474397,
+     "both": false
+    },
+    {
+     "target": "8253.T",
+     "t": 3.7534338805495313,
+     "both": false
+    },
+    {
+     "target": "1605.T",
+     "t": 3.378286878903404,
+     "both": false
+    },
+    {
+     "target": "8309.T",
+     "t": 3.2586402082315136,
+     "both": true
+    },
+    {
+     "target": "7912.T",
+     "t": 3.2501968295292616,
+     "both": false
+    },
+    {
+     "target": "7731.T",
+     "t": 2.9870527571158267,
+     "both": false
+    },
+    {
+     "target": "7751.T",
+     "t": 2.9854217265053156,
+     "both": false
+    },
+    {
+     "target": "1332.T",
+     "t": 2.960259291103493,
+     "both": false
+    },
+    {
+     "target": "8252.T",
+     "t": 2.911568927166162,
+     "both": false
+    },
+    {
+     "target": "8801.T",
+     "t": 2.840327246452416,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "2413.T",
+     "t": -4.724015068956397,
+     "both": false
+    },
+    {
+     "target": "9984.T",
+     "t": -3.888452222881487,
+     "both": false
+    },
+    {
+     "target": "6594.T",
+     "t": -3.548691939802727,
+     "both": false
+    },
+    {
+     "target": "9983.T",
+     "t": -3.13118400017443,
+     "both": false
+    },
+    {
+     "target": "4385.T",
+     "t": -3.1192436630057743,
+     "both": false
+    },
+    {
+     "target": "7004.T",
+     "t": -2.627413929954426,
+     "both": true
+    },
+    {
+     "target": "4755.T",
+     "t": -2.393461894740132,
+     "both": false
+    },
+    {
+     "target": "6981.T",
+     "t": -2.391585118638095,
+     "both": false
+    },
+    {
+     "target": "5332.T",
+     "t": -2.368707707507009,
+     "both": false
+    },
+    {
+     "target": "6963.T",
+     "t": -2.277787136321492,
+     "both": false
+    }
+   ],
+   "n_both": 5,
+   "n": 210
+  },
+  "china": {
+   "top": [
+    {
+     "target": "3289.T",
+     "t": 4.281240626366814,
+     "both": false
+    },
+    {
+     "target": "543A.T",
+     "t": 3.815273569894924,
+     "both": false
+    },
+    {
+     "target": "7201.T",
+     "t": 3.5568969632167446,
+     "both": false
+    },
+    {
+     "target": "7202.T",
+     "t": 3.472040736755096,
+     "both": true
+    },
+    {
+     "target": "5411.T",
+     "t": 3.4389895135130706,
+     "both": true
+    },
+    {
+     "target": "8801.T",
+     "t": 3.3347883503472877,
+     "both": true
+    },
+    {
+     "target": "5406.T",
+     "t": 3.0911181555924028,
+     "both": true
+    },
+    {
+     "target": "8830.T",
+     "t": 3.090932105473283,
+     "both": true
+    },
+    {
+     "target": "6471.T",
+     "t": 3.0592075604824296,
+     "both": false
+    },
+    {
+     "target": "5201.T",
+     "t": 2.8553185235576777,
+     "both": true
+    }
+   ],
+   "bottom": [
+    {
+     "target": "8308.T",
+     "t": -2.676712318601432,
+     "both": false
+    },
+    {
+     "target": "2269.T",
+     "t": -2.5140161484044974,
+     "both": true
+    },
+    {
+     "target": "7832.T",
+     "t": -2.296561364608805,
+     "both": false
+    },
+    {
+     "target": "1721.T",
+     "t": -1.8355336964431785,
+     "both": false
+    },
+    {
+     "target": "4021.T",
+     "t": -1.7981440846512604,
+     "both": false
+    },
+    {
+     "target": "5333.T",
+     "t": -1.795078847443123,
+     "both": false
+    },
+    {
+     "target": "4385.T",
+     "t": -1.7845263395096067,
+     "both": false
+    },
+    {
+     "target": "8331.T",
+     "t": -1.7576232770877553,
+     "both": false
+    },
+    {
+     "target": "5803.T",
+     "t": -1.649220991914663,
+     "both": false
+    },
+    {
+     "target": "4043.T",
+     "t": -1.6159065729056459,
+     "both": false
+    }
+   ],
+   "n_both": 15,
+   "n": 210
+  },
+  "in_total": {
+   "top": [
+    {
+     "target": "7731.T",
+     "t": 4.1010686924581545,
+     "both": true
+    },
+    {
+     "target": "5201.T",
+     "t": 3.3860187634490693,
+     "both": false
+    },
+    {
+     "target": "7201.T",
+     "t": 2.8457973893802158,
+     "both": false
+    },
+    {
+     "target": "5333.T",
+     "t": 2.40963863298979,
+     "both": false
+    },
+    {
+     "target": "3405.T",
+     "t": 2.4001796555999135,
+     "both": false
+    },
+    {
+     "target": "4543.T",
+     "t": 2.349172180261635,
+     "both": false
+    },
+    {
+     "target": "8058.T",
+     "t": 2.3456535890822563,
+     "both": false
+    },
+    {
+     "target": "7752.T",
+     "t": 2.3005988912737316,
+     "both": false
+    },
+    {
+     "target": "543A.T",
+     "t": 2.265049021505832,
+     "both": false
+    },
+    {
+     "target": "6178.T",
+     "t": 2.1987781984083785,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "3659.T",
+     "t": -4.7247439331476935,
+     "both": false
+    },
+    {
+     "target": "4385.T",
+     "t": -3.141084331784752,
+     "both": false
+    },
+    {
+     "target": "8795.T",
+     "t": -2.7956683759228556,
+     "both": false
+    },
+    {
+     "target": "1812.T",
+     "t": -2.5395385035639677,
+     "both": false
+    },
+    {
+     "target": "8267.T",
+     "t": -2.415611885509664,
+     "both": false
+    },
+    {
+     "target": "9101.T",
+     "t": -2.3936001636759996,
+     "both": false
+    },
+    {
+     "target": "4519.T",
+     "t": -2.2419961454342197,
+     "both": false
+    },
+    {
+     "target": "2413.T",
+     "t": -2.1423308083587127,
+     "both": true
+    },
+    {
+     "target": "8411.T",
+     "t": -2.0358749146428705,
+     "both": false
+    },
+    {
+     "target": "5233.T",
+     "t": -2.0082798579538594,
+     "both": false
+    }
+   ],
+   "n_both": 6,
+   "n": 210
+  },
+  "jp_total": {
+   "top": [
+    {
+     "target": "8316.T",
+     "t": 4.360249514472982,
+     "both": true
+    },
+    {
+     "target": "8411.T",
+     "t": 3.8526128501942565,
+     "both": false
+    },
+    {
+     "target": "8306.T",
+     "t": 3.520597003904497,
+     "both": true
+    },
+    {
+     "target": "8795.T",
+     "t": 3.2114332217248647,
+     "both": false
+    },
+    {
+     "target": "8309.T",
+     "t": 3.2091344541026587,
+     "both": true
+    },
+    {
+     "target": "3289.T",
+     "t": 3.1034085428420823,
+     "both": false
+    },
+    {
+     "target": "8253.T",
+     "t": 3.0402376385497223,
+     "both": true
+    },
+    {
+     "target": "6501.T",
+     "t": 2.937590809209204,
+     "both": false
+    },
+    {
+     "target": "2914.T",
+     "t": 2.8561329870485626,
+     "both": false
+    },
+    {
+     "target": "1605.T",
+     "t": 2.594194182262174,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "7004.T",
+     "t": -3.4161713966152716,
+     "both": false
+    },
+    {
+     "target": "6963.T",
+     "t": -2.9769186313971856,
+     "both": false
+    },
+    {
+     "target": "3092.T",
+     "t": -2.655032580595315,
+     "both": true
+    },
+    {
+     "target": "5333.T",
+     "t": -2.6217336027691527,
+     "both": false
+    },
+    {
+     "target": "6981.T",
+     "t": -2.5699791311898346,
+     "both": false
+    },
+    {
+     "target": "6594.T",
+     "t": -2.5416474276223275,
+     "both": false
+    },
+    {
+     "target": "4043.T",
+     "t": -2.4030401668145878,
+     "both": false
+    },
+    {
+     "target": "6762.T",
+     "t": -2.1279006832071796,
+     "both": false
+    },
+    {
+     "target": "4061.T",
+     "t": -2.1036022043054037,
+     "both": false
+    },
+    {
+     "target": "9984.T",
+     "t": -2.0647088505299402,
+     "both": false
+    }
+   ],
+   "n_both": 5,
+   "n": 210
+  },
+  "jp_gasoline": {
+   "top": [
+    {
+     "target": "7752.T",
+     "t": 3.3850805956171466,
+     "both": true
+    },
+    {
+     "target": "8002.T",
+     "t": 3.088356524402456,
+     "both": true
+    },
+    {
+     "target": "3289.T",
+     "t": 2.523515217152057,
+     "both": false
+    },
+    {
+     "target": "2768.T",
+     "t": 2.5172264925522287,
+     "both": false
+    },
+    {
+     "target": "8031.T",
+     "t": 2.4907199961710975,
+     "both": true
+    },
+    {
+     "target": "8830.T",
+     "t": 2.364996774746677,
+     "both": false
+    },
+    {
+     "target": "4004.T",
+     "t": 2.3249261591422568,
+     "both": false
+    },
+    {
+     "target": "7731.T",
+     "t": 2.296501329331596,
+     "both": false
+    },
+    {
+     "target": "1605.T",
+     "t": 2.2266812099254465,
+     "both": false
+    },
+    {
+     "target": "8053.T",
+     "t": 2.2040970664265194,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "2282.T",
+     "t": -3.3082516197519185,
+     "both": false
+    },
+    {
+     "target": "7832.T",
+     "t": -3.2198031384500303,
+     "both": true
+    },
+    {
+     "target": "5332.T",
+     "t": -3.128252061554023,
+     "both": true
+    },
+    {
+     "target": "4755.T",
+     "t": -2.8748033581907753,
+     "both": false
+    },
+    {
+     "target": "6861.T",
+     "t": -2.847960272916923,
+     "both": false
+    },
+    {
+     "target": "8697.T",
+     "t": -2.813732216800466,
+     "both": true
+    },
+    {
+     "target": "9843.T",
+     "t": -2.776805576823353,
+     "both": true
+    },
+    {
+     "target": "7004.T",
+     "t": -2.7563751708417707,
+     "both": false
+    },
+    {
+     "target": "4689.T",
+     "t": -2.623175755714485,
+     "both": false
+    },
+    {
+     "target": "4307.T",
+     "t": -2.622877057953707,
+     "both": false
+    }
+   ],
+   "n_both": 8,
+   "n": 210
+  },
+  "jp_naphtha": {
+   "top": [
+    {
+     "target": "6902.T",
+     "t": 3.1244236029832075,
+     "both": false
+    },
+    {
+     "target": "7912.T",
+     "t": 2.9889114340157676,
+     "both": false
+    },
+    {
+     "target": "1808.T",
+     "t": 2.933259033596098,
+     "both": true
+    },
+    {
+     "target": "1925.T",
+     "t": 2.826080967790528,
+     "both": false
+    },
+    {
+     "target": "1802.T",
+     "t": 2.7817013873568137,
+     "both": false
+    },
+    {
+     "target": "543A.T",
+     "t": 2.717934412639844,
+     "both": false
+    },
+    {
+     "target": "1928.T",
+     "t": 2.520942085508467,
+     "both": false
+    },
+    {
+     "target": "1803.T",
+     "t": 2.2584304451977237,
+     "both": false
+    },
+    {
+     "target": "7911.T",
+     "t": 2.1939379294572685,
+     "both": false
+    },
+    {
+     "target": "8252.T",
+     "t": 2.153117493127588,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "8354.T",
+     "t": -3.3291663761133283,
+     "both": false
+    },
+    {
+     "target": "6301.T",
+     "t": -3.0152832711053112,
+     "both": false
+    },
+    {
+     "target": "8308.T",
+     "t": -2.4633036215848545,
+     "both": false
+    },
+    {
+     "target": "8331.T",
+     "t": -2.3406972956775767,
+     "both": false
+    },
+    {
+     "target": "6762.T",
+     "t": -2.3289505776180524,
+     "both": false
+    },
+    {
+     "target": "9735.T",
+     "t": -2.2192122637750256,
+     "both": true
+    },
+    {
+     "target": "6178.T",
+     "t": -2.2119288666243757,
+     "both": false
+    },
+    {
+     "target": "1963.T",
+     "t": -2.120446889369804,
+     "both": false
+    },
+    {
+     "target": "4063.T",
+     "t": -2.0876004168091646,
+     "both": false
+    },
+    {
+     "target": "9984.T",
+     "t": -2.0627482666264187,
+     "both": false
+    }
+   ],
+   "n_both": 2,
+   "n": 210
+  },
+  "jp_jet": {
+   "top": [
+    {
+     "target": "7270.T",
+     "t": 4.865867659140387,
+     "both": false
+    },
+    {
+     "target": "7912.T",
+     "t": 3.9995084000611674,
+     "both": true
+    },
+    {
+     "target": "2914.T",
+     "t": 3.3930544361058543,
+     "both": false
+    },
+    {
+     "target": "8725.T",
+     "t": 3.1754859696568,
+     "both": false
+    },
+    {
+     "target": "8253.T",
+     "t": 2.873932388249886,
+     "both": false
+    },
+    {
+     "target": "2501.T",
+     "t": 2.837633549242921,
+     "both": false
+    },
+    {
+     "target": "1802.T",
+     "t": 2.8202739920283975,
+     "both": false
+    },
+    {
+     "target": "8766.T",
+     "t": 2.8095118657285987,
+     "both": false
+    },
+    {
+     "target": "1803.T",
+     "t": 2.8072176798297863,
+     "both": false
+    },
+    {
+     "target": "2768.T",
+     "t": 2.797602124770786,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "2413.T",
+     "t": -4.803021782647931,
+     "both": true
+    },
+    {
+     "target": "6594.T",
+     "t": -4.070170418709759,
+     "both": false
+    },
+    {
+     "target": "4061.T",
+     "t": -3.497827380678922,
+     "both": false
+    },
+    {
+     "target": "3659.T",
+     "t": -3.2634935129587044,
+     "both": false
+    },
+    {
+     "target": "5332.T",
+     "t": -3.260267387685215,
+     "both": false
+    },
+    {
+     "target": "5301.T",
+     "t": -3.256356532456555,
+     "both": false
+    },
+    {
+     "target": "9983.T",
+     "t": -3.2007157499574115,
+     "both": true
+    },
+    {
+     "target": "5713.T",
+     "t": -3.0683336997590023,
+     "both": false
+    },
+    {
+     "target": "6326.T",
+     "t": -2.919334898225594,
+     "both": false
+    },
+    {
+     "target": "6532.T",
+     "t": -2.8687847283452665,
+     "both": false
+    }
+   ],
+   "n_both": 5,
+   "n": 210
+  },
+  "jp_diesel": {
+   "top": [
+    {
+     "target": "8309.T",
+     "t": 5.782932747675685,
+     "both": true
+    },
+    {
+     "target": "8316.T",
+     "t": 4.802273380897862,
+     "both": true
+    },
+    {
+     "target": "8795.T",
+     "t": 4.415560200536156,
+     "both": false
+    },
+    {
+     "target": "8411.T",
+     "t": 4.304191492171899,
+     "both": false
+    },
+    {
+     "target": "8306.T",
+     "t": 3.2218862470006613,
+     "both": true
+    },
+    {
+     "target": "8253.T",
+     "t": 2.2286336713403125,
+     "both": false
+    },
+    {
+     "target": "6501.T",
+     "t": 2.0405378858853402,
+     "both": false
+    },
+    {
+     "target": "8591.T",
+     "t": 2.0312813730429413,
+     "both": false
+    },
+    {
+     "target": "1605.T",
+     "t": 1.9930132351720724,
+     "both": false
+    },
+    {
+     "target": "8304.T",
+     "t": 1.8574787867761113,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "4151.T",
+     "t": -2.787836506856114,
+     "both": false
+    },
+    {
+     "target": "3659.T",
+     "t": -2.730337930526339,
+     "both": false
+    },
+    {
+     "target": "4755.T",
+     "t": -2.489004855990352,
+     "both": false
+    },
+    {
+     "target": "9843.T",
+     "t": -2.428192803297827,
+     "both": false
+    },
+    {
+     "target": "6326.T",
+     "t": -2.1989114908231358,
+     "both": false
+    },
+    {
+     "target": "7004.T",
+     "t": -2.0599858300260108,
+     "both": false
+    },
+    {
+     "target": "4543.T",
+     "t": -2.0490332596083176,
+     "both": false
+    },
+    {
+     "target": "4307.T",
+     "t": -1.9337643202516483,
+     "both": false
+    },
+    {
+     "target": "2269.T",
+     "t": -1.8971780116911967,
+     "both": false
+    },
+    {
+     "target": "4704.T",
+     "t": -1.8766470999478428,
+     "both": false
+    }
+   ],
+   "n_both": 3,
+   "n": 210
+  },
+  "jp_fueloil": {
+   "top": [
+    {
+     "target": "8795.T",
+     "t": 3.3390665211351886,
+     "both": false
+    },
+    {
+     "target": "8316.T",
+     "t": 3.056788182400374,
+     "both": false
+    },
+    {
+     "target": "8411.T",
+     "t": 2.9865296582981635,
+     "both": false
+    },
+    {
+     "target": "3382.T",
+     "t": 2.978788117742423,
+     "both": false
+    },
+    {
+     "target": "4503.T",
+     "t": 2.9071399899912325,
+     "both": true
+    },
+    {
+     "target": "8306.T",
+     "t": 2.828976474398777,
+     "both": false
+    },
+    {
+     "target": "1605.T",
+     "t": 2.8257523790527075,
+     "both": true
+    },
+    {
+     "target": "1963.T",
+     "t": 2.8145807121606454,
+     "both": false
+    },
+    {
+     "target": "8233.T",
+     "t": 2.3217526780072837,
+     "both": false
+    },
+    {
+     "target": "4523.T",
+     "t": 2.272560786811268,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "3092.T",
+     "t": -3.5260850238737897,
+     "both": true
+    },
+    {
+     "target": "4901.T",
+     "t": -3.0681826937632715,
+     "both": false
+    },
+    {
+     "target": "6758.T",
+     "t": -2.6134616906883332,
+     "both": false
+    },
+    {
+     "target": "4043.T",
+     "t": -2.423848407615209,
+     "both": false
+    },
+    {
+     "target": "6594.T",
+     "t": -2.2979059421087795,
+     "both": false
+    },
+    {
+     "target": "5333.T",
+     "t": -2.174466427450832,
+     "both": false
+    },
+    {
+     "target": "6146.T",
+     "t": -2.1741699120768843,
+     "both": false
+    },
+    {
+     "target": "6762.T",
+     "t": -2.15475102030573,
+     "both": false
+    },
+    {
+     "target": "4307.T",
+     "t": -2.041852462046975,
+     "both": false
+    },
+    {
+     "target": "6098.T",
+     "t": -2.0185194069882884,
+     "both": false
+    }
+   ],
+   "n_both": 3,
+   "n": 210
+  },
+  "us_natgas": {
+   "top": [
+    {
+     "target": "4503.T",
+     "t": 3.1081354528781993,
+     "both": true
+    },
+    {
+     "target": "4506.T",
+     "t": 2.9904627185752033,
+     "both": true
+    },
+    {
+     "target": "4578.T",
+     "t": 2.92304294652777,
+     "both": true
+    },
+    {
+     "target": "8309.T",
+     "t": 2.88544897277905,
+     "both": true
+    },
+    {
+     "target": "7832.T",
+     "t": 2.7737597368739157,
+     "both": false
+    },
+    {
+     "target": "4568.T",
+     "t": 2.766731402593849,
+     "both": true
+    },
+    {
+     "target": "4523.T",
+     "t": 2.374948849842986,
+     "both": false
+    },
+    {
+     "target": "3382.T",
+     "t": 2.2648514846540997,
+     "both": false
+    },
+    {
+     "target": "2002.T",
+     "t": 2.2507402595705397,
+     "both": false
+    },
+    {
+     "target": "6178.T",
+     "t": 2.20446212829302,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "5706.T",
+     "t": -4.18284795208268,
+     "both": false
+    },
+    {
+     "target": "5803.T",
+     "t": -3.7964522039796926,
+     "both": true
+    },
+    {
+     "target": "5801.T",
+     "t": -3.6198555940636337,
+     "both": false
+    },
+    {
+     "target": "6963.T",
+     "t": -3.03228858172102,
+     "both": true
+    },
+    {
+     "target": "7735.T",
+     "t": -2.865972548724492,
+     "both": false
+    },
+    {
+     "target": "8035.T",
+     "t": -2.7258858271695168,
+     "both": false
+    },
+    {
+     "target": "6146.T",
+     "t": -2.707242262550568,
+     "both": false
+    },
+    {
+     "target": "6723.T",
+     "t": -2.5484361273694125,
+     "both": false
+    },
+    {
+     "target": "4061.T",
+     "t": -2.2658660832504687,
+     "both": false
+    },
+    {
+     "target": "5802.T",
+     "t": -2.147841287848142,
+     "both": false
+    }
+   ],
+   "n_both": 7,
+   "n": 210
+  },
+  "us_power": {
+   "top": [
+    {
+     "target": "6178.T",
+     "t": 4.156370340808489,
+     "both": false
+    },
+    {
+     "target": "8309.T",
+     "t": 3.911195098493029,
+     "both": false
+    },
+    {
+     "target": "7211.T",
+     "t": 3.320961741546572,
+     "both": true
+    },
+    {
+     "target": "7011.T",
+     "t": 3.090135221177171,
+     "both": false
+    },
+    {
+     "target": "7186.T",
+     "t": 3.025111373389488,
+     "both": false
+    },
+    {
+     "target": "8316.T",
+     "t": 2.8603723723637287,
+     "both": false
+    },
+    {
+     "target": "4506.T",
+     "t": 2.8557467618893746,
+     "both": false
+    },
+    {
+     "target": "8331.T",
+     "t": 2.761514888775175,
+     "both": false
+    },
+    {
+     "target": "5020.T",
+     "t": 2.7584920469935126,
+     "both": false
+    },
+    {
+     "target": "7013.T",
+     "t": 2.5417997114330944,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "6146.T",
+     "t": -3.9372270784666212,
+     "both": true
+    },
+    {
+     "target": "6857.T",
+     "t": -3.722969047529203,
+     "both": true
+    },
+    {
+     "target": "4063.T",
+     "t": -3.0463468465340173,
+     "both": false
+    },
+    {
+     "target": "6861.T",
+     "t": -2.9005140998054717,
+     "both": false
+    },
+    {
+     "target": "8035.T",
+     "t": -2.882697356262048,
+     "both": false
+    },
+    {
+     "target": "6273.T",
+     "t": -2.7376333876238443,
+     "both": false
+    },
+    {
+     "target": "7735.T",
+     "t": -2.35021146070886,
+     "both": false
+    },
+    {
+     "target": "6506.T",
+     "t": -2.3348071510033197,
+     "both": false
+    },
+    {
+     "target": "6920.T",
+     "t": -2.1758684217314017,
+     "both": true
+    },
+    {
+     "target": "6645.T",
+     "t": -2.1659765090568115,
+     "both": false
+    }
+   ],
+   "n_both": 6,
+   "n": 210
+  },
+  "us_vmt": {
+   "top": [
+    {
+     "target": "2768.T",
+     "t": 4.9494272161436,
+     "both": true
+    },
+    {
+     "target": "8725.T",
+     "t": 4.283098468808636,
+     "both": false
+    },
+    {
+     "target": "7912.T",
+     "t": 3.9835629978599654,
+     "both": false
+    },
+    {
+     "target": "8253.T",
+     "t": 3.2130545939746953,
+     "both": false
+    },
+    {
+     "target": "8630.T",
+     "t": 3.081173326132469,
+     "both": true
+    },
+    {
+     "target": "8766.T",
+     "t": 2.864398070482462,
+     "both": false
+    },
+    {
+     "target": "8252.T",
+     "t": 2.7712767845305146,
+     "both": false
+    },
+    {
+     "target": "8804.T",
+     "t": 2.7544922481323453,
+     "both": false
+    },
+    {
+     "target": "8306.T",
+     "t": 2.670966085611021,
+     "both": false
+    },
+    {
+     "target": "7203.T",
+     "t": 2.651383623965414,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "2413.T",
+     "t": -4.742633506419589,
+     "both": false
+    },
+    {
+     "target": "8267.T",
+     "t": -3.797195313775872,
+     "both": false
+    },
+    {
+     "target": "9983.T",
+     "t": -3.6962536451418146,
+     "both": true
+    },
+    {
+     "target": "9984.T",
+     "t": -3.4766845112031173,
+     "both": false
+    },
+    {
+     "target": "6594.T",
+     "t": -2.9893196245981426,
+     "both": false
+    },
+    {
+     "target": "3659.T",
+     "t": -2.8706560520302338,
+     "both": false
+    },
+    {
+     "target": "6954.T",
+     "t": -2.6244930665533865,
+     "both": false
+    },
+    {
+     "target": "5332.T",
+     "t": -2.5699474002149945,
+     "both": false
+    },
+    {
+     "target": "6981.T",
+     "t": -2.393611713159266,
+     "both": false
+    },
+    {
+     "target": "4755.T",
+     "t": -2.3716696937039283,
+     "both": true
+    }
+   ],
+   "n_both": 5,
+   "n": 210
+  },
+  "jp_crude_imp": {
+   "top": [
+    {
+     "target": "4503.T",
+     "t": 3.6997904469834952,
+     "both": false
+    },
+    {
+     "target": "1802.T",
+     "t": 3.5653295264031266,
+     "both": true
+    },
+    {
+     "target": "9432.T",
+     "t": 3.2311468296507653,
+     "both": true
+    },
+    {
+     "target": "3382.T",
+     "t": 2.799614038747738,
+     "both": false
+    },
+    {
+     "target": "1605.T",
+     "t": 2.6653194498849775,
+     "both": false
+    },
+    {
+     "target": "1801.T",
+     "t": 2.517871251695517,
+     "both": false
+    },
+    {
+     "target": "7270.T",
+     "t": 2.5040244150270805,
+     "both": false
+    },
+    {
+     "target": "1803.T",
+     "t": 2.405187251809198,
+     "both": false
+    },
+    {
+     "target": "9531.T",
+     "t": 2.3544931529453756,
+     "both": false
+    },
+    {
+     "target": "9532.T",
+     "t": 2.2707333300948203,
+     "both": false
+    }
+   ],
+   "bottom": [
+    {
+     "target": "6762.T",
+     "t": -3.6998454197565627,
+     "both": true
+    },
+    {
+     "target": "5301.T",
+     "t": -3.2503518099541404,
+     "both": false
+    },
+    {
+     "target": "3407.T",
+     "t": -3.2485871370695967,
+     "both": true
+    },
+    {
+     "target": "6976.T",
+     "t": -3.219791134733796,
+     "both": true
+    },
+    {
+     "target": "6098.T",
+     "t": -3.130751651777303,
+     "both": false
+    },
+    {
+     "target": "6753.T",
+     "t": -3.09818731290602,
+     "both": true
+    },
+    {
+     "target": "6532.T",
+     "t": -3.0559005708045,
+     "both": false
+    },
+    {
+     "target": "4061.T",
+     "t": -2.9401360219246753,
+     "both": true
+    },
+    {
+     "target": "3436.T",
+     "t": -2.747013486232893,
+     "both": false
+    },
+    {
+     "target": "5406.T",
+     "t": -2.6901672401969887,
+     "both": false
+    }
+   ],
+   "n_both": 11,
+   "n": 210
+  },
+  "jp_lng_imp": {
+   "top": [
+    {
+     "target": "543A.T",
+     "t": 2.8925577624808656,
+     "both": false
+    },
+    {
+     "target": "7202.T",
+     "t": 2.769439234924368,
+     "both": false
+    },
+    {
+     "target": "6954.T",
+     "t": 2.681635395345677,
+     "both": false
+    },
+    {
+     "target": "6178.T",
+     "t": 2.605558845886765,
+     "both": false
+    },
+    {
+     "target": "6501.T",
+     "t": 2.5772634964378414,
+     "both": false
+    },
+    {
+     "target": "5101.T",
+     "t": 2.5445084151176456,
+     "both": false
+    },
+    {
+     "target": "3382.T",
+     "t": 2.512496456225248,
+     "both": false
+    },
+    {
+     "target": "4506.T",
+     "t": 2.4126311077242417,
+     "both": false
+    },
+    {
+     "target": "5108.T",
+     "t": 2.2960006823891908,
+     "both": false
+    },
+    {
+     "target": "8233.T",
+     "t": 2.265652927985915,
+     "both": true
+    }
+   ],
+   "bottom": [
+    {
+     "target": "6146.T",
+     "t": -3.4770747978180205,
+     "both": false
+    },
+    {
+     "target": "8035.T",
+     "t": -3.439607413414197,
+     "both": false
+    },
+    {
+     "target": "7735.T",
+     "t": -3.0287743186007803,
+     "both": false
+    },
+    {
+     "target": "6361.T",
+     "t": -2.9803041688317644,
+     "both": false
+    },
+    {
+     "target": "6857.T",
+     "t": -2.7439858471488128,
+     "both": false
+    },
+    {
+     "target": "6723.T",
+     "t": -2.5996738618752184,
+     "both": false
+    },
+    {
+     "target": "4021.T",
+     "t": -2.4973910143306517,
+     "both": false
+    },
+    {
+     "target": "5803.T",
+     "t": -2.420110542771705,
+     "both": false
+    },
+    {
+     "target": "4043.T",
+     "t": -2.2321907373550736,
+     "both": false
+    },
+    {
+     "target": "3697.T",
+     "t": -2.2007769018330046,
+     "both": false
+    }
+   ],
+   "n_both": 1,
+   "n": 210
+  }
+ },
+ "O1": [
+  {
+   "src": "world",
+   "target": "鉱業",
+   "sign": 1,
+   "t": 1.54,
+   "p": 0.0933,
+   "t_H1": -0.18,
+   "t_H2": 2.2,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "world",
+   "target": "石油・石炭製品",
+   "sign": 1,
+   "t": 1.17,
+   "p": 0.0984,
+   "t_H1": 1.57,
+   "t_H2": 1.19,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "world",
+   "target": "卸売業",
+   "sign": 1,
+   "t": 2.15,
+   "p": 0.0466,
+   "t_H1": 0.45,
+   "t_H2": 2.19,
+   "ok": true,
+   "cells": [
+    "1→1 错 6",
+    "1→3 错 3",
+    "1→3 错 6",
+    "1→6 错 3",
+    "3→1 错 6",
+    "3→3 错 3",
+    "3→6 错 3",
+    "6→1 错 3",
+    "6→3 错 3",
+    "6→6 错 0"
+   ]
+  },
+  {
+   "src": "world",
+   "target": "海運業",
+   "sign": 1,
+   "t": -0.75,
+   "p": 0.7565,
+   "t_H1": 0.41,
+   "t_H2": -1.11,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "china",
+   "target": "海運業",
+   "sign": 1,
+   "t": 0.04,
+   "p": 0.5699,
+   "t_H1": 2.05,
+   "t_H2": 0.27,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "china",
+   "target": "鉄鋼",
+   "sign": 1,
+   "t": -0.46,
+   "p": 0.658,
+   "t_H1": 1.96,
+   "t_H2": -1.76,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "china",
+   "target": "機械",
+   "sign": 1,
+   "t": -1.38,
+   "p": 0.8912,
+   "t_H1": 0.17,
+   "t_H2": -1.59,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "china",
+   "target": "非鉄金属",
+   "sign": 1,
+   "t": -0.72,
+   "p": 0.772,
+   "t_H1": 0.89,
+   "t_H2": -0.28,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "us_total",
+   "target": "鉱業",
+   "sign": 1,
+   "t": 1.65,
+   "p": 0.1036,
+   "t_H1": 0.4,
+   "t_H2": 1.83,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "us_gasoline",
+   "target": "輸送用機器",
+   "sign": 1,
+   "t": -0.17,
+   "p": 0.5337,
+   "t_H1": 0.6,
+   "t_H2": -0.74,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "us_gasoline",
+   "target": "ゴム製品",
+   "sign": 1,
+   "t": -1.01,
+   "p": 0.8135,
+   "t_H1": -1.38,
+   "t_H2": -0.6,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "us_distillate",
+   "target": "機械",
+   "sign": 1,
+   "t": -0.84,
+   "p": 0.6528,
+   "t_H1": -0.41,
+   "t_H2": -1.03,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "us_distillate",
+   "target": "海運業",
+   "sign": 1,
+   "t": 0.76,
+   "p": 0.2746,
+   "t_H1": 0.43,
+   "t_H2": 0.58,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "us_vmt",
+   "target": "輸送用機器",
+   "sign": 1,
+   "t": -1.45,
+   "p": 0.8601,
+   "t_H1": -0.39,
+   "t_H2": -1.04,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "us_vmt",
+   "target": "ゴム製品",
+   "sign": 1,
+   "t": 0.05,
+   "p": 0.5337,
+   "t_H1": -0.22,
+   "t_H2": 0.24,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "us_power",
+   "target": "T4",
+   "sign": 1,
+   "t": 0.92,
+   "p": 0.2073,
+   "t_H1": 1.05,
+   "t_H2": -0.06,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "us_power",
+   "target": "T3",
+   "sign": 1,
+   "t": 1.63,
+   "p": 0.0311,
+   "t_H1": -0.09,
+   "t_H2": 1.45,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "us_power",
+   "target": "T13",
+   "sign": 1,
+   "t": -0.09,
+   "p": 0.5699,
+   "t_H1": -0.09,
+   "t_H2": -0.26,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "us_natgas",
+   "target": "鉱業",
+   "sign": 1,
+   "t": -0.39,
+   "p": 0.6839,
+   "t_H1": -0.25,
+   "t_H2": -0.37,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "jp_total",
+   "target": "石油・石炭製品",
+   "sign": 1,
+   "t": 1.28,
+   "p": 0.1088,
+   "t_H1": 0.73,
+   "t_H2": 1.21,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "jp_naphtha",
+   "target": "化学",
+   "sign": 1,
+   "t": 1.07,
+   "p": 0.1036,
+   "t_H1": 0.97,
+   "t_H2": 0.32,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "jp_diesel",
+   "target": "建設業",
+   "sign": 1,
+   "t": 1.23,
+   "p": 0.1295,
+   "t_H1": 1.32,
+   "t_H2": 0.44,
+   "ok": false,
+   "cells": [
+    "3→3 错 3",
+    "6→3 错 3",
+    "6→6 错 0"
+   ]
+  },
+  {
+   "src": "jp_fueloil",
+   "target": "電気・ガス業",
+   "sign": -1,
+   "t": 0.34,
+   "p": 0.5648,
+   "t_H1": 0.36,
+   "t_H2": 0.12,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "jp_lng_imp",
+   "target": "電気・ガス業",
+   "sign": -1,
+   "t": -1.18,
+   "p": 0.1503,
+   "t_H1": -0.07,
+   "t_H2": -2.6,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "jp_crude_imp",
+   "target": "海運業",
+   "sign": 1,
+   "t": -1.56,
+   "p": 0.8808,
+   "t_H1": -1.07,
+   "t_H2": -1.26,
+   "ok": false,
+   "cells": []
+  },
+  {
+   "src": "in_total",
+   "target": "輸送用機器",
+   "sign": 1,
+   "t": 0.52,
+   "p": 0.3057,
+   "t_H1": 0.6,
+   "t_H2": -0.51,
+   "ok": false,
+   "cells": []
+  }
+ ],
+ "O2": {
+  "n": 20412,
+  "found": 628,
+  "rep": 75,
+  "sig1_pct": 12.5,
+  "rep2_pct": 12.9,
+  "placebo": [
+   {
+    "n": 20412,
+    "found": 557,
+    "rep": 128,
+    "sig1_pct": 13.1,
+    "rep2_pct": 17.2
+   },
+   {
+    "n": 20412,
+    "found": 673,
+    "rep": 81,
+    "sig1_pct": 12.4,
+    "rep2_pct": 12.0
+   },
+   {
+    "n": 20412,
+    "found": 404,
+    "rep": 60,
+    "sig1_pct": 10.9,
+    "rep2_pct": 9.3
+   },
+   {
+    "n": 20412,
+    "found": 558,
+    "rep": 81,
+    "sig1_pct": 11.6,
+    "rep2_pct": 12.0
+   },
+   {
+    "n": 20412,
+    "found": 536,
+    "rep": 58,
+    "sig1_pct": 12.2,
+    "rep2_pct": 10.9
+   },
+   {
+    "n": 20412,
+    "found": 1743,
+    "rep": 284,
+    "sig1_pct": 18.7,
+    "rep2_pct": 13.7
+   },
+   {
+    "n": 20412,
+    "found": 1499,
+    "rep": 136,
+    "sig1_pct": 15.4,
+    "rep2_pct": 10.5
+   },
+   {
+    "n": 20412,
+    "found": 1087,
+    "rep": 252,
+    "sig1_pct": 14.2,
+    "rep2_pct": 19.5
+   },
+   {
+    "n": 20412,
+    "found": 862,
+    "rep": 96,
+    "sig1_pct": 13.9,
+    "rep2_pct": 10.3
+   }
+  ],
+  "placebo_range": [
+   58,
+   284
+  ],
+  "over": false
+ },
+ "thresholds_pct": {
+  "us_total": {
+   "0.1": -5.68,
+   "0.2": -2.08,
+   "0.5": 0.47,
+   "0.8": 2.71,
+   "0.9": 4.06
+  },
+  "us_gasoline": {
+   "0.1": -3.99,
+   "0.2": -1.91,
+   "0.5": -0.03,
+   "0.8": 2.14,
+   "0.9": 3.5
+  },
+  "us_distillate": {
+   "0.1": -7.76,
+   "0.2": -4.68,
+   "0.5": -0.37,
+   "0.8": 4.32,
+   "0.9": 7.71
+  },
+  "us_jet": {
+   "0.1": -5.95,
+   "0.2": -2.2,
+   "0.5": 1.81,
+   "0.8": 4.71,
+   "0.9": 6.57
+  },
+  "world": {
+   "0.1": -1.43,
+   "0.2": 0.38,
+   "0.5": 1.2,
+   "0.8": 1.8,
+   "0.9": 2.42
+  },
+  "china": {
+   "0.1": -0.27,
+   "0.2": 1.04,
+   "0.5": 3.39,
+   "0.8": 5.58,
+   "0.9": 7.68
+  },
+  "in_total": {
+   "0.1": -1.11,
+   "0.2": 1.37,
+   "0.5": 4.28,
+   "0.8": 8.96,
+   "0.9": 12.4
+  },
+  "jp_total": {
+   "0.1": -7.37,
+   "0.2": -5.12,
+   "0.5": -2.4,
+   "0.8": 0.73,
+   "0.9": 2.56
+  },
+  "jp_gasoline": {
+   "0.1": -4.94,
+   "0.2": -3.75,
+   "0.5": -1.37,
+   "0.8": 0.44,
+   "0.9": 1.34
+  },
+  "jp_naphtha": {
+   "0.1": -11.55,
+   "0.2": -8.19,
+   "0.5": -2.32,
+   "0.8": 4.11,
+   "0.9": 7.9
+  },
+  "jp_jet": {
+   "0.1": -10.06,
+   "0.2": -4.81,
+   "0.5": 3.59,
+   "0.8": 11.87,
+   "0.9": 22.67
+  },
+  "jp_diesel": {
+   "0.1": -7.26,
+   "0.2": -5.04,
+   "0.5": -1.58,
+   "0.8": 0.56,
+   "0.9": 1.14
+  },
+  "jp_fueloil": {
+   "0.1": -27.19,
+   "0.2": -19.75,
+   "0.5": -7.3,
+   "0.8": 7.36,
+   "0.9": 13.49
+  },
+  "us_natgas": {
+   "0.1": -3.66,
+   "0.2": -1.52,
+   "0.5": 2.02,
+   "0.8": 5.19,
+   "0.9": 7.73
+  },
+  "us_power": {
+   "0.1": -3.3,
+   "0.2": -1.67,
+   "0.5": 0.52,
+   "0.8": 2.88,
+   "0.9": 4.56
+  },
+  "us_vmt": {
+   "0.1": -1.4,
+   "0.2": -0.37,
+   "0.5": 0.96,
+   "0.8": 1.87,
+   "0.9": 2.51
+  },
+  "jp_crude_imp": {
+   "0.1": -11.91,
+   "0.2": -8.77,
+   "0.5": -2.97,
+   "0.8": 4.05,
+   "0.9": 6.18
+  },
+  "jp_lng_imp": {
+   "0.1": -8.49,
+   "0.2": -6.16,
+   "0.5": 0.2,
+   "0.8": 6.08,
+   "0.9": 10.18
+  }
+ },
+ "latest": {
+  "us_total": -0.84,
+  "us_gasoline": -0.95,
+  "us_distillate": 0.74,
+  "us_jet": 1.15,
+  "world": -3.57,
+  "china": -5.22,
+  "in_total": 4.83,
+  "jp_total": -9.18,
+  "jp_gasoline": -3.76,
+  "jp_naphtha": -26.21,
+  "jp_jet": -20.54,
+  "jp_diesel": -3.21,
+  "jp_fueloil": -5.93,
+  "us_natgas": 1.26,
+  "us_power": 1.66,
+  "us_vmt": 0.45,
+  "jp_crude_imp": -62.34,
+  "jp_lng_imp": -11.18
+ },
+ "K": {
+  "base": {
+   "all": {
+    "cagr": 12.72,
+    "dd": -35.02,
+    "calmar": 0.363
+   },
+   "disc": {
+    "cagr": 8.36,
+    "dd": -32.32,
+    "calmar": 0.259
+   },
+   "val": {
+    "cagr": 16.63,
+    "dd": -35.02,
+    "calmar": 0.475
+   },
+   "v1": {
+    "cagr": 6.74,
+    "dd": -35.02,
+    "calmar": 0.192
+   },
+   "v2": {
+    "cagr": 26.0,
+    "dd": -18.9,
+    "calmar": 1.376
+   }
+  },
+  "base_info": {
+   "trades": 350,
+   "win": 43.4
+  },
+  "results": {
+   "K1": {
+    "grid": {
+     "-0.837": {
+      "all": {
+       "cagr": 12.77,
+       "dd": -35.05,
+       "calmar": 0.364
+      },
+      "disc": {
+       "cagr": 8.26,
+       "dd": -33.01,
+       "calmar": 0.25
+      },
+      "val": {
+       "cagr": 16.83,
+       "dd": -35.05,
+       "calmar": 0.48
+      },
+      "v1": {
+       "cagr": 7.19,
+       "dd": -35.05,
+       "calmar": 0.205
+      },
+      "v2": {
+       "cagr": 25.93,
+       "dd": -18.86,
+       "calmar": 1.375
+      }
+     },
+     "0.206": {
+      "all": {
+       "cagr": 12.79,
+       "dd": -35.07,
+       "calmar": 0.365
+      },
+      "disc": {
+       "cagr": 8.16,
+       "dd": -33.42,
+       "calmar": 0.244
+      },
+      "val": {
+       "cagr": 16.95,
+       "dd": -35.07,
+       "calmar": 0.483
+      },
+      "v1": {
+       "cagr": 7.24,
+       "dd": -35.07,
+       "calmar": 0.206
+      },
+      "v2": {
+       "cagr": 26.13,
+       "dd": -18.85,
+       "calmar": 1.386
+      }
+     },
+     "0.76": {
+      "all": {
+       "cagr": 12.14,
+       "dd": -34.64,
+       "calmar": 0.35
+      },
+      "disc": {
+       "cagr": 8.37,
+       "dd": -31.74,
+       "calmar": 0.264
+      },
+      "val": {
+       "cagr": 15.51,
+       "dd": -34.64,
+       "calmar": 0.448
+      },
+      "v1": {
+       "cagr": 7.11,
+       "dd": -34.64,
+       "calmar": 0.205
+      },
+      "v2": {
+       "cagr": 23.36,
+       "dd": -20.89,
+       "calmar": 1.118
+      }
+     }
+    },
+    "info": {
+     "-0.837": {
+      "trades": 348,
+      "win": 43.7,
+      "q": 0.1,
+      "share": 10.2
+     },
+     "0.206": {
+      "trades": 345,
+      "win": 43.8,
+      "q": 0.2,
+      "share": 15.1
+     },
+     "0.76": {
+      "trades": 347,
+      "win": 43.5,
+      "q": 0.3,
+      "share": 27.4
+     }
+    },
+    "theta": 0.76,
+    "disc_ok": false,
+    "fails": [
+     "发现期 Calmar 没有比现行高 ≥ 0.03"
+    ]
+   },
+   "K2": {
+    "grid": {
+     "-5.681": {
+      "all": {
+       "cagr": 12.75,
+       "dd": -35.02,
+       "calmar": 0.364
+      },
+      "disc": {
+       "cagr": 8.38,
+       "dd": -32.32,
+       "calmar": 0.259
+      },
+      "val": {
+       "cagr": 16.68,
+       "dd": -35.02,
+       "calmar": 0.476
+      },
+      "v1": {
+       "cagr": 7.16,
+       "dd": -35.02,
+       "calmar": 0.204
+      },
+      "v2": {
+       "cagr": 25.67,
+       "dd": -18.89,
+       "calmar": 1.359
+      }
+     },
+     "-3.054": {
+      "all": {
+       "cagr": 12.74,
+       "dd": -35.01,
+       "calmar": 0.364
+      },
+      "disc": {
+       "cagr": 8.48,
+       "dd": -31.15,
+       "calmar": 0.272
+      },
+      "val": {
+       "cagr": 16.56,
+       "dd": -35.01,
+       "calmar": 0.473
+      },
+      "v1": {
+       "cagr": 7.2,
+       "dd": -35.01,
+       "calmar": 0.206
+      },
+      "v2": {
+       "cagr": 25.38,
+       "dd": -18.89,
+       "calmar": 1.343
+      }
+     },
+     "-1.488": {
+      "all": {
+       "cagr": 12.64,
+       "dd": -34.02,
+       "calmar": 0.372
+      },
+      "disc": {
+       "cagr": 8.09,
+       "dd": -32.4,
+       "calmar": 0.25
+      },
+      "val": {
+       "cagr": 16.73,
+       "dd": -34.02,
+       "calmar": 0.492
+      },
+      "v1": {
+       "cagr": 7.04,
+       "dd": -34.02,
+       "calmar": 0.207
+      },
+      "v2": {
+       "cagr": 25.89,
+       "dd": -18.9,
+       "calmar": 1.369
+      }
+     }
+    },
+    "info": {
+     "-5.681": {
+      "trades": 348,
+      "win": 43.4,
+      "q": 0.1,
+      "share": 10.3
+     },
+     "-3.054": {
+      "trades": 348,
+      "win": 43.7,
+      "q": 0.2,
+      "share": 16.6
+     },
+     "-1.488": {
+      "trades": 346,
+      "win": 43.6,
+      "q": 0.3,
+      "share": 23.7
+     }
+    },
+    "theta": -3.054,
+    "disc_ok": false,
+    "fails": [
+     "发现期 Calmar 没有比现行高 ≥ 0.03"
+    ]
+   },
+   "K3": {
+    "grid": {
+     "1.348": {
+      "all": {
+       "cagr": 12.37,
+       "dd": -35.0,
+       "calmar": 0.354
+      },
+      "disc": {
+       "cagr": 8.53,
+       "dd": -32.32,
+       "calmar": 0.264
+      },
+      "val": {
+       "cagr": 15.81,
+       "dd": -35.0,
+       "calmar": 0.452
+      },
+      "v1": {
+       "cagr": 7.19,
+       "dd": -35.0,
+       "calmar": 0.205
+      },
+      "v2": {
+       "cagr": 23.89,
+       "dd": -20.79,
+       "calmar": 1.149
+      }
+     },
+     "2.581": {
+      "all": {
+       "cagr": 11.67,
+       "dd": -35.02,
+       "calmar": 0.333
+      },
+      "disc": {
+       "cagr": 8.25,
+       "dd": -32.32,
+       "calmar": 0.255
+      },
+      "val": {
+       "cagr": 14.73,
+       "dd": -35.02,
+       "calmar": 0.421
+      },
+      "v1": {
+       "cagr": 7.41,
+       "dd": -35.02,
+       "calmar": 0.212
+      },
+      "v2": {
+       "cagr": 21.51,
+       "dd": -20.77,
+       "calmar": 1.036
+      }
+     },
+     "3.072": {
+      "all": {
+       "cagr": 11.72,
+       "dd": -35.06,
+       "calmar": 0.334
+      },
+      "disc": {
+       "cagr": 8.33,
+       "dd": -32.32,
+       "calmar": 0.258
+      },
+      "val": {
+       "cagr": 14.74,
+       "dd": -35.06,
+       "calmar": 0.421
+      },
+      "v1": {
+       "cagr": 6.94,
+       "dd": -35.06,
+       "calmar": 0.198
+      },
+      "v2": {
+       "cagr": 22.0,
+       "dd": -20.81,
+       "calmar": 1.057
+      }
+     }
+    },
+    "info": {
+     "1.348": {
+      "trades": 348,
+      "win": 43.7,
+      "q": 0.1,
+      "share": 20.7
+     },
+     "2.581": {
+      "trades": 343,
+      "win": 43.4,
+      "q": 0.2,
+      "share": 34.2
+     },
+     "3.072": {
+      "trades": 338,
+      "win": 43.5,
+      "q": 0.3,
+      "share": 42.5
+     }
+    },
+    "theta": 1.348,
+    "disc_ok": false,
+    "fails": [
+     "发现期 Calmar 没有比现行高 ≥ 0.03"
+    ]
+   },
+   "K4": {
+    "grid": {
+     "-9.661": {
+      "all": {
+       "cagr": 12.77,
+       "dd": -35.06,
+       "calmar": 0.364
+      },
+      "disc": {
+       "cagr": 8.24,
+       "dd": -32.92,
+       "calmar": 0.25
+      },
+      "val": {
+       "cagr": 16.84,
+       "dd": -35.06,
+       "calmar": 0.48
+      },
+      "v1": {
+       "cagr": 7.13,
+       "dd": -35.06,
+       "calmar": 0.203
+      },
+      "v2": {
+       "cagr": 26.02,
+       "dd": -18.89,
+       "calmar": 1.377
+      }
+     },
+     "-6.322": {
+      "all": {
+       "cagr": 12.86,
+       "dd": -35.03,
+       "calmar": 0.367
+      },
+      "disc": {
+       "cagr": 8.34,
+       "dd": -30.75,
+       "calmar": 0.271
+      },
+      "val": {
+       "cagr": 16.93,
+       "dd": -35.03,
+       "calmar": 0.483
+      },
+      "v1": {
+       "cagr": 7.2,
+       "dd": -35.03,
+       "calmar": 0.206
+      },
+      "v2": {
+       "cagr": 26.12,
+       "dd": -18.85,
+       "calmar": 1.386
+      }
+     },
+     "-4.626": {
+      "all": {
+       "cagr": 13.05,
+       "dd": -32.88,
+       "calmar": 0.397
+      },
+      "disc": {
+       "cagr": 8.45,
+       "dd": -30.68,
+       "calmar": 0.275
+      },
+      "val": {
+       "cagr": 17.19,
+       "dd": -32.88,
+       "calmar": 0.523
+      },
+      "v1": {
+       "cagr": 8.46,
+       "dd": -32.88,
+       "calmar": 0.257
+      },
+      "v2": {
+       "cagr": 25.38,
+       "dd": -19.01,
+       "calmar": 1.335
+      }
+     }
+    },
+    "info": {
+     "-9.661": {
+      "trades": 348,
+      "win": 43.7,
+      "q": 0.1,
+      "share": 7.9
+     },
+     "-6.322": {
+      "trades": 342,
+      "win": 44.7,
+      "q": 0.2,
+      "share": 15.6
+     },
+     "-4.626": {
+      "trades": 342,
+      "win": 44.2,
+      "q": 0.3,
+      "share": 25.6
+     }
+    },
+    "theta": -4.626,
+    "disc_ok": false,
+    "fails": [
+     "发现期 Calmar 没有比现行高 ≥ 0.03"
+    ]
+   },
+   "K5": {
+    "grid": {
+     "0.5": {
+      "all": {
+       "cagr": 12.57,
+       "dd": -35.01,
+       "calmar": 0.359
+      },
+      "disc": {
+       "cagr": 7.79,
+       "dd": -32.32,
+       "calmar": 0.241
+      },
+      "val": {
+       "cagr": 16.86,
+       "dd": -35.01,
+       "calmar": 0.482
+      },
+      "v1": {
+       "cagr": 7.7,
+       "dd": -35.01,
+       "calmar": 0.22
+      },
+      "v2": {
+       "cagr": 25.48,
+       "dd": -18.9,
+       "calmar": 1.348
+      }
+     },
+     "1.0": {
+      "all": {
+       "cagr": 12.77,
+       "dd": -35.01,
+       "calmar": 0.365
+      },
+      "disc": {
+       "cagr": 8.36,
+       "dd": -32.32,
+       "calmar": 0.259
+      },
+      "val": {
+       "cagr": 16.72,
+       "dd": -35.01,
+       "calmar": 0.478
+      },
+      "v1": {
+       "cagr": 7.51,
+       "dd": -35.01,
+       "calmar": 0.215
+      },
+      "v2": {
+       "cagr": 25.39,
+       "dd": -18.89,
+       "calmar": 1.344
+      }
+     },
+     "1.5": {
+      "all": {
+       "cagr": 12.64,
+       "dd": -35.02,
+       "calmar": 0.361
+      },
+      "disc": {
+       "cagr": 8.36,
+       "dd": -32.32,
+       "calmar": 0.259
+      },
+      "val": {
+       "cagr": 16.48,
+       "dd": -35.02,
+       "calmar": 0.47
+      },
+      "v1": {
+       "cagr": 6.74,
+       "dd": -35.02,
+       "calmar": 0.192
+      },
+      "v2": {
+       "cagr": 25.68,
+       "dd": -18.9,
+       "calmar": 1.359
+      }
+     }
+    },
+    "info": {
+     "0.5": {
+      "trades": 333,
+      "win": 42.9,
+      "skipped": 44
+     },
+     "1.0": {
+      "trades": 343,
+      "win": 43.1,
+      "skipped": 17
+     },
+     "1.5": {
+      "trades": 346,
+      "win": 43.1,
+      "skipped": 8
+     }
+    },
+    "theta": 1.0,
+    "disc_ok": false,
+    "fails": [
+     "发现期 Calmar 没有比现行高 ≥ 0.03"
+    ]
+   }
+  },
+  "best": null
+ }
+}

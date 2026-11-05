@@ -1,0 +1,28 @@
+{
+ "records": 11,
+ "on_days_recorded": 11,
+ "months": 2,
+ "months_on": 2,
+ "completeness": {
+  "expected": 10,
+  "recorded": 10,
+  "missing": [],
+  "last": "2026-10-12"
+ },
+ "base": {
+  "cagr": null,
+  "dd": null,
+  "calmar": null
+ },
+ "k4": {
+  "cagr": null,
+  "dd": null,
+  "calmar": null
+ },
+ "on_days": 7,
+ "decision": {
+  "stage": null,
+  "verdict": "进度（还没到判定时点 2029-09-28）",
+  "fails": []
+ }
+}

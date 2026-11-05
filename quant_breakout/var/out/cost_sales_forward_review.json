@@ -1,0 +1,18 @@
+{
+ "months_logged": 1,
+ "n": 0,
+ "mean": null,
+ "t": null,
+ "hit": null,
+ "pair_n": 0,
+ "pair_mean": null,
+ "pair_t": null,
+ "verdict": "只报告进度（记满 36 个月才判定）",
+ "series": [],
+ "status": {
+  "months": 1,
+  "first": "2026-09",
+  "last": "2026-09",
+  "cost_up_months": 0
+ }
+}

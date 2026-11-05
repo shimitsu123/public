@@ -1,0 +1,803 @@
+{
+ "title": "第十个研究循环：选股成功率（胜率提高、账户不变差）—— 直到找到这样「更好」的选股规则才停",
+ "start": "2026-10-04",
+ "registered": "1450380",
+ "user_request": "胜率提高、账户不变差也算更好之类的也可以，继续研究（2026-10-04 晚，待办〔56〕③）",
+ "rules": "scripts/research_loop10.py 开头（基准 B3、题目只限选股、第一关 V1〜V6、第二关、上限、家族、ID 不重用、停下的情况）",
+ "status": "exhausted",
+ "cap": 20,
+ "family_cap": 3,
+ "family_prefix": "选股",
+ "kinds": [
+  "stock",
+  "date",
+  "rank",
+  "pool"
+ ],
+ "criteria": {
+  "win_min_pp": 2.0,
+  "era_win_tol_pp": 2.0,
+  "era_tol": 0.02,
+  "dd_tol_pp": 2.0,
+  "half_tol": 0.02,
+  "placebo_n": 400,
+  "other_pools": [
+   "W",
+   "Jx"
+  ],
+  "unseen_pool": "Zx",
+  "stage1": "V1 合起来胜率差 ≥ +2.0 pp 且每笔差 ≥ 0；V2 每个年代胜率差 ≥ −2.0 pp；V3 每个年代 Calmar 差 ≥ −0.02、合计 ≥ 0、回撤不深 2 pp 以上、两半合计 ≥ −0.02；V4 W / Jx 保留的胜率差 > 0、每笔差 ≥ 0；V5 学参数的两种检验；V6 事后的在 Zx 同方向",
+  "stage2": {
+   "stock": "每个年代按候选实际挡掉的比例逐个信号随机挡（种子 numpy.random.default_rng([20261004, 10, s])，400 次）",
+   "date": "每个年代把挡 / 不挡的日序列整体循环平移 k ∈ [250, N − 250] 天（同一个种子，400 次）",
+   "rank / pool": "那一轮第二关登记时写定"
+  },
+  "rule": "候选三个年代合起来的胜率差严格大于 400 次里的最大值（有算不出的 = 不过）"
+ },
+ "baseline_def": "B3 = 模拟盘 / 执行器现在的规则（同第九个循环；scripts/loop6_common.load3）；J 到 2026-09-30",
+ "baseline": {
+  "Z": {
+   "cagr": 17.07,
+   "dd": -14.29,
+   "calmar": 1.194,
+   "n": 35,
+   "mean": 5.999,
+   "win": 65.7,
+   "h1": 1.422,
+   "h2": 1.722
+  },
+  "E": {
+   "cagr": 14.53,
+   "dd": -23.19,
+   "calmar": 0.627,
+   "n": 43,
+   "mean": 1.286,
+   "win": 41.9,
+   "h1": 0.215,
+   "h2": 1.479
+  },
+  "J": {
+   "cagr": 20.02,
+   "dd": -29.61,
+   "calmar": 0.676,
+   "n": 62,
+   "mean": 3.057,
+   "win": 48.4,
+   "h1": 0.722,
+   "h2": 0.79
+  }
+ },
+ "success": {
+  "n": 140,
+  "win": 50.72857142857143,
+  "mean": 3.24855
+ },
+ "prereq_ok": true,
+ "fingerprint": "3b2e8757be7b4a74",
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-04",
+   "title": "大盘弱势多数决 WMV / 出货日 × 落后核心 MJR / 落后核心 ≥ 10 pp JRM（事后）",
+   "registered": "8b94e15",
+   "script": "scripts/loop10_r01_weakvote.py",
+   "output": "var/out/loop10_r01_weakvote.md",
+   "approaches": [
+    {
+     "id": "WMV",
+     "family": "选股·大盘弱势（多数决）",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.02,
+     "dmean": 0.343,
+     "sum": 0.012,
+     "passed": 4,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.035,
+      "E": 0.047,
+      "J": 0.0
+     },
+     "era_dwin": {
+      "Z": 6.7,
+      "E": -0.9,
+      "J": 4.5
+     }
+    },
+    {
+     "id": "MJR",
+     "family": "选股·出货日 × 相对核心",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 5.41,
+     "dmean": 0.867,
+     "sum": 0.029,
+     "passed": 3,
+     "checks": {
+      "V1": true,
+      "V2": false,
+      "V3": false,
+      "V4": true,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": 0.012,
+      "E": 0.02,
+      "J": -0.003
+     },
+     "era_dwin": {
+      "Z": 4.0,
+      "E": -3.7,
+      "J": 11.2
+     }
+    },
+    {
+     "id": "JRM",
+     "family": "选股·日本相对核心（宽松）",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.17,
+     "dmean": 0.368,
+     "sum": 0.112,
+     "passed": 5,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": true,
+      "V4": true,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": 0.026,
+      "E": 0.045,
+      "J": 0.041
+     },
+     "era_dwin": {
+      "Z": 1.9,
+      "E": -0.4,
+      "J": 6.3
+     }
+    }
+   ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-04",
+   "title": "中期动量过高 MOM / 突破日收盘弱 CLW / 顾客业种短観没有改善 X2G（事后）",
+   "registered": "f17463f",
+   "script": "scripts/loop10_r02_diagfeat.py",
+   "output": "var/out/loop10_r02_diagfeat.md",
+   "approaches": [
+    {
+     "id": "MOM",
+     "family": "选股·中期动量过高",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 2.49,
+     "dmean": 0.407,
+     "sum": -0.272,
+     "passed": 2,
+     "checks": {
+      "V1": true,
+      "V2": false,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.332,
+      "E": 0.021,
+      "J": 0.039
+     },
+     "era_dwin": {
+      "Z": 2.2,
+      "E": -3.2,
+      "J": 5.6
+     }
+    },
+    {
+     "id": "CLW",
+     "family": "选股·突破日收盘弱",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 5.03,
+     "dmean": 0.746,
+     "sum": -0.066,
+     "passed": 3,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.109,
+      "E": 0.014,
+      "J": 0.029
+     },
+     "era_dwin": {
+      "Z": 6.7,
+      "E": 3.8,
+      "J": 4.1
+     }
+    },
+    {
+     "id": "X2G",
+     "family": "选股·顾客业种景气",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.88,
+     "dmean": 0.929,
+     "sum": -0.048,
+     "passed": 5,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": true,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.132,
+      "E": 0.026,
+      "J": 0.058
+     },
+     "era_dwin": {
+      "Z": 3.5,
+      "E": -0.7,
+      "J": 7.8
+     }
+    }
+   ]
+  },
+  {
+   "round": 3,
+   "date": "2026-10-04",
+   "title": "比自己业种涨得多 RSB / 对美元日元 β 高 BFX（事后）",
+   "registered": "7231aad",
+   "script": "scripts/loop10_r03_relfx.py",
+   "output": "var/out/loop10_r03_relfx.md",
+   "approaches": [
+    {
+     "id": "RSB",
+     "family": "选股·相对业种过热",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.71,
+     "dmean": 0.772,
+     "sum": -0.08,
+     "passed": 4,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.151,
+      "E": 0.054,
+      "J": 0.017
+     },
+     "era_dwin": {
+      "Z": 1.0,
+      "E": 1.4,
+      "J": 5.4
+     }
+    },
+    {
+     "id": "BFX",
+     "family": "选股·汇率敏感",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.8,
+     "dmean": 0.537,
+     "sum": -0.055,
+     "passed": 4,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.054,
+      "E": -0.001,
+      "J": 0.0
+     },
+     "era_dwin": {
+      "Z": 11.2,
+      "E": -1.4,
+      "J": 4.4
+     }
+    }
+   ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-05",
+   "title": "日経波动高 NVL / 宽度低 BRD / 日経 3 个月跌 N3M 的日子不开新仓（事后）",
+   "registered": "b8fef1f",
+   "script": "scripts/loop10_r04_mktstate.py",
+   "output": "var/out/loop10_r04_mktstate.md",
+   "approaches": [
+    {
+     "id": "NVL",
+     "family": "选股·大盘波动",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -0.22,
+     "dmean": -0.191,
+     "sum": -0.137,
+     "passed": 3,
+     "checks": {
+      "V1": false,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.102,
+      "E": -0.023,
+      "J": -0.012
+     },
+     "era_dwin": {
+      "Z": -1.7,
+      "E": -1.9,
+      "J": 1.6
+     }
+    },
+    {
+     "id": "BRD",
+     "family": "选股·大盘宽度",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 1.07,
+     "dmean": -0.053,
+     "sum": -0.025,
+     "passed": 3,
+     "checks": {
+      "V1": false,
+      "V2": false,
+      "V3": false,
+      "V4": true,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.007,
+      "E": 0.012,
+      "J": -0.03
+     },
+     "era_dwin": {
+      "Z": 4.3,
+      "E": -2.4,
+      "J": 1.6
+     }
+    },
+    {
+     "id": "N3M",
+     "family": "选股·大盘中期趋势",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.2,
+     "dmean": 0.346,
+     "sum": 0.008,
+     "passed": 4,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": 0.037,
+      "E": -0.001,
+      "J": -0.028
+     },
+     "era_dwin": {
+      "Z": 9.3,
+      "E": 1.0,
+      "J": 2.7
+     }
+    }
+   ]
+  },
+  {
+   "round": 5,
+   "date": "2026-10-05",
+   "title": "套牢盘 CGO / 离 52 周高点远 H5G / 箱体太宽 RNG（CGO 不是事后）",
+   "registered": "72c80c2",
+   "script": "scripts/loop10_r05_anchor.py",
+   "output": "var/out/loop10_r05_anchor.md",
+   "note": "登记的代码里 ID 写成 H52，与第五个循环的 H52（按离 52 周高点调仓位）重名 → 记录用 H5G；规则、代码、结果都不变",
+   "approaches": [
+    {
+     "id": "CGO",
+     "id_in_code": "CGO",
+     "family": "选股·价格锚点",
+     "kind": "stock",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": -3.58,
+     "dmean": -0.492,
+     "sum": -0.101,
+     "passed": 2,
+     "checks": {
+      "V1": false,
+      "V2": false,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.053,
+      "E": -0.025,
+      "J": -0.023
+     },
+     "era_dwin": {
+      "Z": -3.6,
+      "E": -6.4,
+      "J": -2.9
+     }
+    },
+    {
+     "id": "H5G",
+     "id_in_code": "H52",
+     "family": "选股·价格锚点",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 0.18,
+     "dmean": -0.201,
+     "sum": -0.052,
+     "passed": 2,
+     "checks": {
+      "V1": false,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.007,
+      "E": -0.028,
+      "J": -0.017
+     },
+     "era_dwin": {
+      "Z": 1.0,
+      "E": -1.9,
+      "J": -0.3
+     }
+    },
+    {
+     "id": "RNG",
+     "id_in_code": "RNG",
+     "family": "选股·箱体宽松",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 5.25,
+     "dmean": 0.247,
+     "sum": -0.022,
+     "passed": 3,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.006,
+      "E": -0.035,
+      "J": 0.019
+     },
+     "era_dwin": {
+      "Z": 12.9,
+      "E": -1.3,
+      "J": 4.7
+     }
+    }
+   ]
+  },
+  {
+   "round": 6,
+   "date": "2026-10-05",
+   "title": "高风险特征三选二 RKB / 横截面分散高 DSW / 美股 3 个月跌 USR（事后）",
+   "registered": "36fe75c",
+   "script": "scripts/loop10_r06_riskdisp.py",
+   "output": "var/out/loop10_r06_riskdisp.md",
+   "approaches": [
+    {
+     "id": "RKB",
+     "family": "选股·高风险特征（多数决）",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -1.17,
+     "dmean": 0.344,
+     "sum": 0.023,
+     "passed": 1,
+     "checks": {
+      "V1": false,
+      "V2": false,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.032,
+      "E": 0.026,
+      "J": 0.029
+     },
+     "era_dwin": {
+      "Z": -5.1,
+      "E": -4.4,
+      "J": 1.6
+     }
+    },
+    {
+     "id": "DSW",
+     "family": "选股·横截面分散",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -1.76,
+     "dmean": 0.038,
+     "sum": -0.156,
+     "passed": 2,
+     "checks": {
+      "V1": false,
+      "V2": false,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.103,
+      "E": -0.049,
+      "J": -0.004
+     },
+     "era_dwin": {
+      "Z": 8.2,
+      "E": -9.5,
+      "J": 1.6
+     }
+    },
+    {
+     "id": "USR",
+     "family": "选股·美股回调",
+     "kind": "date",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -0.34,
+     "dmean": -0.061,
+     "sum": -0.038,
+     "passed": 2,
+     "checks": {
+      "V1": false,
+      "V2": false,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.027,
+      "E": -0.024,
+      "J": 0.013
+     },
+     "era_dwin": {
+      "Z": -2.4,
+      "E": -2.9,
+      "J": 3.4
+     }
+    }
+   ]
+  },
+  {
+   "round": 7,
+   "date": "2026-10-05",
+   "title": "5〜10 月不开新仓 HWN（不是事后）/ 均量没放大 VEX / 股息率低 DYL（事后）",
+   "registered": "863f3d2",
+   "script": "scripts/loop10_r07_final.py",
+   "output": "var/out/loop10_r07_final.md",
+   "approaches": [
+    {
+     "id": "HWN",
+     "family": "选股·季节",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "dwin": 3.94,
+     "dmean": 0.117,
+     "sum": -0.333,
+     "passed": 5,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": true,
+      "V5": true,
+      "V6": true
+     },
+     "d": {
+      "Z": -0.35,
+      "E": -0.034,
+      "J": 0.051
+     },
+     "era_dwin": {
+      "Z": 1.0,
+      "E": 4.5,
+      "J": 5.7
+     }
+    },
+    {
+     "id": "VEX",
+     "family": "选股·量能扩张",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": 3.64,
+     "dmean": 0.85,
+     "sum": -0.215,
+     "passed": 4,
+     "checks": {
+      "V1": true,
+      "V2": true,
+      "V3": false,
+      "V4": true,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.232,
+      "E": -0.001,
+      "J": 0.018
+     },
+     "era_dwin": {
+      "Z": 9.3,
+      "E": 0.5,
+      "J": 3.8
+     }
+    },
+    {
+     "id": "DYL",
+     "family": "选股·股息",
+     "kind": "stock",
+     "posthoc": true,
+     "verdict": "第一关不过",
+     "dwin": -3.0,
+     "dmean": -0.599,
+     "sum": -0.431,
+     "passed": 1,
+     "checks": {
+      "V1": false,
+      "V2": false,
+      "V3": false,
+      "V4": false,
+      "V5": true,
+      "V6": false
+     },
+     "d": {
+      "Z": -0.351,
+      "E": -0.11,
+      "J": 0.03
+     },
+     "era_dwin": {
+      "Z": 4.3,
+      "E": -11.9,
+      "J": 0.8
+     }
+    }
+   ]
+  }
+ ],
+ "stopped": {
+  "date": "2026-10-04",
+  "used": 8,
+  "reason": "结构性障碍：按个股挡的 5 个做法都提高胜率但都在 Z（2001〜2006）伤账户；同一天候选换顺序每个年代只改 1 笔 → 排序没用；按日子挡的 JRC 一族在没看过的 Zx 方向相反、变体不能再用 Zx；胜率诊断里三个年代同号的个股特征已用完；剩下的只有先验很弱的做法 → 要用户决定（待办〔57〕：前向检验 X2G / JRM、继续、改账户范围、结束）",
+  "closest": [
+   {
+    "round": 2,
+    "id": "X2G",
+    "verdict": "第一关不过",
+    "dwin": 3.88,
+    "sum": -0.048,
+    "passed": 5
+   },
+   {
+    "round": 1,
+    "id": "JRM",
+    "verdict": "第一关不过",
+    "dwin": 3.17,
+    "sum": 0.112,
+    "passed": 5
+   },
+   {
+    "round": 3,
+    "id": "BFX",
+    "verdict": "第一关不过",
+    "dwin": 3.8,
+    "sum": -0.055,
+    "passed": 4
+   }
+  ]
+ },
+ "resumed": "2026-10-05 08:20 JST 用户「② 继续用完剩下的 12 个做法」（待办〔57〕②）→ running；规则 1450380 不变；8 / 20，剩 12",
+ "exhausted": {
+  "date": "2026-10-05",
+  "used": 20,
+  "closest": [
+   {
+    "round": 7,
+    "id": "HWN",
+    "verdict": "第一关不过",
+    "dwin": 3.94,
+    "sum": -0.333,
+    "passed": 5
+   },
+   {
+    "round": 2,
+    "id": "X2G",
+    "verdict": "第一关不过",
+    "dwin": 3.88,
+    "sum": -0.048,
+    "passed": 5
+   },
+   {
+    "round": 1,
+    "id": "JRM",
+    "verdict": "第一关不过",
+    "dwin": 3.17,
+    "sum": 0.112,
+    "passed": 5
+   }
+  ],
+  "summary": "20 个做法：V1 过 12 个、V3 只过 1 个（JRM）；最接近 HWN（只差 V3）/ X2G（只差 V3）/ JRM（只差 V6）；没找到 → 待办〔58〕"
+ },
+ "decision": {
+  "date": "2026-10-05",
+  "todo": "〔58〕",
+  "choice": "①③",
+  "user": "把 HWN、X2G、JRM 加进前向检验 / 换方向研究卖法，有可能每个股票种类周期都不一样？",
+  "note": "① 登记在 scripts/w2_forward_all.py 第十节（qbreak/gate_forward.py；只记录、不交易）；③ 另开第十一个研究循环（卖法）；本循环的结论不变（exhausted）"
+ }
+}

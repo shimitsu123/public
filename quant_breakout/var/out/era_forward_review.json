@@ -1,0 +1,73 @@
+{
+ "JP-S33": {
+  "next1": {
+   "n": 1,
+   "mean": 0.0,
+   "hit": 0.0,
+   "judged": false,
+   "failed": false
+  },
+  "next12": {
+   "n": 0,
+   "mean": null,
+   "hit": null,
+   "judged": false,
+   "failed": false
+  },
+  "months_logged": 1
+ },
+ "JP-TH": {
+  "next1": {
+   "n": 1,
+   "mean": 0.0,
+   "hit": 0.0,
+   "judged": false,
+   "failed": false
+  },
+  "next12": {
+   "n": 0,
+   "mean": null,
+   "hit": null,
+   "judged": false,
+   "failed": false
+  },
+  "months_logged": 1
+ },
+ "US-FF49": {
+  "next1": {
+   "n": 0,
+   "mean": null,
+   "hit": null,
+   "judged": false,
+   "failed": false
+  },
+  "next12": {
+   "n": 0,
+   "mean": null,
+   "hit": null,
+   "judged": false,
+   "failed": false
+  },
+  "months_logged": 1
+ },
+ "JP-S33Q": {
+  "next1": {
+   "n": 1,
+   "mean": 0.0,
+   "hit": 0.0,
+   "judged": false,
+   "failed": false
+  },
+  "quarters_logged": 1
+ },
+ "JP-THQ": {
+  "next1": {
+   "n": 1,
+   "mean": 0.0,
+   "hit": 0.0,
+   "judged": false,
+   "failed": false
+  },
+  "quarters_logged": 1
+ }
+}

@@ -1,0 +1,25 @@
+{
+ "plan_setting": "free",
+ "endpoints": {
+  "/indices/bars/daily/topix": {
+   "ok": false,
+   "needs": "light",
+   "note": "/indices/bars/daily/topix HTTP 403: This API is not available on your subscription.  If you want more data, please check other plans:https://jpx-jquants.com/#da"
+  },
+  "/fins/dividend": {
+   "ok": false,
+   "needs": "premium",
+   "note": "/fins/dividend HTTP 403: This API is not available on your subscription.  If you want more data, please check other plans:https://jpx-jquants.com/#dataset"
+  }
+ },
+ "key_ok": true,
+ "listed_now": 4437,
+ "recent_daily_ok": false,
+ "recent_daily_note": "/equities/bars/daily HTTP 400: Your subscription covers the following dates: 2024-07-02 ~ 2026-07-02. If you want more data, please check other plans:https://jpx-jquants.com/#dataset",
+ "history_probe_date": "2024-07-16",
+ "history_master_ok": true,
+ "delisted_since_probe": 290,
+ "delisted_in_daily": true,
+ "delisted_sample": "13240",
+ "calls": 6
+}
