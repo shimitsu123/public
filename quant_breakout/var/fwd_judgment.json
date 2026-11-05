@@ -1,5 +1,5 @@
 {
- "as_of": "2026-11-04",
+ "as_of": "2026-11-05",
  "enabled": true,
  "market": {
   "items": {
@@ -14,17 +14,41 @@
   "points": 2,
   "mult": 0.5,
   "readings": {
-   "C_rel": 50.6,
-   "crel_pct": 59.1,
-   "tv_pct": 85.3,
-   "wj_pct": 74.7,
-   "w_pct": 85.6
+   "C_rel": 48.5,
+   "crel_pct": 51.5,
+   "tv_pct": 83.2,
+   "wj_pct": 78.4,
+   "w_pct": 92.4
   },
   "t23_bear": false,
   "k4_on": true,
   "deepdip": false,
-  "date": "2026-11-04"
+  "date": "2026-11-05"
  },
- "stocks": {},
+ "stocks": {
+  "3861.T": {
+   "flags": {
+    "B1": -1,
+    "B2": 1,
+    "B3": 0,
+    "B4": 1,
+    "B5": 0,
+    "B6": 0,
+    "B7": 0
+   },
+   "score": 1,
+   "mult": 1.0,
+   "F2": -0.676166,
+   "inputs": {
+    "x2": 2.064597,
+    "k2": 0,
+    "usw": 1.0,
+    "era": false,
+    "s2": null,
+    "g1": 0,
+    "industry": "パルプ・紙"
+   }
+  }
+ },
  "errors": {}
 }
