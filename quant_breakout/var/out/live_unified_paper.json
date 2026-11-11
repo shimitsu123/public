@@ -1,8 +1,8 @@
 {
  "broker": "PaperBroker",
- "decided_on": "2026-11-10",
- "fill_day": "2026-11-11",
- "equity_jpy": 914256,
+ "decided_on": "2026-11-11",
+ "fill_day": "2026-11-12",
+ "equity_jpy": 927819,
  "cash_jpy": 192,
  "positions": {},
  "core_units": {
@@ -51,8 +51,8 @@
  ],
  "same_as_sim": true,
  "compare": {
-  "exec_date": "2026-11-10",
-  "sim_date": "2026-11-10",
+  "exec_date": "2026-11-11",
+  "sim_date": "2026-11-11",
   "comparable": true,
   "same": true,
   "equity_diff_jpy": 0.0,
