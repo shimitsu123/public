@@ -1,0 +1,80 @@
+{
+ "cash": 191.67823918163776,
+ "positions": {
+  "1545.T": {
+   "qty": 4110,
+   "avg_px": 241.87254305267334,
+   "peak": 241.87254305267334,
+   "stop_px": 0.0,
+   "entry_date": "2026-10-01",
+   "hold_bars": 0,
+   "last_bar": ""
+  }
+ },
+ "orders": [
+  {
+   "ticker": "1655.T",
+   "side": "BUY",
+   "qty": 1130,
+   "price": 876.3752522094726,
+   "ts": "2026-09-29 07:01:33",
+   "status": "FILLED",
+   "filled_qty": 1130,
+   "filled_px": 876.3752522094726,
+   "client_id": "U2026-09-25-BUY-1655.T",
+   "broker_id": "",
+   "note": "",
+   "extra": {}
+  },
+  {
+   "ticker": "1655.T",
+   "side": "SELL",
+   "qty": 1130,
+   "price": 872.2255444091797,
+   "ts": "2026-10-01 07:09:03",
+   "status": "FILLED",
+   "filled_qty": 1130,
+   "filled_px": 872.2255444091797,
+   "client_id": "U2026-09-29-SELL-1655.T-f",
+   "broker_id": "",
+   "note": "pnl=-5,371",
+   "extra": {
+    "pnl": -5371.17,
+    "fill_date": "2026-09-30",
+    "fill_time": "09:00 JST",
+    "queued_bar": "2026-09-29",
+    "ref_px": 871.0
+   }
+  },
+  {
+   "ticker": "1545.T",
+   "side": "BUY",
+   "qty": 4110,
+   "price": 241.87254305267334,
+   "ts": "2026-10-01 07:09:03",
+   "status": "FILLED",
+   "filled_qty": 4110,
+   "filled_px": 241.87254305267334,
+   "client_id": "U2026-09-29-BUY-1545.T",
+   "broker_id": "",
+   "note": "现金不足，4140→4110 股",
+   "extra": {}
+  }
+ ],
+ "closed_trades": [],
+ "realized_pnl": -5371.169814330915,
+ "pending": [],
+ "core_trades": [
+  {
+   "ticker": "1655.T",
+   "entry_date": "2026-09-29",
+   "exit_date": "2026-09-30",
+   "entry_px": 876.3753,
+   "exit_px": 872.2255,
+   "shares": 1130,
+   "pnl": -5371.17,
+   "ret_pct": -0.474,
+   "div": 0.0
+  }
+ ]
+}

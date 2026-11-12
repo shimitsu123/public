@@ -1,0 +1,3319 @@
+{
+ "code": "1cfc9f3",
+ "sets": [
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "现行",
+   "J2": {
+    "n": 1083,
+    "win": 38.3195,
+    "mean": 0.1245
+   },
+   "E": {
+    "n": 127,
+    "win": 42.5197,
+    "mean": 0.6958
+   },
+   "J": {
+    "n": 172,
+    "win": 42.4419,
+    "mean": 0.5322
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40",
+   "J2": {
+    "n": 1737,
+    "win": 36.7876,
+    "mean": -0.0217
+   },
+   "E": {
+    "n": 252,
+    "win": 39.2857,
+    "mean": 0.5164
+   },
+   "J": {
+    "n": 303,
+    "win": 39.2739,
+    "mean": 0.4078
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90",
+   "J2": {
+    "n": 468,
+    "win": 38.0342,
+    "mean": 0.1067
+   },
+   "E": {
+    "n": 44,
+    "win": 36.3636,
+    "mean": 0.0548
+   },
+   "J": {
+    "n": 66,
+    "win": 39.3939,
+    "mean": 0.1003
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 10.0",
+   "J2": {
+    "n": 294,
+    "win": 37.415,
+    "mean": 0.0928
+   },
+   "E": {
+    "n": 28,
+    "win": 50.0,
+    "mean": 2.0971
+   },
+   "J": {
+    "n": 39,
+    "win": 30.7692,
+    "mean": -0.6801
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 20.0",
+   "J2": {
+    "n": 1708,
+    "win": 37.4122,
+    "mean": 0.0372
+   },
+   "E": {
+    "n": 240,
+    "win": 40.8333,
+    "mean": 0.7145
+   },
+   "J": {
+    "n": 298,
+    "win": 39.5973,
+    "mean": 0.3716
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "放量倍数 1.2",
+   "J2": {
+    "n": 1905,
+    "win": 36.5879,
+    "mean": -0.0123
+   },
+   "E": {
+    "n": 225,
+    "win": 38.6667,
+    "mean": 0.1213
+   },
+   "J": {
+    "n": 334,
+    "win": 38.024,
+    "mean": 0.1971
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "放量倍数 2.0",
+   "J2": {
+    "n": 550,
+    "win": 39.2727,
+    "mean": 0.1418
+   },
+   "E": {
+    "n": 52,
+    "win": 38.4615,
+    "mean": 0.2179
+   },
+   "J": {
+    "n": 76,
+    "win": 52.6316,
+    "mean": 1.6463
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "均量天数 10",
+   "J2": {
+    "n": 858,
+    "win": 39.2774,
+    "mean": 0.2377
+   },
+   "E": {
+    "n": 103,
+    "win": 41.7476,
+    "mean": 0.4003
+   },
+   "J": {
+    "n": 136,
+    "win": 44.1176,
+    "mean": 0.6974
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "均量天数 50",
+   "J2": {
+    "n": 1283,
+    "win": 38.5035,
+    "mean": 0.0696
+   },
+   "E": {
+    "n": 148,
+    "win": 41.2162,
+    "mean": 0.2941
+   },
+   "J": {
+    "n": 199,
+    "win": 41.206,
+    "mean": 0.3073
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "MACD (8, 21)",
+   "J2": {
+    "n": 1136,
+    "win": 37.412,
+    "mean": -0.0668
+   },
+   "E": {
+    "n": 140,
+    "win": 38.5714,
+    "mean": 0.0634
+   },
+   "J": {
+    "n": 169,
+    "win": 36.6864,
+    "mean": -0.3162
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "0 轴带宽 0.5",
+   "J2": {
+    "n": 662,
+    "win": 37.4622,
+    "mean": 0.0217
+   },
+   "E": {
+    "n": 89,
+    "win": 43.8202,
+    "mean": 0.7208
+   },
+   "J": {
+    "n": 104,
+    "win": 36.5385,
+    "mean": 0.0775
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "0 轴带宽 2.0",
+   "J2": {
+    "n": 1298,
+    "win": 37.5963,
+    "mean": 0.0574
+   },
+   "E": {
+    "n": 150,
+    "win": 43.3333,
+    "mean": 0.5907
+   },
+   "J": {
+    "n": 215,
+    "win": 41.8605,
+    "mean": 0.5976
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "出货日上限 4",
+   "J2": {
+    "n": 365,
+    "win": 36.7123,
+    "mean": -0.1562
+   },
+   "E": {
+    "n": 47,
+    "win": 46.8085,
+    "mean": 2.332
+   },
+   "J": {
+    "n": 53,
+    "win": 45.283,
+    "mean": 0.1912
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "出货日上限 关",
+   "J2": {
+    "n": 1387,
+    "win": 37.4189,
+    "mean": -0.0957
+   },
+   "E": {
+    "n": 171,
+    "win": 45.0292,
+    "mean": 0.6552
+   },
+   "J": {
+    "n": 221,
+    "win": 38.914,
+    "mean": 0.2343
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "上影上限 2.0",
+   "J2": {
+    "n": 1050,
+    "win": 38.381,
+    "mean": 0.1419
+   },
+   "E": {
+    "n": 125,
+    "win": 42.4,
+    "mean": 0.6633
+   },
+   "J": {
+    "n": 167,
+    "win": 42.515,
+    "mean": 0.5662
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "上影上限 关",
+   "J2": {
+    "n": 1154,
+    "win": 38.3016,
+    "mean": 0.1137
+   },
+   "E": {
+    "n": 133,
+    "win": 42.8571,
+    "mean": 0.6503
+   },
+   "J": {
+    "n": 187,
+    "win": 42.246,
+    "mean": 0.5321
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=0.0",
+   "label": "周线量比 关",
+   "J2": {
+    "n": 2223,
+    "win": 36.4372,
+    "mean": -0.1937
+   },
+   "E": {
+    "n": 239,
+    "win": 38.9121,
+    "mean": 0.5851
+   },
+   "J": {
+    "n": 354,
+    "win": 42.6554,
+    "mean": 0.3849
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "周线量比 1.3",
+   "J2": {
+    "n": 505,
+    "win": 38.4158,
+    "mean": 0.1462
+   },
+   "E": {
+    "n": 54,
+    "win": 48.1481,
+    "mean": 1.179
+   },
+   "J": {
+    "n": 62,
+    "win": 38.7097,
+    "mean": 0.1413
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 40、放量倍数 2.0、均量天数 10、0 轴带宽 0.5、周线量比 1.3",
+   "J2": {
+    "n": 183,
+    "win": 38.2514,
+    "mean": 0.1029
+   },
+   "E": {
+    "n": 28,
+    "win": 50.0,
+    "mean": 0.3486
+   },
+   "J": {
+    "n": 23,
+    "win": 34.7826,
+    "mean": 0.4315
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 90、放量倍数 1.2、均量天数 10、MACD (8, 21)、0 轴带宽 0.5、周线量比 关",
+   "J2": {
+    "n": 1181,
+    "win": 35.3937,
+    "mean": -0.1167
+   },
+   "E": {
+    "n": 96,
+    "win": 31.25,
+    "mean": -0.2142
+   },
+   "J": {
+    "n": 177,
+    "win": 38.4181,
+    "mean": -0.0872
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 10.0、放量倍数 1.2、MACD (8, 21)、0 轴带宽 2.0、出货日上限 4",
+   "J2": {
+    "n": 276,
+    "win": 27.1739,
+    "mean": -0.8486
+   },
+   "E": {
+    "n": 30,
+    "win": 33.3333,
+    "mean": 0.3749
+   },
+   "J": {
+    "n": 35,
+    "win": 22.8571,
+    "mean": -1.0847
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=1.5|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、箱体振幅 10.0、MACD (8, 21)、0 轴带宽 0.5、出货日上限 4、周线量比 1.3",
+   "J2": {
+    "n": 16,
+    "win": 12.5,
+    "mean": -1.0395
+   },
+   "E": {
+    "n": 1,
+    "win": 100.0,
+    "mean": 1.3204
+   },
+   "J": {
+    "n": 0,
+    "win": null,
+    "mean": null
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、箱体振幅 20.0、放量倍数 1.2、均量天数 50、MACD (8, 21)、0 轴带宽 0.5、出货日上限 4、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 1610,
+    "win": 34.9689,
+    "mean": -0.0802
+   },
+   "E": {
+    "n": 198,
+    "win": 37.3737,
+    "mean": 0.51
+   },
+   "J": {
+    "n": 280,
+    "win": 40.0,
+    "mean": 0.441
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 10.0、放量倍数 2.0、均量天数 10、0 轴带宽 0.5、出货日上限 4、上影上限 2.0",
+   "J2": {
+    "n": 8,
+    "win": 0.0,
+    "mean": -2.4869
+   },
+   "E": {
+    "n": 0,
+    "win": null,
+    "mean": null
+   },
+   "J": {
+    "n": 0,
+    "win": null,
+    "mean": null
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体振幅 20.0、放量倍数 1.2、均量天数 10、0 轴带宽 2.0、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 1448,
+    "win": 36.7403,
+    "mean": -0.0853
+   },
+   "E": {
+    "n": 194,
+    "win": 42.7835,
+    "mean": 0.492
+   },
+   "J": {
+    "n": 244,
+    "win": 43.8525,
+    "mean": 0.8166
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体振幅 10.0、放量倍数 2.0、均量天数 10、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 179,
+    "win": 31.2849,
+    "mean": 0.0713
+   },
+   "E": {
+    "n": 18,
+    "win": 44.4444,
+    "mean": 0.7383
+   },
+   "J": {
+    "n": 18,
+    "win": 44.4444,
+    "mean": 0.3373
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、放量倍数 2.0、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 关",
+   "J2": {
+    "n": 192,
+    "win": 35.4167,
+    "mean": -0.1626
+   },
+   "E": {
+    "n": 15,
+    "win": 33.3333,
+    "mean": 0.0942
+   },
+   "J": {
+    "n": 22,
+    "win": 22.7273,
+    "mean": -1.0511
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体振幅 10.0、放量倍数 2.0、均量天数 10、MACD (8, 21)、0 轴带宽 2.0、出货日上限 4、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 23,
+    "win": 21.7391,
+    "mean": -1.3956
+   },
+   "E": {
+    "n": 3,
+    "win": 0.0,
+    "mean": -0.4959
+   },
+   "J": {
+    "n": 1,
+    "win": 0.0,
+    "mean": -3.8726
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=0.0",
+   "label": "放量倍数 2.0、均量天数 50、MACD (8, 21)、出货日上限 4、周线量比 关",
+   "J2": {
+    "n": 379,
+    "win": 35.8839,
+    "mean": -0.3887
+   },
+   "E": {
+    "n": 32,
+    "win": 31.25,
+    "mean": -0.1337
+   },
+   "J": {
+    "n": 43,
+    "win": 39.5349,
+    "mean": -0.5995
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、箱体振幅 10.0、放量倍数 2.0、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 621,
+    "win": 38.0032,
+    "mean": 0.1407
+   },
+   "E": {
+    "n": 81,
+    "win": 35.8025,
+    "mean": -0.47
+   },
+   "J": {
+    "n": 89,
+    "win": 39.3258,
+    "mean": 0.0668
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、MACD (8, 21)、0 轴带宽 0.5、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 160,
+    "win": 34.375,
+    "mean": -0.153
+   },
+   "E": {
+    "n": 16,
+    "win": 50.0,
+    "mean": -0.0032
+   },
+   "J": {
+    "n": 17,
+    "win": 29.4118,
+    "mean": -1.0781
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "放量倍数 1.2、均量天数 10、MACD (8, 21)、0 轴带宽 0.5、出货日上限 4、上影上限 关",
+   "J2": {
+    "n": 394,
+    "win": 31.9797,
+    "mean": -0.574
+   },
+   "E": {
+    "n": 38,
+    "win": 31.5789,
+    "mean": -0.0615
+   },
+   "J": {
+    "n": 59,
+    "win": 25.4237,
+    "mean": -1.6131
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 40、放量倍数 2.0、均量天数 50、出货日上限 4、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 221,
+    "win": 33.9367,
+    "mean": -0.2012
+   },
+   "E": {
+    "n": 21,
+    "win": 47.619,
+    "mean": 2.9614
+   },
+   "J": {
+    "n": 25,
+    "win": 32.0,
+    "mean": 0.8144
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 40、箱体振幅 20.0、放量倍数 1.2、均量天数 10、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 875,
+    "win": 35.7714,
+    "mean": -0.1018
+   },
+   "E": {
+    "n": 126,
+    "win": 50.0,
+    "mean": 1.2532
+   },
+   "J": {
+    "n": 116,
+    "win": 48.2759,
+    "mean": 1.0781
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 1.2、出货日上限 4、上影上限 关",
+   "J2": {
+    "n": 678,
+    "win": 34.8083,
+    "mean": -0.19
+   },
+   "E": {
+    "n": 82,
+    "win": 37.8049,
+    "mean": 1.1017
+   },
+   "J": {
+    "n": 112,
+    "win": 42.8571,
+    "mean": -0.1062
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、箱体振幅 10.0、放量倍数 2.0、均量天数 50、周线量比 关",
+   "J2": {
+    "n": 721,
+    "win": 38.0028,
+    "mean": -0.1062
+   },
+   "E": {
+    "n": 77,
+    "win": 44.1558,
+    "mean": 0.7082
+   },
+   "J": {
+    "n": 107,
+    "win": 42.0561,
+    "mean": 0.3839
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=1.5|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、箱体振幅 10.0、均量天数 50、MACD (8, 21)、0 轴带宽 2.0、周线量比 1.3",
+   "J2": {
+    "n": 75,
+    "win": 28.0,
+    "mean": -0.5571
+   },
+   "E": {
+    "n": 4,
+    "win": 25.0,
+    "mean": -0.2329
+   },
+   "J": {
+    "n": 3,
+    "win": 66.6667,
+    "mean": 0.5211
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、MACD (8, 21)、0 轴带宽 2.0、上影上限 2.0",
+   "J2": {
+    "n": 2487,
+    "win": 36.8315,
+    "mean": -0.1172
+   },
+   "E": {
+    "n": 352,
+    "win": 41.1932,
+    "mean": 0.1623
+   },
+   "J": {
+    "n": 415,
+    "win": 40.9639,
+    "mean": 0.468
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、放量倍数 1.2、均量天数 50、MACD (8, 21)、出货日上限 4、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 2576,
+    "win": 33.2298,
+    "mean": -0.1491
+   },
+   "E": {
+    "n": 320,
+    "win": 42.1875,
+    "mean": 0.9655
+   },
+   "J": {
+    "n": 448,
+    "win": 38.1696,
+    "mean": 0.3288
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、箱体振幅 20.0、0 轴带宽 0.5、出货日上限 4、周线量比 关",
+   "J2": {
+    "n": 890,
+    "win": 35.7303,
+    "mean": -0.1474
+   },
+   "E": {
+    "n": 117,
+    "win": 37.6068,
+    "mean": 1.0482
+   },
+   "J": {
+    "n": 144,
+    "win": 43.75,
+    "mean": 0.6171
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、箱体振幅 10.0、放量倍数 2.0、出货日上限 关、周线量比 关",
+   "J2": {
+    "n": 918,
+    "win": 36.3834,
+    "mean": -0.1215
+   },
+   "E": {
+    "n": 98,
+    "win": 41.8367,
+    "mean": 0.3517
+   },
+   "J": {
+    "n": 138,
+    "win": 41.3043,
+    "mean": 0.4519
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "放量倍数 1.2、均量天数 10、MACD (8, 21)、0 轴带宽 2.0、出货日上限 4",
+   "J2": {
+    "n": 889,
+    "win": 33.6333,
+    "mean": -0.3225
+   },
+   "E": {
+    "n": 101,
+    "win": 32.6733,
+    "mean": 0.5658
+   },
+   "J": {
+    "n": 149,
+    "win": 38.9262,
+    "mean": -0.0464
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、放量倍数 2.0、均量天数 10、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 60,
+    "win": 28.3333,
+    "mean": -0.2039
+   },
+   "E": {
+    "n": 3,
+    "win": 33.3333,
+    "mean": -1.4106
+   },
+   "J": {
+    "n": 6,
+    "win": 16.6667,
+    "mean": -0.7071
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 40、放量倍数 1.2、均量天数 50、0 轴带宽 2.0、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 1953,
+    "win": 37.4296,
+    "mean": -0.0158
+   },
+   "E": {
+    "n": 236,
+    "win": 42.3729,
+    "mean": 0.4626
+   },
+   "J": {
+    "n": 303,
+    "win": 43.2343,
+    "mean": 0.5356
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 20.0、放量倍数 1.2、均量天数 10、出货日上限 4、上影上限 关",
+   "J2": {
+    "n": 892,
+    "win": 35.2018,
+    "mean": -0.1108
+   },
+   "E": {
+    "n": 112,
+    "win": 41.0714,
+    "mean": 1.4791
+   },
+   "J": {
+    "n": 166,
+    "win": 38.5542,
+    "mean": 0.0802
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、箱体振幅 10.0、放量倍数 1.2、均量天数 50、MACD (8, 21)、0 轴带宽 2.0、周线量比 1.3",
+   "J2": {
+    "n": 121,
+    "win": 28.9256,
+    "mean": -0.7471
+   },
+   "E": {
+    "n": 5,
+    "win": 20.0,
+    "mean": -0.4648
+   },
+   "J": {
+    "n": 6,
+    "win": 50.0,
+    "mean": -0.1481
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=1.5|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 40、箱体振幅 10.0、均量天数 10、0 轴带宽 0.5、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 160,
+    "win": 34.375,
+    "mean": -0.3228
+   },
+   "E": {
+    "n": 22,
+    "win": 63.6364,
+    "mean": 2.3334
+   },
+   "J": {
+    "n": 16,
+    "win": 18.75,
+    "mean": -1.4397
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 20.0、均量天数 10、0 轴带宽 2.0、出货日上限 关、上影上限 2.0",
+   "J2": {
+    "n": 1281,
+    "win": 38.7978,
+    "mean": 0.0735
+   },
+   "E": {
+    "n": 169,
+    "win": 41.4201,
+    "mean": 0.4135
+   },
+   "J": {
+    "n": 207,
+    "win": 40.0966,
+    "mean": 0.5592
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、箱体振幅 10.0、放量倍数 2.0、均量天数 10、0 轴带宽 2.0、出货日上限 关、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 946,
+    "win": 40.3805,
+    "mean": 0.2482
+   },
+   "E": {
+    "n": 108,
+    "win": 37.963,
+    "mean": 0.6719
+   },
+   "J": {
+    "n": 146,
+    "win": 44.5205,
+    "mean": 0.2791
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 10.0、放量倍数 1.2、MACD (8, 21)、上影上限 2.0",
+   "J2": {
+    "n": 158,
+    "win": 28.481,
+    "mean": -0.4604
+   },
+   "E": {
+    "n": 13,
+    "win": 30.7692,
+    "mean": -0.4738
+   },
+   "J": {
+    "n": 15,
+    "win": 40.0,
+    "mean": 0.9401
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "放量倍数 2.0、0 轴带宽 2.0、出货日上限 关、周线量比 1.3",
+   "J2": {
+    "n": 443,
+    "win": 38.3747,
+    "mean": -0.0077
+   },
+   "E": {
+    "n": 42,
+    "win": 50.0,
+    "mean": 0.8349
+   },
+   "J": {
+    "n": 52,
+    "win": 36.5385,
+    "mean": 0.7273
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "均量天数 50、MACD (8, 21)、出货日上限 关、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 2670,
+    "win": 36.7041,
+    "mean": -0.1809
+   },
+   "E": {
+    "n": 319,
+    "win": 38.558,
+    "mean": 0.1252
+   },
+   "J": {
+    "n": 429,
+    "win": 39.627,
+    "mean": -0.0034
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 1.2、均量天数 50、MACD (8, 21)、0 轴带宽 0.5、出货日上限 4",
+   "J2": {
+    "n": 446,
+    "win": 35.2018,
+    "mean": -0.2341
+   },
+   "E": {
+    "n": 37,
+    "win": 32.4324,
+    "mean": 0.5305
+   },
+   "J": {
+    "n": 70,
+    "win": 38.5714,
+    "mean": 0.2836
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 40、放量倍数 1.2、均量天数 50、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 1186,
+    "win": 35.4975,
+    "mean": -0.2921
+   },
+   "E": {
+    "n": 129,
+    "win": 42.6357,
+    "mean": 0.3786
+   },
+   "J": {
+    "n": 174,
+    "win": 42.5287,
+    "mean": 0.1685
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "放量倍数 2.0、均量天数 10、0 轴带宽 0.5、出货日上限 关、上影上限 关",
+   "J2": {
+    "n": 297,
+    "win": 41.0774,
+    "mean": 0.0902
+   },
+   "E": {
+    "n": 42,
+    "win": 35.7143,
+    "mean": 0.0261
+   },
+   "J": {
+    "n": 41,
+    "win": 39.0244,
+    "mean": -0.6722
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、箱体振幅 20.0、0 轴带宽 2.0",
+   "J2": {
+    "n": 3301,
+    "win": 37.5341,
+    "mean": 0.0072
+   },
+   "E": {
+    "n": 572,
+    "win": 41.2587,
+    "mean": 0.4993
+   },
+   "J": {
+    "n": 622,
+    "win": 40.0322,
+    "mean": 0.4954
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、0 轴带宽 2.0、上影上限 关",
+   "J2": {
+    "n": 2492,
+    "win": 37.2392,
+    "mean": -0.0237
+   },
+   "E": {
+    "n": 348,
+    "win": 39.6552,
+    "mean": 0.2303
+   },
+   "J": {
+    "n": 459,
+    "win": 39.4336,
+    "mean": 0.4087
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 40、箱体振幅 10.0、放量倍数 2.0、均量天数 10、出货日上限 4、周线量比 1.3",
+   "J2": {
+    "n": 50,
+    "win": 28.0,
+    "mean": -0.85
+   },
+   "E": {
+    "n": 6,
+    "win": 50.0,
+    "mean": 1.2387
+   },
+   "J": {
+    "n": 3,
+    "win": 0.0,
+    "mean": -5.0359
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、箱体振幅 20.0、均量天数 10、0 轴带宽 0.5、上影上限 关",
+   "J2": {
+    "n": 1000,
+    "win": 37.8,
+    "mean": -0.0711
+   },
+   "E": {
+    "n": 162,
+    "win": 40.7407,
+    "mean": -0.0074
+   },
+   "J": {
+    "n": 173,
+    "win": 39.3064,
+    "mean": 0.0754
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体振幅 20.0、放量倍数 2.0、均量天数 50、MACD (8, 21)、0 轴带宽 0.5、出货日上限 4、周线量比 关",
+   "J2": {
+    "n": 292,
+    "win": 35.9589,
+    "mean": -0.2857
+   },
+   "E": {
+    "n": 34,
+    "win": 47.0588,
+    "mean": 1.1385
+   },
+   "J": {
+    "n": 36,
+    "win": 44.4444,
+    "mean": -0.6315
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 1.2、MACD (8, 21)、0 轴带宽 2.0、出货日上限 关",
+   "J2": {
+    "n": 3364,
+    "win": 36.0583,
+    "mean": -0.1119
+   },
+   "E": {
+    "n": 428,
+    "win": 41.1215,
+    "mean": 0.5384
+   },
+   "J": {
+    "n": 614,
+    "win": 39.2508,
+    "mean": 0.3181
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、放量倍数 1.2、均量天数 50、0 轴带宽 2.0、出货日上限 4、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 192,
+    "win": 34.8958,
+    "mean": -0.4607
+   },
+   "E": {
+    "n": 16,
+    "win": 37.5,
+    "mean": 0.8148
+   },
+   "J": {
+    "n": 17,
+    "win": 52.9412,
+    "mean": -0.086
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体振幅 10.0、放量倍数 2.0、均量天数 50、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 273,
+    "win": 38.0952,
+    "mean": -0.1355
+   },
+   "E": {
+    "n": 20,
+    "win": 45.0,
+    "mean": 1.0127
+   },
+   "J": {
+    "n": 25,
+    "win": 44.0,
+    "mean": 0.2405
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、均量天数 10、MACD (8, 21)、上影上限 2.0",
+   "J2": {
+    "n": 1401,
+    "win": 37.2591,
+    "mean": -0.0225
+   },
+   "E": {
+    "n": 203,
+    "win": 37.931,
+    "mean": 0.0683
+   },
+   "J": {
+    "n": 229,
+    "win": 38.8646,
+    "mean": 0.0983
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 20.0、放量倍数 2.0、均量天数 50、MACD (8, 21)、0 轴带宽 2.0、出货日上限 关",
+   "J2": {
+    "n": 2052,
+    "win": 37.5244,
+    "mean": -0.2869
+   },
+   "E": {
+    "n": 249,
+    "win": 37.751,
+    "mean": -0.4169
+   },
+   "J": {
+    "n": 324,
+    "win": 43.2099,
+    "mean": 0.4105
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、箱体振幅 20.0、放量倍数 1.2、均量天数 10、MACD (8, 21)、0 轴带宽 0.5、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 6237,
+    "win": 33.6861,
+    "mean": -0.2519
+   },
+   "E": {
+    "n": 869,
+    "win": 39.5857,
+    "mean": 0.3788
+   },
+   "J": {
+    "n": 1155,
+    "win": 35.4978,
+    "mean": -0.0841
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、放量倍数 1.2、均量天数 10、0 轴带宽 0.5、出货日上限 4、上影上限 2.0",
+   "J2": {
+    "n": 433,
+    "win": 33.7182,
+    "mean": -0.2764
+   },
+   "E": {
+    "n": 59,
+    "win": 44.0678,
+    "mean": 1.4724
+   },
+   "J": {
+    "n": 79,
+    "win": 31.6456,
+    "mean": -0.3711
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、箱体振幅 20.0、放量倍数 2.0、均量天数 10、MACD (8, 21)、出货日上限 关、周线量比 关",
+   "J2": {
+    "n": 2735,
+    "win": 36.2706,
+    "mean": -0.3027
+   },
+   "E": {
+    "n": 405,
+    "win": 40.9877,
+    "mean": 0.2837
+   },
+   "J": {
+    "n": 434,
+    "win": 39.8618,
+    "mean": 0.4663
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、箱体振幅 10.0、放量倍数 1.2、均量天数 10、0 轴带宽 2.0、出货日上限 4、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 22,
+    "win": 18.1818,
+    "mean": -1.46
+   },
+   "E": {
+    "n": 3,
+    "win": 33.3333,
+    "mean": 0.1074
+   },
+   "J": {
+    "n": 0,
+    "win": null,
+    "mean": null
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "均量天数 50、0 轴带宽 2.0、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 2463,
+    "win": 37.3528,
+    "mean": -0.1169
+   },
+   "E": {
+    "n": 296,
+    "win": 39.527,
+    "mean": 0.4232
+   },
+   "J": {
+    "n": 409,
+    "win": 42.2983,
+    "mean": 0.482
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、放量倍数 1.2、MACD (8, 21)、0 轴带宽 2.0、上影上限 关",
+   "J2": {
+    "n": 4788,
+    "win": 35.3592,
+    "mean": -0.1664
+   },
+   "E": {
+    "n": 660,
+    "win": 40.0,
+    "mean": 0.2029
+   },
+   "J": {
+    "n": 940,
+    "win": 38.2979,
+    "mean": 0.1959
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 2.0、上影上限 2.0",
+   "J2": {
+    "n": 497,
+    "win": 38.2294,
+    "mean": -0.0141
+   },
+   "E": {
+    "n": 56,
+    "win": 37.5,
+    "mean": 0.1326
+   },
+   "J": {
+    "n": 69,
+    "win": 49.2754,
+    "mean": 0.9531
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体振幅 20.0、放量倍数 2.0、均量天数 10、MACD (8, 21)、0 轴带宽 0.5、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 169,
+    "win": 36.6864,
+    "mean": 0.3283
+   },
+   "E": {
+    "n": 24,
+    "win": 37.5,
+    "mean": -0.5074
+   },
+   "J": {
+    "n": 20,
+    "win": 45.0,
+    "mean": 0.4116
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、箱体振幅 20.0、均量天数 50、0 轴带宽 2.0、出货日上限 关、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 9242,
+    "win": 36.9184,
+    "mean": -0.2252
+   },
+   "E": {
+    "n": 1571,
+    "win": 41.3749,
+    "mean": 0.7074
+   },
+   "J": {
+    "n": 1752,
+    "win": 40.1256,
+    "mean": 0.2802
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 90、放量倍数 1.2、MACD (8, 21)、0 轴带宽 0.5、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 1094,
+    "win": 34.9177,
+    "mean": -0.0358
+   },
+   "E": {
+    "n": 88,
+    "win": 29.5455,
+    "mean": -0.3179
+   },
+   "J": {
+    "n": 174,
+    "win": 35.0575,
+    "mean": -0.393
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、放量倍数 2.0、均量天数 50、MACD (8, 21)、0 轴带宽 2.0、出货日上限 4、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 109,
+    "win": 27.5229,
+    "mean": -0.8617
+   },
+   "E": {
+    "n": 12,
+    "win": 16.6667,
+    "mean": -0.6889
+   },
+   "J": {
+    "n": 7,
+    "win": 42.8571,
+    "mean": 0.6194
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、箱体振幅 10.0、放量倍数 1.2、MACD (8, 21)、0 轴带宽 0.5、上影上限 2.0",
+   "J2": {
+    "n": 933,
+    "win": 33.5477,
+    "mean": -0.287
+   },
+   "E": {
+    "n": 102,
+    "win": 44.1176,
+    "mean": 0.6079
+   },
+   "J": {
+    "n": 159,
+    "win": 34.5912,
+    "mean": -0.2578
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=1.5|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 10.0、MACD (8, 21)、0 轴带宽 0.5",
+   "J2": {
+    "n": 72,
+    "win": 25.0,
+    "mean": -0.3878
+   },
+   "E": {
+    "n": 4,
+    "win": 25.0,
+    "mean": -0.2888
+   },
+   "J": {
+    "n": 4,
+    "win": 0.0,
+    "mean": -1.0934
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 1.2、MACD (8, 21)、0 轴带宽 0.5、上影上限 2.0",
+   "J2": {
+    "n": 1058,
+    "win": 35.7278,
+    "mean": -0.1041
+   },
+   "E": {
+    "n": 118,
+    "win": 40.678,
+    "mean": 0.1723
+   },
+   "J": {
+    "n": 181,
+    "win": 34.2541,
+    "mean": -0.3479
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、箱体振幅 10.0、放量倍数 1.2、均量天数 50、0 轴带宽 2.0、周线量比 1.3",
+   "J2": {
+    "n": 98,
+    "win": 29.5918,
+    "mean": -0.6825
+   },
+   "E": {
+    "n": 4,
+    "win": 25.0,
+    "mean": -0.1116
+   },
+   "J": {
+    "n": 3,
+    "win": 66.6667,
+    "mean": 4.8001
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "放量倍数 1.2、均量天数 10、0 轴带宽 0.5、周线量比 1.3",
+   "J2": {
+    "n": 376,
+    "win": 36.9681,
+    "mean": -0.1535
+   },
+   "E": {
+    "n": 43,
+    "win": 51.1628,
+    "mean": 1.8109
+   },
+   "J": {
+    "n": 53,
+    "win": 32.0755,
+    "mean": -0.6494
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 10.0、放量倍数 2.0、均量天数 10、MACD (8, 21)、0 轴带宽 0.5、上影上限 关",
+   "J2": {
+    "n": 78,
+    "win": 30.7692,
+    "mean": -0.1541
+   },
+   "E": {
+    "n": 10,
+    "win": 60.0,
+    "mean": 2.1706
+   },
+   "J": {
+    "n": 9,
+    "win": 33.3333,
+    "mean": -1.2846
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=1.5|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、箱体振幅 10.0、均量天数 50、MACD (8, 21)、0 轴带宽 2.0、出货日上限 关、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 95,
+    "win": 27.3684,
+    "mean": -0.6314
+   },
+   "E": {
+    "n": 5,
+    "win": 20.0,
+    "mean": -0.2562
+   },
+   "J": {
+    "n": 3,
+    "win": 66.6667,
+    "mean": 0.5211
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 40、箱体振幅 10.0、放量倍数 2.0、MACD (8, 21)、出货日上限 4、周线量比 1.3",
+   "J2": {
+    "n": 79,
+    "win": 31.6456,
+    "mean": 0.0248
+   },
+   "E": {
+    "n": 8,
+    "win": 25.0,
+    "mean": -0.8524
+   },
+   "J": {
+    "n": 3,
+    "win": 33.3333,
+    "mean": 2.1881
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体振幅 20.0、放量倍数 2.0、均量天数 50、MACD (8, 21)、出货日上限 关、周线量比 1.3",
+   "J2": {
+    "n": 806,
+    "win": 35.6079,
+    "mean": -0.2932
+   },
+   "E": {
+    "n": 91,
+    "win": 40.6593,
+    "mean": -0.2577
+   },
+   "J": {
+    "n": 91,
+    "win": 42.8571,
+    "mean": 0.2106
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 20.0、放量倍数 2.0、0 轴带宽 2.0、上影上限 2.0",
+   "J2": {
+    "n": 1185,
+    "win": 36.5401,
+    "mean": -0.085
+   },
+   "E": {
+    "n": 145,
+    "win": 39.3103,
+    "mean": 0.2152
+   },
+   "J": {
+    "n": 189,
+    "win": 44.9735,
+    "mean": 1.0718
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、放量倍数 2.0、均量天数 50、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 2.0",
+   "J2": {
+    "n": 228,
+    "win": 34.6491,
+    "mean": -0.1615
+   },
+   "E": {
+    "n": 13,
+    "win": 38.4615,
+    "mean": -0.7584
+   },
+   "J": {
+    "n": 24,
+    "win": 29.1667,
+    "mean": -0.6215
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体振幅 10.0、放量倍数 1.2、MACD (8, 21)、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 294,
+    "win": 32.3129,
+    "mean": -0.4052
+   },
+   "E": {
+    "n": 23,
+    "win": 52.1739,
+    "mean": 2.3027
+   },
+   "J": {
+    "n": 21,
+    "win": 42.8571,
+    "mean": 0.412
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、放量倍数 2.0、均量天数 50、出货日上限 关",
+   "J2": {
+    "n": 364,
+    "win": 37.0879,
+    "mean": -0.2766
+   },
+   "E": {
+    "n": 24,
+    "win": 37.5,
+    "mean": -0.7051
+   },
+   "J": {
+    "n": 37,
+    "win": 40.5405,
+    "mean": -0.0403
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 20.0、放量倍数 1.2、均量天数 10、MACD (8, 21)、出货日上限 关、上影上限 关",
+   "J2": {
+    "n": 3704,
+    "win": 35.0162,
+    "mean": -0.1832
+   },
+   "E": {
+    "n": 502,
+    "win": 40.4382,
+    "mean": 0.4863
+   },
+   "J": {
+    "n": 705,
+    "win": 36.7376,
+    "mean": 0.1295
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体振幅 20.0、放量倍数 1.2、均量天数 10、MACD (8, 21)、0 轴带宽 0.5、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 622,
+    "win": 34.8875,
+    "mean": -0.1197
+   },
+   "E": {
+    "n": 72,
+    "win": 40.2778,
+    "mean": 0.1689
+   },
+   "J": {
+    "n": 86,
+    "win": 44.186,
+    "mean": 0.2552
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、放量倍数 1.2、均量天数 50、MACD (8, 21)、出货日上限 4、上影上限 2.0",
+   "J2": {
+    "n": 398,
+    "win": 31.1558,
+    "mean": -0.6505
+   },
+   "E": {
+    "n": 41,
+    "win": 39.0244,
+    "mean": 1.3721
+   },
+   "J": {
+    "n": 56,
+    "win": 41.0714,
+    "mean": 0.2552
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、均量天数 10、0 轴带宽 2.0、出货日上限 关、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 6073,
+    "win": 36.193,
+    "mean": -0.1827
+   },
+   "E": {
+    "n": 887,
+    "win": 37.655,
+    "mean": 0.2647
+   },
+   "J": {
+    "n": 1120,
+    "win": 39.1964,
+    "mean": 0.1556
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体振幅 20.0、放量倍数 2.0、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 1758,
+    "win": 36.6325,
+    "mean": -0.3353
+   },
+   "E": {
+    "n": 202,
+    "win": 43.5644,
+    "mean": 0.7546
+   },
+   "J": {
+    "n": 258,
+    "win": 44.186,
+    "mean": 0.7733
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体振幅 10.0、放量倍数 2.0、均量天数 10、0 轴带宽 2.0、周线量比 1.3",
+   "J2": {
+    "n": 58,
+    "win": 32.7586,
+    "mean": -0.2092
+   },
+   "E": {
+    "n": 7,
+    "win": 71.4286,
+    "mean": 3.6917
+   },
+   "J": {
+    "n": 2,
+    "win": 0.0,
+    "mean": -2.4556
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "MACD (8, 21)、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 568,
+    "win": 38.0282,
+    "mean": -0.0347
+   },
+   "E": {
+    "n": 61,
+    "win": 40.9836,
+    "mean": 0.1611
+   },
+   "J": {
+    "n": 59,
+    "win": 37.2881,
+    "mean": -0.2694
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=1.5|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体振幅 10.0、均量天数 50、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 486,
+    "win": 34.3621,
+    "mean": -0.1077
+   },
+   "E": {
+    "n": 44,
+    "win": 47.7273,
+    "mean": 1.3564
+   },
+   "J": {
+    "n": 65,
+    "win": 33.8462,
+    "mean": 0.0442
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=0.0",
+   "label": "均量天数 50、MACD (8, 21)、0 轴带宽 0.5、出货日上限 4、周线量比 关",
+   "J2": {
+    "n": 440,
+    "win": 35.6818,
+    "mean": -0.2917
+   },
+   "E": {
+    "n": 45,
+    "win": 33.3333,
+    "mean": 0.3824
+   },
+   "J": {
+    "n": 60,
+    "win": 43.3333,
+    "mean": -0.0376
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=1.5|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 90、箱体振幅 10.0、均量天数 50、0 轴带宽 0.5、出货日上限 关、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 142,
+    "win": 32.3944,
+    "mean": -0.3579
+   },
+   "E": {
+    "n": 6,
+    "win": 33.3333,
+    "mean": -0.7908
+   },
+   "J": {
+    "n": 8,
+    "win": 25.0,
+    "mean": 0.3437
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、均量天数 10、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 165,
+    "win": 41.2121,
+    "mean": 0.3453
+   },
+   "E": {
+    "n": 14,
+    "win": 28.5714,
+    "mean": -0.9349
+   },
+   "J": {
+    "n": 17,
+    "win": 41.1765,
+    "mean": 0.7986
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 1.2、均量天数 10、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、周线量比 1.3",
+   "J2": {
+    "n": 452,
+    "win": 35.6195,
+    "mean": -0.2472
+   },
+   "E": {
+    "n": 48,
+    "win": 47.9167,
+    "mean": 0.323
+   },
+   "J": {
+    "n": 51,
+    "win": 47.0588,
+    "mean": 0.6541
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、箱体振幅 20.0、均量天数 50、出货日上限 关",
+   "J2": {
+    "n": 3232,
+    "win": 37.0359,
+    "mean": -0.1598
+   },
+   "E": {
+    "n": 512,
+    "win": 42.9688,
+    "mean": 1.0137
+   },
+   "J": {
+    "n": 566,
+    "win": 38.3392,
+    "mean": 0.2045
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=1.5|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、箱体振幅 10.0、均量天数 50、MACD (8, 21)、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 1728,
+    "win": 35.5903,
+    "mean": -0.1447
+   },
+   "E": {
+    "n": 191,
+    "win": 38.2199,
+    "mean": 0.21
+   },
+   "J": {
+    "n": 298,
+    "win": 37.5839,
+    "mean": 0.0341
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 10.0、放量倍数 2.0、均量天数 10、MACD (8, 21)、0 轴带宽 2.0、上影上限 2.0",
+   "J2": {
+    "n": 124,
+    "win": 38.7097,
+    "mean": 0.025
+   },
+   "E": {
+    "n": 15,
+    "win": 40.0,
+    "mean": 0.6725
+   },
+   "J": {
+    "n": 12,
+    "win": 41.6667,
+    "mean": -0.6691
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "出货日上限 4、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 909,
+    "win": 36.1936,
+    "mean": -0.1906
+   },
+   "E": {
+    "n": 83,
+    "win": 42.1687,
+    "mean": 1.9483
+   },
+   "J": {
+    "n": 141,
+    "win": 48.227,
+    "mean": 0.5171
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 1.2、出货日上限 4、周线量比 关",
+   "J2": {
+    "n": 1547,
+    "win": 34.3245,
+    "mean": -0.0447
+   },
+   "E": {
+    "n": 170,
+    "win": 38.8235,
+    "mean": 1.3761
+   },
+   "J": {
+    "n": 253,
+    "win": 41.8972,
+    "mean": 0.3094
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 1722,
+    "win": 35.4239,
+    "mean": -0.1947
+   },
+   "E": {
+    "n": 231,
+    "win": 39.3939,
+    "mean": 0.3309
+   },
+   "J": {
+    "n": 271,
+    "win": 37.6384,
+    "mean": -0.0195
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=1.5|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、箱体振幅 10.0、均量天数 10、MACD (8, 21)、出货日上限 关、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 2231,
+    "win": 35.4998,
+    "mean": -0.0948
+   },
+   "E": {
+    "n": 268,
+    "win": 37.3134,
+    "mean": 0.1569
+   },
+   "J": {
+    "n": 404,
+    "win": 35.396,
+    "mean": -0.1529
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 40、箱体振幅 10.0、放量倍数 1.2、0 轴带宽 0.5、出货日上限 4、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 118,
+    "win": 33.0508,
+    "mean": -0.6176
+   },
+   "E": {
+    "n": 16,
+    "win": 50.0,
+    "mean": 1.9355
+   },
+   "J": {
+    "n": 10,
+    "win": 30.0,
+    "mean": -2.9558
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 90、箱体振幅 20.0、均量天数 50、MACD (8, 21)、0 轴带宽 2.0、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 3101,
+    "win": 36.4076,
+    "mean": -0.0896
+   },
+   "E": {
+    "n": 403,
+    "win": 43.6725,
+    "mean": 0.5185
+   },
+   "J": {
+    "n": 476,
+    "win": 40.7563,
+    "mean": 0.5381
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、箱体振幅 20.0、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 3936,
+    "win": 35.4167,
+    "mean": -0.2614
+   },
+   "E": {
+    "n": 608,
+    "win": 42.4342,
+    "mean": 0.5866
+   },
+   "J": {
+    "n": 706,
+    "win": 36.2606,
+    "mean": -0.142
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 90、放量倍数 2.0、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 300,
+    "win": 37.0,
+    "mean": 0.1056
+   },
+   "E": {
+    "n": 25,
+    "win": 28.0,
+    "mean": -0.685
+   },
+   "J": {
+    "n": 37,
+    "win": 29.7297,
+    "mean": 0.1961
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、箱体振幅 20.0、MACD (8, 21)、上影上限 2.0",
+   "J2": {
+    "n": 2222,
+    "win": 36.0486,
+    "mean": -0.1328
+   },
+   "E": {
+    "n": 380,
+    "win": 42.8947,
+    "mean": 0.8104
+   },
+   "J": {
+    "n": 374,
+    "win": 38.7701,
+    "mean": 0.1348
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、箱体振幅 20.0、出货日上限 4、上影上限 2.0",
+   "J2": {
+    "n": 671,
+    "win": 35.7675,
+    "mean": -0.202
+   },
+   "E": {
+    "n": 106,
+    "win": 48.1132,
+    "mean": 1.8269
+   },
+   "J": {
+    "n": 107,
+    "win": 35.514,
+    "mean": -0.4661
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "均量天数 50、MACD (8, 21)、0 轴带宽 2.0、出货日上限 关、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 1159,
+    "win": 36.0656,
+    "mean": -0.2035
+   },
+   "E": {
+    "n": 111,
+    "win": 36.036,
+    "mean": -0.0769
+   },
+   "J": {
+    "n": 126,
+    "win": 43.6508,
+    "mean": 0.6414
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 10.0、放量倍数 2.0、MACD (8, 21)、出货日上限 关、上影上限 2.0",
+   "J2": {
+    "n": 52,
+    "win": 36.5385,
+    "mean": -0.488
+   },
+   "E": {
+    "n": 1,
+    "win": 0.0,
+    "mean": -0.6556
+   },
+   "J": {
+    "n": 1,
+    "win": 0.0,
+    "mean": -4.5716
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "放量倍数 1.2、均量天数 50、MACD (8, 21)、0 轴带宽 2.0、上影上限 关",
+   "J2": {
+    "n": 3163,
+    "win": 35.2513,
+    "mean": -0.1971
+   },
+   "E": {
+    "n": 367,
+    "win": 37.0572,
+    "mean": 0.2713
+   },
+   "J": {
+    "n": 556,
+    "win": 38.4892,
+    "mean": 0.1619
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 20.0、出货日上限 4、上影上限 关",
+   "J2": {
+    "n": 596,
+    "win": 36.5772,
+    "mean": -0.1097
+   },
+   "E": {
+    "n": 81,
+    "win": 45.679,
+    "mean": 2.1804
+   },
+   "J": {
+    "n": 99,
+    "win": 38.3838,
+    "mean": -0.0463
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 1.2、MACD (8, 21)、0 轴带宽 0.5、出货日上限 4、上影上限 关",
+   "J2": {
+    "n": 424,
+    "win": 35.8491,
+    "mean": -0.1846
+   },
+   "E": {
+    "n": 38,
+    "win": 34.2105,
+    "mean": 0.5584
+   },
+   "J": {
+    "n": 67,
+    "win": 31.3433,
+    "mean": -1.0024
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "放量倍数 1.2、均量天数 10、出货日上限 4、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 1700,
+    "win": 34.1176,
+    "mean": -0.0062
+   },
+   "E": {
+    "n": 158,
+    "win": 32.2785,
+    "mean": 0.7118
+   },
+   "J": {
+    "n": 272,
+    "win": 42.2794,
+    "mean": 0.5388
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体振幅 20.0、放量倍数 2.0、均量天数 50、MACD (8, 21)、出货日上限 关、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 2092,
+    "win": 37.0937,
+    "mean": -0.3609
+   },
+   "E": {
+    "n": 247,
+    "win": 38.0567,
+    "mean": -0.081
+   },
+   "J": {
+    "n": 309,
+    "win": 41.4239,
+    "mean": 0.0313
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、均量天数 10、出货日上限 关、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 226,
+    "win": 40.708,
+    "mean": 0.1252
+   },
+   "E": {
+    "n": 18,
+    "win": 38.8889,
+    "mean": -1.056
+   },
+   "J": {
+    "n": 24,
+    "win": 37.5,
+    "mean": 0.238
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、出货日上限 关、周线量比 关",
+   "J2": {
+    "n": 4934,
+    "win": 35.8533,
+    "mean": -0.3155
+   },
+   "E": {
+    "n": 683,
+    "win": 39.5315,
+    "mean": 0.5244
+   },
+   "J": {
+    "n": 887,
+    "win": 39.6843,
+    "mean": 0.1579
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、放量倍数 1.2、均量天数 10、MACD (8, 21)、0 轴带宽 2.0、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 11918,
+    "win": 34.6619,
+    "mean": -0.1621
+   },
+   "E": {
+    "n": 1651,
+    "win": 39.2489,
+    "mean": 0.2956
+   },
+   "J": {
+    "n": 2280,
+    "win": 37.1491,
+    "mean": 0.066
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、放量倍数 1.2、出货日上限 关",
+   "J2": {
+    "n": 3881,
+    "win": 34.9652,
+    "mean": -0.26
+   },
+   "E": {
+    "n": 547,
+    "win": 38.9397,
+    "mean": 0.4418
+   },
+   "J": {
+    "n": 745,
+    "win": 36.2416,
+    "mean": 0.0624
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 20.0、均量天数 50、MACD (8, 21)、0 轴带宽 0.5、出货日上限 4",
+   "J2": {
+    "n": 379,
+    "win": 36.6755,
+    "mean": -0.3008
+   },
+   "E": {
+    "n": 43,
+    "win": 44.186,
+    "mean": 1.6001
+   },
+   "J": {
+    "n": 48,
+    "win": 33.3333,
+    "mean": -1.1694
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 2.0、MACD (8, 21)、0 轴带宽 0.5、周线量比 1.3",
+   "J2": {
+    "n": 155,
+    "win": 38.7097,
+    "mean": 0.333
+   },
+   "E": {
+    "n": 18,
+    "win": 44.4444,
+    "mean": -0.8383
+   },
+   "J": {
+    "n": 12,
+    "win": 33.3333,
+    "mean": -0.6149
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=1.5|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体振幅 10.0、均量天数 50、0 轴带宽 2.0、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 199,
+    "win": 36.1809,
+    "mean": 0.0214
+   },
+   "E": {
+    "n": 18,
+    "win": 66.6667,
+    "mean": 3.3341
+   },
+   "J": {
+    "n": 11,
+    "win": 36.3636,
+    "mean": 0.6649
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 40、箱体振幅 10.0、放量倍数 2.0、0 轴带宽 0.5、出货日上限 关、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 154,
+    "win": 35.0649,
+    "mean": -0.2796
+   },
+   "E": {
+    "n": 19,
+    "win": 63.1579,
+    "mean": 2.0585
+   },
+   "J": {
+    "n": 14,
+    "win": 21.4286,
+    "mean": -0.4959
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、箱体振幅 10.0、放量倍数 1.2、均量天数 50、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 97,
+    "win": 26.8041,
+    "mean": -0.8677
+   },
+   "E": {
+    "n": 4,
+    "win": 25.0,
+    "mean": -0.1579
+   },
+   "J": {
+    "n": 5,
+    "win": 60.0,
+    "mean": -0.0986
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 10.0、放量倍数 1.2、MACD (8, 21)、出货日上限 4",
+   "J2": {
+    "n": 77,
+    "win": 25.974,
+    "mean": -0.4296
+   },
+   "E": {
+    "n": 9,
+    "win": 22.2222,
+    "mean": -0.427
+   },
+   "J": {
+    "n": 8,
+    "win": 25.0,
+    "mean": 0.7998
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "放量倍数 1.2、0 轴带宽 2.0、出货日上限 4、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 2164,
+    "win": 34.2884,
+    "mean": -0.1368
+   },
+   "E": {
+    "n": 225,
+    "win": 35.5556,
+    "mean": 0.7714
+   },
+   "J": {
+    "n": 384,
+    "win": 42.9688,
+    "mean": 0.4386
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、箱体振幅 20.0、均量天数 10、MACD (8, 21)、0 轴带宽 2.0、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 543,
+    "win": 37.0166,
+    "mean": -0.0957
+   },
+   "E": {
+    "n": 63,
+    "win": 36.5079,
+    "mean": -0.7415
+   },
+   "J": {
+    "n": 68,
+    "win": 42.6471,
+    "mean": 1.1491
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 2.0、0 轴带宽 0.5、上影上限 关",
+   "J2": {
+    "n": 304,
+    "win": 40.4605,
+    "mean": 0.3378
+   },
+   "E": {
+    "n": 39,
+    "win": 41.0256,
+    "mean": 0.3507
+   },
+   "J": {
+    "n": 42,
+    "win": 45.2381,
+    "mean": 0.901
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 1.2、均量天数 50、出货日上限 4、上影上限 2.0",
+   "J2": {
+    "n": 677,
+    "win": 35.1551,
+    "mean": -0.1415
+   },
+   "E": {
+    "n": 83,
+    "win": 37.3494,
+    "mean": 0.8857
+   },
+   "J": {
+    "n": 106,
+    "win": 45.283,
+    "mean": 0.5087
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体振幅 10.0、放量倍数 1.2、均量天数 50、MACD (8, 21)、0 轴带宽 0.5、出货日上限 4、周线量比 1.3",
+   "J2": {
+    "n": 83,
+    "win": 20.4819,
+    "mean": -1.0155
+   },
+   "E": {
+    "n": 10,
+    "win": 50.0,
+    "mean": 1.8712
+   },
+   "J": {
+    "n": 3,
+    "win": 33.3333,
+    "mean": -0.0516
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、放量倍数 1.2、均量天数 10、0 轴带宽 2.0、上影上限 关",
+   "J2": {
+    "n": 3573,
+    "win": 35.6283,
+    "mean": -0.1147
+   },
+   "E": {
+    "n": 502,
+    "win": 38.247,
+    "mean": 0.1477
+   },
+   "J": {
+    "n": 731,
+    "win": 37.3461,
+    "mean": 0.2061
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、箱体振幅 10.0、放量倍数 2.0、均量天数 50、0 轴带宽 0.5、出货日上限 关、上影上限 关",
+   "J2": {
+    "n": 363,
+    "win": 39.1185,
+    "mean": -0.0619
+   },
+   "E": {
+    "n": 38,
+    "win": 52.6316,
+    "mean": 1.5959
+   },
+   "J": {
+    "n": 46,
+    "win": 36.9565,
+    "mean": -0.7405
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 90、放量倍数 2.0、均量天数 10、MACD (8, 21)、0 轴带宽 0.5、出货日上限 4、周线量比 关",
+   "J2": {
+    "n": 89,
+    "win": 31.4607,
+    "mean": -0.3034
+   },
+   "E": {
+    "n": 6,
+    "win": 16.6667,
+    "mean": -2.0736
+   },
+   "J": {
+    "n": 8,
+    "win": 50.0,
+    "mean": -0.2992
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、箱体振幅 20.0、均量天数 10、出货日上限 关、上影上限 2.0",
+   "J2": {
+    "n": 2144,
+    "win": 37.5933,
+    "mean": -0.1066
+   },
+   "E": {
+    "n": 349,
+    "win": 41.8338,
+    "mean": 0.7135
+   },
+   "J": {
+    "n": 379,
+    "win": 37.7309,
+    "mean": 0.1217
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 90、箱体振幅 10.0、放量倍数 2.0、均量天数 50、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 73,
+    "win": 36.9863,
+    "mean": -0.7564
+   },
+   "E": {
+    "n": 3,
+    "win": 0.0,
+    "mean": -0.7973
+   },
+   "J": {
+    "n": 3,
+    "win": 33.3333,
+    "mean": -1.7316
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 40、箱体振幅 10.0、放量倍数 1.2、出货日上限 关、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 718,
+    "win": 35.0975,
+    "mean": -0.2284
+   },
+   "E": {
+    "n": 67,
+    "win": 46.2687,
+    "mean": 0.9128
+   },
+   "J": {
+    "n": 82,
+    "win": 40.2439,
+    "mean": 0.7718
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 10.0、放量倍数 1.2、MACD (8, 21)、0 轴带宽 2.0、出货日上限 关、上影上限 关",
+   "J2": {
+    "n": 219,
+    "win": 29.6804,
+    "mean": -0.4476
+   },
+   "E": {
+    "n": 19,
+    "win": 31.5789,
+    "mean": -0.1219
+   },
+   "J": {
+    "n": 20,
+    "win": 30.0,
+    "mean": 0.2148
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "均量天数 50、0 轴带宽 0.5、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 1347,
+    "win": 37.4907,
+    "mean": -0.1886
+   },
+   "E": {
+    "n": 164,
+    "win": 39.6341,
+    "mean": 0.6447
+   },
+   "J": {
+    "n": 199,
+    "win": 39.6985,
+    "mean": -0.0108
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、放量倍数 2.0、均量天数 50、0 轴带宽 0.5、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 109,
+    "win": 37.6147,
+    "mean": 0.136
+   },
+   "E": {
+    "n": 7,
+    "win": 42.8571,
+    "mean": -0.8095
+   },
+   "J": {
+    "n": 12,
+    "win": 33.3333,
+    "mean": 0.2098
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 2.0、均量天数 50、MACD (8, 21)、0 轴带宽 2.0、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 497,
+    "win": 36.8209,
+    "mean": 0.0311
+   },
+   "E": {
+    "n": 53,
+    "win": 45.283,
+    "mean": -0.2068
+   },
+   "J": {
+    "n": 51,
+    "win": 43.1373,
+    "mean": 1.5727
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、箱体振幅 20.0、均量天数 10、0 轴带宽 2.0、出货日上限 4、上影上限 关",
+   "J2": {
+    "n": 1098,
+    "win": 36.612,
+    "mean": -0.0019
+   },
+   "E": {
+    "n": 191,
+    "win": 45.0262,
+    "mean": 1.0517
+   },
+   "J": {
+    "n": 193,
+    "win": 41.4508,
+    "mean": 0.5838
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、0 轴带宽 0.5、出货日上限 4、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 53,
+    "win": 33.9623,
+    "mean": -0.8004
+   },
+   "E": {
+    "n": 4,
+    "win": 50.0,
+    "mean": -0.1544
+   },
+   "J": {
+    "n": 4,
+    "win": 25.0,
+    "mean": -1.9091
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 90、放量倍数 1.2、MACD (8, 21)、出货日上限 关、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 2457,
+    "win": 34.9613,
+    "mean": -0.102
+   },
+   "E": {
+    "n": 233,
+    "win": 35.1931,
+    "mean": 0.2319
+   },
+   "J": {
+    "n": 398,
+    "win": 37.6884,
+    "mean": 0.1303
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=2.0|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体振幅 20.0、放量倍数 1.2、均量天数 50、MACD (8, 21)、0 轴带宽 2.0、出货日上限 关、周线量比 1.3",
+   "J2": {
+    "n": 3402,
+    "win": 35.244,
+    "mean": -0.3047
+   },
+   "E": {
+    "n": 409,
+    "win": 41.0758,
+    "mean": 0.4137
+   },
+   "J": {
+    "n": 536,
+    "win": 41.2313,
+    "mean": 0.1642
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 40、均量天数 50、0 轴带宽 2.0、出货日上限 关、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 1769,
+    "win": 37.9876,
+    "mean": -0.0634
+   },
+   "E": {
+    "n": 213,
+    "win": 43.662,
+    "mean": 0.4871
+   },
+   "J": {
+    "n": 247,
+    "win": 43.3198,
+    "mean": 0.8531
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=15.0|vol_mult=2.0|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "放量倍数 2.0、出货日上限 关、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 367,
+    "win": 39.2371,
+    "mean": 0.1266
+   },
+   "E": {
+    "n": 32,
+    "win": 53.125,
+    "mean": 0.9892
+   },
+   "J": {
+    "n": 45,
+    "win": 37.7778,
+    "mean": 0.9464
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 10.0、放量倍数 2.0",
+   "J2": {
+    "n": 42,
+    "win": 38.0952,
+    "mean": -0.6855
+   },
+   "E": {
+    "n": 1,
+    "win": 0.0,
+    "mean": -0.6556
+   },
+   "J": {
+    "n": 2,
+    "win": 50.0,
+    "mean": -2.2271
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 10.0、放量倍数 2.0、均量天数 10、出货日上限 4、上影上限 2.0",
+   "J2": {
+    "n": 44,
+    "win": 25.0,
+    "mean": -0.8969
+   },
+   "E": {
+    "n": 5,
+    "win": 40.0,
+    "mean": -0.2968
+   },
+   "J": {
+    "n": 3,
+    "win": 33.3333,
+    "mean": -2.2553
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、箱体振幅 20.0、放量倍数 2.0、0 轴带宽 2.0、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 3313,
+    "win": 37.0661,
+    "mean": -0.2428
+   },
+   "E": {
+    "n": 479,
+    "win": 42.38,
+    "mean": 0.3729
+   },
+   "J": {
+    "n": 552,
+    "win": 42.3913,
+    "mean": 0.5701
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=10.0|vol_mult=2.0|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 40、箱体振幅 10.0、放量倍数 2.0、MACD (8, 21)、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 222,
+    "win": 36.4865,
+    "mean": 0.0295
+   },
+   "E": {
+    "n": 26,
+    "win": 38.4615,
+    "mean": -0.0686
+   },
+   "J": {
+    "n": 22,
+    "win": 31.8182,
+    "mean": 0.3449
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=20|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 20.0、放量倍数 1.2、MACD (8, 21)、0 轴带宽 0.5、上影上限 2.0",
+   "J2": {
+    "n": 1723,
+    "win": 34.3006,
+    "mean": -0.2719
+   },
+   "E": {
+    "n": 219,
+    "win": 42.0091,
+    "mean": 0.4273
+   },
+   "J": {
+    "n": 306,
+    "win": 35.9477,
+    "mean": -0.2246
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=10.0|vol_mult=1.5|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体振幅 10.0、均量天数 50、0 轴带宽 2.0、出货日上限 4、上影上限 2.0",
+   "J2": {
+    "n": 136,
+    "win": 32.3529,
+    "mean": -0.4125
+   },
+   "E": {
+    "n": 20,
+    "win": 40.0,
+    "mean": 0.6105
+   },
+   "J": {
+    "n": 9,
+    "win": 44.4444,
+    "mean": -0.4738
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=2.0|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 2.0、0 轴带宽 2.0、出货日上限 4、上影上限 关",
+   "J2": {
+    "n": 290,
+    "win": 30.6897,
+    "mean": -0.5264
+   },
+   "E": {
+    "n": 28,
+    "win": 46.4286,
+    "mean": 1.0186
+   },
+   "J": {
+    "n": 45,
+    "win": 40.0,
+    "mean": 1.3146
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=20.0|vol_mult=1.2|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=0|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、箱体振幅 20.0、放量倍数 1.2、均量天数 10、MACD (8, 21)、出货日上限 关、上影上限 关、周线量比 1.3",
+   "J2": {
+    "n": 865,
+    "win": 36.5318,
+    "mean": -0.0763
+   },
+   "E": {
+    "n": 84,
+    "win": 45.2381,
+    "mean": 0.1231
+   },
+   "J": {
+    "n": 113,
+    "win": 44.2478,
+    "mean": 1.0383
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、均量天数 50、MACD (8, 21)、0 轴带宽 0.5、出货日上限 4",
+   "J2": {
+    "n": 128,
+    "win": 32.8125,
+    "mean": -0.6703
+   },
+   "E": {
+    "n": 14,
+    "win": 42.8571,
+    "mean": 0.8815
+   },
+   "J": {
+    "n": 15,
+    "win": 40.0,
+    "mean": -0.5434
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=10|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=6|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 90、均量天数 10、MACD (8, 21)、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 908,
+    "win": 37.1145,
+    "mean": -0.2
+   },
+   "E": {
+    "n": 82,
+    "win": 34.1463,
+    "mean": 0.073
+   },
+   "J": {
+    "n": 123,
+    "win": 41.4634,
+    "mean": 0.1986
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=10.0|vol_mult=1.2|vol_ma_n=10|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 90、箱体振幅 10.0、放量倍数 1.2、均量天数 10、0 轴带宽 0.5、上影上限 关",
+   "J2": {
+    "n": 107,
+    "win": 28.972,
+    "mean": -0.578
+   },
+   "E": {
+    "n": 3,
+    "win": 66.6667,
+    "mean": 1.5307
+   },
+   "J": {
+    "n": 5,
+    "win": 20.0,
+    "mean": 0.9424
+   }
+  },
+  {
+   "id": "range_n=90|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=50|macd=(8, 21)|macd_zero_band_pct=1.0|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=1.3",
+   "label": "箱体天数 90、均量天数 50、MACD (8, 21)、出货日上限 4、上影上限 2.0、周线量比 1.3",
+   "J2": {
+    "n": 135,
+    "win": 31.1111,
+    "mean": -0.729
+   },
+   "E": {
+    "n": 13,
+    "win": 46.1538,
+    "mean": 1.9837
+   },
+   "J": {
+    "n": 7,
+    "win": 28.5714,
+    "mean": -1.2613
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=20|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=0|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、0 轴带宽 2.0、出货日上限 关、周线量比 关",
+   "J2": {
+    "n": 6441,
+    "win": 35.9106,
+    "mean": -0.2923
+   },
+   "E": {
+    "n": 926,
+    "win": 38.8769,
+    "mean": 0.2761
+   },
+   "J": {
+    "n": 1199,
+    "win": 39.3661,
+    "mean": 0.0815
+   }
+  },
+  {
+   "id": "range_n=60|range_x_pct=20.0|vol_mult=1.5|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=2.0|max_distribution_days=4|max_upper_shadow_ratio=2.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体振幅 20.0、均量天数 50、0 轴带宽 2.0、出货日上限 4、上影上限 2.0、周线量比 关",
+   "J2": {
+    "n": 1883,
+    "win": 36.2188,
+    "mean": -0.0854
+   },
+   "E": {
+    "n": 259,
+    "win": 43.6293,
+    "mean": 0.9364
+   },
+   "J": {
+    "n": 335,
+    "win": 42.6866,
+    "mean": 0.8487
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.2|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=6|max_upper_shadow_ratio=3.0|min_weekly_vol_ratio=1.0",
+   "label": "箱体天数 40、放量倍数 1.2、均量天数 50、0 轴带宽 0.5",
+   "J2": {
+    "n": 1903,
+    "win": 36.4162,
+    "mean": -0.2094
+   },
+   "E": {
+    "n": 263,
+    "win": 38.7833,
+    "mean": 0.1929
+   },
+   "J": {
+    "n": 361,
+    "win": 36.0111,
+    "mean": -0.0911
+   }
+  },
+  {
+   "id": "range_n=40|range_x_pct=15.0|vol_mult=1.5|vol_ma_n=50|macd=(12, 26)|macd_zero_band_pct=0.5|max_distribution_days=4|max_upper_shadow_ratio=0.0|min_weekly_vol_ratio=0.0",
+   "label": "箱体天数 40、均量天数 50、0 轴带宽 0.5、出货日上限 4、上影上限 关、周线量比 关",
+   "J2": {
+    "n": 684,
+    "win": 35.5263,
+    "mean": -0.1838
+   },
+   "E": {
+    "n": 84,
+    "win": 44.0476,
+    "mean": 1.6752
+   },
+   "J": {
+    "n": 102,
+    "win": 44.1176,
+    "mean": 0.3958
+   }
+  }
+ ],
+ "star": "现行",
+ "pbo": {
+  "pbo": 0.6504,
+  "splits": 246,
+  "median_rank": 0.2335
+ },
+ "wf": {
+  "E_picks": [
+   [
+    2009,
+    "箱体振幅 20.0、放量倍数 2.0、均量天数 10、MACD (8, 21)、0 轴带宽 0.5、上影上限 2.0、周线量比 1.3"
+   ],
+   [
+    2010,
+    "箱体天数 40、箱体振幅 10.0、放量倍数 2.0、出货日上限 关、周线量比 关"
+   ],
+   [
+    2011,
+    "箱体天数 40、箱体振幅 10.0、放量倍数 2.0、均量天数 50、周线量比 关"
+   ],
+   [
+    2012,
+    "箱体振幅 10.0、均量天数 50、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 2.0、周线量比 关"
+   ],
+   [
+    2013,
+    "箱体振幅 20.0、出货日上限 4、上影上限 关"
+   ],
+   [
+    2014,
+    "箱体振幅 20.0、出货日上限 4、上影上限 关"
+   ],
+   [
+    2015,
+    "箱体振幅 20.0、出货日上限 4、上影上限 关"
+   ],
+   [
+    2016,
+    "箱体振幅 20.0、出货日上限 4、上影上限 关"
+   ]
+  ],
+  "E": {
+   "wf": {
+    "n": 55,
+    "win": 45.4545,
+    "mean": 1.0965
+   },
+   "cur": {
+    "n": 106,
+    "win": 43.3962,
+    "mean": 0.9536
+   },
+   "dwin": 2.0583,
+   "dmean": 0.1429
+  },
+  "J2_picks": [
+   [
+    2019,
+    "箱体振幅 10.0、均量天数 50、MACD (8, 21)、0 轴带宽 0.5、出货日上限 关、上影上限 2.0、周线量比 关"
+   ],
+   [
+    2020,
+    "箱体天数 90、放量倍数 1.2、MACD (8, 21)、0 轴带宽 0.5、上影上限 2.0、周线量比 关"
+   ],
+   [
+    2021,
+    "箱体天数 90、放量倍数 1.2、MACD (8, 21)、0 轴带宽 0.5、上影上限 2.0、周线量比 关"
+   ],
+   [
+    2022,
+    "箱体天数 90、放量倍数 1.2、MACD (8, 21)、0 轴带宽 0.5、上影上限 2.0、周线量比 关"
+   ],
+   [
+    2023,
+    "箱体天数 90"
+   ],
+   [
+    2024,
+    "箱体天数 90"
+   ],
+   [
+    2025,
+    "箱体天数 90"
+   ],
+   [
+    2026,
+    "均量天数 10"
+   ]
+  ],
+  "J2": {
+   "wf": {
+    "n": 578,
+    "win": 33.045,
+    "mean": -0.4046
+   },
+   "cur": {
+    "n": 834,
+    "win": 37.8897,
+    "mean": 0.0835
+   },
+   "dwin": -4.8447,
+   "dmean": -0.4881
+  },
+  "J": {
+   "wf": {
+    "n": 91,
+    "win": 36.2637,
+    "mean": -0.4951
+   },
+   "cur": {
+    "n": 136,
+    "win": 43.3824,
+    "mean": 0.7238
+   },
+   "dwin": -7.1186,
+   "dmean": -1.2189
+  }
+ },
+ "useful": false,
+ "confirm": {
+  "verdict": "不做（P* = 现行）"
+ }
+}

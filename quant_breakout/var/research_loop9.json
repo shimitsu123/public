@@ -1,0 +1,405 @@
+{
+ "title": "第九个研究循环：选股成功率 —— 直到找到比现在（B3）更好的选股规则才停",
+ "start": "2026-10-04",
+ "registered": "1e75ebc",
+ "user_request": "分析胜率低的原因 继续研究提高选股成功率 一直循环到 比现阶段的更好（2026-10-04 傍晚）",
+ "rules": "scripts/research_loop9.py 开头（基准 B3、题目只限选股、第一关 S1〜S8、第二关、上限、家族、ID 不重用、停下的情况）",
+ "status": "ended:用户决定",
+ "cap": 20,
+ "family_cap": 3,
+ "family_prefix": "选股",
+ "kinds": [
+  "stock",
+  "date",
+  "rank",
+  "pool"
+ ],
+ "criteria": {
+  "sum_min": 0.03,
+  "era_tol": 0.02,
+  "dd_tol_pp": 2.0,
+  "placebo_n": 400,
+  "stage1": "research_loop2.stage1（S1〜S7）+ S8 选股成功率不降（三个年代按笔数加权的个股胜率差 ≥ 0 且每笔净收益差 ≥ 0）",
+  "stage2": {
+   "stock": "每个年代按候选实际挡掉的比例逐个信号随机挡（种子 numpy.random.default_rng([20261004, s])，400 次）",
+   "date": "每个年代把挡 / 不挡的日序列整体循环平移 k ∈ [250, N − 250] 天（种子 [20261004, s]，400 次）",
+   "rank / pool": "那一轮第二关登记时写定（同样多、同样形状的随机改动）"
+  },
+  "rule": "候选的 Calmar 差合计严格大于 400 次里的最大值（有算不出的 = 不过）"
+ },
+ "baseline_def": "B3 = 模拟盘 / 执行器现在的规则（W2 + C 留一年代 + X6 + 判断层 + Q1B；scripts/loop6_common.load3）；J 到 2026-09-30",
+ "baseline": {
+  "Z": {
+   "cagr": 17.07,
+   "dd": -14.29,
+   "calmar": 1.194,
+   "n": 35,
+   "mean": 5.999,
+   "win": 65.7,
+   "h1": 1.422,
+   "h2": 1.722
+  },
+  "E": {
+   "cagr": 14.53,
+   "dd": -23.19,
+   "calmar": 0.627,
+   "n": 43,
+   "mean": 1.286,
+   "win": 41.9,
+   "h1": 0.215,
+   "h2": 1.479
+  },
+  "J": {
+   "cagr": 20.02,
+   "dd": -29.61,
+   "calmar": 0.676,
+   "n": 62,
+   "mean": 3.057,
+   "win": 48.4,
+   "h1": 0.722,
+   "h2": 0.79
+  }
+ },
+ "success": {
+  "n": 140,
+  "win": 50.72857142857143,
+  "mean": 3.24855
+ },
+ "prereq_ok": true,
+ "fingerprint": "3b2e8757be7b4a74",
+ "rounds": [
+  {
+   "round": 1,
+   "date": "2026-10-04",
+   "title": "进场时的大盘状态：ADH 騰落レシオ ≥ 120 / N5D 日経在 50 日线下",
+   "registered": "c3b06fa（修正 9713917）",
+   "script": "scripts/loop9_r01_market.py",
+   "output": "var/out/loop9_r01_market.md",
+   "approaches": [
+    {
+     "id": "ADH",
+     "family": "选股·大盘过热（逆向）",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.26,
+     "passed": 3,
+     "d": {
+      "Z": -0.298,
+      "E": 0.003,
+      "J": 0.035
+     },
+     "success": {
+      "win": 51.05,
+      "mean": 3.878
+     }
+    },
+    {
+     "id": "N5D",
+     "family": "选股·大盘短期趋势（顺向）",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": 0.01,
+     "passed": 4,
+     "d": {
+      "Z": -0.035,
+      "E": 0.047,
+      "J": -0.002
+     },
+     "success": {
+      "win": 53.75,
+      "mean": 3.675
+     }
+    }
+   ]
+  },
+  {
+   "round": 2,
+   "date": "2026-10-04",
+   "title": "大盘带动的突破 BXT / 美股在 50 日线下 S5D",
+   "registered": "235ff00",
+   "script": "scripts/loop9_r02_marketday.py",
+   "output": "var/out/loop9_r02_marketday.md",
+   "approaches": [
+    {
+     "id": "BXT",
+     "family": "选股·假突破（大盘带动）",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": 0.022,
+     "passed": 5,
+     "d": {
+      "Z": -0.011,
+      "E": 0.016,
+      "J": 0.017
+     },
+     "success": {
+      "win": 51.66,
+      "mean": 3.513
+     }
+    },
+    {
+     "id": "S5D",
+     "family": "选股·大盘短期趋势（顺向）",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.049,
+     "passed": 3,
+     "d": {
+      "Z": -0.049,
+      "E": 0.0,
+      "J": 0.0
+     },
+     "success": {
+      "win": 48.82,
+      "mean": 2.907
+     }
+    }
+   ]
+  },
+  {
+   "round": 3,
+   "date": "2026-10-04",
+   "title": "日本相对核心 JRC / 开盘追高 GPT",
+   "registered": "f32c708",
+   "script": "scripts/loop9_r03_relative.py",
+   "output": "var/out/loop9_r03_relative.md",
+   "approaches": [
+    {
+     "id": "JRC",
+     "family": "选股·日本相对核心",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.232,
+     "passed": 5,
+     "d": {
+      "Z": -0.234,
+      "E": -0.013,
+      "J": 0.015
+     },
+     "success": {
+      "win": 67.32,
+      "mean": 5.609
+     }
+    },
+    {
+     "id": "GPT",
+     "family": "选股·开盘追高",
+     "kind": "stock",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": 0.041,
+     "passed": 7,
+     "d": {
+      "Z": 0.034,
+      "E": -0.002,
+      "J": 0.009
+     },
+     "success": {
+      "win": 51.87,
+      "mean": 3.484
+     }
+    }
+   ]
+  },
+  {
+   "round": 4,
+   "date": "2026-10-04",
+   "title": "业种宽度 SBW（AGE 是第四个循环 BAS 的事后变体 → 不登记）",
+   "registered": "c92a4de",
+   "script": "scripts/loop9_r04_base.py",
+   "output": "var/out/loop9_r04_base.md",
+   "approaches": [
+    {
+     "id": "SBW",
+     "family": "选股·业种宽度",
+     "kind": "stock",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": 0.039,
+     "passed": 5,
+     "d": {
+      "Z": 0.0,
+      "E": -0.003,
+      "J": 0.042
+     },
+     "success": {
+      "win": 50.4,
+      "mean": 3.313
+     }
+    }
+   ]
+  },
+  {
+   "round": 5,
+   "date": "2026-10-04",
+   "title": "日経短期过热 N25U / 日経在回调中 NDD",
+   "registered": "77651b2",
+   "script": "scripts/loop9_r05_marketext.py",
+   "output": "var/out/loop9_r05_marketext.md",
+   "approaches": [
+    {
+     "id": "N25U",
+     "family": "选股·大盘过热（逆向）",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.154,
+     "passed": 3,
+     "d": {
+      "Z": -0.166,
+      "E": 0.002,
+      "J": 0.01
+     },
+     "success": {
+      "win": 48.41,
+      "mean": 3.311
+     }
+    },
+    {
+     "id": "NDD",
+     "family": "选股·大盘短期趋势（顺向）",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.027,
+     "passed": 4,
+     "d": {
+      "Z": -0.028,
+      "E": -0.002,
+      "J": 0.003
+     },
+     "success": {
+      "win": 52.38,
+      "mean": 3.281
+     }
+    }
+   ]
+  },
+  {
+   "round": 6,
+   "date": "2026-10-04",
+   "title": "大盘出货日 MDD / 短期反转 RVS",
+   "registered": "192c1d3",
+   "script": "scripts/loop9_r06_distrev.py",
+   "output": "var/out/loop9_r06_distrev.md",
+   "approaches": [
+    {
+     "id": "MDD",
+     "family": "选股·大盘出货日",
+     "kind": "date",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.018,
+     "passed": 5,
+     "d": {
+      "Z": -0.044,
+      "E": 0.02,
+      "J": 0.006
+     },
+     "success": {
+      "win": 55.23,
+      "mean": 3.893
+     }
+    },
+    {
+     "id": "RVS",
+     "family": "选股·短期反转",
+     "kind": "stock",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": 0.001,
+     "passed": 5,
+     "d": {
+      "Z": 0.0,
+      "E": -0.001,
+      "J": 0.002
+     },
+     "success": {
+      "win": 51.47,
+      "mean": 3.34
+     }
+    }
+   ]
+  },
+  {
+   "round": 7,
+   "date": "2026-10-04",
+   "title": "隔夜情绪 ONS / 成交额波动 LVV（文献检索后剩下的弱候选）",
+   "registered": "a693d0c",
+   "script": "scripts/loop9_r07_sentliq.py",
+   "output": "var/out/loop9_r07_sentliq.md",
+   "approaches": [
+    {
+     "id": "ONS",
+     "family": "选股·隔夜情绪",
+     "kind": "stock",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": 0.007,
+     "passed": 5,
+     "d": {
+      "Z": 0.0,
+      "E": 0.0,
+      "J": 0.007
+     },
+     "success": {
+      "win": 50.72,
+      "mean": 3.301
+     }
+    },
+    {
+     "id": "LVV",
+     "family": "选股·成交额波动",
+     "kind": "stock",
+     "posthoc": false,
+     "verdict": "第一关不过",
+     "sum": -0.002,
+     "passed": 5,
+     "d": {
+      "Z": -0.011,
+      "E": -0.001,
+      "J": 0.01
+     },
+     "success": {
+      "win": 52.25,
+      "mean": 3.486
+     }
+    }
+   ]
+  }
+ ],
+ "stopped": {
+  "date": "2026-10-04",
+  "used": 13,
+  "reason": "先验想法用完（文献检索也确认）：剩下的只有事后变体（选股没有没看过的数据、S7 过不了）或新数据 / 改评判标准 → 要用户决定（待办〔56〕）",
+  "closest": [
+   {
+    "round": 3,
+    "id": "GPT",
+    "verdict": "第一关不过",
+    "sum": 0.041,
+    "passed": 7
+   },
+   {
+    "round": 4,
+    "id": "SBW",
+    "verdict": "第一关不过",
+    "sum": 0.039,
+    "passed": 5
+   },
+   {
+    "round": 2,
+    "id": "BXT",
+    "verdict": "第一关不过",
+    "sum": 0.022,
+    "passed": 5
+   }
+  ]
+ },
+ "ended": "2026-10-04 晚 用户（待办〔56〕）选 ③「胜率提高、账户不变差也算更好之类的也可以，继续研究」→ 第九个研究循环结束（13 / 20、按它自己的标准没找到；最接近 GPT / SBW / BXT）；按用户的新标准另开第十个研究循环（scripts/research_loop10.py，重新计数）；模拟盘与执行器不变（B3）"
+}

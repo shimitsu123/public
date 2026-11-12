@@ -1,0 +1,108 @@
+{
+ "quarter": "2026Q2",
+ "period": "2026 年 4〜6 月期",
+ "avail": "2026-09-30",
+ "asof": "2026-09-30",
+ "total_growth": 3.7,
+ "share_up": [
+  {
+   "industry": "その他金融業",
+   "v": 29.0,
+   "share": 5.6,
+   "growth": 32.7
+  },
+  {
+   "industry": "鉄鋼",
+   "v": 17.0,
+   "share": 3.1,
+   "growth": 20.7
+  },
+  {
+   "industry": "建設業",
+   "v": 14.2,
+   "share": 2.5,
+   "growth": 17.9
+  },
+  {
+   "industry": "サービス業",
+   "v": 8.6,
+   "share": 6.4,
+   "growth": 12.3
+  },
+  {
+   "industry": "電気・ガス業",
+   "v": 6.6,
+   "share": 11.8,
+   "growth": 10.3
+  }
+ ],
+ "share_down": [
+  {
+   "industry": "電気機器",
+   "v": -21.9,
+   "share": 6.5,
+   "growth": -18.2
+  },
+  {
+   "industry": "倉庫・運輸関連業",
+   "v": -17.5,
+   "share": 2.2,
+   "growth": -13.8
+  },
+  {
+   "industry": "不動産業",
+   "v": -14.2,
+   "share": 6.1,
+   "growth": -10.5
+  },
+  {
+   "industry": "輸送用機器",
+   "v": -11.0,
+   "share": 7.9,
+   "growth": -7.3
+  },
+  {
+   "industry": "卸売業",
+   "v": -5.3,
+   "share": 2.6,
+   "growth": -1.6
+  }
+ ],
+ "flow_up": [
+  {
+   "industry": "輸送用機器",
+   "v": 1.7
+  },
+  {
+   "industry": "機械",
+   "v": 1.4
+  },
+  {
+   "industry": "精密機器",
+   "v": 1.3
+  },
+  {
+   "industry": "情報・通信業",
+   "v": 0.9
+  },
+  {
+   "industry": "電気機器",
+   "v": 0.9
+  }
+ ],
+ "flow_down": [
+  {
+   "industry": "不動産業",
+   "v": -0.6
+  },
+  {
+   "industry": "水産・農林業",
+   "v": -0.3
+  }
+ ],
+ "n_ind": 27,
+ "n_small": 7,
+ "min_share": 1.0,
+ "source": "財務省 法人企業統計調査 季報（資本金 10 億円以上、原数值；e-Stat 0003060191）+ 2020 年 固定資本マトリックス（var/invest_fcm_2020.json）",
+ "note": "研究（登记 5db014b，var/out/invest_flow_study.md）：占比趋势（T1）、投资的钱流向（T2）预测不了之后 3 个月的行业收益，美国复现（T3）也不成立；投资带动的原材料价格多在同一季度就一起动 → 只作背景"
+}

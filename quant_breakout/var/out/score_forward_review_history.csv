@@ -1,0 +1,9 @@
+run,scope,logged,closed,checkpoint,auc_F2,auc_vol,auc_ind_mom20,auc_ind_mom60,auc_rel_ind60,auc_F1,auc_F3,auc_F4,auc_F5,auc_breakout,auc_x2,w2_year,w2_diff,w2_lo95,w2_hi95,w2_lo99,w2_hi99,w2_alarm,w2_confirmed,idio_year,idio_diff,idio_lo95,idio_hi95,idio_lo99,idio_hi99,idio_alarm,idio_confirmed,x6_diff,x6_lo95,x6_hi95,x6_lo99,x6_hi99,x6_confirmed,x6_refuted,r4_dwin,r4_dwin_lo99,r4_dwin_hi95,r4_dmean,r4_dmean_lo95,r4_dmean_hi95,r4_confirmed,r4_refuted,cc_year,cc_diff,cc_lo95,cc_hi95,cc_lo99,cc_hi99,cc_enough,cc_alarm,cc_confirmed
+2026-10-12,combined,6,2,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+2026-10-12,N225,6,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+2026-10-12,W2,6,2,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+2026-10-12,K2,6,2,,,,,,,,,,,,,,,,,,,,,,-0.273,-0.273,-0.273,-0.273,-0.273,,,,,,,,,,,,,,,,,,,,,,,,,,
+2026-10-12,USW,6,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+2026-10-12,X6,6,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+2026-10-12,R4,6,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+2026-10-12,CC,6,0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
