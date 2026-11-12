@@ -148,6 +148,9 @@ def _fetch_sched(today: dt.date) -> pd.DataFrame | None:
     import os
     if not os.environ.get("JQUANTS_API_KEY"):
         return None
+    from .jquants import has_recent
+    if not has_recent():                                     # Free 档（2026-11-12 起）没有近期的决算日程 → 全部 Yahoo
+        return None
     try:
         from .calendar_jp import next_trading_day
         from .jquants import JQuants

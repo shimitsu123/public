@@ -2422,7 +2422,7 @@ def _jq_scope() -> tuple[set[str], dict[str, str], list[str]]:
 
 
 def cmd_jq_live(a) -> int:
-    """J-Quants（Standard）每天的新数据 → 对项目有用的信息（只展示 / 研究，不改交易）：决算日程、会社予想修正、日々公表信用残、
+    """J-Quants（Light 以上；Free 档跳过）每天的新数据 → 对项目有用的信息（只展示 / 研究，不改交易）：决算日程、会社予想修正、日々公表信用残、
     空売り残高報告、真实一手、拆股、上市一览变化、海外投資家。营业日 19:30 取当天、次日 07:05 取確報与补取（scripts/install_launchd_jquants.sh）。"""
     import datetime as _dt
     from qbreak import jq_live as JL
@@ -2435,6 +2435,10 @@ def cmd_jq_live(a) -> int:
         if a.phase == "morning":
             from qbreak.calendar_jp import next_trading_day
             now = _dt.datetime.combine(next_trading_day(d), _dt.time(7, 5), JST)
+    from qbreak.jquants import FREE_NOTE, has_recent
+    if not has_recent():                                         # Free 档没有当天数据（2026-11-12 用户改 Free）→ 不取
+        print(f"跳过：{FREE_NOTE}；要恢复每天的取数 = 升级到 Light 以上并设 JQUANTS_PLAN（见 MACOS.md §1.9）")
+        return 0
     uni, tags, watch = _jq_scope()
     cl = JQuants()
     d = JL.run_now(cl, now, uni, tags, watch)
@@ -2485,6 +2489,9 @@ def _sector_influence(era_q: dict) -> dict:
     import os
     if not os.environ.get("JQUANTS_API_KEY"):
         return {"error": "没有 JQUANTS_API_KEY"}
+    from qbreak.jquants import FREE_NOTE, has_recent
+    if not has_recent():
+        return {"error": f"{FREE_NOTE}（東証業種別指数要 Standard 以上）"}
     try:
         import pandas as pd
 

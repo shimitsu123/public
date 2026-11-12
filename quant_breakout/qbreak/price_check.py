@@ -189,6 +189,9 @@ def run(data: dict[str, pd.DataFrame], today: dt.date, client=None, fetch=None, 
         if client is None:
             if not os.environ.get("JQUANTS_API_KEY"):
                 return {**out, "skipped": "没有设置 JQUANTS_API_KEY（云端环境设置 / Mac 钥匙串）"}
+            from .jquants import FREE_NOTE, has_recent
+            if not has_recent():
+                return {**out, "skipped": FREE_NOTE}
             from .jquants import JQuantsError
             try:
                 client = make_client()

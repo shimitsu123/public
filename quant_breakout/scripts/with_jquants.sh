@@ -11,5 +11,5 @@ if [ -z "${JQUANTS_API_KEY:-}" ]; then
   echo "★ 没有 J-Quants キー：在终端运行 security add-generic-password -s qbreak-jquants -a qbreak -w（回车后输入キー，不显示、不留在历史里）"
   exit 3
 fi
-export JQUANTS_API_KEY JQUANTS_PLAN="${JQUANTS_PLAN:-standard}"
+export JQUANTS_API_KEY JQUANTS_PLAN="${JQUANTS_PLAN:-free}"
 exec "$@"

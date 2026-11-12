@@ -26,6 +26,19 @@ log = setup_logging("jquants")
 API = "https://api.jquants.com/v2"
 RATE_PER_MIN = {"free": 5, "light": 60, "standard": 120, "premium": 500}
 HISTORY_YEARS = {"free": 2, "light": 5, "standard": 10, "premium": 20}
+# 2026-11-12 用户把订阅改成 Free（实测：日线只能取 2024-08-20 ～ 2026-08-20；TOPIX / 信用 / 空売り / 投資部門別 403）。
+# Free 没有近期数据 → 每天的取数（jq_live）、决算日程现取、行情交叉核对、業種影响占比都跳过（只有研究用的旧数据还能取）。
+FREE_NOTE = "J-Quants 是 Free 档：数据最新只到约 12 周前，没有当天 / 近期数据（2026-11-12 起）"
+
+
+def plan_name() -> str:
+    """当前档位：环境变量 JQUANTS_PLAN（free / light / standard / premium），不设 = free。"""
+    return (os.environ.get("JQUANTS_PLAN") or "free").strip().lower()
+
+
+def has_recent(plan: str | None = None) -> bool:
+    """这个档位能不能取近期（当天）数据：Free 延迟 12 周 → False。"""
+    return (plan or plan_name()) != "free"
 
 
 class JQuantsError(RuntimeError):
@@ -49,7 +62,7 @@ class JQuants:
         self.key = api_key if api_key is not None else os.environ.get("JQUANTS_API_KEY", "")
         if not self.key:
             raise JQuantsError("没有设置 JQUANTS_API_KEY（在 J-Quants 仪表盘发行 API キー，放进环境变量；不要写进仓库）")
-        self.plan = (plan or os.environ.get("JQUANTS_PLAN") or "free").lower()
+        self.plan = (plan or plan_name()).lower()
         if self.plan not in RATE_PER_MIN:
             raise JQuantsError(f"JQUANTS_PLAN={self.plan} 无效（free / light / standard / premium）")
         self.min_interval = 60.0 / RATE_PER_MIN[self.plan] * 1.05

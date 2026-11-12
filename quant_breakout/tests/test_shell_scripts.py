@@ -147,10 +147,19 @@ def test_scripts_print_chinese_after_variables_without_dying(tmp_path, locales, 
     assert "unbound variable" not in err, err
     out, err = _bash(env, "scripts/install_launchd_news.sh", "uninstall")
     assert "已卸载 com.qbreak.news" in out and not plist.exists()
-    out, err = _bash(env, "scripts/install_launchd_jquants.sh")               # J-Quants：周一至五 19:30 + 07:05
+    out, err = _bash({**env, "JQUANTS_PLAN": "standard"}, "scripts/install_launchd_jquants.sh")   # J-Quants：周一至五 19:30 + 07:05
     assert "unbound variable" not in err, err
     jp = tmp_path / "agents" / "com.qbreak.jquants.plist"
     assert "已注册 com.qbreak.jquants：" in out and jp.read_text(encoding="utf-8").count("<key>Weekday</key>") == 10
+    assert "<key>JQUANTS_PLAN</key><string>standard</string>" in jp.read_text(encoding="utf-8")
+    (tmp_path / "lh" / "out").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "lh" / "out" / "jq_today.json").write_text("{}", encoding="utf-8")
+    e2 = {k: v for k, v in env.items() if k != "JQUANTS_PLAN"}
+    out, err = _bash(e2, "scripts/install_launchd_jquants.sh")                # Free 档（默认，2026-11-12 起）→ 卸掉、删过时的整理结果
+    assert "unbound variable" not in err, err
+    assert "已卸载 com.qbreak.jquants" in out and "Free 档" in out and not jp.exists()
+    assert not (tmp_path / "lh" / "out" / "jq_today.json").exists()
+    _bash({**env, "JQUANTS_PLAN": "standard"}, "scripts/install_launchd_jquants.sh")
     out, err = _bash({**env, "JQUANTS_API_KEY": ""}, "scripts/liveu.sh", "jq")   # 没有キー → 说明怎么放进钥匙串（不回显任何值）
     assert "unbound variable" not in err, err
     assert "钥匙串里没有 qbreak-jquants" in out

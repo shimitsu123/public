@@ -368,7 +368,8 @@ def interest_html(v: dict | None, top: int | None = None) -> str:
 
 def jq_html(j: dict | None) -> str:
     if not j:
-        return '<p class="muted">还没有 J-Quants 数据（钥匙串里放好キー后运行 scripts/install_launchd_jquants.sh）</p>'
+        return ('<p class="muted">没有 J-Quants 的当天数据：订阅是 Free 档（2026-11-12 起；数据最新只到约 12 周前）→ 每天的取数停了，'
+                '决算日程用 Yahoo。升级到 Light 以上再设 JQUANTS_PLAN、重跑 scripts/install_launchd_jquants.sh 就恢复。</p>')
     es = j.get("earnings_soon") or []
     mine = [e for e in es if e.get("tag") != "股票池"]
     # 代码 + 名字（2026-10-15 用户：只写代码不知道是哪只）：qbreak/names.py → 这份整理结果里 J-Quants 的 CoName（这页只在 Mac 上、
@@ -391,7 +392,7 @@ def jq_html(j: dict | None) -> str:
     parts = [f"<p>{escape(str(j.get('day')))} 的数据（{escape(str(j.get('phase') or ''))}，{escape(str(j.get('generated') or ''))} 取）："
              f"股票池 10 个营业日内要发表决算的 <b>{len(es)} 只</b>，其中持仓 / 候补 {len(mine)} 只。</p>"]
     if rows:
-        parts.append("<div class='scroll'><table><tr><th>代码</th><th>决算日</th><th>区分</th><th>标签</th><th>Yahoo 日程（执行器现在用的）</th></tr>"
+        parts.append("<div class='scroll'><table><tr><th>代码</th><th>决算日</th><th>区分</th><th>标签</th><th>Yahoo 日程（J-Quants 里没有时执行器用它）</th></tr>"
                      f"{rows}</table></div>")
     rv = j.get("revisions") or []
     if rv:

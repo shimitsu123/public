@@ -323,7 +323,12 @@ bash ~/qbreak-src/quant_breakout/scripts/liveu.sh news --open
 
 ## 1.9 J-Quants 每天的新数据（周一至五 19:30 + 07:05；2026-09-26 起，只作展示 / 研究，不改交易）
 
-キー（Standard 方案）只放钥匙串，**不贴进聊天、不写进文件**。在「终端」里运行这一行，回车后输入キー（屏幕上不显示、不留在历史里）：
+> **2026-11-12 起订阅是 Free**：Free 的数据最新只到约 12 周前，这一节的每天取数**停用**（`install_launchd_jquants.sh` / `mac_setup.sh`
+> 在 Free 档卸掉 `com.qbreak.jquants`、删掉过时的 `out/jq_today.json`、`out/fins_view.json`）；执行器「决算前不买」的日程全用 Yahoo，
+> 行情交叉核对与業種影响占比写「Free 档」跳过。档位 = 环境变量 `JQUANTS_PLAN`（不设 = free）。以后升级到 Light 以上：`~/.zshrc` 里加
+> `export JQUANTS_PLAN=light`（或 standard / premium），再跑 `bash ~/qbreak-src/quant_breakout/scripts/mac_setup.sh`，下面的内容就恢复。
+
+キー只放钥匙串，**不贴进聊天、不写进文件**。在「终端」里运行这一行，回车后输入キー（屏幕上不显示、不留在历史里）：
 
 ```bash
 security add-generic-password -s qbreak-jquants -a qbreak -w

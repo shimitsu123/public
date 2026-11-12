@@ -103,6 +103,10 @@ def panel(tickers, asof: dt.date, client=None, fetch: bool = True) -> dict:
     """日报用：{"asof", "states": {ticker: {...}}, "errors": {...}}。没有 JQUANTS_API_KEY → 只用缓存（没有缓存就报原因）。"""
     want = sorted({t for t in tickers if code5(t)})
     out: dict = {"asof": asof.isoformat(), "states": {}, "errors": {}}
+    from .jquants import FREE_NOTE, has_recent
+    if client is None and fetch and os.environ.get("JQUANTS_API_KEY") and not has_recent():   # Free 档：最新只到 12 周前 → 只用缓存
+        out["note"] = f"{FREE_NOTE}：只用缓存"
+        fetch = False
     if client is None and fetch and os.environ.get("JQUANTS_API_KEY"):
         try:
             from .jquants import JQuants

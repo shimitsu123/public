@@ -555,7 +555,8 @@ cmd_check() {
   fi
   if is_repo "$r"; then
     today="$(today_jst)"
-    log="$(git -C "$r" log --since='21 days ago' --format='%ct%x09%s' "$ref" 2>/dev/null || true)"
+    since="$("$PY" -c 'import datetime as d, sys; print(d.date.fromisoformat(sys.argv[1]) - d.timedelta(days=21))' "$today" 2>/dev/null || echo '21 days ago')"
+    log="$(git -C "$r" log --since="$since" --format='%ct%x09%s' "$ref" 2>/dev/null || true)"   # 从「今天」往前 21 天（不用真实时钟：测试固定今天）
     echo
     echo "最近 5 个工作日（看 $(show "$(real "$r")") 上次拉到的远端记录${upd}；Mac = 本机任务、云端 = 以前的云端例行任务（2026-10-19 删了）；— = 没有）："
     printf '%s\n' "$log" | pyq table "$today" 5 2>/dev/null | sed 's/^/  /' || echo "  （读不出）"

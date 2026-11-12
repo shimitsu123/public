@@ -141,6 +141,7 @@ def test_derive_and_text(isolated_home):
 def test_cmd_jq_live_offline(isolated_home, monkeypatch, capsys):
     import run
     import qbreak.jquants
+    monkeypatch.setenv("JQUANTS_PLAN", "standard")                     # Free 档（默认）会跳过：这里测 Light 以上的路径
     monkeypatch.setattr(qbreak.jquants, "JQuants", lambda *a, **k: _client())
     assert run.main(["jq-live", "--date", "2026-09-25"]) == 0
     out = capsys.readouterr().out

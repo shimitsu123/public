@@ -88,7 +88,7 @@ fi
 # ③ 市场仪表盘 + 经济威胁提醒
 bash "$PROJ/scripts/install_launchd_news.sh"
 
-# ④ J-Quants 定时取数（キー在钥匙串里才装）
+# ④ J-Quants 定时取数（キー在钥匙串里才装；Free 档 = 不装、卸掉已有的，见 install_launchd_jquants.sh）
 if command -v security >/dev/null 2>&1 && security find-generic-password -s qbreak-jquants -a qbreak >/dev/null 2>&1; then
   bash "$PROJ/scripts/install_launchd_jquants.sh"
 else

@@ -442,6 +442,7 @@ TOPIX-17 业种 ETF 成交太稀（1629.T 有 1,598 天零价格），不用。F
 1. 在 https://jpx-jquants.com/ 注册 → 选套餐（先用 Free 验证；做 20 年回测时再升级，见下表）
 2. 仪表盘（ダッシュボード）→ 发行 **API キー**（无有效期）→ 只复制，不要发到聊天、不要写进仓库
 3. 放进环境变量：
+   - 档位 `JQUANTS_PLAN`（free / light / standard / premium）不设 = free（2026-11-12 起用户是 Free；Free 没有近期数据 → 每天的取数、决算日程现取、行情交叉核对跳过）
    - 云端（每日例行任务所在环境）：会话标题栏的云端环境菜单 → Edit → 环境变量 `JQUANTS_API_KEY=…`、`JQUANTS_PLAN=free`（新会话生效）
    - Mac：`~/.zshrc` 里加 `export JQUANTS_API_KEY=…` 与 `export JQUANTS_PLAN=free`（launchd 运行时写进 plist 的 EnvironmentVariables）
 4. 检查：`python run.py jquants-check`（不打印キー；Free 档约 2 分钟）→ 结果写 `var/out/jquants_check.json`

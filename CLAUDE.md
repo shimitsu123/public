@@ -73,9 +73,11 @@
   试发 `bash scripts/liveu.sh notify-test`；09:30 自检（LaunchAgent `com.qbreak.watchdog`）：问「今天的自检过了吗」→ 看
   `~/.qbreak/home/out/watchdog_{paper,tachibana}.json` 或跑 `bash scripts/liveu.sh watchdog --dry`（只判定、打印，不写、不发）；
   不带 `--dry` = 重新自检一次（会重写结果文件；没通过会再推一条手机通知，通过且今天已经推过就不再推）→ 只在用户要「再自检一次」时跑
-- J-Quants（Standard，研究用）：密钥放钥匙串（服务名 `qbreak-jquants`，用户自己用 `security add-generic-password -s qbreak-jquants -a qbreak -w` 存），
+- J-Quants（2026-11-12 起 **Free**，研究用；Free = 数据最新只到约 12 周前、5 次/分、没有 TOPIX / 信用 / 空売り / bulk）：密钥放钥匙串（服务名 `qbreak-jquants`，用户自己用 `security add-generic-password -s qbreak-jquants -a qbreak -w` 存），
   命令需要キー时用 `bash scripts/with_jquants.sh <命令>`（从钥匙串读进那个进程的环境变量、绝不回显）；每天的新数据由
-  LaunchAgent `com.qbreak.jquants`（周一至五 19:30 + 07:05）取，整理结果 `~/.qbreak/home/out/jq_today.json`（只展示 / 研究）
+  LaunchAgent `com.qbreak.jquants`（周一至五 19:30 + 07:05）取，整理结果 `~/.qbreak/home/out/jq_today.json`（只展示 / 研究）——
+  Free 档没有当天数据 → 不装（`install_launchd_jquants.sh` 卸掉已有的）、决算日程全用 Yahoo、行情交叉核对 / 業種影响占比跳过；
+  档位 = 环境变量 `JQUANTS_PLAN`（不设 = free）；升级后用户在 `~/.zshrc` 加 `export JQUANTS_PLAN=<档位>` 再跑 `mac_setup.sh`
 - 实盘相关（立花）：不创建 `~/.qbreak/home/ARM`、不删除 `HALT`、不加 `--no-arm`、不用 `--resolve` 登记成交，除非用户在这次对话里明确要求；
   2026-10-09 起同级（用户这次明确说才运行）：撤单 `bash scripts/liveu.sh cancel [<cid>…] --broker tachibana` / 停并撤单 `bash scripts/liveu.sh halt-cancel --broker tachibana`（不写 `--broker` = 有账本的都撤；用户说「撤单」；只撤执行器自己今天还挂着的单；一起下的买单和卖单整组撤 `bash scripts/liveu.sh cancel <cid> --group --broker …`（先跑只读的 `liveu.sh cancel-plan <cid> --broker …` 告诉用户会撤哪些；先撤买单、确认没成交再撤卖单，靠这一组卖单的钱、已经发到交易所的买单也一起先撤，买单已成交 / 撤不掉 → 卖单不撤；立花还没确认 → 过 1 分钟再跑同一条命令接着查（最多 10 分钟；这时 cancel-plan 写「会接着查那一条」；面板约 1 分钟后也自动再查，由面板做完的推一条）；命令行只打印、不推送；2026-10-16 起；单笔撤一组里的卖单、同一组的买单（含靠这一组卖单的钱、已经发出的买单）还挂着 / 已成交 → 默认不撤，用户明确说只撤这笔卖单才加 `--solo`；同一组同时只有一个撤单在处理，别的撤单写明理由不做、等它结束再撤（面板 / 手机写的在等，命令行不接过来；一条命令点了彼此有关的几组 → 先写的那组做、其余写理由）；立花那边已经失效 / 被拒的单 = 「不用撤」））、
   人工代下登记 `liveu.sh adopt --broker tachibana <代码> <BUY|SELL> <股数> <均价>`（用户给出在立花网站上的实际成交）、恢复账本 `liveu.sh restore --broker tachibana <备份文件名>`、

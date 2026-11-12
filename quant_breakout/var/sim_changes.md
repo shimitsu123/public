@@ -12906,3 +12906,16 @@ deb8a46（对账之后的状态与说明：G7 / G8 / G11 / G16 / G17 / G22 / G26
 - `qbreak/news.py`：`MUTED_EVENTS = {"disaster"}`；不再取気象庁地震情報、Google ニュース的查询去掉「地震」；归类不再给「自然灾害」；
   以前存下来的事件 `load()` 时去掉；面板「消息 → 通知记录」不再列以前推出去的「｜自然灾害｜」经济威胁通知。
 - 要恢复：把 `MUTED_EVENTS` 设回空（用户同意后）。
+
+## 2026-11-12 J-Quants 订阅改成 Free（用户「Jquant换成了free plan 更改对应的东西」）
+- 实测（`run.py jquants-check --plan free`，2026-11-12）：日线 / 决算日程 / 财务 / 上市一览只能取 2024-08-20 ～ 2026-08-20（约 12 周延迟、2 年）；
+  TOPIX、信用、空売り残高報告、投資部門別 → HTTP 403；限速 5 次/分（官方 https://jpx-jquants.com/ja/spec/rate-limits，2026-11-12 查，仅对本次检索时点有效）。
+- 改动（代码，不动策略参数 / 仓位 / 股票池 / 阈值）：`qbreak/jquants.py` 加 `plan_name()`、`has_recent()`（Free = 没有近期数据）；Free 档时
+  每天的取数 `run.py jq-live` 跳过、`install_launchd_jquants.sh`（`mac_setup.sh` 调用）卸掉 `com.qbreak.jquants` 并删过时的 `out/jq_today.json`、`out/fins_view.json`；
+  决算日程现取（`events._fetch_sched`）不取；行情交叉核对（`price_check`）、業種影响占比（`_sector_influence`）写「Free 档」跳过；决算形态（`earn_state`）只用缓存；
+  `with_jquants.sh` / `liveu.sh` / plist 的默认档位 standard → free（防止 Free 的キー按 120 次/分请求、被 429 / 5 分钟封锁）。
+- 对决策的影响（数据源被迫变化，不是调参）：执行器与模拟盘「决算前 2 个交易日不买」的日程原来 J-Quants 为主、Yahoo 后备（2026-10-11）→
+  已有的 J-Quants 日程文件（最后一份 2026-11-12 取）用到 7 天内过期（`JQ_SCHED_MAX_AGE`），之后全用 Yahoo（= 2026-10-11 之前的做法）。
+  Yahoo 与 J-Quants 不一致的票（例：8316 三井住友FG 2026-11 Yahoo 早一天）不再有对照。
+- 研究：本机 `var/cache/jquants/` 已有的 10 年缓存（到 2026-09）照旧可读；新数据补不了（bulk 要 Light 以上）→ 季度复核 2i（W2 全市场前向）/ 2j / 3b 的 J-Quants 部分会取数失败，照说明书如实报告原因。
+- 恢复：升级到 Light 以上后 `~/.zshrc` 加 `export JQUANTS_PLAN=<档位>`，再跑 `mac_setup.sh`。

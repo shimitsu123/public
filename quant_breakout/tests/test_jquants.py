@@ -3,6 +3,7 @@ import datetime as dt
 
 import pytest
 
+from qbreak import jquants as JQ
 from qbreak.jquants import API, JQuants, JQuantsError, check, summarize
 
 
@@ -72,3 +73,32 @@ def test_check_reports_point_in_time_universe_and_delisted_history():
     txt = summarize(r)
     assert "无幸存者偏差" in txt and "k" not in txt.split("✓")[0]                # 不打印 API キー
     assert r["calls"] <= 9
+
+
+def test_free_plan_has_no_recent_data(monkeypatch):
+    """2026-11-12 用户把订阅改成 Free：没有近期数据 → 每天的取数、决算日程现取、行情核对、業種影响占比都跳过。"""
+    monkeypatch.delenv("JQUANTS_PLAN", raising=False)
+    assert JQ.plan_name() == "free" and not JQ.has_recent()
+    monkeypatch.setenv("JQUANTS_PLAN", "Standard")
+    assert JQ.plan_name() == "standard" and JQ.has_recent() and JQ.has_recent("light") and not JQ.has_recent("free")
+
+
+def test_free_plan_skips_daily_consumers(monkeypatch, tmp_path):
+    import argparse
+    import datetime as dt
+
+    import run
+    from qbreak import events as EV
+    from qbreak import price_check as PC
+    monkeypatch.setenv("JQUANTS_API_KEY", "dummy")
+    monkeypatch.setenv("JQUANTS_PLAN", "free")
+    monkeypatch.setenv("QBREAK_HOME", str(tmp_path))
+    called = []
+    monkeypatch.setattr(JQ.JQuants, "get", lambda self, *a, **k: called.append(a) or [])
+    assert EV._fetch_sched(dt.date(2026, 11, 12)) is None
+    import pandas as pd
+    r = PC.run({"7203.T": pd.DataFrame({"Close": [1.0]}, index=pd.to_datetime(["2026-11-11"]))}, dt.date(2026, 11, 12))
+    assert "Free" in r.get("skipped", "")
+    assert "Free" in run._sector_influence({}).get("error", "")
+    assert run.cmd_jq_live(argparse.Namespace(date=None, phase=None)) == 0
+    assert called == []
